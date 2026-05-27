@@ -22,7 +22,7 @@ public:
 	FString PathId;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	double SpeedCmPerSecond = 100.0;
+	double SpeedCmPerSecond = 140.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	bool bLoop = false;
@@ -36,14 +36,32 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	bool bUseCharacterMovement = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	bool bFreezeOwnedSplineOnBeginPlay = true;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode", meta = (ClampMin = "0.0"))
 	double CharacterMovementLookAheadCm = 100.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode", meta = (ClampMin = "0.0"))
 	double StopDistanceToleranceCm = 10.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise")
+	bool bUseSeededPathNoise = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise")
+	int32 PathNoiseSeed = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise", meta = (ClampMin = "0.0"))
+	double LateralNoiseAmplitudeCm = 100.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise", meta = (ClampMin = "1.0"))
+	double LateralNoiseWavelengthCm = 500.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise", meta = (ClampMin = "0.0", ClampMax = "0.95"))
+	double SpeedNoiseStrength = 0.08;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise", meta = (ClampMin = "1.0"))
+	double SpeedNoiseWavelengthCm = 900.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise", meta = (ClampMin = "0.0"))
+	double PathNoiseEndpointFadeDistanceCm = 150.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	double InitialDistanceCm = 0.0;
@@ -68,6 +86,13 @@ private:
 	void ResolveSplineComponent();
 	void ConfigureCharacterMovementTickDependency();
 	void FreezeOwnedSplineTransform();
-	bool TryMoveOwnerWithCharacterMovementInput(double SplineLength);
+	void InitializePathNoise();
+	double GetPathNoiseFade(double SplineLength) const;
+	double GetPathNoiseSpeedScale(double SplineLength) const;
+	FVector ApplyPathNoise(double DistanceCm, double SplineLength, const FVector& BaseLocation) const;
+	bool TryMoveOwnerAlongSpline(double SplineLength);
 	void MoveOwnerToCurrentDistance();
+
+	double LateralNoisePhase = 0.0;
+	double SpeedNoisePhase = 0.0;
 };

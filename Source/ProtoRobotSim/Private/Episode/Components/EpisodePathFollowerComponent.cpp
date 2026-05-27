@@ -34,6 +34,7 @@ void UEpisodePathFollowerComponent::BeginPlay()
 
 	CurrentDistanceCm = InitialDistanceCm;
 	ResolveSplineComponent();
+	InitializePathNoise();
 	ConfigureCharacterMovementTickDependency();
 	FreezeOwnedSplineTransform();
 	MoveOwnerToCurrentDistance();
@@ -61,10 +62,7 @@ void UEpisodePathFollowerComponent::TickComponent(float DeltaTime, ELevelTick Ti
 		return;
 	}
 
-	if (TryMoveOwnerWithCharacterMovementInput(SplineLength))
-	{
-		return;
-	}
+	if (TryMoveOwnerAlongSpline(SplineLength)) return;
 
 	CurrentDistanceCm += SpeedCmPerSecond * static_cast<double>(DeltaTime);
 
@@ -101,16 +99,10 @@ void UEpisodePathFollowerComponent::ResolveSplineComponent()
 
 void UEpisodePathFollowerComponent::ConfigureCharacterMovementTickDependency()
 {
-	if (!bUseCharacterMovement)
-	{
-		return;
-	}
+	if (!bUseCharacterMovement) return;
 
 	const ACharacter* Character = Cast<ACharacter>(GetOwner());
-	if (!Character)
-	{
-		return;
-	}
+	if (!Character) return;
 
 	if (UCharacterMovementComponent* CharacterMovement = Character->GetCharacterMovement())
 	{
@@ -120,32 +112,88 @@ void UEpisodePathFollowerComponent::ConfigureCharacterMovementTickDependency()
 
 void UEpisodePathFollowerComponent::FreezeOwnedSplineTransform()
 {
-	if (!bFreezeOwnedSplineOnBeginPlay || !SplineComponent || SplineComponent->GetOwner() != GetOwner())
-	{
-		return;
-	}
+	if (!SplineComponent || SplineComponent->GetOwner() != GetOwner()) return;
 
 	SplineComponent->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
 }
 
-bool UEpisodePathFollowerComponent::TryMoveOwnerWithCharacterMovementInput(double SplineLength)
+void UEpisodePathFollowerComponent::InitializePathNoise()
 {
-	if (!bUseCharacterMovement || !SplineComponent)
+	FRandomStream NoiseStream(PathNoiseSeed);
+	LateralNoisePhase = NoiseStream.FRandRange(-10000.0f, 10000.0f);
+	SpeedNoisePhase = NoiseStream.FRandRange(-10000.0f, 10000.0f);
+}
+
+double UEpisodePathFollowerComponent::GetPathNoiseFade(double SplineLength) const
+{
+	if (bLoop || PathNoiseEndpointFadeDistanceCm <= KINDA_SMALL_NUMBER)
 	{
-		return false;
+		return 1.0;
 	}
+
+	const double StartFade = CurrentDistanceCm / PathNoiseEndpointFadeDistanceCm;
+	const double EndFade = (SplineLength - CurrentDistanceCm) / PathNoiseEndpointFadeDistanceCm;
+	return FMath::Clamp(FMath::Min(StartFade, EndFade), 0.0, 1.0);
+}
+
+double UEpisodePathFollowerComponent::GetPathNoiseSpeedScale(double SplineLength) const
+{
+	if (!bUseSeededPathNoise || SpeedNoiseStrength <= KINDA_SMALL_NUMBER || SpeedNoiseWavelengthCm <= KINDA_SMALL_NUMBER)
+	{
+		return 1.0;
+	}
+
+	const double Fade = GetPathNoiseFade(SplineLength);
+	if (Fade <= KINDA_SMALL_NUMBER)
+	{
+		return 1.0;
+	}
+
+	const double NoiseInput = (CurrentDistanceCm / SpeedNoiseWavelengthCm) + SpeedNoisePhase;
+	const double NoiseValue = FMath::PerlinNoise1D(static_cast<float>(NoiseInput));
+	const double Strength = FMath::Clamp(SpeedNoiseStrength, 0.0, 0.95);
+	return FMath::Clamp(1.0 + NoiseValue * Strength * Fade, 1.0 - Strength, 1.0 + Strength);
+}
+
+FVector UEpisodePathFollowerComponent::ApplyPathNoise(double DistanceCm, double SplineLength, const FVector& BaseLocation) const
+{
+	if (!bUseSeededPathNoise || !SplineComponent || LateralNoiseAmplitudeCm <= KINDA_SMALL_NUMBER || LateralNoiseWavelengthCm <= KINDA_SMALL_NUMBER)
+	{
+		return BaseLocation;
+	}
+
+	const double Fade = GetPathNoiseFade(SplineLength);
+	if (Fade <= KINDA_SMALL_NUMBER)
+	{
+		return BaseLocation;
+	}
+
+	FVector Forward = SplineComponent->GetDirectionAtDistanceAlongSpline(
+		static_cast<float>(DistanceCm),
+		ESplineCoordinateSpace::World);
+	Forward.Z = 0.0;
+
+	if (!Forward.Normalize())
+	{
+		return BaseLocation;
+	}
+
+	const FVector Right = FVector::CrossProduct(FVector::UpVector, Forward).GetSafeNormal();
+	const double NoiseInput = (DistanceCm / LateralNoiseWavelengthCm) + LateralNoisePhase;
+	const double NoiseValue = FMath::PerlinNoise1D(static_cast<float>(NoiseInput));
+	const double LateralOffsetCm = NoiseValue * LateralNoiseAmplitudeCm * Fade;
+	return BaseLocation + Right * LateralOffsetCm;
+}
+
+bool UEpisodePathFollowerComponent::TryMoveOwnerAlongSpline(double SplineLength)
+{
+	if (!bUseCharacterMovement || !SplineComponent) return false;
 
 	ACharacter* Character = Cast<ACharacter>(GetOwner());
-	if (!Character)
-	{
-		return false;
-	}
+	if (!Character) return false;
 
 	UCharacterMovementComponent* CharacterMovement = Character->GetCharacterMovement();
-	if (!CharacterMovement)
-	{
-		return false;
-	}
+	if (!CharacterMovement) return false;
 
 	const FVector OwnerLocation = Character->GetActorLocation();
 	const float ClosestInputKey = SplineComponent->FindInputKeyClosestToWorldLocation(OwnerLocation);
@@ -175,7 +223,8 @@ bool UEpisodePathFollowerComponent::TryMoveOwnerWithCharacterMovementInput(doubl
 	const FVector TargetLocation = SplineComponent->GetLocationAtDistanceAlongSpline(
 		static_cast<float>(TargetDistanceCm),
 		ESplineCoordinateSpace::World);
-	FVector DesiredDirection = TargetLocation - OwnerLocation;
+	const FVector NoisyTargetLocation = ApplyPathNoise(TargetDistanceCm, SplineLength, TargetLocation);
+	FVector DesiredDirection = NoisyTargetLocation - OwnerLocation;
 	DesiredDirection.Z = 0.0;
 
 	if (DesiredDirection.IsNearlyZero())
@@ -187,8 +236,9 @@ bool UEpisodePathFollowerComponent::TryMoveOwnerWithCharacterMovementInput(doubl
 	}
 
 	const double MaxSpeed = CharacterMovement->GetMaxSpeed();
+	const double RequestedSpeed = SpeedCmPerSecond * GetPathNoiseSpeedScale(SplineLength);
 	const float MovementScale = MaxSpeed > KINDA_SMALL_NUMBER
-		? static_cast<float>(FMath::Clamp(SpeedCmPerSecond / MaxSpeed, 0.0, 1.0))
+		? static_cast<float>(FMath::Clamp(RequestedSpeed / MaxSpeed, 0.0, 1.0))
 		: 1.0f;
 	Character->AddMovementInput(DesiredDirection.GetSafeNormal(), MovementScale, true);
 
@@ -202,30 +252,27 @@ bool UEpisodePathFollowerComponent::TryMoveOwnerWithCharacterMovementInput(doubl
 
 void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance()
 {
-	if (!SplineComponent)
-	{
-		return;
-	}
+	if (!SplineComponent) return;
+
 
 	AActor* Owner = GetOwner();
-	if (!Owner)
-	{
-		return;
-	}
+	if (!Owner) return;
+
 
 	const FVector Location = SplineComponent->GetLocationAtDistanceAlongSpline(
 		static_cast<float>(CurrentDistanceCm),
 		ESplineCoordinateSpace::World);
+	const FVector NoisyLocation = ApplyPathNoise(CurrentDistanceCm, SplineComponent->GetSplineLength(), Location);
 
 	if (bOrientToSpline)
 	{
 		const FRotator Rotation = SplineComponent->GetRotationAtDistanceAlongSpline(
 			static_cast<float>(CurrentDistanceCm),
 			ESplineCoordinateSpace::World);
-		Owner->SetActorLocationAndRotation(Location, Rotation, false, nullptr, ETeleportType::None);
+		Owner->SetActorLocationAndRotation(NoisyLocation, Rotation, false, nullptr, ETeleportType::None);
 	}
 	else
 	{
-		Owner->SetActorLocation(Location, false, nullptr, ETeleportType::None);
+		Owner->SetActorLocation(NoisyLocation, false, nullptr, ETeleportType::None);
 	}
 }

@@ -21,6 +21,7 @@ AEpisodePedestrianActor::AEpisodePedestrianActor()
 
 	PathFollowerComponent = CreateDefaultSubobject<UEpisodePathFollowerComponent>(TEXT("PathFollowerComponent"));
 	PathFollowerComponent->SetSplineComponent(MovementSplineComponent);
+	PathFollowerComponent->bUseSeededPathNoise = true;
 }
 
 void AEpisodePedestrianActor::BeginPlay()

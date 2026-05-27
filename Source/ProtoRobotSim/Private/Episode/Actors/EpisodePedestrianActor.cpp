@@ -3,6 +3,7 @@
 #include "Episode/Components/EpisodeObstacleCollisionComponent.h"
 #include "Episode/Components/EpisodePathFollowerComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
+#include "Components/SplineComponent.h"
 
 AEpisodePedestrianActor::AEpisodePedestrianActor()
 {
@@ -10,7 +11,16 @@ AEpisodePedestrianActor::AEpisodePedestrianActor()
 
 	PlaceableComponent = CreateDefaultSubobject<UEpisodePlaceableComponent>(TEXT("PlaceableComponent"));
 	ObstacleCollisionComponent = CreateDefaultSubobject<UEpisodeObstacleCollisionComponent>(TEXT("ObstacleCollisionComponent"));
+
+	MovementSplineComponent = CreateDefaultSubobject<USplineComponent>(TEXT("MovementSplineComponent"));
+	MovementSplineComponent->SetupAttachment(GetRootComponent());
+	MovementSplineComponent->ClearSplinePoints(false);
+	MovementSplineComponent->AddSplinePoint(FVector::ZeroVector, ESplineCoordinateSpace::Local, false);
+	MovementSplineComponent->AddSplinePoint(FVector(500.0, 0.0, 0.0), ESplineCoordinateSpace::Local, false);
+	MovementSplineComponent->UpdateSpline();
+
 	PathFollowerComponent = CreateDefaultSubobject<UEpisodePathFollowerComponent>(TEXT("PathFollowerComponent"));
+	PathFollowerComponent->SetSplineComponent(MovementSplineComponent);
 }
 
 void AEpisodePedestrianActor::BeginPlay()

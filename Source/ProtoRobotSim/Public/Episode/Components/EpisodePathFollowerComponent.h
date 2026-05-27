@@ -52,13 +52,13 @@ public:
 	double LateralNoiseAmplitudeCm = 100.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise", meta = (ClampMin = "1.0"))
-	double LateralNoiseWavelengthCm = 500.0;
+	double LateralNoiseWavelengthCm = 400.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise", meta = (ClampMin = "0.0", ClampMax = "0.95"))
-	double SpeedNoiseStrength = 0.08;
+	double SpeedNoiseStrength = 0.15;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise", meta = (ClampMin = "1.0"))
-	double SpeedNoiseWavelengthCm = 900.0;
+	double SpeedNoiseWavelengthCm = 500.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise", meta = (ClampMin = "0.0"))
 	double PathNoiseEndpointFadeDistanceCm = 150.0;

@@ -13,15 +13,27 @@ class PROTOROBOTSIM_API UDeliveryBot_LocalAvoidanceComponent : public UActorComp
 	GENERATED_BODY()
 
 public:
-	// Sets default values for this component's properties
 	UDeliveryBot_LocalAvoidanceComponent();
 
 protected:
-	// Called when the game starts
 	virtual void BeginPlay() override;
 
 public:
-	// Called every frame
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
-	                           FActorComponentTickFunction* ThisTickFunction) override;
+	bool HasObstacleAhead(const FVector& moveDirection, FHitResult& outHitResult) const;
+private:
+	bool IsIgnoredActor(const AActor* actor) const;
+
+private:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|LocalAvoidance", meta = (AllowPrivateAccess = "true"))
+	float ObstacleTraceDistance{ 300.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|LocalAvoidance", meta = (AllowPrivateAccess = "true"))
+	FVector ObstacleBoxHalfExtent{ 45.f, 35.f, 25.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|LocalAvoidance", meta = (AllowPrivateAccess = "true"))
+	float TraceHeightOffset{ 35.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|LocalAvoidance", meta = (AllowPrivateAccess = "true"))
+	bool bDrawDebugTrace{ true };
+	
 };

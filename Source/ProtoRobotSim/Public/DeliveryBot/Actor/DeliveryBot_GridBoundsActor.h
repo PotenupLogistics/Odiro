@@ -25,9 +25,11 @@ protected:
 	
 public:
 	UBoxComponent* GetBoundsBox() const { return BoundsBox; }
-	float GetCellSize() const { return CellSize; }
-	FVector GetRobotBoxExtent() const { return RobotBoxExtent; }
 	
+	float GetCellSize() const { return CellSize; }
+	float GetMaxWalkableSlopeDegree() const { return MaxWalkableSlopeDegree; }
+	
+	FVector GetRobotBoxExtent() const { return RobotBoxExtent; }
 	
 	
 private:
@@ -38,7 +40,8 @@ private:
 	float CellSize{ 100.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
-	FVector RobotBoxExtent{ 60.f, 90.f, 80.f };
+	FVector RobotBoxExtent{ 60.f, 90.f, 25.f };
 	
-	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
+	float MaxWalkableSlopeDegree{ 60.f };
 };

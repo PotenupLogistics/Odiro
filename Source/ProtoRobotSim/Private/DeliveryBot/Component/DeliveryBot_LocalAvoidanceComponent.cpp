@@ -1,6 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-
+﻿
 #include "DeliveryBot/Component/DeliveryBot_LocalAvoidanceComponent.h"
 
 #include "DrawDebugHelpers.h"
@@ -16,8 +14,6 @@ UDeliveryBot_LocalAvoidanceComponent::UDeliveryBot_LocalAvoidanceComponent()
 void UDeliveryBot_LocalAvoidanceComponent::BeginPlay()
 {
 	Super::BeginPlay();
-
-	
 }
 
 
@@ -55,6 +51,7 @@ bool UDeliveryBot_LocalAvoidanceComponent::HasObstacleAhead(
 	FCollisionObjectQueryParams objectQueryParams;
 	objectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
 	objectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+	objectQueryParams.AddObjectTypesToQuery(ECC_Visibility);
 
 	FRotator traceRotation{ forwardVector.Rotation() };
 	traceRotation.Pitch = 0.f;

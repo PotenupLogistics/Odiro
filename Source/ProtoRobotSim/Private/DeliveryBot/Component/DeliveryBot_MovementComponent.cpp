@@ -128,10 +128,12 @@ void UDeliveryBot_MovementComponent::MarkObstacleAsDynamicBlocked(const FHitResu
 	if (!IsValid(gridSubsystem))
 		return;
 
-	const AActor* obstacleActor{ obstacleHitResult.GetActor() };
-	if (IsValid(obstacleActor))
+	gridSubsystem->ClearDynamicBlockedCells();
+
+	const UPrimitiveComponent* obstacleComponent{ obstacleHitResult.GetComponent() };
+	if (IsValid(obstacleComponent))
 	{
-		gridSubsystem->SetDynamicBlockedByActorBounds(obstacleActor);
+		gridSubsystem->SetDynamicBlockedByComponentBounds(obstacleComponent);
 		return;
 	}
 

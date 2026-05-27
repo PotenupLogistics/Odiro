@@ -122,6 +122,77 @@ void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoun
 	}
 }
 
+void UDeliveryBot_GridSubsystem::SetDynamicBlockedByComponentBounds(const UPrimitiveComponent* obstacleComponent)
+{
+	if (!IsValid(obstacleComponent))
+		return;
+
+	if (GridSizeX <= 0 || GridSizeY <= 0)
+		return;
+
+	const FBoxSphereBounds componentBounds{ obstacleComponent->Bounds };
+	FVector boundsOrigin{ componentBounds.Origin };
+	FVector boundsExtent{ componentBounds.BoxExtent };
+
+	if (boundsExtent.IsNearlyZero())
+	{
+		SetDynamicBlockedByWorldLocation(boundsOrigin);
+		return;
+	}
+
+	const float blockMargin{ CellSize * 0.5f };
+	boundsExtent.X += blockMargin;
+	boundsExtent.Y += blockMargin;
+
+	const FVector minLocation{
+		boundsOrigin.X - boundsExtent.X,
+		boundsOrigin.Y - boundsExtent.Y,
+		boundsOrigin.Z
+	};
+
+	const FVector maxLocation{
+		boundsOrigin.X + boundsExtent.X,
+		boundsOrigin.Y + boundsExtent.Y,
+		boundsOrigin.Z
+	};
+
+	const FIntPoint minGridIndex{ GetGridIndexByWorldLocation(minLocation) };
+	const FIntPoint maxGridIndex{ GetGridIndexByWorldLocation(maxLocation) };
+
+	const int32 minX{ FMath::Clamp(FMath::Min(minGridIndex.X, maxGridIndex.X), 0, GridSizeX - 1) };
+	const int32 maxX{ FMath::Clamp(FMath::Max(minGridIndex.X, maxGridIndex.X), 0, GridSizeX - 1) };
+	const int32 minY{ FMath::Clamp(FMath::Min(minGridIndex.Y, maxGridIndex.Y), 0, GridSizeY - 1) };
+	const int32 maxY{ FMath::Clamp(FMath::Max(minGridIndex.Y, maxGridIndex.Y), 0, GridSizeY - 1) };
+
+	for (int32 y = minY; y <= maxY; ++y)
+	{
+		for (int32 x = minX; x <= maxX; ++x)
+		{
+			const FIntPoint gridIndex{ x, y };
+			const int32 cellArrayIndex{ GetCellArrayIndexByGridIndex(gridIndex) };
+
+			if (!GridCells.IsValidIndex(cellArrayIndex))
+				continue;
+
+			FDeliveryBotGridCellInfo& cellInfo{ GridCells[cellArrayIndex] };
+			if (cellInfo.State == EDeliveryBotGridCellState::Blocked)
+				continue;
+
+			cellInfo.State = EDeliveryBotGridCellState::DynamicBlocked;
+			cellInfo.Cost = BIG_NUMBER;
+
+			DrawDebugPoint(
+				GetWorld(),
+				cellInfo.WorldLocation + FVector{ 0.f, 0.f, 50.f },
+				16.f,
+				FColor::Purple,
+				true,
+				30.f
+			);
+		}
+	}
+}
+
 void UDeliveryBot_GridSubsystem::SetDynamicBlockedByWorldLocation(const FVector& worldLocation)
 {
 	const FIntPoint gridIndex{ GetGridIndexByWorldLocation(worldLocation) };
@@ -185,16 +256,19 @@ bool UDeliveryBot_GridSubsystem::IsCellBlocked(const FVector& worldLocation, con
 	if (!bHasOverlap)
 		return false;
 
-	static const FName NoCollisionTag{ TEXT("IgnoreAboutGrid") };
+	static const FName ignoreAboutGridTag{ TEXT("IgnoreAboutGrid") };
+	static const FName localOnlyObstacleTag{ TEXT("LocalOnlyObstacle") };
 
 	for (const FOverlapResult& overlapResult : overlapResults)
 	{
 		AActor* overlapActor = overlapResult.GetActor();
-		
+
 		if (!IsValid(overlapActor))
 			continue;
 
-		if (overlapActor->ActorHasTag(NoCollisionTag))
+		if (overlapActor->ActorHasTag(ignoreAboutGridTag))
+			continue;
+		if (overlapActor->ActorHasTag(localOnlyObstacleTag))
 			continue;
 
 		// NoCollision 태그가 없는 액터가 하나라도 있으면 이동 불가로 처리한다.

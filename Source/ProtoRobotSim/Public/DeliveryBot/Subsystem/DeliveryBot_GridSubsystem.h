@@ -40,6 +40,7 @@ public:
 	float SlopeDegree{ 0.f };
 };
 
+class UPrimitiveComponent;
 class AActor;
 class ADeliveryBot_GridBoundsActor;
 UCLASS()
@@ -50,6 +51,7 @@ public:
 	void BuildGridFromBounds(const ADeliveryBot_GridBoundsActor* gridBoundsActor);
 
 public:
+	void SetDynamicBlockedByComponentBounds(const UPrimitiveComponent* obstacleComponent);
 	void SetDynamicBlockedByWorldLocation(const FVector& worldLocation);
 	void ClearDynamicBlockedCells();
 	void SetDynamicBlockedByActorBounds(const AActor* obstacleActor);

@@ -51,7 +51,7 @@ bool UDeliveryBot_LocalAvoidanceComponent::HasObstacleAhead(
 	FCollisionObjectQueryParams objectQueryParams;
 	objectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
 	objectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
-	objectQueryParams.AddObjectTypesToQuery(ECC_Visibility);
+	objectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
 
 	FRotator traceRotation{ forwardVector.Rotation() };
 	traceRotation.Pitch = 0.f;

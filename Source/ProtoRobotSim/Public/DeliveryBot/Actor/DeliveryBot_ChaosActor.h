@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "WheeledVehiclePawn.h"
+#include "Shared/Struct/DeliveryBotDriveSetupInfo.h"
 #include "DeliveryBot_ChaosActor.generated.h"
 
 class UDeliveryBot_ChaosDriveComponent;
@@ -10,20 +11,29 @@ UCLASS(Blueprintable)
 class PROTOROBOTSIM_API ADeliveryBot_ChaosActor : public AWheeledVehiclePawn
 {
 	GENERATED_BODY()
-
 public:
 	ADeliveryBot_ChaosActor(const FObjectInitializer& ObjectInitializer);
-
+	
+public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
+	
+public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Temp Drive")
 	void SetTempDriveInput(float throttle, float steering, float brake, bool bHandbrake);
 
+
+private:
+	void ApplyTempDriveInput() const;
+	
+	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
 	TObjectPtr<UDeliveryBot_ChaosDriveComponent> ChaosDriveComponent;
 
+	
+protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Temp Drive")
 	bool bUseTempAutoDrive{ true };
 
@@ -39,6 +49,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Temp Drive")
 	bool bTempHandbrake{ false };
 
-private:
-	void ApplyTempDriveInput() const;
+	
+protected:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Mission")
+	FDeliveryBotDriveSetupInfo DriveSetupInfo{};
+	
+	
+	
 };

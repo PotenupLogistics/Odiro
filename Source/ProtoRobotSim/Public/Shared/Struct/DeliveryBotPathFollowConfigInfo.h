@@ -1,38 +1,29 @@
 ﻿#pragma once
-
 #include "CoreMinimal.h"
-#include "DeliveryBotMovementInfo.generated.h"
+#include "DeliveryBotPathFollowConfigInfo.generated.h"
 
 USTRUCT(BlueprintType)
-struct FDeliveryBotPosInfo
+struct FDeliveryBotPathFollowConfigInfo
 {
 	GENERATED_BODY()
 
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FVector Location{FVector::ZeroVector};
+	float TargetSpeedKmh{ 5.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float YawDegree{0.f};
+	float LookAheadDistanceM{ 2.5f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float PathPointAcceptanceDistanceM{ 0.8f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float GoalAcceptanceDistanceM{ 1.2f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SteeringSensitivity{ 1.2f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bDrawDebug{ true };
+
 };
-
-
-USTRUCT(BlueprintType)
-struct FDeliveryBotMoveCommandInfo
-{
-	GENERATED_BODY()
-	
-public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float TargetSpeedKmh{ 0.f };
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float Steering{ 0.f };
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float Brake{ 0.f };
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bBrake{ false };
-};
-

@@ -222,7 +222,7 @@ void UDeliveryBot_GlobalPathComponent::DrawGlobalPath() const
 	{
 		const FVector startLocation{ GlobalPath[pathIndex] + FVector{ 0.f, 0.f, 20.f } };
 		const FVector endLocation{ GlobalPath[pathIndex + 1] + FVector{ 0.f, 0.f, 20.f } };
-
+		
 		// A*로 생성된 전역 경로를 눈으로 확인하기 위한 Debug Line이다.
 		DrawDebugLine(
 			world,
@@ -230,7 +230,7 @@ void UDeliveryBot_GlobalPathComponent::DrawGlobalPath() const
 			endLocation,
 			FColor::Blue,
 			true,
-			30.f,
+			1.f,
 			0,
 			5.f
 		);

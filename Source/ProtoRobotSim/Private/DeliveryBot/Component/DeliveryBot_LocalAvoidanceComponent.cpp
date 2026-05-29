@@ -14,6 +14,7 @@ UDeliveryBot_LocalAvoidanceComponent::UDeliveryBot_LocalAvoidanceComponent()
 void UDeliveryBot_LocalAvoidanceComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	ObstacleBoxHalfExtent.Z = ObstacleBoxHalfExtent.Z * 0.25f;
 }
 
 
@@ -42,7 +43,7 @@ bool UDeliveryBot_LocalAvoidanceComponent::HasObstacleAhead(
 	const FVector ownerLocation{ owner->GetActorLocation() };
 	const FVector traceStart{ ownerLocation + FVector::UpVector * TraceHeightOffset };
 	const FVector traceEnd{ traceStart + forwardVector * ObstacleTraceDistance };
-
+	
 	const FCollisionShape obstacleShape{ FCollisionShape::MakeBox(ObstacleBoxHalfExtent) };
 
 	FCollisionQueryParams queryParams;

@@ -50,4 +50,6 @@ private:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|GlobalPath", meta = (AllowPrivateAccess = "true"))
 	float PathSmoothingSampleDistance{ 50.f };
+	
+	
 };

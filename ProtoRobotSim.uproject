@@ -7,7 +7,10 @@
 		{
 			"Name": "ProtoRobotSim",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"ChaosVehicles"
+			]
 		}
 	],
 	"Plugins": [
@@ -56,6 +59,10 @@
 		},
 		{
 			"Name": "DrawDebugLibrary",
+			"Enabled": true
+		},
+		{
+			"Name": "ChaosVehiclesPlugin",
 			"Enabled": true
 		}
 	]

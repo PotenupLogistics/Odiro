@@ -83,7 +83,7 @@ struct PROTOROBOTSIM_API FEpisodeParamValue
 	FVector VectorValue = FVector::ZeroVector;
 };
 
-// Unreal FTransform을 외부 JSON 명세에 반영하기 위한 DTO임.
+// 언리얼 FTransform을 외부 JSON 명세에 반영하기 위한 DTO임.
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FEpisodeTransformDto
 {

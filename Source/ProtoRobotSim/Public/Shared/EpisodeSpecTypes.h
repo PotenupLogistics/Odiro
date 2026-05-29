@@ -5,7 +5,8 @@
 #include "EpisodeConfigTypes.h"
 #include "EpisodeSpecTypes.generated.h"
 
-// 컴파일된 에피소드 월드 명세를 JSON 친화적인 데이터로 정의하는 파일.
+// 언리얼에서 ScenarioSpec 해석 후 에피소드를 생성하기 위한 에피소드 명세.
+// 컴파일된 에피소드 명세를 JSON 친화적인 데이터로 정의하는 파일.
 
 UENUM(BlueprintType)
 enum class EEpisodePathType : uint8

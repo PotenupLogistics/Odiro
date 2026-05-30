@@ -8,16 +8,42 @@
 class AEpisodeGroundRegion;
 class AEpisodePedestrian;
 class AEpisodeSplinePath;
+class AEpisodeStaticObstacle;
+class UEpisodePlaceableComponent;
 
-// 한 월드 안에서 에피소드 런타임 actor의 생성, 연결, 초기화를 총괄하는 subsystem.
+// 컴파일된 Episode WorldSpec을 현재 월드에 스폰하고, 런타임 actor 생명주기를 관리하는 subsystem.
+// MVP에서는 ground/path/static obstacle/pedestrian/robot placeholder를 순서대로 배치하는 역할만 담당한다.
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API UEpisodeSimulationSubsystem : public UWorldSubsystem
 {
 	GENERATED_BODY()
 
 public:
+	UEpisodeSimulationSubsystem();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
+	TSubclassOf<AEpisodeStaticObstacle> StaticObstacleClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
+	TSubclassOf<AEpisodePedestrian> PedestrianClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
+	TSubclassOf<AActor> RobotActorClass;
+
 	UFUNCTION(BlueprintCallable, Category = "Episode")
 	void ClearEpisode();
+
+	UFUNCTION(BlueprintCallable, Category = "Episode")
+	bool SpawnEpisodeWorld(const FEpisodeWorldSpec& WorldSpec);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Json")
+	bool SpawnEpisodeWorldFromJsonFile(const FString& JsonFilePath);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Debug")
+	bool SpawnSampleEpisodeWorldFromJson();
+
+	UFUNCTION(BlueprintPure, Category = "Episode")
+	AActor* FindRuntimeActor(const FString& InstanceId) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
 	AEpisodeSplinePath* SpawnSplinePath(const FString& PathId, const TArray<FVector>& Points, bool bClosedLoop);
@@ -36,7 +62,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
 	AEpisodePedestrian* SpawnPedestrianOnPath(
-		TSubclassOf<AEpisodePedestrian> PedestrianClass,
+		TSubclassOf<AEpisodePedestrian> InPedestrianClass,
 		const FTransform& SpawnTransform,
 		AEpisodeSplinePath* SplinePath,
 		double SpeedCmPerSecond,
@@ -45,7 +71,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
 	AEpisodePedestrian* SpawnPedestrianOnPathId(
-		TSubclassOf<AEpisodePedestrian> PedestrianClass,
+		TSubclassOf<AEpisodePedestrian> InPedestrianClass,
 		const FTransform& SpawnTransform,
 		const FString& PathId,
 		double SpeedCmPerSecond,
@@ -54,7 +80,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Debug")
 	AEpisodePedestrian* SpawnSimplePedestrianPathTest(
-		TSubclassOf<AEpisodePedestrian> PedestrianClass,
+		TSubclassOf<AEpisodePedestrian> InPedestrianClass,
 		const FVector& StartLocation,
 		const FVector& EndLocation,
 		double SpeedCmPerSecond);
@@ -71,4 +97,37 @@ private:
 
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<AEpisodeSplinePath>> RuntimePaths;
+
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<AActor>> RuntimeActorsById;
+
+	AActor* SpawnPlaceable(const FEpisodePlaceableInstanceSpec& PlaceableSpec);
+	AEpisodeStaticObstacle* SpawnStaticObstacle(const FEpisodePlaceableInstanceSpec& PlaceableSpec);
+	AActor* SpawnRobotActor(const FEpisodePlaceableInstanceSpec& PlaceableSpec);
+	AActor* SpawnDynamicActor(const FEpisodeDynamicActorSpec& DynamicActorSpec);
+	AEpisodePedestrian* SpawnPedestrian(const FEpisodeDynamicActorSpec& DynamicActorSpec);
+
+	void RegisterRuntimeActor(
+		const FString& InstanceId,
+		const FString& AssetId,
+		EEpisodeActorCategory Category,
+		EEpisodeMobilityMode MobilityMode,
+		AActor* Actor);
+
+	void ConfigurePlaceableComponent(
+		UEpisodePlaceableComponent* PlaceableComponent,
+		const FString& InstanceId,
+		const FString& AssetId,
+		EEpisodeActorCategory Category,
+		EEpisodeMobilityMode MobilityMode) const;
+
+	static double GetFloatProperty(
+		const TMap<FString, FEpisodeParamValue>& Properties,
+		const FString& Key,
+		double DefaultValue);
+
+	static bool GetBoolProperty(
+		const TMap<FString, FEpisodeParamValue>& Properties,
+		const FString& Key,
+		bool DefaultValue);
 };

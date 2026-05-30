@@ -195,6 +195,8 @@ void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance(double DeltaSecon
 		static_cast<float>(CurrentDistanceCm),
 		ESplineCoordinateSpace::World);
 	const FVector NoisyLocation = ApplyPathNoise(CurrentDistanceCm, SplineComponent->GetSplineLength(), Location);
+	FVector TargetLocation = NoisyLocation;
+	TargetLocation.Z += VerticalOffsetCm;
 
 	if (bOrientToSpline)
 	{
@@ -202,12 +204,12 @@ void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance(double DeltaSecon
 			static_cast<float>(CurrentDistanceCm),
 			ESplineCoordinateSpace::World);
 		FHitResult SweepHit;
-		Owner->SetActorLocationAndRotation(NoisyLocation, Rotation, true, &SweepHit, ETeleportType::None);
+		Owner->SetActorLocationAndRotation(TargetLocation, Rotation, true, &SweepHit, ETeleportType::None);
 	}
 	else
 	{
 		FHitResult SweepHit;
-		Owner->SetActorLocation(NoisyLocation, true, &SweepHit, ETeleportType::None);
+		Owner->SetActorLocation(TargetLocation, true, &SweepHit, ETeleportType::None);
 	}
 
 	if (AEpisodePedestrian* Pedestrian = Cast<AEpisodePedestrian>(Owner))

@@ -1,0 +1,150 @@
+{
+  "schema": "episode_actor_spawn_mvp",
+  "version": 1,
+  "scenario_id": "sidewalk_actor_spawn_001",
+  "map_id": "EpisodeSandbox",
+  "units": {
+    "distance": "m",
+    "angle": "deg"
+  },
+  "run": {
+    "base_seed": 42,
+    "iteration_index": 0,
+    "time_limit_s": 30.0
+  },
+  "ground_model": {
+    "default_region_type": "walkable",
+    "regions": [
+      {
+        "region_id": "sidewalk_main",
+        "region_type": "walkable",
+        "shape": {
+          "type": "rectangle",
+          "center_m": [0.0, 0.0, 0.0],
+          "size_m": [12.0, 2.4],
+          "yaw_deg": 0.0
+        },
+        "traversability_score": 1.0
+      },
+      {
+        "region_id": "road_penalty",
+        "region_type": "penalty",
+        "shape": {
+          "type": "rectangle",
+          "center_m": [0.0, -2.3, 0.0],
+          "size_m": [12.0, 3.0],
+          "yaw_deg": 0.0
+        },
+        "penalty": {
+          "kind": "sidewalk_departure",
+          "cost": 5.0,
+          "violation_after_s": 0.2
+        },
+        "traversability_score": 0.6
+      },
+      {
+        "region_id": "building_wall",
+        "region_type": "blocked",
+        "shape": {
+          "type": "rectangle",
+          "center_m": [0.0, 1.6, 0.0],
+          "size_m": [12.0, 0.3],
+          "yaw_deg": 0.0
+        },
+        "collision_tag": "wall"
+      }
+    ]
+  },
+  "paths": [
+    {
+      "path_id": "ped_01_path",
+      "role": "pedestrian_baseline",
+      "type": "spline",
+      "points_m": [
+        [-1.5, -1.1, 0.0],
+        [-1.5, 1.1, 0.0]
+      ],
+      "closed_loop": false
+    }
+  ],
+  "actors": {
+    "static_obstacles": [
+      {
+        "instance_id": "cone_01",
+        "prop_id": "obstacle.road_cone_01",
+        "transform": {
+          "location_m": [2.0, 0.55, 0.0],
+          "rotation_deg": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+          },
+          "scale": [1.0, 1.0, 1.0]
+        }
+      },
+      {
+        "instance_id": "bin_01",
+        "prop_id": "obstacle.bin",
+        "transform": {
+          "location_m": [3.8, 0.65, 0.0],
+          "rotation_deg": {
+            "pitch": 0.0,
+            "yaw": 15.0,
+            "roll": 0.0
+          },
+          "scale": [1.0, 1.0, 1.0]
+        }
+      },
+      {
+        "instance_id": "barrier_01",
+        "prop_id": "obstacle.road_barrier_01",
+        "transform": {
+          "location_m": [-3.0, -0.45, 0.0],
+          "rotation_deg": {
+            "pitch": 0.0,
+            "yaw": 90.0,
+            "roll": 0.0
+          },
+          "scale": [1.0, 1.0, 1.0]
+        }
+      }
+    ],
+    "pedestrians": [
+      {
+        "instance_id": "ped_01",
+        "archetype_id": "adult_pedestrian",
+        "path_id": "ped_01_path",
+        "spawn_time_s": 0.0,
+        "transform": {
+          "location_m": [-1.5, -1.1, 0.0],
+          "rotation_deg": {
+            "pitch": 0.0,
+            "yaw": 90.0,
+            "roll": 0.0
+          },
+          "scale": [1.0, 1.0, 1.0]
+        },
+        "movement": {
+          "model": "straight_line",
+          "speed_mps": 1.2,
+          "initial_distance_m": 0.0,
+          "auto_start": true
+        }
+      }
+    ],
+    "robot": {
+      "instance_id": "robot_01",
+      "asset_id": "delivery_bot",
+      "spawn_only": true,
+      "transform": {
+        "location_m": [-5.0, 0.0, 0.0],
+        "rotation_deg": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [1.0, 1.0, 1.0]
+      }
+    }
+  }
+}

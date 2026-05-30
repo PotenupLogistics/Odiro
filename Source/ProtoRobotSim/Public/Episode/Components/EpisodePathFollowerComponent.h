@@ -34,6 +34,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	bool bOrientToSpline = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode", meta = (ClampMin = "0.0", Units = "cm"))
+	double VerticalOffsetCm = 0.0;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise")
 	bool bUseSeededPathNoise = false;
 

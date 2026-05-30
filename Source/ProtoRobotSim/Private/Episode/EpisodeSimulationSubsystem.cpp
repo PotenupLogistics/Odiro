@@ -4,9 +4,66 @@
 #include "Episode/Actors/EpisodeGroundRegion.h"
 #include "Episode/Actors/EpisodePedestrian.h"
 #include "Episode/Actors/EpisodeSplinePath.h"
+#include "Episode/Actors/EpisodeStaticObstacle.h"
+#include "Episode/Actors/EpisodeVehicle.h"
 #include "Episode/Components/EpisodePathFollowerComponent.h"
+#include "Episode/Components/EpisodePlaceableComponent.h"
+#include "Episode/EpisodeCompiler.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/Paths.h"
+#include "UObject/ConstructorHelpers.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogEpisodeSimulation, Log, All);
+
+namespace
+{
+	const TCHAR* ToCompileSeverityString(EEpisodeCompileDiagnosticSeverity Severity)
+	{
+		switch (Severity)
+		{
+		case EEpisodeCompileDiagnosticSeverity::Info:
+			return TEXT("Info");
+		case EEpisodeCompileDiagnosticSeverity::Warning:
+			return TEXT("Warning");
+		case EEpisodeCompileDiagnosticSeverity::Error:
+			return TEXT("Error");
+		default:
+			return TEXT("Unknown");
+		}
+	}
+
+	void LogCompileDiagnostics(const FEpisodeCompileResult& CompileResult)
+	{
+		for (const FEpisodeCompileDiagnostic& Diagnostic : CompileResult.Diagnostics)
+		{
+			UE_LOG(
+				LogEpisodeSimulation,
+				Log,
+				TEXT("Episode compile %s [%s]: %s"),
+				ToCompileSeverityString(Diagnostic.Severity),
+				*Diagnostic.Code,
+				*Diagnostic.Message);
+		}
+	}
+}
+
+UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
+{
+	StaticObstacleClass = AEpisodeStaticObstacle::StaticClass();
+	RobotActorClass = AEpisodeVehicle::StaticClass();
+
+	static ConstructorHelpers::FClassFinder<AEpisodePedestrian> PedestrianBlueprintClass(
+		TEXT("/Game/Episode/Blueprints/BP_EpisodePedestrian"));
+	if (PedestrianBlueprintClass.Succeeded())
+	{
+		PedestrianClass = PedestrianBlueprintClass.Class;
+	}
+	else
+	{
+		PedestrianClass = AEpisodePedestrian::StaticClass();
+	}
+}
 
 void UEpisodeSimulationSubsystem::ClearEpisode()
 {
@@ -21,6 +78,100 @@ void UEpisodeSimulationSubsystem::ClearEpisode()
 	RuntimeActors.Reset();
 	RuntimeGroundRegions.Reset();
 	RuntimePaths.Reset();
+	RuntimeActorsById.Reset();
+}
+
+bool UEpisodeSimulationSubsystem::SpawnEpisodeWorld(const FEpisodeWorldSpec& WorldSpec)
+{
+	ClearEpisode();
+
+	bool bAllSpawned = true;
+
+	for (const FEpisodeGroundRegionSpec& RegionSpec : WorldSpec.GroundRegions)
+	{
+		if (!SpawnGroundRegion(RegionSpec))
+		{
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("Failed to spawn ground region '%s'."), *RegionSpec.RegionId);
+			bAllSpawned = false;
+		}
+	}
+
+	for (const FEpisodePathSpec& PathSpec : WorldSpec.Paths)
+	{
+		if (PathSpec.PathType != EEpisodePathType::Spline)
+		{
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("Path '%s' is not spline type. Spawning it as spline for MVP."), *PathSpec.PathId);
+		}
+
+		if (!SpawnSplinePath(PathSpec.PathId, PathSpec.Points, PathSpec.bClosedLoop))
+		{
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("Failed to spawn path '%s'."), *PathSpec.PathId);
+			bAllSpawned = false;
+		}
+	}
+
+	for (const FEpisodePlaceableInstanceSpec& PlaceableSpec : WorldSpec.Placeables)
+	{
+		if (!SpawnPlaceable(PlaceableSpec))
+		{
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("Failed to spawn placeable '%s'."), *PlaceableSpec.InstanceId);
+			bAllSpawned = false;
+		}
+	}
+
+	for (const FEpisodeDynamicActorSpec& DynamicActorSpec : WorldSpec.DynamicActors)
+	{
+		if (!SpawnDynamicActor(DynamicActorSpec))
+		{
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("Failed to spawn dynamic actor '%s'."), *DynamicActorSpec.InstanceId);
+			bAllSpawned = false;
+		}
+	}
+
+	return bAllSpawned;
+}
+
+bool UEpisodeSimulationSubsystem::SpawnEpisodeWorldFromJsonFile(const FString& JsonFilePath)
+{
+	if (JsonFilePath.IsEmpty())
+	{
+		UE_LOG(LogEpisodeSimulation, Warning, TEXT("Episode JSON file path is empty."));
+		return false;
+	}
+
+	UEpisodeCompiler* Compiler = NewObject<UEpisodeCompiler>(this);
+	if (!Compiler)
+	{
+		UE_LOG(LogEpisodeSimulation, Warning, TEXT("Failed to create EpisodeCompiler."));
+		return false;
+	}
+
+	const FEpisodeCompileResult CompileResult = Compiler->CompileEpisodeWorldSpecFromJsonFile(JsonFilePath);
+	LogCompileDiagnostics(CompileResult);
+	if (!CompileResult.bSuccess)
+	{
+		UE_LOG(LogEpisodeSimulation, Warning, TEXT("Episode JSON compile failed: %s"), *JsonFilePath);
+		return false;
+	}
+
+	return SpawnEpisodeWorld(CompileResult.WorldSpec);
+}
+
+bool UEpisodeSimulationSubsystem::SpawnSampleEpisodeWorldFromJson()
+{
+	const FString SampleJsonPath = FPaths::ConvertRelativePathToFull(
+		FPaths::Combine(FPaths::ProjectDir(), TEXT("Json"), TEXT("EpisodeActorSpawnMVP.json")));
+	return SpawnEpisodeWorldFromJsonFile(SampleJsonPath);
+}
+
+AActor* UEpisodeSimulationSubsystem::FindRuntimeActor(const FString& InstanceId) const
+{
+	if (const TObjectPtr<AActor>* FoundActor = RuntimeActorsById.Find(InstanceId))
+	{
+		return FoundActor->Get();
+	}
+
+	return nullptr;
 }
 
 AEpisodeSplinePath* UEpisodeSimulationSubsystem::SpawnSplinePath(const FString& PathId, const TArray<FVector>& Points, bool bClosedLoop)
@@ -104,7 +255,7 @@ AEpisodeGroundRegion* UEpisodeSimulationSubsystem::FindGroundRegion(const FStrin
 }
 
 AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrianOnPath(
-	TSubclassOf<AEpisodePedestrian> PedestrianClass,
+	TSubclassOf<AEpisodePedestrian> InPedestrianClass,
 	const FTransform& SpawnTransform,
 	AEpisodeSplinePath* SplinePath,
 	double SpeedCmPerSecond,
@@ -112,7 +263,7 @@ AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrianOnPath(
 	bool bStartFollowing)
 {
 	UWorld* World = GetWorld();
-	if (!World || !PedestrianClass || !SplinePath)
+	if (!World || !InPedestrianClass || !SplinePath)
 	{
 		return nullptr;
 	}
@@ -121,7 +272,7 @@ AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrianOnPath(
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 	AEpisodePedestrian* Pedestrian = World->SpawnActorDeferred<AEpisodePedestrian>(
-		PedestrianClass,
+		InPedestrianClass,
 		SpawnTransform,
 		nullptr,
 		nullptr,
@@ -152,7 +303,7 @@ AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrianOnPath(
 }
 
 AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrianOnPathId(
-	TSubclassOf<AEpisodePedestrian> PedestrianClass,
+	TSubclassOf<AEpisodePedestrian> InPedestrianClass,
 	const FTransform& SpawnTransform,
 	const FString& PathId,
 	double SpeedCmPerSecond,
@@ -160,7 +311,7 @@ AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrianOnPathId(
 	bool bStartFollowing)
 {
 	return SpawnPedestrianOnPath(
-		PedestrianClass,
+		InPedestrianClass,
 		SpawnTransform,
 		FindSplinePath(PathId),
 		SpeedCmPerSecond,
@@ -169,7 +320,7 @@ AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrianOnPathId(
 }
 
 AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnSimplePedestrianPathTest(
-	TSubclassOf<AEpisodePedestrian> PedestrianClass,
+	TSubclassOf<AEpisodePedestrian> InPedestrianClass,
 	const FVector& StartLocation,
 	const FVector& EndLocation,
 	double SpeedCmPerSecond)
@@ -200,7 +351,7 @@ AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnSimplePedestrianPathTest(
 		: SpawnForward.Rotation();
 
 	return SpawnPedestrianOnPath(
-		PedestrianClass,
+		InPedestrianClass,
 		FTransform(SpawnRotation, StartLocation, FVector::OneVector),
 		PathActor,
 		SpeedCmPerSecond,
@@ -245,4 +396,219 @@ void UEpisodeSimulationSubsystem::SpawnDebugGroundRegionTest()
 	GroundRegionSpecs.Add(BlockedRegion);
 
 	SpawnGroundRegions(GroundRegionSpecs);
+}
+
+AActor* UEpisodeSimulationSubsystem::SpawnPlaceable(const FEpisodePlaceableInstanceSpec& PlaceableSpec)
+{
+	switch (PlaceableSpec.Category)
+	{
+	case EEpisodeActorCategory::StaticObstacle:
+		return SpawnStaticObstacle(PlaceableSpec);
+	case EEpisodeActorCategory::RoadVehicle:
+		return SpawnRobotActor(PlaceableSpec);
+	default:
+		UE_LOG(
+			LogEpisodeSimulation,
+			Warning,
+			TEXT("Unsupported placeable category for '%s'."),
+			*PlaceableSpec.InstanceId);
+		return nullptr;
+	}
+}
+
+AEpisodeStaticObstacle* UEpisodeSimulationSubsystem::SpawnStaticObstacle(const FEpisodePlaceableInstanceSpec& PlaceableSpec)
+{
+	UWorld* World = GetWorld();
+	TSubclassOf<AEpisodeStaticObstacle> SpawnClass = StaticObstacleClass;
+	if (!SpawnClass)
+	{
+		SpawnClass = AEpisodeStaticObstacle::StaticClass();
+	}
+	if (!World || PlaceableSpec.InstanceId.IsEmpty() || PlaceableSpec.AssetId.IsEmpty() || !SpawnClass)
+	{
+		return nullptr;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AEpisodeStaticObstacle* StaticObstacle = World->SpawnActor<AEpisodeStaticObstacle>(
+		SpawnClass,
+		PlaceableSpec.Transform,
+		SpawnParams);
+	if (!StaticObstacle)
+	{
+		return nullptr;
+	}
+
+	if (!StaticObstacle->ApplyDefaultPropById(FName(*PlaceableSpec.AssetId)))
+	{
+		UE_LOG(
+			LogEpisodeSimulation,
+			Warning,
+			TEXT("Failed to apply static obstacle prop '%s' to '%s'."),
+			*PlaceableSpec.AssetId,
+			*PlaceableSpec.InstanceId);
+		StaticObstacle->Destroy();
+		return nullptr;
+	}
+
+	RegisterRuntimeActor(
+		PlaceableSpec.InstanceId,
+		PlaceableSpec.AssetId,
+		PlaceableSpec.Category,
+		PlaceableSpec.MobilityMode,
+		StaticObstacle);
+	return StaticObstacle;
+}
+
+AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInstanceSpec& PlaceableSpec)
+{
+	UWorld* World = GetWorld();
+	if (!World || PlaceableSpec.InstanceId.IsEmpty() || !RobotActorClass)
+	{
+		return nullptr;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AActor* RobotActor = World->SpawnActor<AActor>(
+		RobotActorClass,
+		PlaceableSpec.Transform,
+		SpawnParams);
+	if (!RobotActor)
+	{
+		return nullptr;
+	}
+
+	RegisterRuntimeActor(
+		PlaceableSpec.InstanceId,
+		PlaceableSpec.AssetId,
+		PlaceableSpec.Category,
+		PlaceableSpec.MobilityMode,
+		RobotActor);
+	return RobotActor;
+}
+
+AActor* UEpisodeSimulationSubsystem::SpawnDynamicActor(const FEpisodeDynamicActorSpec& DynamicActorSpec)
+{
+	switch (DynamicActorSpec.Category)
+	{
+	case EEpisodeActorCategory::Pedestrian:
+		return SpawnPedestrian(DynamicActorSpec);
+	default:
+		UE_LOG(
+			LogEpisodeSimulation,
+			Warning,
+			TEXT("Unsupported dynamic actor category for '%s'."),
+			*DynamicActorSpec.InstanceId);
+		return nullptr;
+	}
+}
+
+AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrian(const FEpisodeDynamicActorSpec& DynamicActorSpec)
+{
+	const double SpeedCmPerSecond = GetFloatProperty(DynamicActorSpec.Properties, TEXT("speed_cm_per_second"), 120.0);
+	const double InitialDistanceCm = GetFloatProperty(DynamicActorSpec.Properties, TEXT("initial_distance_cm"), 0.0);
+	const bool bAutoStart = GetBoolProperty(DynamicActorSpec.Properties, TEXT("auto_start"), true);
+
+	AEpisodePedestrian* Pedestrian = SpawnPedestrianOnPathId(
+		PedestrianClass ? PedestrianClass.Get() : AEpisodePedestrian::StaticClass(),
+		DynamicActorSpec.InitialTransform,
+		DynamicActorSpec.PathId,
+		SpeedCmPerSecond,
+		InitialDistanceCm,
+		bAutoStart);
+	if (!Pedestrian)
+	{
+		return nullptr;
+	}
+
+	ConfigurePlaceableComponent(
+		Pedestrian->PlaceableComponent,
+		DynamicActorSpec.InstanceId,
+		DynamicActorSpec.AssetId,
+		DynamicActorSpec.Category,
+		DynamicActorSpec.MobilityMode);
+	RuntimeActorsById.Add(DynamicActorSpec.InstanceId, Pedestrian);
+	return Pedestrian;
+}
+
+void UEpisodeSimulationSubsystem::RegisterRuntimeActor(
+	const FString& InstanceId,
+	const FString& AssetId,
+	EEpisodeActorCategory Category,
+	EEpisodeMobilityMode MobilityMode,
+	AActor* Actor)
+{
+	if (!Actor)
+	{
+		return;
+	}
+
+	RuntimeActors.Add(Actor);
+	RuntimeActorsById.Add(InstanceId, Actor);
+	ConfigurePlaceableComponent(
+		Actor->FindComponentByClass<UEpisodePlaceableComponent>(),
+		InstanceId,
+		AssetId,
+		Category,
+		MobilityMode);
+}
+
+void UEpisodeSimulationSubsystem::ConfigurePlaceableComponent(
+	UEpisodePlaceableComponent* PlaceableComponent,
+	const FString& InstanceId,
+	const FString& AssetId,
+	EEpisodeActorCategory Category,
+	EEpisodeMobilityMode MobilityMode) const
+{
+	if (!PlaceableComponent)
+	{
+		return;
+	}
+
+	PlaceableComponent->InstanceId = InstanceId;
+	PlaceableComponent->AssetId = AssetId;
+	PlaceableComponent->Category = Category;
+	PlaceableComponent->MobilityMode = MobilityMode;
+}
+
+double UEpisodeSimulationSubsystem::GetFloatProperty(
+	const TMap<FString, FEpisodeParamValue>& Properties,
+	const FString& Key,
+	double DefaultValue)
+{
+	const FEpisodeParamValue* ParamValue = Properties.Find(Key);
+	if (!ParamValue)
+	{
+		return DefaultValue;
+	}
+
+	if (ParamValue->Type == EEpisodeParamValueType::Float)
+	{
+		return ParamValue->FloatValue;
+	}
+
+	if (ParamValue->Type == EEpisodeParamValueType::Integer)
+	{
+		return static_cast<double>(ParamValue->IntegerValue);
+	}
+
+	return DefaultValue;
+}
+
+bool UEpisodeSimulationSubsystem::GetBoolProperty(
+	const TMap<FString, FEpisodeParamValue>& Properties,
+	const FString& Key,
+	bool DefaultValue)
+{
+	const FEpisodeParamValue* ParamValue = Properties.Find(Key);
+	if (!ParamValue || ParamValue->Type != EEpisodeParamValueType::Bool)
+	{
+		return DefaultValue;
+	}
+
+	return ParamValue->BoolValue;
 }

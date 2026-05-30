@@ -13,6 +13,7 @@ AEpisodePedestrian::AEpisodePedestrian()
 
 	PathFollowerComponent = CreateDefaultSubobject<UEpisodePathFollowerComponent>(TEXT("PathFollowerComponent"));
 	PathFollowerComponent->bUseSeededPathNoise = true;
+	PathFollowerComponent->VerticalOffsetCm = 90.0;
 }
 
 void AEpisodePedestrian::UpdateVisualMotion(const FVector& PreviousLocation, const FVector& NewLocation, double DeltaSeconds)

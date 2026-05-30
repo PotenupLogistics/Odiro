@@ -10,6 +10,7 @@ class FJsonValue;
 
 // 작성자가 만든 JSON을 런타임 스폰용 FEpisodeWorldSpec으로 변환하는 컴파일러.
 // 파일 로딩, JSON 파싱, 단위 변환, 기본 검증 Diagnostic 생성을 한곳에서 담당한다.
+
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API UEpisodeCompiler : public UObject
 {
@@ -155,3 +156,51 @@ private:
 	// source JSON 문자열의 hash를 SpecHash로 기록해 동일 입력 추적에 사용한다.
 	static void CompileRootObject(const FJsonObject& rootObject, const FString& sourceJson, FEpisodeCompileResult& result);
 };
+
+/* 
+컴파일러가 JSON으로부터 명시적으로 읽는 필드
+scenario_id
+version
+run.base_seed
+run.iteration_index
+run.time_limit_s
+
+ground_model.regions[].region_id
+ground_model.regions[].region_type / type
+ground_model.regions[].shape.type
+ground_model.regions[].shape.center_m
+ground_model.regions[].shape.size_m
+ground_model.regions[].shape.yaw_deg
+ground_model.regions[].traversability_score
+ground_model.regions[].penalty.kind
+ground_model.regions[].penalty.cost
+ground_model.regions[].penalty.violation_after_s
+ground_model.regions[].collision_tag
+
+paths[].path_id
+paths[].type
+paths[].points_m
+paths[].closed_loop
+
+actors.static_obstacles[].instance_id
+actors.static_obstacles[].prop_id / asset_id
+actors.static_obstacles[].transform
+actors.static_obstacles[].properties
+
+actors.pedestrians[].instance_id
+actors.pedestrians[].archetype_id
+actors.pedestrians[].path_id
+actors.pedestrians[].spawn_time_s
+actors.pedestrians[].transform
+actors.pedestrians[].movement.model
+actors.pedestrians[].movement.speed_mps
+actors.pedestrians[].movement.initial_distance_m
+actors.pedestrians[].movement.auto_start
+actors.pedestrians[].properties
+
+actors.robot.instance_id / actor_id
+actors.robot.asset_id / type
+actors.robot.spawn_only
+actors.robot.transform
+actors.robot.properties
+ */

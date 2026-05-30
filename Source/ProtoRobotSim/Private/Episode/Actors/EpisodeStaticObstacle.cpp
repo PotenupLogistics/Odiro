@@ -1,6 +1,6 @@
 
-#include "Components/StaticMeshComponent.h"
 #include "Episode/Actors/EpisodeStaticObstacle.h"
+#include "Components/StaticMeshComponent.h"
 #include "Episode/Components/EpisodeObstacleCollisionComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 

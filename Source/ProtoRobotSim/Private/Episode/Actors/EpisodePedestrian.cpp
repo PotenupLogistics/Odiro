@@ -1,11 +1,11 @@
-#include "Episode/Actors/EpisodePedestrianActor.h"
 
+#include "Episode/Actors/EpisodePedestrian.h"
 #include "Episode/Components/EpisodeObstacleCollisionComponent.h"
 #include "Episode/Components/EpisodePathFollowerComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Components/SplineComponent.h"
 
-AEpisodePedestrianActor::AEpisodePedestrianActor()
+AEpisodePedestrian::AEpisodePedestrian()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
@@ -24,12 +24,29 @@ AEpisodePedestrianActor::AEpisodePedestrianActor()
 	PathFollowerComponent->bUseSeededPathNoise = true;
 }
 
-void AEpisodePedestrianActor::BeginPlay()
+void AEpisodePedestrian::UpdateVisualMotion(const FVector& PreviousLocation, const FVector& NewLocation, double DeltaSeconds)
 {
-	Super::BeginPlay();
-}
+	if (DeltaSeconds <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
 
-void AEpisodePedestrianActor::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
+	const FVector DeltaLocation = NewLocation - PreviousLocation;
+	const FVector VisualVelocity = DeltaLocation / DeltaSeconds;
+	const FVector MoveDirection = VisualVelocity.GetSafeNormal2D();
+
+	VisualSpeedCmPerSecond = static_cast<float>(VisualVelocity.Size2D());
+	bMoving = VisualSpeedCmPerSecond > 3.0f;
+
+	if (!bMoving || MoveDirection.IsNearlyZero())
+	{
+		VisualDirectionDegrees = 0.0f;
+		return;
+	}
+
+	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+	const FVector Right = GetActorRightVector().GetSafeNormal2D();
+	const double ForwardAmount = FVector::DotProduct(MoveDirection, Forward);
+	const double RightAmount = FVector::DotProduct(MoveDirection, Right);
+	VisualDirectionDegrees = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(RightAmount, ForwardAmount)));
 }

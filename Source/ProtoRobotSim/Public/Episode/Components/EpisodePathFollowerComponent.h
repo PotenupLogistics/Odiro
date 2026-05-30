@@ -33,15 +33,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	bool bOrientToSpline = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	bool bUseCharacterMovement = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode", meta = (ClampMin = "0.0"))
-	double CharacterMovementLookAheadCm = 100.0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode", meta = (ClampMin = "0.0"))
-	double StopDistanceToleranceCm = 10.0;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise")
 	bool bUseSeededPathNoise = false;
 
@@ -84,14 +75,12 @@ protected:
 
 private:
 	void ResolveSplineComponent();
-	void ConfigureCharacterMovementTickDependency();
 	void FreezeOwnedSplineTransform();
 	void InitializePathNoise();
 	double GetPathNoiseFade(double SplineLength) const;
 	double GetPathNoiseSpeedScale(double SplineLength) const;
 	FVector ApplyPathNoise(double DistanceCm, double SplineLength, const FVector& BaseLocation) const;
-	bool TryMoveOwnerAlongSpline(double SplineLength);
-	void MoveOwnerToCurrentDistance();
+	void MoveOwnerToCurrentDistance(double DeltaSeconds = 0.0);
 
 	double LateralNoisePhase = 0.0;
 	double SpeedNoisePhase = 0.0;

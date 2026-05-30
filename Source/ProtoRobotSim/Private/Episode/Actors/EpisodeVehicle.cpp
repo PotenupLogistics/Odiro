@@ -1,11 +1,11 @@
-#include "Episode/Actors/EpisodeVehicleActor.h"
+#include "Episode/Actors/EpisodeVehicle.h"
 
 #include "Components/SceneComponent.h"
 #include "Episode/Components/EpisodeObstacleCollisionComponent.h"
 #include "Episode/Components/EpisodePathFollowerComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 
-AEpisodeVehicleActor::AEpisodeVehicleActor()
+AEpisodeVehicle::AEpisodeVehicle()
 {
 	PrimaryActorTick.bCanEverTick = false;
 

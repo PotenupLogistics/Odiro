@@ -1,9 +1,7 @@
-#include "Episode/Components/EpisodePathFollowerComponent.h"
 
+#include "Episode/Components/EpisodePathFollowerComponent.h"
 #include "Components/SplineComponent.h"
-#include "GameFramework/Actor.h"
-#include "GameFramework/Character.h"
-#include "GameFramework/CharacterMovementComponent.h"
+#include "Episode/Actors/EpisodePedestrian.h"
 
 UEpisodePathFollowerComponent::UEpisodePathFollowerComponent()
 {
@@ -35,7 +33,6 @@ void UEpisodePathFollowerComponent::BeginPlay()
 	CurrentDistanceCm = InitialDistanceCm;
 	ResolveSplineComponent();
 	InitializePathNoise();
-	ConfigureCharacterMovementTickDependency();
 	FreezeOwnedSplineTransform();
 	MoveOwnerToCurrentDistance();
 
@@ -62,9 +59,7 @@ void UEpisodePathFollowerComponent::TickComponent(float DeltaTime, ELevelTick Ti
 		return;
 	}
 
-	if (TryMoveOwnerAlongSpline(SplineLength)) return;
-
-	CurrentDistanceCm += SpeedCmPerSecond * static_cast<double>(DeltaTime);
+	CurrentDistanceCm += SpeedCmPerSecond * GetPathNoiseSpeedScale(SplineLength) * static_cast<double>(DeltaTime);
 
 	if (bLoop)
 	{
@@ -82,8 +77,7 @@ void UEpisodePathFollowerComponent::TickComponent(float DeltaTime, ELevelTick Ti
 			StopFollowing();
 		}
 	}
-
-	MoveOwnerToCurrentDistance();
+	MoveOwnerToCurrentDistance(DeltaTime);
 }
 
 void UEpisodePathFollowerComponent::ResolveSplineComponent()
@@ -94,19 +88,6 @@ void UEpisodePathFollowerComponent::ResolveSplineComponent()
 		{
 			SplineComponent = Owner->FindComponentByClass<USplineComponent>();
 		}
-	}
-}
-
-void UEpisodePathFollowerComponent::ConfigureCharacterMovementTickDependency()
-{
-	if (!bUseCharacterMovement) return;
-
-	const ACharacter* Character = Cast<ACharacter>(GetOwner());
-	if (!Character) return;
-
-	if (UCharacterMovementComponent* CharacterMovement = Character->GetCharacterMovement())
-	{
-		CharacterMovement->AddTickPrerequisiteComponent(this);
 	}
 }
 
@@ -185,80 +166,14 @@ FVector UEpisodePathFollowerComponent::ApplyPathNoise(double DistanceCm, double 
 	return BaseLocation + Right * LateralOffsetCm;
 }
 
-bool UEpisodePathFollowerComponent::TryMoveOwnerAlongSpline(double SplineLength)
-{
-	if (!bUseCharacterMovement || !SplineComponent) return false;
-
-	ACharacter* Character = Cast<ACharacter>(GetOwner());
-	if (!Character) return false;
-
-	UCharacterMovementComponent* CharacterMovement = Character->GetCharacterMovement();
-	if (!CharacterMovement) return false;
-
-	const FVector OwnerLocation = Character->GetActorLocation();
-	const float ClosestInputKey = SplineComponent->FindInputKeyClosestToWorldLocation(OwnerLocation);
-	CurrentDistanceCm = SplineComponent->GetDistanceAlongSplineAtSplineInputKey(ClosestInputKey);
-
-	if (!bLoop && SplineLength - CurrentDistanceCm <= StopDistanceToleranceCm)
-	{
-		CharacterMovement->StopMovementImmediately();
-		StopFollowing();
-		return true;
-	}
-
-	double TargetDistanceCm = CurrentDistanceCm + FMath::Max(CharacterMovementLookAheadCm, SpeedCmPerSecond * 0.1);
-	if (bLoop)
-	{
-		TargetDistanceCm = FMath::Fmod(TargetDistanceCm, SplineLength);
-		if (TargetDistanceCm < 0.0)
-		{
-			TargetDistanceCm += SplineLength;
-		}
-	}
-	else
-	{
-		TargetDistanceCm = FMath::Clamp(TargetDistanceCm, 0.0, SplineLength);
-	}
-
-	const FVector TargetLocation = SplineComponent->GetLocationAtDistanceAlongSpline(
-		static_cast<float>(TargetDistanceCm),
-		ESplineCoordinateSpace::World);
-	const FVector NoisyTargetLocation = ApplyPathNoise(TargetDistanceCm, SplineLength, TargetLocation);
-	FVector DesiredDirection = NoisyTargetLocation - OwnerLocation;
-	DesiredDirection.Z = 0.0;
-
-	if (DesiredDirection.IsNearlyZero())
-	{
-		DesiredDirection = SplineComponent->GetDirectionAtDistanceAlongSpline(
-			static_cast<float>(CurrentDistanceCm),
-			ESplineCoordinateSpace::World);
-		DesiredDirection.Z = 0.0;
-	}
-
-	const double MaxSpeed = CharacterMovement->GetMaxSpeed();
-	const double RequestedSpeed = SpeedCmPerSecond * GetPathNoiseSpeedScale(SplineLength);
-	const float MovementScale = MaxSpeed > KINDA_SMALL_NUMBER
-		? static_cast<float>(FMath::Clamp(RequestedSpeed / MaxSpeed, 0.0, 1.0))
-		: 1.0f;
-	Character->AddMovementInput(DesiredDirection.GetSafeNormal(), MovementScale, true);
-
-	if (bOrientToSpline)
-	{
-		CharacterMovement->bOrientRotationToMovement = true;
-	}
-
-	return true;
-}
-
-void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance()
+void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance(double DeltaSeconds)
 {
 	if (!SplineComponent) return;
-
 
 	AActor* Owner = GetOwner();
 	if (!Owner) return;
 
-
+	const FVector PreviousLocation = Owner->GetActorLocation();
 	const FVector Location = SplineComponent->GetLocationAtDistanceAlongSpline(
 		static_cast<float>(CurrentDistanceCm),
 		ESplineCoordinateSpace::World);
@@ -269,10 +184,17 @@ void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance()
 		const FRotator Rotation = SplineComponent->GetRotationAtDistanceAlongSpline(
 			static_cast<float>(CurrentDistanceCm),
 			ESplineCoordinateSpace::World);
-		Owner->SetActorLocationAndRotation(NoisyLocation, Rotation, false, nullptr, ETeleportType::None);
+		FHitResult SweepHit;
+		Owner->SetActorLocationAndRotation(NoisyLocation, Rotation, true, &SweepHit, ETeleportType::None);
 	}
 	else
 	{
-		Owner->SetActorLocation(NoisyLocation, false, nullptr, ETeleportType::None);
+		FHitResult SweepHit;
+		Owner->SetActorLocation(NoisyLocation, true, &SweepHit, ETeleportType::None);
+	}
+
+	if (AEpisodePedestrian* Pedestrian = Cast<AEpisodePedestrian>(Owner))
+	{
+		Pedestrian->UpdateVisualMotion(PreviousLocation, Owner->GetActorLocation(), DeltaSeconds);
 	}
 }

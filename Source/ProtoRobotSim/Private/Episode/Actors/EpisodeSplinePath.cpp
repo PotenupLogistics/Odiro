@@ -1,8 +1,8 @@
-#include "Episode/Actors/EpisodeSplinePathActor.h"
+#include "Episode/Actors/EpisodeSplinePath.h"
 
 #include "Components/SplineComponent.h"
 
-AEpisodeSplinePathActor::AEpisodeSplinePathActor()
+AEpisodeSplinePath::AEpisodeSplinePath()
 {
 	PrimaryActorTick.bCanEverTick = false;
 

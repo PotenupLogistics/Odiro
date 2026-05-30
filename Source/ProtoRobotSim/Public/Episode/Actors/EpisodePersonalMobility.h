@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Shared/EpisodeCoreTypes.h"
-#include "EpisodePersonalMobilityActor.generated.h"
+#include "EpisodePersonalMobility.generated.h"
 
 class UEpisodeObstacleCollisionComponent;
 class UEpisodePathFollowerComponent;
@@ -12,12 +12,12 @@ class USceneComponent;
 // 인도 주변 이동체 actor(자전거, PM, 스쿠터 등) 파일임.
 // 개인형 이동수단의 타입과 이동 모드를 표현하는 Pawn 기반 actor임.
 UCLASS(BlueprintType)
-class PROTOROBOTSIM_API AEpisodePersonalMobilityActor : public APawn
+class PROTOROBOTSIM_API AEpisodePersonalMobility : public APawn
 {
 	GENERATED_BODY()
 
 public:
-	AEpisodePersonalMobilityActor();
+	AEpisodePersonalMobility();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
 	TObjectPtr<USceneComponent> SceneRoot;

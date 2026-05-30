@@ -1,10 +1,10 @@
-#include "Episode/Actors/EpisodeStaticObstacleActor.h"
+#include "Episode/Actors/EpisodeStaticObstacle.h"
 
 #include "Components/SceneComponent.h"
 #include "Episode/Components/EpisodeObstacleCollisionComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 
-AEpisodeStaticObstacleActor::AEpisodeStaticObstacleActor()
+AEpisodeStaticObstacle::AEpisodeStaticObstacle()
 {
 	PrimaryActorTick.bCanEverTick = false;
 

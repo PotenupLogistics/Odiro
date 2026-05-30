@@ -1,11 +1,11 @@
-#include "Episode/Actors/EpisodePersonalMobilityActor.h"
+#include "Episode/Actors/EpisodePersonalMobility.h"
 
 #include "Components/SceneComponent.h"
 #include "Episode/Components/EpisodeObstacleCollisionComponent.h"
 #include "Episode/Components/EpisodePathFollowerComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 
-AEpisodePersonalMobilityActor::AEpisodePersonalMobilityActor()
+AEpisodePersonalMobility::AEpisodePersonalMobility()
 {
 	PrimaryActorTick.bCanEverTick = false;
 

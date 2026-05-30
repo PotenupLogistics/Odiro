@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Shared/EpisodeCoreTypes.h"
-#include "EpisodeVehicleActor.generated.h"
+#include "EpisodeVehicle.generated.h"
 
 class UEpisodeObstacleCollisionComponent;
 class UEpisodePathFollowerComponent;
@@ -12,12 +12,12 @@ class USceneComponent;
 // 차량 actor(주차, 주행, 출차 상태)을 표현하는 파일임.
 // 차량 상태를 parked, driving, pulling out으로 구분하는 Pawn 기반 actor임.
 UCLASS(BlueprintType)
-class PROTOROBOTSIM_API AEpisodeVehicleActor : public APawn
+class PROTOROBOTSIM_API AEpisodeVehicle : public APawn
 {
 	GENERATED_BODY()
 
 public:
-	AEpisodeVehicleActor();
+	AEpisodeVehicle();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
 	TObjectPtr<USceneComponent> SceneRoot;

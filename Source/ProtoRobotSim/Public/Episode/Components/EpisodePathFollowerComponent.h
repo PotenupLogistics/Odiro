@@ -5,6 +5,7 @@
 #include "EpisodePathFollowerComponent.generated.h"
 
 class USplineComponent;
+class AEpisodeSplinePath;
 
 // 보행자와 이동체가 EpisodePathSpec을 따라 움직이도록 하기 위한 component 파일임.
 UCLASS(ClassGroup = (Episode), BlueprintType, Blueprintable, meta = (BlueprintSpawnableComponent))
@@ -64,6 +65,9 @@ public:
 	void SetSplineComponent(USplineComponent* InSplineComponent);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
+	void SetSplinePath(AEpisodeSplinePath* InSplinePath);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode")
 	void StartFollowing();
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
@@ -74,8 +78,6 @@ protected:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
-	void ResolveSplineComponent();
-	void FreezeOwnedSplineTransform();
 	void InitializePathNoise();
 	double GetPathNoiseFade(double SplineLength) const;
 	double GetPathNoiseSpeedScale(double SplineLength) const;

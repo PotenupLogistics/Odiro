@@ -3,7 +3,6 @@
 #include "Episode/Components/EpisodeObstacleCollisionComponent.h"
 #include "Episode/Components/EpisodePathFollowerComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
-#include "Components/SplineComponent.h"
 
 AEpisodePedestrian::AEpisodePedestrian()
 {
@@ -12,15 +11,7 @@ AEpisodePedestrian::AEpisodePedestrian()
 	PlaceableComponent = CreateDefaultSubobject<UEpisodePlaceableComponent>(TEXT("PlaceableComponent"));
 	ObstacleCollisionComponent = CreateDefaultSubobject<UEpisodeObstacleCollisionComponent>(TEXT("ObstacleCollisionComponent"));
 
-	MovementSplineComponent = CreateDefaultSubobject<USplineComponent>(TEXT("MovementSplineComponent"));
-	MovementSplineComponent->SetupAttachment(GetRootComponent());
-	MovementSplineComponent->ClearSplinePoints(false);
-	MovementSplineComponent->AddSplinePoint(FVector::ZeroVector, ESplineCoordinateSpace::Local, false);
-	MovementSplineComponent->AddSplinePoint(FVector(500.0, 0.0, 0.0), ESplineCoordinateSpace::Local, false);
-	MovementSplineComponent->UpdateSpline();
-
 	PathFollowerComponent = CreateDefaultSubobject<UEpisodePathFollowerComponent>(TEXT("PathFollowerComponent"));
-	PathFollowerComponent->SetSplineComponent(MovementSplineComponent);
 	PathFollowerComponent->bUseSeededPathNoise = true;
 }
 
@@ -28,6 +19,7 @@ void AEpisodePedestrian::UpdateVisualMotion(const FVector& PreviousLocation, con
 {
 	if (DeltaSeconds <= KINDA_SMALL_NUMBER)
 	{
+		ResetVisualMotion();
 		return;
 	}
 
@@ -49,4 +41,11 @@ void AEpisodePedestrian::UpdateVisualMotion(const FVector& PreviousLocation, con
 	const double ForwardAmount = FVector::DotProduct(MoveDirection, Forward);
 	const double RightAmount = FVector::DotProduct(MoveDirection, Right);
 	VisualDirectionDegrees = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(RightAmount, ForwardAmount)));
+}
+
+void AEpisodePedestrian::ResetVisualMotion()
+{
+	VisualSpeedCmPerSecond = 0.0f;
+	VisualDirectionDegrees = 0.0f;
+	bMoving = false;
 }

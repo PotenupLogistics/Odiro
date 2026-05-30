@@ -8,7 +8,6 @@
 class UEpisodeObstacleCollisionComponent;
 class UEpisodePathFollowerComponent;
 class UEpisodePlaceableComponent;
-class USplineComponent;
 
 // 보행자 actor(아이, 성인, 노인 등) 파일임.
 // profile과 path follower로 보행자 차이를 표현하는 Character 기반 actor임.
@@ -29,9 +28,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
 	TObjectPtr<UEpisodePathFollowerComponent> PathFollowerComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
-	TObjectPtr<USplineComponent> MovementSplineComponent;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	EEpisodePedestrianProfile PedestrianProfile = EEpisodePedestrianProfile::Adult;
 
@@ -45,4 +41,5 @@ public:
 	bool bMoving = false;
 
 	void UpdateVisualMotion(const FVector& PreviousLocation, const FVector& NewLocation, double DeltaSeconds);
+	void ResetVisualMotion();
 };

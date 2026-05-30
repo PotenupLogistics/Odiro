@@ -3,6 +3,8 @@
 #include "CoreMinimal.h"
 #include "EpisodeCoreTypes.generated.h"
 
+class UStaticMesh;
+
 // 에피소드 전반에서 공유하는 가장 작은 공통 타입들을 모아둔 파일임.
 
 UENUM(BlueprintType)
@@ -56,6 +58,50 @@ enum class EEpisodePedestrianProfile : uint8
 	Adult,
 	Child,
 	Elderly
+};
+
+UENUM(BlueprintType)
+enum class EEpisodeStaticObstaclePropCategory : uint8
+{
+	Unknown,
+	StreetFurniture,
+	TrafficControl,
+	DeliveryItem,
+	Utility,
+	SurfaceObject
+};
+
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodeStaticObstaclePropEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode")
+	FName PropId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode")
+	FName SemanticTypeId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode")
+	EEpisodeStaticObstaclePropCategory Category = EEpisodeStaticObstaclePropCategory::Unknown;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode")
+	TSoftObjectPtr<UStaticMesh> StaticMeshAsset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Placement", meta = (ClampMin = "0.0"))
+	FVector FallbackBoxExtent = FVector(50.0, 50.0, 100.0);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Collision")
+	bool bUsePhysicalCollision = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Collision")
+	bool bUseSafetyQuery = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Collision", meta = (ClampMin = "0.0"))
+	double SafetyRadius = 100.0;
 };
 
 // JSON으로 옮길 수 있는 파라미터 값을 담기 위한 작은 variant 타입임.

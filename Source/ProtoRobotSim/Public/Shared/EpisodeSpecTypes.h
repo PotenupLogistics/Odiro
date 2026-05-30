@@ -17,6 +17,61 @@ enum class EEpisodePathType : uint8
 	Spline
 };
 
+UENUM(BlueprintType)
+enum class EEpisodeGroundRegionType : uint8
+{
+	Walkable,
+	Penalty,
+	Blocked
+};
+
+UENUM(BlueprintType)
+enum class EEpisodeGroundShapeType : uint8
+{
+	Rectangle,
+	ConvexPolygon
+};
+
+// Runtime ground region spec. Units are Unreal centimeters.
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodeGroundRegionSpec
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString RegionId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	EEpisodeGroundRegionType RegionType = EEpisodeGroundRegionType::Walkable;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	EEpisodeGroundShapeType ShapeType = EEpisodeGroundShapeType::Rectangle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FVector Center = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FVector2D Size = FVector2D(100.0, 100.0);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	double YawDegrees = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	double TraversabilityScore = 1.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString PenaltyKind;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	double PenaltyCost = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	double ViolationAfterSeconds = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString CollisionTag;
+};
+
 // 월드에 배치되는 정적 객체 하나를 표현하는 명세.
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FEpisodePlaceableInstanceSpec
@@ -125,6 +180,9 @@ struct PROTOROBOTSIM_API FEpisodeWorldSpec
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FEpisodeSeedLedger Seeds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<FEpisodeGroundRegionSpec> GroundRegions;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	TArray<FEpisodePlaceableInstanceSpec> Placeables;

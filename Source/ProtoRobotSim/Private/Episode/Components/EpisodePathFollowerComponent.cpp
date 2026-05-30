@@ -2,6 +2,8 @@
 #include "Episode/Components/EpisodePathFollowerComponent.h"
 #include "Components/SplineComponent.h"
 #include "Episode/Actors/EpisodePedestrian.h"
+#include "Episode/Actors/EpisodeSplinePath.h"
+#include "GameFramework/Actor.h"
 
 UEpisodePathFollowerComponent::UEpisodePathFollowerComponent()
 {
@@ -13,17 +15,47 @@ UEpisodePathFollowerComponent::UEpisodePathFollowerComponent()
 void UEpisodePathFollowerComponent::SetSplineComponent(USplineComponent* InSplineComponent)
 {
 	SplineComponent = InSplineComponent;
+
+	if (!SplineComponent)
+	{
+		StopFollowing();
+	}
+}
+
+void UEpisodePathFollowerComponent::SetSplinePath(AEpisodeSplinePath* InSplinePath)
+{
+	if (!InSplinePath)
+	{
+		PathId.Reset();
+		SplineComponent = nullptr;
+		StopFollowing();
+		return;
+	}
+
+	PathId = InSplinePath->PathId;
+	SetSplineComponent(InSplinePath->SplineComponent);
 }
 
 void UEpisodePathFollowerComponent::StartFollowing()
 {
-	ResolveSplineComponent();
-	SetComponentTickEnabled(SplineComponent != nullptr);
+	if (!SplineComponent)
+	{
+		StopFollowing();
+		return;
+	}
+
+	MoveOwnerToCurrentDistance();
+	SetComponentTickEnabled(true);
 }
 
 void UEpisodePathFollowerComponent::StopFollowing()
 {
 	SetComponentTickEnabled(false);
+
+	if (AEpisodePedestrian* Pedestrian = Cast<AEpisodePedestrian>(GetOwner()))
+	{
+		Pedestrian->ResetVisualMotion();
+	}
 }
 
 void UEpisodePathFollowerComponent::BeginPlay()
@@ -31,9 +63,7 @@ void UEpisodePathFollowerComponent::BeginPlay()
 	Super::BeginPlay();
 
 	CurrentDistanceCm = InitialDistanceCm;
-	ResolveSplineComponent();
 	InitializePathNoise();
-	FreezeOwnedSplineTransform();
 	MoveOwnerToCurrentDistance();
 
 	if (bAutoStart)
@@ -60,7 +90,7 @@ void UEpisodePathFollowerComponent::TickComponent(float DeltaTime, ELevelTick Ti
 	}
 
 	CurrentDistanceCm += SpeedCmPerSecond * GetPathNoiseSpeedScale(SplineLength) * static_cast<double>(DeltaTime);
-
+	bool bReachedEnd = false;
 	if (bLoop)
 	{
 		CurrentDistanceCm = FMath::Fmod(CurrentDistanceCm, SplineLength);
@@ -74,28 +104,15 @@ void UEpisodePathFollowerComponent::TickComponent(float DeltaTime, ELevelTick Ti
 		CurrentDistanceCm = FMath::Clamp(CurrentDistanceCm, 0.0, SplineLength);
 		if (FMath::IsNearlyEqual(CurrentDistanceCm, SplineLength))
 		{
-			StopFollowing();
+			bReachedEnd = true;
 		}
 	}
 	MoveOwnerToCurrentDistance(DeltaTime);
-}
 
-void UEpisodePathFollowerComponent::ResolveSplineComponent()
-{
-	if (!SplineComponent)
+	if (bReachedEnd)
 	{
-		if (AActor* Owner = GetOwner())
-		{
-			SplineComponent = Owner->FindComponentByClass<USplineComponent>();
-		}
+		StopFollowing();
 	}
-}
-
-void UEpisodePathFollowerComponent::FreezeOwnedSplineTransform()
-{
-	if (!SplineComponent || SplineComponent->GetOwner() != GetOwner()) return;
-
-	SplineComponent->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
 }
 
 void UEpisodePathFollowerComponent::InitializePathNoise()

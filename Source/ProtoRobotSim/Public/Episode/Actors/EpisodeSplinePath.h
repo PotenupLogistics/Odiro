@@ -21,4 +21,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FString PathId;
+
+	UFUNCTION(BlueprintCallable, Category = "Episode")
+	void ConfigurePath(const FString& InPathId, const TArray<FVector>& Points, bool bClosedLoop);
 };

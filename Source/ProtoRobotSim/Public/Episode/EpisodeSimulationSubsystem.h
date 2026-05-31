@@ -9,10 +9,10 @@ class AEpisodeGroundRegion;
 class AEpisodePedestrian;
 class AEpisodeSplinePath;
 class AEpisodeStaticObstacle;
+class UPrimitiveComponent;
 class UEpisodePlaceableComponent;
 
 // 컴파일된 Episode WorldSpec을 현재 월드에 스폰하고, 런타임 actor 생명주기를 관리하는 subsystem.
-// MVP에서는 ground/path/static obstacle/pedestrian/robot placeholder를 순서대로 배치하는 역할만 담당한다.
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API UEpisodeSimulationSubsystem : public UWorldSubsystem
 {
@@ -78,16 +78,6 @@ public:
 		double InitialDistanceCm,
 		bool bStartFollowing);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Debug")
-	AEpisodePedestrian* SpawnSimplePedestrianPathTest(
-		TSubclassOf<AEpisodePedestrian> InPedestrianClass,
-		const FVector& StartLocation,
-		const FVector& EndLocation,
-		double SpeedCmPerSecond);
-
-	UFUNCTION(BlueprintCallable, Category = "Episode|Debug")
-	void SpawnDebugGroundRegionTest();
-
 private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> RuntimeActors;
@@ -130,4 +120,11 @@ private:
 		const TMap<FString, FEpisodeParamValue>& Properties,
 		const FString& Key,
 		bool DefaultValue);
+
+	static bool GetVectorProperty(
+		const TMap<FString, FEpisodeParamValue>& Properties,
+		const FString& Key,
+		FVector& OutValue);
+
+	static void SetActorReceivesDecals(AActor* Actor, bool bReceivesDecals);
 };

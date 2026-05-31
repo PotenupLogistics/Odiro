@@ -23,7 +23,11 @@ ADeliveryBot_SimpleMesh::ADeliveryBot_SimpleMesh()
 void ADeliveryBot_SimpleMesh::BeginPlay()
 {
 	Super::BeginPlay();
-	GetWorldTimerManager().SetTimerForNextTick(this, &ADeliveryBot_SimpleMesh::RequestGlobalPathByPathPoints);
+
+	if (bAutoRequestPathPointsOnBeginPlay)
+	{
+		GetWorldTimerManager().SetTimerForNextTick(this, &ADeliveryBot_SimpleMesh::RequestGlobalPathByPathPoints);
+	}
 }
 
 void ADeliveryBot_SimpleMesh::Tick(float DeltaTime)
@@ -113,7 +117,14 @@ bool ADeliveryBot_SimpleMesh::BuildGlobalPathAndStartMove(const FVector& startLo
 	}
 
 	MovementComponent->SetPath(GlobalPathComponent->GetGlobalPath());
+	CachedGoalLocation = goalLocation;
+	bHasCachedGoalLocation = true;
 	return true;
+}
+
+void ADeliveryBot_SimpleMesh::SetAutoRequestPathPointsOnBeginPlay(bool bEnabled)
+{
+	bAutoRequestPathPointsOnBeginPlay = bEnabled;
 }
 
 void ADeliveryBot_SimpleMesh::RequestGlobalPathFromCurrentLocation()

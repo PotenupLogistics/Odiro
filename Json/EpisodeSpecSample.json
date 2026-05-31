@@ -21,7 +21,7 @@
         "shape": {
           "type": "rectangle",
           "center_m": [0.0, 0.0, 0.0],
-          "size_m": [12.0, 2.4],
+          "size_m": [12.0, 6.0],
           "yaw_deg": 0.0
         },
         "traversability_score": 1.0
@@ -31,8 +31,8 @@
         "region_type": "penalty",
         "shape": {
           "type": "rectangle",
-          "center_m": [0.0, -2.3, 0.0],
-          "size_m": [12.0, 3.0],
+          "center_m": [0.0, -6.0, 0.0],
+          "size_m": [12.0, 6.0],
           "yaw_deg": 0.0
         },
         "penalty": {
@@ -47,8 +47,8 @@
         "region_type": "blocked",
         "shape": {
           "type": "rectangle",
-          "center_m": [0.0, 1.6, 0.0],
-          "size_m": [12.0, 0.3],
+          "center_m": [0.0, 3.0, 0.0],
+          "size_m": [4.0, 1.0],
           "yaw_deg": 0.0
         },
         "collision_tag": "wall"
@@ -135,7 +135,7 @@
     "robot": {
       "instance_id": "robot_01",
       "asset_id": "delivery_bot",
-      "spawn_only": true,
+      "spawn_only": false,
       "transform": {
         "location_m": [-5.0, 0.0, 0.0],
         "rotation_deg": {
@@ -144,6 +144,10 @@
           "roll": 0.0
         },
         "scale": [1.0, 1.0, 1.0]
+      },
+      "route": {
+        "goal_m": [5.0, 0.0, 0.0],
+        "auto_start": true
       }
     }
   }

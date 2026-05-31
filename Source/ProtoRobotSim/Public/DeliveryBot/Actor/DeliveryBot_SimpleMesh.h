@@ -21,12 +21,11 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 	
-private:
+public:
 	void RequestGlobalPathByPathPoints();
 	bool GetPathPointLocations(FVector& outStartLocation, FVector& outGoalLocation) const;
 	bool BuildGlobalPathAndStartMove(const FVector& startLocation, const FVector& goalLocation);
-	
-public:
+	void SetAutoRequestPathPointsOnBeginPlay(bool bEnabled);
 	void RequestGlobalPathFromCurrentLocation();
 	
 private:
@@ -45,4 +44,7 @@ private:
 private:
 	FVector CachedGoalLocation{ FVector::ZeroVector };
 	bool bHasCachedGoalLocation{ false };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Path", meta = (AllowPrivateAccess = "true"))
+	bool bAutoRequestPathPointsOnBeginPlay{ true };
 };

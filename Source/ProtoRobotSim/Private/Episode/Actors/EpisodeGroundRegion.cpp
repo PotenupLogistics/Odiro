@@ -1,13 +1,15 @@
 #include "Episode/Actors/EpisodeGroundRegion.h"
 
 #include "Components/BoxComponent.h"
+#include "Components/DecalComponent.h"
 #include "Components/SceneComponent.h"
-#include "DrawDebugHelpers.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
+#include "UObject/ConstructorHelpers.h"
 
 AEpisodeGroundRegion::AEpisodeGroundRegion()
 {
-	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.TickInterval = 0.25f;
+	PrimaryActorTick.bCanEverTick = false;
 
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
@@ -19,20 +21,24 @@ AEpisodeGroundRegion::AEpisodeGroundRegion()
 	RegionBoundsComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	RegionBoundsComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
 	RegionBoundsComponent->SetGenerateOverlapEvents(false);
+
+	RegionDecalComponent = CreateDefaultSubobject<UDecalComponent>(TEXT("RegionDecalComponent"));
+	RegionDecalComponent->SetupAttachment(SceneRoot);
+	RegionDecalComponent->SetVisibility(false);
+	RegionDecalComponent->SetFadeScreenSize(0.0f);
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> GroundDecalMaterialAsset(TEXT("/Game/Episode/Material/M_EpisodeGroundDecal.M_EpisodeGroundDecal"));
+	if (GroundDecalMaterialAsset.Succeeded())
+	{
+		GroundDecalMaterial = GroundDecalMaterialAsset.Object;
+	}
 }
 
 void AEpisodeGroundRegion::BeginPlay()
 {
 	Super::BeginPlay();
 
-	DrawDebugRegion(2.0);
-}
-
-void AEpisodeGroundRegion::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-
-	DrawDebugRegion(DebugDrawLifeTimeSeconds);
+	UpdateDecalVisualization();
 }
 
 void AEpisodeGroundRegion::ConfigureRegion(const FEpisodeGroundRegionSpec& InRegionSpec)
@@ -58,7 +64,7 @@ void AEpisodeGroundRegion::ConfigureRegion(const FEpisodeGroundRegionSpec& InReg
 	RegionBoundsComponent->SetBoxExtent(BoxExtent, true);
 
 	ApplyCollisionSettings();
-	DrawDebugRegion(5.0);
+	UpdateDecalVisualization();
 }
 
 bool AEpisodeGroundRegion::ContainsWorldLocation2D(const FVector& WorldLocation) const
@@ -89,70 +95,64 @@ void AEpisodeGroundRegion::ApplyCollisionSettings()
 	RegionBoundsComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
 }
 
-void AEpisodeGroundRegion::DrawDebugRegion(double LifeTimeSeconds) const
+void AEpisodeGroundRegion::UpdateDecalVisualization()
 {
-	UWorld* World = GetWorld();
-	if (!World || RegionSpec.ShapeType != EEpisodeGroundShapeType::Rectangle)
+	if (!RegionDecalComponent)
 	{
 		return;
 	}
 
-	const FVector DebugCenter = GetActorLocation() + FVector(0.0, 0.0, DebugDrawZOffsetCm);
-	const FVector DebugExtent(
-		RegionSpec.Size.X * 0.5,
-		RegionSpec.Size.Y * 0.5,
-		DebugDrawHalfHeightCm);
-
-	const FColor DebugColor = GetDebugColor();
-	DrawDebugBox(
-		World,
-		DebugCenter,
-		DebugExtent,
-		GetActorQuat(),
-		DebugColor,
-		false,
-		static_cast<float>(LifeTimeSeconds),
-		0,
-		static_cast<float>(DebugLineThickness));
-
-	const FString RegionTypeLabel = GetRegionTypeLabel();
-	const FString Label = FString::Printf(TEXT("%s (%s)"), *RegionSpec.RegionId, *RegionTypeLabel);
-	DrawDebugString(
-		World,
-		DebugCenter + FVector(0.0, 0.0, 24.0),
-		Label,
-		nullptr,
-		DebugColor,
-		static_cast<float>(LifeTimeSeconds),
-		true);
-}
-
-FColor AEpisodeGroundRegion::GetDebugColor() const
-{
-	switch (RegionSpec.RegionType)
+	if (!bUseDecalVisualization || RegionSpec.ShapeType != EEpisodeGroundShapeType::Rectangle)
 	{
-	case EEpisodeGroundRegionType::Walkable:
-		return FColor::Green;
-	case EEpisodeGroundRegionType::Penalty:
-		return FColor(255, 165, 0);
-	case EEpisodeGroundRegionType::Blocked:
-		return FColor::Red;
-	default:
-		return FColor::White;
+		RegionDecalComponent->SetVisibility(false);
+		return;
 	}
+
+	CreateOrUpdateDecalMaterialInstance();
+	if (!GroundDecalMaterialInstance)
+	{
+		RegionDecalComponent->SetVisibility(false);
+		return;
+	}
+
+	// UDecalComponent는 local X축 방향으로 투사하므로, local Y/Z를 지면의 Y/X 크기에 대응시킨다.
+	RegionDecalComponent->DecalSize = FVector(
+		DecalProjectionDepthCm,
+		RegionSpec.Size.Y,
+		RegionSpec.Size.X);
+	RegionDecalComponent->SetRelativeLocation(FVector(0.0, 0.0, DecalZOffsetCm));
+	RegionDecalComponent->SetRelativeRotation(FRotator(-90.0, 0.0, 0.0));
+	RegionDecalComponent->SetVisibility(true);
 }
 
-FString AEpisodeGroundRegion::GetRegionTypeLabel() const
+void AEpisodeGroundRegion::CreateOrUpdateDecalMaterialInstance()
+{
+	if (!RegionDecalComponent || !GroundDecalMaterial)
+	{
+		return;
+	}
+
+	if (!GroundDecalMaterialInstance)
+	{
+		GroundDecalMaterialInstance = UMaterialInstanceDynamic::Create(GroundDecalMaterial, this);
+		RegionDecalComponent->SetDecalMaterial(GroundDecalMaterialInstance);
+	}
+
+	GroundDecalMaterialInstance->SetVectorParameterValue(TEXT("RegionColor"), GetRegionColor());
+	GroundDecalMaterialInstance->SetScalarParameterValue(TEXT("Opacity"), DecalOpacity);
+}
+
+FLinearColor AEpisodeGroundRegion::GetRegionColor() const
 {
 	switch (RegionSpec.RegionType)
 	{
 	case EEpisodeGroundRegionType::Walkable:
-		return TEXT("Walkable");
+		return FLinearColor(0.05f, 0.85f, 0.16f, 1.0f);
 	case EEpisodeGroundRegionType::Penalty:
-		return TEXT("Penalty");
+		return FLinearColor(1.0f, 0.48f, 0.0f, 1.0f);
 	case EEpisodeGroundRegionType::Blocked:
-		return TEXT("Blocked");
+		return FLinearColor(1.0f, 0.03f, 0.02f, 1.0f);
 	default:
-		return TEXT("Unknown");
+		return FLinearColor::White;
 	}
 }

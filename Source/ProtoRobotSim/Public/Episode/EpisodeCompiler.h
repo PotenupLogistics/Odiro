@@ -146,6 +146,8 @@ private:
 
 	// actors.robot를 정책 없는 spawn-only placeable로 변환한다.
 	// robot policy는 다루지 않고 asset_id, transform, spawn_only 상태만 WorldSpec에 보존한다.
+	// 에피소드 로봇 MVP에서는 transform.location_m을 출발 위치(cm)로 사용한다.
+	// route.goal_m 또는 goal_m은 Unreal centimeter 단위 goal_cm 프로퍼티로 변환한다.
 	static void CompileRobotSpawn(const FJsonObject& actorsObject, FEpisodeCompileResult& result, TSet<FString>& instanceIds);
 
 	// actors object 전체를 static obstacle, pedestrian, robot 순서로 컴파일한다.
@@ -202,5 +204,8 @@ actors.robot.instance_id / actor_id
 actors.robot.asset_id / type
 actors.robot.spawn_only
 actors.robot.transform
+actors.robot.goal_m
+actors.robot.route.goal_m
+actors.robot.route.auto_start
 actors.robot.properties
  */

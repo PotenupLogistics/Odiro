@@ -1,11 +1,6 @@
 
 #include "Episode/EpisodeCompiler.h"
-
-#include "Dom/JsonObject.h"
 #include "Episode/Actors/EpisodeStaticObstacle.h"
-#include "Misc/FileHelper.h"
-#include "Serialization/JsonReader.h"
-#include "Serialization/JsonSerializer.h"
 
 void UEpisodeCompiler::AddDiagnostic(
 		FEpisodeCompileResult& result,
@@ -112,7 +107,7 @@ bool UEpisodeCompiler::RequireStringField(
 			return true;
 		}
 
-		AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("missing_string"), FString::Printf(TEXT("%s.%s is required."), *path, *fieldName));
+		AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("missing_string"), FString::Printf(TEXT("%s.%s 필드는 필수."), *path, *fieldName));
 		return false;
 	}
 
@@ -133,7 +128,7 @@ bool UEpisodeCompiler::RequireStringField(
 			result,
 			EEpisodeCompileDiagnosticSeverity::Error,
 			TEXT("missing_string"),
-			FString::Printf(TEXT("%s.%s is required."), *path, *primaryFieldName));
+			FString::Printf(TEXT("%s.%s 필드는 필수."), *path, *primaryFieldName));
 		return false;
 	}
 
@@ -166,7 +161,7 @@ bool UEpisodeCompiler::ReadNumberArray(
 				result,
 				EEpisodeCompileDiagnosticSeverity::Error,
 				TEXT("missing_number_array"),
-				FString::Printf(TEXT("%s.%s must be an array of %d numbers."), *path, *fieldName, expectedCount));
+				FString::Printf(TEXT("%s.%s 필드는 숫자 %d개로 이루어진 배열이어야 함."), *path, *fieldName, expectedCount));
 			return false;
 		}
 
@@ -176,7 +171,7 @@ bool UEpisodeCompiler::ReadNumberArray(
 				result,
 				EEpisodeCompileDiagnosticSeverity::Error,
 				TEXT("invalid_array_length"),
-				FString::Printf(TEXT("%s.%s must contain %d numbers."), *path, *fieldName, expectedCount));
+				FString::Printf(TEXT("%s.%s 필드는 숫자 %d개를 포함해야 함."), *path, *fieldName, expectedCount));
 			return false;
 		}
 
@@ -190,7 +185,7 @@ bool UEpisodeCompiler::ReadNumberArray(
 					result,
 					EEpisodeCompileDiagnosticSeverity::Error,
 					TEXT("invalid_number_array"),
-					FString::Printf(TEXT("%s.%s[%d] must be a number."), *path, *fieldName, Index));
+					FString::Printf(TEXT("%s.%s[%d] 값은 숫자여야 함."), *path, *fieldName, Index));
 				return false;
 			}
 
@@ -274,7 +269,7 @@ bool UEpisodeCompiler::ReadRotatorField(
 					result,
 					EEpisodeCompileDiagnosticSeverity::Error,
 					TEXT("invalid_rotation"),
-					FString::Printf(TEXT("%s.%s must contain 3 numbers."), *path, *fieldName));
+					FString::Printf(TEXT("%s.%s 필드는 숫자 3개를 포함해야 함."), *path, *fieldName));
 				return false;
 			}
 
@@ -286,7 +281,7 @@ bool UEpisodeCompiler::ReadRotatorField(
 						result,
 						EEpisodeCompileDiagnosticSeverity::Error,
 						TEXT("invalid_rotation"),
-						FString::Printf(TEXT("%s.%s[%d] must be a number."), *path, *fieldName, Index));
+						FString::Printf(TEXT("%s.%s[%d] 값은 숫자여야 함."), *path, *fieldName, Index));
 					return false;
 				}
 			}
@@ -302,7 +297,7 @@ bool UEpisodeCompiler::ReadRotatorField(
 			result,
 			EEpisodeCompileDiagnosticSeverity::Error,
 			TEXT("invalid_rotation"),
-			FString::Printf(TEXT("%s.%s must be an object or [roll, pitch, yaw] array."), *path, *fieldName));
+			FString::Printf(TEXT("%s.%s 필드는 object 또는 [roll, pitch, yaw] 배열이어야 함."), *path, *fieldName));
 		return false;
 	}
 
@@ -320,7 +315,7 @@ bool UEpisodeCompiler::ReadTransformField(
 				result,
 				EEpisodeCompileDiagnosticSeverity::Warning,
 				TEXT("missing_transform"),
-				FString::Printf(TEXT("%s.%s is missing. Identity transform will be used."), *path, *fieldName));
+				FString::Printf(TEXT("%s.%s 필드가 없음. Identity transform을 사용하겠음."), *path, *fieldName));
 			outTransform = FTransform::Identity;
 			return true;
 		}
@@ -417,7 +412,7 @@ bool UEpisodeCompiler::AddUniqueId(TSet<FString>& ids, const FString& id, const 
 				result,
 				EEpisodeCompileDiagnosticSeverity::Error,
 				TEXT("duplicate_id"),
-				FString::Printf(TEXT("%s has duplicate id '%s'."), *path, *id));
+				FString::Printf(TEXT("%s에 중복 id '%s'가 있음."), *path, *id));
 			return false;
 		}
 
@@ -508,14 +503,14 @@ void UEpisodeCompiler::CompileGroundRegions(const FJsonObject& rootObject, FEpis
 		TSharedPtr<FJsonObject> GroundModelObject;
 		if (!TryGetObjectField(rootObject, TEXT("ground_model"), GroundModelObject))
 		{
-			AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Warning, TEXT("missing_ground_model"), TEXT("ground_model is missing."));
+			AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Warning, TEXT("missing_ground_model"), TEXT("ground_model 필드가 없음."));
 			return;
 		}
 
 		TArray<TSharedPtr<FJsonValue>> Regions;
 		if (!TryGetArrayField(*GroundModelObject, TEXT("regions"), Regions))
 		{
-			AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Warning, TEXT("missing_ground_regions"), TEXT("ground_model.regions is missing."));
+			AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Warning, TEXT("missing_ground_regions"), TEXT("ground_model.regions 필드가 없음."));
 			return;
 		}
 
@@ -525,7 +520,7 @@ void UEpisodeCompiler::CompileGroundRegions(const FJsonObject& rootObject, FEpis
 			const FString RegionPath = FString::Printf(TEXT("ground_model.regions[%d]"), Index);
 			if (!Regions[Index].IsValid() || Regions[Index]->Type != EJson::Object)
 			{
-				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_ground_region"), FString::Printf(TEXT("%s must be an object."), *RegionPath));
+				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_ground_region"), FString::Printf(TEXT("%s 항목은 object이어야 함."), *RegionPath));
 				continue;
 			}
 
@@ -541,13 +536,13 @@ void UEpisodeCompiler::CompileGroundRegions(const FJsonObject& rootObject, FEpis
 			if (RequireStringField(*RegionObject, TEXT("region_type"), TEXT("type"), RegionPath, result, RegionTypeString)
 				&& !ParseGroundRegionType(RegionTypeString, RegionSpec.RegionType))
 			{
-				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_ground_type"), FString::Printf(TEXT("%s.region_type '%s' is not supported."), *RegionPath, *RegionTypeString));
+				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_ground_type"), FString::Printf(TEXT("%s.region_type '%s' 값은 지원하지 않음."), *RegionPath, *RegionTypeString));
 			}
 
 			TSharedPtr<FJsonObject> ShapeObject;
 			if (!TryGetObjectField(*RegionObject, TEXT("shape"), ShapeObject))
 			{
-				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("missing_shape"), FString::Printf(TEXT("%s.shape is required."), *RegionPath));
+				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("missing_shape"), FString::Printf(TEXT("%s.shape 필드는 필수."), *RegionPath));
 				continue;
 			}
 
@@ -555,12 +550,12 @@ void UEpisodeCompiler::CompileGroundRegions(const FJsonObject& rootObject, FEpis
 			if (RequireStringField(*ShapeObject, TEXT("type"), TEXT("shape_type"), FString::Printf(TEXT("%s.shape"), *RegionPath), result, ShapeTypeString)
 				&& !ParseGroundShapeType(ShapeTypeString, RegionSpec.ShapeType))
 			{
-				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_shape_type"), FString::Printf(TEXT("%s.shape.type '%s' is not supported."), *RegionPath, *ShapeTypeString));
+				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_shape_type"), FString::Printf(TEXT("%s.shape.type '%s' 값은 지원하지 않음."), *RegionPath, *ShapeTypeString));
 			}
 
 			if (RegionSpec.ShapeType != EEpisodeGroundShapeType::Rectangle)
 			{
-				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("unsupported_shape"), FString::Printf(TEXT("%s only supports rectangle ground regions in MVP."), *RegionPath));
+				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("unsupported_shape"), FString::Printf(TEXT("%s는 MVP에서 rectangle 지면 영역만 지원함."), *RegionPath));
 			}
 
 			ReadVectorField(*ShapeObject, TEXT("center_m"), MetersToCentimeters, FString::Printf(TEXT("%s.shape"), *RegionPath), result, RegionSpec.Center);
@@ -594,7 +589,7 @@ void UEpisodeCompiler::CompilePaths(const FJsonObject& rootObject, FEpisodeCompi
 			const FString Path = FString::Printf(TEXT("paths[%d]"), Index);
 			if (!Paths[Index].IsValid() || Paths[Index]->Type != EJson::Object)
 			{
-				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_path"), FString::Printf(TEXT("%s must be an object."), *Path));
+				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_path"), FString::Printf(TEXT("%s 항목은 object이어야 함."), *Path));
 				continue;
 			}
 
@@ -610,13 +605,13 @@ void UEpisodeCompiler::CompilePaths(const FJsonObject& rootObject, FEpisodeCompi
 			if (TryGetStringField(*PathObject, TEXT("type"), PathTypeString)
 				&& !ParsePathType(PathTypeString, PathSpec.PathType))
 			{
-				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_path_type"), FString::Printf(TEXT("%s.type '%s' is not supported."), *Path, *PathTypeString));
+				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_path_type"), FString::Printf(TEXT("%s.type '%s' 값은 지원하지 않음."), *Path, *PathTypeString));
 			}
 
 			TArray<TSharedPtr<FJsonValue>> PointValues;
 			if (!TryGetArrayField(*PathObject, TEXT("points_m"), PointValues))
 			{
-				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("missing_path_points"), FString::Printf(TEXT("%s.points_m is required."), *Path));
+				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("missing_path_points"), FString::Printf(TEXT("%s.points_m 필드는 필수."), *Path));
 				continue;
 			}
 
@@ -625,14 +620,14 @@ void UEpisodeCompiler::CompilePaths(const FJsonObject& rootObject, FEpisodeCompi
 				const FString PointPath = FString::Printf(TEXT("%s.points_m[%d]"), *Path, PointIndex);
 				if (!PointValues[PointIndex].IsValid() || PointValues[PointIndex]->Type != EJson::Array)
 				{
-					AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_path_point"), FString::Printf(TEXT("%s must be a [x, y, z] array."), *PointPath));
+					AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_path_point"), FString::Printf(TEXT("%s 항목은 [x, y, z] 배열이어야 함."), *PointPath));
 					continue;
 				}
 
 				const TArray<TSharedPtr<FJsonValue>> PointArray = PointValues[PointIndex]->AsArray();
 				if (PointArray.Num() != 3)
 				{
-					AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_path_point"), FString::Printf(TEXT("%s must contain 3 numbers."), *PointPath));
+					AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_path_point"), FString::Printf(TEXT("%s 항목은 숫자 3개를 포함해야 함."), *PointPath));
 					continue;
 				}
 
@@ -644,7 +639,7 @@ void UEpisodeCompiler::CompilePaths(const FJsonObject& rootObject, FEpisodeCompi
 
 				if (!bValidPoint)
 				{
-					AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_path_point"), FString::Printf(TEXT("%s must contain only numbers."), *PointPath));
+					AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_path_point"), FString::Printf(TEXT("%s 항목은 숫자만 포함해야 함."), *PointPath));
 					continue;
 				}
 
@@ -654,7 +649,7 @@ void UEpisodeCompiler::CompilePaths(const FJsonObject& rootObject, FEpisodeCompi
 			PathSpec.bClosedLoop = ReadBoolOrDefault(*PathObject, TEXT("closed_loop"), false);
 			if (PathSpec.Points.Num() < 2)
 			{
-				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("too_few_path_points"), FString::Printf(TEXT("%s requires at least 2 points."), *Path));
+				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("too_few_path_points"), FString::Printf(TEXT("%s에는 최소 2개의 point가 필요함."), *Path));
 			}
 
 			result.WorldSpec.Paths.Add(PathSpec);
@@ -677,7 +672,7 @@ void UEpisodeCompiler::CompileStaticObstacles(
 			const FString ObstaclePath = FString::Printf(TEXT("actors.static_obstacles[%d]"), Index);
 			if (!StaticObstacles[Index].IsValid() || StaticObstacles[Index]->Type != EJson::Object)
 			{
-				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_static_obstacle"), FString::Printf(TEXT("%s must be an object."), *ObstaclePath));
+				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_static_obstacle"), FString::Printf(TEXT("%s 항목은 object이어야 함."), *ObstaclePath));
 				continue;
 			}
 
@@ -701,7 +696,7 @@ void UEpisodeCompiler::CompileStaticObstacles(
 					result,
 					EEpisodeCompileDiagnosticSeverity::Error,
 					TEXT("unknown_static_obstacle_prop"),
-					FString::Printf(TEXT("%s.prop_id '%s' is not in the default static obstacle catalog."), *ObstaclePath, *PlaceableSpec.AssetId));
+					FString::Printf(TEXT("%s.prop_id '%s' 값이 기본 정적 장애물 catalog에 없음."), *ObstaclePath, *PlaceableSpec.AssetId));
 			}
 
 			PlaceableSpec.Category = EEpisodeActorCategory::StaticObstacle;
@@ -729,7 +724,7 @@ void UEpisodeCompiler::CompilePedestrians(
 			const FString PedestrianPath = FString::Printf(TEXT("actors.pedestrians[%d]"), Index);
 			if (!Pedestrians[Index].IsValid() || Pedestrians[Index]->Type != EJson::Object)
 			{
-				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_pedestrian"), FString::Printf(TEXT("%s must be an object."), *PedestrianPath));
+				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_pedestrian"), FString::Printf(TEXT("%s 항목은 object여야 합니다."), *PedestrianPath));
 				continue;
 			}
 
@@ -753,7 +748,7 @@ void UEpisodeCompiler::CompilePedestrians(
 					result,
 					EEpisodeCompileDiagnosticSeverity::Error,
 					TEXT("unknown_path"),
-					FString::Printf(TEXT("%s.path_id '%s' does not match a compiled path."), *PedestrianPath, *DynamicActorSpec.PathId));
+					FString::Printf(TEXT("%s.path_id '%s' 값과 일치하는 컴파일된 path가 없음."), *PedestrianPath, *DynamicActorSpec.PathId));
 			}
 
 			DynamicActorSpec.Category = EEpisodeActorCategory::Pedestrian;
@@ -819,9 +814,47 @@ void UEpisodeCompiler::CompileRobotSpawn(
 		}
 
 		RobotSpec.Category = EEpisodeActorCategory::RoadVehicle;
-		RobotSpec.MobilityMode = EEpisodeMobilityMode::Parked;
+		const bool bSpawnOnly = ReadBoolOrDefault(*RobotObject, TEXT("spawn_only"), true);
+		RobotSpec.MobilityMode = bSpawnOnly ? EEpisodeMobilityMode::Parked : EEpisodeMobilityMode::Moving;
 		ReadTransformField(*RobotObject, TEXT("transform"), TEXT("actors.robot"), result, RobotSpec.Transform);
-		RobotSpec.Properties.Add(TEXT("spawn_only"), MakeBoolParam(ReadBoolOrDefault(*RobotObject, TEXT("spawn_only"), true)));
+		RobotSpec.Properties.Add(TEXT("spawn_only"), MakeBoolParam(bSpawnOnly));
+
+		bool bHasGoal = false;
+		TSharedPtr<FJsonObject> RouteObject;
+		if (TryGetObjectField(*RobotObject, TEXT("route"), RouteObject))
+		{
+			FVector GoalLocation = FVector::ZeroVector;
+			if (RouteObject->HasField(TEXT("goal_m")) && ReadVectorField(*RouteObject, TEXT("goal_m"), MetersToCentimeters, TEXT("actors.robot.route"), result, GoalLocation))
+			{
+				RobotSpec.Properties.Add(TEXT("goal_cm"), MakeVectorParam(GoalLocation));
+				bHasGoal = true;
+			}
+
+			if (RouteObject->HasField(TEXT("auto_start")))
+			{
+				RobotSpec.Properties.Add(TEXT("route_auto_start"), MakeBoolParam(ReadBoolOrDefault(*RouteObject, TEXT("auto_start"), true)));
+			}
+		}
+
+		if (!bHasGoal && RobotObject->HasField(TEXT("goal_m")))
+		{
+			FVector GoalLocation = FVector::ZeroVector;
+			if (ReadVectorField(*RobotObject, TEXT("goal_m"), MetersToCentimeters, TEXT("actors.robot"), result, GoalLocation))
+			{
+				RobotSpec.Properties.Add(TEXT("goal_cm"), MakeVectorParam(GoalLocation));
+				bHasGoal = true;
+			}
+		}
+
+		if (!bSpawnOnly && !bHasGoal)
+		{
+			AddDiagnostic(
+				result,
+				EEpisodeCompileDiagnosticSeverity::Warning,
+				TEXT("missing_robot_goal"),
+				TEXT("actors.robot.spawn_only가 false이지만 route.goal_m 또는 goal_m이 없어 로봇 경로 주입을 건너뜁니다."));
+		}
+
 		AddJsonProperties(*RobotObject, RobotSpec.Properties);
 		result.WorldSpec.Placeables.Add(RobotSpec);
 	}
@@ -834,7 +867,7 @@ void UEpisodeCompiler::CompileActors(
 		TSharedPtr<FJsonObject> ActorsObject;
 		if (!TryGetObjectField(rootObject, TEXT("actors"), ActorsObject))
 		{
-			AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Warning, TEXT("missing_actors"), TEXT("actors is missing."));
+			AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Warning, TEXT("missing_actors"), TEXT("actors 필드가 없습니다."));
 			return;
 		}
 
@@ -863,11 +896,7 @@ FEpisodeCompileResult UEpisodeCompiler::CompileEpisodeWorldSpecFromJsonFile(cons
 	FString JsonString;
 	if (!FFileHelper::LoadFileToString(JsonString, *JsonFilePath))
 	{
-		AddDiagnostic(
-			Result,
-			EEpisodeCompileDiagnosticSeverity::Error,
-			TEXT("file_read_failed"),
-			FString::Printf(TEXT("Failed to read JSON file '%s'."), *JsonFilePath));
+		AddDiagnostic(Result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("file_read_failed"), FString::Printf(TEXT("JSON 파일 '%s' 읽기에 실패했습니다."), *JsonFilePath));
 		Result.bSuccess = false;
 		return Result;
 	}
@@ -881,7 +910,7 @@ FEpisodeCompileResult UEpisodeCompiler::CompileEpisodeWorldSpecFromJsonString(co
 
 	if (JsonString.TrimStartAndEnd().IsEmpty())
 	{
-		AddDiagnostic(Result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("empty_json"), TEXT("JSON input is empty."));
+		AddDiagnostic(Result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("empty_json"), TEXT("JSON 입력이 비어 있습니다."));
 		Result.bSuccess = false;
 		return Result;
 	}
@@ -890,7 +919,7 @@ FEpisodeCompileResult UEpisodeCompiler::CompileEpisodeWorldSpecFromJsonString(co
 	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
 	if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
 	{
-		AddDiagnostic(Result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_json"), TEXT("JSON input could not be parsed."));
+		AddDiagnostic(Result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_json"), TEXT("JSON 입력을 파싱할 수 없습니다."));
 		Result.bSuccess = false;
 		return Result;
 	}

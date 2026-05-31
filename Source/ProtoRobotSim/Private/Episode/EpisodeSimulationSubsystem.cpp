@@ -44,7 +44,7 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 {
 	StaticObstacleClass = AEpisodeStaticObstacle::StaticClass();
 
-	// 임시 연결: ChaosActor 경로 추종 구현 전까지 BP_DeliveryBot_SimpleMesh를 기본 로봇 클래스로 사용한다.
+	// 임시 연결: ChaosActor 경로 추종 구현 전까지 BP_DeliveryBot_SimpleMesh를 기본 로봇 클래스로 사용 중 ~~
 	static ConstructorHelpers::FClassFinder<AActor> RobotBlueprintClass(TEXT("/Game/Bluepirnts/Vehicle/BP_DeliveryBot_SimpleMesh"));
 	if (RobotBlueprintClass.Succeeded())
 	{

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Shared/Struct/DeliveryBotMovementInfo.h"
 #include "Shared/Struct/DeliveryBotChaosDriveConfigInfo.h"
 #include "DeliveryBot_ChaosDriveComponent.generated.h"
 
@@ -15,7 +16,8 @@ class PROTOROBOTSIM_API UDeliveryBot_ChaosDriveComponent : public UActorComponen
 
 public:
 	UDeliveryBot_ChaosDriveComponent();
-
+	void ApplyMoveCommand(UChaosVehicleMovementComponent* vehicleMovement, const FDeliveryBotMoveCommandInfo& moveCommandInfo) const;
+	
 	void SetupVehicleMovement(UChaosWheeledVehicleMovementComponent* wheeledMovement) const;
 
 	void ApplyDriveInput(
@@ -40,7 +42,7 @@ protected:
 
 private:
 	void SetupTorqueCurve(UChaosWheeledVehicleMovementComponent* wheeledMovement) const;
-
+	float GetCmPerSecondToKmh(float speedCmS) const;
 	float GetLimitedThrottle(
 		const UChaosVehicleMovementComponent* vehicleMovement,
 		float targetThrottle) const;

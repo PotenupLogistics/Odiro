@@ -9,9 +9,9 @@ struct FDeliveryBotDriveSetupInfo
 
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FVector StartLocation{ FVector::ZeroVector };
+	FVector StartLocationCm{ FVector::ZeroVector };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FVector GoalLocation{ FVector::ZeroVector };
+	FVector GoalLocationCm{ FVector::ZeroVector };
 };
 

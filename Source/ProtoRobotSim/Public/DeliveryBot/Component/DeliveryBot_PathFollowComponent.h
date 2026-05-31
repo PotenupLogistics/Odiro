@@ -1,11 +1,10 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Shared/Struct/DeliveryBotMovementInfo.h"
+#include "Shared/Struct/DeliveryBotPathFollowConfigInfo.h"
 #include "DeliveryBot_PathFollowComponent.generated.h"
-
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class PROTOROBOTSIM_API UDeliveryBot_PathFollowComponent : public UActorComponent
@@ -15,8 +14,31 @@ class PROTOROBOTSIM_API UDeliveryBot_PathFollowComponent : public UActorComponen
 public:
 	UDeliveryBot_PathFollowComponent();
 
+	void SetPath(const TArray<FVector>& pathPoints);
+	void ClearPath();
+
+	bool HasPath() const;
+	bool HasArrived() const;
+
+	FDeliveryBotMoveCommandInfo BuildMoveCommand(float deltaTime);
+
 protected:
-	virtual void BeginPlay() override;
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
-	                           FActorComponentTickFunction* ThisTickFunction) override;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|PathFollow")
+	FDeliveryBotPathFollowConfigInfo PathFollowConfigInfo{};
+
+private:
+	void UpdateCurrentPathIndex();
+	FVector GetLookAheadLocation() const;
+	float GetSteeringToLocation(const FVector& targetLocation) const;
+	float GetDistance2D(const FVector& fromLocation, const FVector& toLocation) const;
+
+private:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|PathFollow", meta = (AllowPrivateAccess = "true"))
+	TArray<FVector> PathPoints;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|PathFollow", meta = (AllowPrivateAccess = "true"))
+	int32 CurrentPathIndex{ INDEX_NONE };
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|PathFollow", meta = (AllowPrivateAccess = "true"))
+	bool bArrived{ false };
 };

@@ -68,6 +68,30 @@ def test_prompt_builder_includes_scenario_requirements_for_korean_prompt() -> No
     assert "pedestrians[].behavior" in package.userPrompt
 
 
+def test_prompt_builder_includes_numeric_environment_constraints() -> None:
+    request = _request()
+    request.constraints.environmentSampling = {
+        "enabled": True,
+        "seed": 1001,
+        "scenarioType": "obstacle_ahead",
+        "fixedParameters": {
+            "sidewalkWidthCm": 120,
+            "obstacleBlockingRatio": 0.6,
+            "timeLimitSec": 60,
+        },
+    }
+
+    package = build_world_config_prompt_package(request, compact_prompt=True)
+
+    assert "Numeric Environment Constraints" in package.userPrompt
+    assert "map.sidewalkWidthCm must be 120" in package.userPrompt
+    assert "obstacleBlockingRatio must be 0.6" in package.userPrompt
+    assert "runtime.maxDurationSec must be 60" in package.userPrompt
+    assert "Never use low/middle/high as JSON values." in package.userPrompt
+    assert package.environmentSampling is not None
+    assert package.environmentSampling["parameters"]["sidewalkWidthCm"] == 120
+
+
 def test_compact_prompt_still_contains_required_field_checklist() -> None:
     package = build_world_config_prompt_package(_request(), context_top_k=2, compact_prompt=True)
 

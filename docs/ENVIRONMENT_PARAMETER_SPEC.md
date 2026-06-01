@@ -64,8 +64,14 @@ JSON contract에 `"low"`, `"middle"`, `"high"`를 값으로 저장하지 않습�
 
 ## 6. 후속 단계
 
-* Seed 기반 deterministic sampler를 WorldConfig generation constraints와 연결
+* Seed 기반 deterministic sampler를 WorldConfig generation constraints와 연결 완료
 * DOE / Latin Hypercube / Sobol sampling
 * Scenario matrix generation
 * Repeated simulation run configuration
 * UE controlled scenario batch test
+
+## 7. Generation constraints 연결
+
+`generationRequest.constraints.environmentSampling`으로 seed와 scenarioType을 전달하면 위 numeric 후보값 중 하나가 deterministic하게 선택됩니다.
+선택된 값은 `Numeric Environment Constraints`로 prompt에 들어가며, deterministic post-processing에서도 LLM 출력보다 우선합니다.
+low/middle/high는 설명 라벨로만 사용할 수 있고 JSON 값으로는 사용하지 않습니다.

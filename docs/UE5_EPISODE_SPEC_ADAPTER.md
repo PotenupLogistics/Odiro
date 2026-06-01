@@ -3,6 +3,7 @@
 ## 1. 목적
 
 AI 내부 `WorldConfig`를 UE5 MVP 컴파일러가 읽을 수 있는 `EpisodeSpec`으로 변환한다.
+EpisodeSpec 계약의 source of truth는 `docs/UE_EPISODE_SPEC_JSON_GUIDE.md`이다.
 
 ## 2. 왜 adapter가 필요한가
 
@@ -17,6 +18,9 @@ AI 내부 `WorldConfig`를 UE5 MVP 컴파일러가 읽을 수 있는 `EpisodeSpe
 * `obstacles` -> `actors.static_obstacles`
 * `pedestrians` -> `paths` + `actors.pedestrians`
 * `runtime` -> `run`
+* guide에 없는 `penalties` 필드는 생성하지 않는다.
+* penalty region이 필요할 때는 guide의 singular `penalty` 필드를 사용한다.
+* `properties`는 shallow map으로 유지하며 boolean, number, string, numeric vector3만 사용한다.
 
 ## 4. 단위 변환
 
@@ -30,6 +34,14 @@ AI 내부 `WorldConfig`를 UE5 MVP 컴파일러가 읽을 수 있는 `EpisodeSpe
 MVP에서는 `obstacle.road_barrier_01`로 임시 매핑하고 `properties.semantic_type="Kickboard"`를 남긴다.
 UE 쪽에는 `obstacle.kickboard` prop 추가 여부 확인이 필요하다.
 
+## 5.1 Generic obstacle mapping
+
+Generic `Obstacle` type is converted to `actors.static_obstacles`.
+The current fallback prop is `obstacle.box_01`.
+The adapter preserves `properties.semantic_type="Obstacle"` and maps `blockingRatio` to `properties.blocking_ratio`.
+
+If the prompt explicitly says there are no pedestrians, empty `actors.pedestrians` and empty `paths` are valid for EpisodeSpec scenario reflection.
+
 ## 6. 검증 규칙
 
 `episode_spec_validator`는 root 필드, meter/degree 단위, actor/path id 중복, pedestrian path 참조, static obstacle catalog, rectangle ground shape, robot route, 위치/크기/스케일 배열 길이, pedestrian speed 권장 범위를 검증한다.
@@ -40,7 +52,7 @@ UE 쪽에는 `obstacle.kickboard` prop 추가 여부 확인이 필요하다.
 
 ## 8. Scenario reflection
 
-`episode_spec_scenario_reflection`은 EpisodeSpec의 구조가 아니라 자연어 시나리오 조건 반영 여부를 확인한다. Kickboard semantic, blocking ratio, pedestrian actor, crossing path, path linkage, narrow sidewalk 조건을 확인한다.
+`episode_spec_scenario_reflection`은 EpisodeSpec의 구조가 아니라 자연어 시나리오 조건 반영 여부를 확인한다. Kickboard semantic, generic obstacle semantic, blocking ratio, pedestrian actor, crossing path, path linkage, no-pedestrian prompt, narrow sidewalk 조건을 확인한다.
 
 ## Environment Parameter Conversion
 

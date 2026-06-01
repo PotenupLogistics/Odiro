@@ -10,6 +10,7 @@
 * `UE_INTEGRATION_HANDOFF_INDEX.md`
 * `UE_HANDOFF_DELIVERY_MANIFEST.md`
 * `OPENAI_FIRST_HANDOFF_RESULT.md`
+* `ENVIRONMENT_SAMPLING_HANDOFF_RESULT.md`
 
 ## 2. UE 팀 확인 항목
 
@@ -19,6 +20,7 @@
 * route injection과 pedestrian path linkage
 * controlled UE integration smoke
 * OpenAI-first EpisodeSpec handoff 결과 확인
+* environmentSampling EpisodeSpec handoff 결과 확인
 
 ## 3. AI 백엔드 후속 작업
 
@@ -30,12 +32,12 @@
 
 ## 4. 이후 개발 후보
 
-* `ENVIRONMENT_PARAMETER_SPEC` 기반 seed sampler를 WorldConfig generation constraints와 연결
-* 수치 후보 기반 scenario matrix 설계
-* UE controlled scenario batch test
-* Run Result receive API
-* Evaluation scoring
-* 추가 scenario support
-* DOE 또는 test matrix reduction 기반 scenario sampling
+1. UE 팀에 EpisodeSpec handoff 문서와 최신 결과 전달
+2. UE에서 EpisodeSpec parser / actor spawn / route injection 확인
+3. UE feedback 기반 adapter 조정
+4. Run Result 수신 API 설계
+5. Evaluation scoring 설계
+6. DOE / scenario matrix / batch generation은 UE 단일 케이스 검증 후 진행
+7. 추가 scenario support 검토
 
 현재 단계에서는 sample JSON, fixture 파일, vector DB, embedding index, UE C++/Blueprint 코드를 생성하지 않습니다.

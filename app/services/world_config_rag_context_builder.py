@@ -23,6 +23,15 @@ def build_policy_context_for_world_config(
     retrieval_queries.extend(intent.suggestedCategories)
     retrieval_queries.extend(intent.suggestedActions)
     retrieval_queries.extend(intent.suggestedPolicyParams)
+    if intent.pathBlockingHints or "Obstacle" in intent.obstacleHints:
+        retrieval_queries.extend(
+            [
+                "장애물 감지",
+                "장애물 회피",
+                "경로 차단",
+                "perception_requirement",
+            ]
+        )
 
     for retrieval_query in dict.fromkeys(retrieval_queries):
         result = search_policy_chunks(

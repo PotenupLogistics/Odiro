@@ -3,6 +3,7 @@
 ## 1. 목적
 
 AI Backend가 반환하는 `worldConfig`를 UE5에서 어떤 Actor 또는 Component 생성 로직으로 연결할지 정의한다.
+UE 실행 계약인 EpisodeSpec의 기준 문서는 `docs/UE_EPISODE_SPEC_JSON_GUIDE.md`이다.
 
 ## 2. UE5가 읽는 최상위 필드
 

@@ -38,13 +38,14 @@ Natural Language Prompt
 * `WorldConfig` -> `EpisodeSpec` adapter
 * `EpisodeSpec` validator와 scenario reflection
 * OpenAI-first / Ollama fallback provider chain
+* environmentSampling 기반 numeric constraints의 EpisodeSpec handoff 반영
 * UE team handoff package와 integration 문서
 
 ## 현재 검증 상태
 
 현재 프로젝트 검증 상태:
 
-* `uv run pytest` -> `329 passed, 1 warning`
+* `uv run pytest` -> `362 passed, 1 warning`
 * `uv run python -m harness.checks.check_all` -> `PASS_WITH_WARNING`
 
 현재 harness warning은 일부 source document와 manual review workflow가 아직 완료되지 않았기 때문에 남아 있습니다. UE handoff 관련 check는 통과 상태입니다.
@@ -53,10 +54,13 @@ Controlled smoke 상태:
 
 * `providerUsed=openai`
 * `fallbackUsed=false`
+* `effectiveResponseFormat=episode_spec`
 * `handoffSuccess=true`
 * `episodeValidationPassed=true`
 * `episodeScenarioReflectionPassed=true`
 * `ueCompilerReadiness=true`
+* `environmentSampling.enabled=true`
+* `sidewalkWidthCm=120`, `obstacleBlockingRatio=0.6`, `timeLimitSec=60`
 
 ## 주요 API
 
@@ -85,6 +89,9 @@ POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=episode_spe
 ```text
 POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=both
 ```
+
+`/api/v1/ue5/world-config/handoff`의 기본 `responseFormat`은 `episode_spec`입니다.
+`responseFormat=world_config`는 AI 내부 구조 확인용이며 이 경우 `episodeSpec`은 `null`일 수 있습니다.
 
 ## UE handoff 상태
 
@@ -144,6 +151,7 @@ uv run python scripts/export_ue5_handoff_payload.py --prompt "좁은 보도에�
 * [UE Integration Handoff Index](docs/UE_INTEGRATION_HANDOFF_INDEX.md)
 * [UE Team Handoff Package](docs/UE_TEAM_HANDOFF_PACKAGE.md)
 * [UE5 Endpoint Usage For UE Team](docs/UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md)
+* [UE EpisodeSpec JSON Guide](docs/UE_EPISODE_SPEC_JSON_GUIDE.md)
 * [UE5 EpisodeSpec Handoff Summary](docs/UE5_EPISODE_SPEC_HANDOFF_SUMMARY.md)
 * [UE5 EpisodeSpec Controlled Smoke Result](docs/UE5_EPISODE_SPEC_CONTROLLED_SMOKE_RESULT.md)
 * [UE Handoff Delivery Manifest](docs/UE_HANDOFF_DELIVERY_MANIFEST.md)
@@ -154,6 +162,7 @@ uv run python scripts/export_ue5_handoff_payload.py --prompt "좁은 보도에�
 * [OpenAI-first Handoff Result](docs/OPENAI_FIRST_HANDOFF_RESULT.md)
 * [Environment Parameter Spec](docs/ENVIRONMENT_PARAMETER_SPEC.md)
 * [Environment Sampler Design](docs/ENVIRONMENT_SAMPLER_DESIGN.md)
+* [Environment Sampling Handoff Result](docs/ENVIRONMENT_SAMPLING_HANDOFF_RESULT.md)
 * [UE AI Integration Issues](docs/UE_AI_INTEGRATION_ISSUES.md)
 * [Next Actions](docs/NEXT_ACTIONS.md)
 * [Current Project Status](docs/CURRENT_PROJECT_STATUS.md)
@@ -167,6 +176,8 @@ uv run python scripts/export_ue5_handoff_payload.py --prompt "좁은 보도에�
 * `obstacle.kickboard` prop ID는 UE 측 확인이 필요합니다.
 * sample JSON과 fixture 파일은 의도적으로 자동 생성하지 않습니다.
 * 환경 파라미터 sampler는 `WorldConfig`를 직접 생성하지 않고, 후속 generation constraints로 사용할 numeric parameter set만 생성합니다.
+* `environmentSampling.enabled=true`이면 seed 기반 numeric parameter set을 `Numeric Environment Constraints`로 WorldConfig generation prompt와 deterministic post-processing에 연결합니다.
+* environmentSampling 기반 단일 EpisodeSpec handoff smoke는 통과했으며, DOE matrix와 batch scenario generation은 아직 후속 단계입니다.
 
 ## 다음 액션
 
@@ -175,3 +186,4 @@ uv run python scripts/export_ue5_handoff_payload.py --prompt "좁은 보도에�
 3. 최종 Kickboard prop ID를 확정합니다.
 4. UE 피드백에 따라 adapter를 조정합니다.
 5. 이후 Run Result API와 scoring을 별도 단계에서 진행합니다.
+6. DOE / scenario matrix / batch generation은 UE 단일 케이스 검증 후 진행합니다.

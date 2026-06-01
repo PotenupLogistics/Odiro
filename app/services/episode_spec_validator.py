@@ -53,9 +53,46 @@ def _validate_vector(length: int, value: list[float], path: str, errors: list[Ep
         errors.append(_error("invalid_vector_length", f"{path} must contain {length} values.", path))
 
 
+def _validate_properties(
+    properties: dict[str, Any],
+    path: str,
+    errors: list[EpisodeValidationError],
+) -> None:
+    for key, value in properties.items():
+        value_path = f"{path}.{key}"
+        if isinstance(value, dict):
+            errors.append(_error("invalid_property_value", "properties must be a shallow map; nested objects are not allowed.", value_path))
+            continue
+        if isinstance(value, list):
+            if len(value) != 3 or not all(isinstance(item, (int, float)) for item in value):
+                errors.append(_error("invalid_property_value", "property arrays must be numeric vectors with exactly 3 values.", value_path))
+            continue
+        if value is not None and not isinstance(value, (bool, int, float, str)):
+            errors.append(_error("invalid_property_value", "properties values must be boolean, number, string, or numeric vector3.", value_path))
+
+
+def _validate_raw_properties(value: Any, path: str, errors: list[EpisodeValidationError]) -> None:
+    if not isinstance(value, dict):
+        return
+    properties = value.get("properties")
+    if isinstance(properties, dict):
+        _validate_properties(properties, f"{path}.properties", errors)
+
+
+def _validate_raw_episode_dict(episode_spec: dict[str, Any], errors: list[EpisodeValidationError]) -> None:
+    actors = episode_spec.get("actors") if isinstance(episode_spec.get("actors"), dict) else {}
+    _validate_raw_properties(actors.get("robot"), "actors.robot", errors)
+    for index, obstacle in enumerate(actors.get("static_obstacles") or []):
+        _validate_raw_properties(obstacle, f"actors.static_obstacles[{index}]", errors)
+    for index, pedestrian in enumerate(actors.get("pedestrians") or []):
+        _validate_raw_properties(pedestrian, f"actors.pedestrians[{index}]", errors)
+
+
 def validate_episode_spec(episode_spec: EpisodeSpec | dict[str, Any]) -> EpisodeValidationResult:
     errors: list[EpisodeValidationError] = []
     warnings: list[EpisodeValidationWarning] = []
+    if isinstance(episode_spec, dict):
+        _validate_raw_episode_dict(episode_spec, errors)
     try:
         episode = episode_spec if isinstance(episode_spec, EpisodeSpec) else EpisodeSpec.model_validate(episode_spec)
     except ValidationError as exc:
@@ -64,7 +101,7 @@ def validate_episode_spec(episode_spec: EpisodeSpec | dict[str, Any]) -> Episode
             errors=[
                 _error("model_validation_error", error["msg"], ".".join(str(part) for part in error["loc"]))
                 for error in exc.errors()
-            ],
+            ] + errors,
             warnings=[],
         )
 
@@ -98,6 +135,7 @@ def validate_episode_spec(episode_spec: EpisodeSpec | dict[str, Any]) -> Episode
                     f"actors.pedestrians[{index}].movement.speed_mps",
                 )
             )
+        _validate_properties(pedestrian.properties, f"actors.pedestrians[{index}].properties", errors)
 
     for index, obstacle in enumerate(episode.actors.static_obstacles):
         if obstacle.prop_id not in ALLOWED_STATIC_PROP_IDS:
@@ -110,6 +148,7 @@ def validate_episode_spec(episode_spec: EpisodeSpec | dict[str, Any]) -> Episode
             )
         _validate_vector(3, obstacle.transform.location_m, f"actors.static_obstacles[{index}].transform.location_m", errors)
         _validate_vector(3, obstacle.transform.scale, f"actors.static_obstacles[{index}].transform.scale", errors)
+        _validate_properties(obstacle.properties, f"actors.static_obstacles[{index}].properties", errors)
 
     for index, region in enumerate(episode.ground_model.regions):
         if region.shape.type != "rectangle":
@@ -119,6 +158,7 @@ def validate_episode_spec(episode_spec: EpisodeSpec | dict[str, Any]) -> Episode
 
     _validate_vector(3, episode.actors.robot.transform.location_m, "actors.robot.transform.location_m", errors)
     _validate_vector(3, episode.actors.robot.transform.scale, "actors.robot.transform.scale", errors)
+    _validate_properties(episode.actors.robot.properties, "actors.robot.properties", errors)
     if not episode.actors.robot.spawn_only and episode.actors.robot.route is None:
         errors.append(_error("missing_robot_route", "robot route.goal_m is required when spawn_only is false.", "actors.robot.route"))
     if episode.actors.robot.route is not None:
@@ -129,4 +169,3 @@ def validate_episode_spec(episode_spec: EpisodeSpec | dict[str, Any]) -> Episode
             _validate_vector(3, point, f"paths[{path_index}].points_m[{point_index}]", errors)
 
     return EpisodeValidationResult(valid=not errors, errors=errors, warnings=warnings)
-

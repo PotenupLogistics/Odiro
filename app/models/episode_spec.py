@@ -35,8 +35,9 @@ class GroundShape(BaseModel):
 class GroundPenalty(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    penalty_type: str
-    value: float
+    kind: str = ""
+    cost: float = 0.0
+    violation_after_s: float = 0.0
 
 
 class GroundRegion(BaseModel):
@@ -46,7 +47,8 @@ class GroundRegion(BaseModel):
     region_type: str
     shape: GroundShape
     traversability_score: float = Field(ge=0, le=1)
-    penalties: list[GroundPenalty] = Field(default_factory=list)
+    penalty: GroundPenalty | None = None
+    collision_tag: str | None = None
 
 
 class GroundModel(BaseModel):

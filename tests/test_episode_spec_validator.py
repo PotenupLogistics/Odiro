@@ -36,3 +36,23 @@ def test_validator_rejects_unknown_static_obstacle_prop_id() -> None:
     assert result.valid is False
     assert any(error.code == "unknown_prop_id" for error in result.errors)
 
+
+def test_validator_rejects_guide_incompatible_penalties_field() -> None:
+    episode = convert_world_config_to_episode_spec(_world_config()).model_dump(mode="json", by_alias=True)
+    episode["ground_model"]["regions"][0]["penalties"] = []
+
+    result = validate_episode_spec(episode)
+
+    assert result.valid is False
+    assert any(error.code == "model_validation_error" and "penalties" in str(error.path) for error in result.errors)
+
+
+def test_validator_rejects_nested_or_general_array_properties() -> None:
+    episode = convert_world_config_to_episode_spec(_world_config()).model_dump(mode="json", by_alias=True)
+    episode["actors"]["static_obstacles"][0]["properties"]["nested"] = {"bad": True}
+    episode["actors"]["static_obstacles"][0]["properties"]["general_array"] = [1.0, 2.0]
+
+    result = validate_episode_spec(episode)
+
+    assert result.valid is False
+    assert sum(1 for error in result.errors if error.code == "invalid_property_value") >= 2

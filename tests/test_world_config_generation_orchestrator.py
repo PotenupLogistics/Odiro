@@ -33,6 +33,58 @@ def _request(max_repairs: int = 1) -> WorldConfigGenerationRequest:
     )
 
 
+def _generic_obstacle_request(max_repairs: int = 1) -> WorldConfigGenerationRequest:
+    return WorldConfigGenerationRequest(
+        schemaVersion="1.0",
+        requestId="REQ-GENERIC-OBSTACLE-001",
+        generationType="world_config",
+        prompt=(
+            "보도 폭은 120cm인 좁은 보도 상황을 만들어줘. "
+            "로봇은 x=0, y=0, z=0에서 출발해서 x=800, y=0, z=0으로 이동한다. "
+            "로봇 경로 중앙인 x=400, y=0, z=0 근처에 정적 장애물 1개를 배치하고, "
+            "장애물이 경로를 막는 정도는 blockingRatio 0.6으로 설정해줘. "
+            "보행자는 없는 시나리오로 만들어줘."
+        ),
+        targetContractType="world_config",
+        policyId="POLICY-MVP",
+        constraints=WorldConfigGenerationConstraints(
+            unitSystem="cm_kmh_sec_degree",
+            allowedMapTypes=["sidewalk"],
+            allowedObjectTypes=["Pedestrian", "Obstacle", "Kickboard"],
+            fixedPolicyId="POLICY-MVP",
+            defaultSeed=42,
+            requireValidation=True,
+        ),
+        maxRepairAttempts=max_repairs,
+    )
+
+
+def _environment_sampling_request(max_repairs: int = 1) -> WorldConfigGenerationRequest:
+    request = _generic_obstacle_request(max_repairs=max_repairs)
+    request.constraints.environmentSampling = {
+        "enabled": True,
+        "seed": 1001,
+        "scenarioType": "obstacle_ahead",
+        "fixedParameters": {
+            "sidewalkWidthCm": 120,
+            "obstacleBlockingRatio": 0.6,
+            "timeLimitSec": 60,
+        },
+    }
+    return request
+
+
+def _environment_sampling_vague_request(max_repairs: int = 1) -> WorldConfigGenerationRequest:
+    request = _environment_sampling_request(max_repairs=max_repairs)
+    request.prompt = (
+        "보도 폭과 장애물 차단 정도는 environmentSampling 결과를 우선 적용해줘. "
+        "로봇은 x=0, y=0, z=0에서 출발해서 x=800, y=0, z=0으로 이동한다. "
+        "로봇 경로 중앙 근처에 정적 장애물 1개가 경로를 막고 있는 상황을 만들어줘. "
+        "보행자는 없는 시나리오로 만들어줘."
+    )
+    return request
+
+
 def _valid_world_config() -> dict:
     location = {"x": 0, "y": 0, "z": 0}
     return {
@@ -149,6 +201,34 @@ class FakeIncompleteScenarioClient:
         )
 
 
+class FakeGenericObstacleIncompleteClient:
+    def generate(self, request: LlmGenerationRequest) -> LlmGenerationResponse:
+        payload = _valid_world_config()
+        payload["map"]["sidewalkWidthCm"] = 150
+        payload["robot"]["spawn"] = {"x": 0, "y": 0, "z": 0}
+        payload["robot"]["goal"] = {"x": 800, "y": 0, "z": 0}
+        payload["obstacles"] = []
+        payload["pedestrians"] = [
+            {
+                "objectId": "ped-wrong",
+                "spawn": {"x": 400, "y": -100, "z": 0},
+                "goal": {"x": 400, "y": 100, "z": 0},
+                "speedKmh": 3,
+                "behavior": "Walking",
+            }
+        ]
+        content = json.dumps(payload, ensure_ascii=False)
+        return LlmGenerationResponse(
+            requestId=request.requestId,
+            provider=request.provider,
+            model=request.model,
+            success=True,
+            content=content,
+            rawContent=content,
+            warnings=[],
+        )
+
+
 class FakeOpenAIFailureClient:
     def generate(self, request: LlmGenerationRequest) -> LlmGenerationResponse:
         return LlmGenerationResponse(
@@ -157,6 +237,34 @@ class FakeOpenAIFailureClient:
             model=request.model,
             success=False,
             error=LlmError(code="openai_timeout", message="timeout"),
+            warnings=[],
+        )
+
+
+class FakeEnvironmentSamplingMismatchClient:
+    def generate(self, request: LlmGenerationRequest) -> LlmGenerationResponse:
+        payload = _valid_world_config()
+        payload["map"]["sidewalkWidthCm"] = 150
+        payload["runtime"]["maxDurationSec"] = 120
+        payload["robot"]["spawn"] = {"x": 0, "y": 0, "z": 0}
+        payload["robot"]["goal"] = {"x": 800, "y": 0, "z": 0}
+        payload["obstacles"] = [
+            {
+                "objectId": "obstacle_001",
+                "type": "Obstacle",
+                "position": {"x": 400, "y": 0, "z": 0},
+                "blockingRatio": 0.3,
+            }
+        ]
+        payload["pedestrians"] = []
+        content = json.dumps(payload, ensure_ascii=False)
+        return LlmGenerationResponse(
+            requestId=request.requestId,
+            provider=request.provider,
+            model=request.model,
+            success=True,
+            content=content,
+            rawContent=content,
             warnings=[],
         )
 
@@ -247,6 +355,67 @@ def test_schema_valid_scenario_invalid_payload_uses_post_processing_before_repai
     assert result.scenarioReflection is not None
     assert result.scenarioReflection.passed is True
     assert [attempt.promptType for attempt in result.attempts] == ["initial"]
+
+
+def test_generic_obstacle_prompt_uses_post_processing_for_missing_obstacle_and_no_pedestrian() -> None:
+    result = generate_world_config(
+        _generic_obstacle_request(max_repairs=1),
+        provider=LlmProvider.custom,
+        client_override=FakeGenericObstacleIncompleteClient(),
+    )
+
+    assert result.success is True
+    assert result.generatedPayload is not None
+    assert result.generatedPayload["map"]["sidewalkWidthCm"] == 120
+    assert result.generatedPayload["obstacles"][0]["type"] == "Obstacle"
+    assert result.generatedPayload["obstacles"][0]["position"] == {"x": 400.0, "y": 0.0, "z": 0.0}
+    assert result.generatedPayload["obstacles"][0]["blockingRatio"] == 0.6
+    assert result.generatedPayload["pedestrians"] == []
+    assert result.scenarioReflection is not None
+    assert result.scenarioReflection.passed is True
+    assert result.scenarioPostProcessing is not None
+    patch_types = {patch.patchType for patch in result.scenarioPostProcessing.patches}
+    assert "add_generic_obstacle" in patch_types
+    assert "remove_pedestrians_for_no_pedestrian_prompt" in patch_types
+
+
+def test_environment_sampling_constraints_are_applied_by_orchestrator_post_processing() -> None:
+    result = generate_world_config(
+        _environment_sampling_request(max_repairs=1),
+        provider=LlmProvider.custom,
+        client_override=FakeGenericObstacleIncompleteClient(),
+    )
+
+    assert result.success is True
+    assert result.generatedPayload is not None
+    assert result.environmentSampling is not None
+    assert result.environmentSampling["parameters"]["sidewalkWidthCm"] == 120
+    assert result.generatedPayload["map"]["sidewalkWidthCm"] == 120
+    assert result.generatedPayload["obstacles"][0]["blockingRatio"] == 0.6
+    assert result.generatedPayload["runtime"]["maxDurationSec"] == 60
+    assert result.scenarioPostProcessing is not None
+    patch_types = {patch.patchType for patch in result.scenarioPostProcessing.patches}
+    assert "set_runtime_limit_from_environment_sampler" in patch_types
+
+
+def test_environment_sampling_post_processing_runs_even_when_prompt_reflection_passes() -> None:
+    result = generate_world_config(
+        _environment_sampling_vague_request(max_repairs=1),
+        provider=LlmProvider.custom,
+        client_override=FakeEnvironmentSamplingMismatchClient(),
+    )
+
+    assert result.success is True
+    assert result.generatedPayload is not None
+    assert result.generatedPayload["map"]["sidewalkWidthCm"] == 120
+    assert result.generatedPayload["runtime"]["maxDurationSec"] == 60
+    assert result.generatedPayload["obstacles"][0]["blockingRatio"] == 0.6
+    assert result.scenarioPostProcessing is not None
+    assert result.scenarioPostProcessing.applied is True
+    patch_types = {patch.patchType for patch in result.scenarioPostProcessing.patches}
+    assert "set_sidewalk_width_from_environment_sampler" in patch_types
+    assert "set_runtime_limit_from_environment_sampler" in patch_types
+    assert "set_obstacle_blocking_ratio_from_environment_sampler" in patch_types
 
 
 def test_openai_failure_can_fallback_to_fake_ollama_success() -> None:

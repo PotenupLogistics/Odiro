@@ -33,6 +33,9 @@ def test_export_cli_help_works() -> None:
     assert "--world-config-only" in completed.stdout
     assert "--format" in completed.stdout
     assert "--out" in completed.stdout
+    assert "--environment-sampling" in completed.stdout
+    assert "--scenario-type" in completed.stdout
+    assert "--fixed" in completed.stdout
 
 
 def test_export_cli_without_out_does_not_create_file(tmp_path: Path) -> None:
@@ -113,6 +116,57 @@ def test_export_cli_supports_episode_spec_format_with_disabled_provider(tmp_path
     assert completed.returncode == 0
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload is None
+
+
+def test_export_cli_accepts_environment_sampling_options_without_live_provider() -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--provider",
+            "disabled",
+            "--prompt",
+            "정적 장애물이 경로를 막는 상황",
+            "--environment-sampling",
+            "--seed",
+            "1001",
+            "--scenario-type",
+            "obstacle_ahead",
+            "--fixed",
+            "sidewalkWidthCm=120",
+            "--fixed",
+            "obstacleBlockingRatio=0.6",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+
+
+def test_export_cli_rejects_low_middle_high_fixed_values_without_live_provider() -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--provider",
+            "disabled",
+            "--prompt",
+            "정적 장애물이 경로를 막는 상황",
+            "--environment-sampling",
+            "--fixed",
+            "sidewalkWidthCm=high",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert "low/middle/high" in completed.stderr
 
 
 def test_no_vector_embedding_sample_fixture_artifacts_exist() -> None:

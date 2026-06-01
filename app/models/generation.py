@@ -21,6 +21,7 @@ class WorldConfigGenerationConstraints(BaseModel):
     fixedPolicyId: str | None = None
     defaultSeed: int | None = None
     requireValidation: bool = True
+    environmentSampling: dict[str, Any] | None = None
 
 
 class WorldConfigGenerationRequest(BaseModel):
@@ -60,6 +61,7 @@ class WorldConfigPromptPackage(BaseModel):
     validationPolicy: str
     scenarioIntent: ScenarioIntent | None = None
     scenarioRequirements: list[ScenarioRequirement] = Field(default_factory=list)
+    environmentSampling: dict[str, Any] | None = None
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -150,6 +152,7 @@ class WorldConfigGenerationResult(BaseModel):
     retrievedContexts: list[RetrievedPolicyContext] = Field(default_factory=list)
     scenarioReflection: ScenarioReflectionResult | None = None
     scenarioPostProcessing: ScenarioPostProcessResult | None = None
+    environmentSampling: dict[str, Any] | None = None
     assumptions: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     error: WorldConfigGenerationError | None = None

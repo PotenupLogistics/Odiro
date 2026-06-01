@@ -27,3 +27,9 @@
 * DOE / Latin Hypercube / Sobol sampling
 * scenario matrix 생성
 * 반복 run configuration
+
+## 6. Generation integration
+
+`generationRequest.constraints.environmentSampling.enabled=true`이면 sampler 결과가 `Numeric Environment Constraints`로 prompt에 포함된다.
+후처리는 sampled numeric values를 LLM 출력보다 우선 적용한다.
+이 연결은 단일 요청용이며 DOE matrix나 batch generation은 만들지 않는다.

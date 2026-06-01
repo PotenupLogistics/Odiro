@@ -59,6 +59,8 @@ def test_converts_world_config_to_episode_spec_without_mutating_input() -> None:
     assert episode.run.base_seed == 1001
     assert episode.run.time_limit_s == 300
     assert episode.ground_model.regions[0].shape.size_m == [10.0, 1.2]
+    assert episode.ground_model.regions[0].model_dump(mode="json", exclude_none=True).get("penalties") is None
+    assert episode.ground_model.regions[0].model_dump(mode="json", exclude_none=True).get("penalty") is None
     assert episode.actors.robot.transform.location_m == [0.0, 0.0, 0.0]
     assert episode.actors.robot.route.goal_m == [10.0, 0.0, 0.0]
     assert episode.paths[0].path_id == "pedestrian_001_path"
@@ -69,3 +71,28 @@ def test_converts_world_config_to_episode_spec_without_mutating_input() -> None:
     assert warnings
     assert "Kickboard mapped" in warnings[0].message
 
+
+def test_converts_generic_obstacle_with_blocking_ratio_to_static_obstacle() -> None:
+    world_config = _world_config()
+    world_config["obstacles"] = [
+        {
+            "objectId": "obstacle_001",
+            "type": "Obstacle",
+            "position": {"x": 400, "y": 0, "z": 0},
+            "blockingRatio": 0.6,
+        }
+    ]
+    world_config["pedestrians"] = []
+
+    episode, warnings = convert_world_config_to_episode_spec_with_warnings(world_config)
+
+    obstacle = episode.actors.static_obstacles[0]
+    assert obstacle.prop_id == "obstacle.box_01"
+    assert obstacle.transform.location_m == [4.0, 0.0, 0.0]
+    assert isinstance(obstacle.properties["semantic_type"], str)
+    assert obstacle.properties["semantic_type"] == "Obstacle"
+    assert isinstance(obstacle.properties["blocking_ratio"], float)
+    assert obstacle.properties["blocking_ratio"] == 0.6
+    assert episode.actors.pedestrians == []
+    assert episode.paths == []
+    assert warnings

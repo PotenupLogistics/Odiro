@@ -151,7 +151,8 @@ def test_successful_generation_result_creates_ue5_handoff_response() -> None:
     )
 
     assert response.success is True
-    assert response.worldConfig is not None
+    assert response.worldConfig is None
+    assert response.episodeSpec is not None
     assert response.metadata.units["distance"] == "cm"
     assert response.metadata.units["coordinate"] == "ue5_world_coordinate"
     assert response.validation.schemaValidationPassed is True

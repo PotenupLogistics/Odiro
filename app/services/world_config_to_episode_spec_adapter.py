@@ -176,6 +176,16 @@ def convert_world_config_to_episode_spec_with_warnings(
     source = deepcopy(world_config)
     warnings: list[EpisodeConversionWarning] = []
     paths, pedestrians = _pedestrians(source)
+    static_obstacles = _obstacles(source, warnings)
+    source_obstacles = source.get("obstacles", [])
+    if isinstance(source_obstacles, list) and source_obstacles and not static_obstacles:
+        warnings.append(
+            EpisodeConversionWarning(
+                code="static_obstacle_conversion_empty",
+                message="WorldConfig contains obstacles but EpisodeSpec static_obstacles is empty",
+                sourcePath="obstacles",
+            )
+        )
     episode = EpisodeSpec(
         scenario_id=source.get("scenarioId") or source.get("worldId") or "scenario_001",
         map_id="EpisodeSandbox",
@@ -189,7 +199,7 @@ def convert_world_config_to_episode_spec_with_warnings(
         actors=EpisodeActors(
             robot=_robot(source),
             pedestrians=pedestrians,
-            static_obstacles=_obstacles(source, warnings),
+            static_obstacles=static_obstacles,
         ),
     )
     return episode, warnings
@@ -198,4 +208,3 @@ def convert_world_config_to_episode_spec_with_warnings(
 def convert_world_config_to_episode_spec(world_config: dict[str, Any]) -> EpisodeSpec:
     episode, _warnings = convert_world_config_to_episode_spec_with_warnings(world_config)
     return episode
-

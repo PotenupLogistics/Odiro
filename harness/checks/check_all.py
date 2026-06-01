@@ -5,8 +5,10 @@ from pathlib import Path
 
 from harness.checks.check_api_shell import run_check as run_api_shell_check
 from harness.checks.check_high_priority_review import run_check as run_high_priority_check
+from harness.checks.check_handoff_response_summary import run_check as run_handoff_response_summary_check
 from harness.checks.check_contract_validation import run_check as run_contract_validation_check
 from harness.checks.check_generation_endpoint import run_check as run_generation_endpoint_check
+from harness.checks.check_generic_obstacle_scenario import run_check as run_generic_obstacle_scenario_check
 from harness.checks.check_episode_spec_adapter import run_check as run_episode_spec_adapter_check
 from harness.checks.check_episode_spec_scenario_reflection import run_check as run_episode_spec_scenario_reflection_check
 from harness.checks.check_ue5_episode_spec_handoff_smoke import run_check as run_ue5_episode_spec_handoff_smoke_check
@@ -16,6 +18,8 @@ from harness.checks.check_root_readme import run_check as run_root_readme_check
 from harness.checks.check_handoff_release_readiness import run_check as run_handoff_release_readiness_check
 from harness.checks.check_environment_parameter_spec import run_check as run_environment_parameter_spec_check
 from harness.checks.check_environment_sampler import run_check as run_environment_sampler_check
+from harness.checks.check_environment_sampler_generation_integration import run_check as run_environment_sampler_generation_integration_check
+from harness.checks.check_environment_sampling_handoff_result_docs import run_check as run_environment_sampling_handoff_result_docs_check
 from harness.checks.check_json_schemas import run_check as run_json_schemas_check
 from harness.checks.check_llm_client_abstraction import run_check as run_llm_client_abstraction_check
 from harness.checks.check_llm_provider_config import run_check as run_llm_provider_config_check
@@ -36,6 +40,7 @@ from harness.checks.check_policy_triage import run_check as run_triage_check
 from harness.checks.check_rag_chunks import run_check as run_rag_chunks_check
 from harness.checks.check_rag_retrieval import run_check as run_rag_retrieval_check
 from harness.checks.check_report_serialization import run_check as run_report_serialization_check
+from harness.checks.check_route_relative_placement import run_check as run_route_relative_placement_check
 from harness.checks.check_world_config_prompt_builder import run_check as run_world_config_prompt_builder_check
 from harness.checks.check_world_config_generation_orchestrator import run_check as run_world_config_generation_orchestrator_check
 from harness.checks.check_world_config_prompt_hardening import run_check as run_world_config_prompt_hardening_check
@@ -50,6 +55,7 @@ from harness.checks.check_scenario_repair_prompt import run_check as run_scenari
 from harness.checks.check_sources import run_check as run_source_check
 from harness.checks.check_ue5_handoff import run_check as run_ue5_handoff_check
 from harness.checks.check_ue5_handoff_docs_and_export import run_check as run_ue5_handoff_docs_and_export_check
+from harness.checks.check_ue_episode_spec_guide_alignment import run_check as run_ue_episode_spec_guide_alignment_check
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -66,6 +72,7 @@ def _overall_status(
     candidate_result: dict,
     triage_result: dict,
     high_priority_result: dict,
+    handoff_response_summary_result: dict,
     manual_confirmation_result: dict,
     manual_review_pack_result: dict,
     page_hints_result: dict,
@@ -80,6 +87,7 @@ def _overall_status(
     world_config_output_contract_result: dict,
     api_shell_result: dict,
     generation_endpoint_result: dict,
+    generic_obstacle_scenario_result: dict,
     episode_spec_adapter_result: dict,
     episode_spec_scenario_reflection_result: dict,
     ue5_episode_spec_handoff_smoke_result: dict,
@@ -89,8 +97,11 @@ def _overall_status(
     handoff_release_readiness_result: dict,
     environment_parameter_spec_result: dict,
     environment_sampler_result: dict,
+    environment_sampler_generation_integration_result: dict,
+    environment_sampling_handoff_result_docs_result: dict,
     ue5_handoff_result: dict,
     ue5_handoff_docs_and_export_result: dict,
+    ue_episode_spec_guide_alignment_result: dict,
     llm_client_abstraction_result: dict,
     llm_provider_config_result: dict,
     ollama_provider_result: dict,
@@ -105,6 +116,7 @@ def _overall_status(
     rag_chunks_result: dict,
     rag_retrieval_result: dict,
     report_serialization_result: dict,
+    route_relative_placement_result: dict,
     research_result: dict,
     research_review_result: dict,
 ) -> str:
@@ -115,6 +127,7 @@ def _overall_status(
         or not candidate_result["passed"]
         or not triage_result["passed"]
         or not high_priority_result["passed"]
+        or not handoff_response_summary_result["passed"]
         or not manual_confirmation_result["passed"]
         or not manual_review_pack_result["passed"]
         or not page_hints_result["passed"]
@@ -129,6 +142,7 @@ def _overall_status(
         or not world_config_output_contract_result["passed"]
         or not api_shell_result["passed"]
         or not generation_endpoint_result["passed"]
+        or not generic_obstacle_scenario_result["passed"]
         or not episode_spec_adapter_result["passed"]
         or not episode_spec_scenario_reflection_result["passed"]
         or not ue5_episode_spec_handoff_smoke_result["passed"]
@@ -138,8 +152,11 @@ def _overall_status(
         or not handoff_release_readiness_result["passed"]
         or not environment_parameter_spec_result["passed"]
         or not environment_sampler_result["passed"]
+        or not environment_sampler_generation_integration_result["passed"]
+        or not environment_sampling_handoff_result_docs_result["passed"]
         or not ue5_handoff_result["passed"]
         or not ue5_handoff_docs_and_export_result["passed"]
+        or not ue_episode_spec_guide_alignment_result["passed"]
         or not llm_client_abstraction_result["passed"]
         or not llm_provider_config_result["passed"]
         or not ollama_provider_result["passed"]
@@ -154,6 +171,7 @@ def _overall_status(
         or not rag_chunks_result["passed"]
         or not rag_retrieval_result["passed"]
         or not report_serialization_result["passed"]
+        or not route_relative_placement_result["passed"]
         or not research_result["passed"]
         or not research_review_result["passed"]
     ):
@@ -164,6 +182,7 @@ def _overall_status(
         or candidate_result.get("warning")
         or triage_result.get("warning")
         or high_priority_result.get("warning")
+        or handoff_response_summary_result.get("warning")
         or manual_confirmation_result.get("warning")
         or manual_review_pack_result.get("warning")
         or page_hints_result.get("warning")
@@ -178,6 +197,7 @@ def _overall_status(
         or world_config_output_contract_result.get("warning")
         or api_shell_result.get("warning")
         or generation_endpoint_result.get("warning")
+        or generic_obstacle_scenario_result.get("warning")
         or episode_spec_adapter_result.get("warning")
         or episode_spec_scenario_reflection_result.get("warning")
         or ue5_episode_spec_handoff_smoke_result.get("warning")
@@ -187,8 +207,11 @@ def _overall_status(
         or handoff_release_readiness_result.get("warning")
         or environment_parameter_spec_result.get("warning")
         or environment_sampler_result.get("warning")
+        or environment_sampler_generation_integration_result.get("warning")
+        or environment_sampling_handoff_result_docs_result.get("warning")
         or ue5_handoff_result.get("warning")
         or ue5_handoff_docs_and_export_result.get("warning")
+        or ue_episode_spec_guide_alignment_result.get("warning")
         or llm_client_abstraction_result.get("warning")
         or llm_provider_config_result.get("warning")
         or ollama_provider_result.get("warning")
@@ -203,6 +226,7 @@ def _overall_status(
         or rag_chunks_result.get("warning")
         or rag_retrieval_result.get("warning")
         or report_serialization_result.get("warning")
+        or route_relative_placement_result.get("warning")
         or research_result.get("warning")
         or research_review_result.get("warning")
     ):
@@ -217,6 +241,7 @@ def build_summary(
     candidate_result: dict,
     triage_result: dict,
     high_priority_result: dict,
+    handoff_response_summary_result: dict,
     manual_confirmation_result: dict,
     manual_review_pack_result: dict,
     page_hints_result: dict,
@@ -231,6 +256,7 @@ def build_summary(
     world_config_output_contract_result: dict,
     api_shell_result: dict,
     generation_endpoint_result: dict,
+    generic_obstacle_scenario_result: dict,
     episode_spec_adapter_result: dict,
     episode_spec_scenario_reflection_result: dict,
     ue5_episode_spec_handoff_smoke_result: dict,
@@ -240,8 +266,11 @@ def build_summary(
     handoff_release_readiness_result: dict,
     environment_parameter_spec_result: dict,
     environment_sampler_result: dict,
+    environment_sampler_generation_integration_result: dict,
+    environment_sampling_handoff_result_docs_result: dict,
     ue5_handoff_result: dict,
     ue5_handoff_docs_and_export_result: dict,
+    ue_episode_spec_guide_alignment_result: dict,
     llm_client_abstraction_result: dict,
     llm_provider_config_result: dict,
     ollama_provider_result: dict,
@@ -256,6 +285,7 @@ def build_summary(
     rag_chunks_result: dict,
     rag_retrieval_result: dict,
     report_serialization_result: dict,
+    route_relative_placement_result: dict,
     research_result: dict,
     research_review_result: dict,
     status_text: str,
@@ -274,6 +304,7 @@ def build_summary(
         f"- Policy candidate extraction result: {'PASS' if candidate_result['passed'] else 'FAIL'}",
         f"- Policy triage result: {'PASS' if triage_result['passed'] else 'FAIL'}",
         f"- High priority review result: {'PASS' if high_priority_result['passed'] else 'FAIL'}",
+        f"- Handoff response summary result: {'PASS' if handoff_response_summary_result['passed'] else 'FAIL'}",
         f"- Manual confirmation result: {'PASS' if manual_confirmation_result['passed'] else 'FAIL'}",
         f"- Manual review pack result: {'PASS' if manual_review_pack_result['passed'] else 'FAIL'}",
         f"- Page hints result: {'PASS' if page_hints_result['passed'] else 'FAIL'}",
@@ -288,6 +319,7 @@ def build_summary(
         f"- World Config output contract result: {'PASS' if world_config_output_contract_result['passed'] else 'FAIL'}",
         f"- API shell result: {'PASS' if api_shell_result['passed'] else 'FAIL'}",
         f"- Generation endpoint result: {'PASS' if generation_endpoint_result['passed'] else 'FAIL'}",
+        f"- Generic obstacle scenario result: {'PASS' if generic_obstacle_scenario_result['passed'] else 'FAIL'}",
         f"- EpisodeSpec adapter result: {'PASS' if episode_spec_adapter_result['passed'] else 'FAIL'}",
         f"- EpisodeSpec scenario reflection result: {'PASS' if episode_spec_scenario_reflection_result['passed'] else 'FAIL'}",
         f"- UE5 EpisodeSpec handoff smoke result: {'PASS' if ue5_episode_spec_handoff_smoke_result['passed'] else 'FAIL'}",
@@ -297,8 +329,11 @@ def build_summary(
         f"- Handoff release readiness result: {'PASS' if handoff_release_readiness_result['passed'] else 'FAIL'}",
         f"- Environment parameter spec result: {'PASS' if environment_parameter_spec_result['passed'] else 'FAIL'}",
         f"- Environment sampler result: {'PASS' if environment_sampler_result['passed'] else 'FAIL'}",
+        f"- Environment sampler generation integration result: {'PASS' if environment_sampler_generation_integration_result['passed'] else 'FAIL'}",
+        f"- Environment sampling handoff result docs result: {'PASS' if environment_sampling_handoff_result_docs_result['passed'] else 'FAIL'}",
         f"- UE5 handoff result: {'PASS' if ue5_handoff_result['passed'] else 'FAIL'}",
         f"- UE5 handoff docs/export result: {'PASS' if ue5_handoff_docs_and_export_result['passed'] else 'FAIL'}",
+        f"- UE EpisodeSpec guide alignment result: {'PASS' if ue_episode_spec_guide_alignment_result['passed'] else 'FAIL'}",
         f"- LLM client abstraction result: {'PASS' if llm_client_abstraction_result['passed'] else 'FAIL'}",
         f"- LLM provider config result: {'PASS' if llm_provider_config_result['passed'] else 'FAIL'}",
         f"- Ollama provider result: {'PASS' if ollama_provider_result['passed'] else 'FAIL'}",
@@ -313,6 +348,7 @@ def build_summary(
         f"- RAG chunks result: {'PASS' if rag_chunks_result['passed'] else 'FAIL'}",
         f"- RAG retrieval result: {'PASS' if rag_retrieval_result['passed'] else 'FAIL'}",
         f"- Report serialization result: {'PASS' if report_serialization_result['passed'] else 'FAIL'}",
+        f"- Route-relative placement result: {'PASS' if route_relative_placement_result['passed'] else 'FAIL'}",
         f"- Research source result: {'PASS' if research_result['passed'] else 'FAIL'}",
         f"- Research review readiness result: {'PASS' if research_review_result['passed'] else 'FAIL'}",
         f"- Manual review pending sources: {len(not_started_sources)}",
@@ -715,6 +751,7 @@ def main() -> int:
     candidate_result = run_candidate_check()
     triage_result = run_triage_check()
     high_priority_result = run_high_priority_check()
+    handoff_response_summary_result = run_handoff_response_summary_check()
     manual_confirmation_result = run_manual_confirmation_check()
     manual_review_pack_result = run_manual_review_pack_check()
     page_hints_result = run_page_hints_check()
@@ -729,6 +766,7 @@ def main() -> int:
     world_config_output_contract_result = run_world_config_output_contract_check()
     api_shell_result = run_api_shell_check()
     generation_endpoint_result = run_generation_endpoint_check()
+    generic_obstacle_scenario_result = run_generic_obstacle_scenario_check()
     episode_spec_adapter_result = run_episode_spec_adapter_check()
     episode_spec_scenario_reflection_result = run_episode_spec_scenario_reflection_check()
     ue5_episode_spec_handoff_smoke_result = run_ue5_episode_spec_handoff_smoke_check()
@@ -738,8 +776,11 @@ def main() -> int:
     handoff_release_readiness_result = run_handoff_release_readiness_check()
     environment_parameter_spec_result = run_environment_parameter_spec_check()
     environment_sampler_result = run_environment_sampler_check()
+    environment_sampler_generation_integration_result = run_environment_sampler_generation_integration_check()
+    environment_sampling_handoff_result_docs_result = run_environment_sampling_handoff_result_docs_check()
     ue5_handoff_result = run_ue5_handoff_check()
     ue5_handoff_docs_and_export_result = run_ue5_handoff_docs_and_export_check()
+    ue_episode_spec_guide_alignment_result = run_ue_episode_spec_guide_alignment_check()
     llm_client_abstraction_result = run_llm_client_abstraction_check()
     llm_provider_config_result = run_llm_provider_config_check()
     ollama_provider_result = run_ollama_provider_check()
@@ -754,6 +795,7 @@ def main() -> int:
     rag_chunks_result = run_rag_chunks_check()
     rag_retrieval_result = run_rag_retrieval_check()
     report_serialization_result = run_report_serialization_check()
+    route_relative_placement_result = run_route_relative_placement_check()
     research_result = run_research_check()
     research_review_result = run_research_review_check()
     status_text = _overall_status(
@@ -763,6 +805,7 @@ def main() -> int:
         candidate_result,
         triage_result,
         high_priority_result,
+        handoff_response_summary_result,
         manual_confirmation_result,
         manual_review_pack_result,
         page_hints_result,
@@ -777,6 +820,7 @@ def main() -> int:
         world_config_output_contract_result,
         api_shell_result,
         generation_endpoint_result,
+        generic_obstacle_scenario_result,
         episode_spec_adapter_result,
         episode_spec_scenario_reflection_result,
         ue5_episode_spec_handoff_smoke_result,
@@ -786,8 +830,11 @@ def main() -> int:
         handoff_release_readiness_result,
         environment_parameter_spec_result,
         environment_sampler_result,
+        environment_sampler_generation_integration_result,
+        environment_sampling_handoff_result_docs_result,
         ue5_handoff_result,
         ue5_handoff_docs_and_export_result,
+        ue_episode_spec_guide_alignment_result,
         llm_client_abstraction_result,
         llm_provider_config_result,
         ollama_provider_result,
@@ -802,6 +849,7 @@ def main() -> int:
         rag_chunks_result,
         rag_retrieval_result,
         report_serialization_result,
+        route_relative_placement_result,
         research_result,
         research_review_result,
     )
@@ -815,6 +863,7 @@ def main() -> int:
             "policyCandidates": candidate_result,
             "policyTriage": triage_result,
             "highPriorityReview": high_priority_result,
+            "handoffResponseSummary": handoff_response_summary_result,
             "manualConfirmation": manual_confirmation_result,
             "manualReviewPack": manual_review_pack_result,
             "pageHints": page_hints_result,
@@ -829,6 +878,7 @@ def main() -> int:
             "worldConfigOutputContract": world_config_output_contract_result,
             "apiShell": api_shell_result,
             "generationEndpoint": generation_endpoint_result,
+            "genericObstacleScenario": generic_obstacle_scenario_result,
             "episodeSpecAdapter": episode_spec_adapter_result,
             "episodeSpecScenarioReflection": episode_spec_scenario_reflection_result,
             "ue5EpisodeSpecHandoffSmoke": ue5_episode_spec_handoff_smoke_result,
@@ -838,8 +888,11 @@ def main() -> int:
             "handoffReleaseReadiness": handoff_release_readiness_result,
             "environmentParameterSpec": environment_parameter_spec_result,
             "environmentSampler": environment_sampler_result,
+            "environmentSamplerGenerationIntegration": environment_sampler_generation_integration_result,
+            "environmentSamplingHandoffResultDocs": environment_sampling_handoff_result_docs_result,
             "ue5Handoff": ue5_handoff_result,
             "ue5HandoffDocsAndExport": ue5_handoff_docs_and_export_result,
+            "ueEpisodeSpecGuideAlignment": ue_episode_spec_guide_alignment_result,
             "llmClientAbstraction": llm_client_abstraction_result,
             "llmProviderConfig": llm_provider_config_result,
             "ollamaProvider": ollama_provider_result,
@@ -854,6 +907,7 @@ def main() -> int:
             "ragChunks": rag_chunks_result,
             "ragRetrieval": rag_retrieval_result,
             "reportSerialization": report_serialization_result,
+            "routeRelativePlacement": route_relative_placement_result,
             "researchSources": research_result,
             "researchReview": research_review_result,
         },
@@ -875,6 +929,7 @@ def main() -> int:
             candidate_result,
             triage_result,
             high_priority_result,
+            handoff_response_summary_result,
             manual_confirmation_result,
             manual_review_pack_result,
             page_hints_result,
@@ -889,6 +944,7 @@ def main() -> int:
             world_config_output_contract_result,
             api_shell_result,
             generation_endpoint_result,
+            generic_obstacle_scenario_result,
             episode_spec_adapter_result,
             episode_spec_scenario_reflection_result,
             ue5_episode_spec_handoff_smoke_result,
@@ -898,8 +954,11 @@ def main() -> int:
             handoff_release_readiness_result,
             environment_parameter_spec_result,
             environment_sampler_result,
+            environment_sampler_generation_integration_result,
+            environment_sampling_handoff_result_docs_result,
             ue5_handoff_result,
             ue5_handoff_docs_and_export_result,
+            ue_episode_spec_guide_alignment_result,
             llm_client_abstraction_result,
             llm_provider_config_result,
             ollama_provider_result,
@@ -914,6 +973,7 @@ def main() -> int:
             rag_chunks_result,
             rag_retrieval_result,
             report_serialization_result,
+            route_relative_placement_result,
             research_result,
             research_review_result,
             status_text,
@@ -927,6 +987,7 @@ def main() -> int:
     print(f"Policy candidate check: {'PASS' if candidate_result['passed'] else 'FAIL'}")
     print(f"Policy triage check: {'PASS' if triage_result['passed'] else 'FAIL'}")
     print(f"High priority review check: {'PASS' if high_priority_result['passed'] else 'FAIL'}")
+    print(f"Handoff response summary check: {'PASS' if handoff_response_summary_result['passed'] else 'FAIL'}")
     print(f"Manual confirmation check: {'PASS' if manual_confirmation_result['passed'] else 'FAIL'}")
     print(f"Manual review pack check: {'PASS' if manual_review_pack_result['passed'] else 'FAIL'}")
     print(f"Page hints check: {'PASS' if page_hints_result['passed'] else 'FAIL'}")
@@ -941,6 +1002,7 @@ def main() -> int:
     print(f"World Config output contract check: {'PASS' if world_config_output_contract_result['passed'] else 'FAIL'}")
     print(f"API shell check: {'PASS' if api_shell_result['passed'] else 'FAIL'}")
     print(f"Generation endpoint check: {'PASS' if generation_endpoint_result['passed'] else 'FAIL'}")
+    print(f"Generic obstacle scenario check: {'PASS' if generic_obstacle_scenario_result['passed'] else 'FAIL'}")
     print(f"EpisodeSpec adapter check: {'PASS' if episode_spec_adapter_result['passed'] else 'FAIL'}")
     print(f"EpisodeSpec scenario reflection check: {'PASS' if episode_spec_scenario_reflection_result['passed'] else 'FAIL'}")
     print(f"UE5 EpisodeSpec handoff smoke check: {'PASS' if ue5_episode_spec_handoff_smoke_result['passed'] else 'FAIL'}")
@@ -950,8 +1012,11 @@ def main() -> int:
     print(f"Handoff release readiness check: {'PASS' if handoff_release_readiness_result['passed'] else 'FAIL'}")
     print(f"Environment parameter spec check: {'PASS' if environment_parameter_spec_result['passed'] else 'FAIL'}")
     print(f"Environment sampler check: {'PASS' if environment_sampler_result['passed'] else 'FAIL'}")
+    print(f"Environment sampler generation integration check: {'PASS' if environment_sampler_generation_integration_result['passed'] else 'FAIL'}")
+    print(f"Environment sampling handoff result docs check: {'PASS' if environment_sampling_handoff_result_docs_result['passed'] else 'FAIL'}")
     print(f"UE5 handoff check: {'PASS' if ue5_handoff_result['passed'] else 'FAIL'}")
     print(f"UE5 handoff docs/export check: {'PASS' if ue5_handoff_docs_and_export_result['passed'] else 'FAIL'}")
+    print(f"UE EpisodeSpec guide alignment check: {'PASS' if ue_episode_spec_guide_alignment_result['passed'] else 'FAIL'}")
     print(f"LLM client abstraction check: {'PASS' if llm_client_abstraction_result['passed'] else 'FAIL'}")
     print(f"LLM provider config check: {'PASS' if llm_provider_config_result['passed'] else 'FAIL'}")
     print(f"Ollama provider check: {'PASS' if ollama_provider_result['passed'] else 'FAIL'}")
@@ -966,6 +1031,7 @@ def main() -> int:
     print(f"RAG chunks check: {'PASS' if rag_chunks_result['passed'] else 'FAIL'}")
     print(f"RAG retrieval check: {'PASS' if rag_retrieval_result['passed'] else 'FAIL'}")
     print(f"Report serialization check: {'PASS' if report_serialization_result['passed'] else 'FAIL'}")
+    print(f"Route-relative placement check: {'PASS' if route_relative_placement_result['passed'] else 'FAIL'}")
     print(f"Research source check: {'PASS' if research_result['passed'] else 'FAIL'}")
     print(f"Research review check: {'PASS' if research_review_result['passed'] else 'FAIL'}")
     if processed_result.get("warning"):
@@ -978,6 +1044,8 @@ def main() -> int:
         print("Policy triage warning: triage requires manual review")
     if high_priority_result.get("warning"):
         print("High priority review warning: manual confirmation required")
+    if handoff_response_summary_result.get("warning"):
+        print("Handoff response summary warning: smoke reporting artifacts require attention")
     if manual_confirmation_result.get("warning"):
         print("Manual confirmation warning: review state requires attention")
     if manual_review_pack_result.get("warning"):
@@ -1006,6 +1074,8 @@ def main() -> int:
         print("API shell warning: API shell artifacts require attention")
     if generation_endpoint_result.get("warning"):
         print("Generation endpoint warning: endpoint artifacts require attention")
+    if generic_obstacle_scenario_result.get("warning"):
+        print("Generic obstacle scenario warning: scenario handling artifacts require attention")
     if episode_spec_adapter_result.get("warning"):
         print("EpisodeSpec adapter warning: adapter artifacts require attention")
     if episode_spec_scenario_reflection_result.get("warning"):
@@ -1024,10 +1094,16 @@ def main() -> int:
         print("Environment parameter spec warning: parameter docs require attention")
     if environment_sampler_result.get("warning"):
         print("Environment sampler warning: sampler artifacts require attention")
+    if environment_sampler_generation_integration_result.get("warning"):
+        print("Environment sampler generation integration warning: integration artifacts require attention")
+    if environment_sampling_handoff_result_docs_result.get("warning"):
+        print("Environment sampling handoff result docs warning: result docs require attention")
     if ue5_handoff_result.get("warning"):
         print("UE5 handoff warning: handoff artifacts require attention")
     if ue5_handoff_docs_and_export_result.get("warning"):
         print("UE5 handoff docs/export warning: docs or export artifacts require attention")
+    if ue_episode_spec_guide_alignment_result.get("warning"):
+        print("UE EpisodeSpec guide alignment warning: guide alignment artifacts require attention")
     if llm_client_abstraction_result.get("warning"):
         print("LLM client abstraction warning: LLM abstraction artifacts require attention")
     if llm_provider_config_result.get("warning"):
@@ -1056,6 +1132,8 @@ def main() -> int:
         print("RAG retrieval warning: retrieval layer requires attention")
     if report_serialization_result.get("warning"):
         print("Report serialization warning: report serialization artifacts require attention")
+    if route_relative_placement_result.get("warning"):
+        print("Route-relative placement warning: route placement artifacts require attention")
     if research_result.get("warning"):
         print("Research source warning: research source collection requires review")
     if research_review_result.get("warning"):

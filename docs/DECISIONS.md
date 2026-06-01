@@ -282,3 +282,50 @@
 * Ollama는 fallback provider로 유지한다.
 * API key와 full WorldConfig/full EpisodeSpec은 report에 저장하지 않는다.
 * UE 실제 actor spawn, parser integration, route injection은 UE 팀 확인 단계로 둔다.
+
+# Generic obstacle scenario decisions
+
+* Generic obstacle prompt도 scenario intent/reflection/post-processing 대상으로 처리한다.
+* 명시된 수치 값은 LLM 출력보다 우선한다.
+* no pedestrian intent는 pedestrians가 없는 EpisodeSpec을 정상으로 허용한다.
+* UE handoff endpoint 기본 responseFormat은 `episode_spec`으로 둔다.
+* `responseFormat=world_config`는 AI 내부 구조 확인용이며 이 경우 `episodeSpec`은 `null`일 수 있다.
+
+# Handoff smoke reporting decisions
+
+* live smoke report는 API 응답 전체가 아니라 summary를 저장한다.
+* generic obstacle smoke는 `handoff_response_summary` helper로 분석한다.
+* OpenAI 재호출 전 report parsing 로직을 먼저 안정화한다.
+
+# Environment sampler generation integration decisions
+
+* environment sampler 결과를 WorldConfig generation constraints에 연결한다.
+* numeric constraints는 LLM 출력보다 우선한다.
+* sampler integration은 단일 요청용이며 DOE matrix는 후속 단계로 분리한다.
+* low/middle/high는 JSON 값으로 사용하지 않는다.
+
+## Environment Sampling Handoff Enforcement
+
+* environmentSampling numeric constraints are applied even when the initial LLM payload is schema-valid.
+* sampled/fixed numeric values override LLM output during deterministic post-processing.
+* Obstacle/path-blocking requirements require EpisodeSpec `actors.static_obstacles` and `properties.blocking_ratio`.
+* If required static obstacles or blocking ratio are missing, EpisodeSpec scenario reflection fails and UE handoff returns `success=false`.
+
+## Environment Sampling Single Request Handoff
+
+* environmentSampling numeric constraints are connected to single WorldConfig/EpisodeSpec generation.
+* numeric constraints have priority over vague natural language.
+* environmentSampling is currently for single request generation, not DOE matrix generation.
+* batch scenario generation is deferred until UE controlled integration succeeds.
+
+## Route-relative Placement Decisions
+
+* 경로 중앙/중간 같은 상대 좌표 표현은 LLM 추론에 맡기지 않고 deterministic midpoint 계산으로 처리한다.
+* 명시 좌표가 있으면 명시 좌표가 midpoint보다 우선한다.
+* EpisodeSpec 변환 후에도 midpoint 근처 배치인지 검증한다.
+
+## UE EpisodeSpec Guide Alignment
+
+* UE EpisodeSpec contract source는 `docs/UE_EPISODE_SPEC_JSON_GUIDE.md`이다.
+* WorldConfig -> EpisodeSpec adapter는 이 guide와 일치해야 한다.
+* UE guide가 바뀌면 guide 문서를 먼저 갱신하고 adapter/test를 갱신한다.

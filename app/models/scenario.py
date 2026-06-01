@@ -10,9 +10,14 @@ class ScenarioIntent(BaseModel):
 
     mapHints: list[str] = Field(default_factory=list)
     obstacleHints: list[str] = Field(default_factory=list)
+    obstaclePositionHint: dict[str, float] | None = None
+    obstaclePlacementHint: str | None = None
+    obstacleBlockingRatio: float | None = None
     pedestrianHints: list[str] = Field(default_factory=list)
+    explicitNoPedestrian: bool = False
     crossingHints: list[str] = Field(default_factory=list)
     pathBlockingHints: bool = False
+    sidewalkWidthCm: float | None = None
     terrainHints: list[str] = Field(default_factory=list)
     trafficSignalHints: list[str] = Field(default_factory=list)
     suggestedCategories: list[str] = Field(default_factory=list)

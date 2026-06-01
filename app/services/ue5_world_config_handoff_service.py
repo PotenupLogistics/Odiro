@@ -57,6 +57,7 @@ def _diagnostics(result: WorldConfigGenerationResult) -> dict:
         "warnings": result.warnings,
         "validation": result.validation.model_dump(mode="json"),
         "fallbackTrace": [trace.model_dump(mode="json") for trace in result.fallbackTrace],
+        "environmentSampling": result.environmentSampling,
     }
 
 
@@ -65,6 +66,19 @@ def _warnings(values: list[str]) -> list[UE5HandoffWarning]:
         UE5HandoffWarning(code=f"generation_warning_{index + 1}", message=value)
         for index, value in enumerate(values)
     ]
+
+
+def _requires_static_obstacle(request: UE5WorldConfigHandoffRequest, result: WorldConfigGenerationResult) -> bool:
+    prompt = request.generationRequest.prompt.lower()
+    if any(value in prompt for value in ["장애물", "정적 장애물", "obstacle", "경로를 막", "차단", "blocking"]):
+        return True
+    sampling = result.environmentSampling or {}
+    parameters = sampling.get("parameters") if isinstance(sampling, dict) else None
+    return bool(
+        isinstance(parameters, dict)
+        and isinstance(parameters.get("obstacleBlockingRatio"), (int, float))
+        and float(parameters["obstacleBlockingRatio"]) > 0
+    )
 
 
 def create_ue5_world_config_handoff(
@@ -97,11 +111,16 @@ def create_ue5_world_config_handoff(
                 generation_result.generatedPayload
             )
             episode_validation = validate_episode_spec(episode_spec_model)
-            episode_spec = episode_spec_model.model_dump(mode="json", by_alias=True) if episode_validation.valid else None
+            episode_spec = (
+                episode_spec_model.model_dump(mode="json", by_alias=True, exclude_none=True)
+                if episode_validation.valid
+                else None
+            )
             if episode_spec is not None:
                 episode_scenario_reflection = validate_episode_spec_scenario_reflection(
                     request.generationRequest.prompt,
                     episode_spec,
+                    environment_sampling=generation_result.environmentSampling,
                 )
 
     schema_passed = generation_result.validation.status == "passed"
@@ -115,7 +134,15 @@ def create_ue5_world_config_handoff(
         and episode_spec
         and episode_scenario_reflection
         and episode_scenario_reflection.passed
+        and episode_scenario_reflection.ueCompilerReadiness
     )
+    if (
+        request.responseFormat in {"episode_spec", "both"}
+        and _requires_static_obstacle(request, generation_result)
+        and episode_scenario_reflection is not None
+        and episode_scenario_reflection.staticObstacleCount == 0
+    ):
+        episode_passed = False
     success = bool(generation_result.success and generation_result.generatedPayload and contract_passed and episode_passed)
 
     validation = UE5HandoffValidationSummary(
@@ -145,7 +172,10 @@ def create_ue5_world_config_handoff(
         validation=validation,
         scenarioReflection=generation_result.scenarioReflection,
         postProcessing=generation_result.scenarioPostProcessing,
-        diagnostics=_diagnostics(generation_result) if request.includeDiagnostics else None,
+        diagnostics={
+            **_diagnostics(generation_result),
+            "effectiveResponseFormat": request.responseFormat,
+        } if request.includeDiagnostics else None,
         warnings=warnings,
         error=None if success else generation_result.error,
     )

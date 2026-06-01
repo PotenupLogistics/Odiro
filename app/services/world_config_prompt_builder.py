@@ -12,6 +12,12 @@ from app.models.generation import (
 from app.services.natural_language_normalizer import normalize_prompt
 from app.services.world_config_rag_context_builder import build_policy_context_for_world_config
 from app.services.world_config_output_contract_builder import build_world_config_output_contract
+from app.services.environment_generation_constraints_builder import (
+    apply_environment_parameters_to_scenario_requirements,
+    build_environment_constraints_prompt_section,
+    build_environment_sampling_context,
+    environment_sampling_summary,
+)
 from app.services.world_config_schema_summary import (
     build_world_config_allowed_field_summary,
     build_world_config_enum_summary,
@@ -83,8 +89,12 @@ def _format_scenario_intent(intent: Any) -> str:
     return "\n".join(
         [
             f"- mapHints: {', '.join(intent.mapHints) or 'none'}",
+            f"- sidewalkWidthCm: {intent.sidewalkWidthCm if intent.sidewalkWidthCm is not None else 'none'}",
             f"- obstacleHints: {', '.join(intent.obstacleHints) or 'none'}",
+            f"- obstaclePositionHint: {intent.obstaclePositionHint or 'none'}",
+            f"- obstacleBlockingRatio: {intent.obstacleBlockingRatio if intent.obstacleBlockingRatio is not None else 'none'}",
             f"- pedestrianHints: {', '.join(intent.pedestrianHints) or 'none'}",
+            f"- explicitNoPedestrian: {intent.explicitNoPedestrian}",
             f"- crossingHints: {', '.join(intent.crossingHints) or 'none'}",
             f"- pathBlockingHints: {intent.pathBlockingHints}",
             f"- suggestedCategories: {', '.join(intent.suggestedCategories) or 'none'}",
@@ -109,7 +119,11 @@ def build_world_config_prompt_package(
     compact_prompt: bool = False,
 ) -> WorldConfigPromptPackage:
     scenario_intent = extract_scenario_intent(request.prompt)
-    scenario_requirements = build_scenario_requirements(scenario_intent)
+    environment_context = build_environment_sampling_context(request)
+    scenario_requirements = apply_environment_parameters_to_scenario_requirements(
+        environment_context,
+        build_scenario_requirements(scenario_intent),
+    )
     contexts = build_policy_context_for_world_config(request, top_k=context_top_k, compact=compact_prompt)
     warnings = [] if contexts else ["No related policy RAG chunks were retrieved."]
     constraints_json = request.constraints.model_dump_json(indent=2)
@@ -139,6 +153,8 @@ Scenario Intent Summary:
 Scenario Requirements:
 {_format_scenario_requirements(scenario_requirements)}
 
+{build_environment_constraints_prompt_section(environment_context)}
+
 World Config required fields:
 {', '.join(schema_summary['required'])}
 
@@ -157,8 +173,19 @@ Instructions:
 - Use fixedPolicyId when provided.
 - Use defaultSeed when provided.
 - If the user mentions Kickboard, obstacles must include type Kickboard.
+- If the user mentions a generic/static obstacle, obstacles must include a schema-valid obstacle such as type Obstacle.
+- If the user explicitly provides numeric values, preserve them exactly.
+- If the user specifies map.sidewalkWidthCm, preserve that exact cm value.
+- If the user specifies an obstacle coordinate, place the obstacle at that coordinate.
+- If the user specifies obstacle blockingRatio, preserve that exact value.
+- If the user says no pedestrians, do not create pedestrians.
+- If Numeric Environment Constraints are present, use those numeric values exactly.
+- Numeric Environment Constraints override vague natural-language intensity words.
+- Never use low/middle/high as JSON values.
 - If the user mentions pedestrian crossing, pedestrians must include a crossing behavior.
 - If the user says path is blocked, obstacles must be placed on or near the robot path and include blockingRatio.
+- If the user says route center, path center, route midpoint, or middle of the path, place the obstacle at the midpoint between robot.spawn and robot.goal.
+- If exact obstacle coordinates are provided, exact coordinates override route midpoint placement.
 - Keep unclear values conservative and record assumptions only if the schema supports them.
 - Extra keys are not allowed.
 - Do not include markdown, comments, explanations, or extra keys.
@@ -176,6 +203,7 @@ Instructions:
         validationPolicy=VALIDATION_POLICY,
         scenarioIntent=scenario_intent,
         scenarioRequirements=scenario_requirements,
+        environmentSampling=environment_sampling_summary(environment_context),
         warnings=warnings,
     )
 
@@ -186,7 +214,10 @@ def build_world_config_repair_prompt_package(
     validation_errors: list[str],
     validation_error_summary: dict[str, Any] | None = None,
 ) -> WorldConfigRepairPromptPackage:
-    scenario_requirements = build_scenario_requirements(extract_scenario_intent(request.prompt))
+    scenario_requirements = apply_environment_parameters_to_scenario_requirements(
+        build_environment_sampling_context(request),
+        build_scenario_requirements(extract_scenario_intent(request.prompt)),
+    )
     error_lines = "\n".join(f"- {error}" for error in validation_errors)
     summary = validation_error_summary or {}
     missing_lines = "\n".join(f"- {field}" for field in summary.get("missingRequiredFields", [])) or "- None listed"

@@ -2,6 +2,8 @@
 
 ## 1. 현재 AI Backend 상태
 
+UE EpisodeSpec JSON 계약의 source of truth는 `docs/UE_EPISODE_SPEC_JSON_GUIDE.md`이다.
+
 * 자연어 기반 `WorldConfig` 생성 가능
 * `WorldConfig` schema validation 가능
 * scenario reflection 가능
@@ -10,6 +12,7 @@
 * `EpisodeSpec` validation 가능
 * `EpisodeSpec` scenario reflection 가능
 * OpenAI-first EpisodeSpec handoff smoke 통과
+* environmentSampling 기반 EpisodeSpec handoff smoke 통과
 * Ollama fallback provider 유지
 
 ## 2. UE가 사용할 기본 endpoint
@@ -60,3 +63,14 @@
 * `actors.pedestrians[].properties.semantic_behavior` 처리 방식
 * `paths[].role=pedestrian_crossing` 처리 방식
 * `blocking_ratio`를 UE debug/log/metric에 사용할지 여부
+* environmentSampling 결과인 `sidewalkWidthCm=120`, `obstacleBlockingRatio=0.6`, `timeLimitSec=60`이 UE parser / actor spawn / route injection에서 유지되는지 확인
+
+## 8. environmentSampling handoff 확인 결과
+
+* `responseFormat=episode_spec`
+* `sidewalkWidthCm=120` -> `ground_model.regions[].shape.size_m[1]=1.2`
+* `obstacleBlockingRatio=0.6` -> `actors.static_obstacles[].properties.blocking_ratio=0.6`
+* `timeLimitSec=60` -> `run.time_limit_s=60.0`
+* `pedestriansEmpty=true`
+* `pathsEmpty=true`
+* DOE / batch scenario generation은 아직 후속 단계입니다.

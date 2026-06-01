@@ -13,9 +13,11 @@
 * [UE Integration Handoff Index](UE_INTEGRATION_HANDOFF_INDEX.md)
 * [UE Team Handoff Package](UE_TEAM_HANDOFF_PACKAGE.md)
 * [UE5 Endpoint Usage For UE Team](UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md)
+* [UE EpisodeSpec JSON Guide](UE_EPISODE_SPEC_JSON_GUIDE.md)
 * [UE5 EpisodeSpec Handoff Summary](UE5_EPISODE_SPEC_HANDOFF_SUMMARY.md)
 * [UE5 EpisodeSpec Controlled Smoke Result](UE5_EPISODE_SPEC_CONTROLLED_SMOKE_RESULT.md)
 * [OpenAI-first Handoff Result](OPENAI_FIRST_HANDOFF_RESULT.md)
+* [Environment Sampling Handoff Result](ENVIRONMENT_SAMPLING_HANDOFF_RESULT.md)
 * [UE Team Message Draft](UE_TEAM_MESSAGE_DRAFT.md)
 * [UE Handoff Delivery Manifest](UE_HANDOFF_DELIVERY_MANIFEST.md)
 * [Handoff Release Notes](HANDOFF_RELEASE_NOTES.md)
@@ -28,6 +30,8 @@
 * [OpenAI-first Handoff Result](OPENAI_FIRST_HANDOFF_RESULT.md)
 * [Environment Parameter Spec](ENVIRONMENT_PARAMETER_SPEC.md)
 * [Environment Sampler Design](ENVIRONMENT_SAMPLER_DESIGN.md)
+* [Environment Sampler Generation Integration](ENVIRONMENT_SAMPLER_GENERATION_INTEGRATION.md)
+* [Environment Sampling Handoff Result](ENVIRONMENT_SAMPLING_HANDOFF_RESULT.md)
 * [JSON Contracts](JSON_CONTRACTS.md)
 * [JSON Contract Validation Guide](JSON_CONTRACT_VALIDATION_GUIDE.md)
 * [LLM World Config Generation Flow](LLM_WORLD_CONFIG_GENERATION_FLOW.md)
@@ -41,6 +45,7 @@
 * UE 실행 계약: `EpisodeSpec`
 * UE 권장 endpoint: `POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=episode_spec`
 * Controlled smoke: `providerUsed=openai`, `fallbackUsed=false`, `episodeValidationPassed=true`, `episodeScenarioReflectionPassed=true`, `ueCompilerReadiness=true`
+* Environment sampling smoke: `sidewalkWidthCm=120`, `obstacleBlockingRatio=0.6`, `timeLimitSec=60`, `responseFormat=episode_spec`
 
 ## 검증 명령
 

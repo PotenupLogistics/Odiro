@@ -60,7 +60,7 @@ class UE5WorldConfigHandoffRequest(BaseModel):
     generationRequest: WorldConfigGenerationRequest
     handoffTarget: Literal["ue5"]
     includeDiagnostics: bool = True
-    responseFormat: Literal["world_config", "episode_spec", "both"] = "world_config"
+    responseFormat: Literal["world_config", "episode_spec", "both"] = "episode_spec"
 
 
 class UE5WorldConfigHandoffResponse(BaseModel):

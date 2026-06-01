@@ -14,6 +14,19 @@ POST /api/v1/ue5/world-config/handoff
 The UE5 handoff endpoint wraps a validated World Config with metadata, validation summary, scenario reflection, post-processing diagnostics, and warnings. It does not create sample JSON files and does not send data directly to UE5.
 ```
 
+UE handoff response format:
+
+- default: `responseFormat=episode_spec`
+- UE test recommendation: `responseFormat=episode_spec`
+- debugging recommendation: `responseFormat=both`
+- AI internal inspection only: `responseFormat=world_config`
+
+The response diagnostics include `effectiveResponseFormat`. `episodeSpec` may be `null` only when `responseFormat=world_config` or when validation fails.
+
+Environment sampling can be enabled through `generationRequest.constraints.environmentSampling`.
+When enabled, the server samples numeric parameters from `seed` and `scenarioType`, adds a `Numeric Environment Constraints` prompt section, and records only a numeric summary in diagnostics.
+Do not use low/middle/high as JSON values.
+
 OpenAI is the first provider when configured with `OPENAI_API_KEY`. Ollama is the fallback provider. The local Ollama server must be running for real fallback generation. Tests mock or dry-run these paths and do not call OpenAI or `localhost:11434`.
 
 OpenAI calls use JSON Schema structured output guidance for WorldConfig responses.

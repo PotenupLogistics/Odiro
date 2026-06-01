@@ -14,6 +14,10 @@ from app.models.generation import (
 )
 from app.models.llm import LlmGenerationRequest, LlmGenerationResponse, LlmProvider
 from app.services.json_contract_validator import validate_payload
+from app.services.environment_generation_constraints_builder import (
+    build_environment_sampling_context,
+    environment_sampling_summary,
+)
 from app.services.json_output_extractor import JsonExtractionError, extract_json_object
 from app.services.llm_client import BaseLlmClient
 from app.services.llm_client_factory import create_llm_client
@@ -270,8 +274,13 @@ def _apply_post_processing(
     request: WorldConfigGenerationRequest,
     payload: dict[str, Any],
     attempt: WorldConfigGenerationAttempt,
+    environment_context: Any = None,
 ) -> tuple[dict[str, Any] | None, Any, Any, list[str], dict[str, Any]]:
-    post_processing = apply_scenario_intent_to_world_config(request.prompt, payload)
+    post_processing = apply_scenario_intent_to_world_config(
+        request.prompt,
+        payload,
+        environment_context=environment_context,
+    )
     attempt.scenarioPostProcessingApplied = post_processing.applied
     attempt.scenarioPostProcessingPatches = [
         patch.model_dump(mode="json") for patch in post_processing.patches
@@ -298,6 +307,45 @@ def _apply_post_processing(
     return post_processing.patchedPayload, post_reflection, post_processing, [], {}
 
 
+def _post_process_success_result(
+    request: WorldConfigGenerationRequest,
+    attempts: list[WorldConfigGenerationAttempt],
+    retrieved_contexts: list[Any],
+    post_payload: dict[str, Any],
+    post_reflection: Any,
+    post_processing: Any,
+    environment_sampling: dict[str, Any] | None,
+    warnings: list[str],
+) -> WorldConfigGenerationResult:
+    return WorldConfigGenerationResult(
+        requestId=request.requestId,
+        generationType="world_config",
+        targetContractType="world_config",
+        success=True,
+        generatedPayload=post_payload,
+        validation=WorldConfigValidationSummary(status="passed"),
+        attempts=attempts,
+        retrievedContexts=retrieved_contexts,
+        scenarioReflection=post_reflection,
+        scenarioPostProcessing=post_processing,
+        environmentSampling=environment_sampling,
+        assumptions=[],
+        warnings=warnings,
+        error=None,
+    )
+
+
+def _apply_environment_post_processing_if_needed(
+    request: WorldConfigGenerationRequest,
+    payload: dict[str, Any],
+    attempt: WorldConfigGenerationAttempt,
+    environment_context: Any,
+) -> tuple[dict[str, Any] | None, Any, Any, list[str], dict[str, Any]]:
+    if environment_context is None:
+        return None, None, None, [], {}
+    return _apply_post_processing(request, payload, attempt, environment_context)
+
+
 def generate_world_config(
     request: WorldConfigGenerationRequest,
     provider: LlmProvider = LlmProvider.disabled,
@@ -315,6 +363,8 @@ def generate_world_config(
         context_top_k=context_top_k,
         compact_prompt=compact_prompt,
     )
+    environment_context = build_environment_sampling_context(request)
+    environment_sampling = environment_sampling_summary(environment_context)
     client = client_override or create_llm_client(provider, settings=settings)
     warnings = list(prompt_package.warnings)
 
@@ -346,33 +396,64 @@ def generate_world_config(
         last_reflection = reflection
         attempt.scenarioReflectionPassed = reflection.passed
         attempt.scenarioReflectionIssues = [issue.model_dump(mode="json") for issue in reflection.issues]
-        if not reflection.passed and request.constraints.requireValidation:
+        (
+            env_post_payload,
+            env_post_reflection,
+            env_post_processing,
+            env_post_errors,
+            env_post_error_summary,
+        ) = _apply_environment_post_processing_if_needed(
+            request,
+            extracted,
+            attempt,
+            environment_context,
+        )
+        if env_post_processing is not None:
+            last_post_processing = env_post_processing
+            warnings.extend(env_post_processing.warnings)
+        if env_post_payload is not None and env_post_reflection is not None:
+            last_reflection = env_post_reflection
+            if env_post_reflection.passed:
+                return _post_process_success_result(
+                    request,
+                    attempts,
+                    prompt_package.retrievedContexts,
+                    env_post_payload,
+                    env_post_reflection,
+                    env_post_processing,
+                    environment_sampling,
+                    warnings + initial_response.warnings,
+                )
+            last_errors = [issue.message for issue in env_post_reflection.issues]
+            invalid_payload = env_post_payload
+            next_repair_kind = "scenario"
+        elif env_post_errors:
+            last_errors = env_post_errors
+            last_error_summary = env_post_error_summary
+            invalid_payload = env_post_payload or extracted
+            next_repair_kind = "schema"
+        elif not reflection.passed and request.constraints.requireValidation:
             (
                 post_payload,
                 post_reflection,
                 post_processing,
                 post_errors,
                 post_error_summary,
-            ) = _apply_post_processing(request, extracted, attempt)
+            ) = _apply_post_processing(request, extracted, attempt, environment_context)
             last_post_processing = post_processing
             warnings.extend(post_processing.warnings)
             if post_payload is not None and post_reflection is not None:
                 last_reflection = post_reflection
                 if post_reflection.passed:
-                    return WorldConfigGenerationResult(
-                        requestId=request.requestId,
-                        generationType="world_config",
-                        targetContractType="world_config",
-                        success=True,
-                        generatedPayload=post_payload,
-                        validation=WorldConfigValidationSummary(status="passed"),
-                        attempts=attempts,
-                        retrievedContexts=prompt_package.retrievedContexts,
-                        scenarioReflection=post_reflection,
-                        scenarioPostProcessing=post_processing,
-                        assumptions=[],
-                        warnings=warnings + initial_response.warnings,
-                        error=None,
+                    return _post_process_success_result(
+                        request,
+                        attempts,
+                        prompt_package.retrievedContexts,
+                        post_payload,
+                        post_reflection,
+                        post_processing,
+                        environment_sampling,
+                        warnings + initial_response.warnings,
                     )
                 last_errors = [issue.message for issue in post_reflection.issues]
                 invalid_payload = post_payload
@@ -398,6 +479,7 @@ def generate_world_config(
                 retrievedContexts=prompt_package.retrievedContexts,
                 scenarioReflection=reflection,
                 scenarioPostProcessing=last_post_processing,
+                environmentSampling=environment_sampling,
                 assumptions=[],
                 warnings=warnings + initial_response.warnings,
                 error=None,
@@ -462,6 +544,46 @@ def generate_world_config(
             repair_attempt.scenarioReflectionIssues = [
                 issue.model_dump(mode="json") for issue in repair_reflection.issues
             ]
+            (
+                env_post_payload,
+                env_post_reflection,
+                env_post_processing,
+                env_post_errors,
+                env_post_error_summary,
+            ) = _apply_environment_post_processing_if_needed(
+                request,
+                repair_extracted,
+                repair_attempt,
+                environment_context,
+            )
+            if env_post_processing is not None:
+                last_post_processing = env_post_processing
+                warnings.extend(env_post_processing.warnings)
+            if env_post_payload is not None and env_post_reflection is not None:
+                last_reflection = env_post_reflection
+                if env_post_reflection.passed:
+                    return _post_process_success_result(
+                        request,
+                        attempts,
+                        prompt_package.retrievedContexts,
+                        env_post_payload,
+                        env_post_reflection,
+                        env_post_processing,
+                        environment_sampling,
+                        warnings + repair_response.warnings,
+                    )
+                last_errors = [issue.message for issue in env_post_reflection.issues]
+                invalid_payload = env_post_payload
+                next_repair_kind = "scenario"
+                repair_index += 1
+                continue
+            if env_post_errors:
+                last_errors = env_post_errors
+                last_error_summary = env_post_error_summary
+                invalid_payload = env_post_payload or repair_extracted
+                next_repair_kind = "schema"
+                repair_index += 1
+                continue
             if not repair_reflection.passed and request.constraints.requireValidation:
                 (
                     post_payload,
@@ -469,26 +591,21 @@ def generate_world_config(
                     post_processing,
                     post_errors,
                     post_error_summary,
-                ) = _apply_post_processing(request, repair_extracted, repair_attempt)
+                ) = _apply_post_processing(request, repair_extracted, repair_attempt, environment_context)
                 last_post_processing = post_processing
                 warnings.extend(post_processing.warnings)
                 if post_payload is not None and post_reflection is not None:
                     last_reflection = post_reflection
                     if post_reflection.passed:
-                        return WorldConfigGenerationResult(
-                            requestId=request.requestId,
-                            generationType="world_config",
-                            targetContractType="world_config",
-                            success=True,
-                            generatedPayload=post_payload,
-                            validation=WorldConfigValidationSummary(status="passed"),
-                            attempts=attempts,
-                            retrievedContexts=prompt_package.retrievedContexts,
-                            scenarioReflection=post_reflection,
-                            scenarioPostProcessing=post_processing,
-                            assumptions=[],
-                            warnings=warnings + repair_response.warnings,
-                            error=None,
+                        return _post_process_success_result(
+                            request,
+                            attempts,
+                            prompt_package.retrievedContexts,
+                            post_payload,
+                            post_reflection,
+                            post_processing,
+                            environment_sampling,
+                            warnings + repair_response.warnings,
                         )
                     last_errors = [issue.message for issue in post_reflection.issues]
                     invalid_payload = post_payload
@@ -518,6 +635,7 @@ def generate_world_config(
                 retrievedContexts=prompt_package.retrievedContexts,
                 scenarioReflection=repair_reflection,
                 scenarioPostProcessing=last_post_processing,
+                environmentSampling=environment_sampling,
                 assumptions=[],
                 warnings=warnings + repair_response.warnings,
                 error=None,
@@ -540,6 +658,7 @@ def generate_world_config(
             retrievedContexts=prompt_package.retrievedContexts,
             scenarioReflection=last_reflection,
             scenarioPostProcessing=last_post_processing,
+            environmentSampling=environment_sampling,
             assumptions=[],
             warnings=warnings,
             error=WorldConfigGenerationError(
@@ -579,6 +698,7 @@ def generate_world_config(
             attempts=attempts,
             retrievedContexts=prompt_package.retrievedContexts,
             scenarioPostProcessing=last_post_processing,
+            environmentSampling=environment_sampling,
             assumptions=[],
             warnings=warnings,
             error=WorldConfigGenerationError(
@@ -609,6 +729,7 @@ def generate_world_config(
         attempts=attempts,
         retrievedContexts=prompt_package.retrievedContexts,
         scenarioPostProcessing=last_post_processing,
+        environmentSampling=environment_sampling,
         assumptions=[],
         warnings=warnings,
         error=WorldConfigGenerationError(

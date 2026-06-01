@@ -521,6 +521,18 @@ Run:
 uv run python -m harness.checks.check_report_serialization
 ```
 
+## Handoff Response Summary
+
+`harness.checks.check_handoff_response_summary` verifies that generic obstacle handoff smoke reporting uses a summary helper instead of storing full `worldConfig` or full `episodeSpec` payloads.
+
+Run:
+
+```powershell
+uv run python -m harness.checks.check_handoff_response_summary
+```
+
+This check reads local source and documentation only. It does not call OpenAI, Ollama, or a live API server.
+
 This check verifies final delivery documents, README links, `responseFormat=episode_spec`, `obstacle.kickboard` confirmation requests, and the absence of forbidden OpenAI SDK imports, sample files, fixtures, vector DB, embedding index, and UE code artifacts.
 
 ## Environment Parameter Spec Check

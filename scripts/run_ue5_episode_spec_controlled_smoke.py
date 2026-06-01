@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.main import app  # noqa: E402
+from app.utils.handoff_response_summary import summarize_handoff_response  # noqa: E402
 from app.utils.report_serialization import to_jsonable, write_json_report  # noqa: E402
 
 
@@ -62,24 +63,28 @@ def _request_body(prompt: str, response_format: str) -> dict[str, Any]:
 
 
 def _report(provider: str, response_format: str, status_code: int, payload: dict[str, Any]) -> dict[str, Any]:
+    summary = summarize_handoff_response(payload, http_status=status_code)
     reflection = payload.get("episodeScenarioReflection") or {}
     episode = payload.get("episodeSpec") or {}
     actors = episode.get("actors") or {}
     return {
         "checkedAt": datetime.now(UTC).isoformat(),
         "provider": provider,
-        "model": (payload.get("metadata") or {}).get("model"),
+        "model": summary["model"],
         "responseFormat": response_format,
+        "effectiveResponseFormat": summary["effectiveResponseFormat"],
         "httpStatus": status_code,
-        "handoffSuccess": payload.get("success"),
-        "episodeSpecExists": payload.get("episodeSpec") is not None,
-        "episodeValidationPassed": (payload.get("episodeValidation") or {}).get("valid"),
-        "episodeScenarioReflectionPassed": reflection.get("passed"),
-        "staticObstacleCount": reflection.get("staticObstacleCount", len(actors.get("static_obstacles") or [])),
+        "handoffSuccess": summary["success"],
+        "worldConfigExists": summary["worldConfigExists"],
+        "episodeSpecExists": summary["episodeSpecExists"],
+        "episodeValidationPassed": summary["episodeValidationPassed"],
+        "episodeScenarioReflectionPassed": summary["episodeScenarioReflectionPassed"],
+        "staticObstacleCount": reflection.get("staticObstacleCount", summary["staticObstacleCount"]),
         "hasKickboardSemantic": reflection.get("hasKickboardSemantic", False),
         "hasBlockingRatio": reflection.get("hasBlockingRatio", False),
-        "pedestrianCount": reflection.get("pedestrianCount", len(actors.get("pedestrians") or [])),
-        "pathCount": reflection.get("pathCount", len(episode.get("paths") or [])),
+        "pedestrianCount": reflection.get("pedestrianCount", summary["pedestrianCount"]),
+        "pathCount": reflection.get("pathCount", summary["pathCount"]),
+        "summary": summary,
         "pedestrianPathLinked": reflection.get("pedestrianPathLinked", False),
         "hasCrossingPedestrian": reflection.get("hasCrossingPedestrian", False),
         "sidewalkWidthM": reflection.get("sidewalkWidthM"),
@@ -139,7 +144,13 @@ def main() -> int:
         f"/api/v1/ue5/world-config/handoff?provider={args.provider}&responseFormat={args.response_format}",
         json=body,
     )
-    payload = response.json()
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        payload = {
+            "success": False,
+            "warnings": [{"code": "response_parse_failed", "message": str(exc)}],
+        }
     report = _report(args.provider, args.response_format, response.status_code, payload)
     _write_report(args.report, report)
     print(json.dumps(to_jsonable(report), ensure_ascii=False, indent=2))

@@ -17,12 +17,13 @@
 * `WorldConfig` to `EpisodeSpec` adapter
 * `EpisodeSpec` validation
 * `EpisodeSpec` scenario reflection
+* environmentSampling numeric constraints handoff
 * UE team handoff package
 * Root README entry point
 
 ## 3. 검증 결과
 
-* pytest: `329 passed, 1 warning`
+* pytest: `362 passed, 1 warning`
 * harness: `PASS_WITH_WARNING`
 * OpenAI-first controlled smoke:
   * `providerUsed=openai`
@@ -31,6 +32,11 @@
   * `episodeValidationPassed=true`
   * `episodeScenarioReflectionPassed=true`
   * `ueCompilerReadiness=true`
+* environmentSampling EpisodeSpec smoke:
+  * `responseFormat=episode_spec`
+  * `sidewalkWidthCm=120 -> sidewalkWidthM=1.2`
+  * `obstacleBlockingRatio=0.6 -> staticObstacleBlockingRatio=0.6`
+  * `timeLimitSec=60 -> run.time_limit_s=60.0`
 
 ## 4. 아직 포함하지 않은 항목
 
@@ -39,6 +45,7 @@
 * UE C++ / Blueprint 구현
 * Run Result receive API
 * Evaluation scoring
+* DOE matrix / batch scenario generation
 * Sample JSON 또는 fixture 파일
 
 ## 5. 다음 단계
@@ -46,6 +53,8 @@
 * UE controlled integration
 * UE feedback 반영
 * Run Result API 설계
+* Evaluation scoring 설계
+* DOE / batch generation은 UE 단일 케이스 검증 후 진행
 
 ## Report Serialization
 

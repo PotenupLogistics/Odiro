@@ -12,9 +12,22 @@ uv run uvicorn app.main:app --reload
 
 ## 3. EpisodeSpec handoff 요청
 
+EpisodeSpec JSON 계약의 기준 문서는 `docs/UE_EPISODE_SPEC_JSON_GUIDE.md`이다.
+
 Endpoint:
 
-* `POST /api/v1/ue5/world-config/handoff?provider=ollama&responseFormat=episode_spec`
+* `POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=episode_spec`
+
+`responseFormat` 기본값은 `episode_spec`이다. UE 테스트에서는 `responseFormat=episode_spec`을 권장한다.
+디버깅에서는 `responseFormat=both`를 사용하면 `worldConfig`와 `episodeSpec`을 함께 볼 수 있다.
+`responseFormat=world_config`는 AI 내부 구조 확인용이며 이 경우 `episodeSpec`은 `null`일 수 있다.
+
+Environment sampler 연동:
+
+* `generationRequest.constraints.environmentSampling.enabled=true`
+* `seed`와 `scenarioType`으로 deterministic numeric parameters 생성
+* numeric constraints는 자연어보다 우선
+* diagnostics에는 sampled numeric summary만 포함
 
 요청 body 구조:
 
@@ -51,9 +64,8 @@ Endpoint:
 ## 6. Export CLI 사용법
 
 ```powershell
-uv run python scripts/export_ue5_handoff_payload.py --prompt "..." --provider ollama --format episode_spec
+uv run python scripts/export_ue5_handoff_payload.py --prompt "..." --provider openai --format episode_spec
 ```
 
 * `--out`을 명시한 경우에만 파일 저장
 * `--out` 없이 실행하면 콘솔 출력만 수행
-

@@ -64,3 +64,14 @@ class EnvironmentSamplingResult(BaseModel):
     parameters: EnvironmentParameterSet
     labelHints: dict[str, str] = Field(default_factory=dict)
     warnings: list[EnvironmentSamplingWarning] = Field(default_factory=list)
+
+
+class EnvironmentSamplingContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    seed: int | None = None
+    scenarioType: ScenarioType | None = None
+    parameters: EnvironmentParameterSet | None = None
+    fixedParameters: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[EnvironmentSamplingWarning] = Field(default_factory=list)

@@ -15,8 +15,13 @@ Schema validation checks structure, required fields, types, and allowed fields. 
 ## 3. Current Rules
 
 - If the prompt mentions a narrow sidewalk, `map.sidewalkWidthCm` must exist and be in a narrow-sidewalk range.
+- If the prompt explicitly states `sidewalkWidthCm` such as `120cm`, `map.sidewalkWidthCm` must preserve that value.
 - If the prompt mentions Kickboard, `obstacles` or `environmentObjects` must include type `Kickboard`.
+- If the prompt mentions a generic/static obstacle, `obstacles[]` must include at least one schema-valid obstacle.
+- If the prompt gives an obstacle coordinate such as `x=400, y=0, z=0`, `obstacles[].position` must match it.
 - If the prompt says the path is blocked, an obstacle must include a positive `blockingRatio`.
+- If the prompt explicitly states `blockingRatio 0.6`, `obstacles[].blockingRatio` must preserve that value.
+- If the prompt says there are no pedestrians, `pedestrians` must be empty or absent.
 - If the prompt mentions pedestrian, `pedestrians` must contain at least one item.
 - If the prompt mentions crossing, a pedestrian must include crossing-like behavior.
 - If the prompt mentions terrain risk, map slope should reflect that risk.
@@ -31,8 +36,14 @@ This layer is heuristic and rule-based. It does not create sample JSON, fixtures
 
 ## 6. Binding To Schema Paths
 
-Scenario requirements are bound to concrete schema paths such as `obstacles[].type`, `obstacles[].blockingRatio`, `pedestrians[]`, and `pedestrians[].behavior`. The prompt builder includes these paths so the model can satisfy semantic requirements without inventing new schema fields.
+Scenario requirements are bound to concrete schema paths such as `map.sidewalkWidthCm`, `obstacles[].type`, `obstacles[].position`, `obstacles[].blockingRatio`, `pedestrians[]`, and `pedestrians[].behavior`. The prompt builder includes these paths so the model can satisfy semantic requirements without inventing new schema fields.
 
 ## 7. Detailed Issues
 
 Reflection issues include `requirementId`, `issueType`, `expectedPath`, `expectedValueHint`, `actualValueSummary`, and `repairInstruction`. These fields are used by the scenario repair prompt to fix only missing semantic requirements.
+
+## Route-relative placement validation
+
+* `obstacle_route_midpoint` requirement가 있으면 WorldConfig의 obstacle position이 robot.spawn과 robot.goal의 midpoint 50cm 이내인지 검사한다.
+* spawn=(0,0,0), goal=(800,0,0)이면 expected midpoint는 (400,0,0)이다.
+* obstacle이 midpoint에서 벗어나면 `obstacle_not_near_route_midpoint` issue로 `passed=false` 처리한다.

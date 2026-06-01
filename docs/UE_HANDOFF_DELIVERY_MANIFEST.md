@@ -12,6 +12,7 @@
 * `docs/UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md`
 * `docs/UE5_EPISODE_SPEC_HANDOFF_SUMMARY.md`
 * `docs/OPENAI_FIRST_HANDOFF_RESULT.md`
+* `docs/ENVIRONMENT_SAMPLING_HANDOFF_RESULT.md`
 * `docs/UE5_EPISODE_SPEC_ADAPTER.md`
 * `docs/UE5_EPISODE_SPEC_SCENARIO_REFLECTION.md`
 * `docs/UE5_EPISODE_SPEC_CONTROLLED_SMOKE_RESULT.md`
@@ -48,6 +49,12 @@ uv run python scripts/export_ue5_handoff_payload.py --prompt "..." --provider op
 * `episodeValidationPassed=true`
 * `episodeScenarioReflectionPassed=true`
 * `ueCompilerReadiness=true`
+* environmentSampling handoff:
+  * `sidewalkWidthCm=120`
+  * `obstacleBlockingRatio=0.6`
+  * `timeLimitSec=60`
+  * `sidewalkWidthM=1.2`
+  * `run.time_limit_s=60.0`
 
 ## 7. UE 팀 확인 요청
 
@@ -56,5 +63,6 @@ uv run python scripts/export_ue5_handoff_payload.py --prompt "..." --provider op
 * `EpisodeSandbox`에서 `UEpisodeCompiler` compile 동작 확인
 * `BP_DeliveryBot_GridBoundsActor` 존재 여부 확인
 * static obstacle, pedestrian, route injection 동작 확인
+* environmentSampling 기반 obstacle/width/time limit가 UE actor spawn과 route injection에 반영되는지 확인
 
 이 handoff는 프로젝트 내부 시뮬레이션 검증용이며 실제 UE actor spawn은 UE 팀 확인이 필요합니다.

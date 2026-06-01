@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.episode_spec_validator import ALLOWED_STATIC_PROP_IDS
 from app.services.route_geometry_utils import compute_midpoint, distance_between_points
 
 
@@ -76,6 +77,29 @@ def _warnings(response: dict[str, Any]) -> list[str]:
     return values
 
 
+def _contains_key(value: Any, key: str) -> bool:
+    if isinstance(value, dict):
+        return key in value or any(_contains_key(child, key) for child in value.values())
+    if isinstance(value, list):
+        return any(_contains_key(child, key) for child in value)
+    return False
+
+
+def _properties_are_shallow(properties: Any) -> bool | None:
+    if not isinstance(properties, dict):
+        return None
+    for value in properties.values():
+        if isinstance(value, dict):
+            return False
+        if isinstance(value, list):
+            if len(value) != 3 or not all(isinstance(item, (int, float)) for item in value):
+                return False
+            continue
+        if value is not None and not isinstance(value, (bool, int, float, str)):
+            return False
+    return True
+
+
 def summarize_handoff_response(response_json: dict[str, Any], http_status: int | None = None) -> dict[str, Any]:
     """Return a JSON-safe handoff summary without full WorldConfig or EpisodeSpec payloads."""
     response = _as_dict(response_json)
@@ -99,6 +123,13 @@ def summarize_handoff_response(response_json: dict[str, Any], http_status: int |
     static_obstacles = _as_list(actors.get("static_obstacles"))
     static_obstacle = _first_dict(static_obstacles)
     static_obstacle_properties = _as_dict(static_obstacle.get("properties"))
+    static_obstacle_transform = _as_dict(static_obstacle.get("transform"))
+    static_obstacle_location = static_obstacle_transform.get("location_m")
+    ground_model = _as_dict(episode_spec.get("ground_model"))
+    regions = _as_list(ground_model.get("regions"))
+    first_region = _first_dict(regions)
+    first_region_shape = _as_dict(first_region.get("shape"))
+    size_m = first_region_shape.get("size_m")
     episode_pedestrians = _as_list(actors.get("pedestrians"))
     episode_paths = _as_list(episode_spec.get("paths"))
     checked_requirements = _as_list(scenario_reflection.get("checkedRequirements"))
@@ -108,20 +139,13 @@ def summarize_handoff_response(response_json: dict[str, Any], http_status: int |
     )
     obstacle_distance_from_midpoint = None
     obstacle_near_route_midpoint = None
-    if world_config:
-        robot = _as_dict(world_config.get("robot"))
-        midpoint = compute_midpoint(_as_dict(robot.get("spawn")), _as_dict(robot.get("goal")))
-        if isinstance(obstacle.get("position"), dict):
-            obstacle_distance_from_midpoint = round(distance_between_points(obstacle["position"], midpoint), 3)
-            obstacle_near_route_midpoint = obstacle_distance_from_midpoint <= 50.0
-    elif episode_spec:
+    if episode_spec:
         robot = _as_dict(actors.get("robot"))
         transform = _as_dict(robot.get("transform"))
         route = _as_dict(robot.get("route"))
         spawn_m = transform.get("location_m")
         goal_m = route.get("goal_m")
-        obstacle_transform = _as_dict(static_obstacle.get("transform"))
-        obstacle_location = obstacle_transform.get("location_m")
+        obstacle_location = static_obstacle_location
         if (
             isinstance(spawn_m, list)
             and len(spawn_m) >= 3
@@ -142,6 +166,15 @@ def summarize_handoff_response(response_json: dict[str, Any], http_status: int |
                 3,
             )
             obstacle_near_route_midpoint = obstacle_distance_from_midpoint <= 0.5
+    elif world_config:
+        robot = _as_dict(world_config.get("robot"))
+        midpoint = compute_midpoint(_as_dict(robot.get("spawn")), _as_dict(robot.get("goal")))
+        if isinstance(obstacle.get("position"), dict):
+            obstacle_distance_from_midpoint = round(distance_between_points(obstacle["position"], midpoint), 3)
+            obstacle_near_route_midpoint = obstacle_distance_from_midpoint <= 50.0
+    sidewalk_width_m = None
+    if isinstance(size_m, list) and len(size_m) >= 2 and isinstance(size_m[1], (int, float)):
+        sidewalk_width_m = float(size_m[1])
 
     summary = {
         "httpStatus": http_status,
@@ -150,6 +183,8 @@ def summarize_handoff_response(response_json: dict[str, Any], http_status: int |
         "effectiveResponseFormat": _effective_response_format(response),
         "providerUsed": metadata.get("provider"),
         "model": metadata.get("model"),
+        "schema": episode_spec.get("schema"),
+        "units": episode_spec.get("units"),
         "worldConfigExists": bool(world_config),
         "episodeSpecExists": bool(episode_spec),
         "schemaValidationPassed": _bool_or_none(validation.get("schemaValidationPassed")),
@@ -165,16 +200,28 @@ def summarize_handoff_response(response_json: dict[str, Any], http_status: int |
         "pedestriansEmpty": bool(world_config) and not pedestrians,
         "pathsEmpty": bool(episode_spec) and not episode_paths,
         "staticObstacleCount": len(static_obstacles),
+        "staticObstaclePropId": static_obstacle.get("prop_id"),
         "staticObstacleSemanticType": static_obstacle_properties.get("semantic_type"),
         "staticObstacleBlockingRatio": static_obstacle_properties.get("blocking_ratio"),
+        "obstacleLocation": static_obstacle_location,
+        "sidewalkWidthM": sidewalk_width_m,
+        "runTimeLimitS": _as_dict(episode_spec.get("run")).get("time_limit_s"),
         "pedestrianCount": len(episode_pedestrians),
         "pathCount": len(episode_paths),
+        "ueCompilerReadiness": _bool_or_none(episode_reflection.get("ueCompilerReadiness")),
         "checkedRequirementsCount": len(checked_requirements),
         "postProcessingApplied": _bool_or_none(post_processing.get("applied")),
         "appliedPatches": _applied_patches(response),
         "routeMidpointExpected": route_midpoint_expected,
         "obstacleNearRouteMidpoint": obstacle_near_route_midpoint,
         "obstacleDistanceFromMidpoint": obstacle_distance_from_midpoint,
+        "penaltiesFieldAbsent": not _contains_key(episode_spec, "penalties"),
+        "propertiesAreShallow": _properties_are_shallow(static_obstacle_properties),
+        "propIdInCatalog": (
+            static_obstacle.get("prop_id") in ALLOWED_STATIC_PROP_IDS
+            if static_obstacle.get("prop_id") is not None
+            else None
+        ),
         "warnings": _warnings(response),
         "errorCode": _as_dict(response.get("error")).get("code"),
         "environmentSamplingEnabled": environment_sampling.get("enabled"),

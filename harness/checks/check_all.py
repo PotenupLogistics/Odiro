@@ -22,6 +22,7 @@ from harness.checks.check_environment_sampler_generation_integration import run_
 from harness.checks.check_environment_sampling_handoff_result_docs import run_check as run_environment_sampling_handoff_result_docs_check
 from harness.checks.check_json_schemas import run_check as run_json_schemas_check
 from harness.checks.check_llm_client_abstraction import run_check as run_llm_client_abstraction_check
+from harness.checks.check_map_generation_data_sources_docs import run_check as run_map_generation_data_sources_docs_check
 from harness.checks.check_llm_provider_config import run_check as run_llm_provider_config_check
 from harness.checks.check_manual_confirmation import run_check as run_manual_confirmation_check
 from harness.checks.check_manual_review_pack import run_check as run_manual_review_pack_check
@@ -103,6 +104,7 @@ def _overall_status(
     ue5_handoff_docs_and_export_result: dict,
     ue_episode_spec_guide_alignment_result: dict,
     llm_client_abstraction_result: dict,
+    map_generation_data_sources_docs_result: dict,
     llm_provider_config_result: dict,
     ollama_provider_result: dict,
     openai_provider_result: dict,
@@ -158,6 +160,7 @@ def _overall_status(
         or not ue5_handoff_docs_and_export_result["passed"]
         or not ue_episode_spec_guide_alignment_result["passed"]
         or not llm_client_abstraction_result["passed"]
+        or not map_generation_data_sources_docs_result["passed"]
         or not llm_provider_config_result["passed"]
         or not ollama_provider_result["passed"]
         or not openai_provider_result["passed"]
@@ -213,6 +216,7 @@ def _overall_status(
         or ue5_handoff_docs_and_export_result.get("warning")
         or ue_episode_spec_guide_alignment_result.get("warning")
         or llm_client_abstraction_result.get("warning")
+        or map_generation_data_sources_docs_result.get("warning")
         or llm_provider_config_result.get("warning")
         or ollama_provider_result.get("warning")
         or openai_provider_result.get("warning")
@@ -272,6 +276,7 @@ def build_summary(
     ue5_handoff_docs_and_export_result: dict,
     ue_episode_spec_guide_alignment_result: dict,
     llm_client_abstraction_result: dict,
+    map_generation_data_sources_docs_result: dict,
     llm_provider_config_result: dict,
     ollama_provider_result: dict,
     openai_provider_result: dict,
@@ -335,6 +340,7 @@ def build_summary(
         f"- UE5 handoff docs/export result: {'PASS' if ue5_handoff_docs_and_export_result['passed'] else 'FAIL'}",
         f"- UE EpisodeSpec guide alignment result: {'PASS' if ue_episode_spec_guide_alignment_result['passed'] else 'FAIL'}",
         f"- LLM client abstraction result: {'PASS' if llm_client_abstraction_result['passed'] else 'FAIL'}",
+        f"- Map generation data sources docs result: {'PASS' if map_generation_data_sources_docs_result['passed'] else 'FAIL'}",
         f"- LLM provider config result: {'PASS' if llm_provider_config_result['passed'] else 'FAIL'}",
         f"- Ollama provider result: {'PASS' if ollama_provider_result['passed'] else 'FAIL'}",
         f"- OpenAI provider result: {'PASS' if openai_provider_result['passed'] else 'FAIL'}",
@@ -782,6 +788,7 @@ def main() -> int:
     ue5_handoff_docs_and_export_result = run_ue5_handoff_docs_and_export_check()
     ue_episode_spec_guide_alignment_result = run_ue_episode_spec_guide_alignment_check()
     llm_client_abstraction_result = run_llm_client_abstraction_check()
+    map_generation_data_sources_docs_result = run_map_generation_data_sources_docs_check()
     llm_provider_config_result = run_llm_provider_config_check()
     ollama_provider_result = run_ollama_provider_check()
     openai_provider_result = run_openai_provider_check()
@@ -836,6 +843,7 @@ def main() -> int:
         ue5_handoff_docs_and_export_result,
         ue_episode_spec_guide_alignment_result,
         llm_client_abstraction_result,
+        map_generation_data_sources_docs_result,
         llm_provider_config_result,
         ollama_provider_result,
         openai_provider_result,
@@ -894,6 +902,7 @@ def main() -> int:
             "ue5HandoffDocsAndExport": ue5_handoff_docs_and_export_result,
             "ueEpisodeSpecGuideAlignment": ue_episode_spec_guide_alignment_result,
             "llmClientAbstraction": llm_client_abstraction_result,
+            "mapGenerationDataSourcesDocs": map_generation_data_sources_docs_result,
             "llmProviderConfig": llm_provider_config_result,
             "ollamaProvider": ollama_provider_result,
             "openaiProvider": openai_provider_result,
@@ -960,6 +969,7 @@ def main() -> int:
             ue5_handoff_docs_and_export_result,
             ue_episode_spec_guide_alignment_result,
             llm_client_abstraction_result,
+            map_generation_data_sources_docs_result,
             llm_provider_config_result,
             ollama_provider_result,
             openai_provider_result,
@@ -1018,6 +1028,7 @@ def main() -> int:
     print(f"UE5 handoff docs/export check: {'PASS' if ue5_handoff_docs_and_export_result['passed'] else 'FAIL'}")
     print(f"UE EpisodeSpec guide alignment check: {'PASS' if ue_episode_spec_guide_alignment_result['passed'] else 'FAIL'}")
     print(f"LLM client abstraction check: {'PASS' if llm_client_abstraction_result['passed'] else 'FAIL'}")
+    print(f"Map generation data sources docs check: {'PASS' if map_generation_data_sources_docs_result['passed'] else 'FAIL'}")
     print(f"LLM provider config check: {'PASS' if llm_provider_config_result['passed'] else 'FAIL'}")
     print(f"Ollama provider check: {'PASS' if ollama_provider_result['passed'] else 'FAIL'}")
     print(f"OpenAI provider check: {'PASS' if openai_provider_result['passed'] else 'FAIL'}")
@@ -1106,6 +1117,8 @@ def main() -> int:
         print("UE EpisodeSpec guide alignment warning: guide alignment artifacts require attention")
     if llm_client_abstraction_result.get("warning"):
         print("LLM client abstraction warning: LLM abstraction artifacts require attention")
+    if map_generation_data_sources_docs_result.get("warning"):
+        print("Map generation data sources docs warning: data source docs require attention")
     if llm_provider_config_result.get("warning"):
         print("LLM provider config warning: provider config artifacts require attention")
     if ollama_provider_result.get("warning"):

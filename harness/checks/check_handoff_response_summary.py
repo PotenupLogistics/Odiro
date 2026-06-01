@@ -52,6 +52,9 @@ def run_check() -> dict[str, Any]:
                 "sidewalkWidthCm",
                 "blockingRatio",
                 "staticObstacleBlockingRatio",
+                "penaltiesFieldAbsent",
+                "obstacleLocation",
+                "obstacleNearRouteMidpoint",
                 "checkedRequirementsCount",
                 "appliedPatches",
             ]

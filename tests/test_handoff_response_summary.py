@@ -28,6 +28,19 @@ def _response() -> dict:
             "pedestrians": [],
         },
         "episodeSpec": {
+            "schema": "episode_actor_spawn_mvp",
+            "units": {"distance": "m", "angle": "deg"},
+            "run": {"time_limit_s": 60.0},
+            "ground_model": {
+                "regions": [
+                    {
+                        "region_id": "sidewalk_main",
+                        "region_type": "walkable",
+                        "shape": {"type": "rectangle", "center_m": [0.0, 0.0, 0.0], "size_m": [10.0, 1.2]},
+                        "traversability_score": 1.0,
+                    }
+                ]
+            },
             "paths": [],
             "actors": {
                 "robot": {
@@ -38,6 +51,8 @@ def _response() -> dict:
                 "pedestrians": [],
                 "static_obstacles": [
                     {
+                        "prop_id": "obstacle.box_01",
+                        "transform": {"location_m": [4.0, 0.0, 0.0]},
                         "properties": {
                             "semantic_type": "Obstacle",
                             "blocking_ratio": 0.6,
@@ -52,6 +67,7 @@ def _response() -> dict:
             "staticObstacleCount": 1,
             "pedestrianCount": 0,
             "pathCount": 0,
+            "ueCompilerReadiness": True,
         },
         "metadata": {"provider": "openai", "model": "gpt-test"},
         "validation": {
@@ -110,8 +126,16 @@ def test_summary_extracts_world_config_and_episode_spec_values() -> None:
     assert summary["obstaclePosition"] == {"x": 400, "y": 0, "z": 0}
     assert summary["blockingRatio"] == 0.6
     assert summary["staticObstacleCount"] == 1
+    assert summary["staticObstaclePropId"] == "obstacle.box_01"
     assert summary["staticObstacleSemanticType"] == "Obstacle"
     assert summary["staticObstacleBlockingRatio"] == 0.6
+    assert summary["obstacleLocation"] == [4.0, 0.0, 0.0]
+    assert summary["sidewalkWidthM"] == 1.2
+    assert summary["runTimeLimitS"] == 60.0
+    assert summary["ueCompilerReadiness"] is True
+    assert summary["penaltiesFieldAbsent"] is True
+    assert summary["propertiesAreShallow"] is True
+    assert summary["propIdInCatalog"] is True
     assert summary["pedestriansEmpty"] is True
     assert summary["pathsEmpty"] is True
     assert summary["checkedRequirementsCount"] == 2
@@ -128,6 +152,22 @@ def test_summary_extracts_world_config_and_episode_spec_values() -> None:
     assert summary["routeMidpointExpected"] is True
     assert summary["obstacleNearRouteMidpoint"] is True
     assert summary["obstacleDistanceFromMidpoint"] == 0.0
+
+
+def test_summary_flags_guide_and_midpoint_mismatches_without_payloads() -> None:
+    response = _response()
+    response["episodeSpec"]["ground_model"]["regions"][0]["penalties"] = []
+    response["episodeSpec"]["actors"]["static_obstacles"][0]["transform"]["location_m"] = [8.0, 0.0, 0.0]
+    response["episodeSpec"]["actors"]["static_obstacles"][0]["properties"]["nested"] = {"bad": True}
+
+    summary = summarize_handoff_response(response)
+
+    assert summary["penaltiesFieldAbsent"] is False
+    assert summary["propertiesAreShallow"] is False
+    assert summary["obstacleLocation"] == [8.0, 0.0, 0.0]
+    assert summary["obstacleNearRouteMidpoint"] is False
+    assert summary["obstacleDistanceFromMidpoint"] == 4.0
+    assert "episodeSpec" not in summary
 
 
 def test_summary_handles_null_episode_spec() -> None:

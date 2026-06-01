@@ -21,6 +21,7 @@ EpisodeSpec 계약의 source of truth는 `docs/UE_EPISODE_SPEC_JSON_GUIDE.md`이
 * guide에 없는 `penalties` 필드는 생성하지 않는다.
 * penalty region이 필요할 때는 guide의 singular `penalty` 필드를 사용한다.
 * `properties`는 shallow map으로 유지하며 boolean, number, string, numeric vector3만 사용한다.
+* Swagger live 응답에 guide 비호환 필드가 보이면 먼저 FastAPI 서버가 최신 코드로 재시작되었는지 확인한다.
 
 ## 4. 단위 변환
 
@@ -45,6 +46,7 @@ If the prompt explicitly says there are no pedestrians, empty `actors.pedestrian
 ## 6. 검증 규칙
 
 `episode_spec_validator`는 root 필드, meter/degree 단위, actor/path id 중복, pedestrian path 참조, static obstacle catalog, rectangle ground shape, robot route, 위치/크기/스케일 배열 길이, pedestrian speed 권장 범위를 검증한다.
+`ground_model.regions[].penalties`처럼 guide에 없는 plural field는 invalid로 처리한다.
 
 ## 7. Controlled smoke
 

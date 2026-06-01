@@ -21,6 +21,8 @@
 * EpisodeSpec scenario reflection
 * OpenAI-first EpisodeSpec handoff smoke
 * environmentSampling 기반 EpisodeSpec handoff smoke
+* guide-aligned route midpoint EpisodeSpec live smoke
+* 맵 생성 데이터 근거 문서
 * UE team handoff package
 * 루트 README 프로젝트 entry point
 
@@ -29,6 +31,8 @@
 Natural Language -> WorldConfig -> Validation -> Scenario Reflection -> Post-processing -> EpisodeSpec -> EpisodeSpec validation -> EpisodeSpec scenario reflection -> UE handoff
 
 environmentSampling이 활성화된 요청은 seed/scenarioType/fixedParameters 기반 numeric constraints를 prompt와 deterministic post-processing에 연결한다. 최근 smoke에서는 `sidewalkWidthCm=120`, `obstacleBlockingRatio=0.6`, `timeLimitSec=60`이 EpisodeSpec까지 반영됐다.
+
+맵 생성 데이터 근거는 사용자 자연어, scenario intent, environmentSampling, UE EpisodeSpec guide, deterministic placement rule을 기준으로 정리했다. 법령/인증 RAG는 좌표 생성 근거가 아니라 안전 정책 근거로 사용한다.
 
 ## 3. 현재 제한 사항
 
@@ -41,7 +45,8 @@ environmentSampling이 활성화된 요청은 seed/scenarioType/fixedParameters 
 ## 4. 현재 검증 상태
 
 * Harness: `PASS_WITH_WARNING`
-* pytest: `362 passed, 1 warning`
+* pytest: `381 passed, 1 warning`
 * warning 사유: 기존 manual-review/partial-source 상태가 설계상 남아 있습니다.
 * OpenAI-first UE handoff smoke는 `providerUsed=openai`, `fallbackUsed=false`, `episodeValidationPassed=true`, `episodeScenarioReflectionPassed=true`, `ueCompilerReadiness=true` 상태입니다.
 * environmentSampling EpisodeSpec handoff smoke는 `responseFormat=episode_spec`, `sidewalkWidthM=1.2`, `staticObstacleBlockingRatio=0.6`, `run.time_limit_s=60.0` 상태입니다.
+* guide midpoint smoke는 `penaltiesFieldAbsent=true`, `propertiesAreShallow=true`, `propIdInCatalog=true`, `obstacleNearRouteMidpoint=true` 상태입니다.

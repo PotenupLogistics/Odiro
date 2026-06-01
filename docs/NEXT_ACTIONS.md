@@ -40,4 +40,12 @@
 6. DOE / scenario matrix / batch generation은 UE 단일 케이스 검증 후 진행
 7. 추가 scenario support 검토
 
+## 5. 미팅 이후 우선순위
+
+* UE actual integration check
+* Run Result API design
+* Evaluation scoring design
+* Run Result analysis design
+* DOE / scenario matrix / batch generation은 UE 단일 케이스 검증 이후 진행
+
 현재 단계에서는 sample JSON, fixture 파일, vector DB, embedding index, UE C++/Blueprint 코드를 생성하지 않습니다.

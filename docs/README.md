@@ -7,6 +7,7 @@
 * [Current Project Status](CURRENT_PROJECT_STATUS.md)
 * [Next Actions](NEXT_ACTIONS.md)
 * [UE AI Integration Issues](UE_AI_INTEGRATION_ISSUES.md)
+* [Map Generation Data Sources](MAP_GENERATION_DATA_SOURCES.md)
 
 ## UE handoff 문서
 
@@ -37,6 +38,7 @@
 * [LLM World Config Generation Flow](LLM_WORLD_CONFIG_GENERATION_FLOW.md)
 * [World Config Prompt Spec](WORLD_CONFIG_PROMPT_SPEC.md)
 * [World Config Generation Orchestrator](WORLD_CONFIG_GENERATION_ORCHESTRATOR.md)
+* [Map Generation Data Sources](MAP_GENERATION_DATA_SOURCES.md)
 
 ## 현재 상태 요약
 

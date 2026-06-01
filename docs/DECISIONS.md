@@ -323,9 +323,17 @@
 * 경로 중앙/중간 같은 상대 좌표 표현은 LLM 추론에 맡기지 않고 deterministic midpoint 계산으로 처리한다.
 * 명시 좌표가 있으면 명시 좌표가 midpoint보다 우선한다.
 * EpisodeSpec 변환 후에도 midpoint 근처 배치인지 검증한다.
+* LLM이 obstacle을 goal 근처에 둔 경우에도 route_midpoint intent가 있으면 deterministic post-processing이 midpoint로 보정한다.
+* live Swagger 응답이 in-memory 회귀 테스트와 다르면 stale FastAPI 서버 여부를 먼저 확인한다.
 
 ## UE EpisodeSpec Guide Alignment
 
 * UE EpisodeSpec contract source는 `docs/UE_EPISODE_SPEC_JSON_GUIDE.md`이다.
 * WorldConfig -> EpisodeSpec adapter는 이 guide와 일치해야 한다.
 * UE guide가 바뀌면 guide 문서를 먼저 갱신하고 adapter/test를 갱신한다.
+* Guide 비호환 `ground_model.regions[].penalties`는 EpisodeSpec output에 포함하지 않고 validator에서 invalid로 처리한다.
+
+## Map Generation Data Source Decisions
+
+* 법령 RAG는 좌표 생성 근거가 아니라 정책/안전 근거로 사용한다.
+* 좌표와 배치는 사용자 입력, environmentSampling, UE EpisodeSpec guide, deterministic placement rule을 기준으로 결정한다.

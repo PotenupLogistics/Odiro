@@ -19,6 +19,7 @@ enum class EEpisodeParamValueType : uint8
 UENUM(BlueprintType)
 enum class EEpisodeActorCategory : uint8
 {
+	DeliveryBot,
 	StaticObstacle,
 	Pedestrian,
 	RoadVehicle,

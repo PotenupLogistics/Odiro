@@ -3,7 +3,6 @@
 #include "CoreMinimal.h"
 #include "EpisodeCoreTypes.h"
 #include "EpisodeConfigTypes.h"
-#include "Struct/DeliveryBotRobotSpawnInfo.h"
 #include "EpisodeSpecTypes.generated.h"
 
 // 언리얼에서 ScenarioSpec 해석 후 에피소드를 생성하기 위한 에피소드 명세.
@@ -33,7 +32,7 @@ enum class EEpisodeGroundShapeType : uint8
 	ConvexPolygon
 };
 
-// 런타임 지면 영역 명세. 단위는 
+// 런타임 지면 영역 명세. 단위는 centimeter.
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FEpisodeGroundRegionSpec
 {
@@ -89,9 +88,6 @@ struct PROTOROBOTSIM_API FEpisodePlaceableInstanceSpec
 	EEpisodeActorCategory Category = EEpisodeActorCategory::StaticObstacle;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	EEpisodeMobilityMode MobilityMode = EEpisodeMobilityMode::Static;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FTransform Transform;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
@@ -112,9 +108,6 @@ struct PROTOROBOTSIM_API FEpisodeDynamicActorSpec
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	EEpisodeActorCategory Category = EEpisodeActorCategory::Pedestrian;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	EEpisodeMobilityMode MobilityMode = EEpisodeMobilityMode::Moving;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FTransform InitialTransform;
@@ -202,11 +195,4 @@ struct PROTOROBOTSIM_API FEpisodeWorldSpec
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FString SpecHash;
-	
-	// 배달봇 전용 ----------------------------------------------------------------
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	bool bHasDeliveryBotRobotSpawnInfo{ false };
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FDeliveryBotRobotSpawnInfo DeliveryBotRobotSpawnInfo{};
 };

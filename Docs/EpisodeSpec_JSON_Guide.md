@@ -515,7 +515,7 @@ EvaluationSubsystem은 `distance_m` 안에 들어온 시점을 near-miss 구간 
         "instance_id": "barrier_01",
         "prop_id": "obstacle.road_barrier_01",
         "transform": {
-          "location_m": [-3.0, -0.45, 0.0],
+          "location_m": [-1.5, -0.45, 0.0],
           "rotation_deg": {
             "pitch": 0.0,
             "yaw": 90.0,

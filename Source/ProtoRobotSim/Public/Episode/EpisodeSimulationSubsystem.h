@@ -34,7 +34,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
 	TSubclassOf<AActor> GoalPointClass;
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
 	TSubclassOf<AActor> StartPointClass;
 
@@ -101,7 +101,7 @@ private:
 
 	AActor* SpawnPlaceable(const FEpisodePlaceableInstanceSpec& PlaceableSpec);
 	AEpisodeStaticObstacle* SpawnStaticObstacle(const FEpisodePlaceableInstanceSpec& PlaceableSpec);
-	AActor* SpawnRobotActor(const FEpisodePlaceableInstanceSpec& PlaceableSpec, const FDeliveryBotRobotSpawnInfo& RobotSpawnInfo);
+	AActor* SpawnRobotActor(const FEpisodePlaceableInstanceSpec& PlaceableSpec);
 	AActor* SpawnDynamicActor(const FEpisodeDynamicActorSpec& DynamicActorSpec);
 	AEpisodePedestrian* SpawnPedestrian(const FEpisodeDynamicActorSpec& DynamicActorSpec);
 
@@ -109,15 +109,13 @@ private:
 		const FString& InstanceId,
 		const FString& AssetId,
 		EEpisodeActorCategory Category,
-		EEpisodeMobilityMode MobilityMode,
 		AActor* Actor);
 
 	void ConfigurePlaceableComponent(
 		UEpisodePlaceableComponent* PlaceableComponent,
 		const FString& InstanceId,
 		const FString& AssetId,
-		EEpisodeActorCategory Category,
-		EEpisodeMobilityMode MobilityMode) const;
+		EEpisodeActorCategory Category) const;
 
 	static double GetFloatProperty(
 		const TMap<FString, FEpisodeParamValue>& Properties,

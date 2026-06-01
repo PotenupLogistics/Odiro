@@ -795,7 +795,6 @@ void UEpisodeCompiler::CompileStaticObstacles(
 		}
 
 		PlaceableSpec.Category = EEpisodeActorCategory::StaticObstacle;
-		PlaceableSpec.MobilityMode = EEpisodeMobilityMode::Static;
 		ReadTransformField(*ObstacleObject, TEXT("transform"), ObstaclePath, result, PlaceableSpec.Transform);
 		AddJsonProperties(*ObstacleObject, PlaceableSpec.Properties);
 		result.WorldSpec.Placeables.Add(PlaceableSpec);
@@ -850,7 +849,6 @@ void UEpisodeCompiler::CompilePedestrians(
 		}
 
 		DynamicActorSpec.Category = EEpisodeActorCategory::Pedestrian;
-		DynamicActorSpec.MobilityMode = EEpisodeMobilityMode::Moving;
 		DynamicActorSpec.SpawnTimeSeconds = ReadNumberOrDefault(*PedestrianObject, TEXT("spawn_time_s"), 0.0);
 		ReadTransformField(*PedestrianObject, TEXT("transform"), PedestrianPath, result,
 		                   DynamicActorSpec.InitialTransform);
@@ -898,33 +896,29 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 	if (!TryGetObjectField(actorsObject, TEXT("robot"), RobotObject))
 		return;
 
-	FDeliveryBotRobotSpawnInfo RobotSpawnInfo;
+	FEpisodePlaceableInstanceSpec RobotSpec;
+	RobotSpec.Category = EEpisodeActorCategory::DeliveryBot;
 
-	if (!RequireStringField(*RobotObject,TEXT("instance_id"),TEXT("actor_id"),TEXT("actors.robot"),result,RobotSpawnInfo.InstanceId))
+	if (!RequireStringField(*RobotObject,TEXT("instance_id"),TEXT("actor_id"),TEXT("actors.robot"),result,RobotSpec.InstanceId))
 		return;
 
-	AddUniqueId(instanceIds, RobotSpawnInfo.InstanceId, TEXT("actors.robot"), result);
+	AddUniqueId(instanceIds, RobotSpec.InstanceId, TEXT("actors.robot"), result);
 
-	if (!RequireStringField(*RobotObject,TEXT("asset_id"),TEXT("type"),TEXT("actors.robot"),result,RobotSpawnInfo.AssetId))
+	if (!RequireStringField(*RobotObject,TEXT("asset_id"),TEXT("type"),TEXT("actors.robot"),result,RobotSpec.AssetId))
 		return;
 
 	const bool bSpawnOnly{ ReadBoolOrDefault(*RobotObject, TEXT("spawn_only"), true)};
-	bool bRouteAutoStart{ true };
 	bool bHasGoal{ false };
-
-	RobotSpawnInfo.MobilityMode = bSpawnOnly ? EEpisodeMobilityMode::Parked	: EEpisodeMobilityMode::Moving;
 
 	ReadTransformField(
 		*RobotObject,
 		TEXT("transform"),
 		TEXT("actors.robot"),
 		result,
-		RobotSpawnInfo.SpawnTransformCm
+		RobotSpec.Transform
 	);
 
-	RobotSpawnInfo.SetupInfo.LocationSetupInfo.StartLocationCm = RobotSpawnInfo.SpawnTransformCm.GetLocation();
-	RobotSpawnInfo.SetupInfo.LocationSetupInfo.GoalLocationCm =	RobotSpawnInfo.SpawnTransformCm.GetLocation();
-	RobotSpawnInfo.ExtraProperties.Add(TEXT("spawn_only"), MakeBoolParam(bSpawnOnly));
+	RobotSpec.Properties.Add(TEXT("spawn_only"), MakeBoolParam(bSpawnOnly));
 
 	TSharedPtr<FJsonObject> RouteObject;
 	if (TryGetObjectField(*RobotObject, TEXT("route"), RouteObject))
@@ -940,15 +934,14 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 				result,
 				GoalLocationCm))
 		{
-			RobotSpawnInfo.SetupInfo.LocationSetupInfo.GoalLocationCm = GoalLocationCm;
-			RobotSpawnInfo.ExtraProperties.Add(TEXT("goal_cm"), MakeVectorParam(GoalLocationCm));
+			RobotSpec.Properties.Add(TEXT("goal_cm"), MakeVectorParam(GoalLocationCm));
 			bHasGoal = true;
 		}
 
 		if (RouteObject->HasField(TEXT("auto_start")))
 		{
-			bRouteAutoStart = ReadBoolOrDefault(*RouteObject, TEXT("auto_start"), true);
-			RobotSpawnInfo.ExtraProperties.Add(TEXT("route_auto_start"), MakeBoolParam(bRouteAutoStart));
+			const bool bRouteAutoStart = ReadBoolOrDefault(*RouteObject, TEXT("auto_start"), true);
+			RobotSpec.Properties.Add(TEXT("route_auto_start"), MakeBoolParam(bRouteAutoStart));
 		}
 	}
 
@@ -964,13 +957,10 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 			result,
 			GoalLocationCm))
 		{
-			RobotSpawnInfo.SetupInfo.LocationSetupInfo.GoalLocationCm = GoalLocationCm;
-			RobotSpawnInfo.ExtraProperties.Add(TEXT("goal_cm"), MakeVectorParam(GoalLocationCm));
+			RobotSpec.Properties.Add(TEXT("goal_cm"), MakeVectorParam(GoalLocationCm));
 			bHasGoal = true;
 		}
 	}
-
-	RobotSpawnInfo.SetupInfo.LocationSetupInfo.bAutoStartRoute = !bSpawnOnly && bRouteAutoStart && bHasGoal;
 
 	if (!bSpawnOnly && !bHasGoal)
 	{
@@ -981,64 +971,7 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 			TEXT("actors.robot.spawn_only가 false이지만 route.goal_m 또는 goal_m이 없어 로봇 경로 주입을 건너뜀."));
 	}
 
-	TSharedPtr<FJsonObject> DriveObject;
-	if (TryGetObjectField(*RobotObject, TEXT("drive"), DriveObject))
-	{
-		FDeliveryBotChaosDriveConfigInfo& DriveConfigInfo{RobotSpawnInfo.SetupInfo.ChaosDriveConfigInfo};
-
-		DriveConfigInfo.MaxSpeedKmh = static_cast<float>(ReadNumberOrDefault(*DriveObject, TEXT("max_speed_kmh"), DriveConfigInfo.MaxSpeedKmh));
-		DriveConfigInfo.SlowdownSpeedRangeKmh = static_cast<float>(ReadNumberOrDefault(*DriveObject, TEXT("slowdown_speed_range_kmh"), DriveConfigInfo.SlowdownSpeedRangeKmh));
-		DriveConfigInfo.SpeedLimitToleranceKmh = static_cast<float>(ReadNumberOrDefault(*DriveObject, TEXT("speed_limit_tolerance_kmh"), DriveConfigInfo.SpeedLimitToleranceKmh));
-		DriveConfigInfo.SpeedLimitBrake = static_cast<float>(ReadNumberOrDefault(*DriveObject, TEXT("speed_limit_brake"), DriveConfigInfo.SpeedLimitBrake));
-		DriveConfigInfo.StopBrakeInput = static_cast<float>(ReadNumberOrDefault(*DriveObject, TEXT("stop_brake_input"), DriveConfigInfo.StopBrakeInput));
-		DriveConfigInfo.ThrottleInputRatePerSecond = static_cast<float>(ReadNumberOrDefault(*DriveObject, TEXT("throttle_input_rate_per_second"), DriveConfigInfo.ThrottleInputRatePerSecond));
-		DriveConfigInfo.BrakeInputRatePerSecond = static_cast<float>(ReadNumberOrDefault(*DriveObject, TEXT("brake_input_rate_per_second"), DriveConfigInfo.BrakeInputRatePerSecond));
-		DriveConfigInfo.SteeringInputRatePerSecond = static_cast<float>(ReadNumberOrDefault(*DriveObject, TEXT("steering_input_rate_per_second"), DriveConfigInfo.SteeringInputRatePerSecond));
-		DriveConfigInfo.bUseHandbrakeWhenBrake = ReadBoolOrDefault(*DriveObject, TEXT("use_handbrake_when_brake"), DriveConfigInfo.bUseHandbrakeWhenBrake);
-		DriveConfigInfo.MaxTorque = static_cast<float>(ReadNumberOrDefault(*DriveObject, TEXT("max_torque"), DriveConfigInfo.MaxTorque));
-		DriveConfigInfo.MaxRPM = static_cast<float>(ReadNumberOrDefault(*DriveObject, TEXT("max_rpm"), DriveConfigInfo.MaxRPM));
-		DriveConfigInfo.EngineIdleRPM = static_cast<float>(ReadNumberOrDefault(*DriveObject, TEXT("engine_idle_rpm"), DriveConfigInfo.EngineIdleRPM));
-		DriveConfigInfo.EngineBrakeEffect = static_cast<float>(ReadNumberOrDefault(*DriveObject, TEXT("engine_brake_effect"), DriveConfigInfo.EngineBrakeEffect));
-		DriveConfigInfo.EngineRevUpMOI = static_cast<float>(ReadNumberOrDefault(*DriveObject, TEXT("engine_rev_up_moi"), DriveConfigInfo.EngineRevUpMOI));
-		DriveConfigInfo.EngineRevDownRate = static_cast<float>(ReadNumberOrDefault(*DriveObject, TEXT("engine_rev_down_rate"), DriveConfigInfo.EngineRevDownRate));
-	}
-
-	TSharedPtr<FJsonObject> PathFollowObject;
-	if (TryGetObjectField(*RobotObject, TEXT("path_follow"), PathFollowObject))
-	{
-		FDeliveryBotPathFollowConfigInfo& PathFollowConfigInfo{
-			RobotSpawnInfo.SetupInfo.PathFollowConfigInfo
-		};
-
-		PathFollowConfigInfo.bDrawDebug = ReadBoolOrDefault(*PathFollowObject, TEXT("draw_debug"), PathFollowConfigInfo.bDrawDebug);
-		PathFollowConfigInfo.TargetSpeedKmh = static_cast<float>(ReadNumberOrDefault(*PathFollowObject, TEXT("target_speed_kmh"), PathFollowConfigInfo.TargetSpeedKmh));
-		PathFollowConfigInfo.LookAheadDistanceM = static_cast<float>(ReadNumberOrDefault(*PathFollowObject, TEXT("look_ahead_distance_m"), PathFollowConfigInfo.LookAheadDistanceM));
-		PathFollowConfigInfo.PathPointAcceptanceDistanceM = static_cast<float>(ReadNumberOrDefault(*PathFollowObject, TEXT("path_point_acceptance_distance_m"), PathFollowConfigInfo.PathPointAcceptanceDistanceM));
-		PathFollowConfigInfo.GoalAcceptanceDistanceM = static_cast<float>(ReadNumberOrDefault(*PathFollowObject, TEXT("goal_acceptance_distance_m"), PathFollowConfigInfo.GoalAcceptanceDistanceM));
-		PathFollowConfigInfo.SteeringSensitivity = static_cast<float>(ReadNumberOrDefault(*PathFollowObject, TEXT("steering_sensitivity"), PathFollowConfigInfo.SteeringSensitivity));
-		PathFollowConfigInfo.MinTurnSpeedKmh = static_cast<float>(ReadNumberOrDefault(*PathFollowObject, TEXT("min_turn_speed_kmh"), PathFollowConfigInfo.MinTurnSpeedKmh));
-	}
-
-	TSharedPtr<FJsonObject> LidarObject;
-	if (TryGetObjectField(*RobotObject, TEXT("lidar"), LidarObject))
-	{
-		FDeliveryBotLidarSensorConfigInfo& LidarSensorConfigInfo{
-			RobotSpawnInfo.SetupInfo.LidarSensorConfigInfo
-		};
-
-		LidarSensorConfigInfo.bDrawDebug = ReadBoolOrDefault(*LidarObject, TEXT("draw_debug"), LidarSensorConfigInfo.bDrawDebug);
-		LidarSensorConfigInfo.ScanRangeM = static_cast<float>(ReadNumberOrDefault(*LidarObject, TEXT("scan_range_m"), LidarSensorConfigInfo.ScanRangeM));
-		LidarSensorConfigInfo.AngleStepDegree = static_cast<float>(ReadNumberOrDefault(*LidarObject, TEXT("angle_step_degree"), LidarSensorConfigInfo.AngleStepDegree));
-		LidarSensorConfigInfo.SensorHeightM = static_cast<float>(ReadNumberOrDefault(*LidarObject, TEXT("sensor_height_m"), LidarSensorConfigInfo.SensorHeightM));
-		LidarSensorConfigInfo.FrontHalfAngleDegree = static_cast<float>(ReadNumberOrDefault(*LidarObject, TEXT("front_half_angle_degree"), LidarSensorConfigInfo.FrontHalfAngleDegree));
-		LidarSensorConfigInfo.bStoreMissedRays = ReadBoolOrDefault(*LidarObject, TEXT("store_missed_rays"), LidarSensorConfigInfo.bStoreMissedRays);
-		LidarSensorConfigInfo.StopDistanceM = static_cast<float>(ReadNumberOrDefault(*LidarObject, TEXT("stop_distance_m"), LidarSensorConfigInfo.StopDistanceM));
-	}
-
-	AddJsonProperties(*RobotObject, RobotSpawnInfo.ExtraProperties);
-
-	result.WorldSpec.DeliveryBotRobotSpawnInfo = RobotSpawnInfo;
-	result.WorldSpec.bHasDeliveryBotRobotSpawnInfo = true;
+	result.WorldSpec.Placeables.Add(RobotSpec);
 }
 
 void UEpisodeCompiler::CompileActors(

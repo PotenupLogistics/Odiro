@@ -9,6 +9,7 @@
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/EpisodeCompiler.h"
 #include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
+#include "Shared/Struct/DeliveryBotSetupInfo.h"
 #include "Kismet/GameplayStatics.h"
 
 
@@ -44,9 +45,9 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 {
 	StaticObstacleClass = AEpisodeStaticObstacle::StaticClass();
 
-	// 임시 연결: ChaosActor 경로 추종 구현 전까지 BP_DeliveryBot_SimpleMesh를 기본 로봇 클래스로 사용 중 ~~
-	static ConstructorHelpers::FClassFinder<ADeliveryBot_ChaosActor> 
-	RobotBlueprintClass(TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBot_ChaosMesh"));
+	// DeliveryBot branch uses the Chaos-based robot actor as the episode robot runtime.
+	static ConstructorHelpers::FClassFinder<ADeliveryBot_ChaosActor> RobotBlueprintClass(
+		TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBot_ChaosMesh"));
 
 	if (RobotBlueprintClass.Succeeded())
 	{
@@ -55,17 +56,6 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 	else
 	{
 		RobotActorClass = ADeliveryBot_ChaosActor::StaticClass();
-	}
-
-	static ConstructorHelpers::FClassFinder<AActor> GoalPointBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_GoalPoint"));
-	if (GoalPointBlueprintClass.Succeeded())
-	{
-		GoalPointClass = GoalPointBlueprintClass.Class;
-	}
-	static ConstructorHelpers::FClassFinder<AActor> StartPointBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_StartPoint"));
-	if (StartPointBlueprintClass.Succeeded())
-	{
-		StartPointClass = StartPointBlueprintClass.Class;
 	}
 
 	static ConstructorHelpers::FClassFinder<AActor> GoalPointBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_GoalPoint"));
@@ -92,9 +82,12 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 
 void UEpisodeSimulationSubsystem::ClearEpisode()
 {
-	for (AActor* Actor : RuntimeActors)
+	for (int32 Index = RuntimeActors.Num() - 1; Index >= 0; --Index)
 	{
-		Actor->Destroy();
+		if (AActor* Actor = RuntimeActors[Index].Get())
+		{
+			Actor->Destroy();
+		}
 	}
 
 	RuntimeActors.Reset();
@@ -137,30 +130,6 @@ bool UEpisodeSimulationSubsystem::SpawnEpisodeWorld(const FEpisodeWorldSpec& Wor
 		if (!SpawnPlaceable(PlaceableSpec))
 		{
 			UE_LOG(LogEpisodeSimulation, Warning, TEXT("배치 액터 '%s' 스폰 실패."), *PlaceableSpec.InstanceId);
-			bAllSpawned = false;
-		}
-	}
-
-	if (WorldSpec.bHasDeliveryBotRobotSpawnInfo)
-	{
-		const FDeliveryBotRobotSpawnInfo& RobotSpawnInfo{ WorldSpec.DeliveryBotRobotSpawnInfo };
-
-		FEpisodePlaceableInstanceSpec RobotPlaceableSpec;
-		RobotPlaceableSpec.InstanceId = RobotSpawnInfo.InstanceId;
-		RobotPlaceableSpec.AssetId = RobotSpawnInfo.AssetId;
-		RobotPlaceableSpec.Category = EEpisodeActorCategory::RoadVehicle;
-		RobotPlaceableSpec.MobilityMode = RobotSpawnInfo.MobilityMode;
-		RobotPlaceableSpec.Transform = RobotSpawnInfo.SpawnTransformCm;
-		RobotPlaceableSpec.Properties = RobotSpawnInfo.ExtraProperties;
-
-		if (!SpawnRobotActor(RobotPlaceableSpec, RobotSpawnInfo))
-		{
-			UE_LOG(
-				LogEpisodeSimulation,
-				Warning,
-				TEXT("DeliveryBot 로봇 '%s' 스폰 실패."),
-				*RobotSpawnInfo.InstanceId
-			);
 			bAllSpawned = false;
 		}
 	}
@@ -243,7 +212,8 @@ FEpisodeRuntimeContext UEpisodeSimulationSubsystem::BuildRuntimeContext(const FE
 			continue;
 		}
 
-		if (PlaceableSpec.Category == EEpisodeActorCategory::RoadVehicle && !RuntimeContext.RobotActor)
+		if ((PlaceableSpec.Category == EEpisodeActorCategory::DeliveryBot ||
+			PlaceableSpec.Category == EEpisodeActorCategory::RoadVehicle) && !RuntimeContext.RobotActor)
 		{
 			RuntimeContext.RobotInstanceId = PlaceableSpec.InstanceId;
 			RuntimeContext.RobotActor = RuntimeActor;
@@ -427,6 +397,9 @@ AActor* UEpisodeSimulationSubsystem::SpawnPlaceable(const FEpisodePlaceableInsta
 	{
 	case EEpisodeActorCategory::StaticObstacle:
 		return SpawnStaticObstacle(PlaceableSpec);
+	case EEpisodeActorCategory::DeliveryBot:
+	case EEpisodeActorCategory::RoadVehicle:
+		return SpawnRobotActor(PlaceableSpec);
 	default:
 		UE_LOG(
 			LogEpisodeSimulation,
@@ -478,26 +451,34 @@ AEpisodeStaticObstacle* UEpisodeSimulationSubsystem::SpawnStaticObstacle(const F
 		PlaceableSpec.InstanceId,
 		PlaceableSpec.AssetId,
 		PlaceableSpec.Category,
-		PlaceableSpec.MobilityMode,
 		StaticObstacle);
 	return StaticObstacle;
 }
 
-AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(
-	const FEpisodePlaceableInstanceSpec& PlaceableSpec,
-	const FDeliveryBotRobotSpawnInfo& RobotSpawnInfo)
+AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInstanceSpec& PlaceableSpec)
 {
 	UWorld* World{ GetWorld() };
 
-	if (!World || RobotSpawnInfo.InstanceId.IsEmpty() || !RobotActorClass)
+	if (!World || PlaceableSpec.InstanceId.IsEmpty() || !RobotActorClass)
 	{
 		return nullptr;
 	}
 
+	const bool bSpawnOnly = GetBoolProperty(PlaceableSpec.Properties, TEXT("spawn_only"), true);
+	const bool bRouteAutoStart = GetBoolProperty(PlaceableSpec.Properties, TEXT("route_auto_start"), true);
+	const FVector StartLocation = PlaceableSpec.Transform.GetLocation();
+	FVector GoalLocation = StartLocation;
+	const bool bHasGoal = GetVectorProperty(PlaceableSpec.Properties, TEXT("goal_cm"), GoalLocation);
+
+	FDeliveryBotSetupInfo SetupInfo;
+	SetupInfo.LocationSetupInfo.StartLocationCm = StartLocation;
+	SetupInfo.LocationSetupInfo.GoalLocationCm = GoalLocation;
+	SetupInfo.LocationSetupInfo.bAutoStartRoute = !bSpawnOnly && bRouteAutoStart && bHasGoal;
+
 	ADeliveryBot_ChaosActor* RobotActor{
 		World->SpawnActorDeferred<ADeliveryBot_ChaosActor>(
 			RobotActorClass,
-			RobotSpawnInfo.SpawnTransformCm,
+			PlaceableSpec.Transform,
 			nullptr,
 			nullptr,
 			ESpawnActorCollisionHandlingMethod::AlwaysSpawn
@@ -509,26 +490,22 @@ AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(
 		return nullptr;
 	}
 
-	RobotActor->InitializeSetupInfo(RobotSpawnInfo.SetupInfo);
+	RobotActor->InitializeSetupInfo(SetupInfo);
 
 	UGameplayStatics::FinishSpawningActor(
 		RobotActor,
-		RobotSpawnInfo.SpawnTransformCm
+		PlaceableSpec.Transform
 	);
 
 	RegisterRuntimeActor(
 		PlaceableSpec.InstanceId,
 		PlaceableSpec.AssetId,
 		PlaceableSpec.Category,
-		PlaceableSpec.MobilityMode,
 		RobotActor);
 
-	const bool bSpawnOnly = GetBoolProperty(PlaceableSpec.Properties, TEXT("spawn_only"), true);
-	const bool bRouteAutoStart = GetBoolProperty(PlaceableSpec.Properties, TEXT("route_auto_start"), true);
 	if (!bSpawnOnly)
 	{
-		FVector GoalLocation = FVector::ZeroVector;
-		if (!GetVectorProperty(PlaceableSpec.Properties, TEXT("goal_cm"), GoalLocation))
+		if (!bHasGoal)
 		{
 			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s'의 이동 목표(goal_cm)가 없어 경로 주입을 건너뜀."), *PlaceableSpec.InstanceId);
 			return RobotActor;
@@ -544,41 +521,18 @@ AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(
 				RuntimeActors.Add(GoalPointActor);
 			}
 		}
-		
+
 		if (StartPointClass)
 		{
 			FActorSpawnParameters SpawnParams;
 			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-			if (AActor* StartPointActor = World->SpawnActor<AActor>(StartPointClass,FTransform(PlaceableSpec.Transform), SpawnParams))
+			if (AActor* StartPointActor = World->SpawnActor<AActor>(StartPointClass, FTransform(PlaceableSpec.Transform), SpawnParams))
 			{
 				RuntimeActors.Add(StartPointActor);
 			}
 		}
 
-		if (!bRouteAutoStart)
-		{
-			return RobotActor;
-		}
-
-		if (!DeliveryBotSimpleMesh)
-		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s' class가 옳지 않아 경로를 주입할 수 없음."), *PlaceableSpec.InstanceId);
-			return RobotActor;
-		}
-
-		const FVector StartGroundLocation = PlaceableSpec.Transform.GetLocation();
-		const FVector BotStartLocation{
-			StartGroundLocation.X,
-			StartGroundLocation.Y,
-			StartGroundLocation.Z + 25.0
-		};
-		RobotActor->SetActorLocation(BotStartLocation);
-
-		if (!DeliveryBotSimpleMesh->BuildGlobalPathAndStartMove(StartGroundLocation, GoalLocation))
-		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s'의 A* 경로 생성 실패."), *PlaceableSpec.InstanceId);
-		}
 	}
 
 	return RobotActor;
@@ -622,8 +576,7 @@ AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrian(const FEpisodeD
 		Pedestrian->PlaceableComponent,
 		DynamicActorSpec.InstanceId,
 		DynamicActorSpec.AssetId,
-		DynamicActorSpec.Category,
-		DynamicActorSpec.MobilityMode);
+		DynamicActorSpec.Category);
 	RuntimeActorsById.Add(DynamicActorSpec.InstanceId, Pedestrian);
 	return Pedestrian;
 }
@@ -632,7 +585,6 @@ void UEpisodeSimulationSubsystem::RegisterRuntimeActor(
 	const FString& InstanceId,
 	const FString& AssetId,
 	EEpisodeActorCategory Category,
-	EEpisodeMobilityMode MobilityMode,
 	AActor* Actor)
 {
 	if (!Actor)
@@ -647,23 +599,20 @@ void UEpisodeSimulationSubsystem::RegisterRuntimeActor(
 		Actor->FindComponentByClass<UEpisodePlaceableComponent>(),
 		InstanceId,
 		AssetId,
-		Category,
-		MobilityMode);
+		Category);
 }
 
 void UEpisodeSimulationSubsystem::ConfigurePlaceableComponent(
 	UEpisodePlaceableComponent* PlaceableComponent,
 	const FString& InstanceId,
 	const FString& AssetId,
-	EEpisodeActorCategory Category,
-	EEpisodeMobilityMode MobilityMode) const
+	EEpisodeActorCategory Category) const
 {
 	if (!PlaceableComponent) return;
 
 	PlaceableComponent->InstanceId = InstanceId;
 	PlaceableComponent->AssetId = AssetId;
 	PlaceableComponent->Category = Category;
-	PlaceableComponent->MobilityMode = MobilityMode;
 }
 
 double UEpisodeSimulationSubsystem::GetFloatProperty(

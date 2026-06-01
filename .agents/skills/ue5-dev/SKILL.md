@@ -14,7 +14,6 @@ Unreal C++, Blueprint, build, packaging, log triage
 - Project: `*.uproject`, `Source/*.Target.cs`, `Source/**/*.Build.cs`
 - C++: touched `Public/` and `Private/` headers, export macro, `GENERATED_BODY()`, reflected fields
 - Blueprint: `/Game/...` asset path, target graph
-- Network: authority write path, `GetLifetimeReplicatedProps`, `OnRep_*`, RPC direction
 - Packaging: default map, maps-to-cook, enabled plugins, packaged log
 
 ## Module Rules
@@ -24,8 +23,6 @@ Unreal C++, Blueprint, build, packaging, log triage
 - Include cycle: move concrete includes from `.h` to `.cpp`, forward declare where possible
 
 ## Commands
-- Prefer repo scripts or user-provided local commands
-- Do not hardcode machine-specific paths, UE install paths, workspace paths, or project absolute paths
 - Use repo-relative project references such as `*.uproject` when describing commands
 - If local UE path or build command is unknown, ask the user to run the build
 
@@ -45,5 +42,3 @@ Unreal C++, Blueprint, build, packaging, log triage
 - Do not bypass with alternate UE path, copied workspace, clean/delete of `Binaries` or `Intermediate`, packaging command, IDE build, or generated project refresh
 - Otherwise ask the user to close the editor or disable Live Coding, then run their local build command
 
-## Skip
-- Unreal basics unrelated to touched files, APIs, commands, logs, assets, or packaging settings

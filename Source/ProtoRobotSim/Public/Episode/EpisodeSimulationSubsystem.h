@@ -6,6 +6,7 @@
 #include "Shared/EpisodeSpecTypes.h"
 #include "EpisodeSimulationSubsystem.generated.h"
 
+class ADeliveryBot_ChaosActor;
 class AEpisodeGroundRegion;
 class AEpisodePedestrian;
 class AEpisodeSplinePath;
@@ -29,7 +30,7 @@ public:
 	TSubclassOf<AEpisodePedestrian> PedestrianClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
-	TSubclassOf<AActor> RobotActorClass;
+	TSubclassOf<ADeliveryBot_ChaosActor> RobotActorClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
 	TSubclassOf<AActor> GoalPointClass;
@@ -100,7 +101,7 @@ private:
 
 	AActor* SpawnPlaceable(const FEpisodePlaceableInstanceSpec& PlaceableSpec);
 	AEpisodeStaticObstacle* SpawnStaticObstacle(const FEpisodePlaceableInstanceSpec& PlaceableSpec);
-	AActor* SpawnRobotActor(const FEpisodePlaceableInstanceSpec& PlaceableSpec);
+	AActor* SpawnRobotActor(const FEpisodePlaceableInstanceSpec& PlaceableSpec, const FDeliveryBotRobotSpawnInfo& RobotSpawnInfo);
 	AActor* SpawnDynamicActor(const FEpisodeDynamicActorSpec& DynamicActorSpec);
 	AEpisodePedestrian* SpawnPedestrian(const FEpisodeDynamicActorSpec& DynamicActorSpec);
 

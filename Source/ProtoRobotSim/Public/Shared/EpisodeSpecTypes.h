@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "EpisodeCoreTypes.h"
 #include "EpisodeConfigTypes.h"
+#include "Struct/DeliveryBotRobotSpawnInfo.h"
 #include "EpisodeSpecTypes.generated.h"
 
 // 언리얼에서 ScenarioSpec 해석 후 에피소드를 생성하기 위한 에피소드 명세.
@@ -201,4 +202,11 @@ struct PROTOROBOTSIM_API FEpisodeWorldSpec
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FString SpecHash;
+	
+	// 배달봇 전용 ----------------------------------------------------------------
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	bool bHasDeliveryBotRobotSpawnInfo{ false };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FDeliveryBotRobotSpawnInfo DeliveryBotRobotSpawnInfo{};
 };

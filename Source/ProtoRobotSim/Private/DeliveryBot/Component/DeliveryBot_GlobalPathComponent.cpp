@@ -29,23 +29,46 @@ void UDeliveryBot_GlobalPathComponent::TickComponent(float DeltaTime, ELevelTick
 
 }
 
-bool UDeliveryBot_GlobalPathComponent::BuildPathByAStar(const FVector& startLocation, const FVector& goalLocation)
+bool UDeliveryBot_GlobalPathComponent::BuildPathByAStar(
+	const FVector& startLocation,
+	const FVector& goalLocation)
 {
 	GlobalPath.Reset();
 
-	UWorld* world{GetWorld()};
+	UWorld* world{ GetWorld() };
 	if (!IsValid(world))
 		return false;
 
-	UDeliveryBot_GridSubsystem* gridSubsystem{world->GetSubsystem<UDeliveryBot_GridSubsystem>()};
+	UDeliveryBot_GridSubsystem* gridSubsystem{
+		world->GetSubsystem<UDeliveryBot_GridSubsystem>()
+	};
+
 	if (!IsValid(gridSubsystem))
 		return false;
 
-	const FIntPoint startGridIndex{ gridSubsystem->GetGridIndexByWorldLocation(startLocation) };
-	const FIntPoint goalGridIndex{ gridSubsystem->GetGridIndexByWorldLocation(goalLocation) };
+	FVector fixedStartLocation{ startLocation };
+	constexpr int32 maxStartSearchRadius{ 5 };
+
+	FIntPoint startGridIndex{
+		gridSubsystem->GetGridIndexByWorldLocation(fixedStartLocation)
+	};
 
 	if (!gridSubsystem->IsWalkableGridIndex(startGridIndex))
-		return false;
+	{
+		if (!gridSubsystem->GetNearestWalkableWorldLocation(
+			startLocation,
+			maxStartSearchRadius,
+			fixedStartLocation))
+		{
+			return false;
+		}
+
+		startGridIndex = gridSubsystem->GetGridIndexByWorldLocation(fixedStartLocation);
+	}
+
+	const FIntPoint goalGridIndex{
+		gridSubsystem->GetGridIndexByWorldLocation(goalLocation)
+	};
 
 	if (!gridSubsystem->IsWalkableGridIndex(goalGridIndex))
 		return false;
@@ -72,48 +95,56 @@ bool UDeliveryBot_GlobalPathComponent::BuildPathByAStar(const FVector& startLoca
 	{
 		FDeliveryBotPathQueueNodeInfo currentQueueNodeInfo;
 		if (!openQueue.Pop(currentQueueNodeInfo))
-		{
 			break;
-		}
 
 		const FIntPoint currentGridIndex{ currentQueueNodeInfo.GridIndex };
 
 		if (closedSet.Contains(currentGridIndex))
-		{
 			continue;
-		}
 
 		if (currentGridIndex == goalGridIndex)
 		{
-			BuildGlobalPathFromNodeMap(nodeMap, startGridIndex, goalGridIndex, gridSubsystem);
+			BuildGlobalPathFromNodeMap(
+				nodeMap,
+				startGridIndex,
+				goalGridIndex,
+				gridSubsystem
+			);
+
 			SmoothGlobalPath();
 			DrawGlobalPath();
+
 			return GlobalPath.Num() > 0;
 		}
 
 		closedSet.Add(currentGridIndex);
 
-		const FDeliveryBotAStarInfo* currentNodeInfo{ nodeMap.Find(currentGridIndex) };
-		if (currentNodeInfo == nullptr)
-		{
-			continue;
-		}
+		const FDeliveryBotAStarInfo* currentNodeInfo{
+			nodeMap.Find(currentGridIndex)
+		};
 
-		const TArray<FIntPoint> neighborGridIndexes{ gridSubsystem->GetNeighborGridIndexes(currentGridIndex) };
+		if (currentNodeInfo == nullptr)
+			continue;
+
+		const TArray<FIntPoint> neighborGridIndexes{
+			gridSubsystem->GetNeighborGridIndexes(currentGridIndex)
+		};
+
 		for (const FIntPoint& neighborGridIndex : neighborGridIndexes)
 		{
 			if (closedSet.Contains(neighborGridIndex))
-			{
 				continue;
-			}
 
-			const float newGCost{ currentNodeInfo->GCost + GetMoveCost(currentGridIndex, neighborGridIndex) };
+			const float newGCost{
+				currentNodeInfo->GCost + GetMoveCost(currentGridIndex, neighborGridIndex)
+			};
 
-			FDeliveryBotAStarInfo* neighborNodeInfo{ nodeMap.Find(neighborGridIndex) };
+			FDeliveryBotAStarInfo* neighborNodeInfo{
+				nodeMap.Find(neighborGridIndex)
+			};
+
 			if (neighborNodeInfo != nullptr && newGCost >= neighborNodeInfo->GCost)
-			{
 				continue;
-			}
 
 			FDeliveryBotAStarInfo newNodeInfo;
 			newNodeInfo.GridIndex = neighborGridIndex;
@@ -223,7 +254,7 @@ void UDeliveryBot_GlobalPathComponent::DrawGlobalPath() const
 		const FVector startLocation{ GlobalPath[pathIndex] + FVector{ 0.f, 0.f, 20.f } };
 		const FVector endLocation{ GlobalPath[pathIndex + 1] + FVector{ 0.f, 0.f, 20.f } };
 		
-		// A*로 생성된 전역 경로를 눈으로 확인하기 위한 Debug Line이다.
+		// A*로 생성된 전역 경로를 눈으로 확인하기 위한 Debug Line
 		DrawDebugLine(
 			world,
 			startLocation,

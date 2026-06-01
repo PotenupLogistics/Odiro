@@ -186,8 +186,8 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByComponentBounds(const UPrimi
 				cellInfo.WorldLocation + FVector{ 0.f, 0.f, 50.f },
 				16.f,
 				FColor::Purple,
-				true,
-				30.f
+				false,
+				0.5f
 			);
 		}
 	}
@@ -215,8 +215,8 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByWorldLocation(const FVector&
 		cellInfo.WorldLocation + FVector{ 0.f, 0.f, 40.f },
 		14.f,
 		FColor::Purple,
-		true,
-		30.f
+		false,
+		0.5f
 	);
 }
 
@@ -333,7 +333,7 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByActorBounds(const AActor* ob
 		return;
 	}
 
-	const float blockMargin{ CellSize * 0.5f };
+	const float blockMargin{ CellSize * DynamicObstacleBlockBound };
 	boundsExtent.X += blockMargin;
 	boundsExtent.Y += blockMargin;
 
@@ -379,13 +379,79 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByActorBounds(const AActor* ob
 				cellInfo.WorldLocation + FVector{ 0.f, 0.f, 50.f },
 				16.f,
 				FColor::Purple,
-				true,
-				30.f
+				false,
+				0.5f
 			);
 		}
 	}
 }
 
+bool UDeliveryBot_GridSubsystem::GetNearestWalkableWorldLocation(
+	const FVector& worldLocation,
+	int32 maxSearchRadius,
+	FVector& outWorldLocation) const
+{
+	outWorldLocation = FVector::ZeroVector;
+
+	if (GridSizeX <= 0 || GridSizeY <= 0)
+		return false;
+
+	const FIntPoint originGridIndex{ GetGridIndexByWorldLocation(worldLocation) };
+
+	if (IsWalkableGridIndex(originGridIndex))
+	{
+		outWorldLocation = GetWorldLocationByGridIndex(originGridIndex);
+		return true;
+	}
+
+	const int32 searchRadius{ FMath::Max(maxSearchRadius, 0) };
+	float bestDistanceSquared{ TNumericLimits<float>::Max() };
+	bool bFound{ false };
+
+	for (int32 radius{ 1 }; radius <= searchRadius; ++radius)
+	{
+		for (int32 offsetY{ -radius }; offsetY <= radius; ++offsetY)
+		{
+			for (int32 offsetX{ -radius }; offsetX <= radius; ++offsetX)
+			{
+				const bool bIsOuterRing{
+					FMath::Abs(offsetX) == radius || FMath::Abs(offsetY) == radius
+				};
+
+				if (!bIsOuterRing)
+					continue;
+
+				const FIntPoint candidateGridIndex{
+					originGridIndex.X + offsetX,
+					originGridIndex.Y + offsetY
+				};
+
+				if (!IsWalkableGridIndex(candidateGridIndex))
+					continue;
+
+				const FVector candidateWorldLocation{
+					GetWorldLocationByGridIndex(candidateGridIndex)
+				};
+
+				const float distanceSquared{
+					static_cast<float>(FVector::DistSquared2D(worldLocation, candidateWorldLocation))
+				};
+
+				if (distanceSquared >= bestDistanceSquared)
+					continue;
+
+				bestDistanceSquared = distanceSquared;
+				outWorldLocation = candidateWorldLocation;
+				bFound = true;
+			}
+		}
+
+		if (bFound)
+			return true;
+	}
+
+	return false;
+}
 
 FVector UDeliveryBot_GridSubsystem::GetWorldLocationByGridIndex(const FIntPoint& gridIndex) const
 {

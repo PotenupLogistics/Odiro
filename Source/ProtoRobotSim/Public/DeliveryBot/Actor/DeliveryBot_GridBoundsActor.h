@@ -37,7 +37,7 @@ private:
 	TObjectPtr<class UBoxComponent> BoundsBox;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
-	float CellSize{ 100.f };
+	float CellSize{ 50.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
 	FVector RobotBoxExtent{ 60.f, 90.f, 25.f };

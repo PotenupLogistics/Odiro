@@ -22,6 +22,21 @@ public:
 	float SpeedLimitBrake{ 0.15f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float StopBrakeInput{ 0.35f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ThrottleInputRatePerSecond{ 0.7f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float BrakeInputRatePerSecond{ 1.2f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SteeringInputRatePerSecond{ 3.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bUseHandbrakeWhenBrake{ false };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float MaxTorque{ 220.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)

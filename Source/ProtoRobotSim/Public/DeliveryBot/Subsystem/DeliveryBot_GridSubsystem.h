@@ -55,7 +55,7 @@ public:
 	void SetDynamicBlockedByWorldLocation(const FVector& worldLocation);
 	void ClearDynamicBlockedCells();
 	void SetDynamicBlockedByActorBounds(const AActor* obstacleActor);
-	
+	bool GetNearestWalkableWorldLocation(const FVector& worldLocation, int32 maxSearchRadius, FVector& outWorldLocation) const;
 	
 private:
 	bool IsCellBlocked(const FVector& worldLocation, const FVector& robotBoxExtent) const;
@@ -77,6 +77,12 @@ public:
 
 	const FDeliveryBotGridCellInfo* FindCellInfoByGridIndex(const FIntPoint& gridIndex) const;
 	
+protected:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Grid")
+	float DynamicObstacleBlockBound{ 0.5f };
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Grid")
+	float CellSize{50.f};  // Grid 사이즈 
 	
 private:
 	UPROPERTY()
@@ -89,7 +95,7 @@ private:
 	int32 GridSizeX{0};
 	int32 GridSizeY{0};
 	
-	float CellSize{100.f};
+
 	
 	
 };

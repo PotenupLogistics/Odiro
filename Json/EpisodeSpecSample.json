@@ -21,7 +21,7 @@
         "shape": {
           "type": "rectangle",
           "center_m": [0.0, 0.0, 0.0],
-          "size_m": [12.0, 8.0],
+          "size_m": [6.0, 4.0],
           "yaw_deg": 0.0
         },
         "traversability_score": 1.0
@@ -31,8 +31,8 @@
         "region_type": "penalty",
         "shape": {
           "type": "rectangle",
-          "center_m": [0.0, -8.0, 0.0],
-          "size_m": [12.0, 4.0],
+          "center_m": [0.0, 6.0, 0.0],
+          "size_m": [6.0, 2.0],
           "yaw_deg": 0.0
         },
         "penalty": {
@@ -47,8 +47,8 @@
         "region_type": "blocked",
         "shape": {
           "type": "rectangle",
-          "center_m": [0.0, 6.0, 0.0],
-          "size_m": [2.0, 2.0],
+          "center_m": [0.0, -5.0, 0.0],
+          "size_m": [6.0, 1.0],
           "yaw_deg": 0.0
         },
         "collision_tag": "wall"
@@ -61,8 +61,8 @@
       "role": "pedestrian_baseline",
       "type": "spline",
       "points_m": [
-        [-1.5, -1.1, 0.0],
-        [-1.5, 1.1, 0.0]
+        [-3.0, -3.0, 0.0],
+        [3.0, 3.0, 0.0]
       ],
       "closed_loop": false
     }

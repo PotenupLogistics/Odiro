@@ -32,7 +32,7 @@ enum class EEpisodeGroundShapeType : uint8
 	ConvexPolygon
 };
 
-// Runtime ground region spec. Units are Unreal centimeters.
+// 런타임 지면 영역 명세. 단위는 
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FEpisodeGroundRegionSpec
 {

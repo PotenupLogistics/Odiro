@@ -30,6 +30,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
 	TSubclassOf<AActor> RobotActorClass;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
+	TSubclassOf<AActor> GoalPointClass;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
+	TSubclassOf<AActor> StartPointClass;
+
 	UFUNCTION(BlueprintCallable, Category = "Episode")
 	void ClearEpisode();
 
@@ -38,9 +44,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Json")
 	bool SpawnEpisodeWorldFromJsonFile(const FString& JsonFilePath);
-
-	UFUNCTION(BlueprintCallable, Category = "Episode|Debug")
-	bool SpawnSampleEpisodeWorldFromJson();
 
 	UFUNCTION(BlueprintPure, Category = "Episode")
 	AActor* FindRuntimeActor(const FString& InstanceId) const;

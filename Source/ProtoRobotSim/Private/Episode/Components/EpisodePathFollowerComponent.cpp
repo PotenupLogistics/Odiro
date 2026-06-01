@@ -3,7 +3,6 @@
 #include "Components/SplineComponent.h"
 #include "Episode/Actors/EpisodePedestrian.h"
 #include "Episode/Actors/EpisodeSplinePath.h"
-#include "GameFramework/Actor.h"
 
 UEpisodePathFollowerComponent::UEpisodePathFollowerComponent()
 {

@@ -45,7 +45,7 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 	StaticObstacleClass = AEpisodeStaticObstacle::StaticClass();
 
 	// 임시 연결: ChaosActor 경로 추종 구현 전까지 BP_DeliveryBot_SimpleMesh를 기본 로봇 클래스로 사용 중 ~~
-	static ConstructorHelpers::FClassFinder<AActor> RobotBlueprintClass(TEXT("/Game/Bluepirnts/Vehicle/BP_DeliveryBot_SimpleMesh"));
+	static ConstructorHelpers::FClassFinder<AActor> RobotBlueprintClass(TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBot_SimpleMesh"));
 	if (RobotBlueprintClass.Succeeded())
 	{
 		RobotActorClass = RobotBlueprintClass.Class;
@@ -53,6 +53,17 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 	else
 	{
 		RobotActorClass = ADeliveryBot_SimpleMesh::StaticClass();
+	}
+
+	static ConstructorHelpers::FClassFinder<AActor> GoalPointBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_GoalPoint"));
+	if (GoalPointBlueprintClass.Succeeded())
+	{
+		GoalPointClass = GoalPointBlueprintClass.Class;
+	}
+	static ConstructorHelpers::FClassFinder<AActor> StartPointBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_StartPoint"));
+	if (StartPointBlueprintClass.Succeeded())
+	{
+		StartPointClass = StartPointBlueprintClass.Class;
 	}
 
 	static ConstructorHelpers::FClassFinder<AEpisodePedestrian> PedestrianBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_EpisodePedestrian"));
@@ -68,12 +79,9 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 
 void UEpisodeSimulationSubsystem::ClearEpisode()
 {
-	for (int32 Index = RuntimeActors.Num() - 1; Index >= 0; --Index)
+	for (AActor* Actor : RuntimeActors)
 	{
-		if (AActor* Actor = RuntimeActors[Index].Get())
-		{
-			Actor->Destroy();
-		}
+		Actor->Destroy();
 	}
 
 	RuntimeActors.Reset();
@@ -156,12 +164,6 @@ bool UEpisodeSimulationSubsystem::SpawnEpisodeWorldFromJsonFile(const FString& J
 	}
 
 	return SpawnEpisodeWorld(CompileResult.WorldSpec);
-}
-
-bool UEpisodeSimulationSubsystem::SpawnSampleEpisodeWorldFromJson()
-{
-	const FString SampleJsonPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("Json"), TEXT("EpisodeSpecSample.json")));
-	return SpawnEpisodeWorldFromJsonFile(SampleJsonPath);
 }
 
 AActor* UEpisodeSimulationSubsystem::FindRuntimeActor(const FString& InstanceId) const
@@ -368,7 +370,7 @@ AEpisodeStaticObstacle* UEpisodeSimulationSubsystem::SpawnStaticObstacle(const F
 		UE_LOG(
 			LogEpisodeSimulation,
 			Warning,
-			TEXT("정적 장애물 '%s'에 prop '%s' 적용을 실패했습니다."),
+			TEXT("정적 장애물 '%s'에 prop '%s' 적용 실패."),
 			*PlaceableSpec.InstanceId,
 			*PlaceableSpec.AssetId);
 		StaticObstacle->Destroy();
@@ -420,18 +422,45 @@ AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInst
 
 	const bool bSpawnOnly = GetBoolProperty(PlaceableSpec.Properties, TEXT("spawn_only"), true);
 	const bool bRouteAutoStart = GetBoolProperty(PlaceableSpec.Properties, TEXT("route_auto_start"), true);
-	if (!bSpawnOnly && bRouteAutoStart)
+	if (!bSpawnOnly)
 	{
 		FVector GoalLocation = FVector::ZeroVector;
 		if (!GetVectorProperty(PlaceableSpec.Properties, TEXT("goal_cm"), GoalLocation))
 		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s'의 이동 목표(goal_cm)가 없어 경로 주입을 건너뜁니다."), *PlaceableSpec.InstanceId);
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s'의 이동 목표(goal_cm)가 없어 경로 주입을 건너뜀."), *PlaceableSpec.InstanceId);
+			return RobotActor;
+		}
+
+		if (GoalPointClass)
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+			if (AActor* GoalPointActor = World->SpawnActor<AActor>(GoalPointClass, FTransform(FRotator::ZeroRotator, GoalLocation), SpawnParams))
+			{
+				RuntimeActors.Add(GoalPointActor);
+			}
+		}
+		
+		if (StartPointClass)
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+			if (AActor* StartPointActor = World->SpawnActor<AActor>(StartPointClass,FTransform(PlaceableSpec.Transform), SpawnParams))
+			{
+				RuntimeActors.Add(StartPointActor);
+			}
+		}
+
+		if (!bRouteAutoStart)
+		{
 			return RobotActor;
 		}
 
 		if (!DeliveryBotSimpleMesh)
 		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s'가 DeliveryBot_SimpleMesh 계열이 아니어서 경로를 주입할 수 없습니다."), *PlaceableSpec.InstanceId);
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s' class가 옳지 않아 경로를 주입할 수 없음."), *PlaceableSpec.InstanceId);
 			return RobotActor;
 		}
 
@@ -445,7 +474,7 @@ AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInst
 
 		if (!DeliveryBotSimpleMesh->BuildGlobalPathAndStartMove(StartGroundLocation, GoalLocation))
 		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s'의 A* 경로 생성에 실패했습니다."), *PlaceableSpec.InstanceId);
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s'의 A* 경로 생성 실패."), *PlaceableSpec.InstanceId);
 		}
 	}
 
@@ -462,7 +491,7 @@ AActor* UEpisodeSimulationSubsystem::SpawnDynamicActor(const FEpisodeDynamicActo
 		UE_LOG(
 			LogEpisodeSimulation,
 			Warning,
-			TEXT("동적 액터 '%s'의 카테고리를 지원하지 않습니다."),
+			TEXT("동적 액터 '%s'의 카테고리를 지원하지 않음."),
 			*DynamicActorSpec.InstanceId);
 		return nullptr;
 	}
@@ -526,10 +555,7 @@ void UEpisodeSimulationSubsystem::ConfigurePlaceableComponent(
 	EEpisodeActorCategory Category,
 	EEpisodeMobilityMode MobilityMode) const
 {
-	if (!PlaceableComponent)
-	{
-		return;
-	}
+	if (!PlaceableComponent) return;
 
 	PlaceableComponent->InstanceId = InstanceId;
 	PlaceableComponent->AssetId = AssetId;
@@ -592,10 +618,7 @@ bool UEpisodeSimulationSubsystem::GetVectorProperty(
 
 void UEpisodeSimulationSubsystem::SetActorReceivesDecals(AActor* Actor, bool bReceivesDecals)
 {
-	if (!Actor)
-	{
-		return;
-	}
+	if (!Actor) return;
 
 	TArray<UPrimitiveComponent*> PrimitiveComponents;
 	Actor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);

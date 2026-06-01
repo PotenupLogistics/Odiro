@@ -3,8 +3,6 @@
 #include "CoreMinimal.h"
 #include "EpisodeCoreTypes.generated.h"
 
-class UStaticMesh;
-
 // 에피소드 전반에서 공유하는 가장 작은 공통 타입들을 모아둔 파일임.
 
 UENUM(BlueprintType)

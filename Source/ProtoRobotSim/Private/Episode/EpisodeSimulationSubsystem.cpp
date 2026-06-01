@@ -176,6 +176,68 @@ AActor* UEpisodeSimulationSubsystem::FindRuntimeActor(const FString& InstanceId)
 	return nullptr;
 }
 
+FEpisodeRuntimeContext UEpisodeSimulationSubsystem::BuildRuntimeContext(const FEpisodeWorldSpec& WorldSpec) const
+{
+	FEpisodeRuntimeContext RuntimeContext;
+	RuntimeContext.EpisodeId = WorldSpec.RunConfig.TemplateId;
+	RuntimeContext.SpecHash = WorldSpec.SpecHash;
+
+	for (AActor* Actor : RuntimeActors)
+	{
+		if (IsValid(Actor))
+		{
+			RuntimeContext.RuntimeActors.Add(Actor);
+		}
+	}
+
+	for (const TPair<FString, TObjectPtr<AEpisodeGroundRegion>>& Pair : RuntimeGroundRegions)
+	{
+		if (AActor* GroundRegionActor = Pair.Value.Get())
+		{
+			RuntimeContext.GroundRegionActors.Add(GroundRegionActor);
+		}
+	}
+
+	for (const FEpisodePlaceableInstanceSpec& PlaceableSpec : WorldSpec.Placeables)
+	{
+		AActor* RuntimeActor = FindRuntimeActor(PlaceableSpec.InstanceId);
+		if (!RuntimeActor)
+		{
+			continue;
+		}
+
+		if (PlaceableSpec.Category == EEpisodeActorCategory::RoadVehicle && !RuntimeContext.RobotActor)
+		{
+			RuntimeContext.RobotInstanceId = PlaceableSpec.InstanceId;
+			RuntimeContext.RobotActor = RuntimeActor;
+			RuntimeContext.bHasGoalLocation = GetVectorProperty(PlaceableSpec.Properties, TEXT("goal_cm"), RuntimeContext.GoalLocation);
+			continue;
+		}
+
+		if (PlaceableSpec.Category == EEpisodeActorCategory::StaticObstacle)
+		{
+			RuntimeContext.StaticObstacleActors.Add(RuntimeActor);
+		}
+	}
+
+	for (const FEpisodeDynamicActorSpec& DynamicActorSpec : WorldSpec.DynamicActors)
+	{
+		AActor* RuntimeActor = FindRuntimeActor(DynamicActorSpec.InstanceId);
+		if (!RuntimeActor)
+		{
+			continue;
+		}
+
+		if (DynamicActorSpec.Category == EEpisodeActorCategory::Pedestrian)
+		{
+			RuntimeContext.PedestrianActors.Add(RuntimeActor);
+			RuntimeContext.PedestrianInstanceIds.Add(DynamicActorSpec.InstanceId);
+		}
+	}
+
+	return RuntimeContext;
+}
+
 AEpisodeSplinePath* UEpisodeSimulationSubsystem::SpawnSplinePath(const FString& PathId, const TArray<FVector>& Points, bool bClosedLoop)
 {
 	UWorld* World = GetWorld();

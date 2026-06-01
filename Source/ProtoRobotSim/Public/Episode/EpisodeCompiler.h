@@ -128,6 +128,8 @@ private:
 	// base_seed는 WorldSeed로 쓰고, 다른 seed들은 MVP용 고정 offset을 더해 파생시킨다.
 	static void CompileRunConfig(const FJsonObject& rootObject, FEpisodeCompileResult& result);
 
+	static void CompileEvaluationConfig(const FJsonObject& rootObject, FEpisodeCompileResult& result);
+
 	// ground_model.regions 배열을 FEpisodeGroundRegionSpec 목록으로 변환한다.
 	// center_m과 size_m은 centimeter로 변환하고, penalty/collision 의미 필드는 그대로 보존한다.
 	static void CompileGroundRegions(const FJsonObject& rootObject, FEpisodeCompileResult& result);
@@ -166,6 +168,15 @@ version
 run.base_seed
 run.iteration_index
 run.time_limit_s
+
+evaluation.goal_acceptance_radius_m
+evaluation.fall_angle_deg
+evaluation.near_miss.distance_m
+evaluation.scoring.static_obstacle_collision
+evaluation.scoring.blocked_region_collision
+evaluation.scoring.penalty_region_violation
+evaluation.scoring.pedestrian_near_miss
+evaluation.scoring.pedestrian_collision
 
 ground_model.regions[].region_id
 ground_model.regions[].region_type / type

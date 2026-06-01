@@ -12,6 +12,20 @@
     "iteration_index": 0,
     "time_limit_s": 30.0
   },
+  "evaluation": {
+    "goal_acceptance_radius_m": 0.5,
+    "fall_angle_deg": 60.0,
+    "near_miss": {
+      "distance_m": 0.5
+    },
+    "scoring": {
+      "static_obstacle_collision": -1.0,
+      "blocked_region_collision": -1.0,
+      "penalty_region_violation": -3.0,
+      "pedestrian_near_miss": -3.0,
+      "pedestrian_collision": -10.0
+    }
+  },
   "ground_model": {
     "default_region_type": "walkable",
     "regions": [

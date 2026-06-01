@@ -512,6 +512,63 @@ void UEpisodeCompiler::CompileRunConfig(const FJsonObject& rootObject, FEpisodeC
 	result.WorldSpec.Seeds.PolicySeed = BaseSeed + 606;
 }
 
+void UEpisodeCompiler::CompileEvaluationConfig(const FJsonObject& rootObject, FEpisodeCompileResult& result)
+{
+	FEpisodeEvaluationConfig& EvaluationConfig = result.WorldSpec.EvaluationConfig;
+
+	TSharedPtr<FJsonObject> EvaluationObject;
+	if (!TryGetObjectField(rootObject, TEXT("evaluation"), EvaluationObject))
+	{
+		return;
+	}
+
+	EvaluationConfig.GoalAcceptanceRadiusCm = FMath::Max(
+		0.0,
+		ReadNumberOrDefault(
+			*EvaluationObject,
+			TEXT("goal_acceptance_radius_m"),
+			EvaluationConfig.GoalAcceptanceRadiusCm / MetersToCentimeters) * MetersToCentimeters);
+	EvaluationConfig.FallAngleDegrees = FMath::Max(
+		0.0,
+		ReadNumberOrDefault(*EvaluationObject, TEXT("fall_angle_deg"), EvaluationConfig.FallAngleDegrees));
+
+	TSharedPtr<FJsonObject> NearMissObject;
+	if (TryGetObjectField(*EvaluationObject, TEXT("near_miss"), NearMissObject))
+	{
+		EvaluationConfig.NearMissDistanceCm = FMath::Max(
+			0.0,
+			ReadNumberOrDefault(
+				*NearMissObject,
+				TEXT("distance_m"),
+				EvaluationConfig.NearMissDistanceCm / MetersToCentimeters) * MetersToCentimeters);
+	}
+
+	TSharedPtr<FJsonObject> ScoringObject;
+	if (TryGetObjectField(*EvaluationObject, TEXT("scoring"), ScoringObject))
+	{
+		EvaluationConfig.StaticObstacleCollisionScore = ReadNumberOrDefault(
+			*ScoringObject,
+			TEXT("static_obstacle_collision"),
+			EvaluationConfig.StaticObstacleCollisionScore);
+		EvaluationConfig.BlockedRegionCollisionScore = ReadNumberOrDefault(
+			*ScoringObject,
+			TEXT("blocked_region_collision"),
+			EvaluationConfig.BlockedRegionCollisionScore);
+		EvaluationConfig.PenaltyRegionViolationScore = ReadNumberOrDefault(
+			*ScoringObject,
+			TEXT("penalty_region_violation"),
+			EvaluationConfig.PenaltyRegionViolationScore);
+		EvaluationConfig.PedestrianNearMissScore = ReadNumberOrDefault(
+			*ScoringObject,
+			TEXT("pedestrian_near_miss"),
+			EvaluationConfig.PedestrianNearMissScore);
+		EvaluationConfig.PedestrianCollisionScore = ReadNumberOrDefault(
+			*ScoringObject,
+			TEXT("pedestrian_collision"),
+			EvaluationConfig.PedestrianCollisionScore);
+	}
+}
+
 void UEpisodeCompiler::CompileGroundRegions(const FJsonObject& rootObject, FEpisodeCompileResult& result)
 {
 	TSharedPtr<FJsonObject> GroundModelObject;
@@ -933,6 +990,7 @@ void UEpisodeCompiler::CompileRootObject(const FJsonObject& rootObject, const FS
                                          FEpisodeCompileResult& result)
 {
 	CompileRunConfig(rootObject, result);
+	CompileEvaluationConfig(rootObject, result);
 	CompileGroundRegions(rootObject, result);
 
 	TSet<FString> PathIds;

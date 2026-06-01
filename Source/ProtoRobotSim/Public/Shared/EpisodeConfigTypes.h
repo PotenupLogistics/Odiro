@@ -4,6 +4,8 @@
 #include "EpisodeCoreTypes.h"
 #include "EpisodeConfigTypes.generated.h"
 
+class AActor;
+
 // 에피소드 실행 설정과 재현성 seed 목록을 정의하는 파일임.
 // 사용자가 선택한 템플릿과 파라미터를 한 번의 실행 설정으로 묶은 타입임.
 // 여러 Iteration을 중복되지 않은 Seed로 관리하기 위함.
@@ -57,4 +59,217 @@ struct PROTOROBOTSIM_API FEpisodeSeedLedger
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	int64 PolicySeed = 0;
+};
+
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodeEvaluationConfig
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation", meta = (ClampMin = "0.0"))
+	double GoalAcceptanceRadiusCm = 50.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation", meta = (ClampMin = "0.0"))
+	double FallAngleDegrees = 60.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation", meta = (ClampMin = "0.0"))
+	double NearMissDistanceCm = 50.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation")
+	double StaticObstacleCollisionScore = -1.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation")
+	double BlockedRegionCollisionScore = -1.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation")
+	double PenaltyRegionViolationScore = -3.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation")
+	double PedestrianNearMissScore = -3.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation")
+	double PedestrianCollisionScore = -10.0;
+};
+
+UENUM(BlueprintType)
+enum class EEpisodeEvaluationEventSeverity : uint8
+{
+	Info,
+	Warning,
+	Failure
+};
+
+UENUM(BlueprintType)
+enum class EEpisodeRunnerState : uint8
+{
+	Idle,
+	Preparing,
+	Running,
+	Ending,
+	Completed,
+	Cancelled,
+	Failed
+};
+
+// SimulationSubsystem이 생성한 월드 객체들을 EvaluationSubsystem이 관찰할 수 있도록 전달하는 런타임 컨텍스트.
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodeRuntimeContext
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString EpisodeId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString SpecHash;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString RobotInstanceId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TObjectPtr<AActor> RobotActor = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	bool bHasGoalLocation = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FVector GoalLocation = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<TObjectPtr<AActor>> RuntimeActors;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<TObjectPtr<AActor>> GroundRegionActors;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<TObjectPtr<AActor>> StaticObstacleActors;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<TObjectPtr<AActor>> PedestrianActors;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<FString> PedestrianInstanceIds;
+};
+
+// EvaluationSubsystem이 평가 중 발견한 사건 한 건.
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodeEvaluationEvent
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	int32 EventIndex = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	double ElapsedTimeSeconds = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString EventType;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	EEpisodeEvaluationEventSeverity Severity = EEpisodeEvaluationEventSeverity::Info;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString SubjectInstanceId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString TargetInstanceId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FVector Location = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	double Value = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString Message;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TMap<FString, FEpisodeParamValue> Properties;
+};
+
+// EvaluationSubsystem이 한 에피소드 평가 종료 시 산출하는 요약.
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodeEvaluationResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString EpisodeId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	bool bCompleted = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	bool bSuccess = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString Outcome;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString TerminalReason;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	double DurationSeconds = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TMap<FString, FEpisodeParamValue> Metrics;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<FEpisodeEvaluationEvent> Events;
+};
+
+// EpisodeRunner가 compile, setup, evaluation 결과를 합쳐 보존하는 최종 기록.
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodeRunRecord
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString RunId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	int32 RunIndex = INDEX_NONE;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString EpisodeId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString SourceJsonPath;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString SpecHash;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	bool bCompileSucceeded = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	bool bSetupSucceeded = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	bool bEvaluationCompleted = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	bool bSuccess = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString Outcome;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString TerminalReason;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	double StartTimeSeconds = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	double EndTimeSeconds = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	double DurationSeconds = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FEpisodeEvaluationResult EvaluationResult;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<FString> Diagnostics;
 };

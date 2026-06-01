@@ -8,6 +8,7 @@
 - 정적 장애물: catalog에 등록된 prop mesh
 - 보행자: spline 경로를 따라 직선 이동
 - 로봇: 임시로 `BP_DeliveryBot_SimpleMesh`를 스폰하고 출발지/목적지를 주입
+- 평가 설정: 종료 판정 반경, near-miss 거리, 감점 기본값
 
 ## 출력 원칙
 
@@ -32,6 +33,7 @@ LLM 출력은 반드시 순수 JSON이어야 한다. 주석, trailing comma, Mar
 | 회전 | `rotation_deg`, `yaw_deg` | degree | degree | `yaw`는 바닥 평면에서의 회전 |
 | 속도 | `speed_mps` | meter/second | centimeter/second | 보행자 이동 속도 |
 | 시간 | `time_limit_s`, `spawn_time_s`, `violation_after_s` | second | second | MVP에서 `spawn_time_s`는 기록되지만 지연 스폰은 아직 적용되지 않음 |
+| 평가 거리 | `goal_acceptance_radius_m`, `near_miss.distance_m` | meter | centimeter | `FEpisodeEvaluationConfig`에 보존 |
 | scale | `scale` | 배율 | 배율 | `[1, 1, 1]` 기본 |
 
 ## 루트 구조
@@ -47,6 +49,7 @@ LLM 출력은 반드시 순수 JSON이어야 한다. 주석, trailing comma, Mar
     "angle": "deg"
   },
   "run": {},
+  "evaluation": {},
   "ground_model": {},
   "paths": [],
   "actors": {}
@@ -61,6 +64,7 @@ LLM 출력은 반드시 순수 JSON이어야 한다. 주석, trailing comma, Mar
 | `map_id` | 권장 | string | 대상 맵 ID. 현재 컴파일러가 맵 로드를 직접 하지는 않음 |
 | `units` | 권장 | object | LLM 출력 단위 명시. 현재 입력은 meter/degree 기준 |
 | `run` | 권장 | object | seed와 반복 실행 설정 |
+| `evaluation` | 권장 | object | 종료 조건과 평가 지표 파라미터 |
 | `ground_model` | 권장 | object | 지면 영역 목록 |
 | `paths` | 보행자 사용 시 필수 | array | 보행자 경로 정의 |
 | `actors` | 권장 | object | 정적 장애물, 보행자, 로봇 정의 |
@@ -79,9 +83,57 @@ LLM 출력은 반드시 순수 JSON이어야 한다. 주석, trailing comma, Mar
 | --- | --- | --- | --- | --- |
 | `base_seed` | 권장 | integer | `0` | 전체 episode seed. 내부 seed ledger의 기준값 |
 | `iteration_index` | 권장 | integer | `0` | 같은 scenario의 반복 index |
-| `time_limit_s` | 권장 | number, second | 없음 | 실행 제한 시간 파라미터로 보존 |
+| `time_limit_s` | 권장 | number, second | 없음 | 실행 제한 시간. EvaluationSubsystem이 timeout 실패 조건으로 사용 |
 
 `base_seed`가 `42`이면 내부 seed는 `WorldSeed=42`, `LayoutSeed=143`, `StaticObstacleSeed=244`, `DynamicActorSeed=345`처럼 고정 offset으로 파생된다.
+
+## evaluation
+
+`evaluation`은 같은 episode 배치를 어떤 기준으로 평가할지 정의하는 정책 레이어이다. 컴파일러는 이 블록을 `FEpisodeEvaluationConfig`로 변환하며, 생략된 값은 코드 기본값을 사용한다.
+
+```json
+"evaluation": {
+  "goal_acceptance_radius_m": 0.5,
+  "fall_angle_deg": 60.0,
+  "near_miss": {
+    "distance_m": 0.5
+  },
+  "scoring": {
+    "static_obstacle_collision": -1.0,
+    "blocked_region_collision": -1.0,
+    "penalty_region_violation": -3.0,
+    "pedestrian_near_miss": -3.0,
+    "pedestrian_collision": -10.0
+  }
+}
+```
+
+| 필드 | 필수 | 타입/단위 | 기본값 | 설명 |
+| --- | --- | --- | --- | --- |
+| `goal_acceptance_radius_m` | 권장 | number, meter | `0.5` | 로봇이 목표 지점에 도착했다고 보는 반경 |
+| `fall_angle_deg` | 권장 | number, degree | `60.0` | 로봇 넘어짐 실패 판정에 사용할 기울기 기준 |
+| `near_miss` | 권장 | object | 기본값 사용 | 보행자 near-miss 판정 설정 |
+| `scoring` | 권장 | object | 기본값 사용 | 평가 이벤트별 점수 변화량 |
+
+### near_miss fields
+
+| 필드 | 필수 | 타입/단위 | 기본값 | 설명 |
+| --- | --- | --- | --- | --- |
+| `distance_m` | 권장 | number, meter | `0.5` | 로봇과 보행자의 2D 거리가 이 값 이하이면 near-miss 구간으로 본다 |
+
+MVP에서는 `cooldown_s` 같은 평가 깊이 조절 파라미터를 JSON에 노출하지 않는다. EvaluationSubsystem은 `distance_m` 안에 들어온 시점을 near-miss 구간 시작으로 보고, 구간이 끝났을 때 `pedestrian_near_miss` 이벤트 하나를 요약 기록한다. 이벤트 properties에는 `start_time_s`, `end_time_s`, `duration_s`, `min_distance_m`, `pedestrian_id`가 들어간다.
+
+### scoring fields
+
+| 필드 | 필수 | 타입/단위 | 기본값 | 설명 |
+| --- | --- | --- | --- | --- |
+| `static_obstacle_collision` | 권장 | number | `-1.0` | 정적 장애물과 충돌했을 때 점수 변화량 |
+| `blocked_region_collision` | 권장 | number | `-1.0` | blocked region collision과 충돌했을 때 점수 변화량 |
+| `penalty_region_violation` | 권장 | number | `-3.0` | penalty region 위반 이벤트의 점수 변화량 |
+| `pedestrian_near_miss` | 권장 | number | `-3.0` | near-miss 구간 1회당 점수 변화량 |
+| `pedestrian_collision` | 권장 | number | `-10.0` | 보행자와 충돌했을 때 점수 변화량 |
+
+`ground_model.regions[].penalty.cost`는 경로/환경 비용을 표현하는 값이고, `evaluation.scoring.penalty_region_violation`은 평가 결과에 반영되는 감점 값이다. 두 값은 같은 숫자를 쓸 필요가 없다.
 
 ## ground_model.regions
 
@@ -338,6 +390,8 @@ LLM 출력은 반드시 순수 JSON이어야 한다. 주석, trailing comma, Mar
 - 모든 `prop_id`가 catalog에 존재하는가
 - 지면 shape는 `rectangle`만 사용했는가
 - `spawn_only=false`인 robot에 `route.goal_m`이 있는가
+- `evaluation.near_miss`에는 `distance_m`만 사용했는가
+- `evaluation.scoring`의 감점 값은 number인가
 - 좌표와 크기는 meter 단위인가
 - 회전은 degree 단위인가
 - 보행자 `speed_mps`가 현실적인 값인가. 예: `0.8 ~ 1.8`
@@ -360,6 +414,20 @@ LLM 출력은 반드시 순수 JSON이어야 한다. 주석, trailing comma, Mar
     "iteration_index": 0,
     "time_limit_s": 30.0
   },
+  "evaluation": {
+    "goal_acceptance_radius_m": 0.5,
+    "fall_angle_deg": 60.0,
+    "near_miss": {
+      "distance_m": 0.5
+    },
+    "scoring": {
+      "static_obstacle_collision": -1.0,
+      "blocked_region_collision": -1.0,
+      "penalty_region_violation": -3.0,
+      "pedestrian_near_miss": -3.0,
+      "pedestrian_collision": -10.0
+    }
+  },
   "ground_model": {
     "default_region_type": "walkable",
     "regions": [
@@ -369,7 +437,7 @@ LLM 출력은 반드시 순수 JSON이어야 한다. 주석, trailing comma, Mar
         "shape": {
           "type": "rectangle",
           "center_m": [0.0, 0.0, 0.0],
-          "size_m": [12.0, 6.0],
+          "size_m": [6.0, 4.0],
           "yaw_deg": 0.0
         },
         "traversability_score": 1.0
@@ -379,8 +447,8 @@ LLM 출력은 반드시 순수 JSON이어야 한다. 주석, trailing comma, Mar
         "region_type": "penalty",
         "shape": {
           "type": "rectangle",
-          "center_m": [0.0, -6.0, 0.0],
-          "size_m": [12.0, 6.0],
+          "center_m": [0.0, 6.0, 0.0],
+          "size_m": [6.0, 2.0],
           "yaw_deg": 0.0
         },
         "penalty": {
@@ -395,8 +463,8 @@ LLM 출력은 반드시 순수 JSON이어야 한다. 주석, trailing comma, Mar
         "region_type": "blocked",
         "shape": {
           "type": "rectangle",
-          "center_m": [0.0, 3.0, 0.0],
-          "size_m": [4.0, 1.0],
+          "center_m": [0.0, -5.0, 0.0],
+          "size_m": [6.0, 1.0],
           "yaw_deg": 0.0
         },
         "collision_tag": "wall"
@@ -409,8 +477,8 @@ LLM 출력은 반드시 순수 JSON이어야 한다. 주석, trailing comma, Mar
       "role": "pedestrian_baseline",
       "type": "spline",
       "points_m": [
-        [-1.5, -1.1, 0.0],
-        [-1.5, 1.1, 0.0]
+        [-3.0, -3.0, 0.0],
+        [3.0, 3.0, 0.0]
       ],
       "closed_loop": false
     }

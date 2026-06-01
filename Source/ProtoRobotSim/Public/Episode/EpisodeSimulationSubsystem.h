@@ -49,6 +49,9 @@ public:
 	AActor* FindRuntimeActor(const FString& InstanceId) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
+	FEpisodeRuntimeContext BuildRuntimeContext(const FEpisodeWorldSpec& WorldSpec) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Episode")
 	AEpisodeSplinePath* SpawnSplinePath(const FString& PathId, const TArray<FVector>& Points, bool bClosedLoop);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")

@@ -179,6 +179,9 @@ struct PROTOROBOTSIM_API FEpisodeWorldSpec
 	FEpisodeRunConfig RunConfig;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FEpisodeEvaluationConfig EvaluationConfig;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FEpisodeSeedLedger Seeds;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")

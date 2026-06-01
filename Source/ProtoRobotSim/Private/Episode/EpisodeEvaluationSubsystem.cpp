@@ -1,6 +1,5 @@
-#include "Episode/EpisodeEvaluationSubsystem.h"
 
-#include "GameFramework/Actor.h"
+#include "Episode/EpisodeEvaluationSubsystem.h"
 
 bool UEpisodeEvaluationSubsystem::StartEvaluation(
 	const FEpisodeWorldSpec& WorldSpec,
@@ -114,8 +113,6 @@ void UEpisodeEvaluationSubsystem::RequestEndEpisode(const FEpisodeEvaluationResu
 
 void UEpisodeEvaluationSubsystem::Tick(float DeltaTime)
 {
-	(void)DeltaTime;
-
 	if (!bEvaluating) return;
 
 	UpdateNearMisses();

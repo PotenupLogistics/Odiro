@@ -89,7 +89,7 @@ LLM 출력은 반드시 순수 JSON이어야 한다. 주석, trailing comma, Mar
 
 ## evaluation
 
-`evaluation`은 같은 episode 배치를 어떤 기준으로 평가할지 정의하는 정책 레이어이다. 컴파일러는 이 블록을 `FEpisodeEvaluationConfig`로 변환하며, 생략된 값은 코드 기본값을 사용한다.
+`evaluation`은 episode에서의 로봇 정책을 어떤 기준으로 평가할지 정의하는 레이어이다. 컴파일러는 이 블록을 `FEpisodeEvaluationConfig`로 변환하며, 생략된 값은 코드 기본값을 사용한다.
 
 ```json
 "evaluation": {
@@ -121,7 +121,7 @@ LLM 출력은 반드시 순수 JSON이어야 한다. 주석, trailing comma, Mar
 | --- | --- | --- | --- | --- |
 | `distance_m` | 권장 | number, meter | `0.5` | 로봇과 보행자의 2D 거리가 이 값 이하이면 near-miss 구간으로 본다 |
 
-MVP에서는 `cooldown_s` 같은 평가 깊이 조절 파라미터를 JSON에 노출하지 않는다. EvaluationSubsystem은 `distance_m` 안에 들어온 시점을 near-miss 구간 시작으로 보고, 구간이 끝났을 때 `pedestrian_near_miss` 이벤트 하나를 요약 기록한다. 이벤트 properties에는 `start_time_s`, `end_time_s`, `duration_s`, `min_distance_m`, `pedestrian_id`가 들어간다.
+EvaluationSubsystem은 `distance_m` 안에 들어온 시점을 near-miss 구간 시작으로 보고, 구간이 끝났을 때 `pedestrian_near_miss` 이벤트 하나를 요약 기록한다. 이벤트 properties에는 `start_time_s`, `end_time_s`, `duration_s`, `min_distance_m`, `pedestrian_id`가 들어간다.
 
 ### scoring fields
 
@@ -137,7 +137,7 @@ MVP에서는 `cooldown_s` 같은 평가 깊이 조절 파라미터를 JSON에 �
 
 ## ground_model.regions
 
-지면 영역은 floor mesh 자체를 생성하지 않는다. 맵에 이미 큰 floor가 있다고 가정하고, JSON 영역은 의미 정보와 시각화/decal/collision layer로 사용된다.
+맵에 이미 큰 floor가 있음을 전제하고, JSON 영역을 의미 정보와 시각화 및 collision layer로 사용한다.
 
 ```json
 "ground_model": {
@@ -321,7 +321,7 @@ MVP에서는 `cooldown_s` 같은 평가 깊이 조절 파라미터를 JSON에 �
 
 ## actors.robot
 
-로봇은 현재 로봇 팀의 최종 ChaosActor가 아니라 임시 `BP_DeliveryBot_SimpleMesh`를 사용한다. JSON에서는 출발 위치와 목적지를 지정할 수 있다.
+로봇 액터는 AWheeledVehiclePawn을 상속받은 class로서 position-base가 아닌, 방향과 힘을 통해 이동한다.
 
 ```json
 "robot": {
@@ -355,7 +355,7 @@ MVP에서는 `cooldown_s` 같은 평가 깊이 조절 파라미터를 JSON에 �
 
 `spawn_only`가 `false`이면 `route.goal_m` 또는 `goal_m`을 반드시 제공해야 한다. 없으면 컴파일은 warning을 남기고 로봇 경로 주입을 건너뛴다.
 
-로봇 경로 탐색은 DeliveryBot grid를 사용한다. 테스트 맵에는 `BP_DeliveryBot_GridBoundsActor`가 있어야 하며, 출발지와 목적지가 grid bounds 안의 walkable cell이어야 한다.
+로봇 경로 탐색은 DeliveryBot grid를 사용한다. 테스트 맵에는 출발지와 목적지가 grid bounds 안의 walkable cell이어야 한다.
 
 ## transform object
 

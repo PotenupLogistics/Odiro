@@ -1,8 +1,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Shared/EpisodeSpecTypes.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "Shared/EpisodeCompileTypes.h"
+#include "Shared/EpisodeSpecTypes.h"
 #include "EpisodeSimulationSubsystem.generated.h"
 
 class AEpisodeGroundRegion;

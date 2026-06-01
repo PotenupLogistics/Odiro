@@ -508,8 +508,7 @@ void UEpisodeCompiler::CompileRunConfig(const FJsonObject& rootObject, FEpisodeC
 	result.WorldSpec.Seeds.StaticObstacleSeed = BaseSeed + 202;
 	result.WorldSpec.Seeds.DynamicActorSeed = BaseSeed + 303;
 	result.WorldSpec.Seeds.EventSeed = BaseSeed + 404;
-	result.WorldSpec.Seeds.WeatherSeed = BaseSeed + 505;
-	result.WorldSpec.Seeds.PolicySeed = BaseSeed + 606;
+	result.WorldSpec.Seeds.PolicySeed = BaseSeed + 505;
 }
 
 void UEpisodeCompiler::CompileEvaluationConfig(const FJsonObject& rootObject, FEpisodeCompileResult& result)

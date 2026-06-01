@@ -1,0 +1,117 @@
+﻿{
+  "processedAt": "2026-05-30T13:31:39+00:00",
+  "totalSourceCount": 5,
+  "sources": [
+    {
+      "sourceId": "KOR-001",
+      "title": "지능형 로봇 개발 및 보급 촉진법",
+      "originalFilePath": "data/sources/raw/korea/KOR-001_지능형로봇법.pdf",
+      "processedFilePath": "data/sources/processed/korea/KOR-001_지능형로봇법.md",
+      "extractionStatus": "partial",
+      "extractionMethod": "pypdf PdfReader.extract_text",
+      "processedAt": "2026-05-30T13:31:39+00:00",
+      "pageCount": 13,
+      "extractedTextLength": 20086,
+      "needsManualReview": true,
+      "keywordsFound": [
+        "실외이동로봇",
+        "운행안전인증",
+        "보도",
+        "도로교통법",
+        "지능형 로봇",
+        "지능형로봇"
+      ],
+      "failureOrPartialReason": "텍스트는 추출되었으나 표, 이미지, 조항 구조는 수동 대조가 필요합니다."
+    },
+    {
+      "sourceId": "KOR-002",
+      "title": "도로교통법 실외이동로봇 관련 법률",
+      "originalFilePath": "data/sources/raw/korea/KOR-002_도로교통법_실외이동로봇.pdf",
+      "processedFilePath": "data/sources/processed/korea/KOR-002_도로교통법_실외이동로봇.md",
+      "extractionStatus": "partial",
+      "extractionMethod": "pypdf PdfReader.extract_text",
+      "processedAt": "2026-05-30T13:31:39+00:00",
+      "pageCount": 4,
+      "extractedTextLength": 6038,
+      "needsManualReview": true,
+      "keywordsFound": [
+        "실외이동로봇",
+        "횡단보도",
+        "보도",
+        "도로교통법",
+        "지능형 로봇",
+        "지능형로봇"
+      ],
+      "failureOrPartialReason": "텍스트는 추출되었으나 표, 이미지, 조항 구조는 수동 대조가 필요합니다."
+    },
+    {
+      "sourceId": "KOR-003",
+      "title": "KIRIA 실외이동로봇 운행안전인증 가이드북",
+      "originalFilePath": "data/sources/raw/korea/KOR-003_KIRIA_실외이동로봇_운행안전인증_가이드북.pdf",
+      "processedFilePath": "data/sources/processed/korea/KOR-003_KIRIA_실외이동로봇_운행안전인증_가이드북.md",
+      "extractionStatus": "partial",
+      "extractionMethod": "pypdf PdfReader.extract_text",
+      "processedAt": "2026-05-30T13:31:39+00:00",
+      "pageCount": 90,
+      "extractedTextLength": 56250,
+      "needsManualReview": true,
+      "keywordsFound": [
+        "실외이동로봇",
+        "운행안전인증",
+        "운행속도",
+        "비상정지",
+        "관제장치",
+        "횡단보도",
+        "보도 통행",
+        "보도",
+        "도로교통법",
+        "지능형 로봇",
+        "지능형로봇"
+      ],
+      "failureOrPartialReason": "텍스트는 추출되었으나 표, 이미지, 조항 구조는 수동 대조가 필요합니다."
+    },
+    {
+      "sourceId": "KOR-004",
+      "title": "실외이동로봇 운행안전인증 절차 및 기준 등에 관한 고시",
+      "originalFilePath": "data/sources/raw/korea/KOR-004_산업통상자원부_운행안전인증_절차_및_기준_고시.pdf",
+      "processedFilePath": "data/sources/processed/korea/KOR-004_산업통상자원부_운행안전인증_절차_및_기준_고시.md",
+      "extractionStatus": "partial",
+      "extractionMethod": "pypdf PdfReader.extract_text",
+      "processedAt": "2026-05-30T13:31:39+00:00",
+      "pageCount": 14,
+      "extractedTextLength": 6727,
+      "needsManualReview": true,
+      "keywordsFound": [
+        "실외이동로봇",
+        "운행안전인증",
+        "운행속도",
+        "비상정지",
+        "관제장치",
+        "횡단보도",
+        "보도 통행",
+        "보도",
+        "도로교통법",
+        "지능형 로봇",
+        "지능형로봇"
+      ],
+      "failureOrPartialReason": "텍스트는 추출되었으나 표, 이미지, 조항 구조는 수동 대조가 필요합니다."
+    },
+    {
+      "sourceId": "KOR-005",
+      "title": "도로교통법 제2조 하위법령 운행기준 참고자료",
+      "originalFilePath": "data/sources/raw/korea/KOR-005_도로교통법_제2조_하위법령_운행기준_참고자료.pdf",
+      "processedFilePath": "data/sources/processed/korea/KOR-005_도로교통법_제2조_하위법령_운행기준_참고자료.md",
+      "extractionStatus": "partial",
+      "extractionMethod": "pypdf PdfReader.extract_text",
+      "processedAt": "2026-05-30T13:31:39+00:00",
+      "pageCount": 1,
+      "extractedTextLength": 688,
+      "needsManualReview": true,
+      "keywordsFound": [
+        "실외이동로봇",
+        "도로교통법"
+      ],
+      "failureOrPartialReason": "텍스트는 추출되었으나 표, 이미지, 조항 구조는 수동 대조가 필요합니다."
+    }
+  ]
+}

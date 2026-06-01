@@ -1,0 +1,81 @@
+﻿{
+  "generatedAt": "2026-05-30T13:56:24+00:00",
+  "note": "This is not a policy knowledge card file. All candidates require manual PDF verification.",
+  "totalCandidateCount": 201,
+  "sources": [
+    {
+      "sourceId": "KOR-001",
+      "candidateFilePath": "data/sources/review/candidates/korea/KOR-001_policy_candidates.md",
+      "candidateCount": 49,
+      "categoriesFound": [
+        "certification_process",
+        "emergency_stop",
+        "legal_background"
+      ],
+      "needsPdfCheckCount": 49,
+      "extractionStatus": "partial",
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "sourceId": "KOR-002",
+      "candidateFilePath": "data/sources/review/candidates/korea/KOR-002_policy_candidates.md",
+      "candidateCount": 38,
+      "categoriesFound": [
+        "emergency_stop",
+        "legal_background",
+        "sidewalk_operation",
+        "speed_policy",
+        "terrain_or_dynamic_safety"
+      ],
+      "needsPdfCheckCount": 38,
+      "extractionStatus": "partial",
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "sourceId": "KOR-003",
+      "candidateFilePath": "data/sources/review/candidates/korea/KOR-003_policy_candidates.md",
+      "candidateCount": 80,
+      "categoriesFound": [
+        "certification_process",
+        "emergency_stop",
+        "legal_background",
+        "operator_control",
+        "perception_requirement",
+        "sidewalk_operation",
+        "speed_policy",
+        "terrain_or_dynamic_safety"
+      ],
+      "needsPdfCheckCount": 80,
+      "extractionStatus": "partial",
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "sourceId": "KOR-004",
+      "candidateFilePath": "data/sources/review/candidates/korea/KOR-004_policy_candidates.md",
+      "candidateCount": 30,
+      "categoriesFound": [
+        "certification_process",
+        "emergency_stop",
+        "legal_background",
+        "perception_requirement",
+        "sidewalk_operation",
+        "speed_policy",
+        "terrain_or_dynamic_safety"
+      ],
+      "needsPdfCheckCount": 30,
+      "extractionStatus": "partial",
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "sourceId": "KOR-005",
+      "candidateFilePath": "data/sources/review/candidates/korea/KOR-005_policy_candidates.md",
+      "candidateCount": 4,
+      "categoriesFound": [
+        "legal_background"
+      ],
+      "needsPdfCheckCount": 4,
+      "extractionStatus": "partial",
+      "reviewStatus": "needs_pdf_check"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "policy_config.schema.json",
+  "title": "PolicyConfig",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "policyId", "policyName", "priority", "parameters", "availableActions"],
+  "properties": {
+    "schemaVersion": { "type": "string" },
+    "policyId": { "type": "string" },
+    "policyName": { "type": "string" },
+    "priority": { "type": "integer", "minimum": 0 },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxSpeedKmh": { "type": "number", "minimum": 0 },
+        "lowSpeedZoneSpeedKmh": { "type": "number", "minimum": 0 },
+        "emergencyStopDistanceCm": { "type": "number", "minimum": 0 },
+        "ttcThresholdSec": { "type": "number", "minimum": 0 },
+        "safeDistanceCm": { "type": "number", "minimum": 0 },
+        "perceptionMinRangeM": { "type": "number", "minimum": 0 },
+        "traversabilityThreshold": { "type": "number", "minimum": 0, "maximum": 1 },
+        "rollPitchThresholdDeg": { "type": "number", "minimum": 0 },
+        "botMassKg": { "type": "number", "minimum": 0 },
+        "robotWidthCm": { "type": "number", "minimum": 0 },
+        "sidewalkWidthCm": { "type": "number", "minimum": 0 },
+        "waitTimeoutSec": { "type": "number", "minimum": 0 },
+        "maxRerouteAttempts": { "type": "integer", "minimum": 0 },
+        "operatorOverrideEnabled": { "type": "boolean" }
+      }
+    },
+    "availableActions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["Continue", "SlowDown", "Stop", "EmergencyStop", "LocalAvoidance", "ReplanPath", "YieldWait", "RequestOperator"]
+      }
+    }
+  }
+}

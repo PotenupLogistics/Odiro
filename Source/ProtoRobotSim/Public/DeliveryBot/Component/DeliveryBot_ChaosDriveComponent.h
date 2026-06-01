@@ -16,16 +16,17 @@ class PROTOROBOTSIM_API UDeliveryBot_ChaosDriveComponent : public UActorComponen
 
 public:
 	UDeliveryBot_ChaosDriveComponent();
-	void ApplyMoveCommand(UChaosVehicleMovementComponent* vehicleMovement, const FDeliveryBotMoveCommandInfo& moveCommandInfo) const;
+	void ApplyMoveCommand(
+		UChaosVehicleMovementComponent* vehicleMovement,
+		const FDeliveryBotMoveCommandInfo& moveCommandInfo,
+		float deltaTime);
 	
 	void SetupVehicleMovement(UChaosWheeledVehicleMovementComponent* wheeledMovement) const;
 
-	void ApplyDriveInput(
-		UChaosVehicleMovementComponent* vehicleMovement,
-		float throttle,
-		float steering,
-		float brake,
-		bool bHandbrake) const;
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Chaos Drive")
+	void InitializeChaosDrive(
+		UChaosWheeledVehicleMovementComponent* wheeledMovement,
+		const FDeliveryBotChaosDriveConfigInfo& driveConfigInfo);
 
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Chaos Drive")
 	void SetDriveConfigInfo(const FDeliveryBotChaosDriveConfigInfo& driveConfigInfo);
@@ -40,7 +41,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Chaos Drive")
 	FDeliveryBotChaosDriveConfigInfo DriveConfigInfo{};
 
+	float CurrentThrottleInput{ 0.f };
+	float CurrentBrakeInput{ 0.f };
+	float CurrentSteeringInput{ 0.f };
+
 private:
+	void ApplyDriveInput(
+		UChaosVehicleMovementComponent* vehicleMovement,
+		float throttle,
+		float steering,
+		float brake,
+		bool bHandbrake,
+		float deltaTime);
+
 	void SetupTorqueCurve(UChaosWheeledVehicleMovementComponent* wheeledMovement) const;
 	float GetCmPerSecondToKmh(float speedCmS) const;
 	float GetLimitedThrottle(

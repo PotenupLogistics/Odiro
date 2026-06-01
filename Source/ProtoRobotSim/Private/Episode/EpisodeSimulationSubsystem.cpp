@@ -8,7 +8,7 @@
 #include "Episode/Components/EpisodePathFollowerComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/EpisodeCompiler.h"
-#include "DeliveryBot/Actor/DeliveryBot_SimpleMesh.h"
+#include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
 #include "Kismet/GameplayStatics.h"
 
 
@@ -45,14 +45,16 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 	StaticObstacleClass = AEpisodeStaticObstacle::StaticClass();
 
 	// 임시 연결: ChaosActor 경로 추종 구현 전까지 BP_DeliveryBot_SimpleMesh를 기본 로봇 클래스로 사용 중 ~~
-	static ConstructorHelpers::FClassFinder<AActor> RobotBlueprintClass(TEXT("/Game/Bluepirnts/Vehicle/BP_DeliveryBot_SimpleMesh"));
+	static ConstructorHelpers::FClassFinder<ADeliveryBot_ChaosActor> 
+	RobotBlueprintClass(TEXT("/Game/Bluepirnts/Vehicle/BP_DeliveryBot_ChaosMesh"));
+
 	if (RobotBlueprintClass.Succeeded())
 	{
 		RobotActorClass = RobotBlueprintClass.Class;
 	}
 	else
 	{
-		RobotActorClass = ADeliveryBot_SimpleMesh::StaticClass();
+		RobotActorClass = ADeliveryBot_ChaosActor::StaticClass();
 	}
 
 	static ConstructorHelpers::FClassFinder<AEpisodePedestrian> PedestrianBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_EpisodePedestrian"));
@@ -86,7 +88,7 @@ bool UEpisodeSimulationSubsystem::SpawnEpisodeWorld(const FEpisodeWorldSpec& Wor
 {
 	ClearEpisode();
 
-	bool bAllSpawned = true;
+	bool bAllSpawned{ true };
 
 	for (const FEpisodeGroundRegionSpec& RegionSpec : WorldSpec.GroundRegions)
 	{
@@ -116,6 +118,30 @@ bool UEpisodeSimulationSubsystem::SpawnEpisodeWorld(const FEpisodeWorldSpec& Wor
 		if (!SpawnPlaceable(PlaceableSpec))
 		{
 			UE_LOG(LogEpisodeSimulation, Warning, TEXT("배치 액터 '%s' 스폰 실패."), *PlaceableSpec.InstanceId);
+			bAllSpawned = false;
+		}
+	}
+
+	if (WorldSpec.bHasDeliveryBotRobotSpawnInfo)
+	{
+		const FDeliveryBotRobotSpawnInfo& RobotSpawnInfo{ WorldSpec.DeliveryBotRobotSpawnInfo };
+
+		FEpisodePlaceableInstanceSpec RobotPlaceableSpec;
+		RobotPlaceableSpec.InstanceId = RobotSpawnInfo.InstanceId;
+		RobotPlaceableSpec.AssetId = RobotSpawnInfo.AssetId;
+		RobotPlaceableSpec.Category = EEpisodeActorCategory::RoadVehicle;
+		RobotPlaceableSpec.MobilityMode = RobotSpawnInfo.MobilityMode;
+		RobotPlaceableSpec.Transform = RobotSpawnInfo.SpawnTransformCm;
+		RobotPlaceableSpec.Properties = RobotSpawnInfo.ExtraProperties;
+
+		if (!SpawnRobotActor(RobotPlaceableSpec, RobotSpawnInfo))
+		{
+			UE_LOG(
+				LogEpisodeSimulation,
+				Warning,
+				TEXT("DeliveryBot 로봇 '%s' 스폰 실패."),
+				*RobotSpawnInfo.InstanceId
+			);
 			bAllSpawned = false;
 		}
 	}
@@ -326,8 +352,6 @@ AActor* UEpisodeSimulationSubsystem::SpawnPlaceable(const FEpisodePlaceableInsta
 	{
 	case EEpisodeActorCategory::StaticObstacle:
 		return SpawnStaticObstacle(PlaceableSpec);
-	case EEpisodeActorCategory::RoadVehicle:
-		return SpawnRobotActor(PlaceableSpec);
 	default:
 		UE_LOG(
 			LogEpisodeSimulation,
@@ -384,70 +408,46 @@ AEpisodeStaticObstacle* UEpisodeSimulationSubsystem::SpawnStaticObstacle(const F
 	return StaticObstacle;
 }
 
-AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInstanceSpec& PlaceableSpec)
+AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(
+	const FEpisodePlaceableInstanceSpec& PlaceableSpec,
+	const FDeliveryBotRobotSpawnInfo& RobotSpawnInfo)
 {
-	UWorld* World = GetWorld();
-	if (!World || PlaceableSpec.InstanceId.IsEmpty() || !RobotActorClass)
+	UWorld* World{ GetWorld() };
+
+	if (!World || RobotSpawnInfo.InstanceId.IsEmpty() || !RobotActorClass)
 	{
 		return nullptr;
 	}
 
-	AActor* RobotActor = World->SpawnActorDeferred<AActor>(
-		RobotActorClass,
-		PlaceableSpec.Transform,
-		nullptr,
-		nullptr,
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	ADeliveryBot_ChaosActor* RobotActor{
+		World->SpawnActorDeferred<ADeliveryBot_ChaosActor>(
+			RobotActorClass,
+			RobotSpawnInfo.SpawnTransformCm,
+			nullptr,
+			nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn
+		)
+	};
+
 	if (!RobotActor)
 	{
 		return nullptr;
 	}
 
-	ADeliveryBot_SimpleMesh* DeliveryBotSimpleMesh = Cast<ADeliveryBot_SimpleMesh>(RobotActor);
-	if (DeliveryBotSimpleMesh)
-	{
-		DeliveryBotSimpleMesh->SetAutoRequestPathPointsOnBeginPlay(false);
-	}
+	RobotActor->InitializeSetupInfo(RobotSpawnInfo.SetupInfo);
 
-	UGameplayStatics::FinishSpawningActor(RobotActor, PlaceableSpec.Transform);
+	UGameplayStatics::FinishSpawningActor(
+		RobotActor,
+		RobotSpawnInfo.SpawnTransformCm
+	);
 
 	RegisterRuntimeActor(
 		PlaceableSpec.InstanceId,
 		PlaceableSpec.AssetId,
 		PlaceableSpec.Category,
 		PlaceableSpec.MobilityMode,
-		RobotActor);
-
-	const bool bSpawnOnly = GetBoolProperty(PlaceableSpec.Properties, TEXT("spawn_only"), true);
-	const bool bRouteAutoStart = GetBoolProperty(PlaceableSpec.Properties, TEXT("route_auto_start"), true);
-	if (!bSpawnOnly && bRouteAutoStart)
-	{
-		FVector GoalLocation = FVector::ZeroVector;
-		if (!GetVectorProperty(PlaceableSpec.Properties, TEXT("goal_cm"), GoalLocation))
-		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s'의 이동 목표(goal_cm)가 없어 경로 주입을 건너뜁니다."), *PlaceableSpec.InstanceId);
-			return RobotActor;
-		}
-
-		if (!DeliveryBotSimpleMesh)
-		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s'가 DeliveryBot_SimpleMesh 계열이 아니어서 경로를 주입할 수 없습니다."), *PlaceableSpec.InstanceId);
-			return RobotActor;
-		}
-
-		const FVector StartGroundLocation = PlaceableSpec.Transform.GetLocation();
-		const FVector BotStartLocation{
-			StartGroundLocation.X,
-			StartGroundLocation.Y,
-			StartGroundLocation.Z + 25.0
-		};
-		RobotActor->SetActorLocation(BotStartLocation);
-
-		if (!DeliveryBotSimpleMesh->BuildGlobalPathAndStartMove(StartGroundLocation, GoalLocation))
-		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s'의 A* 경로 생성에 실패했습니다."), *PlaceableSpec.InstanceId);
-		}
-	}
+		RobotActor
+	);
 
 	return RobotActor;
 }

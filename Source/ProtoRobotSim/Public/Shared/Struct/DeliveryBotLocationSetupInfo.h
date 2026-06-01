@@ -1,9 +1,9 @@
 ﻿#pragma once
 #include "CoreMinimal.h"
-#include "DeliveryBotDriveSetupInfo.generated.h"
+#include "DeliveryBotLocationSetupInfo.generated.h"
 
 USTRUCT(BlueprintType)
-struct FDeliveryBotDriveSetupInfo
+struct FDeliveryBotLocationSetupInfo
 {
 	GENERATED_BODY()
 
@@ -13,5 +13,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FVector GoalLocationCm{ FVector::ZeroVector };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bAutoStartRoute{ true };
 };
 

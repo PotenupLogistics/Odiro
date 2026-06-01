@@ -14,6 +14,9 @@ class PROTOROBOTSIM_API UDeliveryBot_PathFollowComponent : public UActorComponen
 public:
 	UDeliveryBot_PathFollowComponent();
 
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PathFollow")
+	void InitializePathFollow(const FDeliveryBotPathFollowConfigInfo& pathFollowConfigInfo);
+
 	void SetPath(const TArray<FVector>& pathPoints);
 	void ClearPath();
 
@@ -31,7 +34,9 @@ private:
 	FVector GetLookAheadLocation() const;
 	float GetSteeringToLocation(const FVector& targetLocation) const;
 	float GetDistance2D(const FVector& fromLocation, const FVector& toLocation) const;
-
+	void DrawDebugPathFollow(const FVector& lookAheadLocation, float steering) const;
+	
+	
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|PathFollow", meta = (AllowPrivateAccess = "true"))
 	TArray<FVector> PathPoints;

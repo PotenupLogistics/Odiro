@@ -17,7 +17,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogEpisodeSimulation, Log, All);
 
 namespace
 {
-	const TCHAR* ToCompileSeverityString(EEpisodeCompileDiagnosticSeverity Severity)
+	const TCHAR* ToSimulationCompileSeverityString(EEpisodeCompileDiagnosticSeverity Severity)
 	{
 		switch (Severity)
 		{
@@ -36,7 +36,7 @@ namespace
 	{
 		for (const FEpisodeCompileDiagnostic& Diagnostic : CompileResult.Diagnostics)
 		{
-			UE_LOG(LogEpisodeSimulation, Log, TEXT("에피소드 컴파일 진단 %s [%s]: %s"), ToCompileSeverityString(Diagnostic.Severity), *Diagnostic.Code, *Diagnostic.Message);
+			UE_LOG(LogEpisodeSimulation, Log, TEXT("에피소드 컴파일 진단 %s [%s]: %s"), ToSimulationCompileSeverityString(Diagnostic.Severity), *Diagnostic.Code, *Diagnostic.Message);
 		}
 	}
 }

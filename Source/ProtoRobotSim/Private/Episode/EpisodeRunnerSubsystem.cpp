@@ -8,7 +8,7 @@
 
 namespace
 {
-	const TCHAR* ToCompileSeverityString(EEpisodeCompileDiagnosticSeverity Severity)
+	const TCHAR* ToRunnerCompileSeverityString(EEpisodeCompileDiagnosticSeverity Severity)
 	{
 		switch (Severity)
 		{
@@ -230,7 +230,7 @@ void UEpisodeRunnerSubsystem::AppendCompileDiagnostics(const FEpisodeCompileResu
 	{
 		CurrentRecord.Diagnostics.Add(FString::Printf(
 			TEXT("%s [%s]: %s"),
-			ToCompileSeverityString(Diagnostic.Severity),
+			ToRunnerCompileSeverityString(Diagnostic.Severity),
 			*Diagnostic.Code,
 			*Diagnostic.Message));
 	}

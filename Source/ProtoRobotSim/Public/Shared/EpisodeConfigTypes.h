@@ -55,9 +55,6 @@ struct PROTOROBOTSIM_API FEpisodeSeedLedger
 	int64 EventSeed = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	int64 WeatherSeed = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	int64 PolicySeed = 0;
 };
 

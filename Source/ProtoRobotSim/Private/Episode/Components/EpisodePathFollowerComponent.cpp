@@ -88,7 +88,11 @@ void UEpisodePathFollowerComponent::TickComponent(float DeltaTime, ELevelTick Ti
 		return;
 	}
 
-	CurrentDistanceCm += SpeedCmPerSecond * GetPathNoiseSpeedScale(SplineLength) * static_cast<double>(DeltaTime);
+	const double PreviousDistanceCm = CurrentDistanceCm;
+	const double DistanceDeltaCm = SpeedCmPerSecond * GetPathNoiseSpeedScale(SplineLength) * static_cast<double>(DeltaTime);
+	const double DesiredDistanceCm = CurrentDistanceCm + DistanceDeltaCm;
+
+	CurrentDistanceCm = DesiredDistanceCm;
 	bool bReachedEnd = false;
 	if (bLoop)
 	{
@@ -106,7 +110,32 @@ void UEpisodePathFollowerComponent::TickComponent(float DeltaTime, ELevelTick Ti
 			bReachedEnd = true;
 		}
 	}
-	MoveOwnerToCurrentDistance(DeltaTime);
+
+	const double AppliedDistanceDeltaCm = bLoop ? DistanceDeltaCm : CurrentDistanceCm - PreviousDistanceCm;
+	FHitResult SweepHit;
+	MoveOwnerToCurrentDistance(DeltaTime, &SweepHit);
+
+	// sweep된 이후 순식간에 route를 따라잡지 않도록 처리.
+	if (SweepHit.bBlockingHit
+		&& SweepHit.Time < 1.0f - KINDA_SMALL_NUMBER
+		&& FMath::Abs(AppliedDistanceDeltaCm) > KINDA_SMALL_NUMBER)
+	{
+		CurrentDistanceCm = PreviousDistanceCm
+			+ AppliedDistanceDeltaCm * FMath::Clamp(static_cast<double>(SweepHit.Time), 0.0, 1.0);
+		if (bLoop)
+		{
+			CurrentDistanceCm = FMath::Fmod(CurrentDistanceCm, SplineLength);
+			if (CurrentDistanceCm < 0.0)
+			{
+				CurrentDistanceCm += SplineLength;
+			}
+		}
+		else
+		{
+			CurrentDistanceCm = FMath::Clamp(CurrentDistanceCm, 0.0, SplineLength);
+		}
+		bReachedEnd = false;
+	}
 
 	if (bReachedEnd)
 	{
@@ -182,8 +211,13 @@ FVector UEpisodePathFollowerComponent::ApplyPathNoise(double DistanceCm, double 
 	return BaseLocation + Right * LateralOffsetCm;
 }
 
-void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance(double DeltaSeconds)
+void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance(double DeltaSeconds, FHitResult* OutSweepHit)
 {
+	if (OutSweepHit)
+	{
+		*OutSweepHit = FHitResult();
+	}
+
 	if (!SplineComponent) return;
 
 	AActor* Owner = GetOwner();
@@ -197,18 +231,22 @@ void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance(double DeltaSecon
 	FVector TargetLocation = NoisyLocation;
 	TargetLocation.Z += VerticalOffsetCm;
 
+	FHitResult SweepHit;
 	if (bOrientToSpline)
 	{
 		const FRotator Rotation = SplineComponent->GetRotationAtDistanceAlongSpline(
 			static_cast<float>(CurrentDistanceCm),
 			ESplineCoordinateSpace::World);
-		FHitResult SweepHit;
 		Owner->SetActorLocationAndRotation(TargetLocation, Rotation, true, &SweepHit, ETeleportType::None);
 	}
 	else
 	{
-		FHitResult SweepHit;
 		Owner->SetActorLocation(TargetLocation, true, &SweepHit, ETeleportType::None);
+	}
+
+	if (OutSweepHit)
+	{
+		*OutSweepHit = SweepHit;
 	}
 
 	if (AEpisodePedestrian* Pedestrian = Cast<AEpisodePedestrian>(Owner))

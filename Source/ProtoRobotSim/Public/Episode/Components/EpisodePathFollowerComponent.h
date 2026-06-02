@@ -6,6 +6,7 @@
 
 class USplineComponent;
 class AEpisodeSplinePath;
+struct FHitResult;
 
 // 보행자와 이동체가 EpisodePathSpec을 따라 움직이도록 하기 위한 component 파일임.
 UCLASS(ClassGroup = (Episode), BlueprintType, Blueprintable, meta = (BlueprintSpawnableComponent))
@@ -85,7 +86,7 @@ private:
 	double GetPathNoiseFade(double SplineLength) const;
 	double GetPathNoiseSpeedScale(double SplineLength) const;
 	FVector ApplyPathNoise(double DistanceCm, double SplineLength, const FVector& BaseLocation) const;
-	void MoveOwnerToCurrentDistance(double DeltaSeconds = 0.0);
+	void MoveOwnerToCurrentDistance(double DeltaSeconds = 0.0, FHitResult* OutSweepHit = nullptr);
 
 	double LateralNoisePhase = 0.0;
 	double SpeedNoisePhase = 0.0;

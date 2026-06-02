@@ -52,6 +52,10 @@ def run_check() -> dict[str, Any]:
             term in data_text
             for term in ["사용자가 명시한 좌표", "robot.spawn / robot.goal", "route midpoint rule", "environmentSampling"]
         ),
+        "dataSourcesMentionGenerationTrace": all(
+            term in data_text
+            for term in ["diagnostics.generationTrace", "full WorldConfig", "full EpisodeSpec", "rawContent"]
+        ),
         "noLiveProviderCallsInHarness": not _imports_live_http_client(Path(__file__)),
         "forbiddenArtifacts": forbidden,
         "errors": [],
@@ -63,6 +67,7 @@ def run_check() -> dict[str, Any]:
         ("readmesLinkDataSources", "README or docs README must link the data sources doc."),
         ("dataSourcesSeparatesPolicyRagFromCoordinates", "Data source docs must state Policy RAG is not a coordinate-generation source."),
         ("dataSourcesExplainCoordinateBasis", "Data source docs must explain coordinate decision inputs."),
+        ("dataSourcesMentionGenerationTrace", "Data source docs must mention generationTrace and no full payload storage."),
         ("noLiveProviderCallsInHarness", "Harness check must not perform live provider calls."),
     ]:
         if not result[key]:

@@ -20,12 +20,16 @@ def test_map_generation_data_sources_doc_exists_and_explains_sources() -> None:
     assert "robot.spawn / robot.goal" in data_text
     assert "route midpoint rule" in data_text
     assert "environmentSampling" in data_text
+    assert "diagnostics.generationTrace" in data_text
+    assert "full WorldConfig" in data_text
+    assert "full EpisodeSpec" in data_text
 
 
 def test_readmes_link_map_generation_data_sources_doc_only() -> None:
     text = _read(ROOT / "README.md") + "\n" + _read(ROOT / "docs" / "README.md")
 
     assert "MAP_GENERATION_DATA_SOURCES.md" in text
+    assert "MAP_GENERATION_TRACE.md" in text
     assert "LLM_AGENT_MEETING_BRIEF.md" not in text
     assert "INSTRUCTOR_MEETING_QA.md" not in text
 

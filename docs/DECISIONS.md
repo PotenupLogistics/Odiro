@@ -337,3 +337,21 @@
 
 * 법령 RAG는 좌표 생성 근거가 아니라 정책/안전 근거로 사용한다.
 * 좌표와 배치는 사용자 입력, environmentSampling, UE EpisodeSpec guide, deterministic placement rule을 기준으로 결정한다.
+
+## Map Generation Trace Decisions
+
+* Map generation trace는 full payload가 아니라 summary evidence만 저장한다.
+* API key, rawContent, full WorldConfig, full EpisodeSpec은 trace에 저장하지 않는다.
+* 법령 RAG는 좌표 생성 근거가 아니라 정책/안전 근거로 기록한다.
+* `includeDiagnostics=true`일 때만 handoff diagnostics에 `generationTrace`를 포함한다.
+* generationTrace 생성 실패는 UE handoff 성공/실패 판정을 깨뜨리지 않고 `diagnostics.generationTraceError`로 분리한다.
+* 성공 경로의 generationTrace에는 `episode_spec_adapter`와 `scenario_reflection` 근거를 포함한다.
+* 실패 경로의 generationTrace는 `failureStage`와 `errorSummary`를 기록한다.
+* `success=false` handoff 응답은 `failureStage`를 null로 남기지 않고, 원인을 특정하지 못하면 `unknown`으로 기록한다.
+
+## Research Alignment Decisions
+
+* Scenic is research inspiration only at this stage.
+* Proto-AI currently uses WorldConfig/EpisodeSpec, not Scenic DSL.
+* Placement and sampling rules may evolve toward Scenic-like constraint-based scene generation.
+* Scenic runtime dependency is not introduced at this stage.

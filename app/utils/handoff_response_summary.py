@@ -77,6 +77,54 @@ def _warnings(response: dict[str, Any]) -> list[str]:
     return values
 
 
+def _episode_spec_missing_reason(response: dict[str, Any], diagnostics: dict[str, Any]) -> str | None:
+    error_code = _as_dict(response.get("error")).get("code")
+    if error_code:
+        return str(error_code)
+    failure_stage = diagnostics.get("failureStage")
+    if failure_stage:
+        return str(failure_stage)
+    validation = _as_dict(diagnostics.get("validation"))
+    if validation.get("status") == "failed":
+        return "world_config_validation"
+    return None
+
+
+def _trace_source_types(generation_trace: dict[str, Any]) -> list[str]:
+    source_types: list[str] = []
+    for item in _as_list(generation_trace.get("evidenceItems")):
+        if isinstance(item, dict) and item.get("sourceType"):
+            source_types.append(str(item["sourceType"]))
+    return list(dict.fromkeys(source_types))
+
+
+def _coordinate_source(source_types: list[str]) -> str:
+    has_user = "user_prompt" in source_types or "scenario_intent" in source_types
+    has_sampling = "environment_sampling" in source_types
+    has_placement = "placement_rule" in source_types
+    active = [value for value, flag in [("explicit_user_coordinates", has_user), ("environment_sampling", has_sampling), ("placement_rule", has_placement)] if flag]
+    if len(active) > 1:
+        return "mixed"
+    return active[0] if active else "unknown"
+
+
+def _policy_rag_used_for(generation_trace: dict[str, Any]) -> str:
+    trace_summary = _as_dict(generation_trace.get("summary"))
+    if trace_summary.get("policyRagUsedFor"):
+        return str(trace_summary["policyRagUsedFor"])
+    items = _as_list(generation_trace.get("evidenceItems"))
+    policy_items = [
+        item for item in items if isinstance(item, dict) and item.get("sourceType") == "policy_rag"
+    ]
+    if not policy_items:
+        return "unknown"
+    if any("safety context" in str(item.get("reason", "")).lower() for item in policy_items):
+        return "safety_context"
+    if any(item.get("valueSummary") == "not_used" for item in policy_items):
+        return "not_used"
+    return "unknown"
+
+
 def _contains_key(value: Any, key: str) -> bool:
     if isinstance(value, dict):
         return key in value or any(_contains_key(child, key) for child in value.values())
@@ -113,6 +161,9 @@ def summarize_handoff_response(response_json: dict[str, Any], http_status: int |
     diagnostics = _as_dict(response.get("diagnostics"))
     environment_sampling = _as_dict(diagnostics.get("environmentSampling"))
     environment_parameters = _as_dict(environment_sampling.get("parameters"))
+    generation_trace = _as_dict(diagnostics.get("generationTrace"))
+    trace_summary = _as_dict(generation_trace.get("summary"))
+    trace_source_types = _trace_source_types(generation_trace)
 
     map_config = _as_dict(world_config.get("map"))
     obstacles = _as_list(world_config.get("obstacles"))
@@ -231,6 +282,25 @@ def summarize_handoff_response(response_json: dict[str, Any], http_status: int |
         "sampledPedestrianCount": environment_parameters.get("pedestrianCount"),
         "sampledObstacleBlockingRatio": environment_parameters.get("obstacleBlockingRatio"),
         "sampledTimeLimitSec": environment_parameters.get("timeLimitSec"),
+        "generationTraceExists": bool(generation_trace),
+        "traceItemCount": len(_as_list(generation_trace.get("evidenceItems"))),
+        "traceSourceTypes": trace_source_types,
+        "coordinateSource": trace_summary.get("coordinateSource") or _coordinate_source(trace_source_types),
+        "policyRagUsedFor": _policy_rag_used_for(generation_trace) if generation_trace else "unknown",
+        "traceStatus": trace_summary.get("status") or ("unknown" if response.get("success") is False and generation_trace else None),
+        "traceFailureStage": trace_summary.get("failureStage"),
+        "generationTraceError": diagnostics.get("generationTraceError"),
+        "missingFailureStage": bool(
+            response.get("success") is False
+            and bool(generation_trace)
+            and not trace_summary.get("failureStage")
+            and not diagnostics.get("failureStage")
+        ),
+        "episodeSpecMissingReason": (
+            _episode_spec_missing_reason(response, diagnostics)
+            if not bool(episode_spec)
+            else None
+        ),
         "apiKeyStored": False,
         "fullPayloadStored": False,
         "fullEpisodeSpecStored": False,

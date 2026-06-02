@@ -8,6 +8,8 @@
 * [Next Actions](NEXT_ACTIONS.md)
 * [UE AI Integration Issues](UE_AI_INTEGRATION_ISSUES.md)
 * [Map Generation Data Sources](MAP_GENERATION_DATA_SOURCES.md)
+* [Map Generation Trace](MAP_GENERATION_TRACE.md)
+* [Research Alignment](RESEARCH_ALIGNMENT.md)
 
 ## UE handoff 문서
 
@@ -39,6 +41,8 @@
 * [World Config Prompt Spec](WORLD_CONFIG_PROMPT_SPEC.md)
 * [World Config Generation Orchestrator](WORLD_CONFIG_GENERATION_ORCHESTRATOR.md)
 * [Map Generation Data Sources](MAP_GENERATION_DATA_SOURCES.md)
+* [Map Generation Trace](MAP_GENERATION_TRACE.md)
+* [Research Alignment](RESEARCH_ALIGNMENT.md)
 
 ## 현재 상태 요약
 

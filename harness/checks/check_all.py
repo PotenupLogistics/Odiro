@@ -8,6 +8,7 @@ from harness.checks.check_high_priority_review import run_check as run_high_prio
 from harness.checks.check_handoff_response_summary import run_check as run_handoff_response_summary_check
 from harness.checks.check_contract_validation import run_check as run_contract_validation_check
 from harness.checks.check_generation_endpoint import run_check as run_generation_endpoint_check
+from harness.checks.check_generation_trace import run_check as run_generation_trace_check
 from harness.checks.check_generic_obstacle_scenario import run_check as run_generic_obstacle_scenario_check
 from harness.checks.check_episode_spec_adapter import run_check as run_episode_spec_adapter_check
 from harness.checks.check_episode_spec_scenario_reflection import run_check as run_episode_spec_scenario_reflection_check
@@ -41,6 +42,7 @@ from harness.checks.check_policy_triage import run_check as run_triage_check
 from harness.checks.check_rag_chunks import run_check as run_rag_chunks_check
 from harness.checks.check_rag_retrieval import run_check as run_rag_retrieval_check
 from harness.checks.check_report_serialization import run_check as run_report_serialization_check
+from harness.checks.check_research_alignment_docs import run_check as run_research_alignment_docs_check
 from harness.checks.check_route_relative_placement import run_check as run_route_relative_placement_check
 from harness.checks.check_world_config_prompt_builder import run_check as run_world_config_prompt_builder_check
 from harness.checks.check_world_config_generation_orchestrator import run_check as run_world_config_generation_orchestrator_check
@@ -88,6 +90,7 @@ def _overall_status(
     world_config_output_contract_result: dict,
     api_shell_result: dict,
     generation_endpoint_result: dict,
+    generation_trace_result: dict,
     generic_obstacle_scenario_result: dict,
     episode_spec_adapter_result: dict,
     episode_spec_scenario_reflection_result: dict,
@@ -118,6 +121,7 @@ def _overall_status(
     rag_chunks_result: dict,
     rag_retrieval_result: dict,
     report_serialization_result: dict,
+    research_alignment_docs_result: dict,
     route_relative_placement_result: dict,
     research_result: dict,
     research_review_result: dict,
@@ -144,6 +148,7 @@ def _overall_status(
         or not world_config_output_contract_result["passed"]
         or not api_shell_result["passed"]
         or not generation_endpoint_result["passed"]
+        or not generation_trace_result["passed"]
         or not generic_obstacle_scenario_result["passed"]
         or not episode_spec_adapter_result["passed"]
         or not episode_spec_scenario_reflection_result["passed"]
@@ -174,6 +179,7 @@ def _overall_status(
         or not rag_chunks_result["passed"]
         or not rag_retrieval_result["passed"]
         or not report_serialization_result["passed"]
+        or not research_alignment_docs_result["passed"]
         or not route_relative_placement_result["passed"]
         or not research_result["passed"]
         or not research_review_result["passed"]
@@ -200,6 +206,7 @@ def _overall_status(
         or world_config_output_contract_result.get("warning")
         or api_shell_result.get("warning")
         or generation_endpoint_result.get("warning")
+        or generation_trace_result.get("warning")
         or generic_obstacle_scenario_result.get("warning")
         or episode_spec_adapter_result.get("warning")
         or episode_spec_scenario_reflection_result.get("warning")
@@ -230,6 +237,7 @@ def _overall_status(
         or rag_chunks_result.get("warning")
         or rag_retrieval_result.get("warning")
         or report_serialization_result.get("warning")
+        or research_alignment_docs_result.get("warning")
         or route_relative_placement_result.get("warning")
         or research_result.get("warning")
         or research_review_result.get("warning")
@@ -260,6 +268,7 @@ def build_summary(
     world_config_output_contract_result: dict,
     api_shell_result: dict,
     generation_endpoint_result: dict,
+    generation_trace_result: dict,
     generic_obstacle_scenario_result: dict,
     episode_spec_adapter_result: dict,
     episode_spec_scenario_reflection_result: dict,
@@ -290,6 +299,7 @@ def build_summary(
     rag_chunks_result: dict,
     rag_retrieval_result: dict,
     report_serialization_result: dict,
+    research_alignment_docs_result: dict,
     route_relative_placement_result: dict,
     research_result: dict,
     research_review_result: dict,
@@ -324,6 +334,7 @@ def build_summary(
         f"- World Config output contract result: {'PASS' if world_config_output_contract_result['passed'] else 'FAIL'}",
         f"- API shell result: {'PASS' if api_shell_result['passed'] else 'FAIL'}",
         f"- Generation endpoint result: {'PASS' if generation_endpoint_result['passed'] else 'FAIL'}",
+        f"- Generation trace result: {'PASS' if generation_trace_result['passed'] else 'FAIL'}",
         f"- Generic obstacle scenario result: {'PASS' if generic_obstacle_scenario_result['passed'] else 'FAIL'}",
         f"- EpisodeSpec adapter result: {'PASS' if episode_spec_adapter_result['passed'] else 'FAIL'}",
         f"- EpisodeSpec scenario reflection result: {'PASS' if episode_spec_scenario_reflection_result['passed'] else 'FAIL'}",
@@ -354,6 +365,7 @@ def build_summary(
         f"- RAG chunks result: {'PASS' if rag_chunks_result['passed'] else 'FAIL'}",
         f"- RAG retrieval result: {'PASS' if rag_retrieval_result['passed'] else 'FAIL'}",
         f"- Report serialization result: {'PASS' if report_serialization_result['passed'] else 'FAIL'}",
+        f"- Research alignment docs result: {'PASS' if research_alignment_docs_result['passed'] else 'FAIL'}",
         f"- Route-relative placement result: {'PASS' if route_relative_placement_result['passed'] else 'FAIL'}",
         f"- Research source result: {'PASS' if research_result['passed'] else 'FAIL'}",
         f"- Research review readiness result: {'PASS' if research_review_result['passed'] else 'FAIL'}",
@@ -772,6 +784,7 @@ def main() -> int:
     world_config_output_contract_result = run_world_config_output_contract_check()
     api_shell_result = run_api_shell_check()
     generation_endpoint_result = run_generation_endpoint_check()
+    generation_trace_result = run_generation_trace_check()
     generic_obstacle_scenario_result = run_generic_obstacle_scenario_check()
     episode_spec_adapter_result = run_episode_spec_adapter_check()
     episode_spec_scenario_reflection_result = run_episode_spec_scenario_reflection_check()
@@ -802,6 +815,7 @@ def main() -> int:
     rag_chunks_result = run_rag_chunks_check()
     rag_retrieval_result = run_rag_retrieval_check()
     report_serialization_result = run_report_serialization_check()
+    research_alignment_docs_result = run_research_alignment_docs_check()
     route_relative_placement_result = run_route_relative_placement_check()
     research_result = run_research_check()
     research_review_result = run_research_review_check()
@@ -827,6 +841,7 @@ def main() -> int:
         world_config_output_contract_result,
         api_shell_result,
         generation_endpoint_result,
+        generation_trace_result,
         generic_obstacle_scenario_result,
         episode_spec_adapter_result,
         episode_spec_scenario_reflection_result,
@@ -857,6 +872,7 @@ def main() -> int:
         rag_chunks_result,
         rag_retrieval_result,
         report_serialization_result,
+        research_alignment_docs_result,
         route_relative_placement_result,
         research_result,
         research_review_result,
@@ -886,6 +902,7 @@ def main() -> int:
             "worldConfigOutputContract": world_config_output_contract_result,
             "apiShell": api_shell_result,
             "generationEndpoint": generation_endpoint_result,
+            "generationTrace": generation_trace_result,
             "genericObstacleScenario": generic_obstacle_scenario_result,
             "episodeSpecAdapter": episode_spec_adapter_result,
             "episodeSpecScenarioReflection": episode_spec_scenario_reflection_result,
@@ -916,6 +933,7 @@ def main() -> int:
             "ragChunks": rag_chunks_result,
             "ragRetrieval": rag_retrieval_result,
             "reportSerialization": report_serialization_result,
+            "researchAlignmentDocs": research_alignment_docs_result,
             "routeRelativePlacement": route_relative_placement_result,
             "researchSources": research_result,
             "researchReview": research_review_result,
@@ -953,6 +971,7 @@ def main() -> int:
             world_config_output_contract_result,
             api_shell_result,
             generation_endpoint_result,
+            generation_trace_result,
             generic_obstacle_scenario_result,
             episode_spec_adapter_result,
             episode_spec_scenario_reflection_result,
@@ -983,6 +1002,7 @@ def main() -> int:
             rag_chunks_result,
             rag_retrieval_result,
             report_serialization_result,
+            research_alignment_docs_result,
             route_relative_placement_result,
             research_result,
             research_review_result,
@@ -1012,6 +1032,7 @@ def main() -> int:
     print(f"World Config output contract check: {'PASS' if world_config_output_contract_result['passed'] else 'FAIL'}")
     print(f"API shell check: {'PASS' if api_shell_result['passed'] else 'FAIL'}")
     print(f"Generation endpoint check: {'PASS' if generation_endpoint_result['passed'] else 'FAIL'}")
+    print(f"Generation trace check: {'PASS' if generation_trace_result['passed'] else 'FAIL'}")
     print(f"Generic obstacle scenario check: {'PASS' if generic_obstacle_scenario_result['passed'] else 'FAIL'}")
     print(f"EpisodeSpec adapter check: {'PASS' if episode_spec_adapter_result['passed'] else 'FAIL'}")
     print(f"EpisodeSpec scenario reflection check: {'PASS' if episode_spec_scenario_reflection_result['passed'] else 'FAIL'}")
@@ -1042,6 +1063,7 @@ def main() -> int:
     print(f"RAG chunks check: {'PASS' if rag_chunks_result['passed'] else 'FAIL'}")
     print(f"RAG retrieval check: {'PASS' if rag_retrieval_result['passed'] else 'FAIL'}")
     print(f"Report serialization check: {'PASS' if report_serialization_result['passed'] else 'FAIL'}")
+    print(f"Research alignment docs check: {'PASS' if research_alignment_docs_result['passed'] else 'FAIL'}")
     print(f"Route-relative placement check: {'PASS' if route_relative_placement_result['passed'] else 'FAIL'}")
     print(f"Research source check: {'PASS' if research_result['passed'] else 'FAIL'}")
     print(f"Research review check: {'PASS' if research_review_result['passed'] else 'FAIL'}")
@@ -1085,6 +1107,8 @@ def main() -> int:
         print("API shell warning: API shell artifacts require attention")
     if generation_endpoint_result.get("warning"):
         print("Generation endpoint warning: endpoint artifacts require attention")
+    if generation_trace_result.get("warning"):
+        print("Generation trace warning: trace artifacts require attention")
     if generic_obstacle_scenario_result.get("warning"):
         print("Generic obstacle scenario warning: scenario handling artifacts require attention")
     if episode_spec_adapter_result.get("warning"):
@@ -1145,6 +1169,8 @@ def main() -> int:
         print("RAG retrieval warning: retrieval layer requires attention")
     if report_serialization_result.get("warning"):
         print("Report serialization warning: report serialization artifacts require attention")
+    if research_alignment_docs_result.get("warning"):
+        print("Research alignment docs warning: research alignment docs require attention")
     if route_relative_placement_result.get("warning"):
         print("Route-relative placement warning: route placement artifacts require attention")
     if research_result.get("warning"):

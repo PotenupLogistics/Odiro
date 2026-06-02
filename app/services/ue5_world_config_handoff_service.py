@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from app.core.contract_types import ContractType
 from app.core.settings import Settings
-from app.models.generation import WorldConfigGenerationRequest, WorldConfigGenerationResult
+from app.models.generation import WorldConfigGenerationError, WorldConfigGenerationRequest, WorldConfigGenerationResult
 from app.models.handoff import (
     UE5HandoffMetadata,
     UE5HandoffValidationSummary,
@@ -18,6 +18,8 @@ from app.models.llm import LlmProvider
 from app.services.json_contract_validator import validate_payload
 from app.services.episode_spec_validator import validate_episode_spec
 from app.services.episode_spec_scenario_reflection import validate_episode_spec_scenario_reflection
+from app.services.generation_trace_builder import build_generation_trace
+from app.services.generation_trace_builder import infer_failure_stage
 from app.services.world_config_to_episode_spec_adapter import (
     convert_world_config_to_episode_spec_with_warnings,
 )
@@ -49,8 +51,14 @@ def _metadata(
     )
 
 
-def _diagnostics(result: WorldConfigGenerationResult) -> dict:
-    return {
+def _diagnostics(
+    result: WorldConfigGenerationResult,
+    generation_trace: dict | None = None,
+    generation_trace_error: str | None = None,
+    failure_stage: str | None = None,
+    error_summary: str | None = None,
+) -> dict:
+    diagnostics = {
         "generationRequestId": result.requestId,
         "attempts": [attempt.model_dump(mode="json") for attempt in result.attempts],
         "retrievedContextCount": len(result.retrievedContexts),
@@ -59,6 +67,15 @@ def _diagnostics(result: WorldConfigGenerationResult) -> dict:
         "fallbackTrace": [trace.model_dump(mode="json") for trace in result.fallbackTrace],
         "environmentSampling": result.environmentSampling,
     }
+    if generation_trace is not None:
+        diagnostics["generationTrace"] = generation_trace
+    if generation_trace_error:
+        diagnostics["generationTraceError"] = generation_trace_error
+    if failure_stage:
+        diagnostics["failureStage"] = failure_stage
+    if error_summary:
+        diagnostics["errorSummary"] = error_summary
+    return diagnostics
 
 
 def _warnings(values: list[str]) -> list[UE5HandoffWarning]:
@@ -101,27 +118,72 @@ def create_ue5_world_config_handoff(
     episode_validation = None
     episode_scenario_reflection = None
     conversion_warnings = []
+    failure_stage = None
+    error_summary = None
+    handoff_error = generation_result.error
     if generation_result.generatedPayload is not None:
         contract_validation = validate_payload(
             ContractType.world_config,
             generation_result.generatedPayload,
         )
         if contract_validation.valid and request.responseFormat in {"episode_spec", "both"}:
-            episode_spec_model, conversion_warnings = convert_world_config_to_episode_spec_with_warnings(
-                generation_result.generatedPayload
-            )
-            episode_validation = validate_episode_spec(episode_spec_model)
-            episode_spec = (
-                episode_spec_model.model_dump(mode="json", by_alias=True, exclude_none=True)
-                if episode_validation.valid
-                else None
-            )
-            if episode_spec is not None:
-                episode_scenario_reflection = validate_episode_spec_scenario_reflection(
-                    request.generationRequest.prompt,
-                    episode_spec,
-                    environment_sampling=generation_result.environmentSampling,
+            try:
+                episode_spec_model, conversion_warnings = convert_world_config_to_episode_spec_with_warnings(
+                    generation_result.generatedPayload
                 )
+            except Exception as exc:
+                failure_stage = "episode_spec_adapter"
+                error_summary = str(exc)
+                handoff_error = WorldConfigGenerationError(
+                    code="episode_spec_adapter_error",
+                    message=error_summary,
+                )
+            else:
+                try:
+                    episode_validation = validate_episode_spec(episode_spec_model)
+                except Exception as exc:
+                    failure_stage = "episode_validation"
+                    error_summary = str(exc)
+                    handoff_error = WorldConfigGenerationError(
+                        code="episode_validation_error",
+                        message=error_summary,
+                    )
+                else:
+                    if episode_validation.valid:
+                        episode_spec = episode_spec_model.model_dump(mode="json", by_alias=True, exclude_none=True)
+                    else:
+                        failure_stage = "episode_validation"
+                        error_summary = "; ".join(episode_validation.errors[:3]) if episode_validation.errors else "EpisodeSpec validation failed."
+                    if episode_spec is not None:
+                        try:
+                            episode_scenario_reflection = validate_episode_spec_scenario_reflection(
+                                request.generationRequest.prompt,
+                                episode_spec,
+                                environment_sampling=generation_result.environmentSampling,
+                            )
+                        except Exception as exc:
+                            failure_stage = "episode_scenario_reflection"
+                            error_summary = str(exc)
+                            handoff_error = WorldConfigGenerationError(
+                                code="episode_scenario_reflection_error",
+                                message=error_summary,
+                            )
+                        else:
+                            if (
+                                episode_scenario_reflection is not None
+                                and (
+                                    not episode_scenario_reflection.passed
+                                    or not episode_scenario_reflection.ueCompilerReadiness
+                                )
+                            ):
+                                failure_stage = "episode_scenario_reflection"
+                                error_summary = (
+                                    "; ".join(issue.message for issue in episode_scenario_reflection.issues[:3])
+                                    if episode_scenario_reflection.issues
+                                    else "EpisodeSpec scenario reflection failed."
+                                )
+    elif not generation_result.success:
+        failure_stage, error_summary = infer_failure_stage(generation_result)
 
     schema_passed = generation_result.validation.status == "passed"
     scenario_passed = bool(
@@ -143,7 +205,25 @@ def create_ue5_world_config_handoff(
         and episode_scenario_reflection.staticObstacleCount == 0
     ):
         episode_passed = False
+        failure_stage = failure_stage or "episode_scenario_reflection"
+        error_summary = error_summary or "Static obstacle requirement was not reflected in EpisodeSpec."
     success = bool(generation_result.success and generation_result.generatedPayload and contract_passed and episode_passed)
+    if not success and failure_stage is None:
+        if not generation_result.success:
+            failure_stage, error_summary = infer_failure_stage(generation_result)
+        elif not contract_passed:
+            failure_stage = "world_config_validation"
+            error_summary = (
+                "; ".join(contract_validation.errors[:3])
+                if contract_validation and contract_validation.errors
+                else "WorldConfig contract validation failed."
+            )
+        elif request.responseFormat in {"episode_spec", "both"} and episode_spec is None:
+            failure_stage = "episode_spec_adapter"
+            error_summary = "EpisodeSpec was not produced."
+        else:
+            failure_stage = "unknown"
+            error_summary = "Handoff failed before a precise failure stage could be determined."
 
     validation = UE5HandoffValidationSummary(
         schemaValidationPassed=schema_passed,
@@ -156,6 +236,21 @@ def create_ue5_world_config_handoff(
         warnings.extend(_warnings(contract_validation.warnings))
 
     world_config_payload = generation_result.generatedPayload if success and request.responseFormat in {"world_config", "both"} else None
+    generation_trace = None
+    generation_trace_error = None
+    if request.includeDiagnostics:
+        try:
+            generation_trace = build_generation_trace(
+                request.generationRequest,
+                generation_result,
+                episode_spec=episode_spec,
+                episode_validation=episode_validation,
+                episode_scenario_reflection=episode_scenario_reflection,
+                failure_stage=None if success else failure_stage,
+                error_summary=None if success else error_summary,
+            ).model_dump(mode="json")
+        except Exception as exc:
+            generation_trace_error = str(exc)
 
     return UE5WorldConfigHandoffResponse(
         schemaVersion=request.schemaVersion,
@@ -173,9 +268,15 @@ def create_ue5_world_config_handoff(
         scenarioReflection=generation_result.scenarioReflection,
         postProcessing=generation_result.scenarioPostProcessing,
         diagnostics={
-            **_diagnostics(generation_result),
+            **_diagnostics(
+                generation_result,
+                generation_trace=generation_trace,
+                generation_trace_error=generation_trace_error,
+                failure_stage=None if success else failure_stage,
+                error_summary=None if success else error_summary,
+            ),
             "effectiveResponseFormat": request.responseFormat,
         } if request.includeDiagnostics else None,
         warnings=warnings,
-        error=None if success else generation_result.error,
+        error=None if success else handoff_error,
     )

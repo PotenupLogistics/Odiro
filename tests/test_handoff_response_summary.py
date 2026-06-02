@@ -88,6 +88,48 @@ def _response() -> dict:
         },
         "diagnostics": {
             "effectiveResponseFormat": "both",
+            "generationTrace": {
+                "traceId": "TRACE-001",
+                "requestId": "GEN-001",
+                "createdAt": "2026-06-02T00:00:00+00:00",
+                "summary": "summary evidence only",
+                "warnings": [],
+                "evidenceItems": [
+                    {
+                        "sourceType": "environment_sampling",
+                        "fieldPath": "map.sidewalkWidthCm",
+                        "valueSummary": 120,
+                        "evidence": "environmentSampling.parameters.sidewalkWidthCm",
+                        "rule": "fixed_parameter_override",
+                        "reason": "fixedParameters.sidewalkWidthCm was provided",
+                        "priority": 10,
+                        "inputs": {"seed": 1001},
+                        "calculation": None,
+                    },
+                    {
+                        "sourceType": "placement_rule",
+                        "fieldPath": "obstacles[0].position",
+                        "valueSummary": "x=400, y=0, z=0",
+                        "evidence": "route midpoint language",
+                        "rule": "route_midpoint_with_lateral_offset",
+                        "reason": "Obstacle position is derived from robot.spawn and robot.goal.",
+                        "priority": 10,
+                        "inputs": {},
+                        "calculation": "midpoint(robot.spawn, robot.goal)",
+                    },
+                    {
+                        "sourceType": "policy_rag",
+                        "fieldPath": "relatedPolicyContext",
+                        "valueSummary": "1 chunks",
+                        "evidence": "perception_requirement",
+                        "rule": None,
+                        "reason": "Policy RAG used for safety context, not coordinate generation.",
+                        "priority": 5,
+                        "inputs": {},
+                        "calculation": None,
+                    },
+                ],
+            },
             "environmentSampling": {
                 "enabled": True,
                 "seed": 1001,
@@ -149,9 +191,71 @@ def test_summary_extracts_world_config_and_episode_spec_values() -> None:
     assert summary["sampledPedestrianCount"] == 1
     assert summary["sampledObstacleBlockingRatio"] == 0.6
     assert summary["sampledTimeLimitSec"] == 60
+    assert summary["generationTraceExists"] is True
+    assert summary["traceItemCount"] == 3
+    assert summary["traceSourceTypes"] == [
+        "environment_sampling",
+        "placement_rule",
+        "policy_rag",
+    ]
+    assert summary["coordinateSource"] == "mixed"
+    assert summary["policyRagUsedFor"] == "safety_context"
     assert summary["routeMidpointExpected"] is True
     assert summary["obstacleNearRouteMidpoint"] is True
     assert summary["obstacleDistanceFromMidpoint"] == 0.0
+
+
+def test_summary_extracts_trace_status_failure_stage_and_trace_error() -> None:
+    response = {
+        "success": False,
+        "diagnostics": {
+            "generationTraceError": "trace boom",
+            "generationTrace": {
+                "summary": {
+                    "status": "failed",
+                    "failureStage": "episode_spec_adapter",
+                    "errorSummary": "adapter boom",
+                    "coordinateSource": "placement_rule",
+                    "policyRagUsedFor": "safety_context",
+                },
+                "evidenceItems": [
+                    {"sourceType": "placement_rule"},
+                    {"sourceType": "validation"},
+                ],
+            },
+        },
+    }
+
+    summary = summarize_handoff_response(response)
+
+    assert summary["generationTraceExists"] is True
+    assert summary["traceStatus"] == "failed"
+    assert summary["traceFailureStage"] == "episode_spec_adapter"
+    assert summary["generationTraceError"] == "trace boom"
+    assert summary["coordinateSource"] == "placement_rule"
+    assert summary["policyRagUsedFor"] == "safety_context"
+
+
+def test_summary_flags_missing_trace_failure_stage_on_failed_response() -> None:
+    response = {
+        "success": False,
+        "episodeSpec": None,
+        "error": {"code": "provider_chain_failed"},
+        "diagnostics": {
+            "generationTrace": {
+                "summary": "legacy summary",
+                "evidenceItems": [{"sourceType": "validation"}],
+            },
+            "validation": {"status": "failed", "errors": ["provider chain failed"]},
+        },
+    }
+
+    summary = summarize_handoff_response(response)
+
+    assert summary["traceStatus"] == "unknown"
+    assert summary["traceFailureStage"] is None
+    assert summary["missingFailureStage"] is True
+    assert summary["episodeSpecMissingReason"] == "provider_chain_failed"
 
 
 def test_summary_flags_guide_and_midpoint_mismatches_without_payloads() -> None:

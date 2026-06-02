@@ -9,6 +9,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from app.models.episode_spec import EpisodeConversionWarning
+from app.models.generation_trace import GenerationTrace, GenerationTraceItem, TraceSourceType
 from app.utils.report_serialization import MASKED_VALUE, to_jsonable, write_json_report
 
 
@@ -70,6 +71,30 @@ def test_episode_conversion_warning_is_jsonable() -> None:
 
     assert result["warnings"][0]["code"] == "kickboard_prop_mapping_pending"
     json.dumps(result)
+
+
+def test_generation_trace_is_jsonable_without_unmasked_secrets() -> None:
+    trace = GenerationTrace(
+        requestId="REQ-TRACE-001",
+        summary="summary only",
+        evidenceItems=[
+            GenerationTraceItem(
+                sourceType=TraceSourceType.environment_sampling,
+                fieldPath="map.sidewalkWidthCm",
+                valueSummary=120,
+                evidence="fixed parameter",
+                reason="fixedParameters.sidewalkWidthCm was provided",
+                inputs={"OPENAI_API_KEY": "should-mask", "seed": 1001},
+            )
+        ],
+    )
+
+    result = to_jsonable({"generationTrace": trace})
+
+    json.dumps(result)
+    item = result["generationTrace"]["evidenceItems"][0]
+    assert item["sourceType"] == "environment_sampling"
+    assert item["inputs"]["OPENAI_API_KEY"] == MASKED_VALUE
 
 
 def test_secret_like_keys_are_masked() -> None:

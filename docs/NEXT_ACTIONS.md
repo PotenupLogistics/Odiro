@@ -46,6 +46,10 @@
 * Run Result API design
 * Evaluation scoring design
 * Run Result analysis design
+* Define spatial placement contract.
+* Define scenario placement rules.
+* Define placement validation rules.
+* Consider Scenic-like intermediate scenario specification after UE single-case integration succeeds.
 * DOE / scenario matrix / batch generation은 UE 단일 케이스 검증 이후 진행
 
 현재 단계에서는 sample JSON, fixture 파일, vector DB, embedding index, UE C++/Blueprint 코드를 생성하지 않습니다.

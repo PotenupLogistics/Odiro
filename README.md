@@ -164,6 +164,8 @@ uv run python scripts/export_ue5_handoff_payload.py --prompt "좁은 보도에�
 * [Environment Sampler Design](docs/ENVIRONMENT_SAMPLER_DESIGN.md)
 * [Environment Sampling Handoff Result](docs/ENVIRONMENT_SAMPLING_HANDOFF_RESULT.md)
 * [Map Generation Data Sources](docs/MAP_GENERATION_DATA_SOURCES.md)
+* [Map Generation Trace](docs/MAP_GENERATION_TRACE.md)
+* [Research Alignment](docs/RESEARCH_ALIGNMENT.md)
 * [UE AI Integration Issues](docs/UE_AI_INTEGRATION_ISSUES.md)
 * [Next Actions](docs/NEXT_ACTIONS.md)
 * [Current Project Status](docs/CURRENT_PROJECT_STATUS.md)

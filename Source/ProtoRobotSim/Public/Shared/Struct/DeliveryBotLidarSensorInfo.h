@@ -96,7 +96,7 @@ struct FDeliveryBotLidarDetectedObjectInfo
 {
 	GENERATED_BODY()
 
-public:
+public: // 탐지된 액터
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TObjectPtr<AActor> DetectedActor{ nullptr };
 
@@ -106,6 +106,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> ActorTags{};
 
+public: // 가장 가까운 액터와의 위치 정보
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FVector ClosestHitLocationCm{ FVector::ZeroVector };
 
@@ -124,6 +125,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float ClosestFrontRayYawDegree{ 0.f };
 
+public: // 레이 몇 개 맞았는지(레이의 총 개수와 같은면 어디도 못간다 판단 할 수 있을지도)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 TotalHitRayCount{ 0 };
 

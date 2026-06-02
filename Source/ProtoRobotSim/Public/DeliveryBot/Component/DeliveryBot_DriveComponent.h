@@ -4,18 +4,18 @@
 #include "Components/ActorComponent.h"
 #include "Shared/Struct/DeliveryBotMovementInfo.h"
 #include "Shared/Struct/DeliveryBotDriveConfigInfo.h"
-#include "DeliveryBot_ChaosDriveComponent.generated.h"
+#include "DeliveryBot_DriveComponent.generated.h"
 
 class UChaosVehicleMovementComponent;
 class UChaosWheeledVehicleMovementComponent;
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
-class PROTOROBOTSIM_API UDeliveryBot_ChaosDriveComponent : public UActorComponent
+class PROTOROBOTSIM_API UDeliveryBot_DriveComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
 public:
-	UDeliveryBot_ChaosDriveComponent();
+	UDeliveryBot_DriveComponent();
 	void ApplyMoveCommand(
 		UChaosVehicleMovementComponent* vehicleMovement,
 		const FDeliveryBotMoveCommandInfo& moveCommandInfo,

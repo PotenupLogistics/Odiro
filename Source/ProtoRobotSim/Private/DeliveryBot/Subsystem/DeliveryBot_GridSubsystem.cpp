@@ -34,7 +34,7 @@ void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoun
 	GridCells.SetNum(GridSizeX * GridSizeY);
 
 	const FVector robotBoxExtent = gridBoundsActor->GetRobotBoxExtent();
-	const float maxWalkableSlopeDegree{ gridBoundsActor->GetMaxWalkableSlopeDegree() };
+	const float maxWalkableSlopeDegree = gridBoundsActor->GetMaxWalkableSlopeDegree();
 	for (int32 y = 0; y < GridSizeY; ++y)
 	{
 		for (int32 x = 0; x < GridSizeX; ++x)
@@ -49,22 +49,25 @@ void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoun
 				GridOrigin.Y + (y + 0.5f) * CellSize,
 				GridOrigin.Z
 			);
-			FVector groundLocation{ cellInfo.WorldLocation };
-			FVector groundNormal{ FVector::UpVector };
+			FVector groundLocation = cellInfo.WorldLocation;
+			FVector groundNormal = FVector::UpVector;
 
 			if (!GetGroundInfoByWorldLocation(cellInfo.WorldLocation, groundLocation, groundNormal))
 			{
 				cellInfo.State = EDeliveryBotGridCellState::Blocked;
 				cellInfo.Cost = BIG_NUMBER;
 				
-				DrawDebugPoint(
-				GetWorld(),
-				cellInfo.WorldLocation,
-				8.f,
-				FColor::Red,
-				true,
-				30.f
-			);
+				if (bDrawDebug)
+				{
+					DrawDebugPoint(
+						GetWorld(),
+						cellInfo.WorldLocation,
+						8.f,
+						FColor::Red,
+						true,
+						30.f
+					);
+				}
 
 				continue;
 			}
@@ -72,7 +75,7 @@ void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoun
 			cellInfo.GroundLocation = groundLocation;
 			cellInfo.GroundNormal = groundNormal;
 
-			const float upDot{ FMath::Clamp(static_cast<float>(FVector::DotProduct(groundNormal, FVector::UpVector)), -1.f, 1.f) };
+			const float upDot = FMath::Clamp(static_cast<float>(FVector::DotProduct(groundNormal, FVector::UpVector)), -1.f, 1.f);
 			cellInfo.SlopeDegree = FMath::RadiansToDegrees(FMath::Acos(upDot));
 			cellInfo.WorldLocation = groundLocation;
 
@@ -82,14 +85,17 @@ void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoun
 				cellInfo.Cost = BIG_NUMBER;
 
 				// 이동 가능한 최대 경사각을 넘는 셀은 이동 불가로 표시한다.
-				DrawDebugPoint(
-					GetWorld(),
-					cellInfo.WorldLocation,
-					8.f,
-					FColor::Orange,
-					true,
-					30.f
-				);
+				if (bDrawDebug)
+				{
+					DrawDebugPoint(
+						GetWorld(),
+						cellInfo.WorldLocation,
+						8.f,
+						FColor::Orange,
+						true,
+						30.f
+					);
+				}
 
 				continue;
 			}
@@ -122,6 +128,19 @@ void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoun
 	}
 }
 
+void UDeliveryBot_GridSubsystem::SetDrawDebugEnabled(bool bEnabled)
+{
+	bDrawDebug = bEnabled;
+
+	if (!bDrawDebug)
+	{
+		if (UWorld* world = GetWorld())
+		{
+			FlushPersistentDebugLines(world);
+		}
+	}
+}
+
 void UDeliveryBot_GridSubsystem::SetDynamicBlockedByComponentBounds(const UPrimitiveComponent* obstacleComponent)
 {
 	if (!IsValid(obstacleComponent))
@@ -130,9 +149,9 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByComponentBounds(const UPrimi
 	if (GridSizeX <= 0 || GridSizeY <= 0)
 		return;
 
-	const FBoxSphereBounds componentBounds{ obstacleComponent->Bounds };
-	FVector boundsOrigin{ componentBounds.Origin };
-	FVector boundsExtent{ componentBounds.BoxExtent };
+	const FBoxSphereBounds componentBounds = obstacleComponent->Bounds;
+	FVector boundsOrigin = componentBounds.Origin;
+	FVector boundsExtent = componentBounds.BoxExtent;
 
 	if (boundsExtent.IsNearlyZero())
 	{
@@ -140,41 +159,41 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByComponentBounds(const UPrimi
 		return;
 	}
 
-	const float blockMargin{ CellSize * 0.5f };
+	const float blockMargin = CellSize * 0.5f;
 	boundsExtent.X += blockMargin;
 	boundsExtent.Y += blockMargin;
 
-	const FVector minLocation{
+	const FVector minLocation = FVector(
 		boundsOrigin.X - boundsExtent.X,
 		boundsOrigin.Y - boundsExtent.Y,
 		boundsOrigin.Z
-	};
+	);
 
-	const FVector maxLocation{
+	const FVector maxLocation = FVector(
 		boundsOrigin.X + boundsExtent.X,
 		boundsOrigin.Y + boundsExtent.Y,
 		boundsOrigin.Z
-	};
+	);
 
-	const FIntPoint minGridIndex{ GetGridIndexByWorldLocation(minLocation) };
-	const FIntPoint maxGridIndex{ GetGridIndexByWorldLocation(maxLocation) };
+	const FIntPoint minGridIndex = GetGridIndexByWorldLocation(minLocation);
+	const FIntPoint maxGridIndex = GetGridIndexByWorldLocation(maxLocation);
 
-	const int32 minX{ FMath::Clamp(FMath::Min(minGridIndex.X, maxGridIndex.X), 0, GridSizeX - 1) };
-	const int32 maxX{ FMath::Clamp(FMath::Max(minGridIndex.X, maxGridIndex.X), 0, GridSizeX - 1) };
-	const int32 minY{ FMath::Clamp(FMath::Min(minGridIndex.Y, maxGridIndex.Y), 0, GridSizeY - 1) };
-	const int32 maxY{ FMath::Clamp(FMath::Max(minGridIndex.Y, maxGridIndex.Y), 0, GridSizeY - 1) };
+	const int32 minX = FMath::Clamp(FMath::Min(minGridIndex.X, maxGridIndex.X), 0, GridSizeX - 1);
+	const int32 maxX = FMath::Clamp(FMath::Max(minGridIndex.X, maxGridIndex.X), 0, GridSizeX - 1);
+	const int32 minY = FMath::Clamp(FMath::Min(minGridIndex.Y, maxGridIndex.Y), 0, GridSizeY - 1);
+	const int32 maxY = FMath::Clamp(FMath::Max(minGridIndex.Y, maxGridIndex.Y), 0, GridSizeY - 1);
 
 	for (int32 y = minY; y <= maxY; ++y)
 	{
 		for (int32 x = minX; x <= maxX; ++x)
 		{
-			const FIntPoint gridIndex{ x, y };
-			const int32 cellArrayIndex{ GetCellArrayIndexByGridIndex(gridIndex) };
+			const FIntPoint gridIndex = FIntPoint(x, y);
+			const int32 cellArrayIndex = GetCellArrayIndexByGridIndex(gridIndex);
 
 			if (!GridCells.IsValidIndex(cellArrayIndex))
 				continue;
 
-			FDeliveryBotGridCellInfo& cellInfo{ GridCells[cellArrayIndex] };
+			FDeliveryBotGridCellInfo& cellInfo = GridCells[cellArrayIndex];
 			if (cellInfo.State == EDeliveryBotGridCellState::Blocked)
 				continue;
 
@@ -183,7 +202,7 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByComponentBounds(const UPrimi
 
 			// DrawDebugPoint(
 			// 	GetWorld(),
-			// 	cellInfo.WorldLocation + FVector{ 0.f, 0.f, 50.f },
+			// 	cellInfo.WorldLocation + FVector(0.f, 0.f, 50.f),
 			// 	16.f,
 			// 	FColor::Purple,
 			// 	false,
@@ -195,15 +214,15 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByComponentBounds(const UPrimi
 
 void UDeliveryBot_GridSubsystem::SetDynamicBlockedByWorldLocation(const FVector& worldLocation)
 {
-	const FIntPoint gridIndex{ GetGridIndexByWorldLocation(worldLocation) };
+	const FIntPoint gridIndex = GetGridIndexByWorldLocation(worldLocation);
 	if (!IsValidGridIndex(gridIndex))
 		return;
 
-	const int32 cellArrayIndex{ GetCellArrayIndexByGridIndex(gridIndex) };
+	const int32 cellArrayIndex = GetCellArrayIndexByGridIndex(gridIndex);
 	if (!GridCells.IsValidIndex(cellArrayIndex))
 		return;
 
-	FDeliveryBotGridCellInfo& cellInfo{ GridCells[cellArrayIndex] };
+	FDeliveryBotGridCellInfo& cellInfo = GridCells[cellArrayIndex];
 	if (cellInfo.State == EDeliveryBotGridCellState::Blocked)
 		return;
 
@@ -212,7 +231,7 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByWorldLocation(const FVector&
 
 	// DrawDebugPoint(
 	// 	GetWorld(),
-	// 	cellInfo.WorldLocation + FVector{ 0.f, 0.f, 40.f },
+	// 	cellInfo.WorldLocation + FVector(0.f, 0.f, 40.f),
 	// 	14.f,
 	// 	FColor::Purple,
 	// 	false,
@@ -256,8 +275,8 @@ bool UDeliveryBot_GridSubsystem::IsCellBlocked(const FVector& worldLocation, con
 	if (!bHasOverlap)
 		return false;
 
-	static const FName ignoreAboutGridTag{ TEXT("IgnoreAboutGrid") };
-	static const FName localOnlyObstacleTag{ TEXT("LocalOnlyObstacle") };
+	static const FName ignoreAboutGridTag = TEXT("IgnoreAboutGrid");
+	static const FName localOnlyObstacleTag = TEXT("LocalOnlyObstacle");
 
 	for (const FOverlapResult& overlapResult : overlapResults)
 	{
@@ -280,21 +299,21 @@ bool UDeliveryBot_GridSubsystem::IsCellBlocked(const FVector& worldLocation, con
 bool UDeliveryBot_GridSubsystem::GetGroundInfoByWorldLocation(const FVector& worldLocation, FVector& outGroundLocation,
 	FVector& outGroundNormal) const
 {
-	const UWorld* world{ GetWorld() };
+	const UWorld* world = GetWorld();
 	if (!IsValid(world))
 	{
 		return false;
 	}
-	const FVector traceStart{ worldLocation.X, worldLocation.Y, worldLocation.Z + 1000.f };
-	const FVector traceEnd{ worldLocation.X, worldLocation.Y, worldLocation.Z - 1000.f };
+	const FVector traceStart = FVector(worldLocation.X, worldLocation.Y, worldLocation.Z + 1000.f);
+	const FVector traceEnd = FVector(worldLocation.X, worldLocation.Y, worldLocation.Z - 1000.f);
 
 	FHitResult hitResult;
-	const bool bHit{ world->LineTraceSingleByChannel(
+	const bool bHit = world->LineTraceSingleByChannel(
 		hitResult,
 		traceStart,
 		traceEnd,
 		ECC_WorldStatic
-	) };
+	);
 
 	if (!bHit)
 	{
@@ -308,11 +327,10 @@ bool UDeliveryBot_GridSubsystem::GetGroundInfoByWorldLocation(const FVector& wor
 
 FIntPoint UDeliveryBot_GridSubsystem::GetGridIndexByWorldLocation(const FVector& worldLocation) const
 {
-	return FIntPoint
-	{
+	return FIntPoint(
 		static_cast<int32>(FMath::FloorToInt((worldLocation.X - GridOrigin.X) / CellSize)),
 		static_cast<int32>(FMath::FloorToInt((worldLocation.Y - GridOrigin.Y) / CellSize))
-	};
+	);
 }
 
 void UDeliveryBot_GridSubsystem::SetDynamicBlockedByActorBounds(const AActor* obstacleActor)
@@ -323,8 +341,8 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByActorBounds(const AActor* ob
 	if (GridSizeX <= 0 || GridSizeY <= 0)
 		return;
 
-	FVector boundsOrigin{ FVector::ZeroVector };
-	FVector boundsExtent{ FVector::ZeroVector };
+	FVector boundsOrigin = FVector::ZeroVector;
+	FVector boundsExtent = FVector::ZeroVector;
 	obstacleActor->GetActorBounds(true, boundsOrigin, boundsExtent);
 
 	if (boundsExtent.IsNearlyZero())
@@ -333,41 +351,41 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByActorBounds(const AActor* ob
 		return;
 	}
 
-	const float blockMargin{ CellSize * DynamicObstacleBlockBound };
+	const float blockMargin = CellSize * DynamicObstacleBlockBound;
 	boundsExtent.X += blockMargin;
 	boundsExtent.Y += blockMargin;
 
-	const FVector minLocation{
+	const FVector minLocation = FVector(
 		boundsOrigin.X - boundsExtent.X,
 		boundsOrigin.Y - boundsExtent.Y,
 		boundsOrigin.Z
-	};
+	);
 
-	const FVector maxLocation{
+	const FVector maxLocation = FVector(
 		boundsOrigin.X + boundsExtent.X,
 		boundsOrigin.Y + boundsExtent.Y,
 		boundsOrigin.Z
-	};
+	);
 
-	const FIntPoint minGridIndex{ GetGridIndexByWorldLocation(minLocation) };
-	const FIntPoint maxGridIndex{ GetGridIndexByWorldLocation(maxLocation) };
+	const FIntPoint minGridIndex = GetGridIndexByWorldLocation(minLocation);
+	const FIntPoint maxGridIndex = GetGridIndexByWorldLocation(maxLocation);
 
-	const int32 minX{ FMath::Clamp(FMath::Min(minGridIndex.X, maxGridIndex.X), 0, GridSizeX - 1) };
-	const int32 maxX{ FMath::Clamp(FMath::Max(minGridIndex.X, maxGridIndex.X), 0, GridSizeX - 1) };
-	const int32 minY{ FMath::Clamp(FMath::Min(minGridIndex.Y, maxGridIndex.Y), 0, GridSizeY - 1) };
-	const int32 maxY{ FMath::Clamp(FMath::Max(minGridIndex.Y, maxGridIndex.Y), 0, GridSizeY - 1) };
+	const int32 minX = FMath::Clamp(FMath::Min(minGridIndex.X, maxGridIndex.X), 0, GridSizeX - 1);
+	const int32 maxX = FMath::Clamp(FMath::Max(minGridIndex.X, maxGridIndex.X), 0, GridSizeX - 1);
+	const int32 minY = FMath::Clamp(FMath::Min(minGridIndex.Y, maxGridIndex.Y), 0, GridSizeY - 1);
+	const int32 maxY = FMath::Clamp(FMath::Max(minGridIndex.Y, maxGridIndex.Y), 0, GridSizeY - 1);
 
 	for (int32 y = minY; y <= maxY; ++y)
 	{
 		for (int32 x = minX; x <= maxX; ++x)
 		{
-			const FIntPoint gridIndex{ x, y };
-			const int32 cellArrayIndex{ GetCellArrayIndexByGridIndex(gridIndex) };
+			const FIntPoint gridIndex = FIntPoint(x, y);
+			const int32 cellArrayIndex = GetCellArrayIndexByGridIndex(gridIndex);
 
 			if (!GridCells.IsValidIndex(cellArrayIndex))
 				continue;
 
-			FDeliveryBotGridCellInfo& cellInfo{ GridCells[cellArrayIndex] };
+			FDeliveryBotGridCellInfo& cellInfo = GridCells[cellArrayIndex];
 			if (cellInfo.State == EDeliveryBotGridCellState::Blocked)
 				continue;
 
@@ -376,7 +394,7 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByActorBounds(const AActor* ob
 
 			// DrawDebugPoint(
 			// 	GetWorld(),
-			// 	cellInfo.WorldLocation + FVector{ 0.f, 0.f, 50.f },
+			// 	cellInfo.WorldLocation + FVector(0.f, 0.f, 50.f),
 			// 	16.f,
 			// 	FColor::Purple,
 			// 	false,
@@ -396,7 +414,7 @@ bool UDeliveryBot_GridSubsystem::GetNearestWalkableWorldLocation(
 	if (GridSizeX <= 0 || GridSizeY <= 0)
 		return false;
 
-	const FIntPoint originGridIndex{ GetGridIndexByWorldLocation(worldLocation) };
+	const FIntPoint originGridIndex = GetGridIndexByWorldLocation(worldLocation);
 
 	if (IsWalkableGridIndex(originGridIndex))
 	{
@@ -404,38 +422,34 @@ bool UDeliveryBot_GridSubsystem::GetNearestWalkableWorldLocation(
 		return true;
 	}
 
-	const int32 searchRadius{ FMath::Max(maxSearchRadius, 0) };
-	float bestDistanceSquared{ TNumericLimits<float>::Max() };
-	bool bFound{ false };
+	const int32 searchRadius = FMath::Max(maxSearchRadius, 0);
+	float bestDistanceSquared = TNumericLimits<float>::Max();
+	bool bFound = false;
 
-	for (int32 radius{ 1 }; radius <= searchRadius; ++radius)
+	for (int32 radius = 1; radius <= searchRadius; ++radius)
 	{
-		for (int32 offsetY{ -radius }; offsetY <= radius; ++offsetY)
+		for (int32 offsetY = -radius; offsetY <= radius; ++offsetY)
 		{
-			for (int32 offsetX{ -radius }; offsetX <= radius; ++offsetX)
+			for (int32 offsetX = -radius; offsetX <= radius; ++offsetX)
 			{
-				const bool bIsOuterRing{
-					FMath::Abs(offsetX) == radius || FMath::Abs(offsetY) == radius
-				};
+				const bool bIsOuterRing =
+					FMath::Abs(offsetX) == radius || FMath::Abs(offsetY) == radius;
 
 				if (!bIsOuterRing)
 					continue;
 
-				const FIntPoint candidateGridIndex{
+				const FIntPoint candidateGridIndex = FIntPoint(
 					originGridIndex.X + offsetX,
 					originGridIndex.Y + offsetY
-				};
+				);
 
 				if (!IsWalkableGridIndex(candidateGridIndex))
 					continue;
 
-				const FVector candidateWorldLocation{
-					GetWorldLocationByGridIndex(candidateGridIndex)
-				};
+				const FVector candidateWorldLocation = GetWorldLocationByGridIndex(candidateGridIndex);
 
-				const float distanceSquared{
-					static_cast<float>(FVector::DistSquared2D(worldLocation, candidateWorldLocation))
-				};
+				const float distanceSquared =
+					static_cast<float>(FVector::DistSquared2D(worldLocation, candidateWorldLocation));
 
 				if (distanceSquared >= bestDistanceSquared)
 					continue;
@@ -455,7 +469,7 @@ bool UDeliveryBot_GridSubsystem::GetNearestWalkableWorldLocation(
 
 FVector UDeliveryBot_GridSubsystem::GetWorldLocationByGridIndex(const FIntPoint& gridIndex) const
 {
-	const FDeliveryBotGridCellInfo* cellInfo{ FindCellInfoByGridIndex(gridIndex) };
+	const FDeliveryBotGridCellInfo* cellInfo = FindCellInfoByGridIndex(gridIndex);
 	if (cellInfo == nullptr)
 	{
 		return FVector::ZeroVector;
@@ -472,33 +486,35 @@ int32 UDeliveryBot_GridSubsystem::GetCellArrayIndexByGridIndex(const FIntPoint& 
 TArray<FIntPoint> UDeliveryBot_GridSubsystem::GetNeighborGridIndexes(const FIntPoint& gridIndex) const
 {
 	TArray<FIntPoint> neighborGridIndexes;
-	static const TArray<FIntPoint> directions
+	static const TArray<FIntPoint> directions = []()
 	{
-		FIntPoint{ 1, 0 },
-		FIntPoint{ -1, 0 },
-		FIntPoint{ 0, 1 },
-		FIntPoint{ 0, -1 },
-		FIntPoint{ 1, 1 },
-		FIntPoint{ 1, -1 },
-		FIntPoint{ -1, 1 },
-		FIntPoint{ -1, -1 }
-	};
+		TArray<FIntPoint> result;
+		result.Reserve(8);
+		result.Add(FIntPoint(1, 0));
+		result.Add(FIntPoint(-1, 0));
+		result.Add(FIntPoint(0, 1));
+		result.Add(FIntPoint(0, -1));
+		result.Add(FIntPoint(1, 1));
+		result.Add(FIntPoint(1, -1));
+		result.Add(FIntPoint(-1, 1));
+		result.Add(FIntPoint(-1, -1));
+		return result;
+	}();
 
 	for (const FIntPoint& direction : directions)
 	{
-		const FIntPoint neighborGridIndex
-		{
+		const FIntPoint neighborGridIndex = FIntPoint(
 			gridIndex.X + direction.X,
 			gridIndex.Y + direction.Y
-		};
+		);
 
 		if (!IsWalkableGridIndex(neighborGridIndex))
 			continue;
-		const bool bDiagonal{ direction.X != 0 && direction.Y != 0 };
+		const bool bDiagonal = direction.X != 0 && direction.Y != 0;
 		if (bDiagonal)
 		{
-			const FIntPoint sideGridIndexX{gridIndex.X + direction.X, gridIndex.Y};
-			const FIntPoint sideGridIndexY{	gridIndex.X,gridIndex.Y + direction.Y};
+			const FIntPoint sideGridIndexX = FIntPoint(gridIndex.X + direction.X, gridIndex.Y);
+			const FIntPoint sideGridIndexY = FIntPoint(gridIndex.X, gridIndex.Y + direction.Y);
 
 			// 대각선 이동 시 양쪽 직선 셀이 막혀 있으면 모서리를 뚫고 지나가는 경로가 생기므로 제외
 			if (!IsWalkableGridIndex(sideGridIndexX) || !IsWalkableGridIndex(sideGridIndexY))
@@ -520,7 +536,7 @@ bool UDeliveryBot_GridSubsystem::IsValidGridIndex(const FIntPoint& gridIndex) co
 
 bool UDeliveryBot_GridSubsystem::IsWalkableGridIndex(const FIntPoint& gridIndex) const
 {
-	const FDeliveryBotGridCellInfo* cellInfo{ FindCellInfoByGridIndex(gridIndex) };
+	const FDeliveryBotGridCellInfo* cellInfo = FindCellInfoByGridIndex(gridIndex);
 	if (cellInfo == nullptr)
 		return false;
 
@@ -532,7 +548,7 @@ const FDeliveryBotGridCellInfo* UDeliveryBot_GridSubsystem::FindCellInfoByGridIn
 	if (!IsValidGridIndex(gridIndex))
 		return nullptr;
 
-	const int32 cellArrayIndex{ GetCellArrayIndexByGridIndex(gridIndex) };
+	const int32 cellArrayIndex = GetCellArrayIndexByGridIndex(gridIndex);
 	if (!GridCells.IsValidIndex(cellArrayIndex))
 		return nullptr;
 

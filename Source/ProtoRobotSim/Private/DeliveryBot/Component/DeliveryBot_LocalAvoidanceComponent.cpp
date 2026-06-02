@@ -22,17 +22,17 @@ bool UDeliveryBot_LocalAvoidanceComponent::HasObstacleAhead(
 	const FVector& moveDirection,
 	FHitResult& outHitResult) const
 {
-	outHitResult = FHitResult{};
+	outHitResult = FHitResult();
 
-	const UWorld* world{ GetWorld() };
+	const UWorld* world = GetWorld();
 	if (!IsValid(world))
 		return false;
 
-	const AActor* owner{ GetOwner() };
+	const AActor* owner = GetOwner();
 	if (!IsValid(owner))
 		return false;
 
-	FVector forwardVector{ moveDirection };
+	FVector forwardVector = moveDirection;
 	forwardVector.Z = 0.f;
 
 	if (forwardVector.IsNearlyZero())
@@ -40,11 +40,11 @@ bool UDeliveryBot_LocalAvoidanceComponent::HasObstacleAhead(
 
 	forwardVector.Normalize();
 
-	const FVector ownerLocation{ owner->GetActorLocation() };
-	const FVector traceStart{ ownerLocation + FVector::UpVector * TraceHeightOffset };
-	const FVector traceEnd{ traceStart + forwardVector * ObstacleTraceDistance };
+	const FVector ownerLocation = owner->GetActorLocation();
+	const FVector traceStart = ownerLocation + FVector::UpVector * TraceHeightOffset;
+	const FVector traceEnd = traceStart + forwardVector * ObstacleTraceDistance;
 	
-	const FCollisionShape obstacleShape{ FCollisionShape::MakeBox(ObstacleBoxHalfExtent) };
+	const FCollisionShape obstacleShape = FCollisionShape::MakeBox(ObstacleBoxHalfExtent);
 
 	FCollisionQueryParams queryParams;
 	queryParams.AddIgnoredActor(owner);
@@ -54,13 +54,13 @@ bool UDeliveryBot_LocalAvoidanceComponent::HasObstacleAhead(
 	objectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
 	objectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
 
-	FRotator traceRotation{ forwardVector.Rotation() };
+	FRotator traceRotation = forwardVector.Rotation();
 	traceRotation.Pitch = 0.f;
 	traceRotation.Roll = 0.f;
 
 	TArray<FHitResult> hitResults;
 
-	const bool bHit{ world->SweepMultiByObjectType(
+	const bool bHit = world->SweepMultiByObjectType(
 		hitResults,
 		traceStart,
 		traceEnd,
@@ -68,15 +68,15 @@ bool UDeliveryBot_LocalAvoidanceComponent::HasObstacleAhead(
 		objectQueryParams,
 		obstacleShape,
 		queryParams
-	) };
+	);
 
-	bool bFoundObstacle{ false };
+	bool bFoundObstacle = false;
 
 	if (bHit)
 	{
 		for (const FHitResult& hitResult : hitResults)
 		{
-			const AActor* hitActor{ hitResult.GetActor() };
+			const AActor* hitActor = hitResult.GetActor();
 			if (!IsValid(hitActor))
 				continue;
 
@@ -91,7 +91,7 @@ bool UDeliveryBot_LocalAvoidanceComponent::HasObstacleAhead(
 
 	if (bDrawDebugTrace)
 	{
-		const FColor debugColor{ bFoundObstacle ? FColor::Red : FColor::Green };
+		const FColor debugColor = bFoundObstacle ? FColor::Red : FColor::Green;
 
 		DrawDebugLine(
 			world,
@@ -126,8 +126,8 @@ bool UDeliveryBot_LocalAvoidanceComponent::IsIgnoredActor(const AActor* actor) c
 	if (!IsValid(actor))
 		return true;
 
-	static const FName ignoreAboutGridTag{ TEXT("IgnoreAboutGrid") };
-	static const FName staticMapObjectTag{ TEXT("StaticMapObject") };
+	static const FName ignoreAboutGridTag = TEXT("IgnoreAboutGrid");
+	static const FName staticMapObjectTag = TEXT("StaticMapObject");
 
 
 	return actor->ActorHasTag(ignoreAboutGridTag)

@@ -56,7 +56,7 @@ private:
 	{
 		while (itemIndex > 0)
 		{
-			const int32 parentIndex{(itemIndex - 1) / 2};
+			const int32 parentIndex = (itemIndex - 1) / 2;
 			if (!HasHigherPriority(Items[itemIndex], Items[parentIndex]))
 				break;
 			
@@ -69,16 +69,14 @@ private:
 	{
 		while (true)
 		{
-			const int32 leftIndex{ itemIndex * 2 + 1 };
-			const int32 rightIndex{ itemIndex * 2 + 2 };
-			int32 bestIndex{ itemIndex };
+			const int32 leftIndex = itemIndex * 2 + 1;
+			const int32 rightIndex = itemIndex * 2 + 2;
+			int32 bestIndex = itemIndex;
 
-			if (Items.IsValidIndex(leftIndex) 
-				&& HasHigherPriority(Items[leftIndex], Items[bestIndex]))
+			if (Items.IsValidIndex(leftIndex) && HasHigherPriority(Items[leftIndex], Items[bestIndex]))
 				bestIndex = leftIndex;
 
-			if (Items.IsValidIndex(rightIndex) 
-				&& HasHigherPriority(Items[rightIndex], Items[bestIndex]))
+			if (Items.IsValidIndex(rightIndex) && HasHigherPriority(Items[rightIndex], Items[bestIndex]))
 				bestIndex = rightIndex;
 
 			if (bestIndex == itemIndex)

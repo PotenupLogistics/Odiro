@@ -37,8 +37,8 @@ void ADeliveryBot_SimpleMesh::Tick(float DeltaTime)
 
 void ADeliveryBot_SimpleMesh::RequestGlobalPathByPathPoints()
 {
-	FVector startLocation{ FVector::ZeroVector };
-	FVector goalLocation{ FVector::ZeroVector };
+	FVector startLocation = FVector::ZeroVector;
+	FVector goalLocation = FVector::ZeroVector;
 
 	if (!GetPathPointLocations(startLocation, goalLocation))
 	{
@@ -49,12 +49,12 @@ void ADeliveryBot_SimpleMesh::RequestGlobalPathByPathPoints()
 	CachedGoalLocation = goalLocation;
 	bHasCachedGoalLocation = true;
 
-	const float bodyHalfHeight{ 25.f };
-	const FVector botStartLocation{
+	const float bodyHalfHeight = 25.f;
+	const FVector botStartLocation = FVector(
 		startLocation.X,
 		startLocation.Y,
 		startLocation.Z + bodyHalfHeight
-	};
+	);
 
 	SetActorLocation(botStartLocation);
 
@@ -63,7 +63,7 @@ void ADeliveryBot_SimpleMesh::RequestGlobalPathByPathPoints()
 
 bool ADeliveryBot_SimpleMesh::GetPathPointLocations(FVector& outStartLocation, FVector& outGoalLocation) const
 {
-	const UWorld* world{ GetWorld() };
+	const UWorld* world = GetWorld();
 	if (!IsValid(world))
 	{
 		return false;
@@ -72,12 +72,12 @@ bool ADeliveryBot_SimpleMesh::GetPathPointLocations(FVector& outStartLocation, F
 	TArray<AActor*> pathPointActors;
 	UGameplayStatics::GetAllActorsOfClass(world, ADeliveryBot_PathPoint::StaticClass(), pathPointActors);
 
-	bool bFoundStart{ false };
-	bool bFoundGoal{ false };
+	bool bFoundStart = false;
+	bool bFoundGoal = false;
 
 	for (AActor* pathPointActor : pathPointActors)
 	{
-		ADeliveryBot_PathPoint* deliveryBotPathPointActor{ Cast<ADeliveryBot_PathPoint>(pathPointActor) };
+		ADeliveryBot_PathPoint* deliveryBotPathPointActor = Cast<ADeliveryBot_PathPoint>(pathPointActor);
 		if (!IsValid(deliveryBotPathPointActor))
 		{
 			continue;
@@ -109,7 +109,7 @@ bool ADeliveryBot_SimpleMesh::BuildGlobalPathAndStartMove(const FVector& startLo
 	if (!IsValid(MovementComponent))
 		return false;
 
-	const bool bSuccess{ GlobalPathComponent->BuildPathByAStar(startLocation, goalLocation) };
+	const bool bSuccess = GlobalPathComponent->BuildPathByAStar(startLocation, goalLocation);
 	if (!bSuccess)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("DeliveryBot A* path build failed."));
@@ -132,7 +132,7 @@ void ADeliveryBot_SimpleMesh::RequestGlobalPathFromCurrentLocation()
 	if (!bHasCachedGoalLocation)
 		return;
 
-	const FVector currentLocation{ GetActorLocation() };
+	const FVector currentLocation = GetActorLocation();
 
 	BuildGlobalPathAndStartMove(currentLocation, CachedGoalLocation);
 }

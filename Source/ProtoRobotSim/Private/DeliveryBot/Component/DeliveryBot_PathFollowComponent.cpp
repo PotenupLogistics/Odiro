@@ -73,9 +73,9 @@ FDeliveryBotMoveCommandInfo UDeliveryBot_PathFollowComponent::BuildMoveCommand(f
 		return moveCommandInfo;
 	}
 
-	const FVector lookAheadLocation{ GetLookAheadLocation() };
-	const float steering{ GetSteeringToLocation(lookAheadLocation) };
-	const float steeringAlpha{ FMath::Clamp(FMath::Abs(steering), 0.f, 1.f) };
+	const FVector lookAheadLocation = GetLookAheadLocation();
+	const float steering = GetSteeringToLocation(lookAheadLocation);
+	const float steeringAlpha = FMath::Clamp(FMath::Abs(steering), 0.f, 1.f);
 
 	moveCommandInfo.TargetSpeedKmh = FMath::Lerp(
 		PathFollowConfigInfo.TargetSpeedKmh,
@@ -95,19 +95,17 @@ FDeliveryBotMoveCommandInfo UDeliveryBot_PathFollowComponent::BuildMoveCommand(f
 
 void UDeliveryBot_PathFollowComponent::UpdateCurrentPathIndex()
 {
-	const AActor* owner{ GetOwner() };
+	const AActor* owner = GetOwner();
 
 	if (!IsValid(owner) || PathPoints.Num() == 0)
 	{
 		return;
 	}
 
-	const FVector ownerLocation{ owner->GetActorLocation() };
-	const FVector goalLocation{ PathPoints.Last() };
+	const FVector ownerLocation = owner->GetActorLocation();
+	const FVector goalLocation = PathPoints.Last();
 
-	const float goalAcceptanceDistanceCm{
-		PathFollowConfigInfo.GoalAcceptanceDistanceM * 100.f
-	};
+	const float goalAcceptanceDistanceCm = PathFollowConfigInfo.GoalAcceptanceDistanceM * 100.f;
 
 	if (GetDistance2D(ownerLocation, goalLocation) <= goalAcceptanceDistanceCm)
 	{
@@ -116,15 +114,11 @@ void UDeliveryBot_PathFollowComponent::UpdateCurrentPathIndex()
 		return;
 	}
 
-	const float pathPointAcceptanceDistanceCm{
-		PathFollowConfigInfo.PathPointAcceptanceDistanceM * 100.f
-	};
+	const float pathPointAcceptanceDistanceCm = PathFollowConfigInfo.PathPointAcceptanceDistanceM * 100.f;
 
 	while (PathPoints.IsValidIndex(CurrentPathIndex))
 	{
-		const float distanceToPathPointCm{
-			GetDistance2D(ownerLocation, PathPoints[CurrentPathIndex])
-		};
+		const float distanceToPathPointCm = GetDistance2D(ownerLocation, PathPoints[CurrentPathIndex]);
 
 		if (distanceToPathPointCm > pathPointAcceptanceDistanceCm)
 		{
@@ -139,7 +133,7 @@ void UDeliveryBot_PathFollowComponent::UpdateCurrentPathIndex()
 
 FVector UDeliveryBot_PathFollowComponent::GetLookAheadLocation() const
 {
-	const AActor* owner{ GetOwner() };
+	const AActor* owner = GetOwner();
 
 	if (!IsValid(owner) || !HasPath())
 	{
@@ -151,41 +145,39 @@ FVector UDeliveryBot_PathFollowComponent::GetLookAheadLocation() const
 		return PathPoints[0];
 	}
 
-	const FVector ownerLocation{ owner->GetActorLocation() };
-	const float lookAheadDistanceCm{ PathFollowConfigInfo.LookAheadDistanceM * 100.f };
+	const FVector ownerLocation = owner->GetActorLocation();
+	const float lookAheadDistanceCm = PathFollowConfigInfo.LookAheadDistanceM * 100.f;
 
-	int32 closestSegmentIndex{ FMath::Clamp(CurrentPathIndex - 1, 0, PathPoints.Num() - 2) };
-	double closestAlpha{ 0.0 };
-	double closestDistanceSquared{ TNumericLimits<double>::Max() };
+	int32 closestSegmentIndex = FMath::Clamp(CurrentPathIndex - 1, 0, PathPoints.Num() - 2);
+	double closestAlpha = 0.0;
+	double closestDistanceSquared = TNumericLimits<double>::Max();
 
-	for (int32 pathIndex{ closestSegmentIndex }; pathIndex < PathPoints.Num() - 1; ++pathIndex)
+	for (int32 pathIndex = closestSegmentIndex; pathIndex < PathPoints.Num() - 1; ++pathIndex)
 	{
-		const FVector segmentStart{ PathPoints[pathIndex] };
-		const FVector segmentEnd{ PathPoints[pathIndex + 1] };
+		const FVector segmentStart = PathPoints[pathIndex];
+		const FVector segmentEnd = PathPoints[pathIndex + 1];
 
-		FVector segment{ segmentEnd - segmentStart };
+		FVector segment = segmentEnd - segmentStart;
 		segment.Z = 0.f;
 
-		FVector ownerToStart{ ownerLocation - segmentStart };
+		FVector ownerToStart = ownerLocation - segmentStart;
 		ownerToStart.Z = 0.f;
 
-		const double segmentLengthSquared{ segment.SizeSquared2D() };
+		const double segmentLengthSquared = segment.SizeSquared2D();
 
 		if (segmentLengthSquared <= KINDA_SMALL_NUMBER)
 		{
 			continue;
 		}
 
-		const double alpha{
-			FMath::Clamp(
-				FVector::DotProduct(ownerToStart, segment) / segmentLengthSquared,
-				0.0,
-				1.0
-			)
-		};
+		const double alpha = FMath::Clamp(
+			FVector::DotProduct(ownerToStart, segment) / segmentLengthSquared,
+			0.0,
+			1.0
+		);
 
-		const FVector closestLocation{ FMath::Lerp(segmentStart, segmentEnd, alpha) };
-		const double distanceSquared{ FVector::DistSquared2D(ownerLocation, closestLocation) };
+		const FVector closestLocation = FMath::Lerp(segmentStart, segmentEnd, alpha);
+		const double distanceSquared = FVector::DistSquared2D(ownerLocation, closestLocation);
 
 		if (distanceSquared < closestDistanceSquared)
 		{
@@ -195,20 +187,22 @@ FVector UDeliveryBot_PathFollowComponent::GetLookAheadLocation() const
 		}
 	}
 
-	const FVector currentLocationOnPath{
-		FMath::Lerp(PathPoints[closestSegmentIndex], PathPoints[closestSegmentIndex + 1], closestAlpha)
-	};
+	const FVector currentLocationOnPath = FMath::Lerp(
+		PathPoints[closestSegmentIndex],
+		PathPoints[closestSegmentIndex + 1],
+		closestAlpha
+	);
 
-	float remainDistanceCm{ lookAheadDistanceCm };
+	float remainDistanceCm = lookAheadDistanceCm;
 
-	for (int32 pathIndex{ closestSegmentIndex }; pathIndex < PathPoints.Num() - 1; ++pathIndex)
+	for (int32 pathIndex = closestSegmentIndex; pathIndex < PathPoints.Num() - 1; ++pathIndex)
 	{
-		const FVector segmentStart{
-			pathIndex == closestSegmentIndex ? currentLocationOnPath : PathPoints[pathIndex]
-		};
+		const FVector segmentStart = pathIndex == closestSegmentIndex
+			? currentLocationOnPath
+			: PathPoints[pathIndex];
 
-		const FVector segmentEnd{ PathPoints[pathIndex + 1] };
-		const float segmentDistanceCm{ static_cast<float>(FVector::Dist2D(segmentStart, segmentEnd)) };
+		const FVector segmentEnd = PathPoints[pathIndex + 1];
+		const float segmentDistanceCm = static_cast<float>(FVector::Dist2D(segmentStart, segmentEnd));
 
 		if (segmentDistanceCm <= KINDA_SMALL_NUMBER)
 		{
@@ -217,7 +211,7 @@ FVector UDeliveryBot_PathFollowComponent::GetLookAheadLocation() const
 
 		if (remainDistanceCm <= segmentDistanceCm)
 		{
-			const float alpha{ remainDistanceCm / segmentDistanceCm };
+			const float alpha = remainDistanceCm / segmentDistanceCm;
 			return FMath::Lerp(segmentStart, segmentEnd, alpha);
 		}
 
@@ -229,14 +223,14 @@ FVector UDeliveryBot_PathFollowComponent::GetLookAheadLocation() const
 
 float UDeliveryBot_PathFollowComponent::GetSteeringToLocation(const FVector& targetLocation) const
 {
-	const AActor* owner{ GetOwner() };
+	const AActor* owner = GetOwner();
 
 	if (!IsValid(owner))
 	{
 		return 0.f;
 	}
 
-	FVector forward{ owner->GetActorForwardVector() };
+	FVector forward = owner->GetActorForwardVector();
 	forward.Z = 0.f;
 
 	if (!forward.Normalize())
@@ -244,7 +238,7 @@ float UDeliveryBot_PathFollowComponent::GetSteeringToLocation(const FVector& tar
 		return 0.f;
 	}
 
-	FVector targetDirection{ targetLocation - owner->GetActorLocation() };
+	FVector targetDirection = targetLocation - owner->GetActorLocation();
 	targetDirection.Z = 0.f;
 
 	if (!targetDirection.Normalize())
@@ -252,13 +246,11 @@ float UDeliveryBot_PathFollowComponent::GetSteeringToLocation(const FVector& tar
 		return 0.f;
 	}
 
-	const double crossZ{ FVector::CrossProduct(forward, targetDirection).Z };
-	const double dot{ FVector::DotProduct(forward, targetDirection) };
-	const double angleRad{ FMath::Atan2(crossZ, dot) };
+	const double crossZ = FVector::CrossProduct(forward, targetDirection).Z;
+	const double dot = FVector::DotProduct(forward, targetDirection);
+	const double angleRad = FMath::Atan2(crossZ, dot);
 
-	const double steering{
-		(angleRad / FMath::DegreesToRadians(45.0)) * PathFollowConfigInfo.SteeringSensitivity
-	};
+	const double steering = (angleRad / FMath::DegreesToRadians(45.0)) * PathFollowConfigInfo.SteeringSensitivity;
 
 	return static_cast<float>(FMath::Clamp(steering, -1.0, 1.0));
 }
@@ -275,20 +267,20 @@ void UDeliveryBot_PathFollowComponent::DrawDebugPathFollow(const FVector& lookAh
 		return;
 	}
 
-	const UWorld* world{ GetWorld() };
-	const AActor* owner{ GetOwner() };
+	const UWorld* world = GetWorld();
+	const AActor* owner = GetOwner();
 
 	if (world == nullptr || !IsValid(owner))
 	{
 		return;
 	}
 
-	for (int32 pathIndex{ 0 }; pathIndex < PathPoints.Num() - 1; ++pathIndex)
+	for (int32 pathIndex = 0; pathIndex < PathPoints.Num() - 1; ++pathIndex)
 	{
 		DrawDebugLine(
 			world,
-			PathPoints[pathIndex] + FVector{ 0.f, 0.f, 20.f },
-			PathPoints[pathIndex + 1] + FVector{ 0.f, 0.f, 20.f },
+			PathPoints[pathIndex] + FVector(0.f, 0.f, 20.f),
+			PathPoints[pathIndex + 1] + FVector(0.f, 0.f, 20.f),
 			FColor::Blue,
 			false,
 			0.f,
@@ -301,7 +293,7 @@ void UDeliveryBot_PathFollowComponent::DrawDebugPathFollow(const FVector& lookAh
 	{
 		DrawDebugSphere(
 			world,
-			PathPoints[CurrentPathIndex] + FVector{ 0.f, 0.f, 35.f },
+			PathPoints[CurrentPathIndex] + FVector(0.f, 0.f, 35.f),
 			18.f,
 			12,
 			FColor::Orange,
@@ -312,7 +304,7 @@ void UDeliveryBot_PathFollowComponent::DrawDebugPathFollow(const FVector& lookAh
 
 	DrawDebugSphere(
 		world,
-		lookAheadLocation + FVector{ 0.f, 0.f, 45.f },
+		lookAheadLocation + FVector(0.f, 0.f, 45.f),
 		22.f,
 		12,
 		FColor::Yellow,
@@ -322,8 +314,8 @@ void UDeliveryBot_PathFollowComponent::DrawDebugPathFollow(const FVector& lookAh
 
 	DrawDebugLine(
 		world,
-		owner->GetActorLocation() + FVector{ 0.f, 0.f, 35.f },
-		lookAheadLocation + FVector{ 0.f, 0.f, 45.f },
+		owner->GetActorLocation() + FVector(0.f, 0.f, 35.f),
+		lookAheadLocation + FVector(0.f, 0.f, 45.f),
 		FColor::Cyan,
 		false,
 		0.f,

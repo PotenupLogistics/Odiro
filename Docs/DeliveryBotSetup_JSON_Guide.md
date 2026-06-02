@@ -12,8 +12,8 @@ EpisodeSetup JSON이 담당하는 값:
 | --- | --- |
 | Episode 실행 정보 | `run.base_seed`, `run.iteration_index`, `run.time_limit_s` |
 | 로봇 액터 식별 | `actors.robot.instance_id`, `actors.robot.asset_id` |
-| 로봇 배치 | `actors.robot.spawn_only`, `actors.robot.transform` |
-| 로봇 목적지 | `actors.robot.route.goal_m`, `actors.robot.route.auto_start`, `actors.robot.goal_m` fallback |
+| 로봇 배치 | `actors.robot.spawn_only`, `actors.robot.xy_m`, `actors.robot.yaw_deg` |
+| 로봇 목적지 | `actors.robot.route.goal_xy_m`, `actors.robot.route.auto_start` |
 
 DeliveryBotSetup JSON이 담당하는 값:
 
@@ -133,6 +133,6 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
 
 ## 구현 메모
 
-`UEpisodeCompiler::CompileRobotSpawn()`은 로봇 배치와 목적지를 EpisodeSetup에서 읽는다. 시작 위치는 `actors.robot.transform`, 목적지는 `actors.robot.route.goal_m` 또는 `actors.robot.goal_m` fallback을 사용한다.
+`UEpisodeCompiler::CompileRobotSpawn()`은 로봇 배치와 목적지를 EpisodeSetup에서 읽는다. 시작 위치는 `actors.robot.xy_m`/`actors.robot.yaw_deg`, 목적지는 `actors.robot.route.goal_xy_m`을 사용한다.
 
 DeliveryBot 튜닝값은 `drive`, `path_follow`, `lidar`만 `FDeliveryBotSetupInfo`로 전달한다. `LocationSetupInfo`는 DeliveryBotSetup JSON에서 직접 열지 않고 EpisodeSetup의 배치/route 결과로 채운다.

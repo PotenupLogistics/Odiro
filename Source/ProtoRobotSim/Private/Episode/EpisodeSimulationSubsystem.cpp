@@ -1,5 +1,3 @@
-
-
 #include "Episode/EpisodeSimulationSubsystem.h"
 #include "Episode/Actors/EpisodeGroundRegion.h"
 #include "Episode/Actors/EpisodePedestrian.h"
@@ -7,7 +5,6 @@
 #include "Episode/Actors/EpisodeStaticObstacle.h"
 #include "Episode/Components/EpisodePathFollowerComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
-#include "Episode/EpisodeCompiler.h"
 #include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
 #include "Shared/Struct/DeliveryBotSetupInfo.h"
 #include "Kismet/GameplayStatics.h"
@@ -15,37 +12,10 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogEpisodeSimulation, Log, All);
 
-namespace
-{
-	const TCHAR* ToSimulationCompileSeverityString(EEpisodeCompileDiagnosticSeverity Severity)
-	{
-		switch (Severity)
-		{
-		case EEpisodeCompileDiagnosticSeverity::Info:
-			return TEXT("정보");
-		case EEpisodeCompileDiagnosticSeverity::Warning:
-			return TEXT("경고");
-		case EEpisodeCompileDiagnosticSeverity::Error:
-			return TEXT("오류");
-		default:
-			return TEXT("알 수 없음");
-		}
-	}
-
-	void LogCompileDiagnostics(const FEpisodeCompileResult& CompileResult)
-	{
-		for (const FEpisodeCompileDiagnostic& Diagnostic : CompileResult.Diagnostics)
-		{
-			UE_LOG(LogEpisodeSimulation, Log, TEXT("에피소드 컴파일 진단 %s [%s]: %s"), ToSimulationCompileSeverityString(Diagnostic.Severity), *Diagnostic.Code, *Diagnostic.Message);
-		}
-	}
-}
-
 UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 {
 	StaticObstacleClass = AEpisodeStaticObstacle::StaticClass();
 
-	// DeliveryBot branch uses the Chaos-based robot actor as the episode robot runtime.
 	static ConstructorHelpers::FClassFinder<ADeliveryBot_ChaosActor> RobotBlueprintClass(
 		TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBot_ChaosMesh"));
 
@@ -57,7 +27,6 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 	{
 		RobotActorClass = ADeliveryBot_ChaosActor::StaticClass();
 	}
-
 	static ConstructorHelpers::FClassFinder<AActor> GoalPointBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_GoalPoint"));
 	if (GoalPointBlueprintClass.Succeeded())
 	{
@@ -68,7 +37,6 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 	{
 		StartPointClass = StartPointBlueprintClass.Class;
 	}
-
 	static ConstructorHelpers::FClassFinder<AEpisodePedestrian> PedestrianBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_EpisodePedestrian"));
 	if (PedestrianBlueprintClass.Succeeded())
 	{
@@ -113,23 +81,24 @@ void UEpisodeSimulationSubsystem::ClearEpisode()
 	}
 }
 
-bool UEpisodeSimulationSubsystem::SpawnEpisodeWorld(const FEpisodeWorldSpec& WorldSpec)
+bool UEpisodeSimulationSubsystem::SetupEpisodeWorld(const FEpisodeSimulationSetupSpec& SetupSpec)
 {
 	ClearEpisode();
 
 	UE_LOG(
 		LogEpisodeSimulation,
 		Log,
-		TEXT("Episode world spawn started | Episode: %s, GroundRegions: %d, Paths: %d, Placeables: %d, DynamicActors: %d"),
-		*WorldSpec.RunConfig.TemplateId,
-		WorldSpec.GroundRegions.Num(),
-		WorldSpec.Paths.Num(),
-		WorldSpec.Placeables.Num(),
-		WorldSpec.DynamicActors.Num());
+		TEXT("Episode world setup started | Episode: %s, GroundRegions: %d, Paths: %d, Placeables: %d, DynamicActors: %d, Events: %d"),
+		*SetupSpec.EpisodeId,
+		SetupSpec.GroundRegions.Num(),
+		SetupSpec.Paths.Num(),
+		SetupSpec.Placeables.Num(),
+		SetupSpec.DynamicActors.Num(),
+		SetupSpec.Events.Num());
 
 	bool bAllSpawned{ true };
 
-	for (const FEpisodeGroundRegionSpec& RegionSpec : WorldSpec.GroundRegions)
+	for (const FEpisodeGroundRegionSpec& RegionSpec : SetupSpec.GroundRegions)
 	{
 		if (!SpawnGroundRegion(RegionSpec))
 		{
@@ -138,7 +107,7 @@ bool UEpisodeSimulationSubsystem::SpawnEpisodeWorld(const FEpisodeWorldSpec& Wor
 		}
 	}
 
-	for (const FEpisodePathSpec& PathSpec : WorldSpec.Paths)
+	for (const FEpisodePathSpec& PathSpec : SetupSpec.Paths)
 	{
 		if (PathSpec.PathType != EEpisodePathType::Spline)
 		{
@@ -152,7 +121,7 @@ bool UEpisodeSimulationSubsystem::SpawnEpisodeWorld(const FEpisodeWorldSpec& Wor
 		}
 	}
 
-	for (const FEpisodePlaceableInstanceSpec& PlaceableSpec : WorldSpec.Placeables)
+	for (const FEpisodePlaceableInstanceSpec& PlaceableSpec : SetupSpec.Placeables)
 	{
 		if (!SpawnPlaceable(PlaceableSpec))
 		{
@@ -161,7 +130,7 @@ bool UEpisodeSimulationSubsystem::SpawnEpisodeWorld(const FEpisodeWorldSpec& Wor
 		}
 	}
 
-	for (const FEpisodeDynamicActorSpec& DynamicActorSpec : WorldSpec.DynamicActors)
+	for (const FEpisodeDynamicActorSpec& DynamicActorSpec : SetupSpec.DynamicActors)
 	{
 		if (!SpawnDynamicActor(DynamicActorSpec))
 		{
@@ -173,8 +142,8 @@ bool UEpisodeSimulationSubsystem::SpawnEpisodeWorld(const FEpisodeWorldSpec& Wor
 	UE_LOG(
 		LogEpisodeSimulation,
 		Log,
-		TEXT("Episode world spawn completed | Episode: %s, Success: %s, RuntimeActors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
-		*WorldSpec.RunConfig.TemplateId,
+		TEXT("Episode world setup completed | Episode: %s, Success: %s, RuntimeActors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
+		*SetupSpec.EpisodeId,
 		bAllSpawned ? TEXT("true") : TEXT("false"),
 		RuntimeActors.Num(),
 		RuntimeActorsById.Num(),
@@ -182,32 +151,6 @@ bool UEpisodeSimulationSubsystem::SpawnEpisodeWorld(const FEpisodeWorldSpec& Wor
 		RuntimePaths.Num());
 
 	return bAllSpawned;
-}
-
-bool UEpisodeSimulationSubsystem::SpawnEpisodeWorldFromJsonFile(const FString& JsonFilePath)
-{
-	if (JsonFilePath.IsEmpty())
-	{
-		UE_LOG(LogEpisodeSimulation, Warning, TEXT("에피소드 JSON 파일 경로가 비어 있음."));
-		return false;
-	}
-
-	UEpisodeCompiler* Compiler = NewObject<UEpisodeCompiler>(this);
-	if (!Compiler)
-	{
-		UE_LOG(LogEpisodeSimulation, Warning, TEXT("EpisodeCompiler 생성 실패."));
-		return false;
-	}
-
-	const FEpisodeCompileResult CompileResult = Compiler->CompileEpisodeWorldSpecFromJsonFile(JsonFilePath);
-	LogCompileDiagnostics(CompileResult);
-	if (!CompileResult.bSuccess)
-	{
-		UE_LOG(LogEpisodeSimulation, Warning, TEXT("에피소드 JSON 컴파일 실패: %s"), *JsonFilePath);
-		return false;
-	}
-
-	return SpawnEpisodeWorld(CompileResult.WorldSpec);
 }
 
 AActor* UEpisodeSimulationSubsystem::FindRuntimeActor(const FString& InstanceId) const
@@ -220,11 +163,11 @@ AActor* UEpisodeSimulationSubsystem::FindRuntimeActor(const FString& InstanceId)
 	return nullptr;
 }
 
-FEpisodeRuntimeContext UEpisodeSimulationSubsystem::BuildRuntimeContext(const FEpisodeWorldSpec& WorldSpec) const
+FEpisodeRuntimeContext UEpisodeSimulationSubsystem::BuildRuntimeContext(const FEpisodeSimulationSetupSpec& SetupSpec) const
 {
 	FEpisodeRuntimeContext RuntimeContext;
-	RuntimeContext.EpisodeId = WorldSpec.RunConfig.TemplateId;
-	RuntimeContext.SpecHash = WorldSpec.SpecHash;
+	RuntimeContext.EpisodeId = SetupSpec.EpisodeId;
+	RuntimeContext.SpecHash = SetupSpec.SpecHash;
 
 	for (AActor* Actor : RuntimeActors)
 	{
@@ -242,7 +185,7 @@ FEpisodeRuntimeContext UEpisodeSimulationSubsystem::BuildRuntimeContext(const FE
 		}
 	}
 
-	for (const FEpisodePlaceableInstanceSpec& PlaceableSpec : WorldSpec.Placeables)
+	for (const FEpisodePlaceableInstanceSpec& PlaceableSpec : SetupSpec.Placeables)
 	{
 		AActor* RuntimeActor = FindRuntimeActor(PlaceableSpec.InstanceId);
 		if (!RuntimeActor)
@@ -265,7 +208,7 @@ FEpisodeRuntimeContext UEpisodeSimulationSubsystem::BuildRuntimeContext(const FE
 		}
 	}
 
-	for (const FEpisodeDynamicActorSpec& DynamicActorSpec : WorldSpec.DynamicActors)
+	for (const FEpisodeDynamicActorSpec& DynamicActorSpec : SetupSpec.DynamicActors)
 	{
 		AActor* RuntimeActor = FindRuntimeActor(DynamicActorSpec.InstanceId);
 		if (!RuntimeActor)

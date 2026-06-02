@@ -163,6 +163,37 @@ struct PROTOROBOTSIM_API FEpisodeEventSpec
 	TMap<FString, FEpisodeParamValue> Properties;
 };
 
+// Runner가 SimulationSubsystem에게 에피소드 Setup을 지시하기 위해 필요한 명세.
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodeSimulationSetupSpec
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString EpisodeId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString SpecHash;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FEpisodeSeedLedger Seeds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<FEpisodeGroundRegionSpec> GroundRegions;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<FEpisodePlaceableInstanceSpec> Placeables;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<FEpisodeDynamicActorSpec> DynamicActors;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<FEpisodePathSpec> Paths;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<FEpisodeEventSpec> Events;
+};
+
 // Runner가 읽어서 월드에 actor를 생성할 수 있는 최종 에피소드 명세.
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FEpisodeWorldSpec

@@ -35,6 +35,20 @@ namespace
 
 		return TEXT("Unknown");
 	}
+
+	FEpisodeSimulationSetupSpec MakeSimulationSetupSpec(const FEpisodeWorldSpec& WorldSpec)
+	{
+		FEpisodeSimulationSetupSpec SetupSpec;
+		SetupSpec.EpisodeId = WorldSpec.RunConfig.TemplateId;
+		SetupSpec.SpecHash = WorldSpec.SpecHash;
+		SetupSpec.Seeds = WorldSpec.Seeds;
+		SetupSpec.GroundRegions = WorldSpec.GroundRegions;
+		SetupSpec.Placeables = WorldSpec.Placeables;
+		SetupSpec.DynamicActors = WorldSpec.DynamicActors;
+		SetupSpec.Paths = WorldSpec.Paths;
+		SetupSpec.Events = WorldSpec.Events;
+		return SetupSpec;
+	}
 }
 
 bool UEpisodeRunnerSubsystem::StartEpisodeFromJsonFile(const FString& JsonFilePath)
@@ -219,8 +233,10 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 		return;
 	}
 
+	const FEpisodeSimulationSetupSpec SimulationSetupSpec = MakeSimulationSetupSpec(CompileResult.WorldSpec);
+
 	SimulationSubsystem->ClearEpisode();
-	const bool bSetupSucceeded = SimulationSubsystem->SpawnEpisodeWorld(CompileResult.WorldSpec);
+	const bool bSetupSucceeded = SimulationSubsystem->SetupEpisodeWorld(SimulationSetupSpec);
 	CurrentRecord.bSetupSucceeded = bSetupSucceeded;
 
 	UE_LOG(
@@ -242,7 +258,7 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 		return;
 	}
 
-	const FEpisodeRuntimeContext RuntimeContext = SimulationSubsystem->BuildRuntimeContext(CompileResult.WorldSpec);
+	const FEpisodeRuntimeContext RuntimeContext = SimulationSubsystem->BuildRuntimeContext(SimulationSetupSpec);
 	const double TimeLimitSeconds = GetRunTimeLimitSeconds(CompileResult.WorldSpec.RunConfig);
 
 	UE_LOG(

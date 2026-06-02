@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
-#include "Shared/EpisodeCompileTypes.h"
 #include "Shared/EpisodeSpecTypes.h"
 #include "EpisodeSimulationSubsystem.generated.h"
 
@@ -14,7 +13,7 @@ class AEpisodeStaticObstacle;
 class UPrimitiveComponent;
 class UEpisodePlaceableComponent;
 
-// 컴파일된 Episode WorldSpec을 현재 월드에 스폰하고, 런타임 actor 생명주기를 관리하는 subsystem.
+// 컴파일된 Episode simulation setup spec을 현재 월드에 스폰하고, 런타임 actor 생명주기를 관리하는 subsystem.
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API UEpisodeSimulationSubsystem : public UWorldSubsystem
 {
@@ -42,16 +41,13 @@ public:
 	void ClearEpisode();
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
-	bool SpawnEpisodeWorld(const FEpisodeWorldSpec& WorldSpec);
-
-	UFUNCTION(BlueprintCallable, Category = "Episode|Json")
-	bool SpawnEpisodeWorldFromJsonFile(const FString& JsonFilePath);
+	bool SetupEpisodeWorld(const FEpisodeSimulationSetupSpec& SetupSpec);
 
 	UFUNCTION(BlueprintPure, Category = "Episode")
 	AActor* FindRuntimeActor(const FString& InstanceId) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
-	FEpisodeRuntimeContext BuildRuntimeContext(const FEpisodeWorldSpec& WorldSpec) const;
+	FEpisodeRuntimeContext BuildRuntimeContext(const FEpisodeSimulationSetupSpec& SetupSpec) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
 	AEpisodeSplinePath* SpawnSplinePath(const FString& PathId, const TArray<FVector>& Points, bool bClosedLoop);

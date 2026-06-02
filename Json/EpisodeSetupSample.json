@@ -35,7 +35,7 @@
         "shape": {
           "type": "rectangle",
           "center_m": [0.0, 0.0, 0.0],
-          "size_m": [6.0, 4.0],
+          "size_m": [12.0, 8.0],
           "yaw_deg": 0.0
         },
         "traversability_score": 1.0
@@ -46,7 +46,7 @@
         "shape": {
           "type": "rectangle",
           "center_m": [0.0, 6.0, 0.0],
-          "size_m": [6.0, 2.0],
+          "size_m": [12.0, 4.0],
           "yaw_deg": 0.0
         },
         "penalty": {
@@ -62,7 +62,7 @@
         "shape": {
           "type": "rectangle",
           "center_m": [0.0, -5.0, 0.0],
-          "size_m": [6.0, 1.0],
+          "size_m": [12.0, 2.0],
           "yaw_deg": 0.0
         },
         "collision_tag": "wall"
@@ -87,7 +87,7 @@
         "instance_id": "cone_01",
         "prop_id": "obstacle.road_cone_01",
         "transform": {
-          "location_m": [2.0, 0.55, 0.0],
+          "location_m": [2.0, 1.0, 0.0],
           "rotation_deg": {
             "pitch": 0.0,
             "yaw": 0.0,
@@ -104,6 +104,19 @@
           "rotation_deg": {
             "pitch": 0.0,
             "yaw": 15.0,
+            "roll": 0.0
+          },
+          "scale": [1.0, 1.0, 1.0]
+        }
+      },
+      {
+        "instance_id": "manhole_04",
+        "prop_id": "obstacle.manhole_04",
+        "transform": {
+          "location_m": [0.0, 1.0, 0.0],
+          "rotation_deg": {
+            "pitch": 0.0,
+            "yaw": 0.0,
             "roll": 0.0
           },
           "scale": [1.0, 1.0, 1.0]

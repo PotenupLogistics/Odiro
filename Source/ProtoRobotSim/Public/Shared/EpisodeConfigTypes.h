@@ -89,6 +89,48 @@ struct PROTOROBOTSIM_API FEpisodeEvaluationConfig
 };
 
 UENUM(BlueprintType)
+enum class EEpisodeEvaluationOutcome : uint8
+{
+	Running,
+	Success,
+	Warning,
+	Failure,
+	Cancelled
+};
+
+UENUM(BlueprintType)
+enum class EEpisodeEvaluationTerminalReason : uint8
+{
+	None,
+	GoalReached,
+	Timeout,
+	RobotFall,
+	StaticObstacleCollision,
+	BlockedRegionCollision,
+	PenaltyRegionViolation,
+	PedestrianCollision,
+	CompilerCreateFailed,
+	CompileFailed,
+	SetupFailed,
+	EvaluationStartFailed,
+	Cancelled
+};
+
+UENUM(BlueprintType)
+enum class EEpisodeEvaluationEventType : uint8
+{
+	None,
+	GoalReached,
+	Timeout,
+	RobotFall,
+	StaticObstacleCollision,
+	BlockedRegionCollision,
+	PenaltyRegionViolation,
+	PedestrianNearMiss,
+	PedestrianCollision
+};
+
+UENUM(BlueprintType)
 enum class EEpisodeEvaluationEventSeverity : uint8
 {
 	Info,
@@ -148,7 +190,7 @@ struct PROTOROBOTSIM_API FEpisodeRuntimeContext
 	TArray<FString> PedestrianInstanceIds;
 };
 
-// EvaluationSubsystem이 평가 중 발견한 사건 한 건.
+// EvaluationSubsystem이 평가 중 발견한 사건 한 건에 대한 Snapshot.
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FEpisodeEvaluationEvent
 {
@@ -161,7 +203,7 @@ struct PROTOROBOTSIM_API FEpisodeEvaluationEvent
 	double ElapsedTimeSeconds = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString EventType;
+	EEpisodeEvaluationEventType EventType = EEpisodeEvaluationEventType::None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	EEpisodeEvaluationEventSeverity Severity = EEpisodeEvaluationEventSeverity::Info;
@@ -201,10 +243,10 @@ struct PROTOROBOTSIM_API FEpisodeEvaluationResult
 	bool bSuccess = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString Outcome;
+	EEpisodeEvaluationOutcome Outcome = EEpisodeEvaluationOutcome::Running;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString TerminalReason;
+	EEpisodeEvaluationTerminalReason TerminalReason = EEpisodeEvaluationTerminalReason::None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	double DurationSeconds = 0.0;
@@ -250,10 +292,10 @@ struct PROTOROBOTSIM_API FEpisodeRunRecord
 	bool bSuccess = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString Outcome;
+	EEpisodeEvaluationOutcome Outcome = EEpisodeEvaluationOutcome::Running;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString TerminalReason;
+	EEpisodeEvaluationTerminalReason TerminalReason = EEpisodeEvaluationTerminalReason::None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	double StartTimeSeconds = 0.0;

@@ -15,8 +15,8 @@ bool UEpisodeEvaluationSubsystem::StartEvaluation(
 
 	CurrentResult = FEpisodeEvaluationResult{};
 	CurrentResult.EpisodeId = RuntimeContext.EpisodeId;
-	CurrentResult.Outcome = TEXT("running");
-	CurrentResult.TerminalReason.Reset();
+	CurrentResult.Outcome = EEpisodeEvaluationOutcome::Running;
+	CurrentResult.TerminalReason = EEpisodeEvaluationTerminalReason::None;
 
 	UWorld* World = GetWorld();
 	EvaluationStartTimeSeconds = World ? World->GetTimeSeconds() : 0.0;
@@ -174,7 +174,7 @@ FEpisodeParamValue UEpisodeEvaluationSubsystem::MakeStringParam(const FString& V
 }
 
 void UEpisodeEvaluationSubsystem::AddEvaluationEvent(
-	const FString& EventType,
+	EEpisodeEvaluationEventType EventType,
 	EEpisodeEvaluationEventSeverity Severity,
 	const FString& Message)
 {
@@ -301,7 +301,7 @@ void UEpisodeEvaluationSubsystem::CloseNearMissInterval(
 	FEpisodeEvaluationEvent Event;
 	Event.EventIndex = CurrentResult.Events.Num();
 	Event.ElapsedTimeSeconds = EndTimeSeconds;
-	Event.EventType = TEXT("pedestrian_near_miss");
+	Event.EventType = EEpisodeEvaluationEventType::PedestrianNearMiss;
 	Event.Severity = EEpisodeEvaluationEventSeverity::Warning;
 	Event.SubjectInstanceId = ActiveRuntimeContext.RobotInstanceId;
 	Event.TargetInstanceId = PedestrianInstanceId;
@@ -349,15 +349,15 @@ void UEpisodeEvaluationSubsystem::EndForTimeout()
 	FlushActiveNearMisses();
 
 	AddEvaluationEvent(
-		TEXT("timeout"),
+		EEpisodeEvaluationEventType::Timeout,
 		EEpisodeEvaluationEventSeverity::Failure,
 		TEXT("시간 초과."));
 
 	FEpisodeEvaluationResult Result = CurrentResult;
 	Result.EpisodeId = ActiveRuntimeContext.EpisodeId;
 	Result.bSuccess = false;
-	Result.Outcome = TEXT("failure");
-	Result.TerminalReason = TEXT("timeout");
+	Result.Outcome = EEpisodeEvaluationOutcome::Failure;
+	Result.TerminalReason = EEpisodeEvaluationTerminalReason::Timeout;
 	Result.DurationSeconds = GetElapsedTimeSeconds();
 	RequestEndEpisode(Result);
 }

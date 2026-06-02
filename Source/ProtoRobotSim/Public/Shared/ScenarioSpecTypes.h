@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "EpisodeCoreTypes.h"
+#include "Struct/DeliveryBotSetupInfo.h"
 #include "ScenarioSpecTypes.generated.h"
 
 // LLM이 언리얼에서 에피소드 세팅을 위해 사용할 수 있는 필드들을 한 WorldConfig에 해당.
@@ -277,25 +278,6 @@ struct PROTOROBOTSIM_API FScenarioPedestrianSpec
 	TMap<FString, FEpisodeParamValue> Properties;
 };
 
-// 로봇 actor, 시작점, 목적지, 정책 선택 정보.
-USTRUCT(BlueprintType)
-struct PROTOROBOTSIM_API FScenarioRobotSpec
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
-	FString ActorId = TEXT("delivery_bot");
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
-	FString StartAnchorId;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
-	FString GoalAnchorId;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
-	FString PolicyId = TEXT("policy_rule_v1");
-};
-
 // LLM/사용자가 작성하는 최상위 시나리오 명세.
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FScenarioSpec
@@ -315,7 +297,7 @@ struct PROTOROBOTSIM_API FScenarioSpec
 	FString MapId;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
-	FScenarioRobotSpec Robot;
+	FDeliveryBotSetupInfo Robot;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FScenarioGroundModelSpec GroundModel;

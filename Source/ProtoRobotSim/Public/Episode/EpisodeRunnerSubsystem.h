@@ -39,8 +39,8 @@ private:
 	void QueueStartNextEpisode();
 	void CompleteCurrentRecord(
 		bool bSuccess,
-		const FString& Outcome,
-		const FString& TerminalReason,
+		EEpisodeEvaluationOutcome Outcome,
+		EEpisodeEvaluationTerminalReason TerminalReason,
 		const FEpisodeEvaluationResult* EvaluationResult = nullptr);
 
 	void AppendCompileDiagnostics(const FEpisodeCompileResult& CompileResult);

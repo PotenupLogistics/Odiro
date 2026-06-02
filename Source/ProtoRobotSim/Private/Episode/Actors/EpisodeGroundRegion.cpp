@@ -1,8 +1,9 @@
 #include "Episode/Actors/EpisodeGroundRegion.h"
 
-#include "Components/BoxComponent.h"
 #include "Components/DecalComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
@@ -14,23 +15,36 @@ AEpisodeGroundRegion::AEpisodeGroundRegion()
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
 
-	RegionBoundsComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("RegionBoundsComponent"));
+	RegionBoundsComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("RegionBoundsComponent"));
 	RegionBoundsComponent->SetupAttachment(SceneRoot);
-	RegionBoundsComponent->SetBoxExtent(FVector(50.0, 50.0, 50.0));
-	RegionBoundsComponent->SetHiddenInGame(true);
+	RegionBoundsComponent->SetVisibility(false);
 	RegionBoundsComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	RegionBoundsComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
 	RegionBoundsComponent->SetGenerateOverlapEvents(false);
+	RegionBoundsComponent->SetMobility(EComponentMobility::Movable);
 
 	RegionDecalComponent = CreateDefaultSubobject<UDecalComponent>(TEXT("RegionDecalComponent"));
 	RegionDecalComponent->SetupAttachment(SceneRoot);
 	RegionDecalComponent->SetVisibility(false);
 	RegionDecalComponent->SetFadeScreenSize(0.0f);
 
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMeshAsset(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (CubeMeshAsset.Succeeded())
+	{
+		RegionBoundsComponent->SetStaticMesh(CubeMeshAsset.Object);
+	}
+
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> GroundDecalMaterialAsset(TEXT("/Game/Episode/Material/M_EpisodeGroundDecal.M_EpisodeGroundDecal"));
 	if (GroundDecalMaterialAsset.Succeeded())
 	{
 		GroundDecalMaterial = GroundDecalMaterialAsset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BlockedAreaMaterialAsset(TEXT("/Game/Episode/Material/MI_EpisodeBlockArea.MI_EpisodeBlockArea"));
+	if (BlockedAreaMaterialAsset.Succeeded())
+	{
+		BlockedAreaMaterial = BlockedAreaMaterialAsset.Object;
+		RegionBoundsComponent->SetMaterial(0, BlockedAreaMaterial);
 	}
 }
 
@@ -55,13 +69,15 @@ void AEpisodeGroundRegion::ConfigureRegion(const FEpisodeGroundRegionSpec& InReg
 		Tags.AddUnique(FName(*RegionSpec.CollisionTag));
 	}
 
-	const FVector BoxExtent(
-		RegionSpec.Size.X * 0.5,
-		RegionSpec.Size.Y * 0.5,
-		BlockedCollisionHeightCm * 0.5);
-
 	RegionBoundsComponent->SetRelativeLocation(FVector(0.0, 0.0, BlockedCollisionHeightCm * 0.5));
-	RegionBoundsComponent->SetBoxExtent(BoxExtent, true);
+	RegionBoundsComponent->SetRelativeScale3D(FVector(
+		RegionSpec.Size.X / 100.0,
+		RegionSpec.Size.Y / 100.0,
+		BlockedCollisionHeightCm / 100.0));
+	if (BlockedAreaMaterial)
+	{
+		RegionBoundsComponent->SetMaterial(0, BlockedAreaMaterial);
+	}
 
 	ApplyCollisionSettings();
 	UpdateDecalVisualization();
@@ -78,31 +94,31 @@ bool AEpisodeGroundRegion::ContainsWorldLocation2D(const FVector& WorldLocation)
 
 void AEpisodeGroundRegion::ApplyCollisionSettings()
 {
-	if (!RegionBoundsComponent)
-	{
-		return;
-	}
+	if (!RegionBoundsComponent) return;
+
 
 	if (RegionSpec.RegionType == EEpisodeGroundRegionType::Blocked)
 	{
+		RegionBoundsComponent->SetVisibility(true);
 		RegionBoundsComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		RegionBoundsComponent->SetCollisionObjectType(ECC_WorldStatic);
 		RegionBoundsComponent->SetCollisionResponseToAllChannels(ECR_Block);
 		return;
 	}
 
+	RegionBoundsComponent->SetVisibility(false);
 	RegionBoundsComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	RegionBoundsComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
 }
 
 void AEpisodeGroundRegion::UpdateDecalVisualization()
 {
-	if (!RegionDecalComponent)
-	{
-		return;
-	}
+	if (!RegionDecalComponent) return;
 
-	if (!bUseDecalVisualization || RegionSpec.ShapeType != EEpisodeGroundShapeType::Rectangle)
+
+	if (!bUseDecalVisualization
+		|| RegionSpec.ShapeType != EEpisodeGroundShapeType::Rectangle
+		|| RegionSpec.RegionType == EEpisodeGroundRegionType::Blocked)
 	{
 		RegionDecalComponent->SetVisibility(false);
 		return;
@@ -115,11 +131,11 @@ void AEpisodeGroundRegion::UpdateDecalVisualization()
 		return;
 	}
 
-	// UDecalComponent는 local X축 방향으로 투사하므로, local Y/Z를 지면의 Y/X 크기에 대응시킨다.
+	// JSON 단위를 좀더 sementic하게 만들기 위해 지면 영역 X/Y 너비의 절반을 받아서 그림.
 	RegionDecalComponent->DecalSize = FVector(
 		DecalProjectionDepthCm,
-		RegionSpec.Size.Y,
-		RegionSpec.Size.X);
+		RegionSpec.Size.Y * 0.5,
+		RegionSpec.Size.X * 0.5);
 	RegionDecalComponent->SetRelativeLocation(FVector(0.0, 0.0, DecalZOffsetCm));
 	RegionDecalComponent->SetRelativeRotation(FRotator(-90.0, 0.0, 0.0));
 	RegionDecalComponent->SetVisibility(true);
@@ -127,10 +143,7 @@ void AEpisodeGroundRegion::UpdateDecalVisualization()
 
 void AEpisodeGroundRegion::CreateOrUpdateDecalMaterialInstance()
 {
-	if (!RegionDecalComponent || !GroundDecalMaterial)
-	{
-		return;
-	}
+	if (!RegionDecalComponent || !GroundDecalMaterial) return;
 
 	if (!GroundDecalMaterialInstance)
 	{

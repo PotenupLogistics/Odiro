@@ -19,7 +19,16 @@ class PROTOROBOTSIM_API AEpisodeStaticObstacle : public AActor
 
 public:
 	AEpisodeStaticObstacle();
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	TObjectPtr<UStaticMeshComponent> MeshRoot;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	TObjectPtr<UEpisodePlaceableComponent> PlaceableComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	TObjectPtr<UEpisodeObstacleCollisionComponent> ObstacleCollisionComponent;
+	
 	virtual void OnConstruction(const FTransform& Transform) override;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Mesh")
@@ -50,15 +59,6 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Placement")
 	double GetPlacementRadius2D() const;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
-	TObjectPtr<UStaticMeshComponent> MeshRoot;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
-	TObjectPtr<UEpisodePlaceableComponent> PlaceableComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
-	TObjectPtr<UEpisodeObstacleCollisionComponent> ObstacleCollisionComponent;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Semantic")
 	FName PropId;

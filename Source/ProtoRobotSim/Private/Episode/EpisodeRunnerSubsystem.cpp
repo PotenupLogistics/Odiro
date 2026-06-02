@@ -138,7 +138,10 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 	UEpisodeCompiler* Compiler = NewObject<UEpisodeCompiler>(this);
 	if (!Compiler)
 	{
-		CompleteCurrentRecord(false, TEXT("failure"), TEXT("compiler_create_failed"));
+		CompleteCurrentRecord(
+			false,
+			EEpisodeEvaluationOutcome::Failure,
+			EEpisodeEvaluationTerminalReason::CompilerCreateFailed);
 		QueueStartNextEpisode();
 		return;
 	}
@@ -151,7 +154,10 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 
 	if (!CompileResult.bSuccess)
 	{
-		CompleteCurrentRecord(false, TEXT("failure"), TEXT("compile_failed"));
+		CompleteCurrentRecord(
+			false,
+			EEpisodeEvaluationOutcome::Failure,
+			EEpisodeEvaluationTerminalReason::CompileFailed);
 		QueueStartNextEpisode();
 		return;
 	}
@@ -161,7 +167,10 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 	CurrentRecord.bSetupSucceeded = bSetupSucceeded;
 	if (!bSetupSucceeded)
 	{
-		CompleteCurrentRecord(false, TEXT("failure"), TEXT("setup_failed"));
+		CompleteCurrentRecord(
+			false,
+			EEpisodeEvaluationOutcome::Failure,
+			EEpisodeEvaluationTerminalReason::SetupFailed);
 		SimulationSubsystem->ClearEpisode();
 		QueueStartNextEpisode();
 		return;
@@ -174,7 +183,10 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 	if (!EvaluationSubsystem->StartEvaluation(CompileResult.WorldSpec, RuntimeContext))
 	{
 		EvaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UEpisodeRunnerSubsystem::HandleEpisodeEnded);
-		CompleteCurrentRecord(false, TEXT("failure"), TEXT("evaluation_start_failed"));
+		CompleteCurrentRecord(
+			false,
+			EEpisodeEvaluationOutcome::Failure,
+			EEpisodeEvaluationTerminalReason::EvaluationStartFailed);
 		SimulationSubsystem->ClearEpisode();
 		QueueStartNextEpisode();
 		return;
@@ -197,8 +209,8 @@ void UEpisodeRunnerSubsystem::QueueStartNextEpisode()
 
 void UEpisodeRunnerSubsystem::CompleteCurrentRecord(
 	bool bSuccess,
-	const FString& Outcome,
-	const FString& TerminalReason,
+	EEpisodeEvaluationOutcome Outcome,
+	EEpisodeEvaluationTerminalReason TerminalReason,
 	const FEpisodeEvaluationResult* EvaluationResult)
 {
 	if (UWorld* World = ResolveWorld())

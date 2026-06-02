@@ -55,7 +55,7 @@ private:
 	static FEpisodeParamValue MakeStringParam(const FString& Value);
 
 	void AddEvaluationEvent(
-		const FString& EventType,
+		EEpisodeEvaluationEventType EventType,
 		EEpisodeEvaluationEventSeverity Severity,
 		const FString& Message);
 

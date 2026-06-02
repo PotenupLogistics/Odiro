@@ -5,11 +5,11 @@
 #include "Shared/EpisodeSpecTypes.h"
 #include "EpisodeGroundRegion.generated.h"
 
-class UBoxComponent;
 class UDecalComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class USceneComponent;
+class UStaticMeshComponent;
 
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API AEpisodeGroundRegion : public AActor
@@ -23,7 +23,7 @@ public:
 	TObjectPtr<USceneComponent> SceneRoot;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
-	TObjectPtr<UBoxComponent> RegionBoundsComponent;
+	TObjectPtr<UStaticMeshComponent> RegionBoundsComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
 	TObjectPtr<UDecalComponent> RegionDecalComponent;
@@ -52,6 +52,9 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Episode|Visual")
 	TObjectPtr<UMaterialInterface> GroundDecalMaterial;
 
+	UPROPERTY(EditAnywhere, Category = "Episode|Visual")
+	TObjectPtr<UMaterialInterface> BlockedAreaMaterial;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> GroundDecalMaterialInstance;
 
@@ -65,5 +68,5 @@ private:
 	double DecalOpacity = 0.22;
 
 	UPROPERTY(EditAnywhere, Category = "Episode|Collision", meta = (ClampMin = "1.0"))
-	double BlockedCollisionHeightCm = 140.0;
+	double BlockedCollisionHeightCm = 200.0;
 };

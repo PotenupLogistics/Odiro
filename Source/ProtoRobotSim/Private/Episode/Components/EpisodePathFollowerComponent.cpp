@@ -11,9 +11,9 @@ UEpisodePathFollowerComponent::UEpisodePathFollowerComponent()
 	PrimaryComponentTick.TickGroup = TG_PrePhysics;
 }
 
-void UEpisodePathFollowerComponent::SetSplineComponent(USplineComponent* InSplineComponent)
+void UEpisodePathFollowerComponent::SetSplineComponent(USplineComponent* inSplineComponent)
 {
-	SplineComponent = InSplineComponent;
+	SplineComponent = inSplineComponent;
 
 	if (!SplineComponent)
 	{
@@ -21,9 +21,9 @@ void UEpisodePathFollowerComponent::SetSplineComponent(USplineComponent* InSplin
 	}
 }
 
-void UEpisodePathFollowerComponent::SetSplinePath(AEpisodeSplinePath* InSplinePath)
+void UEpisodePathFollowerComponent::SetSplinePath(AEpisodeSplinePath* inSplinePath)
 {
-	if (!InSplinePath)
+	if (!inSplinePath)
 	{
 		PathId.Reset();
 		SplineComponent = nullptr;
@@ -31,8 +31,8 @@ void UEpisodePathFollowerComponent::SetSplinePath(AEpisodeSplinePath* InSplinePa
 		return;
 	}
 
-	PathId = InSplinePath->PathId;
-	SetSplineComponent(InSplinePath->SplineComponent);
+	PathId = inSplinePath->PathId;
+	SetSplineComponent(inSplinePath->SplineComponent);
 }
 
 void UEpisodePathFollowerComponent::StartFollowing()
@@ -51,9 +51,9 @@ void UEpisodePathFollowerComponent::StopFollowing()
 {
 	SetComponentTickEnabled(false);
 
-	if (AEpisodePedestrian* Pedestrian = Cast<AEpisodePedestrian>(GetOwner()))
+	if (AEpisodePedestrian* pedestrian = Cast<AEpisodePedestrian>(GetOwner()))
 	{
-		Pedestrian->ResetVisualMotion();
+		pedestrian->ResetVisualMotion();
 	}
 }
 
@@ -71,9 +71,9 @@ void UEpisodePathFollowerComponent::BeginPlay()
 	}
 }
 
-void UEpisodePathFollowerComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+void UEpisodePathFollowerComponent::TickComponent(float deltaTime, ELevelTick tickType, FActorComponentTickFunction* thisTickFunction)
 {
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	Super::TickComponent(deltaTime, tickType, thisTickFunction);
 
 	if (!SplineComponent)
 	{
@@ -81,58 +81,58 @@ void UEpisodePathFollowerComponent::TickComponent(float DeltaTime, ELevelTick Ti
 		return;
 	}
 
-	const double SplineLength = SplineComponent->GetSplineLength();
-	if (SplineLength <= KINDA_SMALL_NUMBER)
+	const double splineLength = SplineComponent->GetSplineLength();
+	if (splineLength <= KINDA_SMALL_NUMBER)
 	{
 		StopFollowing();
 		return;
 	}
 
-	const double PreviousDistanceCm = CurrentDistanceCm;
-	const double DistanceDeltaCm = SpeedCmPerSecond * GetPathNoiseSpeedScale(SplineLength) * static_cast<double>(DeltaTime);
-	const double DesiredDistanceCm = CurrentDistanceCm + DistanceDeltaCm;
+	const double previousDistanceCm = CurrentDistanceCm;
+	const double distanceDeltaCm = SpeedCmPerSecond * GetPathNoiseSpeedScale(splineLength) * static_cast<double>(deltaTime);
+	const double desiredDistanceCm = CurrentDistanceCm + distanceDeltaCm;
 
-	CurrentDistanceCm = DesiredDistanceCm;
+	CurrentDistanceCm = desiredDistanceCm;
 	bool bReachedEnd = false;
 	if (bLoop)
 	{
-		CurrentDistanceCm = FMath::Fmod(CurrentDistanceCm, SplineLength);
+		CurrentDistanceCm = FMath::Fmod(CurrentDistanceCm, splineLength);
 		if (CurrentDistanceCm < 0.0)
 		{
-			CurrentDistanceCm += SplineLength;
+			CurrentDistanceCm += splineLength;
 		}
 	}
 	else
 	{
-		CurrentDistanceCm = FMath::Clamp(CurrentDistanceCm, 0.0, SplineLength);
-		if (FMath::IsNearlyEqual(CurrentDistanceCm, SplineLength))
+		CurrentDistanceCm = FMath::Clamp(CurrentDistanceCm, 0.0, splineLength);
+		if (FMath::IsNearlyEqual(CurrentDistanceCm, splineLength))
 		{
 			bReachedEnd = true;
 		}
 	}
 
-	const double AppliedDistanceDeltaCm = bLoop ? DistanceDeltaCm : CurrentDistanceCm - PreviousDistanceCm;
-	FHitResult SweepHit;
-	MoveOwnerToCurrentDistance(DeltaTime, &SweepHit);
+	const double appliedDistanceDeltaCm = bLoop ? distanceDeltaCm : CurrentDistanceCm - previousDistanceCm;
+	FHitResult sweepHit;
+	MoveOwnerToCurrentDistance(deltaTime, &sweepHit);
 
 	// sweep된 이후 순식간에 route를 따라잡지 않도록 처리.
-	if (SweepHit.bBlockingHit
-		&& SweepHit.Time < 1.0f - KINDA_SMALL_NUMBER
-		&& FMath::Abs(AppliedDistanceDeltaCm) > KINDA_SMALL_NUMBER)
+	if (sweepHit.bBlockingHit
+		&& sweepHit.Time < 1.0f - KINDA_SMALL_NUMBER
+		&& FMath::Abs(appliedDistanceDeltaCm) > KINDA_SMALL_NUMBER)
 	{
-		CurrentDistanceCm = PreviousDistanceCm
-			+ AppliedDistanceDeltaCm * FMath::Clamp(static_cast<double>(SweepHit.Time), 0.0, 1.0);
+		CurrentDistanceCm = previousDistanceCm
+			+ appliedDistanceDeltaCm * FMath::Clamp(static_cast<double>(sweepHit.Time), 0.0, 1.0);
 		if (bLoop)
 		{
-			CurrentDistanceCm = FMath::Fmod(CurrentDistanceCm, SplineLength);
+			CurrentDistanceCm = FMath::Fmod(CurrentDistanceCm, splineLength);
 			if (CurrentDistanceCm < 0.0)
 			{
-				CurrentDistanceCm += SplineLength;
+				CurrentDistanceCm += splineLength;
 			}
 		}
 		else
 		{
-			CurrentDistanceCm = FMath::Clamp(CurrentDistanceCm, 0.0, SplineLength);
+			CurrentDistanceCm = FMath::Clamp(CurrentDistanceCm, 0.0, splineLength);
 		}
 		bReachedEnd = false;
 	}
@@ -145,112 +145,94 @@ void UEpisodePathFollowerComponent::TickComponent(float DeltaTime, ELevelTick Ti
 
 void UEpisodePathFollowerComponent::InitializePathNoise()
 {
-	FRandomStream NoiseStream(PathNoiseSeed);
-	LateralNoisePhase = NoiseStream.FRandRange(-10000.0f, 10000.0f);
-	SpeedNoisePhase = NoiseStream.FRandRange(-10000.0f, 10000.0f);
+	FRandomStream noiseStream(PathNoiseSeed);
+	LateralNoisePhase = noiseStream.FRandRange(-10000.0f, 10000.0f);
+	SpeedNoisePhase = noiseStream.FRandRange(-10000.0f, 10000.0f);
 }
 
-double UEpisodePathFollowerComponent::GetPathNoiseFade(double SplineLength) const
+double UEpisodePathFollowerComponent::GetPathNoiseFade(double splineLength) const
 {
-	if (bLoop || PathNoiseEndpointFadeDistanceCm <= KINDA_SMALL_NUMBER)
-	{
-		return 1.0;
-	}
+	if (bLoop || PathNoiseEndpointFadeDistanceCm <= KINDA_SMALL_NUMBER) return 1.0;
 
-	const double StartFade = CurrentDistanceCm / PathNoiseEndpointFadeDistanceCm;
-	const double EndFade = (SplineLength - CurrentDistanceCm) / PathNoiseEndpointFadeDistanceCm;
-	return FMath::Clamp(FMath::Min(StartFade, EndFade), 0.0, 1.0);
+	const double startFade = CurrentDistanceCm / PathNoiseEndpointFadeDistanceCm;
+	const double endFade = (splineLength - CurrentDistanceCm) / PathNoiseEndpointFadeDistanceCm;
+	return FMath::Clamp(FMath::Min(startFade, endFade), 0.0, 1.0);
 }
 
-double UEpisodePathFollowerComponent::GetPathNoiseSpeedScale(double SplineLength) const
+double UEpisodePathFollowerComponent::GetPathNoiseSpeedScale(double splineLength) const
 {
-	if (!bUseSeededPathNoise || SpeedNoiseStrength <= KINDA_SMALL_NUMBER || SpeedNoiseWavelengthCm <= KINDA_SMALL_NUMBER)
-	{
-		return 1.0;
-	}
+	if (!bUseSeededPathNoise || SpeedNoiseStrength <= KINDA_SMALL_NUMBER || SpeedNoiseWavelengthCm <= KINDA_SMALL_NUMBER) return 1.0;
 
-	const double Fade = GetPathNoiseFade(SplineLength);
-	if (Fade <= KINDA_SMALL_NUMBER)
-	{
-		return 1.0;
-	}
+	const double fade = GetPathNoiseFade(splineLength);
+	if (fade <= KINDA_SMALL_NUMBER) return 1.0;
 
-	const double NoiseInput = (CurrentDistanceCm / SpeedNoiseWavelengthCm) + SpeedNoisePhase;
-	const double NoiseValue = FMath::PerlinNoise1D(static_cast<float>(NoiseInput));
-	const double Strength = FMath::Clamp(SpeedNoiseStrength, 0.0, 0.95);
-	return FMath::Clamp(1.0 + NoiseValue * Strength * Fade, 1.0 - Strength, 1.0 + Strength);
+	const double noiseInput = (CurrentDistanceCm / SpeedNoiseWavelengthCm) + SpeedNoisePhase;
+	const double noiseValue = FMath::PerlinNoise1D(static_cast<float>(noiseInput));
+	const double strength = FMath::Clamp(SpeedNoiseStrength, 0.0, 0.95);
+	return FMath::Clamp(1.0 + noiseValue * strength * fade, 1.0 - strength, 1.0 + strength);
 }
 
-FVector UEpisodePathFollowerComponent::ApplyPathNoise(double DistanceCm, double SplineLength, const FVector& BaseLocation) const
+FVector UEpisodePathFollowerComponent::ApplyPathNoise(double distanceCm, double splineLength, const FVector& baseLocation) const
 {
-	if (!bUseSeededPathNoise || !SplineComponent || LateralNoiseAmplitudeCm <= KINDA_SMALL_NUMBER || LateralNoiseWavelengthCm <= KINDA_SMALL_NUMBER)
-	{
-		return BaseLocation;
-	}
+	if (!bUseSeededPathNoise || !SplineComponent || LateralNoiseAmplitudeCm <= KINDA_SMALL_NUMBER || LateralNoiseWavelengthCm <= KINDA_SMALL_NUMBER) return baseLocation;
 
-	const double Fade = GetPathNoiseFade(SplineLength);
-	if (Fade <= KINDA_SMALL_NUMBER)
-	{
-		return BaseLocation;
-	}
+	const double fade = GetPathNoiseFade(splineLength);
+	if (fade <= KINDA_SMALL_NUMBER) return baseLocation;
 
-	FVector Forward = SplineComponent->GetDirectionAtDistanceAlongSpline(
-		static_cast<float>(DistanceCm),
+	FVector forward = SplineComponent->GetDirectionAtDistanceAlongSpline(
+		static_cast<float>(distanceCm),
 		ESplineCoordinateSpace::World);
-	Forward.Z = 0.0;
+	forward.Z = 0.0;
 
-	if (!Forward.Normalize())
-	{
-		return BaseLocation;
-	}
+	if (!forward.Normalize()) return baseLocation;
 
-	const FVector Right = FVector::CrossProduct(FVector::UpVector, Forward).GetSafeNormal();
-	const double NoiseInput = (DistanceCm / LateralNoiseWavelengthCm) + LateralNoisePhase;
-	const double NoiseValue = FMath::PerlinNoise1D(static_cast<float>(NoiseInput));
-	const double LateralOffsetCm = NoiseValue * LateralNoiseAmplitudeCm * Fade;
-	return BaseLocation + Right * LateralOffsetCm;
+	const FVector right = FVector::CrossProduct(FVector::UpVector, forward).GetSafeNormal();
+	const double noiseInput = (distanceCm / LateralNoiseWavelengthCm) + LateralNoisePhase;
+	const double noiseValue = FMath::PerlinNoise1D(static_cast<float>(noiseInput));
+	const double lateralOffsetCm = noiseValue * LateralNoiseAmplitudeCm * fade;
+	return baseLocation + right * lateralOffsetCm;
 }
 
-void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance(double DeltaSeconds, FHitResult* OutSweepHit)
+void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance(double deltaSeconds, FHitResult* outSweepHit)
 {
-	if (OutSweepHit)
+	if (outSweepHit)
 	{
-		*OutSweepHit = FHitResult();
+		*outSweepHit = FHitResult();
 	}
 
 	if (!SplineComponent) return;
 
-	AActor* Owner = GetOwner();
-	if (!Owner) return;
+	AActor* owner = GetOwner();
+	if (!owner) return;
 
-	const FVector PreviousLocation = Owner->GetActorLocation();
-	const FVector Location = SplineComponent->GetLocationAtDistanceAlongSpline(
+	const FVector previousLocation = owner->GetActorLocation();
+	const FVector location = SplineComponent->GetLocationAtDistanceAlongSpline(
 		static_cast<float>(CurrentDistanceCm),
 		ESplineCoordinateSpace::World);
-	const FVector NoisyLocation = ApplyPathNoise(CurrentDistanceCm, SplineComponent->GetSplineLength(), Location);
-	FVector TargetLocation = NoisyLocation;
-	TargetLocation.Z += VerticalOffsetCm;
+	const FVector noisyLocation = ApplyPathNoise(CurrentDistanceCm, SplineComponent->GetSplineLength(), location);
+	FVector targetLocation = noisyLocation;
+	targetLocation.Z += VerticalOffsetCm;
 
-	FHitResult SweepHit;
+	FHitResult sweepHit;
 	if (bOrientToSpline)
 	{
-		const FRotator Rotation = SplineComponent->GetRotationAtDistanceAlongSpline(
+		const FRotator rotation = SplineComponent->GetRotationAtDistanceAlongSpline(
 			static_cast<float>(CurrentDistanceCm),
 			ESplineCoordinateSpace::World);
-		Owner->SetActorLocationAndRotation(TargetLocation, Rotation, true, &SweepHit, ETeleportType::None);
+		owner->SetActorLocationAndRotation(targetLocation, rotation, true, &sweepHit, ETeleportType::None);
 	}
 	else
 	{
-		Owner->SetActorLocation(TargetLocation, true, &SweepHit, ETeleportType::None);
+		owner->SetActorLocation(targetLocation, true, &sweepHit, ETeleportType::None);
 	}
 
-	if (OutSweepHit)
+	if (outSweepHit)
 	{
-		*OutSweepHit = SweepHit;
+		*outSweepHit = sweepHit;
 	}
 
-	if (AEpisodePedestrian* Pedestrian = Cast<AEpisodePedestrian>(Owner))
+	if (AEpisodePedestrian* pedestrian = Cast<AEpisodePedestrian>(owner))
 	{
-		Pedestrian->UpdateVisualMotion(PreviousLocation, Owner->GetActorLocation(), DeltaSeconds);
+		pedestrian->UpdateVisualMotion(previousLocation, owner->GetActorLocation(), deltaSeconds);
 	}
 }

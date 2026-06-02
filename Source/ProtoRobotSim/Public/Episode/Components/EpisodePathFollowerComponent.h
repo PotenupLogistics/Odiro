@@ -66,10 +66,10 @@ public:
 	double CurrentDistanceCm = 0.0;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
-	void SetSplineComponent(USplineComponent* InSplineComponent);
+	void SetSplineComponent(USplineComponent* inSplineComponent);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
-	void SetSplinePath(AEpisodeSplinePath* InSplinePath);
+	void SetSplinePath(AEpisodeSplinePath* inSplinePath);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
 	void StartFollowing();
@@ -79,14 +79,14 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	virtual void TickComponent(float deltaTime, ELevelTick tickType, FActorComponentTickFunction* thisTickFunction) override;
 
 private:
 	void InitializePathNoise();
-	double GetPathNoiseFade(double SplineLength) const;
-	double GetPathNoiseSpeedScale(double SplineLength) const;
-	FVector ApplyPathNoise(double DistanceCm, double SplineLength, const FVector& BaseLocation) const;
-	void MoveOwnerToCurrentDistance(double DeltaSeconds = 0.0, FHitResult* OutSweepHit = nullptr);
+	double GetPathNoiseFade(double splineLength) const;
+	double GetPathNoiseSpeedScale(double splineLength) const;
+	FVector ApplyPathNoise(double distanceCm, double splineLength, const FVector& baseLocation) const;
+	void MoveOwnerToCurrentDistance(double deltaSeconds = 0.0, FHitResult* outSweepHit = nullptr);
 
 	double LateralNoisePhase = 0.0;
 	double SpeedNoisePhase = 0.0;

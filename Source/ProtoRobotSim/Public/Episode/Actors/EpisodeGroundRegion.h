@@ -32,10 +32,10 @@ public:
 	FEpisodeGroundRegionSpec RegionSpec;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
-	void ConfigureRegion(const FEpisodeGroundRegionSpec& InRegionSpec);
+	void ConfigureRegion(const FEpisodeGroundRegionSpec& inRegionSpec);
 
 	UFUNCTION(BlueprintPure, Category = "Episode")
-	bool ContainsWorldLocation2D(const FVector& WorldLocation) const;
+	bool ContainsWorldLocation2D(const FVector& worldLocation) const;
 
 protected:
 	virtual void BeginPlay() override;

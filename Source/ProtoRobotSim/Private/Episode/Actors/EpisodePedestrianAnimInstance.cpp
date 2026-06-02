@@ -10,9 +10,9 @@ void UEpisodePedestrianAnimInstance::NativeInitializeAnimation()
 	RootMotionMode = ERootMotionMode::NoRootMotionExtraction;
 }
 
-void UEpisodePedestrianAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
+void UEpisodePedestrianAnimInstance::NativeUpdateAnimation(float deltaSeconds)
 {
-	Super::NativeUpdateAnimation(DeltaSeconds);
+	Super::NativeUpdateAnimation(deltaSeconds);
 
 	if (!CachedPedestrian)
 	{

@@ -16,31 +16,31 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 {
 	StaticObstacleClass = AEpisodeStaticObstacle::StaticClass();
 
-	static ConstructorHelpers::FClassFinder<ADeliveryBot_ChaosActor> RobotBlueprintClass(
+	static ConstructorHelpers::FClassFinder<ADeliveryBot_ChaosActor> robotBlueprintClass(
 		TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBot_ChaosMesh"));
 
-	if (RobotBlueprintClass.Succeeded())
+	if (robotBlueprintClass.Succeeded())
 	{
-		RobotActorClass = RobotBlueprintClass.Class;
+		RobotActorClass = robotBlueprintClass.Class;
 	}
 	else
 	{
 		RobotActorClass = ADeliveryBot_ChaosActor::StaticClass();
 	}
-	static ConstructorHelpers::FClassFinder<AActor> GoalPointBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_GoalPoint"));
-	if (GoalPointBlueprintClass.Succeeded())
+	static ConstructorHelpers::FClassFinder<AActor> goalPointBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_GoalPoint"));
+	if (goalPointBlueprintClass.Succeeded())
 	{
-		GoalPointClass = GoalPointBlueprintClass.Class;
+		GoalPointClass = goalPointBlueprintClass.Class;
 	}
-	static ConstructorHelpers::FClassFinder<AActor> StartPointBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_StartPoint"));
-	if (StartPointBlueprintClass.Succeeded())
+	static ConstructorHelpers::FClassFinder<AActor> startPointBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_StartPoint"));
+	if (startPointBlueprintClass.Succeeded())
 	{
-		StartPointClass = StartPointBlueprintClass.Class;
+		StartPointClass = startPointBlueprintClass.Class;
 	}
-	static ConstructorHelpers::FClassFinder<AEpisodePedestrian> PedestrianBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_EpisodePedestrian"));
-	if (PedestrianBlueprintClass.Succeeded())
+	static ConstructorHelpers::FClassFinder<AEpisodePedestrian> pedestrianBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_EpisodePedestrian"));
+	if (pedestrianBlueprintClass.Succeeded())
 	{
-		PedestrianClass = PedestrianBlueprintClass.Class;
+		PedestrianClass = pedestrianBlueprintClass.Class;
 	}
 	else
 	{
@@ -50,16 +50,16 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 
 void UEpisodeSimulationSubsystem::ClearEpisode()
 {
-	const int32 ActorCount = RuntimeActors.Num();
-	const int32 ActorIdCount = RuntimeActorsById.Num();
-	const int32 GroundRegionCount = RuntimeGroundRegions.Num();
-	const int32 PathCount = RuntimePaths.Num();
+	const int32 actorCount = RuntimeActors.Num();
+	const int32 actorIdCount = RuntimeActorsById.Num();
+	const int32 groundRegionCount = RuntimeGroundRegions.Num();
+	const int32 pathCount = RuntimePaths.Num();
 
-	for (int32 Index = RuntimeActors.Num() - 1; Index >= 0; --Index)
+	for (int32 index = RuntimeActors.Num() - 1; index >= 0; --index)
 	{
-		if (AActor* Actor = RuntimeActors[Index].Get())
+		if (AActor* actor = RuntimeActors[index].Get())
 		{
-			Actor->Destroy();
+			actor->Destroy();
 		}
 	}
 
@@ -68,20 +68,20 @@ void UEpisodeSimulationSubsystem::ClearEpisode()
 	RuntimePaths.Reset();
 	RuntimeActorsById.Reset();
 
-	if (ActorCount > 0 || ActorIdCount > 0 || GroundRegionCount > 0 || PathCount > 0)
+	if (actorCount > 0 || actorIdCount > 0 || groundRegionCount > 0 || pathCount > 0)
 	{
 		UE_LOG(
 			LogEpisodeSimulation,
 			Log,
 			TEXT("Episode runtime cleared | Actors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
-			ActorCount,
-			ActorIdCount,
-			GroundRegionCount,
-			PathCount);
+			actorCount,
+			actorIdCount,
+			groundRegionCount,
+			pathCount);
 	}
 }
 
-bool UEpisodeSimulationSubsystem::SetupEpisodeWorld(const FEpisodeSimulationSetupSpec& SetupSpec)
+bool UEpisodeSimulationSubsystem::SetupEpisodeWorld(const FEpisodeSimulationSetupSpec& setupSpec)
 {
 	ClearEpisode();
 
@@ -89,52 +89,52 @@ bool UEpisodeSimulationSubsystem::SetupEpisodeWorld(const FEpisodeSimulationSetu
 		LogEpisodeSimulation,
 		Log,
 		TEXT("Episode world setup started | Episode: %s, GroundRegions: %d, Paths: %d, Placeables: %d, DynamicActors: %d, Events: %d"),
-		*SetupSpec.EpisodeId,
-		SetupSpec.GroundRegions.Num(),
-		SetupSpec.Paths.Num(),
-		SetupSpec.Placeables.Num(),
-		SetupSpec.DynamicActors.Num(),
-		SetupSpec.Events.Num());
+		*setupSpec.EpisodeId,
+		setupSpec.GroundRegions.Num(),
+		setupSpec.Paths.Num(),
+		setupSpec.Placeables.Num(),
+		setupSpec.DynamicActors.Num(),
+		setupSpec.Events.Num());
 
 	bool bAllSpawned{ true };
 
-	for (const FEpisodeGroundRegionSpec& RegionSpec : SetupSpec.GroundRegions)
+	for (const FEpisodeGroundRegionSpec& regionSpec : setupSpec.GroundRegions)
 	{
-		if (!SpawnGroundRegion(RegionSpec))
+		if (!SpawnGroundRegion(regionSpec))
 		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("지면 영역 '%s' 스폰 실패."), *RegionSpec.RegionId);
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("지면 영역 '%s' 스폰 실패."), *regionSpec.RegionId);
 			bAllSpawned = false;
 		}
 	}
 
-	for (const FEpisodePathSpec& PathSpec : SetupSpec.Paths)
+	for (const FEpisodePathSpec& pathSpec : setupSpec.Paths)
 	{
-		if (PathSpec.PathType != EEpisodePathType::Spline)
+		if (pathSpec.PathType != EEpisodePathType::Spline)
 		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("경로 '%s'가 spline 타입이 아님."), *PathSpec.PathId);
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("경로 '%s'가 spline 타입이 아님."), *pathSpec.PathId);
 		}
 
-		if (!SpawnSplinePath(PathSpec.PathId, PathSpec.Points, PathSpec.bClosedLoop))
+		if (!SpawnSplinePath(pathSpec.PathId, pathSpec.Points, pathSpec.bClosedLoop))
 		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("경로 '%s' 스폰 실패."), *PathSpec.PathId);
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("경로 '%s' 스폰 실패."), *pathSpec.PathId);
 			bAllSpawned = false;
 		}
 	}
 
-	for (const FEpisodePlaceableInstanceSpec& PlaceableSpec : SetupSpec.Placeables)
+	for (const FEpisodePlaceableInstanceSpec& placeableSpec : setupSpec.Placeables)
 	{
-		if (!SpawnPlaceable(PlaceableSpec))
+		if (!SpawnPlaceable(placeableSpec))
 		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("배치 액터 '%s' 스폰 실패."), *PlaceableSpec.InstanceId);
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("배치 액터 '%s' 스폰 실패."), *placeableSpec.InstanceId);
 			bAllSpawned = false;
 		}
 	}
 
-	for (const FEpisodeDynamicActorSpec& DynamicActorSpec : SetupSpec.DynamicActors)
+	for (const FEpisodeDynamicActorSpec& dynamicActorSpec : setupSpec.DynamicActors)
 	{
-		if (!SpawnDynamicActor(DynamicActorSpec))
+		if (!SpawnDynamicActor(dynamicActorSpec))
 		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("동적 액터 '%s' 스폰 실패."), *DynamicActorSpec.InstanceId);
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("동적 액터 '%s' 스폰 실패."), *dynamicActorSpec.InstanceId);
 			bAllSpawned = false;
 		}
 	}
@@ -143,7 +143,7 @@ bool UEpisodeSimulationSubsystem::SetupEpisodeWorld(const FEpisodeSimulationSetu
 		LogEpisodeSimulation,
 		Log,
 		TEXT("Episode world setup completed | Episode: %s, Success: %s, RuntimeActors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
-		*SetupSpec.EpisodeId,
+		*setupSpec.EpisodeId,
 		bAllSpawned ? TEXT("true") : TEXT("false"),
 		RuntimeActors.Num(),
 		RuntimeActorsById.Num(),
@@ -153,73 +153,64 @@ bool UEpisodeSimulationSubsystem::SetupEpisodeWorld(const FEpisodeSimulationSetu
 	return bAllSpawned;
 }
 
-AActor* UEpisodeSimulationSubsystem::FindRuntimeActor(const FString& InstanceId) const
+AActor* UEpisodeSimulationSubsystem::FindRuntimeActor(const FString& instanceId) const
 {
-	if (const TObjectPtr<AActor>* FoundActor = RuntimeActorsById.Find(InstanceId))
-	{
-		return FoundActor->Get();
-	}
+	if (const TObjectPtr<AActor>* foundActor = RuntimeActorsById.Find(instanceId)) return foundActor->Get();
 
 	return nullptr;
 }
 
-FEpisodeRuntimeContext UEpisodeSimulationSubsystem::BuildRuntimeContext(const FEpisodeSimulationSetupSpec& SetupSpec) const
+FEpisodeRuntimeContext UEpisodeSimulationSubsystem::BuildRuntimeContext(const FEpisodeSimulationSetupSpec& setupSpec) const
 {
-	FEpisodeRuntimeContext RuntimeContext;
-	RuntimeContext.EpisodeId = SetupSpec.EpisodeId;
-	RuntimeContext.SpecHash = SetupSpec.SpecHash;
+	FEpisodeRuntimeContext runtimeContext;
+	runtimeContext.EpisodeId = setupSpec.EpisodeId;
+	runtimeContext.SpecHash = setupSpec.SpecHash;
 
-	for (AActor* Actor : RuntimeActors)
+	for (AActor* actor : RuntimeActors)
 	{
-		if (IsValid(Actor))
+		if (IsValid(actor))
 		{
-			RuntimeContext.RuntimeActors.Add(Actor);
+			runtimeContext.RuntimeActors.Add(actor);
 		}
 	}
 
-	for (const TPair<FString, TObjectPtr<AEpisodeGroundRegion>>& Pair : RuntimeGroundRegions)
+	for (const TPair<FString, TObjectPtr<AEpisodeGroundRegion>>& pair : RuntimeGroundRegions)
 	{
-		if (AActor* GroundRegionActor = Pair.Value.Get())
+		if (AActor* groundRegionActor = pair.Value.Get())
 		{
-			RuntimeContext.GroundRegionActors.Add(GroundRegionActor);
+			runtimeContext.GroundRegionActors.Add(groundRegionActor);
 		}
 	}
 
-	for (const FEpisodePlaceableInstanceSpec& PlaceableSpec : SetupSpec.Placeables)
+	for (const FEpisodePlaceableInstanceSpec& placeableSpec : setupSpec.Placeables)
 	{
-		AActor* RuntimeActor = FindRuntimeActor(PlaceableSpec.InstanceId);
-		if (!RuntimeActor)
+		AActor* runtimeActor = FindRuntimeActor(placeableSpec.InstanceId);
+		if (!runtimeActor) continue;
+
+		if ((placeableSpec.Category == EEpisodeActorCategory::DeliveryBot ||
+			placeableSpec.Category == EEpisodeActorCategory::RoadVehicle) && !runtimeContext.RobotActor)
 		{
+			runtimeContext.RobotInstanceId = placeableSpec.InstanceId;
+			runtimeContext.RobotActor = runtimeActor;
+			runtimeContext.bHasGoalLocation = GetVectorProperty(placeableSpec.Properties, TEXT("goal_cm"), runtimeContext.GoalLocation);
 			continue;
 		}
 
-		if ((PlaceableSpec.Category == EEpisodeActorCategory::DeliveryBot ||
-			PlaceableSpec.Category == EEpisodeActorCategory::RoadVehicle) && !RuntimeContext.RobotActor)
+		if (placeableSpec.Category == EEpisodeActorCategory::StaticObstacle)
 		{
-			RuntimeContext.RobotInstanceId = PlaceableSpec.InstanceId;
-			RuntimeContext.RobotActor = RuntimeActor;
-			RuntimeContext.bHasGoalLocation = GetVectorProperty(PlaceableSpec.Properties, TEXT("goal_cm"), RuntimeContext.GoalLocation);
-			continue;
-		}
-
-		if (PlaceableSpec.Category == EEpisodeActorCategory::StaticObstacle)
-		{
-			RuntimeContext.StaticObstacleActors.Add(RuntimeActor);
+			runtimeContext.StaticObstacleActors.Add(runtimeActor);
 		}
 	}
 
-	for (const FEpisodeDynamicActorSpec& DynamicActorSpec : SetupSpec.DynamicActors)
+	for (const FEpisodeDynamicActorSpec& dynamicActorSpec : setupSpec.DynamicActors)
 	{
-		AActor* RuntimeActor = FindRuntimeActor(DynamicActorSpec.InstanceId);
-		if (!RuntimeActor)
-		{
-			continue;
-		}
+		AActor* runtimeActor = FindRuntimeActor(dynamicActorSpec.InstanceId);
+		if (!runtimeActor) continue;
 
-		if (DynamicActorSpec.Category == EEpisodeActorCategory::Pedestrian)
+		if (dynamicActorSpec.Category == EEpisodeActorCategory::Pedestrian)
 		{
-			RuntimeContext.PedestrianActors.Add(RuntimeActor);
-			RuntimeContext.PedestrianInstanceIds.Add(DynamicActorSpec.InstanceId);
+			runtimeContext.PedestrianActors.Add(runtimeActor);
+			runtimeContext.PedestrianInstanceIds.Add(dynamicActorSpec.InstanceId);
 		}
 	}
 
@@ -227,457 +218,400 @@ FEpisodeRuntimeContext UEpisodeSimulationSubsystem::BuildRuntimeContext(const FE
 		LogEpisodeSimulation,
 		Log,
 		TEXT("Runtime context built | Episode: %s, SpecHash: %s, Robot: %s, HasGoal: %s, RuntimeActors: %d, GroundRegions: %d, StaticObstacles: %d, Pedestrians: %d"),
-		*RuntimeContext.EpisodeId,
-		*RuntimeContext.SpecHash,
-		*RuntimeContext.RobotInstanceId,
-		RuntimeContext.bHasGoalLocation ? TEXT("true") : TEXT("false"),
-		RuntimeContext.RuntimeActors.Num(),
-		RuntimeContext.GroundRegionActors.Num(),
-		RuntimeContext.StaticObstacleActors.Num(),
-		RuntimeContext.PedestrianActors.Num());
+		*runtimeContext.EpisodeId,
+		*runtimeContext.SpecHash,
+		*runtimeContext.RobotInstanceId,
+		runtimeContext.bHasGoalLocation ? TEXT("true") : TEXT("false"),
+		runtimeContext.RuntimeActors.Num(),
+		runtimeContext.GroundRegionActors.Num(),
+		runtimeContext.StaticObstacleActors.Num(),
+		runtimeContext.PedestrianActors.Num());
 
-	if (!IsValid(RuntimeContext.RobotActor))
+	if (!IsValid(runtimeContext.RobotActor))
 	{
-		UE_LOG(LogEpisodeSimulation, Warning, TEXT("Runtime context has no valid robot actor | Episode: %s"), *RuntimeContext.EpisodeId);
+		UE_LOG(LogEpisodeSimulation, Warning, TEXT("Runtime context has no valid robot actor | Episode: %s"), *runtimeContext.EpisodeId);
 	}
 
-	return RuntimeContext;
+	return runtimeContext;
 }
 
-AEpisodeSplinePath* UEpisodeSimulationSubsystem::SpawnSplinePath(const FString& PathId, const TArray<FVector>& Points, bool bClosedLoop)
+AEpisodeSplinePath* UEpisodeSimulationSubsystem::SpawnSplinePath(const FString& pathId, const TArray<FVector>& points, bool bClosedLoop)
 {
-	UWorld* World = GetWorld();
-	if (!World || PathId.IsEmpty() || Points.Num() < 2)
-	{
-		return nullptr;
-	}
+	UWorld* world = GetWorld();
+	if (!world || pathId.IsEmpty() || points.Num() < 2) return nullptr;
 
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	AEpisodeSplinePath* PathActor = World->SpawnActor<AEpisodeSplinePath>(
+	AEpisodeSplinePath* pathActor = world->SpawnActor<AEpisodeSplinePath>(
 		AEpisodeSplinePath::StaticClass(),
 		FTransform::Identity,
-		SpawnParams);
-	if (!PathActor)
-	{
-		return nullptr;
-	}
+		spawnParams);
+	if (!pathActor) return nullptr;
 
-	PathActor->ConfigurePath(PathId, Points, bClosedLoop);
-	RuntimeActors.Add(PathActor);
-	RuntimePaths.Add(PathId, PathActor);
-	return PathActor;
+	pathActor->ConfigurePath(pathId, points, bClosedLoop);
+	RuntimeActors.Add(pathActor);
+	RuntimePaths.Add(pathId, pathActor);
+	return pathActor;
 }
 
-AEpisodeSplinePath* UEpisodeSimulationSubsystem::FindSplinePath(const FString& PathId) const
+AEpisodeSplinePath* UEpisodeSimulationSubsystem::FindSplinePath(const FString& pathId) const
 {
-	if (const TObjectPtr<AEpisodeSplinePath>* FoundPath = RuntimePaths.Find(PathId))
-	{
-		return FoundPath->Get();
-	}
+	if (const TObjectPtr<AEpisodeSplinePath>* foundPath = RuntimePaths.Find(pathId)) return foundPath->Get();
 
 	return nullptr;
 }
 
-AEpisodeGroundRegion* UEpisodeSimulationSubsystem::SpawnGroundRegion(const FEpisodeGroundRegionSpec& RegionSpec)
+AEpisodeGroundRegion* UEpisodeSimulationSubsystem::SpawnGroundRegion(const FEpisodeGroundRegionSpec& regionSpec)
 {
-	UWorld* World = GetWorld();
-	if (!World || RegionSpec.RegionId.IsEmpty() || RegionSpec.ShapeType != EEpisodeGroundShapeType::Rectangle)
-	{
-		return nullptr;
-	}
+	UWorld* world = GetWorld();
+	if (!world || regionSpec.RegionId.IsEmpty() || regionSpec.ShapeType != EEpisodeGroundShapeType::Rectangle) return nullptr;
 
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	AEpisodeGroundRegion* GroundRegion = World->SpawnActor<AEpisodeGroundRegion>(
+	AEpisodeGroundRegion* groundRegion = world->SpawnActor<AEpisodeGroundRegion>(
 		AEpisodeGroundRegion::StaticClass(),
 		FTransform::Identity,
-		SpawnParams);
-	if (!GroundRegion)
-	{
-		return nullptr;
-	}
+		spawnParams);
+	if (!groundRegion) return nullptr;
 
-	GroundRegion->ConfigureRegion(RegionSpec);
-	RuntimeActors.Add(GroundRegion);
-	RuntimeGroundRegions.Add(RegionSpec.RegionId, GroundRegion);
-	return GroundRegion;
+	groundRegion->ConfigureRegion(regionSpec);
+	RuntimeActors.Add(groundRegion);
+	RuntimeGroundRegions.Add(regionSpec.RegionId, groundRegion);
+	return groundRegion;
 }
 
-void UEpisodeSimulationSubsystem::SpawnGroundRegions(const TArray<FEpisodeGroundRegionSpec>& RegionSpecs)
+void UEpisodeSimulationSubsystem::SpawnGroundRegions(const TArray<FEpisodeGroundRegionSpec>& regionSpecs)
 {
-	for (const FEpisodeGroundRegionSpec& RegionSpec : RegionSpecs)
+	for (const FEpisodeGroundRegionSpec& regionSpec : regionSpecs)
 	{
-		SpawnGroundRegion(RegionSpec);
+		SpawnGroundRegion(regionSpec);
 	}
 }
 
-AEpisodeGroundRegion* UEpisodeSimulationSubsystem::FindGroundRegion(const FString& RegionId) const
+AEpisodeGroundRegion* UEpisodeSimulationSubsystem::FindGroundRegion(const FString& regionId) const
 {
-	if (const TObjectPtr<AEpisodeGroundRegion>* FoundRegion = RuntimeGroundRegions.Find(RegionId))
-	{
-		return FoundRegion->Get();
-	}
+	if (const TObjectPtr<AEpisodeGroundRegion>* foundRegion = RuntimeGroundRegions.Find(regionId)) return foundRegion->Get();
 
 	return nullptr;
 }
 
 AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrianOnPath(
-	TSubclassOf<AEpisodePedestrian> InPedestrianClass,
-	const FTransform& SpawnTransform,
-	AEpisodeSplinePath* SplinePath,
-	double SpeedCmPerSecond,
-	double InitialDistanceCm,
+	TSubclassOf<AEpisodePedestrian> inPedestrianClass,
+	const FTransform& spawnTransform,
+	AEpisodeSplinePath* splinePath,
+	double speedCmPerSecond,
+	double initialDistanceCm,
 	bool bStartFollowing)
 {
-	UWorld* World = GetWorld();
-	if (!World || !InPedestrianClass || !SplinePath)
-	{
-		return nullptr;
-	}
+	UWorld* world = GetWorld();
+	if (!world || !inPedestrianClass || !splinePath) return nullptr;
 
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	AEpisodePedestrian* Pedestrian = World->SpawnActorDeferred<AEpisodePedestrian>(
-		InPedestrianClass,
-		SpawnTransform,
+	AEpisodePedestrian* pedestrian = world->SpawnActorDeferred<AEpisodePedestrian>(
+		inPedestrianClass,
+		spawnTransform,
 		nullptr,
 		nullptr,
 		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-	if (!Pedestrian)
+	if (!pedestrian) return nullptr;
+
+	if (UEpisodePathFollowerComponent* pathFollower = pedestrian->PathFollowerComponent)
 	{
-		return nullptr;
+		pathFollower->bAutoStart = false;
+		pathFollower->SpeedCmPerSecond = speedCmPerSecond;
+		pathFollower->InitialDistanceCm = initialDistanceCm;
+		pathFollower->CurrentDistanceCm = initialDistanceCm;
+		pathFollower->SetSplinePath(splinePath);
 	}
 
-	if (UEpisodePathFollowerComponent* PathFollower = Pedestrian->PathFollowerComponent)
+	UGameplayStatics::FinishSpawningActor(pedestrian, spawnTransform);
+	SetActorReceivesDecals(pedestrian, false);
+	RuntimeActors.Add(pedestrian);
+
+	if (bStartFollowing && pedestrian->PathFollowerComponent)
 	{
-		PathFollower->bAutoStart = false;
-		PathFollower->SpeedCmPerSecond = SpeedCmPerSecond;
-		PathFollower->InitialDistanceCm = InitialDistanceCm;
-		PathFollower->CurrentDistanceCm = InitialDistanceCm;
-		PathFollower->SetSplinePath(SplinePath);
+		pedestrian->PathFollowerComponent->StartFollowing();
 	}
 
-	UGameplayStatics::FinishSpawningActor(Pedestrian, SpawnTransform);
-	SetActorReceivesDecals(Pedestrian, false);
-	RuntimeActors.Add(Pedestrian);
-
-	if (bStartFollowing && Pedestrian->PathFollowerComponent)
-	{
-		Pedestrian->PathFollowerComponent->StartFollowing();
-	}
-
-	return Pedestrian;
+	return pedestrian;
 }
 
 AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrianOnPathId(
-	TSubclassOf<AEpisodePedestrian> InPedestrianClass,
-	const FTransform& SpawnTransform,
-	const FString& PathId,
-	double SpeedCmPerSecond,
-	double InitialDistanceCm,
+	TSubclassOf<AEpisodePedestrian> inPedestrianClass,
+	const FTransform& spawnTransform,
+	const FString& pathId,
+	double speedCmPerSecond,
+	double initialDistanceCm,
 	bool bStartFollowing)
 {
 	return SpawnPedestrianOnPath(
-		InPedestrianClass,
-		SpawnTransform,
-		FindSplinePath(PathId),
-		SpeedCmPerSecond,
-		InitialDistanceCm,
+		inPedestrianClass,
+		spawnTransform,
+		FindSplinePath(pathId),
+		speedCmPerSecond,
+		initialDistanceCm,
 		bStartFollowing);
 }
 
-AActor* UEpisodeSimulationSubsystem::SpawnPlaceable(const FEpisodePlaceableInstanceSpec& PlaceableSpec)
+AActor* UEpisodeSimulationSubsystem::SpawnPlaceable(const FEpisodePlaceableInstanceSpec& placeableSpec)
 {
-	switch (PlaceableSpec.Category)
+	switch (placeableSpec.Category)
 	{
 	case EEpisodeActorCategory::StaticObstacle:
-		return SpawnStaticObstacle(PlaceableSpec);
+		return SpawnStaticObstacle(placeableSpec);
 	case EEpisodeActorCategory::DeliveryBot:
 	case EEpisodeActorCategory::RoadVehicle:
-		return SpawnRobotActor(PlaceableSpec);
+		return SpawnRobotActor(placeableSpec);
 	default:
 		UE_LOG(
 			LogEpisodeSimulation,
 			Warning,
 			TEXT("배치 액터 '%s'의 카테고리를 지원하지 않음."),
-			*PlaceableSpec.InstanceId);
+			*placeableSpec.InstanceId);
 		return nullptr;
 	}
 }
 
-AEpisodeStaticObstacle* UEpisodeSimulationSubsystem::SpawnStaticObstacle(const FEpisodePlaceableInstanceSpec& PlaceableSpec)
+AEpisodeStaticObstacle* UEpisodeSimulationSubsystem::SpawnStaticObstacle(const FEpisodePlaceableInstanceSpec& placeableSpec)
 {
-	UWorld* World = GetWorld();
-	TSubclassOf<AEpisodeStaticObstacle> SpawnClass = StaticObstacleClass;
-	if (!SpawnClass)
+	UWorld* world = GetWorld();
+	TSubclassOf<AEpisodeStaticObstacle> spawnClass = StaticObstacleClass;
+	if (!spawnClass)
 	{
-		SpawnClass = AEpisodeStaticObstacle::StaticClass();
+		spawnClass = AEpisodeStaticObstacle::StaticClass();
 	}
-	if (!World || PlaceableSpec.InstanceId.IsEmpty() || PlaceableSpec.AssetId.IsEmpty() || !SpawnClass)
-	{
-		return nullptr;
-	}
+	if (!world || placeableSpec.InstanceId.IsEmpty() || placeableSpec.AssetId.IsEmpty() || !spawnClass) return nullptr;
 
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	AEpisodeStaticObstacle* StaticObstacle = World->SpawnActor<AEpisodeStaticObstacle>(
-		SpawnClass,
-		PlaceableSpec.Transform,
-		SpawnParams);
-	if (!StaticObstacle)
-	{
-		return nullptr;
-	}
+	AEpisodeStaticObstacle* staticObstacle = world->SpawnActor<AEpisodeStaticObstacle>(
+		spawnClass,
+		placeableSpec.Transform,
+		spawnParams);
+	if (!staticObstacle) return nullptr;
 
-	if (!StaticObstacle->ApplyDefaultPropById(FName(*PlaceableSpec.AssetId)))
+	if (!staticObstacle->ApplyDefaultPropById(FName(*placeableSpec.AssetId)))
 	{
 		UE_LOG(
 			LogEpisodeSimulation,
 			Warning,
 			TEXT("정적 장애물 '%s'에 prop '%s' 적용 실패."),
-			*PlaceableSpec.InstanceId,
-			*PlaceableSpec.AssetId);
-		StaticObstacle->Destroy();
+			*placeableSpec.InstanceId,
+			*placeableSpec.AssetId);
+		staticObstacle->Destroy();
 		return nullptr;
 	}
 
 	RegisterRuntimeActor(
-		PlaceableSpec.InstanceId,
-		PlaceableSpec.AssetId,
-		PlaceableSpec.Category,
-		StaticObstacle);
-	return StaticObstacle;
+		placeableSpec.InstanceId,
+		placeableSpec.AssetId,
+		placeableSpec.Category,
+		staticObstacle);
+	return staticObstacle;
 }
 
-AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInstanceSpec& PlaceableSpec)
+AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInstanceSpec& placeableSpec)
 {
-	UWorld* World{ GetWorld() };
+	UWorld* world{ GetWorld() };
 
-	if (!World || PlaceableSpec.InstanceId.IsEmpty() || !RobotActorClass)
-	{
-		return nullptr;
-	}
+	if (!world || placeableSpec.InstanceId.IsEmpty() || !RobotActorClass) return nullptr;
 
-	const bool bSpawnOnly = GetBoolProperty(PlaceableSpec.Properties, TEXT("spawn_only"), true);
-	const bool bRouteAutoStart = GetBoolProperty(PlaceableSpec.Properties, TEXT("route_auto_start"), true);
-	const FVector StartLocation = PlaceableSpec.Transform.GetLocation();
-	FVector GoalLocation = StartLocation;
-	const bool bHasGoal = GetVectorProperty(PlaceableSpec.Properties, TEXT("goal_cm"), GoalLocation);
+	const bool bSpawnOnly = GetBoolProperty(placeableSpec.Properties, TEXT("spawn_only"), true);
+	const bool bRouteAutoStart = GetBoolProperty(placeableSpec.Properties, TEXT("route_auto_start"), true);
+	const FVector startLocation = placeableSpec.Transform.GetLocation();
+	FVector goalLocation = startLocation;
+	const bool bHasGoal = GetVectorProperty(placeableSpec.Properties, TEXT("goal_cm"), goalLocation);
 
-	FDeliveryBotSetupInfo SetupInfo;
-	SetupInfo.LocationSetupInfo.StartLocationCm = StartLocation;
-	SetupInfo.LocationSetupInfo.GoalLocationCm = GoalLocation;
-	SetupInfo.LocationSetupInfo.bAutoStartRoute = !bSpawnOnly && bRouteAutoStart && bHasGoal;
+	FDeliveryBotSetupInfo setupInfo;
+	setupInfo.LocationSetupInfo.StartLocationCm = startLocation;
+	setupInfo.LocationSetupInfo.GoalLocationCm = goalLocation;
+	setupInfo.LocationSetupInfo.bAutoStartRoute = !bSpawnOnly && bRouteAutoStart && bHasGoal;
 
-	ADeliveryBot_ChaosActor* RobotActor{
-		World->SpawnActorDeferred<ADeliveryBot_ChaosActor>(
+	ADeliveryBot_ChaosActor* robotActor{
+		world->SpawnActorDeferred<ADeliveryBot_ChaosActor>(
 			RobotActorClass,
-			PlaceableSpec.Transform,
+			placeableSpec.Transform,
 			nullptr,
 			nullptr,
 			ESpawnActorCollisionHandlingMethod::AlwaysSpawn
 		)
 	};
 
-	if (!RobotActor)
-	{
-		return nullptr;
-	}
+	if (!robotActor) return nullptr;
 
-	RobotActor->InitializeSetupInfo(SetupInfo);
+	robotActor->InitializeSetupInfo(setupInfo);
 
 	UGameplayStatics::FinishSpawningActor(
-		RobotActor,
-		PlaceableSpec.Transform
+		robotActor,
+		placeableSpec.Transform
 	);
 
 	RegisterRuntimeActor(
-		PlaceableSpec.InstanceId,
-		PlaceableSpec.AssetId,
-		PlaceableSpec.Category,
-		RobotActor);
+		placeableSpec.InstanceId,
+		placeableSpec.AssetId,
+		placeableSpec.Category,
+		robotActor);
 
 	if (!bSpawnOnly)
 	{
 		if (!bHasGoal)
 		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s'의 이동 목표(goal_cm)가 없어 경로 주입을 건너뜀."), *PlaceableSpec.InstanceId);
-			return RobotActor;
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s'의 이동 목표(goal_cm)가 없어 경로 주입을 건너뜀."), *placeableSpec.InstanceId);
+			return robotActor;
 		}
 
 		if (GoalPointClass)
 		{
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			FActorSpawnParameters spawnParams;
+			spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-			if (AActor* GoalPointActor = World->SpawnActor<AActor>(GoalPointClass, FTransform(FRotator::ZeroRotator, GoalLocation), SpawnParams))
+			if (AActor* goalPointActor = world->SpawnActor<AActor>(GoalPointClass, FTransform(FRotator::ZeroRotator, goalLocation), spawnParams))
 			{
-				RuntimeActors.Add(GoalPointActor);
+				RuntimeActors.Add(goalPointActor);
 			}
 		}
 
 		if (StartPointClass)
 		{
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			FActorSpawnParameters spawnParams;
+			spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-			if (AActor* StartPointActor = World->SpawnActor<AActor>(StartPointClass, FTransform(PlaceableSpec.Transform), SpawnParams))
+			if (AActor* startPointActor = world->SpawnActor<AActor>(StartPointClass, FTransform(placeableSpec.Transform), spawnParams))
 			{
-				RuntimeActors.Add(StartPointActor);
+				RuntimeActors.Add(startPointActor);
 			}
 		}
 
 	}
 
-	return RobotActor;
+	return robotActor;
 }
 
-AActor* UEpisodeSimulationSubsystem::SpawnDynamicActor(const FEpisodeDynamicActorSpec& DynamicActorSpec)
+AActor* UEpisodeSimulationSubsystem::SpawnDynamicActor(const FEpisodeDynamicActorSpec& dynamicActorSpec)
 {
-	switch (DynamicActorSpec.Category)
+	switch (dynamicActorSpec.Category)
 	{
 	case EEpisodeActorCategory::Pedestrian:
-		return SpawnPedestrian(DynamicActorSpec);
+		return SpawnPedestrian(dynamicActorSpec);
 	default:
 		UE_LOG(
 			LogEpisodeSimulation,
 			Warning,
 			TEXT("동적 액터 '%s'의 카테고리를 지원하지 않음."),
-			*DynamicActorSpec.InstanceId);
+			*dynamicActorSpec.InstanceId);
 		return nullptr;
 	}
 }
 
-AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrian(const FEpisodeDynamicActorSpec& DynamicActorSpec)
+AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrian(const FEpisodeDynamicActorSpec& dynamicActorSpec)
 {
-	const double SpeedCmPerSecond = GetFloatProperty(DynamicActorSpec.Properties, TEXT("speed_cm_per_second"), 120.0);
-	const double InitialDistanceCm = GetFloatProperty(DynamicActorSpec.Properties, TEXT("initial_distance_cm"), 0.0);
-	const bool bAutoStart = GetBoolProperty(DynamicActorSpec.Properties, TEXT("auto_start"), true);
+	const double speedCmPerSecond = GetFloatProperty(dynamicActorSpec.Properties, TEXT("speed_cm_per_second"), 120.0);
+	const double initialDistanceCm = GetFloatProperty(dynamicActorSpec.Properties, TEXT("initial_distance_cm"), 0.0);
+	const bool bAutoStart = GetBoolProperty(dynamicActorSpec.Properties, TEXT("auto_start"), true);
 
-	AEpisodePedestrian* Pedestrian = SpawnPedestrianOnPathId(
+	AEpisodePedestrian* pedestrian = SpawnPedestrianOnPathId(
 		PedestrianClass ? PedestrianClass.Get() : AEpisodePedestrian::StaticClass(),
-		DynamicActorSpec.InitialTransform,
-		DynamicActorSpec.PathId,
-		SpeedCmPerSecond,
-		InitialDistanceCm,
+		dynamicActorSpec.InitialTransform,
+		dynamicActorSpec.PathId,
+		speedCmPerSecond,
+		initialDistanceCm,
 		bAutoStart);
-	if (!Pedestrian)
-	{
-		return nullptr;
-	}
+	if (!pedestrian) return nullptr;
 
 	ConfigurePlaceableComponent(
-		Pedestrian->PlaceableComponent,
-		DynamicActorSpec.InstanceId,
-		DynamicActorSpec.AssetId,
-		DynamicActorSpec.Category);
-	RuntimeActorsById.Add(DynamicActorSpec.InstanceId, Pedestrian);
-	return Pedestrian;
+		pedestrian->PlaceableComponent,
+		dynamicActorSpec.InstanceId,
+		dynamicActorSpec.AssetId,
+		dynamicActorSpec.Category);
+	RuntimeActorsById.Add(dynamicActorSpec.InstanceId, pedestrian);
+	return pedestrian;
 }
 
 void UEpisodeSimulationSubsystem::RegisterRuntimeActor(
-	const FString& InstanceId,
-	const FString& AssetId,
-	EEpisodeActorCategory Category,
-	AActor* Actor)
+	const FString& instanceId,
+	const FString& assetId,
+	EEpisodeActorCategory category,
+	AActor* actor)
 {
-	if (!Actor)
-	{
-		return;
-	}
+	if (!actor) return;
 
-	RuntimeActors.Add(Actor);
-	RuntimeActorsById.Add(InstanceId, Actor);
-	SetActorReceivesDecals(Actor, false);
+	RuntimeActors.Add(actor);
+	RuntimeActorsById.Add(instanceId, actor);
+	SetActorReceivesDecals(actor, false);
 	ConfigurePlaceableComponent(
-		Actor->FindComponentByClass<UEpisodePlaceableComponent>(),
-		InstanceId,
-		AssetId,
-		Category);
+		actor->FindComponentByClass<UEpisodePlaceableComponent>(),
+		instanceId,
+		assetId,
+		category);
 }
 
 void UEpisodeSimulationSubsystem::ConfigurePlaceableComponent(
-	UEpisodePlaceableComponent* PlaceableComponent,
-	const FString& InstanceId,
-	const FString& AssetId,
-	EEpisodeActorCategory Category) const
+	UEpisodePlaceableComponent* placeableComponent,
+	const FString& instanceId,
+	const FString& assetId,
+	EEpisodeActorCategory category) const
 {
-	if (!PlaceableComponent) return;
+	if (!placeableComponent) return;
 
-	PlaceableComponent->InstanceId = InstanceId;
-	PlaceableComponent->AssetId = AssetId;
-	PlaceableComponent->Category = Category;
+	placeableComponent->InstanceId = instanceId;
+	placeableComponent->AssetId = assetId;
+	placeableComponent->Category = category;
 }
 
 double UEpisodeSimulationSubsystem::GetFloatProperty(
-	const TMap<FString, FEpisodeParamValue>& Properties,
-	const FString& Key,
-	double DefaultValue)
+	const TMap<FString, FEpisodeParamValue>& properties,
+	const FString& key,
+	double defaultValue)
 {
-	const FEpisodeParamValue* ParamValue = Properties.Find(Key);
-	if (!ParamValue)
-	{
-		return DefaultValue;
-	}
+	const FEpisodeParamValue* paramValue = properties.Find(key);
+	if (!paramValue) return defaultValue;
 
-	if (ParamValue->Type == EEpisodeParamValueType::Float)
-	{
-		return ParamValue->FloatValue;
-	}
+	if (paramValue->Type == EEpisodeParamValueType::Float) return paramValue->FloatValue;
 
-	if (ParamValue->Type == EEpisodeParamValueType::Integer)
-	{
-		return ParamValue->IntegerValue;
-	}
+	if (paramValue->Type == EEpisodeParamValueType::Integer) return paramValue->IntegerValue;
 
-	return DefaultValue;
+	return defaultValue;
 }
 
 bool UEpisodeSimulationSubsystem::GetBoolProperty(
-	const TMap<FString, FEpisodeParamValue>& Properties,
-	const FString& Key,
-	bool DefaultValue)
+	const TMap<FString, FEpisodeParamValue>& properties,
+	const FString& key,
+	bool defaultValue)
 {
-	const FEpisodeParamValue* ParamValue = Properties.Find(Key);
-	if (!ParamValue || ParamValue->Type != EEpisodeParamValueType::Bool)
-	{
-		return DefaultValue;
-	}
+	const FEpisodeParamValue* paramValue = properties.Find(key);
+	if (!paramValue || paramValue->Type != EEpisodeParamValueType::Bool) return defaultValue;
 
-	return ParamValue->BoolValue;
+	return paramValue->BoolValue;
 }
 
 bool UEpisodeSimulationSubsystem::GetVectorProperty(
-	const TMap<FString, FEpisodeParamValue>& Properties,
-	const FString& Key,
-	FVector& OutValue)
+	const TMap<FString, FEpisodeParamValue>& properties,
+	const FString& key,
+	FVector& outValue)
 {
-	const FEpisodeParamValue* ParamValue = Properties.Find(Key);
-	if (!ParamValue || ParamValue->Type != EEpisodeParamValueType::Vector)
-	{
-		return false;
-	}
+	const FEpisodeParamValue* paramValue = properties.Find(key);
+	if (!paramValue || paramValue->Type != EEpisodeParamValueType::Vector) return false;
 
-	OutValue = ParamValue->VectorValue;
+	outValue = paramValue->VectorValue;
 	return true;
 }
 
-void UEpisodeSimulationSubsystem::SetActorReceivesDecals(AActor* Actor, bool bReceivesDecals)
+void UEpisodeSimulationSubsystem::SetActorReceivesDecals(AActor* actor, bool bReceivesDecals)
 {
-	if (!Actor) return;
+	if (!actor) return;
 
-	TArray<UPrimitiveComponent*> PrimitiveComponents;
-	Actor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
-	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
+	TArray<UPrimitiveComponent*> primitiveComponents;
+	actor->GetComponents<UPrimitiveComponent>(primitiveComponents);
+	for (UPrimitiveComponent* primitiveComponent : primitiveComponents)
 	{
-		if (PrimitiveComponent)
+		if (primitiveComponent)
 		{
-			PrimitiveComponent->SetReceivesDecals(bReceivesDecals);
+			primitiveComponent->SetReceivesDecals(bReceivesDecals);
 		}
 	}
 }

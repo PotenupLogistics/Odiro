@@ -10,7 +10,7 @@ class AActor;
 class AEpisodeGroundRegion;
 class UPrimitiveComponent;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEpisodeEvaluationEndedSignature, FEpisodeEvaluationResult, Result);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEpisodeEvaluationEndedSignature, FEpisodeEvaluationResult, result);
 
 // 현재 월드의 episode runtime을 관찰하고 평가 결과와 종료 결정을 생성하는 subsystem.
 UCLASS(BlueprintType)
@@ -24,15 +24,15 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Evaluation")
 	bool StartEvaluation(
-		const FEpisodeEvaluationConfig& EvaluationConfig,
-		const FEpisodeRuntimeContext& RuntimeContext,
-		double InTimeLimitSeconds);
+		const FEpisodeEvaluationConfig& evaluationConfig,
+		const FEpisodeRuntimeContext& runtimeContext,
+		double inTimeLimitSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Evaluation")
 	void StopEvaluation();
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Evaluation")
-	void RequestEndEpisode(const FEpisodeEvaluationResult& Result);
+	void RequestEndEpisode(const FEpisodeEvaluationResult& result);
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Evaluation")
 	bool IsEvaluating() const { return bEvaluating; }
@@ -40,7 +40,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Episode|Evaluation")
 	FEpisodeEvaluationResult GetCurrentResult() const { return CurrentResult; }
 
-	virtual void Tick(float DeltaTime) override;
+	virtual void Tick(float deltaTime) override;
 	virtual bool IsTickable() const override;
 	virtual TStatId GetStatId() const override;
 
@@ -66,34 +66,34 @@ private:
 		bool bInside = false;
 	};
 
-	static FEpisodeParamValue MakeFloatParam(double Value);
-	static FEpisodeParamValue MakeStringParam(const FString& Value);
+	static FEpisodeParamValue MakeFloatParam(double value);
+	static FEpisodeParamValue MakeStringParam(const FString& value);
 
 	void AddEvaluationEvent(
-		EEpisodeEvaluationEventType EventType,
-		EEpisodeEvaluationEventSeverity Severity,
-		const FString& Message);
+		EEpisodeEvaluationEventType eventType,
+		EEpisodeEvaluationEventSeverity severity,
+		const FString& message);
 	void AddEvaluationEventWithDetails(
-		EEpisodeEvaluationEventType EventType,
-		EEpisodeEvaluationEventSeverity Severity,
-		const FString& Message,
-		const FString& TargetInstanceId,
-		const FVector& Location,
-		double Value,
-		const TMap<FString, FEpisodeParamValue>& Properties);
+		EEpisodeEvaluationEventType eventType,
+		EEpisodeEvaluationEventSeverity severity,
+		const FString& message,
+		const FString& targetInstanceId,
+		const FVector& location,
+		double value,
+		const TMap<FString, FEpisodeParamValue>& properties);
 
 	void BindEvaluationHitDelegates();
-	void BindActorHitDelegates(AActor* Actor);
+	void BindActorHitDelegates(AActor* actor);
 	void UnbindEvaluationHitDelegates();
-	bool IsHitComponentBound(const UPrimitiveComponent* PrimitiveComponent) const;
+	bool IsHitComponentBound(const UPrimitiveComponent* primitiveComponent) const;
 
 	UFUNCTION()
 	void HandleObservedComponentHit(
-		UPrimitiveComponent* HitComponent,
-		AActor* OtherActor,
-		UPrimitiveComponent* OtherComp,
-		FVector NormalImpulse,
-		const FHitResult& Hit);
+		UPrimitiveComponent* hitComponent,
+		AActor* otherActor,
+		UPrimitiveComponent* otherComp,
+		FVector normalImpulse,
+		const FHitResult& hit);
 
 	bool CheckGoalReached();
 	bool CheckRobotFall();
@@ -102,25 +102,25 @@ private:
 	void UpdateNearMisses();
 	void FlushActiveNearMisses();
 	void CloseNearMissInterval(
-		const FString& PedestrianInstanceId,
-		const FNearMissIntervalState& State,
-		double EndTimeSeconds);
-	void SetFloatMetric(const FString& Key, double Value);
-	void AddScore(double ScoreDelta);
+		const FString& pedestrianInstanceId,
+		const FNearMissIntervalState& state,
+		double endTimeSeconds);
+	void SetFloatMetric(const FString& key, double value);
+	void AddScore(double scoreDelta);
 	void FinishEpisode(
 		bool bSuccess,
-		EEpisodeEvaluationOutcome Outcome,
-		EEpisodeEvaluationTerminalReason TerminalReason);
+		EEpisodeEvaluationOutcome outcome,
+		EEpisodeEvaluationTerminalReason terminalReason);
 	void RecordCollisionEvent(
-		EEpisodeEvaluationEventType EventType,
-		AActor* TargetActor,
-		const FVector& Location,
-		double ScoreDelta,
-		const FString& Message);
+		EEpisodeEvaluationEventType eventType,
+		AActor* targetActor,
+		const FVector& location,
+		double scoreDelta,
+		const FString& message);
 	bool HasWarningEventsOrScore() const;
-	bool IsRobotActor(const AActor* Actor) const;
-	bool ContainsRuntimeActor(const TArray<TObjectPtr<AActor>>& Actors, const AActor* Actor) const;
-	FString GetActorInstanceId(const AActor* Actor) const;
+	bool IsRobotActor(const AActor* actor) const;
+	bool ContainsRuntimeActor(const TArray<TObjectPtr<AActor>>& actors, const AActor* actor) const;
+	FString GetActorInstanceId(const AActor* actor) const;
 
 	double GetElapsedTimeSeconds() const;
 	void EndForTimeout();

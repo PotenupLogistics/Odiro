@@ -23,5 +23,5 @@ public:
 	FString PathId;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
-	void ConfigurePath(const FString& InPathId, const TArray<FVector>& Points, bool bClosedLoop);
+	void ConfigurePath(const FString& inPathId, const TArray<FVector>& points, bool bClosedLoop);
 };

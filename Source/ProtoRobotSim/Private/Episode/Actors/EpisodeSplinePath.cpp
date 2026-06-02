@@ -10,16 +10,16 @@ AEpisodeSplinePath::AEpisodeSplinePath()
 	SetRootComponent(SplineComponent);
 }
 
-void AEpisodeSplinePath::ConfigurePath(const FString& InPathId, const TArray<FVector>& Points, bool bClosedLoop)
+void AEpisodeSplinePath::ConfigurePath(const FString& inPathId, const TArray<FVector>& points, bool bClosedLoop)
 {
-	PathId = InPathId;
+	PathId = inPathId;
 
 	if (!SplineComponent) return;
 
 	SplineComponent->ClearSplinePoints(false);
-	for (const FVector& Point : Points)
+	for (const FVector& point : points)
 	{
-		SplineComponent->AddSplinePoint(Point, ESplineCoordinateSpace::World, false);
+		SplineComponent->AddSplinePoint(point, ESplineCoordinateSpace::World, false);
 	}
 
 	SplineComponent->SetClosedLoop(bClosedLoop, false);

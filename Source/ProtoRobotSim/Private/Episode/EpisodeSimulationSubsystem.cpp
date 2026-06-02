@@ -82,6 +82,11 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 
 void UEpisodeSimulationSubsystem::ClearEpisode()
 {
+	const int32 ActorCount = RuntimeActors.Num();
+	const int32 ActorIdCount = RuntimeActorsById.Num();
+	const int32 GroundRegionCount = RuntimeGroundRegions.Num();
+	const int32 PathCount = RuntimePaths.Num();
+
 	for (int32 Index = RuntimeActors.Num() - 1; Index >= 0; --Index)
 	{
 		if (AActor* Actor = RuntimeActors[Index].Get())
@@ -94,11 +99,33 @@ void UEpisodeSimulationSubsystem::ClearEpisode()
 	RuntimeGroundRegions.Reset();
 	RuntimePaths.Reset();
 	RuntimeActorsById.Reset();
+
+	if (ActorCount > 0 || ActorIdCount > 0 || GroundRegionCount > 0 || PathCount > 0)
+	{
+		UE_LOG(
+			LogEpisodeSimulation,
+			Log,
+			TEXT("Episode runtime cleared | Actors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
+			ActorCount,
+			ActorIdCount,
+			GroundRegionCount,
+			PathCount);
+	}
 }
 
 bool UEpisodeSimulationSubsystem::SpawnEpisodeWorld(const FEpisodeWorldSpec& WorldSpec)
 {
 	ClearEpisode();
+
+	UE_LOG(
+		LogEpisodeSimulation,
+		Log,
+		TEXT("Episode world spawn started | Episode: %s, GroundRegions: %d, Paths: %d, Placeables: %d, DynamicActors: %d"),
+		*WorldSpec.RunConfig.TemplateId,
+		WorldSpec.GroundRegions.Num(),
+		WorldSpec.Paths.Num(),
+		WorldSpec.Placeables.Num(),
+		WorldSpec.DynamicActors.Num());
 
 	bool bAllSpawned{ true };
 
@@ -142,6 +169,17 @@ bool UEpisodeSimulationSubsystem::SpawnEpisodeWorld(const FEpisodeWorldSpec& Wor
 			bAllSpawned = false;
 		}
 	}
+
+	UE_LOG(
+		LogEpisodeSimulation,
+		Log,
+		TEXT("Episode world spawn completed | Episode: %s, Success: %s, RuntimeActors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
+		*WorldSpec.RunConfig.TemplateId,
+		bAllSpawned ? TEXT("true") : TEXT("false"),
+		RuntimeActors.Num(),
+		RuntimeActorsById.Num(),
+		RuntimeGroundRegions.Num(),
+		RuntimePaths.Num());
 
 	return bAllSpawned;
 }
@@ -240,6 +278,24 @@ FEpisodeRuntimeContext UEpisodeSimulationSubsystem::BuildRuntimeContext(const FE
 			RuntimeContext.PedestrianActors.Add(RuntimeActor);
 			RuntimeContext.PedestrianInstanceIds.Add(DynamicActorSpec.InstanceId);
 		}
+	}
+
+	UE_LOG(
+		LogEpisodeSimulation,
+		Log,
+		TEXT("Runtime context built | Episode: %s, SpecHash: %s, Robot: %s, HasGoal: %s, RuntimeActors: %d, GroundRegions: %d, StaticObstacles: %d, Pedestrians: %d"),
+		*RuntimeContext.EpisodeId,
+		*RuntimeContext.SpecHash,
+		*RuntimeContext.RobotInstanceId,
+		RuntimeContext.bHasGoalLocation ? TEXT("true") : TEXT("false"),
+		RuntimeContext.RuntimeActors.Num(),
+		RuntimeContext.GroundRegionActors.Num(),
+		RuntimeContext.StaticObstacleActors.Num(),
+		RuntimeContext.PedestrianActors.Num());
+
+	if (!IsValid(RuntimeContext.RobotActor))
+	{
+		UE_LOG(LogEpisodeSimulation, Warning, TEXT("Runtime context has no valid robot actor | Episode: %s"), *RuntimeContext.EpisodeId);
 	}
 
 	return RuntimeContext;

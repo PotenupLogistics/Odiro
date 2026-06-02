@@ -1,13 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Shared/EpisodeSpecTypes.h"
+#include "Shared/EpisodeConfigTypes.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "EpisodeEvaluationSubsystem.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEpisodeEvaluationEndedSignature, FEpisodeEvaluationResult, Result);
 
-// 현재 월드의 episode runtime actor를 관찰하고 평가 결과와 종료 결정을 생성하는 subsystem.
+// 현재 월드의 episode runtime을 관찰하고 평가 결과와 종료 결정을 생성하는 subsystem.
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API UEpisodeEvaluationSubsystem : public UTickableWorldSubsystem
 {
@@ -18,7 +18,10 @@ public:
 	FEpisodeEvaluationEndedSignature OnEpisodeEnded;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Evaluation")
-	bool StartEvaluation(const FEpisodeWorldSpec& WorldSpec, const FEpisodeRuntimeContext& RuntimeContext);
+	bool StartEvaluation(
+		const FEpisodeEvaluationConfig& EvaluationConfig,
+		const FEpisodeRuntimeContext& RuntimeContext,
+		double InTimeLimitSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Evaluation")
 	void StopEvaluation();
@@ -46,11 +49,6 @@ private:
 		FVector ClosestPedestrianLocation = FVector::ZeroVector;
 	};
 
-	static double GetFloatProperty(
-		const TMap<FString, FEpisodeParamValue>& Properties,
-		const FString& Key,
-		double DefaultValue);
-
 	static FEpisodeParamValue MakeFloatParam(double Value);
 	static FEpisodeParamValue MakeStringParam(const FString& Value);
 
@@ -72,7 +70,7 @@ private:
 	void EndForTimeout();
 
 	UPROPERTY(Transient)
-	FEpisodeWorldSpec ActiveWorldSpec;
+	FEpisodeEvaluationConfig ActiveEvaluationConfig;
 
 	UPROPERTY(Transient)
 	FEpisodeRuntimeContext ActiveRuntimeContext;

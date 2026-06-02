@@ -44,6 +44,7 @@ private:
 		const FEpisodeEvaluationResult* EvaluationResult = nullptr);
 
 	void AppendCompileDiagnostics(const FEpisodeCompileResult& CompileResult);
+	double GetRunTimeLimitSeconds(const FEpisodeRunConfig& RunConfig) const;
 	FString BuildRunId() const;
 
 	UWorld* ResolveWorld() const;

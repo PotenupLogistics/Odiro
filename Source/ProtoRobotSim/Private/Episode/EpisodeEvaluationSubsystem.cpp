@@ -1,16 +1,33 @@
 
 #include "Episode/EpisodeEvaluationSubsystem.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogEpisodeEvaluation, Log, All);
+
+namespace
+{
+	template <typename TEnum>
+	FString ToEvaluationEnumString(TEnum Value)
+	{
+		if (const UEnum* Enum = StaticEnum<TEnum>())
+		{
+			return Enum->GetNameStringByValue(static_cast<int64>(Value));
+		}
+
+		return TEXT("Unknown");
+	}
+}
+
 bool UEpisodeEvaluationSubsystem::StartEvaluation(
-	const FEpisodeWorldSpec& WorldSpec,
-	const FEpisodeRuntimeContext& RuntimeContext)
+	const FEpisodeEvaluationConfig& EvaluationConfig,
+	const FEpisodeRuntimeContext& RuntimeContext,
+	double InTimeLimitSeconds)
 {
 	if (bEvaluating)
 	{
 		StopEvaluation();
 	}
 
-	ActiveWorldSpec = WorldSpec;
+	ActiveEvaluationConfig = EvaluationConfig;
 	ActiveRuntimeContext = RuntimeContext;
 
 	CurrentResult = FEpisodeEvaluationResult{};
@@ -20,7 +37,7 @@ bool UEpisodeEvaluationSubsystem::StartEvaluation(
 
 	UWorld* World = GetWorld();
 	EvaluationStartTimeSeconds = World ? World->GetTimeSeconds() : 0.0;
-	TimeLimitSeconds = GetFloatProperty(WorldSpec.RunConfig.Parameters, TEXT("time_limit_s"), 0.0);
+	TimeLimitSeconds = FMath::Max(0.0, InTimeLimitSeconds);
 	CurrentScore = 0.0;
 	NearMissCount = 0;
 	NearMissTotalDurationSeconds = 0.0;
@@ -31,13 +48,37 @@ bool UEpisodeEvaluationSubsystem::StartEvaluation(
 	SetFloatMetric(TEXT("near_miss_total_duration_s"), 0.0);
 	bEvaluating = true;
 
+	UE_LOG(
+		LogEpisodeEvaluation,
+		Log,
+		TEXT("Evaluation started | Episode: %s, TimeLimit: %.2fs, Robot: %s, HasGoal: %s, RuntimeActors: %d, GroundRegions: %d, StaticObstacles: %d, Pedestrians: %d, NearMissDistance: %.1fcm"),
+		*RuntimeContext.EpisodeId,
+		TimeLimitSeconds,
+		*RuntimeContext.RobotInstanceId,
+		RuntimeContext.bHasGoalLocation ? TEXT("true") : TEXT("false"),
+		RuntimeContext.RuntimeActors.Num(),
+		RuntimeContext.GroundRegionActors.Num(),
+		RuntimeContext.StaticObstacleActors.Num(),
+		RuntimeContext.PedestrianActors.Num(),
+		ActiveEvaluationConfig.NearMissDistanceCm);
+
+	if (!IsValid(RuntimeContext.RobotActor))
+	{
+		UE_LOG(LogEpisodeEvaluation, Warning, TEXT("Evaluation started without a valid robot actor | Episode: %s"), *RuntimeContext.EpisodeId);
+	}
+
 	return true;
 }
 
 void UEpisodeEvaluationSubsystem::StopEvaluation()
 {
+	if (bEvaluating)
+	{
+		UE_LOG(LogEpisodeEvaluation, Log, TEXT("Evaluation stopped | Episode: %s"), *ActiveRuntimeContext.EpisodeId);
+	}
+
 	bEvaluating = false;
-	ActiveWorldSpec = FEpisodeWorldSpec{};
+	ActiveEvaluationConfig = FEpisodeEvaluationConfig{};
 	ActiveRuntimeContext = FEpisodeRuntimeContext{};
 	TimeLimitSeconds = 0.0;
 	EvaluationStartTimeSeconds = 0.0;
@@ -108,6 +149,20 @@ void UEpisodeEvaluationSubsystem::RequestEndEpisode(const FEpisodeEvaluationResu
 
 	SetFloatMetric(TEXT("duration_s"), CurrentResult.DurationSeconds);
 	bEvaluating = false;
+
+	UE_LOG(
+		LogEpisodeEvaluation,
+		Log,
+		TEXT("Evaluation ended | Episode: %s, Success: %s, Outcome: %s, TerminalReason: %s, Duration: %.2fs, Score: %.2f, Events: %d, Metrics: %d"),
+		*CurrentResult.EpisodeId,
+		CurrentResult.bSuccess ? TEXT("true") : TEXT("false"),
+		*ToEvaluationEnumString(CurrentResult.Outcome),
+		*ToEvaluationEnumString(CurrentResult.TerminalReason),
+		CurrentResult.DurationSeconds,
+		CurrentScore,
+		CurrentResult.Events.Num(),
+		CurrentResult.Metrics.Num());
+
 	OnEpisodeEnded.Broadcast(CurrentResult);
 }
 
@@ -131,30 +186,6 @@ bool UEpisodeEvaluationSubsystem::IsTickable() const
 TStatId UEpisodeEvaluationSubsystem::GetStatId() const
 {
 	RETURN_QUICK_DECLARE_CYCLE_STAT(UEpisodeEvaluationSubsystem, STATGROUP_Tickables);
-}
-
-double UEpisodeEvaluationSubsystem::GetFloatProperty(
-	const TMap<FString, FEpisodeParamValue>& Properties,
-	const FString& Key,
-	double DefaultValue)
-{
-	const FEpisodeParamValue* ParamValue = Properties.Find(Key);
-	if (!ParamValue)
-	{
-		return DefaultValue;
-	}
-
-	if (ParamValue->Type == EEpisodeParamValueType::Float)
-	{
-		return ParamValue->FloatValue;
-	}
-
-	if (ParamValue->Type == EEpisodeParamValueType::Integer)
-	{
-		return ParamValue->IntegerValue;
-	}
-
-	return DefaultValue;
 }
 
 FEpisodeParamValue UEpisodeEvaluationSubsystem::MakeFloatParam(double Value)
@@ -191,11 +222,23 @@ void UEpisodeEvaluationSubsystem::AddEvaluationEvent(
 	}
 
 	CurrentResult.Events.Add(Event);
+
+	UE_LOG(
+		LogEpisodeEvaluation,
+		Log,
+		TEXT("Evaluation event | Episode: %s, Index: %d, Type: %s, Severity: %s, Subject: %s, Time: %.2fs, Message: %s"),
+		*CurrentResult.EpisodeId,
+		Event.EventIndex,
+		*ToEvaluationEnumString(Event.EventType),
+		*ToEvaluationEnumString(Event.Severity),
+		*Event.SubjectInstanceId,
+		Event.ElapsedTimeSeconds,
+		*Event.Message);
 }
 
 void UEpisodeEvaluationSubsystem::UpdateNearMisses()
 {
-	const FEpisodeEvaluationConfig& EvaluationConfig = ActiveWorldSpec.EvaluationConfig;
+	const FEpisodeEvaluationConfig& EvaluationConfig = ActiveEvaluationConfig;
 	if (EvaluationConfig.NearMissDistanceCm <= 0.0 || !IsValid(ActiveRuntimeContext.RobotActor))
 	{
 		return;
@@ -296,7 +339,7 @@ void UEpisodeEvaluationSubsystem::CloseNearMissInterval(
 	}
 
 	const double DurationSeconds = FMath::Max(0.0, EndTimeSeconds - State.StartTimeSeconds);
-	const double ScoreDelta = ActiveWorldSpec.EvaluationConfig.PedestrianNearMissScore;
+	const double ScoreDelta = ActiveEvaluationConfig.PedestrianNearMissScore;
 
 	FEpisodeEvaluationEvent Event;
 	Event.EventIndex = CurrentResult.Events.Num();
@@ -314,6 +357,20 @@ void UEpisodeEvaluationSubsystem::CloseNearMissInterval(
 	Event.Properties.Add(TEXT("min_distance_m"), MakeFloatParam(State.MinDistanceCm / 100.0));
 	Event.Properties.Add(TEXT("pedestrian_id"), MakeStringParam(PedestrianInstanceId));
 	CurrentResult.Events.Add(Event);
+
+	UE_LOG(
+		LogEpisodeEvaluation,
+		Log,
+		TEXT("Evaluation event | Episode: %s, Index: %d, Type: %s, Severity: %s, Subject: %s, Target: %s, Duration: %.2fs, MinDistance: %.2fm, ScoreDelta: %.2f"),
+		*CurrentResult.EpisodeId,
+		Event.EventIndex,
+		*ToEvaluationEnumString(Event.EventType),
+		*ToEvaluationEnumString(Event.Severity),
+		*Event.SubjectInstanceId,
+		*Event.TargetInstanceId,
+		DurationSeconds,
+		State.MinDistanceCm / 100.0,
+		ScoreDelta);
 
 	AddScore(ScoreDelta);
 	++NearMissCount;
@@ -347,6 +404,14 @@ double UEpisodeEvaluationSubsystem::GetElapsedTimeSeconds() const
 void UEpisodeEvaluationSubsystem::EndForTimeout()
 {
 	FlushActiveNearMisses();
+
+	UE_LOG(
+		LogEpisodeEvaluation,
+		Log,
+		TEXT("Evaluation timeout reached | Episode: %s, Elapsed: %.2fs, Limit: %.2fs"),
+		*ActiveRuntimeContext.EpisodeId,
+		GetElapsedTimeSeconds(),
+		TimeLimitSeconds);
 
 	AddEvaluationEvent(
 		EEpisodeEvaluationEventType::Timeout,

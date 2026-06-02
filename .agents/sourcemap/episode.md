@@ -1,6 +1,6 @@
 # Episode
 
-Covers: `Source/ProtoRobotSim/Public/Episode`, `Source/ProtoRobotSim/Private/Episode`, `Docs/EpisodeSpec_JSON_Guide.md`
+Covers: `Source/ProtoRobotSim/Public/Episode`, `Source/ProtoRobotSim/Private/Episode`, `Docs/EpisodeSetup_JSON_Guide.md`
 
 ## Entry Points
 - `Public/Episode/EpisodeCompiler.h`: JSON to `FEpisodeWorldSpec` compile entry points
@@ -8,7 +8,7 @@ Covers: `Source/ProtoRobotSim/Public/Episode`, `Source/ProtoRobotSim/Private/Epi
 - `Public/Episode/Actors`: ground region, spline path, static obstacle, pedestrian, vehicle actors
 - `Public/Episode/Components`: placeable metadata, obstacle collision, path follower components
 - `Public/Episode/Interfaces`: physics participant and replay trackable extension points
-- `Docs/EpisodeSpec_JSON_Guide.md`: authored JSON contract
+- `Docs/EpisodeSetup_JSON_Guide.md`: authored JSON contract
 
 ## Notes
 - Surface: `UEpisodeCompiler`, `UEpisodeSimulationSubsystem`, `UEpisodeDefinition`, `UEpisodePlaceableAssetCatalog`, episode actors/components, `IEpisode*`

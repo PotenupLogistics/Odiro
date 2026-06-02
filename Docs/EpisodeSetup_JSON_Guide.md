@@ -1,6 +1,6 @@
-# EpisodeSpec JSON Guide
+# EpisodeSetup JSON Guide
 
-이 문서는 EpisodeSpec JSON을 작성하기 위한 현재 MVP 기준 양식 설명서이다. 언리얼 엔진 프로젝트 디렉토리 기준으로 샘플은 `Json/EpisodeSpecSample.json`이며, 컴파일러는 `UEpisodeCompiler`가 JSON을 읽어 `FEpisodeWorldSpec`으로 변환한다.
+이 문서는 EpisodeSetup JSON을 작성하기 위한 현재 MVP 기준 양식 설명서이다. 언리얼 엔진 프로젝트 디렉토리 기준으로 샘플은 `Json/EpisodeSetupSample.json`이며, 컴파일러는 `UEpisodeCompiler`가 JSON을 읽어 `FEpisodeWorldSpec`으로 변환한다.
 
 현재 MVP의 목적은 다음 요소를 JSON으로 배치하고 단일 실행을 시작하는 것이다.
 
@@ -59,7 +59,7 @@ LLM 출력은 반드시 순수 JSON이어야 한다. 주석, trailing comma, Mar
 | 필드 | 필수 | 타입 | 설명 |
 | --- | --- | --- | --- |
 | `schema` | 권장 | string | 사람이 읽는 스키마 이름. 현재 컴파일러 검증 대상은 아니지만 반드시 유지 권장 |
-| `version` | 권장 | number | EpisodeSpec template version. 없으면 `1`로 처리 |
+| `version` | 권장 | number | EpisodeSetup template version. 없으면 `1`로 처리 |
 | `scenario_id` | 권장 | string | 실행 템플릿/시나리오 ID |
 | `map_id` | 권장 | string | 대상 맵 ID. 현재 컴파일러가 맵 로드를 직접 하지는 않음 |
 | `units` | 권장 | object | LLM 출력 단위 명시. 현재 입력은 meter/degree 기준 |

@@ -213,9 +213,6 @@ actors.robot.instance_id / actor_id
 actors.robot.asset_id / type
 actors.robot.spawn_only
 actors.robot.transform
-actors.robot.location.start_location_cm
-actors.robot.location.goal_location_cm
-actors.robot.location.auto_start_route
 actors.robot.goal_m
 actors.robot.route.goal_m
 actors.robot.route.auto_start

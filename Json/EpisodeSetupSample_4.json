@@ -1,0 +1,152 @@
+{
+  "schema": "episode_actor_spawn_mvp",
+  "version": 1,
+  "scenario_id": "sensor_route_layout_004",
+  "map_id": "EpisodeSandbox",
+  "units": {
+    "distance": "m",
+    "angle": "deg"
+  },
+  "run": {
+    "base_seed": 1004,
+    "iteration_index": 4,
+    "time_limit_s": 45.0
+  },
+  "evaluation": {
+    "goal_acceptance_radius_m": 1.0,
+    "fall_angle_deg": 60.0,
+    "near_miss": {
+      "distance_m": 0.5
+    },
+    "scoring": {
+      "static_obstacle_collision": -1.0,
+      "blocked_region_collision": -1.0,
+      "penalty_region_violation": -3.0,
+      "pedestrian_near_miss": -3.0,
+      "pedestrian_collision": -10.0
+    }
+  },
+  "ground_model": {
+    "default_region_type": "walkable",
+    "regions": [
+      {
+        "region_id": "sensor_test_pad",
+        "region_type": "walkable",
+        "shape": {
+          "type": "rectangle",
+          "center_m": [0.0, 0.0, 0.0],
+          "size_m": [10.0, 8.0],
+          "yaw_deg": 0.0
+        },
+        "traversability_score": 1.0
+      },
+      {
+        "region_id": "rear_blocked_wall",
+        "region_type": "blocked",
+        "shape": {
+          "type": "rectangle",
+          "center_m": [0.0, -4.8, 0.0],
+          "size_m": [10.0, 1.2],
+          "yaw_deg": 0.0
+        },
+        "collision_tag": "wall"
+      }
+    ]
+  },
+  "paths": [
+    {
+      "path_id": "ped_static_observer",
+      "role": "pedestrian_baseline",
+      "type": "spline",
+      "points_m": [
+        [-4.0, 3.0, 0.0],
+        [4.0, 3.0, 0.0]
+      ],
+      "closed_loop": false
+    }
+  ],
+  "actors": {
+    "static_obstacles": [
+      {
+        "instance_id": "cone_sensor_01",
+        "prop_id": "obstacle.road_cone_01",
+        "transform": {
+          "location_m": [1.2, 0.0, 0.0],
+          "rotation_deg": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+          },
+          "scale": [1.0, 1.0, 1.0]
+        }
+      },
+      {
+        "instance_id": "hydrant_sensor_01",
+        "prop_id": "obstacle.fire_hydrant",
+        "transform": {
+          "location_m": [2.5, 1.2, 0.0],
+          "rotation_deg": {
+            "pitch": 0.0,
+            "yaw": 20.0,
+            "roll": 0.0
+          },
+          "scale": [1.0, 1.0, 1.0]
+        }
+      },
+      {
+        "instance_id": "trash_sensor_01",
+        "prop_id": "obstacle.trash_bin",
+        "transform": {
+          "location_m": [-2.0, -1.0, 0.0],
+          "rotation_deg": {
+            "pitch": 0.0,
+            "yaw": -10.0,
+            "roll": 0.0
+          },
+          "scale": [1.0, 1.0, 1.0]
+        }
+      }
+    ],
+    "pedestrians": [
+      {
+        "instance_id": "ped_observer_01",
+        "archetype_id": "adult_pedestrian",
+        "path_id": "ped_static_observer",
+        "spawn_time_s": 0.0,
+        "transform": {
+          "location_m": [-4.0, 3.0, 0.0],
+          "rotation_deg": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+          },
+          "scale": [1.0, 1.0, 1.0]
+        },
+        "movement": {
+          "model": "straight_line",
+          "speed_mps": 0.7,
+          "initial_distance_m": 0.0,
+          "auto_start": false
+        }
+      }
+    ],
+    "robot": {
+      "instance_id": "robot_sensor_route",
+      "asset_id": "delivery_bot",
+      "spawn_only": false,
+      "transform": {
+        "location_m": [-4.0, -2.8, 0.0],
+        "rotation_deg": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "route": {
+        "goal_m": [4.0, -2.8, 0.0],
+        "auto_start": true
+      }
+    }
+  }
+}

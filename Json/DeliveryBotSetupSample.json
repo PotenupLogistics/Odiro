@@ -1,36 +1,21 @@
 {
-  "scenario_id": "deliverybot_tuning_001",
+  "schema": "delivery_bot_setup",
   "version": 1,
-  "run": {
-    "base_seed": 1234,
-    "iteration_index": 0,
-    "time_limit_s": 60.0
-  },
-  "actors": {
-    "robot": {
-      "instance_id": "delivery_bot_01",
-      "asset_id": "delivery_bot_chaos",
-      "spawn_only": false,
-      "location": {
-        "start_location_cm": [0.0, 0.0, 50.0],
-        "goal_location_cm": [800.0, 300.0, 50.0],
-        "auto_start_route": true
-      },
-      "drive": {
-        "max_speed_kmh": 10.0,
-        "slowdown_speed_range_kmh": 2.0
-      },
-      "path_follow": {
-        "target_speed_kmh": 10.0,
-        "look_ahead_distance_m": 1.0,
-        "obstacle_slow_speed_kmh": 2.0
-      },
-      "lidar": {
-        "scan_range_m": 5.0,
-        "angle_step_degree": 5.0,
-        "stop_distance_m": 1.5,
-        "slow_down_distance_m": 3.5
-      }
+  "robot": {
+    "drive": {
+      "max_speed_kmh": 10.0,
+      "slowdown_speed_range_kmh": 2.0
+    },
+    "path_follow": {
+      "target_speed_kmh": 10.0,
+      "look_ahead_distance_m": 1.0,
+      "obstacle_slow_speed_kmh": 2.0
+    },
+    "lidar": {
+      "scan_range_m": 5.0,
+      "angle_step_degree": 5.0,
+      "stop_distance_m": 1.5,
+      "slow_down_distance_m": 3.5
     }
   }
 }

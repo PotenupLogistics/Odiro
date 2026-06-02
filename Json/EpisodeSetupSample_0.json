@@ -1,0 +1,183 @@
+{
+  "schema": "episode_actor_spawn_mvp",
+  "version": 1,
+  "scenario_id": "sidewalk_baseline_tuned_000",
+  "map_id": "EpisodeSandbox",
+  "units": {
+    "distance": "m",
+    "angle": "deg"
+  },
+  "run": {
+    "base_seed": 1000,
+    "iteration_index": 0,
+    "time_limit_s": 60.0
+  },
+  "evaluation": {
+    "goal_acceptance_radius_m": 1.0,
+    "fall_angle_deg": 60.0,
+    "near_miss": {
+      "distance_m": 0.5
+    },
+    "scoring": {
+      "static_obstacle_collision": -1.0,
+      "blocked_region_collision": -1.0,
+      "penalty_region_violation": -3.0,
+      "pedestrian_near_miss": -3.0,
+      "pedestrian_collision": -10.0
+    }
+  },
+  "ground_model": {
+    "default_region_type": "walkable",
+    "regions": [
+      {
+        "region_id": "sidewalk_main",
+        "region_type": "walkable",
+        "shape": {
+          "type": "rectangle",
+          "center_m": [0.0, 0.0, 0.0],
+          "size_m": [12.0, 8.0],
+          "yaw_deg": 0.0
+        },
+        "traversability_score": 1.0
+      },
+      {
+        "region_id": "road_penalty",
+        "region_type": "penalty",
+        "shape": {
+          "type": "rectangle",
+          "center_m": [0.0, 5.5, 0.0],
+          "size_m": [12.0, 3.0],
+          "yaw_deg": 0.0
+        },
+        "penalty": {
+          "kind": "sidewalk_departure",
+          "cost": 5.0,
+          "violation_after_s": 0.25
+        },
+        "traversability_score": 0.6
+      },
+      {
+        "region_id": "building_edge",
+        "region_type": "blocked",
+        "shape": {
+          "type": "rectangle",
+          "center_m": [0.0, -5.0, 0.0],
+          "size_m": [12.0, 2.0],
+          "yaw_deg": 0.0
+        },
+        "collision_tag": "wall"
+      }
+    ]
+  },
+  "paths": [
+    {
+      "path_id": "ped_crossing_01",
+      "role": "pedestrian_baseline",
+      "type": "spline",
+      "points_m": [
+        [-2.5, -3.0, 0.0],
+        [2.5, 3.0, 0.0]
+      ],
+      "closed_loop": false
+    }
+  ],
+  "actors": {
+    "static_obstacles": [
+      {
+        "instance_id": "cone_01",
+        "prop_id": "obstacle.road_cone_01",
+        "transform": {
+          "location_m": [1.8, 1.0, 0.0],
+          "rotation_deg": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+          },
+          "scale": [1.0, 1.0, 1.0]
+        }
+      },
+      {
+        "instance_id": "bin_01",
+        "prop_id": "obstacle.bin",
+        "transform": {
+          "location_m": [3.4, 0.7, 0.0],
+          "rotation_deg": {
+            "pitch": 0.0,
+            "yaw": 15.0,
+            "roll": 0.0
+          },
+          "scale": [1.0, 1.0, 1.0]
+        }
+      },
+      {
+        "instance_id": "barrier_01",
+        "prop_id": "obstacle.road_barrier_01",
+        "transform": {
+          "location_m": [-1.7, -0.5, 0.0],
+          "rotation_deg": {
+            "pitch": 0.0,
+            "yaw": 90.0,
+            "roll": 0.0
+          },
+          "scale": [1.0, 1.0, 1.0]
+        }
+      }
+    ],
+    "pedestrians": [
+      {
+        "instance_id": "ped_01",
+        "archetype_id": "adult_pedestrian",
+        "path_id": "ped_crossing_01",
+        "spawn_time_s": 0.0,
+        "transform": {
+          "location_m": [-2.5, -3.0, 0.0],
+          "rotation_deg": {
+            "pitch": 0.0,
+            "yaw": 50.0,
+            "roll": 0.0
+          },
+          "scale": [1.0, 1.0, 1.0]
+        },
+        "movement": {
+          "model": "straight_line",
+          "speed_mps": 1.2,
+          "initial_distance_m": 0.0,
+          "auto_start": true
+        }
+      }
+    ],
+    "robot": {
+      "instance_id": "robot_01",
+      "asset_id": "delivery_bot",
+      "spawn_only": false,
+      "transform": {
+        "location_m": [-5.0, 0.0, 0.0],
+        "rotation_deg": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "route": {
+        "goal_m": [5.0, 0.0, 0.0],
+        "auto_start": true
+      },
+      "drive": {
+        "max_speed_kmh": 10.0,
+        "slowdown_speed_range_kmh": 4.0
+      },
+      "path_follow": {
+        "target_speed_kmh": 8.0,
+        "look_ahead_distance_m": 1.0,
+        "obstacle_slow_speed_kmh": 2.0
+      },
+      "lidar": {
+        "scan_range_m": 5.0,
+        "angle_step_degree": 5.0,
+        "stop_distance_m": 1.2,
+        "slow_down_distance_m": 3.5
+      }
+    }
+  }
+}

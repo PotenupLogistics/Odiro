@@ -852,7 +852,6 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 
 	const bool bSpawnOnly{ ReadBoolOrDefault(*robotObject, TEXT("spawn_only"), true)};
 	bool bHasGoal{ false };
-	bool bHasLocationAutoStart{ false };
 
 	if (robotObject->HasField(TEXT("transform")))
 	{
@@ -925,46 +924,13 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 		return true;
 	};
 
-	TSharedPtr<FJsonObject> locationObject;
-	if (TryGetObjectField(*robotObject, TEXT("location"), locationObject))
+	if (robotObject->HasField(TEXT("location")))
 	{
-		FVector startLocationCm{ FVector::ZeroVector };
-		if (locationObject->HasField(TEXT("start_location_cm")) &&
-			ReadVectorField(
-				*locationObject,
-				TEXT("start_location_cm"),
-				1.0,
-				TEXT("actors.robot.location"),
-				result,
-				startLocationCm))
-		{
-			robotSetupInfo.LocationSetupInfo.StartLocationCm = startLocationCm;
-			robotSpec.Transform.SetLocation(startLocationCm);
-		}
-
-		FVector goalLocationCm{ FVector::ZeroVector };
-		if (locationObject->HasField(TEXT("goal_location_cm")) &&
-			ReadVectorField(
-				*locationObject,
-				TEXT("goal_location_cm"),
-				1.0,
-				TEXT("actors.robot.location"),
-				result,
-				goalLocationCm))
-		{
-			robotSetupInfo.LocationSetupInfo.GoalLocationCm = goalLocationCm;
-			bHasGoal = true;
-		}
-
-		if (locationObject->HasField(TEXT("auto_start_route")))
-		{
-			bHasLocationAutoStart = true;
-			readOptionalBoolField(
-				*locationObject,
-				TEXT("auto_start_route"),
-				TEXT("actors.robot.location"),
-				robotSetupInfo.LocationSetupInfo.bAutoStartRoute);
-		}
+		AddDiagnostic(
+			result,
+			EEpisodeCompileDiagnosticSeverity::Warning,
+			TEXT("robot_location_ignored"),
+			TEXT("actors.robot.location은 더 이상 EpisodeCompiler에서 읽지 않음. 로봇 배치는 transform, 목적지는 route를 사용해야 함."));
 	}
 
 	TSharedPtr<FJsonObject> routeObject;
@@ -986,7 +952,7 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 			bHasGoal = true;
 		}
 
-		if (!bHasLocationAutoStart && routeObject->HasField(TEXT("auto_start")))
+		if (routeObject->HasField(TEXT("auto_start")))
 		{
 			readOptionalBoolField(
 				*routeObject,
@@ -1097,7 +1063,7 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 			result,
 			EEpisodeCompileDiagnosticSeverity::Warning,
 			TEXT("missing_robot_goal"),
-			TEXT("actors.robot.spawn_only가 false이지만 location.goal_location_cm, route.goal_m, goal_m이 없어 로봇 경로 주입을 건너뜀."));
+			TEXT("actors.robot.spawn_only가 false이지만 route.goal_m 또는 goal_m이 없어 로봇 경로 주입을 건너뜀."));
 	}
 
 	result.WorldSpec.Placeables.Add(robotSpec);

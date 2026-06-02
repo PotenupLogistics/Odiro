@@ -8,6 +8,12 @@
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 
+namespace
+{
+	const FName BlockedRegionCollisionProfileName{ TEXT("BlockAllDynamic") };
+	const FName NonBlockingRegionCollisionProfileName{ TEXT("NoCollision") };
+}
+
 AEpisodeGroundRegion::AEpisodeGroundRegion()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -100,15 +106,12 @@ void AEpisodeGroundRegion::ApplyCollisionSettings()
 	if (RegionSpec.RegionType == EEpisodeGroundRegionType::Blocked)
 	{
 		RegionBoundsComponent->SetVisibility(true);
-		RegionBoundsComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		RegionBoundsComponent->SetCollisionObjectType(ECC_WorldStatic);
-		RegionBoundsComponent->SetCollisionResponseToAllChannels(ECR_Block);
+		RegionBoundsComponent->SetCollisionProfileName(BlockedRegionCollisionProfileName);
 		return;
 	}
 
 	RegionBoundsComponent->SetVisibility(false);
-	RegionBoundsComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	RegionBoundsComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+	RegionBoundsComponent->SetCollisionProfileName(NonBlockingRegionCollisionProfileName);
 }
 
 void AEpisodeGroundRegion::UpdateDecalVisualization()

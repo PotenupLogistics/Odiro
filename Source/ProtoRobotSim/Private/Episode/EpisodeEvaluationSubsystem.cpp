@@ -1,5 +1,9 @@
-
 #include "Episode/EpisodeEvaluationSubsystem.h"
+
+#include "Components/PrimitiveComponent.h"
+#include "Episode/Actors/EpisodeGroundRegion.h"
+#include "Episode/Components/EpisodePlaceableComponent.h"
+#include "GameFramework/Actor.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogEpisodeEvaluation, Log, All);
 
@@ -43,9 +47,25 @@ bool UEpisodeEvaluationSubsystem::StartEvaluation(
 	NearMissTotalDurationSeconds = 0.0;
 	NearMissMinDistanceCm = TNumericLimits<double>::Max();
 	ActiveNearMisses.Reset();
+	PenaltyRegionStates.Reset();
+	BlockedRegionStates.Reset();
+	LastCollisionEventTimes.Reset();
+	GoalReachedCount = 0;
+	RobotFallCount = 0;
+	StaticObstacleCollisionCount = 0;
+	BlockedRegionCollisionCount = 0;
+	PenaltyRegionViolationCount = 0;
+	PedestrianCollisionCount = 0;
 	SetFloatMetric(TEXT("score"), CurrentScore);
+	SetFloatMetric(TEXT("goal_reached"), 0.0);
+	SetFloatMetric(TEXT("robot_fall_count"), 0.0);
+	SetFloatMetric(TEXT("static_obstacle_collision_count"), 0.0);
+	SetFloatMetric(TEXT("blocked_region_collision_count"), 0.0);
+	SetFloatMetric(TEXT("penalty_region_violation_count"), 0.0);
+	SetFloatMetric(TEXT("pedestrian_collision_count"), 0.0);
 	SetFloatMetric(TEXT("near_miss_count"), 0.0);
 	SetFloatMetric(TEXT("near_miss_total_duration_s"), 0.0);
+	BindEvaluationHitDelegates();
 	bEvaluating = true;
 
 	UE_LOG(
@@ -78,6 +98,7 @@ void UEpisodeEvaluationSubsystem::StopEvaluation()
 	}
 
 	bEvaluating = false;
+	UnbindEvaluationHitDelegates();
 	ActiveEvaluationConfig = FEpisodeEvaluationConfig{};
 	ActiveRuntimeContext = FEpisodeRuntimeContext{};
 	TimeLimitSeconds = 0.0;
@@ -87,6 +108,15 @@ void UEpisodeEvaluationSubsystem::StopEvaluation()
 	NearMissTotalDurationSeconds = 0.0;
 	NearMissMinDistanceCm = TNumericLimits<double>::Max();
 	ActiveNearMisses.Reset();
+	PenaltyRegionStates.Reset();
+	BlockedRegionStates.Reset();
+	LastCollisionEventTimes.Reset();
+	GoalReachedCount = 0;
+	RobotFallCount = 0;
+	StaticObstacleCollisionCount = 0;
+	BlockedRegionCollisionCount = 0;
+	PenaltyRegionViolationCount = 0;
+	PedestrianCollisionCount = 0;
 }
 
 void UEpisodeEvaluationSubsystem::RequestEndEpisode(const FEpisodeEvaluationResult& Result)
@@ -148,6 +178,7 @@ void UEpisodeEvaluationSubsystem::RequestEndEpisode(const FEpisodeEvaluationResu
 	}
 
 	SetFloatMetric(TEXT("duration_s"), CurrentResult.DurationSeconds);
+	UnbindEvaluationHitDelegates();
 	bEvaluating = false;
 
 	UE_LOG(
@@ -169,6 +200,11 @@ void UEpisodeEvaluationSubsystem::RequestEndEpisode(const FEpisodeEvaluationResu
 void UEpisodeEvaluationSubsystem::Tick(float DeltaTime)
 {
 	if (!bEvaluating) return;
+
+	if (CheckGoalReached()) return;
+	if (CheckRobotFall()) return;
+	UpdateBlockedRegionViolations();
+	UpdatePenaltyRegionViolations();
 
 	UpdateNearMisses();
 
@@ -209,16 +245,40 @@ void UEpisodeEvaluationSubsystem::AddEvaluationEvent(
 	EEpisodeEvaluationEventSeverity Severity,
 	const FString& Message)
 {
+	AddEvaluationEventWithDetails(
+		EventType,
+		Severity,
+		Message,
+		FString(),
+		IsValid(ActiveRuntimeContext.RobotActor)
+			? ActiveRuntimeContext.RobotActor->GetActorLocation()
+			: FVector::ZeroVector,
+		0.0,
+		TMap<FString, FEpisodeParamValue>());
+}
+
+void UEpisodeEvaluationSubsystem::AddEvaluationEventWithDetails(
+	EEpisodeEvaluationEventType EventType,
+	EEpisodeEvaluationEventSeverity Severity,
+	const FString& Message,
+	const FString& TargetInstanceId,
+	const FVector& Location,
+	double Value,
+	const TMap<FString, FEpisodeParamValue>& Properties)
+{
 	FEpisodeEvaluationEvent Event;
 	Event.EventIndex = CurrentResult.Events.Num();
 	Event.ElapsedTimeSeconds = GetElapsedTimeSeconds();
 	Event.EventType = EventType;
 	Event.Severity = Severity;
 	Event.Message = Message;
+	Event.TargetInstanceId = TargetInstanceId;
+	Event.Location = Location;
+	Event.Value = Value;
+	Event.Properties = Properties;
 	if (IsValid(ActiveRuntimeContext.RobotActor))
 	{
 		Event.SubjectInstanceId = ActiveRuntimeContext.RobotInstanceId;
-		Event.Location = ActiveRuntimeContext.RobotActor->GetActorLocation();
 	}
 
 	CurrentResult.Events.Add(Event);
@@ -226,14 +286,381 @@ void UEpisodeEvaluationSubsystem::AddEvaluationEvent(
 	UE_LOG(
 		LogEpisodeEvaluation,
 		Log,
-		TEXT("Evaluation event | Episode: %s, Index: %d, Type: %s, Severity: %s, Subject: %s, Time: %.2fs, Message: %s"),
+		TEXT("Evaluation event | Episode: %s, Index: %d, Type: %s, Severity: %s, Subject: %s, Target: %s, Time: %.2fs, Value: %.2f, Message: %s"),
 		*CurrentResult.EpisodeId,
 		Event.EventIndex,
 		*ToEvaluationEnumString(Event.EventType),
 		*ToEvaluationEnumString(Event.Severity),
 		*Event.SubjectInstanceId,
+		*Event.TargetInstanceId,
 		Event.ElapsedTimeSeconds,
+		Event.Value,
 		*Event.Message);
+}
+
+void UEpisodeEvaluationSubsystem::BindEvaluationHitDelegates()
+{
+	UnbindEvaluationHitDelegates();
+
+	BindActorHitDelegates(ActiveRuntimeContext.RobotActor.Get());
+
+	for (const TObjectPtr<AActor>& StaticObstacleActor : ActiveRuntimeContext.StaticObstacleActors)
+	{
+		BindActorHitDelegates(StaticObstacleActor.Get());
+	}
+
+	for (const TObjectPtr<AActor>& PedestrianActor : ActiveRuntimeContext.PedestrianActors)
+	{
+		BindActorHitDelegates(PedestrianActor.Get());
+	}
+
+	for (const TObjectPtr<AActor>& GroundRegionActor : ActiveRuntimeContext.GroundRegionActors)
+	{
+		BindActorHitDelegates(GroundRegionActor.Get());
+	}
+}
+
+void UEpisodeEvaluationSubsystem::BindActorHitDelegates(AActor* Actor)
+{
+	if (!IsValid(Actor))
+	{
+		return;
+	}
+
+	TArray<UPrimitiveComponent*> PrimitiveComponents;
+	Actor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
+	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
+	{
+		if (!IsValid(PrimitiveComponent) || IsHitComponentBound(PrimitiveComponent))
+		{
+			continue;
+		}
+
+		PrimitiveComponent->OnComponentHit.RemoveDynamic(this, &UEpisodeEvaluationSubsystem::HandleObservedComponentHit);
+		PrimitiveComponent->OnComponentHit.AddDynamic(this, &UEpisodeEvaluationSubsystem::HandleObservedComponentHit);
+		PrimitiveComponent->SetNotifyRigidBodyCollision(true);
+		BoundHitComponents.Add(PrimitiveComponent);
+	}
+}
+
+void UEpisodeEvaluationSubsystem::UnbindEvaluationHitDelegates()
+{
+	for (const TWeakObjectPtr<UPrimitiveComponent>& BoundComponent : BoundHitComponents)
+	{
+		if (UPrimitiveComponent* PrimitiveComponent = BoundComponent.Get())
+		{
+			PrimitiveComponent->OnComponentHit.RemoveDynamic(this, &UEpisodeEvaluationSubsystem::HandleObservedComponentHit);
+		}
+	}
+
+	BoundHitComponents.Reset();
+}
+
+bool UEpisodeEvaluationSubsystem::IsHitComponentBound(const UPrimitiveComponent* PrimitiveComponent) const
+{
+	if (!PrimitiveComponent)
+	{
+		return false;
+	}
+
+	for (const TWeakObjectPtr<UPrimitiveComponent>& BoundComponent : BoundHitComponents)
+	{
+		if (BoundComponent.Get() == PrimitiveComponent)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void UEpisodeEvaluationSubsystem::HandleObservedComponentHit(
+	UPrimitiveComponent* HitComponent,
+	AActor* OtherActor,
+	UPrimitiveComponent* OtherComp,
+	FVector NormalImpulse,
+	const FHitResult& Hit)
+{
+	(void)OtherComp;
+	(void)NormalImpulse;
+
+	if (!bEvaluating || !HitComponent)
+	{
+		return;
+	}
+
+	AActor* HitOwner = HitComponent->GetOwner();
+	AActor* TargetActor = nullptr;
+	if (IsRobotActor(HitOwner))
+	{
+		TargetActor = OtherActor;
+	}
+	else if (IsRobotActor(OtherActor))
+	{
+		TargetActor = HitOwner;
+	}
+
+	if (!IsValid(TargetActor) || IsRobotActor(TargetActor))
+	{
+		return;
+	}
+
+	const FVector ImpactPoint(Hit.ImpactPoint.X, Hit.ImpactPoint.Y, Hit.ImpactPoint.Z);
+	const FVector EventLocation = ImpactPoint.IsNearlyZero()
+		? TargetActor->GetActorLocation()
+		: ImpactPoint;
+
+	if (AEpisodeGroundRegion* GroundRegion = Cast<AEpisodeGroundRegion>(TargetActor))
+	{
+		if (GroundRegion->RegionSpec.RegionType == EEpisodeGroundRegionType::Blocked)
+		{
+			RecordCollisionEvent(
+				EEpisodeEvaluationEventType::BlockedRegionCollision,
+				TargetActor,
+				EventLocation,
+				ActiveEvaluationConfig.BlockedRegionCollisionScore,
+				TEXT("Robot collided with a blocked region."));
+		}
+		return;
+	}
+
+	if (ContainsRuntimeActor(ActiveRuntimeContext.StaticObstacleActors, TargetActor))
+	{
+		RecordCollisionEvent(
+			EEpisodeEvaluationEventType::StaticObstacleCollision,
+			TargetActor,
+			EventLocation,
+			ActiveEvaluationConfig.StaticObstacleCollisionScore,
+			TEXT("Robot collided with a static obstacle."));
+		return;
+	}
+
+	if (ContainsRuntimeActor(ActiveRuntimeContext.PedestrianActors, TargetActor))
+	{
+		RecordCollisionEvent(
+			EEpisodeEvaluationEventType::PedestrianCollision,
+			TargetActor,
+			EventLocation,
+			ActiveEvaluationConfig.PedestrianCollisionScore,
+			TEXT("Robot collided with a pedestrian."));
+	}
+}
+
+bool UEpisodeEvaluationSubsystem::CheckGoalReached()
+{
+	if (!ActiveRuntimeContext.bHasGoalLocation || !IsValid(ActiveRuntimeContext.RobotActor))
+	{
+		return false;
+	}
+
+	const double AcceptanceRadiusCm = FMath::Max(0.0, ActiveEvaluationConfig.GoalAcceptanceRadiusCm);
+	if (AcceptanceRadiusCm <= 0.0)
+	{
+		return false;
+	}
+
+	const FVector RobotLocation = ActiveRuntimeContext.RobotActor->GetActorLocation();
+	const double GoalDistanceCm = FVector::Dist2D(RobotLocation, ActiveRuntimeContext.GoalLocation);
+	if (GoalDistanceCm > AcceptanceRadiusCm)
+	{
+		return false;
+	}
+
+	if (ActiveNearMisses.Num() > 0)
+	{
+		FlushActiveNearMisses();
+	}
+
+	++GoalReachedCount;
+	SetFloatMetric(TEXT("goal_reached"), GoalReachedCount);
+	SetFloatMetric(TEXT("goal_distance_m"), GoalDistanceCm / 100.0);
+
+	FinishEpisode(
+		true,
+		HasWarningEventsOrScore() ? EEpisodeEvaluationOutcome::Warning : EEpisodeEvaluationOutcome::Success,
+		EEpisodeEvaluationTerminalReason::GoalReached);
+	return true;
+}
+
+bool UEpisodeEvaluationSubsystem::CheckRobotFall()
+{
+	if (!IsValid(ActiveRuntimeContext.RobotActor))
+	{
+		return false;
+	}
+
+	const double FallAngleDegrees = FMath::Max(0.0, ActiveEvaluationConfig.FallAngleDegrees);
+	if (FallAngleDegrees <= 0.0)
+	{
+		return false;
+	}
+
+	const FVector RobotUp = ActiveRuntimeContext.RobotActor->GetActorUpVector().GetSafeNormal();
+	const double UpDot = FMath::Clamp(FVector::DotProduct(RobotUp, FVector::UpVector), -1.0, 1.0);
+	const double TiltAngleDegrees = FMath::RadiansToDegrees(FMath::Acos(UpDot));
+	if (TiltAngleDegrees < FallAngleDegrees)
+	{
+		return false;
+	}
+
+	++RobotFallCount;
+	SetFloatMetric(TEXT("robot_fall_count"), RobotFallCount);
+	SetFloatMetric(TEXT("robot_fall_angle_deg"), TiltAngleDegrees);
+
+	TMap<FString, FEpisodeParamValue> Properties;
+	Properties.Add(TEXT("tilt_angle_deg"), MakeFloatParam(TiltAngleDegrees));
+	Properties.Add(TEXT("fall_angle_threshold_deg"), MakeFloatParam(FallAngleDegrees));
+	AddEvaluationEventWithDetails(
+		EEpisodeEvaluationEventType::RobotFall,
+		EEpisodeEvaluationEventSeverity::Failure,
+		TEXT("Robot exceeded the fall angle threshold."),
+		FString(),
+		ActiveRuntimeContext.RobotActor->GetActorLocation(),
+		TiltAngleDegrees,
+		Properties);
+
+	FinishEpisode(false, EEpisodeEvaluationOutcome::Failure, EEpisodeEvaluationTerminalReason::RobotFall);
+	return true;
+}
+
+void UEpisodeEvaluationSubsystem::UpdateBlockedRegionViolations()
+{
+	if (!IsValid(ActiveRuntimeContext.RobotActor))
+	{
+		return;
+	}
+
+	const FVector RobotLocation = ActiveRuntimeContext.RobotActor->GetActorLocation();
+	TSet<FString> ObservedBlockedRegionIds;
+
+	for (const TObjectPtr<AActor>& GroundRegionActor : ActiveRuntimeContext.GroundRegionActors)
+	{
+		AEpisodeGroundRegion* GroundRegion = Cast<AEpisodeGroundRegion>(GroundRegionActor.Get());
+		if (!IsValid(GroundRegion)
+			|| GroundRegion->RegionSpec.RegionType != EEpisodeGroundRegionType::Blocked)
+		{
+			continue;
+		}
+
+		const FString RegionId = GetActorInstanceId(GroundRegion);
+		ObservedBlockedRegionIds.Add(RegionId);
+
+		FBlockedRegionState& RegionState = BlockedRegionStates.FindOrAdd(RegionId);
+		const bool bInside = GroundRegion->ContainsWorldLocation2D(RobotLocation);
+		if (!bInside)
+		{
+			RegionState.bInside = false;
+			continue;
+		}
+
+		if (RegionState.bInside)
+		{
+			continue;
+		}
+
+		RegionState.bInside = true;
+
+		RecordCollisionEvent(
+			EEpisodeEvaluationEventType::BlockedRegionCollision,
+			GroundRegion,
+			RobotLocation,
+			ActiveEvaluationConfig.BlockedRegionCollisionScore,
+			TEXT("Robot entered a blocked region."));
+	}
+
+	TArray<FString> MissingRegionIds;
+	for (const TPair<FString, FBlockedRegionState>& Pair : BlockedRegionStates)
+	{
+		if (!ObservedBlockedRegionIds.Contains(Pair.Key))
+		{
+			MissingRegionIds.Add(Pair.Key);
+		}
+	}
+
+	for (const FString& MissingRegionId : MissingRegionIds)
+	{
+		BlockedRegionStates.Remove(MissingRegionId);
+	}
+}
+
+void UEpisodeEvaluationSubsystem::UpdatePenaltyRegionViolations()
+{
+	if (!IsValid(ActiveRuntimeContext.RobotActor))
+	{
+		return;
+	}
+
+	const double ElapsedTimeSeconds = GetElapsedTimeSeconds();
+	const FVector RobotLocation = ActiveRuntimeContext.RobotActor->GetActorLocation();
+	TSet<FString> ObservedPenaltyRegionIds;
+
+	for (const TObjectPtr<AActor>& GroundRegionActor : ActiveRuntimeContext.GroundRegionActors)
+	{
+		AEpisodeGroundRegion* GroundRegion = Cast<AEpisodeGroundRegion>(GroundRegionActor.Get());
+		if (!IsValid(GroundRegion) || GroundRegion->RegionSpec.RegionType != EEpisodeGroundRegionType::Penalty)
+		{
+			continue;
+		}
+
+		const FString RegionId = GetActorInstanceId(GroundRegion);
+		ObservedPenaltyRegionIds.Add(RegionId);
+		FPenaltyRegionState& RegionState = PenaltyRegionStates.FindOrAdd(RegionId);
+		const bool bInside = GroundRegion->ContainsWorldLocation2D(RobotLocation);
+		if (!bInside)
+		{
+			RegionState.bInside = false;
+			RegionState.bEventRecorded = false;
+			RegionState.EnterTimeSeconds = 0.0;
+			continue;
+		}
+
+		if (!RegionState.bInside)
+		{
+			RegionState.bInside = true;
+			RegionState.bEventRecorded = false;
+			RegionState.EnterTimeSeconds = ElapsedTimeSeconds;
+		}
+
+		const double RequiredDurationSeconds = FMath::Max(0.0, GroundRegion->RegionSpec.ViolationAfterSeconds);
+		if (RegionState.bEventRecorded || ElapsedTimeSeconds - RegionState.EnterTimeSeconds < RequiredDurationSeconds)
+		{
+			continue;
+		}
+
+		const double ScoreDelta = ActiveEvaluationConfig.PenaltyRegionViolationScore;
+		TMap<FString, FEpisodeParamValue> Properties;
+		Properties.Add(TEXT("region_id"), MakeStringParam(RegionId));
+		Properties.Add(TEXT("enter_time_s"), MakeFloatParam(RegionState.EnterTimeSeconds));
+		Properties.Add(TEXT("duration_s"), MakeFloatParam(ElapsedTimeSeconds - RegionState.EnterTimeSeconds));
+		Properties.Add(TEXT("violation_after_s"), MakeFloatParam(RequiredDurationSeconds));
+		AddEvaluationEventWithDetails(
+			EEpisodeEvaluationEventType::PenaltyRegionViolation,
+			EEpisodeEvaluationEventSeverity::Warning,
+			TEXT("Robot violated a penalty region."),
+			RegionId,
+			RobotLocation,
+			ScoreDelta,
+			Properties);
+		AddScore(ScoreDelta);
+
+		++PenaltyRegionViolationCount;
+		SetFloatMetric(TEXT("penalty_region_violation_count"), PenaltyRegionViolationCount);
+		RegionState.bEventRecorded = true;
+	}
+
+	TArray<FString> MissingRegionIds;
+	for (const TPair<FString, FPenaltyRegionState>& Pair : PenaltyRegionStates)
+	{
+		if (!ObservedPenaltyRegionIds.Contains(Pair.Key))
+		{
+			MissingRegionIds.Add(Pair.Key);
+		}
+	}
+
+	for (const FString& MissingRegionId : MissingRegionIds)
+	{
+		PenaltyRegionStates.Remove(MissingRegionId);
+	}
 }
 
 void UEpisodeEvaluationSubsystem::UpdateNearMisses()
@@ -393,6 +820,162 @@ void UEpisodeEvaluationSubsystem::AddScore(double ScoreDelta)
 	SetFloatMetric(TEXT("score"), CurrentScore);
 }
 
+void UEpisodeEvaluationSubsystem::FinishEpisode(
+	bool bSuccess,
+	EEpisodeEvaluationOutcome Outcome,
+	EEpisodeEvaluationTerminalReason TerminalReason)
+{
+	if (ActiveNearMisses.Num() > 0)
+	{
+		FlushActiveNearMisses();
+	}
+
+	FEpisodeEvaluationResult Result = CurrentResult;
+	Result.EpisodeId = ActiveRuntimeContext.EpisodeId;
+	Result.bSuccess = bSuccess;
+	Result.Outcome = Outcome;
+	Result.TerminalReason = TerminalReason;
+	Result.DurationSeconds = GetElapsedTimeSeconds();
+	RequestEndEpisode(Result);
+}
+
+void UEpisodeEvaluationSubsystem::RecordCollisionEvent(
+	EEpisodeEvaluationEventType EventType,
+	AActor* TargetActor,
+	const FVector& Location,
+	double ScoreDelta,
+	const FString& Message)
+{
+	if (!bEvaluating)
+	{
+		return;
+	}
+
+	const FString TargetInstanceId = GetActorInstanceId(TargetActor);
+	const FString CollisionEventKey = FString::Printf(TEXT("%s:%s"), *ToEvaluationEnumString(EventType), *TargetInstanceId);
+	const double ElapsedTimeSeconds = GetElapsedTimeSeconds();
+	if (const double* LastRecordedTime = LastCollisionEventTimes.Find(CollisionEventKey))
+	{
+		if (ElapsedTimeSeconds - *LastRecordedTime < CollisionEventCooldownSeconds)
+		{
+			return;
+		}
+	}
+
+	LastCollisionEventTimes.Add(CollisionEventKey, ElapsedTimeSeconds);
+
+	TMap<FString, FEpisodeParamValue> Properties;
+	Properties.Add(TEXT("target_id"), MakeStringParam(TargetInstanceId));
+	if (TargetActor)
+	{
+		Properties.Add(TEXT("target_actor"), MakeStringParam(TargetActor->GetName()));
+	}
+	if (const AEpisodeGroundRegion* GroundRegion = Cast<AEpisodeGroundRegion>(TargetActor))
+	{
+		Properties.Add(TEXT("region_id"), MakeStringParam(GetActorInstanceId(GroundRegion)));
+	}
+
+	AddEvaluationEventWithDetails(
+		EventType,
+		EEpisodeEvaluationEventSeverity::Warning,
+		Message,
+		TargetInstanceId,
+		Location,
+		ScoreDelta,
+		Properties);
+	AddScore(ScoreDelta);
+
+	switch (EventType)
+	{
+	case EEpisodeEvaluationEventType::StaticObstacleCollision:
+		++StaticObstacleCollisionCount;
+		SetFloatMetric(TEXT("static_obstacle_collision_count"), StaticObstacleCollisionCount);
+		break;
+	case EEpisodeEvaluationEventType::BlockedRegionCollision:
+		++BlockedRegionCollisionCount;
+		SetFloatMetric(TEXT("blocked_region_collision_count"), BlockedRegionCollisionCount);
+		break;
+	case EEpisodeEvaluationEventType::PedestrianCollision:
+		++PedestrianCollisionCount;
+		SetFloatMetric(TEXT("pedestrian_collision_count"), PedestrianCollisionCount);
+		break;
+	default:
+		break;
+	}
+}
+
+bool UEpisodeEvaluationSubsystem::HasWarningEventsOrScore() const
+{
+	if (CurrentScore < 0.0)
+	{
+		return true;
+	}
+
+	for (const FEpisodeEvaluationEvent& Event : CurrentResult.Events)
+	{
+		if (Event.Severity == EEpisodeEvaluationEventSeverity::Warning)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool UEpisodeEvaluationSubsystem::IsRobotActor(const AActor* Actor) const
+{
+	return IsValid(Actor) && Actor == ActiveRuntimeContext.RobotActor.Get();
+}
+
+bool UEpisodeEvaluationSubsystem::ContainsRuntimeActor(const TArray<TObjectPtr<AActor>>& Actors, const AActor* Actor) const
+{
+	if (!IsValid(Actor))
+	{
+		return false;
+	}
+
+	for (const TObjectPtr<AActor>& RuntimeActor : Actors)
+	{
+		if (RuntimeActor.Get() == Actor)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+FString UEpisodeEvaluationSubsystem::GetActorInstanceId(const AActor* Actor) const
+{
+	if (!Actor)
+	{
+		return FString();
+	}
+
+	if (IsRobotActor(Actor))
+	{
+		return ActiveRuntimeContext.RobotInstanceId;
+	}
+
+	if (const AEpisodeGroundRegion* GroundRegion = Cast<AEpisodeGroundRegion>(Actor))
+	{
+		if (!GroundRegion->RegionSpec.RegionId.IsEmpty())
+		{
+			return GroundRegion->RegionSpec.RegionId;
+		}
+	}
+
+	if (const UEpisodePlaceableComponent* PlaceableComponent = Actor->FindComponentByClass<UEpisodePlaceableComponent>())
+	{
+		if (!PlaceableComponent->InstanceId.IsEmpty())
+		{
+			return PlaceableComponent->InstanceId;
+		}
+	}
+
+	return Actor->GetName();
+}
+
 double UEpisodeEvaluationSubsystem::GetElapsedTimeSeconds() const
 {
 	const UWorld* World = GetWorld();
@@ -416,13 +999,7 @@ void UEpisodeEvaluationSubsystem::EndForTimeout()
 	AddEvaluationEvent(
 		EEpisodeEvaluationEventType::Timeout,
 		EEpisodeEvaluationEventSeverity::Failure,
-		TEXT("시간 초과."));
+		TEXT("Time limit exceeded."));
 
-	FEpisodeEvaluationResult Result = CurrentResult;
-	Result.EpisodeId = ActiveRuntimeContext.EpisodeId;
-	Result.bSuccess = false;
-	Result.Outcome = EEpisodeEvaluationOutcome::Failure;
-	Result.TerminalReason = EEpisodeEvaluationTerminalReason::Timeout;
-	Result.DurationSeconds = GetElapsedTimeSeconds();
-	RequestEndEpisode(Result);
+	FinishEpisode(false, EEpisodeEvaluationOutcome::Failure, EEpisodeEvaluationTerminalReason::Timeout);
 }

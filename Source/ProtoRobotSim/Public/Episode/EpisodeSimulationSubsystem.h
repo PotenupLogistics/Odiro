@@ -92,6 +92,9 @@ private:
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<AEpisodeSplinePath>> RuntimePaths;
 
+	// RuntimeActors가 SimulationSubsystem이 다루는 모든 Actor들이라면
+	// RuntimeActorsById는 instance_id로 찾아야 하는 런타임 액터 lookup map.
+	// 예를 들어, RuntimePaths, RuntimeGroundRegions는 instance_id가 없어서 포함되지 않음.
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<AActor>> RuntimeActorsById;
 

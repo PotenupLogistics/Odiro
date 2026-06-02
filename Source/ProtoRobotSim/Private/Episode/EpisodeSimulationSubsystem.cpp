@@ -73,7 +73,7 @@ void UEpisodeSimulationSubsystem::ClearEpisode()
 		UE_LOG(
 			LogEpisodeSimulation,
 			Log,
-			TEXT("Episode runtime cleared | Actors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
+			TEXT("Episode 런타임 정리 완료 | Actors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
 			actorCount,
 			actorIdCount,
 			groundRegionCount,
@@ -88,7 +88,7 @@ bool UEpisodeSimulationSubsystem::SetupEpisodeWorld(const FEpisodeSimulationSetu
 	UE_LOG(
 		LogEpisodeSimulation,
 		Log,
-		TEXT("Episode world setup started | Episode: %s, GroundRegions: %d, Paths: %d, Placeables: %d, DynamicActors: %d, Events: %d"),
+		TEXT("Episode 월드 설정 시작 | Episode: %s, GroundRegions: %d, Paths: %d, Placeables: %d, DynamicActors: %d, Events: %d"),
 		*setupSpec.EpisodeId,
 		setupSpec.GroundRegions.Num(),
 		setupSpec.Paths.Num(),
@@ -142,7 +142,7 @@ bool UEpisodeSimulationSubsystem::SetupEpisodeWorld(const FEpisodeSimulationSetu
 	UE_LOG(
 		LogEpisodeSimulation,
 		Log,
-		TEXT("Episode world setup completed | Episode: %s, Success: %s, RuntimeActors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
+		TEXT("Episode 월드 설정 완료 | Episode: %s, Success: %s, RuntimeActors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
 		*setupSpec.EpisodeId,
 		bAllSpawned ? TEXT("true") : TEXT("false"),
 		RuntimeActors.Num(),
@@ -192,7 +192,18 @@ FEpisodeRuntimeContext UEpisodeSimulationSubsystem::BuildRuntimeContext(const FE
 		{
 			runtimeContext.RobotInstanceId = placeableSpec.InstanceId;
 			runtimeContext.RobotActor = runtimeActor;
-			runtimeContext.bHasGoalLocation = GetVectorProperty(placeableSpec.Properties, TEXT("goal_cm"), runtimeContext.GoalLocation);
+			if (placeableSpec.DeliveryBot.bHasGoalLocation)
+			{
+				runtimeContext.GoalLocation = placeableSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm;
+				runtimeContext.bHasGoalLocation = true;
+			}
+			else if (!placeableSpec.DeliveryBot.bHasStartLocation)
+			{
+				runtimeContext.bHasGoalLocation = GetVectorProperty(
+					placeableSpec.Properties,
+					TEXT("goal_cm"),
+					runtimeContext.GoalLocation);
+			}
 			continue;
 		}
 
@@ -217,7 +228,7 @@ FEpisodeRuntimeContext UEpisodeSimulationSubsystem::BuildRuntimeContext(const FE
 	UE_LOG(
 		LogEpisodeSimulation,
 		Log,
-		TEXT("Runtime context built | Episode: %s, SpecHash: %s, Robot: %s, HasGoal: %s, RuntimeActors: %d, GroundRegions: %d, StaticObstacles: %d, Pedestrians: %d"),
+		TEXT("런타임 컨텍스트 생성 완료 | Episode: %s, SpecHash: %s, Robot: %s, HasGoal: %s, RuntimeActors: %d, GroundRegions: %d, StaticObstacles: %d, Pedestrians: %d"),
 		*runtimeContext.EpisodeId,
 		*runtimeContext.SpecHash,
 		*runtimeContext.RobotInstanceId,
@@ -229,7 +240,7 @@ FEpisodeRuntimeContext UEpisodeSimulationSubsystem::BuildRuntimeContext(const FE
 
 	if (!IsValid(runtimeContext.RobotActor))
 	{
-		UE_LOG(LogEpisodeSimulation, Warning, TEXT("Runtime context has no valid robot actor | Episode: %s"), *runtimeContext.EpisodeId);
+		UE_LOG(LogEpisodeSimulation, Warning, TEXT("런타임 컨텍스트에 유효한 로봇 액터가 없음 | Episode: %s"), *runtimeContext.EpisodeId);
 	}
 
 	return runtimeContext;
@@ -421,15 +432,41 @@ AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInst
 
 	if (!world || placeableSpec.InstanceId.IsEmpty() || !RobotActorClass) return nullptr;
 
-	const bool bSpawnOnly = GetBoolProperty(placeableSpec.Properties, TEXT("spawn_only"), true);
-	const bool bRouteAutoStart = GetBoolProperty(placeableSpec.Properties, TEXT("route_auto_start"), true);
-	const FVector startLocation = placeableSpec.Transform.GetLocation();
-	FVector goalLocation = startLocation;
-	const bool bHasGoal = GetVectorProperty(placeableSpec.Properties, TEXT("goal_cm"), goalLocation);
+	const FEpisodeDeliveryBotSpawnSpec& deliveryBotSpec = placeableSpec.DeliveryBot;
+	const bool bUseLegacyPropertyFallback = !deliveryBotSpec.bHasStartLocation;
+	const bool bSpawnOnly = bUseLegacyPropertyFallback
+		? GetBoolProperty(placeableSpec.Properties, TEXT("spawn_only"), deliveryBotSpec.bSpawnOnly)
+		: deliveryBotSpec.bSpawnOnly;
 
-	FDeliveryBotSetupInfo setupInfo;
-	setupInfo.LocationSetupInfo.StartLocationCm = startLocation;
-	setupInfo.LocationSetupInfo.GoalLocationCm = goalLocation;
+	FDeliveryBotSetupInfo setupInfo = deliveryBotSpec.SetupInfo;
+	if (!deliveryBotSpec.bHasStartLocation)
+	{
+		setupInfo.LocationSetupInfo.StartLocationCm = placeableSpec.Transform.GetLocation();
+		setupInfo.LocationSetupInfo.GoalLocationCm = setupInfo.LocationSetupInfo.StartLocationCm;
+	}
+
+	bool bRouteAutoStart = setupInfo.LocationSetupInfo.bAutoStartRoute;
+	if (bUseLegacyPropertyFallback)
+	{
+		bRouteAutoStart = GetBoolProperty(placeableSpec.Properties, TEXT("route_auto_start"), bRouteAutoStart);
+	}
+
+	FVector goalLocation = setupInfo.LocationSetupInfo.GoalLocationCm;
+	bool bHasGoal = deliveryBotSpec.bHasGoalLocation;
+	if (!bHasGoal && bUseLegacyPropertyFallback)
+	{
+		bHasGoal = GetVectorProperty(placeableSpec.Properties, TEXT("goal_cm"), goalLocation);
+		if (bHasGoal)
+		{
+			setupInfo.LocationSetupInfo.GoalLocationCm = goalLocation;
+		}
+	}
+
+	if (!bHasGoal)
+	{
+		goalLocation = setupInfo.LocationSetupInfo.StartLocationCm;
+	}
+
 	setupInfo.LocationSetupInfo.bAutoStartRoute = !bSpawnOnly && bRouteAutoStart && bHasGoal;
 
 	ADeliveryBot_ChaosActor* robotActor{
@@ -461,7 +498,7 @@ AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInst
 	{
 		if (!bHasGoal)
 		{
-			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s'의 이동 목표(goal_cm)가 없어 경로 주입을 건너뜀."), *placeableSpec.InstanceId);
+			UE_LOG(LogEpisodeSimulation, Warning, TEXT("로봇 '%s'에 이동 목표가 없어 경로 주입을 건너뜀."), *placeableSpec.InstanceId);
 			return robotActor;
 		}
 

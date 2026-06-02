@@ -146,10 +146,8 @@ private:
 	// speed_mps와 initial_distance_m은 원본 값과 centimeter 변환 값을 properties에 함께 남긴다.
 	static void CompilePedestrians(const FJsonObject& actorsObject, FEpisodeCompileResult& result, const TSet<FString>& pathIds, TSet<FString>& instanceIds);
 
-	// actors.robot를 정책 없는 spawn-only placeable로 변환한다.
-	// robot policy는 다루지 않고 asset_id, transform, spawn_only 상태만 WorldSpec에 보존한다.
-	// 에피소드 로봇 MVP에서는 transform.location_m을 출발 위치(cm)로 사용한다.
-	// route.goal_m 또는 goal_m은 Unreal centimeter 단위 goal_cm 프로퍼티로 변환한다.
+	// actors.robot setup은 FEpisodeDeliveryBotSpawnSpec으로 컴파일되어 저장된다.
+	// 새로운 location/drive/path_follow/lidar 블록들은 전달되고; transform/route은 fallback으로 남는다.
 	static void CompileRobotSpawn(const FJsonObject& actorsObject, FEpisodeCompileResult& result, TSet<FString>& instanceIds);
 
 	// actors object 전체를 static obstacle, pedestrian, robot 순서로 컴파일한다.
@@ -215,8 +213,20 @@ actors.robot.instance_id / actor_id
 actors.robot.asset_id / type
 actors.robot.spawn_only
 actors.robot.transform
+actors.robot.location.start_location_cm
+actors.robot.location.goal_location_cm
+actors.robot.location.auto_start_route
 actors.robot.goal_m
 actors.robot.route.goal_m
 actors.robot.route.auto_start
+actors.robot.drive.max_speed_kmh
+actors.robot.drive.slowdown_speed_range_kmh
+actors.robot.path_follow.target_speed_kmh
+actors.robot.path_follow.look_ahead_distance_m
+actors.robot.path_follow.obstacle_slow_speed_kmh
+actors.robot.lidar.scan_range_m
+actors.robot.lidar.angle_step_degree
+actors.robot.lidar.stop_distance_m
+actors.robot.lidar.slow_down_distance_m
 actors.robot.properties
  */

@@ -852,23 +852,128 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 
 	const bool bSpawnOnly{ ReadBoolOrDefault(*robotObject, TEXT("spawn_only"), true)};
 	bool bHasGoal{ false };
+	bool bHasLocationAutoStart{ false };
 
-	ReadTransformField(
-		*robotObject,
-		TEXT("transform"),
-		TEXT("actors.robot"),
-		result,
-		robotSpec.Transform
-	);
+	if (robotObject->HasField(TEXT("transform")))
+	{
+		if (!ReadTransformField(
+			*robotObject,
+			TEXT("transform"),
+			TEXT("actors.robot"),
+			result,
+			robotSpec.Transform
+		))
+		{
+			robotSpec.Transform = FTransform::Identity;
+		}
+	}
+	else
+	{
+		robotSpec.Transform = FTransform::Identity;
+	}
 
-	robotSpec.Properties.Add(TEXT("spawn_only"), MakeBoolParam(bSpawnOnly));
+	FDeliveryBotSetupInfo& robotSetupInfo = robotSpec.DeliveryBot.SetupInfo;
+	robotSpec.DeliveryBot.bSpawnOnly = bSpawnOnly;
+	robotSpec.DeliveryBot.bHasStartLocation = true;
+	robotSetupInfo.LocationSetupInfo.StartLocationCm = robotSpec.Transform.GetLocation();
+	robotSetupInfo.LocationSetupInfo.GoalLocationCm = robotSetupInfo.LocationSetupInfo.StartLocationCm;
+
+	const auto readOptionalNumberField = [&result](
+		const FJsonObject& sourceObject,
+		const TCHAR* fieldName,
+		const FString& path,
+		float& targetValue,
+		float minValue)
+	{
+		const FString fieldNameString{ fieldName };
+		if (!sourceObject.HasField(fieldNameString)) return false;
+
+		double parsedValue = targetValue;
+		if (!sourceObject.TryGetNumberField(fieldNameString, parsedValue))
+		{
+			AddDiagnostic(
+				result,
+				EEpisodeCompileDiagnosticSeverity::Error,
+				TEXT("invalid_number"),
+				FString::Printf(TEXT("%s.%s 필드는 숫자여야 함."), *path, *fieldNameString));
+			return false;
+		}
+
+		targetValue = FMath::Max(static_cast<float>(parsedValue), minValue);
+		return true;
+	};
+
+	const auto readOptionalBoolField = [&result](
+		const FJsonObject& sourceObject,
+		const TCHAR* fieldName,
+		const FString& path,
+		bool& targetValue)
+	{
+		const FString fieldNameString{ fieldName };
+		if (!sourceObject.HasField(fieldNameString)) return false;
+
+		if (!sourceObject.TryGetBoolField(fieldNameString, targetValue))
+		{
+			AddDiagnostic(
+				result,
+				EEpisodeCompileDiagnosticSeverity::Error,
+				TEXT("invalid_bool"),
+				FString::Printf(TEXT("%s.%s 필드는 bool 값이어야 함."), *path, *fieldNameString));
+			return false;
+		}
+
+		return true;
+	};
+
+	TSharedPtr<FJsonObject> locationObject;
+	if (TryGetObjectField(*robotObject, TEXT("location"), locationObject))
+	{
+		FVector startLocationCm{ FVector::ZeroVector };
+		if (locationObject->HasField(TEXT("start_location_cm")) &&
+			ReadVectorField(
+				*locationObject,
+				TEXT("start_location_cm"),
+				1.0,
+				TEXT("actors.robot.location"),
+				result,
+				startLocationCm))
+		{
+			robotSetupInfo.LocationSetupInfo.StartLocationCm = startLocationCm;
+			robotSpec.Transform.SetLocation(startLocationCm);
+		}
+
+		FVector goalLocationCm{ FVector::ZeroVector };
+		if (locationObject->HasField(TEXT("goal_location_cm")) &&
+			ReadVectorField(
+				*locationObject,
+				TEXT("goal_location_cm"),
+				1.0,
+				TEXT("actors.robot.location"),
+				result,
+				goalLocationCm))
+		{
+			robotSetupInfo.LocationSetupInfo.GoalLocationCm = goalLocationCm;
+			bHasGoal = true;
+		}
+
+		if (locationObject->HasField(TEXT("auto_start_route")))
+		{
+			bHasLocationAutoStart = true;
+			readOptionalBoolField(
+				*locationObject,
+				TEXT("auto_start_route"),
+				TEXT("actors.robot.location"),
+				robotSetupInfo.LocationSetupInfo.bAutoStartRoute);
+		}
+	}
 
 	TSharedPtr<FJsonObject> routeObject;
 	if (TryGetObjectField(*robotObject, TEXT("route"), routeObject))
 	{
 		FVector goalLocationCm{ FVector::ZeroVector };
 
-		if (routeObject->HasField(TEXT("goal_m")) &&
+		if (!bHasGoal &&
+			routeObject->HasField(TEXT("goal_m")) &&
 			ReadVectorField(
 				*routeObject,
 				TEXT("goal_m"),
@@ -877,14 +982,17 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 				result,
 				goalLocationCm))
 		{
-			robotSpec.Properties.Add(TEXT("goal_cm"), MakeVectorParam(goalLocationCm));
+			robotSetupInfo.LocationSetupInfo.GoalLocationCm = goalLocationCm;
 			bHasGoal = true;
 		}
 
-		if (routeObject->HasField(TEXT("auto_start")))
+		if (!bHasLocationAutoStart && routeObject->HasField(TEXT("auto_start")))
 		{
-			const bool bRouteAutoStart = ReadBoolOrDefault(*routeObject, TEXT("auto_start"), true);
-			robotSpec.Properties.Add(TEXT("route_auto_start"), MakeBoolParam(bRouteAutoStart));
+			readOptionalBoolField(
+				*routeObject,
+				TEXT("auto_start"),
+				TEXT("actors.robot.route"),
+				robotSetupInfo.LocationSetupInfo.bAutoStartRoute);
 		}
 	}
 
@@ -900,10 +1008,88 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 			result,
 			goalLocationCm))
 		{
-			robotSpec.Properties.Add(TEXT("goal_cm"), MakeVectorParam(goalLocationCm));
+			robotSetupInfo.LocationSetupInfo.GoalLocationCm = goalLocationCm;
 			bHasGoal = true;
 		}
 	}
+
+	TSharedPtr<FJsonObject> driveObject;
+	if (TryGetObjectField(*robotObject, TEXT("drive"), driveObject))
+	{
+		readOptionalNumberField(
+			*driveObject,
+			TEXT("max_speed_kmh"),
+			TEXT("actors.robot.drive"),
+			robotSetupInfo.ChaosDriveConfigInfo.MaxSpeedKmh,
+			0.f);
+		readOptionalNumberField(
+			*driveObject,
+			TEXT("slowdown_speed_range_kmh"),
+			TEXT("actors.robot.drive"),
+			robotSetupInfo.ChaosDriveConfigInfo.SlowdownSpeedRangeKmh,
+			0.1f);
+	}
+
+	TSharedPtr<FJsonObject> pathFollowObject;
+	if (TryGetObjectField(*robotObject, TEXT("path_follow"), pathFollowObject))
+	{
+		readOptionalNumberField(
+			*pathFollowObject,
+			TEXT("target_speed_kmh"),
+			TEXT("actors.robot.path_follow"),
+			robotSetupInfo.PathFollowConfigInfo.TargetSpeedKmh,
+			0.f);
+		readOptionalNumberField(
+			*pathFollowObject,
+			TEXT("look_ahead_distance_m"),
+			TEXT("actors.robot.path_follow"),
+			robotSetupInfo.PathFollowConfigInfo.LookAheadDistanceM,
+			0.1f);
+		readOptionalNumberField(
+			*pathFollowObject,
+			TEXT("obstacle_slow_speed_kmh"),
+			TEXT("actors.robot.path_follow"),
+			robotSetupInfo.PathFollowConfigInfo.ObstacleSlowSpeedKmh,
+			0.f);
+	}
+
+	TSharedPtr<FJsonObject> lidarObject;
+	if (TryGetObjectField(*robotObject, TEXT("lidar"), lidarObject))
+	{
+		readOptionalNumberField(
+			*lidarObject,
+			TEXT("scan_range_m"),
+			TEXT("actors.robot.lidar"),
+			robotSetupInfo.LidarSensorConfigInfo.ScanRangeM,
+			0.f);
+		readOptionalNumberField(
+			*lidarObject,
+			TEXT("angle_step_degree"),
+			TEXT("actors.robot.lidar"),
+			robotSetupInfo.LidarSensorConfigInfo.AngleStepDegree,
+			1.f);
+		readOptionalNumberField(
+			*lidarObject,
+			TEXT("stop_distance_m"),
+			TEXT("actors.robot.lidar"),
+			robotSetupInfo.LidarSensorConfigInfo.StopDistanceM,
+			0.f);
+		readOptionalNumberField(
+			*lidarObject,
+			TEXT("slow_down_distance_m"),
+			TEXT("actors.robot.lidar"),
+			robotSetupInfo.LidarSensorConfigInfo.SlowDownDistanceM,
+			0.f);
+	}
+
+	robotSetupInfo.LidarSensorConfigInfo.SlowDownDistanceM = FMath::Max(
+		robotSetupInfo.LidarSensorConfigInfo.SlowDownDistanceM,
+		robotSetupInfo.LidarSensorConfigInfo.StopDistanceM + 0.1f);
+	robotSetupInfo.LocationSetupInfo.bAutoStartRoute =
+		!bSpawnOnly && robotSetupInfo.LocationSetupInfo.bAutoStartRoute && bHasGoal;
+	robotSpec.DeliveryBot.bHasGoalLocation = bHasGoal;
+
+	AddJsonProperties(*robotObject, robotSpec.Properties);
 
 	if (!bSpawnOnly && !bHasGoal)
 	{
@@ -911,7 +1097,7 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 			result,
 			EEpisodeCompileDiagnosticSeverity::Warning,
 			TEXT("missing_robot_goal"),
-			TEXT("actors.robot.spawn_only가 false이지만 route.goal_m 또는 goal_m이 없어 로봇 경로 주입을 건너뜀."));
+			TEXT("actors.robot.spawn_only가 false이지만 location.goal_location_cm, route.goal_m, goal_m이 없어 로봇 경로 주입을 건너뜀."));
 	}
 
 	result.WorldSpec.Placeables.Add(robotSpec);

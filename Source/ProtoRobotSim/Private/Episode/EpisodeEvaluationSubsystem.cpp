@@ -28,6 +28,12 @@ bool UEpisodeEvaluationSubsystem::StartEvaluation(
 		StopEvaluation();
 	}
 
+	if (!IsValid(runtimeContext.RobotActor))
+	{
+		UE_LOG(LogEpisodeEvaluation, Warning, TEXT("평가 시작 거부: 런타임 컨텍스트에 유효한 로봇 액터가 없음 | Episode: %s"), *runtimeContext.EpisodeId);
+		return false;
+	}
+
 	ActiveEvaluationConfig = evaluationConfig;
 	ActiveRuntimeContext = runtimeContext;
 
@@ -68,7 +74,7 @@ bool UEpisodeEvaluationSubsystem::StartEvaluation(
 	UE_LOG(
 		LogEpisodeEvaluation,
 		Log,
-		TEXT("Evaluation started | Episode: %s, TimeLimit: %.2fs, Robot: %s, HasGoal: %s, RuntimeActors: %d, GroundRegions: %d, StaticObstacles: %d, Pedestrians: %d, NearMissDistance: %.1fcm"),
+		TEXT("평가 시작 | Episode: %s, TimeLimit: %.2fs, Robot: %s, HasGoal: %s, RuntimeActors: %d, GroundRegions: %d, StaticObstacles: %d, Pedestrians: %d, NearMissDistance: %.1fcm"),
 		*runtimeContext.EpisodeId,
 		TimeLimitSeconds,
 		*runtimeContext.RobotInstanceId,
@@ -79,11 +85,6 @@ bool UEpisodeEvaluationSubsystem::StartEvaluation(
 		runtimeContext.PedestrianActors.Num(),
 		ActiveEvaluationConfig.NearMissDistanceCm);
 
-	if (!IsValid(runtimeContext.RobotActor))
-	{
-		UE_LOG(LogEpisodeEvaluation, Warning, TEXT("Evaluation started without a valid robot actor | Episode: %s"), *runtimeContext.EpisodeId);
-	}
-
 	return true;
 }
 
@@ -91,7 +92,7 @@ void UEpisodeEvaluationSubsystem::StopEvaluation()
 {
 	if (bEvaluating)
 	{
-		UE_LOG(LogEpisodeEvaluation, Log, TEXT("Evaluation stopped | Episode: %s"), *ActiveRuntimeContext.EpisodeId);
+		UE_LOG(LogEpisodeEvaluation, Log, TEXT("평가 중지 | Episode: %s"), *ActiveRuntimeContext.EpisodeId);
 	}
 
 	bEvaluating = false;
@@ -181,7 +182,7 @@ void UEpisodeEvaluationSubsystem::RequestEndEpisode(const FEpisodeEvaluationResu
 	UE_LOG(
 		LogEpisodeEvaluation,
 		Log,
-		TEXT("Evaluation ended | Episode: %s, Success: %s, Outcome: %s, TerminalReason: %s, Duration: %.2fs, Score: %.2f, Events: %d, Metrics: %d"),
+		TEXT("평가 종료 | Episode: %s, Success: %s, Outcome: %s, TerminalReason: %s, Duration: %.2fs, Score: %.2f, Events: %d, Metrics: %d"),
 		*CurrentResult.EpisodeId,
 		CurrentResult.bSuccess ? TEXT("true") : TEXT("false"),
 		*ToEvaluationEnumString(CurrentResult.Outcome),
@@ -283,7 +284,7 @@ void UEpisodeEvaluationSubsystem::AddEvaluationEventWithDetails(
 	UE_LOG(
 		LogEpisodeEvaluation,
 		Log,
-		TEXT("Evaluation event | Episode: %s, Index: %d, Type: %s, Severity: %s, Subject: %s, Target: %s, Time: %.2fs, Value: %.2f, Message: %s"),
+		TEXT("평가 이벤트 기록 | Episode: %s, Index: %d, Type: %s, Severity: %s, Subject: %s, Target: %s, Time: %.2fs, Value: %.2f, Message: %s"),
 		*CurrentResult.EpisodeId,
 		event.EventIndex,
 		*ToEvaluationEnumString(event.EventType),
@@ -398,7 +399,7 @@ void UEpisodeEvaluationSubsystem::HandleObservedComponentHit(
 				targetActor,
 				eventLocation,
 				ActiveEvaluationConfig.BlockedRegionCollisionScore,
-				TEXT("Robot collided with a blocked region."));
+				TEXT("로봇이 blocked region과 충돌함."));
 		}
 		return;
 	}
@@ -410,7 +411,7 @@ void UEpisodeEvaluationSubsystem::HandleObservedComponentHit(
 			targetActor,
 			eventLocation,
 			ActiveEvaluationConfig.StaticObstacleCollisionScore,
-			TEXT("Robot collided with a static obstacle."));
+			TEXT("로봇이 정적 장애물과 충돌함."));
 		return;
 	}
 
@@ -421,7 +422,7 @@ void UEpisodeEvaluationSubsystem::HandleObservedComponentHit(
 			targetActor,
 			eventLocation,
 			ActiveEvaluationConfig.PedestrianCollisionScore,
-			TEXT("Robot collided with a pedestrian."));
+			TEXT("로봇이 보행자와 충돌함."));
 	}
 }
 
@@ -474,7 +475,7 @@ bool UEpisodeEvaluationSubsystem::CheckRobotFall()
 	AddEvaluationEventWithDetails(
 		EEpisodeEvaluationEventType::RobotFall,
 		EEpisodeEvaluationEventSeverity::Failure,
-		TEXT("Robot exceeded the fall angle threshold."),
+		TEXT("로봇이 낙상 각도 임계값을 초과함."),
 		FString(),
 		ActiveRuntimeContext.RobotActor->GetActorLocation(),
 		tiltAngleDegrees,
@@ -520,7 +521,7 @@ void UEpisodeEvaluationSubsystem::UpdateBlockedRegionViolations()
 			groundRegion,
 			robotLocation,
 			ActiveEvaluationConfig.BlockedRegionCollisionScore,
-			TEXT("Robot entered a blocked region."));
+			TEXT("로봇이 blocked region에 진입함."));
 	}
 
 	TArray<FString> missingRegionIds;
@@ -582,7 +583,7 @@ void UEpisodeEvaluationSubsystem::UpdatePenaltyRegionViolations()
 		AddEvaluationEventWithDetails(
 			EEpisodeEvaluationEventType::PenaltyRegionViolation,
 			EEpisodeEvaluationEventSeverity::Warning,
-			TEXT("Robot violated a penalty region."),
+			TEXT("로봇이 penalty region 조건을 위반함."),
 			regionId,
 			robotLocation,
 			scoreDelta,
@@ -714,7 +715,7 @@ void UEpisodeEvaluationSubsystem::CloseNearMissInterval(
 	event.TargetInstanceId = pedestrianInstanceId;
 	event.Location = state.ClosestRobotLocation;
 	event.Value = scoreDelta;
-	event.Message = TEXT("Pedestrian near-miss interval.");
+	event.Message = TEXT("보행자 near-miss 구간.");
 	event.Properties.Add(TEXT("start_time_s"), MakeFloatParam(state.StartTimeSeconds));
 	event.Properties.Add(TEXT("end_time_s"), MakeFloatParam(endTimeSeconds));
 	event.Properties.Add(TEXT("duration_s"), MakeFloatParam(durationSeconds));
@@ -725,7 +726,7 @@ void UEpisodeEvaluationSubsystem::CloseNearMissInterval(
 	UE_LOG(
 		LogEpisodeEvaluation,
 		Log,
-		TEXT("Evaluation event | Episode: %s, Index: %d, Type: %s, Severity: %s, Subject: %s, Target: %s, Duration: %.2fs, MinDistance: %.2fm, ScoreDelta: %.2f"),
+		TEXT("평가 이벤트 기록 | Episode: %s, Index: %d, Type: %s, Severity: %s, Subject: %s, Target: %s, Duration: %.2fs, MinDistance: %.2fm, ScoreDelta: %.2f"),
 		*CurrentResult.EpisodeId,
 		event.EventIndex,
 		*ToEvaluationEnumString(event.EventType),
@@ -898,7 +899,7 @@ void UEpisodeEvaluationSubsystem::EndForTimeout()
 	UE_LOG(
 		LogEpisodeEvaluation,
 		Log,
-		TEXT("Evaluation timeout reached | Episode: %s, Elapsed: %.2fs, Limit: %.2fs"),
+		TEXT("평가 제한 시간 도달 | Episode: %s, Elapsed: %.2fs, Limit: %.2fs"),
 		*ActiveRuntimeContext.EpisodeId,
 		GetElapsedTimeSeconds(),
 		TimeLimitSeconds);
@@ -906,7 +907,7 @@ void UEpisodeEvaluationSubsystem::EndForTimeout()
 	AddEvaluationEvent(
 		EEpisodeEvaluationEventType::Timeout,
 		EEpisodeEvaluationEventSeverity::Failure,
-		TEXT("Time limit exceeded."));
+		TEXT("제한 시간을 초과함."));
 
 	FinishEpisode(false, EEpisodeEvaluationOutcome::Failure, EEpisodeEvaluationTerminalReason::Timeout);
 }

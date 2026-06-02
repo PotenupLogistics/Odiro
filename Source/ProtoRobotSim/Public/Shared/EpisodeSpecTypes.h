@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "EpisodeCoreTypes.h"
 #include "EpisodeConfigTypes.h"
+#include "Struct/DeliveryBotSetupInfo.h"
 #include "EpisodeSpecTypes.generated.h"
 
 // 언리얼에서 ScenarioSpec 해석 후 에피소드를 생성하기 위한 에피소드 명세.
@@ -72,6 +73,25 @@ struct PROTOROBOTSIM_API FEpisodeGroundRegionSpec
 	FString CollisionTag;
 };
 
+// 로봇을 배치시키고 초기화시키기 위한 명세.
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodeDeliveryBotSpawnSpec
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|DeliveryBot")
+	FDeliveryBotSetupInfo SetupInfo;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|DeliveryBot")
+	bool bSpawnOnly = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|DeliveryBot")
+	bool bHasStartLocation = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|DeliveryBot")
+	bool bHasGoalLocation = false;
+};
+
 // 월드에 배치되는 정적 객체 하나를 표현하는 명세.
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FEpisodePlaceableInstanceSpec
@@ -89,6 +109,9 @@ struct PROTOROBOTSIM_API FEpisodePlaceableInstanceSpec
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FTransform Transform;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FEpisodeDeliveryBotSpawnSpec DeliveryBot;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	TMap<FString, FEpisodeParamValue> Properties;

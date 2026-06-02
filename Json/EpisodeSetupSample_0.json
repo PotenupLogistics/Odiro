@@ -3,27 +3,23 @@
   "version": 1,
   "scenario_id": "sidewalk_baseline_tuned_000",
   "map_id": "EpisodeSandbox",
-  "units": {
-    "distance": "m",
-    "angle": "deg"
-  },
   "run": {
     "base_seed": 1000,
     "iteration_index": 0,
-    "time_limit_s": 60.0
+    "time_limit_s": 60
   },
   "evaluation": {
-    "goal_acceptance_radius_m": 1.0,
-    "fall_angle_deg": 60.0,
+    "goal_acceptance_radius_m": 1,
+    "fall_angle_deg": 60,
     "near_miss": {
       "distance_m": 0.5
     },
     "scoring": {
-      "static_obstacle_collision": -1.0,
-      "blocked_region_collision": -1.0,
-      "penalty_region_violation": -3.0,
-      "pedestrian_near_miss": -3.0,
-      "pedestrian_collision": -10.0
+      "static_obstacle_collision": -1,
+      "blocked_region_collision": -1,
+      "penalty_region_violation": -3,
+      "pedestrian_near_miss": -3,
+      "pedestrian_collision": -10
     }
   },
   "ground_model": {
@@ -34,24 +30,24 @@
         "region_type": "walkable",
         "shape": {
           "type": "rectangle",
-          "center_m": [0.0, 0.0, 0.0],
-          "size_m": [12.0, 8.0],
-          "yaw_deg": 0.0
+          "center_xy_m": [0, 0],
+          "size_m": [12, 8],
+          "yaw_deg": 0
         },
-        "traversability_score": 1.0
+        "traversability_score": 1
       },
       {
         "region_id": "road_penalty",
         "region_type": "penalty",
         "shape": {
           "type": "rectangle",
-          "center_m": [0.0, 5.5, 0.0],
-          "size_m": [12.0, 3.0],
-          "yaw_deg": 0.0
+          "center_xy_m": [0, 5.5],
+          "size_m": [12, 3],
+          "yaw_deg": 0
         },
         "penalty": {
           "kind": "sidewalk_departure",
-          "cost": 5.0,
+          "cost": 5,
           "violation_after_s": 0.25
         },
         "traversability_score": 0.6
@@ -61,9 +57,9 @@
         "region_type": "blocked",
         "shape": {
           "type": "rectangle",
-          "center_m": [0.0, -5.0, 0.0],
-          "size_m": [12.0, 2.0],
-          "yaw_deg": 0.0
+          "center_xy_m": [0, -5],
+          "size_m": [12, 2],
+          "yaw_deg": 0
         },
         "collision_tag": "wall"
       }
@@ -72,11 +68,9 @@
   "paths": [
     {
       "path_id": "ped_crossing_01",
-      "role": "pedestrian_baseline",
-      "type": "spline",
-      "points_m": [
-        [-2.5, -3.0, 0.0],
-        [2.5, 3.0, 0.0]
+      "points_xy_m": [
+        [-2.5, -3],
+        [2.5, 3]
       ],
       "closed_loop": false
     }
@@ -86,41 +80,20 @@
       {
         "instance_id": "cone_01",
         "prop_id": "obstacle.road_cone_01",
-        "transform": {
-          "location_m": [1.8, 1.0, 0.0],
-          "rotation_deg": {
-            "pitch": 0.0,
-            "yaw": 0.0,
-            "roll": 0.0
-          },
-          "scale": [1.0, 1.0, 1.0]
-        }
+        "xy_m": [1.8, 1],
+        "yaw_deg": 0
       },
       {
         "instance_id": "bin_01",
         "prop_id": "obstacle.bin",
-        "transform": {
-          "location_m": [3.4, 0.7, 0.0],
-          "rotation_deg": {
-            "pitch": 0.0,
-            "yaw": 15.0,
-            "roll": 0.0
-          },
-          "scale": [1.0, 1.0, 1.0]
-        }
+        "xy_m": [3.4, 0.7],
+        "yaw_deg": 15
       },
       {
         "instance_id": "barrier_01",
         "prop_id": "obstacle.road_barrier_01",
-        "transform": {
-          "location_m": [-1.7, -0.5, 0.0],
-          "rotation_deg": {
-            "pitch": 0.0,
-            "yaw": 90.0,
-            "roll": 0.0
-          },
-          "scale": [1.0, 1.0, 1.0]
-        }
+        "xy_m": [-1.7, -0.5],
+        "yaw_deg": 90
       }
     ],
     "pedestrians": [
@@ -128,20 +101,13 @@
         "instance_id": "ped_01",
         "archetype_id": "adult_pedestrian",
         "path_id": "ped_crossing_01",
-        "spawn_time_s": 0.0,
-        "transform": {
-          "location_m": [-2.5, -3.0, 0.0],
-          "rotation_deg": {
-            "pitch": 0.0,
-            "yaw": 50.0,
-            "roll": 0.0
-          },
-          "scale": [1.0, 1.0, 1.0]
-        },
+        "spawn_time_s": 0,
+        "xy_m": [-2.5, -3],
+        "yaw_deg": 50,
         "movement": {
           "model": "straight_line",
           "speed_mps": 1.2,
-          "initial_distance_m": 0.0,
+          "initial_distance_m": 0,
           "auto_start": true
         }
       }
@@ -150,31 +116,24 @@
       "instance_id": "robot_01",
       "asset_id": "delivery_bot",
       "spawn_only": false,
-      "transform": {
-        "location_m": [-5.0, 0.0, 0.0],
-        "rotation_deg": {
-          "pitch": 0.0,
-          "yaw": 0.0,
-          "roll": 0.0
-        },
-        "scale": [1.0, 1.0, 1.0]
-      },
+      "xy_m": [-5, 0],
+      "yaw_deg": 0,
       "route": {
-        "goal_m": [5.0, 0.0, 0.0],
+        "goal_xy_m": [5, 0],
         "auto_start": true
       },
       "drive": {
-        "max_speed_kmh": 10.0,
-        "slowdown_speed_range_kmh": 4.0
+        "max_speed_kmh": 10,
+        "slowdown_speed_range_kmh": 4
       },
       "path_follow": {
-        "target_speed_kmh": 8.0,
-        "look_ahead_distance_m": 1.0,
-        "obstacle_slow_speed_kmh": 2.0
+        "target_speed_kmh": 8,
+        "look_ahead_distance_m": 1,
+        "obstacle_slow_speed_kmh": 2
       },
       "lidar": {
-        "scan_range_m": 5.0,
-        "angle_step_degree": 5.0,
+        "scan_range_m": 5,
+        "angle_step_degree": 5,
         "stop_distance_m": 1.2,
         "slow_down_distance_m": 3.5
       }

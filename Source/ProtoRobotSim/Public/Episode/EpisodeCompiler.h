@@ -57,23 +57,23 @@ private:
 	static bool TryGetObjectField(const FJsonObject& jsonObject, const FString& fieldName, TSharedPtr<FJsonObject>& outObject);
 
 	// JSON 필드가 array인지 확인하고 FJsonValue 배열로 꺼낸다.
-	// points_m, regions, actors 같은 반복 항목을 읽는 공통 진입점이다.
+	// paths, regions, actors 같은 반복 항목을 읽는 공통 진입점이다.
 	static bool TryGetArrayField(const FJsonObject& jsonObject, const FString& fieldName, TArray<TSharedPtr<FJsonValue>>& outArray);
 
 	// JSON string 필드를 선택적으로 읽는다.
 	// 필드가 없으면 false를 반환하고 Diagnostic은 남기지 않는다.
 	static bool TryGetStringField(const FJsonObject& jsonObject, const FString& fieldName, FString& outValue);
 
-	// primary 필드를 먼저 읽고, 없으면 fallback 필드를 읽는다.
-	// prop_id/asset_id, region_type/type처럼 이름 전환기에 있는 JSON을 받아들이기 위한 호환 헬퍼다.
+	// primary 필드를 먼저 읽고, 없으면 대체 이름 필드를 읽는다.
+	// prop_id/asset_id, region_type/type처럼 같은 의미의 대체 이름을 받아들이기 위한 호환 헬퍼다.
 	static bool TryGetStringField(const FJsonObject& jsonObject, const FString& primaryFieldName, const FString& fallbackFieldName, FString& outValue);
 
 	// 필수 string 필드를 읽고 비어 있으면 Error Diagnostic을 남긴다.
 	// Path는 사람이 JSON 위치를 바로 찾을 수 있도록 Message에 포함된다.
 	static bool RequireStringField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FEpisodeCompileResult& result, FString& outValue);
 
-	// 필수 string 필드를 primary/fallback 이름으로 읽고 실패하면 Error Diagnostic을 남긴다.
-	// JSON 양식이 바뀌는 동안 새 이름을 우선하고 기존 이름도 잠시 허용할 때 사용한다.
+	// 필수 string 필드를 primary/대체 이름으로 읽고 실패하면 Error Diagnostic을 남긴다.
+	// 같은 의미의 대체 이름을 허용할 때 사용한다.
 	static bool RequireStringField(const FJsonObject& jsonObject, const FString& primaryFieldName, const FString& fallbackFieldName, const FString& path, FEpisodeCompileResult& result, FString& outValue);
 
 	// JSON number 필드를 읽고 없으면 기본값을 반환한다.
@@ -88,21 +88,15 @@ private:
 	// 좌표, 크기, 회전 배열의 길이와 숫자 타입 오류는 여기서 Diagnostic으로 기록한다.
 	static bool ReadNumberArray(const FJsonObject& jsonObject, const FString& fieldName, int32 expectedCount, const FString& path, FEpisodeCompileResult& result, TArray<double>& outValues);
 
-	// 숫자 3개 배열을 FVector로 읽고 Scale을 곱한다.
-	// location_m, points_m처럼 meter 입력은 100.0을 곱해 Unreal centimeter로 변환한다.
-	static bool ReadVectorField(const FJsonObject& jsonObject, const FString& fieldName, double scale, const FString& path, FEpisodeCompileResult& result, FVector& outVector);
-
 	// 숫자 2개 배열을 FVector2D로 읽고 Scale을 곱한다.
 	// size_m 같은 평면 크기 입력은 meter에서 centimeter로 변환되어 ground region 크기로 들어간다.
 	static bool ReadVector2DField(const FJsonObject& jsonObject, const FString& fieldName, double scale, const FString& path, FEpisodeCompileResult& result, FVector2D& outVector);
 
-	// rotation_deg 필드를 FRotator로 해석한다.
-	// object 형식은 pitch/yaw/roll 키를 읽고, array 형식은 [roll, pitch, yaw] 순서로 해석한다.
-	static bool ReadRotatorField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FEpisodeCompileResult& result, FRotator& outRotator);
+	// xy_m, center_xy_m, goal_xy_m처럼 2D 입력을 읽어 Z=0인 FVector로 변환한다.
+	static bool ReadVector2DAsVectorField(const FJsonObject& jsonObject, const FString& fieldName, double scale, const FString& path, FEpisodeCompileResult& result, FVector& outVector);
 
-	// transform object를 FTransform으로 읽는다.
-	// location_m은 meter에서 centimeter로 변환하고, rotation_deg는 degree 그대로, Scale은 무단위 값 그대로 사용한다.
-	static bool ReadTransformField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FEpisodeCompileResult& result, FTransform& outTransform);
+	// EpisodeSetup 축약 양식의 xy_m/yaw_deg를 FTransform으로 변환한다.
+	static bool ReadActorPlacementTransform(const FJsonObject& jsonObject, const FString& path, FEpisodeCompileResult& result, FTransform& outTransform);
 
 	// 문자열 ground region 타입을 런타임 enum으로 변환한다.
 	// 현재 MVP는 walkable, penalty, blocked만 의미 있는 값으로 인정한다.
@@ -111,10 +105,6 @@ private:
 	// 문자열 shape 타입을 런타임 enum으로 변환한다.
 	// convex_polygon은 타입으로는 읽지만 실제 컴파일 단계에서는 MVP 제약상 rectangle만 허용한다.
 	static bool ParseGroundShapeType(const FString& value, EEpisodeGroundShapeType& outType);
-
-	// 문자열 Path 타입을 런타임 enum으로 변환한다.
-	// spline과 waypoints를 구분하지만, 현재 spawn 테스트 흐름은 spline 중심으로 사용한다.
-	static bool ParsePathType(const FString& value, EEpisodePathType& outType);
 
 	// 한 컴파일 결과 안에서 semantic Id가 중복되는지 검사한다.
 	// 중복되면 actor/Path/region lookup이 모호해지므로 Error Diagnostic을 남긴다.
@@ -131,11 +121,11 @@ private:
 	static void CompileEvaluationConfig(const FJsonObject& rootObject, FEpisodeCompileResult& result);
 
 	// ground_model.regions 배열을 FEpisodeGroundRegionSpec 목록으로 변환한다.
-	// center_m과 size_m은 centimeter로 변환하고, penalty/collision 의미 필드는 그대로 보존한다.
+	// center_xy_m과 size_m은 centimeter로 변환하고, penalty/collision 의미 필드는 그대로 보존한다.
 	static void CompileGroundRegions(const FJsonObject& rootObject, FEpisodeCompileResult& result);
 
 	// paths 배열을 FEpisodePathSpec 목록으로 변환하고 Path Id 목록을 수집한다.
-	// points_m 좌표는 meter에서 centimeter로 변환되며, 이후 pedestrian의 path_id 검증에 사용된다.
+	// points_xy_m 좌표는 meter에서 centimeter로 변환되며, 이후 pedestrian의 path_id 검증에 사용된다.
 	static void CompilePaths(const FJsonObject& rootObject, FEpisodeCompileResult& result, TSet<FString>& outPathIds);
 
 	// actors.static_obstacles를 정적 배치 actor spec으로 변환한다.
@@ -147,7 +137,7 @@ private:
 	static void CompilePedestrians(const FJsonObject& actorsObject, FEpisodeCompileResult& result, const TSet<FString>& pathIds, TSet<FString>& instanceIds);
 
 	// actors.robot setup은 FEpisodeDeliveryBotSpawnSpec으로 컴파일되어 저장된다.
-	// 새로운 location/drive/path_follow/lidar 블록들은 전달되고; transform/route은 fallback으로 남는다.
+	// 배치는 xy_m/yaw_deg로 읽고, 목적지와 튜닝값은 route/drive/path_follow/lidar 블록에서 전달된다.
 	static void CompileRobotSpawn(const FJsonObject& actorsObject, FEpisodeCompileResult& result, TSet<FString>& instanceIds);
 
 	// actors object 전체를 static obstacle, pedestrian, robot 순서로 컴파일한다.
@@ -179,7 +169,7 @@ evaluation.scoring.pedestrian_collision
 ground_model.regions[].region_id
 ground_model.regions[].region_type / type
 ground_model.regions[].shape.type
-ground_model.regions[].shape.center_m
+ground_model.regions[].shape.center_xy_m
 ground_model.regions[].shape.size_m
 ground_model.regions[].shape.yaw_deg
 ground_model.regions[].traversability_score
@@ -189,20 +179,21 @@ ground_model.regions[].penalty.violation_after_s
 ground_model.regions[].collision_tag
 
 paths[].path_id
-paths[].type
-paths[].points_m
+paths[].points_xy_m
 paths[].closed_loop
 
 actors.static_obstacles[].instance_id
 actors.static_obstacles[].prop_id / asset_id
-actors.static_obstacles[].transform
+actors.static_obstacles[].xy_m
+actors.static_obstacles[].yaw_deg
 actors.static_obstacles[].properties
 
 actors.pedestrians[].instance_id
 actors.pedestrians[].archetype_id
 actors.pedestrians[].path_id
 actors.pedestrians[].spawn_time_s
-actors.pedestrians[].transform
+actors.pedestrians[].xy_m
+actors.pedestrians[].yaw_deg
 actors.pedestrians[].movement.model
 actors.pedestrians[].movement.speed_mps
 actors.pedestrians[].movement.initial_distance_m
@@ -212,9 +203,9 @@ actors.pedestrians[].properties
 actors.robot.instance_id / actor_id
 actors.robot.asset_id / type
 actors.robot.spawn_only
-actors.robot.transform
-actors.robot.goal_m
-actors.robot.route.goal_m
+actors.robot.xy_m
+actors.robot.yaw_deg
+actors.robot.route.goal_xy_m
 actors.robot.route.auto_start
 actors.robot.drive.max_speed_kmh
 actors.robot.drive.slowdown_speed_range_kmh

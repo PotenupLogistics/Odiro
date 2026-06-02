@@ -3,27 +3,23 @@
   "version": 1,
   "scenario_id": "sidewalk_actor_spawn_001",
   "map_id": "EpisodeSandbox",
-  "units": {
-    "distance": "m",
-    "angle": "deg"
-  },
   "run": {
     "base_seed": 42,
     "iteration_index": 0,
-    "time_limit_s": 60.0
+    "time_limit_s": 60
   },
   "evaluation": {
-    "goal_acceptance_radius_m": 1.0,
-    "fall_angle_deg": 60.0,
+    "goal_acceptance_radius_m": 1,
+    "fall_angle_deg": 60,
     "near_miss": {
       "distance_m": 0.5
     },
     "scoring": {
-      "static_obstacle_collision": -1.0,
-      "blocked_region_collision": -1.0,
-      "penalty_region_violation": -3.0,
-      "pedestrian_near_miss": -3.0,
-      "pedestrian_collision": -10.0
+      "static_obstacle_collision": -1,
+      "blocked_region_collision": -1,
+      "penalty_region_violation": -3,
+      "pedestrian_near_miss": -3,
+      "pedestrian_collision": -10
     }
   },
   "ground_model": {
@@ -34,20 +30,20 @@
         "region_type": "walkable",
         "shape": {
           "type": "rectangle",
-          "center_m": [0.0, 0.0, 0.0],
-          "size_m": [40.0, 40.0],
-          "yaw_deg": 0.0
+          "center_xy_m": [0, 0],
+          "size_m": [40, 40],
+          "yaw_deg": 0
         },
-        "traversability_score": 1.0
+        "traversability_score": 1
       },
       {
         "region_id": "building_wall_0",
         "region_type": "blocked",
         "shape": {
           "type": "rectangle",
-          "center_m": [-12.0, -6.0, 0.0],
-          "size_m": [16.0, 28.0],
-          "yaw_deg": 0.0
+          "center_xy_m": [-12, -6],
+          "size_m": [16, 28],
+          "yaw_deg": 0
         },
         "collision_tag": "wall"
       },
@@ -56,9 +52,9 @@
         "region_type": "blocked",
         "shape": {
           "type": "rectangle",
-          "center_m": [14.0, 6.0, 0.0],
-          "size_m": [12.0, 28.0],
-          "yaw_deg": 0.0
+          "center_xy_m": [14, 6],
+          "size_m": [12, 28],
+          "yaw_deg": 0
         },
         "collision_tag": "wall"
       }
@@ -67,34 +63,28 @@
   "paths": [
     {
       "path_id": "ped_01_path",
-      "role": "pedestrian_baseline",
-      "type": "spline",
-      "points_m": [
-        [15.0, -15.0, 0.0],
-        [4.0, -12.0, 0.0],
-        [0.0, 8.0, 0.0],
-        [-4.0, 13.0, 0.0]
+      "points_xy_m": [
+        [15, -15],
+        [4, -12],
+        [0, 8],
+        [-4, 13]
       ],
       "closed_loop": false
     },
     {
       "path_id": "ped_02_path",
-      "role": "pedestrian_baseline",
-      "type": "spline",
-      "points_m": [
-        [6.0, 16.0, 0.0],
-        [4.0, -12.0, 0.0]
+      "points_xy_m": [
+        [6, 16],
+        [4, -12]
       ],
       "closed_loop": false
     },
     {
       "path_id": "ped_03_path",
-      "role": "pedestrian_baseline",
-      "type": "spline",
-      "points_m": [
-        [-3.0, -16.0, 0.0],
-        [6.0, -5.0, 0.0],
-        [-3.0, 8.0, 0.0]
+      "points_xy_m": [
+        [-3, -16],
+        [6, -5],
+        [-3, 8]
       ],
       "closed_loop": false
     }
@@ -104,67 +94,32 @@
       {
         "instance_id": "box_01",
         "prop_id": "obstacle.box_02",
-        "transform": {
-          "location_m": [2.0, 1.0, 0.0],
-          "rotation_deg": {
-            "pitch": 0.0,
-            "yaw": 0.0,
-            "roll": 0.0
-          },
-          "scale": [1.0, 1.0, 1.0]
-        }
+        "xy_m": [2, 1],
+        "yaw_deg": 0
       },
       {
         "instance_id": "bin_01",
         "prop_id": "obstacle.bin",
-        "transform": {
-          "location_m": [3.8, 0.65, 0.0],
-          "rotation_deg": {
-            "pitch": 0.0,
-            "yaw": 15.0,
-            "roll": 0.0
-          },
-          "scale": [1.0, 1.0, 1.0]
-        }
+        "xy_m": [3.8, 0.65],
+        "yaw_deg": 15
       },
       {
         "instance_id": "manhole_01",
         "prop_id": "obstacle.manhole_03",
-        "transform": {
-          "location_m": [-6.0, 11.0, 0.0],
-          "rotation_deg": {
-            "pitch": 0.0,
-            "yaw": 0.0,
-            "roll": 0.0
-          },
-          "scale": [1.0, 1.0, 1.0]
-        }
+        "xy_m": [-6, 11],
+        "yaw_deg": 0
       },
       {
         "instance_id": "manhole_02",
         "prop_id": "obstacle.manhole_04",
-        "transform": {
-          "location_m": [0.0, 5.0, 0.0],
-          "rotation_deg": {
-            "pitch": 0.0,
-            "yaw": 0.0,
-            "roll": 0.0
-          },
-          "scale": [1.0, 1.0, 1.0]
-        }
+        "xy_m": [0, 5],
+        "yaw_deg": 0
       },
       {
         "instance_id": "barrier_01",
         "prop_id": "obstacle.road_barrier_01",
-        "transform": {
-          "location_m": [-1.5, -0.45, 0.0],
-          "rotation_deg": {
-            "pitch": 0.0,
-            "yaw": 90.0,
-            "roll": 0.0
-          },
-          "scale": [1.0, 1.0, 1.0]
-        }
+        "xy_m": [-1.5, -0.45],
+        "yaw_deg": 90
       }
     ],
     "pedestrians": [
@@ -172,20 +127,13 @@
         "instance_id": "ped_01",
         "archetype_id": "adult_pedestrian",
         "path_id": "ped_01_path",
-        "spawn_time_s": 0.0,
-        "transform": {
-          "location_m": [-1.5, -1.1, 0.0],
-          "rotation_deg": {
-            "pitch": 0.0,
-            "yaw": 90.0,
-            "roll": 0.0
-          },
-          "scale": [1.0, 1.0, 1.0]
-        },
+        "spawn_time_s": 0,
+        "xy_m": [-1.5, -1.1],
+        "yaw_deg": 90,
         "movement": {
           "model": "straight_line",
           "speed_mps": 1.2,
-          "initial_distance_m": 0.0,
+          "initial_distance_m": 0,
           "auto_start": true
         }
       },
@@ -193,20 +141,13 @@
         "instance_id": "ped_02",
         "archetype_id": "adult_pedestrian",
         "path_id": "ped_02_path",
-        "spawn_time_s": 0.0,
-        "transform": {
-          "location_m": [6.0, 16.0, 0.0],
-          "rotation_deg": {
-            "pitch": 0.0,
-            "yaw": 90.0,
-            "roll": 0.0
-          },
-          "scale": [1.0, 1.0, 1.0]
-        },
+        "spawn_time_s": 0,
+        "xy_m": [6, 16],
+        "yaw_deg": 90,
         "movement": {
           "model": "straight_line",
           "speed_mps": 0.9,
-          "initial_distance_m": 0.0,
+          "initial_distance_m": 0,
           "auto_start": true
         }
       },
@@ -214,20 +155,13 @@
         "instance_id": "ped_03",
         "archetype_id": "adult_pedestrian",
         "path_id": "ped_03_path",
-        "spawn_time_s": 0.0,
-        "transform": {
-          "location_m": [-3.0, -16.0, 0.0],
-          "rotation_deg": {
-            "pitch": 0.0,
-            "yaw": 90.0,
-            "roll": 0.0
-          },
-          "scale": [1.0, 1.0, 1.0]
-        },
+        "spawn_time_s": 0,
+        "xy_m": [-3, -16],
+        "yaw_deg": 90,
         "movement": {
           "model": "straight_line",
           "speed_mps": 1.1,
-          "initial_distance_m": 0.0,
+          "initial_distance_m": 0,
           "auto_start": true
         }
       }
@@ -236,17 +170,10 @@
       "instance_id": "robot_01",
       "asset_id": "delivery_bot",
       "spawn_only": false,
-      "transform": {
-        "location_m": [-18.0, 15.0, 0.0],
-        "rotation_deg": {
-          "pitch": 0.0,
-          "yaw": 0.0,
-          "roll": 0.0
-        },
-        "scale": [1.0, 1.0, 1.0]
-      },
+      "xy_m": [-18, 15],
+      "yaw_deg": 0,
       "route": {
-        "goal_m": [18.0, -18.0, 0.0],
+        "goal_xy_m": [18, -18],
         "auto_start": true
       }
     }

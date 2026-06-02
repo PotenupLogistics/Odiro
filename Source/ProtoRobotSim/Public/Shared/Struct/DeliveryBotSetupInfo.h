@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Shared/Struct/DeliveryBotLocationSetupInfo.h"
-#include "Shared/Struct/DeliveryBotChaosDriveConfigInfo.h"
+#include "Shared/Struct/DeliveryBotDriveConfigInfo.h"
 #include "Shared/Struct/DeliveryBotPathFollowConfigInfo.h"
 #include "Shared/Struct/DeliveryBotLidarSensorInfo.h"
 #include "DeliveryBotSetupInfo.generated.h"
@@ -17,7 +17,7 @@ public:
 	FDeliveryBotLocationSetupInfo LocationSetupInfo{};
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FDeliveryBotChaosDriveConfigInfo ChaosDriveConfigInfo{};
+	FDeliveryBotDriveConfigInfo ChaosDriveConfigInfo{};
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FDeliveryBotPathFollowConfigInfo PathFollowConfigInfo{};

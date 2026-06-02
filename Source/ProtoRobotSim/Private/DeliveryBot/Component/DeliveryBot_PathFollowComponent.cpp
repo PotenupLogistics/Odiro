@@ -22,6 +22,7 @@ void UDeliveryBot_PathFollowComponent::InitializePathFollow(
 	PathFollowConfigInfo.GoalAcceptanceDistanceM = FMath::Max(PathFollowConfigInfo.GoalAcceptanceDistanceM, 0.1f);
 	PathFollowConfigInfo.SteeringSensitivity = FMath::Max(PathFollowConfigInfo.SteeringSensitivity, 0.f);
 	PathFollowConfigInfo.MinTurnSpeedKmh = FMath::Max(PathFollowConfigInfo.MinTurnSpeedKmh, 0.f);
+	PathFollowConfigInfo.ObstacleSlowSpeedKmh = FMath::Max(PathFollowConfigInfo.ObstacleSlowSpeedKmh, 0.f);
 }
 
 void UDeliveryBot_PathFollowComponent::SetPath(const TArray<FVector>& pathPoints)

@@ -109,15 +109,15 @@ void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoun
 			// Debug Draw
 			const FColor debugColor = bBlocked ? FColor::Red : FColor::Green;
 
-			DrawDebugPoint(
-				GetWorld(),
-				cellInfo.WorldLocation,
-				8.f,
-				debugColor,
-				true,
-				30.f
-			);
-					
+			// DrawDebugPoint(
+			// 	GetWorld(),
+			// 	cellInfo.WorldLocation,
+			// 	8.f,
+			// 	debugColor,
+			// 	true,
+			// 	30.f
+			// );
+			// 		
 		}
 	}
 }
@@ -181,14 +181,14 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByComponentBounds(const UPrimi
 			cellInfo.State = EDeliveryBotGridCellState::DynamicBlocked;
 			cellInfo.Cost = BIG_NUMBER;
 
-			DrawDebugPoint(
-				GetWorld(),
-				cellInfo.WorldLocation + FVector{ 0.f, 0.f, 50.f },
-				16.f,
-				FColor::Purple,
-				false,
-				0.5f
-			);
+			// DrawDebugPoint(
+			// 	GetWorld(),
+			// 	cellInfo.WorldLocation + FVector{ 0.f, 0.f, 50.f },
+			// 	16.f,
+			// 	FColor::Purple,
+			// 	false,
+			// 	0.5f
+			// );
 		}
 	}
 }
@@ -210,14 +210,14 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByWorldLocation(const FVector&
 	cellInfo.State = EDeliveryBotGridCellState::DynamicBlocked;
 	cellInfo.Cost = BIG_NUMBER;
 
-	DrawDebugPoint(
-		GetWorld(),
-		cellInfo.WorldLocation + FVector{ 0.f, 0.f, 40.f },
-		14.f,
-		FColor::Purple,
-		false,
-		0.5f
-	);
+	// DrawDebugPoint(
+	// 	GetWorld(),
+	// 	cellInfo.WorldLocation + FVector{ 0.f, 0.f, 40.f },
+	// 	14.f,
+	// 	FColor::Purple,
+	// 	false,
+	// 	0.5f
+	// );
 }
 
 void UDeliveryBot_GridSubsystem::ClearDynamicBlockedCells()
@@ -374,14 +374,14 @@ void UDeliveryBot_GridSubsystem::SetDynamicBlockedByActorBounds(const AActor* ob
 			cellInfo.State = EDeliveryBotGridCellState::DynamicBlocked;
 			cellInfo.Cost = BIG_NUMBER;
 
-			DrawDebugPoint(
-				GetWorld(),
-				cellInfo.WorldLocation + FVector{ 0.f, 0.f, 50.f },
-				16.f,
-				FColor::Purple,
-				false,
-				0.5f
-			);
+			// DrawDebugPoint(
+			// 	GetWorld(),
+			// 	cellInfo.WorldLocation + FVector{ 0.f, 0.f, 50.f },
+			// 	16.f,
+			// 	FColor::Purple,
+			// 	false,
+			// 	0.5f
+			// );
 		}
 	}
 }

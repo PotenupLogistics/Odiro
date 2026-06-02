@@ -39,7 +39,9 @@ private:
 	void DebugFrontLidarObject() const;
 	int32 SetLidarDetectedActorsAsDynamicBlocked(UDeliveryBot_GridSubsystem* gridSubsystem,	AActor* requiredFrontActor) const;
 	void ClearLidarDynamicBlockedCells();
-	
+	void ApplyFrontObstacleSlowDown(FDeliveryBotMoveCommandInfo& moveCommandInfo, const FDeliveryBotLidarDetectedObjectInfo& frontObjectInfo) const;
+
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
 	TObjectPtr<UDeliveryBot_ChaosDriveComponent> ChaosDriveComponent;

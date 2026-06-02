@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Shared/Struct/DeliveryBotMovementInfo.h"
-#include "Shared/Struct/DeliveryBotChaosDriveConfigInfo.h"
+#include "Shared/Struct/DeliveryBotDriveConfigInfo.h"
 #include "DeliveryBot_ChaosDriveComponent.generated.h"
 
 class UChaosVehicleMovementComponent;
@@ -26,24 +26,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Chaos Drive")
 	void InitializeChaosDrive(
 		UChaosWheeledVehicleMovementComponent* wheeledMovement,
-		const FDeliveryBotChaosDriveConfigInfo& driveConfigInfo);
+		const FDeliveryBotDriveConfigInfo& driveConfigInfo);
 
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Chaos Drive")
-	void SetDriveConfigInfo(const FDeliveryBotChaosDriveConfigInfo& driveConfigInfo);
+	void SetDriveConfigInfo(const FDeliveryBotDriveConfigInfo& driveConfigInfo);
 
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Chaos Drive")
-	FDeliveryBotChaosDriveConfigInfo GetDriveConfigInfo() const;
+	FDeliveryBotDriveConfigInfo GetDriveConfigInfo() const;
 
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Chaos Drive")
 	float GetMaxSpeedCmPerSecond() const;
 
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Chaos Drive")
-	FDeliveryBotChaosDriveConfigInfo DriveConfigInfo{};
+	FDeliveryBotDriveConfigInfo DriveConfigInfo{};
 
 	float CurrentThrottleInput{ 0.f };
 	float CurrentBrakeInput{ 0.f };
 	float CurrentSteeringInput{ 0.f };
+	float CurrentTargetSpeedKmh{ 0.f };
 
 private:
 	void ApplyDriveInput(

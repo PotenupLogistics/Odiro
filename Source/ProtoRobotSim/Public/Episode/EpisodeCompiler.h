@@ -18,10 +18,10 @@ class PROTOROBOTSIM_API UEpisodeCompiler : public UObject
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Compiler")
-	FEpisodeCompileResult CompileEpisodeWorldSpecFromJsonFile(const FString& JsonFilePath) const;
+	FEpisodeCompileResult CompileEpisodeWorldSpecFromJsonFile(const FString& jsonFilePath) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Compiler")
-	FEpisodeCompileResult CompileEpisodeWorldSpecFromJsonString(const FString& JsonString) const;
+	FEpisodeCompileResult CompileEpisodeWorldSpecFromJsonString(const FString& jsonString) const;
 
 private:
 	// 작성용 JSON은 meter 단위를 사용하고, 런타임 WorldSpec은 Unreal centimeter 단위를 사용한다.
@@ -69,7 +69,7 @@ private:
 	static bool TryGetStringField(const FJsonObject& jsonObject, const FString& primaryFieldName, const FString& fallbackFieldName, FString& outValue);
 
 	// 필수 string 필드를 읽고 비어 있으면 Error Diagnostic을 남긴다.
-	// path는 사람이 JSON 위치를 바로 찾을 수 있도록 message에 포함된다.
+	// Path는 사람이 JSON 위치를 바로 찾을 수 있도록 Message에 포함된다.
 	static bool RequireStringField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FEpisodeCompileResult& result, FString& outValue);
 
 	// 필수 string 필드를 primary/fallback 이름으로 읽고 실패하면 Error Diagnostic을 남긴다.
@@ -88,11 +88,11 @@ private:
 	// 좌표, 크기, 회전 배열의 길이와 숫자 타입 오류는 여기서 Diagnostic으로 기록한다.
 	static bool ReadNumberArray(const FJsonObject& jsonObject, const FString& fieldName, int32 expectedCount, const FString& path, FEpisodeCompileResult& result, TArray<double>& outValues);
 
-	// 숫자 3개 배열을 FVector로 읽고 scale을 곱한다.
+	// 숫자 3개 배열을 FVector로 읽고 Scale을 곱한다.
 	// location_m, points_m처럼 meter 입력은 100.0을 곱해 Unreal centimeter로 변환한다.
 	static bool ReadVectorField(const FJsonObject& jsonObject, const FString& fieldName, double scale, const FString& path, FEpisodeCompileResult& result, FVector& outVector);
 
-	// 숫자 2개 배열을 FVector2D로 읽고 scale을 곱한다.
+	// 숫자 2개 배열을 FVector2D로 읽고 Scale을 곱한다.
 	// size_m 같은 평면 크기 입력은 meter에서 centimeter로 변환되어 ground region 크기로 들어간다.
 	static bool ReadVector2DField(const FJsonObject& jsonObject, const FString& fieldName, double scale, const FString& path, FEpisodeCompileResult& result, FVector2D& outVector);
 
@@ -101,7 +101,7 @@ private:
 	static bool ReadRotatorField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FEpisodeCompileResult& result, FRotator& outRotator);
 
 	// transform object를 FTransform으로 읽는다.
-	// location_m은 meter에서 centimeter로 변환하고, rotation_deg는 degree 그대로, scale은 무단위 값 그대로 사용한다.
+	// location_m은 meter에서 centimeter로 변환하고, rotation_deg는 degree 그대로, Scale은 무단위 값 그대로 사용한다.
 	static bool ReadTransformField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FEpisodeCompileResult& result, FTransform& outTransform);
 
 	// 문자열 ground region 타입을 런타임 enum으로 변환한다.
@@ -112,12 +112,12 @@ private:
 	// convex_polygon은 타입으로는 읽지만 실제 컴파일 단계에서는 MVP 제약상 rectangle만 허용한다.
 	static bool ParseGroundShapeType(const FString& value, EEpisodeGroundShapeType& outType);
 
-	// 문자열 path 타입을 런타임 enum으로 변환한다.
+	// 문자열 Path 타입을 런타임 enum으로 변환한다.
 	// spline과 waypoints를 구분하지만, 현재 spawn 테스트 흐름은 spline 중심으로 사용한다.
 	static bool ParsePathType(const FString& value, EEpisodePathType& outType);
 
-	// 한 컴파일 결과 안에서 semantic id가 중복되는지 검사한다.
-	// 중복되면 actor/path/region lookup이 모호해지므로 Error Diagnostic을 남긴다.
+	// 한 컴파일 결과 안에서 semantic Id가 중복되는지 검사한다.
+	// 중복되면 actor/Path/region lookup이 모호해지므로 Error Diagnostic을 남긴다.
 	static bool AddUniqueId(TSet<FString>& ids, const FString& id, const FString& path, FEpisodeCompileResult& result);
 
 	// actor JSON의 properties object를 FEpisodeParamValue map으로 복사한다.
@@ -134,7 +134,7 @@ private:
 	// center_m과 size_m은 centimeter로 변환하고, penalty/collision 의미 필드는 그대로 보존한다.
 	static void CompileGroundRegions(const FJsonObject& rootObject, FEpisodeCompileResult& result);
 
-	// paths 배열을 FEpisodePathSpec 목록으로 변환하고 path id 목록을 수집한다.
+	// paths 배열을 FEpisodePathSpec 목록으로 변환하고 Path Id 목록을 수집한다.
 	// points_m 좌표는 meter에서 centimeter로 변환되며, 이후 pedestrian의 path_id 검증에 사용된다.
 	static void CompilePaths(const FJsonObject& rootObject, FEpisodeCompileResult& result, TSet<FString>& outPathIds);
 
@@ -146,14 +146,12 @@ private:
 	// speed_mps와 initial_distance_m은 원본 값과 centimeter 변환 값을 properties에 함께 남긴다.
 	static void CompilePedestrians(const FJsonObject& actorsObject, FEpisodeCompileResult& result, const TSet<FString>& pathIds, TSet<FString>& instanceIds);
 
-	// actors.robot를 정책 없는 spawn-only placeable로 변환한다.
-	// robot policy는 다루지 않고 asset_id, transform, spawn_only 상태만 WorldSpec에 보존한다.
-	// 에피소드 로봇 MVP에서는 transform.location_m을 출발 위치(cm)로 사용한다.
-	// route.goal_m 또는 goal_m은 Unreal centimeter 단위 goal_cm 프로퍼티로 변환한다.
+	// actors.robot setup은 FEpisodeDeliveryBotSpawnSpec으로 컴파일되어 저장된다.
+	// 새로운 location/drive/path_follow/lidar 블록들은 전달되고; transform/route은 fallback으로 남는다.
 	static void CompileRobotSpawn(const FJsonObject& actorsObject, FEpisodeCompileResult& result, TSet<FString>& instanceIds);
 
 	// actors object 전체를 static obstacle, pedestrian, robot 순서로 컴파일한다.
-	// instance id는 actor 종류와 관계없이 하나의 집합에서 중복을 검사한다.
+	// instance Id는 actor 종류와 관계없이 하나의 집합에서 중복을 검사한다.
 	static void CompileActors(const FJsonObject& rootObject, FEpisodeCompileResult& result, const TSet<FString>& pathIds);
 
 	// 파싱된 root object를 최종 FEpisodeWorldSpec으로 조립한다.
@@ -215,8 +213,20 @@ actors.robot.instance_id / actor_id
 actors.robot.asset_id / type
 actors.robot.spawn_only
 actors.robot.transform
+actors.robot.location.start_location_cm
+actors.robot.location.goal_location_cm
+actors.robot.location.auto_start_route
 actors.robot.goal_m
 actors.robot.route.goal_m
 actors.robot.route.auto_start
+actors.robot.drive.max_speed_kmh
+actors.robot.drive.slowdown_speed_range_kmh
+actors.robot.path_follow.target_speed_kmh
+actors.robot.path_follow.look_ahead_distance_m
+actors.robot.path_follow.obstacle_slow_speed_kmh
+actors.robot.lidar.scan_range_m
+actors.robot.lidar.angle_step_degree
+actors.robot.lidar.stop_distance_m
+actors.robot.lidar.slow_down_distance_m
 actors.robot.properties
  */

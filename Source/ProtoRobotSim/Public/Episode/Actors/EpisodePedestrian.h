@@ -40,6 +40,6 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|Visual")
 	bool bMoving = false;
 
-	void UpdateVisualMotion(const FVector& PreviousLocation, const FVector& NewLocation, double DeltaSeconds);
+	void UpdateVisualMotion(const FVector& previousLocation, const FVector& newLocation, double deltaSeconds);
 	void ResetVisualMotion();
 };

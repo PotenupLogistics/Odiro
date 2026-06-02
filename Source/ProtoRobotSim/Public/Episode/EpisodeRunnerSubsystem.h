@@ -17,10 +17,10 @@ class PROTOROBOTSIM_API UEpisodeRunnerSubsystem : public UGameInstanceSubsystem
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
-	bool StartEpisodeFromJsonFile(const FString& JsonFilePath);
+	bool StartEpisodeFromJsonFile(const FString& jsonFilePath);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
-	bool StartBatchFromJsonFiles(const TArray<FString>& JsonFilePaths);
+	bool StartBatchFromJsonFiles(const TArray<FString>& jsonFilePaths);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
 	void CancelRun();
@@ -33,17 +33,18 @@ public:
 
 private:
 	UFUNCTION()
-	void HandleEpisodeEnded(FEpisodeEvaluationResult Result);
+	void HandleEpisodeEnded(FEpisodeEvaluationResult result);
 
 	void StartNextEpisode();
 	void QueueStartNextEpisode();
 	void CompleteCurrentRecord(
 		bool bSuccess,
-		EEpisodeEvaluationOutcome Outcome,
-		EEpisodeEvaluationTerminalReason TerminalReason,
-		const FEpisodeEvaluationResult* EvaluationResult = nullptr);
+		EEpisodeEvaluationOutcome outcome,
+		EEpisodeEvaluationTerminalReason terminalReason,
+		const FEpisodeEvaluationResult* evaluationResult = nullptr);
 
-	void AppendCompileDiagnostics(const FEpisodeCompileResult& CompileResult);
+	void AppendCompileDiagnostics(const FEpisodeCompileResult& compileResult);
+	double GetRunTimeLimitSeconds(const FEpisodeRunConfig& runConfig) const;
 	FString BuildRunId() const;
 
 	UWorld* ResolveWorld() const;

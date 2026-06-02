@@ -6,11 +6,13 @@
 #include "Engine/GameInstance.h"
 #include "TimerManager.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogEpisodeRunner, Log, All);
+
 namespace
 {
-	const TCHAR* ToRunnerCompileSeverityString(EEpisodeCompileDiagnosticSeverity Severity)
+	const TCHAR* ToRunnerCompileSeverityString(EEpisodeCompileDiagnosticSeverity severity)
 	{
-		switch (Severity)
+		switch (severity)
 		{
 		case EEpisodeCompileDiagnosticSeverity::Info:
 			return TEXT("정보");
@@ -22,50 +24,69 @@ namespace
 			return TEXT("알 수 없음");
 		}
 	}
-}
 
-bool UEpisodeRunnerSubsystem::StartEpisodeFromJsonFile(const FString& JsonFilePath)
-{
-	if (JsonFilePath.IsEmpty())
+	template <typename TEnum>
+	FString ToRunnerEnumString(TEnum value)
 	{
-		return false;
+		if (const UEnum* enumValue = StaticEnum<TEnum>()) return enumValue->GetNameStringByValue(static_cast<int64>(value));
+
+		return TEXT("Unknown");
 	}
 
-	TArray<FString> JsonFilePaths;
-	JsonFilePaths.Add(JsonFilePath);
-	return StartBatchFromJsonFiles(JsonFilePaths);
+	FEpisodeSimulationSetupSpec MakeSimulationSetupSpec(const FEpisodeWorldSpec& worldSpec)
+	{
+		FEpisodeSimulationSetupSpec setupSpec;
+		setupSpec.EpisodeId = worldSpec.RunConfig.TemplateId;
+		setupSpec.SpecHash = worldSpec.SpecHash;
+		setupSpec.Seeds = worldSpec.Seeds;
+		setupSpec.GroundRegions = worldSpec.GroundRegions;
+		setupSpec.Placeables = worldSpec.Placeables;
+		setupSpec.DynamicActors = worldSpec.DynamicActors;
+		setupSpec.Paths = worldSpec.Paths;
+		setupSpec.Events = worldSpec.Events;
+		return setupSpec;
+	}
 }
 
-bool UEpisodeRunnerSubsystem::StartBatchFromJsonFiles(const TArray<FString>& JsonFilePaths)
+bool UEpisodeRunnerSubsystem::StartEpisodeFromJsonFile(const FString& jsonFilePath)
+{
+	if (jsonFilePath.IsEmpty()) return false;
+
+	TArray<FString> jsonFilePaths;
+	jsonFilePaths.Add(jsonFilePath);
+	return StartBatchFromJsonFiles(jsonFilePaths);
+}
+
+bool UEpisodeRunnerSubsystem::StartBatchFromJsonFiles(const TArray<FString>& jsonFilePaths)
 {
 	PendingJsonFilePaths.Reset();
-	for (const FString& JsonFilePath : JsonFilePaths)
+	for (const FString& jsonFilePath : jsonFilePaths)
 	{
-		if (!JsonFilePath.IsEmpty())
+		if (!jsonFilePath.IsEmpty())
 		{
-			PendingJsonFilePaths.Add(JsonFilePath);
+			PendingJsonFilePaths.Add(jsonFilePath);
 		}
 	}
 
-	if (PendingJsonFilePaths.IsEmpty())
+	if (PendingJsonFilePaths.IsEmpty()) return false;
+
+	if (UEpisodeEvaluationSubsystem* evaluationSubsystem = ResolveEvaluationSubsystem())
 	{
-		return false;
+		evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UEpisodeRunnerSubsystem::HandleEpisodeEnded);
+		evaluationSubsystem->StopEvaluation();
 	}
 
-	if (UEpisodeEvaluationSubsystem* EvaluationSubsystem = ResolveEvaluationSubsystem())
+	if (UEpisodeSimulationSubsystem* simulationSubsystem = ResolveSimulationSubsystem())
 	{
-		EvaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UEpisodeRunnerSubsystem::HandleEpisodeEnded);
-		EvaluationSubsystem->StopEvaluation();
-	}
-
-	if (UEpisodeSimulationSubsystem* SimulationSubsystem = ResolveSimulationSubsystem())
-	{
-		SimulationSubsystem->ClearEpisode();
+		simulationSubsystem->ClearEpisode();
 	}
 
 	RunRecords.Reset();
 	CurrentRunIndex = INDEX_NONE;
 	RunnerState = EEpisodeRunnerState::Preparing;
+
+	UE_LOG(LogEpisodeRunner, Log, TEXT("Episode 배치 시작 | Count: %d"), PendingJsonFilePaths.Num());
+
 	StartNextEpisode();
 	return true;
 }
@@ -75,31 +96,44 @@ void UEpisodeRunnerSubsystem::CancelRun()
 	PendingJsonFilePaths.Reset();
 	RunnerState = EEpisodeRunnerState::Cancelled;
 
-	if (UEpisodeEvaluationSubsystem* EvaluationSubsystem = ResolveEvaluationSubsystem())
+	if (UEpisodeEvaluationSubsystem* evaluationSubsystem = ResolveEvaluationSubsystem())
 	{
-		EvaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UEpisodeRunnerSubsystem::HandleEpisodeEnded);
-		EvaluationSubsystem->StopEvaluation();
+		evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UEpisodeRunnerSubsystem::HandleEpisodeEnded);
+		evaluationSubsystem->StopEvaluation();
 	}
 
-	if (UEpisodeSimulationSubsystem* SimulationSubsystem = ResolveSimulationSubsystem())
+	if (UEpisodeSimulationSubsystem* simulationSubsystem = ResolveSimulationSubsystem())
 	{
-		SimulationSubsystem->ClearEpisode();
+		simulationSubsystem->ClearEpisode();
 	}
+
+	UE_LOG(LogEpisodeRunner, Log, TEXT("Episode 실행 취소됨."));
 }
 
-void UEpisodeRunnerSubsystem::HandleEpisodeEnded(FEpisodeEvaluationResult Result)
+void UEpisodeRunnerSubsystem::HandleEpisodeEnded(FEpisodeEvaluationResult result)
 {
-	CompleteCurrentRecord(Result.bSuccess, Result.Outcome, Result.TerminalReason, &Result);
+	UE_LOG(
+		LogEpisodeRunner,
+		Log,
+		TEXT("Episode 종료 콜백 수신 | Episode: %s, Success: %s, Outcome: %s, TerminalReason: %s, Duration: %.2fs, Events: %d"),
+		*result.EpisodeId,
+		result.bSuccess ? TEXT("true") : TEXT("false"),
+		*ToRunnerEnumString(result.Outcome),
+		*ToRunnerEnumString(result.TerminalReason),
+		result.DurationSeconds,
+		result.Events.Num());
 
-	if (UEpisodeEvaluationSubsystem* EvaluationSubsystem = ResolveEvaluationSubsystem())
+	CompleteCurrentRecord(result.bSuccess, result.Outcome, result.TerminalReason, &result);
+
+	if (UEpisodeEvaluationSubsystem* evaluationSubsystem = ResolveEvaluationSubsystem())
 	{
-		EvaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UEpisodeRunnerSubsystem::HandleEpisodeEnded);
-		EvaluationSubsystem->StopEvaluation();
+		evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UEpisodeRunnerSubsystem::HandleEpisodeEnded);
+		evaluationSubsystem->StopEvaluation();
 	}
 
-	if (UEpisodeSimulationSubsystem* SimulationSubsystem = ResolveSimulationSubsystem())
+	if (UEpisodeSimulationSubsystem* simulationSubsystem = ResolveSimulationSubsystem())
 	{
-		SimulationSubsystem->ClearEpisode();
+		simulationSubsystem->ClearEpisode();
 	}
 
 	RunnerState = EEpisodeRunnerState::Ending;
@@ -111,15 +145,23 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 	if (PendingJsonFilePaths.IsEmpty())
 	{
 		RunnerState = EEpisodeRunnerState::Completed;
+		UE_LOG(LogEpisodeRunner, Log, TEXT("Episode 배치 완료 | Records: %d"), RunRecords.Num());
 		return;
 	}
 
-	UWorld* World = ResolveWorld();
-	UEpisodeSimulationSubsystem* SimulationSubsystem = ResolveSimulationSubsystem();
-	UEpisodeEvaluationSubsystem* EvaluationSubsystem = ResolveEvaluationSubsystem();
-	if (!World || !SimulationSubsystem || !EvaluationSubsystem)
+	UWorld* world = ResolveWorld();
+	UEpisodeSimulationSubsystem* simulationSubsystem = ResolveSimulationSubsystem();
+	UEpisodeEvaluationSubsystem* evaluationSubsystem = ResolveEvaluationSubsystem();
+	if (!world || !simulationSubsystem || !evaluationSubsystem)
 	{
 		RunnerState = EEpisodeRunnerState::Failed;
+		UE_LOG(
+			LogEpisodeRunner,
+			Warning,
+			TEXT("Episode runner가 서브시스템을 찾지 못함 | World: %s, Simulation: %s, Evaluation: %s"),
+			world ? TEXT("valid") : TEXT("null"),
+			simulationSubsystem ? TEXT("valid") : TEXT("null"),
+			evaluationSubsystem ? TEXT("valid") : TEXT("null"));
 		return;
 	}
 
@@ -131,13 +173,23 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 	CurrentRecord.RunIndex = CurrentRunIndex;
 	CurrentRecord.RunId = BuildRunId();
 	CurrentRecord.SourceJsonPath = CurrentJsonFilePath;
-	CurrentRecord.StartTimeSeconds = World->GetTimeSeconds();
+	CurrentRecord.StartTimeSeconds = world->GetTimeSeconds();
 
 	RunnerState = EEpisodeRunnerState::Preparing;
 
-	UEpisodeCompiler* Compiler = NewObject<UEpisodeCompiler>(this);
-	if (!Compiler)
+	UE_LOG(
+		LogEpisodeRunner,
+		Log,
+		TEXT("Episode 준비 중 | RunId: %s, Index: %d, Json: %s, Remaining: %d"),
+		*CurrentRecord.RunId,
+		CurrentRecord.RunIndex,
+		*CurrentJsonFilePath,
+		PendingJsonFilePaths.Num());
+
+	UEpisodeCompiler* compiler = NewObject<UEpisodeCompiler>(this);
+	if (!compiler)
 	{
+		UE_LOG(LogEpisodeRunner, Warning, TEXT("Episode 컴파일러 생성 실패 | RunId: %s"), *CurrentRecord.RunId);
 		CompleteCurrentRecord(
 			false,
 			EEpisodeEvaluationOutcome::Failure,
@@ -146,13 +198,23 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 		return;
 	}
 
-	const FEpisodeCompileResult CompileResult = Compiler->CompileEpisodeWorldSpecFromJsonFile(CurrentJsonFilePath);
-	CurrentRecord.bCompileSucceeded = CompileResult.bSuccess;
-	CurrentRecord.EpisodeId = CompileResult.WorldSpec.RunConfig.TemplateId;
-	CurrentRecord.SpecHash = CompileResult.WorldSpec.SpecHash;
-	AppendCompileDiagnostics(CompileResult);
+	const FEpisodeCompileResult compileResult = compiler->CompileEpisodeWorldSpecFromJsonFile(CurrentJsonFilePath);
+	CurrentRecord.bCompileSucceeded = compileResult.bSuccess;
+	CurrentRecord.EpisodeId = compileResult.WorldSpec.RunConfig.TemplateId;
+	CurrentRecord.SpecHash = compileResult.WorldSpec.SpecHash;
+	AppendCompileDiagnostics(compileResult);
 
-	if (!CompileResult.bSuccess)
+	UE_LOG(
+		LogEpisodeRunner,
+		Log,
+		TEXT("Episode 컴파일 완료 | RunId: %s, Episode: %s, Success: %s, Diagnostics: %d, SpecHash: %s"),
+		*CurrentRecord.RunId,
+		*CurrentRecord.EpisodeId,
+		compileResult.bSuccess ? TEXT("true") : TEXT("false"),
+		compileResult.Diagnostics.Num(),
+		*CurrentRecord.SpecHash);
+
+	if (!compileResult.bSuccess)
 	{
 		CompleteCurrentRecord(
 			false,
@@ -162,44 +224,91 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 		return;
 	}
 
-	SimulationSubsystem->ClearEpisode();
-	const bool bSetupSucceeded = SimulationSubsystem->SpawnEpisodeWorld(CompileResult.WorldSpec);
+	const FEpisodeSimulationSetupSpec simulationSetupSpec = MakeSimulationSetupSpec(compileResult.WorldSpec);
+
+	simulationSubsystem->ClearEpisode();
+	const bool bSetupSucceeded = simulationSubsystem->SetupEpisodeWorld(simulationSetupSpec);
 	CurrentRecord.bSetupSucceeded = bSetupSucceeded;
+
+	UE_LOG(
+		LogEpisodeRunner,
+		Log,
+		TEXT("Episode 설정 완료 | RunId: %s, Episode: %s, Success: %s"),
+		*CurrentRecord.RunId,
+		*CurrentRecord.EpisodeId,
+		bSetupSucceeded ? TEXT("true") : TEXT("false"));
+
 	if (!bSetupSucceeded)
 	{
 		CompleteCurrentRecord(
 			false,
 			EEpisodeEvaluationOutcome::Failure,
 			EEpisodeEvaluationTerminalReason::SetupFailed);
-		SimulationSubsystem->ClearEpisode();
+		simulationSubsystem->ClearEpisode();
 		QueueStartNextEpisode();
 		return;
 	}
 
-	const FEpisodeRuntimeContext RuntimeContext = SimulationSubsystem->BuildRuntimeContext(CompileResult.WorldSpec);
-	EvaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UEpisodeRunnerSubsystem::HandleEpisodeEnded);
-	EvaluationSubsystem->OnEpisodeEnded.AddDynamic(this, &UEpisodeRunnerSubsystem::HandleEpisodeEnded);
-
-	if (!EvaluationSubsystem->StartEvaluation(CompileResult.WorldSpec, RuntimeContext))
+	const FEpisodeRuntimeContext runtimeContext = simulationSubsystem->BuildRuntimeContext(simulationSetupSpec);
+	if (!IsValid(runtimeContext.RobotActor))
 	{
-		EvaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UEpisodeRunnerSubsystem::HandleEpisodeEnded);
+		CurrentRecord.bSetupSucceeded = false;
+		UE_LOG(
+			LogEpisodeRunner,
+			Warning,
+			TEXT("Episode 설정 실패: 런타임 컨텍스트에 유효한 로봇 액터가 없음 | RunId: %s, Episode: %s"),
+			*CurrentRecord.RunId,
+			*runtimeContext.EpisodeId);
+		CompleteCurrentRecord(
+			false,
+			EEpisodeEvaluationOutcome::Failure,
+			EEpisodeEvaluationTerminalReason::SetupFailed);
+		simulationSubsystem->ClearEpisode();
+		QueueStartNextEpisode();
+		return;
+	}
+
+	const double timeLimitSeconds = GetRunTimeLimitSeconds(compileResult.WorldSpec.RunConfig);
+
+	UE_LOG(
+		LogEpisodeRunner,
+		Log,
+		TEXT("평가 전달 | RunId: %s, Episode: %s, TimeLimit: %.2fs, Robot: %s, HasGoal: %s, RuntimeActors: %d, GroundRegions: %d, StaticObstacles: %d, Pedestrians: %d"),
+		*CurrentRecord.RunId,
+		*runtimeContext.EpisodeId,
+		timeLimitSeconds,
+		*runtimeContext.RobotInstanceId,
+		runtimeContext.bHasGoalLocation ? TEXT("true") : TEXT("false"),
+		runtimeContext.RuntimeActors.Num(),
+		runtimeContext.GroundRegionActors.Num(),
+		runtimeContext.StaticObstacleActors.Num(),
+		runtimeContext.PedestrianActors.Num());
+
+	evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UEpisodeRunnerSubsystem::HandleEpisodeEnded);
+	evaluationSubsystem->OnEpisodeEnded.AddDynamic(this, &UEpisodeRunnerSubsystem::HandleEpisodeEnded);
+
+	if (!evaluationSubsystem->StartEvaluation(compileResult.WorldSpec.EvaluationConfig, runtimeContext, timeLimitSeconds))
+	{
+		evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UEpisodeRunnerSubsystem::HandleEpisodeEnded);
+		UE_LOG(LogEpisodeRunner, Warning, TEXT("평가 시작 실패 | RunId: %s, Episode: %s"), *CurrentRecord.RunId, *runtimeContext.EpisodeId);
 		CompleteCurrentRecord(
 			false,
 			EEpisodeEvaluationOutcome::Failure,
 			EEpisodeEvaluationTerminalReason::EvaluationStartFailed);
-		SimulationSubsystem->ClearEpisode();
+		simulationSubsystem->ClearEpisode();
 		QueueStartNextEpisode();
 		return;
 	}
 
 	RunnerState = EEpisodeRunnerState::Running;
+	UE_LOG(LogEpisodeRunner, Log, TEXT("Episode 실행 중 | RunId: %s, Episode: %s"), *CurrentRecord.RunId, *runtimeContext.EpisodeId);
 }
 
 void UEpisodeRunnerSubsystem::QueueStartNextEpisode()
 {
-	if (UWorld* World = ResolveWorld())
+	if (UWorld* world = ResolveWorld())
 	{
-		World->GetTimerManager().SetTimerForNextTick(
+		world->GetTimerManager().SetTimerForNextTick(
 			FTimerDelegate::CreateUObject(this, &UEpisodeRunnerSubsystem::StartNextEpisode));
 		return;
 	}
@@ -209,43 +318,84 @@ void UEpisodeRunnerSubsystem::QueueStartNextEpisode()
 
 void UEpisodeRunnerSubsystem::CompleteCurrentRecord(
 	bool bSuccess,
-	EEpisodeEvaluationOutcome Outcome,
-	EEpisodeEvaluationTerminalReason TerminalReason,
-	const FEpisodeEvaluationResult* EvaluationResult)
+	EEpisodeEvaluationOutcome outcome,
+	EEpisodeEvaluationTerminalReason terminalReason,
+	const FEpisodeEvaluationResult* evaluationResult)
 {
-	if (UWorld* World = ResolveWorld())
+	if (UWorld* world = ResolveWorld())
 	{
-		CurrentRecord.EndTimeSeconds = World->GetTimeSeconds();
+		CurrentRecord.EndTimeSeconds = world->GetTimeSeconds();
 	}
 
 	CurrentRecord.DurationSeconds = FMath::Max(0.0, CurrentRecord.EndTimeSeconds - CurrentRecord.StartTimeSeconds);
 	CurrentRecord.bSuccess = bSuccess;
-	CurrentRecord.Outcome = Outcome;
-	CurrentRecord.TerminalReason = TerminalReason;
+	CurrentRecord.Outcome = outcome;
+	CurrentRecord.TerminalReason = terminalReason;
 
-	if (EvaluationResult)
+	if (evaluationResult)
 	{
-		CurrentRecord.bEvaluationCompleted = EvaluationResult->bCompleted;
-		CurrentRecord.EvaluationResult = *EvaluationResult;
+		CurrentRecord.bEvaluationCompleted = evaluationResult->bCompleted;
+		CurrentRecord.EvaluationResult = *evaluationResult;
 		if (CurrentRecord.DurationSeconds <= 0.0)
 		{
-			CurrentRecord.DurationSeconds = EvaluationResult->DurationSeconds;
+			CurrentRecord.DurationSeconds = evaluationResult->DurationSeconds;
 		}
 	}
 
 	RunRecords.Add(CurrentRecord);
+
+	UE_LOG(
+		LogEpisodeRunner,
+		Log,
+		TEXT("Episode 기록 완료 | RunId: %s, Episode: %s, Success: %s, Outcome: %s, TerminalReason: %s, Duration: %.2fs, EvaluationCompleted: %s, TotalRecords: %d"),
+		*CurrentRecord.RunId,
+		*CurrentRecord.EpisodeId,
+		CurrentRecord.bSuccess ? TEXT("true") : TEXT("false"),
+		*ToRunnerEnumString(CurrentRecord.Outcome),
+		*ToRunnerEnumString(CurrentRecord.TerminalReason),
+		CurrentRecord.DurationSeconds,
+		CurrentRecord.bEvaluationCompleted ? TEXT("true") : TEXT("false"),
+		RunRecords.Num());
 }
 
-void UEpisodeRunnerSubsystem::AppendCompileDiagnostics(const FEpisodeCompileResult& CompileResult)
+void UEpisodeRunnerSubsystem::AppendCompileDiagnostics(const FEpisodeCompileResult& compileResult)
 {
-	for (const FEpisodeCompileDiagnostic& Diagnostic : CompileResult.Diagnostics)
+	for (const FEpisodeCompileDiagnostic& diagnostic : compileResult.Diagnostics)
 	{
 		CurrentRecord.Diagnostics.Add(FString::Printf(
 			TEXT("%s [%s]: %s"),
-			ToRunnerCompileSeverityString(Diagnostic.Severity),
-			*Diagnostic.Code,
-			*Diagnostic.Message));
+			ToRunnerCompileSeverityString(diagnostic.Severity),
+			*diagnostic.Code,
+			*diagnostic.Message));
 	}
+}
+
+double UEpisodeRunnerSubsystem::GetRunTimeLimitSeconds(const FEpisodeRunConfig& runConfig) const
+{
+	const FEpisodeParamValue* timeLimitParam = runConfig.Parameters.Find(TEXT("time_limit_s"));
+	if (!timeLimitParam) return 0.0;
+
+	double timeLimitSeconds = 0.0;
+	if (timeLimitParam->Type == EEpisodeParamValueType::Float)
+	{
+		timeLimitSeconds = timeLimitParam->FloatValue;
+	}
+	else if (timeLimitParam->Type == EEpisodeParamValueType::Integer)
+	{
+		timeLimitSeconds = static_cast<double>(timeLimitParam->IntegerValue);
+	}
+	else
+	{
+		UE_LOG(LogEpisodeRunner, Warning, TEXT("숫자가 아닌 run parameter 'time_limit_s' 무시 | Template: %s"), *runConfig.TemplateId);
+		return 0.0;
+	}
+
+	if (timeLimitSeconds < 0.0)
+	{
+		UE_LOG(LogEpisodeRunner, Warning, TEXT("음수 run parameter 'time_limit_s' 클램프 | Template: %s, Value: %.2f"), *runConfig.TemplateId, timeLimitSeconds);
+	}
+
+	return FMath::Max(0.0, timeLimitSeconds);
 }
 
 FString UEpisodeRunnerSubsystem::BuildRunId() const
@@ -255,18 +405,18 @@ FString UEpisodeRunnerSubsystem::BuildRunId() const
 
 UWorld* UEpisodeRunnerSubsystem::ResolveWorld() const
 {
-	const UGameInstance* GameInstance = GetGameInstance();
-	return GameInstance ? GameInstance->GetWorld() : nullptr;
+	const UGameInstance* gameInstance = GetGameInstance();
+	return gameInstance ? gameInstance->GetWorld() : nullptr;
 }
 
 UEpisodeSimulationSubsystem* UEpisodeRunnerSubsystem::ResolveSimulationSubsystem() const
 {
-	UWorld* World = ResolveWorld();
-	return World ? World->GetSubsystem<UEpisodeSimulationSubsystem>() : nullptr;
+	UWorld* world = ResolveWorld();
+	return world ? world->GetSubsystem<UEpisodeSimulationSubsystem>() : nullptr;
 }
 
 UEpisodeEvaluationSubsystem* UEpisodeRunnerSubsystem::ResolveEvaluationSubsystem() const
 {
-	UWorld* World = ResolveWorld();
-	return World ? World->GetSubsystem<UEpisodeEvaluationSubsystem>() : nullptr;
+	UWorld* world = ResolveWorld();
+	return world ? world->GetSubsystem<UEpisodeEvaluationSubsystem>() : nullptr;
 }

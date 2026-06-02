@@ -28,22 +28,22 @@ AEpisodeGroundRegion::AEpisodeGroundRegion()
 	RegionDecalComponent->SetVisibility(false);
 	RegionDecalComponent->SetFadeScreenSize(0.0f);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMeshAsset(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	if (CubeMeshAsset.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> cubeMeshAsset(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (cubeMeshAsset.Succeeded())
 	{
-		RegionBoundsComponent->SetStaticMesh(CubeMeshAsset.Object);
+		RegionBoundsComponent->SetStaticMesh(cubeMeshAsset.Object);
 	}
 
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> GroundDecalMaterialAsset(TEXT("/Game/Episode/Material/M_EpisodeGroundDecal.M_EpisodeGroundDecal"));
-	if (GroundDecalMaterialAsset.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> groundDecalMaterialAsset(TEXT("/Game/Episode/Material/M_EpisodeGroundDecal.M_EpisodeGroundDecal"));
+	if (groundDecalMaterialAsset.Succeeded())
 	{
-		GroundDecalMaterial = GroundDecalMaterialAsset.Object;
+		GroundDecalMaterial = groundDecalMaterialAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BlockedAreaMaterialAsset(TEXT("/Game/Episode/Material/MI_EpisodeBlockArea.MI_EpisodeBlockArea"));
-	if (BlockedAreaMaterialAsset.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> blockedAreaMaterialAsset(TEXT("/Game/Episode/Material/MI_EpisodeBlockArea.MI_EpisodeBlockArea"));
+	if (blockedAreaMaterialAsset.Succeeded())
 	{
-		BlockedAreaMaterial = BlockedAreaMaterialAsset.Object;
+		BlockedAreaMaterial = blockedAreaMaterialAsset.Object;
 		RegionBoundsComponent->SetMaterial(0, BlockedAreaMaterial);
 	}
 }
@@ -55,9 +55,9 @@ void AEpisodeGroundRegion::BeginPlay()
 	UpdateDecalVisualization();
 }
 
-void AEpisodeGroundRegion::ConfigureRegion(const FEpisodeGroundRegionSpec& InRegionSpec)
+void AEpisodeGroundRegion::ConfigureRegion(const FEpisodeGroundRegionSpec& inRegionSpec)
 {
-	RegionSpec = InRegionSpec;
+	RegionSpec = inRegionSpec;
 	RegionSpec.Size.X = FMath::Max(RegionSpec.Size.X, 1.0);
 	RegionSpec.Size.Y = FMath::Max(RegionSpec.Size.Y, 1.0);
 
@@ -83,13 +83,13 @@ void AEpisodeGroundRegion::ConfigureRegion(const FEpisodeGroundRegionSpec& InReg
 	UpdateDecalVisualization();
 }
 
-bool AEpisodeGroundRegion::ContainsWorldLocation2D(const FVector& WorldLocation) const
+bool AEpisodeGroundRegion::ContainsWorldLocation2D(const FVector& worldLocation) const
 {
-	const FVector LocalLocation = GetActorTransform().InverseTransformPosition(WorldLocation);
-	const FVector2D HalfSize(RegionSpec.Size.X * 0.5, RegionSpec.Size.Y * 0.5);
+	const FVector localLocation = GetActorTransform().InverseTransformPosition(worldLocation);
+	const FVector2D halfSize(RegionSpec.Size.X * 0.5, RegionSpec.Size.Y * 0.5);
 
-	return FMath::Abs(LocalLocation.X) <= HalfSize.X
-		&& FMath::Abs(LocalLocation.Y) <= HalfSize.Y;
+	return FMath::Abs(localLocation.X) <= halfSize.X
+		&& FMath::Abs(localLocation.Y) <= halfSize.Y;
 }
 
 void AEpisodeGroundRegion::ApplyCollisionSettings()

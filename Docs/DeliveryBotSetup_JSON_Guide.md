@@ -1,9 +1,9 @@
-# DeliveryBot Initialize JSON Guide
+# DeliveryBotSetup JSON Guide
 
 이 문서는 Episode JSON에서 DeliveryBot을 생성하고 `ADeliveryBot_ChaosActor::InitializeSetupInfo()`에 전달할 값을 정리한다.
 
-현재 코드에서 실제로 JSON으로 연결된 값은 시작 위치, 목표 위치, 자동 경로 시작 여부이다.
-아래의 사용자 조정 필드는 이후 JSON 파싱을 확장할 때 추가할 최종 후보이다.
+현재 코드는 `actors.robot.location`, `drive`, `path_follow`, `lidar`에서 필요한 값만 읽어 `FDeliveryBotSetupInfo`로 전달한다.
+JSON으로 열지 않은 엔진 토크, RPM, 충돌 채널, IgnoreTag 같은 값은 C++ 구조체 기본값으로 fallback된다.
 
 ## 출력 원칙
 
@@ -28,7 +28,7 @@ DeliveryBot 설정은 `actors.robot` 아래에 둔다.
 
 ## 현재 JSON에서 실제로 받는 값
 
-현재 `UEpisodeCompiler::CompileRobotSpawn()`과 `UEpisodeSimulationSubsystem::SpawnRobotActor()`가 실제로 연결하는 값은 아래 정도이다.
+현재 `UEpisodeCompiler::CompileRobotSpawn()`과 `UEpisodeSimulationSubsystem::SpawnRobotActor()`가 실제로 연결하는 값은 아래와 같다.
 
 | JSON 경로 | 필수 | 타입/단위 | 기본값 | 설명 |
 | --- | --- | --- | --- | --- |
@@ -39,6 +39,10 @@ DeliveryBot 설정은 `actors.robot` 아래에 둔다.
 | `actors.robot.route.goal_m` | 선택 | `[x, y, z]`, meter | 없음 | 목적지로 사용된다. 내부에서는 cm로 변환된다. |
 | `actors.robot.route.auto_start` | 선택 | boolean | `true` | `spawn_only=false`이고 목표 위치가 있을 때 자동 경로 추종을 시작할지 결정한다. |
 | `actors.robot.goal_m` | 대체 가능 | `[x, y, z]`, meter | 없음 | `route.goal_m`이 없을 때 사용하는 목적지 대체 필드. |
+| `actors.robot.location.*` | 선택 | object | C++ 기본값 또는 기존 위치 fallback | `FDeliveryBotLocationSetupInfo`로 직접 전달된다. |
+| `actors.robot.drive.*` | 선택 | object | C++ 기본값 | 공개 주행 튜닝값만 `FDeliveryBotDriveConfigInfo`로 전달된다. |
+| `actors.robot.path_follow.*` | 선택 | object | C++ 기본값 | 공개 경로 추종 튜닝값만 `FDeliveryBotPathFollowConfigInfo`로 전달된다. |
+| `actors.robot.lidar.*` | 선택 | object | C++ 기본값 | 공개 라이다 튜닝값만 `FDeliveryBotLidarSensorConfigInfo`로 전달된다. |
 
 ## 사용자 조정 필드 최종안
 
@@ -84,7 +88,7 @@ DeliveryBot 설정은 `actors.robot` 아래에 둔다.
 | 필드 | 필수 | 타입/단위 | 기본값 | C++ 매핑 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `max_speed_kmh` | 선택 | number, km/h | `10.0` | `ChaosDriveConfigInfo.MaxSpeedKmh` | 차량 주행 속도의 최종 상한. `target_speed_kmh`가 더 높아도 이 값으로 제한된다. |
-| `slowdown_speed_range_kmh` | 선택 | number, km/h | `2.0` | `ChaosDriveConfigInfo.SlowdownSpeedRangeKmh` | 목표 속도에 가까워질수록 입력을 줄이는 범위. 값이 크면 속도 변화가 더 부드럽다. |
+| `slowdown_speed_range_kmh` | 선택 | number, km/h | `4.0` | `ChaosDriveConfigInfo.SlowdownSpeedRangeKmh` | 목표 속도에 가까워질수록 입력을 줄이는 범위. 값이 크면 속도 변화가 더 부드럽다. |
 
 ### path_follow fields
 
@@ -100,7 +104,7 @@ DeliveryBot 설정은 `actors.robot` 아래에 둔다.
 | --- | --- | --- | --- | --- | --- |
 | `target_speed_kmh` | 선택 | number, km/h | `10.0` | `PathFollowConfigInfo.TargetSpeedKmh` | 경로 추종 목표 속도. 일반 주행 속도를 정한다. |
 | `look_ahead_distance_m` | 선택 | number, meter | `1.0` | `PathFollowConfigInfo.LookAheadDistanceM` | 현재 위치보다 앞쪽의 추종 목표점을 얼마나 멀리 볼지 정한다. 작으면 급하게 꺾고, 크면 완만하게 움직인다. |
-| `obstacle_slow_speed_kmh` | 선택 | number, km/h | `2.0` | `PathFollowConfigInfo.ObstacleSlowSpeedKmh` | 장애물 감속 구간에서 사용할 목표 속도. `slow_down_distance_m` 안에 장애물이 있을 때 의미가 있다. |
+| `obstacle_slow_speed_kmh` | 선택 | number, km/h | `1.5` | `PathFollowConfigInfo.ObstacleSlowSpeedKmh` | 장애물 감속 구간에서 사용할 목표 속도. `slow_down_distance_m` 안에 장애물이 있을 때 의미가 있다. |
 
 ### lidar fields
 
@@ -116,8 +120,8 @@ DeliveryBot 설정은 `actors.robot` 아래에 둔다.
 | 필드 | 필수 | 타입/단위 | 기본값 | C++ 매핑 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `scan_range_m` | 선택 | number, meter | `5.0` | `LidarSensorConfigInfo.ScanRangeM` | 라이다가 장애물을 탐지할 최대 거리. 값이 크면 더 멀리 보지만 트레이스 비용이 늘어난다. |
-| `angle_step_degree` | 선택 | number, degree | `5.0` | `LidarSensorConfigInfo.AngleStepDegree` | 라이다 레이 간격. 작을수록 촘촘하게 감지하지만 레이 수가 늘어난다. |
-| `stop_distance_m` | 선택 | number, meter | `1.5` | `LidarSensorConfigInfo.StopDistanceM` | 전방 장애물이 이 거리 안에 있으면 정지한다. |
+| `angle_step_degree` | 선택 | number, degree | `2.0` | `LidarSensorConfigInfo.AngleStepDegree` | 라이다 레이 간격. 작을수록 촘촘하게 감지하지만 레이 수가 늘어난다. |
+| `stop_distance_m` | 선택 | number, meter | `1.2` | `LidarSensorConfigInfo.StopDistanceM` | 전방 장애물이 이 거리 안에 있으면 정지한다. |
 | `slow_down_distance_m` | 선택 | number, meter | `3.5` | `LidarSensorConfigInfo.SlowDownDistanceM` | 전방 장애물이 이 거리 안에 있으면 감속한다. `stop_distance_m`보다 커야 한다. |
 
 ## 권장 검증 규칙

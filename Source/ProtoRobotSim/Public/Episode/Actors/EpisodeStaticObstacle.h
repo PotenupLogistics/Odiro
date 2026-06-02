@@ -29,33 +29,33 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
 	TObjectPtr<UEpisodeObstacleCollisionComponent> ObstacleCollisionComponent;
 	
-	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void OnConstruction(const FTransform& transform) override;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Mesh")
-	bool SetStaticMeshAsset(TSoftObjectPtr<UStaticMesh> InStaticMeshAsset);
+	bool SetStaticMeshAsset(TSoftObjectPtr<UStaticMesh> inStaticMeshAsset);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Mesh")
-	void SetStaticMesh(UStaticMesh* InStaticMesh);
+	void SetStaticMesh(UStaticMesh* inStaticMesh);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Mesh")
 	bool ApplyConfiguredStaticMesh();
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Catalog")
-	bool ApplyPropEntry(const FEpisodeStaticObstaclePropEntry& PropEntry);
+	bool ApplyPropEntry(const FEpisodeStaticObstaclePropEntry& propEntry);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Catalog")
-	bool ApplyDefaultPropById(FName InPropId);
+	bool ApplyDefaultPropById(FName inPropId);
 
-	static bool FindDefaultPropEntryById(FName InPropId, FEpisodeStaticObstaclePropEntry& OutPropEntry);
+	static bool FindDefaultPropEntryById(FName inPropId, FEpisodeStaticObstaclePropEntry& outPropEntry);
 	static const TArray<FEpisodeStaticObstaclePropEntry>& GetDefaultPropEntries();
 	static TArray<FName> GetDefaultPropIds();
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Placement")
 	bool GetPlacementBounds(
-		FVector& OutOrigin,
-		FVector& OutBoxExtent,
-		FVector2D& OutHalfSize2D,
-		double& OutRadius2D) const;
+		FVector& outOrigin,
+		FVector& outBoxExtent,
+		FVector2D& outHalfSize2D,
+		double& outRadius2D) const;
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Placement")
 	double GetPlacementRadius2D() const;

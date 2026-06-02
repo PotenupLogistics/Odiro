@@ -101,33 +101,28 @@ enum class EEpisodeEvaluationOutcome : uint8
 UENUM(BlueprintType)
 enum class EEpisodeEvaluationTerminalReason : uint8
 {
-	None,
-	GoalReached,
-	Timeout,
-	RobotFall,
-	StaticObstacleCollision,
-	BlockedRegionCollision,
-	PenaltyRegionViolation,
-	PedestrianCollision,
-	CompilerCreateFailed,
-	CompileFailed,
-	SetupFailed,
-	EvaluationStartFailed,
-	Cancelled
+	None = 0,
+	GoalReached = 1,
+	Timeout = 2,
+	RobotFall = 3,
+	CompilerCreateFailed = 8,
+	CompileFailed = 9,
+	SetupFailed = 10,
+	EvaluationStartFailed = 11,
+	Cancelled = 12
 };
 
 UENUM(BlueprintType)
 enum class EEpisodeEvaluationEventType : uint8
 {
-	None,
-	GoalReached,
-	Timeout,
-	RobotFall,
-	StaticObstacleCollision,
-	BlockedRegionCollision,
-	PenaltyRegionViolation,
-	PedestrianNearMiss,
-	PedestrianCollision
+	None = 0,
+	Timeout = 2,
+	RobotFall = 3,
+	StaticObstacleCollision = 4,
+	BlockedRegionCollision = 5,
+	PenaltyRegionViolation = 6,
+	PedestrianNearMiss = 7,
+	PedestrianCollision = 8
 };
 
 UENUM(BlueprintType)

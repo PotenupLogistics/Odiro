@@ -13,7 +13,7 @@ class PROTOROBOTSIM_API UEpisodePedestrianAnimInstance : public UAnimInstance
 
 public:
 	virtual void NativeInitializeAnimation() override;
-	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
+	virtual void NativeUpdateAnimation(float deltaSeconds) override;
 
 	UPROPERTY(BlueprintReadOnly, Category="Episode|Visual")
 	float VisualSpeedCmPerSecond = 0.0f;

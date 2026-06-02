@@ -7,23 +7,23 @@
 namespace
 {
 	FEpisodeStaticObstaclePropEntry MakeStaticObstaclePropEntry(
-		const TCHAR* PropId,
-		const TCHAR* SemanticTypeId,
-		const TCHAR* DisplayName,
-		EEpisodeStaticObstaclePropCategory Category,
-		const TCHAR* MeshPath,
-		const FVector& FallbackBoxExtent,
-		double SafetyRadius)
+		const TCHAR* propId,
+		const TCHAR* semanticTypeId,
+		const TCHAR* displayName,
+		EEpisodeStaticObstaclePropCategory category,
+		const TCHAR* meshPath,
+		const FVector& fallbackBoxExtent,
+		double safetyRadius)
 	{
-		FEpisodeStaticObstaclePropEntry Entry;
-		Entry.PropId = FName(PropId);
-		Entry.SemanticTypeId = FName(SemanticTypeId);
-		Entry.DisplayName = FText::FromString(DisplayName);
-		Entry.Category = Category;
-		Entry.StaticMeshAsset = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(MeshPath));
-		Entry.FallbackBoxExtent = FallbackBoxExtent;
-		Entry.SafetyRadius = SafetyRadius;
-		return Entry;
+		FEpisodeStaticObstaclePropEntry entry;
+		entry.PropId = FName(propId);
+		entry.SemanticTypeId = FName(semanticTypeId);
+		entry.DisplayName = FText::FromString(displayName);
+		entry.Category = category;
+		entry.StaticMeshAsset = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(meshPath));
+		entry.FallbackBoxExtent = fallbackBoxExtent;
+		entry.SafetyRadius = safetyRadius;
+		return entry;
 	}
 }
 
@@ -38,98 +38,80 @@ AEpisodeStaticObstacle::AEpisodeStaticObstacle()
 	ObstacleCollisionComponent = CreateDefaultSubobject<UEpisodeObstacleCollisionComponent>(TEXT("ObstacleCollisionComponent"));
 }
 
-void AEpisodeStaticObstacle::OnConstruction(const FTransform& Transform)
+void AEpisodeStaticObstacle::OnConstruction(const FTransform& transform)
 {
-	Super::OnConstruction(Transform);
+	Super::OnConstruction(transform);
 
 	ApplyConfiguredStaticMesh();
 }
 
-bool AEpisodeStaticObstacle::SetStaticMeshAsset(TSoftObjectPtr<UStaticMesh> InStaticMeshAsset)
+bool AEpisodeStaticObstacle::SetStaticMeshAsset(TSoftObjectPtr<UStaticMesh> inStaticMeshAsset)
 {
-	StaticMeshAsset = InStaticMeshAsset;
+	StaticMeshAsset = inStaticMeshAsset;
 	return ApplyConfiguredStaticMesh();
 }
 
-void AEpisodeStaticObstacle::SetStaticMesh(UStaticMesh* InStaticMesh)
+void AEpisodeStaticObstacle::SetStaticMesh(UStaticMesh* inStaticMesh)
 {
-	StaticMeshAsset = InStaticMesh;
+	StaticMeshAsset = inStaticMesh;
 
 	if (MeshRoot)
 	{
-		MeshRoot->SetStaticMesh(InStaticMesh);
+		MeshRoot->SetStaticMesh(inStaticMesh);
 	}
 }
 
 bool AEpisodeStaticObstacle::ApplyConfiguredStaticMesh()
 {
-	if (!MeshRoot)
-	{
-		return false;
-	}
+	if (!MeshRoot) return false;
 
-	if (StaticMeshAsset.IsNull())
-	{
-		return MeshRoot->GetStaticMesh() != nullptr;
-	}
+	if (StaticMeshAsset.IsNull()) return MeshRoot->GetStaticMesh() != nullptr;
 
-	UStaticMesh* LoadedMesh = StaticMeshAsset.LoadSynchronous();
-	if (!LoadedMesh)
-	{
-		return false;
-	}
+	UStaticMesh* loadedMesh = StaticMeshAsset.LoadSynchronous();
+	if (!loadedMesh) return false;
 
-	MeshRoot->SetStaticMesh(LoadedMesh);
+	MeshRoot->SetStaticMesh(loadedMesh);
 	return true;
 }
 
-bool AEpisodeStaticObstacle::ApplyPropEntry(const FEpisodeStaticObstaclePropEntry& PropEntry)
+bool AEpisodeStaticObstacle::ApplyPropEntry(const FEpisodeStaticObstaclePropEntry& propEntry)
 {
-	if (PropEntry.PropId.IsNone())
-	{
-		return false;
-	}
+	if (propEntry.PropId.IsNone()) return false;
 
-	PropId = PropEntry.PropId;
-	SemanticTypeId = PropEntry.SemanticTypeId;
-	PropDisplayName = PropEntry.DisplayName;
-	PropCategory = PropEntry.Category;
-	StaticMeshAsset = PropEntry.StaticMeshAsset;
-	FallbackBoxExtent = PropEntry.FallbackBoxExtent;
+	PropId = propEntry.PropId;
+	SemanticTypeId = propEntry.SemanticTypeId;
+	PropDisplayName = propEntry.DisplayName;
+	PropCategory = propEntry.Category;
+	StaticMeshAsset = propEntry.StaticMeshAsset;
+	FallbackBoxExtent = propEntry.FallbackBoxExtent;
 
 	if (ObstacleCollisionComponent)
 	{
-		ObstacleCollisionComponent->bUsePhysicalCollision = PropEntry.bUsePhysicalCollision;
-		ObstacleCollisionComponent->bUseSafetyQuery = PropEntry.bUseSafetyQuery;
-		ObstacleCollisionComponent->SafetyRadius = PropEntry.SafetyRadius;
+		ObstacleCollisionComponent->bUsePhysicalCollision = propEntry.bUsePhysicalCollision;
+		ObstacleCollisionComponent->bUseSafetyQuery = propEntry.bUseSafetyQuery;
+		ObstacleCollisionComponent->SafetyRadius = propEntry.SafetyRadius;
 	}
 
 	return ApplyConfiguredStaticMesh();
 }
 
-bool AEpisodeStaticObstacle::ApplyDefaultPropById(FName InPropId)
+bool AEpisodeStaticObstacle::ApplyDefaultPropById(FName inPropId)
 {
-	FEpisodeStaticObstaclePropEntry PropEntry;
-	if (!FindDefaultPropEntryById(InPropId, PropEntry))
-	{
-		return false;
-	}
+	FEpisodeStaticObstaclePropEntry propEntry;
+	if (!FindDefaultPropEntryById(inPropId, propEntry)) return false;
 
-	return ApplyPropEntry(PropEntry);
+	return ApplyPropEntry(propEntry);
 }
 
-bool AEpisodeStaticObstacle::FindDefaultPropEntryById(FName InPropId, FEpisodeStaticObstaclePropEntry& OutPropEntry)
+bool AEpisodeStaticObstacle::FindDefaultPropEntryById(FName inPropId, FEpisodeStaticObstaclePropEntry& outPropEntry)
 {
-	if (InPropId.IsNone())
-	{
-		return false;
-	}
+	if (inPropId.IsNone()) return false;
 
-	for (const FEpisodeStaticObstaclePropEntry& PropEntry : GetDefaultPropEntries())
+	for (const FEpisodeStaticObstaclePropEntry& propEntry : GetDefaultPropEntries())
 	{
-		if (PropEntry.PropId == InPropId)
+		if (propEntry.PropId == inPropId)
 		{
-			OutPropEntry = PropEntry;
+			outPropEntry = propEntry;
 			return true;
 		}
 	}
@@ -139,7 +121,7 @@ bool AEpisodeStaticObstacle::FindDefaultPropEntryById(FName InPropId, FEpisodeSt
 
 const TArray<FEpisodeStaticObstaclePropEntry>& AEpisodeStaticObstacle::GetDefaultPropEntries()
 {
-	static const TArray<FEpisodeStaticObstaclePropEntry> PropEntries =
+	static const TArray<FEpisodeStaticObstaclePropEntry> propEntries =
 	{
 		MakeStaticObstaclePropEntry(TEXT("obstacle.bin"), TEXT("bin"), TEXT("Bin"), EEpisodeStaticObstaclePropCategory::StreetFurniture, TEXT("/Game/Episode/Mesh/SM_Bin.SM_Bin"), FVector(45.0, 45.0, 90.0), 75.0),
 		MakeStaticObstaclePropEntry(TEXT("obstacle.box_01"), TEXT("box"), TEXT("Box 01"), EEpisodeStaticObstaclePropCategory::DeliveryItem, TEXT("/Game/Episode/Mesh/SM_Box_01.SM_Box_01"), FVector(45.0, 45.0, 45.0), 70.0),
@@ -159,45 +141,45 @@ const TArray<FEpisodeStaticObstaclePropEntry>& AEpisodeStaticObstacle::GetDefaul
 		MakeStaticObstaclePropEntry(TEXT("obstacle.trash_bin"), TEXT("trash_bin"), TEXT("Trash Bin"), EEpisodeStaticObstaclePropCategory::StreetFurniture, TEXT("/Game/Episode/Mesh/SM_Trash_Bin.SM_Trash_Bin"), FVector(45.0, 45.0, 90.0), 75.0)
 	};
 
-	return PropEntries;
+	return propEntries;
 }
 
 TArray<FName> AEpisodeStaticObstacle::GetDefaultPropIds()
 {
-	TArray<FName> PropIds;
-	PropIds.Reserve(GetDefaultPropEntries().Num());
+	TArray<FName> propIds;
+	propIds.Reserve(GetDefaultPropEntries().Num());
 
-	for (const FEpisodeStaticObstaclePropEntry& PropEntry : GetDefaultPropEntries())
+	for (const FEpisodeStaticObstaclePropEntry& propEntry : GetDefaultPropEntries())
 	{
-		if (!PropEntry.PropId.IsNone())
+		if (!propEntry.PropId.IsNone())
 		{
-			PropIds.Add(PropEntry.PropId);
+			propIds.Add(propEntry.PropId);
 		}
 	}
 
-	return PropIds;
+	return propIds;
 }
 
 bool AEpisodeStaticObstacle::GetPlacementBounds(
-	FVector& OutOrigin,
-	FVector& OutBoxExtent,
-	FVector2D& OutHalfSize2D,
-	double& OutRadius2D) const
+	FVector& outOrigin,
+	FVector& outBoxExtent,
+	FVector2D& outHalfSize2D,
+	double& outRadius2D) const
 {
-	OutOrigin = GetActorLocation();
-	OutBoxExtent = FVector::ZeroVector;
-	OutHalfSize2D = FVector2D::ZeroVector;
-	OutRadius2D = 0.0;
+	outOrigin = GetActorLocation();
+	outBoxExtent = FVector::ZeroVector;
+	outHalfSize2D = FVector2D::ZeroVector;
+	outRadius2D = 0.0;
 
 	if (MeshRoot && MeshRoot->GetStaticMesh())
 	{
-		const FBoxSphereBounds MeshBounds = MeshRoot->Bounds;
-		OutOrigin = MeshBounds.Origin;
-		OutBoxExtent = MeshBounds.BoxExtent;
+		const FBoxSphereBounds meshBounds = MeshRoot->Bounds;
+		outOrigin = meshBounds.Origin;
+		outBoxExtent = meshBounds.BoxExtent;
 	}
 	else if (bUseFallbackBoundsWhenMeshMissing)
 	{
-		OutBoxExtent = FVector(
+		outBoxExtent = FVector(
 			FMath::Max(FallbackBoxExtent.X, 0.0),
 			FMath::Max(FallbackBoxExtent.Y, 0.0),
 			FMath::Max(FallbackBoxExtent.Z, 0.0));
@@ -207,18 +189,18 @@ bool AEpisodeStaticObstacle::GetPlacementBounds(
 		return false;
 	}
 
-	OutHalfSize2D = FVector2D(OutBoxExtent.X, OutBoxExtent.Y);
-	OutRadius2D = FMath::Sqrt(FMath::Square(OutHalfSize2D.X) + FMath::Square(OutHalfSize2D.Y));
-	return OutRadius2D > KINDA_SMALL_NUMBER;
+	outHalfSize2D = FVector2D(outBoxExtent.X, outBoxExtent.Y);
+	outRadius2D = FMath::Sqrt(FMath::Square(outHalfSize2D.X) + FMath::Square(outHalfSize2D.Y));
+	return outRadius2D > KINDA_SMALL_NUMBER;
 }
 
 double AEpisodeStaticObstacle::GetPlacementRadius2D() const
 {
-	FVector Origin = FVector::ZeroVector;
-	FVector BoxExtent = FVector::ZeroVector;
-	FVector2D HalfSize2D = FVector2D::ZeroVector;
-	double Radius2D = 0.0;
+	FVector origin = FVector::ZeroVector;
+	FVector boxExtent = FVector::ZeroVector;
+	FVector2D halfSize2D = FVector2D::ZeroVector;
+	double radius2D = 0.0;
 
-	GetPlacementBounds(Origin, BoxExtent, HalfSize2D, Radius2D);
-	return Radius2D;
+	GetPlacementBounds(origin, boxExtent, halfSize2D, radius2D);
+	return radius2D;
 }

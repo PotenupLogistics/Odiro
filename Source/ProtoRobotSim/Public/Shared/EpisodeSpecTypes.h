@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "EpisodeCoreTypes.h"
 #include "EpisodeConfigTypes.h"
+#include "Struct/DeliveryBotSetupInfo.h"
 #include "EpisodeSpecTypes.generated.h"
 
 // 언리얼에서 ScenarioSpec 해석 후 에피소드를 생성하기 위한 에피소드 명세.
@@ -72,6 +73,25 @@ struct PROTOROBOTSIM_API FEpisodeGroundRegionSpec
 	FString CollisionTag;
 };
 
+// 로봇을 배치시키고 초기화시키기 위한 명세.
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodeDeliveryBotSpawnSpec
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|DeliveryBot")
+	FDeliveryBotSetupInfo SetupInfo;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|DeliveryBot")
+	bool bSpawnOnly = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|DeliveryBot")
+	bool bHasStartLocation = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|DeliveryBot")
+	bool bHasGoalLocation = false;
+};
+
 // 월드에 배치되는 정적 객체 하나를 표현하는 명세.
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FEpisodePlaceableInstanceSpec
@@ -89,6 +109,9 @@ struct PROTOROBOTSIM_API FEpisodePlaceableInstanceSpec
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FTransform Transform;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FEpisodeDeliveryBotSpawnSpec DeliveryBot;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	TMap<FString, FEpisodeParamValue> Properties;
@@ -161,6 +184,37 @@ struct PROTOROBOTSIM_API FEpisodeEventSpec
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	TMap<FString, FEpisodeParamValue> Properties;
+};
+
+// Runner가 SimulationSubsystem에게 에피소드 Setup을 지시하기 위해 필요한 명세.
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodeSimulationSetupSpec
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString EpisodeId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString SpecHash;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FEpisodeSeedLedger Seeds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<FEpisodeGroundRegionSpec> GroundRegions;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<FEpisodePlaceableInstanceSpec> Placeables;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<FEpisodeDynamicActorSpec> DynamicActors;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<FEpisodePathSpec> Paths;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	TArray<FEpisodeEventSpec> Events;
 };
 
 // Runner가 읽어서 월드에 actor를 생성할 수 있는 최종 에피소드 명세.

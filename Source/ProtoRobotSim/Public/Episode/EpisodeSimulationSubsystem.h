@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
-#include "Shared/EpisodeCompileTypes.h"
 #include "Shared/EpisodeSpecTypes.h"
 #include "EpisodeSimulationSubsystem.generated.h"
 
@@ -14,7 +13,7 @@ class AEpisodeStaticObstacle;
 class UPrimitiveComponent;
 class UEpisodePlaceableComponent;
 
-// 컴파일된 Episode WorldSpec을 현재 월드에 스폰하고, 런타임 actor 생명주기를 관리하는 subsystem.
+// 컴파일된 Episode simulation setup spec을 현재 월드에 스폰하고, 런타임 actor 생명주기를 관리하는 subsystem.
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API UEpisodeSimulationSubsystem : public UWorldSubsystem
 {
@@ -42,48 +41,45 @@ public:
 	void ClearEpisode();
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
-	bool SpawnEpisodeWorld(const FEpisodeWorldSpec& WorldSpec);
-
-	UFUNCTION(BlueprintCallable, Category = "Episode|Json")
-	bool SpawnEpisodeWorldFromJsonFile(const FString& JsonFilePath);
+	bool SetupEpisodeWorld(const FEpisodeSimulationSetupSpec& setupSpec);
 
 	UFUNCTION(BlueprintPure, Category = "Episode")
-	AActor* FindRuntimeActor(const FString& InstanceId) const;
+	AActor* FindRuntimeActor(const FString& instanceId) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
-	FEpisodeRuntimeContext BuildRuntimeContext(const FEpisodeWorldSpec& WorldSpec) const;
+	FEpisodeRuntimeContext BuildRuntimeContext(const FEpisodeSimulationSetupSpec& setupSpec) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
-	AEpisodeSplinePath* SpawnSplinePath(const FString& PathId, const TArray<FVector>& Points, bool bClosedLoop);
+	AEpisodeSplinePath* SpawnSplinePath(const FString& pathId, const TArray<FVector>& points, bool bClosedLoop);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
-	AEpisodeSplinePath* FindSplinePath(const FString& PathId) const;
+	AEpisodeSplinePath* FindSplinePath(const FString& pathId) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
-	AEpisodeGroundRegion* SpawnGroundRegion(const FEpisodeGroundRegionSpec& RegionSpec);
+	AEpisodeGroundRegion* SpawnGroundRegion(const FEpisodeGroundRegionSpec& regionSpec);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
-	void SpawnGroundRegions(const TArray<FEpisodeGroundRegionSpec>& RegionSpecs);
+	void SpawnGroundRegions(const TArray<FEpisodeGroundRegionSpec>& regionSpecs);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
-	AEpisodeGroundRegion* FindGroundRegion(const FString& RegionId) const;
+	AEpisodeGroundRegion* FindGroundRegion(const FString& regionId) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
 	AEpisodePedestrian* SpawnPedestrianOnPath(
-		TSubclassOf<AEpisodePedestrian> InPedestrianClass,
-		const FTransform& SpawnTransform,
-		AEpisodeSplinePath* SplinePath,
-		double SpeedCmPerSecond,
-		double InitialDistanceCm,
+		TSubclassOf<AEpisodePedestrian> inPedestrianClass,
+		const FTransform& spawnTransform,
+		AEpisodeSplinePath* splinePath,
+		double speedCmPerSecond,
+		double initialDistanceCm,
 		bool bStartFollowing);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
 	AEpisodePedestrian* SpawnPedestrianOnPathId(
-		TSubclassOf<AEpisodePedestrian> InPedestrianClass,
-		const FTransform& SpawnTransform,
-		const FString& PathId,
-		double SpeedCmPerSecond,
-		double InitialDistanceCm,
+		TSubclassOf<AEpisodePedestrian> inPedestrianClass,
+		const FTransform& spawnTransform,
+		const FString& pathId,
+		double speedCmPerSecond,
+		double initialDistanceCm,
 		bool bStartFollowing);
 
 private:
@@ -96,41 +92,44 @@ private:
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<AEpisodeSplinePath>> RuntimePaths;
 
+	// RuntimeActors가 SimulationSubsystem이 다루는 모든 Actor들이라면
+	// RuntimeActorsById는 instance_id로 찾아야 하는 런타임 액터 lookup map.
+	// 예를 들어, RuntimePaths, RuntimeGroundRegions는 instance_id가 없어서 포함되지 않음.
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<AActor>> RuntimeActorsById;
 
-	AActor* SpawnPlaceable(const FEpisodePlaceableInstanceSpec& PlaceableSpec);
-	AEpisodeStaticObstacle* SpawnStaticObstacle(const FEpisodePlaceableInstanceSpec& PlaceableSpec);
-	AActor* SpawnRobotActor(const FEpisodePlaceableInstanceSpec& PlaceableSpec);
-	AActor* SpawnDynamicActor(const FEpisodeDynamicActorSpec& DynamicActorSpec);
-	AEpisodePedestrian* SpawnPedestrian(const FEpisodeDynamicActorSpec& DynamicActorSpec);
+	AActor* SpawnPlaceable(const FEpisodePlaceableInstanceSpec& placeableSpec);
+	AEpisodeStaticObstacle* SpawnStaticObstacle(const FEpisodePlaceableInstanceSpec& placeableSpec);
+	AActor* SpawnRobotActor(const FEpisodePlaceableInstanceSpec& placeableSpec);
+	AActor* SpawnDynamicActor(const FEpisodeDynamicActorSpec& dynamicActorSpec);
+	AEpisodePedestrian* SpawnPedestrian(const FEpisodeDynamicActorSpec& dynamicActorSpec);
 
 	void RegisterRuntimeActor(
-		const FString& InstanceId,
-		const FString& AssetId,
-		EEpisodeActorCategory Category,
-		AActor* Actor);
+		const FString& instanceId,
+		const FString& assetId,
+		EEpisodeActorCategory category,
+		AActor* actor);
 
 	void ConfigurePlaceableComponent(
-		UEpisodePlaceableComponent* PlaceableComponent,
-		const FString& InstanceId,
-		const FString& AssetId,
-		EEpisodeActorCategory Category) const;
+		UEpisodePlaceableComponent* placeableComponent,
+		const FString& instanceId,
+		const FString& assetId,
+		EEpisodeActorCategory category) const;
 
 	static double GetFloatProperty(
-		const TMap<FString, FEpisodeParamValue>& Properties,
-		const FString& Key,
-		double DefaultValue);
+		const TMap<FString, FEpisodeParamValue>& properties,
+		const FString& key,
+		double defaultValue);
 
 	static bool GetBoolProperty(
-		const TMap<FString, FEpisodeParamValue>& Properties,
-		const FString& Key,
-		bool DefaultValue);
+		const TMap<FString, FEpisodeParamValue>& properties,
+		const FString& key,
+		bool defaultValue);
 
 	static bool GetVectorProperty(
-		const TMap<FString, FEpisodeParamValue>& Properties,
-		const FString& Key,
-		FVector& OutValue);
+		const TMap<FString, FEpisodeParamValue>& properties,
+		const FString& key,
+		FVector& outValue);
 
-	static void SetActorReceivesDecals(AActor* Actor, bool bReceivesDecals);
+	static void SetActorReceivesDecals(AActor* actor, bool bReceivesDecals);
 };

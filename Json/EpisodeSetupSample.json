@@ -10,10 +10,10 @@
   "run": {
     "base_seed": 42,
     "iteration_index": 0,
-    "time_limit_s": 30.0
+    "time_limit_s": 60.0
   },
   "evaluation": {
-    "goal_acceptance_radius_m": 0.5,
+    "goal_acceptance_radius_m": 1.0,
     "fall_angle_deg": 60.0,
     "near_miss": {
       "distance_m": 0.5

@@ -49,6 +49,7 @@ class PROTOROBOTSIM_API UDeliveryBot_GridSubsystem : public UWorldSubsystem
 	GENERATED_BODY()
 public:
 	void BuildGridFromBounds(const ADeliveryBot_GridBoundsActor* gridBoundsActor);
+	void SetDrawDebugEnabled(bool bEnabled);
 
 public:
 	void SetDynamicBlockedByComponentBounds(const UPrimitiveComponent* obstacleComponent);
@@ -80,6 +81,9 @@ public:
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Grid")
 	float DynamicObstacleBlockBound{ 0.5f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Grid")
+	bool bDrawDebug{ true };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Grid")
 	float CellSize{50.f};  // Grid 사이즈 

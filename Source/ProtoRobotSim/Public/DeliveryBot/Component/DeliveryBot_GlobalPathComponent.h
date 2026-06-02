@@ -28,6 +28,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|GlobalPath")
 	bool BuildPathByAStar(const FVector& startLocation, const FVector& goalLocation);
 
+	void SetDrawDebugEnabled(bool bEnabled);
+
 	const TArray<FVector>& GetGlobalPath() const { return GlobalPath; }
 	
 private:
@@ -50,6 +52,9 @@ private:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|GlobalPath", meta = (AllowPrivateAccess = "true"))
 	float PathSmoothingSampleDistance{ 50.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|GlobalPath", meta = (AllowPrivateAccess = "true"))
+	bool bDrawDebug{ true };
 	
 	
 };

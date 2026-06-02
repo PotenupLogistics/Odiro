@@ -19,7 +19,7 @@ void UDeliveryBot_MovementComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	AActor* owner{ GetOwner() };
+	AActor* owner = GetOwner();
 	if (!IsValid(owner))
 		return;
 
@@ -59,7 +59,7 @@ void UDeliveryBot_MovementComponent::StopMove()
 
 void UDeliveryBot_MovementComponent::MoveAlongPath(float deltaTime)
 {
-	AActor* owner{ GetOwner() };
+	AActor* owner = GetOwner();
 	if (!IsValid(owner))
 	{
 		StopMove();
@@ -83,9 +83,9 @@ void UDeliveryBot_MovementComponent::MoveAlongPath(float deltaTime)
 		}
 	}
 
-	const FVector ownerLocation{ owner->GetActorLocation() };
-	const FVector targetLocation{ PathPoints[CurrentPathIndex] };
-	FVector direction{ targetLocation - ownerLocation };
+	const FVector ownerLocation = owner->GetActorLocation();
+	const FVector targetLocation = PathPoints[CurrentPathIndex];
+	FVector direction = targetLocation - ownerLocation;
 	direction.Z = 0.f;
 
 	if (direction.IsNearlyZero())
@@ -106,38 +106,38 @@ void UDeliveryBot_MovementComponent::MoveAlongPath(float deltaTime)
 		return;
 	}
 
-	FVector nextLocation{ ownerLocation + direction * MoveSpeed * deltaTime };
+	FVector nextLocation = ownerLocation + direction * MoveSpeed * deltaTime;
 
-	FVector groundLocation{ FVector::ZeroVector };
+	FVector groundLocation = FVector::ZeroVector;
 	if (GetGroundLocationByWorldLocation(nextLocation, groundLocation))
 	{
 		nextLocation.Z = groundLocation.Z + BodyHalfHeight;
 	}
 
-	const FRotator nextRotation{ direction.Rotation() };
+	const FRotator nextRotation = direction.Rotation();
 	owner->SetActorLocationAndRotation(nextLocation, nextRotation);
 }
 
 void UDeliveryBot_MovementComponent::MarkObstacleAsDynamicBlocked(const FHitResult& obstacleHitResult) const
 {
-	UWorld* world{ GetWorld() };
+	UWorld* world = GetWorld();
 	if (!IsValid(world))
 		return;
 
-	UDeliveryBot_GridSubsystem* gridSubsystem{ world->GetSubsystem<UDeliveryBot_GridSubsystem>() };
+	UDeliveryBot_GridSubsystem* gridSubsystem = world->GetSubsystem<UDeliveryBot_GridSubsystem>();
 	if (!IsValid(gridSubsystem))
 		return;
 
 	gridSubsystem->ClearDynamicBlockedCells();
 
-	const UPrimitiveComponent* obstacleComponent{ obstacleHitResult.GetComponent() };
+	const UPrimitiveComponent* obstacleComponent = obstacleHitResult.GetComponent();
 	if (IsValid(obstacleComponent))
 	{
 		gridSubsystem->SetDynamicBlockedByComponentBounds(obstacleComponent);
 		return;
 	}
 
-	FVector obstacleLocation{ obstacleHitResult.ImpactPoint };
+	FVector obstacleLocation = obstacleHitResult.ImpactPoint;
 
 	if (obstacleLocation.IsNearlyZero())
 	{
@@ -149,15 +149,15 @@ void UDeliveryBot_MovementComponent::MarkObstacleAsDynamicBlocked(const FHitResu
 
 bool UDeliveryBot_MovementComponent::IsArrivedAtCurrentPathPoint() const
 {
-	const AActor* owner{ GetOwner() };
+	const AActor* owner = GetOwner();
 	if (!IsValid(owner))
 		return false;
 
 	if (!PathPoints.IsValidIndex(CurrentPathIndex))
 		return false;
 
-	const FVector ownerLocation{ owner->GetActorLocation() };
-	const FVector targetLocation{ PathPoints[CurrentPathIndex] };
+	const FVector ownerLocation = owner->GetActorLocation();
+	const FVector targetLocation = PathPoints[CurrentPathIndex];
 	return FVector::DistSquared2D(ownerLocation, targetLocation) <= FMath::Square(AcceptanceRadius);
 
 }
@@ -165,12 +165,12 @@ bool UDeliveryBot_MovementComponent::IsArrivedAtCurrentPathPoint() const
 bool UDeliveryBot_MovementComponent::GetGroundLocationByWorldLocation(const FVector& worldLocation,
 	FVector& outGroundLocation) const
 {
-	const UWorld* world{ GetWorld() };
+	const UWorld* world = GetWorld();
 	if (!IsValid(world))
 		return false;
 
-	const FVector traceStart{ worldLocation.X, worldLocation.Y, worldLocation.Z + 300.f };
-	const FVector traceEnd{ worldLocation.X, worldLocation.Y, worldLocation.Z - 500.f };
+	const FVector traceStart = FVector(worldLocation.X, worldLocation.Y, worldLocation.Z + 300.f);
+	const FVector traceEnd = FVector(worldLocation.X, worldLocation.Y, worldLocation.Z - 500.f);
 
 	FHitResult hitResult;
 
@@ -194,21 +194,21 @@ bool UDeliveryBot_MovementComponent::GetGroundLocationByWorldLocation(const FVec
 
 bool UDeliveryBot_MovementComponent::CanRequestReroute() const
 {
-	const UWorld* world{ GetWorld() };
+	const UWorld* world = GetWorld();
 	if (!IsValid(world))
 		return false;
 
-	const float currentTime{static_cast<float>(world->GetTimeSeconds()) };
+	const float currentTime = static_cast<float>(world->GetTimeSeconds());
 	return currentTime - LastRerouteRequestTime >= RerouteCooldownTime;
 }
 
 void UDeliveryBot_MovementComponent::RequestOwnerReroute()
 {
-	const UWorld* world{ GetWorld() };
+	const UWorld* world = GetWorld();
 	if (!IsValid(world))
 		return;
 
-	ADeliveryBot_SimpleMesh* deliveryBot{ Cast<ADeliveryBot_SimpleMesh>(GetOwner()) };
+	ADeliveryBot_SimpleMesh* deliveryBot = Cast<ADeliveryBot_SimpleMesh>(GetOwner());
 	if (!IsValid(deliveryBot))
 		return;
 

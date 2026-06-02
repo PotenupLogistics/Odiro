@@ -24,50 +24,34 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar() const
 {
 	FDeliveryBotLidarScanInfo scanInfo;
 
-	const AActor* owner{ GetOwner() };
+	const AActor* owner = GetOwner();
 
 	if (!IsValid(owner))
-	{
 		return scanInfo;
-	}
 
-	const FVector sensorLocationCm{
-		owner->GetActorLocation() + FVector{ 0.f, 0.f, LidarSensorConfigInfo.SensorHeightM * 100.f }
-	};
+	const FVector sensorLocationCm = owner->GetActorLocation() + FVector(0.f, 0.f, LidarSensorConfigInfo.SensorHeightM * 100.f);
 
 	scanInfo.SensorLocationCm = sensorLocationCm;
 
-	const float angleStepDegree{ FMath::Max(LidarSensorConfigInfo.AngleStepDegree, 1.f) };
-	const float scanRangeCm{ LidarSensorConfigInfo.ScanRangeM * 100.f };
+	const float angleStepDegree = FMath::Max(LidarSensorConfigInfo.AngleStepDegree, 1.f);
+	const float scanRangeCm = LidarSensorConfigInfo.ScanRangeM * 100.f;
 
-	int32 rayIndex{ 0 };
+	int32 rayIndex = 0;
 
-	for (float yawDegree{ 0.f }; yawDegree < 360.f; yawDegree += angleStepDegree)
+	for (float yawDegree = 0.f; yawDegree < 360.f; yawDegree += angleStepDegree)
 	{
-		const FVector localDirection{ FRotator{ 0.f, yawDegree, 0.f }.Vector() };
-		const FVector worldDirection{ owner->GetActorRotation().RotateVector(localDirection) };
-		const FVector endLocationCm{ sensorLocationCm + worldDirection * scanRangeCm };
+		const FVector localDirection = FRotator(0.f, yawDegree, 0.f).Vector();
+		const FVector worldDirection = owner->GetActorRotation().RotateVector(localDirection);
+		const FVector endLocationCm = sensorLocationCm + worldDirection * scanRangeCm;
 
 		FHitResult hitResult;
-		const bool bHit{ TraceLidarRay(sensorLocationCm, endLocationCm, hitResult) };
+		const bool bHit = TraceLidarRay(sensorLocationCm, endLocationCm, hitResult);
 
-		DrawDebugLidarRay(
-			sensorLocationCm,
-			endLocationCm,
-			bHit ? &hitResult : nullptr
-		);
+		DrawDebugLidarRay(sensorLocationCm, endLocationCm,	bHit ? &hitResult : nullptr	);
 
 		if (bHit || LidarSensorConfigInfo.bStoreMissedRays)
 		{
-			scanInfo.RayInfos.Add(
-				MakeRayInfo(
-					rayIndex,
-					yawDegree,
-					sensorLocationCm,
-					endLocationCm,
-					bHit ? &hitResult : nullptr
-				)
-			);
+			scanInfo.RayInfos.Add(MakeRayInfo(rayIndex, yawDegree,sensorLocationCm, endLocationCm, bHit ? &hitResult : nullptr));
 		}
 
 		++rayIndex;
@@ -76,70 +60,54 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar() const
 	return scanInfo;
 }
 
-bool UDeliveryBot_LidarSensorComponent::TraceLidarRay(
-	const FVector& startLocationCm,
-	const FVector& endLocationCm,
-	FHitResult& outHitResult) const
+bool UDeliveryBot_LidarSensorComponent::TraceLidarRay(const FVector& startLocationCm, const FVector& endLocationCm,	FHitResult& outHitResult) const
 {
-	UWorld* world{ GetWorld() };
-	const AActor* owner{ GetOwner() };
+	UWorld* world = GetWorld();
+	const AActor* owner = GetOwner();
 
 	if (world == nullptr || !IsValid(owner))
-	{
 		return false;
-	}
 
 	FCollisionQueryParams queryParams;
 	queryParams.AddIgnoredActor(owner);
 
 	TArray<FHitResult> hitResults;
 
-	const bool bHit{
+	const bool bHit =
 		world->LineTraceMultiByChannel(
 			hitResults,
 			startLocationCm,
 			endLocationCm,
 			LidarSensorConfigInfo.TraceChannel,
 			queryParams
-		)
-	};
+		);
 
 	if (!bHit)
-	{
 		return false;
-	}
 
 	for (const FHitResult& hitResult : hitResults)
 	{
-		const AActor* hitActor{ hitResult.GetActor() };
+		const AActor* hitActor = hitResult.GetActor();
 
 		if (ShouldIgnoreActor(hitActor))
-		{
 			continue;
-		}
 
 		outHitResult = hitResult;
 		return true;
 	}
-
 	return false;
 }
 
 bool UDeliveryBot_LidarSensorComponent::ShouldIgnoreActor(const AActor* actor) const
 {
 	if (!IsValid(actor))
-	{
 		return true;
-	}
 
 	for (const FName& ignoreTag : LidarSensorConfigInfo.IgnoreTags)
 	{
 		if (actor->ActorHasTag(ignoreTag))
-		{
 			return true;
-		}
 	}
-
 	return false;
 }
 
@@ -164,7 +132,7 @@ FDeliveryBotLidarRayInfo UDeliveryBot_LidarSensorComponent::MakeRayInfo(
 		return rayInfo;
 	}
 
-	AActor* hitActor{ hitResult->GetActor() };
+	AActor* hitActor = hitResult->GetActor();
 
 	rayInfo.bHit = true;
 	rayInfo.HitActor = hitActor;
@@ -186,16 +154,16 @@ void UDeliveryBot_LidarSensorComponent::DrawDebugLidarRay(
 		return;
 	}
 
-	UWorld* world{ GetWorld() };
+	UWorld* world = GetWorld();
 
 	if (world == nullptr)
 	{
 		return;
 	}
 
-	const bool bHit{ hitResult != nullptr };
-	const FVector drawEndLocationCm{ bHit ? hitResult->ImpactPoint : endLocationCm };
-	const FColor drawColor{ bHit ? FColor::Red : FColor::Green };
+	const bool bHit = hitResult != nullptr;
+	const FVector drawEndLocationCm = bHit ? hitResult->ImpactPoint : endLocationCm;
+	const FColor drawColor = bHit ? FColor::Red : FColor::Green;
 
 	DrawDebugLine(
 		world,
@@ -223,7 +191,7 @@ void UDeliveryBot_LidarSensorComponent::DrawDebugLidarRay(
 
 float UDeliveryBot_LidarSensorComponent::GetSignedYawDegree(float yawDegree) const
 {
-	float normalizedYawDegree{ FMath::Fmod(yawDegree, 360.f) };
+	float normalizedYawDegree = FMath::Fmod(yawDegree, 360.f);
 
 	if (normalizedYawDegree < 0.f)
 	{
@@ -240,8 +208,8 @@ float UDeliveryBot_LidarSensorComponent::GetSignedYawDegree(float yawDegree) con
 
 bool UDeliveryBot_LidarSensorComponent::IsFrontYaw(float yawDegree) const
 {
-	const float signedYawDegree{ GetSignedYawDegree(yawDegree) };
-	const float frontHalfAngleDegree{ FMath::Max(LidarSensorConfigInfo.FrontHalfAngleDegree, 0.f) };
+	const float signedYawDegree = GetSignedYawDegree(yawDegree);
+	const float frontHalfAngleDegree = FMath::Max(LidarSensorConfigInfo.FrontHalfAngleDegree, 0.f);
 
 	return FMath::Abs(signedYawDegree) <= frontHalfAngleDegree;
 }
@@ -258,8 +226,8 @@ TArray<FDeliveryBotLidarDetectedObjectInfo> UDeliveryBot_LidarSensorComponent::B
 			continue;
 		}
 
-		const bool bFrontRay{ IsFrontYaw(rayInfo.RayYawDegree) };
-		FDeliveryBotLidarDetectedObjectInfo* objectInfo{ objectMap.Find(rayInfo.HitActor) };
+		const bool bFrontRay = IsFrontYaw(rayInfo.RayYawDegree);
+		FDeliveryBotLidarDetectedObjectInfo* objectInfo = objectMap.Find(rayInfo.HitActor);
 
 		if (objectInfo == nullptr)
 		{
@@ -325,12 +293,10 @@ bool UDeliveryBot_LidarSensorComponent::FindNearestFrontObject(
 	const FDeliveryBotLidarScanInfo& scanInfo,
 	FDeliveryBotLidarDetectedObjectInfo& outObjectInfo) const
 {
-	const TArray<FDeliveryBotLidarDetectedObjectInfo> detectedObjects{
-		BuildDetectedObjects(scanInfo)
-	};
+	const TArray<FDeliveryBotLidarDetectedObjectInfo> detectedObjects = BuildDetectedObjects(scanInfo);
 
-	bool bFound{ false };
-	float nearestFrontDistanceM{ TNumericLimits<float>::Max() };
+	bool bFound = false;
+	float nearestFrontDistanceM = TNumericLimits<float>::Max();
 
 	for (const FDeliveryBotLidarDetectedObjectInfo& objectInfo : detectedObjects)
 	{

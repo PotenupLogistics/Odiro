@@ -10,7 +10,6 @@
 UDeliveryBot_GlobalPathComponent::UDeliveryBot_GlobalPathComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
- 
 }
 
 
@@ -18,7 +17,6 @@ void UDeliveryBot_GlobalPathComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	
 }
 
 
@@ -29,29 +27,23 @@ void UDeliveryBot_GlobalPathComponent::TickComponent(float DeltaTime, ELevelTick
 
 }
 
-bool UDeliveryBot_GlobalPathComponent::BuildPathByAStar(
-	const FVector& startLocation,
-	const FVector& goalLocation)
+bool UDeliveryBot_GlobalPathComponent::BuildPathByAStar(const FVector& startLocation, const FVector& goalLocation)
 {
 	GlobalPath.Reset();
 
-	UWorld* world{ GetWorld() };
+	UWorld* world = GetWorld();
 	if (!IsValid(world))
 		return false;
 
-	UDeliveryBot_GridSubsystem* gridSubsystem{
-		world->GetSubsystem<UDeliveryBot_GridSubsystem>()
-	};
+	UDeliveryBot_GridSubsystem* gridSubsystem = world->GetSubsystem<UDeliveryBot_GridSubsystem>();
 
 	if (!IsValid(gridSubsystem))
 		return false;
 
-	FVector fixedStartLocation{ startLocation };
-	constexpr int32 maxStartSearchRadius{ 5 };
+	FVector fixedStartLocation = startLocation;
+	constexpr int32 maxStartSearchRadius = 5;
 
-	FIntPoint startGridIndex{
-		gridSubsystem->GetGridIndexByWorldLocation(fixedStartLocation)
-	};
+	FIntPoint startGridIndex = gridSubsystem->GetGridIndexByWorldLocation(fixedStartLocation);
 
 	if (!gridSubsystem->IsWalkableGridIndex(startGridIndex))
 	{
@@ -66,30 +58,28 @@ bool UDeliveryBot_GlobalPathComponent::BuildPathByAStar(
 		startGridIndex = gridSubsystem->GetGridIndexByWorldLocation(fixedStartLocation);
 	}
 
-	const FIntPoint goalGridIndex{
-		gridSubsystem->GetGridIndexByWorldLocation(goalLocation)
-	};
+	const FIntPoint goalGridIndex = gridSubsystem->GetGridIndexByWorldLocation(goalLocation);
 
-	if (!gridSubsystem->IsWalkableGridIndex(goalGridIndex))
+	if (!gridSubsystem-> IsWalkableGridIndex(goalGridIndex))
 		return false;
 
-	TMap<FIntPoint, FDeliveryBotAStarInfo> nodeMap;
-	TSet<FIntPoint> closedSet;
-	FDeliveryBotPathPriorityQueueInfo openQueue;
+	TMap<FIntPoint, FDeliveryBotAStarInfo> nodeMap;  // 각 그리드의 GCost, HCost, Parent 정보를 저장
+	TSet<FIntPoint> closedSet; //  이미 탐색 완료한 그리드 저장
+	FDeliveryBotPathPriorityQueueInfo openQueue;  // 앞으로 탐색할 후보 노드 우선순위 큐
 
+	// 시작 노드
 	FDeliveryBotAStarInfo startNodeInfo;
 	startNodeInfo.GridIndex = startGridIndex;
 	startNodeInfo.GCost = 0.f;
 	startNodeInfo.HCost = GetHeuristicCost(startGridIndex, goalGridIndex);
-	startNodeInfo.ParentGridIndex = FIntPoint{ INDEX_NONE, INDEX_NONE };
-
+	startNodeInfo.ParentGridIndex = FIntPoint(INDEX_NONE, INDEX_NONE);
 	nodeMap.Add(startGridIndex, startNodeInfo);
-
-	openQueue.Push(FDeliveryBotPathQueueNodeInfo{
-		startGridIndex,
-		startNodeInfo.GetFCost(),
-		startNodeInfo.HCost
-	});
+	
+	FDeliveryBotPathQueueNodeInfo startQueueNodeInfo;
+	startQueueNodeInfo.GridIndex = startGridIndex;
+	startQueueNodeInfo.FCost = startNodeInfo.GetFCost();
+	startQueueNodeInfo.HCost = startNodeInfo.HCost;
+	openQueue.Push(startQueueNodeInfo);
 
 	while (!openQueue.IsEmpty())
 	{
@@ -97,21 +87,17 @@ bool UDeliveryBot_GlobalPathComponent::BuildPathByAStar(
 		if (!openQueue.Pop(currentQueueNodeInfo))
 			break;
 
-		const FIntPoint currentGridIndex{ currentQueueNodeInfo.GridIndex };
+		const FIntPoint currentGridIndex = currentQueueNodeInfo.GridIndex;
 
 		if (closedSet.Contains(currentGridIndex))
 			continue;
 
+		// 도착 검사
 		if (currentGridIndex == goalGridIndex)
 		{
-			BuildGlobalPathFromNodeMap(
-				nodeMap,
-				startGridIndex,
-				goalGridIndex,
-				gridSubsystem
-			);
+			BuildGlobalPathFromNodeMap(	nodeMap, startGridIndex, goalGridIndex, gridSubsystem);
 
-			SmoothGlobalPath();
+			SmoothGlobalPath(); // 경로 보정
 			DrawGlobalPath();
 
 			return GlobalPath.Num() > 0;
@@ -119,29 +105,21 @@ bool UDeliveryBot_GlobalPathComponent::BuildPathByAStar(
 
 		closedSet.Add(currentGridIndex);
 
-		const FDeliveryBotAStarInfo* currentNodeInfo{
-			nodeMap.Find(currentGridIndex)
-		};
+		const FDeliveryBotAStarInfo* currentNodeInfo = nodeMap.Find(currentGridIndex);
 
 		if (currentNodeInfo == nullptr)
 			continue;
 
-		const TArray<FIntPoint> neighborGridIndexes{
-			gridSubsystem->GetNeighborGridIndexes(currentGridIndex)
-		};
+		const TArray<FIntPoint> neighborGridIndexes = gridSubsystem->GetNeighborGridIndexes(currentGridIndex);
 
 		for (const FIntPoint& neighborGridIndex : neighborGridIndexes)
 		{
 			if (closedSet.Contains(neighborGridIndex))
 				continue;
 
-			const float newGCost{
-				currentNodeInfo->GCost + GetMoveCost(currentGridIndex, neighborGridIndex)
-			};
+			const float newGCost = currentNodeInfo->GCost + GetMoveCost(currentGridIndex, neighborGridIndex);
 
-			FDeliveryBotAStarInfo* neighborNodeInfo{
-				nodeMap.Find(neighborGridIndex)
-			};
+			FDeliveryBotAStarInfo* neighborNodeInfo = nodeMap.Find(neighborGridIndex);
 
 			if (neighborNodeInfo != nullptr && newGCost >= neighborNodeInfo->GCost)
 				continue;
@@ -154,11 +132,11 @@ bool UDeliveryBot_GlobalPathComponent::BuildPathByAStar(
 
 			nodeMap.Add(neighborGridIndex, newNodeInfo);
 
-			openQueue.Push(FDeliveryBotPathQueueNodeInfo{
-				neighborGridIndex,
-				newNodeInfo.GetFCost(),
-				newNodeInfo.HCost
-			});
+			FDeliveryBotPathQueueNodeInfo neighborQueueNodeInfo;
+			neighborQueueNodeInfo.GridIndex = neighborGridIndex;
+			neighborQueueNodeInfo.FCost = newNodeInfo.GetFCost();
+			neighborQueueNodeInfo.HCost = newNodeInfo.HCost;
+			openQueue.Push(neighborQueueNodeInfo);
 		}
 	}
 
@@ -168,38 +146,37 @@ bool UDeliveryBot_GlobalPathComponent::BuildPathByAStar(
 float UDeliveryBot_GlobalPathComponent::GetHeuristicCost(const FIntPoint& fromGridIndex,
                                                          const FIntPoint& toGridIndex) const
 {
-	const int32 dx{ FMath::Abs(fromGridIndex.X - toGridIndex.X) };
-	const int32 dy{ FMath::Abs(fromGridIndex.Y - toGridIndex.Y) };
+	const int32 dx = FMath::Abs(fromGridIndex.X - toGridIndex.X);
+	const int32 dy = FMath::Abs(fromGridIndex.Y - toGridIndex.Y);
 
 	return static_cast<float>(FMath::Max(dx, dy) * 10);
 }
 
 float UDeliveryBot_GlobalPathComponent::GetMoveCost(const FIntPoint& fromGridIndex, const FIntPoint& toGridIndex) const
 {
-	const int32 dx{ FMath::Abs(fromGridIndex.X - toGridIndex.X) };
-	const int32 dy{ FMath::Abs(fromGridIndex.Y - toGridIndex.Y) };
+	const int32 dx = FMath::Abs(fromGridIndex.X - toGridIndex.X);
+	const int32 dy = FMath::Abs(fromGridIndex.Y - toGridIndex.Y);
 
 	return dx == 1 && dy == 1 ? 14.f : 10.f;
 }
 
 void UDeliveryBot_GlobalPathComponent::BuildGlobalPathFromNodeMap(const TMap<FIntPoint, FDeliveryBotAStarInfo>& nodeMap,
-	const FIntPoint& startGridIndex, const FIntPoint& goalGridIndex,
-	const class UDeliveryBot_GridSubsystem* gridSubsystem)
+	const FIntPoint& startGridIndex, const FIntPoint& goalGridIndex, const class UDeliveryBot_GridSubsystem* gridSubsystem)
 {
 	GlobalPath.Reset();
 
 	if (!IsValid(gridSubsystem))
 		return;
 
-	const FDeliveryBotAStarInfo* goalNodeInfo{ nodeMap.Find(goalGridIndex) };
+	const FDeliveryBotAStarInfo* goalNodeInfo = nodeMap.Find(goalGridIndex);
 	if (goalNodeInfo == nullptr)
 		return;
 
 	TArray<FIntPoint> reverseGridPath;
-	FIntPoint currentGridIndex{ goalGridIndex };
+	FIntPoint currentGridIndex = goalGridIndex;
 
-	bool bFoundStart{ false };
-	const int32 maxTraceCount{ nodeMap.Num() };
+	bool bFoundStart = false;
+	const int32 maxTraceCount = nodeMap.Num();
 
 	for (int32 traceCount = 0; traceCount < maxTraceCount; ++traceCount)
 	{
@@ -211,7 +188,7 @@ void UDeliveryBot_GlobalPathComponent::BuildGlobalPathFromNodeMap(const TMap<FIn
 			break;
 		}
 
-		const FDeliveryBotAStarInfo* currentNodeInfo{ nodeMap.Find(currentGridIndex) };
+		const FDeliveryBotAStarInfo* currentNodeInfo = nodeMap.Find(currentGridIndex);
 		if (currentNodeInfo == nullptr)
 		{
 			GlobalPath.Reset();
@@ -235,14 +212,17 @@ void UDeliveryBot_GlobalPathComponent::BuildGlobalPathFromNodeMap(const TMap<FIn
 
 	for (int32 pathIndex = reverseGridPath.Num() - 1; pathIndex >= 0; --pathIndex)
 	{
-		const FVector worldLocation{ gridSubsystem->GetWorldLocationByGridIndex(reverseGridPath[pathIndex]) };
+		const FVector worldLocation = gridSubsystem->GetWorldLocationByGridIndex(reverseGridPath[pathIndex]);
 		GlobalPath.Add(worldLocation);
 	}
 }
 
 void UDeliveryBot_GlobalPathComponent::DrawGlobalPath() const
 {
-	const UWorld* world{ GetWorld() };
+	if (!bDrawDebug)
+		return;
+
+	const UWorld* world = GetWorld();
 	if (!IsValid(world))
 		return;
 
@@ -251,8 +231,8 @@ void UDeliveryBot_GlobalPathComponent::DrawGlobalPath() const
 
 	for (int32 pathIndex = 0; pathIndex < GlobalPath.Num() - 1; ++pathIndex)
 	{
-		const FVector startLocation{ GlobalPath[pathIndex] + FVector{ 0.f, 0.f, 20.f } };
-		const FVector endLocation{ GlobalPath[pathIndex + 1] + FVector{ 0.f, 0.f, 20.f } };
+		const FVector startLocation = GlobalPath[pathIndex] + FVector(0.f, 0.f, 20.f);
+		const FVector endLocation = GlobalPath[pathIndex + 1] + FVector(0.f, 0.f, 20.f);
 		
 		// A*로 생성된 전역 경로를 눈으로 확인하기 위한 Debug Line
 		DrawDebugLine(
@@ -267,9 +247,10 @@ void UDeliveryBot_GlobalPathComponent::DrawGlobalPath() const
 		);
 	}
 
+	// 시작 점
 	DrawDebugSphere(
 		world,
-		GlobalPath[0] + FVector{ 0.f, 0.f, 20.f },
+		GlobalPath[0] + FVector(0.f, 0.f, 20.f),
 		20.f,
 		12,
 		FColor::Cyan,
@@ -277,15 +258,29 @@ void UDeliveryBot_GlobalPathComponent::DrawGlobalPath() const
 		30.f
 	);
 
+	// 도착 점
 	DrawDebugSphere(
 		world,
-		GlobalPath.Last() + FVector{ 0.f, 0.f, 20.f },
+		GlobalPath.Last() + FVector(0.f, 0.f, 20.f),
 		20.f,
 		12,
 		FColor::Magenta,
 		true,
 		30.f
 	);
+}
+
+void UDeliveryBot_GlobalPathComponent::SetDrawDebugEnabled(bool bEnabled)
+{
+	bDrawDebug = bEnabled;
+
+	if (!bDrawDebug)
+	{
+		if (UWorld* world = GetWorld())
+		{
+			FlushPersistentDebugLines(world);
+		}
+	}
 }
 
 void UDeliveryBot_GlobalPathComponent::SmoothGlobalPath()
@@ -296,13 +291,13 @@ void UDeliveryBot_GlobalPathComponent::SmoothGlobalPath()
 	}
 
 	TArray<FVector> smoothPath;
-	int32 currentPathIndex{ 0 };
+	int32 currentPathIndex = 0;
 
 	smoothPath.Add(GlobalPath[currentPathIndex]);
 
 	while (currentPathIndex < GlobalPath.Num() - 1)
 	{
-		int32 nextPathIndex{ GlobalPath.Num() - 1 };
+		int32 nextPathIndex = GlobalPath.Num() - 1;
 
 		for (; nextPathIndex > currentPathIndex + 1; --nextPathIndex)
 		{
@@ -319,37 +314,28 @@ void UDeliveryBot_GlobalPathComponent::SmoothGlobalPath()
 	GlobalPath = MoveTemp(smoothPath);
 }
 
-bool UDeliveryBot_GlobalPathComponent::CanConnectPathPoints(
-	const FVector& fromLocation,
-	const FVector& toLocation) const
+bool UDeliveryBot_GlobalPathComponent::CanConnectPathPoints(const FVector& fromLocation, const FVector& toLocation) const
 {
-	const UWorld* world{ GetWorld() };
+	const UWorld* world = GetWorld();
 	if (!IsValid(world))
-	{
 		return false;
-	}
 
-	const UDeliveryBot_GridSubsystem* gridSubsystem{ world->GetSubsystem<UDeliveryBot_GridSubsystem>() };
+	const UDeliveryBot_GridSubsystem* gridSubsystem = world->GetSubsystem<UDeliveryBot_GridSubsystem>();
 	if (!IsValid(gridSubsystem))
-	{
 		return false;
-	}
 
-	const FVector deltaLocation{ toLocation - fromLocation };
-	const float distance2D{static_cast<float>(FVector{ deltaLocation.X, deltaLocation.Y, 0.f }.Size()) };
-	const int32 sampleCount{ FMath::Max(1, FMath::CeilToInt(distance2D / PathSmoothingSampleDistance)) };
+	const FVector deltaLocation = toLocation - fromLocation;
+	const float distance2D = static_cast<float>(FVector(deltaLocation.X, deltaLocation.Y, 0.f).Size());
+	const int32 sampleCount = FMath::Max(1, FMath::CeilToInt(distance2D / PathSmoothingSampleDistance));
 
 	for (int32 sampleIndex = 0; sampleIndex <= sampleCount; ++sampleIndex)
 	{
-		const float alpha{ static_cast<float>(sampleIndex) / static_cast<float>(sampleCount) };
-		const FVector sampleLocation{ fromLocation + deltaLocation * alpha };
-		const FIntPoint sampleGridIndex{ gridSubsystem->GetGridIndexByWorldLocation(sampleLocation) };
+		const float alpha = static_cast<float>(sampleIndex) / static_cast<float>(sampleCount);
+		const FVector sampleLocation = fromLocation + deltaLocation * alpha;
+		const FIntPoint sampleGridIndex = gridSubsystem->GetGridIndexByWorldLocation(sampleLocation);
 
 		if (!gridSubsystem->IsWalkableGridIndex(sampleGridIndex))
-		{
 			return false;
-		}
 	}
-
 	return true;
 }

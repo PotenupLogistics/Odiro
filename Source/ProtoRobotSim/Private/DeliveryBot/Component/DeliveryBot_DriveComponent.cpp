@@ -1,55 +1,51 @@
-﻿#include "DeliveryBot/Component/DeliveryBot_ChaosDriveComponent.h"
+﻿#include "DeliveryBot/Component/DeliveryBot_DriveComponent.h"
 
 #include "ChaosVehicleMovementComponent.h"
 #include "ChaosWheeledVehicleMovementComponent.h"
 #include "Curves/RichCurve.h"
 
-UDeliveryBot_ChaosDriveComponent::UDeliveryBot_ChaosDriveComponent()
+namespace
+{
+	constexpr float KMH_TO_CMS = 27.777778f;
+}
+
+UDeliveryBot_DriveComponent::UDeliveryBot_DriveComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-void UDeliveryBot_ChaosDriveComponent::ApplyMoveCommand(
-	UChaosVehicleMovementComponent* vehicleMovement,
-	const FDeliveryBotMoveCommandInfo& moveCommandInfo,
-	float deltaTime)
+void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponent* vehicleMovement,
+	const FDeliveryBotMoveCommandInfo& moveCommandInfo,	float deltaTime)
 {
 	if (!IsValid(vehicleMovement))
 		return;
 
-	const float safeDeltaTime{ FMath::Max(deltaTime, 0.f) };
+	const float safeDeltaTime = FMath::Max(deltaTime, 0.f);
 
-	const float requestedTargetSpeedKmh{
-		moveCommandInfo.bBrake
-			? 0.f
-			: FMath::Clamp(moveCommandInfo.TargetSpeedKmh, 0.f, DriveConfigInfo.MaxSpeedKmh)
-	};
+	const float requestedTargetSpeedKmh = moveCommandInfo.bBrake
+		? 0.f
+		: FMath::Clamp(moveCommandInfo.TargetSpeedKmh, 0.f, DriveConfigInfo.MaxSpeedKmh);
 
-	const float speedInterpRateKmhPerSecond{
-		requestedTargetSpeedKmh > CurrentTargetSpeedKmh
-			? DriveConfigInfo.AccelerationRateKmhPerSecond
-			: DriveConfigInfo.DecelerationRateKmhPerSecond
-	};
+	const float speedInterpRateKmhPerSecond = requestedTargetSpeedKmh > CurrentTargetSpeedKmh
+		? DriveConfigInfo.AccelerationRateKmhPerSecond
+		: DriveConfigInfo.DecelerationRateKmhPerSecond;
 
-	CurrentTargetSpeedKmh = FMath::FInterpConstantTo(
+	CurrentTargetSpeedKmh = FMath::FInterpConstantTo
+	(
 		CurrentTargetSpeedKmh,
 		requestedTargetSpeedKmh,
 		safeDeltaTime,
 		speedInterpRateKmhPerSecond
 	);
 
-	const float currentSpeedKmh{
-		FMath::Abs(GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed()))
-	};
+	const float currentSpeedKmh = FMath::Abs(GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed()));
 
-	const float speedErrorKmh{ CurrentTargetSpeedKmh - currentSpeedKmh };
-	const float speedControlRangeKmh{ FMath::Max(DriveConfigInfo.SlowdownSpeedRangeKmh, 0.1f) };
+	const float speedErrorKmh = CurrentTargetSpeedKmh - currentSpeedKmh;
+	const float speedControlRangeKmh = FMath::Max(DriveConfigInfo.SlowdownSpeedRangeKmh, 0.1f);
 
-	const float throttle{
-		FMath::Clamp(speedErrorKmh / speedControlRangeKmh, 0.f, 1.f)
-	};
+	const float throttle = FMath::Clamp(speedErrorKmh / speedControlRangeKmh, 0.f, 1.f);
 
-	float brake{ FMath::Clamp(moveCommandInfo.Brake, 0.f, 1.f) };
+	float brake = FMath::Clamp(moveCommandInfo.Brake, 0.f, 1.f);
 
 	if (moveCommandInfo.bBrake)
 	{
@@ -57,16 +53,14 @@ void UDeliveryBot_ChaosDriveComponent::ApplyMoveCommand(
 	}
 	else if (speedErrorKmh < -DriveConfigInfo.SpeedLimitToleranceKmh)
 	{
-		const float overspeedBrake{
-			FMath::Clamp(-speedErrorKmh / speedControlRangeKmh, 0.f, 1.f)
-		};
-
+		const float overspeedBrake = FMath::Clamp(-speedErrorKmh / speedControlRangeKmh, 0.f, 1.f);
 		brake = FMath::Max(brake, FMath::Min(overspeedBrake, DriveConfigInfo.SpeedLimitBrake));
 	}
 
 	vehicleMovement->SetTargetGear(1, true);
 
-	ApplyDriveInput(
+	ApplyDriveInput
+	(
 		vehicleMovement,
 		throttle,
 		moveCommandInfo.Steering,
@@ -76,12 +70,10 @@ void UDeliveryBot_ChaosDriveComponent::ApplyMoveCommand(
 	);
 }
 
-void UDeliveryBot_ChaosDriveComponent::SetupVehicleMovement(UChaosWheeledVehicleMovementComponent* wheeledMovement) const
+void UDeliveryBot_DriveComponent::SetupVehicleMovement(UChaosWheeledVehicleMovementComponent* wheeledMovement) const
 {
 	if (!IsValid(wheeledMovement))
-	{
 		return;
-	}
 
 	wheeledMovement->bMechanicalSimEnabled = true;
 	wheeledMovement->TransmissionSetup.bUseAutoReverse = false;
@@ -96,8 +88,7 @@ void UDeliveryBot_ChaosDriveComponent::SetupVehicleMovement(UChaosWheeledVehicle
 	SetupTorqueCurve(wheeledMovement);
 }
 
-void UDeliveryBot_ChaosDriveComponent::InitializeChaosDrive(
-	UChaosWheeledVehicleMovementComponent* wheeledMovement,
+void UDeliveryBot_DriveComponent::InitializeChaosDrive(UChaosWheeledVehicleMovementComponent* wheeledMovement,
 	const FDeliveryBotDriveConfigInfo& driveConfigInfo)
 {
 	DriveConfigInfo = driveConfigInfo;
@@ -123,52 +114,46 @@ void UDeliveryBot_ChaosDriveComponent::InitializeChaosDrive(
 	SetupVehicleMovement(wheeledMovement);
 }
 
-void UDeliveryBot_ChaosDriveComponent::ApplyDriveInput(
-	UChaosVehicleMovementComponent* vehicleMovement,
-	float throttle,
-	float steering,
-	float brake,
-	bool bHandbrake,
-	float deltaTime)
+void UDeliveryBot_DriveComponent::ApplyDriveInput(UChaosVehicleMovementComponent* vehicleMovement,
+	float throttle,	float steering,	float brake, bool bHandbrake, float deltaTime)
 {
 	if (!IsValid(vehicleMovement))
-	{
 		return;
-	}
 
-	const float limitedThrottle{ GetLimitedThrottle(vehicleMovement, throttle) };
-	float targetBrake{ FMath::Clamp(brake, 0.f, 1.f) };
+	const float limitedThrottle = GetLimitedThrottle(vehicleMovement, throttle);
+	float targetBrake = FMath::Clamp(brake, 0.f, 1.f);
 
-	const float currentSpeedCmS{ FMath::Abs(vehicleMovement->GetForwardSpeed()) };
-	const float speedLimitCmS{ GetMaxSpeedCmPerSecond() };
-	const float speedToleranceCmS{ GetKmhToCmPerSecond(DriveConfigInfo.SpeedLimitToleranceKmh) };
+	const float currentSpeedCmS = FMath::Abs(vehicleMovement->GetForwardSpeed());
+	const float speedLimitCmS = GetMaxSpeedCmPerSecond();
+	const float speedToleranceCmS = GetKmhToCmPerSecond(DriveConfigInfo.SpeedLimitToleranceKmh);
 
 	if (currentSpeedCmS > speedLimitCmS + speedToleranceCmS)
 	{
 		targetBrake = FMath::Max(targetBrake, DriveConfigInfo.SpeedLimitBrake);
 	}
 
-	const float targetSteering{ FMath::Clamp(steering, -1.f, 1.f) };
+	const float targetSteering = FMath::Clamp(steering, -1.f, 1.f);
 
-	const float targetThrottle{
-		targetBrake > KINDA_SMALL_NUMBER ? 0.f : limitedThrottle
-	};
+	const float targetThrottle = targetBrake > KINDA_SMALL_NUMBER ? 0.f : limitedThrottle;
 
-	CurrentThrottleInput = FMath::FInterpConstantTo(
+	CurrentThrottleInput = FMath::FInterpConstantTo
+	(
 		CurrentThrottleInput,
 		targetThrottle,
 		deltaTime,
 		DriveConfigInfo.ThrottleInputRatePerSecond
 	);
 
-	CurrentBrakeInput = FMath::FInterpConstantTo(
+	CurrentBrakeInput = FMath::FInterpConstantTo
+	(
 		CurrentBrakeInput,
 		targetBrake,
 		deltaTime,
 		DriveConfigInfo.BrakeInputRatePerSecond
 	);
 
-	CurrentSteeringInput = FMath::FInterpConstantTo(
+	CurrentSteeringInput = FMath::FInterpConstantTo
+	(
 		CurrentSteeringInput,
 		targetSteering,
 		deltaTime,
@@ -181,36 +166,32 @@ void UDeliveryBot_ChaosDriveComponent::ApplyDriveInput(
 	vehicleMovement->SetHandbrakeInput(bHandbrake);
 }
 
-void UDeliveryBot_ChaosDriveComponent::SetDriveConfigInfo(const FDeliveryBotDriveConfigInfo& driveConfigInfo)
+void UDeliveryBot_DriveComponent::SetDriveConfigInfo(const FDeliveryBotDriveConfigInfo& driveConfigInfo)
 {
 	DriveConfigInfo = driveConfigInfo;
 }
 
-FDeliveryBotDriveConfigInfo UDeliveryBot_ChaosDriveComponent::GetDriveConfigInfo() const
+FDeliveryBotDriveConfigInfo UDeliveryBot_DriveComponent::GetDriveConfigInfo() const
 {
 	return DriveConfigInfo;
 }
 
-float UDeliveryBot_ChaosDriveComponent::GetMaxSpeedCmPerSecond() const
+float UDeliveryBot_DriveComponent::GetMaxSpeedCmPerSecond() const
 {
 	return GetKmhToCmPerSecond(DriveConfigInfo.MaxSpeedKmh);
 }
 
-void UDeliveryBot_ChaosDriveComponent::SetupTorqueCurve(UChaosWheeledVehicleMovementComponent* wheeledMovement) const
+void UDeliveryBot_DriveComponent::SetupTorqueCurve(UChaosWheeledVehicleMovementComponent* wheeledMovement) const
 {
 	if (!IsValid(wheeledMovement))
-	{
 		return;
-	}
 
-	FRichCurve* torqueCurve{ wheeledMovement->EngineSetup.TorqueCurve.GetRichCurve() };
+	FRichCurve* torqueCurve = wheeledMovement->EngineSetup.TorqueCurve.GetRichCurve();
 
 	if (torqueCurve == nullptr)
-	{
 		return;
-	}
 
-	const float maxRPM{ FMath::Max(DriveConfigInfo.MaxRPM, 1.f) };
+	const float maxRPM = FMath::Max(DriveConfigInfo.MaxRPM, 1.f);
 
 	torqueCurve->Reset();
 	torqueCurve->AddKey(0.f, 0.7f);
@@ -221,31 +202,25 @@ void UDeliveryBot_ChaosDriveComponent::SetupTorqueCurve(UChaosWheeledVehicleMove
 	torqueCurve->AddKey(maxRPM, 0.1f);
 }
 
-float UDeliveryBot_ChaosDriveComponent::GetLimitedThrottle(
-	const UChaosVehicleMovementComponent* vehicleMovement,
-	float targetThrottle) const
+float UDeliveryBot_DriveComponent::GetLimitedThrottle(const UChaosVehicleMovementComponent* vehicleMovement, float targetThrottle) const
 {
 	if (!IsValid(vehicleMovement))
-	{
 		return 0.f;
-	}
 
-	const float currentSpeedCmS{ FMath::Abs(vehicleMovement->GetForwardSpeed()) };
-	const float maxSpeedCmS{ GetMaxSpeedCmPerSecond() };
-	const float slowdownRangeCmS{ FMath::Max(GetKmhToCmPerSecond(DriveConfigInfo.SlowdownSpeedRangeKmh), 1.f) };
+	const float currentSpeedCmS = FMath::Abs(vehicleMovement->GetForwardSpeed());
+	const float maxSpeedCmS = GetMaxSpeedCmPerSecond();
+	const float slowdownRangeCmS = FMath::Max(GetKmhToCmPerSecond(DriveConfigInfo.SlowdownSpeedRangeKmh), 1.f);
 
-	const float throttleScale{
-		FMath::Clamp((maxSpeedCmS - currentSpeedCmS) / slowdownRangeCmS, 0.f, 1.f)
-	};
+	const float throttleScale = FMath::Clamp((maxSpeedCmS - currentSpeedCmS) / slowdownRangeCmS, 0.f, 1.f);
 
 	return FMath::Clamp(targetThrottle, 0.f, 1.f) * throttleScale;
 }
 
-float UDeliveryBot_ChaosDriveComponent::GetKmhToCmPerSecond(float speedKmh) const
+float UDeliveryBot_DriveComponent::GetKmhToCmPerSecond(float speedKmh) const
 {
-	return speedKmh * 27.777778f;
+	return speedKmh * KMH_TO_CMS;
 }
-float UDeliveryBot_ChaosDriveComponent::GetCmPerSecondToKmh(float speedCmS) const
+float UDeliveryBot_DriveComponent::GetCmPerSecondToKmh(float speedCmS) const
 {
-	return speedCmS / 27.777778f;
+	return speedCmS / KMH_TO_CMS;
 }

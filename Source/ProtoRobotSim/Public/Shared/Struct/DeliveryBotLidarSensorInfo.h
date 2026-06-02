@@ -16,20 +16,23 @@ public:
 	float ScanRangeM{ 5.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float AngleStepDegree{ 5.f };
+	float AngleStepDegree{ 2.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float SensorHeightM{ 0.4f };
+	float SensorHeightM{ 0.07f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float FrontHalfAngleDegree{ 10.f };
+	float FrontHalfAngleDegree{ 20.f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bStoreMissedRays{ false };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float StopDistanceM{ 1.5f };
+	float StopDistanceM{ 1.2f };
 	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SlowDownDistanceM{ 3.5f };
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TEnumAsByte<ECollisionChannel> TraceChannel{ ECC_Visibility };
 

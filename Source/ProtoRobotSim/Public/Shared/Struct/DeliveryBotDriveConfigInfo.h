@@ -1,37 +1,43 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "DeliveryBotChaosDriveConfigInfo.generated.h"
+#include "DeliveryBotDriveConfigInfo.generated.h"
 
 USTRUCT(BlueprintType)
-struct FDeliveryBotChaosDriveConfigInfo
+struct FDeliveryBotDriveConfigInfo
 {
 	GENERATED_BODY()
 
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float MaxSpeedKmh{ 10.f };
-
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float SlowdownSpeedRangeKmh{ 2.f };
-
+	float SlowdownSpeedRangeKmh{ 4.f };
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SpeedLimitToleranceKmh{ 0.5f };
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SpeedLimitBrake{ 0.08f };
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float StopBrakeInput{ 0.2f };
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ThrottleInputRatePerSecond{ 0.35f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float SpeedLimitBrake{ 0.15f };
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float StopBrakeInput{ 0.35f };
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float ThrottleInputRatePerSecond{ 0.7f };
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float BrakeInputRatePerSecond{ 1.2f };
+	float BrakeInputRatePerSecond{ 0.5f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SteeringInputRatePerSecond{ 3.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float AccelerationRateKmhPerSecond{ 2.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float DecelerationRateKmhPerSecond{ 3.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bUseHandbrakeWhenBrake{ false };

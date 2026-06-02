@@ -125,6 +125,7 @@ void ADeliveryBot_ChaosActor::BuildGlobalPathAndStartFollow()
 	PathFollowComponent->SetPath(GlobalPathComponent->GetGlobalPath());
 }
 
+
 void ADeliveryBot_ChaosActor::ApplyPathFollowMoveCommand(float deltaTime)
 {
 	if (!IsValid(PathFollowComponent) || !IsValid(ChaosDriveComponent))
@@ -139,45 +140,63 @@ void ADeliveryBot_ChaosActor::ApplyPathFollowMoveCommand(float deltaTime)
 	};
 
 	FDeliveryBotLidarDetectedObjectInfo frontObjectInfo;
-	const bool bShouldStopByFrontObject{
+	const bool bHasFrontObject{
 		IsValid(LidarSensorComponent) &&
-		LidarSensorComponent->ShouldStopByFrontObject(LastLidarScanInfo, frontObjectInfo)
+		LidarSensorComponent->FindNearestFrontObject(LastLidarScanInfo, frontObjectInfo)
 	};
 
-	if (bShouldStopByFrontObject)
+	if (bHasFrontObject)
 	{
-		if (IsInRepathMoveGraceTime())
-		{
-			moveCommandInfo = PathFollowComponent->BuildMoveCommand(deltaTime);
-			moveCommandInfo.TargetSpeedKmh = FMath::Min(
-				moveCommandInfo.TargetSpeedKmh,
-				SetupInfo.PathFollowConfigInfo.MinTurnSpeedKmh
-			);
-		}
-		else
-		{
-			const bool bRepathSuccess{
-				bUseFrontObstacleRepath && TryRequestRepathByFrontObject(frontObjectInfo)
-			};
+		const float stopDistanceM{
+			FMath::Max(SetupInfo.LidarSensorConfigInfo.StopDistanceM, 0.f)
+		};
 
-			if (bRepathSuccess)
+		const float obstacleSlowSpeedKmh{
+			FMath::Max(SetupInfo.PathFollowConfigInfo.ObstacleSlowSpeedKmh, 0.f)
+		};
+
+		if (frontObjectInfo.ClosestFrontDistanceM <= stopDistanceM)
+		{
+			if (IsInRepathMoveGraceTime())
 			{
 				moveCommandInfo = PathFollowComponent->BuildMoveCommand(deltaTime);
 				moveCommandInfo.TargetSpeedKmh = FMath::Min(
 					moveCommandInfo.TargetSpeedKmh,
-					SetupInfo.PathFollowConfigInfo.MinTurnSpeedKmh
+					obstacleSlowSpeedKmh
 				);
 			}
 			else
 			{
-				ApplyStopCommand(moveCommandInfo);
+				const bool bRepathSuccess{
+					bUseFrontObstacleRepath && TryRequestRepathByFrontObject(frontObjectInfo)
+				};
+
+				if (bRepathSuccess)
+				{
+					moveCommandInfo = PathFollowComponent->BuildMoveCommand(deltaTime);
+					moveCommandInfo.TargetSpeedKmh = FMath::Min(
+						moveCommandInfo.TargetSpeedKmh,
+						obstacleSlowSpeedKmh
+					);
+				}
+				else
+				{
+					ApplyStopCommand(moveCommandInfo);
+				}
 			}
+		}
+		else
+		{
+			ApplyFrontObstacleSlowDown(moveCommandInfo, frontObjectInfo);
 		}
 	}
 
-	if (!bShouldStopByFrontObject && !IsInRepathMoveGraceTime())
+	if (!bHasFrontObject || frontObjectInfo.ClosestFrontDistanceM > SetupInfo.LidarSensorConfigInfo.SlowDownDistanceM)
 	{
-		ClearLidarDynamicBlockedCells();
+		if (!IsInRepathMoveGraceTime())
+		{
+			ClearLidarDynamicBlockedCells();
+		}
 	}
 
 	ChaosDriveComponent->ApplyMoveCommand(vehicleMovement, moveCommandInfo, deltaTime);
@@ -356,4 +375,53 @@ int32 ADeliveryBot_ChaosActor::SetLidarDetectedActorsAsDynamicBlocked(
 	}
 
 	return blockedActors.Num();
+}
+
+void ADeliveryBot_ChaosActor::ApplyFrontObstacleSlowDown(
+	FDeliveryBotMoveCommandInfo& moveCommandInfo,
+	const FDeliveryBotLidarDetectedObjectInfo& frontObjectInfo) const
+{
+	const float stopDistanceM{
+		FMath::Max(SetupInfo.LidarSensorConfigInfo.StopDistanceM, 0.f)
+	};
+
+	const float slowDownDistanceM{
+		FMath::Max(
+			SetupInfo.LidarSensorConfigInfo.SlowDownDistanceM,
+			stopDistanceM + 0.1f
+		)
+	};
+
+	const float distanceM{ frontObjectInfo.ClosestFrontDistanceM };
+
+	if (distanceM <= stopDistanceM || distanceM > slowDownDistanceM)
+		return;
+
+	const float distanceAlpha{
+		FMath::Clamp(
+			(distanceM - stopDistanceM) / (slowDownDistanceM - stopDistanceM),
+			0.f,
+			1.f
+		)
+	};
+
+	const float slowSpeedKmh{
+		FMath::Max(SetupInfo.PathFollowConfigInfo.ObstacleSlowSpeedKmh, 0.f)
+	};
+
+	const float limitedSpeedKmh{
+		FMath::Lerp(
+			slowSpeedKmh,
+			moveCommandInfo.TargetSpeedKmh,
+			distanceAlpha
+		)
+	};
+
+	moveCommandInfo.TargetSpeedKmh = FMath::Min(
+		moveCommandInfo.TargetSpeedKmh,
+		limitedSpeedKmh
+	);
+
+	moveCommandInfo.Brake = 0.f;
+	moveCommandInfo.bBrake = false;
 }

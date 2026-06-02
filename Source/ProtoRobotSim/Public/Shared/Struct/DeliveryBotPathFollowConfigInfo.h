@@ -28,4 +28,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float MinTurnSpeedKmh{ 1.5f };
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ObstacleSlowSpeedKmh{ 1.5f };
 };

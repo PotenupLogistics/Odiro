@@ -17,6 +17,7 @@ void UDeliveryBot_LidarSensorComponent::InitializeLidar(
 	LidarSensorConfigInfo.SensorHeightM = FMath::Max(LidarSensorConfigInfo.SensorHeightM, 0.f);
 	LidarSensorConfigInfo.FrontHalfAngleDegree = FMath::Clamp(LidarSensorConfigInfo.FrontHalfAngleDegree, 0.f, 180.f);
 	LidarSensorConfigInfo.StopDistanceM = FMath::Max(LidarSensorConfigInfo.StopDistanceM, 0.f);
+	LidarSensorConfigInfo.SlowDownDistanceM = FMath::Max(LidarSensorConfigInfo.SlowDownDistanceM,LidarSensorConfigInfo.StopDistanceM + 0.1f);
 }
 
 FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar() const

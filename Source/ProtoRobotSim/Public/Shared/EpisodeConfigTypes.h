@@ -198,6 +198,9 @@ struct PROTOROBOTSIM_API FEpisodeEvaluationEvent
 	double ElapsedTimeSeconds = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	double WorldTimeSeconds = -1.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	EEpisodeEvaluationEventType EventType = EEpisodeEvaluationEventType::None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")

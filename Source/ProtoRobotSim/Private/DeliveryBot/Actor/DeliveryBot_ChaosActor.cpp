@@ -9,6 +9,7 @@
 #include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "DeliveryBot/Component/DeliveryBot_PolicyJudgmentComponent.h"
+#include "Episode/Components/EpisodePlaceableComponent.h"
 
 
 namespace
@@ -37,6 +38,7 @@ ADeliveryBot_ChaosActor::ADeliveryBot_ChaosActor(const FObjectInitializer& Objec
 	PathFollowComponent = CreateDefaultSubobject<UDeliveryBot_PathFollowComponent>(TEXT("PathFollowComponent"));
 	LidarSensorComponent = CreateDefaultSubobject<UDeliveryBot_LidarSensorComponent>(TEXT("LidarSensorComponent"));
 	PolicyJudgmentComponent = CreateDefaultSubobject<UDeliveryBot_PolicyJudgmentComponent>(TEXT("PolicyJudgmentComponent"));
+	PlaceableComponent = CreateDefaultSubobject<UEpisodePlaceableComponent>(TEXT("PlaceableComponent"));
 	
 	UChaosWheeledVehicleMovementComponent* wheeledMovement = Cast<UChaosWheeledVehicleMovementComponent>(GetVehicleMovementComponent());
 
@@ -97,6 +99,25 @@ void ADeliveryBot_ChaosActor::SetDrawDebugEnabled(bool bEnabled)
 		}
 	}
 	ApplySetupInfo();
+}
+
+bool ADeliveryBot_ChaosActor::GetMeasurementSnapshot(FDeliveryBotMeasurementSnapshot& OutSnapshot) const
+{
+	OutSnapshot = FDeliveryBotMeasurementSnapshot{};
+	OutSnapshot.LidarScanInfo = LastLidarScanInfo;
+	for (const FDeliveryBotLidarRayInfo& RayInfo : LastLidarScanInfo.RayInfos)
+	{
+		if (RayInfo.bHit)
+		{
+			++OutSnapshot.LidarHitCount;
+		}
+	}
+	OutSnapshot.bHasFrontObject = IsValid(LidarSensorComponent)
+		&& LidarSensorComponent->FindNearestFrontObject(LastLidarScanInfo, OutSnapshot.FrontObjectInfo);
+	OutSnapshot.MoveCommandInfo = LastMoveCommandInfo;
+	OutSnapshot.bHasMoveCommand = bHasLastMoveCommand;
+	OutSnapshot.ActionReason = LastActionReason;
+	return true;
 }
 
 void ADeliveryBot_ChaosActor::Tick(float DeltaSeconds)
@@ -185,6 +206,7 @@ void ADeliveryBot_ChaosActor::ApplyPathFollowMoveCommand(float deltaTime)
 		return;
 
 	FDeliveryBotMoveCommandInfo moveCommandInfo = PathFollowComponent->BuildMoveCommand(deltaTime);
+	FString actionReason{ TEXT("path_follow") };
 
 	FDeliveryBotLidarDetectedObjectInfo frontObjectInfo;
 	const bool bHasFrontObject =
@@ -195,7 +217,7 @@ void ADeliveryBot_ChaosActor::ApplyPathFollowMoveCommand(float deltaTime)
 		const FDeliveryBotPolicyContextInfo contextInfo = BuildPolicyContextInfo(bHasFrontObject, frontObjectInfo);
 		const FDeliveryBotPolicyDecisionInfo decisionInfo = PolicyJudgmentComponent->EvaluatePolicy(contextInfo);
 
-		ApplyPolicyDecisionToMoveCommand(moveCommandInfo, decisionInfo, frontObjectInfo, deltaTime);
+		actionReason = ApplyPolicyDecisionToMoveCommand(moveCommandInfo, decisionInfo, frontObjectInfo, deltaTime);
 	}
 
 	if (!bHasFrontObject || frontObjectInfo.ClosestFrontDistanceM > SetupInfo.LidarSensorConfigInfo.SlowDownDistanceM)
@@ -206,6 +228,9 @@ void ADeliveryBot_ChaosActor::ApplyPathFollowMoveCommand(float deltaTime)
 		}
 	}
 
+	LastMoveCommandInfo = moveCommandInfo;
+	LastActionReason = actionReason;
+	bHasLastMoveCommand = true;
 	ChaosDriveComponent->ApplyMoveCommand(vehicleMovement, moveCommandInfo, deltaTime);
 }
 
@@ -427,7 +452,7 @@ FDeliveryBotPolicyContextInfo ADeliveryBot_ChaosActor::BuildPolicyContextInfo(bo
 	return contextInfo;
 }
 
-void ADeliveryBot_ChaosActor::ApplyPolicyDecisionToMoveCommand(
+FString ADeliveryBot_ChaosActor::ApplyPolicyDecisionToMoveCommand(
 	FDeliveryBotMoveCommandInfo& moveCommandInfo,const FDeliveryBotPolicyDecisionInfo& decisionInfo,
 	const FDeliveryBotLidarDetectedObjectInfo& frontObjectInfo,	float deltaTime)
 {
@@ -448,13 +473,15 @@ void ADeliveryBot_ChaosActor::ApplyPolicyDecisionToMoveCommand(
 		case EDeliveryBotPolicyActionType::SlowDown:
 		{
 			ApplyFrontObstacleSlowDown(moveCommandInfo, frontObjectInfo);
-			break;
+			return decisionInfo.Reason.Contains(TEXT("Repath grace"))
+				? FString(TEXT("repath_grace"))
+				: FString(TEXT("slowdown"));
 		}
 
 		case EDeliveryBotPolicyActionType::Stop:
 		{
 			ApplyStopCommand(moveCommandInfo);
-			break;
+			return TEXT("stop");
 		}
 
 		case EDeliveryBotPolicyActionType::Repath:
@@ -463,18 +490,21 @@ void ADeliveryBot_ChaosActor::ApplyPolicyDecisionToMoveCommand(
 			{
 				moveCommandInfo = PathFollowComponent->BuildMoveCommand(deltaTime);
 				ApplyFrontObstacleSlowDown(moveCommandInfo, frontObjectInfo);
+				return TEXT("repath");
 			}
 			else
 			{
 				ApplyStopCommand(moveCommandInfo);
+				return TEXT("stop");
 			}
 		}
-		break;
 
 	case EDeliveryBotPolicyActionType::None:
 	default:
 		break;
 	}
+
+	return TEXT("path_follow");
 }
 
 void ADeliveryBot_ChaosActor::HandlePolicyFailed(
@@ -498,6 +528,9 @@ void ADeliveryBot_ChaosActor::ApplyFailureStopCommand(float deltaTime)
 	FDeliveryBotMoveCommandInfo moveCommandInfo;
 	ApplyStopCommand(moveCommandInfo);
 
+	LastMoveCommandInfo = moveCommandInfo;
+	LastActionReason = TEXT("simulation_failed");
+	bHasLastMoveCommand = true;
 	ChaosDriveComponent->ApplyMoveCommand(vehicleMovement, moveCommandInfo, deltaTime);
 }
 

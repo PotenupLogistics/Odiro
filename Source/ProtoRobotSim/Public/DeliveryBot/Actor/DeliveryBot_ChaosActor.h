@@ -6,7 +6,15 @@
 #include "Shared/Struct/DeliveryBotSetupInfo.h"
 #include "Shared/Struct/DeliveryBotMovementInfo.h"
 #include "Shared/Struct/DeliveryBotPolicyInfo.h"
+#include "Shared/Struct/DeliveryBotPolicyFailureInfo.h"
+#include "Shared/Struct/DeliveryBotSimulationFailureInfo.h"
 #include "DeliveryBot_ChaosActor.generated.h"
+
+
+class ADeliveryBot_ChaosActor;
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FDeliveryBotSimulationFailedSignature,	ADeliveryBot_ChaosActor*, DeliveryBotActor,
+	const FDeliveryBotSimulationFailureInfo&, FailureInfo);
+
 
 class UDeliveryBot_PolicyJudgmentComponent;
 class UDeliveryBot_GridSubsystem;
@@ -31,19 +39,31 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Debug")
 	void SetDrawDebugEnabled(bool bEnabled);
 
+	UPROPERTY(BlueprintAssignable, Category = "DeliveryBot|Simulation")
+	FDeliveryBotSimulationFailedSignature OnDeliveryBotSimulationFailed;
+
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Simulation")
+	bool HasSimulationFailed() const
+	{
+		return bSimulationFailed;
+	}
+	
 private:
 	void ApplySetupInfo();
+	
 	void BuildGlobalPathAndStartFollow();
 	void ApplyPathFollowMoveCommand(float deltaTime);
 	void ApplyStopCommand(FDeliveryBotMoveCommandInfo& moveCommandInfo) const;
 	bool TryRequestRepathByFrontObject(const FDeliveryBotLidarDetectedObjectInfo& frontObjectInfo);
 	bool IsInRepathMoveGraceTime() const;
 	void AlignRotationToPathStart();
+	void ApplyFrontObstacleSlowDown(FDeliveryBotMoveCommandInfo& moveCommandInfo, const FDeliveryBotLidarDetectedObjectInfo& frontObjectInfo) const;
+
 	void UpdateLidarScan();
 	void DebugFrontLidarObject() const;
 	int32 SetLidarDetectedActorsAsDynamicBlocked(UDeliveryBot_GridSubsystem* gridSubsystem,	AActor* requiredFrontActor) const;
 	void ClearLidarDynamicBlockedCells();
-	void ApplyFrontObstacleSlowDown(FDeliveryBotMoveCommandInfo& moveCommandInfo, const FDeliveryBotLidarDetectedObjectInfo& frontObjectInfo) const;
+	
 
 	FDeliveryBotPolicyContextInfo BuildPolicyContextInfo(bool bHasFrontObject, const FDeliveryBotLidarDetectedObjectInfo& frontObjectInfo) const;
 
@@ -53,6 +73,13 @@ private:
 		const FDeliveryBotLidarDetectedObjectInfo& frontObjectInfo,
 		float deltaTime);
 	
+	UFUNCTION()
+	void HandlePolicyFailed(const FDeliveryBotPolicyFailureInfo& failureInfo);
+
+	void ApplyFailureStopCommand(float deltaTime);
+	void FailSimulation(const FDeliveryBotSimulationFailureInfo& failureInfo);
+	FDeliveryBotSimulationFailureInfo BuildPolicySimulationFailureInfo(	const FDeliveryBotPolicyFailureInfo& policyFailureInfo) const;
+	float GetCurrentSpeedKmh() const;
 	
 	
 protected:
@@ -101,4 +128,9 @@ protected:
 	bool bHasLidarDynamicBlockedCells{ false };
 	bool bLastAppliedDrawDebug{ true };
 	
+	
+private:
+	bool bSimulationFailed{ false };
+
+	FDeliveryBotSimulationFailureInfo LastSimulationFailureInfo{};
 };

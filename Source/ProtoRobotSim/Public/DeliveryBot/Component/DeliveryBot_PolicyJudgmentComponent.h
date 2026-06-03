@@ -6,9 +6,10 @@
 #include "Components/ActorComponent.h"
 #include "Shared/Struct/DeliveryBotPolicyConfigInfo.h"
 #include "Shared/Struct/DeliveryBotPolicyInfo.h"
+#include "Shared/Struct/DeliveryBotPolicyFailureInfo.h"
 #include "DeliveryBot_PolicyJudgmentComponent.generated.h"
 
-
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliveryBotPolicyFailedSignature, const FDeliveryBotPolicyFailureInfo&, FailureInfo);
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class PROTOROBOTSIM_API UDeliveryBot_PolicyJudgmentComponent : public UActorComponent
 {
@@ -26,7 +27,12 @@ public:
 	
 public:
 	FDeliveryBotPolicyDecisionInfo EvaluatePolicy(const FDeliveryBotPolicyContextInfo& contextInfo);
+	UPROPERTY(BlueprintAssignable, Category = "DeliveryBot|Policy")
+	FDeliveryBotPolicyFailedSignature OnPolicyFailed;
 
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Policy")
+	bool HasPolicyFailed() const { return bPolicyFailed; }
+	
 private:
 	FDeliveryBotPolicyDecisionInfo EvaluateLocalPolicy(const FDeliveryBotPolicyContextInfo& contextInfo) const;
 
@@ -39,19 +45,27 @@ private:
 	bool ShouldRequestRemotePolicy() const;
 
 	//  Context를 JSON으로 변환
-	FString BuildRemotePolicyRequestJson(const FDeliveryBotPolicyContextInfo& contextInfo) const;
+	FString BuildRemotePolicyRequestJson(const FDeliveryBotPolicyContextInfo& contextInfo, const FString& requestId) const;
 
 	// HTTP 응답 처리
-	void HandleRemotePolicyResponse(int32 responseCode, const FString& responseBody, bool bWasSuccessful);
+	void HandleRemotePolicyResponse(const FString& requestId, int32 responseCode, const FString& responseBody, bool bWasSuccessful);
 
+	bool TryGetActionTypeFromString(const FString& actionString, EDeliveryBotPolicyActionType& outActionType) const;
+	
 	// JSON 응답을 Decision으로 변환
 	bool ParseRemotePolicyResponse(const FString& responseBody, FDeliveryBotPolicyDecisionInfo& outDecisionInfo) const;
 
 	// 최근 API 응답 가져오기
 	bool TryGetLastRemoteDecision(FDeliveryBotPolicyDecisionInfo& outDecisionInfo) const;
 
-	// "Stop" 문자열을 enum으로 변환
-	EDeliveryBotPolicyActionType GetActionTypeFromString(const FString& actionString) const;
+	FDeliveryBotPolicyDecisionInfo BuildPolicyFailedDecision() const;
+
+	bool CheckRemoteRequestTimeout();
+
+	void BroadcastPolicyFailure(EDeliveryBotPolicyFailureType failureType,	int32 responseCode,	const FString& message);
+	
+	void ClearPendingRemoteRequest();
+	
 	
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Policy")
@@ -60,8 +74,11 @@ protected:
 private:
 	bool bRemoteRequestPending{ false };
 	bool bHasLastRemoteDecision{ false };
+	bool bPolicyFailed{ false };
 
 	double LastRemoteRequestTimeSeconds{ -1000.0 };
+	double PendingRequestStartTimeSeconds{ -1000.0 };
 
+	FString PendingRequestId{};
 	FDeliveryBotPolicyDecisionInfo LastRemoteDecisionInfo{};
 };

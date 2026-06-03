@@ -30,21 +30,26 @@ void UDeliveryBot_PolicyJudgmentComponent::TickComponent(float DeltaTime, ELevel
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 }
-
 FDeliveryBotPolicyDecisionInfo UDeliveryBot_PolicyJudgmentComponent::EvaluatePolicy(const FDeliveryBotPolicyContextInfo& contextInfo)
 {
+	if (bPolicyFailed)
+		return BuildPolicyFailedDecision();
+
 	if (!PolicyConfigInfo.bUseRemotePolicy)
 		return EvaluateLocalPolicy(contextInfo);
 
 	if (!contextInfo.bHasFrontObject)
 	{
 		bHasLastRemoteDecision = false;
-		FDeliveryBotPolicyDecisionInfo decisionInfo;
-		decisionInfo.ActionType = EDeliveryBotPolicyActionType::None;
-		return decisionInfo;
+		ClearPendingRemoteRequest();
+		return FDeliveryBotPolicyDecisionInfo{};
 	}
 
+	if (CheckRemoteRequestTimeout())
+		return BuildPolicyFailedDecision();
+
 	RequestRemotePolicyDecision(contextInfo);
+
 	FDeliveryBotPolicyDecisionInfo remoteDecisionInfo;
 	if (TryGetLastRemoteDecision(remoteDecisionInfo))
 		return remoteDecisionInfo;
@@ -120,8 +125,7 @@ FDeliveryBotPolicyDecisionInfo UDeliveryBot_PolicyJudgmentComponent::BuildWaitin
 
 	return decisionInfo;
 }
-
-void UDeliveryBot_PolicyJudgmentComponent::RequestRemotePolicyDecision(const FDeliveryBotPolicyContextInfo& contextInfo)
+void UDeliveryBot_PolicyJudgmentComponent::RequestRemotePolicyDecision(	const FDeliveryBotPolicyContextInfo& contextInfo)
 {
 	if (!ShouldRequestRemotePolicy())
 		return;
@@ -130,36 +134,53 @@ void UDeliveryBot_PolicyJudgmentComponent::RequestRemotePolicyDecision(const FDe
 	if (!IsValid(world))
 		return;
 
-	LastRemoteRequestTimeSeconds = world->GetTimeSeconds();
+	PendingRequestId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
+	PendingRequestStartTimeSeconds = world->GetTimeSeconds();
+
+	LastRemoteRequestTimeSeconds = PendingRequestStartTimeSeconds;
 	bRemoteRequestPending = true;
 	bHasLastRemoteDecision = false;
 
-	const FString requestBody = BuildRemotePolicyRequestJson(contextInfo);
+	const FString requestBody = BuildRemotePolicyRequestJson(contextInfo, PendingRequestId);
 
-	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request =	FHttpModule::Get().CreateRequest();
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request = FHttpModule::Get().CreateRequest();
 	request->SetURL(PolicyConfigInfo.PolicyServerUrl);
 	request->SetVerb(TEXT("POST"));
 	request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
 	request->SetContentAsString(requestBody);
 	request->SetTimeout(PolicyConfigInfo.RequestTimeoutSecond);
 
-	TWeakObjectPtr<UDeliveryBot_PolicyJudgmentComponent> weakThis{ this };
+	TWeakObjectPtr<UDeliveryBot_PolicyJudgmentComponent> weakThis = this;
+	const FString capturedRequestId = PendingRequestId;
 
 	request->OnProcessRequestComplete().BindLambda(
-		[weakThis](FHttpRequestPtr httpRequest, FHttpResponsePtr httpResponse, bool bWasSuccessful)
+		[weakThis, capturedRequestId](FHttpRequestPtr httpRequest, FHttpResponsePtr httpResponse, bool bWasSuccessful)
 		{
 			if (!weakThis.IsValid())
 				return;
-			const int32 responseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode()	: 0;
-			const FString responseBody = httpResponse.IsValid()	? httpResponse->GetContentAsString() : FString{};
 
-			weakThis->HandleRemotePolicyResponse(responseCode, responseBody, bWasSuccessful);
+			const int32 responseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode() : 0;
+			const FString responseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString();
+
+			weakThis->HandleRemotePolicyResponse(
+				capturedRequestId,
+				responseCode,
+				responseBody,
+				bWasSuccessful);
 		}
 	);
 
 	if (!request->ProcessRequest())
-		bRemoteRequestPending = false;
+	{
+		BroadcastPolicyFailure(
+			EDeliveryBotPolicyFailureType::ProcessRequestFailed,
+			0,
+			TEXT("Failed to start remote policy request"));
+
+		ClearPendingRemoteRequest();
+	}
 }
+
 bool UDeliveryBot_PolicyJudgmentComponent::ShouldRequestRemotePolicy() const
 {
 	if (bRemoteRequestPending)
@@ -171,13 +192,12 @@ bool UDeliveryBot_PolicyJudgmentComponent::ShouldRequestRemotePolicy() const
 	const double currentTimeSeconds = world->GetTimeSeconds();
 	return currentTimeSeconds - LastRemoteRequestTimeSeconds >=	static_cast<double>(PolicyConfigInfo.MinRequestIntervalSecond);
 }
-
-FString UDeliveryBot_PolicyJudgmentComponent::BuildRemotePolicyRequestJson(const FDeliveryBotPolicyContextInfo& contextInfo) const
+FString UDeliveryBot_PolicyJudgmentComponent::BuildRemotePolicyRequestJson(	const FDeliveryBotPolicyContextInfo& contextInfo, const FString& requestId) const
 {
 	TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
 
 	rootObject->SetStringField(TEXT("schemaVersion"), TEXT("1.0.0"));
-	rootObject->SetStringField(TEXT("requestId"), FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens));
+	rootObject->SetStringField(TEXT("requestId"), requestId);
 
 	TSharedRef<FJsonObject> contextObject = MakeShared<FJsonObject>();
 	contextObject->SetBoolField(TEXT("hasFrontObject"), contextInfo.bHasFrontObject);
@@ -198,13 +218,38 @@ FString UDeliveryBot_PolicyJudgmentComponent::BuildRemotePolicyRequestJson(const
 	return outputString;
 }
 
-void UDeliveryBot_PolicyJudgmentComponent::HandleRemotePolicyResponse(int32 responseCode, const FString& responseBody, bool bWasSuccessful)
-{
-	bRemoteRequestPending = false;
 
-	if (!bWasSuccessful || responseCode < 200 || responseCode >= 300)
+void UDeliveryBot_PolicyJudgmentComponent::HandleRemotePolicyResponse(const FString& requestId,int32 responseCode,const FString& responseBody,bool bWasSuccessful)
+{
+	if (bPolicyFailed)
+		return;
+
+	if (!requestId.Equals(PendingRequestId, ESearchCase::CaseSensitive))
+		return;
+
+	if (!bWasSuccessful)
 	{
 		bHasLastRemoteDecision = false;
+
+		BroadcastPolicyFailure(
+			EDeliveryBotPolicyFailureType::HttpRequestFailed,
+			responseCode,
+			TEXT("Remote policy HTTP request failed"));
+
+		ClearPendingRemoteRequest();
+		return;
+	}
+
+	if (responseCode < 200 || responseCode >= 300)
+	{
+		bHasLastRemoteDecision = false;
+
+		BroadcastPolicyFailure(
+			EDeliveryBotPolicyFailureType::HttpError,
+			responseCode,
+			FString::Printf(TEXT("Remote policy HTTP error: %d"), responseCode));
+
+		ClearPendingRemoteRequest();
 		return;
 	}
 
@@ -212,14 +257,22 @@ void UDeliveryBot_PolicyJudgmentComponent::HandleRemotePolicyResponse(int32 resp
 	if (!ParseRemotePolicyResponse(responseBody, decisionInfo))
 	{
 		bHasLastRemoteDecision = false;
+
+		BroadcastPolicyFailure(
+			EDeliveryBotPolicyFailureType::InvalidResponse,
+			responseCode,
+			TEXT("Remote policy response is invalid"));
+
+		ClearPendingRemoteRequest();
 		return;
 	}
 
 	decisionInfo.bFromRemoteApi = true;
 	LastRemoteDecisionInfo = decisionInfo;
 	bHasLastRemoteDecision = true;
-}
 
+	ClearPendingRemoteRequest();
+}
 bool UDeliveryBot_PolicyJudgmentComponent::ParseRemotePolicyResponse( const FString& responseBody, FDeliveryBotPolicyDecisionInfo& outDecisionInfo) const
 {
 	TSharedPtr<FJsonObject> rootObject;
@@ -232,7 +285,11 @@ bool UDeliveryBot_PolicyJudgmentComponent::ParseRemotePolicyResponse( const FStr
 	if (!rootObject->TryGetStringField(TEXT("selectedAction"), selectedAction))
 		return false;
 
-	outDecisionInfo.ActionType = GetActionTypeFromString(selectedAction);
+	EDeliveryBotPolicyActionType actionType{ EDeliveryBotPolicyActionType::None };
+	if (!TryGetActionTypeFromString(selectedAction, actionType))
+		return false;
+
+	outDecisionInfo.ActionType = actionType;
 	rootObject->TryGetStringField(TEXT("reason"), outDecisionInfo.Reason);
 
 	return true;
@@ -247,22 +304,106 @@ bool UDeliveryBot_PolicyJudgmentComponent::TryGetLastRemoteDecision(FDeliveryBot
 	return true;
 }
 
-EDeliveryBotPolicyActionType UDeliveryBot_PolicyJudgmentComponent::GetActionTypeFromString(const FString& actionString) const
+FDeliveryBotPolicyDecisionInfo UDeliveryBot_PolicyJudgmentComponent::BuildPolicyFailedDecision() const
 {
+	FDeliveryBotPolicyDecisionInfo decisionInfo;
+	decisionInfo.ActionType = EDeliveryBotPolicyActionType::Stop;
+	decisionInfo.Reason = TEXT("Policy request failed");
+	return decisionInfo;
+}
+
+bool UDeliveryBot_PolicyJudgmentComponent::CheckRemoteRequestTimeout()
+{
+	if (!bRemoteRequestPending)
+		return false;
+
+	const UWorld* world = GetWorld();
+	if (!IsValid(world))
+		return false;
+
+	const float elapsedSecond = static_cast<float>(
+		world->GetTimeSeconds() - PendingRequestStartTimeSeconds);
+
+	if (elapsedSecond < PolicyConfigInfo.RequestTimeoutSecond)
+		return false;
+
+	BroadcastPolicyFailure(
+		EDeliveryBotPolicyFailureType::Timeout,
+		0,
+		TEXT("Remote policy request timeout"));
+
+	ClearPendingRemoteRequest();
+	return true;
+}
+
+void UDeliveryBot_PolicyJudgmentComponent::BroadcastPolicyFailure(EDeliveryBotPolicyFailureType failureType, int32 responseCode, const FString& message)
+{
+	if (bPolicyFailed)
+		return;
+
+	bPolicyFailed = true;
+
+	const UWorld* world = GetWorld();
+	const float elapsedSecond = IsValid(world)
+		? static_cast<float>(world->GetTimeSeconds() - PendingRequestStartTimeSeconds)
+		: 0.f;
+
+	FDeliveryBotPolicyFailureInfo failureInfo;
+	failureInfo.FailureType = failureType;
+	failureInfo.RequestId = PendingRequestId;
+	failureInfo.PolicyServerUrl = PolicyConfigInfo.PolicyServerUrl;
+	failureInfo.ResponseCode = responseCode;
+	failureInfo.RequestElapsedSecond = FMath::Max(elapsedSecond, 0.f);
+	failureInfo.Message = message;
+
+	OnPolicyFailed.Broadcast(failureInfo);
+}
+
+void UDeliveryBot_PolicyJudgmentComponent::ClearPendingRemoteRequest()
+{
+	bRemoteRequestPending = false;
+	PendingRequestId.Reset();
+	PendingRequestStartTimeSeconds = -1000.0;
+}
+
+bool UDeliveryBot_PolicyJudgmentComponent::TryGetActionTypeFromString(const FString& actionString, EDeliveryBotPolicyActionType& outActionType) const
+{
+	if (actionString.Equals(TEXT("None"), ESearchCase::IgnoreCase))
+	{
+		outActionType = EDeliveryBotPolicyActionType::None;
+		return true;
+	}
+
 	if (actionString.Equals(TEXT("SlowDown"), ESearchCase::IgnoreCase))
-		return EDeliveryBotPolicyActionType::SlowDown;
+	{
+		outActionType = EDeliveryBotPolicyActionType::SlowDown;
+		return true;
+	}
 
 	if (actionString.Equals(TEXT("Stop"), ESearchCase::IgnoreCase))
-		return EDeliveryBotPolicyActionType::Stop;
+	{
+		outActionType = EDeliveryBotPolicyActionType::Stop;
+		return true;
+	}
 
 	if (actionString.Equals(TEXT("Repath"), ESearchCase::IgnoreCase))
-		return EDeliveryBotPolicyActionType::Repath;
+	{
+		outActionType = EDeliveryBotPolicyActionType::Repath;
+		return true;
+	}
 
 	if (actionString.Equals(TEXT("Avoidance"), ESearchCase::IgnoreCase))
-		return EDeliveryBotPolicyActionType::Avoidance;
+	{
+		outActionType = EDeliveryBotPolicyActionType::Avoidance;
+		return true;
+	}
 
 	if (actionString.Equals(TEXT("RequestControl"), ESearchCase::IgnoreCase))
-		return EDeliveryBotPolicyActionType::RequestControl;
+	{
+		outActionType = EDeliveryBotPolicyActionType::RequestControl;
+		return true;
+	}
 
-	return EDeliveryBotPolicyActionType::None;
+	outActionType = EDeliveryBotPolicyActionType::None;
+	return false;
 }

@@ -49,20 +49,14 @@ void ADeliveryBot_ChaosActor::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (IsValid(PolicyJudgmentComponent))
+	{
+		PolicyJudgmentComponent->OnPolicyFailed.RemoveDynamic(this, &ADeliveryBot_ChaosActor::HandlePolicyFailed);
+		PolicyJudgmentComponent->OnPolicyFailed.AddDynamic(	this, &ADeliveryBot_ChaosActor::HandlePolicyFailed);
+	}
+
 	ApplySetupInfo();
 
-	// 설정 값 확인용
-	// UE_LOG(
-	// LogTemp,
-	// Warning,
-	// TEXT("DeliveryBot Setup | Start: %s, Goal: %s, AutoStart: %s, MaxSpeedKmh: %.2f, TargetSpeedKmh: %.2f, LidarRangeM: %.2f"),
-	// *SetupInfo.LocationSetupInfo.StartLocationCm.ToString(),
-	// *SetupInfo.LocationSetupInfo.GoalLocationCm.ToString(),
-	// SetupInfo.LocationSetupInfo.bAutoStartRoute ? TEXT("true") : TEXT("false"),
-	// SetupInfo.ChaosDriveConfigInfo.MaxSpeedKmh,
-	// SetupInfo.PathFollowConfigInfo.TargetSpeedKmh,
-	// SetupInfo.LidarSensorConfigInfo.ScanRangeM);
-	
 	UChaosVehicleMovementComponent* vehicleMovement = GetVehicleMovementComponent();
 
 	if (!IsValid(vehicleMovement))
@@ -71,17 +65,22 @@ void ADeliveryBot_ChaosActor::BeginPlay()
 	vehicleMovement->SetRequiresControllerForInputs(false);
 	vehicleMovement->SetUseAutomaticGears(true);
 	vehicleMovement->SetTargetGear(1, true);
-	
+
 	SetActorLocation(SetupInfo.LocationSetupInfo.StartLocationCm,false,nullptr, ETeleportType::TeleportPhysics);
 
-	// 자동 시작
 	if (SetupInfo.LocationSetupInfo.bAutoStartRoute)
-		GetWorldTimerManager().SetTimerForNextTick(this, &ADeliveryBot_ChaosActor::BuildGlobalPathAndStartFollow);
+	{
+		GetWorldTimerManager().SetTimerForNextTick(	this,	&ADeliveryBot_ChaosActor::BuildGlobalPathAndStartFollow);
+	}
 }
 
 void ADeliveryBot_ChaosActor::InitializeSetupInfo(const FDeliveryBotSetupInfo& setupInfo)
 {
 	SetupInfo = setupInfo;
+
+	bSimulationFailed = false;
+	LastSimulationFailureInfo = FDeliveryBotSimulationFailureInfo{};
+
 	ApplySetupInfo();
 }
 
@@ -107,6 +106,12 @@ void ADeliveryBot_ChaosActor::Tick(float DeltaSeconds)
 	if (bDrawDebug != bLastAppliedDrawDebug)
 	{
 		ApplySetupInfo();
+	}
+
+	if (bSimulationFailed)
+	{
+		ApplyFailureStopCommand(DeltaSeconds);
+		return;
 	}
 
 	UpdateLidarScan();
@@ -470,4 +475,90 @@ void ADeliveryBot_ChaosActor::ApplyPolicyDecisionToMoveCommand(
 	default:
 		break;
 	}
+}
+
+void ADeliveryBot_ChaosActor::HandlePolicyFailed(
+	const FDeliveryBotPolicyFailureInfo& failureInfo)
+{
+	const FDeliveryBotSimulationFailureInfo simulationFailureInfo =
+		BuildPolicySimulationFailureInfo(failureInfo);
+
+	FailSimulation(simulationFailureInfo);
+}
+
+void ADeliveryBot_ChaosActor::ApplyFailureStopCommand(float deltaTime)
+{
+	if (!IsValid(ChaosDriveComponent))
+		return;
+
+	UChaosVehicleMovementComponent* vehicleMovement = GetVehicleMovementComponent();
+	if (!IsValid(vehicleMovement))
+		return;
+
+	FDeliveryBotMoveCommandInfo moveCommandInfo;
+	ApplyStopCommand(moveCommandInfo);
+
+	ChaosDriveComponent->ApplyMoveCommand(vehicleMovement, moveCommandInfo, deltaTime);
+}
+
+
+void ADeliveryBot_ChaosActor::FailSimulation(const FDeliveryBotSimulationFailureInfo& failureInfo)
+{
+	if (bSimulationFailed)
+		return;
+
+	bSimulationFailed = true;
+	LastSimulationFailureInfo = failureInfo;
+
+	ClearLidarDynamicBlockedCells();
+
+	if (IsValid(PathFollowComponent))
+	{
+		PathFollowComponent->ClearPath();
+	}
+
+	if (UWorld* world = GetWorld())
+	{
+		ApplyFailureStopCommand(world->GetDeltaSeconds());
+	}
+
+	UE_LOG(
+		LogTemp,
+		Error,
+		TEXT("DeliveryBot simulation failed | Type: %d, Message: %s, Location: %s, SpeedKmh: %.2f"),
+		static_cast<int32>(failureInfo.FailureType),
+		*failureInfo.Message,
+		*failureInfo.LocationCm.ToString(),
+		failureInfo.SpeedKmh);
+
+	OnDeliveryBotSimulationFailed.Broadcast(this, LastSimulationFailureInfo);
+}
+
+FDeliveryBotSimulationFailureInfo ADeliveryBot_ChaosActor::BuildPolicySimulationFailureInfo(const FDeliveryBotPolicyFailureInfo& policyFailureInfo) const
+{
+	FDeliveryBotSimulationFailureInfo simulationFailureInfo;
+
+	simulationFailureInfo.FailureType = EDeliveryBotSimulationFailureType::PolicyRequestFailed;
+	simulationFailureInfo.Message = policyFailureInfo.Message;
+	simulationFailureInfo.LocationCm = GetActorLocation();
+	simulationFailureInfo.SpeedKmh = GetCurrentSpeedKmh();
+	simulationFailureInfo.bHasPolicyFailureInfo = true;
+	simulationFailureInfo.PolicyFailureInfo = policyFailureInfo;
+
+	const UWorld* world = GetWorld();
+	if (IsValid(world))
+	{
+		simulationFailureInfo.TimeSeconds = world->GetTimeSeconds();
+	}
+
+	return simulationFailureInfo;
+}
+
+float ADeliveryBot_ChaosActor::GetCurrentSpeedKmh() const
+{
+	const UChaosVehicleMovementComponent* vehicleMovement = GetVehicleMovementComponent();
+	if (!IsValid(vehicleMovement))
+		return 0.f;
+
+	return FMath::Abs(vehicleMovement->GetForwardSpeed()) * 0.036f;
 }

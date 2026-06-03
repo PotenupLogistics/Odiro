@@ -3,10 +3,12 @@
 #include "CoreMinimal.h"
 #include "Engine/EngineTypes.h"
 #include "Shared/EpisodeConfigTypes.h"
+#include "Shared/Struct/DeliveryBotSimulationFailureInfo.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "EpisodeEvaluationSubsystem.generated.h"
 
 class AActor;
+class ADeliveryBot_ChaosActor;
 class AEpisodeGroundRegion;
 class UPrimitiveComponent;
 
@@ -44,6 +46,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Episode|Evaluation")
 	FEpisodeEvaluationResult GetCurrentResult() const { return CurrentResult; }
 
+	UFUNCTION()
+	void HandleDeliveryBotSimulationFailed(
+		ADeliveryBot_ChaosActor* DeliveryBotActor,
+		const FDeliveryBotSimulationFailureInfo& FailureInfo);
+
 	virtual void Tick(float deltaTime) override;
 	virtual bool IsTickable() const override;
 	virtual TStatId GetStatId() const override;
@@ -70,8 +77,11 @@ private:
 		bool bInside = false;
 	};
 
+	static FEpisodeParamValue MakeBoolParam(bool value);
+	static FEpisodeParamValue MakeIntegerParam(int32 value);
 	static FEpisodeParamValue MakeFloatParam(double value);
 	static FEpisodeParamValue MakeStringParam(const FString& value);
+	static FEpisodeParamValue MakeVectorParam(const FVector& value);
 
 	void AddEvaluationEvent(
 		EEpisodeEvaluationEventType eventType,
@@ -101,7 +111,7 @@ private:
 		const FHitResult& hit);
 
 	bool CheckGoalReached();
-	bool CheckRobotFall();
+	bool CheckRobotTipOver();
 	void UpdateBlockedRegionViolations();
 	void UpdatePenaltyRegionViolations();
 	void UpdateNearMisses();
@@ -153,7 +163,7 @@ private:
 	TArray<TWeakObjectPtr<UPrimitiveComponent>> BoundHitComponents;
 
 	int32 GoalReachedCount = 0;
-	int32 RobotFallCount = 0;
+	int32 RobotTipOverCount = 0;
 	int32 StaticObstacleCollisionCount = 0;
 	int32 BlockedRegionCollisionCount = 0;
 	int32 PenaltyRegionViolationCount = 0;

@@ -158,7 +158,7 @@ run.iteration_index
 run.time_limit_s
 
 evaluation.goal_acceptance_radius_m
-evaluation.fall_angle_deg
+evaluation.tip_over_angle_deg
 evaluation.near_miss.distance_m
 evaluation.scoring.static_obstacle_collision
 evaluation.scoring.blocked_region_collision

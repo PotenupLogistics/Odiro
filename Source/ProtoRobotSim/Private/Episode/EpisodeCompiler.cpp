@@ -422,9 +422,9 @@ void UEpisodeCompiler::CompileEvaluationConfig(const FJsonObject& rootObject, FE
 			*evaluationObject,
 			TEXT("goal_acceptance_radius_m"),
 			evaluationConfig.GoalAcceptanceRadiusCm / MetersToCentimeters) * MetersToCentimeters);
-	evaluationConfig.FallAngleDegrees = FMath::Max(
+	evaluationConfig.TipOverAngleDegrees = FMath::Max(
 		0.0,
-		ReadNumberOrDefault(*evaluationObject, TEXT("fall_angle_deg"), evaluationConfig.FallAngleDegrees));
+		ReadNumberOrDefault(*evaluationObject, TEXT("tip_over_angle_deg"), evaluationConfig.TipOverAngleDegrees));
 
 	TSharedPtr<FJsonObject> nearMissObject;
 	if (TryGetObjectField(*evaluationObject, TEXT("near_miss"), nearMissObject))

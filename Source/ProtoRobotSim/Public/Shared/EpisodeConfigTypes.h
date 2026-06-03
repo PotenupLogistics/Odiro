@@ -67,7 +67,7 @@ struct PROTOROBOTSIM_API FEpisodeEvaluationConfig
 	double GoalAcceptanceRadiusCm = 50.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation", meta = (ClampMin = "0.0"))
-	double FallAngleDegrees = 60.0;
+	double TipOverAngleDegrees = 60.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation", meta = (ClampMin = "0.0"))
 	double NearMissDistanceCm = 50.0;
@@ -104,12 +104,13 @@ enum class EEpisodeEvaluationTerminalReason : uint8
 	None = 0,
 	GoalReached = 1,
 	Timeout = 2,
-	RobotFall = 3,
+	RobotTipOver = 3,
 	CompilerCreateFailed = 8,
 	CompileFailed = 9,
 	SetupFailed = 10,
 	EvaluationStartFailed = 11,
-	Cancelled = 12
+	Cancelled = 12,
+	DeliveryBotSimulationFailed = 13
 };
 
 UENUM(BlueprintType)
@@ -117,12 +118,13 @@ enum class EEpisodeEvaluationEventType : uint8
 {
 	None = 0,
 	Timeout = 2,
-	RobotFall = 3,
+	RobotTipOver = 3,
 	StaticObstacleCollision = 4,
 	BlockedRegionCollision = 5,
 	PenaltyRegionViolation = 6,
 	PedestrianNearMiss = 7,
-	PedestrianCollision = 8
+	PedestrianCollision = 8,
+	DeliveryBotSimulationFailure = 9
 };
 
 UENUM(BlueprintType)

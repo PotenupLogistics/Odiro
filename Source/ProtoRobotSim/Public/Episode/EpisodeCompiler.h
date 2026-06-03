@@ -137,7 +137,7 @@ private:
 	static void CompilePedestrians(const FJsonObject& actorsObject, FEpisodeCompileResult& result, const TSet<FString>& pathIds, TSet<FString>& instanceIds);
 
 	// actors.robot setup은 FEpisodeDeliveryBotSpawnSpec으로 컴파일되어 저장된다.
-	// 배치는 xy_m/yaw_deg로 읽고, 목적지와 튜닝값은 route/drive/path_follow/lidar 블록에서 전달된다.
+	// 배치는 xy_m/yaw_deg, 목적지는 route 블록에서 읽고 로봇 튜닝은 DeliveryBotSetup JSON이 담당한다.
 	static void CompileRobotSpawn(const FJsonObject& actorsObject, FEpisodeCompileResult& result, TSet<FString>& instanceIds);
 
 	// actors object 전체를 static obstacle, pedestrian, robot 순서로 컴파일한다.
@@ -207,14 +207,5 @@ actors.robot.xy_m
 actors.robot.yaw_deg
 actors.robot.route.goal_xy_m
 actors.robot.route.auto_start
-actors.robot.drive.max_speed_kmh
-actors.robot.drive.slowdown_speed_range_kmh
-actors.robot.path_follow.target_speed_kmh
-actors.robot.path_follow.look_ahead_distance_m
-actors.robot.path_follow.obstacle_slow_speed_kmh
-actors.robot.lidar.scan_range_m
-actors.robot.lidar.angle_step_degree
-actors.robot.lidar.stop_distance_m
-actors.robot.lidar.slow_down_distance_m
 actors.robot.properties
  */

@@ -1,6 +1,24 @@
 #include "Episode/EpisodeCompiler.h"
 #include "Episode/Actors/EpisodeStaticObstacle.h"
 
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+
+namespace
+{
+	FString ResolveEpisodeJsonFilePath(const FString& jsonFilePath)
+	{
+		if (jsonFilePath.IsEmpty()) return jsonFilePath;
+
+		if (FPaths::IsRelative(jsonFilePath))
+		{
+			return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), jsonFilePath));
+		}
+
+		return jsonFilePath;
+	}
+}
+
 void UEpisodeCompiler::AddDiagnostic(
 	FEpisodeCompileResult& result,
 	EEpisodeCompileDiagnosticSeverity severity,
@@ -795,31 +813,6 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 	robotSetupInfo.LocationSetupInfo.StartLocationCm = robotSpec.Transform.GetLocation();
 	robotSetupInfo.LocationSetupInfo.GoalLocationCm = robotSetupInfo.LocationSetupInfo.StartLocationCm;
 
-	const auto readOptionalNumberField = [&result](
-		const FJsonObject& sourceObject,
-		const TCHAR* fieldName,
-		const FString& path,
-		float& targetValue,
-		float minValue)
-	{
-		const FString fieldNameString{ fieldName };
-		if (!sourceObject.HasField(fieldNameString)) return false;
-
-		double parsedValue = targetValue;
-		if (!sourceObject.TryGetNumberField(fieldNameString, parsedValue))
-		{
-			AddDiagnostic(
-				result,
-				EEpisodeCompileDiagnosticSeverity::Error,
-				TEXT("invalid_number"),
-				FString::Printf(TEXT("%s.%s 필드는 숫자여야 함."), *path, *fieldNameString));
-			return false;
-		}
-
-		targetValue = FMath::Max(static_cast<float>(parsedValue), minValue);
-		return true;
-	};
-
 	const auto readOptionalBoolField = [&result](
 		const FJsonObject& sourceObject,
 		const TCHAR* fieldName,
@@ -869,6 +862,17 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 			TEXT("actors.robot.goal_m은 더 이상 지원하지 않음. actors.robot.route.goal_xy_m을 사용해야 함."));
 	}
 
+	if (robotObject->HasField(TEXT("drive"))
+		|| robotObject->HasField(TEXT("path_follow"))
+		|| robotObject->HasField(TEXT("lidar")))
+	{
+		AddDiagnostic(
+			result,
+			EEpisodeCompileDiagnosticSeverity::Error,
+			TEXT("delivery_bot_setup_fields_in_episode_setup"),
+			TEXT("actors.robot.drive/path_follow/lidar는 더 이상 EpisodeSetup에서 지원하지 않음. DeliveryBotSetup JSON으로 분리해야 함."));
+	}
+
 	TSharedPtr<FJsonObject> routeObject;
 	if (TryGetObjectField(*robotObject, TEXT("route"), routeObject))
 	{
@@ -907,78 +911,6 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 		}
 	}
 
-	TSharedPtr<FJsonObject> driveObject;
-	if (TryGetObjectField(*robotObject, TEXT("drive"), driveObject))
-	{
-		readOptionalNumberField(
-			*driveObject,
-			TEXT("max_speed_kmh"),
-			TEXT("actors.robot.drive"),
-			robotSetupInfo.ChaosDriveConfigInfo.MaxSpeedKmh,
-			0.f);
-		readOptionalNumberField(
-			*driveObject,
-			TEXT("slowdown_speed_range_kmh"),
-			TEXT("actors.robot.drive"),
-			robotSetupInfo.ChaosDriveConfigInfo.SlowdownSpeedRangeKmh,
-			0.1f);
-	}
-
-	TSharedPtr<FJsonObject> pathFollowObject;
-	if (TryGetObjectField(*robotObject, TEXT("path_follow"), pathFollowObject))
-	{
-		readOptionalNumberField(
-			*pathFollowObject,
-			TEXT("target_speed_kmh"),
-			TEXT("actors.robot.path_follow"),
-			robotSetupInfo.PathFollowConfigInfo.TargetSpeedKmh,
-			0.f);
-		readOptionalNumberField(
-			*pathFollowObject,
-			TEXT("look_ahead_distance_m"),
-			TEXT("actors.robot.path_follow"),
-			robotSetupInfo.PathFollowConfigInfo.LookAheadDistanceM,
-			0.1f);
-		readOptionalNumberField(
-			*pathFollowObject,
-			TEXT("obstacle_slow_speed_kmh"),
-			TEXT("actors.robot.path_follow"),
-			robotSetupInfo.PathFollowConfigInfo.ObstacleSlowSpeedKmh,
-			0.f);
-	}
-
-	TSharedPtr<FJsonObject> lidarObject;
-	if (TryGetObjectField(*robotObject, TEXT("lidar"), lidarObject))
-	{
-		readOptionalNumberField(
-			*lidarObject,
-			TEXT("scan_range_m"),
-			TEXT("actors.robot.lidar"),
-			robotSetupInfo.LidarSensorConfigInfo.ScanRangeM,
-			0.f);
-		readOptionalNumberField(
-			*lidarObject,
-			TEXT("angle_step_degree"),
-			TEXT("actors.robot.lidar"),
-			robotSetupInfo.LidarSensorConfigInfo.AngleStepDegree,
-			1.f);
-		readOptionalNumberField(
-			*lidarObject,
-			TEXT("stop_distance_m"),
-			TEXT("actors.robot.lidar"),
-			robotSetupInfo.LidarSensorConfigInfo.StopDistanceM,
-			0.f);
-		readOptionalNumberField(
-			*lidarObject,
-			TEXT("slow_down_distance_m"),
-			TEXT("actors.robot.lidar"),
-			robotSetupInfo.LidarSensorConfigInfo.SlowDownDistanceM,
-			0.f);
-	}
-
-	robotSetupInfo.LidarSensorConfigInfo.SlowDownDistanceM = FMath::Max(
-		robotSetupInfo.LidarSensorConfigInfo.SlowDownDistanceM,
-		robotSetupInfo.LidarSensorConfigInfo.StopDistanceM + 0.1f);
 	robotSetupInfo.LocationSetupInfo.bAutoStartRoute =
 		!bSpawnOnly && robotSetupInfo.LocationSetupInfo.bAutoStartRoute && bHasGoal;
 	robotSpec.DeliveryBot.bHasGoalLocation = bHasGoal;
@@ -1033,12 +965,13 @@ void UEpisodeCompiler::CompileRootObject(const FJsonObject& rootObject, const FS
 FEpisodeCompileResult UEpisodeCompiler::CompileEpisodeWorldSpecFromJsonFile(const FString& jsonFilePath) const
 {
 	FEpisodeCompileResult result;
+	const FString resolvedJsonFilePath = ResolveEpisodeJsonFilePath(jsonFilePath);
 
 	FString jsonString;
-	if (!FFileHelper::LoadFileToString(jsonString, *jsonFilePath))
+	if (!FFileHelper::LoadFileToString(jsonString, *resolvedJsonFilePath))
 	{
 		AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("file_read_failed"),
-		              FString::Printf(TEXT("JSON 파일 '%s' 읽기 실패."), *jsonFilePath));
+		              FString::Printf(TEXT("JSON 파일 '%s' 읽기 실패. ResolvedPath: '%s'"), *jsonFilePath, *resolvedJsonFilePath));
 		result.bSuccess = false;
 		return result;
 	}

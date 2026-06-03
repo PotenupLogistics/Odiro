@@ -6,6 +6,7 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "EpisodeRunnerSubsystem.generated.h"
 
+struct FDeliveryBotSetupCompileResult;
 class UEpisodeEvaluationSubsystem;
 class UEpisodeSimulationSubsystem;
 
@@ -17,10 +18,13 @@ class PROTOROBOTSIM_API UEpisodeRunnerSubsystem : public UGameInstanceSubsystem
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
-	bool StartEpisodeFromJsonFile(const FString& jsonFilePath);
+	bool StartEpisodePairFromJsonFiles(const FString& episodeSetupJsonPath, const FString& deliveryBotSetupJsonPath);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
-	bool StartBatchFromJsonFiles(const TArray<FString>& jsonFilePaths);
+	bool StartBatchFromRunInputs(const TArray<FEpisodeRunInput>& runInputs);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
+	bool StartBatchFromRunQueueJsonFile(const FString& runQueueJsonFilePath);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
 	void CancelRun();
@@ -44,8 +48,10 @@ private:
 		const FEpisodeEvaluationResult* evaluationResult = nullptr);
 
 	void AppendCompileDiagnostics(const FEpisodeCompileResult& compileResult);
+	void AppendDeliveryBotSetupDiagnostics(const FDeliveryBotSetupCompileResult& compileResult);
 	double GetRunTimeLimitSeconds(const FEpisodeRunConfig& runConfig) const;
 	FString BuildRunId() const;
+	static FString BuildPairId(const FEpisodeRunInput& runInput, int32 runIndex);
 
 	UWorld* ResolveWorld() const;
 	UEpisodeSimulationSubsystem* ResolveSimulationSubsystem() const;
@@ -55,7 +61,7 @@ private:
 	EEpisodeRunnerState RunnerState = EEpisodeRunnerState::Idle;
 
 	UPROPERTY(Transient)
-	TArray<FString> PendingJsonFilePaths;
+	TArray<FEpisodeRunInput> PendingRunInputs;
 
 	UPROPERTY(Transient)
 	TArray<FEpisodeRunRecord> RunRecords;
@@ -64,7 +70,7 @@ private:
 	FEpisodeRunRecord CurrentRecord;
 
 	UPROPERTY(Transient)
-	FString CurrentJsonFilePath;
+	FEpisodeRunInput CurrentRunInput;
 
 	int32 CurrentRunIndex = INDEX_NONE;
 };

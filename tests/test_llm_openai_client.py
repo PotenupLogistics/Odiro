@@ -140,3 +140,76 @@ def test_openai_invalid_response_returns_error() -> None:
     assert response.success is False
     assert response.error is not None
     assert response.error.code == "openai_invalid_response"
+
+
+def _policy_recommendation_request() -> LlmGenerationRequest:
+    return LlmGenerationRequest(
+        provider=LlmProvider.openai,
+        model="policy-recommendation",
+        systemPrompt="system prompt",
+        userPrompt="user prompt",
+        temperature=0.1,
+        maxTokens=1200,
+        responseFormat="json_object",
+        requestId="REQ-OPENAI-POLICY-001",
+    )
+
+
+def test_openai_policy_recommendation_uses_generic_json_object_format() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "output": [
+                    {
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "{\"recommendations\":[],\"summary\":\"none\"}",
+                            }
+                        ]
+                    }
+                ],
+            },
+        )
+
+    response = OpenAILlmClient(
+        settings=_settings(),
+        transport=httpx.MockTransport(handler),
+    ).generate(_policy_recommendation_request())
+
+    assert response.success is True
+    # WorldConfig schema 분기 침범하지 않고 json_object 모드 사용
+    assert captured["body"]["text"]["format"]["type"] == "json_object"
+    assert "name" not in captured["body"]["text"]["format"]
+    assert "schema" not in captured["body"]["text"]["format"]
+    # model 라벨은 settings의 openaiModel로 정규화
+    assert captured["body"]["model"] == "gpt-4o-mini"
+    assert response.model == "gpt-4o-mini"
+
+
+def test_openai_world_config_request_still_uses_json_schema_format() -> None:
+    """기존 WorldConfig 경로가 깨지지 않는지 회귀 검증."""
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "output": [
+                    {"content": [{"type": "output_text", "text": "{}"}]}
+                ],
+            },
+        )
+
+    OpenAILlmClient(
+        settings=_settings(),
+        transport=httpx.MockTransport(handler),
+    ).generate(_request())
+
+    assert captured["body"]["text"]["format"]["type"] == "json_schema"
+    assert captured["body"]["text"]["format"]["name"] == "world_config"

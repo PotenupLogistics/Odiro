@@ -44,3 +44,7 @@ dist/
 # OS files
 .DS_Store
 Thumbs.db
+
+# 로컬 전용 파일
+CLAUDE.md
+image (1).png

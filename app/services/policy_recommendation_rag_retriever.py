@@ -1,0 +1,83 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from app.models.rag import RagRetrievedChunk, RagSearchQuery
+from app.models.recommendation import AnalysisStatistics, PolicyParamName
+from app.services.policy_rag_retriever import search_policy_chunks
+
+
+@dataclass(frozen=True)
+class PolicyRagContext:
+    param: PolicyParamName
+    query: str
+    chunks: list[RagRetrievedChunk]
+
+
+# 메트릭 조건 → (쿼리 텍스트, 대상 파라미터) 매핑
+def _build_queries(statistics: AnalysisStatistics) -> list[tuple[PolicyParamName, str]]:
+    queries: list[tuple[PolicyParamName, str]] = []
+
+    if 0 < statistics.minFrontDistanceM < 1.0:
+        queries.append(("stopDistanceM", "위험한 정지거리 안전여유 충돌회피"))
+
+    if statistics.brakeAppliedRatio > 0.25:
+        queries.append(("slowDownDistanceM", "응급 정지 빈도 감속 시작 거리"))
+        queries.append(("stopDistanceM", "비상 제동 안전 거리"))
+
+    if statistics.repathActionRatio > 0.05:
+        queries.append(("canRepath", "경로 재탐색 비용 효과"))
+
+    if statistics.slowdownActionRatio > 0.6:
+        queries.append(("slowDownDistanceM", "감속 의존도 효율"))
+
+    if statistics.targetSpeedVariance > 4.0 or statistics.avgTargetSpeedKmh < 3.0:
+        queries.append(("maxSpeedKmh", "최대 운행 속도 안정성"))
+
+    if statistics.avgFrontDistanceM > 5.0:
+        queries.append(("slowDownDistanceM", "과도한 보수성 효율"))
+
+    if not queries:
+        # 트리거 조건이 없어도 정책 표준 컨텍스트는 항상 제공
+        queries.append(("stopDistanceM", "정지 거리 정책"))
+        queries.append(("maxSpeedKmh", "최대 속도 정책"))
+
+    return queries
+
+
+def retrieve_policy_context(
+    statistics: AnalysisStatistics,
+    topK: int = 3,
+) -> list[PolicyRagContext]:
+    contexts: list[PolicyRagContext] = []
+    seen: set[tuple[PolicyParamName, str]] = set()
+    for param, query_text in _build_queries(statistics):
+        key = (param, query_text)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        rag_query = RagSearchQuery(
+            query=query_text,
+            topK=topK,
+            policyParamFilter=[param] if param != "canRepath" else None,
+        )
+        result = search_policy_chunks(rag_query)
+        contexts.append(
+            PolicyRagContext(
+                param=param,
+                query=query_text,
+                chunks=result.results,
+            )
+        )
+    return contexts
+
+
+def context_citation_ids(contexts: list[PolicyRagContext]) -> list[str]:
+    ids: list[str] = []
+    for context in contexts:
+        for chunk in context.chunks:
+            for source_id in chunk.metadata.sourceIds:
+                if source_id not in ids:
+                    ids.append(source_id)
+    return ids

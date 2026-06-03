@@ -1,0 +1,117 @@
+{
+  "schema": "episode_actor_spawn_mvp",
+  "version": 1,
+  "scenario_id": "obstacle_chicane_slowdown_003",
+  "map_id": "EpisodeSandbox",
+  "run": {
+    "base_seed": 1003,
+    "iteration_index": 3,
+    "time_limit_s": 75
+  },
+  "evaluation": {
+    "goal_acceptance_radius_m": 1,
+    "tip_over_angle_deg": 60,
+    "near_miss": {
+      "distance_m": 0.5
+    },
+    "scoring": {
+      "static_obstacle_collision": -2,
+      "blocked_region_collision": -2,
+      "penalty_region_violation": -3,
+      "pedestrian_near_miss": -3,
+      "pedestrian_collision": -10
+    }
+  },
+  "ground_model": {
+    "default_region_type": "walkable",
+    "regions": [
+      {
+        "region_id": "chicane_sidewalk",
+        "region_type": "walkable",
+        "shape": {
+          "type": "rectangle",
+          "center_xy_m": [0, 0],
+          "size_m": [13, 7],
+          "yaw_deg": 0
+        },
+        "traversability_score": 1
+      },
+      {
+        "region_id": "construction_block",
+        "region_type": "blocked",
+        "shape": {
+          "type": "rectangle",
+          "center_xy_m": [0, -4.5],
+          "size_m": [13, 1.5],
+          "yaw_deg": 0
+        },
+        "collision_tag": "construction"
+      }
+    ]
+  },
+  "paths": [
+    {
+      "path_id": "ped_edge_walk",
+      "points_xy_m": [
+        [-5, 2.8],
+        [5, 2.8]
+      ],
+      "closed_loop": false
+    }
+  ],
+  "actors": {
+    "static_obstacles": [
+      {
+        "instance_id": "barrier_chicane_01",
+        "prop_id": "obstacle.road_barrier_01",
+        "xy_m": [-2.8, 0.8],
+        "yaw_deg": 75
+      },
+      {
+        "instance_id": "barrier_chicane_02",
+        "prop_id": "obstacle.road_barrier_02",
+        "xy_m": [0, -0.8],
+        "yaw_deg": -75
+      },
+      {
+        "instance_id": "box_chicane_01",
+        "prop_id": "obstacle.box_01",
+        "xy_m": [2.4, 0.9],
+        "yaw_deg": 20
+      },
+      {
+        "instance_id": "manhole_chicane_01",
+        "prop_id": "obstacle.manhole_02",
+        "xy_m": [1.3, -1.8],
+        "yaw_deg": 0
+      }
+    ],
+    "pedestrians": [
+      {
+        "instance_id": "ped_edge_01",
+        "archetype_id": "adult_pedestrian",
+        "path_id": "ped_edge_walk",
+        "spawn_time_s": 0,
+        "xy_m": [-5, 2.8],
+        "yaw_deg": 0,
+        "movement": {
+          "model": "straight_line",
+          "speed_mps": 1,
+          "initial_distance_m": 0,
+          "auto_start": true
+        }
+      }
+    ],
+    "robot": {
+      "instance_id": "robot_chicane",
+      "asset_id": "delivery_bot",
+      "spawn_only": false,
+      "xy_m": [-5.5, 0],
+      "yaw_deg": 0,
+      "route": {
+        "goal_xy_m": [5.5, 0],
+        "auto_start": true
+      }
+    }
+  }
+}

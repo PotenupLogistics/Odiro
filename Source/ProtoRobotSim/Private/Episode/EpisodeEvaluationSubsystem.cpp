@@ -1,6 +1,7 @@
 #include "Episode/EpisodeEvaluationSubsystem.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
 #include "Episode/Actors/EpisodeGroundRegion.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "GameFramework/Actor.h"
@@ -15,6 +16,19 @@ namespace
 		if (const UEnum* enumValue = StaticEnum<TEnum>()) return enumValue->GetNameStringByValue(static_cast<int64>(value));
 
 		return TEXT("Unknown");
+	}
+
+	bool ShouldRecordDeliveryBotSimulationFailure(EDeliveryBotSimulationFailureType failureType)
+	{
+		switch (failureType)
+		{
+		case EDeliveryBotSimulationFailureType::RobotTipOver:
+		case EDeliveryBotSimulationFailureType::PathFindingFailed:
+		case EDeliveryBotSimulationFailureType::Stuck:
+			return true;
+		default:
+			return false;
+		}
 	}
 }
 
@@ -54,14 +68,14 @@ bool UEpisodeEvaluationSubsystem::StartEvaluation(
 	BlockedRegionStates.Reset();
 	LastCollisionEventTimes.Reset();
 	GoalReachedCount = 0;
-	RobotFallCount = 0;
+	RobotTipOverCount = 0;
 	StaticObstacleCollisionCount = 0;
 	BlockedRegionCollisionCount = 0;
 	PenaltyRegionViolationCount = 0;
 	PedestrianCollisionCount = 0;
 	SetFloatMetric(TEXT("score"), CurrentScore);
 	SetFloatMetric(TEXT("goal_reached"), 0.0);
-	SetFloatMetric(TEXT("robot_fall_count"), 0.0);
+	SetFloatMetric(TEXT("robot_tip_over_count"), 0.0);
 	SetFloatMetric(TEXT("static_obstacle_collision_count"), 0.0);
 	SetFloatMetric(TEXT("blocked_region_collision_count"), 0.0);
 	SetFloatMetric(TEXT("penalty_region_violation_count"), 0.0);
@@ -110,7 +124,7 @@ void UEpisodeEvaluationSubsystem::StopEvaluation()
 	BlockedRegionStates.Reset();
 	LastCollisionEventTimes.Reset();
 	GoalReachedCount = 0;
-	RobotFallCount = 0;
+	RobotTipOverCount = 0;
 	StaticObstacleCollisionCount = 0;
 	BlockedRegionCollisionCount = 0;
 	PenaltyRegionViolationCount = 0;
@@ -200,7 +214,7 @@ void UEpisodeEvaluationSubsystem::Tick(float deltaTime)
 	if (!bEvaluating) return;
 
 	if (CheckGoalReached()) return;
-	if (CheckRobotFall()) return;
+	if (CheckRobotTipOver()) return;
 	UpdateBlockedRegionViolations();
 	UpdatePenaltyRegionViolations();
 
@@ -230,12 +244,116 @@ FEpisodeParamValue UEpisodeEvaluationSubsystem::MakeFloatParam(double value)
 	return paramValue;
 }
 
+FEpisodeParamValue UEpisodeEvaluationSubsystem::MakeBoolParam(bool value)
+{
+	FEpisodeParamValue paramValue;
+	paramValue.Type = EEpisodeParamValueType::Bool;
+	paramValue.BoolValue = value;
+	return paramValue;
+}
+
+FEpisodeParamValue UEpisodeEvaluationSubsystem::MakeIntegerParam(int32 value)
+{
+	FEpisodeParamValue paramValue;
+	paramValue.Type = EEpisodeParamValueType::Integer;
+	paramValue.IntegerValue = value;
+	return paramValue;
+}
+
 FEpisodeParamValue UEpisodeEvaluationSubsystem::MakeStringParam(const FString& value)
 {
 	FEpisodeParamValue paramValue;
 	paramValue.Type = EEpisodeParamValueType::String;
 	paramValue.StringValue = value;
 	return paramValue;
+}
+
+FEpisodeParamValue UEpisodeEvaluationSubsystem::MakeVectorParam(const FVector& value)
+{
+	FEpisodeParamValue paramValue;
+	paramValue.Type = EEpisodeParamValueType::Vector;
+	paramValue.VectorValue = value;
+	return paramValue;
+}
+
+void UEpisodeEvaluationSubsystem::HandleDeliveryBotSimulationFailed(
+	ADeliveryBot_ChaosActor* DeliveryBotActor,
+	const FDeliveryBotSimulationFailureInfo& FailureInfo)
+{
+	if (!bEvaluating) return;
+
+	if (!IsValid(DeliveryBotActor) || DeliveryBotActor != ActiveRuntimeContext.RobotActor.Get())
+	{
+		UE_LOG(
+			LogEpisodeEvaluation,
+			Warning,
+			TEXT("DeliveryBot 실패 이벤트 무시: 현재 평가 로봇이 아님 | Episode: %s, Actor: %s"),
+			*ActiveRuntimeContext.EpisodeId,
+			IsValid(DeliveryBotActor) ? *DeliveryBotActor->GetName() : TEXT("null"));
+		return;
+	}
+
+	const FString failureTypeName = ToEvaluationEnumString(FailureInfo.FailureType);
+	if (!ShouldRecordDeliveryBotSimulationFailure(FailureInfo.FailureType))
+	{
+		UE_LOG(
+			LogEpisodeEvaluation,
+			Warning,
+			TEXT("DeliveryBot 실패 이벤트 무시: 평가 대상 실패 유형이 아님 | Episode: %s, Type: %s, Message: %s"),
+			*ActiveRuntimeContext.EpisodeId,
+			*failureTypeName,
+			*FailureInfo.Message);
+		return;
+	}
+
+	if (ActiveNearMisses.Num() > 0)
+	{
+		FlushActiveNearMisses();
+	}
+
+	const FString failureMessage = FailureInfo.Message.IsEmpty()
+		? TEXT("DeliveryBot simulation failed.")
+		: FailureInfo.Message;
+	const AActor* targetActor = FailureInfo.TargetActor.Get();
+	const FString targetActorName = IsValid(targetActor) ? targetActor->GetName() : FString();
+	const FString targetInstanceId = GetActorInstanceId(targetActor);
+
+	TMap<FString, FEpisodeParamValue> properties;
+	const auto addMetricAndProperty = [this, &properties](const FString& key, const FEpisodeParamValue& value)
+	{
+		CurrentResult.Metrics.Add(key, value);
+		properties.Add(key, value);
+	};
+
+	addMetricAndProperty(TEXT("delivery_bot_failure_type"), MakeStringParam(failureTypeName));
+	addMetricAndProperty(TEXT("delivery_bot_failure_message"), MakeStringParam(failureMessage));
+	addMetricAndProperty(TEXT("delivery_bot_failure_location_cm"), MakeVectorParam(FailureInfo.LocationCm));
+	addMetricAndProperty(TEXT("delivery_bot_failure_time_seconds"), MakeFloatParam(FailureInfo.TimeSeconds));
+	addMetricAndProperty(TEXT("delivery_bot_failure_speed_kmh"), MakeFloatParam(FailureInfo.SpeedKmh));
+	addMetricAndProperty(TEXT("delivery_bot_failure_target_actor_name"), MakeStringParam(targetActorName));
+
+	AddEvaluationEventWithDetails(
+		EEpisodeEvaluationEventType::DeliveryBotSimulationFailure,
+		EEpisodeEvaluationEventSeverity::Failure,
+		failureMessage,
+		targetInstanceId,
+		FailureInfo.LocationCm,
+		0.0,
+		properties);
+
+	UE_LOG(
+		LogEpisodeEvaluation,
+		Warning,
+		TEXT("DeliveryBot 실패로 Episode 종료 | Episode: %s, Type: %s, Message: %s, SpeedKmh: %.2f"),
+		*ActiveRuntimeContext.EpisodeId,
+		*failureTypeName,
+		*failureMessage,
+		FailureInfo.SpeedKmh);
+
+	FinishEpisode(
+		false,
+		EEpisodeEvaluationOutcome::Failure,
+		EEpisodeEvaluationTerminalReason::DeliveryBotSimulationFailed);
 }
 
 void UEpisodeEvaluationSubsystem::AddEvaluationEvent(
@@ -464,35 +582,35 @@ bool UEpisodeEvaluationSubsystem::CheckGoalReached()
 	return true;
 }
 
-bool UEpisodeEvaluationSubsystem::CheckRobotFall()
+bool UEpisodeEvaluationSubsystem::CheckRobotTipOver()
 {
 	if (!IsValid(ActiveRuntimeContext.RobotActor)) return false;
 
-	const double fallAngleDegrees = FMath::Max(0.0, ActiveEvaluationConfig.FallAngleDegrees);
-	if (fallAngleDegrees <= 0.0) return false;
+	const double tipOverAngleDegrees = FMath::Max(0.0, ActiveEvaluationConfig.TipOverAngleDegrees);
+	if (tipOverAngleDegrees <= 0.0) return false;
 
 	const FVector robotUp = ActiveRuntimeContext.RobotActor->GetActorUpVector().GetSafeNormal();
 	const double upDot = FMath::Clamp(FVector::DotProduct(robotUp, FVector::UpVector), -1.0, 1.0);
 	const double tiltAngleDegrees = FMath::RadiansToDegrees(FMath::Acos(upDot));
-	if (tiltAngleDegrees < fallAngleDegrees) return false;
+	if (tiltAngleDegrees < tipOverAngleDegrees) return false;
 
-	++RobotFallCount;
-	SetFloatMetric(TEXT("robot_fall_count"), RobotFallCount);
-	SetFloatMetric(TEXT("robot_fall_angle_deg"), tiltAngleDegrees);
+	++RobotTipOverCount;
+	SetFloatMetric(TEXT("robot_tip_over_count"), RobotTipOverCount);
+	SetFloatMetric(TEXT("robot_tip_over_angle_deg"), tiltAngleDegrees);
 
 	TMap<FString, FEpisodeParamValue> properties;
 	properties.Add(TEXT("tilt_angle_deg"), MakeFloatParam(tiltAngleDegrees));
-	properties.Add(TEXT("fall_angle_threshold_deg"), MakeFloatParam(fallAngleDegrees));
+	properties.Add(TEXT("tip_over_angle_threshold_deg"), MakeFloatParam(tipOverAngleDegrees));
 	AddEvaluationEventWithDetails(
-		EEpisodeEvaluationEventType::RobotFall,
+		EEpisodeEvaluationEventType::RobotTipOver,
 		EEpisodeEvaluationEventSeverity::Failure,
-		TEXT("로봇이 낙상 각도 임계값을 초과함."),
+		TEXT("로봇이 전복 각도 임계값을 초과함."),
 		FString(),
 		ActiveRuntimeContext.RobotActor->GetActorLocation(),
 		tiltAngleDegrees,
 		properties);
 
-	FinishEpisode(false, EEpisodeEvaluationOutcome::Failure, EEpisodeEvaluationTerminalReason::RobotFall);
+	FinishEpisode(false, EEpisodeEvaluationOutcome::Failure, EEpisodeEvaluationTerminalReason::RobotTipOver);
 	return true;
 }
 

@@ -19,7 +19,8 @@ namespace
 			|| Kind == TEXT("static_obstacle_collision")
 			|| Kind == TEXT("blocked_region_collision")
 			|| Kind == TEXT("penalty_region_violation")
-			|| Kind == TEXT("robot_fall")
+			|| Kind == TEXT("robot_tip_over")
+			|| Kind == TEXT("delivery_bot_simulation_failure")
 			|| Kind == TEXT("collision")
 			|| Kind == TEXT("emergency_stop")
 			|| Kind == TEXT("timeout");
@@ -46,8 +47,8 @@ namespace
 		{
 		case EEpisodeEvaluationEventType::Timeout:
 			return TEXT("timeout");
-		case EEpisodeEvaluationEventType::RobotFall:
-			return TEXT("robot_fall");
+		case EEpisodeEvaluationEventType::RobotTipOver:
+			return TEXT("robot_tip_over");
 		case EEpisodeEvaluationEventType::StaticObstacleCollision:
 			return TEXT("static_obstacle_collision");
 		case EEpisodeEvaluationEventType::BlockedRegionCollision:
@@ -58,6 +59,8 @@ namespace
 			return TEXT("pedestrian_near_miss");
 		case EEpisodeEvaluationEventType::PedestrianCollision:
 			return TEXT("pedestrian_collision");
+		case EEpisodeEvaluationEventType::DeliveryBotSimulationFailure:
+			return TEXT("delivery_bot_simulation_failure");
 		case EEpisodeEvaluationEventType::None:
 		default:
 			return TEXT("unknown");

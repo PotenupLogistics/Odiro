@@ -35,6 +35,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
 	TArray<FEpisodeRunRecord> GetRunRecords() const { return RunRecords; }
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Runner|Report")
+	bool bSaveEvaluationReportJson = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Runner|Report")
+	FString EvaluationReportOutputDirectory = TEXT("Json/Output");
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
+	bool BuildLatestEvaluationReportJson(FString& outJson) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
+	bool BuildEvaluationReportJson(int32 runRecordIndex, FString& outJson) const;
+
 private:
 	UFUNCTION()
 	void HandleEpisodeEnded(FEpisodeEvaluationResult result);
@@ -51,7 +63,10 @@ private:
 	void AppendDeliveryBotSetupDiagnostics(const FDeliveryBotSetupCompileResult& compileResult);
 	double GetRunTimeLimitSeconds(const FEpisodeRunConfig& runConfig) const;
 	FString BuildRunId() const;
+	bool SaveEvaluationReportJsonForRecord(const FEpisodeRunRecord& runRecord) const;
+	FString BuildEvaluationReportJsonFilePath(const FEpisodeRunRecord& runRecord) const;
 	static FString BuildPairId(const FEpisodeRunInput& runInput, int32 runIndex);
+	static FString SanitizeReportFileToken(const FString& value);
 
 	UWorld* ResolveWorld() const;
 	UEpisodeSimulationSubsystem* ResolveSimulationSubsystem() const;

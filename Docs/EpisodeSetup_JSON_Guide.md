@@ -1,6 +1,6 @@
 # EpisodeSetup JSON Guide
 
-이 문서는 LLM이 EpisodeSetup JSON을 안정적으로 생성하기 위한 축약 양식을 설명한다. 샘플은 `Json/EpisodeSetupSample.json` 및 `Json/EpisodeSetupSample_*.json`을 기준으로 한다.
+이 문서는 LLM이 EpisodeSetup JSON을 안정적으로 생성하기 위한 축약 양식을 설명한다. 샘플은 `Json/Input/EpisodeSetupSample.json` 및 `Json/Input/EpisodeSetupSample_*.json`을 기준으로 한다.
 
 EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로, 정적 장애물, 보행자, 로봇 배치와 로봇 목적지를 정의한다. DeliveryBot의 주행/센서/정책 튜닝값은 같은 실행 pair의 DeliveryBotSetup JSON에서 정의한다.
 
@@ -69,7 +69,7 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
 ```json
 "evaluation": {
   "goal_acceptance_radius_m": 1,
-  "fall_angle_deg": 60,
+  "tip_over_angle_deg": 60,
   "near_miss": {
     "distance_m": 0.5
   },

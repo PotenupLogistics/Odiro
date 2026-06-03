@@ -5,6 +5,7 @@
 #include "Episode/Actors/EpisodeStaticObstacle.h"
 #include "Episode/Components/EpisodePathFollowerComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
+#include "Episode/EpisodeEvaluationSubsystem.h"
 #include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
 #include "Shared/Struct/DeliveryBotSetupInfo.h"
 #include "Kismet/GameplayStatics.h"
@@ -67,6 +68,7 @@ void UEpisodeSimulationSubsystem::ClearEpisode()
 	RuntimeGroundRegions.Reset();
 	RuntimePaths.Reset();
 	RuntimeActorsById.Reset();
+	FlushPersistentDebugLines(GetWorld());
 
 	if (actorCount > 0 || actorIdCount > 0 || groundRegionCount > 0 || pathCount > 0)
 	{
@@ -488,6 +490,16 @@ AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInst
 		robotActor,
 		placeableSpec.Transform
 	);
+
+	if (UEpisodeEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UEpisodeEvaluationSubsystem>())
+	{
+		robotActor->OnDeliveryBotSimulationFailed.RemoveDynamic(
+			evaluationSubsystem,
+			&UEpisodeEvaluationSubsystem::HandleDeliveryBotSimulationFailed);
+		robotActor->OnDeliveryBotSimulationFailed.AddDynamic(
+			evaluationSubsystem,
+			&UEpisodeEvaluationSubsystem::HandleDeliveryBotSimulationFailed);
+	}
 
 	RegisterRuntimeActor(
 		placeableSpec.InstanceId,

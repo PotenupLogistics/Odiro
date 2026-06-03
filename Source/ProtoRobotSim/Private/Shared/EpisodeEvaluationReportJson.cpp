@@ -34,7 +34,7 @@ namespace
 		return MakeXyArrayM(LocationCm.X * CmToM, LocationCm.Y * CmToM);
 	}
 
-	TArray<TSharedPtr<FJsonValue>> MakeVectorArray(const FVector& Value)
+	TArray<TSharedPtr<FJsonValue>> MakeReportVectorArray(const FVector& Value)
 	{
 		TArray<TSharedPtr<FJsonValue>> Array;
 		Array.Reserve(3);
@@ -44,7 +44,7 @@ namespace
 		return Array;
 	}
 
-	TSharedPtr<FJsonValue> MakeParamJsonValue(const FEpisodeParamValue& ParamValue)
+	TSharedPtr<FJsonValue> MakeReportParamJsonValue(const FEpisodeParamValue& ParamValue)
 	{
 		switch (ParamValue.Type)
 		{
@@ -57,7 +57,7 @@ namespace
 		case EEpisodeParamValueType::String:
 			return MakeShared<FJsonValueString>(ParamValue.StringValue);
 		case EEpisodeParamValueType::Vector:
-			return MakeShared<FJsonValueArray>(MakeVectorArray(ParamValue.VectorValue));
+			return MakeShared<FJsonValueArray>(MakeReportVectorArray(ParamValue.VectorValue));
 		case EEpisodeParamValueType::None:
 		default:
 			return MakeShared<FJsonValueNull>();
@@ -234,7 +234,7 @@ namespace
 		const FString& Key,
 		const FEpisodeParamValue& ParamValue)
 	{
-		Object->SetField(Key, MakeParamJsonValue(ParamValue));
+		Object->SetField(Key, MakeReportParamJsonValue(ParamValue));
 	}
 
 	TSharedRef<FJsonObject> MakeUnitsObject()

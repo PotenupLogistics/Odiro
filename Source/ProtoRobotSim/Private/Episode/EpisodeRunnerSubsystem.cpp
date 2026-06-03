@@ -85,7 +85,7 @@ bool UEpisodeRunnerSubsystem::StartBatchFromJsonFiles(const TArray<FString>& jso
 	CurrentRunIndex = INDEX_NONE;
 	RunnerState = EEpisodeRunnerState::Preparing;
 
-	UE_LOG(LogEpisodeRunner, Log, TEXT("Episode 배치 시작 | Count: %d"), PendingJsonFilePaths.Num());
+	UE_LOG(LogEpisodeRunner, Warning, TEXT("Episode 배치 시작 | Count: %d"), PendingJsonFilePaths.Num());
 
 	StartNextEpisode();
 	return true;
@@ -206,7 +206,7 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 
 	UE_LOG(
 		LogEpisodeRunner,
-		Log,
+		Warning,
 		TEXT("Episode 컴파일 완료 | RunId: %s, Episode: %s, Success: %s, Diagnostics: %d, SpecHash: %s"),
 		*CurrentRecord.RunId,
 		*CurrentRecord.EpisodeId,

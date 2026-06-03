@@ -184,21 +184,6 @@ bool UEpisodeCompiler::ReadNumberArray(
 	return true;
 }
 
-bool UEpisodeCompiler::ReadVectorField(
-	const FJsonObject& jsonObject,
-	const FString& fieldName,
-	double scale,
-	const FString& path,
-	FEpisodeCompileResult& result,
-	FVector& outVector)
-{
-	TArray<double> values;
-	if (!ReadNumberArray(jsonObject, fieldName, 3, path, result, values)) return false;
-
-	outVector = FVector(values[0] * scale, values[1] * scale, values[2] * scale);
-	return true;
-}
-
 bool UEpisodeCompiler::ReadVector2DField(
 	const FJsonObject& jsonObject,
 	const FString& fieldName,
@@ -214,111 +199,60 @@ bool UEpisodeCompiler::ReadVector2DField(
 	return true;
 }
 
-bool UEpisodeCompiler::ReadRotatorField(
+bool UEpisodeCompiler::ReadVector2DAsVectorField(
 	const FJsonObject& jsonObject,
 	const FString& fieldName,
+	double scale,
 	const FString& path,
 	FEpisodeCompileResult& result,
-	FRotator& outRotator)
+	FVector& outVector)
 {
-	const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
-	if (!jsonValue.IsValid())
-	{
-		outRotator = FRotator::ZeroRotator;
-		return true;
-	}
+	FVector2D vector2D;
+	if (!ReadVector2DField(jsonObject, fieldName, scale, path, result, vector2D)) return false;
 
-	if (jsonValue->Type == EJson::Object)
-	{
-		const TSharedPtr<FJsonObject> rotationObject = jsonValue->AsObject();
-		if (!rotationObject.IsValid()) return false;
-
-		outRotator = FRotator(
-			ReadNumberOrDefault(*rotationObject, TEXT("pitch"), 0.0),
-			ReadNumberOrDefault(*rotationObject, TEXT("yaw"), 0.0),
-			ReadNumberOrDefault(*rotationObject, TEXT("roll"), 0.0));
-		return true;
-	}
-
-	if (jsonValue->Type == EJson::Array)
-	{
-		TArray<TSharedPtr<FJsonValue>> rotationArray = jsonValue->AsArray();
-		if (rotationArray.Num() != 3)
-		{
-			AddDiagnostic(
-				result,
-				EEpisodeCompileDiagnosticSeverity::Error,
-				TEXT("invalid_rotation"),
-				FString::Printf(TEXT("%s.%s 필드는 숫자 3개를 포함해야 함."), *path, *fieldName));
-			return false;
-		}
-
-		for (int32 index = 0; index < rotationArray.Num(); ++index)
-		{
-			if (!rotationArray[index].IsValid() || rotationArray[index]->Type != EJson::Number)
-			{
-				AddDiagnostic(
-					result,
-					EEpisodeCompileDiagnosticSeverity::Error,
-					TEXT("invalid_rotation"),
-					FString::Printf(TEXT("%s.%s[%d] 값은 숫자여야 함."), *path, *fieldName, index));
-				return false;
-			}
-		}
-
-		const double roll = rotationArray[0]->AsNumber();
-		const double pitch = rotationArray[1]->AsNumber();
-		const double yaw = rotationArray[2]->AsNumber();
-		outRotator = FRotator(pitch, yaw, roll);
-		return true;
-	}
-
-	AddDiagnostic(
-		result,
-		EEpisodeCompileDiagnosticSeverity::Error,
-		TEXT("invalid_rotation"),
-		FString::Printf(TEXT("%s.%s 필드는 object 또는 [roll, pitch, yaw] 배열이어야 함."), *path, *fieldName));
-	return false;
+	outVector = FVector(vector2D.X, vector2D.Y, 0.0);
+	return true;
 }
 
-bool UEpisodeCompiler::ReadTransformField(
+bool UEpisodeCompiler::ReadActorPlacementTransform(
 	const FJsonObject& jsonObject,
-	const FString& fieldName,
 	const FString& path,
 	FEpisodeCompileResult& result,
 	FTransform& outTransform)
 {
-	TSharedPtr<FJsonObject> transformObject;
-	if (!TryGetObjectField(jsonObject, fieldName, transformObject))
+	outTransform = FTransform::Identity;
+
+	if (jsonObject.HasField(TEXT("transform")))
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Warning,
-			TEXT("missing_transform"),
-			FString::Printf(TEXT("%s.%s 필드가 없음. Identity transform을 사용하겠음."), *path, *fieldName));
-		outTransform = FTransform::Identity;
-		return true;
+			EEpisodeCompileDiagnosticSeverity::Error,
+			TEXT("legacy_transform_unsupported"),
+			FString::Printf(TEXT("%s.transform은 더 이상 지원하지 않음. xy_m/yaw_deg를 사용해야 함."), *path));
+		return false;
 	}
 
 	FVector location = FVector::ZeroVector;
-	if (transformObject->HasField(TEXT("location_m")))
+	if (jsonObject.HasField(TEXT("xy_m")))
 	{
-		ReadVectorField(*transformObject, TEXT("location_m"), MetersToCentimeters,
-		                FString::Printf(TEXT("%s.%s"), *path, *fieldName), result, location);
+		if (!ReadVector2DAsVectorField(jsonObject, TEXT("xy_m"), MetersToCentimeters, path, result, location))
+		{
+			return false;
+		}
 	}
 
-	FRotator rotation = FRotator::ZeroRotator;
-	ReadRotatorField(*transformObject, TEXT("rotation_deg"), FString::Printf(TEXT("%s.%s"), *path, *fieldName), result,
-	                 rotation);
-
-	FVector scale = FVector::OneVector;
-	if (transformObject->HasField(TEXT("scale")))
+	double yawDegrees = 0.0;
+	if (jsonObject.HasField(TEXT("yaw_deg")) && !jsonObject.TryGetNumberField(TEXT("yaw_deg"), yawDegrees))
 	{
-		ReadVectorField(*transformObject, TEXT("scale"), 1.0, FString::Printf(TEXT("%s.%s"), *path, *fieldName), result,
-		                scale);
+		AddDiagnostic(
+			result,
+			EEpisodeCompileDiagnosticSeverity::Error,
+			TEXT("invalid_number"),
+			FString::Printf(TEXT("%s.yaw_deg 필드는 숫자여야 함."), *path));
+		return false;
 	}
 
-	outTransform = FTransform(rotation, location, scale);
+	outTransform = FTransform(FRotator(0.0, yawDegrees, 0.0), location, FVector::OneVector);
 	return true;
 }
 
@@ -358,24 +292,6 @@ bool UEpisodeCompiler::ParseGroundShapeType(const FString& value, EEpisodeGround
 	if (normalized == TEXT("convex_polygon"))
 	{
 		outType = EEpisodeGroundShapeType::ConvexPolygon;
-		return true;
-	}
-
-	return false;
-}
-
-bool UEpisodeCompiler::ParsePathType(const FString& value, EEpisodePathType& outType)
-{
-	const FString normalized = value.ToLower();
-	if (normalized == TEXT("spline"))
-	{
-		outType = EEpisodePathType::Spline;
-		return true;
-	}
-
-	if (normalized == TEXT("waypoints"))
-	{
-		outType = EEpisodePathType::Waypoints;
 		return true;
 	}
 
@@ -594,8 +510,14 @@ void UEpisodeCompiler::CompileGroundRegions(const FJsonObject& rootObject, FEpis
 			              FString::Printf(TEXT("%s는 MVP에서 rectangle 지면 영역만 지원함."), *regionPath));
 		}
 
-		ReadVectorField(*shapeObject, TEXT("center_m"), MetersToCentimeters,
-		                FString::Printf(TEXT("%s.shape"), *regionPath), result, regionSpec.Center);
+		if (shapeObject->HasField(TEXT("center_m")))
+		{
+			AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("legacy_center_unsupported"),
+			              FString::Printf(TEXT("%s.shape.center_m은 더 이상 지원하지 않음. center_xy_m을 사용해야 함."), *regionPath));
+		}
+
+		ReadVector2DAsVectorField(*shapeObject, TEXT("center_xy_m"), MetersToCentimeters,
+		                          FString::Printf(TEXT("%s.shape"), *regionPath), result, regionSpec.Center);
 		ReadVector2DField(*shapeObject, TEXT("size_m"), MetersToCentimeters,
 		                  FString::Printf(TEXT("%s.shape"), *regionPath), result, regionSpec.Size);
 		regionSpec.YawDegrees = ReadNumberOrDefault(*shapeObject, TEXT("yaw_deg"), 0.0);
@@ -637,37 +559,41 @@ void UEpisodeCompiler::CompilePaths(const FJsonObject& rootObject, FEpisodeCompi
 		if (!RequireStringField(*pathObject, TEXT("path_id"), path, result, pathSpec.PathId)) continue;
 		AddUniqueId(outPathIds, pathSpec.PathId, path, result);
 
-		FString pathTypeString;
-		if (TryGetStringField(*pathObject, TEXT("type"), pathTypeString)
-			&& !ParsePathType(pathTypeString, pathSpec.PathType))
+		if (pathObject->HasField(TEXT("type")))
 		{
-			AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_path_type"),
-			              FString::Printf(TEXT("%s.type '%s' 값은 지원하지 않음."), *path, *pathTypeString));
+			AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("legacy_path_type_unsupported"),
+			              FString::Printf(TEXT("%s.type은 더 이상 지원하지 않음. paths는 spline으로 고정됨."), *path));
+		}
+
+		if (pathObject->HasField(TEXT("points_m")))
+		{
+			AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("legacy_path_points_unsupported"),
+			              FString::Printf(TEXT("%s.points_m은 더 이상 지원하지 않음. points_xy_m을 사용해야 함."), *path));
 		}
 
 		TArray<TSharedPtr<FJsonValue>> pointValues;
-		if (!TryGetArrayField(*pathObject, TEXT("points_m"), pointValues))
+		if (!TryGetArrayField(*pathObject, TEXT("points_xy_m"), pointValues))
 		{
 			AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("missing_path_points"),
-			              FString::Printf(TEXT("%s.points_m 필드는 필수."), *path));
+			              FString::Printf(TEXT("%s.points_xy_m 필드는 필수."), *path));
 			continue;
 		}
 
 		for (int32 pointIndex = 0; pointIndex < pointValues.Num(); ++pointIndex)
 		{
-			const FString pointPath = FString::Printf(TEXT("%s.points_m[%d]"), *path, pointIndex);
+			const FString pointPath = FString::Printf(TEXT("%s.points_xy_m[%d]"), *path, pointIndex);
 			if (!pointValues[pointIndex].IsValid() || pointValues[pointIndex]->Type != EJson::Array)
 			{
 				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_path_point"),
-				              FString::Printf(TEXT("%s 항목은 [x, y, z] 배열이어야 함."), *pointPath));
+				              FString::Printf(TEXT("%s 항목은 숫자 배열이어야 함."), *pointPath));
 				continue;
 			}
 
 			const TArray<TSharedPtr<FJsonValue>> pointArray = pointValues[pointIndex]->AsArray();
-			if (pointArray.Num() != 3)
+			if (pointArray.Num() != 2)
 			{
 				AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_path_point"),
-				              FString::Printf(TEXT("%s 항목은 숫자 3개를 포함해야 함."), *pointPath));
+				              FString::Printf(TEXT("%s 항목은 숫자 2개를 포함해야 함."), *pointPath));
 				continue;
 			}
 
@@ -684,9 +610,10 @@ void UEpisodeCompiler::CompilePaths(const FJsonObject& rootObject, FEpisodeCompi
 				continue;
 			}
 
-			pathSpec.Points.Add(FVector(pointArray[0]->AsNumber() * MetersToCentimeters,
-			                            pointArray[1]->AsNumber() * MetersToCentimeters,
-			                            pointArray[2]->AsNumber() * MetersToCentimeters));
+			pathSpec.Points.Add(FVector(
+				pointArray[0]->AsNumber() * MetersToCentimeters,
+				pointArray[1]->AsNumber() * MetersToCentimeters,
+				0.0));
 		}
 
 		pathSpec.bClosedLoop = ReadBoolOrDefault(*pathObject, TEXT("closed_loop"), false);
@@ -741,7 +668,7 @@ void UEpisodeCompiler::CompileStaticObstacles(
 		}
 
 		placeableSpec.Category = EEpisodeActorCategory::StaticObstacle;
-		ReadTransformField(*obstacleObject, TEXT("transform"), obstaclePath, result, placeableSpec.Transform);
+		ReadActorPlacementTransform(*obstacleObject, obstaclePath, result, placeableSpec.Transform);
 		AddJsonProperties(*obstacleObject, placeableSpec.Properties);
 		result.WorldSpec.Placeables.Add(placeableSpec);
 	}
@@ -793,8 +720,7 @@ void UEpisodeCompiler::CompilePedestrians(
 
 		dynamicActorSpec.Category = EEpisodeActorCategory::Pedestrian;
 		dynamicActorSpec.SpawnTimeSeconds = ReadNumberOrDefault(*pedestrianObject, TEXT("spawn_time_s"), 0.0);
-		ReadTransformField(*pedestrianObject, TEXT("transform"), pedestrianPath, result,
-		                   dynamicActorSpec.InitialTransform);
+		ReadActorPlacementTransform(*pedestrianObject, pedestrianPath, result, dynamicActorSpec.InitialTransform);
 		AddJsonProperties(*pedestrianObject, dynamicActorSpec.Properties);
 
 		TSharedPtr<FJsonObject> movementObject;
@@ -853,20 +779,12 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 	const bool bSpawnOnly{ ReadBoolOrDefault(*robotObject, TEXT("spawn_only"), true)};
 	bool bHasGoal{ false };
 
-	if (robotObject->HasField(TEXT("transform")))
-	{
-		if (!ReadTransformField(
-			*robotObject,
-			TEXT("transform"),
-			TEXT("actors.robot"),
-			result,
-			robotSpec.Transform
-		))
-		{
-			robotSpec.Transform = FTransform::Identity;
-		}
-	}
-	else
+	if (!ReadActorPlacementTransform(
+		*robotObject,
+		TEXT("actors.robot"),
+		result,
+		robotSpec.Transform
+	))
 	{
 		robotSpec.Transform = FTransform::Identity;
 	}
@@ -930,7 +848,25 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 			result,
 			EEpisodeCompileDiagnosticSeverity::Warning,
 			TEXT("robot_location_ignored"),
-			TEXT("actors.robot.location은 더 이상 EpisodeCompiler에서 읽지 않음. 로봇 배치는 transform, 목적지는 route를 사용해야 함."));
+			TEXT("actors.robot.location은 더 이상 EpisodeCompiler에서 읽지 않음. 로봇 배치는 xy_m/yaw_deg, 목적지는 route.goal_xy_m을 사용해야 함."));
+	}
+
+	if (robotObject->HasField(TEXT("goal_xy_m")))
+	{
+		AddDiagnostic(
+			result,
+			EEpisodeCompileDiagnosticSeverity::Error,
+			TEXT("legacy_robot_goal_unsupported"),
+			TEXT("actors.robot.goal_xy_m은 더 이상 지원하지 않음. actors.robot.route.goal_xy_m을 사용해야 함."));
+	}
+
+	if (robotObject->HasField(TEXT("goal_m")))
+	{
+		AddDiagnostic(
+			result,
+			EEpisodeCompileDiagnosticSeverity::Error,
+			TEXT("legacy_robot_goal_unsupported"),
+			TEXT("actors.robot.goal_m은 더 이상 지원하지 않음. actors.robot.route.goal_xy_m을 사용해야 함."));
 	}
 
 	TSharedPtr<FJsonObject> routeObject;
@@ -938,11 +874,20 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 	{
 		FVector goalLocationCm{ FVector::ZeroVector };
 
+		if (routeObject->HasField(TEXT("goal_m")))
+		{
+			AddDiagnostic(
+				result,
+				EEpisodeCompileDiagnosticSeverity::Error,
+				TEXT("legacy_robot_goal_unsupported"),
+				TEXT("actors.robot.route.goal_m은 더 이상 지원하지 않음. goal_xy_m을 사용해야 함."));
+		}
+
 		if (!bHasGoal &&
-			routeObject->HasField(TEXT("goal_m")) &&
-			ReadVectorField(
+			routeObject->HasField(TEXT("goal_xy_m")) &&
+			ReadVector2DAsVectorField(
 				*routeObject,
-				TEXT("goal_m"),
+				TEXT("goal_xy_m"),
 				MetersToCentimeters,
 				TEXT("actors.robot.route"),
 				result,
@@ -959,23 +904,6 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 				TEXT("auto_start"),
 				TEXT("actors.robot.route"),
 				robotSetupInfo.LocationSetupInfo.bAutoStartRoute);
-		}
-	}
-
-	if (!bHasGoal && robotObject->HasField(TEXT("goal_m")))
-	{
-		FVector goalLocationCm{ FVector::ZeroVector };
-
-		if (ReadVectorField(
-			*robotObject,
-			TEXT("goal_m"),
-			MetersToCentimeters,
-			TEXT("actors.robot"),
-			result,
-			goalLocationCm))
-		{
-			robotSetupInfo.LocationSetupInfo.GoalLocationCm = goalLocationCm;
-			bHasGoal = true;
 		}
 	}
 
@@ -1063,7 +991,7 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 			result,
 			EEpisodeCompileDiagnosticSeverity::Warning,
 			TEXT("missing_robot_goal"),
-			TEXT("actors.robot.spawn_only가 false이지만 route.goal_m 또는 goal_m이 없어 로봇 경로 주입을 건너뜀."));
+			TEXT("actors.robot.spawn_only가 false이지만 route.goal_xy_m이 없어 로봇 경로 주입을 건너뜀."));
 	}
 
 	result.WorldSpec.Placeables.Add(robotSpec);

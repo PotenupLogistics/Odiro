@@ -422,6 +422,7 @@ AEpisodeStaticObstacle* UEpisodeSimulationSubsystem::SpawnStaticObstacle(const F
 		placeableSpec.InstanceId,
 		placeableSpec.AssetId,
 		placeableSpec.Category,
+		EEpisodeMobilityMode::Static,
 		staticObstacle);
 	return staticObstacle;
 }
@@ -492,6 +493,7 @@ AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInst
 		placeableSpec.InstanceId,
 		placeableSpec.AssetId,
 		placeableSpec.Category,
+		EEpisodeMobilityMode::Moving,
 		robotActor);
 
 	if (!bSpawnOnly)
@@ -564,7 +566,8 @@ AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrian(const FEpisodeD
 		pedestrian->PlaceableComponent,
 		dynamicActorSpec.InstanceId,
 		dynamicActorSpec.AssetId,
-		dynamicActorSpec.Category);
+		dynamicActorSpec.Category,
+		EEpisodeMobilityMode::Moving);
 	RuntimeActorsById.Add(dynamicActorSpec.InstanceId, pedestrian);
 	return pedestrian;
 }
@@ -573,6 +576,7 @@ void UEpisodeSimulationSubsystem::RegisterRuntimeActor(
 	const FString& instanceId,
 	const FString& assetId,
 	EEpisodeActorCategory category,
+	EEpisodeMobilityMode mobilityMode,
 	AActor* actor)
 {
 	if (!actor) return;
@@ -584,20 +588,23 @@ void UEpisodeSimulationSubsystem::RegisterRuntimeActor(
 		actor->FindComponentByClass<UEpisodePlaceableComponent>(),
 		instanceId,
 		assetId,
-		category);
+		category,
+		mobilityMode);
 }
 
 void UEpisodeSimulationSubsystem::ConfigurePlaceableComponent(
 	UEpisodePlaceableComponent* placeableComponent,
 	const FString& instanceId,
 	const FString& assetId,
-	EEpisodeActorCategory category) const
+	EEpisodeActorCategory category,
+	EEpisodeMobilityMode mobilityMode) const
 {
 	if (!placeableComponent) return;
 
 	placeableComponent->InstanceId = instanceId;
 	placeableComponent->AssetId = assetId;
 	placeableComponent->Category = category;
+	placeableComponent->MobilityMode = mobilityMode;
 }
 
 double UEpisodeSimulationSubsystem::GetFloatProperty(

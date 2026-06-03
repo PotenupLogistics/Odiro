@@ -11,6 +11,7 @@ class AEpisodeGroundRegion;
 class UPrimitiveComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEpisodeEvaluationEndedSignature, FEpisodeEvaluationResult, result);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEpisodeEvaluationEventSignature, FEpisodeEvaluationEvent, event);
 
 // 현재 월드의 episode runtime을 관찰하고 평가 결과와 종료 결정을 생성하는 subsystem.
 UCLASS(BlueprintType)
@@ -21,6 +22,9 @@ class PROTOROBOTSIM_API UEpisodeEvaluationSubsystem : public UTickableWorldSubsy
 public:
 	UPROPERTY(BlueprintAssignable, Category = "Episode|Evaluation")
 	FEpisodeEvaluationEndedSignature OnEpisodeEnded;
+
+	UPROPERTY(BlueprintAssignable, Category = "Episode|Evaluation")
+	FEpisodeEvaluationEventSignature OnEvaluationEvent;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Evaluation")
 	bool StartEvaluation(
@@ -81,6 +85,7 @@ private:
 		const FVector& location,
 		double value,
 		const TMap<FString, FEpisodeParamValue>& properties);
+	void PublishEvaluationEvent(FEpisodeEvaluationEvent& event);
 
 	void BindEvaluationHitDelegates();
 	void BindActorHitDelegates(AActor* actor);

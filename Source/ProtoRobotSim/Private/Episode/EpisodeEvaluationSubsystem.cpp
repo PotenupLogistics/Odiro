@@ -265,7 +265,6 @@ void UEpisodeEvaluationSubsystem::AddEvaluationEventWithDetails(
 	const TMap<FString, FEpisodeParamValue>& properties)
 {
 	FEpisodeEvaluationEvent event;
-	event.EventIndex = CurrentResult.Events.Num();
 	event.ElapsedTimeSeconds = GetElapsedTimeSeconds();
 	event.EventType = eventType;
 	event.Severity = severity;
@@ -279,7 +278,7 @@ void UEpisodeEvaluationSubsystem::AddEvaluationEventWithDetails(
 		event.SubjectInstanceId = ActiveRuntimeContext.RobotInstanceId;
 	}
 
-	CurrentResult.Events.Add(event);
+	PublishEvaluationEvent(event);
 
 	UE_LOG(
 		LogEpisodeEvaluation,
@@ -294,6 +293,18 @@ void UEpisodeEvaluationSubsystem::AddEvaluationEventWithDetails(
 		event.ElapsedTimeSeconds,
 		event.Value,
 		*event.Message);
+}
+
+void UEpisodeEvaluationSubsystem::PublishEvaluationEvent(FEpisodeEvaluationEvent& event)
+{
+	event.EventIndex = CurrentResult.Events.Num();
+	if (event.WorldTimeSeconds < 0.0)
+	{
+		event.WorldTimeSeconds = EvaluationStartTimeSeconds + event.ElapsedTimeSeconds;
+	}
+
+	CurrentResult.Events.Add(event);
+	OnEvaluationEvent.Broadcast(event);
 }
 
 void UEpisodeEvaluationSubsystem::BindEvaluationHitDelegates()
@@ -707,8 +718,8 @@ void UEpisodeEvaluationSubsystem::CloseNearMissInterval(
 	const double scoreDelta = ActiveEvaluationConfig.PedestrianNearMissScore;
 
 	FEpisodeEvaluationEvent event;
-	event.EventIndex = CurrentResult.Events.Num();
 	event.ElapsedTimeSeconds = endTimeSeconds;
+	event.WorldTimeSeconds = EvaluationStartTimeSeconds + endTimeSeconds;
 	event.EventType = EEpisodeEvaluationEventType::PedestrianNearMiss;
 	event.Severity = EEpisodeEvaluationEventSeverity::Warning;
 	event.SubjectInstanceId = ActiveRuntimeContext.RobotInstanceId;
@@ -721,7 +732,7 @@ void UEpisodeEvaluationSubsystem::CloseNearMissInterval(
 	event.Properties.Add(TEXT("duration_s"), MakeFloatParam(durationSeconds));
 	event.Properties.Add(TEXT("min_distance_m"), MakeFloatParam(state.MinDistanceCm / 100.0));
 	event.Properties.Add(TEXT("pedestrian_id"), MakeStringParam(pedestrianInstanceId));
-	CurrentResult.Events.Add(event);
+	PublishEvaluationEvent(event);
 
 	UE_LOG(
 		LogEpisodeEvaluation,

@@ -22,6 +22,43 @@ class UDeliveryBot_LidarSensorComponent;
 class UDeliveryBot_DriveComponent;
 class UDeliveryBot_GlobalPathComponent;
 class UDeliveryBot_PathFollowComponent;
+class UEpisodePlaceableComponent;
+
+/// Snapshot of Delivery Bot state used by measurement logging.
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FDeliveryBotMeasurementSnapshot
+{
+	GENERATED_BODY()
+
+	/// Last lidar scan captured by the robot actor.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Measurement")
+	FDeliveryBotLidarScanInfo LidarScanInfo{};
+
+	/// Nearest front object from the last lidar scan.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Measurement")
+	FDeliveryBotLidarDetectedObjectInfo FrontObjectInfo{};
+
+	/// Last movement command applied to the drive component.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Measurement")
+	FDeliveryBotMoveCommandInfo MoveCommandInfo{};
+
+	/// Reason assigned to the last movement command.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Measurement")
+	FString ActionReason{ TEXT("unknown") };
+
+	/// True when the lidar scan has a front object.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Measurement")
+	bool bHasFrontObject = false;
+
+	/// True after at least one movement command has been applied.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Measurement")
+	bool bHasMoveCommand = false;
+
+	/// Number of lidar hits in the last scan.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Measurement")
+	int32 LidarHitCount = 0;
+};
+
 UCLASS(Blueprintable)
 class PROTOROBOTSIM_API ADeliveryBot_ChaosActor : public AWheeledVehiclePawn
 {
@@ -47,6 +84,9 @@ public:
 	{
 		return bSimulationFailed;
 	}
+
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Measurement")
+	bool GetMeasurementSnapshot(FDeliveryBotMeasurementSnapshot& OutSnapshot) const;
 	
 private:
 	void ApplySetupInfo();
@@ -67,7 +107,7 @@ private:
 
 	FDeliveryBotPolicyContextInfo BuildPolicyContextInfo(bool bHasFrontObject, const FDeliveryBotLidarDetectedObjectInfo& frontObjectInfo) const;
 
-	void ApplyPolicyDecisionToMoveCommand(
+	FString ApplyPolicyDecisionToMoveCommand(
 		FDeliveryBotMoveCommandInfo& moveCommandInfo,
 		const FDeliveryBotPolicyDecisionInfo& decisionInfo,
 		const FDeliveryBotLidarDetectedObjectInfo& frontObjectInfo,
@@ -97,11 +137,17 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
 	TObjectPtr<UDeliveryBot_PolicyJudgmentComponent> PolicyJudgmentComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
+	TObjectPtr<UEpisodePlaceableComponent> PlaceableComponent;
 	
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Setup")
 	FDeliveryBotSetupInfo SetupInfo{};
 	FDeliveryBotLidarScanInfo LastLidarScanInfo{};
+	FDeliveryBotMoveCommandInfo LastMoveCommandInfo{};
+	FString LastActionReason{ TEXT("unknown") };
+	bool bHasLastMoveCommand{ false };
 
 		
 protected:  // 디버깅

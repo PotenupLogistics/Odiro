@@ -1,9 +1,16 @@
 #include "Episode/EpisodeRunnerSubsystem.h"
 
+#include "DeliveryBot/DeliveryBotSetupCompiler.h"
 #include "Episode/EpisodeCompiler.h"
 #include "Episode/EpisodeEvaluationSubsystem.h"
 #include "Episode/EpisodeSimulationSubsystem.h"
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
 #include "Engine/GameInstance.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogEpisodeRunner, Log, All);
@@ -33,6 +40,43 @@ namespace
 		return TEXT("Unknown");
 	}
 
+	void LogRunnerCompileDiagnostic(const TCHAR* sourceName, const FEpisodeCompileDiagnostic& diagnostic)
+	{
+		if (diagnostic.Severity == EEpisodeCompileDiagnosticSeverity::Info)
+		{
+			UE_LOG(
+				LogEpisodeRunner,
+				Log,
+				TEXT("%s 컴파일 진단 | Severity: %s, Code: %s, Message: %s"),
+				sourceName,
+				ToRunnerCompileSeverityString(diagnostic.Severity),
+				*diagnostic.Code,
+				*diagnostic.Message);
+			return;
+		}
+
+		UE_LOG(
+			LogEpisodeRunner,
+			Warning,
+			TEXT("%s 컴파일 진단 | Severity: %s, Code: %s, Message: %s"),
+			sourceName,
+			ToRunnerCompileSeverityString(diagnostic.Severity),
+			*diagnostic.Code,
+			*diagnostic.Message);
+	}
+
+	FString ResolveRunnerJsonFilePath(const FString& jsonFilePath)
+	{
+		if (jsonFilePath.IsEmpty()) return jsonFilePath;
+
+		if (FPaths::IsRelative(jsonFilePath))
+		{
+			return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), jsonFilePath));
+		}
+
+		return jsonFilePath;
+	}
+
 	FEpisodeSimulationSetupSpec MakeSimulationSetupSpec(const FEpisodeWorldSpec& worldSpec)
 	{
 		FEpisodeSimulationSetupSpec setupSpec;
@@ -46,29 +90,69 @@ namespace
 		setupSpec.Events = worldSpec.Events;
 		return setupSpec;
 	}
-}
 
-bool UEpisodeRunnerSubsystem::StartEpisodeFromJsonFile(const FString& jsonFilePath)
-{
-	if (jsonFilePath.IsEmpty()) return false;
-
-	TArray<FString> jsonFilePaths;
-	jsonFilePaths.Add(jsonFilePath);
-	return StartBatchFromJsonFiles(jsonFilePaths);
-}
-
-bool UEpisodeRunnerSubsystem::StartBatchFromJsonFiles(const TArray<FString>& jsonFilePaths)
-{
-	PendingJsonFilePaths.Reset();
-	for (const FString& jsonFilePath : jsonFilePaths)
+	bool ApplyDeliveryBotSetupToWorldSpec(
+		FEpisodeWorldSpec& worldSpec,
+		const FDeliveryBotSetupInfo& deliveryBotSetupInfo)
 	{
-		if (!jsonFilePath.IsEmpty())
+		bool bApplied = false;
+		for (FEpisodePlaceableInstanceSpec& placeableSpec : worldSpec.Placeables)
 		{
-			PendingJsonFilePaths.Add(jsonFilePath);
+			if (placeableSpec.Category != EEpisodeActorCategory::DeliveryBot) continue;
+
+			const FDeliveryBotLocationSetupInfo locationSetupInfo = placeableSpec.DeliveryBot.SetupInfo.LocationSetupInfo;
+			FDeliveryBotSetupInfo mergedSetupInfo = deliveryBotSetupInfo;
+			mergedSetupInfo.LocationSetupInfo = locationSetupInfo;
+			placeableSpec.DeliveryBot.SetupInfo = mergedSetupInfo;
+			bApplied = true;
+		}
+
+		return bApplied;
+	}
+
+	FString BuildPairHash(const FString& episodeSetupHash, const FString& deliveryBotSetupHash)
+	{
+		return FString::Printf(TEXT("%u"), GetTypeHash(episodeSetupHash + TEXT(":") + deliveryBotSetupHash));
+	}
+}
+
+bool UEpisodeRunnerSubsystem::StartEpisodePairFromJsonFiles(
+	const FString& episodeSetupJsonPath,
+	const FString& deliveryBotSetupJsonPath)
+{
+	if (episodeSetupJsonPath.IsEmpty() || deliveryBotSetupJsonPath.IsEmpty()) return false;
+
+	FEpisodeRunInput runInput;
+	runInput.EpisodeSetupJsonPath = episodeSetupJsonPath;
+	runInput.DeliveryBotSetupJsonPath = deliveryBotSetupJsonPath;
+
+	TArray<FEpisodeRunInput> runInputs;
+	runInputs.Add(runInput);
+	return StartBatchFromRunInputs(runInputs);
+}
+
+bool UEpisodeRunnerSubsystem::StartBatchFromRunInputs(const TArray<FEpisodeRunInput>& runInputs)
+{
+	PendingRunInputs.Reset();
+	for (const FEpisodeRunInput& runInput : runInputs)
+	{
+		if (!runInput.EpisodeSetupJsonPath.IsEmpty() && !runInput.DeliveryBotSetupJsonPath.IsEmpty())
+		{
+			PendingRunInputs.Add(runInput);
+		}
+		else
+		{
+			UE_LOG(
+				LogEpisodeRunner,
+				Warning,
+				TEXT("Episode pair 입력 무시: EpisodeSetup 또는 DeliveryBotSetup 경로가 비어 있음 | Pair: %s, EpisodeSetup: %s, DeliveryBotSetup: %s"),
+				*runInput.PairId,
+				*runInput.EpisodeSetupJsonPath,
+				*runInput.DeliveryBotSetupJsonPath);
 		}
 	}
 
-	if (PendingJsonFilePaths.IsEmpty()) return false;
+	if (PendingRunInputs.IsEmpty()) return false;
 
 	if (UEpisodeEvaluationSubsystem* evaluationSubsystem = ResolveEvaluationSubsystem())
 	{
@@ -85,15 +169,111 @@ bool UEpisodeRunnerSubsystem::StartBatchFromJsonFiles(const TArray<FString>& jso
 	CurrentRunIndex = INDEX_NONE;
 	RunnerState = EEpisodeRunnerState::Preparing;
 
-	UE_LOG(LogEpisodeRunner, Log, TEXT("Episode 배치 시작 | Count: %d"), PendingJsonFilePaths.Num());
+	UE_LOG(LogEpisodeRunner, Warning, TEXT("Episode pair 배치 시작 | Count: %d"), PendingRunInputs.Num());
 
 	StartNextEpisode();
 	return true;
 }
 
+bool UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile(const FString& runQueueJsonFilePath)
+{
+	if (runQueueJsonFilePath.IsEmpty()) return false;
+	const FString resolvedRunQueueJsonFilePath = ResolveRunnerJsonFilePath(runQueueJsonFilePath);
+
+	FString jsonString;
+	if (!FFileHelper::LoadFileToString(jsonString, *resolvedRunQueueJsonFilePath))
+	{
+		UE_LOG(
+			LogEpisodeRunner,
+			Warning,
+			TEXT("Episode run queue JSON 읽기 실패 | Path: %s, ResolvedPath: %s"),
+			*runQueueJsonFilePath,
+			*resolvedRunQueueJsonFilePath);
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> rootObject;
+	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(jsonString);
+	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+	{
+		UE_LOG(
+			LogEpisodeRunner,
+			Warning,
+			TEXT("Episode run queue JSON 파싱 실패 | Path: %s, ResolvedPath: %s"),
+			*runQueueJsonFilePath,
+			*resolvedRunQueueJsonFilePath);
+		return false;
+	}
+
+	const TSharedPtr<FJsonValue> runsValue = rootObject->TryGetField(TEXT("runs"));
+	if (!runsValue.IsValid() || runsValue->Type != EJson::Array)
+	{
+		UE_LOG(
+			LogEpisodeRunner,
+			Warning,
+			TEXT("Episode run queue에 runs 배열이 없음 | Path: %s, ResolvedPath: %s"),
+			*runQueueJsonFilePath,
+			*resolvedRunQueueJsonFilePath);
+		return false;
+	}
+
+	TArray<FEpisodeRunInput> runInputs;
+	const TArray<TSharedPtr<FJsonValue>> runValues = runsValue->AsArray();
+	for (int32 index = 0; index < runValues.Num(); ++index)
+	{
+		const TSharedPtr<FJsonValue>& runValue = runValues[index];
+		if (!runValue.IsValid() || runValue->Type != EJson::Object)
+		{
+			UE_LOG(LogEpisodeRunner, Warning, TEXT("Episode run queue 항목 무시: object가 아님 | Path: %s, Index: %d"), *runQueueJsonFilePath, index);
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject> runObject = runValue->AsObject();
+		if (!runObject.IsValid())
+		{
+			UE_LOG(LogEpisodeRunner, Warning, TEXT("Episode run queue 항목 무시: object 변환 실패 | Path: %s, Index: %d"), *runQueueJsonFilePath, index);
+			continue;
+		}
+
+		FEpisodeRunInput runInput;
+		runObject->TryGetStringField(TEXT("pair_id"), runInput.PairId);
+		if (!runObject->TryGetStringField(TEXT("episode_setup"), runInput.EpisodeSetupJsonPath))
+		{
+			runObject->TryGetStringField(TEXT("episode_setup_json_path"), runInput.EpisodeSetupJsonPath);
+		}
+		if (!runObject->TryGetStringField(TEXT("delivery_bot_setup"), runInput.DeliveryBotSetupJsonPath))
+		{
+			runObject->TryGetStringField(TEXT("delivery_bot_setup_json_path"), runInput.DeliveryBotSetupJsonPath);
+		}
+
+		if (runInput.EpisodeSetupJsonPath.IsEmpty())
+		{
+			UE_LOG(LogEpisodeRunner, Warning, TEXT("Episode run queue 항목 무시: episode_setup이 비어 있음 | Path: %s, Index: %d"), *runQueueJsonFilePath, index);
+			continue;
+		}
+
+		if (runInput.DeliveryBotSetupJsonPath.IsEmpty())
+		{
+			UE_LOG(LogEpisodeRunner, Warning, TEXT("Episode run queue 항목 무시: delivery_bot_setup이 비어 있음 | Path: %s, Index: %d"), *runQueueJsonFilePath, index);
+			continue;
+		}
+
+		runInputs.Add(runInput);
+	}
+
+	if (runInputs.IsEmpty())
+	{
+		UE_LOG(LogEpisodeRunner, Warning, TEXT("Episode run queue에서 실행할 pair를 찾지 못함 | Path: %s"), *runQueueJsonFilePath);
+		return false;
+	}
+
+	UE_LOG(LogEpisodeRunner, Warning, TEXT("Episode run queue 로드 완료 | Path: %s, Count: %d"), *runQueueJsonFilePath, runInputs.Num());
+	return StartBatchFromRunInputs(runInputs);
+}
+
 void UEpisodeRunnerSubsystem::CancelRun()
 {
-	PendingJsonFilePaths.Reset();
+	PendingRunInputs.Reset();
 	RunnerState = EEpisodeRunnerState::Cancelled;
 
 	if (UEpisodeEvaluationSubsystem* evaluationSubsystem = ResolveEvaluationSubsystem())
@@ -142,7 +322,7 @@ void UEpisodeRunnerSubsystem::HandleEpisodeEnded(FEpisodeEvaluationResult result
 
 void UEpisodeRunnerSubsystem::StartNextEpisode()
 {
-	if (PendingJsonFilePaths.IsEmpty())
+	if (PendingRunInputs.IsEmpty())
 	{
 		RunnerState = EEpisodeRunnerState::Completed;
 		UE_LOG(LogEpisodeRunner, Log, TEXT("Episode 배치 완료 | Records: %d"), RunRecords.Num());
@@ -165,14 +345,18 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 		return;
 	}
 
-	CurrentJsonFilePath = PendingJsonFilePaths[0];
-	PendingJsonFilePaths.RemoveAt(0);
+	CurrentRunInput = PendingRunInputs[0];
+	PendingRunInputs.RemoveAt(0);
 	++CurrentRunIndex;
+	CurrentRunInput.PairId = BuildPairId(CurrentRunInput, CurrentRunIndex);
 
 	CurrentRecord = FEpisodeRunRecord{};
 	CurrentRecord.RunIndex = CurrentRunIndex;
 	CurrentRecord.RunId = BuildRunId();
-	CurrentRecord.SourceJsonPath = CurrentJsonFilePath;
+	CurrentRecord.PairId = CurrentRunInput.PairId;
+	CurrentRecord.SourceJsonPath = CurrentRunInput.EpisodeSetupJsonPath;
+	CurrentRecord.EpisodeSetupJsonPath = CurrentRunInput.EpisodeSetupJsonPath;
+	CurrentRecord.DeliveryBotSetupJsonPath = CurrentRunInput.DeliveryBotSetupJsonPath;
 	CurrentRecord.StartTimeSeconds = world->GetTimeSeconds();
 
 	RunnerState = EEpisodeRunnerState::Preparing;
@@ -180,11 +364,13 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 	UE_LOG(
 		LogEpisodeRunner,
 		Log,
-		TEXT("Episode 준비 중 | RunId: %s, Index: %d, Json: %s, Remaining: %d"),
+		TEXT("Episode pair 준비 중 | RunId: %s, Pair: %s, Index: %d, EpisodeSetup: %s, DeliveryBotSetup: %s, Remaining: %d"),
 		*CurrentRecord.RunId,
+		*CurrentRecord.PairId,
 		CurrentRecord.RunIndex,
-		*CurrentJsonFilePath,
-		PendingJsonFilePaths.Num());
+		*CurrentRunInput.EpisodeSetupJsonPath,
+		*CurrentRunInput.DeliveryBotSetupJsonPath,
+		PendingRunInputs.Num());
 
 	UEpisodeCompiler* compiler = NewObject<UEpisodeCompiler>(this);
 	if (!compiler)
@@ -198,17 +384,31 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 		return;
 	}
 
-	const FEpisodeCompileResult compileResult = compiler->CompileEpisodeWorldSpecFromJsonFile(CurrentJsonFilePath);
-	CurrentRecord.bCompileSucceeded = compileResult.bSuccess;
+	UDeliveryBotSetupCompiler* deliveryBotSetupCompiler = NewObject<UDeliveryBotSetupCompiler>(this);
+	if (!deliveryBotSetupCompiler)
+	{
+		UE_LOG(LogEpisodeRunner, Warning, TEXT("DeliveryBotSetup 컴파일러 생성 실패 | RunId: %s"), *CurrentRecord.RunId);
+		CompleteCurrentRecord(
+			false,
+			EEpisodeEvaluationOutcome::Failure,
+			EEpisodeEvaluationTerminalReason::CompilerCreateFailed);
+		QueueStartNextEpisode();
+		return;
+	}
+
+	FEpisodeCompileResult compileResult = compiler->CompileEpisodeWorldSpecFromJsonFile(CurrentRunInput.EpisodeSetupJsonPath);
+	CurrentRecord.bEpisodeSetupCompileSucceeded = compileResult.bSuccess;
 	CurrentRecord.EpisodeId = compileResult.WorldSpec.RunConfig.TemplateId;
 	CurrentRecord.SpecHash = compileResult.WorldSpec.SpecHash;
+	CurrentRecord.EpisodeSetupHash = compileResult.WorldSpec.SpecHash;
 	AppendCompileDiagnostics(compileResult);
 
 	UE_LOG(
 		LogEpisodeRunner,
-		Log,
-		TEXT("Episode 컴파일 완료 | RunId: %s, Episode: %s, Success: %s, Diagnostics: %d, SpecHash: %s"),
+		Warning,
+		TEXT("EpisodeSetup 컴파일 완료 | RunId: %s, Pair: %s, Episode: %s, Success: %s, Diagnostics: %d, SpecHash: %s"),
 		*CurrentRecord.RunId,
+		*CurrentRecord.PairId,
 		*CurrentRecord.EpisodeId,
 		compileResult.bSuccess ? TEXT("true") : TEXT("false"),
 		compileResult.Diagnostics.Num(),
@@ -223,6 +423,45 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 		QueueStartNextEpisode();
 		return;
 	}
+
+	FDeliveryBotSetupCompileResult deliveryBotCompileResult =
+		deliveryBotSetupCompiler->CompileDeliveryBotSetupFromJsonFile(CurrentRunInput.DeliveryBotSetupJsonPath);
+
+	CurrentRecord.bDeliveryBotSetupCompileSucceeded = deliveryBotCompileResult.bSuccess;
+	CurrentRecord.DeliveryBotSetupHash = deliveryBotCompileResult.SpecHash;
+	CurrentRecord.PairHash = BuildPairHash(CurrentRecord.EpisodeSetupHash, CurrentRecord.DeliveryBotSetupHash);
+	AppendDeliveryBotSetupDiagnostics(deliveryBotCompileResult);
+
+	UE_LOG(
+		LogEpisodeRunner,
+		Warning,
+		TEXT("DeliveryBotSetup 컴파일 완료 | RunId: %s, Pair: %s, Success: %s, Diagnostics: %d, SpecHash: %s"),
+		*CurrentRecord.RunId,
+		*CurrentRecord.PairId,
+		deliveryBotCompileResult.bSuccess ? TEXT("true") : TEXT("false"),
+		deliveryBotCompileResult.Diagnostics.Num(),
+		*CurrentRecord.DeliveryBotSetupHash);
+
+	if (!deliveryBotCompileResult.bSuccess)
+	{
+		CurrentRecord.bCompileSucceeded = false;
+		CompleteCurrentRecord(
+			false,
+			EEpisodeEvaluationOutcome::Failure,
+			EEpisodeEvaluationTerminalReason::CompileFailed);
+		QueueStartNextEpisode();
+		return;
+	}
+
+	const bool bDeliveryBotSetupApplied = ApplyDeliveryBotSetupToWorldSpec(
+		compileResult.WorldSpec,
+		deliveryBotCompileResult.SetupInfo);
+	if (!bDeliveryBotSetupApplied)
+	{
+		UE_LOG(LogEpisodeRunner, Warning, TEXT("DeliveryBotSetup 적용 대상 로봇이 없음 | RunId: %s, Pair: %s"), *CurrentRecord.RunId, *CurrentRecord.PairId);
+	}
+
+	CurrentRecord.bCompileSucceeded = true;
 
 	const FEpisodeSimulationSetupSpec simulationSetupSpec = MakeSimulationSetupSpec(compileResult.WorldSpec);
 
@@ -363,7 +602,19 @@ void UEpisodeRunnerSubsystem::AppendCompileDiagnostics(const FEpisodeCompileResu
 	for (const FEpisodeCompileDiagnostic& diagnostic : compileResult.Diagnostics)
 	{
 		CurrentRecord.Diagnostics.Add(FString::Printf(
-			TEXT("%s [%s]: %s"),
+			TEXT("EpisodeSetup %s [%s]: %s"),
+			ToRunnerCompileSeverityString(diagnostic.Severity),
+			*diagnostic.Code,
+			*diagnostic.Message));
+	}
+}
+
+void UEpisodeRunnerSubsystem::AppendDeliveryBotSetupDiagnostics(const FDeliveryBotSetupCompileResult& compileResult)
+{
+	for (const FEpisodeCompileDiagnostic& diagnostic : compileResult.Diagnostics)
+	{
+		CurrentRecord.Diagnostics.Add(FString::Printf(
+			TEXT("DeliveryBotSetup %s [%s]: %s"),
 			ToRunnerCompileSeverityString(diagnostic.Severity),
 			*diagnostic.Code,
 			*diagnostic.Message));
@@ -401,6 +652,19 @@ double UEpisodeRunnerSubsystem::GetRunTimeLimitSeconds(const FEpisodeRunConfig& 
 FString UEpisodeRunnerSubsystem::BuildRunId() const
 {
 	return FString::Printf(TEXT("episode_run_%04d"), CurrentRunIndex);
+}
+
+FString UEpisodeRunnerSubsystem::BuildPairId(const FEpisodeRunInput& runInput, int32 runIndex)
+{
+	if (!runInput.PairId.IsEmpty()) return runInput.PairId;
+
+	FString baseName = FPaths::GetBaseFilename(runInput.EpisodeSetupJsonPath);
+	if (baseName.IsEmpty())
+	{
+		baseName = FString::Printf(TEXT("pair_%04d"), runIndex);
+	}
+
+	return baseName;
 }
 
 UWorld* UEpisodeRunnerSubsystem::ResolveWorld() const

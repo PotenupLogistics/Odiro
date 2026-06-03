@@ -145,6 +145,22 @@ enum class EEpisodeRunnerState : uint8
 	Failed
 };
 
+// Runner가 한 번의 실행으로 묶어 처리할 EpisodeSetup/DeliveryBotSetup 파일 pair.
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodeRunInput
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString PairId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString EpisodeSetupJsonPath;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString DeliveryBotSetupJsonPath;
+};
+
 // SimulationSubsystem이 생성한 월드 객체들을 EvaluationSubsystem이 관찰할 수 있도록 전달하는 런타임 컨텍스트.
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FEpisodeRuntimeContext
@@ -272,13 +288,37 @@ struct PROTOROBOTSIM_API FEpisodeRunRecord
 	FString EpisodeId;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString PairId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FString SourceJsonPath;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString EpisodeSetupJsonPath;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString DeliveryBotSetupJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FString SpecHash;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString EpisodeSetupHash;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString DeliveryBotSetupHash;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString PairHash;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	bool bCompileSucceeded = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	bool bEpisodeSetupCompileSucceeded = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	bool bDeliveryBotSetupCompileSucceeded = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	bool bSetupSucceeded = false;

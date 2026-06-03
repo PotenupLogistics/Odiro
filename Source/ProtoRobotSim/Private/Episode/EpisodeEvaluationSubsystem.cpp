@@ -181,7 +181,7 @@ void UEpisodeEvaluationSubsystem::RequestEndEpisode(const FEpisodeEvaluationResu
 
 	UE_LOG(
 		LogEpisodeEvaluation,
-		Log,
+		Warning,
 		TEXT("평가 종료 | Episode: %s, Success: %s, Outcome: %s, TerminalReason: %s, Duration: %.2fs, Score: %.2f, Events: %d, Metrics: %d"),
 		*CurrentResult.EpisodeId,
 		CurrentResult.bSuccess ? TEXT("true") : TEXT("false"),

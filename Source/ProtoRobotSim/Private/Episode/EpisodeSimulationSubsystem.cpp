@@ -72,7 +72,7 @@ void UEpisodeSimulationSubsystem::ClearEpisode()
 	{
 		UE_LOG(
 			LogEpisodeSimulation,
-			Log,
+			 Warning,
 			TEXT("Episode 런타임 정리 완료 | Actors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
 			actorCount,
 			actorIdCount,

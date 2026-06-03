@@ -121,21 +121,6 @@
       "route": {
         "goal_xy_m": [5, 0],
         "auto_start": true
-      },
-      "drive": {
-        "max_speed_kmh": 10,
-        "slowdown_speed_range_kmh": 4
-      },
-      "path_follow": {
-        "target_speed_kmh": 8,
-        "look_ahead_distance_m": 1,
-        "obstacle_slow_speed_kmh": 2
-      },
-      "lidar": {
-        "scan_range_m": 5,
-        "angle_step_degree": 5,
-        "stop_distance_m": 1.2,
-        "slow_down_distance_m": 3.5
       }
     }
   }

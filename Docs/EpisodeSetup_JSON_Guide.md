@@ -2,7 +2,7 @@
 
 이 문서는 LLM이 EpisodeSetup JSON을 안정적으로 생성하기 위한 축약 양식을 설명한다. 샘플은 `Json/EpisodeSetupSample.json` 및 `Json/EpisodeSetupSample_*.json`을 기준으로 한다.
 
-EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로, 정적 장애물, 보행자, 로봇 배치와 로봇 목적지를 정의한다. DeliveryBot의 세부 튜닝값은 별도 `DeliveryBotSetup` 영역이 아니라, 필요한 경우 EpisodeSetup의 `actors.robot.drive`, `path_follow`, `lidar`에서 제한적으로 override한다.
+EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로, 정적 장애물, 보행자, 로봇 배치와 로봇 목적지를 정의한다. DeliveryBot의 주행/센서/정책 튜닝값은 같은 실행 pair의 DeliveryBotSetup JSON에서 정의한다.
 
 ## 출력 원칙
 
@@ -232,9 +232,6 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
 | `yaw_deg` | 선택 | 로봇 시작 yaw |
 | `route.goal_xy_m` | 이동 시 필수 | 로봇 목적지 |
 | `route.auto_start` | 선택 | 기본 `true` |
-| `drive` | 선택 | 로봇 주행 튜닝 override |
-| `path_follow` | 선택 | 경로 추종 튜닝 override |
-| `lidar` | 선택 | 라이다 튜닝 override |
 
 `spawn_only=false`이면 `route.goal_xy_m`을 제공해야 한다. 없으면 컴파일러는 warning을 남기고 로봇 route 주입을 건너뛴다.
 
@@ -247,6 +244,7 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
 - region 중심은 `center_xy_m`인가
 - path point는 `points_xy_m`이고 point마다 숫자 2개인가
 - `paths.role`, `paths.type`을 출력하지 않았는가
+- `actors.robot.drive`, `actors.robot.path_follow`, `actors.robot.lidar`를 출력하지 않았는가
 - 이동 로봇은 `route.goal_xy_m`을 갖는가
 - 모든 `instance_id`, `path_id`, `region_id`가 unique한가
 - 모든 `prop_id`가 catalog에 존재하는가

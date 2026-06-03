@@ -40,13 +40,13 @@ AEpisodeGroundRegion::AEpisodeGroundRegion()
 		RegionBoundsComponent->SetStaticMesh(cubeMeshAsset.Object);
 	}
 
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> groundDecalMaterialAsset(TEXT("/Game/Episode/Material/M_EpisodeGroundDecal.M_EpisodeGroundDecal"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> groundDecalMaterialAsset(TEXT("/Game/Materials/M_EpisodeGroundDecal.M_EpisodeGroundDecal"));
 	if (groundDecalMaterialAsset.Succeeded())
 	{
 		GroundDecalMaterial = groundDecalMaterialAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> blockedAreaMaterialAsset(TEXT("/Game/Episode/Material/MI_EpisodeBlockArea.MI_EpisodeBlockArea"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> blockedAreaMaterialAsset(TEXT("/Game/Models/GoalPoint/MI_EpisodeBlockArea.MI_EpisodeBlockArea"));
 	if (blockedAreaMaterialAsset.Succeeded())
 	{
 		BlockedAreaMaterial = blockedAreaMaterialAsset.Object;

@@ -28,17 +28,17 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 	{
 		RobotActorClass = ADeliveryBot_ChaosActor::StaticClass();
 	}
-	static ConstructorHelpers::FClassFinder<AActor> goalPointBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_GoalPoint"));
+	static ConstructorHelpers::FClassFinder<AActor> goalPointBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_GoalPoint"));
 	if (goalPointBlueprintClass.Succeeded())
 	{
 		GoalPointClass = goalPointBlueprintClass.Class;
 	}
-	static ConstructorHelpers::FClassFinder<AActor> startPointBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_StartPoint"));
+	static ConstructorHelpers::FClassFinder<AActor> startPointBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_StartPoint"));
 	if (startPointBlueprintClass.Succeeded())
 	{
 		StartPointClass = startPointBlueprintClass.Class;
 	}
-	static ConstructorHelpers::FClassFinder<AEpisodePedestrian> pedestrianBlueprintClass(TEXT("/Game/Episode/Blueprints/BP_EpisodePedestrian"));
+	static ConstructorHelpers::FClassFinder<AEpisodePedestrian> pedestrianBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_EpisodePedestrian"));
 	if (pedestrianBlueprintClass.Succeeded())
 	{
 		PedestrianClass = pedestrianBlueprintClass.Class;

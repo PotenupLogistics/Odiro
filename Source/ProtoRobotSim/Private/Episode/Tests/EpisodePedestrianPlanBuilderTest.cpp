@@ -77,6 +77,8 @@ bool FEpisodePedestrianPlanBuilderDeterminismTest::RunTest(const FString& Parame
 	if (firstResult.Plans.Num() == 1 && secondResult.Plans.Num() == 1)
 	{
 		TestEqual(TEXT("plan hash is deterministic"), firstResult.Plans[0].PlanHash, secondResult.Plans[0].PlanHash);
+		TestEqual(TEXT("behavior hash is deterministic"), firstResult.Plans[0].BehaviorHash, secondResult.Plans[0].BehaviorHash);
+		TestEqual(TEXT("scenario hash is deterministic"), firstResult.Plans[0].PedestrianScenarioHash, secondResult.Plans[0].PedestrianScenarioHash);
 		TestEqual(TEXT("straight path has two points"), firstResult.Plans[0].Points.Num(), 2);
 		TestEqual(TEXT("nominal duration uses speed"), firstResult.Plans[0].NominalDurationSeconds, 10.0);
 	}
@@ -116,6 +118,49 @@ bool FEpisodePedestrianPlanBuilderObstacleDetourTest::RunTest(const FString& Par
 		TestEqual(TEXT("plan stores source hash"), plan.SourceSpecHash, setupSpec.SpecHash);
 		TestEqual(TEXT("first point is start"), plan.Points[0].Location, FVector(0.0, 0.0, 0.0));
 		TestEqual(TEXT("last point is goal"), plan.Points.Last().Location, FVector(1000.0, 0.0, 0.0));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEpisodePedestrianPlanBuilderBehaviorParamsTest,
+	"ProtoRobotSim.Episode.PedestrianPlan.BehaviorParams",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEpisodePedestrianPlanBuilderBehaviorParamsTest::RunTest(const FString& Parameters)
+{
+	FEpisodeSimulationSetupSpec defaultSetupSpec = MakeSetupSpec();
+	FEpisodeSimulationSetupSpec customSetupSpec = MakeSetupSpec();
+	FEpisodeDynamicActorSpec& customPedestrian = customSetupSpec.DynamicActors[0];
+	customPedestrian.Properties.Add(TEXT("behavior_cooperation"), MakeFloatParam(0.9));
+	customPedestrian.Properties.Add(TEXT("behavior_evasiveness"), MakeFloatParam(0.8));
+	customPedestrian.Properties.Add(TEXT("behavior_personal_space_cm"), MakeFloatParam(120.0));
+	customPedestrian.Properties.Add(TEXT("behavior_awareness_horizon_s"), MakeFloatParam(3.0));
+	customPedestrian.Properties.Add(TEXT("behavior_max_yield_wait_s"), MakeFloatParam(2.0));
+	customPedestrian.Properties.Add(TEXT("behavior_sidestep_distance_cm"), MakeFloatParam(90.0));
+
+	FEpisodePedestrianPlanBuildContext context;
+	context.SourceSpecHash = defaultSetupSpec.SpecHash;
+
+	FEpisodePedestrianPlanBuildResult defaultResult;
+	FEpisodePedestrianPlanBuildResult customResult;
+
+	TestTrue(TEXT("default build succeeds"), FEpisodePedestrianPlanBuilder::BuildPlans(defaultSetupSpec, context, defaultResult));
+	TestTrue(TEXT("custom build succeeds"), FEpisodePedestrianPlanBuilder::BuildPlans(customSetupSpec, context, customResult));
+	TestEqual(TEXT("default one plan"), defaultResult.Plans.Num(), 1);
+	TestEqual(TEXT("custom one plan"), customResult.Plans.Num(), 1);
+
+	if (defaultResult.Plans.Num() == 1 && customResult.Plans.Num() == 1)
+	{
+		const FEpisodePedestrianPlan& defaultPlan = defaultResult.Plans[0];
+		const FEpisodePedestrianPlan& customPlan = customResult.Plans[0];
+		TestEqual(TEXT("baseline plan hash is unchanged by behavior"), defaultPlan.PlanHash, customPlan.PlanHash);
+		TestTrue(TEXT("behavior hash changes"), defaultPlan.BehaviorHash != customPlan.BehaviorHash);
+		TestTrue(TEXT("scenario hash changes"), defaultPlan.PedestrianScenarioHash != customPlan.PedestrianScenarioHash);
+		TestEqual(TEXT("custom cooperation resolved"), customPlan.BehaviorParams.Cooperation, 0.9);
+		TestEqual(TEXT("custom evasiveness resolved"), customPlan.BehaviorParams.Evasiveness, 0.8);
+		TestEqual(TEXT("custom personal space resolved"), customPlan.BehaviorParams.PersonalSpaceCm, 120.0);
 	}
 
 	return true;

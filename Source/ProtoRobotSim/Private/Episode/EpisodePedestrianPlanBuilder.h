@@ -16,6 +16,7 @@ private:
 	static bool TryGetFloatProperty(const TMap<FString, FEpisodeParamValue>& properties, const FString& key, double& outValue);
 	static bool TryGetStringProperty(const TMap<FString, FEpisodeParamValue>& properties, const FString& key, FString& outValue);
 	static bool TryGetVectorProperty(const TMap<FString, FEpisodeParamValue>& properties, const FString& key, FVector& outValue);
+	static FEpisodePedestrianBehaviorParams BuildBehaviorParams(const FEpisodeDynamicActorSpec& dynamicActorSpec);
 
 	static bool BuildPlanForPedestrian(
 		const FEpisodeDynamicActorSpec& dynamicActorSpec,
@@ -48,6 +49,8 @@ private:
 		const FEpisodePedestrianPlanBuildContext& buildContext,
 		const FString& resolvedFootprintHash,
 		const TArray<FEpisodePedestrianPlanPoint>& planPoints);
+	static FString BuildBehaviorHash(const FEpisodePedestrianBehaviorParams& behaviorParams);
+	static FString BuildPedestrianScenarioHash(const FString& planHash, const FString& behaviorHash);
 
 	static FString FormatVectorForHash(const FVector& value);
 };

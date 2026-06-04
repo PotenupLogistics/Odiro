@@ -674,12 +674,15 @@ AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPlannedPedestrian(const FE
 
 	if (pedestrian->PedestrianRuntimeComponent)
 	{
+		FString robotInstanceId;
+		AActor* robotActor = FindRuntimeActorByCategory(EEpisodeActorCategory::DeliveryBot, robotInstanceId);
 		pedestrian->PedestrianRuntimeComponent->ConfigurePlan(
 			dynamicActorSpec.InstanceId,
 			*plan,
 			speedCmPerSecond,
 			initialDistanceCm,
 			bAutoStart);
+		pedestrian->PedestrianRuntimeComponent->SetRobotActor(robotActor, robotInstanceId);
 	}
 
 	UGameplayStatics::FinishSpawningActor(pedestrian, spawnTransform);
@@ -778,6 +781,33 @@ bool UEpisodeSimulationSubsystem::GetVectorProperty(
 
 	outValue = paramValue->VectorValue;
 	return true;
+}
+
+AActor* UEpisodeSimulationSubsystem::FindRuntimeActorByCategory(
+	EEpisodeActorCategory category,
+	FString& outInstanceId) const
+{
+	outInstanceId.Reset();
+
+	for (const TPair<FString, TObjectPtr<AActor>>& pair : RuntimeActorsById)
+	{
+		AActor* actor = pair.Value.Get();
+		if (!IsValid(actor))
+		{
+			continue;
+		}
+
+		const UEpisodePlaceableComponent* placeableComponent = actor->FindComponentByClass<UEpisodePlaceableComponent>();
+		if (!placeableComponent || placeableComponent->Category != category)
+		{
+			continue;
+		}
+
+		outInstanceId = placeableComponent->InstanceId.IsEmpty() ? pair.Key : placeableComponent->InstanceId;
+		return actor;
+	}
+
+	return nullptr;
 }
 
 void UEpisodeSimulationSubsystem::BuildPedestrianPlanContext(

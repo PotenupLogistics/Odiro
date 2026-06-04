@@ -44,6 +44,30 @@ struct PROTOROBOTSIM_API FEpisodePedestrianPlanReservation
 };
 
 USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodePedestrianBehaviorParams
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianBehavior", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	double Cooperation = 0.5;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianBehavior", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	double Evasiveness = 0.35;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianBehavior", meta = (ClampMin = "0.0", Units = "cm"))
+	double PersonalSpaceCm = 80.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianBehavior", meta = (ClampMin = "0.0", Units = "s"))
+	double AwarenessHorizonSeconds = 2.5;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianBehavior", meta = (ClampMin = "0.0", Units = "s"))
+	double MaxYieldWaitSeconds = 4.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianBehavior", meta = (ClampMin = "0.0", Units = "cm"))
+	double SidestepDistanceCm = 60.0;
+};
+
+USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FEpisodePedestrianPlan
 {
 	GENERATED_BODY()
@@ -65,6 +89,15 @@ struct PROTOROBOTSIM_API FEpisodePedestrianPlan
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianPlan")
 	FString PlanHash;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianPlan")
+	FString BehaviorHash;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianPlan")
+	FString PedestrianScenarioHash;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianPlan")
+	FEpisodePedestrianBehaviorParams BehaviorParams;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianPlan", meta = (ClampMin = "0.0", Units = "s"))
 	double SpawnTimeSeconds = 0.0;

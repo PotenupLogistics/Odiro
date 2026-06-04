@@ -39,6 +39,7 @@ bool FEpisodePedestrianPlanBuilder::BuildPlans(
 		}
 	}
 
+	// 추린 보행자를 InstanceId 기준으로 정렬: 입력 배열 순서가 바뀌어도 결과 순서와 hash가 안정적이게 하기 위한 처리
 	plannedPedestrians.Sort(
 		[](const FEpisodeDynamicActorSpec& left, const FEpisodeDynamicActorSpec& right)
 		{
@@ -127,6 +128,27 @@ bool FEpisodePedestrianPlanBuilder::TryGetVectorProperty(
 	return true;
 }
 
+FEpisodePedestrianBehaviorParams FEpisodePedestrianPlanBuilder::BuildBehaviorParams(
+	const FEpisodeDynamicActorSpec& dynamicActorSpec)
+{
+	FEpisodePedestrianBehaviorParams behaviorParams;
+
+	TryGetFloatProperty(dynamicActorSpec.Properties, TEXT("behavior_cooperation"), behaviorParams.Cooperation);
+	TryGetFloatProperty(dynamicActorSpec.Properties, TEXT("behavior_evasiveness"), behaviorParams.Evasiveness);
+	TryGetFloatProperty(dynamicActorSpec.Properties, TEXT("behavior_personal_space_cm"), behaviorParams.PersonalSpaceCm);
+	TryGetFloatProperty(dynamicActorSpec.Properties, TEXT("behavior_awareness_horizon_s"), behaviorParams.AwarenessHorizonSeconds);
+	TryGetFloatProperty(dynamicActorSpec.Properties, TEXT("behavior_max_yield_wait_s"), behaviorParams.MaxYieldWaitSeconds);
+	TryGetFloatProperty(dynamicActorSpec.Properties, TEXT("behavior_sidestep_distance_cm"), behaviorParams.SidestepDistanceCm);
+
+	behaviorParams.Cooperation = FMath::Clamp(behaviorParams.Cooperation, 0.0, 1.0);
+	behaviorParams.Evasiveness = FMath::Clamp(behaviorParams.Evasiveness, 0.0, 1.0);
+	behaviorParams.PersonalSpaceCm = FMath::Max(behaviorParams.PersonalSpaceCm, 0.0);
+	behaviorParams.AwarenessHorizonSeconds = FMath::Max(behaviorParams.AwarenessHorizonSeconds, 0.0);
+	behaviorParams.MaxYieldWaitSeconds = FMath::Max(behaviorParams.MaxYieldWaitSeconds, 0.0);
+	behaviorParams.SidestepDistanceCm = FMath::Max(behaviorParams.SidestepDistanceCm, 0.0);
+	return behaviorParams;
+}
+
 bool FEpisodePedestrianPlanBuilder::BuildPlanForPedestrian(
 	const FEpisodeDynamicActorSpec& dynamicActorSpec,
 	const FEpisodePedestrianPlanBuildContext& buildContext,
@@ -166,6 +188,7 @@ bool FEpisodePedestrianPlanBuilder::BuildPlanForPedestrian(
 	outPlan.ResolvedFootprintHash = resolvedFootprintHash;
 	outPlan.SemanticNavigationHash = buildContext.SemanticNavigationHash;
 	outPlan.SpawnTimeSeconds = dynamicActorSpec.SpawnTimeSeconds;
+	outPlan.BehaviorParams = BuildBehaviorParams(dynamicActorSpec);
 
 	AppendPlanPoints(polyline, speedCmPerSecond, outPlan.Points, outPlan.NominalDurationSeconds);
 	if (outPlan.Points.Num() < 2)
@@ -175,6 +198,8 @@ bool FEpisodePedestrianPlanBuilder::BuildPlanForPedestrian(
 	}
 
 	outPlan.PlanHash = BuildPlanHash(dynamicActorSpec, buildContext, resolvedFootprintHash, outPlan.Points);
+	outPlan.BehaviorHash = BuildBehaviorHash(outPlan.BehaviorParams);
+	outPlan.PedestrianScenarioHash = BuildPedestrianScenarioHash(outPlan.PlanHash, outPlan.BehaviorHash);
 	return true;
 }
 
@@ -399,6 +424,26 @@ FString FEpisodePedestrianPlanBuilder::BuildPlanHash(
 		HashString(hash, FString::Printf(TEXT("%.6f"), planPoint.TimeSeconds));
 	}
 
+	return HashToString(hash);
+}
+
+FString FEpisodePedestrianPlanBuilder::BuildBehaviorHash(const FEpisodePedestrianBehaviorParams& behaviorParams)
+{
+	uint32 hash = 0;
+	HashString(hash, FString::Printf(TEXT("%.6f"), behaviorParams.Cooperation));
+	HashString(hash, FString::Printf(TEXT("%.6f"), behaviorParams.Evasiveness));
+	HashString(hash, FString::Printf(TEXT("%.6f"), behaviorParams.PersonalSpaceCm));
+	HashString(hash, FString::Printf(TEXT("%.6f"), behaviorParams.AwarenessHorizonSeconds));
+	HashString(hash, FString::Printf(TEXT("%.6f"), behaviorParams.MaxYieldWaitSeconds));
+	HashString(hash, FString::Printf(TEXT("%.6f"), behaviorParams.SidestepDistanceCm));
+	return HashToString(hash);
+}
+
+FString FEpisodePedestrianPlanBuilder::BuildPedestrianScenarioHash(const FString& planHash, const FString& behaviorHash)
+{
+	uint32 hash = 0;
+	HashString(hash, planHash);
+	HashString(hash, behaviorHash);
 	return HashToString(hash);
 }
 

@@ -692,6 +692,51 @@ void UEpisodeCompiler::CompileStaticObstacles(
 	}
 }
 
+void UEpisodeCompiler::CompilePedestrianBehavior(
+	const FJsonObject& pedestrianObject,
+	const FString& path,
+	FEpisodeCompileResult& result,
+	FEpisodeDynamicActorSpec& dynamicActorSpec)
+{
+	TSharedPtr<FJsonObject> behaviorObject;
+	if (!TryGetObjectField(pedestrianObject, TEXT("behavior"), behaviorObject))
+	{
+		return;
+	}
+
+	const auto readOptionalNumber = [&result, &behaviorObject, &path](
+		const TCHAR* fieldName,
+		const TCHAR* propertyName,
+		double scale,
+		TMap<FString, FEpisodeParamValue>& outProperties)
+	{
+		const FString fieldNameString(fieldName);
+		if (!behaviorObject->HasField(fieldNameString)) return;
+
+		double value = 0.0;
+		if (!behaviorObject->TryGetNumberField(fieldNameString, value))
+		{
+			AddDiagnostic(
+				result,
+				EEpisodeCompileDiagnosticSeverity::Error,
+				TEXT("invalid_number"),
+				FString::Printf(TEXT("%s.behavior.%s 필드는 숫자여야 함."), *path, fieldName));
+			return;
+		}
+
+		outProperties.Add(propertyName, MakeFloatParam(value * scale));
+	};
+
+	readOptionalNumber(TEXT("cooperation"), TEXT("behavior_cooperation"), 1.0, dynamicActorSpec.Properties);
+	readOptionalNumber(TEXT("evasiveness"), TEXT("behavior_evasiveness"), 1.0, dynamicActorSpec.Properties);
+	readOptionalNumber(TEXT("personal_space_m"), TEXT("behavior_personal_space_cm"), MetersToCentimeters, dynamicActorSpec.Properties);
+	readOptionalNumber(TEXT("personal_space_cm"), TEXT("behavior_personal_space_cm"), 1.0, dynamicActorSpec.Properties);
+	readOptionalNumber(TEXT("awareness_horizon_s"), TEXT("behavior_awareness_horizon_s"), 1.0, dynamicActorSpec.Properties);
+	readOptionalNumber(TEXT("max_yield_wait_s"), TEXT("behavior_max_yield_wait_s"), 1.0, dynamicActorSpec.Properties);
+	readOptionalNumber(TEXT("sidestep_distance_m"), TEXT("behavior_sidestep_distance_cm"), MetersToCentimeters, dynamicActorSpec.Properties);
+	readOptionalNumber(TEXT("sidestep_distance_cm"), TEXT("behavior_sidestep_distance_cm"), 1.0, dynamicActorSpec.Properties);
+}
+
 void UEpisodeCompiler::CompilePedestrians(
 	const FJsonObject& actorsObject,
 	FEpisodeCompileResult& result,
@@ -825,6 +870,8 @@ void UEpisodeCompiler::CompilePedestrians(
 					TEXT("auto_start"), MakeBoolParam(ReadBoolOrDefault(*movementObject, TEXT("auto_start"), true)));
 			}
 		}
+
+		CompilePedestrianBehavior(*pedestrianObject, pedestrianPath, result, dynamicActorSpec);
 
 		result.WorldSpec.DynamicActors.Add(dynamicActorSpec);
 	}

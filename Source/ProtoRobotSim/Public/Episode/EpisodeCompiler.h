@@ -135,6 +135,7 @@ private:
 	// actors.pedestrians를 동적 actor spec으로 변환한다.
 	// speed_mps와 initial_distance_m은 원본 값과 centimeter 변환 값을 properties에 함께 남긴다.
 	static void CompilePedestrians(const FJsonObject& actorsObject, FEpisodeCompileResult& result, const TSet<FString>& pathIds, TSet<FString>& instanceIds);
+	static void CompilePedestrianBehavior(const FJsonObject& pedestrianObject, const FString& path, FEpisodeCompileResult& result, FEpisodeDynamicActorSpec& dynamicActorSpec);
 
 	// actors.robot setup은 FEpisodeDeliveryBotSpawnSpec으로 컴파일되어 저장된다.
 	// 배치는 xy_m/yaw_deg, 목적지는 route 블록에서 읽고 로봇 튜닝은 DeliveryBotSetup JSON이 담당한다.

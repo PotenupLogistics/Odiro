@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/EngineTypes.h"
 #include "Shared/EpisodeConfigTypes.h"
-#include "Shared/Struct/DeliveryBotSimulationFailureInfo.h"
+#include "Shared/Struct/DeliveryBot/Result/DeliveryBotSimulationFailureInfo.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "EpisodeEvaluationSubsystem.generated.h"
 

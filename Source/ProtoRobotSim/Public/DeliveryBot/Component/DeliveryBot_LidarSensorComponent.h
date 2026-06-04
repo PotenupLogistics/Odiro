@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Shared/Struct/DeliveryBotLidarSensorInfo.h"
+#include "Shared/Struct/DeliveryBot/Perception/DeliveryBotLidarSensorInfo.h"
 #include "DeliveryBot_LidarSensorComponent.generated.h"
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))

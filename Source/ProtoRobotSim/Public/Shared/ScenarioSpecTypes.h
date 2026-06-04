@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "EpisodeCoreTypes.h"
-#include "Struct/DeliveryBotSetupInfo.h"
+#include "Struct/DeliveryBot/Setup/DeliveryBotSetupInfo.h"
 #include "ScenarioSpecTypes.generated.h"
 
 // LLM이 언리얼에서 에피소드 세팅을 위해 사용할 수 있는 필드들을 한 WorldConfig에 해당.

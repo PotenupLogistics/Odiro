@@ -28,10 +28,10 @@ public:
 	bool bStoreMissedRays{ false };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float StopDistanceM{ 1.2f };
+	float StopDistanceM{ 1.5f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float SlowDownDistanceM{ 3.5f };
+	float SlowDownDistanceM{ 5.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TEnumAsByte<ECollisionChannel> TraceChannel{ ECC_Visibility };

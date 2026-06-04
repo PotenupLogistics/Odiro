@@ -12,7 +12,7 @@ public:
 	bool bDrawDebug{ true };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float TargetSpeedKmh{ 10.f };
+	float TargetSpeedKmh{ 3.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float LookAheadDistanceM{ 1.0f };
@@ -27,8 +27,8 @@ public:
 	float SteeringSensitivity{ 0.8f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float MinTurnSpeedKmh{ 1.5f };
+	float MinTurnSpeedKmh{ 1.f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float ObstacleSlowSpeedKmh{ 1.5f };
+	float ObstacleSlowSpeedKmh{ 0.5f };
 };

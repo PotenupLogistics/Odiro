@@ -9,37 +9,57 @@ namespace
 	constexpr float KMH_TO_CMS = 27.777778f;
 }
 
+// 드라이브 컴포넌트의 기본 Tick 설정을 초기화한다.
 UDeliveryBot_DriveComponent::UDeliveryBot_DriveComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponent* vehicleMovement,
-	const FDeliveryBotMoveCommandInfo& moveCommandInfo,	float deltaTime)
+// 이동 명령을 현재 차량 상태에 맞는 기어, 스로틀, 브레이크, 조향 입력으로 변환한다.
+void UDeliveryBot_DriveComponent::ApplyMoveCommand(
+	UChaosVehicleMovementComponent* vehicleMovement,
+	const FDeliveryBotMoveCommandInfo& moveCommandInfo,
+	float deltaTime)
 {
 	if (!IsValid(vehicleMovement))
 		return;
 
 	const float safeDeltaTime = FMath::Max(deltaTime, 0.f);
+	const int32 targetGear = GetTargetGear(moveCommandInfo);
+	const float targetMaxSpeedKmh = GetTargetMaxSpeedKmh(moveCommandInfo);
+
+	if (ShouldBrakeBeforeGearSwitch(vehicleMovement, targetGear))
+	{
+		CurrentTargetSpeedKmh = 0.f;
+
+		ApplyDriveInput(
+			vehicleMovement,
+			0.f,
+			0.f,
+			DriveConfigInfo.GearSwitchBrakeInput,
+			false,
+			targetMaxSpeedKmh,
+			safeDeltaTime);
+
+		return;
+	}
+
+	vehicleMovement->SetTargetGear(targetGear, true);
 
 	const float requestedTargetSpeedKmh = moveCommandInfo.bBrake
 		? 0.f
-		: FMath::Clamp(moveCommandInfo.TargetSpeedKmh, 0.f, DriveConfigInfo.MaxSpeedKmh);
+		: FMath::Clamp(moveCommandInfo.TargetSpeedKmh, 0.f, targetMaxSpeedKmh);
 
-	const float speedInterpRateKmhPerSecond = requestedTargetSpeedKmh > CurrentTargetSpeedKmh
-		? DriveConfigInfo.AccelerationRateKmhPerSecond
-		: DriveConfigInfo.DecelerationRateKmhPerSecond;
+	const float speedInterpRateKmhPerSecond =
+		GetTargetAccelerationRateKmhPerSecond(moveCommandInfo, requestedTargetSpeedKmh);
 
-	CurrentTargetSpeedKmh = FMath::FInterpConstantTo
-	(
+	CurrentTargetSpeedKmh = FMath::FInterpConstantTo(
 		CurrentTargetSpeedKmh,
 		requestedTargetSpeedKmh,
 		safeDeltaTime,
-		speedInterpRateKmhPerSecond
-	);
+		speedInterpRateKmhPerSecond);
 
 	const float currentSpeedKmh = FMath::Abs(GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed()));
-
 	const float speedErrorKmh = CurrentTargetSpeedKmh - currentSpeedKmh;
 	const float speedControlRangeKmh = FMath::Max(DriveConfigInfo.SlowdownSpeedRangeKmh, 0.1f);
 
@@ -57,20 +77,19 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 		brake = FMath::Max(brake, FMath::Min(overspeedBrake, DriveConfigInfo.SpeedLimitBrake));
 	}
 
-	vehicleMovement->SetTargetGear(1, true);
-
-	ApplyDriveInput
-	(
+	ApplyDriveInput(
 		vehicleMovement,
 		throttle,
 		moveCommandInfo.Steering,
 		brake,
 		DriveConfigInfo.bUseHandbrakeWhenBrake && moveCommandInfo.bBrake,
-		safeDeltaTime
-	);
+		targetMaxSpeedKmh,
+		safeDeltaTime);
 }
 
-void UDeliveryBot_DriveComponent::SetupVehicleMovement(UChaosWheeledVehicleMovementComponent* wheeledMovement) const
+// Chaos Wheeled Vehicle의 엔진과 변속기 기본 설정을 적용한다.
+void UDeliveryBot_DriveComponent::SetupVehicleMovement(
+	UChaosWheeledVehicleMovementComponent* wheeledMovement) const
 {
 	if (!IsValid(wheeledMovement))
 		return;
@@ -88,43 +107,38 @@ void UDeliveryBot_DriveComponent::SetupVehicleMovement(UChaosWheeledVehicleMovem
 	SetupTorqueCurve(wheeledMovement);
 }
 
-void UDeliveryBot_DriveComponent::InitializeChaosDrive(UChaosWheeledVehicleMovementComponent* wheeledMovement,
-	const FDeliveryBotDriveConfigInfo& driveConfigInfo)
+// 외부 설정값을 보정한 뒤 Chaos 주행 설정을 초기화한다.
+void UDeliveryBot_DriveComponent::InitializeChaosDrive(UChaosWheeledVehicleMovementComponent* wheeledMovement,	const FDeliveryBotDriveConfigInfo& driveConfigInfo)
 {
-	DriveConfigInfo = driveConfigInfo;
+	DriveConfigInfo = NormalizeDriveConfigInfo(driveConfigInfo);
 
-	DriveConfigInfo.MaxSpeedKmh = FMath::Max(DriveConfigInfo.MaxSpeedKmh, 0.f);
-	DriveConfigInfo.SlowdownSpeedRangeKmh = FMath::Max(DriveConfigInfo.SlowdownSpeedRangeKmh, 0.1f);
-	DriveConfigInfo.SpeedLimitToleranceKmh = FMath::Max(DriveConfigInfo.SpeedLimitToleranceKmh, 0.f);
-	DriveConfigInfo.SpeedLimitBrake = FMath::Clamp(DriveConfigInfo.SpeedLimitBrake, 0.f, 1.f);
-	DriveConfigInfo.StopBrakeInput = FMath::Clamp(DriveConfigInfo.StopBrakeInput, 0.f, 1.f);
-	DriveConfigInfo.ThrottleInputRatePerSecond = FMath::Max(DriveConfigInfo.ThrottleInputRatePerSecond, 0.f);
-	DriveConfigInfo.BrakeInputRatePerSecond = FMath::Max(DriveConfigInfo.BrakeInputRatePerSecond, 0.f);
-	DriveConfigInfo.SteeringInputRatePerSecond = FMath::Max(DriveConfigInfo.SteeringInputRatePerSecond, 0.f);
-	DriveConfigInfo.AccelerationRateKmhPerSecond = FMath::Max(DriveConfigInfo.AccelerationRateKmhPerSecond, 0.f);
-	DriveConfigInfo.DecelerationRateKmhPerSecond = FMath::Max(DriveConfigInfo.DecelerationRateKmhPerSecond, 0.f);
-	DriveConfigInfo.MaxTorque = FMath::Max(DriveConfigInfo.MaxTorque, 0.f);
-	DriveConfigInfo.MaxRPM = FMath::Max(DriveConfigInfo.MaxRPM, 1.f);
-	DriveConfigInfo.EngineIdleRPM = FMath::Max(DriveConfigInfo.EngineIdleRPM, 0.f);
-	DriveConfigInfo.EngineBrakeEffect = FMath::Max(DriveConfigInfo.EngineBrakeEffect, 0.f);
-	DriveConfigInfo.EngineRevUpMOI = FMath::Max(DriveConfigInfo.EngineRevUpMOI, 0.f);
-	DriveConfigInfo.EngineRevDownRate = FMath::Max(DriveConfigInfo.EngineRevDownRate, 0.f);
-	CurrentTargetSpeedKmh = FMath::Clamp(CurrentTargetSpeedKmh, 0.f, DriveConfigInfo.MaxSpeedKmh);
+	const float maxTargetSpeedKmh = FMath::Max(
+		DriveConfigInfo.MaxSpeedKmh,
+		DriveConfigInfo.MaxReverseSpeedKmh);
+
+	CurrentTargetSpeedKmh = FMath::Clamp(CurrentTargetSpeedKmh, 0.f, maxTargetSpeedKmh);
 
 	SetupVehicleMovement(wheeledMovement);
 }
 
-void UDeliveryBot_DriveComponent::ApplyDriveInput(UChaosVehicleMovementComponent* vehicleMovement,
-	float throttle,	float steering,	float brake, bool bHandbrake, float deltaTime)
+// 보간된 스로틀, 브레이크, 조향 입력을 Chaos VehicleMovement에 적용한다.
+void UDeliveryBot_DriveComponent::ApplyDriveInput(
+	UChaosVehicleMovementComponent* vehicleMovement,
+	float throttle,
+	float steering,
+	float brake,
+	bool bHandbrake,
+	float speedLimitKmh,
+	float deltaTime)
 {
 	if (!IsValid(vehicleMovement))
 		return;
 
-	const float limitedThrottle = GetLimitedThrottle(vehicleMovement, throttle);
+	const float limitedThrottle = GetLimitedThrottle(vehicleMovement, throttle, speedLimitKmh);
 	float targetBrake = FMath::Clamp(brake, 0.f, 1.f);
 
 	const float currentSpeedCmS = FMath::Abs(vehicleMovement->GetForwardSpeed());
-	const float speedLimitCmS = GetMaxSpeedCmPerSecond();
+	const float speedLimitCmS = GetKmhToCmPerSecond(speedLimitKmh);
 	const float speedToleranceCmS = GetKmhToCmPerSecond(DriveConfigInfo.SpeedLimitToleranceKmh);
 
 	if (currentSpeedCmS > speedLimitCmS + speedToleranceCmS)
@@ -133,32 +147,25 @@ void UDeliveryBot_DriveComponent::ApplyDriveInput(UChaosVehicleMovementComponent
 	}
 
 	const float targetSteering = FMath::Clamp(steering, -1.f, 1.f);
-
 	const float targetThrottle = targetBrake > KINDA_SMALL_NUMBER ? 0.f : limitedThrottle;
 
-	CurrentThrottleInput = FMath::FInterpConstantTo
-	(
+	CurrentThrottleInput = FMath::FInterpConstantTo(
 		CurrentThrottleInput,
 		targetThrottle,
 		deltaTime,
-		DriveConfigInfo.ThrottleInputRatePerSecond
-	);
+		DriveConfigInfo.ThrottleInputRatePerSecond);
 
-	CurrentBrakeInput = FMath::FInterpConstantTo
-	(
+	CurrentBrakeInput = FMath::FInterpConstantTo(
 		CurrentBrakeInput,
 		targetBrake,
 		deltaTime,
-		DriveConfigInfo.BrakeInputRatePerSecond
-	);
+		DriveConfigInfo.BrakeInputRatePerSecond);
 
-	CurrentSteeringInput = FMath::FInterpConstantTo
-	(
+	CurrentSteeringInput = FMath::FInterpConstantTo(
 		CurrentSteeringInput,
 		targetSteering,
 		deltaTime,
-		DriveConfigInfo.SteeringInputRatePerSecond
-	);
+		DriveConfigInfo.SteeringInputRatePerSecond);
 
 	vehicleMovement->SetThrottleInput(CurrentThrottleInput);
 	vehicleMovement->SetSteeringInput(CurrentSteeringInput);
@@ -166,22 +173,32 @@ void UDeliveryBot_DriveComponent::ApplyDriveInput(UChaosVehicleMovementComponent
 	vehicleMovement->SetHandbrakeInput(bHandbrake);
 }
 
+// 주행 설정값을 보정해 저장하고 현재 목표 속도를 유효 범위로 맞춘다.
 void UDeliveryBot_DriveComponent::SetDriveConfigInfo(const FDeliveryBotDriveConfigInfo& driveConfigInfo)
 {
-	DriveConfigInfo = driveConfigInfo;
+	DriveConfigInfo = NormalizeDriveConfigInfo(driveConfigInfo);
+
+	const float maxTargetSpeedKmh = FMath::Max(
+		DriveConfigInfo.MaxSpeedKmh,
+		DriveConfigInfo.MaxReverseSpeedKmh);
+
+	CurrentTargetSpeedKmh = FMath::Clamp(CurrentTargetSpeedKmh, 0.f, maxTargetSpeedKmh);
 }
 
+// 현재 적용 중인 주행 설정값을 반환한다.
 FDeliveryBotDriveConfigInfo UDeliveryBot_DriveComponent::GetDriveConfigInfo() const
 {
 	return DriveConfigInfo;
 }
 
+// 최대 전진 속도를 cm/s 단위로 반환한다.
 float UDeliveryBot_DriveComponent::GetMaxSpeedCmPerSecond() const
 {
 	return GetKmhToCmPerSecond(DriveConfigInfo.MaxSpeedKmh);
 }
 
-void UDeliveryBot_DriveComponent::SetupTorqueCurve(UChaosWheeledVehicleMovementComponent* wheeledMovement) const
+// 엔진 RPM별 토크 곡선을 설정한다.
+void UDeliveryBot_DriveComponent::SetupTorqueCurve(	UChaosWheeledVehicleMovementComponent* wheeledMovement) const
 {
 	if (!IsValid(wheeledMovement))
 		return;
@@ -202,13 +219,87 @@ void UDeliveryBot_DriveComponent::SetupTorqueCurve(UChaosWheeledVehicleMovementC
 	torqueCurve->AddKey(maxRPM, 0.1f);
 }
 
-float UDeliveryBot_DriveComponent::GetLimitedThrottle(const UChaosVehicleMovementComponent* vehicleMovement, float targetThrottle) const
+// 이동 방향에 따라 전진 기어 또는 후진 기어를 결정한다.
+int32 UDeliveryBot_DriveComponent::GetTargetGear(const FDeliveryBotMoveCommandInfo& moveCommandInfo) const
+{
+	return moveCommandInfo.MoveDirectionType == EDeliveryBotMoveDirectionType::Reverse ? -1 : 1;
+}
+
+// 이동 방향에 따라 사용할 최대 속도(km/h)를 반환한다.
+float UDeliveryBot_DriveComponent::GetTargetMaxSpeedKmh(const FDeliveryBotMoveCommandInfo& moveCommandInfo) const
+{
+	return moveCommandInfo.MoveDirectionType == EDeliveryBotMoveDirectionType::Reverse
+		? DriveConfigInfo.MaxReverseSpeedKmh
+		: DriveConfigInfo.MaxSpeedKmh;
+}
+
+// 현재 목표 속도와 요청 속도 차이에 따라 가속 또는 감속 변화율을 선택한다.
+float UDeliveryBot_DriveComponent::GetTargetAccelerationRateKmhPerSecond(const FDeliveryBotMoveCommandInfo& moveCommandInfo,
+	float requestedTargetSpeedKmh) const
+{
+	if (requestedTargetSpeedKmh <= CurrentTargetSpeedKmh)
+		return DriveConfigInfo.DecelerationRateKmhPerSecond;
+
+	return moveCommandInfo.MoveDirectionType == EDeliveryBotMoveDirectionType::Reverse
+		? DriveConfigInfo.ReverseAccelerationRateKmhPerSecond
+		: DriveConfigInfo.AccelerationRateKmhPerSecond;
+}
+
+// 현재 진행 방향과 목표 기어가 반대일 때 기어 전환 전 제동이 필요한지 판단한다.
+bool UDeliveryBot_DriveComponent::ShouldBrakeBeforeGearSwitch(const UChaosVehicleMovementComponent* vehicleMovement,int32 targetGear) const
+{
+	if (!IsValid(vehicleMovement))
+		return false;
+
+	const float signedSpeedKmh = GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed());
+
+	if (targetGear > 0)
+		return signedSpeedKmh < -DriveConfigInfo.GearSwitchStopSpeedKmh;
+
+	return signedSpeedKmh > DriveConfigInfo.GearSwitchStopSpeedKmh;
+}
+
+// 주행 설정값이 음수나 비정상 범위로 들어오지 않도록 보정한다.
+FDeliveryBotDriveConfigInfo UDeliveryBot_DriveComponent::NormalizeDriveConfigInfo(const FDeliveryBotDriveConfigInfo& driveConfigInfo) const
+{
+	FDeliveryBotDriveConfigInfo normalizedInfo = driveConfigInfo;
+
+	normalizedInfo.MaxSpeedKmh = FMath::Max(normalizedInfo.MaxSpeedKmh, 0.f);
+	normalizedInfo.MaxReverseSpeedKmh = FMath::Max(normalizedInfo.MaxReverseSpeedKmh, 0.f);
+	normalizedInfo.ReverseAccelerationRateKmhPerSecond = FMath::Max(normalizedInfo.ReverseAccelerationRateKmhPerSecond, 0.f);
+	normalizedInfo.GearSwitchStopSpeedKmh = FMath::Max(normalizedInfo.GearSwitchStopSpeedKmh, 0.f);
+	normalizedInfo.GearSwitchBrakeInput = FMath::Clamp(normalizedInfo.GearSwitchBrakeInput, 0.f, 1.f);
+
+	normalizedInfo.SlowdownSpeedRangeKmh = FMath::Max(normalizedInfo.SlowdownSpeedRangeKmh, 0.1f);
+	normalizedInfo.SpeedLimitToleranceKmh = FMath::Max(normalizedInfo.SpeedLimitToleranceKmh, 0.f);
+	normalizedInfo.SpeedLimitBrake = FMath::Clamp(normalizedInfo.SpeedLimitBrake, 0.f, 1.f);
+	normalizedInfo.StopBrakeInput = FMath::Clamp(normalizedInfo.StopBrakeInput, 0.f, 1.f);
+
+	normalizedInfo.ThrottleInputRatePerSecond = FMath::Max(normalizedInfo.ThrottleInputRatePerSecond, 0.f);
+	normalizedInfo.BrakeInputRatePerSecond = FMath::Max(normalizedInfo.BrakeInputRatePerSecond, 0.f);
+	normalizedInfo.SteeringInputRatePerSecond = FMath::Max(normalizedInfo.SteeringInputRatePerSecond, 0.f);
+
+	normalizedInfo.AccelerationRateKmhPerSecond = FMath::Max(normalizedInfo.AccelerationRateKmhPerSecond, 0.f);
+	normalizedInfo.DecelerationRateKmhPerSecond = FMath::Max(normalizedInfo.DecelerationRateKmhPerSecond, 0.f);
+
+	normalizedInfo.MaxTorque = FMath::Max(normalizedInfo.MaxTorque, 0.f);
+	normalizedInfo.MaxRPM = FMath::Max(normalizedInfo.MaxRPM, 1.f);
+	normalizedInfo.EngineIdleRPM = FMath::Max(normalizedInfo.EngineIdleRPM, 0.f);
+	normalizedInfo.EngineBrakeEffect = FMath::Max(normalizedInfo.EngineBrakeEffect, 0.f);
+	normalizedInfo.EngineRevUpMOI = FMath::Max(normalizedInfo.EngineRevUpMOI, 0.f);
+	normalizedInfo.EngineRevDownRate = FMath::Max(normalizedInfo.EngineRevDownRate, 0.f);
+
+	return normalizedInfo;
+}
+
+// 현재 속도가 제한 속도에 가까워질수록 스로틀을 줄인다.
+float UDeliveryBot_DriveComponent::GetLimitedThrottle(const UChaosVehicleMovementComponent* vehicleMovement,float targetThrottle,float maxSpeedKmh) const
 {
 	if (!IsValid(vehicleMovement))
 		return 0.f;
 
 	const float currentSpeedCmS = FMath::Abs(vehicleMovement->GetForwardSpeed());
-	const float maxSpeedCmS = GetMaxSpeedCmPerSecond();
+	const float maxSpeedCmS = GetKmhToCmPerSecond(maxSpeedKmh);
 	const float slowdownRangeCmS = FMath::Max(GetKmhToCmPerSecond(DriveConfigInfo.SlowdownSpeedRangeKmh), 1.f);
 
 	const float throttleScale = FMath::Clamp((maxSpeedCmS - currentSpeedCmS) / slowdownRangeCmS, 0.f, 1.f);
@@ -216,10 +307,13 @@ float UDeliveryBot_DriveComponent::GetLimitedThrottle(const UChaosVehicleMovemen
 	return FMath::Clamp(targetThrottle, 0.f, 1.f) * throttleScale;
 }
 
+// km/h 단위 속도를 cm/s 단위로 변환한다.
 float UDeliveryBot_DriveComponent::GetKmhToCmPerSecond(float speedKmh) const
 {
 	return speedKmh * KMH_TO_CMS;
 }
+
+// cm/s 단위 속도를 km/h 단위로 변환한다.
 float UDeliveryBot_DriveComponent::GetCmPerSecondToKmh(float speedCmS) const
 {
 	return speedCmS / KMH_TO_CMS;

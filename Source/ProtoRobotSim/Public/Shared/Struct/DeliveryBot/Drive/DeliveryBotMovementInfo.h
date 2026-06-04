@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Shared/Struct/DeliveryBot/Path/DeliveryBotPathInfo.h"
 #include "DeliveryBotMovementInfo.generated.h"
 
 USTRUCT(BlueprintType)
@@ -34,5 +35,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bBrake{ false };
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EDeliveryBotMoveDirectionType MoveDirectionType{ EDeliveryBotMoveDirectionType::Forward };
 };
 

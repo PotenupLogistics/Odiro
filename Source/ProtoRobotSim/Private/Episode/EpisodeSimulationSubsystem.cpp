@@ -6,7 +6,7 @@
 #include "Episode/Components/EpisodePathFollowerComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
-#include "Shared/Struct/DeliveryBotSetupInfo.h"
+#include "Shared/Struct/DeliveryBot/Setup/DeliveryBotSetupInfo.h"
 #include "Kismet/GameplayStatics.h"
 
 

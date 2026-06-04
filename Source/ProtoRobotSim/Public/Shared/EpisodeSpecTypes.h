@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "EpisodeCoreTypes.h"
 #include "EpisodeConfigTypes.h"
-#include "Struct/DeliveryBotSetupInfo.h"
+#include "Struct/DeliveryBot/Setup/DeliveryBotSetupInfo.h"
 #include "EpisodeSpecTypes.generated.h"
 
 // 언리얼에서 ScenarioSpec 해석 후 에피소드를 생성하기 위한 에피소드 명세.

@@ -13,6 +13,18 @@ public:
 	float MaxSpeedKmh{ 10.f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float MaxReverseSpeedKmh{ 3.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ReverseAccelerationRateKmhPerSecond{ 1.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float GearSwitchStopSpeedKmh{ 0.3f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float GearSwitchBrakeInput{ 0.2f };
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SlowdownSpeedRangeKmh{ 4.f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -22,7 +34,7 @@ public:
 	float SpeedLimitBrake{ 0.08f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float StopBrakeInput{ 0.2f };
+	float StopBrakeInput{ 0.15f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float ThrottleInputRatePerSecond{ 0.35f };
@@ -37,7 +49,7 @@ public:
 	float AccelerationRateKmhPerSecond{ 2.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float DecelerationRateKmhPerSecond{ 3.f };
+	float DecelerationRateKmhPerSecond{ 1.5f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bUseHandbrakeWhenBrake{ false };
@@ -46,7 +58,7 @@ public:
 	float MaxTorque{ 220.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float MaxRPM{ 4000.f };
+	float MaxRPM{ 2000.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float EngineIdleRPM{ 600.f };

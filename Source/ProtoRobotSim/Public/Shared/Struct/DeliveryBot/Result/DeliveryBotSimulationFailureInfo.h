@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "Shared/Struct/DeliveryBotPolicyFailureInfo.h"
+#include "Shared/Struct/DeliveryBot/Policy/DeliveryBotPolicyFailureInfo.h"
 #include "DeliveryBotSimulationFailureInfo.generated.h"
 
 class AActor;

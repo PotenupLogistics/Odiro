@@ -2,8 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Shared/Struct/DeliveryBotMovementInfo.h"
-#include "Shared/Struct/DeliveryBotPathFollowConfigInfo.h"
+#include "Shared/Struct/DeliveryBot/Drive/DeliveryBotMovementInfo.h"
+#include "Shared/Struct/DeliveryBot/Path/DeliveryBotPathFollowConfigInfo.h"
+#include "Shared/Struct/DeliveryBot/Navigation/DeliveryBotNavigationConfigInfo.h"
+#include "Shared/Struct/DeliveryBot/Path/DeliveryBotPathInfo.h"
 #include "DeliveryBot_PathFollowComponent.generated.h"
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
@@ -25,6 +27,10 @@ public:
 
 	FDeliveryBotMoveCommandInfo BuildMoveCommand(float deltaTime);
 
+	FDeliveryBotMoveCommandInfo BuildDriveCommand(float deltaTime, const FDeliveryBotNavigationConfigInfo& navigationConfigInfo);
+	
+	void SetPathPointInfos(const TArray<FDeliveryBotPathPointInfo>& pathPointInfos);
+	
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|PathFollow")
 	FDeliveryBotPathFollowConfigInfo PathFollowConfigInfo{};
@@ -32,15 +38,22 @@ protected:
 private:
 	void UpdateCurrentPathIndex();
 	FVector GetLookAheadLocation() const;
+	float GetSteeringToLocation(const FVector& targetLocation,	EDeliveryBotMoveDirectionType moveDirectionType) const;
 	float GetSteeringToLocation(const FVector& targetLocation) const;
 	float GetDistance2D(const FVector& fromLocation, const FVector& toLocation) const;
 	void DrawDebugPathFollow(const FVector& lookAheadLocation, float steering) const;
-	
+	FVector GetPathPointLocation(int32 pathIndex) const;
+	EDeliveryBotMoveDirectionType GetCurrentMoveDirectionType() const;
+	int32 GetClosestPathSegmentIndex() const;
 	
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|PathFollow", meta = (AllowPrivateAccess = "true"))
 	TArray<FVector> PathPoints;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|PathFollow", meta = (AllowPrivateAccess = "true"))
+	TArray<FDeliveryBotPathPointInfo> PathPointInfos;
+	
+private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|PathFollow", meta = (AllowPrivateAccess = "true"))
 	int32 CurrentPathIndex{ INDEX_NONE };
 

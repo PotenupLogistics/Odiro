@@ -18,10 +18,7 @@ namespace
 	{
 		const UEnum* enumPtr = StaticEnum<EDeliveryBotPolicyActionType>();
 		if (!IsValid(enumPtr))
-		{
 			return TEXT("Unknown");
-		}
-
 		return enumPtr->GetNameStringByValue(static_cast<int64>(actionType));
 	}
 }
@@ -46,15 +43,19 @@ ADeliveryBot_ChaosActor::ADeliveryBot_ChaosActor(const FObjectInitializer& Objec
 		ChaosDriveComponent->SetupVehicleMovement(wheeledMovement);
 	
 }
-
 void ADeliveryBot_ChaosActor::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (UWorld* world = GetWorld())
+	{
+		FlushPersistentDebugLines(world);
+	}
+
 	if (IsValid(PolicyJudgmentComponent))
 	{
 		PolicyJudgmentComponent->OnPolicyFailed.RemoveDynamic(this, &ADeliveryBot_ChaosActor::HandlePolicyFailed);
-		PolicyJudgmentComponent->OnPolicyFailed.AddDynamic(	this, &ADeliveryBot_ChaosActor::HandlePolicyFailed);
+		PolicyJudgmentComponent->OnPolicyFailed.AddDynamic(this, &ADeliveryBot_ChaosActor::HandlePolicyFailed);
 	}
 
 	ApplySetupInfo();
@@ -65,14 +66,14 @@ void ADeliveryBot_ChaosActor::BeginPlay()
 		return;
 
 	vehicleMovement->SetRequiresControllerForInputs(false);
-	vehicleMovement->SetUseAutomaticGears(true);
+	vehicleMovement->SetUseAutomaticGears(false);
 	vehicleMovement->SetTargetGear(1, true);
 
-	SetActorLocation(SetupInfo.LocationSetupInfo.StartLocationCm,false,nullptr, ETeleportType::TeleportPhysics);
+	SetActorLocation(SetupInfo.LocationSetupInfo.StartLocationCm, false, nullptr, ETeleportType::TeleportPhysics);
 
 	if (SetupInfo.LocationSetupInfo.bAutoStartRoute)
 	{
-		GetWorldTimerManager().SetTimerForNextTick(	this,	&ADeliveryBot_ChaosActor::BuildGlobalPathAndStartFollow);
+		GetWorldTimerManager().SetTimerForNextTick(this, &ADeliveryBot_ChaosActor::BuildGlobalPathAndStartFollow);
 	}
 }
 
@@ -82,6 +83,7 @@ void ADeliveryBot_ChaosActor::InitializeSetupInfo(const FDeliveryBotSetupInfo& s
 
 	bSimulationFailed = false;
 	LastSimulationFailureInfo = FDeliveryBotSimulationFailureInfo{};
+	TipOverStartTimeSeconds = -1.f;
 
 	ApplySetupInfo();
 }
@@ -135,10 +137,25 @@ void ADeliveryBot_ChaosActor::Tick(float DeltaSeconds)
 		return;
 	}
 
+	CheckTipOverFailure();
+
+	if (bSimulationFailed)
+	{
+		ApplyFailureStopCommand(DeltaSeconds);
+		return;
+	}
+
 	UpdateLidarScan();
 	DebugFrontLidarObject();
 
 	ApplyPathFollowMoveCommand(DeltaSeconds);
+}
+
+void ADeliveryBot_ChaosActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	CleanupSimulationRuntimeState();
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void ADeliveryBot_ChaosActor::ApplySetupInfo()
@@ -177,24 +194,39 @@ void ADeliveryBot_ChaosActor::ApplySetupInfo()
 void ADeliveryBot_ChaosActor::BuildGlobalPathAndStartFollow()
 {
 	if (!IsValid(GlobalPathComponent) || !IsValid(PathFollowComponent))
-		return;
-
-	const bool bSuccess
 	{
-		GlobalPathComponent->BuildPathByAStar(
-			SetupInfo.LocationSetupInfo.StartLocationCm,
-			SetupInfo.LocationSetupInfo.GoalLocationCm
-			)
-	};
-
-	if (!bSuccess)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("DeliveryBot Chaos A* path build failed."));
+		FailSimulation(BuildSimulationFailureInfo(
+			EDeliveryBotSimulationFailureType::PathFindingFailed,
+			TEXT("Path component is invalid")));
 		return;
 	}
+
+	// const bool bSuccess
+	// {
+	// 	GlobalPathComponent->BuildPathByAStar(
+	// 		SetupInfo.LocationSetupInfo.StartLocationCm,
+	// 		SetupInfo.LocationSetupInfo.GoalLocationCm)
+	// };
+	const bool bSuccess
+	{
+		GlobalPathComponent->BuildPath(
+			SetupInfo.LocationSetupInfo.StartLocationCm,
+			SetupInfo.LocationSetupInfo.GoalLocationCm,
+			SetupInfo.NavigationConfigInfo)
+	};
+	
+	if (!bSuccess)
+	{
+		FailSimulation(BuildSimulationFailureInfo(
+			EDeliveryBotSimulationFailureType::PathFindingFailed,
+			TEXT("DeliveryBot path build failed")));
+		return;
+	}
+	
 	AlignRotationToPathStart();
-	PathFollowComponent->SetPath(GlobalPathComponent->GetGlobalPath());
+	PathFollowComponent->SetPathPointInfos(GlobalPathComponent->GetGlobalPathPointInfos());
 }
+
 
 void ADeliveryBot_ChaosActor::ApplyPathFollowMoveCommand(float deltaTime)
 {
@@ -205,7 +237,9 @@ void ADeliveryBot_ChaosActor::ApplyPathFollowMoveCommand(float deltaTime)
 	if (!IsValid(vehicleMovement))
 		return;
 
-	FDeliveryBotMoveCommandInfo moveCommandInfo = PathFollowComponent->BuildMoveCommand(deltaTime);
+	// FDeliveryBotMoveCommandInfo moveCommandInfo = PathFollowComponent->BuildMoveCommand(deltaTime);
+	FDeliveryBotMoveCommandInfo moveCommandInfo = PathFollowComponent->BuildDriveCommand(deltaTime,	SetupInfo.NavigationConfigInfo);
+
 	FString actionReason{ TEXT("path_follow") };
 
 	FDeliveryBotLidarDetectedObjectInfo frontObjectInfo;
@@ -238,7 +272,7 @@ void ADeliveryBot_ChaosActor::ApplyStopCommand(FDeliveryBotMoveCommandInfo& move
 {
 	moveCommandInfo.TargetSpeedKmh = 0.f;
 	moveCommandInfo.Steering = 0.f;
-	moveCommandInfo.Brake = 1.f;
+	moveCommandInfo.Brake = 0.f;
 	moveCommandInfo.bBrake = true;
 }
 
@@ -268,10 +302,17 @@ bool ADeliveryBot_ChaosActor::TryRequestRepathByFrontObject(const FDeliveryBotLi
 	bHasLidarDynamicBlockedCells = lidarBlockedActorCount > 0;
 
 	const bool bSuccess =
-		GlobalPathComponent->BuildPathByAStar(
-			GetActorLocation(),
-			SetupInfo.LocationSetupInfo.GoalLocationCm
-		);
+	GlobalPathComponent->BuildPath(
+		GetActorLocation(),
+		SetupInfo.LocationSetupInfo.GoalLocationCm,
+		SetupInfo.NavigationConfigInfo
+	);
+
+	// const bool bSuccess =
+	// 	GlobalPathComponent->BuildPathByAStar(
+	// 		GetActorLocation(),
+	// 		SetupInfo.LocationSetupInfo.GoalLocationCm
+	// 	);
 
 	if (!bSuccess)
 	{
@@ -279,7 +320,7 @@ bool ADeliveryBot_ChaosActor::TryRequestRepathByFrontObject(const FDeliveryBotLi
 		return false;
 	}
 
-	PathFollowComponent->SetPath(GlobalPathComponent->GetGlobalPath());
+	PathFollowComponent->SetPathPointInfos(GlobalPathComponent->GetGlobalPathPointInfos());
 	LastSuccessfulRepathTimeSeconds = world->GetTimeSeconds();
 
 	UE_LOG(
@@ -326,18 +367,18 @@ void ADeliveryBot_ChaosActor::AlignRotationToPathStart()
 	if (!IsValid(GlobalPathComponent))
 		return;
 
-	const TArray<FVector>& pathPoints = GlobalPathComponent->GetGlobalPath();
+	const TArray<FDeliveryBotPathPointInfo>& pathPointInfos =
+		GlobalPathComponent->GetGlobalPathPointInfos();
 
-	if (pathPoints.Num() < 2)
+	if (pathPointInfos.Num() == 0)
 		return;
 
-	FVector direction = pathPoints[1] - pathPoints[0];
-	direction.Z = 0.f;
+	const float startHeadingDegree =
+		FMath::RadiansToDegrees(pathPointInfos[0].HeadingRadian);
 
-	if (!direction.Normalize())
-		return;
-
-	SetActorRotation(direction.Rotation(), ETeleportType::TeleportPhysics);
+	SetActorRotation(
+		FRotator(0.f, startHeadingDegree, 0.f),
+		ETeleportType::TeleportPhysics);
 }
 
 void ADeliveryBot_ChaosActor::UpdateLidarScan()
@@ -488,7 +529,7 @@ FString ADeliveryBot_ChaosActor::ApplyPolicyDecisionToMoveCommand(
 		{
 			if (TryRequestRepathByFrontObject(frontObjectInfo))
 			{
-				moveCommandInfo = PathFollowComponent->BuildMoveCommand(deltaTime);
+				moveCommandInfo = PathFollowComponent->BuildDriveCommand(deltaTime,SetupInfo.NavigationConfigInfo);
 				ApplyFrontObstacleSlowDown(moveCommandInfo, frontObjectInfo);
 				return TEXT("repath");
 			}
@@ -507,12 +548,9 @@ FString ADeliveryBot_ChaosActor::ApplyPolicyDecisionToMoveCommand(
 	return TEXT("path_follow");
 }
 
-void ADeliveryBot_ChaosActor::HandlePolicyFailed(
-	const FDeliveryBotPolicyFailureInfo& failureInfo)
+void ADeliveryBot_ChaosActor::HandlePolicyFailed(const FDeliveryBotPolicyFailureInfo& failureInfo)
 {
-	const FDeliveryBotSimulationFailureInfo simulationFailureInfo =
-		BuildPolicySimulationFailureInfo(failureInfo);
-
+	const FDeliveryBotSimulationFailureInfo simulationFailureInfo = 	BuildPolicySimulationFailureInfo(failureInfo);
 	FailSimulation(simulationFailureInfo);
 }
 
@@ -563,7 +601,25 @@ void ADeliveryBot_ChaosActor::FailSimulation(const FDeliveryBotSimulationFailure
 		*failureInfo.Message,
 		*failureInfo.LocationCm.ToString(),
 		failureInfo.SpeedKmh);
+	
+	// 실패 로그 찍기
+	if (LastSimulationFailureInfo.bHasPolicyFailureInfo)
+	{
+		const FDeliveryBotPolicyFailureInfo& policyFailureInfo =
+			LastSimulationFailureInfo.PolicyFailureInfo;
 
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("DeliveryBot Policy Failure Detail | PolicyFailureType: %d, RequestId: %s, Url: %s, ResponseCode: %d, ElapsedSecond: %.2f, Message: %s"),
+			static_cast<int32>(policyFailureInfo.FailureType),
+			*policyFailureInfo.RequestId,
+			*policyFailureInfo.PolicyServerUrl,
+			policyFailureInfo.ResponseCode,
+			policyFailureInfo.RequestElapsedSecond,
+			*policyFailureInfo.Message
+		);
+	}
 	OnDeliveryBotSimulationFailed.Broadcast(this, LastSimulationFailureInfo);
 }
 
@@ -594,4 +650,140 @@ float ADeliveryBot_ChaosActor::GetCurrentSpeedKmh() const
 		return 0.f;
 
 	return FMath::Abs(vehicleMovement->GetForwardSpeed()) * 0.036f;
+}
+
+void ADeliveryBot_ChaosActor::CheckTipOverFailure()
+{
+	if (!bFailOnTipOver)
+		return;
+
+	const FRotator actorRotation = GetActorRotation();
+
+	const float absRollDegree = FMath::Abs(FRotator::NormalizeAxis(actorRotation.Roll));
+	const float absPitchDegree = FMath::Abs(FRotator::NormalizeAxis(actorRotation.Pitch));
+
+	const bool bTipOver = absRollDegree >= TipOverFailureAngleDegree ||	absPitchDegree >= TipOverFailureAngleDegree;
+
+	UWorld* world = GetWorld();
+	if (!IsValid(world))
+		return;
+
+	if (!bTipOver)
+	{
+		TipOverStartTimeSeconds = -1.f;
+		return;
+	}
+
+	if (TipOverStartTimeSeconds < 0.f)
+	{
+		TipOverStartTimeSeconds = world->GetTimeSeconds();
+		return;
+	}
+
+	const float elapsedSecond = world->GetTimeSeconds() - TipOverStartTimeSeconds;
+	if (elapsedSecond < TipOverFailureHoldSecond)
+		return;
+
+	FailSimulation(BuildSimulationFailureInfo(EDeliveryBotSimulationFailureType::RobotTipOver,
+		FString::Printf(TEXT("DeliveryBot tip over | Roll: %.1f, Pitch: %.1f"),	absRollDegree,	absPitchDegree)));
+}
+
+FDeliveryBotSimulationFailureInfo ADeliveryBot_ChaosActor::BuildSimulationFailureInfo(	EDeliveryBotSimulationFailureType failureType,	const FString& message,	AActor* targetActor) const
+{
+	FDeliveryBotSimulationFailureInfo failureInfo;
+
+	failureInfo.FailureType = failureType;
+	failureInfo.Message = message;
+	failureInfo.LocationCm = GetActorLocation();
+	failureInfo.SpeedKmh = GetCurrentSpeedKmh();
+	failureInfo.TargetActor = targetActor;
+
+	const UWorld* world = GetWorld();
+	if (IsValid(world))
+	{
+		failureInfo.TimeSeconds = world->GetTimeSeconds();
+	}
+
+	return failureInfo;
+}
+
+bool ADeliveryBot_ChaosActor::ShouldFailByCollision(AActor* otherActor,	const FHitResult& hit) const
+{
+	if (!bFailOnCollision)
+		return false;
+
+	if (!IsValid(otherActor) || otherActor == this)
+		return false;
+
+	if (otherActor->ActorHasTag(TEXT("NoCollision")))
+		return false;
+
+	if (hit.ImpactNormal.Z >= GroundHitNormalZThreshold)
+		return false;
+
+	if (GetCurrentSpeedKmh() < CollisionFailureMinSpeedKmh)
+		return false;
+
+	return true;
+}
+
+FDeliveryBotSimulationFailureInfo ADeliveryBot_ChaosActor::BuildCollisionSimulationFailureInfo(	AActor* otherActor, const FHitResult& hit) const
+{
+	FDeliveryBotSimulationFailureInfo failureInfo = BuildSimulationFailureInfo(
+		EDeliveryBotSimulationFailureType::Collision,
+		IsValid(otherActor)	
+		? FString::Printf(TEXT("DeliveryBot collided with %s"), *otherActor->GetName())
+		: TEXT("DeliveryBot collided with unknown actor"), otherActor);
+
+	failureInfo.LocationCm = hit.ImpactPoint;
+
+	return failureInfo;
+}
+
+void ADeliveryBot_ChaosActor::CleanupSimulationRuntimeState()
+{
+	GetWorldTimerManager().ClearAllTimersForObject(this);
+
+	if (UWorld* world = GetWorld())
+	{
+		ApplyFailureStopCommand(world->GetDeltaSeconds());
+	}
+
+	if (IsValid(PolicyJudgmentComponent))
+	{
+		PolicyJudgmentComponent->OnPolicyFailed.RemoveDynamic(
+			this,
+			&ADeliveryBot_ChaosActor::HandlePolicyFailed);
+
+		PolicyJudgmentComponent->CancelPendingRemoteRequest();
+	}
+
+	ClearLidarDynamicBlockedCells();
+
+	if (IsValid(PathFollowComponent))
+	{
+		PathFollowComponent->ClearPath();
+	}
+}
+
+void ADeliveryBot_ChaosActor::NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UPrimitiveComponent* OtherComp, bool bSelfMoved,
+                                        FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
+{
+	Super::NotifyHit(
+		MyComp,
+		Other,
+		OtherComp,
+		bSelfMoved,
+		HitLocation,
+		HitNormal,
+		NormalImpulse,
+		Hit);
+
+	if (bSimulationFailed)
+		return;
+
+	if (!ShouldFailByCollision(Other, Hit))
+		return;
+
+	FailSimulation(BuildCollisionSimulationFailureInfo(Other, Hit));
 }

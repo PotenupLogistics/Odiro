@@ -7,6 +7,7 @@
 
 class UEpisodeObstacleCollisionComponent;
 class UEpisodePathFollowerComponent;
+class UEpisodePedestrianRuntimeComponent;
 class UEpisodePlaceableComponent;
 
 // 보행자 actor(아이, 성인, 노인 등) 파일임.
@@ -27,6 +28,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
 	TObjectPtr<UEpisodePathFollowerComponent> PathFollowerComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	TObjectPtr<UEpisodePedestrianRuntimeComponent> PedestrianRuntimeComponent;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	EEpisodePedestrianProfile PedestrianProfile = EEpisodePedestrianProfile::Adult;

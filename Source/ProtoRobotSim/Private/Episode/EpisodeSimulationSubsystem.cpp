@@ -4,10 +4,14 @@
 #include "Episode/Actors/EpisodeSplinePath.h"
 #include "Episode/Actors/EpisodeStaticObstacle.h"
 #include "Episode/Components/EpisodePathFollowerComponent.h"
+#include "Episode/Components/EpisodePedestrianRuntimeComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/EpisodeEvaluationSubsystem.h"
+#include "Episode/EpisodePedestrianPlanSubsystem.h"
 #include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
+#include "Shared/EpisodePedestrianPlanTypes.h"
 #include "Shared/Struct/DeliveryBotSetupInfo.h"
+#include "DrawDebugHelpers.h"
 #include "Kismet/GameplayStatics.h"
 
 
@@ -70,6 +74,14 @@ void UEpisodeSimulationSubsystem::ClearEpisode()
 	RuntimeActorsById.Reset();
 	FlushPersistentDebugLines(GetWorld());
 
+	if (UWorld* world = GetWorld())
+	{
+		if (UEpisodePedestrianPlanSubsystem* pedestrianPlanSubsystem = world->GetSubsystem<UEpisodePedestrianPlanSubsystem>())
+		{
+			pedestrianPlanSubsystem->ClearPlans();
+		}
+	}
+
 	if (actorCount > 0 || actorIdCount > 0 || groundRegionCount > 0 || pathCount > 0)
 	{
 		UE_LOG(
@@ -129,6 +141,27 @@ bool UEpisodeSimulationSubsystem::SetupEpisodeWorld(const FEpisodeSimulationSetu
 		{
 			UE_LOG(LogEpisodeSimulation, Warning, TEXT("배치 액터 '%s' 스폰 실패."), *placeableSpec.InstanceId);
 			bAllSpawned = false;
+		}
+	}
+
+	if (UWorld* world = GetWorld())
+	{
+		if (UEpisodePedestrianPlanSubsystem* pedestrianPlanSubsystem = world->GetSubsystem<UEpisodePedestrianPlanSubsystem>())
+		{
+			FEpisodePedestrianPlanBuildContext planBuildContext;
+			BuildPedestrianPlanContext(setupSpec, planBuildContext);
+
+			FEpisodePedestrianPlanBuildResult planBuildResult;
+			if (!pedestrianPlanSubsystem->BuildPlans(setupSpec, planBuildContext, planBuildResult))
+			{
+				bAllSpawned = false;
+				UE_LOG(
+					LogEpisodeSimulation,
+					Warning,
+					TEXT("보행자 planned trajectory 생성 실패 | Episode: %s, Diagnostics: %d"),
+					*setupSpec.EpisodeId,
+					planBuildResult.Diagnostics.Num());
+			}
 		}
 	}
 
@@ -561,6 +594,12 @@ AActor* UEpisodeSimulationSubsystem::SpawnDynamicActor(const FEpisodeDynamicActo
 
 AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrian(const FEpisodeDynamicActorSpec& dynamicActorSpec)
 {
+	const FString movementModel = GetStringProperty(dynamicActorSpec.Properties, TEXT("movement_model"), TEXT("spline_Relative"));
+	if (movementModel.Equals(TEXT("planned_trajectory"), ESearchCase::IgnoreCase))
+	{
+		return SpawnPlannedPedestrian(dynamicActorSpec);
+	}
+
 	const double speedCmPerSecond = GetFloatProperty(dynamicActorSpec.Properties, TEXT("speed_cm_per_second"), 120.0);
 	const double initialDistanceCm = GetFloatProperty(dynamicActorSpec.Properties, TEXT("initial_distance_cm"), 0.0);
 	const bool bAutoStart = GetBoolProperty(dynamicActorSpec.Properties, TEXT("auto_start"), true);
@@ -573,6 +612,79 @@ AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrian(const FEpisodeD
 		initialDistanceCm,
 		bAutoStart);
 	if (!pedestrian) return nullptr;
+
+	ConfigurePlaceableComponent(
+		pedestrian->PlaceableComponent,
+		dynamicActorSpec.InstanceId,
+		dynamicActorSpec.AssetId,
+		dynamicActorSpec.Category,
+		EEpisodeMobilityMode::Moving);
+	RuntimeActorsById.Add(dynamicActorSpec.InstanceId, pedestrian);
+	return pedestrian;
+}
+
+AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPlannedPedestrian(const FEpisodeDynamicActorSpec& dynamicActorSpec)
+{
+	UWorld* world = GetWorld();
+	if (!world || dynamicActorSpec.InstanceId.IsEmpty()) return nullptr;
+
+	UEpisodePedestrianPlanSubsystem* pedestrianPlanSubsystem = world->GetSubsystem<UEpisodePedestrianPlanSubsystem>();
+	if (!pedestrianPlanSubsystem)
+	{
+		UE_LOG(LogEpisodeSimulation, Warning, TEXT("보행자 plan subsystem이 없어 planned pedestrian '%s' 스폰 실패."), *dynamicActorSpec.InstanceId);
+		return nullptr;
+	}
+
+	const FEpisodePedestrianPlan* plan = pedestrianPlanSubsystem->FindPlan(dynamicActorSpec.InstanceId);
+	if (!plan)
+	{
+		UE_LOG(LogEpisodeSimulation, Warning, TEXT("planned pedestrian '%s'에 대응하는 plan이 없음."), *dynamicActorSpec.InstanceId);
+		return nullptr;
+	}
+
+	const double speedCmPerSecond = GetFloatProperty(dynamicActorSpec.Properties, TEXT("speed_cm_per_second"), 120.0);
+	const double initialDistanceCm = GetFloatProperty(dynamicActorSpec.Properties, TEXT("initial_distance_cm"), 0.0);
+	const bool bAutoStart = GetBoolProperty(dynamicActorSpec.Properties, TEXT("auto_start"), true);
+
+	FTransform spawnTransform = dynamicActorSpec.InitialTransform;
+	if (plan->Points.Num() > 0)
+	{
+		spawnTransform.SetLocation(plan->Points[0].Location);
+		if (!plan->Points[0].Direction.IsNearlyZero())
+		{
+			spawnTransform.SetRotation(plan->Points[0].Direction.Rotation().Quaternion());
+		}
+	}
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AEpisodePedestrian* pedestrian = world->SpawnActorDeferred<AEpisodePedestrian>(
+		PedestrianClass ? PedestrianClass.Get() : AEpisodePedestrian::StaticClass(),
+		spawnTransform,
+		nullptr,
+		nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (!pedestrian) return nullptr;
+
+	if (pedestrian->PathFollowerComponent)
+	{
+		pedestrian->PathFollowerComponent->bAutoStart = false;
+	}
+
+	if (pedestrian->PedestrianRuntimeComponent)
+	{
+		pedestrian->PedestrianRuntimeComponent->ConfigurePlan(
+			dynamicActorSpec.InstanceId,
+			*plan,
+			speedCmPerSecond,
+			initialDistanceCm,
+			bAutoStart);
+	}
+
+	UGameplayStatics::FinishSpawningActor(pedestrian, spawnTransform);
+	SetActorReceivesDecals(pedestrian, false);
+	RuntimeActors.Add(pedestrian);
 
 	ConfigurePlaceableComponent(
 		pedestrian->PlaceableComponent,
@@ -645,6 +757,17 @@ bool UEpisodeSimulationSubsystem::GetBoolProperty(
 	return paramValue->BoolValue;
 }
 
+FString UEpisodeSimulationSubsystem::GetStringProperty(
+	const TMap<FString, FEpisodeParamValue>& properties,
+	const FString& key,
+	const FString& defaultValue)
+{
+	const FEpisodeParamValue* paramValue = properties.Find(key);
+	if (!paramValue || paramValue->Type != EEpisodeParamValueType::String) return defaultValue;
+
+	return paramValue->StringValue;
+}
+
 bool UEpisodeSimulationSubsystem::GetVectorProperty(
 	const TMap<FString, FEpisodeParamValue>& properties,
 	const FString& key,
@@ -655,6 +778,46 @@ bool UEpisodeSimulationSubsystem::GetVectorProperty(
 
 	outValue = paramValue->VectorValue;
 	return true;
+}
+
+void UEpisodeSimulationSubsystem::BuildPedestrianPlanContext(
+	const FEpisodeSimulationSetupSpec& setupSpec,
+	FEpisodePedestrianPlanBuildContext& outBuildContext) const
+{
+	outBuildContext = FEpisodePedestrianPlanBuildContext{};
+	outBuildContext.SourceSpecHash = setupSpec.SpecHash;
+	outBuildContext.SemanticNavigationHash = TEXT("default");
+
+	for (const FEpisodePlaceableInstanceSpec& placeableSpec : setupSpec.Placeables)
+	{
+		if (placeableSpec.Category != EEpisodeActorCategory::StaticObstacle)
+		{
+			continue;
+		}
+
+		AActor* obstacleActor = FindRuntimeActor(placeableSpec.InstanceId);
+		if (!IsValid(obstacleActor))
+		{
+			continue;
+		}
+
+		FVector boundsOrigin = FVector::ZeroVector;
+		FVector boundsExtent = FVector::ZeroVector;
+		obstacleActor->GetActorBounds(true, boundsOrigin, boundsExtent);
+
+		if (boundsExtent.IsNearlyZero())
+		{
+			boundsOrigin = obstacleActor->GetActorLocation();
+			boundsExtent = FVector(50.0, 50.0, 100.0);
+		}
+
+		FEpisodePedestrianObstacleFootprint footprint;
+		footprint.InstanceId = placeableSpec.InstanceId;
+		footprint.AssetId = placeableSpec.AssetId;
+		footprint.Center = boundsOrigin;
+		footprint.Extent = boundsExtent;
+		outBuildContext.StaticObstacleFootprints.Add(footprint);
+	}
 }
 
 void UEpisodeSimulationSubsystem::SetActorReceivesDecals(AActor* actor, bool bReceivesDecals)

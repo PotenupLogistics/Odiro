@@ -12,6 +12,8 @@ class AEpisodeSplinePath;
 class AEpisodeStaticObstacle;
 class UPrimitiveComponent;
 class UEpisodePlaceableComponent;
+struct FEpisodePedestrianPlan;
+struct FEpisodePedestrianPlanBuildContext;
 
 // 컴파일된 Episode simulation setup spec을 현재 월드에 스폰하고, 런타임 actor 생명주기를 관리하는 subsystem.
 UCLASS(BlueprintType)
@@ -103,6 +105,7 @@ private:
 	AActor* SpawnRobotActor(const FEpisodePlaceableInstanceSpec& placeableSpec);
 	AActor* SpawnDynamicActor(const FEpisodeDynamicActorSpec& dynamicActorSpec);
 	AEpisodePedestrian* SpawnPedestrian(const FEpisodeDynamicActorSpec& dynamicActorSpec);
+	AEpisodePedestrian* SpawnPlannedPedestrian(const FEpisodeDynamicActorSpec& dynamicActorSpec);
 
 	void RegisterRuntimeActor(
 		const FString& instanceId,
@@ -128,10 +131,19 @@ private:
 		const FString& key,
 		bool defaultValue);
 
+	static FString GetStringProperty(
+		const TMap<FString, FEpisodeParamValue>& properties,
+		const FString& key,
+		const FString& defaultValue);
+
 	static bool GetVectorProperty(
 		const TMap<FString, FEpisodeParamValue>& properties,
 		const FString& key,
 		FVector& outValue);
+
+	void BuildPedestrianPlanContext(
+		const FEpisodeSimulationSetupSpec& setupSpec,
+		FEpisodePedestrianPlanBuildContext& outBuildContext) const;
 
 	static void SetActorReceivesDecals(AActor* actor, bool bReceivesDecals);
 };

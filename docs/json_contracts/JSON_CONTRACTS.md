@@ -47,7 +47,7 @@
 
 * `POST /api/v1/contracts/validate/{contract_type}`: 제출된 JSON payload를 schema와 Pydantic 모델로 검증한다.
 * `POST /api/v1/generation/world-config`: 자연어 기반 WorldConfig generation 내부 흐름을 검증한다.
-* `POST /api/v1/scenarios/generate`: 사용자 자연어 `prompt`만 입력받고 wrapper 없는 RunQueue JSON을 반환한다.
+* `POST /api/v1/scenarios/generate`: 사용자 자연어 `prompt`를 필수로 받고, 선택적 `episode_count`로 episode/run 개수를 지정할 수 있으며, wrapper 없는 RunQueue JSON을 반환한다.
 
 sample JSON fixture 작성은 현재 repository 공유 범위가 아니다. runtime export는 local ignored path에만 저장한다.
 

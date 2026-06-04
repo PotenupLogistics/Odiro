@@ -12,7 +12,7 @@
 POST /api/v1/scenarios/generate
 ```
 
-이 endpoint는 `prompt` 하나만 허용하고, 성공 시 wrapper field 없는 RunQueue JSON을 반환한다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하지 않는다.
+이 endpoint는 자연어 `prompt`를 필수로 받고, 선택적으로 `episode_count`를 허용한다. 성공 시 wrapper field 없는 RunQueue JSON을 반환한다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하지 않는다. `episode_count`가 없으면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용한다.
 
 현재 provider 동작:
 

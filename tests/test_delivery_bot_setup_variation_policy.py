@@ -18,16 +18,17 @@ def test_delivery_bot_variation_policy_returns_named_policy_profiles() -> None:
 
     assert [profile.profile for profile in profiles] == [
         "baseline",
-        "short_stop",
-        "long_stop",
-        "early_slowdown",
-        "low_speed",
+        "baseline",
+        "baseline",
+        "conservative_lidar",
+        "slower_path_follow",
     ]
     assert profiles[0].values["stopDistanceM"] == 1.2
-    assert profiles[1].values["stopDistanceM"] == 0.8
-    assert profiles[2].values["stopDistanceM"] == 1.6
+    assert profiles[1].values["stopDistanceM"] == 1.2
+    assert profiles[2].values["stopDistanceM"] == 1.2
     assert profiles[3].values["slowDownDistanceM"] == 4.5
     assert profiles[4].values["targetSpeedKmh"] == 8.0
+
 
 def test_policy_profiles_keep_common_field_set_and_valid_ranges() -> None:
     profiles = [delivery_bot_tuning_for_episode(index, fixed_parameters={}) for index in range(5)]
@@ -49,23 +50,30 @@ def test_policy_profiles_keep_common_field_set_and_valid_ranges() -> None:
         assert profile.values["stopDistanceM"] < profile.values["slowDownDistanceM"]
 
 
-def test_early_slowdown_profile_changes_slowdown_distance() -> None:
+def test_conservative_lidar_profile_changes_lidar_values() -> None:
     tuning = delivery_bot_tuning_for_episode(3, fixed_parameters={})
 
-    assert tuning.profile == "early_slowdown"
-    assert tuning.values["stopDistanceM"] == 1.2
+    assert tuning.profile == "conservative_lidar"
+    assert tuning.values["stopDistanceM"] == 1.4
     assert tuning.values["slowDownDistanceM"] == 4.5
-    assert tuning.values["frontHalfAngleDegree"] == 30.0
+    assert tuning.values["frontHalfAngleDegree"] == 45.0
     assert tuning.values["slowDownDistanceM"] >= tuning.values["stopDistanceM"] + 0.1
     assert "deliveryBotSetup.robot.lidar.slow_down_distance_m" in tuning.changed_parameters
 
 
-def test_low_speed_profile_changes_speed_values_without_overwriting_fixed_values() -> None:
+def test_slower_path_follow_profile_changes_speed_values_without_overwriting_fixed_values() -> None:
     tuning = delivery_bot_tuning_for_episode(4, fixed_parameters={"maxSpeedKmh": 10.0})
 
-    assert tuning.profile == "low_speed"
+    assert tuning.profile == "slower_path_follow"
     assert "maxSpeedKmh" not in tuning.values
     assert tuning.values["targetSpeedKmh"] == 8.0
     assert tuning.values["obstacleSlowSpeedKmh"] == 1.5
-    assert tuning.values["minTurnSpeedKmh"] == 1.0
+    assert tuning.values["minTurnSpeedKmh"] == 0.8
     assert "deliveryBotSetup.robot.drive.max_speed_kmh" not in tuning.changed_parameters
+
+
+def test_policy_profiles_fallback_to_baseline_after_defined_profiles() -> None:
+    tuning = delivery_bot_tuning_for_episode(5, fixed_parameters={})
+
+    assert tuning.profile == "baseline"
+    assert tuning.values["targetSpeedKmh"] == 10.0

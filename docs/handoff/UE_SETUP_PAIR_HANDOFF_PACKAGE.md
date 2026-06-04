@@ -32,7 +32,7 @@
 
 RunQueue package는 API 응답 규격을 바꾸지 않고 `scripts/export_ue5_run_queue_package.py`로 local export한다. 기본 episode count는 5이며, 산출물은 `data/run_queue_exports/<timestamp>_<requestId>/Json/Input/` 아래에 저장한다.
 
-사용자용 `POST /api/v1/scenarios/generate`는 같은 RunQueue 계약을 API 응답으로 직접 반환한다. 입력은 자연어 `prompt` 하나만 허용하고, 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하지 않는다.
+사용자용 `POST /api/v1/scenarios/generate`는 같은 RunQueue 계약을 API 응답으로 직접 반환한다. 입력은 자연어 `prompt`를 필수로 받고 선택적으로 `episode_count`를 허용한다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하지 않는다. `episode_count`가 없으면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용한다.
 
 UE용 `EpisodeRunQueue_<scenario>.json`은 공식 RunQueue 계약 그대로 아래 필드만 포함한다.
 

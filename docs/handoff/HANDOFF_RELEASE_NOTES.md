@@ -26,7 +26,7 @@
 
 ## 2. 현재 API 구분
 
-`POST /api/v1/scenarios/generate`는 사용자용 entrypoint다. 사용자는 자연어 `prompt`만 입력하고, backend는 내부적으로 WorldConfig, EpisodeSetup, DeliveryBotSetup, RunQueue를 생성한다. 응답은 wrapper 없는 RunQueue JSON이다.
+`POST /api/v1/scenarios/generate`는 사용자용 entrypoint다. 사용자는 자연어 `prompt`를 필수로 입력하고 선택적으로 `episode_count`를 지정할 수 있다. backend는 내부적으로 WorldConfig, EpisodeSetup, DeliveryBotSetup, RunQueue를 생성한다. 응답은 wrapper 없는 RunQueue JSON이다. `episode_count`가 없으면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용한다.
 
 `POST /api/v1/ue5/world-config/handoff`는 UE handoff와 내부 검증용 endpoint다. legacy `episode_spec`, 최신 `setup_pair`, debugging용 `both`, AI 내부 inspection용 `world_config` 응답을 유지한다.
 

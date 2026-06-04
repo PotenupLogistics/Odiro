@@ -46,6 +46,10 @@ def generate_scenario_run_queue(request: ScenarioGenerateRequest) -> EpisodeRunQ
     )
     if generation.generatedPayload is None:
         raise RuntimeError(generation.error.message if generation.error else "WorldConfig generation failed.")
-    queue = generate_setup_pair_queue(generation.generatedPayload, request_id="SCENARIO-GENERATE-001")
+    queue = generate_setup_pair_queue(
+        generation.generatedPayload,
+        episode_count=request.episode_count,
+        request_id="SCENARIO-GENERATE-001",
+    )
     export_run_queue_package(queue)
     return queue.run_queue

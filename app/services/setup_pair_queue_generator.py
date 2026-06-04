@@ -17,14 +17,11 @@ from app.services.world_config_to_episode_setup_adapter import convert_world_con
 
 
 POLICY_COMPARISON_SCENE_ID = "narrow_sidewalk"
-POLICY_COMPARISON_EPISODE_PATH = "Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block.json"
 POLICY_COMPARISON_RUN_QUEUE_PATH = "Json/Input/EpisodeRunQueue_narrow_sidewalk_policy_comparison.json"
 POLICY_FILE_NAMES = {
     "baseline": "DeliveryBotSetup_policy_000_baseline.json",
-    "short_stop": "DeliveryBotSetup_policy_001_short_stop.json",
-    "long_stop": "DeliveryBotSetup_policy_002_long_stop.json",
-    "early_slowdown": "DeliveryBotSetup_policy_003_early_slowdown.json",
-    "low_speed": "DeliveryBotSetup_policy_004_low_speed.json",
+    "conservative_lidar": "DeliveryBotSetup_policy_003_conservative_lidar.json",
+    "slower_path_follow": "DeliveryBotSetup_policy_004_slower_path_follow.json",
 }
 
 
@@ -72,8 +69,14 @@ def _policy_pair_id(profile: str, index: int) -> str:
 
 
 def _delivery_bot_setup_path(profile: str, index: int) -> str:
+    if profile == "baseline":
+        return f"Json/Input/DeliveryBotSetup_policy_{index:03d}_baseline.json"
     filename = POLICY_FILE_NAMES.get(profile, f"DeliveryBotSetup_policy_{index:03d}_{profile}.json")
     return f"Json/Input/{filename}"
+
+
+def _episode_setup_path(index: int) -> str:
+    return f"Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block_{index:03d}.json"
 
 
 def _fixed_policy_scene_setup(base_world_config: dict[str, Any], base_seed: int) -> EpisodeSetup:
@@ -131,7 +134,7 @@ def generate_setup_pair_queue(
     for index, variant in enumerate(generate_episode_variants(base_world_config, count, base_seed)):
         profile = str(variant.world_config.get("environmentSampling", {}).get("deliveryBotPolicyProfile", "") or "baseline")
         pair_id = _policy_pair_id(profile, index)
-        episode_path = POLICY_COMPARISON_EPISODE_PATH
+        episode_path = _episode_setup_path(index)
         bot_path = _delivery_bot_setup_path(profile, index)
         episode_setup = fixed_episode_setup
         delivery_bot_setup = convert_world_config_to_delivery_bot_setup(variant.world_config)

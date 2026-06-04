@@ -10,7 +10,7 @@ POST /api/v1/generation/world-config
 POST /api/v1/scenarios/generate
 ```
 
-`prompt-package` endpoint는 prompt package만 반환하며 외부 LLM을 호출하지 않는다. `generation/world-config` endpoint는 provider 설정에 따라 WorldConfig generation을 수행할 수 있다. 사용자용 `scenarios/generate` endpoint는 자연어 `prompt`만 입력받고 wrapper 없는 RunQueue JSON을 반환한다.
+`prompt-package` endpoint는 prompt package만 반환하며 외부 LLM을 호출하지 않는다. `generation/world-config` endpoint는 provider 설정에 따라 WorldConfig generation을 수행할 수 있다. 사용자용 `scenarios/generate` endpoint는 자연어 `prompt`를 필수로 받고 선택적으로 `episode_count`를 허용하며, wrapper 없는 RunQueue JSON을 반환한다.
 
 ## Retrieval Connection
 
@@ -46,7 +46,8 @@ MVP에서는 자연어 입력을 World Config JSON 생성에만 사용한다.
 
 - API 기반 입력 구현 완료
 - Swagger/Postman 또는 간단한 UI에서 prompt 입력 가능
-- `/api/v1/scenarios/generate`는 사용자용 prompt-only RunQueue 생성 entrypoint
+- `/api/v1/scenarios/generate`는 사용자용 natural-language RunQueue 생성 entrypoint
+- `episode_count`가 없으면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용
 - CLI는 주로 JSON 검증과 export tooling 용도로 사용
 
 후속 단계:

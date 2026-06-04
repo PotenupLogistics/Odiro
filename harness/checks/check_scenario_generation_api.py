@@ -41,20 +41,23 @@ def run_check() -> dict[str, Any]:
         "passed": False,
         "warning": False,
         "routeExists": "/api/v1/scenarios/generate" in routes_text,
-        "promptOnlyModel": "ScenarioGenerateRequest" in model_text and "extra=\"forbid\"" in model_text and "prompt" in model_text,
+        "promptWithOptionalEpisodeCountModel": all(
+            term in model_text
+            for term in ["ScenarioGenerateRequest", "extra=\"forbid\"", "prompt", "episode_count", "ge=1", "strict=True"]
+        ),
         "serviceUsesOpenAiOnlyNoFallback": "allow_fallback=False" in service_text and "llmProviderChain=[\"openai\"]" in service_text,
         "serviceUsesRunQueueGenerator": "generate_setup_pair_queue" in service_text and "export_run_queue_package" in service_text,
-        "testsCoverPromptOnly": "episodeCount" in tests_text and "prompt" in tests_text,
+        "testsCoverRequestValidation": all(term in tests_text for term in ["episode_count", "episodeCount", "1.5", "\"3\"", "openapi"]),
         "noLiveProviderCallsInHarness": not _imports_live_http_client(Path(__file__)),
         "errors": [],
         "warnings": [],
     }
     for key, message in [
         ("routeExists", "Scenario generation API route is missing."),
-        ("promptOnlyModel", "Scenario generation request model must accept prompt only and reject extras."),
+        ("promptWithOptionalEpisodeCountModel", "Scenario generation request model must accept prompt and optional positive integer episode_count only."),
         ("serviceUsesOpenAiOnlyNoFallback", "Scenario generation service must use OpenAI only with fallback disabled."),
         ("serviceUsesRunQueueGenerator", "Scenario generation service must generate/export RunQueue packages."),
-        ("testsCoverPromptOnly", "Scenario generation tests must cover prompt-only input."),
+        ("testsCoverRequestValidation", "Scenario generation tests must cover episode_count validation and extra field rejection."),
         ("noLiveProviderCallsInHarness", "Scenario generation harness must not perform live provider calls."),
     ]:
         if not result[key]:

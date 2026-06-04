@@ -37,14 +37,17 @@ POST /api/v1/scenarios/generate
 POST /api/v1/scenarios/generate
 ```
 
-이 endpoint는 새 사용자용 entrypoint다. 사용자는 자연어 `prompt`만 입력한다.
+이 endpoint는 새 사용자용 entrypoint다. 사용자는 자연어 `prompt`를 필수로 입력하고, 선택적으로 `episode_count`로 생성할 episode/run 개수를 지정할 수 있다.
 
 사용자가 `EpisodeSetup`, `DeliveryBotSetup`, `RunQueue` JSON을 직접 작성하는 구조가 아니다. JSON은 AI와 backend가 내부적으로 생성한 UE 실행 산출물이다.
 
 응답은 UE 계약 그대로의 RunQueue JSON이다. 최상위 wrapper, diagnostics, raw LLM response, rawContent, API key 값은 포함하지 않는다.
+`episode_count`가 없으면 `SCENARIO_EPISODE_DEFAULT_COUNT` 환경 변수 값을 사용한다.
 
 핵심 검증 기준:
 
+* request body에서 `prompt`는 required이고, `episode_count`는 optional이다.
+* `episode_count`가 제공되면 1 이상 `SCENARIO_EPISODE_MAX_COUNT` 이하의 strict integer만 허용한다.
 * 최상위 필드는 `schema`, `version`, `runs`만 사용한다.
 * explicit `null`은 출력하지 않는다.
 * `0`, `false`, `""`, `[]` 같은 의미 있는 값은 삭제하지 않는다.

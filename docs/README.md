@@ -72,7 +72,7 @@
 
 RunQueue package export는 `scripts/export_ue5_run_queue_package.py`를 사용합니다. 산출물은 `data/run_queue_exports/` 아래 local ignored path에 저장하며, UE용 RunQueue JSON은 `docs/ue_contracts/RUN_QUEUE_JSON.md` 계약 필드만 포함합니다.
 
-사용자용 scenario 생성 API는 `POST /api/v1/scenarios/generate`입니다. 입력은 `prompt` 하나만 허용하며, 성공 응답은 wrapper field 없는 RunQueue JSON입니다. EpisodeSetup / DeliveryBotSetup / RunQueue JSON은 null-free 정책을 따르고 optional field는 값이 없으면 생략합니다.
+사용자용 scenario 생성 API는 `POST /api/v1/scenarios/generate`입니다. 입력은 자연어 `prompt`를 필수로 받고, 선택적으로 `episode_count`를 허용합니다. 성공 응답은 wrapper field 없는 RunQueue JSON입니다. `episode_count`를 생략하면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용하고, 요청값은 1 이상 `SCENARIO_EPISODE_MAX_COUNT` 이하의 strict integer여야 합니다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하는 구조는 아닙니다. EpisodeSetup / DeliveryBotSetup / RunQueue JSON은 null-free 정책을 따르고 optional field는 값이 없으면 생략합니다.
 
 ## Provider
 

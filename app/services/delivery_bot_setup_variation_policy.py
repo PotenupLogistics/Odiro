@@ -31,65 +31,36 @@ def delivery_bot_tuning_for_episode(
     scenario_intent: str | None = None,
 ) -> DeliveryBotTuningVariation:
     fixed = fixed_parameters or {}
+    baseline = {
+        "maxSpeedKmh": 10.0,
+        "targetSpeedKmh": 10.0,
+        "obstacleSlowSpeedKmh": 2.0,
+        "stopDistanceM": 1.2,
+        "slowDownDistanceM": 3.5,
+        "frontHalfAngleDegree": 30.0,
+        "minTurnSpeedKmh": 1.0,
+    }
     profiles: list[tuple[str, dict[str, Any]]] = [
+        ("baseline", baseline),
+        ("baseline", baseline),
+        ("baseline", baseline),
         (
-            "baseline",
+            "conservative_lidar",
             {
-                "maxSpeedKmh": 10.0,
-                "targetSpeedKmh": 10.0,
-                "obstacleSlowSpeedKmh": 2.0,
-                "stopDistanceM": 1.2,
-                "slowDownDistanceM": 3.5,
-                "frontHalfAngleDegree": 30.0,
-                "minTurnSpeedKmh": 1.0,
-            },
-        ),
-        (
-            "short_stop",
-            {
-                "maxSpeedKmh": 10.0,
-                "targetSpeedKmh": 10.0,
-                "obstacleSlowSpeedKmh": 2.0,
-                "stopDistanceM": 0.8,
-                "slowDownDistanceM": 3.5,
-                "frontHalfAngleDegree": 30.0,
-                "minTurnSpeedKmh": 1.0,
-            },
-        ),
-        (
-            "long_stop",
-            {
-                "maxSpeedKmh": 10.0,
-                "targetSpeedKmh": 10.0,
-                "obstacleSlowSpeedKmh": 2.0,
-                "stopDistanceM": 1.6,
-                "slowDownDistanceM": 3.5,
-                "frontHalfAngleDegree": 30.0,
-                "minTurnSpeedKmh": 1.0,
-            },
-        ),
-        (
-            "early_slowdown",
-            {
-                "maxSpeedKmh": 10.0,
-                "targetSpeedKmh": 10.0,
-                "obstacleSlowSpeedKmh": 2.0,
-                "stopDistanceM": 1.2,
+                **baseline,
+                "stopDistanceM": 1.4,
                 "slowDownDistanceM": 4.5,
-                "frontHalfAngleDegree": 30.0,
-                "minTurnSpeedKmh": 1.0,
+                "frontHalfAngleDegree": 45.0,
             },
         ),
         (
-            "low_speed",
+            "slower_path_follow",
             {
+                **baseline,
                 "maxSpeedKmh": 8.0,
                 "targetSpeedKmh": 8.0,
                 "obstacleSlowSpeedKmh": 1.5,
-                "stopDistanceM": 1.2,
-                "slowDownDistanceM": 3.5,
-                "frontHalfAngleDegree": 30.0,
-                "minTurnSpeedKmh": 1.0,
+                "minTurnSpeedKmh": 0.8,
             },
         ),
     ]

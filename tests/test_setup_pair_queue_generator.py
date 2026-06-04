@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+
+from app.core.settings import Settings
 from app.services.setup_pair_queue_generator import generate_setup_pair_queue
 
 
@@ -32,10 +35,10 @@ def test_generate_setup_pair_queue_creates_default_five_valid_pairs() -> None:
     assert all(item.delivery_bot_setup_validation.valid for item in result.items)
     assert [run.pair_id for run in result.run_queue.runs] == [
         "narrow_sidewalk_policy_000_baseline",
-        "narrow_sidewalk_policy_001_short_stop",
-        "narrow_sidewalk_policy_002_long_stop",
-        "narrow_sidewalk_policy_003_early_slowdown",
-        "narrow_sidewalk_policy_004_low_speed",
+        "narrow_sidewalk_policy_001_baseline",
+        "narrow_sidewalk_policy_002_baseline",
+        "narrow_sidewalk_policy_003_conservative_lidar",
+        "narrow_sidewalk_policy_004_slower_path_follow",
     ]
 
 
@@ -44,10 +47,10 @@ def test_generate_setup_pair_queue_uses_ue_relative_paths_and_no_wrapper_fields(
     payload = result.run_queue.model_dump(mode="json", by_alias=True)
 
     assert set(payload) == {"schema", "version", "runs"}
-    assert payload["runs"][0]["episode_setup"] == "Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block.json"
+    assert payload["runs"][0]["episode_setup"] == "Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block_000.json"
     assert payload["runs"][0]["delivery_bot_setup"] == "Json/Input/DeliveryBotSetup_policy_000_baseline.json"
-    assert payload["runs"][1]["episode_setup"] == payload["runs"][0]["episode_setup"]
-    assert payload["runs"][1]["delivery_bot_setup"] == "Json/Input/DeliveryBotSetup_policy_001_short_stop.json"
+    assert payload["runs"][1]["episode_setup"] == "Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block_001.json"
+    assert payload["runs"][1]["delivery_bot_setup"] == "Json/Input/DeliveryBotSetup_policy_001_baseline.json"
     assert "diagnostics" not in payload
     assert "setupPairs" not in payload
 
@@ -58,7 +61,7 @@ def test_generate_setup_pair_queue_uses_one_fixed_episode_setup_for_policy_compa
     assert all(item.episode_setup.paths == [] for item in result.items)
     assert all(item.episode_setup.actors.pedestrians == [] for item in result.items)
     assert all(len(item.episode_setup.actors.static_obstacles) == 1 for item in result.items)
-    assert len({item.episode_setup_path for item in result.items}) == 1
+    assert len({item.episode_setup_path for item in result.items}) == 5
     assert len({tuple(item.episode_setup.actors.robot.xy_m) for item in result.items}) == 1
     assert len({tuple(item.episode_setup.actors.static_obstacles[0].xy_m) for item in result.items}) == 1
     episode = result.items[0].episode_setup
@@ -75,13 +78,26 @@ def test_generate_setup_pair_queue_applies_policy_comparison_delivery_bot_setups
     result = generate_setup_pair_queue(_world_config(), episode_count=5)
 
     assert result.items[0].delivery_bot_setup.robot.lidar.stop_distance_m == 1.2
-    assert result.items[1].delivery_bot_setup.robot.lidar.stop_distance_m == 0.8
-    assert result.items[2].delivery_bot_setup.robot.lidar.stop_distance_m == 1.6
+    assert result.items[1].delivery_bot_setup.robot.lidar.stop_distance_m == 1.2
+    assert result.items[2].delivery_bot_setup.robot.lidar.stop_distance_m == 1.2
+    assert result.items[3].delivery_bot_setup.robot.lidar.stop_distance_m == 1.4
     assert result.items[3].delivery_bot_setup.robot.lidar.slow_down_distance_m == 4.5
     assert result.items[4].delivery_bot_setup.robot.path_follow.target_speed_kmh == 8.0
     assert result.items[4].delivery_bot_setup.robot.path_follow.obstacle_slow_speed_kmh == 1.5
     assert "deliveryBotSetup.robot.lidar.slow_down_distance_m" in result.items[3].variant.changed_parameters
     assert "deliveryBotSetup.robot.path_follow.target_speed_kmh" in result.items[4].variant.changed_parameters
+
+
+def test_generate_setup_pair_queue_falls_back_to_baseline_after_defined_policy_profiles() -> None:
+    max_count = Settings().scenarioEpisodeMaxCount
+    if max_count < 6:
+        pytest.skip("fallback profile test requires SCENARIO_EPISODE_MAX_COUNT >= 6")
+
+    result = generate_setup_pair_queue(_world_config(), episode_count=max_count)
+
+    assert result.run_queue.runs[5].pair_id == "narrow_sidewalk_policy_005_baseline"
+    assert result.run_queue.runs[5].episode_setup == "Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block_005.json"
+    assert result.run_queue.runs[5].delivery_bot_setup == "Json/Input/DeliveryBotSetup_policy_005_baseline.json"
 
 
 def test_policy_comparison_delivery_bot_setups_share_identical_field_sets_and_valid_ranges() -> None:
@@ -101,7 +117,7 @@ def test_policy_comparison_delivery_bot_setups_share_identical_field_sets_and_va
 
 
 def test_generate_setup_pair_queue_rejects_count_above_maximum() -> None:
-    result = generate_setup_pair_queue(_world_config(), episode_count=21)
+    result = generate_setup_pair_queue(_world_config(), episode_count=Settings().scenarioEpisodeMaxCount + 1)
 
     assert result.run_queue_validation.valid is False
     assert result.items == []

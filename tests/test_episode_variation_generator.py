@@ -64,11 +64,11 @@ def test_generate_episode_variants_keeps_scene_fixed_and_changes_only_policy_val
     assert y_values == [0, 0, 0, 0, 0]
     assert [variant.world_config["environmentSampling"]["deliveryBotPolicyProfile"] for variant in variants] == [
         "baseline",
-        "short_stop",
-        "long_stop",
-        "early_slowdown",
-        "low_speed",
+        "baseline",
+        "baseline",
+        "conservative_lidar",
+        "slower_path_follow",
     ]
     assert "obstacles[0].position.y" not in {change for variant in variants for change in variant.changed_parameters}
-    assert "deliveryBotSetup.robot.lidar.stop_distance_m" in variants[1].changed_parameters
+    assert "deliveryBotSetup.robot.lidar.stop_distance_m" in variants[3].changed_parameters
     assert "deliveryBotSetup.robot.path_follow.target_speed_kmh" in variants[4].changed_parameters

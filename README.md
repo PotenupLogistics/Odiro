@@ -81,7 +81,7 @@ Setup pair live smoke 상태:
 사용자용 scenario generation smoke 상태:
 
 * `POST /api/v1/scenarios/generate`
-* 입력은 `prompt` 하나만 허용
+* 입력은 자연어 `prompt`를 필수로 받고, 선택적으로 `episode_count`를 허용
 * 성공 응답은 wrapper field 없는 RunQueue JSON
 * OpenAI live smoke 1회 검증 완료
 * `run count=5`
@@ -133,6 +133,7 @@ POST /api/v1/scenarios/generate
 ```
 
 이 endpoint는 사용자의 자연어 `prompt`만 입력받습니다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하는 구조가 아니며, JSON은 AI와 backend가 내부적으로 생성한 UE 실행 산출물입니다. 정상 응답은 최상위 `schema`, `version`, `runs`만 포함하는 RunQueue JSON입니다.
+`episode_count`를 함께 보내면 생성할 episode/run 개수를 지정할 수 있고, 생략하면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용합니다. 요청값은 1 이상 `SCENARIO_EPISODE_MAX_COUNT` 이하의 strict integer여야 합니다.
 
 ## UE handoff 상태
 

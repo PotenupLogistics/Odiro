@@ -504,7 +504,7 @@ Run the README check directly with:
 uv run python -m harness.checks.check_root_readme
 ```
 
-The root README check verifies that `README.md` exists, is not empty, includes the project overview, mentions `WorldConfig`, `EpisodeSpec`, `UE handoff`, `responseFormat=episode_spec`, prompt-only scenario generation, and includes the core harness/pytest commands. It also checks that forbidden sample, fixture, vector DB, embedding index, and UE code artifacts were not introduced.
+The root README check verifies that `README.md` exists, is not empty, includes the project overview, mentions `WorldConfig`, `EpisodeSpec`, `UE handoff`, `responseFormat=episode_spec`, scenario generation with required `prompt` and optional `episode_count`, and includes the core harness/pytest commands. It also checks that forbidden sample, fixture, vector DB, embedding index, and UE code artifacts were not introduced.
 
 ## Handoff Release Readiness Check
 

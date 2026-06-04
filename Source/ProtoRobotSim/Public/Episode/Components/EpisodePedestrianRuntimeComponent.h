@@ -77,6 +77,18 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianRuntime")
 	EEpisodePedestrianRuntimeState CurrentState = EEpisodePedestrianRuntimeState::FollowBaseline;
 
+	// Baseline plan speed. delay 측정과 nominal animation 기준에 쓰는 변하지 않는 속도다.
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianAnimation", meta = (ClampMin = "0.0", Units = "cm/s"))
+	double NominalSpeedCmPerSecond = 120.0;
+
+	// Baseline path를 따라 실제로 진행 중인 속도다. yield/stop/sidestep state의 speed scale이 반영된다.
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianAnimation", meta = (ClampMin = "0.0", Units = "cm/s"))
+	double ProgressSpeedCmPerSecond = 120.0;
+
+	// Baseline path 기준 좌우 offset 변화 속도다. sidestep/recover animation bridge에 사용한다.
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianAnimation", meta = (Units = "cm/s"))
+	double LateralSpeedCmPerSecond = 0.0;
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianMetrics", meta = (ClampMin = "0.0", Units = "s"))
 	double ActiveTimeSeconds = 0.0;
 
@@ -132,6 +144,8 @@ private:
 		FVector RobotLocation = FVector::ZeroVector;
 		FVector RobotVelocity = FVector::ZeroVector;
 		double RobotRadiusCm = 0.0;
+		double WarningDistanceCm = 0.0;
+		double StopDistanceCm = 0.0;
 		double TimeToClosestSeconds = 0.0;
 		double ClosestDistanceCm = TNumericLimits<double>::Max();
 		double PedestrianDistanceAtClosestCm = 0.0;
@@ -155,12 +169,29 @@ private:
 	double ComputeSpeedScale(const FRobotConflict& conflict) const;
 	void UpdateRuntimeState(const FRobotConflict& conflict, double deltaSeconds);
 	void SetRuntimeState(EEpisodePedestrianRuntimeState newState, const FRobotConflict& conflict);
+	bool CanLeaveCurrentState() const;
+	bool IsStateEscalation(EEpisodePedestrianRuntimeState newState) const;
+	void RequestLateralOffset(double targetOffsetCm);
+	double ComputeLateralCurveDurationSeconds(double startOffsetCm, double targetOffsetCm) const;
 	void UpdateLateralOffset(double deltaSeconds);
+	void UpdateAnimationKinematics(double speedScale, double previousLateralOffsetCm, double deltaSeconds);
 	void UpdateScheduleDelay();
 	void ResetRuntimeMetrics();
 
+	// 현재 baseline path에서 벗어난 좌우 offset과 목표 offset이다. actor location은 baseline + offset으로 계산된다.
 	double ActualLateralOffsetCm = 0.0;
 	double TargetLateralOffsetCm = 0.0;
+
+	// Sidestep/recover를 직선 보간하지 않고 짧은 smootherstep curve로 재생하기 위한 curve 상태다.
+	double LateralCurveStartOffsetCm = 0.0;
+	double LateralCurveTargetOffsetCm = 0.0;
+	double LateralCurveElapsedSeconds = 0.0;
+	double LateralCurveDurationSeconds = 0.0;
+
+	// State 최소 유지 시간과 conflict latch/hysteresis를 위한 runtime 상태다.
+	double StateElapsedSeconds = 0.0;
 	double StoppedByRobotSeconds = 0.0;
 	double CachedRobotRadiusCm = 0.0;
+	bool bLateralCurveActive = false;
+	bool bConflictLatched = false;
 };

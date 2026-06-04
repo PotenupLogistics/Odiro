@@ -31,7 +31,7 @@
         "shape": {
           "type": "rectangle",
           "center_xy_m": [0, 0],
-          "size_m": [12, 6],
+          "size_m": [20, 8],
           "yaw_deg": 0
         },
         "traversability_score": 1
@@ -48,13 +48,13 @@
         "spawn_time_s": 0,
         "xy_m": [4, 0],
         "yaw_deg": 180,
-        "start_xy_m": [4, 0],
-        "goal_xy_m": [-4, 0],
+        "start_xy_m": [8, 0],
+        "goal_xy_m": [-8, 0],
         "profile": "default",
         "movement": {
           "model": "planned_trajectory",
-          "speed_mps": 1.1,
-          "curve_offset_m": 0.6,
+          "speed_mps": 1.5,
+          "curve_offset_m": 1.0,
           "curve_sample_spacing_m": 0.2,
           "initial_distance_m": 0,
           "auto_start": true

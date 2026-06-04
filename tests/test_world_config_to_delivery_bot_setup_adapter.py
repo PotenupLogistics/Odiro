@@ -14,10 +14,12 @@ def test_delivery_bot_setup_adapter_returns_defaults_without_placement_fields() 
     assert payload["robot"]["path_follow"]["target_speed_kmh"] == 10.0
     assert payload["robot"]["path_follow"]["look_ahead_distance_m"] == 1.0
     assert payload["robot"]["path_follow"]["obstacle_slow_speed_kmh"] == 2.0
+    assert payload["robot"]["path_follow"]["min_turn_speed_kmh"] == 1.0
     assert payload["robot"]["lidar"]["scan_range_m"] == 5.0
     assert payload["robot"]["lidar"]["angle_step_degree"] == 5.0
     assert payload["robot"]["lidar"]["stop_distance_m"] == 1.2
     assert payload["robot"]["lidar"]["slow_down_distance_m"] == 3.5
+    assert payload["robot"]["lidar"]["front_half_angle_degree"] == 30.0
     assert "route" not in payload["robot"]
     assert "instance_id" not in payload["robot"]
     assert "xy_m" not in payload["robot"]
@@ -40,7 +42,7 @@ def test_delivery_bot_setup_adapter_can_apply_policy_params() -> None:
     assert setup.robot.lidar.slow_down_distance_m == 4.0
 
 
-def test_delivery_bot_setup_export_payload_is_null_free_and_omits_unspecified_optional_fields() -> None:
+def test_delivery_bot_setup_export_payload_is_null_free_and_keeps_policy_comparison_fields() -> None:
     setup = convert_world_config_to_delivery_bot_setup({})
 
     payload = remove_json_nulls(setup.model_dump(mode="json", by_alias=True))
@@ -48,6 +50,8 @@ def test_delivery_bot_setup_export_payload_is_null_free_and_omits_unspecified_op
     assert "speed_limit_brake" not in payload["robot"]["drive"]
     assert "draw_debug" not in payload["robot"]["path_follow"]
     assert "ignore_tags" not in payload["robot"]["lidar"]
+    assert payload["robot"]["path_follow"]["min_turn_speed_kmh"] == 1.0
+    assert payload["robot"]["lidar"]["front_half_angle_degree"] == 30.0
     assert "null" not in __import__("json").dumps(payload)
 
 

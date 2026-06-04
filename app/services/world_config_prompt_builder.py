@@ -186,6 +186,7 @@ Instructions:
 - If the user says path is blocked, obstacles must be placed on or near the robot path and include blockingRatio.
 - If the user says route center, path center, route midpoint, or middle of the path, place the obstacle at the midpoint between robot.spawn and robot.goal.
 - If exact obstacle coordinates are provided, exact coordinates override route midpoint placement.
+- For policy comparison scenarios, describe one fixed center-blocked narrow-sidewalk scene; backend RunQueue generation keeps EpisodeSetup fixed and varies only DeliveryBotSetup policy parameters.
 - Keep unclear values conservative and record assumptions only if the schema supports them.
 - Extra keys are not allowed.
 - Do not include markdown, comments, explanations, or extra keys.
@@ -271,6 +272,7 @@ Repair rules:
 - Fill all missing required fields.
 - Remove extra fields that are not in the schema.
 - Restore any missing scenario requirements, including Kickboard obstacles, path blocking, and pedestrian crossing behavior when requested.
+- For policy comparison scenarios, keep the World Config as one fixed center-blocked narrow-sidewalk scene; backend RunQueue generation keeps EpisodeSetup fixed and varies only DeliveryBotSetup policy parameters.
 - Return JSON object only.
 - Do not include explanations outside JSON."""
 

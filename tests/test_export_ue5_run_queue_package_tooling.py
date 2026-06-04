@@ -92,7 +92,7 @@ def test_run_queue_export_cli_request_json_exports_without_live_provider(tmp_pat
     stdout = json.loads(completed.stdout)
     assert stdout["runQueueExists"] is True
     assert stdout["runCount"] == 2
-    run_queue_path = output_dir / "Json" / "Input" / "EpisodeRunQueue_obstacle_ahead.json"
+    run_queue_path = output_dir / "Json" / "Input" / "EpisodeRunQueue_narrow_sidewalk_policy_comparison.json"
     assert run_queue_path.exists()
     assert set(json.loads(run_queue_path.read_text(encoding="utf-8"))) == {"schema", "version", "runs"}
 

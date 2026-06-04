@@ -16,6 +16,18 @@ from app.services.world_config_to_delivery_bot_setup_adapter import convert_worl
 from app.services.world_config_to_episode_setup_adapter import convert_world_config_to_episode_setup
 
 
+POLICY_COMPARISON_SCENE_ID = "narrow_sidewalk"
+POLICY_COMPARISON_EPISODE_PATH = "Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block.json"
+POLICY_COMPARISON_RUN_QUEUE_PATH = "Json/Input/EpisodeRunQueue_narrow_sidewalk_policy_comparison.json"
+POLICY_FILE_NAMES = {
+    "baseline": "DeliveryBotSetup_policy_000_baseline.json",
+    "short_stop": "DeliveryBotSetup_policy_001_short_stop.json",
+    "long_stop": "DeliveryBotSetup_policy_002_long_stop.json",
+    "early_slowdown": "DeliveryBotSetup_policy_003_early_slowdown.json",
+    "low_speed": "DeliveryBotSetup_policy_004_low_speed.json",
+}
+
+
 @dataclass(frozen=True)
 class SetupPairQueueItem:
     pair_id: str
@@ -55,6 +67,46 @@ def _count_error(code: str, message: str) -> SetupValidationResult:
     return SetupValidationResult(valid=False, errors=[SetupValidationError(code=code, message=message)], warnings=[])
 
 
+def _policy_pair_id(profile: str, index: int) -> str:
+    return f"{POLICY_COMPARISON_SCENE_ID}_policy_{index:03d}_{profile}"
+
+
+def _delivery_bot_setup_path(profile: str, index: int) -> str:
+    filename = POLICY_FILE_NAMES.get(profile, f"DeliveryBotSetup_policy_{index:03d}_{profile}.json")
+    return f"Json/Input/{filename}"
+
+
+def _fixed_policy_scene_setup(base_world_config: dict[str, Any], base_seed: int) -> EpisodeSetup:
+    scene_config = {
+        **base_world_config,
+        "scenarioId": "narrow_sidewalk_fixed_center_block",
+        "seed": base_seed,
+        "map": {"type": "Sidewalk", "lengthCm": 1400, "sidewalkWidthCm": 150},
+        "robot": {
+            "botId": "delivery_bot_01",
+            "spawn": {"x": 0, "y": 0, "z": 0},
+            "goal": {"x": 1050, "y": 0, "z": 0},
+        },
+        "obstacles": [
+            {
+                "objectId": "obstacle_01",
+                "type": "Obstacle",
+                "position": {"x": 550, "y": 0, "z": 0},
+                "blockingRatio": 0.6,
+            }
+        ],
+        "pedestrians": [],
+        "run": {"iteration_index": 0},
+    }
+    runtime = base_world_config.get("runtime") if isinstance(base_world_config.get("runtime"), dict) else {}
+    scene_config["runtime"] = {"maxDurationSec": runtime.get("maxDurationSec", 60)}
+    episode_setup = convert_world_config_to_episode_setup(scene_config)
+    region = episode_setup.ground_model.regions[0]
+    region.shape.center_xy_m = [5.0, 0.0]
+    region.shape.size_m = [14.0, 1.5]
+    return episode_setup
+
+
 def generate_setup_pair_queue(
     base_world_config: dict[str, Any],
     episode_count: int | None = None,
@@ -73,13 +125,17 @@ def generate_setup_pair_queue(
 
     items: list[SetupPairQueueItem] = []
     runs: list[EpisodeRunQueueItem] = []
+    seed_start = int(base_seed if base_seed is not None else base_world_config.get("seed", 0))
+    fixed_episode_setup = _fixed_policy_scene_setup(base_world_config, seed_start)
+    fixed_episode_validation = validate_episode_setup(fixed_episode_setup)
     for index, variant in enumerate(generate_episode_variants(base_world_config, count, base_seed)):
-        pair_id = f"{scenario_id}_{index:03d}"
-        episode_path = f"Json/Input/EpisodeSetup_{pair_id}.json"
-        bot_path = f"Json/Input/DeliveryBotSetup_{pair_id}.json"
-        episode_setup = convert_world_config_to_episode_setup(variant.world_config)
+        profile = str(variant.world_config.get("environmentSampling", {}).get("deliveryBotPolicyProfile", "") or "baseline")
+        pair_id = _policy_pair_id(profile, index)
+        episode_path = POLICY_COMPARISON_EPISODE_PATH
+        bot_path = _delivery_bot_setup_path(profile, index)
+        episode_setup = fixed_episode_setup
         delivery_bot_setup = convert_world_config_to_delivery_bot_setup(variant.world_config)
-        episode_validation = validate_episode_setup(episode_setup)
+        episode_validation = fixed_episode_validation
         bot_validation = validate_delivery_bot_setup(delivery_bot_setup)
         items.append(
             SetupPairQueueItem(
@@ -95,7 +151,7 @@ def generate_setup_pair_queue(
         )
         runs.append(EpisodeRunQueueItem(pair_id=pair_id, episode_setup=episode_path, delivery_bot_setup=bot_path))
 
-    run_queue_path = f"Json/Input/EpisodeRunQueue_{scenario_id}.json"
+    run_queue_path = POLICY_COMPARISON_RUN_QUEUE_PATH
     queue = EpisodeRunQueue(runs=runs)
     validation = validate_run_queue(queue)
     return SetupPairQueueResult(

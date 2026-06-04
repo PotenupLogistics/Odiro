@@ -13,28 +13,59 @@ def test_delivery_bot_setup_default_catalog_matches_ue_document_values() -> None
     assert DELIVERY_BOT_SETUP_LIMITS["lidar.slow_down_distance_m"]["rule"] == ">= stop_distance_m + 0.1"
 
 
-def test_delivery_bot_variation_policy_returns_baseline_for_first_three_episodes() -> None:
-    for index in [0, 1, 2]:
-        tuning = delivery_bot_tuning_for_episode(index, fixed_parameters={})
-        assert tuning.values == {}
-        assert tuning.changed_parameters == []
+def test_delivery_bot_variation_policy_returns_named_policy_profiles() -> None:
+    profiles = [delivery_bot_tuning_for_episode(index, fixed_parameters={}) for index in range(5)]
+
+    assert [profile.profile for profile in profiles] == [
+        "baseline",
+        "short_stop",
+        "long_stop",
+        "early_slowdown",
+        "low_speed",
+    ]
+    assert profiles[0].values["stopDistanceM"] == 1.2
+    assert profiles[1].values["stopDistanceM"] == 0.8
+    assert profiles[2].values["stopDistanceM"] == 1.6
+    assert profiles[3].values["slowDownDistanceM"] == 4.5
+    assert profiles[4].values["targetSpeedKmh"] == 8.0
+
+def test_policy_profiles_keep_common_field_set_and_valid_ranges() -> None:
+    profiles = [delivery_bot_tuning_for_episode(index, fixed_parameters={}) for index in range(5)]
+    field_set = set(profiles[0].values)
+
+    assert field_set == {
+        "maxSpeedKmh",
+        "targetSpeedKmh",
+        "obstacleSlowSpeedKmh",
+        "stopDistanceM",
+        "slowDownDistanceM",
+        "frontHalfAngleDegree",
+        "minTurnSpeedKmh",
+    }
+    for profile in profiles:
+        assert set(profile.values) == field_set
+        assert profile.values["targetSpeedKmh"] <= profile.values["maxSpeedKmh"]
+        assert profile.values["obstacleSlowSpeedKmh"] <= profile.values["targetSpeedKmh"]
+        assert profile.values["stopDistanceM"] < profile.values["slowDownDistanceM"]
 
 
-def test_conservative_lidar_profile_changes_safe_lidar_values() -> None:
+def test_early_slowdown_profile_changes_slowdown_distance() -> None:
     tuning = delivery_bot_tuning_for_episode(3, fixed_parameters={})
 
-    assert tuning.values["stopDistanceM"] == 1.4
-    assert tuning.values["slowDownDistanceM"] == 4.0
-    assert tuning.values["frontHalfAngleDegree"] == 25.0
+    assert tuning.profile == "early_slowdown"
+    assert tuning.values["stopDistanceM"] == 1.2
+    assert tuning.values["slowDownDistanceM"] == 4.5
+    assert tuning.values["frontHalfAngleDegree"] == 30.0
     assert tuning.values["slowDownDistanceM"] >= tuning.values["stopDistanceM"] + 0.1
-    assert "deliveryBotSetup.robot.lidar.front_half_angle_degree" in tuning.changed_parameters
+    assert "deliveryBotSetup.robot.lidar.slow_down_distance_m" in tuning.changed_parameters
 
 
-def test_slower_path_follow_profile_changes_speed_values_without_overwriting_fixed_values() -> None:
+def test_low_speed_profile_changes_speed_values_without_overwriting_fixed_values() -> None:
     tuning = delivery_bot_tuning_for_episode(4, fixed_parameters={"maxSpeedKmh": 10.0})
 
+    assert tuning.profile == "low_speed"
     assert "maxSpeedKmh" not in tuning.values
     assert tuning.values["targetSpeedKmh"] == 8.0
-    assert tuning.values["obstacleSlowSpeedKmh"] == 1.2
+    assert tuning.values["obstacleSlowSpeedKmh"] == 1.5
     assert tuning.values["minTurnSpeedKmh"] == 1.0
     assert "deliveryBotSetup.robot.drive.max_speed_kmh" not in tuning.changed_parameters

@@ -33,35 +33,13 @@ def _set_seed(config: dict[str, Any], seed: int) -> None:
     config["seed"] = seed
 
 
-def _apply_lateral_offset(config: dict[str, Any], y_cm: int, fixed: dict[str, Any], changes: list[str]) -> None:
-    if "obstacleLateralOffsetM" in fixed:
-        return
-    obstacles = config.get("obstacles") if isinstance(config.get("obstacles"), list) else []
-    if not obstacles or not isinstance(obstacles[0], dict):
-        return
-    position = obstacles[0].get("position") if isinstance(obstacles[0].get("position"), dict) else {}
-    position["y"] = y_cm
-    obstacles[0]["position"] = position
-    changes.append("obstacles[0].position.y")
-
-
-def _set_sampling_value(config: dict[str, Any], key: str, value: Any, fixed: dict[str, Any], changes: list[str]) -> None:
-    if key in fixed:
-        return
-    environment_sampling = config.get("environmentSampling")
-    if not isinstance(environment_sampling, dict):
-        environment_sampling = {}
-        config["environmentSampling"] = environment_sampling
-    environment_sampling[key] = value
-    changes.append(f"deliveryBotSetup.robot.{key}")
-
-
 def _apply_delivery_bot_tuning(config: dict[str, Any], index: int, fixed: dict[str, Any], changes: list[str]) -> None:
     tuning = delivery_bot_tuning_for_episode(index, fixed_parameters=fixed, scenario_intent=str(config.get("scenarioId", "")))
     environment_sampling = config.get("environmentSampling")
     if not isinstance(environment_sampling, dict):
         environment_sampling = {}
         config["environmentSampling"] = environment_sampling
+    environment_sampling["deliveryBotPolicyProfile"] = tuning.profile
     for key, value in tuning.values.items():
         environment_sampling[key] = value
     changes.extend(tuning.changed_parameters)
@@ -83,13 +61,6 @@ def generate_episode_variants(
         changes: list[str] = []
         _set_seed(config, seed_start + index)
         _set_runtime_iteration(config, index)
-        if index == 1:
-            _apply_lateral_offset(config, -40, fixed, changes)
-        elif index == 2:
-            _apply_lateral_offset(config, 40, fixed, changes)
-        elif index == 3:
-            _apply_delivery_bot_tuning(config, index, fixed, changes)
-        elif index == 4:
-            _apply_delivery_bot_tuning(config, index, fixed, changes)
+        _apply_delivery_bot_tuning(config, index, fixed, changes)
         variants.append(EpisodeVariant(world_config=config, changed_parameters=changes))
     return variants

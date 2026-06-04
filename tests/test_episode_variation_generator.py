@@ -36,7 +36,8 @@ def test_generate_episode_variants_defaults_to_five_and_keeps_baseline_first() -
     assert len(variants) == 5
     assert variants[0].world_config["seed"] == 1001
     assert variants[0].world_config["run"]["iteration_index"] == 0
-    assert variants[0].changed_parameters == []
+    assert variants[0].world_config["environmentSampling"]["deliveryBotPolicyProfile"] == "baseline"
+    assert "deliveryBotSetup.robot.lidar.stop_distance_m" in variants[0].changed_parameters
 
 
 def test_generate_episode_variants_uses_base_seed_and_unique_iteration_index() -> None:
@@ -56,11 +57,18 @@ def test_generate_episode_variants_preserves_no_pedestrian_and_single_obstacle_c
     assert all(variant.world_config["runtime"]["maxDurationSec"] == 60 for variant in variants)
 
 
-def test_generate_episode_variants_changes_only_unfixed_values_deterministically() -> None:
+def test_generate_episode_variants_keeps_scene_fixed_and_changes_only_policy_values() -> None:
     variants = generate_episode_variants(_world_config(), episode_count=5)
 
     y_values = [variant.world_config["obstacles"][0]["position"]["y"] for variant in variants]
-    assert y_values == [0, -40, 40, 0, 0]
-    assert any("obstacles[0].position.y" in variant.changed_parameters for variant in variants[1:])
-    assert "deliveryBotSetup.robot.lidar.stop_distance_m" in variants[3].changed_parameters
+    assert y_values == [0, 0, 0, 0, 0]
+    assert [variant.world_config["environmentSampling"]["deliveryBotPolicyProfile"] for variant in variants] == [
+        "baseline",
+        "short_stop",
+        "long_stop",
+        "early_slowdown",
+        "low_speed",
+    ]
+    assert "obstacles[0].position.y" not in {change for variant in variants for change in variant.changed_parameters}
+    assert "deliveryBotSetup.robot.lidar.stop_distance_m" in variants[1].changed_parameters
     assert "deliveryBotSetup.robot.path_follow.target_speed_kmh" in variants[4].changed_parameters

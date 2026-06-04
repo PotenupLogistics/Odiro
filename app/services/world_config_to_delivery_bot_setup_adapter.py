@@ -67,7 +67,7 @@ def convert_world_config_to_delivery_bot_setup(
                 path_point_acceptance_distance_m=params.get("pathPointAcceptanceDistanceM"),
                 goal_acceptance_distance_m=params.get("goalAcceptanceDistanceM"),
                 steering_sensitivity=params.get("steeringSensitivity"),
-                min_turn_speed_kmh=params.get("minTurnSpeedKmh"),
+                min_turn_speed_kmh=float(params.get("minTurnSpeedKmh", 1.0)),
             ),
             lidar=DeliveryBotLidarConfig(
                 scan_range_m=float(params.get("scanRangeM", 5.0)),
@@ -76,7 +76,7 @@ def convert_world_config_to_delivery_bot_setup(
                 slow_down_distance_m=slow_down_distance,
                 draw_debug=params.get("lidarDrawDebug"),
                 sensor_height_m=params.get("sensorHeightM"),
-                front_half_angle_degree=params.get("frontHalfAngleDegree"),
+                front_half_angle_degree=float(params.get("frontHalfAngleDegree", 30.0)),
                 store_missed_rays=params.get("storeMissedRays"),
                 trace_channel=params.get("traceChannel"),
                 ignore_tags=params.get("ignoreTags"),

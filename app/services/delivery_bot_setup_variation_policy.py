@@ -31,17 +31,80 @@ def delivery_bot_tuning_for_episode(
     scenario_intent: str | None = None,
 ) -> DeliveryBotTuningVariation:
     fixed = fixed_parameters or {}
+    profiles: list[tuple[str, dict[str, Any]]] = [
+        (
+            "baseline",
+            {
+                "maxSpeedKmh": 10.0,
+                "targetSpeedKmh": 10.0,
+                "obstacleSlowSpeedKmh": 2.0,
+                "stopDistanceM": 1.2,
+                "slowDownDistanceM": 3.5,
+                "frontHalfAngleDegree": 30.0,
+                "minTurnSpeedKmh": 1.0,
+            },
+        ),
+        (
+            "short_stop",
+            {
+                "maxSpeedKmh": 10.0,
+                "targetSpeedKmh": 10.0,
+                "obstacleSlowSpeedKmh": 2.0,
+                "stopDistanceM": 0.8,
+                "slowDownDistanceM": 3.5,
+                "frontHalfAngleDegree": 30.0,
+                "minTurnSpeedKmh": 1.0,
+            },
+        ),
+        (
+            "long_stop",
+            {
+                "maxSpeedKmh": 10.0,
+                "targetSpeedKmh": 10.0,
+                "obstacleSlowSpeedKmh": 2.0,
+                "stopDistanceM": 1.6,
+                "slowDownDistanceM": 3.5,
+                "frontHalfAngleDegree": 30.0,
+                "minTurnSpeedKmh": 1.0,
+            },
+        ),
+        (
+            "early_slowdown",
+            {
+                "maxSpeedKmh": 10.0,
+                "targetSpeedKmh": 10.0,
+                "obstacleSlowSpeedKmh": 2.0,
+                "stopDistanceM": 1.2,
+                "slowDownDistanceM": 4.5,
+                "frontHalfAngleDegree": 30.0,
+                "minTurnSpeedKmh": 1.0,
+            },
+        ),
+        (
+            "low_speed",
+            {
+                "maxSpeedKmh": 8.0,
+                "targetSpeedKmh": 8.0,
+                "obstacleSlowSpeedKmh": 1.5,
+                "stopDistanceM": 1.2,
+                "slowDownDistanceM": 3.5,
+                "frontHalfAngleDegree": 30.0,
+                "minTurnSpeedKmh": 1.0,
+            },
+        ),
+    ]
+    profile, profile_values = profiles[episode_index] if episode_index < len(profiles) else profiles[0]
     values: dict[str, Any] = {}
     changed: list[str] = []
-    if episode_index == 3:
-        _set_if_not_fixed(values, changed, fixed, "stopDistanceM", 1.4, "deliveryBotSetup.robot.lidar.stop_distance_m")
-        _set_if_not_fixed(values, changed, fixed, "slowDownDistanceM", 4.0, "deliveryBotSetup.robot.lidar.slow_down_distance_m")
-        _set_if_not_fixed(values, changed, fixed, "frontHalfAngleDegree", 25.0, "deliveryBotSetup.robot.lidar.front_half_angle_degree")
-        return DeliveryBotTuningVariation("conservative_lidar", values, changed)
-    if episode_index == 4:
-        _set_if_not_fixed(values, changed, fixed, "maxSpeedKmh", 8.0, "deliveryBotSetup.robot.drive.max_speed_kmh")
-        _set_if_not_fixed(values, changed, fixed, "targetSpeedKmh", 8.0, "deliveryBotSetup.robot.path_follow.target_speed_kmh")
-        _set_if_not_fixed(values, changed, fixed, "obstacleSlowSpeedKmh", 1.2, "deliveryBotSetup.robot.path_follow.obstacle_slow_speed_kmh")
-        _set_if_not_fixed(values, changed, fixed, "minTurnSpeedKmh", 1.0, "deliveryBotSetup.robot.path_follow.min_turn_speed_kmh")
-        return DeliveryBotTuningVariation("slower_path_follow", values, changed)
-    return DeliveryBotTuningVariation("baseline", {}, [])
+    targets = {
+        "maxSpeedKmh": "deliveryBotSetup.robot.drive.max_speed_kmh",
+        "targetSpeedKmh": "deliveryBotSetup.robot.path_follow.target_speed_kmh",
+        "obstacleSlowSpeedKmh": "deliveryBotSetup.robot.path_follow.obstacle_slow_speed_kmh",
+        "stopDistanceM": "deliveryBotSetup.robot.lidar.stop_distance_m",
+        "slowDownDistanceM": "deliveryBotSetup.robot.lidar.slow_down_distance_m",
+        "frontHalfAngleDegree": "deliveryBotSetup.robot.lidar.front_half_angle_degree",
+        "minTurnSpeedKmh": "deliveryBotSetup.robot.path_follow.min_turn_speed_kmh",
+    }
+    for key, value in profile_values.items():
+        _set_if_not_fixed(values, changed, fixed, key, value, targets[key])
+    return DeliveryBotTuningVariation(profile, values, changed)

@@ -52,14 +52,6 @@ enum class EEpisodePersonalMobilityType : uint8
 };
 
 UENUM(BlueprintType)
-enum class EEpisodePedestrianProfile : uint8
-{
-	Adult,
-	Child,
-	Elderly
-};
-
-UENUM(BlueprintType)
 enum class EEpisodeStaticObstaclePropCategory : uint8
 {
 	Unknown,

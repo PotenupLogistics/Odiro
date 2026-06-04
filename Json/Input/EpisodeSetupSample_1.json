@@ -95,7 +95,6 @@
         "instance_id": "ped_parallel_01",
         "archetype_id": "adult_pedestrian",
         "path_id": "ped_parallel_01",
-        "spawn_time_s": 0,
         "xy_m": [-5.5, 2.5],
         "yaw_deg": 0,
         "movement": {

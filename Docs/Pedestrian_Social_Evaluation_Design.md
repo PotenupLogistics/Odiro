@@ -49,12 +49,10 @@ Pedestrian = setup-time planned baseline trajectory + deterministic robot reacti
 {
   "instance_id": "ped_01",
   "archetype_id": "adult_pedestrian",
-  "spawn_time_s": 0,
   "xy_m": [-4, 0],
   "yaw_deg": 0,
   "start_xy_m": [-4, 0],
   "goal_xy_m": [4, 0],
-  "profile": "default",
   "movement": {
     "model": "planned_trajectory",
     "speed_mps": 1.2,
@@ -246,7 +244,6 @@ SetupEpisodeWorld
 | `PathDeviationCm` | 현재 lateral deviation |
 | `MaxPathDeviationCm` | episode 중 최대 lateral deviation |
 | `MinRobotDistanceCm` | 주입된 robot과의 최단 거리 |
-| `LastConflictRobotInstanceId` | 마지막 conflict 대상 robot id |
 
 하지 않는 일:
 

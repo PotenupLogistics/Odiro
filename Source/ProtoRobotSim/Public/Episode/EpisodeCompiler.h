@@ -192,7 +192,6 @@ actors.static_obstacles[].properties
 actors.pedestrians[].instance_id
 actors.pedestrians[].archetype_id
 actors.pedestrians[].path_id
-actors.pedestrians[].spawn_time_s
 actors.pedestrians[].xy_m
 actors.pedestrians[].yaw_deg
 actors.pedestrians[].movement.model

@@ -221,8 +221,7 @@ FEpisodeRuntimeContext UEpisodeSimulationSubsystem::BuildRuntimeContext(const FE
 		AActor* runtimeActor = FindRuntimeActor(placeableSpec.InstanceId);
 		if (!runtimeActor) continue;
 
-		if ((placeableSpec.Category == EEpisodeActorCategory::DeliveryBot ||
-			placeableSpec.Category == EEpisodeActorCategory::RoadVehicle) && !runtimeContext.RobotActor)
+		if (placeableSpec.Category == EEpisodeActorCategory::DeliveryBot && !runtimeContext.RobotActor)
 		{
 			runtimeContext.RobotInstanceId = placeableSpec.InstanceId;
 			runtimeContext.RobotActor = runtimeActor;
@@ -655,6 +654,17 @@ AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPlannedPedestrian(const FE
 		}
 	}
 
+	AActor* robotActor = FindRuntimeActorByCategory(EEpisodeActorCategory::DeliveryBot);
+	if (!robotActor)
+	{
+		UE_LOG(
+			LogEpisodeSimulation,
+			Error,
+			TEXT("planned pedestrian '%s' requires a DeliveryBot runtime actor."),
+			*dynamicActorSpec.InstanceId);
+		return nullptr;
+	}
+
 	FActorSpawnParameters spawnParams;
 	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
@@ -673,15 +683,13 @@ AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPlannedPedestrian(const FE
 
 	if (pedestrian->PedestrianRuntimeComponent)
 	{
-		FString robotInstanceId;
-		AActor* robotActor = FindRuntimeActorByCategory(EEpisodeActorCategory::DeliveryBot, robotInstanceId);
 		pedestrian->PedestrianRuntimeComponent->ConfigurePlan(
 			dynamicActorSpec.InstanceId,
 			*plan,
 			speedCmPerSecond,
 			initialDistanceCm,
 			bAutoStart);
-		pedestrian->PedestrianRuntimeComponent->SetRobotActor(robotActor, robotInstanceId);
+		pedestrian->PedestrianRuntimeComponent->SetRobotActor(robotActor);
 	}
 
 	UGameplayStatics::FinishSpawningActor(pedestrian, spawnTransform);
@@ -782,12 +790,8 @@ bool UEpisodeSimulationSubsystem::GetVectorProperty(
 	return true;
 }
 
-AActor* UEpisodeSimulationSubsystem::FindRuntimeActorByCategory(
-	EEpisodeActorCategory category,
-	FString& outInstanceId) const
+AActor* UEpisodeSimulationSubsystem::FindRuntimeActorByCategory(EEpisodeActorCategory category) const
 {
-	outInstanceId.Reset();
-
 	for (const TPair<FString, TObjectPtr<AActor>>& pair : RuntimeActorsById)
 	{
 		AActor* actor = pair.Value.Get();
@@ -802,7 +806,6 @@ AActor* UEpisodeSimulationSubsystem::FindRuntimeActorByCategory(
 			continue;
 		}
 
-		outInstanceId = placeableComponent->InstanceId.IsEmpty() ? pair.Key : placeableComponent->InstanceId;
 		return actor;
 	}
 

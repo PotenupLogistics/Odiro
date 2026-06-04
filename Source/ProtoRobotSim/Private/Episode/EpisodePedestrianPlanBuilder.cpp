@@ -209,7 +209,6 @@ bool FEpisodePedestrianPlanBuilder::BuildPlanForPedestrian(
 	outPlan.SourceSpecHash = buildContext.SourceSpecHash;
 	outPlan.ResolvedFootprintHash = resolvedFootprintHash;
 	outPlan.SemanticNavigationHash = buildContext.SemanticNavigationHash;
-	outPlan.SpawnTimeSeconds = dynamicActorSpec.SpawnTimeSeconds;
 	outPlan.BehaviorParams = BuildBehaviorParams(dynamicActorSpec);
 	outPlan.PathShapeParams = pathShapeParams;
 

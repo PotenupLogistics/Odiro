@@ -52,12 +52,10 @@
       {
         "instance_id": "ped_planned_01",
         "archetype_id": "adult_pedestrian",
-        "spawn_time_s": 0,
         "xy_m": [-4, 0],
         "yaw_deg": 0,
         "start_xy_m": [-4, 0],
         "goal_xy_m": [4, 0],
-        "profile": "default",
         "movement": {
           "model": "planned_trajectory",
           "speed_mps": 1.2,

@@ -798,7 +798,6 @@ void UEpisodeCompiler::CompilePedestrians(
 		}
 
 		dynamicActorSpec.Category = EEpisodeActorCategory::Pedestrian;
-		dynamicActorSpec.SpawnTimeSeconds = ReadNumberOrDefault(*pedestrianObject, TEXT("spawn_time_s"), 0.0);
 		ReadActorPlacementTransform(*pedestrianObject, pedestrianPath, result, dynamicActorSpec.InitialTransform);
 		AddJsonProperties(*pedestrianObject, dynamicActorSpec.Properties);
 
@@ -837,12 +836,6 @@ void UEpisodeCompiler::CompilePedestrians(
 					EEpisodeCompileDiagnosticSeverity::Error,
 					TEXT("missing_pedestrian_goal"),
 					FString::Printf(TEXT("%s.goal_xy_m 필드는 planned_trajectory 보행자에 필수."), *pedestrianPath));
-			}
-
-			FString profile;
-			if (TryGetStringField(*pedestrianObject, TEXT("profile"), profile))
-			{
-				dynamicActorSpec.Properties.Add(TEXT("pedestrian_profile"), MakeStringParam(profile));
 			}
 		}
 

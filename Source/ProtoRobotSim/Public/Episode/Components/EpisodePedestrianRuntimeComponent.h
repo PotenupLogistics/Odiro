@@ -44,9 +44,6 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianRuntime")
 	TWeakObjectPtr<AActor> RobotActor;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianRuntime")
-	FString RobotInstanceId;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianRuntime")
 	bool bEnableRobotReaction = true;
 
@@ -110,9 +107,6 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianMetrics", meta = (Units = "cm"))
 	double MinRobotDistanceCm = -1.0;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianMetrics")
-	FString LastConflictRobotInstanceId;
-
 	void ConfigurePlan(
 		const FString& inInstanceId,
 		const FEpisodePedestrianPlan& plan,
@@ -121,7 +115,7 @@ public:
 		bool bStartAutomatically);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|PedestrianRuntime")
-	void SetRobotActor(AActor* inRobotActor, const FString& inRobotInstanceId);
+	void SetRobotActor(AActor* inRobotActor);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|PedestrianRuntime")
 	void StartFollowing();
@@ -140,7 +134,6 @@ private:
 	struct FRobotConflict
 	{
 		TWeakObjectPtr<AActor> RobotActor;
-		FString RobotInstanceId;
 		FVector RobotLocation = FVector::ZeroVector;
 		FVector RobotVelocity = FVector::ZeroVector;
 		double RobotRadiusCm = 0.0;
@@ -158,7 +151,7 @@ private:
 	FVector GetDirectionAtDistance(double distanceCm) const;
 	FVector GetRightAtDistance(double distanceCm) const;
 	FVector GetActualLocationAtDistance(double distanceCm, double lateralOffsetCm) const;
-	void MoveOwnerToCurrentDistance(double deltaSeconds = 0.0);
+	void MoveOwnerToCurrentDistance();
 	FRobotConflict FindMostSevereRobotConflict() const;
 	void UpdateRobotDistanceMetrics();
 	double GetActorRadiusCm(const AActor* actor) const;

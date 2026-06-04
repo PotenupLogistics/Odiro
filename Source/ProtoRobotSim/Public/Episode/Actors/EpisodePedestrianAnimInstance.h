@@ -15,15 +15,6 @@ public:
 	virtual void NativeInitializeAnimation() override;
 	virtual void NativeUpdateAnimation(float deltaSeconds) override;
 
-	UPROPERTY(BlueprintReadOnly, Category="Episode|Visual")
-	float VisualSpeedCmPerSecond = 0.0f;
-
-	UPROPERTY(BlueprintReadOnly, Category="Episode|Visual")
-	float VisualDirectionDegrees = 0.0f;
-
-	UPROPERTY(BlueprintReadOnly, Category="Episode|Visual")
-	bool bMoving = false;
-
 	// Baseline plan speed. 로봇 회피나 sidestep 때문에 줄거나 늘지 않는 기준 속도.
 	UPROPERTY(BlueprintReadOnly, Category="Episode|Visual", meta = (Units = "cm/s"))
 	float NominalSpeedCmPerSecond = 0.0f;
@@ -31,6 +22,10 @@ public:
 	// Animation frame에서 actor 위치 delta로 계산한 실제 화면상 이동 속도.
 	UPROPERTY(BlueprintReadOnly, Category="Episode|Visual", meta = (Units = "cm/s"))
 	float ActualVisualSpeedCmPerSecond = 0.0f;
+
+	// 실제 화면 이동 속도가 threshold를 넘는지 여부. locomotion 전환 조건에 사용한다.
+	UPROPERTY(BlueprintReadOnly, Category="Episode|Visual")
+	bool bActuallyMoving = false;
 
 	// Baseline path를 따라 전진하는 속도. 감속/정지 state의 speed scale이 반영.
 	UPROPERTY(BlueprintReadOnly, Category="Episode|Visual", meta = (Units = "cm/s"))

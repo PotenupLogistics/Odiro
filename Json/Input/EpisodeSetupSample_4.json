@@ -85,7 +85,6 @@
         "instance_id": "ped_observer_01",
         "archetype_id": "adult_pedestrian",
         "path_id": "ped_static_observer",
-        "spawn_time_s": 0,
         "xy_m": [-4, 3],
         "yaw_deg": 0,
         "movement": {

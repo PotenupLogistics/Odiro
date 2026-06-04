@@ -58,11 +58,9 @@ void UEpisodePedestrianAnimInstance::NativeUpdateAnimation(float deltaSeconds)
 
 void UEpisodePedestrianAnimInstance::ResetVisualMotion()
 {
-	VisualSpeedCmPerSecond = 0.0f;
-	VisualDirectionDegrees = 0.0f;
-	bMoving = false;
 	NominalSpeedCmPerSecond = 0.0f;
 	ActualVisualSpeedCmPerSecond = 0.0f;
+	bActuallyMoving = false;
 	ProgressSpeedCmPerSecond = 0.0f;
 	LateralSpeedCmPerSecond = 0.0f;
 	MoveDirectionDegrees = 0.0f;
@@ -87,11 +85,9 @@ void UEpisodePedestrianAnimInstance::UpdateVisualMotionFromActor(float deltaSeco
 	{
 		PreviousActorLocation = currentActorLocation;
 		bHasPreviousActorLocation = true;
-		VisualSpeedCmPerSecond = 0.0f;
-		VisualDirectionDegrees = 0.0f;
-		bMoving = false;
 		NominalSpeedCmPerSecond = 0.0f;
 		ActualVisualSpeedCmPerSecond = 0.0f;
+		bActuallyMoving = false;
 		ProgressSpeedCmPerSecond = 0.0f;
 		LateralSpeedCmPerSecond = 0.0f;
 		MoveDirectionDegrees = 0.0f;
@@ -113,18 +109,16 @@ void UEpisodePedestrianAnimInstance::UpdateVisualMotionFromActor(float deltaSeco
 		rawActualVisualSpeedCmPerSecond,
 		deltaSeconds,
 		VisualSpeedSmoothingRate);
-	VisualSpeedCmPerSecond = ActualVisualSpeedCmPerSecond;
-	bMoving = ActualVisualSpeedCmPerSecond > VisualMovingThresholdCmPerSecond;
+	bActuallyMoving = ActualVisualSpeedCmPerSecond > VisualMovingThresholdCmPerSecond;
 
 	const FVector moveDirection = deltaLocation.GetSafeNormal2D();
-	if (!bMoving || moveDirection.IsNearlyZero())
+	if (!bActuallyMoving || moveDirection.IsNearlyZero())
 	{
 		MoveDirectionDegrees = FMath::FInterpTo(
 			MoveDirectionDegrees,
 			0.0f,
 			deltaSeconds,
 			VisualDirectionSmoothingRate);
-		VisualDirectionDegrees = MoveDirectionDegrees;
 		UpdateRuntimeAnimationBridge(
 			visualVelocityCmPerSecond,
 			CachedPedestrian->GetActorForwardVector().GetSafeNormal2D(),
@@ -143,8 +137,6 @@ void UEpisodePedestrianAnimInstance::UpdateVisualMotionFromActor(float deltaSeco
 		rawDirectionDegrees,
 		deltaSeconds,
 		VisualDirectionSmoothingRate);
-	VisualDirectionDegrees = MoveDirectionDegrees;
-
 	UpdateRuntimeAnimationBridge(visualVelocityCmPerSecond, forward, right);
 	UpdateVisualFacing(deltaSeconds);
 }

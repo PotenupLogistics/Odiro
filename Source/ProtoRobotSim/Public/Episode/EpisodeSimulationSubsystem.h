@@ -141,7 +141,7 @@ private:
 		const FString& key,
 		FVector& outValue);
 
-	AActor* FindRuntimeActorByCategory(EEpisodeActorCategory category, FString& outInstanceId) const;
+	AActor* FindRuntimeActorByCategory(EEpisodeActorCategory category) const;
 
 	void BuildPedestrianPlanContext(
 		const FEpisodeSimulationSetupSpec& setupSpec,

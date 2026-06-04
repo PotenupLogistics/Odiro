@@ -1,6 +1,5 @@
 
 #include "Episode/Components/EpisodePedestrianRuntimeComponent.h"
-#include "Episode/Actors/EpisodePedestrian.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogEpisodePedestrianRuntime, Log, All);
 
@@ -101,10 +100,9 @@ void UEpisodePedestrianRuntimeComponent::ConfigurePlan(
 	ResetRuntimeMetrics();
 }
 
-void UEpisodePedestrianRuntimeComponent::SetRobotActor(AActor* inRobotActor, const FString& inRobotInstanceId)
+void UEpisodePedestrianRuntimeComponent::SetRobotActor(AActor* inRobotActor)
 {
 	RobotActor = inRobotActor;
-	RobotInstanceId = inRobotInstanceId;
 	CachedRobotRadiusCm = GetActorRadiusCm(inRobotActor);
 }
 
@@ -125,11 +123,6 @@ void UEpisodePedestrianRuntimeComponent::StartFollowing()
 void UEpisodePedestrianRuntimeComponent::StopFollowing()
 {
 	SetComponentTickEnabled(false);
-
-	if (AEpisodePedestrian* pedestrian = Cast<AEpisodePedestrian>(GetOwner()))
-	{
-		pedestrian->ResetVisualMotion();
-	}
 }
 
 bool UEpisodePedestrianRuntimeComponent::HasPlan() const
@@ -185,8 +178,10 @@ void UEpisodePedestrianRuntimeComponent::TickComponent(float deltaTime, ELevelTi
 
 	const double distanceDeltaCm = FMath::Max(SpeedCmPerSecond, 0.0) * speedScale * deltaSeconds;
 	CurrentDistanceCm = FMath::Clamp(CurrentDistanceCm + distanceDeltaCm, 0.0, TotalDistanceCm);
-	MoveOwnerToCurrentDistance(deltaTime);
+	MoveOwnerToCurrentDistance();
 	UpdateScheduleDelay();
+	
+	GEngine->AddOnScreenDebugMessage(static_cast<uint64>(GetUniqueID()), 0.1f, FColor::Red, FString::Printf(TEXT("CurrentState: %s"), *GetPedestrianRuntimeStateName(CurrentState)));
 
 	if (FMath::IsNearlyEqual(CurrentDistanceCm, TotalDistanceCm))
 	{
@@ -258,12 +253,11 @@ FVector UEpisodePedestrianRuntimeComponent::GetActualLocationAtDistance(double d
 	return GetLocationAtDistance(distanceCm) + GetRightAtDistance(distanceCm) * lateralOffsetCm;
 }
 
-void UEpisodePedestrianRuntimeComponent::MoveOwnerToCurrentDistance(double deltaSeconds)
+void UEpisodePedestrianRuntimeComponent::MoveOwnerToCurrentDistance()
 {
 	AActor* owner = GetOwner();
 	if (!owner || !HasPlan()) return;
 
-	const FVector previousLocation = owner->GetActorLocation();
 	FVector targetLocation = GetActualLocationAtDistance(CurrentDistanceCm, ActualLateralOffsetCm);
 	targetLocation.Z += VerticalOffsetCm;
 
@@ -274,11 +268,6 @@ void UEpisodePedestrianRuntimeComponent::MoveOwnerToCurrentDistance(double delta
 
 	FHitResult sweepHit;
 	owner->SetActorLocationAndRotation(targetLocation, targetRotation, true, &sweepHit, ETeleportType::None);
-
-	if (AEpisodePedestrian* pedestrian = Cast<AEpisodePedestrian>(owner))
-	{
-		pedestrian->UpdateVisualMotion(previousLocation, owner->GetActorLocation(), deltaSeconds);
-	}
 
 	PathDeviationCm = FMath::Abs(ActualLateralOffsetCm);
 	MaxPathDeviationCm = FMath::Max(MaxPathDeviationCm, PathDeviationCm);
@@ -347,7 +336,6 @@ UEpisodePedestrianRuntimeComponent::FRobotConflict UEpisodePedestrianRuntimeComp
 	const double severity = FMath::Clamp(distanceSeverity * 0.75 + timeSeverity * 0.25, 0.0, 1.0);
 
 	bestConflict.RobotActor = robotActor;
-	bestConflict.RobotInstanceId = RobotInstanceId.IsEmpty() ? robotActor->GetName() : RobotInstanceId;
 	bestConflict.RobotLocation = robotLocation;
 	bestConflict.RobotVelocity = robotVelocity;
 	bestConflict.RobotRadiusCm = robotRadiusCm;
@@ -428,7 +416,8 @@ double UEpisodePedestrianRuntimeComponent::ComputeSidestepTargetCm(const FRobotC
 	int32 side = sideDot >= 0.0 ? -1 : 1;
 	if (FMath::IsNearlyZero(sideDot))
 	{
-		side = GetTypeHash(InstanceId + conflict.RobotInstanceId) % 2 == 0 ? -1 : 1;
+		const FString sideSeed = InstanceId.IsEmpty() ? PlanHash : InstanceId;
+		side = GetTypeHash(sideSeed) % 2 == 0 ? -1 : 1;
 	}
 
 	return static_cast<double>(side) * BehaviorParams.SidestepDistanceCm;
@@ -493,8 +482,6 @@ void UEpisodePedestrianRuntimeComponent::UpdateRuntimeState(const FRobotConflict
 			: EEpisodePedestrianRuntimeState::FollowBaseline);
 		return;
 	}
-
-	LastConflictRobotInstanceId = conflict.RobotInstanceId;
 
 	if (CurrentState == EEpisodePedestrianRuntimeState::Blocked)
 	{
@@ -561,6 +548,7 @@ void UEpisodePedestrianRuntimeComponent::SetRuntimeState(
 	const EEpisodePedestrianRuntimeState previousState = CurrentState;
 	CurrentState = newState;
 	StateElapsedSeconds = 0.0;
+	const FString robotDebugName = conflict.RobotActor.IsValid() ? conflict.RobotActor->GetName() : TEXT("None");
 	UE_LOG(
 		LogEpisodePedestrianRuntime,
 		Verbose,
@@ -568,7 +556,7 @@ void UEpisodePedestrianRuntimeComponent::SetRuntimeState(
 		*InstanceId,
 		*GetPedestrianRuntimeStateName(previousState),
 		*GetPedestrianRuntimeStateName(newState),
-		*conflict.RobotInstanceId,
+		*robotDebugName,
 		conflict.Severity,
 		conflict.ClosestDistanceCm);
 }
@@ -700,7 +688,6 @@ void UEpisodePedestrianRuntimeComponent::ResetRuntimeMetrics()
 	PathDeviationCm = 0.0;
 	MaxPathDeviationCm = 0.0;
 	MinRobotDistanceCm = -1.0;
-	LastConflictRobotInstanceId.Reset();
 	ActualLateralOffsetCm = 0.0;
 	TargetLateralOffsetCm = 0.0;
 	LateralCurveStartOffsetCm = 0.0;

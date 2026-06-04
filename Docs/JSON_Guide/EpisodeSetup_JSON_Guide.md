@@ -194,7 +194,6 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
     "instance_id": "ped_01",
     "archetype_id": "adult_pedestrian",
     "path_id": "ped_01_path",
-    "spawn_time_s": 0,
     "xy_m": [-3, -3],
     "yaw_deg": 45,
     "movement": {
@@ -212,7 +211,6 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
 | `instance_id` | 필수 | 전체 actors 안에서 unique |
 | `archetype_id` | 선택 | 기본 `adult_pedestrian` |
 | `path_id` | legacy 보행자 필수 | `paths[].path_id` 중 하나 |
-| `spawn_time_s` | 선택 | 현재는 기록용, 기본 `0` |
 | `xy_m` | 권장 | 초기 위치 |
 | `yaw_deg` | 선택 | 초기 yaw |
 | `movement.speed_mps` | 선택 | m/s |
@@ -226,7 +224,6 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
   {
     "instance_id": "ped_planned_01",
     "archetype_id": "adult_pedestrian",
-    "spawn_time_s": 0,
     "xy_m": [4, 0],
     "yaw_deg": 180,
     "start_xy_m": [4, 0],
@@ -255,7 +252,6 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
 | --- | --- | --- |
 | `instance_id` | 필수 | 전체 actors 안에서 unique |
 | `archetype_id` | 선택 | 기본 `adult_pedestrian` |
-| `spawn_time_s` | 선택 | 현재는 기록용, 기본 `0` |
 | `xy_m` | 선택 | 초기 표시 위치. `planned_trajectory`에서는 `start_xy_m`이 실제 plan 시작 위치로 우선 사용됨 |
 | `yaw_deg` | 선택 | 초기 yaw |
 | `start_xy_m` | 필수 | baseline plan 시작점 |
@@ -316,23 +312,18 @@ LLM이 특별히 사회적 반응 차이를 만들 필요가 없으면 `behavior
 | `route.auto_start` | 선택 | 기본 `true` |
 
 `spawn_only=false`이면 `route.goal_xy_m`을 제공해야 한다. 없으면 컴파일러는 warning을 남기고 로봇 route 주입을 건너뛴다.
-
 `planned_trajectory` 보행자의 robot-aware reaction을 확인하려면 로봇이 실제로 이동해야 하므로 `spawn_only`를 `false`로 두고 `route.goal_xy_m`을 제공한다. 정적 배치된 로봇만 필요한 테스트라면 `spawn_only=true`를 사용할 수 있다.
 
 ## LLM Checklist
 
-- `units`를 출력하지 않았는가
 - actor마다 `xy_m`은 숫자 2개인가
 - actor마다 `yaw_deg`는 숫자인가
-- `scale`, `transform`, `location_m`, `rotation_deg`를 출력하지 않았는가
 - region 중심은 `center_xy_m`인가
 - path point는 `points_xy_m`이고 point마다 숫자 2개인가
-- `paths.role`, `paths.type`을 출력하지 않았는가
 - legacy 보행자는 `path_id`가 있고 해당 `paths[].path_id`가 존재하는가
 - `planned_trajectory` 보행자는 `path_id` 대신 `start_xy_m`과 `goal_xy_m`을 갖는가
 - `planned_trajectory`만 사용하는 경우 `paths`가 빈 배열이어도 된다는 점을 반영했는가
 - `behavior`는 필요할 때만 출력하고, 생략 가능한 기본 파라미터를 불필요하게 늘리지 않았는가
-- `actors.robot.drive`, `actors.robot.path_follow`, `actors.robot.lidar`를 출력하지 않았는가
 - 이동 로봇은 `route.goal_xy_m`을 갖는가
 - 모든 `instance_id`, `path_id`, `region_id`가 unique한가
 - 모든 `prop_id`가 catalog에 존재하는가

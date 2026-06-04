@@ -115,9 +115,6 @@ struct PROTOROBOTSIM_API FEpisodePedestrianPlan
 	FEpisodePedestrianPathShapeParams PathShapeParams;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianPlan", meta = (ClampMin = "0.0", Units = "s"))
-	double SpawnTimeSeconds = 0.0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianPlan", meta = (ClampMin = "0.0", Units = "s"))
 	double NominalDurationSeconds = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianPlan")

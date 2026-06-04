@@ -5,6 +5,9 @@ set "SCRIPT_DIR=%~dp0"
 set "PROJECT_FILE=%SCRIPT_DIR%ProtoRobotSim.uproject"
 set "RES_X=640"
 set "RES_Y=360"
+set "WIN_X="
+set "WIN_Y="
+set "WINDOW_ARGS="
 set "DRY_RUN="
 set "EXTRA_ARGS="
 
@@ -25,6 +28,11 @@ if not exist "%PROJECT_FILE%" (
 	exit /b 1
 )
 
+call :ResolveWindowPosition
+if defined WIN_X if defined WIN_Y (
+	set "WINDOW_ARGS= -WinX=%WIN_X% -WinY=%WIN_Y%"
+)
+
 call :ResolveUnrealEditor
 if not defined UNREAL_EDITOR (
 	echo [ProtoRobotSim] UnrealEditor.exe was not found.
@@ -34,11 +42,12 @@ if not defined UNREAL_EDITOR (
 
 set "EXEC_CMDS=viewmode unlit"
 set "LOG_CMDS=global none, LogEpisodeSimulation Log, LogEpisodeRunner Log, LogEpisodeEvaluation Log"
-set "UE_ARGS="%PROJECT_FILE%" -game -windowed -ResX=%RES_X% -ResY=%RES_Y% -NoSplash -log -FORCELOGFLUSH -ExecCmds="%EXEC_CMDS%" -LogCmds="%LOG_CMDS%"%EXTRA_ARGS%"
+set "UE_ARGS="%PROJECT_FILE%" -game -windowed -ResX=%RES_X% -ResY=%RES_Y%%WINDOW_ARGS% -NoSplash -log -FORCELOGFLUSH -ExecCmds="%EXEC_CMDS%" -LogCmds="%LOG_CMDS%"%EXTRA_ARGS%"
 
 echo [ProtoRobotSim] UnrealEditor: "%UNREAL_EDITOR%"
 echo [ProtoRobotSim] Project: "%PROJECT_FILE%"
 echo [ProtoRobotSim] Window: %RES_X%x%RES_Y%
+if defined WINDOW_ARGS echo [ProtoRobotSim] Window position: X=%WIN_X% Y=%WIN_Y%
 echo [ProtoRobotSim] Startup exec: %EXEC_CMDS%
 echo [ProtoRobotSim] Log filter: %LOG_CMDS%
 
@@ -119,3 +128,10 @@ if exist "%EDITOR_DIR%\Engine\Binaries\Win64\UnrealEditor.exe" (
 	exit /b 0
 )
 exit /b 1
+
+:ResolveWindowPosition
+for /f "tokens=1,2" %%A in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.Windows.Forms; $area = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea; $x = [Math]::Max($area.Left, [int]($area.Left + (($area.Width - %RES_X%) / 2))); $y = [Math]::Max($area.Top, [int]($area.Bottom - %RES_Y%)); Write-Output ($x.ToString() + ' ' + $y.ToString())" 2^>nul') do (
+	set "WIN_X=%%A"
+	set "WIN_Y=%%B"
+)
+exit /b 0

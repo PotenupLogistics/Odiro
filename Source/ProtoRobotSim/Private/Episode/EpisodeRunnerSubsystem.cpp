@@ -280,7 +280,7 @@ void UEpisodeRunnerSubsystem::CancelRun()
 		simulationSubsystem->ClearEpisode();
 	}
 
-	UE_LOG(LogEpisodeRunner, Log, TEXT("Episode 실행 취소됨."));
+	UE_LOG(LogEpisodeRunner, Warning, TEXT("Episode 실행 취소됨."));
 }
 
 bool UEpisodeRunnerSubsystem::BuildLatestEvaluationReportJson(FString& outJson) const

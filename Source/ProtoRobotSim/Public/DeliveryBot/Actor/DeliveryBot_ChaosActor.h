@@ -86,8 +86,6 @@ public: // 외부에서 호출하는 설정/디버그/상태 API
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Debug")
 	void SetDrawDebugEnabled(bool bEnabled);
 
-	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Simulation")
-	bool HasSimulationFailed() const { return bSimulationFailed; }
 
 public: // 시뮬레이션 실패를 외부에 알리는 이벤트
 	UPROPERTY(BlueprintAssignable, Category = "DeliveryBot|Simulation")

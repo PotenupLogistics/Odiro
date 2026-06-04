@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/EngineTypes.h"
 #include "Shared/EpisodeCompileTypes.h"
-#include "Shared/Struct/DeliveryBotSetupInfo.h"
+#include "Shared/Struct/DeliveryBot/Setup/DeliveryBotSetupInfo.h"
 #include "UObject/Object.h"
 #include "DeliveryBotSetupCompiler.generated.h"
 

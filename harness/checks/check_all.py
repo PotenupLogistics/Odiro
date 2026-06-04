@@ -9,6 +9,8 @@ from harness.checks.check_handoff_response_summary import run_check as run_hando
 from harness.checks.check_contract_validation import run_check as run_contract_validation_check
 from harness.checks.check_generation_endpoint import run_check as run_generation_endpoint_check
 from harness.checks.check_generation_trace import run_check as run_generation_trace_check
+from harness.checks.check_run_queue_export import run_check as run_run_queue_export_check
+from harness.checks.check_scenario_generation_api import run_check as run_scenario_generation_api_check
 from harness.checks.check_generic_obstacle_scenario import run_check as run_generic_obstacle_scenario_check
 from harness.checks.check_episode_spec_adapter import run_check as run_episode_spec_adapter_check
 from harness.checks.check_episode_spec_scenario_reflection import run_check as run_episode_spec_scenario_reflection_check
@@ -91,6 +93,8 @@ def _overall_status(
     api_shell_result: dict,
     generation_endpoint_result: dict,
     generation_trace_result: dict,
+    run_queue_export_result: dict,
+    scenario_generation_api_result: dict,
     generic_obstacle_scenario_result: dict,
     episode_spec_adapter_result: dict,
     episode_spec_scenario_reflection_result: dict,
@@ -149,6 +153,8 @@ def _overall_status(
         or not api_shell_result["passed"]
         or not generation_endpoint_result["passed"]
         or not generation_trace_result["passed"]
+        or not run_queue_export_result["passed"]
+        or not scenario_generation_api_result["passed"]
         or not generic_obstacle_scenario_result["passed"]
         or not episode_spec_adapter_result["passed"]
         or not episode_spec_scenario_reflection_result["passed"]
@@ -207,6 +213,8 @@ def _overall_status(
         or api_shell_result.get("warning")
         or generation_endpoint_result.get("warning")
         or generation_trace_result.get("warning")
+        or run_queue_export_result.get("warning")
+        or scenario_generation_api_result.get("warning")
         or generic_obstacle_scenario_result.get("warning")
         or episode_spec_adapter_result.get("warning")
         or episode_spec_scenario_reflection_result.get("warning")
@@ -269,6 +277,8 @@ def build_summary(
     api_shell_result: dict,
     generation_endpoint_result: dict,
     generation_trace_result: dict,
+    run_queue_export_result: dict,
+    scenario_generation_api_result: dict,
     generic_obstacle_scenario_result: dict,
     episode_spec_adapter_result: dict,
     episode_spec_scenario_reflection_result: dict,
@@ -335,6 +345,8 @@ def build_summary(
         f"- API shell result: {'PASS' if api_shell_result['passed'] else 'FAIL'}",
         f"- Generation endpoint result: {'PASS' if generation_endpoint_result['passed'] else 'FAIL'}",
         f"- Generation trace result: {'PASS' if generation_trace_result['passed'] else 'FAIL'}",
+        f"- RunQueue export result: {'PASS' if run_queue_export_result['passed'] else 'FAIL'}",
+        f"- Scenario generation API result: {'PASS' if scenario_generation_api_result['passed'] else 'FAIL'}",
         f"- Generic obstacle scenario result: {'PASS' if generic_obstacle_scenario_result['passed'] else 'FAIL'}",
         f"- EpisodeSpec adapter result: {'PASS' if episode_spec_adapter_result['passed'] else 'FAIL'}",
         f"- EpisodeSpec scenario reflection result: {'PASS' if episode_spec_scenario_reflection_result['passed'] else 'FAIL'}",
@@ -785,6 +797,8 @@ def main() -> int:
     api_shell_result = run_api_shell_check()
     generation_endpoint_result = run_generation_endpoint_check()
     generation_trace_result = run_generation_trace_check()
+    run_queue_export_result = run_run_queue_export_check()
+    scenario_generation_api_result = run_scenario_generation_api_check()
     generic_obstacle_scenario_result = run_generic_obstacle_scenario_check()
     episode_spec_adapter_result = run_episode_spec_adapter_check()
     episode_spec_scenario_reflection_result = run_episode_spec_scenario_reflection_check()
@@ -842,6 +856,8 @@ def main() -> int:
         api_shell_result,
         generation_endpoint_result,
         generation_trace_result,
+        run_queue_export_result,
+        scenario_generation_api_result,
         generic_obstacle_scenario_result,
         episode_spec_adapter_result,
         episode_spec_scenario_reflection_result,
@@ -903,6 +919,8 @@ def main() -> int:
             "apiShell": api_shell_result,
             "generationEndpoint": generation_endpoint_result,
             "generationTrace": generation_trace_result,
+            "runQueueExport": run_queue_export_result,
+            "scenarioGenerationApi": scenario_generation_api_result,
             "genericObstacleScenario": generic_obstacle_scenario_result,
             "episodeSpecAdapter": episode_spec_adapter_result,
             "episodeSpecScenarioReflection": episode_spec_scenario_reflection_result,
@@ -1033,6 +1051,8 @@ def main() -> int:
     print(f"API shell check: {'PASS' if api_shell_result['passed'] else 'FAIL'}")
     print(f"Generation endpoint check: {'PASS' if generation_endpoint_result['passed'] else 'FAIL'}")
     print(f"Generation trace check: {'PASS' if generation_trace_result['passed'] else 'FAIL'}")
+    print(f"RunQueue export check: {'PASS' if run_queue_export_result['passed'] else 'FAIL'}")
+    print(f"Scenario generation API check: {'PASS' if scenario_generation_api_result['passed'] else 'FAIL'}")
     print(f"Generic obstacle scenario check: {'PASS' if generic_obstacle_scenario_result['passed'] else 'FAIL'}")
     print(f"EpisodeSpec adapter check: {'PASS' if episode_spec_adapter_result['passed'] else 'FAIL'}")
     print(f"EpisodeSpec scenario reflection check: {'PASS' if episode_spec_scenario_reflection_result['passed'] else 'FAIL'}")

@@ -24,6 +24,10 @@ harness/reports/*
 # Runtime logs
 logs/
 
+# Local fine-tuning candidate archive
+data/fine_tuning_candidates/
+data/run_queue_exports/
+
 # Build artifacts
 build/
 dist/

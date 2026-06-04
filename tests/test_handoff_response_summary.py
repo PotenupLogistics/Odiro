@@ -288,6 +288,43 @@ def test_summary_handles_null_episode_spec() -> None:
     assert summary["staticObstacleCount"] == 0
 
 
+def test_summary_extracts_setup_pair_fields() -> None:
+    response = _response()
+    response["episodeSpec"] = None
+    response["episodeSetup"] = {
+        "ground_model": {"regions": [{"shape": {"size_m": [10.0, 1.2]}}]},
+        "actors": {
+            "robot": {"xy_m": [0.0, 0.0], "route": {"goal_xy_m": [8.0, 0.0]}},
+            "static_obstacles": [{"xy_m": [4.0, 0.0]}],
+            "pedestrians": [],
+        },
+    }
+    response["deliveryBotSetup"] = {
+        "robot": {
+            "drive": {"max_speed_kmh": 10.0},
+            "path_follow": {"target_speed_kmh": 10.0},
+            "lidar": {"stop_distance_m": 1.2, "slow_down_distance_m": 3.5},
+        }
+    }
+    response["episodeSetupValidation"] = {"valid": True}
+    response["deliveryBotSetupValidation"] = {"valid": True}
+    response["diagnostics"]["effectiveResponseFormat"] = "setup_pair"
+    response["diagnostics"]["setupPairTrace"] = [{"valueSummary": "map.sidewalkWidthCm=120"}]
+
+    summary = summarize_handoff_response(response)
+
+    assert summary["effectiveResponseFormat"] == "setup_pair"
+    assert summary["episodeSetupExists"] is True
+    assert summary["deliveryBotSetupExists"] is True
+    assert summary["episodeSetupValidationPassed"] is True
+    assert summary["deliveryBotSetupValidationPassed"] is True
+    assert summary["episodeSetupSidewalkWidthM"] == 1.2
+    assert summary["episodeSetupStaticObstacleCount"] == 1
+    assert summary["deliveryBotStopDistanceM"] == 1.2
+    assert summary["deliveryBotSlowDownDistanceM"] == 3.5
+    assert summary["setupPairTraceExists"] is True
+
+
 def test_summary_handles_null_world_config() -> None:
     response = _response()
     response["worldConfig"] = None

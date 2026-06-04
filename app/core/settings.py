@@ -80,6 +80,18 @@ class Settings(BaseSettings):
         default=3,
         validation_alias=AliasChoices("LLM_MAX_TOTAL_ATTEMPTS", "llmMaxTotalAttempts"),
     )
+    scenarioEpisodeDefaultCount: int = Field(
+        default=5,
+        validation_alias=AliasChoices("SCENARIO_EPISODE_DEFAULT_COUNT", "scenarioEpisodeDefaultCount"),
+    )
+    scenarioEpisodeMaxCount: int = Field(
+        default=20,
+        validation_alias=AliasChoices("SCENARIO_EPISODE_MAX_COUNT", "scenarioEpisodeMaxCount"),
+    )
+    runQueueExportBaseDir: str = Field(
+        default="data/run_queue_exports",
+        validation_alias=AliasChoices("RUN_QUEUE_EXPORT_BASE_DIR", "runQueueExportBaseDir"),
+    )
 
     @field_validator("llmProviderChain", mode="before")
     @classmethod

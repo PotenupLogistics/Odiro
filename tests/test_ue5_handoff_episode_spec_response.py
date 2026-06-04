@@ -130,6 +130,8 @@ def test_handoff_response_can_include_episode_spec_only() -> None:
     assert response.episodeScenarioReflection is not None
     assert response.episodeScenarioReflection.passed is True
     assert response.conversionWarnings
+    assert response.episodeSetup is None
+    assert response.deliveryBotSetup is None
 
 
 def test_handoff_request_defaults_to_episode_spec_response_format() -> None:

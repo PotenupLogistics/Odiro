@@ -13,6 +13,7 @@ from app.models.episode_spec import (
     EpisodeScenarioReflectionResult,
     EpisodeValidationResult,
 )
+from app.models.episode_setup import SetupValidationResult
 from app.models.scenario import ScenarioPostProcessResult, ScenarioReflectionResult
 
 
@@ -60,7 +61,7 @@ class UE5WorldConfigHandoffRequest(BaseModel):
     generationRequest: WorldConfigGenerationRequest
     handoffTarget: Literal["ue5"]
     includeDiagnostics: bool = True
-    responseFormat: Literal["world_config", "episode_spec", "both"] = "episode_spec"
+    responseFormat: Literal["world_config", "episode_spec", "both", "setup_pair"] = "episode_spec"
 
 
 class UE5WorldConfigHandoffResponse(BaseModel):
@@ -73,8 +74,12 @@ class UE5WorldConfigHandoffResponse(BaseModel):
     success: bool
     worldConfig: dict[str, Any] | None = None
     episodeSpec: dict[str, Any] | None = None
+    episodeSetup: dict[str, Any] | None = None
+    deliveryBotSetup: dict[str, Any] | None = None
     episodeValidation: EpisodeValidationResult | None = None
     episodeScenarioReflection: EpisodeScenarioReflectionResult | None = None
+    episodeSetupValidation: SetupValidationResult | None = None
+    deliveryBotSetupValidation: SetupValidationResult | None = None
     conversionWarnings: list[EpisodeConversionWarning] = Field(default_factory=list)
     metadata: UE5HandoffMetadata
     validation: UE5HandoffValidationSummary

@@ -33,9 +33,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--format",
-        choices=["world_config", "episode_spec", "both"],
+        choices=["world_config", "episode_spec", "both", "setup_pair"],
         default="world_config",
-        help="Output world_config, episode_spec, or the full handoff response with both.",
+        help="Output world_config, episode_spec, setup_pair, or the full handoff response with both.",
     )
     parser.add_argument(
         "--include-diagnostics",
@@ -134,6 +134,11 @@ def main() -> int:
         output_payload = handoff_payload.get("worldConfig")
     elif args.format == "episode_spec":
         output_payload = handoff_payload.get("episodeSpec")
+    elif args.format == "setup_pair":
+        output_payload = {
+            "episodeSetup": handoff_payload.get("episodeSetup"),
+            "deliveryBotSetup": handoff_payload.get("deliveryBotSetup"),
+        }
     else:
         output_payload = handoff_payload
 

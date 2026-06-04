@@ -29,6 +29,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--provider", default="ollama", help="LLM provider. Defaults to ollama.")
     parser.add_argument("--prompt", default=DEFAULT_PROMPT, help="Natural-language scenario prompt.")
     parser.add_argument("--report", help="Optional JSON report path.")
+    parser.add_argument(
+        "--format",
+        choices=["episode_spec", "setup_pair"],
+        default="episode_spec",
+        help="Handoff response format for smoke request.",
+    )
     parser.add_argument("--print-world-config", action="store_true", help="Print worldConfig when handoff succeeds.")
     parser.add_argument("--dry-run", action="store_true", help="Print handoff request structure only; do not call generation.")
     parser.add_argument("--environment-sampling", action="store_true", help="Enable seed-based environment sampling constraints.")
@@ -62,7 +68,7 @@ def _environment_sampling_config(args: argparse.Namespace) -> dict[str, Any] | N
     }
 
 
-def _request_body(prompt: str, environment_sampling: dict[str, Any] | None = None) -> dict[str, Any]:
+def _request_body(prompt: str, response_format: str = "episode_spec", environment_sampling: dict[str, Any] | None = None) -> dict[str, Any]:
     constraints: dict[str, Any] = {
         "unitSystem": "cm_kmh_sec_degree",
         "allowedMapTypes": ["Sidewalk", "Crosswalk"],
@@ -78,6 +84,7 @@ def _request_body(prompt: str, environment_sampling: dict[str, Any] | None = Non
         "requestId": "UE5-HANDOFF-SMOKE-001",
         "handoffTarget": "ue5",
         "includeDiagnostics": True,
+        "responseFormat": response_format,
         "generationRequest": {
             "schemaVersion": "1.0.0",
             "requestId": "GEN-UE5-HANDOFF-SMOKE-001",
@@ -171,7 +178,7 @@ def main() -> int:
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    body = _request_body(args.prompt, environment_sampling)
+    body = _request_body(args.prompt, args.format, environment_sampling)
 
     if args.dry_run:
         print("Dry run: handoff request structure only. Generation was not called.")

@@ -40,6 +40,8 @@ def _effective_response_format(response: dict[str, Any]) -> str | None:
         return "both"
     if response.get("episodeSpec") is not None:
         return "episode_spec"
+    if response.get("episodeSetup") is not None and response.get("deliveryBotSetup") is not None:
+        return "setup_pair"
     if response.get("worldConfig") is not None:
         return "world_config"
     return None
@@ -155,6 +157,8 @@ def summarize_handoff_response(response_json: dict[str, Any], http_status: int |
     validation = _as_dict(response.get("validation"))
     world_config = _as_dict(response.get("worldConfig"))
     episode_spec = _as_dict(response.get("episodeSpec"))
+    episode_setup = _as_dict(response.get("episodeSetup"))
+    delivery_bot_setup = _as_dict(response.get("deliveryBotSetup"))
     scenario_reflection = _as_dict(response.get("scenarioReflection"))
     post_processing = _as_dict(response.get("postProcessing"))
     episode_reflection = _as_dict(response.get("episodeScenarioReflection"))
@@ -162,6 +166,7 @@ def summarize_handoff_response(response_json: dict[str, Any], http_status: int |
     environment_sampling = _as_dict(diagnostics.get("environmentSampling"))
     environment_parameters = _as_dict(environment_sampling.get("parameters"))
     generation_trace = _as_dict(diagnostics.get("generationTrace"))
+    setup_pair_trace = _as_list(diagnostics.get("setupPairTrace"))
     trace_summary = _as_dict(generation_trace.get("summary"))
     trace_source_types = _trace_source_types(generation_trace)
 
@@ -171,6 +176,18 @@ def summarize_handoff_response(response_json: dict[str, Any], http_status: int |
     pedestrians = _as_list(world_config.get("pedestrians"))
 
     actors = _as_dict(episode_spec.get("actors"))
+    setup_actors = _as_dict(episode_setup.get("actors"))
+    setup_static_obstacles = _as_list(setup_actors.get("static_obstacles"))
+    setup_ground_model = _as_dict(episode_setup.get("ground_model"))
+    setup_regions = _as_list(setup_ground_model.get("regions"))
+    setup_first_region = _first_dict(setup_regions)
+    setup_first_shape = _as_dict(setup_first_region.get("shape"))
+    setup_size_m = setup_first_shape.get("size_m")
+    setup_sidewalk_width_m = None
+    if isinstance(setup_size_m, list) and len(setup_size_m) >= 2 and isinstance(setup_size_m[1], (int, float)):
+        setup_sidewalk_width_m = float(setup_size_m[1])
+    delivery_robot = _as_dict(delivery_bot_setup.get("robot"))
+    delivery_lidar = _as_dict(delivery_robot.get("lidar"))
     static_obstacles = _as_list(actors.get("static_obstacles"))
     static_obstacle = _first_dict(static_obstacles)
     static_obstacle_properties = _as_dict(static_obstacle.get("properties"))
@@ -238,11 +255,15 @@ def summarize_handoff_response(response_json: dict[str, Any], http_status: int |
         "units": episode_spec.get("units"),
         "worldConfigExists": bool(world_config),
         "episodeSpecExists": bool(episode_spec),
+        "episodeSetupExists": bool(episode_setup),
+        "deliveryBotSetupExists": bool(delivery_bot_setup),
         "schemaValidationPassed": _bool_or_none(validation.get("schemaValidationPassed")),
         "scenarioReflectionPassed": _bool_or_none(validation.get("scenarioReflectionPassed")),
         "contractValidationPassed": _bool_or_none(validation.get("contractValidationPassed")),
         "episodeValidationPassed": _validation_passed(response.get("episodeValidation")),
         "episodeScenarioReflectionPassed": _bool_or_none(episode_reflection.get("passed")),
+        "episodeSetupValidationPassed": _validation_passed(response.get("episodeSetupValidation")),
+        "deliveryBotSetupValidationPassed": _validation_passed(response.get("deliveryBotSetupValidation")),
         "sidewalkWidthCm": map_config.get("sidewalkWidthCm"),
         "obstacleExists": bool(obstacle),
         "obstacleType": obstacle.get("type"),
@@ -256,6 +277,10 @@ def summarize_handoff_response(response_json: dict[str, Any], http_status: int |
         "staticObstacleBlockingRatio": static_obstacle_properties.get("blocking_ratio"),
         "obstacleLocation": static_obstacle_location,
         "sidewalkWidthM": sidewalk_width_m,
+        "episodeSetupSidewalkWidthM": setup_sidewalk_width_m,
+        "episodeSetupStaticObstacleCount": len(setup_static_obstacles),
+        "deliveryBotStopDistanceM": delivery_lidar.get("stop_distance_m"),
+        "deliveryBotSlowDownDistanceM": delivery_lidar.get("slow_down_distance_m"),
         "runTimeLimitS": _as_dict(episode_spec.get("run")).get("time_limit_s"),
         "pedestrianCount": len(episode_pedestrians),
         "pathCount": len(episode_paths),
@@ -283,6 +308,7 @@ def summarize_handoff_response(response_json: dict[str, Any], http_status: int |
         "sampledObstacleBlockingRatio": environment_parameters.get("obstacleBlockingRatio"),
         "sampledTimeLimitSec": environment_parameters.get("timeLimitSec"),
         "generationTraceExists": bool(generation_trace),
+        "setupPairTraceExists": bool(setup_pair_trace),
         "traceItemCount": len(_as_list(generation_trace.get("evidenceItems"))),
         "traceSourceTypes": trace_source_types,
         "coordinateSource": trace_summary.get("coordinateSource") or _coordinate_source(trace_source_types),

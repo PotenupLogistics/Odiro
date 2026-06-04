@@ -36,6 +36,7 @@ def test_export_cli_help_works() -> None:
     assert "--environment-sampling" in completed.stdout
     assert "--scenario-type" in completed.stdout
     assert "--fixed" in completed.stdout
+    assert "setup_pair" in completed.stdout
 
 
 def test_export_cli_without_out_does_not_create_file(tmp_path: Path) -> None:

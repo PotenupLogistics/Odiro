@@ -15,7 +15,10 @@ from app.models.generation import (
 )
 from app.models.llm import LlmProvider
 from app.models.handoff import UE5WorldConfigHandoffRequest, UE5WorldConfigHandoffResponse
+from app.models.run_queue import EpisodeRunQueue
+from app.models.scenario_generation import ScenarioGenerateRequest
 from app.services.json_contract_validator import ValidationResult, validate_payload
+from app.services.scenario_generation_service import generate_scenario_run_queue
 from app.services.ue5_world_config_handoff_service import create_ue5_world_config_handoff
 from app.services.world_config_generation_orchestrator import generate_world_config
 from app.services.world_config_prompt_builder import build_world_config_prompt_package
@@ -81,6 +84,16 @@ def validate_contract_endpoint(
 
 
 @router.post(
+    "/api/v1/scenarios/generate",
+    response_model=EpisodeRunQueue,
+)
+def scenario_generate_endpoint(
+    request: ScenarioGenerateRequest,
+) -> EpisodeRunQueue:
+    return generate_scenario_run_queue(request)
+
+
+@router.post(
     "/api/v1/ue5/world-config/handoff",
     response_model=UE5WorldConfigHandoffResponse,
     responses={501: {"model": UE5WorldConfigHandoffResponse}},
@@ -90,7 +103,7 @@ def ue5_world_config_handoff_endpoint(
     provider: LlmProvider = LlmProvider.openai,
     responseFormat: str | None = None,
 ) -> UE5WorldConfigHandoffResponse | JSONResponse:
-    if responseFormat in {"world_config", "episode_spec", "both"}:
+    if responseFormat in {"world_config", "episode_spec", "both", "setup_pair"}:
         request = request.model_copy(update={"responseFormat": responseFormat})
     if provider not in {LlmProvider.disabled, LlmProvider.openai, LlmProvider.ollama}:
         response = create_ue5_world_config_handoff(request, provider=LlmProvider.disabled)

@@ -20,10 +20,16 @@ from app.services.episode_spec_validator import validate_episode_spec
 from app.services.episode_spec_scenario_reflection import validate_episode_spec_scenario_reflection
 from app.services.generation_trace_builder import build_generation_trace
 from app.services.generation_trace_builder import infer_failure_stage
+from app.services.delivery_bot_setup_validator import validate_delivery_bot_setup
+from app.services.episode_setup_validator import validate_episode_setup
+from app.services.setup_pair_trace_builder import build_setup_pair_trace_items
+from app.services.world_config_to_delivery_bot_setup_adapter import convert_world_config_to_delivery_bot_setup
+from app.services.world_config_to_episode_setup_adapter import convert_world_config_to_episode_setup
 from app.services.world_config_to_episode_spec_adapter import (
     convert_world_config_to_episode_spec_with_warnings,
 )
 from app.services.world_config_generation_orchestrator import generate_world_config
+from app.utils.json_sanitizer import remove_json_nulls
 
 
 Generator = Callable[[WorldConfigGenerationRequest, LlmProvider], WorldConfigGenerationResult]
@@ -55,6 +61,7 @@ def _diagnostics(
     result: WorldConfigGenerationResult,
     generation_trace: dict | None = None,
     generation_trace_error: str | None = None,
+    setup_pair_trace: list[dict] | None = None,
     failure_stage: str | None = None,
     error_summary: str | None = None,
 ) -> dict:
@@ -71,6 +78,8 @@ def _diagnostics(
         diagnostics["generationTrace"] = generation_trace
     if generation_trace_error:
         diagnostics["generationTraceError"] = generation_trace_error
+    if setup_pair_trace is not None:
+        diagnostics["setupPairTrace"] = setup_pair_trace
     if failure_stage:
         diagnostics["failureStage"] = failure_stage
     if error_summary:
@@ -117,6 +126,11 @@ def create_ue5_world_config_handoff(
     episode_spec = None
     episode_validation = None
     episode_scenario_reflection = None
+    episode_setup = None
+    delivery_bot_setup = None
+    episode_setup_validation = None
+    delivery_bot_setup_validation = None
+    setup_pair_trace = None
     conversion_warnings = []
     failure_stage = None
     error_summary = None
@@ -182,6 +196,59 @@ def create_ue5_world_config_handoff(
                                     if episode_scenario_reflection.issues
                                     else "EpisodeSpec scenario reflection failed."
                                 )
+        if contract_validation.valid and request.responseFormat == "setup_pair":
+            try:
+                episode_setup_model = convert_world_config_to_episode_setup(generation_result.generatedPayload)
+            except Exception as exc:
+                failure_stage = "episode_setup_adapter"
+                error_summary = str(exc)
+                handoff_error = WorldConfigGenerationError(
+                    code="episode_setup_adapter_error",
+                    message=error_summary,
+                )
+            else:
+                episode_setup_validation = validate_episode_setup(episode_setup_model)
+                if episode_setup_validation.valid:
+                    episode_setup = remove_json_nulls(
+                        episode_setup_model.model_dump(mode="json", by_alias=True),
+                        drop_empty_object_keys={"properties"},
+                    )
+                else:
+                    failure_stage = "episode_setup_validation"
+                    error_summary = "; ".join(error.message for error in episode_setup_validation.errors[:3])
+                    handoff_error = WorldConfigGenerationError(
+                        code="episode_setup_validation_error",
+                        message=error_summary or "EpisodeSetup validation failed.",
+                    )
+            if episode_setup is not None:
+                try:
+                    delivery_bot_setup_model = convert_world_config_to_delivery_bot_setup(generation_result.generatedPayload)
+                except Exception as exc:
+                    failure_stage = "delivery_bot_setup_adapter"
+                    error_summary = str(exc)
+                    handoff_error = WorldConfigGenerationError(
+                        code="delivery_bot_setup_adapter_error",
+                        message=error_summary,
+                    )
+                else:
+                    delivery_bot_setup_validation = validate_delivery_bot_setup(delivery_bot_setup_model)
+                    if delivery_bot_setup_validation.valid:
+                        delivery_bot_setup = remove_json_nulls(
+                            delivery_bot_setup_model.model_dump(mode="json", by_alias=True)
+                        )
+                    else:
+                        failure_stage = "delivery_bot_setup_validation"
+                        error_summary = "; ".join(error.message for error in delivery_bot_setup_validation.errors[:3])
+                        handoff_error = WorldConfigGenerationError(
+                            code="delivery_bot_setup_validation_error",
+                            message=error_summary or "DeliveryBotSetup validation failed.",
+                        )
+                if delivery_bot_setup is not None:
+                    setup_pair_trace = build_setup_pair_trace_items(
+                        generation_result.generatedPayload,
+                        episode_setup_model,
+                        delivery_bot_setup_model,
+                    )
     elif not generation_result.success:
         failure_stage, error_summary = infer_failure_stage(generation_result)
 
@@ -190,7 +257,7 @@ def create_ue5_world_config_handoff(
         generation_result.scenarioReflection and generation_result.scenarioReflection.passed
     )
     contract_passed = bool(contract_validation and contract_validation.valid)
-    episode_passed = request.responseFormat == "world_config" or bool(
+    episode_passed = request.responseFormat in {"world_config", "setup_pair"} or bool(
         episode_validation
         and episode_validation.valid
         and episode_spec
@@ -207,7 +274,15 @@ def create_ue5_world_config_handoff(
         episode_passed = False
         failure_stage = failure_stage or "episode_scenario_reflection"
         error_summary = error_summary or "Static obstacle requirement was not reflected in EpisodeSpec."
-    success = bool(generation_result.success and generation_result.generatedPayload and contract_passed and episode_passed)
+    setup_pair_passed = request.responseFormat != "setup_pair" or bool(
+        episode_setup
+        and delivery_bot_setup
+        and episode_setup_validation
+        and episode_setup_validation.valid
+        and delivery_bot_setup_validation
+        and delivery_bot_setup_validation.valid
+    )
+    success = bool(generation_result.success and generation_result.generatedPayload and contract_passed and episode_passed and setup_pair_passed)
     if not success and failure_stage is None:
         if not generation_result.success:
             failure_stage, error_summary = infer_failure_stage(generation_result)
@@ -221,6 +296,12 @@ def create_ue5_world_config_handoff(
         elif request.responseFormat in {"episode_spec", "both"} and episode_spec is None:
             failure_stage = "episode_spec_adapter"
             error_summary = "EpisodeSpec was not produced."
+        elif request.responseFormat == "setup_pair" and episode_setup is None:
+            failure_stage = "episode_setup_adapter"
+            error_summary = "EpisodeSetup was not produced."
+        elif request.responseFormat == "setup_pair" and delivery_bot_setup is None:
+            failure_stage = "delivery_bot_setup_adapter"
+            error_summary = "DeliveryBotSetup was not produced."
         else:
             failure_stage = "unknown"
             error_summary = "Handoff failed before a precise failure stage could be determined."
@@ -260,8 +341,12 @@ def create_ue5_world_config_handoff(
         success=success,
         worldConfig=world_config_payload,
         episodeSpec=episode_spec if success and request.responseFormat in {"episode_spec", "both"} else None,
+        episodeSetup=episode_setup if success and request.responseFormat == "setup_pair" else None,
+        deliveryBotSetup=delivery_bot_setup if success and request.responseFormat == "setup_pair" else None,
         episodeValidation=episode_validation,
         episodeScenarioReflection=episode_scenario_reflection,
+        episodeSetupValidation=episode_setup_validation,
+        deliveryBotSetupValidation=delivery_bot_setup_validation,
         conversionWarnings=conversion_warnings,
         metadata=metadata,
         validation=validation,
@@ -272,6 +357,7 @@ def create_ue5_world_config_handoff(
                 generation_result,
                 generation_trace=generation_trace,
                 generation_trace_error=generation_trace_error,
+                setup_pair_trace=setup_pair_trace if request.responseFormat == "setup_pair" else None,
                 failure_stage=None if success else failure_stage,
                 error_summary=None if success else error_summary,
             ),

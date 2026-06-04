@@ -113,7 +113,7 @@ void UEpisodePedestrianRuntimeComponent::TickComponent(float deltaTime, ELevelTi
 		return;
 	}
 
-	const double deltaSeconds = static_cast<double>(deltaTime);
+	const double deltaSeconds = deltaTime;
 	ActiveTimeSeconds += FMath::Max(deltaSeconds, 0.0);
 	UpdateRobotDistanceMetrics();
 

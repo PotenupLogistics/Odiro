@@ -864,6 +864,34 @@ void UEpisodeCompiler::CompilePedestrians(
 					TEXT("initial_distance_cm"), MakeFloatParam(initialDistanceM * MetersToCentimeters));
 			}
 
+			if (movementObject->HasField(TEXT("curve_offset_m")))
+			{
+				const double curveOffsetM = ReadNumberOrDefault(*movementObject, TEXT("curve_offset_m"), 0.0);
+				dynamicActorSpec.Properties.Add(TEXT("path_curve_offset_cm"), MakeFloatParam(curveOffsetM * MetersToCentimeters));
+			}
+
+			if (movementObject->HasField(TEXT("curve_offset_cm")))
+			{
+				dynamicActorSpec.Properties.Add(
+					TEXT("path_curve_offset_cm"),
+					MakeFloatParam(ReadNumberOrDefault(*movementObject, TEXT("curve_offset_cm"), 0.0)));
+			}
+
+			if (movementObject->HasField(TEXT("curve_sample_spacing_m")))
+			{
+				const double curveSampleSpacingM = ReadNumberOrDefault(*movementObject, TEXT("curve_sample_spacing_m"), 0.5);
+				dynamicActorSpec.Properties.Add(
+					TEXT("path_curve_sample_spacing_cm"),
+					MakeFloatParam(curveSampleSpacingM * MetersToCentimeters));
+			}
+
+			if (movementObject->HasField(TEXT("curve_sample_spacing_cm")))
+			{
+				dynamicActorSpec.Properties.Add(
+					TEXT("path_curve_sample_spacing_cm"),
+					MakeFloatParam(ReadNumberOrDefault(*movementObject, TEXT("curve_sample_spacing_cm"), 50.0)));
+			}
+
 			if (movementObject->HasField(TEXT("auto_start")))
 			{
 				dynamicActorSpec.Properties.Add(

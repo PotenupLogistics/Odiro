@@ -22,6 +22,7 @@ Pedestrian = setup-time planned baseline trajectory + deterministic robot reacti
 - `planned_trajectory` 보행자 입력 지원
 - `start_xy_m` / `goal_xy_m` 기반 baseline plan 생성
 - 정적 장애물 footprint 기반 deterministic detour 생성
+- optional deterministic path curve sampling
 - `UEpisodePedestrianPlanSubsystem` plan cache
 - pure C++ `FEpisodePedestrianPlanBuilder`
 - `UEpisodePedestrianRuntimeComponent` baseline follow
@@ -57,6 +58,8 @@ Pedestrian = setup-time planned baseline trajectory + deterministic robot reacti
   "movement": {
     "model": "planned_trajectory",
     "speed_mps": 1.2,
+    "curve_offset_m": 0.0,
+    "curve_sample_spacing_m": 0.5,
     "initial_distance_m": 0,
     "auto_start": true
   }
@@ -88,6 +91,15 @@ Pedestrian = setup-time planned baseline trajectory + deterministic robot reacti
 | `awareness_horizon_s` | `behavior_awareness_horizon_s` | `2.5s` |
 | `max_yield_wait_s` | `behavior_max_yield_wait_s` | `4.0s` |
 | `sidestep_distance_m` / `sidestep_distance_cm` | `behavior_sidestep_distance_cm` | `60cm` |
+
+planned trajectory의 baseline geometry는 `movement` 아래 optional curve fields로 조정할 수 있다.
+
+| JSON field | 내부 property | 기본값 |
+| --- | --- | --- |
+| `curve_offset_m` / `curve_offset_cm` | `path_curve_offset_cm` | `0cm` |
+| `curve_sample_spacing_m` / `curve_sample_spacing_cm` | `path_curve_sample_spacing_cm` | `50cm` |
+
+`curve_offset_m`가 `0`이면 기존처럼 raw polyline을 그대로 사용한다. 값이 있으면 setup 단계에서 deterministic curve sample point를 생성하고, 이 point들이 `PlanHash`, nominal duration, runtime conflict prediction의 기준이 된다.
 
 기존 `paths[]` 포맷은 여전히 legacy spline follower 입력으로 유지된다.
 
@@ -191,6 +203,7 @@ SetupEpisodeWorld
 - `planned_start_cm`, `planned_goal_cm`, `speed_cm_per_second`를 읽는다.
 - 정적 장애물 footprint와 start-goal 선분이 교차하면 deterministic detour point를 추가한다.
 - `FEpisodePedestrianBehaviorParams`를 resolve한다.
+- `FEpisodePedestrianPathShapeParams`를 resolve하고 curve sample point를 생성한다.
 - `PlanHash`, `BehaviorHash`, `PedestrianScenarioHash`를 계산한다.
 
 현재 한계:
@@ -199,6 +212,7 @@ SetupEpisodeWorld
 - detour segment가 다시 다른 obstacle과 충돌하는지 완전 검증하지 않는다.
 - 다른 보행자 baseline/reservation은 고려하지 않는다.
 - authored spline route source는 아직 읽지 않는다.
+- curve smoothing은 obstacle clearance를 침범한다고 판단되면 raw polyline으로 fallback한다.
 
 ### UEpisodePedestrianRuntimeComponent
 
@@ -342,6 +356,7 @@ MVP3에 우선 포함할 후보:
 - static obstacle footprint 수집 경로 추가
 - deterministic static obstacle detour 생성
 - `PlanHash` 산출
+- optional path curve sampling
 - planned pedestrian spawn/bind
 - `UEpisodePedestrianRuntimeComponent` baseline follower 구현
 - planned pedestrian obstacle sample JSON 추가
@@ -442,4 +457,3 @@ MVP3에 우선 포함할 후보:
 샘플:
 
 - `Json/Input/EpisodeSetupSample_PlannedPedestrianObstacle.json`
-

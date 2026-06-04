@@ -17,6 +17,7 @@ private:
 	static bool TryGetStringProperty(const TMap<FString, FEpisodeParamValue>& properties, const FString& key, FString& outValue);
 	static bool TryGetVectorProperty(const TMap<FString, FEpisodeParamValue>& properties, const FString& key, FVector& outValue);
 	static FEpisodePedestrianBehaviorParams BuildBehaviorParams(const FEpisodeDynamicActorSpec& dynamicActorSpec);
+	static FEpisodePedestrianPathShapeParams BuildPathShapeParams(const FEpisodeDynamicActorSpec& dynamicActorSpec);
 
 	static bool BuildPlanForPedestrian(
 		const FEpisodeDynamicActorSpec& dynamicActorSpec,
@@ -30,6 +31,42 @@ private:
 		const FVector& goalLocation,
 		const TArray<FEpisodePedestrianObstacleFootprint>& obstacleFootprints,
 		double clearanceCm);
+
+	static TArray<FVector> BuildCurvedPolyline(
+		const TArray<FVector>& polyline,
+		const FString& instanceId,
+		const FEpisodePedestrianPathShapeParams& pathShapeParams,
+		const TArray<FEpisodePedestrianObstacleFootprint>& obstacleFootprints,
+		double clearanceCm);
+
+	static TArray<FVector> BuildTwoPointBezierPolyline(
+		const TArray<FVector>& polyline,
+		const FString& instanceId,
+		const FEpisodePedestrianPathShapeParams& pathShapeParams);
+
+	static TArray<FVector> BuildCornerRoundedPolyline(
+		const TArray<FVector>& polyline,
+		const FEpisodePedestrianPathShapeParams& pathShapeParams);
+
+	static bool PathIntersectsFootprints(
+		const TArray<FVector>& polyline,
+		const TArray<FEpisodePedestrianObstacleFootprint>& obstacleFootprints,
+		double clearanceCm);
+
+	static void AppendPointIfSeparated(TArray<FVector>& points, const FVector& point);
+
+	static FVector EvaluateCubicBezier(
+		const FVector& p0,
+		const FVector& p1,
+		const FVector& p2,
+		const FVector& p3,
+		double alpha);
+
+	static FVector EvaluateQuadraticBezier(
+		const FVector& p0,
+		const FVector& p1,
+		const FVector& p2,
+		double alpha);
 
 	static bool SegmentIntersectsFootprint(
 		const FVector& segmentStart,

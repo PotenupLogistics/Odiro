@@ -5,6 +5,8 @@ namespace
 	constexpr double DefaultPedestrianSpeedCmPerSecond = 120.0;
 	constexpr double MinPlanSpeedCmPerSecond = 1.0;
 	constexpr double MinPlanSegmentLengthCm = 1.0;
+	constexpr double MinCurveSampleSpacingCm = 10.0;
+	constexpr double FootprintValidationSlackCm = 5.0;
 
 	FString HashToString(uint32 hash)
 	{
@@ -149,6 +151,19 @@ FEpisodePedestrianBehaviorParams FEpisodePedestrianPlanBuilder::BuildBehaviorPar
 	return behaviorParams;
 }
 
+FEpisodePedestrianPathShapeParams FEpisodePedestrianPlanBuilder::BuildPathShapeParams(
+	const FEpisodeDynamicActorSpec& dynamicActorSpec)
+{
+	FEpisodePedestrianPathShapeParams pathShapeParams;
+
+	TryGetFloatProperty(dynamicActorSpec.Properties, TEXT("path_curve_offset_cm"), pathShapeParams.CurveOffsetCm);
+	TryGetFloatProperty(dynamicActorSpec.Properties, TEXT("path_curve_sample_spacing_cm"), pathShapeParams.CurveSampleSpacingCm);
+
+	pathShapeParams.CurveOffsetCm = FMath::Max(pathShapeParams.CurveOffsetCm, 0.0);
+	pathShapeParams.CurveSampleSpacingCm = FMath::Max(pathShapeParams.CurveSampleSpacingCm, MinCurveSampleSpacingCm);
+	return pathShapeParams;
+}
+
 bool FEpisodePedestrianPlanBuilder::BuildPlanForPedestrian(
 	const FEpisodeDynamicActorSpec& dynamicActorSpec,
 	const FEpisodePedestrianPlanBuildContext& buildContext,
@@ -180,6 +195,13 @@ bool FEpisodePedestrianPlanBuilder::BuildPlanForPedestrian(
 		goalLocation,
 		buildContext.StaticObstacleFootprints,
 		buildContext.StaticObstacleClearanceCm);
+	const FEpisodePedestrianPathShapeParams pathShapeParams = BuildPathShapeParams(dynamicActorSpec);
+	const TArray<FVector> planPolyline = BuildCurvedPolyline(
+		polyline,
+		dynamicActorSpec.InstanceId,
+		pathShapeParams,
+		buildContext.StaticObstacleFootprints,
+		buildContext.StaticObstacleClearanceCm);
 
 	outPlan = FEpisodePedestrianPlan{};
 	outPlan.InstanceId = dynamicActorSpec.InstanceId;
@@ -189,8 +211,9 @@ bool FEpisodePedestrianPlanBuilder::BuildPlanForPedestrian(
 	outPlan.SemanticNavigationHash = buildContext.SemanticNavigationHash;
 	outPlan.SpawnTimeSeconds = dynamicActorSpec.SpawnTimeSeconds;
 	outPlan.BehaviorParams = BuildBehaviorParams(dynamicActorSpec);
+	outPlan.PathShapeParams = pathShapeParams;
 
-	AppendPlanPoints(polyline, speedCmPerSecond, outPlan.Points, outPlan.NominalDurationSeconds);
+	AppendPlanPoints(planPolyline, speedCmPerSecond, outPlan.Points, outPlan.NominalDurationSeconds);
 	if (outPlan.Points.Num() < 2)
 	{
 		outDiagnostics.Add(FString::Printf(TEXT("planned pedestrian '%s' produced less than two plan points."), *dynamicActorSpec.InstanceId));
@@ -298,6 +321,203 @@ TArray<FVector> FEpisodePedestrianPlanBuilder::BuildPolyline(
 	}
 
 	return polyline;
+}
+
+TArray<FVector> FEpisodePedestrianPlanBuilder::BuildCurvedPolyline(
+	const TArray<FVector>& polyline,
+	const FString& instanceId,
+	const FEpisodePedestrianPathShapeParams& pathShapeParams,
+	const TArray<FEpisodePedestrianObstacleFootprint>& obstacleFootprints,
+	double clearanceCm)
+{
+	if (polyline.Num() < 2 || pathShapeParams.CurveOffsetCm <= KINDA_SMALL_NUMBER)
+	{
+		return polyline;
+	}
+
+	TArray<FVector> curvedPolyline = polyline.Num() == 2
+		? BuildTwoPointBezierPolyline(polyline, instanceId, pathShapeParams)
+		: BuildCornerRoundedPolyline(polyline, pathShapeParams);
+
+	if (curvedPolyline.Num() < 2)
+	{
+		return polyline;
+	}
+
+	const double validationClearanceCm = FMath::Max(0.0, clearanceCm - FootprintValidationSlackCm);
+	if (PathIntersectsFootprints(curvedPolyline, obstacleFootprints, validationClearanceCm))
+	{
+		return polyline;
+	}
+
+	return curvedPolyline;
+}
+
+TArray<FVector> FEpisodePedestrianPlanBuilder::BuildTwoPointBezierPolyline(
+	const TArray<FVector>& polyline,
+	const FString& instanceId,
+	const FEpisodePedestrianPathShapeParams& pathShapeParams)
+{
+	TArray<FVector> curvedPolyline;
+	if (polyline.Num() != 2)
+	{
+		return curvedPolyline;
+	}
+
+	const FVector startLocation = polyline[0];
+	const FVector goalLocation = polyline[1];
+	FVector direction3D = goalLocation - startLocation;
+	direction3D.Z = 0.0;
+
+	const double pathLengthCm = direction3D.Size2D();
+	if (pathLengthCm <= MinPlanSegmentLengthCm)
+	{
+		return polyline;
+	}
+
+	const FVector direction = direction3D / pathLengthCm;
+	const FVector right(direction.Y, -direction.X, 0.0);
+	const int32 side = (GetTypeHash(instanceId) % 2) == 0 ? -1 : 1;
+	const double curveOffsetCm = FMath::Min(pathShapeParams.CurveOffsetCm, pathLengthCm * 0.35);
+	const double controlDistanceCm = pathLengthCm / 3.0;
+
+	const FVector controlOffset = right * static_cast<double>(side) * curveOffsetCm;
+	const FVector control0 = startLocation + direction * controlDistanceCm + controlOffset;
+	const FVector control1 = goalLocation - direction * controlDistanceCm + controlOffset;
+	const double approximateLengthCm =
+		FVector::Dist2D(startLocation, control0)
+		+ FVector::Dist2D(control0, control1)
+		+ FVector::Dist2D(control1, goalLocation);
+	const int32 sampleCount = FMath::Max(2, FMath::CeilToInt(approximateLengthCm / pathShapeParams.CurveSampleSpacingCm));
+
+	AppendPointIfSeparated(curvedPolyline, startLocation);
+	for (int32 sampleIndex = 1; sampleIndex <= sampleCount; ++sampleIndex)
+	{
+		const double alpha = static_cast<double>(sampleIndex) / static_cast<double>(sampleCount);
+		AppendPointIfSeparated(curvedPolyline, EvaluateCubicBezier(startLocation, control0, control1, goalLocation, alpha));
+	}
+
+	return curvedPolyline;
+}
+
+TArray<FVector> FEpisodePedestrianPlanBuilder::BuildCornerRoundedPolyline(
+	const TArray<FVector>& polyline,
+	const FEpisodePedestrianPathShapeParams& pathShapeParams)
+{
+	TArray<FVector> curvedPolyline;
+	if (polyline.Num() < 3)
+	{
+		return polyline;
+	}
+
+	AppendPointIfSeparated(curvedPolyline, polyline[0]);
+	for (int32 pointIndex = 1; pointIndex < polyline.Num() - 1; ++pointIndex)
+	{
+		const FVector previous = polyline[pointIndex - 1];
+		const FVector corner = polyline[pointIndex];
+		const FVector next = polyline[pointIndex + 1];
+
+		const FVector incoming = corner - previous;
+		const FVector outgoing = next - corner;
+		const double incomingLengthCm = incoming.Size2D();
+		const double outgoingLengthCm = outgoing.Size2D();
+		if (incomingLengthCm <= MinPlanSegmentLengthCm || outgoingLengthCm <= MinPlanSegmentLengthCm)
+		{
+			AppendPointIfSeparated(curvedPolyline, corner);
+			continue;
+		}
+
+		const FVector incomingDirection = incoming / incomingLengthCm;
+		const FVector outgoingDirection = outgoing / outgoingLengthCm;
+		const double cornerDistanceCm = FMath::Min3(
+			pathShapeParams.CurveOffsetCm,
+			incomingLengthCm * 0.45,
+			outgoingLengthCm * 0.45);
+
+		if (cornerDistanceCm <= MinPlanSegmentLengthCm)
+		{
+			AppendPointIfSeparated(curvedPolyline, corner);
+			continue;
+		}
+
+		const FVector entryPoint = corner - incomingDirection * cornerDistanceCm;
+		const FVector exitPoint = corner + outgoingDirection * cornerDistanceCm;
+		const double approximateLengthCm =
+			FVector::Dist2D(entryPoint, corner)
+			+ FVector::Dist2D(corner, exitPoint);
+		const int32 sampleCount = FMath::Max(2, FMath::CeilToInt(approximateLengthCm / pathShapeParams.CurveSampleSpacingCm));
+
+		AppendPointIfSeparated(curvedPolyline, entryPoint);
+		for (int32 sampleIndex = 1; sampleIndex <= sampleCount; ++sampleIndex)
+		{
+			const double alpha = static_cast<double>(sampleIndex) / static_cast<double>(sampleCount);
+			AppendPointIfSeparated(curvedPolyline, EvaluateQuadraticBezier(entryPoint, corner, exitPoint, alpha));
+		}
+	}
+
+	AppendPointIfSeparated(curvedPolyline, polyline.Last());
+	return curvedPolyline;
+}
+
+bool FEpisodePedestrianPlanBuilder::PathIntersectsFootprints(
+	const TArray<FVector>& polyline,
+	const TArray<FEpisodePedestrianObstacleFootprint>& obstacleFootprints,
+	double clearanceCm)
+{
+	if (polyline.Num() < 2 || obstacleFootprints.IsEmpty())
+	{
+		return false;
+	}
+
+	for (int32 pointIndex = 0; pointIndex < polyline.Num() - 1; ++pointIndex)
+	{
+		for (const FEpisodePedestrianObstacleFootprint& footprint : obstacleFootprints)
+		{
+			if (SegmentIntersectsFootprint(polyline[pointIndex], polyline[pointIndex + 1], footprint, clearanceCm))
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+void FEpisodePedestrianPlanBuilder::AppendPointIfSeparated(TArray<FVector>& points, const FVector& point)
+{
+	if (points.IsEmpty()
+		|| FVector::DistSquared2D(points.Last(), point) > FMath::Square(MinPlanSegmentLengthCm))
+	{
+		points.Add(point);
+	}
+}
+
+FVector FEpisodePedestrianPlanBuilder::EvaluateCubicBezier(
+	const FVector& p0,
+	const FVector& p1,
+	const FVector& p2,
+	const FVector& p3,
+	double alpha)
+{
+	const double clampedAlpha = FMath::Clamp(alpha, 0.0, 1.0);
+	const double inverseAlpha = 1.0 - clampedAlpha;
+	return p0 * FMath::Pow(inverseAlpha, 3.0)
+		+ p1 * (3.0 * FMath::Square(inverseAlpha) * clampedAlpha)
+		+ p2 * (3.0 * inverseAlpha * FMath::Square(clampedAlpha))
+		+ p3 * FMath::Pow(clampedAlpha, 3.0);
+}
+
+FVector FEpisodePedestrianPlanBuilder::EvaluateQuadraticBezier(
+	const FVector& p0,
+	const FVector& p1,
+	const FVector& p2,
+	double alpha)
+{
+	const double clampedAlpha = FMath::Clamp(alpha, 0.0, 1.0);
+	const double inverseAlpha = 1.0 - clampedAlpha;
+	return p0 * FMath::Square(inverseAlpha)
+		+ p1 * (2.0 * inverseAlpha * clampedAlpha)
+		+ p2 * FMath::Square(clampedAlpha);
 }
 
 bool FEpisodePedestrianPlanBuilder::SegmentIntersectsFootprint(

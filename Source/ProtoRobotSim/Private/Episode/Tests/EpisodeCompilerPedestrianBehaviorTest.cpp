@@ -122,4 +122,47 @@ bool FEpisodeCompilerPedestrianBehaviorValuesTest::RunTest(const FString& Parame
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEpisodeCompilerPedestrianPathCurveValuesTest,
+	"ProtoRobotSim.Episode.Compiler.PedestrianPathCurveValues",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEpisodeCompilerPedestrianPathCurveValuesTest::RunTest(const FString& Parameters)
+{
+	const FString json = TEXT(R"JSON(
+{
+  "schema": "episode_actor_spawn_mvp",
+  "version": 1,
+  "scenario_id": "pedestrian_path_curve_values_test",
+  "map_id": "EpisodeSandbox",
+  "actors": {
+    "pedestrians": [
+      {
+        "instance_id": "ped_01",
+        "archetype_id": "adult_pedestrian",
+        "start_xy_m": [0, 0],
+        "goal_xy_m": [2, 0],
+        "movement": {
+          "model": "planned_trajectory",
+          "speed_mps": 1.2,
+          "curve_offset_m": 0.6,
+          "curve_sample_spacing_m": 0.25,
+          "auto_start": true
+        }
+      }
+    ]
+  }
+}
+)JSON");
+
+	const UEpisodeCompiler* compiler = NewObject<UEpisodeCompiler>();
+	const FEpisodeCompileResult result = compiler->CompileEpisodeWorldSpecFromJsonString(json);
+
+	TestTrue(TEXT("compile succeeds with path curve"), result.bSuccess);
+	TestEqual(TEXT("one pedestrian compiled"), result.WorldSpec.DynamicActors.Num(), 1);
+	TestEqual(TEXT("curve offset converted to cm"), GetFloatPropertyOrDefault(result, TEXT("path_curve_offset_cm"), -1.0), 60.0);
+	TestEqual(TEXT("curve sample spacing converted to cm"), GetFloatPropertyOrDefault(result, TEXT("path_curve_sample_spacing_cm"), -1.0), 25.0);
+	return true;
+}
+
 #endif

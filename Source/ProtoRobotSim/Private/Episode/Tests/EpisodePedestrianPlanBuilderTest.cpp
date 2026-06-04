@@ -166,4 +166,45 @@ bool FEpisodePedestrianPlanBuilderBehaviorParamsTest::RunTest(const FString& Par
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEpisodePedestrianPlanBuilderPathCurveTest,
+	"ProtoRobotSim.Episode.PedestrianPlan.PathCurve",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEpisodePedestrianPlanBuilderPathCurveTest::RunTest(const FString& Parameters)
+{
+	FEpisodeSimulationSetupSpec straightSetupSpec = MakeSetupSpec();
+	FEpisodeSimulationSetupSpec curvedSetupSpec = MakeSetupSpec();
+	FEpisodeDynamicActorSpec& curvedPedestrian = curvedSetupSpec.DynamicActors[0];
+	curvedPedestrian.Properties.Add(TEXT("path_curve_offset_cm"), MakeFloatParam(80.0));
+	curvedPedestrian.Properties.Add(TEXT("path_curve_sample_spacing_cm"), MakeFloatParam(100.0));
+
+	FEpisodePedestrianPlanBuildContext context;
+	context.SourceSpecHash = straightSetupSpec.SpecHash;
+
+	FEpisodePedestrianPlanBuildResult straightResult;
+	FEpisodePedestrianPlanBuildResult curvedResult;
+
+	TestTrue(TEXT("straight build succeeds"), FEpisodePedestrianPlanBuilder::BuildPlans(straightSetupSpec, context, straightResult));
+	TestTrue(TEXT("curved build succeeds"), FEpisodePedestrianPlanBuilder::BuildPlans(curvedSetupSpec, context, curvedResult));
+	TestEqual(TEXT("straight one plan"), straightResult.Plans.Num(), 1);
+	TestEqual(TEXT("curved one plan"), curvedResult.Plans.Num(), 1);
+
+	if (straightResult.Plans.Num() == 1 && curvedResult.Plans.Num() == 1)
+	{
+		const FEpisodePedestrianPlan& straightPlan = straightResult.Plans[0];
+		const FEpisodePedestrianPlan& curvedPlan = curvedResult.Plans[0];
+		TestEqual(TEXT("straight path remains two points by default"), straightPlan.Points.Num(), 2);
+		TestTrue(TEXT("curved path adds sampled points"), curvedPlan.Points.Num() > 2);
+		TestEqual(TEXT("curved path preserves start"), curvedPlan.Points[0].Location, FVector(0.0, 0.0, 0.0));
+		TestEqual(TEXT("curved path preserves goal"), curvedPlan.Points.Last().Location, FVector(1000.0, 0.0, 0.0));
+		TestTrue(TEXT("curved path bends laterally"), FMath::Abs(curvedPlan.Points[curvedPlan.Points.Num() / 2].Location.Y) > KINDA_SMALL_NUMBER);
+		TestTrue(TEXT("curve changes baseline plan hash"), straightPlan.PlanHash != curvedPlan.PlanHash);
+		TestEqual(TEXT("curve offset is stored"), curvedPlan.PathShapeParams.CurveOffsetCm, 80.0);
+		TestEqual(TEXT("curve sample spacing is stored"), curvedPlan.PathShapeParams.CurveSampleSpacingCm, 100.0);
+	}
+
+	return true;
+}
+
 #endif

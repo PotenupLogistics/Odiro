@@ -68,6 +68,18 @@ struct PROTOROBOTSIM_API FEpisodePedestrianBehaviorParams
 };
 
 USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodePedestrianPathShapeParams
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianPlan", meta = (ClampMin = "0.0", Units = "cm"))
+	double CurveOffsetCm = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianPlan", meta = (ClampMin = "1.0", Units = "cm"))
+	double CurveSampleSpacingCm = 50.0;
+};
+
+USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FEpisodePedestrianPlan
 {
 	GENERATED_BODY()
@@ -98,6 +110,9 @@ struct PROTOROBOTSIM_API FEpisodePedestrianPlan
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianPlan")
 	FEpisodePedestrianBehaviorParams BehaviorParams;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianPlan")
+	FEpisodePedestrianPathShapeParams PathShapeParams;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianPlan", meta = (ClampMin = "0.0", Units = "s"))
 	double SpawnTimeSeconds = 0.0;

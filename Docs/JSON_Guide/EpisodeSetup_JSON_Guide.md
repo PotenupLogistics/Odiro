@@ -202,8 +202,12 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
 | `xy_m` | 권장 | 초기 위치 |
 | `yaw_deg` | 선택 | 초기 yaw |
 | `movement.speed_mps` | 선택 | m/s |
+| `movement.curve_offset_m` / `movement.curve_offset_cm` | 선택 | `planned_trajectory` baseline curve offset. 기본 `0` |
+| `movement.curve_sample_spacing_m` / `movement.curve_sample_spacing_cm` | 선택 | curve sample 간격. 기본 `0.5m` |
 | `movement.initial_distance_m` | 선택 | path 위 초기 진행 거리 |
 | `movement.auto_start` | 선택 | 기본 `true` |
+
+`movement.model`이 `planned_trajectory`이면 `path_id` 대신 `start_xy_m`과 `goal_xy_m`을 제공한다. `curve_offset_m`가 `0`보다 크면 setup 단계에서 deterministic curve sample point가 생성된다.
 
 ## Robot
 

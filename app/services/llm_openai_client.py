@@ -13,6 +13,9 @@ from app.models.llm import LlmError, LlmGenerationRequest, LlmGenerationResponse
 ROOT = Path(__file__).resolve().parents[2]
 WORLD_CONFIG_SCHEMA_PATH = ROOT / "schemas" / "world_config.schema.json"
 
+# request.model 값이 이 집합이면 자유형 json_object 모드. 그 외(빈문자열/openai-world-config 포함)는 기존 WorldConfig schema 모드.
+GENERIC_JSON_MODELS = {"policy-recommendation"}
+
 
 class OpenAILlmClient:
     def __init__(
@@ -32,21 +35,25 @@ class OpenAILlmClient:
         schema.pop("$id", None)
         return schema
 
+    def _resolved_model(self, request: LlmGenerationRequest) -> str:
+        if request.model in {"openai-world-config", ""} or request.model in GENERIC_JSON_MODELS:
+            return self.settings.openaiModel
+        return request.model
+
     def _request_body(self, request: LlmGenerationRequest) -> dict[str, Any]:
-        model = (
-            self.settings.openaiModel
-            if request.model in {"openai-world-config", ""}
-            else request.model
-        )
-        return {
-            "model": model,
+        body: dict[str, Any] = {
+            "model": self._resolved_model(request),
             "input": [
                 {"role": "system", "content": request.systemPrompt},
                 {"role": "user", "content": request.userPrompt},
             ],
             "temperature": self.settings.openaiTemperature,
             "max_output_tokens": self.settings.openaiMaxTokens,
-            "text": {
+        }
+        if request.model in GENERIC_JSON_MODELS:
+            body["text"] = {"format": {"type": "json_object"}}
+        else:
+            body["text"] = {
                 "format": {
                     "type": "json_schema",
                     "name": "world_config",
@@ -54,8 +61,13 @@ class OpenAILlmClient:
                     "schema": self._world_config_schema(),
                     "strict": False,
                 }
-            },
-        }
+            }
+        return body
+
+    def _response_model_label(self, request: LlmGenerationRequest) -> str:
+        if request.model == "openai-world-config" or request.model in GENERIC_JSON_MODELS:
+            return self.settings.openaiModel
+        return request.model
 
     def _error_response(
         self,
@@ -66,7 +78,7 @@ class OpenAILlmClient:
         return LlmGenerationResponse(
             requestId=request.requestId,
             provider=LlmProvider.openai,
-            model=self.settings.openaiModel if request.model == "openai-world-config" else request.model,
+            model=self._response_model_label(request),
             success=False,
             content=None,
             rawContent=None,
@@ -155,7 +167,7 @@ class OpenAILlmClient:
         return LlmGenerationResponse(
             requestId=request.requestId,
             provider=LlmProvider.openai,
-            model=self.settings.openaiModel if request.model == "openai-world-config" else request.model,
+            model=self._response_model_label(request),
             success=True,
             content=content,
             rawContent=json.dumps(payload, ensure_ascii=False),

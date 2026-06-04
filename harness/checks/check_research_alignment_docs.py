@@ -7,9 +7,8 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DOC = ROOT / "docs" / "RESEARCH_ALIGNMENT.md"
-EUREKA = ROOT / "docs" / "EUREKA.pdf"
-DREUREKA = ROOT / "docs" / "DREUREKA.pdf"
+DOC = ROOT / "docs" / "research" / "RESEARCH_ALIGNMENT.md"
+SOURCE_REGISTRY = ROOT / "docs" / "research" / "RESEARCH_SOURCE_REGISTRY.md"
 README = ROOT / "README.md"
 DOCS_README = ROOT / "docs" / "README.md"
 PYPROJECT = ROOT / "pyproject.toml"
@@ -42,6 +41,7 @@ def _imports_live_http_client(path: Path) -> bool:
 
 def run_check() -> dict[str, Any]:
     doc_text = _read(DOC)
+    source_registry_text = _read(SOURCE_REGISTRY)
     readme_text = _read(README) + "\n" + _read(DOCS_README)
     pyproject_text = _read(PYPROJECT).lower()
     forbidden = [path.relative_to(ROOT).as_posix() for path in FORBIDDEN_ARTIFACTS if path.exists()]
@@ -50,8 +50,32 @@ def run_check() -> dict[str, Any]:
         "passed": False,
         "warning": False,
         "docExists": DOC.exists(),
-        "eurekaPdfExists": EUREKA.exists(),
-        "drEurekaPdfExists": DREUREKA.exists(),
+        "sourceRegistryExists": SOURCE_REGISTRY.exists(),
+        "usesPublicEurekaLinks": all(
+            term in doc_text
+            for term in [
+                "https://eureka-research.github.io/",
+                "https://arxiv.org/abs/2310.12931",
+            ]
+        ),
+        "usesPublicDrEurekaLinks": all(
+            term in doc_text
+            for term in [
+                "https://eureka-research.github.io/dr-eureka/",
+                "https://arxiv.org/abs/2406.01967",
+            ]
+        ),
+        "doesNotRequireLocalResearchPdfs": "docs/references/EUREKA.pdf" not in doc_text
+        and "docs/references/DREUREKA.pdf" not in doc_text,
+        "sourceRegistryIncludesResearchSources": all(
+            term in source_registry_text
+            for term in [
+                "RSR-005",
+                "RSR-006",
+                "https://eureka-research.github.io/",
+                "https://eureka-research.github.io/dr-eureka/",
+            ]
+        ),
         "mentionsEureka": "Eureka" in doc_text,
         "mentionsDrEureka": "DrEureka" in doc_text,
         "mentionsScenic": "Scenic" in doc_text,
@@ -71,9 +95,12 @@ def run_check() -> dict[str, Any]:
         "warnings": [],
     }
     for key, message in [
-        ("docExists", "docs/RESEARCH_ALIGNMENT.md is missing."),
-        ("eurekaPdfExists", "docs/EUREKA.pdf is missing."),
-        ("drEurekaPdfExists", "docs/DREUREKA.pdf is missing."),
+        ("docExists", "docs/research/RESEARCH_ALIGNMENT.md is missing."),
+        ("sourceRegistryExists", "docs/research/RESEARCH_SOURCE_REGISTRY.md is missing."),
+        ("usesPublicEurekaLinks", "Research alignment must link Eureka public project/arXiv sources."),
+        ("usesPublicDrEurekaLinks", "Research alignment must link DrEureka public project/arXiv sources."),
+        ("doesNotRequireLocalResearchPdfs", "Research alignment must not require local Eureka/DrEureka PDFs."),
+        ("sourceRegistryIncludesResearchSources", "Research source registry must include Eureka and DrEureka source entries."),
         ("mentionsEureka", "Research alignment must mention Eureka."),
         ("mentionsDrEureka", "Research alignment must mention DrEureka."),
         ("mentionsScenic", "Research alignment must mention Scenic."),

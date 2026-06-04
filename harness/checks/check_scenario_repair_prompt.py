@@ -8,7 +8,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 BUILDER_PATH = ROOT / "app" / "services" / "world_config_scenario_repair_prompt_builder.py"
 ORCHESTRATOR_PATH = ROOT / "app" / "services" / "world_config_generation_orchestrator.py"
-DOC_PATH = ROOT / "docs" / "SCENARIO_REPAIR_PROMPT.md"
+DOC_PATH = ROOT / "docs" / "architecture" / "SCENARIO_REPAIR_PROMPT.md"
 
 
 def _detect_forbidden_artifacts() -> list[str]:
@@ -55,7 +55,7 @@ def run_check() -> dict[str, Any]:
     if not result["builderExists"]:
         result["errors"].append("app/services/world_config_scenario_repair_prompt_builder.py is missing.")
     if not result["docExists"]:
-        result["errors"].append("docs/SCENARIO_REPAIR_PROMPT.md is missing.")
+        result["errors"].append("docs/architecture/SCENARIO_REPAIR_PROMPT.md is missing.")
 
     orchestrator_text = ORCHESTRATOR_PATH.read_text(encoding="utf-8-sig") if ORCHESTRATOR_PATH.exists() else ""
     result["orchestratorHasScenarioRepair"] = "scenario_repair" in orchestrator_text

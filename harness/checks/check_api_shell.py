@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 REQUIRED_FILES = {
     "app/main.py",
     "app/api/routes.py",
-    "docs/API_SHELL_GUIDE.md",
+    "docs/tooling/API_SHELL_GUIDE.md",
 }
 REQUIRED_ROUTES = {
     "/health",

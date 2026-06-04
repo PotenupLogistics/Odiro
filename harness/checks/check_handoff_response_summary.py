@@ -7,7 +7,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 HELPER = ROOT / "app" / "utils" / "handoff_response_summary.py"
-GUIDE = ROOT / "docs" / "GENERIC_OBSTACLE_SMOKE_REPORTING.md"
+GUIDE = ROOT / "docs" / "handoff" / "GENERIC_OBSTACLE_SMOKE_REPORTING.md"
 SCRIPT_PATHS = [
     ROOT / "scripts" / "run_ue5_handoff_smoke.py",
     ROOT / "scripts" / "run_ue5_episode_spec_controlled_smoke.py",
@@ -69,7 +69,7 @@ def run_check() -> dict[str, Any]:
 
     for key, message in [
         ("helperExists", "app/utils/handoff_response_summary.py is missing."),
-        ("guideExists", "docs/GENERIC_OBSTACLE_SMOKE_REPORTING.md is missing."),
+        ("guideExists", "docs/handoff/GENERIC_OBSTACLE_SMOKE_REPORTING.md is missing."),
         ("helperAvoidsFullPayloadKeys", "Summary helper must not return full worldConfig or episodeSpec keys."),
         ("helperExtractsGenericObstacleFields", "Summary helper must extract generic obstacle smoke fields."),
         ("docsStateNoFullPayload", "Generic obstacle smoke reporting guide must state no full payload/API key storage."),

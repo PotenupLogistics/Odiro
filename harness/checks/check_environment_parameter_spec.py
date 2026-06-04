@@ -6,9 +6,9 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SPEC = ROOT / "docs" / "ENVIRONMENT_PARAMETER_SPEC.md"
-ADAPTER_DOC = ROOT / "docs" / "UE5_EPISODE_SPEC_ADAPTER.md"
-FIELD_MAPPING_DOC = ROOT / "docs" / "UE5_WORLD_CONFIG_FIELD_MAPPING.md"
+SPEC = ROOT / "docs" / "environment" / "ENVIRONMENT_PARAMETER_SPEC.md"
+ADAPTER_DOC = ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_ADAPTER.md"
+FIELD_MAPPING_DOC = ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_WORLD_CONFIG_FIELD_MAPPING.md"
 
 
 REQUIRED_TERMS = [

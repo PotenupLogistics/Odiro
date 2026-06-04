@@ -9,7 +9,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = ROOT / "scripts" / "run_ollama_world_config_smoke.py"
-GUIDE_PATH = ROOT / "docs" / "OLLAMA_TIMEOUT_TUNING_GUIDE.md"
+GUIDE_PATH = ROOT / "docs" / "providers" / "OLLAMA_TIMEOUT_TUNING_GUIDE.md"
 
 
 def _base_result() -> dict[str, Any]:
@@ -72,7 +72,7 @@ def run_check() -> dict[str, Any]:
     result = _base_result()
     result["guideExists"] = GUIDE_PATH.exists()
     if not result["guideExists"]:
-        result["errors"].append("docs/OLLAMA_TIMEOUT_TUNING_GUIDE.md is missing.")
+        result["errors"].append("docs/providers/OLLAMA_TIMEOUT_TUNING_GUIDE.md is missing.")
 
     help_text = _help_text() if SCRIPT_PATH.exists() else ""
     required_options = ["--timeout-sec", "--warm-up", "--compact-prompt", "--context-top-k"]

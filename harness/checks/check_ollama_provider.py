@@ -12,7 +12,7 @@ from app.services.llm_ollama_client import OllamaLlmClient
 ROOT = Path(__file__).resolve().parents[2]
 REQUIRED_FILES = {
     "app/services/llm_ollama_client.py",
-    "docs/OLLAMA_PROVIDER_GUIDE.md",
+    "docs/providers/OLLAMA_PROVIDER_GUIDE.md",
 }
 
 

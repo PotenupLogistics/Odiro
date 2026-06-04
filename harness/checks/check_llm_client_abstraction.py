@@ -16,13 +16,14 @@ REQUIRED_FILES = {
     "app/services/llm_client.py",
     "app/services/llm_disabled_client.py",
     "app/services/llm_client_factory.py",
-    "docs/LLM_CLIENT_ABSTRACTION.md",
+    "docs/providers/LLM_CLIENT_ABSTRACTION.md",
 }
 EXPECTED_ROUTES = {
     "/health",
     "/api/v1/generation/world-config",
     "/api/v1/generation/world-config/prompt-package",
     "/api/v1/ue5/world-config/handoff",
+    "/api/v1/scenarios/generate",
     "/api/v1/contracts/validate/{contract_type}",
 }
 

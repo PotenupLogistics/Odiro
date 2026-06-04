@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TRIAGE_JSON_PATH = ROOT / "data" / "sources" / "review" / "triage" / "policy_candidate_triage.json"
 TRIAGE_MD_PATH = ROOT / "data" / "sources" / "review" / "triage" / "policy_candidate_triage.md"
-MANUAL_REVIEW_QUEUE_PATH = ROOT / "docs" / "MANUAL_REVIEW_QUEUE.md"
+MANUAL_REVIEW_QUEUE_PATH = ROOT / "docs" / "manual_review" / "MANUAL_REVIEW_QUEUE.md"
 POLICY_CARD_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 VALID_PRIORITIES = {"high", "medium", "low"}
 

@@ -7,12 +7,11 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 REQUIRED_DOCS = [
-    ROOT / "docs" / "UE_INTEGRATION_HANDOFF_INDEX.md",
-    ROOT / "docs" / "CURRENT_PROJECT_STATUS.md",
-    ROOT / "docs" / "UE_AI_INTEGRATION_ISSUES.md",
-    ROOT / "docs" / "NEXT_ACTIONS.md",
+    ROOT / "docs" / "handoff" / "UE_INTEGRATION_HANDOFF_INDEX.md",
+    ROOT / "docs" / "handoff" / "HANDOFF_RELEASE_NOTES.md",
+    ROOT / "docs" / "handoff" / "UE_AI_INTEGRATION_ISSUES.md",
 ]
-MESSAGE_DOC = ROOT / "docs" / "UE_TEAM_MESSAGE_DRAFT.md"
+MESSAGE_DOC = ROOT / "docs" / "handoff" / "UE_TEAM_MESSAGE_DRAFT.md"
 DOCS_README = ROOT / "docs" / "README.md"
 ROOT_README = ROOT / "README.md"
 
@@ -33,20 +32,6 @@ def _detect_forbidden_artifacts() -> list[str]:
     return sorted(found)
 
 
-def _detect_openai_imports() -> list[str]:
-    terms = ["from openai", "import openai", "OpenAI(", "AsyncOpenAI(", "responses.create"]
-    found: list[str] = []
-    for path in [ROOT / "app", ROOT / "scripts"]:
-        if not path.exists():
-            continue
-        for file_path in path.rglob("*.py"):
-            text = file_path.read_text(encoding="utf-8-sig")
-            for term in terms:
-                if term in text:
-                    found.append(f"{file_path.relative_to(ROOT).as_posix()} contains {term}")
-    return found
-
-
 def run_check() -> dict[str, Any]:
     missing_docs = [path.relative_to(ROOT).as_posix() for path in REQUIRED_DOCS if not path.exists()]
     message_text = MESSAGE_DOC.read_text(encoding="utf-8-sig") if MESSAGE_DOC.exists() else ""
@@ -60,7 +45,6 @@ def run_check() -> dict[str, Any]:
         "messageMentionsEpisodeSpec": "responseFormat=episode_spec" in message_text,
         "messageMentionsKickboard": "obstacle.kickboard" in message_text,
         "readmeExists": readme_exists,
-        "openAiImports": [],
         "forbiddenArtifacts": [],
         "errors": [],
         "warnings": [],
@@ -76,10 +60,6 @@ def run_check() -> dict[str, Any]:
         result["errors"].append("UE_TEAM_MESSAGE_DRAFT.md does not mention obstacle.kickboard.")
     if not readme_exists:
         result["errors"].append("README.md or docs/README.md is missing.")
-
-    result["openAiImports"] = _detect_openai_imports()
-    if result["openAiImports"]:
-        result["errors"].append("OpenAI SDK import or call code detected.")
 
     result["forbiddenArtifacts"] = _detect_forbidden_artifacts()
     if result["forbiddenArtifacts"]:
@@ -98,4 +78,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

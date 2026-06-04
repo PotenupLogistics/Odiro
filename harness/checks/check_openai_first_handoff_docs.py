@@ -6,23 +6,19 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-RESULT_DOC = ROOT / "docs" / "OPENAI_FIRST_HANDOFF_RESULT.md"
+RESULT_DOC = ROOT / "docs" / "handoff" / "HANDOFF_RELEASE_NOTES.md"
 ROOT_README = ROOT / "README.md"
 DOCS_README = ROOT / "docs" / "README.md"
 
 RELATED_DOCS = [
-    ROOT / "docs" / "CURRENT_PROJECT_STATUS.md",
-    ROOT / "docs" / "HANDOFF_RELEASE_NOTES.md",
-    ROOT / "docs" / "UE_HANDOFF_DELIVERY_MANIFEST.md",
-    ROOT / "docs" / "UE_TEAM_HANDOFF_PACKAGE.md",
-    ROOT / "docs" / "UE5_EPISODE_SPEC_HANDOFF_SUMMARY.md",
-    ROOT / "docs" / "UE5_EPISODE_SPEC_CONTROLLED_SMOKE_RESULT.md",
-    ROOT / "docs" / "OPENAI_PROVIDER_GUIDE.md",
-    ROOT / "docs" / "LLM_PROVIDER_CONFIGURATION.md",
-    ROOT / "docs" / "NEXT_ACTIONS.md",
-    ROOT / "docs" / "DECISIONS.md",
-    ROOT / "docs" / "HANDOFF_READINESS_CHECKLIST.md",
-    ROOT / "docs" / "UE_TEAM_MESSAGE_DRAFT.md",
+    ROOT / "docs" / "handoff" / "HANDOFF_RELEASE_NOTES.md",
+    ROOT / "docs" / "handoff" / "UE_HANDOFF_DELIVERY_MANIFEST.md",
+    ROOT / "docs" / "archive" / "previous_episode_spec" / "UE_TEAM_HANDOFF_PACKAGE.md",
+    ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_HANDOFF_SUMMARY.md",
+    ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_CONTROLLED_SMOKE_RESULT.md",
+    ROOT / "docs" / "providers" / "OPENAI_PROVIDER_GUIDE.md",
+    ROOT / "docs" / "providers" / "LLM_PROVIDER_CONFIGURATION.md",
+    ROOT / "docs" / "handoff" / "UE_TEAM_MESSAGE_DRAFT.md",
 ]
 
 FORBIDDEN_ARTIFACTS = [
@@ -67,8 +63,8 @@ def run_check() -> dict[str, Any]:
         "passed": False,
         "warning": False,
         "resultDocExists": RESULT_DOC.exists(),
-        "rootReadmeLinksResult": "OPENAI_FIRST_HANDOFF_RESULT.md" in root_readme_text,
-        "docsReadmeLinksResult": "OPENAI_FIRST_HANDOFF_RESULT.md" in docs_readme_text,
+        "rootReadmeLinksResult": "HANDOFF_RELEASE_NOTES.md" in root_readme_text,
+        "docsReadmeLinksResult": "HANDOFF_RELEASE_NOTES.md" in docs_readme_text,
         "mentionsOpenAiFirst": "OpenAI-first" in related_text,
         "mentionsOllamaFallback": "Ollama fallback" in related_text,
         "recordsProviderUsedOpenAi": "providerUsed=openai" in related_text,
@@ -83,9 +79,9 @@ def run_check() -> dict[str, Any]:
     }
 
     required_truths = [
-        ("resultDocExists", "docs/OPENAI_FIRST_HANDOFF_RESULT.md is missing."),
-        ("rootReadmeLinksResult", "README.md must link docs/OPENAI_FIRST_HANDOFF_RESULT.md."),
-        ("docsReadmeLinksResult", "docs/README.md must link OPENAI_FIRST_HANDOFF_RESULT.md."),
+        ("resultDocExists", "docs/handoff/HANDOFF_RELEASE_NOTES.md is missing."),
+        ("rootReadmeLinksResult", "README.md must link docs/handoff/HANDOFF_RELEASE_NOTES.md."),
+        ("docsReadmeLinksResult", "docs/README.md must link HANDOFF_RELEASE_NOTES.md."),
         ("mentionsOpenAiFirst", "Related docs must mention OpenAI-first."),
         ("mentionsOllamaFallback", "Related docs must mention Ollama fallback."),
         ("recordsProviderUsedOpenAi", "Related docs must record providerUsed=openai."),

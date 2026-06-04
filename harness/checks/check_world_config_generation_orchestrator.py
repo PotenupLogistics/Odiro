@@ -13,13 +13,14 @@ CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
 REQUIRED_FILES = {
     "app/services/world_config_generation_orchestrator.py",
     "app/services/json_output_extractor.py",
-    "docs/WORLD_CONFIG_GENERATION_ORCHESTRATOR.md",
+    "docs/architecture/WORLD_CONFIG_GENERATION_ORCHESTRATOR.md",
 }
 EXPECTED_ROUTES = {
     "/health",
     "/api/v1/generation/world-config",
     "/api/v1/generation/world-config/prompt-package",
     "/api/v1/ue5/world-config/handoff",
+    "/api/v1/scenarios/generate",
     "/api/v1/contracts/validate/{contract_type}",
 }
 

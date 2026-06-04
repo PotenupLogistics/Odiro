@@ -6,20 +6,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_openai_first_handoff_result_doc_exists() -> None:
-    assert (ROOT / "docs" / "OPENAI_FIRST_HANDOFF_RESULT.md").exists()
+def test_openai_first_handoff_summary_exists_in_release_notes() -> None:
+    assert (ROOT / "docs" / "handoff" / "HANDOFF_RELEASE_NOTES.md").exists()
 
 
 def test_readmes_link_openai_first_handoff_result() -> None:
     root_readme = (ROOT / "README.md").read_text(encoding="utf-8-sig")
     docs_readme = (ROOT / "docs" / "README.md").read_text(encoding="utf-8-sig")
 
-    assert "docs/OPENAI_FIRST_HANDOFF_RESULT.md" in root_readme
-    assert "OPENAI_FIRST_HANDOFF_RESULT.md" in docs_readme
+    assert "docs/handoff/HANDOFF_RELEASE_NOTES.md" in root_readme
+    assert "HANDOFF_RELEASE_NOTES.md" in docs_readme
 
 
 def test_openai_first_handoff_result_contains_required_terms() -> None:
-    text = (ROOT / "docs" / "OPENAI_FIRST_HANDOFF_RESULT.md").read_text(
+    text = (ROOT / "docs" / "handoff" / "HANDOFF_RELEASE_NOTES.md").read_text(
         encoding="utf-8-sig"
     )
 
@@ -30,12 +30,12 @@ def test_openai_first_handoff_result_contains_required_terms() -> None:
     assert "full EpisodeSpec" in text
 
 
-def test_handoff_readiness_checklist_mentions_openai_episode_spec_smoke() -> None:
-    text = (ROOT / "docs" / "HANDOFF_READINESS_CHECKLIST.md").read_text(
+def test_handoff_release_notes_mentions_openai_episode_spec_smoke() -> None:
+    text = (ROOT / "docs" / "handoff" / "HANDOFF_RELEASE_NOTES.md").read_text(
         encoding="utf-8-sig"
     )
 
-    assert "OpenAI EpisodeSpec handoff smoke 성공" in text
+    assert "OpenAI-first" in text
 
 
 def test_forbidden_artifacts_are_not_created() -> None:

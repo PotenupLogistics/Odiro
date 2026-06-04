@@ -10,14 +10,29 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
 
 
-def test_research_alignment_docs_and_pdfs_exist() -> None:
-    assert (ROOT / "docs" / "RESEARCH_ALIGNMENT.md").exists()
-    assert (ROOT / "docs" / "EUREKA.pdf").exists()
-    assert (ROOT / "docs" / "DREUREKA.pdf").exists()
+def test_research_alignment_doc_uses_public_source_links_without_required_pdfs() -> None:
+    assert (ROOT / "docs" / "research" / "RESEARCH_ALIGNMENT.md").exists()
+    text = _read(ROOT / "docs" / "research" / "RESEARCH_ALIGNMENT.md")
+
+    assert "docs/references/EUREKA.pdf" not in text
+    assert "docs/references/DREUREKA.pdf" not in text
+    assert "https://arxiv.org/abs/2310.12931" in text
+    assert "https://arxiv.org/abs/2406.01967" in text
+    assert "https://eureka-research.github.io/" in text
+    assert "https://eureka-research.github.io/dr-eureka/" in text
+
+
+def test_research_alignment_harness_does_not_require_local_pdfs() -> None:
+    text = _read(ROOT / "harness" / "checks" / "check_research_alignment_docs.py")
+
+    assert "EUREKA = ROOT" not in text
+    assert "DREUREKA = ROOT" not in text
+    assert "eurekaPdfExists" not in text
+    assert "drEurekaPdfExists" not in text
 
 
 def test_research_alignment_covers_eureka_dreureka_and_scenic_boundaries() -> None:
-    text = _read(ROOT / "docs" / "RESEARCH_ALIGNMENT.md")
+    text = _read(ROOT / "docs" / "research" / "RESEARCH_ALIGNMENT.md")
 
     assert "Eureka" in text
     assert "DrEureka" in text

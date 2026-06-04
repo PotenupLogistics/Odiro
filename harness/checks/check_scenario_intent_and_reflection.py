@@ -62,8 +62,8 @@ def run_check() -> dict[str, Any]:
         ROOT / "app" / "models" / "scenario.py",
         ROOT / "app" / "services" / "world_config_scenario_intent_extractor.py",
         ROOT / "app" / "services" / "world_config_scenario_reflection.py",
-        ROOT / "docs" / "SCENARIO_INTENT_EXTRACTION.md",
-        ROOT / "docs" / "SCENARIO_REFLECTION_VALIDATION.md",
+        ROOT / "docs" / "architecture" / "SCENARIO_INTENT_EXTRACTION.md",
+        ROOT / "docs" / "architecture" / "SCENARIO_REFLECTION_VALIDATION.md",
     ]
     for path in required_files:
         key = path.relative_to(ROOT).as_posix()

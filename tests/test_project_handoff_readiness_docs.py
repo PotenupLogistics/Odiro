@@ -5,10 +5,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_DOCS = [
-    ROOT / "docs" / "UE_INTEGRATION_HANDOFF_INDEX.md",
-    ROOT / "docs" / "CURRENT_PROJECT_STATUS.md",
-    ROOT / "docs" / "UE_AI_INTEGRATION_ISSUES.md",
-    ROOT / "docs" / "NEXT_ACTIONS.md",
+    ROOT / "docs" / "handoff" / "UE_INTEGRATION_HANDOFF_INDEX.md",
+    ROOT / "docs" / "handoff" / "HANDOFF_RELEASE_NOTES.md",
+    ROOT / "docs" / "handoff" / "UE_AI_INTEGRATION_ISSUES.md",
 ]
 
 
@@ -18,7 +17,7 @@ def test_handoff_readiness_docs_exist() -> None:
 
 
 def test_message_draft_mentions_episode_spec_and_kickboard_request() -> None:
-    text = (ROOT / "docs" / "UE_TEAM_MESSAGE_DRAFT.md").read_text(encoding="utf-8-sig")
+    text = (ROOT / "docs" / "handoff" / "UE_TEAM_MESSAGE_DRAFT.md").read_text(encoding="utf-8-sig")
     assert "responseFormat=episode_spec" in text
     assert "obstacle.kickboard" in text
 
@@ -36,4 +35,3 @@ def test_no_forbidden_artifacts_created_for_handoff_readiness_docs() -> None:
     assert not (ROOT / "fixtures").exists()
     assert not (ROOT / "data" / "rag" / "vector_db").exists()
     assert not (ROOT / "data" / "rag" / "embeddings").exists()
-

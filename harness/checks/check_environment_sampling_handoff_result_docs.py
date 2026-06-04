@@ -7,7 +7,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-RESULT_DOC = ROOT / "docs" / "ENVIRONMENT_SAMPLING_HANDOFF_RESULT.md"
+RESULT_DOC = ROOT / "docs" / "handoff" / "HANDOFF_RELEASE_NOTES.md"
 README = ROOT / "README.md"
 DOCS_README = ROOT / "docs" / "README.md"
 
@@ -47,8 +47,8 @@ def run_check() -> dict[str, Any]:
         "passed": False,
         "warning": False,
         "resultDocExists": RESULT_DOC.exists(),
-        "rootReadmeLinksResult": "ENVIRONMENT_SAMPLING_HANDOFF_RESULT.md" in readme_text,
-        "docsReadmeLinksResult": "ENVIRONMENT_SAMPLING_HANDOFF_RESULT.md" in docs_readme_text,
+        "rootReadmeLinksResult": "HANDOFF_RELEASE_NOTES.md" in readme_text,
+        "docsReadmeLinksResult": "HANDOFF_RELEASE_NOTES.md" in docs_readme_text,
         "documentsSidewalkWidth": "sidewalkWidthCm=120" in result_text,
         "documentsBlockingRatio": "obstacleBlockingRatio=0.6" in result_text,
         "documentsTimeLimit": "timeLimitSec=60" in result_text,
@@ -60,9 +60,9 @@ def run_check() -> dict[str, Any]:
     }
 
     for key, message in [
-        ("resultDocExists", "docs/ENVIRONMENT_SAMPLING_HANDOFF_RESULT.md is missing."),
-        ("rootReadmeLinksResult", "README.md must link ENVIRONMENT_SAMPLING_HANDOFF_RESULT.md."),
-        ("docsReadmeLinksResult", "docs/README.md must link ENVIRONMENT_SAMPLING_HANDOFF_RESULT.md."),
+        ("resultDocExists", "docs/handoff/HANDOFF_RELEASE_NOTES.md is missing."),
+        ("rootReadmeLinksResult", "README.md must link HANDOFF_RELEASE_NOTES.md."),
+        ("docsReadmeLinksResult", "docs/README.md must link HANDOFF_RELEASE_NOTES.md."),
         ("documentsSidewalkWidth", "Result doc must include sidewalkWidthCm=120."),
         ("documentsBlockingRatio", "Result doc must include obstacleBlockingRatio=0.6."),
         ("documentsTimeLimit", "Result doc must include timeLimitSec=60."),

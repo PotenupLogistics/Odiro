@@ -10,8 +10,8 @@ PAGE_HINTS_PATH = ROOT / "data" / "sources" / "review" / "high_priority" / "page
 MANUAL_CONFIRMATION_PATH = ROOT / "data" / "sources" / "review" / "confirmed" / "manual_confirmation_results.json"
 TRIAGE_PATH = ROOT / "data" / "sources" / "review" / "triage" / "policy_candidate_triage.json"
 PACK_DIR = ROOT / "data" / "sources" / "review" / "manual_review_pack"
-EXECUTION_PLAN_PATH = ROOT / "docs" / "MANUAL_REVIEW_EXECUTION_PLAN.md"
-INPUT_GUIDE_PATH = ROOT / "docs" / "MANUAL_CONFIRMATION_INPUT_GUIDE.md"
+EXECUTION_PLAN_PATH = ROOT / "docs" / "manual_review" / "MANUAL_REVIEW_EXECUTION_PLAN.md"
+INPUT_GUIDE_PATH = ROOT / "docs" / "manual_review" / "MANUAL_CONFIRMATION_INPUT_GUIDE.md"
 EXPECTED_SOURCE_IDS = ["KOR-001", "KOR-002", "KOR-003", "KOR-004", "KOR-005"]
 SOURCE_TITLES = {
     "KOR-001": "지능형 로봇 개발 및 보급 촉진법",

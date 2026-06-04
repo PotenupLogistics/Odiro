@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_SUMMARY_PATH = ROOT / "app" / "services" / "world_config_schema_summary.py"
 PROMPT_BUILDER_PATH = ROOT / "app" / "services" / "world_config_prompt_builder.py"
 SMOKE_SCRIPT_PATH = ROOT / "scripts" / "run_ollama_world_config_smoke.py"
-GUIDE_PATH = ROOT / "docs" / "WORLD_CONFIG_PROMPT_HARDENING.md"
+GUIDE_PATH = ROOT / "docs" / "architecture" / "WORLD_CONFIG_PROMPT_HARDENING.md"
 POLICY_CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 RAG_CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
 
@@ -76,7 +76,7 @@ def run_check() -> dict[str, Any]:
     if not result["schemaSummaryExists"]:
         result["errors"].append("app/services/world_config_schema_summary.py is missing.")
     if not result["guideExists"]:
-        result["errors"].append("docs/WORLD_CONFIG_PROMPT_HARDENING.md is missing.")
+        result["errors"].append("docs/architecture/WORLD_CONFIG_PROMPT_HARDENING.md is missing.")
 
     prompt_text = PROMPT_BUILDER_PATH.read_text(encoding="utf-8-sig") if PROMPT_BUILDER_PATH.exists() else ""
     result["requiredChecklistInPrompt"] = (

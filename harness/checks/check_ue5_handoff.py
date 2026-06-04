@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MODEL_PATH = ROOT / "app" / "models" / "handoff.py"
 SERVICE_PATH = ROOT / "app" / "services" / "ue5_world_config_handoff_service.py"
 ROUTES_PATH = ROOT / "app" / "api" / "routes.py"
-DOC_PATH = ROOT / "docs" / "UE5_WORLD_CONFIG_HANDOFF.md"
+DOC_PATH = ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_WORLD_CONFIG_HANDOFF.md"
 SCRIPT_PATH = ROOT / "scripts" / "run_ue5_handoff_smoke.py"
 POLICY_CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 RAG_CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
@@ -71,7 +71,7 @@ def run_check() -> dict[str, Any]:
     if not result["serviceExists"]:
         result["errors"].append("app/services/ue5_world_config_handoff_service.py is missing.")
     if not result["docExists"]:
-        result["errors"].append("docs/UE5_WORLD_CONFIG_HANDOFF.md is missing.")
+        result["errors"].append("docs/archive/previous_episode_spec/UE5_WORLD_CONFIG_HANDOFF.md is missing.")
     if not result["scriptExists"]:
         result["errors"].append("scripts/run_ue5_handoff_smoke.py is missing.")
 

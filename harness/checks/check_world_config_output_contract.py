@@ -8,7 +8,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 BUILDER_PATH = ROOT / "app" / "services" / "world_config_output_contract_builder.py"
 PROMPT_BUILDER_PATH = ROOT / "app" / "services" / "world_config_prompt_builder.py"
-DOC_PATH = ROOT / "docs" / "WORLD_CONFIG_OUTPUT_CONTRACT.md"
+DOC_PATH = ROOT / "docs" / "architecture" / "WORLD_CONFIG_OUTPUT_CONTRACT.md"
 
 
 def _base_result() -> dict[str, Any]:
@@ -61,7 +61,7 @@ def run_check() -> dict[str, Any]:
     if not result["builderExists"]:
         result["errors"].append("app/services/world_config_output_contract_builder.py is missing.")
     if not result["docExists"]:
-        result["errors"].append("docs/WORLD_CONFIG_OUTPUT_CONTRACT.md is missing.")
+        result["errors"].append("docs/architecture/WORLD_CONFIG_OUTPUT_CONTRACT.md is missing.")
 
     prompt_text = PROMPT_BUILDER_PATH.read_text(encoding="utf-8-sig") if PROMPT_BUILDER_PATH.exists() else ""
     result["promptBuilderHasOutputContract"] = "Output Contract" in prompt_text or "build_world_config_output_contract" in prompt_text

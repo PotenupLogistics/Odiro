@@ -7,7 +7,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVICE_PATH = ROOT / "app" / "services" / "episode_spec_scenario_reflection.py"
-DOC_PATH = ROOT / "docs" / "UE5_EPISODE_SPEC_SCENARIO_REFLECTION.md"
+DOC_PATH = ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_SCENARIO_REFLECTION.md"
 SCRIPT_PATH = ROOT / "scripts" / "run_ue5_episode_spec_controlled_smoke.py"
 REPORT_PATH = ROOT / "harness" / "reports" / "ue5_episode_spec_controlled_scenario_smoke.json"
 
@@ -64,7 +64,7 @@ def run_check() -> dict[str, Any]:
     if not result["serviceExists"]:
         result["errors"].append("app/services/episode_spec_scenario_reflection.py is missing.")
     if not result["docExists"]:
-        result["errors"].append("docs/UE5_EPISODE_SPEC_SCENARIO_REFLECTION.md is missing.")
+        result["errors"].append("docs/archive/previous_episode_spec/UE5_EPISODE_SPEC_SCENARIO_REFLECTION.md is missing.")
     if not result["scriptExists"]:
         result["errors"].append("scripts/run_ue5_episode_spec_controlled_smoke.py is missing.")
     if not result["controlledSmokeReportExists"]:

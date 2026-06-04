@@ -14,7 +14,7 @@ REQUIRED_FILES = {
     "app/services/policy_rag_retriever.py",
     "app/models/rag.py",
     "scripts/search_policy_rag.py",
-    "docs/RAG_RETRIEVAL_STRATEGY.md",
+    "docs/rag/RAG_RETRIEVAL_STRATEGY.md",
 }
 
 

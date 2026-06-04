@@ -11,7 +11,7 @@ MODEL = ROOT / "app" / "models" / "generation_trace.py"
 BUILDER = ROOT / "app" / "services" / "generation_trace_builder.py"
 HANDOFF = ROOT / "app" / "services" / "ue5_world_config_handoff_service.py"
 SUMMARY = ROOT / "app" / "utils" / "handoff_response_summary.py"
-DOC = ROOT / "docs" / "MAP_GENERATION_TRACE.md"
+DOC = ROOT / "docs" / "architecture" / "MAP_GENERATION_TRACE.md"
 README = ROOT / "README.md"
 DOCS_README = ROOT / "docs" / "README.md"
 
@@ -79,7 +79,7 @@ def run_check() -> dict[str, Any]:
     for key, message in [
         ("modelExists", "app/models/generation_trace.py is missing."),
         ("builderExists", "app/services/generation_trace_builder.py is missing."),
-        ("docExists", "docs/MAP_GENERATION_TRACE.md is missing."),
+        ("docExists", "docs/architecture/MAP_GENERATION_TRACE.md is missing."),
         ("modelHasTraceTypes", "Generation trace model must define trace item/source types."),
         ("builderHasTraceSources", "Trace builder must cover key generation source types."),
         ("handoffIncludesGenerationTrace", "UE5 handoff diagnostics must include generationTrace."),

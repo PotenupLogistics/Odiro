@@ -7,10 +7,10 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 POLICY_CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
-COVERAGE_DOC = ROOT / "docs" / "POLICY_CARD_COVERAGE.md"
-PARAMETER_DOC = ROOT / "docs" / "POLICY_PARAMETER_CATALOG.md"
-ACTION_DOC = ROOT / "docs" / "DECISION_ACTION_MAPPING.md"
-REQUEST_FIELD_DOC = ROOT / "docs" / "DECISION_REQUEST_FIELD_MAPPING.md"
+COVERAGE_DOC = ROOT / "docs" / "policy" / "POLICY_CARD_COVERAGE.md"
+PARAMETER_DOC = ROOT / "docs" / "policy" / "POLICY_PARAMETER_CATALOG.md"
+ACTION_DOC = ROOT / "docs" / "policy" / "DECISION_ACTION_MAPPING.md"
+REQUEST_FIELD_DOC = ROOT / "docs" / "policy" / "DECISION_REQUEST_FIELD_MAPPING.md"
 COVERAGE_REPORT_JSON = ROOT / "data" / "rag" / "policy_card_coverage_report.json"
 COVERAGE_REPORT_MD = ROOT / "data" / "rag" / "policy_card_coverage_report.md"
 EXPECTED_CARD_COUNT = 9

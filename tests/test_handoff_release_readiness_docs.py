@@ -8,10 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_handoff_release_readiness_docs_exist() -> None:
     required_docs = [
-        ROOT / "docs" / "UE_HANDOFF_DELIVERY_MANIFEST.md",
-        ROOT / "docs" / "HANDOFF_RELEASE_NOTES.md",
-        ROOT / "docs" / "HANDOFF_READINESS_CHECKLIST.md",
-        ROOT / "docs" / "HARNESS_WARNING_EXPLANATION.md",
+        ROOT / "docs" / "handoff" / "UE_HANDOFF_DELIVERY_MANIFEST.md",
+        ROOT / "docs" / "handoff" / "HANDOFF_RELEASE_NOTES.md",
     ]
     for path in required_docs:
         assert path.exists(), f"{path} is missing"
@@ -23,13 +21,22 @@ def test_readme_links_handoff_release_docs() -> None:
 
     assert "UE_HANDOFF_DELIVERY_MANIFEST.md" in root_readme
     assert "HANDOFF_RELEASE_NOTES.md" in root_readme
-    assert "HANDOFF_READINESS_CHECKLIST.md" in root_readme
-    assert "HARNESS_WARNING_EXPLANATION.md" in root_readme
     assert "HANDOFF_RELEASE_NOTES.md" in docs_readme
 
 
+def test_handoff_release_notes_contain_current_smoke_summary() -> None:
+    text = (ROOT / "docs" / "handoff" / "HANDOFF_RELEASE_NOTES.md").read_text(
+        encoding="utf-8-sig"
+    )
+
+    assert "OpenAI-first" in text
+    assert "setup pair" in text
+    assert "policy comparison" in text
+    assert "500 passed, 1 warning" in text
+
+
 def test_delivery_manifest_contains_required_handoff_terms() -> None:
-    text = (ROOT / "docs" / "UE_HANDOFF_DELIVERY_MANIFEST.md").read_text(
+    text = (ROOT / "docs" / "handoff" / "UE_HANDOFF_DELIVERY_MANIFEST.md").read_text(
         encoding="utf-8-sig"
     )
 

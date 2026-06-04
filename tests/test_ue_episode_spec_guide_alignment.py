@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-GUIDE = ROOT / "docs" / "UE_EPISODE_SPEC_JSON_GUIDE.md"
+GUIDE = ROOT / "docs" / "archive" / "previous_episode_spec" / "UE_EPISODE_SPEC_JSON_GUIDE.md"
 
 
 def test_ue_episode_spec_json_guide_exists_and_contains_core_contract_terms() -> None:
@@ -24,14 +24,14 @@ def test_ue_episode_spec_json_guide_exists_and_contains_core_contract_terms() ->
         assert term in text
 
 
-def test_project_docs_reference_ue_episode_spec_guide_as_source_of_truth() -> None:
+def test_project_docs_reference_archived_ue_episode_spec_guide() -> None:
     for path in [
         ROOT / "README.md",
         ROOT / "docs" / "README.md",
-        ROOT / "docs" / "UE5_EPISODE_SPEC_ADAPTER.md",
-        ROOT / "docs" / "UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md",
-        ROOT / "docs" / "UE_TEAM_HANDOFF_PACKAGE.md",
-        ROOT / "docs" / "UE_INTEGRATION_HANDOFF_INDEX.md",
+        ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_ADAPTER.md",
+        ROOT / "docs" / "handoff" / "UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md",
+        ROOT / "docs" / "archive" / "previous_episode_spec" / "UE_TEAM_HANDOFF_PACKAGE.md",
+        ROOT / "docs" / "handoff" / "UE_INTEGRATION_HANDOFF_INDEX.md",
     ]:
         assert "UE_EPISODE_SPEC_JSON_GUIDE.md" in path.read_text(encoding="utf-8"), path
 

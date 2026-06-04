@@ -7,7 +7,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILDER = ROOT / "app" / "services" / "environment_generation_constraints_builder.py"
-GUIDE = ROOT / "docs" / "ENVIRONMENT_SAMPLER_GENERATION_INTEGRATION.md"
+GUIDE = ROOT / "docs" / "environment" / "ENVIRONMENT_SAMPLER_GENERATION_INTEGRATION.md"
 GENERATION_MODEL = ROOT / "app" / "models" / "generation.py"
 PROMPT_BUILDER = ROOT / "app" / "services" / "world_config_prompt_builder.py"
 POST_PROCESSOR = ROOT / "app" / "services" / "world_config_scenario_post_processor.py"
@@ -81,7 +81,7 @@ def run_check() -> dict[str, Any]:
 
     for key, message in [
         ("builderExists", "app/services/environment_generation_constraints_builder.py is missing."),
-        ("guideExists", "docs/ENVIRONMENT_SAMPLER_GENERATION_INTEGRATION.md is missing."),
+        ("guideExists", "docs/environment/ENVIRONMENT_SAMPLER_GENERATION_INTEGRATION.md is missing."),
         ("generationModelHasEnvironmentSampling", "generation.py must include environmentSampling constraints."),
         ("builderCallsSampler", "environment generation builder must call sample_environment_parameters."),
         ("promptHasNumericEnvironmentConstraints", "Prompt builder must include Numeric Environment Constraints."),

@@ -10,7 +10,7 @@ REQUIRED_FILES = {
     ".env.example",
     "app/core/settings.py",
     "app/services/llm_provider_policy.py",
-    "docs/LLM_PROVIDER_CONFIGURATION.md",
+    "docs/providers/LLM_PROVIDER_CONFIGURATION.md",
 }
 
 

@@ -7,7 +7,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 HELPER = ROOT / "app" / "utils" / "report_serialization.py"
-GUIDE = ROOT / "docs" / "REPORT_SERIALIZATION_GUIDE.md"
+GUIDE = ROOT / "docs" / "tooling" / "REPORT_SERIALIZATION_GUIDE.md"
 SCRIPT_PATHS = [
     ROOT / "scripts" / "run_openai_world_config_smoke.py",
     ROOT / "scripts" / "run_ue5_handoff_smoke.py",
@@ -50,7 +50,7 @@ def run_check() -> dict[str, Any]:
     if not HELPER.exists():
         result["errors"].append("app/utils/report_serialization.py is missing.")
     if not GUIDE.exists():
-        result["errors"].append("docs/REPORT_SERIALIZATION_GUIDE.md is missing.")
+        result["errors"].append("docs/tooling/REPORT_SERIALIZATION_GUIDE.md is missing.")
 
     for path in SCRIPT_PATHS:
         text = path.read_text(encoding="utf-8-sig") if path.exists() else ""

@@ -7,11 +7,11 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-GUIDE = ROOT / "docs" / "UE_EPISODE_SPEC_JSON_GUIDE.md"
+GUIDE = ROOT / "docs" / "archive" / "previous_episode_spec" / "UE_EPISODE_SPEC_JSON_GUIDE.md"
 ADAPTER = ROOT / "app" / "services" / "world_config_to_episode_spec_adapter.py"
 README = ROOT / "README.md"
 DOCS_README = ROOT / "docs" / "README.md"
-ADAPTER_DOC = ROOT / "docs" / "UE5_EPISODE_SPEC_ADAPTER.md"
+ADAPTER_DOC = ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_ADAPTER.md"
 
 FORBIDDEN_ARTIFACTS = [
     ROOT / "samples",
@@ -63,7 +63,7 @@ def run_check() -> dict[str, Any]:
     }
 
     for key, message in [
-        ("guideExists", "docs/UE_EPISODE_SPEC_JSON_GUIDE.md is missing."),
+        ("guideExists", "docs/archive/previous_episode_spec/UE_EPISODE_SPEC_JSON_GUIDE.md is missing."),
         ("guideHasSchema", "Guide must include episode_actor_spawn_mvp."),
         ("guideHasRootSections", "Guide must include ground_model, paths, actors."),
         ("guideHasUnitsAndVectors", "Guide must include location_m, size_m, speed_mps."),

@@ -9,10 +9,10 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = [
-    ROOT / "docs" / "UE5_WORLD_CONFIG_FIELD_MAPPING.md",
-    ROOT / "docs" / "UE5_CONTROLLED_INTEGRATION_TEST_PLAN.md",
-    ROOT / "docs" / "UE5_WORLD_CONFIG_PARSER_PSEUDOCODE.md",
-    ROOT / "docs" / "UE5_HANDOFF_ACCEPTANCE_CHECKLIST.md",
+    ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_WORLD_CONFIG_FIELD_MAPPING.md",
+    ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_CONTROLLED_INTEGRATION_TEST_PLAN.md",
+    ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_WORLD_CONFIG_PARSER_PSEUDOCODE.md",
+    ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_HANDOFF_ACCEPTANCE_CHECKLIST.md",
 ]
 SCRIPT_PATH = ROOT / "scripts" / "export_ue5_handoff_payload.py"
 

@@ -11,7 +11,7 @@ def _read(path: Path) -> str:
 
 
 def test_map_generation_data_sources_doc_exists_and_explains_sources() -> None:
-    data_sources = ROOT / "docs" / "MAP_GENERATION_DATA_SOURCES.md"
+    data_sources = ROOT / "docs" / "architecture" / "MAP_GENERATION_DATA_SOURCES.md"
 
     assert data_sources.exists()
     data_text = _read(data_sources)

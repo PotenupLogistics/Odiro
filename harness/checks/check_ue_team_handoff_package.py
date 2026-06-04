@@ -7,10 +7,10 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = [
-    ROOT / "docs" / "UE_TEAM_HANDOFF_PACKAGE.md",
-    ROOT / "docs" / "UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md",
-    ROOT / "docs" / "UE_TEAM_MESSAGE_DRAFT.md",
-    ROOT / "docs" / "UE5_EPISODE_SPEC_CONTROLLED_SMOKE_RESULT.md",
+    ROOT / "docs" / "archive" / "previous_episode_spec" / "UE_TEAM_HANDOFF_PACKAGE.md",
+    ROOT / "docs" / "handoff" / "UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md",
+    ROOT / "docs" / "handoff" / "UE_TEAM_MESSAGE_DRAFT.md",
+    ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_CONTROLLED_SMOKE_RESULT.md",
 ]
 
 

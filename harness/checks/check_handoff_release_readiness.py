@@ -9,10 +9,8 @@ ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
 
 REQUIRED_DOCS = [
-    DOCS / "UE_HANDOFF_DELIVERY_MANIFEST.md",
-    DOCS / "HANDOFF_RELEASE_NOTES.md",
-    DOCS / "HANDOFF_READINESS_CHECKLIST.md",
-    DOCS / "HARNESS_WARNING_EXPLANATION.md",
+    DOCS / "handoff" / "UE_HANDOFF_DELIVERY_MANIFEST.md",
+    DOCS / "handoff" / "HANDOFF_RELEASE_NOTES.md",
 ]
 
 
@@ -47,8 +45,8 @@ def run_check() -> dict[str, Any]:
     readme_text = (ROOT / "README.md").read_text(encoding="utf-8-sig")
     docs_readme_text = (DOCS / "README.md").read_text(encoding="utf-8-sig")
     manifest_text = (
-        (DOCS / "UE_HANDOFF_DELIVERY_MANIFEST.md").read_text(encoding="utf-8-sig")
-        if (DOCS / "UE_HANDOFF_DELIVERY_MANIFEST.md").exists()
+        (DOCS / "handoff" / "UE_HANDOFF_DELIVERY_MANIFEST.md").read_text(encoding="utf-8-sig")
+        if (DOCS / "handoff" / "UE_HANDOFF_DELIVERY_MANIFEST.md").exists()
         else ""
     )
 
@@ -62,6 +60,16 @@ def run_check() -> dict[str, Any]:
         "docsReadmeLinksReleaseNotes": "HANDOFF_RELEASE_NOTES.md" in docs_readme_text,
         "manifestMentionsEpisodeSpecResponse": "responseFormat=episode_spec" in manifest_text,
         "manifestMentionsKickboard": "obstacle.kickboard" in manifest_text,
+        "releaseNotesMentionOpenAiFirst": "OpenAI-first" in (
+            (DOCS / "handoff" / "HANDOFF_RELEASE_NOTES.md").read_text(encoding="utf-8-sig")
+            if (DOCS / "handoff" / "HANDOFF_RELEASE_NOTES.md").exists()
+            else ""
+        ),
+        "releaseNotesMentionSetupPair": "setup pair" in (
+            (DOCS / "handoff" / "HANDOFF_RELEASE_NOTES.md").read_text(encoding="utf-8-sig")
+            if (DOCS / "handoff" / "HANDOFF_RELEASE_NOTES.md").exists()
+            else ""
+        ),
         "openAiImports": [],
         "forbiddenArtifacts": [],
         "errors": [],
@@ -78,6 +86,10 @@ def run_check() -> dict[str, Any]:
         result["errors"].append("Delivery manifest does not mention responseFormat=episode_spec.")
     if not result["manifestMentionsKickboard"]:
         result["errors"].append("Delivery manifest does not mention obstacle.kickboard.")
+    if not result["releaseNotesMentionOpenAiFirst"]:
+        result["errors"].append("Release notes do not mention OpenAI-first smoke.")
+    if not result["releaseNotesMentionSetupPair"]:
+        result["errors"].append("Release notes do not mention setup pair smoke.")
 
     result["openAiImports"] = _detect_openai_imports()
     if result["openAiImports"]:

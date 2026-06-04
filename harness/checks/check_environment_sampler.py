@@ -20,7 +20,7 @@ REQUIRED_PATHS = [
     ROOT / "app" / "services" / "environment_parameter_catalog.py",
     ROOT / "app" / "services" / "environment_parameter_sampler.py",
     SCRIPT,
-    ROOT / "docs" / "ENVIRONMENT_SAMPLER_DESIGN.md",
+    ROOT / "docs" / "environment" / "ENVIRONMENT_SAMPLER_DESIGN.md",
 ]
 
 FORBIDDEN_ARTIFACTS = [

@@ -6,8 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PACK_DIR = ROOT / "data" / "sources" / "review" / "manual_review_pack"
-EXECUTION_PLAN_PATH = ROOT / "docs" / "MANUAL_REVIEW_EXECUTION_PLAN.md"
-INPUT_GUIDE_PATH = ROOT / "docs" / "MANUAL_CONFIRMATION_INPUT_GUIDE.md"
+EXECUTION_PLAN_PATH = ROOT / "docs" / "manual_review" / "MANUAL_REVIEW_EXECUTION_PLAN.md"
+INPUT_GUIDE_PATH = ROOT / "docs" / "manual_review" / "MANUAL_CONFIRMATION_INPUT_GUIDE.md"
 MANUAL_CONFIRMATION_PATH = ROOT / "data" / "sources" / "review" / "confirmed" / "manual_confirmation_results.json"
 POLICY_CARD_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 EXPECTED_PACK_FILES = {

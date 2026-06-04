@@ -9,7 +9,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = ROOT / "scripts" / "run_ollama_world_config_smoke.py"
-GUIDE_PATH = ROOT / "docs" / "OLLAMA_LIVE_SMOKE_GUIDE.md"
+GUIDE_PATH = ROOT / "docs" / "providers" / "OLLAMA_LIVE_SMOKE_GUIDE.md"
 
 
 def _base_result() -> dict[str, Any]:
@@ -93,7 +93,7 @@ def run_check() -> dict[str, Any]:
         result["errors"].append("scripts/run_ollama_world_config_smoke.py is missing.")
         return result
     if not result["guideExists"]:
-        result["errors"].append("docs/OLLAMA_LIVE_SMOKE_GUIDE.md is missing.")
+        result["errors"].append("docs/providers/OLLAMA_LIVE_SMOKE_GUIDE.md is missing.")
 
     help_result = _run_script("--help")
     result["helpWorks"] = help_result.returncode == 0 and "--dry-run" in help_result.stdout

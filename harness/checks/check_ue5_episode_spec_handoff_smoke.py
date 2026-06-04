@@ -8,7 +8,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 REPORT_JSON = ROOT / "harness" / "reports" / "ue5_episode_spec_handoff_smoke.json"
 REPORT_MD = ROOT / "harness" / "reports" / "ue5_episode_spec_handoff_smoke.md"
-SUMMARY_DOC = ROOT / "docs" / "UE5_EPISODE_SPEC_HANDOFF_SUMMARY.md"
+SUMMARY_DOC = ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_HANDOFF_SUMMARY.md"
 
 
 def _detect_forbidden_artifacts() -> list[str]:
@@ -63,7 +63,7 @@ def run_check() -> dict[str, Any]:
     if not result["reportMarkdownExists"]:
         result["errors"].append("harness/reports/ue5_episode_spec_handoff_smoke.md is missing.")
     if not result["summaryDocExists"]:
-        result["errors"].append("docs/UE5_EPISODE_SPEC_HANDOFF_SUMMARY.md is missing.")
+        result["errors"].append("docs/archive/previous_episode_spec/UE5_EPISODE_SPEC_HANDOFF_SUMMARY.md is missing.")
 
     if REPORT_JSON.exists():
         payload = json.loads(REPORT_JSON.read_text(encoding="utf-8-sig"))

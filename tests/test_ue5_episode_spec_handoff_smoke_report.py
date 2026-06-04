@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_JSON = ROOT / "harness" / "reports" / "ue5_episode_spec_handoff_smoke.json"
-SUMMARY_DOC = ROOT / "docs" / "UE5_EPISODE_SPEC_HANDOFF_SUMMARY.md"
+SUMMARY_DOC = ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_HANDOFF_SUMMARY.md"
 
 
 def test_ue5_episode_spec_handoff_summary_doc_exists() -> None:

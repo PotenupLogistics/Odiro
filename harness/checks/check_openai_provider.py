@@ -12,7 +12,7 @@ SCRIPT = ROOT / "scripts" / "run_openai_world_config_smoke.py"
 
 REQUIRED_FILES = [
     ROOT / "app" / "services" / "llm_openai_client.py",
-    ROOT / "docs" / "OPENAI_PROVIDER_GUIDE.md",
+    ROOT / "docs" / "providers" / "OPENAI_PROVIDER_GUIDE.md",
     SCRIPT,
 ]
 

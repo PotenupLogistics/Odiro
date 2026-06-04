@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_environment_parameter_spec_exists_and_lists_core_parameters() -> None:
-    spec_path = ROOT / "docs" / "ENVIRONMENT_PARAMETER_SPEC.md"
+    spec_path = ROOT / "docs" / "environment" / "ENVIRONMENT_PARAMETER_SPEC.md"
     assert spec_path.exists()
 
     text = spec_path.read_text(encoding="utf-8-sig")
@@ -21,7 +21,7 @@ def test_environment_parameter_spec_exists_and_lists_core_parameters() -> None:
 
 
 def test_environment_parameter_spec_rejects_low_middle_high_as_json_values() -> None:
-    text = (ROOT / "docs" / "ENVIRONMENT_PARAMETER_SPEC.md").read_text(
+    text = (ROOT / "docs" / "environment" / "ENVIRONMENT_PARAMETER_SPEC.md").read_text(
         encoding="utf-8-sig"
     )
 
@@ -34,7 +34,7 @@ def test_environment_parameter_spec_rejects_low_middle_high_as_json_values() -> 
 
 
 def test_episode_spec_adapter_documents_unit_conversion() -> None:
-    text = (ROOT / "docs" / "UE5_EPISODE_SPEC_ADAPTER.md").read_text(
+    text = (ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_ADAPTER.md").read_text(
         encoding="utf-8-sig"
     )
 
@@ -50,7 +50,7 @@ def test_episode_spec_adapter_documents_unit_conversion() -> None:
 
 
 def test_world_config_field_mapping_documents_environment_parameters() -> None:
-    text = (ROOT / "docs" / "UE5_WORLD_CONFIG_FIELD_MAPPING.md").read_text(
+    text = (ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_WORLD_CONFIG_FIELD_MAPPING.md").read_text(
         encoding="utf-8-sig"
     )
 

@@ -7,10 +7,15 @@ from harness.checks.check_api_shell import run_check as run_api_shell_check
 from harness.checks.check_high_priority_review import run_check as run_high_priority_check
 from harness.checks.check_handoff_response_summary import run_check as run_handoff_response_summary_check
 from harness.checks.check_contract_validation import run_check as run_contract_validation_check
+from harness.checks.check_docs_inventory import run_check as run_docs_inventory_check
 from harness.checks.check_generation_endpoint import run_check as run_generation_endpoint_check
 from harness.checks.check_generation_trace import run_check as run_generation_trace_check
+from harness.checks.check_setup_pair_handoff import run_check as run_setup_pair_handoff_check
+from harness.checks.check_setup_pair_handoff_docs import run_check as run_setup_pair_handoff_docs_check
+from harness.checks.check_setup_pair_models import run_check as run_setup_pair_models_check
 from harness.checks.check_run_queue_export import run_check as run_run_queue_export_check
 from harness.checks.check_scenario_generation_api import run_check as run_scenario_generation_api_check
+from harness.checks.check_ue_contract_docs import run_check as run_ue_contract_docs_check
 from harness.checks.check_generic_obstacle_scenario import run_check as run_generic_obstacle_scenario_check
 from harness.checks.check_episode_spec_adapter import run_check as run_episode_spec_adapter_check
 from harness.checks.check_episode_spec_scenario_reflection import run_check as run_episode_spec_scenario_reflection_check
@@ -85,6 +90,7 @@ def _overall_status(
     policy_mapping_docs_result: dict,
     json_schemas_result: dict,
     contract_validation_result: dict,
+    docs_inventory_result: dict,
     natural_language_plan_result: dict,
     world_config_prompt_builder_result: dict,
     world_config_generation_orchestrator_result: dict,
@@ -93,8 +99,12 @@ def _overall_status(
     api_shell_result: dict,
     generation_endpoint_result: dict,
     generation_trace_result: dict,
+    setup_pair_handoff_result: dict,
     run_queue_export_result: dict,
     scenario_generation_api_result: dict,
+    setup_pair_handoff_docs_result: dict,
+    setup_pair_models_result: dict,
+    ue_contract_docs_result: dict,
     generic_obstacle_scenario_result: dict,
     episode_spec_adapter_result: dict,
     episode_spec_scenario_reflection_result: dict,
@@ -145,6 +155,7 @@ def _overall_status(
         or not policy_mapping_docs_result["passed"]
         or not json_schemas_result["passed"]
         or not contract_validation_result["passed"]
+        or not docs_inventory_result["passed"]
         or not natural_language_plan_result["passed"]
         or not world_config_prompt_builder_result["passed"]
         or not world_config_generation_orchestrator_result["passed"]
@@ -153,8 +164,12 @@ def _overall_status(
         or not api_shell_result["passed"]
         or not generation_endpoint_result["passed"]
         or not generation_trace_result["passed"]
+        or not setup_pair_handoff_result["passed"]
         or not run_queue_export_result["passed"]
         or not scenario_generation_api_result["passed"]
+        or not setup_pair_handoff_docs_result["passed"]
+        or not setup_pair_models_result["passed"]
+        or not ue_contract_docs_result["passed"]
         or not generic_obstacle_scenario_result["passed"]
         or not episode_spec_adapter_result["passed"]
         or not episode_spec_scenario_reflection_result["passed"]
@@ -205,6 +220,7 @@ def _overall_status(
         or policy_mapping_docs_result.get("warning")
         or json_schemas_result.get("warning")
         or contract_validation_result.get("warning")
+        or docs_inventory_result.get("warning")
         or natural_language_plan_result.get("warning")
         or world_config_prompt_builder_result.get("warning")
         or world_config_generation_orchestrator_result.get("warning")
@@ -213,8 +229,12 @@ def _overall_status(
         or api_shell_result.get("warning")
         or generation_endpoint_result.get("warning")
         or generation_trace_result.get("warning")
+        or setup_pair_handoff_result.get("warning")
         or run_queue_export_result.get("warning")
         or scenario_generation_api_result.get("warning")
+        or setup_pair_handoff_docs_result.get("warning")
+        or setup_pair_models_result.get("warning")
+        or ue_contract_docs_result.get("warning")
         or generic_obstacle_scenario_result.get("warning")
         or episode_spec_adapter_result.get("warning")
         or episode_spec_scenario_reflection_result.get("warning")
@@ -269,6 +289,7 @@ def build_summary(
     policy_mapping_docs_result: dict,
     json_schemas_result: dict,
     contract_validation_result: dict,
+    docs_inventory_result: dict,
     natural_language_plan_result: dict,
     world_config_prompt_builder_result: dict,
     world_config_generation_orchestrator_result: dict,
@@ -277,8 +298,12 @@ def build_summary(
     api_shell_result: dict,
     generation_endpoint_result: dict,
     generation_trace_result: dict,
+    setup_pair_handoff_result: dict,
     run_queue_export_result: dict,
     scenario_generation_api_result: dict,
+    setup_pair_handoff_docs_result: dict,
+    setup_pair_models_result: dict,
+    ue_contract_docs_result: dict,
     generic_obstacle_scenario_result: dict,
     episode_spec_adapter_result: dict,
     episode_spec_scenario_reflection_result: dict,
@@ -337,6 +362,7 @@ def build_summary(
         f"- Policy mapping docs result: {'PASS' if policy_mapping_docs_result['passed'] else 'FAIL'}",
         f"- JSON schemas result: {'PASS' if json_schemas_result['passed'] else 'FAIL'}",
         f"- Contract validation result: {'PASS' if contract_validation_result['passed'] else 'FAIL'}",
+        f"- Docs inventory result: {'PASS' if docs_inventory_result['passed'] else 'FAIL'}",
         f"- Natural language plan result: {'PASS' if natural_language_plan_result['passed'] else 'FAIL'}",
         f"- World Config prompt builder result: {'PASS' if world_config_prompt_builder_result['passed'] else 'FAIL'}",
         f"- World Config generation orchestrator result: {'PASS' if world_config_generation_orchestrator_result['passed'] else 'FAIL'}",
@@ -345,8 +371,12 @@ def build_summary(
         f"- API shell result: {'PASS' if api_shell_result['passed'] else 'FAIL'}",
         f"- Generation endpoint result: {'PASS' if generation_endpoint_result['passed'] else 'FAIL'}",
         f"- Generation trace result: {'PASS' if generation_trace_result['passed'] else 'FAIL'}",
+        f"- Setup pair handoff result: {'PASS' if setup_pair_handoff_result['passed'] else 'FAIL'}",
         f"- RunQueue export result: {'PASS' if run_queue_export_result['passed'] else 'FAIL'}",
         f"- Scenario generation API result: {'PASS' if scenario_generation_api_result['passed'] else 'FAIL'}",
+        f"- Setup pair handoff docs result: {'PASS' if setup_pair_handoff_docs_result['passed'] else 'FAIL'}",
+        f"- Setup pair models result: {'PASS' if setup_pair_models_result['passed'] else 'FAIL'}",
+        f"- UE contract docs result: {'PASS' if ue_contract_docs_result['passed'] else 'FAIL'}",
         f"- Generic obstacle scenario result: {'PASS' if generic_obstacle_scenario_result['passed'] else 'FAIL'}",
         f"- EpisodeSpec adapter result: {'PASS' if episode_spec_adapter_result['passed'] else 'FAIL'}",
         f"- EpisodeSpec scenario reflection result: {'PASS' if episode_spec_scenario_reflection_result['passed'] else 'FAIL'}",
@@ -789,6 +819,7 @@ def main() -> int:
     policy_mapping_docs_result = run_policy_mapping_docs_check()
     json_schemas_result = run_json_schemas_check()
     contract_validation_result = run_contract_validation_check()
+    docs_inventory_result = run_docs_inventory_check()
     natural_language_plan_result = run_natural_language_plan_check()
     world_config_prompt_builder_result = run_world_config_prompt_builder_check()
     world_config_generation_orchestrator_result = run_world_config_generation_orchestrator_check()
@@ -797,8 +828,12 @@ def main() -> int:
     api_shell_result = run_api_shell_check()
     generation_endpoint_result = run_generation_endpoint_check()
     generation_trace_result = run_generation_trace_check()
+    setup_pair_handoff_result = run_setup_pair_handoff_check()
     run_queue_export_result = run_run_queue_export_check()
     scenario_generation_api_result = run_scenario_generation_api_check()
+    setup_pair_handoff_docs_result = run_setup_pair_handoff_docs_check()
+    setup_pair_models_result = run_setup_pair_models_check()
+    ue_contract_docs_result = run_ue_contract_docs_check()
     generic_obstacle_scenario_result = run_generic_obstacle_scenario_check()
     episode_spec_adapter_result = run_episode_spec_adapter_check()
     episode_spec_scenario_reflection_result = run_episode_spec_scenario_reflection_check()
@@ -848,6 +883,7 @@ def main() -> int:
         policy_mapping_docs_result,
         json_schemas_result,
         contract_validation_result,
+        docs_inventory_result,
         natural_language_plan_result,
         world_config_prompt_builder_result,
         world_config_generation_orchestrator_result,
@@ -856,8 +892,12 @@ def main() -> int:
         api_shell_result,
         generation_endpoint_result,
         generation_trace_result,
+        setup_pair_handoff_result,
         run_queue_export_result,
         scenario_generation_api_result,
+        setup_pair_handoff_docs_result,
+        setup_pair_models_result,
+        ue_contract_docs_result,
         generic_obstacle_scenario_result,
         episode_spec_adapter_result,
         episode_spec_scenario_reflection_result,
@@ -911,6 +951,7 @@ def main() -> int:
             "policyMappingDocs": policy_mapping_docs_result,
             "jsonSchemas": json_schemas_result,
             "contractValidation": contract_validation_result,
+            "docsInventory": docs_inventory_result,
             "naturalLanguagePlan": natural_language_plan_result,
             "worldConfigPromptBuilder": world_config_prompt_builder_result,
             "worldConfigGenerationOrchestrator": world_config_generation_orchestrator_result,
@@ -919,8 +960,12 @@ def main() -> int:
             "apiShell": api_shell_result,
             "generationEndpoint": generation_endpoint_result,
             "generationTrace": generation_trace_result,
+            "setupPairHandoff": setup_pair_handoff_result,
             "runQueueExport": run_queue_export_result,
             "scenarioGenerationApi": scenario_generation_api_result,
+            "setupPairHandoffDocs": setup_pair_handoff_docs_result,
+            "setupPairModels": setup_pair_models_result,
+            "ueContractDocs": ue_contract_docs_result,
             "genericObstacleScenario": generic_obstacle_scenario_result,
             "episodeSpecAdapter": episode_spec_adapter_result,
             "episodeSpecScenarioReflection": episode_spec_scenario_reflection_result,
@@ -982,6 +1027,7 @@ def main() -> int:
             policy_mapping_docs_result,
             json_schemas_result,
             contract_validation_result,
+            docs_inventory_result,
             natural_language_plan_result,
             world_config_prompt_builder_result,
             world_config_generation_orchestrator_result,
@@ -990,6 +1036,12 @@ def main() -> int:
             api_shell_result,
             generation_endpoint_result,
             generation_trace_result,
+            setup_pair_handoff_result,
+            run_queue_export_result,
+            scenario_generation_api_result,
+            setup_pair_handoff_docs_result,
+            setup_pair_models_result,
+            ue_contract_docs_result,
             generic_obstacle_scenario_result,
             episode_spec_adapter_result,
             episode_spec_scenario_reflection_result,
@@ -1043,6 +1095,7 @@ def main() -> int:
     print(f"Policy mapping docs check: {'PASS' if policy_mapping_docs_result['passed'] else 'FAIL'}")
     print(f"JSON schemas check: {'PASS' if json_schemas_result['passed'] else 'FAIL'}")
     print(f"Contract validation check: {'PASS' if contract_validation_result['passed'] else 'FAIL'}")
+    print(f"Docs inventory check: {'PASS' if docs_inventory_result['passed'] else 'FAIL'}")
     print(f"Natural language plan check: {'PASS' if natural_language_plan_result['passed'] else 'FAIL'}")
     print(f"World Config prompt builder check: {'PASS' if world_config_prompt_builder_result['passed'] else 'FAIL'}")
     print(f"World Config generation orchestrator check: {'PASS' if world_config_generation_orchestrator_result['passed'] else 'FAIL'}")
@@ -1051,8 +1104,10 @@ def main() -> int:
     print(f"API shell check: {'PASS' if api_shell_result['passed'] else 'FAIL'}")
     print(f"Generation endpoint check: {'PASS' if generation_endpoint_result['passed'] else 'FAIL'}")
     print(f"Generation trace check: {'PASS' if generation_trace_result['passed'] else 'FAIL'}")
+    print(f"Setup pair handoff check: {'PASS' if setup_pair_handoff_result['passed'] else 'FAIL'}")
     print(f"RunQueue export check: {'PASS' if run_queue_export_result['passed'] else 'FAIL'}")
     print(f"Scenario generation API check: {'PASS' if scenario_generation_api_result['passed'] else 'FAIL'}")
+    print(f"Setup pair handoff docs check: {'PASS' if setup_pair_handoff_docs_result['passed'] else 'FAIL'}")
     print(f"Generic obstacle scenario check: {'PASS' if generic_obstacle_scenario_result['passed'] else 'FAIL'}")
     print(f"EpisodeSpec adapter check: {'PASS' if episode_spec_adapter_result['passed'] else 'FAIL'}")
     print(f"EpisodeSpec scenario reflection check: {'PASS' if episode_spec_scenario_reflection_result['passed'] else 'FAIL'}")
@@ -1113,6 +1168,8 @@ def main() -> int:
         print("JSON schemas warning: schema/model artifacts require attention")
     if contract_validation_result.get("warning"):
         print("Contract validation warning: validation layer requires attention")
+    if docs_inventory_result.get("warning"):
+        print("Docs inventory warning: docs inventory requires attention")
     if natural_language_plan_result.get("warning"):
         print("Natural language plan warning: natural language docs require attention")
     if world_config_prompt_builder_result.get("warning"):
@@ -1129,6 +1186,8 @@ def main() -> int:
         print("Generation endpoint warning: endpoint artifacts require attention")
     if generation_trace_result.get("warning"):
         print("Generation trace warning: trace artifacts require attention")
+    if setup_pair_handoff_docs_result.get("warning"):
+        print("Setup pair handoff docs warning: docs require attention")
     if generic_obstacle_scenario_result.get("warning"):
         print("Generic obstacle scenario warning: scenario handling artifacts require attention")
     if episode_spec_adapter_result.get("warning"):

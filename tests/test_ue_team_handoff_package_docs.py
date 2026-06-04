@@ -5,10 +5,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = {
-    "package": ROOT / "docs" / "UE_TEAM_HANDOFF_PACKAGE.md",
-    "endpoint": ROOT / "docs" / "UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md",
-    "message": ROOT / "docs" / "UE_TEAM_MESSAGE_DRAFT.md",
-    "smoke": ROOT / "docs" / "UE5_EPISODE_SPEC_CONTROLLED_SMOKE_RESULT.md",
+    "package": ROOT / "docs" / "archive" / "previous_episode_spec" / "UE_TEAM_HANDOFF_PACKAGE.md",
+    "endpoint": ROOT / "docs" / "handoff" / "UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md",
+    "message": ROOT / "docs" / "handoff" / "UE_TEAM_MESSAGE_DRAFT.md",
+    "smoke": ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_CONTROLLED_SMOKE_RESULT.md",
 }
 
 

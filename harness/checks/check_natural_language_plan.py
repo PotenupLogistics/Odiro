@@ -8,10 +8,10 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 POLICY_CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 EXPECTED_DOCS = [
-    ROOT / "docs" / "NATURAL_LANGUAGE_INPUT_PLAN.md",
-    ROOT / "docs" / "LLM_WORLD_CONFIG_GENERATION_FLOW.md",
-    ROOT / "docs" / "WORLD_CONFIG_PROMPT_SPEC.md",
-    ROOT / "docs" / "NATURAL_LANGUAGE_GENERATION_CONTRACT.md",
+    ROOT / "docs" / "json_contracts" / "NATURAL_LANGUAGE_INPUT_PLAN.md",
+    ROOT / "docs" / "architecture" / "LLM_WORLD_CONFIG_GENERATION_FLOW.md",
+    ROOT / "docs" / "architecture" / "WORLD_CONFIG_PROMPT_SPEC.md",
+    ROOT / "docs" / "json_contracts" / "NATURAL_LANGUAGE_GENERATION_CONTRACT.md",
 ]
 
 

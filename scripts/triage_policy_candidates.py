@@ -11,7 +11,7 @@ CANDIDATE_DIR = ROOT / "data" / "sources" / "review" / "candidates" / "korea"
 TRIAGE_DIR = ROOT / "data" / "sources" / "review" / "triage"
 TRIAGE_JSON_PATH = TRIAGE_DIR / "policy_candidate_triage.json"
 TRIAGE_MD_PATH = TRIAGE_DIR / "policy_candidate_triage.md"
-MANUAL_REVIEW_QUEUE_PATH = ROOT / "docs" / "MANUAL_REVIEW_QUEUE.md"
+MANUAL_REVIEW_QUEUE_PATH = ROOT / "docs" / "manual_review" / "MANUAL_REVIEW_QUEUE.md"
 REVIEW_DIR = ROOT / "data" / "sources" / "review" / "korea"
 
 MVP_CATEGORIES = {

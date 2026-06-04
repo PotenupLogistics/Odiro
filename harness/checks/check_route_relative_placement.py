@@ -8,7 +8,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 UTIL = ROOT / "app" / "services" / "route_geometry_utils.py"
-DOC = ROOT / "docs" / "ROUTE_RELATIVE_PLACEMENT.md"
+DOC = ROOT / "docs" / "architecture" / "ROUTE_RELATIVE_PLACEMENT.md"
 INTENT = ROOT / "app" / "services" / "world_config_scenario_intent_extractor.py"
 POST = ROOT / "app" / "services" / "world_config_scenario_post_processor.py"
 EPISODE_REFLECTION = ROOT / "app" / "services" / "episode_spec_scenario_reflection.py"
@@ -65,7 +65,7 @@ def run_check() -> dict[str, Any]:
 
     for key, message in [
         ("utilityExists", "app/services/route_geometry_utils.py is missing."),
-        ("docExists", "docs/ROUTE_RELATIVE_PLACEMENT.md is missing."),
+        ("docExists", "docs/architecture/ROUTE_RELATIVE_PLACEMENT.md is missing."),
         ("intentExtractorHasRouteMidpoint", "Scenario intent extractor must detect route_midpoint expressions."),
         ("postProcessorSetsRouteMidpoint", "Post-processor must add/set obstacles at route midpoint."),
         ("episodeReflectionChecksMidpoint", "EpisodeSpec reflection must validate route midpoint placement."),

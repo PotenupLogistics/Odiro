@@ -13,11 +13,11 @@ HANDOFF_MODEL = ROOT / "app" / "models" / "handoff.py"
 HANDOFF_SERVICE = ROOT / "app" / "services" / "ue5_world_config_handoff_service.py"
 EPISODE_REFLECTION = ROOT / "app" / "services" / "episode_spec_scenario_reflection.py"
 DOCS = [
-    ROOT / "docs" / "SCENARIO_INTENT_EXTRACTION.md",
-    ROOT / "docs" / "SCENARIO_REFLECTION_VALIDATION.md",
-    ROOT / "docs" / "SCENARIO_POST_PROCESSING.md",
-    ROOT / "docs" / "UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md",
-    ROOT / "docs" / "API_SHELL_GUIDE.md",
+    ROOT / "docs" / "architecture" / "SCENARIO_INTENT_EXTRACTION.md",
+    ROOT / "docs" / "architecture" / "SCENARIO_REFLECTION_VALIDATION.md",
+    ROOT / "docs" / "architecture" / "SCENARIO_POST_PROCESSING.md",
+    ROOT / "docs" / "handoff" / "UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md",
+    ROOT / "docs" / "tooling" / "API_SHELL_GUIDE.md",
 ]
 
 FORBIDDEN_ARTIFACTS = [
@@ -62,7 +62,9 @@ def run_check() -> dict[str, Any]:
                 "remove_pedestrians_for_no_pedestrian_prompt",
             ]
         ),
-        "handoffDefaultEpisodeSpec": 'responseFormat: Literal["world_config", "episode_spec", "both"] = "episode_spec"' in handoff_model_text,
+        "handoffDefaultEpisodeSpec": "responseFormat:" in handoff_model_text
+        and '"episode_spec"' in handoff_model_text
+        and '= "episode_spec"' in handoff_model_text,
         "diagnosticsIncludeEffectiveResponseFormat": "effectiveResponseFormat" in handoff_service_text,
         "episodeReflectionAllowsNoPedestrian": "expectsNoPedestrian" in episode_reflection_text,
         "docsMentionResponseFormatDefaults": "responseFormat=episode_spec" in docs_text

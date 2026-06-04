@@ -10,7 +10,7 @@ PROCESSOR_PATH = ROOT / "app" / "services" / "world_config_scenario_post_process
 ORCHESTRATOR_PATH = ROOT / "app" / "services" / "world_config_generation_orchestrator.py"
 SCENARIO_MODEL_PATH = ROOT / "app" / "models" / "scenario.py"
 GENERATION_MODEL_PATH = ROOT / "app" / "models" / "generation.py"
-DOC_PATH = ROOT / "docs" / "SCENARIO_POST_PROCESSING.md"
+DOC_PATH = ROOT / "docs" / "architecture" / "SCENARIO_POST_PROCESSING.md"
 POLICY_CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 RAG_CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
 
@@ -69,7 +69,7 @@ def run_check() -> dict[str, Any]:
     if not result["processorExists"]:
         result["errors"].append("app/services/world_config_scenario_post_processor.py is missing.")
     if not result["docExists"]:
-        result["errors"].append("docs/SCENARIO_POST_PROCESSING.md is missing.")
+        result["errors"].append("docs/architecture/SCENARIO_POST_PROCESSING.md is missing.")
 
     scenario_text = SCENARIO_MODEL_PATH.read_text(encoding="utf-8-sig") if SCENARIO_MODEL_PATH.exists() else ""
     result["scenarioModelsPresent"] = (

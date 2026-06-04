@@ -7,7 +7,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DATA_SOURCES = ROOT / "docs" / "MAP_GENERATION_DATA_SOURCES.md"
+DATA_SOURCES = ROOT / "docs" / "architecture" / "MAP_GENERATION_DATA_SOURCES.md"
 README = ROOT / "README.md"
 DOCS_README = ROOT / "docs" / "README.md"
 
@@ -63,7 +63,7 @@ def run_check() -> dict[str, Any]:
     }
 
     for key, message in [
-        ("dataSourcesExists", "docs/MAP_GENERATION_DATA_SOURCES.md is missing."),
+        ("dataSourcesExists", "docs/architecture/MAP_GENERATION_DATA_SOURCES.md is missing."),
         ("readmesLinkDataSources", "README or docs README must link the data sources doc."),
         ("dataSourcesSeparatesPolicyRagFromCoordinates", "Data source docs must state Policy RAG is not a coordinate-generation source."),
         ("dataSourcesExplainCoordinateBasis", "Data source docs must explain coordinate decision inputs."),

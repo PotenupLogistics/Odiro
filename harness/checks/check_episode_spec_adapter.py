@@ -15,7 +15,7 @@ HANDOFF_MODEL_PATH = ROOT / "app" / "models" / "handoff.py"
 HANDOFF_SERVICE_PATH = ROOT / "app" / "services" / "ue5_world_config_handoff_service.py"
 ROUTES_PATH = ROOT / "app" / "api" / "routes.py"
 EXPORT_SCRIPT_PATH = ROOT / "scripts" / "export_ue5_handoff_payload.py"
-DOC_PATH = ROOT / "docs" / "UE5_EPISODE_SPEC_ADAPTER.md"
+DOC_PATH = ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_ADAPTER.md"
 POLICY_CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 RAG_CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
 SCHEMA_PATH = ROOT / "schemas" / "world_config.schema.json"
@@ -93,7 +93,7 @@ def run_check() -> dict[str, Any]:
         ("modelExists", "app/models/episode_spec.py is missing."),
         ("adapterExists", "app/services/world_config_to_episode_spec_adapter.py is missing."),
         ("validatorExists", "app/services/episode_spec_validator.py is missing."),
-        ("docExists", "docs/UE5_EPISODE_SPEC_ADAPTER.md is missing."),
+        ("docExists", "docs/archive/previous_episode_spec/UE5_EPISODE_SPEC_ADAPTER.md is missing."),
         ("exportFormatOptionExists", "export CLI --format option is missing."),
     ]:
         if not result[key]:

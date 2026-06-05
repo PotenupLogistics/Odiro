@@ -560,21 +560,44 @@ param 값은 위 dotted path 그대로 적습니다.
 - force_action_override (값은 "None" 문자열 또는 "Stop"/"SlowDown"/"Repath" — 운영 회차는 "None" 권장)
 param 값은 위 키 그대로 적습니다.
 
-[추천 포함 기준 — 반드시 준수]
-추천은 통계에서 실제 문제가 확인된 파라미터에만 생성한다.
-아래 조건을 만족하지 않으면 해당 파라미터는 추천에서 완전히 제외한다.
+[에피소드 결과에 따른 추천 방향 — 반드시 준수]
 
-단, 다음 두 조건은 에피소드 통계와 무관하게 항상 추천한다:
-- stop_distance_m_threshold / slow_down_distance_m_threshold: DeliveryBotSetup의 LiDAR 값(stop_distance_m, slow_down_distance_m)과 수치가 다를 경우 항상 PolicyServer 쪽을 LiDAR 값에 맞춰 동기화 추천한다.
-- force_action_override: "None"이 아닌 값으로 설정되어 있으면 항상 "None"으로 되돌리는 추천을 생성한다.
+입력의 goal_reached / terminal_reason 값을 먼저 확인하고 아래 모드 중 하나를 적용한다.
+기본 원칙: 안전 > 효율. near_miss나 위험 징후가 있으면 효율 추천보다 안전 추천을 항상 우선한다.
 
-- stop_distance_m / slow_down_distance_m (BotSetup lidar 값): 충돌 or 위험 근접(min_front_distance < stop_distance) 발생 시에만 추천
-- max_speed_kmh / target_speed_kmh: 충돌·전복 발생 시 낮춘다 / 타임아웃·목표 미달 발생 시 높인다. 둘 다 없으면 추천 제외
-- run.time_limit_s: terminal_reason=Timeout 발생 시에만 높인다 / 실제 소요시간이 제한시간의 30% 미만이면 낮춘다. 그 외 추천 제외
-- evaluation.goal_acceptance_radius_m: goal_reached=false 또는 terminal_reason=Timeout 발생 시에만 높인다. 목표 도달 성공이면 추천 제외
-- evaluation.near_miss.distance_m: near_miss_count > 0 또는 보행자 충돌 발생 시에만 높인다. 둘 다 없으면 추천 제외. 절대 낮추지 않는다
-- evaluation.tip_over_angle_deg: robot_tip_over_count > 0 시에만 낮춘다. 60deg 초과 금지. 전복 없으면 추천 제외
-- current == suggested인 추천은 생성하지 않는다 (변경 없는 추천 금지)
+■ 성공 모드 (goal_reached=true)
+  목표: 안전을 유지하면서 배달 효율을 높인다.
+  - near_miss_count > 0 또는 min_front_distance_m < stop_distance_m 이면:
+    효율 추천(속도↑, 감속거리↓)을 생성하지 않는다. 안전 여유를 높이는 방향으로 전환한다.
+  - 위 조건 없을 때만:
+    - max_speed_kmh / target_speed_kmh: 현재값보다 10~20% 높이는 추천을 생성한다.
+    - slow_down_distance_m (BotSetup) / slow_down_distance_m_threshold (PolicyServer):
+      slowdownActionRatio가 0.5 이상이면 감속 구간이 과도하므로 값을 줄이는 방향으로 추천한다.
+      단, stop_distance_m + 0.5m 미만으로는 낮추지 않는다.
+  - 그 외 파라미터: 충돌·전복·near_miss가 없으면 추천하지 않는다.
+
+■ 실패 모드 (goal_reached=false) — terminal_reason별 세분화
+  Timeout (충돌·전복·near_miss 없음):
+    - max_speed_kmh / target_speed_kmh: 현재값보다 10~20% 높인다.
+    - run.time_limit_s: 실제 소요 시간이 제한시간의 80% 이상이면 시간 한도를 늘린다.
+  Timeout (충돌 또는 near_miss 동반):
+    - 속도를 높이지 않는다. 아래 Collision 규칙을 적용한다.
+  Collision / PedestrianCollision:
+    - stop_distance_m / stop_distance_m_threshold: 현재값보다 10~20% 높인다.
+    - max_speed_kmh / target_speed_kmh: 충돌 발생이므로 현재값보다 낮춘다.
+  Stuck / PathFindingFailed:
+    - repath_grace_time_s: 현재값보다 줄여서 더 빠르게 재탐색하도록 추천한다.
+    - slow_down_distance_m: 과도한 감속 가능성을 검토한다. 단, min_front_distance_m < stop_distance_m 이면 줄이지 않는다.
+  그 외 실패:
+    - stop_distance_m / slow_down_distance_m: 안전 여유를 높이는 방향으로 추천한다.
+
+■ 공통 (성공/실패 무관하게 항상 적용)
+  - stop_distance_m_threshold / slow_down_distance_m_threshold: LiDAR 값과 다르면 PolicyServer 쪽을 LiDAR 값에 맞춰 동기화 추천한다.
+  - force_action_override: "None"이 아닌 값으로 설정되어 있으면 항상 "None"으로 되돌리는 추천을 생성한다.
+  - evaluation.near_miss.distance_m: near_miss_count > 0 또는 보행자 충돌 발생 시에만 높인다. 절대 낮추지 않는다.
+  - evaluation.tip_over_angle_deg: robot_tip_over_count > 0 시에만 낮춘다. 60deg 초과 금지. 전복 없으면 추천 제외.
+  - evaluation.goal_acceptance_radius_m: goal_reached=false 시에만 높인다. 목표 도달 성공이면 추천 제외.
+  - current == suggested인 추천은 생성하지 않는다 (변경 없는 추천 금지).
 
 [파라미터 조정 방향 원칙 — 반드시 준수]
 - evaluation.near_miss.distance_m: 안전 기준 임계값. 낮추는 것은 기준 완화이므로 절대 줄이지 않는다.
@@ -811,7 +834,17 @@ def generate_integrated_recommendations(
         max_tokens = cfg.ollamaMaxTokens
         timeout_sec = cfg.ollamaTimeoutSec
 
+    if episode_statistics.goal_reached:
+        mode_hint = "※ 이 에피소드는 성공(goal_reached=true)입니다. 성공 모드 추천 원칙을 적용하세요."
+    else:
+        mode_hint = (
+            f"※ 이 에피소드는 실패(goal_reached=false, "
+            f"terminal_reason={episode_statistics.terminal_reason})입니다. "
+            "실패 모드 추천 원칙을 적용하세요."
+        )
+
     user_prompt = "\n".join([
+        mode_hint,
         _episode_statistics_block(episode_statistics),
         _measurement_statistics_block(measurement_statistics),
         _episode_setup_block(episode_setup),

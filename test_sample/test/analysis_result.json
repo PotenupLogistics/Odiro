@@ -1,8 +1,8 @@
 {
   "schema": "test_sample_analysis_result",
   "version": 2,
-  "analysisId": "c7971d80-aaeb-47ec-b7ea-fd78e5ea14a9",
-  "generatedAt": "2026-06-05T03:12:48Z",
+  "analysisId": "9da035cc-094e-4a03-a10d-4ed71440e761",
+  "generatedAt": "2026-06-05T08:17:50Z",
   "generationMethod": "llm_rag",
   "inputs": {
     "bot_setup": "test_sample\\DeliveryBotSetupSample_1.json",
@@ -81,40 +81,66 @@
     "slowdownActionRatio": 0.4681818181818182,
     "repathActionRatio": 0.0015151515151515152
   },
-  "botSetupRecommendations": [],
+  "botSetupRecommendations": [
+    {
+      "param": "max_speed_kmh",
+      "current": 9.0,
+      "suggested": 10.8,
+      "reason": "현재 최대 속도 9.0km/h에서 10~20% 증가하여 10.8km/h로 설정하면 배달 효율이 향상될 수 있습니다. 안전 사고가 없으므로 속도 증가가 가능합니다.",
+      "citations": [
+        "KOR-003",
+        "PRJ-AGENT"
+      ]
+    },
+    {
+      "param": "target_speed_kmh",
+      "current": 7.5,
+      "suggested": 9.0,
+      "reason": "현재 목표 속도 7.5km/h에서 10~20% 증가하여 9.0km/h로 설정하면 배달 효율이 향상될 수 있습니다. 안전 사고가 없으므로 속도 증가가 가능합니다.",
+      "citations": [
+        "KOR-003",
+        "PRJ-AGENT"
+      ]
+    },
+    {
+      "param": "slow_down_distance_m",
+      "current": 3.8,
+      "suggested": 3.3,
+      "reason": "현재 감속 거리 3.8m에서 0.5m 줄여 3.3m로 설정하면 과도한 감속 구간을 줄일 수 있습니다. 안전 여유가 충분합니다.",
+      "citations": [
+        "KOR-003",
+        "PRJ-AGENT"
+      ]
+    }
+  ],
   "episodeSetupRecommendations": [],
   "policyServerRecommendations": [
     {
       "param": "slow_down_distance_m_threshold",
       "current": 3.5,
-      "suggested": 3.8,
-      "reason": "LiDAR의 slow_down_distance_m 값이 3.8m로 설정되어 있으므로 정책서버의 임계값도 이를 반영하여 동기화해야 합니다.",
-      "citations": [
-        "KOR-003"
-      ]
+      "suggested": 3.3,
+      "reason": "LiDAR slow_down_distance_m과 일치하도록 정책서버의 slow_down_distance_m_threshold를 3.3m로 조정해야 합니다.",
+      "citations": []
     },
     {
       "param": "force_action_override",
       "current": "Repath",
       "suggested": "None",
-      "reason": "운영 회차에서는 force_action_override를 'None'으로 설정해야 하므로 변경이 필요합니다.",
-      "citations": [
-        "PRJ-AGENT"
-      ]
+      "reason": "운영 회차에서는 force_action_override를 'None'으로 설정해야 합니다.",
+      "citations": []
     }
   ],
-  "summary": "정책서버의 LiDAR 값과 동기화가 필요하며, force_action_override를 'None'으로 변경해야 합니다.",
+  "summary": "배달 성공을 기반으로 안전을 유지하면서 배달 효율을 높이기 위한 추천을 생성했습니다. 속도를 증가시키고 감속 거리를 줄이는 방향으로 조정하였습니다.",
   "llmWarnings": [
-    "policyServerRecommendations[slow_down_distance_m_threshold] citations에서 근거 없는 sourceId 제거: ['CHUNK-CARD-PRJ-AGENT-policy_server_threshold-001']",
     "policyServerRecommendations[stop_distance_m_threshold] current==suggested 무시 (1.2)",
-    "policyServerRecommendations[force_action_override] citations에서 근거 없는 sourceId 제거: ['CHUNK-CARD-PRJ-AGENT-policy_server_logic-001']"
+    "policyServerRecommendations[slow_down_distance_m_threshold] citations에서 근거 없는 sourceId 제거: ['CHUNK-CARD-PRJ-AGENT-policy_server_threshold-001']"
   ],
   "nextBotSetup": {
     "schema": "delivery_bot_setup",
     "version": 1,
     "robot": {
       "drive": {
-        "max_speed_kmh": 9.0,
+        "max_speed_kmh": 10.8,
         "slowdown_speed_range_kmh": 3.5,
         "speed_limit_tolerance_kmh": 0.5,
         "speed_limit_brake": 0.08,
@@ -133,7 +159,7 @@
         "engine_rev_down_rate": 600.0
       },
       "path_follow": {
-        "target_speed_kmh": 7.5,
+        "target_speed_kmh": 9.0,
         "look_ahead_distance_m": 1.2,
         "obstacle_slow_speed_kmh": 2.0,
         "draw_debug": true,
@@ -146,7 +172,7 @@
         "scan_range_m": 5.5,
         "angle_step_degree": 4.0,
         "stop_distance_m": 1.2,
-        "slow_down_distance_m": 3.8,
+        "slow_down_distance_m": 3.3,
         "draw_debug": true,
         "sensor_height_m": 0.07,
         "front_half_angle_degree": 20.0,

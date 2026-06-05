@@ -9,7 +9,7 @@ namespace
 	constexpr double PedestrianBodyRadiusCm = 35.0;
 	// 로봇-보행자 충돌 예측을 샘플링하는 시간 간격이다.
 	constexpr double ConflictSampleStepSeconds = 0.1;
-	// 지연 계산에서 0 나누기를 막기 위한 최소 진행 속도다.
+	// 지연 계산에서 0으로 나누는 것을 막기 위한 최소 진행 속도다.
 	constexpr double MinRuntimeSpeedCmPerSecond = 1.0;
 	// YieldSlowdown 상태에서 허용하는 최소 속도 scale이다.
 	constexpr double MinSlowdownSpeedScale = 0.15;
@@ -20,15 +20,35 @@ namespace
 	// hard conflict가 해제되기 전까지 유지하는 거리 여유값이다.
 	constexpr double HardConflictExitHysteresisCm = 30.0;
 	// 상태 흔들림을 줄이기 위한 기본 최소 state 유지 시간이다.
-	constexpr double MinimumStateHoldSeconds = 0.25;
+	constexpr double MinimumStateHoldSeconds = 0.35;
 	// Sidestep 상태가 너무 빨리 풀리지 않게 하는 최소 유지 시간이다.
-	constexpr double SidestepMinimumStateHoldSeconds = 0.65;
+	constexpr double SidestepMinimumStateHoldSeconds = 2.0;
+	// YieldStop 상태가 한 프레임성 정지로 보이지 않게 하는 최소 유지 시간이다.
+	constexpr double YieldStopMinimumStateHoldSeconds = 0.85;
+	// Recover 상태가 baseline 복귀 동작으로 보이도록 유지하는 최소 시간이다.
+	constexpr double RecoverMinimumStateHoldSeconds = 1.0;
+	// conflict가 해제된 뒤에도 clear 상태가 안정적으로 유지되어야 하는 시간이다.
+	constexpr double ConflictClearHoldSeconds = 0.65;
 	// sidestep/recover lateral curve의 기준 이동 속도다.
 	constexpr double LateralCurveSpeedCmPerSecond = 80.0;
+	// actor yaw가 목표 이동 방향을 따라가는 보간 속도다.
+	constexpr double ActorRotationInterpSpeed = 6.0;
 	// lateral curve가 지나치게 짧아지지 않도록 하는 최소 재생 시간이다.
 	constexpr double MinimumLateralCurveDurationSeconds = 0.65;
 	// lateral curve가 지나치게 길어지지 않도록 하는 최대 재생 시간이다.
 	constexpr double MaximumLateralCurveDurationSeconds = 1.75;
+	// actor velocity가 비어 있을 때 위치 변화 기반 속도를 신뢰하기 시작하는 기준이다.
+	constexpr double ObservedRobotVelocityMinCmPerSecond = 5.0;
+	// sidestep 목표가 로봇 안전 반경을 살짝 더 벗어나도록 더하는 여유 거리다.
+	constexpr double SidestepClearanceMarginCm = 25.0;
+	// JSON sidestep 값이 작아도 평가 장치 보행자가 회피 가능하도록 허용하는 내부 최대 offset이다.
+	constexpr double AutomaticSidestepLimitCm = 220.0;
+	// 로봇이 baseline 중앙에 가까울 때 방향 선택을 보류하는 lateral 오차 범위다.
+	constexpr double CenterlineSideEpsilonCm = 5.0;
+	// sidestep 후보 평가 점수가 이 값 안이면 deterministic fallback으로 tie-break한다.
+	constexpr double SidestepCandidateScoreTieTolerance = 5.0;
+	// 보행자가 로봇 전방 가까이 끼어드는 후보에 적용하는 penalty scale이다.
+	constexpr double CutInFrontPenaltyScale = 0.75;
 
 	FString GetPedestrianRuntimeStateName(EEpisodePedestrianRuntimeState state)
 	{
@@ -104,6 +124,9 @@ void UEpisodePedestrianRuntimeComponent::SetRobotActor(AActor* inRobotActor)
 {
 	RobotActor = inRobotActor;
 	CachedRobotRadiusCm = GetActorRadiusCm(inRobotActor);
+	LastRobotLocation = FVector::ZeroVector;
+	ObservedRobotVelocityCmPerSecond = FVector::ZeroVector;
+	bHasLastRobotLocation = false;
 }
 
 void UEpisodePedestrianRuntimeComponent::StartFollowing()
@@ -116,7 +139,7 @@ void UEpisodePedestrianRuntimeComponent::StartFollowing()
 
 	CurrentDistanceCm = FMath::Clamp(CurrentDistanceCm, 0.0, TotalDistanceCm);
 	ResetRuntimeMetrics();
-	MoveOwnerToCurrentDistance();
+	MoveOwnerToCurrentDistance(0.0, true);
 	SetComponentTickEnabled(true);
 }
 
@@ -135,7 +158,7 @@ void UEpisodePedestrianRuntimeComponent::BeginPlay()
 	Super::BeginPlay();
 
 	CurrentDistanceCm = InitialDistanceCm;
-	MoveOwnerToCurrentDistance();
+	MoveOwnerToCurrentDistance(0.0, true);
 
 	if (bAutoStart)
 	{
@@ -157,6 +180,7 @@ void UEpisodePedestrianRuntimeComponent::TickComponent(float deltaTime, ELevelTi
 	ActiveTimeSeconds += FMath::Max(deltaSeconds, 0.0);
 	StateElapsedSeconds += FMath::Max(deltaSeconds, 0.0);
 	UpdateRobotDistanceMetrics();
+	UpdateRobotKinematics(deltaSeconds);
 
 	const FRobotConflict conflict = FindMostSevereRobotConflict();
 	UpdateRuntimeState(conflict, deltaSeconds);
@@ -178,7 +202,7 @@ void UEpisodePedestrianRuntimeComponent::TickComponent(float deltaTime, ELevelTi
 
 	const double distanceDeltaCm = FMath::Max(SpeedCmPerSecond, 0.0) * speedScale * deltaSeconds;
 	CurrentDistanceCm = FMath::Clamp(CurrentDistanceCm + distanceDeltaCm, 0.0, TotalDistanceCm);
-	MoveOwnerToCurrentDistance();
+	MoveOwnerToCurrentDistance(deltaSeconds);
 	UpdateScheduleDelay();
 	
 	GEngine->AddOnScreenDebugMessage(static_cast<uint64>(GetUniqueID()), 0.1f, FColor::Red, FString::Printf(TEXT("CurrentState: %s"), *GetPedestrianRuntimeStateName(CurrentState)));
@@ -253,21 +277,35 @@ FVector UEpisodePedestrianRuntimeComponent::GetActualLocationAtDistance(double d
 	return GetLocationAtDistance(distanceCm) + GetRightAtDistance(distanceCm) * lateralOffsetCm;
 }
 
-void UEpisodePedestrianRuntimeComponent::MoveOwnerToCurrentDistance()
+void UEpisodePedestrianRuntimeComponent::MoveOwnerToCurrentDistance(double deltaSeconds, bool bSnapRotation)
 {
 	AActor* owner = GetOwner();
 	if (!owner || !HasPlan()) return;
 
+	const FVector previousLocation = owner->GetActorLocation();
 	FVector targetLocation = GetActualLocationAtDistance(CurrentDistanceCm, ActualLateralOffsetCm);
 	targetLocation.Z += VerticalOffsetCm;
 
-	const FVector direction = GetDirectionAtDistance(CurrentDistanceCm);
-	const FRotator targetRotation = direction.IsNearlyZero()
+	FVector facingDirection = targetLocation - previousLocation;
+	facingDirection.Z = 0.0;
+	if (!facingDirection.Normalize())
+	{
+		facingDirection = GetDirectionAtDistance(CurrentDistanceCm);
+	}
+
+	const FRotator targetRotation = facingDirection.IsNearlyZero()
 		? owner->GetActorRotation()
-		: direction.Rotation();
+		: facingDirection.Rotation();
+	const FRotator nextRotation = bSnapRotation || deltaSeconds <= KINDA_SMALL_NUMBER
+		? targetRotation
+		: FMath::RInterpTo(
+			owner->GetActorRotation(),
+			targetRotation,
+			static_cast<float>(deltaSeconds),
+			ActorRotationInterpSpeed);
 
 	FHitResult sweepHit;
-	owner->SetActorLocationAndRotation(targetLocation, targetRotation, true, &sweepHit, ETeleportType::None);
+	owner->SetActorLocationAndRotation(targetLocation, nextRotation, true, &sweepHit, ETeleportType::None);
 
 	PathDeviationCm = FMath::Abs(ActualLateralOffsetCm);
 	MaxPathDeviationCm = FMath::Max(MaxPathDeviationCm, PathDeviationCm);
@@ -300,12 +338,14 @@ UEpisodePedestrianRuntimeComponent::FRobotConflict UEpisodePedestrianRuntimeComp
 	const double stopDistanceCm = GetConflictStopDistanceCm(robotRadiusCm);
 	const double warningDistanceCm = GetConflictWarningDistanceCm(robotRadiusCm);
 	const FVector robotLocation = robotActor->GetActorLocation();
-	const FVector robotVelocity = robotActor->GetVelocity();
+	const FVector robotVelocity = ResolveRobotVelocity(robotActor);
 	const double predictionProgressSpeedCmPerSecond = FMath::Max(ProgressSpeedCmPerSecond, 0.0);
 
 	double closestDistanceCm = TNumericLimits<double>::Max();
 	double closestTimeSeconds = 0.0;
 	double closestPedestrianDistanceCm = CurrentDistanceCm;
+	FVector closestRobotLocation = robotLocation;
+	FVector closestPedestrianLocation = GetActualLocationAtDistance(CurrentDistanceCm, ActualLateralOffsetCm);
 
 	const int32 sampleCount = FMath::Max(1, FMath::CeilToInt(horizonSeconds / ConflictSampleStepSeconds));
 	for (int32 sampleIndex = 0; sampleIndex <= sampleCount; ++sampleIndex)
@@ -316,7 +356,10 @@ UEpisodePedestrianRuntimeComponent::FRobotConflict UEpisodePedestrianRuntimeComp
 			0.0,
 			TotalDistanceCm);
 		const FVector pedestrianLocation = GetActualLocationAtDistance(predictedPedestrianDistanceCm, ActualLateralOffsetCm);
-		const FVector predictedRobotLocation = robotLocation + robotVelocity * sampleTimeSeconds;
+		const FVector predictedRobotLocation = PredictRobotLocation(
+			robotLocation,
+			robotVelocity,
+			sampleTimeSeconds);
 		const double distanceCm = FVector::Dist2D(pedestrianLocation, predictedRobotLocation);
 
 		if (distanceCm < closestDistanceCm)
@@ -324,6 +367,8 @@ UEpisodePedestrianRuntimeComponent::FRobotConflict UEpisodePedestrianRuntimeComp
 			closestDistanceCm = distanceCm;
 			closestTimeSeconds = sampleTimeSeconds;
 			closestPedestrianDistanceCm = predictedPedestrianDistanceCm;
+			closestRobotLocation = predictedRobotLocation;
+			closestPedestrianLocation = pedestrianLocation;
 		}
 	}
 
@@ -338,6 +383,8 @@ UEpisodePedestrianRuntimeComponent::FRobotConflict UEpisodePedestrianRuntimeComp
 	bestConflict.RobotActor = robotActor;
 	bestConflict.RobotLocation = robotLocation;
 	bestConflict.RobotVelocity = robotVelocity;
+	bestConflict.ClosestRobotLocation = closestRobotLocation;
+	bestConflict.ClosestPedestrianLocation = closestPedestrianLocation;
 	bestConflict.RobotRadiusCm = robotRadiusCm;
 	bestConflict.WarningDistanceCm = warningDistanceCm;
 	bestConflict.StopDistanceCm = stopDistanceCm;
@@ -345,7 +392,7 @@ UEpisodePedestrianRuntimeComponent::FRobotConflict UEpisodePedestrianRuntimeComp
 	bestConflict.ClosestDistanceCm = closestDistanceCm;
 	bestConflict.PedestrianDistanceAtClosestCm = closestPedestrianDistanceCm;
 	bestConflict.Severity = severity;
-	bestConflict.bHasConflict = true;
+	bestConflict.bHasConflict = bHasConflict;
 	bestConflict.bHardConflict = bHardConflict;
 	return bestConflict;
 }
@@ -364,6 +411,59 @@ void UEpisodePedestrianRuntimeComponent::UpdateRobotDistanceMetrics()
 	{
 		MinRobotDistanceCm = distanceCm;
 	}
+}
+
+void UEpisodePedestrianRuntimeComponent::UpdateRobotKinematics(double deltaSeconds)
+{
+	const AActor* robotActor = RobotActor.Get();
+	if (!IsValid(robotActor))
+	{
+		LastRobotLocation = FVector::ZeroVector;
+		ObservedRobotVelocityCmPerSecond = FVector::ZeroVector;
+		bHasLastRobotLocation = false;
+		return;
+	}
+
+	const FVector currentRobotLocation = robotActor->GetActorLocation();
+	if (bHasLastRobotLocation && deltaSeconds > KINDA_SMALL_NUMBER)
+	{
+		ObservedRobotVelocityCmPerSecond = (currentRobotLocation - LastRobotLocation) / deltaSeconds;
+		ObservedRobotVelocityCmPerSecond.Z = 0.0;
+	}
+	else
+	{
+		ObservedRobotVelocityCmPerSecond = FVector::ZeroVector;
+	}
+
+	LastRobotLocation = currentRobotLocation;
+	bHasLastRobotLocation = true;
+}
+
+FVector UEpisodePedestrianRuntimeComponent::ResolveRobotVelocity(const AActor* robotActor) const
+{
+	if (!IsValid(robotActor))
+	{
+		return FVector::ZeroVector;
+	}
+
+	FVector observedVelocity = ObservedRobotVelocityCmPerSecond;
+	observedVelocity.Z = 0.0;
+	if (observedVelocity.Size2D() >= ObservedRobotVelocityMinCmPerSecond)
+	{
+		return observedVelocity;
+	}
+
+	FVector actorVelocity = robotActor->GetVelocity();
+	actorVelocity.Z = 0.0;
+	return actorVelocity;
+}
+
+FVector UEpisodePedestrianRuntimeComponent::PredictRobotLocation(
+	const FVector& robotLocation,
+	const FVector& robotVelocity,
+	double sampleTimeSeconds) const
+{
+	return robotLocation + robotVelocity * sampleTimeSeconds;
 }
 
 double UEpisodePedestrianRuntimeComponent::GetActorRadiusCm(const AActor* actor) const
@@ -392,35 +492,225 @@ double UEpisodePedestrianRuntimeComponent::GetConflictWarningDistanceCm(double r
 	return GetConflictStopDistanceCm(robotRadiusCm) + warningLeadCm;
 }
 
+double UEpisodePedestrianRuntimeComponent::GetSidestepLimitCm() const
+{
+	return FMath::Max(BehaviorParams.SidestepDistanceCm, AutomaticSidestepLimitCm);
+}
+
 bool UEpisodePedestrianRuntimeComponent::ShouldSidestepForConflict(const FRobotConflict& conflict) const
 {
-	if (!conflict.bHasConflict || BehaviorParams.SidestepDistanceCm <= KINDA_SMALL_NUMBER)
-	{
-		return false;
-	}
-
-	if (BehaviorParams.Evasiveness < SidestepActivationThreshold)
-	{
-		return false;
-	}
+	if (!conflict.bHasConflict || BehaviorParams.SidestepDistanceCm <= KINDA_SMALL_NUMBER) return false;
+	if (BehaviorParams.Evasiveness < SidestepActivationThreshold) return false;
 
 	return conflict.Severity >= FMath::Lerp(0.8, 0.35, BehaviorParams.Evasiveness);
 }
 
-double UEpisodePedestrianRuntimeComponent::ComputeSidestepTargetCm(const FRobotConflict& conflict) const
+double UEpisodePedestrianRuntimeComponent::ComputeSidestepTargetForSide(
+	const FRobotConflict& conflict,
+	int32 side) const
 {
-	const FVector baselineLocation = GetLocationAtDistance(CurrentDistanceCm);
-	const FVector right = GetRightAtDistance(CurrentDistanceCm);
-	const double sideDot = FVector::DotProduct(conflict.RobotLocation - baselineLocation, right);
+	const double referenceDistanceCm = FMath::Clamp(conflict.PedestrianDistanceAtClosestCm, 0.0, TotalDistanceCm);
+	const FVector baselineLocation = GetLocationAtDistance(referenceDistanceCm);
+	const FVector right = GetRightAtDistance(referenceDistanceCm);
+	const double robotLateralOffsetCm = FVector::DotProduct(conflict.ClosestRobotLocation - baselineLocation, right);
+	const int32 normalizedSide = side < 0 ? -1 : 1;
 
-	int32 side = sideDot >= 0.0 ? -1 : 1;
-	if (FMath::IsNearlyZero(sideDot))
+	const double requiredClearanceCm = conflict.StopDistanceCm + SidestepClearanceMarginCm;
+	const double clearanceTargetOffsetCm = robotLateralOffsetCm + static_cast<double>(normalizedSide) * requiredClearanceCm;
+	const double preferredTargetOffsetCm = static_cast<double>(normalizedSide) * BehaviorParams.SidestepDistanceCm;
+	double targetOffsetCm = FMath::Abs(clearanceTargetOffsetCm) > FMath::Abs(preferredTargetOffsetCm)
+		? clearanceTargetOffsetCm
+		: preferredTargetOffsetCm;
+
+	if (targetOffsetCm * static_cast<double>(normalizedSide) <= 0.0)
 	{
-		const FString sideSeed = InstanceId.IsEmpty() ? PlanHash : InstanceId;
-		side = GetTypeHash(sideSeed) % 2 == 0 ? -1 : 1;
+		targetOffsetCm = preferredTargetOffsetCm;
 	}
 
-	return static_cast<double>(side) * BehaviorParams.SidestepDistanceCm;
+	return FMath::Clamp(targetOffsetCm, -GetSidestepLimitCm(), GetSidestepLimitCm());
+}
+
+int32 UEpisodePedestrianRuntimeComponent::ComputeDefaultSidestepSide(const FRobotConflict& conflict) const
+{
+	const double referenceDistanceCm = FMath::Clamp(conflict.PedestrianDistanceAtClosestCm, 0.0, TotalDistanceCm);
+	const FVector baselineLocation = GetLocationAtDistance(referenceDistanceCm);
+	const FVector right = GetRightAtDistance(referenceDistanceCm);
+	const double robotLateralOffsetCm = FVector::DotProduct(conflict.ClosestRobotLocation - baselineLocation, right);
+	if (FMath::Abs(robotLateralOffsetCm) > CenterlineSideEpsilonCm)
+	{
+		return robotLateralOffsetCm >= 0.0 ? -1 : 1;
+	}
+
+	const double robotLateralVelocityCmPerSecond = FVector::DotProduct(conflict.RobotVelocity, right);
+	if (FMath::Abs(robotLateralVelocityCmPerSecond) > ObservedRobotVelocityMinCmPerSecond)
+	{
+		return robotLateralVelocityCmPerSecond >= 0.0 ? -1 : 1;
+	}
+
+	const FString sideSeed = InstanceId.IsEmpty() ? PlanHash : InstanceId;
+	return GetTypeHash(sideSeed) % 2 == 0 ? -1 : 1;
+}
+
+UEpisodePedestrianRuntimeComponent::FSidestepCandidate UEpisodePedestrianRuntimeComponent::EvaluateSidestepCandidate(
+	const FRobotConflict& conflict,
+	int32 side) const
+{
+	FSidestepCandidate candidate;
+	candidate.Side = side < 0 ? -1 : 1;
+	candidate.TargetOffsetCm = ComputeSidestepTargetForSide(conflict, candidate.Side);
+	candidate.bValid = HasPlan() && conflict.RobotActor.IsValid();
+	if (!candidate.bValid)
+	{
+		return candidate;
+	}
+
+	const double horizonSeconds = FMath::Max(BehaviorParams.AwarenessHorizonSeconds, ConflictSampleStepSeconds);
+	const int32 sampleCount = FMath::Max(1, FMath::CeilToInt(horizonSeconds / ConflictSampleStepSeconds));
+	const double speedScale = FMath::Clamp(
+		FMath::Lerp(0.75, 0.45, BehaviorParams.Cooperation),
+		MinSlowdownSpeedScale,
+		1.0);
+	const double predictionProgressSpeedCmPerSecond = FMath::Max(SpeedCmPerSecond, 0.0) * speedScale;
+	const double lateralCurveDurationSeconds = ComputeLateralCurveDurationSeconds(
+		ActualLateralOffsetCm,
+		candidate.TargetOffsetCm);
+	const FVector robotForward = conflict.RobotVelocity.GetSafeNormal2D();
+
+	double cutInFrontPenalty = 0.0;
+	double endDistanceCm = candidate.MinDistanceCm;
+	for (int32 sampleIndex = 0; sampleIndex <= sampleCount; ++sampleIndex)
+	{
+		const double sampleTimeSeconds = FMath::Min(sampleIndex * ConflictSampleStepSeconds, horizonSeconds);
+		const double predictedPedestrianDistanceCm = FMath::Clamp(
+			CurrentDistanceCm + predictionProgressSpeedCmPerSecond * sampleTimeSeconds,
+			0.0,
+			TotalDistanceCm);
+
+		double predictedLateralOffsetCm = candidate.TargetOffsetCm;
+		if (lateralCurveDurationSeconds > KINDA_SMALL_NUMBER)
+		{
+			const double lateralAlpha = FMath::Clamp(sampleTimeSeconds / lateralCurveDurationSeconds, 0.0, 1.0);
+			predictedLateralOffsetCm = FMath::Lerp(
+				ActualLateralOffsetCm,
+				candidate.TargetOffsetCm,
+				SmootherStep(lateralAlpha));
+		}
+
+		const FVector pedestrianLocation = GetActualLocationAtDistance(
+			predictedPedestrianDistanceCm,
+			predictedLateralOffsetCm);
+		const FVector robotLocation = PredictRobotLocation(
+			conflict.RobotLocation,
+			conflict.RobotVelocity,
+			sampleTimeSeconds);
+		const double distanceCm = FVector::Dist2D(pedestrianLocation, robotLocation);
+		candidate.MinDistanceCm = FMath::Min(candidate.MinDistanceCm, distanceCm);
+		endDistanceCm = distanceCm;
+
+		if (!robotForward.IsNearlyZero())
+		{
+			const FVector relativePedestrianLocation = pedestrianLocation - robotLocation;
+			const double forwardDistanceCm = FVector::DotProduct(relativePedestrianLocation, robotForward);
+			if (forwardDistanceCm > 0.0 && forwardDistanceCm <= conflict.WarningDistanceCm)
+			{
+				const double distancePenaltyCm = FMath::Max(0.0, conflict.WarningDistanceCm - distanceCm);
+				const double frontPenaltyCm = FMath::Max(
+					0.0,
+					conflict.StopDistanceCm + SidestepClearanceMarginCm - forwardDistanceCm);
+				cutInFrontPenalty += (distancePenaltyCm + frontPenaltyCm) * CutInFrontPenaltyScale;
+			}
+		}
+	}
+
+	const double referenceDistanceCm = FMath::Clamp(conflict.PedestrianDistanceAtClosestCm, 0.0, TotalDistanceCm);
+	const FVector baselineLocation = GetLocationAtDistance(referenceDistanceCm);
+	const FVector right = GetRightAtDistance(referenceDistanceCm);
+	const double robotLateralOffsetCm = FVector::DotProduct(conflict.ClosestRobotLocation - baselineLocation, right);
+	const double targetClearanceCm = FMath::Abs(candidate.TargetOffsetCm - robotLateralOffsetCm);
+
+	candidate.bMeetsClearance = candidate.MinDistanceCm >= conflict.StopDistanceCm;
+	candidate.Score = candidate.MinDistanceCm
+		+ endDistanceCm * 0.15
+		+ targetClearanceCm * 0.25
+		- cutInFrontPenalty;
+	if (candidate.bMeetsClearance)
+	{
+		candidate.Score += conflict.WarningDistanceCm;
+	}
+
+	return candidate;
+}
+
+UEpisodePedestrianRuntimeComponent::FSidestepCandidate UEpisodePedestrianRuntimeComponent::ChooseSidestepCandidate(
+	const FRobotConflict& conflict) const
+{
+	const FSidestepCandidate leftCandidate = EvaluateSidestepCandidate(conflict, -1);
+	const FSidestepCandidate rightCandidate = EvaluateSidestepCandidate(conflict, 1);
+
+	if (!leftCandidate.bValid) return rightCandidate;
+	if (!rightCandidate.bValid) return leftCandidate;
+
+	if (leftCandidate.bMeetsClearance != rightCandidate.bMeetsClearance)
+	{
+		return leftCandidate.bMeetsClearance ? leftCandidate : rightCandidate;
+	}
+
+	const double scoreDelta = leftCandidate.Score - rightCandidate.Score;
+	if (FMath::Abs(scoreDelta) > SidestepCandidateScoreTieTolerance)
+	{
+		return scoreDelta > 0.0 ? leftCandidate : rightCandidate;
+	}
+
+	const int32 defaultSide = ComputeDefaultSidestepSide(conflict);
+	return defaultSide < 0 ? leftCandidate : rightCandidate;
+}
+
+bool UEpisodePedestrianRuntimeComponent::RequestSidestep(const FRobotConflict& conflict)
+{
+	if (!bSidestepTargetLocked || ActiveSidestepSide == 0)
+	{
+		const FSidestepCandidate candidate = ChooseSidestepCandidate(conflict);
+		if (!candidate.bValid)
+		{
+			ResetSidestepLock();
+			return false;
+		}
+
+		ActiveSidestepSide = candidate.Side;
+		ActiveSidestepTargetOffsetCm = candidate.TargetOffsetCm;
+		bSidestepTargetLocked = true;
+		RequestLateralOffset(ActiveSidestepTargetOffsetCm);
+		return true;
+	}
+
+	const FSidestepCandidate lockedCandidate = EvaluateSidestepCandidate(conflict, ActiveSidestepSide);
+	if (!lockedCandidate.bValid)
+	{
+		ResetSidestepLock();
+		return false;
+	}
+
+	if (conflict.bHardConflict
+		&& !lockedCandidate.bMeetsClearance
+		&& lockedCandidate.MinDistanceCm < conflict.StopDistanceCm)
+	{
+		return false;
+	}
+
+	if (FMath::Abs(lockedCandidate.TargetOffsetCm) > FMath::Abs(ActiveSidestepTargetOffsetCm) + 1.0)
+	{
+		ActiveSidestepTargetOffsetCm = lockedCandidate.TargetOffsetCm;
+	}
+
+	RequestLateralOffset(ActiveSidestepTargetOffsetCm);
+	return true;
+}
+
+void UEpisodePedestrianRuntimeComponent::ResetSidestepLock()
+{
+	bSidestepTargetLocked = false;
+	ActiveSidestepSide = 0;
+	ActiveSidestepTargetOffsetCm = 0.0;
 }
 
 double UEpisodePedestrianRuntimeComponent::ComputeSpeedScale(const FRobotConflict& conflict) const
@@ -452,7 +742,20 @@ void UEpisodePedestrianRuntimeComponent::UpdateRuntimeState(const FRobotConflict
 	const bool bHardConflictLatched = bValidConflictSample
 		&& (CurrentState == EEpisodePedestrianRuntimeState::YieldStop || CurrentState == EEpisodePedestrianRuntimeState::Blocked)
 		&& conflict.ClosestDistanceCm <= conflict.StopDistanceCm + HardConflictExitHysteresisCm;
-	const bool bEffectiveConflict = bEnableRobotReaction && bValidConflictSample && (conflict.bHasConflict || bSoftConflictLatched);
+	const bool bRawEffectiveConflict = bEnableRobotReaction && bValidConflictSample && (conflict.bHasConflict || bSoftConflictLatched);
+	if (bRawEffectiveConflict)
+	{
+		ClearConflictElapsedSeconds = 0.0;
+	}
+	else
+	{
+		ClearConflictElapsedSeconds += FMath::Max(deltaSeconds, 0.0);
+	}
+
+	const bool bClearHoldConflict = bValidConflictSample
+		&& bConflictLatched
+		&& ClearConflictElapsedSeconds < ConflictClearHoldSeconds;
+	const bool bEffectiveConflict = bRawEffectiveConflict || bClearHoldConflict;
 	const bool bEffectiveHardConflict = bEnableRobotReaction && bValidConflictSample && (conflict.bHardConflict || bHardConflictLatched);
 
 	bConflictLatched = bEffectiveConflict;
@@ -471,10 +774,8 @@ void UEpisodePedestrianRuntimeComponent::UpdateRuntimeState(const FRobotConflict
 	if (!bEffectiveConflict)
 	{
 		StoppedByRobotSeconds = 0.0;
-		if (!CanLeaveCurrentState())
-		{
-			return;
-		}
+		if (!CanLeaveCurrentState()) return;
+
 
 		RequestLateralOffset(0.0);
 		trySetState(FMath::Abs(ActualLateralOffsetCm) > 1.0 || bLateralCurveActive
@@ -506,7 +807,11 @@ void UEpisodePedestrianRuntimeComponent::UpdateRuntimeState(const FRobotConflict
 			if (trySetState(EEpisodePedestrianRuntimeState::Sidestep))
 			{
 				StoppedByRobotSeconds = 0.0;
-				RequestLateralOffset(ComputeSidestepTargetCm(conflict));
+				if (!RequestSidestep(conflict) && trySetState(EEpisodePedestrianRuntimeState::YieldStop))
+				{
+					ResetSidestepLock();
+					RequestLateralOffset(0.0);
+				}
 			}
 			return;
 		}
@@ -524,7 +829,11 @@ void UEpisodePedestrianRuntimeComponent::UpdateRuntimeState(const FRobotConflict
 	{
 		if (trySetState(EEpisodePedestrianRuntimeState::Sidestep))
 		{
-			RequestLateralOffset(ComputeSidestepTargetCm(conflict));
+			if (!RequestSidestep(conflict))
+			{
+				ResetSidestepLock();
+				RequestLateralOffset(0.0);
+			}
 		}
 	}
 	else
@@ -540,14 +849,17 @@ void UEpisodePedestrianRuntimeComponent::SetRuntimeState(
 	EEpisodePedestrianRuntimeState newState,
 	const FRobotConflict& conflict)
 {
-	if (CurrentState == newState)
-	{
-		return;
-	}
+	if (CurrentState == newState) return;
+
 
 	const EEpisodePedestrianRuntimeState previousState = CurrentState;
 	CurrentState = newState;
 	StateElapsedSeconds = 0.0;
+	if (previousState == EEpisodePedestrianRuntimeState::Sidestep || newState == EEpisodePedestrianRuntimeState::Sidestep)
+	{
+		ResetSidestepLock();
+	}
+
 	const FString robotDebugName = conflict.RobotActor.IsValid() ? conflict.RobotActor->GetName() : TEXT("None");
 	UE_LOG(
 		LogEpisodePedestrianRuntime,
@@ -563,29 +875,49 @@ void UEpisodePedestrianRuntimeComponent::SetRuntimeState(
 
 bool UEpisodePedestrianRuntimeComponent::CanLeaveCurrentState() const
 {
-	if (CurrentState == EEpisodePedestrianRuntimeState::FollowBaseline
-		|| CurrentState == EEpisodePedestrianRuntimeState::Recover)
+	if (CurrentState == EEpisodePedestrianRuntimeState::FollowBaseline)
 	{
 		return true;
 	}
 
-	const double minimumHoldSeconds = CurrentState == EEpisodePedestrianRuntimeState::Sidestep
-		? SidestepMinimumStateHoldSeconds
-		: MinimumStateHoldSeconds;
-	return StateElapsedSeconds >= minimumHoldSeconds;
+	return StateElapsedSeconds >= GetMinimumStateHoldSeconds();
+}
+
+double UEpisodePedestrianRuntimeComponent::GetMinimumStateHoldSeconds() const
+{
+	switch (CurrentState)
+	{
+	case EEpisodePedestrianRuntimeState::Sidestep:
+		return SidestepMinimumStateHoldSeconds;
+	case EEpisodePedestrianRuntimeState::YieldStop:
+		return YieldStopMinimumStateHoldSeconds;
+	case EEpisodePedestrianRuntimeState::Recover:
+		return RecoverMinimumStateHoldSeconds;
+	case EEpisodePedestrianRuntimeState::YieldSlowdown:
+	case EEpisodePedestrianRuntimeState::Blocked:
+	default:
+		return MinimumStateHoldSeconds;
+	}
 }
 
 bool UEpisodePedestrianRuntimeComponent::IsStateEscalation(EEpisodePedestrianRuntimeState newState) const
 {
+	if (CurrentState == EEpisodePedestrianRuntimeState::Sidestep
+		&& StateElapsedSeconds < SidestepMinimumStateHoldSeconds)
+	{
+		return newState == EEpisodePedestrianRuntimeState::Blocked;
+	}
+
 	return GetRuntimeStatePriority(newState) > GetRuntimeStatePriority(CurrentState);
 }
 
 void UEpisodePedestrianRuntimeComponent::RequestLateralOffset(double targetOffsetCm)
 {
+	const double sidestepLimitCm = GetSidestepLimitCm();
 	const double clampedTargetOffsetCm = FMath::Clamp(
 		targetOffsetCm,
-		-BehaviorParams.SidestepDistanceCm,
-		BehaviorParams.SidestepDistanceCm);
+		-sidestepLimitCm,
+		sidestepLimitCm);
 
 	if (bLateralCurveActive && FMath::IsNearlyEqual(LateralCurveTargetOffsetCm, clampedTargetOffsetCm, 1.0))
 	{
@@ -695,10 +1027,15 @@ void UEpisodePedestrianRuntimeComponent::ResetRuntimeMetrics()
 	LateralCurveElapsedSeconds = 0.0;
 	LateralCurveDurationSeconds = 0.0;
 	StateElapsedSeconds = 0.0;
+	ClearConflictElapsedSeconds = 0.0;
 	StoppedByRobotSeconds = 0.0;
+	LastRobotLocation = FVector::ZeroVector;
+	ObservedRobotVelocityCmPerSecond = FVector::ZeroVector;
 	NominalSpeedCmPerSecond = FMath::Max(SpeedCmPerSecond, 0.0);
 	ProgressSpeedCmPerSecond = NominalSpeedCmPerSecond;
 	LateralSpeedCmPerSecond = 0.0;
 	bLateralCurveActive = false;
 	bConflictLatched = false;
+	bHasLastRobotLocation = false;
+	ResetSidestepLock();
 }

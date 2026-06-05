@@ -2,7 +2,6 @@
 #include "Episode/Actors/EpisodePedestrianAnimInstance.h"
 #include "Episode/Actors/EpisodePedestrian.h"
 #include "Episode/Components/EpisodePedestrianRuntimeComponent.h"
-#include "Components/SkeletalMeshComponent.h"
 
 namespace
 {

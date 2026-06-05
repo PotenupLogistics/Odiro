@@ -90,6 +90,8 @@ Pedestrian = setup-time planned baseline trajectory + deterministic robot reacti
 | `max_yield_wait_s` | `behavior_max_yield_wait_s` | `4.0s` |
 | `sidestep_distance_m` / `sidestep_distance_cm` | `behavior_sidestep_distance_cm` | `60cm` |
 
+`sidestep_distance_m`은 사용자가 기대하는 선호 lateral offset이다. 로봇 footprint, personal space, predicted closest point를 기준으로 더 큰 clearance가 필요하면 runtime은 내부 안전 한도까지 sidestep 목표를 확장할 수 있다.
+
 planned trajectory의 baseline geometry는 `movement` 아래 optional curve fields로 조정할 수 있다.
 
 | JSON field | 내부 property | 기본값 |
@@ -217,7 +219,8 @@ SetupEpisodeWorld
 책임:
 
 - 자신에게 주입된 `FEpisodePedestrianPlan`을 따라 baseline progress 기반으로 이동한다.
-- 로봇 weak reference를 사용해 fixed-sample conflict prediction을 수행한다.
+- 로봇 weak reference와 위치 변화 기반 observed velocity를 사용해 fixed-sample conflict prediction을 수행한다.
+- 로봇의 live global path/repath 결과는 보행자 반응 입력으로 사용하지 않는다. 이는 로봇 정책의 회피 행동과 보행자 회피 행동이 서로를 따라가며 지표를 오염시키는 피드백을 막기 위함이다.
 - deterministic state machine을 실행한다.
 - speed-up/catch-up 없이 delay를 보존한다.
 - runtime metrics를 누적한다.
@@ -229,9 +232,16 @@ SetupEpisodeWorld
 | `FollowBaseline` | conflict 없음. baseline을 normal speed로 진행 |
 | `YieldSlowdown` | predicted conflict가 있으나 hard stop 전. 감속 |
 | `YieldStop` | personal space/stop distance 안쪽 conflict. progress 정지 |
-| `Sidestep` | evasiveness가 충분할 때 짧은 lateral offset 적용 |
+| `Sidestep` | evasiveness가 충분할 때 좌/우 후보를 예측 평가하고, 선택한 방향을 state 동안 고정한 뒤 clearance lateral offset 적용 |
 | `Blocked` | `max_yield_wait_s` 이상 yield stop 지속 |
 | `Recover` | conflict 해소 후 lateral offset을 baseline으로 복귀 |
+
+전이 안정화 기준:
+
+- `Sidestep`은 일반 전이에서 최소 `2.0s` 유지한다.
+- `YieldStop`과 `Recover`도 짧은 깜빡임처럼 보이지 않도록 state별 최소 유지 시간을 둔다.
+- conflict가 해제되어도 즉시 `Recover`/`FollowBaseline`으로 가지 않고, clear 상태가 짧게 유지된 뒤 전이한다.
+- actor yaw는 목표 이동 방향을 바로 대입하지 않고 tick delta 기반 보간으로 따라간다.
 
 현재 runtime metrics:
 

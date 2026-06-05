@@ -279,7 +279,7 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
 | `personal_space_m` / `personal_space_cm` | `0.8m` | 로봇과 유지하려는 개인 공간 |
 | `awareness_horizon_s` | `2.5` | 로봇 충돌 예측 horizon |
 | `max_yield_wait_s` | `4.0` | 정지 상태에서 blocked로 넘어가기 전 최대 대기 시간 |
-| `sidestep_distance_m` / `sidestep_distance_cm` | `0.6m` | sidestep lateral offset 거리 |
+| `sidestep_distance_m` / `sidestep_distance_cm` | `0.6m` | sidestep 선호 lateral offset. 실제 회피에 필요한 clearance가 더 크면 내부 안전 한도까지 확장될 수 있음 |
 
 LLM이 특별히 사회적 반응 차이를 만들 필요가 없으면 `behavior`는 생략하는 편이 좋다. 보행자의 시각적 자연스러움, sidestep/recover curve, animation facing은 내부 기본 로직으로 처리된다.
 

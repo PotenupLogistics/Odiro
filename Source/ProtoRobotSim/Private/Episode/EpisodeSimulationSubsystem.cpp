@@ -8,9 +8,9 @@
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/EpisodeEvaluationSubsystem.h"
 #include "Episode/EpisodePedestrianPlanSubsystem.h"
-#include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
 #include "Shared/EpisodePedestrianPlanTypes.h"
 #include "Shared/Struct/DeliveryBotSetupInfo.h"
+#include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
 #include "Kismet/GameplayStatics.h"
 
 

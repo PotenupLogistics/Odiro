@@ -136,6 +136,8 @@ private:
 		TWeakObjectPtr<AActor> RobotActor;
 		FVector RobotLocation = FVector::ZeroVector;
 		FVector RobotVelocity = FVector::ZeroVector;
+		FVector ClosestRobotLocation = FVector::ZeroVector;
+		FVector ClosestPedestrianLocation = FVector::ZeroVector;
 		double RobotRadiusCm = 0.0;
 		double WarningDistanceCm = 0.0;
 		double StopDistanceCm = 0.0;
@@ -147,22 +149,45 @@ private:
 		bool bHardConflict = false;
 	};
 
+	struct FSidestepCandidate
+	{
+		int32 Side = 0;
+		double TargetOffsetCm = 0.0;
+		double MinDistanceCm = TNumericLimits<double>::Max();
+		double Score = -TNumericLimits<double>::Max();
+		bool bValid = false;
+		bool bMeetsClearance = false;
+	};
+
 	FVector GetLocationAtDistance(double distanceCm) const;
 	FVector GetDirectionAtDistance(double distanceCm) const;
 	FVector GetRightAtDistance(double distanceCm) const;
 	FVector GetActualLocationAtDistance(double distanceCm, double lateralOffsetCm) const;
-	void MoveOwnerToCurrentDistance();
+	void MoveOwnerToCurrentDistance(double deltaSeconds = 0.0, bool bSnapRotation = false);
 	FRobotConflict FindMostSevereRobotConflict() const;
 	void UpdateRobotDistanceMetrics();
+	void UpdateRobotKinematics(double deltaSeconds);
+	FVector ResolveRobotVelocity(const AActor* robotActor) const;
+	FVector PredictRobotLocation(
+		const FVector& robotLocation,
+		const FVector& robotVelocity,
+		double sampleTimeSeconds) const;
 	double GetActorRadiusCm(const AActor* actor) const;
 	double GetConflictWarningDistanceCm(double robotRadiusCm) const;
 	double GetConflictStopDistanceCm(double robotRadiusCm) const;
+	double GetSidestepLimitCm() const;
 	bool ShouldSidestepForConflict(const FRobotConflict& conflict) const;
-	double ComputeSidestepTargetCm(const FRobotConflict& conflict) const;
+	double ComputeSidestepTargetForSide(const FRobotConflict& conflict, int32 side) const;
+	int32 ComputeDefaultSidestepSide(const FRobotConflict& conflict) const;
+	FSidestepCandidate EvaluateSidestepCandidate(const FRobotConflict& conflict, int32 side) const;
+	FSidestepCandidate ChooseSidestepCandidate(const FRobotConflict& conflict) const;
+	bool RequestSidestep(const FRobotConflict& conflict);
+	void ResetSidestepLock();
 	double ComputeSpeedScale(const FRobotConflict& conflict) const;
 	void UpdateRuntimeState(const FRobotConflict& conflict, double deltaSeconds);
 	void SetRuntimeState(EEpisodePedestrianRuntimeState newState, const FRobotConflict& conflict);
 	bool CanLeaveCurrentState() const;
+	double GetMinimumStateHoldSeconds() const;
 	bool IsStateEscalation(EEpisodePedestrianRuntimeState newState) const;
 	void RequestLateralOffset(double targetOffsetCm);
 	double ComputeLateralCurveDurationSeconds(double startOffsetCm, double targetOffsetCm) const;
@@ -183,8 +208,15 @@ private:
 
 	// State 최소 유지 시간과 conflict latch/hysteresis를 위한 runtime 상태다.
 	double StateElapsedSeconds = 0.0;
+	double ClearConflictElapsedSeconds = 0.0;
 	double StoppedByRobotSeconds = 0.0;
 	double CachedRobotRadiusCm = 0.0;
+	FVector LastRobotLocation = FVector::ZeroVector;
+	FVector ObservedRobotVelocityCmPerSecond = FVector::ZeroVector;
 	bool bLateralCurveActive = false;
 	bool bConflictLatched = false;
+	bool bHasLastRobotLocation = false;
+	bool bSidestepTargetLocked = false;
+	int32 ActiveSidestepSide = 0;
+	double ActiveSidestepTargetOffsetCm = 0.0;
 };

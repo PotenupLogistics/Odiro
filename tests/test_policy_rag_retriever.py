@@ -9,8 +9,9 @@ from app.services.policy_rag_retriever import load_chunks, search_policy_chunks
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_loads_nine_policy_rag_chunks() -> None:
-    assert len(load_chunks()) == 9
+def test_loads_policy_rag_chunks() -> None:
+    # 기존 KOR-003 자동 생성 9장 + 수동 보충 6장 (PRJ-DOE/PRJ-EVAL/PRJ-AGENT)
+    assert len(load_chunks()) == 15
 
 
 def test_search_emergency_stop_keyword_returns_emergency_result() -> None:

@@ -17,10 +17,12 @@ def _read_chunks() -> list[dict]:
 
 def test_policy_rag_chunks_exist_and_match_card_count() -> None:
     chunks = _read_chunks()
-    assert len(chunks) == 9
+    # 기존 KOR-003 자동 생성 9장 + 수동 보충 6장 (PRJ-DOE/PRJ-EVAL/PRJ-AGENT)
+    assert len(chunks) == 15
 
 
 def test_policy_rag_chunk_report_exists() -> None:
+    # 자동 생성 리포트는 KOR-003 9장 코퍼스에 대한 산출물이며, 수동 보충 카드는 별도.
     assert REPORT_JSON.exists()
     assert REPORT_MD.exists()
     report = json.loads(REPORT_JSON.read_text(encoding="utf-8-sig"))

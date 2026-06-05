@@ -1,0 +1,127 @@
+{
+  "schema": "episode_evaluation_report",
+  "version": 1,
+  "units": {
+    "time": "s",
+    "distance": "m",
+    "angle": "deg",
+    "location": "xy_m",
+    "speed": "km/h",
+    "score": "episode_score"
+  },
+  "run": {
+    "run_id": "episode_run_0004",
+    "run_index": 4,
+    "episode_id": "sensor_route_layout_004",
+    "pair_id": "sample_4",
+    "episode_setup": {
+      "path": "Json/Input/EpisodeSetupSample_4.json",
+      "hash": "252738887"
+    },
+    "delivery_bot_setup": {
+      "path": "Json/Input/DeliveryBotSetupSample_4.json",
+      "hash": "109204312"
+    },
+    "pair_hash": "83029122"
+  },
+  "summary": {
+    "completed": true,
+    "success": false,
+    "outcome": "Failure",
+    "terminal_reason": "DeliveryBotSimulationFailed",
+    "duration_s": 38.6,
+    "score": -7.0,
+    "usable_for_llm_tuning": true
+  },
+  "pipeline": {
+    "episode_setup_compiled": true,
+    "delivery_bot_setup_compiled": true,
+    "world_setup_succeeded": true,
+    "evaluation_completed": true,
+    "diagnostics": []
+  },
+  "metrics": {
+    "goal_reached": 0,
+    "score": -7.0,
+    "duration_s": 38.6,
+    "goal_distance_m": 2.8,
+    "static_obstacle_collision_count": 1,
+    "blocked_region_collision_count": 0,
+    "penalty_region_violation_count": 0,
+    "pedestrian_collision_count": 0,
+    "near_miss_count": 1,
+    "near_miss_total_duration_s": 0.8,
+    "near_miss_min_distance_m": 0.42,
+    "robot_tip_over_count": 0,
+    "delivery_bot_failure_type": "Stuck",
+    "delivery_bot_failure_message": "DeliveryBot remained below movement threshold.",
+    "delivery_bot_failure_xy_m": [3.8, 1.4],
+    "delivery_bot_failure_time_s": 38.6,
+    "delivery_bot_failure_speed_kmh": 0.1,
+    "delivery_bot_failure_target_actor_name": ""
+  },
+  "event_summary": {
+    "total": 3,
+    "by_type": {
+      "PedestrianNearMiss": 1,
+      "StaticObstacleCollision": 1,
+      "DeliveryBotSimulationFailure": 1
+    },
+    "by_severity": {
+      "Info": 0,
+      "Warning": 2,
+      "Failure": 1
+    },
+    "first_failure_event_index": 2
+  },
+  "events": [
+    {
+      "i": 0,
+      "t_s": 12.4,
+      "type": "PedestrianNearMiss",
+      "severity": "Warning",
+      "subject": "robot_01",
+      "target": "ped_01",
+      "xy_m": [1.2, 0.7],
+      "message": "Pedestrian near miss",
+      "properties": {
+        "start_time_s": 11.6,
+        "end_time_s": 12.4,
+        "duration_s": 0.8,
+        "min_distance_m": 0.42,
+        "pedestrian_id": "ped_01",
+        "score_delta": -3.0
+      }
+    },
+    {
+      "i": 1,
+      "t_s": 31.9,
+      "type": "StaticObstacleCollision",
+      "severity": "Warning",
+      "subject": "robot_01",
+      "target": "cone_01",
+      "xy_m": [3.4, 0.9],
+      "message": "Static obstacle collision",
+      "properties": {
+        "target_id": "cone_01",
+        "target_actor": "BP_Cone_C_2",
+        "score_delta": -4.0
+      }
+    },
+    {
+      "i": 2,
+      "t_s": 38.6,
+      "type": "DeliveryBotSimulationFailure",
+      "severity": "Failure",
+      "subject": "robot_01",
+      "target": "",
+      "xy_m": [3.8, 1.4],
+      "message": "DeliveryBot remained below movement threshold.",
+      "properties": {
+        "failure_type": "Stuck",
+        "speed_kmh": 0.1,
+        "target_actor_name": ""
+      }
+    }
+  ]
+}

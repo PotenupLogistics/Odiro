@@ -1,8 +1,8 @@
 {
   "schema": "test_sample_analysis_result",
   "version": 2,
-  "analysisId": "5e1dd277-1677-4d16-b97f-046acfac98e8",
-  "generatedAt": "2026-06-05T02:18:04Z",
+  "analysisId": "c7971d80-aaeb-47ec-b7ea-fd78e5ea14a9",
+  "generatedAt": "2026-06-05T03:12:48Z",
   "generationMethod": "llm_rag",
   "inputs": {
     "bot_setup": "test_sample\\DeliveryBotSetupSample_1.json",
@@ -81,38 +81,40 @@
     "slowdownActionRatio": 0.4681818181818182,
     "repathActionRatio": 0.0015151515151515152
   },
-  "botSetupRecommendations": [
-    {
-      "param": "max_speed_kmh",
-      "current": 9.0,
-      "suggested": 10.0,
-      "reason": "현재 최대 속도 9.0km/h에서 평균 실제 속도 3.46km/h로 운행 중이며, 충돌이나 전복이 발생하지 않았습니다. 따라서 최대 속도를 10.0km/h로 높여 효율성을 개선할 수 있습니다.",
-      "citations": [
-        "KOR-003"
-      ]
-    }
-  ],
+  "botSetupRecommendations": [],
   "episodeSetupRecommendations": [],
   "policyServerRecommendations": [
     {
       "param": "slow_down_distance_m_threshold",
       "current": 3.5,
       "suggested": 3.8,
-      "reason": "현재 slow_down_distance_m_threshold가 3.5m로 설정되어 있으나, LiDAR의 slow_down_distance_m이 3.8m로 설정되어 있습니다. 두 값의 일관성을 위해 threshold를 3.8m로 조정해야 합니다.",
+      "reason": "LiDAR의 slow_down_distance_m 값이 3.8m로 설정되어 있으므로 정책서버의 임계값도 이를 반영하여 동기화해야 합니다.",
       "citations": [
-        "PRJ-AGENT",
         "KOR-003"
+      ]
+    },
+    {
+      "param": "force_action_override",
+      "current": "Repath",
+      "suggested": "None",
+      "reason": "운영 회차에서는 force_action_override를 'None'으로 설정해야 하므로 변경이 필요합니다.",
+      "citations": [
+        "PRJ-AGENT"
       ]
     }
   ],
-  "summary": "최대 속도를 10.0km/h로 높이고, 정책서버의 slow_down_distance_m_threshold를 3.8m로 조정할 것을 추천합니다.",
-  "llmWarnings": [],
+  "summary": "정책서버의 LiDAR 값과 동기화가 필요하며, force_action_override를 'None'으로 변경해야 합니다.",
+  "llmWarnings": [
+    "policyServerRecommendations[slow_down_distance_m_threshold] citations에서 근거 없는 sourceId 제거: ['CHUNK-CARD-PRJ-AGENT-policy_server_threshold-001']",
+    "policyServerRecommendations[stop_distance_m_threshold] current==suggested 무시 (1.2)",
+    "policyServerRecommendations[force_action_override] citations에서 근거 없는 sourceId 제거: ['CHUNK-CARD-PRJ-AGENT-policy_server_logic-001']"
+  ],
   "nextBotSetup": {
     "schema": "delivery_bot_setup",
     "version": 1,
     "robot": {
       "drive": {
-        "max_speed_kmh": 10.0,
+        "max_speed_kmh": 9.0,
         "slowdown_speed_range_kmh": 3.5,
         "speed_limit_tolerance_kmh": 0.5,
         "speed_limit_brake": 0.08,

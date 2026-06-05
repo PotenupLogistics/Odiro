@@ -564,7 +564,11 @@ param 값은 위 키 그대로 적습니다.
 추천은 통계에서 실제 문제가 확인된 파라미터에만 생성한다.
 아래 조건을 만족하지 않으면 해당 파라미터는 추천에서 완전히 제외한다.
 
-- stop_distance_m / slow_down_distance_m: 충돌 or 위험 근접(min_front_distance < stop_distance) 발생 시에만 추천
+단, 다음 두 조건은 에피소드 통계와 무관하게 항상 추천한다:
+- stop_distance_m_threshold / slow_down_distance_m_threshold: DeliveryBotSetup의 LiDAR 값(stop_distance_m, slow_down_distance_m)과 수치가 다를 경우 항상 PolicyServer 쪽을 LiDAR 값에 맞춰 동기화 추천한다.
+- force_action_override: "None"이 아닌 값으로 설정되어 있으면 항상 "None"으로 되돌리는 추천을 생성한다.
+
+- stop_distance_m / slow_down_distance_m (BotSetup lidar 값): 충돌 or 위험 근접(min_front_distance < stop_distance) 발생 시에만 추천
 - max_speed_kmh / target_speed_kmh: 충돌·전복 발생 시 낮춘다 / 타임아웃·목표 미달 발생 시 높인다. 둘 다 없으면 추천 제외
 - run.time_limit_s: terminal_reason=Timeout 발생 시에만 높인다 / 실제 소요시간이 제한시간의 30% 미만이면 낮춘다. 그 외 추천 제외
 - evaluation.goal_acceptance_radius_m: goal_reached=false 또는 terminal_reason=Timeout 발생 시에만 높인다. 목표 도달 성공이면 추천 제외
@@ -742,6 +746,10 @@ def _validate_integrated_payload(
             except Exception as exc:
                 warnings.append(f"{key} 검증 실패 무시: {exc}")
                 continue
+            # current == suggested인 추천 제거
+            if hasattr(item, "current") and hasattr(item, "suggested") and item.current == item.suggested:
+                warnings.append(f"{key}[{item.param}] current==suggested 무시 ({item.current})")
+                continue
             # citations에 실제 RAG에 없는 sourceId가 있으면 제거
             if valid_source_ids is not None and item.citations:
                 invalid = [c for c in item.citations if c not in valid_source_ids]
@@ -872,9 +880,8 @@ def generate_integrated_recommendations(
             rawContent=json.dumps(payload, ensure_ascii=False),
         )
 
-    success = bool(bot_recs or ep_recs or ps_recs)
     return IntegratedLlmOutcome(
-        success=success,
+        success=True,
         bot_recommendations=bot_recs,
         episode_recommendations=ep_recs,
         policy_server_recommendations=ps_recs,

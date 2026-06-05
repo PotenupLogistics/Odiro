@@ -1,6 +1,5 @@
 
 #include "Episode/Editor/EpisodeEditorController.h"
-
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "EnhancedInputComponent.h"
@@ -25,6 +24,8 @@ AEpisodeEditorController::AEpisodeEditorController()
 	EditorInputMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Editor.IMC_Editor")));
 	EditorMoveAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorMove.IA_EditorMove")));
 	EditorLookAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorLook.IA_EditorLook")));
+	EditorSelectionAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_Selection.IA_Selection")));
+	EditorDeselectionAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_Deselection.IA_Deselection")));
 }
 
 void AEpisodeEditorController::BeginPlay()
@@ -51,13 +52,7 @@ void AEpisodeEditorController::Tick(float deltaSeconds)
 void AEpisodeEditorController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
-
-	if (!InputComponent) return;
-
 	BindEditorInputActions();
-	InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AEpisodeEditorController::HandleConfirmPlacementInput);
-	InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &AEpisodeEditorController::CancelPlacement);
-	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AEpisodeEditorController::CancelPlacement);
 }
 
 void AEpisodeEditorController::SetObserverMode()
@@ -72,22 +67,16 @@ void AEpisodeEditorController::SetObserverMode()
 
 void AEpisodeEditorController::RequestEditorWidgetInputMode(UWidget* focusWidget)
 {
-	if (!focusWidget)
-	{
-		return;
-	}
+	if (!focusWidget) return;
 
 	PruneEditorWidgetInputModeRequests();
-	EditorWidgetInputModeRequesters.AddUnique(TWeakObjectPtr<UWidget>(focusWidget));
+	EditorWidgetInputModeRequesters.AddUnique(TWeakObjectPtr(focusWidget));
 	ApplyInputMode();
 }
 
 void AEpisodeEditorController::ReleaseEditorWidgetInputMode(UWidget* focusWidget)
 {
-	if (!focusWidget)
-	{
-		return;
-	}
+	if (!focusWidget) return;
 
 	EditorWidgetInputModeRequesters.RemoveAll(
 		[focusWidget](const TWeakObjectPtr<UWidget>& requester)
@@ -100,11 +89,8 @@ void AEpisodeEditorController::ReleaseEditorWidgetInputMode(UWidget* focusWidget
 bool AEpisodeEditorController::BeginStaticObstaclePlacement(FName propId)
 {
 	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
-	if (!authoringSubsystem)
-	{
-		return false;
-	}
-
+	if (!authoringSubsystem) return false;
+	
 	FString failureReason;
 	if (!authoringSubsystem->CanPlaceStaticObstacle(propId, FTransform::Identity, failureReason)
 		&& failureReason.StartsWith(TEXT("Unknown static obstacle prop")))
@@ -167,7 +153,7 @@ bool AEpisodeEditorController::ConfirmPlacement()
 
 	if (bPlaced)
 	{
-		UpdatePlacementPreview();
+		SetObserverMode();
 	}
 
 	return bPlaced;
@@ -250,6 +236,11 @@ void AEpisodeEditorController::HandleConfirmPlacementInput()
 	ConfirmPlacement();
 }
 
+void AEpisodeEditorController::HandleCancelPlacementInput()
+{
+	CancelPlacement();
+}
+
 void AEpisodeEditorController::HandleEditorMoveAction(const FInputActionValue& inputActionValue)
 {
 	if (EditorMode != EEpisodeEditorControllerMode::Observer)
@@ -296,7 +287,7 @@ void AEpisodeEditorController::HandleEditorMoveAction(const FInputActionValue& i
 
 void AEpisodeEditorController::HandleEditorLookAction(const FInputActionValue& inputActionValue)
 {
-	if (EditorMode != EEpisodeEditorControllerMode::Observer)
+	if (EditorMode != EEpisodeEditorControllerMode::Observer || FindEditorWidgetInputModeFocus())
 	{
 		return;
 	}
@@ -374,6 +365,24 @@ void AEpisodeEditorController::BindEditorInputActions()
 			ETriggerEvent::Triggered,
 			this,
 			&AEpisodeEditorController::HandleEditorLookAction);
+	}
+
+	if (UInputAction* selectionAction = EditorSelectionAction.LoadSynchronous())
+	{
+		enhancedInputComponent->BindAction(
+			selectionAction,
+			ETriggerEvent::Started,
+			this,
+			&AEpisodeEditorController::HandleConfirmPlacementInput);
+	}
+
+	if (UInputAction* deselectionAction = EditorDeselectionAction.LoadSynchronous())
+	{
+		enhancedInputComponent->BindAction(
+			deselectionAction,
+			ETriggerEvent::Started,
+			this,
+			&AEpisodeEditorController::HandleCancelPlacementInput);
 	}
 }
 
@@ -482,12 +491,13 @@ void AEpisodeEditorController::ApplyInputMode()
 		bEnableClickEvents = true;
 		bEnableMouseOverEvents = true;
 
-		FInputModeUIOnly inputMode;
+		FInputModeGameAndUI inputMode;
 		const TSharedRef<SWidget> slateFocusWidget = focusWidget->TakeWidget();
 		if (slateFocusWidget->SupportsKeyboardFocus())
 		{
 			inputMode.SetWidgetToFocus(slateFocusWidget);
 		}
+		inputMode.SetHideCursorDuringCapture(false);
 		inputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 		SetInputMode(inputMode);
 	}

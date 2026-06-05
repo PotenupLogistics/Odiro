@@ -62,6 +62,7 @@ protected:
 
 private:
 	static FText CategoryToText(EEpisodeStaticObstaclePropCategory category);
+	static FString MakeDisplayNameFromPropId(FName propId);
 	static FString MakeIconSuffixFromPropId(FName propId);
 
 	FString BuildThumbnailTextureObjectPath() const;

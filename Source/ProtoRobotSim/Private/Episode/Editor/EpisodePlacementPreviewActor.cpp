@@ -4,6 +4,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Episode/Actors/EpisodeStaticObstacle.h"
 #include "Materials/MaterialInterface.h"
+#include "UObject/ConstructorHelpers.h"
 
 AEpisodePlacementPreviewActor::AEpisodePlacementPreviewActor()
 {
@@ -18,6 +19,20 @@ AEpisodePlacementPreviewActor::AEpisodePlacementPreviewActor()
 	PreviewMeshComponent->SetGenerateOverlapEvents(false);
 	PreviewMeshComponent->SetCastShadow(false);
 	PreviewMeshComponent->SetMobility(EComponentMobility::Movable);
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> validPlacementMaterial(
+		TEXT("/Game/Models/StreetObjects/Materials/MI_EpisodePlaceable.MI_EpisodePlaceable"));
+	if (validPlacementMaterial.Succeeded())
+	{
+		ValidPlacementMaterial = validPlacementMaterial.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> invalidPlacementMaterial(
+		TEXT("/Game/Models/StreetObjects/Materials/MI_EpisodeNonPlaceable.MI_EpisodeNonPlaceable"));
+	if (invalidPlacementMaterial.Succeeded())
+	{
+		InvalidPlacementMaterial = invalidPlacementMaterial.Object;
+	}
 
 	SetActorHiddenInGame(true);
 }

@@ -39,6 +39,12 @@ public:
 	TSoftObjectPtr<UInputAction> EditorLookAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	TSoftObjectPtr<UInputAction> EditorSelectionAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	TSoftObjectPtr<UInputAction> EditorDeselectionAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
 	int32 EditorInputMappingPriority = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Placement", meta = (ClampMin = "1.0"))
@@ -103,6 +109,7 @@ public:
 
 private:
 	void HandleConfirmPlacementInput();
+	void HandleCancelPlacementInput();
 	void HandleEditorMoveAction(const FInputActionValue& inputActionValue);
 	void HandleEditorLookAction(const FInputActionValue& inputActionValue);
 	void AddEditorInputMappingContext();

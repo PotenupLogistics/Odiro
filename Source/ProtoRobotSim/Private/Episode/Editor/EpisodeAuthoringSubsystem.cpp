@@ -164,6 +164,13 @@ bool UEpisodeAuthoringSubsystem::CanPlaceStaticObstacle(
 
 	const double candidateRadius = ComputePlacementRadius2D(candidateProp);
 	const FVector candidateLocation = transform.GetLocation();
+	if (candidateLocation.Z > 0.0)
+	{
+		outFailureReason = FString::Printf(
+			TEXT("Placement location Z must be 0 or lower. Current Z: %.2f."),
+			candidateLocation.Z);
+		return false;
+	}
 
 	for (const FEpisodeAuthoringStaticObstacleRecord& record : StaticObstacleRecords)
 	{

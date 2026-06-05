@@ -23,9 +23,7 @@ void UEpisodePlaceablePaletteItemWidget::SetPropEntry(const FEpisodeStaticObstac
 
 	if (DisplayNameTextBlock)
 	{
-		DisplayNameTextBlock->SetText(PropEntry.DisplayName.IsEmpty()
-			? FText::FromName(PropEntry.PropId)
-			: PropEntry.DisplayName);
+		DisplayNameTextBlock->SetText(FText::FromString(MakeDisplayNameFromPropId(PropEntry.PropId)));
 	}
 
 	if (CategoryTextBlock)
@@ -61,6 +59,18 @@ FText UEpisodePlaceablePaletteItemWidget::CategoryToText(EEpisodeStaticObstacleP
 	default:
 		return FText::FromString(TEXT("Unknown"));
 	}
+}
+
+FString UEpisodePlaceablePaletteItemWidget::MakeDisplayNameFromPropId(FName propId)
+{
+	FString propIdString = propId.ToString();
+	const FString obstaclePrefix(TEXT("obstacle."));
+	if (propIdString.StartsWith(obstaclePrefix))
+	{
+		propIdString.RightChopInline(obstaclePrefix.Len());
+	}
+
+	return propIdString;
 }
 
 FString UEpisodePlaceablePaletteItemWidget::MakeIconSuffixFromPropId(FName propId)

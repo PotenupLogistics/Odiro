@@ -55,3 +55,10 @@ Thumbs.db
 # 로컬 전용 파일
 CLAUDE.md
 image (1).png
+
+# 루트 임시 실행 결과물 (test_sample/test/ 에 공식 결과 저장)
+/recommendations.json
+/episode_recommendations.json
+/next_bot_setup.json
+/initial_policy_proposal.md
+/integrated_initial_policy.md

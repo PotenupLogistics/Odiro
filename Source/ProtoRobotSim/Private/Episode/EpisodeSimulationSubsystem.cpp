@@ -9,7 +9,7 @@
 #include "Episode/EpisodeEvaluationSubsystem.h"
 #include "Episode/EpisodePedestrianPlanSubsystem.h"
 #include "Shared/EpisodePedestrianPlanTypes.h"
-#include "Shared/Struct/DeliveryBotSetupInfo.h"
+#include "Shared/Struct/DeliveryBot/Setup/DeliveryBotSetupInfo.h"
 #include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
 #include "Kismet/GameplayStatics.h"
 

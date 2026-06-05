@@ -1,5 +1,8 @@
 
 #include "Episode/Editor/EpisodeEditorController.h"
+
+#include "Engine/LocalPlayer.h"
+#include "Engine/World.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Episode/Editor/EpisodeAuthoringSubsystem.h"
@@ -7,7 +10,10 @@
 #include "Episode/Editor/EpisodePlacementPreviewActor.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
+#include "InputCoreTypes.h"
 #include "InputMappingContext.h"
+#include "Components/Widget.h"
+#include "Widgets/SWidget.h"
 
 AEpisodeEditorController::AEpisodeEditorController()
 {
@@ -61,6 +67,33 @@ void AEpisodeEditorController::SetObserverMode()
 	bCurrentPlacementValid = false;
 	CurrentPlacementFailureReason.Reset();
 	DestroyPlacementPreview();
+	ApplyInputMode();
+}
+
+void AEpisodeEditorController::RequestEditorWidgetInputMode(UWidget* focusWidget)
+{
+	if (!focusWidget)
+	{
+		return;
+	}
+
+	PruneEditorWidgetInputModeRequests();
+	EditorWidgetInputModeRequesters.AddUnique(TWeakObjectPtr<UWidget>(focusWidget));
+	ApplyInputMode();
+}
+
+void AEpisodeEditorController::ReleaseEditorWidgetInputMode(UWidget* focusWidget)
+{
+	if (!focusWidget)
+	{
+		return;
+	}
+
+	EditorWidgetInputModeRequesters.RemoveAll(
+		[focusWidget](const TWeakObjectPtr<UWidget>& requester)
+		{
+			return !requester.IsValid() || requester.Get() == focusWidget;
+		});
 	ApplyInputMode();
 }
 
@@ -164,6 +197,52 @@ bool AEpisodeEditorController::ExportAndValidateEpisodeSetupJsonString(
 	}
 
 	return authoringSubsystem->ExportAndValidateEpisodeSetupJsonString(outJsonString, outDiagnostics);
+}
+
+bool AEpisodeEditorController::LoadEpisodeSetupJsonFile(
+	const FString& jsonFilePath,
+	FString& outResolvedJsonFilePath,
+	TArray<FString>& outDiagnostics)
+{
+	outResolvedJsonFilePath.Reset();
+	outDiagnostics.Reset();
+
+	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		outDiagnostics.Add(TEXT("Episode authoring subsystem is unavailable."));
+		return false;
+	}
+
+	CancelPlacement();
+	return authoringSubsystem->LoadEpisodeSetupJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
+}
+
+void AEpisodeEditorController::NewEpisodeDraft()
+{
+	CancelPlacement();
+	if (UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem())
+	{
+		authoringSubsystem->NewDraft();
+	}
+}
+
+bool AEpisodeEditorController::SaveEpisodeSetupJsonFile(
+	const FString& jsonFilePath,
+	FString& outResolvedJsonFilePath,
+	TArray<FString>& outDiagnostics)
+{
+	outResolvedJsonFilePath.Reset();
+	outDiagnostics.Reset();
+
+	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		outDiagnostics.Add(TEXT("Episode authoring subsystem is unavailable."));
+		return false;
+	}
+
+	return authoringSubsystem->SaveEpisodeSetupJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
 }
 
 void AEpisodeEditorController::HandleConfirmPlacementInput()
@@ -397,6 +476,21 @@ void AEpisodeEditorController::ApplyInputMode()
 		inputMode.SetHideCursorDuringCapture(false);
 		SetInputMode(inputMode);
 	}
+	else if (UWidget* focusWidget = FindEditorWidgetInputModeFocus())
+	{
+		bShowMouseCursor = true;
+		bEnableClickEvents = true;
+		bEnableMouseOverEvents = true;
+
+		FInputModeUIOnly inputMode;
+		const TSharedRef<SWidget> slateFocusWidget = focusWidget->TakeWidget();
+		if (slateFocusWidget->SupportsKeyboardFocus())
+		{
+			inputMode.SetWidgetToFocus(slateFocusWidget);
+		}
+		inputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		SetInputMode(inputMode);
+	}
 	else
 	{
 		bShowMouseCursor = false;
@@ -406,6 +500,29 @@ void AEpisodeEditorController::ApplyInputMode()
 		FInputModeGameOnly inputMode;
 		SetInputMode(inputMode);
 	}
+}
+
+void AEpisodeEditorController::PruneEditorWidgetInputModeRequests()
+{
+	EditorWidgetInputModeRequesters.RemoveAll(
+		[](const TWeakObjectPtr<UWidget>& requester)
+		{
+			return !requester.IsValid();
+		});
+}
+
+UWidget* AEpisodeEditorController::FindEditorWidgetInputModeFocus() const
+{
+	for (int32 i = EditorWidgetInputModeRequesters.Num() - 1; i >= 0; --i)
+	{
+		UWidget* requester = EditorWidgetInputModeRequesters[i].Get();
+		if (requester && requester->IsVisible())
+		{
+			return requester;
+		}
+	}
+
+	return nullptr;
 }
 
 void AEpisodeEditorController::DestroyPlacementPreview()

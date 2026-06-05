@@ -11,6 +11,7 @@ class AEpisodePlacementPreviewActor;
 class UEpisodeAuthoringSubsystem;
 class UInputAction;
 class UInputMappingContext;
+class UWidget;
 struct FInputActionValue;
 
 UCLASS(BlueprintType)
@@ -58,6 +59,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
 	void SetObserverMode();
 
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Input")
+	void RequestEditorWidgetInputMode(UWidget* focusWidget);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Input")
+	void ReleaseEditorWidgetInputMode(UWidget* focusWidget);
+
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
 	bool BeginStaticObstaclePlacement(FName propId);
 
@@ -85,6 +92,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Export")
 	bool ExportAndValidateEpisodeSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
 
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Import")
+	bool LoadEpisodeSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Authoring")
+	void NewEpisodeDraft();
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Export")
+	bool SaveEpisodeSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
+
 private:
 	void HandleConfirmPlacementInput();
 	void HandleEditorMoveAction(const FInputActionValue& inputActionValue);
@@ -96,6 +112,8 @@ private:
 	FTransform BuildPlacementTransform(const FVector& location) const;
 	FVector SnapLocationIfNeeded(const FVector& location) const;
 	void ApplyInputMode();
+	void PruneEditorWidgetInputModeRequests();
+	UWidget* FindEditorWidgetInputModeFocus() const;
 	void DestroyPlacementPreview();
 	AEpisodeEditorPawn* GetEditorPawn() const;
 	UEpisodeAuthoringSubsystem* GetAuthoringSubsystem() const;
@@ -117,4 +135,6 @@ private:
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
 	FString CurrentPlacementFailureReason;
+
+	TArray<TWeakObjectPtr<UWidget>> EditorWidgetInputModeRequesters;
 };

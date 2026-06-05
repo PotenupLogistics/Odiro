@@ -264,7 +264,7 @@ T04로 남긴 범위:
 - packaged exe가 생기면 같은 executable self-launch 경로로 `-Simulate=<SimulationSetupFile>`, `-RunId=<RunId>`가 전달되는지 확인
 - packaged build에서 `MainMenuMap`, `EpisodeSimulationMap`, `Json/Input`, `Json/Output` staging/cook 설정 확인
 
-### T05 Platform 최소 실행 화면 구현 [ ]
+### T05 Platform 최소 실행 화면 구현 [x]
 
 목표: 사용자가 JSON 파일을 선택하고 run을 시작한 뒤 결과를 확인한다.
 
@@ -364,7 +364,7 @@ T04로 남긴 범위:
 - [x] T02 Simulator bootstrap 구현
 - [x] T03 결과와 상태 기록 연결
 - [x] T04 Platform launcher 구현
-- [ ] T05 Platform 최소 실행 화면 구현
+- [x] T05 Platform 최소 실행 화면 구현
 - [ ] T06 실험 설정 편집 구현
 - [ ] T07 EpisodeEditorMap spawn/preview 연결
 - [ ] T08 LLM 연동 후속 연결
@@ -374,7 +374,7 @@ T04로 남긴 범위:
 | 단계 | 검증 |
 | --- | --- |
 | T01 | `SimulationSetup` parser automation, command line parser automation |
-| T02 | `SimulationProcess` helper automation, `-Simulate=<SimulationSetupFile>` 실행, SimulatorMode fixed-step/FPS 적용 확인 |
+| T02 | `SimulatorProcess` helper automation, `-Simulate=<SimulationSetupFile>` 실행, SimulatorMode fixed-step/FPS 적용 확인 |
 | T03 | sample setup 실행 후 report/log/status 생성 확인 |
 | T04 | Platform launcher command automation, process start/status polling 코드 경로 빌드 확인, visible subprocess smoke는 수동 확인 |
 | T05 | Platform UI widget 빌드 확인, invalid JSON validation 표시 코드 경로 구현, visible UI smoke는 수동 확인 |
@@ -409,3 +409,17 @@ T04로 남긴 범위:
 - packaged exe가 없을 때 `RunPreview.bat` fallback으로 같은 public command parameter 전달
 - status file polling으로 `Pending`, `Running`, `Completed`, `Failed`, `Canceled` terminal state 추적
 - process start failure와 simulator status failure를 분리해 UI가 진단할 수 있게 함
+
+### T05 완료
+
+- `AMainMenuPlayerController`가 MainMenu widget을 viewport에 붙이고 menu input mode를 관리
+- `UMainMenuWidget`이 setup 목록, fixed-step FPS 저장, run 시작, status/report/log preview를 제공
+- `BP_MainMenuGameMode`와 `WBP_MainMenu`를 추가하고 `MainMenuMap`에 연결
+- Platform UI는 simulator world object를 직접 참조하지 않고 status/report/log 파일만 읽음
+
+### 현재 결과
+
+T01~T05 완료.
+Launcher process는 packaged exe 또는 개발 fallback `RunPreview.bat`를 별도 process로 실행한다.
+Simulator process는 `SimulationSetup JSON` 기반 fixed-step run을 수행하고, Platform UI는 status/report/log 파일로 진행 상황과 결과를 조회한다.
+남은 큰 범위는 T06 실험 설정 편집, T07 `EpisodeEditorMap` spawn/preview 연결, T08 LLM 연동이다.

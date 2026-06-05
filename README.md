@@ -21,8 +21,8 @@
 | --- | --- |
 | DeliveryBot | 주행 로봇 Actor/Component/Subsystem. 이동/경로 추종/회피/정책 판단 |
 | Episode | JSON 에피소드 컴파일, 런타임 스폰/조회, 에피소드 Actor/Component, 실행/측정/평가 흐름 |
+| Platform | MainMenu UI, simulator subprocess 실행, `-Simulate=<SimulationSetupFile>` 기반 simulator process bootstrap, status polling |
 | Shared | Episode, Simulation, DeliveryBot 사이의 공유 타입, 실행 설정, 리플레이, 측정 로그, 시나리오 스펙 |
-| Simulation | `-Simulate=<SimulationSetupFile>` 기반 시뮬레이터 부트스트랩, fixed-step 설정, 맵 로드, 상태/로그/리포트 연결 |
 
 ## Scripts
 - `RunPreview.bat`: 패키징 프리뷰 (`UnrealEditor.exe <uproject> -game -NoSplash`)

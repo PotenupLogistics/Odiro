@@ -86,7 +86,6 @@ MVP 기준
 - footer는 명시적 시간 구간 대신 record count와 close reason 중심으로 작성
 
 프로젝트 정책 충돌:
-- `.agents/POLICY.md`는 runtime lifecycle에 events/timers 우선을 권장한다.
 - 이번 요구사항은 every Tick logging이므로 simulation authority가 아니라 measurement capture에 한해 Tick을 사용한다.
 
 ## Runtime 구조

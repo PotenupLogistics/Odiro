@@ -164,7 +164,7 @@ MVP 범위: T01~T05 / T06: 사용성 확장 / T07~T08은 병렬 작업자의 산
 - `-Simulate`, `-RunId` parser test 존재
 - 잘못된 setup path나 field를 simulator 시작 전에 실패 처리
 
-### T02 Simulator bootstrap 구현 [ ]
+### T02 Simulator bootstrap 구현 [x]
 
 목표: Platform UI 없이 simulator process만 실행해 `EpisodeSimulationMap`에서 batch run을 시작한다.
 
@@ -184,7 +184,7 @@ MVP 범위: T01~T05 / T06: 사용성 확장 / T07~T08은 병렬 작업자의 산
 - [SimulatorProcessSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/SimulatorProcessSubsystem.cpp): `-Simulate` 감지, setup parse, fixed-step 적용, target map load, runner start
 - [SimulatorProcessSubsystemTest.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/Tests/SimulatorProcessSubsystemTest.cpp): map id 정규화와 fixed-step 계산 automation
 
-T03에서 구현할 범위:
+T03 완료 범위:
 - Run Status JSON writer
 - setup의 logging 설정을 `UEpisodeMeasurementLogSubsystem`에 적용
 - setup의 report 설정을 `UEpisodeRunnerSubsystem`에 적용
@@ -195,7 +195,7 @@ T03에서 구현할 범위:
 - Simulator process는 setup의 FPS로 fixed-step을 적용
 - sample run queue가 runner에 전달되고 Episode spawn이 발생
 
-### T03 결과와 상태 기록 연결 [ ]
+### T03 결과와 상태 기록 연결 [x]
 
 목표: 별도 process로 실행되는 simulator 상태를 Platform UI가 파일만으로 추적할 수 있게 한다.
 
@@ -361,8 +361,8 @@ T04로 남긴 범위:
 ## 진행 현황
 
 - [x] T01 실행 계약과 타입 고정
-- [ ] T02 Simulator bootstrap 구현
-- [ ] T03 결과와 상태 기록 연결
+- [x] T02 Simulator bootstrap 구현
+- [x] T03 결과와 상태 기록 연결
 - [ ] T04 Platform launcher 구현
 - [ ] T05 Platform 최소 실행 화면 구현
 - [ ] T06 실험 설정 편집 구현
@@ -395,3 +395,10 @@ T04로 남긴 범위:
 - `UEpisodeRunnerSubsystem` runner state/record completion native delegate와 total/completed/current pair 조회 API 추가
 - `FEpisodeRunRecord`에 evaluation report JSON path 기록
 - `UEpisodeMeasurementLogSubsystem`에 runtime logging settings 적용 API 추가
+
+### T02/T03 완료
+
+- `USimulatorProcessSubsystem`이 `-Simulate=<SimulationSetupFile>`를 감지해 simulator mode로 진입
+- setup parse 후 fixed-step FPS 적용, target map load, `UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile` 실행 연결
+- runner 상태 변화와 record 완료를 `Run Status JSON`으로 기록
+- setup의 logging/report 설정을 simulator process 실행 흐름에 적용하고 report/log path를 status에 반영

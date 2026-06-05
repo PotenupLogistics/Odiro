@@ -58,7 +58,8 @@ def run_check() -> dict[str, Any]:
         "missingDocs": missing_docs,
         "readmeLinksManifest": "UE_HANDOFF_DELIVERY_MANIFEST.md" in readme_text,
         "docsReadmeLinksReleaseNotes": "HANDOFF_RELEASE_NOTES.md" in docs_readme_text,
-        "manifestMentionsEpisodeSpecResponse": "responseFormat=episode_spec" in manifest_text,
+        "manifestMentionsScenarioGenerate": "POST /api/v1/scenarios/generate" in manifest_text,
+        "manifestMentionsRemovedLegacyRoute": "FastAPI/OpenAPI에서 제거" in manifest_text,
         "manifestMentionsKickboard": "obstacle.kickboard" in manifest_text,
         "releaseNotesMentionOpenAiFirst": "OpenAI-first" in (
             (DOCS / "handoff" / "HANDOFF_RELEASE_NOTES.md").read_text(encoding="utf-8-sig")
@@ -82,8 +83,10 @@ def run_check() -> dict[str, Any]:
         result["errors"].append("Root README.md does not link UE_HANDOFF_DELIVERY_MANIFEST.md.")
     if not result["docsReadmeLinksReleaseNotes"]:
         result["errors"].append("docs/README.md does not link HANDOFF_RELEASE_NOTES.md.")
-    if not result["manifestMentionsEpisodeSpecResponse"]:
-        result["errors"].append("Delivery manifest does not mention responseFormat=episode_spec.")
+    if not result["manifestMentionsScenarioGenerate"]:
+        result["errors"].append("Delivery manifest does not mention /api/v1/scenarios/generate.")
+    if not result["manifestMentionsRemovedLegacyRoute"]:
+        result["errors"].append("Delivery manifest does not mention removed legacy handoff route.")
     if not result["manifestMentionsKickboard"]:
         result["errors"].append("Delivery manifest does not mention obstacle.kickboard.")
     if not result["releaseNotesMentionOpenAiFirst"]:

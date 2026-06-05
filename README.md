@@ -1,6 +1,6 @@
 # Proto-AI
 
-Proto-AI는 UE5 배달 로봇 시뮬레이션을 위한 AI 백엔드 프로젝트입니다. 자연어 시나리오 입력을 받아 정책 RAG context를 구성하고, `WorldConfig`를 생성/검증한 뒤 scenario reflection과 scenario post-processing을 거쳐 UE 실행 계약으로 변환합니다. 현재 legacy UE 실행 계약인 `EpisodeSpec` 경로를 유지하면서, 최신 UE 계약인 EpisodeSetup + DeliveryBotSetup pair와 RunQueue export/API 경로를 함께 지원합니다. 최신 계약 문서는 `docs/ue_contracts/` 아래에 있고 전환 기준은 [UE Contract Migration Plan](docs/architecture/UE_CONTRACT_MIGRATION_PLAN.md)에 정리했습니다.
+Proto-AI는 UE5 배달 로봇 시뮬레이션을 위한 AI 백엔드 프로젝트입니다. 자연어 시나리오 입력을 받아 정책 RAG context를 구성하고, `WorldConfig`를 생성/검증한 뒤 scenario reflection과 scenario post-processing을 거쳐 최신 UE 실행 계약인 EpisodeSetup + DeliveryBotSetup pair와 RunQueue export/API 경로로 변환합니다. legacy UE 실행 계약인 `EpisodeSpec` 관련 자료는 archive와 export tooling 맥락으로만 유지합니다. 최신 계약 문서는 `docs/ue_contracts/` 아래에 있고 전환 기준은 [UE Contract Migration Plan](docs/architecture/UE_CONTRACT_MIGRATION_PLAN.md)에 정리했습니다.
 
 이 프로젝트는 프로젝트 내부 시뮬레이션 검증용입니다. 실제 운영 안전성이나 외부 기준 충족을 주장하지 않습니다.
 
@@ -16,10 +16,9 @@ Natural Language Prompt
 -> JSON Schema / Pydantic Validation
 -> Scenario Reflection
 -> Scenario Post-Processing
--> EpisodeSpec Adapter
--> EpisodeSpec Validation
--> EpisodeSpec Scenario Reflection
--> UE5 Handoff
+-> EpisodeSetup Adapter / DeliveryBotSetup Adapter
+-> RunQueue Generation / Export
+-> UE5 Handoff Archive
 ```
 
 최신 UE 계약 기준에서는 Scenario는 추상적인 상황 유형이고, Episode는 seed/파라미터/배치가 적용된 단일 실행 인스턴스입니다. UE Runner의 실제 입력 단위는 EpisodeSetup + DeliveryBotSetup execution pair이며, 용어 기준은 [Scenario / Episode Terminology](docs/architecture/SCENARIO_EPISODE_TERMINOLOGY.md)에 정리했습니다.
@@ -36,13 +35,14 @@ Natural Language Prompt
 * 로컬 `WorldConfig` 생성을 위한 Ollama provider 경로
 * prompt package, JSON extraction, validation, repair loop를 포함한 WorldConfig generation orchestrator
 * scenario intent extraction, scenario reflection, deterministic scenario post-processing
-* UE5 handoff endpoint
-* `WorldConfig` -> `EpisodeSpec` adapter
-* `EpisodeSpec` validator와 scenario reflection
+* 사용자용 scenario generation API
+* `WorldConfig` -> EpisodeSetup + DeliveryBotSetup adapter
+* RunQueue model/service/export
+* legacy `WorldConfig` -> `EpisodeSpec` adapter와 validator/archive tooling
 * OpenAI-first / Ollama fallback provider chain
-* environmentSampling 기반 numeric constraints의 EpisodeSpec handoff 반영
-* UE team handoff package와 integration 문서
-* 최신 UE 계약 기반 `responseFormat=setup_pair` live smoke와 UE 전달 문서
+* environmentSampling 기반 numeric constraints의 UE 계약 반영
+* UE team RunQueue/setup pair 전달 문서
+* 최신 UE 계약 기반 setup pair live smoke와 UE 전달 문서
 
 ## 현재 검증 상태
 
@@ -51,7 +51,7 @@ Natural Language Prompt
 * `uv run pytest` -> `500 passed, 1 warning`
 * `uv run python -m harness.checks.check_all` -> `PASS_WITH_WARNING`
 
-현재 harness warning은 일부 source document와 manual review workflow가 아직 완료되지 않았기 때문에 남아 있습니다. UE handoff 관련 check는 통과 상태입니다.
+현재 harness warning은 일부 source document와 manual review workflow가 아직 완료되지 않았기 때문에 남아 있습니다. Legacy UE handoff route는 제거되었고, 사용자용 scenario generation과 RunQueue export check를 기준으로 검증합니다.
 
 Controlled smoke 상태:
 
@@ -95,36 +95,16 @@ Setup pair live smoke 상태:
 * `GET /health`
 * `POST /api/v1/generation/world-config/prompt-package`
 * `POST /api/v1/generation/world-config`
-* `POST /api/v1/ue5/world-config/handoff`
 * `POST /api/v1/contracts/validate/{contract_type}`
 * `POST /api/v1/scenarios/generate`
 
 UE 연동 기본 권장 endpoint:
 
 ```text
-POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=episode_spec
+POST /api/v1/scenarios/generate
 ```
 
-최신 UE 계약 setup pair endpoint:
-
-```text
-POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=setup_pair
-```
-
-OpenAI-first 권장 endpoint:
-
-```text
-POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=episode_spec
-```
-
-디버그용 endpoint option:
-
-```text
-POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=both
-```
-
-`/api/v1/ue5/world-config/handoff`의 기본 `responseFormat`은 `episode_spec`입니다.
-`responseFormat=world_config`는 AI 내부 구조 확인용이며 이 경우 `episodeSpec`은 `null`일 수 있습니다.
+Legacy `/api/v1/ue5/world-config/handoff` endpoint는 현재 FastAPI/OpenAPI에서 제거되었습니다. 이전 `responseFormat=episode_spec`, `responseFormat=setup_pair`, `responseFormat=both` 기반 handoff 설명은 archive 문서와 CLI tooling 참고용입니다.
 
 사용자용 scenario 생성 endpoint:
 
@@ -135,17 +115,17 @@ POST /api/v1/scenarios/generate
 이 endpoint는 사용자의 자연어 `prompt`만 입력받습니다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하는 구조가 아니며, JSON은 AI와 backend가 내부적으로 생성한 UE 실행 산출물입니다. 정상 응답은 최상위 `schema`, `version`, `runs`만 포함하는 RunQueue JSON입니다.
 `episode_count`를 함께 보내면 생성할 episode/run 개수를 지정할 수 있고, 생략하면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용합니다. 요청값은 1 이상 `SCENARIO_EPISODE_MAX_COUNT` 이하의 strict integer여야 합니다.
 
-## UE handoff 상태
+## UE 연동 상태
 
-AI 내부 계약은 계속 `WorldConfig`로 유지합니다. 현재 구현된 UE handoff 계약은 legacy `EpisodeSpec`과 최신 EpisodeSetup + DeliveryBotSetup pair를 함께 지원합니다. 최신 UE 계약 문서는 [docs/ue_contracts](docs/ue_contracts/) 아래에 있으며, UE 단일 pair 실행 확인 후 EpisodeSetup JSON과 DeliveryBotSetup JSON pair 중심으로 전환합니다.
+AI 내부 계약은 계속 `WorldConfig`로 유지합니다. 현재 사용자용 UE 연동 API는 `/api/v1/scenarios/generate`이며, backend가 내부적으로 EpisodeSetup + DeliveryBotSetup pair와 RunQueue를 생성/export합니다. 최신 UE 계약 문서는 [docs/ue_contracts](docs/ue_contracts/) 아래에 있습니다.
 
-`responseFormat=setup_pair`, OpenAI-first smoke, environmentSampling smoke, policy comparison smoke 결과는 release note에 요약했습니다. UE 전달 package는 별도 문서로 유지합니다.
+setup pair smoke, environmentSampling smoke, policy comparison smoke 결과는 release note에 요약했습니다. UE 전달 package는 별도 문서로 유지합니다.
 
 * [Handoff Release Notes](docs/handoff/HANDOFF_RELEASE_NOTES.md)
 * [UE Setup Pair Handoff Package](docs/handoff/UE_SETUP_PAIR_HANDOFF_PACKAGE.md)
 * [UE Team Message Draft](docs/handoff/UE_TEAM_MESSAGE_DRAFT.md)
 
-`EpisodeSpec`은 UE MVP JSON guide에 맞춘 UE 연동 권장 payload 형식입니다. 현재 UE object catalog에 `obstacle.kickboard`가 없으므로 adapter는 임시로 `obstacle.road_barrier_01`을 사용합니다. 단, 원래 시나리오 의미는 `semantic_type="Kickboard"`로 보존합니다.
+`EpisodeSpec`은 이전 UE MVP JSON guide에 맞춘 legacy payload 형식입니다. 현재 UE object catalog에 `obstacle.kickboard`가 없으므로 legacy adapter는 임시로 `obstacle.road_barrier_01`을 사용합니다. 단, 원래 시나리오 의미는 `semantic_type="Kickboard"`로 보존합니다.
 
 생성된 `EpisodeSpec`에는 다음 정보가 포함됩니다.
 

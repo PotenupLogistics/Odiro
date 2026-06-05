@@ -43,7 +43,6 @@ def _imports_live_http_client(path: Path) -> bool:
 def run_check() -> dict[str, Any]:
     model_text = _read(HANDOFF_MODEL)
     service_text = _read(HANDOFF_SERVICE)
-    routes_text = _read(ROUTES)
     summary_text = _read(SUMMARY)
     export_text = _read(EXPORT_SCRIPT)
     smoke_text = _read(SMOKE_SCRIPT)
@@ -57,7 +56,7 @@ def run_check() -> dict[str, Any]:
             term in model_text
             for term in ["episodeSetup", "deliveryBotSetup", "episodeSetupValidation", "deliveryBotSetupValidation"]
         ),
-        "routeAllowsSetupPair": "setup_pair" in routes_text,
+        "legacyRouteRemoved": "/api/v1/ue5/world-config/handoff" not in _read(ROUTES),
         "serviceCallsSetupPairAdapters": all(
             term in service_text
             for term in [
@@ -87,7 +86,7 @@ def run_check() -> dict[str, Any]:
     for key, message in [
         ("modelAllowsSetupPair", "Handoff request model must allow responseFormat=setup_pair."),
         ("responseHasSetupPairFields", "Handoff response model must include setup pair fields."),
-        ("routeAllowsSetupPair", "UE5 handoff route must allow setup_pair query override."),
+        ("legacyRouteRemoved", "Legacy UE5 handoff route must stay removed from FastAPI routes."),
         ("serviceCallsSetupPairAdapters", "Handoff service must call setup pair adapters and validators."),
         ("summaryIncludesSetupPairFields", "Handoff summary must include setup pair fields."),
         ("scriptsAcceptSetupPair", "Export/smoke scripts must accept setup_pair format."),

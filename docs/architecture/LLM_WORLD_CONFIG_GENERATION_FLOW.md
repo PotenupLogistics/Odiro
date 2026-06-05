@@ -1,10 +1,10 @@
 # LLM World Config Generation Flow
 
-이 문서는 자연어 입력이 `WorldConfig` draft, validation, scenario reflection, UE handoff로 이어지는 흐름을 설명한다. 기술 식별자와 API path는 영어 원문을 유지한다.
+이 문서는 자연어 입력이 `WorldConfig` draft, validation, scenario reflection, RunQueue generation/export로 이어지는 흐름을 설명한다. 기술 식별자와 API path는 영어 원문을 유지한다.
 
 schema validation을 통과한 뒤에는 scenario reflection validation을 수행한다. reflection이 실패하면 LLM에 scenario repair prompt를 다시 보내기 전에 deterministic scenario post-processing을 먼저 시도한다. Kickboard obstacle 삽입이나 pedestrian crossing behavior처럼 명확한 scenario 보강은 local rule과 schema 범위 안에서 처리한다.
 
-검증된 generation result는 UE5 handoff endpoint에서 감쌀 수 있다. handoff response는 schema validation, contract validation, scenario reflection을 통과한 경우에만 `worldConfig`를 포함한다.
+검증된 generation result는 내부 변환 경로에서 EpisodeSetup + DeliveryBotSetup pair와 RunQueue로 변환된다. legacy UE5 handoff endpoint는 FastAPI/OpenAPI에서 제거되었다.
 
 ## FastAPI Generation Endpoint
 
@@ -16,7 +16,7 @@ schema validation을 통과한 뒤에는 scenario reflection validation을 수�
 - `disabled` provider는 `success=false`를 반환한다.
 - OpenAI/Ollama provider client는 구현되어 있지만 automated tests와 harness에서는 실제 호출하지 않는다.
 - `generatedPayload`를 사용하려면 validation이 필수다.
-- UE5 handoff는 `/api/v1/ue5/world-config/handoff` 경로에서 별도로 수행한다.
+- UE 실행용 사용자 흐름은 `/api/v1/scenarios/generate`에서 RunQueue JSON으로 제공한다.
 
 ## Generation Orchestrator Status
 
@@ -58,7 +58,7 @@ Natural Language Prompt
 -> deterministic RAG context
 -> prompt package response
 
-외부 LLM 실행, generated World Config payload 반환, UE5 handoff는 별도 endpoint와 service layer에서 처리한다.
+외부 LLM 실행과 generated World Config payload 반환은 별도 generation endpoint/service layer에서 처리한다. UE 실행용 RunQueue 흐름은 `/api/v1/scenarios/generate`를 사용한다.
 
 ## Current Implementation Scope
 
@@ -96,7 +96,7 @@ Natural Language Prompt
 -> Contract Validation
 -> Repair Loop
 -> Validated World Config
--> UE5 Handoff
+-> RunQueue Generation / Export
 
 ## 2. 단계별 설명
 
@@ -109,8 +109,8 @@ Natural Language Prompt
 | JSON Extraction | LLM 출력 | JSON object 후보 | JSON object가 없으면 repair 요청 |
 | Contract Validation | JSON object 후보 | validation layer 결과 | schema/Pydantic 오류를 수집 |
 | Repair Loop | validation error | 수정된 JSON object 후보 | 최대 2회까지 repair |
-| Validated World Config | 검증 통과 payload | UE5 전달 가능 payload | 검증 전에는 UE5 전달 금지 |
-| UE5 Handoff | Validated World Config | UE5 world setup input | 전달 실패 시 로그와 payload id 기록 |
+| Validated World Config | 검증 통과 payload | UE 실행 계약 변환 가능 payload | 검증 전에는 UE 전달 금지 |
+| RunQueue Generation / Export | Validated World Config | EpisodeSetup + DeliveryBotSetup pair와 RunQueue | 생성 실패 시 로그와 payload id 기록 |
 
 ## 3. Validation 원칙
 

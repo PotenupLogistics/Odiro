@@ -18,7 +18,8 @@ def test_handoff_readiness_docs_exist() -> None:
 
 def test_message_draft_mentions_episode_spec_and_kickboard_request() -> None:
     text = (ROOT / "docs" / "handoff" / "UE_TEAM_MESSAGE_DRAFT.md").read_text(encoding="utf-8-sig")
-    assert "responseFormat=episode_spec" in text
+    assert "/api/v1/scenarios/generate" in text
+    assert "FastAPI/OpenAPI에서 제거" in text
     assert "obstacle.kickboard" in text
 
 

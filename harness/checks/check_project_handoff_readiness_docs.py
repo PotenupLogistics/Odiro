@@ -42,7 +42,8 @@ def run_check() -> dict[str, Any]:
         "warning": False,
         "missingDocs": missing_docs,
         "messageDocExists": MESSAGE_DOC.exists(),
-        "messageMentionsEpisodeSpec": "responseFormat=episode_spec" in message_text,
+        "messageMentionsScenarioGenerate": "/api/v1/scenarios/generate" in message_text,
+        "messageMentionsRemovedLegacyRoute": "FastAPI/OpenAPI에서 제거" in message_text,
         "messageMentionsKickboard": "obstacle.kickboard" in message_text,
         "readmeExists": readme_exists,
         "forbiddenArtifacts": [],
@@ -54,8 +55,10 @@ def run_check() -> dict[str, Any]:
         result["errors"].append("Project handoff readiness docs are missing.")
     if not result["messageDocExists"]:
         result["errors"].append("UE_TEAM_MESSAGE_DRAFT.md is missing.")
-    if not result["messageMentionsEpisodeSpec"]:
-        result["errors"].append("UE_TEAM_MESSAGE_DRAFT.md does not mention responseFormat=episode_spec.")
+    if not result["messageMentionsScenarioGenerate"]:
+        result["errors"].append("UE_TEAM_MESSAGE_DRAFT.md does not mention /api/v1/scenarios/generate.")
+    if not result["messageMentionsRemovedLegacyRoute"]:
+        result["errors"].append("UE_TEAM_MESSAGE_DRAFT.md does not mention removed legacy handoff route.")
     if not result["messageMentionsKickboard"]:
         result["errors"].append("UE_TEAM_MESSAGE_DRAFT.md does not mention obstacle.kickboard.")
     if not readme_exists:

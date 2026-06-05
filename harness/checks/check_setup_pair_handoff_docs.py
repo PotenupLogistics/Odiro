@@ -55,13 +55,14 @@ def run_check() -> dict[str, Any]:
         "warning": False,
         "handoffResultExists": HANDOFF_RESULT.exists(),
         "handoffPackageExists": HANDOFF_PACKAGE.exists(),
-        "ueTeamMessageMentionsSetupPair": "setup_pair" in message_text,
+        "ueTeamMessageMentionsScenarioGenerate": "/api/v1/scenarios/generate" in message_text,
+        "ueTeamMessageMentionsSetupPair": "EpisodeSetup + DeliveryBotSetup pair" in message_text,
         "readmeLinksHandoffResult": "HANDOFF_RELEASE_NOTES.md" in readme_text,
         "gitignoreIncludesFineTuningCandidates": "data/fine_tuning_candidates/" in gitignore_text,
         "resultDocumentsSetupPair": all(
             term in result_text
             for term in [
-                "responseFormat=setup_pair",
+                "setup pair",
                 "EpisodeSetup + DeliveryBotSetup pair",
                 "episodeSetupValidationPassed",
                 "deliveryBotSetupValidationPassed",
@@ -98,7 +99,8 @@ def run_check() -> dict[str, Any]:
     for key, message in [
         ("handoffResultExists", "Handoff release notes document is missing."),
         ("handoffPackageExists", "UE setup pair handoff package document is missing."),
-        ("ueTeamMessageMentionsSetupPair", "UE team message draft must mention setup_pair."),
+        ("ueTeamMessageMentionsScenarioGenerate", "UE team message draft must mention /api/v1/scenarios/generate."),
+        ("ueTeamMessageMentionsSetupPair", "UE team message draft must mention setup pair delivery scope."),
         ("readmeLinksHandoffResult", "README or docs README must link HANDOFF_RELEASE_NOTES."),
         ("gitignoreIncludesFineTuningCandidates", ".gitignore must include data/fine_tuning_candidates/."),
         ("resultDocumentsSetupPair", "Setup pair handoff result must document the verified setup_pair smoke."),

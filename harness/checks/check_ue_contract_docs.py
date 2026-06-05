@@ -96,7 +96,13 @@ def run_check() -> dict[str, Any]:
         ),
         "migrationPlanDescribesPairMigration": all(
             term in migration_plan
-            for term in ["WorldConfig -> EpisodeSetup", "DeliveryBotSetup", "setup_pair", "EpisodeSpec", "deprecated"]
+            for term in [
+                "WorldConfig -> EpisodeSetup",
+                "DeliveryBotSetup",
+                "RunQueue",
+                "/api/v1/scenarios/generate",
+                "legacy `/api/v1/ue5/world-config/handoff` route는 제거한다",
+            ]
         ),
         "legacyDocsArchived": (DOCS / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_ADAPTER.md").exists(),
         "readmesLinkPlans": all(

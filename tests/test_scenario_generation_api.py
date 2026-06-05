@@ -24,7 +24,7 @@ def _queue(run_count: int = 1) -> EpisodeRunQueue:
 def test_scenario_generation_route_accepts_prompt_only_and_returns_run_queue(monkeypatch) -> None:
     def stub_generate(request):
         assert request.episode_count is None
-        return _queue()
+        return _queue(run_count=Settings().scenarioEpisodeDefaultCount)
 
     monkeypatch.setattr(routes, "generate_scenario_run_queue", stub_generate)
 
@@ -33,6 +33,7 @@ def test_scenario_generation_route_accepts_prompt_only_and_returns_run_queue(mon
     assert response.status_code == 200
     payload = response.json()
     assert set(payload) == {"schema", "version", "runs"}
+    assert len(payload["runs"]) == Settings().scenarioEpisodeDefaultCount
     assert set(payload["runs"][0]) == {"pair_id", "episode_setup", "delivery_bot_setup"}
 
 

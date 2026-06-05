@@ -22,7 +22,6 @@ EXPECTED_ROUTES = {
     "/health",
     "/api/v1/generation/world-config",
     "/api/v1/generation/world-config/prompt-package",
-    "/api/v1/ue5/world-config/handoff",
     "/api/v1/scenarios/generate",
     "/api/v1/contracts/validate/{contract_type}",
 }
@@ -137,11 +136,15 @@ def run_check() -> dict[str, Any]:
         result["errors"].append("disabled provider must return DisabledLlmClient.")
 
     route_paths = {route.path for route in app.routes}
-    result["routeCountUnchanged"] = EXPECTED_ROUTES.issubset(route_paths) and len(
+    result["routeCountUnchanged"] = (
+        "/api/v1/ue5/world-config/handoff" not in route_paths
+        and EXPECTED_ROUTES.issubset(route_paths)
+        and len(
         {path for path in route_paths if path.startswith("/api/") or path == "/health"}
-    ) == len(EXPECTED_ROUTES)
+        ) == len(EXPECTED_ROUTES)
+    )
     if not result["routeCountUnchanged"]:
-        result["errors"].append("FastAPI endpoint set changed unexpectedly.")
+        result["errors"].append("FastAPI endpoint set must expose scenario generation and omit legacy handoff.")
 
     sdk_imports = _detect_external_sdk_imports()
     result["externalSdkImports"] = sdk_imports

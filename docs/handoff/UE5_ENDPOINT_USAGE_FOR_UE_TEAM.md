@@ -1,4 +1,4 @@
-# UE5 Endpoint Usage for UE Team
+# UE5 API Usage for UE Team
 
 ## 1. 서버 실행
 
@@ -10,27 +10,35 @@ uv run uvicorn app.main:app --reload
 
 * `GET /health`
 
-## 3. EpisodeSpec handoff 요청
+## 3. 권장 API: scenario generation
 
-EpisodeSpec JSON 계약의 기준 문서는 `docs/archive/previous_episode_spec/UE_EPISODE_SPEC_JSON_GUIDE.md`이다.
+Endpoint:
+
+* `POST /api/v1/scenarios/generate`
+
+이 endpoint는 사용자의 자연어 `prompt`를 필수로 받고, 선택적으로 `episode_count`를 허용한다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하는 구조가 아니다. AI와 backend가 내부적으로 EpisodeSetup + DeliveryBotSetup pair와 RunQueue JSON을 생성한다.
+
+성공 응답은 wrapper 없는 RunQueue JSON이며 최상위 필드는 `schema`, `version`, `runs`만 포함한다. EpisodeSetup / DeliveryBotSetup / RunQueue export는 null-free 정책을 따른다.
+
+## 3.1 Removed legacy EpisodeSpec handoff endpoint
 
 Endpoint:
 
 * `POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=episode_spec`
 
-`responseFormat` 기본값은 `episode_spec`이다. UE 테스트에서는 `responseFormat=episode_spec`을 권장한다.
-디버깅에서는 `responseFormat=both`를 사용하면 `worldConfig`와 `episodeSpec`을 함께 볼 수 있다.
-`responseFormat=world_config`는 AI 내부 구조 확인용이며 이 경우 `episodeSpec`은 `null`일 수 있다.
+이 legacy endpoint는 현재 FastAPI route와 OpenAPI에서 제거되었다. 이 URL은 현재 UE 연동용 정상 API가 아니다.
+
+EpisodeSpec JSON 계약의 기준 문서는 `docs/archive/previous_episode_spec/UE_EPISODE_SPEC_JSON_GUIDE.md`이다. 이전 `responseFormat=episode_spec`, `responseFormat=both`, `responseFormat=world_config` 설명은 archive/tooling 참고용이다.
 
 ## 3.1 최신 EpisodeSetup + DeliveryBotSetup pair 요청
 
 최신 UE 계약 기준 문서는 `docs/ue_contracts/` 아래 문서다.
 
-Endpoint:
+Removed endpoint:
 
 * `POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=setup_pair`
 
-`responseFormat=setup_pair`는 `episodeSetup`과 `deliveryBotSetup`을 반환한다. 이 응답에서 `episodeSpec`은 `null`이며, 기존 EpisodeSpec 경로는 legacy로 유지한다.
+이 legacy endpoint 역시 현재 route/OpenAPI에서 제거되었다. 최신 setup pair 생성은 `/api/v1/scenarios/generate`와 RunQueue export 경로를 기준으로 한다.
 
 UE가 읽어야 하는 setup pair 필드:
 
@@ -49,7 +57,7 @@ Environment sampler 연동:
 * numeric constraints는 자연어보다 우선
 * diagnostics에는 sampled numeric summary만 포함
 
-요청 body 구조:
+Legacy 요청 body 구조:
 
 * `schemaVersion`
 * `requestId`

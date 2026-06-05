@@ -19,7 +19,7 @@ def test_setup_pair_handoff_docs_exist() -> None:
 def test_setup_pair_handoff_result_documents_verified_response_format_and_pair() -> None:
     text = _read(DOCS / "handoff" / "HANDOFF_RELEASE_NOTES.md")
 
-    assert "responseFormat=setup_pair" in text
+    assert "setup pair" in text
     assert "EpisodeSetup + DeliveryBotSetup pair" in text
     assert "episodeSetupValidationPassed" in text
     assert "deliveryBotSetupValidationPassed" in text
@@ -49,7 +49,8 @@ def test_ue_setup_pair_package_documents_ue_checklist() -> None:
 def test_ue_team_message_mentions_setup_pair_delivery_scope() -> None:
     text = _read(DOCS / "handoff" / "UE_TEAM_MESSAGE_DRAFT.md")
 
-    assert "responseFormat=setup_pair" in text
+    assert "/api/v1/scenarios/generate" in text
+    assert "RunQueue JSON" in text
     assert "EpisodeSetup + DeliveryBotSetup pair" in text
     assert "actor spawn" in text
     assert "route injection" in text

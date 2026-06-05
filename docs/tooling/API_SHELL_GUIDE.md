@@ -1,6 +1,6 @@
 # API Shell Guide
 
-이 문서는 현재 FastAPI shell에서 노출되는 API와 provider 동작 범위를 정리한다. 사용자용 자연어 생성 API, UE handoff API, contract validation API를 구분해서 읽어야 한다.
+이 문서는 현재 FastAPI shell에서 노출되는 API와 provider 동작 범위를 정리한다. 사용자용 자연어 생성 API, WorldConfig generation API, contract validation API를 구분해서 읽어야 한다.
 
 ## 1. 실행
 
@@ -27,7 +27,6 @@ GET /health
 POST /api/v1/generation/world-config/prompt-package
 POST /api/v1/generation/world-config
 POST /api/v1/contracts/validate/{contract_type}
-POST /api/v1/ue5/world-config/handoff
 POST /api/v1/scenarios/generate
 ```
 
@@ -72,24 +71,15 @@ POST /api/v1/generation/world-config?provider=ollama
 
 `generatedPayload`는 LLM 응답에서 JSON 추출과 `world_config` validation이 통과한 뒤에만 채워진다.
 
-## 5. UE5 handoff API
+## 5. Removed legacy UE5 handoff API
 
 ```text
 POST /api/v1/ue5/world-config/handoff
 ```
 
-이 endpoint는 UE handoff와 내부 검증용 경로다. validated WorldConfig를 metadata, validation summary, scenario reflection, post-processing diagnostics, warning과 함께 감싼다.
+이 legacy endpoint는 현재 FastAPI route와 OpenAPI에서 제거되었다. 해당 URL 요청은 정상 API로 처리되지 않고 route not found로 남아야 한다.
 
-지원하는 `responseFormat`:
-
-* `episode_spec`: legacy EpisodeSpec 응답
-* `setup_pair`: 최신 EpisodeSetup + DeliveryBotSetup pair 응답
-* `both`: legacy와 setup pair를 함께 확인하는 debugging 응답
-* `world_config`: AI 내부 WorldConfig inspection 응답
-
-`/api/v1/ue5/world-config/handoff`의 `responseFormat=run_queue`는 현재 public handoff 옵션이 아니다. RunQueue가 필요한 사용자 흐름은 `/api/v1/scenarios/generate`를 사용한다.
-
-`includeDiagnostics=true`일 때 diagnostics에는 generationTrace, setupPairTrace 같은 요약 근거를 담을 수 있다. trace에는 rawContent, full raw response, API key, 인증값을 저장하지 않는다.
+RunQueue가 필요한 사용자/UE 흐름은 `/api/v1/scenarios/generate`를 사용한다. 이전 `responseFormat=episode_spec`, `responseFormat=setup_pair`, `responseFormat=both`, `responseFormat=world_config` 설명은 archive 문서와 CLI tooling 참고용이다.
 
 ## 6. Prompt package API
 

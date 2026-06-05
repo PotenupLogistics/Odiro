@@ -14,10 +14,10 @@
 * Scenario post-processing
 * OpenAI-first provider 경로
 * Ollama fallback provider 경로
-* UE handoff endpoint
-* legacy `WorldConfig` -> `EpisodeSpec` adapter
+* legacy UE handoff endpoint 제거
+* legacy `WorldConfig` -> `EpisodeSpec` adapter/archive tooling
 * 최신 `WorldConfig` -> `EpisodeSetup` + `DeliveryBotSetup` adapter
-* `responseFormat=setup_pair` handoff 응답
+* setup pair service/export tooling
 * EpisodeSetup + DeliveryBotSetup pair validation
 * 사용자용 `POST /api/v1/scenarios/generate`
 * UE 계약 그대로의 null-free RunQueue export
@@ -28,7 +28,7 @@
 
 `POST /api/v1/scenarios/generate`는 사용자용 entrypoint다. 사용자는 자연어 `prompt`를 필수로 입력하고 선택적으로 `episode_count`를 지정할 수 있다. backend는 내부적으로 WorldConfig, EpisodeSetup, DeliveryBotSetup, RunQueue를 생성한다. 응답은 wrapper 없는 RunQueue JSON이다. `episode_count`가 없으면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용한다.
 
-`POST /api/v1/ue5/world-config/handoff`는 UE handoff와 내부 검증용 endpoint다. legacy `episode_spec`, 최신 `setup_pair`, debugging용 `both`, AI 내부 inspection용 `world_config` 응답을 유지한다.
+`POST /api/v1/ue5/world-config/handoff`는 legacy endpoint이며 현재 FastAPI route와 OpenAPI에서 제거되었다. 이전 `episode_spec`, `setup_pair`, `both`, `world_config` responseFormat 설명은 archive/tooling 참고용으로만 남긴다.
 
 ## 3. 검증 결과
 

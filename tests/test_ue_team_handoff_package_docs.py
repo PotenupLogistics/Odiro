@@ -28,6 +28,8 @@ def test_handoff_package_mentions_episode_spec_format() -> None:
 
 def test_message_draft_requests_kickboard_catalog_confirmation() -> None:
     text = DOCS["message"].read_text(encoding="utf-8-sig")
+    assert "/api/v1/scenarios/generate" in text
+    assert "FastAPI/OpenAPI에서 제거" in text
     assert "obstacle.kickboard" in text
     assert "obstacle.road_barrier_01" in text
 
@@ -44,4 +46,3 @@ def test_no_forbidden_artifacts_created_for_ue_docs() -> None:
     assert not (ROOT / "fixtures").exists()
     assert not (ROOT / "data" / "rag" / "vector_db").exists()
     assert not (ROOT / "data" / "rag" / "embeddings").exists()
-

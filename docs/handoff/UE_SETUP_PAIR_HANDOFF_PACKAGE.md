@@ -28,7 +28,7 @@
 
 ## 전달 메모
 
-`responseFormat=setup_pair`는 최신 UE 계약 기준의 EpisodeSetup + DeliveryBotSetup pair만 반환한다. 기존 `responseFormat=episode_spec`은 legacy 경로로 유지되며, UE 단일 pair 실행 검증이 끝날 때까지 제거하지 않는다.
+Legacy `responseFormat=setup_pair` handoff smoke는 최신 UE 계약 기준의 EpisodeSetup + DeliveryBotSetup pair 생성을 검증했던 기록이다. 기존 `/api/v1/ue5/world-config/handoff` route와 `responseFormat=episode_spec` / `responseFormat=setup_pair` API 경로는 현재 FastAPI/OpenAPI에서 제거되었다.
 
 RunQueue package는 API 응답 규격을 바꾸지 않고 `scripts/export_ue5_run_queue_package.py`로 local export한다. 기본 episode count는 5이며, 산출물은 `data/run_queue_exports/<timestamp>_<requestId>/Json/Input/` 아래에 저장한다.
 

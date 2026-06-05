@@ -57,7 +57,7 @@ def run_check() -> dict[str, Any]:
         "serviceExists": SERVICE_PATH.exists(),
         "docExists": DOC_PATH.exists(),
         "scriptExists": SCRIPT_PATH.exists(),
-        "routeRegistered": False,
+        "legacyRouteRemoved": False,
         "policyCardCount": _jsonl_count(POLICY_CARDS_PATH),
         "ragChunkCount": _jsonl_count(RAG_CHUNKS_PATH),
         "openAiImports": [],
@@ -79,12 +79,12 @@ def run_check() -> dict[str, Any]:
         from app.main import app
 
         route_paths = {route.path for route in app.routes}
-        result["routeRegistered"] = "/api/v1/ue5/world-config/handoff" in route_paths
+        result["legacyRouteRemoved"] = "/api/v1/ue5/world-config/handoff" not in route_paths
     except Exception as exc:  # pragma: no cover
         result["errors"].append(f"Failed to import app.main:app: {exc}")
 
-    if not result["routeRegistered"]:
-        result["errors"].append("UE5 handoff route is not registered.")
+    if not result["legacyRouteRemoved"]:
+        result["errors"].append("Legacy UE5 handoff route is still registered.")
 
     if result["policyCardCount"] != 9:
         result["errors"].append("Policy card count changed from 9.")

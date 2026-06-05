@@ -67,9 +67,11 @@ def run_check() -> dict[str, Any]:
         and '= "episode_spec"' in handoff_model_text,
         "diagnosticsIncludeEffectiveResponseFormat": "effectiveResponseFormat" in handoff_service_text,
         "episodeReflectionAllowsNoPedestrian": "expectsNoPedestrian" in episode_reflection_text,
-        "docsMentionResponseFormatDefaults": "responseFormat=episode_spec" in docs_text
-        and "responseFormat=both" in docs_text
-        and "responseFormat=world_config" in docs_text,
+        "docsMentionScenarioGenerateAndRemovedLegacyRoute": "/api/v1/scenarios/generate" in docs_text
+        and (
+            "FastAPI/OpenAPI에서 제거" in docs_text
+            or "FastAPI route와 OpenAPI에서 제거" in docs_text
+        ),
         "forbiddenArtifacts": forbidden,
         "schemaFilesPresent": (ROOT / "schemas" / "world_config.schema.json").exists(),
         "errors": [],
@@ -83,7 +85,7 @@ def run_check() -> dict[str, Any]:
         ("handoffDefaultEpisodeSpec", "UE handoff request default responseFormat must be episode_spec."),
         ("diagnosticsIncludeEffectiveResponseFormat", "UE handoff diagnostics must include effectiveResponseFormat."),
         ("episodeReflectionAllowsNoPedestrian", "EpisodeSpec scenario reflection must support no-pedestrian prompts."),
-        ("docsMentionResponseFormatDefaults", "Docs must describe episode_spec, both, and world_config response formats."),
+        ("docsMentionScenarioGenerateAndRemovedLegacyRoute", "Docs must describe scenario generation and removed legacy handoff route."),
         ("schemaFilesPresent", "world_config JSON Schema file is missing."),
     ]:
         if not result[key]:

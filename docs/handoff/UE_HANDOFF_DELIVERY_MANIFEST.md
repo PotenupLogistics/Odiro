@@ -22,14 +22,12 @@
 ## 3. UE 기본 권장 endpoint
 
 ```text
-POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=episode_spec
+POST /api/v1/scenarios/generate
 ```
 
-## 4. 디버그 endpoint option
+이 endpoint는 자연어 `prompt`와 선택적 `episode_count`를 받고 wrapper 없는 RunQueue JSON을 반환합니다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하는 구조가 아닙니다.
 
-```text
-responseFormat=both
-```
+Legacy `/api/v1/ue5/world-config/handoff` endpoint와 `responseFormat=episode_spec` / `responseFormat=both` 옵션은 현재 FastAPI/OpenAPI에서 제거되었고 archive/tooling 참고용입니다.
 
 ## 5. Export CLI
 

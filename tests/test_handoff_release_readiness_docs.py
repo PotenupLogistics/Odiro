@@ -40,8 +40,8 @@ def test_delivery_manifest_contains_required_handoff_terms() -> None:
         encoding="utf-8-sig"
     )
 
-    assert "responseFormat=episode_spec" in text
-    assert "responseFormat=both" in text
+    assert "POST /api/v1/scenarios/generate" in text
+    assert "FastAPI/OpenAPI에서 제거" in text
     assert "obstacle.kickboard" in text
     assert "obstacle.road_barrier_01" in text
     assert "ueCompilerReadiness=true" in text

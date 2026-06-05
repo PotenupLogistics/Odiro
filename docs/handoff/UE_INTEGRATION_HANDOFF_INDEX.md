@@ -29,8 +29,9 @@ UE 담당자가 AI Backend handoff 관련 문서를 어떤 순서로 보면 되�
 
 ## 5. 현재 추천 endpoint
 
-* `POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=episode_spec`
-* 디버깅용: `responseFormat=both`
+* `POST /api/v1/scenarios/generate`
+
+Legacy `/api/v1/ue5/world-config/handoff`와 `responseFormat=episode_spec` / `responseFormat=both` 설명은 archive/tooling 참고용이며 현재 FastAPI/OpenAPI에는 노출되지 않는다.
 
 ## 6. 현재 확인된 smoke 결과
 

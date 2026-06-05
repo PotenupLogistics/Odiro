@@ -19,7 +19,6 @@ EXPECTED_ROUTES = {
     "/health",
     "/api/v1/generation/world-config",
     "/api/v1/generation/world-config/prompt-package",
-    "/api/v1/ue5/world-config/handoff",
     "/api/v1/scenarios/generate",
     "/api/v1/contracts/validate/{contract_type}",
 }
@@ -136,11 +135,15 @@ def run_check() -> dict[str, Any]:
         result["errors"].append("policy RAG chunk count must remain 9.")
 
     route_paths = {route.path for route in app.routes}
-    result["routeSetUnchanged"] = EXPECTED_ROUTES.issubset(route_paths) and len(
+    result["routeSetUnchanged"] = (
+        "/api/v1/ue5/world-config/handoff" not in route_paths
+        and EXPECTED_ROUTES.issubset(route_paths)
+        and len(
         {path for path in route_paths if path.startswith("/api/") or path == "/health"}
-    ) == len(EXPECTED_ROUTES)
+        ) == len(EXPECTED_ROUTES)
+    )
     if not result["routeSetUnchanged"]:
-        result["errors"].append("FastAPI endpoint set changed unexpectedly.")
+        result["errors"].append("FastAPI endpoint set must expose scenario generation and omit legacy handoff.")
 
     external_imports = _detect_external_sdk_imports()
     result["externalSdkImports"] = external_imports

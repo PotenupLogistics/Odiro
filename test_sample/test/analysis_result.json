@@ -1,0 +1,318 @@
+{
+  "schema": "test_sample_analysis_result",
+  "version": 2,
+  "analysisId": "5e1dd277-1677-4d16-b97f-046acfac98e8",
+  "generatedAt": "2026-06-05T02:18:04Z",
+  "generationMethod": "llm_rag",
+  "inputs": {
+    "bot_setup": "test_sample\\DeliveryBotSetupSample_1.json",
+    "episode_setup": "test_sample\\EpisodeSetupSample_1.json",
+    "measurement_log": "test_sample\\MeasurementLog_20260605_101451_EpisodeSimulationMap.jsonl",
+    "evaluation_report": "test_sample\\episode_run_0000_EpisodeSetupSample_1_legacy_route_fallback_001_evaluation_report.json",
+    "policy_server_source": "test_sample\\policy_server.py"
+  },
+  "policy_source_analysis": {
+    "forced_action": "Repath",
+    "default_stop_distance_m": 1.2,
+    "default_slow_down_distance_m": 3.5,
+    "logic_summary": [
+      "hasFrontObject=False → None",
+      "inRepathMoveGraceTime=True → SlowDown",
+      "dist ≤ 1.2m + canRepath=True → Repath",
+      "dist ≤ 1.2m + canRepath=False → Stop",
+      "dist ≤ 3.5m → SlowDown",
+      "그 외 → None"
+    ],
+    "warning": "FORCED_ACTION='Repath' 활성화 — 실제 거리 기반 로직이 무시됩니다. 운영 환경에서는 None으로 설정하세요."
+  },
+  "param_consistency_check": {
+    "ok": false,
+    "near_miss_threshold_m": 0.6,
+    "issues": [
+      {
+        "param": "slow_down_distance_m",
+        "bot_value": 3.8,
+        "policy_server_value": 3.5,
+        "gap": 0.3,
+        "description": "BotSetup(3.8m) ≠ PolicyServer 기본값(3.5m)"
+      }
+    ]
+  },
+  "episodeStatistics": {
+    "outcome": "Success",
+    "terminal_reason": "GoalReached",
+    "duration_s": 14.010344844311476,
+    "score": 0.0,
+    "goal_reached": true,
+    "static_obstacle_collision_count": 0,
+    "blocked_region_collision_count": 0,
+    "pedestrian_collision_count": 0,
+    "near_miss_count": 0,
+    "near_miss_min_distance_m": null,
+    "robot_tip_over_count": 0,
+    "failure_type": null,
+    "failure_speed_kmh": null,
+    "event_counts_by_type": {},
+    "diagnostics": [],
+    "usable_for_llm_tuning": true
+  },
+  "measurementStatistics": {
+    "totalTicks": 660,
+    "deliveryTimeSec": 14.010344844311476,
+    "closeReason": "unknown",
+    "diagnosticsWarningCount": 0,
+    "avgFrontDistanceM": 2.782435596689086,
+    "minFrontDistanceM": 0.7877489328384399,
+    "medianFrontDistanceM": 2.8326234817504883,
+    "frontObjectDetectionRate": 0.7742424242424243,
+    "actionReasonFreq": {
+      "path_follow": 200,
+      "slowdown": 309,
+      "repath": 1,
+      "repath_grace": 149,
+      "unknown": 1
+    },
+    "brakeAppliedCount": 1,
+    "brakeAppliedRatio": 0.0015151515151515152,
+    "avgTargetSpeedKmh": 4.288444232579433,
+    "targetSpeedVariance": 2.763692048225045,
+    "avgActualSpeedKmh": 3.4629552468592286,
+    "stopActionRatio": 0.0,
+    "slowdownActionRatio": 0.4681818181818182,
+    "repathActionRatio": 0.0015151515151515152
+  },
+  "botSetupRecommendations": [
+    {
+      "param": "max_speed_kmh",
+      "current": 9.0,
+      "suggested": 10.0,
+      "reason": "현재 최대 속도 9.0km/h에서 평균 실제 속도 3.46km/h로 운행 중이며, 충돌이나 전복이 발생하지 않았습니다. 따라서 최대 속도를 10.0km/h로 높여 효율성을 개선할 수 있습니다.",
+      "citations": [
+        "KOR-003"
+      ]
+    }
+  ],
+  "episodeSetupRecommendations": [],
+  "policyServerRecommendations": [
+    {
+      "param": "slow_down_distance_m_threshold",
+      "current": 3.5,
+      "suggested": 3.8,
+      "reason": "현재 slow_down_distance_m_threshold가 3.5m로 설정되어 있으나, LiDAR의 slow_down_distance_m이 3.8m로 설정되어 있습니다. 두 값의 일관성을 위해 threshold를 3.8m로 조정해야 합니다.",
+      "citations": [
+        "PRJ-AGENT",
+        "KOR-003"
+      ]
+    }
+  ],
+  "summary": "최대 속도를 10.0km/h로 높이고, 정책서버의 slow_down_distance_m_threshold를 3.8m로 조정할 것을 추천합니다.",
+  "llmWarnings": [],
+  "nextBotSetup": {
+    "schema": "delivery_bot_setup",
+    "version": 1,
+    "robot": {
+      "drive": {
+        "max_speed_kmh": 10.0,
+        "slowdown_speed_range_kmh": 3.5,
+        "speed_limit_tolerance_kmh": 0.5,
+        "speed_limit_brake": 0.08,
+        "stop_brake_input": 0.2,
+        "throttle_input_rate_per_second": 0.35,
+        "brake_input_rate_per_second": 0.5,
+        "steering_input_rate_per_second": 3.0,
+        "acceleration_rate_kmh_per_second": 1.8,
+        "deceleration_rate_kmh_per_second": 3.2,
+        "use_handbrake_when_brake": false,
+        "max_torque": 220.0,
+        "max_rpm": 4000.0,
+        "engine_idle_rpm": 600.0,
+        "engine_brake_effect": 0.04,
+        "engine_rev_up_moi": 5.0,
+        "engine_rev_down_rate": 600.0
+      },
+      "path_follow": {
+        "target_speed_kmh": 7.5,
+        "look_ahead_distance_m": 1.2,
+        "obstacle_slow_speed_kmh": 2.0,
+        "draw_debug": true,
+        "path_point_acceptance_distance_m": 0.4,
+        "goal_acceptance_distance_m": 0.8,
+        "steering_sensitivity": 0.8,
+        "min_turn_speed_kmh": 1.5
+      },
+      "lidar": {
+        "scan_range_m": 5.5,
+        "angle_step_degree": 4.0,
+        "stop_distance_m": 1.2,
+        "slow_down_distance_m": 3.8,
+        "draw_debug": true,
+        "sensor_height_m": 0.07,
+        "front_half_angle_degree": 20.0,
+        "store_missed_rays": false,
+        "trace_channel": "visibility",
+        "ignore_tags": [
+          "NoCollision"
+        ]
+      }
+    }
+  },
+  "nextEpisodeSetup": {
+    "schema": "episode_actor_spawn_mvp",
+    "version": 1,
+    "scenario_id": "legacy_route_fallback_001",
+    "map_id": "EpisodeSandbox",
+    "run": {
+      "base_seed": 1001,
+      "iteration_index": 1,
+      "time_limit_s": 55
+    },
+    "evaluation": {
+      "goal_acceptance_radius_m": 1,
+      "tip_over_angle_deg": 60,
+      "near_miss": {
+        "distance_m": 0.6
+      },
+      "scoring": {
+        "static_obstacle_collision": -1,
+        "blocked_region_collision": -1,
+        "penalty_region_violation": -3,
+        "pedestrian_near_miss": -3,
+        "pedestrian_collision": -10
+      }
+    },
+    "ground_model": {
+      "default_region_type": "walkable",
+      "regions": [
+        {
+          "region_id": "wide_sidewalk",
+          "region_type": "walkable",
+          "shape": {
+            "type": "rectangle",
+            "center_xy_m": [
+              0,
+              0
+            ],
+            "size_m": [
+              14,
+              8
+            ],
+            "yaw_deg": 0
+          },
+          "traversability_score": 1
+        },
+        {
+          "region_id": "curb_penalty",
+          "region_type": "penalty",
+          "shape": {
+            "type": "rectangle",
+            "center_xy_m": [
+              0,
+              5
+            ],
+            "size_m": [
+              14,
+              2.5
+            ],
+            "yaw_deg": 0
+          },
+          "penalty": {
+            "kind": "curb_departure",
+            "cost": 4,
+            "violation_after_s": 0.2
+          },
+          "traversability_score": 0.7
+        },
+        {
+          "region_id": "storefront_block",
+          "region_type": "blocked",
+          "shape": {
+            "type": "rectangle",
+            "center_xy_m": [
+              0,
+              -5
+            ],
+            "size_m": [
+              14,
+              2
+            ],
+            "yaw_deg": 0
+          },
+          "collision_tag": "building"
+        }
+      ]
+    },
+    "paths": [
+      {
+        "path_id": "ped_parallel_01",
+        "points_xy_m": [
+          [
+            -5.5,
+            2.5
+          ],
+          [
+            5.5,
+            2.5
+          ]
+        ],
+        "closed_loop": false
+      }
+    ],
+    "actors": {
+      "static_obstacles": [
+        {
+          "instance_id": "mailbox_01",
+          "prop_id": "obstacle.mailbox",
+          "xy_m": [
+            -2,
+            1
+          ],
+          "yaw_deg": 0
+        },
+        {
+          "instance_id": "bench_01",
+          "prop_id": "obstacle.street_bank",
+          "xy_m": [
+            2,
+            -1
+          ],
+          "yaw_deg": 0
+        }
+      ],
+      "pedestrians": [
+        {
+          "instance_id": "ped_parallel_01",
+          "archetype_id": "adult_pedestrian",
+          "path_id": "ped_parallel_01",
+          "xy_m": [
+            -5.5,
+            2.5
+          ],
+          "yaw_deg": 0,
+          "movement": {
+            "model": "straight_line",
+            "speed_mps": 0.9,
+            "initial_distance_m": 0,
+            "auto_start": true
+          }
+        }
+      ],
+      "robot": {
+        "instance_id": "robot_legacy_route",
+        "asset_id": "delivery_bot",
+        "spawn_only": false,
+        "xy_m": [
+          -5.5,
+          -1.5
+        ],
+        "yaw_deg": 0,
+        "route": {
+          "goal_xy_m": [
+            5.5,
+            -1.5
+          ],
+          "auto_start": true
+        }
+      }
+    }
+  }
+}

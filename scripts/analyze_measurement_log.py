@@ -14,6 +14,7 @@ from app.models.llm import LlmProvider  # noqa: E402
 from app.services.policy_recommendation_orchestrator import (  # noqa: E402
     analyze_and_recommend,
     analyze_episode_and_recommend,
+    analyze_full_setup_and_recommend,
 )
 
 
@@ -41,6 +42,20 @@ def _parser() -> argparse.ArgumentParser:
     ep_p.add_argument("--next-setup-path", default=None, help="다음 실험용 DeliveryBotSetup 저장 경로")
     ep_p.add_argument("--provider", default="ollama", choices=[p.value for p in LlmProvider])
     ep_p.add_argument("--fallback-only", action="store_true")
+
+    # 통합 5-입력 모드
+    full_p = subparsers.add_parser(
+        "full",
+        help="5-입력 통합 분석: EvaluationReport + MeasurementLog + EpisodeSetup + DeliveryBotSetup + policy_server.py",
+    )
+    full_p.add_argument("--evaluation-report", required=True, help="EpisodeEvaluationReport JSON 경로")
+    full_p.add_argument("--measurement-log", required=True, help="MeasurementLog_*.jsonl 경로")
+    full_p.add_argument("--episode-setup", required=True, help="EpisodeSetup JSON 경로")
+    full_p.add_argument("--bot-setup", required=True, help="DeliveryBotSetup JSON 경로")
+    full_p.add_argument("--policy-server", default=None, help="policy_server.py 경로 (선택)")
+    full_p.add_argument("--output", default=None, help="통합 추천 결과 JSON 저장 경로")
+    full_p.add_argument("--provider", default="openai", choices=[p.value for p in LlmProvider])
+    full_p.add_argument("--fallback-only", action="store_true")
 
     return parser
 
@@ -108,6 +123,24 @@ def main(argv: list[str] | None = None) -> int:
                 encoding="utf-8",
             )
             print(f"다음 실험용 DeliveryBotSetup 저장: {next_path}")
+    elif args.mode == "full":
+        result = analyze_full_setup_and_recommend(
+            evaluation_report_path=args.evaluation_report,
+            measurement_log_path=args.measurement_log,
+            episode_setup_path=args.episode_setup,
+            bot_setup_path=args.bot_setup,
+            policy_server_path=args.policy_server,
+            provider=provider,
+            fallback_only=args.fallback_only,
+            output_path=args.output,
+        )
+        payload = result.model_dump(mode="json")
+        text = json.dumps(payload, ensure_ascii=False, indent=2)
+        if args.output:
+            print(f"통합 추천 결과 저장: {args.output}")
+        else:
+            print(text)
+        return 0
     else:
         _parser().print_help()
         return 1

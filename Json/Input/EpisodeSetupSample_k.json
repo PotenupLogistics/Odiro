@@ -127,7 +127,6 @@
         "instance_id": "ped_01",
         "archetype_id": "adult_pedestrian",
         "path_id": "ped_01_path",
-        "spawn_time_s": 0,
         "xy_m": [-1.5, -1.1],
         "yaw_deg": 90,
         "movement": {
@@ -141,7 +140,6 @@
         "instance_id": "ped_02",
         "archetype_id": "adult_pedestrian",
         "path_id": "ped_02_path",
-        "spawn_time_s": 0,
         "xy_m": [6, 16],
         "yaw_deg": 90,
         "movement": {
@@ -155,7 +153,6 @@
         "instance_id": "ped_03",
         "archetype_id": "adult_pedestrian",
         "path_id": "ped_03_path",
-        "spawn_time_s": 0,
         "xy_m": [-3, -16],
         "yaw_deg": 90,
         "movement": {

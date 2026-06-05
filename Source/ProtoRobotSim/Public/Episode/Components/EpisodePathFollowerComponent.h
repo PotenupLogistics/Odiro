@@ -86,7 +86,7 @@ private:
 	double GetPathNoiseFade(double splineLength) const;
 	double GetPathNoiseSpeedScale(double splineLength) const;
 	FVector ApplyPathNoise(double distanceCm, double splineLength, const FVector& baseLocation) const;
-	void MoveOwnerToCurrentDistance(double deltaSeconds = 0.0, FHitResult* outSweepHit = nullptr);
+	void MoveOwnerToCurrentDistance(FHitResult* outSweepHit = nullptr);
 
 	double LateralNoisePhase = 0.0;
 	double SpeedNoisePhase = 0.0;

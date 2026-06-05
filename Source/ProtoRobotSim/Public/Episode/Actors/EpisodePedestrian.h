@@ -2,15 +2,15 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
-#include "Shared/EpisodeCoreTypes.h"
 #include "EpisodePedestrian.generated.h"
 
 class UEpisodeObstacleCollisionComponent;
 class UEpisodePathFollowerComponent;
+class UEpisodePedestrianRuntimeComponent;
 class UEpisodePlaceableComponent;
 
-// 보행자 actor(아이, 성인, 노인 등) 파일임.
-// profile과 path follower로 보행자 차이를 표현하는 Character 기반 actor임.
+// 보행자 Character 기반 actor임.
+// 이동 방식은 legacy path follower 또는 planned trajectory runtime component가 담당한다.
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API AEpisodePedestrian : public ACharacter
 {
@@ -28,18 +28,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
 	TObjectPtr<UEpisodePathFollowerComponent> PathFollowerComponent;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	EEpisodePedestrianProfile PedestrianProfile = EEpisodePedestrianProfile::Adult;
-
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|Visual")
-	float VisualSpeedCmPerSecond = 0.0f;
-
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|Visual")
-	float VisualDirectionDegrees = 0.0f;
-
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|Visual")
-	bool bMoving = false;
-
-	void UpdateVisualMotion(const FVector& previousLocation, const FVector& newLocation, double deltaSeconds);
-	void ResetVisualMotion();
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	TObjectPtr<UEpisodePedestrianRuntimeComponent> PedestrianRuntimeComponent;
 };

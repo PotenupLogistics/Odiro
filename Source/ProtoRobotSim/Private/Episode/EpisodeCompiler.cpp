@@ -692,6 +692,51 @@ void UEpisodeCompiler::CompileStaticObstacles(
 	}
 }
 
+void UEpisodeCompiler::CompilePedestrianBehavior(
+	const FJsonObject& pedestrianObject,
+	const FString& path,
+	FEpisodeCompileResult& result,
+	FEpisodeDynamicActorSpec& dynamicActorSpec)
+{
+	TSharedPtr<FJsonObject> behaviorObject;
+	if (!TryGetObjectField(pedestrianObject, TEXT("behavior"), behaviorObject))
+	{
+		return;
+	}
+
+	const auto readOptionalNumber = [&result, &behaviorObject, &path](
+		const TCHAR* fieldName,
+		const TCHAR* propertyName,
+		double scale,
+		TMap<FString, FEpisodeParamValue>& outProperties)
+	{
+		const FString fieldNameString(fieldName);
+		if (!behaviorObject->HasField(fieldNameString)) return;
+
+		double value = 0.0;
+		if (!behaviorObject->TryGetNumberField(fieldNameString, value))
+		{
+			AddDiagnostic(
+				result,
+				EEpisodeCompileDiagnosticSeverity::Error,
+				TEXT("invalid_number"),
+				FString::Printf(TEXT("%s.behavior.%s 필드는 숫자여야 함."), *path, fieldName));
+			return;
+		}
+
+		outProperties.Add(propertyName, MakeFloatParam(value * scale));
+	};
+
+	readOptionalNumber(TEXT("cooperation"), TEXT("behavior_cooperation"), 1.0, dynamicActorSpec.Properties);
+	readOptionalNumber(TEXT("evasiveness"), TEXT("behavior_evasiveness"), 1.0, dynamicActorSpec.Properties);
+	readOptionalNumber(TEXT("personal_space_m"), TEXT("behavior_personal_space_cm"), MetersToCentimeters, dynamicActorSpec.Properties);
+	readOptionalNumber(TEXT("personal_space_cm"), TEXT("behavior_personal_space_cm"), 1.0, dynamicActorSpec.Properties);
+	readOptionalNumber(TEXT("awareness_horizon_s"), TEXT("behavior_awareness_horizon_s"), 1.0, dynamicActorSpec.Properties);
+	readOptionalNumber(TEXT("max_yield_wait_s"), TEXT("behavior_max_yield_wait_s"), 1.0, dynamicActorSpec.Properties);
+	readOptionalNumber(TEXT("sidestep_distance_m"), TEXT("behavior_sidestep_distance_cm"), MetersToCentimeters, dynamicActorSpec.Properties);
+	readOptionalNumber(TEXT("sidestep_distance_cm"), TEXT("behavior_sidestep_distance_cm"), 1.0, dynamicActorSpec.Properties);
+}
+
 void UEpisodeCompiler::CompilePedestrians(
 	const FJsonObject& actorsObject,
 	FEpisodeCompileResult& result,
@@ -725,31 +770,77 @@ void UEpisodeCompiler::CompilePedestrians(
 			dynamicActorSpec.AssetId = TEXT("adult_pedestrian");
 		}
 
-		RequireStringField(*pedestrianObject, TEXT("path_id"), pedestrianPath, result, dynamicActorSpec.PathId);
-		if (!dynamicActorSpec.PathId.IsEmpty() && !pathIds.Contains(dynamicActorSpec.PathId))
-		{
-			AddDiagnostic(
-				result,
-				EEpisodeCompileDiagnosticSeverity::Error,
-				TEXT("unknown_path"),
-				FString::Printf(
-					TEXT("%s.path_id '%s' 값과 일치하는 컴파일된 path가 없음."), *pedestrianPath, *dynamicActorSpec.PathId));
-		}
-
-		dynamicActorSpec.Category = EEpisodeActorCategory::Pedestrian;
-		dynamicActorSpec.SpawnTimeSeconds = ReadNumberOrDefault(*pedestrianObject, TEXT("spawn_time_s"), 0.0);
-		ReadActorPlacementTransform(*pedestrianObject, pedestrianPath, result, dynamicActorSpec.InitialTransform);
-		AddJsonProperties(*pedestrianObject, dynamicActorSpec.Properties);
-
+		FString movementModel = TEXT("spline_Relative");
 		TSharedPtr<FJsonObject> movementObject;
 		if (TryGetObjectField(*pedestrianObject, TEXT("movement"), movementObject))
 		{
-			FString movementModel;
-			if (TryGetStringField(*movementObject, TEXT("model"), movementModel))
+			TryGetStringField(*movementObject, TEXT("model"), movementModel);
+		}
+		dynamicActorSpec.Properties.Add(TEXT("movement_model"), MakeStringParam(movementModel));
+		const bool bPlannedTrajectory = movementModel.Equals(TEXT("planned_trajectory"), ESearchCase::IgnoreCase);
+
+		if (!bPlannedTrajectory)
+		{
+			RequireStringField(*pedestrianObject, TEXT("path_id"), pedestrianPath, result, dynamicActorSpec.PathId);
+			if (!dynamicActorSpec.PathId.IsEmpty() && !pathIds.Contains(dynamicActorSpec.PathId))
 			{
-				dynamicActorSpec.Properties.Add(TEXT("movement_model"), MakeStringParam(movementModel));
+				AddDiagnostic(
+					result,
+					EEpisodeCompileDiagnosticSeverity::Error,
+					TEXT("unknown_path"),
+					FString::Printf(
+						TEXT("%s.path_id '%s' 값과 일치하는 컴파일된 path가 없음."), *pedestrianPath, *dynamicActorSpec.PathId));
+			}
+		}
+		else
+		{
+			TryGetStringField(*pedestrianObject, TEXT("path_id"), dynamicActorSpec.PathId);
+		}
+
+		dynamicActorSpec.Category = EEpisodeActorCategory::Pedestrian;
+		ReadActorPlacementTransform(*pedestrianObject, pedestrianPath, result, dynamicActorSpec.InitialTransform);
+		AddJsonProperties(*pedestrianObject, dynamicActorSpec.Properties);
+
+		if (bPlannedTrajectory)
+		{
+			FVector plannedStartCm = FVector::ZeroVector;
+			if (pedestrianObject->HasField(TEXT("start_xy_m")))
+			{
+				if (ReadVector2DAsVectorField(*pedestrianObject, TEXT("start_xy_m"), MetersToCentimeters, pedestrianPath, result, plannedStartCm))
+				{
+					dynamicActorSpec.InitialTransform.SetLocation(plannedStartCm);
+					dynamicActorSpec.Properties.Add(TEXT("planned_start_cm"), MakeVectorParam(plannedStartCm));
+				}
+			}
+			else
+			{
+				AddDiagnostic(
+					result,
+					EEpisodeCompileDiagnosticSeverity::Error,
+					TEXT("missing_pedestrian_start"),
+					FString::Printf(TEXT("%s.start_xy_m 필드는 planned_trajectory 보행자에 필수."), *pedestrianPath));
 			}
 
+			FVector plannedGoalCm = FVector::ZeroVector;
+			if (pedestrianObject->HasField(TEXT("goal_xy_m")))
+			{
+				if (ReadVector2DAsVectorField(*pedestrianObject, TEXT("goal_xy_m"), MetersToCentimeters, pedestrianPath, result, plannedGoalCm))
+				{
+					dynamicActorSpec.Properties.Add(TEXT("planned_goal_cm"), MakeVectorParam(plannedGoalCm));
+				}
+			}
+			else
+			{
+				AddDiagnostic(
+					result,
+					EEpisodeCompileDiagnosticSeverity::Error,
+					TEXT("missing_pedestrian_goal"),
+					FString::Printf(TEXT("%s.goal_xy_m 필드는 planned_trajectory 보행자에 필수."), *pedestrianPath));
+			}
+		}
+
+		if (movementObject.IsValid())
+		{
 			if (movementObject->HasField(TEXT("speed_mps")))
 			{
 				const double speedMps = ReadNumberOrDefault(*movementObject, TEXT("speed_mps"), 1.2);
@@ -766,12 +857,42 @@ void UEpisodeCompiler::CompilePedestrians(
 					TEXT("initial_distance_cm"), MakeFloatParam(initialDistanceM * MetersToCentimeters));
 			}
 
+			if (movementObject->HasField(TEXT("curve_offset_m")))
+			{
+				const double curveOffsetM = ReadNumberOrDefault(*movementObject, TEXT("curve_offset_m"), 0.0);
+				dynamicActorSpec.Properties.Add(TEXT("path_curve_offset_cm"), MakeFloatParam(curveOffsetM * MetersToCentimeters));
+			}
+
+			if (movementObject->HasField(TEXT("curve_offset_cm")))
+			{
+				dynamicActorSpec.Properties.Add(
+					TEXT("path_curve_offset_cm"),
+					MakeFloatParam(ReadNumberOrDefault(*movementObject, TEXT("curve_offset_cm"), 0.0)));
+			}
+
+			if (movementObject->HasField(TEXT("curve_sample_spacing_m")))
+			{
+				const double curveSampleSpacingM = ReadNumberOrDefault(*movementObject, TEXT("curve_sample_spacing_m"), 0.5);
+				dynamicActorSpec.Properties.Add(
+					TEXT("path_curve_sample_spacing_cm"),
+					MakeFloatParam(curveSampleSpacingM * MetersToCentimeters));
+			}
+
+			if (movementObject->HasField(TEXT("curve_sample_spacing_cm")))
+			{
+				dynamicActorSpec.Properties.Add(
+					TEXT("path_curve_sample_spacing_cm"),
+					MakeFloatParam(ReadNumberOrDefault(*movementObject, TEXT("curve_sample_spacing_cm"), 50.0)));
+			}
+
 			if (movementObject->HasField(TEXT("auto_start")))
 			{
 				dynamicActorSpec.Properties.Add(
 					TEXT("auto_start"), MakeBoolParam(ReadBoolOrDefault(*movementObject, TEXT("auto_start"), true)));
 			}
 		}
+
+		CompilePedestrianBehavior(*pedestrianObject, pedestrianPath, result, dynamicActorSpec);
 
 		result.WorldSpec.DynamicActors.Add(dynamicActorSpec);
 	}

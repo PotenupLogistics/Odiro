@@ -139,9 +139,6 @@ struct PROTOROBOTSIM_API FEpisodeDynamicActorSpec
 	FString PathId;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	double SpawnTimeSeconds = 0.0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	TMap<FString, FEpisodeParamValue> Properties;
 };
 

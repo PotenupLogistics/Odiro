@@ -389,3 +389,9 @@ T04로 남긴 범위:
 - `SimulationSetup JSON`, `Run Status JSON`, `-Simulate=<SimulationSetupFile>`, optional `-RunId=<RunId>` 계약 타입과 parser 추가
 - `Json/Input/SimulationSetupSample.json` sample setup 추가
 - sample parse, invalid field, missing file, command line parser, status read/write automation 추가
+
+### T03 선행 작업
+
+- `UEpisodeRunnerSubsystem` runner state/record completion native delegate와 total/completed/current pair 조회 API 추가
+- `FEpisodeRunRecord`에 evaluation report JSON path 기록
+- `UEpisodeMeasurementLogSubsystem`에 runtime logging settings 적용 API 추가

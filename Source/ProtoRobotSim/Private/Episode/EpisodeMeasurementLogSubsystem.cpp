@@ -76,6 +76,23 @@ namespace
 	}
 }
 
+void UEpisodeMeasurementLogSubsystem::ApplySettings(
+	const FEpisodeMeasurementLogSettings& settings,
+	bool bRestartIfLogging)
+{
+	const bool bWasLogging = IsLogging();
+	if (bWasLogging && bRestartIfLogging)
+	{
+		StopLogging(TEXT("settings_reconfigured"));
+	}
+
+	Settings = settings;
+	if ((bWasLogging || bStartAttempted) && !IsLogging() && Settings.bEnabled)
+	{
+		StartLogging();
+	}
+}
+
 bool UEpisodeMeasurementLogSubsystem::StartLogging()
 {
 	if (IsLogging())

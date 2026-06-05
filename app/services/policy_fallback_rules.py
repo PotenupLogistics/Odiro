@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.models.recommendation import AnalysisStatistics, ParamRecommendation
+from app.models.recommendation import (
+    AnalysisStatistics,
+    BotSetupRecommendation,
+    EvaluationReportStatistics,
+    ParamRecommendation,
+)
 
 
 # CLAUDE.md 명시 고정값. 로그에 실제 적용값이 없으므로 1차 구현은 이 기본값을 current로 가정.
@@ -153,6 +158,114 @@ def apply_fallback_rules(
 
 
 def build_fallback_summary(recommendations: list[ParamRecommendation]) -> str:
+    if not recommendations:
+        return "fallback 규칙 기준으로 조정이 필요한 파라미터가 없음."
+    params = ", ".join(rec.param for rec in recommendations)
+    return f"fallback 규칙 기반으로 {len(recommendations)}개 파라미터 조정 권장: {params}"
+
+
+# ── EvaluationReport 기반 fallback 규칙 ──────────────────────────────────
+
+def apply_episode_fallback_rules(
+    statistics: EvaluationReportStatistics,
+    current_stop_distance_m: float = 1.2,
+    current_slow_down_distance_m: float = 3.5,
+    current_max_speed_kmh: float = 10.0,
+    current_target_speed_kmh: float = 10.0,
+    current_obstacle_slow_speed_kmh: float = 1.5,
+    current_look_ahead_distance_m: float = 1.0,
+) -> list[BotSetupRecommendation]:
+    """EvaluationReport 통계 기반 결정론적 추천. LLM 실패 시 호출."""
+    recs: list[BotSetupRecommendation] = []
+
+    # 규칙 1: 보행자 근접 — stop 거리 상향
+    if statistics.near_miss_min_distance_m is not None and statistics.near_miss_min_distance_m < 0.5:
+        recs.append(BotSetupRecommendation(
+            param="stop_distance_m",
+            current=current_stop_distance_m,
+            suggested=_round(current_stop_distance_m * 1.25),
+            reason=(
+                f"보행자 근접 최소거리 {statistics.near_miss_min_distance_m:.2f}m로 임계(0.5m) 미만. "
+                f"정지 거리를 25% 상향해 안전여유 확보."
+            ),
+        ))
+
+    # 규칙 2: 보행자 충돌 — stop 거리 대폭 상향
+    if statistics.pedestrian_collision_count > 0:
+        recs.append(BotSetupRecommendation(
+            param="stop_distance_m",
+            current=current_stop_distance_m,
+            suggested=_round(current_stop_distance_m * 1.5),
+            reason=(
+                f"보행자 충돌 {statistics.pedestrian_collision_count}회 발생. "
+                f"정지 거리를 50% 상향."
+            ),
+        ))
+
+    # 규칙 3: 정적 장애물 충돌 — 감속 시작 거리 상향
+    if statistics.static_obstacle_collision_count > 0:
+        recs.append(BotSetupRecommendation(
+            param="slow_down_distance_m",
+            current=current_slow_down_distance_m,
+            suggested=_round(current_slow_down_distance_m * 1.2),
+            reason=(
+                f"정적 장애물 충돌 {statistics.static_obstacle_collision_count}회. "
+                f"감속 시작 거리를 20% 상향해 충돌 여유 확보."
+            ),
+        ))
+
+    # 규칙 4: Stuck — 장애물 감속 속도 낮추기 (더 느리게 통과)
+    if statistics.terminal_reason == "Stuck" or statistics.failure_type == "Stuck":
+        recs.append(BotSetupRecommendation(
+            param="obstacle_slow_speed_kmh",
+            current=current_obstacle_slow_speed_kmh,
+            suggested=_round(current_obstacle_slow_speed_kmh * 0.8),
+            reason=(
+                "로봇이 Stuck(이동 불가) 상태로 종료. 장애물 구간 목표 속도를 20% 낮춰 "
+                "저속 통과를 유도."
+            ),
+        ))
+
+    # 규칙 5: Timeout — 목표 속도 상향
+    if statistics.terminal_reason == "Timeout":
+        recs.append(BotSetupRecommendation(
+            param="target_speed_kmh",
+            current=current_target_speed_kmh,
+            suggested=_round(current_target_speed_kmh * 1.1),
+            reason=(
+                f"제한시간({statistics.duration_s:.1f}s) 초과로 종료. "
+                f"경로 추종 목표 속도를 10% 상향해 배송 시간 단축."
+            ),
+        ))
+
+    # 규칙 6: 전복 — 최대 속도 하향
+    if statistics.robot_tip_over_count > 0:
+        recs.append(BotSetupRecommendation(
+            param="max_speed_kmh",
+            current=current_max_speed_kmh,
+            suggested=_round(current_max_speed_kmh * 0.8),
+            reason=(
+                f"로봇 전복 {statistics.robot_tip_over_count}회. "
+                f"최대 속도를 20% 낮춰 안정성 확보."
+            ),
+        ))
+
+    # 규칙 7: 경로 탐색 실패 — look ahead 거리 상향
+    if statistics.terminal_reason == "PathFindingFailed" or statistics.failure_type == "PathFindingFailed":
+        recs.append(BotSetupRecommendation(
+            param="look_ahead_distance_m",
+            current=current_look_ahead_distance_m,
+            suggested=_round(current_look_ahead_distance_m * 1.2),
+            reason=(
+                "경로 탐색 실패로 종료. look ahead 거리를 20% 늘려 "
+                "경로 추종 시야를 넓힘."
+            ),
+        ))
+
+    return recs
+
+
+def build_episode_fallback_summary(recommendations: list[BotSetupRecommendation]) -> str:
     if not recommendations:
         return "fallback 규칙 기준으로 조정이 필요한 파라미터가 없음."
     params = ", ".join(rec.param for rec in recommendations)

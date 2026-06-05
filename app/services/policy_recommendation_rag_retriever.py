@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Union
 
 from app.models.rag import RagRetrievedChunk, RagSearchQuery
-from app.models.recommendation import AnalysisStatistics, PolicyParamName
+from app.models.recommendation import (
+    AnalysisStatistics,
+    EvaluationReportStatistics,
+    PolicyParamName,
+)
 from app.services.policy_rag_retriever import search_policy_chunks
 
 
@@ -45,13 +50,49 @@ def _build_queries(statistics: AnalysisStatistics) -> list[tuple[PolicyParamName
     return queries
 
 
+def _build_episode_queries(
+    statistics: EvaluationReportStatistics,
+) -> list[tuple[PolicyParamName, str]]:
+    queries: list[tuple[PolicyParamName, str]] = []
+
+    if statistics.near_miss_min_distance_m is not None and statistics.near_miss_min_distance_m < 0.5:
+        queries.append(("stopDistanceM", "위험한 정지거리 안전여유 충돌회피"))
+
+    if statistics.pedestrian_collision_count > 0:
+        queries.append(("stopDistanceM", "보행자 충돌 정지 거리 안전"))
+
+    if statistics.static_obstacle_collision_count > 0:
+        queries.append(("slowDownDistanceM", "장애물 감속 시작 거리 충돌 방지"))
+
+    if statistics.terminal_reason == "Timeout":
+        queries.append(("maxSpeedKmh", "배송 시간 초과 속도 정책"))
+
+    if statistics.robot_tip_over_count > 0:
+        queries.append(("maxSpeedKmh", "로봇 전복 최대 속도 안전"))
+
+    if statistics.terminal_reason in ("Stuck", "PathFindingFailed") or (
+        statistics.failure_type in ("Stuck", "PathFindingFailed")
+    ):
+        queries.append(("slowDownDistanceM", "장애물 회피 감속 경로 추종"))
+
+    if not queries:
+        queries.append(("stopDistanceM", "정지 거리 정책"))
+        queries.append(("maxSpeedKmh", "최대 속도 정책"))
+
+    return queries
+
+
 def retrieve_policy_context(
-    statistics: AnalysisStatistics,
+    statistics: Union[AnalysisStatistics, EvaluationReportStatistics],
     topK: int = 3,
 ) -> list[PolicyRagContext]:
     contexts: list[PolicyRagContext] = []
     seen: set[tuple[PolicyParamName, str]] = set()
-    for param, query_text in _build_queries(statistics):
+    if isinstance(statistics, EvaluationReportStatistics):
+        query_pairs = _build_episode_queries(statistics)
+    else:
+        query_pairs = _build_queries(statistics)
+    for param, query_text in query_pairs:
         key = (param, query_text)
         if key in seen:
             continue

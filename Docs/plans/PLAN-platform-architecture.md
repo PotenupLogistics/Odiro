@@ -137,7 +137,7 @@ MVP 범위: T01~T05 / T06: 사용성 확장 / T07~T08은 병렬 작업자의 산
 - 로봇 내부 구현, Python API Server 통신은 이 계획에서 구현 X
 - `EpisodeEditorMap` 에디터 UI는 별도 작업자 담당, 이 계획은 spawn/preview 연결만 후순위로 다룬다.
 
-### T01 실행 계약과 타입 고정 [ ]
+### T01 실행 계약과 타입 고정 [x]
 
 목표: platform과 simulator가 공유할 파일, command line, 결과 경로를 구현 가능한 계약으로 고정한다.
 
@@ -360,7 +360,7 @@ T04로 남긴 범위:
 
 ## 진행 현황
 
-- [ ] T01 실행 계약과 타입 고정
+- [x] T01 실행 계약과 타입 고정
 - [ ] T02 Simulator bootstrap 구현
 - [ ] T03 결과와 상태 기록 연결
 - [ ] T04 Platform launcher 구현
@@ -384,4 +384,8 @@ T04로 남긴 범위:
 
 ## 완료 기록
 
-구현 커밋마다 완료된 task 정보를 이 섹션에 누적한다.
+### T01 완료
+
+- `SimulationSetup JSON`, `Run Status JSON`, `-Simulate=<SimulationSetupFile>`, optional `-RunId=<RunId>` 계약 타입과 parser 추가
+- `Json/Input/SimulationSetupSample.json` sample setup 추가
+- sample parse, invalid field, missing file, command line parser, status read/write automation 추가

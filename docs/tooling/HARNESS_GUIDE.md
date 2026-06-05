@@ -71,9 +71,8 @@ manual live execution은 automated tests 밖에서만 수행한다.
 
 검증 항목:
 
-- `/api/v1/generation/world-config` exists.
-- `/api/v1/generation/world-config/prompt-package` remains available.
-- `/api/v1/contracts/validate/{contract_type}` remains available.
+- `/api/v1/scenarios/generate` remains the only public `/api/v1` endpoint.
+- WorldConfig generation, prompt package, and contract validation remain covered through service/function or CLI tests.
 - The harness does not perform a live external LLM call.
 - No hardcoded API key or secret string is present.
 - Policy card count remains 9.
@@ -116,7 +115,7 @@ manual live execution은 automated tests 밖에서만 수행한다.
 
 ## API Shell Check
 
-`harness.checks.check_api_shell`은 natural-language prompt package generation과 JSON contract validation을 위한 FastAPI shell을 검증한다.
+`harness.checks.check_api_shell`은 FastAPI public surface가 `/api/v1/scenarios/generate`만 노출하고 제거된 `/api/v1` endpoint를 등록하지 않는지 검증한다.
 
 검증 항목:
 
@@ -124,11 +123,8 @@ manual live execution은 automated tests 밖에서만 수행한다.
 - `app/api/routes.py` exists.
 - `docs/tooling/API_SHELL_GUIDE.md` exists.
 - `GET /health` is registered.
-- `POST /api/v1/generation/world-config/prompt-package` is registered.
-- `POST /api/v1/contracts/validate/{contract_type}` is registered.
-- `POST /api/v1/generation/world-config` is registered.
 - `POST /api/v1/scenarios/generate` is registered.
-- The API shell can route to provider clients, but harness checks do not perform live OpenAI/Ollama calls.
+- The API shell does not expose provider/contract validation routes; harness checks do not perform live OpenAI/Ollama calls.
 - No sample JSON, fixture, vector DB, or embedding index artifacts are created.
 
 Run:

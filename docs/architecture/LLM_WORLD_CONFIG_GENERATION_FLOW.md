@@ -8,7 +8,7 @@ schema validation을 통과한 뒤에는 scenario reflection validation을 수�
 
 ## FastAPI Generation Endpoint
 
-`POST /api/v1/generation/world-config`는 내부 orchestrator를 호출한다.
+`generate_world_config()` service 함수는 내부 orchestrator를 호출한다. 이전 `/api/v1/generation/world-config` endpoint는 public API에서 제거되었다.
 
 현재 상태:
 
@@ -44,21 +44,21 @@ prompt package 생성 후에는 LLM client abstraction을 통해 provider별 cli
 
 ## API Shell Integration
 
-현재 API shell은 prompt package generation을 노출한다.
+현재 prompt package generation은 service 함수로만 노출한다.
 
 ```text
-POST /api/v1/generation/world-config/prompt-package
+app.services.world_config_prompt_builder.build_world_config_prompt_package()
 ```
 
 이 경로의 흐름:
 
 Natural Language Prompt
--> API shell
+-> prompt package service
 -> prompt builder
 -> deterministic RAG context
 -> prompt package response
 
-외부 LLM 실행과 generated World Config payload 반환은 별도 generation endpoint/service layer에서 처리한다. UE 실행용 RunQueue 흐름은 `/api/v1/scenarios/generate`를 사용한다.
+외부 LLM 실행과 generated World Config payload 반환은 service layer에서 처리한다. UE 실행용 RunQueue 흐름은 `/api/v1/scenarios/generate`를 사용한다.
 
 ## Current Implementation Scope
 

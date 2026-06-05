@@ -4,7 +4,7 @@
 
 ## Generation Endpoint Contract
 
-`POST /api/v1/generation/world-config`는 `WorldConfigGenerationRequest`를 입력받고 `WorldConfigGenerationResult`를 반환한다. 이 endpoint는 내부/개발용 generation 흐름 확인에 가깝다.
+WorldConfig generation은 `app.services.world_config_generation_orchestrator.generate_world_config()` service 함수가 `WorldConfigGenerationRequest`를 입력받고 `WorldConfigGenerationResult`를 반환한다. 이전 `/api/v1/generation/world-config` endpoint는 public API에서 제거되었다.
 
 사용자용 scenario 생성 API는 다음 endpoint다.
 

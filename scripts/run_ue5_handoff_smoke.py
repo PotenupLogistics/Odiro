@@ -7,14 +7,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi.testclient import TestClient
-
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.main import app  # noqa: E402
+from app.models.handoff import UE5WorldConfigHandoffRequest  # noqa: E402
+from app.models.llm import LlmProvider  # noqa: E402
+from app.services.ue5_world_config_handoff_service import create_ue5_world_config_handoff  # noqa: E402
 from app.utils.handoff_response_summary import summarize_handoff_response  # noqa: E402
 from app.utils.report_serialization import write_json_report  # noqa: E402
 
@@ -116,7 +115,6 @@ def _ue5_readable_fields(world_config: dict[str, Any] | None) -> dict[str, bool]
 
 def _report(provider: str, http_status: int, response_payload: dict[str, Any]) -> dict[str, Any]:
     summary = summarize_handoff_response(response_payload, http_status=http_status)
-    post_processing = response_payload.get("postProcessing") or {}
     report = {
         "checkedAt": datetime.now(UTC).isoformat(),
         "provider": provider,
@@ -185,19 +183,18 @@ def main() -> int:
         print(json.dumps(body, ensure_ascii=False, indent=2))
         return 0
 
-    client = TestClient(app)
-    response = client.post(
-        f"/api/v1/ue5/world-config/handoff?provider={args.provider}",
-        json=body,
-    )
     try:
-        payload = response.json()
+        provider = LlmProvider(args.provider)
     except ValueError as exc:
-        payload = {
-            "success": False,
-            "warnings": [{"code": "response_parse_failed", "message": str(exc)}],
-        }
-    report = _report(args.provider, response.status_code, payload)
+        print(str(exc), file=sys.stderr)
+        return 2
+    response = create_ue5_world_config_handoff(
+        UE5WorldConfigHandoffRequest(**body),
+        provider=provider,
+    )
+    payload = response.model_dump(mode="json", by_alias=True, exclude_none=True)
+    status_code = 200
+    report = _report(args.provider, status_code, payload)
     _write_report(args.report, report)
 
     print(f"handoffSuccess: {payload.get('success')}")
@@ -208,7 +205,7 @@ def main() -> int:
     print(f"ue5ReadableFields: {report['ue5ReadableFields']}")
     if args.print_world_config and payload.get("worldConfig") is not None:
         print(json.dumps(payload["worldConfig"], ensure_ascii=False, indent=2))
-    return 0 if response.status_code < 500 else 1
+    return 0
 
 
 if __name__ == "__main__":

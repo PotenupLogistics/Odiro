@@ -7,14 +7,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi.testclient import TestClient
-
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.main import app  # noqa: E402
+from app.models.handoff import UE5WorldConfigHandoffRequest  # noqa: E402
+from app.models.llm import LlmProvider  # noqa: E402
+from app.services.ue5_world_config_handoff_service import create_ue5_world_config_handoff  # noqa: E402
 from app.utils.handoff_response_summary import summarize_handoff_response  # noqa: E402
 from app.utils.report_serialization import to_jsonable, write_json_report  # noqa: E402
 
@@ -65,8 +64,6 @@ def _request_body(prompt: str, response_format: str) -> dict[str, Any]:
 def _report(provider: str, response_format: str, status_code: int, payload: dict[str, Any]) -> dict[str, Any]:
     summary = summarize_handoff_response(payload, http_status=status_code)
     reflection = payload.get("episodeScenarioReflection") or {}
-    episode = payload.get("episodeSpec") or {}
-    actors = episode.get("actors") or {}
     return {
         "checkedAt": datetime.now(UTC).isoformat(),
         "provider": provider,
@@ -139,24 +136,23 @@ def main() -> int:
         print(json.dumps(body, ensure_ascii=False, indent=2))
         return 0
 
-    client = TestClient(app)
-    response = client.post(
-        f"/api/v1/ue5/world-config/handoff?provider={args.provider}&responseFormat={args.response_format}",
-        json=body,
-    )
     try:
-        payload = response.json()
+        provider = LlmProvider(args.provider)
     except ValueError as exc:
-        payload = {
-            "success": False,
-            "warnings": [{"code": "response_parse_failed", "message": str(exc)}],
-        }
-    report = _report(args.provider, args.response_format, response.status_code, payload)
+        print(str(exc), file=sys.stderr)
+        return 2
+    response = create_ue5_world_config_handoff(
+        UE5WorldConfigHandoffRequest(**body),
+        provider=provider,
+    )
+    payload = response.model_dump(mode="json", by_alias=True, exclude_none=True)
+    status_code = 200
+    report = _report(args.provider, args.response_format, status_code, payload)
     _write_report(args.report, report)
     print(json.dumps(to_jsonable(report), ensure_ascii=False, indent=2))
     if args.print_episode_spec and payload.get("episodeSpec") is not None:
         print(json.dumps(payload["episodeSpec"], ensure_ascii=False, indent=2))
-    return 0 if response.status_code < 500 else 1
+    return 0
 
 
 if __name__ == "__main__":

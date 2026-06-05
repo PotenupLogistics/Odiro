@@ -20,10 +20,7 @@ REQUIRED_FILES = {
 }
 EXPECTED_ROUTES = {
     "/health",
-    "/api/v1/generation/world-config",
-    "/api/v1/generation/world-config/prompt-package",
     "/api/v1/scenarios/generate",
-    "/api/v1/contracts/validate/{contract_type}",
 }
 
 
@@ -140,11 +137,11 @@ def run_check() -> dict[str, Any]:
         "/api/v1/ue5/world-config/handoff" not in route_paths
         and EXPECTED_ROUTES.issubset(route_paths)
         and len(
-        {path for path in route_paths if path.startswith("/api/") or path == "/health"}
+        {path for path in route_paths if path.startswith("/api/v1/") or path == "/health"}
         ) == len(EXPECTED_ROUTES)
     )
     if not result["routeCountUnchanged"]:
-        result["errors"].append("FastAPI endpoint set must expose scenario generation and omit legacy handoff.")
+        result["errors"].append("FastAPI public API v1 set must expose only scenario generation.")
 
     sdk_imports = _detect_external_sdk_imports()
     result["externalSdkImports"] = sdk_imports

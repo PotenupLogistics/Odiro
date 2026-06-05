@@ -18,9 +18,9 @@ WorldConfig prompt builder는 다음 정보를 조합한다.
 * scenario requirements
 * repair prompt용 validation feedback
 
-`POST /api/v1/generation/world-config/prompt-package`는 이 prompt package를 확인하는 endpoint다. 이 endpoint 자체는 LLM을 호출하지 않는다.
+`build_world_config_prompt_package()` service 함수는 이 prompt package를 확인하는 경로다. 이 함수 자체는 LLM을 호출하지 않는다.
 
-`POST /api/v1/generation/world-config`와 `POST /api/v1/scenarios/generate`는 설정된 provider와 orchestration 흐름에 따라 실제 WorldConfig generation을 수행할 수 있다.
+`generate_world_config()` service 함수와 `POST /api/v1/scenarios/generate`는 설정된 provider와 orchestration 흐름에 따라 실제 WorldConfig generation을 수행할 수 있다. Public `/api/v1` HTTP endpoint는 scenario generation만 유지한다.
 
 ## 2. System Prompt 원칙
 

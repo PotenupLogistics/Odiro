@@ -11,9 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
 REQUIRED_ROUTES = {
-    "/api/v1/generation/world-config",
-    "/api/v1/generation/world-config/prompt-package",
-    "/api/v1/contracts/validate/{contract_type}",
+    "/api/v1/scenarios/generate",
 }
 
 
@@ -112,9 +110,13 @@ def _jsonl_count(path: Path) -> int:
 def run_check() -> dict[str, Any]:
     result = _base_result()
     route_paths = {route.path for route in app.routes}
-    result["missingRoutes"] = sorted(REQUIRED_ROUTES - route_paths)
+    api_v1_paths = {path for path in route_paths if path.startswith("/api/v1/")}
+    result["missingRoutes"] = sorted(REQUIRED_ROUTES - api_v1_paths)
     if result["missingRoutes"]:
-        result["errors"].append("Required generation endpoint routes are missing.")
+        result["errors"].append("Required scenario generation API route is missing.")
+    unexpected_routes = sorted(api_v1_paths - REQUIRED_ROUTES)
+    if unexpected_routes:
+        result["errors"].append(f"Unexpected API v1 routes are registered: {unexpected_routes}")
 
     result["policyCardCount"] = _jsonl_count(CARDS_PATH)
     result["ragChunkCount"] = _jsonl_count(CHUNKS_PATH)

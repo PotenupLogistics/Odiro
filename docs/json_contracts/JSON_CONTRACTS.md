@@ -4,7 +4,7 @@
 
 이 문서는 UE5 배달 로봇 시뮬레이션과 AI 정책 판단 서버가 주고받을 JSON 계약의 위치와 단위 기준을 정리한다.
 
-현재 프로젝트는 JSON Schema, Pydantic 모델, validation CLI, validation API, WorldConfig generation endpoint, 사용자용 RunQueue generation API를 함께 제공한다. sample JSON과 fixture 파일은 repository에 추가하지 않는다.
+현재 프로젝트는 JSON Schema, Pydantic 모델, validation CLI/service, WorldConfig generation service, 사용자용 RunQueue generation API를 함께 제공한다. sample JSON과 fixture 파일은 repository에 추가하지 않는다.
 
 ## 2. UE5가 생성하는 JSON
 
@@ -43,11 +43,11 @@
 - 각도: degree
 - 좌표: UE5 world coordinate 기준
 
-## 7. 현재 API 연결
+## 7. 현재 API / service 연결
 
-* `POST /api/v1/contracts/validate/{contract_type}`: 제출된 JSON payload를 schema와 Pydantic 모델로 검증한다.
-* `POST /api/v1/generation/world-config`: 자연어 기반 WorldConfig generation 내부 흐름을 검증한다.
 * `POST /api/v1/scenarios/generate`: 사용자 자연어 `prompt`를 필수로 받고, 선택적 `episode_count`로 episode/run 개수를 지정할 수 있으며, wrapper 없는 RunQueue JSON을 반환한다.
+* `app.services.json_contract_validator.validate_payload()`: 제출된 JSON payload를 schema와 Pydantic 모델로 검증한다.
+* `app.services.world_config_generation_orchestrator.generate_world_config()`: 자연어 기반 WorldConfig generation 내부 흐름을 수행한다.
 
 sample JSON fixture 작성은 현재 repository 공유 범위가 아니다. runtime export는 local ignored path에만 저장한다.
 

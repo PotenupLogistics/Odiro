@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+import pytest
 
-from app.main import app
+from app.core.contract_types import ContractType
+from app.services.json_contract_validator import validate_payload
 
 
 def valid_world_config_payload() -> dict:
@@ -36,43 +37,26 @@ def valid_world_config_payload() -> dict:
     }
 
 
-def test_contract_validation_endpoint_accepts_valid_world_config() -> None:
-    client = TestClient(app)
+def test_contract_validation_service_accepts_valid_world_config() -> None:
+    result = validate_payload(ContractType.world_config, valid_world_config_payload())
 
-    response = client.post(
-        "/api/v1/contracts/validate/world_config",
-        json=valid_world_config_payload(),
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
+    payload = result.model_dump(mode="json")
     assert payload["valid"] is True
     assert payload["contractType"] == "world_config"
     assert payload["errors"] == []
 
 
-def test_contract_validation_endpoint_rejects_invalid_world_config() -> None:
-    client = TestClient(app)
+def test_contract_validation_service_rejects_invalid_world_config() -> None:
     invalid_payload = valid_world_config_payload()
     invalid_payload.pop("worldId")
 
-    response = client.post(
-        "/api/v1/contracts/validate/world_config",
-        json=invalid_payload,
-    )
+    result = validate_payload(ContractType.world_config, invalid_payload)
 
-    assert response.status_code == 200
-    payload = response.json()
+    payload = result.model_dump(mode="json")
     assert payload["valid"] is False
     assert payload["errors"]
 
 
-def test_contract_validation_endpoint_rejects_unknown_contract_type() -> None:
-    client = TestClient(app)
-
-    response = client.post(
-        "/api/v1/contracts/validate/not_a_contract",
-        json=valid_world_config_payload(),
-    )
-
-    assert response.status_code == 422
+def test_contract_type_rejects_unknown_value_before_validation_service() -> None:
+    with pytest.raises(ValueError):
+        ContractType("not_a_contract")

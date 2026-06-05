@@ -93,9 +93,6 @@ Setup pair live smoke 상태:
 현재 FastAPI endpoint:
 
 * `GET /health`
-* `POST /api/v1/generation/world-config/prompt-package`
-* `POST /api/v1/generation/world-config`
-* `POST /api/v1/contracts/validate/{contract_type}`
 * `POST /api/v1/scenarios/generate`
 
 UE 연동 기본 권장 endpoint:
@@ -105,6 +102,7 @@ POST /api/v1/scenarios/generate
 ```
 
 Legacy `/api/v1/ue5/world-config/handoff` endpoint는 현재 FastAPI/OpenAPI에서 제거되었습니다. 이전 `responseFormat=episode_spec`, `responseFormat=setup_pair`, `responseFormat=both` 기반 handoff 설명은 archive 문서와 CLI tooling 참고용입니다.
+`/api/v1/generation/world-config`, `/api/v1/generation/world-config/prompt-package`, `/api/v1/contracts/validate/{contract_type}`도 public API에서 제거되었습니다. 관련 기능은 service/helper 함수와 CLI 테스트 대상으로 유지합니다.
 
 사용자용 scenario 생성 endpoint:
 

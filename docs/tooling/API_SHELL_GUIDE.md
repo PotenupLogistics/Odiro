@@ -1,6 +1,6 @@
 # API Shell Guide
 
-이 문서는 현재 FastAPI shell에서 노출되는 API와 provider 동작 범위를 정리한다. 사용자용 자연어 생성 API, WorldConfig generation API, contract validation API를 구분해서 읽어야 한다.
+이 문서는 현재 FastAPI에서 외부에 노출되는 API와 내부 service/helper로만 유지하는 검증 기능을 구분한다.
 
 ## 1. 실행
 
@@ -24,11 +24,10 @@ http://127.0.0.1:8000/openapi.json
 
 ```text
 GET /health
-POST /api/v1/generation/world-config/prompt-package
-POST /api/v1/generation/world-config
-POST /api/v1/contracts/validate/{contract_type}
 POST /api/v1/scenarios/generate
 ```
+
+`/api/v1` 하위 public endpoint는 `POST /api/v1/scenarios/generate` 하나만 유지한다.
 
 ## 3. 사용자용 scenario generation API
 
@@ -52,22 +51,18 @@ POST /api/v1/scenarios/generate
 * `0`, `false`, `""`, `[]` 같은 의미 있는 값은 삭제하지 않는다.
 * 좁은 보도 장애물 policy comparison queue는 동일 EpisodeSetup을 공유하고 DeliveryBotSetup만 policy별로 다르게 만든다.
 
-## 4. WorldConfig generation API
+## 4. WorldConfig generation service
 
-```text
-POST /api/v1/generation/world-config?provider=disabled
-POST /api/v1/generation/world-config?provider=openai
-POST /api/v1/generation/world-config?provider=ollama
-```
+WorldConfig generation은 더 이상 `/api/v1/generation/world-config` HTTP endpoint로 노출하지 않는다. 내부 구현은 `app.services.world_config_generation_orchestrator.generate_world_config()` service 함수로 유지한다.
 
-`provider` 값:
+provider 값:
 
 * `disabled`: 실제 외부 LLM 호출 없이 provider disabled 결과를 반환한다.
 * `openai`: `OPENAI_API_KEY`가 설정된 경우 OpenAI client를 사용한다.
 * `ollama`: local Ollama server를 사용한다.
 * `gemini`, `custom`: 테스트 주입 또는 후속 구현용 경로다.
 
-자동 테스트와 harness check는 실제 OpenAI/Ollama 호출을 하지 않는다. live smoke는 명시적으로 허용된 경우에만 최소 횟수로 수행한다.
+자동 테스트와 harness check는 service/function 단위에서 실제 OpenAI/Ollama 호출 없이 검증한다. live smoke는 명시적으로 허용된 경우에만 최소 횟수로 수행한다.
 
 `generatedPayload`는 LLM 응답에서 JSON 추출과 `world_config` validation이 통과한 뒤에만 채워진다.
 
@@ -81,23 +76,19 @@ POST /api/v1/ue5/world-config/handoff
 
 RunQueue가 필요한 사용자/UE 흐름은 `/api/v1/scenarios/generate`를 사용한다. 이전 `responseFormat=episode_spec`, `responseFormat=setup_pair`, `responseFormat=both`, `responseFormat=world_config` 설명은 archive 문서와 CLI tooling 참고용이다.
 
-## 6. Prompt package API
+## 6. Prompt package service
+
+Prompt package 생성은 더 이상 HTTP endpoint로 노출하지 않는다. `app.services.world_config_prompt_builder.build_world_config_prompt_package()` 함수가 deterministic RAG context, schema-derived checklist, scenario requirements, repair guidance에 필요한 prompt package를 반환한다.
+
+prompt package builder 자체는 LLM을 호출하지 않고 WorldConfig payload도 생성하지 않는다.
+
+## 7. Contract validation service / CLI
 
 ```text
-POST /api/v1/generation/world-config/prompt-package
+uv run python scripts/validate_contract.py --type world_config --file path/to/world.json
 ```
 
-이 endpoint는 prompt builder 결과를 확인하기 위한 경로다. deterministic RAG context, schema-derived checklist, scenario requirements, repair guidance에 필요한 prompt package를 반환한다.
-
-prompt package endpoint 자체는 LLM을 호출하지 않고 WorldConfig payload도 생성하지 않는다.
-
-## 7. Contract validation API
-
-```text
-POST /api/v1/contracts/validate/{contract_type}
-```
-
-제출된 JSON payload가 특정 contract type에 맞는지 검증한다. 이 endpoint는 payload를 생성하지 않고, sample/fixture JSON 파일도 만들지 않는다.
+Contract validation은 더 이상 HTTP endpoint로 노출하지 않는다. 제출된 JSON payload가 특정 contract type에 맞는지는 `app.services.json_contract_validator.validate_payload()` 또는 `scripts/validate_contract.py` CLI로 검증한다. 이 경로는 payload를 생성하지 않고, sample/fixture JSON 파일도 만들지 않는다.
 
 ## 8. Environment sampling
 
@@ -107,7 +98,7 @@ sampling 결과는 numeric summary로 diagnostics에 기록한다. `low`, `middl
 
 ## 9. 구현하지 않는 것
 
-현재 API shell은 다음을 자동으로 수행하지 않는다.
+현재 public API와 service/helper 경로는 다음을 자동으로 수행하지 않는다.
 
 * UE C++ / Blueprint 코드 생성
 * vector DB 또는 embedding index 생성

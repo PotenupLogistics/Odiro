@@ -58,7 +58,7 @@ fallback 대상에는 OpenAI API key 없음, timeout, rate limit, HTTP error, in
 orchestrator는 다음 endpoint를 통해 접근할 수 있다.
 
 ```text
-POST /api/v1/generation/world-config
+app.services.world_config_generation_orchestrator.generate_world_config()
 ```
 
 이 endpoint의 기본 provider는 `disabled`이므로, 외부 LLM 호출 없이 명확한 failed result를 반환한다.

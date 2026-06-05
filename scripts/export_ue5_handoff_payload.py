@@ -6,14 +6,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from fastapi.testclient import TestClient
-
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.main import app  # noqa: E402
+from app.models.handoff import UE5WorldConfigHandoffRequest  # noqa: E402
+from app.models.llm import LlmProvider  # noqa: E402
+from app.services.ue5_world_config_handoff_service import create_ue5_world_config_handoff  # noqa: E402
 from app.utils.report_serialization import to_jsonable, write_json_report  # noqa: E402
 
 
@@ -117,17 +116,19 @@ def _write_optional(path_text: str | None, payload: dict[str, Any] | None) -> No
 
 def main() -> int:
     args = _parser().parse_args()
-    client = TestClient(app)
     try:
         environment_sampling = _environment_sampling_config(args)
+        provider = LlmProvider(args.provider)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    response = client.post(
-        f"/api/v1/ue5/world-config/handoff?provider={args.provider}",
-        json=_request_body(args.prompt, args.include_diagnostics, args.format, environment_sampling),
+    response = create_ue5_world_config_handoff(
+        UE5WorldConfigHandoffRequest(
+            **_request_body(args.prompt, args.include_diagnostics, args.format, environment_sampling)
+        ),
+        provider=provider,
     )
-    handoff_payload = response.json()
+    handoff_payload = response.model_dump(mode="json", by_alias=True, exclude_none=True)
     if args.world_config_only:
         output_payload = handoff_payload.get("worldConfig")
     elif args.format == "world_config":

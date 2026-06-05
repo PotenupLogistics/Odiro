@@ -5,12 +5,10 @@
 Natural-language input can now be accepted through the following API endpoints:
 
 ```text
-POST /api/v1/generation/world-config/prompt-package
-POST /api/v1/generation/world-config
 POST /api/v1/scenarios/generate
 ```
 
-`prompt-package` endpoint는 prompt package만 반환하며 외부 LLM을 호출하지 않는다. `generation/world-config` endpoint는 provider 설정에 따라 WorldConfig generation을 수행할 수 있다. 사용자용 `scenarios/generate` endpoint는 자연어 `prompt`를 필수로 받고 선택적으로 `episode_count`를 허용하며, wrapper 없는 RunQueue JSON을 반환한다.
+Public API는 `scenarios/generate` 하나만 유지한다. Prompt package 생성은 `build_world_config_prompt_package()` service 함수로, WorldConfig generation은 `generate_world_config()` service 함수로 검증한다. 사용자용 `scenarios/generate` endpoint는 자연어 `prompt`를 필수로 받고 선택적으로 `episode_count`를 허용하며, wrapper 없는 RunQueue JSON을 반환한다.
 
 ## Retrieval Connection
 

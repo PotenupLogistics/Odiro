@@ -437,9 +437,10 @@ def test_openai_failure_can_fallback_to_fake_ollama_success() -> None:
 
 def test_orchestrator_keeps_expected_fastapi_endpoints_and_forbidden_artifacts_absent() -> None:
     route_paths = {route.path for route in app.routes}
-    assert "/api/v1/generation/world-config" in route_paths
-    assert "/api/v1/generation/world-config/prompt-package" in route_paths
-    assert "/api/v1/contracts/validate/{contract_type}" in route_paths
+    assert "/api/v1/scenarios/generate" in route_paths
+    assert "/api/v1/generation/world-config" not in route_paths
+    assert "/api/v1/generation/world-config/prompt-package" not in route_paths
+    assert "/api/v1/contracts/validate/{contract_type}" not in route_paths
     assert not (ROOT / "samples").exists()
     assert not (ROOT / "fixtures").exists()
     assert not (ROOT / "data" / "rag" / "vector_db").exists()

@@ -2,16 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi.testclient import TestClient
-
-from app.main import app
+from app.models.generation import WorldConfigGenerationRequest
+from app.services.world_config_prompt_builder import build_world_config_prompt_package
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _generation_request() -> dict:
-    return {
+def _generation_request() -> WorldConfigGenerationRequest:
+    return WorldConfigGenerationRequest.model_validate({
         "schemaVersion": "1.0",
         "requestId": "REQ-API-PROMPT-001",
         "generationType": "world_config",
@@ -27,19 +26,13 @@ def _generation_request() -> dict:
             "requireValidation": True,
         },
         "maxRepairAttempts": 2,
-    }
+    })
 
 
-def test_prompt_package_endpoint_returns_prompt_package_without_llm_output() -> None:
-    client = TestClient(app)
+def test_prompt_package_builder_returns_prompt_package_without_llm_output() -> None:
+    package = build_world_config_prompt_package(_generation_request())
+    payload = package.model_dump(mode="json")
 
-    response = client.post(
-        "/api/v1/generation/world-config/prompt-package",
-        json=_generation_request(),
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
     assert payload["requestId"] == "REQ-API-PROMPT-001"
     assert payload["systemPrompt"]
     assert payload["userPrompt"]
@@ -49,16 +42,10 @@ def test_prompt_package_endpoint_returns_prompt_package_without_llm_output() -> 
     assert "generatedPayload" not in payload
 
 
-def test_prompt_package_endpoint_does_not_create_forbidden_artifacts() -> None:
-    client = TestClient(app)
-    response = client.post(
-        "/api/v1/generation/world-config/prompt-package",
-        json=_generation_request(),
-    )
-    assert response.status_code == 200
+def test_prompt_package_builder_does_not_create_forbidden_artifacts() -> None:
+    build_world_config_prompt_package(_generation_request())
 
     assert not (ROOT / "samples").exists()
     assert not (ROOT / "fixtures").exists()
     assert not (ROOT / "data" / "rag" / "vector_db").exists()
     assert not (ROOT / "data" / "rag" / "embeddings").exists()
-

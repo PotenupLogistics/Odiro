@@ -50,10 +50,10 @@ def test_ue5_handoff_endpoint_is_removed_and_returns_not_found() -> None:
 def test_existing_generation_and_contract_routes_remain_registered() -> None:
     route_paths = {route.path for route in app.routes}
     assert "/api/v1/ue5/world-config/handoff" not in route_paths
-    assert "/api/v1/generation/world-config" in route_paths
-    assert "/api/v1/generation/world-config/prompt-package" in route_paths
+    assert "/api/v1/generation/world-config" not in route_paths
+    assert "/api/v1/generation/world-config/prompt-package" not in route_paths
     assert "/api/v1/scenarios/generate" in route_paths
-    assert "/api/v1/contracts/validate/{contract_type}" in route_paths
+    assert "/api/v1/contracts/validate/{contract_type}" not in route_paths
 
 
 def test_ue5_handoff_endpoint_is_not_exposed_in_openapi() -> None:

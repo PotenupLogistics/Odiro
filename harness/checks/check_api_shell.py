@@ -15,9 +15,13 @@ REQUIRED_FILES = {
 }
 REQUIRED_ROUTES = {
     "/health",
+    "/api/v1/scenarios/generate",
+}
+FORBIDDEN_API_V1_ROUTES = {
     "/api/v1/generation/world-config",
     "/api/v1/generation/world-config/prompt-package",
     "/api/v1/contracts/validate/{contract_type}",
+    "/api/v1/ue5/world-config/handoff",
 }
 
 
@@ -82,6 +86,9 @@ def run_check() -> dict[str, Any]:
     result["missingRoutes"] = sorted(REQUIRED_ROUTES - route_paths)
     if result["missingRoutes"]:
         result["errors"].append("Required API shell routes are missing.")
+    result["forbiddenRoutes"] = sorted(FORBIDDEN_API_V1_ROUTES & route_paths)
+    if result["forbiddenRoutes"]:
+        result["errors"].append("Removed API v1 routes are still registered.")
 
     llm_warnings = _detect_llm_call_code()
     result["llmCallWarnings"] = llm_warnings

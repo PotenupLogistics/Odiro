@@ -100,3 +100,11 @@ def test_scenario_generation_openapi_marks_episode_count_optional() -> None:
     assert "episode_count" in request_schema["properties"]
     assert "minimum" in request_schema["properties"]["episode_count"]["anyOf"][0]
     assert request_schema["properties"]["episode_count"]["anyOf"][0]["maximum"] == Settings().scenarioEpisodeMaxCount
+
+
+def test_openapi_exposes_no_other_api_v1_routes() -> None:
+    schema = TestClient(app).get("/openapi.json").json()
+
+    api_v1_paths = sorted(path for path in schema["paths"] if path.startswith("/api/v1/"))
+
+    assert api_v1_paths == ["/api/v1/scenarios/generate"]

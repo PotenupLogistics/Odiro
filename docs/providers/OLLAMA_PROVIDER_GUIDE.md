@@ -54,7 +54,7 @@ Do not commit a real `.env` file.
 Endpoint:
 
 ```text
-POST /api/v1/generation/world-config?provider=ollama
+app.services.world_config_generation_orchestrator.generate_world_config(..., provider=ollama)
 ```
 
 Request body uses `WorldConfigGenerationRequest`.

@@ -229,7 +229,7 @@ T04로 남긴 범위:
 - `Saved/AnalysisLogs`에 measurement log 생성
 - Platform UI가 simulator 내부 객체 참조 없이 status/report/log 파일로 진행 상황을 알 수 있음
 
-### T04 Platform launcher 구현 [ ]
+### T04 Platform launcher 구현 [x]
 
 목표: Platform UI가 simulator process를 별도로 실행하고 lifecycle을 관리한다.
 
@@ -363,7 +363,7 @@ T04로 남긴 범위:
 - [x] T01 실행 계약과 타입 고정
 - [x] T02 Simulator bootstrap 구현
 - [x] T03 결과와 상태 기록 연결
-- [ ] T04 Platform launcher 구현
+- [x] T04 Platform launcher 구현
 - [ ] T05 Platform 최소 실행 화면 구현
 - [ ] T06 실험 설정 편집 구현
 - [ ] T07 EpisodeEditorMap spawn/preview 연결
@@ -402,3 +402,10 @@ T04로 남긴 범위:
 - setup parse 후 fixed-step FPS 적용, target map load, `UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile` 실행 연결
 - runner 상태 변화와 record 완료를 `Run Status JSON`으로 기록
 - setup의 logging/report 설정을 simulator process 실행 흐름에 적용하고 report/log path를 status에 반영
+
+### T04 완료
+
+- `USimulatorLaunchSubsystem`으로 simulator subprocess command 조립과 실행 lifecycle 관리 추가
+- packaged exe가 없을 때 `RunPreview.bat` fallback으로 같은 public command parameter 전달
+- status file polling으로 `Pending`, `Running`, `Completed`, `Failed`, `Canceled` terminal state 추적
+- process start failure와 simulator status failure를 분리해 UI가 진단할 수 있게 함

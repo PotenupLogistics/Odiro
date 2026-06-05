@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WORLD_CONFIG_SCHEMA_PATH = ROOT / "schemas" / "world_config.schema.json"
 
 # request.model 값이 이 집합이면 자유형 json_object 모드. 그 외(빈문자열/openai-world-config 포함)는 기존 WorldConfig schema 모드.
-GENERIC_JSON_MODELS = {"policy-recommendation"}
+GENERIC_JSON_MODELS = {"policy-recommendation", "integrated-recommendation"}
 
 
 class OpenAILlmClient:

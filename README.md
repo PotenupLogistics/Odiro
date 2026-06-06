@@ -17,10 +17,15 @@
 - Sensor contract: 변동 가능 목록, Aggregator 출력 계약
 
 ## Source Mapping
-| Path | Purpose |
+| Area | Description |
 | --- | --- |
-| `Source/ProtoRobotSim/Public/DeliveryBot` | Delivery Bot 공개 타입, Actor, Component, Subsystem |
-| `Source/ProtoRobotSim/Private/DeliveryBot` | Delivery Bot 구현 |
-| `Source/ProtoRobotSim/Public/Episode` | Episode 구성, 장애물, 경로, 스폰 관련 공개 타입 |
-| `Source/ProtoRobotSim/Private/Episode` | Episode 실행과 월드 스폰 구현 |
-| `Source/ProtoRobotSim/Public/Shared` | Delivery Bot과 Episode가 공유하는 데이터 타입 |
+| DeliveryBot | 주행 로봇 Actor/Component/Subsystem. 이동/경로 추종/회피/정책 판단 |
+| Episode | JSON 에피소드 컴파일, 런타임 스폰/조회, 에피소드 Actor/Component, 실행/측정/평가 흐름 |
+| Platform | MainMenu UI, simulator subprocess 실행, `-Simulate=<SimulationSetupFile>` 기반 simulator process bootstrap, status polling |
+| Shared | Episode, Simulation, DeliveryBot 사이의 공유 타입, 실행 설정, 리플레이, 측정 로그, 시나리오 스펙 |
+
+## Scripts
+- `RunPreview.bat`: 패키징 프리뷰 (`UnrealEditor.exe <uproject> -game -NoSplash`)
+  - `-Simulate=<SimulationSetupFile> -RunId=<RunId>` 로 시뮬레이터 실행
+- `.run/SetEnginePath.ps1`: Rider Preview 실행 설정에서 사용하는 `UE_INSTALL_DIR` Path Variable 설정
+  - 프로젝트 설정 시 한 번 `powershell -ExecutionPolicy Bypass -File .run\SetEnginePath.ps1` 실행

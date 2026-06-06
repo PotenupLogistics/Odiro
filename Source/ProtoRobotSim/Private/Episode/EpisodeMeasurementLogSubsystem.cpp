@@ -67,12 +67,29 @@ namespace
 		}
 	}
 
-	FEpisodeParamValue MakeStringParamValue(const FString& Value)
+	FEpisodeParamValue MakeMeasurementStringParamValue(const FString& Value)
 	{
 		FEpisodeParamValue ParamValue;
 		ParamValue.Type = EEpisodeParamValueType::String;
 		ParamValue.StringValue = Value;
 		return ParamValue;
+	}
+}
+
+void UEpisodeMeasurementLogSubsystem::ApplySettings(
+	const FEpisodeMeasurementLogSettings& settings,
+	bool bRestartIfLogging)
+{
+	const bool bWasLogging = IsLogging();
+	if (bWasLogging && bRestartIfLogging)
+	{
+		StopLogging(TEXT("settings_reconfigured"));
+	}
+
+	Settings = settings;
+	if ((bWasLogging || bStartAttempted) && !IsLogging() && Settings.bEnabled)
+	{
+		StartLogging();
 	}
 }
 
@@ -236,7 +253,7 @@ bool UEpisodeMeasurementLogSubsystem::RecordEmergencyStopEvent(
 	EventRecord.Value = Value;
 	if (!Reason.IsEmpty())
 	{
-		EventRecord.Properties.Add(TEXT("reason"), MakeStringParamValue(Reason));
+		EventRecord.Properties.Add(TEXT("reason"), MakeMeasurementStringParamValue(Reason));
 	}
 
 	return WriteEventRecord(EventRecord);
@@ -319,7 +336,7 @@ void UEpisodeMeasurementLogSubsystem::HandleEvaluationEvent(FEpisodeEvaluationEv
 	EventRecord.Properties = Event.Properties;
 	if (!Event.Message.IsEmpty())
 	{
-		EventRecord.Properties.Add(TEXT("message"), MakeStringParamValue(Event.Message));
+		EventRecord.Properties.Add(TEXT("message"), MakeMeasurementStringParamValue(Event.Message));
 	}
 
 	WriteEventRecord(EventRecord);

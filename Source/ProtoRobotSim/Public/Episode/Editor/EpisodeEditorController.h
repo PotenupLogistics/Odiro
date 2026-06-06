@@ -10,6 +10,7 @@ class AEpisodeEditorPawn;
 class AEpisodePlacementPreviewActor;
 class AEpisodeTransformGizmoActor;
 class UEpisodeAuthoringSubsystem;
+class UEpisodeEditorToolbarWidget;
 class UEpisodePlaceableComponent;
 class UEpisodePlaceableContextMenuWidget;
 class UInputAction;
@@ -27,6 +28,7 @@ public:
 	AEpisodeEditorController();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type endPlayReason) override;
 	virtual void Tick(float deltaSeconds) override;
 	virtual void SetupInputComponent() override;
 
@@ -87,8 +89,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
 	TSubclassOf<UEpisodePlaceableContextMenuWidget> PlaceableContextMenuWidgetClass;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	TSubclassOf<UEpisodeEditorToolbarWidget> ToolbarWidgetClass;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|UI")
 	int32 PlaceableContextMenuViewportZOrder = 10;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|UI")
+	int32 ToolbarViewportZOrder = 2;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
 	void SetObserverMode();
@@ -146,6 +154,15 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Export")
 	bool SaveEpisodeSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Authoring")
+	FString GetSourceEpisodeSetupJsonPath() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|UI")
+	UEpisodeEditorToolbarWidget* ShowToolbarWidget();
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|UI")
+	void RemoveToolbarWidget();
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Selection")
 	UEpisodePlaceableComponent* GetSelectedPlaceableComponent() const { return SelectedPlaceableComponent.Get(); }
@@ -235,6 +252,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UEpisodePlaceableContextMenuWidget> PlaceableContextMenuWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UEpisodeEditorToolbarWidget> ToolbarWidget;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
 	FTransform CurrentPlacementTransform = FTransform::Identity;

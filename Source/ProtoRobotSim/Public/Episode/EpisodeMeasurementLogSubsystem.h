@@ -22,6 +22,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|MeasurementLog")
 	FEpisodeMeasurementLogSettings Settings;
 
+	/// Applies simulator setup settings and optionally restarts an already-open log.
+	void ApplySettings(const FEpisodeMeasurementLogSettings& settings, bool bRestartIfLogging = true);
+
 	/// Starts a measurement log with currently known world metadata.
 	UFUNCTION(BlueprintCallable, Category = "Episode|MeasurementLog")
 	bool StartLogging();

@@ -4,6 +4,8 @@
 #include "Components/EditableTextBox.h"
 #include "Episode/Editor/EpisodeEditorController.h"
 #include "Episode/Widget/EpisodeAssetPaletteWidget.h"
+#include "Platform/EpisodeEditorLaunchSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "GameFramework/PlayerController.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogEpisodeEditorEntryWidget, Log, All);
@@ -29,10 +31,12 @@ void UEpisodeEditorEntryWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	RequestEditorWidgetInputMode();
+	BindEpisodeEditorLaunchSubsystem();
 }
 
 void UEpisodeEditorEntryWidget::NativeDestruct()
 {
+	UnbindEpisodeEditorLaunchSubsystem();
 	ReleaseEditorWidgetInputMode();
 	Super::NativeDestruct();
 }
@@ -164,6 +168,23 @@ void UEpisodeEditorEntryWidget::RemoveAssetPaletteWidget()
 	AssetPaletteWidget = nullptr;
 }
 
+bool UEpisodeEditorEntryWidget::CompleteExternallyStartedEpisode(const bool bLoadedExistingEpisode)
+{
+	// The launch subsystem event and late widget construction check can both arrive for one map load.
+	if (bExternalStartCompleted)
+	{
+		return true;
+	}
+
+	if (!FinishSuccessfulStart(bLoadedExistingEpisode))
+	{
+		return false;
+	}
+
+	bExternalStartCompleted = true;
+	return true;
+}
+
 void UEpisodeEditorEntryWidget::HandleNewEpisodeButtonClicked()
 {
 	StartNewEpisode();
@@ -172,6 +193,58 @@ void UEpisodeEditorEntryWidget::HandleNewEpisodeButtonClicked()
 void UEpisodeEditorEntryWidget::HandleLoadEpisodeButtonClicked()
 {
 	LoadEpisodeFromPathTextBox();
+}
+
+void UEpisodeEditorEntryWidget::BindEpisodeEditorLaunchSubsystem()
+{
+	UGameInstance* gameInstance = GetGameInstance();
+	if (!gameInstance)
+	{
+		return;
+	}
+
+	UEpisodeEditorLaunchSubsystem* launchSubsystem = gameInstance->GetSubsystem<UEpisodeEditorLaunchSubsystem>();
+	if (!launchSubsystem)
+	{
+		return;
+	}
+
+	if (!AutoStartCompletedHandle.IsValid())
+	{
+		AutoStartCompletedHandle = launchSubsystem->OnAutoStartCompleted().AddUObject(
+			this,
+			&UEpisodeEditorEntryWidget::HandleAutoStartCompleted);
+	}
+
+	if (launchSubsystem->HasAutoStartedEpisodeEditorSession())
+	{
+		CompleteExternallyStartedEpisode(
+			launchSubsystem->WasAutoStartedEpisodeEditorSessionLoadedExistingEpisode());
+	}
+}
+
+void UEpisodeEditorEntryWidget::UnbindEpisodeEditorLaunchSubsystem()
+{
+	if (!AutoStartCompletedHandle.IsValid())
+	{
+		return;
+	}
+
+	if (UGameInstance* gameInstance = GetGameInstance())
+	{
+		if (UEpisodeEditorLaunchSubsystem* launchSubsystem =
+				gameInstance->GetSubsystem<UEpisodeEditorLaunchSubsystem>())
+		{
+			launchSubsystem->OnAutoStartCompleted().Remove(AutoStartCompletedHandle);
+		}
+	}
+
+	AutoStartCompletedHandle.Reset();
+}
+
+void UEpisodeEditorEntryWidget::HandleAutoStartCompleted(const bool bLoadedExistingEpisode)
+{
+	CompleteExternallyStartedEpisode(bLoadedExistingEpisode);
 }
 
 void UEpisodeEditorEntryWidget::RequestEditorWidgetInputMode()

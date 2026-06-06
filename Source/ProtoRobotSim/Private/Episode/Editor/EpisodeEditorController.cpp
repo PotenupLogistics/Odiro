@@ -6,6 +6,7 @@
 #include "Episode/Editor/EpisodeEditorPawn.h"
 #include "Episode/Editor/EpisodePlacementPreviewActor.h"
 #include "Episode/Editor/EpisodeTransformGizmoActor.h"
+#include "Episode/Widget/EpisodeEditorToolbarWidget.h"
 #include "Episode/Widget/EpisodePlaceableContextMenuWidget.h"
 #include "Camera/CameraComponent.h"
 #include "InputAction.h"
@@ -14,6 +15,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Episode/Actors/EpisodePedestrian.h"
+#include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogEpisodeEditorController, Log, All);
 
@@ -26,6 +28,12 @@ AEpisodeEditorController::AEpisodeEditorController()
 	PlacementPreviewActorClass = AEpisodePlacementPreviewActor::StaticClass();
 	TransformGizmoActorClass = AEpisodeTransformGizmoActor::StaticClass();
 	PlaceableContextMenuWidgetClass = UEpisodePlaceableContextMenuWidget::StaticClass();
+	static ConstructorHelpers::FClassFinder<UEpisodeEditorToolbarWidget> toolbarWidgetFinder(
+		TEXT("/Game/Widgets/WBP_EpisodeEditorToolbar"));
+	if (toolbarWidgetFinder.Succeeded())
+	{
+		ToolbarWidgetClass = toolbarWidgetFinder.Class;
+	}
 	EditorInputMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Editor.IMC_Editor")));
 	EditorMoveAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorMove.IA_EditorMove")));
 	EditorLookAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorLook.IA_EditorLook")));
@@ -42,6 +50,13 @@ void AEpisodeEditorController::BeginPlay()
 	AddEditorInputMappingContext();
 	EnsureAuthoringOutlineCustomDepthEnabled();
 	SetObserverMode();
+	ShowToolbarWidget();
+}
+
+void AEpisodeEditorController::EndPlay(const EEndPlayReason::Type endPlayReason)
+{
+	RemoveToolbarWidget();
+	Super::EndPlay(endPlayReason);
 }
 
 void AEpisodeEditorController::Tick(float deltaSeconds)
@@ -337,6 +352,51 @@ bool AEpisodeEditorController::SaveEpisodeSetupJsonFile(
 	}
 
 	return authoringSubsystem->SaveEpisodeSetupJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
+}
+
+FString AEpisodeEditorController::GetSourceEpisodeSetupJsonPath() const
+{
+	const UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	return authoringSubsystem ? authoringSubsystem->GetSourceEpisodeSetupJsonPath() : FString();
+}
+
+UEpisodeEditorToolbarWidget* AEpisodeEditorController::ShowToolbarWidget()
+{
+	if (IsValid(ToolbarWidget))
+	{
+		if (!ToolbarWidget->IsInViewport())
+		{
+			ToolbarWidget->AddToViewport(ToolbarViewportZOrder);
+		}
+		return ToolbarWidget;
+	}
+
+	if (!ensureMsgf(
+			ToolbarWidgetClass,
+			TEXT("EpisodeEditorController requires ToolbarWidgetClass to point to WBP_EpisodeEditorToolbar.")))
+	{
+		UE_LOG(LogEpisodeEditorController, Error, TEXT("ToolbarWidgetClass is not set."));
+		return nullptr;
+	}
+
+	ToolbarWidget = CreateWidget<UEpisodeEditorToolbarWidget>(this, ToolbarWidgetClass);
+	if (!ToolbarWidget)
+	{
+		return nullptr;
+	}
+
+	ToolbarWidget->AddToViewport(ToolbarViewportZOrder);
+	return ToolbarWidget;
+}
+
+void AEpisodeEditorController::RemoveToolbarWidget()
+{
+	if (IsValid(ToolbarWidget))
+	{
+		ToolbarWidget->RemoveFromParent();
+	}
+
+	ToolbarWidget = nullptr;
 }
 
 bool AEpisodeEditorController::TryUpdateSelectedPlaceableTransform(

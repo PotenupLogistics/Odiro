@@ -9,8 +9,10 @@
 class AEpisodeEditorPawn;
 class AEpisodePlacementPreviewActor;
 class UEpisodeAuthoringSubsystem;
+class UEpisodePlaceableComponent;
 class UInputAction;
 class UInputMappingContext;
+class UMaterialInterface;
 class UWidget;
 struct FInputActionValue;
 
@@ -46,6 +48,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
 	int32 EditorInputMappingPriority = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input", meta = (ClampMin = "0.0"))
+	double SelectionClickLookDeltaThreshold = 4.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Placement", meta = (ClampMin = "1.0"))
 	float PlacementTraceDistanceCm = 100000.0f;
@@ -108,10 +113,21 @@ public:
 	bool SaveEpisodeSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
 private:
-	void HandleConfirmPlacementInput();
+	void HandleSelectionStartedInput();
+	void HandleSelectionCompletedInput();
 	void HandleCancelPlacementInput();
 	void HandleEditorMoveAction(const FInputActionValue& inputActionValue);
 	void HandleEditorLookAction(const FInputActionValue& inputActionValue);
+	void BeginLookInputCapture();
+	void EndLookInputCapture();
+	void UpdateHoveredPlaceable();
+	bool TraceMouseSelectablePlaceable(UEpisodePlaceableComponent*& outPlaceableComponent, FHitResult& outHit) const;
+	bool IsEditorSelectablePlaceable(const UEpisodePlaceableComponent* placeableComponent) const;
+	bool IsCursorOverEditorWidgetInputModeFocus() const;
+	void SetHoveredPlaceable(UEpisodePlaceableComponent* placeableComponent);
+	void SetSelectedPlaceable(UEpisodePlaceableComponent* placeableComponent);
+	void ApplyAuthoringOutlinePostProcessMaterial(const UEpisodePlaceableComponent* placeableComponent);
+	void EnsureAuthoringOutlineCustomDepthEnabled() const;
 	void AddEditorInputMappingContext();
 	void BindEditorInputActions();
 	void UpdatePlacementPreview();
@@ -142,6 +158,18 @@ private:
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
 	FString CurrentPlacementFailureReason;
+
+	bool bIsLookInputHeld = false;
+
+	double LookCaptureAccumulatedDelta = 0.0;
+
+	TWeakObjectPtr<UEpisodePlaceableComponent> HoveredPlaceableComponent;
+
+	TWeakObjectPtr<UEpisodePlaceableComponent> SelectedPlaceableComponent;
+
+	TWeakObjectPtr<UEpisodePlaceableComponent> PressedPlaceableComponent;
+
+	TWeakObjectPtr<UMaterialInterface> ActiveAuthoringOutlinePostProcessMaterial;
 
 	TArray<TWeakObjectPtr<UWidget>> EditorWidgetInputModeRequesters;
 };

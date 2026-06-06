@@ -2,6 +2,7 @@
 
 #include "Components/HorizontalBox.h"
 #include "Components/ScrollBox.h"
+#include "Components/SizeBox.h"
 #include "Episode/Editor/EpisodeEditorController.h"
 #include "Episode/Widget/EpisodePlaceablePaletteItemWidget.h"
 #include "Shared/EpisodeCoreTypes.h"
@@ -102,7 +103,9 @@ void UEpisodeAssetPaletteWidget::RequestEditorWidgetInputMode()
 {
 	if (AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer()))
 	{
-		editorController->RequestEditorWidgetInputMode(this);
+		UWidget* focusWidget = ResolveInputModeFocusWidget();
+		RequestedInputModeFocusWidget = focusWidget;
+		editorController->RequestEditorWidgetInputMode(focusWidget);
 	}
 }
 
@@ -110,6 +113,23 @@ void UEpisodeAssetPaletteWidget::ReleaseEditorWidgetInputMode()
 {
 	if (AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer()))
 	{
-		editorController->ReleaseEditorWidgetInputMode(this);
+		UWidget* focusWidget = RequestedInputModeFocusWidget.Get();
+		if (!focusWidget)
+		{
+			focusWidget = ResolveInputModeFocusWidget();
+		}
+
+		editorController->ReleaseEditorWidgetInputMode(focusWidget);
+		RequestedInputModeFocusWidget.Reset();
 	}
+}
+
+UWidget* UEpisodeAssetPaletteWidget::ResolveInputModeFocusWidget() const
+{
+	if (PaletteSizeBox)
+	{
+		return PaletteSizeBox.Get();
+	}
+
+	return const_cast<UEpisodeAssetPaletteWidget*>(this);
 }

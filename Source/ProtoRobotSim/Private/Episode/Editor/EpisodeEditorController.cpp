@@ -2,12 +2,17 @@
 #include "Episode/Editor/EpisodeEditorController.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/Editor/EpisodeAuthoringSubsystem.h"
 #include "Episode/Editor/EpisodeEditorPawn.h"
 #include "Episode/Editor/EpisodePlacementPreviewActor.h"
+#include "Framework/Application/SlateApplication.h"
+#include "HAL/IConsoleManager.h"
+#include "Camera/CameraComponent.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
 #include "InputMappingContext.h"
+#include "Materials/MaterialInterface.h"
 #include "Components/Widget.h"
 
 AEpisodeEditorController::AEpisodeEditorController()
@@ -28,6 +33,7 @@ void AEpisodeEditorController::BeginPlay()
 {
 	Super::BeginPlay();
 	AddEditorInputMappingContext();
+	EnsureAuthoringOutlineCustomDepthEnabled();
 	SetObserverMode();
 }
 
@@ -37,6 +43,9 @@ void AEpisodeEditorController::Tick(float deltaSeconds)
 
 	switch (EditorMode)
 	{
+	case EEpisodeEditorControllerMode::Observer:
+		UpdateHoveredPlaceable();
+		break;
 	case EEpisodeEditorControllerMode::EditPlacement:
 		UpdatePlacementPreview();
 		break;
@@ -57,6 +66,11 @@ void AEpisodeEditorController::SetObserverMode()
 	SelectedStaticObstaclePropId = NAME_None;
 	bCurrentPlacementValid = false;
 	CurrentPlacementFailureReason.Reset();
+	bIsLookInputHeld = false;
+	LookCaptureAccumulatedDelta = 0.0;
+	PressedPlaceableComponent.Reset();
+	SetHoveredPlaceable(nullptr);
+	SetSelectedPlaceable(nullptr);
 	DestroyPlacementPreview();
 	ApplyInputMode();
 }
@@ -84,6 +98,12 @@ void AEpisodeEditorController::ReleaseEditorWidgetInputMode(UWidget* focusWidget
 
 bool AEpisodeEditorController::BeginStaticObstaclePlacement(FName propId)
 {
+	bIsLookInputHeld = false;
+	LookCaptureAccumulatedDelta = 0.0;
+	PressedPlaceableComponent.Reset();
+	SetHoveredPlaceable(nullptr);
+	SetSelectedPlaceable(nullptr);
+
 	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if (!authoringSubsystem) return false;
 	
@@ -227,13 +247,51 @@ bool AEpisodeEditorController::SaveEpisodeSetupJsonFile(
 	return authoringSubsystem->SaveEpisodeSetupJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
 }
 
-void AEpisodeEditorController::HandleConfirmPlacementInput()
+void AEpisodeEditorController::HandleSelectionStartedInput()
 {
-	ConfirmPlacement();
+	if (EditorMode == EEpisodeEditorControllerMode::EditPlacement)
+	{
+		ConfirmPlacement();
+		return;
+	}
+
+	if (EditorMode == EEpisodeEditorControllerMode::Observer)
+	{
+		if (IsCursorOverEditorWidgetInputModeFocus())
+		{
+			return;
+		}
+
+		PressedPlaceableComponent = HoveredPlaceableComponent;
+		BeginLookInputCapture();
+	}
+}
+
+void AEpisodeEditorController::HandleSelectionCompletedInput()
+{
+	const bool bShouldSelectPressedPlaceable =
+		EditorMode == EEpisodeEditorControllerMode::Observer
+		&& bIsLookInputHeld
+		&& LookCaptureAccumulatedDelta <= SelectionClickLookDeltaThreshold;
+	UEpisodePlaceableComponent* placeableToSelect = PressedPlaceableComponent.Get();
+
+	EndLookInputCapture();
+	PressedPlaceableComponent.Reset();
+
+	if (bShouldSelectPressedPlaceable)
+	{
+		SetSelectedPlaceable(placeableToSelect);
+	}
 }
 
 void AEpisodeEditorController::HandleCancelPlacementInput()
 {
+	if (EditorMode == EEpisodeEditorControllerMode::Observer)
+	{
+		SetSelectedPlaceable(nullptr);
+		return;
+	}
+
 	CancelPlacement();
 }
 
@@ -283,7 +341,7 @@ void AEpisodeEditorController::HandleEditorMoveAction(const FInputActionValue& i
 
 void AEpisodeEditorController::HandleEditorLookAction(const FInputActionValue& inputActionValue)
 {
-	if (EditorMode != EEpisodeEditorControllerMode::Observer || FindEditorWidgetInputModeFocus())
+	if (EditorMode != EEpisodeEditorControllerMode::Observer || !bIsLookInputHeld)
 	{
 		return;
 	}
@@ -313,9 +371,205 @@ void AEpisodeEditorController::HandleEditorLookAction(const FInputActionValue& i
 		break;
 	}
 
+	LookCaptureAccumulatedDelta += FVector2D(yawValue, pitchValue).Size();
 	editorPawn->ApplyLookInput(
 		yawValue * MouseLookSensitivity,
 		pitchValue * MouseLookSensitivity);
+}
+
+void AEpisodeEditorController::BeginLookInputCapture()
+{
+	if (bIsLookInputHeld)
+	{
+		return;
+	}
+
+	bIsLookInputHeld = true;
+	LookCaptureAccumulatedDelta = 0.0;
+	ApplyInputMode();
+}
+
+void AEpisodeEditorController::EndLookInputCapture()
+{
+	if (!bIsLookInputHeld)
+	{
+		return;
+	}
+
+	bIsLookInputHeld = false;
+	ApplyInputMode();
+}
+
+void AEpisodeEditorController::UpdateHoveredPlaceable()
+{
+	if (bIsLookInputHeld || IsCursorOverEditorWidgetInputModeFocus())
+	{
+		SetHoveredPlaceable(nullptr);
+		return;
+	}
+
+	UEpisodePlaceableComponent* hitPlaceableComponent = nullptr;
+	FHitResult hit;
+	if (TraceMouseSelectablePlaceable(hitPlaceableComponent, hit))
+	{
+		SetHoveredPlaceable(hitPlaceableComponent);
+	}
+	else
+	{
+		SetHoveredPlaceable(nullptr);
+	}
+}
+
+bool AEpisodeEditorController::TraceMouseSelectablePlaceable(
+	UEpisodePlaceableComponent*& outPlaceableComponent,
+	FHitResult& outHit) const
+{
+	outPlaceableComponent = nullptr;
+
+	FVector worldOrigin = FVector::ZeroVector;
+	FVector worldDirection = FVector::ForwardVector;
+	if (!DeprojectMousePositionToWorld(worldOrigin, worldDirection)) return false;
+
+	UWorld* world = GetWorld();
+	if (!world) return false;
+
+	FCollisionQueryParams queryParams(SCENE_QUERY_STAT(EpisodeEditorSelectableTrace), true);
+	queryParams.bReturnPhysicalMaterial = false;
+	if (PlacementPreviewActor)
+	{
+		queryParams.AddIgnoredActor(PlacementPreviewActor);
+	}
+	if (const APawn* pawn = GetPawn())
+	{
+		queryParams.AddIgnoredActor(pawn);
+	}
+
+	const FVector traceEnd = worldOrigin + worldDirection.GetSafeNormal() * PlacementTraceDistanceCm;
+	if (!world->LineTraceSingleByChannel(
+		outHit,
+		worldOrigin,
+		traceEnd,
+		PlacementTraceChannel,
+		queryParams))
+	{
+		return false;
+	}
+
+	AActor* hitActor = outHit.GetActor();
+	if (!hitActor)
+	{
+		return false;
+	}
+
+	UEpisodePlaceableComponent* placeableComponent = hitActor->FindComponentByClass<UEpisodePlaceableComponent>();
+	if (!IsEditorSelectablePlaceable(placeableComponent))
+	{
+		return false;
+	}
+
+	outPlaceableComponent = placeableComponent;
+	return true;
+}
+
+bool AEpisodeEditorController::IsEditorSelectablePlaceable(const UEpisodePlaceableComponent* placeableComponent) const
+{
+	return placeableComponent
+		&& placeableComponent->bAuthoringSelectable
+		&& placeableComponent->Category == EEpisodeActorCategory::StaticObstacle;
+}
+
+bool AEpisodeEditorController::IsCursorOverEditorWidgetInputModeFocus() const
+{
+	if (!FSlateApplication::IsInitialized())
+	{
+		return false;
+	}
+
+	const FVector2D cursorScreenPosition = FSlateApplication::Get().GetCursorPos();
+	for (int32 i = EditorWidgetInputModeRequesters.Num() - 1; i >= 0; --i)
+	{
+		UWidget* requester = EditorWidgetInputModeRequesters[i].Get();
+		if (requester && requester->IsVisible() && requester->GetCachedGeometry().IsUnderLocation(cursorScreenPosition))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void AEpisodeEditorController::SetHoveredPlaceable(UEpisodePlaceableComponent* placeableComponent)
+{
+	if (HoveredPlaceableComponent.Get() == placeableComponent)
+	{
+		return;
+	}
+
+	if (UEpisodePlaceableComponent* previousHoveredPlaceable = HoveredPlaceableComponent.Get())
+	{
+		previousHoveredPlaceable->SetAuthoringHovered(false);
+	}
+
+	HoveredPlaceableComponent = placeableComponent;
+	if (placeableComponent)
+	{
+		ApplyAuthoringOutlinePostProcessMaterial(placeableComponent);
+		placeableComponent->SetAuthoringHovered(true);
+	}
+}
+
+void AEpisodeEditorController::SetSelectedPlaceable(UEpisodePlaceableComponent* placeableComponent)
+{
+	if (SelectedPlaceableComponent.Get() == placeableComponent)
+	{
+		return;
+	}
+
+	if (UEpisodePlaceableComponent* previousSelectedPlaceable = SelectedPlaceableComponent.Get())
+	{
+		previousSelectedPlaceable->SetAuthoringSelected(false);
+	}
+
+	SelectedPlaceableComponent = placeableComponent;
+	if (placeableComponent)
+	{
+		placeableComponent->SetAuthoringSelected(true);
+	}
+}
+
+void AEpisodeEditorController::ApplyAuthoringOutlinePostProcessMaterial(
+	const UEpisodePlaceableComponent* placeableComponent)
+{
+	if (!placeableComponent)
+	{
+		return;
+	}
+
+	UMaterialInterface* outlinePostProcessMaterial =
+		placeableComponent->AuthoringHoverOutlineMaterial.LoadSynchronous();
+	if (!outlinePostProcessMaterial || ActiveAuthoringOutlinePostProcessMaterial.Get() == outlinePostProcessMaterial)
+	{
+		return;
+	}
+
+	AEpisodeEditorPawn* editorPawn = GetEditorPawn();
+	if (!editorPawn || !editorPawn->CameraComponent)
+	{
+		return;
+	}
+
+	editorPawn->CameraComponent->PostProcessBlendWeight = 1.0f;
+	editorPawn->CameraComponent->PostProcessSettings.AddBlendable(outlinePostProcessMaterial, 1.0f);
+	ActiveAuthoringOutlinePostProcessMaterial = outlinePostProcessMaterial;
+}
+
+void AEpisodeEditorController::EnsureAuthoringOutlineCustomDepthEnabled() const
+{
+	IConsoleVariable* customDepthCvar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.CustomDepth"));
+	if (customDepthCvar && customDepthCvar->GetInt() < 3)
+	{
+		customDepthCvar->Set(3, ECVF_SetByCode);
+	}
 }
 
 void AEpisodeEditorController::AddEditorInputMappingContext()
@@ -362,7 +616,19 @@ void AEpisodeEditorController::BindEditorInputActions()
 			selectionAction,
 			ETriggerEvent::Started,
 			this,
-			&AEpisodeEditorController::HandleConfirmPlacementInput);
+			&AEpisodeEditorController::HandleSelectionStartedInput);
+
+		enhancedInputComponent->BindAction(
+			selectionAction,
+			ETriggerEvent::Completed,
+			this,
+			&AEpisodeEditorController::HandleSelectionCompletedInput);
+
+		enhancedInputComponent->BindAction(
+			selectionAction,
+			ETriggerEvent::Canceled,
+			this,
+			&AEpisodeEditorController::HandleSelectionCompletedInput);
 	}
 
 	if (UInputAction* deselectionAction = EditorDeselectionAction.LoadSynchronous())
@@ -459,7 +725,16 @@ FVector AEpisodeEditorController::SnapLocationIfNeeded(const FVector& location) 
 
 void AEpisodeEditorController::ApplyInputMode()
 {
-	if (EditorMode == EEpisodeEditorControllerMode::EditPlacement)
+	if (EditorMode == EEpisodeEditorControllerMode::Observer && bIsLookInputHeld)
+	{
+		bShowMouseCursor = false;
+		bEnableClickEvents = false;
+		bEnableMouseOverEvents = false;
+
+		FInputModeGameOnly inputMode;
+		SetInputMode(inputMode);
+	}
+	else if (EditorMode == EEpisodeEditorControllerMode::EditPlacement)
 	{
 		bShowMouseCursor = true;
 		bEnableClickEvents = true;

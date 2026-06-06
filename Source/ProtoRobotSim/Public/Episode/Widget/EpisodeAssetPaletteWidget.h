@@ -7,6 +7,7 @@
 class UHorizontalBox;
 class UScrollBox;
 class USizeBox;
+class UWidget;
 class UEpisodePlaceablePaletteItemWidget;
 
 UCLASS(BlueprintType, Blueprintable)
@@ -45,4 +46,9 @@ protected:
 
 	void RequestEditorWidgetInputMode();
 	void ReleaseEditorWidgetInputMode();
+
+private:
+	UWidget* ResolveInputModeFocusWidget() const;
+
+	TWeakObjectPtr<UWidget> RequestedInputModeFocusWidget;
 };

@@ -31,14 +31,15 @@ specs:
 ## 설계
 
 하나의 프로젝트로 Unreal Engine 클라이언트를 모두 개발한다.
-그냥 켜면 플랫폼 + 시나리오 편집기가 실행되고, 시뮬레이터는 Commandline Parameter와 함께 별도의 프로세스로 실행된다.
+그냥 켜면 플랫폼 MainMenu가 실행되고, 시뮬레이터는 Commandline Parameter와 함께 별도의 프로세스로 실행된다.
+시나리오 편집기는 `EpisodeEditorMap`에서 제공하며, MainMenu는 에디터 내부 기능을 구현하지 않고 에디터 map으로 진입하는 역할만 맡는다.
 
 ### Main Window
 
 - 플랫폼 UI 표시. 창모드로 실행, Unreal Engine의 Slate 또는 UMG를 활용하여 UI 구현
 - 좌측 사이드바: 내비게이션 메뉴, 각 메뉴 클릭 시 우측 콘텐츠 영역에 해당 화면 표시
   - 홈: 랜딩 페이지, 공지사항, 최근 활동 등 표시
-  - 시나리오: 시나리오 구성 목록 표시, 각 항목 클릭 시 시나리오 편집기 창 열기
+  - 시나리오: 시나리오 구성 목록 표시, 각 항목 클릭 시 `EpisodeEditorMap` 열기
   - 행동 정책: 행동 정책 목록 표시, 각 항목 클릭 시 텍스트 에디터 열기
   - 실험 구성: 시뮬레이션 구성 목록 표시, 각 항목 클릭 시 설정 값 편집 화면 전환
   - 실험 현황: 시뮬레이션 실행 현황 확인 및 관리
@@ -47,7 +48,9 @@ specs:
 
 ### 시나리오 편집기
 
-- 특정 시나리오 구성 JSON 파일을 열어 시각적으로 표현. Editor Level을 분리된 Window로 띄움
+- 특정 시나리오 구성 JSON 파일을 열어 시각적으로 표현. Editor Level은 `EpisodeEditorMap`에서 실행
+- 에디터 UI와 authoring 기능은 에디터 담당 작업자의 소유로 두고, Platform 작업은 MainMenu에서 `EpisodeEditorMap`으로 진입하는 Level 전환만 담당
+- MVP에서는 MainMenu와 EpisodeEditorMap을 같은 Unreal process의 별도 map으로 취급한다. 같은 process 안에서 두 map을 각각 독립 창으로 동시에 실행하는 구조는 구현하지 않는다
 - 월드 뷰: 액터 배치 및 시뮬레이션 환경 시각화. 액터를 클릭하여 속성 패널에서 편집 가능
 - 시나리오 구성 트리: 시나리오 구성 요소를 트리 형태로 표시, 각 요소 클릭 시 속성 패널에 상세 정보 표시
 - 속성 패널: 선택한 요소의 속성 편집 가능. 예: 액터 위치, 행동 정책 매핑 등
@@ -80,12 +83,12 @@ specs:
 ### 범위
 
 - `EpisodeSimulationMap`: 시뮬레이션 수행
-- `EpisodeEditorMap`: 시나리오 에디터 map. 에디터 UI 구현은 다른 작업자 담당으로 제외. spawn/preview는 이 계획에 포함하되 후순위
+- `EpisodeEditorMap`: 구현된 시나리오 에디터 map. 에디터 UI와 authoring 기능은 다른 작업자 담당으로 제외. 이 계획은 MainMenu에서 에디터 map을 여는 진입점만 포함
 - Platform UI와 Simulator는 별도 프로세스로 실행
 - Platform UI 프로세스는 fixed-step을 적용하지 않고 `EpisodeSimulationMap`을 직접 로드하지 않음
 - Simulator 프로세스는 `EpisodeSimulationMap`을 로드하고 fixed-step으로 실행
 - 로봇 구현은 다른 작업자가 진행 중으로 이 계획에서 Python API Server 통신 구현 제외
-- 이 계획은 플랫폼이 시뮬레이션 실행, 상태 추적, 결과 조회를 연결하는 범위만 다룸
+- 이 계획은 플랫폼이 시뮬레이션 실행, 상태 추적, 결과 조회, 시나리오 에디터 진입을 연결하는 범위만 다룸
 - `EpisodeSimulationMap`의 Episode spawn 경로는 즉시 구현
 
 ### 현재 구현
@@ -99,9 +102,9 @@ specs:
 | Batch runner              | 구현    | `UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile`               | 실험 구성 실행의 핵심 API                                              |
 | Evaluation report         | 구현    | `FEpisodeEvaluationReportJson`                                          | 실험 결과 화면의 요약 데이터 기반                                      |
 | Measurement log           | 구현    | `UEpisodeMeasurementLogSubsystem`                                       | 결과 분석 Agent와 결과 상세 화면의 raw log 기반                        |
-| Map 분리                  | 진행 중 | `EpisodeSimulationMap`, `EpisodeEditorMap`                              | 시뮬레이션 실행과 시나리오 편집 map을 분리                             |
+| Map 분리                  | 구현    | `EpisodeSimulationMap`, `EpisodeEditorMap`                              | 시뮬레이션 실행과 시나리오 편집 map을 분리                             |
 | Remote policy API         | 범위 밖 | `UDeliveryBot_PolicyJudgmentComponent`                                  | 로봇 담당 작업자의 구현 범위                                           |
-| Platform UI               | 미구현  | `Source/ProtoRobotSim`에 Platform/UI 계층 없음                          | 다음 구현 대상                                                         |
+| Platform UI               | 구현    | `AMainMenuPlayerController`, `UMainMenuWidget`                          | MainMenu에서 simulation 실행과 status/report/log 조회 가능             |
 | Simulator CLI bootstrap   | 구현    | `USimulatorProcessSubsystem`, `FSimulationCommandLine`                 | `-Simulate=<SimulationSetupFile>` 감지, fixed-step 적용, map load, runner 시작, status 기록 |
 | LLM 연동                  | 미구현  | 관련 source 없음                                                        | 후순위 구현 대상                                                       |
 
@@ -123,7 +126,10 @@ specs:
 - 시뮬레이터는 주기적으로 실험 현황 Status JSON으로 기록, 플랫폼도 주기적으로 읽어 UI 표시
 - 시뮬레이터 중단, 오류 시 Status JSON에 실패 기록 필요
 - `EpisodeSimulationMap`의 spawn 실행을 먼저 연결
-- `EpisodeEditorMap` spawn/preview는 구현 대상이지만 현재 구체 설계가 어려우므로 후순위로 미룸
+- `EpisodeEditorMap` 내부 authoring, spawn/preview, 저장 흐름은 에디터 담당 작업자 소유로 두고 Platform에서는 직접 구현하지 않음
+- MainMenu에서 `EpisodeEditorMap`을 열 때는 같은 process 안의 `OpenLevel` 기반 전환을 MVP 기본값으로 둠
+- 같은 Unreal process 안에서 MainMenuMap과 EpisodeEditorMap을 각각 별도 runtime window로 동시에 띄우는 구조는 `SWindow`만으로 해결되지 않고 별도 `UWorld`/viewport lifecycle 관리가 필요하므로 MVP 범위에서 제외
+- 에디터를 MainMenu와 동시에 유지해야 하는 요구가 생기면, 별도 Unreal process를 실행하는 launcher 방식으로 확장한다
 - LLM 서버는 runtime 필수 의존성이 아니라 파일 생성, 분석, 수정 제안 도구로 둔다
 
 ## 작업
@@ -135,7 +141,7 @@ MVP 범위: T01~T05 / T06: 사용성 확장 / T07~T08은 병렬 작업자의 산
 - Platform UI는 fixed-step 적용 X, `EpisodeSimulationMap` 직접 로드 X
 - Simulator는 `-Simulate=<SimulationSetupFile>`로 진입, fixed-step 적용
 - 로봇 내부 구현, Python API Server 통신은 이 계획에서 구현 X
-- `EpisodeEditorMap` 에디터 UI는 별도 작업자 담당, 이 계획은 spawn/preview 연결만 후순위로 다룬다.
+- `EpisodeEditorMap` 에디터 UI와 authoring 기능은 별도 작업자 담당, 이 계획은 MainMenu의 에디터 진입점만 다룬다.
 
 ### T01 실행 계약과 타입 고정 [x]
 
@@ -320,24 +326,25 @@ T04로 남긴 범위:
 - 저장된 queue와 setup을 simulator runner가 그대로 실행
 - validation 실패 항목은 파일과 run item 단위로 확인
 
-### T07 EpisodeEditorMap spawn/preview 연결 [ ]
+### T07 EpisodeEditorMap 진입점 연결 [ ]
 
-목표: 시나리오 에디터 구현 방향이 안정된 뒤 editor map의 spawn/preview 진입점을 연결한다.
+목표: MainMenu에서 구현된 `EpisodeEditorMap`을 열 수 있게 한다.
 
 의존:
 - T05
-- 에디터 UI 담당 작업자의 `EpisodeEditorMap` lifecycle 확정
+- 에디터 UI 담당 작업자의 `EpisodeEditorMap` 기본 진입 lifecycle 확정
 
 상세 작업:
-- 에디터 UI 담당 작업자의 `EpisodeEditorMap` lifecycle과 actor 선택 흐름을 확인
-- 이 계획에서는 editor UI를 구현하지 않고 EpisodeSetup을 editor map에 spawn/preview하는 경로만 연결
-- `EpisodeSimulationMap` runner 경로와 `EpisodeEditorMap` preview 경로가 같은 world lifecycle을 공유하지 않게 분리
-- preview 결과는 저장 전 validation과 사용자 확인을 돕는 보조 기능으로 둔다
+- 에디터 UI 담당 작업자의 `EpisodeEditorMap` 진입 조건과 초기 로드 인자를 확인
+- MainMenu에서 시나리오 목록 또는 선택 파일을 기준으로 `EpisodeEditorMap`을 연다
+- MVP에서는 같은 process 안에서 `OpenLevel`로 전환한다
+- MainMenuMap과 EpisodeEditorMap을 동시에 유지하는 별도 runtime window 구조는 MVP 범위에서 제외한다
+- 후속으로 에디터를 별도 프로세스로 열 필요가 생기면 `-EditScenario=<EpisodeSetupFile>` 같은 명시적 command line 계약을 추가한다
 
 검증:
 - Platform에서 시나리오 에디터를 열 수 있는 진입점이 있다
-- `EpisodeEditorMap`에서 EpisodeSetup preview를 띄운다
-- preview 구현이 simulator fixed-step이나 runner 실행 경로에 영향을 주지 않는다
+- MainMenu에서 `EpisodeEditorMap`으로 전환해 에디터 담당 기능이 시작된다
+- 에디터 진입 경로가 simulator fixed-step이나 runner 실행 경로에 영향을 주지 않는다
 
 ### T08 LLM 연동 후속 연결 [ ]
 
@@ -366,7 +373,7 @@ T04로 남긴 범위:
 - [x] T04 Platform launcher 구현
 - [x] T05 Platform 최소 실행 화면 구현
 - [ ] T06 실험 설정 편집 구현
-- [ ] T07 EpisodeEditorMap spawn/preview 연결
+- [ ] T07 EpisodeEditorMap 진입점 연결
 - [ ] T08 LLM 연동 후속 연결
 
 ## 검증
@@ -379,7 +386,7 @@ T04로 남긴 범위:
 | T04 | Platform launcher command automation, process start/status polling 코드 경로 빌드 확인, visible subprocess smoke는 수동 확인 |
 | T05 | Platform UI widget 빌드 확인, invalid JSON validation 표시 코드 경로 구현, visible UI smoke는 수동 확인 |
 | T06 | run queue 저장 후 runner 실행 성공 확인 |
-| T07 | `EpisodeEditorMap` preview가 simulator 실행 경로와 분리되는지 확인 |
+| T07 | `EpisodeEditorMap` 진입 경로가 simulator 실행 경로와 분리되는지 확인 |
 | T08 | LLM analysis payload와 report 표시 확인 |
 
 ## 완료 기록
@@ -422,4 +429,4 @@ T04로 남긴 범위:
 T01~T05 완료.
 Launcher process는 packaged exe 또는 개발 fallback `RunPreview.bat`를 별도 process로 실행한다.
 Simulator process는 `SimulationSetup JSON` 기반 fixed-step run을 수행하고, Platform UI는 status/report/log 파일로 진행 상황과 결과를 조회한다.
-남은 큰 범위는 T06 실험 설정 편집, T07 `EpisodeEditorMap` spawn/preview 연결, T08 LLM 연동이다.
+남은 큰 범위는 T06 실험 설정 편집, T07 `EpisodeEditorMap` 진입점 연결, T08 LLM 연동이다.

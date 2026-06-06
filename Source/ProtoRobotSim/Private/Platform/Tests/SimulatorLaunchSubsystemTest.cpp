@@ -47,4 +47,38 @@ bool FSimulatorLaunchRunStateTerminalTest::RunTest(const FString& parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimulatorLaunchRunQueueJsonRoundTripTest,
+	"ProtoRobotSim.SimulatorLaunch.RunQueueJson.RoundTrip",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimulatorLaunchRunQueueJsonRoundTripTest::RunTest(const FString& parameters)
+{
+	TArray<FEpisodeRunInput> runInputs;
+	FEpisodeRunInput runInput;
+	runInput.PairId = TEXT("sample_0");
+	runInput.EpisodeSetupJsonPath = TEXT("Json/Input/EpisodeSetupSample_0.json");
+	runInput.DeliveryBotSetupJsonPath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
+	runInputs.Add(runInput);
+
+	FString json;
+	TArray<FString> diagnostics;
+	TestTrue(TEXT("run queue writes"), USimulatorLaunchSubsystem::TryWriteEpisodeRunQueueJson(runInputs, json, diagnostics));
+	TestEqual(TEXT("write diagnostics"), diagnostics.Num(), 0);
+	TestTrue(TEXT("schema field"), json.Contains(TEXT("\"schema\"")));
+	TestTrue(TEXT("episode setup field"), json.Contains(TEXT("EpisodeSetupSample_0.json")));
+
+	TArray<FEpisodeRunInput> parsedRunInputs;
+	TestTrue(TEXT("run queue reads"), USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(json, parsedRunInputs, diagnostics));
+	TestEqual(TEXT("read diagnostics"), diagnostics.Num(), 0);
+	TestEqual(TEXT("run input count"), parsedRunInputs.Num(), 1);
+	TestEqual(TEXT("pair id"), parsedRunInputs[0].PairId, FString(TEXT("sample_0")));
+	TestEqual(
+		TEXT("delivery setup"),
+		parsedRunInputs[0].DeliveryBotSetupJsonPath,
+		FString(TEXT("Json/Input/DeliveryBotSetupSample_0.json")));
+
+	return true;
+}
+
 #endif

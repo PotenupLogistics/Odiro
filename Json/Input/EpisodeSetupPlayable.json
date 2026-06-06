@@ -1,0 +1,57 @@
+{
+  "schema": "episode_actor_spawn_mvp",
+  "version": 1,
+  "scenario_id": "playable_route_001",
+  "map_id": "EpisodeSimulationMap",
+  "run": {
+    "base_seed": 2001,
+    "iteration_index": 0,
+    "time_limit_s": 45
+  },
+  "evaluation": {
+    "goal_acceptance_radius_m": 1,
+    "tip_over_angle_deg": 60,
+    "near_miss": {
+      "distance_m": 0.5
+    },
+    "scoring": {
+      "static_obstacle_collision": -1,
+      "blocked_region_collision": -1,
+      "penalty_region_violation": -3,
+      "pedestrian_near_miss": -3,
+      "pedestrian_collision": -10
+    }
+  },
+  "ground_model": {
+    "default_region_type": "walkable",
+    "regions": [
+      {
+        "region_id": "playable_walkway",
+        "region_type": "walkable",
+        "shape": {
+          "type": "rectangle",
+          "center_xy_m": [0, 0],
+          "size_m": [14, 7],
+          "yaw_deg": 0
+        },
+        "traversability_score": 1
+      }
+    ]
+  },
+  "paths": [],
+  "actors": {
+    "static_obstacles": [],
+    "pedestrians": [],
+    "robot": {
+      "instance_id": "robot_playable",
+      "asset_id": "delivery_bot",
+      "spawn_only": false,
+      "xy_m": [-6, 0],
+      "yaw_deg": 0,
+      "route": {
+        "goal_xy_m": [6, 0],
+        "auto_start": true
+      }
+    }
+  }
+}

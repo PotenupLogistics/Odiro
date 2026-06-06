@@ -209,6 +209,14 @@ struct PROTOROBOTSIM_API FSimulationSetupJson
 {
 	static FSimulationSetupParseResult ParseFromFile(const FString& jsonFilePath);
 	static FSimulationSetupParseResult ParseFromString(const FString& jsonString);
+	static bool TryWriteSetupJson(
+		const FSimulationSetup& setup,
+		FString& outJson,
+		TArray<FString>& outDiagnostics);
+	static bool SaveToFile(
+		const FSimulationSetup& setup,
+		const FString& setupFilePath,
+		TArray<FString>& outDiagnostics);
 	static FString ResolveProjectPath(const FString& filePath);
 };
 

@@ -442,6 +442,96 @@ namespace
 		return object;
 	}
 
+	TSharedRef<FJsonObject> MakeSimulationSetupObject(const FSimulationSetup& setup)
+	{
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		object->SetStringField(TEXT("schema"), setup.Schema);
+		object->SetNumberField(TEXT("version"), setup.Version);
+		object->SetStringField(TEXT("map_id"), setup.MapId);
+		object->SetStringField(TEXT("run_queue"), setup.RunQueueJsonPath);
+
+		TSharedRef<FJsonObject> fixedStepObject = MakeShared<FJsonObject>();
+		fixedStepObject->SetNumberField(TEXT("fps"), setup.FixedStep.Fps);
+		object->SetObjectField(TEXT("fixed_step"), fixedStepObject);
+
+		TSharedRef<FJsonObject> loggingObject = MakeShared<FJsonObject>();
+		loggingObject->SetBoolField(TEXT("measurement_log_enabled"), setup.MeasurementLog.bEnabled);
+		loggingObject->SetStringField(TEXT("measurement_output_directory"), setup.MeasurementLog.OutputDirectory);
+		loggingObject->SetStringField(TEXT("measurement_file_prefix"), setup.MeasurementLog.FilePrefix);
+		loggingObject->SetNumberField(TEXT("flush_interval_ticks"), setup.MeasurementLog.FlushIntervalTicks);
+		loggingObject->SetBoolField(TEXT("flush_on_event"), setup.MeasurementLog.bFlushOnEvent);
+		object->SetObjectField(TEXT("logging"), loggingObject);
+
+		TSharedRef<FJsonObject> reportObject = MakeShared<FJsonObject>();
+		reportObject->SetBoolField(TEXT("save_evaluation_report_json"), setup.Report.bSaveEvaluationReportJson);
+		reportObject->SetStringField(TEXT("output_directory"), setup.Report.OutputDirectory);
+		object->SetObjectField(TEXT("report"), reportObject);
+
+		TSharedRef<FJsonObject> statusObject = MakeShared<FJsonObject>();
+		statusObject->SetStringField(TEXT("output_path"), setup.Status.OutputPath);
+		object->SetObjectField(TEXT("status"), statusObject);
+
+		return object;
+	}
+
+	bool ValidateSimulationSetupForWrite(
+		const FSimulationSetup& setup,
+		TArray<FString>& outDiagnostics)
+	{
+		outDiagnostics.Reset();
+		if (!setup.Schema.Equals(SimulationSetupSchema, ESearchCase::CaseSensitive))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("SimulationSetup schema must be '%s'."), SimulationSetupSchema));
+		}
+
+		if (setup.Version <= 0)
+		{
+			outDiagnostics.Add(TEXT("SimulationSetup version must be > 0."));
+		}
+
+		if (setup.MapId.TrimStartAndEnd().IsEmpty())
+		{
+			outDiagnostics.Add(TEXT("SimulationSetup map_id must not be empty."));
+		}
+
+		if (setup.RunQueueJsonPath.TrimStartAndEnd().IsEmpty())
+		{
+			outDiagnostics.Add(TEXT("SimulationSetup run_queue must not be empty."));
+		}
+
+		if (setup.FixedStep.Fps <= 0)
+		{
+			outDiagnostics.Add(TEXT("SimulationSetup fixed_step.fps must be > 0."));
+		}
+
+		if (setup.MeasurementLog.bEnabled && setup.MeasurementLog.OutputDirectory.TrimStartAndEnd().IsEmpty())
+		{
+			outDiagnostics.Add(TEXT("SimulationSetup logging.measurement_output_directory must not be empty when logging is enabled."));
+		}
+
+		if (setup.MeasurementLog.FilePrefix.TrimStartAndEnd().IsEmpty())
+		{
+			outDiagnostics.Add(TEXT("SimulationSetup logging.measurement_file_prefix must not be empty."));
+		}
+
+		if (setup.MeasurementLog.FlushIntervalTicks <= 0)
+		{
+			outDiagnostics.Add(TEXT("SimulationSetup logging.flush_interval_ticks must be > 0."));
+		}
+
+		if (setup.Report.bSaveEvaluationReportJson && setup.Report.OutputDirectory.TrimStartAndEnd().IsEmpty())
+		{
+			outDiagnostics.Add(TEXT("SimulationSetup report.output_directory must not be empty when report saving is enabled."));
+		}
+
+		if (setup.Status.OutputPath.TrimStartAndEnd().IsEmpty())
+		{
+			outDiagnostics.Add(TEXT("SimulationSetup status.output_path must not be empty."));
+		}
+
+		return outDiagnostics.IsEmpty();
+	}
+
 	bool TryReadStatusStringField(
 		const FJsonObject& jsonObject,
 		const FString& fieldName,
@@ -608,6 +698,66 @@ FSimulationSetupParseResult FSimulationSetupJson::ParseFromString(const FString&
 	ParseSimulationSetupObject(*rootObject, result);
 	result.bSuccess = !HasSimulationErrors(result.Diagnostics);
 	return result;
+}
+
+bool FSimulationSetupJson::TryWriteSetupJson(
+	const FSimulationSetup& setup,
+	FString& outJson,
+	TArray<FString>& outDiagnostics)
+{
+	outJson.Reset();
+	if (!ValidateSimulationSetupForWrite(setup, outDiagnostics))
+	{
+		return false;
+	}
+
+	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
+		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&outJson);
+	if (!FJsonSerializer::Serialize(MakeSimulationSetupObject(setup), writer))
+	{
+		outDiagnostics.Add(TEXT("SimulationSetup JSON serialization failed."));
+		return false;
+	}
+
+	return true;
+}
+
+bool FSimulationSetupJson::SaveToFile(
+	const FSimulationSetup& setup,
+	const FString& setupFilePath,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+	if (setupFilePath.TrimStartAndEnd().IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("SimulationSetup output path must not be empty."));
+		return false;
+	}
+
+	FString setupJson;
+	if (!TryWriteSetupJson(setup, setupJson, outDiagnostics))
+	{
+		return false;
+	}
+
+	const FString resolvedSetupFilePath = ResolveProjectPath(setupFilePath);
+	const FString outputDirectory = FPaths::GetPath(resolvedSetupFilePath);
+	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("SimulationSetup directory create failed: %s"), *outputDirectory));
+		return false;
+	}
+
+	if (!FFileHelper::SaveStringToFile(
+			setupJson,
+			*resolvedSetupFilePath,
+			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("SimulationSetup file write failed: %s"), *resolvedSetupFilePath));
+		return false;
+	}
+
+	return true;
 }
 
 FString FSimulationSetupJson::ResolveProjectPath(const FString& filePath)

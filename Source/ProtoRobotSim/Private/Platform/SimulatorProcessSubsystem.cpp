@@ -45,6 +45,24 @@ namespace
 		return world->GetMapName().StartsWith(TEXT("Untitled"))
 			|| world->GetOutermost()->GetName().StartsWith(TEXT("/Temp/"));
 	}
+
+	bool HasFailedRunRecord(const UEpisodeRunnerSubsystem* runnerSubsystem)
+	{
+		if (!runnerSubsystem)
+		{
+			return false;
+		}
+
+		for (const FEpisodeRunRecord& runRecord : runnerSubsystem->GetRunRecords())
+		{
+			if (!runRecord.bSuccess)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
 }
 
 void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -570,7 +588,18 @@ void USimulatorProcessSubsystem::WriteStatus(ESimulationRunState state, const FS
 
 void USimulatorProcessSubsystem::WriteStatusFromRunnerState(EEpisodeRunnerState runnerState, const FString& error)
 {
-	WriteStatus(ConvertRunnerStateToRunState(runnerState), error);
+	ESimulationRunState runState = ConvertRunnerStateToRunState(runnerState);
+	FString statusError = error;
+	if (runState == ESimulationRunState::Completed && HasFailedRunRecord(BoundRunnerSubsystem))
+	{
+		runState = ESimulationRunState::Failed;
+		if (statusError.IsEmpty())
+		{
+			statusError = TEXT("One or more episode runs failed.");
+		}
+	}
+
+	WriteStatus(runState, statusError);
 }
 
 void USimulatorProcessSubsystem::RefreshStatusFromRunner(const UEpisodeRunnerSubsystem* runnerSubsystem)

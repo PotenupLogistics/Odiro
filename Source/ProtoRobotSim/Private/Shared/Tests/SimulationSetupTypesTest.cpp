@@ -2,7 +2,11 @@
 
 #include "Shared/SimulationSetupTypes.h"
 
+#include "DeliveryBot/DeliveryBotSetupCompiler.h"
+#include "Episode/EpisodeCompiler.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/FileHelper.h"
+#include "Platform/SimulatorLaunchSubsystem.h"
 
 namespace
 {
@@ -52,6 +56,72 @@ bool FSimulationSetupJsonParseSampleTest::RunTest(const FString& parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimulationSetupJsonPlayableContractTest,
+	"ProtoRobotSim.SimulationSetup.Json.PlayableContract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters)
+{
+	const FSimulationSetupParseResult setupResult =
+		FSimulationSetupJson::ParseFromFile(TEXT("Json/Input/SimulationSetupPlayable.json"));
+
+	TestTrue(TEXT("playable setup parses"), setupResult.bSuccess);
+	TestEqual(TEXT("playable map id"), setupResult.Setup.MapId, FString(TEXT("EpisodeSimulationMap")));
+	TestEqual(TEXT("playable run queue"), setupResult.Setup.RunQueueJsonPath, FString(TEXT("Json/Input/EpisodeRunQueuePlayable.json")));
+
+	FString runQueueJson;
+	TestTrue(
+		TEXT("playable run queue loads"),
+		FFileHelper::LoadFileToString(
+			runQueueJson,
+			*FSimulationSetupJson::ResolveProjectPath(TEXT("Json/Input/EpisodeRunQueuePlayable.json"))));
+
+	TArray<FEpisodeRunInput> runInputs;
+	TArray<FString> runQueueDiagnostics;
+	TestTrue(
+		TEXT("playable run queue reads"),
+		USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(runQueueJson, runInputs, runQueueDiagnostics));
+	TestEqual(TEXT("playable run input count"), runInputs.Num(), 1);
+	TestEqual(TEXT("playable episode setup path"), runInputs[0].EpisodeSetupJsonPath, FString(TEXT("Json/Input/EpisodeSetupPlayable.json")));
+	TestEqual(TEXT("playable policy path"), runInputs[0].DeliveryBotSetupJsonPath, FString(TEXT("Json/Input/DeliveryBotSetupPlayable.json")));
+
+	const UDeliveryBotSetupCompiler* deliveryBotCompiler = NewObject<UDeliveryBotSetupCompiler>();
+	const FDeliveryBotSetupCompileResult deliveryBotResult =
+		deliveryBotCompiler->CompileDeliveryBotSetupFromJsonFile(TEXT("Json/Input/DeliveryBotSetupPlayable.json"));
+	TestTrue(TEXT("playable policy compiles"), deliveryBotResult.bSuccess);
+
+	const UEpisodeCompiler* episodeCompiler = NewObject<UEpisodeCompiler>();
+	const FEpisodeCompileResult episodeResult =
+		episodeCompiler->CompileEpisodeWorldSpecFromJsonFile(TEXT("Json/Input/EpisodeSetupPlayable.json"));
+	TestTrue(TEXT("playable episode compiles"), episodeResult.bSuccess);
+
+	const FEpisodePlaceableInstanceSpec* robotSpec = nullptr;
+	for (const FEpisodePlaceableInstanceSpec& placeable : episodeResult.WorldSpec.Placeables)
+	{
+		if (placeable.Category == EEpisodeActorCategory::DeliveryBot)
+		{
+			robotSpec = &placeable;
+			break;
+		}
+	}
+
+	TestNotNull(TEXT("playable episode has robot"), robotSpec);
+	if (robotSpec)
+	{
+		TestFalse(TEXT("playable robot is not spawn-only"), robotSpec->DeliveryBot.bSpawnOnly);
+		TestTrue(TEXT("playable robot has start"), robotSpec->DeliveryBot.bHasStartLocation);
+		TestTrue(TEXT("playable robot has goal"), robotSpec->DeliveryBot.bHasGoalLocation);
+		TestTrue(TEXT("playable route auto-starts"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute);
+		TestEqual(TEXT("playable robot start x cm"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.X, -600.0);
+		TestEqual(TEXT("playable robot start y cm"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.Y, 0.0);
+		TestEqual(TEXT("playable robot goal x cm"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.X, 600.0);
+		TestEqual(TEXT("playable robot goal y cm"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.Y, 0.0);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSimulationSetupJsonValidationTest,
 	"ProtoRobotSim.SimulationSetup.Json.Validation",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -77,6 +147,42 @@ bool FSimulationSetupJsonValidationTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("invalid fps diagnostic"), HasSimulationDiagnosticCode(result.Diagnostics, TEXT("invalid_fps")));
 	TestTrue(TEXT("invalid flush interval diagnostic"), HasSimulationDiagnosticCode(result.Diagnostics, TEXT("invalid_flush_interval_ticks")));
 	TestTrue(TEXT("missing status output path diagnostic"), HasSimulationDiagnosticCode(result.Diagnostics, TEXT("missing_output_path")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimulationSetupJsonWriteRoundTripTest,
+	"ProtoRobotSim.SimulationSetup.Json.WriteRoundTrip",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimulationSetupJsonWriteRoundTripTest::RunTest(const FString& parameters)
+{
+	FSimulationSetup setup;
+	setup.MapId = TEXT("EpisodeSimulationMap");
+	setup.RunQueueJsonPath = TEXT("Json/Input/EpisodeRunQueueSample.json");
+	setup.FixedStep.Fps = 30;
+	setup.MeasurementLog.bEnabled = true;
+	setup.MeasurementLog.OutputDirectory = TEXT("Saved/TestLogs");
+	setup.MeasurementLog.FilePrefix = TEXT("TestMeasurement");
+	setup.MeasurementLog.FlushIntervalTicks = 10;
+	setup.MeasurementLog.bFlushOnEvent = false;
+	setup.Report.bSaveEvaluationReportJson = true;
+	setup.Report.OutputDirectory = TEXT("Json/TestOutput");
+	setup.Status.OutputPath = TEXT("Saved/SimulationRuns/test_status.json");
+
+	FString json;
+	TArray<FString> diagnostics;
+	TestTrue(TEXT("setup JSON writes"), FSimulationSetupJson::TryWriteSetupJson(setup, json, diagnostics));
+	TestEqual(TEXT("diagnostics"), diagnostics.Num(), 0);
+	TestTrue(TEXT("run queue field"), json.Contains(TEXT("\"run_queue\"")));
+
+	const FSimulationSetupParseResult result = FSimulationSetupJson::ParseFromString(json);
+	TestTrue(TEXT("written setup parses"), result.bSuccess);
+	TestEqual(TEXT("written fps"), result.Setup.FixedStep.Fps, 30);
+	TestEqual(TEXT("written log dir"), result.Setup.MeasurementLog.OutputDirectory, FString(TEXT("Saved/TestLogs")));
+	TestFalse(TEXT("written flush on event"), result.Setup.MeasurementLog.bFlushOnEvent);
+	TestEqual(TEXT("written status"), result.Setup.Status.OutputPath, FString(TEXT("Saved/SimulationRuns/test_status.json")));
 
 	return true;
 }

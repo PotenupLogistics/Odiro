@@ -15,9 +15,7 @@ LLM 실패 시 규칙 기반 fallback으로 자동 전환.
 
 from __future__ import annotations
 
-import ast
 import json
-import re
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -38,7 +36,7 @@ from app.services.evaluation_report_parser import parse_evaluation_report
 from app.services.evaluation_report_statistics_extractor import (
     extract_statistics as extract_episode_stats,
 )
-from app.services.measurement_log_parser import MeasurementLogData
+from app.services.measurement_log_parser import parse_measurement_log_lenient
 from app.services.metrics_extractor import extract_statistics as extract_measurement_stats
 from app.services.policy_fallback_rules import (
     apply_episode_fallback_rules,
@@ -56,6 +54,10 @@ from app.services.policy_recommendation_rag_retriever import (
     retrieve_policy_server_context,
 )
 from app.services.policy_server_inspector import extract_policy_defaults_from_source
+from app.services.policy_source_analyzer import (
+    analyze_policy_server_source,
+    check_param_consistency,
+)
 
 SAMPLE_DIR = ROOT / "test_sample"
 OUT_DIR = SAMPLE_DIR / "test"
@@ -63,24 +65,6 @@ OUT_DIR = SAMPLE_DIR / "test"
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-# ── footer 없는 JSONL도 허용하는 파서 ──────────────────────────────────────────
-
-def _parse_measurement_log_lenient(path: Path) -> MeasurementLogData:
-    records: list[dict] = []
-    for line in path.read_text(encoding="utf-8-sig").splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        try:
-            records.append(json.loads(stripped))
-        except json.JSONDecodeError:
-            continue
-    header = next((r for r in records if r.get("type") == "header"), {})
-    footer = next((r for r in reversed(records) if r.get("type") == "footer"), {})
-    ticks = [r for r in records if r.get("type") == "tick"]
-    return MeasurementLogData(header=header, ticks=ticks, footer=footer, sourcePath=str(path))
 
 
 # ── BotSetup / EpisodeSetup 로더 ───────────────────────────────────────────────
@@ -98,79 +82,6 @@ def _load_bot_setup(path: Path) -> tuple[DeliveryBotSetup, dict]:
 
 def _load_episode_setup(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8-sig"))
-
-
-# ── policy_server.py 소스 분석 (FORCED_ACTION 감지) ───────────────────────────
-
-def _parse_policy_server_source(path: Path) -> dict:
-    src = path.read_text(encoding="utf-8")
-    forced_action = None
-    try:
-        tree = ast.parse(src)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assign):
-                for t in node.targets:
-                    if isinstance(t, ast.Name) and t.id == "FORCED_ACTION":
-                        v = node.value
-                        forced_action = v.value if isinstance(v, ast.Constant) else None
-    except SyntaxError:
-        pass
-
-    stop_m = re.search(r'stop_distance_m.*?get\([^,]+,\s*([\d.]+)\)', src)
-    slow_m = re.search(r'slow_down_distance_m.*?get\([^,]+,\s*([\d.]+)\)', src)
-    default_stop = float(stop_m.group(1)) if stop_m else 1.2
-    default_slow = float(slow_m.group(1)) if slow_m else 3.5
-
-    warning = None
-    if forced_action is not None:
-        warning = (
-            f"FORCED_ACTION='{forced_action}' 활성화 — 실제 거리 기반 로직이 무시됩니다. "
-            "운영 환경에서는 None으로 설정하세요."
-        )
-
-    return {
-        "forced_action": forced_action,
-        "default_stop_distance_m": default_stop,
-        "default_slow_down_distance_m": default_slow,
-        "logic_summary": [
-            "hasFrontObject=False → None",
-            "inRepathMoveGraceTime=True → SlowDown",
-            f"dist ≤ {default_stop}m + canRepath=True → Repath",
-            f"dist ≤ {default_stop}m + canRepath=False → Stop",
-            f"dist ≤ {default_slow}m → SlowDown",
-            "그 외 → None",
-        ],
-        "warning": warning,
-    }
-
-
-# ── BotSetup ↔ PolicyServer 파라미터 정합성 검사 ──────────────────────────────
-
-def _check_param_consistency(bot_setup: dict, episode_setup: dict, policy_source: dict) -> dict:
-    lidar = bot_setup.get("robot", {}).get("lidar", {})
-    issues = []
-
-    for param, bot_key, ps_key in [
-        ("stop_distance_m", "stop_distance_m", "default_stop_distance_m"),
-        ("slow_down_distance_m", "slow_down_distance_m", "default_slow_down_distance_m"),
-    ]:
-        bot_val = lidar.get(bot_key)
-        ps_val = policy_source.get(ps_key)
-        if bot_val is not None and ps_val is not None and abs(bot_val - ps_val) > 0.01:
-            issues.append({
-                "param": param,
-                "bot_value": bot_val,
-                "policy_server_value": ps_val,
-                "gap": round(bot_val - ps_val, 3),
-                "description": f"BotSetup({bot_val}m) ≠ PolicyServer 기본값({ps_val}m)",
-            })
-
-    near_miss_thresh = episode_setup.get("evaluation", {}).get("near_miss", {}).get("distance_m")
-    return {
-        "ok": len(issues) == 0,
-        "near_miss_threshold_m": near_miss_thresh,
-        "issues": issues,
-    }
 
 
 # ── fallback 실행 헬퍼 ─────────────────────────────────────────────────────────
@@ -251,13 +162,13 @@ def main() -> None:
     print("[1/7] 파일 로드...")
     bot_setup, bot_setup_raw = _load_bot_setup(bot_setup_path)
     episode_setup_dict = _load_episode_setup(episode_setup_path)
-    policy_source = _parse_policy_server_source(policy_server_path)
+    policy_source = analyze_policy_server_source(policy_server_path)
     policy_defaults = extract_policy_defaults_from_source(policy_server_path)
-    param_consistency = _check_param_consistency(bot_setup_raw, episode_setup_dict, policy_source)
+    param_consistency = check_param_consistency(bot_setup_raw, episode_setup_dict, policy_source)
 
     # 2. 파싱
     print(f"[2/7] 측정 로그 파싱: {log_path.name}")
-    log_data = _parse_measurement_log_lenient(log_path)
+    log_data = parse_measurement_log_lenient(log_path)
     measurement_stats = extract_measurement_stats(log_data)
 
     print(f"[3/7] 에피소드 리포트 파싱: {report_path.name}")

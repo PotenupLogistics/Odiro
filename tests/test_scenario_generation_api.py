@@ -123,6 +123,7 @@ def test_openapi_exposes_no_other_api_v1_routes() -> None:
     api_v1_paths = sorted(path for path in schema["paths"] if path.startswith("/api/v1/"))
 
     assert api_v1_paths == [
+        "/api/v1/analysis/run",
         "/api/v1/scenarios/generate",
         "/api/v1/scenarios/generate-artifacts",
         "/api/v1/scenarios/generate-drive",

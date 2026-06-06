@@ -82,3 +82,40 @@ def parse_measurement_log(path: str | Path) -> MeasurementLogData:
         footer=footer,
         sourcePath=str(log_path),
     )
+
+
+def parse_measurement_log_lenient(path: str | Path) -> MeasurementLogData:
+    """footer가 없는 로그도 허용하는 관대한 파서.
+
+    언리얼이 에피소드 중단 등으로 footer를 기록하지 못한 로그도 분석할 수 있도록,
+    header/footer 누락이나 파싱 불가 라인을 에러 대신 건너뛴다.
+    type별로 header/footer/tick을 분류만 한다.
+    """
+    log_path = Path(path)
+    if not log_path.exists():
+        raise MeasurementLogParseError(
+            f"Measurement log file not found: {log_path}",
+            "measurement_log_file_missing",
+        )
+
+    records: list[dict[str, Any]] = []
+    for line in log_path.read_text(encoding="utf-8-sig").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            record = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+
+    header = next((r for r in records if r.get("type") == "header"), {})
+    footer = next((r for r in reversed(records) if r.get("type") == "footer"), {})
+    ticks = [r for r in records if r.get("type") == "tick"]
+    return MeasurementLogData(
+        header=header,
+        ticks=ticks,
+        footer=footer,
+        sourcePath=str(log_path),
+    )

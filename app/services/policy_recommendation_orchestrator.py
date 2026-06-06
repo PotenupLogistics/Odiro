@@ -21,7 +21,10 @@ from app.services.evaluation_report_statistics_extractor import (
     extract_statistics as extract_episode_statistics,
 )
 from app.services.llm_client import BaseLlmClient
-from app.services.measurement_log_parser import parse_measurement_log
+from app.services.measurement_log_parser import (
+    parse_measurement_log,
+    parse_measurement_log_lenient,
+)
 from app.services.metrics_extractor import extract_run_metrics, extract_statistics
 from app.services.policy_fallback_rules import (
     PolicyParamDefaults,
@@ -47,6 +50,10 @@ from app.services.policy_recommendation_rag_retriever import (
     retrieve_policy_server_context,
 )
 from app.services.policy_server_inspector import extract_policy_defaults_from_source
+from app.services.policy_source_analyzer import (
+    analyze_policy_server_source,
+    check_param_consistency,
+)
 
 
 def _now_iso() -> str:
@@ -321,12 +328,23 @@ def analyze_full_setup_and_recommend(
     report = parse_evaluation_report(evaluation_report_path)
     episode_statistics = extract_episode_statistics(report)
 
-    log_data = parse_measurement_log(measurement_log_path)
+    # footer 없는 로그도 허용 (언리얼이 footer를 기록 못 한 경우 대비)
+    log_data = parse_measurement_log_lenient(measurement_log_path)
     measurement_statistics = extract_statistics(log_data)
 
     episode_setup_dict = _load_episode_setup_dict(episode_setup_path)
     bot_setup, bot_setup_raw = _load_bot_setup_from_path(bot_setup_path)
     policy_defaults = extract_policy_defaults_from_source(policy_server_path)
+
+    # policy_server.py 정적 분석 + BotSetup↔PolicyServer 정합성 검사
+    if policy_server_path:
+        policy_source_analysis = analyze_policy_server_source(policy_server_path)
+        param_consistency_check = check_param_consistency(
+            bot_setup_raw, episode_setup_dict, policy_source_analysis
+        )
+    else:
+        policy_source_analysis = None
+        param_consistency_check = None
 
     inputs = {
         "evaluation_report": str(evaluation_report_path),
@@ -358,6 +376,8 @@ def analyze_full_setup_and_recommend(
             llmWarnings=warnings,
             nextBotSetup=None,
             nextEpisodeSetup=None,
+            policySourceAnalysis=policy_source_analysis,
+            paramConsistencyCheck=param_consistency_check,
         )
         _write_output(result, output_path)
         return result
@@ -475,6 +495,8 @@ def analyze_full_setup_and_recommend(
         llmWarnings=warnings,
         nextBotSetup=next_bot_setup.to_json_dict(),
         nextEpisodeSetup=next_episode_setup,
+        policySourceAnalysis=policy_source_analysis,
+        paramConsistencyCheck=param_consistency_check,
     )
     _write_output(result, output_path)
     return result

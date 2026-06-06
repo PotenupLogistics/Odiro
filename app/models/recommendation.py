@@ -193,3 +193,24 @@ class IntegratedRecommendationResult(BaseModel):
 
     nextBotSetup: dict[str, Any] | None = None
     nextEpisodeSetup: dict[str, Any] | None = None
+
+    # policy_server.py 정적 분석 결과 (FORCED_ACTION 감지 등)
+    policySourceAnalysis: dict[str, Any] | None = None
+    # BotSetup ↔ PolicyServer 거리값 정합성 검사 결과
+    paramConsistencyCheck: dict[str, Any] | None = None
+
+
+class EpisodeAnalysisRequest(BaseModel):
+    """언리얼 → 분석 API 요청. 서버 로컬 파일 경로 4개를 받는다.
+
+    policy_server.py는 서버 내부 코드이므로 요청으로 받지 않고
+    서버가 고정 기본경로를 사용한다.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    evaluation_report_path: str = Field(min_length=1)
+    measurement_log_path: str = Field(min_length=1)
+    episode_setup_path: str = Field(min_length=1)
+    bot_setup_path: str = Field(min_length=1)
+    fallback_only: bool = False

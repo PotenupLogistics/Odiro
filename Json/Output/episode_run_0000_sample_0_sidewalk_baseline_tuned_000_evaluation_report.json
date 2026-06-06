@@ -19,14 +19,14 @@
 		"episode_setup":
 		{
 			"path": "Json/Input/EpisodeSetupSample_0.json",
-			"hash": "25983675"
+			"hash": "1597763705"
 		},
 		"delivery_bot_setup":
 		{
 			"path": "Json/Input/DeliveryBotSetupSample_0.json",
 			"hash": "2569831349"
 		},
-		"pair_hash": "899567847"
+		"pair_hash": "1842784581"
 	},
 	"summary":
 	{
@@ -34,7 +34,7 @@
 		"success": true,
 		"outcome": "Success",
 		"terminal_reason": "GoalReached",
-		"duration_s": 13.607190004491713,
+		"duration_s": 11.406540505588055,
 		"score": 0,
 		"usable_for_llm_tuning": true
 	},
@@ -49,8 +49,8 @@
 	"metrics":
 	{
 		"blocked_region_collision_count": 0,
-		"duration_s": 13.607190004491713,
-		"goal_distance_m": 0.99691554064538423,
+		"duration_s": 11.406540505588055,
+		"goal_distance_m": 0.98873976701439936,
 		"goal_reached": 1,
 		"near_miss_count": 0,
 		"near_miss_total_duration_s": 0,

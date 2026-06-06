@@ -16,7 +16,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Lidar")
 	void InitializeLidar(const FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo);
 
-	FDeliveryBotLidarScanInfo ScanLidar() const; // 레이쏘는 역할
+public:
+	FDeliveryBotLidarScanInfo ScanLidar() const;
+	FDeliveryBotLidarScanInfo ScanLidar1D() const;
+	FDeliveryBotLidarScanInfo ScanLidar2D() const; // 레이쏘는 역할
+	FDeliveryBotLidarScanInfo ScanLidar3D() const;
+	
+	
 	// 전방에 물체 있으면 멈춤
 	bool ShouldStopByFrontObject(const FDeliveryBotLidarScanInfo& scanInfo,	FDeliveryBotLidarDetectedObjectInfo& outObjectInfo) const;
 	

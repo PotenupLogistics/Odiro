@@ -386,7 +386,7 @@ void ADeliveryBot_ChaosActor::UpdateLidarScan()
 	if (!IsValid(LidarSensorComponent))
 		return;
 
-	LastLidarScanInfo = LidarSensorComponent->ScanLidar();
+	LastLidarScanInfo = LidarSensorComponent->ScanLidar2D();
 }
 
 void ADeliveryBot_ChaosActor::DebugFrontLidarObject() const

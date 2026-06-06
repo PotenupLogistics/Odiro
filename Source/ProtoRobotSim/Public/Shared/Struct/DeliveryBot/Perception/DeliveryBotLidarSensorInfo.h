@@ -3,6 +3,17 @@
 #include "CoreMinimal.h"
 #include "DeliveryBotLidarSensorInfo.generated.h"
 
+UENUM(BlueprintType)
+enum class EDeliveryBotLidarModeType : uint8
+{
+	OneD,
+	TwoD,
+	ThreeD,
+	OneDAndTwoD,
+	TwoDAndThreeD,
+	All
+};
+
 USTRUCT(BlueprintType)
 struct FDeliveryBotLidarSensorConfigInfo
 {
@@ -36,6 +47,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TEnumAsByte<ECollisionChannel> TraceChannel{ ECC_Visibility };
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EDeliveryBotLidarModeType LidarModeType{ EDeliveryBotLidarModeType::TwoD };
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> IgnoreTags{ TEXT("NoCollision") };
 	
@@ -126,6 +140,37 @@ public: // 가장 가까운 액터와의 위치 정보
 	float ClosestFrontRayYawDegree{ 0.f };
 
 public: // 레이 몇 개 맞았는지(레이의 총 개수와 같은면 어디도 못간다 판단 할 수 있을지도)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 TotalHitRayCount{ 0 };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 FrontHitRayCount{ 0 };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bInFront{ false };
+};
+
+// 라이더에 부딪힌 각 액터에 대한 정보
+USTRUCT(BlueprintType)
+struct FDeliveryBotLidarObservedObjectInfo
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString ActorName{};
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FName> ActorTags{};
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector ClosestHitLocationCm{ FVector::ZeroVector };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ClosestDistanceM{ 0.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ClosestRayYawDegree{ 0.f };
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 TotalHitRayCount{ 0 };
 

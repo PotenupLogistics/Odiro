@@ -1,0 +1,844 @@
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
+
+
+CLIENT_DISCONNECT_EXCEPTIONS = (BrokenPipeError, ConnectionAbortedError, ConnectionResetError)
+POLICY_MODE_CHOICES = (
+    "forward",
+    "left",
+    "right",
+    "reverse",
+    "reverse-left",
+    "reverse-right",
+    "stop",
+    "invalid-speed",
+    "invalid-steering",
+    "invalid-brake",
+    "invalid-direction",
+    "missing-action",
+    "error-status",
+)
+
+
+def clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
+
+
+def get_sequence(observation: dict[str, Any]) -> int:
+    return int(observation.get("sequence", 0) or 0)
+
+
+def get_server_grid_version(server: ThreadingHTTPServer) -> int:
+    return int(getattr(server, "grid_version", 0) or 0)
+
+
+def get_server_grid_lock(server: ThreadingHTTPServer) -> threading.RLock:
+    grid_lock = getattr(server, "grid_lock", None)
+    if grid_lock is None:
+        grid_lock = threading.RLock()
+        server.grid_lock = grid_lock
+    return grid_lock
+
+
+def get_server_grid_summary(server: ThreadingHTTPServer) -> dict[str, Any]:
+    grid_summary = getattr(server, "grid_summary", None)
+    return grid_summary if isinstance(grid_summary, dict) else {}
+
+
+def get_server_episode_info(server: ThreadingHTTPServer) -> dict[str, Any]:
+    episode_info = getattr(server, "episode_info", None)
+    return episode_info if isinstance(episode_info, dict) else {}
+
+
+def get_server_config_info(server: ThreadingHTTPServer) -> dict[str, Any]:
+    config_info = getattr(server, "config_info", None)
+    return config_info if isinstance(config_info, dict) else {}
+
+
+def get_server_episode_version(server: ThreadingHTTPServer) -> int:
+    return int(getattr(server, "episode_version", 0) or 0)
+
+
+def get_server_config_version(server: ThreadingHTTPServer) -> int:
+    return int(getattr(server, "config_version", 0) or 0)
+
+
+def get_server_grid_cell_lookup(server: ThreadingHTTPServer) -> dict[tuple[int, int], dict[str, Any]]:
+    grid_cell_lookup = getattr(server, "grid_cell_lookup", None)
+    return grid_cell_lookup if isinstance(grid_cell_lookup, dict) else {}
+
+
+def build_grid_status_response(server: ThreadingHTTPServer) -> dict[str, Any]:
+    with get_server_grid_lock(server):
+        grid_summary = dict(get_server_grid_summary(server))
+        grid_version = get_server_grid_version(server)
+
+    return {
+        "status": "ok",
+        "gridReceived": bool(grid_summary),
+        "gridVersion": grid_version,
+        "gridSizeX": int(grid_summary.get("gridSizeX", 0) or 0),
+        "gridSizeY": int(grid_summary.get("gridSizeY", 0) or 0),
+        "cellCount": int(grid_summary.get("cellCount", 0) or 0),
+        "walkableCount": int(grid_summary.get("walkableCount", 0) or 0),
+        "penaltyCount": int(grid_summary.get("penaltyCount", 0) or 0),
+        "blockedCount": int(grid_summary.get("blockedCount", 0) or 0),
+    }
+
+
+def build_episode_status_response(server: ThreadingHTTPServer) -> dict[str, Any]:
+    with get_server_grid_lock(server):
+        episode_info = dict(get_server_episode_info(server))
+        config_info = dict(get_server_config_info(server))
+        episode_version = get_server_episode_version(server)
+        config_version = get_server_config_version(server)
+        grid_status = build_grid_status_response(server)
+
+    return {
+        "status": "ok",
+        "episodeReceived": bool(episode_info),
+        "episodeVersion": episode_version,
+        "episodeId": str(episode_info.get("episodeId", "")),
+        "robotInstanceId": str(episode_info.get("robotInstanceId", "")),
+        "hasStart": isinstance(episode_info.get("start"), dict),
+        "hasGoal": bool(episode_info.get("hasGoal", False)),
+        "configReceived": bool(config_info),
+        "configVersion": config_version,
+        **grid_status,
+    }
+
+
+def get_int_field(source: dict[str, Any], field_name: str, default: int = 0) -> int:
+    return int(source.get(field_name, default) or default)
+
+
+def get_float_field(source: dict[str, Any], field_name: str, default: float = 0.0) -> float:
+    return float(source.get(field_name, default) or default)
+
+
+def get_nested_object(source: dict[str, Any], field_name: str) -> dict[str, Any]:
+    value = source.get(field_name, {})
+    return value if isinstance(value, dict) else {}
+
+
+def merge_dict_recursive(base: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in update.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = merge_dict_recursive(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def build_grid_cell_lookup(grid_info: dict[str, Any]) -> dict[tuple[int, int], dict[str, Any]]:
+    cells = grid_info.get("cells", [])
+    safe_cells = cells if isinstance(cells, list) else []
+
+    cell_lookup: dict[tuple[int, int], dict[str, Any]] = {}
+    for cell in safe_cells:
+        if not isinstance(cell, dict):
+            continue
+
+        try:
+            grid_x = get_int_field(cell, "x")
+            grid_y = get_int_field(cell, "y")
+        except (TypeError, ValueError):
+            continue
+
+        cell_lookup[(grid_x, grid_y)] = cell
+
+    return cell_lookup
+
+
+def build_config_info_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    config_info: dict[str, Any] = {}
+
+    config_object = payload.get("config", {})
+    if isinstance(config_object, dict):
+        config_info.update(config_object)
+
+    for field_name in ("vehicleSpec", "lidarSpec", "controlSpec"):
+        field_value = payload.get(field_name)
+        if isinstance(field_value, dict):
+            config_info[field_name] = field_value
+
+    return config_info
+
+
+def build_episode_info_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    goal = get_nested_object(payload, "goal")
+    has_goal = bool(goal.get("hasGoal", bool(goal)))
+
+    return {
+        "episodeId": str(payload.get("episodeId", "")),
+        "robotInstanceId": str(payload.get("robotInstanceId", "")),
+        "start": get_nested_object(payload, "start"),
+        "goal": goal,
+        "hasGoal": has_goal,
+    }
+
+
+def store_grid_info(server: ThreadingHTTPServer, grid_info: dict[str, Any]) -> dict[str, Any]:
+    server.grid_version = get_server_grid_version(server) + 1
+    server.grid_info = grid_info
+    server.grid_cell_lookup = build_grid_cell_lookup(grid_info)
+    server.grid_summary = build_grid_summary(grid_info, server.grid_version)
+    return build_grid_status_response(server)
+
+
+def build_grid_summary(grid_info: dict[str, Any], grid_version: int) -> dict[str, Any]:
+    cells = grid_info.get("cells", [])
+    safe_cells = cells if isinstance(cells, list) else []
+
+    walkable_count = 0
+    penalty_count = 0
+    blocked_count = 0
+
+    for cell in safe_cells:
+        if not isinstance(cell, dict):
+            continue
+
+        area_type = str(cell.get("areaType", ""))
+        is_blocked = bool(cell.get("blocked", False))
+
+        if is_blocked or area_type == "Blocked":
+            blocked_count += 1
+        elif area_type == "Penalty":
+            penalty_count += 1
+        elif area_type == "Walkable":
+            walkable_count += 1
+
+    return {
+        "gridVersion": grid_version,
+        "gridSizeX": int(grid_info.get("gridSizeX", 0) or 0),
+        "gridSizeY": int(grid_info.get("gridSizeY", 0) or 0),
+        "cellSizeCm": float(grid_info.get("cellSizeCm", 0.0) or 0.0),
+        "cellCount": int(grid_info.get("cellCount", len(safe_cells)) or len(safe_cells)),
+        "walkableCount": walkable_count,
+        "penaltyCount": penalty_count,
+        "blockedCount": blocked_count,
+    }
+
+
+def world_to_grid_index(grid_info: dict[str, Any], world_x_cm: float, world_y_cm: float) -> tuple[int, int] | None:
+    cell_size_cm = get_float_field(grid_info, "cellSizeCm")
+    grid_size_x = get_int_field(grid_info, "gridSizeX")
+    grid_size_y = get_int_field(grid_info, "gridSizeY")
+    origin_cm = grid_info.get("originCm", {})
+
+    if cell_size_cm <= 0.0 or grid_size_x <= 0 or grid_size_y <= 0:
+        return None
+
+    if not isinstance(origin_cm, dict):
+        return None
+
+    origin_x_cm = get_float_field(origin_cm, "x")
+    origin_y_cm = get_float_field(origin_cm, "y")
+
+    grid_x = math.floor((world_x_cm - origin_x_cm) / cell_size_cm)
+    grid_y = math.floor((world_y_cm - origin_y_cm) / cell_size_cm)
+
+    if grid_x < 0 or grid_y < 0 or grid_x >= grid_size_x or grid_y >= grid_size_y:
+        return None
+
+    return int(grid_x), int(grid_y)
+
+
+def get_cell_by_grid_index(
+    grid_cell_lookup: dict[tuple[int, int], dict[str, Any]],
+    grid_x: int,
+    grid_y: int,
+) -> dict[str, Any] | None:
+    cell = grid_cell_lookup.get((grid_x, grid_y))
+    return cell if isinstance(cell, dict) else None
+
+
+def build_robot_grid_debug(server: ThreadingHTTPServer, observation: dict[str, Any]) -> dict[str, Any]:
+    robot_state = observation.get("robotState", {})
+    if not isinstance(robot_state, dict):
+        return {
+            "robotGridStatus": "missing_robot_state",
+        }
+
+    try:
+        robot_x_cm = get_float_field(robot_state, "x")
+        robot_y_cm = get_float_field(robot_state, "y")
+    except (TypeError, ValueError):
+        return {
+            "robotGridStatus": "invalid_robot_location",
+        }
+
+    with get_server_grid_lock(server):
+        grid_info = getattr(server, "grid_info", None)
+        grid_cell_lookup = get_server_grid_cell_lookup(server)
+        grid_version = get_server_grid_version(server)
+
+        if not isinstance(grid_info, dict):
+            return {
+                "robotGridStatus": "grid_not_received",
+                "robotGridVersion": grid_version,
+            }
+
+        grid_index = world_to_grid_index(grid_info, robot_x_cm, robot_y_cm)
+        if grid_index is None:
+            return {
+                "robotGridStatus": "outside_grid",
+                "robotGridVersion": grid_version,
+                "robotWorldX": robot_x_cm,
+                "robotWorldY": robot_y_cm,
+            }
+
+        grid_x, grid_y = grid_index
+        cell = get_cell_by_grid_index(grid_cell_lookup, grid_x, grid_y)
+        if cell is None:
+            return {
+                "robotGridStatus": "cell_not_found",
+                "robotGridVersion": grid_version,
+                "robotGridX": grid_x,
+                "robotGridY": grid_y,
+            }
+
+        return {
+            "robotGridStatus": "ok",
+            "robotGridVersion": grid_version,
+            "robotGridX": grid_x,
+            "robotGridY": grid_y,
+            "robotCellAreaType": str(cell.get("areaType", "Unknown")),
+            "robotCellCost": get_float_field(cell, "cost"),
+            "robotCellBlocked": bool(cell.get("blocked", False)),
+            "robotCellSourceCollisionProfile": str(cell.get("sourceCollisionProfile", "")),
+        }
+
+
+def build_point_grid_debug(
+    server: ThreadingHTTPServer,
+    point: dict[str, Any],
+    prefix: str,
+) -> dict[str, Any]:
+    if not isinstance(point, dict) or not point:
+        return {
+            f"{prefix}GridStatus": "missing_point",
+        }
+
+    try:
+        point_x_cm = get_float_field(point, "x")
+        point_y_cm = get_float_field(point, "y")
+    except (TypeError, ValueError):
+        return {
+            f"{prefix}GridStatus": "invalid_point",
+        }
+
+    with get_server_grid_lock(server):
+        grid_info = getattr(server, "grid_info", None)
+        grid_cell_lookup = get_server_grid_cell_lookup(server)
+        grid_version = get_server_grid_version(server)
+
+        if not isinstance(grid_info, dict):
+            return {
+                f"{prefix}GridStatus": "grid_not_received",
+                f"{prefix}GridVersion": grid_version,
+            }
+
+        grid_index = world_to_grid_index(grid_info, point_x_cm, point_y_cm)
+        if grid_index is None:
+            return {
+                f"{prefix}GridStatus": "outside_grid",
+                f"{prefix}GridVersion": grid_version,
+                f"{prefix}WorldX": point_x_cm,
+                f"{prefix}WorldY": point_y_cm,
+            }
+
+        grid_x, grid_y = grid_index
+        cell = get_cell_by_grid_index(grid_cell_lookup, grid_x, grid_y)
+        if cell is None:
+            return {
+                f"{prefix}GridStatus": "cell_not_found",
+                f"{prefix}GridVersion": grid_version,
+                f"{prefix}GridX": grid_x,
+                f"{prefix}GridY": grid_y,
+            }
+
+        return {
+            f"{prefix}GridStatus": "ok",
+            f"{prefix}GridVersion": grid_version,
+            f"{prefix}GridX": grid_x,
+            f"{prefix}GridY": grid_y,
+            f"{prefix}CellAreaType": str(cell.get("areaType", "Unknown")),
+            f"{prefix}CellCost": get_float_field(cell, "cost"),
+            f"{prefix}CellBlocked": bool(cell.get("blocked", False)),
+            f"{prefix}CellSourceCollisionProfile": str(cell.get("sourceCollisionProfile", "")),
+        }
+
+
+def build_episode_goal_debug(server: ThreadingHTTPServer, observation: dict[str, Any]) -> dict[str, Any]:
+    with get_server_grid_lock(server):
+        episode_info = dict(get_server_episode_info(server))
+
+    goal = get_nested_object(episode_info, "goal")
+    if not goal or not bool(episode_info.get("hasGoal", False)):
+        return {
+            "goalGridStatus": "goal_not_received",
+        }
+
+    debug = build_point_grid_debug(server, goal, "goal")
+
+    robot_state = get_nested_object(observation, "robotState")
+    if robot_state:
+        try:
+            robot_x_cm = get_float_field(robot_state, "x")
+            robot_y_cm = get_float_field(robot_state, "y")
+            goal_x_cm = get_float_field(goal, "x")
+            goal_y_cm = get_float_field(goal, "y")
+            debug["distanceToGoalCm"] = math.hypot(goal_x_cm - robot_x_cm, goal_y_cm - robot_y_cm)
+        except (TypeError, ValueError):
+            debug["distanceToGoalCm"] = 0.0
+
+    return debug
+
+
+def make_response(
+    observation: dict[str, Any],
+    policy_name: str,
+    reason: str,
+    action: dict[str, Any] | None,
+    status: str = "ok",
+) -> dict[str, Any]:
+    response: dict[str, Any] = {
+        "sequence": get_sequence(observation),
+        "status": status,
+        "debug": {
+            "policyName": policy_name,
+            "reason": reason,
+        },
+    }
+
+    if action is not None:
+        response["action"] = action
+
+    return response
+
+
+def build_forward_test_response(observation: dict[str, Any]) -> dict[str, Any]:
+    vehicle_spec = observation.get("vehicleSpec", {})
+    max_speed_kmh = float(vehicle_spec.get("maxSpeedKmh", 0.0) or 0.0)
+    target_speed_kmh = clamp(3.0, 0.0, max_speed_kmh)
+    should_move = target_speed_kmh > 0.0
+
+    return make_response(
+        observation,
+        "forward_test_policy",
+        "smoke_test_server_returns_low_speed_forward_action",
+        {
+            "steering": 0.0,
+            "throttle": 1.0 if should_move else 0.0,
+            "brake": 0.0 if should_move else 1.0,
+            "targetSpeedKmh": target_speed_kmh,
+            "direction": "Forward",
+        },
+    )
+
+
+def get_vehicle_spec(observation: dict[str, Any]) -> dict[str, Any]:
+    vehicle_spec = observation.get("vehicleSpec", {})
+    return vehicle_spec if isinstance(vehicle_spec, dict) else {}
+
+
+def enrich_observation_with_server_config(
+    server: ThreadingHTTPServer,
+    observation: dict[str, Any],
+) -> dict[str, Any]:
+    enriched_observation = dict(observation)
+
+    with get_server_grid_lock(server):
+        config_info = dict(get_server_config_info(server))
+        episode_version = get_server_episode_version(server)
+        config_version = get_server_config_version(server)
+
+    if "vehicleSpec" not in enriched_observation and isinstance(config_info.get("vehicleSpec"), dict):
+        enriched_observation["vehicleSpec"] = config_info["vehicleSpec"]
+
+    enriched_observation.setdefault("episodeVersion", episode_version)
+    enriched_observation.setdefault("configVersion", config_version)
+
+    return enriched_observation
+
+
+def get_max_forward_speed_kmh(observation: dict[str, Any]) -> float:
+    vehicle_spec = get_vehicle_spec(observation)
+    return float(vehicle_spec.get("maxSpeedKmh", 0.0) or 0.0)
+
+
+def get_max_reverse_speed_kmh(observation: dict[str, Any]) -> float:
+    vehicle_spec = get_vehicle_spec(observation)
+    return float(vehicle_spec.get("maxReverseSpeedKmh", 0.0) or 0.0)
+
+
+def build_move_test_response(
+    observation: dict[str, Any],
+    policy_mode: str,
+    steering: float,
+    requested_speed_kmh: float,
+    direction: str,
+) -> dict[str, Any]:
+    max_speed_kmh = (
+        get_max_reverse_speed_kmh(observation)
+        if direction == "Reverse"
+        else get_max_forward_speed_kmh(observation)
+    )
+    target_speed_kmh = clamp(requested_speed_kmh, 0.0, max_speed_kmh)
+    should_move = target_speed_kmh > 0.0
+
+    return make_response(
+        observation,
+        f"{policy_mode}_test_policy",
+        f"server_returns_{policy_mode}_action",
+        {
+            "steering": steering,
+            "throttle": 1.0 if should_move else 0.0,
+            "brake": 0.0 if should_move else 1.0,
+            "targetSpeedKmh": target_speed_kmh,
+            "direction": direction,
+        },
+    )
+
+
+def build_stop_test_response(observation: dict[str, Any]) -> dict[str, Any]:
+    return make_response(
+        observation,
+        "stop_test_policy",
+        "server_returns_stop_action",
+        {
+            "steering": 0.0,
+            "throttle": 0.0,
+            "brake": 1.0,
+            "targetSpeedKmh": 0.0,
+            "direction": "Forward",
+        },
+    )
+
+
+def build_invalid_test_response(observation: dict[str, Any], policy_mode: str) -> dict[str, Any]:
+    action: dict[str, Any] = {
+        "steering": 0.0,
+        "throttle": 1.0,
+        "brake": 0.0,
+        "targetSpeedKmh": 3.0,
+        "direction": "Forward",
+    }
+
+    if policy_mode == "invalid-speed":
+        action["targetSpeedKmh"] = 100.0
+    elif policy_mode == "invalid-steering":
+        action["steering"] = 2.0
+    elif policy_mode == "invalid-brake":
+        action["brake"] = 2.0
+    elif policy_mode == "invalid-direction":
+        action["direction"] = "Sideways"
+
+    return make_response(
+        observation,
+        f"{policy_mode}_policy",
+        f"server_returns_{policy_mode}_action_for_validation_test",
+        action,
+    )
+
+
+def build_policy_response(observation: dict[str, Any], policy_mode: str) -> dict[str, Any]:
+    if policy_mode == "forward":
+        return build_forward_test_response(observation)
+
+    if policy_mode == "left":
+        return build_move_test_response(observation, policy_mode, -0.5, 3.0, "Forward")
+
+    if policy_mode == "right":
+        return build_move_test_response(observation, policy_mode, 0.5, 3.0, "Forward")
+
+    if policy_mode == "reverse":
+        return build_move_test_response(observation, policy_mode, 0.0, 1.5, "Reverse")
+
+    if policy_mode == "reverse-left":
+        return build_move_test_response(observation, policy_mode, -0.5, 1.5, "Reverse")
+
+    if policy_mode == "reverse-right":
+        return build_move_test_response(observation, policy_mode, 0.5, 1.5, "Reverse")
+
+    if policy_mode == "stop":
+        return build_stop_test_response(observation)
+
+    if policy_mode in {"invalid-speed", "invalid-steering", "invalid-brake", "invalid-direction"}:
+        return build_invalid_test_response(observation, policy_mode)
+
+    if policy_mode == "missing-action":
+        return make_response(
+            observation,
+            "missing_action_policy",
+            "server_returns_status_ok_without_action_object",
+            None,
+        )
+
+    if policy_mode == "error-status":
+        return make_response(
+            observation,
+            "error_status_policy",
+            "server_returns_error_status_for_failure_test",
+            None,
+            status="error",
+        )
+
+    return build_forward_test_response(observation)
+
+
+class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
+    server_version = "DeliveryBotPolicyServer/0.1"
+
+    def do_GET(self) -> None:
+        if self.path == "/health":
+            self.send_json(200, build_episode_status_response(self.server))
+            return
+
+        if self.path == "/grid/status":
+            self.send_json(200, build_grid_status_response(self.server))
+            return
+
+        if self.path == "/episode/status":
+            self.send_json(200, build_episode_status_response(self.server))
+            return
+
+        self.send_json(404, {"status": "error", "message": "unknown endpoint"})
+
+    def do_POST(self) -> None:
+        if self.path == "/episode/start":
+            self.handle_episode_start()
+            return
+
+        if self.path == "/episode/config/update":
+            self.handle_episode_config_update()
+            return
+
+        if self.path == "/grid/update":
+            self.handle_grid_update()
+            return
+
+        if self.path == "/policy/action":
+            self.handle_policy_action()
+            return
+
+        self.send_json(404, {"status": "error", "message": "unknown endpoint"})
+
+    def handle_episode_start(self) -> None:
+        try:
+            episode_payload = self.read_json_body()
+        except ValueError as error:
+            self.send_json(400, {"status": "error", "message": str(error)})
+            return
+
+        grid_info = episode_payload.get("grid", {})
+        config_info = build_config_info_from_payload(episode_payload)
+
+        with get_server_grid_lock(self.server):
+            self.server.episode_version = get_server_episode_version(self.server) + 1
+            self.server.episode_info = build_episode_info_from_payload(episode_payload)
+
+            if isinstance(config_info, dict) and config_info:
+                self.server.config_version = get_server_config_version(self.server) + 1
+                self.server.config_info = config_info
+
+            if isinstance(grid_info, dict) and grid_info:
+                store_grid_info(self.server, grid_info)
+
+            response = build_episode_status_response(self.server)
+
+        print(
+            "episode start "
+            f"episodeVersion={response['episodeVersion']} "
+            f"episodeId={response['episodeId']} "
+            f"robot={response['robotInstanceId']} "
+            f"configVersion={response['configVersion']} "
+            f"gridVersion={response['gridVersion']} "
+            f"gridReceived={response['gridReceived']}"
+        )
+
+        self.send_json(200, response)
+
+    def handle_episode_config_update(self) -> None:
+        try:
+            config_payload = self.read_json_body()
+        except ValueError as error:
+            self.send_json(400, {"status": "error", "message": str(error)})
+            return
+
+        config_update = build_config_info_from_payload(config_payload)
+        if not config_update:
+            self.send_json(400, {"status": "error", "message": "config update has no config fields"})
+            return
+
+        with get_server_grid_lock(self.server):
+            previous_config_info = get_server_config_info(self.server)
+            self.server.config_info = merge_dict_recursive(previous_config_info, config_update)
+            self.server.config_version = get_server_config_version(self.server) + 1
+            response = build_episode_status_response(self.server)
+
+        print(
+            "episode config update "
+            f"configVersion={response['configVersion']} "
+            f"episodeId={response['episodeId']} "
+            f"robot={response['robotInstanceId']}"
+        )
+
+        self.send_json(200, response)
+
+    def handle_grid_update(self) -> None:
+        try:
+            grid_info = self.read_json_body()
+        except ValueError as error:
+            self.send_json(400, {"status": "error", "message": str(error)})
+            return
+
+        with get_server_grid_lock(self.server):
+            response = store_grid_info(self.server, grid_info)
+
+        print(
+            "grid update "
+            f"version={response['gridVersion']} "
+            f"size={response['gridSizeX']}x{response['gridSizeY']} "
+            f"cells={response['cellCount']} "
+            f"walkable={response['walkableCount']} "
+            f"penalty={response['penaltyCount']} "
+            f"blocked={response['blockedCount']}"
+        )
+
+        self.send_json(200, response)
+
+    def handle_policy_action(self) -> None:
+        try:
+            observation = self.read_json_body()
+        except ValueError as error:
+            self.send_json(400, {"status": "error", "message": str(error)})
+            return
+
+        lidar_rays = observation.get("lidarRays", [])
+        observed_objects = observation.get("observedObjects", [])
+        robot_grid_debug = build_robot_grid_debug(self.server, observation)
+        goal_grid_debug = build_episode_goal_debug(self.server, observation)
+        print(
+            "observation "
+            f"sequence={observation.get('sequence', 0)} "
+            f"sensorSequence={observation.get('sensorSequence', 0)} "
+            f"policyMode={getattr(self.server, 'policy_mode', 'forward')} "
+            f"rays={len(lidar_rays) if isinstance(lidar_rays, list) else 0} "
+            f"objects={len(observed_objects) if isinstance(observed_objects, list) else 0} "
+            f"robotGridStatus={robot_grid_debug.get('robotGridStatus', 'unknown')} "
+            f"robotGrid=({robot_grid_debug.get('robotGridX', '-')},{robot_grid_debug.get('robotGridY', '-')}) "
+            f"robotCell={robot_grid_debug.get('robotCellAreaType', '-')} "
+            f"goalGridStatus={goal_grid_debug.get('goalGridStatus', 'unknown')} "
+            f"goalGrid=({goal_grid_debug.get('goalGridX', '-')},{goal_grid_debug.get('goalGridY', '-')})"
+        )
+
+        response_delay_second = getattr(self.server, "response_delay_second", 0.0)
+        if response_delay_second > 0.0:
+            time.sleep(response_delay_second)
+
+        policy_mode = getattr(self.server, "policy_mode", "forward")
+        grid_status = build_grid_status_response(self.server)
+        enriched_observation = enrich_observation_with_server_config(self.server, observation)
+        response = build_policy_response(enriched_observation, policy_mode)
+        response["gridVersion"] = grid_status["gridVersion"]
+        response["gridReceived"] = grid_status["gridReceived"]
+        response["episodeVersion"] = get_server_episode_version(self.server)
+        response["configVersion"] = get_server_config_version(self.server)
+        response["debug"].update(robot_grid_debug)
+        response["debug"].update(goal_grid_debug)
+        self.send_json(200, response)
+
+    def read_json_body(self) -> dict[str, Any]:
+        content_length = int(self.headers.get("Content-Length", "0") or 0)
+        if content_length <= 0:
+            raise ValueError("empty request body")
+
+        raw_body = self.rfile.read(content_length)
+        try:
+            body = json.loads(raw_body.decode("utf-8"))
+        except json.JSONDecodeError as error:
+            raise ValueError(f"invalid json: {error.msg}") from error
+
+        if not isinstance(body, dict):
+            raise ValueError("request body must be a json object")
+
+        return body
+
+    def send_json(self, status_code: int, payload: dict[str, Any]) -> None:
+        response_body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+        try:
+            self.send_response(status_code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(response_body)))
+            self.end_headers()
+            self.wfile.write(response_body)
+        except CLIENT_DISCONNECT_EXCEPTIONS as error:
+            print(
+                f"{self.client_address[0]} - client disconnected before response "
+                f"({error.__class__.__name__})"
+            )
+
+    def log_message(self, format: str, *args: Any) -> None:
+        print(f"{self.client_address[0]} - {format % args}")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="DeliveryBot HTTP policy server")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument(
+        "--response-delay-second",
+        type=float,
+        default=0.0,
+        help="Artificial response delay for Unreal HTTP in-flight request tests.",
+    )
+    parser.add_argument(
+        "--policy-mode",
+        choices=POLICY_MODE_CHOICES,
+        default="forward",
+        help="Policy response mode for success and validation failure tests.",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    server = ThreadingHTTPServer((args.host, args.port), DeliveryBotPolicyHandler)
+    server.response_delay_second = max(args.response_delay_second, 0.0)
+    server.policy_mode = args.policy_mode
+    server.episode_info = {}
+    server.episode_version = 0
+    server.config_info = {}
+    server.config_version = 0
+    server.grid_info = None
+    server.grid_summary = {}
+    server.grid_cell_lookup = {}
+    server.grid_version = 0
+    server.grid_lock = threading.RLock()
+    print(f"DeliveryBot policy server listening on http://{args.host}:{args.port}")
+    print("POST /episode/start")
+    print("POST /episode/config/update")
+    print("POST /policy/action")
+    print("POST /grid/update")
+    print("GET  /episode/status")
+    print("GET  /grid/status")
+    print("GET  /health")
+    print(f"policy mode: {server.policy_mode}")
+    if server.response_delay_second > 0.0:
+        print(f"response delay: {server.response_delay_second:.3f}s")
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

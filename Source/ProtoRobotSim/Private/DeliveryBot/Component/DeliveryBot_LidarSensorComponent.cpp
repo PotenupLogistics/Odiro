@@ -22,6 +22,52 @@ void UDeliveryBot_LidarSensorComponent::InitializeLidar(
 
 FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar() const
 {
+	switch (LidarSensorConfigInfo.LidarModeType)
+	{
+	case EDeliveryBotLidarModeType::OneD:
+		return ScanLidar1D();
+
+	case EDeliveryBotLidarModeType::TwoD:
+		return ScanLidar2D();
+
+	case EDeliveryBotLidarModeType::ThreeD:
+		return ScanLidar3D();
+
+	default:
+		return ScanLidar2D();
+	}
+}
+
+FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar1D() const
+{
+	FDeliveryBotLidarScanInfo scanInfo;
+
+	const AActor* owner = GetOwner();
+	if (!IsValid(owner))
+		return scanInfo;
+
+	const FVector sensorLocationCm = owner->GetActorLocation() + FVector(0.f, 0.f, LidarSensorConfigInfo.SensorHeightM * 100.f);
+
+	scanInfo.SensorLocationCm = sensorLocationCm;
+
+	const float scanRangeCm = LidarSensorConfigInfo.ScanRangeM * 100.f;
+	const FVector endLocationCm = sensorLocationCm + owner->GetActorForwardVector() * scanRangeCm;
+
+	FHitResult hitResult;
+	const bool bHit = TraceLidarRay(sensorLocationCm, endLocationCm, hitResult);
+
+	DrawDebugLidarRay(sensorLocationCm, endLocationCm, bHit ? &hitResult : nullptr);
+
+	if (bHit || LidarSensorConfigInfo.bStoreMissedRays)
+	{
+		scanInfo.RayInfos.Add(MakeRayInfo(0, 0.f, sensorLocationCm, endLocationCm, bHit ? &hitResult : nullptr));
+	}
+
+	return scanInfo;
+}
+
+FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar2D() const
+{
 	FDeliveryBotLidarScanInfo scanInfo;
 
 	const AActor* owner = GetOwner();
@@ -59,6 +105,12 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar() const
 
 	return scanInfo;
 }
+
+FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar3D() const
+{
+	return FDeliveryBotLidarScanInfo{};
+}
+
 
 bool UDeliveryBot_LidarSensorComponent::TraceLidarRay(const FVector& startLocationCm, const FVector& endLocationCm,	FHitResult& outHitResult) const
 {
@@ -301,14 +353,10 @@ bool UDeliveryBot_LidarSensorComponent::FindNearestFrontObject(
 	for (const FDeliveryBotLidarDetectedObjectInfo& objectInfo : detectedObjects)
 	{
 		if (!objectInfo.bInFront || objectInfo.FrontHitRayCount <= 0 || objectInfo.ClosestFrontDistanceM <= 0.f)
-		{
 			continue;
-		}
 
 		if (objectInfo.ClosestFrontDistanceM >= nearestFrontDistanceM)
-		{
 			continue;
-		}
 
 		nearestFrontDistanceM = objectInfo.ClosestFrontDistanceM;
 		outObjectInfo = objectInfo;

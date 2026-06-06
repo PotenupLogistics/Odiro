@@ -3,8 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-
-import pytest
+from types import SimpleNamespace
 
 from app.models.llm import (
     LlmGenerationRequest,
@@ -23,20 +22,128 @@ from app.services.policy_server_inspector import extract_policy_defaults_from_so
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = Path(__file__).parent / "fixtures"
 SAMPLE_REPORT = FIXTURES / "sample_evaluation_report.json"
-SAMPLE_DIR = ROOT / "SetupSample_0"
-# SetupSample_0 의 MeasurementLog는 footer가 없는 실측 로그라 parser가 거부한다.
-# OpenAI 실행 검증 단계에서 만든 footer-추가 사본을 통합 테스트도 함께 쓴다.
-SAMPLE_LOG = SAMPLE_DIR / "test" / "MeasurementLog_with_footer.jsonl"
-SAMPLE_EPISODE_SETUP = SAMPLE_DIR / "EpisodeSetupSample_0.json"
-SAMPLE_BOT_SETUP = SAMPLE_DIR / "DeliveryBotSetupSample_0.json"
-SAMPLE_POLICY_SERVER = SAMPLE_DIR / "policy_server.py"
+
+
+def _write_policy_server(tmp_path: Path) -> Path:
+    path = tmp_path / "policy_server.py"
+    path.write_text(
+        "\n".join(
+            [
+                'FORCED_ACTION = "Repath"',
+                'policy.add_threshold("stopDistanceM", 1.2)',
+                'policy.add_threshold("slowDownDistanceM", 3.5)',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_measurement_log(tmp_path: Path) -> Path:
+    path = tmp_path / "measurement_log_minimal.jsonl"
+    records = [
+        {"type": "header", "runId": "integrated-test-run"},
+        {
+            "type": "tick",
+            "deltaSeconds": 1.0,
+            "worldTimeSeconds": 1.0,
+            "robot": {
+                "perception": {"lidar": {"hasFrontObject": True, "frontDistanceM": 0.5}},
+                "action": {"reason": "slowdown", "brakeApplied": True, "targetSpeedKmh": 2.0},
+                "truth": {"v": [100.0, 0.0, 0.0]},
+            },
+        },
+        {
+            "type": "tick",
+            "deltaSeconds": 1.0,
+            "worldTimeSeconds": 2.0,
+            "robot": {
+                "perception": {"lidar": {"hasFrontObject": True, "frontDistanceM": 1.0}},
+                "action": {"reason": "repath", "brakeApplied": False, "targetSpeedKmh": 4.0},
+                "truth": {"v": [120.0, 0.0, 0.0]},
+            },
+        },
+        {
+            "type": "footer",
+            "closeReason": "world_end_play",
+            "diagnostics": [{"severity": "warning", "message": "unit test diagnostic"}],
+        },
+    ]
+    path.write_text(
+        "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_episode_setup(tmp_path: Path) -> Path:
+    path = tmp_path / "episode_setup.json"
+    path.write_text(
+        json.dumps(
+            {
+                "scenario_id": "integrated_test",
+                "run": {"time_limit_s": 60.0},
+                "evaluation": {
+                    "goal_acceptance_radius_m": 1.0,
+                    "near_miss": {"distance_m": 0.5},
+                    "tip_over_angle_deg": 60.0,
+                },
+                "actors": {
+                    "pedestrians": [{"movement": {"speed_mps": 1.2}, "spawn_time_s": 2.0}],
+                    "static_obstacles": [{"xy_m": [3.0, 1.0]}],
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_bot_setup(tmp_path: Path) -> Path:
+    path = tmp_path / "delivery_bot_setup.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema": "delivery_bot_setup",
+                "version": 1,
+                "robot": {
+                    "drive": {"max_speed_kmh": 10.0},
+                    "path_follow": {
+                        "target_speed_kmh": 10.0,
+                        "look_ahead_distance_m": 1.0,
+                        "obstacle_slow_speed_kmh": 1.5,
+                    },
+                    "lidar": {
+                        "stop_distance_m": 1.2,
+                        "slow_down_distance_m": 3.5,
+                        "scan_range_m": 5.0,
+                        "angle_step_degree": 2.0,
+                    },
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_integrated_inputs(tmp_path: Path) -> SimpleNamespace:
+    return SimpleNamespace(
+        measurement_log=_write_measurement_log(tmp_path),
+        episode_setup=_write_episode_setup(tmp_path),
+        bot_setup=_write_bot_setup(tmp_path),
+        policy_server=_write_policy_server(tmp_path),
+    )
 
 
 # ── policy_server_inspector ────────────────────────────────────────────────
 
 
-def test_extract_policy_defaults_from_source() -> None:
-    defaults = extract_policy_defaults_from_source(SAMPLE_POLICY_SERVER)
+def test_extract_policy_defaults_from_source(tmp_path) -> None:
+    defaults = extract_policy_defaults_from_source(_write_policy_server(tmp_path))
     assert defaults["force_action_override"] == "Repath"
     assert defaults["stop_distance_m_threshold"] == 1.2
     assert defaults["slow_down_distance_m_threshold"] == 3.5
@@ -52,7 +159,11 @@ def test_extract_policy_defaults_missing_file() -> None:
 
 
 def test_episode_setup_patcher_dotted_path() -> None:
-    current = json.loads(SAMPLE_EPISODE_SETUP.read_text(encoding="utf-8-sig"))
+    current = {
+        "run": {"time_limit_s": 60.0},
+        "evaluation": {"near_miss": {"distance_m": 0.5}},
+        "actors": {"pedestrians": [{"movement": {"speed_mps": 1.2}}]},
+    }
     recs = [
         EpisodeSetupRecommendation(
             param="run.time_limit_s", current=60.0, suggested=120.0, reason="x", citations=[]
@@ -88,13 +199,14 @@ def test_episode_setup_patcher_unknown_path_warns() -> None:
 
 
 def test_analyze_full_setup_fallback_only(tmp_path) -> None:
+    inputs = _write_integrated_inputs(tmp_path)
     output = tmp_path / "integrated.json"
     result = analyze_full_setup_and_recommend(
         evaluation_report_path=SAMPLE_REPORT,
-        measurement_log_path=SAMPLE_LOG,
-        episode_setup_path=SAMPLE_EPISODE_SETUP,
-        bot_setup_path=SAMPLE_BOT_SETUP,
-        policy_server_path=SAMPLE_POLICY_SERVER,
+        measurement_log_path=inputs.measurement_log,
+        episode_setup_path=inputs.episode_setup,
+        bot_setup_path=inputs.bot_setup,
+        policy_server_path=inputs.policy_server,
         provider=LlmProvider.ollama,
         fallback_only=True,
         output_path=output,
@@ -118,6 +230,7 @@ def test_analyze_full_setup_fallback_only(tmp_path) -> None:
 
 
 def test_analyze_full_setup_unusable_report(tmp_path) -> None:
+    inputs = _write_integrated_inputs(tmp_path)
     data = json.loads(SAMPLE_REPORT.read_text(encoding="utf-8"))
     data["summary"]["usable_for_llm_tuning"] = False
     p = tmp_path / "unusable.json"
@@ -125,10 +238,10 @@ def test_analyze_full_setup_unusable_report(tmp_path) -> None:
 
     result = analyze_full_setup_and_recommend(
         evaluation_report_path=p,
-        measurement_log_path=SAMPLE_LOG,
-        episode_setup_path=SAMPLE_EPISODE_SETUP,
-        bot_setup_path=SAMPLE_BOT_SETUP,
-        policy_server_path=SAMPLE_POLICY_SERVER,
+        measurement_log_path=inputs.measurement_log,
+        episode_setup_path=inputs.episode_setup,
+        bot_setup_path=inputs.bot_setup,
+        policy_server_path=inputs.policy_server,
         provider=LlmProvider.ollama,
         fallback_only=True,
     )
@@ -163,6 +276,7 @@ class _StubLlmClient:
 
 
 def test_analyze_full_setup_llm_path_with_stub_client(tmp_path) -> None:
+    inputs = _write_integrated_inputs(tmp_path)
     stub_payload = {
         "botSetupRecommendations": [
             {
@@ -197,10 +311,10 @@ def test_analyze_full_setup_llm_path_with_stub_client(tmp_path) -> None:
 
     result = analyze_full_setup_and_recommend(
         evaluation_report_path=SAMPLE_REPORT,
-        measurement_log_path=SAMPLE_LOG,
-        episode_setup_path=SAMPLE_EPISODE_SETUP,
-        bot_setup_path=SAMPLE_BOT_SETUP,
-        policy_server_path=SAMPLE_POLICY_SERVER,
+        measurement_log_path=inputs.measurement_log,
+        episode_setup_path=inputs.episode_setup,
+        bot_setup_path=inputs.bot_setup,
+        policy_server_path=inputs.policy_server,
         provider=LlmProvider.openai,
         fallback_only=False,
         llm_client=client,
@@ -218,13 +332,14 @@ def test_analyze_full_setup_llm_path_with_stub_client(tmp_path) -> None:
 
 
 def test_analyze_full_setup_llm_failure_falls_back(tmp_path) -> None:
+    inputs = _write_integrated_inputs(tmp_path)
     client = _StubLlmClient("garbage", success=False)
     result = analyze_full_setup_and_recommend(
         evaluation_report_path=SAMPLE_REPORT,
-        measurement_log_path=SAMPLE_LOG,
-        episode_setup_path=SAMPLE_EPISODE_SETUP,
-        bot_setup_path=SAMPLE_BOT_SETUP,
-        policy_server_path=SAMPLE_POLICY_SERVER,
+        measurement_log_path=inputs.measurement_log,
+        episode_setup_path=inputs.episode_setup,
+        bot_setup_path=inputs.bot_setup,
+        policy_server_path=inputs.policy_server,
         provider=LlmProvider.openai,
         fallback_only=False,
         llm_client=client,
@@ -250,15 +365,16 @@ def _load_cli_module():
 def test_full_mode_cli_smoke(tmp_path) -> None:
     """argparse + 오케스트레이터 fallback 경로 전체 흐름."""
     cli_mod = _load_cli_module()
+    inputs = _write_integrated_inputs(tmp_path)
 
     output = tmp_path / "cli_out.json"
     rc = cli_mod.main([
         "full",
         "--evaluation-report", str(SAMPLE_REPORT),
-        "--measurement-log", str(SAMPLE_LOG),
-        "--episode-setup", str(SAMPLE_EPISODE_SETUP),
-        "--bot-setup", str(SAMPLE_BOT_SETUP),
-        "--policy-server", str(SAMPLE_POLICY_SERVER),
+        "--measurement-log", str(inputs.measurement_log),
+        "--episode-setup", str(inputs.episode_setup),
+        "--bot-setup", str(inputs.bot_setup),
+        "--policy-server", str(inputs.policy_server),
         "--provider", "ollama",
         "--fallback-only",
         "--output", str(output),

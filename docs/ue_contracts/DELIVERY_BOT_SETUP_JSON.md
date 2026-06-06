@@ -139,8 +139,8 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
 ```json
 {
   "pair_id": "sample_0",
-  "episode_setup": "Json/Input/EpisodeSetupSample_0.json",
-  "delivery_bot_setup": "Json/Input/DeliveryBotSetupSample_0.json"
+  "episode_setup": "Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block_000.json",
+  "delivery_bot_setup": "Json/Input/DeliveryBotSetup_policy_000_baseline.json"
 }
 ```
 
@@ -154,8 +154,8 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
   "runs": [
     {
       "pair_id": "sample_0",
-      "episode_setup": "Json/Input/EpisodeSetupSample_0.json",
-      "delivery_bot_setup": "Json/Input/DeliveryBotSetupSample_0.json"
+      "episode_setup": "Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block_000.json",
+      "delivery_bot_setup": "Json/Input/DeliveryBotSetup_policy_000_baseline.json"
     }
   ]
 }

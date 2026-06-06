@@ -33,11 +33,11 @@ def test_export_run_queue_package_writes_ue_contract_files_under_tmp_path(tmp_pa
 
     input_dir = result.export_root / "Json" / "Input"
     assert result.exported is True
-    assert (input_dir / "EpisodeSetup_narrow_sidewalk_fixed_center_block_000.json").exists()
-    assert (input_dir / "EpisodeSetup_narrow_sidewalk_fixed_center_block_001.json").exists()
-    assert (input_dir / "DeliveryBotSetup_policy_000_baseline.json").exists()
-    assert (input_dir / "DeliveryBotSetup_policy_001_baseline.json").exists()
-    assert (input_dir / "EpisodeRunQueue_narrow_sidewalk_policy_comparison.json").exists()
+    assert (input_dir / "EpisodeSetup_obstacle_ahead_000.json").exists()
+    assert (input_dir / "EpisodeSetup_obstacle_ahead_001.json").exists()
+    assert (input_dir / "DeliveryBotSetup_obstacle_ahead_000_baseline.json").exists()
+    assert (input_dir / "DeliveryBotSetup_obstacle_ahead_001_baseline.json").exists()
+    assert (input_dir / "EpisodeRunQueue_obstacle_ahead.json").exists()
     assert (result.export_root / "export_summary.json").exists()
     assert (result.export_root / "validation_summary.json").exists()
     assert (result.export_root / "trace_summary.json").exists()
@@ -48,7 +48,7 @@ def test_exported_run_queue_contains_only_ue_contract_fields(tmp_path: Path) -> 
 
     result = export_run_queue_package(queue, output_dir=tmp_path)
 
-    payload = json.loads((result.export_root / "Json" / "Input" / "EpisodeRunQueue_narrow_sidewalk_policy_comparison.json").read_text(encoding="utf-8"))
+    payload = json.loads((result.export_root / "Json" / "Input" / "EpisodeRunQueue_obstacle_ahead.json").read_text(encoding="utf-8"))
     assert set(payload) == {"schema", "version", "runs"}
     assert set(payload["runs"][0]) == {"pair_id", "episode_setup", "delivery_bot_setup"}
     assert "success" not in payload
@@ -62,20 +62,20 @@ def test_exported_run_queue_writes_one_episode_setup_per_run_with_fixed_scene_co
     result = export_run_queue_package(queue, output_dir=tmp_path)
 
     input_dir = result.export_root / "Json" / "Input"
-    payload = json.loads((input_dir / "EpisodeRunQueue_narrow_sidewalk_policy_comparison.json").read_text(encoding="utf-8"))
+    payload = json.loads((input_dir / "EpisodeRunQueue_obstacle_ahead.json").read_text(encoding="utf-8"))
     assert [run["episode_setup"] for run in payload["runs"]] == [
-        "Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block_000.json",
-        "Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block_001.json",
-        "Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block_002.json",
-        "Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block_003.json",
-        "Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block_004.json",
+        "Json/Input/EpisodeSetup_obstacle_ahead_000.json",
+        "Json/Input/EpisodeSetup_obstacle_ahead_001.json",
+        "Json/Input/EpisodeSetup_obstacle_ahead_002.json",
+        "Json/Input/EpisodeSetup_obstacle_ahead_003.json",
+        "Json/Input/EpisodeSetup_obstacle_ahead_004.json",
     ]
     assert [run["delivery_bot_setup"] for run in payload["runs"]] == [
-        "Json/Input/DeliveryBotSetup_policy_000_baseline.json",
-        "Json/Input/DeliveryBotSetup_policy_001_baseline.json",
-        "Json/Input/DeliveryBotSetup_policy_002_baseline.json",
-        "Json/Input/DeliveryBotSetup_policy_003_conservative_lidar.json",
-        "Json/Input/DeliveryBotSetup_policy_004_slower_path_follow.json",
+        "Json/Input/DeliveryBotSetup_obstacle_ahead_000_baseline.json",
+        "Json/Input/DeliveryBotSetup_obstacle_ahead_001_baseline.json",
+        "Json/Input/DeliveryBotSetup_obstacle_ahead_002_baseline.json",
+        "Json/Input/DeliveryBotSetup_obstacle_ahead_003_baseline.json",
+        "Json/Input/DeliveryBotSetup_obstacle_ahead_004_baseline.json",
     ]
     assert len(list(input_dir.glob("EpisodeSetup_*.json"))) == 5
     assert len(list(input_dir.glob("DeliveryBotSetup_*.json"))) == 5
@@ -84,7 +84,8 @@ def test_exported_run_queue_writes_one_episode_setup_per_run_with_fixed_scene_co
         for run in payload["runs"]
     ]
     assert {tuple(item["actors"]["robot"]["xy_m"]) for item in episode_payloads} == {(0.0, 0.0)}
-    assert {tuple(item["actors"]["static_obstacles"][0]["xy_m"]) for item in episode_payloads} == {(5.5, 0.0)}
+    assert len({len(item["actors"]["static_obstacles"]) for item in episode_payloads}) > 1
+    assert len({len(item["actors"]["pedestrians"]) for item in episode_payloads}) > 1
 
 
 def test_exported_run_queue_writes_max_count_episode_and_delivery_bot_files(tmp_path: Path) -> None:
@@ -94,7 +95,7 @@ def test_exported_run_queue_writes_max_count_episode_and_delivery_bot_files(tmp_
     result = export_run_queue_package(queue, output_dir=tmp_path)
 
     input_dir = result.export_root / "Json" / "Input"
-    payload = json.loads((input_dir / "EpisodeRunQueue_narrow_sidewalk_policy_comparison.json").read_text(encoding="utf-8"))
+    payload = json.loads((input_dir / "EpisodeRunQueue_obstacle_ahead.json").read_text(encoding="utf-8"))
     exported_text = "\n".join(path.read_text(encoding="utf-8") for path in input_dir.glob("*.json"))
 
     assert result.exported is True
@@ -102,7 +103,7 @@ def test_exported_run_queue_writes_max_count_episode_and_delivery_bot_files(tmp_
     assert len(list(input_dir.glob("EpisodeSetup_*.json"))) == max_count
     assert len(list(input_dir.glob("DeliveryBotSetup_*.json"))) == max_count
     if max_count >= 6:
-        assert payload["runs"][5]["pair_id"] == "narrow_sidewalk_policy_005_baseline"
+        assert payload["runs"][5]["pair_id"] == "obstacle_ahead_005_baseline"
     assert "null" not in exported_text
 
 

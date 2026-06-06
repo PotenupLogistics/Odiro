@@ -10,6 +10,8 @@ from app.main import app
 ROOT = Path(__file__).resolve().parents[2]
 CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
+EXPECTED_POLICY_CARD_COUNT = 9
+EXPECTED_RAG_CHUNK_COUNT = 15
 REQUIRED_FILES = {
     "app/services/world_config_generation_orchestrator.py",
     "app/services/json_output_extractor.py",
@@ -18,6 +20,7 @@ REQUIRED_FILES = {
 EXPECTED_ROUTES = {
     "/health",
     "/api/v1/scenarios/generate",
+    "/api/v1/scenarios/generate-artifacts",
 }
 
 
@@ -126,10 +129,10 @@ def run_check() -> dict[str, Any]:
 
     result["policyCardCount"] = _jsonl_count(CARDS_PATH)
     result["ragChunkCount"] = _jsonl_count(CHUNKS_PATH)
-    if result["policyCardCount"] != 9:
-        result["errors"].append("policy card count must remain 9.")
-    if result["ragChunkCount"] != 9:
-        result["errors"].append("policy RAG chunk count must remain 9.")
+    if result["policyCardCount"] != EXPECTED_POLICY_CARD_COUNT:
+        result["errors"].append(f"policy card count must remain {EXPECTED_POLICY_CARD_COUNT}.")
+    if result["ragChunkCount"] != EXPECTED_RAG_CHUNK_COUNT:
+        result["errors"].append(f"policy RAG chunk count must remain {EXPECTED_RAG_CHUNK_COUNT}.")
 
     route_paths = {route.path for route in app.routes}
     result["routeSetUnchanged"] = (
@@ -140,7 +143,7 @@ def run_check() -> dict[str, Any]:
         ) == len(EXPECTED_ROUTES)
     )
     if not result["routeSetUnchanged"]:
-        result["errors"].append("FastAPI public API v1 set must expose only scenario generation.")
+        result["errors"].append("FastAPI public API v1 set must expose only scenario generation and debug artifact download.")
 
     external_imports = _detect_external_sdk_imports()
     result["externalSdkImports"] = external_imports

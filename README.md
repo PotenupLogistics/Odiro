@@ -94,6 +94,8 @@ Setup pair live smoke 상태:
 
 * `GET /health`
 * `POST /api/v1/scenarios/generate`
+* `POST /api/v1/scenarios/generate-drive`
+* `POST /api/v1/scenarios/generate-artifacts` (debug/test artifact zip download)
 
 UE 연동 기본 권장 endpoint:
 
@@ -112,6 +114,30 @@ POST /api/v1/scenarios/generate
 
 이 endpoint는 사용자의 자연어 `prompt`만 입력받습니다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하는 구조가 아니며, JSON은 AI와 backend가 내부적으로 생성한 UE 실행 산출물입니다. 정상 응답은 최상위 `schema`, `version`, `runs`만 포함하는 RunQueue JSON입니다.
 `episode_count`를 함께 보내면 생성할 episode/run 개수를 지정할 수 있고, 생략하면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용합니다. 요청값은 1 이상 `SCENARIO_EPISODE_MAX_COUNT` 이하의 strict integer여야 합니다.
+
+Google Drive artifact 업로드 endpoint:
+
+```text
+POST /api/v1/scenarios/generate-drive
+```
+
+이 endpoint는 `/api/v1/scenarios/generate`와 같은 `ScenarioGenerateRequest` body를 받습니다. backend는 기존 scenario generation flow로 `EpisodeRunQueue`, `EpisodeSetup`, `DeliveryBotSetup` JSON 산출물을 만든 뒤 `.env`에 설정된 Google Drive 폴더로 업로드하고, 응답으로 파일 본문이나 zip 대신 Drive metadata JSON을 반환합니다. 응답의 `run_queue_file`은 UE가 Google Drive 동기화 폴더에서 먼저 읽어야 하는 RunQueue 파일명입니다.
+
+Google Drive 방식에서는 AI 서버가 지정 폴더에 JSON artifact를 업로드하고, 언리얼은 로컬 Google Drive 동기화 폴더에서 `run_queue_file`이 실제로 생겼는지 확인한 뒤 실행하는 것이 안전합니다. 동기화 지연이 있을 수 있으므로 UE 쪽에서는 파일 존재 확인과 짧은 retry/polling을 두는 흐름을 권장합니다.
+
+Drive 인증 방식은 `GOOGLE_DRIVE_AUTH_MODE`로 선택합니다. `service_account` mode는 Shared Drive 업로드에 권장하며 `GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE`을 사용합니다. 사용자의 My Drive에 만든 공유 폴더는 service account에 저장소 quota가 없어 `Service Accounts do not have storage quota`로 실패할 수 있으므로 `oauth` mode를 사용합니다. `oauth` mode는 `GOOGLE_DRIVE_OAUTH_CLIENT_FILE`에서 OAuth client 설정을 읽고 `GOOGLE_DRIVE_OAUTH_TOKEN_FILE`에 사용자 token을 저장/재사용합니다.
+
+`GOOGLE_DRIVE_BACKUP_BEFORE_UPLOAD=true`이면 새 artifact 업로드 전에 대상 Drive 폴더의 기존 직계 항목을 백업 폴더로 이동합니다. 백업 폴더는 `GOOGLE_DRIVE_BACKUP_FOLDER_ID`가 있으면 해당 ID를 우선 사용하고, 없으면 대상 폴더의 직계 child 중 `GOOGLE_DRIVE_BACKUP_FOLDER_NAME` 값(기본값 `백업`)과 일치하는 폴더를 찾습니다. 백업 폴더 자체와 백업 폴더 안의 기존 파일은 이동하지 않으며, 백업 폴더를 찾지 못하거나 이름이 중복되면 업로드를 중단합니다.
+
+Drive folder id, auth mode, credentials/token 경로는 요청 body로 받지 않고 서버 설정값만 사용합니다. `secrets/oauth_client.json`, `secrets/google_drive_token.json`, `secrets/credentials.json`은 Git에 올리면 안 되며, OAuth client secret, OAuth token, service account private key, credentials 내용은 로그에 남기면 안 됩니다.
+
+테스트용 artifact 다운로드 endpoint:
+
+```text
+POST /api/v1/scenarios/generate-artifacts
+```
+
+이 endpoint는 `/api/v1/scenarios/generate`와 같은 request body를 받지만 JSON body 대신 `scenario_artifacts.zip` 파일을 반환합니다. zip에는 `response.json`, `EpisodeRunQueue_*.json`, `EpisodeSetup_*.json`, `DeliveryBotSetup_*.json`이 포함됩니다. UE/통신 테스트에서 생성 산출물을 직접 확인하기 위한 debug/test endpoint입니다. Google Drive 기반 전달을 사용할 때는 `/api/v1/scenarios/generate-drive`가 권장 경로이며, zip endpoint는 legacy/debug 용도로만 유지합니다.
 
 ## UE 연동 상태
 

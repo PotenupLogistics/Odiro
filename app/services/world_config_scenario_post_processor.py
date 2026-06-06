@@ -292,7 +292,7 @@ def apply_scenario_intent_to_world_config_from_intent(
         parameters = environment_context.parameters
         map_config = patched.setdefault("map", {})
         width = map_config.get("sidewalkWidthCm")
-        if width != parameters.sidewalkWidthCm:
+        if intent.sidewalkWidthCm is None and width != parameters.sidewalkWidthCm:
             map_config["sidewalkWidthCm"] = parameters.sidewalkWidthCm
             _append_patch(
                 patches,

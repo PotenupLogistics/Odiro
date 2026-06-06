@@ -23,6 +23,8 @@ def test_api_routes_are_registered() -> None:
 
     assert "/health" in route_paths
     assert "/api/v1/scenarios/generate" in route_paths
+    assert "/api/v1/scenarios/generate-drive" in route_paths
+    assert "/api/v1/scenarios/generate-artifacts" in route_paths
     assert "/api/v1/generation/world-config" not in route_paths
     assert "/api/v1/generation/world-config/prompt-package" not in route_paths
     assert "/api/v1/contracts/validate/{contract_type}" not in route_paths
@@ -33,7 +35,11 @@ def test_openapi_exposes_only_scenario_generate_under_api_v1() -> None:
 
     api_v1_paths = sorted(path for path in schema["paths"] if path.startswith("/api/v1/"))
 
-    assert api_v1_paths == ["/api/v1/scenarios/generate"]
+    assert api_v1_paths == [
+        "/api/v1/scenarios/generate",
+        "/api/v1/scenarios/generate-artifacts",
+        "/api/v1/scenarios/generate-drive",
+    ]
 
 
 def test_removed_api_v1_endpoints_return_not_found() -> None:

@@ -16,6 +16,8 @@ REQUIRED_FILES = {
 REQUIRED_ROUTES = {
     "/health",
     "/api/v1/scenarios/generate",
+    "/api/v1/scenarios/generate-artifacts",
+    "/api/v1/scenarios/generate-drive",
 }
 FORBIDDEN_API_V1_ROUTES = {
     "/api/v1/generation/world-config",

@@ -192,6 +192,41 @@ def test_post_processor_applies_environment_sampling_parameters_over_payload_val
     assert result.patchedPayload["runtime"]["maxDurationSec"] == 60
 
 
+def test_post_processor_preserves_explicit_sidewalk_width_over_environment_sampler() -> None:
+    payload = _base_payload()
+    payload["map"]["sidewalkWidthCm"] = 100
+    context = EnvironmentSamplingContext(
+        enabled=True,
+        seed=1001,
+        scenarioType="obstacle_ahead",
+        parameters=EnvironmentParameterSet(
+            sidewalkWidthCm=100,
+            pedestrianCount=1,
+            pedestrianSpeedMps=1.2,
+            obstacleBlockingRatio=0.6,
+            obstacleLateralOffsetM=0.0,
+            crossingAngleDeg=90,
+            robotSpeedKmh=5,
+            slopeDegree=0,
+            curbHeightCm=0,
+            timeLimitSec=60,
+        ),
+        fixedParameters={},
+        warnings=[],
+    )
+
+    result = apply_scenario_intent_to_world_config(
+        "보도 폭이 120cm인 좁은 직선 보도에서 정적 장애물이 경로를 막는 상황",
+        payload,
+        environment_context=context,
+    )
+
+    patch_types = {patch.patchType for patch in result.patches}
+    assert "set_sidewalk_width_from_prompt" in patch_types
+    assert "set_sidewalk_width_from_environment_sampler" not in patch_types
+    assert result.patchedPayload["map"]["sidewalkWidthCm"] == 120
+
+
 def test_post_processor_adds_obstacle_at_route_midpoint_when_requested() -> None:
     payload = _base_payload()
     payload["robot"]["goal"] = {"x": 800, "y": 0, "z": 0}

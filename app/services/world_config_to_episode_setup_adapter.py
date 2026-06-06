@@ -33,7 +33,7 @@ def _ground_model(world_config: dict[str, Any]) -> GroundModel:
     length_m = _cm_to_m(map_config.get("lengthCm", 0.0))
     width_m = _cm_to_m(map_config.get("sidewalkWidthCm", 0.0))
     return GroundModel(
-        default_region_type="walkable",
+        default_region_type="blocked",
         regions=[
             GroundRegion(
                 region_id="sidewalk_main",

@@ -13,6 +13,8 @@ GENERATION_MODEL_PATH = ROOT / "app" / "models" / "generation.py"
 DOC_PATH = ROOT / "docs" / "architecture" / "SCENARIO_POST_PROCESSING.md"
 POLICY_CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 RAG_CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
+EXPECTED_POLICY_CARD_COUNT = 9
+EXPECTED_RAG_CHUNK_COUNT = 15
 
 
 def _detect_forbidden_artifacts() -> list[str]:
@@ -96,10 +98,10 @@ def run_check() -> dict[str, Any]:
     if not result["orchestratorIntegrated"]:
         result["errors"].append("Orchestrator does not integrate scenario post-processing.")
 
-    if result["policyCardCount"] != 9:
-        result["errors"].append("Policy card count changed from 9.")
-    if result["ragChunkCount"] != 9:
-        result["errors"].append("Policy RAG chunk count changed from 9.")
+    if result["policyCardCount"] != EXPECTED_POLICY_CARD_COUNT:
+        result["errors"].append(f"Policy card count changed from {EXPECTED_POLICY_CARD_COUNT}.")
+    if result["ragChunkCount"] != EXPECTED_RAG_CHUNK_COUNT:
+        result["errors"].append(f"Policy RAG chunk count changed from {EXPECTED_RAG_CHUNK_COUNT}.")
 
     result["openAiImports"] = _detect_openai_code()
     if result["openAiImports"]:

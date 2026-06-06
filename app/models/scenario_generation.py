@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from app.core.settings import Settings
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -36,3 +36,48 @@ class ScenarioGenerateRequest(BaseModel):
         if value is not None and value > Settings().scenarioEpisodeMaxCount:
             raise ValueError(f"episode_count must be <= {Settings().scenarioEpisodeMaxCount}.")
         return value
+
+
+class ScenarioDriveArtifactFile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["episode_run_queue", "episode_setup", "delivery_bot_setup"]
+    filename: str
+    drive_file_id: str
+    drive_url: str
+
+
+class ScenarioDriveArtifactBackupFile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filename: str
+    drive_file_id: str
+
+
+class ScenarioDriveArtifactBackup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    backup_folder_id: str | None = None
+    backup_folder_name: str
+    moved_count: int
+    moved_files: list[ScenarioDriveArtifactBackupFile] = Field(default_factory=list)
+
+
+class ScenarioDriveArtifactResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    status: Literal["success"] = "success"
+    schema_: Literal["scenario_drive_artifact_response"] = Field(
+        default="scenario_drive_artifact_response",
+        alias="schema",
+    )
+    version: Literal[1] = 1
+    drive_folder_id: str
+    run_queue_file: str
+    backup: ScenarioDriveArtifactBackup | None = None
+    files: list[ScenarioDriveArtifactFile]
+
+    @property
+    def schema(self) -> str:
+        return self.schema_

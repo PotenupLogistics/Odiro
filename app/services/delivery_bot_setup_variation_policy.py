@@ -42,8 +42,28 @@ def delivery_bot_tuning_for_episode(
     }
     profiles: list[tuple[str, dict[str, Any]]] = [
         ("baseline", baseline),
-        ("baseline", baseline),
-        ("baseline", baseline),
+        (
+            "cautious_lidar",
+            {
+                **baseline,
+                "maxSpeedKmh": 9.0,
+                "targetSpeedKmh": 9.0,
+                "stopDistanceM": 1.35,
+                "slowDownDistanceM": 4.0,
+                "frontHalfAngleDegree": 40.0,
+            },
+        ),
+        (
+            "slow_safe",
+            {
+                **baseline,
+                "maxSpeedKmh": 7.0,
+                "targetSpeedKmh": 7.0,
+                "obstacleSlowSpeedKmh": 1.5,
+                "stopDistanceM": 1.25,
+                "minTurnSpeedKmh": 0.8,
+            },
+        ),
         (
             "conservative_lidar",
             {

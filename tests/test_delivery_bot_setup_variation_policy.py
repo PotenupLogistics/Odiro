@@ -18,14 +18,14 @@ def test_delivery_bot_variation_policy_returns_named_policy_profiles() -> None:
 
     assert [profile.profile for profile in profiles] == [
         "baseline",
-        "baseline",
-        "baseline",
+        "cautious_lidar",
+        "slow_safe",
         "conservative_lidar",
         "slower_path_follow",
     ]
     assert profiles[0].values["stopDistanceM"] == 1.2
-    assert profiles[1].values["stopDistanceM"] == 1.2
-    assert profiles[2].values["stopDistanceM"] == 1.2
+    assert profiles[1].values["stopDistanceM"] == 1.35
+    assert profiles[2].values["stopDistanceM"] == 1.25
     assert profiles[3].values["slowDownDistanceM"] == 4.5
     assert profiles[4].values["targetSpeedKmh"] == 8.0
 

@@ -28,7 +28,64 @@ from app.services.policy_recommendation_rag_retriever import retrieve_policy_con
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SAMPLE_LOG = ROOT / "MeasurementLog_20260602_153440_EpisodeSimulationMap.jsonl"
+
+
+def _write_measurement_log(tmp_path: Path) -> Path:
+    """자동 pytest는 대용량/수동 MeasurementLog를 repo 필수 입력으로 요구하지 않는다."""
+    path = tmp_path / "measurement_log_minimal.jsonl"
+    records = [
+        {"type": "header", "runId": "unit-test-run"},
+        {
+            "type": "tick",
+            "deltaSeconds": 1.0,
+            "worldTimeSeconds": 1.0,
+            "robot": {
+                "perception": {"lidar": {"hasFrontObject": True, "frontDistanceM": 0.5}},
+                "action": {"reason": "slowdown", "brakeApplied": True, "targetSpeedKmh": 2.0},
+                "truth": {"v": [100.0, 0.0, 0.0]},
+            },
+        },
+        {
+            "type": "tick",
+            "deltaSeconds": 1.0,
+            "worldTimeSeconds": 2.0,
+            "robot": {
+                "perception": {"lidar": {"hasFrontObject": True, "frontDistanceM": 1.0}},
+                "action": {"reason": "path_follow", "brakeApplied": False, "targetSpeedKmh": 5.0},
+                "truth": {"v": [120.0, 0.0, 0.0]},
+            },
+        },
+        {
+            "type": "tick",
+            "deltaSeconds": 1.0,
+            "worldTimeSeconds": 3.0,
+            "robot": {
+                "perception": {"lidar": {"hasFrontObject": False, "frontDistanceM": 0.0}},
+                "action": {"reason": "stop", "brakeApplied": True, "targetSpeedKmh": 0.0},
+                "truth": {"v": [0.0, 0.0, 0.0]},
+            },
+        },
+        {
+            "type": "tick",
+            "deltaSeconds": 1.0,
+            "worldTimeSeconds": 4.0,
+            "robot": {
+                "perception": {"lidar": {"hasFrontObject": True, "frontDistanceM": 2.0}},
+                "action": {"reason": "repath", "brakeApplied": False, "targetSpeedKmh": 3.0},
+                "truth": {"v": [90.0, 0.0, 0.0]},
+            },
+        },
+        {
+            "type": "footer",
+            "closeReason": "world_end_play",
+            "diagnostics": [{"severity": "warning", "message": "unit test diagnostic"}],
+        },
+    ]
+    path.write_text(
+        "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n",
+        encoding="utf-8",
+    )
+    return path
 
 
 def _make_statistics(**overrides) -> AnalysisStatistics:
@@ -58,8 +115,8 @@ def _make_statistics(**overrides) -> AnalysisStatistics:
 # -------- parser tests --------
 
 
-def test_parse_measurement_log_returns_header_ticks_footer() -> None:
-    data = parse_measurement_log(SAMPLE_LOG)
+def test_parse_measurement_log_returns_header_ticks_footer(tmp_path: Path) -> None:
+    data = parse_measurement_log(_write_measurement_log(tmp_path))
     assert data.header["type"] == "header"
     assert data.footer["type"] == "footer"
     assert len(data.ticks) > 0
@@ -88,11 +145,11 @@ def test_parse_measurement_log_invalid_json(tmp_path) -> None:
 # -------- metrics extractor tests --------
 
 
-def test_extract_statistics_from_real_log() -> None:
-    data = parse_measurement_log(SAMPLE_LOG)
+def test_extract_statistics_from_self_contained_log(tmp_path: Path) -> None:
+    data = parse_measurement_log(_write_measurement_log(tmp_path))
     statistics = extract_statistics(data)
 
-    assert statistics.totalTicks > 600
+    assert statistics.totalTicks == 4
     assert statistics.deliveryTimeSec > 0
     assert statistics.closeReason == "world_end_play"
     assert 0 <= statistics.frontObjectDetectionRate <= 1
@@ -102,8 +159,8 @@ def test_extract_statistics_from_real_log() -> None:
     assert statistics.avgFrontDistanceM > 0
 
 
-def test_extract_run_metrics_maps_basic_fields() -> None:
-    data = parse_measurement_log(SAMPLE_LOG)
+def test_extract_run_metrics_maps_basic_fields(tmp_path: Path) -> None:
+    data = parse_measurement_log(_write_measurement_log(tmp_path))
     statistics = extract_statistics(data)
     metrics = extract_run_metrics(data, statistics)
 
@@ -178,9 +235,10 @@ def test_retrieve_policy_context_triggers_more_queries_on_high_brake() -> None:
 # -------- orchestrator E2E tests (fallback path만) --------
 
 
-def test_orchestrator_fallback_only_produces_result() -> None:
+def test_orchestrator_fallback_only_produces_result(tmp_path: Path) -> None:
+    sample_log = _write_measurement_log(tmp_path)
     result = analyze_and_recommend(
-        log_path=SAMPLE_LOG,
+        log_path=sample_log,
         fallback_only=True,
     )
     assert isinstance(result, PolicyRecommendationResult)
@@ -190,9 +248,10 @@ def test_orchestrator_fallback_only_produces_result() -> None:
     assert result.logPath.endswith(".jsonl")
 
 
-def test_orchestrator_result_is_json_serializable() -> None:
+def test_orchestrator_result_is_json_serializable(tmp_path: Path) -> None:
+    sample_log = _write_measurement_log(tmp_path)
     result = analyze_and_recommend(
-        log_path=SAMPLE_LOG,
+        log_path=sample_log,
         fallback_only=True,
     )
     payload = result.model_dump(mode="json")

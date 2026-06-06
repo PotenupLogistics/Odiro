@@ -10,6 +10,7 @@ from app.services.policy_rag_retriever import load_chunks, search_policy_chunks
 
 ROOT = Path(__file__).resolve().parents[2]
 CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
+EXPECTED_RAG_CHUNK_COUNT = 15
 REQUIRED_FILES = {
     "app/services/policy_rag_retriever.py",
     "app/models/rag.py",
@@ -65,8 +66,8 @@ def run_check() -> dict[str, Any]:
 
     chunks = load_chunks(str(CHUNKS_PATH))
     result["chunkCount"] = len(chunks)
-    if len(chunks) != 9:
-        result["errors"].append("policy_rag_chunks.jsonl must contain 9 chunks.")
+    if len(chunks) != EXPECTED_RAG_CHUNK_COUNT:
+        result["errors"].append(f"policy_rag_chunks.jsonl must contain {EXPECTED_RAG_CHUNK_COUNT} chunks.")
 
     result["keywordSearchResultCount"] = len(search_policy_chunks(RagSearchQuery(query="비상정지")).results)
     result["actionSearchResultCount"] = len(

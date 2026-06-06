@@ -41,8 +41,8 @@ Runner는 더 이상 기본 DeliveryBotSetup 파일로 fallback하지 않는다.
   "runs": [
     {
       "pair_id": "sample_0",
-      "episode_setup": "Json/Input/EpisodeSetupSample_0.json",
-      "delivery_bot_setup": "Json/Input/DeliveryBotSetupSample_0.json"
+      "episode_setup": "Json/Input/EpisodeSetup_narrow_sidewalk_fixed_center_block_000.json",
+      "delivery_bot_setup": "Json/Input/DeliveryBotSetup_policy_000_baseline.json"
     },
     {
       "pair_id": "sample_1",

@@ -13,6 +13,7 @@ from app.services.world_config_prompt_builder import build_world_config_prompt_p
 
 ROOT = Path(__file__).resolve().parents[2]
 CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
+EXPECTED_RAG_CHUNK_COUNT = 15
 REQUIRED_FILES = {
     "app/models/generation.py",
     "app/services/natural_language_normalizer.py",
@@ -75,8 +76,10 @@ def run_check() -> dict[str, Any]:
             if line.strip()
         ]
         result["chunkCount"] = len(chunks)
-        if len(chunks) != 9:
-            result["errors"].append("policy_rag_chunks.jsonl must contain 9 chunks.")
+        if len(chunks) != EXPECTED_RAG_CHUNK_COUNT:
+            result["errors"].append(
+                f"policy_rag_chunks.jsonl must contain {EXPECTED_RAG_CHUNK_COUNT} chunks."
+            )
 
     builder_text = (ROOT / "app" / "services" / "world_config_prompt_builder.py").read_text(
         encoding="utf-8-sig"

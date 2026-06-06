@@ -25,9 +25,11 @@ http://127.0.0.1:8000/openapi.json
 ```text
 GET /health
 POST /api/v1/scenarios/generate
+POST /api/v1/scenarios/generate-drive
+POST /api/v1/scenarios/generate-artifacts
 ```
 
-`/api/v1` 하위 public endpoint는 `POST /api/v1/scenarios/generate` 하나만 유지한다.
+사용자용 기본 `/api/v1` endpoint는 `POST /api/v1/scenarios/generate`다. Google Drive 동기화 기반 UE 전달이 필요하면 `POST /api/v1/scenarios/generate-drive`를 사용한다. `POST /api/v1/scenarios/generate-artifacts`는 같은 request model을 쓰는 debug/test artifact zip 다운로드 endpoint다.
 
 ## 3. 사용자용 scenario generation API
 
@@ -51,7 +53,64 @@ POST /api/v1/scenarios/generate
 * `0`, `false`, `""`, `[]` 같은 의미 있는 값은 삭제하지 않는다.
 * 좁은 보도 장애물 policy comparison queue는 동일 EpisodeSetup을 공유하고 DeliveryBotSetup만 policy별로 다르게 만든다.
 
-## 4. WorldConfig generation service
+## 4. Google Drive artifact upload API
+
+```text
+POST /api/v1/scenarios/generate-drive
+```
+
+이 endpoint는 `/api/v1/scenarios/generate`와 같은 `ScenarioGenerateRequest` body를 받는다. backend는 기존 scenario generation flow를 재사용해 `EpisodeRunQueue`, `EpisodeSetup`, `DeliveryBotSetup` JSON artifact를 만들고, `.env`에 설정된 Google Drive 폴더로 각 JSON 파일을 `application/json`으로 업로드한다.
+
+응답은 artifact 본문이나 zip 파일이 아니라 Drive metadata JSON이다.
+
+```json
+{
+  "status": "success",
+  "schema": "scenario_drive_artifact_response",
+  "version": 1,
+  "drive_folder_id": "configured-folder-id",
+  "run_queue_file": "EpisodeRunQueue_example.json",
+  "files": [
+    {
+      "kind": "episode_run_queue",
+      "filename": "EpisodeRunQueue_example.json",
+      "drive_file_id": "drive-file-id",
+      "drive_url": "https://drive.google.com/file/d/drive-file-id/view"
+    }
+  ]
+}
+```
+
+Google Drive 방식에서는 AI 서버가 지정 폴더에 JSON artifact를 업로드하고, 언리얼은 Google Drive 동기화 폴더에서 `run_queue_file`을 읽는다. Drive 동기화 지연이 있을 수 있으므로, 언리얼 쪽에서는 해당 파일이 생겼는지 확인한 뒤 실행하는 것이 안전하다.
+
+Drive 폴더와 credentials/token 경로는 요청 body로 받지 않는다. 서버는 `GOOGLE_DRIVE_UPLOAD_ENABLED`, `GOOGLE_DRIVE_FOLDER_ID`, `GOOGLE_DRIVE_AUTH_MODE` 설정을 읽는다.
+
+`GOOGLE_DRIVE_AUTH_MODE=service_account`는 Shared Drive 업로드에 권장한다. 이 mode는 `GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE`을 사용하며 Shared Drive 대응을 위해 Drive API upload에 `supportsAllDrives=True`를 전달한다.
+
+`GOOGLE_DRIVE_AUTH_MODE=oauth`는 사용자의 My Drive 공유 폴더 업로드에 사용한다. service account는 My Drive에서 `Service Accounts do not have storage quota`로 실패할 수 있다. OAuth mode는 `GOOGLE_DRIVE_OAUTH_CLIENT_FILE`에서 client 설정을 읽고, `GOOGLE_DRIVE_OAUTH_TOKEN_FILE`에 사용자 token을 저장/재사용한다.
+
+`GOOGLE_DRIVE_BACKUP_BEFORE_UPLOAD=true`이면 새 artifact 업로드 전에 대상 폴더의 기존 직계 child 항목을 백업 폴더로 이동한다. `GOOGLE_DRIVE_BACKUP_FOLDER_ID`가 있으면 해당 ID를 사용하고, 없으면 대상 폴더 안에서 `GOOGLE_DRIVE_BACKUP_FOLDER_NAME` 값(기본값 `백업`)과 일치하는 폴더를 찾는다. 백업 폴더 자체와 백업 폴더 내부 기존 파일은 이동하지 않는다. 백업 폴더가 없거나 이름이 중복되거나 기존 항목 이동에 실패하면 새 artifact 업로드를 시작하지 않고 500 오류를 반환한다.
+
+`secrets/oauth_client.json`, `secrets/google_drive_token.json`, `secrets/credentials.json`은 Git에 올리면 안 된다. OAuth client secret, OAuth token, service account private key, credentials 내용은 로그에 남기면 안 된다.
+
+## 5. Debug/test artifact download API
+
+```text
+POST /api/v1/scenarios/generate-artifacts
+```
+
+이 endpoint는 `/api/v1/scenarios/generate`와 같은 request body를 받는다. 응답은 JSON body가 아니라 `Content-Type: application/zip`인 `scenario_artifacts.zip` 파일이다. Google Drive 전달 방식이 필요한 UE 흐름에서는 `/api/v1/scenarios/generate-drive`를 사용하고, 이 zip endpoint는 debug/test 또는 legacy 확인용으로 유지한다.
+
+zip 내부에는 다음 파일을 포함한다.
+
+* `response.json`: `/api/v1/scenarios/generate`가 반환하는 wrapper 없는 RunQueue JSON과 같은 구조
+* `EpisodeRunQueue_*.json`
+* `EpisodeSetup_*.json`
+* `DeliveryBotSetup_*.json`
+
+이 endpoint는 UE 통신/수동 확인을 위한 debug/test 경로다. 기존 `/api/v1/scenarios/generate` 응답 schema는 변경하지 않는다.
+
+## 6. WorldConfig generation service
 
 WorldConfig generation은 더 이상 `/api/v1/generation/world-config` HTTP endpoint로 노출하지 않는다. 내부 구현은 `app.services.world_config_generation_orchestrator.generate_world_config()` service 함수로 유지한다.
 
@@ -66,7 +125,7 @@ provider 값:
 
 `generatedPayload`는 LLM 응답에서 JSON 추출과 `world_config` validation이 통과한 뒤에만 채워진다.
 
-## 5. Removed legacy UE5 handoff API
+## 7. Removed legacy UE5 handoff API
 
 ```text
 POST /api/v1/ue5/world-config/handoff
@@ -76,13 +135,13 @@ POST /api/v1/ue5/world-config/handoff
 
 RunQueue가 필요한 사용자/UE 흐름은 `/api/v1/scenarios/generate`를 사용한다. 이전 `responseFormat=episode_spec`, `responseFormat=setup_pair`, `responseFormat=both`, `responseFormat=world_config` 설명은 archive 문서와 CLI tooling 참고용이다.
 
-## 6. Prompt package service
+## 8. Prompt package service
 
 Prompt package 생성은 더 이상 HTTP endpoint로 노출하지 않는다. `app.services.world_config_prompt_builder.build_world_config_prompt_package()` 함수가 deterministic RAG context, schema-derived checklist, scenario requirements, repair guidance에 필요한 prompt package를 반환한다.
 
 prompt package builder 자체는 LLM을 호출하지 않고 WorldConfig payload도 생성하지 않는다.
 
-## 7. Contract validation service / CLI
+## 9. Contract validation service / CLI
 
 ```text
 uv run python scripts/validate_contract.py --type world_config --file path/to/world.json
@@ -90,13 +149,13 @@ uv run python scripts/validate_contract.py --type world_config --file path/to/wo
 
 Contract validation은 더 이상 HTTP endpoint로 노출하지 않는다. 제출된 JSON payload가 특정 contract type에 맞는지는 `app.services.json_contract_validator.validate_payload()` 또는 `scripts/validate_contract.py` CLI로 검증한다. 이 경로는 payload를 생성하지 않고, sample/fixture JSON 파일도 만들지 않는다.
 
-## 8. Environment sampling
+## 10. Environment sampling
 
 `generationRequest.constraints.environmentSampling`을 사용하면 seed, scenarioType, fixedParameters 기반 numeric constraints를 prompt와 deterministic post-processing에 연결한다.
 
 sampling 결과는 numeric summary로 diagnostics에 기록한다. `low`, `middle`, `high` 같은 자연어 값을 UE JSON 값으로 직접 쓰지 않는다.
 
-## 9. 구현하지 않는 것
+## 11. 구현하지 않는 것
 
 현재 public API와 service/helper 경로는 다음을 자동으로 수행하지 않는다.
 

@@ -18,6 +18,8 @@ EXPORT_SCRIPT_PATH = ROOT / "scripts" / "export_ue5_handoff_payload.py"
 DOC_PATH = ROOT / "docs" / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_ADAPTER.md"
 POLICY_CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 RAG_CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
+EXPECTED_POLICY_CARD_COUNT = 9
+EXPECTED_RAG_CHUNK_COUNT = 15
 SCHEMA_PATH = ROOT / "schemas" / "world_config.schema.json"
 
 
@@ -107,10 +109,10 @@ def run_check() -> dict[str, Any]:
     if not result["responseFormatCodeExists"]:
         result["errors"].append("handoff responseFormat episode_spec support is missing.")
 
-    if result["policyCardCount"] != 9:
-        result["errors"].append("Policy card count changed from 9.")
-    if result["ragChunkCount"] != 9:
-        result["errors"].append("Policy RAG chunk count changed from 9.")
+    if result["policyCardCount"] != EXPECTED_POLICY_CARD_COUNT:
+        result["errors"].append(f"Policy card count changed from {EXPECTED_POLICY_CARD_COUNT}.")
+    if result["ragChunkCount"] != EXPECTED_RAG_CHUNK_COUNT:
+        result["errors"].append(f"Policy RAG chunk count changed from {EXPECTED_RAG_CHUNK_COUNT}.")
 
     result["forbiddenCode"] = _detect_forbidden_code()
     if result["forbiddenCode"]:
@@ -133,4 +135,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

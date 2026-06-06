@@ -21,6 +21,7 @@ REQUIRED_FILES = {
 EXPECTED_ROUTES = {
     "/health",
     "/api/v1/scenarios/generate",
+    "/api/v1/scenarios/generate-artifacts",
 }
 
 
@@ -141,7 +142,7 @@ def run_check() -> dict[str, Any]:
         ) == len(EXPECTED_ROUTES)
     )
     if not result["routeCountUnchanged"]:
-        result["errors"].append("FastAPI public API v1 set must expose only scenario generation.")
+        result["errors"].append("FastAPI public API v1 set must expose only scenario generation and debug artifact download.")
 
     sdk_imports = _detect_external_sdk_imports()
     result["externalSdkImports"] = sdk_imports

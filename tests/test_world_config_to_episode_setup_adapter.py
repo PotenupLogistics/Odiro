@@ -38,7 +38,9 @@ def test_converts_world_config_to_episode_setup_without_mutating_input() -> None
     assert episode.scenario_id == "obstacle_ahead"
     assert episode.run.base_seed == 1001
     assert episode.run.time_limit_s == 60
+    assert episode.ground_model.default_region_type == "blocked"
     assert episode.ground_model.regions[0].shape.size_m == [8.0, 1.2]
+    assert episode.ground_model.regions[0].region_type == "walkable"
     assert episode.ground_model.regions[0].shape.center_xy_m == [4.0, 0.0]
     assert episode.actors.robot.xy_m == [0.0, 0.0]
     assert episode.actors.robot.route is not None
@@ -72,12 +74,12 @@ def test_episode_setup_export_payload_is_null_free_and_uses_evaluation_defaults(
 def test_converts_world_config_pedestrians_to_paths_and_pedestrian_actors() -> None:
     world_config = _world_config()
     world_config["pedestrians"] = [
-        {"objectId": "ped_01", "spawn": {"x": 100, "y": -100}, "goal": {"x": 100, "y": 100}, "speedKmh": 3.6}
+        {"objectId": "ped_01", "spawn": {"x": 100, "y": -50}, "goal": {"x": 100, "y": 50}, "speedKmh": 3.6}
     ]
 
     episode = convert_world_config_to_episode_setup(world_config)
 
     assert episode.paths[0].path_id == "ped_01_path"
-    assert episode.paths[0].points_xy_m == [[1.0, -1.0], [1.0, 1.0]]
+    assert episode.paths[0].points_xy_m == [[1.0, -0.5], [1.0, 0.5]]
     assert episode.actors.pedestrians[0].path_id == "ped_01_path"
     assert episode.actors.pedestrians[0].movement.speed_mps == 1.0

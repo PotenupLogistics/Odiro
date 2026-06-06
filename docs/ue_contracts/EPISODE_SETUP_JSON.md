@@ -87,7 +87,7 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
 
 ```json
 "ground_model": {
-  "default_region_type": "walkable",
+  "default_region_type": "blocked",
   "regions": [
     {
       "region_id": "sidewalk_main",

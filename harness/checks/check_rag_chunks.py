@@ -9,6 +9,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
+EXPECTED_POLICY_CARD_COUNT = 9
+EXPECTED_RAG_CHUNK_COUNT = 15
 REQUIRED_METADATA = {
     "sourceIds",
     "category",
@@ -83,8 +85,10 @@ def run_check() -> dict[str, Any]:
     chunks = _read_jsonl(CHUNKS_PATH)
     result["cardCount"] = len(cards)
     result["chunkCount"] = len(chunks)
-    if len(cards) != len(chunks):
-        result["errors"].append("policy card count and rag chunk count must match.")
+    if len(cards) != EXPECTED_POLICY_CARD_COUNT:
+        result["errors"].append(f"policy card count must remain {EXPECTED_POLICY_CARD_COUNT}.")
+    if len(chunks) != EXPECTED_RAG_CHUNK_COUNT:
+        result["errors"].append(f"policy_rag_chunks.jsonl must contain {EXPECTED_RAG_CHUNK_COUNT} chunks.")
 
     confirmed_card_ids = {card["cardId"] for card in cards}
     counts = Counter(chunk.get("chunkId") for chunk in chunks)
@@ -103,7 +107,13 @@ def run_check() -> dict[str, Any]:
             result["missingMetadata"].append({"chunkId": chunk_id, "missing": missing})
         if metadata.get("status") != "confirmed_policy_card":
             result["invalidStatuses"].append({"chunkId": chunk_id, "status": metadata.get("status")})
-        if chunk.get("cardId") not in confirmed_card_ids:
+        source_ids = metadata.get("sourceIds") if isinstance(metadata, dict) else []
+        is_manual_project_supplement = (
+            str(chunk.get("cardId", "")).startswith("CARD-PRJ-")
+            and isinstance(source_ids, list)
+            and any(str(source_id).startswith("PRJ-") for source_id in source_ids)
+        )
+        if chunk.get("cardId") not in confirmed_card_ids and not is_manual_project_supplement:
             result["nonConfirmedCandidateChunks"].append(chunk_id)
 
     forbidden = _detect_forbidden_artifacts()

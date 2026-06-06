@@ -7,6 +7,7 @@
 #include "Episode/Editor/EpisodeAuthoringSubsystem.h"
 #include "Episode/Editor/EpisodeEditorPawn.h"
 #include "Episode/Editor/EpisodePlacementPreviewActor.h"
+#include "Episode/Widget/EpisodeEditorToolbarWidget.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/IConsoleManager.h"
 #include "Camera/CameraComponent.h"
@@ -15,6 +16,8 @@
 #include "InputMappingContext.h"
 #include "Materials/MaterialInterface.h"
 #include "Components/Widget.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogEpisodeEditorController, Log, All);
 
 AEpisodeEditorController::AEpisodeEditorController()
 {
@@ -36,6 +39,13 @@ void AEpisodeEditorController::BeginPlay()
 	AddEditorInputMappingContext();
 	EnsureAuthoringOutlineCustomDepthEnabled();
 	SetObserverMode();
+	ShowToolbarWidget();
+}
+
+void AEpisodeEditorController::EndPlay(const EEndPlayReason::Type endPlayReason)
+{
+	RemoveToolbarWidget();
+	Super::EndPlay(endPlayReason);
 }
 
 void AEpisodeEditorController::Tick(float deltaSeconds)
@@ -246,6 +256,51 @@ bool AEpisodeEditorController::SaveEpisodeSetupJsonFile(
 	}
 
 	return authoringSubsystem->SaveEpisodeSetupJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
+}
+
+FString AEpisodeEditorController::GetSourceEpisodeSetupJsonPath() const
+{
+	const UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	return authoringSubsystem ? authoringSubsystem->GetSourceEpisodeSetupJsonPath() : FString();
+}
+
+UEpisodeEditorToolbarWidget* AEpisodeEditorController::ShowToolbarWidget()
+{
+	if (IsValid(ToolbarWidget))
+	{
+		if (!ToolbarWidget->IsInViewport())
+		{
+			ToolbarWidget->AddToViewport(ToolbarViewportZOrder);
+		}
+		return ToolbarWidget;
+	}
+
+	if (!ensureMsgf(
+			ToolbarWidgetClass,
+			TEXT("EpisodeEditorController requires ToolbarWidgetClass to point to WBP_EpisodeEditorToolbar.")))
+	{
+		UE_LOG(LogEpisodeEditorController, Error, TEXT("ToolbarWidgetClass is not set."));
+		return nullptr;
+	}
+
+	ToolbarWidget = CreateWidget<UEpisodeEditorToolbarWidget>(this, ToolbarWidgetClass);
+	if (!ToolbarWidget)
+	{
+		return nullptr;
+	}
+
+	ToolbarWidget->AddToViewport(ToolbarViewportZOrder);
+	return ToolbarWidget;
+}
+
+void AEpisodeEditorController::RemoveToolbarWidget()
+{
+	if (IsValid(ToolbarWidget))
+	{
+		ToolbarWidget->RemoveFromParent();
+	}
+
+	ToolbarWidget = nullptr;
 }
 
 void AEpisodeEditorController::HandleSelectionStartedInput()

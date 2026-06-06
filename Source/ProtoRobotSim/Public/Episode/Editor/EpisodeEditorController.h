@@ -9,6 +9,7 @@
 class AEpisodeEditorPawn;
 class AEpisodePlacementPreviewActor;
 class UEpisodeAuthoringSubsystem;
+class UEpisodeEditorToolbarWidget;
 class UEpisodePlaceableComponent;
 class UInputAction;
 class UInputMappingContext;
@@ -25,6 +26,7 @@ public:
 	AEpisodeEditorController();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type endPlayReason) override;
 	virtual void Tick(float deltaSeconds) override;
 	virtual void SetupInputComponent() override;
 
@@ -69,6 +71,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
 	TSubclassOf<AEpisodePlacementPreviewActor> PlacementPreviewActorClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	TSubclassOf<UEpisodeEditorToolbarWidget> ToolbarWidgetClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|UI")
+	int32 ToolbarViewportZOrder = 2;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
 	void SetObserverMode();
@@ -115,6 +123,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Export")
 	bool SaveEpisodeSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
+	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Authoring")
+	FString GetSourceEpisodeSetupJsonPath() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|UI")
+	UEpisodeEditorToolbarWidget* ShowToolbarWidget();
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|UI")
+	void RemoveToolbarWidget();
+
 private:
 	void HandleSelectionStartedInput();
 	void HandleSelectionCompletedInput();
@@ -152,6 +169,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<AEpisodePlacementPreviewActor> PlacementPreviewActor;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UEpisodeEditorToolbarWidget> ToolbarWidget;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
 	FTransform CurrentPlacementTransform = FTransform::Identity;

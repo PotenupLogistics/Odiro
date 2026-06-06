@@ -294,20 +294,20 @@ T04로 남긴 범위:
 
 구현 위치:
 - [MainMenuPlayerController.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Platform/MainMenuPlayerController.h): MainMenu widget 생성, viewport 부착, menu input mode 적용
-- [MainMenuPlayerController.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/MainMenuPlayerController.cpp): `WBP_MainMenu` fallback, widget lifecycle, cursor/input mode 관리
+- [MainMenuPlayerController.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/MainMenuPlayerController.cpp): `WBP_MainMenu` class resolution, widget lifecycle, cursor/input mode 관리
 - [BP_MainMenuGameMode.uasset](x:/UE5/Proto-Unreal/Content/Blueprints/MainMenu/BP_MainMenuGameMode.uasset): MainMenuMap이 `AMainMenuPlayerController`를 사용하도록 연결하는 Blueprint GameMode
-- [MainMenuWidget.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Platform/Widget/MainMenuWidget.h): 최소 simulator 실행 widget
-- [MainMenuWidget.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/Widget/MainMenuWidget.cpp): `Json/Input` setup 목록, fixed-step FPS 저장, run 시작, status/report/log preview 표시
+- [MainMenuWidget.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Platform/Widget/MainMenuWidget.h): `WBP_MainMenu` binding 계약과 platform event handler
+- [MainMenuWidget.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/Widget/MainMenuWidget.cpp): `BindWidget` control wiring, `Json/Input` setup 목록, fixed-step FPS 저장, run 시작, status/report/log preview 표시
 
 수동/후속 확인:
 - `MainMenuMap`의 World Settings에서 GameMode Override를 `BP_MainMenuGameMode`로 지정한다
 - `WBP_MainMenu`를 직접 지정하려면 `MainMenuPlayerController`를 상속한 Blueprint에서 `MainWidgetClass`를 설정하고, GameMode의 Player Controller Class를 그 Blueprint로 지정한다
-- C++ 기본 widget은 기능 확인용 최소 UI다. 장기적으로는 UMG/Blueprint widget으로 시각 polish를 분리할 수 있다
+- `WBP_MainMenu`가 정식 MainMenu layout이다. `BindWidget` 이름/타입 불일치는 C++ fallback 없이 버그로 보고 수정한다
 - 실제 MainMenuMap 화면 표시와 버튼 클릭은 visible run 또는 PIE에서 확인해야 한다
 - measurement JSONL preview는 전체 tick load 대신 앞/뒤 일부 line preview만 표시한다. event 중심 필터링 UI는 T06 이후 사용성 확장에서 보강한다
 - `MainMenuMap`은 Platform 메뉴와 3D 배경을 둘 수 있는 user-facing world로 유지한다. Platform UI는 이 world 위에 overlay로 표시하며, map이 비어 있거나 배경 actor가 있어도 같은 경로로 동작해야 한다
 
-### T06 실험 설정 편집 구현 [ ]
+### T06 실험 설정 편집 구현 [x]
 
 목표: 사용자가 Platform 안에서 실행할 simulation setup과 run queue를 구성한다.
 
@@ -315,18 +315,24 @@ T04로 남긴 범위:
 - T05
 
 상세 작업:
-- EpisodeSetup, DeliveryBotSetup, EpisodeRunQueue file selector와 validation 제공
-- EpisodeRunQueue editor에서 EpisodeSetup과 DeliveryBotSetup pair를 추가, 제거, 재정렬
-- SimulationSetup editor에서 map, run queue, fixed-step FPS, logging, report, status output 편집
-- 새 setup과 queue template 생성
-- 저장 전 compiler와 runner 입력 validation 실행
+- `Json/Input`에서 `SimulationSetup`, `EpisodeSetup`, `DeliveryBotSetup`, `EpisodeRunQueue` 후보 파일을 분류해 selector에 표시
+- `EpisodeRunQueue` editor에서 EpisodeSetup과 DeliveryBotSetup pair를 추가, 제거, 위/아래 이동
+- `SimulationSetup` editor에서 map, run queue, fixed-step FPS, logging, report, status output 편집
+- 새 queue 파일은 사용자가 입력한 path에 첫 pair를 추가하는 방식으로 생성
+- 저장 전 `EpisodeSetup`은 `UEpisodeCompiler`, `DeliveryBotSetup`은 `UDeliveryBotSetupCompiler`, `SimulationSetup`은 `FSimulationSetupJson` 계약으로 validation
 
 검증:
 - 기존 EpisodeSetup과 DeliveryBotSetup pair를 queue에 추가
 - 저장된 queue와 setup을 simulator runner가 그대로 실행
 - validation 실패 항목은 파일과 run item 단위로 확인
+- `ProtoRobotSim.SimulationSetup` automation과 `ProtoRobotSim.SimulatorLaunch` automation 통과
 
-### T07 EpisodeEditorMap 진입점 연결 [ ]
+수동/후속 확인:
+- 실제 `MainMenuMap` visible run 또는 PIE에서 `WBP_MainMenu`가 화면에 표시되고 버튼 클릭이 가능한지 확인
+- `WBP_MainMenu` layout 변경 시 `UMainMenuWidget`의 `BindWidget` 이름과 타입을 맞춘다
+- 새 SimulationSetup 파일 생성은 path 입력 후 `Save Setup`으로 가능하지만, MVP UI에는 별도 "Create Setup" 버튼을 두지 않음
+
+### T07 EpisodeEditorMap 진입점 연결 [x]
 
 목표: MainMenu에서 구현된 `EpisodeEditorMap`을 열 수 있게 한다.
 
@@ -336,8 +342,9 @@ T04로 남긴 범위:
 
 상세 작업:
 - 에디터 UI 담당 작업자의 `EpisodeEditorMap` 진입 조건과 초기 로드 인자를 확인
-- MainMenu에서 시나리오 목록 또는 선택 파일을 기준으로 `EpisodeEditorMap`을 연다
+- MainMenu에서 선택한 EpisodeSetup 파일을 기준으로 `EpisodeEditorMap`을 연다
 - MVP에서는 같은 process 안에서 `OpenLevel`로 전환한다
+- `UEpisodeEditorLaunchSubsystem`이 선택한 EpisodeSetup path를 보관하고 `EpisodeEditorMap` load 후 `AEpisodeEditorController::LoadEpisodeSetupJsonFile` 자동 호출을 시도한다
 - MainMenuMap과 EpisodeEditorMap을 동시에 유지하는 별도 runtime window 구조는 MVP 범위에서 제외한다
 - 후속으로 에디터를 별도 프로세스로 열 필요가 생기면 `-EditScenario=<EpisodeSetupFile>` 같은 명시적 command line 계약을 추가한다
 
@@ -345,6 +352,12 @@ T04로 남긴 범위:
 - Platform에서 시나리오 에디터를 열 수 있는 진입점이 있다
 - MainMenu에서 `EpisodeEditorMap`으로 전환해 에디터 담당 기능이 시작된다
 - 에디터 진입 경로가 simulator fixed-step이나 runner 실행 경로에 영향을 주지 않는다
+- `ProtoRobotSimEditor` build 통과
+
+수동/후속 확인:
+- `EpisodeEditorMap`의 GameMode/PlayerController가 `AEpisodeEditorController` 또는 그 Blueprint subclass를 사용해야 선택한 EpisodeSetup 자동 로드가 동작한다
+- visible run 또는 PIE에서 `Open Editor` 버튼 클릭 후 `EpisodeEditorMap` 전환과 선택 EpisodeSetup 로드 상태를 확인
+- 에디터에서 MainMenu로 돌아가는 버튼은 MVP 범위에 없음. 현재는 같은 process level 전환이므로 필요하면 후속으로 back navigation 또는 별도 editor process 방식을 선택
 
 ### T08 LLM 연동 후속 연결 [ ]
 
@@ -372,8 +385,8 @@ T04로 남긴 범위:
 - [x] T03 결과와 상태 기록 연결
 - [x] T04 Platform launcher 구현
 - [x] T05 Platform 최소 실행 화면 구현
-- [ ] T06 실험 설정 편집 구현
-- [ ] T07 EpisodeEditorMap 진입점 연결
+- [x] T06 실험 설정 편집 구현
+- [x] T07 EpisodeEditorMap 진입점 연결
 - [ ] T08 LLM 연동 후속 연결
 
 ## 검증
@@ -385,8 +398,8 @@ T04로 남긴 범위:
 | T03 | sample setup 실행 후 report/log/status 생성 확인 |
 | T04 | Platform launcher command automation, process start/status polling 코드 경로 빌드 확인, visible subprocess smoke는 수동 확인 |
 | T05 | Platform UI widget 빌드 확인, invalid JSON validation 표시 코드 경로 구현, visible UI smoke는 수동 확인 |
-| T06 | run queue 저장 후 runner 실행 성공 확인 |
-| T07 | `EpisodeEditorMap` 진입 경로가 simulator 실행 경로와 분리되는지 확인 |
+| T06 | `SimulationSetup` writer round-trip, `EpisodeRunQueue` writer/parser automation, Editor target build |
+| T07 | `UEpisodeEditorLaunchSubsystem` compile 확인, visible `EpisodeEditorMap` 진입은 수동 확인 |
 | T08 | LLM analysis payload와 report 표시 확인 |
 
 ## 완료 기록
@@ -424,9 +437,25 @@ T04로 남긴 범위:
 - `BP_MainMenuGameMode`와 `WBP_MainMenu`를 추가하고 `MainMenuMap`에 연결
 - Platform UI는 simulator world object를 직접 참조하지 않고 status/report/log 파일만 읽음
 
+### T06 완료
+
+- `FSimulationSetupJson`에 `SimulationSetup JSON` writer와 file save API 추가
+- `USimulatorLaunchSubsystem`에 EpisodeSetup, DeliveryBotSetup, EpisodeRunQueue selector용 파일 분류 API 추가
+- `USimulatorLaunchSubsystem`에 `EpisodeRunQueue JSON` read/write, pair 추가, 제거, 재정렬 API 추가
+- `WBP_MainMenu` layout과 `UMainMenuWidget` C++ event handler로 setup 실행/저장 UI 제공
+- queue 저장 전 EpisodeSetup/DeliveryBotSetup validation을 수행해 잘못된 pair 저장을 차단
+
+### T07 완료
+
+- `UEpisodeEditorLaunchSubsystem` 추가
+- MainMenu에서 선택한 EpisodeSetup을 보관하고 `EpisodeEditorMap`을 `OpenLevel`로 연다
+- `EpisodeEditorMap` load 후 PlayerController가 `AEpisodeEditorController`이면 선택한 EpisodeSetup 자동 로드를 시도
+- 같은 process 안의 별도 runtime window 동시 실행은 MVP 범위에서 제외하고 Plan에 후속 선택지로 남김
+
 ### 현재 결과
 
-T01~T05 완료.
+T01~T07 완료.
 Launcher process는 packaged exe 또는 개발 fallback `RunPreview.bat`를 별도 process로 실행한다.
 Simulator process는 `SimulationSetup JSON` 기반 fixed-step run을 수행하고, Platform UI는 status/report/log 파일로 진행 상황과 결과를 조회한다.
-남은 큰 범위는 T06 실험 설정 편집, T07 `EpisodeEditorMap` 진입점 연결, T08 LLM 연동이다.
+MainMenu는 실험 설정과 run queue를 편집하고, 선택한 EpisodeSetup으로 `EpisodeEditorMap`에 진입할 수 있다.
+남은 큰 범위는 T08 LLM 연동이다.

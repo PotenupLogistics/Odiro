@@ -56,6 +56,7 @@ bool UEpisodeAssetPaletteWidget::RebuildPalette()
 
 	TArray<FEpisodeStaticObstaclePropEntry> paletteEntries;
 	editorController->GetStaticObstaclePaletteEntries(paletteEntries);
+	int32 itemCount = 0;
 	for (const FEpisodeStaticObstaclePropEntry& paletteEntry : paletteEntries)
 	{
 		UEpisodePlaceablePaletteItemWidget* itemWidget = CreateWidget<UEpisodePlaceablePaletteItemWidget>(
@@ -67,9 +68,50 @@ bool UEpisodeAssetPaletteWidget::RebuildPalette()
 		itemWidget->OnSelected.RemoveDynamic(this, &UEpisodeAssetPaletteWidget::HandlePaletteItemSelected);
 		itemWidget->OnSelected.AddDynamic(this, &UEpisodeAssetPaletteWidget::HandlePaletteItemSelected);
 		PlaceableItemContainer->AddChildToHorizontalBox(itemWidget);
+		++itemCount;
 	}
 
-	UE_LOG(LogEpisodeAssetPaletteWidget, Log, TEXT("Loaded %d placeable assets."), paletteEntries.Num());
+	TArray<FEpisodePaletteItemEntry> specialEntries;
+	if (bIncludePedestrianPlacement)
+	{
+		specialEntries.Add(MakeSpecialPaletteItemEntry(
+			EEpisodePaletteItemType::Pedestrian,
+			FName(TEXT("adult_pedestrian")),
+			TEXT("pedestrian"),
+			TEXT("Dynamic Actor"),
+			TEXT("pedestrian")));
+	}
+	if (bIncludeRobotRoutePlacement)
+	{
+		specialEntries.Add(MakeSpecialPaletteItemEntry(
+			EEpisodePaletteItemType::RobotStart,
+			FName(TEXT("delivery_bot")),
+			TEXT("start_point"),
+			TEXT("Robot"),
+			TEXT("start_point")));
+		specialEntries.Add(MakeSpecialPaletteItemEntry(
+			EEpisodePaletteItemType::RobotGoal,
+			FName(TEXT("delivery_bot_goal")),
+			TEXT("goal_point"),
+			TEXT("Robot"),
+			TEXT("goal_point")));
+	}
+
+	for (const FEpisodePaletteItemEntry& specialEntry : specialEntries)
+	{
+		UEpisodePlaceablePaletteItemWidget* itemWidget = CreateWidget<UEpisodePlaceablePaletteItemWidget>(
+			editorController,
+			PlaceableItemWidgetClass);
+		if (!itemWidget) continue;
+
+		itemWidget->SetPaletteItemEntry(specialEntry);
+		itemWidget->OnSelected.RemoveDynamic(this, &UEpisodeAssetPaletteWidget::HandlePaletteItemSelected);
+		itemWidget->OnSelected.AddDynamic(this, &UEpisodeAssetPaletteWidget::HandlePaletteItemSelected);
+		PlaceableItemContainer->AddChildToHorizontalBox(itemWidget);
+		++itemCount;
+	}
+
+	UE_LOG(LogEpisodeAssetPaletteWidget, Log, TEXT("Loaded %d placeable assets."), itemCount);
 	return true;
 }
 
@@ -81,7 +123,7 @@ void UEpisodeAssetPaletteWidget::ClearPalette()
 	}
 }
 
-void UEpisodeAssetPaletteWidget::HandlePaletteItemSelected(FName propId)
+void UEpisodeAssetPaletteWidget::HandlePaletteItemSelected(EEpisodePaletteItemType itemType, FName assetId)
 {
 	AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer());
 	if (!editorController)
@@ -90,13 +132,39 @@ void UEpisodeAssetPaletteWidget::HandlePaletteItemSelected(FName propId)
 		return;
 	}
 
-	if (!editorController->BeginStaticObstaclePlacement(propId))
+	if (!editorController->BeginPalettePlacement(itemType, assetId))
 	{
-		UE_LOG(LogEpisodeAssetPaletteWidget, Warning, TEXT("Failed to begin placement for '%s'."), *propId.ToString());
+		UE_LOG(
+			LogEpisodeAssetPaletteWidget,
+			Warning,
+			TEXT("Failed to begin placement | Type: %d | AssetId: %s"),
+			static_cast<int32>(itemType),
+			*assetId.ToString());
 		return;
 	}
 
-	UE_LOG(LogEpisodeAssetPaletteWidget, Log, TEXT("Placement selected: %s"), *propId.ToString());
+	UE_LOG(
+		LogEpisodeAssetPaletteWidget,
+		Log,
+		TEXT("Placement selected | Type: %d | AssetId: %s"),
+		static_cast<int32>(itemType),
+		*assetId.ToString());
+}
+
+FEpisodePaletteItemEntry UEpisodeAssetPaletteWidget::MakeSpecialPaletteItemEntry(
+	EEpisodePaletteItemType itemType,
+	FName assetId,
+	const TCHAR* displayName,
+	const TCHAR* category,
+	const TCHAR* iconName)
+{
+	FEpisodePaletteItemEntry entry;
+	entry.ItemType = itemType;
+	entry.AssetId = assetId;
+	entry.DisplayName = FText::FromString(displayName);
+	entry.CategoryText = FText::FromString(category);
+	entry.IconName = iconName;
+	return entry;
 }
 
 void UEpisodeAssetPaletteWidget::RequestEditorWidgetInputMode()

@@ -27,3 +27,5 @@
 ## Scripts
 - `RunPreview.bat`: 패키징 프리뷰 (`UnrealEditor.exe <uproject> -game -NoSplash`)
   - `-Simulate=<SimulationSetupFile> -RunId=<RunId>` 로 시뮬레이터 실행
+- `.run/SetEnginePath.ps1`: Rider Preview 실행 설정에서 사용하는 `UE_INSTALL_DIR` Path Variable 설정
+  - 프로젝트 설정 시 한 번 `powershell -ExecutionPolicy Bypass -File .run\SetEnginePath.ps1` 실행

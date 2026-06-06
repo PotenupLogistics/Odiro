@@ -8,6 +8,8 @@
 #include "EpisodeAuthoringSubsystem.generated.h"
 
 class AEpisodeStaticObstacle;
+class AEpisodePedestrian;
+class AActor;
 class FJsonObject;
 class FJsonValue;
 
@@ -38,6 +40,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
 	TSubclassOf<AEpisodeStaticObstacle> StaticObstacleClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	TSubclassOf<AEpisodePedestrian> PedestrianClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
 	TSubclassOf<AActor> StartPointClass;
@@ -80,6 +85,9 @@ public:
 	bool CanPlaceStaticObstacle(FName propId, const FTransform& transform, FString& outFailureReason) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	bool CanPlaceEditorGroundActor(const FTransform& transform, FString& outFailureReason) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
 	bool CanUpdateStaticObstacleTransform(
 		const FString& instanceId,
 		const FTransform& transform,
@@ -87,6 +95,26 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
 	bool AddStaticObstacle(FName propId, const FTransform& transform, FEpisodePlaceableInstanceSpec& outSpec);
+
+	bool AddPedestrian(
+		FName archetypeId,
+		const FTransform& transform,
+		FEpisodeDynamicActorSpec& outSpec,
+		AEpisodePedestrian*& outActor,
+		FString& outFailureReason);
+
+	bool SetRobotStartLocation(
+		FName assetId,
+		const FTransform& transform,
+		FEpisodePlaceableInstanceSpec& outSpec,
+		AActor*& outMarker,
+		FString& outFailureReason);
+
+	bool SetRobotGoalLocation(
+		const FTransform& transform,
+		FEpisodePlaceableInstanceSpec& outSpec,
+		AActor*& outMarker,
+		FString& outFailureReason);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
 	bool UpdateStaticObstacleTransform(
@@ -127,6 +155,8 @@ public:
 	TArray<FEpisodeAuthoringStaticObstacleRecord> GetAuthoredStaticObstacleRecords() const { return StaticObstacleRecords; }
 
 	void GetAuthoredStaticObstacleActors(TArray<AEpisodeStaticObstacle*>& outActors) const;
+
+	void GetEditorPlacementIgnoredActors(TArray<AActor*>& outActors) const;
 
 	// DraftWorldSpec 전체 기준으로 JSON을 다시 작성하고, 다시 compiler로 round-trip 검증.
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Export")
@@ -172,6 +202,7 @@ private:
 		const FVector2D& candidateHalfExtent,
 		const FEpisodeAuthoringStaticObstacleRecord& record) const;
 	FString GenerateStaticObstacleInstanceId();
+	FString GeneratePedestrianInstanceId();
 	bool ContainsInstanceId(const FString& instanceId) const;
 	void InitializeDraftDefaults();
 	void ClearEditorView();
@@ -182,16 +213,32 @@ private:
 		const FEpisodePlaceableInstanceSpec& spec,
 		AEpisodeStaticObstacle*& outActor,
 		FString& outFailureReason);
-	void SpawnRobotRouteMarkers(const FEpisodePlaceableInstanceSpec& spec, TArray<FString>& outDiagnostics);
+	bool SpawnEditorPedestrianActor(
+		const FEpisodeDynamicActorSpec& spec,
+		AEpisodePedestrian*& outActor,
+		FString& outFailureReason);
+	bool SpawnRobotRouteMarkers(const FEpisodePlaceableInstanceSpec& spec, TArray<FString>& outDiagnostics);
 	AActor* SpawnEditorMarkerActor(TSubclassOf<AActor> markerClass, const FTransform& transform);
+	AActor* SpawnOrReplaceRouteMarker(
+		TObjectPtr<AActor>& markerActor,
+		TSubclassOf<AActor> markerClass,
+		const FTransform& transform,
+		FString& outFailureReason);
 	void AddStaticObstacleViewRecord(
 		const FEpisodePlaceableInstanceSpec& spec,
 		const FEpisodeStaticObstaclePropEntry& propEntry,
 		AEpisodeStaticObstacle* actor);
+	void AddPedestrianViewRecord(const FEpisodeDynamicActorSpec& spec, AEpisodePedestrian* actor);
 	FEpisodePlaceableInstanceSpec MakeStaticObstacleSpec(
 		const FString& instanceId,
 		FName propId,
 		const FTransform& transform) const;
+	FEpisodeDynamicActorSpec MakePedestrianSpec(
+		const FString& instanceId,
+		FName archetypeId,
+		const FTransform& transform) const;
+	FEpisodePlaceableInstanceSpec* FindDeliveryBotSpec();
+	const FEpisodePlaceableInstanceSpec* FindDeliveryBotSpec() const;
 	FEpisodePlaceableInstanceSpec* FindStaticObstacleSpecByInstanceId(const FString& instanceId);
 	const FEpisodePlaceableInstanceSpec* FindStaticObstacleSpecByInstanceId(const FString& instanceId) const;
 	FEpisodeAuthoringStaticObstacleRecord* FindStaticObstacleRecordByInstanceId(const FString& instanceId);
@@ -216,8 +263,20 @@ private:
 	TMap<FString, TObjectPtr<AEpisodeStaticObstacle>> StaticObstacleActors;
 
 	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<AEpisodePedestrian>> PedestrianActors;
+
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> RouteMarkerActors;
 
 	UPROPERTY(Transient)
+	TObjectPtr<AActor> RobotStartMarkerActor;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> RobotGoalMarkerActor;
+
+	UPROPERTY(Transient)
 	int32 NextStaticObstacleIndex = 1;
+
+	UPROPERTY(Transient)
+	int32 NextPedestrianIndex = 1;
 };

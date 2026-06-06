@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Episode/Editor/EpisodeEditorTypes.h"
 #include "EpisodeAssetPaletteWidget.generated.h"
 
 class UHorizontalBox;
@@ -25,6 +26,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
 	bool bRebuildOnConstruct = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
+	bool bIncludePedestrianPlacement = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
+	bool bIncludeRobotRoutePlacement = true;
+
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
 	TObjectPtr<USizeBox> PaletteSizeBox;
 
@@ -42,12 +49,19 @@ public:
 
 protected:
 	UFUNCTION()
-	void HandlePaletteItemSelected(FName propId);
+	void HandlePaletteItemSelected(EEpisodePaletteItemType itemType, FName assetId);
 
 	void RequestEditorWidgetInputMode();
 	void ReleaseEditorWidgetInputMode();
 
 private:
+	static FEpisodePaletteItemEntry MakeSpecialPaletteItemEntry(
+		EEpisodePaletteItemType itemType,
+		FName assetId,
+		const TCHAR* displayName,
+		const TCHAR* category,
+		const TCHAR* iconName);
+
 	UWidget* ResolveInputModeFocusWidget() const;
 
 	TWeakObjectPtr<UWidget> RequestedInputModeFocusWidget;

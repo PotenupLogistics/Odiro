@@ -7,7 +7,10 @@
 
 class UMaterialInterface;
 class USceneComponent;
+class USkeletalMeshComponent;
+class USkeletalMesh;
 class UStaticMeshComponent;
+class UStaticMesh;
 
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API AEpisodePlacementPreviewActor : public AActor
@@ -23,6 +26,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
 	TObjectPtr<UStaticMeshComponent> PreviewMeshComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	TObjectPtr<USkeletalMeshComponent> PreviewSkeletalMeshComponent;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Visual")
 	TObjectPtr<UMaterialInterface> ValidPlacementMaterial;
 
@@ -36,6 +42,9 @@ public:
 	bool ConfigureStaticObstaclePropEntry(const FEpisodeStaticObstaclePropEntry& propEntry);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
+	bool ConfigureActorPreviewClass(TSubclassOf<AActor> actorClass);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
 	void SetPlacementValid(bool bCanPlace);
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor")
@@ -45,6 +54,9 @@ public:
 	double GetPlacementRadius2D() const { return PlacementRadius2D; }
 
 private:
+	void ClearPreviewMeshes();
+	void SetStaticMeshPreview(UStaticMesh* staticMesh);
+	void SetSkeletalMeshPreview(USkeletalMesh* skeletalMesh);
 	void ApplyPreviewMaterial(UMaterialInterface* material);
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor")

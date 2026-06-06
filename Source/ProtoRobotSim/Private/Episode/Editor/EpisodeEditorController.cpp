@@ -1,7 +1,5 @@
 
 #include "Episode/Editor/EpisodeEditorController.h"
-#include "EnhancedInputComponent.h"
-#include "EnhancedInputSubsystems.h"
 #include "Episode/Actors/EpisodeStaticObstacle.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/Editor/EpisodeAuthoringSubsystem.h"
@@ -9,14 +7,13 @@
 #include "Episode/Editor/EpisodePlacementPreviewActor.h"
 #include "Episode/Editor/EpisodeTransformGizmoActor.h"
 #include "Episode/Widget/EpisodePlaceableContextMenuWidget.h"
-#include "Framework/Application/SlateApplication.h"
-#include "HAL/IConsoleManager.h"
 #include "Camera/CameraComponent.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
 #include "InputMappingContext.h"
-#include "Materials/MaterialInterface.h"
-#include "Components/Widget.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "Episode/Actors/EpisodePedestrian.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogEpisodeEditorController, Log, All);
 
@@ -86,6 +83,8 @@ void AEpisodeEditorController::SetObserverMode()
 {
 	EditorMode = EEpisodeEditorControllerMode::Observer;
 	SelectedStaticObstaclePropId = NAME_None;
+	SelectedPlacementItemType = EEpisodePaletteItemType::StaticObstacle;
+	SelectedPlacementAssetId = NAME_None;
 	bCurrentPlacementValid = false;
 	CurrentPlacementFailureReason.Reset();
 	bIsLookInputHeld = false;
@@ -121,6 +120,11 @@ void AEpisodeEditorController::ReleaseEditorWidgetInputMode(UWidget* focusWidget
 
 bool AEpisodeEditorController::BeginStaticObstaclePlacement(FName propId)
 {
+	return BeginPalettePlacement(EEpisodePaletteItemType::StaticObstacle, propId);
+}
+
+bool AEpisodeEditorController::BeginPalettePlacement(EEpisodePaletteItemType itemType, FName assetId)
+{
 	bIsLookInputHeld = false;
 	LookCaptureAccumulatedDelta = 0.0;
 	PressedPlaceableComponent.Reset();
@@ -130,14 +134,6 @@ bool AEpisodeEditorController::BeginStaticObstaclePlacement(FName propId)
 
 	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if (!authoringSubsystem) return false;
-	
-	FString failureReason;
-	if (!authoringSubsystem->CanPlaceStaticObstacle(propId, FTransform::Identity, failureReason)
-		&& failureReason.StartsWith(TEXT("Unknown static obstacle prop")))
-	{
-		CurrentPlacementFailureReason = failureReason;
-		return false;
-	}
 
 	UWorld* world = GetWorld();
 	if (!world || !PlacementPreviewActorClass) return false;
@@ -152,13 +148,20 @@ bool AEpisodeEditorController::BeginStaticObstaclePlacement(FName propId)
 			spawnParams);
 	}
 
-	if (!PlacementPreviewActor || !PlacementPreviewActor->ConfigureStaticObstacleProp(propId))
+	SelectedPlacementItemType = itemType;
+	SelectedPlacementAssetId = assetId;
+	SelectedStaticObstaclePropId =
+		itemType == EEpisodePaletteItemType::StaticObstacle ? assetId : NAME_None;
+
+	if (!PlacementPreviewActor || !ConfigurePlacementPreviewForSelectedItem(authoringSubsystem))
 	{
 		DestroyPlacementPreview();
+		SelectedPlacementItemType = EEpisodePaletteItemType::StaticObstacle;
+		SelectedPlacementAssetId = NAME_None;
+		SelectedStaticObstaclePropId = NAME_None;
 		return false;
 	}
 
-	SelectedStaticObstaclePropId = propId;
 	EditorMode = EEpisodeEditorControllerMode::EditPlacement;
 	ApplyInputMode();
 	UpdatePlacementPreview();
@@ -183,20 +186,85 @@ bool AEpisodeEditorController::ConfirmPlacement()
 	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if (!authoringSubsystem) return false;
 
-	FEpisodePlaceableInstanceSpec placedSpec;
-	AEpisodeStaticObstacle* placedActor = nullptr;
-	const bool bPlaced = authoringSubsystem->AddStaticObstacleInternal(
-		SelectedStaticObstaclePropId,
-		CurrentPlacementTransform,
-		placedSpec,
-		placedActor);
+	bool bPlaced = false;
+	FString failureReason;
+	switch (SelectedPlacementItemType)
+	{
+	case EEpisodePaletteItemType::StaticObstacle:
+	{
+		FEpisodePlaceableInstanceSpec placedSpec;
+		AEpisodeStaticObstacle* placedActor = nullptr;
+		bPlaced = authoringSubsystem->AddStaticObstacleInternal(
+			SelectedStaticObstaclePropId,
+			CurrentPlacementTransform,
+			placedSpec,
+			placedActor);
+		if (!bPlaced)
+		{
+			failureReason = TEXT("Static obstacle placement failed.");
+		}
+		break;
+	}
+	case EEpisodePaletteItemType::Pedestrian:
+	{
+		FEpisodeDynamicActorSpec placedSpec;
+		AEpisodePedestrian* placedActor = nullptr;
+		bPlaced = authoringSubsystem->AddPedestrian(
+			SelectedPlacementAssetId,
+			CurrentPlacementTransform,
+			placedSpec,
+			placedActor,
+			failureReason);
+		break;
+	}
+	case EEpisodePaletteItemType::RobotStart:
+	{
+		FEpisodePlaceableInstanceSpec placedSpec;
+		AActor* placedMarker = nullptr;
+		bPlaced = authoringSubsystem->SetRobotStartLocation(
+			SelectedPlacementAssetId,
+			CurrentPlacementTransform,
+			placedSpec,
+			placedMarker,
+			failureReason);
+		break;
+	}
+	case EEpisodePaletteItemType::RobotGoal:
+	{
+		FEpisodePlaceableInstanceSpec placedSpec;
+		AActor* placedMarker = nullptr;
+		bPlaced = authoringSubsystem->SetRobotGoalLocation(
+			CurrentPlacementTransform,
+			placedSpec,
+			placedMarker,
+			failureReason);
+		break;
+	}
+	default:
+		failureReason = TEXT("Unknown palette placement item type.");
+		break;
+	}
 
 	if (bPlaced)
 	{
 		SetObserverMode();
+		return true;
 	}
 
-	return bPlaced;
+	CurrentPlacementFailureReason = failureReason;
+	if (PlacementPreviewActor)
+	{
+		PlacementPreviewActor->SetPlacementValid(false);
+	}
+
+	UE_LOG(
+		LogEpisodeEditorController,
+		Warning,
+		TEXT("Placement failed | Type: %d | AssetId: %s | Reason: %s"),
+		static_cast<int32>(SelectedPlacementItemType),
+		*SelectedPlacementAssetId.ToString(),
+		*CurrentPlacementFailureReason);
+	return false;
 }
 
 void AEpisodeEditorController::GetStaticObstaclePaletteEntries(TArray<FEpisodeStaticObstaclePropEntry>& outEntries) const
@@ -1330,7 +1398,6 @@ void AEpisodeEditorController::UpdatePlacementPreview()
 {
 	if (!PlacementPreviewActor) return;
 
-
 	FHitResult hit;
 	if (!TraceMousePlacement(hit))
 	{
@@ -1350,14 +1417,133 @@ void AEpisodeEditorController::UpdatePlacementPreview()
 	}
 	else
 	{
-		bCurrentPlacementValid = authoringSubsystem->CanPlaceStaticObstacle(
-			SelectedStaticObstaclePropId,
-			CurrentPlacementTransform,
+		bCurrentPlacementValid = ValidatePlacementForSelectedItem(
+			authoringSubsystem,
 			CurrentPlacementFailureReason);
 	}
 
 	PlacementPreviewActor->SetActorTransform(CurrentPlacementTransform);
 	PlacementPreviewActor->SetPlacementValid(bCurrentPlacementValid);
+}
+
+bool AEpisodeEditorController::ConfigurePlacementPreviewForSelectedItem(
+	UEpisodeAuthoringSubsystem* authoringSubsystem)
+{
+	if (!PlacementPreviewActor || !authoringSubsystem)
+	{
+		CurrentPlacementFailureReason = TEXT("Episode authoring subsystem is unavailable.");
+		return false;
+	}
+
+	switch (SelectedPlacementItemType)
+	{
+	case EEpisodePaletteItemType::StaticObstacle:
+	{
+		FString failureReason;
+		if (!authoringSubsystem->CanPlaceStaticObstacle(
+				SelectedStaticObstaclePropId,
+				FTransform::Identity,
+				failureReason)
+			&& failureReason.StartsWith(TEXT("Unknown static obstacle prop")))
+		{
+			CurrentPlacementFailureReason = failureReason;
+			return false;
+		}
+
+		if (!PlacementPreviewActor->ConfigureStaticObstacleProp(SelectedStaticObstaclePropId))
+		{
+			CurrentPlacementFailureReason = FString::Printf(
+				TEXT("Failed to configure static obstacle preview '%s'."),
+				*SelectedStaticObstaclePropId.ToString());
+			return false;
+		}
+		return true;
+	}
+	case EEpisodePaletteItemType::Pedestrian:
+		if (!PlacementPreviewActor->ConfigureActorPreviewClass(authoringSubsystem->PedestrianClass.Get()))
+		{
+			CurrentPlacementFailureReason = TEXT("Failed to configure pedestrian preview.");
+			return false;
+		}
+		return true;
+	case EEpisodePaletteItemType::RobotStart:
+		if (!PlacementPreviewActor->ConfigureActorPreviewClass(authoringSubsystem->StartPointClass))
+		{
+			CurrentPlacementFailureReason = TEXT("Failed to configure robot start preview.");
+			return false;
+		}
+		return true;
+	case EEpisodePaletteItemType::RobotGoal:
+		if (!PlacementPreviewActor->ConfigureActorPreviewClass(authoringSubsystem->GoalPointClass))
+		{
+			CurrentPlacementFailureReason = TEXT("Failed to configure robot goal preview.");
+			return false;
+		}
+		return true;
+	default:
+		CurrentPlacementFailureReason = TEXT("Unknown palette placement item type.");
+		return false;
+	}
+}
+
+bool AEpisodeEditorController::ValidatePlacementForSelectedItem(
+	const UEpisodeAuthoringSubsystem* authoringSubsystem,
+	FString& outFailureReason) const
+{
+	outFailureReason.Reset();
+	if (!authoringSubsystem)
+	{
+		outFailureReason = TEXT("Episode authoring subsystem is unavailable.");
+		return false;
+	}
+
+	switch (SelectedPlacementItemType)
+	{
+	case EEpisodePaletteItemType::StaticObstacle:
+		return authoringSubsystem->CanPlaceStaticObstacle(
+			SelectedStaticObstaclePropId,
+			CurrentPlacementTransform,
+			outFailureReason);
+	case EEpisodePaletteItemType::Pedestrian:
+	case EEpisodePaletteItemType::RobotStart:
+		return authoringSubsystem->CanPlaceEditorGroundActor(
+			CurrentPlacementTransform,
+			outFailureReason);
+	case EEpisodePaletteItemType::RobotGoal:
+		if (!HasAuthoredRobotStart(authoringSubsystem))
+		{
+			outFailureReason = TEXT("Robot start point must be placed before a goal point.");
+			return false;
+		}
+		return authoringSubsystem->CanPlaceEditorGroundActor(
+			CurrentPlacementTransform,
+			outFailureReason);
+	default:
+		outFailureReason = TEXT("Unknown palette placement item type.");
+		return false;
+	}
+}
+
+bool AEpisodeEditorController::HasAuthoredRobotStart(
+	const UEpisodeAuthoringSubsystem* authoringSubsystem) const
+{
+	if (!authoringSubsystem)
+	{
+		return false;
+	}
+
+	const FEpisodeWorldSpec draftWorldSpec = authoringSubsystem->GetDraftWorldSpec();
+	for (const FEpisodePlaceableInstanceSpec& spec : draftWorldSpec.Placeables)
+	{
+		if ((spec.Category == EEpisodeActorCategory::DeliveryBot
+				|| spec.Category == EEpisodeActorCategory::RoadVehicle)
+			&& spec.DeliveryBot.bHasStartLocation)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 bool AEpisodeEditorController::TraceMousePlacement(FHitResult& outHit) const
@@ -1381,11 +1567,11 @@ bool AEpisodeEditorController::TraceMousePlacement(FHitResult& outHit) const
 	}
 	if (UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem())
 	{
-		TArray<AEpisodeStaticObstacle*> authoredStaticObstacleActors;
-		authoringSubsystem->GetAuthoredStaticObstacleActors(authoredStaticObstacleActors);
-		for (const AEpisodeStaticObstacle* authoredStaticObstacleActor : authoredStaticObstacleActors)
+		TArray<AActor*> ignoredActors;
+		authoringSubsystem->GetEditorPlacementIgnoredActors(ignoredActors);
+		for (const AActor* ignoredActor : ignoredActors)
 		{
-			queryParams.AddIgnoredActor(authoredStaticObstacleActor);
+			queryParams.AddIgnoredActor(ignoredActor);
 		}
 	}
 

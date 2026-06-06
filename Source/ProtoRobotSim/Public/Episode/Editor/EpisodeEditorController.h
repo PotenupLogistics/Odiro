@@ -103,6 +103,9 @@ public:
 	bool BeginStaticObstaclePlacement(FName propId);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	bool BeginPalettePlacement(EEpisodePaletteItemType itemType, FName assetId);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
 	void CancelPlacement();
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
@@ -122,6 +125,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Placement")
 	FName GetSelectedStaticObstaclePropId() const { return SelectedStaticObstaclePropId; }
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Placement")
+	EEpisodePaletteItemType GetSelectedPlacementItemType() const { return SelectedPlacementItemType; }
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Placement")
+	FName GetSelectedPlacementAssetId() const { return SelectedPlacementAssetId; }
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
 	void GetStaticObstaclePaletteEntries(TArray<FEpisodeStaticObstaclePropEntry>& outEntries) const;
@@ -181,6 +190,11 @@ private:
 	void AddEditorInputMappingContext();
 	void BindEditorInputActions();
 	void UpdatePlacementPreview();
+	bool ConfigurePlacementPreviewForSelectedItem(UEpisodeAuthoringSubsystem* authoringSubsystem);
+	bool ValidatePlacementForSelectedItem(
+		const UEpisodeAuthoringSubsystem* authoringSubsystem,
+		FString& outFailureReason) const;
+	bool HasAuthoredRobotStart(const UEpisodeAuthoringSubsystem* authoringSubsystem) const;
 	bool TraceMousePlacement(FHitResult& outHit) const;
 	FTransform BuildPlacementTransform(const FVector& location) const;
 	FVector SnapLocationIfNeeded(const FVector& location) const;
@@ -206,6 +220,12 @@ private:
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
 	FName SelectedStaticObstaclePropId;
+
+	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
+	EEpisodePaletteItemType SelectedPlacementItemType = EEpisodePaletteItemType::StaticObstacle;
+
+	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
+	FName SelectedPlacementAssetId;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AEpisodePlacementPreviewActor> PlacementPreviewActor;

@@ -597,6 +597,37 @@ AEpisodePedestrian* UEpisodeSimulationSubsystem::SpawnPedestrian(const FEpisodeD
 	{
 		return SpawnPlannedPedestrian(dynamicActorSpec);
 	}
+	if (movementModel.Equals(TEXT("static_placement"), ESearchCase::IgnoreCase))
+	{
+		UWorld* world = GetWorld();
+		if (!world || dynamicActorSpec.InstanceId.IsEmpty()) return nullptr;
+
+		AEpisodePedestrian* pedestrian = world->SpawnActor<AEpisodePedestrian>(
+			PedestrianClass ? PedestrianClass.Get() : AEpisodePedestrian::StaticClass(),
+			dynamicActorSpec.InitialTransform);
+		if (!pedestrian) return nullptr;
+
+		if (pedestrian->PathFollowerComponent)
+		{
+			pedestrian->PathFollowerComponent->bAutoStart = false;
+			pedestrian->PathFollowerComponent->StopFollowing();
+		}
+		if (pedestrian->PedestrianRuntimeComponent)
+		{
+			pedestrian->PedestrianRuntimeComponent->bAutoStart = false;
+			pedestrian->PedestrianRuntimeComponent->StopFollowing();
+		}
+
+		RuntimeActors.Add(pedestrian);
+		ConfigurePlaceableComponent(
+			pedestrian->PlaceableComponent,
+			dynamicActorSpec.InstanceId,
+			dynamicActorSpec.AssetId,
+			dynamicActorSpec.Category,
+			EEpisodeMobilityMode::Static);
+		RuntimeActorsById.Add(dynamicActorSpec.InstanceId, pedestrian);
+		return pedestrian;
+	}
 
 	const double speedCmPerSecond = GetFloatProperty(dynamicActorSpec.Properties, TEXT("speed_cm_per_second"), 120.0);
 	const double initialDistanceCm = GetFloatProperty(dynamicActorSpec.Properties, TEXT("initial_distance_cm"), 0.0);

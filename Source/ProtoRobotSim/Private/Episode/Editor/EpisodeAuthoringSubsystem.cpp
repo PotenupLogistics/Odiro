@@ -3,7 +3,10 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/World.h"
+#include "Episode/Actors/EpisodePedestrian.h"
 #include "Episode/Actors/EpisodeStaticObstacle.h"
+#include "Episode/Components/EpisodePathFollowerComponent.h"
+#include "Episode/Components/EpisodePedestrianRuntimeComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/EpisodeCompiler.h"
 #include "UObject/ConstructorHelpers.h"
@@ -25,6 +28,22 @@ namespace
 	const FString MovementModelKey(TEXT("movement_model"));
 	const FString PlannedStartCmKey(TEXT("planned_start_cm"));
 	const FString PlannedGoalCmKey(TEXT("planned_goal_cm"));
+
+	FEpisodeParamValue MakeStringParamValue(const FString& value)
+	{
+		FEpisodeParamValue paramValue;
+		paramValue.Type = EEpisodeParamValueType::String;
+		paramValue.StringValue = value;
+		return paramValue;
+	}
+
+	FEpisodeParamValue MakeBoolParamValue(bool value)
+	{
+		FEpisodeParamValue paramValue;
+		paramValue.Type = EEpisodeParamValueType::Bool;
+		paramValue.BoolValue = value;
+		return paramValue;
+	}
 }
 
 UEpisodeAuthoringSubsystem::UEpisodeAuthoringSubsystem()
@@ -39,6 +58,16 @@ UEpisodeAuthoringSubsystem::UEpisodeAuthoringSubsystem()
 	if (goalPointBlueprintClass.Succeeded())
 	{
 		GoalPointClass = goalPointBlueprintClass.Class;
+	}
+
+	static ConstructorHelpers::FClassFinder<AEpisodePedestrian> pedestrianBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_EpisodePedestrian"));
+	if (pedestrianBlueprintClass.Succeeded())
+	{
+		PedestrianClass = pedestrianBlueprintClass.Class;
+	}
+	else
+	{
+		PedestrianClass = AEpisodePedestrian::StaticClass();
 	}
 }
 
@@ -55,6 +84,7 @@ void UEpisodeAuthoringSubsystem::ClearDraft()
 	SourceEpisodeSetupJsonPath.Reset();
 	bDirty = false;
 	NextStaticObstacleIndex = 1;
+	NextPedestrianIndex = 1;
 }
 
 void UEpisodeAuthoringSubsystem::NewDraft()
@@ -164,12 +194,68 @@ void UEpisodeAuthoringSubsystem::GetAuthoredStaticObstacleActors(TArray<AEpisode
 	}
 }
 
+void UEpisodeAuthoringSubsystem::GetEditorPlacementIgnoredActors(TArray<AActor*>& outActors) const
+{
+	outActors.Reset();
+	outActors.Reserve(StaticObstacleActors.Num() + PedestrianActors.Num() + RouteMarkerActors.Num());
+
+	for (const TPair<FString, TObjectPtr<AEpisodeStaticObstacle>>& pair : StaticObstacleActors)
+	{
+		if (AActor* actor = pair.Value.Get())
+		{
+			outActors.Add(actor);
+		}
+	}
+
+	for (const TPair<FString, TObjectPtr<AEpisodePedestrian>>& pair : PedestrianActors)
+	{
+		if (AActor* actor = pair.Value.Get())
+		{
+			outActors.Add(actor);
+		}
+	}
+
+	for (const TObjectPtr<AActor>& markerActor : RouteMarkerActors)
+	{
+		if (AActor* actor = markerActor.Get())
+		{
+			outActors.Add(actor);
+		}
+	}
+}
+
 bool UEpisodeAuthoringSubsystem::CanPlaceStaticObstacle(
 	FName propId,
 	const FTransform& transform,
 	FString& outFailureReason) const
 {
 	return CanPlaceStaticObstacleInternal(propId, transform, FString(), outFailureReason);
+}
+
+bool UEpisodeAuthoringSubsystem::CanPlaceEditorGroundActor(
+	const FTransform& transform,
+	FString& outFailureReason) const
+{
+	outFailureReason.Reset();
+
+	const double locationZ = transform.GetLocation().Z;
+	if (locationZ < -KINDA_SMALL_NUMBER)
+	{
+		outFailureReason = FString::Printf(
+			TEXT("Placement location Z must be 0.00 cm or higher. Current Z: %.2f."),
+			locationZ);
+		return false;
+	}
+	if (locationZ > StaticObstacleGroundZToleranceCm)
+	{
+		outFailureReason = FString::Printf(
+			TEXT("Placement location Z must be %.2f cm or lower. Current Z: %.2f."),
+			StaticObstacleGroundZToleranceCm,
+			locationZ);
+		return false;
+	}
+
+	return true;
 }
 
 bool UEpisodeAuthoringSubsystem::CanUpdateStaticObstacleTransform(
@@ -266,6 +352,168 @@ bool UEpisodeAuthoringSubsystem::AddStaticObstacle(
 {
 	AEpisodeStaticObstacle* spawnedActor = nullptr;
 	return AddStaticObstacleInternal(propId, transform, outSpec, spawnedActor);
+}
+
+bool UEpisodeAuthoringSubsystem::AddPedestrian(
+	FName archetypeId,
+	const FTransform& transform,
+	FEpisodeDynamicActorSpec& outSpec,
+	AEpisodePedestrian*& outActor,
+	FString& outFailureReason)
+{
+	outSpec = FEpisodeDynamicActorSpec();
+	outActor = nullptr;
+	outFailureReason.Reset();
+
+	if (!CanPlaceEditorGroundActor(transform, outFailureReason))
+	{
+		return false;
+	}
+
+	if (DraftWorldSpec.RunConfig.TemplateId.IsEmpty()
+		&& DraftWorldSpec.Placeables.IsEmpty()
+		&& DraftWorldSpec.DynamicActors.IsEmpty()
+		&& DraftWorldSpec.GroundRegions.IsEmpty()
+		&& DraftWorldSpec.Paths.IsEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	const FString instanceId = GeneratePedestrianInstanceId();
+	outSpec = MakePedestrianSpec(instanceId, archetypeId, transform);
+
+	if (!SpawnEditorPedestrianActor(outSpec, outActor, outFailureReason))
+	{
+		return false;
+	}
+
+	DraftWorldSpec.DynamicActors.Add(outSpec);
+	AddPedestrianViewRecord(outSpec, outActor);
+	DraftWorldSpec.SpecHash.Reset();
+	bDirty = true;
+
+	UE_LOG(
+		LogEpisodeAuthoring,
+		Log,
+		TEXT("Added pedestrian | InstanceId: %s | AssetId: %s | Location: %s"),
+		*outSpec.InstanceId,
+		*outSpec.AssetId,
+		*transform.GetLocation().ToCompactString());
+
+	return true;
+}
+
+bool UEpisodeAuthoringSubsystem::SetRobotStartLocation(
+	FName assetId,
+	const FTransform& transform,
+	FEpisodePlaceableInstanceSpec& outSpec,
+	AActor*& outMarker,
+	FString& outFailureReason)
+{
+	outSpec = FEpisodePlaceableInstanceSpec();
+	outMarker = nullptr;
+	outFailureReason.Reset();
+
+	if (!CanPlaceEditorGroundActor(transform, outFailureReason))
+	{
+		return false;
+	}
+
+	if (DraftWorldSpec.RunConfig.TemplateId.IsEmpty()
+		&& DraftWorldSpec.Placeables.IsEmpty()
+		&& DraftWorldSpec.DynamicActors.IsEmpty()
+		&& DraftWorldSpec.GroundRegions.IsEmpty()
+		&& DraftWorldSpec.Paths.IsEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	outMarker = SpawnOrReplaceRouteMarker(RobotStartMarkerActor, StartPointClass, transform, outFailureReason);
+	if (!outMarker)
+	{
+		return false;
+	}
+
+	FEpisodePlaceableInstanceSpec* robotSpec = FindDeliveryBotSpec();
+	if (!robotSpec)
+	{
+		FEpisodePlaceableInstanceSpec newRobotSpec;
+		newRobotSpec.InstanceId = ContainsInstanceId(TEXT("robot_01")) ? FString::Printf(TEXT("robot_%03d"), DraftWorldSpec.Placeables.Num() + 1) : TEXT("robot_01");
+		newRobotSpec.AssetId = assetId.IsNone() ? TEXT("delivery_bot") : assetId.ToString();
+		newRobotSpec.Category = EEpisodeActorCategory::DeliveryBot;
+		newRobotSpec.DeliveryBot.bSpawnOnly = true;
+		DraftWorldSpec.Placeables.Add(newRobotSpec);
+		robotSpec = &DraftWorldSpec.Placeables.Last();
+	}
+
+	robotSpec->Transform = transform;
+	robotSpec->AssetId = assetId.IsNone() ? TEXT("delivery_bot") : assetId.ToString();
+	robotSpec->DeliveryBot.bHasStartLocation = true;
+	robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = transform.GetLocation();
+	if (!robotSpec->DeliveryBot.bHasGoalLocation)
+	{
+		robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = transform.GetLocation();
+	}
+
+	outSpec = *robotSpec;
+	DraftWorldSpec.SpecHash.Reset();
+	bDirty = true;
+
+	UE_LOG(
+		LogEpisodeAuthoring,
+		Log,
+		TEXT("Set robot start | InstanceId: %s | Location: %s"),
+		*robotSpec->InstanceId,
+		*transform.GetLocation().ToCompactString());
+
+	return true;
+}
+
+bool UEpisodeAuthoringSubsystem::SetRobotGoalLocation(
+	const FTransform& transform,
+	FEpisodePlaceableInstanceSpec& outSpec,
+	AActor*& outMarker,
+	FString& outFailureReason)
+{
+	outSpec = FEpisodePlaceableInstanceSpec();
+	outMarker = nullptr;
+	outFailureReason.Reset();
+
+	if (!CanPlaceEditorGroundActor(transform, outFailureReason))
+	{
+		return false;
+	}
+
+	FEpisodePlaceableInstanceSpec* robotSpec = FindDeliveryBotSpec();
+	if (!robotSpec || !robotSpec->DeliveryBot.bHasStartLocation)
+	{
+		outFailureReason = TEXT("Robot start point must be placed before a goal point.");
+		return false;
+	}
+
+	outMarker = SpawnOrReplaceRouteMarker(RobotGoalMarkerActor, GoalPointClass, transform, outFailureReason);
+	if (!outMarker)
+	{
+		return false;
+	}
+
+	robotSpec->DeliveryBot.bSpawnOnly = false;
+	robotSpec->DeliveryBot.bHasGoalLocation = true;
+	robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = transform.GetLocation();
+	robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
+
+	outSpec = *robotSpec;
+	DraftWorldSpec.SpecHash.Reset();
+	bDirty = true;
+
+	UE_LOG(
+		LogEpisodeAuthoring,
+		Log,
+		TEXT("Set robot goal | InstanceId: %s | Location: %s"),
+		*robotSpec->InstanceId,
+		*transform.GetLocation().ToCompactString());
+
+	return true;
 }
 
 bool UEpisodeAuthoringSubsystem::UpdateStaticObstacleTransform(
@@ -626,11 +874,13 @@ bool UEpisodeAuthoringSubsystem::ExportEpisodeSetupJsonString(
 
 		FString movementModel;
 		TryGetStringProperty(dynamicActorSpec.Properties, MovementModelKey, movementModel);
-		if (!movementModel.Equals(TEXT("planned_trajectory"), ESearchCase::IgnoreCase))
+		const bool bPlannedTrajectory = movementModel.Equals(TEXT("planned_trajectory"), ESearchCase::IgnoreCase);
+		const bool bStaticPlacement = movementModel.Equals(TEXT("static_placement"), ESearchCase::IgnoreCase);
+		if (!bPlannedTrajectory && !bStaticPlacement)
 		{
 			pedestrianObject->SetStringField(TEXT("path_id"), dynamicActorSpec.PathId);
 		}
-		else
+		else if (bPlannedTrajectory)
 		{
 			FVector plannedStartCm = dynamicActorSpec.InitialTransform.GetLocation();
 			FVector plannedGoalCm = FVector::ZeroVector;
@@ -1102,6 +1352,18 @@ FString UEpisodeAuthoringSubsystem::GenerateStaticObstacleInstanceId()
 	return instanceId;
 }
 
+FString UEpisodeAuthoringSubsystem::GeneratePedestrianInstanceId()
+{
+	FString instanceId;
+	do
+	{
+		instanceId = FString::Printf(TEXT("ped_%03d"), NextPedestrianIndex++);
+	}
+	while (ContainsInstanceId(instanceId));
+
+	return instanceId;
+}
+
 bool UEpisodeAuthoringSubsystem::ContainsInstanceId(const FString& instanceId) const
 {
 	for (const FEpisodePlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
@@ -1162,10 +1424,22 @@ void UEpisodeAuthoringSubsystem::ClearEditorView()
 		}
 	}
 
+	for (const TPair<FString, TObjectPtr<AEpisodePedestrian>>& pair : PedestrianActors)
+	{
+		if (IsValid(pair.Value))
+		{
+			pair.Value->Destroy();
+		}
+	}
+
 	RouteMarkerActors.Reset();
+	RobotStartMarkerActor = nullptr;
+	RobotGoalMarkerActor = nullptr;
 	StaticObstacleRecords.Reset();
 	StaticObstacleActors.Reset();
+	PedestrianActors.Reset();
 	NextStaticObstacleIndex = 1;
+	NextPedestrianIndex = 1;
 }
 
 bool UEpisodeAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& outDiagnostics)
@@ -1177,7 +1451,10 @@ bool UEpisodeAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& out
 	{
 		if (spec.Category == EEpisodeActorCategory::DeliveryBot || spec.Category == EEpisodeActorCategory::RoadVehicle)
 		{
-			SpawnRobotRouteMarkers(spec, outDiagnostics);
+			if (!SpawnRobotRouteMarkers(spec, outDiagnostics))
+			{
+				bSucceeded = false;
+			}
 			continue;
 		}
 
@@ -1205,48 +1482,96 @@ bool UEpisodeAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& out
 		}
 	}
 
+	for (const FEpisodeDynamicActorSpec& spec : DraftWorldSpec.DynamicActors)
+	{
+		if (spec.Category != EEpisodeActorCategory::Pedestrian)
+		{
+			continue;
+		}
+
+		AEpisodePedestrian* spawnedActor = nullptr;
+		FString failureReason;
+		if (!SpawnEditorPedestrianActor(spec, spawnedActor, failureReason))
+		{
+			outDiagnostics.Add(FString::Printf(
+				TEXT("Failed to create editor view for pedestrian '%s': %s"),
+				*spec.InstanceId,
+				*failureReason));
+			bSucceeded = false;
+			continue;
+		}
+
+		AddPedestrianViewRecord(spec, spawnedActor);
+	}
+
 	return bSucceeded;
 }
 
-void UEpisodeAuthoringSubsystem::SpawnRobotRouteMarkers(
+bool UEpisodeAuthoringSubsystem::SpawnRobotRouteMarkers(
 	const FEpisodePlaceableInstanceSpec& spec,
 	TArray<FString>& outDiagnostics)
 {
 	if (!StartPointClass)
 	{
-		outDiagnostics.Add(TEXT("StartPointClass is not set; robot start marker was not spawned."));
-	}
-	else if (AActor* startMarker = SpawnEditorMarkerActor(StartPointClass, FTransform(spec.Transform)))
-	{
-		RouteMarkerActors.Add(startMarker);
-	}
-	else
-	{
 		outDiagnostics.Add(FString::Printf(
-			TEXT("Failed to spawn robot start marker for '%s'."),
+			TEXT("StartPointClass is not set; robot start marker was not spawned for '%s'."),
 			*spec.InstanceId));
+		return false;
 	}
 
-	if (!spec.DeliveryBot.bHasGoalLocation) return;
+	AActor* startMarker = SpawnEditorMarkerActor(StartPointClass, FTransform(spec.Transform));
+	if (!startMarker)
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("Failed to spawn robot start marker for '%s'."), *spec.InstanceId));
+		return false;
+	}
 
+	RobotStartMarkerActor = startMarker;
+	RouteMarkerActors.Add(startMarker);
+	const auto cleanupStartMarker = [this, startMarker]()
+	{
+		RouteMarkerActors.RemoveAll(
+			[startMarker](const TObjectPtr<AActor>& markerActor)
+			{
+				return !IsValid(markerActor) || markerActor.Get() == startMarker;
+			});
+
+		if (RobotStartMarkerActor.Get() == startMarker)
+		{
+			RobotStartMarkerActor = nullptr;
+		}
+		if (IsValid(startMarker))
+		{
+			startMarker->Destroy();
+		}
+	};
+
+	if (!spec.DeliveryBot.bHasGoalLocation)
+	{
+		return true;
+	}
 
 	if (!GoalPointClass)
 	{
-		outDiagnostics.Add(TEXT("GoalPointClass is not set; robot goal marker was not spawned."));
-		return;
+		outDiagnostics.Add(FString::Printf(
+			TEXT("GoalPointClass is not set; robot goal marker was not spawned for '%s'."),
+			*spec.InstanceId));
+		cleanupStartMarker();
+		return false;
 	}
 
 	const FTransform goalTransform(FRotator::ZeroRotator, spec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm);
-	if (AActor* goalMarker = SpawnEditorMarkerActor(GoalPointClass, goalTransform))
+	AActor* goalMarker = SpawnEditorMarkerActor(GoalPointClass, goalTransform);
+	if (!goalMarker)
 	{
-		RouteMarkerActors.Add(goalMarker);
+		outDiagnostics.Add(FString::Printf(TEXT("Failed to spawn robot goal marker for '%s'."), *spec.InstanceId));
+		cleanupStartMarker();
+		return false;
 	}
-	else
-	{
-		outDiagnostics.Add(FString::Printf(
-			TEXT("Failed to spawn robot goal marker for '%s'."),
-			*spec.InstanceId));
-	}
+
+	RobotGoalMarkerActor = goalMarker;
+	RouteMarkerActors.Add(goalMarker);
+	return true;
 }
 
 AActor* UEpisodeAuthoringSubsystem::SpawnEditorMarkerActor(
@@ -1259,6 +1584,42 @@ AActor* UEpisodeAuthoringSubsystem::SpawnEditorMarkerActor(
 	FActorSpawnParameters spawnParams;
 	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	return world->SpawnActor<AActor>(markerClass, transform, spawnParams);
+}
+
+AActor* UEpisodeAuthoringSubsystem::SpawnOrReplaceRouteMarker(
+	TObjectPtr<AActor>& markerActor,
+	TSubclassOf<AActor> markerClass,
+	const FTransform& transform,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+	if (!markerClass)
+	{
+		outFailureReason = TEXT("Marker actor class is not set.");
+		return nullptr;
+	}
+
+	AActor* spawnedMarker = SpawnEditorMarkerActor(markerClass, transform);
+	if (!spawnedMarker)
+	{
+		outFailureReason = TEXT("Failed to spawn marker actor.");
+		return nullptr;
+	}
+
+	RouteMarkerActors.RemoveAll(
+		[&markerActor](const TObjectPtr<AActor>& existingMarker)
+		{
+			return !IsValid(existingMarker) || existingMarker.Get() == markerActor.Get();
+		});
+
+	if (IsValid(markerActor))
+	{
+		markerActor->Destroy();
+	}
+
+	markerActor = spawnedMarker;
+	RouteMarkerActors.Add(markerActor);
+	return markerActor.Get();
 }
 
 bool UEpisodeAuthoringSubsystem::SpawnEditorStaticObstacleActor(
@@ -1319,6 +1680,69 @@ bool UEpisodeAuthoringSubsystem::SpawnEditorStaticObstacleActor(
 	return true;
 }
 
+bool UEpisodeAuthoringSubsystem::SpawnEditorPedestrianActor(
+	const FEpisodeDynamicActorSpec& spec,
+	AEpisodePedestrian*& outActor,
+	FString& outFailureReason)
+{
+	outActor = nullptr;
+	outFailureReason.Reset();
+
+	UWorld* world = GetWorld();
+	if (!world)
+	{
+		outFailureReason = TEXT("World is unavailable.");
+		return false;
+	}
+
+	if (spec.InstanceId.IsEmpty())
+	{
+		outFailureReason = TEXT("InstanceId is empty.");
+		return false;
+	}
+
+	TSubclassOf<AEpisodePedestrian> spawnClass = PedestrianClass;
+	if (!spawnClass)
+	{
+		spawnClass = AEpisodePedestrian::StaticClass();
+	}
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AEpisodePedestrian* pedestrian = world->SpawnActor<AEpisodePedestrian>(
+		spawnClass,
+		spec.InitialTransform,
+		spawnParams);
+	if (!pedestrian)
+	{
+		outFailureReason = TEXT("SpawnActor failed.");
+		return false;
+	}
+
+	if (pedestrian->PlaceableComponent)
+	{
+		pedestrian->PlaceableComponent->InstanceId = spec.InstanceId;
+		pedestrian->PlaceableComponent->AssetId = spec.AssetId;
+		pedestrian->PlaceableComponent->Category = EEpisodeActorCategory::Pedestrian;
+		pedestrian->PlaceableComponent->MobilityMode = EEpisodeMobilityMode::Static;
+		pedestrian->PlaceableComponent->bAuthoringSelectable = false;
+	}
+	if (pedestrian->PathFollowerComponent)
+	{
+		pedestrian->PathFollowerComponent->bAutoStart = false;
+		pedestrian->PathFollowerComponent->StopFollowing();
+	}
+	if (pedestrian->PedestrianRuntimeComponent)
+	{
+		pedestrian->PedestrianRuntimeComponent->bAutoStart = false;
+		pedestrian->PedestrianRuntimeComponent->StopFollowing();
+	}
+
+	outActor = pedestrian;
+	return true;
+}
+
 void UEpisodeAuthoringSubsystem::AddStaticObstacleViewRecord(
 	const FEpisodePlaceableInstanceSpec& spec,
 	const FEpisodeStaticObstaclePropEntry& propEntry,
@@ -1335,6 +1759,16 @@ void UEpisodeAuthoringSubsystem::AddStaticObstacleViewRecord(
 	StaticObstacleActors.Add(spec.InstanceId, actor);
 }
 
+void UEpisodeAuthoringSubsystem::AddPedestrianViewRecord(const FEpisodeDynamicActorSpec& spec, AEpisodePedestrian* actor)
+{
+	if (!actor || spec.InstanceId.IsEmpty())
+	{
+		return;
+	}
+
+	PedestrianActors.Add(spec.InstanceId, actor);
+}
+
 FEpisodePlaceableInstanceSpec UEpisodeAuthoringSubsystem::MakeStaticObstacleSpec(
 	const FString& instanceId,
 	FName propId,
@@ -1346,6 +1780,47 @@ FEpisodePlaceableInstanceSpec UEpisodeAuthoringSubsystem::MakeStaticObstacleSpec
 	spec.Category = EEpisodeActorCategory::StaticObstacle;
 	spec.Transform = transform;
 	return spec;
+}
+
+FEpisodeDynamicActorSpec UEpisodeAuthoringSubsystem::MakePedestrianSpec(
+	const FString& instanceId,
+	FName archetypeId,
+	const FTransform& transform) const
+{
+	FEpisodeDynamicActorSpec spec;
+	spec.InstanceId = instanceId;
+	spec.AssetId = archetypeId.IsNone() ? TEXT("adult_pedestrian") : archetypeId.ToString();
+	spec.Category = EEpisodeActorCategory::Pedestrian;
+	spec.InitialTransform = transform;
+	spec.Properties.Add(MovementModelKey, MakeStringParamValue(TEXT("static_placement")));
+	spec.Properties.Add(AutoStartKey, MakeBoolParamValue(false));
+	return spec;
+}
+
+FEpisodePlaceableInstanceSpec* UEpisodeAuthoringSubsystem::FindDeliveryBotSpec()
+{
+	for (FEpisodePlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
+	{
+		if (spec.Category == EEpisodeActorCategory::DeliveryBot || spec.Category == EEpisodeActorCategory::RoadVehicle)
+		{
+			return &spec;
+		}
+	}
+
+	return nullptr;
+}
+
+const FEpisodePlaceableInstanceSpec* UEpisodeAuthoringSubsystem::FindDeliveryBotSpec() const
+{
+	for (const FEpisodePlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
+	{
+		if (spec.Category == EEpisodeActorCategory::DeliveryBot || spec.Category == EEpisodeActorCategory::RoadVehicle)
+		{
+			return &spec;
+		}
+	}
+
+	return nullptr;
 }
 
 FEpisodePlaceableInstanceSpec* UEpisodeAuthoringSubsystem::FindStaticObstacleSpecByInstanceId(

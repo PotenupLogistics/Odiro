@@ -40,6 +40,36 @@ enum class EEpisodeTransformGizmoMode : uint8
 	Scale
 };
 
+UENUM(BlueprintType)
+enum class EEpisodePaletteItemType : uint8
+{
+	StaticObstacle,
+	Pedestrian,
+	RobotStart,
+	RobotGoal
+};
+
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodePaletteItemEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	EEpisodePaletteItemType ItemType = EEpisodePaletteItemType::StaticObstacle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	FName AssetId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	FText CategoryText;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	FString IconName;
+};
+
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FEpisodeAuthoringStaticObstacleRecord
 {

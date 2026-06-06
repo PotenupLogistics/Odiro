@@ -2,7 +2,6 @@
 
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
-#include "Components/TextBlock.h"
 #include "Episode/Editor/EpisodeEditorController.h"
 #include "Episode/Widget/EpisodeAssetPaletteWidget.h"
 #include "GameFramework/PlayerController.h"
@@ -43,12 +42,12 @@ void UEpisodeEditorEntryWidget::StartNewEpisode()
 	AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer());
 	if (!editorController)
 	{
-		SetDiagnosticsText(TEXT("Owning player is not an EpisodeEditorController."));
+		UE_LOG(LogEpisodeEditorEntryWidget, Warning, TEXT("Owning player is not an EpisodeEditorController."));
 		return;
 	}
 
 	editorController->NewEpisodeDraft();
-	SetDiagnosticsText(TEXT("New episode draft created."));
+	UE_LOG(LogEpisodeEditorEntryWidget, Log, TEXT("New episode draft created."));
 	FinishSuccessfulStart(false);
 }
 
@@ -56,36 +55,35 @@ bool UEpisodeEditorEntryWidget::LoadEpisodeFromPathTextBox()
 {
 	if (!EpisodeSetupJsonPathTextBox)
 	{
-		SetDiagnosticsText(TEXT("EpisodeSetupJsonPathTextBox is not bound."));
+		UE_LOG(LogEpisodeEditorEntryWidget, Warning, TEXT("EpisodeSetupJsonPathTextBox is not bound."));
 		return false;
 	}
 
 	const FString jsonFilePath = EpisodeSetupJsonPathTextBox->GetText().ToString();
 	if (jsonFilePath.IsEmpty())
 	{
-		SetDiagnosticsText(TEXT("EpisodeSetup JSON path is empty."));
+		UE_LOG(LogEpisodeEditorEntryWidget, Warning, TEXT("EpisodeSetup JSON path is empty."));
 		return false;
 	}
 
 	AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer());
 	if (!editorController)
 	{
-		SetDiagnosticsText(TEXT("Owning player is not an EpisodeEditorController."));
+		UE_LOG(LogEpisodeEditorEntryWidget, Warning, TEXT("Owning player is not an EpisodeEditorController."));
 		return false;
 	}
 
 	FString resolvedJsonFilePath;
-	TArray<FString> diagnostics;
+	TArray<FString> loadMessages;
 	UE_LOG(LogEpisodeEditorEntryWidget, Log, TEXT("EpisodeSetup JSON load requested | Input: %s"), *jsonFilePath);
 
-	const bool bLoaded = editorController->LoadEpisodeSetupJsonFile(jsonFilePath, resolvedJsonFilePath, diagnostics);
-	if (diagnostics.IsEmpty())
+	const bool bLoaded = editorController->LoadEpisodeSetupJsonFile(jsonFilePath, resolvedJsonFilePath, loadMessages);
+	if (loadMessages.IsEmpty())
 	{
-		diagnostics.Add(bLoaded
+		loadMessages.Add(bLoaded
 			? FString::Printf(TEXT("Loaded EpisodeSetup JSON: %s"), *resolvedJsonFilePath)
 			: TEXT("EpisodeSetup JSON load failed."));
 	}
-	SetDiagnosticsFromLines(diagnostics);
 
 	if (bLoaded)
 	{
@@ -105,9 +103,9 @@ bool UEpisodeEditorEntryWidget::LoadEpisodeFromPathTextBox()
 			*jsonFilePath,
 			*resolvedJsonFilePath);
 	}
-	for (const FString& diagnostic : diagnostics)
+	for (const FString& loadMessage : loadMessages)
 	{
-		UE_LOG(LogEpisodeEditorEntryWidget, Log, TEXT("EpisodeSetup JSON load diagnostic | %s"), *diagnostic);
+		UE_LOG(LogEpisodeEditorEntryWidget, Log, TEXT("EpisodeSetup JSON load message | %s"), *loadMessage);
 	}
 
 	if (bLoaded)
@@ -116,19 +114,6 @@ bool UEpisodeEditorEntryWidget::LoadEpisodeFromPathTextBox()
 	}
 
 	return bLoaded;
-}
-
-void UEpisodeEditorEntryWidget::SetDiagnosticsFromLines(const TArray<FString>& diagnostics)
-{
-	SetDiagnosticsText(FString::Join(diagnostics, TEXT("\n")));
-}
-
-void UEpisodeEditorEntryWidget::SetDiagnosticsText(const FString& diagnostics)
-{
-	if (DiagnosticsTextBlock)
-	{
-		DiagnosticsTextBlock->SetText(FText::FromString(diagnostics));
-	}
 }
 
 UEpisodeAssetPaletteWidget* UEpisodeEditorEntryWidget::ShowAssetPaletteWidget()
@@ -146,7 +131,6 @@ UEpisodeAssetPaletteWidget* UEpisodeEditorEntryWidget::ShowAssetPaletteWidget()
 
 	if (!AssetPaletteWidgetClass)
 	{
-		SetDiagnosticsText(TEXT("AssetPaletteWidgetClass is not set."));
 		UE_LOG(LogEpisodeEditorEntryWidget, Warning, TEXT("AssetPaletteWidgetClass is not set."));
 		return nullptr;
 	}
@@ -154,7 +138,6 @@ UEpisodeAssetPaletteWidget* UEpisodeEditorEntryWidget::ShowAssetPaletteWidget()
 	APlayerController* owningPlayer = GetOwningPlayer();
 	if (!owningPlayer)
 	{
-		SetDiagnosticsText(TEXT("Owning player is unavailable."));
 		UE_LOG(LogEpisodeEditorEntryWidget, Warning, TEXT("Owning player is unavailable."));
 		return nullptr;
 	}
@@ -162,7 +145,6 @@ UEpisodeAssetPaletteWidget* UEpisodeEditorEntryWidget::ShowAssetPaletteWidget()
 	AssetPaletteWidget = CreateWidget<UEpisodeAssetPaletteWidget>(owningPlayer, AssetPaletteWidgetClass);
 	if (!AssetPaletteWidget)
 	{
-		SetDiagnosticsText(TEXT("Failed to create AssetPaletteWidget."));
 		UE_LOG(LogEpisodeEditorEntryWidget, Warning, TEXT("Failed to create AssetPaletteWidget."));
 		return nullptr;
 	}

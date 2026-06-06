@@ -2,10 +2,11 @@
 
 #include "Components/HorizontalBox.h"
 #include "Components/ScrollBox.h"
-#include "Components/TextBlock.h"
 #include "Episode/Editor/EpisodeEditorController.h"
 #include "Episode/Widget/EpisodePlaceablePaletteItemWidget.h"
 #include "Shared/EpisodeCoreTypes.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogEpisodeAssetPaletteWidget, Log, All);
 
 void UEpisodeAssetPaletteWidget::NativeConstruct()
 {
@@ -35,20 +36,20 @@ bool UEpisodeAssetPaletteWidget::RebuildPalette()
 
 	if (!PlaceableItemContainer)
 	{
-		SetDiagnostics(TEXT("PlaceableItemContainer is not bound."));
+		UE_LOG(LogEpisodeAssetPaletteWidget, Warning, TEXT("PlaceableItemContainer is not bound."));
 		return false;
 	}
 
 	if (!PlaceableItemWidgetClass)
 	{
-		SetDiagnostics(TEXT("PlaceableItemWidgetClass is not set."));
+		UE_LOG(LogEpisodeAssetPaletteWidget, Warning, TEXT("PlaceableItemWidgetClass is not set."));
 		return false;
 	}
 
 	AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer());
 	if (!editorController)
 	{
-		SetDiagnostics(TEXT("Owning player is not an EpisodeEditorController."));
+		UE_LOG(LogEpisodeAssetPaletteWidget, Warning, TEXT("Owning player is not an EpisodeEditorController."));
 		return false;
 	}
 
@@ -67,7 +68,7 @@ bool UEpisodeAssetPaletteWidget::RebuildPalette()
 		PlaceableItemContainer->AddChildToHorizontalBox(itemWidget);
 	}
 
-	SetDiagnostics(FString::Printf(TEXT("Loaded %d placeable assets."), paletteEntries.Num()));
+	UE_LOG(LogEpisodeAssetPaletteWidget, Log, TEXT("Loaded %d placeable assets."), paletteEntries.Num());
 	return true;
 }
 
@@ -84,25 +85,17 @@ void UEpisodeAssetPaletteWidget::HandlePaletteItemSelected(FName propId)
 	AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer());
 	if (!editorController)
 	{
-		SetDiagnostics(TEXT("Owning player is not an EpisodeEditorController."));
+		UE_LOG(LogEpisodeAssetPaletteWidget, Warning, TEXT("Owning player is not an EpisodeEditorController."));
 		return;
 	}
 
 	if (!editorController->BeginStaticObstaclePlacement(propId))
 	{
-		SetDiagnostics(FString::Printf(TEXT("Failed to begin placement for '%s'."), *propId.ToString()));
+		UE_LOG(LogEpisodeAssetPaletteWidget, Warning, TEXT("Failed to begin placement for '%s'."), *propId.ToString());
 		return;
 	}
 
-	SetDiagnostics(FString::Printf(TEXT("Placement selected: %s"), *propId.ToString()));
-}
-
-void UEpisodeAssetPaletteWidget::SetDiagnostics(const FString& message)
-{
-	if (DiagnosticsTextBlock)
-	{
-		DiagnosticsTextBlock->SetText(FText::FromString(message));
-	}
+	UE_LOG(LogEpisodeAssetPaletteWidget, Log, TEXT("Placement selected: %s"), *propId.ToString());
 }
 
 void UEpisodeAssetPaletteWidget::RequestEditorWidgetInputMode()

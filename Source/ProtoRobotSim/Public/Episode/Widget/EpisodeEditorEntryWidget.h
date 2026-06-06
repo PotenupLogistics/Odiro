@@ -6,7 +6,6 @@
 
 class UButton;
 class UEditableTextBox;
-class UTextBlock;
 class UEpisodeAssetPaletteWidget;
 
 UCLASS(BlueprintType, Blueprintable)
@@ -40,20 +39,11 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Entry")
 	TObjectPtr<UEditableTextBox> EpisodeSetupJsonPathTextBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Entry")
-	TObjectPtr<UTextBlock> DiagnosticsTextBlock;
-
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Entry")
 	void StartNewEpisode();
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Entry")
 	bool LoadEpisodeFromPathTextBox();
-
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Entry")
-	void SetDiagnosticsFromLines(const TArray<FString>& diagnostics);
-
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Entry")
-	void SetDiagnosticsText(const FString& diagnostics);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Entry")
 	UEpisodeAssetPaletteWidget* ShowAssetPaletteWidget();

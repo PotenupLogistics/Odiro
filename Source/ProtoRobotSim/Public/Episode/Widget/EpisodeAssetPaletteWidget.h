@@ -7,7 +7,6 @@
 class UHorizontalBox;
 class UScrollBox;
 class USizeBox;
-class UTextBlock;
 class UEpisodePlaceablePaletteItemWidget;
 
 UCLASS(BlueprintType, Blueprintable)
@@ -34,9 +33,6 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
 	TObjectPtr<UHorizontalBox> PlaceableItemContainer;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
-	TObjectPtr<UTextBlock> DiagnosticsTextBlock;
-
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
 	bool RebuildPalette();
 
@@ -47,7 +43,6 @@ protected:
 	UFUNCTION()
 	void HandlePaletteItemSelected(FName propId);
 
-	void SetDiagnostics(const FString& message);
 	void RequestEditorWidgetInputMode();
 	void ReleaseEditorWidgetInputMode();
 };

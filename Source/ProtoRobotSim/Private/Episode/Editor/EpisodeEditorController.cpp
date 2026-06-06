@@ -1,7 +1,5 @@
 
 #include "Episode/Editor/EpisodeEditorController.h"
-#include "Engine/LocalPlayer.h"
-#include "Engine/World.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Episode/Editor/EpisodeAuthoringSubsystem.h"
@@ -9,10 +7,8 @@
 #include "Episode/Editor/EpisodePlacementPreviewActor.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
-#include "InputCoreTypes.h"
 #include "InputMappingContext.h"
 #include "Components/Widget.h"
-#include "Widgets/SWidget.h"
 
 AEpisodeEditorController::AEpisodeEditorController()
 {
@@ -300,13 +296,6 @@ void AEpisodeEditorController::HandleEditorLookAction(const FInputActionValue& i
 
 	switch (inputActionValue.GetValueType())
 	{
-	case EInputActionValueType::Axis3D:
-	{
-		const FVector lookValue = inputActionValue.Get<FVector>();
-		yawValue = lookValue.X;
-		pitchValue = lookValue.Y;
-		break;
-	}
 	case EInputActionValueType::Axis2D:
 	{
 		const FVector2D lookValue = inputActionValue.Get<FVector2D>();
@@ -388,10 +377,8 @@ void AEpisodeEditorController::BindEditorInputActions()
 
 void AEpisodeEditorController::UpdatePlacementPreview()
 {
-	if (!PlacementPreviewActor)
-	{
-		return;
-	}
+	if (!PlacementPreviewActor) return;
+
 
 	FHitResult hit;
 	if (!TraceMousePlacement(hit))
@@ -426,10 +413,7 @@ bool AEpisodeEditorController::TraceMousePlacement(FHitResult& outHit) const
 {
 	FVector worldOrigin = FVector::ZeroVector;
 	FVector worldDirection = FVector::ForwardVector;
-	if (!DeprojectMousePositionToWorld(worldOrigin, worldDirection))
-	{
-		return false;
-	}
+	if (!DeprojectMousePositionToWorld(worldOrigin, worldDirection)) return false;
 
 	UWorld* world = GetWorld();
 	if (!world) return false;

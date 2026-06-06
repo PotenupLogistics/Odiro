@@ -7,6 +7,7 @@
 #include "Episode/Editor/EpisodeAuthoringSubsystem.h"
 #include "Episode/Editor/EpisodeEditorPawn.h"
 #include "Episode/Editor/EpisodePlacementPreviewActor.h"
+#include "Episode/Editor/EpisodeTransformGizmoActor.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/IConsoleManager.h"
 #include "Camera/CameraComponent.h"
@@ -16,6 +17,8 @@
 #include "Materials/MaterialInterface.h"
 #include "Components/Widget.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogEpisodeEditorController, Log, All);
+
 AEpisodeEditorController::AEpisodeEditorController()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -23,11 +26,15 @@ AEpisodeEditorController::AEpisodeEditorController()
 	bEnableClickEvents = false;
 	bEnableMouseOverEvents = false;
 	PlacementPreviewActorClass = AEpisodePlacementPreviewActor::StaticClass();
+	TransformGizmoActorClass = AEpisodeTransformGizmoActor::StaticClass();
 	EditorInputMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Editor.IMC_Editor")));
 	EditorMoveAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorMove.IA_EditorMove")));
 	EditorLookAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorLook.IA_EditorLook")));
 	EditorSelectionAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_Selection.IA_Selection")));
 	EditorDeselectionAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_Deselection.IA_Deselection")));
+	EditorTranslateAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorTranslate.IA_EditorTranslate")));
+	EditorRotateAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorRotate.IA_EditorRotate")));
+	EditorScaleAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorScale.IA_EditorScale")));
 }
 
 void AEpisodeEditorController::BeginPlay()
@@ -45,7 +52,19 @@ void AEpisodeEditorController::Tick(float deltaSeconds)
 	switch (EditorMode)
 	{
 	case EEpisodeEditorControllerMode::Observer:
-		UpdateHoveredPlaceable();
+		if (bIsTransformGizmoDragging)
+		{
+			UpdateTransformGizmoDrag();
+			SetHoveredPlaceable(nullptr);
+		}
+		else if (UpdateHoveredTransformGizmo())
+		{
+			SetHoveredPlaceable(nullptr);
+		}
+		else
+		{
+			UpdateHoveredPlaceable();
+		}
 		break;
 	case EEpisodeEditorControllerMode::EditPlacement:
 		UpdatePlacementPreview();
@@ -70,6 +89,7 @@ void AEpisodeEditorController::SetObserverMode()
 	bIsLookInputHeld = false;
 	LookCaptureAccumulatedDelta = 0.0;
 	PressedPlaceableComponent.Reset();
+	ResetTransformGizmoDrag();
 	SetHoveredPlaceable(nullptr);
 	SetSelectedPlaceable(nullptr);
 	DestroyPlacementPreview();
@@ -102,6 +122,7 @@ bool AEpisodeEditorController::BeginStaticObstaclePlacement(FName propId)
 	bIsLookInputHeld = false;
 	LookCaptureAccumulatedDelta = 0.0;
 	PressedPlaceableComponent.Reset();
+	ResetTransformGizmoDrag();
 	SetHoveredPlaceable(nullptr);
 	SetSelectedPlaceable(nullptr);
 
@@ -263,6 +284,15 @@ void AEpisodeEditorController::HandleSelectionStartedInput()
 			return;
 		}
 
+		EEpisodeTransformGizmoHandle gizmoHandle = EEpisodeTransformGizmoHandle::None;
+		FHitResult gizmoHit;
+		if (TraceMouseTransformGizmo(gizmoHandle, gizmoHit)
+			&& gizmoHandle != EEpisodeTransformGizmoHandle::None)
+		{
+			BeginTransformGizmoDrag(gizmoHandle, gizmoHit);
+			return;
+		}
+
 		PressedPlaceableComponent = HoveredPlaceableComponent;
 		BeginLookInputCapture();
 	}
@@ -270,6 +300,12 @@ void AEpisodeEditorController::HandleSelectionStartedInput()
 
 void AEpisodeEditorController::HandleSelectionCompletedInput()
 {
+	if (bIsTransformGizmoDragging)
+	{
+		EndTransformGizmoDrag();
+		return;
+	}
+
 	const bool bShouldSelectPressedPlaceable =
 		EditorMode == EEpisodeEditorControllerMode::Observer
 		&& bIsLookInputHeld
@@ -289,6 +325,12 @@ void AEpisodeEditorController::HandleCancelPlacementInput()
 {
 	if (EditorMode == EEpisodeEditorControllerMode::Observer)
 	{
+		if (bIsTransformGizmoDragging)
+		{
+			EndTransformGizmoDrag();
+			return;
+		}
+
 		SetSelectedPlaceable(nullptr);
 		return;
 	}
@@ -296,9 +338,28 @@ void AEpisodeEditorController::HandleCancelPlacementInput()
 	CancelPlacement();
 }
 
+void AEpisodeEditorController::HandleTranslateModeInput()
+{
+	SetTransformGizmoMode(EEpisodeTransformGizmoMode::Translate);
+}
+
+void AEpisodeEditorController::HandleRotateModeInput()
+{
+	SetTransformGizmoMode(EEpisodeTransformGizmoMode::Rotate);
+}
+
+void AEpisodeEditorController::HandleScaleModeInput()
+{
+	SetTransformGizmoMode(EEpisodeTransformGizmoMode::Scale);
+}
+
 void AEpisodeEditorController::HandleEditorMoveAction(const FInputActionValue& inputActionValue)
 {
 	if (EditorMode != EEpisodeEditorControllerMode::Observer)
+	{
+		return;
+	}
+	if (bIsTransformGizmoDragging)
 	{
 		return;
 	}
@@ -421,6 +482,482 @@ void AEpisodeEditorController::UpdateHoveredPlaceable()
 	}
 }
 
+bool AEpisodeEditorController::UpdateHoveredTransformGizmo()
+{
+	if (!IsValid(TransformGizmoActor))
+	{
+		return false;
+	}
+
+	if (bIsTransformGizmoDragging || bIsLookInputHeld || IsCursorOverEditorWidgetInputModeFocus())
+	{
+		TransformGizmoActor->SetHoveredHandle(EEpisodeTransformGizmoHandle::None);
+		return false;
+	}
+
+	EEpisodeTransformGizmoHandle hoveredHandle = EEpisodeTransformGizmoHandle::None;
+	FHitResult hit;
+	const bool bHitGizmo = TraceMouseTransformGizmo(hoveredHandle, hit);
+	TransformGizmoActor->SetHoveredHandle(hoveredHandle);
+	return bHitGizmo && hoveredHandle != EEpisodeTransformGizmoHandle::None;
+}
+
+bool AEpisodeEditorController::TraceMouseTransformGizmo(
+	EEpisodeTransformGizmoHandle& outHandle,
+	FHitResult& outHit) const
+{
+	outHandle = EEpisodeTransformGizmoHandle::None;
+
+	if (!IsValid(TransformGizmoActor) || TransformGizmoActor->IsHidden())
+	{
+		return false;
+	}
+
+	FVector worldOrigin = FVector::ZeroVector;
+	FVector worldDirection = FVector::ForwardVector;
+	if (!DeprojectMousePositionToWorld(worldOrigin, worldDirection)) return false;
+
+	UWorld* world = GetWorld();
+	if (!world) return false;
+
+	FCollisionQueryParams queryParams(SCENE_QUERY_STAT(EpisodeEditorTransformGizmoTrace), true);
+	queryParams.bReturnPhysicalMaterial = false;
+	if (PlacementPreviewActor)
+	{
+		queryParams.AddIgnoredActor(PlacementPreviewActor);
+	}
+	if (const APawn* pawn = GetPawn())
+	{
+		queryParams.AddIgnoredActor(pawn);
+	}
+
+	const FVector traceEnd = worldOrigin + worldDirection.GetSafeNormal() * PlacementTraceDistanceCm;
+	TArray<FHitResult> hits;
+	if (!world->LineTraceMultiByChannel(
+		hits,
+		worldOrigin,
+		traceEnd,
+		PlacementTraceChannel,
+		queryParams))
+	{
+		return false;
+	}
+
+	for (const FHitResult& hit : hits)
+	{
+		if (hit.GetActor() != TransformGizmoActor)
+		{
+			continue;
+		}
+
+		const EEpisodeTransformGizmoHandle handle =
+			TransformGizmoActor->GetHandleForComponent(hit.GetComponent());
+		if (handle == EEpisodeTransformGizmoHandle::None
+			|| !TransformGizmoActor->IsHandleEnabled(handle))
+		{
+			continue;
+		}
+
+		outHit = hit;
+		outHandle = handle;
+		return true;
+	}
+
+	return false;
+}
+
+bool AEpisodeEditorController::BeginTransformGizmoDrag(
+	EEpisodeTransformGizmoHandle handle,
+	const FHitResult& hit)
+{
+	if (handle == EEpisodeTransformGizmoHandle::None)
+	{
+		return false;
+	}
+	if (!IsValid(TransformGizmoActor) || !TransformGizmoActor->IsHandleEnabled(handle))
+	{
+		return false;
+	}
+
+	UEpisodePlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
+	if (!IsEditorSelectablePlaceable(selectedPlaceable) || selectedPlaceable->InstanceId.IsEmpty())
+	{
+		return false;
+	}
+
+	AActor* selectedActor = selectedPlaceable->GetOwner();
+	if (!selectedActor)
+	{
+		return false;
+	}
+
+	bIsLookInputHeld = false;
+	LookCaptureAccumulatedDelta = 0.0;
+	PressedPlaceableComponent.Reset();
+	SetHoveredPlaceable(nullptr);
+
+	DraggedPlaceableComponent = selectedPlaceable;
+	ActiveTransformGizmoHandle = handle;
+	ActiveTransformGizmoInstanceId = selectedPlaceable->InstanceId;
+	TransformGizmoDragStartTransform = selectedActor->GetActorTransform();
+	LastTransformGizmoDragFailureReason.Reset();
+
+	const FVector startLocation = TransformGizmoDragStartTransform.GetLocation();
+	const FVector startXAxis = TransformGizmoDragStartTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
+	const FVector startYAxis = TransformGizmoDragStartTransform.GetUnitAxis(EAxis::Y).GetSafeNormal();
+	const FVector startZAxis = TransformGizmoDragStartTransform.GetUnitAxis(EAxis::Z).GetSafeNormal();
+
+	auto buildCameraFacingAxisPlaneNormal = [this](const FVector& axis)
+	{
+		FVector worldOrigin = FVector::ZeroVector;
+		FVector worldDirection = FVector::ForwardVector;
+		if (!DeprojectMousePositionToWorld(worldOrigin, worldDirection))
+		{
+			worldDirection = FVector::ForwardVector;
+		}
+
+		const FVector safeAxis = axis.GetSafeNormal();
+		FVector planeNormal = FVector::CrossProduct(safeAxis, FVector::CrossProduct(worldDirection.GetSafeNormal(), safeAxis));
+		if (!planeNormal.Normalize())
+		{
+			planeNormal = FVector::CrossProduct(safeAxis, FVector::UpVector);
+			if (!planeNormal.Normalize())
+			{
+				planeNormal = FVector::CrossProduct(safeAxis, FVector::RightVector);
+				planeNormal.Normalize();
+			}
+		}
+		return planeNormal;
+	};
+
+	TransformGizmoDragAxis = FVector::ForwardVector;
+	TransformGizmoDragPlaneNormal = FVector::UpVector;
+	if (handle == EEpisodeTransformGizmoHandle::TranslateX || handle == EEpisodeTransformGizmoHandle::ScaleX)
+	{
+		TransformGizmoDragAxis = startXAxis;
+	}
+	else if (handle == EEpisodeTransformGizmoHandle::TranslateY || handle == EEpisodeTransformGizmoHandle::ScaleY)
+	{
+		TransformGizmoDragAxis = startYAxis;
+	}
+	else if (handle == EEpisodeTransformGizmoHandle::TranslateZ || handle == EEpisodeTransformGizmoHandle::ScaleZ)
+	{
+		TransformGizmoDragAxis = startZAxis;
+		TransformGizmoDragPlaneNormal = buildCameraFacingAxisPlaneNormal(TransformGizmoDragAxis);
+	}
+	else if (handle == EEpisodeTransformGizmoHandle::TranslateXY || handle == EEpisodeTransformGizmoHandle::ScaleXY)
+	{
+		TransformGizmoDragPlaneNormal = startZAxis;
+	}
+	else if (handle == EEpisodeTransformGizmoHandle::TranslateXZ || handle == EEpisodeTransformGizmoHandle::ScaleXZ)
+	{
+		TransformGizmoDragPlaneNormal = startYAxis;
+	}
+	else if (handle == EEpisodeTransformGizmoHandle::TranslateYZ || handle == EEpisodeTransformGizmoHandle::ScaleYZ)
+	{
+		TransformGizmoDragPlaneNormal = startXAxis;
+	}
+	else if (handle == EEpisodeTransformGizmoHandle::RotateX)
+	{
+		TransformGizmoDragAxis = startXAxis;
+		TransformGizmoDragPlaneNormal = startXAxis;
+	}
+	else if (handle == EEpisodeTransformGizmoHandle::RotateY)
+	{
+		TransformGizmoDragAxis = startYAxis;
+		TransformGizmoDragPlaneNormal = startYAxis;
+	}
+	else if (handle == EEpisodeTransformGizmoHandle::RotateZ)
+	{
+		TransformGizmoDragAxis = startZAxis;
+		TransformGizmoDragPlaneNormal = startZAxis;
+	}
+
+	if ((handle == EEpisodeTransformGizmoHandle::TranslateX || handle == EEpisodeTransformGizmoHandle::TranslateY)
+		&& !TransformGizmoDragAxis.IsNearlyZero())
+	{
+		TransformGizmoDragAxis.Z = 0.0;
+		if (!TransformGizmoDragAxis.Normalize())
+		{
+			TransformGizmoDragAxis = handle == EEpisodeTransformGizmoHandle::TranslateX
+				? FVector::ForwardVector
+				: FVector::RightVector;
+		}
+	}
+
+	if (!TraceMouseToPlane(startLocation, TransformGizmoDragPlaneNormal, TransformGizmoDragStartPoint))
+	{
+		TransformGizmoDragStartPoint = hit.ImpactPoint;
+		const double planeDistance = FVector::DotProduct(
+			TransformGizmoDragStartPoint - startLocation,
+			TransformGizmoDragPlaneNormal.GetSafeNormal());
+		TransformGizmoDragStartPoint -= TransformGizmoDragPlaneNormal.GetSafeNormal() * planeDistance;
+	}
+
+	if (handle == EEpisodeTransformGizmoHandle::RotateX
+		|| handle == EEpisodeTransformGizmoHandle::RotateY
+		|| handle == EEpisodeTransformGizmoHandle::RotateZ)
+	{
+		TransformGizmoDragStartDirection = FVector::VectorPlaneProject(
+			TransformGizmoDragStartPoint - startLocation,
+			TransformGizmoDragAxis);
+		if (!TransformGizmoDragStartDirection.Normalize())
+		{
+			TransformGizmoDragStartDirection = FVector::VectorPlaneProject(startXAxis, TransformGizmoDragAxis);
+			if (!TransformGizmoDragStartDirection.Normalize())
+			{
+				TransformGizmoDragStartDirection = FVector::VectorPlaneProject(startYAxis, TransformGizmoDragAxis);
+				TransformGizmoDragStartDirection.Normalize();
+			}
+		}
+	}
+
+	bIsTransformGizmoDragging = true;
+	if (IsValid(TransformGizmoActor))
+	{
+		TransformGizmoActor->SetHoveredHandle(handle);
+	}
+	ApplyInputMode();
+	return true;
+}
+
+void AEpisodeEditorController::UpdateTransformGizmoDrag()
+{
+	FTransform dragTransform;
+	if (BuildTransformGizmoDragTransform(dragTransform))
+	{
+		ApplyTransformGizmoDragTransform(dragTransform);
+	}
+
+	if (IsValid(TransformGizmoActor))
+	{
+		TransformGizmoActor->SetHoveredHandle(ActiveTransformGizmoHandle);
+		TransformGizmoActor->RefreshFromTarget();
+	}
+}
+
+void AEpisodeEditorController::EndTransformGizmoDrag()
+{
+	if (!bIsTransformGizmoDragging)
+	{
+		return;
+	}
+
+	ResetTransformGizmoDrag();
+	UpdateTransformGizmoForSelection();
+	ApplyInputMode();
+}
+
+void AEpisodeEditorController::ResetTransformGizmoDrag()
+{
+	bIsTransformGizmoDragging = false;
+	ActiveTransformGizmoHandle = EEpisodeTransformGizmoHandle::None;
+	ActiveTransformGizmoInstanceId.Reset();
+	TransformGizmoDragStartTransform = FTransform::Identity;
+	TransformGizmoDragStartPoint = FVector::ZeroVector;
+	TransformGizmoDragPlaneNormal = FVector::UpVector;
+	TransformGizmoDragAxis = FVector::ForwardVector;
+	TransformGizmoDragStartDirection = FVector::ForwardVector;
+	LastTransformGizmoDragFailureReason.Reset();
+	DraggedPlaceableComponent.Reset();
+
+	if (IsValid(TransformGizmoActor))
+	{
+		TransformGizmoActor->SetHoveredHandle(EEpisodeTransformGizmoHandle::None);
+	}
+}
+
+bool AEpisodeEditorController::BuildTransformGizmoDragTransform(FTransform& outTransform) const
+{
+	if (!bIsTransformGizmoDragging || ActiveTransformGizmoHandle == EEpisodeTransformGizmoHandle::None)
+	{
+		return false;
+	}
+	if (!IsEditorSelectablePlaceable(DraggedPlaceableComponent.Get()))
+	{
+		return false;
+	}
+
+	const FVector startLocation = TransformGizmoDragStartTransform.GetLocation();
+	FVector currentPoint = FVector::ZeroVector;
+	if (!TraceMouseToPlane(startLocation, TransformGizmoDragPlaneNormal, currentPoint))
+	{
+		return false;
+	}
+
+	outTransform = TransformGizmoDragStartTransform;
+	const FVector rawDelta = currentPoint - TransformGizmoDragStartPoint;
+	const FVector planeDelta = FVector::VectorPlaneProject(rawDelta, TransformGizmoDragPlaneNormal);
+	const FVector startXAxis = TransformGizmoDragStartTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
+	const FVector startYAxis = TransformGizmoDragStartTransform.GetUnitAxis(EAxis::Y).GetSafeNormal();
+	const FVector startZAxis = TransformGizmoDragStartTransform.GetUnitAxis(EAxis::Z).GetSafeNormal();
+	auto makeScaleFactor = [](double dragDistanceCm)
+	{
+		return FMath::Max(0.05, 1.0 + dragDistanceCm / 100.0);
+	};
+
+	switch (ActiveTransformGizmoHandle)
+	{
+	case EEpisodeTransformGizmoHandle::TranslateX:
+	case EEpisodeTransformGizmoHandle::TranslateY:
+	case EEpisodeTransformGizmoHandle::TranslateZ:
+	{
+		const double axisDistance = FVector::DotProduct(rawDelta, TransformGizmoDragAxis);
+		outTransform.SetLocation(startLocation + TransformGizmoDragAxis * axisDistance);
+		return true;
+	}
+	case EEpisodeTransformGizmoHandle::TranslateXY:
+	case EEpisodeTransformGizmoHandle::TranslateXZ:
+	case EEpisodeTransformGizmoHandle::TranslateYZ:
+	{
+		outTransform.SetLocation(startLocation + planeDelta);
+		return true;
+	}
+	case EEpisodeTransformGizmoHandle::RotateX:
+	case EEpisodeTransformGizmoHandle::RotateY:
+	case EEpisodeTransformGizmoHandle::RotateZ:
+	{
+		FVector currentDirection = FVector::VectorPlaneProject(currentPoint - startLocation, TransformGizmoDragAxis);
+		if (!currentDirection.Normalize())
+		{
+			return false;
+		}
+
+		const double deltaAngleRadians = FMath::Atan2(
+			FVector::DotProduct(FVector::CrossProduct(TransformGizmoDragStartDirection, currentDirection), TransformGizmoDragAxis),
+			FVector::DotProduct(TransformGizmoDragStartDirection, currentDirection));
+		const FQuat deltaRotation(TransformGizmoDragAxis, deltaAngleRadians);
+		outTransform.SetRotation(deltaRotation * TransformGizmoDragStartTransform.GetRotation());
+		return true;
+	}
+	case EEpisodeTransformGizmoHandle::ScaleX:
+	case EEpisodeTransformGizmoHandle::ScaleY:
+	case EEpisodeTransformGizmoHandle::ScaleZ:
+	{
+		FVector scale = TransformGizmoDragStartTransform.GetScale3D();
+		const double scaleFactor = makeScaleFactor(FVector::DotProduct(rawDelta, TransformGizmoDragAxis));
+		if (ActiveTransformGizmoHandle == EEpisodeTransformGizmoHandle::ScaleX)
+		{
+			scale.X *= scaleFactor;
+		}
+		else if (ActiveTransformGizmoHandle == EEpisodeTransformGizmoHandle::ScaleY)
+		{
+			scale.Y *= scaleFactor;
+		}
+		else
+		{
+			scale.Z *= scaleFactor;
+		}
+		outTransform.SetScale3D(scale);
+		return true;
+	}
+	case EEpisodeTransformGizmoHandle::ScaleXY:
+	case EEpisodeTransformGizmoHandle::ScaleXZ:
+	case EEpisodeTransformGizmoHandle::ScaleYZ:
+	{
+		FVector scale = TransformGizmoDragStartTransform.GetScale3D();
+		if (ActiveTransformGizmoHandle == EEpisodeTransformGizmoHandle::ScaleXY)
+		{
+			scale.X *= makeScaleFactor(FVector::DotProduct(planeDelta, startXAxis));
+			scale.Y *= makeScaleFactor(FVector::DotProduct(planeDelta, startYAxis));
+		}
+		else if (ActiveTransformGizmoHandle == EEpisodeTransformGizmoHandle::ScaleXZ)
+		{
+			scale.X *= makeScaleFactor(FVector::DotProduct(planeDelta, startXAxis));
+			scale.Z *= makeScaleFactor(FVector::DotProduct(planeDelta, startZAxis));
+		}
+		else
+		{
+			scale.Y *= makeScaleFactor(FVector::DotProduct(planeDelta, startYAxis));
+			scale.Z *= makeScaleFactor(FVector::DotProduct(planeDelta, startZAxis));
+		}
+		outTransform.SetScale3D(scale);
+		return true;
+	}
+	case EEpisodeTransformGizmoHandle::ScaleUniform:
+	{
+		const FVector uniformDragAxis = (startXAxis + startYAxis + startZAxis).GetSafeNormal();
+		const double scaleFactor = makeScaleFactor(FVector::DotProduct(rawDelta, uniformDragAxis));
+		outTransform.SetScale3D(TransformGizmoDragStartTransform.GetScale3D() * scaleFactor);
+		return true;
+	}
+	default:
+		return false;
+	}
+}
+
+bool AEpisodeEditorController::ApplyTransformGizmoDragTransform(const FTransform& transform)
+{
+	if (ActiveTransformGizmoInstanceId.IsEmpty())
+	{
+		return false;
+	}
+
+	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		return false;
+	}
+
+	FString failureReason;
+	if (authoringSubsystem->UpdateStaticObstacleTransform(
+		ActiveTransformGizmoInstanceId,
+		transform,
+		failureReason))
+	{
+		LastTransformGizmoDragFailureReason.Reset();
+		return true;
+	}
+
+	if (LastTransformGizmoDragFailureReason != failureReason)
+	{
+		LastTransformGizmoDragFailureReason = failureReason;
+		UE_LOG(
+			LogEpisodeEditorController,
+			Verbose,
+			TEXT("Transform gizmo drag rejected | InstanceId: %s, Reason: %s"),
+			*ActiveTransformGizmoInstanceId,
+			*failureReason);
+	}
+
+	return false;
+}
+
+bool AEpisodeEditorController::TraceMouseToPlane(
+	const FVector& planeOrigin,
+	const FVector& planeNormal,
+	FVector& outPoint) const
+{
+	const FVector safePlaneNormal = planeNormal.GetSafeNormal();
+	if (safePlaneNormal.IsNearlyZero())
+	{
+		return false;
+	}
+
+	FVector worldOrigin = FVector::ZeroVector;
+	FVector worldDirection = FVector::ForwardVector;
+	if (!DeprojectMousePositionToWorld(worldOrigin, worldDirection))
+	{
+		return false;
+	}
+
+	const FVector safeWorldDirection = worldDirection.GetSafeNormal();
+	const double denominator = FVector::DotProduct(safeWorldDirection, safePlaneNormal);
+	if (FMath::IsNearlyZero(denominator))
+	{
+		return false;
+	}
+
+	const double distance = FVector::DotProduct(planeOrigin - worldOrigin, safePlaneNormal) / denominator;
+	if (distance < 0.0 || distance > PlacementTraceDistanceCm)
+	{
+		return false;
+	}
+
+	outPoint = worldOrigin + safeWorldDirection * distance;
+	return true;
+}
+
 bool AEpisodeEditorController::TraceMouseSelectablePlaceable(
 	UEpisodePlaceableComponent*& outPlaceableComponent,
 	FHitResult& outHit) const
@@ -523,6 +1060,7 @@ void AEpisodeEditorController::SetSelectedPlaceable(UEpisodePlaceableComponent* 
 {
 	if (SelectedPlaceableComponent.Get() == placeableComponent)
 	{
+		UpdateTransformGizmoForSelection();
 		return;
 	}
 
@@ -536,6 +1074,8 @@ void AEpisodeEditorController::SetSelectedPlaceable(UEpisodePlaceableComponent* 
 	{
 		placeableComponent->SetAuthoringSelected(true);
 	}
+
+	UpdateTransformGizmoForSelection();
 }
 
 void AEpisodeEditorController::ApplyAuthoringOutlinePostProcessMaterial(
@@ -640,6 +1180,33 @@ void AEpisodeEditorController::BindEditorInputActions()
 			this,
 			&AEpisodeEditorController::HandleCancelPlacementInput);
 	}
+
+	if (UInputAction* translateAction = EditorTranslateAction.LoadSynchronous())
+	{
+		enhancedInputComponent->BindAction(
+			translateAction,
+			ETriggerEvent::Started,
+			this,
+			&AEpisodeEditorController::HandleTranslateModeInput);
+	}
+
+	if (UInputAction* rotateAction = EditorRotateAction.LoadSynchronous())
+	{
+		enhancedInputComponent->BindAction(
+			rotateAction,
+			ETriggerEvent::Started,
+			this,
+			&AEpisodeEditorController::HandleRotateModeInput);
+	}
+
+	if (UInputAction* scaleAction = EditorScaleAction.LoadSynchronous())
+	{
+		enhancedInputComponent->BindAction(
+			scaleAction,
+			ETriggerEvent::Started,
+			this,
+			&AEpisodeEditorController::HandleScaleModeInput);
+	}
 }
 
 void AEpisodeEditorController::UpdatePlacementPreview()
@@ -740,7 +1307,18 @@ FVector AEpisodeEditorController::SnapLocationIfNeeded(const FVector& location) 
 
 void AEpisodeEditorController::ApplyInputMode()
 {
-	if (EditorMode == EEpisodeEditorControllerMode::Observer && bIsLookInputHeld)
+	if (EditorMode == EEpisodeEditorControllerMode::Observer && bIsTransformGizmoDragging)
+	{
+		bShowMouseCursor = true;
+		bEnableClickEvents = true;
+		bEnableMouseOverEvents = true;
+
+		FInputModeGameAndUI inputMode;
+		inputMode.SetHideCursorDuringCapture(false);
+		inputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		SetInputMode(inputMode);
+	}
+	else if (EditorMode == EEpisodeEditorControllerMode::Observer && bIsLookInputHeld)
 	{
 		bShowMouseCursor = false;
 		bEnableClickEvents = false;
@@ -817,6 +1395,81 @@ void AEpisodeEditorController::DestroyPlacementPreview()
 	}
 
 	PlacementPreviewActor = nullptr;
+}
+
+AEpisodeTransformGizmoActor* AEpisodeEditorController::EnsureTransformGizmoActor()
+{
+	if (IsValid(TransformGizmoActor))
+	{
+		return TransformGizmoActor;
+	}
+
+	UWorld* world = GetWorld();
+	if (!world || !TransformGizmoActorClass)
+	{
+		return nullptr;
+	}
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	TransformGizmoActor = world->SpawnActor<AEpisodeTransformGizmoActor>(
+		TransformGizmoActorClass,
+		FTransform::Identity,
+		spawnParams);
+	return TransformGizmoActor;
+}
+
+void AEpisodeEditorController::UpdateTransformGizmoForSelection()
+{
+	UEpisodePlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
+	if (!IsEditorSelectablePlaceable(selectedPlaceable))
+	{
+		HideTransformGizmo();
+		return;
+	}
+
+	AActor* selectedActor = selectedPlaceable->GetOwner();
+	if (!selectedActor)
+	{
+		HideTransformGizmo();
+		return;
+	}
+
+	AEpisodeTransformGizmoActor* gizmoActor = EnsureTransformGizmoActor();
+	if (!gizmoActor)
+	{
+		return;
+	}
+
+	gizmoActor->ShowForTarget(selectedActor);
+	gizmoActor->SetGizmoMode(TransformGizmoMode);
+}
+
+void AEpisodeEditorController::HideTransformGizmo()
+{
+	if (IsValid(TransformGizmoActor))
+	{
+		TransformGizmoActor->HideGizmo();
+	}
+}
+
+void AEpisodeEditorController::SetTransformGizmoMode(EEpisodeTransformGizmoMode mode)
+{
+	if (TransformGizmoMode == mode)
+	{
+		return;
+	}
+
+	if (bIsTransformGizmoDragging)
+	{
+		EndTransformGizmoDrag();
+	}
+
+	TransformGizmoMode = mode;
+	if (IsValid(TransformGizmoActor))
+	{
+		TransformGizmoActor->SetGizmoMode(TransformGizmoMode);
+	}
 }
 
 AEpisodeEditorPawn* AEpisodeEditorController::GetEditorPawn() const

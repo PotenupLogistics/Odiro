@@ -10,6 +10,36 @@ enum class EEpisodeEditorControllerMode : uint8
 	EditPlacement
 };
 
+UENUM(BlueprintType)
+enum class EEpisodeTransformGizmoHandle : uint8
+{
+	None,
+	TranslateX,
+	TranslateY,
+	TranslateZ,
+	TranslateXY,
+	TranslateXZ,
+	TranslateYZ,
+	RotateX,
+	RotateY,
+	RotateZ,
+	ScaleX,
+	ScaleY,
+	ScaleZ,
+	ScaleXY,
+	ScaleXZ,
+	ScaleYZ,
+	ScaleUniform
+};
+
+UENUM(BlueprintType)
+enum class EEpisodeTransformGizmoMode : uint8
+{
+	Translate,
+	Rotate,
+	Scale
+};
+
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FEpisodeAuthoringStaticObstacleRecord
 {

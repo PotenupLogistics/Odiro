@@ -80,7 +80,19 @@ public:
 	bool CanPlaceStaticObstacle(FName propId, const FTransform& transform, FString& outFailureReason) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	bool CanUpdateStaticObstacleTransform(
+		const FString& instanceId,
+		const FTransform& transform,
+		FString& outFailureReason) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
 	bool AddStaticObstacle(FName propId, const FTransform& transform, FEpisodePlaceableInstanceSpec& outSpec);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	bool UpdateStaticObstacleTransform(
+		const FString& instanceId,
+		const FTransform& transform,
+		FString& outFailureReason);
 
 	bool AddStaticObstacleInternal(
 		FName propId,
@@ -137,6 +149,11 @@ private:
 	static bool TryGetStringProperty(const TMap<FString, FEpisodeParamValue>& properties, const FString& key, FString& outValue);
 
 	bool TryFindStaticObstacleProp(FName propId, FEpisodeStaticObstaclePropEntry& outPropEntry) const;
+	bool CanPlaceStaticObstacleInternal(
+		FName propId,
+		const FTransform& transform,
+		const FString& ignoredInstanceId,
+		FString& outFailureReason) const;
 	double ComputePlacementRadius2D(const FEpisodeStaticObstaclePropEntry& propEntry) const;
 	FVector2D ComputePlacementHalfExtent2D(const FEpisodeStaticObstaclePropEntry& propEntry) const;
 	bool StaticObstacleFootprintsOverlap(
@@ -164,6 +181,10 @@ private:
 		const FString& instanceId,
 		FName propId,
 		const FTransform& transform) const;
+	FEpisodePlaceableInstanceSpec* FindStaticObstacleSpecByInstanceId(const FString& instanceId);
+	const FEpisodePlaceableInstanceSpec* FindStaticObstacleSpecByInstanceId(const FString& instanceId) const;
+	FEpisodeAuthoringStaticObstacleRecord* FindStaticObstacleRecordByInstanceId(const FString& instanceId);
+	const FEpisodeAuthoringStaticObstacleRecord* FindStaticObstacleRecordByInstanceId(const FString& instanceId) const;
 	void ConfigureAuthoredStaticObstacleActor(
 		AEpisodeStaticObstacle* actor,
 		const FEpisodePlaceableInstanceSpec& spec) const;

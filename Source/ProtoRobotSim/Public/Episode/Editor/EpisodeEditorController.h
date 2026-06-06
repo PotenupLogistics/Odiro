@@ -8,6 +8,7 @@
 
 class AEpisodeEditorPawn;
 class AEpisodePlacementPreviewActor;
+class AEpisodeTransformGizmoActor;
 class UEpisodeAuthoringSubsystem;
 class UEpisodePlaceableComponent;
 class UInputAction;
@@ -47,6 +48,15 @@ public:
 	TSoftObjectPtr<UInputAction> EditorDeselectionAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	TSoftObjectPtr<UInputAction> EditorTranslateAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	TSoftObjectPtr<UInputAction> EditorRotateAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	TSoftObjectPtr<UInputAction> EditorScaleAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
 	int32 EditorInputMappingPriority = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input", meta = (ClampMin = "0.0"))
@@ -70,6 +80,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
 	TSubclassOf<AEpisodePlacementPreviewActor> PlacementPreviewActorClass;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	TSubclassOf<AEpisodeTransformGizmoActor> TransformGizmoActorClass;
+
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
 	void SetObserverMode();
 
@@ -90,6 +103,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor")
 	EEpisodeEditorControllerMode GetEditorMode() const { return EditorMode; }
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
+	EEpisodeTransformGizmoMode GetTransformGizmoMode() const { return TransformGizmoMode; }
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Placement")
 	bool IsCurrentPlacementValid() const { return bCurrentPlacementValid; }
@@ -119,11 +135,23 @@ private:
 	void HandleSelectionStartedInput();
 	void HandleSelectionCompletedInput();
 	void HandleCancelPlacementInput();
+	void HandleTranslateModeInput();
+	void HandleRotateModeInput();
+	void HandleScaleModeInput();
 	void HandleEditorMoveAction(const FInputActionValue& inputActionValue);
 	void HandleEditorLookAction(const FInputActionValue& inputActionValue);
 	void BeginLookInputCapture();
 	void EndLookInputCapture();
 	void UpdateHoveredPlaceable();
+	bool UpdateHoveredTransformGizmo();
+	bool TraceMouseTransformGizmo(EEpisodeTransformGizmoHandle& outHandle, FHitResult& outHit) const;
+	bool BeginTransformGizmoDrag(EEpisodeTransformGizmoHandle handle, const FHitResult& hit);
+	void UpdateTransformGizmoDrag();
+	void EndTransformGizmoDrag();
+	void ResetTransformGizmoDrag();
+	bool BuildTransformGizmoDragTransform(FTransform& outTransform) const;
+	bool ApplyTransformGizmoDragTransform(const FTransform& transform);
+	bool TraceMouseToPlane(const FVector& planeOrigin, const FVector& planeNormal, FVector& outPoint) const;
 	bool TraceMouseSelectablePlaceable(UEpisodePlaceableComponent*& outPlaceableComponent, FHitResult& outHit) const;
 	bool IsEditorSelectablePlaceable(const UEpisodePlaceableComponent* placeableComponent) const;
 	bool IsCursorOverEditorWidgetInputModeFocus() const;
@@ -141,17 +169,27 @@ private:
 	void PruneEditorWidgetInputModeRequests();
 	UWidget* FindEditorWidgetInputModeFocus() const;
 	void DestroyPlacementPreview();
+	AEpisodeTransformGizmoActor* EnsureTransformGizmoActor();
+	void UpdateTransformGizmoForSelection();
+	void HideTransformGizmo();
+	void SetTransformGizmoMode(EEpisodeTransformGizmoMode mode);
 	AEpisodeEditorPawn* GetEditorPawn() const;
 	UEpisodeAuthoringSubsystem* GetAuthoringSubsystem() const;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor")
 	EEpisodeEditorControllerMode EditorMode = EEpisodeEditorControllerMode::Observer;
 
+	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Gizmo")
+	EEpisodeTransformGizmoMode TransformGizmoMode = EEpisodeTransformGizmoMode::Translate;
+
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
 	FName SelectedStaticObstaclePropId;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AEpisodePlacementPreviewActor> PlacementPreviewActor;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AEpisodeTransformGizmoActor> TransformGizmoActor;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
 	FTransform CurrentPlacementTransform = FTransform::Identity;
@@ -166,11 +204,31 @@ private:
 
 	double LookCaptureAccumulatedDelta = 0.0;
 
+	bool bIsTransformGizmoDragging = false;
+
+	EEpisodeTransformGizmoHandle ActiveTransformGizmoHandle = EEpisodeTransformGizmoHandle::None;
+
+	FString ActiveTransformGizmoInstanceId;
+
+	FTransform TransformGizmoDragStartTransform = FTransform::Identity;
+
+	FVector TransformGizmoDragStartPoint = FVector::ZeroVector;
+
+	FVector TransformGizmoDragPlaneNormal = FVector::UpVector;
+
+	FVector TransformGizmoDragAxis = FVector::ForwardVector;
+
+	FVector TransformGizmoDragStartDirection = FVector::ForwardVector;
+
+	FString LastTransformGizmoDragFailureReason;
+
 	TWeakObjectPtr<UEpisodePlaceableComponent> HoveredPlaceableComponent;
 
 	TWeakObjectPtr<UEpisodePlaceableComponent> SelectedPlaceableComponent;
 
 	TWeakObjectPtr<UEpisodePlaceableComponent> PressedPlaceableComponent;
+
+	TWeakObjectPtr<UEpisodePlaceableComponent> DraggedPlaceableComponent;
 
 	TWeakObjectPtr<UMaterialInterface> ActiveAuthoringOutlinePostProcessMaterial;
 

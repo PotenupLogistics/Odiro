@@ -13,6 +13,8 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogEpisodeAuthoring, Log, All);
+
 namespace
 {
 	const FString SpeedMpsKey(TEXT("speed_mps"));
@@ -167,6 +169,51 @@ bool UEpisodeAuthoringSubsystem::CanPlaceStaticObstacle(
 	const FTransform& transform,
 	FString& outFailureReason) const
 {
+	return CanPlaceStaticObstacleInternal(propId, transform, FString(), outFailureReason);
+}
+
+bool UEpisodeAuthoringSubsystem::CanUpdateStaticObstacleTransform(
+	const FString& instanceId,
+	const FTransform& transform,
+	FString& outFailureReason) const
+{
+	outFailureReason.Reset();
+
+	if (instanceId.IsEmpty())
+	{
+		outFailureReason = TEXT("Static obstacle instance id is empty.");
+		return false;
+	}
+
+	const FEpisodePlaceableInstanceSpec* spec = FindStaticObstacleSpecByInstanceId(instanceId);
+	if (!spec)
+	{
+		outFailureReason = FString::Printf(TEXT("Static obstacle spec '%s' was not found."), *instanceId);
+		return false;
+	}
+
+	if (!FindStaticObstacleRecordByInstanceId(instanceId))
+	{
+		outFailureReason = FString::Printf(TEXT("Static obstacle record '%s' was not found."), *instanceId);
+		return false;
+	}
+
+	const TObjectPtr<AEpisodeStaticObstacle>* actorPtr = StaticObstacleActors.Find(instanceId);
+	if (!actorPtr || !actorPtr->Get())
+	{
+		outFailureReason = FString::Printf(TEXT("Static obstacle actor '%s' was not found."), *instanceId);
+		return false;
+	}
+
+	return CanPlaceStaticObstacleInternal(FName(*spec->AssetId), transform, instanceId, outFailureReason);
+}
+
+bool UEpisodeAuthoringSubsystem::CanPlaceStaticObstacleInternal(
+	FName propId,
+	const FTransform& transform,
+	const FString& ignoredInstanceId,
+	FString& outFailureReason) const
+{
 	outFailureReason.Reset();
 
 	FEpisodeStaticObstaclePropEntry candidateProp;
@@ -189,6 +236,11 @@ bool UEpisodeAuthoringSubsystem::CanPlaceStaticObstacle(
 
 	for (const FEpisodeAuthoringStaticObstacleRecord& record : StaticObstacleRecords)
 	{
+		if (!ignoredInstanceId.IsEmpty() && record.InstanceId == ignoredInstanceId)
+		{
+			continue;
+		}
+
 		if (StaticObstacleFootprintsOverlap(candidateLocation, candidateHalfExtent, record))
 		{
 			outFailureReason = FString::Printf(
@@ -207,6 +259,50 @@ bool UEpisodeAuthoringSubsystem::AddStaticObstacle(
 {
 	AEpisodeStaticObstacle* spawnedActor = nullptr;
 	return AddStaticObstacleInternal(propId, transform, outSpec, spawnedActor);
+}
+
+bool UEpisodeAuthoringSubsystem::UpdateStaticObstacleTransform(
+	const FString& instanceId,
+	const FTransform& transform,
+	FString& outFailureReason)
+{
+	if (!CanUpdateStaticObstacleTransform(instanceId, transform, outFailureReason))
+	{
+		return false;
+	}
+
+	FEpisodePlaceableInstanceSpec* spec = FindStaticObstacleSpecByInstanceId(instanceId);
+	FEpisodeAuthoringStaticObstacleRecord* record = FindStaticObstacleRecordByInstanceId(instanceId);
+	if (!spec || !record)
+	{
+		outFailureReason = FString::Printf(TEXT("Static obstacle '%s' is not editable."), *instanceId);
+		return false;
+	}
+
+	TObjectPtr<AEpisodeStaticObstacle>* actorPtr = StaticObstacleActors.Find(instanceId);
+	AEpisodeStaticObstacle* actor = actorPtr ? actorPtr->Get() : nullptr;
+	if (!actor)
+	{
+		outFailureReason = FString::Printf(TEXT("Static obstacle actor '%s' was not found."), *instanceId);
+		return false;
+	}
+
+	spec->Transform = transform;
+	record->Transform = transform;
+	actor->SetActorTransform(transform, false, nullptr, ETeleportType::TeleportPhysics);
+
+	DraftWorldSpec.SpecHash.Reset();
+	bDirty = true;
+
+	UE_LOG(
+		LogEpisodeAuthoring,
+		Verbose,
+		TEXT("Updated static obstacle transform | InstanceId: %s, Location: %s, Yaw: %.2f"),
+		*instanceId,
+		*transform.GetLocation().ToCompactString(),
+		transform.Rotator().Yaw);
+
+	return true;
 }
 
 bool UEpisodeAuthoringSubsystem::AddStaticObstacleInternal(
@@ -1132,6 +1228,62 @@ FEpisodePlaceableInstanceSpec UEpisodeAuthoringSubsystem::MakeStaticObstacleSpec
 	spec.Category = EEpisodeActorCategory::StaticObstacle;
 	spec.Transform = transform;
 	return spec;
+}
+
+FEpisodePlaceableInstanceSpec* UEpisodeAuthoringSubsystem::FindStaticObstacleSpecByInstanceId(
+	const FString& instanceId)
+{
+	for (FEpisodePlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
+	{
+		if (spec.InstanceId == instanceId && spec.Category == EEpisodeActorCategory::StaticObstacle)
+		{
+			return &spec;
+		}
+	}
+
+	return nullptr;
+}
+
+const FEpisodePlaceableInstanceSpec* UEpisodeAuthoringSubsystem::FindStaticObstacleSpecByInstanceId(
+	const FString& instanceId) const
+{
+	for (const FEpisodePlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
+	{
+		if (spec.InstanceId == instanceId && spec.Category == EEpisodeActorCategory::StaticObstacle)
+		{
+			return &spec;
+		}
+	}
+
+	return nullptr;
+}
+
+FEpisodeAuthoringStaticObstacleRecord* UEpisodeAuthoringSubsystem::FindStaticObstacleRecordByInstanceId(
+	const FString& instanceId)
+{
+	for (FEpisodeAuthoringStaticObstacleRecord& record : StaticObstacleRecords)
+	{
+		if (record.InstanceId == instanceId)
+		{
+			return &record;
+		}
+	}
+
+	return nullptr;
+}
+
+const FEpisodeAuthoringStaticObstacleRecord* UEpisodeAuthoringSubsystem::FindStaticObstacleRecordByInstanceId(
+	const FString& instanceId) const
+{
+	for (const FEpisodeAuthoringStaticObstacleRecord& record : StaticObstacleRecords)
+	{
+		if (record.InstanceId == instanceId)
+		{
+			return &record;
+		}
+	}
+
+	return nullptr;
 }
 
 void UEpisodeAuthoringSubsystem::ConfigureAuthoredStaticObstacleActor(

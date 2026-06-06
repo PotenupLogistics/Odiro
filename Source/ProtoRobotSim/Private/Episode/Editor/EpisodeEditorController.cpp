@@ -2,6 +2,7 @@
 #include "Episode/Editor/EpisodeEditorController.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Episode/Actors/EpisodeStaticObstacle.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/Editor/EpisodeAuthoringSubsystem.h"
 #include "Episode/Editor/EpisodeEditorPawn.h"
@@ -694,6 +695,15 @@ bool AEpisodeEditorController::TraceMousePlacement(FHitResult& outHit) const
 	{
 		queryParams.AddIgnoredActor(pawn);
 	}
+	if (UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem())
+	{
+		TArray<AEpisodeStaticObstacle*> authoredStaticObstacleActors;
+		authoringSubsystem->GetAuthoredStaticObstacleActors(authoredStaticObstacleActors);
+		for (const AEpisodeStaticObstacle* authoredStaticObstacleActor : authoredStaticObstacleActors)
+		{
+			queryParams.AddIgnoredActor(authoredStaticObstacleActor);
+		}
+	}
 
 	const FVector traceEnd = worldOrigin + worldDirection.GetSafeNormal() * PlacementTraceDistanceCm;
 	return world->LineTraceSingleByChannel(
@@ -706,7 +716,12 @@ bool AEpisodeEditorController::TraceMousePlacement(FHitResult& outHit) const
 
 FTransform AEpisodeEditorController::BuildPlacementTransform(const FVector& location) const
 {
-	const FVector snappedLocation = SnapLocationIfNeeded(location);
+	FVector snappedLocation = SnapLocationIfNeeded(location);
+	if (FMath::Abs(snappedLocation.Z) <= PlacementGroundSnapToleranceCm)
+	{
+		snappedLocation.Z = 0.0;
+	}
+
 	return FTransform(FRotator::ZeroRotator, snappedLocation, FVector::OneVector);
 }
 

@@ -148,6 +148,20 @@ void UEpisodeAuthoringSubsystem::GetStaticObstaclePaletteEntries(TArray<FEpisode
 	outEntries = AEpisodeStaticObstacle::GetDefaultPropEntries();
 }
 
+void UEpisodeAuthoringSubsystem::GetAuthoredStaticObstacleActors(TArray<AEpisodeStaticObstacle*>& outActors) const
+{
+	outActors.Reset();
+	outActors.Reserve(StaticObstacleActors.Num());
+
+	for (const TPair<FString, TObjectPtr<AEpisodeStaticObstacle>>& pair : StaticObstacleActors)
+	{
+		if (AEpisodeStaticObstacle* actor = pair.Value.Get())
+		{
+			outActors.Add(actor);
+		}
+	}
+}
+
 bool UEpisodeAuthoringSubsystem::CanPlaceStaticObstacle(
 	FName propId,
 	const FTransform& transform,
@@ -162,21 +176,20 @@ bool UEpisodeAuthoringSubsystem::CanPlaceStaticObstacle(
 		return false;
 	}
 
-	const double candidateRadius = ComputePlacementRadius2D(candidateProp);
+	const FVector2D candidateHalfExtent = ComputePlacementHalfExtent2D(candidateProp);
 	const FVector candidateLocation = transform.GetLocation();
-	if (candidateLocation.Z > 0.0)
+	if (candidateLocation.Z > StaticObstacleGroundZToleranceCm)
 	{
 		outFailureReason = FString::Printf(
-			TEXT("Placement location Z must be 0 or lower. Current Z: %.2f."),
+			TEXT("Placement location Z must be %.2f cm or lower. Current Z: %.2f."),
+			StaticObstacleGroundZToleranceCm,
 			candidateLocation.Z);
 		return false;
 	}
 
 	for (const FEpisodeAuthoringStaticObstacleRecord& record : StaticObstacleRecords)
 	{
-		const double minDistance = candidateRadius + record.PlacementRadius2D;
-		const double distance2D = FVector::Dist2D(candidateLocation, record.Transform.GetLocation());
-		if (distance2D < minDistance)
+		if (StaticObstacleFootprintsOverlap(candidateLocation, candidateHalfExtent, record))
 		{
 			outFailureReason = FString::Printf(
 				TEXT("Overlaps static obstacle '%s'."), *record.InstanceId);
@@ -825,6 +838,44 @@ double UEpisodeAuthoringSubsystem::ComputePlacementRadius2D(const FEpisodeStatic
 	return FMath::Sqrt(FMath::Square(propEntry.FallbackBoxExtent.X) + FMath::Square(propEntry.FallbackBoxExtent.Y));
 }
 
+FVector2D UEpisodeAuthoringSubsystem::ComputePlacementHalfExtent2D(
+	const FEpisodeStaticObstaclePropEntry& propEntry) const
+{
+	const FVector2D halfExtent(
+		FMath::Max(propEntry.FallbackBoxExtent.X, 0.0),
+		FMath::Max(propEntry.FallbackBoxExtent.Y, 0.0));
+
+	if (halfExtent.X > KINDA_SMALL_NUMBER || halfExtent.Y > KINDA_SMALL_NUMBER)
+	{
+		return halfExtent;
+	}
+
+	const double fallbackRadius = ComputePlacementRadius2D(propEntry);
+	return FVector2D(fallbackRadius, fallbackRadius);
+}
+
+bool UEpisodeAuthoringSubsystem::StaticObstacleFootprintsOverlap(
+	const FVector& candidateLocation,
+	const FVector2D& candidateHalfExtent,
+	const FEpisodeAuthoringStaticObstacleRecord& record) const
+{
+	const FVector recordLocation = record.Transform.GetLocation();
+	FVector2D recordHalfExtent = record.PlacementHalfExtent2D;
+	if (recordHalfExtent.X <= KINDA_SMALL_NUMBER && recordHalfExtent.Y <= KINDA_SMALL_NUMBER)
+	{
+		recordHalfExtent = FVector2D(record.PlacementRadius2D, record.PlacementRadius2D);
+	}
+
+	const double allowedDeltaX =
+		candidateHalfExtent.X + recordHalfExtent.X + StaticObstacleFootprintClearanceCm;
+	const double allowedDeltaY =
+		candidateHalfExtent.Y + recordHalfExtent.Y + StaticObstacleFootprintClearanceCm;
+	const double deltaX = FMath::Abs(candidateLocation.X - recordLocation.X);
+	const double deltaY = FMath::Abs(candidateLocation.Y - recordLocation.Y);
+
+	return deltaX < allowedDeltaX && deltaY < allowedDeltaY;
+}
+
 FString UEpisodeAuthoringSubsystem::GenerateStaticObstacleInstanceId()
 {
 	FString instanceId;
@@ -1064,6 +1115,7 @@ void UEpisodeAuthoringSubsystem::AddStaticObstacleViewRecord(
 	record.PropId = FName(*spec.AssetId);
 	record.Transform = spec.Transform;
 	record.PlacementRadius2D = ComputePlacementRadius2D(propEntry);
+	record.PlacementHalfExtent2D = ComputePlacementHalfExtent2D(propEntry);
 
 	StaticObstacleRecords.Add(record);
 	StaticObstacleActors.Add(spec.InstanceId, actor);

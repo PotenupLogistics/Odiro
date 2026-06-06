@@ -48,6 +48,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Import")
 	FString EpisodeSetupInputDirectory = TEXT("Json/Input");
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Placement", meta = (ClampMin = "0.0"))
+	double StaticObstacleGroundZToleranceCm = 5.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Placement", meta = (ClampMin = "0.0"))
+	double StaticObstacleFootprintClearanceCm = 5.0;
+
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Authoring")
 	void ClearDraft();
 
@@ -97,6 +103,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Authoring")
 	TArray<FEpisodeAuthoringStaticObstacleRecord> GetAuthoredStaticObstacleRecords() const { return StaticObstacleRecords; }
 
+	void GetAuthoredStaticObstacleActors(TArray<AEpisodeStaticObstacle*>& outActors) const;
+
 	// DraftWorldSpec 전체 기준으로 JSON을 다시 작성하고, 다시 compiler로 round-trip 검증.
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Export")
 	bool ExportEpisodeSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
@@ -130,6 +138,11 @@ private:
 
 	bool TryFindStaticObstacleProp(FName propId, FEpisodeStaticObstaclePropEntry& outPropEntry) const;
 	double ComputePlacementRadius2D(const FEpisodeStaticObstaclePropEntry& propEntry) const;
+	FVector2D ComputePlacementHalfExtent2D(const FEpisodeStaticObstaclePropEntry& propEntry) const;
+	bool StaticObstacleFootprintsOverlap(
+		const FVector& candidateLocation,
+		const FVector2D& candidateHalfExtent,
+		const FEpisodeAuthoringStaticObstacleRecord& record) const;
 	FString GenerateStaticObstacleInstanceId();
 	bool ContainsInstanceId(const FString& instanceId) const;
 	void InitializeDraftDefaults();

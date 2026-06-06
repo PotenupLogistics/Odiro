@@ -26,4 +26,7 @@ struct PROTOROBOTSIM_API FEpisodeAuthoringStaticObstacleRecord
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor", meta = (ClampMin = "0.0"))
 	double PlacementRadius2D = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	FVector2D PlacementHalfExtent2D = FVector2D::ZeroVector;
 };

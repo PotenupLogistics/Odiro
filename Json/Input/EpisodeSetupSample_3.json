@@ -91,7 +91,6 @@
         "instance_id": "ped_edge_01",
         "archetype_id": "adult_pedestrian",
         "path_id": "ped_edge_walk",
-        "spawn_time_s": 0,
         "xy_m": [-5, 2.8],
         "yaw_deg": 0,
         "movement": {

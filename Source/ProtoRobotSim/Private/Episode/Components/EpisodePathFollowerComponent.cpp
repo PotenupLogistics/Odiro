@@ -1,7 +1,6 @@
 
 #include "Episode/Components/EpisodePathFollowerComponent.h"
 #include "Components/SplineComponent.h"
-#include "Episode/Actors/EpisodePedestrian.h"
 #include "Episode/Actors/EpisodeSplinePath.h"
 
 UEpisodePathFollowerComponent::UEpisodePathFollowerComponent()
@@ -50,11 +49,6 @@ void UEpisodePathFollowerComponent::StartFollowing()
 void UEpisodePathFollowerComponent::StopFollowing()
 {
 	SetComponentTickEnabled(false);
-
-	if (AEpisodePedestrian* pedestrian = Cast<AEpisodePedestrian>(GetOwner()))
-	{
-		pedestrian->ResetVisualMotion();
-	}
 }
 
 void UEpisodePathFollowerComponent::BeginPlay()
@@ -113,7 +107,7 @@ void UEpisodePathFollowerComponent::TickComponent(float deltaTime, ELevelTick ti
 
 	const double appliedDistanceDeltaCm = bLoop ? distanceDeltaCm : CurrentDistanceCm - previousDistanceCm;
 	FHitResult sweepHit;
-	MoveOwnerToCurrentDistance(deltaTime, &sweepHit);
+	MoveOwnerToCurrentDistance(&sweepHit);
 
 	// sweep된 이후 순식간에 route를 따라잡지 않도록 처리.
 	if (sweepHit.bBlockingHit
@@ -193,7 +187,7 @@ FVector UEpisodePathFollowerComponent::ApplyPathNoise(double distanceCm, double 
 	return baseLocation + right * lateralOffsetCm;
 }
 
-void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance(double deltaSeconds, FHitResult* outSweepHit)
+void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance(FHitResult* outSweepHit)
 {
 	if (outSweepHit)
 	{
@@ -205,7 +199,6 @@ void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance(double deltaSecon
 	AActor* owner = GetOwner();
 	if (!owner) return;
 
-	const FVector previousLocation = owner->GetActorLocation();
 	const FVector location = SplineComponent->GetLocationAtDistanceAlongSpline(
 		static_cast<float>(CurrentDistanceCm),
 		ESplineCoordinateSpace::World);
@@ -231,8 +224,4 @@ void UEpisodePathFollowerComponent::MoveOwnerToCurrentDistance(double deltaSecon
 		*outSweepHit = sweepHit;
 	}
 
-	if (AEpisodePedestrian* pedestrian = Cast<AEpisodePedestrian>(owner))
-	{
-		pedestrian->UpdateVisualMotion(previousLocation, owner->GetActorLocation(), deltaSeconds);
-	}
 }

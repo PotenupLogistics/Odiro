@@ -107,7 +107,6 @@
         "instance_id": "ped_01",
         "archetype_id": "adult_pedestrian",
         "path_id": "ped_01_path",
-        "spawn_time_s": 0,
         "xy_m": [-1.5, -1.1],
         "yaw_deg": 90,
         "movement": {

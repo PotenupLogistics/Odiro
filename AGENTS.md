@@ -3,6 +3,15 @@
 - Asset edits: `.uasset` and `.umap` through editor, commandlet, or project scripts
 - Commands: no hardcoded local UE install paths
 
+## MCP Routing
+- MCP calls are editor-backed. If the editor is not running, launch the project editor for `ProtoRobotSim.uproject` and wait until the target MCP server is listening before calling or declaring MCP unavailable
+- `connection refused` before an editor-backed MCP server is ready is setup state, not a fallback condition
+- Do not use Unreal commandlet/Python/project scripts as fallback for MCP-routed work until the editor is running and the relevant MCP call still fails
+- UMG asset writes, layout edits, UMG animation, and UMG material work: use `UmgMcp` first after editor/MCP readiness
+- PIE/runtime inspection, screenshots, logs, editor status, build status, and screen-debug tasks: use `ue-mcp` first after editor/MCP readiness
+- `ue-mcp` UI write actions are read-only by default unless the user explicitly asks to edit UI through `ue-mcp`
+- After MCP plugin source changes, rebuild/restart the editor before runtime verification
+
 ## Language
 - Docs/plans: Korean unless a template or external audience requires English
 

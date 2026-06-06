@@ -82,7 +82,12 @@ TSubclassOf<UMainMenuWidget> AMainMenuPlayerController::ResolveMainWidgetClass()
 		return TSubclassOf<UMainMenuWidget>(defaultMainWidgetClass);
 	}
 
-	return TSubclassOf<UMainMenuWidget>(UMainMenuWidget::StaticClass());
+	UE_LOG(
+		LogMainMenuPlayerController,
+		Error,
+		TEXT("기본 MainMenu widget Blueprint를 찾을 수 없음 | Path: %s"),
+		DefaultMainWidgetBlueprintClassPath);
+	return nullptr;
 }
 
 void AMainMenuPlayerController::ApplyMainMenuInputMode(UMainMenuWidget* widget)

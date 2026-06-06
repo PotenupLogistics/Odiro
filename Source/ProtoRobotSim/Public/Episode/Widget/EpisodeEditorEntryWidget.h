@@ -7,6 +7,7 @@
 class UButton;
 class UEditableTextBox;
 class UEpisodeAssetPaletteWidget;
+class UEpisodeEditorLaunchSubsystem;
 
 UCLASS(BlueprintType, Blueprintable)
 class PROTOROBOTSIM_API UEpisodeEditorEntryWidget : public UUserWidget
@@ -51,6 +52,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Entry")
 	void RemoveAssetPaletteWidget();
 
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Entry")
+	bool CompleteExternallyStartedEpisode(bool bLoadedExistingEpisode);
+
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Entry")
 	UEpisodeAssetPaletteWidget* GetAssetPaletteWidget() const { return AssetPaletteWidget; }
 
@@ -65,6 +69,9 @@ protected:
 	void HandleLoadEpisodeButtonClicked();
 
 private:
+	void BindEpisodeEditorLaunchSubsystem();
+	void UnbindEpisodeEditorLaunchSubsystem();
+	void HandleAutoStartCompleted(bool bLoadedExistingEpisode);
 	void RequestEditorWidgetInputMode();
 	void ReleaseEditorWidgetInputMode();
 	bool FinishSuccessfulStart(bool bLoadedExistingEpisode);
@@ -72,4 +79,7 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UEpisodeAssetPaletteWidget> AssetPaletteWidget;
+
+	FDelegateHandle AutoStartCompletedHandle;
+	bool bExternalStartCompleted = false;
 };

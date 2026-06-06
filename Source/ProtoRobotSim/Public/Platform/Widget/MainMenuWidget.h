@@ -7,21 +7,24 @@
 #include "MainMenuWidget.generated.h"
 
 class UButton;
+class UCheckBox;
 class UComboBoxString;
 class UEditableTextBox;
+class UEpisodeEditorLaunchSubsystem;
+class UFileListItemWidget;
 class USimulatorLaunchSubsystem;
 class UScrollBox;
 class UTextBlock;
-class UVerticalBox;
+class UWidget;
+class UWidgetSwitcher;
 
-// MainMenuMap에서 SimulationSetup 선택과 run status 확인을 제공하는 최소 C++ widget
+// MainMenuMap에서 UMG Blueprint layout과 platform event handler를 연결하는 widget
 UCLASS(BlueprintType, Blueprintable)
 class PROTOROBOTSIM_API UMainMenuWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
 public:
-	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
@@ -39,7 +42,34 @@ protected:
 	void HandleLoadClicked();
 
 	UFUNCTION()
+	void HandleNewSetupClicked();
+
+	UFUNCTION()
 	void HandleSaveFpsClicked();
+
+	UFUNCTION()
+	void HandleSaveSetupClicked();
+
+	UFUNCTION()
+	void HandleOpenEditorClicked();
+
+	UFUNCTION()
+	void HandleNewScenarioClicked();
+
+	void HandleScenarioRenameRequested(UFileListItemWidget* itemWidget, const FString& requestedPath);
+	void HandleScenarioEditRequested(UFileListItemWidget* itemWidget);
+	void HandlePolicyRenameRequested(UFileListItemWidget* itemWidget, const FString& requestedPath);
+	void HandlePolicyEditRequested(UFileListItemWidget* itemWidget);
+	void HandleExperimentConfigRenameRequested(UFileListItemWidget* itemWidget, const FString& requestedPath);
+	void HandleExperimentConfigEditRequested(UFileListItemWidget* itemWidget);
+	void HandleExperimentConfigPlayRequested(UFileListItemWidget* itemWidget);
+	void HandleExperimentResultDetailsRequested(UFileListItemWidget* itemWidget);
+
+	UFUNCTION()
+	void HandleOpenPolicyTextEditorClicked();
+
+	UFUNCTION()
+	void HandleNewPolicyClicked();
 
 	UFUNCTION()
 	void HandleStartClicked();
@@ -47,52 +77,255 @@ protected:
 	UFUNCTION()
 	void HandleRefreshClicked();
 
+	UFUNCTION()
+	void HandleShowScenarioClicked();
+
+	UFUNCTION()
+	void HandleShowPolicyClicked();
+
+	UFUNCTION()
+	void HandleShowExperimentConfigClicked();
+
+	UFUNCTION()
+	void HandleShowRunStatusClicked();
+
+	UFUNCTION()
+	void HandleShowExperimentResultClicked();
+
+	UFUNCTION()
+	void HandleExperimentResultBackClicked();
+
+	UFUNCTION()
+	void HandleExperimentConfigBackClicked();
+
+	UFUNCTION()
+	void HandleScenarioEpisodeSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
+
+	UFUNCTION()
+	void HandlePolicyDeliveryBotSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
+
+	UFUNCTION()
+	void HandleExperimentEpisodeSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
+
+	UFUNCTION()
+	void HandleExperimentDeliveryBotSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
+
+	UFUNCTION()
+	UWidget* HandleGenerateComboBoxItem(FString item);
+
 private:
-	void BuildWidgetTreeIfNeeded();
+	bool ValidateRequiredBindings() const;
 	void BindControls();
+	void ShowMainMenuSection(int32 sectionIndex);
+	void SyncComboBoxSelection(UComboBoxString* targetComboBox, const FString& selectedItem);
 	void LoadSelectedSetup();
+	void RefreshScenarioList();
+	void RefreshPolicyList();
+	void RefreshExperimentConfigList();
+	void RefreshExperimentResultList();
+	void ApplyNewSetupDefaults(const FString& setupPath);
+	void SetExperimentConfigDetailVisible(bool bVisible);
+	void SetExperimentResultDetailVisible(bool bVisible);
+	void SetSelectedSetupPath(const FString& setupPath);
+	void SetSelectedEpisodeSetupPath(const FString& episodeSetupPath);
+	void SetSelectedDeliveryBotSetupPath(const FString& deliveryBotSetupPath);
+	void SetSelectedExperimentResultPath(const FString& reportPath);
+	bool CreateScenarioFileFromTemplate(const FString& episodeSetupPath);
+	bool OpenScenarioInEditor(const FString& episodeSetupPath);
+	TSubclassOf<UFileListItemWidget> ResolveFileListItemWidgetClass() const;
 	void HandleRunInfoChanged(const struct FSimulatorRunInfo& runInfo);
 	void UpdateStatusText(const FString& extraMessage = FString());
 	void UpdateReportAndLogText();
 	void SetDiagnosticsText(const FString& message);
 	FString GetSelectedSetupPath() const;
+	FString GetSelectedEpisodeSetupPath() const;
+	FString GetSelectedDeliveryBotSetupPath() const;
 	USimulatorLaunchSubsystem* GetSimulatorLaunchSubsystem() const;
+	UEpisodeEditorLaunchSubsystem* GetEpisodeEditorLaunchSubsystem() const;
 
-	UPROPERTY(Transient)
-	TObjectPtr<UVerticalBox> RootBox;
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UWidgetSwitcher> MainContentSwitcher;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ActiveSectionTextBlock;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UButton> ScenarioNavButton;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UButton> PolicyNavButton;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UButton> ExperimentConfigNavButton;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UButton> RunStatusNavButton;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UButton> ExperimentResultNavButton;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UScrollBox> ScenarioListScrollBox;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UScrollBox> PolicyListScrollBox;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UWidget> ExperimentConfigSectionBoxScrollBox;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UWidget> ExperimentConfigDetailSectionBoxScrollBox;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UScrollBox> ExperimentConfigListScrollBox;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UWidget> ExperimentResultSectionBoxScrollBox;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UWidget> ExperimentResultDetailSectionBoxScrollBox;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UScrollBox> ExperimentResultListScrollBox;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UButton> ExperimentConfigBackButton;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UButton> ExperimentResultBackButton;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> ScenarioEpisodeSetupComboBox;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UEditableTextBox> ScenarioEpisodePathTextBox;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> PolicyDeliveryBotSetupComboBox;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UComboBoxString> SetupComboBox;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableTextBox> SetupPathTextBox;
+	TObjectPtr<UTextBlock> ExperimentConfigSectionTitleText;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> SetupLabel;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UEditableTextBox> MapIdTextBox;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableTextBox> RunIdTextBox;
 
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UEditableTextBox> FixedStepFpsTextBox;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UEditableTextBox> RunCountTextBox;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UCheckBox> MeasurementLogEnabledCheckBox;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UEditableTextBox> MeasurementOutputDirectoryTextBox;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UEditableTextBox> MeasurementFilePrefixTextBox;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UEditableTextBox> FlushIntervalTicksTextBox;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UEditableTextBox> ReportOutputDirectoryTextBox;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UEditableTextBox> StatusOutputPathTextBox;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UComboBoxString> EpisodeSetupComboBox;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UComboBoxString> DeliveryBotSetupComboBox;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> PairRow;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> RunSettingsRow;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> LoadButton;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> LoadButtonOverlay;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> LoadButtonLabel;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UButton> NewSetupButton;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> NewSetupButtonOverlay;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> SaveFpsButton;
 
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UButton> SaveSetupButton;
+
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> OpenEditorButton;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UButton> NewScenarioButton;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> OpenPolicyTextEditorButton;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UButton> NewPolicyButton;
+
+	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UButton> StartButton;
 
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UButton> RefreshButton;
 
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> StatusTextBlock;
 
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UTextBlock> DiagnosticsTextBlock;
+
+	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> ReportTextBlock;
 
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> LogPreviewTextBlock;
 
 	FTimerHandle RefreshTimerHandle;
+
+	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|List")
+	TSubclassOf<UFileListItemWidget> FileListItemWidgetClass;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UFileListItemWidget>> ScenarioListItems;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UFileListItemWidget>> PolicyListItems;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UFileListItemWidget>> ExperimentConfigListItems;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UFileListItemWidget>> ExperimentResultListItems;
+
+	FString SelectedSetupPath;
+	FString SelectedEpisodeSetupPath;
+	FString SelectedDeliveryBotSetupPath;
+	FString SelectedExperimentResultPath;
+	bool bExperimentConfigDetailVisible = false;
+	bool bExperimentResultDetailVisible = false;
 };

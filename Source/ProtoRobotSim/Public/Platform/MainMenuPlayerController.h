@@ -26,7 +26,7 @@ public:
 	UMainMenuWidget* GetMainWidget() const { return MainWidget; }
 
 protected:
-	// 비어 있으면 `/Game/Widgets/MainMenu/WBP_MainMenu`를 기본으로 시도한다.
+	// 비어 있으면 `/Game/Widgets/MainMenu/WBP_MainMenu`를 기본으로 사용한다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "MainMenu|UI")
 	TSubclassOf<UMainMenuWidget> MainWidgetClass;
 

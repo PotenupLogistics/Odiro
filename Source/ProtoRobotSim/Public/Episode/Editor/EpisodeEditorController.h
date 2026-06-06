@@ -11,6 +11,7 @@ class AEpisodePlacementPreviewActor;
 class AEpisodeTransformGizmoActor;
 class UEpisodeAuthoringSubsystem;
 class UEpisodePlaceableComponent;
+class UEpisodePlaceableContextMenuWidget;
 class UInputAction;
 class UInputMappingContext;
 class UMaterialInterface;
@@ -83,6 +84,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
 	TSubclassOf<AEpisodeTransformGizmoActor> TransformGizmoActorClass;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	TSubclassOf<UEpisodePlaceableContextMenuWidget> PlaceableContextMenuWidgetClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|UI")
+	int32 PlaceableContextMenuViewportZOrder = 10;
+
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
 	void SetObserverMode();
 
@@ -131,6 +138,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Export")
 	bool SaveEpisodeSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
+	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Selection")
+	UEpisodePlaceableComponent* GetSelectedPlaceableComponent() const { return SelectedPlaceableComponent.Get(); }
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Selection")
+	bool TryUpdateSelectedPlaceableTransform(const FTransform& transform, FString& outFailureReason);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Selection")
+	bool TryRenameSelectedPlaceableInstanceId(const FString& newInstanceId, FString& outFailureReason);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Selection")
+	bool DeleteSelectedPlaceable(FString& outFailureReason);
+
 private:
 	void HandleSelectionStartedInput();
 	void HandleSelectionCompletedInput();
@@ -173,6 +192,9 @@ private:
 	void UpdateTransformGizmoForSelection();
 	void HideTransformGizmo();
 	void SetTransformGizmoMode(EEpisodeTransformGizmoMode mode);
+	UEpisodePlaceableContextMenuWidget* EnsurePlaceableContextMenuWidget();
+	void UpdatePlaceableContextMenuForSelection(bool bRepositionToMouse = true);
+	void HidePlaceableContextMenu();
 	AEpisodeEditorPawn* GetEditorPawn() const;
 	UEpisodeAuthoringSubsystem* GetAuthoringSubsystem() const;
 
@@ -190,6 +212,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<AEpisodeTransformGizmoActor> TransformGizmoActor;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UEpisodePlaceableContextMenuWidget> PlaceableContextMenuWidget;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
 	FTransform CurrentPlacementTransform = FTransform::Identity;

@@ -21,14 +21,14 @@ AEpisodePlacementPreviewActor::AEpisodePlacementPreviewActor()
 	PreviewMeshComponent->SetMobility(EComponentMobility::Movable);
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> validPlacementMaterial(
-		TEXT("/Game/Models/StreetObjects/Materials/MI_EpisodePlaceable.MI_EpisodePlaceable"));
+		TEXT("/Game/Models/Placeable/Materials/MI_EpisodePlaceable.MI_EpisodePlaceable"));
 	if (validPlacementMaterial.Succeeded())
 	{
 		ValidPlacementMaterial = validPlacementMaterial.Object;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> invalidPlacementMaterial(
-		TEXT("/Game/Models/StreetObjects/Materials/MI_EpisodeNonPlaceable.MI_EpisodeNonPlaceable"));
+		TEXT("/Game/Models/Placeable/Materials/MI_EpisodeNonPlaceable.MI_EpisodeNonPlaceable"));
 	if (invalidPlacementMaterial.Succeeded())
 	{
 		InvalidPlacementMaterial = invalidPlacementMaterial.Object;

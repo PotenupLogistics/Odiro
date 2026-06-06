@@ -8,6 +8,7 @@
 #include "Episode/Editor/EpisodeEditorPawn.h"
 #include "Episode/Editor/EpisodePlacementPreviewActor.h"
 #include "Episode/Editor/EpisodeTransformGizmoActor.h"
+#include "Episode/Widget/EpisodePlaceableContextMenuWidget.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/IConsoleManager.h"
 #include "Camera/CameraComponent.h"
@@ -27,6 +28,7 @@ AEpisodeEditorController::AEpisodeEditorController()
 	bEnableMouseOverEvents = false;
 	PlacementPreviewActorClass = AEpisodePlacementPreviewActor::StaticClass();
 	TransformGizmoActorClass = AEpisodeTransformGizmoActor::StaticClass();
+	PlaceableContextMenuWidgetClass = UEpisodePlaceableContextMenuWidget::StaticClass();
 	EditorInputMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Editor.IMC_Editor")));
 	EditorMoveAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorMove.IA_EditorMove")));
 	EditorLookAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorLook.IA_EditorLook")));
@@ -267,6 +269,118 @@ bool AEpisodeEditorController::SaveEpisodeSetupJsonFile(
 	}
 
 	return authoringSubsystem->SaveEpisodeSetupJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
+}
+
+bool AEpisodeEditorController::TryUpdateSelectedPlaceableTransform(
+	const FTransform& transform,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+
+	UEpisodePlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
+	if (!IsEditorSelectablePlaceable(selectedPlaceable) || selectedPlaceable->InstanceId.IsEmpty())
+	{
+		outFailureReason = TEXT("No selected placeable is editable.");
+		return false;
+	}
+
+	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		outFailureReason = TEXT("Episode authoring subsystem is unavailable.");
+		return false;
+	}
+
+	if (!authoringSubsystem->UpdateStaticObstacleTransform(selectedPlaceable->InstanceId, transform, outFailureReason))
+	{
+		return false;
+	}
+
+	UpdateTransformGizmoForSelection();
+	UpdatePlaceableContextMenuForSelection(false);
+	return true;
+}
+
+bool AEpisodeEditorController::TryRenameSelectedPlaceableInstanceId(
+	const FString& newInstanceId,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+
+	UEpisodePlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
+	if (!IsEditorSelectablePlaceable(selectedPlaceable) || selectedPlaceable->InstanceId.IsEmpty())
+	{
+		outFailureReason = TEXT("No selected placeable is editable.");
+		return false;
+	}
+
+	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		outFailureReason = TEXT("Episode authoring subsystem is unavailable.");
+		return false;
+	}
+
+	const FString oldInstanceId = selectedPlaceable->InstanceId;
+	if (!authoringSubsystem->RenameStaticObstacleInstanceId(oldInstanceId, newInstanceId, outFailureReason))
+	{
+		return false;
+	}
+
+	if (ActiveTransformGizmoInstanceId == oldInstanceId)
+	{
+		ActiveTransformGizmoInstanceId = selectedPlaceable->InstanceId;
+	}
+
+	UpdateTransformGizmoForSelection();
+	UpdatePlaceableContextMenuForSelection(false);
+	return true;
+}
+
+bool AEpisodeEditorController::DeleteSelectedPlaceable(FString& outFailureReason)
+{
+	outFailureReason.Reset();
+
+	UEpisodePlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
+	if (!IsEditorSelectablePlaceable(selectedPlaceable) || selectedPlaceable->InstanceId.IsEmpty())
+	{
+		outFailureReason = TEXT("No selected placeable is editable.");
+		return false;
+	}
+
+	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		outFailureReason = TEXT("Episode authoring subsystem is unavailable.");
+		return false;
+	}
+
+	const FString instanceId = selectedPlaceable->InstanceId;
+	selectedPlaceable->SetAuthoringSelected(false);
+	if (!authoringSubsystem->RemoveStaticObstacle(instanceId, outFailureReason))
+	{
+		selectedPlaceable->SetAuthoringSelected(true);
+		return false;
+	}
+
+	if (HoveredPlaceableComponent.Get() == selectedPlaceable)
+	{
+		HoveredPlaceableComponent.Reset();
+	}
+	if (PressedPlaceableComponent.Get() == selectedPlaceable)
+	{
+		PressedPlaceableComponent.Reset();
+	}
+	if (DraggedPlaceableComponent.Get() == selectedPlaceable)
+	{
+		ResetTransformGizmoDrag();
+	}
+
+	SelectedPlaceableComponent.Reset();
+	HideTransformGizmo();
+	HidePlaceableContextMenu();
+	ApplyInputMode();
+	return true;
 }
 
 void AEpisodeEditorController::HandleSelectionStartedInput()
@@ -906,6 +1020,7 @@ bool AEpisodeEditorController::ApplyTransformGizmoDragTransform(const FTransform
 		failureReason))
 	{
 		LastTransformGizmoDragFailureReason.Reset();
+		UpdatePlaceableContextMenuForSelection(false);
 		return true;
 	}
 
@@ -1061,6 +1176,7 @@ void AEpisodeEditorController::SetSelectedPlaceable(UEpisodePlaceableComponent* 
 	if (SelectedPlaceableComponent.Get() == placeableComponent)
 	{
 		UpdateTransformGizmoForSelection();
+		UpdatePlaceableContextMenuForSelection();
 		return;
 	}
 
@@ -1076,6 +1192,7 @@ void AEpisodeEditorController::SetSelectedPlaceable(UEpisodePlaceableComponent* 
 	}
 
 	UpdateTransformGizmoForSelection();
+	UpdatePlaceableContextMenuForSelection();
 }
 
 void AEpisodeEditorController::ApplyAuthoringOutlinePostProcessMaterial(
@@ -1469,6 +1586,73 @@ void AEpisodeEditorController::SetTransformGizmoMode(EEpisodeTransformGizmoMode 
 	if (IsValid(TransformGizmoActor))
 	{
 		TransformGizmoActor->SetGizmoMode(TransformGizmoMode);
+	}
+}
+
+UEpisodePlaceableContextMenuWidget* AEpisodeEditorController::EnsurePlaceableContextMenuWidget()
+{
+	if (IsValid(PlaceableContextMenuWidget))
+	{
+		if (!PlaceableContextMenuWidget->IsInViewport())
+		{
+			PlaceableContextMenuWidget->AddToViewport(PlaceableContextMenuViewportZOrder);
+		}
+		return PlaceableContextMenuWidget;
+	}
+
+	if (!PlaceableContextMenuWidgetClass)
+	{
+		UE_LOG(LogEpisodeEditorController, Warning, TEXT("PlaceableContextMenuWidgetClass is not set."));
+		return nullptr;
+	}
+
+	PlaceableContextMenuWidget = CreateWidget<UEpisodePlaceableContextMenuWidget>(
+		this,
+		PlaceableContextMenuWidgetClass);
+	if (!PlaceableContextMenuWidget)
+	{
+		UE_LOG(LogEpisodeEditorController, Warning, TEXT("Failed to create placeable context menu widget."));
+		return nullptr;
+	}
+
+	PlaceableContextMenuWidget->AddToViewport(PlaceableContextMenuViewportZOrder);
+	return PlaceableContextMenuWidget;
+}
+
+void AEpisodeEditorController::UpdatePlaceableContextMenuForSelection(bool bRepositionToMouse)
+{
+	UEpisodePlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
+	if (!IsEditorSelectablePlaceable(selectedPlaceable))
+	{
+		HidePlaceableContextMenu();
+		return;
+	}
+
+	UEpisodePlaceableContextMenuWidget* contextMenuWidget = EnsurePlaceableContextMenuWidget();
+	if (!contextMenuWidget)
+	{
+		return;
+	}
+
+	contextMenuWidget->SetSelectedPlaceable(selectedPlaceable);
+	contextMenuWidget->SetAlignmentInViewport(FVector2D::ZeroVector);
+
+	float mouseX = 0.0f;
+	float mouseY = 0.0f;
+	if (bRepositionToMouse && GetMousePosition(mouseX, mouseY))
+	{
+		contextMenuWidget->SetPositionInViewport(FVector2D(mouseX + 12.0f, mouseY + 12.0f), true);
+	}
+
+	contextMenuWidget->SetVisibility(ESlateVisibility::Visible);
+}
+
+void AEpisodeEditorController::HidePlaceableContextMenu()
+{
+	if (IsValid(PlaceableContextMenuWidget))
+	{
+		PlaceableContextMenuWidget->SetSelectedPlaceable(nullptr);
+		PlaceableContextMenuWidget->RemoveFromParent();
 	}
 }
 

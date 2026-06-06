@@ -225,6 +225,13 @@ bool UEpisodeAuthoringSubsystem::CanPlaceStaticObstacleInternal(
 
 	const FVector2D candidateHalfExtent = ComputePlacementHalfExtent2D(candidateProp);
 	const FVector candidateLocation = transform.GetLocation();
+	if (candidateLocation.Z < -KINDA_SMALL_NUMBER)
+	{
+		outFailureReason = FString::Printf(
+			TEXT("Placement location Z must be 0.00 cm or higher. Current Z: %.2f."),
+			candidateLocation.Z);
+		return false;
+	}
 	if (candidateLocation.Z > StaticObstacleGroundZToleranceCm)
 	{
 		outFailureReason = FString::Printf(
@@ -302,6 +309,117 @@ bool UEpisodeAuthoringSubsystem::UpdateStaticObstacleTransform(
 		*transform.GetLocation().ToCompactString(),
 		transform.Rotator().Yaw);
 
+	return true;
+}
+
+bool UEpisodeAuthoringSubsystem::RenameStaticObstacleInstanceId(
+	const FString& oldInstanceId,
+	const FString& newInstanceId,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+
+	const FString trimmedNewInstanceId = newInstanceId.TrimStartAndEnd();
+	if (oldInstanceId.IsEmpty())
+	{
+		outFailureReason = TEXT("Static obstacle instance id is empty.");
+		return false;
+	}
+	if (trimmedNewInstanceId.IsEmpty())
+	{
+		outFailureReason = TEXT("New static obstacle instance id is empty.");
+		return false;
+	}
+	if (oldInstanceId == trimmedNewInstanceId)
+	{
+		return true;
+	}
+	if (ContainsInstanceId(trimmedNewInstanceId))
+	{
+		outFailureReason = FString::Printf(TEXT("Static obstacle instance id '%s' already exists."), *trimmedNewInstanceId);
+		return false;
+	}
+
+	FEpisodePlaceableInstanceSpec* spec = FindStaticObstacleSpecByInstanceId(oldInstanceId);
+	FEpisodeAuthoringStaticObstacleRecord* record = FindStaticObstacleRecordByInstanceId(oldInstanceId);
+	if (!spec || !record)
+	{
+		outFailureReason = FString::Printf(TEXT("Static obstacle '%s' is not editable."), *oldInstanceId);
+		return false;
+	}
+
+	TObjectPtr<AEpisodeStaticObstacle>* actorPtr = StaticObstacleActors.Find(oldInstanceId);
+	if (!actorPtr || !actorPtr->Get())
+	{
+		outFailureReason = FString::Printf(TEXT("Static obstacle actor '%s' was not found."), *oldInstanceId);
+		return false;
+	}
+	AEpisodeStaticObstacle* actor = actorPtr->Get();
+
+	spec->InstanceId = trimmedNewInstanceId;
+	record->InstanceId = trimmedNewInstanceId;
+	StaticObstacleActors.Remove(oldInstanceId);
+	TObjectPtr<AEpisodeStaticObstacle> renamedActorPtr = actor;
+	StaticObstacleActors.Add(trimmedNewInstanceId, renamedActorPtr);
+
+	if (UEpisodePlaceableComponent* placeableComponent = actor->FindComponentByClass<UEpisodePlaceableComponent>())
+	{
+		placeableComponent->InstanceId = trimmedNewInstanceId;
+	}
+
+	DraftWorldSpec.SpecHash.Reset();
+	bDirty = true;
+
+	UE_LOG(
+		LogEpisodeAuthoring,
+		Log,
+		TEXT("Renamed static obstacle instance | OldInstanceId: %s | NewInstanceId: %s"),
+		*oldInstanceId,
+		*trimmedNewInstanceId);
+
+	return true;
+}
+
+bool UEpisodeAuthoringSubsystem::RemoveStaticObstacle(
+	const FString& instanceId,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+
+	if (instanceId.IsEmpty())
+	{
+		outFailureReason = TEXT("Static obstacle instance id is empty.");
+		return false;
+	}
+
+	const int32 removedSpecCount = DraftWorldSpec.Placeables.RemoveAll(
+		[&instanceId](const FEpisodePlaceableInstanceSpec& spec)
+		{
+			return spec.InstanceId == instanceId && spec.Category == EEpisodeActorCategory::StaticObstacle;
+		});
+	if (removedSpecCount <= 0)
+	{
+		outFailureReason = FString::Printf(TEXT("Static obstacle spec '%s' was not found."), *instanceId);
+		return false;
+	}
+
+	StaticObstacleRecords.RemoveAll(
+		[&instanceId](const FEpisodeAuthoringStaticObstacleRecord& record)
+		{
+			return record.InstanceId == instanceId;
+		});
+
+	TObjectPtr<AEpisodeStaticObstacle> actorPtr;
+	StaticObstacleActors.RemoveAndCopyValue(instanceId, actorPtr);
+	if (AEpisodeStaticObstacle* actor = actorPtr.Get())
+	{
+		actor->Destroy();
+	}
+
+	DraftWorldSpec.SpecHash.Reset();
+	bDirty = true;
+
+	UE_LOG(LogEpisodeAuthoring, Log, TEXT("Removed static obstacle | InstanceId: %s"), *instanceId);
 	return true;
 }
 

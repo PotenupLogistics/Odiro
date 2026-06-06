@@ -94,6 +94,17 @@ public:
 		const FTransform& transform,
 		FString& outFailureReason);
 
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	bool RenameStaticObstacleInstanceId(
+		const FString& oldInstanceId,
+		const FString& newInstanceId,
+		FString& outFailureReason);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	bool RemoveStaticObstacle(
+		const FString& instanceId,
+		FString& outFailureReason);
+
 	bool AddStaticObstacleInternal(
 		FName propId,
 		const FTransform& transform,

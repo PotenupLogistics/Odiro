@@ -3,6 +3,11 @@
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "DeliveryBot/Component/DeliveryBot_HttpPolicyComponent.h"
 #include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
+#include "Shared/Struct/DeliveryBot/Drive/DeliveryBotDriveConfigInfo.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotPolicyController, Log, All);
 
@@ -10,26 +15,38 @@ UDeliveryBot_PolicyControllerComponent::UDeliveryBot_PolicyControllerComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 }
+
 void UDeliveryBot_PolicyControllerComponent::InitializePolicyController(ADeliveryBot* ownerDeliveryBot,	UDeliveryBot_HttpPolicyComponent* httpPolicyComponent)
 {
 	OwnerDeliveryBot = ownerDeliveryBot;
 	HttpPolicyComponent = httpPolicyComponent;
 
+	UE_LOG(
+		LogDeliveryBotPolicyController,
+		Log,
+		TEXT("Policy controller initialized | AutoStart: %s, WaitEpisodeStart: %s, WaitGrid: %s"),
+		bAutoStartPolicyLoop ? TEXT("true") : TEXT("false"),
+		bWaitForEpisodeStartBeforePolicyLoop ? TEXT("true") : TEXT("false"),
+		bWaitForGridUploadBeforePolicyLoop ? TEXT("true") : TEXT("false")
+	);
+
 	if (IsValid(HttpPolicyComponent))
 	{
 		HttpPolicyComponent->OnParsedPolicyResponse.AddUniqueDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse);
 		HttpPolicyComponent->OnGridResponse.AddUniqueDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleGridUploadResponse);
+		HttpPolicyComponent->OnEpisodeStartResponse.AddUniqueDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeStartResponse);
+		HttpPolicyComponent->OnEpisodeConfigUpdateResponse.AddUniqueDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeConfigUpdateResponse);
 	}
 
 	if (bAutoStartPolicyLoop)
 	{
-		if (bWaitForGridUploadBeforePolicyLoop)
+		if (bWaitForEpisodeStartBeforePolicyLoop)
 		{
-			StartGridUploadRetryLoop();
+			StartEpisodeStartRetryLoop();
 		}
 		else
 		{
-			SendGridToPolicyServerOnce();
+			SendEpisodeStartToPolicyServerOnce();
 			StartPolicyLoop();
 		}
 	}
@@ -39,11 +56,15 @@ void UDeliveryBot_PolicyControllerComponent::EndPlay(const EEndPlayReason::Type 
 {
 	StopPolicyLoop();
 	StopGridUploadRetryLoop();
+	StopEpisodeStartRetryLoop();
 
 	if (IsValid(HttpPolicyComponent))
 	{
-		HttpPolicyComponent->OnParsedPolicyResponse.RemoveDynamic(this,	&UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse);
-		HttpPolicyComponent->OnGridResponse.RemoveDynamic(this,	&UDeliveryBot_PolicyControllerComponent::HandleGridUploadResponse);
+		HttpPolicyComponent->OnParsedPolicyResponse.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse);
+		HttpPolicyComponent->OnGridResponse.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleGridUploadResponse);
+		HttpPolicyComponent->OnEpisodeStartResponse.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeStartResponse);
+		HttpPolicyComponent->OnEpisodeConfigUpdateResponse.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeConfigUpdateResponse);
+		
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -52,7 +73,10 @@ void UDeliveryBot_PolicyControllerComponent::EndPlay(const EEndPlayReason::Type 
 void UDeliveryBot_PolicyControllerComponent::StartPolicyLoop()
 {
 	if (!GetWorld())
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Policy loop start skipped. World is invalid."));
 		return;
+	}
 
 	const float safeInterval = FMath::Max(PolicyRequestIntervalSecond, 0.05f);
 
@@ -63,6 +87,13 @@ void UDeliveryBot_PolicyControllerComponent::StartPolicyLoop()
 		safeInterval,
 		true,
 		0.f
+	);
+
+	UE_LOG(
+		LogDeliveryBotPolicyController,
+		Log,
+		TEXT("Policy loop started. Interval: %.2fs"),
+		safeInterval
 	);
 }
 
@@ -77,10 +108,23 @@ void UDeliveryBot_PolicyControllerComponent::StopPolicyLoop()
 void UDeliveryBot_PolicyControllerComponent::RequestPolicyByTimer()
 {
 	if (!IsValid(OwnerDeliveryBot))
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Policy request skipped. OwnerDeliveryBot is invalid."));
 		return;
+	}
 
-	OwnerDeliveryBot->SendPolicyObservationOnce();
+	if (!bHasExpectedPolicyVersions)
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Policy request skipped. Expected policy versions are not initialized yet."));
+		return;
+	}
+
+	if (!OwnerDeliveryBot->SendPolicyObservationOnce())
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Policy request skipped. SendPolicyObservationOnce returned false."));
+	}
 }
+
 void UDeliveryBot_PolicyControllerComponent::TickPolicy(float deltaTime)
 {
 	if (!bHasValidPolicyMoveCommand)
@@ -93,8 +137,7 @@ void UDeliveryBot_PolicyControllerComponent::TickPolicy(float deltaTime)
 	if (!world)
 		return;
 
-	const float elapsedSinceLastPolicyAction =
-		world->GetTimeSeconds() - LastValidPolicyActionWorldTimeSeconds;
+	const float elapsedSinceLastPolicyAction = world->GetTimeSeconds() - LastValidPolicyActionWorldTimeSeconds;
 
 	if (elapsedSinceLastPolicyAction > PolicyActionTimeoutSecond)
 	{
@@ -115,9 +158,7 @@ void UDeliveryBot_PolicyControllerComponent::TickPolicy(float deltaTime)
 
 	OwnerDeliveryBot->ApplyMoveCommand(LastValidPolicyMoveCommand, deltaTime);
 }
-
-void UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse(
-	const FDeliveryBotHttpPolicyResponseInfo& responseInfo)
+void UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse(const FDeliveryBotHttpPolicyResponseInfo& responseInfo)
 {
 	LogPolicyResponseReceived(responseInfo);
 
@@ -148,6 +189,15 @@ void UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse(
 		return;
 	}
 
+	FString versionErrorMessage;
+	if (!TryValidatePolicyResponseVersions(responseInfo, versionErrorMessage))
+	{
+		FDeliveryBotHttpPolicyResponseInfo failureInfo = responseInfo;
+		failureInfo.ErrorMessage = versionErrorMessage;
+		HandlePolicyFailure(failureInfo);
+		return;
+	}
+
 	FDeliveryBotMoveCommandInfo moveCommandInfo;
 	FString validationErrorMessage;
 
@@ -169,6 +219,130 @@ void UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse(
 	}
 
 	LogValidPolicyAction(responseInfo, moveCommandInfo);
+}
+
+// Python action이 현재 Unreal episode/config/grid 기준과 같은지 확인
+bool UDeliveryBot_PolicyControllerComponent::TryValidatePolicyResponseVersions(const FDeliveryBotHttpPolicyResponseInfo& responseInfo, FString& outErrorMessage) const
+{
+	outErrorMessage.Empty();
+
+	if (!bHasExpectedPolicyVersions)
+	{
+		outErrorMessage = TEXT("Expected policy versions are not initialized.");
+		return false;
+	}
+
+	if (responseInfo.EpisodeVersion != ExpectedEpisodeVersion)
+	{
+		outErrorMessage = FString::Printf(TEXT("Episode version mismatch. Response: %d, Expected: %d"), responseInfo.EpisodeVersion, ExpectedEpisodeVersion);
+		return false;
+	}
+
+	if (responseInfo.ConfigVersion != ExpectedConfigVersion)
+	{
+		outErrorMessage = FString::Printf(TEXT("Config version mismatch. Response: %d, Expected: %d"), responseInfo.ConfigVersion, ExpectedConfigVersion);
+		return false;
+	}
+
+	if (responseInfo.GridVersion != ExpectedGridVersion)
+	{
+		outErrorMessage = FString::Printf(TEXT("Grid version mismatch. Response: %d, Expected: %d"), responseInfo.GridVersion, ExpectedGridVersion);
+		return false;
+	}
+
+	return true;
+}
+
+// /episode/start 성공 응답에서 version 값을 읽어서 이후 policy 응답 검증 기준으로 저장
+bool UDeliveryBot_PolicyControllerComponent::TryUpdateExpectedPolicyVersionsFromEpisodeStartResponse(const FString& responseBody, FString& outErrorMessage)
+{
+	outErrorMessage.Empty();
+
+	if (responseBody.IsEmpty())
+	{
+		outErrorMessage = TEXT("Episode start response body is empty.");
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> rootObject;
+	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(responseBody);
+
+	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+	{
+		outErrorMessage = TEXT("Failed to parse episode start response JSON.");
+		return false;
+	}
+
+	int32 parsedEpisodeVersion = 0;
+	int32 parsedConfigVersion = 0;
+	int32 parsedGridVersion = 0;
+
+	if (!rootObject->TryGetNumberField(TEXT("episodeVersion"), parsedEpisodeVersion))
+	{
+		outErrorMessage = TEXT("Episode start response has no episodeVersion.");
+		return false;
+	}
+
+	if (!rootObject->TryGetNumberField(TEXT("configVersion"), parsedConfigVersion))
+	{
+		outErrorMessage = TEXT("Episode start response has no configVersion.");
+		return false;
+	}
+
+	if (!rootObject->TryGetNumberField(TEXT("gridVersion"), parsedGridVersion))
+	{
+		outErrorMessage = TEXT("Episode start response has no gridVersion.");
+		return false;
+	}
+
+	ExpectedEpisodeVersion = parsedEpisodeVersion;
+	ExpectedConfigVersion = parsedConfigVersion;
+	ExpectedGridVersion = parsedGridVersion;
+	bHasExpectedPolicyVersions = true;
+
+	UE_LOG(
+		LogDeliveryBotPolicyController,
+		Log,
+		TEXT("Expected policy versions updated | Episode: %d, Config: %d, Grid: %d"),
+		ExpectedEpisodeVersion,
+		ExpectedConfigVersion,
+		ExpectedGridVersion
+	);
+
+	return true;
+}
+
+bool UDeliveryBot_PolicyControllerComponent::TryUpdateExpectedGridVersionFromGridUploadResponse(const FString& responseBody, FString& outErrorMessage)
+{
+	outErrorMessage.Empty();
+
+	if (responseBody.IsEmpty())
+	{
+		outErrorMessage = TEXT("Grid upload response body is empty.");
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> rootObject;
+	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(responseBody);
+
+	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+	{
+		outErrorMessage = TEXT("Failed to parse grid upload response JSON.");
+		return false;
+	}
+
+	int32 parsedGridVersion = 0;
+	if (!rootObject->TryGetNumberField(TEXT("gridVersion"), parsedGridVersion))
+	{
+		outErrorMessage = TEXT("Grid upload response has no gridVersion.");
+		return false;
+	}
+
+	ExpectedGridVersion = parsedGridVersion;
+
+	UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Expected grid version updated | Grid: %d"), ExpectedGridVersion);
+
+	return true;
 }
 
 bool UDeliveryBot_PolicyControllerComponent::TryBuildMoveCommandFromPolicyResponse(const FDeliveryBotHttpPolicyResponseInfo& responseInfo,	FDeliveryBotMoveCommandInfo& outMoveCommandInfo, FString& outErrorMessage) const
@@ -216,12 +390,8 @@ bool UDeliveryBot_PolicyControllerComponent::TryBuildMoveCommandFromPolicyRespon
 		return false;
 	}
 
-	const FDeliveryBotObservationInfo observation = OwnerDeliveryBot->BuildObservation();
-	const float maxAllowedSpeedKmh =
-		moveDirectionType == EDeliveryBotMoveDirectionType::Reverse
-			? observation.VehicleSpec.MaxReverseSpeedKmh
-			: observation.VehicleSpec.MaxSpeedKmh;
-
+	const float maxAllowedSpeedKmh = OwnerDeliveryBot->GetMaxPolicySpeedKmh(moveDirectionType);
+	
 	if (action.TargetSpeedKmh > maxAllowedSpeedKmh)
 	{
 		outErrorMessage = FString::Printf(
@@ -262,6 +432,8 @@ bool UDeliveryBot_PolicyControllerComponent::TryGetMoveDirectionTypeFromPolicyDi
 
 void UDeliveryBot_PolicyControllerComponent::HandlePolicyFailure(const FDeliveryBotHttpPolicyResponseInfo& responseInfo)
 {
+	RecordPolicyFailure(responseInfo);
+	
 	++ConsecutivePolicyFailureCount;
 
 	UE_LOG(
@@ -304,10 +476,13 @@ void UDeliveryBot_PolicyControllerComponent::LogPolicyResponseReceived(const FDe
 	UE_LOG(
 		LogDeliveryBotPolicyController,
 		Log,
-		TEXT("Policy response received | Seq: %d, Status: %s, HasAction: %s, Error: %s"),
+		TEXT("Policy response received | Seq: %d, Status: %s, HasAction: %s, EpisodeVersion: %d, ConfigVersion: %d, GridVersion: %d, Error: %s"),
 		responseInfo.Sequence,
 		*responseInfo.Status,
 		responseInfo.bHasAction ? TEXT("true") : TEXT("false"),
+		responseInfo.EpisodeVersion,
+		responseInfo.ConfigVersion,
+		responseInfo.GridVersion,
 		*responseInfo.ErrorMessage
 	);
 }
@@ -429,36 +604,378 @@ void UDeliveryBot_PolicyControllerComponent::HandleGridUploadResponse(bool bWasS
 {
 	const bool bHttpOk = bWasSuccessful && responseCode >= 200 && responseCode < 300;
 	
-	if (bHttpOk)
+	if (!bHttpOk)
 	{
-		UE_LOG(
-			LogDeliveryBotPolicyController,
-			Log,
-			TEXT("Grid upload response | Success: %s, Code: %d, Body: %s"),
-			bWasSuccessful ? TEXT("true") : TEXT("false"),
-			responseCode,
-			*responseBody
-		);
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Grid upload response | Success: %s, Code: %d, Body: %s"), 
+				bWasSuccessful ? TEXT("true") : TEXT("false"), responseCode, *responseBody);
+		return;
 	}
-	else
-	{
-		UE_LOG(
-			LogDeliveryBotPolicyController,
-			Warning,
-			TEXT("Grid upload response | Success: %s, Code: %d, Body: %s"),
-			bWasSuccessful ? TEXT("true") : TEXT("false"),
-			responseCode,
-			*responseBody
-		);
 
+	UE_LOG(LogDeliveryBotPolicyController, Log,
+		TEXT("Grid upload response | Success: %s, Code: %d, Body: %s"), bWasSuccessful ? TEXT("true") : TEXT("false"), responseCode, *responseBody);
+
+	FString versionErrorMessage;
+	if (!TryUpdateExpectedGridVersionFromGridUploadResponse(responseBody, versionErrorMessage))
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Error, TEXT("Grid upload response rejected. %s"), *versionErrorMessage);
 		return;
 	}
 
 	bHasCompletedGridUpload = true;
 	StopGridUploadRetryLoop();
 
-	if (bAutoStartPolicyLoop && bWaitForGridUploadBeforePolicyLoop)
+	if (!bWaitForEpisodeStartBeforePolicyLoop && bAutoStartPolicyLoop && bWaitForGridUploadBeforePolicyLoop)
 	{
 		StartPolicyLoop();
+	}
+}
+
+
+void UDeliveryBot_PolicyControllerComponent::StartEpisodeStartRetryLoop()
+{
+	if (!GetWorld())
+		return;
+
+	const float safeInterval = FMath::Max(EpisodeStartRetryIntervalSecond, 0.1f);
+
+	GetWorld()->GetTimerManager().SetTimer(
+		EpisodeStartRetryTimerHandle,
+		this,
+		&UDeliveryBot_PolicyControllerComponent::RequestEpisodeStartByTimer,
+		safeInterval,
+		true,
+		0.f
+	);
+}
+
+void UDeliveryBot_PolicyControllerComponent::StopEpisodeStartRetryLoop()
+{
+	if (!GetWorld())
+		return;
+
+	GetWorld()->GetTimerManager().ClearTimer(EpisodeStartRetryTimerHandle);
+}
+
+void UDeliveryBot_PolicyControllerComponent::RequestEpisodeStartByTimer()
+{
+	if (bHasCompletedEpisodeStart)
+	{
+		StopEpisodeStartRetryLoop();
+		return;
+	}
+
+	SendEpisodeStartToPolicyServerOnce();
+}
+bool UDeliveryBot_PolicyControllerComponent::SendEpisodeStartToPolicyServerOnce()
+{
+	if (!IsValid(OwnerDeliveryBot) || !IsValid(HttpPolicyComponent))
+		return false;
+
+	if (HttpPolicyComponent->IsEpisodeStartRequestInFlight())
+		return false;
+
+	FString episodeStartJson;
+	if (!OwnerDeliveryBot->BuildEpisodeStartJson(episodeStartJson))
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Episode start upload skipped. Failed to build episode start JSON."));
+		return false;
+	}
+
+	const bool bRequestStarted = HttpPolicyComponent->SendEpisodeStartJson(episodeStartJson);
+
+	if (bRequestStarted)
+	{
+		UE_LOG(
+			LogDeliveryBotPolicyController,
+			Log,
+			TEXT("Episode start request sent. JsonLength: %d"),
+			episodeStartJson.Len()
+		);
+	}
+
+	return bRequestStarted;
+}
+
+void UDeliveryBot_PolicyControllerComponent::HandleEpisodeStartResponse(bool bWasSuccessful, int32 responseCode, const FString& responseBody)
+{
+	const bool bHttpOk = bWasSuccessful && responseCode >= 200 && responseCode < 300;
+
+	if (!bHttpOk)
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Episode start response | Success: %s, Code: %d, Body: %s"), 
+				bWasSuccessful ? TEXT("true") : TEXT("false"), responseCode, *responseBody);
+		return;
+	}
+
+	UE_LOG(	LogDeliveryBotPolicyController,	Log, TEXT("Episode start response | Success: %s, Code: %d, Body: %s"), bWasSuccessful ? TEXT("true") : TEXT("false"), responseCode, *responseBody);
+
+	FString versionErrorMessage;
+	if (!TryUpdateExpectedPolicyVersionsFromEpisodeStartResponse(responseBody, versionErrorMessage))
+	{
+		UE_LOG(	LogDeliveryBotPolicyController,	Error,	TEXT("Episode start response rejected. %s"), *versionErrorMessage);
+
+		return;
+	}
+
+	bHasCompletedEpisodeStart = true;
+	StopEpisodeStartRetryLoop();
+
+	if (bAutoStartPolicyLoop)
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Episode start completed. Starting policy loop."));
+		StartPolicyLoop();
+	}
+	else
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Episode start completed, but auto policy loop is disabled."));
+	}
+}
+
+
+bool UDeliveryBot_PolicyControllerComponent::SendEpisodeConfigUpdateToPolicyServerOnce()
+{
+	if (!IsValid(OwnerDeliveryBot) || !IsValid(HttpPolicyComponent))
+		return false;
+
+	if (HttpPolicyComponent->IsEpisodeConfigUpdateRequestInFlight())
+		return false;
+
+	if (HttpPolicyComponent->IsRequestInFlight())
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Config update skipped. Policy request is still in flight."));
+		return false;
+	}
+	if (!bHasExpectedPolicyVersions)
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Config update skipped. Expected policy versions are not initialized yet."));
+		return false;
+	}
+	
+	FString configUpdateJson;
+	if (!OwnerDeliveryBot->BuildEpisodeConfigUpdateJson(configUpdateJson))
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Config update skipped. Failed to build config update JSON."));
+		return false;
+	}
+
+	StopPolicyLoop();
+
+	const bool bRequestStarted = HttpPolicyComponent->SendEpisodeConfigUpdateJson(configUpdateJson);
+
+	if (bRequestStarted)
+	{
+		UE_LOG(
+			LogDeliveryBotPolicyController,
+			Log,
+			TEXT("Episode config update request sent. JsonLength: %d"),
+			configUpdateJson.Len()
+		);
+	}
+	else if (bAutoStartPolicyLoop && bHasExpectedPolicyVersions)
+	{
+		StartPolicyLoop();
+	}
+
+	return bRequestStarted;
+}
+
+bool UDeliveryBot_PolicyControllerComponent::ApplyRuntimeDriveConfigAndSendConfigUpdate(const FDeliveryBotDriveConfigInfo& driveConfigInfo)
+{
+	UE_LOG(
+		LogDeliveryBotPolicyController,
+		Log,
+		TEXT("Runtime drive config update requested | MaxSpeed: %.2f, MaxReverseSpeed: %.2f"),
+		driveConfigInfo.MaxSpeedKmh,
+		driveConfigInfo.MaxReverseSpeedKmh
+	);
+
+	if (!IsValid(OwnerDeliveryBot) || !IsValid(HttpPolicyComponent))
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Drive config update skipped. Owner or HTTP component is invalid."));
+		return false;
+	}
+
+	if (!bHasExpectedPolicyVersions)
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Drive config update skipped. Expected policy versions are not initialized yet."));
+		return false;
+	}
+
+	if (HttpPolicyComponent->IsEpisodeConfigUpdateRequestInFlight())
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Drive config update skipped. Config update request is already in flight."));
+		return false;
+	}
+
+	if (HttpPolicyComponent->IsRequestInFlight())
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Drive config update skipped. Policy request is still in flight."));
+		return false;
+	}
+
+	StopPolicyLoop();
+
+	OwnerDeliveryBot->ApplyRuntimeDriveConfigInfo(driveConfigInfo);
+
+	const bool bRequestStarted = SendEpisodeConfigUpdateToPolicyServerOnce();
+
+	UE_LOG(
+		LogDeliveryBotPolicyController,
+		Log,
+		TEXT("Runtime drive config update request result | Started: %s"),
+		bRequestStarted ? TEXT("true") : TEXT("false")
+	);
+
+	return bRequestStarted;
+}
+
+bool UDeliveryBot_PolicyControllerComponent::SendCurrentRuntimeConfigUpdateToPolicyServerOnce()
+{
+	UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Current runtime config update requested."));
+
+	if (!IsValid(OwnerDeliveryBot) || !IsValid(HttpPolicyComponent))
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Current config update skipped. Owner or HTTP component is invalid."));
+		return false;
+	}
+
+	if (!bHasExpectedPolicyVersions)
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Current config update skipped. Expected policy versions are not initialized yet."));
+		return false;
+	}
+
+	if (HttpPolicyComponent->IsEpisodeConfigUpdateRequestInFlight())
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Current config update skipped. Config update request is already in flight."));
+		return false;
+	}
+
+	if (HttpPolicyComponent->IsRequestInFlight())
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Current config update skipped. Policy request is still in flight. Try again shortly."));
+		return false;
+	}
+
+	OwnerDeliveryBot->ApplyCurrentSetupInfoToRuntimeComponents();
+
+	return SendEpisodeConfigUpdateToPolicyServerOnce();
+}
+
+bool UDeliveryBot_PolicyControllerComponent::TryUpdateExpectedConfigVersionFromEpisodeConfigUpdateResponse(
+	const FString& responseBody,
+	FString& outErrorMessage)
+{
+	outErrorMessage.Empty();
+
+	if (!bHasExpectedPolicyVersions)
+	{
+		outErrorMessage = TEXT("Expected policy versions are not initialized.");
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> rootObject;
+	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(responseBody);
+
+	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+	{
+		outErrorMessage = TEXT("Failed to parse episode config update response JSON.");
+		return false;
+	}
+
+	int32 parsedEpisodeVersion = 0;
+	int32 parsedConfigVersion = 0;
+	int32 parsedGridVersion = 0;
+
+	if (!rootObject->TryGetNumberField(TEXT("episodeVersion"), parsedEpisodeVersion) ||
+		!rootObject->TryGetNumberField(TEXT("configVersion"), parsedConfigVersion) ||
+		!rootObject->TryGetNumberField(TEXT("gridVersion"), parsedGridVersion))
+	{
+		outErrorMessage = TEXT("Config update response has missing version fields.");
+		return false;
+	}
+
+	if (parsedEpisodeVersion != ExpectedEpisodeVersion)
+	{
+		outErrorMessage = FString::Printf(TEXT("Episode version mismatch during config update. Response: %d, Expected: %d"), parsedEpisodeVersion, ExpectedEpisodeVersion);
+		return false;
+	}
+
+	if (parsedGridVersion != ExpectedGridVersion)
+	{
+		outErrorMessage = FString::Printf(TEXT("Grid version mismatch during config update. Response: %d, Expected: %d"), parsedGridVersion, ExpectedGridVersion);
+		return false;
+	}
+
+	ExpectedConfigVersion = parsedConfigVersion;
+
+	UE_LOG(
+		LogDeliveryBotPolicyController,
+		Log,
+		TEXT("Expected config version updated | Config: %d"),
+		ExpectedConfigVersion
+	);
+
+	return true;
+}
+
+
+void UDeliveryBot_PolicyControllerComponent::HandleEpisodeConfigUpdateResponse(bool bWasSuccessful, int32 responseCode, const FString& responseBody)
+{
+	const bool bHttpOk = bWasSuccessful && responseCode >= 200 && responseCode < 300;
+
+	if (!bHttpOk)
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Episode config update response | Success: %s, Code: %d, Body: %s"),
+			bWasSuccessful ? TEXT("true") : TEXT("false"), responseCode, *responseBody);
+
+		if (bAutoStartPolicyLoop && bHasExpectedPolicyVersions)
+		{
+			StartPolicyLoop();
+		}
+
+		return;
+	}
+
+	FString versionErrorMessage;
+	if (!TryUpdateExpectedConfigVersionFromEpisodeConfigUpdateResponse(responseBody, versionErrorMessage))
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Error, TEXT("Episode config update response rejected. %s"), *versionErrorMessage);
+
+		if (bAutoStartPolicyLoop && bHasExpectedPolicyVersions)
+		{
+			StartPolicyLoop();
+		}
+
+		return;
+	}
+
+	if (bAutoStartPolicyLoop)
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Episode config update completed. Restarting policy loop."));
+		StartPolicyLoop();
+	}
+}
+
+void UDeliveryBot_PolicyControllerComponent::RecordPolicyFailure(const FDeliveryBotHttpPolicyResponseInfo& responseInfo)
+{
+	const FString failureLine = FString::Printf(
+		TEXT("Seq=%d Episode=%d Config=%d Grid=%d Status=%s Error=%s Policy=%s Reason=%s"),
+		responseInfo.Sequence,
+		responseInfo.EpisodeVersion,
+		responseInfo.ConfigVersion,
+		responseInfo.GridVersion,
+		*responseInfo.Status,
+		*responseInfo.ErrorMessage,
+		*responseInfo.Debug.PolicyName,
+		*responseInfo.Debug.Reason
+	);
+
+	PolicyFailureHistory.Add(failureLine);
+
+	const int32 safeMaxCount = FMath::Max(MaxPolicyFailureHistoryCount, 1);
+	while (PolicyFailureHistory.Num() > safeMaxCount)
+	{
+		PolicyFailureHistory.RemoveAt(0);
 	}
 }

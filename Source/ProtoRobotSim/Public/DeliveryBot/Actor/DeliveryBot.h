@@ -55,6 +55,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Drive")
 	void ApplyMoveCommand(const FDeliveryBotMoveCommandInfo& moveCommandInfo, float deltaTime);
 
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Setup")
+	void ApplyRuntimeDriveConfigInfo(const FDeliveryBotDriveConfigInfo& driveConfigInfo);
+
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Setup")
+	void ApplyCurrentSetupInfoToRuntimeComponents();
+
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "DeliveryBot|Debug")
+	void SendCurrentRuntimeConfigUpdateToPolicyServerOnce();
+	
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Sensor")
 	void UpdateSensorSnapshot();
 
@@ -73,11 +82,21 @@ public:
 	bool BuildObservationJson(const FDeliveryBotObservationInfo& observation, FString& outJson) const;
 	
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
+	bool BuildEpisodeStartJson(FString& outJson) const;
+	
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
+	bool BuildEpisodeConfigUpdateJson(FString& outJson) const;
+	
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
 	bool SendPolicyObservationOnce();
+	
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Policy")
+	float GetMaxPolicySpeedKmh(EDeliveryBotMoveDirectionType moveDirectionType) const;
+	
 	
 private:
 	void ApplySetupInfo();
-	
+
 	void FillObservation(FDeliveryBotObservationInfo& observation) const;
 	void DebugLogObservation(float deltaTime);
 

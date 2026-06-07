@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Shared/Struct/DeliveryBot/Drive/DeliveryBotDriveConfigInfo.h"
 #include "Shared/Struct/DeliveryBot/Drive/DeliveryBotMovementInfo.h"
 #include "Shared/Struct/DeliveryBot/Policy/DeliveryBotHttpPolicyResponseInfo.h"
 #include "DeliveryBot_PolicyControllerComponent.generated.h"
@@ -34,21 +35,29 @@ public:
 	// 매 프레임 처리해야 할 로직을 실행
 	void TickPolicy(float deltaTime);
 
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PolicyController")
+	bool SendEpisodeStartToPolicyServerOnce();
+	
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PolicyController")
+	bool SendEpisodeConfigUpdateToPolicyServerOnce();
+	
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PolicyController")
+	bool ApplyRuntimeDriveConfigAndSendConfigUpdate(const FDeliveryBotDriveConfigInfo& driveConfigInfo);
+
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PolicyController")
+	bool SendCurrentRuntimeConfigUpdateToPolicyServerOnce();
 	
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
 	void RequestPolicyByTimer();
-
 	// 파싱한 Python 응답을 받는 함수
 	UFUNCTION()
 	void HandleParsedPolicyResponse(const FDeliveryBotHttpPolicyResponseInfo& responseInfo);
 
-	
 	// Python action을 Unreal 이동 명령으로 변환하고 값 범위를 검증한다.
 	bool TryBuildMoveCommandFromPolicyResponse(const FDeliveryBotHttpPolicyResponseInfo& responseInfo,	FDeliveryBotMoveCommandInfo& outMoveCommandInfo, FString& outErrorMessage) const;
-
 	// Python의 direction 문자열을 Unreal 이동 방향 enum으로 변환한다.
 	bool TryGetMoveDirectionTypeFromPolicyDirection(const FString& direction, EDeliveryBotMoveDirectionType& outMoveDirectionType) const;
 
@@ -67,12 +76,37 @@ private:
 	// 검증을 통과해 실제 적용 가능한 action을 기록한다.
 	void LogValidPolicyAction(const FDeliveryBotHttpPolicyResponseInfo& responseInfo,	const FDeliveryBotMoveCommandInfo& moveCommandInfo) const;
 	
+	// Python 응답의 episode/config/grid version이 현재 Unreal 기준과 같은지 검증한다.
+	bool TryValidatePolicyResponseVersions(const FDeliveryBotHttpPolicyResponseInfo& responseInfo,	FString& outErrorMessage) const;
+
+	// /episode/start 응답 body에서 episode/config/grid version을 읽어 현재 기대 version으로 저장한다.
+	bool TryUpdateExpectedPolicyVersionsFromEpisodeStartResponse(const FString& responseBody, FString& outErrorMessage);
+	
+	// /grid/update 응답 body에서 gridVersion을 읽어 현재 기대 GridVersion으로 저장한다.
+	bool TryUpdateExpectedGridVersionFromGridUploadResponse(const FString& responseBody, FString& outErrorMessage);
+	
+	bool TryUpdateExpectedConfigVersionFromEpisodeConfigUpdateResponse(const FString& responseBody,	FString& outErrorMessage);
+	
+	UFUNCTION()
+	void HandleEpisodeConfigUpdateResponse(bool bWasSuccessful, int32 responseCode, const FString& responseBody);
+	
+	void RecordPolicyFailure(const FDeliveryBotHttpPolicyResponseInfo& responseInfo);
+	
+	
+private: // 그리드를 파이썬으로 전송
 	void StartGridUploadRetryLoop();
 	void StopGridUploadRetryLoop();
 	void RequestGridUploadByTimer();
-
 	UFUNCTION()
 	void HandleGridUploadResponse(bool bWasSuccessful, int32 responseCode, const FString& responseBody);
+	
+	
+private: // 시작 설정 값 파이썬으로 전송  -> Grid + 차량 설정 + Lidar 설정 + Start/Goal + Motion 설정
+	void StartEpisodeStartRetryLoop();
+	void StopEpisodeStartRetryLoop();
+	void RequestEpisodeStartByTimer();
+	UFUNCTION()
+	void HandleEpisodeStartResponse(bool bWasSuccessful, int32 responseCode, const FString& responseBody);
 	
 private:
 	UPROPERTY()
@@ -99,19 +133,36 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|PolicyController", meta = (AllowPrivateAccess = "true"))
 	float GridUploadRetryIntervalSecond{ 0.5f };
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|PolicyController", meta = (AllowPrivateAccess = "true"))
+	bool bWaitForEpisodeStartBeforePolicyLoop{ true };
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|PolicyController", meta = (AllowPrivateAccess = "true"))
+	float EpisodeStartRetryIntervalSecond{ 0.5f };
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|PolicyController", meta = (AllowPrivateAccess = "true"))
+	TArray<FString> PolicyFailureHistory;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|PolicyController", meta = (AllowPrivateAccess = "true"))
+	int32 MaxPolicyFailureHistoryCount{ 300 };
 	
 private:
 	FTimerHandle GridUploadRetryTimerHandle;
 	FTimerHandle PolicyLoopTimerHandle;
-	
+	FTimerHandle EpisodeStartRetryTimerHandle;
 	FDeliveryBotMoveCommandInfo LastValidPolicyMoveCommand{};
 	
 	bool bHasValidPolicyMoveCommand{ false };
 	bool bHasCompletedGridUpload{ false };
+	bool bHasCompletedEpisodeStart{ false };
+	bool bHasExpectedPolicyVersions{ false };
 	
 	float LastValidPolicyActionWorldTimeSeconds{ 0.f };
 	
+
 	int32 ConsecutivePolicyFailureCount{ 0 };
 	int32 LastHandledPolicyResponseSequence { 0 };
+	
+	int32 ExpectedEpisodeVersion{ 0 };
+	int32 ExpectedConfigVersion{ 0 };
+	int32 ExpectedGridVersion{ 0 };
 };

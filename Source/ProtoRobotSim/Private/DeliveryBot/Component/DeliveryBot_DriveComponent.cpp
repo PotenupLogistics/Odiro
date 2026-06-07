@@ -16,10 +16,8 @@ UDeliveryBot_DriveComponent::UDeliveryBot_DriveComponent()
 }
 
 // 이동 명령을 현재 차량 상태에 맞는 기어, 스로틀, 브레이크, 조향 입력으로 변환한다.
-void UDeliveryBot_DriveComponent::ApplyMoveCommand(
-	UChaosVehicleMovementComponent* vehicleMovement,
-	const FDeliveryBotMoveCommandInfo& moveCommandInfo,
-	float deltaTime)
+void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponent* vehicleMovement,	
+	const FDeliveryBotMoveCommandInfo& moveCommandInfo,	float deltaTime)
 {
 	if (!IsValid(vehicleMovement))
 		return;

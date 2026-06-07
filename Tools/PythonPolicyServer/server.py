@@ -24,7 +24,22 @@ POLICY_MODE_CHOICES = (
     "invalid-direction",
     "missing-action",
     "error-status",
+    "mismatch-episode-version",
+    "mismatch-config-version",
+    "mismatch-grid-version",
+    "stale-episode-version",
+    "stale-config-version",
+    "stale-grid-version",
 )
+
+VERSION_MISMATCH_POLICY_MODES = {
+    "mismatch-episode-version",
+    "mismatch-config-version",
+    "mismatch-grid-version",
+    "stale-episode-version",
+    "stale-config-version",
+    "stale-grid-version",
+}
 
 
 def clamp(value: float, minimum: float, maximum: float) -> float:
@@ -165,7 +180,15 @@ def build_config_info_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if isinstance(config_object, dict):
         config_info.update(config_object)
 
-    for field_name in ("vehicleSpec", "lidarSpec", "controlSpec"):
+    for field_name in (
+        "locationSpec",
+        "driveSpec",
+        "lidarSpec",
+        "motionControlSpec",
+        # Legacy compatibility while Unreal still sends/uses these names.
+        "vehicleSpec",
+        "controlSpec",
+    ):
         field_value = payload.get(field_name)
         if isinstance(field_value, dict):
             config_info[field_name] = field_value
@@ -174,15 +197,31 @@ def build_config_info_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_episode_info_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    location_spec = get_nested_object(payload, "locationSpec")
+
+    start = get_nested_object(payload, "start")
     goal = get_nested_object(payload, "goal")
+
+    start_from_location_spec = get_nested_object(location_spec, "startLocationCm")
+    goal_from_location_spec = get_nested_object(location_spec, "goalLocationCm")
+
+    if start_from_location_spec:
+        start = start_from_location_spec
+
+    if goal_from_location_spec:
+        goal = goal_from_location_spec
+
     has_goal = bool(goal.get("hasGoal", bool(goal)))
+    if location_spec:
+        has_goal = bool(location_spec.get("autoStartRoute", has_goal))
 
     return {
         "episodeId": str(payload.get("episodeId", "")),
         "robotInstanceId": str(payload.get("robotInstanceId", "")),
-        "start": get_nested_object(payload, "start"),
+        "start": start,
         "goal": goal,
         "hasGoal": has_goal,
+        "locationSpec": location_spec,
     }
 
 
@@ -427,7 +466,7 @@ def make_response(
 
 
 def build_forward_test_response(observation: dict[str, Any]) -> dict[str, Any]:
-    vehicle_spec = observation.get("vehicleSpec", {})
+    vehicle_spec = get_vehicle_spec(observation)
     max_speed_kmh = float(vehicle_spec.get("maxSpeedKmh", 0.0) or 0.0)
     target_speed_kmh = clamp(3.0, 0.0, max_speed_kmh)
     should_move = target_speed_kmh > 0.0
@@ -448,7 +487,17 @@ def build_forward_test_response(observation: dict[str, Any]) -> dict[str, Any]:
 
 def get_vehicle_spec(observation: dict[str, Any]) -> dict[str, Any]:
     vehicle_spec = observation.get("vehicleSpec", {})
-    return vehicle_spec if isinstance(vehicle_spec, dict) else {}
+    if isinstance(vehicle_spec, dict) and vehicle_spec:
+        return vehicle_spec
+
+    drive_spec = observation.get("driveSpec", {})
+    if isinstance(drive_spec, dict):
+        return {
+            "maxSpeedKmh": drive_spec.get("maxSpeedKmh", 0.0),
+            "maxReverseSpeedKmh": drive_spec.get("maxReverseSpeedKmh", 0.0),
+        }
+
+    return {}
 
 
 def enrich_observation_with_server_config(
@@ -462,8 +511,27 @@ def enrich_observation_with_server_config(
         episode_version = get_server_episode_version(server)
         config_version = get_server_config_version(server)
 
-    if "vehicleSpec" not in enriched_observation and isinstance(config_info.get("vehicleSpec"), dict):
-        enriched_observation["vehicleSpec"] = config_info["vehicleSpec"]
+    if "vehicleSpec" not in enriched_observation:
+        if isinstance(config_info.get("vehicleSpec"), dict):
+            enriched_observation["vehicleSpec"] = config_info["vehicleSpec"]
+        elif isinstance(config_info.get("driveSpec"), dict):
+            drive_spec = config_info["driveSpec"]
+            enriched_observation["vehicleSpec"] = {
+                "maxSpeedKmh": drive_spec.get("maxSpeedKmh", 0.0),
+                "maxReverseSpeedKmh": drive_spec.get("maxReverseSpeedKmh", 0.0),
+            }
+
+    if "driveSpec" not in enriched_observation and isinstance(config_info.get("driveSpec"), dict):
+        enriched_observation["driveSpec"] = config_info["driveSpec"]
+
+    if "lidarSpec" not in enriched_observation and isinstance(config_info.get("lidarSpec"), dict):
+        enriched_observation["lidarSpec"] = config_info["lidarSpec"]
+
+    if (
+        "motionControlSpec" not in enriched_observation
+        and isinstance(config_info.get("motionControlSpec"), dict)
+    ):
+        enriched_observation["motionControlSpec"] = config_info["motionControlSpec"]
 
     enriched_observation.setdefault("episodeVersion", episode_version)
     enriched_observation.setdefault("configVersion", config_version)
@@ -551,9 +619,58 @@ def build_invalid_test_response(observation: dict[str, Any], policy_mode: str) -
     )
 
 
+def build_version_mismatch_test_response(observation: dict[str, Any], policy_mode: str) -> dict[str, Any]:
+    response = build_forward_test_response(observation)
+    response["debug"]["policyName"] = f"{policy_mode}_policy"
+    response["debug"]["reason"] = f"server_returns_{policy_mode}_for_version_validation_test"
+    return response
+
+
+def apply_version_mismatch_policy_mode(response: dict[str, Any], policy_mode: str) -> None:
+    if policy_mode not in VERSION_MISMATCH_POLICY_MODES:
+        return
+
+    debug_info = response.setdefault("debug", {})
+    if not isinstance(debug_info, dict):
+        debug_info = {}
+        response["debug"] = debug_info
+
+    if policy_mode == "mismatch-episode-version":
+        response["episodeVersion"] = int(response.get("episodeVersion", 0) or 0) + 1
+        debug_info["versionMismatchTest"] = "episodeVersion_plus_one"
+        return
+
+    if policy_mode == "mismatch-config-version":
+        response["configVersion"] = int(response.get("configVersion", 0) or 0) + 1
+        debug_info["versionMismatchTest"] = "configVersion_plus_one"
+        return
+
+    if policy_mode == "mismatch-grid-version":
+        response["gridVersion"] = int(response.get("gridVersion", 0) or 0) + 1
+        debug_info["versionMismatchTest"] = "gridVersion_plus_one"
+        return
+
+    if policy_mode == "stale-episode-version":
+        response["episodeVersion"] = max(int(response.get("episodeVersion", 0) or 0) - 1, 0)
+        debug_info["versionMismatchTest"] = "episodeVersion_minus_one"
+        return
+
+    if policy_mode == "stale-config-version":
+        response["configVersion"] = max(int(response.get("configVersion", 0) or 0) - 1, 0)
+        debug_info["versionMismatchTest"] = "configVersion_minus_one"
+        return
+
+    if policy_mode == "stale-grid-version":
+        response["gridVersion"] = max(int(response.get("gridVersion", 0) or 0) - 1, 0)
+        debug_info["versionMismatchTest"] = "gridVersion_minus_one"
+
+
 def build_policy_response(observation: dict[str, Any], policy_mode: str) -> dict[str, Any]:
     if policy_mode == "forward":
         return build_forward_test_response(observation)
+
+    if policy_mode in VERSION_MISMATCH_POLICY_MODES:
+        return build_version_mismatch_test_response(observation, policy_mode)
 
     if policy_mode == "left":
         return build_move_test_response(observation, policy_mode, -0.5, 3.0, "Forward")
@@ -754,6 +871,7 @@ class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
         response["gridReceived"] = grid_status["gridReceived"]
         response["episodeVersion"] = get_server_episode_version(self.server)
         response["configVersion"] = get_server_config_version(self.server)
+        apply_version_mismatch_policy_mode(response, policy_mode)
         response["debug"].update(robot_grid_debug)
         response["debug"].update(goal_grid_debug)
         self.send_json(200, response)

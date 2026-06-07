@@ -28,11 +28,15 @@ void UDeliveryBot_HttpPolicyComponent::EndPlay(const EEndPlayReason::Type EndPla
 
 	CancelActiveRequest();
 	CancelActiveGridRequest();
+	CancelActiveEpisodeStartRequest();
+	CancelActiveEpisodeConfigUpdateRequest();
 
 	OnPolicyResponse.Clear();
 	OnParsedPolicyResponse.Clear();
 	OnGridResponse.Clear();
-
+	OnEpisodeStartResponse.Clear();
+	OnEpisodeConfigUpdateResponse.Clear();
+	
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -154,6 +158,10 @@ bool UDeliveryBot_HttpPolicyComponent::TryParsePolicyResponseJson(const FString&
 	outResponseInfo.Sequence = rootObject->GetIntegerField(TEXT("sequence"));
 	rootObject->TryGetStringField(TEXT("status"), outResponseInfo.Status);
 
+	rootObject->TryGetNumberField(TEXT("episodeVersion"), outResponseInfo.EpisodeVersion);
+	rootObject->TryGetNumberField(TEXT("configVersion"), outResponseInfo.ConfigVersion);
+	rootObject->TryGetNumberField(TEXT("gridVersion"), outResponseInfo.GridVersion);
+
 	const TSharedPtr<FJsonObject>* actionObject = nullptr;
 	if (rootObject->TryGetObjectField(TEXT("action"), actionObject) && actionObject && actionObject->IsValid())
 	{
@@ -184,10 +192,8 @@ bool UDeliveryBot_HttpPolicyComponent::TryParsePolicyResponseJson(const FString&
 		outResponseInfo.ErrorMessage = TEXT("Policy response has no action object.");
 		return false;
 	}
-
 	return true;
 }
-
 
 bool UDeliveryBot_HttpPolicyComponent::SendGridJson(const FString& gridJson)
 {
@@ -264,6 +270,156 @@ bool UDeliveryBot_HttpPolicyComponent::SendGridJson(const FString& gridJson)
 	return true;
 }
 
+bool UDeliveryBot_HttpPolicyComponent::SendEpisodeStartJson(const FString& episodeStartJson)
+{
+	if (episodeStartJson.IsEmpty())
+	{
+		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Episode start JSON is empty."));
+		return false;
+	}
+
+	if (bIsEndingPlay)
+	{
+		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Episode start request skipped because component is ending play."));
+		return false;
+	}
+
+	if (bEpisodeStartRequestInFlight)
+	{
+		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Episode start request skipped because previous request is still in flight."));
+		return false;
+	}
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request = FHttpModule::Get().CreateRequest();
+
+	request->SetURL(EpisodeStartServerUrl);
+	request->SetVerb(TEXT("POST"));
+	request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+	request->SetContentAsString(episodeStartJson);
+	request->SetTimeout(RequestTimeoutSecond);
+
+	TWeakObjectPtr<UDeliveryBot_HttpPolicyComponent> weakThis(this);
+
+	request->OnProcessRequestComplete().BindLambda(
+		[weakThis](FHttpRequestPtr httpRequest, FHttpResponsePtr httpResponse, bool bWasSuccessful)
+		{
+			const int32 responseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode() : 0;
+			const FString responseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString{};
+
+			AsyncTask(ENamedThreads::GameThread, [weakThis, responseCode, responseBody, bWasSuccessful]()
+			{
+				if (!weakThis.IsValid())
+					return;
+
+				UDeliveryBot_HttpPolicyComponent* component = weakThis.Get();
+				component->bEpisodeStartRequestInFlight = false;
+				component->ActiveEpisodeStartRequest.Reset();
+
+				if (component->bIsEndingPlay)
+					return;
+
+				UE_LOG(
+					LogDeliveryBotHttpPolicy,
+					Log,
+					TEXT("Episode start response | Success: %s, Code: %d, Body: %s"),
+					bWasSuccessful ? TEXT("true") : TEXT("false"),
+					responseCode,
+					*responseBody
+				);
+
+				component->OnEpisodeStartResponse.Broadcast(bWasSuccessful, responseCode, responseBody);
+			});
+		}
+	);
+
+	bEpisodeStartRequestInFlight = true;
+	ActiveEpisodeStartRequest = request;
+
+	if (!request->ProcessRequest())
+	{
+		bEpisodeStartRequestInFlight = false;
+		ActiveEpisodeStartRequest.Reset();
+		return false;
+	}
+
+	return true;
+}
+
+bool UDeliveryBot_HttpPolicyComponent::SendEpisodeConfigUpdateJson(const FString& configUpdateJson)
+{
+	if (configUpdateJson.IsEmpty())
+	{
+		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Episode config update JSON is empty."));
+		return false;
+	}
+
+	if (bIsEndingPlay)
+	{
+		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Episode config update request skipped because component is ending play."));
+		return false;
+	}
+
+	if (bEpisodeConfigUpdateRequestInFlight)
+	{
+		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Episode config update request skipped because previous request is still in flight."));
+		return false;
+	}
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request = FHttpModule::Get().CreateRequest();
+
+	request->SetURL(EpisodeConfigUpdateServerUrl);
+	request->SetVerb(TEXT("POST"));
+	request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+	request->SetContentAsString(configUpdateJson);
+	request->SetTimeout(RequestTimeoutSecond);
+
+	TWeakObjectPtr<UDeliveryBot_HttpPolicyComponent> weakThis(this);
+
+	request->OnProcessRequestComplete().BindLambda(
+		[weakThis](FHttpRequestPtr httpRequest, FHttpResponsePtr httpResponse, bool bWasSuccessful)
+		{
+			const int32 responseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode() : 0;
+			const FString responseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString{};
+
+			AsyncTask(ENamedThreads::GameThread, [weakThis, responseCode, responseBody, bWasSuccessful]()
+			{
+				if (!weakThis.IsValid())
+					return;
+
+				UDeliveryBot_HttpPolicyComponent* component = weakThis.Get();
+				component->bEpisodeConfigUpdateRequestInFlight = false;
+				component->ActiveEpisodeConfigUpdateRequest.Reset();
+
+				if (component->bIsEndingPlay)
+					return;
+
+				UE_LOG(
+					LogDeliveryBotHttpPolicy,
+					Log,
+					TEXT("Episode config update response | Success: %s, Code: %d, Body: %s"),
+					bWasSuccessful ? TEXT("true") : TEXT("false"),
+					responseCode,
+					*responseBody
+				);
+
+				component->OnEpisodeConfigUpdateResponse.Broadcast(bWasSuccessful, responseCode, responseBody);
+			});
+		}
+	);
+
+	bEpisodeConfigUpdateRequestInFlight = true;
+	ActiveEpisodeConfigUpdateRequest = request;
+
+	if (!request->ProcessRequest())
+	{
+		bEpisodeConfigUpdateRequestInFlight = false;
+		ActiveEpisodeConfigUpdateRequest.Reset();
+		return false;
+	}
+
+	return true;
+}
+
 void UDeliveryBot_HttpPolicyComponent::CancelActiveGridRequest()
 {
 	if (ActiveGridRequest.IsValid())
@@ -275,3 +431,28 @@ void UDeliveryBot_HttpPolicyComponent::CancelActiveGridRequest()
 
 	bGridRequestInFlight = false;
 }
+
+void UDeliveryBot_HttpPolicyComponent::CancelActiveEpisodeStartRequest()
+{
+	if (ActiveEpisodeStartRequest.IsValid())
+	{
+		ActiveEpisodeStartRequest->OnProcessRequestComplete().Unbind();
+		ActiveEpisodeStartRequest->CancelRequest();
+		ActiveEpisodeStartRequest.Reset();
+	}
+
+	bEpisodeStartRequestInFlight = false;
+}
+
+void UDeliveryBot_HttpPolicyComponent::CancelActiveEpisodeConfigUpdateRequest()
+{
+	if (ActiveEpisodeConfigUpdateRequest.IsValid())
+	{
+		ActiveEpisodeConfigUpdateRequest->OnProcessRequestComplete().Unbind();
+		ActiveEpisodeConfigUpdateRequest->CancelRequest();
+		ActiveEpisodeConfigUpdateRequest.Reset();
+	}
+
+	bEpisodeConfigUpdateRequestInFlight = false;
+}
+

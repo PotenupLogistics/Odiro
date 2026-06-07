@@ -52,6 +52,18 @@ struct FDeliveryBotHttpPolicyResponseInfo
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 Sequence{ 0 };
 
+	// 현재 episode/start/goal 기준	이전 실행이나 다른 episode action을 막기 위해.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 EpisodeVersion{ 0 };
+
+	// 현재 차량/센서/제어 설정 기준으로	다른 속도/센서/제어 설정 기준 action을 막기 위해
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 ConfigVersion{ 0 };
+
+	// 현재 지도/grid 기준으로	다른 지도 기준 path/action을 막기 위해
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 GridVersion{ 0 };
+	
 	// Python 응답 상태. 예: "ok", "error"
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FString Status{};
@@ -75,4 +87,6 @@ struct FDeliveryBotHttpPolicyResponseInfo
 	// 원본 응답 문자열. 문제 발생 시 로그/분석용으로 남긴다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FString RawResponseBody{};
+	
+	
 };

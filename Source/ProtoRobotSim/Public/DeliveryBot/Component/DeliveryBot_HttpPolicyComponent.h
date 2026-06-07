@@ -10,6 +10,8 @@ class IHttpRequest;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FDeliveryBotHttpPolicyResponseSignature, bool, bWasSuccessful, int32, ResponseCode, const FString&, ResponseBody);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliveryBotHttpPolicyParsedResponseSignature,	const FDeliveryBotHttpPolicyResponseInfo&,	ResponseInfo);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FDeliveryBotHttpGridResponseSignature, bool, bWasSuccessful,	int32, ResponseCode, const FString&, ResponseBody);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FDeliveryBotHttpEpisodeStartResponseSignature, bool, bWasSuccessful, int32, ResponseCode, const FString&, ResponseBody);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FDeliveryBotHttpEpisodeConfigUpdateResponseSignature, bool, bWasSuccessful, int32, ResponseCode, const FString&, ResponseBody);
 
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
@@ -20,6 +22,17 @@ class PROTOROBOTSIM_API UDeliveryBot_HttpPolicyComponent : public UActorComponen
 public:
 	UDeliveryBot_HttpPolicyComponent();
 
+protected:
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+private:
+	void CancelActiveRequest();
+	void CancelActiveGridRequest();
+	void CancelActiveEpisodeStartRequest();
+	void CancelActiveEpisodeConfigUpdateRequest();
+	
+public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
 	bool SendObservationJson(const FString& observationJson);
 
@@ -30,6 +43,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
 	bool SendGridJson(const FString& gridJson);
 	
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
+	bool SendEpisodeStartJson(const FString& episodeStartJson);
+	
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
+	bool SendEpisodeConfigUpdateJson(const FString& configUpdateJson);
 public:
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|HttpPolicy")
 	bool IsRequestInFlight() const
@@ -44,6 +62,17 @@ public:
 		return bGridRequestInFlight;
 	}
 	
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|HttpPolicy")
+	bool IsEpisodeStartRequestInFlight() const
+	{
+		return bEpisodeStartRequestInFlight;
+	}
+	
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|HttpPolicy")
+	bool IsEpisodeConfigUpdateRequestInFlight() const
+	{
+		return bEpisodeConfigUpdateRequestInFlight;
+	}
 	
 	
 public:
@@ -57,10 +86,12 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "DeliveryBot|HttpPolicy")
 	FDeliveryBotHttpGridResponseSignature OnGridResponse;
 	
-protected:
-	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-
+	UPROPERTY(BlueprintAssignable, Category = "DeliveryBot|HttpPolicy")
+	FDeliveryBotHttpEpisodeStartResponseSignature OnEpisodeStartResponse;
+	
+	UPROPERTY(BlueprintAssignable, Category = "DeliveryBot|HttpPolicy")
+	FDeliveryBotHttpEpisodeConfigUpdateResponseSignature OnEpisodeConfigUpdateResponse;
+	
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|HttpPolicy")
 	FString PolicyServerUrl{ TEXT("http://127.0.0.1:8000/policy/action") };
@@ -69,11 +100,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|HttpPolicy")
 	FString GridServerUrl{ TEXT("http://127.0.0.1:8000/grid/update") };
 	
-	
-private:
-	void CancelActiveRequest();
-	void CancelActiveGridRequest();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|HttpPolicy")
+	FString EpisodeStartServerUrl{ TEXT("http://127.0.0.1:8000/episode/start") };
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|HttpPolicy")
+	FString EpisodeConfigUpdateServerUrl{ TEXT("http://127.0.0.1:8000/episode/config/update") };
 	
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|HttpPolicy")
@@ -83,8 +114,12 @@ protected:
 private:
 	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> ActiveRequest;
 	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> ActiveGridRequest;
+	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> ActiveEpisodeStartRequest;
+	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> ActiveEpisodeConfigUpdateRequest;
 	
+	bool bEpisodeStartRequestInFlight{ false };
 	bool bGridRequestInFlight{ false };
 	bool bRequestInFlight{ false };
 	bool bIsEndingPlay{ false };
+	bool bEpisodeConfigUpdateRequestInFlight{ false };
 };

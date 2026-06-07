@@ -8,13 +8,59 @@
 #include "DeliveryBot/Component/DeliveryBot_HttpPolicyComponent.h"
 #include "DeliveryBot/Component/DeliveryBot_LidarSensorComponent.h"
 #include "DeliveryBot/Component/DeliveryBot_PolicyControllerComponent.h"
-
+#include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
+#include "Serialization/JsonReader.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBot, Log, All);
+
+namespace
+{
+	TSharedRef<FJsonObject> MakeVectorJson(const FVector& vector)
+	{
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		object->SetNumberField(TEXT("x"), vector.X);
+		object->SetNumberField(TEXT("y"), vector.Y);
+		object->SetNumberField(TEXT("z"), vector.Z);
+		return object;
+	}
+
+	FString GetLidarModeString(EDeliveryBotLidarModeType modeType)
+	{
+		switch (modeType)
+		{
+		case EDeliveryBotLidarModeType::OneD:
+			return TEXT("OneD");
+		case EDeliveryBotLidarModeType::TwoD:
+			return TEXT("TwoD");
+		case EDeliveryBotLidarModeType::ThreeD:
+			return TEXT("ThreeD");
+		case EDeliveryBotLidarModeType::OneDAndTwoD:
+			return TEXT("OneDAndTwoD");
+		case EDeliveryBotLidarModeType::TwoDAndThreeD:
+			return TEXT("TwoDAndThreeD");
+		case EDeliveryBotLidarModeType::All:
+			return TEXT("All");
+		default:
+			return TEXT("Unknown");
+		}
+	}
+
+	void SetNameArrayField(TSharedRef<FJsonObject> object, const FString& fieldName, const TArray<FName>& names)
+	{
+		TArray<TSharedPtr<FJsonValue>> values;
+
+		for (const FName& name : names)
+		{
+			values.Add(MakeShared<FJsonValueString>(name.ToString()));
+		}
+
+		object->SetArrayField(fieldName, values);
+	}
+}
 
 ADeliveryBot::ADeliveryBot()
 {
@@ -109,6 +155,80 @@ void ADeliveryBot::ApplyMoveCommand(const FDeliveryBotMoveCommandInfo& moveComma
 		return;
 
 	DriveComponent->ApplyMoveCommand(vehicleMovement, moveCommandInfo, deltaTime);
+}
+
+void ADeliveryBot::ApplyRuntimeDriveConfigInfo(const FDeliveryBotDriveConfigInfo& driveConfigInfo)
+{
+	UE_LOG(
+		LogDeliveryBot,
+		Log,
+		TEXT("Runtime drive config apply requested | MaxSpeed: %.2f, MaxReverseSpeed: %.2f"),
+		driveConfigInfo.MaxSpeedKmh,
+		driveConfigInfo.MaxReverseSpeedKmh
+	);
+
+	SetupInfo.ChaosDriveConfigInfo = driveConfigInfo;
+
+	if (!IsValid(DriveComponent))
+	{
+		UE_LOG(LogDeliveryBot, Warning, TEXT("Runtime drive config apply skipped. DriveComponent is invalid."));
+		return;
+	}
+
+	UChaosWheeledVehicleMovementComponent* wheeledMovement =
+		Cast<UChaosWheeledVehicleMovementComponent>(GetVehicleMovementComponent());
+
+	DriveComponent->InitializeChaosDrive(wheeledMovement, SetupInfo.ChaosDriveConfigInfo);
+
+	// DriveComponent에서 보정된 값을 다시 SetupInfo에 저장한다.
+	// 이후 observation 검증과 config update JSON이 같은 기준을 쓰게 하기 위함.
+	SetupInfo.ChaosDriveConfigInfo = DriveComponent->GetDriveConfigInfo();
+
+	UE_LOG(
+		LogDeliveryBot,
+		Log,
+		TEXT("Runtime drive config applied | MaxSpeed: %.2f, MaxReverseSpeed: %.2f"),
+		SetupInfo.ChaosDriveConfigInfo.MaxSpeedKmh,
+		SetupInfo.ChaosDriveConfigInfo.MaxReverseSpeedKmh
+	);
+}
+
+void ADeliveryBot::ApplyCurrentSetupInfoToRuntimeComponents()
+{
+	ApplyRuntimeDriveConfigInfo(SetupInfo.ChaosDriveConfigInfo);
+
+	if (IsValid(LidarSensorComponent))
+	{
+		LidarSensorComponent->InitializeLidar(SetupInfo.LidarSensorConfigInfo);
+	}
+
+	UpdateSensorSnapshot();
+
+	UE_LOG(
+		LogDeliveryBot,
+		Log,
+		TEXT("Current setup info applied to runtime components | MaxSpeed: %.2f, LidarRange: %.2f"),
+		SetupInfo.ChaosDriveConfigInfo.MaxSpeedKmh,
+		SetupInfo.LidarSensorConfigInfo.ScanRangeM
+	);
+}
+
+void ADeliveryBot::SendCurrentRuntimeConfigUpdateToPolicyServerOnce()
+{
+	if (!IsValid(PolicyControllerComponent))
+	{
+		UE_LOG(LogDeliveryBot, Warning, TEXT("Current runtime config update skipped. PolicyControllerComponent is invalid."));
+		return;
+	}
+
+	const bool bRequestStarted = PolicyControllerComponent->SendCurrentRuntimeConfigUpdateToPolicyServerOnce();
+
+	UE_LOG(
+		LogDeliveryBot,
+		Log,
+		TEXT("Current runtime config update button completed | Started: %s"),
+		bRequestStarted ? TEXT("true") : TEXT("false")
+	);
 }
 
 void ADeliveryBot::UpdateSensorSnapshot()
@@ -217,9 +337,7 @@ void ADeliveryBot::FillObservation(FDeliveryBotObservationInfo& observation) con
 	observation.ObservedObjects = BuildObservedObjectsForPolicy();
 }
 
-bool ADeliveryBot::BuildObservationJson(
-	const FDeliveryBotObservationInfo& observation,
-	FString& outJson) const
+bool ADeliveryBot::BuildObservationJson(const FDeliveryBotObservationInfo& observation, FString& outJson) const
 {
 	TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
 
@@ -235,17 +353,12 @@ bool ADeliveryBot::BuildObservationJson(
 	robotObject->SetNumberField(TEXT("speedKmh"), observation.RobotState.SpeedKmh);
 	rootObject->SetObjectField(TEXT("robotState"), robotObject);
 
-	TSharedRef<FJsonObject> vehicleObject = MakeShared<FJsonObject>();
-	vehicleObject->SetNumberField(TEXT("maxSpeedKmh"), observation.VehicleSpec.MaxSpeedKmh);
-	vehicleObject->SetNumberField(TEXT("maxReverseSpeedKmh"), observation.VehicleSpec.MaxReverseSpeedKmh);
-	vehicleObject->SetNumberField(TEXT("lidarScanRangeM"), observation.VehicleSpec.LidarScanRangeM);
-	rootObject->SetObjectField(TEXT("vehicleSpec"), vehicleObject);
-
 	TArray<TSharedPtr<FJsonValue>> objectValues;
 	for (const FDeliveryBotLidarObservedObjectInfo& observedObject : observation.ObservedObjects)
 	{
 		TSharedRef<FJsonObject> objectJson = MakeShared<FJsonObject>();
 		objectJson->SetStringField(TEXT("actorName"), observedObject.ActorName);
+		SetNameArrayField(objectJson, TEXT("actorTags"), observedObject.ActorTags);
 		objectJson->SetNumberField(TEXT("closestDistanceM"), observedObject.ClosestDistanceM);
 		objectJson->SetNumberField(TEXT("closestRayYawDegree"), observedObject.ClosestRayYawDegree);
 		objectJson->SetNumberField(TEXT("totalHitRayCount"), observedObject.TotalHitRayCount);
@@ -265,6 +378,7 @@ bool ADeliveryBot::BuildObservationJson(
 		rayJson->SetNumberField(TEXT("rayYawDegree"), rayInfo.RayYawDegree);
 		rayJson->SetNumberField(TEXT("distanceM"), rayInfo.DistanceM);
 		rayJson->SetStringField(TEXT("actorName"), rayInfo.ActorName);
+		SetNameArrayField(rayJson, TEXT("actorTags"), rayInfo.ActorTags);
 
 		rayValues.Add(MakeShared<FJsonValueObject>(rayJson));
 	}
@@ -276,19 +390,212 @@ bool ADeliveryBot::BuildObservationJson(
 	return FJsonSerializer::Serialize(rootObject, writer);
 }
 
+bool ADeliveryBot::BuildEpisodeStartJson(FString& outJson) const
+{
+	outJson.Empty();
+
+	const UWorld* world = GetWorld();
+	if (!IsValid(world))
+		return false;
+
+	const UDeliveryBot_GridSubsystem* gridSubsystem = world->GetSubsystem<UDeliveryBot_GridSubsystem>();
+	if (!IsValid(gridSubsystem) || !gridSubsystem->HasBuiltGrid())
+	{
+		UE_LOG(LogDeliveryBot, Warning, TEXT("Episode start JSON build skipped. Grid is not built yet."));
+		return false;
+	}
+
+	FString gridJson;
+	if (!gridSubsystem->BuildGridJson(gridJson))
+	{
+		UE_LOG(LogDeliveryBot, Warning, TEXT("Episode start JSON build failed. Grid JSON build failed."));
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> gridObject;
+	const TSharedRef<TJsonReader<>> gridReader = TJsonReaderFactory<>::Create(gridJson);
+
+	if (!FJsonSerializer::Deserialize(gridReader, gridObject) || !gridObject.IsValid())
+	{
+		UE_LOG(LogDeliveryBot, Warning, TEXT("Episode start JSON build failed. Grid JSON parse failed."));
+		return false;
+	}
+
+	const FDeliveryBotLocationSetupInfo& locationInfo = SetupInfo.LocationSetupInfo;
+	const FDeliveryBotDriveConfigInfo& driveInfo = SetupInfo.ChaosDriveConfigInfo;
+	const FDeliveryBotLidarSensorConfigInfo& lidarInfo = SetupInfo.LidarSensorConfigInfo;
+	const FDeliveryBotPathFollowConfigInfo& motionInfo = SetupInfo.PathFollowConfigInfo;
+
+	TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
+	rootObject->SetStringField(TEXT("episodeId"), TEXT("delivery_bot_episode"));
+	rootObject->SetStringField(TEXT("robotInstanceId"), GetName());
+
+	TSharedRef<FJsonObject> locationSpecObject = MakeShared<FJsonObject>();
+	locationSpecObject->SetObjectField(TEXT("startLocationCm"), MakeVectorJson(locationInfo.StartLocationCm));
+	locationSpecObject->SetObjectField(TEXT("goalLocationCm"), MakeVectorJson(locationInfo.GoalLocationCm));
+	locationSpecObject->SetBoolField(TEXT("autoStartRoute"), locationInfo.bAutoStartRoute);
+	rootObject->SetObjectField(TEXT("locationSpec"), locationSpecObject);
+
+	TSharedRef<FJsonObject> driveSpecObject = MakeShared<FJsonObject>();
+	driveSpecObject->SetNumberField(TEXT("maxSpeedKmh"), driveInfo.MaxSpeedKmh);
+	driveSpecObject->SetNumberField(TEXT("maxReverseSpeedKmh"), driveInfo.MaxReverseSpeedKmh);
+	driveSpecObject->SetNumberField(TEXT("slowdownSpeedRangeKmh"), driveInfo.SlowdownSpeedRangeKmh);
+	driveSpecObject->SetNumberField(TEXT("stopBrakeInput"), driveInfo.StopBrakeInput);
+	driveSpecObject->SetNumberField(TEXT("throttleInputRatePerSecond"), driveInfo.ThrottleInputRatePerSecond);
+	driveSpecObject->SetNumberField(TEXT("brakeInputRatePerSecond"), driveInfo.BrakeInputRatePerSecond);
+	driveSpecObject->SetNumberField(TEXT("steeringInputRatePerSecond"), driveInfo.SteeringInputRatePerSecond);
+	driveSpecObject->SetNumberField(TEXT("accelerationRateKmhPerSecond"), driveInfo.AccelerationRateKmhPerSecond);
+	driveSpecObject->SetNumberField(TEXT("decelerationRateKmhPerSecond"), driveInfo.DecelerationRateKmhPerSecond);
+	driveSpecObject->SetNumberField(TEXT("maxTorque"), driveInfo.MaxTorque);
+	driveSpecObject->SetNumberField(TEXT("maxRPM"), driveInfo.MaxRPM);
+	rootObject->SetObjectField(TEXT("driveSpec"), driveSpecObject);
+
+	TSharedRef<FJsonObject> lidarSpecObject = MakeShared<FJsonObject>();
+	lidarSpecObject->SetNumberField(TEXT("scanRangeM"), lidarInfo.ScanRangeM);
+	lidarSpecObject->SetNumberField(TEXT("angleStepDegree"), lidarInfo.AngleStepDegree);
+	lidarSpecObject->SetNumberField(TEXT("sensorHeightM"), lidarInfo.SensorHeightM);
+	lidarSpecObject->SetNumberField(TEXT("frontHalfAngleDegree"), lidarInfo.FrontHalfAngleDegree);
+	lidarSpecObject->SetBoolField(TEXT("storeMissedRays"), lidarInfo.bStoreMissedRays);
+	lidarSpecObject->SetNumberField(TEXT("stopDistanceM"), lidarInfo.StopDistanceM);
+	lidarSpecObject->SetNumberField(TEXT("slowDownDistanceM"), lidarInfo.SlowDownDistanceM);
+	lidarSpecObject->SetStringField(TEXT("lidarModeType"), GetLidarModeString(lidarInfo.LidarModeType));
+	SetNameArrayField(lidarSpecObject, TEXT("ignoreTags"), lidarInfo.IgnoreTags);
+	rootObject->SetObjectField(TEXT("lidarSpec"), lidarSpecObject);
+
+	TSharedRef<FJsonObject> motionControlSpecObject = MakeShared<FJsonObject>();
+	motionControlSpecObject->SetBoolField(TEXT("drawDebug"), motionInfo.bDrawDebug);
+	motionControlSpecObject->SetNumberField(TEXT("lookAheadDistanceM"), motionInfo.LookAheadDistanceM);
+	motionControlSpecObject->SetNumberField(TEXT("pathPointAcceptanceDistanceM"), motionInfo.PathPointAcceptanceDistanceM);
+	motionControlSpecObject->SetNumberField(TEXT("goalAcceptanceDistanceM"), motionInfo.GoalAcceptanceDistanceM);
+	motionControlSpecObject->SetNumberField(TEXT("steeringSensitivity"), motionInfo.SteeringSensitivity);
+	motionControlSpecObject->SetNumberField(TEXT("minTurnSpeedKmh"), motionInfo.MinTurnSpeedKmh);
+	motionControlSpecObject->SetNumberField(TEXT("obstacleSlowSpeedKmh"), motionInfo.ObstacleSlowSpeedKmh);
+	rootObject->SetObjectField(TEXT("motionControlSpec"), motionControlSpecObject);
+
+	// 현재 Python 서버 호환용 필드. 서버 스키마 정리 후 제거해도 된다.
+	TSharedRef<FJsonObject> startObject = MakeVectorJson(locationInfo.StartLocationCm);
+	startObject->SetNumberField(TEXT("yawDegree"), GetActorRotation().Yaw);
+	rootObject->SetObjectField(TEXT("start"), startObject);
+
+	TSharedRef<FJsonObject> goalObject = MakeVectorJson(locationInfo.GoalLocationCm);
+	goalObject->SetBoolField(TEXT("hasGoal"), locationInfo.bAutoStartRoute);
+	rootObject->SetObjectField(TEXT("goal"), goalObject);
+
+	TSharedRef<FJsonObject> controlSpecObject = MakeShared<FJsonObject>();
+	controlSpecObject->SetStringField(TEXT("mode"), TEXT("TargetSpeed"));
+	rootObject->SetObjectField(TEXT("controlSpec"), controlSpecObject);
+
+	rootObject->SetObjectField(TEXT("grid"), gridObject);
+
+	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> writer =
+		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&outJson);
+
+	return FJsonSerializer::Serialize(rootObject, writer);
+}
+
+bool ADeliveryBot::BuildEpisodeConfigUpdateJson(FString& outJson) const
+{
+	outJson.Empty();
+
+	const FDeliveryBotDriveConfigInfo& driveInfo = SetupInfo.ChaosDriveConfigInfo;
+	const FDeliveryBotLidarSensorConfigInfo& lidarInfo = SetupInfo.LidarSensorConfigInfo;
+	const FDeliveryBotPathFollowConfigInfo& motionInfo = SetupInfo.PathFollowConfigInfo;
+
+	TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
+
+	TSharedRef<FJsonObject> driveSpecObject = MakeShared<FJsonObject>();
+	driveSpecObject->SetNumberField(TEXT("maxSpeedKmh"), driveInfo.MaxSpeedKmh);
+	driveSpecObject->SetNumberField(TEXT("maxReverseSpeedKmh"), driveInfo.MaxReverseSpeedKmh);
+	driveSpecObject->SetNumberField(TEXT("slowdownSpeedRangeKmh"), driveInfo.SlowdownSpeedRangeKmh);
+	driveSpecObject->SetNumberField(TEXT("stopBrakeInput"), driveInfo.StopBrakeInput);
+	driveSpecObject->SetNumberField(TEXT("throttleInputRatePerSecond"), driveInfo.ThrottleInputRatePerSecond);
+	driveSpecObject->SetNumberField(TEXT("brakeInputRatePerSecond"), driveInfo.BrakeInputRatePerSecond);
+	driveSpecObject->SetNumberField(TEXT("steeringInputRatePerSecond"), driveInfo.SteeringInputRatePerSecond);
+	driveSpecObject->SetNumberField(TEXT("accelerationRateKmhPerSecond"), driveInfo.AccelerationRateKmhPerSecond);
+	driveSpecObject->SetNumberField(TEXT("decelerationRateKmhPerSecond"), driveInfo.DecelerationRateKmhPerSecond);
+	driveSpecObject->SetNumberField(TEXT("maxTorque"), driveInfo.MaxTorque);
+	driveSpecObject->SetNumberField(TEXT("maxRPM"), driveInfo.MaxRPM);
+	rootObject->SetObjectField(TEXT("driveSpec"), driveSpecObject);
+
+	TSharedRef<FJsonObject> lidarSpecObject = MakeShared<FJsonObject>();
+	lidarSpecObject->SetNumberField(TEXT("scanRangeM"), lidarInfo.ScanRangeM);
+	lidarSpecObject->SetNumberField(TEXT("angleStepDegree"), lidarInfo.AngleStepDegree);
+	lidarSpecObject->SetNumberField(TEXT("sensorHeightM"), lidarInfo.SensorHeightM);
+	lidarSpecObject->SetNumberField(TEXT("frontHalfAngleDegree"), lidarInfo.FrontHalfAngleDegree);
+	lidarSpecObject->SetBoolField(TEXT("storeMissedRays"), lidarInfo.bStoreMissedRays);
+	lidarSpecObject->SetNumberField(TEXT("stopDistanceM"), lidarInfo.StopDistanceM);
+	lidarSpecObject->SetNumberField(TEXT("slowDownDistanceM"), lidarInfo.SlowDownDistanceM);
+	lidarSpecObject->SetStringField(TEXT("lidarModeType"), GetLidarModeString(lidarInfo.LidarModeType));
+	SetNameArrayField(lidarSpecObject, TEXT("ignoreTags"), lidarInfo.IgnoreTags);
+	rootObject->SetObjectField(TEXT("lidarSpec"), lidarSpecObject);
+
+	TSharedRef<FJsonObject> motionControlSpecObject = MakeShared<FJsonObject>();
+	motionControlSpecObject->SetBoolField(TEXT("drawDebug"), motionInfo.bDrawDebug);
+	motionControlSpecObject->SetNumberField(TEXT("lookAheadDistanceM"), motionInfo.LookAheadDistanceM);
+	motionControlSpecObject->SetNumberField(TEXT("pathPointAcceptanceDistanceM"), motionInfo.PathPointAcceptanceDistanceM);
+	motionControlSpecObject->SetNumberField(TEXT("goalAcceptanceDistanceM"), motionInfo.GoalAcceptanceDistanceM);
+	motionControlSpecObject->SetNumberField(TEXT("steeringSensitivity"), motionInfo.SteeringSensitivity);
+	motionControlSpecObject->SetNumberField(TEXT("minTurnSpeedKmh"), motionInfo.MinTurnSpeedKmh);
+	motionControlSpecObject->SetNumberField(TEXT("obstacleSlowSpeedKmh"), motionInfo.ObstacleSlowSpeedKmh);
+	rootObject->SetObjectField(TEXT("motionControlSpec"), motionControlSpecObject);
+
+	TSharedRef<FJsonObject> controlSpecObject = MakeShared<FJsonObject>();
+	controlSpecObject->SetStringField(TEXT("mode"), TEXT("TargetSpeed"));
+	rootObject->SetObjectField(TEXT("controlSpec"), controlSpecObject);
+
+	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> writer =
+			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&outJson);
+
+	return FJsonSerializer::Serialize(rootObject, writer);
+}
+
 bool ADeliveryBot::SendPolicyObservationOnce()
 {
 	if (!IsValid(HttpPolicyComponent))
+	{
+		UE_LOG(LogDeliveryBot, Warning, TEXT("Policy observation send skipped. HttpPolicyComponent is invalid."));
 		return false;
+	}
 
 	if (HttpPolicyComponent->IsRequestInFlight())
+	{
+		UE_LOG(LogDeliveryBot, Warning, TEXT("Policy observation send skipped. Previous policy request is still in flight."));
 		return false;
+	}
 	
 	const FDeliveryBotObservationInfo observation = BuildPolicyObservation();
 
 	FString observationJson;
 	if (!BuildObservationJson(observation, observationJson))
+	{
+		UE_LOG(LogDeliveryBot, Warning, TEXT("Policy observation send skipped. Failed to build observation JSON."));
 		return false;
+	}
 
-	return HttpPolicyComponent->SendObservationJson(observationJson);
+	const bool bRequestStarted = HttpPolicyComponent->SendObservationJson(observationJson);
+
+	if (bRequestStarted)
+	{
+		UE_LOG(
+			LogDeliveryBot,
+			Log,
+			TEXT("Policy observation request sent | PolicySeq: %d, SensorSeq: %d, JsonLength: %d"),
+			observation.Sequence,
+			observation.SensorSequence,
+			observationJson.Len()
+		);
+	}
+	else
+	{
+		UE_LOG(LogDeliveryBot, Warning, TEXT("Policy observation send failed. HTTP request did not start."));
+	}
+
+	return bRequestStarted;
+}
+
+float ADeliveryBot::GetMaxPolicySpeedKmh(EDeliveryBotMoveDirectionType moveDirectionType) const
+{
+	return moveDirectionType == EDeliveryBotMoveDirectionType::Reverse
+		? SetupInfo.ChaosDriveConfigInfo.MaxReverseSpeedKmh
+		: SetupInfo.ChaosDriveConfigInfo.MaxSpeedKmh;
 }

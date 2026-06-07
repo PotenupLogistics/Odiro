@@ -84,6 +84,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	TArray<FString> ListEvaluationReportFiles() const;
 
+	// Saved/SimulationRuns 아래 run별 결과 폴더 목록
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
+	TArray<FString> ListSimulationRunResultDirectories() const;
+
+	// 특정 run 결과 폴더 안의 evaluation report JSON 목록
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
+	TArray<FString> ListEvaluationReportFilesInDirectory(const FString& runDirectory) const;
+
+	// 특정 run 결과 폴더 안의 measurement JSONL 목록
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
+	TArray<FString> ListMeasurementLogFilesInDirectory(const FString& runDirectory) const;
+
 	// Saved/SimulationRuns 아래 simulation run status JSON 후보 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	TArray<FString> ListSimulationRunStatusFiles() const;
@@ -171,6 +183,12 @@ public:
 		TArray<FString>& outDiagnostics);
 
 private:
+	bool CreateRuntimeSimulationSetupFile(
+		const FSimulationSetup& sourceSetup,
+		const FString& runId,
+		FString& outRuntimeSetupPath,
+		FSimulationSetup& outRuntimeSetup,
+		TArray<FString>& outDiagnostics) const;
 	bool BuildLaunchCommand(const FString& setupPath, const FString& runId, FString& outExecutable, FString& outArguments, bool& bOutUsesPreviewLauncher) const;
 	bool ShouldUsePreviewLauncher(FString& outPreviewBatPath) const;
 	void PollActiveRunStatus();

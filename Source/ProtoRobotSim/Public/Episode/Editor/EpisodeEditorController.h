@@ -267,36 +267,20 @@ private:
 	FString CurrentPlacementFailureReason;
 
 	bool bIsLookInputHeld = false;
-
 	double LookCaptureAccumulatedDelta = 0.0;
-
 	bool bIsTransformGizmoDragging = false;
-
 	EEpisodeTransformGizmoHandle ActiveTransformGizmoHandle = EEpisodeTransformGizmoHandle::None;
-
 	FString ActiveTransformGizmoInstanceId;
-
 	FTransform TransformGizmoDragStartTransform = FTransform::Identity;
-
 	FVector TransformGizmoDragStartPoint = FVector::ZeroVector;
-
 	FVector TransformGizmoDragPlaneNormal = FVector::UpVector;
-
 	FVector TransformGizmoDragAxis = FVector::ForwardVector;
-
 	FVector TransformGizmoDragStartDirection = FVector::ForwardVector;
-
 	FString LastTransformGizmoDragFailureReason;
-
 	TWeakObjectPtr<UEpisodePlaceableComponent> HoveredPlaceableComponent;
-
 	TWeakObjectPtr<UEpisodePlaceableComponent> SelectedPlaceableComponent;
-
 	TWeakObjectPtr<UEpisodePlaceableComponent> PressedPlaceableComponent;
-
 	TWeakObjectPtr<UEpisodePlaceableComponent> DraggedPlaceableComponent;
-
 	TWeakObjectPtr<UMaterialInterface> ActiveAuthoringOutlinePostProcessMaterial;
-
 	TArray<TWeakObjectPtr<UWidget>> EditorWidgetInputModeRequesters;
 };

@@ -70,6 +70,27 @@ namespace
 		return jsonFilePath;
 	}
 
+	FString MakeEpisodeRunnerProjectRelativePath(FString filePath)
+	{
+		if (filePath.IsEmpty())
+		{
+			return filePath;
+		}
+
+		FPaths::NormalizeFilename(filePath);
+
+		const FString projectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+		FString projectRelativePath = filePath;
+		if (!FPaths::IsRelative(projectRelativePath) && FPaths::MakePathRelativeTo(projectRelativePath, *projectDir))
+		{
+			projectRelativePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+			return projectRelativePath;
+		}
+
+		filePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		return filePath;
+	}
+
 	FString NormalizeRunnerJsonFilePathForCompare(const FString& jsonFilePath)
 	{
 		FString normalizedJsonFilePath = ResolveRunnerJsonFilePath(jsonFilePath);
@@ -834,7 +855,7 @@ bool UEpisodeRunnerSubsystem::SaveEvaluationReportJsonForRecord(FEpisodeRunRecor
 		*runRecord.RunId,
 		*runRecord.EpisodeId,
 		*outputFilePath);
-	runRecord.EvaluationReportJsonPath = outputFilePath;
+	runRecord.EvaluationReportJsonPath = MakeEpisodeRunnerProjectRelativePath(outputFilePath);
 	return true;
 }
 

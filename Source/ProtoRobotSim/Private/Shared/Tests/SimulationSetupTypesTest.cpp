@@ -6,6 +6,7 @@
 #include "Episode/EpisodeCompiler.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 
 namespace
@@ -288,14 +289,22 @@ bool FSimulationRunStatusJsonWriteTest::RunTest(const FString& parameters)
 	status.CompletedRuns = 1;
 	status.TotalRuns = 5;
 	status.ReportPaths.Add(TEXT("Json/Output/sample_report.json"));
+	status.ReportPaths.Add(FPaths::ConvertRelativePathToFull(FPaths::Combine(
+		FPaths::ProjectDir(),
+		TEXT("Json/Output/absolute_sample_report.json"))));
 	status.LogPaths.Add(TEXT("Saved/AnalysisLogs/sample.jsonl"));
 
 	FString json;
 	TArray<FString> diagnostics;
+	FString normalizedProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	FPaths::NormalizeFilename(normalizedProjectDir);
+
 	TestTrue(TEXT("status JSON writes"), FSimulationRunStatusJson::TryWriteStatusJson(status, json, diagnostics));
 	TestEqual(TEXT("status diagnostics"), diagnostics.Num(), 0);
 	TestTrue(TEXT("state field"), json.Contains(TEXT("\"state\": \"Running\"")));
 	TestTrue(TEXT("report path"), json.Contains(TEXT("Json/Output/sample_report.json")));
+	TestTrue(TEXT("absolute report path is written project-relative"), json.Contains(TEXT("Json/Output/absolute_sample_report.json")));
+	TestFalse(TEXT("report path does not include project root"), json.Contains(normalizedProjectDir));
 	TestTrue(TEXT("log path"), json.Contains(TEXT("Saved/AnalysisLogs/sample.jsonl")));
 
 	return true;

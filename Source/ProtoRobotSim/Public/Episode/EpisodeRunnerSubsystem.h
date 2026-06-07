@@ -10,6 +10,9 @@ struct FDeliveryBotSetupCompileResult;
 class UEpisodeEvaluationSubsystem;
 class UEpisodeSimulationSubsystem;
 
+DECLARE_MULTICAST_DELEGATE_OneParam(FEpisodeRunnerStateChangedNative, EEpisodeRunnerState);
+DECLARE_MULTICAST_DELEGATE_OneParam(FEpisodeRunRecordCompletedNative, const FEpisodeRunRecord&);
+
 // Episode compile, setup, evaluation을 순차 실행하고 최종 FEpisodeRunRecord를 수집하는 subsystem.
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API UEpisodeRunnerSubsystem : public UGameInstanceSubsystem
@@ -17,6 +20,9 @@ class PROTOROBOTSIM_API UEpisodeRunnerSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
+	FEpisodeRunnerStateChangedNative OnRunnerStateChanged;
+	FEpisodeRunRecordCompletedNative OnRunRecordCompleted;
+
 	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
 	bool StartEpisodePairFromJsonFiles(const FString& episodeSetupJsonPath, const FString& deliveryBotSetupJsonPath);
 
@@ -33,7 +39,25 @@ public:
 	EEpisodeRunnerState GetRunnerState() const { return RunnerState; }
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
+	bool IsBatchActive() const;
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
+	FString GetActiveRunQueueJsonFilePath() const { return ActiveRunQueueJsonFilePath; }
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
+	bool IsRunningRunQueueJsonFile(const FString& runQueueJsonFilePath) const;
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
 	TArray<FEpisodeRunRecord> GetRunRecords() const { return RunRecords; }
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
+	int32 GetCompletedRunCount() const { return RunRecords.Num(); }
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
+	int32 GetTotalRunCount() const { return TotalRunCount; }
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
+	FString GetCurrentPairId() const { return CurrentRecord.PairId; }
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Runner|Report")
 	bool bSaveEvaluationReportJson = false;
@@ -51,6 +75,8 @@ private:
 	UFUNCTION()
 	void HandleEpisodeEnded(FEpisodeEvaluationResult result);
 
+	bool StartBatchFromRunInputsInternal(const TArray<FEpisodeRunInput>& runInputs, const FString& activeRunQueueJsonFilePath);
+	void SetRunnerState(EEpisodeRunnerState runnerState);
 	void StartNextEpisode();
 	void QueueStartNextEpisode();
 	void CompleteCurrentRecord(
@@ -63,7 +89,7 @@ private:
 	void AppendDeliveryBotSetupDiagnostics(const FDeliveryBotSetupCompileResult& compileResult);
 	double GetRunTimeLimitSeconds(const FEpisodeRunConfig& runConfig) const;
 	FString BuildRunId() const;
-	bool SaveEvaluationReportJsonForRecord(const FEpisodeRunRecord& runRecord) const;
+	bool SaveEvaluationReportJsonForRecord(FEpisodeRunRecord& runRecord) const;
 	FString BuildEvaluationReportJsonFilePath(const FEpisodeRunRecord& runRecord) const;
 	static FString BuildPairId(const FEpisodeRunInput& runInput, int32 runIndex);
 	static FString SanitizeReportFileToken(const FString& value);
@@ -80,6 +106,12 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<FEpisodeRunRecord> RunRecords;
+
+	UPROPERTY(Transient)
+	int32 TotalRunCount = 0;
+
+	UPROPERTY(Transient)
+	FString ActiveRunQueueJsonFilePath;
 
 	UPROPERTY(Transient)
 	FEpisodeRunRecord CurrentRecord;

@@ -2,10 +2,12 @@
 
 #include "Components/HorizontalBox.h"
 #include "Components/ScrollBox.h"
-#include "Components/TextBlock.h"
+#include "Components/SizeBox.h"
 #include "Episode/Editor/EpisodeEditorController.h"
 #include "Episode/Widget/EpisodePlaceablePaletteItemWidget.h"
 #include "Shared/EpisodeCoreTypes.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogEpisodeAssetPaletteWidget, Log, All);
 
 void UEpisodeAssetPaletteWidget::NativeConstruct()
 {
@@ -35,25 +37,26 @@ bool UEpisodeAssetPaletteWidget::RebuildPalette()
 
 	if (!PlaceableItemContainer)
 	{
-		SetDiagnostics(TEXT("PlaceableItemContainer is not bound."));
+		UE_LOG(LogEpisodeAssetPaletteWidget, Warning, TEXT("PlaceableItemContainer is not bound."));
 		return false;
 	}
 
 	if (!PlaceableItemWidgetClass)
 	{
-		SetDiagnostics(TEXT("PlaceableItemWidgetClass is not set."));
+		UE_LOG(LogEpisodeAssetPaletteWidget, Warning, TEXT("PlaceableItemWidgetClass is not set."));
 		return false;
 	}
 
 	AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer());
 	if (!editorController)
 	{
-		SetDiagnostics(TEXT("Owning player is not an EpisodeEditorController."));
+		UE_LOG(LogEpisodeAssetPaletteWidget, Warning, TEXT("Owning player is not an EpisodeEditorController."));
 		return false;
 	}
 
 	TArray<FEpisodeStaticObstaclePropEntry> paletteEntries;
 	editorController->GetStaticObstaclePaletteEntries(paletteEntries);
+	int32 itemCount = 0;
 	for (const FEpisodeStaticObstaclePropEntry& paletteEntry : paletteEntries)
 	{
 		UEpisodePlaceablePaletteItemWidget* itemWidget = CreateWidget<UEpisodePlaceablePaletteItemWidget>(
@@ -65,9 +68,50 @@ bool UEpisodeAssetPaletteWidget::RebuildPalette()
 		itemWidget->OnSelected.RemoveDynamic(this, &UEpisodeAssetPaletteWidget::HandlePaletteItemSelected);
 		itemWidget->OnSelected.AddDynamic(this, &UEpisodeAssetPaletteWidget::HandlePaletteItemSelected);
 		PlaceableItemContainer->AddChildToHorizontalBox(itemWidget);
+		++itemCount;
 	}
 
-	SetDiagnostics(FString::Printf(TEXT("Loaded %d placeable assets."), paletteEntries.Num()));
+	TArray<FEpisodePaletteItemEntry> specialEntries;
+	if (bIncludePedestrianPlacement)
+	{
+		specialEntries.Add(MakeSpecialPaletteItemEntry(
+			EEpisodePaletteItemType::Pedestrian,
+			FName(TEXT("adult_pedestrian")),
+			TEXT("pedestrian"),
+			TEXT("Dynamic Actor"),
+			TEXT("pedestrian")));
+	}
+	if (bIncludeRobotRoutePlacement)
+	{
+		specialEntries.Add(MakeSpecialPaletteItemEntry(
+			EEpisodePaletteItemType::RobotStart,
+			FName(TEXT("delivery_bot")),
+			TEXT("start_point"),
+			TEXT("Robot"),
+			TEXT("start_point")));
+		specialEntries.Add(MakeSpecialPaletteItemEntry(
+			EEpisodePaletteItemType::RobotGoal,
+			FName(TEXT("delivery_bot_goal")),
+			TEXT("goal_point"),
+			TEXT("Robot"),
+			TEXT("goal_point")));
+	}
+
+	for (const FEpisodePaletteItemEntry& specialEntry : specialEntries)
+	{
+		UEpisodePlaceablePaletteItemWidget* itemWidget = CreateWidget<UEpisodePlaceablePaletteItemWidget>(
+			editorController,
+			PlaceableItemWidgetClass);
+		if (!itemWidget) continue;
+
+		itemWidget->SetPaletteItemEntry(specialEntry);
+		itemWidget->OnSelected.RemoveDynamic(this, &UEpisodeAssetPaletteWidget::HandlePaletteItemSelected);
+		itemWidget->OnSelected.AddDynamic(this, &UEpisodeAssetPaletteWidget::HandlePaletteItemSelected);
+		PlaceableItemContainer->AddChildToHorizontalBox(itemWidget);
+		++itemCount;
+	}
+
+	UE_LOG(LogEpisodeAssetPaletteWidget, Log, TEXT("Loaded %d placeable assets."), itemCount);
 	return true;
 }
 
@@ -79,37 +123,57 @@ void UEpisodeAssetPaletteWidget::ClearPalette()
 	}
 }
 
-void UEpisodeAssetPaletteWidget::HandlePaletteItemSelected(FName propId)
+void UEpisodeAssetPaletteWidget::HandlePaletteItemSelected(EEpisodePaletteItemType itemType, FName assetId)
 {
 	AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer());
 	if (!editorController)
 	{
-		SetDiagnostics(TEXT("Owning player is not an EpisodeEditorController."));
+		UE_LOG(LogEpisodeAssetPaletteWidget, Warning, TEXT("Owning player is not an EpisodeEditorController."));
 		return;
 	}
 
-	if (!editorController->BeginStaticObstaclePlacement(propId))
+	if (!editorController->BeginPalettePlacement(itemType, assetId))
 	{
-		SetDiagnostics(FString::Printf(TEXT("Failed to begin placement for '%s'."), *propId.ToString()));
+		UE_LOG(
+			LogEpisodeAssetPaletteWidget,
+			Warning,
+			TEXT("Failed to begin placement | Type: %d | AssetId: %s"),
+			static_cast<int32>(itemType),
+			*assetId.ToString());
 		return;
 	}
 
-	SetDiagnostics(FString::Printf(TEXT("Placement selected: %s"), *propId.ToString()));
+	UE_LOG(
+		LogEpisodeAssetPaletteWidget,
+		Log,
+		TEXT("Placement selected | Type: %d | AssetId: %s"),
+		static_cast<int32>(itemType),
+		*assetId.ToString());
 }
 
-void UEpisodeAssetPaletteWidget::SetDiagnostics(const FString& message)
+FEpisodePaletteItemEntry UEpisodeAssetPaletteWidget::MakeSpecialPaletteItemEntry(
+	EEpisodePaletteItemType itemType,
+	FName assetId,
+	const TCHAR* displayName,
+	const TCHAR* category,
+	const TCHAR* iconName)
 {
-	if (DiagnosticsTextBlock)
-	{
-		DiagnosticsTextBlock->SetText(FText::FromString(message));
-	}
+	FEpisodePaletteItemEntry entry;
+	entry.ItemType = itemType;
+	entry.AssetId = assetId;
+	entry.DisplayName = FText::FromString(displayName);
+	entry.CategoryText = FText::FromString(category);
+	entry.IconName = iconName;
+	return entry;
 }
 
 void UEpisodeAssetPaletteWidget::RequestEditorWidgetInputMode()
 {
 	if (AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer()))
 	{
-		editorController->RequestEditorWidgetInputMode(this);
+		UWidget* focusWidget = ResolveInputModeFocusWidget();
+		RequestedInputModeFocusWidget = focusWidget;
+		editorController->RequestEditorWidgetInputMode(focusWidget);
 	}
 }
 
@@ -117,6 +181,23 @@ void UEpisodeAssetPaletteWidget::ReleaseEditorWidgetInputMode()
 {
 	if (AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer()))
 	{
-		editorController->ReleaseEditorWidgetInputMode(this);
+		UWidget* focusWidget = RequestedInputModeFocusWidget.Get();
+		if (!focusWidget)
+		{
+			focusWidget = ResolveInputModeFocusWidget();
+		}
+
+		editorController->ReleaseEditorWidgetInputMode(focusWidget);
+		RequestedInputModeFocusWidget.Reset();
 	}
+}
+
+UWidget* UEpisodeAssetPaletteWidget::ResolveInputModeFocusWidget() const
+{
+	if (PaletteSizeBox)
+	{
+		return PaletteSizeBox.Get();
+	}
+
+	return const_cast<UEpisodeAssetPaletteWidget*>(this);
 }

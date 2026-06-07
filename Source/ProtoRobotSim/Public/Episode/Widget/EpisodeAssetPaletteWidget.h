@@ -2,12 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Episode/Editor/EpisodeEditorTypes.h"
 #include "EpisodeAssetPaletteWidget.generated.h"
 
 class UHorizontalBox;
 class UScrollBox;
 class USizeBox;
-class UTextBlock;
+class UWidget;
 class UEpisodePlaceablePaletteItemWidget;
 
 UCLASS(BlueprintType, Blueprintable)
@@ -25,6 +26,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
 	bool bRebuildOnConstruct = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
+	bool bIncludePedestrianPlacement = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
+	bool bIncludeRobotRoutePlacement = true;
+
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
 	TObjectPtr<USizeBox> PaletteSizeBox;
 
@@ -34,9 +41,6 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
 	TObjectPtr<UHorizontalBox> PlaceableItemContainer;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
-	TObjectPtr<UTextBlock> DiagnosticsTextBlock;
-
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
 	bool RebuildPalette();
 
@@ -45,9 +49,20 @@ public:
 
 protected:
 	UFUNCTION()
-	void HandlePaletteItemSelected(FName propId);
+	void HandlePaletteItemSelected(EEpisodePaletteItemType itemType, FName assetId);
 
-	void SetDiagnostics(const FString& message);
 	void RequestEditorWidgetInputMode();
 	void ReleaseEditorWidgetInputMode();
+
+private:
+	static FEpisodePaletteItemEntry MakeSpecialPaletteItemEntry(
+		EEpisodePaletteItemType itemType,
+		FName assetId,
+		const TCHAR* displayName,
+		const TCHAR* category,
+		const TCHAR* iconName);
+
+	UWidget* ResolveInputModeFocusWidget() const;
+
+	TWeakObjectPtr<UWidget> RequestedInputModeFocusWidget;
 };

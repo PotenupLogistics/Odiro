@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Episode/Editor/EpisodeEditorTypes.h"
 #include "Shared/EpisodeCoreTypes.h"
 #include "EpisodePlaceablePaletteItemWidget.generated.h"
 
@@ -10,7 +11,12 @@ class UImage;
 class UTextBlock;
 class UTexture2D;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEpisodePlaceablePaletteItemSelected, FName, PropId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FEpisodePlaceablePaletteItemSelected,
+	EEpisodePaletteItemType,
+	ItemType,
+	FName,
+	AssetId);
 
 UCLASS(BlueprintType, Blueprintable)
 class PROTOROBOTSIM_API UEpisodePlaceablePaletteItemWidget : public UUserWidget
@@ -36,10 +42,10 @@ public:
 	TObjectPtr<UImage> ThumbnailImage;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
-	FString StaticObstacleIconDirectory = TEXT("/Game/Widgets/Icon");
+	FString IconDirectory = TEXT("/Game/Widgets/Thumbnail");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
-	FString StaticObstacleIconAssetPrefix = TEXT("icon_");
+	FString IconAssetPrefix = TEXT("icon_");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
 	bool bMatchThumbnailImageSizeToTexture = false;
@@ -50,11 +56,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
 	void SetPropEntry(const FEpisodeStaticObstaclePropEntry& propEntry);
 
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
+	void SetPaletteItemEntry(const FEpisodePaletteItemEntry& paletteItemEntry);
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Palette")
+	FEpisodePaletteItemEntry GetPaletteItemEntry() const { return PaletteItemEntry; }
+
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Palette")
 	FEpisodeStaticObstaclePropEntry GetPropEntry() const { return PropEntry; }
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Palette")
-	FName GetPropId() const { return PropEntry.PropId; }
+	FName GetPropId() const { return PaletteItemEntry.AssetId; }
 
 protected:
 	UFUNCTION()
@@ -62,11 +74,16 @@ protected:
 
 private:
 	static FText CategoryToText(EEpisodeStaticObstaclePropCategory category);
+	static FString MakeDisplayNameFromPropId(FName propId);
 	static FString MakeIconSuffixFromPropId(FName propId);
+	static FEpisodePaletteItemEntry MakeStaticObstaclePaletteItemEntry(const FEpisodeStaticObstaclePropEntry& propEntry);
 
 	FString BuildThumbnailTextureObjectPath() const;
 	void ApplyThumbnailImage();
 
 	UPROPERTY(Transient)
 	FEpisodeStaticObstaclePropEntry PropEntry;
+
+	UPROPERTY(Transient)
+	FEpisodePaletteItemEntry PaletteItemEntry;
 };

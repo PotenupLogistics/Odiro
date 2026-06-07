@@ -20,17 +20,21 @@ void UEpisodePlaceablePaletteItemWidget::NativeOnInitialized()
 void UEpisodePlaceablePaletteItemWidget::SetPropEntry(const FEpisodeStaticObstaclePropEntry& propEntry)
 {
 	PropEntry = propEntry;
+	SetPaletteItemEntry(MakeStaticObstaclePaletteItemEntry(propEntry));
+}
+
+void UEpisodePlaceablePaletteItemWidget::SetPaletteItemEntry(const FEpisodePaletteItemEntry& paletteItemEntry)
+{
+	PaletteItemEntry = paletteItemEntry;
 
 	if (DisplayNameTextBlock)
 	{
-		DisplayNameTextBlock->SetText(PropEntry.DisplayName.IsEmpty()
-			? FText::FromName(PropEntry.PropId)
-			: PropEntry.DisplayName);
+		DisplayNameTextBlock->SetText(PaletteItemEntry.DisplayName);
 	}
 
 	if (CategoryTextBlock)
 	{
-		CategoryTextBlock->SetText(CategoryToText(PropEntry.Category));
+		CategoryTextBlock->SetText(PaletteItemEntry.CategoryText);
 	}
 
 	ApplyThumbnailImage();
@@ -38,9 +42,9 @@ void UEpisodePlaceablePaletteItemWidget::SetPropEntry(const FEpisodeStaticObstac
 
 void UEpisodePlaceablePaletteItemWidget::HandleSelectButtonClicked()
 {
-	if (PropEntry.PropId.IsNone()) return;
+	if (PaletteItemEntry.AssetId.IsNone()) return;
 
-	OnSelected.Broadcast(PropEntry.PropId);
+	OnSelected.Broadcast(PaletteItemEntry.ItemType, PaletteItemEntry.AssetId);
 }
 
 FText UEpisodePlaceablePaletteItemWidget::CategoryToText(EEpisodeStaticObstaclePropCategory category)
@@ -63,6 +67,18 @@ FText UEpisodePlaceablePaletteItemWidget::CategoryToText(EEpisodeStaticObstacleP
 	}
 }
 
+FString UEpisodePlaceablePaletteItemWidget::MakeDisplayNameFromPropId(FName propId)
+{
+	FString propIdString = propId.ToString();
+	const FString obstaclePrefix(TEXT("obstacle."));
+	if (propIdString.StartsWith(obstaclePrefix))
+	{
+		propIdString.RightChopInline(obstaclePrefix.Len());
+	}
+
+	return propIdString;
+}
+
 FString UEpisodePlaceablePaletteItemWidget::MakeIconSuffixFromPropId(FName propId)
 {
 	FString propIdString = propId.ToString();
@@ -77,14 +93,26 @@ FString UEpisodePlaceablePaletteItemWidget::MakeIconSuffixFromPropId(FName propI
 	return propIdString;
 }
 
+FEpisodePaletteItemEntry UEpisodePlaceablePaletteItemWidget::MakeStaticObstaclePaletteItemEntry(
+	const FEpisodeStaticObstaclePropEntry& propEntry)
+{
+	FEpisodePaletteItemEntry paletteItemEntry;
+	paletteItemEntry.ItemType = EEpisodePaletteItemType::StaticObstacle;
+	paletteItemEntry.AssetId = propEntry.PropId;
+	paletteItemEntry.DisplayName = FText::FromString(MakeDisplayNameFromPropId(propEntry.PropId));
+	paletteItemEntry.CategoryText = CategoryToText(propEntry.Category);
+	paletteItemEntry.IconName = MakeIconSuffixFromPropId(propEntry.PropId);
+	return paletteItemEntry;
+}
+
 FString UEpisodePlaceablePaletteItemWidget::BuildThumbnailTextureObjectPath() const
 {
-	if (PropEntry.PropId.IsNone())
+	if (PaletteItemEntry.IconName.IsEmpty())
 	{
 		return FString();
 	}
 
-	FString iconDirectory = StaticObstacleIconDirectory;
+	FString iconDirectory = IconDirectory;
 	iconDirectory.TrimStartAndEndInline();
 	FPaths::NormalizeFilename(iconDirectory);
 	iconDirectory.RemoveFromEnd(TEXT("/"));
@@ -93,13 +121,19 @@ FString UEpisodePlaceablePaletteItemWidget::BuildThumbnailTextureObjectPath() co
 		return FString();
 	}
 
-	const FString iconSuffix = MakeIconSuffixFromPropId(PropEntry.PropId);
+	FString iconSuffix = PaletteItemEntry.IconName;
+	iconSuffix.TrimStartAndEndInline();
 	if (iconSuffix.IsEmpty())
 	{
 		return FString();
 	}
 
-	const FString iconAssetName = StaticObstacleIconAssetPrefix + iconSuffix;
+	if (iconSuffix.StartsWith(IconAssetPrefix))
+	{
+		iconSuffix.RightChopInline(IconAssetPrefix.Len());
+	}
+
+	const FString iconAssetName = IconAssetPrefix + iconSuffix;
 	return FString::Printf(TEXT("%s/%s.%s"), *iconDirectory, *iconAssetName, *iconAssetName);
 }
 

@@ -778,8 +778,9 @@ void UEpisodeCompiler::CompilePedestrians(
 		}
 		dynamicActorSpec.Properties.Add(TEXT("movement_model"), MakeStringParam(movementModel));
 		const bool bPlannedTrajectory = movementModel.Equals(TEXT("planned_trajectory"), ESearchCase::IgnoreCase);
+		const bool bStaticPlacement = movementModel.Equals(TEXT("static_placement"), ESearchCase::IgnoreCase);
 
-		if (!bPlannedTrajectory)
+		if (!bPlannedTrajectory && !bStaticPlacement)
 		{
 			RequireStringField(*pedestrianObject, TEXT("path_id"), pedestrianPath, result, dynamicActorSpec.PathId);
 			if (!dynamicActorSpec.PathId.IsEmpty() && !pathIds.Contains(dynamicActorSpec.PathId))

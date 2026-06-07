@@ -1,0 +1,11 @@
+{
+  "schema": "episode_run_queue",
+  "version": 1,
+  "runs": [
+    {
+      "pair_id": "playable_route_001",
+      "episode_setup": "Json/Input/EpisodeSetupPlayable.json",
+      "delivery_bot_setup": "Json/Input/DeliveryBotSetupPlayable.json"
+    }
+  ]
+}

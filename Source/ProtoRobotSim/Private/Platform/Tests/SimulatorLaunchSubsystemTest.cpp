@@ -1,0 +1,84 @@
+#if WITH_DEV_AUTOMATION_TESTS
+
+#include "Platform/SimulatorLaunchSubsystem.h"
+
+#include "Misc/AutomationTest.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimulatorLaunchCommandLineBuildTest,
+	"ProtoRobotSim.SimulatorLaunch.CommandLine",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimulatorLaunchCommandLineBuildTest::RunTest(const FString& parameters)
+{
+	// Launcher는 simulator public 계약만 넘기고 fixed-step은 SimulationSetup JSON에만 둔다.
+	const FString simulatorArguments = USimulatorLaunchSubsystem::BuildSimulatorArgumentString(
+		TEXT("Json/Input/SimulationSetupSample.json"),
+		TEXT("run-001"));
+	TestTrue(TEXT("simulator passes simulate setup"), simulatorArguments.Contains(TEXT("\"-Simulate=Json/Input/SimulationSetupSample.json\"")));
+	TestTrue(TEXT("simulator passes run id"), simulatorArguments.Contains(TEXT("\"-RunId=run-001\"")));
+	TestFalse(TEXT("simulator omits fixed step args"), simulatorArguments.Contains(TEXT("UseFixedTimeStep")));
+
+	// 개발 fallback도 packaged exe와 같은 public args를 유지해야 한다.
+	const FString previewArguments = USimulatorLaunchSubsystem::BuildPreviewLauncherArgumentString(
+		TEXT("RunPreview.bat"),
+		TEXT("Json/Input/SimulationSetupSample.json"),
+		TEXT("run-001"));
+	TestTrue(TEXT("preview uses cmd run wrapper"), previewArguments.StartsWith(TEXT("/d /s /c \"\"")));
+	TestTrue(TEXT("preview passes simulate setup"), previewArguments.Contains(TEXT("\"-Simulate=Json/Input/SimulationSetupSample.json\"")));
+	TestTrue(TEXT("preview passes run id"), previewArguments.Contains(TEXT("\"-RunId=run-001\"")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimulatorLaunchRunStateTerminalTest,
+	"ProtoRobotSim.SimulatorLaunch.TerminalStates",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimulatorLaunchRunStateTerminalTest::RunTest(const FString& parameters)
+{
+	TestFalse(TEXT("pending is not terminal"), USimulatorLaunchSubsystem::IsTerminalRunState(ESimulationRunState::Pending));
+	TestFalse(TEXT("running is not terminal"), USimulatorLaunchSubsystem::IsTerminalRunState(ESimulationRunState::Running));
+	TestTrue(TEXT("completed is terminal"), USimulatorLaunchSubsystem::IsTerminalRunState(ESimulationRunState::Completed));
+	TestTrue(TEXT("failed is terminal"), USimulatorLaunchSubsystem::IsTerminalRunState(ESimulationRunState::Failed));
+	TestTrue(TEXT("canceled is terminal"), USimulatorLaunchSubsystem::IsTerminalRunState(ESimulationRunState::Canceled));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimulatorLaunchRunQueueJsonRoundTripTest,
+	"ProtoRobotSim.SimulatorLaunch.RunQueueJson.RoundTrip",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimulatorLaunchRunQueueJsonRoundTripTest::RunTest(const FString& parameters)
+{
+	TArray<FEpisodeRunInput> runInputs;
+	FEpisodeRunInput runInput;
+	runInput.PairId = TEXT("sample_0");
+	runInput.EpisodeSetupJsonPath = TEXT("Json/Input/EpisodeSetupSample_0.json");
+	runInput.DeliveryBotSetupJsonPath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
+	runInputs.Add(runInput);
+
+	FString json;
+	TArray<FString> diagnostics;
+	TestTrue(TEXT("run queue writes"), USimulatorLaunchSubsystem::TryWriteEpisodeRunQueueJson(runInputs, json, diagnostics));
+	TestEqual(TEXT("write diagnostics"), diagnostics.Num(), 0);
+	TestTrue(TEXT("schema field"), json.Contains(TEXT("\"schema\"")));
+	TestTrue(TEXT("episode setup field"), json.Contains(TEXT("EpisodeSetupSample_0.json")));
+
+	TArray<FEpisodeRunInput> parsedRunInputs;
+	TestTrue(TEXT("run queue reads"), USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(json, parsedRunInputs, diagnostics));
+	TestEqual(TEXT("read diagnostics"), diagnostics.Num(), 0);
+	TestEqual(TEXT("run input count"), parsedRunInputs.Num(), 1);
+	TestEqual(TEXT("pair id"), parsedRunInputs[0].PairId, FString(TEXT("sample_0")));
+	TestEqual(
+		TEXT("delivery setup"),
+		parsedRunInputs[0].DeliveryBotSetupJsonPath,
+		FString(TEXT("Json/Input/DeliveryBotSetupSample_0.json")));
+
+	return true;
+}
+
+#endif

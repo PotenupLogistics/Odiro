@@ -10,6 +10,66 @@ enum class EEpisodeEditorControllerMode : uint8
 	EditPlacement
 };
 
+UENUM(BlueprintType)
+enum class EEpisodeTransformGizmoHandle : uint8
+{
+	None,
+	TranslateX,
+	TranslateY,
+	TranslateZ,
+	TranslateXY,
+	TranslateXZ,
+	TranslateYZ,
+	RotateX,
+	RotateY,
+	RotateZ,
+	ScaleX,
+	ScaleY,
+	ScaleZ,
+	ScaleXY,
+	ScaleXZ,
+	ScaleYZ,
+	ScaleUniform
+};
+
+UENUM(BlueprintType)
+enum class EEpisodeTransformGizmoMode : uint8
+{
+	Translate,
+	Rotate,
+	Scale
+};
+
+UENUM(BlueprintType)
+enum class EEpisodePaletteItemType : uint8
+{
+	StaticObstacle,
+	Pedestrian,
+	RobotStart,
+	RobotGoal
+};
+
+USTRUCT(BlueprintType)
+struct PROTOROBOTSIM_API FEpisodePaletteItemEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	EEpisodePaletteItemType ItemType = EEpisodePaletteItemType::StaticObstacle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	FName AssetId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	FText CategoryText;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	FString IconName;
+};
+
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FEpisodeAuthoringStaticObstacleRecord
 {
@@ -26,4 +86,7 @@ struct PROTOROBOTSIM_API FEpisodeAuthoringStaticObstacleRecord
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor", meta = (ClampMin = "0.0"))
 	double PlacementRadius2D = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	FVector2D PlacementHalfExtent2D = FVector2D::ZeroVector;
 };

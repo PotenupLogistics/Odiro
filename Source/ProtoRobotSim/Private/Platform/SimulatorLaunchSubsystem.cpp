@@ -1,0 +1,1007 @@
+#include "Platform/SimulatorLaunchSubsystem.h"
+
+#include "DeliveryBot/DeliveryBotSetupCompiler.h"
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
+#include "Episode/EpisodeCompiler.h"
+#include "HAL/FileManager.h"
+#include "Misc/DateTime.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Guid.h"
+#include "Misc/Paths.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+#include "TimerManager.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogSimulatorLaunch, Log, All);
+
+namespace
+{
+	const TCHAR* SimulationSetupInputDirectory = TEXT("Json/Input");
+	const TCHAR* EvaluationReportOutputDirectory = TEXT("Json/Output");
+	const TCHAR* SimulationRunStatusDirectory = TEXT("Saved/SimulationRuns");
+	const TCHAR* PreviewLauncherFileName = TEXT("RunPreview.bat");
+	const TCHAR* LaunchSimulationSetupSchema = TEXT("simulation_setup");
+	const TCHAR* LaunchEpisodeSetupSchema = TEXT("episode_actor_spawn_mvp");
+	const TCHAR* LaunchDeliveryBotSetupSchema = TEXT("delivery_bot_setup");
+	const TCHAR* LaunchEpisodeRunQueueSchema = TEXT("episode_run_queue");
+	const TCHAR* SimulatorProcessFlags = TEXT("-nosound -unattended -NoLoadingScreen");
+
+	FString ToProjectRelativePath(FString filePath)
+	{
+		// UI에는 machine-specific absolute path 대신 packaged args와 같은 project-relative path를 노출한다.
+		const FString projectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+		FPaths::MakePathRelativeTo(filePath, *projectDir);
+		return filePath.Replace(TEXT("\\"), TEXT("/"));
+	}
+
+	void FindProjectJsonFiles(const FString& relativeDirectory, TArray<FString>& outFiles)
+	{
+		outFiles.Reset();
+
+		const FString searchRoot = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), relativeDirectory));
+		TArray<FString> foundFiles;
+		IFileManager::Get().FindFilesRecursive(foundFiles, *searchRoot, TEXT("*.json"), true, false);
+
+		for (FString filePath : foundFiles)
+		{
+			outFiles.Add(ToProjectRelativePath(filePath));
+		}
+
+		outFiles.Sort();
+	}
+
+	bool IsReferenceSampleJsonFile(const FString& jsonFile)
+	{
+		return FPaths::GetBaseFilename(jsonFile).Contains(TEXT("Sample"), ESearchCase::IgnoreCase);
+	}
+
+	bool TryReadJsonSchema(const FString& jsonFile, FString& outSchema)
+	{
+		outSchema.Reset();
+
+		FString jsonString;
+		if (!FFileHelper::LoadFileToString(jsonString, *FSimulationSetupJson::ResolveProjectPath(jsonFile)))
+		{
+			return false;
+		}
+
+		TSharedPtr<FJsonObject> rootObject;
+		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(jsonString);
+		if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+		{
+			return false;
+		}
+
+		return rootObject->TryGetStringField(TEXT("schema"), outSchema);
+	}
+
+	bool HasJsonSchema(const FString& jsonFile, const TCHAR* expectedSchema)
+	{
+		FString schema;
+		return TryReadJsonSchema(jsonFile, schema)
+			&& schema.Equals(expectedSchema, ESearchCase::CaseSensitive);
+	}
+
+	FString JoinDiagnostics(const TArray<FEpisodeCompileDiagnostic>& diagnostics)
+	{
+		TArray<FString> lines;
+		lines.Reserve(diagnostics.Num());
+		for (const FEpisodeCompileDiagnostic& diagnostic : diagnostics)
+		{
+			lines.Add(FString::Printf(TEXT("%s: %s"), *diagnostic.Code, *diagnostic.Message));
+		}
+
+		return FString::Join(lines, TEXT("\n"));
+	}
+
+	FString JoinStringDiagnostics(const TArray<FString>& diagnostics)
+	{
+		return FString::Join(diagnostics, TEXT("\n"));
+	}
+
+	FString MakeSimulatorRunId()
+	{
+		const FString timestamp = FDateTime::UtcNow().ToString(TEXT("%Y%m%d-%H%M%S"));
+		const FString guid = FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(8);
+		return FString::Printf(TEXT("simulator-run-%s-%s"), *timestamp, *guid);
+	}
+
+	bool IsUnrealEditorExecutable()
+	{
+		// Editor preview에서만 RunPreview.bat fallback을 쓴다. Packaged game은 자기 executable을 다시 실행한다.
+		const FString executableName = FPaths::GetBaseFilename(FPlatformProcess::ExecutablePath());
+		return executableName.StartsWith(TEXT("UnrealEditor"), ESearchCase::IgnoreCase);
+	}
+
+	bool IsEpisodeSetupFile(const FString& jsonFile)
+	{
+		if (!HasJsonSchema(jsonFile, LaunchEpisodeSetupSchema))
+		{
+			return false;
+		}
+
+		UEpisodeCompiler* compiler = NewObject<UEpisodeCompiler>();
+		return compiler && compiler->CompileEpisodeWorldSpecFromJsonFile(jsonFile).bSuccess;
+	}
+
+	bool IsDeliveryBotSetupFile(const FString& jsonFile)
+	{
+		if (!HasJsonSchema(jsonFile, LaunchDeliveryBotSetupSchema))
+		{
+			return false;
+		}
+
+		UDeliveryBotSetupCompiler* compiler = NewObject<UDeliveryBotSetupCompiler>();
+		return compiler && compiler->CompileDeliveryBotSetupFromJsonFile(jsonFile).bSuccess;
+	}
+
+	TSharedRef<FJsonObject> MakeEpisodeRunQueueObject(const TArray<FEpisodeRunInput>& runInputs)
+	{
+		TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
+		rootObject->SetStringField(TEXT("schema"), LaunchEpisodeRunQueueSchema);
+		rootObject->SetNumberField(TEXT("version"), 1);
+
+		TArray<TSharedPtr<FJsonValue>> runValues;
+		runValues.Reserve(runInputs.Num());
+		for (const FEpisodeRunInput& runInput : runInputs)
+		{
+			TSharedRef<FJsonObject> runObject = MakeShared<FJsonObject>();
+			if (!runInput.PairId.IsEmpty())
+			{
+				runObject->SetStringField(TEXT("pair_id"), runInput.PairId);
+			}
+			runObject->SetStringField(TEXT("episode_setup"), runInput.EpisodeSetupJsonPath);
+			runObject->SetStringField(TEXT("delivery_bot_setup"), runInput.DeliveryBotSetupJsonPath);
+			runValues.Add(MakeShared<FJsonValueObject>(runObject));
+		}
+
+		rootObject->SetArrayField(TEXT("runs"), runValues);
+		return rootObject;
+	}
+}
+
+void USimulatorLaunchSubsystem::Deinitialize()
+{
+	StopActiveRun();
+	Super::Deinitialize();
+}
+
+TArray<FString> USimulatorLaunchSubsystem::ListSimulationSetupFiles() const
+{
+	TArray<FString> jsonFiles;
+	FindProjectJsonFiles(SimulationSetupInputDirectory, jsonFiles);
+
+	TArray<FString> setupFiles;
+	for (const FString& jsonFile : jsonFiles)
+	{
+		if (IsReferenceSampleJsonFile(jsonFile))
+		{
+			continue;
+		}
+
+		if (HasJsonSchema(jsonFile, LaunchSimulationSetupSchema) && FSimulationSetupJson::ParseFromFile(jsonFile).bSuccess)
+		{
+			setupFiles.Add(jsonFile);
+		}
+	}
+
+	return setupFiles;
+}
+
+TArray<FString> USimulatorLaunchSubsystem::ListEpisodeSetupFiles() const
+{
+	TArray<FString> jsonFiles;
+	FindProjectJsonFiles(SimulationSetupInputDirectory, jsonFiles);
+
+	TArray<FString> setupFiles;
+	for (const FString& jsonFile : jsonFiles)
+	{
+		if (IsReferenceSampleJsonFile(jsonFile))
+		{
+			continue;
+		}
+
+		if (IsEpisodeSetupFile(jsonFile))
+		{
+			setupFiles.Add(jsonFile);
+		}
+	}
+
+	return setupFiles;
+}
+
+TArray<FString> USimulatorLaunchSubsystem::ListDeliveryBotSetupFiles() const
+{
+	TArray<FString> jsonFiles;
+	FindProjectJsonFiles(SimulationSetupInputDirectory, jsonFiles);
+
+	TArray<FString> setupFiles;
+	for (const FString& jsonFile : jsonFiles)
+	{
+		if (IsReferenceSampleJsonFile(jsonFile))
+		{
+			continue;
+		}
+
+		if (IsDeliveryBotSetupFile(jsonFile))
+		{
+			setupFiles.Add(jsonFile);
+		}
+	}
+
+	return setupFiles;
+}
+
+TArray<FString> USimulatorLaunchSubsystem::ListEpisodeRunQueueFiles() const
+{
+	TArray<FString> jsonFiles;
+	FindProjectJsonFiles(SimulationSetupInputDirectory, jsonFiles);
+
+	TArray<FString> runQueueFiles;
+	for (const FString& jsonFile : jsonFiles)
+	{
+		if (IsReferenceSampleJsonFile(jsonFile))
+		{
+			continue;
+		}
+
+		if (!HasJsonSchema(jsonFile, LaunchEpisodeRunQueueSchema))
+		{
+			continue;
+		}
+
+		FString jsonString;
+		if (!FFileHelper::LoadFileToString(jsonString, *FSimulationSetupJson::ResolveProjectPath(jsonFile)))
+		{
+			continue;
+		}
+
+		TArray<FEpisodeRunInput> runInputs;
+		TArray<FString> diagnostics;
+		if (TryReadEpisodeRunQueueJson(jsonString, runInputs, diagnostics))
+		{
+			runQueueFiles.Add(jsonFile);
+		}
+	}
+
+	return runQueueFiles;
+}
+
+TArray<FString> USimulatorLaunchSubsystem::ListEvaluationReportFiles() const
+{
+	TArray<FString> reportFiles;
+	FindProjectJsonFiles(EvaluationReportOutputDirectory, reportFiles);
+	return reportFiles;
+}
+
+TArray<FString> USimulatorLaunchSubsystem::ListSimulationRunStatusFiles() const
+{
+	TArray<FString> jsonFiles;
+	FindProjectJsonFiles(SimulationRunStatusDirectory, jsonFiles);
+
+	TArray<FString> statusFiles;
+	for (const FString& jsonFile : jsonFiles)
+	{
+		FSimulationRunStatus status;
+		TArray<FString> diagnostics;
+		if (FSimulationRunStatusJson::ParseFromFile(jsonFile, status, diagnostics))
+		{
+			statusFiles.Add(jsonFile);
+		}
+	}
+
+	return statusFiles;
+}
+
+FSimulationSetupParseResult USimulatorLaunchSubsystem::LoadSimulationSetupFile(const FString& setupPath) const
+{
+	return FSimulationSetupJson::ParseFromFile(setupPath);
+}
+
+bool USimulatorLaunchSubsystem::SaveFixedStepFpsToSetupFile(
+	const FString& setupPath,
+	int32 fps,
+	TArray<FString>& outDiagnostics) const
+{
+	outDiagnostics.Reset();
+
+	if (setupPath.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("SimulationSetup path must not be empty."));
+		return false;
+	}
+
+	if (fps <= 0)
+	{
+		outDiagnostics.Add(TEXT("fixed_step.fps must be > 0."));
+		return false;
+	}
+
+	const FString resolvedSetupPath = FSimulationSetupJson::ResolveProjectPath(setupPath);
+	FString jsonString;
+	if (!FFileHelper::LoadFileToString(jsonString, *resolvedSetupPath))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("SimulationSetup read failed: %s"), *resolvedSetupPath));
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> rootObject;
+	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(jsonString);
+	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+	{
+		outDiagnostics.Add(TEXT("SimulationSetup JSON parse failed."));
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> fixedStepObject;
+	const TSharedPtr<FJsonValue> fixedStepValue = rootObject->TryGetField(TEXT("fixed_step"));
+	if (fixedStepValue.IsValid() && fixedStepValue->Type == EJson::Object)
+	{
+		fixedStepObject = fixedStepValue->AsObject();
+	}
+
+	if (!fixedStepObject.IsValid())
+	{
+		// UI는 fixed_step.fps만 편집한다. 나머지 JSON 구조와 unknown field는 그대로 둔다.
+		fixedStepObject = MakeShared<FJsonObject>();
+		rootObject->SetObjectField(TEXT("fixed_step"), fixedStepObject);
+	}
+
+	fixedStepObject->SetNumberField(TEXT("fps"), fps);
+
+	FString updatedJsonString;
+	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
+		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&updatedJsonString);
+	if (!FJsonSerializer::Serialize(rootObject.ToSharedRef(), writer))
+	{
+		outDiagnostics.Add(TEXT("SimulationSetup JSON serialization failed."));
+		return false;
+	}
+
+	if (!FFileHelper::SaveStringToFile(
+			updatedJsonString,
+			*resolvedSetupPath,
+			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("SimulationSetup write failed: %s"), *resolvedSetupPath));
+		return false;
+	}
+
+	const FSimulationSetupParseResult parseResult = FSimulationSetupJson::ParseFromFile(setupPath);
+	if (!parseResult.bSuccess)
+	{
+		outDiagnostics.Add(JoinDiagnostics(parseResult.Diagnostics));
+		return false;
+	}
+
+	return true;
+}
+
+bool USimulatorLaunchSubsystem::SaveSimulationSetupFile(
+	const FString& setupPath,
+	const FSimulationSetup& setup,
+	TArray<FString>& outDiagnostics) const
+{
+	if (!FSimulationSetupJson::SaveToFile(setup, setupPath, outDiagnostics))
+	{
+		return false;
+	}
+
+	const FSimulationSetupParseResult parseResult = FSimulationSetupJson::ParseFromFile(setupPath);
+	for (const FEpisodeCompileDiagnostic& diagnostic : parseResult.Diagnostics)
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("%s: %s"), *diagnostic.Code, *diagnostic.Message));
+	}
+	return parseResult.bSuccess;
+}
+
+bool USimulatorLaunchSubsystem::LoadEpisodeRunQueueFile(
+	const FString& runQueuePath,
+	TArray<FEpisodeRunInput>& outRunInputs,
+	TArray<FString>& outDiagnostics) const
+{
+	outRunInputs.Reset();
+	outDiagnostics.Reset();
+	if (runQueuePath.TrimStartAndEnd().IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("EpisodeRunQueue path must not be empty."));
+		return false;
+	}
+
+	FString jsonString;
+	const FString resolvedRunQueuePath = FSimulationSetupJson::ResolveProjectPath(runQueuePath);
+	if (!FFileHelper::LoadFileToString(jsonString, *resolvedRunQueuePath))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue read failed: %s"), *resolvedRunQueuePath));
+		return false;
+	}
+
+	return TryReadEpisodeRunQueueJson(jsonString, outRunInputs, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::SaveEpisodeRunQueueFile(
+	const FString& runQueuePath,
+	const TArray<FEpisodeRunInput>& runInputs,
+	TArray<FString>& outDiagnostics) const
+{
+	outDiagnostics.Reset();
+	if (runQueuePath.TrimStartAndEnd().IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("EpisodeRunQueue path must not be empty."));
+		return false;
+	}
+
+	FString jsonString;
+	if (!TryWriteEpisodeRunQueueJson(runInputs, jsonString, outDiagnostics))
+	{
+		return false;
+	}
+
+	const FString resolvedRunQueuePath = FSimulationSetupJson::ResolveProjectPath(runQueuePath);
+	const FString outputDirectory = FPaths::GetPath(resolvedRunQueuePath);
+	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue directory create failed: %s"), *outputDirectory));
+		return false;
+	}
+
+	if (!FFileHelper::SaveStringToFile(
+			jsonString,
+			*resolvedRunQueuePath,
+			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue write failed: %s"), *resolvedRunQueuePath));
+		return false;
+	}
+
+	return true;
+}
+
+bool USimulatorLaunchSubsystem::AppendRunQueuePair(
+	const FString& runQueuePath,
+	const FString& pairId,
+	const FString& episodeSetupPath,
+	const FString& deliveryBotSetupPath,
+	TArray<FString>& outDiagnostics) const
+{
+	outDiagnostics.Reset();
+
+	TArray<FEpisodeRunInput> runInputs;
+	const FString resolvedRunQueuePath = FSimulationSetupJson::ResolveProjectPath(runQueuePath);
+	if (FPaths::FileExists(resolvedRunQueuePath))
+	{
+		if (!LoadEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics))
+		{
+			return false;
+		}
+	}
+
+	FEpisodeRunInput runInput;
+	runInput.PairId = pairId.TrimStartAndEnd();
+	runInput.EpisodeSetupJsonPath = episodeSetupPath.TrimStartAndEnd();
+	runInput.DeliveryBotSetupJsonPath = deliveryBotSetupPath.TrimStartAndEnd();
+	runInputs.Add(runInput);
+	return SaveEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::RemoveRunQueuePair(
+	const FString& runQueuePath,
+	int32 runIndex,
+	TArray<FString>& outDiagnostics) const
+{
+	TArray<FEpisodeRunInput> runInputs;
+	if (!LoadEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics))
+	{
+		return false;
+	}
+
+	if (!runInputs.IsValidIndex(runIndex))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue index is out of range: %d"), runIndex));
+		return false;
+	}
+
+	runInputs.RemoveAt(runIndex);
+	return SaveEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::MoveRunQueuePair(
+	const FString& runQueuePath,
+	int32 runIndex,
+	int32 direction,
+	TArray<FString>& outDiagnostics) const
+{
+	TArray<FEpisodeRunInput> runInputs;
+	if (!LoadEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics))
+	{
+		return false;
+	}
+
+	if (!runInputs.IsValidIndex(runIndex))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue index is out of range: %d"), runIndex));
+		return false;
+	}
+
+	const int32 step = direction < 0 ? -1 : 1;
+	const int32 targetIndex = runIndex + step;
+	if (!runInputs.IsValidIndex(targetIndex))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue target index is out of range: %d"), targetIndex));
+		return false;
+	}
+
+	runInputs.Swap(runIndex, targetIndex);
+	return SaveEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::StartSimulationRun(const FString& setupPath, const FString& requestedRunId)
+{
+	if (ActiveProcessHandle.IsValid() && FPlatformProcess::IsProcRunning(ActiveProcessHandle))
+	{
+		ActiveRunInfo.LastError = TEXT("A simulator process is already running.");
+		BroadcastRunInfoChanged();
+		return false;
+	}
+
+	CloseActiveProcessHandle();
+
+	const FSimulationSetupParseResult setupParseResult = FSimulationSetupJson::ParseFromFile(setupPath);
+	if (!setupParseResult.bSuccess)
+	{
+		ActiveRunInfo = FSimulatorRunInfo{};
+		ActiveRunInfo.SetupPath = setupPath;
+		ActiveRunInfo.Status.State = ESimulationRunState::Failed;
+		ActiveRunInfo.LastError = JoinDiagnostics(setupParseResult.Diagnostics);
+		BroadcastRunInfoChanged();
+		return false;
+	}
+
+	const FString runId = requestedRunId.IsEmpty() ? MakeSimulatorRunId() : requestedRunId;
+
+	FString executable;
+	FString arguments;
+	bool bUsesPreviewLauncher = false;
+	if (!BuildLaunchCommand(setupPath, runId, executable, arguments, bUsesPreviewLauncher))
+	{
+		ActiveRunInfo = FSimulatorRunInfo{};
+		ActiveRunInfo.RunId = runId;
+		ActiveRunInfo.SetupPath = setupPath;
+		ActiveRunInfo.StatusPath = setupParseResult.Setup.Status.OutputPath;
+		MarkActiveRunFailed(TEXT("Simulator launch command could not be built."));
+		return false;
+	}
+
+	ActiveRunInfo = FSimulatorRunInfo{};
+	ActiveRunInfo.RunId = runId;
+	ActiveRunInfo.SetupPath = setupPath;
+	ActiveRunInfo.StatusPath = setupParseResult.Setup.Status.OutputPath;
+	ActiveRunInfo.LaunchExecutable = executable;
+	ActiveRunInfo.LaunchArguments = arguments;
+	ActiveRunInfo.bUsedPreviewLauncher = bUsesPreviewLauncher;
+	ActiveRunInfo.Status.RunId = runId;
+	ActiveRunInfo.Status.SetupPath = setupPath;
+	ActiveRunInfo.Status.State = ESimulationRunState::Pending;
+
+	// 동일 status path를 재사용할 수 있으므로 이전 run의 terminal status를 먼저 제거한다.
+	const FString resolvedStatusPath = FSimulationSetupJson::ResolveProjectPath(ActiveRunInfo.StatusPath);
+	IFileManager::Get().Delete(*resolvedStatusPath, false, true);
+
+	uint32 processId = 0;
+	const FString workingDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	ActiveProcessHandle = FPlatformProcess::CreateProc(
+		*executable,
+		*arguments,
+		false,
+		false,
+		false,
+		&processId,
+		0,
+		*workingDirectory,
+		nullptr);
+
+	if (!ActiveProcessHandle.IsValid())
+	{
+		ActiveRunInfo.bProcessStarted = false;
+		MarkActiveRunFailed(FString::Printf(TEXT("Simulator process start failed: %s"), *executable));
+		return false;
+	}
+
+	ActiveRunInfo.bProcessStarted = true;
+	ActiveRunInfo.bProcessRunning = true;
+	StartPolling();
+	BroadcastRunInfoChanged();
+
+	UE_LOG(
+		LogSimulatorLaunch,
+		Log,
+		TEXT("Simulator process started | RunId: %s, Executable: %s, Arguments: %s"),
+		*runId,
+		*executable,
+		*arguments);
+
+	return true;
+}
+
+bool USimulatorLaunchSubsystem::RefreshActiveRunStatus()
+{
+	if (ActiveRunInfo.RunId.IsEmpty() && !ActiveRunInfo.bProcessStarted)
+	{
+		return false;
+	}
+
+	FSimulationRunStatus status;
+	TArray<FString> diagnostics;
+	const bool bStatusRead = FSimulationRunStatusJson::ParseFromFile(ActiveRunInfo.StatusPath, status, diagnostics);
+	if (bStatusRead)
+	{
+		if (!status.RunId.Equals(ActiveRunInfo.RunId, ESearchCase::CaseSensitive))
+		{
+			// Status file은 setup마다 고정될 수 있어, 다른 run id의 stale status는 완료로 처리하지 않는다.
+			ActiveRunInfo.Diagnostics.Reset();
+			ActiveRunInfo.Diagnostics.Add(FString::Printf(
+				TEXT("Waiting for simulator status run id '%s'. Current status file has '%s'."),
+				*ActiveRunInfo.RunId,
+				*status.RunId));
+		}
+		else
+		{
+			ActiveRunInfo.Status = status;
+			ActiveRunInfo.Diagnostics.Reset();
+			ActiveRunInfo.LastError = status.State == ESimulationRunState::Failed ? status.Error : FString();
+		}
+	}
+	else
+	{
+		SetActiveRunDiagnostics(diagnostics);
+	}
+
+	RefreshActiveProcessState();
+
+	if (IsTerminalRunState(ActiveRunInfo.Status.State))
+	{
+		if (ActiveRunInfo.bProcessRunning && ActiveProcessHandle.IsValid())
+		{
+			// Simulator가 terminal status를 쓴 뒤 창이 남아 있으면 launcher가 run lifecycle을 닫는다.
+			FPlatformProcess::TerminateProc(ActiveProcessHandle, true);
+			ActiveRunInfo.bProcessRunning = false;
+		}
+
+		StopPolling();
+		CloseActiveProcessHandle();
+		BroadcastRunInfoChanged();
+		return bStatusRead;
+	}
+
+	if (ActiveRunInfo.bProcessStarted && !ActiveRunInfo.bProcessRunning)
+	{
+		// Process start failure와 구분되는 simulator-side abnormal exit 경로다.
+		ActiveRunInfo.Status.State = ESimulationRunState::Failed;
+		ActiveRunInfo.LastError = TEXT("Simulator process exited before writing a terminal status.");
+		StopPolling();
+		CloseActiveProcessHandle();
+		BroadcastRunInfoChanged();
+		return false;
+	}
+
+	BroadcastRunInfoChanged();
+	return bStatusRead;
+}
+
+void USimulatorLaunchSubsystem::StopActiveRun()
+{
+	if (ActiveProcessHandle.IsValid())
+	{
+		if (FPlatformProcess::IsProcRunning(ActiveProcessHandle))
+		{
+			FPlatformProcess::TerminateProc(ActiveProcessHandle, true);
+		}
+
+		CloseActiveProcessHandle();
+	}
+
+	if (!ActiveRunInfo.RunId.IsEmpty() && !IsTerminalRunState(ActiveRunInfo.Status.State))
+	{
+		ActiveRunInfo.Status.State = ESimulationRunState::Canceled;
+		ActiveRunInfo.bProcessRunning = false;
+		BroadcastRunInfoChanged();
+	}
+
+	StopPolling();
+}
+
+bool USimulatorLaunchSubsystem::IsTerminalRunState(ESimulationRunState state)
+{
+	return state == ESimulationRunState::Completed
+		|| state == ESimulationRunState::Failed
+		|| state == ESimulationRunState::Canceled;
+}
+
+FString USimulatorLaunchSubsystem::QuoteCommandLineArgument(const FString& value)
+{
+	FString escapedValue = value;
+	escapedValue.ReplaceInline(TEXT("\""), TEXT("\\\""));
+	return FString::Printf(TEXT("\"%s\""), *escapedValue);
+}
+
+FString USimulatorLaunchSubsystem::BuildSimulatorArgumentString(const FString& setupPath, const FString& runId)
+{
+	return FString::Printf(
+		TEXT("%s %s %s"),
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-Simulate=%s"), *setupPath)),
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
+		SimulatorProcessFlags);
+}
+
+FString USimulatorLaunchSubsystem::BuildPreviewLauncherArgumentString(
+	const FString& previewBatPath,
+	const FString& setupPath,
+	const FString& runId)
+{
+	// cmd.exe quoting is intentionally centralized here; CreateProc receives cmd.exe as executable.
+	return FString::Printf(
+		TEXT("/d /s /c \"\"%s\" %s %s %s\""),
+		*previewBatPath,
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-Simulate=%s"), *setupPath)),
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
+		SimulatorProcessFlags);
+}
+
+bool USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(
+	const FString& jsonString,
+	TArray<FEpisodeRunInput>& outRunInputs,
+	TArray<FString>& outDiagnostics)
+{
+	outRunInputs.Reset();
+	outDiagnostics.Reset();
+
+	TSharedPtr<FJsonObject> rootObject;
+	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(jsonString);
+	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+	{
+		outDiagnostics.Add(TEXT("EpisodeRunQueue JSON parse failed."));
+		return false;
+	}
+
+	FString schema;
+	if (!rootObject->TryGetStringField(TEXT("schema"), schema) || !schema.Equals(LaunchEpisodeRunQueueSchema, ESearchCase::CaseSensitive))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue schema must be '%s'."), LaunchEpisodeRunQueueSchema));
+	}
+
+	double version = 0.0;
+	if (!rootObject->TryGetNumberField(TEXT("version"), version) || version <= 0.0)
+	{
+		outDiagnostics.Add(TEXT("EpisodeRunQueue version must be > 0."));
+	}
+
+	const TSharedPtr<FJsonValue> runsValue = rootObject->TryGetField(TEXT("runs"));
+	if (!runsValue.IsValid() || runsValue->Type != EJson::Array)
+	{
+		outDiagnostics.Add(TEXT("EpisodeRunQueue runs must be an array."));
+		return false;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>> runValues = runsValue->AsArray();
+	if (runValues.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("EpisodeRunQueue runs must contain at least one pair."));
+	}
+
+	for (int32 index = 0; index < runValues.Num(); ++index)
+	{
+		const TSharedPtr<FJsonValue>& runValue = runValues[index];
+		if (!runValue.IsValid() || runValue->Type != EJson::Object)
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue runs[%d] must be an object."), index));
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject> runObject = runValue->AsObject();
+		FEpisodeRunInput runInput;
+		runObject->TryGetStringField(TEXT("pair_id"), runInput.PairId);
+		if (!runObject->TryGetStringField(TEXT("episode_setup"), runInput.EpisodeSetupJsonPath))
+		{
+			runObject->TryGetStringField(TEXT("episode_setup_json_path"), runInput.EpisodeSetupJsonPath);
+		}
+		if (!runObject->TryGetStringField(TEXT("delivery_bot_setup"), runInput.DeliveryBotSetupJsonPath))
+		{
+			runObject->TryGetStringField(TEXT("delivery_bot_setup_json_path"), runInput.DeliveryBotSetupJsonPath);
+		}
+
+		if (runInput.EpisodeSetupJsonPath.TrimStartAndEnd().IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue runs[%d].episode_setup must not be empty."), index));
+		}
+
+		if (runInput.DeliveryBotSetupJsonPath.TrimStartAndEnd().IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue runs[%d].delivery_bot_setup must not be empty."), index));
+		}
+
+		outRunInputs.Add(runInput);
+	}
+
+	return outDiagnostics.IsEmpty();
+}
+
+bool USimulatorLaunchSubsystem::TryWriteEpisodeRunQueueJson(
+	const TArray<FEpisodeRunInput>& runInputs,
+	FString& outJson,
+	TArray<FString>& outDiagnostics)
+{
+	outJson.Reset();
+	outDiagnostics.Reset();
+
+	if (runInputs.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("EpisodeRunQueue requires at least one pair."));
+	}
+
+	for (int32 index = 0; index < runInputs.Num(); ++index)
+	{
+		const FEpisodeRunInput& runInput = runInputs[index];
+		if (runInput.EpisodeSetupJsonPath.TrimStartAndEnd().IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue pair %d requires episode_setup."), index));
+		}
+		else if (!IsEpisodeSetupFile(runInput.EpisodeSetupJsonPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("EpisodeSetup validation failed: %s"), *runInput.EpisodeSetupJsonPath));
+		}
+
+		if (runInput.DeliveryBotSetupJsonPath.TrimStartAndEnd().IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue pair %d requires delivery_bot_setup."), index));
+		}
+		else if (!IsDeliveryBotSetupFile(runInput.DeliveryBotSetupJsonPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("DeliveryBotSetup validation failed: %s"), *runInput.DeliveryBotSetupJsonPath));
+		}
+	}
+
+	if (!outDiagnostics.IsEmpty())
+	{
+		return false;
+	}
+
+	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
+		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&outJson);
+	if (!FJsonSerializer::Serialize(MakeEpisodeRunQueueObject(runInputs), writer))
+	{
+		outDiagnostics.Add(TEXT("EpisodeRunQueue JSON serialization failed."));
+		return false;
+	}
+
+	return true;
+}
+
+bool USimulatorLaunchSubsystem::BuildLaunchCommand(
+	const FString& setupPath,
+	const FString& runId,
+	FString& outExecutable,
+	FString& outArguments,
+	bool& bOutUsesPreviewLauncher) const
+{
+	bOutUsesPreviewLauncher = false;
+
+	FString previewBatPath;
+	if (ShouldUsePreviewLauncher(previewBatPath))
+	{
+		outExecutable = TEXT("cmd.exe");
+		outArguments = BuildPreviewLauncherArgumentString(previewBatPath, setupPath, runId);
+		bOutUsesPreviewLauncher = true;
+		return true;
+	}
+
+	outExecutable = FPlatformProcess::ExecutablePath();
+	outArguments = BuildSimulatorArgumentString(setupPath, runId);
+	return !outExecutable.IsEmpty();
+}
+
+bool USimulatorLaunchSubsystem::ShouldUsePreviewLauncher(FString& outPreviewBatPath) const
+{
+	outPreviewBatPath.Reset();
+
+	if (!IsUnrealEditorExecutable())
+	{
+		return false;
+	}
+
+	// Packaged executable이 없는 개발 중에도 packaged-style public args를 검증하기 위한 fallback이다.
+	const FString previewBatPath = FPaths::ConvertRelativePathToFull(
+		FPaths::Combine(FPaths::ProjectDir(), PreviewLauncherFileName));
+	if (!FPaths::FileExists(previewBatPath))
+	{
+		return false;
+	}
+
+	outPreviewBatPath = previewBatPath;
+	return true;
+}
+
+void USimulatorLaunchSubsystem::PollActiveRunStatus()
+{
+	RefreshActiveRunStatus();
+}
+
+void USimulatorLaunchSubsystem::StartPolling()
+{
+	UWorld* world = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
+	if (!world)
+	{
+		return;
+	}
+
+	world->GetTimerManager().SetTimer(
+		PollTimerHandle,
+		this,
+		&USimulatorLaunchSubsystem::PollActiveRunStatus,
+		1.0f,
+		true);
+}
+
+void USimulatorLaunchSubsystem::StopPolling()
+{
+	UWorld* world = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
+	if (world && PollTimerHandle.IsValid())
+	{
+		world->GetTimerManager().ClearTimer(PollTimerHandle);
+	}
+
+	PollTimerHandle.Invalidate();
+}
+
+void USimulatorLaunchSubsystem::CloseActiveProcessHandle()
+{
+	if (ActiveProcessHandle.IsValid())
+	{
+		FPlatformProcess::CloseProc(ActiveProcessHandle);
+		ActiveProcessHandle.Reset();
+	}
+}
+
+void USimulatorLaunchSubsystem::RefreshActiveProcessState()
+{
+	if (!ActiveProcessHandle.IsValid())
+	{
+		ActiveRunInfo.bProcessRunning = false;
+		return;
+	}
+
+	ActiveRunInfo.bProcessRunning = FPlatformProcess::IsProcRunning(ActiveProcessHandle);
+
+	int32 returnCode = INDEX_NONE;
+	if (FPlatformProcess::GetProcReturnCode(ActiveProcessHandle, &returnCode))
+	{
+		ActiveRunInfo.ProcessReturnCode = returnCode;
+	}
+}
+
+void USimulatorLaunchSubsystem::MarkActiveRunFailed(const FString& error)
+{
+	ActiveRunInfo.Status.State = ESimulationRunState::Failed;
+	ActiveRunInfo.LastError = error;
+	ActiveRunInfo.bProcessRunning = false;
+	StopPolling();
+	CloseActiveProcessHandle();
+	BroadcastRunInfoChanged();
+}
+
+void USimulatorLaunchSubsystem::BroadcastRunInfoChanged()
+{
+	OnRunInfoChanged.Broadcast(ActiveRunInfo);
+}
+
+void USimulatorLaunchSubsystem::SetActiveRunDiagnostics(const TArray<FString>& diagnostics)
+{
+	ActiveRunInfo.Diagnostics = diagnostics;
+	if (!diagnostics.IsEmpty())
+	{
+		UE_LOG(LogSimulatorLaunch, Verbose, TEXT("Simulator status polling diagnostic | %s"), *JoinStringDiagnostics(diagnostics));
+	}
+}

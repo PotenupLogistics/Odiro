@@ -30,6 +30,33 @@ def _world_config() -> dict:
     }
 
 
+def _explicit_fixed_world_config() -> dict:
+    config = _world_config()
+    config["map"]["lengthCm"] = 800
+    config["robot"]["goal"] = {"x": 800, "y": 0, "z": 0}
+    config["pedestrians"] = [
+        {
+            "objectId": "pedestrian_01",
+            "spawn": {"x": 700, "y": 30, "z": 0},
+            "goal": {"x": 100, "y": 30, "z": 0},
+            "behavior": "opposite_direction",
+            "speedKmh": 3.6,
+        }
+    ]
+    config["environmentSampling"]["fixedParameters"].update(
+        {
+            "goalDistanceM": 10.0,
+            "obstacleCount": 2,
+            "obstacleType": "box",
+            "obstaclePositionsFromStartM": [3.0, 6.0],
+            "obstacleLateralPosition": "center",
+            "pedestrianCount": 3,
+            "pedestrianDirection": "opposite_direction",
+        }
+    )
+    return config
+
+
 def test_generate_episode_variants_defaults_to_five_and_keeps_baseline_first() -> None:
     variants = generate_episode_variants(_world_config())
 
@@ -95,3 +122,26 @@ def test_generate_episode_variants_can_enable_policy_comparison_explicitly() -> 
     ]
     assert "deliveryBotSetup.robot.lidar.stop_distance_m" in variants[1].changed_parameters
     assert "deliveryBotSetup.robot.path_follow.target_speed_kmh" in variants[2].changed_parameters
+
+
+def test_generate_episode_variants_preserves_explicit_fixed_actor_constraints() -> None:
+    variants = generate_episode_variants(_explicit_fixed_world_config(), episode_count=3)
+
+    assert len(variants) == 3
+    assert [variant.world_config["seed"] for variant in variants] == [1001, 1002, 1003]
+    for variant in variants:
+        config = variant.world_config
+        assert config["map"]["sidewalkWidthCm"] == 120
+        assert config["map"]["lengthCm"] >= 1000
+        assert config["robot"]["spawn"] == {"x": 0, "y": 0, "z": 0}
+        assert config["robot"]["goal"]["x"] == 1000.0
+        assert len(config["obstacles"]) == 2
+        assert [obstacle["type"] for obstacle in config["obstacles"]] == ["Obstacle", "Obstacle"]
+        assert [obstacle["position"]["x"] for obstacle in config["obstacles"]] == [300.0, 600.0]
+        assert [obstacle["position"]["y"] for obstacle in config["obstacles"]] == [0.0, 0.0]
+        assert len(config["pedestrians"]) == 3
+        assert {pedestrian["behavior"] for pedestrian in config["pedestrians"]} == {"opposite_direction"}
+        assert all(
+            pedestrian["spawn"]["x"] > pedestrian["goal"]["x"]
+            for pedestrian in config["pedestrians"]
+        )

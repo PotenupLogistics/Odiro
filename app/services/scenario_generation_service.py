@@ -14,6 +14,8 @@ from app.models.scenario_generation import ScenarioGenerateRequest
 from app.services.run_queue_export_service import RunQueueExportResult, export_run_queue_package
 from app.services.setup_pair_queue_generator import SetupPairQueueResult
 from app.services.setup_pair_queue_generator import generate_setup_pair_queue
+from app.services.scenario_consistency_checker import check_setup_pair_queue_consistency
+from app.services.environment_parameter_catalog import get_allowed_values
 from app.utils.json_sanitizer import remove_json_nulls
 from app.utils.report_serialization import write_json_report
 from app.services.world_config_generation_orchestrator import generate_world_config
@@ -57,18 +59,63 @@ def _scenario_type_from_prompt(prompt: str) -> str:
     return "generic_sidewalk"
 
 
-def _fixed_parameters_from_prompt(prompt: str) -> dict[str, int | float]:
+def _semantic_fixed_constraints_from_prompt(prompt: str) -> dict[str, int | float | str | list[float] | list[str]]:
     intent = extract_scenario_intent(prompt)
-    fixed: dict[str, int | float] = {}
+    fixed: dict[str, int | float | str | list[float] | list[str]] = {}
     if intent.sidewalkWidthCm is not None:
         fixed["sidewalkWidthCm"] = intent.sidewalkWidthCm
+    elif "narrow_sidewalk" in intent.mapHints:
+        fixed["sidewalkWidthCm"] = 120
+    if intent.goalDistanceM is not None:
+        fixed["goalDistanceM"] = intent.goalDistanceM
+    if intent.obstacleCount is not None:
+        fixed["obstacleCount"] = intent.obstacleCount
+    if intent.obstacleType is not None:
+        fixed["obstacleType"] = intent.obstacleType
+    if intent.obstacleTypes:
+        fixed["obstacleTypes"] = intent.obstacleTypes
+        fixed["obstacleCount"] = len(intent.obstacleTypes)
+    if intent.obstaclePositionsFromStartM:
+        fixed["obstaclePositionsFromStartM"] = intent.obstaclePositionsFromStartM
+    if intent.obstacleLateralPosition is not None:
+        fixed["obstacleLateralPosition"] = intent.obstacleLateralPosition
+    if intent.pedestrianCount is not None:
+        fixed["pedestrianCount"] = intent.pedestrianCount
+    if intent.pedestrianDirection is not None:
+        fixed["pedestrianDirection"] = intent.pedestrianDirection
+    if intent.expectedRobotBehavior:
+        fixed["expectedRobotBehavior"] = intent.expectedRobotBehavior
     if intent.obstacleBlockingRatio is not None:
         fixed["obstacleBlockingRatio"] = intent.obstacleBlockingRatio
     return fixed
 
 
+def _sampler_fixed_parameters_from_constraints(
+    constraints: dict[str, int | float | str | list[float] | list[str]],
+) -> dict[str, int | float]:
+    sampler_fixed: dict[str, int | float] = {}
+    sampler_candidate_keys = {"sidewalkWidthCm", "obstacleBlockingRatio"}
+    for key, value in constraints.items():
+        if key not in sampler_candidate_keys:
+            continue
+        if not isinstance(value, int | float) or isinstance(value, bool):
+            continue
+        try:
+            allowed_values = get_allowed_values(key)
+        except KeyError:
+            continue
+        if value in allowed_values:
+            sampler_fixed[key] = value
+    return sampler_fixed
+
+
+def _fixed_parameters_from_prompt(prompt: str) -> dict[str, int | float | str | list[float] | list[str]]:
+    return _semantic_fixed_constraints_from_prompt(prompt)
+
+
 def _generation_request(request: ScenarioGenerateRequest) -> WorldConfigGenerationRequest:
     seed = _prompt_seed(request.prompt)
+    semantic_constraints = _semantic_fixed_constraints_from_prompt(request.prompt)
     return WorldConfigGenerationRequest(
         schemaVersion="1.0.0",
         requestId="GEN-SCENARIO-GENERATE-001",
@@ -84,11 +131,12 @@ def _generation_request(request: ScenarioGenerateRequest) -> WorldConfigGenerati
             "fixedPolicyId": "policy_v1_basic_safety",
             "defaultSeed": seed,
             "requireValidation": True,
+            "semanticFixedConstraints": semantic_constraints,
             "environmentSampling": {
                 "enabled": True,
                 "seed": seed,
                 "scenarioType": _scenario_type_from_prompt(request.prompt),
-                "fixedParameters": _fixed_parameters_from_prompt(request.prompt),
+                "fixedParameters": _sampler_fixed_parameters_from_constraints(semantic_constraints),
             },
         },
     )
@@ -272,11 +320,28 @@ def generate_scenario_artifacts(
     generated_payload = dict(generation.generatedPayload)
     if generation.environmentSampling is not None:
         generated_payload["environmentSampling"] = generation.environmentSampling
+    semantic_constraints = _semantic_fixed_constraints_from_prompt(request.prompt)
+    generated_payload["semanticFixedConstraints"] = semantic_constraints
+    environment_sampling = generated_payload.get("environmentSampling")
+    if isinstance(environment_sampling, dict):
+        environment_sampling["semanticFixedConstraints"] = semantic_constraints
     queue = generate_setup_pair_queue(
         generated_payload,
         episode_count=request.episode_count,
         request_id="SCENARIO-GENERATE-001",
     )
+    if isinstance(queue, SetupPairQueueResult):
+        consistency = check_setup_pair_queue_consistency(
+            queue,
+            fixed_constraints=semantic_constraints,
+            expected_episode_count=request.episode_count,
+        )
+        if not consistency.passed:
+            messages = "; ".join(
+                f"{issue.code}: {issue.message}" for issue in consistency.issues if issue.severity == "error"
+            )
+            if messages:
+                raise RuntimeError(f"Scenario consistency check failed. {messages}")
     export = export_run_queue_package(queue) if write_export else _skipped_export_result(queue)
     return ScenarioGenerationArtifacts(queue=queue, export=export)
 

@@ -16,7 +16,20 @@ from app.models.run_queue import EpisodeRunQueue, EpisodeRunQueueItem
 from app.models.scenario_generation import ScenarioDriveArtifactBackup, ScenarioDriveArtifactFile, ScenarioDriveArtifactResponse
 from app.services.google_drive_upload_service import GoogleDriveUploadError
 from app.services import scenario_generation_service
+from app.services.environment_generation_constraints_builder import build_environment_sampling_context
 from app.utils.json_sanitizer import contains_json_null
+
+
+EXPLICIT_FIXED_PROMPT = (
+    "보도 폭이 120cm인 좁은 직선 보도에서 배달 로봇이 출발점에서 10m 앞 목적지까지 이동해야 한다. "
+    "보도 중앙에는 박스형 정적 장애물 2개가 3m, 6m 지점에 놓여 있고, "
+    "보행자 3명이 로봇 진행 방향 반대편에서 걸어온다. "
+    "로봇이 감속, 정지, 우회 판단을 해야 하는 시나리오를 생성해줘."
+)
+SIMPLE_BLOCKING_PROMPT = (
+    "좁은 보도에서 정적 장애물이 배달 로봇의 경로 일부를 막고 있는 상황을 생성해줘. "
+    "보행자는 없고, 로봇은 안전하게 감속하거나 우회해야 한다."
+)
 
 
 class _Dumpable:
@@ -122,6 +135,85 @@ def test_scenario_generation_openapi_marks_episode_count_optional() -> None:
     assert "episode_count" in request_schema["properties"]
     assert "minimum" in request_schema["properties"]["episode_count"]["anyOf"][0]
     assert request_schema["properties"]["episode_count"]["anyOf"][0]["maximum"] == Settings().scenarioEpisodeMaxCount
+
+
+def test_scenario_generation_request_maps_explicit_prompt_to_fixed_constraints() -> None:
+    request = scenario_generation_service._generation_request(
+        routes.ScenarioGenerateRequest(prompt=EXPLICIT_FIXED_PROMPT, episode_count=2)
+    )
+    assert request.constraints.environmentSampling is not None
+    sampler_fixed = request.constraints.environmentSampling["fixedParameters"]
+    fixed = request.constraints.semanticFixedConstraints
+
+    assert sampler_fixed == {"sidewalkWidthCm": 120}
+    assert fixed is not None
+    assert fixed["sidewalkWidthCm"] == 120
+    assert fixed["goalDistanceM"] == 10.0
+    assert fixed["obstacleCount"] == 2
+    assert fixed["obstacleType"] == "box"
+    assert fixed["obstaclePositionsFromStartM"] == [3.0, 6.0]
+    assert fixed["obstacleLateralPosition"] == "center"
+    assert fixed["pedestrianCount"] == 3
+    assert fixed["pedestrianDirection"] == "opposite_direction"
+    assert fixed["expectedRobotBehavior"] == ["SlowDown", "Stop", "ReplanPath"]
+
+
+def test_scenario_generation_request_maps_simple_prompt_without_strict_numeric_constraints() -> None:
+    request = scenario_generation_service._generation_request(
+        routes.ScenarioGenerateRequest(prompt=SIMPLE_BLOCKING_PROMPT, episode_count=1)
+    )
+    assert request.constraints.environmentSampling is not None
+    sampler_fixed = request.constraints.environmentSampling["fixedParameters"]
+    fixed = request.constraints.semanticFixedConstraints
+
+    assert sampler_fixed == {"sidewalkWidthCm": 120}
+    assert fixed is not None
+    assert fixed["sidewalkWidthCm"] == 120
+    assert fixed["obstacleType"] == "static_obstacle"
+    assert fixed["pedestrianCount"] == 0
+    assert fixed["expectedRobotBehavior"] == ["SlowDown", "ReplanPath"]
+    assert "goalDistanceM" not in fixed
+    assert "obstacleCount" not in fixed
+    assert "obstaclePositionsFromStartM" not in fixed
+
+
+def test_scenario_generation_request_keeps_sampler_fixed_parameters_catalog_compatible() -> None:
+    cases = [
+        (
+            (
+                "좁은 보도에서 정적 장애물이 배달 로봇의 경로 일부를 막고 있는 상황을 생성해줘. "
+                "보행자는 없고, 로봇은 안전하게 감속하거나 우회해야 한다."
+            ),
+            {"sidewalkWidthCm": 120},
+        ),
+        (
+            (
+                "보도 폭이 140cm인 직선 보도에서 로봇이 출발점에서 10m 앞 목적지까지 이동한다. "
+                "보도 중앙에는 박스형 장애물 1개가 출발점 기준 5m 지점에 있고, "
+                "보행자 1명이 로봇의 진행 방향을 가로질러 이동한다."
+            ),
+            {},
+        ),
+        (
+            (
+                "보도 폭이 180cm인 직선 보도에서 로봇이 12m 앞 목적지까지 이동한다. "
+                "정적 장애물은 박스형 장애물 1개와 킥보드 형태 장애물 1개이며, "
+                "각각 출발점 기준 4m, 8m 지점에 배치한다. "
+                "보행자 2명이 장애물 근처에서 반대 방향으로 걸어온다."
+            ),
+            {},
+        ),
+    ]
+
+    for prompt, expected_sampler_fixed in cases:
+        request = scenario_generation_service._generation_request(
+            routes.ScenarioGenerateRequest(prompt=prompt, episode_count=3)
+        )
+
+        assert request.constraints.environmentSampling is not None
+        assert request.constraints.environmentSampling["fixedParameters"] == expected_sampler_fixed
+        assert request.constraints.semanticFixedConstraints
+        assert build_environment_sampling_context(request) is not None
 
 
 def test_openapi_exposes_no_other_api_v1_routes() -> None:

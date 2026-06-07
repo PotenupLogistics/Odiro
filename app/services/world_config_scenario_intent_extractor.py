@@ -18,7 +18,100 @@ def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
 
 def _extract_sidewalk_width_cm(text: str) -> float | None:
     match = re.search(r"보도\s*폭(?:은|이)?\s*(?:약\s*)?(\d+(?:\.\d+)?)\s*cm", text, re.IGNORECASE)
-    return float(match.group(1)) if match else None
+    if match:
+        return float(match.group(1))
+    match = re.search(r"보도\s*폭(?:은|이)?\s*(?:약\s*)?(\d+(?:\.\d+)?)\s*m", text, re.IGNORECASE)
+    return float(match.group(1)) * 100.0 if match else None
+
+
+def _extract_goal_distance_m(text: str) -> float | None:
+    patterns = (
+        r"출발(?:점|지)?(?:에서|으로부터)\s*(\d+(?:\.\d+)?)\s*m\s*(?:앞|전방|거리|떨어진)?\s*목적지",
+        r"목적지(?:는|가)?\s*출발(?:점|지)?(?:에서|으로부터)\s*(\d+(?:\.\d+)?)\s*m",
+        r"(?:로봇이\s*)?(\d+(?:\.\d+)?)\s*m\s*앞\s*목적지",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return float(match.group(1))
+    return None
+
+
+def _extract_count_near(text: str, keywords: tuple[str, ...], units: tuple[str, ...]) -> int | None:
+    keyword_pattern = "|".join(re.escape(keyword) for keyword in keywords)
+    unit_pattern = "|".join(re.escape(unit) for unit in units)
+    patterns = (
+        rf"(?:{keyword_pattern})[^\d]{{0,12}}(\d+)\s*(?:{unit_pattern})",
+        rf"(\d+)\s*(?:{unit_pattern})[^\n.]{{0,12}}(?:{keyword_pattern})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def _extract_obstacle_type(text: str) -> str | None:
+    if _contains_any(text, ("박스형", "박스", "box")) and _contains_any(text, ("장애물", "정적 장애물")):
+        return "box"
+    if _contains_any(text, ("정적 장애물", "static obstacle")):
+        return "static_obstacle"
+    return None
+
+
+def _extract_obstacle_types(text: str) -> list[str]:
+    type_patterns = (
+        ("box", r"(?:박스형|박스|box)\s*(?:정적\s*)?장애물\s*(\d+)\s*개"),
+        ("kickboard", r"(?:킥보드\s*형태|킥보드|전동킥보드)\s*(?:형태\s*)?(?:장애물\s*)?(\d+)\s*개"),
+        ("cone", r"(?:라바콘|콘|cone)\s*(?:장애물\s*)?(\d+)\s*개"),
+    )
+    obstacle_types: list[str] = []
+    for obstacle_type, pattern in type_patterns:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            obstacle_types.extend([obstacle_type] * int(match.group(1)))
+    return obstacle_types
+
+
+def _extract_obstacle_positions_from_start_m(text: str) -> list[float]:
+    match = re.search(r"((?:\d+(?:\.\d+)?\s*m\s*,?\s*)+)(?:지점|위치)", text, re.IGNORECASE)
+    if match:
+        window = text[max(0, match.start() - 80) : min(len(text), match.end() + 40)]
+        if _contains_any(window, ("장애물", "정적 장애물", "놓여", "배치")):
+            return [float(value) for value in re.findall(r"(\d+(?:\.\d+)?)\s*m", match.group(1), re.IGNORECASE)]
+
+    positions: list[float] = []
+    for match in re.finditer(r"(\d+(?:\.\d+)?)\s*m\s*지점", text, re.IGNORECASE):
+        window = text[max(0, match.start() - 80) : min(len(text), match.end() + 40)]
+        if _contains_any(window, ("장애물", "정적 장애물", "놓여", "배치")):
+            positions.append(float(match.group(1)))
+    return positions
+
+
+def _extract_obstacle_lateral_position(text: str) -> str | None:
+    if _contains_any(text, ("보도 중앙", "보도 가운데", "중앙")) and _contains_any(text, ("장애물", "정적 장애물")):
+        return "center"
+    return None
+
+
+def _extract_pedestrian_direction(text: str) -> str | None:
+    if _contains_any(text, ("가로질러", "횡단", "건너")):
+        return "crossing"
+    if _contains_any(text, ("같은 방향", "동일 방향")):
+        return "same_direction"
+    if _contains_any(text, ("반대편", "반대 방향", "맞은편", "마주")):
+        return "opposite_direction"
+    return None
+
+
+def _extract_expected_robot_behavior(text: str) -> list[str]:
+    actions: list[str] = []
+    if _contains_any(text, ("감속", "속도를 줄", "천천히")):
+        actions.append("SlowDown")
+    if _contains_any(text, ("정지", "멈춤", "멈춰")):
+        actions.append("Stop")
+    if _contains_any(text, ("우회", "회피", "피해")):
+        actions.append("ReplanPath")
+    return actions
 
 
 def _extract_blocking_ratio(text: str) -> float | None:
@@ -107,11 +200,22 @@ def extract_scenario_intent(prompt: str) -> ScenarioIntent:
     text = normalize_prompt(prompt).lower()
     intent = ScenarioIntent()
     intent.sidewalkWidthCm = _extract_sidewalk_width_cm(text)
+    intent.goalDistanceM = _extract_goal_distance_m(text)
+    intent.obstacleTypes = _extract_obstacle_types(text)
+    intent.obstacleCount = len(intent.obstacleTypes) if intent.obstacleTypes else _extract_count_near(text, ("장애물", "정적 장애물"), ("개", "대"))
+    intent.obstacleType = _extract_obstacle_type(text)
+    intent.obstaclePositionsFromStartM = _extract_obstacle_positions_from_start_m(text)
+    intent.obstacleLateralPosition = _extract_obstacle_lateral_position(text)
+    intent.pedestrianCount = _extract_count_near(text, ("보행자", "사람"), ("명", "사람"))
+    intent.pedestrianDirection = _extract_pedestrian_direction(text)
+    intent.expectedRobotBehavior = _extract_expected_robot_behavior(text)
     intent.obstacleBlockingRatio = _extract_blocking_ratio(text)
     intent.obstaclePositionHint = _extract_xyz_near_obstacle(text)
     if _route_midpoint_intent(text):
         intent.obstaclePlacementHint = "route_midpoint"
     intent.explicitNoPedestrian = _explicit_no_pedestrian(text)
+    if intent.explicitNoPedestrian:
+        intent.pedestrianCount = 0
 
     if _contains_any(text, ("좁은 보도", "좁은 길", "보도 폭", "보도")):
         _append_unique(intent.mapHints, ["narrow_sidewalk"])

@@ -22,6 +22,7 @@ class WorldConfigGenerationConstraints(BaseModel):
     defaultSeed: int | None = None
     requireValidation: bool = True
     environmentSampling: dict[str, Any] | None = None
+    semanticFixedConstraints: dict[str, Any] | None = None
 
 
 class WorldConfigGenerationRequest(BaseModel):

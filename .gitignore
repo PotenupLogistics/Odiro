@@ -28,6 +28,7 @@ data/server_logs
 # Local-only
 data/fine_tuning_candidates/
 data/run_queue_exports/
+data/run_queue_exports2/
 docs/references/*.pdf
 docs/status/
 

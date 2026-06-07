@@ -72,15 +72,16 @@ def _obstacles(world_config: dict[str, Any]) -> list[EpisodeStaticObstacle]:
         if not isinstance(obstacle, dict):
             continue
         obstacle_type = obstacle.get("type") or "Obstacle"
+        prop_id = "obstacle.box_01" if obstacle_type == "Obstacle" else "obstacle.road_barrier_01"
         actors.append(
             EpisodeStaticObstacle(
                 instance_id=obstacle.get("objectId") or f"obstacle_{index:02d}",
-                prop_id="obstacle.box_01" if obstacle_type == "Obstacle" else "obstacle.road_barrier_01",
+                prop_id=prop_id,
                 xy_m=_xy_m(obstacle.get("position")),
                 yaw_deg=float(obstacle.get("yawDegree", 0.0)),
                 properties={
                     "blocking_ratio": float(obstacle.get("blockingRatio", 0.0)),
-                    "semantic_type": str(obstacle_type),
+                    "semantic_type": "Obstacle",
                 },
             )
         )

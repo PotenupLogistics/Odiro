@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from app.core.settings import Settings
+from app.services.episode_setup_validator import ALLOWED_STATIC_PROP_IDS
+from app.services.scenario_consistency_checker import check_setup_pair_queue_consistency
 from app.services.setup_pair_queue_generator import generate_setup_pair_queue
 
 
@@ -24,6 +26,109 @@ def _world_config() -> dict:
         "pedestrians": [],
         "runtime": {"maxDurationSec": 60},
     }
+
+
+def _explicit_fixed_world_config() -> dict:
+    config = _world_config()
+    config["map"]["lengthCm"] = 800
+    config["environmentSampling"] = {
+        "fixedParameters": {
+            "sidewalkWidthCm": 120,
+            "goalDistanceM": 10.0,
+            "obstacleCount": 2,
+            "obstacleType": "box",
+            "obstaclePositionsFromStartM": [3.0, 6.0],
+            "obstacleLateralPosition": "center",
+            "pedestrianCount": 3,
+            "pedestrianDirection": "opposite_direction",
+        }
+    }
+    return config
+
+
+def _simple_blocking_world_config() -> dict:
+    config = _world_config()
+    config["environmentSampling"] = {
+        "fixedParameters": {
+            "sidewalkWidthCm": 120,
+            "obstacleType": "static_obstacle",
+            "pedestrianCount": 0,
+            "expectedRobotBehavior": ["SlowDown", "ReplanPath"],
+        }
+    }
+    config["pedestrians"] = [
+        {
+            "objectId": "pedestrian_01",
+            "spawn": {"x": 400, "y": 40, "z": 0},
+            "goal": {"x": 600, "y": 40, "z": 0},
+            "behavior": "same_direction",
+            "speedKmh": 3.6,
+        }
+    ]
+    return config
+
+
+def _crossing_140_world_config() -> dict:
+    config = _world_config()
+    config["semanticFixedConstraints"] = {
+        "sidewalkWidthCm": 140.0,
+        "goalDistanceM": 10.0,
+        "obstacleCount": 1,
+        "obstacleType": "box",
+        "obstaclePositionsFromStartM": [5.0],
+        "obstacleLateralPosition": "center",
+        "pedestrianCount": 1,
+        "pedestrianDirection": "crossing",
+    }
+    return config
+
+
+def _mixed_obstacle_180_world_config() -> dict:
+    config = _world_config()
+    config["semanticFixedConstraints"] = {
+        "sidewalkWidthCm": 180.0,
+        "goalDistanceM": 12.0,
+        "obstacleCount": 2,
+        "obstacleTypes": ["box", "kickboard"],
+        "obstaclePositionsFromStartM": [4.0, 8.0],
+        "pedestrianCount": 2,
+        "pedestrianDirection": "opposite_direction",
+    }
+    return config
+
+
+def _unsupported_obstacle_world_config() -> dict:
+    config = _world_config()
+    config["semanticFixedConstraints"] = {
+        "sidewalkWidthCm": 140.0,
+        "obstacleCount": 1,
+        "obstacleTypes": ["hover_cart"],
+        "obstaclePositionsFromStartM": [4.0],
+        "pedestrianCount": 0,
+    }
+    return config
+
+
+def _assert_episode_points_inside_sidewalk(item) -> None:
+    episode = item.episode_setup
+    region = episode.ground_model.regions[0]
+    center_x, center_y = region.shape.center_xy_m
+    size_x, size_y = region.shape.size_m
+    min_x = center_x - size_x / 2.0
+    max_x = center_x + size_x / 2.0
+    min_y = center_y - size_y / 2.0
+    max_y = center_y + size_y / 2.0
+    points = [episode.actors.robot.xy_m]
+    if episode.actors.robot.route is not None:
+        points.append(episode.actors.robot.route.goal_xy_m)
+    points.extend(obstacle.xy_m for obstacle in episode.actors.static_obstacles)
+    points.extend(pedestrian.xy_m for pedestrian in episode.actors.pedestrians)
+    for path in episode.paths:
+        points.extend(path.points_xy_m)
+
+    for point in points:
+        assert min_x <= point[0] <= max_x
+        assert min_y <= point[1] <= max_y
 
 
 def test_generate_setup_pair_queue_creates_default_five_valid_pairs() -> None:
@@ -165,3 +270,139 @@ def test_generate_setup_pair_queue_rejects_count_above_maximum() -> None:
     assert result.run_queue_validation.valid is False
     assert result.items == []
     assert {error.code for error in result.run_queue_validation.errors} == {"episode_count_too_large"}
+
+
+@pytest.mark.parametrize("episode_count", [1, 2, 3])
+def test_generate_setup_pair_queue_preserves_explicit_fixed_constraints_in_episode_setups(
+    episode_count: int,
+) -> None:
+    result = generate_setup_pair_queue(_explicit_fixed_world_config(), episode_count=episode_count)
+    fixed = _explicit_fixed_world_config()["environmentSampling"]["fixedParameters"]
+    consistency = check_setup_pair_queue_consistency(result, fixed_constraints=fixed, expected_episode_count=episode_count)
+
+    assert result.run_count == episode_count
+    assert result.run_queue_validation.valid is True
+    assert consistency.passed is True
+    assert consistency.issues == []
+    assert len(result.run_queue.runs) == episode_count
+    for item in result.items:
+        episode = item.episode_setup
+        region = episode.ground_model.regions[0]
+        robot = episode.actors.robot
+        assert region.shape.size_m == [10.0, 1.2]
+        assert robot.route is not None
+        assert robot.route.goal_xy_m[0] - robot.xy_m[0] == 10.0
+        assert [obstacle.prop_id for obstacle in episode.actors.static_obstacles] == [
+            "obstacle.box_01",
+            "obstacle.box_01",
+        ]
+        assert [obstacle.xy_m[0] for obstacle in episode.actors.static_obstacles] == [3.0, 6.0]
+        assert [obstacle.xy_m[1] for obstacle in episode.actors.static_obstacles] == [0.0, 0.0]
+        assert len(episode.actors.pedestrians) == 3
+        assert {pedestrian.properties["semantic_behavior"] for pedestrian in episode.actors.pedestrians} == {
+            "opposite_direction"
+        }
+
+
+def test_generate_setup_pair_queue_uses_defaults_for_simple_blocking_prompt_constraints() -> None:
+    result = generate_setup_pair_queue(_simple_blocking_world_config(), episode_count=1)
+    fixed = _simple_blocking_world_config()["environmentSampling"]["fixedParameters"]
+    consistency = check_setup_pair_queue_consistency(result, fixed_constraints=fixed, expected_episode_count=1)
+
+    assert result.run_count == 1
+    assert len(result.run_queue.runs) == 1
+    assert consistency.passed is True
+    item = result.items[0]
+    episode = item.episode_setup
+    region = episode.ground_model.regions[0]
+    robot = episode.actors.robot
+    assert episode.ground_model.default_region_type == "blocked"
+    assert region.region_type == "walkable"
+    assert episode.actors.pedestrians == []
+    assert len(episode.actors.static_obstacles) >= 1
+    assert all(obstacle.prop_id == "obstacle.box_01" for obstacle in episode.actors.static_obstacles)
+    assert robot.route is not None
+    for obstacle in episode.actors.static_obstacles:
+        assert abs(obstacle.xy_m[1] - robot.xy_m[1]) <= region.shape.size_m[1] / 2.0
+        assert robot.xy_m[0] <= obstacle.xy_m[0] <= robot.route.goal_xy_m[0]
+    assert item.pair_id.endswith("_baseline")
+    _assert_episode_points_inside_sidewalk(item)
+
+
+def test_generate_setup_pair_queue_applies_140cm_crossing_semantic_constraints() -> None:
+    result = generate_setup_pair_queue(_crossing_140_world_config(), episode_count=3)
+    fixed = _crossing_140_world_config()["semanticFixedConstraints"]
+    consistency = check_setup_pair_queue_consistency(result, fixed_constraints=fixed, expected_episode_count=3)
+
+    assert consistency.passed is True
+    for item in result.items:
+        episode = item.episode_setup
+        region = episode.ground_model.regions[0]
+        robot = episode.actors.robot
+        assert region.shape.size_m == [10.0, 1.4]
+        assert robot.route is not None
+        assert robot.route.goal_xy_m[0] - robot.xy_m[0] == 10.0
+        assert [obstacle.prop_id for obstacle in episode.actors.static_obstacles] == ["obstacle.box_01"]
+        assert [obstacle.xy_m[0] for obstacle in episode.actors.static_obstacles] == [5.0]
+        assert len(episode.actors.pedestrians) == 1
+        assert episode.actors.pedestrians[0].properties["semantic_behavior"] == "crossing"
+        _assert_episode_points_inside_sidewalk(item)
+
+
+def test_generate_setup_pair_queue_applies_180cm_mixed_obstacle_semantic_constraints() -> None:
+    result = generate_setup_pair_queue(_mixed_obstacle_180_world_config(), episode_count=3)
+    fixed = _mixed_obstacle_180_world_config()["semanticFixedConstraints"]
+    consistency = check_setup_pair_queue_consistency(result, fixed_constraints=fixed, expected_episode_count=3)
+
+    assert consistency.passed is True
+    for item in result.items:
+        episode = item.episode_setup
+        region = episode.ground_model.regions[0]
+        robot = episode.actors.robot
+        assert region.shape.size_m == [12.0, 1.8]
+        assert robot.route is not None
+        assert robot.route.goal_xy_m[0] - robot.xy_m[0] == 12.0
+        assert [obstacle.properties["semantic_type"] for obstacle in episode.actors.static_obstacles] == [
+            "Obstacle",
+            "Obstacle",
+        ]
+        assert [obstacle.xy_m[0] for obstacle in episode.actors.static_obstacles] == [4.0, 8.0]
+        assert len(episode.actors.pedestrians) == 2
+        assert {pedestrian.properties["semantic_behavior"] for pedestrian in episode.actors.pedestrians} == {
+            "opposite_direction"
+        }
+        _assert_episode_points_inside_sidewalk(item)
+
+
+def test_semantic_constraints_do_not_leak_into_ue_episode_setup_payload() -> None:
+    result = generate_setup_pair_queue(_mixed_obstacle_180_world_config(), episode_count=1)
+    payload = result.items[0].episode_setup.model_dump(mode="json", by_alias=True)
+
+    assert "semanticFixedConstraints" not in payload
+    assert "environmentSampling" not in payload
+    assert "constraints" not in payload
+    assert result.items[0].episode_setup_validation.valid is True
+    assert result.items[0].delivery_bot_setup_validation.valid is True
+    assert result.run_queue_validation.valid is True
+
+
+def test_semantic_obstacle_types_use_only_allowed_ue_prop_ids() -> None:
+    result = generate_setup_pair_queue(_mixed_obstacle_180_world_config(), episode_count=1)
+    obstacles = result.items[0].episode_setup.actors.static_obstacles
+
+    assert [obstacle.prop_id for obstacle in obstacles] == [
+        "obstacle.box_01",
+        "obstacle.road_barrier_01",
+    ]
+    assert all(obstacle.prop_id in ALLOWED_STATIC_PROP_IDS for obstacle in obstacles)
+    assert [obstacle.properties["semantic_type"] for obstacle in obstacles] == ["Obstacle", "Obstacle"]
+    assert result.items[0].episode_setup_validation.valid is True
+
+
+def test_unsupported_obstacle_type_falls_back_to_allowed_prop_id_without_new_asset() -> None:
+    result = generate_setup_pair_queue(_unsupported_obstacle_world_config(), episode_count=1)
+    obstacle = result.items[0].episode_setup.actors.static_obstacles[0]
+
+    assert obstacle.prop_id in ALLOWED_STATIC_PROP_IDS
+    assert obstacle.prop_id == "obstacle.box_01"
+    assert result.items[0].episode_setup_validation.valid is True

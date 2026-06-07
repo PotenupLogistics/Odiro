@@ -18,6 +18,15 @@ class ScenarioIntent(BaseModel):
     crossingHints: list[str] = Field(default_factory=list)
     pathBlockingHints: bool = False
     sidewalkWidthCm: float | None = None
+    goalDistanceM: float | None = None
+    obstacleCount: int | None = None
+    obstacleType: str | None = None
+    obstacleTypes: list[str] = Field(default_factory=list)
+    obstaclePositionsFromStartM: list[float] = Field(default_factory=list)
+    obstacleLateralPosition: str | None = None
+    pedestrianCount: int | None = None
+    pedestrianDirection: str | None = None
+    expectedRobotBehavior: list[str] = Field(default_factory=list)
     terrainHints: list[str] = Field(default_factory=list)
     trafficSignalHints: list[str] = Field(default_factory=list)
     suggestedCategories: list[str] = Field(default_factory=list)

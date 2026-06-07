@@ -424,6 +424,44 @@ namespace
 		return jsonValues;
 	}
 
+	FString MakeSimulationStatusProjectRelativeReportPath(FString filePath)
+	{
+		if (filePath.IsEmpty())
+		{
+			return filePath;
+		}
+
+		FPaths::NormalizeFilename(filePath);
+		if (FPaths::IsRelative(filePath))
+		{
+			filePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+			return filePath;
+		}
+
+		const FString projectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+		FString projectRelativePath = filePath;
+		if (FPaths::MakePathRelativeTo(projectRelativePath, *projectDir))
+		{
+			projectRelativePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+			return projectRelativePath;
+		}
+
+		filePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		return filePath;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> MakeSimulationStatusReportPathArrayField(const TArray<FString>& values)
+	{
+		TArray<TSharedPtr<FJsonValue>> jsonValues;
+		jsonValues.Reserve(values.Num());
+		for (const FString& value : values)
+		{
+			jsonValues.Add(MakeShared<FJsonValueString>(MakeSimulationStatusProjectRelativeReportPath(value)));
+		}
+
+		return jsonValues;
+	}
+
 	TSharedRef<FJsonObject> MakeSimulationRunStatusObject(const FSimulationRunStatus& status)
 	{
 		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
@@ -436,7 +474,7 @@ namespace
 		SetOptionalStringField(object, TEXT("current_pair_id"), status.CurrentPairId);
 		object->SetNumberField(TEXT("completed_runs"), status.CompletedRuns);
 		object->SetNumberField(TEXT("total_runs"), status.TotalRuns);
-		object->SetArrayField(TEXT("report_paths"), MakeStringArrayField(status.ReportPaths));
+		object->SetArrayField(TEXT("report_paths"), MakeSimulationStatusReportPathArrayField(status.ReportPaths));
 		object->SetArrayField(TEXT("log_paths"), MakeStringArrayField(status.LogPaths));
 		SetOptionalStringField(object, TEXT("error"), status.Error);
 		return object;

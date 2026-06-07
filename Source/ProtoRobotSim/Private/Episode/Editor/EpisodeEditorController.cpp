@@ -10,11 +10,9 @@
 #include "Episode/Widget/EpisodeEditorToolbarWidget.h"
 #include "Camera/CameraComponent.h"
 #include "InputAction.h"
-#include "InputActionValue.h"
 #include "InputMappingContext.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
-#include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogEpisodeEditorController, Log, All);
 

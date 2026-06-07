@@ -84,6 +84,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	TArray<FString> ListEvaluationReportFiles() const;
 
+	// Saved/SimulationRuns 아래 simulation run status JSON 후보 목록
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
+	TArray<FString> ListSimulationRunStatusFiles() const;
+
 	// Saved/SimulationRuns 아래 run별 결과 폴더 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	TArray<FString> ListSimulationRunResultDirectories() const;
@@ -95,10 +99,6 @@ public:
 	// 특정 run 결과 폴더 안의 measurement JSONL 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	TArray<FString> ListMeasurementLogFilesInDirectory(const FString& runDirectory) const;
-
-	// Saved/SimulationRuns 아래 simulation run status JSON 후보 목록
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
-	TArray<FString> ListSimulationRunStatusFiles() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	FSimulationSetupParseResult LoadSimulationSetupFile(const FString& setupPath) const;

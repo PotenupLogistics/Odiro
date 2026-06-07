@@ -649,6 +649,21 @@ namespace
 		outDiagnostics.Add(FString::Printf(TEXT("Simulation run status has unknown state: %s"), *stateString));
 		return false;
 	}
+
+	FString NormalizeSimulationSetupPath(FString path)
+	{
+		path.ReplaceInline(TEXT("\\"), TEXT("/"));
+		return path;
+	}
+
+	FString SanitizeSimulationRunPathToken(const FString& value)
+	{
+		FString safeValue = FPaths::MakeValidFileName(value.TrimStartAndEnd());
+		safeValue.ReplaceInline(TEXT(".."), TEXT("_"));
+		safeValue.ReplaceInline(TEXT("/"), TEXT("_"));
+		safeValue.ReplaceInline(TEXT("\\"), TEXT("_"));
+		return safeValue.IsEmpty() ? FString(TEXT("simulation-run")) : safeValue;
+	}
 }
 
 FSimulationSetupParseResult FSimulationSetupJson::ParseFromFile(const FString& jsonFilePath)
@@ -768,6 +783,29 @@ FString FSimulationSetupJson::ResolveProjectPath(const FString& filePath)
 	}
 
 	return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), filePath));
+}
+
+FString FSimulationSetupJson::BuildRunOutputDirectory(const FString& runId)
+{
+	return NormalizeSimulationSetupPath(FPaths::Combine(
+		TEXT("Saved/SimulationRuns"),
+		SanitizeSimulationRunPathToken(runId)));
+}
+
+FString FSimulationSetupJson::BuildRunSetupPath(const FString& runId)
+{
+	return NormalizeSimulationSetupPath(FPaths::Combine(
+		BuildRunOutputDirectory(runId),
+		TEXT("simulation_setup.json")));
+}
+
+void FSimulationSetupJson::ApplyRunOutputPaths(FSimulationSetup& setup, const FString& runId)
+{
+	// A simulator run writes every generated artifact into one stable run directory.
+	const FString runOutputDirectory = BuildRunOutputDirectory(runId);
+	setup.MeasurementLog.OutputDirectory = runOutputDirectory;
+	setup.Report.OutputDirectory = runOutputDirectory;
+	setup.Status.OutputPath = NormalizeSimulationSetupPath(FPaths::Combine(runOutputDirectory, TEXT("status.json")));
 }
 
 FSimulationCommandLineParseResult FSimulationCommandLine::Parse(const FString& commandLine)

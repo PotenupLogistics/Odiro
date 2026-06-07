@@ -11,6 +11,7 @@ class UCheckBox;
 class UComboBoxString;
 class UEditableTextBox;
 class UEpisodeEditorLaunchSubsystem;
+class UExperimentResultIterationButton;
 class UFileListItemWidget;
 class USimulatorLaunchSubsystem;
 class UScrollBox;
@@ -65,6 +66,7 @@ protected:
 	void HandleExperimentConfigEditRequested(UFileListItemWidget* itemWidget);
 	void HandleExperimentConfigPlayRequested(UFileListItemWidget* itemWidget);
 	void HandleExperimentResultDetailsRequested(UFileListItemWidget* itemWidget);
+	void HandleExperimentResultIterationButtonClicked(UExperimentResultIterationButton* buttonWidget);
 
 	UFUNCTION()
 	void HandleOpenPolicyTextEditorClicked();
@@ -124,13 +126,16 @@ private:
 	void RefreshPolicyList();
 	void RefreshExperimentConfigList();
 	void RefreshExperimentResultList();
+	void RefreshExperimentResultIterationList();
 	void ApplyNewSetupDefaults(const FString& setupPath);
 	void SetExperimentConfigDetailVisible(bool bVisible);
 	void SetExperimentResultDetailVisible(bool bVisible);
 	void SetSelectedSetupPath(const FString& setupPath);
 	void SetSelectedEpisodeSetupPath(const FString& episodeSetupPath);
 	void SetSelectedDeliveryBotSetupPath(const FString& deliveryBotSetupPath);
+	void SetSelectedExperimentResultRunDirectory(const FString& runDirectory);
 	void SetSelectedExperimentResultPath(const FString& reportPath);
+	void ClearExperimentResultIterationWidgets();
 	bool CreateScenarioFileFromTemplate(const FString& episodeSetupPath);
 	bool OpenScenarioInEditor(const FString& episodeSetupPath);
 	bool BuildSimulationSetupFromControls(
@@ -193,6 +198,9 @@ private:
 
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UScrollBox> ExperimentResultListScrollBox;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UScrollBox> ExperimentResultIterationScrollBox;
 
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UButton> ExperimentConfigBackButton;
@@ -328,9 +336,13 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UFileListItemWidget>> ExperimentResultListItems;
 
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UExperimentResultIterationButton>> ExperimentResultIterationButtons;
+
 	FString SelectedSetupPath;
 	FString SelectedEpisodeSetupPath;
 	FString SelectedDeliveryBotSetupPath;
+	FString SelectedExperimentResultRunDirectory;
 	FString SelectedExperimentResultPath;
 	bool bExperimentConfigDetailVisible = false;
 	bool bExperimentResultDetailVisible = false;

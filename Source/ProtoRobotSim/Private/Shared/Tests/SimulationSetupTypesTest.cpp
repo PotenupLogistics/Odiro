@@ -188,6 +188,40 @@ bool FSimulationSetupJsonWriteRoundTripTest::RunTest(const FString& parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimulationSetupRunOutputPathsTest,
+	"ProtoRobotSim.SimulationSetup.Json.RunOutputPaths",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimulationSetupRunOutputPathsTest::RunTest(const FString& parameters)
+{
+	FSimulationSetup setup;
+	FSimulationSetupJson::ApplyRunOutputPaths(setup, TEXT("run-001"));
+
+	TestEqual(
+		TEXT("run output directory"),
+		FSimulationSetupJson::BuildRunOutputDirectory(TEXT("run-001")),
+		FString(TEXT("Saved/SimulationRuns/run-001")));
+	TestEqual(
+		TEXT("run setup path"),
+		FSimulationSetupJson::BuildRunSetupPath(TEXT("run-001")),
+		FString(TEXT("Saved/SimulationRuns/run-001/simulation_setup.json")));
+	TestEqual(
+		TEXT("measurement output directory"),
+		setup.MeasurementLog.OutputDirectory,
+		FString(TEXT("Saved/SimulationRuns/run-001")));
+	TestEqual(
+		TEXT("report output directory"),
+		setup.Report.OutputDirectory,
+		FString(TEXT("Saved/SimulationRuns/run-001")));
+	TestEqual(
+		TEXT("status output path"),
+		setup.Status.OutputPath,
+		FString(TEXT("Saved/SimulationRuns/run-001/status.json")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSimulationSetupJsonMissingFileTest,
 	"ProtoRobotSim.SimulationSetup.Json.MissingFile",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

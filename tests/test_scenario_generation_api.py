@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
+import os
+from pathlib import Path
 from types import SimpleNamespace
 from zipfile import ZipFile
 
@@ -12,6 +15,7 @@ from app.main import app
 from app.models.run_queue import EpisodeRunQueue, EpisodeRunQueueItem
 from app.models.scenario_generation import ScenarioDriveArtifactBackup, ScenarioDriveArtifactFile, ScenarioDriveArtifactResponse
 from app.services.google_drive_upload_service import GoogleDriveUploadError
+from app.services import scenario_generation_service
 from app.utils.json_sanitizer import contains_json_null
 
 
@@ -37,11 +41,12 @@ def _queue(run_count: int = 1) -> EpisodeRunQueue:
 
 
 def test_scenario_generation_route_accepts_prompt_only_and_returns_run_queue(monkeypatch) -> None:
-    def stub_generate(request):
+    def stub_generate(request, **kwargs):
         assert request.episode_count is None
-        return _queue(run_count=Settings().scenarioEpisodeDefaultCount)
+        return SimpleNamespace(queue=SimpleNamespace(run_queue=_queue(run_count=Settings().scenarioEpisodeDefaultCount)))
 
-    monkeypatch.setattr(routes, "generate_scenario_run_queue", stub_generate)
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", stub_generate)
+    monkeypatch.setattr(routes, "write_scenario_artifacts_to_local_dir", lambda artifacts: None)
 
     response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "장애물이 경로를 막는 상황"})
 
@@ -55,11 +60,12 @@ def test_scenario_generation_route_accepts_prompt_only_and_returns_run_queue(mon
 def test_scenario_generation_route_accepts_optional_episode_count(monkeypatch) -> None:
     observed_counts = []
 
-    def stub_generate(request):
+    def stub_generate(request, **kwargs):
         observed_counts.append(request.episode_count)
-        return _queue(run_count=request.episode_count)
+        return SimpleNamespace(queue=SimpleNamespace(run_queue=_queue(run_count=request.episode_count)))
 
-    monkeypatch.setattr(routes, "generate_scenario_run_queue", stub_generate)
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", stub_generate)
+    monkeypatch.setattr(routes, "write_scenario_artifacts_to_local_dir", lambda artifacts: None)
     client = TestClient(app)
 
     one_response = client.post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": 1})
@@ -75,10 +81,11 @@ def test_scenario_generation_route_accepts_optional_episode_count(monkeypatch) -
 def test_scenario_generation_route_accepts_episode_count_at_max(monkeypatch) -> None:
     max_count = Settings().scenarioEpisodeMaxCount
 
-    def stub_generate(request):
-        return _queue(run_count=request.episode_count)
+    def stub_generate(request, **kwargs):
+        return SimpleNamespace(queue=SimpleNamespace(run_queue=_queue(run_count=request.episode_count)))
 
-    monkeypatch.setattr(routes, "generate_scenario_run_queue", stub_generate)
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", stub_generate)
+    monkeypatch.setattr(routes, "write_scenario_artifacts_to_local_dir", lambda artifacts: None)
 
     response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": max_count})
 
@@ -162,6 +169,8 @@ def _artifact_result(tmp_path, run_count: int):
     run_queue = EpisodeRunQueue(runs=runs)
     return SimpleNamespace(
         queue=SimpleNamespace(
+            request_id="REQ-TEST",
+            export_base_dir=str(tmp_path / "default_exports"),
             run_queue=run_queue,
             run_queue_path="Json/Input/EpisodeRunQueue_test.json",
             items=items,
@@ -184,6 +193,8 @@ def _artifact_result_with_null_artifacts(tmp_path):
     )
     return SimpleNamespace(
         queue=SimpleNamespace(
+            request_id="REQ-TEST",
+            export_base_dir=str(tmp_path / "default_exports"),
             run_queue=run_queue,
             run_queue_path="Json/Input/EpisodeRunQueue_test.json",
             items=[
@@ -216,8 +227,241 @@ def _zip_payload(response):
         return {name: json.loads(archive.read(name).decode("utf-8")) for name in archive.namelist()}
 
 
+def _generated_input_dir(output_root: Path) -> Path:
+    return output_root / "Json" / "Input"
+
+
+def _artifact_names() -> list[str]:
+    return [
+        "DeliveryBotSetup_test_000.json",
+        "EpisodeRunQueue_test.json",
+        "EpisodeSetup_test_000.json",
+    ]
+
+
+def _write_existing_artifacts(input_dir: Path, *, modified_time: float) -> None:
+    input_dir.mkdir(parents=True, exist_ok=True)
+    for name in _artifact_names():
+        path = input_dir / name
+        path.write_text("{}", encoding="utf-8")
+        os.utime(path, (modified_time, modified_time))
+
+
+def _backup_stamp(timestamp: float) -> str:
+    return datetime.fromtimestamp(timestamp, timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def test_scenario_generate_writes_artifacts_to_default_output_dir_when_env_unset(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SCENARIO_ARTIFACT_OUTPUT_DIR", "")
+    monkeypatch.setenv("SCENARIO_ARTIFACT_WRITE_ENABLED", "true")
+    artifacts = _artifact_result(tmp_path, run_count=1)
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: artifacts)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 200
+    export_roots = list((tmp_path / "default_exports").glob("*_REQ-TEST"))
+    assert len(export_roots) == 1
+    input_dir = _generated_input_dir(export_roots[0])
+    assert (input_dir / "EpisodeRunQueue_test.json").exists()
+    assert (input_dir / "EpisodeSetup_test_000.json").exists()
+    assert (input_dir / "DeliveryBotSetup_test_000.json").exists()
+
+
+def test_scenario_generate_moves_existing_artifacts_to_backup_before_writing(monkeypatch, tmp_path) -> None:
+    output_root = tmp_path / "configured_output"
+    input_dir = _generated_input_dir(output_root)
+    modified_time = datetime(2026, 6, 7, 2, 28, 49, tzinfo=timezone.utc).timestamp()
+    _write_existing_artifacts(input_dir, modified_time=modified_time)
+    (input_dir / "notes.json").write_text("{}", encoding="utf-8")
+    artifacts = _artifact_result(tmp_path, run_count=1)
+    monkeypatch.setenv("SCENARIO_ARTIFACT_OUTPUT_DIR", str(output_root))
+    monkeypatch.setenv("SCENARIO_ARTIFACT_WRITE_ENABLED", "true")
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: artifacts)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 200
+    backup_dir = input_dir / "backup" / f"{_backup_stamp(modified_time)}_REQ-TEST"
+    assert sorted(path.name for path in backup_dir.glob("*.json")) == _artifact_names()
+    assert sorted(path.name for path in input_dir.glob("*.json") if path.name.startswith(("EpisodeRunQueue_", "EpisodeSetup_", "DeliveryBotSetup_"))) == _artifact_names()
+    assert (input_dir / "notes.json").exists()
+
+
+def test_scenario_generate_does_not_create_backup_when_no_existing_artifacts(monkeypatch, tmp_path) -> None:
+    output_root = tmp_path / "configured_output"
+    artifacts = _artifact_result(tmp_path, run_count=1)
+    monkeypatch.setenv("SCENARIO_ARTIFACT_OUTPUT_DIR", str(output_root))
+    monkeypatch.setenv("SCENARIO_ARTIFACT_WRITE_ENABLED", "true")
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: artifacts)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 200
+    assert not (_generated_input_dir(output_root) / "backup").exists()
+
+
+def test_scenario_generate_ignores_files_already_under_backup(monkeypatch, tmp_path) -> None:
+    output_root = tmp_path / "configured_output"
+    input_dir = _generated_input_dir(output_root)
+    backup_existing = input_dir / "backup" / "20260607T000000Z_OLD"
+    backup_existing.mkdir(parents=True)
+    preserved = backup_existing / "EpisodeSetup_preserved_000.json"
+    preserved.write_text("{}", encoding="utf-8")
+    modified_time = datetime(2026, 6, 7, 2, 28, 49, tzinfo=timezone.utc).timestamp()
+    _write_existing_artifacts(input_dir, modified_time=modified_time)
+    artifacts = _artifact_result(tmp_path, run_count=1)
+    monkeypatch.setenv("SCENARIO_ARTIFACT_OUTPUT_DIR", str(output_root))
+    monkeypatch.setenv("SCENARIO_ARTIFACT_WRITE_ENABLED", "true")
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: artifacts)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 200
+    assert preserved.exists()
+    assert sorted(path.name for path in backup_existing.glob("*.json")) == ["EpisodeSetup_preserved_000.json"]
+
+
+def test_scenario_generate_skips_backup_and_writes_when_disabled_with_existing_artifacts(monkeypatch, tmp_path) -> None:
+    output_root = tmp_path / "disabled_output"
+    input_dir = _generated_input_dir(output_root)
+    _write_existing_artifacts(input_dir, modified_time=datetime(2026, 6, 7, tzinfo=timezone.utc).timestamp())
+    artifacts = _artifact_result(tmp_path, run_count=1)
+    monkeypatch.setenv("SCENARIO_ARTIFACT_OUTPUT_DIR", str(output_root))
+    monkeypatch.setenv("SCENARIO_ARTIFACT_WRITE_ENABLED", "false")
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: artifacts)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 200
+    assert sorted(path.name for path in input_dir.glob("*.json")) == _artifact_names()
+    assert not (input_dir / "backup").exists()
+
+
+def test_scenario_generate_reports_backup_failure(monkeypatch, tmp_path) -> None:
+    output_root = tmp_path / "configured_output"
+    input_dir = _generated_input_dir(output_root)
+    _write_existing_artifacts(input_dir, modified_time=datetime(2026, 6, 7, tzinfo=timezone.utc).timestamp())
+    artifacts = _artifact_result(tmp_path, run_count=1)
+    monkeypatch.setenv("SCENARIO_ARTIFACT_OUTPUT_DIR", str(output_root))
+    monkeypatch.setenv("SCENARIO_ARTIFACT_WRITE_ENABLED", "true")
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: artifacts)
+
+    def fail_move(source, destination):
+        raise OSError("move failed")
+
+    monkeypatch.setattr(scenario_generation_service.shutil, "move", fail_move)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "SCENARIO_ARTIFACT_BACKUP_FAILED"
+    assert sorted(path.name for path in input_dir.glob("*.json")) == _artifact_names()
+
+
+def test_scenario_generate_writes_artifacts_to_configured_output_dir(monkeypatch, tmp_path) -> None:
+    output_root = tmp_path / "configured_output"
+    monkeypatch.setenv("SCENARIO_ARTIFACT_OUTPUT_DIR", str(output_root))
+    monkeypatch.setenv("SCENARIO_ARTIFACT_WRITE_ENABLED", "true")
+    artifacts = _artifact_result(tmp_path, run_count=1)
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: artifacts)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 200
+    input_dir = _generated_input_dir(output_root)
+    assert sorted(path.name for path in input_dir.glob("*.json")) == [
+        "DeliveryBotSetup_test_000.json",
+        "EpisodeRunQueue_test.json",
+        "EpisodeSetup_test_000.json",
+    ]
+
+
+def test_scenario_generate_skips_file_writes_when_disabled(monkeypatch, tmp_path) -> None:
+    output_root = tmp_path / "disabled_output"
+    monkeypatch.setenv("SCENARIO_ARTIFACT_OUTPUT_DIR", str(output_root))
+    monkeypatch.setenv("SCENARIO_ARTIFACT_WRITE_ENABLED", "false")
+    artifacts = _artifact_result(tmp_path, run_count=1)
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: artifacts)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 200
+    assert response.json()["runs"][0]["episode_setup"] == "Json/Input/EpisodeSetup_test_000.json"
+    assert not output_root.exists()
+
+
+def test_scenario_generate_writes_expected_artifact_counts_and_valid_json(monkeypatch, tmp_path) -> None:
+    output_root = tmp_path / "three_episodes"
+    monkeypatch.setenv("SCENARIO_ARTIFACT_OUTPUT_DIR", str(output_root))
+    monkeypatch.setenv("SCENARIO_ARTIFACT_WRITE_ENABLED", "true")
+    artifacts = _artifact_result(tmp_path, run_count=3)
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: artifacts)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": 3})
+
+    assert response.status_code == 200
+    input_dir = _generated_input_dir(output_root)
+    run_queue_files = sorted(input_dir.glob("EpisodeRunQueue_*.json"))
+    episode_files = sorted(input_dir.glob("EpisodeSetup_*.json"))
+    bot_files = sorted(input_dir.glob("DeliveryBotSetup_*.json"))
+    assert len(run_queue_files) == 1
+    assert len(episode_files) == 3
+    assert len(bot_files) == 3
+    run_queue_payload = json.loads(run_queue_files[0].read_text(encoding="utf-8"))
+    assert [Path(run["episode_setup"]).name for run in run_queue_payload["runs"]] == [path.name for path in episode_files]
+    assert [Path(run["delivery_bot_setup"]).name for run in run_queue_payload["runs"]] == [path.name for path in bot_files]
+    for path in [*run_queue_files, *episode_files, *bot_files]:
+        assert isinstance(json.loads(path.read_text(encoding="utf-8")), dict)
+
+
+def test_scenario_generate_reports_invalid_output_dir(monkeypatch, tmp_path) -> None:
+    output_file = tmp_path / "not_a_directory"
+    output_file.write_text("occupied", encoding="utf-8")
+    monkeypatch.setenv("SCENARIO_ARTIFACT_OUTPUT_DIR", str(output_file))
+    monkeypatch.setenv("SCENARIO_ARTIFACT_WRITE_ENABLED", "true")
+    artifacts = _artifact_result(tmp_path, run_count=1)
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: artifacts)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "SCENARIO_ARTIFACT_OUTPUT_DIR_INVALID"
+
+
+def test_scenario_generate_rejects_relative_output_dir_traversal(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SCENARIO_ARTIFACT_OUTPUT_DIR", "../outside")
+    monkeypatch.setenv("SCENARIO_ARTIFACT_WRITE_ENABLED", "true")
+    artifacts = _artifact_result(tmp_path, run_count=1)
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: artifacts)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "SCENARIO_ARTIFACT_OUTPUT_DIR_INVALID"
+
+
+def test_scenario_generate_reports_file_write_failure(monkeypatch, tmp_path) -> None:
+    output_root = tmp_path / "write_failure"
+    monkeypatch.setenv("SCENARIO_ARTIFACT_OUTPUT_DIR", str(output_root))
+    monkeypatch.setenv("SCENARIO_ARTIFACT_WRITE_ENABLED", "true")
+    artifacts = _artifact_result(tmp_path, run_count=1)
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: artifacts)
+
+    def fail_write(path, data):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(scenario_generation_service, "write_json_report", fail_write)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "SCENARIO_ARTIFACT_WRITE_FAILED"
+    assert response.json()["detail"]["filename"] == "EpisodeRunQueue_test.json"
+
+
 def test_scenario_generation_artifacts_returns_zip_for_one_episode(monkeypatch, tmp_path) -> None:
-    def stub_generate_artifacts(request):
+    def stub_generate_artifacts(request, **kwargs):
         assert request.episode_count == 1
         return _artifact_result(tmp_path, run_count=1)
 
@@ -241,7 +485,7 @@ def test_scenario_generation_artifacts_returns_zip_for_one_episode(monkeypatch, 
 
 
 def test_scenario_generation_artifacts_returns_zip_for_three_episodes(monkeypatch, tmp_path) -> None:
-    def stub_generate_artifacts(request):
+    def stub_generate_artifacts(request, **kwargs):
         assert request.episode_count == 3
         return _artifact_result(tmp_path, run_count=3)
 
@@ -259,7 +503,7 @@ def test_scenario_generation_artifacts_returns_zip_for_three_episodes(monkeypatc
 
 
 def test_scenario_generation_artifacts_zip_payloads_are_null_free(monkeypatch, tmp_path) -> None:
-    def stub_generate_artifacts(request):
+    def stub_generate_artifacts(request, **kwargs):
         return _artifact_result_with_null_artifacts(tmp_path)
 
     monkeypatch.setattr(routes, "generate_scenario_artifacts", stub_generate_artifacts)
@@ -302,7 +546,7 @@ def _drive_response(run_queue_file: str, file_count: int) -> ScenarioDriveArtifa
 def test_scenario_generate_drive_reuses_request_and_returns_metadata(monkeypatch, tmp_path) -> None:
     observed_counts = []
 
-    def stub_generate_artifacts(request):
+    def stub_generate_artifacts(request, **kwargs):
         observed_counts.append(request.episode_count)
         return _artifact_result(tmp_path, run_count=1)
 
@@ -335,7 +579,7 @@ def test_scenario_generate_drive_reuses_request_and_returns_metadata(monkeypatch
 
 
 def test_scenario_generate_drive_reports_upload_failure(monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request: _artifact_result(tmp_path, run_count=1))
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: _artifact_result(tmp_path, run_count=1))
 
     def fail_upload(artifacts):
         raise GoogleDriveUploadError(
@@ -357,7 +601,7 @@ def test_scenario_generate_drive_reports_upload_failure(monkeypatch, tmp_path) -
 
 
 def test_scenario_generate_drive_reports_credentials_missing(monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request: _artifact_result(tmp_path, run_count=1))
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: _artifact_result(tmp_path, run_count=1))
 
     def fail_upload(artifacts):
         raise GoogleDriveUploadError(
@@ -374,7 +618,7 @@ def test_scenario_generate_drive_reports_credentials_missing(monkeypatch, tmp_pa
 
 
 def test_scenario_generate_drive_reports_generation_failure(monkeypatch) -> None:
-    def fail_generation(request):
+    def fail_generation(request, **kwargs):
         raise RuntimeError("generation failed")
 
     monkeypatch.setattr(routes, "generate_scenario_artifacts", fail_generation)

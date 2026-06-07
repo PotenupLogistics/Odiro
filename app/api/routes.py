@@ -13,7 +13,12 @@ from app.models.run_queue import EpisodeRunQueue
 from app.models.scenario_generation import ScenarioDriveArtifactResponse, ScenarioGenerateRequest
 from app.services.google_drive_upload_service import GoogleDriveUploadError, upload_scenario_artifacts_to_drive
 from app.services.policy_recommendation_orchestrator import analyze_full_setup_and_recommend
-from app.services.scenario_generation_service import ScenarioGenerationArtifacts, generate_scenario_artifacts, generate_scenario_run_queue
+from app.services.scenario_generation_service import (
+    ScenarioArtifactStorageError,
+    ScenarioGenerationArtifacts,
+    generate_scenario_artifacts,
+    write_scenario_artifacts_to_local_dir,
+)
 from app.utils.json_sanitizer import remove_json_nulls
 
 
@@ -37,7 +42,15 @@ def health() -> dict[str, str]:
 def scenario_generate_endpoint(
     request: ScenarioGenerateRequest,
 ) -> EpisodeRunQueue:
-    return generate_scenario_run_queue(request)
+    artifacts = generate_scenario_artifacts(request, write_export=False)
+    try:
+        write_scenario_artifacts_to_local_dir(artifacts)
+    except ScenarioArtifactStorageError as exc:
+        detail = {"code": exc.code, "message": exc.message}
+        if exc.filename:
+            detail["filename"] = exc.filename
+        raise HTTPException(status_code=500, detail=detail) from exc
+    return artifacts.queue.run_queue
 
 
 def _json_bytes(payload: object) -> bytes:
@@ -110,7 +123,7 @@ def _artifact_zip_bytes(artifacts: ScenarioGenerationArtifacts) -> bytes:
 def scenario_generate_artifacts_endpoint(
     request: ScenarioGenerateRequest,
 ) -> StreamingResponse:
-    artifacts = generate_scenario_artifacts(request)
+    artifacts = generate_scenario_artifacts(request, write_export=False)
     zip_payload = _artifact_zip_bytes(artifacts)
     return StreamingResponse(
         BytesIO(zip_payload),
@@ -137,7 +150,7 @@ def scenario_generate_drive_endpoint(
     request: ScenarioGenerateRequest,
 ) -> ScenarioDriveArtifactResponse:
     try:
-        artifacts = generate_scenario_artifacts(request)
+        artifacts = generate_scenario_artifacts(request, write_export=False)
     except Exception as exc:
         raise HTTPException(
             status_code=500,

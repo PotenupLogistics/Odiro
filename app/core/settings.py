@@ -92,6 +92,22 @@ class Settings(BaseSettings):
         default="data/run_queue_exports",
         validation_alias=AliasChoices("RUN_QUEUE_EXPORT_BASE_DIR", "runQueueExportBaseDir"),
     )
+    scenario_artifact_output_dir: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "SCENARIO_ARTIFACT_OUTPUT_DIR",
+            "scenario_artifact_output_dir",
+            "scenarioArtifactOutputDir",
+        ),
+    )
+    scenario_artifact_write_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "SCENARIO_ARTIFACT_WRITE_ENABLED",
+            "scenario_artifact_write_enabled",
+            "scenarioArtifactWriteEnabled",
+        ),
+    )
     googleDriveUploadEnabled: bool = Field(
         default=False,
         validation_alias=AliasChoices("GOOGLE_DRIVE_UPLOAD_ENABLED", "googleDriveUploadEnabled"),

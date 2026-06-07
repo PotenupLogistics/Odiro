@@ -183,14 +183,14 @@ public:
 		TArray<FString>& outDiagnostics);
 
 private:
+	bool BuildLaunchCommand(const FString& setupPath, const FString& runId, FString& outExecutable, FString& outArguments, bool& bOutUsesPreviewLauncher) const;
+	bool ShouldUsePreviewLauncher(FString& outPreviewBatPath) const;
 	bool CreateRuntimeSimulationSetupFile(
 		const FSimulationSetup& sourceSetup,
 		const FString& runId,
 		FString& outRuntimeSetupPath,
 		FSimulationSetup& outRuntimeSetup,
 		TArray<FString>& outDiagnostics) const;
-	bool BuildLaunchCommand(const FString& setupPath, const FString& runId, FString& outExecutable, FString& outArguments, bool& bOutUsesPreviewLauncher) const;
-	bool ShouldUsePreviewLauncher(FString& outPreviewBatPath) const;
 	void PollActiveRunStatus();
 	void StartPolling();
 	void StopPolling();

@@ -7,6 +7,7 @@
 class UButton;
 class UEditableTextBox;
 class UEpisodeAssetPaletteWidget;
+class UEpisodeEditorRootWidget;
 class UEpisodeEditorLaunchSubsystem;
 
 UCLASS(BlueprintType, Blueprintable)
@@ -24,12 +25,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Entry")
 	bool bShowAssetPaletteOnSuccessfulStart = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Entry")
-	TSubclassOf<UEpisodeAssetPaletteWidget> AssetPaletteWidgetClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Entry")
-	int32 AssetPaletteViewportZOrder = 1;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Entry")
 	TObjectPtr<UButton> NewEpisodeButton;
@@ -56,7 +51,7 @@ public:
 	bool CompleteExternallyStartedEpisode(bool bLoadedExistingEpisode);
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Entry")
-	UEpisodeAssetPaletteWidget* GetAssetPaletteWidget() const { return AssetPaletteWidget; }
+	UEpisodeAssetPaletteWidget* GetAssetPaletteWidget() const;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Episode|Editor|Entry")
 	void OnEpisodeEditorSessionStarted(bool bLoadedExistingEpisode);
@@ -76,9 +71,7 @@ private:
 	void ReleaseEditorWidgetInputMode();
 	bool FinishSuccessfulStart(bool bLoadedExistingEpisode);
 	void HideAfterSuccessfulStartIfNeeded();
-
-	UPROPERTY(Transient)
-	TObjectPtr<UEpisodeAssetPaletteWidget> AssetPaletteWidget;
+	UEpisodeEditorRootWidget* GetEditorRootWidget() const;
 
 	FDelegateHandle AutoStartCompletedHandle;
 	bool bExternalStartCompleted = false;

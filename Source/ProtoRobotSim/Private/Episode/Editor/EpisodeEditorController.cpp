@@ -6,8 +6,8 @@
 #include "Episode/Editor/EpisodeEditorPawn.h"
 #include "Episode/Editor/EpisodePlacementPreviewActor.h"
 #include "Episode/Editor/EpisodeTransformGizmoActor.h"
+#include "Episode/Widget/EpisodeEditorRootWidget.h"
 #include "Episode/Widget/EpisodeEditorToolbarWidget.h"
-#include "Episode/Widget/EpisodePlaceableContextMenuWidget.h"
 #include "Camera/CameraComponent.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
@@ -26,12 +26,12 @@ AEpisodeEditorController::AEpisodeEditorController()
 	bEnableMouseOverEvents = false;
 	PlacementPreviewActorClass = AEpisodePlacementPreviewActor::StaticClass();
 	TransformGizmoActorClass = AEpisodeTransformGizmoActor::StaticClass();
-	PlaceableContextMenuWidgetClass = UEpisodePlaceableContextMenuWidget::StaticClass();
-	static ConstructorHelpers::FClassFinder<UEpisodeEditorToolbarWidget> toolbarWidgetFinder(
-		TEXT("/Game/Widgets/WBP_EpisodeEditorToolbar"));
-	if (toolbarWidgetFinder.Succeeded())
+	EditorRootWidgetClass = UEpisodeEditorRootWidget::StaticClass();
+	static ConstructorHelpers::FClassFinder<UEpisodeEditorRootWidget> editorRootWidgetFinder(
+		TEXT("/Game/Widgets/WBP_EpisodeEditorRootWidget"));
+	if (editorRootWidgetFinder.Succeeded())
 	{
-		ToolbarWidgetClass = toolbarWidgetFinder.Class;
+		EditorRootWidgetClass = editorRootWidgetFinder.Class;
 	}
 	EditorInputMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Editor.IMC_Editor")));
 	EditorMoveAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorMove.IA_EditorMove")));
@@ -49,12 +49,12 @@ void AEpisodeEditorController::BeginPlay()
 	AddEditorInputMappingContext();
 	EnsureAuthoringOutlineCustomDepthEnabled();
 	SetObserverMode();
-	ShowToolbarWidget();
+	ShowEditorRootWidget();
 }
 
 void AEpisodeEditorController::EndPlay(const EEndPlayReason::Type endPlayReason)
 {
-	RemoveToolbarWidget();
+	RemoveEditorRootWidget();
 	Super::EndPlay(endPlayReason);
 }
 
@@ -361,41 +361,59 @@ FString AEpisodeEditorController::GetSourceEpisodeSetupJsonPath() const
 
 UEpisodeEditorToolbarWidget* AEpisodeEditorController::ShowToolbarWidget()
 {
-	if (IsValid(ToolbarWidget))
-	{
-		if (!ToolbarWidget->IsInViewport())
-		{
-			ToolbarWidget->AddToViewport(ToolbarViewportZOrder);
-		}
-		return ToolbarWidget;
-	}
-
-	if (!ensureMsgf(
-			ToolbarWidgetClass,
-			TEXT("EpisodeEditorController requires ToolbarWidgetClass to point to WBP_EpisodeEditorToolbar.")))
-	{
-		UE_LOG(LogEpisodeEditorController, Error, TEXT("ToolbarWidgetClass is not set."));
-		return nullptr;
-	}
-
-	ToolbarWidget = CreateWidget<UEpisodeEditorToolbarWidget>(this, ToolbarWidgetClass);
-	if (!ToolbarWidget)
-	{
-		return nullptr;
-	}
-
-	ToolbarWidget->AddToViewport(ToolbarViewportZOrder);
-	return ToolbarWidget;
+	UEpisodeEditorRootWidget* rootWidget = ShowEditorRootWidget();
+	return rootWidget ? rootWidget->GetToolbarWidget() : nullptr;
 }
 
 void AEpisodeEditorController::RemoveToolbarWidget()
 {
-	if (IsValid(ToolbarWidget))
+	if (UEpisodeEditorRootWidget* rootWidget = GetEditorRootWidget())
 	{
-		ToolbarWidget->RemoveFromParent();
+		if (UEpisodeEditorToolbarWidget* toolbarWidget = rootWidget->GetToolbarWidget())
+		{
+			toolbarWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+}
+
+UEpisodeEditorRootWidget* AEpisodeEditorController::ShowEditorRootWidget()
+{
+	if (IsValid(EditorRootWidget))
+	{
+		if (!EditorRootWidget->IsInViewport())
+		{
+			EditorRootWidget->AddToViewport(EditorRootWidgetViewportZOrder);
+		}
+		return EditorRootWidget.Get();
 	}
 
-	ToolbarWidget = nullptr;
+	if (!ensureMsgf(
+			EditorRootWidgetClass,
+			TEXT("EpisodeEditorController requires EditorRootWidgetClass to point to WBP_EditorRootWidget.")))
+	{
+		UE_LOG(LogEpisodeEditorController, Error, TEXT("EditorRootWidgetClass is not set."));
+		return nullptr;
+	}
+
+	EditorRootWidget = CreateWidget<UEpisodeEditorRootWidget>(this, EditorRootWidgetClass);
+	if (!EditorRootWidget)
+	{
+		UE_LOG(LogEpisodeEditorController, Error, TEXT("Failed to create editor root widget."));
+		return nullptr;
+	}
+
+	EditorRootWidget->AddToViewport(EditorRootWidgetViewportZOrder);
+	return EditorRootWidget.Get();
+}
+
+void AEpisodeEditorController::RemoveEditorRootWidget()
+{
+	if (IsValid(EditorRootWidget))
+	{
+		EditorRootWidget->RemoveFromParent();
+	}
+
+	EditorRootWidget = nullptr;
 }
 
 bool AEpisodeEditorController::TryUpdateSelectedPlaceableTransform(
@@ -1836,36 +1854,14 @@ void AEpisodeEditorController::SetTransformGizmoMode(EEpisodeTransformGizmoMode 
 
 UEpisodePlaceableContextMenuWidget* AEpisodeEditorController::EnsurePlaceableContextMenuWidget()
 {
-	if (IsValid(PlaceableContextMenuWidget))
-	{
-		if (!PlaceableContextMenuWidget->IsInViewport())
-		{
-			PlaceableContextMenuWidget->AddToViewport(PlaceableContextMenuViewportZOrder);
-		}
-		return PlaceableContextMenuWidget;
-	}
-
-	if (!PlaceableContextMenuWidgetClass)
-	{
-		UE_LOG(LogEpisodeEditorController, Warning, TEXT("PlaceableContextMenuWidgetClass is not set."));
-		return nullptr;
-	}
-
-	PlaceableContextMenuWidget = CreateWidget<UEpisodePlaceableContextMenuWidget>(
-		this,
-		PlaceableContextMenuWidgetClass);
-	if (!PlaceableContextMenuWidget)
-	{
-		UE_LOG(LogEpisodeEditorController, Warning, TEXT("Failed to create placeable context menu widget."));
-		return nullptr;
-	}
-
-	PlaceableContextMenuWidget->AddToViewport(PlaceableContextMenuViewportZOrder);
-	return PlaceableContextMenuWidget;
+	UEpisodeEditorRootWidget* rootWidget = ShowEditorRootWidget();
+	return rootWidget ? rootWidget->GetPlaceableContextMenuWidget() : nullptr;
 }
 
 void AEpisodeEditorController::UpdatePlaceableContextMenuForSelection(bool bRepositionToMouse)
 {
+	(void)bRepositionToMouse;
+
 	UEpisodePlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
 	if (!IsEditorSelectablePlaceable(selectedPlaceable))
 	{
@@ -1873,31 +1869,18 @@ void AEpisodeEditorController::UpdatePlaceableContextMenuForSelection(bool bRepo
 		return;
 	}
 
-	UEpisodePlaceableContextMenuWidget* contextMenuWidget = EnsurePlaceableContextMenuWidget();
-	if (!contextMenuWidget)
+	UEpisodeEditorRootWidget* rootWidget = ShowEditorRootWidget();
+	if (!rootWidget || !rootWidget->ShowPlaceableContextMenu(selectedPlaceable))
 	{
 		return;
 	}
-
-	contextMenuWidget->SetSelectedPlaceable(selectedPlaceable);
-	contextMenuWidget->SetAlignmentInViewport(FVector2D::ZeroVector);
-
-	float mouseX = 0.0f;
-	float mouseY = 0.0f;
-	if (bRepositionToMouse && GetMousePosition(mouseX, mouseY))
-	{
-		contextMenuWidget->SetPositionInViewport(FVector2D(mouseX + 12.0f, mouseY + 12.0f), true);
-	}
-
-	contextMenuWidget->SetVisibility(ESlateVisibility::Visible);
 }
 
 void AEpisodeEditorController::HidePlaceableContextMenu()
 {
-	if (IsValid(PlaceableContextMenuWidget))
+	if (UEpisodeEditorRootWidget* rootWidget = GetEditorRootWidget())
 	{
-		PlaceableContextMenuWidget->SetSelectedPlaceable(nullptr);
-		PlaceableContextMenuWidget->RemoveFromParent();
+		rootWidget->HidePlaceableContextMenu();
 	}
 }
 

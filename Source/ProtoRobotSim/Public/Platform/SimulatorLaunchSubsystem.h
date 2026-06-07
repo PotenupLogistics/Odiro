@@ -130,6 +130,18 @@ public:
 		int32 direction,
 		TArray<FString>& outDiagnostics) const;
 
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
+	bool ReplaceEpisodeSetupReferencesInRunQueues(
+		const FString& oldEpisodeSetupPath,
+		const FString& newEpisodeSetupPath,
+		TArray<FString>& outDiagnostics) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
+	bool ReplaceDeliveryBotSetupReferencesInRunQueues(
+		const FString& oldDeliveryBotSetupPath,
+		const FString& newDeliveryBotSetupPath,
+		TArray<FString>& outDiagnostics) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	bool StartSimulationRun(const FString& setupPath, const FString& requestedRunId);
 
@@ -171,6 +183,11 @@ public:
 		TArray<FString>& outDiagnostics);
 
 private:
+	bool ReplaceRunQueueReferences(
+		const FString& oldPath,
+		const FString& newPath,
+		bool bReplaceEpisodeSetupReference,
+		TArray<FString>& outDiagnostics) const;
 	bool BuildLaunchCommand(const FString& setupPath, const FString& runId, FString& outExecutable, FString& outArguments, bool& bOutUsesPreviewLauncher) const;
 	bool ShouldUsePreviewLauncher(FString& outPreviewBatPath) const;
 	void PollActiveRunStatus();

@@ -14,7 +14,6 @@
 #include "InputMappingContext.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
-#include "Episode/Actors/EpisodePedestrian.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogEpisodeEditorController, Log, All);
@@ -223,7 +222,7 @@ bool AEpisodeEditorController::ConfirmPlacement()
 	case EEpisodePaletteItemType::Pedestrian:
 	{
 		FEpisodeDynamicActorSpec placedSpec;
-		AEpisodePedestrian* placedActor = nullptr;
+		AActor* placedActor = nullptr;
 		bPlaced = authoringSubsystem->AddPedestrian(
 			SelectedPlacementAssetId,
 			CurrentPlacementTransform,
@@ -1520,7 +1519,7 @@ bool AEpisodeEditorController::ConfigurePlacementPreviewForSelectedItem(
 		return true;
 	}
 	case EEpisodePaletteItemType::Pedestrian:
-		if (!PlacementPreviewActor->ConfigureActorPreviewClass(authoringSubsystem->PedestrianClass.Get()))
+		if (!PlacementPreviewActor->ConfigureActorPreviewClass(authoringSubsystem->PedestrianVisualizationActorClass))
 		{
 			CurrentPlacementFailureReason = TEXT("Failed to configure pedestrian preview.");
 			return false;

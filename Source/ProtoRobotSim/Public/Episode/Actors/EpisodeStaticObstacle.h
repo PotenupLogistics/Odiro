@@ -7,6 +7,7 @@
 
 class UEpisodeObstacleCollisionComponent;
 class UEpisodePlaceableComponent;
+class UBoxComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
 
@@ -22,6 +23,9 @@ public:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
 	TObjectPtr<UStaticMeshComponent> MeshRoot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	TObjectPtr<UBoxComponent> CollisionBoundsComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
 	TObjectPtr<UEpisodePlaceableComponent> PlaceableComponent;
@@ -80,4 +84,13 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Placement")
 	bool bUseFallbackBoundsWhenMeshMissing = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Collision")
+	bool bUseMeshSimpleCollision = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Collision")
+	bool bUseFallbackBoxCollision = true;
+
+private:
+	void ApplyCollisionSettings();
 };

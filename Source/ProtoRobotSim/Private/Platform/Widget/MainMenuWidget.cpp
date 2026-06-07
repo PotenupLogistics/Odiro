@@ -491,6 +491,64 @@ void UMainMenuWidget::HandleSaveFpsClicked()
 	SetDiagnosticsText(JoinLines(diagnostics));
 }
 
+bool UMainMenuWidget::BuildSimulationSetupFromControls(
+	const FSimulationSetup& baseSetup,
+	const FString& runQueuePath,
+	FSimulationSetup& outSetup,
+	TArray<FString>& outDiagnostics) const
+{
+	outDiagnostics.Reset();
+	outSetup = baseSetup;
+
+	outSetup.Schema = TEXT("simulation_setup");
+	outSetup.Version = FMath::Max(1, outSetup.Version);
+	outSetup.RunQueueJsonPath = runQueuePath.TrimStartAndEnd();
+
+	if (MapIdTextBox)
+	{
+		outSetup.MapId = MapIdTextBox->GetText().ToString().TrimStartAndEnd();
+	}
+
+	if (FixedStepFpsTextBox)
+	{
+		outSetup.FixedStep.Fps = FCString::Atoi(*FixedStepFpsTextBox->GetText().ToString().TrimStartAndEnd());
+	}
+
+	if (MeasurementLogEnabledCheckBox)
+	{
+		outSetup.MeasurementLog.bEnabled = MeasurementLogEnabledCheckBox->IsChecked();
+	}
+	if (MeasurementOutputDirectoryTextBox)
+	{
+		outSetup.MeasurementLog.OutputDirectory = MeasurementOutputDirectoryTextBox->GetText().ToString().TrimStartAndEnd();
+	}
+	if (MeasurementFilePrefixTextBox)
+	{
+		outSetup.MeasurementLog.FilePrefix = MeasurementFilePrefixTextBox->GetText().ToString().TrimStartAndEnd();
+	}
+	if (FlushIntervalTicksTextBox)
+	{
+		outSetup.MeasurementLog.FlushIntervalTicks =
+			FCString::Atoi(*FlushIntervalTicksTextBox->GetText().ToString().TrimStartAndEnd());
+	}
+	if (ReportOutputDirectoryTextBox)
+	{
+		outSetup.Report.OutputDirectory = ReportOutputDirectoryTextBox->GetText().ToString().TrimStartAndEnd();
+	}
+	if (StatusOutputPathTextBox)
+	{
+		outSetup.Status.OutputPath = StatusOutputPathTextBox->GetText().ToString().TrimStartAndEnd();
+	}
+
+	if (outSetup.RunQueueJsonPath.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("SimulationSetup run_queue must not be empty."));
+		return false;
+	}
+
+	return true;
+}
+
 void UMainMenuWidget::HandleSaveSetupClicked()
 {
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
@@ -546,30 +604,21 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 		return;
 	}
 
-	FSimulationSetup setup;
+	FSimulationSetup setupBase;
 	const FSimulationSetupParseResult parseResult = subsystem->LoadSimulationSetupFile(setupPath);
 	if (parseResult.bSuccess)
 	{
-		setup = parseResult.Setup;
+		setupBase = parseResult.Setup;
 	}
 
-	setup.Schema = TEXT("simulation_setup");
-	setup.Version = FMath::Max(1, setup.Version);
-	setup.MapId = MainMenuDefaultSimulationMapId;
-	setup.RunQueueJsonPath = runQueuePath;
-	setup.FixedStep.Fps = FixedStepFpsTextBox
-		? FCString::Atoi(*FixedStepFpsTextBox->GetText().ToString())
-		: setup.FixedStep.Fps;
-	setup.MeasurementLog.bEnabled = true;
-	setup.MeasurementLog.OutputDirectory = DefaultMeasurementOutputDirectory;
-	setup.MeasurementLog.FilePrefix = DefaultMeasurementFilePrefix;
-	setup.MeasurementLog.FlushIntervalTicks = DefaultFlushIntervalTicks;
-	setup.MeasurementLog.bFlushOnEvent = true;
-	setup.Report.bSaveEvaluationReportJson = true;
-	setup.Report.OutputDirectory = DefaultReportOutputDirectory;
-	setup.Status.OutputPath = DefaultStatusOutputPath;
-
+	FSimulationSetup setup;
 	diagnostics.Reset();
+	if (!BuildSimulationSetupFromControls(setupBase, runQueuePath, setup, diagnostics))
+	{
+		SetDiagnosticsText(JoinLines(diagnostics));
+		return;
+	}
+
 	if (subsystem->SaveSimulationSetupFile(setupPath, setup, diagnostics))
 	{
 		RefreshSetupOptions();
@@ -607,7 +656,7 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 		return;
 	}
 
-	const FString sourcePath = itemWidget->GetOriginalPath();
+	const FString sourcePath = NormalizeInputJsonPath(itemWidget->GetOriginalPath());
 	const FString targetPath = NormalizeInputJsonPath(requestedPath);
 	if (!IsEditableInputJsonPath(sourcePath))
 	{
@@ -626,30 +675,41 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 		return;
 	}
 
-	const FString resolvedSourcePath = FSimulationSetupJson::ResolveProjectPath(sourcePath);
-	const FString resolvedTargetPath = FSimulationSetupJson::ResolveProjectPath(targetPath);
-	if (!FPaths::FileExists(resolvedSourcePath))
+	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
+	if (!subsystem)
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("Scenario file not found: %s"), *sourcePath));
-		return;
-	}
-	if (FPaths::FileExists(resolvedTargetPath))
-	{
-		SetDiagnosticsText(FString::Printf(TEXT("Scenario file already exists: %s"), *targetPath));
+		SetDiagnosticsText(TEXT("SimulatorLaunchSubsystem unavailable."));
 		return;
 	}
 
-	const FString targetDirectory = FPaths::GetPath(resolvedTargetPath);
-	if (!IFileManager::Get().MakeDirectory(*targetDirectory, true)
-		|| !IFileManager::Get().Move(*resolvedTargetPath, *resolvedSourcePath, false, false))
+	FString moveError;
+	if (!MoveProjectRelativeFile(sourcePath, targetPath, TEXT("Scenario"), moveError))
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("Scenario rename failed: %s -> %s"), *sourcePath, *targetPath));
+		SetDiagnosticsText(moveError);
+		return;
+	}
+
+	TArray<FString> diagnostics;
+	if (!subsystem->ReplaceEpisodeSetupReferencesInRunQueues(sourcePath, targetPath, diagnostics))
+	{
+		FString rollbackError;
+		if (MoveProjectRelativeFile(targetPath, sourcePath, TEXT("Scenario rollback"), rollbackError))
+		{
+			diagnostics.Add(TEXT("Scenario rename was rolled back."));
+		}
+		else
+		{
+			diagnostics.Add(rollbackError);
+		}
+
+		SetDiagnosticsText(JoinLines(diagnostics));
 		return;
 	}
 
 	SetSelectedEpisodeSetupPath(targetPath);
 	RefreshSetupOptions();
-	SetDiagnosticsText(FString::Printf(TEXT("시나리오 이름 변경됨: %s -> %s"), *sourcePath, *targetPath));
+	diagnostics.Insert(FString::Printf(TEXT("Scenario renamed: %s -> %s"), *sourcePath, *targetPath), 0);
+	SetDiagnosticsText(JoinLines(diagnostics));
 }
 
 void UMainMenuWidget::HandleScenarioEditRequested(UFileListItemWidget* itemWidget)
@@ -679,6 +739,13 @@ void UMainMenuWidget::HandlePolicyRenameRequested(UFileListItemWidget* itemWidge
 		return;
 	}
 
+	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
+	if (!subsystem)
+	{
+		SetDiagnosticsText(TEXT("SimulatorLaunchSubsystem unavailable."));
+		return;
+	}
+
 	FString moveError;
 	if (!MoveProjectRelativeFile(sourcePath, targetPath, TEXT("Policy"), moveError))
 	{
@@ -686,9 +753,27 @@ void UMainMenuWidget::HandlePolicyRenameRequested(UFileListItemWidget* itemWidge
 		return;
 	}
 
+	TArray<FString> diagnostics;
+	if (!subsystem->ReplaceDeliveryBotSetupReferencesInRunQueues(sourcePath, targetPath, diagnostics))
+	{
+		FString rollbackError;
+		if (MoveProjectRelativeFile(targetPath, sourcePath, TEXT("Policy rollback"), rollbackError))
+		{
+			diagnostics.Add(TEXT("Policy rename was rolled back."));
+		}
+		else
+		{
+			diagnostics.Add(rollbackError);
+		}
+
+		SetDiagnosticsText(JoinLines(diagnostics));
+		return;
+	}
+
 	SetSelectedDeliveryBotSetupPath(targetPath);
 	RefreshSetupOptions();
-	SetDiagnosticsText(FString::Printf(TEXT("행동 정책 이름 변경됨: %s -> %s"), *sourcePath, *targetPath));
+	diagnostics.Insert(FString::Printf(TEXT("Policy renamed: %s -> %s"), *sourcePath, *targetPath), 0);
+	SetDiagnosticsText(JoinLines(diagnostics));
 }
 
 void UMainMenuWidget::HandlePolicyEditRequested(UFileListItemWidget* itemWidget)

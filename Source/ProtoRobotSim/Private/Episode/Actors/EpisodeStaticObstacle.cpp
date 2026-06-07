@@ -1,8 +1,13 @@
 
 #include "Episode/Actors/EpisodeStaticObstacle.h"
+#include "Components/BoxComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Episode/Components/EpisodeObstacleCollisionComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
+#include "PhysicsEngine/AggregateGeom.h"
+#include "PhysicsEngine/BodySetup.h"
 
 namespace
 {
@@ -13,7 +18,9 @@ namespace
 		EEpisodeStaticObstaclePropCategory category,
 		const TCHAR* meshPath,
 		const FVector& fallbackBoxExtent,
-		double safetyRadius)
+		double safetyRadius,
+		bool bUseMeshSimpleCollision = true,
+		bool bUseFallbackBoxCollision = true)
 	{
 		FEpisodeStaticObstaclePropEntry entry;
 		entry.PropId = FName(propId);
@@ -23,7 +30,46 @@ namespace
 		entry.StaticMeshAsset = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(meshPath));
 		entry.FallbackBoxExtent = fallbackBoxExtent;
 		entry.SafetyRadius = safetyRadius;
+		entry.bUseMeshSimpleCollision = bUseMeshSimpleCollision;
+		entry.bUseFallbackBoxCollision = bUseFallbackBoxCollision;
 		return entry;
+	}
+
+	bool StaticMeshHasSimpleCollision(UStaticMesh* staticMesh)
+	{
+		if (!staticMesh) return false;
+
+		const UBodySetup* bodySetup = staticMesh->GetBodySetup();
+		if (!bodySetup) return false;
+
+		return bodySetup->AggGeom.GetElementCount() > 0;
+	}
+
+	FVector ClampCollisionBoxExtent(const FVector& boxExtent)
+	{
+		return FVector(
+			FMath::Max(boxExtent.X, 1.0),
+			FMath::Max(boxExtent.Y, 1.0),
+			FMath::Max(boxExtent.Z, 1.0));
+	}
+
+	void ConfigureObstacleCollisionPrimitive(
+		UPrimitiveComponent* primitiveComponent,
+		ECollisionEnabled::Type collisionEnabled)
+	{
+		if (!primitiveComponent) return;
+
+		primitiveComponent->SetCollisionEnabled(collisionEnabled);
+		primitiveComponent->SetGenerateOverlapEvents(false);
+
+		if (collisionEnabled == ECollisionEnabled::NoCollision)
+		{
+			primitiveComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+			return;
+		}
+
+		primitiveComponent->SetCollisionObjectType(ECC_WorldStatic);
+		primitiveComponent->SetCollisionResponseToAllChannels(ECR_Block);
 	}
 }
 
@@ -33,9 +79,20 @@ AEpisodeStaticObstacle::AEpisodeStaticObstacle()
 
 	MeshRoot = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshRoot"));
 	SetRootComponent(MeshRoot);
+	MeshRoot->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	MeshRoot->SetCollisionResponseToAllChannels(ECR_Ignore);
+	MeshRoot->SetGenerateOverlapEvents(false);
+
+	CollisionBoundsComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBoundsComponent"));
+	CollisionBoundsComponent->SetupAttachment(MeshRoot);
+	CollisionBoundsComponent->SetHiddenInGame(true);
+	CollisionBoundsComponent->SetVisibility(false);
+	CollisionBoundsComponent->SetGenerateOverlapEvents(false);
 
 	PlaceableComponent = CreateDefaultSubobject<UEpisodePlaceableComponent>(TEXT("PlaceableComponent"));
 	ObstacleCollisionComponent = CreateDefaultSubobject<UEpisodeObstacleCollisionComponent>(TEXT("ObstacleCollisionComponent"));
+
+	ApplyCollisionSettings();
 }
 
 void AEpisodeStaticObstacle::OnConstruction(const FTransform& transform)
@@ -43,6 +100,7 @@ void AEpisodeStaticObstacle::OnConstruction(const FTransform& transform)
 	Super::OnConstruction(transform);
 
 	ApplyConfiguredStaticMesh();
+	ApplyCollisionSettings();
 }
 
 bool AEpisodeStaticObstacle::SetStaticMeshAsset(TSoftObjectPtr<UStaticMesh> inStaticMeshAsset)
@@ -59,18 +117,24 @@ void AEpisodeStaticObstacle::SetStaticMesh(UStaticMesh* inStaticMesh)
 	{
 		MeshRoot->SetStaticMesh(inStaticMesh);
 	}
+	ApplyCollisionSettings();
 }
 
 bool AEpisodeStaticObstacle::ApplyConfiguredStaticMesh()
 {
 	if (!MeshRoot) return false;
 
-	if (StaticMeshAsset.IsNull()) return MeshRoot->GetStaticMesh() != nullptr;
+	if (StaticMeshAsset.IsNull())
+	{
+		ApplyCollisionSettings();
+		return MeshRoot->GetStaticMesh() != nullptr;
+	}
 
 	UStaticMesh* loadedMesh = StaticMeshAsset.LoadSynchronous();
 	if (!loadedMesh) return false;
 
 	MeshRoot->SetStaticMesh(loadedMesh);
+	ApplyCollisionSettings();
 	return true;
 }
 
@@ -84,6 +148,8 @@ bool AEpisodeStaticObstacle::ApplyPropEntry(const FEpisodeStaticObstaclePropEntr
 	PropCategory = propEntry.Category;
 	StaticMeshAsset = propEntry.StaticMeshAsset;
 	FallbackBoxExtent = propEntry.FallbackBoxExtent;
+	bUseMeshSimpleCollision = propEntry.bUseMeshSimpleCollision;
+	bUseFallbackBoxCollision = propEntry.bUseFallbackBoxCollision;
 
 	if (ObstacleCollisionComponent)
 	{
@@ -92,7 +158,44 @@ bool AEpisodeStaticObstacle::ApplyPropEntry(const FEpisodeStaticObstaclePropEntr
 		ObstacleCollisionComponent->SafetyRadius = propEntry.SafetyRadius;
 	}
 
-	return ApplyConfiguredStaticMesh();
+	const bool bAppliedMesh = ApplyConfiguredStaticMesh();
+	ApplyCollisionSettings();
+	return bAppliedMesh;
+}
+
+void AEpisodeStaticObstacle::ApplyCollisionSettings()
+{
+	const bool bUsePhysicalCollision = !ObstacleCollisionComponent || ObstacleCollisionComponent->bUsePhysicalCollision;
+	const bool bUseSafetyQuery = !ObstacleCollisionComponent || ObstacleCollisionComponent->bUseSafetyQuery;
+	const ECollisionEnabled::Type collisionEnabled = bUsePhysicalCollision
+		? ECollisionEnabled::QueryAndPhysics
+		: (bUseSafetyQuery ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
+
+	const bool bUseMeshCollision = bUseMeshSimpleCollision
+		&& MeshRoot
+		&& StaticMeshHasSimpleCollision(MeshRoot->GetStaticMesh());
+	const bool bUseFallbackCollision = !bUseMeshCollision && bUseFallbackBoxCollision;
+
+	ConfigureObstacleCollisionPrimitive(
+		MeshRoot,
+		bUseMeshCollision ? collisionEnabled : ECollisionEnabled::NoCollision);
+
+	if (!CollisionBoundsComponent)
+	{
+		return;
+	}
+
+	if (!bUseFallbackCollision)
+	{
+		ConfigureObstacleCollisionPrimitive(CollisionBoundsComponent, ECollisionEnabled::NoCollision);
+		return;
+	}
+
+	const FVector boxExtent = ClampCollisionBoxExtent(FallbackBoxExtent);
+
+	CollisionBoundsComponent->SetBoxExtent(boxExtent, false);
+	CollisionBoundsComponent->SetRelativeLocation(FVector(0.0, 0.0, boxExtent.Z));
+	ConfigureObstacleCollisionPrimitive(CollisionBoundsComponent, collisionEnabled);
 }
 
 bool AEpisodeStaticObstacle::ApplyDefaultPropById(FName inPropId)

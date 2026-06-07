@@ -378,7 +378,7 @@ void USimulatorProcessSubsystem::StartSimulationRun(UWorld* world)
 	}
 
 	bRunStarted = true;
-	if (!runnerSubsystem->StartBatchFromRunQueueJsonFile(ActiveSetup.RunQueueJsonPath))
+	if (!runnerSubsystem->StartBatchFromRunQueueJsonFileForRun(ActiveSetup.RunQueueJsonPath, ActiveRunId))
 	{
 		bRunStarted = false;
 		UE_LOG(

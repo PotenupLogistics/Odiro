@@ -32,6 +32,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
 	bool StartBatchFromRunQueueJsonFile(const FString& runQueueJsonFilePath);
 
+	bool StartBatchFromRunQueueJsonFileForRun(const FString& runQueueJsonFilePath, const FString& activeRunId);
+
 	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
 	void CancelRun();
 
@@ -75,7 +77,10 @@ private:
 	UFUNCTION()
 	void HandleEpisodeEnded(FEpisodeEvaluationResult result);
 
-	bool StartBatchFromRunInputsInternal(const TArray<FEpisodeRunInput>& runInputs, const FString& activeRunQueueJsonFilePath);
+	bool StartBatchFromRunInputsInternal(
+		const TArray<FEpisodeRunInput>& runInputs,
+		const FString& activeRunQueueJsonFilePath,
+		const FString& activeBatchRunId);
 	void SetRunnerState(EEpisodeRunnerState runnerState);
 	void StartNextEpisode();
 	void QueueStartNextEpisode();
@@ -112,6 +117,9 @@ private:
 
 	UPROPERTY(Transient)
 	FString ActiveRunQueueJsonFilePath;
+
+	UPROPERTY(Transient)
+	FString ActiveBatchRunId;
 
 	UPROPERTY(Transient)
 	FEpisodeRunRecord CurrentRecord;

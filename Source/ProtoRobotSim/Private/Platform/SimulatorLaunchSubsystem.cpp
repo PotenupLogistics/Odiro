@@ -103,6 +103,13 @@ namespace
 		return FString::Join(diagnostics, TEXT("\n"));
 	}
 
+	FString NormalizeRunQueueReferencePath(FString jsonPath)
+	{
+		jsonPath = jsonPath.TrimStartAndEnd();
+		jsonPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		return jsonPath;
+	}
+
 	FString MakeSimulatorRunId()
 	{
 		const FString timestamp = FDateTime::UtcNow().ToString(TEXT("%Y%m%d-%H%M%S"));
@@ -537,6 +544,129 @@ bool USimulatorLaunchSubsystem::MoveRunQueuePair(
 
 	runInputs.Swap(runIndex, targetIndex);
 	return SaveEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::ReplaceEpisodeSetupReferencesInRunQueues(
+	const FString& oldEpisodeSetupPath,
+	const FString& newEpisodeSetupPath,
+	TArray<FString>& outDiagnostics) const
+{
+	return ReplaceRunQueueReferences(oldEpisodeSetupPath, newEpisodeSetupPath, true, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::ReplaceDeliveryBotSetupReferencesInRunQueues(
+	const FString& oldDeliveryBotSetupPath,
+	const FString& newDeliveryBotSetupPath,
+	TArray<FString>& outDiagnostics) const
+{
+	return ReplaceRunQueueReferences(oldDeliveryBotSetupPath, newDeliveryBotSetupPath, false, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::ReplaceRunQueueReferences(
+	const FString& oldPath,
+	const FString& newPath,
+	const bool bReplaceEpisodeSetupReference,
+	TArray<FString>& outDiagnostics) const
+{
+	outDiagnostics.Reset();
+
+	const FString normalizedOldPath = NormalizeRunQueueReferencePath(oldPath);
+	const FString normalizedNewPath = NormalizeRunQueueReferencePath(newPath);
+	const TCHAR* referenceFieldName = bReplaceEpisodeSetupReference
+		? TEXT("episode_setup")
+		: TEXT("delivery_bot_setup");
+
+	if (normalizedOldPath.IsEmpty() || normalizedNewPath.IsEmpty())
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue %s reference paths must not be empty."), referenceFieldName));
+		return false;
+	}
+
+	if (normalizedOldPath.Equals(normalizedNewPath, ESearchCase::IgnoreCase))
+	{
+		return true;
+	}
+
+	TArray<FString> changedRunQueueFiles;
+	TArray<FString> changedRunQueueJsonStrings;
+	int32 changedReferenceCount = 0;
+
+	for (const FString& runQueuePath : ListEpisodeRunQueueFiles())
+	{
+		TArray<FEpisodeRunInput> runInputs;
+		TArray<FString> loadDiagnostics;
+		if (!LoadEpisodeRunQueueFile(runQueuePath, runInputs, loadDiagnostics))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue load failed before reference update: %s"), *runQueuePath));
+			outDiagnostics.Append(loadDiagnostics);
+			return false;
+		}
+
+		int32 runQueueChangedReferenceCount = 0;
+		for (FEpisodeRunInput& runInput : runInputs)
+		{
+			FString& referencePath = bReplaceEpisodeSetupReference
+				? runInput.EpisodeSetupJsonPath
+				: runInput.DeliveryBotSetupJsonPath;
+			if (NormalizeRunQueueReferencePath(referencePath).Equals(normalizedOldPath, ESearchCase::IgnoreCase))
+			{
+				referencePath = normalizedNewPath;
+				++runQueueChangedReferenceCount;
+			}
+		}
+
+		if (runQueueChangedReferenceCount <= 0)
+		{
+			continue;
+		}
+
+		FString jsonString;
+		TArray<FString> writeDiagnostics;
+		if (!TryWriteEpisodeRunQueueJson(runInputs, jsonString, writeDiagnostics))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue reference update validation failed: %s"), *runQueuePath));
+			outDiagnostics.Append(writeDiagnostics);
+			return false;
+		}
+
+		changedRunQueueFiles.Add(runQueuePath);
+		changedRunQueueJsonStrings.Add(jsonString);
+		changedReferenceCount += runQueueChangedReferenceCount;
+	}
+
+	for (int32 index = 0; index < changedRunQueueFiles.Num(); ++index)
+	{
+		const FString& runQueuePath = changedRunQueueFiles[index];
+		const FString resolvedRunQueuePath = FSimulationSetupJson::ResolveProjectPath(runQueuePath);
+		if (!FFileHelper::SaveStringToFile(
+				changedRunQueueJsonStrings[index],
+				*resolvedRunQueuePath,
+				FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue reference update write failed: %s"), *resolvedRunQueuePath));
+			return false;
+		}
+	}
+
+	if (changedReferenceCount > 0)
+	{
+		outDiagnostics.Add(FString::Printf(
+			TEXT("Updated %d %s reference(s) in %d EpisodeRunQueue file(s)."),
+			changedReferenceCount,
+			referenceFieldName,
+			changedRunQueueFiles.Num()));
+		UE_LOG(
+			LogSimulatorLaunch,
+			Log,
+			TEXT("EpisodeRunQueue references updated | Field: %s, Old: %s, New: %s, References: %d, Files: %d"),
+			referenceFieldName,
+			*normalizedOldPath,
+			*normalizedNewPath,
+			changedReferenceCount,
+			changedRunQueueFiles.Num());
+	}
+
+	return true;
 }
 
 bool USimulatorLaunchSubsystem::StartSimulationRun(const FString& setupPath, const FString& requestedRunId)

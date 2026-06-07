@@ -10,6 +10,7 @@ class AEpisodeEditorPawn;
 class AEpisodePlacementPreviewActor;
 class AEpisodeTransformGizmoActor;
 class UEpisodeAuthoringSubsystem;
+class UEpisodeEditorRootWidget;
 class UEpisodeEditorToolbarWidget;
 class UEpisodePlaceableComponent;
 class UEpisodePlaceableContextMenuWidget;
@@ -87,16 +88,10 @@ public:
 	TSubclassOf<AEpisodeTransformGizmoActor> TransformGizmoActorClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
-	TSubclassOf<UEpisodePlaceableContextMenuWidget> PlaceableContextMenuWidgetClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
-	TSubclassOf<UEpisodeEditorToolbarWidget> ToolbarWidgetClass;
+	TSubclassOf<UEpisodeEditorRootWidget> EditorRootWidgetClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|UI")
-	int32 PlaceableContextMenuViewportZOrder = 10;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|UI")
-	int32 ToolbarViewportZOrder = 2;
+	int32 EditorRootWidgetViewportZOrder = 2;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
 	void SetObserverMode();
@@ -163,6 +158,15 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|UI")
 	void RemoveToolbarWidget();
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|UI")
+	UEpisodeEditorRootWidget* ShowEditorRootWidget();
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|UI")
+	void RemoveEditorRootWidget();
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Editor|UI")
+	UEpisodeEditorRootWidget* GetEditorRootWidget() const { return EditorRootWidget.Get(); }
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Selection")
 	UEpisodePlaceableComponent* GetSelectedPlaceableComponent() const { return SelectedPlaceableComponent.Get(); }
@@ -251,10 +255,7 @@ private:
 	TObjectPtr<AEpisodeTransformGizmoActor> TransformGizmoActor;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UEpisodePlaceableContextMenuWidget> PlaceableContextMenuWidget;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UEpisodeEditorToolbarWidget> ToolbarWidget;
+	TObjectPtr<UEpisodeEditorRootWidget> EditorRootWidget;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
 	FTransform CurrentPlacementTransform = FTransform::Identity;

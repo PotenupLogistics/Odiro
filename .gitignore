@@ -1,6 +1,10 @@
 # Visual Studio 2015 user specific files
 .vs/
-.idea/
+.idea/*
+!.idea/startup.xml
+.run/Preview.run.xml
+.run/Preview - Simulator.run.xml
+.run/*.local.run.xml
 *.vsconfig
 
 # Compiled Object files

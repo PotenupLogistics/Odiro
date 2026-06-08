@@ -285,12 +285,12 @@ namespace
 		const FString resolvedTargetPath = FSimulationSetupJson::ResolveProjectPath(targetPath);
 		if (!FPaths::FileExists(resolvedSourcePath))
 		{
-			outError = FString::Printf(TEXT("%s file not found: %s"), *itemLabel, *sourcePath);
+			outError = FString::Printf(TEXT("%s 파일을 찾을 수 없습니다: %s"), *itemLabel, *sourcePath);
 			return false;
 		}
 		if (FPaths::FileExists(resolvedTargetPath))
 		{
-			outError = FString::Printf(TEXT("%s file already exists: %s"), *itemLabel, *targetPath);
+			outError = FString::Printf(TEXT("%s 파일이 이미 존재합니다: %s"), *itemLabel, *targetPath);
 			return false;
 		}
 
@@ -298,7 +298,7 @@ namespace
 		if (!IFileManager::Get().MakeDirectory(*targetDirectory, true)
 			|| !IFileManager::Get().Move(*resolvedTargetPath, *resolvedSourcePath, false, false))
 		{
-			outError = FString::Printf(TEXT("%s rename failed: %s -> %s"), *itemLabel, *sourcePath, *targetPath);
+			outError = FString::Printf(TEXT("%s 이름 변경 실패: %s -> %s"), *itemLabel, *sourcePath, *targetPath);
 			return false;
 		}
 
@@ -363,7 +363,7 @@ namespace
 			return true;
 		}
 
-		outError = FString::Printf(TEXT("Default JSON editor launch failed: %s"), *resolvedFilePath);
+		outError = FString::Printf(TEXT("기본 JSON 편집기 실행 실패: %s"), *resolvedFilePath);
 		return false;
 	}
 
@@ -526,7 +526,7 @@ void UMainMenuWidget::HandleLoadClicked()
 	{
 		SetExperimentConfigDetailVisible(false);
 		RefreshExperimentConfigList();
-		SetDiagnosticsText(TEXT("Returned to SimulationSetup list."));
+		SetDiagnosticsText(TEXT("SimulationSetup 목록으로 돌아왔습니다."));
 		return;
 	}
 
@@ -568,7 +568,7 @@ void UMainMenuWidget::HandleSaveFpsClicked()
 	const int32 fps = FCString::Atoi(*FixedStepFpsTextBox->GetText().ToString());
 	if (IsReferenceSampleJsonPath(GetSelectedSetupPath()))
 	{
-		SetDiagnosticsText(TEXT("Sample JSON is read-only. Create a new SimulationSetup before saving."));
+		SetDiagnosticsText(TEXT("샘플 JSON은 읽기 전용입니다. 저장하기 전에 새 SimulationSetup을 만드세요."));
 		return;
 	}
 
@@ -633,7 +633,7 @@ bool UMainMenuWidget::BuildSimulationSetupFromControls(
 
 	if (outSetup.RunQueueJsonPath.IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("SimulationSetup run_queue must not be empty."));
+		outDiagnostics.Add(TEXT("SimulationSetup run_queue는 비어 있을 수 없습니다."));
 		return false;
 	}
 
@@ -651,7 +651,7 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 	const FString setupPath = GetSelectedSetupPath();
 	if (IsReferenceSampleJsonPath(setupPath))
 	{
-		SetDiagnosticsText(TEXT("Sample JSON is read-only. Create a new SimulationSetup before saving."));
+		SetDiagnosticsText(TEXT("샘플 JSON은 읽기 전용입니다. 저장하기 전에 새 SimulationSetup을 만드세요."));
 		return;
 	}
 
@@ -659,12 +659,12 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 	const FString deliveryBotSetupPath = GetSelectedDeliveryBotSetupPath();
 	if (episodeSetupPath.TrimStartAndEnd().IsEmpty() || deliveryBotSetupPath.TrimStartAndEnd().IsEmpty())
 	{
-		SetDiagnosticsText(TEXT("EpisodeSetup and DeliveryBotSetup must be selected."));
+		SetDiagnosticsText(TEXT("EpisodeSetup과 DeliveryBotSetup을 선택해야 합니다."));
 		return;
 	}
 	if (IsReferenceSampleJsonPath(episodeSetupPath) || IsReferenceSampleJsonPath(deliveryBotSetupPath))
 	{
-		SetDiagnosticsText(TEXT("Sample JSON cannot be used for editable SimulationSetup. Create editable Scenario/Policy files first."));
+		SetDiagnosticsText(TEXT("샘플 JSON은 편집 가능한 SimulationSetup에 사용할 수 없습니다. 먼저 편집 가능한 시나리오/행동 정책 파일을 만드세요."));
 		return;
 	}
 
@@ -737,7 +737,7 @@ void UMainMenuWidget::HandleNewScenarioClicked()
 
 	SetSelectedEpisodeSetupPath(newScenarioPath);
 	RefreshSetupOptions();
-	SetDiagnosticsText(FString::Printf(TEXT("Created scenario: %s"), *newScenarioPath));
+	SetDiagnosticsText(FString::Printf(TEXT("시나리오 생성됨: %s"), *newScenarioPath));
 }
 
 void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWidget, const FString& requestedPath)
@@ -751,12 +751,12 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 	const FString targetPath = NormalizeInputJsonPath(requestedPath);
 	if (!IsEditableInputJsonPath(sourcePath))
 	{
-		SetDiagnosticsText(TEXT("Only editable EpisodeSetup JSON files under Json/Input can be renamed."));
+		SetDiagnosticsText(TEXT("Json/Input 아래의 편집 가능한 EpisodeSetup JSON만 이름을 변경할 수 있습니다."));
 		return;
 	}
 	if (!IsEditableInputJsonPath(targetPath))
 	{
-		SetDiagnosticsText(TEXT("Scenario file name must resolve to an editable Json/Input/*.json path."));
+		SetDiagnosticsText(TEXT("시나리오 파일 이름은 편집 가능한 Json/Input/*.json 경로여야 합니다."));
 		return;
 	}
 	if (sourcePath.Equals(targetPath, ESearchCase::IgnoreCase))
@@ -769,7 +769,7 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
 	if (!subsystem)
 	{
-		SetDiagnosticsText(TEXT("SimulatorLaunchSubsystem unavailable."));
+		SetDiagnosticsText(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
 		return;
 	}
 
@@ -786,7 +786,7 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 		FString rollbackError;
 		if (MoveProjectRelativeFile(targetPath, sourcePath, TEXT("Scenario rollback"), rollbackError))
 		{
-			diagnostics.Add(TEXT("Scenario rename was rolled back."));
+			diagnostics.Add(TEXT("시나리오 이름 변경을 롤백했습니다."));
 		}
 		else
 		{
@@ -799,7 +799,7 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 
 	SetSelectedEpisodeSetupPath(targetPath);
 	RefreshSetupOptions();
-	diagnostics.Insert(FString::Printf(TEXT("Scenario renamed: %s -> %s"), *sourcePath, *targetPath), 0);
+	diagnostics.Insert(FString::Printf(TEXT("시나리오 이름 변경됨: %s -> %s"), *sourcePath, *targetPath), 0);
 	SetDiagnosticsText(JoinLines(diagnostics));
 }
 
@@ -826,14 +826,14 @@ void UMainMenuWidget::HandlePolicyRenameRequested(UFileListItemWidget* itemWidge
 	const FString targetPath = NormalizeInputJsonPath(requestedPath);
 	if (!IsEditableInputJsonPath(sourcePath) || !IsEditableInputJsonPath(targetPath))
 	{
-		SetDiagnosticsText(TEXT("Policy file name must resolve to an editable Json/Input/*.json path."));
+		SetDiagnosticsText(TEXT("행동 정책 파일 이름은 편집 가능한 Json/Input/*.json 경로여야 합니다."));
 		return;
 	}
 
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
 	if (!subsystem)
 	{
-		SetDiagnosticsText(TEXT("SimulatorLaunchSubsystem unavailable."));
+		SetDiagnosticsText(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
 		return;
 	}
 
@@ -850,7 +850,7 @@ void UMainMenuWidget::HandlePolicyRenameRequested(UFileListItemWidget* itemWidge
 		FString rollbackError;
 		if (MoveProjectRelativeFile(targetPath, sourcePath, TEXT("Policy rollback"), rollbackError))
 		{
-			diagnostics.Add(TEXT("Policy rename was rolled back."));
+			diagnostics.Add(TEXT("행동 정책 이름 변경을 롤백했습니다."));
 		}
 		else
 		{
@@ -863,7 +863,7 @@ void UMainMenuWidget::HandlePolicyRenameRequested(UFileListItemWidget* itemWidge
 
 	SetSelectedDeliveryBotSetupPath(targetPath);
 	RefreshSetupOptions();
-	diagnostics.Insert(FString::Printf(TEXT("Policy renamed: %s -> %s"), *sourcePath, *targetPath), 0);
+	diagnostics.Insert(FString::Printf(TEXT("행동 정책 이름 변경됨: %s -> %s"), *sourcePath, *targetPath), 0);
 	SetDiagnosticsText(JoinLines(diagnostics));
 }
 
@@ -891,7 +891,7 @@ void UMainMenuWidget::HandleExperimentConfigRenameRequested(
 	const FString targetPath = NormalizeInputJsonPath(requestedPath);
 	if (!IsEditableInputJsonPath(sourcePath) || !IsEditableInputJsonPath(targetPath))
 	{
-		SetDiagnosticsText(TEXT("SimulationSetup file name must resolve to an editable Json/Input/*.json path."));
+		SetDiagnosticsText(TEXT("SimulationSetup 파일 이름은 편집 가능한 Json/Input/*.json 경로여야 합니다."));
 		return;
 	}
 
@@ -963,19 +963,19 @@ void UMainMenuWidget::HandleOpenPolicyTextEditorClicked()
 	const FString policyPath = GetSelectedDeliveryBotSetupPath();
 	if (policyPath.TrimStartAndEnd().IsEmpty())
 	{
-		SetDiagnosticsText(TEXT("DeliveryBotSetup file is not selected."));
+		SetDiagnosticsText(TEXT("DeliveryBotSetup 파일이 선택되지 않았습니다."));
 		return;
 	}
 	if (IsReferenceSampleJsonPath(policyPath))
 	{
-		SetDiagnosticsText(TEXT("Sample JSON은 읽기 전용입니다. + 버튼으로 새 행동 정책을 만든 뒤 편집하세요."));
+		SetDiagnosticsText(TEXT("샘플 JSON은 읽기 전용입니다. + 버튼으로 새 행동 정책을 만든 뒤 편집하세요."));
 		return;
 	}
 
 	const FString resolvedPolicyPath = FSimulationSetupJson::ResolveProjectPath(policyPath);
 	if (!FPaths::FileExists(resolvedPolicyPath))
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("Policy file not found: %s"), *resolvedPolicyPath));
+		SetDiagnosticsText(FString::Printf(TEXT("행동 정책 파일을 찾을 수 없습니다: %s"), *resolvedPolicyPath));
 		return;
 	}
 
@@ -986,7 +986,7 @@ void UMainMenuWidget::HandleOpenPolicyTextEditorClicked()
 		return;
 	}
 
-	SetDiagnosticsText(FString::Printf(TEXT("Opened policy file: %s"), *policyPath));
+	SetDiagnosticsText(FString::Printf(TEXT("행동 정책 파일을 열었습니다: %s"), *policyPath));
 }
 
 void UMainMenuWidget::HandleNewPolicyClicked()
@@ -995,7 +995,7 @@ void UMainMenuWidget::HandleNewPolicyClicked()
 	FString templateJson;
 	if (!FFileHelper::LoadFileToString(templateJson, *templatePath))
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("Policy template read failed: %s"), DeliveryBotTemplatePath));
+		SetDiagnosticsText(FString::Printf(TEXT("행동 정책 템플릿 읽기 실패: %s"), DeliveryBotTemplatePath));
 		return;
 	}
 
@@ -1008,14 +1008,14 @@ void UMainMenuWidget::HandleNewPolicyClicked()
 			*resolvedNewPolicyPath,
 			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("Policy file create failed: %s"), *resolvedNewPolicyPath));
+		SetDiagnosticsText(FString::Printf(TEXT("행동 정책 파일 생성 실패: %s"), *resolvedNewPolicyPath));
 		return;
 	}
 
 	SetSelectedDeliveryBotSetupPath(newPolicyPath);
 	RefreshSetupOptions();
 
-	SetDiagnosticsText(FString::Printf(TEXT("Created policy: %s"), *newPolicyPath));
+	SetDiagnosticsText(FString::Printf(TEXT("행동 정책 생성됨: %s"), *newPolicyPath));
 }
 
 void UMainMenuWidget::HandleStartClicked()
@@ -1075,14 +1075,14 @@ void UMainMenuWidget::HandleExperimentResultBackClicked()
 	ClearExperimentResultIterationWidgets();
 	SetExperimentResultDetailVisible(false);
 	RefreshExperimentResultList();
-	SetDiagnosticsText(TEXT("Returned to experiment result list."));
+	SetDiagnosticsText(TEXT("실험 결과 목록으로 돌아왔습니다."));
 }
 
 void UMainMenuWidget::HandleExperimentConfigBackClicked()
 {
 	SetExperimentConfigDetailVisible(false);
 	RefreshExperimentConfigList();
-	SetDiagnosticsText(TEXT("Returned to SimulationSetup list."));
+	SetDiagnosticsText(TEXT("SimulationSetup 목록으로 돌아왔습니다."));
 }
 
 void UMainMenuWidget::HandleScenarioEpisodeSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType)
@@ -1435,14 +1435,14 @@ void UMainMenuWidget::LoadSelectedSetup()
 	}
 
 	TArray<FString> lines;
-	lines.Add(FString::Printf(TEXT("Loaded setup: %s"), *GetSelectedSetupPath()));
+	lines.Add(FString::Printf(TEXT("로드한 SimulationSetup: %s"), *GetSelectedSetupPath()));
 	if (!loadedRunInputs.IsEmpty())
 	{
-		lines.Add(FString::Printf(TEXT("EpisodeSetup: %s"), *loadedRunInputs[0].EpisodeSetupJsonPath));
-		lines.Add(FString::Printf(TEXT("DeliveryBotSetup: %s"), *loadedRunInputs[0].DeliveryBotSetupJsonPath));
-		lines.Add(FString::Printf(TEXT("Runs: %d"), loadedRunInputs.Num()));
+		lines.Add(FString::Printf(TEXT("시나리오(EpisodeSetup): %s"), *loadedRunInputs[0].EpisodeSetupJsonPath));
+		lines.Add(FString::Printf(TEXT("행동 정책(DeliveryBotSetup): %s"), *loadedRunInputs[0].DeliveryBotSetupJsonPath));
+		lines.Add(FString::Printf(TEXT("실행 수: %d"), loadedRunInputs.Num()));
 	}
-	lines.Add(FString::Printf(TEXT("Fixed-Step FPS: %d"), parseResult.Setup.FixedStep.Fps));
+	lines.Add(FString::Printf(TEXT("고정 스텝 FPS: %d"), parseResult.Setup.FixedStep.Fps));
 	SetDiagnosticsText(JoinLines(lines));
 }
 
@@ -1537,7 +1537,7 @@ void UMainMenuWidget::RefreshScenarioList()
 	const TSubclassOf<UFileListItemWidget> itemWidgetClass = ResolveFileListItemWidgetClass();
 	if (!itemWidgetClass)
 	{
-		SetDiagnosticsText(TEXT("WBP_FileListItem class is not available."));
+		SetDiagnosticsText(TEXT("WBP_FileListItem 클래스를 사용할 수 없습니다."));
 		return;
 	}
 
@@ -1554,10 +1554,7 @@ void UMainMenuWidget::RefreshScenarioList()
 	for (const FString& episodeSetupFile : episodeSetupFiles)
 	{
 		UFileListItemWidget* itemWidget = CreateWidget<UFileListItemWidget>(this, itemWidgetClass);
-		if (!itemWidget)
-		{
-			continue;
-		}
+		if (!itemWidget) continue;
 
 		itemWidget->InitializeItem(episodeSetupFile, TEXT("편집"), TEXT("실행"), true, true, false);
 		itemWidget->OnRenameRequested.AddUObject(this, &UMainMenuWidget::HandleScenarioRenameRequested);
@@ -1569,23 +1566,13 @@ void UMainMenuWidget::RefreshScenarioList()
 
 void UMainMenuWidget::RefreshPolicyList()
 {
-	if (!PolicyListScrollBox)
-	{
-		return;
-	}
+	if (!PolicyListScrollBox) return;
 
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		return;
-	}
+	if (!subsystem) return;
 
 	const TSubclassOf<UFileListItemWidget> itemWidgetClass = ResolveFileListItemWidgetClass();
-	if (!itemWidgetClass)
-	{
-		SetDiagnosticsText(TEXT("WBP_FileListItem class is not available."));
-		return;
-	}
+	if (!itemWidgetClass) return;
 
 	const TArray<FString> deliveryBotSetupFiles = subsystem->ListDeliveryBotSetupFiles();
 	const FString currentPath = GetSelectedDeliveryBotSetupPath();
@@ -1600,17 +1587,14 @@ void UMainMenuWidget::RefreshPolicyList()
 
 	if (deliveryBotSetupFiles.IsEmpty())
 	{
-		AddEmptyListMessage(WidgetTree, PolicyListScrollBox, TEXT("No editable DeliveryBotSetup JSON."));
+		AddEmptyListMessage(WidgetTree, PolicyListScrollBox, TEXT("편집 가능한 DeliveryBotSetup JSON이 없습니다."));
 		return;
 	}
 
 	for (const FString& deliveryBotSetupFile : deliveryBotSetupFiles)
 	{
 		UFileListItemWidget* itemWidget = CreateWidget<UFileListItemWidget>(this, itemWidgetClass);
-		if (!itemWidget)
-		{
-			continue;
-		}
+		if (!itemWidget) continue;
 
 		itemWidget->InitializeItem(deliveryBotSetupFile, TEXT("편집"), TEXT("실행"), true, true, false);
 		itemWidget->OnRenameRequested.AddUObject(this, &UMainMenuWidget::HandlePolicyRenameRequested);
@@ -1622,23 +1606,13 @@ void UMainMenuWidget::RefreshPolicyList()
 
 void UMainMenuWidget::RefreshExperimentConfigList()
 {
-	if (!ExperimentConfigListScrollBox)
-	{
-		return;
-	}
+	if (!ExperimentConfigListScrollBox) return;
 
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		return;
-	}
+	if (!subsystem) return;
 
 	const TSubclassOf<UFileListItemWidget> itemWidgetClass = ResolveFileListItemWidgetClass();
-	if (!itemWidgetClass)
-	{
-		SetDiagnosticsText(TEXT("WBP_FileListItem class is not available."));
-		return;
-	}
+	if (!itemWidgetClass) return;
 
 	const TArray<FString> setupFiles = subsystem->ListSimulationSetupFiles();
 	const FString currentPath = GetSelectedSetupPath();
@@ -1656,17 +1630,14 @@ void UMainMenuWidget::RefreshExperimentConfigList()
 
 	if (setupFiles.IsEmpty())
 	{
-		AddEmptyListMessage(WidgetTree, ExperimentConfigListScrollBox, TEXT("No editable SimulationSetup JSON."));
+		AddEmptyListMessage(WidgetTree, ExperimentConfigListScrollBox, TEXT("편집 가능한 SimulationSetup JSON이 없습니다."));
 		return;
 	}
 
 	for (const FString& setupFile : setupFiles)
 	{
 		UFileListItemWidget* itemWidget = CreateWidget<UFileListItemWidget>(this, itemWidgetClass);
-		if (!itemWidget)
-		{
-			continue;
-		}
+		if (!itemWidget) continue;
 
 		itemWidget->InitializeItem(setupFile, TEXT("편집"), TEXT("실행"), true, true, true);
 		itemWidget->OnRenameRequested.AddUObject(this, &UMainMenuWidget::HandleExperimentConfigRenameRequested);
@@ -1679,23 +1650,13 @@ void UMainMenuWidget::RefreshExperimentConfigList()
 
 void UMainMenuWidget::RefreshExperimentResultList()
 {
-	if (!ExperimentResultListScrollBox)
-	{
-		return;
-	}
+	if (!ExperimentResultListScrollBox) return;
 
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		return;
-	}
+	if (!subsystem) return;
 
 	const TSubclassOf<UFileListItemWidget> itemWidgetClass = ResolveFileListItemWidgetClass();
-	if (!itemWidgetClass)
-	{
-		SetDiagnosticsText(TEXT("WBP_FileListItem class is not available."));
-		return;
-	}
+	if (!itemWidgetClass) return;
 
 	TArray<FString> resultDirectories = subsystem->ListSimulationRunResultDirectories();
 	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
@@ -1720,7 +1681,7 @@ void UMainMenuWidget::RefreshExperimentResultList()
 
 	if (resultDirectories.IsEmpty())
 	{
-		AddEmptyListMessage(WidgetTree, ExperimentResultListScrollBox, TEXT("No experiment result folders."));
+		AddEmptyListMessage(WidgetTree, ExperimentResultListScrollBox, TEXT("실험 결과가 없습니다."));
 		return;
 	}
 
@@ -1907,7 +1868,7 @@ bool UMainMenuWidget::CreateScenarioFileFromTemplate(const FString& episodeSetup
 	FString templateJson;
 	if (!FFileHelper::LoadFileToString(templateJson, *resolvedTemplatePath))
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("Scenario template read failed: %s"), EpisodeSetupTemplatePath));
+		SetDiagnosticsText(FString::Printf(TEXT("시나리오 템플릿 읽기 실패: %s"), EpisodeSetupTemplatePath));
 		return false;
 	}
 
@@ -1921,7 +1882,7 @@ bool UMainMenuWidget::CreateScenarioFileFromTemplate(const FString& episodeSetup
 	const FString resolvedEpisodeSetupPath = FSimulationSetupJson::ResolveProjectPath(normalizedEpisodeSetupPath);
 	if (FPaths::FileExists(resolvedEpisodeSetupPath))
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("Scenario file already exists: %s"), *normalizedEpisodeSetupPath));
+		SetDiagnosticsText(FString::Printf(TEXT("시나리오 파일이 이미 존재합니다: %s"), *normalizedEpisodeSetupPath));
 		return false;
 	}
 
@@ -1932,7 +1893,7 @@ bool UMainMenuWidget::CreateScenarioFileFromTemplate(const FString& episodeSetup
 			*resolvedEpisodeSetupPath,
 			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("Scenario file create failed: %s"), *resolvedEpisodeSetupPath));
+		SetDiagnosticsText(FString::Printf(TEXT("시나리오 파일 생성 실패: %s"), *resolvedEpisodeSetupPath));
 		return false;
 	}
 
@@ -1944,25 +1905,25 @@ bool UMainMenuWidget::OpenScenarioInEditor(const FString& episodeSetupPath)
 	UEpisodeEditorLaunchSubsystem* subsystem = GetEpisodeEditorLaunchSubsystem();
 	if (!subsystem)
 	{
-		SetDiagnosticsText(TEXT("EpisodeEditorLaunchSubsystem unavailable."));
+		SetDiagnosticsText(TEXT("EpisodeEditorLaunchSubsystem을 사용할 수 없습니다."));
 		return false;
 	}
 
 	const FString normalizedEpisodeSetupPath = NormalizeInputJsonPath(episodeSetupPath);
 	if (normalizedEpisodeSetupPath.TrimStartAndEnd().IsEmpty())
 	{
-		SetDiagnosticsText(TEXT("EpisodeSetup file is not selected."));
+		SetDiagnosticsText(TEXT("EpisodeSetup 파일이 선택되지 않았습니다."));
 		return false;
 	}
 	if (!IsEditableInputJsonPath(normalizedEpisodeSetupPath))
 	{
-		SetDiagnosticsText(TEXT("Select an editable EpisodeSetup JSON under Json/Input."));
+		SetDiagnosticsText(TEXT("Json/Input 아래의 편집 가능한 EpisodeSetup JSON을 선택하세요."));
 		return false;
 	}
 
 	if (!subsystem->OpenEpisodeEditor(normalizedEpisodeSetupPath))
 	{
-		SetDiagnosticsText(TEXT("EpisodeEditorMap open failed."));
+		SetDiagnosticsText(TEXT("EpisodeEditorMap 열기 실패."));
 		return false;
 	}
 

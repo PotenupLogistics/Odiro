@@ -21,9 +21,9 @@ void UEpisodeLlmPromptWidget::NativeConstruct()
 	BindLlmSubsystem();
 	ConfigureStatusTextBlock();
 	RequestEditorWidgetInputMode();
-	SetStatusText(TEXT("LLM authoring ready."));
+	SetStatusText(TEXT("LLM 서버와 연결되어 있습니다."));
 }
-
+	
 void UEpisodeLlmPromptWidget::NativeDestruct()
 {
 	ReleaseEditorWidgetInputMode();
@@ -36,7 +36,7 @@ bool UEpisodeLlmPromptWidget::GenerateFromPromptTextBox()
 	UEpisodeLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem();
 	if (!llmSubsystem)
 	{
-		SetStatusText(TEXT("LLM authoring subsystem unavailable."));
+		SetStatusText(TEXT("LLM 서버와 연결되어 있지 않습니다."));
 		return false;
 	}
 
@@ -52,7 +52,7 @@ bool UEpisodeLlmPromptWidget::GenerateFromPromptTextBox()
 		return false;
 	}
 
-	SetStatusText(TEXT("Requesting LLM episode generation..."));
+	SetStatusText(TEXT("LLM 에피소드 생성 요청 중..."));
 	return llmSubsystem->GenerateEpisodeFromPrompt(prompt, episodeCount);
 }
 
@@ -61,27 +61,27 @@ bool UEpisodeLlmPromptWidget::LoadGeneratedEpisode()
 	const UEpisodeLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem();
 	if (!llmSubsystem)
 	{
-		SetStatusText(TEXT("LLM authoring subsystem unavailable."));
+		SetStatusText(TEXT("LLM 서버와 연결되어 있지 않습니다."));
 		return false;
 	}
 
 	const FEpisodeLlmGenerationResult result = llmSubsystem->GetLatestResult();
 	if (!result.bSuccess)
 	{
-		SetStatusText(TEXT("No successful LLM generation result is available."));
+		SetStatusText(TEXT("이용 가능한 LLM 생성 결과가 없습니다."));
 		return false;
 	}
 
 	if (result.FirstEpisodeSetupJsonPath.IsEmpty())
 	{
-		SetStatusText(TEXT("Generated RunQueue does not contain an EpisodeSetup path."));
+		SetStatusText(TEXT("생성된 RunQueue가 EpisodeSetup 경로를 포함하지 않습니다."));
 		return false;
 	}
 
 	AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer());
 	if (!editorController)
 	{
-		SetStatusText(TEXT("Owning player is not an EpisodeEditorController."));
+		SetStatusText(TEXT("소유 플레이어가 EpisodeEditorController가 아닙니다."));
 		return false;
 	}
 
@@ -93,12 +93,12 @@ bool UEpisodeLlmPromptWidget::LoadGeneratedEpisode()
 			diagnostics))
 	{
 		SetStatusText(diagnostics.IsEmpty()
-			? FString::Printf(TEXT("Generated EpisodeSetup load failed: %s"), *result.FirstEpisodeSetupJsonPath)
-			: FString::Join(diagnostics, TEXT("\n")));
+			? FString::Printf(TEXT("생성된 EpisodeSetup 불러오기 실패: %s"), *result.FirstEpisodeSetupJsonPath)
+			: FString::Printf(TEXT("EpisodeSetup 불러오기 실패:\n%s"), *FString::Join(diagnostics, TEXT("\n"))));
 		return false;
 	}
 
-	SetStatusText(FString::Printf(TEXT("Loaded generated EpisodeSetup: %s"), *resolvedJsonFilePath));
+	SetStatusText(FString::Printf(TEXT("EpisodeSetup 불러오기: %s"), *resolvedJsonFilePath));
 	return true;
 }
 
@@ -107,20 +107,20 @@ bool UEpisodeLlmPromptWidget::RunGeneratedSimulation()
 	const UEpisodeLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem();
 	if (!llmSubsystem)
 	{
-		SetStatusText(TEXT("LLM authoring subsystem unavailable."));
+		SetStatusText(TEXT("LLM 생성 서브시스템을 사용할 수 없습니다."));
 		return false;
 	}
 
 	const FEpisodeLlmGenerationResult result = llmSubsystem->GetLatestResult();
 	if (!result.bSuccess)
 	{
-		SetStatusText(TEXT("No successful LLM generation result is available."));
+		SetStatusText(TEXT("성공한 LLM 생성 결과가 없습니다."));
 		return false;
 	}
 
 	if (result.SavedRunQueueJsonPath.IsEmpty())
 	{
-		SetStatusText(TEXT("Generated RunQueue path is empty."));
+		SetStatusText(TEXT("생성된 RunQueue 경로가 비어 있습니다."));
 		return false;
 	}
 
@@ -130,17 +130,17 @@ bool UEpisodeLlmPromptWidget::RunGeneratedSimulation()
 		: nullptr;
 	if (!runnerSubsystem)
 	{
-		SetStatusText(TEXT("EpisodeRunnerSubsystem unavailable."));
+		SetStatusText(TEXT("EpisodeRunnerSubsystem을 사용할 수 없습니다."));
 		return false;
 	}
 
 	if (!runnerSubsystem->StartBatchFromRunQueueJsonFile(result.SavedRunQueueJsonPath))
 	{
-		SetStatusText(FString::Printf(TEXT("Generated RunQueue start failed: %s"), *result.SavedRunQueueJsonPath));
+		SetStatusText(FString::Printf(TEXT("생성된 RunQueue 실행 실패: %s"), *result.SavedRunQueueJsonPath));
 		return false;
 	}
 
-	SetStatusText(FString::Printf(TEXT("Started generated RunQueue: %s"), *result.SavedRunQueueJsonPath));
+	SetStatusText(FString::Printf(TEXT("생성된 RunQueue 실행 시작: %s"), *result.SavedRunQueueJsonPath));
 	return true;
 }
 
@@ -172,13 +172,13 @@ void UEpisodeLlmPromptWidget::HandleGenerationCompleted(const FEpisodeLlmGenerat
 	if (!result.bSuccess)
 	{
 		SetStatusText(result.Diagnostics.IsEmpty()
-			? result.Message
-			: FString::Join(result.Diagnostics, TEXT("\n")));
+			? FString::Printf(TEXT("LLM 생성 실패: %s"), *result.Message)
+			: FString::Printf(TEXT("LLM 생성 실패:\n%s"), *FString::Join(result.Diagnostics, TEXT("\n"))));
 		return;
 	}
 
 	SetStatusText(FString::Printf(
-		TEXT("Generated %d run(s). Saved RunQueue: %s"),
+		TEXT("%d개의 실행을 생성했습니다. 저장된 RunQueue: %s"),
 		result.RunCount,
 		*result.SavedRunQueueJsonPath));
 
@@ -280,14 +280,14 @@ bool UEpisodeLlmPromptWidget::TryGetPrompt(FString& outPrompt)
 	outPrompt.Reset();
 	if (!PromptTextBox)
 	{
-		SetStatusText(TEXT("PromptTextBox is not bound."));
+		SetStatusText(TEXT("PromptTextBox가 바인딩되지 않았습니다."));
 		return false;
 	}
 
 	outPrompt = PromptTextBox->GetText().ToString().TrimStartAndEnd();
 	if (outPrompt.IsEmpty())
 	{
-		SetStatusText(TEXT("Prompt must not be empty."));
+		SetStatusText(TEXT("프롬프트를 입력하세요."));
 		return false;
 	}
 
@@ -324,14 +324,14 @@ bool UEpisodeLlmPromptWidget::TryGetEpisodeCount(int32& outEpisodeCount)
 
 	if (!text.IsNumeric())
 	{
-		SetStatusText(TEXT("Episode count must be an integer."));
+		SetStatusText(TEXT("에피소드 개수는 정수여야 합니다."));
 		return false;
 	}
 
 	outEpisodeCount = FCString::Atoi(*text);
 	if (outEpisodeCount <= 0)
 	{
-		SetStatusText(TEXT("Episode count must be greater than zero."));
+		SetStatusText(TEXT("에피소드 개수는 1 이상이어야 합니다."));
 		return false;
 	}
 

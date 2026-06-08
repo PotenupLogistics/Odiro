@@ -1,16 +1,8 @@
-#include "Platform/SimulatorProcessSubsystem.h"
 
-#include "Engine/World.h"
+#include "Platform/SimulatorProcessSubsystem.h"
 #include "Episode/EpisodeMeasurementLogSubsystem.h"
 #include "Episode/EpisodeRunnerSubsystem.h"
-#include "Engine/GameInstance.h"
 #include "Kismet/GameplayStatics.h"
-#include "Misc/App.h"
-#include "Misc/Guid.h"
-#include "Misc/PackageName.h"
-#include "Misc/Paths.h"
-#include "TimerManager.h"
-#include "UObject/UObjectGlobals.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSimulatorProcess, Log, All);
 

@@ -1,10 +1,5 @@
 
 #include "Episode/Actors/EpisodeGroundRegion.h"
-#include "Components/SceneComponent.h"
-#include "Components/StaticMeshComponent.h"
-#include "Engine/StaticMesh.h"
-#include "Materials/MaterialInterface.h"
-#include "UObject/ConstructorHelpers.h"
 
 namespace
 {

@@ -3,7 +3,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Episode/Actors/EpisodeStaticObstacle.h"
+#include "Episode/Data/EpisodeStaticObstaclePropCatalog.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -28,6 +28,8 @@ AEpisodePlacementPreviewActor::AEpisodePlacementPreviewActor()
 	PreviewSkeletalMeshComponent->SetCastShadow(false);
 	PreviewSkeletalMeshComponent->SetMobility(EComponentMobility::Movable);
 
+	StaticObstaclePropCatalog = UEpisodeStaticObstaclePropCatalog::MakeDefaultCatalogReference();
+
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> validPlacementMaterial(
 		TEXT("/Game/Models/Placeable/Materials/MI_EpisodePlaceable.MI_EpisodePlaceable"));
 	if (validPlacementMaterial.Succeeded())
@@ -48,7 +50,8 @@ AEpisodePlacementPreviewActor::AEpisodePlacementPreviewActor()
 bool AEpisodePlacementPreviewActor::ConfigureStaticObstacleProp(FName propId)
 {
 	FEpisodeStaticObstaclePropEntry propEntry;
-	if (!AEpisodeStaticObstacle::FindDefaultPropEntryById(propId, propEntry))
+	const UEpisodeStaticObstaclePropCatalog* propCatalog = StaticObstaclePropCatalog.LoadSynchronous();
+	if (!IsValid(propCatalog) || !propCatalog->FindPropEntryById(propId, propEntry))
 	{
 		SetActorHiddenInGame(true);
 		PreviewPropId = NAME_None;

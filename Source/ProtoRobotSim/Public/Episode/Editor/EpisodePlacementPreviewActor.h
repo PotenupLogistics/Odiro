@@ -11,6 +11,7 @@ class USkeletalMeshComponent;
 class USkeletalMesh;
 class UStaticMeshComponent;
 class UStaticMesh;
+class UEpisodeStaticObstaclePropCatalog;
 
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API AEpisodePlacementPreviewActor : public AActor
@@ -34,6 +35,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Visual")
 	TObjectPtr<UMaterialInterface> InvalidPlacementMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Catalog")
+	TSoftObjectPtr<UEpisodeStaticObstaclePropCatalog> StaticObstaclePropCatalog;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
 	bool ConfigureStaticObstacleProp(FName propId);

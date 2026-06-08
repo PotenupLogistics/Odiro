@@ -41,11 +41,11 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
 	TObjectPtr<UImage> ThumbnailImage;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
-	FString IconDirectory = TEXT("/Game/Widgets/Thumbnail");
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette", meta = (DeprecatedProperty, DeprecationMessage = "Palette thumbnails are now read from catalog data assets."))
+	FString IconDirectory;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
-	FString IconAssetPrefix = TEXT("icon_");
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette", meta = (DeprecatedProperty, DeprecationMessage = "Palette thumbnails are now read from catalog data assets."))
+	FString IconAssetPrefix;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
 	bool bMatchThumbnailImageSizeToTexture = false;
@@ -75,10 +75,8 @@ protected:
 private:
 	static FText CategoryToText(EEpisodeStaticObstaclePropCategory category);
 	static FString MakeDisplayNameFromPropId(FName propId);
-	static FString MakeIconSuffixFromPropId(FName propId);
 	static FEpisodePaletteItemEntry MakeStaticObstaclePaletteItemEntry(const FEpisodeStaticObstaclePropEntry& propEntry);
 
-	FString BuildThumbnailTextureObjectPath() const;
 	void ApplyThumbnailImage();
 
 	UPROPERTY(Transient)

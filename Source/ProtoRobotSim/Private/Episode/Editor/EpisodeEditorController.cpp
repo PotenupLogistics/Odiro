@@ -1525,7 +1525,9 @@ bool AEpisodeEditorController::ConfigurePlacementPreviewForSelectedItem(
 			return false;
 		}
 
-		if (!PlacementPreviewActor->ConfigureStaticObstacleProp(SelectedStaticObstaclePropId))
+		FEpisodeStaticObstaclePropEntry propEntry;
+		if (!authoringSubsystem->TryGetStaticObstaclePropEntry(SelectedStaticObstaclePropId, propEntry)
+			|| !PlacementPreviewActor->ConfigureStaticObstaclePropEntry(propEntry))
 		{
 			CurrentPlacementFailureReason = FString::Printf(
 				TEXT("Failed to configure static obstacle preview '%s'."),

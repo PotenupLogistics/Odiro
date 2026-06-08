@@ -1,8 +1,9 @@
-#include "Episode/EpisodeCompiler.h"
-#include "Episode/Actors/EpisodeStaticObstacle.h"
 
+#include "Episode/EpisodeCompiler.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 
 namespace
 {
@@ -17,6 +18,11 @@ namespace
 
 		return jsonFilePath;
 	}
+}
+
+UEpisodeCompiler::UEpisodeCompiler()
+{
+	StaticObstaclePropCatalog = UEpisodeStaticObstaclePropCatalog::MakeDefaultCatalogReference();
 }
 
 void UEpisodeCompiler::AddDiagnostic(
@@ -648,7 +654,7 @@ void UEpisodeCompiler::CompilePaths(const FJsonObject& rootObject, FEpisodeCompi
 void UEpisodeCompiler::CompileStaticObstacles(
 	const FJsonObject& actorsObject,
 	FEpisodeCompileResult& result,
-	TSet<FString>& instanceIds)
+	TSet<FString>& instanceIds) const
 {
 	TArray<TSharedPtr<FJsonValue>> staticObstacles;
 	if (!TryGetArrayField(actorsObject, TEXT("static_obstacles"), staticObstacles)) return;
@@ -675,7 +681,20 @@ void UEpisodeCompiler::CompileStaticObstacles(
 		}
 
 		FEpisodeStaticObstaclePropEntry propEntry;
-		if (!AEpisodeStaticObstacle::FindDefaultPropEntryById(FName(*placeableSpec.AssetId), propEntry))
+		const UEpisodeStaticObstaclePropCatalog* propCatalog = StaticObstaclePropCatalog.LoadSynchronous();
+		if (!IsValid(propCatalog))
+		{
+			AddDiagnostic(
+				result,
+				EEpisodeCompileDiagnosticSeverity::Error,
+				TEXT("static_obstacle_catalog_unavailable"),
+				FString::Printf(
+					TEXT("%s.prop_id '%s' validation failed because the static obstacle catalog could not be loaded: %s"),
+					*obstaclePath,
+					*placeableSpec.AssetId,
+					*StaticObstaclePropCatalog.ToSoftObjectPath().ToString()));
+		}
+		else if (!propCatalog->FindPropEntryById(FName(*placeableSpec.AssetId), propEntry))
 		{
 			AddDiagnostic(
 				result,
@@ -1054,7 +1073,7 @@ void UEpisodeCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FEpiso
 void UEpisodeCompiler::CompileActors(
 	const FJsonObject& rootObject,
 	FEpisodeCompileResult& result,
-	const TSet<FString>& pathIds)
+	const TSet<FString>& pathIds) const
 {
 	TSharedPtr<FJsonObject> actorsObject;
 	if (!TryGetObjectField(rootObject, TEXT("actors"), actorsObject))
@@ -1071,7 +1090,7 @@ void UEpisodeCompiler::CompileActors(
 }
 
 void UEpisodeCompiler::CompileRootObject(const FJsonObject& rootObject, const FString& sourceJson,
-                                         FEpisodeCompileResult& result)
+                                         FEpisodeCompileResult& result) const
 {
 	CompileRunConfig(rootObject, result);
 	CompileEvaluationConfig(rootObject, result);

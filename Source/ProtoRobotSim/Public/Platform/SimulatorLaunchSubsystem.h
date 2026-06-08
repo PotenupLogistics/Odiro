@@ -1,11 +1,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "HAL/PlatformProcess.h"
 #include "Shared/EpisodeConfigTypes.h"
 #include "Shared/SimulationSetupTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
-#include "TimerManager.h"
 #include "SimulatorLaunchSubsystem.generated.h"
 
 // Main menu process가 별도 simulator process 하나를 실행하고 status file로 추적한 결과

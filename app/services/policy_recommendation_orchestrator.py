@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.settings import Settings
-from app.models.bot_setup import BotLidarSetup, DeliveryBotSetup
+from app.models.bot_setup import DeliveryBotSetup
 from app.models.llm import LlmProvider
 from app.models.recommendation import (
     EpisodeRecommendationResult,

@@ -2,16 +2,13 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from app.models.decision import DecisionRequest, DecisionResponse
 from app.models.evaluation import EvaluationSpec
 from app.models.policy import PolicyConfig
 from app.models.run_result import RunResult
 from app.models.world import WorldConfig
-
-if TYPE_CHECKING:
-    from pydantic import BaseModel
 
 
 ROOT = Path(__file__).resolve().parents[2]

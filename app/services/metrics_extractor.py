@@ -136,9 +136,6 @@ def extract_run_metrics(
 
     min_pedestrian_distance_cm = statistics.minFrontDistanceM * 100.0
 
-    close_reason = statistics.closeReason
-    success_like_close = close_reason in {"world_end_play", "goal_reached"}
-
     return RunMetrics(
         collisionCount=0,
         nearMissCount=0,

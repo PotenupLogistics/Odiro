@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.models.bot_setup import BotLidarSetup, DeliveryBotSetup
+from app.models.bot_setup import DeliveryBotSetup
 from app.models.evaluation_report import EvaluationReport
 from app.models.recommendation import BotSetupRecommendation, EpisodeRecommendationResult
 from app.services.bot_setup_generator import generate_bot_setup

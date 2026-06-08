@@ -11,12 +11,14 @@ class UCheckBox;
 class UComboBoxString;
 class UEditableTextBox;
 class UEpisodeEditorLaunchSubsystem;
+class UExperimentResultIterationButton;
 class UFileListItemWidget;
 class USimulatorLaunchSubsystem;
 class UScrollBox;
 class UTextBlock;
 class UWidget;
 class UWidgetSwitcher;
+struct FSimulationSetup;
 
 // MainMenuMap에서 UMG Blueprint layout과 platform event handler를 연결하는 widget
 UCLASS(BlueprintType, Blueprintable)
@@ -64,6 +66,7 @@ protected:
 	void HandleExperimentConfigEditRequested(UFileListItemWidget* itemWidget);
 	void HandleExperimentConfigPlayRequested(UFileListItemWidget* itemWidget);
 	void HandleExperimentResultDetailsRequested(UFileListItemWidget* itemWidget);
+	void HandleExperimentResultIterationButtonClicked(UExperimentResultIterationButton* buttonWidget);
 
 	UFUNCTION()
 	void HandleOpenPolicyTextEditorClicked();
@@ -123,15 +126,23 @@ private:
 	void RefreshPolicyList();
 	void RefreshExperimentConfigList();
 	void RefreshExperimentResultList();
+	void RefreshExperimentResultIterationList();
 	void ApplyNewSetupDefaults(const FString& setupPath);
 	void SetExperimentConfigDetailVisible(bool bVisible);
 	void SetExperimentResultDetailVisible(bool bVisible);
 	void SetSelectedSetupPath(const FString& setupPath);
 	void SetSelectedEpisodeSetupPath(const FString& episodeSetupPath);
 	void SetSelectedDeliveryBotSetupPath(const FString& deliveryBotSetupPath);
+	void SetSelectedExperimentResultRunDirectory(const FString& runDirectory);
 	void SetSelectedExperimentResultPath(const FString& reportPath);
+	void ClearExperimentResultIterationWidgets();
 	bool CreateScenarioFileFromTemplate(const FString& episodeSetupPath);
 	bool OpenScenarioInEditor(const FString& episodeSetupPath);
+	bool BuildSimulationSetupFromControls(
+		const FSimulationSetup& baseSetup,
+		const FString& runQueuePath,
+		FSimulationSetup& outSetup,
+		TArray<FString>& outDiagnostics) const;
 	TSubclassOf<UFileListItemWidget> ResolveFileListItemWidgetClass() const;
 	void HandleRunInfoChanged(const struct FSimulatorRunInfo& runInfo);
 	void UpdateStatusText(const FString& extraMessage = FString());
@@ -187,6 +198,9 @@ private:
 
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UScrollBox> ExperimentResultListScrollBox;
+
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UScrollBox> ExperimentResultIterationScrollBox;
 
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UButton> ExperimentConfigBackButton;
@@ -322,9 +336,13 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UFileListItemWidget>> ExperimentResultListItems;
 
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UExperimentResultIterationButton>> ExperimentResultIterationButtons;
+
 	FString SelectedSetupPath;
 	FString SelectedEpisodeSetupPath;
 	FString SelectedDeliveryBotSetupPath;
+	FString SelectedExperimentResultRunDirectory;
 	FString SelectedExperimentResultPath;
 	bool bExperimentConfigDetailVisible = false;
 	bool bExperimentResultDetailVisible = false;

@@ -218,6 +218,9 @@ struct PROTOROBOTSIM_API FSimulationSetupJson
 		const FString& setupFilePath,
 		TArray<FString>& outDiagnostics);
 	static FString ResolveProjectPath(const FString& filePath);
+	static FString BuildRunOutputDirectory(const FString& runId);
+	static FString BuildRunSetupPath(const FString& runId);
+	static void ApplyRunOutputPaths(FSimulationSetup& setup, const FString& runId);
 };
 
 // Simulator public command line 계약을 읽는 utility

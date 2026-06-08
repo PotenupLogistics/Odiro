@@ -91,6 +91,12 @@ struct PROTOROBOTSIM_API FEpisodeStaticObstaclePropEntry
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Collision")
 	bool bUseSafetyQuery = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Collision")
+	bool bUseMeshSimpleCollision = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Collision")
+	bool bUseFallbackBoxCollision = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Collision", meta = (ClampMin = "0.0"))
 	double SafetyRadius = 100.0;
 };

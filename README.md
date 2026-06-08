@@ -27,5 +27,7 @@
 ## Scripts
 - `RunPreview.bat`: 패키징 프리뷰 (`UnrealEditor.exe <uproject> -game -NoSplash`)
   - `-Simulate=<SimulationSetupFile> -RunId=<RunId>` 로 시뮬레이터 실행
-- `.run/SetEnginePath.ps1`: Rider Preview 실행 설정에서 사용하는 `UE_INSTALL_DIR` Path Variable 설정
-  - 프로젝트 설정 시 한 번 `powershell -ExecutionPolicy Bypass -File .run\SetEnginePath.ps1` 실행
+- `.run/GeneratePreviewConfigs.ps1`: Rider 시작 시 `.run/*.local.run.xml` Preview 실행 설정 생성
+  - `ProtoRobotSim.uproject`의 `EngineAssociation` 기반으로 로컬 Unreal Editor 경로 탐색
+  - 생성된 `*.local.run.xml`은 사용자별 절대 경로를 담으므로 git에서 제외
+- `.run/SetEnginePath.ps1`: `UE_INSTALL_DIR` Path Variable 수동 설정용 보조 스크립트

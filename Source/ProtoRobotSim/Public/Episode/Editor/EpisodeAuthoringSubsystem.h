@@ -45,6 +45,9 @@ public:
 	TSubclassOf<AEpisodePedestrian> PedestrianClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	TSubclassOf<AActor> PedestrianVisualizationActorClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
 	TSubclassOf<AActor> StartPointClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
@@ -100,7 +103,7 @@ public:
 		FName archetypeId,
 		const FTransform& transform,
 		FEpisodeDynamicActorSpec& outSpec,
-		AEpisodePedestrian*& outActor,
+		AActor*& outActor,
 		FString& outFailureReason);
 
 	bool SetRobotStartLocation(
@@ -215,7 +218,7 @@ private:
 		FString& outFailureReason);
 	bool SpawnEditorPedestrianActor(
 		const FEpisodeDynamicActorSpec& spec,
-		AEpisodePedestrian*& outActor,
+		AActor*& outActor,
 		FString& outFailureReason);
 	bool SpawnRobotRouteMarkers(const FEpisodePlaceableInstanceSpec& spec, TArray<FString>& outDiagnostics);
 	AActor* SpawnEditorMarkerActor(TSubclassOf<AActor> markerClass, const FTransform& transform);
@@ -228,7 +231,7 @@ private:
 		const FEpisodePlaceableInstanceSpec& spec,
 		const FEpisodeStaticObstaclePropEntry& propEntry,
 		AEpisodeStaticObstacle* actor);
-	void AddPedestrianViewRecord(const FEpisodeDynamicActorSpec& spec, AEpisodePedestrian* actor);
+	void AddPedestrianViewRecord(const FEpisodeDynamicActorSpec& spec, AActor* actor);
 	FEpisodePlaceableInstanceSpec MakeStaticObstacleSpec(
 		const FString& instanceId,
 		FName propId,
@@ -263,7 +266,7 @@ private:
 	TMap<FString, TObjectPtr<AEpisodeStaticObstacle>> StaticObstacleActors;
 
 	UPROPERTY(Transient)
-	TMap<FString, TObjectPtr<AEpisodePedestrian>> PedestrianActors;
+	TMap<FString, TObjectPtr<AActor>> PedestrianActors;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> RouteMarkerActors;

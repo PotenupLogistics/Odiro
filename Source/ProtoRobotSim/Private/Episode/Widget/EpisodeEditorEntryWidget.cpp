@@ -4,6 +4,7 @@
 #include "Components/EditableTextBox.h"
 #include "Episode/Editor/EpisodeEditorController.h"
 #include "Episode/Widget/EpisodeAssetPaletteWidget.h"
+#include "Episode/Widget/EpisodeEditorRootWidget.h"
 #include "Platform/EpisodeEditorLaunchSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "GameFramework/PlayerController.h"
@@ -122,50 +123,32 @@ bool UEpisodeEditorEntryWidget::LoadEpisodeFromPathTextBox()
 
 UEpisodeAssetPaletteWidget* UEpisodeEditorEntryWidget::ShowAssetPaletteWidget()
 {
-	if (IsValid(AssetPaletteWidget))
+	UEpisodeEditorRootWidget* rootWidget = GetEditorRootWidget();
+	if (!rootWidget)
 	{
-		if (!AssetPaletteWidget->IsInViewport())
-		{
-			AssetPaletteWidget->AddToViewport(AssetPaletteViewportZOrder);
-		}
-
-		AssetPaletteWidget->RebuildPalette();
-		return AssetPaletteWidget;
-	}
-
-	if (!AssetPaletteWidgetClass)
-	{
-		UE_LOG(LogEpisodeEditorEntryWidget, Warning, TEXT("AssetPaletteWidgetClass is not set."));
+		UE_LOG(LogEpisodeEditorEntryWidget, Warning, TEXT("Editor root widget is unavailable."));
 		return nullptr;
 	}
 
-	APlayerController* owningPlayer = GetOwningPlayer();
-	if (!owningPlayer)
-	{
-		UE_LOG(LogEpisodeEditorEntryWidget, Warning, TEXT("Owning player is unavailable."));
-		return nullptr;
-	}
-
-	AssetPaletteWidget = CreateWidget<UEpisodeAssetPaletteWidget>(owningPlayer, AssetPaletteWidgetClass);
-	if (!AssetPaletteWidget)
-	{
-		UE_LOG(LogEpisodeEditorEntryWidget, Warning, TEXT("Failed to create AssetPaletteWidget."));
-		return nullptr;
-	}
-
-	AssetPaletteWidget->AddToViewport(AssetPaletteViewportZOrder);
-	AssetPaletteWidget->RebuildPalette();
-	return AssetPaletteWidget;
+	return rootWidget->ShowAssetPaletteWidget();
 }
 
 void UEpisodeEditorEntryWidget::RemoveAssetPaletteWidget()
 {
-	if (IsValid(AssetPaletteWidget))
+	if (UEpisodeEditorRootWidget* rootWidget = GetEditorRootWidget())
 	{
-		AssetPaletteWidget->RemoveFromParent();
+		rootWidget->HideAssetPaletteWidget();
+	}
+}
+
+UEpisodeAssetPaletteWidget* UEpisodeEditorEntryWidget::GetAssetPaletteWidget() const
+{
+	if (const UEpisodeEditorRootWidget* rootWidget = GetEditorRootWidget())
+	{
+		return rootWidget->GetAssetPaletteWidget();
 	}
 
-	AssetPaletteWidget = nullptr;
+	return nullptr;
 }
 
 bool UEpisodeEditorEntryWidget::CompleteExternallyStartedEpisode(const bool bLoadedExistingEpisode)
@@ -265,9 +248,16 @@ void UEpisodeEditorEntryWidget::ReleaseEditorWidgetInputMode()
 
 bool UEpisodeEditorEntryWidget::FinishSuccessfulStart(bool bLoadedExistingEpisode)
 {
-	if (bShowAssetPaletteOnSuccessfulStart && !ShowAssetPaletteWidget())
+	if (bShowAssetPaletteOnSuccessfulStart)
 	{
-		return false;
+		if (UEpisodeEditorRootWidget* rootWidget = GetEditorRootWidget())
+		{
+			rootWidget->HandleEditorSessionStarted(bLoadedExistingEpisode);
+		}
+		else
+		{
+			UE_LOG(LogEpisodeEditorEntryWidget, Warning, TEXT("Editor root widget is unavailable."));
+		}
 	}
 
 	OnEpisodeEditorSessionStarted(bLoadedExistingEpisode);
@@ -282,4 +272,14 @@ void UEpisodeEditorEntryWidget::HideAfterSuccessfulStartIfNeeded()
 		ReleaseEditorWidgetInputMode();
 		SetVisibility(ESlateVisibility::Collapsed);
 	}
+}
+
+UEpisodeEditorRootWidget* UEpisodeEditorEntryWidget::GetEditorRootWidget() const
+{
+	if (AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer()))
+	{
+		return editorController->GetEditorRootWidget();
+	}
+
+	return nullptr;
 }

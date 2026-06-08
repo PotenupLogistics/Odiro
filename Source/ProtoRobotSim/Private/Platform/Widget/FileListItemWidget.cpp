@@ -43,6 +43,25 @@ void UFileListItemWidget::InitializeItem(
 	const bool bInAllowPrimaryAction,
 	const bool bInAllowSecondaryAction)
 {
+	InitializeDisplayItem(
+		itemPath,
+		itemPath,
+		MoveTemp(primaryActionLabel),
+		MoveTemp(secondaryActionLabel),
+		bInAllowRename,
+		bInAllowPrimaryAction,
+		bInAllowSecondaryAction);
+}
+
+void UFileListItemWidget::InitializeDisplayItem(
+	const FString& itemPath,
+	const FString& displayText,
+	FString primaryActionLabel,
+	FString secondaryActionLabel,
+	const bool bInAllowRename,
+	const bool bInAllowPrimaryAction,
+	const bool bInAllowSecondaryAction)
+{
 	OriginalPath = itemPath.TrimStartAndEnd();
 	bAllowRename = bInAllowRename;
 	bAllowPrimaryAction = bInAllowPrimaryAction;
@@ -50,7 +69,11 @@ void UFileListItemWidget::InitializeItem(
 
 	if (PathTextBox)
 	{
-		PathTextBox->SetText(FText::FromString(OriginalPath));
+		const FString trimmedDisplayText = displayText.TrimStartAndEnd();
+		const FString visibleText = trimmedDisplayText.IsEmpty()
+			? OriginalPath
+			: trimmedDisplayText;
+		PathTextBox->SetText(FText::FromString(visibleText));
 	}
 
 	if (RenameButtonLabel)

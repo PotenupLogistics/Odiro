@@ -29,6 +29,14 @@ public:
 		bool bInAllowRename = true,
 		bool bInAllowPrimaryAction = true,
 		bool bInAllowSecondaryAction = false);
+	void InitializeDisplayItem(
+		const FString& itemPath,
+		const FString& displayText,
+		FString primaryActionLabel = FString(TEXT("편집")),
+		FString secondaryActionLabel = FString(TEXT("실행")),
+		bool bInAllowRename = true,
+		bool bInAllowPrimaryAction = true,
+		bool bInAllowSecondaryAction = false);
 	FString GetOriginalPath() const { return OriginalPath; }
 	FString GetEditedPath() const;
 

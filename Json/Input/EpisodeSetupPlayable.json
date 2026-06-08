@@ -1,57 +1,160 @@
 {
-  "schema": "episode_actor_spawn_mvp",
-  "version": 1,
-  "scenario_id": "playable_route_001",
-  "map_id": "EpisodeSimulationMap",
-  "run": {
-    "base_seed": 2001,
-    "iteration_index": 0,
-    "time_limit_s": 45
-  },
-  "evaluation": {
-    "goal_acceptance_radius_m": 1,
-    "tip_over_angle_deg": 60,
-    "near_miss": {
-      "distance_m": 0.5
-    },
-    "scoring": {
-      "static_obstacle_collision": -1,
-      "blocked_region_collision": -1,
-      "penalty_region_violation": -3,
-      "pedestrian_near_miss": -3,
-      "pedestrian_collision": -10
-    }
-  },
-  "ground_model": {
-    "default_region_type": "walkable",
-    "regions": [
-      {
-        "region_id": "playable_walkway",
-        "region_type": "walkable",
-        "shape": {
-          "type": "rectangle",
-          "center_xy_m": [0, 0],
-          "size_m": [14, 7],
-          "yaw_deg": 0
-        },
-        "traversability_score": 1
-      }
-    ]
-  },
-  "paths": [],
-  "actors": {
-    "static_obstacles": [],
-    "pedestrians": [],
-    "robot": {
-      "instance_id": "robot_playable",
-      "asset_id": "delivery_bot",
-      "spawn_only": false,
-      "xy_m": [-6, 0],
-      "yaw_deg": 0,
-      "route": {
-        "goal_xy_m": [6, 0],
-        "auto_start": true
-      }
-    }
-  }
+	"schema": "episode_actor_spawn_mvp",
+	"version": 1,
+	"scenario_id": "playable_route_001",
+	"map_id": "EpisodeEditorMap",
+	"run":
+	{
+		"base_seed": 2001,
+		"iteration_index": 0,
+		"time_limit_s": 45
+	},
+	"evaluation":
+	{
+		"goal_acceptance_radius_m": 1,
+		"tip_over_angle_deg": 60,
+		"near_miss":
+		{
+			"distance_m": 0.5
+		},
+		"scoring":
+		{
+			"static_obstacle_collision": -1,
+			"blocked_region_collision": -1,
+			"penalty_region_violation": -3,
+			"pedestrian_near_miss": -3,
+			"pedestrian_collision": -10
+		}
+	},
+	"ground_model":
+	{
+		"default_region_type": "walkable",
+		"regions": [
+			{
+				"region_id": "playable_walkway",
+				"region_type": "walkable",
+				"shape":
+				{
+					"type": "rectangle",
+					"center_xy_m": [
+						0,
+						0
+					],
+					"size_m": [
+						14,
+						7
+					],
+					"yaw_deg": 0
+				},
+				"traversability_score": 1
+			}
+		]
+	},
+	"paths": [],
+	"actors":
+	{
+		"static_obstacles": [
+			{
+				"instance_id": "obstacle_001",
+				"prop_id": "obstacle.street_bank",
+				"xy_m": [
+					-0.47959768491393873,
+					-0.13429381967483003
+				],
+				"yaw_deg": 76.247127936252568
+			},
+			{
+				"instance_id": "obstacle_002",
+				"prop_id": "obstacle.trash_bin",
+				"xy_m": [
+					2.3370700073242188,
+					1.0362651824951172
+				],
+				"yaw_deg": 0
+			},
+			{
+				"instance_id": "obstacle_003",
+				"prop_id": "obstacle.road_barrier_02",
+				"xy_m": [
+					-2.9651055908203126,
+					1.2483459472656251
+				],
+				"yaw_deg": 0
+			},
+			{
+				"instance_id": "obstacle_004",
+				"prop_id": "obstacle.road_barrier_01",
+				"xy_m": [
+					-2.4332594299316406,
+					-2.240329132080078
+				],
+				"yaw_deg": 60.749874264174274
+			},
+			{
+				"instance_id": "obstacle_005",
+				"prop_id": "obstacle.road_cone_02",
+				"xy_m": [
+					3.9533956909179695,
+					-1.1751629638671874
+				],
+				"yaw_deg": 0
+			},
+			{
+				"instance_id": "obstacle_006",
+				"prop_id": "obstacle.manhole_04",
+				"xy_m": [
+					1.1285229492187501,
+					1.8885961914062501
+				],
+				"yaw_deg": 0
+			},
+			{
+				"instance_id": "obstacle_007",
+				"prop_id": "obstacle.manhole_03",
+				"xy_m": [
+					4.659907836914063,
+					-0.017406814098358155
+				],
+				"yaw_deg": 0
+			},
+			{
+				"instance_id": "obstacle_008",
+				"prop_id": "obstacle.manhole_02",
+				"xy_m": [
+					-4.5943435668945316,
+					2.2661489868164062
+				],
+				"yaw_deg": 0
+			},
+			{
+				"instance_id": "obstacle_009",
+				"prop_id": "obstacle.box_02",
+				"xy_m": [
+					1.6580899047851563,
+					-2.1590290832519532
+				],
+				"yaw_deg": 49.45909076488941
+			}
+		],
+		"pedestrians": [],
+		"robot":
+		{
+			"instance_id": "robot_playable",
+			"asset_id": "delivery_bot",
+			"spawn_only": false,
+			"xy_m": [
+				-6,
+				0
+			],
+			"yaw_deg": 0,
+			"route":
+			{
+				"goal_xy_m": [
+					6,
+					0
+				],
+				"auto_start": true
+			}
+		}
+	}
 }

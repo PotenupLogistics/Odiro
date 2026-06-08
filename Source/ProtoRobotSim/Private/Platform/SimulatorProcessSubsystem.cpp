@@ -8,6 +8,7 @@
 #include "Misc/App.h"
 #include "Misc/Guid.h"
 #include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "TimerManager.h"
 #include "UObject/UObjectGlobals.h"
 
@@ -63,6 +64,30 @@ namespace
 
 		return false;
 	}
+
+	FString ToProjectRelativePathIfPossible(FString filePath)
+	{
+		if (filePath.IsEmpty())
+		{
+			return filePath;
+		}
+
+		filePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (FPaths::IsRelative(filePath))
+		{
+			return filePath;
+		}
+
+		const FString projectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+		FString relativePath = filePath;
+		if (FPaths::MakePathRelativeTo(relativePath, *projectDir))
+		{
+			relativePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+			return relativePath;
+		}
+
+		return filePath;
+	}
 }
 
 void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -97,6 +122,8 @@ void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection
 
 	const FSimulationSetupParseResult setupParseResult = FSimulationSetupJson::ParseFromFile(ActiveSetupPath);
 	ActiveSetup = setupParseResult.Setup;
+	// Direct -Simulate launches and launcher-generated runtime setup files share the same run-folder contract.
+	FSimulationSetupJson::ApplyRunOutputPaths(ActiveSetup, ActiveRunId);
 	InitializeStatus();
 	LogSetupDiagnostics(setupParseResult);
 	if (!setupParseResult.bSuccess)
@@ -378,7 +405,7 @@ void USimulatorProcessSubsystem::StartSimulationRun(UWorld* world)
 	}
 
 	bRunStarted = true;
-	if (!runnerSubsystem->StartBatchFromRunQueueJsonFile(ActiveSetup.RunQueueJsonPath))
+	if (!runnerSubsystem->StartBatchFromRunQueueJsonFileForRun(ActiveSetup.RunQueueJsonPath, ActiveRunId))
 	{
 		bRunStarted = false;
 		UE_LOG(
@@ -620,7 +647,7 @@ void USimulatorProcessSubsystem::RefreshStatusFromRunner(const UEpisodeRunnerSub
 	{
 		if (!runRecord.EvaluationReportJsonPath.IsEmpty())
 		{
-			ActiveStatus.ReportPaths.Add(runRecord.EvaluationReportJsonPath);
+			ActiveStatus.ReportPaths.Add(ToProjectRelativePathIfPossible(runRecord.EvaluationReportJsonPath));
 		}
 	}
 }
@@ -638,7 +665,7 @@ void USimulatorProcessSubsystem::RefreshStatusFromWorld(UWorld* world)
 		if (!currentLogPath.IsEmpty())
 		{
 			ActiveStatus.LogPaths.Reset();
-			ActiveStatus.LogPaths.Add(currentLogPath);
+			ActiveStatus.LogPaths.Add(ToProjectRelativePathIfPossible(currentLogPath));
 		}
 	}
 }

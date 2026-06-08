@@ -134,12 +134,13 @@ bool UEpisodeRunnerSubsystem::StartEpisodePairFromJsonFiles(
 
 bool UEpisodeRunnerSubsystem::StartBatchFromRunInputs(const TArray<FEpisodeRunInput>& runInputs)
 {
-	return StartBatchFromRunInputsInternal(runInputs, FString());
+	return StartBatchFromRunInputsInternal(runInputs, FString(), FString());
 }
 
 bool UEpisodeRunnerSubsystem::StartBatchFromRunInputsInternal(
 	const TArray<FEpisodeRunInput>& runInputs,
-	const FString& activeRunQueueJsonFilePath)
+	const FString& activeRunQueueJsonFilePath,
+	const FString& activeBatchRunId)
 {
 	if (IsBatchActive())
 	{
@@ -188,6 +189,7 @@ bool UEpisodeRunnerSubsystem::StartBatchFromRunInputsInternal(
 	CurrentRunIndex = INDEX_NONE;
 	TotalRunCount = PendingRunInputs.Num();
 	ActiveRunQueueJsonFilePath = activeRunQueueJsonFilePath;
+	ActiveBatchRunId = activeBatchRunId.TrimStartAndEnd();
 	SetRunnerState(EEpisodeRunnerState::Preparing);
 
 	UE_LOG(LogEpisodeRunner, Warning, TEXT("Episode pair 배치 시작 | Count: %d"), PendingRunInputs.Num());
@@ -197,6 +199,13 @@ bool UEpisodeRunnerSubsystem::StartBatchFromRunInputsInternal(
 }
 
 bool UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile(const FString& runQueueJsonFilePath)
+{
+	return StartBatchFromRunQueueJsonFileForRun(runQueueJsonFilePath, FString());
+}
+
+bool UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFileForRun(
+	const FString& runQueueJsonFilePath,
+	const FString& activeRunId)
 {
 	if (runQueueJsonFilePath.IsEmpty()) return false;
 	const FString resolvedRunQueueJsonFilePath = ResolveRunnerJsonFilePath(runQueueJsonFilePath);
@@ -312,13 +321,14 @@ bool UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile(const FString& runQ
 	}
 
 	UE_LOG(LogEpisodeRunner, Warning, TEXT("Episode run queue 로드 완료 | Path: %s, Count: %d"), *runQueueJsonFilePath, runInputs.Num());
-	return StartBatchFromRunInputsInternal(runInputs, normalizedRunQueueJsonFilePath);
+	return StartBatchFromRunInputsInternal(runInputs, normalizedRunQueueJsonFilePath, activeRunId);
 }
 
 void UEpisodeRunnerSubsystem::CancelRun()
 {
 	PendingRunInputs.Reset();
 	ActiveRunQueueJsonFilePath.Reset();
+	ActiveBatchRunId.Reset();
 	SetRunnerState(EEpisodeRunnerState::Cancelled);
 
 	if (UEpisodeEvaluationSubsystem* evaluationSubsystem = ResolveEvaluationSubsystem())
@@ -440,6 +450,7 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 	{
 		SetRunnerState(EEpisodeRunnerState::Completed);
 		ActiveRunQueueJsonFilePath.Reset();
+		ActiveBatchRunId.Reset();
 		UE_LOG(LogEpisodeRunner, Log, TEXT("Episode 배치 완료 | Records: %d"), RunRecords.Num());
 		return;
 	}
@@ -451,6 +462,7 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 	{
 		SetRunnerState(EEpisodeRunnerState::Failed);
 		ActiveRunQueueJsonFilePath.Reset();
+		ActiveBatchRunId.Reset();
 		UE_LOG(
 			LogEpisodeRunner,
 			Warning,
@@ -772,6 +784,11 @@ double UEpisodeRunnerSubsystem::GetRunTimeLimitSeconds(const FEpisodeRunConfig& 
 
 FString UEpisodeRunnerSubsystem::BuildRunId() const
 {
+	if (!ActiveBatchRunId.IsEmpty())
+	{
+		return ActiveBatchRunId;
+	}
+
 	return FString::Printf(TEXT("episode_run_%04d"), CurrentRunIndex);
 }
 

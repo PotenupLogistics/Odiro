@@ -3,10 +3,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/World.h"
-#include "Episode/Actors/EpisodePedestrian.h"
 #include "Episode/Actors/EpisodeStaticObstacle.h"
-#include "Episode/Components/EpisodePathFollowerComponent.h"
-#include "Episode/Components/EpisodePedestrianRuntimeComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/EpisodeCompiler.h"
 #include "UObject/ConstructorHelpers.h"
@@ -60,14 +57,11 @@ UEpisodeAuthoringSubsystem::UEpisodeAuthoringSubsystem()
 		GoalPointClass = goalPointBlueprintClass.Class;
 	}
 
-	static ConstructorHelpers::FClassFinder<AEpisodePedestrian> pedestrianBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_EpisodePedestrian"));
-	if (pedestrianBlueprintClass.Succeeded())
+	static ConstructorHelpers::FClassFinder<AActor> pedestrianVisualizationBlueprintClass(
+		TEXT("/Game/Models/Placeable/StaticMeshes/BP_PlaceablePedestrian"));
+	if (pedestrianVisualizationBlueprintClass.Succeeded())
 	{
-		PedestrianClass = pedestrianBlueprintClass.Class;
-	}
-	else
-	{
-		PedestrianClass = AEpisodePedestrian::StaticClass();
+		PedestrianVisualizationActorClass = pedestrianVisualizationBlueprintClass.Class;
 	}
 }
 
@@ -207,7 +201,7 @@ void UEpisodeAuthoringSubsystem::GetEditorPlacementIgnoredActors(TArray<AActor*>
 		}
 	}
 
-	for (const TPair<FString, TObjectPtr<AEpisodePedestrian>>& pair : PedestrianActors)
+	for (const TPair<FString, TObjectPtr<AActor>>& pair : PedestrianActors)
 	{
 		if (AActor* actor = pair.Value.Get())
 		{
@@ -358,7 +352,7 @@ bool UEpisodeAuthoringSubsystem::AddPedestrian(
 	FName archetypeId,
 	const FTransform& transform,
 	FEpisodeDynamicActorSpec& outSpec,
-	AEpisodePedestrian*& outActor,
+	AActor*& outActor,
 	FString& outFailureReason)
 {
 	outSpec = FEpisodeDynamicActorSpec();
@@ -1424,7 +1418,7 @@ void UEpisodeAuthoringSubsystem::ClearEditorView()
 		}
 	}
 
-	for (const TPair<FString, TObjectPtr<AEpisodePedestrian>>& pair : PedestrianActors)
+	for (const TPair<FString, TObjectPtr<AActor>>& pair : PedestrianActors)
 	{
 		if (IsValid(pair.Value))
 		{
@@ -1489,7 +1483,7 @@ bool UEpisodeAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& out
 			continue;
 		}
 
-		AEpisodePedestrian* spawnedActor = nullptr;
+		AActor* spawnedActor = nullptr;
 		FString failureReason;
 		if (!SpawnEditorPedestrianActor(spec, spawnedActor, failureReason))
 		{
@@ -1682,7 +1676,7 @@ bool UEpisodeAuthoringSubsystem::SpawnEditorStaticObstacleActor(
 
 bool UEpisodeAuthoringSubsystem::SpawnEditorPedestrianActor(
 	const FEpisodeDynamicActorSpec& spec,
-	AEpisodePedestrian*& outActor,
+	AActor*& outActor,
 	FString& outFailureReason)
 {
 	outActor = nullptr;
@@ -1701,16 +1695,17 @@ bool UEpisodeAuthoringSubsystem::SpawnEditorPedestrianActor(
 		return false;
 	}
 
-	TSubclassOf<AEpisodePedestrian> spawnClass = PedestrianClass;
+	TSubclassOf<AActor> spawnClass = PedestrianVisualizationActorClass;
 	if (!spawnClass)
 	{
-		spawnClass = AEpisodePedestrian::StaticClass();
+		outFailureReason = TEXT("Pedestrian visualization actor class is unavailable.");
+		return false;
 	}
 
 	FActorSpawnParameters spawnParams;
 	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	AEpisodePedestrian* pedestrian = world->SpawnActor<AEpisodePedestrian>(
+	AActor* pedestrian = world->SpawnActor<AActor>(
 		spawnClass,
 		spec.InitialTransform,
 		spawnParams);
@@ -1720,23 +1715,13 @@ bool UEpisodeAuthoringSubsystem::SpawnEditorPedestrianActor(
 		return false;
 	}
 
-	if (pedestrian->PlaceableComponent)
+	if (UEpisodePlaceableComponent* placeableComponent = pedestrian->FindComponentByClass<UEpisodePlaceableComponent>())
 	{
-		pedestrian->PlaceableComponent->InstanceId = spec.InstanceId;
-		pedestrian->PlaceableComponent->AssetId = spec.AssetId;
-		pedestrian->PlaceableComponent->Category = EEpisodeActorCategory::Pedestrian;
-		pedestrian->PlaceableComponent->MobilityMode = EEpisodeMobilityMode::Static;
-		pedestrian->PlaceableComponent->bAuthoringSelectable = false;
-	}
-	if (pedestrian->PathFollowerComponent)
-	{
-		pedestrian->PathFollowerComponent->bAutoStart = false;
-		pedestrian->PathFollowerComponent->StopFollowing();
-	}
-	if (pedestrian->PedestrianRuntimeComponent)
-	{
-		pedestrian->PedestrianRuntimeComponent->bAutoStart = false;
-		pedestrian->PedestrianRuntimeComponent->StopFollowing();
+		placeableComponent->InstanceId = spec.InstanceId;
+		placeableComponent->AssetId = spec.AssetId;
+		placeableComponent->Category = EEpisodeActorCategory::Pedestrian;
+		placeableComponent->MobilityMode = EEpisodeMobilityMode::Static;
+		placeableComponent->bAuthoringSelectable = false;
 	}
 
 	outActor = pedestrian;
@@ -1759,7 +1744,7 @@ void UEpisodeAuthoringSubsystem::AddStaticObstacleViewRecord(
 	StaticObstacleActors.Add(spec.InstanceId, actor);
 }
 
-void UEpisodeAuthoringSubsystem::AddPedestrianViewRecord(const FEpisodeDynamicActorSpec& spec, AEpisodePedestrian* actor)
+void UEpisodeAuthoringSubsystem::AddPedestrianViewRecord(const FEpisodeDynamicActorSpec& spec, AActor* actor)
 {
 	if (!actor || spec.InstanceId.IsEmpty())
 	{

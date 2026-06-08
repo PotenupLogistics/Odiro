@@ -6,11 +6,10 @@
 #include "Episode/Components/EpisodePathFollowerComponent.h"
 #include "Episode/Components/EpisodePedestrianRuntimeComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
-#include "Episode/EpisodeEvaluationSubsystem.h"
 #include "Episode/EpisodePedestrianPlanSubsystem.h"
 #include "Shared/EpisodePedestrianPlanTypes.h"
 #include "Shared/Struct/DeliveryBot/Setup/DeliveryBotSetupInfo.h"
-#include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
+#include "DeliveryBot/Actor/DeliveryBot.h"
 #include "Kismet/GameplayStatics.h"
 
 
@@ -20,8 +19,8 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 {
 	StaticObstacleClass = AEpisodeStaticObstacle::StaticClass();
 
-	static ConstructorHelpers::FClassFinder<ADeliveryBot_ChaosActor> robotBlueprintClass(
-		TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBot_ChaosMesh"));
+	static ConstructorHelpers::FClassFinder<ADeliveryBot> robotBlueprintClass(
+		TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBot"));
 
 	if (robotBlueprintClass.Succeeded())
 	{
@@ -29,7 +28,7 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 	}
 	else
 	{
-		RobotActorClass = ADeliveryBot_ChaosActor::StaticClass();
+		RobotActorClass = ADeliveryBot::StaticClass();
 	}
 	static ConstructorHelpers::FClassFinder<AActor> goalPointBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_GoalPoint"));
 	if (goalPointBlueprintClass.Succeeded())
@@ -503,8 +502,8 @@ AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInst
 
 	setupInfo.LocationSetupInfo.bAutoStartRoute = !bSpawnOnly && bRouteAutoStart && bHasGoal;
 
-	ADeliveryBot_ChaosActor* robotActor{
-		world->SpawnActorDeferred<ADeliveryBot_ChaosActor>(
+	ADeliveryBot* robotActor{
+		world->SpawnActorDeferred<ADeliveryBot>(
 			RobotActorClass,
 			placeableSpec.Transform,
 			nullptr,
@@ -521,16 +520,6 @@ AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInst
 		robotActor,
 		placeableSpec.Transform
 	);
-
-	if (UEpisodeEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UEpisodeEvaluationSubsystem>())
-	{
-		robotActor->OnDeliveryBotSimulationFailed.RemoveDynamic(
-			evaluationSubsystem,
-			&UEpisodeEvaluationSubsystem::HandleDeliveryBotSimulationFailed);
-		robotActor->OnDeliveryBotSimulationFailed.AddDynamic(
-			evaluationSubsystem,
-			&UEpisodeEvaluationSubsystem::HandleDeliveryBotSimulationFailed);
-	}
 
 	RegisterRuntimeActor(
 		placeableSpec.InstanceId,

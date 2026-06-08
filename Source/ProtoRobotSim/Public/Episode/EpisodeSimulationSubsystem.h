@@ -5,7 +5,7 @@
 #include "Shared/EpisodeSpecTypes.h"
 #include "EpisodeSimulationSubsystem.generated.h"
 
-class ADeliveryBot_ChaosActor;
+class ADeliveryBot;
 class AEpisodeGroundRegion;
 class AEpisodePedestrian;
 class AEpisodeSplinePath;
@@ -31,7 +31,7 @@ public:
 	TSubclassOf<AEpisodePedestrian> PedestrianClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
-	TSubclassOf<ADeliveryBot_ChaosActor> RobotActorClass;
+	TSubclassOf<ADeliveryBot> RobotActorClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
 	TSubclassOf<AActor> GoalPointClass;

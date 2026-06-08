@@ -93,4 +93,5 @@ public:
 
 private:
 	void ApplyCollisionSettings();
+	void ApplyObjectTypeActorTag();
 };

@@ -1,6 +1,6 @@
 #include "Episode/EpisodeMeasurementLogSubsystem.h"
 
-#include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
+#include "DeliveryBot/Actor/DeliveryBot.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Episode/EpisodeEvaluationSubsystem.h"
@@ -443,7 +443,7 @@ FEpisodeMeasurementLogTickRecord UEpisodeMeasurementLogSubsystem::BuildTickRecor
 	TickRecord.DeltaSeconds = FMath::Max(0.0f, DeltaTime);
 	TickRecord.Robot.Truth.RotationQuatXyzw = { 0.0, 0.0, 0.0, 1.0 };
 
-	ADeliveryBot_ChaosActor* RobotActor = FindRobotActor();
+	ADeliveryBot* RobotActor = FindRobotActor();
 	if (RobotActor)
 	{
 		FEpisodeRobotMeasurementAdapter::BuildRobotTick(
@@ -482,7 +482,7 @@ FEpisodeMeasurementLogHeaderRecord UEpisodeMeasurementLogSubsystem::BuildHeaderR
 	return Header;
 }
 
-ADeliveryBot_ChaosActor* UEpisodeMeasurementLogSubsystem::FindRobotActor() const
+ADeliveryBot* UEpisodeMeasurementLogSubsystem::FindRobotActor() const
 {
 	if (SubjectRegistry)
 	{
@@ -493,7 +493,7 @@ ADeliveryBot_ChaosActor* UEpisodeMeasurementLogSubsystem::FindRobotActor() const
 				continue;
 			}
 
-			if (ADeliveryBot_ChaosActor* RobotActor = Cast<ADeliveryBot_ChaosActor>(SubjectRegistry->GetActorByIndex(ActorInfo.Index)))
+			if (ADeliveryBot* RobotActor = Cast<ADeliveryBot>(SubjectRegistry->GetActorByIndex(ActorInfo.Index)))
 			{
 				return RobotActor;
 			}
@@ -506,9 +506,9 @@ ADeliveryBot_ChaosActor* UEpisodeMeasurementLogSubsystem::FindRobotActor() const
 		return nullptr;
 	}
 
-	for (TActorIterator<ADeliveryBot_ChaosActor> ActorIterator(World); ActorIterator; ++ActorIterator)
+	for (TActorIterator<ADeliveryBot> ActorIterator(World); ActorIterator; ++ActorIterator)
 	{
-		if (ADeliveryBot_ChaosActor* RobotActor = *ActorIterator)
+		if (ADeliveryBot* RobotActor = *ActorIterator)
 		{
 			if (IsValid(RobotActor))
 			{

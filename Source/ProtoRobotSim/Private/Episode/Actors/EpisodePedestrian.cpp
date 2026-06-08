@@ -8,6 +8,7 @@
 AEpisodePedestrian::AEpisodePedestrian()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	Tags.AddUnique(FName(TEXT("ObjectType.pedestrian")));
 
 	PlaceableComponent = CreateDefaultSubobject<UEpisodePlaceableComponent>(TEXT("PlaceableComponent"));
 	ObstacleCollisionComponent = CreateDefaultSubobject<UEpisodeObstacleCollisionComponent>(TEXT("ObstacleCollisionComponent"));

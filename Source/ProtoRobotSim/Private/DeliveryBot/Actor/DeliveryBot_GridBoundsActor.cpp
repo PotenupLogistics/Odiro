@@ -6,6 +6,22 @@
 #include "Components/BoxComponent.h"
 #include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
 
+namespace
+{
+	FDeliveryBotGridCollisionRuleInfo MakeGridCollisionRule(
+		FName collisionProfileName,
+		EDeliveryBotGridAreaType areaType,
+		float cost,
+		bool bBlocksMovement)
+	{
+		FDeliveryBotGridCollisionRuleInfo rule;
+		rule.CollisionProfileName = collisionProfileName;
+		rule.AreaType = areaType;
+		rule.Cost = cost;
+		rule.bBlocksMovement = bBlocksMovement;
+		return rule;
+	}
+}
 
 ADeliveryBot_GridBoundsActor::ADeliveryBot_GridBoundsActor()
 {
@@ -14,6 +30,13 @@ ADeliveryBot_GridBoundsActor::ADeliveryBot_GridBoundsActor()
 	BoundsBox = CreateDefaultSubobject<UBoxComponent>(TEXT("BoundsBox"));
 	SetRootComponent(BoundsBox);
 	BoundsBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	CollisionProfileRules =
+	{
+		MakeGridCollisionRule(FName(TEXT("Walkable")), EDeliveryBotGridAreaType::Walkable, 1.0f, false),
+		MakeGridCollisionRule(FName(TEXT("Penalty")), EDeliveryBotGridAreaType::Penalty, 3.0f, false),
+		MakeGridCollisionRule(FName(TEXT("Blocked")), EDeliveryBotGridAreaType::Blocked, BIG_NUMBER, true)
+	};
 	
 }
 

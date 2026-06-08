@@ -9,7 +9,7 @@
 
 class UEpisodeLogSubjectRegistry;
 class UEpisodeEvaluationSubsystem;
-class ADeliveryBot_ChaosActor;
+class ADeliveryBot;
 
 /// Owns measurement log lifecycle for a PIE or game world.
 UCLASS(BlueprintType)
@@ -106,7 +106,7 @@ private:
 	bool WriteFooter(const FString& CloseReason);
 	FEpisodeMeasurementLogTickRecord BuildTickRecord(float DeltaTime);
 	FEpisodeMeasurementLogHeaderRecord BuildHeaderRecord(double WorldTimeSeconds) const;
-	ADeliveryBot_ChaosActor* FindRobotActor() const;
+	ADeliveryBot* FindRobotActor() const;
 	void CaptureMovingActors(FEpisodeMeasurementLogTickRecord& TickRecord, AActor* RobotActor);
 	FString BuildOutputPath() const;
 	FString GetCleanMapName() const;

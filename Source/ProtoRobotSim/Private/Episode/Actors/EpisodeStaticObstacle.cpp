@@ -11,6 +11,8 @@
 
 namespace
 {
+	const FString ObjectTypeActorTagPrefix{ TEXT("ObjectType.") };
+
 	FEpisodeStaticObstaclePropEntry MakeStaticObstaclePropEntry(
 		const TCHAR* propId,
 		const TCHAR* semanticTypeId,
@@ -71,6 +73,16 @@ namespace
 		primitiveComponent->SetCollisionObjectType(ECC_WorldStatic);
 		primitiveComponent->SetCollisionResponseToAllChannels(ECR_Block);
 	}
+
+	FName MakeObjectTypeActorTag(FName semanticTypeId)
+	{
+		if (semanticTypeId.IsNone())
+		{
+			return NAME_None;
+		}
+
+		return FName(*(ObjectTypeActorTagPrefix + semanticTypeId.ToString()));
+	}
 }
 
 AEpisodeStaticObstacle::AEpisodeStaticObstacle()
@@ -100,6 +112,7 @@ void AEpisodeStaticObstacle::OnConstruction(const FTransform& transform)
 	Super::OnConstruction(transform);
 
 	ApplyConfiguredStaticMesh();
+	ApplyObjectTypeActorTag();
 	ApplyCollisionSettings();
 }
 
@@ -159,8 +172,24 @@ bool AEpisodeStaticObstacle::ApplyPropEntry(const FEpisodeStaticObstaclePropEntr
 	}
 
 	const bool bAppliedMesh = ApplyConfiguredStaticMesh();
+	ApplyObjectTypeActorTag();
 	ApplyCollisionSettings();
 	return bAppliedMesh;
+}
+
+void AEpisodeStaticObstacle::ApplyObjectTypeActorTag()
+{
+	Tags.RemoveAll(
+		[](const FName& tag)
+		{
+			return tag.ToString().StartsWith(ObjectTypeActorTagPrefix);
+		});
+
+	const FName objectTypeTag = MakeObjectTypeActorTag(SemanticTypeId);
+	if (!objectTypeTag.IsNone())
+	{
+		Tags.AddUnique(objectTypeTag);
+	}
 }
 
 void AEpisodeStaticObstacle::ApplyCollisionSettings()

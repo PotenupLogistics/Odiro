@@ -1,11 +1,11 @@
 #include "Episode/EpisodeRobotMeasurementAdapter.h"
 
-#include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
+#include "DeliveryBot/Actor/DeliveryBot.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Shared/EpisodeLogSubjectRegistry.h"
 
 bool FEpisodeRobotMeasurementAdapter::BuildRobotTick(
-	ADeliveryBot_ChaosActor* RobotActor,
+	ADeliveryBot* RobotActor,
 	const UEpisodeLogSubjectRegistry* SubjectRegistry,
 	FEpisodeMeasurementLogRobotTick& OutRobotTick,
 	TArray<FEpisodeMeasurementLogDiagnostic>& OutDiagnostics,
@@ -31,12 +31,18 @@ bool FEpisodeRobotMeasurementAdapter::BuildRobotTick(
 			WorldTimeSeconds));
 	}
 
-	FDeliveryBotMeasurementSnapshot Snapshot;
-	RobotActor->GetMeasurementSnapshot(Snapshot);
+	FDeliveryBotSensorSnapshot Snapshot;
+	RobotActor->GetSensorSnapshot(Snapshot);
 
 	OutRobotTick.Id = RobotId;
 	OutRobotTick.Truth = BuildActorState(RobotActor);
-	OutRobotTick.Lidar.HitCount = Snapshot.LidarHitCount;
+	for (const FDeliveryBotLidarRayInfo& RayInfo : Snapshot.LidarScanInfo.RayInfos)
+	{
+		if (RayInfo.bHit)
+		{
+			++OutRobotTick.Lidar.HitCount;
+		}
+	}
 	OutRobotTick.Lidar.bHasFrontObject = Snapshot.bHasFrontObject;
 
 	if (Snapshot.bHasFrontObject)
@@ -47,13 +53,15 @@ bool FEpisodeRobotMeasurementAdapter::BuildRobotTick(
 		OutRobotTick.Lidar.FrontYawDegree = Snapshot.FrontObjectInfo.ClosestFrontRayYawDegree;
 	}
 
-	if (Snapshot.bHasMoveCommand)
+	FDeliveryBotMoveCommandInfo MoveCommandInfo;
+	FString ActionReason;
+	if (RobotActor->GetLastMoveCommandInfo(MoveCommandInfo, ActionReason))
 	{
-		OutRobotTick.Action.TargetSpeedKmh = Snapshot.MoveCommandInfo.TargetSpeedKmh;
-		OutRobotTick.Action.Steering = Snapshot.MoveCommandInfo.Steering;
-		OutRobotTick.Action.Brake = Snapshot.MoveCommandInfo.Brake;
-		OutRobotTick.Action.bBrakeApplied = Snapshot.MoveCommandInfo.bBrake;
-		OutRobotTick.Action.Reason = Snapshot.ActionReason;
+		OutRobotTick.Action.TargetSpeedKmh = MoveCommandInfo.TargetSpeedKmh;
+		OutRobotTick.Action.Steering = MoveCommandInfo.Steering;
+		OutRobotTick.Action.Brake = MoveCommandInfo.Brake;
+		OutRobotTick.Action.bBrakeApplied = MoveCommandInfo.bBrake;
+		OutRobotTick.Action.Reason = ActionReason;
 	}
 
 	return true;

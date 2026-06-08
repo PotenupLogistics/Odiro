@@ -9,6 +9,7 @@
 #include "DeliveryBot/Component/DeliveryBot_LidarSensorComponent.h"
 #include "DeliveryBot/Component/DeliveryBot_PolicyControllerComponent.h"
 #include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
+#include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Serialization/JsonReader.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
@@ -70,6 +71,15 @@ ADeliveryBot::ADeliveryBot()
 	LidarSensorComponent = CreateDefaultSubobject<UDeliveryBot_LidarSensorComponent>(TEXT("LidarSensorComponent"));
 	HttpPolicyComponent = CreateDefaultSubobject<UDeliveryBot_HttpPolicyComponent>(TEXT("HttpPolicyComponent"));
 	PolicyControllerComponent = CreateDefaultSubobject<UDeliveryBot_PolicyControllerComponent>(TEXT("PolicyControllerComponent"));
+	PlaceableComponent = CreateDefaultSubobject<UEpisodePlaceableComponent>(TEXT("PlaceableComponent"));
+
+	UChaosWheeledVehicleMovementComponent* wheeledMovement =
+		Cast<UChaosWheeledVehicleMovementComponent>(GetVehicleMovementComponent());
+
+	if (IsValid(DriveComponent))
+	{
+		DriveComponent->SetupVehicleMovement(wheeledMovement);
+	}
 }
 
 void ADeliveryBot::BeginPlay()
@@ -78,6 +88,13 @@ void ADeliveryBot::BeginPlay()
 	
 	ApplySetupInfo();
 	UpdateSensorSnapshot();
+
+	if (UChaosVehicleMovementComponent* vehicleMovement = GetVehicleMovementComponent())
+	{
+		vehicleMovement->SetRequiresControllerForInputs(false);
+		vehicleMovement->SetUseAutomaticGears(false);
+		vehicleMovement->SetTargetGear(1, true);
+	}
 	
 	if (IsValid(PolicyControllerComponent))
 	{
@@ -155,6 +172,9 @@ void ADeliveryBot::ApplyMoveCommand(const FDeliveryBotMoveCommandInfo& moveComma
 		return;
 
 	DriveComponent->ApplyMoveCommand(vehicleMovement, moveCommandInfo, deltaTime);
+	LastMoveCommandInfo = moveCommandInfo;
+	LastActionReason = TEXT("python_policy");
+	bHasLastMoveCommand = true;
 }
 
 void ADeliveryBot::ApplyParkingStop()
@@ -167,6 +187,11 @@ void ADeliveryBot::ApplyParkingStop()
 		return;
 
 	DriveComponent->ApplyParkingStop(vehicleMovement);
+	LastMoveCommandInfo = FDeliveryBotMoveCommandInfo{};
+	LastMoveCommandInfo.Brake = 1.f;
+	LastMoveCommandInfo.bBrake = true;
+	LastActionReason = TEXT("parking_stop");
+	bHasLastMoveCommand = true;
 }
 
 void ADeliveryBot::ApplyRuntimeDriveConfigInfo(const FDeliveryBotDriveConfigInfo& driveConfigInfo)
@@ -278,6 +303,13 @@ bool ADeliveryBot::GetSensorSnapshot(FDeliveryBotSensorSnapshot& outSnapshot) co
 {
 	outSnapshot = LastSensorSnapshot;
 	return IsValid(LidarSensorComponent);
+}
+
+bool ADeliveryBot::GetLastMoveCommandInfo(FDeliveryBotMoveCommandInfo& outMoveCommandInfo, FString& outActionReason) const
+{
+	outMoveCommandInfo = LastMoveCommandInfo;
+	outActionReason = LastActionReason;
+	return bHasLastMoveCommand;
 }
 
 FDeliveryBotObservationInfo ADeliveryBot::BuildObservation() const

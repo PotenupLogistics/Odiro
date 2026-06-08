@@ -29,6 +29,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PolicyController")
 	void StopPolicyLoop();
 
+	//  버튼 없이 자동 정책 주행을 시작할 때 호출
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PolicyController")
+	bool StartPolicyRunAfterSpawn();
+	
+	// 자동 시작 전에 이전 실행 상태를 초기화한다.
+	void ResetPolicyRunStartupState();
+	
 	// 매 프레임 처리해야 할 로직을 실행
 	void TickPolicy(float deltaTime);
 
@@ -101,6 +108,11 @@ private:
 	
 	bool IsGoalReachedPolicyResponse(const FDeliveryBotHttpPolicyResponseInfo& responseInfo) const;
 	
+	// 성공하면 /episode/start 재시도 루프를 시작
+	UFUNCTION()
+	void HandleStartupPolicySpecUpdateResponse(bool bWasSuccessful, int32 responseCode, const FString& responseBody);
+	
+	
 private:  // Episode종료
 	void BindEpisodeEvaluationEndedEvent();
 	void UnbindEpisodeEvaluationEndedEvent();
@@ -163,6 +175,14 @@ private:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|PolicyController", meta = (AllowPrivateAccess = "true"))
 	int32 MaxPolicyFailureHistoryCount{ 300 };
+	
+	// 소환 후 자동 시작할 때 Python으로 보낼 기본 PolicySpec 파일명
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|PolicyController", meta = (AllowPrivateAccess = "true"))
+	FString StartupPolicySpecFileName{ TEXT("PolicySpec_DefaultDelivery") };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|PolicyController|Debug", meta = (AllowPrivateAccess = "true"))
+	bool bLogPolicyRuntimeMessages{ false };
+	
 	
 private:
 	FTimerHandle GridUploadRetryTimerHandle;

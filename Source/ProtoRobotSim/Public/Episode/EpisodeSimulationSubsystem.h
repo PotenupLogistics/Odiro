@@ -1,11 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Math/Box2D.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "Shared/EpisodeSpecTypes.h"
 #include "EpisodeSimulationSubsystem.generated.h"
 
 class ADeliveryBot;
+class ADeliveryBot_GridBoundsActor;
 class AEpisodeGroundRegion;
 class AEpisodePedestrian;
 class AEpisodeSplinePath;
@@ -14,6 +16,7 @@ class UPrimitiveComponent;
 class UEpisodePlaceableComponent;
 struct FEpisodePedestrianPlan;
 struct FEpisodePedestrianPlanBuildContext;
+struct FDeliveryBotSetupInfo;
 
 // 컴파일된 Episode simulation setup spec을 현재 월드에 스폰하고, 런타임 actor 생명주기를 관리하는 subsystem.
 UCLASS(BlueprintType)
@@ -38,6 +41,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
 	TSubclassOf<AActor> StartPointClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
+	TSubclassOf<ADeliveryBot_GridBoundsActor> GridBoundsActorClass;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode")
 	void ClearEpisode();
@@ -100,12 +106,41 @@ private:
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<AActor>> RuntimeActorsById;
 
+	UPROPERTY(Transient)
+	TObjectPtr<ADeliveryBot_GridBoundsActor> RuntimeGridBoundsActor;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
+	float DeliveryBotGridBoundsPaddingCm{ 100.f };
+
 	AActor* SpawnPlaceable(const FEpisodePlaceableInstanceSpec& placeableSpec);
 	AEpisodeStaticObstacle* SpawnStaticObstacle(const FEpisodePlaceableInstanceSpec& placeableSpec);
 	AActor* SpawnRobotActor(const FEpisodePlaceableInstanceSpec& placeableSpec);
 	AActor* SpawnDynamicActor(const FEpisodeDynamicActorSpec& dynamicActorSpec);
 	AEpisodePedestrian* SpawnPedestrian(const FEpisodeDynamicActorSpec& dynamicActorSpec);
 	AEpisodePedestrian* SpawnPlannedPedestrian(const FEpisodeDynamicActorSpec& dynamicActorSpec);
+
+	bool RebuildDeliveryBotGridFromEpisodeGroundRegions(const FEpisodeSimulationSetupSpec& setupSpec);
+	bool TryBuildGroundRegionXYBounds(
+		const TArray<FEpisodeGroundRegionSpec>& groundRegionSpecs,
+		FBox2D& outXYBounds,
+		double& outCenterZ) const;
+	ADeliveryBot_GridBoundsActor* SpawnDeliveryBotGridBoundsActor(const FBox2D& xyBounds, double centerZ);
+	void ApplyXYBoundsToGridBoundsActor(
+		ADeliveryBot_GridBoundsActor* gridBoundsActor,
+		const FBox2D& xyBounds,
+		double centerZ) const;
+	static void ExpandXYBoundsWithGroundRegion(
+		const FEpisodeGroundRegionSpec& regionSpec,
+		FBox2D& inOutXYBounds);
+	bool ValidateDeliveryBotGridLocation(
+		const FString& robotInstanceId,
+		const FString& locationLabel,
+		const FVector& worldLocation) const;
+	bool ValidateDeliveryBotRouteOnGrid(
+		const FEpisodePlaceableInstanceSpec& placeableSpec,
+		const FDeliveryBotSetupInfo& setupInfo,
+		bool bHasGoal,
+		const FVector& goalLocation) const;
 
 	void RegisterRuntimeActor(
 		const FString& instanceId,

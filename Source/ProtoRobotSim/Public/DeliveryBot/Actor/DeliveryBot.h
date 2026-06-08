@@ -139,6 +139,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|VehicleSpec")
 	float MinTurningRadiusCm{ 300.f }; //  최소 회전 반경
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Debug")
+	bool bLogPolicyObservationRequests{ false };
 	
 
 private:

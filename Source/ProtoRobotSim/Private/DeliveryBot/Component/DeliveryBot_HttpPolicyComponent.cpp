@@ -133,14 +133,17 @@ bool UDeliveryBot_HttpPolicyComponent::SendObservationJson(const FString& observ
 			if (component->bIsEndingPlay)
 				return;
 
-			UE_LOG(
-				LogDeliveryBotHttpPolicy,
-				Log,
-				TEXT("Policy response | Success: %s, Code: %d, Body: %s"),
-				bWasSuccessful ? TEXT("true") : TEXT("false"),
-				responseCode,
-				*responseBody
-			);
+			if (component->bLogPolicyResponseBody)
+			{
+				UE_LOG(
+					LogDeliveryBotHttpPolicy,
+					Log,
+					TEXT("Policy response | Success: %s, Code: %d, Body: %s"),
+					bWasSuccessful ? TEXT("true") : TEXT("false"),
+					responseCode,
+					*responseBody
+				);
+			}
 
 			component->OnPolicyResponse.Broadcast(bWasSuccessful, responseCode, responseBody);
 			FDeliveryBotHttpPolicyResponseInfo responseInfo;

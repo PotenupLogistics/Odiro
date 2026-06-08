@@ -107,7 +107,7 @@ private:
 	
 	FString GetGridAreaTypeString(EDeliveryBotGridAreaType areaType) const;
 	
-	
+
 public:
 	FIntPoint GetGridIndexByWorldLocation(const FVector& worldLocation) const;
 	FVector GetWorldLocationByGridIndex(const FIntPoint& gridIndex) const;

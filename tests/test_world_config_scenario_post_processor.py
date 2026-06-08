@@ -64,7 +64,7 @@ def test_post_processor_adds_missing_kickboard_blocking_pedestrian_and_narrow_si
     assert "add_kickboard_obstacle" in patch_types
     assert "set_obstacle_blocking_ratio" in patch_types
     assert "add_crossing_pedestrian" in patch_types
-    assert result.patchedPayload["map"]["sidewalkWidthCm"] == 120.0
+    assert result.patchedPayload["map"]["sidewalkWidthCm"] == 150.0
     assert result.patchedPayload["obstacles"][0]["type"] == "Kickboard"
     assert result.patchedPayload["obstacles"][0]["blockingRatio"] == 0.6
     assert "yawDegree" not in result.patchedPayload["obstacles"][0]

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from app.core.settings import Settings
+from app.catalogs.static_obstacle_catalog import find_static_obstacle_by_prop_id, resolve_static_obstacle_prop_id
 from app.models.environment import EnvironmentParameterSet, EnvironmentSamplingRequest
 from app.services.delivery_bot_setup_variation_policy import delivery_bot_tuning_for_episode
 from app.services.environment_parameter_catalog import get_allowed_values
@@ -20,6 +21,9 @@ SCENARIO_TYPES = {
 }
 
 ComparisonMode = Literal["scenario_variation", "policy_comparison"]
+PEDESTRIAN_EDGE_MARGIN_CM = 20.0
+PEDESTRIAN_CROSSING_X_SPACING_CM = 75.0
+OBSTACLE_PATH_BUFFER_CM = 30.0
 
 
 @dataclass(frozen=True)
@@ -247,7 +251,7 @@ def _has_explicit_actor_constraints(fixed: dict[str, Any]) -> bool:
 
 
 def _pedestrian_y_offsets(count: int, half_width_cm: float, index: int) -> list[float]:
-    usable_half_width = max(0.0, half_width_cm - 5.0)
+    usable_half_width = max(0.0, half_width_cm - PEDESTRIAN_EDGE_MARGIN_CM)
     if count <= 1:
         return [0.0]
     if usable_half_width <= 0:
@@ -352,9 +356,17 @@ def _apply_fixed_scenario_constraints(
                 goal_x = goal_x_cm
                 spawn_y_cm = goal_y_cm = y_cm
             elif direction == "crossing":
-                spawn_x_cm = goal_x = _clamp(goal_x_cm * 0.5, 0.0, max_required_x_cm)
-                spawn_y_cm = -half_width_cm + 5.0
-                goal_y_cm = half_width_cm - 5.0
+                base_x_cm = _clamp(goal_x_cm * 0.5, start_x_cm, max_required_x_cm)
+                offset = (pedestrian_index - (pedestrian_count - 1) / 2.0) * PEDESTRIAN_CROSSING_X_SPACING_CM
+                spawn_x_cm = goal_x = _avoid_obstacle_x_ranges(
+                    base_x_cm + offset,
+                    obstacles,
+                    start_x_cm,
+                    goal_x_cm,
+                    pedestrian_index,
+                )
+                spawn_y_cm = -half_width_cm + PEDESTRIAN_EDGE_MARGIN_CM
+                goal_y_cm = half_width_cm - PEDESTRIAN_EDGE_MARGIN_CM
             else:
                 spawn_x_cm = goal_x_cm
                 goal_x = start_x_cm
@@ -395,6 +407,51 @@ def _pedestrian(
         "speedKmh": speed_kmh,
         "spawn_time_s": spawn_time_s,
     }
+
+
+def _obstacle_x_range_with_buffer(obstacle: dict[str, Any]) -> tuple[float, float]:
+    obstacle_type = obstacle.get("type") or "Obstacle"
+    prop_id = (
+        resolve_static_obstacle_prop_id(obstacle.get("prop_id"))
+        or resolve_static_obstacle_prop_id(obstacle.get("asset_name"))
+        or resolve_static_obstacle_prop_id(obstacle.get("asset_id"))
+        or resolve_static_obstacle_prop_id(obstacle_type)
+        or ("obstacle.road_barrier_01" if obstacle_type == "Kickboard" else "obstacle.box_01")
+    )
+    catalog_item = find_static_obstacle_by_prop_id(prop_id)
+    bbox_m = catalog_item["bbox_m"] if catalog_item else [0.0, 0.0, 0.0]
+    position = obstacle.get("position") if isinstance(obstacle.get("position"), dict) else {}
+    x_cm = float(position.get("x", 0.0) or 0.0)
+    half_width_cm = float(bbox_m[0]) * 50.0 + OBSTACLE_PATH_BUFFER_CM
+    return x_cm - half_width_cm, x_cm + half_width_cm
+
+
+def _avoid_obstacle_x_ranges(
+    candidate_x_cm: float,
+    obstacles: list[dict[str, Any]],
+    start_x_cm: float,
+    goal_x_cm: float,
+    pedestrian_index: int,
+) -> float:
+    lower = min(start_x_cm, goal_x_cm) + PEDESTRIAN_CROSSING_X_SPACING_CM
+    upper = max(start_x_cm, goal_x_cm) - PEDESTRIAN_CROSSING_X_SPACING_CM
+    if lower > upper:
+        lower, upper = min(start_x_cm, goal_x_cm), max(start_x_cm, goal_x_cm)
+    candidate = _clamp(candidate_x_cm, lower, upper)
+    for obstacle in obstacles:
+        if not isinstance(obstacle, dict):
+            continue
+        x_min, x_max = _obstacle_x_range_with_buffer(obstacle)
+        if x_min <= candidate <= x_max:
+            left_candidate = x_min - PEDESTRIAN_CROSSING_X_SPACING_CM * (pedestrian_index + 1)
+            right_candidate = x_max + PEDESTRIAN_CROSSING_X_SPACING_CM * (pedestrian_index + 1)
+            if left_candidate >= lower:
+                candidate = left_candidate
+            elif right_candidate <= upper:
+                candidate = right_candidate
+            else:
+                candidate = _clamp(left_candidate, lower, upper)
+    return round(candidate, 3)
 
 
 def _apply_scenario_variation_pattern(

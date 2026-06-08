@@ -4,7 +4,15 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.models.episode_setup import EpisodeSetup
+from app.catalogs.static_obstacle_catalog import find_static_obstacle_by_prop_id
 from app.services.setup_pair_queue_generator import SetupPairQueueResult
+
+
+START_GOAL_MARGIN_M = 2.0
+PEDESTRIAN_EDGE_MARGIN_M = 0.2
+OBSTACLE_PATH_BUFFER_M = 0.3
+MIN_SIDEWALK_WIDTH_M = 1.5
+EXPLICIT_EXTREME_SIDEWALK_WIDTH_M = 1.0
 
 
 @dataclass(frozen=True)
@@ -95,6 +103,61 @@ def _point_inside(bounds: tuple[float, float, float, float], point: list[float])
     return min_x <= point[0] <= max_x and min_y <= point[1] <= max_y
 
 
+def _point_inside_margin(bounds: tuple[float, float, float, float], point: list[float], margin_m: float) -> bool:
+    min_x, max_x, min_y, max_y = bounds
+    return min_x + margin_m <= point[0] <= max_x - margin_m and min_y + margin_m <= point[1] <= max_y - margin_m
+
+
+def _point_inside_x_margin(bounds: tuple[float, float, float, float], point: list[float], margin_m: float) -> bool:
+    min_x, max_x, min_y, max_y = bounds
+    return min_x + margin_m <= point[0] <= max_x - margin_m and min_y <= point[1] <= max_y
+
+
+def _expected_sidewalk_width_m(width_cm: float) -> float:
+    width_m = width_cm / 100.0
+    if width_m <= EXPLICIT_EXTREME_SIDEWALK_WIDTH_M:
+        return width_m
+    return max(width_m, MIN_SIDEWALK_WIDTH_M)
+
+
+def _obstacle_rect_with_buffer(obstacle: Any) -> tuple[float, float, float, float]:
+    catalog_item = find_static_obstacle_by_prop_id(str(getattr(obstacle, "prop_id", "")))
+    bbox_m = catalog_item["bbox_m"] if catalog_item else [0.0, 0.0, 0.0]
+    half_x = float(bbox_m[0]) / 2.0 + OBSTACLE_PATH_BUFFER_M
+    half_y = float(bbox_m[1]) / 2.0 + OBSTACLE_PATH_BUFFER_M
+    x, y = obstacle.xy_m
+    return x - half_x, x + half_x, y - half_y, y + half_y
+
+
+def _segment_intersects_rect(
+    start: list[float],
+    end: list[float],
+    rect: tuple[float, float, float, float],
+) -> bool:
+    min_x, max_x, min_y, max_y = rect
+    if _point_inside(rect, start) or _point_inside(rect, end):
+        return True
+    x1, y1 = start
+    x2, y2 = end
+    dx = x2 - x1
+    dy = y2 - y1
+    t_min = 0.0
+    t_max = 1.0
+    for edge, distance in ((-dx, x1 - min_x), (dx, max_x - x1), (-dy, y1 - min_y), (dy, max_y - y1)):
+        if abs(edge) < 1e-12:
+            if distance < 0:
+                return False
+            continue
+        ratio = distance / edge
+        if edge < 0:
+            t_min = max(t_min, ratio)
+        else:
+            t_max = min(t_max, ratio)
+        if t_min > t_max:
+            return False
+    return True
+
+
 def _check_episode(
     episode: EpisodeSetup,
     fixed_constraints: dict[str, Any],
@@ -119,11 +182,11 @@ def _check_episode(
             )
         )
     sidewalk_width_cm = _as_float(fixed_constraints.get("sidewalkWidthCm"))
-    if sidewalk_width_cm is not None and region is not None and not _near(region.shape.size_m[1], sidewalk_width_cm / 100.0):
+    if sidewalk_width_cm is not None and region is not None and not _near(region.shape.size_m[1], _expected_sidewalk_width_m(sidewalk_width_cm)):
         issues.append(
             ScenarioConsistencyIssue(
                 code="sidewalk_width_mismatch",
-                message="Episode sidewalk width does not match fixed sidewalkWidthCm.",
+                message="Episode sidewalk width does not match fixed or minimum safe sidewalk width.",
                 path=f"items[{episode_index}].episode_setup.ground_model.regions[sidewalk_main].shape.size_m",
             )
         )
@@ -212,6 +275,55 @@ def _check_episode(
     bounds = _sidewalk_bounds(episode)
     if bounds is None:
         return
+    if not _point_inside_x_margin(bounds, robot.xy_m, START_GOAL_MARGIN_M):
+        issues.append(
+            ScenarioConsistencyIssue(
+                code="robot_start_margin_violation",
+                message="Robot start must be inside the walkable region with x margin.",
+                path=f"items[{episode_index}].episode_setup.actors.robot.xy_m",
+            )
+        )
+    if robot.route is not None and not _point_inside_x_margin(bounds, robot.route.goal_xy_m, START_GOAL_MARGIN_M):
+        issues.append(
+            ScenarioConsistencyIssue(
+                code="robot_goal_margin_violation",
+                message="Robot goal must be inside the walkable region with x margin.",
+                path=f"items[{episode_index}].episode_setup.actors.robot.route.goal_xy_m",
+            )
+        )
+
+    path_by_id = {path.path_id: path for path in episode.paths}
+    obstacle_rects = [_obstacle_rect_with_buffer(obstacle) for obstacle in episode.actors.static_obstacles]
+    check_crossing_path_geometry = str(fixed_constraints.get("pedestrianDirection", "")).lower() == "crossing"
+    for pedestrian_index, pedestrian in enumerate(episode.actors.pedestrians):
+        path = path_by_id.get(pedestrian.path_id)
+        if path is None:
+            continue
+        is_crossing = str(pedestrian.properties.get("semantic_behavior", "")).lower() == "crossing"
+        for point_index, point in enumerate(path.points_xy_m):
+            if check_crossing_path_geometry and is_crossing and not _point_inside_margin(bounds, point, PEDESTRIAN_EDGE_MARGIN_M):
+                issues.append(
+                    ScenarioConsistencyIssue(
+                        code="pedestrian_path_margin_violation",
+                        message="Pedestrian path endpoint must stay inside the walkable region margin.",
+                        path=f"items[{episode_index}].episode_setup.paths[{path.path_id}].points_xy_m[{point_index}]",
+                    )
+                )
+                break
+        if check_crossing_path_geometry and is_crossing and len(path.points_xy_m) >= 2:
+            start = path.points_xy_m[0]
+            end = path.points_xy_m[-1]
+            for rect in obstacle_rects:
+                if _segment_intersects_rect(start, end, rect):
+                    issues.append(
+                        ScenarioConsistencyIssue(
+                            code="pedestrian_path_obstacle_overlap",
+                            message="Pedestrian path segment intersects a static obstacle bbox plus buffer.",
+                            path=f"items[{episode_index}].episode_setup.actors.pedestrians[{pedestrian_index}].path_id",
+                        )
+                    )
+                    break
+
     points = [robot.xy_m]
     if robot.route is not None:
         points.append(robot.route.goal_xy_m)

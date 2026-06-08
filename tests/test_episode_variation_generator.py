@@ -136,7 +136,7 @@ def test_generate_episode_variants_preserves_explicit_fixed_actor_constraints() 
         assert config["robot"]["spawn"] == {"x": 0, "y": 0, "z": 0}
         assert config["robot"]["goal"]["x"] == 1000.0
         assert len(config["obstacles"]) == 2
-        assert [obstacle["type"] for obstacle in config["obstacles"]] == ["Obstacle", "Obstacle"]
+        assert [obstacle["type"] for obstacle in config["obstacles"]] == ["box", "box"]
         assert [obstacle["position"]["x"] for obstacle in config["obstacles"]] == [300.0, 600.0]
         assert [obstacle["position"]["y"] for obstacle in config["obstacles"]] == [0.0, 0.0]
         assert len(config["pedestrians"]) == 3

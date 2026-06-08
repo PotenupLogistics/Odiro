@@ -65,7 +65,7 @@ def _semantic_fixed_constraints_from_prompt(prompt: str) -> dict[str, int | floa
     if intent.sidewalkWidthCm is not None:
         fixed["sidewalkWidthCm"] = intent.sidewalkWidthCm
     elif "narrow_sidewalk" in intent.mapHints:
-        fixed["sidewalkWidthCm"] = 120
+        fixed["sidewalkWidthCm"] = 150
     if intent.goalDistanceM is not None:
         fixed["goalDistanceM"] = intent.goalDistanceM
     if intent.obstacleCount is not None:

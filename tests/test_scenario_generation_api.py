@@ -166,9 +166,9 @@ def test_scenario_generation_request_maps_simple_prompt_without_strict_numeric_c
     sampler_fixed = request.constraints.environmentSampling["fixedParameters"]
     fixed = request.constraints.semanticFixedConstraints
 
-    assert sampler_fixed == {"sidewalkWidthCm": 120}
+    assert sampler_fixed == {"sidewalkWidthCm": 150}
     assert fixed is not None
-    assert fixed["sidewalkWidthCm"] == 120
+    assert fixed["sidewalkWidthCm"] == 150
     assert fixed["obstacleType"] == "static_obstacle"
     assert fixed["pedestrianCount"] == 0
     assert fixed["expectedRobotBehavior"] == ["SlowDown", "ReplanPath"]
@@ -184,7 +184,7 @@ def test_scenario_generation_request_keeps_sampler_fixed_parameters_catalog_comp
                 "좁은 보도에서 정적 장애물이 배달 로봇의 경로 일부를 막고 있는 상황을 생성해줘. "
                 "보행자는 없고, 로봇은 안전하게 감속하거나 우회해야 한다."
             ),
-            {"sidewalkWidthCm": 120},
+            {"sidewalkWidthCm": 150},
         ),
         (
             (

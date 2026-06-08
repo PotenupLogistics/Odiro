@@ -39,7 +39,7 @@ def test_converts_world_config_to_episode_setup_without_mutating_input() -> None
     assert episode.run.base_seed == 1001
     assert episode.run.time_limit_s == 60
     assert episode.ground_model.default_region_type == "blocked"
-    assert episode.ground_model.regions[0].shape.size_m == [8.0, 1.2]
+    assert episode.ground_model.regions[0].shape.size_m == [12.0, 1.5]
     assert episode.ground_model.regions[0].region_type == "walkable"
     assert episode.ground_model.regions[0].shape.center_xy_m == [4.0, 0.0]
     assert episode.actors.robot.xy_m == [0.0, 0.0]
@@ -52,6 +52,30 @@ def test_converts_world_config_to_episode_setup_without_mutating_input() -> None
     assert episode.actors.pedestrians == []
     assert "policyId" not in episode.model_dump(mode="json", by_alias=True)
     assert validate_episode_setup(episode).valid is True
+
+
+def test_walkable_region_wraps_robot_start_and_goal_with_margin() -> None:
+    episode = convert_world_config_to_episode_setup(_world_config())
+    region = episode.ground_model.regions[0]
+    center_x, _ = region.shape.center_xy_m
+    size_x, _ = region.shape.size_m
+    x_min = center_x - size_x / 2.0
+    x_max = center_x + size_x / 2.0
+
+    assert x_min == -2.0
+    assert x_max == 10.0
+    assert episode.actors.robot.xy_m[0] - x_min >= 2.0
+    assert x_max - episode.actors.robot.route.goal_xy_m[0] >= 2.0
+
+
+def test_explicit_one_meter_sidewalk_width_is_preserved() -> None:
+    world_config = _world_config()
+    world_config["map"]["sidewalkWidthCm"] = 100
+    world_config["semanticFixedConstraints"] = {"sidewalkWidthCm": 100}
+
+    episode = convert_world_config_to_episode_setup(world_config)
+
+    assert episode.ground_model.regions[0].shape.size_m[1] == 1.0
 
 
 def test_episode_setup_export_payload_is_null_free_and_uses_evaluation_defaults() -> None:

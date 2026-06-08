@@ -20,6 +20,11 @@ from app.models.episode_setup import (
 )
 
 
+START_GOAL_MARGIN_M = 2.0
+MIN_SIDEWALK_WIDTH_M = 1.5
+EXPLICIT_EXTREME_SIDEWALK_WIDTH_M = 1.0
+
+
 def _cm_to_m(value: Any) -> float:
     return float(value or 0.0) / 100.0
 
@@ -29,10 +34,47 @@ def _xy_m(location: dict[str, Any] | None) -> list[float]:
     return [_cm_to_m(source.get("x", 0.0)), _cm_to_m(source.get("y", 0.0))]
 
 
+def _fixed_constraints(world_config: dict[str, Any]) -> dict[str, Any]:
+    semantic_constraints = world_config.get("semanticFixedConstraints")
+    if isinstance(semantic_constraints, dict):
+        return semantic_constraints
+    environment_sampling = world_config.get("environmentSampling")
+    if isinstance(environment_sampling, dict):
+        environment_constraints = environment_sampling.get("semanticFixedConstraints")
+        if isinstance(environment_constraints, dict):
+            return environment_constraints
+        fixed_parameters = environment_sampling.get("fixedParameters")
+        if isinstance(fixed_parameters, dict):
+            return fixed_parameters
+    constraints = world_config.get("constraints")
+    if isinstance(constraints, dict):
+        semantic_constraints = constraints.get("semanticFixedConstraints")
+        if isinstance(semantic_constraints, dict):
+            return semantic_constraints
+    return {}
+
+
+def _sidewalk_width_m(world_config: dict[str, Any], raw_width_m: float) -> float:
+    fixed_width_cm = _fixed_constraints(world_config).get("sidewalkWidthCm")
+    if isinstance(fixed_width_cm, int | float) and not isinstance(fixed_width_cm, bool):
+        fixed_width_m = float(fixed_width_cm) / 100.0
+        if fixed_width_m <= EXPLICIT_EXTREME_SIDEWALK_WIDTH_M:
+            return fixed_width_m
+    return max(raw_width_m, MIN_SIDEWALK_WIDTH_M)
+
+
 def _ground_model(world_config: dict[str, Any]) -> GroundModel:
     map_config = world_config.get("map") if isinstance(world_config.get("map"), dict) else {}
-    length_m = _cm_to_m(map_config.get("lengthCm", 0.0))
-    width_m = _cm_to_m(map_config.get("sidewalkWidthCm", 0.0))
+    robot = world_config.get("robot") if isinstance(world_config.get("robot"), dict) else {}
+    start_xy_m = _xy_m(robot.get("spawn"))
+    goal_xy_m = _xy_m(robot.get("goal"))
+    fallback_length_m = _cm_to_m(map_config.get("lengthCm", 0.0))
+    if goal_xy_m == [0.0, 0.0] and fallback_length_m > 0:
+        goal_xy_m = [fallback_length_m, start_xy_m[1]]
+    x_min = min(start_xy_m[0], goal_xy_m[0]) - START_GOAL_MARGIN_M
+    x_max = max(start_xy_m[0], goal_xy_m[0]) + START_GOAL_MARGIN_M
+    center_y = (start_xy_m[1] + goal_xy_m[1]) / 2.0
+    width_m = _sidewalk_width_m(world_config, _cm_to_m(map_config.get("sidewalkWidthCm", 0.0)))
     return GroundModel(
         default_region_type="blocked",
         regions=[
@@ -41,8 +83,8 @@ def _ground_model(world_config: dict[str, Any]) -> GroundModel:
                 region_type="walkable",
                 shape=RegionShape(
                     type="rectangle",
-                    center_xy_m=[length_m / 2.0, 0.0],
-                    size_m=[length_m, width_m],
+                    center_xy_m=[(x_min + x_max) / 2.0, center_y],
+                    size_m=[x_max - x_min, width_m],
                     yaw_deg=0.0,
                 ),
                 traversability_score=1.0,

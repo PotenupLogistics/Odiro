@@ -21,7 +21,7 @@ def test_setup_pair_trace_builder_summarizes_episode_and_delivery_bot_sources() 
     items = build_setup_pair_trace_items(world_config, episode_setup, delivery_bot_setup)
     text = "\n".join(item["valueSummary"] for item in items)
 
-    assert "map.sidewalkWidthCm=120 -> ground_model.regions[0].shape.size_m[1]=1.2" in text
+    assert "map.sidewalkWidthCm=120 -> ground_model.regions[0].shape.size_m[1]=1.5" in text
     assert "robot.goal.x=800cm -> actors.robot.route.goal_xy_m[0]=8.0" in text
     assert "obstacle.position={x:400,y:-40}cm -> static_obstacles[0].xy_m=[4.0,-0.4]" in text
     assert "lidar.stop_distance_m=1.2 default" in text

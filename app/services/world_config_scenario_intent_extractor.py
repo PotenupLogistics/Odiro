@@ -21,6 +21,9 @@ def _extract_sidewalk_width_cm(text: str) -> float | None:
     if match:
         return float(match.group(1))
     match = re.search(r"보도\s*폭(?:은|이)?\s*(?:약\s*)?(\d+(?:\.\d+)?)\s*m", text, re.IGNORECASE)
+    if match:
+        return float(match.group(1)) * 100.0
+    match = re.search(r"(\d+(?:\.\d+)?)\s*m\s*폭(?:의)?\s*(?:극단적으로\s*)?(?:좁은\s*)?(?:보도|통로)", text, re.IGNORECASE)
     return float(match.group(1)) * 100.0 if match else None
 
 

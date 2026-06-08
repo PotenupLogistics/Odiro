@@ -13,7 +13,7 @@ from app.services.route_geometry_utils import compute_midpoint, is_point_near_ro
 from app.services.world_config_scenario_intent_extractor import extract_scenario_intent
 
 
-NARROW_SIDEWALK_WIDTH_CM = 120.0
+NARROW_SIDEWALK_WIDTH_CM = 150.0
 PATH_BLOCKING_RATIO = 0.6
 
 

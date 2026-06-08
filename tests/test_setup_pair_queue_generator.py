@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.core.settings import Settings
+from app.catalogs.static_obstacle_catalog import find_static_obstacle_by_prop_id
 from app.services.episode_setup_validator import ALLOWED_STATIC_PROP_IDS
 from app.services.scenario_consistency_checker import check_setup_pair_queue_consistency
 from app.services.setup_pair_queue_generator import generate_setup_pair_queue
@@ -131,6 +132,46 @@ def _assert_episode_points_inside_sidewalk(item) -> None:
         assert min_y <= point[1] <= max_y
 
 
+def _segment_intersects_rect(start: list[float], end: list[float], rect: tuple[float, float, float, float]) -> bool:
+    min_x, max_x, min_y, max_y = rect
+    if min_x <= start[0] <= max_x and min_y <= start[1] <= max_y:
+        return True
+    if min_x <= end[0] <= max_x and min_y <= end[1] <= max_y:
+        return True
+    x1, y1 = start
+    x2, y2 = end
+    dx = x2 - x1
+    dy = y2 - y1
+    t_min = 0.0
+    t_max = 1.0
+    for edge, distance in ((-dx, x1 - min_x), (dx, max_x - x1), (-dy, y1 - min_y), (dy, max_y - y1)):
+        if abs(edge) < 1e-12:
+            if distance < 0:
+                return False
+            continue
+        ratio = distance / edge
+        if edge < 0:
+            t_min = max(t_min, ratio)
+        else:
+            t_max = min(t_max, ratio)
+        if t_min > t_max:
+            return False
+    return True
+
+
+def _obstacle_rect_with_buffer(obstacle, buffer_m: float = 0.3) -> tuple[float, float, float, float]:
+    catalog_item = find_static_obstacle_by_prop_id(obstacle.prop_id)
+    bbox_m = catalog_item["bbox_m"] if catalog_item else [0.0, 0.0, 0.0]
+    half_x = bbox_m[0] / 2.0 + buffer_m
+    half_y = bbox_m[1] / 2.0 + buffer_m
+    return (
+        obstacle.xy_m[0] - half_x,
+        obstacle.xy_m[0] + half_x,
+        obstacle.xy_m[1] - half_y,
+        obstacle.xy_m[1] + half_y,
+    )
+
+
 def test_generate_setup_pair_queue_creates_default_five_valid_pairs() -> None:
     result = generate_setup_pair_queue(_world_config())
 
@@ -179,7 +220,7 @@ def test_generate_setup_pair_queue_uses_distinct_episode_setups() -> None:
     episode = result.items[0].episode_setup
     region = episode.ground_model.regions[0]
     assert region.shape.center_xy_m == [4.0, 0.0]
-    assert region.shape.size_m == [8.0, 1.2]
+    assert region.shape.size_m == [12.0, 1.5]
     assert episode.actors.robot.xy_m == [0.0, 0.0]
     assert episode.actors.static_obstacles[0].xy_m[0] == 4.0
     assert episode.actors.robot.route is not None
@@ -289,7 +330,7 @@ def test_generate_setup_pair_queue_preserves_explicit_fixed_constraints_in_episo
         episode = item.episode_setup
         region = episode.ground_model.regions[0]
         robot = episode.actors.robot
-        assert region.shape.size_m == [10.0, 1.2]
+        assert region.shape.size_m == [14.0, 1.5]
         assert robot.route is not None
         assert robot.route.goal_xy_m[0] - robot.xy_m[0] == 10.0
         assert [obstacle.prop_id for obstacle in episode.actors.static_obstacles] == [
@@ -339,7 +380,7 @@ def test_generate_setup_pair_queue_applies_140cm_crossing_semantic_constraints()
         episode = item.episode_setup
         region = episode.ground_model.regions[0]
         robot = episode.actors.robot
-        assert region.shape.size_m == [10.0, 1.4]
+        assert region.shape.size_m == [14.0, 1.5]
         assert robot.route is not None
         assert robot.route.goal_xy_m[0] - robot.xy_m[0] == 10.0
         assert [obstacle.prop_id for obstacle in episode.actors.static_obstacles] == ["obstacle.box_01"]
@@ -359,7 +400,7 @@ def test_generate_setup_pair_queue_applies_180cm_mixed_obstacle_semantic_constra
         episode = item.episode_setup
         region = episode.ground_model.regions[0]
         robot = episode.actors.robot
-        assert region.shape.size_m == [12.0, 1.8]
+        assert region.shape.size_m == [16.0, 1.8]
         assert robot.route is not None
         assert robot.route.goal_xy_m[0] - robot.xy_m[0] == 12.0
         assert [obstacle.properties["semantic_type"] for obstacle in episode.actors.static_obstacles] == [
@@ -406,3 +447,44 @@ def test_unsupported_obstacle_type_falls_back_to_allowed_prop_id_without_new_ass
     assert obstacle.prop_id in ALLOWED_STATIC_PROP_IDS
     assert obstacle.prop_id == "obstacle.box_01"
     assert result.items[0].episode_setup_validation.valid is True
+
+
+def test_crossing_pedestrian_paths_stay_inside_region_margin_and_avoid_obstacle_bbox() -> None:
+    config = _world_config()
+    config["semanticFixedConstraints"] = {
+        "sidewalkWidthCm": 150.0,
+        "goalDistanceM": 10.0,
+        "obstacleCount": 1,
+        "obstacleType": "road_barrier",
+        "obstaclePositionsFromStartM": [5.0],
+        "obstacleLateralPosition": "center",
+        "pedestrianCount": 2,
+        "pedestrianDirection": "crossing",
+    }
+
+    result = generate_setup_pair_queue(config, episode_count=2)
+    consistency = check_setup_pair_queue_consistency(
+        result,
+        fixed_constraints=config["semanticFixedConstraints"],
+        expected_episode_count=2,
+    )
+
+    assert consistency.passed is True
+    for item in result.items:
+        episode = item.episode_setup
+        region = episode.ground_model.regions[0]
+        center_x, center_y = region.shape.center_xy_m
+        size_x, size_y = region.shape.size_m
+        min_y = center_y - size_y / 2.0
+        max_y = center_y + size_y / 2.0
+        path_by_id = {path.path_id: path for path in episode.paths}
+        obstacle_rects = [_obstacle_rect_with_buffer(obstacle) for obstacle in episode.actors.static_obstacles]
+
+        assert len(episode.actors.pedestrians) == 2
+        assert len({tuple(pedestrian.xy_m) for pedestrian in episode.actors.pedestrians}) == 2
+        for pedestrian in episode.actors.pedestrians:
+            path = path_by_id[pedestrian.path_id]
+            assert path.points_xy_m[0][1] > min_y + 0.19
+            assert path.points_xy_m[-1][1] < max_y - 0.19
+            for rect in obstacle_rects:
+                assert not _segment_intersects_rect(path.points_xy_m[0], path.points_xy_m[-1], rect)

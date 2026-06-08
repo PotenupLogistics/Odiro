@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from app.catalogs.static_obstacle_catalog import resolve_static_obstacle_prop_id
 from app.models.episode_spec import (
     EpisodeActors,
     EpisodeConversionWarning,
@@ -123,6 +124,14 @@ def _pedestrians(world_config: dict[str, Any]) -> tuple[list[EpisodePath], list[
 
 def _prop_for_obstacle(obstacle: dict[str, Any], warnings: list[EpisodeConversionWarning], index: int) -> str:
     obstacle_type = obstacle.get("type") or "Obstacle"
+    resolved = (
+        resolve_static_obstacle_prop_id(obstacle.get("prop_id"))
+        or resolve_static_obstacle_prop_id(obstacle.get("asset_name"))
+        or resolve_static_obstacle_prop_id(obstacle.get("asset_id"))
+        or resolve_static_obstacle_prop_id(obstacle_type)
+    )
+    if resolved is not None:
+        return resolved
     if obstacle_type == "Kickboard":
         warnings.append(
             EpisodeConversionWarning(

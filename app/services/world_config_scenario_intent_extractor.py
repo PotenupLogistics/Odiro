@@ -52,6 +52,22 @@ def _extract_count_near(text: str, keywords: tuple[str, ...], units: tuple[str, 
 
 
 def _extract_obstacle_type(text: str) -> str | None:
+    if _contains_any(text, ("안전콘", "라바콘", "traffic cone", "traffic_cone", "road cone", "cone", "콘")):
+        return "traffic_cone"
+    if _contains_any(text, ("쓰레기통", "trash can", "trash_can", "trash bin", "trash_bin", "garbage can")):
+        return "trash_bin"
+    if _contains_any(text, ("바리케이드", "차단막", "barrier", "road barrier", "road_barrier", "barricade")):
+        return "road_barrier"
+    if _contains_any(text, ("맨홀", "manhole")):
+        return "manhole"
+    if _contains_any(text, ("소화전", "hydrant", "fire hydrant")):
+        return "fire_hydrant"
+    if _contains_any(text, ("우편함", "mailbox", "mail box")):
+        return "mailbox"
+    if _contains_any(text, ("벤치", "street bench", "street bank", "bench", "bank")):
+        return "street_bank"
+    if _contains_any(text, ("상자", "박스", "box")):
+        return "box"
     if _contains_any(text, ("박스형", "박스", "box")) and _contains_any(text, ("장애물", "정적 장애물")):
         return "box"
     if _contains_any(text, ("정적 장애물", "static obstacle")):
@@ -228,7 +244,7 @@ def extract_scenario_intent(prompt: str) -> ScenarioIntent:
         _append_unique(intent.suggestedActions, ["SlowDown", "Stop", "LocalAvoidance", "ReplanPath"])
         _append_unique(intent.suggestedPolicyParams, ["safeDistanceCm", "perceptionMinRangeM"])
 
-    if _contains_any(text, ("장애물", "정적 장애물", "로봇 경로 중앙", "경로 중앙", "막고", "막힘", "경로를 막", "막는 정도", "blockingratio", "blocking ratio", "차단")):
+    if intent.obstacleType is not None or _contains_any(text, ("장애물", "정적 장애물", "로봇 경로 중앙", "경로 중앙", "막고", "막힘", "경로를 막", "막는 정도", "blockingratio", "blocking ratio", "차단")):
         intent.pathBlockingHints = True
         _append_unique(intent.obstacleHints, ["Obstacle"])
         _append_unique(intent.suggestedCategories, ["perception_requirement"])

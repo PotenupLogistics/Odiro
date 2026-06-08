@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from app.catalogs.static_obstacle_catalog import get_allowed_static_obstacle_prop_ids
 from app.models.episode_spec import (
     EpisodeSpec,
     EpisodeValidationError,
@@ -12,24 +13,7 @@ from app.models.episode_spec import (
 )
 
 
-ALLOWED_STATIC_PROP_IDS = {
-    "obstacle.bin",
-    "obstacle.box_01",
-    "obstacle.box_02",
-    "obstacle.box_03",
-    "obstacle.fire_hydrant",
-    "obstacle.mailbox",
-    "obstacle.manhole_01",
-    "obstacle.manhole_02",
-    "obstacle.manhole_03",
-    "obstacle.manhole_04",
-    "obstacle.road_cone_01",
-    "obstacle.road_cone_02",
-    "obstacle.road_barrier_01",
-    "obstacle.road_barrier_02",
-    "obstacle.street_bank",
-    "obstacle.trash_bin",
-}
+ALLOWED_STATIC_PROP_IDS = get_allowed_static_obstacle_prop_ids()
 
 
 def _error(code: str, message: str, path: str | None = None) -> EpisodeValidationError:

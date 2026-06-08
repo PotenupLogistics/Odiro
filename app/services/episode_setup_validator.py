@@ -4,14 +4,11 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from app.catalogs.static_obstacle_catalog import get_allowed_static_obstacle_prop_ids
 from app.models.episode_setup import EpisodeSetup, SetupValidationError, SetupValidationResult, SetupValidationWarning
 
 
-ALLOWED_STATIC_PROP_IDS = {
-    "obstacle.box_01",
-    "obstacle.road_barrier_01",
-    "obstacle.road_cone_01",
-}
+ALLOWED_STATIC_PROP_IDS = get_allowed_static_obstacle_prop_ids()
 
 FORBIDDEN_ACTOR_FIELDS = {"transform", "location_m", "rotation_deg", "scale"}
 

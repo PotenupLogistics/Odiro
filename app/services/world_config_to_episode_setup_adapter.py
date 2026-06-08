@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from app.catalogs.static_obstacle_catalog import resolve_static_obstacle_prop_id
 from app.models.episode_setup import (
     EpisodeActors,
     EpisodePath,
@@ -68,14 +69,24 @@ def _robot(world_config: dict[str, Any]) -> EpisodeRobot:
 def _obstacles(world_config: dict[str, Any]) -> list[EpisodeStaticObstacle]:
     obstacles = world_config.get("obstacles") if isinstance(world_config.get("obstacles"), list) else []
     actors: list[EpisodeStaticObstacle] = []
+    instance_counts: dict[str, int] = {}
     for index, obstacle in enumerate(obstacles, start=1):
         if not isinstance(obstacle, dict):
             continue
         obstacle_type = obstacle.get("type") or "Obstacle"
-        prop_id = "obstacle.box_01" if obstacle_type == "Obstacle" else "obstacle.road_barrier_01"
+        prop_id = (
+            resolve_static_obstacle_prop_id(obstacle.get("prop_id"))
+            or resolve_static_obstacle_prop_id(obstacle.get("asset_name"))
+            or resolve_static_obstacle_prop_id(obstacle.get("asset_id"))
+            or resolve_static_obstacle_prop_id(obstacle_type)
+            or ("obstacle.road_barrier_01" if obstacle_type == "Kickboard" else "obstacle.box_01")
+        )
+        base_instance_id = prop_id.removeprefix("obstacle.")
+        instance_counts[base_instance_id] = instance_counts.get(base_instance_id, 0) + 1
+        instance_id = obstacle.get("objectId") or f"{base_instance_id}_{instance_counts[base_instance_id]:02d}"
         actors.append(
             EpisodeStaticObstacle(
-                instance_id=obstacle.get("objectId") or f"obstacle_{index:02d}",
+                instance_id=instance_id,
                 prop_id=prop_id,
                 xy_m=_xy_m(obstacle.get("position")),
                 yaw_deg=float(obstacle.get("yawDegree", 0.0)),

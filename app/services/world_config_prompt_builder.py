@@ -9,6 +9,7 @@ from app.models.generation import (
     WorldConfigPromptPackage,
     WorldConfigRepairPromptPackage,
 )
+from app.catalogs.static_obstacle_catalog import static_obstacle_catalog_prompt_section
 from app.services.natural_language_normalizer import normalize_prompt
 from app.services.world_config_rag_context_builder import build_policy_context_for_world_config
 from app.services.world_config_output_contract_builder import build_world_config_output_contract
@@ -133,7 +134,8 @@ def build_world_config_prompt_package(
     enum_summary = build_world_config_enum_summary()
     generation_rules = build_world_config_generation_rules()
     output_contract = build_world_config_output_contract()
-    hardened_system_prompt = "\n\n".join([SYSTEM_PROMPT, output_contract, required_checklist, generation_rules])
+    static_obstacle_catalog = static_obstacle_catalog_prompt_section()
+    hardened_system_prompt = "\n\n".join([SYSTEM_PROMPT, output_contract, required_checklist, generation_rules, static_obstacle_catalog])
 
     user_prompt = f"""User scenario prompt:
 {normalize_prompt(request.prompt)}
@@ -167,6 +169,8 @@ World Config required fields:
 {generation_rules}
 
 {output_contract}
+
+{static_obstacle_catalog}
 
 Instructions:
 - Create a World Config payload for targetContractType=world_config.

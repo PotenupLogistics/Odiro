@@ -88,6 +88,10 @@ def _first_obstacle(obstacles: list[dict[str, Any]]) -> dict[str, Any] | None:
     return next((item for item in obstacles if isinstance(item, dict)), None)
 
 
+def _world_obstacle_type(intent: ScenarioIntent) -> str:
+    return intent.obstacleType if intent.obstacleType and intent.obstacleType != "static_obstacle" else "Obstacle"
+
+
 def apply_scenario_intent_to_world_config(
     prompt: str,
     payload: dict,
@@ -157,7 +161,7 @@ def apply_scenario_intent_to_world_config_from_intent(
     if target_obstacle is None and (_has_hint(intent.obstacleHints, "Obstacle") or intent.pathBlockingHints):
         target_obstacle = {
             "objectId": "obstacle_001",
-            "type": "Obstacle",
+            "type": _world_obstacle_type(intent),
             "position": intent.obstaclePositionHint or route_midpoint,
             "blockingRatio": intent.obstacleBlockingRatio if intent.obstacleBlockingRatio is not None else PATH_BLOCKING_RATIO,
         }

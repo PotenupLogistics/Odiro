@@ -6,36 +6,15 @@
 #include "Engine/StaticMesh.h"
 #include "Episode/Components/EpisodeObstacleCollisionComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
+#include "Episode/Data/EpisodeStaticObstaclePropCatalog.h"
 #include "PhysicsEngine/AggregateGeom.h"
 #include "PhysicsEngine/BodySetup.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogEpisodeStaticObstacle, Log, All);
 
 namespace
 {
 	const FString ObjectTypeActorTagPrefix{ TEXT("ObjectType.") };
-
-	FEpisodeStaticObstaclePropEntry MakeStaticObstaclePropEntry(
-		const TCHAR* propId,
-		const TCHAR* semanticTypeId,
-		const TCHAR* displayName,
-		EEpisodeStaticObstaclePropCategory category,
-		const TCHAR* meshPath,
-		const FVector& fallbackBoxExtent,
-		double safetyRadius,
-		bool bUseMeshSimpleCollision = true,
-		bool bUseFallbackBoxCollision = true)
-	{
-		FEpisodeStaticObstaclePropEntry entry;
-		entry.PropId = FName(propId);
-		entry.SemanticTypeId = FName(semanticTypeId);
-		entry.DisplayName = FText::FromString(displayName);
-		entry.Category = category;
-		entry.StaticMeshAsset = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(meshPath));
-		entry.FallbackBoxExtent = fallbackBoxExtent;
-		entry.SafetyRadius = safetyRadius;
-		entry.bUseMeshSimpleCollision = bUseMeshSimpleCollision;
-		entry.bUseFallbackBoxCollision = bUseFallbackBoxCollision;
-		return entry;
-	}
 
 	bool StaticMeshHasSimpleCollision(UStaticMesh* staticMesh)
 	{
@@ -83,6 +62,7 @@ namespace
 
 		return FName(*(ObjectTypeActorTagPrefix + semanticTypeId.ToString()));
 	}
+
 }
 
 AEpisodeStaticObstacle::AEpisodeStaticObstacle()
@@ -103,6 +83,8 @@ AEpisodeStaticObstacle::AEpisodeStaticObstacle()
 
 	PlaceableComponent = CreateDefaultSubobject<UEpisodePlaceableComponent>(TEXT("PlaceableComponent"));
 	ObstacleCollisionComponent = CreateDefaultSubobject<UEpisodeObstacleCollisionComponent>(TEXT("ObstacleCollisionComponent"));
+
+	StaticObstaclePropCatalog = UEpisodeStaticObstaclePropCatalog::MakeDefaultCatalogReference();
 
 	ApplyCollisionSettings();
 }
@@ -230,66 +212,29 @@ void AEpisodeStaticObstacle::ApplyCollisionSettings()
 bool AEpisodeStaticObstacle::ApplyDefaultPropById(FName inPropId)
 {
 	FEpisodeStaticObstaclePropEntry propEntry;
-	if (!FindDefaultPropEntryById(inPropId, propEntry)) return false;
+	if (!TryFindConfiguredPropEntry(inPropId, propEntry)) return false;
 
 	return ApplyPropEntry(propEntry);
 }
 
-bool AEpisodeStaticObstacle::FindDefaultPropEntryById(FName inPropId, FEpisodeStaticObstaclePropEntry& outPropEntry)
+bool AEpisodeStaticObstacle::TryFindConfiguredPropEntry(
+	FName inPropId,
+	FEpisodeStaticObstaclePropEntry& outPropEntry) const
 {
 	if (inPropId.IsNone()) return false;
 
-	for (const FEpisodeStaticObstaclePropEntry& propEntry : GetDefaultPropEntries())
+	const UEpisodeStaticObstaclePropCatalog* propCatalog = StaticObstaclePropCatalog.LoadSynchronous();
+	if (!IsValid(propCatalog))
 	{
-		if (propEntry.PropId == inPropId)
-		{
-			outPropEntry = propEntry;
-			return true;
-		}
+		UE_LOG(
+			LogEpisodeStaticObstacle,
+			Warning,
+			TEXT("Episode static obstacle prop catalog is not configured or failed to load: %s"),
+			*StaticObstaclePropCatalog.ToSoftObjectPath().ToString());
+		return false;
 	}
 
-	return false;
-}
-
-const TArray<FEpisodeStaticObstaclePropEntry>& AEpisodeStaticObstacle::GetDefaultPropEntries()
-{
-	static const TArray<FEpisodeStaticObstaclePropEntry> propEntries =
-	{
-		MakeStaticObstaclePropEntry(TEXT("obstacle.bin"), TEXT("bin"), TEXT("Bin"), EEpisodeStaticObstaclePropCategory::StreetFurniture, TEXT("/Game/Models/Placeable/StaticMeshes/SM_Bin.SM_Bin"), FVector(45.0, 45.0, 90.0), 75.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.box_01"), TEXT("box"), TEXT("Box 01"), EEpisodeStaticObstaclePropCategory::DeliveryItem, TEXT("/Game/Models/Placeable/StaticMeshes/SM_Box_01.SM_Box_01"), FVector(45.0, 45.0, 45.0), 70.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.box_02"), TEXT("box"), TEXT("Box 02"), EEpisodeStaticObstaclePropCategory::DeliveryItem, TEXT("/Game/Models/Placeable/StaticMeshes/SM_Box_02.SM_Box_02"), FVector(45.0, 45.0, 45.0), 70.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.box_03"), TEXT("box"), TEXT("Box 03"), EEpisodeStaticObstaclePropCategory::DeliveryItem, TEXT("/Game/Models/Placeable/StaticMeshes/SM_Box_03.SM_Box_03"), FVector(45.0, 45.0, 45.0), 70.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.fire_hydrant"), TEXT("fire_hydrant"), TEXT("Fire Hydrant"), EEpisodeStaticObstaclePropCategory::Utility, TEXT("/Game/Models/Placeable/StaticMeshes/SM_FireHydrant.SM_FireHydrant"), FVector(35.0, 35.0, 80.0), 60.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.mailbox"), TEXT("mailbox"), TEXT("Mailbox"), EEpisodeStaticObstaclePropCategory::StreetFurniture, TEXT("/Game/Models/Placeable/StaticMeshes/SM_Mailbox.SM_Mailbox"), FVector(55.0, 45.0, 90.0), 80.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.manhole_01"), TEXT("manhole"), TEXT("Manhole 01"), EEpisodeStaticObstaclePropCategory::SurfaceObject, TEXT("/Game/Models/Placeable/StaticMeshes/SM_Manhole_01.SM_Manhole_01"), FVector(55.0, 55.0, 5.0), 65.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.manhole_02"), TEXT("manhole"), TEXT("Manhole 02"), EEpisodeStaticObstaclePropCategory::SurfaceObject, TEXT("/Game/Models/Placeable/StaticMeshes/SM_Manhole_02.SM_Manhole_02"), FVector(55.0, 55.0, 5.0), 65.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.manhole_03"), TEXT("manhole"), TEXT("Manhole 03"), EEpisodeStaticObstaclePropCategory::SurfaceObject, TEXT("/Game/Models/Placeable/StaticMeshes/SM_Manhole_03.SM_Manhole_03"), FVector(55.0, 55.0, 5.0), 65.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.manhole_04"), TEXT("manhole"), TEXT("Manhole 04"), EEpisodeStaticObstaclePropCategory::SurfaceObject, TEXT("/Game/Models/Placeable/StaticMeshes/SM_Manhole_04.SM_Manhole_04"), FVector(55.0, 55.0, 5.0), 65.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.road_cone_01"), TEXT("road_cone"), TEXT("Road Cone 01"), EEpisodeStaticObstaclePropCategory::TrafficControl, TEXT("/Game/Models/Placeable/StaticMeshes/SM_RoadCone_01.SM_RoadCone_01"), FVector(35.0, 35.0, 70.0), 55.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.road_cone_02"), TEXT("road_cone"), TEXT("Road Cone 02"), EEpisodeStaticObstaclePropCategory::TrafficControl, TEXT("/Game/Models/Placeable/StaticMeshes/SM_RoadCone_02.SM_RoadCone_02"), FVector(35.0, 35.0, 70.0), 55.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.road_barrier_01"), TEXT("road_barrier"), TEXT("Road Barrier 01"), EEpisodeStaticObstaclePropCategory::TrafficControl, TEXT("/Game/Models/Placeable/StaticMeshes/SM_Road_Barrier_01.SM_Road_Barrier_01"), FVector(120.0, 35.0, 60.0), 130.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.road_barrier_02"), TEXT("road_barrier"), TEXT("Road Barrier 02"), EEpisodeStaticObstaclePropCategory::TrafficControl, TEXT("/Game/Models/Placeable/StaticMeshes/SM_Road_Barrier_02.SM_Road_Barrier_02"), FVector(120.0, 35.0, 60.0), 130.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.street_bank"), TEXT("street_bank"), TEXT("Street Bank"), EEpisodeStaticObstaclePropCategory::StreetFurniture, TEXT("/Game/Models/Placeable/StaticMeshes/SM_StreetBank.SM_StreetBank"), FVector(100.0, 45.0, 60.0), 115.0),
-		MakeStaticObstaclePropEntry(TEXT("obstacle.trash_bin"), TEXT("trash_bin"), TEXT("Trash Bin"), EEpisodeStaticObstaclePropCategory::StreetFurniture, TEXT("/Game/Models/Placeable/StaticMeshes/SM_Trash_Bin.SM_Trash_Bin"), FVector(45.0, 45.0, 90.0), 75.0)
-	};
-
-	return propEntries;
-}
-
-TArray<FName> AEpisodeStaticObstacle::GetDefaultPropIds()
-{
-	TArray<FName> propIds;
-	propIds.Reserve(GetDefaultPropEntries().Num());
-
-	for (const FEpisodeStaticObstaclePropEntry& propEntry : GetDefaultPropEntries())
-	{
-		if (!propEntry.PropId.IsNone())
-		{
-			propIds.Add(propEntry.PropId);
-		}
-	}
-
-	return propIds;
+	return propCatalog->FindPropEntryById(inPropId, outPropEntry);
 }
 
 bool AEpisodeStaticObstacle::GetPlacementBounds(

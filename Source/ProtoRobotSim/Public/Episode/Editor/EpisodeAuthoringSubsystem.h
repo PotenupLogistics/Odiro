@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Episode/Data/EpisodeStaticObstaclePropCatalog.h"
 #include "Episode/Editor/EpisodeEditorTypes.h"
 #include "Shared/EpisodeCompileTypes.h"
 #include "Shared/EpisodeSpecTypes.h"
@@ -12,6 +13,7 @@ class AEpisodePedestrian;
 class AActor;
 class FJsonObject;
 class FJsonValue;
+class UEpisodeCompiler;
 
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API UEpisodeAuthoringSubsystem : public UWorldSubsystem
@@ -53,6 +55,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
 	TSubclassOf<AActor> GoalPointClass;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Catalog")
+	TSoftObjectPtr<UEpisodeStaticObstaclePropCatalog> StaticObstaclePropCatalog;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Import")
 	FString EpisodeSetupInputDirectory = TEXT("Json/Input");
 
@@ -83,6 +88,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
 	void GetStaticObstaclePaletteEntries(TArray<FEpisodeStaticObstaclePropEntry>& outEntries) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
+	bool TryGetStaticObstaclePropEntry(FName propId, FEpisodeStaticObstaclePropEntry& outPropEntry) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
 	bool CanPlaceStaticObstacle(FName propId, const FTransform& transform, FString& outFailureReason) const;
@@ -192,6 +200,8 @@ private:
 	static bool TryGetBoolProperty(const TMap<FString, FEpisodeParamValue>& properties, const FString& key, bool& outValue);
 	static bool TryGetStringProperty(const TMap<FString, FEpisodeParamValue>& properties, const FString& key, FString& outValue);
 
+	UEpisodeCompiler* CreateEpisodeCompiler() const;
+	const UEpisodeStaticObstaclePropCatalog* GetStaticObstaclePropCatalog() const;
 	bool TryFindStaticObstacleProp(FName propId, FEpisodeStaticObstaclePropEntry& outPropEntry) const;
 	bool CanPlaceStaticObstacleInternal(
 		FName propId,

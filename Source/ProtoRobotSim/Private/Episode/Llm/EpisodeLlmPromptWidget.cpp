@@ -1,13 +1,11 @@
-#include "Episode/Llm/EpisodeLlmPromptWidget.h"
 
+#include "Episode/Llm/EpisodeLlmPromptWidget.h"
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/TextBlock.h"
-#include "Engine/GameInstance.h"
 #include "Episode/Editor/EpisodeEditorController.h"
 #include "Episode/EpisodeRunnerSubsystem.h"
-#include "Framework/Text/TextLayout.h"
 
 void UEpisodeLlmPromptWidget::NativeOnInitialized()
 {
@@ -41,16 +39,10 @@ bool UEpisodeLlmPromptWidget::GenerateFromPromptTextBox()
 	}
 
 	FString prompt;
-	if (!TryGetPrompt(prompt))
-	{
-		return false;
-	}
+	if (!TryGetPrompt(prompt)) return false;
 
 	int32 episodeCount = 0;
-	if (!TryGetEpisodeCount(episodeCount))
-	{
-		return false;
-	}
+	if (!TryGetEpisodeCount(episodeCount)) return false;
 
 	SetStatusText(TEXT("생성 요청 중."));
 	return llmSubsystem->GenerateEpisodeFromPrompt(prompt, episodeCount);

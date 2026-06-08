@@ -11,6 +11,7 @@
 #include "Shared/Struct/DeliveryBot/Setup/DeliveryBotSetupInfo.h"
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "Kismet/GameplayStatics.h"
+#include "UObject/ConstructorHelpers.h"
 
 
 DEFINE_LOG_CATEGORY_STATIC(LogEpisodeSimulation, Log, All);
@@ -18,6 +19,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogEpisodeSimulation, Log, All);
 UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 {
 	StaticObstacleClass = AEpisodeStaticObstacle::StaticClass();
+	StaticObstaclePropCatalog = UEpisodeStaticObstaclePropCatalog::MakeDefaultCatalogReference();
 
 	static ConstructorHelpers::FClassFinder<ADeliveryBot> robotBlueprintClass(
 		TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBot"));
@@ -438,12 +440,25 @@ AEpisodeStaticObstacle* UEpisodeSimulationSubsystem::SpawnStaticObstacle(const F
 		spawnParams);
 	if (!staticObstacle) return nullptr;
 
-	if (!staticObstacle->ApplyDefaultPropById(FName(*placeableSpec.AssetId)))
+	FEpisodeStaticObstaclePropEntry propEntry;
+	if (!TryFindStaticObstacleProp(FName(*placeableSpec.AssetId), propEntry))
 	{
 		UE_LOG(
 			LogEpisodeSimulation,
 			Warning,
 			TEXT("정적 장애물 '%s'에 prop '%s' 적용 실패."),
+			*placeableSpec.InstanceId,
+			*placeableSpec.AssetId);
+		staticObstacle->Destroy();
+		return nullptr;
+	}
+
+	if (!staticObstacle->ApplyPropEntry(propEntry))
+	{
+		UE_LOG(
+			LogEpisodeSimulation,
+			Warning,
+			TEXT("?뺤쟻 ?μ븷臾?'%s'??prop '%s' entry ?곸슜 ?ㅽ뙣."),
 			*placeableSpec.InstanceId,
 			*placeableSpec.AssetId);
 		staticObstacle->Destroy();
@@ -457,6 +472,26 @@ AEpisodeStaticObstacle* UEpisodeSimulationSubsystem::SpawnStaticObstacle(const F
 		EEpisodeMobilityMode::Static,
 		staticObstacle);
 	return staticObstacle;
+}
+
+bool UEpisodeSimulationSubsystem::TryFindStaticObstacleProp(
+	FName propId,
+	FEpisodeStaticObstaclePropEntry& outPropEntry) const
+{
+	if (propId.IsNone()) return false;
+
+	const UEpisodeStaticObstaclePropCatalog* propCatalog = StaticObstaclePropCatalog.LoadSynchronous();
+	if (!IsValid(propCatalog))
+	{
+		UE_LOG(
+			LogEpisodeSimulation,
+			Warning,
+			TEXT("Episode static obstacle prop catalog is not configured or failed to load: %s"),
+			*StaticObstaclePropCatalog.ToSoftObjectPath().ToString());
+		return false;
+	}
+
+	return propCatalog->FindPropEntryById(propId, outPropEntry);
 }
 
 AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInstanceSpec& placeableSpec)

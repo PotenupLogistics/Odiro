@@ -45,6 +45,8 @@ namespace
 
 UEpisodeAuthoringSubsystem::UEpisodeAuthoringSubsystem()
 {
+	StaticObstaclePropCatalog = UEpisodeStaticObstaclePropCatalog::MakeDefaultCatalogReference();
+
 	static ConstructorHelpers::FClassFinder<AActor> startPointBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_StartPoint"));
 	if (startPointBlueprintClass.Succeeded())
 	{
@@ -104,7 +106,7 @@ bool UEpisodeAuthoringSubsystem::LoadEpisodeSetupJsonFile(
 
 	outResolvedJsonFilePath = ResolveEpisodeSetupLoadPath(trimmedJsonFilePath);
 
-	UEpisodeCompiler* compiler = NewObject<UEpisodeCompiler>();
+	UEpisodeCompiler* compiler = CreateEpisodeCompiler();
 	if (!compiler)
 	{
 		outDiagnostics.Add(TEXT("Episode compiler creation failed."));
@@ -137,7 +139,7 @@ bool UEpisodeAuthoringSubsystem::LoadEpisodeSetupJsonString(
 		return false;
 	}
 
-	UEpisodeCompiler* compiler = NewObject<UEpisodeCompiler>();
+	UEpisodeCompiler* compiler = CreateEpisodeCompiler();
 	if (!compiler)
 	{
 		outDiagnostics.Add(TEXT("Episode compiler creation failed."));
@@ -171,7 +173,19 @@ bool UEpisodeAuthoringSubsystem::ImportCompiledWorldSpec(
 
 void UEpisodeAuthoringSubsystem::GetStaticObstaclePaletteEntries(TArray<FEpisodeStaticObstaclePropEntry>& outEntries) const
 {
-	outEntries = AEpisodeStaticObstacle::GetDefaultPropEntries();
+	outEntries.Reset();
+
+	const UEpisodeStaticObstaclePropCatalog* propCatalog = GetStaticObstaclePropCatalog();
+	if (!propCatalog) return;
+
+	outEntries = propCatalog->GetEntries();
+}
+
+bool UEpisodeAuthoringSubsystem::TryGetStaticObstaclePropEntry(
+	FName propId,
+	FEpisodeStaticObstaclePropEntry& outPropEntry) const
+{
+	return TryFindStaticObstacleProp(propId, outPropEntry);
 }
 
 void UEpisodeAuthoringSubsystem::GetAuthoredStaticObstacleActors(TArray<AEpisodeStaticObstacle*>& outActors) const
@@ -1013,7 +1027,7 @@ bool UEpisodeAuthoringSubsystem::ExportAndValidateEpisodeSetupJsonString(
 		return false;
 	}
 
-	UEpisodeCompiler* compiler = NewObject<UEpisodeCompiler>();
+	UEpisodeCompiler* compiler = CreateEpisodeCompiler();
 	if (!compiler)
 	{
 		outDiagnostics.Add(TEXT("Episode compiler creation failed."));
@@ -1279,11 +1293,41 @@ bool UEpisodeAuthoringSubsystem::TryGetStringProperty(
 	return true;
 }
 
+UEpisodeCompiler* UEpisodeAuthoringSubsystem::CreateEpisodeCompiler() const
+{
+	UEpisodeCompiler* compiler = NewObject<UEpisodeCompiler>();
+	if (!compiler) return nullptr;
+
+	compiler->StaticObstaclePropCatalog = StaticObstaclePropCatalog;
+	return compiler;
+}
+
+const UEpisodeStaticObstaclePropCatalog* UEpisodeAuthoringSubsystem::GetStaticObstaclePropCatalog() const
+{
+	const UEpisodeStaticObstaclePropCatalog* propCatalog = StaticObstaclePropCatalog.LoadSynchronous();
+	if (!IsValid(propCatalog))
+	{
+		UE_LOG(
+			LogEpisodeAuthoring,
+			Warning,
+			TEXT("Episode static obstacle prop catalog is not configured or failed to load: %s"),
+			*StaticObstaclePropCatalog.ToSoftObjectPath().ToString());
+		return nullptr;
+	}
+
+	return propCatalog;
+}
+
 bool UEpisodeAuthoringSubsystem::TryFindStaticObstacleProp(
 	FName propId,
 	FEpisodeStaticObstaclePropEntry& outPropEntry) const
 {
-	return AEpisodeStaticObstacle::FindDefaultPropEntryById(propId, outPropEntry);
+	if (propId.IsNone()) return false;
+
+	const UEpisodeStaticObstaclePropCatalog* propCatalog = GetStaticObstaclePropCatalog();
+	if (!propCatalog) return false;
+
+	return propCatalog->FindPropEntryById(propId, outPropEntry);
 }
 
 double UEpisodeAuthoringSubsystem::ComputePlacementRadius2D(const FEpisodeStaticObstaclePropEntry& propEntry) const
@@ -1662,9 +1706,17 @@ bool UEpisodeAuthoringSubsystem::SpawnEditorStaticObstacleActor(
 		return false;
 	}
 
-	if (!staticObstacle->ApplyDefaultPropById(FName(*spec.AssetId)))
+	FEpisodeStaticObstaclePropEntry propEntry;
+	if (!TryFindStaticObstacleProp(FName(*spec.AssetId), propEntry))
 	{
 		outFailureReason = FString::Printf(TEXT("Unknown prop '%s'."), *spec.AssetId);
+		staticObstacle->Destroy();
+		return false;
+	}
+
+	if (!staticObstacle->ApplyPropEntry(propEntry))
+	{
+		outFailureReason = FString::Printf(TEXT("Failed to apply prop '%s'."), *spec.AssetId);
 		staticObstacle->Destroy();
 		return false;
 	}

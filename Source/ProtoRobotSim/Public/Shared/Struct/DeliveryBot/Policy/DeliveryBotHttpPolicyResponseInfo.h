@@ -88,5 +88,4 @@ struct FDeliveryBotHttpPolicyResponseInfo
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FString RawResponseBody{};
 	
-	
 };

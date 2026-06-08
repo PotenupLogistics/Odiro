@@ -7,8 +7,7 @@ UDeliveryBot_LidarSensorComponent::UDeliveryBot_LidarSensorComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-void UDeliveryBot_LidarSensorComponent::InitializeLidar(
-	const FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo)
+void UDeliveryBot_LidarSensorComponent::InitializeLidar(const FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo)
 {
 	LidarSensorConfigInfo = lidarSensorConfigInfo;
 

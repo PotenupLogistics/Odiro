@@ -230,5 +230,31 @@ UDeliveryBot_PolicyControllerComponent* AMainMenuPlayerController::FindDeliveryB
 	return nullptr;
 }
 
+// 사용자가 선택한 정책 파일명을 내부 변수에 저장 /  빈 값이 들어오면 기존 선택값을 유지
+void AMainMenuPlayerController::SetSelectedPolicySpecFileName(const FString& policySpecFileName)
+{
+	const FString trimmedFileName = policySpecFileName.TrimStartAndEnd();
 
+	if (trimmedFileName.IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SetSelectedPolicySpecFileName skipped. PolicySpec file name is empty."));
+		return;
+	}
+
+	SelectedPolicySpecFileName = trimmedFileName;
+
+	UE_LOG(LogTemp, Log, TEXT("Selected PolicySpec file changed: %s"), *SelectedPolicySpecFileName);
+}
+
+// 현재 선택된 정책 파일명으로 실행 함수 호출
+bool AMainMenuPlayerController::StartDeliveryBotRunWithSelectedPolicySpec()
+{
+	if (SelectedPolicySpecFileName.TrimStartAndEnd().IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("StartDeliveryBotRunWithSelectedPolicySpec failed. SelectedPolicySpecFileName is empty."));
+		return false;
+	}
+
+	return StartDeliveryBotRunWithPolicySpecFile(SelectedPolicySpecFileName);
+}
 

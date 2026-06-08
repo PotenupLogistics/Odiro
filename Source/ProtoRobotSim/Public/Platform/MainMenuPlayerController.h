@@ -27,10 +27,26 @@ public:
 	UFUNCTION(BlueprintPure, Category = "MainMenu|UI")
 	UMainMenuWidget* GetMainWidget() const { return MainWidget; }
 
+public:
 	// 파일명을 받아서 정책 확정 요청을 시작
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Run")
 	bool StartDeliveryBotRunWithPolicySpecFile(const FString& policySpecFileName);
 	
+	//  실행에 사용할 PolicySpec 파일명을 저장
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Policy")
+	void SetSelectedPolicySpecFileName(const FString& policySpecFileName);
+
+	// 현재 저장된 PolicySpec 파일명으로 DeliveryBot 시작
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Run")
+	bool StartDeliveryBotRunWithSelectedPolicySpec();
+
+public:
+	// 현재 선택된 PolicySpec 파일명을 확인
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Policy")
+	FString GetSelectedPolicySpecFileName() const
+	{
+		return SelectedPolicySpecFileName;
+	}
 	
 private:
 	// /policy/spec/update 응답을 받고 성공이면 Episode Start로 넘어간다.
@@ -62,5 +78,10 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDeliveryBot_HttpPolicyComponent> ActiveRunPolicyHttpComponent;
+
+private:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Policy", meta = (AllowPrivateAccess = "true"))
+	FString SelectedPolicySpecFileName{ TEXT("PolicySpec_DefaultDelivery") };
+	
 	
 };

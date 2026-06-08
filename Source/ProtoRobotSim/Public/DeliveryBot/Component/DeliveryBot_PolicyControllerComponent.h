@@ -5,6 +5,7 @@
 #include "Shared/Struct/DeliveryBot/Drive/DeliveryBotDriveConfigInfo.h"
 #include "Shared/Struct/DeliveryBot/Drive/DeliveryBotMovementInfo.h"
 #include "Shared/Struct/DeliveryBot/Policy/DeliveryBotHttpPolicyResponseInfo.h"
+#include "Shared/EpisodeConfigTypes.h"
 #include "DeliveryBot_PolicyControllerComponent.generated.h"
 
 class ADeliveryBot;
@@ -28,13 +29,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PolicyController")
 	void StopPolicyLoop();
 
+	// 매 프레임 처리해야 할 로직을 실행
+	void TickPolicy(float deltaTime);
+
+public:
 	// GridSubsystem에서 생성한 Grid JSON을 Python 서버로 1회 전송한다.
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PolicyController")
 	bool SendGridToPolicyServerOnce();
 	
-	// 매 프레임 처리해야 할 로직을 실행
-	void TickPolicy(float deltaTime);
-
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PolicyController")
 	bool SendEpisodeStartToPolicyServerOnce();
 	
@@ -50,6 +52,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PolicyController")
 	bool SendEpisodeStartAndStartPolicyLoopOnce();
 	
+
 	
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -98,6 +101,12 @@ private:
 	
 	bool IsGoalReachedPolicyResponse(const FDeliveryBotHttpPolicyResponseInfo& responseInfo) const;
 	
+private:  // Episode종료
+	void BindEpisodeEvaluationEndedEvent();
+	void UnbindEpisodeEvaluationEndedEvent();
+	
+	
+	
 private: // 그리드를 파이썬으로 전송
 	void StartGridUploadRetryLoop();
 	void StopGridUploadRetryLoop();
@@ -110,8 +119,13 @@ private: // 시작 설정 값 파이썬으로 전송  -> Grid + 차량 설정 + 
 	void StartEpisodeStartRetryLoop();
 	void StopEpisodeStartRetryLoop();
 	void RequestEpisodeStartByTimer();
+	void StopPolicyRunForEpisodeEnd(const FEpisodeEvaluationResult& result);// 정책 루프를 멈추고 차량을 ParkingStop 상태로 고정
+	
 	UFUNCTION()
 	void HandleEpisodeStartResponse(bool bWasSuccessful, int32 responseCode, const FString& responseBody);
+	UFUNCTION()
+	void HandleEpisodeEnded(FEpisodeEvaluationResult result); // EpisodeEvaluationSubsystem이 에피소드 종료를 알렸을 때 호출
+	
 	
 private:
 	UPROPERTY()

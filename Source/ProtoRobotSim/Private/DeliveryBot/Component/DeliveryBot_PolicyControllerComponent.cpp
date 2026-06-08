@@ -1,5 +1,5 @@
 ﻿#include "DeliveryBot/Component/DeliveryBot_PolicyControllerComponent.h"
-
+#include "Episode/EpisodeEvaluationSubsystem.h"
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "DeliveryBot/Component/DeliveryBot_HttpPolicyComponent.h"
 #include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
@@ -7,7 +7,7 @@
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
-
+#include "Episode/EpisodeEvaluationSubsystem.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotPolicyController, Log, All);
 
@@ -37,7 +37,16 @@ void UDeliveryBot_PolicyControllerComponent::InitializePolicyController(ADeliver
 		HttpPolicyComponent->OnEpisodeStartResponse.AddUniqueDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeStartResponse);
 		HttpPolicyComponent->OnEpisodeConfigUpdateResponse.AddUniqueDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeConfigUpdateResponse);
 	}
-
+	BindEpisodeEvaluationEndedEvent();
+	if (UWorld* world = GetWorld())
+	{
+		if (UEpisodeEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UEpisodeEvaluationSubsystem>())
+		{
+			evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeEnded);
+			evaluationSubsystem->OnEpisodeEnded.AddDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeEnded);
+		}
+	}
+	
 	if (bAutoStartPolicyLoop)
 	{
 		if (bWaitForEpisodeStartBeforePolicyLoop)
@@ -57,7 +66,7 @@ void UDeliveryBot_PolicyControllerComponent::EndPlay(const EEndPlayReason::Type 
 	StopPolicyLoop();
 	StopGridUploadRetryLoop();
 	StopEpisodeStartRetryLoop();
-
+	UnbindEpisodeEvaluationEndedEvent();
 	if (IsValid(HttpPolicyComponent))
 	{
 		HttpPolicyComponent->OnParsedPolicyResponse.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse);
@@ -66,7 +75,13 @@ void UDeliveryBot_PolicyControllerComponent::EndPlay(const EEndPlayReason::Type 
 		HttpPolicyComponent->OnEpisodeConfigUpdateResponse.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeConfigUpdateResponse);
 		
 	}
-
+	if (UWorld* world = GetWorld())
+	{
+		if (UEpisodeEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UEpisodeEvaluationSubsystem>())
+		{
+			evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeEnded);
+		}
+	}
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -225,10 +240,8 @@ void UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse(const FD
 	{
 		LastValidPolicyMoveCommand = BuildStopMoveCommand();
 		bHasValidPolicyMoveCommand = true;
-		bHoldStopAfterGoalReached = true;
 
-		UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Goal reached. Holding stop command and stopping policy request loop."));
-		StopPolicyLoop();
+		UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Python reported goal_reached. Waiting for EpisodeEvaluationSubsystem final judgment."));
 		return;
 	}
 }
@@ -679,6 +692,30 @@ void UDeliveryBot_PolicyControllerComponent::RequestEpisodeStartByTimer()
 
 	SendEpisodeStartToPolicyServerOnce();
 }
+
+// Episode 종료 후 정책 요청 타이머를 멈추고, 마지막 정책 명령을 버린 뒤 차량을 ParkingStop 상태로 고정한다.
+void UDeliveryBot_PolicyControllerComponent::StopPolicyRunForEpisodeEnd(const FEpisodeEvaluationResult& result)
+{
+	StopPolicyLoop();
+
+	bHasValidPolicyMoveCommand = false;
+	LastValidPolicyMoveCommand = BuildStopMoveCommand();
+	bHoldStopAfterGoalReached = true;
+
+	if (IsValid(OwnerDeliveryBot))
+	{
+		OwnerDeliveryBot->ApplyParkingStop();
+	}
+
+	UE_LOG(
+		LogDeliveryBotPolicyController,
+		Log,
+		TEXT("Episode ended. Policy loop stopped and parking stop applied. Success: %s, TerminalReason: %d"),
+		result.bSuccess ? TEXT("true") : TEXT("false"),
+		static_cast<int32>(result.TerminalReason)
+	);
+}
+
 bool UDeliveryBot_PolicyControllerComponent::SendEpisodeStartToPolicyServerOnce()
 {
 	if (!IsValid(OwnerDeliveryBot) || !IsValid(HttpPolicyComponent))
@@ -745,6 +782,11 @@ void UDeliveryBot_PolicyControllerComponent::HandleEpisodeStartResponse(bool bWa
 	{
 		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Episode start completed, but policy loop start was not requested."));
 	}
+}
+
+void UDeliveryBot_PolicyControllerComponent::HandleEpisodeEnded(FEpisodeEvaluationResult result)
+{
+	StopPolicyRunForEpisodeEnd(result);
 }
 
 
@@ -1014,4 +1056,30 @@ bool UDeliveryBot_PolicyControllerComponent::SendEpisodeStartAndStartPolicyLoopO
 
 	return bRequestStarted;
 }
+
+void UDeliveryBot_PolicyControllerComponent::BindEpisodeEvaluationEndedEvent()
+{
+	if (UWorld* world = GetWorld())
+	{
+		if (UEpisodeEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UEpisodeEvaluationSubsystem>())
+		{
+			evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeEnded);
+			evaluationSubsystem->OnEpisodeEnded.AddDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeEnded);
+			UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Bound to EpisodeEvaluationSubsystem OnEpisodeEnded."));
+		}
+	}
+}
+
+void UDeliveryBot_PolicyControllerComponent::UnbindEpisodeEvaluationEndedEvent()
+{
+	if (UWorld* world = GetWorld())
+	{
+		if (UEpisodeEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UEpisodeEvaluationSubsystem>())
+		{
+			evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeEnded);
+		}
+	}
+}
+
+
 

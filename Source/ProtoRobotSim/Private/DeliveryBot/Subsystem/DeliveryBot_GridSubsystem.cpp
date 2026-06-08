@@ -11,6 +11,35 @@
 #include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 
+namespace
+{
+	FDeliveryBotGridCollisionRuleInfo MakeGridSubsystemFallbackCollisionRule(
+		FName collisionProfileName,
+		EDeliveryBotGridAreaType areaType,
+		float cost,
+		bool bBlocksMovement)
+	{
+		FDeliveryBotGridCollisionRuleInfo rule;
+		rule.CollisionProfileName = collisionProfileName;
+		rule.AreaType = areaType;
+		rule.Cost = cost;
+		rule.bBlocksMovement = bBlocksMovement;
+		return rule;
+	}
+
+	const TArray<FDeliveryBotGridCollisionRuleInfo>& GetGridSubsystemFallbackCollisionRules()
+	{
+		static const TArray<FDeliveryBotGridCollisionRuleInfo> rules =
+		{
+			MakeGridSubsystemFallbackCollisionRule(FName(TEXT("Walkable")), EDeliveryBotGridAreaType::Walkable, 1.0f, false),
+			MakeGridSubsystemFallbackCollisionRule(FName(TEXT("Penalty")), EDeliveryBotGridAreaType::Penalty, 3.0f, false),
+			MakeGridSubsystemFallbackCollisionRule(FName(TEXT("Blocked")), EDeliveryBotGridAreaType::Blocked, BIG_NUMBER, true)
+		};
+
+		return rules;
+	}
+}
+
 void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoundsActor* gridBoundsActor)
 {
 	if (!IsValid(gridBoundsActor))
@@ -495,6 +524,14 @@ const FDeliveryBotGridCellInfo* UDeliveryBot_GridSubsystem::FindCellInfoByGridIn
 const FDeliveryBotGridCollisionRuleInfo* UDeliveryBot_GridSubsystem::FindCollisionRuleByProfileName(const FName& collisionProfileName, const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules) const
 {
 	for (const FDeliveryBotGridCollisionRuleInfo& rule : collisionRules)
+	{
+		if (rule.CollisionProfileName == collisionProfileName)
+		{
+			return &rule;
+		}
+	}
+
+	for (const FDeliveryBotGridCollisionRuleInfo& rule : GetGridSubsystemFallbackCollisionRules())
 	{
 		if (rule.CollisionProfileName == collisionProfileName)
 		{

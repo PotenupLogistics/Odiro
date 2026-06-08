@@ -1,17 +1,40 @@
-#include "Episode/Actors/EpisodeGroundRegion.h"
 
-#include "Components/DecalComponent.h"
+#include "Episode/Actors/EpisodeGroundRegion.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
-#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
 {
-	const FName BlockedRegionCollisionProfileName{ TEXT("BlockAllDynamic") };
-	const FName NonBlockingRegionCollisionProfileName{ TEXT("NoCollision") };
+	const FName WalkableRegionCollisionProfileName{ TEXT("Walkable") };
+	const FName PenaltyRegionCollisionProfileName{ TEXT("Penalty") };
+	const FName BlockedRegionCollisionProfileName{ TEXT("Blocked") };
+
+	FName GetGroundRegionCollisionProfileName(EEpisodeGroundRegionType regionType)
+	{
+		switch (regionType)
+		{
+		case EEpisodeGroundRegionType::Penalty:
+			return PenaltyRegionCollisionProfileName;
+		case EEpisodeGroundRegionType::Blocked:
+			return BlockedRegionCollisionProfileName;
+		case EEpisodeGroundRegionType::Walkable:
+		default:
+			return WalkableRegionCollisionProfileName;
+		}
+	}
+
+	double GetGroundRegionCollisionCenterZCm(EEpisodeGroundRegionType regionType, double collisionHeightCm)
+	{
+		if (regionType == EEpisodeGroundRegionType::Blocked)
+		{
+			return collisionHeightCm * 0.5;
+		}
+
+		return -collisionHeightCm * 0.5;
+	}
 }
 
 AEpisodeGroundRegion::AEpisodeGroundRegion()
@@ -29,36 +52,38 @@ AEpisodeGroundRegion::AEpisodeGroundRegion()
 	RegionBoundsComponent->SetGenerateOverlapEvents(false);
 	RegionBoundsComponent->SetMobility(EComponentMobility::Movable);
 
-	RegionDecalComponent = CreateDefaultSubobject<UDecalComponent>(TEXT("RegionDecalComponent"));
-	RegionDecalComponent->SetupAttachment(SceneRoot);
-	RegionDecalComponent->SetVisibility(false);
-	RegionDecalComponent->SetFadeScreenSize(0.0f);
-
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> cubeMeshAsset(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (cubeMeshAsset.Succeeded())
 	{
 		RegionBoundsComponent->SetStaticMesh(cubeMeshAsset.Object);
 	}
 
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> groundDecalMaterialAsset(TEXT("/Game/Materials/M_EpisodeGroundDecal.M_EpisodeGroundDecal"));
-	if (groundDecalMaterialAsset.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> walkableGroundMaterialAsset(TEXT("/Game/Materials/M_EpisodeGroundWalkable.M_EpisodeGroundWalkable"));
+	if (walkableGroundMaterialAsset.Succeeded())
 	{
-		GroundDecalMaterial = groundDecalMaterialAsset.Object;
+		WalkableGroundMaterial = walkableGroundMaterialAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> blockedAreaMaterialAsset(TEXT("/Game/Models/GoalPoint/MI_EpisodeBlockArea.MI_EpisodeBlockArea"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> penaltyGroundMaterialAsset(TEXT("/Game/Materials/M_EpisodeGroundPenalty.M_EpisodeGroundPenalty"));
+	if (penaltyGroundMaterialAsset.Succeeded())
+	{
+		PenaltyGroundMaterial = penaltyGroundMaterialAsset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> blockedAreaMaterialAsset(TEXT("/Game/Materials/M_EpisodeGroundBlock.M_EpisodeGroundBlock"));
 	if (blockedAreaMaterialAsset.Succeeded())
 	{
 		BlockedAreaMaterial = blockedAreaMaterialAsset.Object;
-		RegionBoundsComponent->SetMaterial(0, BlockedAreaMaterial);
 	}
+
+	ApplyMaterialSettings();
 }
 
 void AEpisodeGroundRegion::BeginPlay()
 {
 	Super::BeginPlay();
 
-	UpdateDecalVisualization();
+	ApplyMaterialSettings();
 }
 
 void AEpisodeGroundRegion::ConfigureRegion(const FEpisodeGroundRegionSpec& inRegionSpec)
@@ -75,18 +100,22 @@ void AEpisodeGroundRegion::ConfigureRegion(const FEpisodeGroundRegionSpec& inReg
 		Tags.AddUnique(FName(*RegionSpec.CollisionTag));
 	}
 
-	RegionBoundsComponent->SetRelativeLocation(FVector(0.0, 0.0, BlockedCollisionHeightCm * 0.5));
+	const double collisionHeightCm = RegionSpec.RegionType == EEpisodeGroundRegionType::Blocked
+		? BlockedCollisionHeightCm
+		: GroundCollisionThicknessCm;
+	const double safeCollisionHeightCm = FMath::Max(collisionHeightCm, 1.0);
+
+	RegionBoundsComponent->SetRelativeLocation(FVector(
+		0.0,
+		0.0,
+		GetGroundRegionCollisionCenterZCm(RegionSpec.RegionType, safeCollisionHeightCm)));
 	RegionBoundsComponent->SetRelativeScale3D(FVector(
 		RegionSpec.Size.X / 100.0,
 		RegionSpec.Size.Y / 100.0,
-		BlockedCollisionHeightCm / 100.0));
-	if (BlockedAreaMaterial)
-	{
-		RegionBoundsComponent->SetMaterial(0, BlockedAreaMaterial);
-	}
+		safeCollisionHeightCm / 100.0));
 
+	ApplyMaterialSettings();
 	ApplyCollisionSettings();
-	UpdateDecalVisualization();
 }
 
 bool AEpisodeGroundRegion::ContainsWorldLocation2D(const FVector& worldLocation) const
@@ -102,73 +131,34 @@ void AEpisodeGroundRegion::ApplyCollisionSettings()
 {
 	if (!RegionBoundsComponent) return;
 
-
-	if (RegionSpec.RegionType == EEpisodeGroundRegionType::Blocked)
-	{
-		RegionBoundsComponent->SetVisibility(true);
-		RegionBoundsComponent->SetCollisionProfileName(BlockedRegionCollisionProfileName);
-		return;
-	}
-
-	RegionBoundsComponent->SetVisibility(false);
-	RegionBoundsComponent->SetCollisionProfileName(NonBlockingRegionCollisionProfileName);
+	RegionBoundsComponent->SetVisibility(true);
+	RegionBoundsComponent->SetCollisionProfileName(GetGroundRegionCollisionProfileName(RegionSpec.RegionType));
+	RegionBoundsComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	RegionBoundsComponent->SetGenerateOverlapEvents(false);
 }
 
-void AEpisodeGroundRegion::UpdateDecalVisualization()
+void AEpisodeGroundRegion::ApplyMaterialSettings()
 {
-	if (!RegionDecalComponent) return;
+	if (!RegionBoundsComponent) return;
 
-
-	if (!bUseDecalVisualization
-		|| RegionSpec.ShapeType != EEpisodeGroundShapeType::Rectangle
-		|| RegionSpec.RegionType == EEpisodeGroundRegionType::Blocked)
-	{
-		RegionDecalComponent->SetVisibility(false);
-		return;
-	}
-
-	CreateOrUpdateDecalMaterialInstance();
-	if (!GroundDecalMaterialInstance)
-	{
-		RegionDecalComponent->SetVisibility(false);
-		return;
-	}
-
-	// JSON 단위를 좀더 sementic하게 만들기 위해 지면 영역 X/Y 너비의 절반을 받아서 그림.
-	RegionDecalComponent->DecalSize = FVector(
-		DecalProjectionDepthCm,
-		RegionSpec.Size.Y * 0.5,
-		RegionSpec.Size.X * 0.5);
-	RegionDecalComponent->SetRelativeLocation(FVector(0.0, 0.0, DecalZOffsetCm));
-	RegionDecalComponent->SetRelativeRotation(FRotator(-90.0, 0.0, 0.0));
-	RegionDecalComponent->SetVisibility(true);
-}
-
-void AEpisodeGroundRegion::CreateOrUpdateDecalMaterialInstance()
-{
-	if (!RegionDecalComponent || !GroundDecalMaterial) return;
-
-	if (!GroundDecalMaterialInstance)
-	{
-		GroundDecalMaterialInstance = UMaterialInstanceDynamic::Create(GroundDecalMaterial, this);
-		RegionDecalComponent->SetDecalMaterial(GroundDecalMaterialInstance);
-	}
-
-	GroundDecalMaterialInstance->SetVectorParameterValue(TEXT("RegionColor"), GetRegionColor());
-	GroundDecalMaterialInstance->SetScalarParameterValue(TEXT("Opacity"), DecalOpacity);
-}
-
-FLinearColor AEpisodeGroundRegion::GetRegionColor() const
-{
+	UMaterialInterface* selectedMaterial = nullptr;
 	switch (RegionSpec.RegionType)
 	{
 	case EEpisodeGroundRegionType::Walkable:
-		return FLinearColor(0.05f, 0.85f, 0.16f, 1.0f);
+		selectedMaterial = WalkableGroundMaterial;
+		break;
 	case EEpisodeGroundRegionType::Penalty:
-		return FLinearColor(1.0f, 0.48f, 0.0f, 1.0f);
+		selectedMaterial = PenaltyGroundMaterial;
+		break;
 	case EEpisodeGroundRegionType::Blocked:
-		return FLinearColor(1.0f, 0.03f, 0.02f, 1.0f);
+		selectedMaterial = BlockedAreaMaterial;
+		break;
 	default:
-		return FLinearColor::White;
+		break;
+	}
+
+	if (selectedMaterial)
+	{
+		RegionBoundsComponent->SetMaterial(0, selectedMaterial);
 	}
 }

@@ -33,6 +33,7 @@ class UDeliveryBot_PolicyControllerComponent;
 class UDeliveryBot_HttpPolicyComponent;
 class UDeliveryBot_DriveComponent;
 class UDeliveryBot_LidarSensorComponent;
+class UEpisodePlaceableComponent;
 UCLASS(Blueprintable)
 class PROTOROBOTSIM_API ADeliveryBot : public AWheeledVehiclePawn
 {
@@ -75,6 +76,9 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Sensor")
 	bool GetSensorSnapshot(FDeliveryBotSensorSnapshot& outSnapshot) const;
+
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Measurement")
+	bool GetLastMoveCommandInfo(FDeliveryBotMoveCommandInfo& outMoveCommandInfo, FString& outActionReason) const;
 	
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Observation")
 	FDeliveryBotObservationInfo BuildObservation() const;
@@ -115,6 +119,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
 	TObjectPtr<UDeliveryBot_PolicyControllerComponent> PolicyControllerComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
+	TObjectPtr<UEpisodePlaceableComponent> PlaceableComponent;
 	
 	
 	
@@ -136,5 +143,8 @@ protected:
 
 private:
 	FDeliveryBotSensorSnapshot LastSensorSnapshot{};
+	FDeliveryBotMoveCommandInfo LastMoveCommandInfo{};
+	FString LastActionReason{ TEXT("unknown") };
+	bool bHasLastMoveCommand{ false };
 	
 };

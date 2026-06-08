@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Shared/EpisodeMeasurementLogTypes.h"
 
-class ADeliveryBot_ChaosActor;
+class ADeliveryBot;
 class UEpisodeLogSubjectRegistry;
 
 /// Converts Delivery Bot runtime state into measurement log payloads.
@@ -12,7 +12,7 @@ class PROTOROBOTSIM_API FEpisodeRobotMeasurementAdapter
 public:
 	/// Builds the robot section for one tick record.
 	static bool BuildRobotTick(
-		ADeliveryBot_ChaosActor* RobotActor,
+		ADeliveryBot* RobotActor,
 		const UEpisodeLogSubjectRegistry* SubjectRegistry,
 		FEpisodeMeasurementLogRobotTick& OutRobotTick,
 		TArray<FEpisodeMeasurementLogDiagnostic>& OutDiagnostics,

@@ -4,7 +4,10 @@
   "robot": {
     "drive": {
       "max_speed_kmh": 7.0,
-      "slowdown_speed_range_kmh": 3.0
+      "slowdown_speed_range_kmh": 3.0,
+      "stop_brake_input": 1.0,
+      "brake_input_rate_per_second": 5.0,
+      "use_handbrake_when_brake": true
     },
     "path_follow": {
       "target_speed_kmh": 5.0,

@@ -1,0 +1,78 @@
+{
+	"schema": "episode_evaluation_report",
+	"version": 1,
+	"units":
+	{
+		"time": "s",
+		"distance": "m",
+		"angle": "deg",
+		"location": "xy_m",
+		"speed": "km/h",
+		"score": "episode_score"
+	},
+	"run":
+	{
+		"run_id": "episode_run_0000",
+		"run_index": 0,
+		"episode_id": "legacy_route_fallback_001",
+		"pair_id": "EpisodeSetupSample_1",
+		"episode_setup":
+		{
+			"path": "C:/Users/user/Documents/Unreal Projects/Proto-Unreal/Json/Input/EpisodeSetupSample_1.json",
+			"hash": "2517930182"
+		},
+		"delivery_bot_setup":
+		{
+			"path": "C:/Users/user/Documents/Unreal Projects/Proto-Unreal/Json/Input/DeliveryBotSetupSample_1.json",
+			"hash": "2279911084"
+		},
+		"pair_hash": "1213026427"
+	},
+	"summary":
+	{
+		"completed": true,
+		"success": true,
+		"outcome": "Success",
+		"terminal_reason": "GoalReached",
+		"duration_s": 16.270444601774216,
+		"score": 0,
+		"usable_for_llm_tuning": true
+	},
+	"pipeline":
+	{
+		"episode_setup_compiled": true,
+		"delivery_bot_setup_compiled": true,
+		"world_setup_succeeded": true,
+		"evaluation_completed": true,
+		"diagnostics": []
+	},
+	"metrics":
+	{
+		"blocked_region_collision_count": 0,
+		"duration_s": 16.270444601774216,
+		"goal_distance_m": 0.99568850299404088,
+		"goal_reached": 1,
+		"near_miss_count": 0,
+		"near_miss_total_duration_s": 0,
+		"pedestrian_collision_count": 0,
+		"penalty_region_violation_count": 0,
+		"robot_tip_over_count": 0,
+		"score": 0,
+		"static_obstacle_collision_count": 0
+	},
+	"event_summary":
+	{
+		"total": 0,
+		"by_type":
+		{
+		},
+		"by_severity":
+		{
+			"Failure": 0,
+			"Info": 0,
+			"Warning": 0
+		},
+		"first_failure_event_index": null
+	},
+	"events": []
+}

@@ -16,10 +16,8 @@ UDeliveryBot_DriveComponent::UDeliveryBot_DriveComponent()
 }
 
 // 이동 명령을 현재 차량 상태에 맞는 기어, 스로틀, 브레이크, 조향 입력으로 변환한다.
-void UDeliveryBot_DriveComponent::ApplyMoveCommand(
-	UChaosVehicleMovementComponent* vehicleMovement,
-	const FDeliveryBotMoveCommandInfo& moveCommandInfo,
-	float deltaTime)
+void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponent* vehicleMovement,	
+	const FDeliveryBotMoveCommandInfo& moveCommandInfo,	float deltaTime)
 {
 	if (!IsValid(vehicleMovement))
 		return;
@@ -85,6 +83,22 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(
 		DriveConfigInfo.bUseHandbrakeWhenBrake && moveCommandInfo.bBrake,
 		targetMaxSpeedKmh,
 		safeDeltaTime);
+}
+
+void UDeliveryBot_DriveComponent::ApplyParkingStop(UChaosVehicleMovementComponent* vehicleMovement)
+{
+	if (!IsValid(vehicleMovement))
+		return;
+
+	CurrentThrottleInput = 0.f;
+	CurrentBrakeInput = 1.f;
+	CurrentSteeringInput = 0.f;
+	CurrentTargetSpeedKmh = 0.f;
+
+	vehicleMovement->SetThrottleInput(0.f);
+	vehicleMovement->SetSteeringInput(0.f);
+	vehicleMovement->SetBrakeInput(1.f);
+	vehicleMovement->SetHandbrakeInput(true);
 }
 
 // Chaos Wheeled Vehicle의 엔진과 변속기 기본 설정을 적용한다.

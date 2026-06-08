@@ -6,6 +6,10 @@
 #include "Components/BoxComponent.h"
 #include "DeliveryBot/Actor/DeliveryBot_GridBoundsActor.h"
 #include "Engine/OverlapResult.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 
 void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoundsActor* gridBoundsActor)
 {
@@ -16,7 +20,7 @@ void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoun
 	if (!IsValid(boundsBox))
 		return;
 
-	CellSize = gridBoundsActor->GetCellSize();
+	CellSize = FMath::Max(gridBoundsActor->GetCellSize(), 1.f);
 
 	const FVector boxExtent = boundsBox->GetScaledBoxExtent();
 	const FVector boxLocation = boundsBox->GetComponentLocation();
@@ -27,14 +31,23 @@ void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoun
 		boxLocation.Z
 	);
 
-	GridSizeX = static_cast<int32>(FMath::FloorToInt((boxExtent.X * 2.f) / CellSize));
-	GridSizeY = static_cast<int32>(FMath::FloorToInt((boxExtent.Y * 2.f) / CellSize));
+	GridSizeX = FMath::Max(static_cast<int32>(FMath::FloorToInt((boxExtent.X * 2.f) / CellSize)), 0);
+	GridSizeY = FMath::Max(static_cast<int32>(FMath::FloorToInt((boxExtent.Y * 2.f) / CellSize)), 0);
 
 	GridCells.Reset();
 	GridCells.SetNum(GridSizeX * GridSizeY);
 
 	const FVector robotBoxExtent = gridBoundsActor->GetRobotBoxExtent();
 	const float maxWalkableSlopeDegree = gridBoundsActor->GetMaxWalkableSlopeDegree();
+	const ECollisionChannel gridTraceChannel = gridBoundsActor->GetGridTraceChannel();
+	const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules =
+		gridBoundsActor->GetCollisionProfileRules();
+
+	int32 walkableCellCount = 0;
+	int32 penaltyCellCount = 0;
+	int32 blockedCellCount = 0;
+	
+	
 	for (int32 y = 0; y < GridSizeY; ++y)
 	{
 		for (int32 x = 0; x < GridSizeX; ++x)
@@ -42,89 +55,67 @@ void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoun
 			const int32 index = x + y * GridSizeX;
 
 			FDeliveryBotGridCellInfo& cellInfo = GridCells[index];
-			cellInfo.State = EDeliveryBotGridCellState::Free;
-			cellInfo.Cost = 1.f;
+			cellInfo = FDeliveryBotGridCellInfo{};
+			cellInfo.GridIndex = FIntPoint(x, y);
 			cellInfo.WorldLocation = FVector(
 				GridOrigin.X + (x + 0.5f) * CellSize,
 				GridOrigin.Y + (y + 0.5f) * CellSize,
 				GridOrigin.Z
 			);
-			FVector groundLocation = cellInfo.WorldLocation;
-			FVector groundNormal = FVector::UpVector;
 
-			if (!GetGroundInfoByWorldLocation(cellInfo.WorldLocation, groundLocation, groundNormal))
+			ClassifyCellByCollisionPreset(cellInfo.WorldLocation, robotBoxExtent, maxWalkableSlopeDegree, gridTraceChannel, collisionRules,cellInfo);
+			switch (cellInfo.AreaType)
 			{
-				cellInfo.State = EDeliveryBotGridCellState::Blocked;
-				cellInfo.Cost = BIG_NUMBER;
-				
-				if (bDrawDebug)
-				{
-					DrawDebugPoint(
-						GetWorld(),
-						cellInfo.WorldLocation,
-						8.f,
-						FColor::Red,
-						true,
-						30.f
-					);
-				}
+			case EDeliveryBotGridAreaType::Walkable:
+				++walkableCellCount;
+				break;
 
-				continue;
+			case EDeliveryBotGridAreaType::Penalty:
+				++penaltyCellCount;
+				break;
+
+			case EDeliveryBotGridAreaType::Blocked:
+				++blockedCellCount;
+				break;
+
+			default:
+				break;
 			}
 
-			cellInfo.GroundLocation = groundLocation;
-			cellInfo.GroundNormal = groundNormal;
-
-			const float upDot = FMath::Clamp(static_cast<float>(FVector::DotProduct(groundNormal, FVector::UpVector)), -1.f, 1.f);
-			cellInfo.SlopeDegree = FMath::RadiansToDegrees(FMath::Acos(upDot));
-			cellInfo.WorldLocation = groundLocation;
-
-			if (cellInfo.SlopeDegree > maxWalkableSlopeDegree)
+			if (bDrawDebug)
 			{
-				cellInfo.State = EDeliveryBotGridCellState::Blocked;
-				cellInfo.Cost = BIG_NUMBER;
-
-				// 이동 가능한 최대 경사각을 넘는 셀은 이동 불가로 표시한다.
-				if (bDrawDebug)
-				{
-					DrawDebugPoint(
-						GetWorld(),
-						cellInfo.WorldLocation,
-						8.f,
-						FColor::Orange,
-						true,
-						30.f
-					);
-				}
-
-				continue;
+				DrawDebugPoint(
+					GetWorld(),
+					cellInfo.WorldLocation + FVector(0.f, 0.f, 20.f),
+					8.f,
+					GetDebugColorByAreaType(cellInfo.AreaType),
+					true,
+					30.f
+				);
 			}
-
-			const bool bBlocked = IsCellBlocked(cellInfo.WorldLocation, robotBoxExtent);
-			cellInfo.State = bBlocked
-				? EDeliveryBotGridCellState::Blocked
-				: EDeliveryBotGridCellState::Free;
-
-			cellInfo.Cost = bBlocked ? BIG_NUMBER : 1.f;
-			
-			
-			const UWorld* world = GetWorld();
-			if (!IsValid(world))
-				return;
-			
-			// Debug Draw
-			const FColor debugColor = bBlocked ? FColor::Red : FColor::Green;
-
-			// DrawDebugPoint(
-			// 	GetWorld(),
-			// 	cellInfo.WorldLocation,
-			// 	8.f,
-			// 	debugColor,
-			// 	true,
-			// 	30.f
-			// );
-			// 		
 		}
+	}
+	
+	UE_LOG(
+	LogTemp,
+	Log,
+	TEXT("DeliveryBot Grid Built | Size: %d x %d, Cells: %d, Walkable: %d, Penalty: %d, Blocked: %d"),
+	GridSizeX,
+	GridSizeY,
+	GridCells.Num(),
+	walkableCellCount,
+	penaltyCellCount,
+	blockedCellCount
+);
+	
+	FString gridJson;
+	if (BuildGridJson(gridJson))
+	{
+		UE_LOG(LogTemp, Log, TEXT("DeliveryBot Grid JSON Built | Length: %d"), gridJson.Len());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DeliveryBot Grid JSON build failed."));
 	}
 }
 
@@ -247,82 +238,8 @@ void UDeliveryBot_GridSubsystem::ClearDynamicBlockedCells()
 			continue;
 
 		cellInfo.State = EDeliveryBotGridCellState::Free;
-		cellInfo.Cost = 1.f;
+		cellInfo.Cost = cellInfo.BaseCost;
 	}
-}
-
-bool UDeliveryBot_GridSubsystem::IsCellBlocked(const FVector& worldLocation, const FVector& robotBoxExtent) const
-{
-	const UWorld* world = GetWorld();
-	if (!IsValid(world))
-		return true;
-
-	const FCollisionShape robotShape = FCollisionShape::MakeBox(robotBoxExtent);
-
-	FVector checkLocation = worldLocation;
-	checkLocation.Z += robotBoxExtent.Z + 2.f;
-
-	TArray<FOverlapResult> overlapResults;
-
-	const bool bHasOverlap = world->OverlapMultiByChannel(
-		overlapResults,
-		checkLocation,
-		FQuat::Identity,
-		ECC_WorldStatic,
-		robotShape
-	);
-
-	if (!bHasOverlap)
-		return false;
-
-	static const FName ignoreAboutGridTag = TEXT("IgnoreAboutGrid");
-	static const FName localOnlyObstacleTag = TEXT("LocalOnlyObstacle");
-
-	for (const FOverlapResult& overlapResult : overlapResults)
-	{
-		AActor* overlapActor = overlapResult.GetActor();
-
-		if (!IsValid(overlapActor))
-			continue;
-
-		if (overlapActor->ActorHasTag(ignoreAboutGridTag))
-			continue;
-		if (overlapActor->ActorHasTag(localOnlyObstacleTag))
-			continue;
-
-		// NoCollision 태그가 없는 액터가 하나라도 있으면 이동 불가로 처리한다.
-		return true;
-	}
-	return false;
-}
-
-bool UDeliveryBot_GridSubsystem::GetGroundInfoByWorldLocation(const FVector& worldLocation, FVector& outGroundLocation,
-	FVector& outGroundNormal) const
-{
-	const UWorld* world = GetWorld();
-	if (!IsValid(world))
-	{
-		return false;
-	}
-	const FVector traceStart = FVector(worldLocation.X, worldLocation.Y, worldLocation.Z + 1000.f);
-	const FVector traceEnd = FVector(worldLocation.X, worldLocation.Y, worldLocation.Z - 1000.f);
-
-	FHitResult hitResult;
-	const bool bHit = world->LineTraceSingleByChannel(
-		hitResult,
-		traceStart,
-		traceEnd,
-		ECC_WorldStatic
-	);
-
-	if (!bHit)
-	{
-		return false;
-	}
-
-	outGroundLocation = hitResult.Location;
-	outGroundNormal = hitResult.ImpactNormal;
-	return true;
 }
 
 FIntPoint UDeliveryBot_GridSubsystem::GetGridIndexByWorldLocation(const FVector& worldLocation) const
@@ -467,6 +384,26 @@ bool UDeliveryBot_GridSubsystem::GetNearestWalkableWorldLocation(
 	return false;
 }
 
+int32 UDeliveryBot_GridSubsystem::GetGridAreaPriority(EDeliveryBotGridAreaType areaType) const
+{
+	switch (areaType)
+	{
+	case EDeliveryBotGridAreaType::Blocked:
+		return 300;
+
+	case EDeliveryBotGridAreaType::Penalty:
+		return 200;
+
+	case EDeliveryBotGridAreaType::Walkable:
+		return 100;
+
+	default:
+		return 0;
+	}
+}
+
+
+
 FVector UDeliveryBot_GridSubsystem::GetWorldLocationByGridIndex(const FIntPoint& gridIndex) const
 {
 	const FDeliveryBotGridCellInfo* cellInfo = FindCellInfoByGridIndex(gridIndex);
@@ -540,7 +477,7 @@ bool UDeliveryBot_GridSubsystem::IsWalkableGridIndex(const FIntPoint& gridIndex)
 	if (cellInfo == nullptr)
 		return false;
 
-	return cellInfo->State == EDeliveryBotGridCellState::Free;
+	return cellInfo->State == EDeliveryBotGridCellState::Free && cellInfo->AreaType != EDeliveryBotGridAreaType::Blocked;
 }
 
 const FDeliveryBotGridCellInfo* UDeliveryBot_GridSubsystem::FindCellInfoByGridIndex(const FIntPoint& gridIndex) const
@@ -554,4 +491,261 @@ const FDeliveryBotGridCellInfo* UDeliveryBot_GridSubsystem::FindCellInfoByGridIn
 
 	return &GridCells[cellArrayIndex];
 }
+
+const FDeliveryBotGridCollisionRuleInfo* UDeliveryBot_GridSubsystem::FindCollisionRuleByProfileName(const FName& collisionProfileName, const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules) const
+{
+	for (const FDeliveryBotGridCollisionRuleInfo& rule : collisionRules)
+	{
+		if (rule.CollisionProfileName == collisionProfileName)
+		{
+			return &rule;
+		}
+	}
+
+	return nullptr;
+}
+
+void UDeliveryBot_GridSubsystem::ApplyWalkableCell(FDeliveryBotGridCellInfo& cellInfo, EDeliveryBotGridAreaType areaType, float cost, const FName& sourceCollisionProfileName) const
+{
+	cellInfo.State = EDeliveryBotGridCellState::Free;
+	cellInfo.AreaType = areaType;
+	cellInfo.Cost = FMath::Max(cost, 0.f);
+	cellInfo.BaseCost = cellInfo.Cost;
+	cellInfo.SourceCollisionProfileName = sourceCollisionProfileName;
+}
+
+void UDeliveryBot_GridSubsystem::ApplyBlockedCell(FDeliveryBotGridCellInfo& cellInfo, const FName& sourceCollisionProfileName) const
+{
+	cellInfo.State = EDeliveryBotGridCellState::Blocked;
+	cellInfo.AreaType = EDeliveryBotGridAreaType::Blocked;
+	cellInfo.Cost = BIG_NUMBER;
+	cellInfo.BaseCost = BIG_NUMBER;
+	cellInfo.SourceCollisionProfileName = sourceCollisionProfileName;
+}
+
+// 셀 하나를 검사해서 Walkable / Penalty / Blocked로 분류
+bool UDeliveryBot_GridSubsystem::ClassifyCellByCollisionPreset(const FVector& cellCenterLocation, const FVector& robotBoxExtent, float maxWalkableSlopeDegree, 
+	ECollisionChannel gridTraceChannel, const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, FDeliveryBotGridCellInfo& outCellInfo) const
+{
+	const UWorld* world = GetWorld();
+	if (!IsValid(world))
+	{
+		ApplyBlockedCell(outCellInfo, TEXT("InvalidWorld"));
+		return false;
+	}
+
+	const FVector traceStart(cellCenterLocation.X, cellCenterLocation.Y, cellCenterLocation.Z + 1000.f);
+	const FVector traceEnd(cellCenterLocation.X, cellCenterLocation.Y, cellCenterLocation.Z - 1000.f);
+
+	FHitResult groundHit;
+	FCollisionQueryParams queryParams(SCENE_QUERY_STAT(DeliveryBotGridTrace), false);
+
+	const bool bHit = world->LineTraceSingleByChannel(
+		groundHit,
+		traceStart,
+		traceEnd,
+		gridTraceChannel,
+		queryParams
+	);
+
+	if (!bHit || !groundHit.bBlockingHit)
+	{
+		ApplyBlockedCell(outCellInfo, TEXT("NoGroundHit"));
+		return true;
+	}
+
+	const UPrimitiveComponent* hitComponent = groundHit.GetComponent();
+	if (!IsValid(hitComponent))
+	{
+		ApplyBlockedCell(outCellInfo, TEXT("InvalidHitComponent"));
+		return true;
+	}
+
+	const FName profileName = hitComponent->GetCollisionProfileName();
+	const FDeliveryBotGridCollisionRuleInfo* rule =
+		FindCollisionRuleByProfileName(profileName, collisionRules);
+
+	outCellInfo.GroundLocation = groundHit.Location;
+	outCellInfo.GroundNormal = groundHit.ImpactNormal;
+	outCellInfo.WorldLocation = groundHit.Location;
+
+	if (rule != nullptr && (rule->bBlocksMovement || rule->AreaType == EDeliveryBotGridAreaType::Blocked))
+	{
+		ApplyBlockedCell(outCellInfo, profileName);
+		return true;
+	}
+
+	const float upDot = FMath::Clamp(
+		static_cast<float>(FVector::DotProduct(outCellInfo.GroundNormal, FVector::UpVector)),
+		-1.f,
+		1.f
+	);
+
+	outCellInfo.SlopeDegree = FMath::RadiansToDegrees(FMath::Acos(upDot));
+
+	if (outCellInfo.SlopeDegree > maxWalkableSlopeDegree)
+	{
+		ApplyBlockedCell(outCellInfo, TEXT("TooSteepSlope"));
+		return true;
+	}
+
+	FName blockingProfileName = NAME_None;
+	if (HasBlockingFootprintOverlap(
+		outCellInfo.GroundLocation,
+		robotBoxExtent,
+		gridTraceChannel,
+		collisionRules,
+		blockingProfileName))
+	{
+		ApplyBlockedCell(outCellInfo, blockingProfileName);
+		return true;
+	}
+
+	if (rule != nullptr)
+	{
+		ApplyWalkableCell(outCellInfo, rule->AreaType, rule->Cost, rule->CollisionProfileName);
+	}
+	else
+	{
+		ApplyWalkableCell(outCellInfo, EDeliveryBotGridAreaType::Walkable, 1.f, TEXT("DefaultWalkable"));
+	}
+
+	return true;
+}
+
+	// 로봇의 실제 크기만큼 박스 overlap을 해서, 해당 셀에 로봇이 들어갈 수 있는지 검사한다.
+bool UDeliveryBot_GridSubsystem::HasBlockingFootprintOverlap(const FVector& groundLocation, const FVector& robotBoxExtent, ECollisionChannel gridTraceChannel,
+	const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, FName& outBlockingProfileName) const
+{
+	outBlockingProfileName = NAME_None;
+
+	const UWorld* world = GetWorld();
+	if (!IsValid(world))
+		return true;
+
+	// 로봇 박스 중심이 바닥 위에 오도록 Z를 올린다.
+	const FVector checkLocation = groundLocation + FVector(0.f, 0.f, robotBoxExtent.Z + 2.f);
+
+	const FCollisionShape robotShape = FCollisionShape::MakeBox(robotBoxExtent);
+
+	TArray<FOverlapResult> overlapResults;
+	FCollisionQueryParams queryParams(SCENE_QUERY_STAT(DeliveryBotGridOverlap), false);
+
+	const bool bHasOverlap = world->OverlapMultiByChannel(
+		overlapResults,
+		checkLocation,
+		FQuat::Identity,
+		gridTraceChannel,
+		robotShape,
+		queryParams
+	);
+
+	// 아무것도 겹치지 않으면 로봇 크기 기준으로 통과 가능하다.
+	if (!bHasOverlap)
+		return false;
+
+	for (const FOverlapResult& overlapResult : overlapResults)
+	{
+		const UPrimitiveComponent* overlapComponent = overlapResult.GetComponent();
+		if (!IsValid(overlapComponent))
+			continue;
+
+		const FName profileName = overlapComponent->GetCollisionProfileName();
+		const FDeliveryBotGridCollisionRuleInfo* rule =
+			FindCollisionRuleByProfileName(profileName, collisionRules);
+
+		if (rule == nullptr)
+			continue;
+
+		// 겹친 컴포넌트가 Blocked rule이면 이 셀은 로봇 크기 기준으로 이동 불가다.
+		if (rule->bBlocksMovement || rule->AreaType == EDeliveryBotGridAreaType::Blocked)
+		{
+			outBlockingProfileName = profileName;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+FColor UDeliveryBot_GridSubsystem::GetDebugColorByAreaType(EDeliveryBotGridAreaType areaType) const
+{
+	switch (areaType)
+	{
+	case EDeliveryBotGridAreaType::Walkable:
+		return FColor::Green;
+
+	case EDeliveryBotGridAreaType::Penalty:
+		return FColor::Yellow;
+
+	case EDeliveryBotGridAreaType::Blocked:
+		return FColor::Red;
+
+	default:
+		return FColor::White;
+	}
+}
+
+FString UDeliveryBot_GridSubsystem::GetGridAreaTypeString(EDeliveryBotGridAreaType areaType) const
+{
+	switch (areaType)
+	{
+	case EDeliveryBotGridAreaType::Walkable:
+		return TEXT("Walkable");
+
+	case EDeliveryBotGridAreaType::Penalty:
+		return TEXT("Penalty");
+
+	case EDeliveryBotGridAreaType::Blocked:
+		return TEXT("Blocked");
+
+	default:
+		return TEXT("Unknown");
+	}
+}
+
+bool UDeliveryBot_GridSubsystem::BuildGridJson(FString& outJson) const
+{
+	TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
+
+	rootObject->SetNumberField(TEXT("gridSizeX"), GridSizeX);
+	rootObject->SetNumberField(TEXT("gridSizeY"), GridSizeY);
+	rootObject->SetNumberField(TEXT("cellSizeCm"), CellSize);
+	rootObject->SetNumberField(TEXT("cellCount"), GridCells.Num());
+
+	TSharedRef<FJsonObject> originObject = MakeShared<FJsonObject>();
+	originObject->SetNumberField(TEXT("x"), GridOrigin.X);
+	originObject->SetNumberField(TEXT("y"), GridOrigin.Y);
+	originObject->SetNumberField(TEXT("z"), GridOrigin.Z);
+	rootObject->SetObjectField(TEXT("originCm"), originObject);
+
+	TArray<TSharedPtr<FJsonValue>> cellValues;
+	cellValues.Reserve(GridCells.Num());
+
+	for (const FDeliveryBotGridCellInfo& cellInfo : GridCells)
+	{
+		TSharedRef<FJsonObject> cellObject = MakeShared<FJsonObject>();
+
+		cellObject->SetNumberField(TEXT("x"), cellInfo.GridIndex.X);
+		cellObject->SetNumberField(TEXT("y"), cellInfo.GridIndex.Y);
+		cellObject->SetNumberField(TEXT("worldX"), cellInfo.WorldLocation.X);
+		cellObject->SetNumberField(TEXT("worldY"), cellInfo.WorldLocation.Y);
+		cellObject->SetNumberField(TEXT("worldZ"), cellInfo.WorldLocation.Z);
+		cellObject->SetStringField(TEXT("areaType"), GetGridAreaTypeString(cellInfo.AreaType));
+		cellObject->SetNumberField(TEXT("cost"), cellInfo.Cost);
+		cellObject->SetBoolField(TEXT("blocked"), !IsWalkableGridIndex(cellInfo.GridIndex));
+		cellObject->SetStringField(TEXT("sourceCollisionProfile"), cellInfo.SourceCollisionProfileName.ToString());
+		cellObject->SetNumberField(TEXT("slopeDegree"), cellInfo.SlopeDegree);
+
+		cellValues.Add(MakeShared<FJsonValueObject>(cellObject));
+	}
+
+	rootObject->SetArrayField(TEXT("cells"), cellValues);
+
+	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> writer =
+		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&outJson);
+
+	return FJsonSerializer::Serialize(rootObject, writer);
+}
+
 

@@ -19,7 +19,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FDeliveryBotDriveConfigInfo ChaosDriveConfigInfo{}; // Chaos Vehicle의 속도 제한, 가속/감속 같은 실제 주행 값
-
+	
+	// FDeliveryBotMotionControlConfigInfo 이걸로 추후 이름 변경
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FDeliveryBotPathFollowConfigInfo PathFollowConfigInfo{}; // A* 경로 따라갈 때 쓰는 목표 속도,도착 판정 거리,장애물 감속 속도 설정.
 

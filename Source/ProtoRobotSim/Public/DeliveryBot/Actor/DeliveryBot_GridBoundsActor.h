@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Shared/Struct/DeliveryBot/Navigation/DeliveryBotGridInfo.h"
 #include "DeliveryBot_GridBoundsActor.generated.h"
 
 class UBoxComponent;
@@ -21,21 +22,41 @@ protected:
 	virtual void Tick(float DeltaTime) override;
 	
 
-	
-	
 public:
-	UBoxComponent* GetBoundsBox() const { return BoundsBox; }
+	UBoxComponent* GetBoundsBox() const
+	{
+		return BoundsBox;
+	}
 	
-	float GetCellSize() const { return CellSize; }
-	float GetMaxWalkableSlopeDegree() const { return MaxWalkableSlopeDegree; }
+	float GetCellSize() const
+	{
+		return CellSize;
+	}
+	float GetMaxWalkableSlopeDegree() const
+	{
+		return MaxWalkableSlopeDegree;
+	}
 	
-	FVector GetRobotBoxExtent() const { return RobotBoxExtent; }
+	FVector GetRobotBoxExtent() const
+	{
+		return RobotBoxExtent;
+	}
 	
+	const TArray<FDeliveryBotGridCollisionRuleInfo>& GetCollisionProfileRules() const
+	{
+		return CollisionProfileRules;
+	}
 	
+	ECollisionChannel GetGridTraceChannel() const
+	{
+		return ECC_GameTraceChannel8;
+	}
+
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<class UBoxComponent> BoundsBox;
 
+private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
 	float CellSize{ 50.f };
 
@@ -44,4 +65,7 @@ private:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
 	float MaxWalkableSlopeDegree{ 60.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
+	TArray<FDeliveryBotGridCollisionRuleInfo> CollisionProfileRules;
 };

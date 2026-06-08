@@ -17,6 +17,7 @@ class PROTOROBOTSIM_API UDeliveryBot_DriveComponent : public UActorComponent
 public:
 	UDeliveryBot_DriveComponent();
 	void ApplyMoveCommand(UChaosVehicleMovementComponent* vehicleMovement,	const FDeliveryBotMoveCommandInfo& moveCommandInfo,	float deltaTime);
+	void ApplyParkingStop(UChaosVehicleMovementComponent* vehicleMovement);
 	
 	void SetupVehicleMovement(UChaosWheeledVehicleMovementComponent* wheeledMovement) const;
 

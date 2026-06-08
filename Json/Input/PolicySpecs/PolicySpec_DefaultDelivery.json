@@ -1,0 +1,24 @@
+{
+  "policySpec": {
+    "catalogId": "default_delivery",
+    "catalogVersion": 1,
+    "enabledPolicies": [
+      {
+        "policyId": "front_obstacle_stop",
+        "priority": 10
+      },
+      {
+        "policyId": "reroute_when_blocked",
+        "priority": 20
+      },
+      {
+        "policyId": "front_obstacle_slowdown",
+        "priority": 30
+      },
+      {
+        "policyId": "normal_path_follow",
+        "priority": 100
+      }
+    ]
+  }
+}

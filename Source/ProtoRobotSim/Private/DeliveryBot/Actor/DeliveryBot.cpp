@@ -85,7 +85,7 @@ ADeliveryBot::ADeliveryBot()
 void ADeliveryBot::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 	ApplySetupInfo();
 	UpdateSensorSnapshot();
 
@@ -95,13 +95,22 @@ void ADeliveryBot::BeginPlay()
 		vehicleMovement->SetUseAutomaticGears(false);
 		vehicleMovement->SetTargetGear(1, true);
 	}
-	
+
 	if (IsValid(PolicyControllerComponent))
 	{
 		PolicyControllerComponent->InitializePolicyController(this, HttpPolicyComponent);
+
+		if (SetupInfo.LocationSetupInfo.bAutoStartRoute)
+		{
+			PolicyControllerComponent->StartPolicyRunAfterSpawn();
+		}
+		else
+		{
+			UE_LOG(LogDeliveryBot, Log, TEXT("DeliveryBot policy auto start skipped. AutoStartRoute is false."));
+		}
 	}
-	
 }
+
 
 void ADeliveryBot::Tick(float DeltaTime)
 {
@@ -622,14 +631,17 @@ bool ADeliveryBot::SendPolicyObservationOnce()
 
 	if (bRequestStarted)
 	{
-		UE_LOG(
-			LogDeliveryBot,
-			Log,
-			TEXT("Policy observation request sent | PolicySeq: %d, SensorSeq: %d, JsonLength: %d"),
-			observation.Sequence,
-			observation.SensorSequence,
-			observationJson.Len()
-		);
+		if (bLogPolicyObservationRequests)
+		{
+			UE_LOG(
+				LogDeliveryBot,
+				Log,
+				TEXT("Policy observation request sent | PolicySeq: %d, SensorSeq: %d, JsonLength: %d"),
+				observation.Sequence,
+				observation.SensorSequence,
+				observationJson.Len()
+			);
+		}
 	}
 	else
 	{

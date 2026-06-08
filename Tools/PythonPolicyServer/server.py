@@ -563,6 +563,10 @@ def log_selected_policy_action(response: dict[str, Any]) -> None:
     )
 
 
+def should_log_runtime_messages(server: ThreadingHTTPServer) -> bool:
+    return bool(getattr(server, "verbose_runtime_log", False))
+
+
 def build_runtime_policy_context(
     server: ThreadingHTTPServer,
     observation: dict[str, Any],
@@ -1088,20 +1092,21 @@ class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
         observed_objects = observation.get("observedObjects", [])
         robot_grid_debug = build_robot_grid_debug(self.server, observation)
         goal_grid_debug = build_episode_goal_debug(self.server, observation)
-        print(
-            "observation "
-            f"sequence={observation.get('sequence', 0)} "
-            f"sensorSequence={observation.get('sensorSequence', 0)} "
-            f"policyMode={getattr(self.server, 'policy_mode', 'forward')} "
-            f"rays={len(lidar_rays) if isinstance(lidar_rays, list) else 0} "
-            f"objects={len(observed_objects) if isinstance(observed_objects, list) else 0} "
-            f"robotGridStatus={robot_grid_debug.get('robotGridStatus', 'unknown')} "
-            f"robotGrid=({robot_grid_debug.get('robotGridX', '-')},{robot_grid_debug.get('robotGridY', '-')}) "
-            f"robotCell={robot_grid_debug.get('robotCellAreaType', '-')} "
-            f"goalGridStatus={goal_grid_debug.get('goalGridStatus', 'unknown')} "
-            f"goalGrid=({goal_grid_debug.get('goalGridX', '-')},{goal_grid_debug.get('goalGridY', '-')})"
-        )
-        log_nearest_observed_object(observation)
+        if should_log_runtime_messages(self.server):
+            print(
+                "observation "
+                f"sequence={observation.get('sequence', 0)} "
+                f"sensorSequence={observation.get('sensorSequence', 0)} "
+                f"policyMode={getattr(self.server, 'policy_mode', 'forward')} "
+                f"rays={len(lidar_rays) if isinstance(lidar_rays, list) else 0} "
+                f"objects={len(observed_objects) if isinstance(observed_objects, list) else 0} "
+                f"robotGridStatus={robot_grid_debug.get('robotGridStatus', 'unknown')} "
+                f"robotGrid=({robot_grid_debug.get('robotGridX', '-')},{robot_grid_debug.get('robotGridY', '-')}) "
+                f"robotCell={robot_grid_debug.get('robotCellAreaType', '-')} "
+                f"goalGridStatus={goal_grid_debug.get('goalGridStatus', 'unknown')} "
+                f"goalGrid=({goal_grid_debug.get('goalGridX', '-')},{goal_grid_debug.get('goalGridY', '-')})"
+            )
+            log_nearest_observed_object(observation)
 
         response_delay_second = getattr(self.server, "response_delay_second", 0.0)
         if response_delay_second > 0.0:
@@ -1124,7 +1129,8 @@ class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
         response["configVersion"] = get_server_config_version(self.server)
         response["debug"].update(robot_grid_debug)
         response["debug"].update(goal_grid_debug)
-        log_selected_policy_action(response)
+        if should_log_runtime_messages(self.server):
+            log_selected_policy_action(response)
         self.send_json(200, response)
 
     def read_json_body(self) -> dict[str, Any]:
@@ -1159,7 +1165,8 @@ class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
             )
 
     def log_message(self, format: str, *args: Any) -> None:
-        print(f"{self.client_address[0]} - {format % args}")
+        if should_log_runtime_messages(self.server):
+            print(f"{self.client_address[0]} - {format % args}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -1178,6 +1185,11 @@ def parse_args() -> argparse.Namespace:
         default="forward",
         help="Policy response mode for success and validation failure tests.",
     )
+    parser.add_argument(
+        "--verbose-runtime-log",
+        action="store_true",
+        help="Print per-action observation, selected policy, and HTTP access logs.",
+    )
     return parser.parse_args()
 
 
@@ -1187,6 +1199,7 @@ def main() -> None:
     server = ThreadingHTTPServer((args.host, args.port), DeliveryBotPolicyHandler)
     server.response_delay_second = max(args.response_delay_second, 0.0)
     server.policy_mode = args.policy_mode
+    server.verbose_runtime_log = bool(args.verbose_runtime_log)
     server.active_catalog_id = str(policy_catalog.get("catalogId", ""))
     server.policy_catalog = policy_catalog
     server.policy_spec = build_default_policy_spec(policy_catalog)

@@ -170,6 +170,9 @@ protected: // HTTP 요청 공통 설정
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|HttpPolicy")
 	float RequestTimeoutSecond{ 2.0f };
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|HttpPolicy|Debug")
+	bool bLogPolicyResponseBody{ false };
+
 private:
 	// 활성 HTTP 요청 핸들
 	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> ActiveRequest;

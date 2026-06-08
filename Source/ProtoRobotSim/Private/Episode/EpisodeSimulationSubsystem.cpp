@@ -10,6 +10,9 @@
 #include "Shared/EpisodePedestrianPlanTypes.h"
 #include "Shared/Struct/DeliveryBot/Setup/DeliveryBotSetupInfo.h"
 #include "DeliveryBot/Actor/DeliveryBot.h"
+#include "DeliveryBot/Actor/DeliveryBot_GridBoundsActor.h"
+#include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
+#include "Components/BoxComponent.h"
 #include "Kismet/GameplayStatics.h"
 
 
@@ -40,6 +43,18 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 	{
 		StartPointClass = startPointBlueprintClass.Class;
 	}
+
+	static ConstructorHelpers::FClassFinder<ADeliveryBot_GridBoundsActor> gridBoundsActorBlueprintClass(
+		TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBot_GridBoundsActor"));
+	if (gridBoundsActorBlueprintClass.Succeeded())
+	{
+		GridBoundsActorClass = gridBoundsActorBlueprintClass.Class;
+	}
+	else
+	{
+		GridBoundsActorClass = ADeliveryBot_GridBoundsActor::StaticClass();
+	}
+
 	static ConstructorHelpers::FClassFinder<AEpisodePedestrian> pedestrianBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_EpisodePedestrian"));
 	if (pedestrianBlueprintClass.Succeeded())
 	{
@@ -57,6 +72,12 @@ void UEpisodeSimulationSubsystem::ClearEpisode()
 	const int32 actorIdCount = RuntimeActorsById.Num();
 	const int32 groundRegionCount = RuntimeGroundRegions.Num();
 	const int32 pathCount = RuntimePaths.Num();
+
+	if (IsValid(RuntimeGridBoundsActor))
+	{
+		RuntimeGridBoundsActor->Destroy();
+	}
+	RuntimeGridBoundsActor = nullptr;
 
 	for (int32 index = RuntimeActors.Num() - 1; index >= 0; --index)
 	{
@@ -93,6 +114,231 @@ void UEpisodeSimulationSubsystem::ClearEpisode()
 	}
 }
 
+bool UEpisodeSimulationSubsystem::RebuildDeliveryBotGridFromEpisodeGroundRegions(const FEpisodeSimulationSetupSpec& setupSpec)
+{
+	UWorld* world = GetWorld();
+	if (!IsValid(world))
+		return false;
+
+	UDeliveryBot_GridSubsystem* gridSubsystem = world->GetSubsystem<UDeliveryBot_GridSubsystem>();
+	if (!IsValid(gridSubsystem))
+	{
+		UE_LOG(LogEpisodeSimulation, Warning, TEXT("DeliveryBot grid rebuild failed. GridSubsystem is invalid."));
+		return false;
+	}
+
+	FBox2D xyBounds(ForceInit);
+	double centerZ = 0.0;
+	if (!TryBuildGroundRegionXYBounds(setupSpec.GroundRegions, xyBounds, centerZ))
+	{
+		UE_LOG(LogEpisodeSimulation, Warning, TEXT("DeliveryBot grid bounds build failed. No valid ground regions."));
+		return false;
+	}
+
+	if (IsValid(RuntimeGridBoundsActor))
+	{
+		RuntimeGridBoundsActor->Destroy();
+		RuntimeGridBoundsActor = nullptr;
+	}
+
+	ADeliveryBot_GridBoundsActor* gridBoundsActor = SpawnDeliveryBotGridBoundsActor(xyBounds, centerZ);
+	if (!IsValid(gridBoundsActor))
+	{
+		UE_LOG(LogEpisodeSimulation, Warning, TEXT("DeliveryBot grid rebuild failed. Runtime GridBoundsActor spawn failed."));
+		return false;
+	}
+
+	gridSubsystem->BuildGridFromBounds(gridBoundsActor);
+
+	UE_LOG(
+		LogEpisodeSimulation,
+		Log,
+		TEXT("DeliveryBot grid rebuilt from episode ground regions. BoundsActor: %s, HasGrid: %s, Cells: %d"),
+		*gridBoundsActor->GetName(),
+		gridSubsystem->HasBuiltGrid() ? TEXT("true") : TEXT("false"),
+		gridSubsystem->GetGridCellCount()
+	);
+
+	return gridSubsystem->HasBuiltGrid();
+}
+
+bool UEpisodeSimulationSubsystem::TryBuildGroundRegionXYBounds(
+	const TArray<FEpisodeGroundRegionSpec>& groundRegionSpecs,
+	FBox2D& outXYBounds,
+	double& outCenterZ) const
+{
+	outXYBounds = FBox2D(ForceInit);
+
+	double zSum = 0.0;
+	int32 validRegionCount = 0;
+
+	for (const FEpisodeGroundRegionSpec& regionSpec : groundRegionSpecs)
+	{
+		if (regionSpec.ShapeType != EEpisodeGroundShapeType::Rectangle)
+			continue;
+
+		ExpandXYBoundsWithGroundRegion(regionSpec, outXYBounds);
+		zSum += regionSpec.Center.Z;
+		++validRegionCount;
+	}
+
+	if (!outXYBounds.bIsValid || validRegionCount <= 0)
+		return false;
+
+	outCenterZ = zSum / static_cast<double>(validRegionCount);
+	return true;
+}
+
+ADeliveryBot_GridBoundsActor* UEpisodeSimulationSubsystem::SpawnDeliveryBotGridBoundsActor(
+	const FBox2D& xyBounds,
+	double centerZ)
+{
+	UWorld* world = GetWorld();
+	if (!IsValid(world))
+		return nullptr;
+
+	TSubclassOf<ADeliveryBot_GridBoundsActor> spawnClass = GridBoundsActorClass;
+	if (!spawnClass)
+	{
+		spawnClass = ADeliveryBot_GridBoundsActor::StaticClass();
+	}
+
+	ADeliveryBot_GridBoundsActor* gridBoundsActor = world->SpawnActorDeferred<ADeliveryBot_GridBoundsActor>(
+		spawnClass,
+		FTransform::Identity,
+		nullptr,
+		nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+	if (!IsValid(gridBoundsActor))
+		return nullptr;
+
+	ApplyXYBoundsToGridBoundsActor(gridBoundsActor, xyBounds, centerZ);
+
+	UGameplayStatics::FinishSpawningActor(gridBoundsActor, gridBoundsActor->GetActorTransform());
+
+	RuntimeGridBoundsActor = gridBoundsActor;
+	return gridBoundsActor;
+}
+
+void UEpisodeSimulationSubsystem::ApplyXYBoundsToGridBoundsActor(
+	ADeliveryBot_GridBoundsActor* gridBoundsActor,
+	const FBox2D& xyBounds,
+	double centerZ) const
+{
+	if (!IsValid(gridBoundsActor))
+		return;
+
+	UBoxComponent* boundsBox = gridBoundsActor->GetBoundsBox();
+	if (!IsValid(boundsBox))
+		return;
+
+	const double safePadding = FMath::Max(static_cast<double>(DeliveryBotGridBoundsPaddingCm), 0.0);
+	const FVector2D paddedMin = xyBounds.Min - FVector2D(safePadding, safePadding);
+	const FVector2D paddedMax = xyBounds.Max + FVector2D(safePadding, safePadding);
+	const FVector2D boundsCenter = (paddedMin + paddedMax) * 0.5;
+	const FVector2D boundsSize = paddedMax - paddedMin;
+
+	gridBoundsActor->SetActorLocation(FVector(boundsCenter.X, boundsCenter.Y, centerZ));
+	gridBoundsActor->SetActorRotation(FRotator::ZeroRotator);
+	gridBoundsActor->SetActorScale3D(FVector::OneVector);
+
+	boundsBox->SetRelativeLocation(FVector::ZeroVector);
+	boundsBox->SetRelativeRotation(FRotator::ZeroRotator);
+	boundsBox->SetRelativeScale3D(FVector::OneVector);
+	boundsBox->SetBoxExtent(FVector(boundsSize.X * 0.5, boundsSize.Y * 0.5, 100.0), true);
+}
+
+void UEpisodeSimulationSubsystem::ExpandXYBoundsWithGroundRegion(
+	const FEpisodeGroundRegionSpec& regionSpec,
+	FBox2D& inOutXYBounds)
+{
+	const FVector2D halfSize = regionSpec.Size * 0.5;
+	const FTransform regionTransform(
+		FRotator(0.0, regionSpec.YawDegrees, 0.0),
+		regionSpec.Center
+	);
+
+	const FVector localCorners[4] =
+	{
+		FVector(-halfSize.X, -halfSize.Y, 0.0),
+		FVector(halfSize.X, -halfSize.Y, 0.0),
+		FVector(halfSize.X, halfSize.Y, 0.0),
+		FVector(-halfSize.X, halfSize.Y, 0.0)
+	};
+
+	for (const FVector& localCorner : localCorners)
+	{
+		const FVector worldCorner = regionTransform.TransformPosition(localCorner);
+		inOutXYBounds += FVector2D(worldCorner.X, worldCorner.Y);
+	}
+}
+
+bool UEpisodeSimulationSubsystem::ValidateDeliveryBotGridLocation(
+	const FString& robotInstanceId,
+	const FString& locationLabel,
+	const FVector& worldLocation) const
+{
+	UWorld* world = GetWorld();
+	if (!IsValid(world))
+		return false;
+
+	const UDeliveryBot_GridSubsystem* gridSubsystem = world->GetSubsystem<UDeliveryBot_GridSubsystem>();
+	if (!IsValid(gridSubsystem) || !gridSubsystem->HasBuiltGrid())
+	{
+		UE_LOG(LogEpisodeSimulation, Warning, TEXT("DeliveryBot grid validation failed. Grid is not built. Robot: %s"), *robotInstanceId);
+		return false;
+	}
+
+	const FIntPoint gridIndex = gridSubsystem->GetGridIndexByWorldLocation(worldLocation);
+	const FDeliveryBotGridCellInfo* cellInfo = gridSubsystem->FindCellInfoByGridIndex(gridIndex);
+
+	if (!cellInfo || !gridSubsystem->IsWalkableGridIndex(gridIndex))
+	{
+		const FString worldLocationString = worldLocation.ToString();
+		const FString gridIndexString = gridIndex.ToString();
+		const FString sourceProfileName = cellInfo
+			? cellInfo->SourceCollisionProfileName.ToString()
+			: FString(TEXT("InvalidCell"));
+
+		UE_LOG(
+			LogEpisodeSimulation,
+			Warning,
+			TEXT("DeliveryBot %s location is not walkable. Robot: %s, World: %s, Grid: %s, Source: %s"),
+			*locationLabel,
+			*robotInstanceId,
+			*worldLocationString,
+			*gridIndexString,
+			*sourceProfileName
+		);
+
+		return false;
+	}
+
+	return true;
+}
+
+bool UEpisodeSimulationSubsystem::ValidateDeliveryBotRouteOnGrid(
+	const FEpisodePlaceableInstanceSpec& placeableSpec,
+	const FDeliveryBotSetupInfo& setupInfo,
+	bool bHasGoal,
+	const FVector& goalLocation) const
+{
+	const bool bStartValid = ValidateDeliveryBotGridLocation(
+		placeableSpec.InstanceId,
+		TEXT("start"),
+		setupInfo.LocationSetupInfo.StartLocationCm
+	);
+
+	const bool bGoalValid = !bHasGoal || ValidateDeliveryBotGridLocation(
+		placeableSpec.InstanceId,
+		TEXT("goal"),
+		goalLocation
+	);
+
+	return bStartValid && bGoalValid;
+}
+
 bool UEpisodeSimulationSubsystem::SetupEpisodeWorld(const FEpisodeSimulationSetupSpec& setupSpec)
 {
 	ClearEpisode();
@@ -117,6 +363,19 @@ bool UEpisodeSimulationSubsystem::SetupEpisodeWorld(const FEpisodeSimulationSetu
 			UE_LOG(LogEpisodeSimulation, Warning, TEXT("지면 영역 '%s' 스폰 실패."), *regionSpec.RegionId);
 			bAllSpawned = false;
 		}
+	}
+
+	const bool bHasDeliveryBotPlaceable = setupSpec.Placeables.ContainsByPredicate(
+		[](const FEpisodePlaceableInstanceSpec& placeableSpec)
+		{
+			return placeableSpec.Category == EEpisodeActorCategory::DeliveryBot
+				|| placeableSpec.Category == EEpisodeActorCategory::RoadVehicle;
+		});
+
+	if (bHasDeliveryBotPlaceable && !RebuildDeliveryBotGridFromEpisodeGroundRegions(setupSpec))
+	{
+		UE_LOG(LogEpisodeSimulation, Warning, TEXT("DeliveryBot grid rebuild failed after ground regions were spawned."));
+		bAllSpawned = false;
 	}
 
 	for (const FEpisodePathSpec& pathSpec : setupSpec.Paths)
@@ -500,7 +759,24 @@ AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInst
 		goalLocation = setupInfo.LocationSetupInfo.StartLocationCm;
 	}
 
-	setupInfo.LocationSetupInfo.bAutoStartRoute = !bSpawnOnly && bRouteAutoStart && bHasGoal;
+	const bool bRouteGridValid = ValidateDeliveryBotRouteOnGrid(
+		placeableSpec,
+		setupInfo,
+		bHasGoal,
+		goalLocation
+	);
+
+	if (!bRouteGridValid)
+	{
+		UE_LOG(
+			LogEpisodeSimulation,
+			Warning,
+			TEXT("DeliveryBot auto start disabled because route grid validation failed. Robot: %s"),
+			*placeableSpec.InstanceId
+		);
+	}
+
+	setupInfo.LocationSetupInfo.bAutoStartRoute = !bSpawnOnly && bRouteAutoStart && bHasGoal && bRouteGridValid;
 
 	ADeliveryBot* robotActor{
 		world->SpawnActorDeferred<ADeliveryBot>(

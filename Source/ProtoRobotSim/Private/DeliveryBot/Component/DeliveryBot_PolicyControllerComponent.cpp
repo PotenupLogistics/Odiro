@@ -7,7 +7,6 @@
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
-#include "Episode/EpisodeEvaluationSubsystem.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotPolicyController, Log, All);
 
@@ -16,7 +15,7 @@ UDeliveryBot_PolicyControllerComponent::UDeliveryBot_PolicyControllerComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-void UDeliveryBot_PolicyControllerComponent::InitializePolicyController(ADeliveryBot* ownerDeliveryBot,	UDeliveryBot_HttpPolicyComponent* httpPolicyComponent)
+void UDeliveryBot_PolicyControllerComponent::InitializePolicyController(ADeliveryBot* ownerDeliveryBot,UDeliveryBot_HttpPolicyComponent* httpPolicyComponent)
 {
 	OwnerDeliveryBot = ownerDeliveryBot;
 	HttpPolicyComponent = httpPolicyComponent;
@@ -37,28 +36,8 @@ void UDeliveryBot_PolicyControllerComponent::InitializePolicyController(ADeliver
 		HttpPolicyComponent->OnEpisodeStartResponse.AddUniqueDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeStartResponse);
 		HttpPolicyComponent->OnEpisodeConfigUpdateResponse.AddUniqueDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeConfigUpdateResponse);
 	}
+
 	BindEpisodeEvaluationEndedEvent();
-	if (UWorld* world = GetWorld())
-	{
-		if (UEpisodeEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UEpisodeEvaluationSubsystem>())
-		{
-			evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeEnded);
-			evaluationSubsystem->OnEpisodeEnded.AddDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeEnded);
-		}
-	}
-	
-	if (bAutoStartPolicyLoop)
-	{
-		if (bWaitForEpisodeStartBeforePolicyLoop)
-		{
-			StartEpisodeStartRetryLoop();
-		}
-		else
-		{
-			SendEpisodeStartToPolicyServerOnce();
-			StartPolicyLoop();
-		}
-	}
 }
 
 void UDeliveryBot_PolicyControllerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -67,21 +46,16 @@ void UDeliveryBot_PolicyControllerComponent::EndPlay(const EEndPlayReason::Type 
 	StopGridUploadRetryLoop();
 	StopEpisodeStartRetryLoop();
 	UnbindEpisodeEvaluationEndedEvent();
+
 	if (IsValid(HttpPolicyComponent))
 	{
 		HttpPolicyComponent->OnParsedPolicyResponse.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse);
 		HttpPolicyComponent->OnGridResponse.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleGridUploadResponse);
 		HttpPolicyComponent->OnEpisodeStartResponse.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeStartResponse);
 		HttpPolicyComponent->OnEpisodeConfigUpdateResponse.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeConfigUpdateResponse);
-		
+		HttpPolicyComponent->OnPolicySpecUpdateResponse.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleStartupPolicySpecUpdateResponse);
 	}
-	if (UWorld* world = GetWorld())
-	{
-		if (UEpisodeEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UEpisodeEvaluationSubsystem>())
-		{
-			evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeEnded);
-		}
-	}
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -499,6 +473,9 @@ FDeliveryBotMoveCommandInfo UDeliveryBot_PolicyControllerComponent::BuildStopMov
 
 void UDeliveryBot_PolicyControllerComponent::LogPolicyResponseReceived(const FDeliveryBotHttpPolicyResponseInfo& responseInfo) const
 {
+	if (!bLogPolicyRuntimeMessages)
+		return;
+
 	UE_LOG(
 		LogDeliveryBotPolicyController,
 		Log,
@@ -528,6 +505,9 @@ void UDeliveryBot_PolicyControllerComponent::LogStalePolicyResponse(const FDeliv
 
 void UDeliveryBot_PolicyControllerComponent::LogValidPolicyAction(const FDeliveryBotHttpPolicyResponseInfo& responseInfo, const FDeliveryBotMoveCommandInfo& moveCommandInfo) const
 {
+	if (!bLogPolicyRuntimeMessages)
+		return;
+
 	UE_LOG(
 		LogDeliveryBotPolicyController,
 		Log,
@@ -1081,5 +1061,101 @@ void UDeliveryBot_PolicyControllerComponent::UnbindEpisodeEvaluationEndedEvent()
 	}
 }
 
+// 이전 실행 흔적 때문에 새로 소환된 로봇이 잘못된 버전/상태를 쓰는 걸 막음
+void UDeliveryBot_PolicyControllerComponent::ResetPolicyRunStartupState()
+{
+	StopPolicyLoop();
+	StopGridUploadRetryLoop();
+	StopEpisodeStartRetryLoop();
+
+	bHoldStopAfterGoalReached = false;
+	bHasValidPolicyMoveCommand = false;
+	bHasCompletedGridUpload = false;
+	bHasCompletedEpisodeStart = false;
+	bHasExpectedPolicyVersions = false;
+	bStartPolicyLoopAfterNextEpisodeStart = false;
+
+	LastValidPolicyMoveCommand = FDeliveryBotMoveCommandInfo{};
+	LastValidPolicyActionWorldTimeSeconds = 0.f;
+
+	ConsecutivePolicyFailureCount = 0;
+	LastHandledPolicyResponseSequence = 0;
+
+	ExpectedEpisodeVersion = 0;
+	ExpectedConfigVersion = 0;
+	ExpectedGridVersion = 0;
+
+	PolicyFailureHistory.Reset();
+}
+
+// 소환 후 자동 주행의 시작점이다.
+bool UDeliveryBot_PolicyControllerComponent::StartPolicyRunAfterSpawn()
+{
+	if (!IsValid(OwnerDeliveryBot) || !IsValid(HttpPolicyComponent))
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("StartPolicyRunAfterSpawn failed. Owner or HttpPolicyComponent is invalid."));
+		return false;
+	}
+
+	const FString trimmedPolicySpecFileName = StartupPolicySpecFileName.TrimStartAndEnd();
+	if (trimmedPolicySpecFileName.IsEmpty())
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("StartPolicyRunAfterSpawn failed. StartupPolicySpecFileName is empty."));
+		return false;
+	}
+
+	if (HttpPolicyComponent->IsPolicySpecUpdateRequestInFlight())
+	{
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("StartPolicyRunAfterSpawn skipped. Policy spec update request is already in flight."));
+		return false;
+	}
+
+	ResetPolicyRunStartupState();
+
+	HttpPolicyComponent->OnPolicySpecUpdateResponse.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleStartupPolicySpecUpdateResponse);
+	HttpPolicyComponent->OnPolicySpecUpdateResponse.AddUniqueDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleStartupPolicySpecUpdateResponse);
+
+	const bool bRequestStarted = HttpPolicyComponent->SendPolicySpecUpdateJsonFile(trimmedPolicySpecFileName);
+	if (!bRequestStarted)
+	{
+		HttpPolicyComponent->OnPolicySpecUpdateResponse.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleStartupPolicySpecUpdateResponse);
+
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("StartPolicyRunAfterSpawn failed. Policy spec update request could not start. File: %s"), *trimmedPolicySpecFileName);
+		return false;
+	}
+
+	UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Spawned DeliveryBot policy run requested. PolicySpec: %s"), *trimmedPolicySpecFileName);
+	return true;
+}
+
+void UDeliveryBot_PolicyControllerComponent::HandleStartupPolicySpecUpdateResponse(
+	bool bWasSuccessful,
+	int32 responseCode,
+	const FString& responseBody)
+{
+	if (IsValid(HttpPolicyComponent))
+	{
+		HttpPolicyComponent->OnPolicySpecUpdateResponse.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleStartupPolicySpecUpdateResponse);
+	}
+
+	const bool bHttpOk = bWasSuccessful && responseCode >= 200 && responseCode < 300;
+	if (!bHttpOk)
+	{
+		UE_LOG(
+			LogDeliveryBotPolicyController,
+			Warning,
+			TEXT("Startup policy spec update failed. Success: %s, Code: %d, Body: %s"),
+			bWasSuccessful ? TEXT("true") : TEXT("false"),
+			responseCode,
+			*responseBody
+		);
+		return;
+	}
+
+	UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Startup policy spec update succeeded. Starting episode start retry loop."));
+
+	bStartPolicyLoopAfterNextEpisodeStart = true;
+	StartEpisodeStartRetryLoop();
+}
 
 

@@ -51,25 +51,30 @@ def _extract_count_near(text: str, keywords: tuple[str, ...], units: tuple[str, 
     return None
 
 
+_OBSTACLE_TYPE_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("trash_bin", ("쓰레기통", "trash can", "trash_can", "trash bin", "trash_bin", "garbage can", "trash", "bin")),
+    ("traffic_cone", ("안전콘", "라바콘", "traffic cone", "traffic_cone", "road cone", "road_cone", "cone", "콘")),
+    ("box", ("상자", "박스", "박스형", "box", "crate")),
+    ("road_barrier", ("바리케이드", "차단막", "barrier", "road barrier", "road_barrier", "barricade")),
+    ("manhole", ("맨홀", "manhole")),
+    ("fire_hydrant", ("소화전", "hydrant", "fire hydrant")),
+    ("mailbox", ("우편함", "mailbox", "mail box")),
+    ("street_bank", ("벤치", "street bench", "street bank", "bench", "bank")),
+)
+
+
+def _mentioned_obstacle_types(text: str) -> list[str]:
+    obstacle_types: list[str] = []
+    for obstacle_type, keywords in _OBSTACLE_TYPE_KEYWORDS:
+        if _contains_any(text, keywords):
+            obstacle_types.append(obstacle_type)
+    return obstacle_types
+
+
 def _extract_obstacle_type(text: str) -> str | None:
-    if _contains_any(text, ("안전콘", "라바콘", "traffic cone", "traffic_cone", "road cone", "cone", "콘")):
-        return "traffic_cone"
-    if _contains_any(text, ("쓰레기통", "trash can", "trash_can", "trash bin", "trash_bin", "garbage can")):
-        return "trash_bin"
-    if _contains_any(text, ("바리케이드", "차단막", "barrier", "road barrier", "road_barrier", "barricade")):
-        return "road_barrier"
-    if _contains_any(text, ("맨홀", "manhole")):
-        return "manhole"
-    if _contains_any(text, ("소화전", "hydrant", "fire hydrant")):
-        return "fire_hydrant"
-    if _contains_any(text, ("우편함", "mailbox", "mail box")):
-        return "mailbox"
-    if _contains_any(text, ("벤치", "street bench", "street bank", "bench", "bank")):
-        return "street_bank"
-    if _contains_any(text, ("상자", "박스", "box")):
-        return "box"
-    if _contains_any(text, ("박스형", "박스", "box")) and _contains_any(text, ("장애물", "정적 장애물")):
-        return "box"
+    mentioned_types = _mentioned_obstacle_types(text)
+    if mentioned_types:
+        return mentioned_types[0]
     if _contains_any(text, ("정적 장애물", "static obstacle")):
         return "static_obstacle"
     return None
@@ -79,12 +84,15 @@ def _extract_obstacle_types(text: str) -> list[str]:
     type_patterns = (
         ("box", r"(?:박스형|박스|box)\s*(?:정적\s*)?장애물\s*(\d+)\s*개"),
         ("kickboard", r"(?:킥보드\s*형태|킥보드|전동킥보드)\s*(?:형태\s*)?(?:장애물\s*)?(\d+)\s*개"),
-        ("cone", r"(?:라바콘|콘|cone)\s*(?:장애물\s*)?(\d+)\s*개"),
+        ("traffic_cone", r"(?:라바콘|안전콘|콘|traffic cone|road cone|cone)\s*(?:장애물\s*)?(\d+)\s*개"),
     )
     obstacle_types: list[str] = []
     for obstacle_type, pattern in type_patterns:
         for match in re.finditer(pattern, text, re.IGNORECASE):
             obstacle_types.extend([obstacle_type] * int(match.group(1)))
+    for obstacle_type in _mentioned_obstacle_types(text):
+        if obstacle_type not in obstacle_types:
+            obstacle_types.append(obstacle_type)
     return obstacle_types
 
 
@@ -260,6 +268,9 @@ def extract_scenario_intent(prompt: str) -> ScenarioIntent:
         _append_unique(intent.crossingHints, ["pedestrian_crossing"])
         _append_unique(intent.suggestedCategories, ["sidewalk_operation", "crosswalk_operation"])
         _append_unique(intent.suggestedActions, ["YieldWait", "Stop", "Continue"])
+
+    if not intent.explicitNoPedestrian and ("Pedestrian" in intent.pedestrianHints or "pedestrian_crossing" in intent.crossingHints):
+        intent.pedestrianCount = intent.pedestrianCount if intent.pedestrianCount is not None else 1
 
     if _contains_any(text, ("횡단보도", "신호등")):
         _append_unique(intent.crossingHints, ["crosswalk"])

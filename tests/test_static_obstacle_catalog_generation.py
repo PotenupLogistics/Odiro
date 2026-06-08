@@ -6,6 +6,7 @@ from app.services.episode_setup_validator import validate_episode_setup
 from app.services.world_config_scenario_intent_extractor import extract_scenario_intent
 from app.services.world_config_scenario_post_processor import apply_scenario_intent_to_world_config
 from app.services.world_config_prompt_builder import build_world_config_prompt_package
+from app.services.setup_pair_queue_generator import generate_setup_pair_queue
 from app.services.world_config_to_episode_setup_adapter import convert_world_config_to_episode_setup
 
 from tests.test_world_config_prompt_builder import _request
@@ -106,3 +107,67 @@ def test_requested_prompt_cases_resolve_to_catalog_prop_ids(prompt: str, expecte
 
     assert episode.actors.static_obstacles[0].prop_id == expected_prop_id
     assert validate_episode_setup(episode).valid is True
+
+
+def test_multiple_named_obstacles_are_preserved_through_post_processing() -> None:
+    world_config = _world_config()
+    world_config["obstacles"] = []
+
+    result = apply_scenario_intent_to_world_config(
+        "좁은 보도에서 안전콘과 상자형 장애물이 놓여 있는 상황",
+        world_config,
+    )
+    episode = convert_world_config_to_episode_setup(result.patchedPayload)
+
+    prop_ids = [item.prop_id for item in episode.actors.static_obstacles]
+    assert "obstacle.road_cone_01" in prop_ids
+    assert "obstacle.box_01" in prop_ids
+
+
+def test_run_queue_variants_preserve_named_obstacle_type_constraints() -> None:
+    world_config = _world_config()
+    world_config["semanticFixedConstraints"] = {
+        "sidewalkWidthCm": 120,
+        "obstacleType": "trash_bin",
+        "pedestrianCount": 0,
+    }
+    world_config["environmentSampling"] = {
+        "enabled": True,
+        "scenarioType": "obstacle_ahead",
+        "fixedParameters": {},
+        "semanticFixedConstraints": world_config["semanticFixedConstraints"],
+    }
+
+    queue = generate_setup_pair_queue(world_config, episode_count=2)
+
+    for item in queue.items:
+        prop_ids = [obstacle.prop_id for obstacle in item.episode_setup.actors.static_obstacles]
+        assert "obstacle.trash_bin" in prop_ids or "obstacle.bin" in prop_ids
+        assert prop_ids != ["obstacle.box_01"]
+        assert item.episode_setup.actors.pedestrians == []
+
+
+def test_run_queue_variants_preserve_multiple_named_obstacles_and_crossing_pedestrians() -> None:
+    world_config = _world_config()
+    world_config["semanticFixedConstraints"] = {
+        "sidewalkWidthCm": 120,
+        "obstacleTypes": ["traffic_cone", "box"],
+        "obstacleCount": 2,
+        "pedestrianCount": 1,
+        "pedestrianDirection": "crossing",
+    }
+    world_config["environmentSampling"] = {
+        "enabled": True,
+        "scenarioType": "obstacle_ahead",
+        "fixedParameters": {},
+        "semanticFixedConstraints": world_config["semanticFixedConstraints"],
+    }
+
+    queue = generate_setup_pair_queue(world_config, episode_count=2)
+
+    for item in queue.items:
+        prop_ids = [obstacle.prop_id for obstacle in item.episode_setup.actors.static_obstacles]
+        assert any(prop_id.startswith("obstacle.road_cone") for prop_id in prop_ids)
+        assert any(prop_id.startswith("obstacle.box") for prop_id in prop_ids)
+        assert len(item.episode_setup.actors.pedestrians) >= 1
+        assert item.episode_setup.paths

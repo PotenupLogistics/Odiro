@@ -88,8 +88,39 @@ def _first_obstacle(obstacles: list[dict[str, Any]]) -> dict[str, Any] | None:
     return next((item for item in obstacles if isinstance(item, dict)), None)
 
 
+def _desired_obstacle_types(intent: ScenarioIntent) -> list[str]:
+    if intent.obstacleTypes:
+        return [item for item in intent.obstacleTypes if item != "static_obstacle"]
+    if intent.obstacleType and intent.obstacleType != "static_obstacle":
+        return [intent.obstacleType]
+    return []
+
+
 def _world_obstacle_type(intent: ScenarioIntent) -> str:
     return intent.obstacleType if intent.obstacleType and intent.obstacleType != "static_obstacle" else "Obstacle"
+
+
+def _matching_obstacle(obstacles: list[dict[str, Any]], obstacle_type: str) -> dict[str, Any] | None:
+    for obstacle in obstacles:
+        if isinstance(obstacle, dict) and str(obstacle.get("type", "")).lower() == obstacle_type.lower():
+            return obstacle
+    return None
+
+
+def _typed_obstacle(
+    obstacle_index: int,
+    obstacle_type: str,
+    payload: dict[str, Any],
+    intent: ScenarioIntent,
+) -> dict[str, Any]:
+    midpoint = _path_midpoint(payload)
+    y_offset = 35.0 * obstacle_index
+    return {
+        "objectId": f"obstacle_{obstacle_index + 1:03d}",
+        "type": obstacle_type,
+        "position": intent.obstaclePositionHint or {"x": midpoint["x"], "y": midpoint["y"] + y_offset, "z": midpoint["z"]},
+        "blockingRatio": intent.obstacleBlockingRatio if intent.obstacleBlockingRatio is not None else PATH_BLOCKING_RATIO,
+    }
 
 
 def apply_scenario_intent_to_world_config(
@@ -137,6 +168,7 @@ def apply_scenario_intent_to_world_config_from_intent(
     obstacles = _items(patched, "obstacles")
     environment_objects = _items(patched, "environmentObjects")
     has_kickboard = _find_type(obstacles, "Kickboard") or _find_type(environment_objects, "Kickboard")
+    desired_obstacle_types = _desired_obstacle_types(intent)
 
     if _has_hint(intent.obstacleHints, "Kickboard") and has_kickboard is None:
         kickboard = {
@@ -155,6 +187,33 @@ def apply_scenario_intent_to_world_config_from_intent(
             kickboard,
             "User prompt includes a Kickboard obstacle.",
         )
+
+    for desired_index, desired_type in enumerate(desired_obstacle_types):
+        matching_obstacle = _matching_obstacle(obstacles, desired_type)
+        if matching_obstacle is None and desired_index < len(obstacles) and isinstance(obstacles[desired_index], dict):
+            matching_obstacle = obstacles[desired_index]
+            before_type = matching_obstacle.get("type")
+            if before_type != desired_type:
+                matching_obstacle["type"] = desired_type
+                _append_patch(
+                    patches,
+                    "set_named_obstacle_type_from_prompt",
+                    f"obstacles[{matching_obstacle.get('objectId', desired_index)}].type",
+                    before_type,
+                    desired_type,
+                    "User prompt explicitly names this static obstacle type.",
+                )
+        if matching_obstacle is None:
+            matching_obstacle = _typed_obstacle(desired_index, desired_type, patched, intent)
+            obstacles.append(matching_obstacle)
+            _append_patch(
+                patches,
+                "add_named_obstacle_from_prompt",
+                "obstacles[]",
+                None,
+                matching_obstacle,
+                "User prompt explicitly names this static obstacle type.",
+            )
 
     target_obstacle = has_kickboard if isinstance(has_kickboard, dict) else _first_obstacle(obstacles)
     route_midpoint = _path_midpoint(patched)

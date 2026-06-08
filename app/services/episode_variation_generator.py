@@ -310,7 +310,11 @@ def _apply_fixed_scenario_constraints(
         obstacles: list[dict[str, Any]] = []
         for obstacle_index in range(obstacle_count):
             obstacle_type = obstacle_types[obstacle_index] if obstacle_index < len(obstacle_types) else single_obstacle_type
-            world_obstacle_type = "Kickboard" if obstacle_type == "kickboard" else "Obstacle"
+            world_obstacle_type = (
+                "Kickboard"
+                if obstacle_type == "kickboard"
+                else obstacle_type if obstacle_type and obstacle_type != "static_obstacle" else "Obstacle"
+            )
             if obstacle_index < len(positions_m):
                 x_cm = start_x_cm + positions_m[obstacle_index] * 100.0
             elif obstacle_count == 1:

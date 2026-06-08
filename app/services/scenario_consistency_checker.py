@@ -57,12 +57,22 @@ def _near(left: float, right: float, tolerance: float = 0.001) -> bool:
 def _obstacle_kind(obstacle: Any) -> str:
     prop_id = str(getattr(obstacle, "prop_id", "")).lower()
     semantic_type = str(obstacle.properties.get("semantic_type", "")).lower()
+    if prop_id in {"obstacle.trash_bin", "obstacle.bin"}:
+        return "trash_bin"
     if prop_id.startswith("obstacle.box"):
         return "box"
-    if prop_id == "obstacle.road_barrier_01":
-        return "kickboard_fallback"
-    if "cone" in prop_id or "cone" in semantic_type:
-        return "cone"
+    if prop_id.startswith("obstacle.road_cone"):
+        return "traffic_cone"
+    if prop_id.startswith("obstacle.road_barrier"):
+        return "road_barrier"
+    if prop_id.startswith("obstacle.manhole"):
+        return "manhole"
+    if prop_id == "obstacle.fire_hydrant":
+        return "fire_hydrant"
+    if prop_id == "obstacle.mailbox":
+        return "mailbox"
+    if prop_id == "obstacle.street_bank":
+        return "street_bank"
     return semantic_type or prop_id or "unknown"
 
 
@@ -143,7 +153,7 @@ def _check_episode(
     if isinstance(obstacle_types, list) and obstacle_types:
         actual_types = [_obstacle_kind(obstacle) for obstacle in episode.actors.static_obstacles]
         expected_types = [
-            "kickboard_fallback" if str(item) == "kickboard" else str(item)
+            "road_barrier" if str(item) == "kickboard" else str(item)
             for item in obstacle_types
         ]
         if actual_types[: len(expected_types)] != expected_types:

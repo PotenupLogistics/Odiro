@@ -8,9 +8,20 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from deliverybot_policy.catalog import (
+    build_default_policy_spec,
+    list_policy_catalog_sources,
+    load_policy_catalog,
+    load_policy_catalog_by_id,
+    normalize_policy_spec,
+)
+from deliverybot_policy.context import get_nearest_observed_object
+from deliverybot_policy.registry import build_runtime_policy_response
+
 
 CLIENT_DISCONNECT_EXCEPTIONS = (BrokenPipeError, ConnectionAbortedError, ConnectionResetError)
 POLICY_MODE_CHOICES = (
+    "runtime",
     "forward",
     "left",
     "right",
@@ -90,6 +101,25 @@ def get_server_grid_cell_lookup(server: ThreadingHTTPServer) -> dict[tuple[int, 
     return grid_cell_lookup if isinstance(grid_cell_lookup, dict) else {}
 
 
+def get_server_policy_catalog(server: ThreadingHTTPServer) -> dict[str, Any]:
+    policy_catalog = getattr(server, "policy_catalog", None)
+    return policy_catalog if isinstance(policy_catalog, dict) else {}
+
+
+def get_server_active_catalog_id(server: ThreadingHTTPServer) -> str:
+    active_catalog_id = getattr(server, "active_catalog_id", "")
+    return str(active_catalog_id or "")
+
+
+def get_server_policy_spec(server: ThreadingHTTPServer) -> dict[str, Any]:
+    policy_spec = getattr(server, "policy_spec", None)
+    return policy_spec if isinstance(policy_spec, dict) else {}
+
+
+def has_runtime_policy_spec(server: ThreadingHTTPServer) -> bool:
+    return bool(getattr(server, "policy_spec_received", False))
+
+
 def build_grid_status_response(server: ThreadingHTTPServer) -> dict[str, Any]:
     with get_server_grid_lock(server):
         grid_summary = dict(get_server_grid_summary(server))
@@ -112,6 +142,8 @@ def build_episode_status_response(server: ThreadingHTTPServer) -> dict[str, Any]
     with get_server_grid_lock(server):
         episode_info = dict(get_server_episode_info(server))
         config_info = dict(get_server_config_info(server))
+        policy_catalog = dict(get_server_policy_catalog(server))
+        policy_spec = dict(get_server_policy_spec(server))
         episode_version = get_server_episode_version(server)
         config_version = get_server_config_version(server)
         grid_status = build_grid_status_response(server)
@@ -126,7 +158,53 @@ def build_episode_status_response(server: ThreadingHTTPServer) -> dict[str, Any]
         "hasGoal": bool(episode_info.get("hasGoal", False)),
         "configReceived": bool(config_info),
         "configVersion": config_version,
+        "policyCatalogVersion": int(policy_catalog.get("catalogVersion", 0) or 0),
+        "policySpecReceived": has_runtime_policy_spec(server),
+        "enabledPolicyCount": len(policy_spec.get("enabledPolicies", []))
+        if isinstance(policy_spec.get("enabledPolicies", []), list)
+        else 0,
         **grid_status,
+    }
+
+
+def build_policy_catalog_response(server: ThreadingHTTPServer) -> dict[str, Any]:
+    with get_server_grid_lock(server):
+        policy_catalog = dict(get_server_policy_catalog(server))
+        active_catalog_id = get_server_active_catalog_id(server)
+
+    return {
+        "status": "ok",
+        "activeCatalogId": active_catalog_id,
+        **policy_catalog,
+    }
+
+
+def build_policy_catalog_sources_response(server: ThreadingHTTPServer) -> dict[str, Any]:
+    with get_server_grid_lock(server):
+        active_catalog_id = get_server_active_catalog_id(server)
+
+    return {
+        "status": "ok",
+        "activeCatalogId": active_catalog_id,
+        "sources": list_policy_catalog_sources(),
+    }
+
+
+def build_policy_spec_response(server: ThreadingHTTPServer) -> dict[str, Any]:
+    with get_server_grid_lock(server):
+        policy_spec = dict(get_server_policy_spec(server))
+        policy_catalog = dict(get_server_policy_catalog(server))
+        active_catalog_id = get_server_active_catalog_id(server)
+
+    return {
+        "status": "ok",
+        "activeCatalogId": active_catalog_id,
+        "policyCatalogVersion": int(policy_catalog.get("catalogVersion", 0) or 0),
+        "policySpecReceived": has_runtime_policy_spec(server),
+        "policySpec": policy_spec,
+        "enabledPolicyCount": len(policy_spec.get("enabledPolicies", []))
+        if isinstance(policy_spec.get("enabledPolicies", []), list)
+        else 0,
     }
 
 
@@ -443,6 +521,73 @@ def build_episode_goal_debug(server: ThreadingHTTPServer, observation: dict[str,
     return debug
 
 
+def log_nearest_observed_object(observation: dict[str, Any]) -> None:
+    nearest_object = get_nearest_observed_object(observation)
+    if nearest_object is None:
+        return
+
+    actor_tags = nearest_object.get("actorTags", [])
+    safe_actor_tags = actor_tags if isinstance(actor_tags, list) else []
+
+    print(
+        "nearest object "
+        f"actor={nearest_object.get('actorName', '')} "
+        f"tags={[str(tag) for tag in safe_actor_tags]} "
+        f"distanceM={float(nearest_object.get('closestDistanceM', 0.0) or 0.0):.2f} "
+        f"inFront={bool(nearest_object.get('inFront', False))}"
+    )
+
+
+def log_selected_policy_action(response: dict[str, Any]) -> None:
+    debug = response.get("debug", {})
+    safe_debug = debug if isinstance(debug, dict) else {}
+
+    action = response.get("action", {})
+    safe_action = action if isinstance(action, dict) else {}
+
+    enabled_policies = safe_debug.get("enabledPolicies", [])
+    safe_enabled_policies = enabled_policies if isinstance(enabled_policies, list) else []
+
+    print(
+        "selected policy "
+        f"id={safe_debug.get('selectedPolicyId', safe_debug.get('policyName', 'unknown_policy'))} "
+        f"priority={int(safe_debug.get('selectedPolicyPriority', 0) or 0)} "
+        f"reason={safe_debug.get('reason', '')} "
+        f"candidates={int(safe_debug.get('candidateCount', 0) or 0)} "
+        f"enabled={[str(policy_id) for policy_id in safe_enabled_policies]} "
+        f"direction={safe_action.get('direction', '-')} "
+        f"speedKmh={float(safe_action.get('targetSpeedKmh', 0.0) or 0.0):.2f} "
+        f"steering={float(safe_action.get('steering', 0.0) or 0.0):.2f} "
+        f"throttle={float(safe_action.get('throttle', 0.0) or 0.0):.2f} "
+        f"brake={float(safe_action.get('brake', 0.0) or 0.0):.2f}"
+    )
+
+
+def build_runtime_policy_context(
+    server: ThreadingHTTPServer,
+    observation: dict[str, Any],
+) -> dict[str, Any]:
+    with get_server_grid_lock(server):
+        grid_info = getattr(server, "grid_info", None)
+        grid_cell_lookup = dict(get_server_grid_cell_lookup(server))
+        grid_summary = dict(get_server_grid_summary(server))
+        episode_info = dict(get_server_episode_info(server))
+        config_info = dict(get_server_config_info(server))
+        policy_catalog = dict(get_server_policy_catalog(server))
+        policy_spec = dict(get_server_policy_spec(server))
+
+    return {
+        "observation": observation,
+        "gridInfo": grid_info if isinstance(grid_info, dict) else {},
+        "gridCellLookup": grid_cell_lookup,
+        "gridSummary": grid_summary,
+        "episodeInfo": episode_info,
+        "configInfo": config_info,
+        "policyCatalog": policy_catalog,
+        "policySpec": policy_spec,
+    }
+
+
 def make_response(
     observation: dict[str, Any],
     policy_name: str,
@@ -717,34 +862,58 @@ class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
     server_version = "DeliveryBotPolicyServer/0.1"
 
     def do_GET(self) -> None:
-        if self.path == "/health":
+        request_path = self.path.split("?", 1)[0]
+
+        if request_path == "/health":
             self.send_json(200, build_episode_status_response(self.server))
             return
 
-        if self.path == "/grid/status":
+        if request_path == "/grid/status":
             self.send_json(200, build_grid_status_response(self.server))
             return
 
-        if self.path == "/episode/status":
+        if request_path == "/episode/status":
             self.send_json(200, build_episode_status_response(self.server))
+            return
+
+        if request_path == "/policy/catalog":
+            self.send_json(200, build_policy_catalog_response(self.server))
+            return
+
+        if request_path == "/policy/catalog/sources":
+            self.send_json(200, build_policy_catalog_sources_response(self.server))
+            return
+
+        if request_path == "/policy/spec/status":
+            self.send_json(200, build_policy_spec_response(self.server))
             return
 
         self.send_json(404, {"status": "error", "message": "unknown endpoint"})
 
     def do_POST(self) -> None:
-        if self.path == "/episode/start":
+        request_path = self.path.split("?", 1)[0]
+
+        if request_path == "/episode/start":
             self.handle_episode_start()
             return
 
-        if self.path == "/episode/config/update":
+        if request_path == "/episode/config/update":
             self.handle_episode_config_update()
             return
 
-        if self.path == "/grid/update":
+        if request_path == "/grid/update":
             self.handle_grid_update()
             return
 
-        if self.path == "/policy/action":
+        if request_path == "/policy/spec/update":
+            self.handle_policy_spec_update()
+            return
+
+        if request_path == "/policy/catalog/source":
+            self.handle_policy_catalog_source_update()
+            return
+
+        if request_path == "/policy/action":
             self.handle_policy_action()
             return
 
@@ -759,6 +928,7 @@ class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
 
         grid_info = episode_payload.get("grid", {})
         config_info = build_config_info_from_payload(episode_payload)
+        policy_spec_payload = episode_payload.get("policySpec", {})
 
         with get_server_grid_lock(self.server):
             self.server.episode_version = get_server_episode_version(self.server) + 1
@@ -771,6 +941,13 @@ class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
             if isinstance(grid_info, dict) and grid_info:
                 store_grid_info(self.server, grid_info)
 
+            if isinstance(policy_spec_payload, dict) and policy_spec_payload:
+                self.server.policy_spec = normalize_policy_spec(
+                    policy_spec_payload,
+                    get_server_policy_catalog(self.server),
+                )
+                self.server.policy_spec_received = True
+
             response = build_episode_status_response(self.server)
 
         print(
@@ -780,7 +957,9 @@ class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
             f"robot={response['robotInstanceId']} "
             f"configVersion={response['configVersion']} "
             f"gridVersion={response['gridVersion']} "
-            f"gridReceived={response['gridReceived']}"
+            f"gridReceived={response['gridReceived']} "
+            f"policySpecReceived={response['policySpecReceived']} "
+            f"enabledPolicies={response['enabledPolicyCount']}"
         )
 
         self.send_json(200, response)
@@ -808,6 +987,70 @@ class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
             f"configVersion={response['configVersion']} "
             f"episodeId={response['episodeId']} "
             f"robot={response['robotInstanceId']}"
+        )
+
+        self.send_json(200, response)
+
+    def handle_policy_catalog_source_update(self) -> None:
+        try:
+            source_payload = self.read_json_body()
+        except ValueError as error:
+            self.send_json(400, {"status": "error", "message": str(error)})
+            return
+
+        catalog_id = str(source_payload.get("catalogId", ""))
+        if not catalog_id:
+            self.send_json(400, {"status": "error", "message": "policy catalog source update has no catalogId"})
+            return
+
+        try:
+            policy_catalog = load_policy_catalog_by_id(catalog_id)
+        except (FileNotFoundError, OSError, ValueError, json.JSONDecodeError) as error:
+            self.send_json(400, {"status": "error", "message": str(error), "catalogId": catalog_id})
+            return
+
+        active_catalog_id = str(policy_catalog.get("catalogId", catalog_id))
+
+        with get_server_grid_lock(self.server):
+            self.server.active_catalog_id = active_catalog_id
+            self.server.policy_catalog = policy_catalog
+            self.server.policy_spec = build_default_policy_spec(policy_catalog)
+            self.server.policy_spec_received = False
+            response = build_policy_catalog_response(self.server)
+
+        print(
+            "policy catalog source update "
+            f"catalogId={active_catalog_id} "
+            f"catalogVersion={response.get('catalogVersion', 0)} "
+            f"policies={len(response.get('policies', [])) if isinstance(response.get('policies', []), list) else 0}"
+        )
+
+        self.send_json(200, response)
+
+    def handle_policy_spec_update(self) -> None:
+        try:
+            policy_payload = self.read_json_body()
+        except ValueError as error:
+            self.send_json(400, {"status": "error", "message": str(error)})
+            return
+
+        policy_spec_payload = policy_payload.get("policySpec", policy_payload)
+        if not isinstance(policy_spec_payload, dict) or not policy_spec_payload:
+            self.send_json(400, {"status": "error", "message": "policy spec update has no policySpec"})
+            return
+
+        with get_server_grid_lock(self.server):
+            self.server.policy_spec = normalize_policy_spec(
+                policy_spec_payload,
+                get_server_policy_catalog(self.server),
+            )
+            self.server.policy_spec_received = True
+            response = build_policy_spec_response(self.server)
+
+        print(
+            "policy spec update "
+            f"catalogVersion={response['policyCatalogVersion']} "
+            f"enabledPolicies={response['enabledPolicyCount']}"
         )
 
         self.send_json(200, response)
@@ -858,6 +1101,7 @@ class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
             f"goalGridStatus={goal_grid_debug.get('goalGridStatus', 'unknown')} "
             f"goalGrid=({goal_grid_debug.get('goalGridX', '-')},{goal_grid_debug.get('goalGridY', '-')})"
         )
+        log_nearest_observed_object(observation)
 
         response_delay_second = getattr(self.server, "response_delay_second", 0.0)
         if response_delay_second > 0.0:
@@ -866,14 +1110,21 @@ class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
         policy_mode = getattr(self.server, "policy_mode", "forward")
         grid_status = build_grid_status_response(self.server)
         enriched_observation = enrich_observation_with_server_config(self.server, observation)
-        response = build_policy_response(enriched_observation, policy_mode)
+
+        if policy_mode == "runtime" or has_runtime_policy_spec(self.server):
+            runtime_context = build_runtime_policy_context(self.server, enriched_observation)
+            response = build_runtime_policy_response(runtime_context)
+        else:
+            response = build_policy_response(enriched_observation, policy_mode)
+            apply_version_mismatch_policy_mode(response, policy_mode)
+
         response["gridVersion"] = grid_status["gridVersion"]
         response["gridReceived"] = grid_status["gridReceived"]
         response["episodeVersion"] = get_server_episode_version(self.server)
         response["configVersion"] = get_server_config_version(self.server)
-        apply_version_mismatch_policy_mode(response, policy_mode)
         response["debug"].update(robot_grid_debug)
         response["debug"].update(goal_grid_debug)
+        log_selected_policy_action(response)
         self.send_json(200, response)
 
     def read_json_body(self) -> dict[str, Any]:
@@ -932,9 +1183,14 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    policy_catalog = load_policy_catalog()
     server = ThreadingHTTPServer((args.host, args.port), DeliveryBotPolicyHandler)
     server.response_delay_second = max(args.response_delay_second, 0.0)
     server.policy_mode = args.policy_mode
+    server.active_catalog_id = str(policy_catalog.get("catalogId", ""))
+    server.policy_catalog = policy_catalog
+    server.policy_spec = build_default_policy_spec(policy_catalog)
+    server.policy_spec_received = False
     server.episode_info = {}
     server.episode_version = 0
     server.config_info = {}
@@ -948,11 +1204,22 @@ def main() -> None:
     print("POST /episode/start")
     print("POST /episode/config/update")
     print("POST /policy/action")
+    print("POST /policy/catalog/source")
+    print("POST /policy/spec/update")
     print("POST /grid/update")
     print("GET  /episode/status")
     print("GET  /grid/status")
+    print("GET  /policy/catalog/sources")
+    print("GET  /policy/catalog")
+    print("GET  /policy/spec/status")
     print("GET  /health")
     print(f"policy mode: {server.policy_mode}")
+    print(
+        "policy catalog: "
+        f"activeCatalogId={server.active_catalog_id} "
+        f"version={policy_catalog.get('catalogVersion', 0)} "
+        f"policies={len(policy_catalog.get('policies', [])) if isinstance(policy_catalog.get('policies', []), list) else 0}"
+    )
     if server.response_delay_second > 0.0:
         print(f"response delay: {server.response_delay_second:.3f}s")
     server.serve_forever()

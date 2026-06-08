@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Shared/Struct/DeliveryBot/Policy/DeliveryBotHttpPolicyResponseInfo.h"
+#include "Shared/Struct/DeliveryBot/Policy/DeliveryBotPolicyCatalogSourceInfo.h"
 #include "DeliveryBot_HttpPolicyComponent.generated.h"
 
 class IHttpRequest;
@@ -12,6 +13,12 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliveryBotHttpPolicyParsedResponse
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FDeliveryBotHttpGridResponseSignature, bool, bWasSuccessful,	int32, ResponseCode, const FString&, ResponseBody);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FDeliveryBotHttpEpisodeStartResponseSignature, bool, bWasSuccessful, int32, ResponseCode, const FString&, ResponseBody);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FDeliveryBotHttpEpisodeConfigUpdateResponseSignature, bool, bWasSuccessful, int32, ResponseCode, const FString&, ResponseBody);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FDeliveryBotHttpPolicyCatalogSourcesResponseSignature, bool, bWasSuccessful, int32, ResponseCode, const FString&, ResponseBody);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliveryBotHttpPolicyCatalogSourcesParsedResponseSignature, const FDeliveryBotPolicyCatalogSourcesInfo&, SourcesInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FDeliveryBotHttpPolicyCatalogResponseSignature, bool, bWasSuccessful, int32, ResponseCode, const FString&, ResponseBody);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliveryBotHttpPolicyCatalogParsedResponseSignature, const FDeliveryBotPolicyCatalogInfo&, CatalogInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(	FDeliveryBotHttpPolicySpecUpdateResponseSignature,	bool,	bWasSuccessful,	int32,	ResponseCode,	const FString&,	ResponseBody);
+
 
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
@@ -31,6 +38,10 @@ private:
 	void CancelActiveGridRequest();
 	void CancelActiveEpisodeStartRequest();
 	void CancelActiveEpisodeConfigUpdateRequest();
+	void CancelActivePolicyCatalogSourcesRequest();
+	void CancelActivePolicyCatalogRequest();
+	void CancelActivePolicySpecUpdateRequest();
+	
 	
 public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
@@ -48,6 +59,42 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
 	bool SendEpisodeConfigUpdateJson(const FString& configUpdateJson);
+	
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
+	bool RequestPolicyCatalogSources();
+
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
+	bool TryParsePolicyCatalogSourcesJson(const FString& responseBody, FDeliveryBotPolicyCatalogSourcesInfo& outSourcesInfo) const;
+	
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
+	bool RequestPolicyCatalogSource(const FString& catalogId);
+
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
+	bool TryParsePolicyCatalogJson(const FString& responseBody, FDeliveryBotPolicyCatalogInfo& outCatalogInfo) const;
+	
+
+	// 완성된 policySpec JSON을 Python에 POST한다.
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
+	bool SendPolicySpecUpdateJson(const FString& policySpecUpdateJson);
+
+	// 임시 테스트용 함수
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
+	bool SendDefaultRuntimePolicySpecUpdate();
+	//  정책 ID 배열을 받아서 우선순위 순서대로 JSON을 만들고 Python에 보냄.
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
+	bool SendRuntimePolicySpecUpdateByPolicyIds(const FString& catalogId,int32 catalogVersion, const TArray<FString>& enabledPolicyIds);
+	// 임시 테스트용 함수. 장애물 감속/정지 정책 없이 normal_path_follow만 켬.
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
+	bool SendNormalOnlyRuntimePolicySpecUpdate();
+	
+	// policySpec JSON 파일을 읽어서 문자열로 반환한다.
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
+	bool LoadPolicySpecUpdateJsonFile(const FString& policySpecJsonFilePath, FString& outPolicySpecUpdateJson) const;
+
+	// policySpec JSON 파일을 읽어서 Python에 POST한다.
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
+	bool SendPolicySpecUpdateJsonFile(const FString& policySpecJsonFilePath);
+	
 public:
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|HttpPolicy")
 	bool IsRequestInFlight() const
@@ -73,6 +120,18 @@ public:
 	{
 		return bEpisodeConfigUpdateRequestInFlight;
 	}
+
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|HttpPolicy")
+	bool IsPolicyCatalogSourcesRequestInFlight() const
+	{
+		return bPolicyCatalogSourcesRequestInFlight;
+	}
+	
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|HttpPolicy")
+	bool IsPolicySpecUpdateRequestInFlight() const
+	{
+		return bPolicySpecUpdateRequestInFlight;
+	}
 	
 	
 public:
@@ -91,6 +150,21 @@ public:
 	
 	UPROPERTY(BlueprintAssignable, Category = "DeliveryBot|HttpPolicy")
 	FDeliveryBotHttpEpisodeConfigUpdateResponseSignature OnEpisodeConfigUpdateResponse;
+
+	UPROPERTY(BlueprintAssignable, Category = "DeliveryBot|HttpPolicy")
+	FDeliveryBotHttpPolicyCatalogSourcesResponseSignature OnPolicyCatalogSourcesResponse;
+
+	UPROPERTY(BlueprintAssignable, Category = "DeliveryBot|HttpPolicy")
+	FDeliveryBotHttpPolicyCatalogSourcesParsedResponseSignature OnParsedPolicyCatalogSourcesResponse;
+	
+	UPROPERTY(BlueprintAssignable, Category = "DeliveryBot|HttpPolicy")
+	FDeliveryBotHttpPolicyCatalogResponseSignature OnPolicyCatalogResponse;
+
+	UPROPERTY(BlueprintAssignable, Category = "DeliveryBot|HttpPolicy")
+	FDeliveryBotHttpPolicyCatalogParsedResponseSignature OnParsedPolicyCatalogResponse;
+	
+	UPROPERTY(BlueprintAssignable, Category = "DeliveryBot|HttpPolicy")
+	FDeliveryBotHttpPolicySpecUpdateResponseSignature OnPolicySpecUpdateResponse;
 	
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|HttpPolicy")
@@ -105,6 +179,17 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|HttpPolicy")
 	FString EpisodeConfigUpdateServerUrl{ TEXT("http://127.0.0.1:8000/episode/config/update") };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|HttpPolicy")
+	FString PolicyCatalogSourcesServerUrl{ TEXT("http://127.0.0.1:8000/policy/catalog/sources") };
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|HttpPolicy")
+	FString PolicyCatalogSourceServerUrl{ TEXT("http://127.0.0.1:8000/policy/catalog/source") };
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|HttpPolicy")
+	FString PolicySpecUpdateServerUrl{ TEXT("http://127.0.0.1:8000/policy/spec/update") };
+	
+	
 	
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|HttpPolicy")
@@ -116,10 +201,18 @@ private:
 	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> ActiveGridRequest;
 	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> ActiveEpisodeStartRequest;
 	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> ActiveEpisodeConfigUpdateRequest;
+	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> ActivePolicyCatalogSourcesRequest;
+	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> ActivePolicyCatalogRequest;
+	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> ActivePolicySpecUpdateRequest;
+
 	
 	bool bEpisodeStartRequestInFlight{ false };
 	bool bGridRequestInFlight{ false };
 	bool bRequestInFlight{ false };
 	bool bIsEndingPlay{ false };
 	bool bEpisodeConfigUpdateRequestInFlight{ false };
+	bool bPolicyCatalogSourcesRequestInFlight{ false };
+	bool bPolicyCatalogRequestInFlight{ false };
+	bool bPolicySpecUpdateRequestInFlight{ false };
+	
 };

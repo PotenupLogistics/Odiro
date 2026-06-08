@@ -1,0 +1,48 @@
+{
+  "catalogId": "default_delivery",
+  "catalogVersion": 1,
+  "displayName": "기본 배송 정책",
+  "description": "일반적인 배송 로봇 주행을 위한 기본 정책 묶음입니다.",
+  "policies": [
+    {
+      "policyId": "front_obstacle_stop",
+      "displayName": "전방 장애물 정지",
+      "description": "전방 가까운 장애물이 정지 거리 안에 있으면 즉시 정지합니다.",
+      "category": "Safety",
+      "defaultEnabled": true,
+      "defaultPriority": 10,
+      "requiresGrid": false,
+      "requiresGoal": false
+    },
+    {
+      "policyId": "reroute_when_blocked",
+      "displayName": "경로 차단 시 우회",
+      "description": "목표까지 이동 가능한 경로가 없으면 정지하고 재계획 실패 상태를 보고합니다.",
+      "category": "Navigation",
+      "defaultEnabled": true,
+      "defaultPriority": 20,
+      "requiresGrid": true,
+      "requiresGoal": true
+    },
+    {
+      "policyId": "front_obstacle_slowdown",
+      "displayName": "전방 장애물 감속",
+      "description": "전방 장애물이 감속 거리 안에 있으면 경로 추종 속도를 낮춥니다.",
+      "category": "Safety",
+      "defaultEnabled": true,
+      "defaultPriority": 30,
+      "requiresGrid": true,
+      "requiresGoal": true
+    },
+    {
+      "policyId": "normal_path_follow",
+      "displayName": "기본 경로 추종",
+      "description": "Grid A* 경로를 계산하고 목표 지점까지 경로를 따라 이동합니다.",
+      "category": "Navigation",
+      "defaultEnabled": true,
+      "defaultPriority": 100,
+      "requiresGrid": true,
+      "requiresGoal": true
+    }
+  ]
+}

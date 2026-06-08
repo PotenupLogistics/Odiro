@@ -85,6 +85,22 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 		safeDeltaTime);
 }
 
+void UDeliveryBot_DriveComponent::ApplyParkingStop(UChaosVehicleMovementComponent* vehicleMovement)
+{
+	if (!IsValid(vehicleMovement))
+		return;
+
+	CurrentThrottleInput = 0.f;
+	CurrentBrakeInput = 1.f;
+	CurrentSteeringInput = 0.f;
+	CurrentTargetSpeedKmh = 0.f;
+
+	vehicleMovement->SetThrottleInput(0.f);
+	vehicleMovement->SetSteeringInput(0.f);
+	vehicleMovement->SetBrakeInput(1.f);
+	vehicleMovement->SetHandbrakeInput(true);
+}
+
 // Chaos Wheeled Vehicle의 엔진과 변속기 기본 설정을 적용한다.
 void UDeliveryBot_DriveComponent::SetupVehicleMovement(
 	UChaosWheeledVehicleMovementComponent* wheeledMovement) const

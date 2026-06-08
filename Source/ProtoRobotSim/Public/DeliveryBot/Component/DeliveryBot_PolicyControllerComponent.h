@@ -47,6 +47,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PolicyController")
 	bool SendCurrentRuntimeConfigUpdateToPolicyServerOnce();
 	
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PolicyController")
+	bool SendEpisodeStartAndStartPolicyLoopOnce();
+	
+	
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -92,6 +96,7 @@ private:
 	
 	void RecordPolicyFailure(const FDeliveryBotHttpPolicyResponseInfo& responseInfo);
 	
+	bool IsGoalReachedPolicyResponse(const FDeliveryBotHttpPolicyResponseInfo& responseInfo) const;
 	
 private: // 그리드를 파이썬으로 전송
 	void StartGridUploadRetryLoop();
@@ -155,6 +160,8 @@ private:
 	bool bHasCompletedGridUpload{ false };
 	bool bHasCompletedEpisodeStart{ false };
 	bool bHasExpectedPolicyVersions{ false };
+	bool bStartPolicyLoopAfterNextEpisodeStart{ false };
+	bool bHoldStopAfterGoalReached{ false };
 	
 	float LastValidPolicyActionWorldTimeSeconds{ 0.f };
 	

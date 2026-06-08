@@ -55,6 +55,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Drive")
 	void ApplyMoveCommand(const FDeliveryBotMoveCommandInfo& moveCommandInfo, float deltaTime);
 
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Drive")
+	void ApplyParkingStop();
+
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Setup")
 	void ApplyRuntimeDriveConfigInfo(const FDeliveryBotDriveConfigInfo& driveConfigInfo);
 

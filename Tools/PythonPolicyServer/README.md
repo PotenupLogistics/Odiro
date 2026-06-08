@@ -35,6 +35,7 @@ py -3 Tools\PythonPolicyServer\server.py --host 127.0.0.1 --port 8000 --response
 `--policy-mode`로 정상 주행/정지/검증 실패 응답을 바꿀 수 있다.
 
 ```powershell
+py -3 Tools\PythonPolicyServer\server.py --host 127.0.0.1 --port 8000 --policy-mode runtime
 py -3 Tools\PythonPolicyServer\server.py --host 127.0.0.1 --port 8000 --policy-mode forward
 py -3 Tools\PythonPolicyServer\server.py --host 127.0.0.1 --port 8000 --policy-mode left
 py -3 Tools\PythonPolicyServer\server.py --host 127.0.0.1 --port 8000 --policy-mode right
@@ -52,6 +53,7 @@ py -3 Tools\PythonPolicyServer\server.py --host 127.0.0.1 --port 8000 --policy-m
 
 모드 의미:
 
+- `runtime`: `policy_catalog.json`과 Unreal이 보낸 `policySpec` 기준으로 실제 정책 선택 구조 실행
 - `forward`: 정상 저속 전진
 - `left`: 전진 좌회전
 - `right`: 전진 우회전
@@ -178,3 +180,50 @@ Grid를 받은 뒤 `/policy/action` 응답의 `debug`에는 현재 로봇이 올
 
 `robotGridStatus`가 `outside_grid`이면 로봇 위치가 GridBoundsActor 범위 밖에 있다는 뜻이다.
 `grid_not_received`이면 Unreal에서 `/grid/update`가 아직 성공하지 않은 상태다.
+
+## Runtime Policy Catalog
+
+패키징된 Unreal UI는 먼저 Python이 관리하는 정책 catalog 목록을 받아서 사용자에게 선택지를 보여준다.
+
+```powershell
+Invoke-RestMethod -Method Get -Uri http://127.0.0.1:8000/policy/catalog/sources
+```
+
+사용자가 catalog를 선택하면 Unreal은 `catalogId`를 Python에 보낸다. Python은 해당 catalog를 active catalog로 저장하고 catalog 내용을 반환한다.
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:8000/policy/catalog/source `
+  -ContentType "application/json" `
+  -Body '{"catalogId":"default_delivery"}'
+```
+
+현재 active catalog는 아래 API로 다시 받을 수 있다.
+
+```powershell
+Invoke-RestMethod -Method Get -Uri http://127.0.0.1:8000/policy/catalog
+```
+
+그 다음 사용자가 선택한 정책만 우선순위와 함께 Python에 보낸다.
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:8000/policy/spec/update `
+  -ContentType "application/json" `
+  -Body '{
+    "policySpec": {
+      "catalogVersion": 1,
+      "catalogId": "default_delivery",
+      "enabledPolicies": [
+        {"policyId":"front_obstacle_stop","priority":10},
+        {"policyId":"reroute_when_blocked","priority":20},
+        {"policyId":"front_obstacle_slowdown","priority":30},
+        {"policyId":"normal_path_follow","priority":100}
+      ]
+    }
+  }'
+```
+
+`/episode/start` 요청에 같은 `policySpec`을 포함해도 된다. `runtime` 모드이거나 `policySpec`을 받은 상태라면 `/policy/action`은 enabled policy 후보를 만들고 priority가 가장 높은 후보 action을 반환한다.

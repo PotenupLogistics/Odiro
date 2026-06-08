@@ -72,6 +72,9 @@ void UDeliveryBot_PolicyControllerComponent::EndPlay(const EEndPlayReason::Type 
 
 void UDeliveryBot_PolicyControllerComponent::StartPolicyLoop()
 {
+	bHoldStopAfterGoalReached = false;
+	bHasValidPolicyMoveCommand = false;
+
 	if (!GetWorld())
 	{
 		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Policy loop start skipped. World is invalid."));
@@ -89,12 +92,7 @@ void UDeliveryBot_PolicyControllerComponent::StartPolicyLoop()
 		0.f
 	);
 
-	UE_LOG(
-		LogDeliveryBotPolicyController,
-		Log,
-		TEXT("Policy loop started. Interval: %.2fs"),
-		safeInterval
-	);
+	UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Policy loop started. Interval: %.2fs"), safeInterval);
 }
 
 void UDeliveryBot_PolicyControllerComponent::StopPolicyLoop()
@@ -127,10 +125,16 @@ void UDeliveryBot_PolicyControllerComponent::RequestPolicyByTimer()
 
 void UDeliveryBot_PolicyControllerComponent::TickPolicy(float deltaTime)
 {
-	if (!bHasValidPolicyMoveCommand)
+	if (!IsValid(OwnerDeliveryBot))
 		return;
 
-	if (!IsValid(OwnerDeliveryBot))
+	if (bHoldStopAfterGoalReached)
+	{
+		OwnerDeliveryBot->ApplyParkingStop();
+		return;
+	}
+
+	if (!bHasValidPolicyMoveCommand)
 		return;
 
 	const UWorld* world = GetWorld();
@@ -146,18 +150,13 @@ void UDeliveryBot_PolicyControllerComponent::TickPolicy(float deltaTime)
 		const FDeliveryBotMoveCommandInfo stopCommand = BuildStopMoveCommand();
 		OwnerDeliveryBot->ApplyMoveCommand(stopCommand, deltaTime);
 
-		UE_LOG(
-			LogDeliveryBotPolicyController,
-			Warning,
-			TEXT("Policy action expired. Stop command applied. Elapsed: %.2fs"),
-			elapsedSinceLastPolicyAction
-		);
-
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Policy action expired. Stop command applied. Elapsed: %.2fs"), elapsedSinceLastPolicyAction);
 		return;
 	}
 
 	OwnerDeliveryBot->ApplyMoveCommand(LastValidPolicyMoveCommand, deltaTime);
 }
+
 void UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse(const FDeliveryBotHttpPolicyResponseInfo& responseInfo)
 {
 	LogPolicyResponseReceived(responseInfo);
@@ -209,8 +208,10 @@ void UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse(const FD
 		return;
 	}
 
+	const bool bGoalReached = IsGoalReachedPolicyResponse(responseInfo);
+
 	ConsecutivePolicyFailureCount = 0;
-	LastValidPolicyMoveCommand = moveCommandInfo;
+	LastValidPolicyMoveCommand = bGoalReached ? BuildStopMoveCommand() : moveCommandInfo;
 	bHasValidPolicyMoveCommand = true;
 
 	if (const UWorld* world = GetWorld())
@@ -218,8 +219,20 @@ void UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse(const FD
 		LastValidPolicyActionWorldTimeSeconds = world->GetTimeSeconds();
 	}
 
-	LogValidPolicyAction(responseInfo, moveCommandInfo);
+	LogValidPolicyAction(responseInfo, LastValidPolicyMoveCommand);
+
+	if (bGoalReached)
+	{
+		LastValidPolicyMoveCommand = BuildStopMoveCommand();
+		bHasValidPolicyMoveCommand = true;
+		bHoldStopAfterGoalReached = true;
+
+		UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Goal reached. Holding stop command and stopping policy request loop."));
+		StopPolicyLoop();
+		return;
+	}
 }
+
 
 // Python action이 현재 Unreal episode/config/grid 기준과 같은지 확인
 bool UDeliveryBot_PolicyControllerComponent::TryValidatePolicyResponseVersions(const FDeliveryBotHttpPolicyResponseInfo& responseInfo, FString& outErrorMessage) const
@@ -720,14 +733,17 @@ void UDeliveryBot_PolicyControllerComponent::HandleEpisodeStartResponse(bool bWa
 	bHasCompletedEpisodeStart = true;
 	StopEpisodeStartRetryLoop();
 
-	if (bAutoStartPolicyLoop)
+	const bool bShouldStartPolicyLoop = bAutoStartPolicyLoop || bStartPolicyLoopAfterNextEpisodeStart;
+	bStartPolicyLoopAfterNextEpisodeStart = false;
+
+	if (bShouldStartPolicyLoop)
 	{
 		UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Episode start completed. Starting policy loop."));
 		StartPolicyLoop();
 	}
 	else
 	{
-		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Episode start completed, but auto policy loop is disabled."));
+		UE_LOG(LogDeliveryBotPolicyController, Warning, TEXT("Episode start completed, but policy loop start was not requested."));
 	}
 }
 
@@ -979,3 +995,23 @@ void UDeliveryBot_PolicyControllerComponent::RecordPolicyFailure(const FDelivery
 		PolicyFailureHistory.RemoveAt(0);
 	}
 }
+
+bool UDeliveryBot_PolicyControllerComponent::IsGoalReachedPolicyResponse(const FDeliveryBotHttpPolicyResponseInfo& responseInfo) const
+{
+	return responseInfo.Debug.Reason.Equals(TEXT("goal_reached"), ESearchCase::IgnoreCase);
+
+}
+
+bool UDeliveryBot_PolicyControllerComponent::SendEpisodeStartAndStartPolicyLoopOnce()
+{
+	bStartPolicyLoopAfterNextEpisodeStart = true;
+
+	const bool bRequestStarted = SendEpisodeStartToPolicyServerOnce();
+	if (!bRequestStarted)
+	{
+		bStartPolicyLoopAfterNextEpisodeStart = false;
+	}
+
+	return bRequestStarted;
+}
+

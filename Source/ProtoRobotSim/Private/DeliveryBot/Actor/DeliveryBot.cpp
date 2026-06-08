@@ -157,6 +157,18 @@ void ADeliveryBot::ApplyMoveCommand(const FDeliveryBotMoveCommandInfo& moveComma
 	DriveComponent->ApplyMoveCommand(vehicleMovement, moveCommandInfo, deltaTime);
 }
 
+void ADeliveryBot::ApplyParkingStop()
+{
+	if (!IsValid(DriveComponent))
+		return;
+
+	UChaosVehicleMovementComponent* vehicleMovement = GetVehicleMovementComponent();
+	if (!IsValid(vehicleMovement))
+		return;
+
+	DriveComponent->ApplyParkingStop(vehicleMovement);
+}
+
 void ADeliveryBot::ApplyRuntimeDriveConfigInfo(const FDeliveryBotDriveConfigInfo& driveConfigInfo)
 {
 	UE_LOG(
@@ -278,7 +290,6 @@ FDeliveryBotObservationInfo ADeliveryBot::BuildObservation() const
 
 	return observation;
 }
-
 TArray<FDeliveryBotLidarObservedObjectInfo> ADeliveryBot::BuildObservedObjectsForPolicy() const
 {
 	TArray<FDeliveryBotLidarObservedObjectInfo> result;
@@ -296,8 +307,10 @@ TArray<FDeliveryBotLidarObservedObjectInfo> ADeliveryBot::BuildObservedObjectsFo
 		target.bInFront = source.bInFront;
 		result.Add(target);
 	}
+
 	return result;
 }
+
 
 void ADeliveryBot::ApplySetupInfo()
 {
@@ -364,7 +377,6 @@ bool ADeliveryBot::BuildObservationJson(const FDeliveryBotObservationInfo& obser
 		objectJson->SetNumberField(TEXT("totalHitRayCount"), observedObject.TotalHitRayCount);
 		objectJson->SetNumberField(TEXT("frontHitRayCount"), observedObject.FrontHitRayCount);
 		objectJson->SetBoolField(TEXT("inFront"), observedObject.bInFront);
-
 		objectValues.Add(MakeShared<FJsonValueObject>(objectJson));
 	}
 	rootObject->SetArrayField(TEXT("observedObjects"), objectValues);
@@ -379,7 +391,6 @@ bool ADeliveryBot::BuildObservationJson(const FDeliveryBotObservationInfo& obser
 		rayJson->SetNumberField(TEXT("distanceM"), rayInfo.DistanceM);
 		rayJson->SetStringField(TEXT("actorName"), rayInfo.ActorName);
 		SetNameArrayField(rayJson, TEXT("actorTags"), rayInfo.ActorTags);
-
 		rayValues.Add(MakeShared<FJsonValueObject>(rayJson));
 	}
 	rootObject->SetArrayField(TEXT("lidarRays"), rayValues);
@@ -389,6 +400,9 @@ bool ADeliveryBot::BuildObservationJson(const FDeliveryBotObservationInfo& obser
 
 	return FJsonSerializer::Serialize(rootObject, writer);
 }
+
+
+
 
 bool ADeliveryBot::BuildEpisodeStartJson(FString& outJson) const
 {

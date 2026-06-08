@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Math/Box2D.h"
+#include "Episode/Data/EpisodeStaticObstaclePropCatalog.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "Shared/EpisodeSpecTypes.h"
 #include "EpisodeSimulationSubsystem.generated.h"
@@ -41,6 +42,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
 	TSubclassOf<AActor> StartPointClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Catalog")
+	TSoftObjectPtr<UEpisodeStaticObstaclePropCatalog> StaticObstaclePropCatalog;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
 	TSubclassOf<ADeliveryBot_GridBoundsActor> GridBoundsActorClass;
@@ -114,6 +118,7 @@ private:
 
 	AActor* SpawnPlaceable(const FEpisodePlaceableInstanceSpec& placeableSpec);
 	AEpisodeStaticObstacle* SpawnStaticObstacle(const FEpisodePlaceableInstanceSpec& placeableSpec);
+	bool TryFindStaticObstacleProp(FName propId, FEpisodeStaticObstaclePropEntry& outPropEntry) const;
 	AActor* SpawnRobotActor(const FEpisodePlaceableInstanceSpec& placeableSpec);
 	AActor* SpawnDynamicActor(const FEpisodeDynamicActorSpec& dynamicActorSpec);
 	AEpisodePedestrian* SpawnPedestrian(const FEpisodeDynamicActorSpec& dynamicActorSpec);

@@ -1,5 +1,5 @@
-#include "Platform/Widget/FileListItemWidget.h"
 
+#include "Platform/Widget/FileListItemWidget.h"
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
 #include "Components/TextBlock.h"

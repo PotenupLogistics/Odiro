@@ -1,7 +1,6 @@
-#include "Platform/Widget/MainMenuWidget.h"
 
+#include "Platform/Widget/MainMenuWidget.h"
 #include "Blueprint/WidgetTree.h"
-#include "Components/Button.h"
 #include "Components/CheckBox.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
@@ -10,21 +9,10 @@
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
-#include "Dom/JsonObject.h"
-#include "Dom/JsonValue.h"
-#include "Engine/GameInstance.h"
-#include "HAL/FileManager.h"
-#include "HAL/PlatformProcess.h"
-#include "Misc/FileHelper.h"
-#include "Misc/Guid.h"
-#include "Misc/Paths.h"
 #include "Platform/EpisodeEditorLaunchSubsystem.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Platform/Widget/ExperimentResultIterationButton.h"
 #include "Platform/Widget/FileListItemWidget.h"
-#include "Serialization/JsonReader.h"
-#include "Serialization/JsonSerializer.h"
-#include "UObject/UObjectGlobals.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMainMenuWidget, Log, All);
 

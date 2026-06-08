@@ -3,6 +3,8 @@
 #include "CoreMinimal.h"
 #include "EpisodeEditorTypes.generated.h"
 
+class UTexture2D;
+
 UENUM(BlueprintType)
 enum class EEpisodeEditorControllerMode : uint8
 {
@@ -68,6 +70,9 @@ struct PROTOROBOTSIM_API FEpisodePaletteItemEntry
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
 	FString IconName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	TSoftObjectPtr<UTexture2D> ThumbnailTexture;
 };
 
 USTRUCT(BlueprintType)

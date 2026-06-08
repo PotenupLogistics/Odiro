@@ -4,7 +4,6 @@
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Engine/Texture2D.h"
-#include "Misc/Paths.h"
 
 void UEpisodePlaceablePaletteItemWidget::NativeOnInitialized()
 {
@@ -79,62 +78,18 @@ FString UEpisodePlaceablePaletteItemWidget::MakeDisplayNameFromPropId(FName prop
 	return propIdString;
 }
 
-FString UEpisodePlaceablePaletteItemWidget::MakeIconSuffixFromPropId(FName propId)
-{
-	FString propIdString = propId.ToString();
-	const FString obstaclePrefix(TEXT("obstacle."));
-	if (propIdString.StartsWith(obstaclePrefix))
-	{
-		propIdString.RightChopInline(obstaclePrefix.Len());
-	}
-
-	propIdString.ReplaceInline(TEXT("."), TEXT("_"));
-	propIdString.ToLowerInline();
-	return propIdString;
-}
-
 FEpisodePaletteItemEntry UEpisodePlaceablePaletteItemWidget::MakeStaticObstaclePaletteItemEntry(
 	const FEpisodeStaticObstaclePropEntry& propEntry)
 {
 	FEpisodePaletteItemEntry paletteItemEntry;
 	paletteItemEntry.ItemType = EEpisodePaletteItemType::StaticObstacle;
 	paletteItemEntry.AssetId = propEntry.PropId;
-	paletteItemEntry.DisplayName = FText::FromString(MakeDisplayNameFromPropId(propEntry.PropId));
+	paletteItemEntry.DisplayName = propEntry.DisplayName.IsEmpty()
+		? FText::FromString(MakeDisplayNameFromPropId(propEntry.PropId))
+		: propEntry.DisplayName;
 	paletteItemEntry.CategoryText = CategoryToText(propEntry.Category);
-	paletteItemEntry.IconName = MakeIconSuffixFromPropId(propEntry.PropId);
+	paletteItemEntry.ThumbnailTexture = propEntry.ThumbnailTexture;
 	return paletteItemEntry;
-}
-
-FString UEpisodePlaceablePaletteItemWidget::BuildThumbnailTextureObjectPath() const
-{
-	if (PaletteItemEntry.IconName.IsEmpty())
-	{
-		return FString();
-	}
-
-	FString iconDirectory = IconDirectory;
-	iconDirectory.TrimStartAndEndInline();
-	FPaths::NormalizeFilename(iconDirectory);
-	iconDirectory.RemoveFromEnd(TEXT("/"));
-	if (iconDirectory.IsEmpty())
-	{
-		return FString();
-	}
-
-	FString iconSuffix = PaletteItemEntry.IconName;
-	iconSuffix.TrimStartAndEndInline();
-	if (iconSuffix.IsEmpty())
-	{
-		return FString();
-	}
-
-	if (iconSuffix.StartsWith(IconAssetPrefix))
-	{
-		iconSuffix.RightChopInline(IconAssetPrefix.Len());
-	}
-
-	const FString iconAssetName = IconAssetPrefix + iconSuffix;
-	return FString::Printf(TEXT("%s/%s.%s"), *iconDirectory, *iconAssetName, *iconAssetName);
 }
 
 void UEpisodePlaceablePaletteItemWidget::ApplyThumbnailImage()
@@ -144,10 +99,9 @@ void UEpisodePlaceablePaletteItemWidget::ApplyThumbnailImage()
 		return;
 	}
 
-	const FString thumbnailTexturePath = BuildThumbnailTextureObjectPath();
-	UTexture2D* thumbnailTexture = thumbnailTexturePath.IsEmpty()
+	UTexture2D* thumbnailTexture = PaletteItemEntry.ThumbnailTexture.IsNull()
 		? nullptr
-		: LoadObject<UTexture2D>(nullptr, *thumbnailTexturePath);
+		: PaletteItemEntry.ThumbnailTexture.LoadSynchronous();
 
 	if (!thumbnailTexture)
 	{

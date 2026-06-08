@@ -3,11 +3,18 @@
 #include "Components/HorizontalBox.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
+#include "Episode/Data/EpisodeAssetPaletteCatalog.h"
 #include "Episode/Editor/EpisodeEditorController.h"
 #include "Episode/Widget/EpisodePlaceablePaletteItemWidget.h"
 #include "Shared/EpisodeCoreTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogEpisodeAssetPaletteWidget, Log, All);
+
+UEpisodeAssetPaletteWidget::UEpisodeAssetPaletteWidget(const FObjectInitializer& objectInitializer)
+	: Super(objectInitializer)
+{
+	AssetPaletteCatalog = UEpisodeAssetPaletteCatalog::MakeDefaultCatalogReference();
+}
 
 void UEpisodeAssetPaletteWidget::NativeConstruct()
 {
@@ -71,44 +78,27 @@ bool UEpisodeAssetPaletteWidget::RebuildPalette()
 		++itemCount;
 	}
 
-	TArray<FEpisodePaletteItemEntry> specialEntries;
-	if (bIncludePedestrianPlacement)
+	const UEpisodeAssetPaletteCatalog* paletteCatalog = GetPaletteCatalog();
+	if (paletteCatalog)
 	{
-		specialEntries.Add(MakeSpecialPaletteItemEntry(
-			EEpisodePaletteItemType::Pedestrian,
-			FName(TEXT("adult_pedestrian")),
-			TEXT("pedestrian"),
-			TEXT("Dynamic Actor"),
-			TEXT("pedestrian")));
-	}
-	if (bIncludeRobotRoutePlacement)
-	{
-		specialEntries.Add(MakeSpecialPaletteItemEntry(
-			EEpisodePaletteItemType::RobotStart,
-			FName(TEXT("delivery_bot")),
-			TEXT("start_point"),
-			TEXT("Robot"),
-			TEXT("start_point")));
-		specialEntries.Add(MakeSpecialPaletteItemEntry(
-			EEpisodePaletteItemType::RobotGoal,
-			FName(TEXT("delivery_bot_goal")),
-			TEXT("goal_point"),
-			TEXT("Robot"),
-			TEXT("goal_point")));
-	}
+		for (const FEpisodePaletteItemEntry& specialEntry : paletteCatalog->SpecialEntries)
+		{
+			if (!ShouldIncludeSpecialEntry(specialEntry, bIncludePedestrianPlacement, bIncludeRobotRoutePlacement))
+			{
+				continue;
+			}
 
-	for (const FEpisodePaletteItemEntry& specialEntry : specialEntries)
-	{
-		UEpisodePlaceablePaletteItemWidget* itemWidget = CreateWidget<UEpisodePlaceablePaletteItemWidget>(
-			editorController,
-			PlaceableItemWidgetClass);
-		if (!itemWidget) continue;
+			UEpisodePlaceablePaletteItemWidget* itemWidget = CreateWidget<UEpisodePlaceablePaletteItemWidget>(
+				editorController,
+				PlaceableItemWidgetClass);
+			if (!itemWidget) continue;
 
-		itemWidget->SetPaletteItemEntry(specialEntry);
-		itemWidget->OnSelected.RemoveDynamic(this, &UEpisodeAssetPaletteWidget::HandlePaletteItemSelected);
-		itemWidget->OnSelected.AddDynamic(this, &UEpisodeAssetPaletteWidget::HandlePaletteItemSelected);
-		PlaceableItemContainer->AddChildToHorizontalBox(itemWidget);
-		++itemCount;
+			itemWidget->SetPaletteItemEntry(specialEntry);
+			itemWidget->OnSelected.RemoveDynamic(this, &UEpisodeAssetPaletteWidget::HandlePaletteItemSelected);
+			itemWidget->OnSelected.AddDynamic(this, &UEpisodeAssetPaletteWidget::HandlePaletteItemSelected);
+			PlaceableItemContainer->AddChildToHorizontalBox(itemWidget);
+			++itemCount;
+		}
 	}
 
 	UE_LOG(LogEpisodeAssetPaletteWidget, Log, TEXT("Loaded %d placeable assets."), itemCount);
@@ -151,20 +141,44 @@ void UEpisodeAssetPaletteWidget::HandlePaletteItemSelected(EEpisodePaletteItemTy
 		*assetId.ToString());
 }
 
-FEpisodePaletteItemEntry UEpisodeAssetPaletteWidget::MakeSpecialPaletteItemEntry(
-	EEpisodePaletteItemType itemType,
-	FName assetId,
-	const TCHAR* displayName,
-	const TCHAR* category,
-	const TCHAR* iconName)
+const UEpisodeAssetPaletteCatalog* UEpisodeAssetPaletteWidget::GetPaletteCatalog() const
 {
-	FEpisodePaletteItemEntry entry;
-	entry.ItemType = itemType;
-	entry.AssetId = assetId;
-	entry.DisplayName = FText::FromString(displayName);
-	entry.CategoryText = FText::FromString(category);
-	entry.IconName = iconName;
-	return entry;
+	if (AssetPaletteCatalog.IsNull())
+	{
+		UE_LOG(LogEpisodeAssetPaletteWidget, Warning, TEXT("Episode asset palette catalog is not configured."));
+		return nullptr;
+	}
+
+	UEpisodeAssetPaletteCatalog* catalog = AssetPaletteCatalog.LoadSynchronous();
+	if (!IsValid(catalog))
+	{
+		UE_LOG(
+			LogEpisodeAssetPaletteWidget,
+			Warning,
+			TEXT("Failed to load episode asset palette catalog: %s"),
+			*AssetPaletteCatalog.ToSoftObjectPath().ToString());
+		return nullptr;
+	}
+
+	return catalog;
+}
+
+bool UEpisodeAssetPaletteWidget::ShouldIncludeSpecialEntry(
+	const FEpisodePaletteItemEntry& entry,
+	bool bIncludePedestrian,
+	bool bIncludeRobotRoute)
+{
+	switch (entry.ItemType)
+	{
+	case EEpisodePaletteItemType::Pedestrian:
+		return bIncludePedestrian;
+	case EEpisodePaletteItemType::RobotStart:
+	case EEpisodePaletteItemType::RobotGoal:
+		return bIncludeRobotRoute;
+	case EEpisodePaletteItemType::StaticObstacle:
+	default:
+		return false;
+	}
 }
 
 void UEpisodeAssetPaletteWidget::RequestEditorWidgetInputMode()

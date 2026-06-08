@@ -1,8 +1,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Episode/Data/EpisodeStaticObstaclePropCatalog.h"
 #include "Shared/EpisodeCompileTypes.h"
-#include "UObject/Object.h"
 #include "EpisodeCompiler.generated.h"
 
 class FJsonObject;
@@ -17,6 +17,11 @@ class PROTOROBOTSIM_API UEpisodeCompiler : public UObject
 	GENERATED_BODY()
 
 public:
+	UEpisodeCompiler();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Compiler|Catalog")
+	TSoftObjectPtr<UEpisodeStaticObstaclePropCatalog> StaticObstaclePropCatalog;
+
 	UFUNCTION(BlueprintCallable, Category = "Episode|Compiler")
 	FEpisodeCompileResult CompileEpisodeWorldSpecFromJsonFile(const FString& jsonFilePath) const;
 
@@ -130,7 +135,7 @@ private:
 
 	// actors.static_obstacles를 정적 배치 actor spec으로 변환한다.
 	// prop_id는 AssetId에 그대로 대응시키고, default static obstacle catalog에 존재하는지 검증한다.
-	static void CompileStaticObstacles(const FJsonObject& actorsObject, FEpisodeCompileResult& result, TSet<FString>& instanceIds);
+	void CompileStaticObstacles(const FJsonObject& actorsObject, FEpisodeCompileResult& result, TSet<FString>& instanceIds) const;
 
 	// actors.pedestrians를 동적 actor spec으로 변환한다.
 	// speed_mps와 initial_distance_m은 원본 값과 centimeter 변환 값을 properties에 함께 남긴다.
@@ -143,11 +148,11 @@ private:
 
 	// actors object 전체를 static obstacle, pedestrian, robot 순서로 컴파일한다.
 	// instance Id는 actor 종류와 관계없이 하나의 집합에서 중복을 검사한다.
-	static void CompileActors(const FJsonObject& rootObject, FEpisodeCompileResult& result, const TSet<FString>& pathIds);
+	void CompileActors(const FJsonObject& rootObject, FEpisodeCompileResult& result, const TSet<FString>& pathIds) const;
 
 	// 파싱된 root object를 최종 FEpisodeWorldSpec으로 조립한다.
 	// source JSON 문자열의 hash를 SpecHash로 기록해 동일 입력 추적에 사용한다.
-	static void CompileRootObject(const FJsonObject& rootObject, const FString& sourceJson, FEpisodeCompileResult& result);
+	void CompileRootObject(const FJsonObject& rootObject, const FString& sourceJson, FEpisodeCompileResult& result) const;
 };
 
 /* 

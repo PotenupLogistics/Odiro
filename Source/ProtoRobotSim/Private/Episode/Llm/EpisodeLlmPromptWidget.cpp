@@ -21,7 +21,7 @@ void UEpisodeLlmPromptWidget::NativeConstruct()
 	BindLlmSubsystem();
 	ConfigureStatusTextBlock();
 	RequestEditorWidgetInputMode();
-	SetStatusText(TEXT("LLM 서버와 연결되어 있습니다."));
+	SetStatusText(TEXT("대기 중."));
 }
 	
 void UEpisodeLlmPromptWidget::NativeDestruct()
@@ -52,7 +52,7 @@ bool UEpisodeLlmPromptWidget::GenerateFromPromptTextBox()
 		return false;
 	}
 
-	SetStatusText(TEXT("LLM 에피소드 생성 요청 중..."));
+	SetStatusText(TEXT("생성 요청 중."));
 	return llmSubsystem->GenerateEpisodeFromPrompt(prompt, episodeCount);
 }
 
@@ -105,11 +105,7 @@ bool UEpisodeLlmPromptWidget::LoadGeneratedEpisode()
 bool UEpisodeLlmPromptWidget::RunGeneratedSimulation()
 {
 	const UEpisodeLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem();
-	if (!llmSubsystem)
-	{
-		SetStatusText(TEXT("LLM 생성 서브시스템을 사용할 수 없습니다."));
-		return false;
-	}
+	if (!llmSubsystem) return false;
 
 	const FEpisodeLlmGenerationResult result = llmSubsystem->GetLatestResult();
 	if (!result.bSuccess)
@@ -278,11 +274,7 @@ void UEpisodeLlmPromptWidget::ReleaseEditorWidgetInputMode()
 bool UEpisodeLlmPromptWidget::TryGetPrompt(FString& outPrompt)
 {
 	outPrompt.Reset();
-	if (!PromptTextBox)
-	{
-		SetStatusText(TEXT("PromptTextBox가 바인딩되지 않았습니다."));
-		return false;
-	}
+	if (!PromptTextBox) return false;
 
 	outPrompt = PromptTextBox->GetText().ToString().TrimStartAndEnd();
 	if (outPrompt.IsEmpty())
@@ -324,14 +316,14 @@ bool UEpisodeLlmPromptWidget::TryGetEpisodeCount(int32& outEpisodeCount)
 
 	if (!text.IsNumeric())
 	{
-		SetStatusText(TEXT("에피소드 개수는 정수여야 합니다."));
+		SetStatusText(TEXT("생성 횟수는 정수여야 합니다."));
 		return false;
 	}
 
 	outEpisodeCount = FCString::Atoi(*text);
 	if (outEpisodeCount <= 0)
 	{
-		SetStatusText(TEXT("에피소드 개수는 1 이상이어야 합니다."));
+		SetStatusText(TEXT("생성 횟수는 1 이상이어야 합니다."));
 		return false;
 	}
 

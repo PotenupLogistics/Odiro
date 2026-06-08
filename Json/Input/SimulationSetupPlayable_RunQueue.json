@@ -4,18 +4,18 @@
 	"runs": [
 		{
 			"pair_id": "SimulationSetupPlayable_000",
-			"episode_setup": "Json/Input/EpisodeSetupPlayable.json",
-			"delivery_bot_setup": "Json/Input/DeliveryBotSetupPlayable.json"
+			"episode_setup": "Json/Input/EpisodeSetup_scenario_001_000.json",
+			"delivery_bot_setup": "Json/Input/DeliveryBotSetup_scenario_001_000_baseline.json"
 		},
 		{
 			"pair_id": "SimulationSetupPlayable_001",
-			"episode_setup": "Json/Input/EpisodeSetupPlayable.json",
-			"delivery_bot_setup": "Json/Input/DeliveryBotSetupPlayable.json"
+			"episode_setup": "Json/Input/EpisodeSetup_scenario_001_000.json",
+			"delivery_bot_setup": "Json/Input/DeliveryBotSetup_scenario_001_000_baseline.json"
 		},
 		{
 			"pair_id": "SimulationSetupPlayable_002",
-			"episode_setup": "Json/Input/EpisodeSetupPlayable.json",
-			"delivery_bot_setup": "Json/Input/DeliveryBotSetupPlayable.json"
+			"episode_setup": "Json/Input/EpisodeSetup_scenario_001_000.json",
+			"delivery_bot_setup": "Json/Input/DeliveryBotSetup_scenario_001_000_baseline.json"
 		}
 	]
 }

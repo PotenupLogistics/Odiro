@@ -369,20 +369,14 @@ namespace
 
 	void AddEmptyListMessage(UWidgetTree* widgetTree, UScrollBox* scrollBox, const FString& message)
 	{
-		if (!widgetTree || !scrollBox)
-		{
-			return;
-		}
+		if (!widgetTree || !scrollBox) return;
 
 		scrollBox->AddChild(MakeTextBlock(widgetTree, TEXT("EmptyListMessage"), message, 14));
 	}
 
 	void SetComboBoxOptions(UComboBoxString* comboBox, const TArray<FString>& options, const FString& preferredOption)
 	{
-		if (!comboBox)
-		{
-			return;
-		}
+		if (!comboBox) return;
 
 		comboBox->ClearOptions();
 		for (const FString& option : options)
@@ -406,10 +400,7 @@ void UMainMenuWidget::NativeConstruct()
 	Super::NativeConstruct();
 
 	SetIsFocusable(true);
-	if (!ValidateRequiredBindings())
-	{
-		return;
-	}
+	if (!ValidateRequiredBindings()) return;
 
 	BindControls();
 	SetExperimentConfigDetailVisible(false);
@@ -455,10 +446,7 @@ void UMainMenuWidget::NativeDestruct()
 void UMainMenuWidget::RefreshSetupOptions()
 {
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		return;
-	}
+	if (!subsystem) return;
 
 	const FString currentPath = GetSelectedSetupPath();
 	const TArray<FString> setupFiles = subsystem->ListSimulationSetupFiles();
@@ -742,10 +730,7 @@ void UMainMenuWidget::HandleNewScenarioClicked()
 
 void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWidget, const FString& requestedPath)
 {
-	if (!IsValid(itemWidget))
-	{
-		return;
-	}
+	if (!IsValid(itemWidget)) return;
 
 	const FString sourcePath = NormalizeInputJsonPath(itemWidget->GetOriginalPath());
 	const FString targetPath = NormalizeInputJsonPath(requestedPath);
@@ -805,10 +790,7 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 
 void UMainMenuWidget::HandleScenarioEditRequested(UFileListItemWidget* itemWidget)
 {
-	if (!IsValid(itemWidget))
-	{
-		return;
-	}
+	if (!IsValid(itemWidget)) return;
 
 	const FString episodeSetupPath = itemWidget->GetOriginalPath();
 	SetSelectedEpisodeSetupPath(episodeSetupPath);
@@ -817,10 +799,7 @@ void UMainMenuWidget::HandleScenarioEditRequested(UFileListItemWidget* itemWidge
 
 void UMainMenuWidget::HandlePolicyRenameRequested(UFileListItemWidget* itemWidget, const FString& requestedPath)
 {
-	if (!IsValid(itemWidget))
-	{
-		return;
-	}
+	if (!IsValid(itemWidget)) return;
 
 	const FString sourcePath = NormalizeInputJsonPath(itemWidget->GetOriginalPath());
 	const FString targetPath = NormalizeInputJsonPath(requestedPath);
@@ -869,10 +848,7 @@ void UMainMenuWidget::HandlePolicyRenameRequested(UFileListItemWidget* itemWidge
 
 void UMainMenuWidget::HandlePolicyEditRequested(UFileListItemWidget* itemWidget)
 {
-	if (!IsValid(itemWidget))
-	{
-		return;
-	}
+	if (!IsValid(itemWidget)) return;
 
 	SetSelectedDeliveryBotSetupPath(itemWidget->GetOriginalPath());
 	HandleOpenPolicyTextEditorClicked();
@@ -882,10 +858,7 @@ void UMainMenuWidget::HandleExperimentConfigRenameRequested(
 	UFileListItemWidget* itemWidget,
 	const FString& requestedPath)
 {
-	if (!IsValid(itemWidget))
-	{
-		return;
-	}
+	if (!IsValid(itemWidget)) return;
 
 	const FString sourcePath = NormalizeInputJsonPath(itemWidget->GetOriginalPath());
 	const FString targetPath = NormalizeInputJsonPath(requestedPath);
@@ -909,10 +882,7 @@ void UMainMenuWidget::HandleExperimentConfigRenameRequested(
 
 void UMainMenuWidget::HandleExperimentConfigEditRequested(UFileListItemWidget* itemWidget)
 {
-	if (!IsValid(itemWidget))
-	{
-		return;
-	}
+	if (!IsValid(itemWidget)) return;
 
 	SetExperimentConfigDetailVisible(true);
 	const FString setupPath = NormalizeInputJsonPath(itemWidget->GetOriginalPath());
@@ -922,10 +892,7 @@ void UMainMenuWidget::HandleExperimentConfigEditRequested(UFileListItemWidget* i
 
 void UMainMenuWidget::HandleExperimentConfigPlayRequested(UFileListItemWidget* itemWidget)
 {
-	if (!IsValid(itemWidget))
-	{
-		return;
-	}
+	if (!IsValid(itemWidget)) return;
 
 	const FString setupPath = NormalizeInputJsonPath(itemWidget->GetOriginalPath());
 	SetSelectedSetupPath(setupPath);
@@ -935,10 +902,7 @@ void UMainMenuWidget::HandleExperimentConfigPlayRequested(UFileListItemWidget* i
 
 void UMainMenuWidget::HandleExperimentResultDetailsRequested(UFileListItemWidget* itemWidget)
 {
-	if (!IsValid(itemWidget))
-	{
-		return;
-	}
+	if (!IsValid(itemWidget)) return;
 
 	SetSelectedExperimentResultRunDirectory(itemWidget->GetOriginalPath());
 	RefreshExperimentResultIterationList();
@@ -948,10 +912,7 @@ void UMainMenuWidget::HandleExperimentResultDetailsRequested(UFileListItemWidget
 
 void UMainMenuWidget::HandleExperimentResultIterationButtonClicked(UExperimentResultIterationButton* buttonWidget)
 {
-	if (!IsValid(buttonWidget))
-	{
-		return;
-	}
+	if (!IsValid(buttonWidget)) return;
 
 	SetSelectedExperimentResultPath(buttonWidget->GetReportPath());
 	RefreshExperimentResultIterationList();
@@ -1021,10 +982,7 @@ void UMainMenuWidget::HandleNewPolicyClicked()
 void UMainMenuWidget::HandleStartClicked()
 {
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		return;
-	}
+	if (!subsystem) return;
 
 	const FString requestedRunId = RunIdTextBox ? RunIdTextBox->GetText().ToString().TrimStartAndEnd() : FString();
 	if (subsystem->StartSimulationRun(GetSelectedSetupPath(), requestedRunId))
@@ -1347,10 +1305,7 @@ void UMainMenuWidget::BindControls()
 void UMainMenuWidget::LoadSelectedSetup()
 {
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		return;
-	}
+	if (!subsystem) return;
 
 	const FSimulationSetupParseResult parseResult = subsystem->LoadSimulationSetupFile(GetSelectedSetupPath());
 	if (!parseResult.bSuccess)
@@ -1523,16 +1478,10 @@ void UMainMenuWidget::SetExperimentResultDetailVisible(const bool bVisible)
 
 void UMainMenuWidget::RefreshScenarioList()
 {
-	if (!ScenarioListScrollBox)
-	{
-		return;
-	}
+	if (!ScenarioListScrollBox) return;
 
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		return;
-	}
+	if (!subsystem) return;
 
 	const TSubclassOf<UFileListItemWidget> itemWidgetClass = ResolveFileListItemWidgetClass();
 	if (!itemWidgetClass)
@@ -1688,11 +1637,8 @@ void UMainMenuWidget::RefreshExperimentResultList()
 	for (const FString& resultDirectory : resultDirectories)
 	{
 		UFileListItemWidget* itemWidget = CreateWidget<UFileListItemWidget>(this, itemWidgetClass);
-		if (!itemWidget)
-		{
-			continue;
-		}
-
+		if (!itemWidget) continue;
+		
 		itemWidget->InitializeDisplayItem(
 			resultDirectory,
 			FPaths::GetBaseFilename(resultDirectory),
@@ -1768,10 +1714,7 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 			reportItem.RunIndex == INDEX_NONE ? FString(TEXT("?")) : FString::FromInt(reportItem.RunIndex),
 			18);
 
-		if (!sizeBox || !button || !label)
-		{
-			continue;
-		}
+		if (!sizeBox || !button || !label) continue;
 
 		const bool bSelected = reportItem.ReportPath.Equals(SelectedExperimentResultPath, ESearchCase::IgnoreCase);
 		button->Configure(reportItem.ReportPath, reportItem.RunIndex);
@@ -1969,11 +1912,8 @@ void UMainMenuWidget::HandleRunInfoChanged(const FSimulatorRunInfo& runInfo)
 
 void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 {
-	if (!StatusTextBlock)
-	{
-		return;
-	}
-
+	if (!StatusTextBlock) return;
+	
 	TArray<FString> lines;
 	if (!extraMessage.IsEmpty())
 	{

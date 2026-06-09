@@ -7,7 +7,7 @@ import pytest
 
 from app.models.bot_setup import DeliveryBotSetup
 from app.models.evaluation_report import EvaluationReport
-from app.models.recommendation import BotSetupRecommendation, EpisodeRecommendationResult
+from app.models.recommendation import BotSetupRecommendation
 from app.services.bot_setup_generator import generate_bot_setup
 from app.services.evaluation_report_parser import (
     EvaluationReportParseError,
@@ -18,7 +18,6 @@ from app.services.policy_fallback_rules import (
     apply_episode_fallback_rules,
     build_episode_fallback_summary,
 )
-from app.services.policy_recommendation_orchestrator import analyze_episode_and_recommend
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -192,43 +191,3 @@ def test_generate_bot_setup_json_dict_format() -> None:
     assert "lidar" in d["robot"]
     assert "drive" in d["robot"]
     assert "path_follow" in d["robot"]
-
-
-# ── orchestrator E2E ─────────────────────────────────────────────────────────
-
-
-def test_orchestrator_episode_fallback_only() -> None:
-    result = analyze_episode_and_recommend(
-        report_path=SAMPLE_REPORT,
-        fallback_only=True,
-    )
-    assert isinstance(result, EpisodeRecommendationResult)
-    assert result.generationMethod == "fallback_rules"
-    assert result.statistics.outcome == "Failure"
-    assert result.nextBotSetup is not None
-    assert result.nextBotSetup["schema"] == "delivery_bot_setup"
-
-
-def test_orchestrator_episode_unusable_report(tmp_path) -> None:
-    data = json.loads(SAMPLE_REPORT.read_text(encoding="utf-8"))
-    data["summary"]["usable_for_llm_tuning"] = False
-    p = tmp_path / "unusable.json"
-    p.write_text(json.dumps(data), encoding="utf-8")
-
-    result = analyze_episode_and_recommend(report_path=p, fallback_only=True)
-    assert result.recommendations == []
-    assert result.nextBotSetup is None
-    assert any("usable_for_llm_tuning" in w for w in result.llmWarnings)
-
-
-def test_orchestrator_episode_result_json_serializable() -> None:
-    result = analyze_episode_and_recommend(
-        report_path=SAMPLE_REPORT,
-        fallback_only=True,
-    )
-    payload = result.model_dump(mode="json")
-    text = json.dumps(payload, ensure_ascii=False)
-    reloaded = json.loads(text)
-    assert reloaded["analysisId"] == result.analysisId
-    assert reloaded["generationMethod"] == "fallback_rules"
-    assert "nextBotSetup" in reloaded

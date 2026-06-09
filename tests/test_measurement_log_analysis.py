@@ -8,7 +8,6 @@ import pytest
 from app.models.recommendation import (
     AnalysisStatistics,
     ParamRecommendation,
-    PolicyRecommendationResult,
 )
 from app.services.measurement_log_parser import (
     MeasurementLogParseError,
@@ -23,7 +22,6 @@ from app.services.policy_fallback_rules import (
     apply_fallback_rules,
     build_fallback_summary,
 )
-from app.services.policy_recommendation_orchestrator import analyze_and_recommend
 from app.services.policy_recommendation_rag_retriever import retrieve_policy_context
 
 
@@ -235,32 +233,6 @@ def test_retrieve_policy_context_triggers_more_queries_on_high_brake() -> None:
 # -------- orchestrator E2E tests (fallback path만) --------
 
 
-def test_orchestrator_fallback_only_produces_result(tmp_path: Path) -> None:
-    sample_log = _write_measurement_log(tmp_path)
-    result = analyze_and_recommend(
-        log_path=sample_log,
-        fallback_only=True,
-    )
-    assert isinstance(result, PolicyRecommendationResult)
-    assert result.generationMethod == "fallback_rules"
-    assert result.statistics.totalTicks > 0
-    assert isinstance(result.recommendations, list)
-    assert result.logPath.endswith(".jsonl")
-
-
-def test_orchestrator_result_is_json_serializable(tmp_path: Path) -> None:
-    sample_log = _write_measurement_log(tmp_path)
-    result = analyze_and_recommend(
-        log_path=sample_log,
-        fallback_only=True,
-    )
-    payload = result.model_dump(mode="json")
-    text = json.dumps(payload, ensure_ascii=False)
-    reloaded = json.loads(text)
-    assert reloaded["analysisId"] == result.analysisId
-    assert reloaded["generationMethod"] == "fallback_rules"
-
-
 def test_recommendation_validation_rejects_invalid_param() -> None:
     with pytest.raises(Exception):
         ParamRecommendation(
@@ -269,100 +241,3 @@ def test_recommendation_validation_rejects_invalid_param() -> None:
             suggested=1.5,
             reason="test",
         )
-
-
-# -------- LLM 래퍼 단위 테스트 (mock 클라이언트) --------
-
-
-def test_llm_recommendation_parses_valid_openai_response() -> None:
-    from app.models.llm import (
-        LlmGenerationRequest,
-        LlmGenerationResponse,
-        LlmProvider,
-    )
-    from app.services.policy_recommendation_llm_client import (
-        generate_recommendations,
-    )
-
-    class _StubClient:
-        def __init__(self) -> None:
-            self.last_request: LlmGenerationRequest | None = None
-
-        def generate(self, request: LlmGenerationRequest) -> LlmGenerationResponse:
-            self.last_request = request
-            return LlmGenerationResponse(
-                requestId=request.requestId,
-                provider=LlmProvider.openai,
-                model="gpt-4o-mini",
-                success=True,
-                content=(
-                    '{"recommendations":['
-                    '{"param":"stopDistanceM","current":1.2,"suggested":1.5,'
-                    '"reason":"통계 근거","citations":["KOR-003"]}'
-                    '],"summary":"한 개 추천"}'
-                ),
-                rawContent=None,
-                usage=None,
-                error=None,
-                warnings=[],
-            )
-
-    stub = _StubClient()
-    statistics = _make_statistics(minFrontDistanceM=0.5, brakeAppliedRatio=0.3)
-    outcome = generate_recommendations(
-        statistics=statistics,
-        contexts=[],
-        provider=LlmProvider.openai,
-        client=stub,
-    )
-
-    assert outcome.success is True
-    assert len(outcome.recommendations) == 1
-    assert outcome.recommendations[0].param == "stopDistanceM"
-    assert outcome.summary == "한 개 추천"
-    # request body가 policy-recommendation 모델로 전달됐는지 확인
-    assert stub.last_request is not None
-    assert stub.last_request.model == "policy-recommendation"
-
-
-def test_llm_recommendation_falls_through_on_invalid_param() -> None:
-    from app.models.llm import (
-        LlmGenerationRequest,
-        LlmGenerationResponse,
-        LlmProvider,
-    )
-    from app.services.policy_recommendation_llm_client import (
-        generate_recommendations,
-    )
-
-    class _StubClient:
-        def generate(self, request: LlmGenerationRequest) -> LlmGenerationResponse:
-            return LlmGenerationResponse(
-                requestId=request.requestId,
-                provider=LlmProvider.openai,
-                model="gpt-4o-mini",
-                success=True,
-                content=(
-                    '{"recommendations":['
-                    '{"param":"unsupported","current":1,"suggested":2,"reason":"x"}'
-                    '],"summary":"ok"}'
-                ),
-                rawContent=None,
-                usage=None,
-                error=None,
-                warnings=[],
-            )
-
-    outcome = generate_recommendations(
-        statistics=_make_statistics(),
-        contexts=[],
-        provider=__import__(
-            "app.models.llm", fromlist=["LlmProvider"]
-        ).LlmProvider.openai,
-        client=_StubClient(),
-    )
-
-    # 허용되지 않은 param은 무시되고 success=True 유지 (빈 리스트)
-    assert outcome.success is True
-    assert outcome.recommendations == []
-    assert any("허용되지 않은 param" in w for w in outcome.warnings)

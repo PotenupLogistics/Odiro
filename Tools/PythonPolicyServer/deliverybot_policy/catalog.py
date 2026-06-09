@@ -234,7 +234,16 @@ def normalize_enabled_policy_objects(
 
 
 def copy_policy_runtime_settings(source: dict[str, Any], target: dict[str, Any]) -> None:
-    for field_name in ("pathfinding", "dynamicObstacles", "dynamic_obstacles", "recovery", "parameters"):
+    for field_name in (
+        "pathfinding",
+        "dynamicObstacles",
+        "dynamic_obstacles",
+        "recovery",
+        "parameters",
+        "safetyStop",
+        "safety_stop",
+        "dwa",
+    ):
         value = source.get(field_name)
         if isinstance(value, dict):
             target[field_name] = value

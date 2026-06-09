@@ -1,6 +1,6 @@
 {
   "catalogId": "cautious_delivery",
-  "catalogVersion": 2,
+  "catalogVersion": 1,
   "displayName": "보수적 배송 정책",
   "description": "장애물 정지와 감속을 우선하는 보수적 주행 정책 묶음입니다.",
   "policies": [
@@ -12,14 +12,7 @@
       "defaultEnabled": true,
       "defaultPriority": 5,
       "requiresGrid": false,
-      "requiresGoal": false,
-      "parameters": {
-        "safetyStop": {
-          "hardStopDistanceM": 0.65,
-          "timeToCollisionSeconds": 1.0,
-          "minSpeedKmhForTtc": 0.2
-        }
-      }
+      "requiresGoal": false
     },
     {
       "policyId": "front_obstacle_slowdown",
@@ -29,14 +22,7 @@
       "defaultEnabled": true,
       "defaultPriority": 15,
       "requiresGrid": true,
-      "requiresGoal": true,
-      "dynamicObstacles": {
-        "enabled": true,
-        "frontOnly": false,
-        "inflationRadiusM": 0.65,
-        "maxDistanceM": 5.0,
-        "persistenceSeconds": 2.0
-      }
+      "requiresGoal": true
     },
     {
       "policyId": "reroute_when_blocked",
@@ -47,32 +33,6 @@
       "defaultPriority": 30,
       "requiresGrid": true,
       "requiresGoal": true
-    },
-    {
-      "policyId": "dwa_local_avoidance",
-      "displayName": "DWA Local Avoidance",
-      "description": "Uses LiDAR hits and the A* path target to select a short-horizon avoidance command.",
-      "category": "Navigation",
-      "defaultEnabled": true,
-      "defaultPriority": 25,
-      "requiresGrid": true,
-      "requiresGoal": true,
-      "parameters": {
-          "dwa": {
-            "activationDistanceM": 4.5,
-            "safetyDistanceM": 0.55,
-            "noSafeStopDistanceM": 0.65,
-            "stopOnNoSafeTrajectory": false,
-            "predictionTimeS": 1.6,
-            "stepTimeS": 0.2,
-            "minSpeedKmh": 0.4,
-          "speedSampleCount": 4,
-          "steeringSampleCount": 13,
-          "clearanceWeight": 1.0,
-          "pathWeight": 0.8,
-          "targetWeight": 1.1
-        }
-      }
     },
     {
       "policyId": "normal_path_follow",

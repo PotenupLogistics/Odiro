@@ -41,21 +41,6 @@ struct FDeliveryBotHttpPolicyDebugInfo
 	// Python 서버가 이 action을 선택한 이유. 디버깅/로그용이다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FString Reason{};
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FString PathStatus{};
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int32 PathLength{ 0 };
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FVector LookAheadWorldLocationCm{ FVector::ZeroVector };
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bHasLookAheadWorldLocation{ false };
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TArray<FVector> PathWorldPointsCm{};
 };
 
 USTRUCT(BlueprintType)

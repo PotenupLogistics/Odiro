@@ -36,9 +36,6 @@ public:
 	// 자동 시작 전에 이전 실행 상태를 초기화한다.
 	void ResetPolicyRunStartupState();
 	
-	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PolicyController")
-	void SetStartupPolicySpecFileName(const FString& policySpecFileName);
-
 	// 매 프레임 처리해야 할 로직을 실행
 	void TickPolicy(float deltaTime);
 
@@ -120,9 +117,7 @@ private:  // Episode종료
 	void BindEpisodeEvaluationEndedEvent();
 	void UnbindEpisodeEvaluationEndedEvent();
 	
-private:  // 경로 표시
-	void UpdateLastPolicyPathFromResponse(const FDeliveryBotHttpPolicyResponseInfo& responseInfo);
-	void DrawLastPolicyPath() const;
+	
 	
 private: // 그리드를 파이썬으로 전송
 	void StartGridUploadRetryLoop();
@@ -188,15 +183,13 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|PolicyController|Debug", meta = (AllowPrivateAccess = "true"))
 	bool bLogPolicyRuntimeMessages{ false };
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|PolicyController|Debug", meta = (AllowPrivateAccess = "true"))
-	bool bDrawPolicyPathDebug{ true };
-
+	
 private:
 	FTimerHandle GridUploadRetryTimerHandle;
 	FTimerHandle PolicyLoopTimerHandle;
 	FTimerHandle EpisodeStartRetryTimerHandle;
 	FDeliveryBotMoveCommandInfo LastValidPolicyMoveCommand{};
-
+	
 	bool bHasValidPolicyMoveCommand{ false };
 	bool bHasCompletedGridUpload{ false };
 	bool bHasCompletedEpisodeStart{ false };
@@ -213,6 +206,4 @@ private:
 	int32 ExpectedEpisodeVersion{ 0 };
 	int32 ExpectedConfigVersion{ 0 };
 	int32 ExpectedGridVersion{ 0 };
-
-	TArray<FVector> LastPolicyPathPointsCm;
 };

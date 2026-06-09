@@ -1,7 +1,7 @@
 
 #include "Episode/EpisodeEvaluationSubsystem.h"
 #include "Components/PrimitiveComponent.h"
-#include "DeliveryBot/Actor/DeliveryBot.h"
+#include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
 #include "Episode/Actors/EpisodeGroundRegion.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 
@@ -208,7 +208,6 @@ void UEpisodeEvaluationSubsystem::RequestEndEpisode(const FEpisodeEvaluationResu
 	OnEpisodeEnded.Broadcast(CurrentResult);
 }
 
-
 void UEpisodeEvaluationSubsystem::Tick(float deltaTime)
 {
 	if (!bEvaluating) return;
@@ -277,7 +276,7 @@ FEpisodeParamValue UEpisodeEvaluationSubsystem::MakeVectorParam(const FVector& v
 }
 
 void UEpisodeEvaluationSubsystem::HandleDeliveryBotSimulationFailed(
-	ADeliveryBot* DeliveryBotActor,
+	ADeliveryBot_ChaosActor* DeliveryBotActor,
 	const FDeliveryBotSimulationFailureInfo& FailureInfo)
 {
 	if (!bEvaluating) return;

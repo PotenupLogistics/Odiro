@@ -203,4 +203,5 @@ private: // 요청 진행 상태
 
 private: // 종료 중 콜백 무시 플래그
 	bool bIsEndingPlay{ false };
+	
 };

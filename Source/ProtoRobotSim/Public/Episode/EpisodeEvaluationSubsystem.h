@@ -6,7 +6,6 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "EpisodeEvaluationSubsystem.generated.h"
 
-class ADeliveryBot;
 class AActor;
 class ADeliveryBot_ChaosActor;
 class AEpisodeGroundRegion;
@@ -48,7 +47,7 @@ public:
 
 	UFUNCTION()
 	void HandleDeliveryBotSimulationFailed(
-		ADeliveryBot* DeliveryBotActor,
+		ADeliveryBot_ChaosActor* DeliveryBotActor,
 		const FDeliveryBotSimulationFailureInfo& FailureInfo);
 
 	virtual void Tick(float deltaTime) override;

@@ -16,7 +16,6 @@ from deliverybot_policy.context import (
 )
 from deliverybot_policy.pathfinding import (
     build_pathfinding_debug,
-    build_path_points_debug,
     find_policy_astar_path,
     grid_index_to_world_location,
     world_to_grid_index,
@@ -138,12 +137,10 @@ def build_path_follow_candidate(
             "lookAheadGridY": lookahead_index[1],
             "lookAheadWorldX": lookahead_world["x"],
             "lookAheadWorldY": lookahead_world["y"],
-            "lookAheadWorldZ": lookahead_world["z"],
             "yawErrorDegree": yaw_error_degree,
             "distanceToGoalCm": distance_to_goal_cm,
         }
     )
-    path_debug.update(build_path_points_debug(grid_info, path))
 
     return make_policy_candidate(
         policy_id,

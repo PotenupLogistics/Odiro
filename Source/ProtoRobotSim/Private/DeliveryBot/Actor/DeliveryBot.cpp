@@ -362,10 +362,9 @@ void ADeliveryBot::ApplySetupInfo()
 
 	if (IsValid(LidarSensorComponent))
 		LidarSensorComponent->InitializeLidar(SetupInfo.LidarSensorConfigInfo);
-
-	if (IsValid(PolicyControllerComponent))
-		PolicyControllerComponent->SetStartupPolicySpecFileName(SetupInfo.StartupPolicySpecFileName);
 }
+
+
 
 void ADeliveryBot::FillObservation(FDeliveryBotObservationInfo& observation) const
 {

@@ -5,7 +5,6 @@ from typing import Any, Callable
 from deliverybot_policy.actions import make_policy_candidate, make_policy_response, make_stop_action
 from deliverybot_policy.catalog import normalize_policy_spec
 from deliverybot_policy.policies import (
-    dwa_local_avoidance,
     front_obstacle_slowdown,
     front_obstacle_stop,
     normal_path_follow,
@@ -19,7 +18,6 @@ PolicyEvaluator = Callable[[dict[str, Any]], dict[str, Any] | None]
 POLICY_EVALUATORS: dict[str, PolicyEvaluator] = {
     front_obstacle_stop.POLICY_ID: front_obstacle_stop.evaluate,
     reroute_when_blocked.POLICY_ID: reroute_when_blocked.evaluate,
-    dwa_local_avoidance.POLICY_ID: dwa_local_avoidance.evaluate,
     front_obstacle_slowdown.POLICY_ID: front_obstacle_slowdown.evaluate,
     normal_path_follow.POLICY_ID: normal_path_follow.evaluate,
 }

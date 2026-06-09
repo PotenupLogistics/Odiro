@@ -29,7 +29,4 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FDeliveryBotNavigationConfigInfo NavigationConfigInfo{}; // 어떤 방식으로 이동할지 A*, HybridA*, DWA 등
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FString StartupPolicySpecFileName{ TEXT("PolicySpec_DefaultDelivery") }; // 정책 JSON 파일 명
 };

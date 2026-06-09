@@ -7,10 +7,6 @@ from deliverybot_policy.context import get_float_field, get_goal, get_robot_stat
 from deliverybot_policy.pathfinding import GridIndex, grid_index_to_world_location, world_to_grid_index
 
 
-DYNAMIC_OBSTACLE_STATE_KEY = "dynamicObstacles"
-DEFAULT_PERSISTENCE_SECONDS = 1.5
-
-
 def get_nested_spec(source: dict[str, Any], field_names: tuple[str, ...]) -> dict[str, Any]:
     for field_name in field_names:
         value = source.get(field_name, {})
@@ -105,14 +101,6 @@ def build_dynamic_obstacle_grid_overlay(
         max_distance_m,
     )
     effective_max_distance_m = max(min(configured_max_distance_m, max_distance_m), 0.0)
-    persistence_seconds = max(
-        get_float_setting(
-            dynamic_spec,
-            ("persistenceSeconds", "persistence_seconds", "ttlSeconds", "ttl_seconds"),
-            DEFAULT_PERSISTENCE_SECONDS,
-        ),
-        0.0,
-    )
 
     lidar_rays = observation.get("lidarRays", [])
     if not isinstance(lidar_rays, list):
@@ -120,7 +108,6 @@ def build_dynamic_obstacle_grid_overlay(
 
     overlay_lookup: dict[GridIndex, dict[str, Any]] = dict(cell_lookup)
     blocked_indexes: set[GridIndex] = set()
-    observed_hit_indexes: set[GridIndex] = set()
     hit_ray_count = 0
     protected = protected_indexes or set()
 
@@ -136,30 +123,15 @@ def build_dynamic_obstacle_grid_overlay(
         if front_only and abs(normalize_angle_degree(relative_yaw_degree)) > front_half_angle_degree:
             continue
 
-        hit_index = get_dynamic_obstacle_center_index(
-            grid_info,
-            robot_state,
-            relative_yaw_degree,
-            distance_m,
-            protected,
-        )
+        hit_index = get_lidar_hit_grid_index(grid_info, robot_state, relative_yaw_degree, distance_m)
         if hit_index is None:
             continue
 
         hit_ray_count += 1
-        observed_hit_indexes.add(hit_index)
-
-    active_obstacle_indexes = update_dynamic_obstacle_memory(
-        context,
-        observed_hit_indexes,
-        persistence_seconds,
-    )
-
-    for obstacle_index in active_obstacle_indexes:
         blocked_indexes.update(
             iter_inflated_obstacle_indexes(
                 grid_info,
-                obstacle_index,
+                hit_index,
                 inflation_radius_m * 100.0,
                 protected,
             )
@@ -180,125 +152,11 @@ def build_dynamic_obstacle_grid_overlay(
     return overlay_lookup, {
         "dynamicObstacleStatus": "ok",
         "dynamicObstacleHitRayCount": hit_ray_count,
-        "dynamicObstacleObservedCellCount": len(observed_hit_indexes),
-        "dynamicObstacleMemoryCellCount": len(active_obstacle_indexes),
         "dynamicObstacleBlockedCellCount": len(blocked_indexes),
         "dynamicObstacleInflationRadiusM": inflation_radius_m,
         "dynamicObstacleMaxDistanceM": effective_max_distance_m,
         "dynamicObstacleFrontOnly": front_only,
-        "dynamicObstaclePersistenceSeconds": persistence_seconds,
     }
-
-
-def get_dynamic_obstacle_center_index(
-    grid_info: dict[str, Any],
-    robot_state: dict[str, Any],
-    relative_yaw_degree: float,
-    distance_m: float,
-    protected_indexes: set[GridIndex],
-) -> GridIndex | None:
-    hit_index = get_lidar_hit_grid_index(grid_info, robot_state, relative_yaw_degree, distance_m)
-    if hit_index is None or hit_index not in protected_indexes:
-        return hit_index
-
-    cell_size_m = max(get_float_field(grid_info, "cellSizeCm", 100.0), 1.0) / 100.0
-    projected_index = get_lidar_hit_grid_index(
-        grid_info,
-        robot_state,
-        relative_yaw_degree,
-        distance_m + cell_size_m,
-    )
-    if projected_index is None or projected_index in protected_indexes:
-        return None
-
-    return projected_index
-
-
-def update_dynamic_obstacle_memory(
-    context: dict[str, Any],
-    observed_indexes: set[GridIndex],
-    persistence_seconds: float,
-) -> set[GridIndex]:
-    if persistence_seconds <= 0.0:
-        clear_dynamic_obstacle_memory(context)
-        return set(observed_indexes)
-
-    obstacle_state = get_dynamic_obstacle_state(context)
-    if obstacle_state is None:
-        return set(observed_indexes)
-
-    current_time_seconds = get_observation_time_seconds(context)
-    cells = obstacle_state.setdefault("cells", {})
-    if not isinstance(cells, dict):
-        cells = {}
-        obstacle_state["cells"] = cells
-
-    for observed_index in observed_indexes:
-        cells[serialize_grid_index(observed_index)] = current_time_seconds
-
-    active_indexes: set[GridIndex] = set()
-    expired_keys: list[str] = []
-    for key, last_seen_value in cells.items():
-        try:
-            last_seen_seconds = float(last_seen_value)
-        except (TypeError, ValueError):
-            expired_keys.append(str(key))
-            continue
-
-        if current_time_seconds - last_seen_seconds <= persistence_seconds:
-            parsed_index = parse_grid_index(str(key))
-            if parsed_index is not None:
-                active_indexes.add(parsed_index)
-        else:
-            expired_keys.append(str(key))
-
-    for expired_key in expired_keys:
-        cells.pop(expired_key, None)
-
-    obstacle_state["lastUpdateTimeSeconds"] = current_time_seconds
-    return active_indexes
-
-
-def clear_dynamic_obstacle_memory(context: dict[str, Any]) -> None:
-    policy_runtime_state = context.get("policyRuntimeState", {})
-    if not isinstance(policy_runtime_state, dict):
-        return
-
-    policy_runtime_state.pop(DYNAMIC_OBSTACLE_STATE_KEY, None)
-
-
-def get_dynamic_obstacle_state(context: dict[str, Any]) -> dict[str, Any] | None:
-    policy_runtime_state = context.get("policyRuntimeState", {})
-    if not isinstance(policy_runtime_state, dict):
-        return None
-
-    state = policy_runtime_state.setdefault(DYNAMIC_OBSTACLE_STATE_KEY, {})
-    if not isinstance(state, dict):
-        state = {}
-        policy_runtime_state[DYNAMIC_OBSTACLE_STATE_KEY] = state
-
-    return state
-
-
-def get_observation_time_seconds(context: dict[str, Any]) -> float:
-    observation = context.get("observation", {})
-    safe_observation = observation if isinstance(observation, dict) else {}
-    return get_float_field(safe_observation, "worldTimeSeconds", 0.0)
-
-
-def serialize_grid_index(grid_index: GridIndex) -> str:
-    return f"{grid_index[0]},{grid_index[1]}"
-
-
-def parse_grid_index(value: str) -> GridIndex | None:
-    parts = value.split(",", 1)
-    if len(parts) != 2:
-        return None
-
-    try:
-        return int(parts[0]), int(parts[1])
-    except ValueError:
-        return None
 
 
 def build_dynamic_obstacle_reroute_context(context: dict[str, Any], max_distance_m: float) -> dict[str, Any]:

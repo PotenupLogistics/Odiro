@@ -42,19 +42,53 @@ public:
 	FDeliveryBotSetupCompileResult CompileDeliveryBotSetupFromJsonString(const FString& jsonString) const;
 
 private:
-	static void AddDiagnostic(FDeliveryBotSetupCompileResult& result, EEpisodeCompileDiagnosticSeverity severity, const FString& code, const FString& message);
+	static void AddDiagnostic(
+		FDeliveryBotSetupCompileResult& result,
+		EEpisodeCompileDiagnosticSeverity severity,
+		const FString& code,
+		const FString& message);
 	static bool HasErrors(const FDeliveryBotSetupCompileResult& result);
 
-	static bool ReadOptionalFloatField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, float& targetValue, float minValue, float maxValue = TNumericLimits<float>::Max());
-	static bool ReadOptionalBoolField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, bool& targetValue);
-	static bool ReadOptionalNameArrayField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, TArray<FName>& targetValue);
-	static bool ReadOptionalCollisionChannelField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, TEnumAsByte<ECollisionChannel>& targetValue);
+	static bool ReadOptionalFloatField(
+		const FJsonObject& jsonObject,
+		const FString& fieldName,
+		const FString& path,
+		FDeliveryBotSetupCompileResult& result,
+		float& targetValue,
+		float minValue,
+		float maxValue = TNumericLimits<float>::Max());
+	static bool ReadOptionalBoolField(
+		const FJsonObject& jsonObject,
+		const FString& fieldName,
+		const FString& path,
+		FDeliveryBotSetupCompileResult& result,
+		bool& targetValue);
+	static bool ReadOptionalNameArrayField(
+		const FJsonObject& jsonObject,
+		const FString& fieldName,
+		const FString& path,
+		FDeliveryBotSetupCompileResult& result,
+		TArray<FName>& targetValue);
+	static bool ReadOptionalCollisionChannelField(
+		const FJsonObject& jsonObject,
+		const FString& fieldName,
+		const FString& path,
+		FDeliveryBotSetupCompileResult& result,
+		TEnumAsByte<ECollisionChannel>& targetValue);
 
-	static void CompileRobotObject(const FJsonObject& rootObject, FDeliveryBotSetupCompileResult& result);
-	static void CompileDrive(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotDriveConfigInfo& driveConfigInfo);
-	static void CompilePathFollow(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotPathFollowConfigInfo& pathFollowConfigInfo);
-	static void CompileLidar(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo);
-	static bool ReadOptionalStringField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, FString& targetValue);
-
-	static void CompilePolicy(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FString& startupPolicySpecFileName);
+	static void CompileRobotObject(
+		const FJsonObject& rootObject,
+		FDeliveryBotSetupCompileResult& result);
+	static void CompileDrive(
+		const FJsonObject& robotObject,
+		FDeliveryBotSetupCompileResult& result,
+		FDeliveryBotDriveConfigInfo& driveConfigInfo);
+	static void CompilePathFollow(
+		const FJsonObject& robotObject,
+		FDeliveryBotSetupCompileResult& result,
+		FDeliveryBotPathFollowConfigInfo& pathFollowConfigInfo);
+	static void CompileLidar(
+		const FJsonObject& robotObject,
+		FDeliveryBotSetupCompileResult& result,
+		FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo);
 };

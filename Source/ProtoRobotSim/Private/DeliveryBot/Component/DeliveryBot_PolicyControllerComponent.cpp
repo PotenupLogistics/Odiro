@@ -7,8 +7,6 @@
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
-#include "DrawDebugHelpers.h"
-
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotPolicyController, Log, All);
 
@@ -119,8 +117,6 @@ void UDeliveryBot_PolicyControllerComponent::TickPolicy(float deltaTime)
 	if (!IsValid(OwnerDeliveryBot))
 		return;
 
-	DrawLastPolicyPath();
-
 	if (bHoldStopAfterGoalReached)
 	{
 		OwnerDeliveryBot->ApplyParkingStop();
@@ -211,7 +207,7 @@ void UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse(const FD
 	{
 		LastValidPolicyActionWorldTimeSeconds = world->GetTimeSeconds();
 	}
-	UpdateLastPolicyPathFromResponse(responseInfo);
+
 	LogValidPolicyAction(responseInfo, LastValidPolicyMoveCommand);
 
 	if (bGoalReached)
@@ -1092,14 +1088,6 @@ void UDeliveryBot_PolicyControllerComponent::ResetPolicyRunStartupState()
 	PolicyFailureHistory.Reset();
 }
 
-void UDeliveryBot_PolicyControllerComponent::SetStartupPolicySpecFileName(const FString& policySpecFileName)
-{
-	const FString trimmedFileName = policySpecFileName.TrimStartAndEnd();
-	if (trimmedFileName.IsEmpty()) return;
-
-	StartupPolicySpecFileName = trimmedFileName;
-}
-
 // 소환 후 자동 주행의 시작점이다.
 bool UDeliveryBot_PolicyControllerComponent::StartPolicyRunAfterSpawn()
 {
@@ -1171,28 +1159,3 @@ void UDeliveryBot_PolicyControllerComponent::HandleStartupPolicySpecUpdateRespon
 }
 
 
-void UDeliveryBot_PolicyControllerComponent::UpdateLastPolicyPathFromResponse(const FDeliveryBotHttpPolicyResponseInfo& responseInfo)
-{
-	if (responseInfo.Debug.PathWorldPointsCm.Num() > 0)
-	{
-		LastPolicyPathPointsCm = responseInfo.Debug.PathWorldPointsCm;
-	}
-	else if (!responseInfo.Debug.PathStatus.IsEmpty()
-		&& !responseInfo.Debug.PathStatus.Equals(TEXT("goal_reached"), ESearchCase::IgnoreCase))
-	{
-		LastPolicyPathPointsCm.Reset();
-	}
-}
-
-void UDeliveryBot_PolicyControllerComponent::DrawLastPolicyPath() const
-{
-	const UWorld* world = GetWorld();
-	if (!bDrawPolicyPathDebug || LastPolicyPathPointsCm.Num() < 2 || !world)
-		return;
-
-	for (int32 index = 0; index < LastPolicyPathPointsCm.Num() - 1; ++index)
-	{
-		DrawDebugLine(world, LastPolicyPathPointsCm[index] + FVector(0, 0, 30),
-			LastPolicyPathPointsCm[index + 1] + FVector(0, 0, 30), FColor::Green, false, 0.25f, 0, 4.f);
-	}
-}

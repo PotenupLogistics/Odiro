@@ -1,6 +1,6 @@
 {
   "catalogId": "default_delivery",
-  "catalogVersion": 2,
+  "catalogVersion": 1,
   "displayName": "기본 배송 정책",
   "description": "일반적인 배송 로봇 주행을 위한 기본 정책 묶음입니다.",
   "policies": [
@@ -12,14 +12,7 @@
       "defaultEnabled": true,
       "defaultPriority": 10,
       "requiresGrid": false,
-      "requiresGoal": false,
-      "parameters": {
-        "safetyStop": {
-          "hardStopDistanceM": 0.55,
-          "timeToCollisionSeconds": 0.8,
-          "minSpeedKmhForTtc": 0.2
-        }
-      }
+      "requiresGoal": false
     },
     {
       "policyId": "reroute_when_blocked",
@@ -39,40 +32,7 @@
       "defaultEnabled": true,
       "defaultPriority": 30,
       "requiresGrid": true,
-      "requiresGoal": true,
-      "dynamicObstacles": {
-        "enabled": true,
-        "frontOnly": false,
-        "inflationRadiusM": 0.55,
-        "maxDistanceM": 5.0,
-        "persistenceSeconds": 1.5
-      }
-    },
-    {
-      "policyId": "dwa_local_avoidance",
-      "displayName": "DWA Local Avoidance",
-      "description": "Uses LiDAR hits and the A* path target to select a short-horizon avoidance command.",
-      "category": "Navigation",
-      "defaultEnabled": true,
-      "defaultPriority": 25,
-      "requiresGrid": true,
-      "requiresGoal": true,
-      "parameters": {
-          "dwa": {
-            "activationDistanceM": 4.0,
-            "safetyDistanceM": 0.45,
-            "noSafeStopDistanceM": 0.55,
-            "stopOnNoSafeTrajectory": false,
-            "predictionTimeS": 1.4,
-            "stepTimeS": 0.2,
-            "minSpeedKmh": 0.5,
-          "speedSampleCount": 4,
-          "steeringSampleCount": 11,
-          "clearanceWeight": 0.8,
-          "pathWeight": 0.8,
-          "targetWeight": 1.2
-        }
-      }
+      "requiresGoal": true
     },
     {
       "policyId": "normal_path_follow",

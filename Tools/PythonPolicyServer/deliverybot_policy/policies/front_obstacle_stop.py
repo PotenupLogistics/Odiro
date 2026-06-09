@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from typing import Any
 
 from deliverybot_policy.actions import make_action, make_policy_candidate, make_stop_action
@@ -10,7 +9,6 @@ from deliverybot_policy.context import (
     get_motion_control_spec,
     get_nearest_observed_object,
     get_policy_priority,
-    get_robot_state,
 )
 from deliverybot_policy.dynamic_obstacles import build_dynamic_obstacle_reroute_context
 from deliverybot_policy.policies.normal_path_follow import build_path_follow_candidate
@@ -25,9 +23,6 @@ DEFAULT_REVERSE_DURATION_SECONDS = 0.8
 DEFAULT_REVERSE_SPEED_KMH = 1.0
 DEFAULT_GRACE_DURATION_SECONDS = 1.5
 DEFAULT_GRACE_SPEED_KMH = 1.0
-DEFAULT_HARD_STOP_DISTANCE_M = 0.55
-DEFAULT_TIME_TO_COLLISION_SECONDS = 0.8
-DEFAULT_MIN_SPEED_KMH_FOR_TTC = 0.2
 
 
 def evaluate(context: dict[str, Any]) -> dict[str, Any] | None:
@@ -49,11 +44,6 @@ def evaluate(context: dict[str, Any]) -> dict[str, Any] | None:
         clear_stop_sustain_state(context)
         return None
 
-    should_stop, safety_debug = should_stop_for_imminent_collision(context, distance_m)
-    if not should_stop:
-        clear_stop_sustain_state(context)
-        return None
-
     priority = get_policy_priority(context, 10)
     actor_tags = nearest_object.get("actorTags", [])
     safe_actor_tags = actor_tags if isinstance(actor_tags, list) else []
@@ -67,7 +57,6 @@ def evaluate(context: dict[str, Any]) -> dict[str, Any] | None:
         "stopSustainSeconds": stop_sustain_seconds,
         "stopRerouteDelaySeconds": reroute_delay_seconds,
     }
-    common_debug.update(safety_debug)
 
     if stop_sustain_seconds >= reroute_delay_seconds:
         return build_sustained_stop_reroute_candidate(
@@ -80,7 +69,7 @@ def evaluate(context: dict[str, Any]) -> dict[str, Any] | None:
     return make_policy_candidate(
         POLICY_ID,
         make_stop_action(),
-        "front_object_imminent_collision_stop",
+        "front_object_inside_stop_distance",
         priority,
         common_debug,
     )
@@ -363,94 +352,6 @@ def get_recovery_spec(context: dict[str, Any]) -> dict[str, Any]:
         return parameters["recovery"]
 
     return {}
-
-
-def get_safety_stop_spec(context: dict[str, Any]) -> dict[str, Any]:
-    policy_entry = context.get("policyEntry", {})
-    safe_policy_entry = policy_entry if isinstance(policy_entry, dict) else {}
-
-    for source in (
-        safe_policy_entry,
-        safe_policy_entry.get("parameters", {}),
-    ):
-        if not isinstance(source, dict):
-            continue
-
-        for field_name in ("safetyStop", "safety_stop"):
-            value = source.get(field_name, {})
-            if isinstance(value, dict):
-                return value
-
-    return {}
-
-
-def get_float_safety_setting(
-    safety_spec: dict[str, Any],
-    field_names: tuple[str, ...],
-    default_value: float,
-) -> float:
-    for field_name in field_names:
-        if field_name not in safety_spec:
-            continue
-
-        try:
-            return max(float(safety_spec.get(field_name, default_value) or 0.0), 0.0)
-        except (TypeError, ValueError):
-            return default_value
-
-    return default_value
-
-
-def should_stop_for_imminent_collision(
-    context: dict[str, Any],
-    distance_m: float,
-) -> tuple[bool, dict[str, Any]]:
-    safety_spec = get_safety_stop_spec(context)
-    hard_stop_distance_m = get_float_safety_setting(
-        safety_spec,
-        ("hardStopDistanceM", "hard_stop_distance_m"),
-        DEFAULT_HARD_STOP_DISTANCE_M,
-    )
-    ttc_threshold_seconds = get_float_safety_setting(
-        safety_spec,
-        ("timeToCollisionSeconds", "time_to_collision_seconds"),
-        DEFAULT_TIME_TO_COLLISION_SECONDS,
-    )
-    min_speed_kmh_for_ttc = get_float_safety_setting(
-        safety_spec,
-        ("minSpeedKmhForTtc", "min_speed_kmh_for_ttc"),
-        DEFAULT_MIN_SPEED_KMH_FOR_TTC,
-    )
-
-    robot_state = get_robot_state(context)
-    speed_kmh = abs(get_float_field(robot_state, "speedKmh", 0.0))
-    speed_mps = speed_kmh / 3.6
-    time_to_collision_seconds = math.inf
-    if speed_mps > 1.0e-3:
-        time_to_collision_seconds = distance_m / speed_mps
-
-    b_hard_stop_distance_triggered = distance_m <= hard_stop_distance_m
-    b_time_to_collision_triggered = (
-        speed_kmh >= min_speed_kmh_for_ttc
-        and time_to_collision_seconds <= ttc_threshold_seconds
-    )
-    b_should_stop = b_hard_stop_distance_triggered or b_time_to_collision_triggered
-    time_to_collision_debug = (
-        time_to_collision_seconds
-        if math.isfinite(time_to_collision_seconds)
-        else None
-    )
-
-    return b_should_stop, {
-        "safetyStopStatus": "imminent" if b_should_stop else "defer_to_local_planner",
-        "hardStopDistanceM": hard_stop_distance_m,
-        "timeToCollisionSeconds": time_to_collision_debug,
-        "timeToCollisionThresholdSeconds": ttc_threshold_seconds,
-        "minSpeedKmhForTtc": min_speed_kmh_for_ttc,
-        "robotSpeedKmh": speed_kmh,
-        "bHardStopDistanceTriggered": b_hard_stop_distance_triggered,
-        "bTimeToCollisionTriggered": b_time_to_collision_triggered,
-    }
 
 
 def get_recovery_strategy(context: dict[str, Any]) -> str:

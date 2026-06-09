@@ -45,6 +45,44 @@ namespace
 
 		return normalizedPath;
 	}
+
+	bool TryReadVectorObject(const TSharedPtr<FJsonObject>& object, FVector& outVector)
+	{
+		if (!object.IsValid())
+			return false;
+
+		double x = 0.0;
+		double y = 0.0;
+		double z = 0.0;
+
+		if (!object->TryGetNumberField(TEXT("x"), x) || !object->TryGetNumberField(TEXT("y"), y))
+			return false;
+
+		object->TryGetNumberField(TEXT("z"), z);
+		outVector = FVector(x, y, z);
+		return true;
+	}
+
+	void ReadVectorArrayField(const TSharedPtr<FJsonObject>& object, const TCHAR* fieldName, TArray<FVector>& outVectors)
+	{
+		outVectors.Reset();
+
+		const TArray<TSharedPtr<FJsonValue>>* values = nullptr;
+		if (!object.IsValid() || !object->TryGetArrayField(fieldName, values) || values == nullptr)
+			return;
+
+		for (const TSharedPtr<FJsonValue>& value : *values)
+		{
+			if (!value.IsValid())
+				continue;
+
+			FVector vector;
+			if (TryReadVectorObject(value->AsObject(), vector))
+			{
+				outVectors.Add(vector);
+			}
+		}
+	}
 }
 
 
@@ -231,6 +269,21 @@ bool UDeliveryBot_HttpPolicyComponent::TryParsePolicyResponseJson(const FString&
 	{
 		(*debugObject)->TryGetStringField(TEXT("policyName"), outResponseInfo.Debug.PolicyName);
 		(*debugObject)->TryGetStringField(TEXT("reason"), outResponseInfo.Debug.Reason);
+		(*debugObject)->TryGetStringField(TEXT("pathStatus"), outResponseInfo.Debug.PathStatus);
+		(*debugObject)->TryGetNumberField(TEXT("pathLength"), outResponseInfo.Debug.PathLength);
+
+		double lookAheadX = 0.0;
+		double lookAheadY = 0.0;
+		double lookAheadZ = 0.0;
+		if ((*debugObject)->TryGetNumberField(TEXT("lookAheadWorldX"), lookAheadX)
+			&& (*debugObject)->TryGetNumberField(TEXT("lookAheadWorldY"), lookAheadY))
+		{
+			(*debugObject)->TryGetNumberField(TEXT("lookAheadWorldZ"), lookAheadZ);
+			outResponseInfo.Debug.LookAheadWorldLocationCm = FVector(lookAheadX, lookAheadY, lookAheadZ);
+			outResponseInfo.Debug.bHasLookAheadWorldLocation = true;
+		}
+
+		ReadVectorArrayField(*debugObject, TEXT("pathWorldPoints"), outResponseInfo.Debug.PathWorldPointsCm);
 	}
 
 	if (!outResponseInfo.Status.Equals(TEXT("ok"), ESearchCase::IgnoreCase))

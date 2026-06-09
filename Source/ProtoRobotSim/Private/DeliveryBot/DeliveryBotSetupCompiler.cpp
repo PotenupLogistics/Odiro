@@ -22,11 +22,7 @@ namespace
 	}
 }
 
-void UDeliveryBotSetupCompiler::AddDiagnostic(
-	FDeliveryBotSetupCompileResult& result,
-	EEpisodeCompileDiagnosticSeverity severity,
-	const FString& code,
-	const FString& message)
+void UDeliveryBotSetupCompiler::AddDiagnostic(FDeliveryBotSetupCompileResult& result, EEpisodeCompileDiagnosticSeverity severity, const FString& code, const FString& message)
 {
 	FEpisodeCompileDiagnostic diagnostic;
 	diagnostic.Severity = severity;
@@ -45,14 +41,7 @@ bool UDeliveryBotSetupCompiler::HasErrors(const FDeliveryBotSetupCompileResult& 
 	return false;
 }
 
-bool UDeliveryBotSetupCompiler::ReadOptionalFloatField(
-	const FJsonObject& jsonObject,
-	const FString& fieldName,
-	const FString& path,
-	FDeliveryBotSetupCompileResult& result,
-	float& targetValue,
-	float minValue,
-	float maxValue)
+bool UDeliveryBotSetupCompiler::ReadOptionalFloatField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, float& targetValue, float minValue, float maxValue)
 {
 	if (!jsonObject.HasField(fieldName)) return false;
 
@@ -71,12 +60,7 @@ bool UDeliveryBotSetupCompiler::ReadOptionalFloatField(
 	return true;
 }
 
-bool UDeliveryBotSetupCompiler::ReadOptionalBoolField(
-	const FJsonObject& jsonObject,
-	const FString& fieldName,
-	const FString& path,
-	FDeliveryBotSetupCompileResult& result,
-	bool& targetValue)
+bool UDeliveryBotSetupCompiler::ReadOptionalBoolField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, bool& targetValue)
 {
 	if (!jsonObject.HasField(fieldName)) return false;
 
@@ -93,12 +77,7 @@ bool UDeliveryBotSetupCompiler::ReadOptionalBoolField(
 	return true;
 }
 
-bool UDeliveryBotSetupCompiler::ReadOptionalNameArrayField(
-	const FJsonObject& jsonObject,
-	const FString& fieldName,
-	const FString& path,
-	FDeliveryBotSetupCompileResult& result,
-	TArray<FName>& targetValue)
+bool UDeliveryBotSetupCompiler::ReadOptionalNameArrayField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, TArray<FName>& targetValue)
 {
 	const TSharedPtr<FJsonValue> arrayValue = jsonObject.TryGetField(fieldName);
 	if (!arrayValue.IsValid()) return false;
@@ -135,12 +114,7 @@ bool UDeliveryBotSetupCompiler::ReadOptionalNameArrayField(
 	return true;
 }
 
-bool UDeliveryBotSetupCompiler::ReadOptionalCollisionChannelField(
-	const FJsonObject& jsonObject,
-	const FString& fieldName,
-	const FString& path,
-	FDeliveryBotSetupCompileResult& result,
-	TEnumAsByte<ECollisionChannel>& targetValue)
+bool UDeliveryBotSetupCompiler::ReadOptionalCollisionChannelField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, TEnumAsByte<ECollisionChannel>& targetValue)
 {
 	const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
 	if (!jsonValue.IsValid()) return false;
@@ -222,10 +196,7 @@ bool UDeliveryBotSetupCompiler::ReadOptionalCollisionChannelField(
 	return false;
 }
 
-void UDeliveryBotSetupCompiler::CompileDrive(
-	const FJsonObject& robotObject,
-	FDeliveryBotSetupCompileResult& result,
-	FDeliveryBotDriveConfigInfo& driveConfigInfo)
+void UDeliveryBotSetupCompiler::CompileDrive( const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotDriveConfigInfo& driveConfigInfo)
 {
 	const TSharedPtr<FJsonValue> driveValue = robotObject.TryGetField(TEXT("drive"));
 	if (!driveValue.IsValid()) return;
@@ -263,10 +234,7 @@ void UDeliveryBotSetupCompiler::CompileDrive(
 	ReadOptionalFloatField(*driveObject, TEXT("engine_rev_down_rate"), path, result, driveConfigInfo.EngineRevDownRate, 0.0f);
 }
 
-void UDeliveryBotSetupCompiler::CompilePathFollow(
-	const FJsonObject& robotObject,
-	FDeliveryBotSetupCompileResult& result,
-	FDeliveryBotPathFollowConfigInfo& pathFollowConfigInfo)
+void UDeliveryBotSetupCompiler::CompilePathFollow(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotPathFollowConfigInfo& pathFollowConfigInfo)
 {
 	const TSharedPtr<FJsonValue> pathFollowValue = robotObject.TryGetField(TEXT("path_follow"));
 	if (!pathFollowValue.IsValid()) return;
@@ -295,10 +263,7 @@ void UDeliveryBotSetupCompiler::CompilePathFollow(
 	ReadOptionalFloatField(*pathFollowObject, TEXT("obstacle_slow_speed_kmh"), path, result, pathFollowConfigInfo.ObstacleSlowSpeedKmh, 0.0f);
 }
 
-void UDeliveryBotSetupCompiler::CompileLidar(
-	const FJsonObject& robotObject,
-	FDeliveryBotSetupCompileResult& result,
-	FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo)
+void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo)
 {
 	const TSharedPtr<FJsonValue> lidarValue = robotObject.TryGetField(TEXT("lidar"));
 	if (!lidarValue.IsValid()) return;
@@ -333,9 +298,37 @@ void UDeliveryBotSetupCompiler::CompileLidar(
 		lidarSensorConfigInfo.StopDistanceM + 0.1f);
 }
 
-void UDeliveryBotSetupCompiler::CompileRobotObject(
-	const FJsonObject& rootObject,
-	FDeliveryBotSetupCompileResult& result)
+bool UDeliveryBotSetupCompiler::ReadOptionalStringField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, FString& targetValue)
+{
+	const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
+	if (!jsonValue.IsValid()) return false;
+
+	if (jsonValue->Type != EJson::String)
+	{
+		AddDiagnostic(
+			result,
+			EEpisodeCompileDiagnosticSeverity::Error,
+			TEXT("invalid_string"),
+			FString::Printf(TEXT("%s.%s must be a string."), *path, *fieldName));
+		return false;
+	}
+
+	const FString trimmedValue = jsonValue->AsString().TrimStartAndEnd();
+	if (trimmedValue.IsEmpty())
+	{
+		AddDiagnostic(
+			result,
+			EEpisodeCompileDiagnosticSeverity::Error,
+			TEXT("empty_string"),
+			FString::Printf(TEXT("%s.%s must not be empty."), *path, *fieldName));
+		return false;
+	}
+
+	targetValue = trimmedValue;
+	return true;
+}
+
+void UDeliveryBotSetupCompiler::CompileRobotObject(const FJsonObject& rootObject, FDeliveryBotSetupCompileResult& result)
 {
 	if (rootObject.HasField(TEXT("run")) || rootObject.HasField(TEXT("actors")))
 	{
@@ -386,10 +379,10 @@ void UDeliveryBotSetupCompiler::CompileRobotObject(
 	CompileDrive(*robotObject, result, result.SetupInfo.ChaosDriveConfigInfo);
 	CompilePathFollow(*robotObject, result, result.SetupInfo.PathFollowConfigInfo);
 	CompileLidar(*robotObject, result, result.SetupInfo.LidarSensorConfigInfo);
+	CompilePolicy(*robotObject, result, result.SetupInfo.StartupPolicySpecFileName);
 }
 
-FDeliveryBotSetupCompileResult UDeliveryBotSetupCompiler::CompileDeliveryBotSetupFromJsonFile(
-	const FString& jsonFilePath) const
+FDeliveryBotSetupCompileResult UDeliveryBotSetupCompiler::CompileDeliveryBotSetupFromJsonFile(const FString& jsonFilePath) const
 {
 	FDeliveryBotSetupCompileResult result;
 	const FString resolvedJsonFilePath = ResolveDeliveryBotSetupJsonFilePath(jsonFilePath);
@@ -409,8 +402,7 @@ FDeliveryBotSetupCompileResult UDeliveryBotSetupCompiler::CompileDeliveryBotSetu
 	return CompileDeliveryBotSetupFromJsonString(jsonString);
 }
 
-FDeliveryBotSetupCompileResult UDeliveryBotSetupCompiler::CompileDeliveryBotSetupFromJsonString(
-	const FString& jsonString) const
+FDeliveryBotSetupCompileResult UDeliveryBotSetupCompiler::CompileDeliveryBotSetupFromJsonString(const FString& jsonString) const
 {
 	FDeliveryBotSetupCompileResult result;
 
@@ -442,4 +434,21 @@ FDeliveryBotSetupCompileResult UDeliveryBotSetupCompiler::CompileDeliveryBotSetu
 	result.SpecHash = FString::Printf(TEXT("%u"), GetTypeHash(jsonString));
 	result.bSuccess = !HasErrors(result);
 	return result;
+}
+
+void UDeliveryBotSetupCompiler::CompilePolicy(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FString& startupPolicySpecFileName)
+{
+	const TSharedPtr<FJsonValue> policyValue = robotObject.TryGetField(TEXT("policy"));
+	if (!policyValue.IsValid()) return;
+
+	if (policyValue->Type != EJson::Object)
+	{
+		AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_object"), TEXT("robot.policy must be an object."));
+		return;
+	}
+
+	const TSharedPtr<FJsonObject> policyObject = policyValue->AsObject();
+	if (!policyObject.IsValid()) return;
+
+	ReadOptionalStringField(*policyObject,TEXT("startup_policy_spec_file_name"), TEXT("robot.policy"), result, startupPolicySpecFileName);
 }

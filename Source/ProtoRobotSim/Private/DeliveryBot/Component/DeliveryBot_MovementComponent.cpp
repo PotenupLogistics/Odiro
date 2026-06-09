@@ -3,7 +3,7 @@
 
 #include "DeliveryBot/Component/DeliveryBot_MovementComponent.h"
 
-#include "DeliveryBot/Actor/DeliveryBot_SimpleMesh.h"
+#include "DeliveryBot/Actor/DeliveryBot.h"
 #include "DeliveryBot/Component/DeliveryBot_LocalAvoidanceComponent.h"
 #include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
 
@@ -208,10 +208,10 @@ void UDeliveryBot_MovementComponent::RequestOwnerReroute()
 	if (!IsValid(world))
 		return;
 
-	ADeliveryBot_SimpleMesh* deliveryBot = Cast<ADeliveryBot_SimpleMesh>(GetOwner());
+	ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(GetOwner());
 	if (!IsValid(deliveryBot))
 		return;
 
 	LastRerouteRequestTime = world->GetTimeSeconds();
-	deliveryBot->RequestGlobalPathFromCurrentLocation();
+	// deliveryBot->RequestGlobalPathFromCurrentLocation();
 }

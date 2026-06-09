@@ -289,6 +289,26 @@ def build_pathfinding_debug(result: AStarResult) -> dict[str, Any]:
     }
 
 
+def build_path_points_debug(
+    grid_info: dict[str, Any],
+    path: list[GridIndex],
+    max_points: int = 200,
+) -> dict[str, Any]:
+    safe_max_points = max(int(max_points), 2)
+    sampled_path = path
+
+    if len(path) > safe_max_points:
+        sample_step = max(math.ceil(len(path) / safe_max_points), 1)
+        sampled_path = path[::sample_step]
+        if sampled_path[-1] != path[-1]:
+            sampled_path.append(path[-1])
+
+    return {
+        "pathGridPoints": [{"x": grid_index[0], "y": grid_index[1]} for grid_index in sampled_path],
+        "pathWorldPoints": [grid_index_to_world_location(grid_info, grid_index) for grid_index in sampled_path],
+    }
+
+
 def find_astar_path_result(
     grid_info: dict[str, Any],
     cell_lookup: dict[GridIndex, dict[str, Any]],

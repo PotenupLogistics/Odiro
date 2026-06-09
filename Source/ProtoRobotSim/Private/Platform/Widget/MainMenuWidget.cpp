@@ -19,6 +19,7 @@
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "Platform/EpisodeEditorLaunchSubsystem.h"
+#include "Platform/PlatformAnalysisAiSubsystem.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Platform/Widget/ExperimentResultIterationButton.h"
 #include "Platform/Widget/FileListItemWidget.h"
@@ -414,6 +415,12 @@ void UMainMenuWidget::NativeConstruct()
 		subsystem->OnRunInfoChanged.AddUObject(this, &UMainMenuWidget::HandleRunInfoChanged);
 	}
 
+	if (UPlatformAnalysisAiSubsystem* analysisSubsystem = GetPlatformAnalysisAiSubsystem())
+	{
+		analysisSubsystem->OnAnalysisCompleted.RemoveAll(this);
+		analysisSubsystem->OnAnalysisCompleted.AddUObject(this, &UMainMenuWidget::HandleAnalysisCompleted);
+	}
+
 	if (UWorld* world = GetWorld())
 	{
 		world->GetTimerManager().SetTimer(
@@ -438,6 +445,11 @@ void UMainMenuWidget::NativeDestruct()
 	if (USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem())
 	{
 		subsystem->OnRunInfoChanged.RemoveAll(this);
+	}
+
+	if (UPlatformAnalysisAiSubsystem* analysisSubsystem = GetPlatformAnalysisAiSubsystem())
+	{
+		analysisSubsystem->OnAnalysisCompleted.RemoveAll(this);
 	}
 
 	Super::NativeDestruct();
@@ -1000,6 +1012,44 @@ void UMainMenuWidget::HandleRefreshClicked()
 	RefreshFromSubsystem();
 }
 
+void UMainMenuWidget::HandleSendToAiClicked()
+{
+	if (CurrentPreviewReportPath.IsEmpty())
+	{
+		if (AiAnalysisTextBlock)
+		{
+			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: no evaluation report selected.")));
+		}
+		return;
+	}
+
+	if (CurrentPreviewLogPath.IsEmpty())
+	{
+		if (AiAnalysisTextBlock)
+		{
+			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: no measurement log available.")));
+		}
+		return;
+	}
+
+	UPlatformAnalysisAiSubsystem* analysisSubsystem = GetPlatformAnalysisAiSubsystem();
+	if (!analysisSubsystem)
+	{
+		if (AiAnalysisTextBlock)
+		{
+			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: subsystem not found.")));
+		}
+		return;
+	}
+
+	if (AiAnalysisTextBlock)
+	{
+		AiAnalysisTextBlock->SetText(FText::FromString(TEXT("Analyzing...")));
+	}
+
+	analysisSubsystem->RequestAnalysisForReport(CurrentPreviewReportPath, CurrentPreviewLogPath);
+}
+
 void UMainMenuWidget::HandleShowScenarioClicked()
 {
 	ShowMainMenuSection(static_cast<int32>(EMainMenuSection::Scenario));
@@ -1299,6 +1349,12 @@ void UMainMenuWidget::BindControls()
 	{
 		RefreshButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleRefreshClicked);
 		RefreshButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleRefreshClicked);
+	}
+
+	if (SendToAiButton)
+	{
+		SendToAiButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleSendToAiClicked);
+		SendToAiButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleSendToAiClicked);
 	}
 }
 
@@ -1910,6 +1966,38 @@ void UMainMenuWidget::HandleRunInfoChanged(const FSimulatorRunInfo& runInfo)
 	UpdateReportAndLogText();
 }
 
+void UMainMenuWidget::HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response)
+{
+	if (!AiAnalysisTextBlock)
+	{
+		return;
+	}
+
+	if (response.bSuccess)
+	{
+		AiAnalysisTextBlock->SetText(FText::FromString(response.DisplayText));
+		return;
+	}
+
+	TArray<FString> lines;
+	lines.Add(TEXT("AI analysis failed"));
+	if (response.ResponseCode != 0)
+	{
+		lines.Add(FString::Printf(TEXT("Response: %d"), response.ResponseCode));
+	}
+	if (!response.ErrorMessage.IsEmpty())
+	{
+		lines.Add(response.ErrorMessage);
+	}
+	if (!response.ResponseBody.IsEmpty())
+	{
+		lines.Add(TEXT(""));
+		lines.Add(TruncatePreview(response.ResponseBody, ReportPreviewCharacterLimit));
+	}
+
+	AiAnalysisTextBlock->SetText(FText::FromString(JoinLines(lines)));
+}
+
 void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 {
 	if (!StatusTextBlock) return;
@@ -1993,6 +2081,9 @@ void UMainMenuWidget::UpdateReportAndLogText()
 
 	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
 
+	CurrentPreviewReportPath = SelectedExperimentResultPath;
+	CurrentPreviewLogPath.Reset();
+
 	if (ReportTextBlock)
 	{
 		TArray<FString> reportLines;
@@ -2031,6 +2122,7 @@ void UMainMenuWidget::UpdateReportAndLogText()
 			}
 		}
 		logPaths.Sort();
+		CurrentPreviewLogPath = logPaths.IsEmpty() ? FString() : logPaths.Last();
 
 		for (const FString& logPath : logPaths)
 		{
@@ -2039,7 +2131,7 @@ void UMainMenuWidget::UpdateReportAndLogText()
 
 		if (!logPaths.IsEmpty())
 		{
-			const FString previewLogPath = logPaths.Last();
+			const FString previewLogPath = CurrentPreviewLogPath;
 			logLines.Add(TEXT(""));
 			logLines.Add(FString::Printf(TEXT("Preview: %s"), *previewLogPath));
 			logLines.Add(BuildLogPreview(previewLogPath));
@@ -2112,4 +2204,10 @@ UEpisodeEditorLaunchSubsystem* UMainMenuWidget::GetEpisodeEditorLaunchSubsystem(
 {
 	const UGameInstance* gameInstance = GetGameInstance();
 	return gameInstance ? gameInstance->GetSubsystem<UEpisodeEditorLaunchSubsystem>() : nullptr;
+}
+
+UPlatformAnalysisAiSubsystem* UMainMenuWidget::GetPlatformAnalysisAiSubsystem() const
+{
+	const UGameInstance* gameInstance = GetGameInstance();
+	return gameInstance ? gameInstance->GetSubsystem<UPlatformAnalysisAiSubsystem>() : nullptr;
 }

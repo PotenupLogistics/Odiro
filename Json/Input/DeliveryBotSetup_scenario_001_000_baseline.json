@@ -1,0 +1,24 @@
+{
+  "schema": "delivery_bot_setup",
+  "version": 1,
+  "robot": {
+    "drive": {
+      "max_speed_kmh": 8.0,
+      "slowdown_speed_range_kmh": 3.0,
+      "acceleration_rate_kmh_per_second": 1.6,
+      "deceleration_rate_kmh_per_second": 3.0
+    },
+    "path_follow": {
+      "target_speed_kmh": 6.5,
+      "look_ahead_distance_m": 1.2,
+      "goal_acceptance_distance_m": 0.8,
+      "obstacle_slow_speed_kmh": 2.0
+    },
+    "lidar": {
+      "scan_range_m": 5.5,
+      "angle_step_degree": 4.0,
+      "stop_distance_m": 1.0,
+      "slow_down_distance_m": 3.2
+    }
+  }
+}

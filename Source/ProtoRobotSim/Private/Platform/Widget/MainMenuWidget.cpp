@@ -27,6 +27,7 @@ namespace
 	const TCHAR* DefaultMeasurementFilePrefix = TEXT("MeasurementLog");
 	const TCHAR* DefaultReportOutputDirectory = TEXT("Json/Output");
 	const TCHAR* DefaultStatusOutputPath = TEXT("Saved/SimulationRuns/latest_status.json");
+	const TCHAR* DefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	const int32 DefaultFlushIntervalTicks = 60;
 	const TCHAR* EpisodeSetupTemplatePath = TEXT("Json/Input/EpisodeSetupSample_0.json");
 	const TCHAR* DeliveryBotTemplatePath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
@@ -486,6 +487,18 @@ void UMainMenuWidget::RefreshSetupOptions()
 	SetComboBoxOptions(PolicyDeliveryBotSetupComboBox, deliveryBotSetupFiles, selectedDeliveryBotSetupPath);
 	SetSelectedDeliveryBotSetupPath(selectedDeliveryBotSetupPath);
 	RefreshPolicyList();
+
+	const TArray<FString> policySpecFiles = subsystem->ListPolicySpecFiles();
+	const FString currentPolicySpecPath = GetSelectedPolicySpecPath();
+	const FString defaultPolicySpecPath = DefaultPolicySpecJsonPath;
+	const FString selectedPolicySpecPath = policySpecFiles.Contains(currentPolicySpecPath)
+		? currentPolicySpecPath
+		: (policySpecFiles.Contains(defaultPolicySpecPath)
+			? defaultPolicySpecPath
+			: (policySpecFiles.IsEmpty() ? defaultPolicySpecPath : policySpecFiles[0]));
+	SetComboBoxOptions(PolicySpecComboBox, policySpecFiles, selectedPolicySpecPath);
+	SetSelectedPolicySpecPath(selectedPolicySpecPath);
+
 	RefreshExperimentResultList();
 }
 
@@ -645,9 +658,15 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 
 	const FString episodeSetupPath = GetSelectedEpisodeSetupPath();
 	const FString deliveryBotSetupPath = GetSelectedDeliveryBotSetupPath();
+	const FString policySpecPath = GetSelectedPolicySpecPath();
 	if (episodeSetupPath.TrimStartAndEnd().IsEmpty() || deliveryBotSetupPath.TrimStartAndEnd().IsEmpty())
 	{
 		SetDiagnosticsText(TEXT("EpisodeSetup과 DeliveryBotSetup을 선택해야 합니다."));
+		return;
+	}
+	if (policySpecPath.TrimStartAndEnd().IsEmpty())
+	{
+		SetDiagnosticsText(TEXT("PolicySpec JSON을 선택해야 합니다."));
 		return;
 	}
 	if (IsReferenceSampleJsonPath(episodeSetupPath) || IsReferenceSampleJsonPath(deliveryBotSetupPath))
@@ -673,6 +692,7 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 		runInput.PairId = FString::Printf(TEXT("%s_%03d"), *pairIdBase, runIndex);
 		runInput.EpisodeSetupJsonPath = episodeSetupPath;
 		runInput.DeliveryBotSetupJsonPath = deliveryBotSetupPath;
+		runInput.PolicySpecJsonPath = policySpecPath;
 		runInputs.Add(runInput);
 	}
 
@@ -1105,6 +1125,12 @@ void UMainMenuWidget::HandleExperimentDeliveryBotSelectionChanged(FString select
 	SetSelectedDeliveryBotSetupPath(selectedItem);
 }
 
+void UMainMenuWidget::HandlePolicySpecSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType)
+{
+	(void)selectionType;
+	SetSelectedPolicySpecPath(selectedItem);
+}
+
 UWidget* UMainMenuWidget::HandleGenerateComboBoxItem(FString item)
 {
 	return WidgetTree ? MakeTextBlock(WidgetTree, TEXT("ComboBoxItemText"), item, 13) : nullptr;
@@ -1279,6 +1305,14 @@ void UMainMenuWidget::BindControls()
 		DeliveryBotSetupComboBox->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::HandleExperimentDeliveryBotSelectionChanged);
 	}
 
+	if (PolicySpecComboBox)
+	{
+		PolicySpecComboBox->OnGenerateWidgetEvent.Unbind();
+		PolicySpecComboBox->OnGenerateWidgetEvent.BindDynamic(this, &UMainMenuWidget::HandleGenerateComboBoxItem);
+		PolicySpecComboBox->OnSelectionChanged.RemoveDynamic(this, &UMainMenuWidget::HandlePolicySpecSelectionChanged);
+		PolicySpecComboBox->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::HandlePolicySpecSelectionChanged);
+	}
+
 	if (LoadButton)
 	{
 		LoadButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleLoadClicked);
@@ -1403,6 +1437,9 @@ void UMainMenuWidget::LoadSelectedSetup()
 			PolicyDeliveryBotSetupComboBox->SetSelectedOption(firstRunInput.DeliveryBotSetupJsonPath);
 		}
 		SetSelectedDeliveryBotSetupPath(firstRunInput.DeliveryBotSetupJsonPath);
+		SetSelectedPolicySpecPath(firstRunInput.PolicySpecJsonPath.IsEmpty()
+			? FString(DefaultPolicySpecJsonPath)
+			: firstRunInput.PolicySpecJsonPath);
 		if (RunCountTextBox)
 		{
 			RunCountTextBox->SetText(FText::AsNumber(loadedRunInputs.Num()));
@@ -1439,6 +1476,9 @@ void UMainMenuWidget::LoadSelectedSetup()
 	{
 		lines.Add(FString::Printf(TEXT("시나리오(EpisodeSetup): %s"), *loadedRunInputs[0].EpisodeSetupJsonPath));
 		lines.Add(FString::Printf(TEXT("행동 정책(DeliveryBotSetup): %s"), *loadedRunInputs[0].DeliveryBotSetupJsonPath));
+		lines.Add(FString::Printf(
+			TEXT("PolicySpec: %s"),
+			loadedRunInputs[0].PolicySpecJsonPath.IsEmpty() ? DefaultPolicySpecJsonPath : *loadedRunInputs[0].PolicySpecJsonPath));
 		lines.Add(FString::Printf(TEXT("실행 수: %d"), loadedRunInputs.Num()));
 	}
 	lines.Add(FString::Printf(TEXT("고정 스텝 FPS: %d"), parseResult.Setup.FixedStep.Fps));
@@ -1460,6 +1500,7 @@ void UMainMenuWidget::ApplyNewSetupDefaults(const FString& setupPath)
 	{
 		RunCountTextBox->SetText(FText::AsNumber(1));
 	}
+	SetSelectedPolicySpecPath(DefaultPolicySpecJsonPath);
 	if (MeasurementLogEnabledCheckBox)
 	{
 		MeasurementLogEnabledCheckBox->SetIsChecked(true);
@@ -1812,6 +1853,14 @@ void UMainMenuWidget::SetSelectedDeliveryBotSetupPath(const FString& deliveryBot
 
 	SyncComboBoxSelection(PolicyDeliveryBotSetupComboBox, SelectedDeliveryBotSetupPath);
 	SyncComboBoxSelection(DeliveryBotSetupComboBox, SelectedDeliveryBotSetupPath);
+}
+
+void UMainMenuWidget::SetSelectedPolicySpecPath(const FString& policySpecPath)
+{
+	SelectedPolicySpecJsonPath = policySpecPath.TrimStartAndEnd();
+	SelectedPolicySpecJsonPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+
+	SyncComboBoxSelection(PolicySpecComboBox, SelectedPolicySpecJsonPath);
 }
 
 void UMainMenuWidget::SetSelectedExperimentResultRunDirectory(const FString& runDirectory)
@@ -2180,6 +2229,21 @@ FString UMainMenuWidget::GetSelectedDeliveryBotSetupPath() const
 	}
 
 	return DeliveryBotSetupComboBox ? DeliveryBotSetupComboBox->GetSelectedOption() : FString();
+}
+
+FString UMainMenuWidget::GetSelectedPolicySpecPath() const
+{
+	if (!SelectedPolicySpecJsonPath.TrimStartAndEnd().IsEmpty())
+	{
+		return SelectedPolicySpecJsonPath;
+	}
+
+	if (PolicySpecComboBox && !PolicySpecComboBox->GetSelectedOption().TrimStartAndEnd().IsEmpty())
+	{
+		return PolicySpecComboBox->GetSelectedOption();
+	}
+
+	return DefaultPolicySpecJsonPath;
 }
 
 USimulatorLaunchSubsystem* UMainMenuWidget::GetSimulatorLaunchSubsystem() const

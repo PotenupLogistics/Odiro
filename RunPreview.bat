@@ -4,6 +4,7 @@ setlocal EnableExtensions
 set "SCRIPT_DIR=%~dp0"
 set "PROJECT_FILE=%SCRIPT_DIR%ProtoRobotSim.uproject"
 set "UNREAL_EDITOR="
+set "PREVIEW_WINDOW_ARGS=-windowed -ResX=960 -ResY=540"
 
 if not exist "%PROJECT_FILE%" (
 	echo [ProtoRobotSim] Project file not found: "%PROJECT_FILE%"
@@ -19,9 +20,10 @@ if not defined UNREAL_EDITOR (
 
 echo [ProtoRobotSim] UnrealEditor: "%UNREAL_EDITOR%"
 echo [ProtoRobotSim] Project: "%PROJECT_FILE%"
+echo [ProtoRobotSim] Preview window args: %PREVIEW_WINDOW_ARGS%
 echo [ProtoRobotSim] Packaged-style args: %*
 
-start "" /wait "%UNREAL_EDITOR%" "%PROJECT_FILE%" -game -NoSplash %*
+start "" /wait "%UNREAL_EDITOR%" "%PROJECT_FILE%" -game -NoSplash %PREVIEW_WINDOW_ARGS% %*
 exit /b %ERRORLEVEL%
 
 :ResolveUnrealEditor

@@ -74,6 +74,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
 	TArray<FString> ListDeliveryBotSetupFiles() const;
 
+	// Json/Input/PolicySpecs 아래에서 policySpec update payload로 읽히는 JSON 파일 목록
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
+	TArray<FString> ListPolicySpecFiles() const;
+
 	// Json/Input 아래에서 EpisodeRunQueue 계약으로 읽히는 JSON 파일 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
 	TArray<FString> ListEpisodeRunQueueFiles() const;

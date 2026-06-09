@@ -161,6 +161,9 @@ struct PROTOROBOTSIM_API FEpisodeRunInput
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FString DeliveryBotSetupJsonPath;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString PolicySpecJsonPath;
 };
 
 // SimulationSubsystem이 생성한 월드 객체들을 EvaluationSubsystem이 관찰할 수 있도록 전달하는 런타임 컨텍스트.
@@ -300,6 +303,9 @@ struct PROTOROBOTSIM_API FEpisodeRunRecord
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FString DeliveryBotSetupJsonPath;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	FString PolicySpecJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FString SpecHash;

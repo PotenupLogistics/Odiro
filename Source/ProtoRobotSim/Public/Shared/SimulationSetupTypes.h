@@ -60,7 +60,7 @@ struct PROTOROBOTSIM_API FSimulationSetup
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
 	FString MapId = TEXT("EpisodeSimulationMap");
 
-	// EpisodeSetup과 DeliveryBotSetup pair 목록을 담은 EpisodeRunQueue JSON path
+	// EpisodeSetup, DeliveryBotSetup, PolicySpec 조합 목록을 담은 EpisodeRunQueue JSON path
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
 	FString RunQueueJsonPath;
 

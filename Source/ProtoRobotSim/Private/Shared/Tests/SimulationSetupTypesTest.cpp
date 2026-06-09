@@ -85,6 +85,10 @@ bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters
 	TestEqual(TEXT("playable run input count"), runInputs.Num(), 1);
 	TestEqual(TEXT("playable episode setup path"), runInputs[0].EpisodeSetupJsonPath, FString(TEXT("Json/Input/EpisodeSetupPlayable.json")));
 	TestEqual(TEXT("playable policy path"), runInputs[0].DeliveryBotSetupJsonPath, FString(TEXT("Json/Input/DeliveryBotSetupPlayable.json")));
+	TestEqual(
+		TEXT("playable policy spec path"),
+		runInputs[0].PolicySpecJsonPath,
+		FString(TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json")));
 
 	const UDeliveryBotSetupCompiler* deliveryBotCompiler = NewObject<UDeliveryBotSetupCompiler>();
 	const FDeliveryBotSetupCompileResult deliveryBotResult =

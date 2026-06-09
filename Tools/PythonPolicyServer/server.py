@@ -116,6 +116,15 @@ def get_server_policy_spec(server: ThreadingHTTPServer) -> dict[str, Any]:
     return policy_spec if isinstance(policy_spec, dict) else {}
 
 
+def get_server_policy_runtime_state(server: ThreadingHTTPServer) -> dict[str, Any]:
+    policy_runtime_state = getattr(server, "policy_runtime_state", None)
+    if not isinstance(policy_runtime_state, dict):
+        policy_runtime_state = {}
+        server.policy_runtime_state = policy_runtime_state
+
+    return policy_runtime_state
+
+
 def has_runtime_policy_spec(server: ThreadingHTTPServer) -> bool:
     return bool(getattr(server, "policy_spec_received", False))
 
@@ -553,6 +562,11 @@ def log_selected_policy_action(response: dict[str, Any]) -> None:
         f"id={safe_debug.get('selectedPolicyId', safe_debug.get('policyName', 'unknown_policy'))} "
         f"priority={int(safe_debug.get('selectedPolicyPriority', 0) or 0)} "
         f"reason={safe_debug.get('reason', '')} "
+        f"pathStatus={safe_debug.get('pathStatus', '-')} "
+        f"dynamicBlocked={int(safe_debug.get('dynamicObstacleBlockedCellCount', 0) or 0)} "
+        f"stopElapsed={float(safe_debug.get('stopSustainSeconds', 0.0) or 0.0):.2f} "
+        f"rerouteAttempts={int(safe_debug.get('rerouteAttemptCount', 0) or 0)} "
+        f"recovery={safe_debug.get('recoveryMode', '-')} "
         f"candidates={int(safe_debug.get('candidateCount', 0) or 0)} "
         f"enabled={[str(policy_id) for policy_id in safe_enabled_policies]} "
         f"direction={safe_action.get('direction', '-')} "
@@ -579,6 +593,7 @@ def build_runtime_policy_context(
         config_info = dict(get_server_config_info(server))
         policy_catalog = dict(get_server_policy_catalog(server))
         policy_spec = dict(get_server_policy_spec(server))
+        policy_runtime_state = get_server_policy_runtime_state(server)
 
     return {
         "observation": observation,
@@ -589,6 +604,7 @@ def build_runtime_policy_context(
         "configInfo": config_info,
         "policyCatalog": policy_catalog,
         "policySpec": policy_spec,
+        "policyRuntimeState": policy_runtime_state,
     }
 
 
@@ -937,6 +953,7 @@ class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
         with get_server_grid_lock(self.server):
             self.server.episode_version = get_server_episode_version(self.server) + 1
             self.server.episode_info = build_episode_info_from_payload(episode_payload)
+            self.server.policy_runtime_state = {}
 
             if isinstance(config_info, dict) and config_info:
                 self.server.config_version = get_server_config_version(self.server) + 1

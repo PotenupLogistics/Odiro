@@ -15,7 +15,8 @@ from deliverybot_policy.context import (
     normalize_angle_degree,
 )
 from deliverybot_policy.pathfinding import (
-    find_astar_path,
+    build_pathfinding_debug,
+    find_policy_astar_path,
     grid_index_to_world_location,
     world_to_grid_index,
 )
@@ -99,42 +100,54 @@ def build_path_follow_candidate(
             },
         )
 
-    path = find_astar_path(grid_info, cell_lookup, start_index, goal_index)
+    path_result = find_policy_astar_path(
+        grid_info,
+        cell_lookup,
+        start_index,
+        goal_index,
+        context.get("policyEntry", {}),
+    )
+    path = path_result.path
     if not path:
+        path_debug = build_pathfinding_debug(path_result)
+        path_debug.update(
+            {
+                "robotGridX": start_index[0],
+                "robotGridY": start_index[1],
+                "goalGridX": goal_index[0],
+                "goalGridY": goal_index[1],
+            }
+        )
         return make_policy_candidate(
             policy_id,
             make_stop_action(),
             "path_not_found",
             priority,
-            {
-                "pathStatus": "not_found",
-                "robotGridX": start_index[0],
-                "robotGridY": start_index[1],
-                "goalGridX": goal_index[0],
-                "goalGridY": goal_index[1],
-            },
+            path_debug,
         )
 
     lookahead_index = choose_lookahead_index(grid_info, path, motion_spec)
     lookahead_world = grid_index_to_world_location(grid_info, lookahead_index)
     steering, yaw_error_degree = build_steering(robot_state, lookahead_world, motion_spec)
     target_speed_kmh = build_target_speed_kmh(drive_spec, motion_spec, steering, speed_limit_kmh)
-
-    return make_policy_candidate(
-        policy_id,
-        make_action(steering, target_speed_kmh, direction="Forward"),
-        reason,
-        priority,
+    path_debug = build_pathfinding_debug(path_result)
+    path_debug.update(
         {
-            "pathStatus": "ok",
-            "pathLength": len(path),
             "lookAheadGridX": lookahead_index[0],
             "lookAheadGridY": lookahead_index[1],
             "lookAheadWorldX": lookahead_world["x"],
             "lookAheadWorldY": lookahead_world["y"],
             "yawErrorDegree": yaw_error_degree,
             "distanceToGoalCm": distance_to_goal_cm,
-        },
+        }
+    )
+
+    return make_policy_candidate(
+        policy_id,
+        make_action(steering, target_speed_kmh, direction="Forward"),
+        reason,
+        priority,
+        path_debug,
     )
 
 

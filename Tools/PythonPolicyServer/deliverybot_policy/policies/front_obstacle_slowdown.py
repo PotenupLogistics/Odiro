@@ -9,6 +9,7 @@ from deliverybot_policy.context import (
     get_nearest_observed_object,
     get_policy_priority,
 )
+from deliverybot_policy.dynamic_obstacles import build_dynamic_obstacle_reroute_context
 from deliverybot_policy.policies.normal_path_follow import build_path_follow_candidate
 
 
@@ -33,10 +34,16 @@ def evaluate(context: dict[str, Any]) -> dict[str, Any] | None:
 
     motion_spec = get_motion_control_spec(context)
     slow_speed_kmh = get_float_field(motion_spec, "obstacleSlowSpeedKmh", 0.5)
+    reroute_context = build_dynamic_obstacle_reroute_context(context, slow_down_distance_m)
+    dynamic_debug = reroute_context.pop("dynamicObstacleDebug", {})
+    reason = "front_object_dynamic_obstacle_reroute"
+    if isinstance(dynamic_debug, dict) and int(dynamic_debug.get("dynamicObstacleBlockedCellCount", 0) or 0) <= 0:
+        reason = "front_object_inside_slowdown_distance"
+
     candidate = build_path_follow_candidate(
-        context,
+        reroute_context,
         POLICY_ID,
-        "front_object_inside_slowdown_distance",
+        reason,
         speed_limit_kmh=slow_speed_kmh,
     )
     candidate["priority"] = get_policy_priority(context, 30)
@@ -53,5 +60,7 @@ def evaluate(context: dict[str, Any]) -> dict[str, Any] | None:
                 "obstacleSlowSpeedKmh": slow_speed_kmh,
             }
         )
+        if isinstance(dynamic_debug, dict):
+            candidate_debug.update(dynamic_debug)
 
     return candidate

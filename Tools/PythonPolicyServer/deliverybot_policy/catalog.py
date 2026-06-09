@@ -126,12 +126,12 @@ def build_default_policy_spec(catalog: dict[str, Any]) -> dict[str, Any]:
         if not policy_id:
             continue
 
-        enabled_policies.append(
-            {
-                "policyId": policy_id,
-                "priority": int(policy.get("defaultPriority", 100) or 100),
-            }
-        )
+        enabled_policy = {
+            "policyId": policy_id,
+            "priority": int(policy.get("defaultPriority", 100) or 100),
+        }
+        copy_policy_runtime_settings(policy, enabled_policy)
+        enabled_policies.append(enabled_policy)
 
     enabled_policies.sort(key=lambda item: int(item.get("priority", 100) or 100))
 
@@ -220,11 +220,30 @@ def normalize_enabled_policy_objects(
             continue
 
         seen_policy_ids.add(policy_id)
-        normalized.append(
-            {
-                "policyId": policy_id,
-                "priority": priority,
-            }
-        )
+        normalized_policy = {
+            "policyId": policy_id,
+            "priority": priority,
+        }
+
+        if isinstance(policy, dict):
+            copy_policy_runtime_settings(policy, normalized_policy)
+
+        normalized.append(normalized_policy)
 
     return normalized
+
+
+def copy_policy_runtime_settings(source: dict[str, Any], target: dict[str, Any]) -> None:
+    for field_name in ("pathfinding", "dynamicObstacles", "dynamic_obstacles", "recovery", "parameters"):
+        value = source.get(field_name)
+        if isinstance(value, dict):
+            target[field_name] = value
+
+    for field_name in (
+        "stopRerouteDelaySeconds",
+        "stop_reroute_delay_seconds",
+        "recoveryStrategy",
+        "recovery_strategy",
+    ):
+        if field_name in source:
+            target[field_name] = source[field_name]

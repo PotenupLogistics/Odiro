@@ -1,0 +1,76 @@
+{
+  "policySpec": {
+    "catalogId": "default_delivery",
+    "catalogVersion": 1,
+    "enabledPolicies": [
+      {
+        "policyId": "front_obstacle_stop",
+        "priority": 10,
+        "stopRerouteDelaySeconds": 3.0,
+        "dynamicObstacles": {
+          "enabled": true,
+          "frontOnly": true,
+          "inflationRadiusM": 0.75,
+          "maxDistanceM": 3.5
+        },
+        "pathfinding": {
+          "allowDiagonal": true,
+          "preventCornerCutting": true,
+          "penaltyMinimumCost": 5.0,
+          "penaltyCostMultiplier": 1.0,
+          "heuristicWeight": 1.0,
+          "maxExpandedNodes": 100000
+        },
+        "recovery": {
+          "strategy": "reverse_then_reroute",
+          "rerouteAttemptLimit": 3,
+          "rerouteAttemptIntervalSeconds": 0.75,
+          "reverseDurationSeconds": 0.8,
+          "reverseSpeedKmh": 1.0,
+          "reverseSteering": 0.0
+        }
+      },
+      {
+        "policyId": "reroute_when_blocked",
+        "priority": 20,
+        "pathfinding": {
+          "allowDiagonal": true,
+          "preventCornerCutting": true,
+          "penaltyCostMultiplier": 2.0,
+          "heuristicWeight": 1.0,
+          "maxExpandedNodes": 100000
+        }
+      },
+      {
+        "policyId": "front_obstacle_slowdown",
+        "priority": 30,
+        "dynamicObstacles": {
+          "enabled": true,
+          "frontOnly": true,
+          "inflationRadiusM": 0.9,
+          "maxDistanceM": 5.0
+        },
+        "pathfinding": {
+          "allowDiagonal": true,
+          "preventCornerCutting": true,
+          "penaltyMinimumCost": 5.0,
+          "penaltyCostMultiplier": 1.0,
+          "heuristicWeight": 1.0,
+          "maxExpandedNodes": 100000
+        }
+      },
+      {
+        "policyId": "normal_path_follow",
+        "priority": 100,
+        "pathfinding": {
+          "allowDiagonal": true,
+          "preventCornerCutting": true,
+          "penaltyMinimumCost": 5.0,
+          "penaltyCostMultiplier": 1.0,
+          "heuristicWeight": 1.0,
+          "maxExpandedNodes": 100000
+        }
+      }
+    ]
+  }
+}

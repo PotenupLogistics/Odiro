@@ -1,0 +1,120 @@
+{
+  "schema": "episode_actor_spawn_mvp",
+  "version": 1,
+  "scenario_id": "scenario_001_000_delivery_sidewalk_baseline",
+  "map_id": "EpisodeSandbox",
+  "run": {
+    "base_seed": 3100,
+    "iteration_index": 0,
+    "time_limit_s": 60
+  },
+  "evaluation": {
+    "goal_acceptance_radius_m": 1,
+    "tip_over_angle_deg": 60,
+    "near_miss": {
+      "distance_m": 0.6
+    },
+    "scoring": {
+      "static_obstacle_collision": -1,
+      "blocked_region_collision": -1,
+      "penalty_region_violation": -3,
+      "pedestrian_near_miss": -3,
+      "pedestrian_collision": -10
+    }
+  },
+  "ground_model": {
+    "default_region_type": "walkable",
+    "regions": [
+      {
+        "region_id": "main_sidewalk",
+        "region_type": "walkable",
+        "shape": {
+          "type": "rectangle",
+          "center_xy_m": [0, 0],
+          "size_m": [14, 8],
+          "yaw_deg": 0
+        },
+        "traversability_score": 1
+      },
+      {
+        "region_id": "north_curb_penalty",
+        "region_type": "penalty",
+        "shape": {
+          "type": "rectangle",
+          "center_xy_m": [0, 5],
+          "size_m": [14, 2.5],
+          "yaw_deg": 0
+        },
+        "penalty": {
+          "kind": "curb_departure",
+          "cost": 4,
+          "violation_after_s": 0.2
+        },
+        "traversability_score": 0.7
+      },
+      {
+        "region_id": "south_storefront_block",
+        "region_type": "blocked",
+        "shape": {
+          "type": "rectangle",
+          "center_xy_m": [0, -5],
+          "size_m": [14, 2],
+          "yaw_deg": 0
+        },
+        "collision_tag": "building"
+      }
+    ]
+  },
+  "paths": [
+    {
+      "path_id": "ped_parallel_01",
+      "points_xy_m": [
+        [-5.5, 2.4],
+        [5.5, 2.4]
+      ],
+      "closed_loop": false
+    }
+  ],
+  "actors": {
+    "static_obstacles": [
+      {
+        "instance_id": "mailbox_01",
+        "prop_id": "obstacle.mailbox",
+        "xy_m": [-2.2, 0.9],
+        "yaw_deg": 0
+      },
+      {
+        "instance_id": "bench_01",
+        "prop_id": "obstacle.street_bank",
+        "xy_m": [2.6, -2.7],
+        "yaw_deg": 0
+      }
+    ],
+    "pedestrians": [
+      {
+        "instance_id": "ped_parallel_01",
+        "archetype_id": "adult_pedestrian",
+        "path_id": "ped_parallel_01",
+        "xy_m": [-5.5, 2.4],
+        "yaw_deg": 0,
+        "movement": {
+          "model": "straight_line",
+          "speed_mps": 0.9,
+          "initial_distance_m": 0,
+          "auto_start": true
+        }
+      }
+    ],
+    "robot": {
+      "instance_id": "robot_scenario_001_000",
+      "asset_id": "delivery_bot",
+      "spawn_only": false,
+      "xy_m": [-5.5, -1.5],
+      "yaw_deg": 0,
+      "route": {
+        "goal_xy_m": [5.5, -1.5],
+        "auto_start": true
+      }
+    }
+  }
+}

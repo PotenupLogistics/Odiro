@@ -6,6 +6,7 @@ Covers: `Source/ProtoRobotSim/Public/Platform`, `Source/ProtoRobotSim/Private/Pl
 - `SimulatorLaunchSubsystem.h` and `.cpp`: simulator subprocess launcher, `RunPreview.bat` development fallback, status polling, fixed-step FPS save helper
 - `EpisodeEditorLaunchSubsystem.h` and `.cpp`: MainMenu-to-`EpisodeEditorMap` navigation, pending EpisodeSetup path handoff, editor controller auto-load attempt
 - `SimulatorProcessSubsystem.h` and `.cpp`: simulator process bootstrap, `-Simulate=<SimulationSetupFile>` detection, fixed-step setup, target map load, runner/log setup, run status JSON updates
+- `PlatformAnalysisAiSubsystem.h` and `.cpp`: Platform UI에서 evaluation report와 measurement log 경로를 AI 분석 서버 `/api/v1/analysis/run`으로 전송하고 응답 요약 텍스트를 구성
 - `MainMenuPlayerController.h` and `.cpp`: creates the MainMenu widget, adds it to the player viewport, and owns menu input mode
 - `/Game/Blueprints/MainMenu/BP_MainMenuGameMode`: map-level GameMode asset that selects `AMainMenuPlayerController`
 - `Widget/MainMenuWidget.h` and `.cpp`: document-aligned MainMenu sidebar sections for scenario, policy, experiment config, run status, and experiment result; includes setup/run queue selector, simulator launcher, new/load editor map entry, policy JSON external editor launch, status/report/log preview UI
@@ -21,3 +22,4 @@ Covers: `Source/ProtoRobotSim/Public/Platform`, `Source/ProtoRobotSim/Private/Pl
 - UI reads simulator progress through `SimulationRunStatus JSON`, report JSON paths, and measurement log paths instead of simulator world objects
 - MainMenu opens `EpisodeEditorMap` through `UEpisodeEditorLaunchSubsystem`; selected EpisodeSetup auto-load requires the editor map's GameMode to use `AEpisodeEditorController`
 - MainMenu can pass `EpisodeSetup=...` or `NewEpisode=1` when opening `EpisodeEditorMap`; `UEpisodeEditorEntryWidget` hides its initial load/new screen after this auto-start succeeds
+- AI analysis uses report JSON to resolve EpisodeSetup/DeliveryBotSetup paths and sends absolute local file paths to the AI server; the UI does not send API keys

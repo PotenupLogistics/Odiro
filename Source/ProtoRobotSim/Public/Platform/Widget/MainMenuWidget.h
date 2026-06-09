@@ -13,11 +13,13 @@ class UEditableTextBox;
 class UEpisodeEditorLaunchSubsystem;
 class UExperimentResultIterationButton;
 class UFileListItemWidget;
+class UPlatformAnalysisAiSubsystem;
 class USimulatorLaunchSubsystem;
 class UScrollBox;
 class UTextBlock;
 class UWidget;
 class UWidgetSwitcher;
+struct FPlatformAnalysisAiResponse;
 struct FSimulationSetup;
 
 // MainMenuMap에서 UMG Blueprint layout과 platform event handler를 연결하는 widget
@@ -116,6 +118,9 @@ protected:
 	UFUNCTION()
 	UWidget* HandleGenerateComboBoxItem(FString item);
 
+	UFUNCTION()
+	void HandleSendToAiClicked();
+
 private:
 	bool ValidateRequiredBindings() const;
 	void BindControls();
@@ -145,6 +150,7 @@ private:
 		TArray<FString>& outDiagnostics) const;
 	TSubclassOf<UFileListItemWidget> ResolveFileListItemWidgetClass() const;
 	void HandleRunInfoChanged(const struct FSimulatorRunInfo& runInfo);
+	void HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response);
 	void UpdateStatusText(const FString& extraMessage = FString());
 	void UpdateReportAndLogText();
 	void SetDiagnosticsText(const FString& message);
@@ -153,6 +159,7 @@ private:
 	FString GetSelectedDeliveryBotSetupPath() const;
 	USimulatorLaunchSubsystem* GetSimulatorLaunchSubsystem() const;
 	UEpisodeEditorLaunchSubsystem* GetEpisodeEditorLaunchSubsystem() const;
+	UPlatformAnalysisAiSubsystem* GetPlatformAnalysisAiSubsystem() const;
 
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UWidgetSwitcher> MainContentSwitcher;
@@ -310,6 +317,12 @@ private:
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> StatusTextBlock;
 
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> SendToAiButton;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> AiAnalysisTextBlock;
+
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> DiagnosticsTextBlock;
 
@@ -319,6 +332,8 @@ private:
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> LogPreviewTextBlock;
 
+	FString CurrentPreviewReportPath;
+	FString CurrentPreviewLogPath;
 	FTimerHandle RefreshTimerHandle;
 
 	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|List")

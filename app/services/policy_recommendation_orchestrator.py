@@ -156,6 +156,11 @@ def analyze_full_setup_and_recommend(
 
     warnings: list[str] = []
 
+    # policy_server.py 읽기 경고(거리 임계값 추출 실패 등)를 결과 경고로 노출.
+    # 조기 반환·fallback 경로 모두에서 보이도록 분기 이전에 합류시킨다.
+    if policy_source_analysis is not None:
+        warnings.extend(policy_source_analysis.get("warnings", []))
+
     # 2. usable_for_llm_tuning=False면 빈 추천 즉시 반환
     if not episode_statistics.usable_for_llm_tuning:
         warnings.append("usable_for_llm_tuning=False — 이 결과는 LLM 튜닝 근거로 사용할 수 없음.")

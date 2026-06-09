@@ -33,15 +33,33 @@ def analyze_policy_server_source(path: str | Path) -> dict[str, Any]:
 
     stop_m = re.search(r'stop_distance_m.*?get\([^,]+,\s*([\d.]+)\)', src)
     slow_m = re.search(r'slow_down_distance_m.*?get\([^,]+,\s*([\d.]+)\)', src)
+    # 추출 실패 시 기본값으로 fallback하되, "조용히" 넘어가지 않고 신호를 남긴다.
+    # policy_server.py는 지속 수정되는 파일이라 형식이 바뀌면 regex가 못 잡을 수 있다.
     default_stop = float(stop_m.group(1)) if stop_m else 1.2
     default_slow = float(slow_m.group(1)) if slow_m else 3.5
 
-    warning = None
+    # 거리 임계값 읽기 실패 경고 수집 (둘 다 매칭돼야 extraction_ok)
+    extraction_warnings: list[str] = []
+    if stop_m is None:
+        extraction_warnings.append(
+            f"policy_server.py에서 stop_distance_m 임계값을 추출하지 못했습니다 — "
+            f"기본값({default_stop}) 사용 중. 파일 형식 변경 가능성."
+        )
+    if slow_m is None:
+        extraction_warnings.append(
+            f"policy_server.py에서 slow_down_distance_m 임계값을 추출하지 못했습니다 — "
+            f"기본값({default_slow}) 사용 중. 파일 형식 변경 가능성."
+        )
+    extraction_ok = not extraction_warnings
+
+    warnings: list[str] = list(extraction_warnings)
+    forced_action_warning = None
     if forced_action is not None:
-        warning = (
+        forced_action_warning = (
             f"FORCED_ACTION='{forced_action}' 활성화 — 실제 거리 기반 로직이 무시됩니다. "
             "운영 환경에서는 None으로 설정하세요."
         )
+        warnings.append(forced_action_warning)
 
     return {
         "forced_action": forced_action,
@@ -55,7 +73,11 @@ def analyze_policy_server_source(path: str | Path) -> dict[str, Any]:
             f"dist ≤ {default_slow}m → SlowDown",
             "그 외 → None",
         ],
-        "warning": warning,
+        # 하위호환: 기존 단일 `warning` 키는 FORCED_ACTION 메시지를 그대로 유지
+        "warning": forced_action_warning,
+        # 신규: 거리 추출 성공 여부와 전체 경고 목록(거리 실패 + FORCED_ACTION)
+        "extraction_ok": extraction_ok,
+        "warnings": warnings,
     }
 
 

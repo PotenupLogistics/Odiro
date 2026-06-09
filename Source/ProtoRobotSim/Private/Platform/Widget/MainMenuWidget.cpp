@@ -18,6 +18,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
+#include "Serialization/JsonWriter.h"
 #include "Platform/EpisodeEditorLaunchSubsystem.h"
 #include "Platform/PlatformAnalysisAiSubsystem.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
@@ -639,6 +640,106 @@ bool UMainMenuWidget::BuildSimulationSetupFromControls(
 
 	return true;
 }
+
+bool UMainMenuWidget::SaveStartupPolicySpecFileNameToSelectedDeliveryBotSetup(const FString& policySpecFileName)
+{
+	TArray<FString> diagnostics;
+	if (!SaveStartupPolicySpecFileNameToDeliveryBotSetup(
+		GetSelectedDeliveryBotSetupPath(),
+		policySpecFileName,
+		diagnostics))
+	{
+		SetDiagnosticsText(JoinLines(diagnostics));
+		return false;
+	}
+
+	SetDiagnosticsText(FString::Printf(
+		TEXT("PolicySpec saved to DeliveryBotSetup: %s"),
+		*FPaths::GetBaseFilename(policySpecFileName.TrimStartAndEnd())));
+
+	return true;
+}
+
+bool UMainMenuWidget::SaveStartupPolicySpecFileNameToDeliveryBotSetup(const FString& deliveryBotSetupPath, const FString& policySpecFileName, TArray<FString>& outDiagnostics) const
+{
+	outDiagnostics.Reset();
+
+	const FString normalizedDeliveryBotSetupPath = NormalizeInputJsonPath(deliveryBotSetupPath);
+	const FString normalizedPolicySpecFileName = FPaths::GetBaseFilename(policySpecFileName.TrimStartAndEnd());
+
+	if (!IsEditableInputJsonPath(normalizedDeliveryBotSetupPath))
+	{
+		outDiagnostics.Add(TEXT("Editable DeliveryBotSetup JSON must be selected."));
+		return false;
+	}
+
+	if (normalizedPolicySpecFileName.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("PolicySpec file name is empty."));
+		return false;
+	}
+
+	const FString resolvedPath = FSimulationSetupJson::ResolveProjectPath(normalizedDeliveryBotSetupPath);
+
+	FString jsonString;
+	if (!FFileHelper::LoadFileToString(jsonString, *resolvedPath))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("DeliveryBotSetup read failed: %s"), *normalizedDeliveryBotSetupPath));
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> rootObject;
+	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(jsonString);
+	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("DeliveryBotSetup parse failed: %s"), *normalizedDeliveryBotSetupPath));
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> robotObject;
+	const TSharedPtr<FJsonObject>* existingRobotObject = nullptr;
+	if (rootObject->TryGetObjectField(TEXT("robot"), existingRobotObject) && existingRobotObject && existingRobotObject->IsValid())
+	{
+		robotObject = *existingRobotObject;
+	}
+	else
+	{
+		robotObject = MakeShared<FJsonObject>();
+		rootObject->SetObjectField(TEXT("robot"), robotObject);
+	}
+
+	TSharedPtr<FJsonObject> policyObject;
+	const TSharedPtr<FJsonObject>* existingPolicyObject = nullptr;
+	if (robotObject->TryGetObjectField(TEXT("policy"), existingPolicyObject) && existingPolicyObject && existingPolicyObject->IsValid())
+	{
+		policyObject = *existingPolicyObject;
+	}
+	else
+	{
+		policyObject = MakeShared<FJsonObject>();
+		robotObject->SetObjectField(TEXT("policy"), policyObject);
+	}
+
+	policyObject->SetStringField(TEXT("startup_policy_spec_file_name"), normalizedPolicySpecFileName);
+
+	FString outputJson;
+	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer = TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&outputJson);
+
+	if (!FJsonSerializer::Serialize(rootObject.ToSharedRef(), writer))
+	{
+		outDiagnostics.Add(TEXT("DeliveryBotSetup serialize failed."));
+		return false;
+	}
+
+	if (!FFileHelper::SaveStringToFile(outputJson, *resolvedPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("DeliveryBotSetup write failed: %s"), *normalizedDeliveryBotSetupPath));
+		return false;
+	}
+
+	return true;
+}
+
 
 void UMainMenuWidget::HandleSaveSetupClicked()
 {

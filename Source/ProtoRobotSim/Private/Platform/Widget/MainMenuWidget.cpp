@@ -1,7 +1,6 @@
-#include "Platform/Widget/MainMenuWidget.h"
 
+#include "Platform/Widget/MainMenuWidget.h"
 #include "Blueprint/WidgetTree.h"
-#include "Components/Button.h"
 #include "Components/CheckBox.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
@@ -10,22 +9,11 @@
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
-#include "Dom/JsonObject.h"
-#include "Dom/JsonValue.h"
-#include "Engine/GameInstance.h"
-#include "HAL/FileManager.h"
-#include "HAL/PlatformProcess.h"
-#include "Misc/FileHelper.h"
-#include "Misc/Guid.h"
-#include "Misc/Paths.h"
 #include "Platform/EpisodeEditorLaunchSubsystem.h"
 #include "Platform/PlatformAnalysisAiSubsystem.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Platform/Widget/ExperimentResultIterationButton.h"
 #include "Platform/Widget/FileListItemWidget.h"
-#include "Serialization/JsonReader.h"
-#include "Serialization/JsonSerializer.h"
-#include "UObject/UObjectGlobals.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMainMenuWidget, Log, All);
 
@@ -135,7 +123,7 @@ namespace
 		return FString::Join(previewLines, TEXT("\n"));
 	}
 
-	FString JoinLines(const TArray<FString>& lines)
+	FString JoinStringLines(const TArray<FString>& lines)
 	{
 		return FString::Join(lines, TEXT("\n"));
 	}
@@ -579,7 +567,7 @@ void UMainMenuWidget::HandleSaveFpsClicked()
 		return;
 	}
 
-	SetDiagnosticsText(JoinLines(diagnostics));
+	SetDiagnosticsText(JoinStringLines(diagnostics));
 }
 
 bool UMainMenuWidget::BuildSimulationSetupFromControls(
@@ -691,7 +679,7 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 	TArray<FString> diagnostics;
 	if (!subsystem->SaveEpisodeRunQueueFile(runQueuePath, runInputs, diagnostics))
 	{
-		SetDiagnosticsText(JoinLines(diagnostics));
+		SetDiagnosticsText(JoinStringLines(diagnostics));
 		return;
 	}
 
@@ -706,7 +694,7 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 	diagnostics.Reset();
 	if (!BuildSimulationSetupFromControls(setupBase, runQueuePath, setup, diagnostics))
 	{
-		SetDiagnosticsText(JoinLines(diagnostics));
+		SetDiagnosticsText(JoinStringLines(diagnostics));
 		return;
 	}
 
@@ -719,7 +707,7 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 		return;
 	}
 
-	SetDiagnosticsText(JoinLines(diagnostics));
+	SetDiagnosticsText(JoinStringLines(diagnostics));
 }
 
 void UMainMenuWidget::HandleOpenEditorClicked()
@@ -790,14 +778,14 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 			diagnostics.Add(rollbackError);
 		}
 
-		SetDiagnosticsText(JoinLines(diagnostics));
+		SetDiagnosticsText(JoinStringLines(diagnostics));
 		return;
 	}
 
 	SetSelectedEpisodeSetupPath(targetPath);
 	RefreshSetupOptions();
 	diagnostics.Insert(FString::Printf(TEXT("시나리오 이름 변경됨: %s -> %s"), *sourcePath, *targetPath), 0);
-	SetDiagnosticsText(JoinLines(diagnostics));
+	SetDiagnosticsText(JoinStringLines(diagnostics));
 }
 
 void UMainMenuWidget::HandleScenarioEditRequested(UFileListItemWidget* itemWidget)
@@ -848,14 +836,14 @@ void UMainMenuWidget::HandlePolicyRenameRequested(UFileListItemWidget* itemWidge
 			diagnostics.Add(rollbackError);
 		}
 
-		SetDiagnosticsText(JoinLines(diagnostics));
+		SetDiagnosticsText(JoinStringLines(diagnostics));
 		return;
 	}
 
 	SetSelectedDeliveryBotSetupPath(targetPath);
 	RefreshSetupOptions();
 	diagnostics.Insert(FString::Printf(TEXT("행동 정책 이름 변경됨: %s -> %s"), *sourcePath, *targetPath), 0);
-	SetDiagnosticsText(JoinLines(diagnostics));
+	SetDiagnosticsText(JoinStringLines(diagnostics));
 }
 
 void UMainMenuWidget::HandlePolicyEditRequested(UFileListItemWidget* itemWidget)
@@ -1384,7 +1372,7 @@ void UMainMenuWidget::LoadSelectedSetup()
 		{
 			diagnostics.Add(FString::Printf(TEXT("%s: %s"), *diagnostic.Code, *diagnostic.Message));
 		}
-		SetDiagnosticsText(JoinLines(diagnostics));
+		SetDiagnosticsText(JoinStringLines(diagnostics));
 		return;
 	}
 
@@ -1454,7 +1442,7 @@ void UMainMenuWidget::LoadSelectedSetup()
 		lines.Add(FString::Printf(TEXT("실행 수: %d"), loadedRunInputs.Num()));
 	}
 	lines.Add(FString::Printf(TEXT("고정 스텝 FPS: %d"), parseResult.Setup.FixedStep.Fps));
-	SetDiagnosticsText(JoinLines(lines));
+	SetDiagnosticsText(JoinStringLines(lines));
 }
 
 void UMainMenuWidget::ApplyNewSetupDefaults(const FString& setupPath)
@@ -1995,7 +1983,7 @@ void UMainMenuWidget::HandleAnalysisCompleted(const FPlatformAnalysisAiResponse&
 		lines.Add(TruncatePreview(response.ResponseBody, ReportPreviewCharacterLimit));
 	}
 
-	AiAnalysisTextBlock->SetText(FText::FromString(JoinLines(lines)));
+	AiAnalysisTextBlock->SetText(FText::FromString(JoinStringLines(lines)));
 }
 
 void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
@@ -2068,7 +2056,7 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 		}
 	}
 
-	StatusTextBlock->SetText(FText::FromString(JoinLines(lines)));
+	StatusTextBlock->SetText(FText::FromString(JoinStringLines(lines)));
 }
 
 void UMainMenuWidget::UpdateReportAndLogText()
@@ -2102,7 +2090,7 @@ void UMainMenuWidget::UpdateReportAndLogText()
 			}
 		}
 
-		ReportTextBlock->SetText(FText::FromString(JoinLines(reportLines)));
+		ReportTextBlock->SetText(FText::FromString(JoinStringLines(reportLines)));
 	}
 
 	if (LogPreviewTextBlock)
@@ -2137,7 +2125,7 @@ void UMainMenuWidget::UpdateReportAndLogText()
 			logLines.Add(BuildLogPreview(previewLogPath));
 		}
 
-		LogPreviewTextBlock->SetText(FText::FromString(JoinLines(logLines)));
+		LogPreviewTextBlock->SetText(FText::FromString(JoinStringLines(logLines)));
 	}
 }
 

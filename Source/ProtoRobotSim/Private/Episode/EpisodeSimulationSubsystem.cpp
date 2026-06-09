@@ -21,6 +21,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogEpisodeSimulation, Log, All);
 UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 {
 	StaticObstacleClass = AEpisodeStaticObstacle::StaticClass();
+	StaticObstaclePropCatalog = UEpisodeStaticObstaclePropCatalog::MakeDefaultCatalogReference();
 
 	static ConstructorHelpers::FClassFinder<ADeliveryBot> robotBlueprintClass(
 		TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBot"));
@@ -42,17 +43,6 @@ UEpisodeSimulationSubsystem::UEpisodeSimulationSubsystem()
 	if (startPointBlueprintClass.Succeeded())
 	{
 		StartPointClass = startPointBlueprintClass.Class;
-	}
-
-	static ConstructorHelpers::FClassFinder<ADeliveryBot_GridBoundsActor> gridBoundsActorBlueprintClass(
-		TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBot_GridBoundsActor"));
-	if (gridBoundsActorBlueprintClass.Succeeded())
-	{
-		GridBoundsActorClass = gridBoundsActorBlueprintClass.Class;
-	}
-	else
-	{
-		GridBoundsActorClass = ADeliveryBot_GridBoundsActor::StaticClass();
 	}
 
 	static ConstructorHelpers::FClassFinder<AEpisodePedestrian> pedestrianBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_EpisodePedestrian"));
@@ -197,11 +187,7 @@ ADeliveryBot_GridBoundsActor* UEpisodeSimulationSubsystem::SpawnDeliveryBotGridB
 	if (!IsValid(world))
 		return nullptr;
 
-	TSubclassOf<ADeliveryBot_GridBoundsActor> spawnClass = GridBoundsActorClass;
-	if (!spawnClass)
-	{
-		spawnClass = ADeliveryBot_GridBoundsActor::StaticClass();
-	}
+	TSubclassOf<ADeliveryBot_GridBoundsActor> spawnClass = ADeliveryBot_GridBoundsActor::StaticClass();
 
 	ADeliveryBot_GridBoundsActor* gridBoundsActor = world->SpawnActorDeferred<ADeliveryBot_GridBoundsActor>(
 		spawnClass,
@@ -226,12 +212,10 @@ void UEpisodeSimulationSubsystem::ApplyXYBoundsToGridBoundsActor(
 	const FBox2D& xyBounds,
 	double centerZ) const
 {
-	if (!IsValid(gridBoundsActor))
-		return;
+	if (!IsValid(gridBoundsActor)) return;
 
 	UBoxComponent* boundsBox = gridBoundsActor->GetBoundsBox();
-	if (!IsValid(boundsBox))
-		return;
+	if (!IsValid(boundsBox)) return;
 
 	const double safePadding = FMath::Max(static_cast<double>(DeliveryBotGridBoundsPaddingCm), 0.0);
 	const FVector2D paddedMin = xyBounds.Min - FVector2D(safePadding, safePadding);
@@ -280,15 +264,10 @@ bool UEpisodeSimulationSubsystem::ValidateDeliveryBotGridLocation(
 	const FVector& worldLocation) const
 {
 	UWorld* world = GetWorld();
-	if (!IsValid(world))
-		return false;
+	if (!IsValid(world)) return false;
 
 	const UDeliveryBot_GridSubsystem* gridSubsystem = world->GetSubsystem<UDeliveryBot_GridSubsystem>();
-	if (!IsValid(gridSubsystem) || !gridSubsystem->HasBuiltGrid())
-	{
-		UE_LOG(LogEpisodeSimulation, Warning, TEXT("DeliveryBot grid validation failed. Grid is not built. Robot: %s"), *robotInstanceId);
-		return false;
-	}
+	if (!IsValid(gridSubsystem) || !gridSubsystem->HasBuiltGrid()) return false;
 
 	const FIntPoint gridIndex = gridSubsystem->GetGridIndexByWorldLocation(worldLocation);
 	const FDeliveryBotGridCellInfo* cellInfo = gridSubsystem->FindCellInfoByGridIndex(gridIndex);
@@ -365,11 +344,28 @@ bool UEpisodeSimulationSubsystem::SetupEpisodeWorld(const FEpisodeSimulationSetu
 		}
 	}
 
+	for (const FEpisodePlaceableInstanceSpec& placeableSpec : setupSpec.Placeables)
+	{
+		if (placeableSpec.Category != EEpisodeActorCategory::StaticObstacle)
+		{
+			continue;
+		}
+
+		if (!SpawnStaticObstacle(placeableSpec))
+		{
+			UE_LOG(
+				LogEpisodeSimulation,
+				Warning,
+				TEXT("Static obstacle placeable spawn failed before DeliveryBot grid rebuild. InstanceId: %s"),
+				*placeableSpec.InstanceId);
+			bAllSpawned = false;
+		}
+	}
+
 	const bool bHasDeliveryBotPlaceable = setupSpec.Placeables.ContainsByPredicate(
 		[](const FEpisodePlaceableInstanceSpec& placeableSpec)
 		{
-			return placeableSpec.Category == EEpisodeActorCategory::DeliveryBot
-				|| placeableSpec.Category == EEpisodeActorCategory::RoadVehicle;
+			return placeableSpec.Category == EEpisodeActorCategory::DeliveryBot;
 		});
 
 	if (bHasDeliveryBotPlaceable && !RebuildDeliveryBotGridFromEpisodeGroundRegions(setupSpec))
@@ -394,6 +390,11 @@ bool UEpisodeSimulationSubsystem::SetupEpisodeWorld(const FEpisodeSimulationSetu
 
 	for (const FEpisodePlaceableInstanceSpec& placeableSpec : setupSpec.Placeables)
 	{
+		if (placeableSpec.Category == EEpisodeActorCategory::StaticObstacle)
+		{
+			continue;
+		}
+
 		if (!SpawnPlaceable(placeableSpec))
 		{
 			UE_LOG(LogEpisodeSimulation, Warning, TEXT("배치 액터 '%s' 스폰 실패."), *placeableSpec.InstanceId);
@@ -697,12 +698,25 @@ AEpisodeStaticObstacle* UEpisodeSimulationSubsystem::SpawnStaticObstacle(const F
 		spawnParams);
 	if (!staticObstacle) return nullptr;
 
-	if (!staticObstacle->ApplyDefaultPropById(FName(*placeableSpec.AssetId)))
+	FEpisodeStaticObstaclePropEntry propEntry;
+	if (!TryFindStaticObstacleProp(FName(*placeableSpec.AssetId), propEntry))
 	{
 		UE_LOG(
 			LogEpisodeSimulation,
 			Warning,
 			TEXT("정적 장애물 '%s'에 prop '%s' 적용 실패."),
+			*placeableSpec.InstanceId,
+			*placeableSpec.AssetId);
+		staticObstacle->Destroy();
+		return nullptr;
+	}
+
+	if (!staticObstacle->ApplyPropEntry(propEntry))
+	{
+		UE_LOG(
+			LogEpisodeSimulation,
+			Warning,
+			TEXT("?뺤쟻 ?μ븷臾?'%s'??prop '%s' entry ?곸슜 ?ㅽ뙣."),
 			*placeableSpec.InstanceId,
 			*placeableSpec.AssetId);
 		staticObstacle->Destroy();
@@ -716,6 +730,26 @@ AEpisodeStaticObstacle* UEpisodeSimulationSubsystem::SpawnStaticObstacle(const F
 		EEpisodeMobilityMode::Static,
 		staticObstacle);
 	return staticObstacle;
+}
+
+bool UEpisodeSimulationSubsystem::TryFindStaticObstacleProp(
+	FName propId,
+	FEpisodeStaticObstaclePropEntry& outPropEntry) const
+{
+	if (propId.IsNone()) return false;
+
+	const UEpisodeStaticObstaclePropCatalog* propCatalog = StaticObstaclePropCatalog.LoadSynchronous();
+	if (!IsValid(propCatalog))
+	{
+		UE_LOG(
+			LogEpisodeSimulation,
+			Warning,
+			TEXT("Episode static obstacle prop catalog is not configured or failed to load: %s"),
+			*StaticObstaclePropCatalog.ToSoftObjectPath().ToString());
+		return false;
+	}
+
+	return propCatalog->FindPropEntryById(propId, outPropEntry);
 }
 
 AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInstanceSpec& placeableSpec)
@@ -770,13 +804,14 @@ AActor* UEpisodeSimulationSubsystem::SpawnRobotActor(const FEpisodePlaceableInst
 	{
 		UE_LOG(
 			LogEpisodeSimulation,
-			Warning,
-			TEXT("DeliveryBot auto start disabled because route grid validation failed. Robot: %s"),
+			Error,
+			TEXT("Episode setup 실패: DeliveryBot의 start/goal이 그리드 상 도달할 수 없는 지점. Robot: %s"),
 			*placeableSpec.InstanceId
 		);
+		return nullptr;
 	}
 
-	setupInfo.LocationSetupInfo.bAutoStartRoute = !bSpawnOnly && bRouteAutoStart && bHasGoal && bRouteGridValid;
+	setupInfo.LocationSetupInfo.bAutoStartRoute = !bSpawnOnly && bRouteAutoStart && bHasGoal;
 
 	ADeliveryBot* robotActor{
 		world->SpawnActorDeferred<ADeliveryBot>(

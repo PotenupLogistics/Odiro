@@ -3,6 +3,8 @@
 #include "CoreMinimal.h"
 #include "EpisodeEditorTypes.generated.h"
 
+class UTexture2D;
+
 UENUM(BlueprintType)
 enum class EEpisodeEditorControllerMode : uint8
 {
@@ -41,6 +43,13 @@ enum class EEpisodeTransformGizmoMode : uint8
 };
 
 UENUM(BlueprintType)
+enum class EEpisodeTransformGizmoOrientationMode : uint8
+{
+	World,
+	Relative
+};
+
+UENUM(BlueprintType)
 enum class EEpisodePaletteItemType : uint8
 {
 	StaticObstacle,
@@ -68,6 +77,9 @@ struct PROTOROBOTSIM_API FEpisodePaletteItemEntry
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
 	FString IconName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	TSoftObjectPtr<UTexture2D> ThumbnailTexture;
 };
 
 USTRUCT(BlueprintType)

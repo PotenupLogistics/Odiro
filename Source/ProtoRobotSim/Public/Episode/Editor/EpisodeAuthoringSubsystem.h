@@ -1,9 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Episode/Data/EpisodeStaticObstaclePropCatalog.h"
+#include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/Editor/EpisodeEditorTypes.h"
 #include "Shared/EpisodeCompileTypes.h"
 #include "Shared/EpisodeSpecTypes.h"
+#include "Episode/Actors/EpisodePedestrian.h"
+#include "Episode/Actors/EpisodeStaticObstacle.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "EpisodeAuthoringSubsystem.generated.h"
 
@@ -12,6 +16,7 @@ class AEpisodePedestrian;
 class AActor;
 class FJsonObject;
 class FJsonValue;
+class UEpisodeCompiler;
 
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API UEpisodeAuthoringSubsystem : public UWorldSubsystem
@@ -53,6 +58,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
 	TSubclassOf<AActor> GoalPointClass;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Catalog")
+	TSoftObjectPtr<UEpisodeStaticObstaclePropCatalog> StaticObstaclePropCatalog;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Import")
 	FString EpisodeSetupInputDirectory = TEXT("Json/Input");
 
@@ -83,6 +91,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
 	void GetStaticObstaclePaletteEntries(TArray<FEpisodeStaticObstaclePropEntry>& outEntries) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
+	bool TryGetStaticObstaclePropEntry(FName propId, FEpisodeStaticObstaclePropEntry& outPropEntry) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
 	bool CanPlaceStaticObstacle(FName propId, const FTransform& transform, FString& outFailureReason) const;
@@ -122,6 +133,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
 	bool UpdateStaticObstacleTransform(
 		const FString& instanceId,
+		const FTransform& transform,
+		FString& outFailureReason);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	bool UpdateRobotStartPointTransform(
+		const FTransform& transform,
+		FString& outFailureReason);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	bool UpdateRobotGoalPointTransform(
 		const FTransform& transform,
 		FString& outFailureReason);
 
@@ -192,6 +213,8 @@ private:
 	static bool TryGetBoolProperty(const TMap<FString, FEpisodeParamValue>& properties, const FString& key, bool& outValue);
 	static bool TryGetStringProperty(const TMap<FString, FEpisodeParamValue>& properties, const FString& key, FString& outValue);
 
+	UEpisodeCompiler* CreateEpisodeCompiler() const;
+	const UEpisodeStaticObstaclePropCatalog* GetStaticObstaclePropCatalog() const;
 	bool TryFindStaticObstacleProp(FName propId, FEpisodeStaticObstaclePropEntry& outPropEntry) const;
 	bool CanPlaceStaticObstacleInternal(
 		FName propId,
@@ -208,6 +231,8 @@ private:
 	FString GeneratePedestrianInstanceId();
 	bool ContainsInstanceId(const FString& instanceId) const;
 	void InitializeDraftDefaults();
+	bool EnsureSingleRobotRouteSpec(TArray<FString>& outDiagnostics, bool& bOutDraftChanged);
+	bool ValidateSingleRobotRouteSpecForExport(TArray<FString>& outDiagnostics) const;
 	void ClearEditorView();
 
 	// import된 draft에서 정적 장애물만 AEpisodeStaticObstacle로 EditorMap에 재생성.
@@ -226,7 +251,12 @@ private:
 		TObjectPtr<AActor>& markerActor,
 		TSubclassOf<AActor> markerClass,
 		const FTransform& transform,
+		EEpisodePlaceableAuthoringRole markerRole,
 		FString& outFailureReason);
+	bool ConfigureRobotRouteMarkerActor(
+		AActor* markerActor,
+		EEpisodePlaceableAuthoringRole markerRole,
+		FString& outFailureReason) const;
 	void AddStaticObstacleViewRecord(
 		const FEpisodePlaceableInstanceSpec& spec,
 		const FEpisodeStaticObstaclePropEntry& propEntry,

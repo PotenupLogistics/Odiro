@@ -7,6 +7,7 @@
 
 class UEpisodeObstacleCollisionComponent;
 class UEpisodePlaceableComponent;
+class UEpisodeStaticObstaclePropCatalog;
 class UBoxComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
@@ -50,10 +51,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Catalog")
 	bool ApplyDefaultPropById(FName inPropId);
 
-	static bool FindDefaultPropEntryById(FName inPropId, FEpisodeStaticObstaclePropEntry& outPropEntry);
-	static const TArray<FEpisodeStaticObstaclePropEntry>& GetDefaultPropEntries();
-	static TArray<FName> GetDefaultPropIds();
-
 	UFUNCTION(BlueprintPure, Category = "Episode|Placement")
 	bool GetPlacementBounds(
 		FVector& outOrigin,
@@ -76,6 +73,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Semantic")
 	EEpisodeStaticObstaclePropCategory PropCategory = EEpisodeStaticObstaclePropCategory::Unknown;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Catalog")
+	TSoftObjectPtr<UEpisodeStaticObstaclePropCatalog> StaticObstaclePropCatalog;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Mesh", meta = (AllowedClasses = "/Script/Engine.StaticMesh"))
 	TSoftObjectPtr<UStaticMesh> StaticMeshAsset;
 
@@ -92,6 +92,7 @@ public:
 	bool bUseFallbackBoxCollision = true;
 
 private:
+	bool TryFindConfiguredPropEntry(FName inPropId, FEpisodeStaticObstaclePropEntry& outPropEntry) const;
 	void ApplyCollisionSettings();
 	void ApplyObjectTypeActorTag();
 };

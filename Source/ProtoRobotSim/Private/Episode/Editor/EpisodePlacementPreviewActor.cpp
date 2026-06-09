@@ -3,9 +3,12 @@
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Episode/Actors/EpisodeStaticObstacle.h"
+#include "Engine/World.h"
+#include "Episode/Data/EpisodeStaticObstaclePropCatalog.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogEpisodePlacementPreview, Log, All);
 
 AEpisodePlacementPreviewActor::AEpisodePlacementPreviewActor()
 {
@@ -28,6 +31,8 @@ AEpisodePlacementPreviewActor::AEpisodePlacementPreviewActor()
 	PreviewSkeletalMeshComponent->SetCastShadow(false);
 	PreviewSkeletalMeshComponent->SetMobility(EComponentMobility::Movable);
 
+	StaticObstaclePropCatalog = UEpisodeStaticObstaclePropCatalog::MakeDefaultCatalogReference();
+
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> validPlacementMaterial(
 		TEXT("/Game/Models/Placeable/Materials/MI_EpisodePlaceable.MI_EpisodePlaceable"));
 	if (validPlacementMaterial.Succeeded())
@@ -48,7 +53,8 @@ AEpisodePlacementPreviewActor::AEpisodePlacementPreviewActor()
 bool AEpisodePlacementPreviewActor::ConfigureStaticObstacleProp(FName propId)
 {
 	FEpisodeStaticObstaclePropEntry propEntry;
-	if (!AEpisodeStaticObstacle::FindDefaultPropEntryById(propId, propEntry))
+	const UEpisodeStaticObstaclePropCatalog* propCatalog = StaticObstaclePropCatalog.LoadSynchronous();
+	if (!IsValid(propCatalog) || !propCatalog->FindPropEntryById(propId, propEntry))
 	{
 		SetActorHiddenInGame(true);
 		PreviewPropId = NAME_None;
@@ -94,21 +100,41 @@ bool AEpisodePlacementPreviewActor::ConfigureActorPreviewClass(TSubclassOf<AActo
 		return false;
 	}
 
-	AActor* defaultActor = actorClass->GetDefaultObject<AActor>();
-	if (!defaultActor)
+	if (ConfigureActorPreviewFromActor(actorClass->GetDefaultObject<AActor>(), actorClass->GetFName()))
 	{
-		ClearPreviewMeshes();
-		SetActorHiddenInGame(true);
+		return true;
+	}
+
+	if (ConfigureActorPreviewFromSpawnedActor(actorClass))
+	{
+		return true;
+	}
+
+	UE_LOG(
+		LogEpisodePlacementPreview,
+		Warning,
+		TEXT("Failed to configure actor preview mesh | Class: %s"),
+		*actorClass->GetPathName());
+
+	ClearPreviewMeshes();
+	SetActorHiddenInGame(true);
+	return false;
+}
+
+bool AEpisodePlacementPreviewActor::ConfigureActorPreviewFromActor(AActor* actor, FName previewId)
+{
+	if (!actor)
+	{
 		return false;
 	}
 
 	TArray<UStaticMeshComponent*> staticMeshComponents;
-	defaultActor->GetComponents(staticMeshComponents);
+	actor->GetComponents(staticMeshComponents);
 	for (const UStaticMeshComponent* staticMeshComponent : staticMeshComponents)
 	{
 		if (staticMeshComponent && staticMeshComponent->GetStaticMesh())
 		{
-			PreviewPropId = actorClass->GetFName();
+			PreviewPropId = previewId;
 			PlacementRadius2D = 0.0;
 			SetStaticMeshPreview(staticMeshComponent->GetStaticMesh());
 			SetActorHiddenInGame(false);
@@ -118,12 +144,12 @@ bool AEpisodePlacementPreviewActor::ConfigureActorPreviewClass(TSubclassOf<AActo
 	}
 
 	TArray<USkeletalMeshComponent*> skeletalMeshComponents;
-	defaultActor->GetComponents(skeletalMeshComponents);
+	actor->GetComponents(skeletalMeshComponents);
 	for (const USkeletalMeshComponent* skeletalMeshComponent : skeletalMeshComponents)
 	{
 		if (skeletalMeshComponent && skeletalMeshComponent->GetSkeletalMeshAsset())
 		{
-			PreviewPropId = actorClass->GetFName();
+			PreviewPropId = previewId;
 			PlacementRadius2D = 0.0;
 			SetSkeletalMeshPreview(skeletalMeshComponent->GetSkeletalMeshAsset());
 			SetActorHiddenInGame(false);
@@ -132,9 +158,33 @@ bool AEpisodePlacementPreviewActor::ConfigureActorPreviewClass(TSubclassOf<AActo
 		}
 	}
 
-	ClearPreviewMeshes();
-	SetActorHiddenInGame(true);
 	return false;
+}
+
+bool AEpisodePlacementPreviewActor::ConfigureActorPreviewFromSpawnedActor(TSubclassOf<AActor> actorClass)
+{
+	UWorld* world = GetWorld();
+	if (!world || !actorClass)
+	{
+		return false;
+	}
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	spawnParams.ObjectFlags |= RF_Transient;
+
+	AActor* sourceActor = world->SpawnActor<AActor>(actorClass, FTransform::Identity, spawnParams);
+	if (!sourceActor)
+	{
+		return false;
+	}
+
+	sourceActor->SetActorHiddenInGame(true);
+	sourceActor->SetActorEnableCollision(false);
+
+	const bool bConfigured = ConfigureActorPreviewFromActor(sourceActor, actorClass->GetFName());
+	sourceActor->Destroy();
+	return bConfigured;
 }
 
 void AEpisodePlacementPreviewActor::ClearPreviewMeshes()

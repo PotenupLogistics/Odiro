@@ -1,7 +1,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Engine/EngineTypes.h"
 #include "Shared/EpisodeConfigTypes.h"
 #include "Shared/Struct/DeliveryBot/Result/DeliveryBotSimulationFailureInfo.h"
 #include "Subsystems/WorldSubsystem.h"

@@ -120,6 +120,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
 	EEpisodeTransformGizmoMode GetTransformGizmoMode() const { return TransformGizmoMode; }
 
+	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
+	EEpisodeTransformGizmoOrientationMode GetTransformGizmoOrientationMode() const { return TransformGizmoOrientationMode; }
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
+	EEpisodeTransformGizmoOrientationMode GetEffectiveTransformGizmoOrientationMode() const;
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
+	bool CanEditTransformGizmoOrientationForSelection() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Gizmo")
+	void SetTransformGizmoOrientationMode(EEpisodeTransformGizmoOrientationMode orientationMode);
+
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Placement")
 	bool IsCurrentPlacementValid() const { return bCurrentPlacementValid; }
 
@@ -227,6 +239,14 @@ private:
 	void UpdateTransformGizmoForSelection();
 	void HideTransformGizmo();
 	void SetTransformGizmoMode(EEpisodeTransformGizmoMode mode);
+	EEpisodeTransformGizmoOrientationMode GetEffectiveTransformGizmoOrientationModeForPlaceable(
+		const UEpisodePlaceableComponent* placeableComponent) const;
+	void GetTransformGizmoBasis(
+		const FTransform& transform,
+		EEpisodeTransformGizmoOrientationMode orientationMode,
+		FVector& outXAxis,
+		FVector& outYAxis,
+		FVector& outZAxis) const;
 	UEpisodePlaceableContextMenuWidget* EnsurePlaceableContextMenuWidget();
 	void UpdatePlaceableContextMenuForSelection(bool bRepositionToMouse = true);
 	void HidePlaceableContextMenu();
@@ -238,6 +258,10 @@ private:
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Gizmo")
 	EEpisodeTransformGizmoMode TransformGizmoMode = EEpisodeTransformGizmoMode::Translate;
+
+	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Gizmo")
+	EEpisodeTransformGizmoOrientationMode TransformGizmoOrientationMode =
+		EEpisodeTransformGizmoOrientationMode::Relative;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
 	FName SelectedStaticObstaclePropId;
@@ -276,6 +300,8 @@ private:
 	FVector TransformGizmoDragPlaneNormal = FVector::UpVector;
 	FVector TransformGizmoDragAxis = FVector::ForwardVector;
 	FVector TransformGizmoDragStartDirection = FVector::ForwardVector;
+	EEpisodeTransformGizmoOrientationMode ActiveTransformGizmoOrientationMode =
+		EEpisodeTransformGizmoOrientationMode::Relative;
 	FString LastTransformGizmoDragFailureReason;
 	TWeakObjectPtr<UEpisodePlaceableComponent> HoveredPlaceableComponent;
 	TWeakObjectPtr<UEpisodePlaceableComponent> SelectedPlaceableComponent;

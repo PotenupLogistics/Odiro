@@ -2,8 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "TimerManager.h"
-#include "Types/SlateEnums.h"
 #include "MainMenuWidget.generated.h"
 
 class UButton;

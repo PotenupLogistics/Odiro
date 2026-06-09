@@ -1,12 +1,7 @@
-#include "Platform/EpisodeEditorLaunchSubsystem.h"
 
-#include "Engine/GameInstance.h"
-#include "Engine/World.h"
+#include "Platform/EpisodeEditorLaunchSubsystem.h"
 #include "Episode/Editor/EpisodeEditorController.h"
 #include "Kismet/GameplayStatics.h"
-#include "Misc/PackageName.h"
-#include "TimerManager.h"
-#include "UObject/UObjectGlobals.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogEpisodeEditorLaunch, Log, All);
 

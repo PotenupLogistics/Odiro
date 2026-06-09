@@ -5,6 +5,7 @@
 #include "Types/SlateEnums.h"
 #include "EpisodePlaceableContextMenuWidget.generated.h"
 
+class USizeBox;
 class UButton;
 class UEditableText;
 class UEditableTextBox;
@@ -54,6 +55,18 @@ public:
 	TObjectPtr<UTextBlock> AssetNameTextBlock;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	TObjectPtr<USizeBox> OrientationSizeBox;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	TObjectPtr<UButton> WorldOrientationButton;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	TObjectPtr<UButton> RelativeOrientationButton;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	TObjectPtr<USizeBox> LocationSizeBox;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
 	TObjectPtr<UEditableTextBox> LocationXTextBox;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
@@ -63,6 +76,9 @@ public:
 	TObjectPtr<UEditableTextBox> LocationZTextBox;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	TObjectPtr<USizeBox> RotationSizeBox;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
 	TObjectPtr<UEditableTextBox> RotationXTextBox;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
@@ -70,6 +86,9 @@ public:
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
 	TObjectPtr<UEditableTextBox> RotationZTextBox;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	TObjectPtr<USizeBox> ScaleSizeBox;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
 	TObjectPtr<UEditableTextBox> ScaleXTextBox;
@@ -92,6 +111,12 @@ public:
 protected:
 	UFUNCTION()
 	void HandleEditInstanceIdButtonClicked();
+
+	UFUNCTION()
+	void HandleWorldOrientationButtonClicked();
+
+	UFUNCTION()
+	void HandleRelativeOrientationButtonClicked();
 
 	UFUNCTION()
 	void HandleDeleteButtonClicked();
@@ -135,6 +160,12 @@ private:
 		ETextCommit::Type commitMethod);
 	bool TryReadTransformFields(FTransform& outTransform, UEditableTextBox*& outInvalidTextBox) const;
 	bool TryReadDoubleField(UEditableTextBox* textBox, double& outValue) const;
+	bool IsTransformFieldEditable(
+		const UEpisodePlaceableComponent* placeableComponent,
+		EEpisodePlaceableContextMenuTransformField field) const;
+	void ApplyEditPermissions(const UEpisodePlaceableComponent* placeableComponent);
+	void ApplyOrientationControls(const UEpisodePlaceableComponent* placeableComponent);
+	void SetTextBoxEditable(UEditableTextBox* textBox, bool bEditable) const;
 	void FlashInvalidField(UEditableTextBox* textBox);
 	void SetTextBoxFieldColor(UEditableTextBox* textBox, const FLinearColor& color) const;
 	void FlashInvalidInstanceIdField();

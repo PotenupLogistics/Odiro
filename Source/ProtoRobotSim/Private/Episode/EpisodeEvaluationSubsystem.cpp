@@ -1,10 +1,9 @@
-#include "Episode/EpisodeEvaluationSubsystem.h"
 
+#include "Episode/EpisodeEvaluationSubsystem.h"
 #include "Components/PrimitiveComponent.h"
 #include "DeliveryBot/Actor/DeliveryBot_ChaosActor.h"
 #include "Episode/Actors/EpisodeGroundRegion.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
-#include "GameFramework/Actor.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogEpisodeEvaluation, Log, All);
 

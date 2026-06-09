@@ -1,20 +1,7 @@
-#include "Platform/SimulatorLaunchSubsystem.h"
 
+#include "Platform/SimulatorLaunchSubsystem.h"
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
-#include "Dom/JsonObject.h"
-#include "Dom/JsonValue.h"
-#include "Engine/GameInstance.h"
-#include "Engine/World.h"
 #include "Episode/EpisodeCompiler.h"
-#include "HAL/FileManager.h"
-#include "Misc/DateTime.h"
-#include "Misc/FileHelper.h"
-#include "Misc/Guid.h"
-#include "Misc/Paths.h"
-#include "Serialization/JsonReader.h"
-#include "Serialization/JsonSerializer.h"
-#include "Serialization/JsonWriter.h"
-#include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSimulatorLaunch, Log, All);
 

@@ -363,7 +363,9 @@ void AEpisodeTransformGizmoActor::RefreshFromTarget()
 
 	SetActorLocationAndRotation(
 		targetActor->GetActorLocation(),
-		targetActor->GetActorRotation(),
+		OrientationMode == EEpisodeTransformGizmoOrientationMode::World
+			? FRotator::ZeroRotator
+			: targetActor->GetActorRotation(),
 		false,
 		nullptr,
 		ETeleportType::TeleportPhysics);
@@ -395,6 +397,18 @@ void AEpisodeTransformGizmoActor::SetGizmoMode(EEpisodeTransformGizmoMode mode)
 	GizmoMode = mode;
 	HoveredHandle = EEpisodeTransformGizmoHandle::None;
 	ApplyHandleMaterials();
+}
+
+void AEpisodeTransformGizmoActor::SetGizmoOrientationMode(
+	EEpisodeTransformGizmoOrientationMode orientationMode)
+{
+	if (OrientationMode == orientationMode)
+	{
+		return;
+	}
+
+	OrientationMode = orientationMode;
+	RefreshFromTarget();
 }
 
 bool AEpisodeTransformGizmoActor::IsHandleEnabled(EEpisodeTransformGizmoHandle handle) const

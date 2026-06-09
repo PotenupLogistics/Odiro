@@ -41,6 +41,7 @@ struct PROTOROBOTSIM_API FEpisodeLlmGenerationResult
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEpisodeLlmGenerationCompletedSignature, const FEpisodeLlmGenerationResult&, Result);
 
+// 시나리오 에디터에서 AI 서버로 자연어 기반 시나리오 생성 요청을 보내고 EpisodeSetup JSON을 받는 책임.
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API UEpisodeLlmAuthoringSubsystem : public UGameInstanceSubsystem
 {

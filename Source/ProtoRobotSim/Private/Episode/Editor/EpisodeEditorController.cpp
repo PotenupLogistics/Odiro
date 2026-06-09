@@ -8,6 +8,7 @@
 #include "Episode/Editor/EpisodeTransformGizmoActor.h"
 #include "Episode/Widget/EpisodeEditorRootWidget.h"
 #include "Episode/Widget/EpisodeEditorToolbarWidget.h"
+#include "Episode/Actors/EpisodePedestrian.h"
 #include "Camera/CameraComponent.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
@@ -264,6 +265,14 @@ bool AEpisodeEditorController::BeginPalettePlacement(EEpisodePaletteItemType ite
 
 	if (!PlacementPreviewActor || !ConfigurePlacementPreviewForSelectedItem(authoringSubsystem))
 	{
+		UE_LOG(
+			LogEpisodeEditorController,
+			Warning,
+			TEXT("Failed to begin placement preview | Type: %d | AssetId: %s | Reason: %s"),
+			static_cast<int32>(SelectedPlacementItemType),
+			*SelectedPlacementAssetId.ToString(),
+			CurrentPlacementFailureReason.IsEmpty() ? TEXT("<none>") : *CurrentPlacementFailureReason);
+
 		DestroyPlacementPreview();
 		SelectedPlacementItemType = EEpisodePaletteItemType::StaticObstacle;
 		SelectedPlacementAssetId = NAME_None;
@@ -1763,12 +1772,27 @@ bool AEpisodeEditorController::ConfigurePlacementPreviewForSelectedItem(
 		return true;
 	}
 	case EEpisodePaletteItemType::Pedestrian:
-		if (!PlacementPreviewActor->ConfigureActorPreviewClass(authoringSubsystem->PedestrianVisualizationActorClass))
+	{
+		TSubclassOf<AActor> pedestrianPreviewClass = authoringSubsystem->PedestrianVisualizationActorClass;
+		if (!pedestrianPreviewClass)
 		{
-			CurrentPlacementFailureReason = TEXT("Failed to configure pedestrian preview.");
+			pedestrianPreviewClass = authoringSubsystem->PedestrianClass.Get();
+		}
+		if (!pedestrianPreviewClass)
+		{
+			CurrentPlacementFailureReason = TEXT("Pedestrian preview class is unavailable.");
+			return false;
+		}
+
+		if (!PlacementPreviewActor->ConfigureActorPreviewClass(pedestrianPreviewClass))
+		{
+			CurrentPlacementFailureReason = FString::Printf(
+				TEXT("Failed to configure pedestrian preview class '%s'."),
+				*pedestrianPreviewClass->GetPathName());
 			return false;
 		}
 		return true;
+	}
 	case EEpisodePaletteItemType::RobotStart:
 		if (!PlacementPreviewActor->ConfigureActorPreviewClass(authoringSubsystem->StartPointClass))
 		{

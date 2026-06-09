@@ -6,6 +6,8 @@
 #include "Episode/Editor/EpisodeEditorTypes.h"
 #include "Shared/EpisodeCompileTypes.h"
 #include "Shared/EpisodeSpecTypes.h"
+#include "Episode/Actors/EpisodePedestrian.h"
+#include "Episode/Actors/EpisodeStaticObstacle.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "EpisodeAuthoringSubsystem.generated.h"
 

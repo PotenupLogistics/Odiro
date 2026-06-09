@@ -4,7 +4,10 @@
 #include "Dom/JsonValue.h"
 #include "Components/SphereComponent.h"
 #include "Engine/World.h"
+#include "Episode/Actors/EpisodePedestrian.h"
 #include "Episode/Actors/EpisodeStaticObstacle.h"
+#include "Episode/Components/EpisodePathFollowerComponent.h"
+#include "Episode/Components/EpisodePedestrianRuntimeComponent.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/EpisodeCompiler.h"
 #include "UObject/ConstructorHelpers.h"
@@ -54,7 +57,16 @@ namespace
 
 UEpisodeAuthoringSubsystem::UEpisodeAuthoringSubsystem()
 {
+	StaticObstacleClass = AEpisodeStaticObstacle::StaticClass();
+	PedestrianClass = AEpisodePedestrian::StaticClass();
 	StaticObstaclePropCatalog = UEpisodeStaticObstaclePropCatalog::MakeDefaultCatalogReference();
+
+	static ConstructorHelpers::FClassFinder<AEpisodePedestrian> pedestrianBlueprintClass(
+		TEXT("/Game/Blueprints/Episode/BP_EpisodePedestrian"));
+	if (pedestrianBlueprintClass.Succeeded())
+	{
+		PedestrianClass = pedestrianBlueprintClass.Class;
+	}
 
 	static ConstructorHelpers::FClassFinder<AActor> startPointBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_StartPoint"));
 	if (startPointBlueprintClass.Succeeded())
@@ -73,6 +85,17 @@ UEpisodeAuthoringSubsystem::UEpisodeAuthoringSubsystem()
 	if (pedestrianVisualizationBlueprintClass.Succeeded())
 	{
 		PedestrianVisualizationActorClass = pedestrianVisualizationBlueprintClass.Class;
+	}
+	else
+	{
+		PedestrianVisualizationActorClass = PedestrianClass.Get();
+		UE_LOG(
+			LogEpisodeAuthoring,
+			Warning,
+			TEXT("Pedestrian visualization actor class was not found. Falling back to pedestrian class: %s"),
+			PedestrianVisualizationActorClass
+				? *PedestrianVisualizationActorClass->GetPathName()
+				: TEXT("<null>"));
 	}
 }
 
@@ -2137,8 +2160,11 @@ bool UEpisodeAuthoringSubsystem::SpawnEditorPedestrianActor(
 	TSubclassOf<AActor> spawnClass = PedestrianVisualizationActorClass;
 	if (!spawnClass)
 	{
-		outFailureReason = TEXT("Pedestrian visualization actor class is unavailable.");
-		return false;
+		spawnClass = PedestrianClass.Get();
+	}
+	if (!spawnClass)
+	{
+		spawnClass = AEpisodePedestrian::StaticClass();
 	}
 
 	FActorSpawnParameters spawnParams;
@@ -2150,8 +2176,25 @@ bool UEpisodeAuthoringSubsystem::SpawnEditorPedestrianActor(
 		spawnParams);
 	if (!pedestrian)
 	{
-		outFailureReason = TEXT("SpawnActor failed.");
+		outFailureReason = FString::Printf(
+			TEXT("SpawnActor failed for pedestrian class '%s'."),
+			*spawnClass->GetPathName());
 		return false;
+	}
+
+	if (AEpisodePedestrian* episodePedestrian = Cast<AEpisodePedestrian>(pedestrian))
+	{
+		if (episodePedestrian->PathFollowerComponent)
+		{
+			episodePedestrian->PathFollowerComponent->bAutoStart = false;
+			episodePedestrian->PathFollowerComponent->StopFollowing();
+		}
+		if (episodePedestrian->PedestrianRuntimeComponent)
+		{
+			episodePedestrian->PedestrianRuntimeComponent->bAutoStart = false;
+			episodePedestrian->PedestrianRuntimeComponent->bEnableRobotReaction = false;
+			episodePedestrian->PedestrianRuntimeComponent->StopFollowing();
+		}
 	}
 
 	if (UEpisodePlaceableComponent* placeableComponent = pedestrian->FindComponentByClass<UEpisodePlaceableComponent>())
@@ -2161,6 +2204,15 @@ bool UEpisodeAuthoringSubsystem::SpawnEditorPedestrianActor(
 		placeableComponent->Category = EEpisodeActorCategory::Pedestrian;
 		placeableComponent->MobilityMode = EEpisodeMobilityMode::Static;
 		placeableComponent->bAuthoringSelectable = false;
+	}
+	else
+	{
+		UE_LOG(
+			LogEpisodeAuthoring,
+			Verbose,
+			TEXT("Spawned pedestrian editor actor has no EpisodePlaceableComponent | Class: %s | InstanceId: %s"),
+			*spawnClass->GetPathName(),
+			*spec.InstanceId);
 	}
 
 	outActor = pedestrian;

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Actor.h"
 #include "Shared/EpisodeCoreTypes.h"
 #include "EpisodePlacementPreviewActor.generated.h"
 
@@ -58,6 +57,8 @@ public:
 	double GetPlacementRadius2D() const { return PlacementRadius2D; }
 
 private:
+	bool ConfigureActorPreviewFromActor(AActor* actor, FName previewId);
+	bool ConfigureActorPreviewFromSpawnedActor(TSubclassOf<AActor> actorClass);
 	void ClearPreviewMeshes();
 	void SetStaticMeshPreview(UStaticMesh* staticMesh);
 	void SetSkeletalMeshPreview(USkeletalMesh* skeletalMesh);

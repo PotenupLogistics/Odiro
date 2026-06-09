@@ -3,6 +3,7 @@
 #include "Components/Button.h"
 #include "Components/EditableText.h"
 #include "Components/EditableTextBox.h"
+#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/Editor/EpisodeEditorController.h"
@@ -55,6 +56,16 @@ void UEpisodePlaceableContextMenuWidget::NativeOnInitialized()
 	{
 		EditInstanceIdButton->OnClicked.RemoveDynamic(this, &UEpisodePlaceableContextMenuWidget::HandleEditInstanceIdButtonClicked);
 		EditInstanceIdButton->OnClicked.AddDynamic(this, &UEpisodePlaceableContextMenuWidget::HandleEditInstanceIdButtonClicked);
+	}
+	if (WorldOrientationButton)
+	{
+		WorldOrientationButton->OnClicked.RemoveDynamic(this, &UEpisodePlaceableContextMenuWidget::HandleWorldOrientationButtonClicked);
+		WorldOrientationButton->OnClicked.AddDynamic(this, &UEpisodePlaceableContextMenuWidget::HandleWorldOrientationButtonClicked);
+	}
+	if (RelativeOrientationButton)
+	{
+		RelativeOrientationButton->OnClicked.RemoveDynamic(this, &UEpisodePlaceableContextMenuWidget::HandleRelativeOrientationButtonClicked);
+		RelativeOrientationButton->OnClicked.AddDynamic(this, &UEpisodePlaceableContextMenuWidget::HandleRelativeOrientationButtonClicked);
 	}
 	if (DeleteButton)
 	{
@@ -156,6 +167,8 @@ void UEpisodePlaceableContextMenuWidget::RefreshFromSelectedPlaceable()
 	}
 
 	SetTransformFieldTexts(ownerActor->GetActorTransform());
+	ApplyEditPermissions(placeableComponent);
+	ApplyOrientationControls(placeableComponent);
 	bRefreshingFields = false;
 }
 
@@ -169,6 +182,24 @@ void UEpisodePlaceableContextMenuWidget::HandleEditInstanceIdButtonClicked()
 	InstanceIdEditableText->SetKeyboardFocus();
 }
 
+void UEpisodePlaceableContextMenuWidget::HandleWorldOrientationButtonClicked()
+{
+	if (AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer()))
+	{
+		editorController->SetTransformGizmoOrientationMode(EEpisodeTransformGizmoOrientationMode::World);
+		RefreshFromSelectedPlaceable();
+	}
+}
+
+void UEpisodePlaceableContextMenuWidget::HandleRelativeOrientationButtonClicked()
+{
+	if (AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer()))
+	{
+		editorController->SetTransformGizmoOrientationMode(EEpisodeTransformGizmoOrientationMode::Relative);
+		RefreshFromSelectedPlaceable();
+	}
+}
+
 void UEpisodePlaceableContextMenuWidget::HandleDeleteButtonClicked()
 {
 	AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer());
@@ -179,6 +210,14 @@ void UEpisodePlaceableContextMenuWidget::HandleDeleteButtonClicked()
 	}
 
 	FString failureReason;
+	UEpisodePlaceableComponent* placeableComponent = SelectedPlaceableComponent.Get();
+	if (!placeableComponent || !placeableComponent->bAuthoringDeletable)
+	{
+		UE_LOG(LogEpisodePlaceableContextMenuWidget, Warning, TEXT("Selected placeable cannot be deleted."));
+		FlashInvalidInstanceIdField();
+		return;
+	}
+
 	if (!editorController->DeleteSelectedPlaceable(failureReason))
 	{
 		UE_LOG(LogEpisodePlaceableContextMenuWidget, Warning, TEXT("Failed to delete selected placeable | %s"), *failureReason);
@@ -198,6 +237,15 @@ void UEpisodePlaceableContextMenuWidget::HandleInstanceIdCommitted(const FText& 
 	if (!editorController)
 	{
 		UE_LOG(LogEpisodePlaceableContextMenuWidget, Warning, TEXT("Owning player is not an EpisodeEditorController."));
+		return;
+	}
+
+	UEpisodePlaceableComponent* placeableComponent = SelectedPlaceableComponent.Get();
+	if (!placeableComponent || !placeableComponent->bAuthoringRenamable)
+	{
+		UE_LOG(LogEpisodePlaceableContextMenuWidget, Warning, TEXT("Selected placeable cannot be renamed."));
+		RefreshFromSelectedPlaceable();
+		FlashInvalidInstanceIdField();
 		return;
 	}
 
@@ -286,6 +334,14 @@ bool UEpisodePlaceableContextMenuWidget::CommitTransformField(
 	if (commitMethod == ETextCommit::OnCleared)
 	{
 		RefreshFromSelectedPlaceable();
+		return false;
+	}
+	UEpisodePlaceableComponent* placeableComponent = SelectedPlaceableComponent.Get();
+	if (!IsTransformFieldEditable(placeableComponent, field))
+	{
+		UE_LOG(LogEpisodePlaceableContextMenuWidget, Warning, TEXT("Rejected non-editable transform field | Field: %s"), *TransformFieldName(field));
+		RefreshFromSelectedPlaceable();
+		FlashInvalidField(textBox);
 		return false;
 	}
 
@@ -392,6 +448,135 @@ bool UEpisodePlaceableContextMenuWidget::TryReadDoubleField(UEditableTextBox* te
 	}
 
 	return true;
+}
+
+bool UEpisodePlaceableContextMenuWidget::IsTransformFieldEditable(
+	const UEpisodePlaceableComponent* placeableComponent,
+	EEpisodePlaceableContextMenuTransformField field) const
+{
+	if (!placeableComponent) return false;
+
+	switch (field)
+	{
+	case EEpisodePlaceableContextMenuTransformField::LocationX:
+	case EEpisodePlaceableContextMenuTransformField::LocationY:
+	case EEpisodePlaceableContextMenuTransformField::LocationZ:
+		return placeableComponent->bAuthoringAllowLocationEdit;
+	case EEpisodePlaceableContextMenuTransformField::RotationX:
+	case EEpisodePlaceableContextMenuTransformField::RotationY:
+	case EEpisodePlaceableContextMenuTransformField::RotationZ:
+		return placeableComponent->bAuthoringAllowRotationEdit;
+	case EEpisodePlaceableContextMenuTransformField::ScaleX:
+	case EEpisodePlaceableContextMenuTransformField::ScaleY:
+	case EEpisodePlaceableContextMenuTransformField::ScaleZ:
+		return placeableComponent->bAuthoringAllowScaleEdit;
+	default:
+		return false;
+	}
+}
+
+void UEpisodePlaceableContextMenuWidget::ApplyEditPermissions(
+	const UEpisodePlaceableComponent* placeableComponent)
+{
+	const bool bCanRename = placeableComponent && placeableComponent->bAuthoringRenamable;
+	const bool bCanDelete = placeableComponent && placeableComponent->bAuthoringDeletable;
+	if (EditInstanceIdButton)
+	{
+		EditInstanceIdButton->SetVisibility(bCanRename ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		EditInstanceIdButton->SetIsEnabled(bCanRename);
+	}
+	if (InstanceIdEditableText)
+	{
+		InstanceIdEditableText->SetVisibility(bCanRename ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		InstanceIdEditableText->SetIsReadOnly(!bCanRename);
+		InstanceIdEditableText->SetIsEnabled(bCanRename);
+	}
+	if (DeleteButton)
+	{
+		DeleteButton->SetVisibility(bCanDelete ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		DeleteButton->SetIsEnabled(bCanDelete);
+	}
+
+	const bool bCanEditLocation = placeableComponent && placeableComponent->bAuthoringAllowLocationEdit;
+	const bool bCanEditRotation = placeableComponent && placeableComponent->bAuthoringAllowRotationEdit;
+	const bool bCanEditScale = placeableComponent && placeableComponent->bAuthoringAllowScaleEdit;
+
+	if (LocationSizeBox)
+	{
+		LocationSizeBox->SetVisibility(bCanEditLocation ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+	if (RotationSizeBox)
+	{
+		RotationSizeBox->SetVisibility(bCanEditRotation ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+	if (ScaleSizeBox)
+	{
+		ScaleSizeBox->SetVisibility(bCanEditScale ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+
+	SetTextBoxEditable(LocationXTextBox, bCanEditLocation);
+	SetTextBoxEditable(LocationYTextBox, bCanEditLocation);
+	SetTextBoxEditable(LocationZTextBox, bCanEditLocation);
+	SetTextBoxEditable(RotationXTextBox, bCanEditRotation);
+	SetTextBoxEditable(RotationYTextBox, bCanEditRotation);
+	SetTextBoxEditable(RotationZTextBox, bCanEditRotation);
+	SetTextBoxEditable(ScaleXTextBox, bCanEditScale);
+	SetTextBoxEditable(ScaleYTextBox, bCanEditScale);
+	SetTextBoxEditable(ScaleZTextBox, bCanEditScale);
+}
+
+void UEpisodePlaceableContextMenuWidget::ApplyOrientationControls(
+	const UEpisodePlaceableComponent* placeableComponent)
+{
+	AEpisodeEditorController* editorController = Cast<AEpisodeEditorController>(GetOwningPlayer());
+	const bool bCanEditOrientation = placeableComponent
+		&& editorController
+		&& editorController->CanEditTransformGizmoOrientationForSelection();
+	const ESlateVisibility orientationVisibility = bCanEditOrientation
+		? ESlateVisibility::Visible
+		: ESlateVisibility::Collapsed;
+
+	if (OrientationSizeBox)
+	{
+		OrientationSizeBox->SetVisibility(orientationVisibility);
+	}
+	if (WorldOrientationButton)
+	{
+		WorldOrientationButton->SetVisibility(orientationVisibility);
+	}
+	if (RelativeOrientationButton)
+	{
+		RelativeOrientationButton->SetVisibility(orientationVisibility);
+	}
+
+	if (!bCanEditOrientation)
+	{
+		return;
+	}
+
+	const EEpisodeTransformGizmoOrientationMode effectiveOrientationMode =
+		editorController->GetEffectiveTransformGizmoOrientationMode();
+	if (WorldOrientationButton)
+	{
+		WorldOrientationButton->SetIsEnabled(
+			effectiveOrientationMode != EEpisodeTransformGizmoOrientationMode::World);
+	}
+	if (RelativeOrientationButton)
+	{
+		RelativeOrientationButton->SetIsEnabled(
+			effectiveOrientationMode != EEpisodeTransformGizmoOrientationMode::Relative);
+	}
+}
+
+void UEpisodePlaceableContextMenuWidget::SetTextBoxEditable(
+	UEditableTextBox* textBox,
+	bool bEditable) const
+{
+	if (!textBox) return;
+
+	textBox->SetVisibility(bEditable ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	textBox->SetIsReadOnly(!bEditable);
+	textBox->SetIsEnabled(bEditable);
 }
 
 void UEpisodePlaceableContextMenuWidget::FlashInvalidField(UEditableTextBox* textBox)

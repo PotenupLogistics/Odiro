@@ -95,11 +95,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Gizmo")
 	void SetGizmoMode(EEpisodeTransformGizmoMode mode);
 
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Gizmo")
+	void SetGizmoOrientationMode(EEpisodeTransformGizmoOrientationMode orientationMode);
+
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
 	EEpisodeTransformGizmoHandle GetHoveredHandle() const { return HoveredHandle; }
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
 	EEpisodeTransformGizmoMode GetGizmoMode() const { return GizmoMode; }
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
+	EEpisodeTransformGizmoOrientationMode GetGizmoOrientationMode() const { return OrientationMode; }
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
 	bool IsHandleEnabled(EEpisodeTransformGizmoHandle handle) const;
@@ -128,6 +134,9 @@ private:
 
 	UPROPERTY(Transient)
 	EEpisodeTransformGizmoMode GizmoMode = EEpisodeTransformGizmoMode::Translate;
+
+	UPROPERTY(Transient)
+	EEpisodeTransformGizmoOrientationMode OrientationMode = EEpisodeTransformGizmoOrientationMode::Relative;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> XAxisMaterial;

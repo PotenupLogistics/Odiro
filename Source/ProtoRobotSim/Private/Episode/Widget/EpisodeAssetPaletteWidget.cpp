@@ -168,13 +168,14 @@ bool UEpisodeAssetPaletteWidget::ShouldIncludeSpecialEntry(
 	bool bIncludePedestrian,
 	bool bIncludeRobotRoute)
 {
+	(void)bIncludeRobotRoute;
 	switch (entry.ItemType)
 	{
 	case EEpisodePaletteItemType::Pedestrian:
 		return bIncludePedestrian;
 	case EEpisodePaletteItemType::RobotStart:
 	case EEpisodePaletteItemType::RobotGoal:
-		return bIncludeRobotRoute;
+		return false;
 	case EEpisodePaletteItemType::StaticObstacle:
 	default:
 		return false;

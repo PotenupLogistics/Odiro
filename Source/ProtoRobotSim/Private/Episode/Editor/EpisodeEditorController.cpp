@@ -16,6 +16,103 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogEpisodeEditorController, Log, All);
 
+namespace
+{
+	bool IsRobotRouteMarkerPlaceable(const UEpisodePlaceableComponent* placeableComponent)
+	{
+		if (!placeableComponent) return false;
+
+		return placeableComponent->AuthoringRole == EEpisodePlaceableAuthoringRole::RobotStartMarker
+			|| placeableComponent->AuthoringRole == EEpisodePlaceableAuthoringRole::RobotGoalMarker;
+	}
+
+	bool IsTransformModeAllowedForPlaceable(
+		const UEpisodePlaceableComponent* placeableComponent,
+		EEpisodeTransformGizmoMode mode)
+	{
+		if (!placeableComponent) return false;
+
+		switch (mode)
+		{
+		case EEpisodeTransformGizmoMode::Translate:
+			return placeableComponent->bAuthoringAllowLocationEdit;
+		case EEpisodeTransformGizmoMode::Rotate:
+			return placeableComponent->bAuthoringAllowRotationEdit;
+		case EEpisodeTransformGizmoMode::Scale:
+			return placeableComponent->bAuthoringAllowScaleEdit;
+		default:
+			return false;
+		}
+	}
+
+	bool IsTransformHandleAllowedForPlaceable(
+		const UEpisodePlaceableComponent* placeableComponent,
+		EEpisodeTransformGizmoHandle handle)
+	{
+		if (!placeableComponent) return false;
+
+		switch (handle)
+		{
+		case EEpisodeTransformGizmoHandle::TranslateX:
+		case EEpisodeTransformGizmoHandle::TranslateY:
+		case EEpisodeTransformGizmoHandle::TranslateZ:
+		case EEpisodeTransformGizmoHandle::TranslateXY:
+		case EEpisodeTransformGizmoHandle::TranslateXZ:
+		case EEpisodeTransformGizmoHandle::TranslateYZ:
+			return placeableComponent->bAuthoringAllowLocationEdit;
+		case EEpisodeTransformGizmoHandle::RotateX:
+		case EEpisodeTransformGizmoHandle::RotateY:
+		case EEpisodeTransformGizmoHandle::RotateZ:
+			return placeableComponent->bAuthoringAllowRotationEdit;
+		case EEpisodeTransformGizmoHandle::ScaleX:
+		case EEpisodeTransformGizmoHandle::ScaleY:
+		case EEpisodeTransformGizmoHandle::ScaleZ:
+		case EEpisodeTransformGizmoHandle::ScaleXY:
+		case EEpisodeTransformGizmoHandle::ScaleXZ:
+		case EEpisodeTransformGizmoHandle::ScaleYZ:
+		case EEpisodeTransformGizmoHandle::ScaleUniform:
+			return placeableComponent->bAuthoringAllowScaleEdit;
+		case EEpisodeTransformGizmoHandle::None:
+		default:
+			return false;
+		}
+	}
+
+	bool IsTransformEditAllowedForPlaceable(
+		const UEpisodePlaceableComponent* placeableComponent,
+		const FTransform& currentTransform,
+		const FTransform& requestedTransform,
+		FString& outFailureReason)
+	{
+		if (!placeableComponent)
+		{
+			outFailureReason = TEXT("No selected placeable is editable.");
+			return false;
+		}
+
+		if (!placeableComponent->bAuthoringAllowLocationEdit
+			&& !currentTransform.GetLocation().Equals(requestedTransform.GetLocation(), KINDA_SMALL_NUMBER))
+		{
+			outFailureReason = TEXT("Selected placeable location cannot be edited.");
+			return false;
+		}
+		if (!placeableComponent->bAuthoringAllowRotationEdit
+			&& !currentTransform.GetRotation().Equals(requestedTransform.GetRotation(), KINDA_SMALL_NUMBER))
+		{
+			outFailureReason = TEXT("Selected placeable rotation cannot be edited.");
+			return false;
+		}
+		if (!placeableComponent->bAuthoringAllowScaleEdit
+			&& !currentTransform.GetScale3D().Equals(requestedTransform.GetScale3D(), KINDA_SMALL_NUMBER))
+		{
+			outFailureReason = TEXT("Selected placeable scale cannot be edited.");
+			return false;
+		}
+
+		return true;
+	}
+}
+
 AEpisodeEditorController::AEpisodeEditorController()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -414,6 +511,36 @@ void AEpisodeEditorController::RemoveEditorRootWidget()
 	EditorRootWidget = nullptr;
 }
 
+EEpisodeTransformGizmoOrientationMode AEpisodeEditorController::GetEffectiveTransformGizmoOrientationMode() const
+{
+	return GetEffectiveTransformGizmoOrientationModeForPlaceable(SelectedPlaceableComponent.Get());
+}
+
+bool AEpisodeEditorController::CanEditTransformGizmoOrientationForSelection() const
+{
+	const UEpisodePlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
+	return IsEditorSelectablePlaceable(selectedPlaceable)
+		&& !IsRobotRouteMarkerPlaceable(selectedPlaceable);
+}
+
+void AEpisodeEditorController::SetTransformGizmoOrientationMode(
+	EEpisodeTransformGizmoOrientationMode orientationMode)
+{
+	if (TransformGizmoOrientationMode == orientationMode)
+	{
+		return;
+	}
+
+	if (bIsTransformGizmoDragging)
+	{
+		EndTransformGizmoDrag();
+	}
+
+	TransformGizmoOrientationMode = orientationMode;
+	UpdateTransformGizmoForSelection();
+	UpdatePlaceableContextMenuForSelection(false);
+}
+
 bool AEpisodeEditorController::TryUpdateSelectedPlaceableTransform(
 	const FTransform& transform,
 	FString& outFailureReason)
@@ -434,7 +561,40 @@ bool AEpisodeEditorController::TryUpdateSelectedPlaceableTransform(
 		return false;
 	}
 
-	if (!authoringSubsystem->UpdateStaticObstacleTransform(selectedPlaceable->InstanceId, transform, outFailureReason))
+	AActor* selectedActor = selectedPlaceable->GetOwner();
+	if (!IsValid(selectedActor))
+	{
+		outFailureReason = TEXT("Selected placeable actor is unavailable.");
+		return false;
+	}
+	const FTransform currentTransform = selectedActor->GetActorTransform();
+	if (!IsTransformEditAllowedForPlaceable(selectedPlaceable, currentTransform, transform, outFailureReason))
+	{
+		return false;
+	}
+
+	bool bUpdated = false;
+	if (selectedPlaceable->Category == EEpisodeActorCategory::StaticObstacle)
+	{
+		bUpdated = authoringSubsystem->UpdateStaticObstacleTransform(
+			selectedPlaceable->InstanceId,
+			transform,
+			outFailureReason);
+	}
+	else if (selectedPlaceable->AuthoringRole == EEpisodePlaceableAuthoringRole::RobotStartMarker)
+	{
+		bUpdated = authoringSubsystem->UpdateRobotStartPointTransform(transform, outFailureReason);
+	}
+	else if (selectedPlaceable->AuthoringRole == EEpisodePlaceableAuthoringRole::RobotGoalMarker)
+	{
+		bUpdated = authoringSubsystem->UpdateRobotGoalPointTransform(transform, outFailureReason);
+	}
+	else
+	{
+		outFailureReason = TEXT("Selected placeable transform editing is not supported.");
+	}
+
+	if (!bUpdated)
 	{
 		return false;
 	}
@@ -454,6 +614,11 @@ bool AEpisodeEditorController::TryRenameSelectedPlaceableInstanceId(
 	if (!IsEditorSelectablePlaceable(selectedPlaceable) || selectedPlaceable->InstanceId.IsEmpty())
 	{
 		outFailureReason = TEXT("No selected placeable is editable.");
+		return false;
+	}
+	if (!selectedPlaceable->bAuthoringRenamable)
+	{
+		outFailureReason = TEXT("Selected placeable cannot be renamed.");
 		return false;
 	}
 
@@ -488,6 +653,11 @@ bool AEpisodeEditorController::DeleteSelectedPlaceable(FString& outFailureReason
 	if (!IsEditorSelectablePlaceable(selectedPlaceable) || selectedPlaceable->InstanceId.IsEmpty())
 	{
 		outFailureReason = TEXT("No selected placeable is editable.");
+		return false;
+	}
+	if (!selectedPlaceable->bAuthoringDeletable)
+	{
+		outFailureReason = TEXT("Selected placeable cannot be deleted.");
 		return false;
 	}
 
@@ -847,6 +1017,10 @@ bool AEpisodeEditorController::BeginTransformGizmoDrag(
 	{
 		return false;
 	}
+	if (!IsTransformHandleAllowedForPlaceable(selectedPlaceable, handle))
+	{
+		return false;
+	}
 
 	bIsLookInputHeld = false;
 	LookCaptureAccumulatedDelta = 0.0;
@@ -857,12 +1031,19 @@ bool AEpisodeEditorController::BeginTransformGizmoDrag(
 	ActiveTransformGizmoHandle = handle;
 	ActiveTransformGizmoInstanceId = selectedPlaceable->InstanceId;
 	TransformGizmoDragStartTransform = selectedActor->GetActorTransform();
+	ActiveTransformGizmoOrientationMode = GetEffectiveTransformGizmoOrientationModeForPlaceable(selectedPlaceable);
 	LastTransformGizmoDragFailureReason.Reset();
 
 	const FVector startLocation = TransformGizmoDragStartTransform.GetLocation();
-	const FVector startXAxis = TransformGizmoDragStartTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
-	const FVector startYAxis = TransformGizmoDragStartTransform.GetUnitAxis(EAxis::Y).GetSafeNormal();
-	const FVector startZAxis = TransformGizmoDragStartTransform.GetUnitAxis(EAxis::Z).GetSafeNormal();
+	FVector startXAxis = FVector::ForwardVector;
+	FVector startYAxis = FVector::RightVector;
+	FVector startZAxis = FVector::UpVector;
+	GetTransformGizmoBasis(
+		TransformGizmoDragStartTransform,
+		ActiveTransformGizmoOrientationMode,
+		startXAxis,
+		startYAxis,
+		startZAxis);
 
 	auto buildCameraFacingAxisPlaneNormal = [this](const FVector& axis)
 	{
@@ -1015,6 +1196,7 @@ void AEpisodeEditorController::ResetTransformGizmoDrag()
 	TransformGizmoDragPlaneNormal = FVector::UpVector;
 	TransformGizmoDragAxis = FVector::ForwardVector;
 	TransformGizmoDragStartDirection = FVector::ForwardVector;
+	ActiveTransformGizmoOrientationMode = EEpisodeTransformGizmoOrientationMode::Relative;
 	LastTransformGizmoDragFailureReason.Reset();
 	DraggedPlaceableComponent.Reset();
 
@@ -1034,6 +1216,10 @@ bool AEpisodeEditorController::BuildTransformGizmoDragTransform(FTransform& outT
 	{
 		return false;
 	}
+	if (!IsTransformHandleAllowedForPlaceable(DraggedPlaceableComponent.Get(), ActiveTransformGizmoHandle))
+	{
+		return false;
+	}
 
 	const FVector startLocation = TransformGizmoDragStartTransform.GetLocation();
 	FVector currentPoint = FVector::ZeroVector;
@@ -1045,9 +1231,15 @@ bool AEpisodeEditorController::BuildTransformGizmoDragTransform(FTransform& outT
 	outTransform = TransformGizmoDragStartTransform;
 	const FVector rawDelta = currentPoint - TransformGizmoDragStartPoint;
 	const FVector planeDelta = FVector::VectorPlaneProject(rawDelta, TransformGizmoDragPlaneNormal);
-	const FVector startXAxis = TransformGizmoDragStartTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
-	const FVector startYAxis = TransformGizmoDragStartTransform.GetUnitAxis(EAxis::Y).GetSafeNormal();
-	const FVector startZAxis = TransformGizmoDragStartTransform.GetUnitAxis(EAxis::Z).GetSafeNormal();
+	FVector startXAxis = FVector::ForwardVector;
+	FVector startYAxis = FVector::RightVector;
+	FVector startZAxis = FVector::UpVector;
+	GetTransformGizmoBasis(
+		TransformGizmoDragStartTransform,
+		ActiveTransformGizmoOrientationMode,
+		startXAxis,
+		startYAxis,
+		startZAxis);
 	auto makeScaleFactor = [](double dragDistanceCm)
 	{
 		return FMath::Max(0.05, 1.0 + dragDistanceCm / 100.0);
@@ -1149,6 +1341,11 @@ bool AEpisodeEditorController::ApplyTransformGizmoDragTransform(const FTransform
 	{
 		return false;
 	}
+	UEpisodePlaceableComponent* draggedPlaceable = DraggedPlaceableComponent.Get();
+	if (!IsEditorSelectablePlaceable(draggedPlaceable))
+	{
+		return false;
+	}
 
 	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if (!authoringSubsystem)
@@ -1157,10 +1354,38 @@ bool AEpisodeEditorController::ApplyTransformGizmoDragTransform(const FTransform
 	}
 
 	FString failureReason;
-	if (authoringSubsystem->UpdateStaticObstacleTransform(
-		ActiveTransformGizmoInstanceId,
-		transform,
-		failureReason))
+	AActor* draggedActor = draggedPlaceable->GetOwner();
+	if (!IsValid(draggedActor))
+	{
+		return false;
+	}
+	const FTransform currentTransform = draggedActor->GetActorTransform();
+	bool bUpdated = false;
+	if (!IsTransformEditAllowedForPlaceable(draggedPlaceable, currentTransform, transform, failureReason))
+	{
+		bUpdated = false;
+	}
+	else if (draggedPlaceable->Category == EEpisodeActorCategory::StaticObstacle)
+	{
+		bUpdated = authoringSubsystem->UpdateStaticObstacleTransform(
+			ActiveTransformGizmoInstanceId,
+			transform,
+			failureReason);
+	}
+	else if (draggedPlaceable->AuthoringRole == EEpisodePlaceableAuthoringRole::RobotStartMarker)
+	{
+		bUpdated = authoringSubsystem->UpdateRobotStartPointTransform(transform, failureReason);
+	}
+	else if (draggedPlaceable->AuthoringRole == EEpisodePlaceableAuthoringRole::RobotGoalMarker)
+	{
+		bUpdated = authoringSubsystem->UpdateRobotGoalPointTransform(transform, failureReason);
+	}
+	else
+	{
+		failureReason = TEXT("Selected placeable transform editing is not supported.");
+	}
+
+	if (bUpdated)
 	{
 		LastTransformGizmoDragFailureReason.Reset();
 		UpdatePlaceableContextMenuForSelection(false);
@@ -1271,7 +1496,8 @@ bool AEpisodeEditorController::IsEditorSelectablePlaceable(const UEpisodePlaceab
 {
 	return placeableComponent
 		&& placeableComponent->bAuthoringSelectable
-		&& placeableComponent->Category == EEpisodeActorCategory::StaticObstacle;
+		&& (placeableComponent->Category == EEpisodeActorCategory::StaticObstacle
+			|| IsRobotRouteMarkerPlaceable(placeableComponent));
 }
 
 bool AEpisodeEditorController::IsCursorOverEditorWidgetInputModeFocus() const
@@ -1821,7 +2047,13 @@ void AEpisodeEditorController::UpdateTransformGizmoForSelection()
 		return;
 	}
 
+	if (!IsTransformModeAllowedForPlaceable(selectedPlaceable, TransformGizmoMode))
+	{
+		TransformGizmoMode = EEpisodeTransformGizmoMode::Translate;
+	}
+
 	gizmoActor->ShowForTarget(selectedActor);
+	gizmoActor->SetGizmoOrientationMode(GetEffectiveTransformGizmoOrientationModeForPlaceable(selectedPlaceable));
 	gizmoActor->SetGizmoMode(TransformGizmoMode);
 }
 
@@ -1835,6 +2067,13 @@ void AEpisodeEditorController::HideTransformGizmo()
 
 void AEpisodeEditorController::SetTransformGizmoMode(EEpisodeTransformGizmoMode mode)
 {
+	if (UEpisodePlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
+		IsEditorSelectablePlaceable(selectedPlaceable)
+		&& !IsTransformModeAllowedForPlaceable(selectedPlaceable, mode))
+	{
+		mode = EEpisodeTransformGizmoMode::Translate;
+	}
+
 	if (TransformGizmoMode == mode)
 	{
 		return;
@@ -1850,6 +2089,37 @@ void AEpisodeEditorController::SetTransformGizmoMode(EEpisodeTransformGizmoMode 
 	{
 		TransformGizmoActor->SetGizmoMode(TransformGizmoMode);
 	}
+}
+
+EEpisodeTransformGizmoOrientationMode AEpisodeEditorController::GetEffectiveTransformGizmoOrientationModeForPlaceable(
+	const UEpisodePlaceableComponent* placeableComponent) const
+{
+	return IsRobotRouteMarkerPlaceable(placeableComponent)
+		? EEpisodeTransformGizmoOrientationMode::World
+		: TransformGizmoOrientationMode;
+}
+
+void AEpisodeEditorController::GetTransformGizmoBasis(
+	const FTransform& transform,
+	EEpisodeTransformGizmoOrientationMode orientationMode,
+	FVector& outXAxis,
+	FVector& outYAxis,
+	FVector& outZAxis) const
+{
+	if (orientationMode == EEpisodeTransformGizmoOrientationMode::World)
+	{
+		outXAxis = FVector::ForwardVector;
+		outYAxis = FVector::RightVector;
+		outZAxis = FVector::UpVector;
+		return;
+	}
+
+	outXAxis = transform.GetUnitAxis(EAxis::X).GetSafeNormal();
+	outYAxis = transform.GetUnitAxis(EAxis::Y).GetSafeNormal();
+	outZAxis = transform.GetUnitAxis(EAxis::Z).GetSafeNormal();
+	if (outXAxis.IsNearlyZero()) outXAxis = FVector::ForwardVector;
+	if (outYAxis.IsNearlyZero()) outYAxis = FVector::RightVector;
+	if (outZAxis.IsNearlyZero()) outZAxis = FVector::UpVector;
 }
 
 UEpisodePlaceableContextMenuWidget* AEpisodeEditorController::EnsurePlaceableContextMenuWidget()

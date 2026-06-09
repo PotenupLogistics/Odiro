@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Episode/Data/EpisodeStaticObstaclePropCatalog.h"
+#include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/Editor/EpisodeEditorTypes.h"
 #include "Shared/EpisodeCompileTypes.h"
 #include "Shared/EpisodeSpecTypes.h"
@@ -134,6 +135,16 @@ public:
 		FString& outFailureReason);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	bool UpdateRobotStartPointTransform(
+		const FTransform& transform,
+		FString& outFailureReason);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	bool UpdateRobotGoalPointTransform(
+		const FTransform& transform,
+		FString& outFailureReason);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
 	bool RenameStaticObstacleInstanceId(
 		const FString& oldInstanceId,
 		const FString& newInstanceId,
@@ -218,6 +229,8 @@ private:
 	FString GeneratePedestrianInstanceId();
 	bool ContainsInstanceId(const FString& instanceId) const;
 	void InitializeDraftDefaults();
+	bool EnsureSingleRobotRouteSpec(TArray<FString>& outDiagnostics, bool& bOutDraftChanged);
+	bool ValidateSingleRobotRouteSpecForExport(TArray<FString>& outDiagnostics) const;
 	void ClearEditorView();
 
 	// import된 draft에서 정적 장애물만 AEpisodeStaticObstacle로 EditorMap에 재생성.
@@ -236,7 +249,12 @@ private:
 		TObjectPtr<AActor>& markerActor,
 		TSubclassOf<AActor> markerClass,
 		const FTransform& transform,
+		EEpisodePlaceableAuthoringRole markerRole,
 		FString& outFailureReason);
+	bool ConfigureRobotRouteMarkerActor(
+		AActor* markerActor,
+		EEpisodePlaceableAuthoringRole markerRole,
+		FString& outFailureReason) const;
 	void AddStaticObstacleViewRecord(
 		const FEpisodePlaceableInstanceSpec& spec,
 		const FEpisodeStaticObstaclePropEntry& propEntry,

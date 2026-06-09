@@ -36,7 +36,7 @@ public:
 	bool bIncludePedestrianPlacement = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
-	bool bIncludeRobotRoutePlacement = true;
+	bool bIncludeRobotRoutePlacement = false;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
 	TObjectPtr<USizeBox> PaletteSizeBox;

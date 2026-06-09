@@ -43,6 +43,13 @@ enum class EEpisodeTransformGizmoMode : uint8
 };
 
 UENUM(BlueprintType)
+enum class EEpisodeTransformGizmoOrientationMode : uint8
+{
+	World,
+	Relative
+};
+
+UENUM(BlueprintType)
 enum class EEpisodePaletteItemType : uint8
 {
 	StaticObstacle,

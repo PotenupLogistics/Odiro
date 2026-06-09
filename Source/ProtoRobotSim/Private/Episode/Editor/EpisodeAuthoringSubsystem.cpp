@@ -2,6 +2,7 @@
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Components/SphereComponent.h"
 #include "Engine/World.h"
 #include "Episode/Actors/EpisodeStaticObstacle.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
@@ -25,6 +26,14 @@ namespace
 	const FString MovementModelKey(TEXT("movement_model"));
 	const FString PlannedStartCmKey(TEXT("planned_start_cm"));
 	const FString PlannedGoalCmKey(TEXT("planned_goal_cm"));
+	const FString DefaultRobotInstanceId(TEXT("robot_01"));
+	const FString DefaultRobotAssetId(TEXT("delivery_bot"));
+	const FString RobotStartMarkerInstanceId(TEXT("robot_start_point"));
+	const FString RobotGoalMarkerInstanceId(TEXT("robot_goal_point"));
+	const FString RobotStartMarkerAssetId(TEXT("start_point"));
+	const FString RobotGoalMarkerAssetId(TEXT("goal_point"));
+	const FVector DefaultRobotStartLocationCm(-600.0, 0.0, 0.0);
+	const FVector DefaultRobotGoalLocationCm(600.0, 0.0, 0.0);
 
 	FEpisodeParamValue MakeStringParamValue(const FString& value)
 	{
@@ -87,6 +96,14 @@ void UEpisodeAuthoringSubsystem::NewDraft()
 {
 	ClearDraft();
 	InitializeDraftDefaults();
+	TArray<FString> diagnostics;
+	if (!RebuildEditorViewFromDraft(diagnostics))
+	{
+		for (const FString& diagnostic : diagnostics)
+		{
+			UE_LOG(LogEpisodeAuthoring, Warning, TEXT("New draft editor view rebuild failed | %s"), *diagnostic);
+		}
+	}
 }
 
 bool UEpisodeAuthoringSubsystem::LoadEpisodeSetupJsonFile(
@@ -436,7 +453,12 @@ bool UEpisodeAuthoringSubsystem::SetRobotStartLocation(
 		InitializeDraftDefaults();
 	}
 
-	outMarker = SpawnOrReplaceRouteMarker(RobotStartMarkerActor, StartPointClass, transform, outFailureReason);
+	outMarker = SpawnOrReplaceRouteMarker(
+		RobotStartMarkerActor,
+		StartPointClass,
+		transform,
+		EEpisodePlaceableAuthoringRole::RobotStartMarker,
+		outFailureReason);
 	if (!outMarker)
 	{
 		return false;
@@ -499,7 +521,12 @@ bool UEpisodeAuthoringSubsystem::SetRobotGoalLocation(
 		return false;
 	}
 
-	outMarker = SpawnOrReplaceRouteMarker(RobotGoalMarkerActor, GoalPointClass, transform, outFailureReason);
+	outMarker = SpawnOrReplaceRouteMarker(
+		RobotGoalMarkerActor,
+		GoalPointClass,
+		transform,
+		EEpisodePlaceableAuthoringRole::RobotGoalMarker,
+		outFailureReason);
 	if (!outMarker)
 	{
 		return false;
@@ -565,6 +592,71 @@ bool UEpisodeAuthoringSubsystem::UpdateStaticObstacleTransform(
 		*transform.GetLocation().ToCompactString(),
 		transform.Rotator().Yaw);
 
+	return true;
+}
+
+bool UEpisodeAuthoringSubsystem::UpdateRobotStartPointTransform(
+	const FTransform& transform,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+	if (!CanPlaceEditorGroundActor(transform, outFailureReason))
+	{
+		return false;
+	}
+
+	FEpisodePlaceableInstanceSpec* robotSpec = FindDeliveryBotSpec();
+	if (!robotSpec || !robotSpec->DeliveryBot.bHasStartLocation || !robotSpec->DeliveryBot.bHasGoalLocation)
+	{
+		outFailureReason = TEXT("Robot route points are not initialized.");
+		return false;
+	}
+	if (!IsValid(RobotStartMarkerActor))
+	{
+		outFailureReason = TEXT("Robot start marker actor was not found.");
+		return false;
+	}
+
+	const FVector location = transform.GetLocation();
+	robotSpec->Transform.SetLocation(location);
+	robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = location;
+	RobotStartMarkerActor->SetActorLocation(location, false, nullptr, ETeleportType::TeleportPhysics);
+
+	DraftWorldSpec.SpecHash.Reset();
+	bDirty = true;
+	return true;
+}
+
+bool UEpisodeAuthoringSubsystem::UpdateRobotGoalPointTransform(
+	const FTransform& transform,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+	if (!CanPlaceEditorGroundActor(transform, outFailureReason))
+	{
+		return false;
+	}
+
+	FEpisodePlaceableInstanceSpec* robotSpec = FindDeliveryBotSpec();
+	if (!robotSpec || !robotSpec->DeliveryBot.bHasStartLocation || !robotSpec->DeliveryBot.bHasGoalLocation)
+	{
+		outFailureReason = TEXT("Robot route points are not initialized.");
+		return false;
+	}
+	if (!IsValid(RobotGoalMarkerActor))
+	{
+		outFailureReason = TEXT("Robot goal marker actor was not found.");
+		return false;
+	}
+
+	const FVector location = transform.GetLocation();
+	robotSpec->DeliveryBot.bSpawnOnly = false;
+	robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = location;
+	robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
+	RobotGoalMarkerActor->SetActorLocation(location, false, nullptr, ETeleportType::TeleportPhysics);
+
+	DraftWorldSpec.SpecHash.Reset();
+	bDirty = true;
 	return true;
 }
 
@@ -740,6 +832,10 @@ bool UEpisodeAuthoringSubsystem::ExportEpisodeSetupJsonString(
 {
 	outJsonString.Reset();
 	outDiagnostics.Reset();
+	if (!ValidateSingleRobotRouteSpecForExport(outDiagnostics))
+	{
+		return false;
+	}
 
 	TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
 	rootObject->SetStringField(TEXT("schema"), TEXT("episode_actor_spawn_mvp"));
@@ -1442,6 +1538,158 @@ void UEpisodeAuthoringSubsystem::InitializeDraftDefaults()
 	DraftWorldSpec.Seeds.DynamicActorSeed = BaseSeed + 303;
 	DraftWorldSpec.Seeds.EventSeed = BaseSeed + 404;
 	DraftWorldSpec.Seeds.PolicySeed = BaseSeed + 505;
+
+	FEpisodePlaceableInstanceSpec robotSpec;
+	robotSpec.InstanceId = DefaultRobotInstanceId;
+	robotSpec.AssetId = DefaultRobotAssetId;
+	robotSpec.Category = EEpisodeActorCategory::DeliveryBot;
+	robotSpec.Transform = FTransform(FRotator::ZeroRotator, DefaultRobotStartLocationCm);
+	robotSpec.DeliveryBot.bSpawnOnly = false;
+	robotSpec.DeliveryBot.bHasStartLocation = true;
+	robotSpec.DeliveryBot.bHasGoalLocation = true;
+	robotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = DefaultRobotStartLocationCm;
+	robotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = DefaultRobotGoalLocationCm;
+	robotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
+	DraftWorldSpec.Placeables.Add(robotSpec);
+}
+
+bool UEpisodeAuthoringSubsystem::EnsureSingleRobotRouteSpec(
+	TArray<FString>& outDiagnostics,
+	bool& bOutDraftChanged)
+{
+	bOutDraftChanged = false;
+
+	FEpisodePlaceableInstanceSpec* robotSpec = nullptr;
+	int32 robotSpecCount = 0;
+	for (FEpisodePlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
+	{
+		if (spec.Category == EEpisodeActorCategory::DeliveryBot || spec.Category == EEpisodeActorCategory::RoadVehicle)
+		{
+			++robotSpecCount;
+			if (!robotSpec)
+			{
+				robotSpec = &spec;
+			}
+		}
+	}
+
+	if (robotSpecCount > 1)
+	{
+		outDiagnostics.Add(FString::Printf(
+			TEXT("Episode editor requires exactly one robot route, but %d robot specs were found."),
+			robotSpecCount));
+		return false;
+	}
+
+	if (!robotSpec)
+	{
+		FEpisodePlaceableInstanceSpec newRobotSpec;
+		newRobotSpec.InstanceId = DefaultRobotInstanceId;
+		newRobotSpec.AssetId = DefaultRobotAssetId;
+		newRobotSpec.Category = EEpisodeActorCategory::DeliveryBot;
+		newRobotSpec.Transform = FTransform(FRotator::ZeroRotator, DefaultRobotStartLocationCm);
+		newRobotSpec.DeliveryBot.bSpawnOnly = false;
+		newRobotSpec.DeliveryBot.bHasStartLocation = true;
+		newRobotSpec.DeliveryBot.bHasGoalLocation = true;
+		newRobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = DefaultRobotStartLocationCm;
+		newRobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = DefaultRobotGoalLocationCm;
+		newRobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
+		DraftWorldSpec.Placeables.Add(newRobotSpec);
+		bOutDraftChanged = true;
+		outDiagnostics.Add(TEXT("Robot route was missing; default StartPoint and GoalPoint were added."));
+		return true;
+	}
+
+	if (robotSpec->InstanceId.IsEmpty())
+	{
+		robotSpec->InstanceId = ContainsInstanceId(DefaultRobotInstanceId)
+			? FString::Printf(TEXT("robot_%03d"), DraftWorldSpec.Placeables.Num() + 1)
+			: DefaultRobotInstanceId;
+		bOutDraftChanged = true;
+	}
+	if (robotSpec->AssetId.IsEmpty())
+	{
+		robotSpec->AssetId = DefaultRobotAssetId;
+		bOutDraftChanged = true;
+	}
+
+	if (!robotSpec->DeliveryBot.bHasStartLocation)
+	{
+		robotSpec->Transform.SetLocation(DefaultRobotStartLocationCm);
+		robotSpec->DeliveryBot.bHasStartLocation = true;
+		robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = DefaultRobotStartLocationCm;
+		bOutDraftChanged = true;
+	}
+	else if (!robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.Equals(robotSpec->Transform.GetLocation()))
+	{
+		robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = robotSpec->Transform.GetLocation();
+		bOutDraftChanged = true;
+	}
+
+	if (!robotSpec->DeliveryBot.bHasGoalLocation)
+	{
+		const FVector defaultRouteOffset = DefaultRobotGoalLocationCm - DefaultRobotStartLocationCm;
+		robotSpec->DeliveryBot.bHasGoalLocation = true;
+		robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm =
+			robotSpec->Transform.GetLocation() + defaultRouteOffset;
+		bOutDraftChanged = true;
+		outDiagnostics.Add(TEXT("Robot goal was missing; a default GoalPoint was added."));
+	}
+
+	if (robotSpec->DeliveryBot.bSpawnOnly)
+	{
+		robotSpec->DeliveryBot.bSpawnOnly = false;
+		bOutDraftChanged = true;
+	}
+	if (!robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute)
+	{
+		robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
+		bOutDraftChanged = true;
+	}
+
+	return true;
+}
+
+bool UEpisodeAuthoringSubsystem::ValidateSingleRobotRouteSpecForExport(TArray<FString>& outDiagnostics) const
+{
+	const FEpisodePlaceableInstanceSpec* robotSpec = nullptr;
+	int32 robotSpecCount = 0;
+	for (const FEpisodePlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
+	{
+		if (spec.Category == EEpisodeActorCategory::DeliveryBot || spec.Category == EEpisodeActorCategory::RoadVehicle)
+		{
+			++robotSpecCount;
+			if (!robotSpec)
+			{
+				robotSpec = &spec;
+			}
+		}
+	}
+
+	if (robotSpecCount != 1 || !robotSpec)
+	{
+		outDiagnostics.Add(FString::Printf(
+			TEXT("Episode must contain exactly one robot route before export. Found: %d."),
+			robotSpecCount));
+		return false;
+	}
+	if (!robotSpec->DeliveryBot.bHasStartLocation)
+	{
+		outDiagnostics.Add(TEXT("Robot StartPoint is missing."));
+		return false;
+	}
+	if (!robotSpec->DeliveryBot.bHasGoalLocation)
+	{
+		outDiagnostics.Add(TEXT("Robot GoalPoint is missing."));
+		return false;
+	}
+	if (robotSpec->DeliveryBot.bSpawnOnly)
+	{
+		outDiagnostics.Add(TEXT("Robot route cannot be exported as spawn_only when StartPoint and GoalPoint are authored."));
+		return false;
+	}
+
+	return true;
 }
 
 void UEpisodeAuthoringSubsystem::ClearEditorView()
@@ -1482,6 +1730,17 @@ void UEpisodeAuthoringSubsystem::ClearEditorView()
 
 bool UEpisodeAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& outDiagnostics)
 {
+	bool bDraftChanged = false;
+	if (!EnsureSingleRobotRouteSpec(outDiagnostics, bDraftChanged))
+	{
+		return false;
+	}
+	if (bDraftChanged)
+	{
+		DraftWorldSpec.SpecHash.Reset();
+		bDirty = true;
+	}
+
 	ClearEditorView();
 
 	bool bSucceeded = true;
@@ -1563,6 +1822,19 @@ bool UEpisodeAuthoringSubsystem::SpawnRobotRouteMarkers(
 		outDiagnostics.Add(FString::Printf(TEXT("Failed to spawn robot start marker for '%s'."), *spec.InstanceId));
 		return false;
 	}
+	FString markerFailureReason;
+	if (!ConfigureRobotRouteMarkerActor(
+		startMarker,
+		EEpisodePlaceableAuthoringRole::RobotStartMarker,
+		markerFailureReason))
+	{
+		outDiagnostics.Add(FString::Printf(
+			TEXT("Failed to configure robot start marker for '%s': %s"),
+			*spec.InstanceId,
+			*markerFailureReason));
+		startMarker->Destroy();
+		return false;
+	}
 
 	RobotStartMarkerActor = startMarker;
 	RouteMarkerActors.Add(startMarker);
@@ -1586,7 +1858,9 @@ bool UEpisodeAuthoringSubsystem::SpawnRobotRouteMarkers(
 
 	if (!spec.DeliveryBot.bHasGoalLocation)
 	{
-		return true;
+		outDiagnostics.Add(FString::Printf(TEXT("Robot goal marker is missing for '%s'."), *spec.InstanceId));
+		cleanupStartMarker();
+		return false;
 	}
 
 	if (!GoalPointClass)
@@ -1603,6 +1877,19 @@ bool UEpisodeAuthoringSubsystem::SpawnRobotRouteMarkers(
 	if (!goalMarker)
 	{
 		outDiagnostics.Add(FString::Printf(TEXT("Failed to spawn robot goal marker for '%s'."), *spec.InstanceId));
+		cleanupStartMarker();
+		return false;
+	}
+	if (!ConfigureRobotRouteMarkerActor(
+		goalMarker,
+		EEpisodePlaceableAuthoringRole::RobotGoalMarker,
+		markerFailureReason))
+	{
+		outDiagnostics.Add(FString::Printf(
+			TEXT("Failed to configure robot goal marker for '%s': %s"),
+			*spec.InstanceId,
+			*markerFailureReason));
+		goalMarker->Destroy();
 		cleanupStartMarker();
 		return false;
 	}
@@ -1628,6 +1915,7 @@ AActor* UEpisodeAuthoringSubsystem::SpawnOrReplaceRouteMarker(
 	TObjectPtr<AActor>& markerActor,
 	TSubclassOf<AActor> markerClass,
 	const FTransform& transform,
+	EEpisodePlaceableAuthoringRole markerRole,
 	FString& outFailureReason)
 {
 	outFailureReason.Reset();
@@ -1641,6 +1929,11 @@ AActor* UEpisodeAuthoringSubsystem::SpawnOrReplaceRouteMarker(
 	if (!spawnedMarker)
 	{
 		outFailureReason = TEXT("Failed to spawn marker actor.");
+		return nullptr;
+	}
+	if (!ConfigureRobotRouteMarkerActor(spawnedMarker, markerRole, outFailureReason))
+	{
+		spawnedMarker->Destroy();
 		return nullptr;
 	}
 
@@ -1658,6 +1951,100 @@ AActor* UEpisodeAuthoringSubsystem::SpawnOrReplaceRouteMarker(
 	markerActor = spawnedMarker;
 	RouteMarkerActors.Add(markerActor);
 	return markerActor.Get();
+}
+
+bool UEpisodeAuthoringSubsystem::ConfigureRobotRouteMarkerActor(
+	AActor* markerActor,
+	EEpisodePlaceableAuthoringRole markerRole,
+	FString& outFailureReason) const
+{
+	outFailureReason.Reset();
+	if (!markerActor)
+	{
+		outFailureReason = TEXT("Marker actor is null.");
+		return false;
+	}
+
+	UEpisodePlaceableComponent* placeableComponent =
+		markerActor->FindComponentByClass<UEpisodePlaceableComponent>();
+	if (!placeableComponent)
+	{
+		const FName componentName = MakeUniqueObjectName(
+			markerActor,
+			UEpisodePlaceableComponent::StaticClass(),
+			TEXT("RouteMarkerPlaceableComponent"));
+		placeableComponent = NewObject<UEpisodePlaceableComponent>(markerActor, componentName);
+		if (!placeableComponent)
+		{
+			outFailureReason = TEXT("Failed to create route marker placeable component.");
+			return false;
+		}
+
+		markerActor->AddInstanceComponent(placeableComponent);
+		placeableComponent->RegisterComponent();
+	}
+
+	const bool bStartMarker = markerRole == EEpisodePlaceableAuthoringRole::RobotStartMarker;
+	placeableComponent->InstanceId = bStartMarker ? RobotStartMarkerInstanceId : RobotGoalMarkerInstanceId;
+	placeableComponent->AssetId = bStartMarker ? RobotStartMarkerAssetId : RobotGoalMarkerAssetId;
+	placeableComponent->Category = EEpisodeActorCategory::DeliveryBot;
+	placeableComponent->MobilityMode = EEpisodeMobilityMode::Static;
+	placeableComponent->AuthoringRole = markerRole;
+	placeableComponent->bAuthoringSelectable = true;
+	placeableComponent->bAuthoringRenamable = false;
+	placeableComponent->bAuthoringDeletable = false;
+	placeableComponent->bAuthoringAllowLocationEdit = true;
+	placeableComponent->bAuthoringAllowRotationEdit = false;
+	placeableComponent->bAuthoringAllowScaleEdit = false;
+
+	USphereComponent* selectionComponent = nullptr;
+	TArray<USphereComponent*> sphereComponents;
+	markerActor->GetComponents(sphereComponents);
+	const FName selectionComponentTag(TEXT("EpisodeRouteMarkerSelection"));
+	for (USphereComponent* sphereComponent : sphereComponents)
+	{
+		if (sphereComponent && sphereComponent->ComponentTags.Contains(selectionComponentTag))
+		{
+			selectionComponent = sphereComponent;
+			break;
+		}
+	}
+	if (!selectionComponent)
+	{
+		const FName componentName = MakeUniqueObjectName(
+			markerActor,
+			USphereComponent::StaticClass(),
+			TEXT("RouteMarkerSelectionComponent"));
+		selectionComponent = NewObject<USphereComponent>(markerActor, componentName);
+		if (selectionComponent)
+		{
+			markerActor->AddInstanceComponent(selectionComponent);
+			if (USceneComponent* rootComponent = markerActor->GetRootComponent())
+			{
+				selectionComponent->SetupAttachment(rootComponent);
+			}
+			selectionComponent->RegisterComponent();
+		}
+	}
+	if (!selectionComponent)
+	{
+		outFailureReason = TEXT("Failed to create route marker selection component.");
+		return false;
+	}
+	if (selectionComponent)
+	{
+		selectionComponent->ComponentTags.AddUnique(selectionComponentTag);
+		selectionComponent->SetSphereRadius(75.0f, true);
+		selectionComponent->SetRelativeLocation(FVector::ZeroVector);
+		selectionComponent->SetHiddenInGame(true);
+		selectionComponent->SetVisibility(false);
+		selectionComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		selectionComponent->SetCollisionObjectType(ECC_WorldDynamic);
+		selectionComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+		selectionComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+		selectionComponent->SetGenerateOverlapEvents(false);
+	}
+	return true;
 }
 
 bool UEpisodeAuthoringSubsystem::SpawnEditorStaticObstacleActor(
@@ -1928,5 +2315,12 @@ void UEpisodeAuthoringSubsystem::ConfigureAuthoredStaticObstacleActor(
 		placeableComponent->AssetId = spec.AssetId;
 		placeableComponent->Category = spec.Category;
 		placeableComponent->MobilityMode = EEpisodeMobilityMode::Static;
+		placeableComponent->AuthoringRole = EEpisodePlaceableAuthoringRole::Generic;
+		placeableComponent->bAuthoringSelectable = true;
+		placeableComponent->bAuthoringRenamable = true;
+		placeableComponent->bAuthoringDeletable = true;
+		placeableComponent->bAuthoringAllowLocationEdit = true;
+		placeableComponent->bAuthoringAllowRotationEdit = true;
+		placeableComponent->bAuthoringAllowScaleEdit = true;
 	}
 }

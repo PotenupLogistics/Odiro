@@ -8,6 +8,14 @@
 class UMaterialInterface;
 class UMeshComponent;
 
+UENUM(BlueprintType)
+enum class EEpisodePlaceableAuthoringRole : uint8
+{
+	Generic,
+	RobotStartMarker,
+	RobotGoalMarker
+};
+
 struct FEpisodeAuthoringMeshCustomDepthState
 {
 	bool bRenderCustomDepth = false;
@@ -38,6 +46,24 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor")
 	bool bAuthoringSelectable = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor")
+	EEpisodePlaceableAuthoringRole AuthoringRole = EEpisodePlaceableAuthoringRole::Generic;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor")
+	bool bAuthoringRenamable = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor")
+	bool bAuthoringDeletable = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor")
+	bool bAuthoringAllowLocationEdit = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor")
+	bool bAuthoringAllowRotationEdit = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor")
+	bool bAuthoringAllowScaleEdit = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor")
 	TSoftObjectPtr<UMaterialInterface> AuthoringHoverOutlineMaterial;

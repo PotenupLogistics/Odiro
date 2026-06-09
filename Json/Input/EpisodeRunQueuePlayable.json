@@ -5,7 +5,8 @@
     {
       "pair_id": "playable_route_001",
       "episode_setup": "Json/Input/EpisodeSetupPlayable.json",
-      "delivery_bot_setup": "Json/Input/DeliveryBotSetupPlayable.json"
+      "delivery_bot_setup": "Json/Input/DeliveryBotSetupPlayable.json",
+      "policy_spec": "Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json"
     }
   ]
 }

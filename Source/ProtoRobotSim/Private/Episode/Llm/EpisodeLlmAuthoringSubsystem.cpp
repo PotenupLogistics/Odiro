@@ -276,10 +276,16 @@ bool UEpisodeLlmAuthoringSubsystem::TryValidateAndSaveRunQueue(
 
 		FString episodeSetupPath;
 		FString deliveryBotSetupPath;
+		FString policySpecPath;
 		runObject->TryGetStringField(TEXT("episode_setup"), episodeSetupPath);
 		runObject->TryGetStringField(TEXT("delivery_bot_setup"), deliveryBotSetupPath);
+		if (!runObject->TryGetStringField(TEXT("policy_spec"), policySpecPath))
+		{
+			runObject->TryGetStringField(TEXT("policy_spec_json_path"), policySpecPath);
+		}
 		episodeSetupPath = episodeSetupPath.TrimStartAndEnd();
 		deliveryBotSetupPath = deliveryBotSetupPath.TrimStartAndEnd();
+		policySpecPath = policySpecPath.TrimStartAndEnd();
 
 		if (episodeSetupPath.IsEmpty())
 		{
@@ -322,6 +328,24 @@ bool UEpisodeLlmAuthoringSubsystem::TryValidateAndSaveRunQueue(
 				outResult.Diagnostics.Add(FString::Printf(
 					TEXT("DeliveryBotSetup file does not exist: %s"),
 					*deliveryBotSetupPath));
+			}
+		}
+
+		if (!policySpecPath.IsEmpty())
+		{
+			if (!policySpecPath.StartsWith(TEXT("Json/Input/")))
+			{
+				outResult.Diagnostics.Add(FString::Printf(
+					TEXT("runs[%d].policy_spec must start with Json/Input/: %s"),
+					index,
+					*policySpecPath));
+			}
+
+			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(policySpecPath)))
+			{
+				outResult.Diagnostics.Add(FString::Printf(
+					TEXT("PolicySpec file does not exist: %s"),
+					*policySpecPath));
 			}
 		}
 

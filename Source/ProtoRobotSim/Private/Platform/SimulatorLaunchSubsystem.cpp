@@ -8,6 +8,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogSimulatorLaunch, Log, All);
 namespace
 {
 	const TCHAR* SimulationSetupInputDirectory = TEXT("Json/Input");
+	const TCHAR* PolicySpecInputDirectory = TEXT("Json/Input/PolicySpecs");
 	const TCHAR* EvaluationReportOutputDirectory = TEXT("Json/Output");
 	const TCHAR* SimulationRunStatusDirectory = TEXT("Saved/SimulationRuns");
 	const TCHAR* PreviewLauncherFileName = TEXT("RunPreview.bat");
@@ -16,6 +17,7 @@ namespace
 	const TCHAR* LaunchDeliveryBotSetupSchema = TEXT("delivery_bot_setup");
 	const TCHAR* LaunchEpisodeRunQueueSchema = TEXT("episode_run_queue");
 	const TCHAR* LaunchEvaluationReportSchema = TEXT("episode_evaluation_report");
+	const TCHAR* DefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	const TCHAR* SimulatorProcessFlags = TEXT("-nosound -unattended -NoLoadingScreen");
 
 	FString ToProjectRelativePath(FString filePath)
@@ -120,6 +122,30 @@ namespace
 		return jsonPath;
 	}
 
+	FString ResolvePolicySpecReferencePath(const FString& policySpecJsonPath)
+	{
+		FString normalizedPath = policySpecJsonPath.TrimStartAndEnd();
+		if (normalizedPath.IsEmpty())
+		{
+			return FString{};
+		}
+
+		FPaths::NormalizeFilename(normalizedPath);
+		if (FPaths::GetExtension(normalizedPath).IsEmpty())
+		{
+			normalizedPath = FPaths::SetExtension(normalizedPath, TEXT("json"));
+		}
+
+		if (FPaths::IsRelative(normalizedPath) && FPaths::GetPath(normalizedPath).IsEmpty())
+		{
+			normalizedPath = FPaths::Combine(PolicySpecInputDirectory, normalizedPath);
+		}
+
+		return FPaths::IsRelative(normalizedPath)
+			? FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), normalizedPath))
+			: normalizedPath;
+	}
+
 	FString MakeSimulatorRunId()
 	{
 		const FString timestamp = FDateTime::UtcNow().ToString(TEXT("%Y%m%d-%H%M%S"));
@@ -156,6 +182,27 @@ namespace
 		return compiler && compiler->CompileDeliveryBotSetupFromJsonFile(jsonFile).bSuccess;
 	}
 
+	bool IsPolicySpecFile(const FString& jsonFile)
+	{
+		FString jsonString;
+		if (!FFileHelper::LoadFileToString(jsonString, *ResolvePolicySpecReferencePath(jsonFile)))
+		{
+			return false;
+		}
+
+		TSharedPtr<FJsonObject> rootObject;
+		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(jsonString);
+		if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+		{
+			return false;
+		}
+
+		const TSharedPtr<FJsonObject>* policySpecObject = nullptr;
+		return rootObject->TryGetObjectField(TEXT("policySpec"), policySpecObject)
+			&& policySpecObject != nullptr
+			&& policySpecObject->IsValid();
+	}
+
 	TSharedRef<FJsonObject> MakeEpisodeRunQueueObject(const TArray<FEpisodeRunInput>& runInputs)
 	{
 		TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
@@ -173,6 +220,10 @@ namespace
 			}
 			runObject->SetStringField(TEXT("episode_setup"), runInput.EpisodeSetupJsonPath);
 			runObject->SetStringField(TEXT("delivery_bot_setup"), runInput.DeliveryBotSetupJsonPath);
+			if (!runInput.PolicySpecJsonPath.IsEmpty())
+			{
+				runObject->SetStringField(TEXT("policy_spec"), runInput.PolicySpecJsonPath);
+			}
 			runValues.Add(MakeShared<FJsonValueObject>(runObject));
 		}
 
@@ -251,6 +302,23 @@ TArray<FString> USimulatorLaunchSubsystem::ListDeliveryBotSetupFiles() const
 	}
 
 	return setupFiles;
+}
+
+TArray<FString> USimulatorLaunchSubsystem::ListPolicySpecFiles() const
+{
+	TArray<FString> jsonFiles;
+	FindProjectJsonFiles(PolicySpecInputDirectory, jsonFiles);
+
+	TArray<FString> policySpecFiles;
+	for (const FString& jsonFile : jsonFiles)
+	{
+		if (IsPolicySpecFile(jsonFile))
+		{
+			policySpecFiles.Add(jsonFile);
+		}
+	}
+
+	return policySpecFiles;
 }
 
 TArray<FString> USimulatorLaunchSubsystem::ListEpisodeRunQueueFiles() const
@@ -561,6 +629,7 @@ bool USimulatorLaunchSubsystem::AppendRunQueuePair(
 	runInput.PairId = pairId.TrimStartAndEnd();
 	runInput.EpisodeSetupJsonPath = episodeSetupPath.TrimStartAndEnd();
 	runInput.DeliveryBotSetupJsonPath = deliveryBotSetupPath.TrimStartAndEnd();
+	runInput.PolicySpecJsonPath = DefaultPolicySpecJsonPath;
 	runInputs.Add(runInput);
 	return SaveEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics);
 }
@@ -1050,6 +1119,15 @@ bool USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(
 		{
 			runObject->TryGetStringField(TEXT("delivery_bot_setup_json_path"), runInput.DeliveryBotSetupJsonPath);
 		}
+		if (!runObject->TryGetStringField(TEXT("policy_spec"), runInput.PolicySpecJsonPath))
+		{
+			runObject->TryGetStringField(TEXT("policy_spec_json_path"), runInput.PolicySpecJsonPath);
+		}
+
+		runInput.PairId = runInput.PairId.TrimStartAndEnd();
+		runInput.EpisodeSetupJsonPath = NormalizeRunQueueReferencePath(runInput.EpisodeSetupJsonPath);
+		runInput.DeliveryBotSetupJsonPath = NormalizeRunQueueReferencePath(runInput.DeliveryBotSetupJsonPath);
+		runInput.PolicySpecJsonPath = NormalizeRunQueueReferencePath(runInput.PolicySpecJsonPath);
 
 		if (runInput.EpisodeSetupJsonPath.TrimStartAndEnd().IsEmpty())
 		{
@@ -1099,6 +1177,12 @@ bool USimulatorLaunchSubsystem::TryWriteEpisodeRunQueueJson(
 		else if (!IsDeliveryBotSetupFile(runInput.DeliveryBotSetupJsonPath))
 		{
 			outDiagnostics.Add(FString::Printf(TEXT("DeliveryBotSetup validation failed: %s"), *runInput.DeliveryBotSetupJsonPath));
+		}
+
+		if (!runInput.PolicySpecJsonPath.TrimStartAndEnd().IsEmpty()
+			&& !IsPolicySpecFile(runInput.PolicySpecJsonPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("PolicySpec validation failed: %s"), *runInput.PolicySpecJsonPath));
 		}
 	}
 

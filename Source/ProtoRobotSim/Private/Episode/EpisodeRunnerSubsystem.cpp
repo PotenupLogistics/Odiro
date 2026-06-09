@@ -1,5 +1,6 @@
 
 #include "Episode/EpisodeRunnerSubsystem.h"
+#include "DeliveryBot/Actor/DeliveryBot.h"
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
 #include "Episode/EpisodeCompiler.h"
 #include "Episode/EpisodeEvaluationSubsystem.h"
@@ -115,7 +116,9 @@ namespace
 
 	bool ApplyDeliveryBotSetupToWorldSpec(
 		FEpisodeWorldSpec& worldSpec,
-		const FDeliveryBotSetupInfo& deliveryBotSetupInfo)
+		const FDeliveryBotSetupInfo& deliveryBotSetupInfo,
+		const FString& policySpecJsonPath,
+		bool bDeferPolicyAutoStartToRunner)
 	{
 		bool bApplied = false;
 		for (FEpisodePlaceableInstanceSpec& placeableSpec : worldSpec.Placeables)
@@ -124,7 +127,15 @@ namespace
 
 			const FDeliveryBotLocationSetupInfo locationSetupInfo = placeableSpec.DeliveryBot.SetupInfo.LocationSetupInfo;
 			FDeliveryBotSetupInfo mergedSetupInfo = deliveryBotSetupInfo;
+			if (!policySpecJsonPath.TrimStartAndEnd().IsEmpty())
+			{
+				mergedSetupInfo.StartupPolicySpecFileName = policySpecJsonPath.TrimStartAndEnd();
+			}
 			mergedSetupInfo.LocationSetupInfo = locationSetupInfo;
+			if (bDeferPolicyAutoStartToRunner)
+			{
+				mergedSetupInfo.LocationSetupInfo.bAutoStartRoute = false;
+			}
 			placeableSpec.DeliveryBot.SetupInfo = mergedSetupInfo;
 			bApplied = true;
 		}
@@ -132,9 +143,19 @@ namespace
 		return bApplied;
 	}
 
-	FString BuildPairHash(const FString& episodeSetupHash, const FString& deliveryBotSetupHash)
+	FString BuildPairHash(
+		const FString& episodeSetupHash,
+		const FString& deliveryBotSetupHash,
+		const FString& policySpecJsonPath)
 	{
-		return FString::Printf(TEXT("%u"), GetTypeHash(episodeSetupHash + TEXT(":") + deliveryBotSetupHash));
+		FString hashSource = episodeSetupHash + TEXT(":") + deliveryBotSetupHash;
+		const FString trimmedPolicySpecJsonPath = policySpecJsonPath.TrimStartAndEnd();
+		if (!trimmedPolicySpecJsonPath.IsEmpty())
+		{
+			hashSource += TEXT(":") + trimmedPolicySpecJsonPath;
+		}
+
+		return FString::Printf(TEXT("%u"), GetTypeHash(hashSource));
 	}
 }
 
@@ -319,6 +340,18 @@ bool UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFileForRun(
 		{
 			runObject->TryGetStringField(TEXT("delivery_bot_setup_json_path"), runInput.DeliveryBotSetupJsonPath);
 		}
+		if (!runObject->TryGetStringField(TEXT("policy_spec"), runInput.PolicySpecJsonPath))
+		{
+			runObject->TryGetStringField(TEXT("policy_spec_json_path"), runInput.PolicySpecJsonPath);
+		}
+
+		runInput.PairId = runInput.PairId.TrimStartAndEnd();
+		runInput.EpisodeSetupJsonPath = runInput.EpisodeSetupJsonPath.TrimStartAndEnd();
+		runInput.EpisodeSetupJsonPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		runInput.DeliveryBotSetupJsonPath = runInput.DeliveryBotSetupJsonPath.TrimStartAndEnd();
+		runInput.DeliveryBotSetupJsonPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		runInput.PolicySpecJsonPath = runInput.PolicySpecJsonPath.TrimStartAndEnd();
+		runInput.PolicySpecJsonPath.ReplaceInline(TEXT("\\"), TEXT("/"));
 
 		if (runInput.EpisodeSetupJsonPath.IsEmpty())
 		{
@@ -506,6 +539,7 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 	CurrentRecord.SourceJsonPath = CurrentRunInput.EpisodeSetupJsonPath;
 	CurrentRecord.EpisodeSetupJsonPath = CurrentRunInput.EpisodeSetupJsonPath;
 	CurrentRecord.DeliveryBotSetupJsonPath = CurrentRunInput.DeliveryBotSetupJsonPath;
+	CurrentRecord.PolicySpecJsonPath = CurrentRunInput.PolicySpecJsonPath;
 	CurrentRecord.StartTimeSeconds = world->GetTimeSeconds();
 
 	SetRunnerState(EEpisodeRunnerState::Preparing);
@@ -513,12 +547,13 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 	UE_LOG(
 		LogEpisodeRunner,
 		Log,
-		TEXT("Episode pair 준비 중 | RunId: %s, Pair: %s, Index: %d, EpisodeSetup: %s, DeliveryBotSetup: %s, Remaining: %d"),
+		TEXT("Episode pair 준비 중 | RunId: %s, Pair: %s, Index: %d, EpisodeSetup: %s, DeliveryBotSetup: %s, PolicySpec: %s, Remaining: %d"),
 		*CurrentRecord.RunId,
 		*CurrentRecord.PairId,
 		CurrentRecord.RunIndex,
 		*CurrentRunInput.EpisodeSetupJsonPath,
 		*CurrentRunInput.DeliveryBotSetupJsonPath,
+		CurrentRunInput.PolicySpecJsonPath.IsEmpty() ? TEXT("<delivery_bot_setup>") : *CurrentRunInput.PolicySpecJsonPath,
 		PendingRunInputs.Num());
 
 	UEpisodeCompiler* compiler = NewObject<UEpisodeCompiler>(this);
@@ -578,7 +613,10 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 
 	CurrentRecord.bDeliveryBotSetupCompileSucceeded = deliveryBotCompileResult.bSuccess;
 	CurrentRecord.DeliveryBotSetupHash = deliveryBotCompileResult.SpecHash;
-	CurrentRecord.PairHash = BuildPairHash(CurrentRecord.EpisodeSetupHash, CurrentRecord.DeliveryBotSetupHash);
+	CurrentRecord.PairHash = BuildPairHash(
+		CurrentRecord.EpisodeSetupHash,
+		CurrentRecord.DeliveryBotSetupHash,
+		CurrentRunInput.PolicySpecJsonPath);
 	AppendDeliveryBotSetupDiagnostics(deliveryBotCompileResult);
 
 	UE_LOG(
@@ -602,9 +640,13 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 		return;
 	}
 
+	const bool bRunnerManagedPolicyStart = !CurrentRunInput.PolicySpecJsonPath.IsEmpty();
+
 	const bool bDeliveryBotSetupApplied = ApplyDeliveryBotSetupToWorldSpec(
 		compileResult.WorldSpec,
-		deliveryBotCompileResult.SetupInfo);
+		deliveryBotCompileResult.SetupInfo,
+		CurrentRunInput.PolicySpecJsonPath,
+		bRunnerManagedPolicyStart);
 	if (!bDeliveryBotSetupApplied)
 	{
 		UE_LOG(LogEpisodeRunner, Warning, TEXT("DeliveryBotSetup 적용 대상 로봇이 없음 | RunId: %s, Pair: %s"), *CurrentRecord.RunId, *CurrentRecord.PairId);
@@ -654,6 +696,56 @@ void UEpisodeRunnerSubsystem::StartNextEpisode()
 		simulationSubsystem->ClearEpisode();
 		QueueStartNextEpisode();
 		return;
+	}
+
+	if (bRunnerManagedPolicyStart)
+	{
+		ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(runtimeContext.RobotActor);
+		if (!IsValid(deliveryBot))
+		{
+			CurrentRecord.bSetupSucceeded = false;
+			UE_LOG(
+				LogEpisodeRunner,
+				Warning,
+				TEXT("RunQueue PolicySpec 적용 실패: runtime robot actor가 DeliveryBot이 아님 | RunId: %s, Pair: %s, PolicySpec: %s"),
+				*CurrentRecord.RunId,
+				*CurrentRecord.PairId,
+				*CurrentRunInput.PolicySpecJsonPath);
+			CompleteCurrentRecord(
+				false,
+				EEpisodeEvaluationOutcome::Failure,
+				EEpisodeEvaluationTerminalReason::SetupFailed);
+			simulationSubsystem->ClearEpisode();
+			QueueStartNextEpisode();
+			return;
+		}
+
+		if (!deliveryBot->StartPolicyRunWithPolicySpecFileName(CurrentRunInput.PolicySpecJsonPath))
+		{
+			CurrentRecord.bSetupSucceeded = false;
+			UE_LOG(
+				LogEpisodeRunner,
+				Warning,
+				TEXT("RunQueue PolicySpec 적용 요청 시작 실패 | RunId: %s, Pair: %s, PolicySpec: %s"),
+				*CurrentRecord.RunId,
+				*CurrentRecord.PairId,
+				*CurrentRunInput.PolicySpecJsonPath);
+			CompleteCurrentRecord(
+				false,
+				EEpisodeEvaluationOutcome::Failure,
+				EEpisodeEvaluationTerminalReason::SetupFailed);
+			simulationSubsystem->ClearEpisode();
+			QueueStartNextEpisode();
+			return;
+		}
+
+		UE_LOG(
+			LogEpisodeRunner,
+			Log,
+			TEXT("RunQueue PolicySpec 적용 요청 시작 | RunId: %s, Pair: %s, PolicySpec: %s"),
+			*CurrentRecord.RunId,
+			*CurrentRecord.PairId,
+			*CurrentRunInput.PolicySpecJsonPath);
 	}
 
 	const double timeLimitSeconds = GetRunTimeLimitSeconds(compileResult.WorldSpec.RunConfig);

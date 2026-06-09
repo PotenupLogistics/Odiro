@@ -259,6 +259,9 @@ namespace
 		DeliveryBotSetupObject->SetStringField(TEXT("path"), Record.DeliveryBotSetupJsonPath);
 		DeliveryBotSetupObject->SetStringField(TEXT("hash"), Record.DeliveryBotSetupHash);
 
+		TSharedRef<FJsonObject> PolicySpecObject = MakeShared<FJsonObject>();
+		PolicySpecObject->SetStringField(TEXT("path"), Record.PolicySpecJsonPath);
+
 		TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
 		Object->SetStringField(TEXT("run_id"), Record.RunId);
 		Object->SetNumberField(TEXT("run_index"), Record.RunIndex);
@@ -266,6 +269,10 @@ namespace
 		Object->SetStringField(TEXT("pair_id"), Record.PairId);
 		Object->SetObjectField(TEXT("episode_setup"), EpisodeSetupObject);
 		Object->SetObjectField(TEXT("delivery_bot_setup"), DeliveryBotSetupObject);
+		if (!Record.PolicySpecJsonPath.IsEmpty())
+		{
+			Object->SetObjectField(TEXT("policy_spec"), PolicySpecObject);
+		}
 		Object->SetStringField(TEXT("pair_hash"), Record.PairHash);
 		return Object;
 	}

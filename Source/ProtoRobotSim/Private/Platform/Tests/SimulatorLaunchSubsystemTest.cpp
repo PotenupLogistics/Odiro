@@ -59,6 +59,7 @@ bool FSimulatorLaunchRunQueueJsonRoundTripTest::RunTest(const FString& parameter
 	runInput.PairId = TEXT("sample_0");
 	runInput.EpisodeSetupJsonPath = TEXT("Json/Input/EpisodeSetupSample_0.json");
 	runInput.DeliveryBotSetupJsonPath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
+	runInput.PolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	runInputs.Add(runInput);
 
 	FString json;
@@ -67,6 +68,7 @@ bool FSimulatorLaunchRunQueueJsonRoundTripTest::RunTest(const FString& parameter
 	TestEqual(TEXT("write diagnostics"), diagnostics.Num(), 0);
 	TestTrue(TEXT("schema field"), json.Contains(TEXT("\"schema\"")));
 	TestTrue(TEXT("episode setup field"), json.Contains(TEXT("EpisodeSetupSample_0.json")));
+	TestTrue(TEXT("policy spec field"), json.Contains(TEXT("\"policy_spec\"")));
 
 	TArray<FEpisodeRunInput> parsedRunInputs;
 	TestTrue(TEXT("run queue reads"), USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(json, parsedRunInputs, diagnostics));
@@ -77,6 +79,10 @@ bool FSimulatorLaunchRunQueueJsonRoundTripTest::RunTest(const FString& parameter
 		TEXT("delivery setup"),
 		parsedRunInputs[0].DeliveryBotSetupJsonPath,
 		FString(TEXT("Json/Input/DeliveryBotSetupSample_0.json")));
+	TestEqual(
+		TEXT("policy spec"),
+		parsedRunInputs[0].PolicySpecJsonPath,
+		FString(TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json")));
 
 	return true;
 }

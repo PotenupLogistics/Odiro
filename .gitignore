@@ -7,6 +7,7 @@
 .run/*.local.run.xml
 *.vsconfig
 
+
 # Compiled Object files
 *.slo
 *.lo
@@ -85,6 +86,9 @@ DerivedDataCache/*
 
 # External AI backend workspace copied locally for UE integration tests
 Proto-AI/
+
+# etc
+*.pyc
 Docs/Delivery이용설명.md
 Docs/딜리버리봇 구현 흐름.md
 Docs/딜리흐름도.md

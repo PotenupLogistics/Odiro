@@ -114,6 +114,9 @@ protected:
 	void HandleExperimentDeliveryBotSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
 
 	UFUNCTION()
+	void HandlePolicySpecSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
+
+	UFUNCTION()
 	UWidget* HandleGenerateComboBoxItem(FString item);
 
 	UFUNCTION()
@@ -136,6 +139,7 @@ private:
 	void SetSelectedSetupPath(const FString& setupPath);
 	void SetSelectedEpisodeSetupPath(const FString& episodeSetupPath);
 	void SetSelectedDeliveryBotSetupPath(const FString& deliveryBotSetupPath);
+	void SetSelectedPolicySpecPath(const FString& policySpecPath);
 	void SetSelectedExperimentResultRunDirectory(const FString& runDirectory);
 	void SetSelectedExperimentResultPath(const FString& reportPath);
 	void ClearExperimentResultIterationWidgets();
@@ -155,6 +159,7 @@ private:
 	FString GetSelectedSetupPath() const;
 	FString GetSelectedEpisodeSetupPath() const;
 	FString GetSelectedDeliveryBotSetupPath() const;
+	FString GetSelectedPolicySpecPath() const;
 	USimulatorLaunchSubsystem* GetSimulatorLaunchSubsystem() const;
 	UEpisodeEditorLaunchSubsystem* GetEpisodeEditorLaunchSubsystem() const;
 	UPlatformAnalysisAiSubsystem* GetPlatformAnalysisAiSubsystem() const;
@@ -268,6 +273,9 @@ private:
 	TObjectPtr<UComboBoxString> DeliveryBotSetupComboBox;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> PolicySpecComboBox;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> PairRow;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -355,6 +363,7 @@ private:
 	FString SelectedSetupPath;
 	FString SelectedEpisodeSetupPath;
 	FString SelectedDeliveryBotSetupPath;
+	FString SelectedPolicySpecJsonPath;
 	FString SelectedExperimentResultRunDirectory;
 	FString SelectedExperimentResultPath;
 	bool bExperimentConfigDetailVisible = false;

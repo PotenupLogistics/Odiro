@@ -12,7 +12,7 @@ DeliveryBotSetup JSON
 -> 배송봇 속도, 라이다, 감속/정지 거리, 주행 튜닝 담당
 
 EpisodeRunQueue JSON
--> EpisodeSetup + DeliveryBotSetup pair를 실행 단위로 묶음
+-> EpisodeSetup + DeliveryBotSetup + PolicySpec 조합을 실행 단위로 묶음
 ```
 
 ## 1. 파일 역할 분리
@@ -221,7 +221,8 @@ DeliveryBotSetup.robot.path_follow.goal_acceptance_distance_m
     {
       "pair_id": "delivery_policy_test_001",
       "episode_setup": "Json/Input/EpisodeSetupDeliveryPolicyTest.json",
-      "delivery_bot_setup": "Json/Input/DeliveryBotSetupPlayable.json"
+      "delivery_bot_setup": "Json/Input/DeliveryBotSetupPlayable.json",
+      "policy_spec": "Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json"
     }
   ]
 }
@@ -230,7 +231,7 @@ DeliveryBotSetup.robot.path_follow.goal_acceptance_distance_m
 실행 단위는 다음과 같다.
 
 ```text
-EpisodeSetup + DeliveryBotSetup = 1개 실행 pair
+EpisodeSetup + DeliveryBotSetup + PolicySpec = 1개 실행 pair
 ```
 
 ## 7. 사용하면 안 되는 필드

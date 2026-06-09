@@ -65,6 +65,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Setup")
 	void ApplyCurrentSetupInfoToRuntimeComponents();
 
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Policy")
+	bool StartPolicyRunWithPolicySpecFileName(const FString& policySpecFileName);
+
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "DeliveryBot|Debug")
 	void SendCurrentRuntimeConfigUpdateToPolicyServerOnce();
 	

@@ -259,6 +259,24 @@ void ADeliveryBot::ApplyCurrentSetupInfoToRuntimeComponents()
 	);
 }
 
+bool ADeliveryBot::StartPolicyRunWithPolicySpecFileName(const FString& policySpecFileName)
+{
+	if (!IsValid(PolicyControllerComponent))
+	{
+		UE_LOG(LogDeliveryBot, Warning, TEXT("Policy run start skipped. PolicyControllerComponent is invalid."));
+		return false;
+	}
+
+	const FString trimmedPolicySpecFileName = policySpecFileName.TrimStartAndEnd();
+	if (!trimmedPolicySpecFileName.IsEmpty())
+	{
+		SetupInfo.StartupPolicySpecFileName = trimmedPolicySpecFileName;
+		PolicyControllerComponent->SetStartupPolicySpecFileName(trimmedPolicySpecFileName);
+	}
+
+	return PolicyControllerComponent->StartPolicyRunAfterSpawn();
+}
+
 void ADeliveryBot::SendCurrentRuntimeConfigUpdateToPolicyServerOnce()
 {
 	if (!IsValid(PolicyControllerComponent))

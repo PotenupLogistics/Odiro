@@ -33,6 +33,9 @@
       "path": "Json/Input/DeliveryBotSetupSample_4.json",
       "hash": "109204312"
     },
+    "policy_spec": {
+      "path": "Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json"
+    },
     "pair_hash": "83029122"
   },
   "summary": {
@@ -145,7 +148,7 @@
 | `schema` | string | 고정값. `episode_evaluation_report`를 사용한다. |
 | `version` | integer | report 양식 버전. 초기 버전은 `1`이다. |
 | `units` | object | report 전체에서 사용하는 단위 계약. |
-| `run` | object | 실행 ID, EpisodeSetup/DeliveryBotSetup pair, hash 정보. |
+| `run` | object | 실행 ID, EpisodeSetup/DeliveryBotSetup/PolicySpec 조합, hash 정보. |
 | `summary` | object | Episode 최종 평가 요약. |
 | `pipeline` | object | compile, setup, evaluation pipeline 성공 여부와 진단 정보. |
 | `metrics` | object | Episode 전체에 대한 누적 수치와 최종 상태. |
@@ -177,9 +180,10 @@
 | `run.episode_setup.hash` | string | EpisodeSetup JSON 또는 compile spec hash. |
 | `run.delivery_bot_setup.path` | string | 실행에 사용한 DeliveryBotSetup JSON 경로. |
 | `run.delivery_bot_setup.hash` | string | DeliveryBotSetup JSON 또는 compile spec hash. |
-| `run.pair_hash` | string | EpisodeSetup hash와 DeliveryBotSetup hash를 조합한 pair hash. |
+| `run.policy_spec.path` | string | 실행에 사용한 PolicySpec JSON 경로. |
+| `run.pair_hash` | string | EpisodeSetup hash, DeliveryBotSetup hash, PolicySpec 경로를 조합한 pair hash. |
 
-`pair_id`와 `pair_hash`는 LLM이 "어떤 환경 구성과 로봇 설정의 조합에서 나온 결과인지"를 추적하기 위한 값이다. EpisodeSetup만 바꾸거나 DeliveryBotSetup만 바꾸는 실험에서도 pair 단위로 결과를 비교한다.
+`pair_id`와 `pair_hash`는 LLM이 "어떤 환경 구성, 로봇 설정, 정책 스펙의 조합에서 나온 결과인지"를 추적하기 위한 값이다. EpisodeSetup, DeliveryBotSetup, PolicySpec 중 하나만 바꾸는 실험에서도 pair 단위로 결과를 비교한다.
 
 ## Summary
 

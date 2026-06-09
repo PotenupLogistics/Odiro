@@ -1,19 +1,53 @@
 {
   "policySpec": {
     "catalogId": "default_delivery",
-    "catalogVersion": 1,
+    "catalogVersion": 2,
     "enabledPolicies": [
       {
         "policyId": "front_obstacle_stop",
-        "priority": 10
+        "priority": 10,
+        "parameters": {
+          "safetyStop": {
+            "hardStopDistanceM": 0.55,
+            "timeToCollisionSeconds": 0.8,
+            "minSpeedKmhForTtc": 0.2
+          }
+        }
       },
       {
         "policyId": "reroute_when_blocked",
         "priority": 20
       },
       {
+        "policyId": "dwa_local_avoidance",
+        "priority": 25,
+        "parameters": {
+          "dwa": {
+            "activationDistanceM": 4.0,
+            "safetyDistanceM": 0.45,
+            "noSafeStopDistanceM": 0.55,
+            "stopOnNoSafeTrajectory": false,
+            "predictionTimeS": 1.4,
+            "stepTimeS": 0.2,
+            "minSpeedKmh": 0.5,
+            "speedSampleCount": 4,
+            "steeringSampleCount": 11,
+            "clearanceWeight": 0.8,
+            "pathWeight": 0.8,
+            "targetWeight": 1.2
+          }
+        }
+      },
+      {
         "policyId": "front_obstacle_slowdown",
-        "priority": 30
+        "priority": 30,
+        "dynamicObstacles": {
+          "enabled": true,
+          "frontOnly": false,
+          "inflationRadiusM": 0.55,
+          "maxDistanceM": 5.0,
+          "persistenceSeconds": 1.5
+        }
       },
       {
         "policyId": "normal_path_follow",

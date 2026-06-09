@@ -51,6 +51,24 @@ def test_episode_setup_contract_uses_new_coordinate_fields_and_forbids_legacy_tr
     assert "로봇 목적지" in text
 
 
+def test_episode_setup_contract_documents_robot_profile() -> None:
+    text = _read(UE_CONTRACTS / "EPISODE_SETUP_JSON.md")
+
+    for term in [
+        "robot_profile",
+        "delivery_bot_alpha",
+        "0.44",
+        "1.00",
+        "0.64",
+        "min_passable_width_m",
+        "0.84",
+        "서버 기본",
+        "API request",
+        "collision box",
+    ]:
+        assert term in text
+
+
 def test_delivery_bot_setup_contract_keeps_tuning_separate_from_episode_placement() -> None:
     text = _read(UE_CONTRACTS / "DELIVERY_BOT_SETUP_JSON.md")
 

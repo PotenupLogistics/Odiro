@@ -54,6 +54,18 @@ def test_converts_world_config_to_episode_setup_without_mutating_input() -> None
     assert validate_episode_setup(episode).valid is True
 
 
+def test_episode_setup_includes_default_robot_profile() -> None:
+    episode = convert_world_config_to_episode_setup(_world_config())
+
+    assert episode.robot_profile.profile_id == "delivery_bot_alpha"
+    assert episode.robot_profile.width_m == 0.44
+    assert episode.robot_profile.depth_m == 1.0
+    assert episode.robot_profile.height_m == 0.64
+    assert episode.robot_profile.footprint_shape == "box"
+    assert episode.robot_profile.safety_margin_m == 0.2
+    assert episode.robot_profile.min_passable_width_m == 0.84
+
+
 def test_walkable_region_wraps_robot_start_and_goal_with_margin() -> None:
     episode = convert_world_config_to_episode_setup(_world_config())
     region = episode.ground_model.regions[0]
@@ -91,6 +103,15 @@ def test_episode_setup_export_payload_is_null_free_and_uses_evaluation_defaults(
     assert "penalty" not in payload["ground_model"]["regions"][0]
     assert "collision_tag" not in payload["ground_model"]["regions"][0]
     assert "properties" not in payload["actors"]["robot"]
+    assert payload["robot_profile"] == {
+        "profile_id": "delivery_bot_alpha",
+        "width_m": 0.44,
+        "depth_m": 1.0,
+        "height_m": 0.64,
+        "footprint_shape": "box",
+        "safety_margin_m": 0.2,
+        "min_passable_width_m": 0.84,
+    }
     assert payload["evaluation"]["near_miss"] == {"distance_m": 0.5}
     assert payload["evaluation"]["scoring"]["pedestrian_collision"] == -10
 

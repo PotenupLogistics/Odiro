@@ -116,6 +116,25 @@ def test_exported_episode_and_delivery_bot_payloads_are_null_free(tmp_path: Path
     assert "null" not in exported_text
 
 
+def test_exported_episode_setup_payload_includes_robot_profile(tmp_path: Path) -> None:
+    queue = generate_setup_pair_queue(_world_config(), episode_count=1, request_id="REQ-001")
+
+    result = export_run_queue_package(queue, output_dir=tmp_path)
+
+    episode_payload = json.loads(
+        (result.export_root / "Json" / "Input" / "EpisodeSetup_obstacle_ahead_000.json").read_text(encoding="utf-8")
+    )
+    assert episode_payload["robot_profile"] == {
+        "profile_id": "delivery_bot_alpha",
+        "width_m": 0.44,
+        "depth_m": 1.0,
+        "height_m": 0.64,
+        "footprint_shape": "box",
+        "safety_margin_m": 0.2,
+        "min_passable_width_m": 0.84,
+    }
+
+
 def test_export_service_moves_existing_target_to_backup_before_writing(tmp_path: Path) -> None:
     output_dir = tmp_path / "export"
     existing_input = output_dir / "Json" / "Input"

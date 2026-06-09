@@ -65,3 +65,34 @@ def test_consistency_checker_reports_fixed_constraint_mismatch() -> None:
     assert {"goal_distance_mismatch", "obstacle_count_mismatch"} <= {
         issue.code for issue in consistency.issues
     }
+
+
+def test_consistency_checker_rejects_narrow_gap_marked_passable() -> None:
+    result = generate_setup_pair_queue(_world_config(), episode_count=1)
+    obstacle = result.items[0].episode_setup.actors.static_obstacles[0]
+    obstacle.properties["passability"] = "passable"
+
+    consistency = check_setup_pair_queue_consistency(result, fixed_constraints={}, expected_episode_count=1)
+
+    assert consistency.passed is False
+    assert any(issue.code == "narrow_gap_marked_passable" for issue in consistency.issues)
+
+
+def test_consistency_checker_accepts_narrow_gap_marked_blocked_path() -> None:
+    result = generate_setup_pair_queue(_world_config(), episode_count=1)
+    obstacle = result.items[0].episode_setup.actors.static_obstacles[0]
+    obstacle.properties["passability"] = "blocked_path"
+
+    consistency = check_setup_pair_queue_consistency(result, fixed_constraints={}, expected_episode_count=1)
+
+    assert consistency.passed is True
+
+
+def test_consistency_checker_accepts_obstacle_without_passability_property() -> None:
+    result = generate_setup_pair_queue(_world_config(), episode_count=1)
+    obstacle = result.items[0].episode_setup.actors.static_obstacles[0]
+    obstacle.properties.pop("passability", None)
+
+    consistency = check_setup_pair_queue_consistency(result, fixed_constraints={}, expected_episode_count=1)
+
+    assert consistency.passed is True

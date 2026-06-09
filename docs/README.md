@@ -74,6 +74,8 @@ RunQueue package export는 `scripts/export_ue5_run_queue_package.py`를 사용�
 
 사용자용 scenario 생성 API는 `POST /api/v1/scenarios/generate`입니다. 입력은 자연어 `prompt`를 필수로 받고, 선택적으로 `episode_count`를 허용합니다. 성공 응답은 wrapper field 없는 RunQueue JSON입니다. `episode_count`를 생략하면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용하고, 요청값은 1 이상 `SCENARIO_EPISODE_MAX_COUNT` 이하의 strict integer여야 합니다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하는 구조는 아닙니다. EpisodeSetup / DeliveryBotSetup / RunQueue JSON은 null-free 정책을 따르고 optional field는 값이 없으면 생략합니다.
 
+로봇 실측 크기 W/D/H `0.44m / 1.00m / 0.64m`는 API request가 아니라 서버 기본 `RobotProfile`로 주입합니다. 생성/export된 EpisodeSetup에는 additive root field `robot_profile`이 포함되며, `min_passable_width_m=0.84m` 기준으로 보도 폭, 장애물 gap, robot spawn/goal 여유 검증에 사용합니다. UE가 아직 이 field를 소비하지 않으면 무시해도 되지만 collision box와 실제 크기 일치 여부는 UE 확인 항목입니다.
+
 ## Provider
 
 * [OpenAI Provider 가이드](providers/OPENAI_PROVIDER_GUIDE.md)

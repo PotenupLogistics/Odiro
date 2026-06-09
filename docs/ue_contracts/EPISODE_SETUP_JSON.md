@@ -25,6 +25,15 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
   "map_id": "EpisodeSandbox",
   "run": {},
   "evaluation": {},
+  "robot_profile": {
+    "profile_id": "delivery_bot_alpha",
+    "width_m": 0.44,
+    "depth_m": 1.0,
+    "height_m": 0.64,
+    "footprint_shape": "box",
+    "safety_margin_m": 0.2,
+    "min_passable_width_m": 0.84
+  },
   "ground_model": {},
   "paths": [],
   "actors": {}
@@ -39,9 +48,30 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
 | `map_id` | 권장 | 대상 맵 ID |
 | `run` | 권장 | seed와 시간 제한 |
 | `evaluation` | 권장 | 종료 조건과 평가 파라미터 |
+| `robot_profile` | 선택/additive | 서버 기본 로봇 실측 크기와 통과 폭 제약 |
 | `ground_model` | 권장 | 지면 영역 목록 |
 | `paths` | 보행자 사용 시 필수 | 보행자 spline 경로 |
 | `actors` | 권장 | 정적 장애물, 보행자, 로봇 |
+
+## RobotProfile
+
+`robot_profile`은 서버 기본값으로 주입되는 additive root field다. public scenario generation API request에서 사용자가 로봇 크기를 직접 넘기지 않는다. 현재 기본 profile은 `delivery_bot_alpha`이며 실측 W/D/H는 `0.44m / 1.00m / 0.64m`로 해석한다.
+
+```json
+"robot_profile": {
+  "profile_id": "delivery_bot_alpha",
+  "width_m": 0.44,
+  "depth_m": 1.0,
+  "height_m": 0.64,
+  "footprint_shape": "box",
+  "safety_margin_m": 0.2,
+  "min_passable_width_m": 0.84
+}
+```
+
+`min_passable_width_m`은 `width_m + safety_margin_m * 2`로 계산한 `0.84m`이다. backend는 이 값을 시나리오 생성/검증 단계에서 보도 폭, 장애물 배치 후 남은 gap, robot spawn/goal과 blocked region 사이의 여유 판단에 사용한다. UE collision box가 실제 충돌 판정을 담당하더라도, AI 생성 단계에서는 이 profile로 비현실적인 passable 경로 생성을 줄인다.
+
+UE 파서가 아직 `robot_profile`을 소비하지 않아도 기존 실행에는 영향을 주지 않아야 한다. 이 필드는 기존 `actors.robot`, `ground_model`, `paths`, `actors.static_obstacles`, `actors.pedestrians` 구조를 변경하지 않는다. 다만 UE 쪽 collision box와 실제 크기 W/D/H가 일치하는지는 별도 확인이 필요하다.
 
 ## Coordinates
 
@@ -158,7 +188,10 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
     "instance_id": "cone_01",
     "prop_id": "obstacle.road_cone_01",
     "xy_m": [2, 1],
-    "yaw_deg": 0
+    "yaw_deg": 0,
+    "properties": {
+      "passability": "passable"
+    }
   }
 ]
 ```
@@ -171,6 +204,8 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
 | `xy_m` | 권장 | 2D 위치 |
 | `yaw_deg` | 선택 | yaw |
 | `properties` | 선택 | shallow 확장 map |
+
+`properties`는 shallow 확장 map이다. backend는 장애물의 `blocking_ratio`와 보도 폭을 기준으로 `properties.passability`를 `"passable"` 또는 `"blocked_path"`로 추가할 수 있다. UE가 이 값을 사용하지 않으면 무시해도 되며, 기존 장애물 배치 필드인 `instance_id`, `prop_id`, `xy_m`, `yaw_deg`는 그대로 유지된다.
 
 ## Pedestrians
 

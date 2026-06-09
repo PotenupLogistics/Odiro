@@ -71,6 +71,32 @@ def test_generic_obstacle_prompt_extracts_explicit_numeric_intent() -> None:
     assert "Pedestrian" not in intent.pedestrianHints
 
 
+def test_extracts_meter_sidewalk_width_before_narrow_sidewalk_default() -> None:
+    cases = [
+        ("폭이 약 1.2m인 좁은 보도에서 로봇이 이동한다.", 120.0),
+        ("폭 1.2m 보도에서 정적 장애물이 있다.", 120.0),
+        ("1.5m 폭의 보도에서 장애물을 회피한다.", 150.0),
+        ("보도 폭 0.9m에서 로봇이 이동한다.", 90.0),
+    ]
+
+    for prompt, expected_width_cm in cases:
+        intent = extract_scenario_intent(prompt)
+
+        assert intent.sidewalkWidthCm == expected_width_cm
+
+
+def test_keeps_existing_centimeter_sidewalk_width_extraction() -> None:
+    intent = extract_scenario_intent("보도 폭은 150cm인 좁은 보도 상황을 만들어줘.")
+
+    assert intent.sidewalkWidthCm == 150
+
+
+def test_does_not_treat_robot_size_meter_value_as_sidewalk_width() -> None:
+    intent = extract_scenario_intent("로봇 크기는 폭 0.44m이고 높이 0.64m이다.")
+
+    assert intent.sidewalkWidthCm is None
+
+
 def test_generic_obstacle_requirements_include_explicit_paths() -> None:
     requirements = build_scenario_requirements(extract_scenario_intent(GENERIC_OBSTACLE_PROMPT))
     by_id = {requirement.requirementId: requirement for requirement in requirements}

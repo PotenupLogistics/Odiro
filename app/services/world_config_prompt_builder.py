@@ -29,6 +29,7 @@ from app.services.world_config_scenario_intent_extractor import (
     build_scenario_requirements,
     extract_scenario_intent,
 )
+from app.models.robot_profile import robot_physical_constraints_prompt_section
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -135,7 +136,10 @@ def build_world_config_prompt_package(
     generation_rules = build_world_config_generation_rules()
     output_contract = build_world_config_output_contract()
     static_obstacle_catalog = static_obstacle_catalog_prompt_section()
-    hardened_system_prompt = "\n\n".join([SYSTEM_PROMPT, output_contract, required_checklist, generation_rules, static_obstacle_catalog])
+    robot_constraints = robot_physical_constraints_prompt_section()
+    hardened_system_prompt = "\n\n".join(
+        [SYSTEM_PROMPT, output_contract, required_checklist, generation_rules, robot_constraints, static_obstacle_catalog]
+    )
 
     user_prompt = f"""User scenario prompt:
 {normalize_prompt(request.prompt)}
@@ -167,6 +171,8 @@ World Config required fields:
 {enum_summary}
 
 {generation_rules}
+
+{robot_constraints}
 
 {output_contract}
 

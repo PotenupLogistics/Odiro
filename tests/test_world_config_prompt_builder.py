@@ -92,6 +92,18 @@ def test_prompt_builder_includes_numeric_environment_constraints() -> None:
     assert package.environmentSampling["parameters"]["sidewalkWidthCm"] == 120
 
 
+def test_prompt_builder_includes_server_robot_profile_constraints() -> None:
+    package = build_world_config_prompt_package(_request(), compact_prompt=True)
+    combined_prompt = package.systemPrompt + package.userPrompt
+
+    assert "Robot physical size" in combined_prompt
+    assert "width: 0.44 m" in combined_prompt
+    assert "depth/length: 1.00 m" in combined_prompt
+    assert "height: 0.64 m" in combined_prompt
+    assert "robot width plus safety margin" in combined_prompt
+    assert "fixed server-side constraint" in combined_prompt
+
+
 def test_compact_prompt_still_contains_required_field_checklist() -> None:
     package = build_world_config_prompt_package(_request(), context_top_k=2, compact_prompt=True)
 

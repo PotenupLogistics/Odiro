@@ -86,6 +86,7 @@ Setup pair live smoke 상태:
 * OpenAI live smoke 1회 검증 완료
 * `run count=5`
 * EpisodeSetup / DeliveryBotSetup / RunQueue 모두 null-free
+* EpisodeSetup artifact에는 서버 기본 `RobotProfile`이 additive root field `robot_profile`로 포함됨
 * narrow sidewalk policy comparison 구조에서는 모든 run이 동일 EpisodeSetup을 참조하고, DeliveryBotSetup만 5개 policy별로 달라짐
 
 ## 주요 API
@@ -114,6 +115,8 @@ POST /api/v1/scenarios/generate
 
 이 endpoint는 사용자의 자연어 `prompt`만 입력받습니다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하는 구조가 아니며, JSON은 AI와 backend가 내부적으로 생성한 UE 실행 산출물입니다. 정상 응답은 최상위 `schema`, `version`, `runs`만 포함하는 RunQueue JSON입니다.
 `episode_count`를 함께 보내면 생성할 episode/run 개수를 지정할 수 있고, 생략하면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용합니다. 요청값은 1 이상 `SCENARIO_EPISODE_MAX_COUNT` 이하의 strict integer여야 합니다.
+
+로봇 실측 크기는 request body로 받지 않고 서버 기본 `RobotProfile`로 주입합니다. 기본 profile은 W/D/H `0.44m / 1.00m / 0.64m`, `footprint_shape=box`, `safety_margin_m=0.2`, `min_passable_width_m=0.84`이며, 생성된 `EpisodeSetup_*.json`의 root `robot_profile` field로 export됩니다. backend는 이 값을 보도 폭, 장애물 gap, robot spawn/goal 여유 검증에 사용합니다. UE는 우선 이 additive field를 무시해도 기존 `actors.robot`, `ground_model`, obstacle 구조가 바뀌지 않아야 하며, 실제 collision box와 크기 일치 여부는 UE 쪽 확인이 필요합니다.
 
 Google Drive artifact 업로드 endpoint:
 

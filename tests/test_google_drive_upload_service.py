@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +12,7 @@ from app.services.google_drive_upload_service import (
     build_google_drive_client,
     upload_scenario_artifacts_to_drive,
 )
+from app.services.setup_pair_queue_generator import generate_setup_pair_queue
 
 
 class _Dumpable:
@@ -157,6 +159,34 @@ def _artifact_result(run_count: int):
     )
 
 
+def _real_artifact_result(run_count: int):
+    queue = generate_setup_pair_queue(
+        {
+            "scenarioId": "obstacle_ahead",
+            "seed": 1001,
+            "map": {"type": "Sidewalk", "lengthCm": 800, "sidewalkWidthCm": 120},
+            "robot": {
+                "botId": "robot_01",
+                "spawn": {"x": 0, "y": 0, "z": 0},
+                "goal": {"x": 800, "y": 0, "z": 0},
+            },
+            "obstacles": [
+                {
+                    "objectId": "obstacle_01",
+                    "type": "Obstacle",
+                    "position": {"x": 400, "y": 0, "z": 0},
+                    "blockingRatio": 0.6,
+                }
+            ],
+            "pedestrians": [],
+            "runtime": {"maxDurationSec": 60},
+        },
+        episode_count=run_count,
+        request_id="REQ-ROBOT-PROFILE",
+    )
+    return SimpleNamespace(queue=queue)
+
+
 def _settings(tmp_path, folder_id: str = "folder-123") -> Settings:
     credentials = tmp_path / "credentials.json"
     credentials.write_text("{}", encoding="utf-8")
@@ -223,6 +253,25 @@ def test_upload_scenario_artifacts_uploads_one_run_queue_and_one_pair(tmp_path) 
     assert all(upload["mimetype"] == "application/json" for upload in client.files_resource.uploads)
     assert all(upload["supportsAllDrives"] is True for upload in client.files_resource.uploads)
     assert '"label": "한글"' in client.files_resource.uploads[1]["payload"]
+
+
+def test_upload_scenario_artifacts_uploads_episode_setup_robot_profile(tmp_path) -> None:
+    client = _FakeDriveClient()
+
+    response = upload_scenario_artifacts_to_drive(
+        _real_artifact_result(run_count=1),
+        settings=_settings(tmp_path),
+        drive_client=client,
+    )
+
+    episode_upload = next(upload for upload in client.files_resource.uploads if upload["body"]["name"].startswith("EpisodeSetup_"))
+    episode_payload = json.loads(episode_upload["payload"])
+    assert response.run_queue_file == "EpisodeRunQueue_obstacle_ahead.json"
+    assert episode_payload["robot_profile"]["width_m"] == 0.44
+    assert episode_payload["robot_profile"]["depth_m"] == 1.0
+    assert episode_payload["robot_profile"]["height_m"] == 0.64
+    assert episode_payload["robot_profile"]["min_passable_width_m"] == 0.84
+    assert "null" not in episode_upload["payload"]
 
 
 def test_upload_scenario_artifacts_uploads_three_pairs(tmp_path) -> None:

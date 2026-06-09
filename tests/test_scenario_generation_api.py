@@ -17,6 +17,7 @@ from app.models.scenario_generation import ScenarioDriveArtifactBackup, Scenario
 from app.services.google_drive_upload_service import GoogleDriveUploadError
 from app.services import scenario_generation_service
 from app.services.environment_generation_constraints_builder import build_environment_sampling_context
+from app.services.setup_pair_queue_generator import generate_setup_pair_queue
 from app.utils.json_sanitizer import contains_json_null
 
 
@@ -89,6 +90,58 @@ def test_scenario_generation_route_accepts_optional_episode_count(monkeypatch) -
     assert len(one_response.json()["runs"]) == 1
     assert len(three_response.json()["runs"]) == 3
     assert observed_counts == [1, 3]
+
+
+def test_scenario_generation_route_reports_generation_failure(monkeypatch) -> None:
+    def fail_generation(request, **kwargs):
+        raise RuntimeError("world config validation failed with api_key and token hidden")
+
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", fail_generation)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == {
+        "code": "SCENARIO_GENERATION_FAILED",
+        "message": "world config validation failed with [redacted] and [redacted] hidden",
+        "stage": "scenario_generation",
+    }
+
+
+def test_generated_episode_setup_preserves_request_shape_and_robot_profile() -> None:
+    queue = generate_setup_pair_queue(
+        {
+            "schemaVersion": "1.0",
+            "worldId": "world-1",
+            "scenarioId": "obstacle_ahead",
+            "seed": 1001,
+            "map": {"type": "Sidewalk", "lengthCm": 800, "sidewalkWidthCm": 120},
+            "robot": {
+                "botId": "robot_01",
+                "spawn": {"x": 0, "y": 0, "z": 0},
+                "goal": {"x": 800, "y": 0, "z": 0},
+            },
+            "obstacles": [
+                {
+                    "objectId": "obstacle_01",
+                    "type": "Obstacle",
+                    "position": {"x": 400, "y": 0, "z": 0},
+                    "blockingRatio": 0.6,
+                }
+            ],
+            "pedestrians": [],
+            "runtime": {"maxDurationSec": 60},
+        },
+        episode_count=1,
+    )
+
+    episode = queue.items[0].episode_setup
+
+    assert episode.robot_profile.width_m == 0.44
+    assert episode.robot_profile.depth_m == 1.0
+    assert episode.robot_profile.height_m == 0.64
+    assert episode.robot_profile.min_passable_width_m == 0.84
+    assert episode.actors.static_obstacles[0].properties["passability"] == "blocked_path"
 
 
 def test_scenario_generation_route_accepts_episode_count_at_max(monkeypatch) -> None:
@@ -269,6 +322,36 @@ def _artifact_result(tmp_path, run_count: int):
         ),
         export=SimpleNamespace(export_root=tmp_path, run_queue_path=None),
     )
+
+
+def _real_artifact_result(tmp_path, run_count: int = 1):
+    queue = generate_setup_pair_queue(
+        {
+            "schemaVersion": "1.0",
+            "worldId": "world-1",
+            "scenarioId": "obstacle_ahead",
+            "seed": 1001,
+            "map": {"type": "Sidewalk", "lengthCm": 800, "sidewalkWidthCm": 120},
+            "robot": {
+                "botId": "robot_01",
+                "spawn": {"x": 0, "y": 0, "z": 0},
+                "goal": {"x": 800, "y": 0, "z": 0},
+            },
+            "obstacles": [
+                {
+                    "objectId": "obstacle_01",
+                    "type": "Obstacle",
+                    "position": {"x": 400, "y": 0, "z": 0},
+                    "blockingRatio": 0.6,
+                }
+            ],
+            "pedestrians": [],
+            "runtime": {"maxDurationSec": 60},
+        },
+        episode_count=run_count,
+        request_id="REQ-ROBOT-PROFILE",
+    )
+    return SimpleNamespace(queue=queue, export=SimpleNamespace(export_root=tmp_path, run_queue_path=None))
 
 
 def _artifact_result_with_null_artifacts(tmp_path):
@@ -611,6 +694,46 @@ def test_scenario_generation_artifacts_zip_payloads_are_null_free(monkeypatch, t
     assert "ignore_tags" not in payloads["DeliveryBotSetup_test_000.json"]["robot"]["lidar"]
 
 
+def test_scenario_generation_artifacts_zip_includes_robot_profile(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(
+        routes,
+        "generate_scenario_artifacts",
+        lambda request, **kwargs: _real_artifact_result(tmp_path, run_count=1),
+    )
+
+    response = TestClient(app).post("/api/v1/scenarios/generate-artifacts", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 200
+    payloads = _zip_payload(response)
+    episode_payload = payloads["EpisodeSetup_obstacle_ahead_000.json"]
+    assert episode_payload["robot_profile"] == {
+        "profile_id": "delivery_bot_alpha",
+        "width_m": 0.44,
+        "depth_m": 1.0,
+        "height_m": 0.64,
+        "footprint_shape": "box",
+        "safety_margin_m": 0.2,
+        "min_passable_width_m": 0.84,
+    }
+    assert contains_json_null(episode_payload) is False
+
+
+def test_scenario_generation_artifacts_reports_generation_failure(monkeypatch) -> None:
+    def fail_generation(request, **kwargs):
+        raise RuntimeError("world config validation failed with private_key hidden")
+
+    monkeypatch.setattr(routes, "generate_scenario_artifacts", fail_generation)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate-artifacts", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == {
+        "code": "SCENARIO_GENERATION_FAILED",
+        "message": "world config validation failed with [redacted] hidden",
+        "stage": "scenario_generation",
+    }
+
+
 def _drive_response(run_queue_file: str, file_count: int) -> ScenarioDriveArtifactResponse:
     files = [
         ScenarioDriveArtifactFile(
@@ -670,6 +793,30 @@ def test_scenario_generate_drive_reuses_request_and_returns_metadata(monkeypatch
     assert set(payload["files"][0]) == {"kind", "filename", "drive_file_id", "drive_url"}
 
 
+def test_scenario_generate_drive_path_keeps_robot_profile_in_artifacts(monkeypatch, tmp_path) -> None:
+    observed_profile = {}
+
+    def stub_upload(artifacts):
+        episode_payload = artifacts.queue.items[0].episode_setup.model_dump(mode="json", by_alias=True)
+        observed_profile.update(episode_payload["robot_profile"])
+        return _drive_response("EpisodeRunQueue_obstacle_ahead.json", file_count=3)
+
+    monkeypatch.setattr(
+        routes,
+        "generate_scenario_artifacts",
+        lambda request, **kwargs: _real_artifact_result(tmp_path, run_count=1),
+    )
+    monkeypatch.setattr(routes, "upload_scenario_artifacts_to_drive", stub_upload)
+
+    response = TestClient(app).post("/api/v1/scenarios/generate-drive", json={"prompt": "test", "episode_count": 1})
+
+    assert response.status_code == 200
+    assert observed_profile["width_m"] == 0.44
+    assert observed_profile["depth_m"] == 1.0
+    assert observed_profile["height_m"] == 0.64
+    assert observed_profile["min_passable_width_m"] == 0.84
+
+
 def test_scenario_generate_drive_reports_upload_failure(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(routes, "generate_scenario_artifacts", lambda request, **kwargs: _artifact_result(tmp_path, run_count=1))
 
@@ -711,7 +858,7 @@ def test_scenario_generate_drive_reports_credentials_missing(monkeypatch, tmp_pa
 
 def test_scenario_generate_drive_reports_generation_failure(monkeypatch) -> None:
     def fail_generation(request, **kwargs):
-        raise RuntimeError("generation failed")
+        raise RuntimeError("generation failed with secret hidden")
 
     monkeypatch.setattr(routes, "generate_scenario_artifacts", fail_generation)
 
@@ -720,5 +867,6 @@ def test_scenario_generate_drive_reports_generation_failure(monkeypatch) -> None
     assert response.status_code == 500
     assert response.json()["detail"] == {
         "code": "SCENARIO_GENERATION_FAILED",
-        "message": "Scenario generation failed.",
+        "message": "generation failed with [redacted] hidden",
+        "stage": "scenario_generation",
     }

@@ -18,6 +18,7 @@ from app.models.episode_setup import (
     PedestrianMovement,
     RegionShape,
 )
+from app.models.robot_profile import RobotProfile, default_robot_profile
 
 
 START_GOAL_MARGIN_M = 2.0
@@ -108,8 +109,15 @@ def _robot(world_config: dict[str, Any]) -> EpisodeRobot:
     )
 
 
-def _obstacles(world_config: dict[str, Any]) -> list[EpisodeStaticObstacle]:
+def _passability(sidewalk_width_m: float, blocking_ratio: float, robot_profile: RobotProfile) -> str:
+    remaining_width_m = sidewalk_width_m * max(0.0, 1.0 - blocking_ratio)
+    return "passable" if remaining_width_m >= robot_profile.min_passable_width_m else "blocked_path"
+
+
+def _obstacles(world_config: dict[str, Any], robot_profile: RobotProfile) -> list[EpisodeStaticObstacle]:
     obstacles = world_config.get("obstacles") if isinstance(world_config.get("obstacles"), list) else []
+    map_config = world_config.get("map") if isinstance(world_config.get("map"), dict) else {}
+    sidewalk_width_m = _sidewalk_width_m(world_config, _cm_to_m(map_config.get("sidewalkWidthCm", 0.0)))
     actors: list[EpisodeStaticObstacle] = []
     instance_counts: dict[str, int] = {}
     for index, obstacle in enumerate(obstacles, start=1):
@@ -126,6 +134,7 @@ def _obstacles(world_config: dict[str, Any]) -> list[EpisodeStaticObstacle]:
         base_instance_id = prop_id.removeprefix("obstacle.")
         instance_counts[base_instance_id] = instance_counts.get(base_instance_id, 0) + 1
         instance_id = obstacle.get("objectId") or f"{base_instance_id}_{instance_counts[base_instance_id]:02d}"
+        blocking_ratio = float(obstacle.get("blockingRatio", 0.0))
         actors.append(
             EpisodeStaticObstacle(
                 instance_id=instance_id,
@@ -133,7 +142,8 @@ def _obstacles(world_config: dict[str, Any]) -> list[EpisodeStaticObstacle]:
                 xy_m=_xy_m(obstacle.get("position")),
                 yaw_deg=float(obstacle.get("yawDegree", 0.0)),
                 properties={
-                    "blocking_ratio": float(obstacle.get("blockingRatio", 0.0)),
+                    "blocking_ratio": blocking_ratio,
+                    "passability": _passability(sidewalk_width_m, blocking_ratio, robot_profile),
                     "semantic_type": "Obstacle",
                 },
             )
@@ -181,6 +191,7 @@ def _pedestrians(world_config: dict[str, Any]) -> tuple[list[EpisodePath], list[
 
 def convert_world_config_to_episode_setup(world_config: dict[str, Any]) -> EpisodeSetup:
     source = deepcopy(world_config)
+    robot_profile = default_robot_profile()
     paths, pedestrians = _pedestrians(source)
     runtime = source.get("runtime") if isinstance(source.get("runtime"), dict) else {}
     run = source.get("run") if isinstance(source.get("run"), dict) else {}
@@ -192,11 +203,12 @@ def convert_world_config_to_episode_setup(world_config: dict[str, Any]) -> Episo
             iteration_index=int(run.get("iteration_index", 0)),
             time_limit_s=float(runtime.get("maxDurationSec", 60.0)),
         ),
+        robot_profile=robot_profile,
         ground_model=_ground_model(source),
         paths=paths,
         actors=EpisodeActors(
             robot=_robot(source),
-            static_obstacles=_obstacles(source),
+            static_obstacles=_obstacles(source, robot_profile),
             pedestrians=pedestrians,
         ),
     )

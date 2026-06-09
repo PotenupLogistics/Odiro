@@ -27,6 +27,7 @@ EpisodeSetup JSON과 DeliveryBotSetup JSON은 항상 pair로 다룬다. 한 pair
 - LLM이 입력 JSON을 만들 때는 valid JSON object만 출력한다.
 - EpisodeSetup은 meter와 degree를 사용한다. 컴파일러가 Unreal centimeter로 변환한다.
 - EpisodeSetup의 actor 배치는 `xy_m`, `yaw_deg`만 사용한다. scale, pitch, roll, transform object는 입력하지 않는다.
+- EpisodeSetup은 additive root field `robot_profile`로 서버 기본 로봇 실측 크기 W/D/H `0.44m / 1.00m / 0.64m`를 전달할 수 있다. UE가 아직 이 field를 소비하지 않으면 무시해도 되지만, collision box와 실제 크기 일치 여부는 UE에서 확인해야 한다.
 - DeliveryBotSetup은 로봇 배치, instance ID, 목적지, run 정보를 갖지 않는다.
 - RunQueue의 각 항목은 `episode_setup`과 `delivery_bot_setup`을 모두 가져야 한다.
 - EvaluationReport는 LLM이 조정할 수 있는 episode behavior와 관련된 정보만 담는다. 정책 서버 통신 실패 같은 인프라 오류는 핵심 평가 데이터에서 제외한다.

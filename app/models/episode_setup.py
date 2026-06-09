@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models.robot_profile import RobotProfile, default_robot_profile
+
 
 EpisodePropertyValue = str | int | float | bool | list[float] | None
 
@@ -136,6 +138,7 @@ class EpisodeSetup(BaseModel):
     map_id: str = "EpisodeSandbox"
     run: EpisodeRunConfig = Field(default_factory=EpisodeRunConfig)
     evaluation: EpisodeEvaluationConfig = Field(default_factory=EpisodeEvaluationConfig)
+    robot_profile: RobotProfile = Field(default_factory=default_robot_profile)
     ground_model: GroundModel
     paths: list[EpisodePath] = Field(default_factory=list)
     actors: EpisodeActors

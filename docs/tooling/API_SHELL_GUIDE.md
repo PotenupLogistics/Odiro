@@ -52,6 +52,7 @@ POST /api/v1/scenarios/generate
 * explicit `null`은 출력하지 않는다.
 * `0`, `false`, `""`, `[]` 같은 의미 있는 값은 삭제하지 않는다.
 * 좁은 보도 장애물 policy comparison queue는 동일 EpisodeSetup을 공유하고 DeliveryBotSetup만 policy별로 다르게 만든다.
+* 로봇 실측 크기 W/D/H `0.44m / 1.00m / 0.64m`는 request body가 아니라 서버 기본 `RobotProfile`로 주입한다. 생성/export된 `EpisodeSetup_*.json`에는 additive root field `robot_profile`이 포함되며, `min_passable_width_m`은 `0.84m`이다.
 
 ## 4. Google Drive artifact upload API
 
@@ -109,6 +110,7 @@ zip 내부에는 다음 파일을 포함한다.
 * `DeliveryBotSetup_*.json`
 
 이 endpoint는 UE 통신/수동 확인을 위한 debug/test 경로다. 기존 `/api/v1/scenarios/generate` 응답 schema는 변경하지 않는다.
+zip 안의 `EpisodeSetup_*.json`도 local export와 Google Drive upload 경로와 동일하게 `robot_profile`을 포함한다.
 
 ## 6. WorldConfig generation service
 

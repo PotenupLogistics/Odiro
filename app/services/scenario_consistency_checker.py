@@ -120,6 +120,13 @@ def _expected_sidewalk_width_m(width_cm: float) -> float:
     return max(width_m, MIN_SIDEWALK_WIDTH_M)
 
 
+def _remaining_passage_width_m(sidewalk_width_m: float, obstacle: Any) -> float | None:
+    blocking_ratio = _as_float(getattr(obstacle, "properties", {}).get("blocking_ratio"))
+    if blocking_ratio is None:
+        return None
+    return sidewalk_width_m * max(0.0, 1.0 - blocking_ratio)
+
+
 def _obstacle_rect_with_buffer(obstacle: Any) -> tuple[float, float, float, float]:
     catalog_item = find_static_obstacle_by_prop_id(str(getattr(obstacle, "prop_id", "")))
     bbox_m = catalog_item["bbox_m"] if catalog_item else [0.0, 0.0, 0.0]
@@ -291,9 +298,41 @@ def _check_episode(
                 path=f"items[{episode_index}].episode_setup.actors.robot.route.goal_xy_m",
             )
         )
+    robot_clearance_margin_m = episode.robot_profile.half_width_with_margin_m
+    if not _point_inside_margin(bounds, robot.xy_m, robot_clearance_margin_m):
+        issues.append(
+            ScenarioConsistencyIssue(
+                code="robot_start_footprint_margin_violation",
+                message="Robot start must keep half footprint plus safety margin away from blocked regions.",
+                path=f"items[{episode_index}].episode_setup.actors.robot.xy_m",
+            )
+        )
+    if robot.route is not None and not _point_inside_margin(bounds, robot.route.goal_xy_m, robot_clearance_margin_m):
+        issues.append(
+            ScenarioConsistencyIssue(
+                code="robot_goal_footprint_margin_violation",
+                message="Robot goal must keep half footprint plus safety margin away from blocked regions.",
+                path=f"items[{episode_index}].episode_setup.actors.robot.route.goal_xy_m",
+            )
+        )
 
     path_by_id = {path.path_id: path for path in episode.paths}
     obstacle_rects = [_obstacle_rect_with_buffer(obstacle) for obstacle in episode.actors.static_obstacles]
+    sidewalk_width_m = bounds[3] - bounds[2]
+    for obstacle_index, obstacle in enumerate(episode.actors.static_obstacles):
+        remaining_width_m = _remaining_passage_width_m(sidewalk_width_m, obstacle)
+        if (
+            remaining_width_m is not None
+            and remaining_width_m < episode.robot_profile.min_passable_width_m
+            and obstacle.properties.get("passability") == "passable"
+        ):
+            issues.append(
+                ScenarioConsistencyIssue(
+                    code="narrow_gap_marked_passable",
+                    message="Obstacle leaves less than robot min_passable_width_m but is marked passable.",
+                    path=f"items[{episode_index}].episode_setup.actors.static_obstacles[{obstacle_index}].properties.passability",
+                )
+            )
     check_crossing_path_geometry = str(fixed_constraints.get("pedestrianDirection", "")).lower() == "crossing"
     for pedestrian_index, pedestrian in enumerate(episode.actors.pedestrians):
         path = path_by_id.get(pedestrian.path_id)

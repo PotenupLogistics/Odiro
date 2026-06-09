@@ -28,6 +28,32 @@ router = APIRouter()
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # 정책 서버 소스는 서버 내부 코드 — 고정 기본경로 사용
 _POLICY_SERVER_SOURCE_PATH = _PROJECT_ROOT / "test_sample" / "policy_server.py"
+_SENSITIVE_ERROR_TOKENS = (
+    "api_key",
+    "apikey",
+    "authorization",
+    "bearer",
+    "credential",
+    "credentials",
+    "private_key",
+    "secret",
+    "token",
+)
+
+
+def _redact_error_message(message: str) -> str:
+    safe_message = message or "Scenario generation failed."
+    for token in _SENSITIVE_ERROR_TOKENS:
+        safe_message = safe_message.replace(token, "[redacted]")
+    return safe_message
+
+
+def _scenario_generation_error_detail(exc: Exception) -> dict[str, str]:
+    return {
+        "code": "SCENARIO_GENERATION_FAILED",
+        "message": _redact_error_message(str(exc)),
+        "stage": "scenario_generation",
+    }
 
 
 @router.get("/health")
@@ -42,7 +68,10 @@ def health() -> dict[str, str]:
 def scenario_generate_endpoint(
     request: ScenarioGenerateRequest,
 ) -> EpisodeRunQueue:
-    artifacts = generate_scenario_artifacts(request, write_export=False)
+    try:
+        artifacts = generate_scenario_artifacts(request, write_export=False)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=_scenario_generation_error_detail(exc)) from exc
     try:
         write_scenario_artifacts_to_local_dir(artifacts)
     except ScenarioArtifactStorageError as exc:
@@ -123,7 +152,10 @@ def _artifact_zip_bytes(artifacts: ScenarioGenerationArtifacts) -> bytes:
 def scenario_generate_artifacts_endpoint(
     request: ScenarioGenerateRequest,
 ) -> StreamingResponse:
-    artifacts = generate_scenario_artifacts(request, write_export=False)
+    try:
+        artifacts = generate_scenario_artifacts(request, write_export=False)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=_scenario_generation_error_detail(exc)) from exc
     zip_payload = _artifact_zip_bytes(artifacts)
     return StreamingResponse(
         BytesIO(zip_payload),
@@ -152,13 +184,7 @@ def scenario_generate_drive_endpoint(
     try:
         artifacts = generate_scenario_artifacts(request, write_export=False)
     except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "code": "SCENARIO_GENERATION_FAILED",
-                "message": "Scenario generation failed.",
-            },
-        ) from exc
+        raise HTTPException(status_code=500, detail=_scenario_generation_error_detail(exc)) from exc
     try:
         return upload_scenario_artifacts_to_drive(artifacts)
     except GoogleDriveUploadError as exc:

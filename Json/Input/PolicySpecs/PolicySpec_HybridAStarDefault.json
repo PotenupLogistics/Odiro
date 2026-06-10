@@ -6,21 +6,54 @@
       {
         "policyId": "front_obstacle_stop",
         "priority": 10,
-        "parameters": {
-          "safetyStop": {
-            "hardStopDistanceM": 0.55,
-            "timeToCollisionSeconds": 0.8,
-            "minSpeedKmhForTtc": 0.2
-          }
+        "planner": "hybrid_astar",
+        "hybridAStar": {
+          "stepDistanceCm": 75.0,
+          "minTurningRadiusCm": 300.0,
+          "headingBinCount": 72,
+          "maxExpandedNodes": 18000,
+          "goalAcceptanceDistanceCm": 150.0,
+          "reverseCostMultiplier": 2.2,
+          "gearSwitchCostPenalty": 500.0,
+          "maxContinuousReverseDistanceCm": 350.0,
+          "clearanceRadiusCm": 65.0,
+          "analyticExpansionEnabled": true,
+          "analyticExpansionMaxDistanceCm": 700.0,
+          "analyticExpansionInterval": 1,
+          "analyticExpansionSampleStepCm": 25.0,
+          "analyticExpansionMaxLengthMultiplier": 4.0,
+          "postProcessEnabled": true,
+          "shortcutEnabled": true,
+          "resampleEnabled": true,
+          "resampleDistanceCm": 50.0,
+          "dedupeDistanceCm": 2.0
+        },
+        "dynamicObstacles": {
+          "enabled": true,
+          "frontOnly": false,
+          "inflationRadiusM": 0.75,
+          "maxDistanceM": 5.5,
+          "persistenceSeconds": 2.0
+        },
+        "recovery": {
+          "strategy": "reverse_then_reroute",
+          "rerouteAttemptLimit": 3,
+          "rerouteAttemptIntervalSeconds": 0.75,
+          "reverseDurationSeconds": 1.0,
+          "reverseSpeedKmh": 1.0,
+          "reverseMinClearanceM": 1.2
         }
       },
       {
         "policyId": "reroute_when_blocked",
-        "priority": 20
+        "priority": 20,
+        "planner": "hybrid_astar"
       },
       {
         "policyId": "dwa_local_avoidance",
         "priority": 25,
+        "planner": "dwa",
+        "globalPlanner": "hybrid_astar",
         "parameters": {
           "dwa": {
             "activationDistanceM": 5.0,
@@ -30,7 +63,6 @@
             "clearanceMarginM": 0.15,
             "obstacleInflationM": 0.1,
             "noSafeStopDistanceM": 0.85,
-            "stopOnNoSafeTrajectory": false,
             "predictionTimeS": 1.8,
             "stepTimeS": 0.2,
             "minSpeedKmh": 0.5,
@@ -58,17 +90,19 @@
       {
         "policyId": "front_obstacle_slowdown",
         "priority": 30,
+        "planner": "hybrid_astar",
         "dynamicObstacles": {
           "enabled": true,
           "frontOnly": false,
-          "inflationRadiusM": 0.55,
-          "maxDistanceM": 5.0,
-          "persistenceSeconds": 1.5
+          "inflationRadiusM": 0.75,
+          "maxDistanceM": 5.5,
+          "persistenceSeconds": 2.0
         }
       },
       {
         "policyId": "normal_path_follow",
-        "priority": 100
+        "priority": 100,
+        "planner": "hybrid_astar"
       }
     ]
   }

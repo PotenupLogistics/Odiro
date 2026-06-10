@@ -28,6 +28,9 @@ DEFAULT_GRACE_SPEED_KMH = 1.0
 DEFAULT_HARD_STOP_DISTANCE_M = 0.55
 DEFAULT_TIME_TO_COLLISION_SECONDS = 0.8
 DEFAULT_MIN_SPEED_KMH_FOR_TTC = 0.2
+DEFAULT_PEDESTRIAN_YIELD_SECONDS = 5.0
+DEFAULT_REVERSE_MIN_CLEARANCE_M = 1.2
+DEFAULT_REVERSE_REAR_HALF_ANGLE_DEGREE = 55.0
 
 
 def evaluate(context: dict[str, Any]) -> dict[str, Any] | None:
@@ -45,6 +48,30 @@ def evaluate(context: dict[str, Any]) -> dict[str, Any] | None:
     slow_down_distance_m = get_float_field(lidar_spec, "slowDownDistanceM", max(stop_distance_m, 5.0))
     distance_m = float(nearest_object.get("closestDistanceM", 0.0) or 0.0)
 
+    priority = get_policy_priority(context, 10)
+    actor_tags = nearest_object.get("actorTags", [])
+    safe_actor_tags = actor_tags if isinstance(actor_tags, list) else []
+    stop_sustain_seconds = update_stop_sustain_state(context, nearest_object)
+    reroute_delay_seconds = get_stop_reroute_delay_seconds(context, nearest_object)
+    common_debug = {
+        "nearestObjectActor": str(nearest_object.get("actorName", "")),
+        "nearestObjectTags": [str(tag) for tag in safe_actor_tags],
+        "nearestObjectDistanceM": distance_m,
+        "stopDistanceM": stop_distance_m,
+        "stopSustainSeconds": stop_sustain_seconds,
+        "stopRerouteDelaySeconds": reroute_delay_seconds,
+        "rightOfWayMode": str(context.get("rightOfWayMode", "policy")),
+    }
+
+    if should_reroute_without_wait(context, nearest_object) and distance_m <= slow_down_distance_m:
+        common_debug["safetyStopStatus"] = "early_reroute"
+        return build_sustained_stop_reroute_candidate(
+            context,
+            priority,
+            max(stop_distance_m, slow_down_distance_m, distance_m),
+            common_debug,
+        )
+
     if distance_m > stop_distance_m:
         clear_stop_sustain_state(context)
         return None
@@ -54,19 +81,6 @@ def evaluate(context: dict[str, Any]) -> dict[str, Any] | None:
         clear_stop_sustain_state(context)
         return None
 
-    priority = get_policy_priority(context, 10)
-    actor_tags = nearest_object.get("actorTags", [])
-    safe_actor_tags = actor_tags if isinstance(actor_tags, list) else []
-    stop_sustain_seconds = update_stop_sustain_state(context, nearest_object)
-    reroute_delay_seconds = get_stop_reroute_delay_seconds(context)
-    common_debug = {
-        "nearestObjectActor": str(nearest_object.get("actorName", "")),
-        "nearestObjectTags": [str(tag) for tag in safe_actor_tags],
-        "nearestObjectDistanceM": distance_m,
-        "stopDistanceM": stop_distance_m,
-        "stopSustainSeconds": stop_sustain_seconds,
-        "stopRerouteDelaySeconds": reroute_delay_seconds,
-    }
     common_debug.update(safety_debug)
 
     if stop_sustain_seconds >= reroute_delay_seconds:
@@ -110,7 +124,6 @@ def build_sustained_stop_reroute_candidate(
         if reroute_attempt_count >= attempt_limit:
             return start_recovery_candidate(context, priority, debug)
 
-    register_reroute_attempt(context)
     motion_spec = get_motion_control_spec(context)
     reroute_speed_kmh = get_float_field(
         motion_spec,
@@ -135,6 +148,12 @@ def build_sustained_stop_reroute_candidate(
         candidate_debug.update(build_recovery_debug(context))
         if isinstance(dynamic_debug, dict):
             candidate_debug.update(dynamic_debug)
+
+    path_status = str(candidate.get("debug", {}).get("pathStatus", ""))
+    if path_status == "ok":
+        mark_reroute_success(context)
+    else:
+        register_reroute_attempt(context)
 
     return candidate
 
@@ -242,6 +261,24 @@ def make_reverse_recovery_candidate(
     recovery_duration_seconds: float,
 ) -> dict[str, Any]:
     recovery_spec = get_recovery_spec(context)
+    reverse_clearance_debug = build_reverse_clearance_debug(context, recovery_spec)
+    if not bool(reverse_clearance_debug.get("reverseClearanceOk", False)):
+        recovery_debug = build_recovery_debug(context)
+        recovery_debug.update(reverse_clearance_debug)
+        recovery_debug.update(
+            {
+                "recoveryElapsedSeconds": recovery_elapsed_seconds,
+                "recoveryDurationSeconds": recovery_duration_seconds,
+            }
+        )
+        return make_policy_candidate(
+            POLICY_ID,
+            make_stop_action(),
+            "front_obstacle_stop_recovery_reverse_blocked",
+            priority,
+            {**debug, **recovery_debug},
+        )
+
     reverse_speed_kmh = get_float_recovery_setting(
         recovery_spec,
         ("reverseSpeedKmh", "reverse_speed_kmh"),
@@ -261,6 +298,7 @@ def make_reverse_recovery_candidate(
             "reverseSteering": reverse_steering,
         }
     )
+    recovery_debug.update(reverse_clearance_debug)
 
     return make_policy_candidate(
         POLICY_ID,
@@ -336,7 +374,7 @@ def finish_recovery_cycle(policy_state: dict[str, Any], current_time_seconds: fl
     policy_state["lastRecoveryEndTimeSeconds"] = current_time_seconds
 
 
-def get_stop_reroute_delay_seconds(context: dict[str, Any]) -> float:
+def get_stop_reroute_delay_seconds(context: dict[str, Any], nearest_object: dict[str, Any]) -> float:
     policy_entry = context.get("policyEntry", {})
     safe_policy_entry = policy_entry if isinstance(policy_entry, dict) else {}
     parameters = safe_policy_entry.get("parameters", {})
@@ -347,7 +385,17 @@ def get_stop_reroute_delay_seconds(context: dict[str, Any]) -> float:
             if field_name in source:
                 return max(float(source.get(field_name, DEFAULT_STOP_REROUTE_DELAY_SECONDS) or 0.0), 0.0)
 
+    right_of_way_mode = str(context.get("rightOfWayMode", "policy")).strip().lower().replace("-", "_")
+    if right_of_way_mode == "robot":
+        return 0.0
+    if right_of_way_mode == "pedestrian":
+        return DEFAULT_PEDESTRIAN_YIELD_SECONDS if is_pedestrian_obstacle(nearest_object) else 0.0
+
     return DEFAULT_STOP_REROUTE_DELAY_SECONDS
+
+
+def should_reroute_without_wait(context: dict[str, Any], nearest_object: dict[str, Any]) -> bool:
+    return get_stop_reroute_delay_seconds(context, nearest_object) <= 0.0
 
 
 def get_recovery_spec(context: dict[str, Any]) -> dict[str, Any]:
@@ -524,6 +572,7 @@ def build_recovery_debug(context: dict[str, Any]) -> dict[str, Any]:
             DEFAULT_REROUTE_ATTEMPT_LIMIT,
         ),
         "recoveryMode": str(policy_state.get("recoveryMode", "")),
+        "rerouteSuccessCount": int(policy_state.get("rerouteSuccessCount", 0) or 0),
     }
 
 
@@ -548,6 +597,14 @@ def update_stop_sustain_state(context: dict[str, Any], nearest_object: dict[str,
     policy_state["lastTimeSeconds"] = current_time_seconds
     policy_state["stopSustainSeconds"] = stop_sustain_seconds
     return stop_sustain_seconds
+
+
+def mark_reroute_success(context: dict[str, Any]) -> None:
+    policy_state = get_stop_policy_state(context)
+    current_time_seconds = get_observation_time_seconds(context)
+    policy_state["rerouteSuccessCount"] = int(policy_state.get("rerouteSuccessCount", 0) or 0) + 1
+    policy_state["rerouteAttemptCount"] = 0
+    policy_state["lastRerouteSuccessTimeSeconds"] = current_time_seconds
 
 
 def clear_stop_sustain_state(context: dict[str, Any]) -> None:
@@ -577,3 +634,67 @@ def build_obstacle_state_key(nearest_object: dict[str, Any]) -> str:
         return actor_name
 
     return f"unknown:{float(nearest_object.get('closestRayYawDegree', 0.0) or 0.0):.1f}"
+
+
+def is_pedestrian_obstacle(nearest_object: dict[str, Any]) -> bool:
+    actor_name = str(nearest_object.get("actorName", "")).lower()
+    actor_tags = nearest_object.get("actorTags", [])
+    safe_tags = actor_tags if isinstance(actor_tags, list) else []
+    searchable_values = [actor_name, *(str(tag).lower() for tag in safe_tags)]
+    return any(
+        token in value
+        for value in searchable_values
+        for token in ("pedestrian", "person", "human", "walker")
+    )
+
+
+def build_reverse_clearance_debug(
+    context: dict[str, Any],
+    recovery_spec: dict[str, Any],
+) -> dict[str, Any]:
+    min_clearance_m = get_float_recovery_setting(
+        recovery_spec,
+        ("reverseMinClearanceM", "reverse_min_clearance_m"),
+        DEFAULT_REVERSE_MIN_CLEARANCE_M,
+    )
+    rear_half_angle_degree = get_float_recovery_setting(
+        recovery_spec,
+        ("reverseRearHalfAngleDegree", "reverse_rear_half_angle_degree"),
+        DEFAULT_REVERSE_REAR_HALF_ANGLE_DEGREE,
+    )
+    closest_rear_hit_m = get_closest_rear_lidar_hit_m(context, rear_half_angle_degree)
+    return {
+        "reverseMinClearanceM": min_clearance_m,
+        "reverseRearHalfAngleDegree": rear_half_angle_degree,
+        "reverseClosestRearHitM": closest_rear_hit_m,
+        "reverseClearanceOk": closest_rear_hit_m is None or closest_rear_hit_m >= min_clearance_m,
+    }
+
+
+def get_closest_rear_lidar_hit_m(
+    context: dict[str, Any],
+    rear_half_angle_degree: float,
+) -> float | None:
+    observation = context.get("observation", {})
+    safe_observation = observation if isinstance(observation, dict) else {}
+    rays = safe_observation.get("lidarRays", [])
+    if not isinstance(rays, list):
+        return None
+
+    closest_rear_hit_m: float | None = None
+    for ray in rays:
+        if not isinstance(ray, dict) or not bool(ray.get("hit", False)):
+            continue
+
+        signed_yaw = normalize_angle_degree(get_float_field(ray, "rayYawDegree", 0.0))
+        if abs(abs(signed_yaw) - 180.0) > rear_half_angle_degree:
+            continue
+
+        distance_m = get_float_field(ray, "distanceM", 0.0)
+        if distance_m <= 0.0:
+            continue
+
+        if closest_rear_hit_m is None or distance_m < closest_rear_hit_m:
+            closest_rear_hit_m = distance_m
+
+    return closest_rear_hit_m

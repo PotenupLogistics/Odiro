@@ -243,6 +243,8 @@ def copy_policy_runtime_settings(source: dict[str, Any], target: dict[str, Any])
         "safetyStop",
         "safety_stop",
         "dwa",
+        "hybridAStar",
+        "hybrid_astar",
     ):
         value = source.get(field_name)
         if isinstance(value, dict):
@@ -253,6 +255,10 @@ def copy_policy_runtime_settings(source: dict[str, Any], target: dict[str, Any])
         "stop_reroute_delay_seconds",
         "recoveryStrategy",
         "recovery_strategy",
+        "planner",
+        "plannerMode",
+        "pathPlanner",
+        "globalPlanner",
     ):
         if field_name in source:
             target[field_name] = source[field_name]

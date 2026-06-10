@@ -4,7 +4,7 @@ from typing import Any
 
 from deliverybot_policy.actions import make_policy_candidate, make_stop_action
 from deliverybot_policy.context import get_float_field, get_goal, get_policy_priority, get_robot_state
-from deliverybot_policy.pathfinding import build_pathfinding_debug, find_policy_astar_path, world_to_grid_index
+from deliverybot_policy.planning import build_planned_path_debug, find_path_for_policy, world_to_grid_index
 
 
 POLICY_ID = "reroute_when_blocked"
@@ -33,17 +33,11 @@ def evaluate(context: dict[str, Any]) -> dict[str, Any] | None:
     if start_index is None or goal_index is None:
         return None
 
-    path_result = find_policy_astar_path(
-        grid_info,
-        cell_lookup,
-        start_index,
-        goal_index,
-        context.get("policyEntry", {}),
-    )
-    if path_result.path:
+    path_result = find_path_for_policy(context)
+    if path_result.world_path:
         return None
 
-    path_debug = build_pathfinding_debug(path_result)
+    path_debug = build_planned_path_debug(grid_info, path_result)
     path_debug.update(
         {
             "robotGridX": start_index[0],

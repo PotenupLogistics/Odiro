@@ -1,7 +1,10 @@
 #include "Episode/Widget/EpisodeEditorRootWidget.h"
 
+#include "Components/Button.h"
 #include "Components/Widget.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
+#include "Episode/Editor/EpisodeEditorController.h"
+#include "Episode/Editor/EpisodeEditorTypes.h"
 #include "Episode/Llm/EpisodeLlmPromptWidget.h"
 #include "Episode/Widget/EpisodeAssetPaletteWidget.h"
 #include "Episode/Widget/EpisodeEditorToolbarWidget.h"
@@ -20,11 +23,14 @@ void UEpisodeEditorRootWidget::NativeConstruct()
 	HidePlaceableContextMenu();
 	HideAssetPaletteWidget();
 	SetLlmPanelVisible(false);
+	BindViewModeButtons();
+	RefreshViewModeButtons();
 	BindEditorLaunchSubsystem();
 }
 
 void UEpisodeEditorRootWidget::NativeDestruct()
 {
+	UnbindViewModeButtons();
 	UnbindEditorLaunchSubsystem();
 	Super::NativeDestruct();
 }
@@ -36,6 +42,15 @@ void UEpisodeEditorRootWidget::NativeTick(const FGeometry& myGeometry, const flo
 	if (bAutoRevealLlmPanelOnRightEdge)
 	{
 		SetLlmPanelVisible(ShouldRevealLlmPanelFromMouseEdge());
+	}
+
+	// keyboard toggle 등 버튼 외 경로로 view mode가 바뀐 경우를 따라잡음.
+	if (const AEpisodeEditorController* controller = GetEditorController())
+	{
+		if (!bHasCachedViewMode || controller->GetEditorViewMode() != LastSeenViewMode)
+		{
+			RefreshViewModeButtons();
+		}
 	}
 }
 
@@ -95,6 +110,87 @@ void UEpisodeEditorRootWidget::HandleEditorSessionStarted(const bool)
 	{
 		ShowAssetPaletteWidget();
 	}
+}
+
+void UEpisodeEditorRootWidget::RefreshViewModeButtons()
+{
+	const AEpisodeEditorController* controller = GetEditorController();
+	if (!controller)
+	{
+		return;
+	}
+
+	const EEpisodeEditorViewMode viewMode = controller->GetEditorViewMode();
+	LastSeenViewMode = viewMode;
+	bHasCachedViewMode = true;
+
+	// 현재 모드가 아닌, 전환 대상 모드의 버튼만 노출함.
+	const bool bTopDownActive = viewMode == EEpisodeEditorViewMode::TopDownOrtho;
+	if (TopDownOrthoModeButton)
+	{
+		TopDownOrthoModeButton->SetVisibility(
+			bTopDownActive ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	}
+	if (PerspectiveModeButton)
+	{
+		PerspectiveModeButton->SetVisibility(
+			bTopDownActive ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+}
+
+void UEpisodeEditorRootWidget::HandleTopDownOrthoModeButtonClicked()
+{
+	if (AEpisodeEditorController* controller = GetEditorController())
+	{
+		controller->SetEditorViewMode(EEpisodeEditorViewMode::TopDownOrtho);
+		RefreshViewModeButtons();
+	}
+}
+
+void UEpisodeEditorRootWidget::HandlePerspectiveModeButtonClicked()
+{
+	if (AEpisodeEditorController* controller = GetEditorController())
+	{
+		controller->SetEditorViewMode(EEpisodeEditorViewMode::Perspective);
+		RefreshViewModeButtons();
+	}
+}
+
+void UEpisodeEditorRootWidget::BindViewModeButtons()
+{
+	if (TopDownOrthoModeButton)
+	{
+		TopDownOrthoModeButton->OnClicked.RemoveDynamic(
+			this, &UEpisodeEditorRootWidget::HandleTopDownOrthoModeButtonClicked);
+		TopDownOrthoModeButton->OnClicked.AddDynamic(
+			this, &UEpisodeEditorRootWidget::HandleTopDownOrthoModeButtonClicked);
+	}
+	if (PerspectiveModeButton)
+	{
+		PerspectiveModeButton->OnClicked.RemoveDynamic(
+			this, &UEpisodeEditorRootWidget::HandlePerspectiveModeButtonClicked);
+		PerspectiveModeButton->OnClicked.AddDynamic(
+			this, &UEpisodeEditorRootWidget::HandlePerspectiveModeButtonClicked);
+	}
+}
+
+void UEpisodeEditorRootWidget::UnbindViewModeButtons()
+{
+	if (TopDownOrthoModeButton)
+	{
+		TopDownOrthoModeButton->OnClicked.RemoveDynamic(
+			this, &UEpisodeEditorRootWidget::HandleTopDownOrthoModeButtonClicked);
+	}
+	if (PerspectiveModeButton)
+	{
+		PerspectiveModeButton->OnClicked.RemoveDynamic(
+			this, &UEpisodeEditorRootWidget::HandlePerspectiveModeButtonClicked);
+	}
+}
+
+AEpisodeEditorController* UEpisodeEditorRootWidget::GetEditorController() const
+{
+	return Cast<AEpisodeEditorController>(GetOwningPlayer());
 }
 
 void UEpisodeEditorRootWidget::BindEditorLaunchSubsystem()

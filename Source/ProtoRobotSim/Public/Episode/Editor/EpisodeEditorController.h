@@ -61,6 +61,12 @@ public:
 	TSoftObjectPtr<UInputAction> EditorScaleAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	TSoftObjectPtr<UInputAction> EditorViewModeToggleAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	TSoftObjectPtr<UInputAction> EditorZoomAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
 	int32 EditorInputMappingPriority = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input", meta = (ClampMin = "0.0"))
@@ -116,6 +122,15 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor")
 	EEpisodeEditorControllerMode GetEditorMode() const { return EditorMode; }
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Editor")
+	EEpisodeEditorViewMode GetEditorViewMode() const { return EditorViewMode; }
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
+	void SetEditorViewMode(EEpisodeEditorViewMode viewMode);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
+	void ToggleEditorViewMode();
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
 	EEpisodeTransformGizmoMode GetTransformGizmoMode() const { return TransformGizmoMode; }
@@ -201,6 +216,8 @@ private:
 	void HandleScaleModeInput();
 	void HandleEditorMoveAction(const FInputActionValue& inputActionValue);
 	void HandleEditorLookAction(const FInputActionValue& inputActionValue);
+	void HandleViewModeToggleInput();
+	void HandleEditorZoomAction(const FInputActionValue& inputActionValue);
 	void BeginLookInputCapture();
 	void EndLookInputCapture();
 	void UpdateHoveredPlaceable();
@@ -255,6 +272,9 @@ private:
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor")
 	EEpisodeEditorControllerMode EditorMode = EEpisodeEditorControllerMode::Observer;
+
+	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor")
+	EEpisodeEditorViewMode EditorViewMode = EEpisodeEditorViewMode::Perspective;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Gizmo")
 	EEpisodeTransformGizmoMode TransformGizmoMode = EEpisodeTransformGizmoMode::Translate;

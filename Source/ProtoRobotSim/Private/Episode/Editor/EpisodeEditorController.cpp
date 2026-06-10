@@ -137,6 +137,8 @@ AEpisodeEditorController::AEpisodeEditorController()
 	EditorTranslateAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorTranslate.IA_EditorTranslate")));
 	EditorRotateAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorRotate.IA_EditorRotate")));
 	EditorScaleAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorScale.IA_EditorScale")));
+	EditorViewModeToggleAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorViewModeToggle.IA_EditorViewModeToggle")));
+	EditorZoomAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorZoom.IA_EditorZoom")));
 }
 
 void AEpisodeEditorController::BeginPlay()
@@ -205,6 +207,40 @@ void AEpisodeEditorController::SetObserverMode()
 	SetSelectedPlaceable(nullptr);
 	DestroyPlacementPreview();
 	ApplyInputMode();
+}
+
+void AEpisodeEditorController::SetEditorViewMode(EEpisodeEditorViewMode viewMode)
+{
+	if (EditorViewMode == viewMode)
+	{
+		return;
+	}
+
+	AEpisodeEditorPawn* editorPawn = GetEditorPawn();
+	if (!editorPawn) return;
+
+	if (bIsTransformGizmoDragging)
+	{
+		EndTransformGizmoDrag();
+	}
+
+	EditorViewMode = viewMode;
+	if (viewMode == EEpisodeEditorViewMode::TopDownOrtho)
+	{
+		editorPawn->EnterTopDownView();
+	}
+	else
+	{
+		editorPawn->EnterPerspectiveView();
+	}
+}
+
+void AEpisodeEditorController::ToggleEditorViewMode()
+{
+	SetEditorViewMode(
+		EditorViewMode == EEpisodeEditorViewMode::Perspective
+			? EEpisodeEditorViewMode::TopDownOrtho
+			: EEpisodeEditorViewMode::Perspective);
 }
 
 void AEpisodeEditorController::RequestEditorWidgetInputMode(UWidget* focusWidget)
@@ -845,6 +881,13 @@ void AEpisodeEditorController::HandleEditorMoveAction(const FInputActionValue& i
 		break;
 	}
 
+	if (EditorViewMode == EEpisodeEditorViewMode::TopDownOrtho)
+	{
+		// top-down에서는 zoom을 마우스 휠(EditorZoomAction)으로만 처리하고 Z축 입력은 무시함.
+		editorPawn->ApplyTopDownPanInput(forwardValue, rightValue);
+		return;
+	}
+
 	editorPawn->ApplyMoveInput(forwardValue, rightValue, upValue);
 }
 
@@ -881,9 +924,36 @@ void AEpisodeEditorController::HandleEditorLookAction(const FInputActionValue& i
 	}
 
 	LookCaptureAccumulatedDelta += FVector2D(yawValue, pitchValue).Size();
+
+	// top-down에서는 회전 대신 drag pan으로 라우팅함.
+	// 클릭 선택이 look capture의 누적 delta에 의존하므로 capture 자체는 유지함.
+	if (EditorViewMode == EEpisodeEditorViewMode::TopDownOrtho)
+	{
+		editorPawn->ApplyTopDownDragPanInput(yawValue, pitchValue);
+		return;
+	}
+
 	editorPawn->ApplyLookInput(
 		yawValue * MouseLookSensitivity,
 		pitchValue * MouseLookSensitivity);
+}
+
+void AEpisodeEditorController::HandleViewModeToggleInput()
+{
+	ToggleEditorViewMode();
+}
+
+void AEpisodeEditorController::HandleEditorZoomAction(const FInputActionValue& inputActionValue)
+{
+	if (EditorViewMode != EEpisodeEditorViewMode::TopDownOrtho)
+	{
+		return;
+	}
+
+	AEpisodeEditorPawn* editorPawn = GetEditorPawn();
+	if (!editorPawn) return;
+
+	editorPawn->ApplyTopDownZoomInput(inputActionValue.Get<float>());
 }
 
 void AEpisodeEditorController::BeginLookInputCapture()
@@ -1703,6 +1773,24 @@ void AEpisodeEditorController::BindEditorInputActions()
 			ETriggerEvent::Started,
 			this,
 			&AEpisodeEditorController::HandleScaleModeInput);
+	}
+
+	if (UInputAction* viewModeToggleAction = EditorViewModeToggleAction.LoadSynchronous())
+	{
+		enhancedInputComponent->BindAction(
+			viewModeToggleAction,
+			ETriggerEvent::Started,
+			this,
+			&AEpisodeEditorController::HandleViewModeToggleInput);
+	}
+
+	if (UInputAction* zoomAction = EditorZoomAction.LoadSynchronous())
+	{
+		enhancedInputComponent->BindAction(
+			zoomAction,
+			ETriggerEvent::Triggered,
+			this,
+			&AEpisodeEditorController::HandleEditorZoomAction);
 	}
 }
 

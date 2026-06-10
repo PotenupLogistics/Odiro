@@ -12,6 +12,14 @@ enum class EEpisodeEditorControllerMode : uint8
 	EditPlacement
 };
 
+// 카메라 투영 모드. EditorMode(배치 상태)와 직교하는 별도 상태임.
+UENUM(BlueprintType)
+enum class EEpisodeEditorViewMode : uint8
+{
+	Perspective,
+	TopDownOrtho
+};
+
 UENUM(BlueprintType)
 enum class EEpisodeTransformGizmoHandle : uint8
 {

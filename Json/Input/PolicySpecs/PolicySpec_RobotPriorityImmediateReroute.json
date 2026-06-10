@@ -1,0 +1,51 @@
+{
+  "policySpec": {
+    "catalogId": "default_delivery",
+    "catalogVersion": 2,
+    "enabledPolicies": [
+      {
+        "policyId": "front_obstacle_stop",
+        "priority": 10,
+        "stopRerouteDelaySeconds": 0.0,
+        "dynamicObstacles": {
+          "enabled": true,
+          "frontOnly": false,
+          "inflationRadiusM": 0.75,
+          "maxDistanceM": 5.5,
+          "persistenceSeconds": 2.0
+        },
+        "recovery": {
+          "strategy": "reverse_then_reroute",
+          "rerouteAttemptLimit": 3,
+          "rerouteAttemptIntervalSeconds": 0.75,
+          "reverseDurationSeconds": 1.0,
+          "reverseSpeedKmh": 1.0,
+          "reverseMinClearanceM": 1.2
+        }
+      },
+      {
+        "policyId": "reroute_when_blocked",
+        "priority": 20
+      },
+      {
+        "policyId": "dwa_local_avoidance",
+        "priority": 25
+      },
+      {
+        "policyId": "front_obstacle_slowdown",
+        "priority": 30,
+        "dynamicObstacles": {
+          "enabled": true,
+          "frontOnly": false,
+          "inflationRadiusM": 0.75,
+          "maxDistanceM": 5.5,
+          "persistenceSeconds": 2.0
+        }
+      },
+      {
+        "policyId": "normal_path_follow",
+        "priority": 100
+      }
+    ]
+  }
+}

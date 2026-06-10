@@ -14,11 +14,11 @@ from deliverybot_policy.context import (
     get_robot_state,
     normalize_angle_degree,
 )
-from deliverybot_policy.pathfinding import (
-    build_pathfinding_debug,
-    build_path_points_debug,
-    find_policy_astar_path,
-    grid_index_to_world_location,
+from deliverybot_policy.planning import (
+    build_planned_path_debug,
+    build_steering_to_target,
+    choose_lookahead_target_info,
+    find_path_for_policy,
     world_to_grid_index,
 )
 
@@ -101,16 +101,10 @@ def build_path_follow_candidate(
             },
         )
 
-    path_result = find_policy_astar_path(
-        grid_info,
-        cell_lookup,
-        start_index,
-        goal_index,
-        context.get("policyEntry", {}),
-    )
-    path = path_result.path
+    path_result = find_path_for_policy(context)
+    path = path_result.world_path
     if not path:
-        path_debug = build_pathfinding_debug(path_result)
+        path_debug = build_planned_path_debug(grid_info, path_result)
         path_debug.update(
             {
                 "robotGridX": start_index[0],
@@ -127,27 +121,36 @@ def build_path_follow_candidate(
             path_debug,
         )
 
-    lookahead_index = choose_lookahead_index(grid_info, path, motion_spec)
-    lookahead_world = grid_index_to_world_location(grid_info, lookahead_index)
-    steering, yaw_error_degree = build_steering(robot_state, lookahead_world, motion_spec)
-    target_speed_kmh = build_target_speed_kmh(drive_spec, motion_spec, steering, speed_limit_kmh)
-    path_debug = build_pathfinding_debug(path_result)
+    lookahead_result = choose_lookahead_target_info(path_result, robot_state, motion_spec)
+    lookahead_world = lookahead_result.target_world
+    direction = lookahead_result.direction
+    steering, yaw_error_degree = build_steering_to_target(robot_state, lookahead_world, motion_spec, direction)
+    target_speed_kmh = build_target_speed_kmh(drive_spec, motion_spec, steering, speed_limit_kmh, direction)
+    path_debug = build_planned_path_debug(grid_info, path_result)
+    lookahead_grid_index = world_to_grid_index(
+        grid_info,
+        lookahead_world["x"],
+        lookahead_world["y"],
+    )
     path_debug.update(
         {
-            "lookAheadGridX": lookahead_index[0],
-            "lookAheadGridY": lookahead_index[1],
+            "lookAheadGridX": lookahead_grid_index[0] if lookahead_grid_index is not None else None,
+            "lookAheadGridY": lookahead_grid_index[1] if lookahead_grid_index is not None else None,
             "lookAheadWorldX": lookahead_world["x"],
             "lookAheadWorldY": lookahead_world["y"],
             "lookAheadWorldZ": lookahead_world["z"],
+            "nearestPathIndex": lookahead_result.nearest_index,
+            "lookAheadPathIndex": lookahead_result.target_index,
+            "distanceToPathCm": lookahead_result.distance_to_path_cm,
             "yawErrorDegree": yaw_error_degree,
             "distanceToGoalCm": distance_to_goal_cm,
+            "pathDirection": direction,
         }
     )
-    path_debug.update(build_path_points_debug(grid_info, path))
 
     return make_policy_candidate(
         policy_id,
-        make_action(steering, target_speed_kmh, direction="Forward"),
+        make_action(steering, target_speed_kmh, direction=direction),
         reason,
         priority,
         path_debug,
@@ -188,8 +191,10 @@ def build_target_speed_kmh(
     motion_spec: dict[str, Any],
     steering: float,
     speed_limit_kmh: float | None,
+    direction: str = "Forward",
 ) -> float:
-    max_speed_kmh = get_float_field(drive_spec, "maxSpeedKmh", 0.0)
+    max_speed_field = "maxReverseSpeedKmh" if direction == "Reverse" else "maxSpeedKmh"
+    max_speed_kmh = get_float_field(drive_spec, max_speed_field, 0.0)
     requested_speed_kmh = get_float_field(motion_spec, "targetSpeedKmh", 3.0)
     if requested_speed_kmh <= 0.0:
         requested_speed_kmh = min(3.0, max_speed_kmh) if max_speed_kmh > 0.0 else 0.0

@@ -6,6 +6,7 @@ import math
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 
 from deliverybot_policy.catalog import (
@@ -51,6 +52,25 @@ VERSION_MISMATCH_POLICY_MODES = {
     "stale-config-version",
     "stale-grid-version",
 }
+
+PLANNER_MODE_CHOICES = (
+    "auto",
+    "astar",
+    "hybrid-astar",
+    "hybrid_astar",
+)
+
+DWA_MODE_CHOICES = (
+    "policy",
+    "on",
+    "off",
+)
+
+RIGHT_OF_WAY_MODE_CHOICES = (
+    "policy",
+    "pedestrian",
+    "robot",
+)
 
 
 def clamp(value: float, minimum: float, maximum: float) -> float:
@@ -172,6 +192,9 @@ def build_episode_status_response(server: ThreadingHTTPServer) -> dict[str, Any]
         "enabledPolicyCount": len(policy_spec.get("enabledPolicies", []))
         if isinstance(policy_spec.get("enabledPolicies", []), list)
         else 0,
+        "plannerMode": str(getattr(server, "planner_mode", "auto")),
+        "dwaMode": str(getattr(server, "dwa_mode", "policy")),
+        "rightOfWayMode": str(getattr(server, "right_of_way_mode", "policy")),
         **grid_status,
     }
 
@@ -214,6 +237,9 @@ def build_policy_spec_response(server: ThreadingHTTPServer) -> dict[str, Any]:
         "enabledPolicyCount": len(policy_spec.get("enabledPolicies", []))
         if isinstance(policy_spec.get("enabledPolicies", []), list)
         else 0,
+        "plannerMode": str(getattr(server, "planner_mode", "auto")),
+        "dwaMode": str(getattr(server, "dwa_mode", "policy")),
+        "rightOfWayMode": str(getattr(server, "right_of_way_mode", "policy")),
     }
 
 
@@ -568,6 +594,24 @@ def log_selected_policy_action(response: dict[str, Any]) -> None:
         f"rerouteAttempts={int(safe_debug.get('rerouteAttemptCount', 0) or 0)} "
         f"recovery={safe_debug.get('recoveryMode', '-')} "
         f"candidates={int(safe_debug.get('candidateCount', 0) or 0)} "
+        f"elapsedMs={get_debug_float(safe_debug, 'decisionElapsedMs', 0.0):.1f} "
+        f"pathCacheHit={bool(safe_debug.get('pathCacheHit', False))} "
+        f"nearestPathIndex={get_debug_int(safe_debug, 'nearestPathIndex', -1)} "
+        f"lookAheadPathIndex={get_debug_int(safe_debug, 'lookAheadPathIndex', -1)} "
+        f"lookAhead=({float(safe_debug.get('lookAheadWorldX', 0.0) or 0.0):.1f},"
+        f"{float(safe_debug.get('lookAheadWorldY', 0.0) or 0.0):.1f}) "
+        f"distanceToPathCm={float(safe_debug.get('distanceToPathCm', 0.0) or 0.0):.1f} "
+        f"dwaStatus={safe_debug.get('dwaStatus', '-')} "
+        f"dwaObstacles={int(safe_debug.get('dwaObstacleCount', 0) or 0)} "
+        f"dwaLidar={int(safe_debug.get('dwaLidarObstacleCount', 0) or 0)} "
+        f"dwaGrid={int(safe_debug.get('dwaGridObstacleCount', 0) or 0)} "
+        f"dwaClearanceCm={get_debug_float(safe_debug, 'dwaClearanceCm', 0.0):.1f} "
+        f"dwaClearanceRecovery={bool(safe_debug.get('dwaClearanceRecoverySelected', False))} "
+        f"dwaRecovery={safe_debug.get('dwaRecoveryDirection', '-')} "
+        f"dwaRecoveryClearanceCm={get_debug_float(safe_debug, 'dwaRecoveryClearanceCm', 0.0):.1f} "
+        f"dwaRequiredClearanceCm={get_debug_float(safe_debug, 'dwaRequiredClearanceCm', 0.0):.1f} "
+        f"dwaRecoveryStartCm={get_debug_float(safe_debug, 'dwaRecoveryStartClearanceCm', 0.0):.1f} "
+        f"dwaRecoveryEndCm={get_debug_float(safe_debug, 'dwaRecoveryEndClearanceCm', 0.0):.1f} "
         f"enabled={[str(policy_id) for policy_id in safe_enabled_policies]} "
         f"direction={safe_action.get('direction', '-')} "
         f"speedKmh={float(safe_action.get('targetSpeedKmh', 0.0) or 0.0):.2f} "
@@ -575,6 +619,20 @@ def log_selected_policy_action(response: dict[str, Any]) -> None:
         f"throttle={float(safe_action.get('throttle', 0.0) or 0.0):.2f} "
         f"brake={float(safe_action.get('brake', 0.0) or 0.0):.2f}"
     )
+
+
+def get_debug_int(debug: dict[str, Any], field_name: str, default: int = 0) -> int:
+    try:
+        return int(debug.get(field_name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def get_debug_float(debug: dict[str, Any], field_name: str, default: float = 0.0) -> float:
+    try:
+        return float(debug.get(field_name, default))
+    except (TypeError, ValueError):
+        return default
 
 
 def should_log_runtime_messages(server: ThreadingHTTPServer) -> bool:
@@ -605,6 +663,9 @@ def build_runtime_policy_context(
         "policyCatalog": policy_catalog,
         "policySpec": policy_spec,
         "policyRuntimeState": policy_runtime_state,
+        "plannerMode": str(getattr(server, "planner_mode", "auto")),
+        "dwaMode": str(getattr(server, "dwa_mode", "policy")),
+        "rightOfWayMode": str(getattr(server, "right_of_way_mode", "policy")),
     }
 
 
@@ -1099,6 +1160,7 @@ class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
         self.send_json(200, response)
 
     def handle_policy_action(self) -> None:
+        decision_start_time = time.perf_counter()
         try:
             observation = self.read_json_body()
         except ValueError as error:
@@ -1146,6 +1208,7 @@ class DeliveryBotPolicyHandler(BaseHTTPRequestHandler):
         response["configVersion"] = get_server_config_version(self.server)
         response["debug"].update(robot_grid_debug)
         response["debug"].update(goal_grid_debug)
+        response["debug"]["decisionElapsedMs"] = (time.perf_counter() - decision_start_time) * 1000.0
         if should_log_runtime_messages(self.server):
             log_selected_policy_action(response)
         self.send_json(200, response)
@@ -1199,8 +1262,31 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--policy-mode",
         choices=POLICY_MODE_CHOICES,
-        default="forward",
+        default="runtime",
         help="Policy response mode for success and validation failure tests.",
+    )
+    parser.add_argument(
+        "--planner-mode",
+        choices=PLANNER_MODE_CHOICES,
+        default="auto",
+        help="Default global planner: astar, hybrid-astar, or auto. PolicySpec planner fields override this.",
+    )
+    parser.add_argument(
+        "--dwa-mode",
+        choices=DWA_MODE_CHOICES,
+        default="policy",
+        help="DWA local avoidance mode. on forces DWA policy on; off removes DWA policy; policy follows PolicySpec.",
+    )
+    parser.add_argument(
+        "--right-of-way-mode",
+        choices=RIGHT_OF_WAY_MODE_CHOICES,
+        default="policy",
+        help="Default yielding behavior. pedestrian waits for people before reroute; robot reroutes immediately.",
+    )
+    parser.add_argument(
+        "--policy-spec-file",
+        default="",
+        help="Optional startup PolicySpec JSON path or name under Json/Input/PolicySpecs.",
     )
     parser.add_argument(
         "--verbose-runtime-log",
@@ -1216,11 +1302,19 @@ def main() -> None:
     server = ThreadingHTTPServer((args.host, args.port), DeliveryBotPolicyHandler)
     server.response_delay_second = max(args.response_delay_second, 0.0)
     server.policy_mode = args.policy_mode
+    server.planner_mode = normalize_cli_planner_mode(args.planner_mode)
+    server.dwa_mode = normalize_cli_dwa_mode(args.dwa_mode)
+    server.right_of_way_mode = args.right_of_way_mode
     server.verbose_runtime_log = bool(args.verbose_runtime_log)
     server.active_catalog_id = str(policy_catalog.get("catalogId", ""))
     server.policy_catalog = policy_catalog
-    server.policy_spec = build_default_policy_spec(policy_catalog)
-    server.policy_spec_received = False
+    startup_policy_spec = load_startup_policy_spec(args.policy_spec_file)
+    if startup_policy_spec:
+        server.policy_spec = normalize_policy_spec(startup_policy_spec, policy_catalog)
+        server.policy_spec_received = True
+    else:
+        server.policy_spec = build_default_policy_spec(policy_catalog)
+        server.policy_spec_received = False
     server.episode_info = {}
     server.episode_version = 0
     server.config_info = {}
@@ -1244,15 +1338,65 @@ def main() -> None:
     print("GET  /policy/spec/status")
     print("GET  /health")
     print(f"policy mode: {server.policy_mode}")
+    print(f"planner mode: {server.planner_mode}")
+    print(f"dwa mode: {server.dwa_mode}")
+    print(f"right-of-way mode: {server.right_of_way_mode}")
     print(
         "policy catalog: "
         f"activeCatalogId={server.active_catalog_id} "
         f"version={policy_catalog.get('catalogVersion', 0)} "
         f"policies={len(policy_catalog.get('policies', [])) if isinstance(policy_catalog.get('policies', []), list) else 0}"
     )
+    if startup_policy_spec:
+        print(f"startup policy spec: enabledPolicies={len(server.policy_spec.get('enabledPolicies', []))}")
     if server.response_delay_second > 0.0:
         print(f"response delay: {server.response_delay_second:.3f}s")
     server.serve_forever()
+
+
+def normalize_cli_planner_mode(value: str) -> str:
+    planner_mode = str(value or "auto").strip().lower().replace("-", "_")
+    return "hybrid_astar" if planner_mode == "hybrid_astar" else planner_mode
+
+
+def normalize_cli_dwa_mode(value: str) -> str:
+    dwa_mode = str(value or "policy").strip().lower()
+    return dwa_mode if dwa_mode in DWA_MODE_CHOICES else "policy"
+
+
+def load_startup_policy_spec(policy_spec_file: str) -> dict[str, Any]:
+    trimmed = str(policy_spec_file or "").strip()
+    if not trimmed:
+        return {}
+
+    for candidate in iter_policy_spec_candidates(trimmed):
+        if not candidate.exists() or not candidate.is_file():
+            continue
+
+        with candidate.open("r", encoding="utf-8") as file:
+            payload = json.load(file)
+
+        policy_spec = payload.get("policySpec", payload) if isinstance(payload, dict) else {}
+        if isinstance(policy_spec, dict):
+            return policy_spec
+
+    raise FileNotFoundError(f"policy spec file not found: {policy_spec_file}")
+
+
+def iter_policy_spec_candidates(value: str) -> list[Path]:
+    raw_path = Path(value)
+    names = [value]
+    if raw_path.suffix.lower() != ".json":
+        names.append(f"{value}.json")
+
+    candidates: list[Path] = []
+    for name in names:
+        path = Path(name)
+        candidates.append(path)
+        candidates.append(Path.cwd() / path)
+        candidates.append(Path.cwd() / "Json" / "Input" / "PolicySpecs" / path.name)
+
+    return candidates
 
 
 if __name__ == "__main__":

@@ -4,9 +4,11 @@
 #include "Episode/Editor/EpisodeEditorTypes.h"
 #include "GameFramework/PlayerController.h"
 #include "Shared/EpisodeCoreTypes.h"
+#include "Shared/EpisodeSpecTypes.h"
 #include "EpisodeEditorController.generated.h"
 
 class AEpisodeEditorPawn;
+class AEpisodeGroundRegion;
 class AEpisodePlacementPreviewActor;
 class AEpisodeTransformGizmoActor;
 class UEpisodeAuthoringSubsystem;
@@ -79,13 +81,21 @@ public:
 	TEnumAsByte<ECollisionChannel> PlacementTraceChannel = ECC_Visibility;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Placement")
-	bool bSnapPlacementToGrid = false;
+	bool bSnapPlacementToGrid = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Placement", meta = (ClampMin = "1.0"))
 	double PlacementGridSizeCm = 50.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Placement", meta = (ClampMin = "0.0"))
 	double PlacementGroundSnapToleranceCm = 5.0;
+
+	// 지면 영역을 그리는 평면의 높이(cm). 코너 trace가 이 평면에 투영됨.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|RegionDraw")
+	double GroundRegionDrawPlaneZCm = 0.0;
+
+	// 드래그한 사각형의 가로/세로가 모두 이 값 이상이어야 커밋됨(짧은 클릭은 무시).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|RegionDraw", meta = (ClampMin = "0.0"))
+	double RegionDrawMinSizeCm = 10.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
 	TSubclassOf<AEpisodePlacementPreviewActor> PlacementPreviewActorClass;
@@ -113,6 +123,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
 	bool BeginPalettePlacement(EEpisodePaletteItemType itemType, FName assetId);
+
+	// 지면 영역(walkable/penalty/blocked)을 drag-out으로 그리는 모드로 진입함.
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|RegionDraw")
+	bool BeginGroundRegionDraw(EEpisodeGroundRegionType regionType);
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
 	void CancelPlacement();
@@ -248,6 +262,18 @@ private:
 	bool TraceMousePlacement(FHitResult& outHit) const;
 	FTransform BuildPlacementTransform(const FVector& location) const;
 	FVector SnapLocationIfNeeded(const FVector& location) const;
+	void UpdateRegionDrawPreview();
+	void BeginRegionDrag();
+	void FinalizeRegionDrag();
+	bool TraceMouseToGroundRegionPlane(FVector& outPoint) const;
+	void ComputeRegionRectFromCorners(
+		const FVector& cornerA,
+		const FVector& cornerB,
+		FVector& outCenter,
+		FVector2D& outSize) const;
+	void ConfigureRegionDrawPreview(const FVector& center, const FVector2D& size);
+	AEpisodeGroundRegion* EnsureRegionDrawPreviewActor();
+	void DestroyRegionDrawPreview();
 	void ApplyInputMode();
 	void PruneEditorWidgetInputModeRequests();
 	UWidget* FindEditorWidgetInputModeFocus() const;
@@ -292,6 +318,12 @@ private:
 	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
 	FName SelectedPlacementAssetId;
 
+	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|RegionDraw")
+	EEpisodeGroundRegionType PendingGroundRegionType = EEpisodeGroundRegionType::Walkable;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AEpisodeGroundRegion> RegionDrawPreviewActor;
+
 	UPROPERTY(Transient)
 	TObjectPtr<AEpisodePlacementPreviewActor> PlacementPreviewActor;
 
@@ -312,6 +344,8 @@ private:
 
 	bool bIsLookInputHeld = false;
 	double LookCaptureAccumulatedDelta = 0.0;
+	bool bIsRegionDragging = false;
+	FVector RegionDragStartWorld = FVector::ZeroVector;
 	bool bIsTransformGizmoDragging = false;
 	EEpisodeTransformGizmoHandle ActiveTransformGizmoHandle = EEpisodeTransformGizmoHandle::None;
 	FString ActiveTransformGizmoInstanceId;

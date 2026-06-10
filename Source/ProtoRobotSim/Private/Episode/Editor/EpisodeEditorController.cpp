@@ -1,5 +1,6 @@
 
 #include "Episode/Editor/EpisodeEditorController.h"
+#include "Episode/Actors/EpisodeGroundRegion.h"
 #include "Episode/Actors/EpisodeStaticObstacle.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/Editor/EpisodeAuthoringSubsystem.h"
@@ -124,7 +125,7 @@ AEpisodeEditorController::AEpisodeEditorController()
 	TransformGizmoActorClass = AEpisodeTransformGizmoActor::StaticClass();
 	EditorRootWidgetClass = UEpisodeEditorRootWidget::StaticClass();
 	static ConstructorHelpers::FClassFinder<UEpisodeEditorRootWidget> editorRootWidgetFinder(
-		TEXT("/Game/Widgets/WBP_EpisodeEditorRootWidget"));
+		TEXT("/Game/Widgets/Editor/WBP_EpisodeEditorRootWidget"));
 	if (editorRootWidgetFinder.Succeeded())
 	{
 		EditorRootWidgetClass = editorRootWidgetFinder.Class;
@@ -180,6 +181,9 @@ void AEpisodeEditorController::Tick(float deltaSeconds)
 	case EEpisodeEditorControllerMode::EditPlacement:
 		UpdatePlacementPreview();
 		break;
+	case EEpisodeEditorControllerMode::EditRegionDraw:
+		UpdateRegionDrawPreview();
+		break;
 	default:
 		break;
 	}
@@ -201,11 +205,13 @@ void AEpisodeEditorController::SetObserverMode()
 	CurrentPlacementFailureReason.Reset();
 	bIsLookInputHeld = false;
 	LookCaptureAccumulatedDelta = 0.0;
+	bIsRegionDragging = false;
 	PressedPlaceableComponent.Reset();
 	ResetTransformGizmoDrag();
 	SetHoveredPlaceable(nullptr);
 	SetSelectedPlaceable(nullptr);
 	DestroyPlacementPreview();
+	DestroyRegionDrawPreview();
 	ApplyInputMode();
 }
 
@@ -273,10 +279,12 @@ bool AEpisodeEditorController::BeginPalettePlacement(EEpisodePaletteItemType ite
 {
 	bIsLookInputHeld = false;
 	LookCaptureAccumulatedDelta = 0.0;
+	bIsRegionDragging = false;
 	PressedPlaceableComponent.Reset();
 	ResetTransformGizmoDrag();
 	SetHoveredPlaceable(nullptr);
 	SetSelectedPlaceable(nullptr);
+	DestroyRegionDrawPreview();
 
 	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if (!authoringSubsystem) return false;
@@ -324,7 +332,8 @@ bool AEpisodeEditorController::BeginPalettePlacement(EEpisodePaletteItemType ite
 
 void AEpisodeEditorController::CancelPlacement()
 {
-	if (EditorMode == EEpisodeEditorControllerMode::EditPlacement)
+	if (EditorMode == EEpisodeEditorControllerMode::EditPlacement
+		|| EditorMode == EEpisodeEditorControllerMode::EditRegionDraw)
 	{
 		SetObserverMode();
 	}
@@ -419,6 +428,204 @@ bool AEpisodeEditorController::ConfirmPlacement()
 		*SelectedPlacementAssetId.ToString(),
 		*CurrentPlacementFailureReason);
 	return false;
+}
+
+bool AEpisodeEditorController::BeginGroundRegionDraw(EEpisodeGroundRegionType regionType)
+{
+	bIsLookInputHeld = false;
+	LookCaptureAccumulatedDelta = 0.0;
+	bIsRegionDragging = false;
+	PressedPlaceableComponent.Reset();
+	ResetTransformGizmoDrag();
+	SetHoveredPlaceable(nullptr);
+	SetSelectedPlaceable(nullptr);
+	DestroyPlacementPreview();
+
+	if (!GetAuthoringSubsystem())
+	{
+		return false;
+	}
+
+	PendingGroundRegionType = regionType;
+
+	// 프리뷰 actor를 미리 준비하되 드래그 시작 전까지는 숨김.
+	if (AEpisodeGroundRegion* previewActor = EnsureRegionDrawPreviewActor())
+	{
+		previewActor->SetActorHiddenInGame(true);
+	}
+
+	EditorMode = EEpisodeEditorControllerMode::EditRegionDraw;
+	ApplyInputMode();
+	return true;
+}
+
+void AEpisodeEditorController::BeginRegionDrag()
+{
+	FVector groundPoint = FVector::ZeroVector;
+	if (!TraceMouseToGroundRegionPlane(groundPoint))
+	{
+		return;
+	}
+
+	RegionDragStartWorld = groundPoint;
+	bIsRegionDragging = true;
+	ConfigureRegionDrawPreview(groundPoint, FVector2D::ZeroVector);
+}
+
+void AEpisodeEditorController::UpdateRegionDrawPreview()
+{
+	if (!bIsRegionDragging)
+	{
+		return;
+	}
+
+	FVector groundPoint = FVector::ZeroVector;
+	if (!TraceMouseToGroundRegionPlane(groundPoint))
+	{
+		return;
+	}
+
+	FVector center = FVector::ZeroVector;
+	FVector2D size = FVector2D::ZeroVector;
+	ComputeRegionRectFromCorners(RegionDragStartWorld, groundPoint, center, size);
+	ConfigureRegionDrawPreview(center, size);
+}
+
+void AEpisodeEditorController::FinalizeRegionDrag()
+{
+	bIsRegionDragging = false;
+
+	FVector groundPoint = FVector::ZeroVector;
+	if (!TraceMouseToGroundRegionPlane(groundPoint))
+	{
+		groundPoint = RegionDragStartWorld;
+	}
+
+	FVector center = FVector::ZeroVector;
+	FVector2D size = FVector2D::ZeroVector;
+	ComputeRegionRectFromCorners(RegionDragStartWorld, groundPoint, center, size);
+
+	if (AEpisodeGroundRegion* previewActor = RegionDrawPreviewActor.Get())
+	{
+		previewActor->SetActorHiddenInGame(true);
+	}
+
+	// 너무 작은 사각형은 stray click으로 보고 커밋하지 않음.
+	if (size.X < RegionDrawMinSizeCm || size.Y < RegionDrawMinSizeCm)
+	{
+		return;
+	}
+
+	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		return;
+	}
+
+	FEpisodeGroundRegionSpec placedSpec;
+	FString failureReason;
+	if (!authoringSubsystem->AddGroundRegion(
+		PendingGroundRegionType,
+		center,
+		size,
+		0.0,
+		placedSpec,
+		failureReason))
+	{
+		UE_LOG(
+			LogEpisodeEditorController,
+			Warning,
+			TEXT("Ground region placement failed | Reason: %s"),
+			*failureReason);
+	}
+
+	// 연속 그리기: EditRegionDraw 모드를 유지함.
+}
+
+bool AEpisodeEditorController::TraceMouseToGroundRegionPlane(FVector& outPoint) const
+{
+	const FVector planeOrigin(0.0, 0.0, GroundRegionDrawPlaneZCm);
+	FVector hitPoint = FVector::ZeroVector;
+	if (!TraceMouseToPlane(planeOrigin, FVector::UpVector, hitPoint))
+	{
+		return false;
+	}
+
+	outPoint = SnapLocationIfNeeded(hitPoint);
+	outPoint.Z = GroundRegionDrawPlaneZCm;
+	return true;
+}
+
+void AEpisodeEditorController::ComputeRegionRectFromCorners(
+	const FVector& cornerA,
+	const FVector& cornerB,
+	FVector& outCenter,
+	FVector2D& outSize) const
+{
+	outCenter = FVector(
+		(cornerA.X + cornerB.X) * 0.5,
+		(cornerA.Y + cornerB.Y) * 0.5,
+		GroundRegionDrawPlaneZCm);
+	outSize = FVector2D(
+		FMath::Abs(cornerA.X - cornerB.X),
+		FMath::Abs(cornerA.Y - cornerB.Y));
+}
+
+void AEpisodeEditorController::ConfigureRegionDrawPreview(const FVector& center, const FVector2D& size)
+{
+	AEpisodeGroundRegion* previewActor = EnsureRegionDrawPreviewActor();
+	if (!previewActor)
+	{
+		return;
+	}
+
+	FEpisodeGroundRegionSpec spec;
+	spec.RegionId = TEXT("__region_draw_preview");
+	spec.RegionType = PendingGroundRegionType;
+	spec.ShapeType = EEpisodeGroundShapeType::Rectangle;
+	spec.Center = center;
+	spec.Size = FVector2D(FMath::Max(size.X, 1.0), FMath::Max(size.Y, 1.0));
+	spec.YawDegrees = 0.0;
+
+	previewActor->ConfigureRegion(spec);
+	previewActor->SetActorEnableCollision(false);
+	previewActor->SetActorHiddenInGame(false);
+}
+
+AEpisodeGroundRegion* AEpisodeEditorController::EnsureRegionDrawPreviewActor()
+{
+	if (IsValid(RegionDrawPreviewActor))
+	{
+		return RegionDrawPreviewActor;
+	}
+
+	UWorld* world = GetWorld();
+	if (!world)
+	{
+		return nullptr;
+	}
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	RegionDrawPreviewActor = world->SpawnActor<AEpisodeGroundRegion>(
+		AEpisodeGroundRegion::StaticClass(),
+		FTransform::Identity,
+		spawnParams);
+	if (RegionDrawPreviewActor)
+	{
+		RegionDrawPreviewActor->SetActorEnableCollision(false);
+	}
+	return RegionDrawPreviewActor;
+}
+
+void AEpisodeEditorController::DestroyRegionDrawPreview()
+{
+	if (IsValid(RegionDrawPreviewActor))
+	{
+		RegionDrawPreviewActor->Destroy();
+	}
+
+	RegionDrawPreviewActor = nullptr;
 }
 
 void AEpisodeEditorController::GetStaticObstaclePaletteEntries(TArray<FEpisodeStaticObstaclePropEntry>& outEntries) const
@@ -760,6 +967,15 @@ void AEpisodeEditorController::HandleSelectionStartedInput()
 		return;
 	}
 
+	if (EditorMode == EEpisodeEditorControllerMode::EditRegionDraw)
+	{
+		if (!IsCursorOverEditorWidgetInputModeFocus())
+		{
+			BeginRegionDrag();
+		}
+		return;
+	}
+
 	if (EditorMode == EEpisodeEditorControllerMode::Observer)
 	{
 		if (IsCursorOverEditorWidgetInputModeFocus())
@@ -783,6 +999,15 @@ void AEpisodeEditorController::HandleSelectionStartedInput()
 
 void AEpisodeEditorController::HandleSelectionCompletedInput()
 {
+	if (EditorMode == EEpisodeEditorControllerMode::EditRegionDraw)
+	{
+		if (bIsRegionDragging)
+		{
+			FinalizeRegionDrag();
+		}
+		return;
+	}
+
 	if (bIsTransformGizmoDragging)
 	{
 		EndTransformGizmoDrag();
@@ -815,6 +1040,12 @@ void AEpisodeEditorController::HandleCancelPlacementInput()
 		}
 
 		SetSelectedPlaceable(nullptr);
+		return;
+	}
+
+	if (EditorMode == EEpisodeEditorControllerMode::EditRegionDraw)
+	{
+		SetObserverMode();
 		return;
 	}
 
@@ -2047,7 +2278,8 @@ void AEpisodeEditorController::ApplyInputMode()
 		FInputModeGameOnly inputMode;
 		SetInputMode(inputMode);
 	}
-	else if (EditorMode == EEpisodeEditorControllerMode::EditPlacement)
+	else if (EditorMode == EEpisodeEditorControllerMode::EditPlacement
+		|| EditorMode == EEpisodeEditorControllerMode::EditRegionDraw)
 	{
 		bShowMouseCursor = true;
 		bEnableClickEvents = true;

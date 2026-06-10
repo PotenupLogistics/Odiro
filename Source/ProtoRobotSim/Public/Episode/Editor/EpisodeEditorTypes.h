@@ -9,7 +9,8 @@ UENUM(BlueprintType)
 enum class EEpisodeEditorControllerMode : uint8
 {
 	Observer,
-	EditPlacement
+	EditPlacement,
+	EditRegionDraw
 };
 
 // 카메라 투영 모드. EditorMode(배치 상태)와 직교하는 별도 상태임.
@@ -63,7 +64,8 @@ enum class EEpisodePaletteItemType : uint8
 	StaticObstacle,
 	Pedestrian,
 	RobotStart,
-	RobotGoal
+	RobotGoal,
+	GroundRegion
 };
 
 USTRUCT(BlueprintType)

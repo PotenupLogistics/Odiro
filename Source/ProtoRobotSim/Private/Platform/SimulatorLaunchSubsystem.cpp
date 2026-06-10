@@ -17,7 +17,7 @@ namespace
 	const TCHAR* LaunchDeliveryBotSetupSchema = TEXT("delivery_bot_setup");
 	const TCHAR* LaunchEpisodeRunQueueSchema = TEXT("episode_run_queue");
 	const TCHAR* LaunchEvaluationReportSchema = TEXT("episode_evaluation_report");
-	const TCHAR* DefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
+	const TCHAR* LaunchDefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	const TCHAR* SimulatorProcessFlags = TEXT("-nosound -unattended -NoLoadingScreen");
 
 	FString ToProjectRelativePath(FString filePath)
@@ -629,7 +629,7 @@ bool USimulatorLaunchSubsystem::AppendRunQueuePair(
 	runInput.PairId = pairId.TrimStartAndEnd();
 	runInput.EpisodeSetupJsonPath = episodeSetupPath.TrimStartAndEnd();
 	runInput.DeliveryBotSetupJsonPath = deliveryBotSetupPath.TrimStartAndEnd();
-	runInput.PolicySpecJsonPath = DefaultPolicySpecJsonPath;
+	runInput.PolicySpecJsonPath = LaunchDefaultPolicySpecJsonPath;
 	runInputs.Add(runInput);
 	return SaveEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics);
 }

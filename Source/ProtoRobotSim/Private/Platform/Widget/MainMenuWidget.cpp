@@ -27,7 +27,7 @@ namespace
 	const TCHAR* DefaultMeasurementFilePrefix = TEXT("MeasurementLog");
 	const TCHAR* DefaultReportOutputDirectory = TEXT("Json/Output");
 	const TCHAR* DefaultStatusOutputPath = TEXT("Saved/SimulationRuns/latest_status.json");
-	const TCHAR* DefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
+	const TCHAR* MainMenuDefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	const int32 DefaultFlushIntervalTicks = 60;
 	const TCHAR* EpisodeSetupTemplatePath = TEXT("Json/Input/EpisodeSetupSample_0.json");
 	const TCHAR* DeliveryBotTemplatePath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
@@ -490,7 +490,7 @@ void UMainMenuWidget::RefreshSetupOptions()
 
 	const TArray<FString> policySpecFiles = subsystem->ListPolicySpecFiles();
 	const FString currentPolicySpecPath = GetSelectedPolicySpecPath();
-	const FString defaultPolicySpecPath = DefaultPolicySpecJsonPath;
+	const FString defaultPolicySpecPath = MainMenuDefaultPolicySpecJsonPath;
 	const FString selectedPolicySpecPath = policySpecFiles.Contains(currentPolicySpecPath)
 		? currentPolicySpecPath
 		: (policySpecFiles.Contains(defaultPolicySpecPath)
@@ -675,12 +675,25 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 		return;
 	}
 
+	FSimulationSetup setupBase;
+	const FSimulationSetupParseResult parseResult = subsystem->LoadSimulationSetupFile(setupPath);
+	if (parseResult.bSuccess)
+	{
+		setupBase = parseResult.Setup;
+	}
+
+	FString runQueuePath = setupBase.RunQueueJsonPath.TrimStartAndEnd();
+	runQueuePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+	if (runQueuePath.IsEmpty())
+	{
+		runQueuePath = MakeGeneratedRunQueuePathForSetup(setupPath);
+	}
+
 	const int32 runCount = FMath::Max(
 		1,
 		RunCountTextBox ? FCString::Atoi(*RunCountTextBox->GetText().ToString()) : 1);
-	const FString runQueuePath = MakeGeneratedRunQueuePathForSetup(setupPath);
 
-	// MainMenu edits a single scenario/policy pair plus repeat count; the concrete EpisodeRunQueue file is generated.
+	// MainMenu edits a single scenario/policy pair plus repeat count into the SimulationSetup-owned RunQueue.
 	TArray<FEpisodeRunInput> runInputs;
 	runInputs.Reserve(runCount);
 	const FString pairIdBase = FPaths::GetBaseFilename(setupPath).IsEmpty()
@@ -703,13 +716,6 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 		return;
 	}
 
-	FSimulationSetup setupBase;
-	const FSimulationSetupParseResult parseResult = subsystem->LoadSimulationSetupFile(setupPath);
-	if (parseResult.bSuccess)
-	{
-		setupBase = parseResult.Setup;
-	}
-
 	FSimulationSetup setup;
 	diagnostics.Reset();
 	if (!BuildSimulationSetupFromControls(setupBase, runQueuePath, setup, diagnostics))
@@ -723,7 +729,7 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 		RefreshSetupOptions();
 		SetExperimentConfigDetailVisible(false);
 		ShowMainMenuSection(static_cast<int32>(EMainMenuSection::ExperimentConfig));
-		SetDiagnosticsText(FString::Printf(TEXT("SimulationSetup 저장됨: %s"), *setupPath));
+		SetDiagnosticsText(FString::Printf(TEXT("SimulationSetup saved: %s\nRunQueue saved: %s"), *setupPath, *runQueuePath));
 		return;
 	}
 
@@ -1438,7 +1444,7 @@ void UMainMenuWidget::LoadSelectedSetup()
 		}
 		SetSelectedDeliveryBotSetupPath(firstRunInput.DeliveryBotSetupJsonPath);
 		SetSelectedPolicySpecPath(firstRunInput.PolicySpecJsonPath.IsEmpty()
-			? FString(DefaultPolicySpecJsonPath)
+			? FString(MainMenuDefaultPolicySpecJsonPath)
 			: firstRunInput.PolicySpecJsonPath);
 		if (RunCountTextBox)
 		{
@@ -1472,13 +1478,14 @@ void UMainMenuWidget::LoadSelectedSetup()
 
 	TArray<FString> lines;
 	lines.Add(FString::Printf(TEXT("로드한 SimulationSetup: %s"), *GetSelectedSetupPath()));
+	lines.Add(FString::Printf(TEXT("RunQueue: %s"), *parseResult.Setup.RunQueueJsonPath));
 	if (!loadedRunInputs.IsEmpty())
 	{
 		lines.Add(FString::Printf(TEXT("시나리오(EpisodeSetup): %s"), *loadedRunInputs[0].EpisodeSetupJsonPath));
 		lines.Add(FString::Printf(TEXT("행동 정책(DeliveryBotSetup): %s"), *loadedRunInputs[0].DeliveryBotSetupJsonPath));
 		lines.Add(FString::Printf(
 			TEXT("PolicySpec: %s"),
-			loadedRunInputs[0].PolicySpecJsonPath.IsEmpty() ? DefaultPolicySpecJsonPath : *loadedRunInputs[0].PolicySpecJsonPath));
+			loadedRunInputs[0].PolicySpecJsonPath.IsEmpty() ? MainMenuDefaultPolicySpecJsonPath : *loadedRunInputs[0].PolicySpecJsonPath));
 		lines.Add(FString::Printf(TEXT("실행 수: %d"), loadedRunInputs.Num()));
 	}
 	lines.Add(FString::Printf(TEXT("고정 스텝 FPS: %d"), parseResult.Setup.FixedStep.Fps));
@@ -1500,7 +1507,7 @@ void UMainMenuWidget::ApplyNewSetupDefaults(const FString& setupPath)
 	{
 		RunCountTextBox->SetText(FText::AsNumber(1));
 	}
-	SetSelectedPolicySpecPath(DefaultPolicySpecJsonPath);
+	SetSelectedPolicySpecPath(MainMenuDefaultPolicySpecJsonPath);
 	if (MeasurementLogEnabledCheckBox)
 	{
 		MeasurementLogEnabledCheckBox->SetIsChecked(true);
@@ -2243,7 +2250,7 @@ FString UMainMenuWidget::GetSelectedPolicySpecPath() const
 		return PolicySpecComboBox->GetSelectedOption();
 	}
 
-	return DefaultPolicySpecJsonPath;
+	return MainMenuDefaultPolicySpecJsonPath;
 }
 
 USimulatorLaunchSubsystem* UMainMenuWidget::GetSimulatorLaunchSubsystem() const

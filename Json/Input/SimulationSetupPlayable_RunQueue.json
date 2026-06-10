@@ -3,10 +3,10 @@
 	"version": 1,
 	"runs": [
 		{
-			"pair_id": "scenario_001_000_baseline",
-			"episode_setup": "Json/Input/EpisodeSetup_scenario_001_000.json",
-			"delivery_bot_setup": "Json/Input/DeliveryBotSetup_scenario_001_000_baseline.json",
-			"policy_spec": "Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json"
+			"pair_id": "SimulationSetupPlayable_000",
+			"episode_setup": "Json/Input/EpisodeSetupPlayable.json",
+			"delivery_bot_setup": "Json/Input/DeliveryBotSetupPlayable.json",
+			"policy_spec": "Json/Input/PolicySpecs/PolicySpec_NormalOnly.json"
 		}
 	]
 }

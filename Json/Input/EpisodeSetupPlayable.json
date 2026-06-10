@@ -53,7 +53,17 @@
 	"paths": [],
 	"actors":
 	{
-		"static_obstacles": [],
+		"static_obstacles": [
+			{
+				"instance_id": "obstacle_001",
+				"prop_id": "obstacle.box_02",
+				"xy_m": [
+					0.30024164199829101,
+					-0.023388869762420654
+				],
+				"yaw_deg": 0
+			}
+		],
 		"pedestrians": [],
 		"robot":
 		{

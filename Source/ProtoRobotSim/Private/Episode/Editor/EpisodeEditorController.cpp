@@ -577,7 +577,18 @@ bool AEpisodeEditorController::TryUpdateSelectedPlaceableTransform(
 		return false;
 	}
 	const FTransform currentTransform = selectedActor->GetActorTransform();
-	if (!IsTransformEditAllowedForPlaceable(selectedPlaceable, currentTransform, transform, outFailureReason))
+	
+	FTransform requestedTransform = transform;
+	if (!selectedPlaceable->bAuthoringAllowRotationEdit)
+	{
+		requestedTransform.SetRotation(currentTransform.GetRotation());
+	}
+	if (!selectedPlaceable->bAuthoringAllowScaleEdit)
+	{
+		requestedTransform.SetScale3D(currentTransform.GetScale3D());
+	}
+
+	if (!IsTransformEditAllowedForPlaceable(selectedPlaceable, currentTransform, requestedTransform, outFailureReason))
 	{
 		return false;
 	}
@@ -587,16 +598,16 @@ bool AEpisodeEditorController::TryUpdateSelectedPlaceableTransform(
 	{
 		bUpdated = authoringSubsystem->UpdateStaticObstacleTransform(
 			selectedPlaceable->InstanceId,
-			transform,
+			requestedTransform,
 			outFailureReason);
 	}
 	else if (selectedPlaceable->AuthoringRole == EEpisodePlaceableAuthoringRole::RobotStartMarker)
 	{
-		bUpdated = authoringSubsystem->UpdateRobotStartPointTransform(transform, outFailureReason);
+		bUpdated = authoringSubsystem->UpdateRobotStartPointTransform(requestedTransform, outFailureReason);
 	}
 	else if (selectedPlaceable->AuthoringRole == EEpisodePlaceableAuthoringRole::RobotGoalMarker)
 	{
-		bUpdated = authoringSubsystem->UpdateRobotGoalPointTransform(transform, outFailureReason);
+		bUpdated = authoringSubsystem->UpdateRobotGoalPointTransform(requestedTransform, outFailureReason);
 	}
 	else
 	{
@@ -953,24 +964,14 @@ bool AEpisodeEditorController::TraceMouseTransformGizmo(
 	FVector worldDirection = FVector::ForwardVector;
 	if (!DeprojectMousePositionToWorld(worldOrigin, worldDirection)) return false;
 
-	UWorld* world = GetWorld();
-	if (!world) return false;
-
+	const FVector traceEnd = worldOrigin + worldDirection.GetSafeNormal() * PlacementTraceDistanceCm;
+	
 	FCollisionQueryParams queryParams(SCENE_QUERY_STAT(EpisodeEditorTransformGizmoTrace), true);
 	queryParams.bReturnPhysicalMaterial = false;
-	if (PlacementPreviewActor)
-	{
-		queryParams.AddIgnoredActor(PlacementPreviewActor);
-	}
-	if (const APawn* pawn = GetPawn())
-	{
-		queryParams.AddIgnoredActor(pawn);
-	}
 
-	const FVector traceEnd = worldOrigin + worldDirection.GetSafeNormal() * PlacementTraceDistanceCm;
-	TArray<FHitResult> hits;
-	if (!world->LineTraceMultiByChannel(
-		hits,
+	FHitResult hit;
+	if (!TransformGizmoActor->ActorLineTraceSingle(
+		hit,
 		worldOrigin,
 		traceEnd,
 		PlacementTraceChannel,
@@ -979,27 +980,17 @@ bool AEpisodeEditorController::TraceMouseTransformGizmo(
 		return false;
 	}
 
-	for (const FHitResult& hit : hits)
+	const EEpisodeTransformGizmoHandle handle =
+		TransformGizmoActor->GetHandleForComponent(hit.GetComponent());
+	if (handle == EEpisodeTransformGizmoHandle::None
+		|| !TransformGizmoActor->IsHandleEnabled(handle))
 	{
-		if (hit.GetActor() != TransformGizmoActor)
-		{
-			continue;
-		}
-
-		const EEpisodeTransformGizmoHandle handle =
-			TransformGizmoActor->GetHandleForComponent(hit.GetComponent());
-		if (handle == EEpisodeTransformGizmoHandle::None
-			|| !TransformGizmoActor->IsHandleEnabled(handle))
-		{
-			continue;
-		}
-
-		outHit = hit;
-		outHandle = handle;
-		return true;
+		return false;
 	}
 
-	return false;
+	outHit = hit;
+	outHandle = handle;
+	return true;
 }
 
 bool AEpisodeEditorController::BeginTransformGizmoDrag(
@@ -1369,8 +1360,19 @@ bool AEpisodeEditorController::ApplyTransformGizmoDragTransform(const FTransform
 		return false;
 	}
 	const FTransform currentTransform = draggedActor->GetActorTransform();
+
+	FTransform requestedTransform = transform;
+	if (!draggedPlaceable->bAuthoringAllowRotationEdit)
+	{
+		requestedTransform.SetRotation(currentTransform.GetRotation());
+	}
+	if (!draggedPlaceable->bAuthoringAllowScaleEdit)
+	{
+		requestedTransform.SetScale3D(currentTransform.GetScale3D());
+	}
+
 	bool bUpdated = false;
-	if (!IsTransformEditAllowedForPlaceable(draggedPlaceable, currentTransform, transform, failureReason))
+	if (!IsTransformEditAllowedForPlaceable(draggedPlaceable, currentTransform, requestedTransform, failureReason))
 	{
 		bUpdated = false;
 	}
@@ -1378,16 +1380,16 @@ bool AEpisodeEditorController::ApplyTransformGizmoDragTransform(const FTransform
 	{
 		bUpdated = authoringSubsystem->UpdateStaticObstacleTransform(
 			ActiveTransformGizmoInstanceId,
-			transform,
+			requestedTransform,
 			failureReason);
 	}
 	else if (draggedPlaceable->AuthoringRole == EEpisodePlaceableAuthoringRole::RobotStartMarker)
 	{
-		bUpdated = authoringSubsystem->UpdateRobotStartPointTransform(transform, failureReason);
+		bUpdated = authoringSubsystem->UpdateRobotStartPointTransform(requestedTransform, failureReason);
 	}
 	else if (draggedPlaceable->AuthoringRole == EEpisodePlaceableAuthoringRole::RobotGoalMarker)
 	{
-		bUpdated = authoringSubsystem->UpdateRobotGoalPointTransform(transform, failureReason);
+		bUpdated = authoringSubsystem->UpdateRobotGoalPointTransform(requestedTransform, failureReason);
 	}
 	else
 	{

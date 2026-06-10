@@ -4,7 +4,7 @@ setlocal EnableExtensions
 set "SCRIPT_DIR=%~dp0"
 set "PROJECT_FILE=%SCRIPT_DIR%ProtoRobotSim.uproject"
 set "UNREAL_EDITOR="
-set "PREVIEW_WINDOW_ARGS=-windowed -ResX=960 -ResY=540"
+set "PREVIEW_WINDOW_ARGS=-windowed -ResX=1920 -ResY=1080"
 
 if not exist "%PROJECT_FILE%" (
 	echo [ProtoRobotSim] Project file not found: "%PROJECT_FILE%"

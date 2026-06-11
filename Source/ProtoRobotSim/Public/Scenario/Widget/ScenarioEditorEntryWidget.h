@@ -20,40 +20,40 @@ public:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Entry")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Entry")
 	bool bHideOnSuccessfulStart = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Entry")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Entry")
 	bool bShowAssetPaletteOnSuccessfulStart = true;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Entry")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Entry")
 	TObjectPtr<UButton> NewEpisodeButton;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Entry")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Entry")
 	TObjectPtr<UButton> LoadEpisodeButton;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Entry")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Entry")
 	TObjectPtr<UEditableTextBox> EpisodeSetupJsonPathTextBox;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Entry")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Entry")
 	void StartNewEpisode();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Entry")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Entry")
 	bool LoadEpisodeFromPathTextBox();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Entry")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Entry")
 	UScenarioAssetPaletteWidget* ShowAssetPaletteWidget();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Entry")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Entry")
 	void RemoveAssetPaletteWidget();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Entry")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Entry")
 	bool CompleteExternallyStartedEpisode(bool bLoadedExistingEpisode);
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Entry")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Entry")
 	UScenarioAssetPaletteWidget* GetAssetPaletteWidget() const;
 
-	UFUNCTION(BlueprintImplementableEvent, Category = "Episode|Editor|Entry")
+	UFUNCTION(BlueprintImplementableEvent, Category = "Scenario|Editor|Entry")
 	void OnEpisodeEditorSessionStarted(bool bLoadedExistingEpisode);
 
 protected:

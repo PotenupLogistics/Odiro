@@ -26,83 +26,83 @@ public:
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& myGeometry, float inDeltaTime) override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Root")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root")
 	bool bShowAssetPaletteOnEditorSessionStart = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Root")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root")
 	bool bAutoRevealLlmPanelOnRightEdge = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Root", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root", meta = (ClampMin = "0.0"))
 	float LlmPanelRevealRightEdgePixels = 24.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Root", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root", meta = (ClampMin = "0.0"))
 	float LlmPanelHideRightEdgePixels = 96.0f;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UScenarioEditorToolbarWidget> ToolbarWidget;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UButton> TopDownOrthoModeButton;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UButton> PerspectiveModeButton;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UButton> SnapPlacementToGridButton;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UTextBlock> SnapPlacementToGridButtonText;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UWidget> PlaceableContextMenuPanel;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UScenarioPlaceableContextMenuWidget> PlaceableContextMenuWidget;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UWidget> AssetPalettePanel;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UScenarioAssetPaletteWidget> AssetPaletteWidget;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UWidget> LlmPanel;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UScenarioLlmPromptWidget> EpisodeEditorLLMWidget;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Root")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	UScenarioAssetPaletteWidget* ShowAssetPaletteWidget();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Root")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void HideAssetPaletteWidget();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Root")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	UScenarioPlaceableContextMenuWidget* ShowPlaceableContextMenu(UScenarioPlaceableComponent* selectedPlaceable);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Root")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void HidePlaceableContextMenu();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Root")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void SetLlmPanelVisible(bool bVisible);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Root")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void HandleEditorSessionStarted(bool bLoadedExistingEpisode);
 
 	// 현재 view mode에 맞춰 두 모드 전환 버튼의 노출 상태를 갱신함.
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Root")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void RefreshViewModeButtons();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Root")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void RefreshPlacementSnapButton();
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Root")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Root")
 	UScenarioAssetPaletteWidget* GetAssetPaletteWidget() const { return AssetPaletteWidget.Get(); }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Root")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Root")
 	UScenarioEditorToolbarWidget* GetToolbarWidget() const { return ToolbarWidget.Get(); }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Root")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Root")
 	UScenarioPlaceableContextMenuWidget* GetPlaceableContextMenuWidget() const { return PlaceableContextMenuWidget.Get(); }
 
 private:

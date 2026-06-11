@@ -21,19 +21,19 @@ public:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|LLM")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM")
 	bool bLoadFirstEpisodeAfterGenerate = false;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|LLM")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|LLM")
 	bool GenerateFromPromptTextBox();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|LLM")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|LLM")
 	bool LoadGeneratedEpisode();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|LLM")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|LLM")
 	bool RunGeneratedSimulation();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|LLM")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|LLM")
 	void SetStatusText(const FString& message);
 
 protected:

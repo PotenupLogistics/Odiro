@@ -73,22 +73,22 @@ struct PROTOROBOTSIM_API FScenarioPaletteItemEntry
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	EScenarioPaletteItemType ItemType = EScenarioPaletteItemType::StaticObstacle;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	FName AssetId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	FText DisplayName;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	FText CategoryText;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	FString IconName;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	TSoftObjectPtr<UTexture2D> ThumbnailTexture;
 };
 
@@ -97,18 +97,18 @@ struct PROTOROBOTSIM_API FScenarioAuthoringStaticObstacleRecord
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	FString InstanceId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	FName PropId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	FTransform Transform = FTransform::Identity;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor", meta = (ClampMin = "0.0"))
 	double PlacementRadius2D = 0.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Editor")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	FVector2D PlacementHalfExtent2D = FVector2D::ZeroVector;
 };

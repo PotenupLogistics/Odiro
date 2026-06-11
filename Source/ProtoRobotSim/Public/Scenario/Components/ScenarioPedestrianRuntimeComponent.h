@@ -18,7 +18,7 @@ enum class EScenarioPedestrianRuntimeState : uint8
 	Recover
 };
 
-UCLASS(ClassGroup = (Episode), BlueprintType, Blueprintable, meta = (BlueprintSpawnableComponent))
+UCLASS(ClassGroup = (Scenario), BlueprintType, Blueprintable, meta = (BlueprintSpawnableComponent))
 class PROTOROBOTSIM_API UScenarioPedestrianRuntimeComponent : public UActorComponent
 {
 	GENERATED_BODY()
@@ -26,85 +26,85 @@ class PROTOROBOTSIM_API UScenarioPedestrianRuntimeComponent : public UActorCompo
 public:
 	UScenarioPedestrianRuntimeComponent();
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianRuntime")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianRuntime")
 	FString InstanceId;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianRuntime")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianRuntime")
 	FString PlanId;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianRuntime")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianRuntime")
 	FString PlanHash;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianRuntime")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianRuntime")
 	FString BehaviorHash;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianRuntime")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianRuntime")
 	FString PedestrianScenarioHash;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianRuntime")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianRuntime")
 	TWeakObjectPtr<AActor> RobotActor;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianRuntime")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|PedestrianRuntime")
 	bool bEnableRobotReaction = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianRuntime")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|PedestrianRuntime")
 	bool bAutoStart = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianRuntime", meta = (ClampMin = "0.0", Units = "cm/s"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|PedestrianRuntime", meta = (ClampMin = "0.0", Units = "cm/s"))
 	double SpeedCmPerSecond = 120.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianRuntime", meta = (ClampMin = "0.0", Units = "cm"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|PedestrianRuntime", meta = (ClampMin = "0.0", Units = "cm"))
 	double VerticalOffsetCm = 90.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianRuntime", meta = (ClampMin = "0.0", Units = "cm"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|PedestrianRuntime", meta = (ClampMin = "0.0", Units = "cm"))
 	double InitialDistanceCm = 0.0;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianRuntime", meta = (ClampMin = "0.0", Units = "cm"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianRuntime", meta = (ClampMin = "0.0", Units = "cm"))
 	double CurrentDistanceCm = 0.0;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianRuntime", meta = (ClampMin = "0.0", Units = "cm"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianRuntime", meta = (ClampMin = "0.0", Units = "cm"))
 	double TotalDistanceCm = 0.0;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianRuntime")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianRuntime")
 	TArray<FScenarioPedestrianPlanPoint> PlanPoints;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|PedestrianRuntime")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|PedestrianRuntime")
 	FScenarioPedestrianBehaviorParams BehaviorParams;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianRuntime")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianRuntime")
 	EScenarioPedestrianRuntimeState CurrentState = EScenarioPedestrianRuntimeState::FollowBaseline;
 
 	// Baseline plan speed. delay 측정과 nominal animation 기준에 쓰는 변하지 않는 속도다.
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianAnimation", meta = (ClampMin = "0.0", Units = "cm/s"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianAnimation", meta = (ClampMin = "0.0", Units = "cm/s"))
 	double NominalSpeedCmPerSecond = 120.0;
 
 	// Baseline path를 따라 실제로 진행 중인 속도다. yield/stop/sidestep state의 speed scale이 반영된다.
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianAnimation", meta = (ClampMin = "0.0", Units = "cm/s"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianAnimation", meta = (ClampMin = "0.0", Units = "cm/s"))
 	double ProgressSpeedCmPerSecond = 120.0;
 
 	// Baseline path 기준 좌우 offset 변화 속도다. sidestep/recover animation bridge에 사용한다.
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianAnimation", meta = (Units = "cm/s"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianAnimation", meta = (Units = "cm/s"))
 	double LateralSpeedCmPerSecond = 0.0;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianMetrics", meta = (ClampMin = "0.0", Units = "s"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianMetrics", meta = (ClampMin = "0.0", Units = "s"))
 	double ActiveTimeSeconds = 0.0;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianMetrics", meta = (ClampMin = "0.0", Units = "s"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianMetrics", meta = (ClampMin = "0.0", Units = "s"))
 	double ScheduleDelaySeconds = 0.0;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianMetrics", meta = (ClampMin = "0.0", Units = "s"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianMetrics", meta = (ClampMin = "0.0", Units = "s"))
 	double ForcedWaitSeconds = 0.0;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianMetrics", meta = (ClampMin = "0.0", Units = "s"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianMetrics", meta = (ClampMin = "0.0", Units = "s"))
 	double BlockedDurationSeconds = 0.0;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianMetrics", meta = (ClampMin = "0.0", Units = "cm"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianMetrics", meta = (ClampMin = "0.0", Units = "cm"))
 	double PathDeviationCm = 0.0;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianMetrics", meta = (ClampMin = "0.0", Units = "cm"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianMetrics", meta = (ClampMin = "0.0", Units = "cm"))
 	double MaxPathDeviationCm = 0.0;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode|PedestrianMetrics", meta = (Units = "cm"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario|PedestrianMetrics", meta = (Units = "cm"))
 	double MinRobotDistanceCm = -1.0;
 
 	void ConfigurePlan(
@@ -114,16 +114,16 @@ public:
 		double initialDistanceCm,
 		bool bStartAutomatically);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|PedestrianRuntime")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|PedestrianRuntime")
 	void SetRobotActor(AActor* inRobotActor);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|PedestrianRuntime")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|PedestrianRuntime")
 	void StartFollowing();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|PedestrianRuntime")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|PedestrianRuntime")
 	void StopFollowing();
 
-	UFUNCTION(BlueprintPure, Category = "Episode|PedestrianRuntime")
+	UFUNCTION(BlueprintPure, Category = "Scenario|PedestrianRuntime")
 	bool HasPlan() const;
 
 protected:

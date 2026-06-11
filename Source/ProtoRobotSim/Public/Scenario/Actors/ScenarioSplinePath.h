@@ -16,12 +16,12 @@ class PROTOROBOTSIM_API AScenarioSplinePath : public AActor
 public:
 	AScenarioSplinePath();
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")
 	TObjectPtr<USplineComponent> SplineComponent;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString PathId;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	void ConfigurePath(const FString& inPathId, const TArray<FVector>& points, bool bClosedLoop);
 };

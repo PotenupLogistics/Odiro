@@ -44,40 +44,40 @@ struct PROTOROBOTSIM_API FScenarioStaticObstaclePropEntry
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario")
 	FName PropId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario")
 	FName SemanticTypeId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario")
 	FText DisplayName;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario")
 	EScenarioStaticObstaclePropCategory Category = EScenarioStaticObstaclePropCategory::Unknown;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario")
 	TSoftObjectPtr<UStaticMesh> StaticMeshAsset;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Palette")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Palette")
 	TSoftObjectPtr<UTexture2D> ThumbnailTexture;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Placement", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Placement", meta = (ClampMin = "0.0"))
 	FVector FallbackBoxExtent = FVector(50.0, 50.0, 100.0);
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Collision")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Collision")
 	bool bUsePhysicalCollision = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Collision")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Collision")
 	bool bUseSafetyQuery = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Collision")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Collision")
 	bool bUseMeshSimpleCollision = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Collision")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Collision")
 	bool bUseFallbackBoxCollision = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Collision", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Collision", meta = (ClampMin = "0.0"))
 	double SafetyRadius = 100.0;
 };
 
@@ -87,21 +87,21 @@ struct PROTOROBOTSIM_API FScenarioParamValue
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	EScenarioParamValueType Type = EScenarioParamValueType::None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	bool BoolValue = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	int32 IntegerValue = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	double FloatValue = 0.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString StringValue;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FVector VectorValue = FVector::ZeroVector;
 };

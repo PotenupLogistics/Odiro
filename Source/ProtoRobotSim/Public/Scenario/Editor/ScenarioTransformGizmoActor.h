@@ -20,94 +20,94 @@ public:
 
 	virtual void Tick(float deltaSeconds) override;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<USceneComponent> SceneRoot;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> TranslateXHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> TranslateYHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> TranslateZHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> TranslateXYHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> TranslateXZHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> TranslateYZHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> RotateXHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> RotateYHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> RotateZHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> ScaleXHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> ScaleYHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> ScaleZHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> ScaleXYHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> ScaleXZHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> ScaleYZHandleComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Gizmo")
 	TObjectPtr<UStaticMeshComponent> ScaleUniformHandleComponent;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Gizmo", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Gizmo", meta = (ClampMin = "0.0"))
 	double ScreenScalePerDistanceCm = 0.0012;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Gizmo", meta = (ClampMin = "0.001"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Gizmo", meta = (ClampMin = "0.001"))
 	double MinScreenScale = 0.35;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Gizmo", meta = (ClampMin = "0.001"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Gizmo", meta = (ClampMin = "0.001"))
 	double MaxScreenScale = 3.0;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Gizmo")
 	void ShowForTarget(AActor* targetActor);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Gizmo")
 	void HideGizmo();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Gizmo")
 	void RefreshFromTarget();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Gizmo")
 	void SetHoveredHandle(EScenarioTransformGizmoHandle handle);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Gizmo")
 	void SetGizmoMode(EScenarioTransformGizmoMode mode);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Gizmo")
 	void SetGizmoOrientationMode(EScenarioTransformGizmoOrientationMode orientationMode);
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Gizmo")
 	EScenarioTransformGizmoHandle GetHoveredHandle() const { return HoveredHandle; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Gizmo")
 	EScenarioTransformGizmoMode GetGizmoMode() const { return GizmoMode; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Gizmo")
 	EScenarioTransformGizmoOrientationMode GetGizmoOrientationMode() const { return OrientationMode; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Gizmo")
 	bool IsHandleEnabled(EScenarioTransformGizmoHandle handle) const;
 
 	EScenarioTransformGizmoHandle GetHandleForComponent(const UPrimitiveComponent* component) const;

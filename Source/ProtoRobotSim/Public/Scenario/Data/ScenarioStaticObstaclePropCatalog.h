@@ -13,10 +13,10 @@ class PROTOROBOTSIM_API UScenarioStaticObstaclePropCatalog : public UDataAsset
 public:
 	static TSoftObjectPtr<UScenarioStaticObstaclePropCatalog> MakeDefaultCatalogReference();
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Static Obstacle")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Static Obstacle")
 	TArray<FScenarioStaticObstaclePropEntry> Entries;
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Static Obstacle")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Static Obstacle")
 	bool FindPropEntryById(FName propId, FScenarioStaticObstaclePropEntry& outPropEntry) const;
 
 	const TArray<FScenarioStaticObstaclePropEntry>& GetEntries() const { return Entries; }

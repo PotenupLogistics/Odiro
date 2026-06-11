@@ -20,13 +20,13 @@ struct PROTOROBOTSIM_API FScenarioCompileDiagnostic
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	EScenarioCompileDiagnosticSeverity Severity = EScenarioCompileDiagnosticSeverity::Info;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString Code;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString Message;
 };
 
@@ -36,12 +36,12 @@ struct PROTOROBOTSIM_API FScenarioCompileResult
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	bool bSuccess = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FScenarioWorldSpec WorldSpec;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TArray<FScenarioCompileDiagnostic> Diagnostics;
 };

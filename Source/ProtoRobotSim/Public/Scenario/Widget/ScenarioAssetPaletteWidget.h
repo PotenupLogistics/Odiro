@@ -24,43 +24,43 @@ public:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
 	TSubclassOf<UScenarioPlaceablePaletteItemWidget> PlaceableItemWidgetClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
 	TSoftObjectPtr<UScenarioAssetPaletteCatalog> AssetPaletteCatalog;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
 	bool bRebuildOnConstruct = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
 	bool bIncludePedestrianPlacement = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
 	bool bIncludeRobotRoutePlacement = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
 	bool bIncludeGroundRegionDraw = true;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
 	TObjectPtr<USizeBox> PaletteSizeBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
 	TObjectPtr<UScrollBox> PaletteScrollBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
 	TObjectPtr<UHorizontalBox> PlaceableItemContainer;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
 	TObjectPtr<UHorizontalBox> StaticObstacleItemContainer;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
 	TObjectPtr<UHorizontalBox> GroundRegionItemContainer;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Palette")
 	bool RebuildPalette();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Palette")
 	void ClearPalette();
 
 protected:

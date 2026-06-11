@@ -22,73 +22,73 @@ class PROTOROBOTSIM_API AScenarioStaticObstacle : public AActor
 public:
 	AScenarioStaticObstacle();
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")
 	TObjectPtr<UStaticMeshComponent> MeshRoot;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")
 	TObjectPtr<UBoxComponent> CollisionBoundsComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")
 	TObjectPtr<UScenarioPlaceableComponent> PlaceableComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")
 	TObjectPtr<UScenarioObstacleCollisionComponent> ObstacleCollisionComponent;
 	
 	virtual void OnConstruction(const FTransform& transform) override;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Mesh")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Mesh")
 	bool SetStaticMeshAsset(TSoftObjectPtr<UStaticMesh> inStaticMeshAsset);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Mesh")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Mesh")
 	void SetStaticMesh(UStaticMesh* inStaticMesh);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Mesh")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Mesh")
 	bool ApplyConfiguredStaticMesh();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Catalog")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Catalog")
 	bool ApplyPropEntry(const FScenarioStaticObstaclePropEntry& propEntry);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Catalog")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Catalog")
 	bool ApplyDefaultPropById(FName inPropId);
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Placement")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Placement")
 	bool GetPlacementBounds(
 		FVector& outOrigin,
 		FVector& outBoxExtent,
 		FVector2D& outHalfSize2D,
 		double& outRadius2D) const;
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Placement")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Placement")
 	double GetPlacementRadius2D() const;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Semantic")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Semantic")
 	FName PropId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Semantic")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Semantic")
 	FName SemanticTypeId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Semantic")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Semantic")
 	FText PropDisplayName;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Semantic")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Semantic")
 	EScenarioStaticObstaclePropCategory PropCategory = EScenarioStaticObstaclePropCategory::Unknown;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Catalog")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Catalog")
 	TSoftObjectPtr<UScenarioStaticObstaclePropCatalog> StaticObstaclePropCatalog;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Mesh", meta = (AllowedClasses = "/Script/Engine.StaticMesh"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Mesh", meta = (AllowedClasses = "/Script/Engine.StaticMesh"))
 	TSoftObjectPtr<UStaticMesh> StaticMeshAsset;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Placement", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Placement", meta = (ClampMin = "0.0"))
 	FVector FallbackBoxExtent = FVector(50.0, 50.0, 100.0);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Placement")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Placement")
 	bool bUseFallbackBoundsWhenMeshMissing = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Collision")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Collision")
 	bool bUseMeshSimpleCollision = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Collision")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Collision")
 	bool bUseFallbackBoxCollision = true;
 
 private:

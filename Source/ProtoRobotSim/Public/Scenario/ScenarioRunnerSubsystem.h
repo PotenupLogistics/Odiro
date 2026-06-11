@@ -24,54 +24,54 @@ public:
 	FScenarioRunnerStateChangedNative OnRunnerStateChanged;
 	FScenarioRunRecordCompletedNative OnRunRecordCompleted;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	bool StartEpisodePairFromJsonFiles(const FString& episodeSetupJsonPath, const FString& deliveryBotSetupJsonPath);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	bool StartBatchFromRunInputs(const TArray<FScenarioRunInput>& runInputs);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	bool StartBatchFromRunQueueJsonFile(const FString& runQueueJsonFilePath);
 
 	bool StartBatchFromRunQueueJsonFileForRun(const FString& runQueueJsonFilePath, const FString& activeRunId);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	void CancelRun();
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	EScenarioRunnerState GetRunnerState() const { return RunnerState; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	bool IsBatchActive() const;
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	FString GetActiveRunQueueJsonFilePath() const { return ActiveRunQueueJsonFilePath; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	bool IsRunningRunQueueJsonFile(const FString& runQueueJsonFilePath) const;
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	TArray<FEpisodeRunRecord> GetRunRecords() const { return RunRecords; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	int32 GetCompletedRunCount() const { return RunRecords.Num(); }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	int32 GetTotalRunCount() const { return TotalRunCount; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Runner")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	FString GetCurrentPairId() const { return CurrentRecord.PairId; }
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Runner|Report")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Runner|Report")
 	bool bSaveEvaluationReportJson = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Runner|Report")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Runner|Report")
 	FString EvaluationReportOutputDirectory = TEXT("Json/Output");
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	bool BuildLatestEvaluationReportJson(FString& outJson) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Runner")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	bool BuildEvaluationReportJson(int32 runRecordIndex, FString& outJson) const;
 
 private:

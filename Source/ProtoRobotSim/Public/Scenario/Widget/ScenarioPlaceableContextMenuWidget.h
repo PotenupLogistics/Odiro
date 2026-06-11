@@ -36,76 +36,76 @@ public:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Context Menu")
 	FLinearColor NormalFieldTextColor = FLinearColor::White;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Context Menu")
 	FLinearColor InvalidFieldTextColor = FLinearColor(1.0f, 0.08f, 0.04f, 1.0f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Context Menu", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Context Menu", meta = (ClampMin = "0.0"))
 	float InvalidFieldFlashSeconds = 3.0f;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UButton> EditInstanceIdButton;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UEditableText> InstanceIdEditableText;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UTextBlock> AssetNameTextBlock;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<USizeBox> OrientationSizeBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UButton> WorldOrientationButton;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UButton> RelativeOrientationButton;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<USizeBox> LocationSizeBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UEditableTextBox> LocationXTextBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UEditableTextBox> LocationYTextBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UEditableTextBox> LocationZTextBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<USizeBox> RotationSizeBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UEditableTextBox> RotationXTextBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UEditableTextBox> RotationYTextBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UEditableTextBox> RotationZTextBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<USizeBox> ScaleSizeBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UEditableTextBox> ScaleXTextBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UEditableTextBox> ScaleYTextBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UEditableTextBox> ScaleZTextBox;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Context Menu")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Context Menu")
 	TObjectPtr<UButton> DeleteButton;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Context Menu")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Context Menu")
 	void SetSelectedPlaceable(UScenarioPlaceableComponent* placeableComponent);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Context Menu")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Context Menu")
 	void RefreshFromSelectedPlaceable();
 
 protected:

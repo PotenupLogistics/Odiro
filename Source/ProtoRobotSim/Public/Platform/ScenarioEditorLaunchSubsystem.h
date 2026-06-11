@@ -25,29 +25,29 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& collection) override;
 	virtual void Deinitialize() override;
 
-	UFUNCTION(BlueprintCallable, Category = "Platform|EpisodeEditor")
+	UFUNCTION(BlueprintCallable, Category = "Platform|ScenarioEditor")
 	bool OpenEpisodeEditor(const FString& episodeSetupPath);
 
-	UFUNCTION(BlueprintCallable, Category = "Platform|EpisodeEditor")
+	UFUNCTION(BlueprintCallable, Category = "Platform|ScenarioEditor")
 	bool OpenNewEpisodeEditor();
 
-	UFUNCTION(BlueprintPure, Category = "Platform|EpisodeEditor")
+	UFUNCTION(BlueprintPure, Category = "Platform|ScenarioEditor")
 	FString GetPendingEpisodeSetupPath() const { return PendingEpisodeSetupPath; }
 
 	// Legacy Blueprint-facing reset name. New C++ code should call ResetPendingAutoStartState().
-	UFUNCTION(BlueprintCallable, Category = "Platform|EpisodeEditor")
+	UFUNCTION(BlueprintCallable, Category = "Platform|ScenarioEditor")
 	void ClearPendingEpisodeSetupPath();
 
-	UFUNCTION(BlueprintPure, Category = "Platform|EpisodeEditor")
+	UFUNCTION(BlueprintPure, Category = "Platform|ScenarioEditor")
 	bool HasAutoStartedEpisodeEditorSession() const { return bAutoStartedEpisodeEditorSession; }
 
-	UFUNCTION(BlueprintPure, Category = "Platform|EpisodeEditor")
+	UFUNCTION(BlueprintPure, Category = "Platform|ScenarioEditor")
 	bool WasAutoStartedEpisodeEditorSessionLoadedExistingEpisode() const
 	{
 		return bAutoStartedEpisodeEditorSessionLoadedExistingEpisode;
 	}
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|EpisodeEditor")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ScenarioEditor")
 	FString EpisodeEditorMapId = TEXT("EpisodeEditorMap");
 
 	FScenarioEditorAutoStartCompletedNative& OnAutoStartCompleted() { return AutoStartCompletedEvent; }

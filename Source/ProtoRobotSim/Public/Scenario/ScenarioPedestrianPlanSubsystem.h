@@ -11,7 +11,7 @@ class PROTOROBOTSIM_API UScenarioPedestrianPlanSubsystem : public UWorldSubsyste
 	GENERATED_BODY()
 
 public:
-	UFUNCTION(BlueprintCallable, Category = "Episode|PedestrianPlan")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|PedestrianPlan")
 	void ClearPlans();
 
 	bool BuildPlans(
@@ -19,12 +19,12 @@ public:
 		const FScenarioPedestrianPlanBuildContext& buildContext,
 		FScenarioPedestrianPlanBuildResult& outResult);
 
-	UFUNCTION(BlueprintPure, Category = "Episode|PedestrianPlan")
+	UFUNCTION(BlueprintPure, Category = "Scenario|PedestrianPlan")
 	bool HasPlan(const FString& instanceId) const;
 
 	const FScenarioPedestrianPlan* FindPlan(const FString& instanceId) const;
 
-	UFUNCTION(BlueprintPure, Category = "Episode|PedestrianPlan")
+	UFUNCTION(BlueprintPure, Category = "Scenario|PedestrianPlan")
 	FScenarioPedestrianPlan GetPlanCopy(const FString& instanceId, bool& bFound) const;
 
 private:

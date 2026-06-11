@@ -9,7 +9,7 @@ class AScenarioSplinePath;
 struct FHitResult;
 
 // 보행자와 이동체가 ScenarioPathSpec을 따라 움직이도록 하기 위한 component 파일임.
-UCLASS(ClassGroup = (Episode), BlueprintType, Blueprintable, meta = (BlueprintSpawnableComponent))
+UCLASS(ClassGroup = (Scenario), BlueprintType, Blueprintable, meta = (BlueprintSpawnableComponent))
 class PROTOROBOTSIM_API UScenarioPathFollowerComponent : public UActorComponent
 {
 	GENERATED_BODY()
@@ -17,64 +17,64 @@ class PROTOROBOTSIM_API UScenarioPathFollowerComponent : public UActorComponent
 public:
 	UScenarioPathFollowerComponent();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TObjectPtr<USplineComponent> SplineComponent;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString PathId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	double SpeedCmPerSecond = 140.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	bool bLoop = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	bool bAutoStart = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	bool bOrientToSpline = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode", meta = (ClampMin = "0.0", Units = "cm"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario", meta = (ClampMin = "0.0", Units = "cm"))
 	double VerticalOffsetCm = 0.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Path Noise")
 	bool bUseSeededPathNoise = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Path Noise")
 	int32 PathNoiseSeed = 1;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Path Noise", meta = (ClampMin = "0.0"))
 	double LateralNoiseAmplitudeCm = 100.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Path Noise", meta = (ClampMin = "1.0"))
 	double LateralNoiseWavelengthCm = 400.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise", meta = (ClampMin = "0.0", ClampMax = "0.95"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Path Noise", meta = (ClampMin = "0.0", ClampMax = "0.95"))
 	double SpeedNoiseStrength = 0.15;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Path Noise", meta = (ClampMin = "1.0"))
 	double SpeedNoiseWavelengthCm = 500.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Path Noise", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Path Noise", meta = (ClampMin = "0.0"))
 	double PathNoiseEndpointFadeDistanceCm = 150.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	double InitialDistanceCm = 0.0;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scenario")
 	double CurrentDistanceCm = 0.0;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	void SetSplineComponent(USplineComponent* inSplineComponent);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	void SetSplinePath(AScenarioSplinePath* inSplinePath);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	void StartFollowing();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	void StopFollowing();
 
 protected:

@@ -18,16 +18,16 @@ public:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Toolbar")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Toolbar")
 	FString DefaultSavePath = TEXT("Json/Input/EpisodeSetupNew.json");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Toolbar")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Toolbar")
 	FString MainMenuMapId = TEXT("MainMenuMap");
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Toolbar")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
 	bool SaveEpisode();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Toolbar")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
 	void ReturnToMainMenu();
 
 protected:

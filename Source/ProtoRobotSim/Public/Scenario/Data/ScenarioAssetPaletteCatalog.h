@@ -13,6 +13,6 @@ class PROTOROBOTSIM_API UScenarioAssetPaletteCatalog : public UDataAsset
 public:
 	static TSoftObjectPtr<UScenarioAssetPaletteCatalog> MakeDefaultCatalogReference();
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode|Palette")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Palette")
 	TArray<FScenarioPaletteItemEntry> SpecialEntries;
 };

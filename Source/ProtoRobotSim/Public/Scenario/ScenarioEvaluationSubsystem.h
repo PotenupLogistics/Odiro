@@ -23,28 +23,28 @@ class PROTOROBOTSIM_API UScenarioEvaluationSubsystem : public UTickableWorldSubs
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(BlueprintAssignable, Category = "Episode|Evaluation")
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Evaluation")
 	FEpisodeEvaluationEndedSignature OnEpisodeEnded;
 
-	UPROPERTY(BlueprintAssignable, Category = "Episode|Evaluation")
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Evaluation")
 	FEpisodeEvaluationEventSignature OnEvaluationEvent;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Evaluation")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Evaluation")
 	bool StartEvaluation(
 		const FScenarioEvaluationConfig& evaluationConfig,
 		const FScenarioRuntimeContext& runtimeContext,
 		double inTimeLimitSeconds);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Evaluation")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Evaluation")
 	void StopEvaluation();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Evaluation")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Evaluation")
 	void RequestEndEpisode(const FEpisodeEvaluationResult& result);
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Evaluation")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Evaluation")
 	bool IsEvaluating() const { return bEvaluating; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Evaluation")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Evaluation")
 	FEpisodeEvaluationResult GetCurrentResult() const { return CurrentResult; }
 
 	UFUNCTION()

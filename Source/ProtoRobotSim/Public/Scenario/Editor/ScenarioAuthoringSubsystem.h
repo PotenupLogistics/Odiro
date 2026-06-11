@@ -29,89 +29,89 @@ public:
 
 	virtual void Deinitialize() override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Export")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Export")
 	FString ScenarioId = TEXT("episode_editor_export");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Export")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Export")
 	FString MapId = TEXT("EpisodeEditorMap");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Export")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Export")
 	int64 BaseSeed = 42;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Export")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Export")
 	int32 IterationIndex = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Export", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Export", meta = (ClampMin = "0.0"))
 	double TimeLimitSeconds = 60.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Classes")
 	TSubclassOf<AScenarioStaticObstacle> StaticObstacleClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Classes")
 	TSubclassOf<AScenarioPedestrian> PedestrianClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Classes")
 	TSubclassOf<AActor> PedestrianVisualizationActorClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Classes")
 	TSubclassOf<AActor> StartPointClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Classes")
 	TSubclassOf<AActor> GoalPointClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Classes")
 	TSubclassOf<AScenarioGroundRegion> GroundRegionClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Catalog")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Catalog")
 	TSoftObjectPtr<UScenarioStaticObstaclePropCatalog> StaticObstaclePropCatalog;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Import")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Import")
 	FString EpisodeSetupInputDirectory = TEXT("Json/Input");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Placement", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement", meta = (ClampMin = "0.0"))
 	double StaticObstacleGroundZToleranceCm = 5.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Placement", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement", meta = (ClampMin = "0.0"))
 	double StaticObstacleFootprintClearanceCm = 5.0;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Authoring")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Authoring")
 	void ClearDraft();
 
 	// 새 에피소드 작성용 빈 draft 초기화.
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Authoring")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Authoring")
 	void NewDraft();
 
 	// 기존 EpisodeSetup JSON을 UScenarioCompiler로 컴파일하고, 성공하면 DraftWorldSpec으로 import.
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Import")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
 	bool LoadEpisodeSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
 	// 문자열 기반 import.
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Import")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
 	bool LoadEpisodeSetupJsonString(const FString& jsonString, TArray<FString>& outDiagnostics);
 
 	// 이미 컴파일된 FScenarioWorldSpec 직접 import.
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Import")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
 	bool ImportCompiledWorldSpec(const FScenarioWorldSpec& worldSpec, TArray<FString>& outDiagnostics);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Palette")
 	void GetStaticObstaclePaletteEntries(TArray<FScenarioStaticObstaclePropEntry>& outEntries) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Palette")
 	bool TryGetStaticObstaclePropEntry(FName propId, FScenarioStaticObstaclePropEntry& outPropEntry) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool CanPlaceStaticObstacle(FName propId, const FTransform& transform, FString& outFailureReason) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool CanPlaceEditorGroundActor(const FTransform& transform, FString& outFailureReason) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool CanUpdateStaticObstacleTransform(
 		const FString& instanceId,
 		const FTransform& transform,
 		FString& outFailureReason) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool AddStaticObstacle(FName propId, const FTransform& transform, FScenarioPlaceableInstanceSpec& outSpec);
 
 	bool AddPedestrian(
@@ -134,29 +134,29 @@ public:
 		AActor*& outMarker,
 		FString& outFailureReason);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool UpdateStaticObstacleTransform(
 		const FString& instanceId,
 		const FTransform& transform,
 		FString& outFailureReason);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool UpdateRobotStartPointTransform(
 		const FTransform& transform,
 		FString& outFailureReason);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool UpdateRobotGoalPointTransform(
 		const FTransform& transform,
 		FString& outFailureReason);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool RenameStaticObstacleInstanceId(
 		const FString& oldInstanceId,
 		const FString& newInstanceId,
 		FString& outFailureReason);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool RemoveStaticObstacle(
 		const FString& instanceId,
 		FString& outFailureReason);
@@ -171,13 +171,13 @@ public:
 		FString& outFailureReason);
 
 	// gizmo 편집 결과(이동·yaw 회전)를 region spec의 Center/YawDegrees에 반영함. Size는 불변.
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool UpdateGroundRegionTransform(
 		const FString& regionId,
 		const FTransform& transform,
 		FString& outFailureReason);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool RemoveGroundRegion(
 		const FString& regionId,
 		FString& outFailureReason);
@@ -188,19 +188,19 @@ public:
 		FScenarioPlaceableInstanceSpec& outSpec,
 		AScenarioStaticObstacle*& outActor);
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Authoring")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	FScenarioWorldSpec GetDraftWorldSpec() const { return DraftWorldSpec; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Authoring")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	FString GetSourceEpisodeSetupJsonPath() const { return SourceEpisodeSetupJsonPath; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Authoring")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	bool IsDraftDirty() const { return bDirty; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Authoring")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	TArray<FScenarioPlaceableInstanceSpec> GetAuthoredStaticObstacleSpecs() const;
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Authoring")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	TArray<FScenarioAuthoringStaticObstacleRecord> GetAuthoredStaticObstacleRecords() const { return StaticObstacleRecords; }
 
 	void GetAuthoredStaticObstacleActors(TArray<AScenarioStaticObstacle*>& outActors) const;
@@ -208,14 +208,14 @@ public:
 	void GetEditorPlacementIgnoredActors(TArray<AActor*>& outActors) const;
 
 	// DraftWorldSpec 전체 기준으로 JSON을 다시 작성하고, 다시 compiler로 round-trip 검증.
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Export")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
 	bool ExportEpisodeSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Export")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
 	bool ExportAndValidateEpisodeSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
 
 	// 검증 성공 시 저장하고 dirty 상태 해제.
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Export")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
 	bool SaveEpisodeSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
 private:

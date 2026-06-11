@@ -28,55 +28,55 @@ class PROTOROBOTSIM_API UScenarioSimulationSubsystem : public UWorldSubsystem
 public:
 	UScenarioSimulationSubsystem();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Classes")
 	TSubclassOf<AScenarioStaticObstacle> StaticObstacleClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Classes")
 	TSubclassOf<AScenarioPedestrian> PedestrianClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Classes")
 	TSubclassOf<ADeliveryBot> RobotActorClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Classes")
 	TSubclassOf<AActor> GoalPointClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Classes")
 	TSubclassOf<AActor> StartPointClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Catalog")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Catalog")
 	TSoftObjectPtr<UScenarioStaticObstaclePropCatalog> StaticObstaclePropCatalog;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Classes")
 	TSubclassOf<ADeliveryBot_GridBoundsActor> GridBoundsActorClass;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	void ClearEpisode();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	bool SetupEpisodeWorld(const FScenarioSimulationSetupSpec& setupSpec);
 
-	UFUNCTION(BlueprintPure, Category = "Episode")
+	UFUNCTION(BlueprintPure, Category = "Scenario")
 	AActor* FindRuntimeActor(const FString& instanceId) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	FScenarioRuntimeContext BuildRuntimeContext(const FScenarioSimulationSetupSpec& setupSpec) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	AScenarioSplinePath* SpawnSplinePath(const FString& pathId, const TArray<FVector>& points, bool bClosedLoop);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	AScenarioSplinePath* FindSplinePath(const FString& pathId) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	AScenarioGroundRegion* SpawnGroundRegion(const FScenarioGroundRegionSpec& regionSpec);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	void SpawnGroundRegions(const TArray<FScenarioGroundRegionSpec>& regionSpecs);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	AScenarioGroundRegion* FindGroundRegion(const FString& regionId) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	AScenarioPedestrian* SpawnPedestrianOnPath(
 		TSubclassOf<AScenarioPedestrian> inPedestrianClass,
 		const FTransform& spawnTransform,
@@ -85,7 +85,7 @@ public:
 		double initialDistanceCm,
 		bool bStartFollowing);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode")
+	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	AScenarioPedestrian* SpawnPedestrianOnPathId(
 		TSubclassOf<AScenarioPedestrian> inPedestrianClass,
 		const FTransform& spawnTransform,
@@ -113,7 +113,7 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<ADeliveryBot_GridBoundsActor> RuntimeGridBoundsActor;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
 	float DeliveryBotGridBoundsPaddingCm{ 100.f };
 
 	AActor* SpawnPlaceable(const FScenarioPlaceableInstanceSpec& placeableSpec);

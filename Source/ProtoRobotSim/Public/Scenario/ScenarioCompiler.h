@@ -19,13 +19,13 @@ class PROTOROBOTSIM_API UScenarioCompiler : public UObject
 public:
 	UScenarioCompiler();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Compiler|Catalog")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Compiler|Catalog")
 	TSoftObjectPtr<UScenarioStaticObstaclePropCatalog> StaticObstaclePropCatalog;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Compiler")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Compiler")
 	FScenarioCompileResult CompileEpisodeWorldSpecFromJsonFile(const FString& jsonFilePath) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Compiler")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Compiler")
 	FScenarioCompileResult CompileEpisodeWorldSpecFromJsonString(const FString& jsonString) const;
 
 private:

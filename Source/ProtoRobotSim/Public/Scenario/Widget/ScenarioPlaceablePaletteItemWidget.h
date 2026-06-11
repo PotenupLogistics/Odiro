@@ -26,46 +26,46 @@ class PROTOROBOTSIM_API UScenarioPlaceablePaletteItemWidget : public UUserWidget
 public:
 	virtual void NativeOnInitialized() override;
 
-	UPROPERTY(BlueprintAssignable, Category = "Episode|Editor|Palette")
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Palette")
 	FScenarioPlaceablePaletteItemSelected OnSelected;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
 	TObjectPtr<UButton> SelectButton;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
 	TObjectPtr<UTextBlock> DisplayNameTextBlock;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
 	TObjectPtr<UTextBlock> CategoryTextBlock;
 
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
 	TObjectPtr<UImage> ThumbnailImage;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette", meta = (DeprecatedProperty, DeprecationMessage = "Palette thumbnails are now read from catalog data assets."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette", meta = (DeprecatedProperty, DeprecationMessage = "Palette thumbnails are now read from catalog data assets."))
 	FString IconDirectory;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette", meta = (DeprecatedProperty, DeprecationMessage = "Palette thumbnails are now read from catalog data assets."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette", meta = (DeprecatedProperty, DeprecationMessage = "Palette thumbnails are now read from catalog data assets."))
 	FString IconAssetPrefix;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
 	bool bMatchThumbnailImageSizeToTexture = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
 	bool bHideThumbnailImageWhenMissing = true;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Palette")
 	void SetPropEntry(const FScenarioStaticObstaclePropEntry& propEntry);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Palette")
 	void SetPaletteItemEntry(const FScenarioPaletteItemEntry& paletteItemEntry);
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Palette")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Palette")
 	FScenarioPaletteItemEntry GetPaletteItemEntry() const { return PaletteItemEntry; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Palette")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Palette")
 	FScenarioStaticObstaclePropEntry GetPropEntry() const { return PropEntry; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Palette")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Palette")
 	FName GetPropId() const { return PaletteItemEntry.AssetId; }
 
 protected:

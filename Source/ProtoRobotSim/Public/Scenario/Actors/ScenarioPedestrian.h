@@ -19,15 +19,15 @@ class PROTOROBOTSIM_API AScenarioPedestrian : public ACharacter
 public:
 	AScenarioPedestrian();
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")
 	TObjectPtr<UScenarioPlaceableComponent> PlaceableComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")
 	TObjectPtr<UScenarioObstacleCollisionComponent> ObstacleCollisionComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")
 	TObjectPtr<UScenarioPathFollowerComponent> PathFollowerComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")
 	TObjectPtr<UScenarioPedestrianRuntimeComponent> PedestrianRuntimeComponent;
 };

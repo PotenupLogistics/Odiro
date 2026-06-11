@@ -36,199 +36,199 @@ public:
 	virtual void Tick(float deltaSeconds) override;
 	virtual void SetupInputComponent() override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input", meta = (ClampMin = "0.001"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input", meta = (ClampMin = "0.001"))
 	float MouseLookSensitivity = 1.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	TSoftObjectPtr<UInputMappingContext> EditorInputMappingContext;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	TSoftObjectPtr<UInputAction> EditorMoveAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	TSoftObjectPtr<UInputAction> EditorLookAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	TSoftObjectPtr<UInputAction> EditorSelectionAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	TSoftObjectPtr<UInputAction> EditorDeselectionAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	TSoftObjectPtr<UInputAction> EditorTranslateAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	TSoftObjectPtr<UInputAction> EditorRotateAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	TSoftObjectPtr<UInputAction> EditorScaleAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	TSoftObjectPtr<UInputAction> EditorViewModeToggleAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	TSoftObjectPtr<UInputAction> EditorZoomAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	int32 EditorInputMappingPriority = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Input", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input", meta = (ClampMin = "0.0"))
 	double SelectionClickLookDeltaThreshold = 4.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Placement", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement", meta = (ClampMin = "1.0"))
 	float PlacementTraceDistanceCm = 100000.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Placement")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement")
 	TEnumAsByte<ECollisionChannel> PlacementTraceChannel = ECC_Visibility;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Placement")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement")
 	bool bSnapPlacementToGrid = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Placement", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement", meta = (ClampMin = "1.0"))
 	double PlacementGridSizeCm = 50.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Placement", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement", meta = (ClampMin = "0.0"))
 	double PlacementGroundSnapToleranceCm = 5.0;
 
 	// 지면 영역을 그리는 평면의 높이(cm). 코너 trace가 이 평면에 투영됨.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|RegionDraw")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|RegionDraw")
 	double GroundRegionDrawPlaneZCm = 0.0;
 
 	// 드래그한 사각형의 가로/세로가 모두 이 값 이상이어야 커밋됨(짧은 클릭은 무시).
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|RegionDraw", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|RegionDraw", meta = (ClampMin = "0.0"))
 	double RegionDrawMinSizeCm = 10.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Classes")
 	TSubclassOf<AScenarioPlacementPreviewActor> PlacementPreviewActorClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Classes")
 	TSubclassOf<AScenarioTransformGizmoActor> TransformGizmoActorClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Classes")
 	TSubclassOf<UScenarioEditorRootWidget> EditorRootWidgetClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|UI")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
 	int32 EditorRootWidgetViewportZOrder = 2;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor")
 	void SetObserverMode();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Input")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Input")
 	void RequestEditorWidgetInputMode(UWidget* focusWidget);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Input")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Input")
 	void ReleaseEditorWidgetInputMode(UWidget* focusWidget);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool BeginStaticObstaclePlacement(FName propId);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool BeginPalettePlacement(EScenarioPaletteItemType itemType, FName assetId);
 
 	// 지면 영역(walkable/penalty/blocked)을 drag-out으로 그리는 모드로 진입함.
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|RegionDraw")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|RegionDraw")
 	bool BeginGroundRegionDraw(EScenarioGroundRegionType regionType);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	void CancelPlacement();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool ConfirmPlacement();
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor")
 	EScenarioEditorControllerMode GetEditorMode() const { return EditorMode; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor")
 	EScenarioEditorViewMode GetEditorViewMode() const { return EditorViewMode; }
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor")
 	void SetEditorViewMode(EScenarioEditorViewMode viewMode);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor")
 	void ToggleEditorViewMode();
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Placement")
 	bool IsPlacementSnapToGridEnabled() const { return bSnapPlacementToGrid; }
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	void SetPlacementSnapToGridEnabled(bool bEnabled);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	void TogglePlacementSnapToGrid();
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Gizmo")
 	EScenarioTransformGizmoMode GetTransformGizmoMode() const { return TransformGizmoMode; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Gizmo")
 	EScenarioTransformGizmoOrientationMode GetTransformGizmoOrientationMode() const { return TransformGizmoOrientationMode; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Gizmo")
 	EScenarioTransformGizmoOrientationMode GetEffectiveTransformGizmoOrientationMode() const;
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Gizmo")
 	bool CanEditTransformGizmoOrientationForSelection() const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Gizmo")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Gizmo")
 	void SetTransformGizmoOrientationMode(EScenarioTransformGizmoOrientationMode orientationMode);
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Placement")
 	bool IsCurrentPlacementValid() const { return bCurrentPlacementValid; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Placement")
 	FString GetCurrentPlacementFailureReason() const { return CurrentPlacementFailureReason; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Placement")
 	FName GetSelectedStaticObstaclePropId() const { return SelectedStaticObstaclePropId; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Placement")
 	EScenarioPaletteItemType GetSelectedPlacementItemType() const { return SelectedPlacementItemType; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Placement")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Placement")
 	FName GetSelectedPlacementAssetId() const { return SelectedPlacementAssetId; }
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Palette")
 	void GetStaticObstaclePaletteEntries(TArray<FScenarioStaticObstaclePropEntry>& outEntries) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Export")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
 	bool ExportAndValidateEpisodeSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Import")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
 	bool LoadEpisodeSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Authoring")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Authoring")
 	void NewEpisodeDraft();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Export")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
 	bool SaveEpisodeSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Authoring")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	FString GetSourceEpisodeSetupJsonPath() const;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|UI")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
 	UScenarioEditorToolbarWidget* ShowToolbarWidget();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|UI")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
 	void RemoveToolbarWidget();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|UI")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
 	UScenarioEditorRootWidget* ShowEditorRootWidget();
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|UI")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
 	void RemoveEditorRootWidget();
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|UI")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|UI")
 	UScenarioEditorRootWidget* GetEditorRootWidget() const { return EditorRootWidget.Get(); }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Selection")
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Selection")
 	UScenarioPlaceableComponent* GetSelectedPlaceableComponent() const { return SelectedPlaceableComponent.Get(); }
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Selection")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Selection")
 	bool TryUpdateSelectedPlaceableTransform(const FTransform& transform, FString& outFailureReason);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Selection")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Selection")
 	bool TryRenameSelectedPlaceableInstanceId(const FString& newInstanceId, FString& outFailureReason);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Selection")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Selection")
 	bool DeleteSelectedPlaceable(FString& outFailureReason);
 
 private:
@@ -306,29 +306,29 @@ private:
 	AScenarioEditorPawn* GetEditorPawn() const;
 	UScenarioAuthoringSubsystem* GetAuthoringSubsystem() const;
 
-	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor")
+	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor")
 	EScenarioEditorControllerMode EditorMode = EScenarioEditorControllerMode::Observer;
 
-	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor")
+	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor")
 	EScenarioEditorViewMode EditorViewMode = EScenarioEditorViewMode::Perspective;
 
-	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor|Gizmo")
 	EScenarioTransformGizmoMode TransformGizmoMode = EScenarioTransformGizmoMode::Translate;
 
-	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Gizmo")
+	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor|Gizmo")
 	EScenarioTransformGizmoOrientationMode TransformGizmoOrientationMode =
 		EScenarioTransformGizmoOrientationMode::Relative;
 
-	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
+	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor|Placement")
 	FName SelectedStaticObstaclePropId;
 
-	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
+	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor|Placement")
 	EScenarioPaletteItemType SelectedPlacementItemType = EScenarioPaletteItemType::StaticObstacle;
 
-	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
+	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor|Placement")
 	FName SelectedPlacementAssetId;
 
-	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|RegionDraw")
+	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor|RegionDraw")
 	EScenarioGroundRegionType PendingGroundRegionType = EScenarioGroundRegionType::Walkable;
 
 	UPROPERTY(Transient)
@@ -343,13 +343,13 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UScenarioEditorRootWidget> EditorRootWidget;
 
-	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
+	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor|Placement")
 	FTransform CurrentPlacementTransform = FTransform::Identity;
 
-	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
+	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor|Placement")
 	bool bCurrentPlacementValid = false;
 
-	UPROPERTY(VisibleInstanceOnly, Category = "Episode|Editor|Placement")
+	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor|Placement")
 	FString CurrentPlacementFailureReason;
 
 	bool bIsLookInputHeld = false;

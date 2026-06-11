@@ -14,22 +14,22 @@ struct PROTOROBOTSIM_API FScenarioRunConfig
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString TemplateId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	int32 TemplateVersion = 1;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	int32 GeneratorVersion = 1;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	int64 BaseSeed = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	int32 IterationIndex = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TMap<FString, FScenarioParamValue> Parameters;
 };
 
@@ -39,22 +39,22 @@ struct PROTOROBOTSIM_API FScenarioSeedLedger
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	int64 WorldSeed = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	int64 LayoutSeed = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	int64 StaticObstacleSeed = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	int64 DynamicActorSeed = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	int64 EventSeed = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	int64 PolicySeed = 0;
 };
 
@@ -63,28 +63,28 @@ struct PROTOROBOTSIM_API FScenarioEvaluationConfig
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation", meta = (ClampMin = "0.0"))
 	double GoalAcceptanceRadiusCm = 50.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation", meta = (ClampMin = "0.0"))
 	double TipOverAngleDegrees = 60.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation", meta = (ClampMin = "0.0"))
 	double NearMissDistanceCm = 50.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation")
 	double StaticObstacleCollisionScore = -1.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation")
 	double BlockedRegionCollisionScore = -1.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation")
 	double PenaltyRegionViolationScore = -3.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation")
 	double PedestrianNearMissScore = -3.0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Evaluation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation")
 	double PedestrianCollisionScore = -10.0;
 };
 
@@ -106,16 +106,16 @@ struct PROTOROBOTSIM_API FScenarioRunInput
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString PairId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString EpisodeSetupJsonPath;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString DeliveryBotSetupJsonPath;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString PolicySpecJsonPath;
 };
 
@@ -125,37 +125,37 @@ struct PROTOROBOTSIM_API FScenarioRuntimeContext
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString EpisodeId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString SpecHash;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString RobotInstanceId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TObjectPtr<AActor> RobotActor = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	bool bHasGoalLocation = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FVector GoalLocation = FVector::ZeroVector;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TArray<TObjectPtr<AActor>> RuntimeActors;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TArray<TObjectPtr<AActor>> GroundRegionActors;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TArray<TObjectPtr<AActor>> StaticObstacleActors;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TArray<TObjectPtr<AActor>> PedestrianActors;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TArray<FString> PedestrianInstanceIds;
 };
 

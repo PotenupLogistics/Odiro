@@ -11,31 +11,31 @@ struct PROTOROBOTSIM_API FScenarioLlmGenerationResult
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly, Category = "Episode|LLM")
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
 	bool bSuccess = false;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Episode|LLM")
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
 	int32 HttpStatusCode = 0;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Episode|LLM")
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
 	FString Message;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Episode|LLM")
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
 	FString SavedRunQueueJsonPath;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Episode|LLM")
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
 	FString ResolvedSavedRunQueueJsonPath;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Episode|LLM")
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
 	FString FirstEpisodeSetupJsonPath;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Episode|LLM")
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
 	FString FirstDeliveryBotSetupJsonPath;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Episode|LLM")
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
 	int32 RunCount = 0;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Episode|LLM")
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
 	TArray<FString> Diagnostics;
 };
 
@@ -50,37 +50,37 @@ class PROTOROBOTSIM_API UScenarioLlmAuthoringSubsystem : public UGameInstanceSub
 public:
 	virtual void Deinitialize() override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|LLM")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM")
 	FString BaseUrl = TEXT("http://127.0.0.1:8711");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|LLM")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM")
 	FString GenerateEndpoint = TEXT("/api/v1/scenarios/generate");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|LLM")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM")
 	FString LatestRunQueueJsonPath = TEXT("Json/Input/EpisodeRunQueue_LlmLatest.json");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|LLM", meta = (ClampMin = "1", ClampMax = "20"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM", meta = (ClampMin = "1", ClampMax = "20"))
 	int32 DefaultEpisodeCount = 1;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|LLM", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM", meta = (ClampMin = "1.0"))
 	float RequestTimeoutSeconds = 120.0f;
 
-	UPROPERTY(BlueprintAssignable, Category = "Episode|LLM")
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|LLM")
 	FScenarioLlmGenerationCompletedSignature OnGenerationCompleted;
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|LLM")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|LLM")
 	bool GenerateEpisodeFromPrompt(const FString& prompt, int32 episodeCount);
 
-	UFUNCTION(BlueprintCallable, Category = "Episode|LLM")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|LLM")
 	void CancelPendingRequest();
 
-	UFUNCTION(BlueprintPure, Category = "Episode|LLM")
+	UFUNCTION(BlueprintPure, Category = "Scenario|LLM")
 	bool IsRequestPending() const { return PendingHttpRequest.IsValid(); }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|LLM")
+	UFUNCTION(BlueprintPure, Category = "Scenario|LLM")
 	FScenarioLlmGenerationResult GetLatestResult() const { return LatestResult; }
 
-	UFUNCTION(BlueprintPure, Category = "Episode|LLM")
+	UFUNCTION(BlueprintPure, Category = "Scenario|LLM")
 	FString GetLatestRunQueueJsonPath() const { return LatestRunQueueJsonPath; }
 
 private:

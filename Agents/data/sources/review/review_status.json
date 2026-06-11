@@ -1,0 +1,42 @@
+[
+  {
+    "sourceId": "KOR-001",
+    "reviewChecklistPath": "data/sources/review/korea/KOR-001_review_checklist.md",
+    "reviewStatus": "not_started",
+    "extractionStatus": "partial",
+    "reviewer": "",
+    "notes": "processed extraction is partial; manual source comparison required"
+  },
+  {
+    "sourceId": "KOR-002",
+    "reviewChecklistPath": "data/sources/review/korea/KOR-002_review_checklist.md",
+    "reviewStatus": "not_started",
+    "extractionStatus": "partial",
+    "reviewer": "",
+    "notes": "processed extraction is partial; manual source comparison required"
+  },
+  {
+    "sourceId": "KOR-003",
+    "reviewChecklistPath": "data/sources/review/korea/KOR-003_review_checklist.md",
+    "reviewStatus": "not_started",
+    "extractionStatus": "partial",
+    "reviewer": "",
+    "notes": "processed extraction is partial; manual source comparison required"
+  },
+  {
+    "sourceId": "KOR-004",
+    "reviewChecklistPath": "data/sources/review/korea/KOR-004_review_checklist.md",
+    "reviewStatus": "not_started",
+    "extractionStatus": "partial",
+    "reviewer": "",
+    "notes": "processed extraction is partial; manual source comparison required"
+  },
+  {
+    "sourceId": "KOR-005",
+    "reviewChecklistPath": "data/sources/review/korea/KOR-005_review_checklist.md",
+    "reviewStatus": "not_started",
+    "extractionStatus": "partial",
+    "reviewer": "",
+    "notes": "processed extraction is partial; manual source comparison required"
+  }
+]

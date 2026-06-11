@@ -1,0 +1,159 @@
+{
+  "totalCards": 9,
+  "cardsByCategory": {
+    "emergency_stop": 2,
+    "operator_control": 1,
+    "perception_requirement": 1,
+    "sidewalk_operation": 1,
+    "speed_policy": 2,
+    "terrain_or_dynamic_safety": 2
+  },
+  "mvpSituationCoverage": {
+    "PedestrianAhead": {
+      "cardIds": [
+        "CARD-KOR-003-perception_requirement-001",
+        "CARD-KOR-003-sidewalk_operation-001"
+      ],
+      "status": "ready"
+    },
+    "ObstacleAhead": {
+      "cardIds": [
+        "CARD-KOR-003-perception_requirement-001",
+        "CARD-KOR-003-emergency_stop-001"
+      ],
+      "status": "ready"
+    },
+    "FallOrTilt": {
+      "cardIds": [
+        "CARD-KOR-003-terrain_or_dynamic_safety-001",
+        "CARD-KOR-003-terrain_or_dynamic_safety-002"
+      ],
+      "status": "ready"
+    },
+    "TerrainRisk": {
+      "cardIds": [
+        "CARD-KOR-003-terrain_or_dynamic_safety-001",
+        "CARD-KOR-003-terrain_or_dynamic_safety-002"
+      ],
+      "status": "ready"
+    },
+    "ApproachingObject": {
+      "cardIds": [
+        "CARD-KOR-003-perception_requirement-001"
+      ],
+      "status": "needs_more_evidence"
+    },
+    "CrosswalkApproach": {
+      "cardIds": [
+        "CARD-KOR-003-sidewalk_operation-001"
+      ],
+      "status": "ready"
+    },
+    "CommunicationIssue": {
+      "cardIds": [
+        "CARD-KOR-003-operator_control-001",
+        "CARD-KOR-003-emergency_stop-002"
+      ],
+      "status": "partial"
+    },
+    "CrowdedPath": {
+      "cardIds": [
+        "CARD-KOR-003-operator_control-001",
+        "CARD-KOR-003-perception_requirement-001"
+      ],
+      "status": "needs_more_evidence"
+    }
+  },
+  "actionCoverage": {
+    "Continue": [
+      "CARD-KOR-003-sidewalk_operation-001"
+    ],
+    "SlowDown": [
+      "CARD-KOR-003-speed_policy-001",
+      "CARD-KOR-003-speed_policy-002",
+      "CARD-KOR-003-perception_requirement-001"
+    ],
+    "Stop": [
+      "CARD-KOR-003-emergency_stop-001",
+      "CARD-KOR-003-sidewalk_operation-001",
+      "CARD-KOR-003-terrain_or_dynamic_safety-002"
+    ],
+    "EmergencyStop": [
+      "CARD-KOR-003-emergency_stop-001",
+      "CARD-KOR-003-emergency_stop-002"
+    ],
+    "LocalAvoidance": [
+      "CARD-KOR-003-perception_requirement-001"
+    ],
+    "ReplanPath": [
+      "CARD-KOR-003-terrain_or_dynamic_safety-001",
+      "CARD-KOR-003-terrain_or_dynamic_safety-002",
+      "CARD-KOR-003-perception_requirement-001"
+    ],
+    "YieldWait": [
+      "CARD-KOR-003-sidewalk_operation-001"
+    ],
+    "RequestOperator": [
+      "CARD-KOR-003-operator_control-001",
+      "CARD-KOR-003-emergency_stop-002"
+    ]
+  },
+  "parameterCoverage": {
+    "ready": [
+      "maxSpeedKmh",
+      "lowSpeedZoneSpeedKmh",
+      "emergencyStopDistanceCm",
+      "ttcThresholdSec",
+      "safeDistanceCm",
+      "perceptionMinRangeM",
+      "traversabilityThreshold",
+      "rollPitchThresholdDeg",
+      "botMassKg",
+      "robotWidthCm",
+      "sidewalkWidthCm",
+      "operatorOverrideEnabled"
+    ],
+    "needs_more_evidence": [
+      "waitTimeoutSec",
+      "maxRerouteAttempts"
+    ]
+  },
+  "requestFieldCoverage": {
+    "ready": [
+      "event.type",
+      "event.severity",
+      "event.confidence",
+      "event.source",
+      "botState.speedKmh",
+      "botState.pitchDegree",
+      "botState.rollDegree",
+      "detectedObjects[].type",
+      "detectedObjects[].distanceCm",
+      "detectedObjects[].timeToCollisionSec",
+      "detectedObjects[].isOnPath",
+      "terrain.traversabilityScore",
+      "terrain.slopeDegree",
+      "terrain.curbHeightCm",
+      "environments[].type",
+      "environments[].state",
+      "communicationStatus"
+    ],
+    "needs_more_evidence": [
+      "pathContext.pathBlocked",
+      "pathContext.leftTraversable",
+      "pathContext.rightTraversable",
+      "pathContext.leftClearanceCm",
+      "pathContext.rightClearanceCm"
+    ]
+  },
+  "gaps": [
+    "ApproachingObject 세부 객체 유형은 RSR 또는 추가 KOR confirmed 근거가 필요하다.",
+    "CrowdedPath 판단 기준은 추가 confirmed 근거가 필요하다.",
+    "Evaluation metric은 RSR-001 검토 후 보강이 필요하다."
+  ],
+  "nextStepRecommendation": [
+    "Policy Config JSON 스키마 설계 전에 파라미터 후보를 검토한다.",
+    "Decision Request 필드 후보의 requiredForMvp를 확정한다.",
+    "부족 영역은 추가 manual confirmation 또는 RSR 검토로 보강한다."
+  ]
+}

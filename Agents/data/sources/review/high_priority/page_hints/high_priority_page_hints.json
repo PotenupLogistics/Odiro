@@ -1,0 +1,700 @@
+﻿{
+  "generatedAt": "2026-05-30T14:41:25+00:00",
+  "totalCandidates": 43,
+  "hintSummary": {
+    "found": 39,
+    "partial": 4,
+    "notFound": 0,
+    "needsManualPageSearch": 0
+  },
+  "items": [
+    {
+      "candidateId": "CAND-KOR-001-010",
+      "sourceId": "KOR-001",
+      "category": "emergency_stop",
+      "extractedText": "면의 점용ㆍ사용 실시계획의 승인 등(매립면허를 받은 매립예정지는 제외한다), 같은 법 제28조에 따른 공유수면",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 8,
+          "matchType": "exact",
+          "matchedSnippet": "법 제 33조에 따른 하천 점용 등의 허가 6. 「공유수면 관리 및 매립에 관한 법률」 제8조에 따른 공유수면의 점용ㆍ사용허가, 같은 법 제17조에 따른 공유수 면의 점용ㆍ사용 실시계획의 승인 등(매립면허를 받은 매립예정지는 제외한다), 같은 법 제28조에 따른 공유수면 의 매립면허, 같은 법 제35조에 따른 협의 또는 승인 및 같은 법 제38조에 따른 공유수면 매립실시계획의 승인ㆍ 고시 7. 「폐기물관리법」 제29조에 따른 폐",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-004",
+      "sourceId": "KOR-002",
+      "category": "speed_policy",
+      "extractedText": "3. “고속도로”란 자동차의 고속 운행에만 사용하기 위하여 지정된 도로를 말한다.",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 1,
+          "matchType": "exact",
+          "matchedSnippet": ")가 통행할 수 있도록 공개된 장소로서 안전하고 원활한 교통을 확보할 필요가 있는 장소 2. “자동차전용도로”란 자동차만 다닐 수 있도록 설치된 도로를 말한다. 3. “고속도로”란 자동차의 고속 운행에만 사용하기 위하여 지정된 도로를 말한다. 4. “차도”(車道)란 연석선(차도와 보도를 구분하는 돌 등으로 이어진 선을 말한다. 이하 같다), 안전표지 또는 그 와 비슷한 인공구조물을 이용하여 경계(境界",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-005",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "extractedText": "4. “차도”(車道)란 연석선(차도와 보도를 구분하는 돌 등으로 이어진 선을 말한다. 이하 같다), 안전표지 또는 그",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 1,
+          "matchType": "exact",
+          "matchedSnippet": "장소 2. “자동차전용도로”란 자동차만 다닐 수 있도록 설치된 도로를 말한다. 3. “고속도로”란 자동차의 고속 운행에만 사용하기 위하여 지정된 도로를 말한다. 4. “차도”(車道)란 연석선(차도와 보도를 구분하는 돌 등으로 이어진 선을 말한다. 이하 같다), 안전표지 또는 그 와 비슷한 인공구조물을 이용하여 경계(境界)를 표시하여 모든 차가 통행할 수 있도록 설치된 도로의 부분을 말한다. 5. “중앙선”이란 차마의 통행 방향을 명확하",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-010",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "extractedText": "10. “보도”(步道)란 연석선, 안전표지나 그와 비슷한 인공구조물로 경계를 표시하여 보행자(유모차, 보행보조용",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 1,
+          "matchType": "exact",
+          "matchedSnippet": "률」 제3조 각 호의 도로를 말한다. 9. “자전거횡단도”란 자전거 및 개인형 이동장치가 일반도로를 횡단할 수 있도록 안전표지로 표시한 도로의 부 분을 말한다. 10. “보도”(步道)란 연석선, 안전표지나 그와 비슷한 인공구조물로 경계를 표시하여 보행자(유모차, 보행보조용 의자차, 노약자용 보행기 등 행정안전부령으로 정하는 기구ㆍ장치를 이용하여 통행하는 사람 및 제21호의 3에 따른 실외이동로봇을 포함한다. 이하 같다)가 통행할",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-013",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "extractedText": "11. “길가장자리구역”이란 보도와 차도가 구분되지 아니한 도로에서 보행자의 안전을 확보하기 위하여 안전표",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 1,
+          "matchType": "exact",
+          "matchedSnippet": "부령으로 정하는 기구ㆍ장치를 이용하여 통행하는 사람 및 제21호의 3에 따른 실외이동로봇을 포함한다. 이하 같다)가 통행할 수 있도록 한 도로의 부분을 말한다. 11. “길가장자리구역”이란 보도와 차도가 구분되지 아니한 도로에서 보행자의 안전을 확보하기 위하여 안전표 지 등으로 경계를 표시한 도로의 가장자리 부분을 말한다.",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-014",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "extractedText": "12. “횡단보도”란 보행자가 도로를 횡단할 수 있도록 안전표지로 표시한 도로의 부분을 말한다.",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 2,
+          "matchType": "exact",
+          "matchedSnippet": "2 국가법령정보센 터 도로교통법 12. “횡단보도”란 보행자가 도로를 횡단할 수 있도록 안전표지로 표시한 도로의 부분을 말한다. 13. “교차로”란 ‘십’자로, ‘T’자로나 그 밖에 둘 이상의 도로(보도와 차도가 구분되어 있는 도로에서는 차도를 말 한다)가 교차하는 부분을 말한다. 13의",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-015",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "extractedText": "13. “교차로”란 ‘십’자로, ‘T’자로나 그 밖에 둘 이상의 도로(보도와 차도가 구분되어 있는 도로에서는 차도를 말",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 2,
+          "matchType": "exact",
+          "matchedSnippet": "국가법령정보센 터 도로교통법 12. “횡단보도”란 보행자가 도로를 횡단할 수 있도록 안전표지로 표시한 도로의 부분을 말한다. 13. “교차로”란 ‘십’자로, ‘T’자로나 그 밖에 둘 이상의 도로(보도와 차도가 구분되어 있는 도로에서는 차도를 말 한다)가 교차하는 부분을 말한다. 13의2. “회전교차로”란 교차로 중 차마가 원형의 교통섬(차마의 안전하고 원활한 교통처리나 보행자 도로횡단 의 안전을 확보하",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-016",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "extractedText": "13의2. “회전교차로”란 교차로 중 차마가 원형의 교통섬(차마의 안전하고 원활한 교통처리나 보행자 도로횡단",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 2,
+          "matchType": "exact",
+          "matchedSnippet": "한다. 13. “교차로”란 ‘십’자로, ‘T’자로나 그 밖에 둘 이상의 도로(보도와 차도가 구분되어 있는 도로에서는 차도를 말 한다)가 교차하는 부분을 말한다. 13의2. “회전교차로”란 교차로 중 차마가 원형의 교통섬(차마의 안전하고 원활한 교통처리나 보행자 도로횡단 의 안전을 확보하기 위하여 교차로 또는 차도의 분기점 등에 설치하는 섬 모양의 시설을 말한다)을 중심으로 반시계방향으로 통행하도록 한 원형의 도로를 말한다. 1",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-018",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "extractedText": "14. “안전지대”란 도로를 횡단하는 보행자나 통행하는 차마의 안전을 위하여 안전표지나 이와 비슷한 인공구조",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 2,
+          "matchType": "exact",
+          "matchedSnippet": "단 의 안전을 확보하기 위하여 교차로 또는 차도의 분기점 등에 설치하는 섬 모양의 시설을 말한다)을 중심으로 반시계방향으로 통행하도록 한 원형의 도로를 말한다. 14. “안전지대”란 도로를 횡단하는 보행자나 통행하는 차마의 안전을 위하여 안전표지나 이와 비슷한 인공구조 물로 표시한 도로의 부분을 말한다. 15. “신호기”란 도로교통에서 문자ㆍ기호 또는 등화(燈火)를 사용하여 진행ㆍ정지ㆍ방향전환ㆍ주의 등의 신호 를 표시하기 위하",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-019",
+      "sourceId": "KOR-002",
+      "category": "emergency_stop",
+      "extractedText": "15. “신호기”란 도로교통에서 문자ㆍ기호 또는 등화(燈火)를 사용하여 진행ㆍ정지ㆍ방향전환ㆍ주의 등의 신호",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 2,
+          "matchType": "exact",
+          "matchedSnippet": "도로를 말한다. 14. “안전지대”란 도로를 횡단하는 보행자나 통행하는 차마의 안전을 위하여 안전표지나 이와 비슷한 인공구조 물로 표시한 도로의 부분을 말한다. 15. “신호기”란 도로교통에서 문자ㆍ기호 또는 등화(燈火)를 사용하여 진행ㆍ정지ㆍ방향전환ㆍ주의 등의 신호 를 표시하기 위하여 사람이나 전기의 힘으로 조작하는 장치를 말한다. 16. “안전표지”란 교통안전에 필요한 주의ㆍ규제ㆍ지시 등을 표시하는 표지판이나 도로의 바닥",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-023",
+      "sourceId": "KOR-002",
+      "category": "terrain_or_dynamic_safety",
+      "extractedText": "18의2. “자율주행시스템”이란 「자율주행자동차 상용화 촉진 및 지원에 관한 법률」 제2조제1항제2호에 따른 자",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 2,
+          "matchType": "exact",
+          "matchedSnippet": "치자전거는 제외한다. 1) 승용자동차 2) 승합자동차 3) 화물자동차 4) 특수자동차 5) 이륜자동차 나. 「건설기계관리법」 제26조제1항 단서에 따른 건설기계 18의2. “자율주행시스템”이란 「자율주행자동차 상용화 촉진 및 지원에 관한 법률」 제2조제1항제2호에 따른 자 율주행시스템을 말한다. 이 경우 그 종류는 완전 자율주행시스템, 부분 자율주행시스템 등 행정안전부령으로 정하는 바에 따라 세분할 수 있다. 18의3. “자율주행",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-024",
+      "sourceId": "KOR-002",
+      "category": "terrain_or_dynamic_safety",
+      "extractedText": "율주행시스템을 말한다. 이 경우 그 종류는 완전 자율주행시스템, 부분 자율주행시스템 등 행정안전부령으로",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 2,
+          "matchType": "exact",
+          "matchedSnippet": "기계관리법」 제26조제1항 단서에 따른 건설기계 18의2. “자율주행시스템”이란 「자율주행자동차 상용화 촉진 및 지원에 관한 법률」 제2조제1항제2호에 따른 자 율주행시스템을 말한다. 이 경우 그 종류는 완전 자율주행시스템, 부분 자율주행시스템 등 행정안전부령으로 정하는 바에 따라 세분할 수 있다. 18의3. “자율주행자동차”란 「자동차관리법」 제2조제1호의3에 따른 자율주행자동차로서 자율주행시스템을 갖 추고 있는 자동차",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-025",
+      "sourceId": "KOR-002",
+      "category": "terrain_or_dynamic_safety",
+      "extractedText": "18의3. “자율주행자동차”란 「자동차관리법」 제2조제1호의3에 따른 자율주행자동차로서 자율주행시스템을 갖",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 2,
+          "matchType": "exact",
+          "matchedSnippet": "1항제2호에 따른 자 율주행시스템을 말한다. 이 경우 그 종류는 완전 자율주행시스템, 부분 자율주행시스템 등 행정안전부령으로 정하는 바에 따라 세분할 수 있다. 18의3. “자율주행자동차”란 「자동차관리법」 제2조제1호의3에 따른 자율주행자동차로서 자율주행시스템을 갖 추고 있는 자동차를 말한다. 19. “원동기장치자전거”란 다음 각 목의 어느 하나에 해당하는 차를 말한다. 가. 「자동차관리법」 제3조에 따른 이륜자동차 가운데",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-030",
+      "sourceId": "KOR-002",
+      "category": "emergency_stop",
+      "extractedText": "24. “주차”란 운전자가 승객을 기다리거나 화물을 싣거나 차가 고장 나거나 그 밖의 사유로 차를 계속 정지 상",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 3,
+          "matchType": "exact",
+          "matchedSnippet": ". 「도서관법」에 따른 공공도서관 자. 「평생교육법」에 따른 시ㆍ도평생교육진흥원 및 시ㆍ군ㆍ구평생학습관 차. 「사회복지사업법」에 따른 사회복지시설 및 사회복지관 24. “주차”란 운전자가 승객을 기다리거나 화물을 싣거나 차가 고장 나거나 그 밖의 사유로 차를 계속 정지 상 태에 두는 것 또는 운전자가 차에서 떠나서 즉시 그 차를 운전할 수 없는 상태에 두는 것을 말한다. 25. “정차”란 운전자가 5분을 초과하지 아니하고 차를 정",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-031",
+      "sourceId": "KOR-002",
+      "category": "emergency_stop",
+      "extractedText": "25. “정차”란 운전자가 5분을 초과하지 아니하고 차를 정지시키는 것으로서 주차 외의 정지 상태를 말한다.",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 3,
+          "matchType": "exact",
+          "matchedSnippet": "싣거나 차가 고장 나거나 그 밖의 사유로 차를 계속 정지 상 태에 두는 것 또는 운전자가 차에서 떠나서 즉시 그 차를 운전할 수 없는 상태에 두는 것을 말한다. 25. “정차”란 운전자가 5분을 초과하지 아니하고 차를 정지시키는 것으로서 주차 외의 정지 상태를 말한다. 26. “운전”이란 도로(제27조제6항제3호ㆍ제44조ㆍ제45조ㆍ제54조제1항ㆍ제148조ㆍ제148조의2 및 제156조제 10호의 경우에는 도로 외의 곳을 포함한다",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-032",
+      "sourceId": "KOR-002",
+      "category": "terrain_or_dynamic_safety",
+      "extractedText": "것(조종 또는 자율주행시스템을 사용하는 것을 포함한다)을 말한다.",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 3,
+          "matchType": "exact",
+          "matchedSnippet": "제54조제1항ㆍ제148조ㆍ제148조의2 및 제156조제 10호의 경우에는 도로 외의 곳을 포함한다)에서 차마 또는 노면전차를 그 본래의 사용방법에 따라 사용하는 것(조종 또는 자율주행시스템을 사용하는 것을 포함한다)을 말한다. 27. “초보운전자”란 처음 운전면허를 받은 날(처음 운전면허를 받은 날부터 2년이 지나기 전에 운전면허의 취소 처분을 받은 경우에는 그 후 다시 운전면허를 받",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-033",
+      "sourceId": "KOR-002",
+      "category": "speed_policy",
+      "extractedText": "28. “서행”(徐行)이란 운전자가 차 또는 노면전차를 즉시 정지시킬 수 있는 정도의 느린 속도로 진행하는 것을",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 4,
+          "matchType": "exact",
+          "matchedSnippet": "4 국가법령정보센 터 도로교통법 28. “서행”(徐行)이란 운전자가 차 또는 노면전차를 즉시 정지시킬 수 있는 정도의 느린 속도로 진행하는 것을 말한다. 29. “앞지르기”란 차의 운전자가 앞서가는 다른 차의 옆을 지나서 그 차의 앞으로 나가는 것을 말한다. 30. “일시정지”란 차 또는 노면전차의 운전",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-034",
+      "sourceId": "KOR-002",
+      "category": "emergency_stop",
+      "extractedText": "30. “일시정지”란 차 또는 노면전차의 운전자가 그 차 또는 노면전차의 바퀴를 일시적으로 완전히 정지시키는",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 4,
+          "matchType": "exact",
+          "matchedSnippet": "킬 수 있는 정도의 느린 속도로 진행하는 것을 말한다. 29. “앞지르기”란 차의 운전자가 앞서가는 다른 차의 옆을 지나서 그 차의 앞으로 나가는 것을 말한다. 30. “일시정지”란 차 또는 노면전차의 운전자가 그 차 또는 노면전차의 바퀴를 일시적으로 완전히 정지시키는 것을 말한다. 31. “보행자전용도로”란 보행자만 다닐 수 있도록 안전표지나 그와 비슷한 인공구조물로 표시한 도로를 말한다 . 31의2. “보행자우선도로”란 「",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-035",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "extractedText": "31. “보행자전용도로”란 보행자만 다닐 수 있도록 안전표지나 그와 비슷한 인공구조물로 표시한 도로를 말한다",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 4,
+          "matchType": "exact",
+          "matchedSnippet": "그 차의 앞으로 나가는 것을 말한다. 30. “일시정지”란 차 또는 노면전차의 운전자가 그 차 또는 노면전차의 바퀴를 일시적으로 완전히 정지시키는 것을 말한다. 31. “보행자전용도로”란 보행자만 다닐 수 있도록 안전표지나 그와 비슷한 인공구조물로 표시한 도로를 말한다 . 31의2. “보행자우선도로”란 「보행안전 및 편의증진에 관한 법률」 제2조제3호에 따른 보행자우선도로를 말한다 . 32. “자동차운전학원”이란 자동차등의 운",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-002-036",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "extractedText": "31의2. “보행자우선도로”란 「보행안전 및 편의증진에 관한 법률」 제2조제3호에 따른 보행자우선도로를 말한다",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 4,
+          "matchType": "exact",
+          "matchedSnippet": "퀴를 일시적으로 완전히 정지시키는 것을 말한다. 31. “보행자전용도로”란 보행자만 다닐 수 있도록 안전표지나 그와 비슷한 인공구조물로 표시한 도로를 말한다 . 31의2. “보행자우선도로”란 「보행안전 및 편의증진에 관한 법률」 제2조제3호에 따른 보행자우선도로를 말한다 . 32. “자동차운전학원”이란 자동차등의 운전에 관한 지식ㆍ기능을 교육하는 시설로서 다음 각 목의 시설 외의 시설을 말한다. 가. 교육 관계 법령에 따른 학교",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-003-026",
+      "sourceId": "KOR-003",
+      "category": "sidewalk_operation",
+      "extractedText": "그림 5 신호등이 없는 횡단보도 통행 시나리오 예시 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·14",
+      "hintStatus": "partial",
+      "pageHints": [
+        {
+          "pageNumber": 9,
+          "matchType": "normalized_partial",
+          "matchedSnippet": "그림 목차 그림 1 인증 절차 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·",
+          "confidence": "medium"
+        }
+      ],
+      "note": "Normalized partial text match found. Manual PDF verification is required."
+    },
+    {
+      "candidateId": "CAND-KOR-003-027",
+      "sourceId": "KOR-003",
+      "category": "sidewalk_operation",
+      "extractedText": "그림 6 신호등이 있는 횡단보도 통행 시나리오 예시 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·15",
+      "hintStatus": "partial",
+      "pageHints": [
+        {
+          "pageNumber": 9,
+          "matchType": "normalized_partial",
+          "matchedSnippet": "그림 목차 그림 1 인증 절차 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·",
+          "confidence": "medium"
+        }
+      ],
+      "note": "Normalized partial text match found. Manual PDF verification is required."
+    },
+    {
+      "candidateId": "CAND-KOR-003-050",
+      "sourceId": "KOR-003",
+      "category": "terrain_or_dynamic_safety",
+      "extractedText": "1 질량 및 폭 제한 질량 폭 이하500 kg, 800 mm",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 13,
+          "matchType": "exact",
+          "matchedSnippet": "하 질량 이하의 실외이동로봇을 대상으로 개 심사 항목에 적합함을 15km/h , 500kg 16 확인 표 | 1 |심사 항목 표 No. 심사 항목 내용 요약 1 질량 및 폭 제한 질량 폭 이하500 kg, 800 mm * 단 보도 폭이 최소 이상이면 까지 허용2500 mm 1200 mm 2 운행 속도 질량별 최대 운행 속도 보호구역 운행 속도 준수, 3 겉모양 날카로운",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-003-051",
+      "sourceId": "KOR-003",
+      "category": "sidewalk_operation",
+      "extractedText": "* 단 보도 폭이 최소 이상이면 까지 허용2500 mm 1200 mm",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 13,
+          "matchType": "exact",
+          "matchedSnippet": "15km/h , 500kg 16 확인 표 | 1 |심사 항목 표 No. 심사 항목 내용 요약 1 질량 및 폭 제한 질량 폭 이하500 kg, 800 mm * 단 보도 폭이 최소 이상이면 까지 허용2500 mm 1200 mm 2 운행 속도 질량별 최대 운행 속도 보호구역 운행 속도 준수, 3 겉모양 날카로운 형상 제한 4 동적 안정성 경사로 주행 및 구조물 통과 시 안정성 확인",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-003-052",
+      "sourceId": "KOR-003",
+      "category": "speed_policy",
+      "extractedText": "2 운행 속도 질량별 최대 운행 속도 보호구역 운행 속도 준수,",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 13,
+          "matchType": "exact",
+          "matchedSnippet": "o. 심사 항목 내용 요약 1 질량 및 폭 제한 질량 폭 이하500 kg, 800 mm * 단 보도 폭이 최소 이상이면 까지 허용2500 mm 1200 mm 2 운행 속도 질량별 최대 운행 속도 보호구역 운행 속도 준수, 3 겉모양 날카로운 형상 제한 4 동적 안정성 경사로 주행 및 구조물 통과 시 안정성 확인 5 비상정지 비상정지 스위치 장착 및 요구사항 준수 6 운행구역 준",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-003-053",
+      "sourceId": "KOR-003",
+      "category": "terrain_or_dynamic_safety",
+      "extractedText": "4 동적 안정성 경사로 주행 및 구조물 통과 시 안정성 확인",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 13,
+          "matchType": "exact",
+          "matchedSnippet": "보도 폭이 최소 이상이면 까지 허용2500 mm 1200 mm 2 운행 속도 질량별 최대 운행 속도 보호구역 운행 속도 준수, 3 겉모양 날카로운 형상 제한 4 동적 안정성 경사로 주행 및 구조물 통과 시 안정성 확인 5 비상정지 비상정지 스위치 장착 및 요구사항 준수 6 운행구역 준수 운행구역 준수 및 금지구역 진입 제한 7 속도 제어 설정된 운행 속도 준수 8 장애물 감지",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-003-054",
+      "sourceId": "KOR-003",
+      "category": "emergency_stop",
+      "extractedText": "5 비상정지 비상정지 스위치 장착 및 요구사항 준수",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 13,
+          "matchType": "exact",
+          "matchedSnippet": "2 운행 속도 질량별 최대 운행 속도 보호구역 운행 속도 준수, 3 겉모양 날카로운 형상 제한 4 동적 안정성 경사로 주행 및 구조물 통과 시 안정성 확인 5 비상정지 비상정지 스위치 장착 및 요구사항 준수 6 운행구역 준수 운행구역 준수 및 금지구역 진입 제한 7 속도 제어 설정된 운행 속도 준수 8 장애물 감지 관련 규격에 따른 장애물 형상 감지 및 회피 9 알",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-003-056",
+      "sourceId": "KOR-003",
+      "category": "speed_policy",
+      "extractedText": "7 속도 제어 설정된 운행 속도 준수",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 13,
+          "matchType": "exact",
+          "matchedSnippet": "안정성 경사로 주행 및 구조물 통과 시 안정성 확인 5 비상정지 비상정지 스위치 장착 및 요구사항 준수 6 운행구역 준수 운행구역 준수 및 금지구역 진입 제한 7 속도 제어 설정된 운행 속도 준수 8 장애물 감지 관련 규격에 따른 장애물 형상 감지 및 회피 9 알림음 발생하는 알림음 적절성 확인 및 소음 제한 10 등화장치 시각 알림 제공을 위한 등화장치",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-003-057",
+      "sourceId": "KOR-003",
+      "category": "perception_requirement",
+      "extractedText": "8 장애물 감지 관련 규격에 따른 장애물 형상 감지 및 회피",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 13,
+          "matchType": "exact",
+          "matchedSnippet": "시 안정성 확인 5 비상정지 비상정지 스위치 장착 및 요구사항 준수 6 운행구역 준수 운행구역 준수 및 금지구역 진입 제한 7 속도 제어 설정된 운행 속도 준수 8 장애물 감지 관련 규격에 따른 장애물 형상 감지 및 회피 9 알림음 발생하는 알림음 적절성 확인 및 소음 제한 10 등화장치 시각 알림 제공을 위한 등화장치 장착 11 방수 성능 로봇 외함에 대한 기본 방수 성능 만족",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-003-058",
+      "sourceId": "KOR-003",
+      "category": "terrain_or_dynamic_safety",
+      "extractedText": "11 방수 성능 로봇 외함에 대한 기본 방수 성능 만족",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 13,
+          "matchType": "exact",
+          "matchedSnippet": "애물 감지 관련 규격에 따른 장애물 형상 감지 및 회피 9 알림음 발생하는 알림음 적절성 확인 및 소음 제한 10 등화장치 시각 알림 제공을 위한 등화장치 장착 11 방수 성능 로봇 외함에 대한 기본 방수 성능 만족 12 물리적 보안 통신 및 저장장치에 대한 외부접근 제한 13 횡단보도 통행 횡단보도 통행 시 필수 요건 충족 14 관제장치 모니터링 알림 등 관제장치 필수",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-003-059",
+      "sourceId": "KOR-003",
+      "category": "sidewalk_operation",
+      "extractedText": "13 횡단보도 통행 횡단보도 통행 시 필수 요건 충족",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 13,
+          "matchType": "exact",
+          "matchedSnippet": "등화장치 시각 알림 제공을 위한 등화장치 장착 11 방수 성능 로봇 외함에 대한 기본 방수 성능 만족 12 물리적 보안 통신 및 저장장치에 대한 외부접근 제한 13 횡단보도 통행 횡단보도 통행 시 필수 요건 충족 14 관제장치 모니터링 알림 등 관제장치 필수 요건 충족, 15 통신장애 대응 통신 지연 및 단절 상황에서의 안전한 작동 시나리오 검증 16 원격조작 원격에서",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-003-060",
+      "sourceId": "KOR-003",
+      "category": "operator_control",
+      "extractedText": "14 관제장치 모니터링 알림 등 관제장치 필수 요건 충족,",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 13,
+          "matchType": "exact",
+          "matchedSnippet": "수 성능 로봇 외함에 대한 기본 방수 성능 만족 12 물리적 보안 통신 및 저장장치에 대한 외부접근 제한 13 횡단보도 통행 횡단보도 통행 시 필수 요건 충족 14 관제장치 모니터링 알림 등 관제장치 필수 요건 충족, 15 통신장애 대응 통신 지연 및 단절 상황에서의 안전한 작동 시나리오 검증 16 원격조작 원격에서 로봇을 정지시키는 수단 만족 ※ 심사 항목에 대한 상세 심",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-003-062",
+      "sourceId": "KOR-003",
+      "category": "emergency_stop",
+      "extractedText": "16 원격조작 원격에서 로봇을 정지시키는 수단 만족",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 13,
+          "matchType": "exact",
+          "matchedSnippet": "행 시 필수 요건 충족 14 관제장치 모니터링 알림 등 관제장치 필수 요건 충족, 15 통신장애 대응 통신 지연 및 단절 상황에서의 안전한 작동 시나리오 검증 16 원격조작 원격에서 로봇을 정지시키는 수단 만족 ※ 심사 항목에 대한 상세 심사 기준은 제 장 참고2",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-004-010",
+      "sourceId": "KOR-004",
+      "category": "sidewalk_operation",
+      "extractedText": "가.로봇의자체질량과적재물의질량을합하여500kg을초과하지않아야한다.나.로봇의폭은800mm를초과하지않아야한다.단,해당로봇이운행하려는보도의최소폭이2500mm이상인경우,로봇의폭을1200mm까지허용한다.",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 8,
+          "matchType": "exact",
+          "matchedSnippet": "항목심사기준 1.질량및폭제한 가.로봇의자체질량과적재물의질량을합하여500kg을초과하지않아야한다.나.로봇의폭은800mm를초과하지않아야한다.단,해당로봇이운행하려는보도의최소폭이2500mm이상인경우,로봇의폭을1200mm까지허용한다. 2.운행속도가.로봇의최대운행속도는최대질량(로봇과적재물질량의합)에따라,아래의기준에적합해야한다.최대질량(kg)최대운행속도(km/h)230초과500이하5100초과23",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-004-011",
+      "sourceId": "KOR-004",
+      "category": "speed_policy",
+      "extractedText": "2.운행속도가.로봇의최대운행속도는최대질량(로봇과적재물질량의합)에따라,아래의기준에적합해야한다.최대질량(kg)최대운행속도(km/h)230초과500이하5100초과230이하10100이하 15나.가항에도불구하고,도로교통법제12조에따른어린이보호구역,제12조의2에따른노인보호구역또는장애인보호구역에서로봇이최대운행속도5km/h를준수하는지확인한다.3.겉모양가.로봇의표면에날카로운모서리와날카로운끝이없고,손가락끼임으로인해상해가발생하지않아야한다.나.접촉가능한날카로운부위의최소반경은3mm이상이어야한다.",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 8,
+          "matchType": "exact",
+          "matchedSnippet": "여500kg을초과하지않아야한다.나.로봇의폭은800mm를초과하지않아야한다.단,해당로봇이운행하려는보도의최소폭이2500mm이상인경우,로봇의폭을1200mm까지허용한다. 2.운행속도가.로봇의최대운행속도는최대질량(로봇과적재물질량의합)에따라,아래의기준에적합해야한다.최대질량(kg)최대운행속도(km/h)230초과500이하5100초과230이하10100이하 15나.가항에도불구하고,도로교통법제12조에따른어린이보호구역,제12조의2에따른노인보호구역또는장애인보호구역에서로봇이최대운행속도5k",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-004-012",
+      "sourceId": "KOR-004",
+      "category": "terrain_or_dynamic_safety",
+      "extractedText": "가.로봇은그림과같이경사각(θ)이적어도5°이상인주행로에서시험하여안정적으로주행할수있어야한다.1)로봇을출발점(Po)에서목표점(Pt)까지주행하였을때,적재물의이탈이나낙하없이목표선을통과해야하며,통과지점(Pf)은허용범위(D)이내에있을것",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 8,
+          "matchType": "exact",
+          "matchedSnippet": ".겉모양가.로봇의표면에날카로운모서리와날카로운끝이없고,손가락끼임으로인해상해가발생하지않아야한다.나.접촉가능한날카로운부위의최소반경은3mm이상이어야한다. 4.동적안정성 가.로봇은그림과같이경사각(θ)이적어도5°이상인주행로에서시험하여안정적으로주행할수있어야한다.1)로봇을출발점(Po)에서목표점(Pt)까지주행하였을때,적재물의이탈이나낙하없이목표선을통과해야하며,통과지점(Pf)은허용범위(D)이내에있을것 2)후진을하는로봇의경우,후진주행으로“1)”과동일한방법으로시험할것나.로봇은적어도높이",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-004-013",
+      "sourceId": "KOR-004",
+      "category": "emergency_stop",
+      "extractedText": "2)후진을하는로봇의경우,후진주행으로“1)”과동일한방법으로시험할것나.로봇은적어도높이30mm이상의구조물을전도,적재물의이탈이나낙하없이통과해야하며,평가방법은한국산업표준KSB7320의5.3.2에따른다.5.비상정지가.로봇은비정상적인작동이나위험한상황이발생한경우위험을즉",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 8,
+          "matchType": "exact",
+          "matchedSnippet": "정적으로주행할수있어야한다.1)로봇을출발점(Po)에서목표점(Pt)까지주행하였을때,적재물의이탈이나낙하없이목표선을통과해야하며,통과지점(Pf)은허용범위(D)이내에있을것 2)후진을하는로봇의경우,후진주행으로“1)”과동일한방법으로시험할것나.로봇은적어도높이30mm이상의구조물을전도,적재물의이탈이나낙하없이통과해야하며,평가방법은한국산업표준KSB7320의5.3.2에따른다.5.비상정지가.로봇은비정상적인작동이나위험한상황이발생한경우위험을즉 ■실외이동로봇운행안전인증절차및기준등에관한고시[별표",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-004-017",
+      "sourceId": "KOR-004",
+      "category": "terrain_or_dynamic_safety",
+      "extractedText": "1)그림과같이로봇을출발지점에서도착지점으로자율주행하도록하였을때,로봇이금지구역을침범하지않을것2)출발지점A와B에대해각3회씩반복하여시험하였을때“1)”의조건을만족할것나.로봇이금지구역에진입하지아니하고회피하여주행하거나멈추는경우“가”에만족한것으로간주한다.",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 9,
+          "matchType": "exact",
+          "matchedSnippet": "를가질것2)실외이동로봇의외부에위치해야하며,바로접근이용이할것3)색상은빨간색일것 6.운행구역준수 가.로봇은지정된운행구역을준수해야하며제한된금지구역에진입하지않아야한다. 1)그림과같이로봇을출발지점에서도착지점으로자율주행하도록하였을때,로봇이금지구역을침범하지않을것2)출발지점A와B에대해각3회씩반복하여시험하였을때“1)”의조건을만족할것나.로봇이금지구역에진입하지아니하고회피하여주행하거나멈추는경우“가”에만족한것으로간주한다. 7.속도제어 가.로봇은경사가없는평지에서설정된속도에대하여정확도±1",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-004-018",
+      "sourceId": "KOR-004",
+      "category": "speed_policy",
+      "extractedText": "가.로봇은경사가없는평지에서설정된속도에대하여정확도±10%이내의속도로주행해야한다.1)로봇의속도를측정하는구간은1m이상일것2)로봇은속도를측정하는구간에이르기전에충분한가속이이루어질것3)로봇의속도는고유사양에서명시된최댓값으로설정할것4)시험은총3회수행하여그결과를평균한값이“가”를만족할것나.로봇은적어도5°이상의경사가있는주행로에서설정된속도에대하여정확도±10%이내의속도로주행해야한다.1)“가”의방법과동일한조건으로시험할것2)경사각은고유사양에서명시된최대주행가능경사각으로설정할것3)오르막과내리막에대하여동일한방법으로시험할것8.장애물감지가.로봇은사람이나장애물을감지하여...",
+      "hintStatus": "partial",
+      "pageHints": [
+        {
+          "pageNumber": 9,
+          "matchType": "normalized_partial",
+          "matchedSnippet": "각차단할수있도록비상정지기능을가져야한다.1)비상정지는로봇의제어시스템에서가장높은우선권을가질것2)경사로에서비상정지를한경우로봇은미끄러짐이나구름으로인한위험이발생하지않아야할것3)비상정지해제후,사용자의조작없이임의로동작하지않을것4)비상정지상태는수동에의해서만해제할수있도록할것나.비상정지상태에서어떠한임의의작동을하여서는아니된다.다.비상정지장치는쉽게식별및작동시킬수있어야한다.1)누름버튼(버섯머리유형등)형태를가질것2)실외이동로봇의외부에위치해야하며,바로접근이용이할것3)색상",
+          "confidence": "medium"
+        }
+      ],
+      "note": "Normalized partial text match found. Manual PDF verification is required."
+    },
+    {
+      "candidateId": "CAND-KOR-004-019",
+      "sourceId": "KOR-004",
+      "category": "perception_requirement",
+      "extractedText": "나.장애물배치방법은그림과같다.단,폭이800mm를초과하는로봇의경우초과하는폭의길이만큼시험장의폭을확장시킨다.",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 10,
+          "matchType": "exact",
+          "matchedSnippet": "나.장애물배치방법은그림과같다.단,폭이800mm를초과하는로봇의경우초과하는폭의길이만큼시험장의폭을확장시킨다. ※이때α(mm)의값은로봇폭(mm)–800(mm)이다.9.알림음가.로봇은통행요청,고장상태등안전한운행에필요한적절한알림음을발생해야한다.나.로봇의알림음중발화음과비상정",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-004-020",
+      "sourceId": "KOR-004",
+      "category": "emergency_stop",
+      "extractedText": "※이때α(mm)의값은로봇폭(mm)–800(mm)이다.9.알림음가.로봇은통행요청,고장상태등안전한운행에필요한적절한알림음을발생해야한다.나.로봇의알림음중발화음과비상정지알림음은55dB(A)이상,73dB(A)이하이어야하며,평가방법은한국산업표준KSB7320의5.7절(알림음)에따른다.10.등화장치가.로봇은시각적알림을제공하기위한등화장치를가져야한다.나.등화장치는한국산업표준KSB7320에따른시험환경에서표면온도가섭씨60도를초과하지않아야한다.온도의측정은등화장치를30분이상작동상태로유지한이후시험해야한다.11.방수성능가.로봇의외함은한국산업표준KSCIEC6052...",
+      "hintStatus": "partial",
+      "pageHints": [
+        {
+          "pageNumber": 10,
+          "matchType": "normalized_partial",
+          "matchedSnippet": "나.장애물배치방법은그림과같다.단,폭이800mm를초과하는로봇의경우초과하는폭의길이만큼시험장의폭을확장시킨다. ※이때α(mm)의값은로봇폭(mm)–800(mm)이다.9.알림음가.로봇은통행요청,고장상태등안전한운행에필요한적절한알림음을발생해야한다.나.로봇의알림음중발화음과비상정지알림음은55dB(A)이상,73dB(A)이하이어야하며,평가방법은한국산업표준KSB7320의5.7절(알림음)에따른다.10.등화장치가.로봇은시각적알림을제공하기위한등화장치를가져야한다.나.등화장",
+          "confidence": "medium"
+        }
+      ],
+      "note": "Normalized partial text match found. Manual PDF verification is required."
+    },
+    {
+      "candidateId": "CAND-KOR-004-021",
+      "sourceId": "KOR-004",
+      "category": "sidewalk_operation",
+      "extractedText": "13.횡단보도통행가.로봇이횡단보도를통행하는경우에는아래의요구사항을모두만족하도록해야한다.1)신호를대기하는로봇은운행계획서에명시된보도상의구역에위치할것2)로봇은신호등의신호를정확히인지할수있는수단을가질것3)로봇이횡단보도통행을위해대기장소에도착한시점에보행신호가작동중인경우에는,정지상태로대기후다음보행신호에횡단할것4)횡단중보행자및차량등장애물과의접촉이없을것5)로봇은보행신호가종료되기이전에횡단을완료할것",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 10,
+          "matchType": "exact",
+          "matchedSnippet": "C60529에따른방수등급이IPX4이상이어야한다.12.물리적보안가.로봇의통신포트및저장장치에접근가능한단자는외부에서접근할수없는위치이거나잠금장치를사용하여보호되어야한다. 13.횡단보도통행가.로봇이횡단보도를통행하는경우에는아래의요구사항을모두만족하도록해야한다.1)신호를대기하는로봇은운행계획서에명시된보도상의구역에위치할것2)로봇은신호등의신호를정확히인지할수있는수단을가질것3)로봇이횡단보도통행을위해대기장소에도착한시점에보행신호가작동중인경우에는,정지상태로대기후다음보행신호에횡단할것4)횡단중보",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    },
+    {
+      "candidateId": "CAND-KOR-004-022",
+      "sourceId": "KOR-004",
+      "category": "sidewalk_operation",
+      "extractedText": "14.관제장치가.로봇의관제장치는운용중인모든로봇을식별해야한다.나.관제장치는모든로봇에대하여다음의상태에대한정보를실시간으로확인할수있어야한다.1)로봇의위치와속력2)로봇의주행가능거리또는배터리잔량3)로봇과관제장치간통신신호의감도4)로봇의상태(주행,대기,비상정지,오류등)다.로봇은주행하는경로에보행자밀집등으로인해통행이불가능한",
+      "hintStatus": "found",
+      "pageHints": [
+        {
+          "pageNumber": 10,
+          "matchType": "exact",
+          "matchedSnippet": "장소에도착한시점에보행신호가작동중인경우에는,정지상태로대기후다음보행신호에횡단할것4)횡단중보행자및차량등장애물과의접촉이없을것5)로봇은보행신호가종료되기이전에횡단을완료할것 14.관제장치가.로봇의관제장치는운용중인모든로봇을식별해야한다.나.관제장치는모든로봇에대하여다음의상태에대한정보를실시간으로확인할수있어야한다.1)로봇의위치와속력2)로봇의주행가능거리또는배터리잔량3)로봇과관제장치간통신신호의감도4)로봇의상태(주행,대기,비상정지,오류등)다.로봇은주행하는경로에보행자밀집등으로인해통행이불가능",
+          "confidence": "high"
+        }
+      ],
+      "note": "Exact text match found in extracted PDF text. Page number is a review hint, not confirmed evidence."
+    }
+  ]
+}

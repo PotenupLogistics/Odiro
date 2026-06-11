@@ -1,0 +1,56 @@
+﻿[
+  {
+    "sourceId": "RSR-001",
+    "reviewChecklistPath": "data/sources/review/research/RSR-001_review_checklist.md",
+    "rawFilePath": "data/sources/raw/research/RSR-001_METRANS_Sidewalk_ADR_Interactions.pdf",
+    "processedFilePath": "data/sources/processed/research/RSR-001_METRANS_Sidewalk_ADR_Interactions.md",
+    "reviewStatus": "not_started",
+    "sourceMode": "local_pdf",
+    "notes": "RSR-001 local PDF processed; manual source comparison required"
+  },
+  {
+    "sourceId": "RSR-002",
+    "reviewChecklistPath": "data/sources/review/research/RSR-002_review_checklist.md",
+    "rawFilePath": "",
+    "processedFilePath": "",
+    "reviewStatus": "not_started",
+    "sourceMode": "url_only",
+    "notes": "URL-only source; manual content collection required before processing"
+  },
+  {
+    "sourceId": "RSR-003",
+    "reviewChecklistPath": "data/sources/review/research/RSR-003_review_checklist.md",
+    "rawFilePath": "",
+    "processedFilePath": "",
+    "reviewStatus": "not_started",
+    "sourceMode": "url_only",
+    "notes": "URL-only source; manual content collection required before processing"
+  },
+  {
+    "sourceId": "RSR-004",
+    "reviewChecklistPath": "data/sources/review/research/RSR-004_review_checklist.md",
+    "rawFilePath": "",
+    "processedFilePath": "",
+    "reviewStatus": "not_started",
+    "sourceMode": "url_only",
+    "notes": "URL-only source; manual content collection required before processing"
+  },
+  {
+    "sourceId": "RSR-005",
+    "reviewChecklistPath": "data/sources/review/research/RSR-005_review_checklist.md",
+    "rawFilePath": "",
+    "processedFilePath": "",
+    "reviewStatus": "not_started",
+    "sourceMode": "url_only",
+    "notes": "URL-only source; manual content collection required before processing"
+  },
+  {
+    "sourceId": "RSR-006",
+    "reviewChecklistPath": "data/sources/review/research/RSR-006_review_checklist.md",
+    "rawFilePath": "",
+    "processedFilePath": "",
+    "reviewStatus": "not_started",
+    "sourceMode": "url_only",
+    "notes": "URL-only source; manual content collection required before processing"
+  }
+]

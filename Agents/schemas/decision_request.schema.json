@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "decision_request.schema.json",
+  "title": "DecisionRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "requestId", "simulationId", "timestampSec", "policyId", "event", "botState", "remainTarget", "detectedObjects", "environments"],
+  "properties": {
+    "schemaVersion": { "type": "string" },
+    "requestId": { "type": "string" },
+    "simulationId": { "type": "string" },
+    "timestampSec": { "type": "number", "minimum": 0 },
+    "policyId": { "type": "string" },
+    "event": {
+      "type": "object",
+      "required": ["eventId", "type", "severity", "confidence", "source", "description"],
+      "properties": {
+        "eventId": { "type": "string" },
+        "type": { "type": "string", "enum": ["PedestrianAhead", "ObstacleAhead", "FallOrTilt", "TerrainRisk", "ApproachingObject", "CrosswalkApproach", "CommunicationIssue", "CrowdedPath", "Unknown"] },
+        "severity": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "source": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "botState": {
+      "type": "object",
+      "required": ["location", "yawDegree", "pitchDegree", "rollDegree", "speedKmh"],
+      "properties": {
+        "location": { "$ref": "#/$defs/location" },
+        "yawDegree": { "type": "number" },
+        "pitchDegree": { "type": "number" },
+        "rollDegree": { "type": "number" },
+        "speedKmh": { "type": "number", "minimum": 0 }
+      }
+    },
+    "remainTarget": {
+      "type": "object",
+      "required": ["location", "distanceCm"],
+      "properties": {
+        "location": { "$ref": "#/$defs/location" },
+        "distanceCm": { "type": "number", "minimum": 0 }
+      }
+    },
+    "detectedObjects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["objectId", "type", "location", "relativeLocation", "distanceCm", "relativeSpeedKmh", "relativeDirection", "isOnPath", "pathOverlapDistanceCm"],
+        "properties": {
+          "objectId": { "type": "string" },
+          "type": { "type": "string", "enum": ["Pedestrian", "Obstacle", "Animal", "Bicycle", "Kickboard", "Vehicle", "Unknown"] },
+          "location": { "$ref": "#/$defs/location" },
+          "relativeLocation": { "$ref": "#/$defs/location" },
+          "distanceCm": { "type": "number", "minimum": 0 },
+          "relativeSpeedKmh": { "type": "number" },
+          "relativeDirection": { "type": "string" },
+          "isOnPath": { "type": "boolean" },
+          "pathOverlapDistanceCm": { "type": "number", "minimum": 0 },
+          "timeToCollisionSec": { "type": "number", "minimum": 0 }
+        }
+      }
+    },
+    "environments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "state"],
+        "properties": {
+          "type": { "type": "string" },
+          "state": { "type": "string" }
+        }
+      }
+    },
+    "pathContext": {
+      "type": "object",
+      "properties": {
+        "pathBlocked": { "type": "boolean" },
+        "leftClearanceCm": { "type": "number", "minimum": 0 },
+        "rightClearanceCm": { "type": "number", "minimum": 0 },
+        "leftTraversable": { "type": "boolean" },
+        "rightTraversable": { "type": "boolean" },
+        "pathOverlapRatio": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "terrain": {
+      "type": "object",
+      "properties": {
+        "traversabilityScore": { "type": "number", "minimum": 0, "maximum": 1 },
+        "slopeDegree": { "type": "number" },
+        "curbHeightCm": { "type": "number", "minimum": 0 },
+        "surfaceType": { "type": "string" }
+      }
+    },
+    "communicationStatus": { "type": "string" }
+  },
+  "$defs": {
+    "location": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "schema": "policy_chunk_candidate",
+  "version": 1,
+  "source_id": "KOR-004",
+  "source_status_at_review": "candidate_active",
+  "candidate_id": "CAND-KOR-004-CROSSWALK-001",
+  "review_status": "confirmed",
+  "category": "crosswalk_operation",
+  "chunkText": "산업통상자원부 운행안전인증 고시 후보 근거에 따르면 로봇이 횡단보도를 통행할 때는 지정된 보도상 대기 구역에 위치하고, 신호등 신호를 인지하며, 이미 보행신호가 작동 중이면 정지 대기 후 다음 보행신호에 횡단해야 한다. 횡단 중에는 보행자 및 차량 등 장애물과 접촉이 없어야 하고 보행신호 종료 전에 횡단을 완료해야 한다.",
+  "relatedActions": [
+    "YieldWait",
+    "Stop",
+    "SlowDown",
+    "Continue"
+  ],
+  "relatedPolicyParams": [
+    "safeDistanceCm",
+    "lowSpeedZoneSpeedKmh"
+  ],
+  "sourceEvidence": {
+    "document_path": "data/sources/processed/korea/KOR-004_산업통상자원부_운행안전인증_절차_및_기준_고시.md",
+    "page": "processed line 97",
+    "section": "별표3 실외이동로봇 운행안전인증기준 13. 횡단보도통행",
+    "evidence_text": "13.횡단보도통행가.로봇이횡단보도를통행하는경우에는아래의요구사항을모두만족하도록해야한다.1)신호를대기하는로봇은운행계획서에명시된보도상의구역에위치할것2)로봇은신호등의신호를정확히인지할수있는수단을가질것3)로봇이횡단보도통행을위해대기장소에도착한시점에보행신호가작동중인경우에는,정지상태로대기후다음보행신호에횡단할것4)횡단중보행자및차량등장애물과의접촉이없을것5)로봇은보행신호가종료되기이전에횡단을완료할것"
+  },
+  "reviewNotes": "sourceEvidence.evidence_text가 processed MD line 97에 그대로 존재함을 확인했다. 횡단보도 대기, 신호 인지, 정지 대기, 장애물 비접촉, 보행신호 종료 전 완료 요구는 crosswalk_operation/sidewalk_operation 성격의 runtime 검색 근거로 의미가 있다. KOR-004는 현재 candidate_active source이므로 실제 runtime 승격 전 source status와 KOR-003 기존 횡단보도 chunk와의 중복 여부를 별도 확인해야 한다.",
+  "promotionDecision": {
+    "can_promote_to_runtime": true,
+    "decision_reason": "processed MD 근거가 확인되었고, 횡단보도 통행 요구사항은 YieldWait/Stop/SlowDown/Continue 및 safeDistanceCm/lowSpeedZoneSpeedKmh와 정책적으로 연결된다. 단, 다음 단계에서 source status와 기존 KOR-003 chunk 중복 검토 후 별도 수동 승격해야 한다.",
+    "reviewed_by": "codex_source_review",
+    "reviewed_at": "2026-06-11"
+  }
+}

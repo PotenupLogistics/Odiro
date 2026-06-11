@@ -1,0 +1,176 @@
+[
+  {
+    "sourceId": "KOR-001",
+    "title": "지능형 로봇 개발 및 보급 촉진법",
+    "filePath": "data/sources/raw/korea/KOR-001_지능형로봇법.pdf",
+    "url": "",
+    "sourceType": "law",
+    "accessType": "public",
+    "usagePurpose": [
+      "legal_background",
+      "outdoor_mobile_robot_operation",
+      "certification_basis"
+    ],
+    "status": "to_review",
+    "notes": "실외이동로봇 운행 및 인증 제도의 법적 근거 확인용"
+  },
+  {
+    "sourceId": "KOR-002",
+    "title": "도로교통법 실외이동로봇 관련 법률",
+    "filePath": "data/sources/raw/korea/KOR-002_도로교통법_실외이동로봇.pdf",
+    "url": "",
+    "sourceType": "law",
+    "accessType": "public",
+    "usagePurpose": [
+      "sidewalk_operation",
+      "pedestrian_status",
+      "traffic_rule_context"
+    ],
+    "status": "to_review",
+    "notes": "실외이동로봇의 보도 및 도로교통법상 지위 확인용"
+  },
+  {
+    "sourceId": "KOR-003",
+    "title": "KIRIA 실외이동로봇 운행안전인증 가이드북",
+    "filePath": "data/sources/raw/korea/KOR-003_KIRIA_실외이동로봇_운행안전인증_가이드북.pdf",
+    "url": "",
+    "sourceType": "certification",
+    "accessType": "public",
+    "usagePurpose": [
+      "speed_policy",
+      "emergency_stop",
+      "perception_requirement",
+      "operator_control",
+      "safety_certification"
+    ],
+    "status": "to_review",
+    "notes": "정책 파라미터와 안전 규칙 추출의 핵심 근거 문서"
+  },
+  {
+    "sourceId": "KOR-004",
+    "title": "실외이동로봇 운행안전인증 절차 및 기준 등에 관한 고시",
+    "filePath": "data/sources/raw/korea/KOR-004_산업통상자원부_운행안전인증_절차_및_기준_고시.pdf",
+    "url": "",
+    "sourceType": "regulation",
+    "accessType": "public",
+    "usagePurpose": [
+      "certification_process",
+      "certification_criteria",
+      "safety_requirement"
+    ],
+    "status": "to_review",
+    "notes": "운행안전인증 절차와 기준 확인용"
+  },
+  {
+    "sourceId": "KOR-005",
+    "title": "도로교통법 제2조 하위법령 운행기준 참고자료",
+    "filePath": "data/sources/raw/korea/KOR-005_도로교통법_제2조_하위법령_운행기준_참고자료.pdf",
+    "url": "",
+    "sourceType": "regulation",
+    "accessType": "public",
+    "usagePurpose": [
+      "terminology_definition",
+      "outdoor_mobile_robot_definition",
+      "traffic_rule_detail"
+    ],
+    "status": "to_review",
+    "notes": "실외이동로봇 정의와 하위 운행 기준 참고용"
+  },
+  {
+    "sourceId": "RSR-001",
+    "title": "Evaluation of Sidewalk Autonomous Delivery Robot Interactions with Pedestrians and Bicyclists",
+    "filePath": "data/sources/raw/research/RSR-001_METRANS_Sidewalk_ADR_Interactions.pdf",
+    "url": "https://www.metrans.org/assets/research/psr_finalreport_21-16.pdf",
+    "sourceType": "report",
+    "accessType": "public",
+    "usagePurpose": [
+      "pedestrian_interaction",
+      "near_miss_metric",
+      "pet_metric",
+      "delivery_robot_scenario",
+      "comfort_and_safety"
+    ],
+    "status": "to_review",
+    "notes": "배달 로봇과 보행자/자전거 상호작용, PET, 실제 관찰 기반 위험 시나리오 근거"
+  },
+  {
+    "sourceId": "RSR-002",
+    "title": "Composable and executable scenarios for simulation-based testing of mobile robots",
+    "filePath": "",
+    "url": "https://www.frontiersin.org/journals/robotics-and-ai/articles/10.3389/frobt.2024.1363281/full",
+    "sourceType": "paper",
+    "accessType": "public",
+    "usagePurpose": [
+      "scenario_based_testing",
+      "executable_scenario",
+      "mobile_robot_testing",
+      "scenario_variability"
+    ],
+    "status": "to_review",
+    "notes": "모바일 로봇 시뮬레이션에서 실행 가능한 시나리오와 시나리오 변동성 관리 근거"
+  },
+  {
+    "sourceId": "RSR-003",
+    "title": "NIST Combinatorial Methods for Trust and Assurance",
+    "filePath": "",
+    "url": "https://csrc.nist.gov/projects/automated-combinatorial-testing-for-software",
+    "sourceType": "guideline",
+    "accessType": "public",
+    "usagePurpose": [
+      "combinatorial_testing",
+      "doe",
+      "test_matrix_reduction",
+      "input_space_coverage"
+    ],
+    "status": "to_review",
+    "notes": "환경 변수 조합 폭발을 줄이기 위한 조합 테스트/DOE 근거"
+  },
+  {
+    "sourceId": "RSR-004",
+    "title": "The Scenic Programming Language",
+    "filePath": "",
+    "url": "https://scenic-lang.org/",
+    "sourceType": "guideline",
+    "accessType": "public",
+    "usagePurpose": [
+      "world_config_generation",
+      "scenario_specification",
+      "probabilistic_scene_generation",
+      "simulator_integration"
+    ],
+    "status": "to_review",
+    "notes": "자연어/명세 기반 World Config JSON 및 시나리오 분포 설계 근거"
+  },
+  {
+    "sourceId": "RSR-005",
+    "title": "Eureka: Human-Level Reward Design via Coding Large Language Models",
+    "filePath": "",
+    "url": "https://eureka-research.github.io/",
+    "sourceType": "paper",
+    "accessType": "public",
+    "usagePurpose": [
+      "evaluation_function_generation",
+      "reward_reflection",
+      "llm_automation",
+      "score_design"
+    ],
+    "status": "to_review",
+    "notes": "LLM 기반 평가 함수/점수화 기준 생성 아이디어 근거. 실제 RL 학습이 아니라 프로젝트용 평가 함수 생성으로 축소 적용"
+  },
+  {
+    "sourceId": "RSR-006",
+    "title": "DrEureka: Language Model Guided Sim-To-Real Transfer",
+    "filePath": "",
+    "url": "https://eureka-research.github.io/dr-eureka/",
+    "sourceType": "paper",
+    "accessType": "public",
+    "usagePurpose": [
+      "world_parameter_sampling",
+      "domain_randomization",
+      "sampling_range_recommendation",
+      "llm_automation"
+    ],
+    "status": "to_review",
+    "notes": "월드 파라미터 샘플링 범위 추천 근거. 실제 sim-to-real 학습이 아니라 보도 폭/보행자 밀도/장애물 위치 샘플링 추천으로 축소 적용"
+  }
+]

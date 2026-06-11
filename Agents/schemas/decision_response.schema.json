@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "decision_response.schema.json",
+  "title": "DecisionResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "requestId", "decisionId", "selectedAction", "priority", "confidence", "command", "reason", "recordTags"],
+  "properties": {
+    "schemaVersion": { "type": "string" },
+    "requestId": { "type": "string" },
+    "decisionId": { "type": "string" },
+    "selectedAction": { "type": "string", "enum": ["Continue", "SlowDown", "Stop", "EmergencyStop", "LocalAvoidance", "ReplanPath", "YieldWait", "RequestOperator"] },
+    "priority": { "type": "integer", "minimum": 0 },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "command": {
+      "type": "object",
+      "properties": {
+        "targetSpeedKmh": { "type": "number", "minimum": 0 },
+        "durationSec": { "type": "number", "minimum": 0 },
+        "allowRecheck": { "type": "boolean" },
+        "recheckAfterSec": { "type": "number", "minimum": 0 },
+        "replanRequired": { "type": "boolean" },
+        "avoidanceDirection": { "type": "string" },
+        "requestOperatorReason": { "type": "string" }
+      }
+    },
+    "reason": { "type": "string" },
+    "recordTags": { "type": "array", "items": { "type": "string" } },
+    "safetyConstraints": {
+      "type": "object",
+      "properties": {
+        "mustStopIfDistanceUnderCm": { "type": "number", "minimum": 0 },
+        "maxAllowedSpeedKmh": { "type": "number", "minimum": 0 },
+        "requiresHumanApproval": { "type": "boolean" }
+      }
+    },
+    "appliedRules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ruleId", "ruleName", "matchedCondition"],
+        "properties": {
+          "ruleId": { "type": "string" },
+          "ruleName": { "type": "string" },
+          "matchedCondition": { "type": "string" }
+        }
+      }
+    }
+  }
+}

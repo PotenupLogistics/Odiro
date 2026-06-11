@@ -1,0 +1,67 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test, coverage, and type-checker caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.pyright/
+.ruff_cache/
+
+# Generated harness reports
+harness/reports/*
+!harness/reports/.gitkeep
+
+# Runtime logs
+logs/
+data/server_logs
+
+# Local-only
+data/fine_tuning_candidates/
+data/run_queue_exports/
+data/run_queue_exports2/
+docs/references/*.pdf
+docs/status/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Environment files
+.env
+.env.*
+!.env.example
+secrets/*
+
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE/editor settings
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# 로컬 전용 파일
+CLAUDE.md
+image (1).png
+
+# 루트 임시 실행 결과물 (test_sample/test/ 에 공식 결과 저장)
+/recommendations.json
+/episode_recommendations.json
+/next_bot_setup.json
+/initial_policy_proposal.md
+/integrated_initial_policy.md

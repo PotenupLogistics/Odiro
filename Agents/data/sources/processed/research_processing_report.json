@@ -1,0 +1,66 @@
+﻿{
+  "processedAt": "2026-05-30T14:16:58+00:00",
+  "totalRsrSourceCount": 6,
+  "localPdfSourceCount": 1,
+  "urlOnlySourceCount": 5,
+  "processedCompletedSources": [
+    "RSR-001"
+  ],
+  "processedPendingSources": [
+    "RSR-002",
+    "RSR-003",
+    "RSR-004",
+    "RSR-005",
+    "RSR-006"
+  ],
+  "sources": [
+    {
+      "sourceId": "RSR-001",
+      "sourceMode": "local_pdf",
+      "processedFilePath": "data/sources/processed/research/RSR-001_METRANS_Sidewalk_ADR_Interactions.md",
+      "extractionStatus": "partial",
+      "manualReviewRequired": true,
+      "notes": "RSR-001 local PDF processed; manual source comparison required"
+    },
+    {
+      "sourceId": "RSR-002",
+      "sourceMode": "url_only",
+      "processedFilePath": "",
+      "extractionStatus": "not_processed",
+      "manualReviewRequired": true,
+      "notes": "URL-only source; manual content collection required before processing"
+    },
+    {
+      "sourceId": "RSR-003",
+      "sourceMode": "url_only",
+      "processedFilePath": "",
+      "extractionStatus": "not_processed",
+      "manualReviewRequired": true,
+      "notes": "URL-only source; manual content collection required before processing"
+    },
+    {
+      "sourceId": "RSR-004",
+      "sourceMode": "url_only",
+      "processedFilePath": "",
+      "extractionStatus": "not_processed",
+      "manualReviewRequired": true,
+      "notes": "URL-only source; manual content collection required before processing"
+    },
+    {
+      "sourceId": "RSR-005",
+      "sourceMode": "url_only",
+      "processedFilePath": "",
+      "extractionStatus": "not_processed",
+      "manualReviewRequired": true,
+      "notes": "URL-only source; manual content collection required before processing"
+    },
+    {
+      "sourceId": "RSR-006",
+      "sourceMode": "url_only",
+      "processedFilePath": "",
+      "extractionStatus": "not_processed",
+      "manualReviewRequired": true,
+      "notes": "URL-only source; manual content collection required before processing"
+    }
+  ]
+}

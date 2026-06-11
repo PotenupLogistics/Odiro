@@ -34,6 +34,7 @@ def test_docs_are_split_into_expected_folders() -> None:
     assert (DOCS / "handoff").exists()
     assert (DOCS / "architecture").exists()
     assert (DOCS / "environment").exists()
+    assert (DOCS / "experiment").exists()
     assert (DOCS / "policy").exists()
     assert (DOCS / "rag").exists()
     assert (DOCS / "manual_review").exists()
@@ -74,6 +75,7 @@ def test_readmes_link_new_structure_and_canonical_contracts() -> None:
     assert "archive/previous_episode_spec" in text
     assert "docs/ue_contracts/EPISODE_SETUP_JSON.md" in text
     assert "docs/policy_server/POLICY_DECISION_JSON_GUIDE.md" in text
+    assert "experiment/EXPERIMENT_WORKSPACE_LAYOUT.md" in text
 
 
 def test_docs_inventory_tests_do_not_import_live_provider_sdks() -> None:

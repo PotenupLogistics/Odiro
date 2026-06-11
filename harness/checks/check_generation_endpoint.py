@@ -13,8 +13,16 @@ CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
 EXPECTED_POLICY_CARD_COUNT = 9
 EXPECTED_RAG_CHUNK_COUNT = 15
 REQUIRED_ROUTES = {
+    "/api/v1/analysis/run",
     "/api/v1/scenarios/generate",
+}
+REMOVED_ROUTES = {
     "/api/v1/scenarios/generate-artifacts",
+    "/api/v1/scenarios/generate-drive",
+    "/api/v1/generation/world-config",
+    "/api/v1/generation/world-config/prompt-package",
+    "/api/v1/contracts/validate/world_config",
+    "/api/v1/ue5/world-config/handoff",
 }
 
 
@@ -120,6 +128,9 @@ def run_check() -> dict[str, Any]:
     unexpected_routes = sorted(api_v1_paths - REQUIRED_ROUTES)
     if unexpected_routes:
         result["errors"].append(f"Unexpected API v1 routes are registered: {unexpected_routes}")
+    removed_routes = sorted(REMOVED_ROUTES & route_paths)
+    if removed_routes:
+        result["errors"].append(f"Removed API routes are still registered: {removed_routes}")
 
     result["policyCardCount"] = _jsonl_count(CARDS_PATH)
     result["ragChunkCount"] = _jsonl_count(CHUNKS_PATH)

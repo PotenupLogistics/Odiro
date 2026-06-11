@@ -44,6 +44,10 @@
 * [환경 샘플러 설계](environment/ENVIRONMENT_SAMPLER_DESIGN.md)
 * [환경 샘플러 생성 연동](environment/ENVIRONMENT_SAMPLER_GENERATION_INTEGRATION.md)
 
+## 실험
+
+* [알파 단계 실험 workspace layout](experiment/EXPERIMENT_WORKSPACE_LAYOUT.md)
+
 ## 정책
 
 * [MVP 정책 범위](policy/MVP_POLICY_SCOPE.md)
@@ -60,6 +64,16 @@
 * [RAG chunking 전략](rag/RAG_CHUNKING_STRATEGY.md)
 * [RAG retrieval 전략](rag/RAG_RETRIEVAL_STRATEGY.md)
 * [출처 처리 가이드](rag/SOURCE_PROCESSING_GUIDE.md)
+
+## 파일 기반 데이터 저장소
+
+* [File-Based RAG Data Store 설계](database/FILE_BASED_RAG_DATA_DESIGN.md)
+* [Policy chunk 후보 작성/검토/승격 workflow](database/POLICY_CHUNK_PROMOTION_WORKFLOW.md)
+* Source inventory: `data/sources/source_inventory.json`
+* 통합 readiness check: `uv run python scripts/check_file_based_rag_readiness.py`
+* 로컬 통합 하네스 포함: `uv run python -m harness.checks.check_all`
+* File-based RAG store, source inventory, runtime source status guard 검증: `uv run python scripts/validate_file_based_rag_store.py`
+* Policy chunk candidate 검증: `uv run python scripts/validate_policy_chunk_candidates.py`
 
 ## UE 전달
 
@@ -125,6 +139,7 @@ Archive 문서는 현재 계약 문서가 아니라 과거 구현과 의사결�
 ## 검증 명령
 
 ```powershell
+uv run python scripts/check_file_based_rag_readiness.py
 uv run python -m harness.checks.check_all
 uv run pytest
 ```

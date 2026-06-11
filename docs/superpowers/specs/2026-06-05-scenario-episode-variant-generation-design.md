@@ -1,5 +1,7 @@
 # Scenario Episode Variant Generation Design
 
+> Historical note: this design predates the public API surface cleanup. `POST /api/v1/scenarios/generate-artifacts` has since been removed from the public API; current public scenario generation uses `POST /api/v1/scenarios/generate`.
+
 ## Goal
 
 Keep the public scenario generation API input unchanged while making each generated queue item use a different episode environment and a different robot policy.
@@ -41,10 +43,10 @@ Public API input parameters do not change:
 - Do not add `fixed_parameters`.
 - Keep `prompt` and optional `episode_count` only.
 
-Both endpoints use the same internal generation service and should change together:
+At the time of this design, both endpoints used the same internal generation service:
 
 - `POST /api/v1/scenarios/generate`
-- `POST /api/v1/scenarios/generate-artifacts`
+- `POST /api/v1/scenarios/generate-artifacts` (removed from the current public API)
 
 ## Design
 
@@ -134,7 +136,7 @@ Update or add focused tests for:
 - Queue items have distinct EpisodeSetup payloads.
 - Queue items have distinct DeliveryBotSetup policy profiles.
 - Explicit prompt numeric values remain fixed across variants.
-- `/api/v1/scenarios/generate-artifacts` zip includes distinct EpisodeSetup and DeliveryBotSetup JSON files.
+- Historical zip endpoint coverage is superseded by current OpenAPI/404 checks for the removed `/api/v1/scenarios/generate-artifacts` route.
 
 ## Out Of Scope
 

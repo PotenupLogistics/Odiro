@@ -46,11 +46,11 @@
 ## 7. 현재 API / service 연결
 
 * `POST /api/v1/scenarios/generate`: 사용자 자연어 `prompt`를 필수로 받고, 선택적 `episode_count`로 episode/run 개수를 지정할 수 있으며, wrapper 없는 RunQueue JSON을 반환한다.
-* `POST /api/v1/scenarios/generate-artifacts`: 같은 request body를 받는 debug/test endpoint이며, RunQueue 응답과 생성된 EpisodeSetup / DeliveryBotSetup artifact JSON을 zip으로 반환한다.
+* `POST /api/v1/analysis/run`: UE 실행 결과 파일과 setup 파일을 입력으로 받아 분석과 추천 결과를 반환한다.
 * `app.services.json_contract_validator.validate_payload()`: 제출된 JSON payload를 schema와 Pydantic 모델로 검증한다.
 * `app.services.world_config_generation_orchestrator.generate_world_config()`: 자연어 기반 WorldConfig generation 내부 흐름을 수행한다.
 
-sample JSON fixture 작성은 현재 repository 공유 범위가 아니다. runtime export는 local ignored path에만 저장한다.
+`POST /api/v1/scenarios/generate-artifacts`와 `POST /api/v1/scenarios/generate-drive`는 public API에서 제거되었다. sample JSON fixture 작성은 현재 repository 공유 범위가 아니다. runtime export는 local ignored path에만 저장한다.
 
 ## 8. Validation Layer
 

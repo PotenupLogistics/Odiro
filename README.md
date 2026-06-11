@@ -95,8 +95,7 @@ Setup pair live smoke 상태:
 
 * `GET /health`
 * `POST /api/v1/scenarios/generate`
-* `POST /api/v1/scenarios/generate-drive`
-* `POST /api/v1/scenarios/generate-artifacts` (debug/test artifact zip download)
+* `POST /api/v1/analysis/run`
 
 UE 연동 기본 권장 endpoint:
 
@@ -118,29 +117,7 @@ POST /api/v1/scenarios/generate
 
 로봇 실측 크기는 request body로 받지 않고 서버 기본 `RobotProfile`로 주입합니다. 기본 profile은 W/D/H `0.44m / 1.00m / 0.64m`, `footprint_shape=box`, `safety_margin_m=0.2`, `min_passable_width_m=0.84`이며, 생성된 `EpisodeSetup_*.json`의 root `robot_profile` field로 export됩니다. backend는 이 값을 보도 폭, 장애물 gap, robot spawn/goal 여유 검증에 사용합니다. UE는 우선 이 additive field를 무시해도 기존 `actors.robot`, `ground_model`, obstacle 구조가 바뀌지 않아야 하며, 실제 collision box와 크기 일치 여부는 UE 쪽 확인이 필요합니다.
 
-Google Drive artifact 업로드 endpoint:
-
-```text
-POST /api/v1/scenarios/generate-drive
-```
-
-이 endpoint는 `/api/v1/scenarios/generate`와 같은 `ScenarioGenerateRequest` body를 받습니다. backend는 기존 scenario generation flow로 `EpisodeRunQueue`, `EpisodeSetup`, `DeliveryBotSetup` JSON 산출물을 만든 뒤 `.env`에 설정된 Google Drive 폴더로 업로드하고, 응답으로 파일 본문이나 zip 대신 Drive metadata JSON을 반환합니다. 응답의 `run_queue_file`은 UE가 Google Drive 동기화 폴더에서 먼저 읽어야 하는 RunQueue 파일명입니다.
-
-Google Drive 방식에서는 AI 서버가 지정 폴더에 JSON artifact를 업로드하고, 언리얼은 로컬 Google Drive 동기화 폴더에서 `run_queue_file`이 실제로 생겼는지 확인한 뒤 실행하는 것이 안전합니다. 동기화 지연이 있을 수 있으므로 UE 쪽에서는 파일 존재 확인과 짧은 retry/polling을 두는 흐름을 권장합니다.
-
-Drive 인증 방식은 `GOOGLE_DRIVE_AUTH_MODE`로 선택합니다. `service_account` mode는 Shared Drive 업로드에 권장하며 `GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE`을 사용합니다. 사용자의 My Drive에 만든 공유 폴더는 service account에 저장소 quota가 없어 `Service Accounts do not have storage quota`로 실패할 수 있으므로 `oauth` mode를 사용합니다. `oauth` mode는 `GOOGLE_DRIVE_OAUTH_CLIENT_FILE`에서 OAuth client 설정을 읽고 `GOOGLE_DRIVE_OAUTH_TOKEN_FILE`에 사용자 token을 저장/재사용합니다.
-
-`GOOGLE_DRIVE_BACKUP_BEFORE_UPLOAD=true`이면 새 artifact 업로드 전에 대상 Drive 폴더의 기존 직계 항목을 백업 폴더로 이동합니다. 백업 폴더는 `GOOGLE_DRIVE_BACKUP_FOLDER_ID`가 있으면 해당 ID를 우선 사용하고, 없으면 대상 폴더의 직계 child 중 `GOOGLE_DRIVE_BACKUP_FOLDER_NAME` 값(기본값 `백업`)과 일치하는 폴더를 찾습니다. 백업 폴더 자체와 백업 폴더 안의 기존 파일은 이동하지 않으며, 백업 폴더를 찾지 못하거나 이름이 중복되면 업로드를 중단합니다.
-
-Drive folder id, auth mode, credentials/token 경로는 요청 body로 받지 않고 서버 설정값만 사용합니다. `secrets/oauth_client.json`, `secrets/google_drive_token.json`, `secrets/credentials.json`은 Git에 올리면 안 되며, OAuth client secret, OAuth token, service account private key, credentials 내용은 로그에 남기면 안 됩니다.
-
-테스트용 artifact 다운로드 endpoint:
-
-```text
-POST /api/v1/scenarios/generate-artifacts
-```
-
-이 endpoint는 `/api/v1/scenarios/generate`와 같은 request body를 받지만 JSON body 대신 `scenario_artifacts.zip` 파일을 반환합니다. zip에는 `response.json`, `EpisodeRunQueue_*.json`, `EpisodeSetup_*.json`, `DeliveryBotSetup_*.json`이 포함됩니다. UE/통신 테스트에서 생성 산출물을 직접 확인하기 위한 debug/test endpoint입니다. Google Drive 기반 전달을 사용할 때는 `/api/v1/scenarios/generate-drive`가 권장 경로이며, zip endpoint는 legacy/debug 용도로만 유지합니다.
+`POST /api/v1/scenarios/generate-drive`와 `POST /api/v1/scenarios/generate-artifacts`는 public API에서 제거되었습니다. RunQueue, EpisodeSetup, DeliveryBotSetup 산출물은 `/api/v1/scenarios/generate` 내부 흐름으로 생성되고 `data/run_queue_exports/` 계열 local output 구조는 유지합니다.
 
 ## UE 연동 상태
 
@@ -162,11 +139,26 @@ setup pair smoke, environmentSampling smoke, policy comparison smoke 결과는 r
 
 ## 실행 방법
 
+파일 기반 RAG 구조 변경 후 우선 실행:
+
+```powershell
+uv run python scripts/check_file_based_rag_readiness.py
+```
+
+세부 실패 원인 확인:
+
+```powershell
+uv run python scripts/validate_file_based_rag_store.py
+uv run python scripts/validate_policy_chunk_candidates.py
+```
+
 전체 하네스 실행:
 
 ```powershell
 uv run python -m harness.checks.check_all
 ```
+
+`harness.checks.check_all`은 file-based RAG readiness check를 포함합니다.
 
 테스트 실행:
 

@@ -15,14 +15,16 @@ REQUIRED_FILES = {
 }
 REQUIRED_ROUTES = {
     "/health",
+    "/api/v1/analysis/run",
     "/api/v1/scenarios/generate",
-    "/api/v1/scenarios/generate-artifacts",
-    "/api/v1/scenarios/generate-drive",
 }
 FORBIDDEN_API_V1_ROUTES = {
+    "/api/v1/scenarios/generate-artifacts",
+    "/api/v1/scenarios/generate-drive",
     "/api/v1/generation/world-config",
     "/api/v1/generation/world-config/prompt-package",
     "/api/v1/contracts/validate/{contract_type}",
+    "/api/v1/contracts/validate/world_config",
     "/api/v1/ue5/world-config/handoff",
 }
 

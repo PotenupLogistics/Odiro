@@ -71,7 +71,8 @@ manual live execution은 automated tests 밖에서만 수행한다.
 
 검증 항목:
 
-- `/api/v1/scenarios/generate` remains the only public `/api/v1` endpoint.
+- `/api/v1/scenarios/generate` and `/api/v1/analysis/run` are the only public `/api/v1` endpoints.
+- `/api/v1/scenarios/generate-artifacts` and `/api/v1/scenarios/generate-drive` are not registered.
 - WorldConfig generation, prompt package, and contract validation remain covered through service/function or CLI tests.
 - The harness does not perform a live external LLM call.
 - No hardcoded API key or secret string is present.
@@ -90,7 +91,7 @@ manual live execution은 automated tests 밖에서만 수행한다.
 - `docs/architecture/WORLD_CONFIG_GENERATION_ORCHESTRATOR.md` exists.
 - The harness does not perform a live external LLM call.
 - No hardcoded API key or secret string is present.
-- FastAPI endpoint set is unchanged.
+- FastAPI endpoint set is limited to `/health`, `/api/v1/scenarios/generate`, and `/api/v1/analysis/run`.
 - Policy card count remains 9.
 - Policy RAG chunk count remains 9.
 - No sample JSON, fixture, vector DB, or embedding index artifacts are created.
@@ -108,14 +109,14 @@ manual live execution은 automated tests 밖에서만 수행한다.
 - `docs/providers/LLM_CLIENT_ABSTRACTION.md` exists.
 - Providers include `disabled`, `openai`, `gemini`, `ollama`, and `custom`.
 - The `disabled` provider returns `DisabledLlmClient`.
-- FastAPI endpoint set is unchanged.
+- FastAPI endpoint set is limited to `/health`, `/api/v1/scenarios/generate`, and `/api/v1/analysis/run`.
 - The harness does not perform a live external LLM call.
 - No hardcoded API key or secret string is present.
 - No sample JSON, fixture, vector DB, or embedding index artifacts are created.
 
 ## API Shell Check
 
-`harness.checks.check_api_shell`은 FastAPI public surface가 `/api/v1/scenarios/generate`만 노출하고 제거된 `/api/v1` endpoint를 등록하지 않는지 검증한다.
+`harness.checks.check_api_shell`은 FastAPI public surface가 `/api/v1/scenarios/generate`와 `/api/v1/analysis/run`만 노출하고 제거된 `/api/v1` endpoint를 등록하지 않는지 검증한다.
 
 검증 항목:
 
@@ -124,6 +125,9 @@ manual live execution은 automated tests 밖에서만 수행한다.
 - `docs/tooling/API_SHELL_GUIDE.md` exists.
 - `GET /health` is registered.
 - `POST /api/v1/scenarios/generate` is registered.
+- `POST /api/v1/analysis/run` is registered.
+- `POST /api/v1/scenarios/generate-artifacts` is not registered.
+- `POST /api/v1/scenarios/generate-drive` is not registered.
 - The API shell does not expose provider/contract validation routes; harness checks do not perform live OpenAI/Ollama calls.
 - No sample JSON, fixture, vector DB, or embedding index artifacts are created.
 

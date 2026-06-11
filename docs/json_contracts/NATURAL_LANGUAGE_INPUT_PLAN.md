@@ -8,7 +8,7 @@ Natural-language input can now be accepted through the following API endpoints:
 POST /api/v1/scenarios/generate
 ```
 
-사용자용 기본 Public API는 `scenarios/generate`다. `scenarios/generate-artifacts`는 같은 request model을 사용하는 debug/test artifact zip 다운로드 endpoint로만 둔다. Prompt package 생성은 `build_world_config_prompt_package()` service 함수로, WorldConfig generation은 `generate_world_config()` service 함수로 검증한다. 사용자용 `scenarios/generate` endpoint는 자연어 `prompt`를 필수로 받고 선택적으로 `episode_count`를 허용하며, wrapper 없는 RunQueue JSON을 반환한다.
+사용자용 기본 Public API는 `scenarios/generate`다. Prompt package 생성은 `build_world_config_prompt_package()` service 함수로, WorldConfig generation은 `generate_world_config()` service 함수로 검증한다. 사용자용 `scenarios/generate` endpoint는 자연어 `prompt`를 필수로 받고 선택적으로 `episode_count`를 허용하며, wrapper 없는 RunQueue JSON을 반환한다. `scenarios/generate-artifacts`와 `scenarios/generate-drive`는 public API에서 제거되었다.
 
 ## Retrieval Connection
 

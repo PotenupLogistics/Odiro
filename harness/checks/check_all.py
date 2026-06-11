@@ -28,6 +28,7 @@ from harness.checks.check_environment_parameter_spec import run_check as run_env
 from harness.checks.check_environment_sampler import run_check as run_environment_sampler_check
 from harness.checks.check_environment_sampler_generation_integration import run_check as run_environment_sampler_generation_integration_check
 from harness.checks.check_environment_sampling_handoff_result_docs import run_check as run_environment_sampling_handoff_result_docs_check
+from harness.checks.check_file_based_rag_readiness import run_check as run_file_based_rag_readiness_check
 from harness.checks.check_json_schemas import run_check as run_json_schemas_check
 from harness.checks.check_llm_client_abstraction import run_check as run_llm_client_abstraction_check
 from harness.checks.check_map_generation_data_sources_docs import run_check as run_map_generation_data_sources_docs_check
@@ -863,6 +864,7 @@ def main() -> int:
     scenario_repair_prompt_result = run_scenario_repair_prompt_check()
     rag_chunks_result = run_rag_chunks_check()
     rag_retrieval_result = run_rag_retrieval_check()
+    file_based_rag_readiness_result = run_file_based_rag_readiness_check()
     report_serialization_result = run_report_serialization_check()
     research_alignment_docs_result = run_research_alignment_docs_check()
     route_relative_placement_result = run_route_relative_placement_check()
@@ -933,6 +935,8 @@ def main() -> int:
         research_result,
         research_review_result,
     )
+    if not file_based_rag_readiness_result["passed"]:
+        status_text = "FAIL"
     summary_result = {
         "status": status_text,
         "passed": status_text in {"PASS", "PASS_WITH_WARNING"},
@@ -995,6 +999,7 @@ def main() -> int:
             "scenarioRepairPrompt": scenario_repair_prompt_result,
             "ragChunks": rag_chunks_result,
             "ragRetrieval": rag_retrieval_result,
+            "fileBasedRagReadiness": file_based_rag_readiness_result,
             "reportSerialization": report_serialization_result,
             "researchAlignmentDocs": research_alignment_docs_result,
             "routeRelativePlacement": route_relative_placement_result,
@@ -1011,8 +1016,7 @@ def main() -> int:
         json.dumps(summary_result, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8-sig",
     )
-    SUMMARY_PATH.write_text(
-        build_summary(
+    summary_text = build_summary(
             source_result,
             processed_result,
             review_result,
@@ -1077,7 +1081,18 @@ def main() -> int:
             research_result,
             research_review_result,
             status_text,
-        ),
+        )
+    summary_text += (
+        "\n## File-Based RAG Readiness\n\n"
+        f"- Result: {'PASS' if file_based_rag_readiness_result['passed'] else 'FAIL'}\n"
+        f"- Runtime store validation: {'PASS' if file_based_rag_readiness_result['runtimeStoreValidationPassed'] else 'FAIL'}\n"
+        f"- Source inventory validation: {'PASS' if file_based_rag_readiness_result['sourceInventoryValidationPassed'] else 'FAIL'}\n"
+        f"- Runtime source status guard: {'PASS' if file_based_rag_readiness_result['runtimeSourceStatusGuardPassed'] else 'FAIL'}\n"
+        f"- Candidate chunk validation: {'PASS' if file_based_rag_readiness_result['candidateChunkValidationPassed'] else 'FAIL'}\n"
+        f"- Vector DB directories: {'absent' if file_based_rag_readiness_result['vectorDbDirectoriesAbsent'] else 'present'}\n"
+    )
+    SUMMARY_PATH.write_text(
+        summary_text,
         encoding="utf-8-sig",
     )
 
@@ -1137,6 +1152,7 @@ def main() -> int:
     print(f"Scenario repair prompt check: {'PASS' if scenario_repair_prompt_result['passed'] else 'FAIL'}")
     print(f"RAG chunks check: {'PASS' if rag_chunks_result['passed'] else 'FAIL'}")
     print(f"RAG retrieval check: {'PASS' if rag_retrieval_result['passed'] else 'FAIL'}")
+    print(f"File-based RAG readiness check: {'PASS' if file_based_rag_readiness_result['passed'] else 'FAIL'}")
     print(f"Report serialization check: {'PASS' if report_serialization_result['passed'] else 'FAIL'}")
     print(f"Research alignment docs check: {'PASS' if research_alignment_docs_result['passed'] else 'FAIL'}")
     print(f"Route-relative placement check: {'PASS' if route_relative_placement_result['passed'] else 'FAIL'}")

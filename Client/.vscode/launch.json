@@ -1,0 +1,44 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Preview",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${env:ComSpec}",
+      "args": [
+        "/d",
+        "/c",
+        "call",
+        "${workspaceFolder}\\RunPreview.bat"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    },
+    {
+      "name": "Run Preview - Simulate Target",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${env:ComSpec}",
+      "args": [
+        "/d",
+        "/c",
+        "call",
+        "${workspaceFolder}\\RunPreview.bat",
+        "-Simulate=${input:simulateTarget}"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    }
+  ],
+  "inputs": [
+    {
+      "id": "simulateTarget",
+      "type": "promptString",
+      "description": "SimulationSetup JSON path passed to -Simulate",
+      "default": "Json/Input/SimulationSetupPlayable.json"
+    }
+  ]
+}

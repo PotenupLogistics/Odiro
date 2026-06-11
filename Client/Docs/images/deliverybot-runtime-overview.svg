@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="980" viewBox="0 0 1400 980" role="img" aria-labelledby="title desc">
+  <title id="title">DeliveryBot Runtime Overview</title>
+  <desc id="desc">Unreal DeliveryBot sends setup, grid, observation and policy spec to Python. Python selects a policy action and Unreal validates and applies movement.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#253145"/>
+    </marker>
+    <style>
+      .bg { fill: #f7f9fc; }
+      .title { font: 700 34px Arial, sans-serif; fill: #172033; }
+      .subtitle { font: 400 18px Arial, sans-serif; fill: #526071; }
+      .lane { fill: #ffffff; stroke: #d7dee9; stroke-width: 2; }
+      .lane-title { font: 700 20px Arial, sans-serif; fill: #253145; }
+      .box-title { font: 700 18px Arial, sans-serif; fill: #172033; }
+      .box-text { font: 400 15px Arial, sans-serif; fill: #3b4655; }
+      .small { font: 400 13px Arial, sans-serif; fill: #617083; }
+      .ue { fill: #e8f3ff; stroke: #68a7e8; stroke-width: 2; }
+      .py { fill: #eef8ed; stroke: #72b56e; stroke-width: 2; }
+      .ui { fill: #fff4df; stroke: #e5a84b; stroke-width: 2; }
+      .guard { fill: #fcecef; stroke: #d96376; stroke-width: 2; }
+      .data { fill: #f2efff; stroke: #8b78d7; stroke-width: 2; }
+      .line { fill: none; stroke: #253145; stroke-width: 2.5; marker-end: url(#arrow); }
+      .loop { fill: none; stroke: #8b78d7; stroke-width: 3; stroke-dasharray: 9 7; marker-end: url(#arrow); }
+      .note { fill: #ffffff; stroke: #cdd6e3; stroke-width: 1.5; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1400" height="980"/>
+  <text class="title" x="70" y="68">DeliveryBot Runtime Flow</text>
+  <text class="subtitle" x="70" y="99">Python이 길찾기와 정책 판단을 담당하고, Unreal은 관측 전송, 응답 검증, 물리 이동 실행을 담당한다.</text>
+
+  <rect class="lane" x="50" y="135" width="410" height="780" rx="12"/>
+  <rect class="lane" x="495" y="135" width="410" height="780" rx="12"/>
+  <rect class="lane" x="940" y="135" width="410" height="780" rx="12"/>
+  <text class="lane-title" x="80" y="172">Packaged Unreal Runtime</text>
+  <text class="lane-title" x="525" y="172">DeliveryBot Runtime</text>
+  <text class="lane-title" x="970" y="172">Python Policy Server</text>
+
+  <rect class="ui" x="85" y="210" width="315" height="92" rx="10"/>
+  <text class="box-title" x="110" y="242">Policy UI</text>
+  <text class="box-text" x="110" y="267">catalog source 선택</text>
+  <text class="box-text" x="110" y="288">사용 여부 / 우선순위 선택</text>
+
+  <rect class="data" x="85" y="350" width="315" height="94" rx="10"/>
+  <text class="box-title" x="110" y="382">policySpec</text>
+  <text class="box-text" x="110" y="407">enabledPolicies[]</text>
+  <text class="box-text" x="110" y="428">policyId + priority</text>
+
+  <rect class="ue" x="535" y="210" width="320" height="98" rx="10"/>
+  <text class="box-title" x="560" y="242">Episode / Grid Setup</text>
+  <text class="box-text" x="560" y="267">POST /episode/start</text>
+  <text class="box-text" x="560" y="288">grid, goal, config, policySpec</text>
+
+  <rect class="ue" x="535" y="356" width="320" height="100" rx="10"/>
+  <text class="box-title" x="560" y="388">Sensor Snapshot</text>
+  <text class="box-text" x="560" y="413">Lidar rays + observedObjects</text>
+  <text class="box-text" x="560" y="434">actorTags 포함 예정</text>
+
+  <rect class="ue" x="535" y="510" width="320" height="100" rx="10"/>
+  <text class="box-title" x="560" y="542">Observation JSON</text>
+  <text class="box-text" x="560" y="567">POST /policy/action</text>
+  <text class="box-text" x="560" y="588">robotState + lidar + objects</text>
+
+  <rect class="guard" x="535" y="665" width="320" height="108" rx="10"/>
+  <text class="box-title" x="560" y="697">Response Validation</text>
+  <text class="box-text" x="560" y="722">version / sequence / action range</text>
+  <text class="box-text" x="560" y="743">invalid action은 실행 거부</text>
+
+  <rect class="ue" x="535" y="820" width="320" height="70" rx="10"/>
+  <text class="box-title" x="560" y="850">DriveComponent</text>
+  <text class="box-text" x="560" y="872">targetSpeed 기반 물리 이동</text>
+
+  <rect class="py" x="980" y="210" width="315" height="98" rx="10"/>
+  <text class="box-title" x="1005" y="242">Policy Catalog</text>
+  <text class="box-text" x="1005" y="267">policy_catalogs/*.json</text>
+  <text class="box-text" x="1005" y="288">sources + active catalog</text>
+
+  <rect class="py" x="980" y="356" width="315" height="100" rx="10"/>
+  <text class="box-title" x="1005" y="388">Runtime Context</text>
+  <text class="box-text" x="1005" y="413">episode + config + grid</text>
+  <text class="box-text" x="1005" y="434">observation + policySpec</text>
+
+  <rect class="py" x="980" y="510" width="315" height="110" rx="10"/>
+  <text class="box-title" x="1005" y="542">Policy Engine</text>
+  <text class="box-text" x="1005" y="567">A* pathfinding</text>
+  <text class="box-text" x="1005" y="588">stop / slowdown / reroute</text>
+  <text class="box-text" x="1005" y="609">priority로 후보 선택</text>
+
+  <rect class="py" x="980" y="665" width="315" height="108" rx="10"/>
+  <text class="box-title" x="1005" y="697">Policy Response</text>
+  <text class="box-text" x="1005" y="722">action + debug</text>
+  <text class="box-text" x="1005" y="743">episode/config/grid version</text>
+
+  <path class="line" d="M400 256 C500 256, 450 256, 535 256"/>
+  <text class="small" x="425" y="242">source 선택 후 policy 설정</text>
+
+  <path class="line" d="M980 257 C890 257, 940 257, 856 257"/>
+  <text class="small" x="876" y="238">catalog 응답</text>
+
+  <path class="line" d="M243 350 L243 318 C243 318, 535 318, 535 260"/>
+  <text class="small" x="302" y="333">policySpec 포함</text>
+
+  <path class="line" d="M855 258 L980 258"/>
+  <text class="small" x="872" y="286">episode/start</text>
+
+  <path class="line" d="M695 456 L695 510"/>
+  <text class="small" x="710" y="488">주기적 관측 생성</text>
+
+  <path class="line" d="M855 560 L980 560"/>
+  <text class="small" x="870" y="545">observation</text>
+
+  <path class="line" d="M1138 456 L1138 510"/>
+  <text class="small" x="1155" y="488">context 구성</text>
+
+  <path class="line" d="M1138 620 L1138 665"/>
+  <text class="small" x="1155" y="650">action 선택</text>
+
+  <path class="line" d="M980 720 L855 720"/>
+  <text class="small" x="885" y="705">response</text>
+
+  <path class="line" d="M695 773 L695 820"/>
+  <text class="small" x="710" y="804">검증 통과</text>
+
+  <path class="loop" d="M535 855 C450 855, 450 405, 535 405"/>
+  <text class="small" x="368" y="640">Policy Loop</text>
+
+  <rect class="note" x="85" y="690" width="315" height="145" rx="10"/>
+  <text class="box-title" x="110" y="722">중요 원칙</text>
+  <text class="box-text" x="110" y="748">Unreal은 길찾기를 하지 않는다.</text>
+  <text class="box-text" x="110" y="773">Python action은 반드시 검증한다.</text>
+  <text class="box-text" x="110" y="798">비정상 응답은 이동에 사용하지 않는다.</text>
+  <text class="box-text" x="110" y="823">사용자 설정은 런타임 UI에서 처리한다.</text>
+</svg>

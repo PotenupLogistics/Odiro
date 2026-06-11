@@ -1,0 +1,138 @@
+{
+  "experimentId": 1,
+  "episodeId": "episode_001",
+  "robotInstanceId": "delivery_bot_01",
+  "start": {
+    "x": 0,
+    "y": 0,
+    "z": 0,
+    "yawDegree": 0
+  },
+  "goal": {
+    "hasGoal": true,
+    "x": 300,
+    "y": 0,
+    "z": 0,
+    "acceptanceRadiusCm": 100
+  },
+  "vehicleSpec": {
+    "maxSpeedKmh": 10,
+    "maxReverseSpeedKmh": 3
+  },
+  "lidarSpec": {
+    "mode": "TwoD",
+    "scanRangeM": 5
+  },
+  "controlSpec": {
+    "mode": "TargetSpeed"
+  },
+  "grid": {
+    "gridSizeX": 4,
+    "gridSizeY": 3,
+    "cellSizeCm": 100,
+    "cellCount": 12,
+    "originCm": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "cells": [
+      {
+        "x": 0,
+        "y": 0,
+        "areaType": "Walkable",
+        "cost": 1,
+        "blocked": false,
+        "sourceCollisionProfile": "Walkable"
+      },
+      {
+        "x": 1,
+        "y": 0,
+        "areaType": "Walkable",
+        "cost": 1,
+        "blocked": false,
+        "sourceCollisionProfile": "Walkable"
+      },
+      {
+        "x": 2,
+        "y": 0,
+        "areaType": "Walkable",
+        "cost": 1,
+        "blocked": false,
+        "sourceCollisionProfile": "Walkable"
+      },
+      {
+        "x": 3,
+        "y": 0,
+        "areaType": "Walkable",
+        "cost": 1,
+        "blocked": false,
+        "sourceCollisionProfile": "Walkable"
+      },
+      {
+        "x": 0,
+        "y": 1,
+        "areaType": "Walkable",
+        "cost": 1,
+        "blocked": false,
+        "sourceCollisionProfile": "Walkable"
+      },
+      {
+        "x": 1,
+        "y": 1,
+        "areaType": "Blocked",
+        "cost": 9999,
+        "blocked": true,
+        "sourceCollisionProfile": "Blocked"
+      },
+      {
+        "x": 2,
+        "y": 1,
+        "areaType": "Blocked",
+        "cost": 9999,
+        "blocked": true,
+        "sourceCollisionProfile": "Blocked"
+      },
+      {
+        "x": 3,
+        "y": 1,
+        "areaType": "Walkable",
+        "cost": 1,
+        "blocked": false,
+        "sourceCollisionProfile": "Walkable"
+      },
+      {
+        "x": 0,
+        "y": 2,
+        "areaType": "Walkable",
+        "cost": 1,
+        "blocked": false,
+        "sourceCollisionProfile": "Walkable"
+      },
+      {
+        "x": 1,
+        "y": 2,
+        "areaType": "Walkable",
+        "cost": 1,
+        "blocked": false,
+        "sourceCollisionProfile": "Walkable"
+      },
+      {
+        "x": 2,
+        "y": 2,
+        "areaType": "Walkable",
+        "cost": 1,
+        "blocked": false,
+        "sourceCollisionProfile": "Walkable"
+      },
+      {
+        "x": 3,
+        "y": 2,
+        "areaType": "Walkable",
+        "cost": 1,
+        "blocked": false,
+        "sourceCollisionProfile": "Walkable"
+      }
+    ]
+  }
+}

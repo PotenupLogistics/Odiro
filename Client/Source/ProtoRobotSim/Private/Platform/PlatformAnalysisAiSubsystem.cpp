@@ -1,0 +1,599 @@
+#include "Platform/PlatformAnalysisAiSubsystem.h"
+
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
+#include "HttpModule.h"
+#include "Interfaces/IHttpRequest.h"
+#include "Interfaces/IHttpResponse.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Guid.h"
+#include "Misc/Paths.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+#include "Shared/SimulationSetupTypes.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogPlatformAnalysisAi, Log, All);
+
+namespace
+{
+	const int32 RawResponsePreviewCharacterLimit = 6000;
+
+	FString JoinLines(const TArray<FString>& Lines)
+	{
+		return FString::Join(Lines, TEXT("\n"));
+	}
+
+	FString TruncateText(const FString& Text, int32 CharacterLimit)
+	{
+		if (Text.Len() <= CharacterLimit)
+		{
+			return Text;
+		}
+
+		return Text.Left(CharacterLimit) + TEXT("\n...");
+	}
+
+	FString NormalizeResolvedPath(FString Path)
+	{
+		FPaths::NormalizeFilename(Path);
+		FPaths::CollapseRelativeDirectories(Path);
+		return Path;
+	}
+
+	FString TryExtractKnownProjectRelativeTail(FString Path)
+	{
+		FPaths::NormalizeFilename(Path);
+		FPaths::CollapseRelativeDirectories(Path);
+
+		static const TCHAR* KnownRoots[] = {
+			TEXT("Json/Input/"),
+			TEXT("Json/Output/"),
+			TEXT("Saved/AnalysisLogs/"),
+			TEXT("Saved/SimulationRuns/")
+		};
+
+		for (const TCHAR* KnownRoot : KnownRoots)
+		{
+			const int32 RootIndex = Path.Find(KnownRoot, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+			if (RootIndex != INDEX_NONE)
+			{
+				return Path.Mid(RootIndex);
+			}
+		}
+
+		return FString();
+	}
+
+	FString ResolveAnalysisPath(FString Path)
+	{
+		Path = Path.TrimStartAndEnd();
+		Path.ReplaceInline(TEXT("\\"), TEXT("/"));
+
+		const FString ResolvedPath = NormalizeResolvedPath(FSimulationSetupJson::ResolveProjectPath(Path));
+		if (FPaths::FileExists(ResolvedPath))
+		{
+			return ResolvedPath;
+		}
+
+		const FString ProjectRelativeTail = TryExtractKnownProjectRelativeTail(Path);
+		if (!ProjectRelativeTail.IsEmpty())
+		{
+			return NormalizeResolvedPath(FPaths::Combine(FPaths::ProjectDir(), ProjectRelativeTail));
+		}
+
+		return ResolvedPath;
+	}
+
+	bool RequireExistingFile(
+		const FString& FieldName,
+		const FString& FilePath,
+		TArray<FString>& OutDiagnostics)
+	{
+		if (FilePath.IsEmpty())
+		{
+			OutDiagnostics.Add(FString::Printf(TEXT("%s must not be empty."), *FieldName));
+			return false;
+		}
+
+		if (!FPaths::FileExists(FilePath))
+		{
+			OutDiagnostics.Add(FString::Printf(TEXT("%s file not found: %s"), *FieldName, *FilePath));
+			return false;
+		}
+
+		return true;
+	}
+
+	bool TryGetObjectField(
+		const FJsonObject& JsonObject,
+		const FString& FieldName,
+		TSharedPtr<FJsonObject>& OutObject)
+	{
+		OutObject.Reset();
+
+		const TSharedPtr<FJsonValue> JsonValue = JsonObject.TryGetField(FieldName);
+		if (!JsonValue.IsValid() || JsonValue->Type != EJson::Object)
+		{
+			return false;
+		}
+
+		OutObject = JsonValue->AsObject();
+		return OutObject.IsValid();
+	}
+
+	bool TryGetStringFromObjectField(
+		const FJsonObject& JsonObject,
+		const FString& ObjectFieldName,
+		const FString& StringFieldName,
+		FString& OutValue)
+	{
+		OutValue.Reset();
+
+		TSharedPtr<FJsonObject> ObjectValue;
+		if (!TryGetObjectField(JsonObject, ObjectFieldName, ObjectValue))
+		{
+			return false;
+		}
+
+		return ObjectValue->TryGetStringField(StringFieldName, OutValue);
+	}
+
+	FString JsonValueToDisplayString(const TSharedPtr<FJsonValue>& Value)
+	{
+		if (!Value.IsValid() || Value->Type == EJson::Null)
+		{
+			return TEXT("null");
+		}
+
+		switch (Value->Type)
+		{
+		case EJson::String:
+			return Value->AsString();
+		case EJson::Number:
+			return FString::SanitizeFloat(Value->AsNumber());
+		case EJson::Boolean:
+			return Value->AsBool() ? TEXT("true") : TEXT("false");
+		case EJson::Array:
+			return TEXT("[...]");
+		case EJson::Object:
+			return TEXT("{...}");
+		case EJson::None:
+		case EJson::Null:
+		default:
+			break;
+		}
+
+		return TEXT("null");
+	}
+
+	void AppendStringFieldLine(
+		const TSharedPtr<FJsonObject>& Object,
+		const FString& Label,
+		const FString& FieldName,
+		TArray<FString>& Lines)
+	{
+		if (!Object.IsValid())
+		{
+			return;
+		}
+
+		FString Value;
+		if (Object->TryGetStringField(FieldName, Value) && !Value.IsEmpty())
+		{
+			Lines.Add(FString::Printf(TEXT("%s: %s"), *Label, *Value));
+		}
+	}
+
+	void AppendNumberFieldLine(
+		const TSharedPtr<FJsonObject>& Object,
+		const FString& Label,
+		const FString& FieldName,
+		TArray<FString>& Lines)
+	{
+		if (!Object.IsValid())
+		{
+			return;
+		}
+
+		double Value = 0.0;
+		if (Object->TryGetNumberField(FieldName, Value))
+		{
+			Lines.Add(FString::Printf(TEXT("%s: %.2f"), *Label, Value));
+		}
+	}
+
+	void AppendRecommendations(
+		const TSharedPtr<FJsonObject>& RootObject,
+		const FString& FieldName,
+		const FString& Title,
+		TArray<FString>& Lines)
+	{
+		if (!RootObject.IsValid())
+		{
+			return;
+		}
+
+		const TSharedPtr<FJsonValue> RecommendationsValue = RootObject->TryGetField(FieldName);
+		if (!RecommendationsValue.IsValid() || RecommendationsValue->Type != EJson::Array)
+		{
+			return;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>& Recommendations = RecommendationsValue->AsArray();
+		if (Recommendations.IsEmpty())
+		{
+			return;
+		}
+
+		Lines.Add(TEXT(""));
+		Lines.Add(Title);
+
+		for (const TSharedPtr<FJsonValue>& RecommendationValue : Recommendations)
+		{
+			if (!RecommendationValue.IsValid() || RecommendationValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			const TSharedPtr<FJsonObject> Recommendation = RecommendationValue->AsObject();
+			if (!Recommendation.IsValid())
+			{
+				continue;
+			}
+
+			FString Param;
+			FString Reason;
+			Recommendation->TryGetStringField(TEXT("param"), Param);
+			Recommendation->TryGetStringField(TEXT("reason"), Reason);
+
+			const FString Current = JsonValueToDisplayString(Recommendation->TryGetField(TEXT("current")));
+			const FString Suggested = JsonValueToDisplayString(Recommendation->TryGetField(TEXT("suggested")));
+			Lines.Add(FString::Printf(TEXT("- %s: %s -> %s"), *Param, *Current, *Suggested));
+			if (!Reason.IsEmpty())
+			{
+				Lines.Add(FString::Printf(TEXT("  %s"), *Reason));
+			}
+		}
+	}
+
+	void AppendWarnings(const TSharedPtr<FJsonObject>& RootObject, TArray<FString>& Lines)
+	{
+		if (!RootObject.IsValid())
+		{
+			return;
+		}
+
+		const TSharedPtr<FJsonValue> WarningsValue = RootObject->TryGetField(TEXT("llmWarnings"));
+		if (!WarningsValue.IsValid() || WarningsValue->Type != EJson::Array)
+		{
+			return;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>& Warnings = WarningsValue->AsArray();
+		if (Warnings.IsEmpty())
+		{
+			return;
+		}
+
+		Lines.Add(TEXT(""));
+		Lines.Add(TEXT("Warnings"));
+		for (const TSharedPtr<FJsonValue>& WarningValue : Warnings)
+		{
+			if (WarningValue.IsValid() && WarningValue->Type == EJson::String)
+			{
+				Lines.Add(FString::Printf(TEXT("- %s"), *WarningValue->AsString()));
+			}
+		}
+	}
+
+	FPlatformAnalysisAiResponse MakeResponse(
+		bool bSuccess,
+		int32 ResponseCode,
+		const FString& DisplayText,
+		const FString& ErrorMessage,
+		const FString& ResponseBody)
+	{
+		FPlatformAnalysisAiResponse Response;
+		Response.bSuccess = bSuccess;
+		Response.ResponseCode = ResponseCode;
+		Response.DisplayText = DisplayText;
+		Response.ErrorMessage = ErrorMessage;
+		Response.ResponseBody = ResponseBody;
+		return Response;
+	}
+}
+
+void UPlatformAnalysisAiSubsystem::Deinitialize()
+{
+	CancelPendingAnalysisRequest();
+	OnAnalysisCompleted.Clear();
+	Super::Deinitialize();
+}
+
+bool UPlatformAnalysisAiSubsystem::RequestAnalysisForReport(
+	const FString& evaluationReportPath,
+	const FString& measurementLogPath)
+{
+	if (PendingHttpRequest.IsValid())
+	{
+		BroadcastFailure(0, TEXT("An AI analysis request is already pending."));
+		return false;
+	}
+
+	if (AnalysisEndpointUrl.TrimStartAndEnd().IsEmpty())
+	{
+		BroadcastFailure(0, TEXT("AI analysis endpoint URL is empty."));
+		return false;
+	}
+
+	FString RequestJson;
+	TArray<FString> Diagnostics;
+	if (!BuildAnalysisRequestJsonFromReport(
+			evaluationReportPath,
+			measurementLogPath,
+			bFallbackOnly,
+			RequestJson,
+			Diagnostics))
+	{
+		BroadcastFailure(0, JoinLines(Diagnostics));
+		return false;
+	}
+
+	PendingRequestId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+	Request->SetURL(AnalysisEndpointUrl);
+	Request->SetVerb(TEXT("POST"));
+	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+	Request->SetContentAsString(RequestJson);
+	Request->SetTimeout(RequestTimeoutSeconds);
+
+	TWeakObjectPtr<UPlatformAnalysisAiSubsystem> WeakThis = this;
+	const FString CapturedRequestId = PendingRequestId;
+	Request->OnProcessRequestComplete().BindLambda(
+		[WeakThis, CapturedRequestId](FHttpRequestPtr HttpRequest, FHttpResponsePtr HttpResponse, bool bWasSuccessful)
+		{
+			if (!WeakThis.IsValid())
+			{
+				return;
+			}
+
+			WeakThis->HandleAnalysisResponse(CapturedRequestId, HttpRequest, HttpResponse, bWasSuccessful);
+		});
+
+	PendingHttpRequest = Request;
+	if (!Request->ProcessRequest())
+	{
+		PendingHttpRequest.Reset();
+		PendingRequestId.Reset();
+		BroadcastFailure(0, TEXT("Failed to start AI analysis request."));
+		return false;
+	}
+
+	UE_LOG(
+		LogPlatformAnalysisAi,
+		Log,
+		TEXT("AI analysis request started | Url: %s, Report: %s, Log: %s"),
+		*AnalysisEndpointUrl,
+		*evaluationReportPath,
+		*measurementLogPath);
+
+	return true;
+}
+
+void UPlatformAnalysisAiSubsystem::CancelPendingAnalysisRequest()
+{
+	if (!PendingHttpRequest.IsValid())
+	{
+		return;
+	}
+
+	PendingHttpRequest->OnProcessRequestComplete().Unbind();
+	PendingHttpRequest->CancelRequest();
+	PendingHttpRequest.Reset();
+	PendingRequestId.Reset();
+}
+
+bool UPlatformAnalysisAiSubsystem::ExtractSetupPathsFromReportJson(
+	const FString& reportJson,
+	FString& outEpisodeSetupPath,
+	FString& outDeliveryBotSetupPath,
+	TArray<FString>& outDiagnostics)
+{
+	outEpisodeSetupPath.Reset();
+	outDeliveryBotSetupPath.Reset();
+	outDiagnostics.Reset();
+
+	TSharedPtr<FJsonObject> RootObject;
+	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(reportJson);
+	if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
+	{
+		outDiagnostics.Add(TEXT("Evaluation report JSON parse failed."));
+		return false;
+	}
+
+	FString Schema;
+	if (!RootObject->TryGetStringField(TEXT("schema"), Schema)
+		|| !Schema.Equals(TEXT("episode_evaluation_report"), ESearchCase::CaseSensitive))
+	{
+		outDiagnostics.Add(TEXT("Evaluation report schema must be 'episode_evaluation_report'."));
+	}
+
+	TSharedPtr<FJsonObject> RunObject;
+	if (!TryGetObjectField(*RootObject, TEXT("run"), RunObject))
+	{
+		outDiagnostics.Add(TEXT("Evaluation report field missing or invalid: run."));
+		return false;
+	}
+
+	if (!TryGetStringFromObjectField(*RunObject, TEXT("episode_setup"), TEXT("path"), outEpisodeSetupPath)
+		|| outEpisodeSetupPath.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("Evaluation report field missing or invalid: run.episode_setup.path."));
+	}
+
+	if (!TryGetStringFromObjectField(*RunObject, TEXT("delivery_bot_setup"), TEXT("path"), outDeliveryBotSetupPath)
+		|| outDeliveryBotSetupPath.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("Evaluation report field missing or invalid: run.delivery_bot_setup.path."));
+	}
+
+	return outDiagnostics.IsEmpty();
+}
+
+bool UPlatformAnalysisAiSubsystem::BuildAnalysisRequestJsonFromReport(
+	const FString& evaluationReportPath,
+	const FString& measurementLogPath,
+	bool bFallbackOnly,
+	FString& outRequestJson,
+	TArray<FString>& outDiagnostics)
+{
+	outRequestJson.Reset();
+	outDiagnostics.Reset();
+
+	const FString ResolvedReportPath = ResolveAnalysisPath(evaluationReportPath);
+	const FString ResolvedLogPath = ResolveAnalysisPath(measurementLogPath);
+
+	RequireExistingFile(TEXT("evaluation_report_path"), ResolvedReportPath, outDiagnostics);
+	RequireExistingFile(TEXT("measurement_log_path"), ResolvedLogPath, outDiagnostics);
+	if (!outDiagnostics.IsEmpty())
+	{
+		return false;
+	}
+
+	FString ReportJson;
+	if (!FFileHelper::LoadFileToString(ReportJson, *ResolvedReportPath))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("Evaluation report read failed: %s"), *ResolvedReportPath));
+		return false;
+	}
+
+	FString EpisodeSetupPath;
+	FString DeliveryBotSetupPath;
+	if (!ExtractSetupPathsFromReportJson(ReportJson, EpisodeSetupPath, DeliveryBotSetupPath, outDiagnostics))
+	{
+		return false;
+	}
+
+	const FString ResolvedEpisodeSetupPath = ResolveAnalysisPath(EpisodeSetupPath);
+	const FString ResolvedDeliveryBotSetupPath = ResolveAnalysisPath(DeliveryBotSetupPath);
+	RequireExistingFile(TEXT("episode_setup_path"), ResolvedEpisodeSetupPath, outDiagnostics);
+	RequireExistingFile(TEXT("bot_setup_path"), ResolvedDeliveryBotSetupPath, outDiagnostics);
+	if (!outDiagnostics.IsEmpty())
+	{
+		return false;
+	}
+
+	TSharedRef<FJsonObject> RequestObject = MakeShared<FJsonObject>();
+	RequestObject->SetStringField(TEXT("evaluation_report_path"), ResolvedReportPath);
+	RequestObject->SetStringField(TEXT("measurement_log_path"), ResolvedLogPath);
+	RequestObject->SetStringField(TEXT("episode_setup_path"), ResolvedEpisodeSetupPath);
+	RequestObject->SetStringField(TEXT("bot_setup_path"), ResolvedDeliveryBotSetupPath);
+	RequestObject->SetBoolField(TEXT("fallback_only"), bFallbackOnly);
+
+	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&outRequestJson);
+	if (!FJsonSerializer::Serialize(RequestObject, Writer))
+	{
+		outDiagnostics.Add(TEXT("AI analysis request JSON serialization failed."));
+		return false;
+	}
+
+	return true;
+}
+
+FString UPlatformAnalysisAiSubsystem::BuildDisplayTextFromAnalysisResponse(
+	const FString& responseBody,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+
+	TSharedPtr<FJsonObject> RootObject;
+	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(responseBody);
+	if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
+	{
+		outDiagnostics.Add(TEXT("AI analysis response JSON parse failed."));
+		return TruncateText(responseBody, RawResponsePreviewCharacterLimit);
+	}
+
+	TArray<FString> Lines;
+	Lines.Add(TEXT("AI Analysis"));
+	AppendStringFieldLine(RootObject, TEXT("Analysis Id"), TEXT("analysisId"), Lines);
+	AppendStringFieldLine(RootObject, TEXT("Generation"), TEXT("generationMethod"), Lines);
+
+	FString Summary;
+	if (RootObject->TryGetStringField(TEXT("summary"), Summary) && !Summary.IsEmpty())
+	{
+		Lines.Add(TEXT(""));
+		Lines.Add(TEXT("Summary"));
+		Lines.Add(Summary);
+	}
+
+	TSharedPtr<FJsonObject> EpisodeStatistics;
+	if (TryGetObjectField(*RootObject, TEXT("episodeStatistics"), EpisodeStatistics))
+	{
+		Lines.Add(TEXT(""));
+		Lines.Add(TEXT("Episode Statistics"));
+		AppendStringFieldLine(EpisodeStatistics, TEXT("Outcome"), TEXT("outcome"), Lines);
+		AppendStringFieldLine(EpisodeStatistics, TEXT("Terminal"), TEXT("terminal_reason"), Lines);
+		AppendNumberFieldLine(EpisodeStatistics, TEXT("Duration(s)"), TEXT("duration_s"), Lines);
+		AppendNumberFieldLine(EpisodeStatistics, TEXT("Score"), TEXT("score"), Lines);
+	}
+
+	AppendRecommendations(RootObject, TEXT("botSetupRecommendations"), TEXT("Bot Setup Recommendations"), Lines);
+	AppendRecommendations(RootObject, TEXT("episodeSetupRecommendations"), TEXT("Episode Setup Recommendations"), Lines);
+	AppendRecommendations(RootObject, TEXT("policyServerRecommendations"), TEXT("Policy Server Recommendations"), Lines);
+	AppendWarnings(RootObject, Lines);
+
+	return JoinLines(Lines);
+}
+
+void UPlatformAnalysisAiSubsystem::HandleAnalysisResponse(
+	const FString& requestId,
+	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> httpRequest,
+	TSharedPtr<IHttpResponse, ESPMode::ThreadSafe> httpResponse,
+	bool bWasSuccessful)
+{
+	(void)httpRequest;
+
+	if (!requestId.Equals(PendingRequestId, ESearchCase::CaseSensitive))
+	{
+		return;
+	}
+
+	PendingHttpRequest.Reset();
+	PendingRequestId.Reset();
+
+	const int32 ResponseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode() : 0;
+	const FString ResponseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString();
+	if (!bWasSuccessful)
+	{
+		BroadcastFailure(ResponseCode, TEXT("AI analysis HTTP request failed."), ResponseBody);
+		return;
+	}
+
+	if (ResponseCode < 200 || ResponseCode >= 300)
+	{
+		const FString Message = FString::Printf(TEXT("AI analysis HTTP error: %d"), ResponseCode);
+		BroadcastFailure(ResponseCode, Message, ResponseBody);
+		return;
+	}
+
+	TArray<FString> Diagnostics;
+	const FString DisplayText = BuildDisplayTextFromAnalysisResponse(ResponseBody, Diagnostics);
+	if (!Diagnostics.IsEmpty())
+	{
+		UE_LOG(LogPlatformAnalysisAi, Warning, TEXT("AI analysis response diagnostic | %s"), *JoinLines(Diagnostics));
+	}
+
+	OnAnalysisCompleted.Broadcast(MakeResponse(true, ResponseCode, DisplayText, FString(), ResponseBody));
+}
+
+void UPlatformAnalysisAiSubsystem::BroadcastFailure(
+	int32 responseCode,
+	const FString& message,
+	const FString& responseBody)
+{
+	UE_LOG(LogPlatformAnalysisAi, Warning, TEXT("AI analysis failed | Code: %d, Message: %s"), responseCode, *message);
+	OnAnalysisCompleted.Broadcast(MakeResponse(false, responseCode, FString(), message, responseBody));
+}

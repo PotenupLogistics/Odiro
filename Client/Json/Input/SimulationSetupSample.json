@@ -1,0 +1,23 @@
+{
+  "schema": "simulation_setup",
+  "version": 1,
+  "map_id": "ScenarioSimulationMap",
+  "run_queue": "Json/Input/EpisodeRunQueueSample.json",
+  "fixed_step": {
+    "fps": 60
+  },
+  "logging": {
+    "measurement_log_enabled": true,
+    "measurement_output_directory": "Saved/AnalysisLogs",
+    "measurement_file_prefix": "MeasurementLog",
+    "flush_interval_ticks": 60,
+    "flush_on_event": true
+  },
+  "report": {
+    "save_evaluation_report_json": true,
+    "output_directory": "Json/Output"
+  },
+  "status": {
+    "output_path": "Saved/SimulationRuns/latest_status.json"
+  }
+}

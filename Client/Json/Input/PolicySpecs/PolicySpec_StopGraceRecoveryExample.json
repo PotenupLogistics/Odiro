@@ -1,0 +1,52 @@
+{
+  "policySpec": {
+    "catalogId": "default_delivery",
+    "catalogVersion": 1,
+    "enabledPolicies": [
+      {
+        "policyId": "front_obstacle_stop",
+        "priority": 10,
+        "stopRerouteDelaySeconds": 3.0,
+        "dynamicObstacles": {
+          "enabled": true,
+          "frontOnly": true,
+          "inflationRadiusM": 0.75,
+          "maxDistanceM": 3.5
+        },
+        "pathfinding": {
+          "allowDiagonal": true,
+          "preventCornerCutting": true,
+          "penaltyMinimumCost": 5.0,
+          "penaltyCostMultiplier": 1.0,
+          "heuristicWeight": 1.0,
+          "maxExpandedNodes": 100000
+        },
+        "recovery": {
+          "strategy": "grace_forward",
+          "rerouteAttemptLimit": 3,
+          "rerouteAttemptIntervalSeconds": 0.75,
+          "graceDurationSeconds": 1.5,
+          "graceSpeedKmh": 1.0
+        }
+      },
+      {
+        "policyId": "reroute_when_blocked",
+        "priority": 20
+      },
+      {
+        "policyId": "front_obstacle_slowdown",
+        "priority": 30,
+        "dynamicObstacles": {
+          "enabled": true,
+          "frontOnly": true,
+          "inflationRadiusM": 0.9,
+          "maxDistanceM": 5.0
+        }
+      },
+      {
+        "policyId": "normal_path_follow",
+        "priority": 100
+      }
+    ]
+  }
+}

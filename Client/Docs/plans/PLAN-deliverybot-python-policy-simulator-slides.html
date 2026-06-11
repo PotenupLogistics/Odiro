@@ -1,0 +1,1446 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DeliveryBot Python Policy Simulator 구현 계획</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f4;
+      --ink: #182022;
+      --muted: #5f6b6d;
+      --line: #d9ded8;
+      --panel: #ffffff;
+      --panel-2: #edf3ef;
+      --green: #1f7a5a;
+      --teal: #0d6f78;
+      --amber: #b86416;
+      --red: #a83c32;
+      --blue: #325e9b;
+      --shadow: 0 18px 42px rgba(24, 32, 34, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", "Malgun Gothic", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    body {
+      overflow: hidden;
+    }
+
+    .deck {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      padding: 48px 64px 64px;
+      display: none;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.18)),
+        var(--bg);
+      overflow: auto;
+    }
+
+    .slide.active {
+      display: block;
+    }
+
+    .slide-inner {
+      max-width: 1180px;
+      min-height: calc(100vh - 112px);
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 26px;
+    }
+
+    .kicker {
+      color: var(--teal);
+      font-size: 15px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      max-width: 980px;
+      font-size: 54px;
+      line-height: 1.08;
+      font-weight: 780;
+    }
+
+    h2 {
+      font-size: 40px;
+      line-height: 1.16;
+      font-weight: 760;
+    }
+
+    h3 {
+      font-size: 22px;
+      line-height: 1.25;
+      font-weight: 740;
+    }
+
+    p,
+    li,
+    td,
+    th {
+      font-size: 18px;
+      line-height: 1.55;
+    }
+
+    .lead {
+      max-width: 940px;
+      color: var(--muted);
+      font-size: 24px;
+      line-height: 1.45;
+    }
+
+    .note {
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .cols-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .cols-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .cols-4 {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 22px;
+      box-shadow: 0 8px 20px rgba(24, 32, 34, 0.06);
+    }
+
+    .card.accent-green {
+      border-top: 5px solid var(--green);
+    }
+
+    .card.accent-teal {
+      border-top: 5px solid var(--teal);
+    }
+
+    .card.accent-amber {
+      border-top: 5px solid var(--amber);
+    }
+
+    .card.accent-blue {
+      border-top: 5px solid var(--blue);
+    }
+
+    .card.accent-red {
+      border-top: 5px solid var(--red);
+    }
+
+    .big-statement {
+      background: #ffffff;
+      border-left: 8px solid var(--green);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 30px 34px;
+      font-size: 30px;
+      line-height: 1.42;
+      font-weight: 720;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      border-radius: 999px;
+      padding: 5px 13px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      font-size: 15px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .pill.green {
+      border-color: rgba(31, 122, 90, 0.35);
+      color: var(--green);
+      background: rgba(31, 122, 90, 0.08);
+    }
+
+    .pill.amber {
+      border-color: rgba(184, 100, 22, 0.35);
+      color: var(--amber);
+      background: rgba(184, 100, 22, 0.08);
+    }
+
+    .pill.red {
+      border-color: rgba(168, 60, 50, 0.35);
+      color: var(--red);
+      background: rgba(168, 60, 50, 0.08);
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 0.96fr 1.04fr;
+      gap: 28px;
+      align-items: start;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .flow-step {
+      min-height: 116px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      position: relative;
+    }
+
+    .flow-step::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      right: -12px;
+      width: 12px;
+      height: 2px;
+      background: var(--line);
+    }
+
+    .flow-step:last-child::after {
+      display: none;
+    }
+
+    .flow-step strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 18px;
+    }
+
+    .flow-step span {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.4;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    th {
+      text-align: left;
+      background: #e8eee9;
+      color: #243033;
+      font-weight: 760;
+    }
+
+    th,
+    td {
+      padding: 13px 15px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    ul,
+    ol {
+      margin: 0;
+      padding-left: 22px;
+    }
+
+    li + li {
+      margin-top: 8px;
+    }
+
+    code {
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 0.92em;
+      background: #eef2ed;
+      border: 1px solid #dce4dc;
+      border-radius: 5px;
+      padding: 1px 5px;
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow: auto;
+      max-height: 360px;
+      padding: 18px;
+      border-radius: 8px;
+      background: #182022;
+      color: #f3f7f4;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 15px;
+      line-height: 1.52;
+    }
+
+    .roadmap {
+      display: grid;
+      grid-template-columns: 190px 1fr;
+      gap: 12px 18px;
+      align-items: stretch;
+    }
+
+    .phase-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      color: #fff;
+      font-weight: 760;
+      padding: 14px;
+      text-align: center;
+    }
+
+    .phase-label.green { background: var(--green); }
+    .phase-label.teal { background: var(--teal); }
+    .phase-label.amber { background: var(--amber); }
+    .phase-label.blue { background: var(--blue); }
+    .phase-label.red { background: var(--red); }
+
+    .phase-body {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px 18px;
+    }
+
+    .metric-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 32px;
+      line-height: 1;
+      color: var(--green);
+      margin-bottom: 8px;
+    }
+
+    .status {
+      font-weight: 760;
+    }
+
+    .status.done {
+      color: var(--green);
+    }
+
+    .status.next {
+      color: var(--amber);
+    }
+
+    .status.risk {
+      color: var(--red);
+    }
+
+    .footer {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: rgba(246, 247, 244, 0.92);
+      border-top: 1px solid var(--line);
+      backdrop-filter: blur(8px);
+    }
+
+    .nav-button {
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .nav-button:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+
+    .counter {
+      min-width: 72px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .source-list {
+      columns: 2;
+      column-gap: 28px;
+    }
+
+    .source-list li {
+      break-inside: avoid;
+      font-size: 15px;
+      line-height: 1.42;
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 900px) {
+      body {
+        overflow: auto;
+      }
+
+      .deck {
+        height: auto;
+      }
+
+      .slide {
+        position: static;
+        min-height: 100vh;
+        padding: 34px 22px 72px;
+      }
+
+      h1 {
+        font-size: 38px;
+      }
+
+      h2 {
+        font-size: 30px;
+      }
+
+      .lead {
+        font-size: 20px;
+      }
+
+      .cols-2,
+      .cols-3,
+      .cols-4,
+      .split,
+      .flow,
+      .metric-row,
+      .roadmap {
+        grid-template-columns: 1fr;
+      }
+
+      .flow-step::after {
+        display: none;
+      }
+
+      .source-list {
+        columns: 1;
+      }
+    }
+
+    @media print {
+      body {
+        overflow: visible;
+      }
+
+      .deck {
+        height: auto;
+      }
+
+      .slide {
+        position: static;
+        display: block;
+        min-height: 100vh;
+        page-break-after: always;
+      }
+
+      .footer {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="deck" aria-label="DeliveryBot Python Policy Simulator 구현 계획 슬라이드">
+    <section class="slide active">
+      <div class="slide-inner">
+        <div class="kicker">검토용 구현 계획</div>
+        <h1>DeliveryBot Python Policy Simulator 구현 방향</h1>
+        <p class="lead">
+          현재 구현된 DeliveryBot, Python 정책 서버, Docs, Json/Input을 기준으로 정리한
+          정책 실험용 가상 환경 고도화 계획입니다.
+        </p>
+        <div class="big-statement">
+          결론: Unreal은 환경, 물리, 센서, 평가를 책임지고 Python은 길찾기, 정책 판단, 재계획, 제어 명령 생성을 책임지는 현재 구조를 유지합니다.
+        </div>
+        <div class="pill-row">
+          <span class="pill green">기준일 2026-06-10</span>
+          <span class="pill">UE 5.7 Runtime Module</span>
+          <span class="pill">HTTP Policy Loop</span>
+          <span class="pill">Grid A* + DWA</span>
+          <span class="pill">Episode JSON Pair 실행</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">핵심 판단</div>
+        <h2>새 구조를 만들기보다 현재 축을 고도화한다</h2>
+        <div class="grid cols-2">
+          <div class="card accent-green">
+            <h3>이미 잡힌 중심축</h3>
+            <ul>
+              <li><code>ADeliveryBot</code>은 센서 관측과 이동 명령 실행을 담당합니다.</li>
+              <li><code>UDeliveryBot_PolicyControllerComponent</code>가 policy loop, startup spec, version 검증을 관리합니다.</li>
+              <li><code>Tools/PythonPolicyServer</code>가 catalog, policySpec, A*, DWA, 동적 장애물 overlay를 담당합니다.</li>
+            </ul>
+          </div>
+          <div class="card accent-amber">
+            <h3>고도화가 필요한 부분</h3>
+            <ul>
+              <li>Python planner 계층을 A*, Hybrid A*, DWA 단위로 명확히 분리합니다.</li>
+              <li>장애물 의미 판정은 ActorTags에서 Semantic DataAsset 기반으로 확장합니다.</li>
+              <li>정책 조합 실험은 JSON 파일 임시 방식에서 UI 또는 Web 설정 흐름으로 옮깁니다.</li>
+            </ul>
+          </div>
+        </div>
+        <p class="note">
+          현재 문서 일부에는 이전 TODO가 남아 있으나, 코드 기준으로 actorTags 전송, policy registry, DWA, dynamic obstacle overlay는 이미 반영되어 있습니다.
+        </p>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">역할 분리</div>
+        <h2>Unreal과 Python의 책임 경계</h2>
+        <div class="grid cols-3">
+          <div class="card accent-blue">
+            <h3>Unreal</h3>
+            <ul>
+              <li>Episode, 맵, 보행자, 장애물 spawn</li>
+              <li>Grid 생성과 JSON 직렬화</li>
+              <li>LiDAR ray와 observed object 생성</li>
+              <li>Python action 검증 후 Chaos Vehicle 이동</li>
+              <li>평가 종료와 report/log 집계</li>
+            </ul>
+          </div>
+          <div class="card accent-green">
+            <h3>Python</h3>
+            <ul>
+              <li>policy catalog와 policySpec 정규화</li>
+              <li>Grid 기반 A* 경로 계산</li>
+              <li>DWA local avoidance</li>
+              <li>동적 장애물 grid overlay와 TTL 관리</li>
+              <li>priority 기반 최종 action 선택</li>
+            </ul>
+          </div>
+          <div class="card accent-amber">
+            <h3>JSON 입력</h3>
+            <ul>
+              <li><code>EpisodeSetup</code>: 환경, 배치, 목표, 평가</li>
+              <li><code>DeliveryBotSetup</code>: 주행, 라이다, 제어 튜닝</li>
+              <li><code>PolicySpec</code>: 정책 묶음과 우선순위</li>
+              <li><code>EpisodeRunQueue</code>: 실행 pair 목록</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">현재 런타임 시퀀스</div>
+        <h2>Episode 시작부터 주행 명령까지</h2>
+        <div class="flow">
+          <div class="flow-step">
+            <strong>1. 입력 선택</strong>
+            <span>RunQueue가 EpisodeSetup과 DeliveryBotSetup pair를 지정합니다.</span>
+          </div>
+          <div class="flow-step">
+            <strong>2. Grid 생성</strong>
+            <span>GroundRegion 기반 Runtime GridBoundsActor를 만들고 GridSubsystem이 cell을 분류합니다.</span>
+          </div>
+          <div class="flow-step">
+            <strong>3. Robot spawn</strong>
+            <span>EpisodeSimulationSubsystem이 <code>BP_DeliveryBot</code> 또는 C++ class를 spawn합니다.</span>
+          </div>
+          <div class="flow-step">
+            <strong>4. Python 동기화</strong>
+            <span>Startup PolicySpec 전송 후 <code>/episode/start</code>로 grid/config/start/goal을 보냅니다.</span>
+          </div>
+          <div class="flow-step">
+            <strong>5. Policy loop</strong>
+            <span><code>/policy/action</code> 응답을 검증하고 target speed, steering, brake를 적용합니다.</span>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>현재 사실</th>
+              <th>계획 반영</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>BuildEpisodeStartJson()</code>은 grid/config/start/goal을 포함하지만 policySpec은 별도 startup 파일로 먼저 전송합니다.</td>
+              <td>단기에는 이 흐름을 유지하고, 정책 UI/Web 결정 후 <code>/episode/start</code> 포함 여부를 다시 판단합니다.</td>
+            </tr>
+            <tr>
+              <td>Python 응답에는 <code>episodeVersion</code>, <code>configVersion</code>, <code>gridVersion</code>이 포함됩니다.</td>
+              <td>모든 새 planner와 policy도 동일한 version 계약을 깨지 않아야 합니다.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">Unreal 구현 상태</div>
+        <h2>DeliveryBot은 이미 Python policy 실행기로 설계되어 있다</h2>
+        <div class="metric-row">
+          <div class="metric">
+            <strong>4</strong>
+            <span>핵심 컴포넌트: Drive, Lidar, HttpPolicy, PolicyController</span>
+          </div>
+          <div class="metric">
+            <strong>0.2s</strong>
+            <span>기본 policy request interval</span>
+          </div>
+          <div class="metric">
+            <strong>1.5s</strong>
+            <span>policy action timeout 기본값</span>
+          </div>
+          <div class="metric">
+            <strong>5</strong>
+            <span>연속 실패 시 policy loop 중단 기준</span>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>파일</th>
+              <th>현재 책임</th>
+              <th>계획상 유지/확장</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>DeliveryBot.cpp</code></td>
+              <td>Observation, EpisodeStart, ConfigUpdate JSON 생성</td>
+              <td>semantic field와 sensor summary만 추가</td>
+            </tr>
+            <tr>
+              <td><code>DeliveryBot_PolicyControllerComponent.cpp</code></td>
+              <td>startup policySpec, retry loop, 응답 검증, debug path draw</td>
+              <td>실험 상태와 failure reason을 report/log로 연결</td>
+            </tr>
+            <tr>
+              <td><code>DeliveryBot_GridSubsystem.cpp</code></td>
+              <td>Walkable/Penalty/Blocked cell 생성과 grid JSON 생성</td>
+              <td>surface/traversability metadata 확장</td>
+            </tr>
+            <tr>
+              <td><code>DeliveryBot_LidarSensorComponent.cpp</code></td>
+              <td>ray hit, actor name/tags, observed object 생성</td>
+              <td>3D point cloud보다 object semantic 안정화 우선</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">Python 구현 상태</div>
+        <h2>정책 엔진은 이미 priority 기반 후보 선택 구조</h2>
+        <div class="split">
+          <div class="card accent-green">
+            <h3>정책 실행 흐름</h3>
+            <ol>
+              <li>서버가 episode/config/grid/policySpec을 메모리에 저장합니다.</li>
+              <li>Observation이 들어오면 runtime context를 구성합니다.</li>
+              <li>enabled policy evaluator만 실행합니다.</li>
+              <li>각 policy는 action 후보를 반환하거나 상황이 아니면 반환하지 않습니다.</li>
+              <li>priority 숫자가 가장 낮은 후보를 최종 action으로 선택합니다.</li>
+            </ol>
+          </div>
+          <div class="card accent-blue">
+            <h3>현재 policy 목록</h3>
+            <ul>
+              <li><code>front_obstacle_stop</code>: hard stop, TTC, recovery, sustained reroute</li>
+              <li><code>reroute_when_blocked</code>: A* 실패 시 정지 후보</li>
+              <li><code>dwa_local_avoidance</code>: LiDAR hit 기반 short-horizon 회피</li>
+              <li><code>front_obstacle_slowdown</code>: 감속 + dynamic obstacle overlay</li>
+              <li><code>normal_path_follow</code>: Grid A* + lookahead steering</li>
+            </ul>
+          </div>
+        </div>
+        <p class="note">
+          Python은 아직 모듈명이 단순하지만, 기능적으로는 global planner, local planner, behavior policy가 한 서버 안에서 동작합니다. 다음 단계는 이 책임을 파일/인터페이스 단위로 더 선명하게 분리하는 것입니다.
+        </p>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">JSON 입력 해석</div>
+        <h2>실험 단위는 EpisodeSetup + DeliveryBotSetup + PolicySpec</h2>
+        <div class="grid cols-2">
+          <div class="card accent-blue">
+            <h3><code>EpisodeSetup_scenario_001_000.json</code></h3>
+            <ul>
+              <li>14m x 8m 보도 baseline scenario</li>
+              <li>북쪽 curb penalty, 남쪽 storefront blocked region</li>
+              <li>mailbox, bench 정적 장애물</li>
+              <li>parallel pedestrian path</li>
+              <li>robot start <code>[-5.5, -1.5]</code>, goal <code>[5.5, -1.5]</code></li>
+            </ul>
+          </div>
+          <div class="card accent-green">
+            <h3><code>DeliveryBotSetup_scenario_001_000_baseline.json</code></h3>
+            <ul>
+              <li>max speed 8.0 km/h</li>
+              <li>path target speed 6.5 km/h</li>
+              <li>lookahead 1.2m</li>
+              <li>LiDAR range 5.5m</li>
+              <li>stop 1.0m, slowdown 3.2m</li>
+            </ul>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>정책 실험 입력</th>
+              <th>의미</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>PolicySpec_DefaultDelivery.json</code></td>
+              <td>stop, reroute, DWA, slowdown, normal path follow를 함께 사용합니다.</td>
+            </tr>
+            <tr>
+              <td><code>PolicySpec_NormalOnly.json</code></td>
+              <td>A* path follow baseline 비교에 적합합니다.</td>
+            </tr>
+            <tr>
+              <td><code>PolicySpec_AStarPolicyOptionsExample.json</code></td>
+              <td>정책별 A* cost, diagonal, dynamic obstacle, recovery 옵션 검증용입니다.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">데이터 계약</div>
+        <h2>HTTP API는 구현 계획의 고정점으로 둔다</h2>
+        <div class="grid cols-2">
+          <div class="card accent-green">
+            <h3>초기 동기화</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>API</th>
+                  <th>역할</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>POST /policy/spec/update</code></td>
+                  <td>enabled policy와 priority 갱신</td>
+                </tr>
+                <tr>
+                  <td><code>POST /episode/start</code></td>
+                  <td>start, goal, grid, drive/lidar/motion 설정 저장</td>
+                </tr>
+                <tr>
+                  <td><code>POST /grid/update</code></td>
+                  <td>grid만 별도 갱신할 때 사용</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card accent-amber">
+            <h3>반복 루프</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>입력</th>
+                  <th>출력</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>robotState</code>, <code>lidarRays</code>, <code>observedObjects</code></td>
+                  <td><code>targetSpeedKmh</code>, <code>steering</code>, <code>brake</code>, <code>direction</code></td>
+                </tr>
+                <tr>
+                  <td><code>sequence</code>, <code>sensorSequence</code>, <code>worldTimeSeconds</code></td>
+                  <td><code>debug.pathWorldPoints</code>, selected policy, path/DWA status</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="big-statement">
+          새 알고리즘을 붙일 때도 Unreal action 계약은 넓히지 않습니다. 먼저 Python 내부 planner와 policy debug를 확장하고, Unreal은 검증 가능한 명령만 실행합니다.
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">길찾기 스택</div>
+        <h2>A*, Hybrid A*, DWA의 책임을 분리한다</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>계층</th>
+              <th>현재 상태</th>
+              <th>추가 구현 방향</th>
+              <th>출력</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Global Planner A*</td>
+              <td><code>pathfinding.py</code>에 Grid A* 구현</td>
+              <td>경로 캐시, 재계획 사유, 정책별 cost profile 정리</td>
+              <td>grid path, sampled world path</td>
+            </tr>
+            <tr>
+              <td>Global Planner Hybrid A*</td>
+              <td>UE C++ legacy 구현 존재</td>
+              <td>Python planner로 이전 또는 Python 신규 구현. 회전 반경, 후진 비용, heading bin 반영</td>
+              <td>pose path, direction profile</td>
+            </tr>
+            <tr>
+              <td>Local Planner DWA</td>
+              <td>LiDAR point와 A* target 기반 후보 샘플링 구현</td>
+              <td>로봇 크기, 속도 제한, no-safe trajectory 처리, path corridor 점수 보강</td>
+              <td>단기 steering/speed command</td>
+            </tr>
+            <tr>
+              <td>Policy Layer</td>
+              <td>priority 후보 선택 구현</td>
+              <td>사람 우선, 로봇 우선, 보수/공격 프로파일을 policySpec으로 구성</td>
+              <td>최종 action과 reason</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">1단계</div>
+        <h2>현재 흐름 안정화와 기준 시나리오 고정</h2>
+        <div class="roadmap">
+          <div class="phase-label green">T01</div>
+          <div class="phase-body">
+            <h3>빌드와 PIE 검증</h3>
+            <p>Runtime GridBoundsActor 자동 생성, DeliveryBot spawn, policySpec 전송, <code>/episode/start</code>, <code>/policy/action</code>까지 한 번에 통과하는지 확인합니다.</p>
+          </div>
+          <div class="phase-label green">T02</div>
+          <div class="phase-body">
+            <h3>기준 JSON pair 확정</h3>
+            <p><code>scenario_001_000_baseline</code>을 회귀 기준으로 삼고 NormalOnly, DefaultDelivery, CautiousDelivery를 같은 Episode에서 비교합니다.</p>
+          </div>
+          <div class="phase-label amber">T03</div>
+          <div class="phase-body">
+            <h3>로그와 디버그 경로 검증</h3>
+            <p>Python의 <code>pathWorldPoints</code>가 UE debug line에 표시되고, selected policy와 path/DWA status가 report에 남도록 연결합니다.</p>
+          </div>
+          <div class="phase-label amber">T04</div>
+          <div class="phase-body">
+            <h3>실패 조건 정리</h3>
+            <p>connection refused, policy timeout, stale sequence, version mismatch, invalid action의 대응과 표시 문구를 고정합니다.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">2단계</div>
+        <h2>Python planner 엔진 분리</h2>
+        <div class="grid cols-2">
+          <div class="card accent-blue">
+            <h3>새 Python 구조</h3>
+            <pre>deliverybot_policy/
+  planners/
+    grid_astar.py
+    hybrid_astar.py
+    dwa.py
+    path_cache.py
+  world_model/
+    grid.py
+    dynamic_obstacle_map.py
+    semantic_objects.py
+  policies/
+    pedestrian_priority.py
+    robot_priority.py
+    cautious_delivery.py</pre>
+          </div>
+          <div class="card accent-green">
+            <h3>분리 기준</h3>
+            <ul>
+              <li>Planner는 policy를 모릅니다. grid, pose, goal, 옵션을 받아 path 또는 command 후보만 냅니다.</li>
+              <li>Policy는 planner 결과를 고르고, 안전/양보/재시도 규칙을 적용합니다.</li>
+              <li>World model은 observation을 누적하고 TTL, inflation, semantic class를 관리합니다.</li>
+              <li>Action builder는 계속 한 곳에서 speed/steering/brake 범위를 보장합니다.</li>
+            </ul>
+          </div>
+        </div>
+        <p class="note">
+          현재 <code>pathfinding.py</code>의 A*는 유지하면서 파일을 나누는 방식이 안전합니다. 한 번에 알고리즘을 교체하지 않습니다.
+        </p>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">3단계</div>
+        <h2>Hybrid A*는 Python의 pose planner로 구현한다</h2>
+        <div class="grid cols-3">
+          <div class="card accent-green">
+            <h3>왜 필요한가</h3>
+            <ul>
+              <li>A* grid path는 로봇 회전 반경과 후진을 직접 표현하지 못합니다.</li>
+              <li>좁은 복도, U턴, 장애물 옆 정렬에는 pose 단위 경로가 필요합니다.</li>
+            </ul>
+          </div>
+          <div class="card accent-blue">
+            <h3>입력</h3>
+            <ul>
+              <li>grid lookup</li>
+              <li>start pose x/y/yaw</li>
+              <li>goal pose 또는 goal point</li>
+              <li>min turning radius</li>
+              <li>forward/reverse motion model</li>
+            </ul>
+          </div>
+          <div class="card accent-amber">
+            <h3>출력</h3>
+            <ul>
+              <li>pose path</li>
+              <li>direction per segment</li>
+              <li>path cost와 expanded count</li>
+              <li>fallback reason</li>
+            </ul>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>구현 원칙</th>
+              <th>설명</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>UE C++ 구현은 참고만</td>
+              <td><code>FDeliveryBotHybridAStarConfigInfo</code>와 기존 C++ 알고리즘은 옵션/동작 기준으로 읽되, Python policy mode의 최종 판단은 Python에 둡니다.</td>
+            </tr>
+            <tr>
+              <td>작게 시작</td>
+              <td>처음에는 저속 pose path 생성과 debug path 반환을 목표로 하고, DWA와 결합은 다음 단계로 둡니다.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">4단계</div>
+        <h2>장애물 의미 판정은 ActorTags에서 Semantic DataAsset으로 확장</h2>
+        <div class="split">
+          <div class="card accent-amber">
+            <h3>현재</h3>
+            <ul>
+              <li>LiDAR ray와 observed object에 <code>actorTags</code>가 포함됩니다.</li>
+              <li>Python은 가까운 전방 객체와 LiDAR hit를 이용해 stop, slowdown, DWA, dynamic blocked를 판단합니다.</li>
+              <li>객체가 사람인지, 콘인지, 밟을 수 있는 맨홀인지는 아직 태그 기반 임시 판단 단계입니다.</li>
+            </ul>
+          </div>
+          <div class="card accent-green">
+            <h3>확장</h3>
+            <ul>
+              <li><code>semanticTypeId</code>, <code>objectCategory</code>, <code>mobilityType</code>를 observation에 추가합니다.</li>
+              <li><code>TraversalType</code>: Block, DriveOver, Penalty, Ignore를 정책 입력으로 사용합니다.</li>
+              <li>사람과 차량은 dynamic obstacle, 낮은 맨홀/턱은 penalty 또는 speed limit로 처리합니다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="big-statement">
+          정적 환경은 Grid 생성 시점에 비용화하고, 런타임 객체는 LiDAR 관측 이후 의미와 통과 가능성을 판단합니다.
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">5단계</div>
+        <h2>정책 프로파일은 policySpec 조합으로 만든다</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>프로파일</th>
+              <th>우선 정책</th>
+              <th>설정 의도</th>
+              <th>검증 시나리오</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>사람 우선</td>
+              <td><code>pedestrian_stop</code>, <code>pedestrian_slowdown</code>, DWA</td>
+              <td>보행자 안전과 courtesy metric을 우선합니다.</td>
+              <td>횡단 보행자, 병렬 보행자, path corridor 점유</td>
+            </tr>
+            <tr>
+              <td>로봇 우선</td>
+              <td>DWA, low-speed grace, normal path follow</td>
+              <td>충돌 위험이 낮으면 배송 효율과 진행성을 우선합니다.</td>
+              <td>넓은 보도, 낮은 밀도 장애물, 시간 제한 배송</td>
+            </tr>
+            <tr>
+              <td>보수적 배송</td>
+              <td>hard stop, long slowdown, wide inflation</td>
+              <td>오탐을 감수하고 안전 여유를 크게 둡니다.</td>
+              <td>좁은 보도, 가려진 장애물, 연속 static obstacle</td>
+            </tr>
+            <tr>
+              <td>A/B 알고리즘 비교</td>
+              <td>NormalOnly, A*, Hybrid A*, DWA on/off</td>
+              <td>알고리즘 자체 성능을 정책 효과와 분리해 봅니다.</td>
+              <td>동일 Episode + 다른 PolicySpec</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="note">
+          새 정책을 Python 파일로 추가할 때는 catalog에 displayName, category, defaultPriority, parameters schema를 같이 넣어야 실험 UI로 자연스럽게 올라갑니다.
+        </p>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">6단계</div>
+        <h2>제어 명령은 단순하게 유지하고 debug만 풍부하게</h2>
+        <div class="grid cols-2">
+          <div class="card accent-green">
+            <h3>Action 계약 유지</h3>
+            <pre>{
+  "action": {
+    "steering": -1.0 ~ 1.0,
+    "targetSpeedKmh": 0.0 이상,
+    "brake": 0.0 ~ 1.0,
+    "direction": "Forward" | "Reverse"
+  }
+}</pre>
+          </div>
+          <div class="card accent-blue">
+            <h3>Debug 확장</h3>
+            <pre>{
+  "debug": {
+    "selectedPolicyId": "dwa_local_avoidance",
+    "pathStatus": "ok",
+    "planner": "hybrid_astar",
+    "replanReason": "dynamic_obstacle_on_corridor",
+    "pathWorldPoints": []
+  }
+}</pre>
+          </div>
+        </div>
+        <ul>
+          <li>Unreal은 action 검증과 물리 이동만 담당하므로, 새 제어 방식도 먼저 <code>targetSpeedKmh</code> 중심으로 맞춥니다.</li>
+          <li>Hybrid A*가 direction profile을 반환해도 초기에는 lookahead target을 통해 steering/speed로 변환합니다.</li>
+          <li>실험 분석에 필요한 정보는 action 필드를 늘리기보다 debug와 report/log에 남깁니다.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">평가와 로깅</div>
+        <h2>정책 개발자가 봐야 할 결과를 report로 연결</h2>
+        <div class="grid cols-4">
+          <div class="card accent-red">
+            <h3>Safety</h3>
+            <ul>
+              <li>collision count</li>
+              <li>near miss count</li>
+              <li>min pedestrian distance</li>
+              <li>min TTC</li>
+            </ul>
+          </div>
+          <div class="card accent-amber">
+            <h3>Courtesy</h3>
+            <ul>
+              <li>forced wait</li>
+              <li>schedule delay</li>
+              <li>path deviation</li>
+              <li>blocked duration</li>
+            </ul>
+          </div>
+          <div class="card accent-blue">
+            <h3>Efficiency</h3>
+            <ul>
+              <li>goal reached</li>
+              <li>duration</li>
+              <li>idle duration</li>
+              <li>extra path distance</li>
+            </ul>
+          </div>
+          <div class="card accent-green">
+            <h3>Planner</h3>
+            <ul>
+              <li>replan count</li>
+              <li>expanded nodes</li>
+              <li>path cost</li>
+              <li>DWA no-safe count</li>
+            </ul>
+          </div>
+        </div>
+        <p class="note">
+          보행자 runtime metric은 이미 core 구현이 진행되어 있으므로, 다음 계획에서는 EvaluationReport JSON과 measurement log로 끌어올리는 작업이 중요합니다.
+        </p>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">테스트 전략</div>
+        <h2>알고리즘, 통신, 에피소드를 분리해서 검증</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>레벨</th>
+              <th>검증 대상</th>
+              <th>예상 테스트</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Python unit</td>
+              <td>A*, DynamicObstacle overlay, DWA scoring, policy selection</td>
+              <td>작은 grid fixture, blocked/penalty/path_not_found/no_safe_trajectory</td>
+            </tr>
+            <tr>
+              <td>Python API</td>
+              <td>HTTP contract와 version 증가</td>
+              <td><code>/policy/spec/update</code>, <code>/episode/start</code>, <code>/policy/action</code> roundtrip</td>
+            </tr>
+            <tr>
+              <td>Unreal automation</td>
+              <td>JSON compile, Grid rebuild, spawn, route validation</td>
+              <td>EpisodeSetup/DeliveryBotSetup pair 실행과 grid cell count 확인</td>
+            </tr>
+            <tr>
+              <td>PIE 시나리오</td>
+              <td>실제 주행, stop/slowdown/DWA/recovery</td>
+              <td>NormalOnly와 DefaultDelivery 비교, obstacle placement sweep</td>
+            </tr>
+            <tr>
+              <td>Report 검증</td>
+              <td>정책 개발자가 읽을 결과물</td>
+              <td>선택 policy, replan reason, safety/courtesy/efficiency metric 포함 여부</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">리뷰 포인트</div>
+        <h2>결정이 필요한 항목</h2>
+        <div class="grid cols-2">
+          <div class="card accent-amber">
+            <h3>제품/UX 결정</h3>
+            <ul>
+              <li>정책 설정 UI를 Unreal WBP로 할지, Web UI로 할지 결정해야 합니다.</li>
+              <li>정책 개발자가 직접 편집할 JSON과 UI에서만 만질 값을 구분해야 합니다.</li>
+              <li>실험 결과를 MainMenu에서 미리보기할지, 별도 분석 페이지로 보낼지 정해야 합니다.</li>
+            </ul>
+          </div>
+          <div class="card accent-blue">
+            <h3>기술 결정</h3>
+            <ul>
+              <li>Hybrid A*의 canonical 구현 위치는 Python으로 두는 것이 현재 목표와 맞습니다.</li>
+              <li><code>policySpec</code>을 계속 별도 전송할지, <code>/episode/start</code>에 포함할지 정해야 합니다.</li>
+              <li>Semantic DataAsset 도입 전까지 ActorTags 기반 policy를 어디까지 허용할지 정해야 합니다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="card accent-red">
+          <h3>리스크</h3>
+          <ul>
+            <li>Grid 생성 순서가 StaticObstacle spawn보다 앞서면 정적 장애물이 grid에 반영되지 않을 수 있습니다.</li>
+            <li>Python 서버가 꺼져 있거나 늦게 응답할 때 Unreal은 정지 상태로 안전하게 실패해야 합니다.</li>
+            <li>문서의 오래된 TODO와 현재 코드 상태가 섞여 있으므로 구현 전에는 코드 기준으로 재확인해야 합니다.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">우선순위 백로그</div>
+        <h2>바로 이어갈 작업 순서</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>작업</th>
+              <th>완료 기준</th>
+              <th>상태</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>T01</td>
+              <td>UE 빌드와 PIE 검증</td>
+              <td>Grid rebuild, DeliveryBot spawn, policy loop, goal reached 로그 확인</td>
+              <td class="status next">다음</td>
+            </tr>
+            <tr>
+              <td>T02</td>
+              <td>기준 scenario regression 세트 구성</td>
+              <td>NormalOnly, DefaultDelivery, CautiousDelivery가 같은 Episode에서 비교 가능</td>
+              <td class="status next">다음</td>
+            </tr>
+            <tr>
+              <td>T03</td>
+              <td>Python planner 모듈 분리</td>
+              <td>기존 A* 결과가 동일하고 import 경계가 planner/policy로 분리됨</td>
+              <td>계획</td>
+            </tr>
+            <tr>
+              <td>T04</td>
+              <td>Hybrid A* Python MVP</td>
+              <td>pose path debug 반환, narrow turn fixture 통과</td>
+              <td>계획</td>
+            </tr>
+            <tr>
+              <td>T05</td>
+              <td>Semantic observation 확장</td>
+              <td>actorTags에서 semanticTypeId/objectCategory/mobilityType으로 확장</td>
+              <td>Episode DataAsset 이후</td>
+            </tr>
+            <tr>
+              <td>T06</td>
+              <td>Report metric 연결</td>
+              <td>policy, planner, pedestrian courtesy metric이 EvaluationReport JSON에 포함</td>
+              <td>계획</td>
+            </tr>
+            <tr>
+              <td>T07</td>
+              <td>정책 설정 UI/Web 결정 및 구현</td>
+              <td>catalog 선택, enabled, priority, parameters 편집 가능</td>
+              <td class="status risk">결정 필요</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">검토 체크리스트</div>
+        <h2>사람이 리뷰할 때 볼 질문</h2>
+        <div class="grid cols-2">
+          <div class="card accent-green">
+            <h3>방향성</h3>
+            <ul>
+              <li>Python이 길찾기와 정책 판단을 모두 책임지는 구조에 동의하는가?</li>
+              <li>Unreal NavMesh는 baseline/debug용으로만 두는 방향이 맞는가?</li>
+              <li>Hybrid A*를 Python으로 옮기는 비용과 장점이 맞는가?</li>
+            </ul>
+          </div>
+          <div class="card accent-amber">
+            <h3>실험성</h3>
+            <ul>
+              <li>PolicySpec만 바꾸면 같은 Episode에서 정책 비교가 가능한가?</li>
+              <li>리포트에 정책 선택 이유와 경로 상태가 충분히 남는가?</li>
+              <li>사람 우선/로봇 우선의 차이가 metric으로 드러나는가?</li>
+            </ul>
+          </div>
+          <div class="card accent-blue">
+            <h3>안전성</h3>
+            <ul>
+              <li>서버 지연/끊김/invalid action에서 로봇이 정지하는가?</li>
+              <li>version mismatch나 stale sequence가 이동에 쓰이지 않는가?</li>
+              <li>동적 장애물 TTL과 inflation이 과도하거나 부족하지 않은가?</li>
+            </ul>
+          </div>
+          <div class="card accent-red">
+            <h3>운영성</h3>
+            <ul>
+              <li>패키징 시 JSON과 Python 서버 실행 경로가 안정적인가?</li>
+              <li>정책 개발자가 어떤 파일을 수정해야 하는지 명확한가?</li>
+              <li>문서와 코드 상태의 차이를 관리할 sourcemap 업데이트 기준이 있는가?</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">출처</div>
+        <h2>이번 계획 작성 시 확인한 주요 파일</h2>
+        <ul class="source-list">
+          <li><code>.agents/sourcemap/INDEX.md</code>, <code>delivery-bot.md</code>, <code>episode.md</code>, <code>shared-types.md</code></li>
+          <li><code>Docs/DeliveryBot_Runtime_Flow.md</code></li>
+          <li><code>Docs/DeliveryBot_Python_API_Current.md</code></li>
+          <li><code>Docs/DeliveryBot_Codex_Handoff.md</code></li>
+          <li><code>Docs/DeliveryBot_Next_Work_For_New_Chat.md</code></li>
+          <li><code>Docs/환경장애물판별흐름.md</code></li>
+          <li><code>Docs/Pedestrian_Social_Evaluation_Design.md</code></li>
+          <li><code>Docs/JSON_Guide/DeliveryBotSetup_JSON_Guide.md</code></li>
+          <li><code>Docs/JSON_Guide/DeliveryBot_Episode_Spawn_JSON_Guide.md</code></li>
+          <li><code>Source/ProtoRobotSim/Public/DeliveryBot/Actor/DeliveryBot.h</code></li>
+          <li><code>Source/ProtoRobotSim/Private/DeliveryBot/Actor/DeliveryBot.cpp</code></li>
+          <li><code>Source/ProtoRobotSim/Public/DeliveryBot/Component/*</code></li>
+          <li><code>Source/ProtoRobotSim/Private/DeliveryBot/Component/*</code></li>
+          <li><code>Source/ProtoRobotSim/Private/DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.cpp</code></li>
+          <li><code>Source/ProtoRobotSim/Private/Episode/EpisodeSimulationSubsystem.cpp</code></li>
+          <li><code>Tools/PythonPolicyServer/server.py</code></li>
+          <li><code>Tools/PythonPolicyServer/deliverybot_policy/*.py</code></li>
+          <li><code>Tools/PythonPolicyServer/deliverybot_policy/policies/*.py</code></li>
+          <li><code>Tools/PythonPolicyServer/policy_catalogs/*.json</code></li>
+          <li><code>Json/Input/*.json</code>, <code>Json/Input/PolicySpecs/*.json</code></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">정리</div>
+        <h2>구현 방향 한 줄 요약</h2>
+        <div class="big-statement">
+          현재 DeliveryBot은 이미 “Unreal 센서/물리 + Python 판단/계획” 구조로 충분히 진입했습니다. 다음 작업은 기능 추가보다 실험 엔진으로 믿고 반복할 수 있게 planner 분리, semantic observation, report metric, 정책 설정 UI를 순서대로 굳히는 일입니다.
+        </div>
+        <div class="grid cols-3">
+          <div class="card accent-green">
+            <h3>단기</h3>
+            <p>UE 빌드/PIE 검증, 기준 JSON pair 고정, 로그/report 연결</p>
+          </div>
+          <div class="card accent-blue">
+            <h3>중기</h3>
+            <p>Python planner 분리, Hybrid A* MVP, policy profile 확장</p>
+          </div>
+          <div class="card accent-amber">
+            <h3>장기</h3>
+            <p>Semantic DataAsset, 정책 UI/Web, 사회적 평가 metric 기반 실험 플랫폼화</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <button class="nav-button" id="prevBtn" type="button" aria-label="이전 슬라이드">&#8592;</button>
+    <div class="counter" id="counter">1 / 1</div>
+    <button class="nav-button" id="nextBtn" type="button" aria-label="다음 슬라이드">&#8594;</button>
+  </footer>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    const counter = document.getElementById("counter");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    let current = 0;
+
+    function showSlide(index) {
+      current = Math.max(0, Math.min(index, slides.length - 1));
+      slides.forEach((slide, slideIndex) => {
+        slide.classList.toggle("active", slideIndex === current);
+      });
+      counter.textContent = `${current + 1} / ${slides.length}`;
+      prevBtn.disabled = current === 0;
+      nextBtn.disabled = current === slides.length - 1;
+      window.location.hash = `slide-${current + 1}`;
+    }
+
+    prevBtn.addEventListener("click", () => showSlide(current - 1));
+    nextBtn.addEventListener("click", () => showSlide(current + 1));
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowLeft" || event.key === "PageUp") {
+        showSlide(current - 1);
+      }
+      if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") {
+        showSlide(current + 1);
+      }
+    });
+
+    const hashMatch = window.location.hash.match(/slide-(\d+)/);
+    if (hashMatch) {
+      showSlide(Number(hashMatch[1]) - 1);
+    } else {
+      showSlide(0);
+    }
+  </script>
+</body>
+</html>

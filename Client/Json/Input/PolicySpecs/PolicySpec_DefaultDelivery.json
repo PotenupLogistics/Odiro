@@ -1,0 +1,75 @@
+{
+  "policySpec": {
+    "catalogId": "default_delivery",
+    "catalogVersion": 2,
+    "enabledPolicies": [
+      {
+        "policyId": "front_obstacle_stop",
+        "priority": 10,
+        "parameters": {
+          "safetyStop": {
+            "hardStopDistanceM": 0.55,
+            "timeToCollisionSeconds": 0.8,
+            "minSpeedKmhForTtc": 0.2
+          }
+        }
+      },
+      {
+        "policyId": "reroute_when_blocked",
+        "priority": 20
+      },
+      {
+        "policyId": "dwa_local_avoidance",
+        "priority": 25,
+        "parameters": {
+          "dwa": {
+            "activationDistanceM": 5.0,
+            "pathLookAheadDistanceM": 2.0,
+            "safetyDistanceM": 0.65,
+            "robotCollisionRadiusM": 0.9,
+            "clearanceMarginM": 0.15,
+            "obstacleInflationM": 0.1,
+            "noSafeStopDistanceM": 0.85,
+            "stopOnNoSafeTrajectory": false,
+            "predictionTimeS": 1.8,
+            "stepTimeS": 0.2,
+            "minSpeedKmh": 0.5,
+            "includeGridObstacles": true,
+            "gridObstacleMaxDistanceM": 3.5,
+            "speedSampleCount": 4,
+            "steeringSampleCount": 13,
+            "forwardCorridorHalfWidthM": 0.9,
+            "minAvoidanceSteering": 0.25,
+            "avoidanceSteeringPenalty": 2.0,
+            "stuckDetectionEnabled": true,
+            "stuckSpeedThresholdKmh": 0.2,
+            "stuckProgressDistanceM": 0.15,
+            "stuckTimeSeconds": 0.8,
+            "stuckCloseObstacleDistanceM": 1.2,
+            "stuckRecoveryReverseDurationS": 0.9,
+            "stuckRecoveryReverseSpeedKmh": 1.0,
+            "stuckRecoveryMinClearanceGainM": 0.1,
+            "clearanceWeight": 1.1,
+            "pathWeight": 0.8,
+            "targetWeight": 1.2
+          }
+        }
+      },
+      {
+        "policyId": "front_obstacle_slowdown",
+        "priority": 30,
+        "dynamicObstacles": {
+          "enabled": true,
+          "frontOnly": false,
+          "inflationRadiusM": 0.55,
+          "maxDistanceM": 5.0,
+          "persistenceSeconds": 1.5
+        }
+      },
+      {
+        "policyId": "normal_path_follow",
+        "priority": 100
+      }
+    ]
+  }
+}

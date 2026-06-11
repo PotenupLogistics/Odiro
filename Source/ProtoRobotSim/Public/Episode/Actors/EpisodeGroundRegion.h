@@ -5,6 +5,7 @@
 #include "EpisodeGroundRegion.generated.h"
 
 class UDecalComponent;
+class UEpisodePlaceableComponent;
 class UMaterialInterface;
 class USceneComponent;
 class UStaticMeshComponent;
@@ -25,6 +26,10 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
 	TObjectPtr<UDecalComponent> RegionDecalComponent;
+
+	// 에디터에서 선택/gizmo(이동·yaw 회전) 대상으로 삼기 위한 식별 component임.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Episode")
+	TObjectPtr<UEpisodePlaceableComponent> PlaceableComponent;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Episode")
 	FEpisodeGroundRegionSpec RegionSpec;

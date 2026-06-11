@@ -4,6 +4,11 @@
 #include "Blueprint/UserWidget.h"
 #include "EpisodeEditorRootWidget.generated.h"
 
+enum class EEpisodeEditorViewMode : uint8;
+
+class UButton;
+class USizeBox;
+class UTextBlock;
 class UEpisodeAssetPaletteWidget;
 class UEpisodeEditorToolbarWidget;
 class UEpisodeLlmPromptWidget;
@@ -35,6 +40,18 @@ public:
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
 	TObjectPtr<UEpisodeEditorToolbarWidget> ToolbarWidget;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	TObjectPtr<UButton> TopDownOrthoModeButton;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	TObjectPtr<UButton> PerspectiveModeButton;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	TObjectPtr<UButton> SnapPlacementToGridButton;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	TObjectPtr<UTextBlock> SnapPlacementToGridButtonText;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
 	TObjectPtr<UWidget> PlaceableContextMenuPanel;
@@ -72,6 +89,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Root")
 	void HandleEditorSessionStarted(bool bLoadedExistingEpisode);
 
+	// 현재 view mode에 맞춰 두 모드 전환 버튼의 노출 상태를 갱신함.
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Root")
+	void RefreshViewModeButtons();
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Root")
+	void RefreshPlacementSnapButton();
+
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Root")
 	UEpisodeAssetPaletteWidget* GetAssetPaletteWidget() const { return AssetPaletteWidget.Get(); }
 
@@ -82,6 +106,19 @@ public:
 	UEpisodePlaceableContextMenuWidget* GetPlaceableContextMenuWidget() const { return PlaceableContextMenuWidget.Get(); }
 
 private:
+	UFUNCTION()
+	void HandleTopDownOrthoModeButtonClicked();
+
+	UFUNCTION()
+	void HandlePerspectiveModeButtonClicked();
+
+	UFUNCTION()
+	void HandleSnapPlacementToGridButtonClicked();
+
+	void BindEditorModeButtons();
+	void UnbindEditorModeButtons();
+	class AEpisodeEditorController* GetEditorController() const;
+
 	void BindEditorLaunchSubsystem();
 	void UnbindEditorLaunchSubsystem();
 	void HandleAutoStartCompleted(bool bLoadedExistingEpisode);
@@ -93,4 +130,10 @@ private:
 	bool IsMouseOverWidget(const UWidget* targetWidget) const;
 
 	FDelegateHandle AutoStartCompletedHandle;
+
+	// keyboard toggle 등 외부 변경과 버튼 표시를 동기화하기 위한 최근 view mode 캐시.
+	EEpisodeEditorViewMode LastSeenViewMode = static_cast<EEpisodeEditorViewMode>(0);
+	bool bHasCachedViewMode = false;
+	bool bLastSeenPlacementSnapToGrid = false;
+	bool bHasCachedPlacementSnapToGrid = false;
 };

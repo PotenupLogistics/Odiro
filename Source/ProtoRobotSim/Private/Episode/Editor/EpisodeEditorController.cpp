@@ -1,5 +1,6 @@
 
 #include "Episode/Editor/EpisodeEditorController.h"
+#include "Episode/Actors/EpisodeGroundRegion.h"
 #include "Episode/Actors/EpisodeStaticObstacle.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/Editor/EpisodeAuthoringSubsystem.h"
@@ -40,7 +41,8 @@ namespace
 		case EEpisodeTransformGizmoMode::Rotate:
 			return placeableComponent->bAuthoringAllowRotationEdit;
 		case EEpisodeTransformGizmoMode::Scale:
-			return placeableComponent->bAuthoringAllowScaleEdit;
+			// scale은 gizmo로 동작하는 핸들이 없으므로 모드 진입 자체를 막음(빈 gizmo 방지).
+			return false;
 		default:
 			return false;
 		}
@@ -124,7 +126,7 @@ AEpisodeEditorController::AEpisodeEditorController()
 	TransformGizmoActorClass = AEpisodeTransformGizmoActor::StaticClass();
 	EditorRootWidgetClass = UEpisodeEditorRootWidget::StaticClass();
 	static ConstructorHelpers::FClassFinder<UEpisodeEditorRootWidget> editorRootWidgetFinder(
-		TEXT("/Game/Widgets/WBP_EpisodeEditorRootWidget"));
+		TEXT("/Game/Widgets/Editor/WBP_EpisodeEditorRootWidget"));
 	if (editorRootWidgetFinder.Succeeded())
 	{
 		EditorRootWidgetClass = editorRootWidgetFinder.Class;
@@ -137,6 +139,8 @@ AEpisodeEditorController::AEpisodeEditorController()
 	EditorTranslateAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorTranslate.IA_EditorTranslate")));
 	EditorRotateAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorRotate.IA_EditorRotate")));
 	EditorScaleAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorScale.IA_EditorScale")));
+	EditorViewModeToggleAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorViewModeToggle.IA_EditorViewModeToggle")));
+	EditorZoomAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorZoom.IA_EditorZoom")));
 }
 
 void AEpisodeEditorController::BeginPlay()
@@ -178,6 +182,9 @@ void AEpisodeEditorController::Tick(float deltaSeconds)
 	case EEpisodeEditorControllerMode::EditPlacement:
 		UpdatePlacementPreview();
 		break;
+	case EEpisodeEditorControllerMode::EditRegionDraw:
+		UpdateRegionDrawPreview();
+		break;
 	default:
 		break;
 	}
@@ -199,12 +206,58 @@ void AEpisodeEditorController::SetObserverMode()
 	CurrentPlacementFailureReason.Reset();
 	bIsLookInputHeld = false;
 	LookCaptureAccumulatedDelta = 0.0;
+	bIsRegionDragging = false;
 	PressedPlaceableComponent.Reset();
 	ResetTransformGizmoDrag();
 	SetHoveredPlaceable(nullptr);
 	SetSelectedPlaceable(nullptr);
 	DestroyPlacementPreview();
+	DestroyRegionDrawPreview();
 	ApplyInputMode();
+}
+
+void AEpisodeEditorController::SetEditorViewMode(EEpisodeEditorViewMode viewMode)
+{
+	if (EditorViewMode == viewMode)
+	{
+		return;
+	}
+
+	AEpisodeEditorPawn* editorPawn = GetEditorPawn();
+	if (!editorPawn) return;
+
+	if (bIsTransformGizmoDragging)
+	{
+		EndTransformGizmoDrag();
+	}
+
+	EditorViewMode = viewMode;
+	if (viewMode == EEpisodeEditorViewMode::TopDownOrtho)
+	{
+		editorPawn->EnterTopDownView();
+	}
+	else
+	{
+		editorPawn->EnterPerspectiveView();
+	}
+}
+
+void AEpisodeEditorController::ToggleEditorViewMode()
+{
+	SetEditorViewMode(
+		EditorViewMode == EEpisodeEditorViewMode::Perspective
+			? EEpisodeEditorViewMode::TopDownOrtho
+			: EEpisodeEditorViewMode::Perspective);
+}
+
+void AEpisodeEditorController::SetPlacementSnapToGridEnabled(const bool bEnabled)
+{
+	bSnapPlacementToGrid = bEnabled;
+}
+
+void AEpisodeEditorController::TogglePlacementSnapToGrid()
+{
+	SetPlacementSnapToGridEnabled(!bSnapPlacementToGrid);
 }
 
 void AEpisodeEditorController::RequestEditorWidgetInputMode(UWidget* focusWidget)
@@ -237,10 +290,12 @@ bool AEpisodeEditorController::BeginPalettePlacement(EEpisodePaletteItemType ite
 {
 	bIsLookInputHeld = false;
 	LookCaptureAccumulatedDelta = 0.0;
+	bIsRegionDragging = false;
 	PressedPlaceableComponent.Reset();
 	ResetTransformGizmoDrag();
 	SetHoveredPlaceable(nullptr);
 	SetSelectedPlaceable(nullptr);
+	DestroyRegionDrawPreview();
 
 	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if (!authoringSubsystem) return false;
@@ -288,7 +343,8 @@ bool AEpisodeEditorController::BeginPalettePlacement(EEpisodePaletteItemType ite
 
 void AEpisodeEditorController::CancelPlacement()
 {
-	if (EditorMode == EEpisodeEditorControllerMode::EditPlacement)
+	if (EditorMode == EEpisodeEditorControllerMode::EditPlacement
+		|| EditorMode == EEpisodeEditorControllerMode::EditRegionDraw)
 	{
 		SetObserverMode();
 	}
@@ -383,6 +439,204 @@ bool AEpisodeEditorController::ConfirmPlacement()
 		*SelectedPlacementAssetId.ToString(),
 		*CurrentPlacementFailureReason);
 	return false;
+}
+
+bool AEpisodeEditorController::BeginGroundRegionDraw(EEpisodeGroundRegionType regionType)
+{
+	bIsLookInputHeld = false;
+	LookCaptureAccumulatedDelta = 0.0;
+	bIsRegionDragging = false;
+	PressedPlaceableComponent.Reset();
+	ResetTransformGizmoDrag();
+	SetHoveredPlaceable(nullptr);
+	SetSelectedPlaceable(nullptr);
+	DestroyPlacementPreview();
+
+	if (!GetAuthoringSubsystem())
+	{
+		return false;
+	}
+
+	PendingGroundRegionType = regionType;
+
+	// 프리뷰 actor를 미리 준비하되 드래그 시작 전까지는 숨김.
+	if (AEpisodeGroundRegion* previewActor = EnsureRegionDrawPreviewActor())
+	{
+		previewActor->SetActorHiddenInGame(true);
+	}
+
+	EditorMode = EEpisodeEditorControllerMode::EditRegionDraw;
+	ApplyInputMode();
+	return true;
+}
+
+void AEpisodeEditorController::BeginRegionDrag()
+{
+	FVector groundPoint = FVector::ZeroVector;
+	if (!TraceMouseToGroundRegionPlane(groundPoint))
+	{
+		return;
+	}
+
+	RegionDragStartWorld = groundPoint;
+	bIsRegionDragging = true;
+	ConfigureRegionDrawPreview(groundPoint, FVector2D::ZeroVector);
+}
+
+void AEpisodeEditorController::UpdateRegionDrawPreview()
+{
+	if (!bIsRegionDragging)
+	{
+		return;
+	}
+
+	FVector groundPoint = FVector::ZeroVector;
+	if (!TraceMouseToGroundRegionPlane(groundPoint))
+	{
+		return;
+	}
+
+	FVector center = FVector::ZeroVector;
+	FVector2D size = FVector2D::ZeroVector;
+	ComputeRegionRectFromCorners(RegionDragStartWorld, groundPoint, center, size);
+	ConfigureRegionDrawPreview(center, size);
+}
+
+void AEpisodeEditorController::FinalizeRegionDrag()
+{
+	bIsRegionDragging = false;
+
+	FVector groundPoint = FVector::ZeroVector;
+	if (!TraceMouseToGroundRegionPlane(groundPoint))
+	{
+		groundPoint = RegionDragStartWorld;
+	}
+
+	FVector center = FVector::ZeroVector;
+	FVector2D size = FVector2D::ZeroVector;
+	ComputeRegionRectFromCorners(RegionDragStartWorld, groundPoint, center, size);
+
+	if (AEpisodeGroundRegion* previewActor = RegionDrawPreviewActor.Get())
+	{
+		previewActor->SetActorHiddenInGame(true);
+	}
+
+	// 너무 작은 사각형은 stray click으로 보고 커밋하지 않음.
+	if (size.X < RegionDrawMinSizeCm || size.Y < RegionDrawMinSizeCm)
+	{
+		return;
+	}
+
+	UEpisodeAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		return;
+	}
+
+	FEpisodeGroundRegionSpec placedSpec;
+	FString failureReason;
+	if (!authoringSubsystem->AddGroundRegion(
+		PendingGroundRegionType,
+		center,
+		size,
+		0.0,
+		placedSpec,
+		failureReason))
+	{
+		UE_LOG(
+			LogEpisodeEditorController,
+			Warning,
+			TEXT("Ground region placement failed | Reason: %s"),
+			*failureReason);
+	}
+
+	// 연속 그리기: EditRegionDraw 모드를 유지함.
+}
+
+bool AEpisodeEditorController::TraceMouseToGroundRegionPlane(FVector& outPoint) const
+{
+	const FVector planeOrigin(0.0, 0.0, GroundRegionDrawPlaneZCm);
+	FVector hitPoint = FVector::ZeroVector;
+	if (!TraceMouseToPlane(planeOrigin, FVector::UpVector, hitPoint))
+	{
+		return false;
+	}
+
+	outPoint = SnapLocationIfNeeded(hitPoint);
+	outPoint.Z = GroundRegionDrawPlaneZCm;
+	return true;
+}
+
+void AEpisodeEditorController::ComputeRegionRectFromCorners(
+	const FVector& cornerA,
+	const FVector& cornerB,
+	FVector& outCenter,
+	FVector2D& outSize) const
+{
+	outCenter = FVector(
+		(cornerA.X + cornerB.X) * 0.5,
+		(cornerA.Y + cornerB.Y) * 0.5,
+		GroundRegionDrawPlaneZCm);
+	outSize = FVector2D(
+		FMath::Abs(cornerA.X - cornerB.X),
+		FMath::Abs(cornerA.Y - cornerB.Y));
+}
+
+void AEpisodeEditorController::ConfigureRegionDrawPreview(const FVector& center, const FVector2D& size)
+{
+	AEpisodeGroundRegion* previewActor = EnsureRegionDrawPreviewActor();
+	if (!previewActor)
+	{
+		return;
+	}
+
+	FEpisodeGroundRegionSpec spec;
+	spec.RegionId = TEXT("__region_draw_preview");
+	spec.RegionType = PendingGroundRegionType;
+	spec.ShapeType = EEpisodeGroundShapeType::Rectangle;
+	spec.Center = center;
+	spec.Size = FVector2D(FMath::Max(size.X, 1.0), FMath::Max(size.Y, 1.0));
+	spec.YawDegrees = 0.0;
+
+	previewActor->ConfigureRegion(spec);
+	previewActor->SetActorEnableCollision(false);
+	previewActor->SetActorHiddenInGame(false);
+}
+
+AEpisodeGroundRegion* AEpisodeEditorController::EnsureRegionDrawPreviewActor()
+{
+	if (IsValid(RegionDrawPreviewActor))
+	{
+		return RegionDrawPreviewActor;
+	}
+
+	UWorld* world = GetWorld();
+	if (!world)
+	{
+		return nullptr;
+	}
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	RegionDrawPreviewActor = world->SpawnActor<AEpisodeGroundRegion>(
+		AEpisodeGroundRegion::StaticClass(),
+		FTransform::Identity,
+		spawnParams);
+	if (RegionDrawPreviewActor)
+	{
+		RegionDrawPreviewActor->SetActorEnableCollision(false);
+	}
+	return RegionDrawPreviewActor;
+}
+
+void AEpisodeEditorController::DestroyRegionDrawPreview()
+{
+	if (IsValid(RegionDrawPreviewActor))
+	{
+		RegionDrawPreviewActor->Destroy();
+	}
+
+	RegionDrawPreviewActor = nullptr;
 }
 
 void AEpisodeEditorController::GetStaticObstaclePaletteEntries(TArray<FEpisodeStaticObstaclePropEntry>& outEntries) const
@@ -601,6 +855,13 @@ bool AEpisodeEditorController::TryUpdateSelectedPlaceableTransform(
 			requestedTransform,
 			outFailureReason);
 	}
+	else if (selectedPlaceable->Category == EEpisodeActorCategory::GroundRegion)
+	{
+		bUpdated = authoringSubsystem->UpdateGroundRegionTransform(
+			selectedPlaceable->InstanceId,
+			requestedTransform,
+			outFailureReason);
+	}
 	else if (selectedPlaceable->AuthoringRole == EEpisodePlaceableAuthoringRole::RobotStartMarker)
 	{
 		bUpdated = authoringSubsystem->UpdateRobotStartPointTransform(requestedTransform, outFailureReason);
@@ -689,8 +950,12 @@ bool AEpisodeEditorController::DeleteSelectedPlaceable(FString& outFailureReason
 	}
 
 	const FString instanceId = selectedPlaceable->InstanceId;
+	const bool bIsGroundRegion = selectedPlaceable->Category == EEpisodeActorCategory::GroundRegion;
 	selectedPlaceable->SetAuthoringSelected(false);
-	if (!authoringSubsystem->RemoveStaticObstacle(instanceId, outFailureReason))
+	const bool bRemoved = bIsGroundRegion
+		? authoringSubsystem->RemoveGroundRegion(instanceId, outFailureReason)
+		: authoringSubsystem->RemoveStaticObstacle(instanceId, outFailureReason);
+	if (!bRemoved)
 	{
 		selectedPlaceable->SetAuthoringSelected(true);
 		return false;
@@ -724,6 +989,15 @@ void AEpisodeEditorController::HandleSelectionStartedInput()
 		return;
 	}
 
+	if (EditorMode == EEpisodeEditorControllerMode::EditRegionDraw)
+	{
+		if (!IsCursorOverEditorWidgetInputModeFocus())
+		{
+			BeginRegionDrag();
+		}
+		return;
+	}
+
 	if (EditorMode == EEpisodeEditorControllerMode::Observer)
 	{
 		if (IsCursorOverEditorWidgetInputModeFocus())
@@ -747,6 +1021,15 @@ void AEpisodeEditorController::HandleSelectionStartedInput()
 
 void AEpisodeEditorController::HandleSelectionCompletedInput()
 {
+	if (EditorMode == EEpisodeEditorControllerMode::EditRegionDraw)
+	{
+		if (bIsRegionDragging)
+		{
+			FinalizeRegionDrag();
+		}
+		return;
+	}
+
 	if (bIsTransformGizmoDragging)
 	{
 		EndTransformGizmoDrag();
@@ -779,6 +1062,12 @@ void AEpisodeEditorController::HandleCancelPlacementInput()
 		}
 
 		SetSelectedPlaceable(nullptr);
+		return;
+	}
+
+	if (EditorMode == EEpisodeEditorControllerMode::EditRegionDraw)
+	{
+		SetObserverMode();
 		return;
 	}
 
@@ -845,6 +1134,13 @@ void AEpisodeEditorController::HandleEditorMoveAction(const FInputActionValue& i
 		break;
 	}
 
+	if (EditorViewMode == EEpisodeEditorViewMode::TopDownOrtho)
+	{
+		// top-down에서는 zoom을 마우스 휠(EditorZoomAction)으로만 처리하고 Z축 입력은 무시함.
+		editorPawn->ApplyTopDownPanInput(forwardValue, rightValue);
+		return;
+	}
+
 	editorPawn->ApplyMoveInput(forwardValue, rightValue, upValue);
 }
 
@@ -881,9 +1177,36 @@ void AEpisodeEditorController::HandleEditorLookAction(const FInputActionValue& i
 	}
 
 	LookCaptureAccumulatedDelta += FVector2D(yawValue, pitchValue).Size();
+
+	// top-down에서는 회전 대신 drag pan으로 라우팅함.
+	// 클릭 선택이 look capture의 누적 delta에 의존하므로 capture 자체는 유지함.
+	if (EditorViewMode == EEpisodeEditorViewMode::TopDownOrtho)
+	{
+		editorPawn->ApplyTopDownDragPanInput(yawValue, pitchValue);
+		return;
+	}
+
 	editorPawn->ApplyLookInput(
 		yawValue * MouseLookSensitivity,
 		pitchValue * MouseLookSensitivity);
+}
+
+void AEpisodeEditorController::HandleViewModeToggleInput()
+{
+	ToggleEditorViewMode();
+}
+
+void AEpisodeEditorController::HandleEditorZoomAction(const FInputActionValue& inputActionValue)
+{
+	if (EditorViewMode != EEpisodeEditorViewMode::TopDownOrtho)
+	{
+		return;
+	}
+
+	AEpisodeEditorPawn* editorPawn = GetEditorPawn();
+	if (!editorPawn) return;
+
+	editorPawn->ApplyTopDownZoomInput(inputActionValue.Get<float>());
 }
 
 void AEpisodeEditorController::BeginLookInputCapture()
@@ -1383,6 +1706,13 @@ bool AEpisodeEditorController::ApplyTransformGizmoDragTransform(const FTransform
 			requestedTransform,
 			failureReason);
 	}
+	else if (draggedPlaceable->Category == EEpisodeActorCategory::GroundRegion)
+	{
+		bUpdated = authoringSubsystem->UpdateGroundRegionTransform(
+			ActiveTransformGizmoInstanceId,
+			requestedTransform,
+			failureReason);
+	}
 	else if (draggedPlaceable->AuthoringRole == EEpisodePlaceableAuthoringRole::RobotStartMarker)
 	{
 		bUpdated = authoringSubsystem->UpdateRobotStartPointTransform(requestedTransform, failureReason);
@@ -1508,6 +1838,7 @@ bool AEpisodeEditorController::IsEditorSelectablePlaceable(const UEpisodePlaceab
 	return placeableComponent
 		&& placeableComponent->bAuthoringSelectable
 		&& (placeableComponent->Category == EEpisodeActorCategory::StaticObstacle
+			|| placeableComponent->Category == EEpisodeActorCategory::GroundRegion
 			|| IsRobotRouteMarkerPlaceable(placeableComponent));
 }
 
@@ -1703,6 +2034,24 @@ void AEpisodeEditorController::BindEditorInputActions()
 			ETriggerEvent::Started,
 			this,
 			&AEpisodeEditorController::HandleScaleModeInput);
+	}
+
+	if (UInputAction* viewModeToggleAction = EditorViewModeToggleAction.LoadSynchronous())
+	{
+		enhancedInputComponent->BindAction(
+			viewModeToggleAction,
+			ETriggerEvent::Started,
+			this,
+			&AEpisodeEditorController::HandleViewModeToggleInput);
+	}
+
+	if (UInputAction* zoomAction = EditorZoomAction.LoadSynchronous())
+	{
+		enhancedInputComponent->BindAction(
+			zoomAction,
+			ETriggerEvent::Triggered,
+			this,
+			&AEpisodeEditorController::HandleEditorZoomAction);
 	}
 }
 
@@ -1959,7 +2308,8 @@ void AEpisodeEditorController::ApplyInputMode()
 		FInputModeGameOnly inputMode;
 		SetInputMode(inputMode);
 	}
-	else if (EditorMode == EEpisodeEditorControllerMode::EditPlacement)
+	else if (EditorMode == EEpisodeEditorControllerMode::EditPlacement
+		|| EditorMode == EEpisodeEditorControllerMode::EditRegionDraw)
 	{
 		bShowMouseCursor = true;
 		bEnableClickEvents = true;

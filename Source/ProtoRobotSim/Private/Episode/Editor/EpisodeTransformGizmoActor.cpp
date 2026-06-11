@@ -624,11 +624,11 @@ void AEpisodeTransformGizmoActor::ApplyHandleState(
 {
 	if (!component) return;
 
-	const bool bVisibleInMode = IsHandleVisibleInMode(handle);
-	component->SetVisibility(bVisibleInMode, true);
-	component->SetHiddenInGame(!bVisibleInMode);
+	// 실제로 동작하는(enabled) 핸들만 노출함. Z 이동, X/Y 회전, 모든 scale 핸들은
+	// 인터랙션이 비활성이므로 시각적으로도 숨겨 2.5D 에디터에 맞춤.
+	const bool bEnabled = IsHandleEnabled(handle);
+	component->SetVisibility(bEnabled, true);
+	component->SetHiddenInGame(!bEnabled);
 	component->SetCollisionEnabled(
-		bVisibleInMode && IsHandleEnabled(handle)
-			? ECollisionEnabled::QueryOnly
-			: ECollisionEnabled::NoCollision);
+		bEnabled ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
 }

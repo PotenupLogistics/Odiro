@@ -26,7 +26,8 @@ enum class EEpisodeActorCategory : uint8
 	StaticObstacle,
 	Pedestrian,
 	RoadVehicle,
-	PersonalMobility
+	PersonalMobility,
+	GroundRegion
 };
 
 UENUM(BlueprintType)

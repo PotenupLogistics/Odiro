@@ -9,6 +9,7 @@ class UHorizontalBox;
 class UScrollBox;
 class USizeBox;
 class UWidget;
+class AEpisodeEditorController;
 class UEpisodeAssetPaletteCatalog;
 class UEpisodePlaceablePaletteItemWidget;
 
@@ -38,6 +39,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
 	bool bIncludeRobotRoutePlacement = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Palette")
+	bool bIncludeGroundRegionDraw = true;
+
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
 	TObjectPtr<USizeBox> PaletteSizeBox;
 
@@ -46,6 +50,12 @@ public:
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
 	TObjectPtr<UHorizontalBox> PlaceableItemContainer;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
+	TObjectPtr<UHorizontalBox> StaticObstacleItemContainer;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Palette")
+	TObjectPtr<UHorizontalBox> GroundRegionItemContainer;
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Palette")
 	bool RebuildPalette();
@@ -62,6 +72,15 @@ protected:
 
 private:
 	const UEpisodeAssetPaletteCatalog* GetPaletteCatalog() const;
+	UHorizontalBox* ResolveStaticObstacleItemContainer() const;
+	UHorizontalBox* ResolveGroundRegionItemContainer() const;
+	UEpisodePlaceablePaletteItemWidget* CreatePaletteItemWidget(AEpisodeEditorController* editorController) const;
+	void BindPaletteItemWidget(UEpisodePlaceablePaletteItemWidget* itemWidget);
+	bool AddPaletteItemWidget(
+		AEpisodeEditorController* editorController,
+		UHorizontalBox* targetContainer,
+		const FEpisodePaletteItemEntry& paletteItemEntry);
+	int32 AddDefaultGroundRegionPaletteEntries(AEpisodeEditorController* editorController);
 	static bool ShouldIncludeSpecialEntry(
 		const FEpisodePaletteItemEntry& entry,
 		bool bIncludePedestrian,

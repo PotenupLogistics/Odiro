@@ -4,6 +4,7 @@
 #include "Dom/JsonValue.h"
 #include "Components/SphereComponent.h"
 #include "Engine/World.h"
+#include "Episode/Actors/EpisodeGroundRegion.h"
 #include "Episode/Actors/EpisodePedestrian.h"
 #include "Episode/Actors/EpisodeStaticObstacle.h"
 #include "Episode/Components/EpisodePathFollowerComponent.h"
@@ -791,6 +792,240 @@ bool UEpisodeAuthoringSubsystem::RemoveStaticObstacle(
 	bDirty = true;
 
 	UE_LOG(LogEpisodeAuthoring, Log, TEXT("Removed static obstacle | InstanceId: %s"), *instanceId);
+	return true;
+}
+
+bool UEpisodeAuthoringSubsystem::AddGroundRegion(
+	EEpisodeGroundRegionType regionType,
+	const FVector& centerCm,
+	const FVector2D& sizeCm,
+	double yawDegrees,
+	FEpisodeGroundRegionSpec& outSpec,
+	FString& outFailureReason)
+{
+	outSpec = FEpisodeGroundRegionSpec();
+	outFailureReason.Reset();
+
+	if (sizeCm.X <= KINDA_SMALL_NUMBER || sizeCm.Y <= KINDA_SMALL_NUMBER)
+	{
+		outFailureReason = TEXT("Ground region size must be positive.");
+		return false;
+	}
+
+	if (DraftWorldSpec.RunConfig.TemplateId.IsEmpty()
+		&& DraftWorldSpec.Placeables.IsEmpty()
+		&& DraftWorldSpec.DynamicActors.IsEmpty()
+		&& DraftWorldSpec.GroundRegions.IsEmpty()
+		&& DraftWorldSpec.Paths.IsEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	const FString regionId = GenerateGroundRegionId();
+	outSpec = MakeGroundRegionSpec(regionId, regionType, centerCm, sizeCm, yawDegrees);
+
+	AEpisodeGroundRegion* spawnedActor = nullptr;
+	if (!SpawnEditorGroundRegionActor(outSpec, spawnedActor, outFailureReason))
+	{
+		outSpec = FEpisodeGroundRegionSpec();
+		return false;
+	}
+
+	DraftWorldSpec.GroundRegions.Add(outSpec);
+	DraftWorldSpec.SpecHash.Reset();
+	bDirty = true;
+
+	UE_LOG(
+		LogEpisodeAuthoring,
+		Log,
+		TEXT("Added ground region | RegionId: %s | Type: %s | Center: %s | Size: %s"),
+		*outSpec.RegionId,
+		*GroundRegionTypeToString(outSpec.RegionType),
+		*centerCm.ToCompactString(),
+		*sizeCm.ToString());
+
+	return true;
+}
+
+bool UEpisodeAuthoringSubsystem::UpdateGroundRegionTransform(
+	const FString& regionId,
+	const FTransform& transform,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+
+	if (regionId.IsEmpty())
+	{
+		outFailureReason = TEXT("Ground region id is empty.");
+		return false;
+	}
+
+	FEpisodeGroundRegionSpec* regionSpec = DraftWorldSpec.GroundRegions.FindByPredicate(
+		[&regionId](const FEpisodeGroundRegionSpec& spec)
+		{
+			return spec.RegionId == regionId;
+		});
+	if (!regionSpec)
+	{
+		outFailureReason = FString::Printf(TEXT("Ground region spec '%s' was not found."), *regionId);
+		return false;
+	}
+
+	// 이동(Center)과 yaw 회전만 반영하고 Size는 보존함.
+	regionSpec->Center = transform.GetLocation();
+	regionSpec->YawDegrees = transform.GetRotation().Rotator().Yaw;
+
+	if (const TObjectPtr<AEpisodeGroundRegion>* actorPtr = GroundRegionActors.Find(regionId))
+	{
+		if (AEpisodeGroundRegion* actor = actorPtr->Get())
+		{
+			actor->ConfigureRegion(*regionSpec);
+		}
+	}
+
+	DraftWorldSpec.SpecHash.Reset();
+	bDirty = true;
+	return true;
+}
+
+bool UEpisodeAuthoringSubsystem::RemoveGroundRegion(
+	const FString& regionId,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+
+	if (regionId.IsEmpty())
+	{
+		outFailureReason = TEXT("Ground region id is empty.");
+		return false;
+	}
+
+	const int32 removedSpecCount = DraftWorldSpec.GroundRegions.RemoveAll(
+		[&regionId](const FEpisodeGroundRegionSpec& spec)
+		{
+			return spec.RegionId == regionId;
+		});
+	if (removedSpecCount <= 0)
+	{
+		outFailureReason = FString::Printf(TEXT("Ground region spec '%s' was not found."), *regionId);
+		return false;
+	}
+
+	TObjectPtr<AEpisodeGroundRegion> actorPtr;
+	GroundRegionActors.RemoveAndCopyValue(regionId, actorPtr);
+	if (AEpisodeGroundRegion* actor = actorPtr.Get())
+	{
+		actor->Destroy();
+	}
+
+	DraftWorldSpec.SpecHash.Reset();
+	bDirty = true;
+
+	UE_LOG(LogEpisodeAuthoring, Log, TEXT("Removed ground region | RegionId: %s"), *regionId);
+	return true;
+}
+
+FEpisodeGroundRegionSpec UEpisodeAuthoringSubsystem::MakeGroundRegionSpec(
+	const FString& regionId,
+	EEpisodeGroundRegionType regionType,
+	const FVector& centerCm,
+	const FVector2D& sizeCm,
+	double yawDegrees) const
+{
+	FEpisodeGroundRegionSpec spec;
+	spec.RegionId = regionId;
+	spec.RegionType = regionType;
+	spec.ShapeType = EEpisodeGroundShapeType::Rectangle;
+	spec.Center = centerCm;
+	spec.Size = sizeCm;
+	spec.YawDegrees = yawDegrees;
+
+	switch (regionType)
+	{
+	case EEpisodeGroundRegionType::Walkable:
+		spec.TraversabilityScore = 1.0;
+		break;
+	case EEpisodeGroundRegionType::Penalty:
+		spec.TraversabilityScore = 0.5;
+		break;
+	case EEpisodeGroundRegionType::Blocked:
+		spec.TraversabilityScore = 0.0;
+		break;
+	default:
+		break;
+	}
+
+	return spec;
+}
+
+FString UEpisodeAuthoringSubsystem::GenerateGroundRegionId()
+{
+	FString regionId;
+	do
+	{
+		regionId = FString::Printf(TEXT("region_%03d"), NextGroundRegionIndex++);
+	}
+	while (ContainsGroundRegionId(regionId));
+
+	return regionId;
+}
+
+bool UEpisodeAuthoringSubsystem::ContainsGroundRegionId(const FString& regionId) const
+{
+	for (const FEpisodeGroundRegionSpec& spec : DraftWorldSpec.GroundRegions)
+	{
+		if (spec.RegionId == regionId)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool UEpisodeAuthoringSubsystem::SpawnEditorGroundRegionActor(
+	const FEpisodeGroundRegionSpec& spec,
+	AEpisodeGroundRegion*& outActor,
+	FString& outFailureReason)
+{
+	outActor = nullptr;
+	outFailureReason.Reset();
+
+	UWorld* world = GetWorld();
+	if (!world)
+	{
+		outFailureReason = TEXT("World is unavailable.");
+		return false;
+	}
+
+	if (spec.RegionId.IsEmpty())
+	{
+		outFailureReason = TEXT("RegionId is empty.");
+		return false;
+	}
+
+	TSubclassOf<AEpisodeGroundRegion> spawnClass = GroundRegionClass;
+	if (!spawnClass)
+	{
+		spawnClass = AEpisodeGroundRegion::StaticClass();
+	}
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AEpisodeGroundRegion* regionActor = world->SpawnActor<AEpisodeGroundRegion>(
+		spawnClass,
+		FTransform::Identity,
+		spawnParams);
+	if (!regionActor)
+	{
+		outFailureReason = TEXT("SpawnActor failed.");
+		return false;
+	}
+
+	regionActor->ConfigureRegion(spec);
+	GroundRegionActors.Add(spec.RegionId, regionActor);
+	outActor = regionActor;
 	return true;
 }
 
@@ -1741,14 +1976,24 @@ void UEpisodeAuthoringSubsystem::ClearEditorView()
 		}
 	}
 
+	for (const TPair<FString, TObjectPtr<AEpisodeGroundRegion>>& pair : GroundRegionActors)
+	{
+		if (IsValid(pair.Value))
+		{
+			pair.Value->Destroy();
+		}
+	}
+
 	RouteMarkerActors.Reset();
 	RobotStartMarkerActor = nullptr;
 	RobotGoalMarkerActor = nullptr;
 	StaticObstacleRecords.Reset();
 	StaticObstacleActors.Reset();
 	PedestrianActors.Reset();
+	GroundRegionActors.Reset();
 	NextStaticObstacleIndex = 1;
 	NextPedestrianIndex = 1;
+	NextGroundRegionIndex = 1;
 }
 
 bool UEpisodeAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& outDiagnostics)
@@ -1822,6 +2067,20 @@ bool UEpisodeAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& out
 		}
 
 		AddPedestrianViewRecord(spec, spawnedActor);
+	}
+
+	for (const FEpisodeGroundRegionSpec& regionSpec : DraftWorldSpec.GroundRegions)
+	{
+		AEpisodeGroundRegion* spawnedRegion = nullptr;
+		FString failureReason;
+		if (!SpawnEditorGroundRegionActor(regionSpec, spawnedRegion, failureReason))
+		{
+			outDiagnostics.Add(FString::Printf(
+				TEXT("Failed to create editor view for ground region '%s': %s"),
+				*regionSpec.RegionId,
+				*failureReason));
+			bSucceeded = false;
+		}
 	}
 
 	return bSucceeded;

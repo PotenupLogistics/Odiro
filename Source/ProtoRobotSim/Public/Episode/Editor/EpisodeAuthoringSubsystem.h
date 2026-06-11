@@ -13,6 +13,7 @@
 
 class AEpisodeStaticObstacle;
 class AEpisodePedestrian;
+class AEpisodeGroundRegion;
 class AActor;
 class FJsonObject;
 class FJsonValue;
@@ -57,6 +58,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
 	TSubclassOf<AActor> GoalPointClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Classes")
+	TSubclassOf<AEpisodeGroundRegion> GroundRegionClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor|Catalog")
 	TSoftObjectPtr<UEpisodeStaticObstaclePropCatalog> StaticObstaclePropCatalog;
@@ -157,6 +161,27 @@ public:
 		const FString& instanceId,
 		FString& outFailureReason);
 
+	// 사각형 지면 영역 하나를 draft에 추가하고 에디터 뷰 actor를 스폰함.
+	bool AddGroundRegion(
+		EEpisodeGroundRegionType regionType,
+		const FVector& centerCm,
+		const FVector2D& sizeCm,
+		double yawDegrees,
+		FEpisodeGroundRegionSpec& outSpec,
+		FString& outFailureReason);
+
+	// gizmo 편집 결과(이동·yaw 회전)를 region spec의 Center/YawDegrees에 반영함. Size는 불변.
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	bool UpdateGroundRegionTransform(
+		const FString& regionId,
+		const FTransform& transform,
+		FString& outFailureReason);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	bool RemoveGroundRegion(
+		const FString& regionId,
+		FString& outFailureReason);
+
 	bool AddStaticObstacleInternal(
 		FName propId,
 		const FTransform& transform,
@@ -229,7 +254,9 @@ private:
 		const FEpisodeAuthoringStaticObstacleRecord& record) const;
 	FString GenerateStaticObstacleInstanceId();
 	FString GeneratePedestrianInstanceId();
+	FString GenerateGroundRegionId();
 	bool ContainsInstanceId(const FString& instanceId) const;
+	bool ContainsGroundRegionId(const FString& regionId) const;
 	void InitializeDraftDefaults();
 	bool EnsureSingleRobotRouteSpec(TArray<FString>& outDiagnostics, bool& bOutDraftChanged);
 	bool ValidateSingleRobotRouteSpecForExport(TArray<FString>& outDiagnostics) const;
@@ -245,6 +272,16 @@ private:
 		const FEpisodeDynamicActorSpec& spec,
 		AActor*& outActor,
 		FString& outFailureReason);
+	bool SpawnEditorGroundRegionActor(
+		const FEpisodeGroundRegionSpec& spec,
+		AEpisodeGroundRegion*& outActor,
+		FString& outFailureReason);
+	FEpisodeGroundRegionSpec MakeGroundRegionSpec(
+		const FString& regionId,
+		EEpisodeGroundRegionType regionType,
+		const FVector& centerCm,
+		const FVector2D& sizeCm,
+		double yawDegrees) const;
 	bool SpawnRobotRouteMarkers(const FEpisodePlaceableInstanceSpec& spec, TArray<FString>& outDiagnostics);
 	AActor* SpawnEditorMarkerActor(TSubclassOf<AActor> markerClass, const FTransform& transform);
 	AActor* SpawnOrReplaceRouteMarker(
@@ -299,6 +336,9 @@ private:
 	TMap<FString, TObjectPtr<AActor>> PedestrianActors;
 
 	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<AEpisodeGroundRegion>> GroundRegionActors;
+
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> RouteMarkerActors;
 
 	UPROPERTY(Transient)
@@ -312,4 +352,7 @@ private:
 
 	UPROPERTY(Transient)
 	int32 NextPedestrianIndex = 1;
+
+	UPROPERTY(Transient)
+	int32 NextGroundRegionIndex = 1;
 };

@@ -16,23 +16,23 @@ namespace
 	const TCHAR* SimulationRunStatusSchema = TEXT("simulation_run_status");
 
 	void AddSimulationDiagnostic(
-		TArray<FEpisodeCompileDiagnostic>& diagnostics,
-		EEpisodeCompileDiagnosticSeverity severity,
+		TArray<FScenarioCompileDiagnostic>& diagnostics,
+		EScenarioCompileDiagnosticSeverity severity,
 		const FString& code,
 		const FString& message)
 	{
-		FEpisodeCompileDiagnostic diagnostic;
+		FScenarioCompileDiagnostic diagnostic;
 		diagnostic.Severity = severity;
 		diagnostic.Code = code;
 		diagnostic.Message = message;
 		diagnostics.Add(diagnostic);
 	}
 
-	bool HasSimulationErrors(const TArray<FEpisodeCompileDiagnostic>& diagnostics)
+	bool HasSimulationErrors(const TArray<FScenarioCompileDiagnostic>& diagnostics)
 	{
-		for (const FEpisodeCompileDiagnostic& diagnostic : diagnostics)
+		for (const FScenarioCompileDiagnostic& diagnostic : diagnostics)
 		{
-			if (diagnostic.Severity == EEpisodeCompileDiagnosticSeverity::Error)
+			if (diagnostic.Severity == EScenarioCompileDiagnosticSeverity::Error)
 			{
 				return true;
 			}
@@ -45,7 +45,7 @@ namespace
 		const FJsonObject& jsonObject,
 		const FString& fieldName,
 		const FString& path,
-		TArray<FEpisodeCompileDiagnostic>& diagnostics,
+		TArray<FScenarioCompileDiagnostic>& diagnostics,
 		TSharedPtr<FJsonObject>& outObject)
 	{
 		const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
@@ -53,7 +53,7 @@ namespace
 		{
 			AddSimulationDiagnostic(
 				diagnostics,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("missing_%s"), *fieldName),
 				FString::Printf(TEXT("%s.%s field is required."), *path, *fieldName));
 			return false;
@@ -63,7 +63,7 @@ namespace
 		{
 			AddSimulationDiagnostic(
 				diagnostics,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
 				FString::Printf(TEXT("%s.%s must be an object."), *path, *fieldName));
 			return false;
@@ -77,7 +77,7 @@ namespace
 		const FJsonObject& jsonObject,
 		const FString& fieldName,
 		const FString& path,
-		TArray<FEpisodeCompileDiagnostic>& diagnostics,
+		TArray<FScenarioCompileDiagnostic>& diagnostics,
 		FString& outValue)
 	{
 		const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
@@ -85,7 +85,7 @@ namespace
 		{
 			AddSimulationDiagnostic(
 				diagnostics,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("missing_%s"), *fieldName),
 				FString::Printf(TEXT("%s.%s field is required."), *path, *fieldName));
 			return false;
@@ -95,7 +95,7 @@ namespace
 		{
 			AddSimulationDiagnostic(
 				diagnostics,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
 				FString::Printf(TEXT("%s.%s must be a string."), *path, *fieldName));
 			return false;
@@ -106,7 +106,7 @@ namespace
 		{
 			AddSimulationDiagnostic(
 				diagnostics,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("empty_%s"), *fieldName),
 				FString::Printf(TEXT("%s.%s must not be empty."), *path, *fieldName));
 			return false;
@@ -119,7 +119,7 @@ namespace
 		const FJsonObject& jsonObject,
 		const FString& fieldName,
 		const FString& path,
-		TArray<FEpisodeCompileDiagnostic>& diagnostics,
+		TArray<FScenarioCompileDiagnostic>& diagnostics,
 		FString& targetValue)
 	{
 		const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
@@ -132,7 +132,7 @@ namespace
 		{
 			AddSimulationDiagnostic(
 				diagnostics,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
 				FString::Printf(TEXT("%s.%s must be a string."), *path, *fieldName));
 			return false;
@@ -143,7 +143,7 @@ namespace
 		{
 			AddSimulationDiagnostic(
 				diagnostics,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("empty_%s"), *fieldName),
 				FString::Printf(TEXT("%s.%s must not be empty."), *path, *fieldName));
 			return false;
@@ -156,7 +156,7 @@ namespace
 		const FJsonObject& jsonObject,
 		const FString& fieldName,
 		const FString& path,
-		TArray<FEpisodeCompileDiagnostic>& diagnostics,
+		TArray<FScenarioCompileDiagnostic>& diagnostics,
 		bool& targetValue)
 	{
 		const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
@@ -169,7 +169,7 @@ namespace
 		{
 			AddSimulationDiagnostic(
 				diagnostics,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
 				FString::Printf(TEXT("%s.%s must be a boolean."), *path, *fieldName));
 			return false;
@@ -183,7 +183,7 @@ namespace
 		const FJsonObject& jsonObject,
 		const FString& fieldName,
 		const FString& path,
-		TArray<FEpisodeCompileDiagnostic>& diagnostics,
+		TArray<FScenarioCompileDiagnostic>& diagnostics,
 		int32& targetValue,
 		int32 minValue)
 	{
@@ -197,7 +197,7 @@ namespace
 		{
 			AddSimulationDiagnostic(
 				diagnostics,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
 				FString::Printf(TEXT("%s.%s must be a number."), *path, *fieldName));
 			return false;
@@ -208,7 +208,7 @@ namespace
 		{
 			AddSimulationDiagnostic(
 				diagnostics,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
 				FString::Printf(TEXT("%s.%s must be >= %d."), *path, *fieldName, minValue));
 			return false;
@@ -222,7 +222,7 @@ namespace
 		const FJsonObject& jsonObject,
 		const FString& fieldName,
 		const FString& path,
-		TArray<FEpisodeCompileDiagnostic>& diagnostics,
+		TArray<FScenarioCompileDiagnostic>& diagnostics,
 		int32& outValue)
 	{
 		const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
@@ -230,7 +230,7 @@ namespace
 		{
 			AddSimulationDiagnostic(
 				diagnostics,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("missing_%s"), *fieldName),
 				FString::Printf(TEXT("%s.%s field is required."), *path, *fieldName));
 			return false;
@@ -240,7 +240,7 @@ namespace
 		{
 			AddSimulationDiagnostic(
 				diagnostics,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
 				FString::Printf(TEXT("%s.%s must be a number."), *path, *fieldName));
 			return false;
@@ -251,7 +251,7 @@ namespace
 		{
 			AddSimulationDiagnostic(
 				diagnostics,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
 				FString::Printf(TEXT("%s.%s must be > 0."), *path, *fieldName));
 			return false;
@@ -270,7 +270,7 @@ namespace
 		{
 			AddSimulationDiagnostic(
 				result.Diagnostics,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				TEXT("invalid_schema"),
 				FString::Printf(TEXT("$.schema must be '%s'."), SimulationSetupSchema));
 		}
@@ -711,7 +711,7 @@ FSimulationSetupParseResult FSimulationSetupJson::ParseFromFile(const FString& j
 	{
 		AddSimulationDiagnostic(
 			result.Diagnostics,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("empty_simulation_setup_path"),
 			TEXT("Simulation setup file path must not be empty."));
 		return result;
@@ -723,7 +723,7 @@ FSimulationSetupParseResult FSimulationSetupJson::ParseFromFile(const FString& j
 	{
 		AddSimulationDiagnostic(
 			result.Diagnostics,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("simulation_setup_file_missing"),
 			FString::Printf(TEXT("Simulation setup JSON read failed: %s"), *resolvedPath));
 		return result;
@@ -742,7 +742,7 @@ FSimulationSetupParseResult FSimulationSetupJson::ParseFromString(const FString&
 	{
 		AddSimulationDiagnostic(
 			result.Diagnostics,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("invalid_simulation_setup_json"),
 			TEXT("Simulation setup JSON parse failed."));
 		return result;
@@ -858,7 +858,7 @@ FSimulationCommandLineParseResult FSimulationCommandLine::Parse(const FString& c
 	{
 		AddSimulationDiagnostic(
 			result.Diagnostics,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("missing_simulate_value"),
 			TEXT("-Simulate requires a simulation setup file path."));
 	}
@@ -869,7 +869,7 @@ FSimulationCommandLineParseResult FSimulationCommandLine::Parse(const FString& c
 	{
 		AddSimulationDiagnostic(
 			result.Diagnostics,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("missing_run_id_value"),
 			TEXT("-RunId requires a non-empty value."));
 	}
@@ -878,7 +878,7 @@ FSimulationCommandLineParseResult FSimulationCommandLine::Parse(const FString& c
 	{
 		AddSimulationDiagnostic(
 			result.Diagnostics,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("empty_simulate_value"),
 			TEXT("-Simulate value must not be empty."));
 	}

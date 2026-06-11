@@ -22,9 +22,9 @@ namespace
 	}
 }
 
-void UDeliveryBotSetupCompiler::AddDiagnostic(FDeliveryBotSetupCompileResult& result, EEpisodeCompileDiagnosticSeverity severity, const FString& code, const FString& message)
+void UDeliveryBotSetupCompiler::AddDiagnostic(FDeliveryBotSetupCompileResult& result, EScenarioCompileDiagnosticSeverity severity, const FString& code, const FString& message)
 {
-	FEpisodeCompileDiagnostic diagnostic;
+	FScenarioCompileDiagnostic diagnostic;
 	diagnostic.Severity = severity;
 	diagnostic.Code = code;
 	diagnostic.Message = message;
@@ -33,9 +33,9 @@ void UDeliveryBotSetupCompiler::AddDiagnostic(FDeliveryBotSetupCompileResult& re
 
 bool UDeliveryBotSetupCompiler::HasErrors(const FDeliveryBotSetupCompileResult& result)
 {
-	for (const FEpisodeCompileDiagnostic& diagnostic : result.Diagnostics)
+	for (const FScenarioCompileDiagnostic& diagnostic : result.Diagnostics)
 	{
-		if (diagnostic.Severity == EEpisodeCompileDiagnosticSeverity::Error) return true;
+		if (diagnostic.Severity == EScenarioCompileDiagnosticSeverity::Error) return true;
 	}
 
 	return false;
@@ -50,7 +50,7 @@ bool UDeliveryBotSetupCompiler::ReadOptionalFloatField(const FJsonObject& jsonOb
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("invalid_number"),
 			FString::Printf(TEXT("%s.%s 필드는 숫자여야 함."), *path, *fieldName));
 		return false;
@@ -68,7 +68,7 @@ bool UDeliveryBotSetupCompiler::ReadOptionalBoolField(const FJsonObject& jsonObj
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("invalid_bool"),
 			FString::Printf(TEXT("%s.%s 필드는 bool 값이어야 함."), *path, *fieldName));
 		return false;
@@ -86,7 +86,7 @@ bool UDeliveryBotSetupCompiler::ReadOptionalNameArrayField(const FJsonObject& js
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("invalid_string_array"),
 			FString::Printf(TEXT("%s.%s 필드는 string 배열이어야 함."), *path, *fieldName));
 		return false;
@@ -101,7 +101,7 @@ bool UDeliveryBotSetupCompiler::ReadOptionalNameArrayField(const FJsonObject& js
 		{
 			AddDiagnostic(
 				result,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				TEXT("invalid_string_array"),
 				FString::Printf(TEXT("%s.%s[%d] 값은 string이어야 함."), *path, *fieldName, index));
 			return false;
@@ -126,7 +126,7 @@ bool UDeliveryBotSetupCompiler::ReadOptionalCollisionChannelField(const FJsonObj
 		{
 			AddDiagnostic(
 				result,
-				EEpisodeCompileDiagnosticSeverity::Error,
+				EScenarioCompileDiagnosticSeverity::Error,
 				TEXT("invalid_collision_channel"),
 				FString::Printf(TEXT("%s.%s 값이 collision channel 범위를 벗어남."), *path, *fieldName));
 			return false;
@@ -140,7 +140,7 @@ bool UDeliveryBotSetupCompiler::ReadOptionalCollisionChannelField(const FJsonObj
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("invalid_collision_channel"),
 			FString::Printf(TEXT("%s.%s 필드는 string 또는 number여야 함."), *path, *fieldName));
 		return false;
@@ -190,7 +190,7 @@ bool UDeliveryBotSetupCompiler::ReadOptionalCollisionChannelField(const FJsonObj
 
 	AddDiagnostic(
 		result,
-		EEpisodeCompileDiagnosticSeverity::Error,
+		EScenarioCompileDiagnosticSeverity::Error,
 		TEXT("invalid_collision_channel"),
 		FString::Printf(TEXT("%s.%s '%s' 값은 지원하지 않음."), *path, *fieldName, *jsonValue->AsString()));
 	return false;
@@ -205,7 +205,7 @@ void UDeliveryBotSetupCompiler::CompileDrive( const FJsonObject& robotObject, FD
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("invalid_object"),
 			TEXT("robot.drive 필드는 object여야 함."));
 		return;
@@ -243,7 +243,7 @@ void UDeliveryBotSetupCompiler::CompilePathFollow(const FJsonObject& robotObject
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("invalid_object"),
 			TEXT("robot.path_follow 필드는 object여야 함."));
 		return;
@@ -272,7 +272,7 @@ void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDe
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("invalid_object"),
 			TEXT("robot.lidar 필드는 object여야 함."));
 		return;
@@ -307,7 +307,7 @@ bool UDeliveryBotSetupCompiler::ReadOptionalStringField(const FJsonObject& jsonO
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("invalid_string"),
 			FString::Printf(TEXT("%s.%s must be a string."), *path, *fieldName));
 		return false;
@@ -318,7 +318,7 @@ bool UDeliveryBotSetupCompiler::ReadOptionalStringField(const FJsonObject& jsonO
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("empty_string"),
 			FString::Printf(TEXT("%s.%s must not be empty."), *path, *fieldName));
 		return false;
@@ -334,7 +334,7 @@ void UDeliveryBotSetupCompiler::CompileRobotObject(const FJsonObject& rootObject
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("episode_fields_in_delivery_bot_setup"),
 			TEXT("DeliveryBotSetup JSON에는 run/actors를 넣지 않음. 에피소드 배치 정보는 EpisodeSetup JSON이 담당함."));
 	}
@@ -344,7 +344,7 @@ void UDeliveryBotSetupCompiler::CompileRobotObject(const FJsonObject& rootObject
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Warning,
+			EScenarioCompileDiagnosticSeverity::Warning,
 			TEXT("missing_robot"),
 			TEXT("robot 필드가 없어 FDeliveryBotSetupInfo 기본값을 사용함."));
 		return;
@@ -354,7 +354,7 @@ void UDeliveryBotSetupCompiler::CompileRobotObject(const FJsonObject& rootObject
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("invalid_object"),
 			TEXT("robot 필드는 object여야 함."));
 		return;
@@ -371,7 +371,7 @@ void UDeliveryBotSetupCompiler::CompileRobotObject(const FJsonObject& rootObject
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("episode_robot_fields_in_delivery_bot_setup"),
 			TEXT("DeliveryBotSetup.robot에는 location/route/instance_id/asset_id/spawn_only를 넣지 않음. 로봇 배치와 목적지는 EpisodeSetup JSON이 담당함."));
 	}
@@ -392,7 +392,7 @@ FDeliveryBotSetupCompileResult UDeliveryBotSetupCompiler::CompileDeliveryBotSetu
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("file_read_failed"),
 			FString::Printf(TEXT("DeliveryBotSetup JSON 파일 '%s' 읽기 실패. ResolvedPath: '%s'"), *jsonFilePath, *resolvedJsonFilePath));
 		result.bSuccess = false;
@@ -410,7 +410,7 @@ FDeliveryBotSetupCompileResult UDeliveryBotSetupCompiler::CompileDeliveryBotSetu
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("empty_json"),
 			TEXT("DeliveryBotSetup JSON 입력이 비어 있음."));
 		result.bSuccess = false;
@@ -423,7 +423,7 @@ FDeliveryBotSetupCompileResult UDeliveryBotSetupCompiler::CompileDeliveryBotSetu
 	{
 		AddDiagnostic(
 			result,
-			EEpisodeCompileDiagnosticSeverity::Error,
+			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("invalid_json"),
 			TEXT("DeliveryBotSetup JSON 입력을 파싱할 수 없음."));
 		result.bSuccess = false;
@@ -443,7 +443,7 @@ void UDeliveryBotSetupCompiler::CompilePolicy(const FJsonObject& robotObject, FD
 
 	if (policyValue->Type != EJson::Object)
 	{
-		AddDiagnostic(result, EEpisodeCompileDiagnosticSeverity::Error, TEXT("invalid_object"), TEXT("robot.policy must be an object."));
+		AddDiagnostic(result, EScenarioCompileDiagnosticSeverity::Error, TEXT("invalid_object"), TEXT("robot.policy must be an object."));
 		return;
 	}
 

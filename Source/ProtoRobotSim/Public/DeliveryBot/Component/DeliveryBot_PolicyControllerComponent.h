@@ -141,7 +141,7 @@ private: // 시작 설정 값 파이썬으로 전송  -> Grid + 차량 설정 + 
 	UFUNCTION()
 	void HandleEpisodeStartResponse(bool bWasSuccessful, int32 responseCode, const FString& responseBody);
 	UFUNCTION()
-	void HandleEpisodeEnded(FEpisodeEvaluationResult result); // EpisodeEvaluationSubsystem이 에피소드 종료를 알렸을 때 호출
+	void HandleEpisodeEnded(FEpisodeEvaluationResult result); // ScenarioEvaluationSubsystem이 에피소드 종료를 알렸을 때 호출
 	
 	
 private:

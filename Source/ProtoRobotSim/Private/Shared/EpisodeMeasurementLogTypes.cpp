@@ -38,21 +38,21 @@ namespace
 		return Array;
 	}
 
-	TSharedPtr<FJsonValue> MakeParamJsonValue(const FEpisodeParamValue& ParamValue)
+	TSharedPtr<FJsonValue> MakeParamJsonValue(const FScenarioParamValue& ParamValue)
 	{
 		switch (ParamValue.Type)
 		{
-		case EEpisodeParamValueType::Bool:
+		case EScenarioParamValueType::Bool:
 			return MakeShared<FJsonValueBoolean>(ParamValue.BoolValue);
-		case EEpisodeParamValueType::Integer:
+		case EScenarioParamValueType::Integer:
 			return MakeShared<FJsonValueNumber>(ParamValue.IntegerValue);
-		case EEpisodeParamValueType::Float:
+		case EScenarioParamValueType::Float:
 			return MakeShared<FJsonValueNumber>(ParamValue.FloatValue);
-		case EEpisodeParamValueType::String:
+		case EScenarioParamValueType::String:
 			return MakeShared<FJsonValueString>(ParamValue.StringValue);
-		case EEpisodeParamValueType::Vector:
+		case EScenarioParamValueType::Vector:
 			return MakeShared<FJsonValueArray>(MakeVectorArray(ParamValue.VectorValue));
-		case EEpisodeParamValueType::None:
+		case EScenarioParamValueType::None:
 		default:
 			return MakeShared<FJsonValueNull>();
 		}
@@ -208,15 +208,15 @@ FString FEpisodeMeasurementLogJson::ToSeverityString(EEpisodeMeasurementLogSever
 	}
 }
 
-FString FEpisodeMeasurementLogJson::ToActorCategoryString(EEpisodeActorCategory Category)
+FString FEpisodeMeasurementLogJson::ToActorCategoryString(EScenarioActorCategory Category)
 {
 	switch (Category)
 	{
-	case EEpisodeActorCategory::DeliveryBot:
+	case EScenarioActorCategory::DeliveryBot:
 		return TEXT("DeliveryBot");
-	case EEpisodeActorCategory::StaticObstacle:
+	case EScenarioActorCategory::StaticObstacle:
 		return TEXT("StaticObstacle");
-	case EEpisodeActorCategory::Pedestrian:
+	case EScenarioActorCategory::Pedestrian:
 		return TEXT("Pedestrian");
 	default:
 		return TEXT("Unknown");
@@ -588,7 +588,7 @@ TSharedRef<FJsonObject> FEpisodeMeasurementLogJson::MakeEventObject(
 	const FEpisodeMeasurementLogEventRecord& Record)
 {
 	TSharedRef<FJsonObject> PropertiesObject = MakeShared<FJsonObject>();
-	for (const TPair<FString, FEpisodeParamValue>& Pair : Record.Properties)
+	for (const TPair<FString, FScenarioParamValue>& Pair : Record.Properties)
 	{
 		PropertiesObject->SetField(Pair.Key, MakeParamJsonValue(Pair.Value));
 	}

@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/EngineTypes.h"
-#include "Shared/EpisodeCompileTypes.h"
+#include "Shared/ScenarioCompileTypes.h"
 #include "Shared/Struct/DeliveryBot/Setup/DeliveryBotSetupInfo.h"
 #include "UObject/Object.h"
 #include "DeliveryBotSetupCompiler.generated.h"
@@ -26,7 +26,7 @@ struct PROTOROBOTSIM_API FDeliveryBotSetupCompileResult
 	FString SpecHash;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Setup")
-	TArray<FEpisodeCompileDiagnostic> Diagnostics;
+	TArray<FScenarioCompileDiagnostic> Diagnostics;
 };
 
 UCLASS(BlueprintType)
@@ -42,7 +42,7 @@ public:
 	FDeliveryBotSetupCompileResult CompileDeliveryBotSetupFromJsonString(const FString& jsonString) const;
 
 private:
-	static void AddDiagnostic(FDeliveryBotSetupCompileResult& result, EEpisodeCompileDiagnosticSeverity severity, const FString& code, const FString& message);
+	static void AddDiagnostic(FDeliveryBotSetupCompileResult& result, EScenarioCompileDiagnosticSeverity severity, const FString& code, const FString& message);
 	static bool HasErrors(const FDeliveryBotSetupCompileResult& result);
 
 	static bool ReadOptionalFloatField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, float& targetValue, float minValue, float maxValue = TNumericLimits<float>::Max());

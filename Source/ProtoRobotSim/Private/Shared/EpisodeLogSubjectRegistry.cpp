@@ -2,7 +2,7 @@
 
 #include "Engine/World.h"
 #include "EngineUtils.h"
-#include "Episode/Components/EpisodePlaceableComponent.h"
+#include "Scenario/Components/ScenarioPlaceableComponent.h"
 #include "GameFramework/Actor.h"
 
 namespace
@@ -12,9 +12,9 @@ namespace
 		return IsValid(Actor) ? Actor->GetName() : FString(TEXT("<invalid>"));
 	}
 
-	bool IsValidActorCategory(EEpisodeActorCategory Category)
+	bool IsValidActorCategory(EScenarioActorCategory Category)
 	{
-		const UEnum* Enum = StaticEnum<EEpisodeActorCategory>();
+		const UEnum* Enum = StaticEnum<EScenarioActorCategory>();
 		return Enum && Enum->IsValidEnumValue(static_cast<int64>(Category));
 	}
 }
@@ -44,13 +44,13 @@ bool UEpisodeLogSubjectRegistry::BuildFromWorld(UWorld* World, double WorldTimeS
 		return false;
 	}
 
-	TArray<UEpisodePlaceableComponent*> PlaceableComponents;
+	TArray<UScenarioPlaceableComponent*> PlaceableComponents;
 	CollectWorldPlaceables(World, PlaceableComponents);
 	return BuildFromComponents(PlaceableComponents, WorldTimeSeconds);
 }
 
 bool UEpisodeLogSubjectRegistry::BuildFromComponents(
-	const TArray<UEpisodePlaceableComponent*>& PlaceableComponents,
+	const TArray<UScenarioPlaceableComponent*>& PlaceableComponents,
 	double WorldTimeSeconds)
 {
 	Reset();
@@ -58,7 +58,7 @@ bool UEpisodeLogSubjectRegistry::BuildFromComponents(
 	TArray<FSubjectCandidate> Candidates;
 	Candidates.Reserve(PlaceableComponents.Num());
 
-	for (UEpisodePlaceableComponent* PlaceableComponent : PlaceableComponents)
+	for (UScenarioPlaceableComponent* PlaceableComponent : PlaceableComponents)
 	{
 		FSubjectCandidate Candidate;
 		if (!MakeCandidate(PlaceableComponent, Candidate))
@@ -77,8 +77,8 @@ bool UEpisodeLogSubjectRegistry::BuildFromComponents(
 	Candidates.Sort(
 		[](const FSubjectCandidate& Left, const FSubjectCandidate& Right)
 		{
-			const UEpisodePlaceableComponent* LeftComponent = Left.PlaceableComponent.Get();
-			const UEpisodePlaceableComponent* RightComponent = Right.PlaceableComponent.Get();
+			const UScenarioPlaceableComponent* LeftComponent = Left.PlaceableComponent.Get();
+			const UScenarioPlaceableComponent* RightComponent = Right.PlaceableComponent.Get();
 			const AActor* LeftActor = Left.Actor.Get();
 			const AActor* RightActor = Right.Actor.Get();
 
@@ -113,16 +113,16 @@ bool UEpisodeLogSubjectRegistry::DetectNewSubjectsInWorld(UWorld* World, double 
 		return false;
 	}
 
-	TArray<UEpisodePlaceableComponent*> PlaceableComponents;
+	TArray<UScenarioPlaceableComponent*> PlaceableComponents;
 	CollectWorldPlaceables(World, PlaceableComponents);
 	return DetectNewSubjects(PlaceableComponents, WorldTimeSeconds);
 }
 
 bool UEpisodeLogSubjectRegistry::DetectNewSubjects(
-	const TArray<UEpisodePlaceableComponent*>& PlaceableComponents,
+	const TArray<UScenarioPlaceableComponent*>& PlaceableComponents,
 	double WorldTimeSeconds)
 {
-	for (UEpisodePlaceableComponent* PlaceableComponent : PlaceableComponents)
+	for (UScenarioPlaceableComponent* PlaceableComponent : PlaceableComponents)
 	{
 		FSubjectCandidate Candidate;
 		if (!MakeCandidate(PlaceableComponent, Candidate))
@@ -178,7 +178,7 @@ bool UEpisodeLogSubjectRegistry::HasBlockingDiagnostic() const
 
 void UEpisodeLogSubjectRegistry::CollectWorldPlaceables(
 	UWorld* World,
-	TArray<UEpisodePlaceableComponent*>& OutPlaceableComponents)
+	TArray<UScenarioPlaceableComponent*>& OutPlaceableComponents)
 {
 	OutPlaceableComponents.Reset();
 
@@ -195,7 +195,7 @@ void UEpisodeLogSubjectRegistry::CollectWorldPlaceables(
 			continue;
 		}
 
-		if (UEpisodePlaceableComponent* PlaceableComponent = Actor->FindComponentByClass<UEpisodePlaceableComponent>())
+		if (UScenarioPlaceableComponent* PlaceableComponent = Actor->FindComponentByClass<UScenarioPlaceableComponent>())
 		{
 			OutPlaceableComponents.Add(PlaceableComponent);
 		}
@@ -203,7 +203,7 @@ void UEpisodeLogSubjectRegistry::CollectWorldPlaceables(
 }
 
 bool UEpisodeLogSubjectRegistry::MakeCandidate(
-	UEpisodePlaceableComponent* PlaceableComponent,
+	UScenarioPlaceableComponent* PlaceableComponent,
 	FSubjectCandidate& OutCandidate)
 {
 	if (!IsValid(PlaceableComponent))
@@ -240,7 +240,7 @@ bool UEpisodeLogSubjectRegistry::AddCandidateToTable(
 	double WorldTimeSeconds)
 {
 	AActor* Actor = Candidate.Actor.Get();
-	UEpisodePlaceableComponent* PlaceableComponent = Candidate.PlaceableComponent.Get();
+	UScenarioPlaceableComponent* PlaceableComponent = Candidate.PlaceableComponent.Get();
 	if (!IsValid(Actor) || !IsValid(PlaceableComponent))
 	{
 		AddDiagnostic(
@@ -317,7 +317,7 @@ bool UEpisodeLogSubjectRegistry::AddCandidateToTable(
 
 bool UEpisodeLogSubjectRegistry::IsKnownSubject(const FSubjectCandidate& Candidate) const
 {
-	const UEpisodePlaceableComponent* PlaceableComponent = Candidate.PlaceableComponent.Get();
+	const UScenarioPlaceableComponent* PlaceableComponent = Candidate.PlaceableComponent.Get();
 	if (!PlaceableComponent || PlaceableComponent->InstanceId.IsEmpty())
 	{
 		return false;
@@ -331,7 +331,7 @@ void UEpisodeLogSubjectRegistry::ReportNewSubject(
 	double WorldTimeSeconds)
 {
 	const AActor* Actor = Candidate.Actor.Get();
-	const UEpisodePlaceableComponent* PlaceableComponent = Candidate.PlaceableComponent.Get();
+	const UScenarioPlaceableComponent* PlaceableComponent = Candidate.PlaceableComponent.Get();
 	const FString ActorName = GetSubjectActorName(Actor);
 
 	if (!PlaceableComponent || PlaceableComponent->InstanceId.IsEmpty())

@@ -9,7 +9,7 @@
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
-#include "Platform/EpisodeEditorLaunchSubsystem.h"
+#include "Platform/ScenarioEditorLaunchSubsystem.h"
 #include "Platform/PlatformAnalysisAiSubsystem.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Platform/Widget/ExperimentResultIterationButton.h"
@@ -694,14 +694,14 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 		RunCountTextBox ? FCString::Atoi(*RunCountTextBox->GetText().ToString()) : 1);
 
 	// MainMenu edits a single scenario/policy pair plus repeat count into the SimulationSetup-owned RunQueue.
-	TArray<FEpisodeRunInput> runInputs;
+	TArray<FScenarioRunInput> runInputs;
 	runInputs.Reserve(runCount);
 	const FString pairIdBase = FPaths::GetBaseFilename(setupPath).IsEmpty()
 		? FString(TEXT("run"))
 		: FPaths::GetBaseFilename(setupPath);
 	for (int32 runIndex = 0; runIndex < runCount; ++runIndex)
 	{
-		FEpisodeRunInput runInput;
+		FScenarioRunInput runInput;
 		runInput.PairId = FString::Printf(TEXT("%s_%03d"), *pairIdBase, runIndex);
 		runInput.EpisodeSetupJsonPath = episodeSetupPath;
 		runInput.DeliveryBotSetupJsonPath = deliveryBotSetupPath;
@@ -1408,7 +1408,7 @@ void UMainMenuWidget::LoadSelectedSetup()
 
 		// Start Run 전에 setup 계약 위반을 보여줘 simulator process를 불필요하게 띄우지 않는다.
 		TArray<FString> diagnostics;
-		for (const FEpisodeCompileDiagnostic& diagnostic : parseResult.Diagnostics)
+		for (const FScenarioCompileDiagnostic& diagnostic : parseResult.Diagnostics)
 		{
 			diagnostics.Add(FString::Printf(TEXT("%s: %s"), *diagnostic.Code, *diagnostic.Message));
 		}
@@ -1427,12 +1427,12 @@ void UMainMenuWidget::LoadSelectedSetup()
 	}
 
 	// SimulationSetup stores a generated EpisodeRunQueue path; the detail page exposes the resolved pair and run count.
-	TArray<FEpisodeRunInput> loadedRunInputs;
+	TArray<FScenarioRunInput> loadedRunInputs;
 	TArray<FString> runQueueDiagnostics;
 	if (subsystem->LoadEpisodeRunQueueFile(parseResult.Setup.RunQueueJsonPath, loadedRunInputs, runQueueDiagnostics)
 		&& !loadedRunInputs.IsEmpty())
 	{
-		const FEpisodeRunInput& firstRunInput = loadedRunInputs[0];
+		const FScenarioRunInput& firstRunInput = loadedRunInputs[0];
 		SetSelectedEpisodeSetupPath(firstRunInput.EpisodeSetupJsonPath);
 		if (DeliveryBotSetupComboBox)
 		{
@@ -1945,10 +1945,10 @@ bool UMainMenuWidget::CreateScenarioFileFromTemplate(const FString& episodeSetup
 
 bool UMainMenuWidget::OpenScenarioInEditor(const FString& episodeSetupPath)
 {
-	UEpisodeEditorLaunchSubsystem* subsystem = GetEpisodeEditorLaunchSubsystem();
+	UScenarioEditorLaunchSubsystem* subsystem = GetScenarioEditorLaunchSubsystem();
 	if (!subsystem)
 	{
-		SetDiagnosticsText(TEXT("EpisodeEditorLaunchSubsystem을 사용할 수 없습니다."));
+		SetDiagnosticsText(TEXT("ScenarioEditorLaunchSubsystem을 사용할 수 없습니다."));
 		return false;
 	}
 
@@ -2259,10 +2259,10 @@ USimulatorLaunchSubsystem* UMainMenuWidget::GetSimulatorLaunchSubsystem() const
 	return gameInstance ? gameInstance->GetSubsystem<USimulatorLaunchSubsystem>() : nullptr;
 }
 
-UEpisodeEditorLaunchSubsystem* UMainMenuWidget::GetEpisodeEditorLaunchSubsystem() const
+UScenarioEditorLaunchSubsystem* UMainMenuWidget::GetScenarioEditorLaunchSubsystem() const
 {
 	const UGameInstance* gameInstance = GetGameInstance();
-	return gameInstance ? gameInstance->GetSubsystem<UEpisodeEditorLaunchSubsystem>() : nullptr;
+	return gameInstance ? gameInstance->GetSubsystem<UScenarioEditorLaunchSubsystem>() : nullptr;
 }
 
 UPlatformAnalysisAiSubsystem* UMainMenuWidget::GetPlatformAnalysisAiSubsystem() const

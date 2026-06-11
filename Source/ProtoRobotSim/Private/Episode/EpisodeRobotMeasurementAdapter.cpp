@@ -1,7 +1,7 @@
 #include "Episode/EpisodeRobotMeasurementAdapter.h"
 
 #include "DeliveryBot/Actor/DeliveryBot.h"
-#include "Episode/Components/EpisodePlaceableComponent.h"
+#include "Scenario/Components/ScenarioPlaceableComponent.h"
 #include "Shared/EpisodeLogSubjectRegistry.h"
 
 bool FEpisodeRobotMeasurementAdapter::BuildRobotTick(
@@ -76,7 +76,7 @@ FString FEpisodeRobotMeasurementAdapter::ResolveActorId(
 		return FString();
 	}
 
-	if (const UEpisodePlaceableComponent* PlaceableComponent = Actor->FindComponentByClass<UEpisodePlaceableComponent>())
+	if (const UScenarioPlaceableComponent* PlaceableComponent = Actor->FindComponentByClass<UScenarioPlaceableComponent>())
 	{
 		if (!PlaceableComponent->InstanceId.IsEmpty())
 		{

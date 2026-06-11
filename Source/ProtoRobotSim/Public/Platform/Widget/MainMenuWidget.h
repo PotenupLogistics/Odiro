@@ -8,7 +8,7 @@ class UButton;
 class UCheckBox;
 class UComboBoxString;
 class UEditableTextBox;
-class UEpisodeEditorLaunchSubsystem;
+class UScenarioEditorLaunchSubsystem;
 class UExperimentResultIterationButton;
 class UFileListItemWidget;
 class UPlatformAnalysisAiSubsystem;
@@ -161,7 +161,7 @@ private:
 	FString GetSelectedDeliveryBotSetupPath() const;
 	FString GetSelectedPolicySpecPath() const;
 	USimulatorLaunchSubsystem* GetSimulatorLaunchSubsystem() const;
-	UEpisodeEditorLaunchSubsystem* GetEpisodeEditorLaunchSubsystem() const;
+	UScenarioEditorLaunchSubsystem* GetScenarioEditorLaunchSubsystem() const;
 	UPlatformAnalysisAiSubsystem* GetPlatformAnalysisAiSubsystem() const;
 
 	UPROPERTY(Transient, meta = (BindWidget))

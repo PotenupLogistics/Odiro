@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -33,7 +33,7 @@ class UDeliveryBot_PolicyControllerComponent;
 class UDeliveryBot_HttpPolicyComponent;
 class UDeliveryBot_DriveComponent;
 class UDeliveryBot_LidarSensorComponent;
-class UEpisodePlaceableComponent;
+class UScenarioPlaceableComponent;
 UCLASS(Blueprintable)
 class PROTOROBOTSIM_API ADeliveryBot : public AWheeledVehiclePawn
 {
@@ -124,7 +124,7 @@ protected:
 	TObjectPtr<UDeliveryBot_PolicyControllerComponent> PolicyControllerComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
-	TObjectPtr<UEpisodePlaceableComponent> PlaceableComponent;
+	TObjectPtr<UScenarioPlaceableComponent> PlaceableComponent;
 	
 	
 	

@@ -1,5 +1,5 @@
-﻿#include "DeliveryBot/Component/DeliveryBot_PolicyControllerComponent.h"
-#include "Episode/EpisodeEvaluationSubsystem.h"
+#include "DeliveryBot/Component/DeliveryBot_PolicyControllerComponent.h"
+#include "Scenario/ScenarioEvaluationSubsystem.h"
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "DeliveryBot/Component/DeliveryBot_HttpPolicyComponent.h"
 #include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
@@ -219,7 +219,7 @@ void UDeliveryBot_PolicyControllerComponent::HandleParsedPolicyResponse(const FD
 		LastValidPolicyMoveCommand = BuildStopMoveCommand();
 		bHasValidPolicyMoveCommand = true;
 
-		UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Python reported goal_reached. Waiting for EpisodeEvaluationSubsystem final judgment."));
+		UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Python reported goal_reached. Waiting for ScenarioEvaluationSubsystem final judgment."));
 		return;
 	}
 }
@@ -1045,11 +1045,11 @@ void UDeliveryBot_PolicyControllerComponent::BindEpisodeEvaluationEndedEvent()
 {
 	if (UWorld* world = GetWorld())
 	{
-		if (UEpisodeEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UEpisodeEvaluationSubsystem>())
+		if (UScenarioEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UScenarioEvaluationSubsystem>())
 		{
 			evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeEnded);
 			evaluationSubsystem->OnEpisodeEnded.AddDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeEnded);
-			UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Bound to EpisodeEvaluationSubsystem OnEpisodeEnded."));
+			UE_LOG(LogDeliveryBotPolicyController, Log, TEXT("Bound to ScenarioEvaluationSubsystem OnEpisodeEnded."));
 		}
 	}
 }
@@ -1058,7 +1058,7 @@ void UDeliveryBot_PolicyControllerComponent::UnbindEpisodeEvaluationEndedEvent()
 {
 	if (UWorld* world = GetWorld())
 	{
-		if (UEpisodeEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UEpisodeEvaluationSubsystem>())
+		if (UScenarioEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UScenarioEvaluationSubsystem>())
 		{
 			evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UDeliveryBot_PolicyControllerComponent::HandleEpisodeEnded);
 		}

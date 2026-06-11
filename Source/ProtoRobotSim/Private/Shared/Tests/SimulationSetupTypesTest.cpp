@@ -3,7 +3,7 @@
 #include "Shared/SimulationSetupTypes.h"
 
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
-#include "Episode/EpisodeCompiler.h"
+#include "Scenario/ScenarioCompiler.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -12,10 +12,10 @@
 namespace
 {
 	bool HasSimulationDiagnosticCode(
-		const TArray<FEpisodeCompileDiagnostic>& diagnostics,
+		const TArray<FScenarioCompileDiagnostic>& diagnostics,
 		const FString& code)
 	{
-		for (const FEpisodeCompileDiagnostic& diagnostic : diagnostics)
+		for (const FScenarioCompileDiagnostic& diagnostic : diagnostics)
 		{
 			if (diagnostic.Code == code)
 			{
@@ -77,7 +77,7 @@ bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters
 			runQueueJson,
 			*FSimulationSetupJson::ResolveProjectPath(TEXT("Json/Input/EpisodeRunQueuePlayable.json"))));
 
-	TArray<FEpisodeRunInput> runInputs;
+	TArray<FScenarioRunInput> runInputs;
 	TArray<FString> runQueueDiagnostics;
 	TestTrue(
 		TEXT("playable run queue reads"),
@@ -95,15 +95,15 @@ bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters
 		deliveryBotCompiler->CompileDeliveryBotSetupFromJsonFile(TEXT("Json/Input/DeliveryBotSetupPlayable.json"));
 	TestTrue(TEXT("playable policy compiles"), deliveryBotResult.bSuccess);
 
-	const UEpisodeCompiler* episodeCompiler = NewObject<UEpisodeCompiler>();
-	const FEpisodeCompileResult episodeResult =
+	const UScenarioCompiler* episodeCompiler = NewObject<UScenarioCompiler>();
+	const FScenarioCompileResult episodeResult =
 		episodeCompiler->CompileEpisodeWorldSpecFromJsonFile(TEXT("Json/Input/EpisodeSetupPlayable.json"));
 	TestTrue(TEXT("playable episode compiles"), episodeResult.bSuccess);
 
-	const FEpisodePlaceableInstanceSpec* robotSpec = nullptr;
-	for (const FEpisodePlaceableInstanceSpec& placeable : episodeResult.WorldSpec.Placeables)
+	const FScenarioPlaceableInstanceSpec* robotSpec = nullptr;
+	for (const FScenarioPlaceableInstanceSpec& placeable : episodeResult.WorldSpec.Placeables)
 	{
-		if (placeable.Category == EEpisodeActorCategory::DeliveryBot)
+		if (placeable.Category == EScenarioActorCategory::DeliveryBot)
 		{
 			robotSpec = &placeable;
 			break;

@@ -77,7 +77,7 @@ bool FEpisodeMeasurementLogJsonSerializationTest::RunTest(const FString& Paramet
 	RobotActor.Index = 0;
 	RobotActor.Id = TEXT("robot_01");
 	RobotActor.AssetId = TEXT("delivery_bot");
-	RobotActor.ActorCategory = EEpisodeActorCategory::DeliveryBot;
+	RobotActor.ActorCategory = EScenarioActorCategory::DeliveryBot;
 	Header.Actors.Add(RobotActor);
 
 	FString JsonLine;

@@ -2,19 +2,19 @@
 
 #include "Shared/EpisodeLogSubjectRegistry.h"
 
-#include "Episode/Components/EpisodePlaceableComponent.h"
+#include "Scenario/Components/ScenarioPlaceableComponent.h"
 #include "GameFramework/Actor.h"
 #include "Misc/AutomationTest.h"
 
 namespace
 {
-	UEpisodePlaceableComponent* MakePlaceableComponent(
+	UScenarioPlaceableComponent* MakePlaceableComponent(
 		const FString& InstanceId,
 		const FString& AssetId,
-		EEpisodeActorCategory Category)
+		EScenarioActorCategory Category)
 	{
 		AActor* Actor = NewObject<AActor>(GetTransientPackage());
-		UEpisodePlaceableComponent* PlaceableComponent = NewObject<UEpisodePlaceableComponent>(Actor);
+		UScenarioPlaceableComponent* PlaceableComponent = NewObject<UScenarioPlaceableComponent>(Actor);
 		Actor->AddInstanceComponent(PlaceableComponent);
 
 		PlaceableComponent->InstanceId = InstanceId;
@@ -53,19 +53,19 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FEpisodeLogSubjectRegistryTableTest::RunTest(const FString& Parameters)
 {
-	TArray<UEpisodePlaceableComponent*> PlaceableComponents;
+	TArray<UScenarioPlaceableComponent*> PlaceableComponents;
 	PlaceableComponents.Add(MakePlaceableComponent(
 		TEXT("static_01"),
 		TEXT("trash_bag"),
-		EEpisodeActorCategory::StaticObstacle));
+		EScenarioActorCategory::StaticObstacle));
 	PlaceableComponents.Add(MakePlaceableComponent(
 		TEXT("robot_01"),
 		TEXT("delivery_bot"),
-		EEpisodeActorCategory::DeliveryBot));
+		EScenarioActorCategory::DeliveryBot));
 	PlaceableComponents.Add(MakePlaceableComponent(
 		TEXT("ped_01"),
 		TEXT("adult_pedestrian"),
-		EEpisodeActorCategory::Pedestrian));
+		EScenarioActorCategory::Pedestrian));
 
 	UEpisodeLogSubjectRegistry* Registry = NewObject<UEpisodeLogSubjectRegistry>();
 	TestTrue(TEXT("registry builds from placeables"), Registry->BuildFromComponents(PlaceableComponents));
@@ -90,7 +90,7 @@ bool FEpisodeLogSubjectRegistryTableTest::RunTest(const FString& Parameters)
 
 	if (RobotInfo)
 	{
-		TestEqual(TEXT("robot category"), RobotInfo->ActorCategory, EEpisodeActorCategory::DeliveryBot);
+		TestEqual(TEXT("robot category"), RobotInfo->ActorCategory, EScenarioActorCategory::DeliveryBot);
 		TestEqual(TEXT("robot actor index lookup"), Registry->FindActorIndexById(TEXT("robot_01")), RobotInfo->Index);
 	}
 
@@ -106,19 +106,19 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FEpisodeLogSubjectRegistryValidationTest::RunTest(const FString& Parameters)
 {
-	TArray<UEpisodePlaceableComponent*> PlaceableComponents;
+	TArray<UScenarioPlaceableComponent*> PlaceableComponents;
 	PlaceableComponents.Add(MakePlaceableComponent(
 		TEXT("dup_01"),
 		TEXT("delivery_bot"),
-		EEpisodeActorCategory::DeliveryBot));
+		EScenarioActorCategory::DeliveryBot));
 	PlaceableComponents.Add(MakePlaceableComponent(
 		TEXT("dup_01"),
 		TEXT("adult_pedestrian"),
-		EEpisodeActorCategory::Pedestrian));
+		EScenarioActorCategory::Pedestrian));
 	PlaceableComponents.Add(MakePlaceableComponent(
 		FString(),
 		TEXT("trash_bag"),
-		EEpisodeActorCategory::StaticObstacle));
+		EScenarioActorCategory::StaticObstacle));
 
 	UEpisodeLogSubjectRegistry* Registry = NewObject<UEpisodeLogSubjectRegistry>();
 	TestFalse(TEXT("duplicate or missing identity blocks registry"), Registry->BuildFromComponents(PlaceableComponents));
@@ -146,14 +146,14 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FEpisodeLogSubjectRegistryDynamicTest::RunTest(const FString& Parameters)
 {
-	UEpisodePlaceableComponent* RobotComponent = MakePlaceableComponent(
+	UScenarioPlaceableComponent* RobotComponent = MakePlaceableComponent(
 		TEXT("robot_01"),
 		TEXT("delivery_bot"),
-		EEpisodeActorCategory::DeliveryBot);
-	UEpisodePlaceableComponent* PedestrianComponent = MakePlaceableComponent(
+		EScenarioActorCategory::DeliveryBot);
+	UScenarioPlaceableComponent* PedestrianComponent = MakePlaceableComponent(
 		TEXT("ped_late_01"),
 		TEXT("adult_pedestrian"),
-		EEpisodeActorCategory::Pedestrian);
+		EScenarioActorCategory::Pedestrian);
 
 	UEpisodeLogSubjectRegistry* Registry = NewObject<UEpisodeLogSubjectRegistry>();
 	TestTrue(TEXT("initial registry builds"), Registry->BuildFromComponents({ RobotComponent }));

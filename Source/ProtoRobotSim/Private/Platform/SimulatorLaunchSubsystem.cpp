@@ -1,7 +1,7 @@
 
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
-#include "Episode/EpisodeCompiler.h"
+#include "Scenario/ScenarioCompiler.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSimulatorLaunch, Log, All);
 
@@ -98,11 +98,11 @@ namespace
 		}
 	}
 
-	FString JoinDiagnostics(const TArray<FEpisodeCompileDiagnostic>& diagnostics)
+	FString JoinDiagnostics(const TArray<FScenarioCompileDiagnostic>& diagnostics)
 	{
 		TArray<FString> lines;
 		lines.Reserve(diagnostics.Num());
-		for (const FEpisodeCompileDiagnostic& diagnostic : diagnostics)
+		for (const FScenarioCompileDiagnostic& diagnostic : diagnostics)
 		{
 			lines.Add(FString::Printf(TEXT("%s: %s"), *diagnostic.Code, *diagnostic.Message));
 		}
@@ -167,7 +167,7 @@ namespace
 			return false;
 		}
 
-		UEpisodeCompiler* compiler = NewObject<UEpisodeCompiler>();
+		UScenarioCompiler* compiler = NewObject<UScenarioCompiler>();
 		return compiler && compiler->CompileEpisodeWorldSpecFromJsonFile(jsonFile).bSuccess;
 	}
 
@@ -203,7 +203,7 @@ namespace
 			&& policySpecObject->IsValid();
 	}
 
-	TSharedRef<FJsonObject> MakeEpisodeRunQueueObject(const TArray<FEpisodeRunInput>& runInputs)
+	TSharedRef<FJsonObject> MakeEpisodeRunQueueObject(const TArray<FScenarioRunInput>& runInputs)
 	{
 		TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
 		rootObject->SetStringField(TEXT("schema"), LaunchEpisodeRunQueueSchema);
@@ -211,7 +211,7 @@ namespace
 
 		TArray<TSharedPtr<FJsonValue>> runValues;
 		runValues.Reserve(runInputs.Num());
-		for (const FEpisodeRunInput& runInput : runInputs)
+		for (const FScenarioRunInput& runInput : runInputs)
 		{
 			TSharedRef<FJsonObject> runObject = MakeShared<FJsonObject>();
 			if (!runInput.PairId.IsEmpty())
@@ -345,7 +345,7 @@ TArray<FString> USimulatorLaunchSubsystem::ListEpisodeRunQueueFiles() const
 			continue;
 		}
 
-		TArray<FEpisodeRunInput> runInputs;
+		TArray<FScenarioRunInput> runInputs;
 		TArray<FString> diagnostics;
 		if (TryReadEpisodeRunQueueJson(jsonString, runInputs, diagnostics))
 		{
@@ -537,7 +537,7 @@ bool USimulatorLaunchSubsystem::SaveSimulationSetupFile(
 	}
 
 	const FSimulationSetupParseResult parseResult = FSimulationSetupJson::ParseFromFile(setupPath);
-	for (const FEpisodeCompileDiagnostic& diagnostic : parseResult.Diagnostics)
+	for (const FScenarioCompileDiagnostic& diagnostic : parseResult.Diagnostics)
 	{
 		outDiagnostics.Add(FString::Printf(TEXT("%s: %s"), *diagnostic.Code, *diagnostic.Message));
 	}
@@ -546,7 +546,7 @@ bool USimulatorLaunchSubsystem::SaveSimulationSetupFile(
 
 bool USimulatorLaunchSubsystem::LoadEpisodeRunQueueFile(
 	const FString& runQueuePath,
-	TArray<FEpisodeRunInput>& outRunInputs,
+	TArray<FScenarioRunInput>& outRunInputs,
 	TArray<FString>& outDiagnostics) const
 {
 	outRunInputs.Reset();
@@ -570,7 +570,7 @@ bool USimulatorLaunchSubsystem::LoadEpisodeRunQueueFile(
 
 bool USimulatorLaunchSubsystem::SaveEpisodeRunQueueFile(
 	const FString& runQueuePath,
-	const TArray<FEpisodeRunInput>& runInputs,
+	const TArray<FScenarioRunInput>& runInputs,
 	TArray<FString>& outDiagnostics) const
 {
 	outDiagnostics.Reset();
@@ -615,7 +615,7 @@ bool USimulatorLaunchSubsystem::AppendRunQueuePair(
 {
 	outDiagnostics.Reset();
 
-	TArray<FEpisodeRunInput> runInputs;
+	TArray<FScenarioRunInput> runInputs;
 	const FString resolvedRunQueuePath = FSimulationSetupJson::ResolveProjectPath(runQueuePath);
 	if (FPaths::FileExists(resolvedRunQueuePath))
 	{
@@ -625,7 +625,7 @@ bool USimulatorLaunchSubsystem::AppendRunQueuePair(
 		}
 	}
 
-	FEpisodeRunInput runInput;
+	FScenarioRunInput runInput;
 	runInput.PairId = pairId.TrimStartAndEnd();
 	runInput.EpisodeSetupJsonPath = episodeSetupPath.TrimStartAndEnd();
 	runInput.DeliveryBotSetupJsonPath = deliveryBotSetupPath.TrimStartAndEnd();
@@ -639,7 +639,7 @@ bool USimulatorLaunchSubsystem::RemoveRunQueuePair(
 	int32 runIndex,
 	TArray<FString>& outDiagnostics) const
 {
-	TArray<FEpisodeRunInput> runInputs;
+	TArray<FScenarioRunInput> runInputs;
 	if (!LoadEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics))
 	{
 		return false;
@@ -661,7 +661,7 @@ bool USimulatorLaunchSubsystem::MoveRunQueuePair(
 	int32 direction,
 	TArray<FString>& outDiagnostics) const
 {
-	TArray<FEpisodeRunInput> runInputs;
+	TArray<FScenarioRunInput> runInputs;
 	if (!LoadEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics))
 	{
 		return false;
@@ -732,7 +732,7 @@ bool USimulatorLaunchSubsystem::ReplaceRunQueueReferences(
 
 	for (const FString& runQueuePath : ListEpisodeRunQueueFiles())
 	{
-		TArray<FEpisodeRunInput> runInputs;
+		TArray<FScenarioRunInput> runInputs;
 		TArray<FString> loadDiagnostics;
 		if (!LoadEpisodeRunQueueFile(runQueuePath, runInputs, loadDiagnostics))
 		{
@@ -742,7 +742,7 @@ bool USimulatorLaunchSubsystem::ReplaceRunQueueReferences(
 		}
 
 		int32 runQueueChangedReferenceCount = 0;
-		for (FEpisodeRunInput& runInput : runInputs)
+		for (FScenarioRunInput& runInput : runInputs)
 		{
 			FString& referencePath = bReplaceEpisodeSetupReference
 				? runInput.EpisodeSetupJsonPath
@@ -1060,7 +1060,7 @@ FString USimulatorLaunchSubsystem::BuildPreviewLauncherArgumentString(
 
 bool USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(
 	const FString& jsonString,
-	TArray<FEpisodeRunInput>& outRunInputs,
+	TArray<FScenarioRunInput>& outRunInputs,
 	TArray<FString>& outDiagnostics)
 {
 	outRunInputs.Reset();
@@ -1109,7 +1109,7 @@ bool USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(
 		}
 
 		const TSharedPtr<FJsonObject> runObject = runValue->AsObject();
-		FEpisodeRunInput runInput;
+		FScenarioRunInput runInput;
 		runObject->TryGetStringField(TEXT("pair_id"), runInput.PairId);
 		if (!runObject->TryGetStringField(TEXT("episode_setup"), runInput.EpisodeSetupJsonPath))
 		{
@@ -1146,7 +1146,7 @@ bool USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(
 }
 
 bool USimulatorLaunchSubsystem::TryWriteEpisodeRunQueueJson(
-	const TArray<FEpisodeRunInput>& runInputs,
+	const TArray<FScenarioRunInput>& runInputs,
 	FString& outJson,
 	TArray<FString>& outDiagnostics)
 {
@@ -1160,7 +1160,7 @@ bool USimulatorLaunchSubsystem::TryWriteEpisodeRunQueueJson(
 
 	for (int32 index = 0; index < runInputs.Num(); ++index)
 	{
-		const FEpisodeRunInput& runInput = runInputs[index];
+		const FScenarioRunInput& runInput = runInputs[index];
 		if (runInput.EpisodeSetupJsonPath.TrimStartAndEnd().IsEmpty())
 		{
 			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue pair %d requires episode_setup."), index));

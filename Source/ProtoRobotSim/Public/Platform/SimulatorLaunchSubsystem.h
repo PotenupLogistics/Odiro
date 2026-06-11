@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Shared/EpisodeConfigTypes.h"
+#include "Shared/ScenarioConfigTypes.h"
 #include "Shared/SimulationSetupTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "SimulatorLaunchSubsystem.generated.h"
@@ -114,13 +114,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
 	bool LoadEpisodeRunQueueFile(
 		const FString& runQueuePath,
-		TArray<FEpisodeRunInput>& outRunInputs,
+		TArray<FScenarioRunInput>& outRunInputs,
 		TArray<FString>& outDiagnostics) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
 	bool SaveEpisodeRunQueueFile(
 		const FString& runQueuePath,
-		const TArray<FEpisodeRunInput>& runInputs,
+		const TArray<FScenarioRunInput>& runInputs,
 		TArray<FString>& outDiagnostics) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
@@ -188,11 +188,11 @@ public:
 
 	static bool TryReadEpisodeRunQueueJson(
 		const FString& jsonString,
-		TArray<FEpisodeRunInput>& outRunInputs,
+		TArray<FScenarioRunInput>& outRunInputs,
 		TArray<FString>& outDiagnostics);
 
 	static bool TryWriteEpisodeRunQueueJson(
-		const TArray<FEpisodeRunInput>& runInputs,
+		const TArray<FScenarioRunInput>& runInputs,
 		FString& outJson,
 		TArray<FString>& outDiagnostics);
 

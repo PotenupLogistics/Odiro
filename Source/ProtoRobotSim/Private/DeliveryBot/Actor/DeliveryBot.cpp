@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "DeliveryBot/Actor/DeliveryBot.h"
@@ -9,7 +9,7 @@
 #include "DeliveryBot/Component/DeliveryBot_LidarSensorComponent.h"
 #include "DeliveryBot/Component/DeliveryBot_PolicyControllerComponent.h"
 #include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
-#include "Episode/Components/EpisodePlaceableComponent.h"
+#include "Scenario/Components/ScenarioPlaceableComponent.h"
 #include "Serialization/JsonReader.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
@@ -71,7 +71,7 @@ ADeliveryBot::ADeliveryBot()
 	LidarSensorComponent = CreateDefaultSubobject<UDeliveryBot_LidarSensorComponent>(TEXT("LidarSensorComponent"));
 	HttpPolicyComponent = CreateDefaultSubobject<UDeliveryBot_HttpPolicyComponent>(TEXT("HttpPolicyComponent"));
 	PolicyControllerComponent = CreateDefaultSubobject<UDeliveryBot_PolicyControllerComponent>(TEXT("PolicyControllerComponent"));
-	PlaceableComponent = CreateDefaultSubobject<UEpisodePlaceableComponent>(TEXT("PlaceableComponent"));
+	PlaceableComponent = CreateDefaultSubobject<UScenarioPlaceableComponent>(TEXT("PlaceableComponent"));
 
 	UChaosWheeledVehicleMovementComponent* wheeledMovement =
 		Cast<UChaosWheeledVehicleMovementComponent>(GetVehicleMovementComponent());

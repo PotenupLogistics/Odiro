@@ -54,8 +54,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSimulatorLaunchRunQueueJsonRoundTripTest::RunTest(const FString& parameters)
 {
-	TArray<FEpisodeRunInput> runInputs;
-	FEpisodeRunInput runInput;
+	TArray<FScenarioRunInput> runInputs;
+	FScenarioRunInput runInput;
 	runInput.PairId = TEXT("sample_0");
 	runInput.EpisodeSetupJsonPath = TEXT("Json/Input/EpisodeSetupSample_0.json");
 	runInput.DeliveryBotSetupJsonPath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
@@ -70,7 +70,7 @@ bool FSimulatorLaunchRunQueueJsonRoundTripTest::RunTest(const FString& parameter
 	TestTrue(TEXT("episode setup field"), json.Contains(TEXT("EpisodeSetupSample_0.json")));
 	TestTrue(TEXT("policy spec field"), json.Contains(TEXT("\"policy_spec\"")));
 
-	TArray<FEpisodeRunInput> parsedRunInputs;
+	TArray<FScenarioRunInput> parsedRunInputs;
 	TestTrue(TEXT("run queue reads"), USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(json, parsedRunInputs, diagnostics));
 	TestEqual(TEXT("read diagnostics"), diagnostics.Num(), 0);
 	TestEqual(TEXT("run input count"), parsedRunInputs.Num(), 1);

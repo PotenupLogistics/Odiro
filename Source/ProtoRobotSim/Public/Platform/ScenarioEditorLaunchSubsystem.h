@@ -6,7 +6,7 @@
 
 class UWorld;
 
-DECLARE_MULTICAST_DELEGATE_OneParam(FScenarioEditorAutoStartCompletedNative, bool /*bLoadedExistingEpisode*/);
+DECLARE_MULTICAST_DELEGATE_OneParam(FScenarioEditorAutoStartCompletedNative, bool /*bLoadedExistingScenario*/);
 
 enum class EScenarioEditorAutoStartMode : uint8
 {
@@ -15,7 +15,7 @@ enum class EScenarioEditorAutoStartMode : uint8
 	NewDraft,
 };
 
-// GameInstance lifetime keeps the requested EpisodeEditor startup mode alive while OpenLevel replaces the world.
+// GameInstance lifetime keeps the requested scenario editor startup mode alive while OpenLevel replaces the world.
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API UScenarioEditorLaunchSubsystem : public UGameInstanceSubsystem
 {
@@ -26,29 +26,28 @@ public:
 	virtual void Deinitialize() override;
 
 	UFUNCTION(BlueprintCallable, Category = "Platform|ScenarioEditor")
-	bool OpenEpisodeEditor(const FString& episodeSetupPath);
+	bool OpenScenarioEditor(const FString& scenarioSetupPath);
 
 	UFUNCTION(BlueprintCallable, Category = "Platform|ScenarioEditor")
-	bool OpenNewEpisodeEditor();
+	bool OpenNewScenarioEditor();
 
 	UFUNCTION(BlueprintPure, Category = "Platform|ScenarioEditor")
-	FString GetPendingEpisodeSetupPath() const { return PendingEpisodeSetupPath; }
+	FString GetPendingScenarioSetupPath() const { return PendingScenarioSetupPath; }
 
-	// Legacy Blueprint-facing reset name. New C++ code should call ResetPendingAutoStartState().
 	UFUNCTION(BlueprintCallable, Category = "Platform|ScenarioEditor")
-	void ClearPendingEpisodeSetupPath();
+	void ClearPendingScenarioSetupPath();
 
 	UFUNCTION(BlueprintPure, Category = "Platform|ScenarioEditor")
-	bool HasAutoStartedEpisodeEditorSession() const { return bAutoStartedEpisodeEditorSession; }
+	bool HasAutoStartedScenarioEditorSession() const { return bAutoStartedScenarioEditorSession; }
 
 	UFUNCTION(BlueprintPure, Category = "Platform|ScenarioEditor")
-	bool WasAutoStartedEpisodeEditorSessionLoadedExistingEpisode() const
+	bool WasAutoStartedScenarioEditorSessionLoadedExistingScenario() const
 	{
-		return bAutoStartedEpisodeEditorSessionLoadedExistingEpisode;
+		return bAutoStartedScenarioEditorSessionLoadedExistingScenario;
 	}
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ScenarioEditor")
-	FString EpisodeEditorMapId = TEXT("EpisodeEditorMap");
+	FString ScenarioEditorMapId = TEXT("ScenarioEditorMap");
 
 	FScenarioEditorAutoStartCompletedNative& OnAutoStartCompleted() { return AutoStartCompletedEvent; }
 
@@ -56,15 +55,15 @@ private:
 	void HandlePostLoadMapWithWorld(UWorld* loadedWorld);
 	void TryApplyPendingEditorStartup(UWorld* loadedWorld);
 	void ResetPendingAutoStartState();
-	bool OpenEpisodeEditorInternal(EScenarioEditorAutoStartMode launchMode, const FString& episodeSetupPath);
+	bool OpenScenarioEditorInternal(EScenarioEditorAutoStartMode launchMode, const FString& scenarioSetupPath);
 	static bool DoesWorldMatchMapId(const UWorld* world, const FString& mapId);
 
 	UPROPERTY(Transient)
-	FString PendingEpisodeSetupPath;
+	FString PendingScenarioSetupPath;
 
 	EScenarioEditorAutoStartMode PendingAutoStartMode = EScenarioEditorAutoStartMode::None;
-	bool bAutoStartedEpisodeEditorSession = false;
-	bool bAutoStartedEpisodeEditorSessionLoadedExistingEpisode = false;
+	bool bAutoStartedScenarioEditorSession = false;
+	bool bAutoStartedScenarioEditorSessionLoadedExistingScenario = false;
 
 	FScenarioEditorAutoStartCompletedNative AutoStartCompletedEvent;
 	FDelegateHandle PostLoadMapHandle;

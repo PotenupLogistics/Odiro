@@ -34,18 +34,18 @@ UScenarioSimulationSubsystem::UScenarioSimulationSubsystem()
 	{
 		RobotActorClass = ADeliveryBot::StaticClass();
 	}
-	static ConstructorHelpers::FClassFinder<AActor> goalPointBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_GoalPoint"));
+	static ConstructorHelpers::FClassFinder<AActor> goalPointBlueprintClass(TEXT("/Game/Blueprints/Scenario/BP_GoalPoint"));
 	if (goalPointBlueprintClass.Succeeded())
 	{
 		GoalPointClass = goalPointBlueprintClass.Class;
 	}
-	static ConstructorHelpers::FClassFinder<AActor> startPointBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_StartPoint"));
+	static ConstructorHelpers::FClassFinder<AActor> startPointBlueprintClass(TEXT("/Game/Blueprints/Scenario/BP_StartPoint"));
 	if (startPointBlueprintClass.Succeeded())
 	{
 		StartPointClass = startPointBlueprintClass.Class;
 	}
 
-	static ConstructorHelpers::FClassFinder<AScenarioPedestrian> pedestrianBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_EpisodePedestrian"));
+	static ConstructorHelpers::FClassFinder<AScenarioPedestrian> pedestrianBlueprintClass(TEXT("/Game/Blueprints/Scenario/BP_ScenarioPedestrian"));
 	if (pedestrianBlueprintClass.Succeeded())
 	{
 		PedestrianClass = pedestrianBlueprintClass.Class;
@@ -56,7 +56,7 @@ UScenarioSimulationSubsystem::UScenarioSimulationSubsystem()
 	}
 }
 
-void UScenarioSimulationSubsystem::ClearEpisode()
+void UScenarioSimulationSubsystem::ClearScenario()
 {
 	const int32 actorCount = RuntimeActors.Num();
 	const int32 actorIdCount = RuntimeActorsById.Num();
@@ -96,11 +96,11 @@ void UScenarioSimulationSubsystem::ClearEpisode()
 		UE_LOG(
 			LogScenarioSimulation,
 			 Warning,
-			TEXT("Episode 런타임 정리 완료 | Actors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
-			actorCount,
-			actorIdCount,
-			groundRegionCount,
-			pathCount);
+			TEXT("Scenario 런타임 정리 완료 | Actors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
+		actorCount,
+		actorIdCount,
+		groundRegionCount,
+		pathCount);
 	}
 }
 
@@ -318,14 +318,14 @@ bool UScenarioSimulationSubsystem::ValidateDeliveryBotRouteOnGrid(
 	return bStartValid && bGoalValid;
 }
 
-bool UScenarioSimulationSubsystem::SetupEpisodeWorld(const FScenarioSimulationSetupSpec& setupSpec)
+bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationSetupSpec& setupSpec)
 {
-	ClearEpisode();
+	ClearScenario();
 
 	UE_LOG(
 		LogScenarioSimulation,
 		Log,
-		TEXT("Episode 월드 설정 시작 | Episode: %s, GroundRegions: %d, Paths: %d, Placeables: %d, DynamicActors: %d, Events: %d"),
+		TEXT("Scenario 월드 설정 시작 | Scenario: %s, GroundRegions: %d, Paths: %d, Placeables: %d, DynamicActors: %d, Events: %d"),
 		*setupSpec.EpisodeId,
 		setupSpec.GroundRegions.Num(),
 		setupSpec.Paths.Num(),
@@ -416,7 +416,7 @@ bool UScenarioSimulationSubsystem::SetupEpisodeWorld(const FScenarioSimulationSe
 				UE_LOG(
 					LogScenarioSimulation,
 					Warning,
-					TEXT("보행자 planned trajectory 생성 실패 | Episode: %s, Diagnostics: %d"),
+					TEXT("보행자 planned trajectory 생성 실패 | Scenario: %s, Diagnostics: %d"),
 					*setupSpec.EpisodeId,
 					planBuildResult.Diagnostics.Num());
 			}
@@ -435,7 +435,7 @@ bool UScenarioSimulationSubsystem::SetupEpisodeWorld(const FScenarioSimulationSe
 	UE_LOG(
 		LogScenarioSimulation,
 		Log,
-		TEXT("Episode 월드 설정 완료 | Episode: %s, Success: %s, RuntimeActors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
+		TEXT("Scenario 월드 설정 완료 | Scenario: %s, Success: %s, RuntimeActors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
 		*setupSpec.EpisodeId,
 		bAllSpawned ? TEXT("true") : TEXT("false"),
 		RuntimeActors.Num(),
@@ -520,7 +520,7 @@ FScenarioRuntimeContext UScenarioSimulationSubsystem::BuildRuntimeContext(const 
 	UE_LOG(
 		LogScenarioSimulation,
 		Log,
-		TEXT("런타임 컨텍스트 생성 완료 | Episode: %s, SpecHash: %s, Robot: %s, HasGoal: %s, RuntimeActors: %d, GroundRegions: %d, StaticObstacles: %d, Pedestrians: %d"),
+		TEXT("런타임 컨텍스트 생성 완료 | Scenario: %s, SpecHash: %s, Robot: %s, HasGoal: %s, RuntimeActors: %d, GroundRegions: %d, StaticObstacles: %d, Pedestrians: %d"),
 		*runtimeContext.EpisodeId,
 		*runtimeContext.SpecHash,
 		*runtimeContext.RobotInstanceId,
@@ -532,7 +532,7 @@ FScenarioRuntimeContext UScenarioSimulationSubsystem::BuildRuntimeContext(const 
 
 	if (!IsValid(runtimeContext.RobotActor))
 	{
-		UE_LOG(LogScenarioSimulation, Warning, TEXT("런타임 컨텍스트에 유효한 로봇 액터가 없음 | Episode: %s"), *runtimeContext.EpisodeId);
+		UE_LOG(LogScenarioSimulation, Warning, TEXT("런타임 컨텍스트에 유효한 로봇 액터가 없음 | Scenario: %s"), *runtimeContext.EpisodeId);
 	}
 
 	return runtimeContext;
@@ -742,7 +742,7 @@ bool UScenarioSimulationSubsystem::TryFindStaticObstacleProp(
 		UE_LOG(
 			LogScenarioSimulation,
 			Warning,
-			TEXT("Episode static obstacle prop catalog is not configured or failed to load: %s"),
+			TEXT("Scenario static obstacle prop catalog is not configured or failed to load: %s"),
 			*StaticObstaclePropCatalog.ToSoftObjectPath().ToString());
 		return false;
 	}
@@ -803,7 +803,7 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 		UE_LOG(
 			LogScenarioSimulation,
 			Error,
-			TEXT("Episode setup 실패: DeliveryBot의 start/goal이 그리드 상 도달할 수 없는 지점. Robot: %s"),
+			TEXT("Scenario setup 실패: DeliveryBot의 start/goal이 그리드 상 도달할 수 없는 지점. Robot: %s"),
 			*placeableSpec.InstanceId
 		);
 		return nullptr;

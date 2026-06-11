@@ -190,19 +190,19 @@ public:
 	void GetStaticObstaclePaletteEntries(TArray<FScenarioStaticObstaclePropEntry>& outEntries) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
-	bool ExportAndValidateEpisodeSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
+	bool ExportAndValidateScenarioSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
-	bool LoadEpisodeSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
+	bool LoadScenarioSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Authoring")
-	void NewEpisodeDraft();
+	void NewScenarioDraft();
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
-	bool SaveEpisodeSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
+	bool SaveScenarioSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
-	FString GetSourceEpisodeSetupJsonPath() const;
+	FString GetSourceScenarioSetupJsonPath() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
 	UScenarioEditorToolbarWidget* ShowToolbarWidget();

@@ -4,7 +4,7 @@
 namespace
 {
 	const FSoftObjectPath DefaultAssetPaletteCatalogPath(
-		TEXT("/Game/Data/Episode/DA_EpisodeAssetPaletteCatalog.DA_EpisodeAssetPaletteCatalog"));
+		TEXT("/Game/Data/Scenario/DA_ScenarioAssetPaletteCatalog.DA_ScenarioAssetPaletteCatalog"));
 }
 
 TSoftObjectPtr<UScenarioAssetPaletteCatalog> UScenarioAssetPaletteCatalog::MakeDefaultCatalogReference()

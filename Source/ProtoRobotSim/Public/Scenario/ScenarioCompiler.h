@@ -23,10 +23,10 @@ public:
 	TSoftObjectPtr<UScenarioStaticObstaclePropCatalog> StaticObstaclePropCatalog;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Compiler")
-	FScenarioCompileResult CompileEpisodeWorldSpecFromJsonFile(const FString& jsonFilePath) const;
+	FScenarioCompileResult CompileScenarioWorldSpecFromJsonFile(const FString& jsonFilePath) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Compiler")
-	FScenarioCompileResult CompileEpisodeWorldSpecFromJsonString(const FString& jsonString) const;
+	FScenarioCompileResult CompileScenarioWorldSpecFromJsonString(const FString& jsonString) const;
 
 private:
 	// 작성용 JSON은 meter 단위를 사용하고, 런타임 WorldSpec은 Unreal centimeter 단위를 사용한다.
@@ -100,7 +100,7 @@ private:
 	// xy_m, center_xy_m, goal_xy_m처럼 2D 입력을 읽어 Z=0인 FVector로 변환한다.
 	static bool ReadVector2DAsVectorField(const FJsonObject& jsonObject, const FString& fieldName, double scale, const FString& path, FScenarioCompileResult& result, FVector& outVector);
 
-	// EpisodeSetup 축약 양식의 xy_m/yaw_deg를 FTransform으로 변환한다.
+	// ScenarioSetup 축약 양식의 xy_m/yaw_deg를 FTransform으로 변환한다.
 	static bool ReadActorPlacementTransform(const FJsonObject& jsonObject, const FString& path, FScenarioCompileResult& result, FTransform& outTransform);
 
 	// 문자열 ground region 타입을 런타임 enum으로 변환한다.

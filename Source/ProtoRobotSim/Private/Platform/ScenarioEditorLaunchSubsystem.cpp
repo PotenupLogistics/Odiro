@@ -12,7 +12,7 @@ namespace
 		FString normalizedMapId = mapId.TrimStartAndEnd();
 		if (normalizedMapId.IsEmpty())
 		{
-			normalizedMapId = TEXT("EpisodeEditorMap");
+			normalizedMapId = TEXT("ScenarioEditorMap");
 		}
 
 		int32 objectNameSeparatorIndex = INDEX_NONE;
@@ -44,74 +44,74 @@ void UScenarioEditorLaunchSubsystem::Deinitialize()
 	Super::Deinitialize();
 }
 
-bool UScenarioEditorLaunchSubsystem::OpenEpisodeEditor(const FString& episodeSetupPath)
+bool UScenarioEditorLaunchSubsystem::OpenScenarioEditor(const FString& scenarioSetupPath)
 {
-	const FString trimmedEpisodeSetupPath = episodeSetupPath.TrimStartAndEnd();
-	if (trimmedEpisodeSetupPath.IsEmpty())
+	const FString trimmedScenarioSetupPath = scenarioSetupPath.TrimStartAndEnd();
+	if (trimmedScenarioSetupPath.IsEmpty())
 	{
-		return OpenNewEpisodeEditor();
+		return OpenNewScenarioEditor();
 	}
 
-	return OpenEpisodeEditorInternal(EScenarioEditorAutoStartMode::LoadFromPath, trimmedEpisodeSetupPath);
+	return OpenScenarioEditorInternal(EScenarioEditorAutoStartMode::LoadFromPath, trimmedScenarioSetupPath);
 }
 
-bool UScenarioEditorLaunchSubsystem::OpenNewEpisodeEditor()
+bool UScenarioEditorLaunchSubsystem::OpenNewScenarioEditor()
 {
-	return OpenEpisodeEditorInternal(EScenarioEditorAutoStartMode::NewDraft, FString());
+	return OpenScenarioEditorInternal(EScenarioEditorAutoStartMode::NewDraft, FString());
 }
 
-bool UScenarioEditorLaunchSubsystem::OpenEpisodeEditorInternal(
+bool UScenarioEditorLaunchSubsystem::OpenScenarioEditorInternal(
 	const EScenarioEditorAutoStartMode launchMode,
-	const FString& episodeSetupPath)
+	const FString& scenarioSetupPath)
 {
 	UWorld* world = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
 	if (!world)
 	{
-		UE_LOG(LogScenarioEditorLaunch, Warning, TEXT("EpisodeEditorMap 열기 실패: World 없음"));
+		UE_LOG(LogScenarioEditorLaunch, Warning, TEXT("ScenarioEditorMap 열기 실패: World 없음"));
 		return false;
 	}
 
 	PendingAutoStartMode = launchMode;
-	PendingEpisodeSetupPath = episodeSetupPath.TrimStartAndEnd();
-	bAutoStartedEpisodeEditorSession = false;
-	bAutoStartedEpisodeEditorSessionLoadedExistingEpisode = false;
+	PendingScenarioSetupPath = scenarioSetupPath.TrimStartAndEnd();
+	bAutoStartedScenarioEditorSession = false;
+	bAutoStartedScenarioEditorSessionLoadedExistingScenario = false;
 
-	const FString openLevelName = NormalizeMapIdForOpenLevel(EpisodeEditorMapId);
+	const FString openLevelName = NormalizeMapIdForOpenLevel(ScenarioEditorMapId);
 	const FString openLevelOptions = launchMode == EScenarioEditorAutoStartMode::LoadFromPath
-		? FString::Printf(TEXT("EpisodeSetup=%s"), *PendingEpisodeSetupPath)
-		: TEXT("NewEpisode=1");
+		? FString::Printf(TEXT("ScenarioSetup=%s"), *PendingScenarioSetupPath)
+		: TEXT("NewScenario=1");
 
 	// The URL options keep the transition inspectable in logs/console, while the subsystem state is the authoritative
 	// startup request that survives the world replacement.
 	UE_LOG(
 		LogScenarioEditorLaunch,
 		Log,
-		TEXT("EpisodeEditorMap 열기 요청 | Map: %s, Options: %s"),
+		TEXT("ScenarioEditorMap 열기 요청 | Map: %s, Options: %s"),
 		*openLevelName,
 		*openLevelOptions);
 	UGameplayStatics::OpenLevel(world, FName(*openLevelName), true, openLevelOptions);
 	return true;
 }
 
-void UScenarioEditorLaunchSubsystem::ClearPendingEpisodeSetupPath()
+void UScenarioEditorLaunchSubsystem::ClearPendingScenarioSetupPath()
 {
 	ResetPendingAutoStartState();
 }
 
 void UScenarioEditorLaunchSubsystem::ResetPendingAutoStartState()
 {
-	PendingEpisodeSetupPath.Reset();
+	PendingScenarioSetupPath.Reset();
 	PendingAutoStartMode = EScenarioEditorAutoStartMode::None;
 }
 
 void UScenarioEditorLaunchSubsystem::HandlePostLoadMapWithWorld(UWorld* loadedWorld)
 {
-	if (!loadedWorld || !DoesWorldMatchMapId(loadedWorld, EpisodeEditorMapId))
+	if (!loadedWorld || !DoesWorldMatchMapId(loadedWorld, ScenarioEditorMapId))
 	{
 		return;
 	}
 
-	// Defer one tick so the EpisodeEditor controller and its startup widgets have completed their own construction.
+	// Defer one tick so the scenario editor controller and its startup widgets have completed their own construction.
 	loadedWorld->GetTimerManager().SetTimerForNextTick(
 		FTimerDelegate::CreateUObject(
 			this,
@@ -133,44 +133,44 @@ void UScenarioEditorLaunchSubsystem::TryApplyPendingEditorStartup(UWorld* loaded
 		UE_LOG(
 			LogScenarioEditorLaunch,
 			Warning,
-			TEXT("EpisodeEditor 자동 시작 보류: ScenarioEditorController 없음 | Mode: %d, Path: %s"),
+			TEXT("ScenarioEditor 자동 시작 보류: ScenarioEditorController 없음 | Mode: %d, Path: %s"),
 			static_cast<int32>(PendingAutoStartMode),
-			PendingEpisodeSetupPath.IsEmpty() ? TEXT("<new draft>") : *PendingEpisodeSetupPath);
+			PendingScenarioSetupPath.IsEmpty() ? TEXT("<new draft>") : *PendingScenarioSetupPath);
 		return;
 	}
 
-	bool bLoadedExistingEpisode = false;
+	bool bLoadedExistingScenario = false;
 	if (PendingAutoStartMode == EScenarioEditorAutoStartMode::NewDraft)
 	{
-		editorController->NewEpisodeDraft();
-		UE_LOG(LogScenarioEditorLaunch, Log, TEXT("EpisodeEditor 새 draft 자동 시작 완료"));
+		editorController->NewScenarioDraft();
+		UE_LOG(LogScenarioEditorLaunch, Log, TEXT("ScenarioEditor 새 draft 자동 시작 완료"));
 	}
 	else
 	{
 		FString resolvedPath;
 		TArray<FString> diagnostics;
-		if (!editorController->LoadEpisodeSetupJsonFile(PendingEpisodeSetupPath, resolvedPath, diagnostics))
+		if (!editorController->LoadScenarioSetupJsonFile(PendingScenarioSetupPath, resolvedPath, diagnostics))
 		{
 			UE_LOG(
 				LogScenarioEditorLaunch,
 				Warning,
-				TEXT("EpisodeSetup 자동 로드 실패 | Path: %s, Diagnostics: %s"),
-				*PendingEpisodeSetupPath,
+				TEXT("ScenarioSetup 자동 로드 실패 | Path: %s, Diagnostics: %s"),
+				*PendingScenarioSetupPath,
 				*FString::Join(diagnostics, TEXT(" | ")));
 			return;
 		}
 
-		bLoadedExistingEpisode = true;
+		bLoadedExistingScenario = true;
 		UE_LOG(
 			LogScenarioEditorLaunch,
 			Log,
-			TEXT("EpisodeSetup 자동 로드 완료 | Path: %s"),
+			TEXT("ScenarioSetup 자동 로드 완료 | Path: %s"),
 			*resolvedPath);
 	}
 
-	bAutoStartedEpisodeEditorSession = true;
-	bAutoStartedEpisodeEditorSessionLoadedExistingEpisode = bLoadedExistingEpisode;
-	AutoStartCompletedEvent.Broadcast(bLoadedExistingEpisode);
+	bAutoStartedScenarioEditorSession = true;
+	bAutoStartedScenarioEditorSessionLoadedExistingScenario = bLoadedExistingScenario;
+	AutoStartCompletedEvent.Broadcast(bLoadedExistingScenario);
 	ResetPendingAutoStartState();
 }
 

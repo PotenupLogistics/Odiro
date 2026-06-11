@@ -1,8 +1,8 @@
-# EpisodeSetup JSON Guide
+# ScenarioSetup JSON Guide
 
-이 문서는 LLM이 EpisodeSetup JSON을 안정적으로 생성하기 위한 축약 양식을 설명한다. 기본 샘플은 `Json/Input/EpisodeSetupSample.json` 및 `Json/Input/EpisodeSetupSample_*.json`을 기준으로 한다. Planned pedestrian 샘플은 `Json/Input/EpisodeSetupSample_PlannedPedestrianObstacle.json`, `Json/Input/EpisodeSetupSample_PlannedPedestrianRobotOverlap.json`을 참고한다.
+이 문서는 LLM이 ScenarioSetup JSON을 안정적으로 생성하기 위한 축약 양식을 설명한다. 기본 샘플은 `Json/Input/EpisodeSetupSample.json` 및 `Json/Input/EpisodeSetupSample_*.json`을 기준으로 한다. Planned pedestrian 샘플은 `Json/Input/EpisodeSetupSample_PlannedPedestrianObstacle.json`, `Json/Input/EpisodeSetupSample_PlannedPedestrianRobotOverlap.json`을 참고한다.
 
-EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로, 정적 장애물, 보행자, 로봇 배치와 로봇 목적지를 정의한다. DeliveryBot의 주행/센서/정책 튜닝값은 같은 실행 pair의 DeliveryBotSetup JSON에서 정의한다.
+ScenarioSetup JSON은 시나리오 실행 정보, 지면 영역, 보행자 경로, 정적 장애물, 보행자, 로봇 배치와 로봇 목적지를 정의한다. DeliveryBot의 주행/센서/정책 튜닝값은 같은 실행 pair의 DeliveryBotSetup JSON에서 정의한다.
 
 ## 출력 원칙
 
@@ -20,7 +20,7 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
 
 ```json
 {
-  "schema": "episode_actor_spawn_mvp",
+  "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "sidewalk_actor_spawn_001",
   "map_id": "EpisodeSandbox",
@@ -35,8 +35,8 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
 | 필드 | 필수 | 설명 |
 | --- | --- | --- |
 | `schema` | 권장 | 사람이 읽는 스키마 이름 |
-| `version` | 권장 | EpisodeSetup 버전. 없으면 `1`로 처리 |
-| `scenario_id` | 권장 | 에피소드/시나리오 ID |
+| `version` | 권장 | ScenarioSetup 버전. 없으면 `1`로 처리 |
+| `scenario_id` | 권장 | 시나리오 ID |
 | `map_id` | 권장 | 대상 맵 ID |
 | `run` | 권장 | seed와 시간 제한 |
 | `evaluation` | 권장 | 종료 조건과 평가 파라미터 |
@@ -266,7 +266,7 @@ EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로
 
 `curve_offset_m`는 setup 단계에서 baseline plan point를 deterministic하게 샘플링하기 위한 값이다. 값이 클수록 직선 start-goal 경로가 더 크게 휘고, `0`이면 raw polyline을 사용한다. `curve_sample_spacing_m`은 곡선을 몇 m 간격으로 샘플링할지 정하는 해상도이며 보행자의 속도 자체를 의미하지 않는다.
 
-`planned_trajectory`의 runtime reaction은 Unreal 내부 로직에서 처리한다. Sidestep local curve, state hysteresis, visual facing, animation bridge 값은 EpisodeSetup JSON에서 직접 튜닝하지 않는다.
+`planned_trajectory`의 runtime reaction은 Unreal 내부 로직에서 처리한다. Sidestep local curve, state hysteresis, visual facing, animation bridge 값은 ScenarioSetup JSON에서 직접 튜닝하지 않는다.
 
 #### Pedestrian Behavior
 

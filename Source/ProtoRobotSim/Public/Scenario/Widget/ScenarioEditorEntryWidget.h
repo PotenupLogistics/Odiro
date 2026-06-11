@@ -27,19 +27,19 @@ public:
 	bool bShowAssetPaletteOnSuccessfulStart = true;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Entry")
-	TObjectPtr<UButton> NewEpisodeButton;
+	TObjectPtr<UButton> NewScenarioButton;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Entry")
-	TObjectPtr<UButton> LoadEpisodeButton;
+	TObjectPtr<UButton> LoadScenarioButton;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Entry")
-	TObjectPtr<UEditableTextBox> EpisodeSetupJsonPathTextBox;
+	TObjectPtr<UEditableTextBox> ScenarioSetupJsonPathTextBox;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Entry")
-	void StartNewEpisode();
+	void StartNewScenario();
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Entry")
-	bool LoadEpisodeFromPathTextBox();
+	bool LoadScenarioFromPathTextBox();
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Entry")
 	UScenarioAssetPaletteWidget* ShowAssetPaletteWidget();
@@ -48,28 +48,28 @@ public:
 	void RemoveAssetPaletteWidget();
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Entry")
-	bool CompleteExternallyStartedEpisode(bool bLoadedExistingEpisode);
+	bool CompleteExternallyStartedScenario(bool bLoadedExistingScenario);
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Entry")
 	UScenarioAssetPaletteWidget* GetAssetPaletteWidget() const;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Scenario|Editor|Entry")
-	void OnEpisodeEditorSessionStarted(bool bLoadedExistingEpisode);
+	void OnScenarioEditorSessionStarted(bool bLoadedExistingScenario);
 
 protected:
 	UFUNCTION()
-	void HandleNewEpisodeButtonClicked();
+	void HandleNewScenarioButtonClicked();
 
 	UFUNCTION()
-	void HandleLoadEpisodeButtonClicked();
+	void HandleLoadScenarioButtonClicked();
 
 private:
 	void BindScenarioEditorLaunchSubsystem();
 	void UnbindScenarioEditorLaunchSubsystem();
-	void HandleAutoStartCompleted(bool bLoadedExistingEpisode);
+	void HandleAutoStartCompleted(bool bLoadedExistingScenario);
 	void RequestEditorWidgetInputMode();
 	void ReleaseEditorWidgetInputMode();
-	bool FinishSuccessfulStart(bool bLoadedExistingEpisode);
+	bool FinishSuccessfulStart(bool bLoadedExistingScenario);
 	void HideAfterSuccessfulStartIfNeeded();
 	UScenarioEditorRootWidget* GetEditorRootWidget() const;
 

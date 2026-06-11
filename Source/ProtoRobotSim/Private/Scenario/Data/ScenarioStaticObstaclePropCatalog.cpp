@@ -4,7 +4,7 @@
 namespace
 {
 	const FSoftObjectPath DefaultStaticObstaclePropCatalogPath(
-		TEXT("/Game/Data/Episode/DA_EpisodeStaticObstaclePropCatalog.DA_EpisodeStaticObstaclePropCatalog"));
+		TEXT("/Game/Data/Scenario/DA_ScenarioStaticObstaclePropCatalog.DA_ScenarioStaticObstaclePropCatalog"));
 }
 
 TSoftObjectPtr<UScenarioStaticObstaclePropCatalog> UScenarioStaticObstaclePropCatalog::MakeDefaultCatalogReference()

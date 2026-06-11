@@ -22,13 +22,13 @@ public:
 	virtual void NativeDestruct() override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM")
-	bool bLoadFirstEpisodeAfterGenerate = false;
+	bool bLoadFirstScenarioAfterGenerate = false;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|LLM")
 	bool GenerateFromPromptTextBox();
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|LLM")
-	bool LoadGeneratedEpisode();
+	bool LoadGeneratedScenario();
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|LLM")
 	bool RunGeneratedSimulation();
@@ -41,7 +41,7 @@ protected:
 	void HandleGenerateButtonClicked();
 
 	UFUNCTION()
-	void HandleLoadGeneratedEpisodeButtonClicked();
+	void HandleLoadGeneratedScenarioButtonClicked();
 
 	UFUNCTION()
 	void HandleRunGeneratedSimulationButtonClicked();
@@ -57,7 +57,7 @@ private:
 	void RequestEditorWidgetInputMode();
 	void ReleaseEditorWidgetInputMode();
 	bool TryGetPrompt(FString& outPrompt);
-	bool TryGetEpisodeCount(int32& outEpisodeCount);
+	bool TryGetScenarioCount(int32& outScenarioCount);
 	UWidget* ResolveInputModeFocusWidget();
 	UScenarioLlmAuthoringSubsystem* GetLlmAuthoringSubsystem() const;
 
@@ -68,13 +68,13 @@ private:
 	TObjectPtr<UMultiLineEditableTextBox> PromptTextBox;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableTextBox> EpisodeCountTextBox;
+	TObjectPtr<UEditableTextBox> ScenarioCountTextBox;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> GenerateButton;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> LoadGeneratedEpisodeButton;
+	TObjectPtr<UButton> LoadGeneratedScenarioButton;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> RunGeneratedSimulationButton;

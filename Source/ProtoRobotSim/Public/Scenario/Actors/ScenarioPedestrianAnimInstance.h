@@ -27,6 +27,9 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category="Scenario|Visual")
 	bool bActuallyMoving = false;
 
+	UPROPERTY(BlueprintReadOnly, Category="Scenario|Visual")
+	bool bMoving = false;
+
 	// Baseline path를 따라 전진하는 속도. 감속/정지 state의 speed scale이 반영.
 	UPROPERTY(BlueprintReadOnly, Category="Scenario|Visual", meta = (Units = "cm/s"))
 	float ProgressSpeedCmPerSecond = 0.0f;

@@ -58,9 +58,9 @@ struct PROTOROBOTSIM_API FSimulationSetup
 
 	// SimulatorMode에서 로드할 UE level identifier
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
-	FString MapId = TEXT("EpisodeSimulationMap");
+	FString MapId = TEXT("ScenarioSimulationMap");
 
-	// EpisodeSetup, DeliveryBotSetup, PolicySpec 조합 목록을 담은 EpisodeRunQueue JSON path
+	// ScenarioSetup, DeliveryBotSetup, PolicySpec 조합 목록을 담은 EpisodeRunQueue JSON path
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
 	FString RunQueueJsonPath;
 

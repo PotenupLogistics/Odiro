@@ -41,14 +41,14 @@ bool UScenarioLlmPromptWidget::GenerateFromPromptTextBox()
 	FString prompt;
 	if (!TryGetPrompt(prompt)) return false;
 
-	int32 episodeCount = 0;
-	if (!TryGetEpisodeCount(episodeCount)) return false;
+	int32 scenarioCount = 0;
+	if (!TryGetScenarioCount(scenarioCount)) return false;
 
 	SetStatusText(TEXT("생성 요청 중."));
-	return llmSubsystem->GenerateEpisodeFromPrompt(prompt, episodeCount);
+	return llmSubsystem->GenerateEpisodeFromPrompt(prompt, scenarioCount);
 }
 
-bool UScenarioLlmPromptWidget::LoadGeneratedEpisode()
+bool UScenarioLlmPromptWidget::LoadGeneratedScenario()
 {
 	const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem();
 	if (!llmSubsystem)
@@ -64,9 +64,9 @@ bool UScenarioLlmPromptWidget::LoadGeneratedEpisode()
 		return false;
 	}
 
-	if (result.FirstEpisodeSetupJsonPath.IsEmpty())
+	if (result.FirstScenarioSetupJsonPath.IsEmpty())
 	{
-		SetStatusText(TEXT("생성된 RunQueue가 EpisodeSetup 경로를 포함하지 않습니다."));
+		SetStatusText(TEXT("생성된 RunQueue가 ScenarioSetup 경로를 포함하지 않습니다."));
 		return false;
 	}
 
@@ -79,18 +79,18 @@ bool UScenarioLlmPromptWidget::LoadGeneratedEpisode()
 
 	FString resolvedJsonFilePath;
 	TArray<FString> diagnostics;
-	if (!editorController->LoadEpisodeSetupJsonFile(
-			result.FirstEpisodeSetupJsonPath,
+	if (!editorController->LoadScenarioSetupJsonFile(
+			result.FirstScenarioSetupJsonPath,
 			resolvedJsonFilePath,
 			diagnostics))
 	{
 		SetStatusText(diagnostics.IsEmpty()
-			? FString::Printf(TEXT("생성된 EpisodeSetup 불러오기 실패: %s"), *result.FirstEpisodeSetupJsonPath)
-			: FString::Printf(TEXT("EpisodeSetup 불러오기 실패:\n%s"), *FString::Join(diagnostics, TEXT("\n"))));
+			? FString::Printf(TEXT("생성된 ScenarioSetup 불러오기 실패: %s"), *result.FirstScenarioSetupJsonPath)
+			: FString::Printf(TEXT("ScenarioSetup 불러오기 실패:\n%s"), *FString::Join(diagnostics, TEXT("\n"))));
 		return false;
 	}
 
-	SetStatusText(FString::Printf(TEXT("EpisodeSetup 불러오기: %s"), *resolvedJsonFilePath));
+	SetStatusText(FString::Printf(TEXT("ScenarioSetup 불러오기: %s"), *resolvedJsonFilePath));
 	return true;
 }
 
@@ -145,9 +145,9 @@ void UScenarioLlmPromptWidget::HandleGenerateButtonClicked()
 	GenerateFromPromptTextBox();
 }
 
-void UScenarioLlmPromptWidget::HandleLoadGeneratedEpisodeButtonClicked()
+void UScenarioLlmPromptWidget::HandleLoadGeneratedScenarioButtonClicked()
 {
-	LoadGeneratedEpisode();
+	LoadGeneratedScenario();
 }
 
 void UScenarioLlmPromptWidget::HandleRunGeneratedSimulationButtonClicked()
@@ -170,9 +170,9 @@ void UScenarioLlmPromptWidget::HandleGenerationCompleted(const FScenarioLlmGener
 		result.RunCount,
 		*result.SavedRunQueueJsonPath));
 
-	if (bLoadFirstEpisodeAfterGenerate)
+	if (bLoadFirstScenarioAfterGenerate)
 	{
-		LoadGeneratedEpisode();
+		LoadGeneratedScenario();
 	}
 }
 
@@ -184,14 +184,14 @@ void UScenarioLlmPromptWidget::BindControls()
 		GenerateButton->OnClicked.AddDynamic(this, &UScenarioLlmPromptWidget::HandleGenerateButtonClicked);
 	}
 
-	if (LoadGeneratedEpisodeButton)
+	if (LoadGeneratedScenarioButton)
 	{
-		LoadGeneratedEpisodeButton->OnClicked.RemoveDynamic(
+		LoadGeneratedScenarioButton->OnClicked.RemoveDynamic(
 			this,
-			&UScenarioLlmPromptWidget::HandleLoadGeneratedEpisodeButtonClicked);
-		LoadGeneratedEpisodeButton->OnClicked.AddDynamic(
+			&UScenarioLlmPromptWidget::HandleLoadGeneratedScenarioButtonClicked);
+		LoadGeneratedScenarioButton->OnClicked.AddDynamic(
 			this,
-			&UScenarioLlmPromptWidget::HandleLoadGeneratedEpisodeButtonClicked);
+			&UScenarioLlmPromptWidget::HandleLoadGeneratedScenarioButtonClicked);
 	}
 
 	if (RunGeneratedSimulationButton)
@@ -278,31 +278,31 @@ bool UScenarioLlmPromptWidget::TryGetPrompt(FString& outPrompt)
 	return true;
 }
 
-bool UScenarioLlmPromptWidget::TryGetEpisodeCount(int32& outEpisodeCount)
+bool UScenarioLlmPromptWidget::TryGetScenarioCount(int32& outScenarioCount)
 {
-	outEpisodeCount = 0;
-	if (!EpisodeCountTextBox)
+	outScenarioCount = 0;
+	if (!ScenarioCountTextBox)
 	{
 		if (const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem())
 		{
-			outEpisodeCount = llmSubsystem->DefaultEpisodeCount;
+			outScenarioCount = llmSubsystem->DefaultEpisodeCount;
 			return true;
 		}
 
-		outEpisodeCount = 1;
+		outScenarioCount = 1;
 		return true;
 	}
 
-	const FString text = EpisodeCountTextBox->GetText().ToString().TrimStartAndEnd();
+	const FString text = ScenarioCountTextBox->GetText().ToString().TrimStartAndEnd();
 	if (text.IsEmpty())
 	{
 		if (const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem())
 		{
-			outEpisodeCount = llmSubsystem->DefaultEpisodeCount;
+			outScenarioCount = llmSubsystem->DefaultEpisodeCount;
 			return true;
 		}
 
-		outEpisodeCount = 1;
+		outScenarioCount = 1;
 		return true;
 	}
 
@@ -312,8 +312,8 @@ bool UScenarioLlmPromptWidget::TryGetEpisodeCount(int32& outEpisodeCount)
 		return false;
 	}
 
-	outEpisodeCount = FCString::Atoi(*text);
-	if (outEpisodeCount <= 0)
+	outScenarioCount = FCString::Atoi(*text);
+	if (outScenarioCount <= 0)
 	{
 		SetStatusText(TEXT("생성 횟수는 1 이상이어야 합니다."));
 		return false;

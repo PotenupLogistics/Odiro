@@ -229,7 +229,7 @@ bool AScenarioStaticObstacle::TryFindConfiguredPropEntry(
 		UE_LOG(
 			LogScenarioStaticObstacle,
 			Warning,
-			TEXT("Episode static obstacle prop catalog is not configured or failed to load: %s"),
+			TEXT("Scenario static obstacle prop catalog is not configured or failed to load: %s"),
 			*StaticObstaclePropCatalog.ToSoftObjectPath().ToString());
 		return false;
 	}

@@ -8,7 +8,7 @@ class UButton;
 class UTextBlock;
 class UWidget;
 
-// EpisodeEditorMap에서 저장과 MainMenu 복귀를 제공하는 최소 toolbar.
+// ScenarioEditorMap에서 저장과 MainMenu 복귀를 제공하는 최소 toolbar.
 UCLASS(BlueprintType, Blueprintable)
 class PROTOROBOTSIM_API UScenarioEditorToolbarWidget : public UUserWidget
 {
@@ -19,13 +19,13 @@ public:
 	virtual void NativeDestruct() override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Toolbar")
-	FString DefaultSavePath = TEXT("Json/Input/EpisodeSetupNew.json");
+	FString DefaultSavePath = TEXT("Json/Input/ScenarioSetupNew.json");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Toolbar")
 	FString MainMenuMapId = TEXT("MainMenuMap");
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
-	bool SaveEpisode();
+	bool SaveScenario();
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
 	void ReturnToMainMenu();

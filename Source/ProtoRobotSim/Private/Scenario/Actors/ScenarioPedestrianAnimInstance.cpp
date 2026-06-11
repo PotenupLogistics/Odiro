@@ -60,6 +60,7 @@ void UScenarioPedestrianAnimInstance::ResetVisualMotion()
 	NominalSpeedCmPerSecond = 0.0f;
 	ActualVisualSpeedCmPerSecond = 0.0f;
 	bActuallyMoving = false;
+	bMoving = false;
 	ProgressSpeedCmPerSecond = 0.0f;
 	LateralSpeedCmPerSecond = 0.0f;
 	MoveDirectionDegrees = 0.0f;
@@ -87,6 +88,7 @@ void UScenarioPedestrianAnimInstance::UpdateVisualMotionFromActor(float deltaSec
 		NominalSpeedCmPerSecond = 0.0f;
 		ActualVisualSpeedCmPerSecond = 0.0f;
 		bActuallyMoving = false;
+		bMoving = false;
 		ProgressSpeedCmPerSecond = 0.0f;
 		LateralSpeedCmPerSecond = 0.0f;
 		MoveDirectionDegrees = 0.0f;
@@ -109,6 +111,7 @@ void UScenarioPedestrianAnimInstance::UpdateVisualMotionFromActor(float deltaSec
 		deltaSeconds,
 		VisualSpeedSmoothingRate);
 	bActuallyMoving = ActualVisualSpeedCmPerSecond > VisualMovingThresholdCmPerSecond;
+	bMoving = bActuallyMoving;
 
 	const FVector moveDirection = deltaLocation.GetSafeNormal2D();
 	if (!bActuallyMoving || moveDirection.IsNearlyZero())

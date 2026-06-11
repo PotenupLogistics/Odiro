@@ -2,16 +2,16 @@
 
 이 문서는 DeliveryBot의 주행/센서/정책 튜닝값을 `FDeliveryBotSetupInfo`에 채우기 위한 JSON 범위를 정리한다.
 
-DeliveryBotSetup JSON은 로봇 액터를 어디에, 어떤 ID로, 어떤 목표로 배치할지 결정하지 않는다. 그 책임은 EpisodeSetup JSON에 둔다.
-Runner는 EpisodeSetup JSON과 DeliveryBotSetup JSON을 하나의 실행 pair로 묶어 컴파일한다.
+DeliveryBotSetup JSON은 로봇 액터를 어디에, 어떤 ID로, 어떤 목표로 배치할지 결정하지 않는다. 그 책임은 ScenarioSetup JSON에 둔다.
+Runner는 ScenarioSetup JSON과 DeliveryBotSetup JSON을 하나의 실행 pair로 묶어 컴파일한다.
 
 ## 책임 범위
 
-EpisodeSetup JSON이 담당하는 값:
+ScenarioSetup JSON이 담당하는 값:
 
 | 범위 | 예시 |
 | --- | --- |
-| Episode 실행 정보 | `run.base_seed`, `run.iteration_index`, `run.time_limit_s` |
+| Scenario 실행 정보 | `run.base_seed`, `run.iteration_index`, `run.time_limit_s` |
 | 로봇 액터 식별 | `actors.robot.instance_id`, `actors.robot.asset_id` |
 | 로봇 배치 | `actors.robot.spawn_only`, `actors.robot.xy_m`, `actors.robot.yaw_deg` |
 | 로봇 목적지 | `actors.robot.route.goal_xy_m`, `actors.robot.route.auto_start` |
@@ -139,13 +139,13 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
 ```json
 {
   "pair_id": "sample_0",
-  "episode_setup": "Json/Input/EpisodeSetupSample_0.json",
+  "scenario_setup": "Json/Input/EpisodeSetupSample_0.json",
   "delivery_bot_setup": "Json/Input/DeliveryBotSetupSample_0.json"
 }
 ```
 
-여러 pair를 순서대로 실행할 때는 `Json/Input/EpisodeRunQueueSample.json`처럼 `runs` 배열로 묶고 `UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile()`에 큐 파일 경로를 전달한다.
-`episode_setup`과 `delivery_bot_setup`은 둘 다 필수이며, Runner는 더 이상 기본 DeliveryBotSetup 파일로 fallback하지 않는다.
+여러 pair를 순서대로 실행할 때는 `Json/Input/EpisodeRunQueueSample.json`처럼 `runs` 배열로 묶고 `UScenarioRunnerSubsystem::StartBatchFromRunQueueJsonFile()`에 큐 파일 경로를 전달한다.
+`scenario_setup`과 `delivery_bot_setup`은 둘 다 필수이며, Runner는 더 이상 기본 DeliveryBotSetup 파일로 fallback하지 않는다.
 
 ```json
 {
@@ -154,7 +154,7 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
   "runs": [
     {
       "pair_id": "sample_0",
-      "episode_setup": "Json/Input/EpisodeSetupSample_0.json",
+      "scenario_setup": "Json/Input/EpisodeSetupSample_0.json",
       "delivery_bot_setup": "Json/Input/DeliveryBotSetupSample_0.json"
     }
   ]
@@ -189,7 +189,7 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
 
 ## 구현 메모
 
-`UEpisodeCompiler::CompileRobotSpawn()`은 로봇 배치와 목적지를 EpisodeSetup에서 읽는다. 시작 위치는 `actors.robot.xy_m`/`actors.robot.yaw_deg`, 목적지는 `actors.robot.route.goal_xy_m`을 사용한다.
-`UDeliveryBotSetupCompiler`는 DeliveryBotSetup JSON을 `FDeliveryBotSetupInfo`로 컴파일한다. Runner는 두 결과를 merge할 때 `LocationSetupInfo`만 EpisodeSetup 결과로 유지하고, 나머지 DeliveryBot setup 값은 DeliveryBotSetup 결과를 사용한다.
+`UScenarioCompiler::CompileRobotSpawn()`은 로봇 배치와 목적지를 ScenarioSetup에서 읽는다. 시작 위치는 `actors.robot.xy_m`/`actors.robot.yaw_deg`, 목적지는 `actors.robot.route.goal_xy_m`을 사용한다.
+`UDeliveryBotSetupCompiler`는 DeliveryBotSetup JSON을 `FDeliveryBotSetupInfo`로 컴파일한다. Runner는 두 결과를 merge할 때 `LocationSetupInfo`만 ScenarioSetup 결과로 유지하고, 나머지 DeliveryBot setup 값은 DeliveryBotSetup 결과를 사용한다.
 
-DeliveryBot 튜닝값은 `drive`, `path_follow`, `lidar`만 `FDeliveryBotSetupInfo`로 전달한다. `LocationSetupInfo`는 DeliveryBotSetup JSON에서 직접 열지 않고 EpisodeSetup의 배치/route 결과로 채운다.
+DeliveryBot 튜닝값은 `drive`, `path_follow`, `lidar`만 `FDeliveryBotSetupInfo`로 전달한다. `LocationSetupInfo`는 DeliveryBotSetup JSON에서 직접 열지 않고 ScenarioSetup의 배치/route 결과로 채운다.

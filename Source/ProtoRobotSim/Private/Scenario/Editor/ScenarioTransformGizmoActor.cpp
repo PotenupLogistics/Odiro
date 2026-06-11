@@ -519,7 +519,7 @@ void AScenarioTransformGizmoActor::ConfigureHandleComponent(
 	component->SetGenerateOverlapEvents(false);
 	component->SetCastShadow(false);
 	component->SetTranslucentSortPriority(20);
-	component->ComponentTags.AddUnique(FName(TEXT("EpisodeTransformGizmo")));
+	component->ComponentTags.AddUnique(FName(TEXT("ScenarioTransformGizmo")));
 	const FName handleTag = TransformGizmoHandleTag(handle);
 	if (!handleTag.IsNone())
 	{

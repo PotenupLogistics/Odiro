@@ -312,7 +312,7 @@ const UScenarioAssetPaletteCatalog* UScenarioAssetPaletteWidget::GetPaletteCatal
 {
 	if (AssetPaletteCatalog.IsNull())
 	{
-		UE_LOG(LogScenarioAssetPaletteWidget, Warning, TEXT("Episode asset palette catalog is not configured."));
+		UE_LOG(LogScenarioAssetPaletteWidget, Warning, TEXT("Scenario asset palette catalog is not configured."));
 		return nullptr;
 	}
 

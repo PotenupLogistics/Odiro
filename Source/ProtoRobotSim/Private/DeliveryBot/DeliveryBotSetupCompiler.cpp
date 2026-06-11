@@ -336,7 +336,7 @@ void UDeliveryBotSetupCompiler::CompileRobotObject(const FJsonObject& rootObject
 			result,
 			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("episode_fields_in_delivery_bot_setup"),
-			TEXT("DeliveryBotSetup JSON에는 run/actors를 넣지 않음. 에피소드 배치 정보는 EpisodeSetup JSON이 담당함."));
+			TEXT("DeliveryBotSetup JSON에는 run/actors를 넣지 않음. 시나리오 배치 정보는 ScenarioSetup JSON이 담당함."));
 	}
 
 	const TSharedPtr<FJsonValue> robotValue = rootObject.TryGetField(TEXT("robot"));
@@ -373,7 +373,7 @@ void UDeliveryBotSetupCompiler::CompileRobotObject(const FJsonObject& rootObject
 			result,
 			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("episode_robot_fields_in_delivery_bot_setup"),
-			TEXT("DeliveryBotSetup.robot에는 location/route/instance_id/asset_id/spawn_only를 넣지 않음. 로봇 배치와 목적지는 EpisodeSetup JSON이 담당함."));
+			TEXT("DeliveryBotSetup.robot에는 location/route/instance_id/asset_id/spawn_only를 넣지 않음. 로봇 배치와 목적지는 ScenarioSetup JSON이 담당함."));
 	}
 
 	CompileDrive(*robotObject, result, result.SetupInfo.ChaosDriveConfigInfo);

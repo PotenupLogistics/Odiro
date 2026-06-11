@@ -100,6 +100,12 @@ namespace
 		return normalizedJsonFilePath;
 	}
 
+	bool TryReadRunQueueScenarioSetupPath(const FJsonObject& runObject, FString& outScenarioSetupJsonPath)
+	{
+		return runObject.TryGetStringField(TEXT("scenario_setup"), outScenarioSetupJsonPath)
+			|| runObject.TryGetStringField(TEXT("scenario_setup_json_path"), outScenarioSetupJsonPath);
+	}
+
 	FScenarioSimulationSetupSpec MakeSimulationSetupSpec(const FScenarioWorldSpec& worldSpec)
 	{
 		FScenarioSimulationSetupSpec setupSpec;
@@ -159,14 +165,14 @@ namespace
 	}
 }
 
-bool UScenarioRunnerSubsystem::StartEpisodePairFromJsonFiles(
-	const FString& episodeSetupJsonPath,
+bool UScenarioRunnerSubsystem::StartScenarioPairFromJsonFiles(
+	const FString& scenarioSetupJsonPath,
 	const FString& deliveryBotSetupJsonPath)
 {
-	if (episodeSetupJsonPath.IsEmpty() || deliveryBotSetupJsonPath.IsEmpty()) return false;
+	if (scenarioSetupJsonPath.IsEmpty() || deliveryBotSetupJsonPath.IsEmpty()) return false;
 
 	FScenarioRunInput runInput;
-	runInput.EpisodeSetupJsonPath = episodeSetupJsonPath;
+	runInput.ScenarioSetupJsonPath = scenarioSetupJsonPath;
 	runInput.DeliveryBotSetupJsonPath = deliveryBotSetupJsonPath;
 
 	TArray<FScenarioRunInput> runInputs;
@@ -198,7 +204,7 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
 	PendingRunInputs.Reset();
 	for (const FScenarioRunInput& runInput : runInputs)
 	{
-		if (!runInput.EpisodeSetupJsonPath.IsEmpty() && !runInput.DeliveryBotSetupJsonPath.IsEmpty())
+		if (!runInput.ScenarioSetupJsonPath.IsEmpty() && !runInput.DeliveryBotSetupJsonPath.IsEmpty())
 		{
 			PendingRunInputs.Add(runInput);
 		}
@@ -207,9 +213,9 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
 			UE_LOG(
 				LogScenarioRunner,
 				Warning,
-				TEXT("Episode pair 입력 무시: EpisodeSetup 또는 DeliveryBotSetup 경로가 비어 있음 | Pair: %s, EpisodeSetup: %s, DeliveryBotSetup: %s"),
+				TEXT("Scenario pair 입력 무시: ScenarioSetup 또는 DeliveryBotSetup 경로가 비어 있음 | Pair: %s, ScenarioSetup: %s, DeliveryBotSetup: %s"),
 				*runInput.PairId,
-				*runInput.EpisodeSetupJsonPath,
+				*runInput.ScenarioSetupJsonPath,
 				*runInput.DeliveryBotSetupJsonPath);
 		}
 	}
@@ -224,7 +230,7 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
 
 	if (UScenarioSimulationSubsystem* simulationSubsystem = ResolveSimulationSubsystem())
 	{
-		simulationSubsystem->ClearEpisode();
+		simulationSubsystem->ClearScenario();
 	}
 
 	RunRecords.Reset();
@@ -234,9 +240,9 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
 	ActiveBatchRunId = activeBatchRunId.TrimStartAndEnd();
 	SetRunnerState(EScenarioRunnerState::Preparing);
 
-	UE_LOG(LogScenarioRunner, Warning, TEXT("Episode pair 배치 시작 | Count: %d"), PendingRunInputs.Num());
+	UE_LOG(LogScenarioRunner, Warning, TEXT("Scenario pair 배치 시작 | Count: %d"), PendingRunInputs.Num());
 
-	StartNextEpisode();
+	StartNextScenario();
 	return true;
 }
 
@@ -332,10 +338,7 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunQueueJsonFileForRun(
 
 		FScenarioRunInput runInput;
 		runObject->TryGetStringField(TEXT("pair_id"), runInput.PairId);
-		if (!runObject->TryGetStringField(TEXT("episode_setup"), runInput.EpisodeSetupJsonPath))
-		{
-			runObject->TryGetStringField(TEXT("episode_setup_json_path"), runInput.EpisodeSetupJsonPath);
-		}
+		TryReadRunQueueScenarioSetupPath(*runObject, runInput.ScenarioSetupJsonPath);
 		if (!runObject->TryGetStringField(TEXT("delivery_bot_setup"), runInput.DeliveryBotSetupJsonPath))
 		{
 			runObject->TryGetStringField(TEXT("delivery_bot_setup_json_path"), runInput.DeliveryBotSetupJsonPath);
@@ -346,16 +349,16 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunQueueJsonFileForRun(
 		}
 
 		runInput.PairId = runInput.PairId.TrimStartAndEnd();
-		runInput.EpisodeSetupJsonPath = runInput.EpisodeSetupJsonPath.TrimStartAndEnd();
-		runInput.EpisodeSetupJsonPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		runInput.ScenarioSetupJsonPath = runInput.ScenarioSetupJsonPath.TrimStartAndEnd();
+		runInput.ScenarioSetupJsonPath.ReplaceInline(TEXT("\\"), TEXT("/"));
 		runInput.DeliveryBotSetupJsonPath = runInput.DeliveryBotSetupJsonPath.TrimStartAndEnd();
 		runInput.DeliveryBotSetupJsonPath.ReplaceInline(TEXT("\\"), TEXT("/"));
 		runInput.PolicySpecJsonPath = runInput.PolicySpecJsonPath.TrimStartAndEnd();
 		runInput.PolicySpecJsonPath.ReplaceInline(TEXT("\\"), TEXT("/"));
 
-		if (runInput.EpisodeSetupJsonPath.IsEmpty())
+		if (runInput.ScenarioSetupJsonPath.IsEmpty())
 		{
-			UE_LOG(LogScenarioRunner, Warning, TEXT("Episode run queue 항목 무시: episode_setup이 비어 있음 | Path: %s, Index: %d"), *runQueueJsonFilePath, index);
+			UE_LOG(LogScenarioRunner, Warning, TEXT("Episode run queue 항목 무시: scenario_setup이 비어 있음 | Path: %s, Index: %d"), *runQueueJsonFilePath, index);
 			continue;
 		}
 
@@ -393,7 +396,7 @@ void UScenarioRunnerSubsystem::CancelRun()
 
 	if (UScenarioSimulationSubsystem* simulationSubsystem = ResolveSimulationSubsystem())
 	{
-		simulationSubsystem->ClearEpisode();
+		simulationSubsystem->ClearScenario();
 	}
 
 	UE_LOG(LogScenarioRunner, Warning, TEXT("Episode 실행 취소됨."));
@@ -491,14 +494,14 @@ void UScenarioRunnerSubsystem::HandleEpisodeEnded(FEpisodeEvaluationResult resul
 
 	if (UScenarioSimulationSubsystem* simulationSubsystem = ResolveSimulationSubsystem())
 	{
-		simulationSubsystem->ClearEpisode();
+		simulationSubsystem->ClearScenario();
 	}
 
 	SetRunnerState(EScenarioRunnerState::Ending);
-	QueueStartNextEpisode();
+	QueueStartNextScenario();
 }
 
-void UScenarioRunnerSubsystem::StartNextEpisode()
+void UScenarioRunnerSubsystem::StartNextScenario()
 {
 	if (PendingRunInputs.IsEmpty())
 	{
@@ -536,8 +539,8 @@ void UScenarioRunnerSubsystem::StartNextEpisode()
 	CurrentRecord.RunIndex = CurrentRunIndex;
 	CurrentRecord.RunId = BuildRunId();
 	CurrentRecord.PairId = CurrentRunInput.PairId;
-	CurrentRecord.SourceJsonPath = CurrentRunInput.EpisodeSetupJsonPath;
-	CurrentRecord.EpisodeSetupJsonPath = CurrentRunInput.EpisodeSetupJsonPath;
+	CurrentRecord.SourceJsonPath = CurrentRunInput.ScenarioSetupJsonPath;
+	CurrentRecord.EpisodeSetupJsonPath = CurrentRunInput.ScenarioSetupJsonPath;
 	CurrentRecord.DeliveryBotSetupJsonPath = CurrentRunInput.DeliveryBotSetupJsonPath;
 	CurrentRecord.PolicySpecJsonPath = CurrentRunInput.PolicySpecJsonPath;
 	CurrentRecord.StartTimeSeconds = world->GetTimeSeconds();
@@ -547,11 +550,11 @@ void UScenarioRunnerSubsystem::StartNextEpisode()
 	UE_LOG(
 		LogScenarioRunner,
 		Log,
-		TEXT("Episode pair 준비 중 | RunId: %s, Pair: %s, Index: %d, EpisodeSetup: %s, DeliveryBotSetup: %s, PolicySpec: %s, Remaining: %d"),
+		TEXT("Scenario pair 준비 중 | RunId: %s, Pair: %s, Index: %d, ScenarioSetup: %s, DeliveryBotSetup: %s, PolicySpec: %s, Remaining: %d"),
 		*CurrentRecord.RunId,
 		*CurrentRecord.PairId,
 		CurrentRecord.RunIndex,
-		*CurrentRunInput.EpisodeSetupJsonPath,
+		*CurrentRunInput.ScenarioSetupJsonPath,
 		*CurrentRunInput.DeliveryBotSetupJsonPath,
 		CurrentRunInput.PolicySpecJsonPath.IsEmpty() ? TEXT("<delivery_bot_setup>") : *CurrentRunInput.PolicySpecJsonPath,
 		PendingRunInputs.Num());
@@ -564,7 +567,7 @@ void UScenarioRunnerSubsystem::StartNextEpisode()
 			false,
 			EEpisodeEvaluationOutcome::Failure,
 			EEpisodeEvaluationTerminalReason::CompilerCreateFailed);
-		QueueStartNextEpisode();
+		QueueStartNextScenario();
 		return;
 	}
 
@@ -576,11 +579,11 @@ void UScenarioRunnerSubsystem::StartNextEpisode()
 			false,
 			EEpisodeEvaluationOutcome::Failure,
 			EEpisodeEvaluationTerminalReason::CompilerCreateFailed);
-		QueueStartNextEpisode();
+		QueueStartNextScenario();
 		return;
 	}
 
-	FScenarioCompileResult compileResult = compiler->CompileEpisodeWorldSpecFromJsonFile(CurrentRunInput.EpisodeSetupJsonPath);
+	FScenarioCompileResult compileResult = compiler->CompileScenarioWorldSpecFromJsonFile(CurrentRunInput.ScenarioSetupJsonPath);
 	CurrentRecord.bEpisodeSetupCompileSucceeded = compileResult.bSuccess;
 	CurrentRecord.EpisodeId = compileResult.WorldSpec.RunConfig.TemplateId;
 	CurrentRecord.SpecHash = compileResult.WorldSpec.SpecHash;
@@ -590,7 +593,7 @@ void UScenarioRunnerSubsystem::StartNextEpisode()
 	UE_LOG(
 		LogScenarioRunner,
 		Warning,
-		TEXT("EpisodeSetup 컴파일 완료 | RunId: %s, Pair: %s, Episode: %s, Success: %s, Diagnostics: %d, SpecHash: %s"),
+		TEXT("ScenarioSetup 컴파일 완료 | RunId: %s, Pair: %s, Scenario: %s, Success: %s, Diagnostics: %d, SpecHash: %s"),
 		*CurrentRecord.RunId,
 		*CurrentRecord.PairId,
 		*CurrentRecord.EpisodeId,
@@ -604,7 +607,7 @@ void UScenarioRunnerSubsystem::StartNextEpisode()
 			false,
 			EEpisodeEvaluationOutcome::Failure,
 			EEpisodeEvaluationTerminalReason::CompileFailed);
-		QueueStartNextEpisode();
+		QueueStartNextScenario();
 		return;
 	}
 
@@ -636,7 +639,7 @@ void UScenarioRunnerSubsystem::StartNextEpisode()
 			false,
 			EEpisodeEvaluationOutcome::Failure,
 			EEpisodeEvaluationTerminalReason::CompileFailed);
-		QueueStartNextEpisode();
+		QueueStartNextScenario();
 		return;
 	}
 
@@ -656,14 +659,14 @@ void UScenarioRunnerSubsystem::StartNextEpisode()
 
 	const FScenarioSimulationSetupSpec simulationSetupSpec = MakeSimulationSetupSpec(compileResult.WorldSpec);
 
-	simulationSubsystem->ClearEpisode();
-	const bool bSetupSucceeded = simulationSubsystem->SetupEpisodeWorld(simulationSetupSpec);
+	simulationSubsystem->ClearScenario();
+	const bool bSetupSucceeded = simulationSubsystem->SetupScenarioWorld(simulationSetupSpec);
 	CurrentRecord.bSetupSucceeded = bSetupSucceeded;
 
 	UE_LOG(
 		LogScenarioRunner,
 		Log,
-		TEXT("Episode 설정 완료 | RunId: %s, Episode: %s, Success: %s"),
+		TEXT("Scenario 설정 완료 | RunId: %s, Scenario: %s, Success: %s"),
 		*CurrentRecord.RunId,
 		*CurrentRecord.EpisodeId,
 		bSetupSucceeded ? TEXT("true") : TEXT("false"));
@@ -674,8 +677,8 @@ void UScenarioRunnerSubsystem::StartNextEpisode()
 			false,
 			EEpisodeEvaluationOutcome::Failure,
 			EEpisodeEvaluationTerminalReason::SetupFailed);
-		simulationSubsystem->ClearEpisode();
-		QueueStartNextEpisode();
+		simulationSubsystem->ClearScenario();
+		QueueStartNextScenario();
 		return;
 	}
 
@@ -686,15 +689,15 @@ void UScenarioRunnerSubsystem::StartNextEpisode()
 		UE_LOG(
 			LogScenarioRunner,
 			Warning,
-			TEXT("Episode 설정 실패: 런타임 컨텍스트에 유효한 로봇 액터가 없음 | RunId: %s, Episode: %s"),
+			TEXT("Scenario 설정 실패: 런타임 컨텍스트에 유효한 로봇 액터가 없음 | RunId: %s, Scenario: %s"),
 			*CurrentRecord.RunId,
 			*runtimeContext.EpisodeId);
 		CompleteCurrentRecord(
 			false,
 			EEpisodeEvaluationOutcome::Failure,
 			EEpisodeEvaluationTerminalReason::SetupFailed);
-		simulationSubsystem->ClearEpisode();
-		QueueStartNextEpisode();
+		simulationSubsystem->ClearScenario();
+		QueueStartNextScenario();
 		return;
 	}
 
@@ -715,8 +718,8 @@ void UScenarioRunnerSubsystem::StartNextEpisode()
 				false,
 				EEpisodeEvaluationOutcome::Failure,
 				EEpisodeEvaluationTerminalReason::SetupFailed);
-			simulationSubsystem->ClearEpisode();
-			QueueStartNextEpisode();
+			simulationSubsystem->ClearScenario();
+			QueueStartNextScenario();
 			return;
 		}
 
@@ -734,8 +737,8 @@ void UScenarioRunnerSubsystem::StartNextEpisode()
 				false,
 				EEpisodeEvaluationOutcome::Failure,
 				EEpisodeEvaluationTerminalReason::SetupFailed);
-			simulationSubsystem->ClearEpisode();
-			QueueStartNextEpisode();
+			simulationSubsystem->ClearScenario();
+			QueueStartNextScenario();
 			return;
 		}
 
@@ -775,25 +778,25 @@ void UScenarioRunnerSubsystem::StartNextEpisode()
 			false,
 			EEpisodeEvaluationOutcome::Failure,
 			EEpisodeEvaluationTerminalReason::EvaluationStartFailed);
-		simulationSubsystem->ClearEpisode();
-		QueueStartNextEpisode();
+		simulationSubsystem->ClearScenario();
+		QueueStartNextScenario();
 		return;
 	}
 
 	SetRunnerState(EScenarioRunnerState::Running);
-	UE_LOG(LogScenarioRunner, Log, TEXT("Episode 실행 중 | RunId: %s, Episode: %s"), *CurrentRecord.RunId, *runtimeContext.EpisodeId);
+	UE_LOG(LogScenarioRunner, Log, TEXT("Scenario 실행 중 | RunId: %s, Scenario: %s"), *CurrentRecord.RunId, *runtimeContext.EpisodeId);
 }
 
-void UScenarioRunnerSubsystem::QueueStartNextEpisode()
+void UScenarioRunnerSubsystem::QueueStartNextScenario()
 {
 	if (UWorld* world = ResolveWorld())
 	{
 		world->GetTimerManager().SetTimerForNextTick(
-			FTimerDelegate::CreateUObject(this, &UScenarioRunnerSubsystem::StartNextEpisode));
+			FTimerDelegate::CreateUObject(this, &UScenarioRunnerSubsystem::StartNextScenario));
 		return;
 	}
 
-	StartNextEpisode();
+	StartNextScenario();
 }
 
 void UScenarioRunnerSubsystem::CompleteCurrentRecord(
@@ -848,7 +851,7 @@ void UScenarioRunnerSubsystem::AppendCompileDiagnostics(const FScenarioCompileRe
 	for (const FScenarioCompileDiagnostic& diagnostic : compileResult.Diagnostics)
 	{
 		CurrentRecord.Diagnostics.Add(FString::Printf(
-			TEXT("EpisodeSetup %s [%s]: %s"),
+			TEXT("ScenarioSetup %s [%s]: %s"),
 			ToRunnerCompileSeverityString(diagnostic.Severity),
 			*diagnostic.Code,
 			*diagnostic.Message));
@@ -972,7 +975,7 @@ FString UScenarioRunnerSubsystem::BuildPairId(const FScenarioRunInput& runInput,
 {
 	if (!runInput.PairId.IsEmpty()) return runInput.PairId;
 
-	FString baseName = FPaths::GetBaseFilename(runInput.EpisodeSetupJsonPath);
+	FString baseName = FPaths::GetBaseFilename(runInput.ScenarioSetupJsonPath);
 	if (baseName.IsEmpty())
 	{
 		baseName = FString::Printf(TEXT("pair_%04d"), runIndex);

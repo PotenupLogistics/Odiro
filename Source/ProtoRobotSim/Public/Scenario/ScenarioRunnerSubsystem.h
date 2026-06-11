@@ -25,7 +25,7 @@ public:
 	FScenarioRunRecordCompletedNative OnRunRecordCompleted;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
-	bool StartEpisodePairFromJsonFiles(const FString& episodeSetupJsonPath, const FString& deliveryBotSetupJsonPath);
+	bool StartScenarioPairFromJsonFiles(const FString& scenarioSetupJsonPath, const FString& deliveryBotSetupJsonPath);
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	bool StartBatchFromRunInputs(const TArray<FScenarioRunInput>& runInputs);
@@ -83,8 +83,8 @@ private:
 		const FString& activeRunQueueJsonFilePath,
 		const FString& activeBatchRunId);
 	void SetRunnerState(EScenarioRunnerState runnerState);
-	void StartNextEpisode();
-	void QueueStartNextEpisode();
+	void StartNextScenario();
+	void QueueStartNextScenario();
 	void CompleteCurrentRecord(
 		bool bSuccess,
 		EEpisodeEvaluationOutcome outcome,

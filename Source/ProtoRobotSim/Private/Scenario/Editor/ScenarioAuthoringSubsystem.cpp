@@ -63,19 +63,19 @@ UScenarioAuthoringSubsystem::UScenarioAuthoringSubsystem()
 	StaticObstaclePropCatalog = UScenarioStaticObstaclePropCatalog::MakeDefaultCatalogReference();
 
 	static ConstructorHelpers::FClassFinder<AScenarioPedestrian> pedestrianBlueprintClass(
-		TEXT("/Game/Blueprints/Episode/BP_EpisodePedestrian"));
+		TEXT("/Game/Blueprints/Scenario/BP_ScenarioPedestrian"));
 	if (pedestrianBlueprintClass.Succeeded())
 	{
 		PedestrianClass = pedestrianBlueprintClass.Class;
 	}
 
-	static ConstructorHelpers::FClassFinder<AActor> startPointBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_StartPoint"));
+	static ConstructorHelpers::FClassFinder<AActor> startPointBlueprintClass(TEXT("/Game/Blueprints/Scenario/BP_StartPoint"));
 	if (startPointBlueprintClass.Succeeded())
 	{
 		StartPointClass = startPointBlueprintClass.Class;
 	}
 
-	static ConstructorHelpers::FClassFinder<AActor> goalPointBlueprintClass(TEXT("/Game/Blueprints/Episode/BP_GoalPoint"));
+	static ConstructorHelpers::FClassFinder<AActor> goalPointBlueprintClass(TEXT("/Game/Blueprints/Scenario/BP_GoalPoint"));
 	if (goalPointBlueprintClass.Succeeded())
 	{
 		GoalPointClass = goalPointBlueprintClass.Class;
@@ -110,7 +110,7 @@ void UScenarioAuthoringSubsystem::ClearDraft()
 {
 	ClearEditorView();
 	DraftWorldSpec = FScenarioWorldSpec();
-	SourceEpisodeSetupJsonPath.Reset();
+	SourceScenarioSetupJsonPath.Reset();
 	bDirty = false;
 	NextStaticObstacleIndex = 1;
 	NextPedestrianIndex = 1;
@@ -130,7 +130,7 @@ void UScenarioAuthoringSubsystem::NewDraft()
 	}
 }
 
-bool UScenarioAuthoringSubsystem::LoadEpisodeSetupJsonFile(
+bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonFile(
 	const FString& jsonFilePath,
 	FString& outResolvedJsonFilePath,
 	TArray<FString>& outDiagnostics)
@@ -141,34 +141,34 @@ bool UScenarioAuthoringSubsystem::LoadEpisodeSetupJsonFile(
 	const FString trimmedJsonFilePath = jsonFilePath.TrimStartAndEnd();
 	if (trimmedJsonFilePath.IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("EpisodeSetup JSON file path is empty."));
+		outDiagnostics.Add(TEXT("ScenarioSetup JSON file path is empty."));
 		return false;
 	}
 
-	outResolvedJsonFilePath = ResolveEpisodeSetupLoadPath(trimmedJsonFilePath);
+	outResolvedJsonFilePath = ResolveScenarioSetupLoadPath(trimmedJsonFilePath);
 
 	UScenarioCompiler* compiler = CreateScenarioCompiler();
 	if (!compiler)
 	{
-		outDiagnostics.Add(TEXT("Episode compiler creation failed."));
+		outDiagnostics.Add(TEXT("Scenario compiler creation failed."));
 		return false;
 	}
 
-	const FScenarioCompileResult compileResult = compiler->CompileEpisodeWorldSpecFromJsonFile(outResolvedJsonFilePath);
+	const FScenarioCompileResult compileResult = compiler->CompileScenarioWorldSpecFromJsonFile(outResolvedJsonFilePath);
 	AppendCompileDiagnostics(compileResult, outDiagnostics);
 	if (!compileResult.bSuccess)
 	{
-		outDiagnostics.Add(TEXT("EpisodeSetup JSON import failed compiler validation."));
+		outDiagnostics.Add(TEXT("ScenarioSetup JSON import failed compiler validation."));
 		return false;
 	}
 
 	DraftWorldSpec = compileResult.WorldSpec;
-	SourceEpisodeSetupJsonPath = outResolvedJsonFilePath;
+	SourceScenarioSetupJsonPath = outResolvedJsonFilePath;
 	bDirty = false;
 	return RebuildEditorViewFromDraft(outDiagnostics);
 }
 
-bool UScenarioAuthoringSubsystem::LoadEpisodeSetupJsonString(
+bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonString(
 	const FString& jsonString,
 	TArray<FString>& outDiagnostics)
 {
@@ -176,27 +176,27 @@ bool UScenarioAuthoringSubsystem::LoadEpisodeSetupJsonString(
 
 	if (jsonString.IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("EpisodeSetup JSON string is empty."));
+		outDiagnostics.Add(TEXT("ScenarioSetup JSON string is empty."));
 		return false;
 	}
 
 	UScenarioCompiler* compiler = CreateScenarioCompiler();
 	if (!compiler)
 	{
-		outDiagnostics.Add(TEXT("Episode compiler creation failed."));
+		outDiagnostics.Add(TEXT("Scenario compiler creation failed."));
 		return false;
 	}
 
-	const FScenarioCompileResult compileResult = compiler->CompileEpisodeWorldSpecFromJsonString(jsonString);
+	const FScenarioCompileResult compileResult = compiler->CompileScenarioWorldSpecFromJsonString(jsonString);
 	AppendCompileDiagnostics(compileResult, outDiagnostics);
 	if (!compileResult.bSuccess)
 	{
-		outDiagnostics.Add(TEXT("EpisodeSetup JSON import failed compiler validation."));
+		outDiagnostics.Add(TEXT("ScenarioSetup JSON import failed compiler validation."));
 		return false;
 	}
 
 	DraftWorldSpec = compileResult.WorldSpec;
-	SourceEpisodeSetupJsonPath.Reset();
+	SourceScenarioSetupJsonPath.Reset();
 	bDirty = false;
 	return RebuildEditorViewFromDraft(outDiagnostics);
 }
@@ -207,7 +207,7 @@ bool UScenarioAuthoringSubsystem::ImportCompiledWorldSpec(
 {
 	outDiagnostics.Reset();
 	DraftWorldSpec = worldSpec;
-	SourceEpisodeSetupJsonPath.Reset();
+	SourceScenarioSetupJsonPath.Reset();
 	bDirty = false;
 	return RebuildEditorViewFromDraft(outDiagnostics);
 }
@@ -1084,7 +1084,7 @@ TArray<FScenarioPlaceableInstanceSpec> UScenarioAuthoringSubsystem::GetAuthoredS
 	return staticObstacleSpecs;
 }
 
-bool UScenarioAuthoringSubsystem::ExportEpisodeSetupJsonString(
+bool UScenarioAuthoringSubsystem::ExportScenarioSetupJsonString(
 	FString& outJsonString,
 	TArray<FString>& outDiagnostics) const
 {
@@ -1096,7 +1096,7 @@ bool UScenarioAuthoringSubsystem::ExportEpisodeSetupJsonString(
 	}
 
 	TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
-	rootObject->SetStringField(TEXT("schema"), TEXT("episode_actor_spawn_mvp"));
+	rootObject->SetStringField(TEXT("schema"), TEXT("scenario_actor_spawn_mvp"));
 	rootObject->SetNumberField(TEXT("version"), DraftWorldSpec.RunConfig.TemplateVersion > 0 ? DraftWorldSpec.RunConfig.TemplateVersion : 1);
 	rootObject->SetStringField(
 		TEXT("scenario_id"),
@@ -1365,18 +1365,18 @@ bool UScenarioAuthoringSubsystem::ExportEpisodeSetupJsonString(
 	const TSharedRef<TJsonWriter<>> writer = TJsonWriterFactory<>::Create(&outJsonString);
 	if (!FJsonSerializer::Serialize(rootObject, writer))
 	{
-		outDiagnostics.Add(TEXT("EpisodeSetup JSON serialization failed."));
+		outDiagnostics.Add(TEXT("ScenarioSetup JSON serialization failed."));
 		return false;
 	}
 
 	return true;
 }
 
-bool UScenarioAuthoringSubsystem::ExportAndValidateEpisodeSetupJsonString(
+bool UScenarioAuthoringSubsystem::ExportAndValidateScenarioSetupJsonString(
 	FString& outJsonString,
 	TArray<FString>& outDiagnostics) const
 {
-	if (!ExportEpisodeSetupJsonString(outJsonString, outDiagnostics))
+	if (!ExportScenarioSetupJsonString(outJsonString, outDiagnostics))
 	{
 		return false;
 	}
@@ -1384,22 +1384,22 @@ bool UScenarioAuthoringSubsystem::ExportAndValidateEpisodeSetupJsonString(
 	UScenarioCompiler* compiler = CreateScenarioCompiler();
 	if (!compiler)
 	{
-		outDiagnostics.Add(TEXT("Episode compiler creation failed."));
+		outDiagnostics.Add(TEXT("Scenario compiler creation failed."));
 		return false;
 	}
 
-	const FScenarioCompileResult compileResult = compiler->CompileEpisodeWorldSpecFromJsonString(outJsonString);
+	const FScenarioCompileResult compileResult = compiler->CompileScenarioWorldSpecFromJsonString(outJsonString);
 	AppendCompileDiagnostics(compileResult, outDiagnostics);
 
 	if (!compileResult.bSuccess)
 	{
-		outDiagnostics.Add(TEXT("Exported EpisodeSetup JSON failed compiler validation."));
+		outDiagnostics.Add(TEXT("Exported ScenarioSetup JSON failed compiler validation."));
 	}
 
 	return compileResult.bSuccess;
 }
 
-bool UScenarioAuthoringSubsystem::SaveEpisodeSetupJsonFile(
+bool UScenarioAuthoringSubsystem::SaveScenarioSetupJsonFile(
 	const FString& jsonFilePath,
 	FString& outResolvedJsonFilePath,
 	TArray<FString>& outDiagnostics)
@@ -1408,14 +1408,14 @@ bool UScenarioAuthoringSubsystem::SaveEpisodeSetupJsonFile(
 	if (jsonFilePath.IsEmpty())
 	{
 		outResolvedJsonFilePath.Reset();
-		outDiagnostics.Add(TEXT("EpisodeSetup JSON file path is empty."));
+		outDiagnostics.Add(TEXT("ScenarioSetup JSON file path is empty."));
 		return false;
 	}
 
 	outResolvedJsonFilePath = ResolveProjectRelativePath(jsonFilePath);
 
 	FString jsonString;
-	if (!ExportAndValidateEpisodeSetupJsonString(jsonString, outDiagnostics))
+	if (!ExportAndValidateScenarioSetupJsonString(jsonString, outDiagnostics))
 	{
 		return false;
 	}
@@ -1428,11 +1428,11 @@ bool UScenarioAuthoringSubsystem::SaveEpisodeSetupJsonFile(
 
 	if (!FFileHelper::SaveStringToFile(jsonString, *outResolvedJsonFilePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
-		outDiagnostics.Add(FString::Printf(TEXT("Failed to save EpisodeSetup JSON to '%s'."), *outResolvedJsonFilePath));
+		outDiagnostics.Add(FString::Printf(TEXT("Failed to save ScenarioSetup JSON to '%s'."), *outResolvedJsonFilePath));
 		return false;
 	}
 
-	SourceEpisodeSetupJsonPath = outResolvedJsonFilePath;
+	SourceScenarioSetupJsonPath = outResolvedJsonFilePath;
 	bDirty = false;
 	return true;
 }
@@ -1447,7 +1447,7 @@ FString UScenarioAuthoringSubsystem::ResolveProjectRelativePath(const FString& f
 	return filePath;
 }
 
-FString UScenarioAuthoringSubsystem::ResolveEpisodeSetupLoadPath(const FString& filePath) const
+FString UScenarioAuthoringSubsystem::ResolveScenarioSetupLoadPath(const FString& filePath) const
 {
 	FString normalizedPath = filePath;
 	normalizedPath.TrimStartAndEndInline();
@@ -1466,7 +1466,7 @@ FString UScenarioAuthoringSubsystem::ResolveEpisodeSetupLoadPath(const FString& 
 	if (FPaths::GetPath(normalizedPath).IsEmpty())
 	{
 		return FPaths::ConvertRelativePathToFull(
-			FPaths::Combine(FPaths::ProjectDir(), EpisodeSetupInputDirectory, normalizedPath));
+			FPaths::Combine(FPaths::ProjectDir(), ScenarioSetupInputDirectory, normalizedPath));
 	}
 
 	return ResolveProjectRelativePath(normalizedPath);
@@ -1664,7 +1664,7 @@ const UScenarioStaticObstaclePropCatalog* UScenarioAuthoringSubsystem::GetStatic
 		UE_LOG(
 			LogScenarioAuthoring,
 			Warning,
-			TEXT("Episode static obstacle prop catalog is not configured or failed to load: %s"),
+			TEXT("Scenario static obstacle prop catalog is not configured or failed to load: %s"),
 			*StaticObstaclePropCatalog.ToSoftObjectPath().ToString());
 		return nullptr;
 	}
@@ -1834,7 +1834,7 @@ bool UScenarioAuthoringSubsystem::EnsureSingleRobotRouteSpec(
 	if (robotSpecCount > 1)
 	{
 		outDiagnostics.Add(FString::Printf(
-			TEXT("Episode editor requires exactly one robot route, but %d robot specs were found."),
+			TEXT("Scenario editor requires exactly one robot route, but %d robot specs were found."),
 			robotSpecCount));
 		return false;
 	}
@@ -1927,7 +1927,7 @@ bool UScenarioAuthoringSubsystem::ValidateSingleRobotRouteSpecForExport(TArray<F
 	if (robotSpecCount != 1 || !robotSpec)
 	{
 		outDiagnostics.Add(FString::Printf(
-			TEXT("Episode must contain exactly one robot route before export. Found: %d."),
+			TEXT("Scenario must contain exactly one robot route before export. Found: %d."),
 			robotSpecCount));
 		return false;
 	}
@@ -2281,7 +2281,7 @@ bool UScenarioAuthoringSubsystem::ConfigureRobotRouteMarkerActor(
 	USphereComponent* selectionComponent = nullptr;
 	TArray<USphereComponent*> sphereComponents;
 	markerActor->GetComponents(sphereComponents);
-	const FName selectionComponentTag(TEXT("EpisodeRouteMarkerSelection"));
+	const FName selectionComponentTag(TEXT("ScenarioRouteMarkerSelection"));
 	for (USphereComponent* sphereComponent : sphereComponents)
 	{
 		if (sphereComponent && sphereComponent->ComponentTags.Contains(selectionComponentTag))

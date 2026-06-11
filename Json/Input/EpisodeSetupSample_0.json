@@ -1,5 +1,5 @@
 {
-  "schema": "episode_actor_spawn_mvp",
+  "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "sidewalk_baseline_tuned_000",
   "map_id": "EpisodeSandbox",

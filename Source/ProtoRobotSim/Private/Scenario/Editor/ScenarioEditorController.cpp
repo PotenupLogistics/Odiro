@@ -126,7 +126,7 @@ AScenarioEditorController::AScenarioEditorController()
 	TransformGizmoActorClass = AScenarioTransformGizmoActor::StaticClass();
 	EditorRootWidgetClass = UScenarioEditorRootWidget::StaticClass();
 	static ConstructorHelpers::FClassFinder<UScenarioEditorRootWidget> editorRootWidgetFinder(
-		TEXT("/Game/Widgets/Editor/WBP_EpisodeEditorRootWidget"));
+		TEXT("/Game/Widgets/Editor/WBP_ScenarioEditorRootWidget"));
 	if (editorRootWidgetFinder.Succeeded())
 	{
 		EditorRootWidgetClass = editorRootWidgetFinder.Class;
@@ -648,7 +648,7 @@ void AScenarioEditorController::GetStaticObstaclePaletteEntries(TArray<FScenario
 	}
 }
 
-bool AScenarioEditorController::ExportAndValidateEpisodeSetupJsonString(
+bool AScenarioEditorController::ExportAndValidateScenarioSetupJsonString(
 	FString& outJsonString,
 	TArray<FString>& outDiagnostics) const
 {
@@ -658,14 +658,14 @@ bool AScenarioEditorController::ExportAndValidateEpisodeSetupJsonString(
 	const UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if (!authoringSubsystem)
 	{
-		outDiagnostics.Add(TEXT("Episode authoring subsystem is unavailable."));
+		outDiagnostics.Add(TEXT("Scenario authoring subsystem is unavailable."));
 		return false;
 	}
 
-	return authoringSubsystem->ExportAndValidateEpisodeSetupJsonString(outJsonString, outDiagnostics);
+	return authoringSubsystem->ExportAndValidateScenarioSetupJsonString(outJsonString, outDiagnostics);
 }
 
-bool AScenarioEditorController::LoadEpisodeSetupJsonFile(
+bool AScenarioEditorController::LoadScenarioSetupJsonFile(
 	const FString& jsonFilePath,
 	FString& outResolvedJsonFilePath,
 	TArray<FString>& outDiagnostics)
@@ -676,15 +676,15 @@ bool AScenarioEditorController::LoadEpisodeSetupJsonFile(
 	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if (!authoringSubsystem)
 	{
-		outDiagnostics.Add(TEXT("Episode authoring subsystem is unavailable."));
+		outDiagnostics.Add(TEXT("Scenario authoring subsystem is unavailable."));
 		return false;
 	}
 
 	CancelPlacement();
-	return authoringSubsystem->LoadEpisodeSetupJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
+	return authoringSubsystem->LoadScenarioSetupJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
 }
 
-void AScenarioEditorController::NewEpisodeDraft()
+void AScenarioEditorController::NewScenarioDraft()
 {
 	CancelPlacement();
 	if (UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem())
@@ -693,7 +693,7 @@ void AScenarioEditorController::NewEpisodeDraft()
 	}
 }
 
-bool AScenarioEditorController::SaveEpisodeSetupJsonFile(
+bool AScenarioEditorController::SaveScenarioSetupJsonFile(
 	const FString& jsonFilePath,
 	FString& outResolvedJsonFilePath,
 	TArray<FString>& outDiagnostics)
@@ -704,17 +704,17 @@ bool AScenarioEditorController::SaveEpisodeSetupJsonFile(
 	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if (!authoringSubsystem)
 	{
-		outDiagnostics.Add(TEXT("Episode authoring subsystem is unavailable."));
+		outDiagnostics.Add(TEXT("Scenario authoring subsystem is unavailable."));
 		return false;
 	}
 
-	return authoringSubsystem->SaveEpisodeSetupJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
+	return authoringSubsystem->SaveScenarioSetupJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
 }
 
-FString AScenarioEditorController::GetSourceEpisodeSetupJsonPath() const
+FString AScenarioEditorController::GetSourceScenarioSetupJsonPath() const
 {
 	const UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
-	return authoringSubsystem ? authoringSubsystem->GetSourceEpisodeSetupJsonPath() : FString();
+	return authoringSubsystem ? authoringSubsystem->GetSourceScenarioSetupJsonPath() : FString();
 }
 
 UScenarioEditorToolbarWidget* AScenarioEditorController::ShowToolbarWidget()
@@ -820,7 +820,7 @@ bool AScenarioEditorController::TryUpdateSelectedPlaceableTransform(
 	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if (!authoringSubsystem)
 	{
-		outFailureReason = TEXT("Episode authoring subsystem is unavailable.");
+		outFailureReason = TEXT("Scenario authoring subsystem is unavailable.");
 		return false;
 	}
 
@@ -906,7 +906,7 @@ bool AScenarioEditorController::TryRenameSelectedPlaceableInstanceId(
 	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if (!authoringSubsystem)
 	{
-		outFailureReason = TEXT("Episode authoring subsystem is unavailable.");
+		outFailureReason = TEXT("Scenario authoring subsystem is unavailable.");
 		return false;
 	}
 
@@ -945,7 +945,7 @@ bool AScenarioEditorController::DeleteSelectedPlaceable(FString& outFailureReaso
 	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if (!authoringSubsystem)
 	{
-		outFailureReason = TEXT("Episode authoring subsystem is unavailable.");
+		outFailureReason = TEXT("Scenario authoring subsystem is unavailable.");
 		return false;
 	}
 
@@ -1289,7 +1289,7 @@ bool AScenarioEditorController::TraceMouseTransformGizmo(
 
 	const FVector traceEnd = worldOrigin + worldDirection.GetSafeNormal() * PlacementTraceDistanceCm;
 	
-	FCollisionQueryParams queryParams(SCENE_QUERY_STAT(EpisodeEditorTransformGizmoTrace), true);
+	FCollisionQueryParams queryParams(SCENE_QUERY_STAT(ScenarioEditorTransformGizmoTrace), true);
 	queryParams.bReturnPhysicalMaterial = false;
 
 	FHitResult hit;
@@ -1795,7 +1795,7 @@ bool AScenarioEditorController::TraceMouseSelectablePlaceable(
 	UWorld* world = GetWorld();
 	if (!world) return false;
 
-	FCollisionQueryParams queryParams(SCENE_QUERY_STAT(EpisodeEditorSelectableTrace), true);
+	FCollisionQueryParams queryParams(SCENE_QUERY_STAT(ScenarioEditorSelectableTrace), true);
 	queryParams.bReturnPhysicalMaterial = false;
 	if (PlacementPreviewActor)
 	{
@@ -2074,7 +2074,7 @@ void AScenarioEditorController::UpdatePlacementPreview()
 	if (!authoringSubsystem)
 	{
 		bCurrentPlacementValid = false;
-		CurrentPlacementFailureReason = TEXT("Episode authoring subsystem is unavailable.");
+		CurrentPlacementFailureReason = TEXT("Scenario authoring subsystem is unavailable.");
 	}
 	else
 	{
@@ -2092,7 +2092,7 @@ bool AScenarioEditorController::ConfigurePlacementPreviewForSelectedItem(
 {
 	if (!PlacementPreviewActor || !authoringSubsystem)
 	{
-		CurrentPlacementFailureReason = TEXT("Episode authoring subsystem is unavailable.");
+		CurrentPlacementFailureReason = TEXT("Scenario authoring subsystem is unavailable.");
 		return false;
 	}
 
@@ -2171,7 +2171,7 @@ bool AScenarioEditorController::ValidatePlacementForSelectedItem(
 	outFailureReason.Reset();
 	if (!authoringSubsystem)
 	{
-		outFailureReason = TEXT("Episode authoring subsystem is unavailable.");
+		outFailureReason = TEXT("Scenario authoring subsystem is unavailable.");
 		return false;
 	}
 
@@ -2232,7 +2232,7 @@ bool AScenarioEditorController::TraceMousePlacement(FHitResult& outHit) const
 	UWorld* world = GetWorld();
 	if (!world) return false;
 
-	FCollisionQueryParams queryParams(SCENE_QUERY_STAT(EpisodeEditorPlacementTrace), true);
+	FCollisionQueryParams queryParams(SCENE_QUERY_STAT(ScenarioEditorPlacementTrace), true);
 	queryParams.bReturnPhysicalMaterial = false;
 	if (PlacementPreviewActor)
 	{

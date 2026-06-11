@@ -20,7 +20,7 @@ namespace
 		}
 
 		const FString baseName = FPaths::GetBaseFilename(preferredPath).IsEmpty()
-			? FString(TEXT("EpisodeSetupNew"))
+			? FString(TEXT("ScenarioSetupNew"))
 			: FPaths::GetBaseFilename(preferredPath);
 		const FString extension = FPaths::GetExtension(preferredPath).IsEmpty()
 			? FString(TEXT("json"))
@@ -62,7 +62,7 @@ void UScenarioEditorToolbarWidget::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-bool UScenarioEditorToolbarWidget::SaveEpisode()
+bool UScenarioEditorToolbarWidget::SaveScenario()
 {
 	AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
 	if (!editorController)
@@ -74,7 +74,7 @@ bool UScenarioEditorToolbarWidget::SaveEpisode()
 	FString resolvedPath;
 	TArray<FString> diagnostics;
 	const FString savePath = ResolveSavePath();
-	if (!editorController->SaveEpisodeSetupJsonFile(savePath, resolvedPath, diagnostics))
+	if (!editorController->SaveScenarioSetupJsonFile(savePath, resolvedPath, diagnostics))
 	{
 		SetStatusText(diagnostics.IsEmpty()
 			? FString::Printf(TEXT("저장 실패: %s"), *savePath)
@@ -96,7 +96,7 @@ void UScenarioEditorToolbarWidget::ReturnToMainMenu()
 
 void UScenarioEditorToolbarWidget::HandleSaveButtonClicked()
 {
-	SaveEpisode();
+	SaveScenario();
 }
 
 void UScenarioEditorToolbarWidget::HandleReturnButtonClicked()
@@ -161,7 +161,7 @@ FString UScenarioEditorToolbarWidget::ResolveSavePath() const
 {
 	if (const AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
 	{
-		const FString sourcePath = editorController->GetSourceEpisodeSetupJsonPath();
+		const FString sourcePath = editorController->GetSourceScenarioSetupJsonPath();
 		if (!sourcePath.IsEmpty())
 		{
 			return sourcePath;

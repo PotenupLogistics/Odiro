@@ -15,16 +15,16 @@ void UScenarioEditorEntryWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 
-	if (NewEpisodeButton)
+	if (NewScenarioButton)
 	{
-		NewEpisodeButton->OnClicked.RemoveDynamic(this, &UScenarioEditorEntryWidget::HandleNewEpisodeButtonClicked);
-		NewEpisodeButton->OnClicked.AddDynamic(this, &UScenarioEditorEntryWidget::HandleNewEpisodeButtonClicked);
+		NewScenarioButton->OnClicked.RemoveDynamic(this, &UScenarioEditorEntryWidget::HandleNewScenarioButtonClicked);
+		NewScenarioButton->OnClicked.AddDynamic(this, &UScenarioEditorEntryWidget::HandleNewScenarioButtonClicked);
 	}
 
-	if (LoadEpisodeButton)
+	if (LoadScenarioButton)
 	{
-		LoadEpisodeButton->OnClicked.RemoveDynamic(this, &UScenarioEditorEntryWidget::HandleLoadEpisodeButtonClicked);
-		LoadEpisodeButton->OnClicked.AddDynamic(this, &UScenarioEditorEntryWidget::HandleLoadEpisodeButtonClicked);
+		LoadScenarioButton->OnClicked.RemoveDynamic(this, &UScenarioEditorEntryWidget::HandleLoadScenarioButtonClicked);
+		LoadScenarioButton->OnClicked.AddDynamic(this, &UScenarioEditorEntryWidget::HandleLoadScenarioButtonClicked);
 	}
 }
 
@@ -42,7 +42,7 @@ void UScenarioEditorEntryWidget::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-void UScenarioEditorEntryWidget::StartNewEpisode()
+void UScenarioEditorEntryWidget::StartNewScenario()
 {
 	AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
 	if (!editorController)
@@ -51,23 +51,23 @@ void UScenarioEditorEntryWidget::StartNewEpisode()
 		return;
 	}
 
-	editorController->NewEpisodeDraft();
-	UE_LOG(LogScenarioEditorEntryWidget, Log, TEXT("New episode draft created."));
+	editorController->NewScenarioDraft();
+	UE_LOG(LogScenarioEditorEntryWidget, Log, TEXT("New scenario draft created."));
 	FinishSuccessfulStart(false);
 }
 
-bool UScenarioEditorEntryWidget::LoadEpisodeFromPathTextBox()
+bool UScenarioEditorEntryWidget::LoadScenarioFromPathTextBox()
 {
-	if (!EpisodeSetupJsonPathTextBox)
+	if (!ScenarioSetupJsonPathTextBox)
 	{
-		UE_LOG(LogScenarioEditorEntryWidget, Warning, TEXT("EpisodeSetupJsonPathTextBox is not bound."));
+		UE_LOG(LogScenarioEditorEntryWidget, Warning, TEXT("ScenarioSetupJsonPathTextBox is not bound."));
 		return false;
 	}
 
-	const FString jsonFilePath = EpisodeSetupJsonPathTextBox->GetText().ToString();
+	const FString jsonFilePath = ScenarioSetupJsonPathTextBox->GetText().ToString();
 	if (jsonFilePath.IsEmpty())
 	{
-		UE_LOG(LogScenarioEditorEntryWidget, Warning, TEXT("EpisodeSetup JSON path is empty."));
+		UE_LOG(LogScenarioEditorEntryWidget, Warning, TEXT("ScenarioSetup JSON path is empty."));
 		return false;
 	}
 
@@ -80,14 +80,14 @@ bool UScenarioEditorEntryWidget::LoadEpisodeFromPathTextBox()
 
 	FString resolvedJsonFilePath;
 	TArray<FString> loadMessages;
-	UE_LOG(LogScenarioEditorEntryWidget, Log, TEXT("EpisodeSetup JSON load requested | Input: %s"), *jsonFilePath);
+	UE_LOG(LogScenarioEditorEntryWidget, Log, TEXT("ScenarioSetup JSON load requested | Input: %s"), *jsonFilePath);
 
-	const bool bLoaded = editorController->LoadEpisodeSetupJsonFile(jsonFilePath, resolvedJsonFilePath, loadMessages);
+	const bool bLoaded = editorController->LoadScenarioSetupJsonFile(jsonFilePath, resolvedJsonFilePath, loadMessages);
 	if (loadMessages.IsEmpty())
 	{
 		loadMessages.Add(bLoaded
-			? FString::Printf(TEXT("Loaded EpisodeSetup JSON: %s"), *resolvedJsonFilePath)
-			: TEXT("EpisodeSetup JSON load failed."));
+			? FString::Printf(TEXT("Loaded ScenarioSetup JSON: %s"), *resolvedJsonFilePath)
+			: TEXT("ScenarioSetup JSON load failed."));
 	}
 
 	if (bLoaded)
@@ -95,7 +95,7 @@ bool UScenarioEditorEntryWidget::LoadEpisodeFromPathTextBox()
 		UE_LOG(
 			LogScenarioEditorEntryWidget,
 			Log,
-			TEXT("EpisodeSetup JSON load succeeded | Input: %s | Resolved: %s"),
+			TEXT("ScenarioSetup JSON load succeeded | Input: %s | Resolved: %s"),
 			*jsonFilePath,
 			*resolvedJsonFilePath);
 	}
@@ -104,13 +104,13 @@ bool UScenarioEditorEntryWidget::LoadEpisodeFromPathTextBox()
 		UE_LOG(
 			LogScenarioEditorEntryWidget,
 			Warning,
-			TEXT("EpisodeSetup JSON load failed | Input: %s | Resolved: %s"),
+			TEXT("ScenarioSetup JSON load failed | Input: %s | Resolved: %s"),
 			*jsonFilePath,
 			*resolvedJsonFilePath);
 	}
 	for (const FString& loadMessage : loadMessages)
 	{
-		UE_LOG(LogScenarioEditorEntryWidget, Log, TEXT("EpisodeSetup JSON load message | %s"), *loadMessage);
+		UE_LOG(LogScenarioEditorEntryWidget, Log, TEXT("ScenarioSetup JSON load message | %s"), *loadMessage);
 	}
 
 	if (bLoaded)
@@ -151,7 +151,7 @@ UScenarioAssetPaletteWidget* UScenarioEditorEntryWidget::GetAssetPaletteWidget()
 	return nullptr;
 }
 
-bool UScenarioEditorEntryWidget::CompleteExternallyStartedEpisode(const bool bLoadedExistingEpisode)
+bool UScenarioEditorEntryWidget::CompleteExternallyStartedScenario(const bool bLoadedExistingScenario)
 {
 	// The launch subsystem event and late widget construction check can both arrive for one map load.
 	if (bExternalStartCompleted)
@@ -159,7 +159,7 @@ bool UScenarioEditorEntryWidget::CompleteExternallyStartedEpisode(const bool bLo
 		return true;
 	}
 
-	if (!FinishSuccessfulStart(bLoadedExistingEpisode))
+	if (!FinishSuccessfulStart(bLoadedExistingScenario))
 	{
 		return false;
 	}
@@ -168,14 +168,14 @@ bool UScenarioEditorEntryWidget::CompleteExternallyStartedEpisode(const bool bLo
 	return true;
 }
 
-void UScenarioEditorEntryWidget::HandleNewEpisodeButtonClicked()
+void UScenarioEditorEntryWidget::HandleNewScenarioButtonClicked()
 {
-	StartNewEpisode();
+	StartNewScenario();
 }
 
-void UScenarioEditorEntryWidget::HandleLoadEpisodeButtonClicked()
+void UScenarioEditorEntryWidget::HandleLoadScenarioButtonClicked()
 {
-	LoadEpisodeFromPathTextBox();
+	LoadScenarioFromPathTextBox();
 }
 
 void UScenarioEditorEntryWidget::BindScenarioEditorLaunchSubsystem()
@@ -199,10 +199,10 @@ void UScenarioEditorEntryWidget::BindScenarioEditorLaunchSubsystem()
 			&UScenarioEditorEntryWidget::HandleAutoStartCompleted);
 	}
 
-	if (launchSubsystem->HasAutoStartedEpisodeEditorSession())
+	if (launchSubsystem->HasAutoStartedScenarioEditorSession())
 	{
-		CompleteExternallyStartedEpisode(
-			launchSubsystem->WasAutoStartedEpisodeEditorSessionLoadedExistingEpisode());
+		CompleteExternallyStartedScenario(
+			launchSubsystem->WasAutoStartedScenarioEditorSessionLoadedExistingScenario());
 	}
 }
 
@@ -225,9 +225,9 @@ void UScenarioEditorEntryWidget::UnbindScenarioEditorLaunchSubsystem()
 	AutoStartCompletedHandle.Reset();
 }
 
-void UScenarioEditorEntryWidget::HandleAutoStartCompleted(const bool bLoadedExistingEpisode)
+void UScenarioEditorEntryWidget::HandleAutoStartCompleted(const bool bLoadedExistingScenario)
 {
-	CompleteExternallyStartedEpisode(bLoadedExistingEpisode);
+	CompleteExternallyStartedScenario(bLoadedExistingScenario);
 }
 
 void UScenarioEditorEntryWidget::RequestEditorWidgetInputMode()
@@ -246,13 +246,13 @@ void UScenarioEditorEntryWidget::ReleaseEditorWidgetInputMode()
 	}
 }
 
-bool UScenarioEditorEntryWidget::FinishSuccessfulStart(bool bLoadedExistingEpisode)
+bool UScenarioEditorEntryWidget::FinishSuccessfulStart(bool bLoadedExistingScenario)
 {
 	if (bShowAssetPaletteOnSuccessfulStart)
 	{
 		if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
 		{
-			rootWidget->HandleEditorSessionStarted(bLoadedExistingEpisode);
+			rootWidget->HandleEditorSessionStarted(bLoadedExistingScenario);
 		}
 		else
 		{
@@ -260,7 +260,7 @@ bool UScenarioEditorEntryWidget::FinishSuccessfulStart(bool bLoadedExistingEpiso
 		}
 	}
 
-	OnEpisodeEditorSessionStarted(bLoadedExistingEpisode);
+	OnScenarioEditorSessionStarted(bLoadedExistingScenario);
 	HideAfterSuccessfulStartIfNeeded();
 	return true;
 }

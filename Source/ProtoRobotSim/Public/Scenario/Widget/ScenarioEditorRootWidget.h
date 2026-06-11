@@ -69,7 +69,7 @@ public:
 	TObjectPtr<UWidget> LlmPanel;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
-	TObjectPtr<UScenarioLlmPromptWidget> EpisodeEditorLLMWidget;
+	TObjectPtr<UScenarioLlmPromptWidget> ScenarioEditorLlmWidget;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	UScenarioAssetPaletteWidget* ShowAssetPaletteWidget();
@@ -87,7 +87,7 @@ public:
 	void SetLlmPanelVisible(bool bVisible);
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
-	void HandleEditorSessionStarted(bool bLoadedExistingEpisode);
+	void HandleEditorSessionStarted(bool bLoadedExistingScenario);
 
 	// 현재 view mode에 맞춰 두 모드 전환 버튼의 노출 상태를 갱신함.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
@@ -121,7 +121,7 @@ private:
 
 	void BindEditorLaunchSubsystem();
 	void UnbindEditorLaunchSubsystem();
-	void HandleAutoStartCompleted(bool bLoadedExistingEpisode);
+	void HandleAutoStartCompleted(bool bLoadedExistingScenario);
 	UWidget* ResolvePlaceableContextMenuVisibilityTarget() const;
 	UWidget* ResolveAssetPaletteVisibilityTarget() const;
 	UWidget* ResolveLlmPanelVisibilityTarget() const;

@@ -34,14 +34,14 @@ AScenarioPlacementPreviewActor::AScenarioPlacementPreviewActor()
 	StaticObstaclePropCatalog = UScenarioStaticObstaclePropCatalog::MakeDefaultCatalogReference();
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> validPlacementMaterial(
-		TEXT("/Game/Models/Placeable/Materials/MI_EpisodePlaceable.MI_EpisodePlaceable"));
+		TEXT("/Game/Models/Placeable/Materials/MI_ScenarioPlaceable.MI_ScenarioPlaceable"));
 	if (validPlacementMaterial.Succeeded())
 	{
 		ValidPlacementMaterial = validPlacementMaterial.Object;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> invalidPlacementMaterial(
-		TEXT("/Game/Models/Placeable/Materials/MI_EpisodeNonPlaceable.MI_EpisodeNonPlaceable"));
+		TEXT("/Game/Models/Placeable/Materials/MI_ScenarioNonPlaceable.MI_ScenarioNonPlaceable"));
 	if (invalidPlacementMaterial.Succeeded())
 	{
 		InvalidPlacementMaterial = invalidPlacementMaterial.Object;

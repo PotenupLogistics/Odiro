@@ -18,6 +18,12 @@ DEFINE_LOG_CATEGORY_STATIC(LogScenarioLlmAuthoring, Log, All);
 namespace
 {
 	const TCHAR* ExpectedRunQueueSchema = TEXT("episode_run_queue");
+
+	bool TryReadRunQueueScenarioSetupPath(const FJsonObject& runObject, FString& outScenarioSetupPath)
+	{
+		return runObject.TryGetStringField(TEXT("scenario_setup"), outScenarioSetupPath)
+			|| runObject.TryGetStringField(TEXT("scenario_setup_json_path"), outScenarioSetupPath);
+	}
 }
 
 void UScenarioLlmAuthoringSubsystem::Deinitialize()
@@ -274,38 +280,38 @@ bool UScenarioLlmAuthoringSubsystem::TryValidateAndSaveRunQueue(
 			continue;
 		}
 
-		FString episodeSetupPath;
+		FString scenarioSetupPath;
 		FString deliveryBotSetupPath;
 		FString policySpecPath;
-		runObject->TryGetStringField(TEXT("episode_setup"), episodeSetupPath);
+		TryReadRunQueueScenarioSetupPath(*runObject, scenarioSetupPath);
 		runObject->TryGetStringField(TEXT("delivery_bot_setup"), deliveryBotSetupPath);
 		if (!runObject->TryGetStringField(TEXT("policy_spec"), policySpecPath))
 		{
 			runObject->TryGetStringField(TEXT("policy_spec_json_path"), policySpecPath);
 		}
-		episodeSetupPath = episodeSetupPath.TrimStartAndEnd();
+		scenarioSetupPath = scenarioSetupPath.TrimStartAndEnd();
 		deliveryBotSetupPath = deliveryBotSetupPath.TrimStartAndEnd();
 		policySpecPath = policySpecPath.TrimStartAndEnd();
 
-		if (episodeSetupPath.IsEmpty())
+		if (scenarioSetupPath.IsEmpty())
 		{
-			outResult.Diagnostics.Add(FString::Printf(TEXT("runs[%d].episode_setup must not be empty."), index));
+			outResult.Diagnostics.Add(FString::Printf(TEXT("runs[%d].scenario_setup must not be empty."), index));
 		}
 		else
 		{
-			if (!episodeSetupPath.StartsWith(TEXT("Json/Input/")))
+			if (!scenarioSetupPath.StartsWith(TEXT("Json/Input/")))
 			{
 				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("runs[%d].episode_setup must start with Json/Input/: %s"),
+					TEXT("runs[%d].scenario_setup must start with Json/Input/: %s"),
 					index,
-					*episodeSetupPath));
+					*scenarioSetupPath));
 			}
 
-			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(episodeSetupPath)))
+			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(scenarioSetupPath)))
 			{
 				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("EpisodeSetup file does not exist: %s"),
-					*episodeSetupPath));
+					TEXT("ScenarioSetup file does not exist: %s"),
+					*scenarioSetupPath));
 			}
 		}
 
@@ -351,8 +357,13 @@ bool UScenarioLlmAuthoringSubsystem::TryValidateAndSaveRunQueue(
 
 		if (index == 0)
 		{
-			outResult.FirstEpisodeSetupJsonPath = episodeSetupPath;
+			outResult.FirstScenarioSetupJsonPath = scenarioSetupPath;
 			outResult.FirstDeliveryBotSetupJsonPath = deliveryBotSetupPath;
+		}
+
+		if (!scenarioSetupPath.IsEmpty())
+		{
+			runObject->SetStringField(TEXT("scenario_setup"), scenarioSetupPath);
 		}
 	}
 
@@ -371,8 +382,18 @@ bool UScenarioLlmAuthoringSubsystem::TryValidateAndSaveRunQueue(
 		return false;
 	}
 
+	FString normalizedRunQueueJson;
+	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
+		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&normalizedRunQueueJson);
+	if (!FJsonSerializer::Serialize(rootObject.ToSharedRef(), writer))
+	{
+		outResult.Message = TEXT("Failed to serialize normalized RunQueue JSON.");
+		outResult.Diagnostics.Add(outResult.Message);
+		return false;
+	}
+
 	if (!FFileHelper::SaveStringToFile(
-			responseBody,
+			normalizedRunQueueJson,
 			*outputFilePath,
 			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{

@@ -10,7 +10,7 @@
 class FJsonObject;
 
 // DeliveryBotSetup JSON을 FDeliveryBotSetupInfo로 변환하는 컴파일러.
-// EpisodeSetup이 담당하는 로봇 배치/목적지는 읽지 않고, 로봇 주행/센서/정책 설정만 다룬다.
+// ScenarioSetup이 담당하는 로봇 배치/목적지는 읽지 않고, 로봇 주행/센서/정책 설정만 다룬다.
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FDeliveryBotSetupCompileResult
 {

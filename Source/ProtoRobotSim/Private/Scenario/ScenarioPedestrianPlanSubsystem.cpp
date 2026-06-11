@@ -41,7 +41,7 @@ bool UScenarioPedestrianPlanSubsystem::BuildPlans(
 		UE_LOG(
 			LogScenarioPedestrianPlan,
 			Log,
-			TEXT("보행자 plan 생성 완료 | Episode: %s, Success: %s, Plans: %d, Diagnostics: %d, FootprintHash: %s"),
+			TEXT("보행자 plan 생성 완료 | Scenario: %s, Success: %s, Plans: %d, Diagnostics: %d, FootprintHash: %s"),
 			*setupSpec.EpisodeId,
 			bBuilt ? TEXT("true") : TEXT("false"),
 			outResult.Plans.Num(),

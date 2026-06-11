@@ -65,19 +65,19 @@ AScenarioGroundRegion::AScenarioGroundRegion()
 		RegionBoundsComponent->SetStaticMesh(cubeMeshAsset.Object);
 	}
 
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> walkableGroundMaterialAsset(TEXT("/Game/Materials/M_EpisodeGroundWalkable.M_EpisodeGroundWalkable"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> walkableGroundMaterialAsset(TEXT("/Game/Materials/M_ScenarioGroundWalkable.M_ScenarioGroundWalkable"));
 	if (walkableGroundMaterialAsset.Succeeded())
 	{
 		WalkableGroundMaterial = walkableGroundMaterialAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> penaltyGroundMaterialAsset(TEXT("/Game/Materials/M_EpisodeGroundPenalty.M_EpisodeGroundPenalty"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> penaltyGroundMaterialAsset(TEXT("/Game/Materials/M_ScenarioGroundPenalty.M_ScenarioGroundPenalty"));
 	if (penaltyGroundMaterialAsset.Succeeded())
 	{
 		PenaltyGroundMaterial = penaltyGroundMaterialAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> blockedAreaMaterialAsset(TEXT("/Game/Materials/M_EpisodeGroundBlock.M_EpisodeGroundBlock"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> blockedAreaMaterialAsset(TEXT("/Game/Materials/M_ScenarioGroundBlock.M_ScenarioGroundBlock"));
 	if (blockedAreaMaterialAsset.Succeeded())
 	{
 		BlockedAreaMaterial = blockedAreaMaterialAsset.Object;

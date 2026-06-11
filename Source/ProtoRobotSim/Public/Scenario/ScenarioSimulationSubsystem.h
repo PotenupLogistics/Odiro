@@ -50,10 +50,10 @@ public:
 	TSubclassOf<ADeliveryBot_GridBoundsActor> GridBoundsActorClass;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario")
-	void ClearEpisode();
+	void ClearScenario();
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario")
-	bool SetupEpisodeWorld(const FScenarioSimulationSetupSpec& setupSpec);
+	bool SetupScenarioWorld(const FScenarioSimulationSetupSpec& setupSpec);
 
 	UFUNCTION(BlueprintPure, Category = "Scenario")
 	AActor* FindRuntimeActor(const FString& instanceId) const;

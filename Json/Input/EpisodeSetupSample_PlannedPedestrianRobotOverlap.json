@@ -1,5 +1,5 @@
 {
-  "schema": "episode_actor_spawn_mvp",
+  "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "planned_pedestrian_robot_overlap_001",
   "map_id": "EpisodeSandbox",

@@ -100,7 +100,7 @@ enum class EScenarioRunnerState : uint8
 	Failed
 };
 
-// Runner가 한 번의 실행으로 묶어 처리할 EpisodeSetup/DeliveryBotSetup 파일 pair.
+// Runner가 한 번의 실행으로 묶어 처리할 ScenarioSetup/DeliveryBotSetup 파일 pair.
 USTRUCT(BlueprintType)
 struct PROTOROBOTSIM_API FScenarioRunInput
 {
@@ -110,7 +110,7 @@ struct PROTOROBOTSIM_API FScenarioRunInput
 	FString PairId;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
-	FString EpisodeSetupJsonPath;
+	FString ScenarioSetupJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString DeliveryBotSetupJsonPath;

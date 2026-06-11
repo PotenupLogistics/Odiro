@@ -7,7 +7,7 @@
 
 namespace
 {
-	FString ResolveEpisodeJsonFilePath(const FString& jsonFilePath)
+	FString ResolveScenarioJsonFilePath(const FString& jsonFilePath)
 	{
 		if (jsonFilePath.IsEmpty()) return jsonFilePath;
 
@@ -1010,8 +1010,8 @@ void UScenarioCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FScen
 		AddDiagnostic(
 			result,
 			EScenarioCompileDiagnosticSeverity::Error,
-			TEXT("delivery_bot_setup_fields_in_episode_setup"),
-			TEXT("actors.robot.drive/path_follow/lidar는 더 이상 EpisodeSetup에서 지원하지 않음. DeliveryBotSetup JSON으로 분리해야 함."));
+			TEXT("delivery_bot_setup_fields_in_scenario_setup"),
+			TEXT("actors.robot.drive/path_follow/lidar는 더 이상 ScenarioSetup에서 지원하지 않음. DeliveryBotSetup JSON으로 분리해야 함."));
 	}
 
 	TSharedPtr<FJsonObject> routeObject;
@@ -1103,10 +1103,10 @@ void UScenarioCompiler::CompileRootObject(const FJsonObject& rootObject, const F
 	result.WorldSpec.SpecHash = FString::Printf(TEXT("%u"), GetTypeHash(sourceJson));
 }
 
-FScenarioCompileResult UScenarioCompiler::CompileEpisodeWorldSpecFromJsonFile(const FString& jsonFilePath) const
+FScenarioCompileResult UScenarioCompiler::CompileScenarioWorldSpecFromJsonFile(const FString& jsonFilePath) const
 {
 	FScenarioCompileResult result;
-	const FString resolvedJsonFilePath = ResolveEpisodeJsonFilePath(jsonFilePath);
+	const FString resolvedJsonFilePath = ResolveScenarioJsonFilePath(jsonFilePath);
 
 	FString jsonString;
 	if (!FFileHelper::LoadFileToString(jsonString, *resolvedJsonFilePath))
@@ -1117,10 +1117,10 @@ FScenarioCompileResult UScenarioCompiler::CompileEpisodeWorldSpecFromJsonFile(co
 		return result;
 	}
 
-	return CompileEpisodeWorldSpecFromJsonString(jsonString);
+	return CompileScenarioWorldSpecFromJsonString(jsonString);
 }
 
-FScenarioCompileResult UScenarioCompiler::CompileEpisodeWorldSpecFromJsonString(const FString& jsonString) const
+FScenarioCompileResult UScenarioCompiler::CompileScenarioWorldSpecFromJsonString(const FString& jsonString) const
 {
 	FScenarioCompileResult result;
 

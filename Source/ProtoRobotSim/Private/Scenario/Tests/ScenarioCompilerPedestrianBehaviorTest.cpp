@@ -38,7 +38,7 @@ bool FScenarioCompilerPedestrianBehaviorOptionalTest::RunTest(const FString& Par
 {
 	const FString json = TEXT(R"JSON(
 {
-  "schema": "episode_actor_spawn_mvp",
+  "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "pedestrian_behavior_optional_test",
   "map_id": "EpisodeSandbox",
@@ -61,7 +61,7 @@ bool FScenarioCompilerPedestrianBehaviorOptionalTest::RunTest(const FString& Par
 )JSON");
 
 	const UScenarioCompiler* compiler = NewObject<UScenarioCompiler>();
-	const FScenarioCompileResult result = compiler->CompileEpisodeWorldSpecFromJsonString(json);
+	const FScenarioCompileResult result = compiler->CompileScenarioWorldSpecFromJsonString(json);
 
 	TestTrue(TEXT("compile succeeds without behavior"), result.bSuccess);
 	TestEqual(TEXT("one pedestrian compiled"), result.WorldSpec.DynamicActors.Num(), 1);
@@ -78,7 +78,7 @@ bool FScenarioCompilerPedestrianBehaviorValuesTest::RunTest(const FString& Param
 {
 	const FString json = TEXT(R"JSON(
 {
-  "schema": "episode_actor_spawn_mvp",
+  "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "pedestrian_behavior_values_test",
   "map_id": "EpisodeSandbox",
@@ -109,7 +109,7 @@ bool FScenarioCompilerPedestrianBehaviorValuesTest::RunTest(const FString& Param
 )JSON");
 
 	const UScenarioCompiler* compiler = NewObject<UScenarioCompiler>();
-	const FScenarioCompileResult result = compiler->CompileEpisodeWorldSpecFromJsonString(json);
+	const FScenarioCompileResult result = compiler->CompileScenarioWorldSpecFromJsonString(json);
 
 	TestTrue(TEXT("compile succeeds with behavior"), result.bSuccess);
 	TestEqual(TEXT("one pedestrian compiled"), result.WorldSpec.DynamicActors.Num(), 1);
@@ -131,7 +131,7 @@ bool FScenarioCompilerPedestrianPathCurveValuesTest::RunTest(const FString& Para
 {
 	const FString json = TEXT(R"JSON(
 {
-  "schema": "episode_actor_spawn_mvp",
+  "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "pedestrian_path_curve_values_test",
   "map_id": "EpisodeSandbox",
@@ -156,7 +156,7 @@ bool FScenarioCompilerPedestrianPathCurveValuesTest::RunTest(const FString& Para
 )JSON");
 
 	const UScenarioCompiler* compiler = NewObject<UScenarioCompiler>();
-	const FScenarioCompileResult result = compiler->CompileEpisodeWorldSpecFromJsonString(json);
+	const FScenarioCompileResult result = compiler->CompileScenarioWorldSpecFromJsonString(json);
 
 	TestTrue(TEXT("compile succeeds with path curve"), result.bSuccess);
 	TestEqual(TEXT("one pedestrian compiled"), result.WorldSpec.DynamicActors.Num(), 1);

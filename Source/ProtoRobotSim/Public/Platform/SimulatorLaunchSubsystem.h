@@ -66,9 +66,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	TArray<FString> ListSimulationSetupFiles() const;
 
-	// Json/Input 아래에서 EpisodeSetup 계약으로 컴파일되는 JSON 파일 목록
+	// Json/Input 아래에서 ScenarioSetup 계약으로 컴파일되는 JSON 파일 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
-	TArray<FString> ListEpisodeSetupFiles() const;
+	TArray<FString> ListScenarioSetupFiles() const;
 
 	// Json/Input 아래에서 DeliveryBotSetup 계약으로 컴파일되는 JSON 파일 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
@@ -127,7 +127,7 @@ public:
 	bool AppendRunQueuePair(
 		const FString& runQueuePath,
 		const FString& pairId,
-		const FString& episodeSetupPath,
+		const FString& scenarioSetupPath,
 		const FString& deliveryBotSetupPath,
 		TArray<FString>& outDiagnostics) const;
 
@@ -145,9 +145,9 @@ public:
 		TArray<FString>& outDiagnostics) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
-	bool ReplaceEpisodeSetupReferencesInRunQueues(
-		const FString& oldEpisodeSetupPath,
-		const FString& newEpisodeSetupPath,
+	bool ReplaceScenarioSetupReferencesInRunQueues(
+		const FString& oldScenarioSetupPath,
+		const FString& newScenarioSetupPath,
 		TArray<FString>& outDiagnostics) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
@@ -200,7 +200,7 @@ private:
 	bool ReplaceRunQueueReferences(
 		const FString& oldPath,
 		const FString& newPath,
-		bool bReplaceEpisodeSetupReference,
+		bool bReplaceScenarioSetupReference,
 		TArray<FString>& outDiagnostics) const;
 	bool BuildLaunchCommand(const FString& setupPath, const FString& runId, FString& outExecutable, FString& outArguments, bool& bOutUsesPreviewLauncher) const;
 	bool ShouldUsePreviewLauncher(FString& outPreviewBatPath) const;

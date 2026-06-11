@@ -27,7 +27,7 @@ struct PROTOROBOTSIM_API FScenarioLlmGenerationResult
 	FString ResolvedSavedRunQueueJsonPath;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
-	FString FirstEpisodeSetupJsonPath;
+	FString FirstScenarioSetupJsonPath;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
 	FString FirstDeliveryBotSetupJsonPath;
@@ -41,7 +41,7 @@ struct PROTOROBOTSIM_API FScenarioLlmGenerationResult
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FScenarioLlmGenerationCompletedSignature, const FScenarioLlmGenerationResult&, Result);
 
-// 시나리오 에디터에서 AI 서버로 자연어 기반 시나리오 생성 요청을 보내고 EpisodeSetup JSON을 받는 책임.
+// 시나리오 에디터에서 AI 서버로 자연어 기반 시나리오 생성 요청을 보내고 ScenarioSetup JSON을 받는 책임.
 UCLASS(BlueprintType)
 class PROTOROBOTSIM_API UScenarioLlmAuthoringSubsystem : public UGameInstanceSubsystem
 {

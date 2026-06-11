@@ -33,7 +33,7 @@ public:
 	FString ScenarioId = TEXT("episode_editor_export");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Export")
-	FString MapId = TEXT("EpisodeEditorMap");
+	FString MapId = TEXT("ScenarioEditorMap");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Export")
 	int64 BaseSeed = 42;
@@ -66,7 +66,7 @@ public:
 	TSoftObjectPtr<UScenarioStaticObstaclePropCatalog> StaticObstaclePropCatalog;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Import")
-	FString EpisodeSetupInputDirectory = TEXT("Json/Input");
+	FString ScenarioSetupInputDirectory = TEXT("Json/Input");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement", meta = (ClampMin = "0.0"))
 	double StaticObstacleGroundZToleranceCm = 5.0;
@@ -81,13 +81,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Authoring")
 	void NewDraft();
 
-	// 기존 EpisodeSetup JSON을 UScenarioCompiler로 컴파일하고, 성공하면 DraftWorldSpec으로 import.
+	// 기존 ScenarioSetup JSON을 UScenarioCompiler로 컴파일하고, 성공하면 DraftWorldSpec으로 import.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
-	bool LoadEpisodeSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
+	bool LoadScenarioSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
 	// 문자열 기반 import.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
-	bool LoadEpisodeSetupJsonString(const FString& jsonString, TArray<FString>& outDiagnostics);
+	bool LoadScenarioSetupJsonString(const FString& jsonString, TArray<FString>& outDiagnostics);
 
 	// 이미 컴파일된 FScenarioWorldSpec 직접 import.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
@@ -192,7 +192,7 @@ public:
 	FScenarioWorldSpec GetDraftWorldSpec() const { return DraftWorldSpec; }
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
-	FString GetSourceEpisodeSetupJsonPath() const { return SourceEpisodeSetupJsonPath; }
+	FString GetSourceScenarioSetupJsonPath() const { return SourceScenarioSetupJsonPath; }
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	bool IsDraftDirty() const { return bDirty; }
@@ -209,20 +209,20 @@ public:
 
 	// DraftWorldSpec 전체 기준으로 JSON을 다시 작성하고, 다시 compiler로 round-trip 검증.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
-	bool ExportEpisodeSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
+	bool ExportScenarioSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
-	bool ExportAndValidateEpisodeSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
+	bool ExportAndValidateScenarioSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
 
 	// 검증 성공 시 저장하고 dirty 상태 해제.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
-	bool SaveEpisodeSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
+	bool SaveScenarioSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
 private:
 	static constexpr double CentimetersToMeters = 0.01;
 
 	static FString ResolveProjectRelativePath(const FString& filePath);
-	FString ResolveEpisodeSetupLoadPath(const FString& filePath) const;
+	FString ResolveScenarioSetupLoadPath(const FString& filePath) const;
 	static FString CompileSeverityToString(EScenarioCompileDiagnosticSeverity severity);
 	static void AppendCompileDiagnostics(const FScenarioCompileResult& compileResult, TArray<FString>& outDiagnostics);
 	static FString GroundRegionTypeToString(EScenarioGroundRegionType regionType);
@@ -321,7 +321,7 @@ private:
 	FScenarioWorldSpec DraftWorldSpec;
 
 	UPROPERTY(Transient)
-	FString SourceEpisodeSetupJsonPath;
+	FString SourceScenarioSetupJsonPath;
 
 	UPROPERTY(Transient)
 	bool bDirty = false;

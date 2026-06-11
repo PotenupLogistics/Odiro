@@ -109,7 +109,7 @@ void UScenarioEditorRootWidget::HidePlaceableContextMenu()
 void UScenarioEditorRootWidget::SetLlmPanelVisible(const bool bVisible)
 {
 	SetPanelVisibility(ResolveLlmPanelVisibilityTarget(), bVisible);
-	SetPanelVisibility(EpisodeEditorLLMWidget.Get(), bVisible);
+	SetPanelVisibility(ScenarioEditorLlmWidget.Get(), bVisible);
 }
 
 void UScenarioEditorRootWidget::HandleEditorSessionStarted(const bool)
@@ -271,10 +271,10 @@ void UScenarioEditorRootWidget::BindEditorLaunchSubsystem()
 			&UScenarioEditorRootWidget::HandleAutoStartCompleted);
 	}
 
-	if (launchSubsystem->HasAutoStartedEpisodeEditorSession())
+	if (launchSubsystem->HasAutoStartedScenarioEditorSession())
 	{
 		HandleAutoStartCompleted(
-			launchSubsystem->WasAutoStartedEpisodeEditorSessionLoadedExistingEpisode());
+			launchSubsystem->WasAutoStartedScenarioEditorSessionLoadedExistingScenario());
 	}
 }
 
@@ -297,9 +297,9 @@ void UScenarioEditorRootWidget::UnbindEditorLaunchSubsystem()
 	AutoStartCompletedHandle.Reset();
 }
 
-void UScenarioEditorRootWidget::HandleAutoStartCompleted(const bool bLoadedExistingEpisode)
+void UScenarioEditorRootWidget::HandleAutoStartCompleted(const bool bLoadedExistingScenario)
 {
-	HandleEditorSessionStarted(bLoadedExistingEpisode);
+	HandleEditorSessionStarted(bLoadedExistingScenario);
 }
 
 UWidget* UScenarioEditorRootWidget::ResolvePlaceableContextMenuVisibilityTarget() const
@@ -314,7 +314,7 @@ UWidget* UScenarioEditorRootWidget::ResolveAssetPaletteVisibilityTarget() const
 
 UWidget* UScenarioEditorRootWidget::ResolveLlmPanelVisibilityTarget() const
 {
-	return LlmPanel ? LlmPanel.Get() : Cast<UWidget>(EpisodeEditorLLMWidget.Get());
+	return LlmPanel ? LlmPanel.Get() : Cast<UWidget>(ScenarioEditorLlmWidget.Get());
 }
 
 void UScenarioEditorRootWidget::SetPanelVisibility(UWidget* targetWidget, const bool bVisible) const

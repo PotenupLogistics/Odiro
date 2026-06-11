@@ -1,8 +1,5 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 
 #include "DeliveryBot/Actor/DeliveryBot.h"
-
 #include "ChaosWheeledVehicleMovementComponent.h"
 #include "DeliveryBot/Component/DeliveryBot_DriveComponent.h"
 #include "DeliveryBot/Component/DeliveryBot_HttpPolicyComponent.h"
@@ -10,10 +7,6 @@
 #include "DeliveryBot/Component/DeliveryBot_PolicyControllerComponent.h"
 #include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
-#include "Serialization/JsonReader.h"
-#include "Dom/JsonObject.h"
-#include "Serialization/JsonSerializer.h"
-#include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBot, Log, All);

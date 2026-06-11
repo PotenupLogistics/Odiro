@@ -1,9 +1,7 @@
-// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
 #include "CoreMinimal.h"
-
 #include "WheeledVehiclePawn.h"
 #include "Shared/Struct/DeliveryBot/Perception/DeliveryBotLidarSensorInfo.h"
 #include "Shared/Struct/DeliveryBot/Drive/DeliveryBotMovementInfo.h"

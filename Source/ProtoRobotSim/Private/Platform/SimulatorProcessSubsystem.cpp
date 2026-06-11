@@ -8,7 +8,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogSimulatorProcess, Log, All);
 
 namespace
 {
-	const TCHAR* DefaultSimulationMapId = TEXT("EpisodeSimulationMap");
+	const TCHAR* DefaultSimulationMapId = TEXT("ScenarioSimulationMap");
 
 	FString TrimMapId(const FString& mapId)
 	{

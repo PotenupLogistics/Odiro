@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run_result.schema.json",
+  "title": "RunResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "runId", "worldId", "policyId", "success", "metrics", "eventTimeline"],
+  "properties": {
+    "schemaVersion": { "type": "string" },
+    "runId": { "type": "string" },
+    "worldId": { "type": "string" },
+    "policyId": { "type": "string" },
+    "success": { "type": "boolean" },
+    "metrics": {
+      "type": "object",
+      "required": ["collisionCount", "nearMissCount", "minPedestrianDistanceCm", "rerouteCount", "stopCount", "deliveryTimeSec", "manualOverrideRequired", "fallDetected", "sidewalkDepartureCount"],
+      "properties": {
+        "collisionCount": { "type": "integer", "minimum": 0 },
+        "nearMissCount": { "type": "integer", "minimum": 0 },
+        "minPedestrianDistanceCm": { "type": "number", "minimum": 0 },
+        "rerouteCount": { "type": "integer", "minimum": 0 },
+        "stopCount": { "type": "integer", "minimum": 0 },
+        "deliveryTimeSec": { "type": "number", "minimum": 0 },
+        "manualOverrideRequired": { "type": "boolean" },
+        "fallDetected": { "type": "boolean" },
+        "sidewalkDepartureCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "eventTimeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["t", "event"],
+        "properties": {
+          "t": { "type": "number", "minimum": 0 },
+          "event": { "type": "string" },
+          "objectId": { "type": "string" },
+          "distanceCm": { "type": "number", "minimum": 0 },
+          "action": { "type": "string", "enum": ["Continue", "SlowDown", "Stop", "EmergencyStop", "LocalAvoidance", "ReplanPath", "YieldWait", "RequestOperator"] },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}

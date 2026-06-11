@@ -1,0 +1,2905 @@
+﻿{
+  "generatedAt": "2026-05-30T14:22:17+00:00",
+  "totalCandidates": 201,
+  "byPriority": {
+    "high": 43,
+    "medium": 158,
+    "low": 0
+  },
+  "byCategory": {
+    "certification_process": 71,
+    "emergency_stop": 9,
+    "legal_background": 87,
+    "operator_control": 1,
+    "perception_requirement": 2,
+    "sidewalk_operation": 16,
+    "speed_policy": 6,
+    "terrain_or_dynamic_safety": 9
+  },
+  "bySource": {
+    "KOR-001": {
+      "high": 1,
+      "medium": 48,
+      "low": 0
+    },
+    "KOR-002": {
+      "high": 19,
+      "medium": 19,
+      "low": 0
+    },
+    "KOR-003": {
+      "high": 13,
+      "medium": 67,
+      "low": 0
+    },
+    "KOR-004": {
+      "high": 10,
+      "medium": 20,
+      "low": 0
+    },
+    "KOR-005": {
+      "high": 0,
+      "medium": 4,
+      "low": 0
+    }
+  },
+  "reviewQueue": [
+    {
+      "candidateId": "CAND-KOR-001-001",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "제5장의2 실외이동로봇 운행안전인증",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-002",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "제40조의2(실외이동로봇의 운행안전인증 등)",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-003",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "제40조의3(안전인증의 취소 등)",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-004",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "제41조의2(진흥원에 대한 보고ㆍ검사)",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-005",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "제44조의2(자료제출ㆍ검사 등)",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-006",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "4의2. “실외이동로봇”이란 배송 등을 위하여 자율주행(원격제어를 포함한다)으로 운행할 수 있는 지능형 로봇을 말",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-007",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "제3조(국가 및 지방자치단체의 책무) ① 국가 및 지방자치단체는 지능형 로봇이 국민의 안전과 편의를 증진시키는 방향",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-008",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "② 손해보장사업을 하는 자는 사업 운영상 필요하다고 인정하는 때에는 제40조의2에 따라 운행안전인증을 실시하",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-009",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "는 기관(이하 “인증기관”이라 한다)에 대하여 운행안전인증 관련 자료의 제공을 요구할 수 있다. 이 경우 인증기관은",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-010",
+      "sourceId": "KOR-001",
+      "category": "emergency_stop",
+      "priority": "high",
+      "extractedText": "면의 점용ㆍ사용 실시계획의 승인 등(매립면허를 받은 매립예정지는 제외한다), 같은 법 제28조에 따른 공유수면",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "ObstacleAhead",
+      "linkedMvpAction": "EmergencyStop, Stop",
+      "relatedPolicyParams": [
+        "emergencyStopEnabled",
+        "minStopDistanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-011",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "9. 「전기사업법」 제7조에 따른 발전사업ㆍ송전사업ㆍ배전사업 또는 전기판매사업의 허가 및 「전기안전관리법」 제",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-012",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "관할 시ㆍ도지사, 그 밖의 전문기관의 장에게 준공확인에 필요한 검사를 의뢰할 수 있다. <개정 2013. 3. 23., 2025.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-013",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "후 그 공사가 승인된 내용대로 시행되었다고 인정하는 경우에는 준공확인증명서를 그 신청인에게 교부하고 대통령",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-014",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "③ 사업시행자가 제2항에 따른 준공확인증명서를 교부받은 때에는 제36조의 인ㆍ허가 등 의제규정에 따라 해당 사",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-015",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "④ 사업시행자는 제2항에 따른 준공확인증명서를 교부받기 전에는 조성사업으로 조성 또는 설치된 토지 및 시설을",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-016",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "제5장의2 실외이동로봇 운행안전인증 <신설 2023. 5. 16.>",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-017",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "제40조의2(실외이동로봇의 운행안전인증 등) ① 산업통상부장관은 실외이동로봇의 「도로교통법」 제2조제10호에 따른",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-018",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "보도 등에서의 운행을 위하여 실외이동로봇의 운행안전인증(이하 “안전인증”이라 한다)을 실시할 수 있다. <개정",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-019",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "② 산업통상부장관은 안전인증을 위하여 인증기관을 지정할 수 있다.<개정 2025. 10. 1.>",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-020",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "③ 안전인증을 받은 자는 안전인증받은 사항을 변경하려는 경우 산업통상부령으로 정하는 바에 따라 변경인증을",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-021",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "받아야 한다. 다만, 실외이동로봇의 운행안전과 관련이 없는 것으로서 산업통상부령으로 정하는 사항을 변경하는",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-022",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "④ 안전인증을 받은 자는 대통령령으로 정하는 바에 따라 안전인증 표시를 하거나 그 사실을 홍보할 수 있다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-023",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "⑤ 안전인증을 받은 자가 아니면 안전인증 표시 또는 이와 유사한 표시를 하거나 안전인증을 받은 것으로 홍보하여",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-024",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "⑥ 안전인증의 기준ㆍ절차 등 안전인증에 필요한 사항과 제2항에 따른 인증기관 지정의 기준ㆍ절차ㆍ취소 등에 필",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-025",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "⑦ 산업통상부장관은 안전인증된 사항에 대하여 운영실태조사 등 사후관리를 하여야 하며, 조사 결과 안전인증 기",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-026",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "제40조의3(안전인증의 취소 등) ① 산업통상부장관은 다음 각 호의 어느 하나에 해당하는 경우에는 안전인증을 취소하",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-027",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "거나 6개월 이내의 기간을 정하여 안전인증을 사용하지 못하도록 명하거나 개선명령을 할 수 있다. 다만, 제1호에 해",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-028",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "당하는 경우에는 안전인증을 취소하여야 한다. <개정 2025. 10. 1.>",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-029",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "1. 거짓이나 그 밖의 부정한 방법으로 안전인증을 받은 경우",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-030",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "2. 제40조의2제6항에 따른 안전인증 기준에 미달한 경우",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-031",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "3. 부적합한 실외이동로봇을 생산한 경우로서 보행자 등에 중대한 위해를 끼칠 우려가 있는 경우",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-032",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "제40조의4(보험 등 가입 의무) 안전인증을 받은 실외이동로봇을 운영하는 자는 「도로교통법」 제2조제10호에 따른 보",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-033",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "도 등에서의 운행으로 인하여 발생할 수 있는 인적ㆍ물적 손해를 배상하기 위하여 대통령령으로 정하는 보험 또는",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-034",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "8. 제9조에 따른 품질확보 등에 대한 지원사업 및 「산업표준화법」 제15조에 따른 인증사업",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-035",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "제41조의2(진흥원에 대한 보고ㆍ검사) ① 산업통상부장관은 진흥원에 대하여 그 업무 및 재산에 관한 보고 또는 자료",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-036",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "의 제출을 명하거나 소속 공무원으로 하여금 현장출입 또는 서류검사를 하게 하는 등 필요한 조치를 할 수 있다. <개",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-037",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "② 제1항에 따라 출입ㆍ검사를 하는 관계 공무원은 그 권한을 표시하는 증표를 지니고 이를 관계인에게 보여주어야",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-038",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "제44조의2(자료제출ㆍ검사 등) ① 산업통상부장관은 감독을 위하여 필요한 경우에는 인증기관 및 안전인증을 받은 자",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-039",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "(이하 “인증기관등”이라 한다)에 대하여 그 업무에 관한 보고 또는 자료의 제출을 명할 수 있다. <개정 2025. 10. 1.>",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-040",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "② 산업통상부장관은 소속 공무원으로 하여금 인증기관등의 사무소, 사업장, 실외이동로봇 제조시설 및 그 밖의 장",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-041",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "소에 출입하여 관련 서류를 검사하게 하거나 관계인에게 질문을 하게 하는 등 필요한 조치를 할 수 있다.<개정",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-042",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "③ 제2항에 따라 출입검사를 하는 공무원은 그 권한을 나타내는 증표를 지니고 이를 관계인에게 내보여야 한다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-043",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "1. 거짓이나 그 밖의 부정한 방법으로 제40조의2제2항에 따른 인증기관으로 지정을 받고 안전인증을 한 자",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-044",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "2. 제40조의2제2항에 따른 인증기관으로 지정을 받지 아니하고 안전인증을 한 자",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-045",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "3. 거짓이나 그 밖의 부정한 방법으로 안전인증을 받은 자",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-046",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "4. 제40조의2제3항에 따른 변경인증을 받지 아니하고 실외이동로봇을 판매 또는 운행을 목적으로 개조한 자",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-047",
+      "sourceId": "KOR-001",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "5. 제40조의2제5항을 위반하여 안전인증을 받지 아니하고 실외이동로봇에 안전인증 표시를 한 자",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-048",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "6. 제40조의2제6항에 따라 인증기관의 지정이 취소된 후 안전인증을 한 자",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-001-049",
+      "sourceId": "KOR-001",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "3. 제44조의2제2항에 따른 조사 또는 검사를 거부ㆍ방해 또는 기피한 자",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-001",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "경찰청 (교통기획계(법제총괄, 안전표지, 보호구역)) 02-3150-2251",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-002",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "경찰청 (교통안전계(안전, 단속, 어린이통학버스)) 02-3150-2252",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-003",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "라. 그 밖에 현실적으로 불특정 다수의 사람 또는 차마(車馬)가 통행할 수 있도록 공개된 장소로서 안전하고",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-004",
+      "sourceId": "KOR-002",
+      "category": "speed_policy",
+      "priority": "high",
+      "extractedText": "3. “고속도로”란 자동차의 고속 운행에만 사용하기 위하여 지정된 도로를 말한다.",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "SlowDown, Stop",
+      "relatedPolicyParams": [
+        "maxSpeedKmh",
+        "lowSpeedZoneSpeedKmh"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-005",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "4. “차도”(車道)란 연석선(차도와 보도를 구분하는 돌 등으로 이어진 선을 말한다. 이하 같다), 안전표지 또는 그",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-006",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "7. “차선”이란 차로와 차로를 구분하기 위하여 그 경계지점을 안전표지로 표시한 선을 말한다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-007",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "7의2. “노면전차 전용로”란 도로에서 궤도를 설치하고, 안전표지 또는 인공구조물로 경계를 표시하여 설치한 「",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-008",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "8. “자전거도로”란 안전표지, 위험방지용 울타리나 그와 비슷한 인공구조물로 경계를 표시하여 자전거 및 개인",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-009",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "9. “자전거횡단도”란 자전거 및 개인형 이동장치가 일반도로를 횡단할 수 있도록 안전표지로 표시한 도로의 부",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-010",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "10. “보도”(步道)란 연석선, 안전표지나 그와 비슷한 인공구조물로 경계를 표시하여 보행자(유모차, 보행보조용",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-011",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "의자차, 노약자용 보행기 등 행정안전부령으로 정하는 기구ㆍ장치를 이용하여 통행하는 사람 및 제21호의",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-012",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "3에 따른 실외이동로봇을 포함한다. 이하 같다)가 통행할 수 있도록 한 도로의 부분을 말한다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-013",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "11. “길가장자리구역”이란 보도와 차도가 구분되지 아니한 도로에서 보행자의 안전을 확보하기 위하여 안전표",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-014",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "12. “횡단보도”란 보행자가 도로를 횡단할 수 있도록 안전표지로 표시한 도로의 부분을 말한다.",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-015",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "13. “교차로”란 ‘십’자로, ‘T’자로나 그 밖에 둘 이상의 도로(보도와 차도가 구분되어 있는 도로에서는 차도를 말",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-016",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "13의2. “회전교차로”란 교차로 중 차마가 원형의 교통섬(차마의 안전하고 원활한 교통처리나 보행자 도로횡단",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-017",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "의 안전을 확보하기 위하여 교차로 또는 차도의 분기점 등에 설치하는 섬 모양의 시설을 말한다)을 중심으로",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-018",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "14. “안전지대”란 도로를 횡단하는 보행자나 통행하는 차마의 안전을 위하여 안전표지나 이와 비슷한 인공구조",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-019",
+      "sourceId": "KOR-002",
+      "category": "emergency_stop",
+      "priority": "high",
+      "extractedText": "15. “신호기”란 도로교통에서 문자ㆍ기호 또는 등화(燈火)를 사용하여 진행ㆍ정지ㆍ방향전환ㆍ주의 등의 신호",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "ObstacleAhead",
+      "linkedMvpAction": "EmergencyStop, Stop",
+      "relatedPolicyParams": [
+        "emergencyStopEnabled",
+        "minStopDistanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-020",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "16. “안전표지”란 교통안전에 필요한 주의ㆍ규제ㆍ지시 등을 표시하는 표지판이나 도로의 바닥에 표시하는 기",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-021",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "로봇 등 행정안전부령으로 정하는 기구ㆍ장치는 제외한다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-022",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "17의2. “노면전차”란 「도시철도법」 제2조제2호에 따른 노면전차로서 도로에서 궤도를 이용하여 운행되는 차를",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-023",
+      "sourceId": "KOR-002",
+      "category": "terrain_or_dynamic_safety",
+      "priority": "high",
+      "extractedText": "18의2. “자율주행시스템”이란 「자율주행자동차 상용화 촉진 및 지원에 관한 법률」 제2조제1항제2호에 따른 자",
+      "reasonForPriority": "MVP 필수 정책 카테고리에 속함",
+      "linkedMvpSituation": "FallOrTilt, TerrainRisk, ObstacleAhead",
+      "linkedMvpAction": "ReplanPath, LocalAvoidance, Stop",
+      "relatedPolicyParams": [
+        "maxSlopeDeg",
+        "obstacleClearanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-024",
+      "sourceId": "KOR-002",
+      "category": "terrain_or_dynamic_safety",
+      "priority": "high",
+      "extractedText": "율주행시스템을 말한다. 이 경우 그 종류는 완전 자율주행시스템, 부분 자율주행시스템 등 행정안전부령으로",
+      "reasonForPriority": "MVP 필수 정책 카테고리에 속함",
+      "linkedMvpSituation": "FallOrTilt, TerrainRisk, ObstacleAhead",
+      "linkedMvpAction": "ReplanPath, LocalAvoidance, Stop",
+      "relatedPolicyParams": [
+        "maxSlopeDeg",
+        "obstacleClearanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-025",
+      "sourceId": "KOR-002",
+      "category": "terrain_or_dynamic_safety",
+      "priority": "high",
+      "extractedText": "18의3. “자율주행자동차”란 「자동차관리법」 제2조제1호의3에 따른 자율주행자동차로서 자율주행시스템을 갖",
+      "reasonForPriority": "MVP 필수 정책 카테고리에 속함",
+      "linkedMvpSituation": "FallOrTilt, TerrainRisk, ObstacleAhead",
+      "linkedMvpAction": "ReplanPath, LocalAvoidance, Stop",
+      "relatedPolicyParams": [
+        "maxSlopeDeg",
+        "obstacleClearanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-026",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "19의2. “개인형 이동장치”란 제19호나목의 원동기장치자전거 중 시속 25킬로미터 이상으로 운행할 경우 전동",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-027",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "기가 작동하지 아니하고 차체 중량이 30킬로그램 미만인 것으로서 행정안전부령으로 정하는 것을 말한다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-028",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "21의3. “실외이동로봇”이란 「지능형 로봇 개발 및 보급 촉진법」 제2조제1호에 따른 지능형 로봇 중 행정안전부",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-029",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "허를 받아 어린이를 여객대상으로 하여 운행되는 운송사업용 자동차를 말한다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-030",
+      "sourceId": "KOR-002",
+      "category": "emergency_stop",
+      "priority": "high",
+      "extractedText": "24. “주차”란 운전자가 승객을 기다리거나 화물을 싣거나 차가 고장 나거나 그 밖의 사유로 차를 계속 정지 상",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "ObstacleAhead",
+      "linkedMvpAction": "EmergencyStop, Stop",
+      "relatedPolicyParams": [
+        "emergencyStopEnabled",
+        "minStopDistanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-031",
+      "sourceId": "KOR-002",
+      "category": "emergency_stop",
+      "priority": "high",
+      "extractedText": "25. “정차”란 운전자가 5분을 초과하지 아니하고 차를 정지시키는 것으로서 주차 외의 정지 상태를 말한다.",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "ObstacleAhead",
+      "linkedMvpAction": "EmergencyStop, Stop",
+      "relatedPolicyParams": [
+        "emergencyStopEnabled",
+        "minStopDistanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-032",
+      "sourceId": "KOR-002",
+      "category": "terrain_or_dynamic_safety",
+      "priority": "high",
+      "extractedText": "것(조종 또는 자율주행시스템을 사용하는 것을 포함한다)을 말한다.",
+      "reasonForPriority": "MVP 필수 정책 카테고리에 속함",
+      "linkedMvpSituation": "FallOrTilt, TerrainRisk, ObstacleAhead",
+      "linkedMvpAction": "ReplanPath, LocalAvoidance, Stop",
+      "relatedPolicyParams": [
+        "maxSlopeDeg",
+        "obstacleClearanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-033",
+      "sourceId": "KOR-002",
+      "category": "speed_policy",
+      "priority": "high",
+      "extractedText": "28. “서행”(徐行)이란 운전자가 차 또는 노면전차를 즉시 정지시킬 수 있는 정도의 느린 속도로 진행하는 것을",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "SlowDown, Stop",
+      "relatedPolicyParams": [
+        "maxSpeedKmh",
+        "lowSpeedZoneSpeedKmh"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-034",
+      "sourceId": "KOR-002",
+      "category": "emergency_stop",
+      "priority": "high",
+      "extractedText": "30. “일시정지”란 차 또는 노면전차의 운전자가 그 차 또는 노면전차의 바퀴를 일시적으로 완전히 정지시키는",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "ObstacleAhead",
+      "linkedMvpAction": "EmergencyStop, Stop",
+      "relatedPolicyParams": [
+        "emergencyStopEnabled",
+        "minStopDistanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-035",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "31. “보행자전용도로”란 보행자만 다닐 수 있도록 안전표지나 그와 비슷한 인공구조물로 표시한 도로를 말한다",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-036",
+      "sourceId": "KOR-002",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "31의2. “보행자우선도로”란 「보행안전 및 편의증진에 관한 법률」 제2조제3호에 따른 보행자우선도로를 말한다",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-037",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "안전 봉사활동에 종사하는 사람을 말한다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-002-038",
+      "sourceId": "KOR-002",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "것으로서 행정안전부령으로 정하는 것을 말한다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-001",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "본 책자는 실외이동로봇 운행안전인증의 신청 심사기준 절차, , ,",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-002",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "인증제도에 대한 해설을 수록하였습니다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-003",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "제 장 1 실외이동로봇 운행안전인증 안내 · · · · · · · · · · · · · · · · · · · · · · · · · · ·1",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-004",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "인증 대상 2. · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·2",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-005",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "인증 절차 4. · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·4",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-006",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "인증 기관 6. · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·6",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-007",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "인증 수수료7. · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·7",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-008",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "인증 신청서 작성요령1. · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·8",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-009",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "실외이동로봇 운행계획서 작성요령4. · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·13",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-010",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "제 장 2 실외이동로봇 운행안전인증 심사 · · · · · · · · · · · · · · · · · · · · · · · · ·19",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-011",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "인증서 및 인증표시 발급5. · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·28",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-012",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "실외이동로봇 모델 구분1. · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·34",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-013",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "변경 인증 2. · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·35",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-014",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "인증서 재발급3. · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·37",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-015",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "인증표시 재발급4. · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·37",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-016",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "인증 취소 6. · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·39",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-017",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "로봇 운행 시 고려사항2. · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·46",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-018",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "표 2 인증신청 제출 서류 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·5",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-019",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "표 4 인증 신청서 작성요령 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·8",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-020",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "표 6 실외이동로봇 모델의 구분 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·34",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-021",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "표 7 실외이동로봇 변경인증 주요 사항 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·35",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-022",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "표 8 인증의 취소 또는 개선명령 처분 기준 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·39",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-023",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "표 10 운행 및 설계 시 고려사항 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·46",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-024",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "그림 1 인증 절차 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·4",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-025",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "그림 3 실외이동로봇 운행안전인증 신청서 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·9",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-026",
+      "sourceId": "KOR-003",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "그림 5 신호등이 없는 횡단보도 통행 시나리오 예시 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·14",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-027",
+      "sourceId": "KOR-003",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "그림 6 신호등이 있는 횡단보도 통행 시나리오 예시 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·15",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-028",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "그림 10 주요 운행지역 정보 예시 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·18",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-029",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "그림 11 실외이동로봇 인증 표시 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·28",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-030",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "그림 12 실외이동로봇 운행안전인증 부적합 개선조치 보고서 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·29",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-031",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "그림 13 실외이동로봇 운행안전인증 표시 발급 신청서 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·30",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-032",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "그림 15 실외이동로봇 운행안전 변경인증 신청서 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·36",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-033",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "그림 16 인증서 재발급 신청서 · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·38",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-034",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "실외이동로봇 운행안전인증 은 지능형 로봇 개발 및 보급 촉진법에 따라 실외이동로봇이 도로교통법상 「 」",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-035",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "보도에 해당하는 지역에서 운행하기 위해 필요한 필수 인증입니다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-036",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "인증을 획득한 실외이동로봇은 보행자에 준하는 지위를 갖게 되어 보도 및 횡단보도 등 통행이 가능합니다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-037",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "기존의 실외이동로봇은 도로교통법상 보도에 통행할 수 없는 규제로 인해 합법적인 운행이 불가능하였습니다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-038",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "이에 실외이동로봇의 규제해소를 위해 한국로봇산업진흥원을 중심으로 산학연관이 참여하는 자율주행로봇",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-039",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "얼라이언스를 구성하고 관계부처와 협의를 통해 관련 법을 개정하였으며 실외이동로봇 운행안전인증 을 「 」",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-040",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "실외이동로봇 운행안전인증은 국내 실외이동로봇의 안전한 보도 통행을 위하여 실시하며 산업통상자원부로부터,",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-041",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "지정받은 운행안전인증기관으로부터 획득할 수 있습니다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-042",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": " 실외이동로봇과 그 운행에 필요한 관제장치 조합의 일체",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-043",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "제 장 1실외이동로봇 운행안전인증 안내",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-044",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "제도 설명 인증 대상 심사 항목1. / 2. / 3. 3",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-045",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": " 인증 신청인은 실외이동로봇 모델을 구성 또는 운영하는 자로서 별도의 자격 제한이 없음",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-046",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": " 실외이동로봇 이란 배송 등을 위하여 자율주행 원격제어 포함 으로 운행 가능한 지능형 로봇을 의미함‘ ’ ( )",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-047",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": " 도로교통법에 정의된 도로 에 해당하지 않는 사유지 캠퍼스 상업 시설 아파트 단지 등 에서 운행하는 ‘ ’ ( , , )",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-048",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "경우에는 인증의 의무가 없음",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-049",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "▶ 최대 속도 이하 질량 이하의 실외이동로봇을 대상으로 개 심사 항목에 적합함을 15km/h , 500kg 16",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-050",
+      "sourceId": "KOR-003",
+      "category": "terrain_or_dynamic_safety",
+      "priority": "high",
+      "extractedText": "1 질량 및 폭 제한 질량 폭 이하500 kg, 800 mm",
+      "reasonForPriority": "MVP 필수 정책 카테고리에 속함",
+      "linkedMvpSituation": "FallOrTilt, TerrainRisk, ObstacleAhead",
+      "linkedMvpAction": "ReplanPath, LocalAvoidance, Stop",
+      "relatedPolicyParams": [
+        "maxSlopeDeg",
+        "obstacleClearanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-051",
+      "sourceId": "KOR-003",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "* 단 보도 폭이 최소 이상이면 까지 허용2500 mm 1200 mm",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-052",
+      "sourceId": "KOR-003",
+      "category": "speed_policy",
+      "priority": "high",
+      "extractedText": "2 운행 속도 질량별 최대 운행 속도 보호구역 운행 속도 준수,",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "SlowDown, Stop",
+      "relatedPolicyParams": [
+        "maxSpeedKmh",
+        "lowSpeedZoneSpeedKmh"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-053",
+      "sourceId": "KOR-003",
+      "category": "terrain_or_dynamic_safety",
+      "priority": "high",
+      "extractedText": "4 동적 안정성 경사로 주행 및 구조물 통과 시 안정성 확인",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "FallOrTilt, TerrainRisk, ObstacleAhead",
+      "linkedMvpAction": "ReplanPath, LocalAvoidance, Stop",
+      "relatedPolicyParams": [
+        "maxSlopeDeg",
+        "obstacleClearanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-054",
+      "sourceId": "KOR-003",
+      "category": "emergency_stop",
+      "priority": "high",
+      "extractedText": "5 비상정지 비상정지 스위치 장착 및 요구사항 준수",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "ObstacleAhead",
+      "linkedMvpAction": "EmergencyStop, Stop",
+      "relatedPolicyParams": [
+        "emergencyStopEnabled",
+        "minStopDistanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-055",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "6 운행구역 준수 운행구역 준수 및 금지구역 진입 제한",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-056",
+      "sourceId": "KOR-003",
+      "category": "speed_policy",
+      "priority": "high",
+      "extractedText": "7 속도 제어 설정된 운행 속도 준수",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "SlowDown, Stop",
+      "relatedPolicyParams": [
+        "maxSpeedKmh",
+        "lowSpeedZoneSpeedKmh"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-057",
+      "sourceId": "KOR-003",
+      "category": "perception_requirement",
+      "priority": "high",
+      "extractedText": "8 장애물 감지 관련 규격에 따른 장애물 형상 감지 및 회피",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead, ObstacleAhead, ApproachingObject",
+      "linkedMvpAction": "SlowDown, Stop, RequestOperator",
+      "relatedPolicyParams": [
+        "perceptionMinRangeM",
+        "pedestrianDetectionRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-058",
+      "sourceId": "KOR-003",
+      "category": "terrain_or_dynamic_safety",
+      "priority": "high",
+      "extractedText": "11 방수 성능 로봇 외함에 대한 기본 방수 성능 만족",
+      "reasonForPriority": "MVP 필수 정책 카테고리에 속함",
+      "linkedMvpSituation": "FallOrTilt, TerrainRisk, ObstacleAhead",
+      "linkedMvpAction": "ReplanPath, LocalAvoidance, Stop",
+      "relatedPolicyParams": [
+        "maxSlopeDeg",
+        "obstacleClearanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-059",
+      "sourceId": "KOR-003",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "13 횡단보도 통행 횡단보도 통행 시 필수 요건 충족",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-060",
+      "sourceId": "KOR-003",
+      "category": "operator_control",
+      "priority": "high",
+      "extractedText": "14 관제장치 모니터링 알림 등 관제장치 필수 요건 충족,",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "ApproachingObject",
+      "linkedMvpAction": "RequestOperator, Stop",
+      "relatedPolicyParams": [
+        "operatorOverrideEnabled",
+        "maxRemoteResponseSec"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-061",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "15 통신장애 대응 통신 지연 및 단절 상황에서의 안전한 작동 시나리오 검증",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-062",
+      "sourceId": "KOR-003",
+      "category": "emergency_stop",
+      "priority": "high",
+      "extractedText": "16 원격조작 원격에서 로봇을 정지시키는 수단 만족",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "ObstacleAhead",
+      "linkedMvpAction": "EmergencyStop, Stop",
+      "relatedPolicyParams": [
+        "emergencyStopEnabled",
+        "minStopDistanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-063",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "그림 | 1 |인증 절차",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-064",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "▶ 인증 신청서 및 구비서류를 준비하여 인증신청",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-065",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "▶ 인증기관 담당자를 통해 접수 완료 확인",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-066",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "▶ 인증심사 수수료 입금",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-067",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "▶ 인증기관으로부터 서류심사 완료 확인",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-068",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "▶ 인증기관 담당자와 제품심사 일정 조율",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-069",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "인증 절차 제출 서류4. / 5. 5",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-070",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "* 년 이내에 부적합한 사항을 조치하지 않은 경우 인증신청이 기각됨1",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-071",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "▶ 개선조치 사항에 대한 인증기관 확인 후 인증서 발급",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-072",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "▶ 인증 표시 신청서 제출 및 인증 표시 수령 후 로봇에 부착",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-073",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "▶ 변경사항이 있는 경우 변경인증 신청서 제출",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-074",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "▶ 인증받은 모델에 대해 년마다 정기점검 대응2",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-075",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "▶ 안전사고 발생 또는 인증기관의 요청에 따라 수시점검 대응",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-076",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "표 | 2 |인증신청 제출 서류",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-077",
+      "sourceId": "KOR-003",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "1 인증 신청서 지정 양식",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-078",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "3 실외이동로봇 구조 및 운영에 관한 설명서 -",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-079",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "4 실외이동로봇 설계도면 및 부품 명세표 -",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-003-080",
+      "sourceId": "KOR-003",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "5 실외이동로봇 운행계획서 횡단보도 통행 통신장애 사고발생 혼잡상황 대응 시나리오 포함( / / / ) -",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-001",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "산업통상자원부고시제2023-211호「지능형로봇개발및보급촉진법시행규칙」제7조의4,제7조의5,제7조6규정에따른『실외이동로봇운행안전인증절차및기준등에관한고시』를다음과같이제정고시합니다.2023년11월17일산업통상자원부장관실외이동로봇운행안전인증절차및기준등에관한고시제1장총칙제1조(목적)이고시는「지능형로봇개발및보급촉진법」(이하“법”이라한다)제40조의2와같은법시행규칙제7조의4에따른실외이동로봇운행안전인증(이하“운행안전인증”이라한다)의기준과제7조의5에따른신청등절차를구체화하고,그시행과관련하여필요한사항을규정함을목적으로한다.제2조(정의)이고시에서사용하는용어...",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-002",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "장관이정하여고시하는실외이동로봇등운행안전인증대상이라함은법제2조제4호의2에따른실외이동로봇과그운행에필요한관제장치의조합일체를말한다.②시행규칙제7조의5제1항의산업통상자원부장관이정하여고시하는모델의구분에대한세부기준은별표2와같다.제4조(운행안전인증기준)시행규칙제7조의4에따른실외이동로봇운행안전인증기준은별표3과같다.제2장실외이동로봇운행안전인증절차제5조(신청접수)①운행안전인증기관의장은시행규칙제7조의5제1항에따라실외이동로봇의운행안전인증신청을받은경우운행안전인증대상여부및구비서류목록을확인하여신청인에게접수결과를통보해야한다.②운행안전인증기관의장은접수된신청서류를검...",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-003",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "호의어느하나에해당하는경우심사의일부또는전부를면제할수있다.1.동일한모델의실외이동로봇에대하여2년이내에인증기관으로부터발급받은시험또는심사결과를제출한경우2.운행안전인증을받은실외이동로봇또는해당관제장치의일부를변경하여신규운행안전인증또는법제40조의2제3항에따른변경인증을받고자하는경우②운행안전인증기관의장은제1항에따른심사의일부또는전부를면제하는경우에는시험또는심사결과서류를면밀히검토해야한다.제9조(심사결과의처리등)①운행안전인증기관의장은실외이동로봇의심사가종료되면신청인에게심사결과를통보해야한다.②실외이동로봇심사결과운행안전인증기준에적합한경우제10조에따라실외이동로봇운행...",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-004",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "관해야한다.③인증서를발급받은자가법제40조의3에따라해당운행안전인증이취소된경우에는그운행안전인증서를인증기관에지체없이반납해야한다.제11조(운행안전인증신청의처리기간)시행규칙제7조의5제5항의산업통상자원부장관이정하여고시하는부득이한사유란아래각호와같다.1.운행안전인증신청의급격한증가2.신청인이신청서류를보완하거나부적합사항의개선조치에필요한기간3.시료나설비의고장및파손등부득이한사유로인하여심사가지연되는경우그기간제12조(이의신청)①신청인은실외이동로봇운행안전인증심사결과에대해운행안전인증기관의장에게별지제1호서식에따라이의신청을할수있다.②운행안전인증기관의장은제1항에의하...",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-005",
+      "sourceId": "KOR-004",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "제14조(운행안전인증서의재발급)①운행안전인증서를발급받은자는인증서가분실또는훼손된경우별지제2호서식에따라운행안전인증서의재발급을신청할수있다.②운행안전인증기관의장은운행안전인증서의재발급신청서가접수된이후7일이내에신청자에게운행안전인증서를재발급해야한다.제15조(세부운영지침)운행안전인증기관의장은운행안전인증업무와관련한세부지침을별도로정하여운영해야한다.제16조(재검토기한)산업통상자원부장관은「행정규제기본법」및「훈령ㆍ예규등의발령및관리에관한규정」에따라2024년1월1일기준으로매2년이되는시점(매2년째의12월31일까지를말한다)마다그타당성을검토하여개선등의조치를해야한다...",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-006",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "■실외이동로봇운행안전인증절차및기준등에관한고시[별표1]실외이동로봇운행안전인증절차신청인인증기관비고신청서제출신청접수신청서류보완서류심사제품심사인증완료인증서발급사후관리",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-007",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "■실외이동로봇운행안전인증절차및기준등에관한고시[별표2]실외이동로봇모델의구분(제3조관련)번호품목모델구성모델구분세부항목",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-008",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "1최대속도15km/h이하,최대질량500kg이하실외이동로봇",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-009",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "치수별길이,높이,폭,바퀴지름등질량별로봇의질량,최대적재가능한질량주행방식별바퀴형,보행형등겉모양별로봇외형,적재함등주요부품별구동기,제어장치,센서류,입출력장치등관제장치관제시스템응용프로그램실외이동로봇운행안전인증기준상영향을미치는변경",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-010",
+      "sourceId": "KOR-004",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "가.로봇의자체질량과적재물의질량을합하여500kg을초과하지않아야한다.나.로봇의폭은800mm를초과하지않아야한다.단,해당로봇이운행하려는보도의최소폭이2500mm이상인경우,로봇의폭을1200mm까지허용한다.",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-011",
+      "sourceId": "KOR-004",
+      "category": "speed_policy",
+      "priority": "high",
+      "extractedText": "2.운행속도가.로봇의최대운행속도는최대질량(로봇과적재물질량의합)에따라,아래의기준에적합해야한다.최대질량(kg)최대운행속도(km/h)230초과500이하5100초과230이하10100이하 15나.가항에도불구하고,도로교통법제12조에따른어린이보호구역,제12조의2에따른노인보호구역또는장애인보호구역에서로봇이최대운행속도5km/h를준수하는지확인한다.3.겉모양가.로봇의표면에날카로운모서리와날카로운끝이없고,손가락끼임으로인해상해가발생하지않아야한다.나.접촉가능한날카로운부위의최소반경은3mm이상이어야한다.",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "SlowDown, Stop",
+      "relatedPolicyParams": [
+        "maxSpeedKmh",
+        "lowSpeedZoneSpeedKmh"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-012",
+      "sourceId": "KOR-004",
+      "category": "terrain_or_dynamic_safety",
+      "priority": "high",
+      "extractedText": "가.로봇은그림과같이경사각(θ)이적어도5°이상인주행로에서시험하여안정적으로주행할수있어야한다.1)로봇을출발점(Po)에서목표점(Pt)까지주행하였을때,적재물의이탈이나낙하없이목표선을통과해야하며,통과지점(Pf)은허용범위(D)이내에있을것",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "FallOrTilt, TerrainRisk, ObstacleAhead",
+      "linkedMvpAction": "ReplanPath, LocalAvoidance, Stop",
+      "relatedPolicyParams": [
+        "maxSlopeDeg",
+        "obstacleClearanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-013",
+      "sourceId": "KOR-004",
+      "category": "emergency_stop",
+      "priority": "high",
+      "extractedText": "2)후진을하는로봇의경우,후진주행으로“1)”과동일한방법으로시험할것나.로봇은적어도높이30mm이상의구조물을전도,적재물의이탈이나낙하없이통과해야하며,평가방법은한국산업표준KSB7320의5.3.2에따른다.5.비상정지가.로봇은비정상적인작동이나위험한상황이발생한경우위험을즉",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "ObstacleAhead",
+      "linkedMvpAction": "EmergencyStop, Stop",
+      "relatedPolicyParams": [
+        "emergencyStopEnabled",
+        "minStopDistanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-014",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "■실외이동로봇운행안전인증절차및기준등에관한고시[별표3]실외이동로봇운행안전인증기준(제4조관련)",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-015",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "각차단할수있도록비상정지기능을가져야한다.1)비상정지는로봇의제어시스템에서가장높은우선권을가질것2)경사로에서비상정지를한경우로봇은미끄러짐이나구름으로인한위험이발생하지않아야할것3)비상정지해제후,사용자의조작없이임의로동작하지않을것4)비상정지상태는수동에의해서만해제할수있도록할것나.비상정지상태에서어떠한임의의작동을하여서는아니된다.다.비상정지장치는쉽게식별및작동시킬수있어야한다.1)누름버튼(버섯머리유형등)형태를가질것2)실외이동로봇의외부에위치해야하며,바로접근이용이할것3)색상은빨간색일것",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-016",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "가.로봇은지정된운행구역을준수해야하며제한된금지구역에진입하지않아야한다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-017",
+      "sourceId": "KOR-004",
+      "category": "terrain_or_dynamic_safety",
+      "priority": "high",
+      "extractedText": "1)그림과같이로봇을출발지점에서도착지점으로자율주행하도록하였을때,로봇이금지구역을침범하지않을것2)출발지점A와B에대해각3회씩반복하여시험하였을때“1)”의조건을만족할것나.로봇이금지구역에진입하지아니하고회피하여주행하거나멈추는경우“가”에만족한것으로간주한다.",
+      "reasonForPriority": "MVP 필수 정책 카테고리에 속함",
+      "linkedMvpSituation": "FallOrTilt, TerrainRisk, ObstacleAhead",
+      "linkedMvpAction": "ReplanPath, LocalAvoidance, Stop",
+      "relatedPolicyParams": [
+        "maxSlopeDeg",
+        "obstacleClearanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-018",
+      "sourceId": "KOR-004",
+      "category": "speed_policy",
+      "priority": "high",
+      "extractedText": "가.로봇은경사가없는평지에서설정된속도에대하여정확도±10%이내의속도로주행해야한다.1)로봇의속도를측정하는구간은1m이상일것2)로봇은속도를측정하는구간에이르기전에충분한가속이이루어질것3)로봇의속도는고유사양에서명시된최댓값으로설정할것4)시험은총3회수행하여그결과를평균한값이“가”를만족할것나.로봇은적어도5°이상의경사가있는주행로에서설정된속도에대하여정확도±10%이내의속도로주행해야한다.1)“가”의방법과동일한조건으로시험할것2)경사각은고유사양에서명시된최대주행가능경사각으로설정할것3)오르막과내리막에대하여동일한방법으로시험할것8.장애물감지가.로봇은사람이나장애물을감지하여...",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "SlowDown, Stop",
+      "relatedPolicyParams": [
+        "maxSpeedKmh",
+        "lowSpeedZoneSpeedKmh"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-019",
+      "sourceId": "KOR-004",
+      "category": "perception_requirement",
+      "priority": "high",
+      "extractedText": "나.장애물배치방법은그림과같다.단,폭이800mm를초과하는로봇의경우초과하는폭의길이만큼시험장의폭을확장시킨다.",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead, ObstacleAhead, ApproachingObject",
+      "linkedMvpAction": "SlowDown, Stop, RequestOperator",
+      "relatedPolicyParams": [
+        "perceptionMinRangeM",
+        "pedestrianDetectionRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-020",
+      "sourceId": "KOR-004",
+      "category": "emergency_stop",
+      "priority": "high",
+      "extractedText": "※이때α(mm)의값은로봇폭(mm)–800(mm)이다.9.알림음가.로봇은통행요청,고장상태등안전한운행에필요한적절한알림음을발생해야한다.나.로봇의알림음중발화음과비상정지알림음은55dB(A)이상,73dB(A)이하이어야하며,평가방법은한국산업표준KSB7320의5.7절(알림음)에따른다.10.등화장치가.로봇은시각적알림을제공하기위한등화장치를가져야한다.나.등화장치는한국산업표준KSB7320에따른시험환경에서표면온도가섭씨60도를초과하지않아야한다.온도의측정은등화장치를30분이상작동상태로유지한이후시험해야한다.11.방수성능가.로봇의외함은한국산업표준KSCIEC6052...",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "ObstacleAhead",
+      "linkedMvpAction": "EmergencyStop, Stop",
+      "relatedPolicyParams": [
+        "emergencyStopEnabled",
+        "minStopDistanceM"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-021",
+      "sourceId": "KOR-004",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "13.횡단보도통행가.로봇이횡단보도를통행하는경우에는아래의요구사항을모두만족하도록해야한다.1)신호를대기하는로봇은운행계획서에명시된보도상의구역에위치할것2)로봇은신호등의신호를정확히인지할수있는수단을가질것3)로봇이횡단보도통행을위해대기장소에도착한시점에보행신호가작동중인경우에는,정지상태로대기후다음보행신호에횡단할것4)횡단중보행자및차량등장애물과의접촉이없을것5)로봇은보행신호가종료되기이전에횡단을완료할것",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-022",
+      "sourceId": "KOR-004",
+      "category": "sidewalk_operation",
+      "priority": "high",
+      "extractedText": "14.관제장치가.로봇의관제장치는운용중인모든로봇을식별해야한다.나.관제장치는모든로봇에대하여다음의상태에대한정보를실시간으로확인할수있어야한다.1)로봇의위치와속력2)로봇의주행가능거리또는배터리잔량3)로봇과관제장치간통신신호의감도4)로봇의상태(주행,대기,비상정지,오류등)다.로봇은주행하는경로에보행자밀집등으로인해통행이불가능한",
+      "reasonForPriority": "MVP 필수 정책 카테고리와 candidate keyword/text가 직접 연결됨",
+      "linkedMvpSituation": "PedestrianAhead",
+      "linkedMvpAction": "YieldWait, SlowDown, Continue",
+      "relatedPolicyParams": [
+        "sidewalkAllowed",
+        "pedestrianPriorityRequired"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-023",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "경우관제장치에알리고관리자에의한조치가이루어질수있어야한다.15.통신장애대응가.로봇과관제장치간통신장애가발생한경우,실외이동로봇운행계획서상통신장애대응시나리오에따라사전에계획된방식으로작동해야한다.16.원격조작가.운행중안전을위해원격에서로봇을정지시킬수있는수단을가져야한다.나.원격수동조작을통해로봇을이동시키는경우,반드시카메라등의영상장치를통해주변의상황을확인할수있어야한다.단,로봇을육안으로확인하여원격조작을하는경우에는예외로한다. [비고]각운행안전인증기준항목에대해지정된장소에서평가하기가곤란한경우,로봇이운행가능한장소를별도로지정하여평가할수있다.",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-024",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "■실외이동로봇운행안전인증절차및기준등에관한고시[별표4]인증번호의부여기준(제10조제1항관련)1.인증번호의부여및식별방법ABCDE-01-23-001-01①②③④⑤가)①란에는운행안전인증기관의약호를다섯자리이하의영문대문자로기재한다.나)②란에는운행안전인증품목을식별하는코드를두자리의숫자로기재한다.품목코드운행안전인증품목01최대속도15km/h이하,최대질량500kg이하인실외이동로봇다)③란에는운행안전인증서발급년도의끝두자리숫자(예:2023년→23)를기재한다.라)④란에는운행안전인증서발급년도의인증서발급순서세자리숫자를기재한다.마)⑤란에는운행안전변경인증,재발급등의사...",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-025",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "■ 실외이동로봇 운행안전인증 절차 및 기준 등에 관한 고시 [별지 제1호서식]이의제기신청서※ 색상이 어두운 칸은 신청인이 작성하지 않습니다.접수번호접수일처리기간 30일",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-026",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "「실외이동로봇 운행안전인증 절차 및 기준 등에 관한 고시」제12조제1항에 따라 위와 같이 이의제기를 신청합니다. 년 월 일 신청인(서명 또는 인) 운행안전인증기관의 장 귀하",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-027",
+      "sourceId": "KOR-004",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "처 리 절 차신 청è접 수è서류검토è결과 통보신청인처리기관: 운행안전인증기관",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-028",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "■ 실외이동로봇 운행안전인증 절차 및 기준 등에 관한 고시 [별지 제2호서식]실외이동로봇운행안전인증서재발급신청서※ 색상이 어두운 칸은 신청인이 작성하지 않습니다.접수번호접수일처리기간 7일",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-029",
+      "sourceId": "KOR-004",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "인증 내용인증번호(다수 인증서 재발급 시 별지에 기재)로봇 제품명로봇 모델명관제장치 제품명관제장치 모델명신청 사유「실외이동로봇 운행안전인증 절차 및 기준 등에 관한 고시」 제14조에 따라 위와 같이 실외이동로봇 운행안전인증서의 재발급을 신청합니다. 년 월 일 신청인(서명 또는 인) 운행안전인증기관의 장 귀하첨부서류1. 사업자등록증 사본 또는 이에 준하는 서류 수수료 인증기관에서 정하는 수수료",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-004-030",
+      "sourceId": "KOR-004",
+      "category": "certification_process",
+      "priority": "medium",
+      "extractedText": "처 리 절 차신청서 작성è접 수è검 토è결 재è인증서 재발급신청인처리기관: 운행안전인증기관",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "RequestOperator",
+      "relatedPolicyParams": [
+        "certificationSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-005-001",
+      "sourceId": "KOR-005",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "에서 “유모차, 보행보조용 의자차, 노약자용 보행기 등 행정안전부령으로 정하는 기구ㆍ장치",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-005-002",
+      "sourceId": "KOR-005",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "2. 보행보조용 의자차(「의료기기법」 제19조에 따라 식품의약품안전처장이 정하는 의료기",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-005-003",
+      "sourceId": "KOR-005",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "따른 실외이동로봇 등 행정안전부령으로 정하는 기구ㆍ장치”란 다음 각 호의 기구ㆍ장치를",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    },
+    {
+      "candidateId": "CAND-KOR-005-004",
+      "sourceId": "KOR-005",
+      "category": "legal_background",
+      "priority": "medium",
+      "extractedText": "[시행 2026. 4. 2.] [행정안전부령 제615호, 2026. 4. 1., 일부개정]",
+      "reasonForPriority": "법적 배경 또는 인증 절차 관련 후보이며 정책 파라미터 직접 변환은 후순위",
+      "linkedMvpSituation": "",
+      "linkedMvpAction": "",
+      "relatedPolicyParams": [
+        "legalBasisSourceIds"
+      ],
+      "reviewStatus": "needs_pdf_check"
+    }
+  ]
+}

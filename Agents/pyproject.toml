@@ -1,0 +1,52 @@
+[project]
+name = "proto-ai"
+version = "0.1.0"
+description = "AI backend for delivery robot simulation policy validation"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.136.0",
+    "uvicorn[standard]>=0.41.0",
+    "python-multipart>=0.0.22",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.7.0",
+    "numpy>=2.2.0",
+    "pandas>=2.2.3",
+    "scikit-learn>=1.6.0",
+    "httpx>=0.28.0",
+    "python-dotenv>=1.0.1",
+    "openai>=1.80.0",
+    "langchain>=0.3.0",
+    "langchain-openai>=0.3.0",
+    "langchain-chroma>=0.2.0",
+    "chromadb>=0.6.0",
+    "google-api-python-client>=2.197.0",
+    "google-auth>=2.53.0",
+    "google-auth-oauthlib>=1.4.0",
+]
+
+[project.optional-dependencies]
+vision = [
+    "opencv-python>=4.10.0.84",
+    "pillow>=12.1.1",
+    "torch==2.11.0",
+    "torchvision==0.26.0",
+    "torchaudio==2.11.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "ruff>=0.8.0",
+    "jupyter>=1.1.1",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+torchvision = { index = "pytorch" }
+torchaudio = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true

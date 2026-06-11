@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-05-30T21:57:58.793774+00:00",
+  "confirmedCandidateCount": 9,
+  "generatedCardCount": 9,
+  "skippedPendingCount": 30,
+  "skippedRejectedCount": 4,
+  "cardsBySource": {
+    "KOR-003": 9
+  },
+  "cardsByCategory": {
+    "emergency_stop": 2,
+    "operator_control": 1,
+    "perception_requirement": 1,
+    "sidewalk_operation": 1,
+    "speed_policy": 2,
+    "terrain_or_dynamic_safety": 2
+  },
+  "cautionSummary": {
+    "requiredCautionIncluded": true,
+    "caution": "이 카드는 원본 문서의 수동 확인 내용을 바탕으로 만든 프로젝트 내부 정책 기준이며, 공식 인증 준수를 의미하지 않는다."
+  },
+  "nextSteps": [
+    "policy card 검증",
+    "RAG index 생성 준비",
+    "이후 Policy Config JSON 스키마 설계"
+  ]
+}

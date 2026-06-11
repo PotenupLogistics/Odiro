@@ -1,0 +1,21 @@
+# Policy RAG Chunks Report
+
+- generatedAt: 2026-05-30T22:48:59.137088+00:00
+- inputCardCount: 9
+- generatedChunkCount: 9
+
+## chunksByCategory
+- emergency_stop: 2
+- operator_control: 1
+- perception_requirement: 1
+- sidewalk_operation: 1
+- speed_policy: 2
+- terrain_or_dynamic_safety: 2
+
+## chunksBySource
+- KOR-003: 9
+
+## nextStepRecommendation
+- embedding index 생성 준비
+- retrieval test 설계
+- source document RAG는 별도 단계

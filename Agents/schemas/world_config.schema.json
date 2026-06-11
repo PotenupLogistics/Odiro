@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "world_config.schema.json",
+  "title": "WorldConfig",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "worldId", "scenarioId", "seed", "map", "robot", "runtime"],
+  "properties": {
+    "schemaVersion": { "type": "string" },
+    "worldId": { "type": "string" },
+    "scenarioId": { "type": "string" },
+    "seed": { "type": "integer" },
+    "map": {
+      "type": "object",
+      "required": ["type", "lengthCm", "sidewalkWidthCm", "surfaceCondition", "slopeDegree"],
+      "properties": {
+        "type": { "type": "string" },
+        "lengthCm": { "type": "number", "minimum": 0 },
+        "sidewalkWidthCm": { "type": "number", "minimum": 0 },
+        "surfaceCondition": { "type": "string" },
+        "slopeDegree": { "type": "number" }
+      }
+    },
+    "robot": {
+      "type": "object",
+      "required": ["botId", "spawn", "goal", "policyId"],
+      "properties": {
+        "botId": { "type": "string" },
+        "spawn": { "$ref": "#/$defs/location" },
+        "goal": { "$ref": "#/$defs/location" },
+        "policyId": { "type": "string" }
+      }
+    },
+    "obstacles": { "type": "array", "items": { "$ref": "#/$defs/object" } },
+    "pedestrians": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["objectId", "spawn", "goal", "speedKmh", "behavior"],
+        "properties": {
+          "objectId": { "type": "string" },
+          "spawn": { "$ref": "#/$defs/location" },
+          "goal": { "$ref": "#/$defs/location" },
+          "speedKmh": { "type": "number", "minimum": 0 },
+          "behavior": { "type": "string" }
+        }
+      }
+    },
+    "environmentObjects": { "type": "array", "items": { "$ref": "#/$defs/object" } },
+    "runtime": {
+      "type": "object",
+      "required": ["maxDurationSec", "captureReplay", "emitEventLog"],
+      "properties": {
+        "maxDurationSec": { "type": "number", "minimum": 0 },
+        "captureReplay": { "type": "boolean" },
+        "emitEventLog": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "location": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "object": {
+      "type": "object",
+      "required": ["objectId", "type", "position"],
+      "properties": {
+        "objectId": { "type": "string" },
+        "type": { "type": "string" },
+        "position": { "$ref": "#/$defs/location" },
+        "blockingRatio": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

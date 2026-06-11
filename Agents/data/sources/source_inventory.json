@@ -1,0 +1,102 @@
+{
+  "schema": "file_based_rag_source_inventory",
+  "version": 1,
+  "runtime_rag_store": "data/rag/policy_rag_chunks.jsonl",
+  "knowledge_card_store": "data/rag/policy_knowledge_cards.jsonl",
+  "sources": [
+    {
+      "source_id": "KOR-003",
+      "status": "active",
+      "source_type": "guidebook",
+      "role": "현재 런타임 정책 chunk의 핵심",
+      "usage": "runtime_rag_chunk_source",
+      "description": "KIRIA 실외이동로봇 운행안전인증 가이드북 기반",
+      "raw_file_path": "data/sources/raw/korea/KOR-003_KIRIA_실외이동로봇_운행안전인증_가이드북.pdf",
+      "processed_file_path": "data/sources/processed/korea/KOR-003_KIRIA_실외이동로봇_운행안전인증_가이드북.md",
+      "path_status": "verified"
+    },
+    {
+      "source_id": "KOR-004",
+      "status": "active",
+      "source_type": "official_notice",
+      "role": "공식 고시 기반 runtime 보강 근거",
+      "usage": "runtime_rag_chunk_source",
+      "description": "산업부 운행안전인증 고시",
+      "note": "2026-06-11 기준 confirmed candidate 2개(speed_policy, crosswalk_operation)만 runtime RAG에 반영한다. KOR-004 전체 내용을 무분별하게 runtime 근거로 사용하지 않는다.",
+      "raw_file_path": "data/sources/raw/korea/KOR-004_산업통상자원부_운행안전인증_절차_및_기준_고시.pdf",
+      "processed_file_path": "data/sources/processed/korea/KOR-004_산업통상자원부_운행안전인증_절차_및_기준_고시.md",
+      "path_status": "verified"
+    },
+    {
+      "source_id": "RSR-001",
+      "status": "supporting_candidate",
+      "source_type": "research_report",
+      "role": "실험 설계 보조 근거",
+      "usage": "pedestrian interaction, near-miss, scenario difficulty support",
+      "description": "METRANS Sidewalk ADR Interactions",
+      "raw_file_path": "data/sources/raw/research/RSR-001_METRANS_Sidewalk_ADR_Interactions.pdf",
+      "processed_file_path": "data/sources/processed/research/RSR-001_METRANS_Sidewalk_ADR_Interactions.md",
+      "path_status": "verified"
+    },
+    {
+      "source_id": "KOR-001",
+      "status": "reference_only",
+      "source_type": "law",
+      "role": "법적 배경/출처 근거",
+      "usage": "reference only",
+      "description": "지능형로봇법",
+      "raw_file_path": "data/sources/raw/korea/KOR-001_지능형로봇법.pdf",
+      "processed_file_path": "data/sources/processed/korea/KOR-001_지능형로봇법.md",
+      "path_status": "verified"
+    },
+    {
+      "source_id": "KOR-002",
+      "status": "reference_only",
+      "source_type": "law",
+      "role": "도로교통법 관련 보조 근거",
+      "usage": "reference only",
+      "description": "도로교통법 실외이동로봇 관련",
+      "raw_file_path": "data/sources/raw/korea/KOR-002_도로교통법_실외이동로봇.pdf",
+      "processed_file_path": "data/sources/processed/korea/KOR-002_도로교통법_실외이동로봇.md",
+      "path_status": "verified"
+    },
+    {
+      "source_id": "KOR-005",
+      "status": "reference_only",
+      "source_type": "reference",
+      "role": "하위법령/운행기준 참고",
+      "usage": "reference or review candidate",
+      "description": "도로교통법 하위법령 운행기준 참고",
+      "raw_file_path": "data/sources/raw/korea/KOR-005_도로교통법_제2조_하위법령_운행기준_참고자료.pdf",
+      "processed_file_path": "data/sources/processed/korea/KOR-005_도로교통법_제2조_하위법령_운행기준_참고자료.md",
+      "path_status": "verified"
+    },
+    {
+      "source_id": "PRJ-AGENT",
+      "status": "active_internal",
+      "source_type": "project_internal",
+      "role": "결과 분석/정책 서버 로직 관련 내부 정책",
+      "usage": "runtime_rag_chunk_source",
+      "description": "프로젝트 내부 결과 분석/정책 서버 로직 관련 정책",
+      "path_status": "internal"
+    },
+    {
+      "source_id": "PRJ-DOE",
+      "status": "active_internal",
+      "source_type": "project_internal",
+      "role": "시나리오 난이도/실험 설계 관련 내부 정책",
+      "usage": "runtime_rag_chunk_source",
+      "description": "프로젝트 내부 시나리오 난이도/실험 설계 관련 정책",
+      "path_status": "internal"
+    },
+    {
+      "source_id": "PRJ-EVAL",
+      "status": "active_internal",
+      "source_type": "project_internal",
+      "role": "평가 기준 관련 내부 정책",
+      "usage": "runtime_rag_chunk_source",
+      "description": "프로젝트 내부 평가 기준 관련 정책",
+      "path_status": "internal"
+    }
+  ]
+}

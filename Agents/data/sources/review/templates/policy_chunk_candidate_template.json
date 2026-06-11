@@ -1,0 +1,29 @@
+{
+  "schema": "policy_chunk_candidate_template",
+  "version": 1,
+  "source_id": "PLACEHOLDER_SOURCE_ID",
+  "source_status_at_review": "candidate_active",
+  "candidate_id": "CAND-PLACEHOLDER-001",
+  "review_status": "draft",
+  "category": "PLACEHOLDER_CATEGORY",
+  "chunkText": "PLACEHOLDER: write a verified summary only after manual evidence review.",
+  "relatedActions": [
+    "PLACEHOLDER_ACTION"
+  ],
+  "relatedPolicyParams": [
+    "PLACEHOLDER_POLICY_PARAM"
+  ],
+  "sourceEvidence": {
+    "document_path": "PLACEHOLDER_EXISTING_DOCUMENT_PATH",
+    "page": "PLACEHOLDER_PAGE",
+    "section": "PLACEHOLDER_SECTION",
+    "evidence_text": "PLACEHOLDER: paste only verified source text or a concise reviewed paraphrase."
+  },
+  "reviewNotes": "PLACEHOLDER_REVIEW_NOTES",
+  "promotionDecision": {
+    "can_promote_to_runtime": false,
+    "decision_reason": "PLACEHOLDER: explain why this candidate is or is not ready for runtime promotion.",
+    "reviewed_by": "PLACEHOLDER_REVIEWER",
+    "reviewed_at": "PLACEHOLDER_YYYY-MM-DD"
+  }
+}

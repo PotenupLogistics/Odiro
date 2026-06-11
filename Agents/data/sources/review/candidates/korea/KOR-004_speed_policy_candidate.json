@@ -1,0 +1,31 @@
+{
+  "schema": "policy_chunk_candidate",
+  "version": 1,
+  "source_id": "KOR-004",
+  "source_status_at_review": "candidate_active",
+  "candidate_id": "CAND-KOR-004-SPEED-001",
+  "review_status": "confirmed",
+  "category": "speed_policy",
+  "chunkText": "산업통상자원부 운행안전인증 고시 후보 근거에 따르면 로봇의 최대 운행속도는 최대질량 기준으로 제한되며, 어린이보호구역, 노인보호구역, 장애인보호구역에서는 최대 운행속도 5km/h 준수 여부를 확인해야 한다.",
+  "relatedActions": [
+    "SlowDown",
+    "Stop"
+  ],
+  "relatedPolicyParams": [
+    "maxSpeedKmh",
+    "lowSpeedZoneSpeedKmh"
+  ],
+  "sourceEvidence": {
+    "document_path": "data/sources/processed/korea/KOR-004_산업통상자원부_운행안전인증_절차_및_기준_고시.md",
+    "page": "processed line 82",
+    "section": "별표3 실외이동로봇 운행안전인증기준 2. 운행속도",
+    "evidence_text": "2.운행속도가.로봇의최대운행속도는최대질량(로봇과적재물질량의합)에따라,아래의기준에적합해야한다.최대질량(kg)최대운행속도(km/h)230초과500이하5100초과230이하10100이하 15나.가항에도불구하고,도로교통법제12조에따른어린이보호구역,제12조의2에따른노인보호구역또는장애인보호구역에서로봇이최대운행속도5km/h를준수하는지확인한다."
+  },
+  "reviewNotes": "sourceEvidence.evidence_text가 processed MD line 82에 그대로 존재함을 확인했다. 속도 제한 및 보호구역 5km/h 준수 내용은 speed_policy, SlowDown/Stop, maxSpeedKmh/lowSpeedZoneSpeedKmh와 직접 연결된다. KOR-004는 현재 candidate_active source이므로 실제 runtime 승격 전 source status와 최신 고시 여부를 별도 확인해야 한다.",
+  "promotionDecision": {
+    "can_promote_to_runtime": true,
+    "decision_reason": "processed MD 근거가 확인되었고, 최대 운행속도 및 보호구역 속도 제한은 기존 speed_policy runtime chunk를 보강하는 공식 고시 후보로 의미가 있다. 단, 다음 단계에서 source status와 최신본 검증 후 별도 수동 승격해야 한다.",
+    "reviewed_by": "codex_source_review",
+    "reviewed_at": "2026-06-11"
+  }
+}

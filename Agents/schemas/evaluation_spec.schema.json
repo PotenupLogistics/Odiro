@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "evaluation_spec.schema.json",
+  "title": "EvaluationSpec",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "evaluationId", "baseScore", "weights", "penalties", "bonuses", "requiredMetrics"],
+  "properties": {
+    "schemaVersion": { "type": "string" },
+    "evaluationId": { "type": "string" },
+    "baseScore": { "type": "number" },
+    "weights": { "type": "object", "additionalProperties": { "type": "number" } },
+    "penalties": { "type": "object", "additionalProperties": { "type": "number" } },
+    "bonuses": { "type": "object", "additionalProperties": { "type": "number" } },
+    "requiredMetrics": { "type": "array", "items": { "type": "string" } }
+  }
+}

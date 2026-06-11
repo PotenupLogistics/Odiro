@@ -1,0 +1,146 @@
+[
+  {
+    "prop_id": "obstacle.bin",
+    "asset_name": "SM_Bin",
+    "bbox_cm": [90, 90, 180],
+    "bbox_m": [0.9, 0.9, 1.8],
+    "category": "sidewalk_fixture",
+    "description": "Upright bin-sized fixed sidewalk obstacle.",
+    "aliases": ["bin", "generic bin", "휴지통", "통"]
+  },
+  {
+    "prop_id": "obstacle.box_01",
+    "asset_name": "SM_Box_01",
+    "bbox_cm": [90, 90, 90],
+    "bbox_m": [0.9, 0.9, 0.9],
+    "category": "box",
+    "description": "Box obstacle variant 1.",
+    "aliases": ["box", "crate", "상자", "박스", "box_01"]
+  },
+  {
+    "prop_id": "obstacle.box_02",
+    "asset_name": "SM_Box_02",
+    "bbox_cm": [90, 90, 90],
+    "bbox_m": [0.9, 0.9, 0.9],
+    "category": "box",
+    "description": "Box obstacle variant 2.",
+    "aliases": ["box_02", "상자2", "박스2"]
+  },
+  {
+    "prop_id": "obstacle.box_03",
+    "asset_name": "SM_Box_03",
+    "bbox_cm": [90, 90, 90],
+    "bbox_m": [0.9, 0.9, 0.9],
+    "category": "box",
+    "description": "Box obstacle variant 3.",
+    "aliases": ["box_03", "상자3", "박스3"]
+  },
+  {
+    "prop_id": "obstacle.fire_hydrant",
+    "asset_name": "SM_FireHydrant",
+    "bbox_cm": [70, 70, 160],
+    "bbox_m": [0.7, 0.7, 1.6],
+    "category": "sidewalk_fixture",
+    "description": "Fixed sidewalk fire hydrant.",
+    "aliases": ["fire hydrant", "hydrant", "소화전"]
+  },
+  {
+    "prop_id": "obstacle.mailbox",
+    "asset_name": "SM_Mailbox",
+    "bbox_cm": [110, 90, 180],
+    "bbox_m": [1.1, 0.9, 1.8],
+    "category": "sidewalk_fixture",
+    "description": "Fixed sidewalk mailbox.",
+    "aliases": ["mailbox", "mail box", "우편함"]
+  },
+  {
+    "prop_id": "obstacle.manhole_01",
+    "asset_name": "SM_Manhole_01",
+    "bbox_cm": [110, 110, 10],
+    "bbox_m": [1.1, 1.1, 0.1],
+    "category": "low_ground_obstacle",
+    "description": "Low ground manhole variant 1.",
+    "aliases": ["manhole", "맨홀", "manhole_01"]
+  },
+  {
+    "prop_id": "obstacle.manhole_02",
+    "asset_name": "SM_Manhole_02",
+    "bbox_cm": [110, 110, 10],
+    "bbox_m": [1.1, 1.1, 0.1],
+    "category": "low_ground_obstacle",
+    "description": "Low ground manhole variant 2.",
+    "aliases": ["manhole_02", "맨홀2"]
+  },
+  {
+    "prop_id": "obstacle.manhole_03",
+    "asset_name": "SM_Manhole_03",
+    "bbox_cm": [110, 110, 10],
+    "bbox_m": [1.1, 1.1, 0.1],
+    "category": "low_ground_obstacle",
+    "description": "Low ground manhole variant 3.",
+    "aliases": ["manhole_03", "맨홀3"]
+  },
+  {
+    "prop_id": "obstacle.manhole_04",
+    "asset_name": "SM_Manhole_04",
+    "bbox_cm": [110, 110, 10],
+    "bbox_m": [1.1, 1.1, 0.1],
+    "category": "low_ground_obstacle",
+    "description": "Low ground manhole variant 4.",
+    "aliases": ["manhole_04", "맨홀4"]
+  },
+  {
+    "prop_id": "obstacle.road_cone_01",
+    "asset_name": "SM_RoadCone_01",
+    "bbox_cm": [70, 70, 140],
+    "bbox_m": [0.7, 0.7, 1.4],
+    "category": "avoidance_marker",
+    "description": "Small cone obstacle for avoidance scenarios.",
+    "aliases": ["cone", "traffic cone", "traffic_cone", "road cone", "safety cone", "콘", "안전콘", "라바콘", "road_cone_01"]
+  },
+  {
+    "prop_id": "obstacle.road_cone_02",
+    "asset_name": "SM_RoadCone_02",
+    "bbox_cm": [70, 70, 140],
+    "bbox_m": [0.7, 0.7, 1.4],
+    "category": "avoidance_marker",
+    "description": "Small cone obstacle variant 2.",
+    "aliases": ["road_cone_02", "콘2", "안전콘2"]
+  },
+  {
+    "prop_id": "obstacle.road_barrier_01",
+    "asset_name": "SM_Road_Barrier_01",
+    "bbox_cm": [240, 70, 120],
+    "bbox_m": [2.4, 0.7, 1.2],
+    "category": "path_blocker",
+    "description": "Large barrier, preferred when the prompt intends path blocking.",
+    "aliases": ["barrier", "road barrier", "road_barrier", "barricade", "바리케이드", "차단막", "road_barrier_01"]
+  },
+  {
+    "prop_id": "obstacle.road_barrier_02",
+    "asset_name": "SM_Road_Barrier_02",
+    "bbox_cm": [240, 70, 120],
+    "bbox_m": [2.4, 0.7, 1.2],
+    "category": "path_blocker",
+    "description": "Large barrier variant 2.",
+    "aliases": ["road_barrier_02", "바리케이드2", "차단막2"]
+  },
+  {
+    "prop_id": "obstacle.street_bank",
+    "asset_name": "SM_StreetBank",
+    "bbox_cm": [200, 90, 120],
+    "bbox_m": [2.0, 0.9, 1.2],
+    "category": "sidewalk_fixture",
+    "description": "Street bench/bank fixed sidewalk obstacle.",
+    "aliases": ["street bank", "street bench", "bench", "bank", "벤치", "의자"]
+  },
+  {
+    "prop_id": "obstacle.trash_bin",
+    "asset_name": "SM_Trash_Bin",
+    "bbox_cm": [90, 90, 180],
+    "bbox_m": [0.9, 0.9, 1.8],
+    "category": "sidewalk_fixture",
+    "description": "Trash bin fixed sidewalk obstacle.",
+    "aliases": ["trash bin", "trash_bin", "trash can", "trash_can", "garbage can", "쓰레기통", "휴지통"]
+  }
+]

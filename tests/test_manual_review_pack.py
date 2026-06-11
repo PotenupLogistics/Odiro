@@ -50,5 +50,5 @@ def test_policy_knowledge_cards_if_present_are_confirmed_only() -> None:
         for line in POLICY_CARD_PATH.read_text(encoding="utf-8-sig").splitlines()
         if line.strip()
     ]
-    assert len(cards) == 9
-    assert {card["sourceIds"][0] for card in cards} == {"KOR-003"}
+    assert len(cards) == 11
+    assert {card["sourceIds"][0] for card in cards} == {"KOR-003", "KOR-004"}

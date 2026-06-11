@@ -87,10 +87,10 @@ def _base_source_inventory(sources: list[dict] | None = None) -> dict:
             },
             {
                 "source_id": "KOR-004",
-                "status": "candidate_active",
+                "status": "active",
                 "source_type": "notice",
-                "role": "official notice candidate",
-                "usage": "candidate for future policy chunk promotion",
+                "role": "official notice runtime source for confirmed speed and crosswalk chunks",
+                "usage": "runtime_rag_chunk_source",
                 "description": "MOTIE notice",
                 "path_status": "verified",
             },
@@ -192,16 +192,16 @@ def test_cli_prints_human_readable_pass_summary() -> None:
 
     assert completed.returncode == 0
     assert "runtime chunk file: OK" in completed.stdout
-    assert "chunk count: 15" in completed.stdout
-    assert "knowledge card count: 9" in completed.stdout
+    assert "chunk count: 17" in completed.stdout
+    assert "knowledge card count: 11" in completed.stdout
     assert "source inventory: OK" in completed.stdout
     assert "source count: 9" in completed.stdout
-    assert "active sources: KOR-003" in completed.stdout
-    assert "candidate sources: KOR-004, RSR-001" in completed.stdout
+    assert "active sources: KOR-003, KOR-004" in completed.stdout
+    assert "candidate sources: RSR-001" in completed.stdout
     assert "reference-only sources: KOR-001, KOR-002, KOR-005" in completed.stdout
     assert "runtime source status guard: OK" in completed.stdout
     assert "runtime allowed statuses: active, active_internal" in completed.stdout
-    assert "runtime source ids used by chunks: KOR-003, PRJ-AGENT, PRJ-DOE, PRJ-EVAL" in completed.stdout
+    assert "runtime source ids used by chunks: KOR-003, KOR-004, PRJ-AGENT, PRJ-DOE, PRJ-EVAL" in completed.stdout
     assert "candidate/reference sources excluded from runtime chunks: OK" in completed.stdout
     assert "vector db directories: absent" in completed.stdout
     assert "result: PASS" in completed.stdout
@@ -261,7 +261,7 @@ def test_validator_reports_vector_db_directory(tmp_path: Path) -> None:
     assert any("data/rag/chroma must be absent" in error for error in result.errors)
 
 
-def test_validator_requires_current_cards_to_be_kor_003_based(tmp_path: Path) -> None:
+def test_validator_allows_current_cards_to_be_kor_003_or_kor_004_based(tmp_path: Path) -> None:
     rag_dir = tmp_path / "data" / "rag"
     rag_dir.mkdir(parents=True)
     card = _base_card()
@@ -276,8 +276,7 @@ def test_validator_requires_current_cards_to_be_kor_003_based(tmp_path: Path) ->
         expected_knowledge_card_count=1,
     )
 
-    assert result.passed is False
-    assert any("must remain KOR-003 based" in error for error in result.errors)
+    assert result.passed is True
 
 
 def test_source_inventory_contains_required_sources() -> None:
@@ -286,7 +285,8 @@ def test_source_inventory_contains_required_sources() -> None:
     assert result.passed is True
     assert set(result.source_ids) == set(REQUIRED_SOURCE_IDS)
     assert "KOR-003" in result.active_sources
-    assert result.candidate_sources == ["KOR-004", "RSR-001"]
+    assert "KOR-004" in result.active_sources
+    assert result.candidate_sources == ["RSR-001"]
     assert result.reference_only_sources == ["KOR-001", "KOR-002", "KOR-005"]
 
 
@@ -384,6 +384,28 @@ def test_runtime_chunk_allows_active_internal_source_status(tmp_path: Path) -> N
     assert result.runtime_source_ids_used_by_chunks == ["PRJ-DOE"]
 
 
+def test_runtime_chunk_allows_active_kor_004_source_status(tmp_path: Path) -> None:
+    rag_dir = tmp_path / "data" / "rag"
+    rag_dir.mkdir(parents=True)
+    chunk = _base_chunk()
+    chunk["metadata"]["sourceIds"] = ["KOR-004"]
+    card = _base_card()
+    card["sourceIds"] = ["KOR-004"]
+    _write_jsonl(rag_dir / "policy_rag_chunks.jsonl", [chunk])
+    _write_jsonl(rag_dir / "policy_knowledge_cards.jsonl", [card])
+    _write_inventory(tmp_path)
+
+    result = validate_file_based_rag_store(
+        tmp_path,
+        expected_runtime_chunk_count=1,
+        expected_knowledge_card_count=1,
+    )
+
+    assert result.passed is True
+    assert result.runtime_source_status_guard_passed is True
+    assert result.runtime_source_ids_used_by_chunks == ["KOR-004"]
+
+
 def test_runtime_chunk_rejects_candidate_active_source_status(tmp_path: Path) -> None:
     rag_dir = tmp_path / "data" / "rag"
     rag_dir.mkdir(parents=True)
@@ -391,7 +413,11 @@ def test_runtime_chunk_rejects_candidate_active_source_status(tmp_path: Path) ->
     chunk["metadata"]["sourceIds"] = ["KOR-004"]
     _write_jsonl(rag_dir / "policy_rag_chunks.jsonl", [chunk])
     _write_jsonl(rag_dir / "policy_knowledge_cards.jsonl", [_base_card()])
-    _write_inventory(tmp_path)
+    inventory = _base_source_inventory()
+    for source in inventory["sources"]:
+        if source["source_id"] == "KOR-004":
+            source["status"] = "candidate_active"
+    _write_inventory(tmp_path, inventory)
 
     result = validate_file_based_rag_store(
         tmp_path,

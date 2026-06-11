@@ -12,8 +12,8 @@ RAG_DIR = Path("data") / "rag"
 RUNTIME_CHUNKS_FILE = RAG_DIR / "policy_rag_chunks.jsonl"
 KNOWLEDGE_CARDS_FILE = RAG_DIR / "policy_knowledge_cards.jsonl"
 SOURCE_INVENTORY_FILE = Path("data") / "sources" / "source_inventory.json"
-EXPECTED_RUNTIME_CHUNK_COUNT = 15
-EXPECTED_KNOWLEDGE_CARD_COUNT = 9
+EXPECTED_RUNTIME_CHUNK_COUNT = 17
+EXPECTED_KNOWLEDGE_CARD_COUNT = 11
 REQUIRED_SOURCE_IDS = (
     "KOR-003",
     "KOR-004",
@@ -237,9 +237,9 @@ def _validate_cards(
             errors,
             require_non_empty=True,
         )
-        if isinstance(source_ids, list) and source_ids != ["KOR-003"]:
+        if isinstance(source_ids, list) and any(source_id not in {"KOR-003", "KOR-004"} for source_id in source_ids):
             errors.append(
-                f"{display_path} line {line_number}: current knowledge cards must remain KOR-003 based"
+                f"{display_path} line {line_number}: current knowledge cards must remain KOR-003 or KOR-004 based"
             )
         _require_non_empty_string(card.get("cardId"), "cardId", line_number, display_path, errors)
         _require_non_empty_string(card.get("category"), "category", line_number, display_path, errors)
@@ -327,8 +327,8 @@ def _validate_source_inventory(
                 "but runtime chunks only allow active or active_internal"
             )
 
-    if status_by_source_id.get("KOR-004") != "candidate_active":
-        errors.append(f"{display_path} source_id KOR-004: status must remain candidate_active")
+    if status_by_source_id.get("KOR-004") != "active":
+        errors.append(f"{display_path} source_id KOR-004: status must be active after confirmed runtime promotion")
     if status_by_source_id.get("RSR-001") != "supporting_candidate":
         errors.append(f"{display_path} source_id RSR-001: status must remain supporting_candidate")
 

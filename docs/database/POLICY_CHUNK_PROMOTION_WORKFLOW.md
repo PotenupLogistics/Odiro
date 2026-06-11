@@ -2,7 +2,7 @@
 
 ## 목적
 
-이 문서는 `KOR-004`, `RSR-001` 같은 candidate/supporting source를 나중에 runtime RAG chunk로 승격할 때 따라야 하는 수동 검토 절차를 정의한다. 현재 단계에서는 어떤 candidate도 `data/rag/policy_rag_chunks.jsonl`에 자동 추가하지 않는다.
+이 문서는 `KOR-004`, `RSR-001` 같은 candidate/supporting source를 runtime RAG chunk로 승격할 때 따라야 하는 수동 검토 절차를 정의한다. 어떤 candidate도 자동으로 `data/rag/policy_rag_chunks.jsonl`에 추가하지 않는다.
 
 현재 runtime RAG store는 계속 `data/rag/policy_rag_chunks.jsonl` 하나이며, `app/services/policy_rag_retriever.py`는 기존 JSONL retriever 동작을 유지한다.
 
@@ -13,7 +13,8 @@
 - `confirmed` 전에는 `data/rag/policy_rag_chunks.jsonl`에 넣지 않는다.
 - `can_promote_to_runtime=true`는 자동 승격 명령이 아니다. 사람이 검토 후 별도 변경으로 반영해야 한다.
 - Runtime chunk로 승격하려면 source status가 `active` 또는 `active_internal`이어야 한다.
-- `KOR-004`, `RSR-001`은 현재 runtime RAG에 반영된 상태가 아니다.
+- `KOR-004`는 confirmed speed policy / crosswalk operation 2개만 runtime RAG에 반영된 상태다.
+- `RSR-001`, `KOR-002`는 아직 runtime RAG에 반영된 상태가 아니다.
 
 ## Workflow
 
@@ -85,7 +86,8 @@ uv run python -m harness.checks.check_all
 - 필수 필드가 있는지
 - `source_id`가 `data/sources/source_inventory.json`에 등록되어 있는지
 - Candidate source status가 `candidate_active`, `supporting_candidate`, `reference_only`, `review_candidate` 중 하나인지
-- `source_status_at_review`가 inventory의 현재 status와 일치하는지
+- 이미 runtime으로 승격된 confirmed candidate는 현재 inventory status가 `active`여도 `source_status_at_review`에 review 당시 상태를 보존할 수 있는지
+- 아직 승격되지 않은 candidate의 `source_status_at_review`가 inventory의 현재 status와 일치하는지
 - `review_status`가 허용 목록에 있는지
 - `relatedActions`, `relatedPolicyParams`가 list 타입인지
 - `chunkText`가 비어 있지 않은지
@@ -108,11 +110,11 @@ Runtime 승격 전에 확인할 항목:
 - 필요하면 `uv run python scripts/validate_file_based_rag_store.py`와 `uv run python scripts/validate_policy_chunk_candidates.py`로 세부 실패 원인을 확인한다.
 - 기존 RAG 관련 pytest가 PASS 한다.
 
-## 현재 비승격 Source
+## 현재 승격/비승격 Source
 
 | Source | 현재 status | 현재 runtime 반영 |
 | --- | --- | --- |
-| `KOR-004` | `candidate_active` | 아님 |
+| `KOR-004` | `active` | confirmed speed policy / crosswalk operation 2개만 반영 |
 | `RSR-001` | `supporting_candidate` | 아님 |
 | `KOR-001` | `reference_only` | 아님 |
 | `KOR-002` | `reference_only` | 아님 |

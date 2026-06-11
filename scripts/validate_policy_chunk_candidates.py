@@ -18,6 +18,7 @@ ALLOWED_CANDIDATE_SOURCE_STATUSES = (
     "reference_only",
     "review_candidate",
 )
+PROMOTED_RUNTIME_SOURCE_STATUS = "active"
 ALLOWED_REVIEW_STATUSES = (
     "draft",
     "candidate",
@@ -149,13 +150,21 @@ def _validate_candidate(
         errors.append(f"{display_path}: source_id {source_id} is not registered in source inventory")
     else:
         inventory_status = status_by_source_id[source_id]
-        if inventory_status not in ALLOWED_CANDIDATE_SOURCE_STATUSES:
+        promotion_decision = payload.get("promotionDecision")
+        promoted_confirmed_candidate = (
+            inventory_status == PROMOTED_RUNTIME_SOURCE_STATUS
+            and payload.get("review_status") == "confirmed"
+            and isinstance(promotion_decision, dict)
+            and promotion_decision.get("can_promote_to_runtime") is True
+            and payload.get("source_status_at_review") in ALLOWED_CANDIDATE_SOURCE_STATUSES
+        )
+        if inventory_status not in ALLOWED_CANDIDATE_SOURCE_STATUSES and not promoted_confirmed_candidate:
             errors.append(
                 f"{display_path}: source_id {source_id} has status {inventory_status}, "
                 "but candidate chunks require candidate_active, supporting_candidate, "
-                "reference_only, or review_candidate"
+                "reference_only, review_candidate, or a confirmed promoted active source"
             )
-        if payload.get("source_status_at_review") != inventory_status:
+        if payload.get("source_status_at_review") != inventory_status and not promoted_confirmed_candidate:
             errors.append(
                 f"{display_path}: source_status_at_review must match inventory status {inventory_status}"
             )

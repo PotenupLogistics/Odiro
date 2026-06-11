@@ -35,11 +35,11 @@ def _read_jsonl(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8-sig").splitlines() if line.strip()]
 
 
-def test_policy_cards_generate_nine_rag_chunks(tmp_path: Path) -> None:
+def test_policy_cards_generate_eleven_rag_chunks(tmp_path: Path) -> None:
     completed = _run_generator(tmp_path)
     assert completed.returncode == 0, completed.stderr
     chunks = _read_jsonl(tmp_path / "policy_rag_chunks.jsonl")
-    assert len(chunks) == 9
+    assert len(chunks) == 11
 
 
 def test_chunk_text_and_metadata_are_populated(tmp_path: Path) -> None:
@@ -69,7 +69,7 @@ def test_generator_is_idempotent(tmp_path: Path) -> None:
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
     chunks = _read_jsonl(tmp_path / "policy_rag_chunks.jsonl")
-    assert len(chunks) == 9
+    assert len(chunks) == 11
 
 
 def test_no_source_document_chunks_or_vector_index_are_created() -> None:

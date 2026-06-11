@@ -10,6 +10,10 @@ ROOT = Path(__file__).resolve().parents[1]
 RESULTS_JSON_PATH = ROOT / "data" / "sources" / "review" / "confirmed" / "manual_confirmation_results.json"
 RESULTS_MD_PATH = ROOT / "data" / "sources" / "review" / "confirmed" / "manual_confirmation_results.md"
 POLICY_CARD_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
+PROMOTED_CANDIDATE_IDS = {
+    "CAND-KOR-004-SPEED-001",
+    "CAND-KOR-004-CROSSWALK-001",
+}
 
 
 def load_results() -> dict:
@@ -66,4 +70,4 @@ def test_policy_knowledge_cards_if_present_are_confirmed_only() -> None:
         for line in POLICY_CARD_PATH.read_text(encoding="utf-8-sig").splitlines()
         if line.strip()
     ]
-    assert {card["createdFromCandidateId"] for card in cards} == confirmed_ids
+    assert {card["createdFromCandidateId"] for card in cards} == confirmed_ids | PROMOTED_CANDIDATE_IDS

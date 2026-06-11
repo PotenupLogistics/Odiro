@@ -17,12 +17,12 @@
     },
     {
       "source_id": "KOR-004",
-      "status": "candidate_active",
+      "status": "active",
       "source_type": "official_notice",
-      "role": "공식 고시 근거 후보",
-      "usage": "candidate for future policy chunk promotion",
+      "role": "공식 고시 기반 runtime 보강 근거",
+      "usage": "runtime_rag_chunk_source",
       "description": "산업부 운행안전인증 고시",
-      "note": "최신본 여부, version_date, publisher 확인 후 일부 반영 검토",
+      "note": "2026-06-11 기준 confirmed candidate 2개(speed_policy, crosswalk_operation)만 runtime RAG에 반영한다. KOR-004 전체 내용을 무분별하게 runtime 근거로 사용하지 않는다.",
       "raw_file_path": "data/sources/raw/korea/KOR-004_산업통상자원부_운행안전인증_절차_및_기준_고시.pdf",
       "processed_file_path": "data/sources/processed/korea/KOR-004_산업통상자원부_운행안전인증_절차_및_기준_고시.md",
       "path_status": "verified"

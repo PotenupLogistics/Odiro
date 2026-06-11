@@ -134,6 +134,34 @@ def test_valid_candidate_file_passes(tmp_path: Path) -> None:
     assert result.candidate_count == 1
 
 
+def test_confirmed_promoted_candidate_may_keep_review_time_source_status(tmp_path: Path) -> None:
+    _write_inventory(tmp_path)
+    inventory_path = tmp_path / "data" / "sources" / "source_inventory.json"
+    inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+    for source in inventory["sources"]:
+        if source["source_id"] == "KOR-004":
+            source["status"] = "active"
+            source["usage"] = "runtime_rag_chunk_source"
+    inventory_path.write_text(json.dumps(inventory, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _write_candidate(
+        tmp_path,
+        _valid_candidate(
+            review_status="confirmed",
+            promotionDecision={
+                "can_promote_to_runtime": True,
+                "decision_reason": "confirmed and promoted",
+                "reviewed_by": "codex_source_review",
+                "reviewed_at": "2026-06-11",
+            },
+        ),
+    )
+
+    result = validate_policy_chunk_candidates(tmp_path)
+
+    assert result.passed is True
+    assert result.candidate_count == 1
+
+
 def test_candidate_with_unknown_source_id_fails(tmp_path: Path) -> None:
     _write_inventory(tmp_path)
     _write_candidate(tmp_path, _valid_candidate(source_id="KOR-999"))

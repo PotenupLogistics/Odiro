@@ -26,7 +26,7 @@
 
 `data/rag/policy_rag_chunks.jsonl`은 현재 런타임 정책 검색의 기준 파일이다.
 
-- 현재 chunk 수: 15개
+- 현재 chunk 수: 17개
 - loader: `app/services/policy_rag_retriever.py::load_chunks`
 - search entry point: `app/services/policy_rag_retriever.py::search_policy_chunks`
 - 호출 경로 예: `app/services/world_config_rag_context_builder.py`, `app/services/policy_recommendation_rag_retriever.py`, `scripts/search_policy_rag.py`
@@ -36,6 +36,7 @@ Source count는 chunk 하나가 여러 `sourceIds`를 가질 수 있으므로 �
 | Source | 현재 chunk count | 의미 |
 | --- | ---: | --- |
 | `KOR-003` | 13 | 현재 active 정책 chunk의 핵심 근거 |
+| `KOR-004` | 2 | confirmed speed policy / crosswalk operation runtime 보강 근거 |
 | `PRJ-DOE` | 3 | 프로젝트 내부 시나리오 난이도/실험 설계 정책 |
 | `PRJ-AGENT` | 2 | 프로젝트 내부 분석/정책 서버 로직 정책 |
 | `PRJ-EVAL` | 1 | 프로젝트 내부 평가 기준 정책 |
@@ -46,8 +47,8 @@ Source count는 chunk 하나가 여러 `sourceIds`를 가질 수 있으므로 �
 
 현재 상태:
 
-- card 수: 9개
-- source: 모두 `KOR-003`
+- card 수: 11개
+- source: `KOR-003` 9개, `KOR-004` 2개
 - 역할: confirmed policy card lifecycle의 중간 산출물
 
 정책 카드가 runtime 검색에 들어가려면 `policy_rag_chunks.jsonl`의 chunk로 승격되어야 한다. review 전 후보, manual confirmation 전 데이터, raw PDF 원문은 runtime chunk로 직접 승격하지 않는다.
@@ -59,7 +60,7 @@ PDF source는 모두 동일한 비중으로 runtime RAG에 들어가지 않는�
 | 우선순위 | Source | Status | 반영 방향 |
 | ---: | --- | --- | --- |
 | 1 | `KOR-003` KIRIA 실외이동로봇 운행안전인증 가이드북 | `active` | 현재 runtime 정책 chunk의 핵심 근거로 유지 |
-| 2 | `KOR-004` 산업부 운행안전인증 고시 | `candidate_active` | 공식 고시 근거 후보. 최신본 여부, `version_date`, `publisher` 확인 후 일부 반영 검토 |
+| 2 | `KOR-004` 산업부 운행안전인증 고시 | `active` | confirmed speed policy / crosswalk operation 2개 근거만 runtime 보강 chunk로 반영 |
 | 3 | `RSR-001` METRANS Sidewalk ADR Interactions | `supporting_candidate` | 법적 근거가 아니라 보행자 상호작용, near-miss, 시나리오 난이도, 실험 설계 보조 근거 |
 | 4 | `KOR-001` 지능형로봇법 | `reference_only` | 법적 배경/출처 근거 |
 | 5 | `KOR-002` 도로교통법 실외이동로봇 관련 | `reference_only` | 보도/횡단보도/보행자 지위 관련 보조 근거 |
@@ -97,7 +98,7 @@ Status 의미:
 | Source | Status | Source type | 역할 | Usage |
 | --- | --- | --- | --- | --- |
 | `KOR-003` | `active` | `guidebook` | 현재 런타임 정책 chunk의 핵심 | `runtime_rag_chunk_source` |
-| `KOR-004` | `candidate_active` | `official_notice` | 공식 고시 근거 후보 | `candidate for future policy chunk promotion` |
+| `KOR-004` | `active` | `official_notice` | 공식 고시 기반 runtime 보강 근거 | `runtime_rag_chunk_source` |
 | `RSR-001` | `supporting_candidate` | `research_report` | 실험 설계 보조 근거 | `pedestrian interaction, near-miss, scenario difficulty support` |
 | `KOR-001` | `reference_only` | `law` | 법적 배경/출처 근거 | `reference only` |
 | `KOR-002` | `reference_only` | `law` | 도로교통법 관련 보조 근거 | `reference only` |
@@ -113,7 +114,8 @@ Inventory 관리 규칙:
 - 파일 경로를 확인할 수 없으면 경로를 지어내지 않고 `path_status`로 `not_found` 또는 `not_verified`를 표현한다.
 - 내부 PRJ source는 파일 경로 대신 `path_status: internal`로 관리할 수 있다.
 - `policy_rag_chunks.jsonl`의 모든 `sourceIds`는 inventory에 등록되어 있어야 한다.
-- `KOR-004`와 `RSR-001`은 현재 runtime active chunk로 강제하지 않는다. 각각 `candidate_active`, `supporting_candidate` 상태를 유지하며 검토 후보로만 관리한다.
+- `KOR-004`는 confirmed speed policy / crosswalk operation 2개만 runtime active chunk로 반영한다.
+- `RSR-001`은 `supporting_candidate` 상태를 유지하며 검토 후보로만 관리한다.
 
 ## Runtime Source Status Guardrail
 
@@ -136,6 +138,7 @@ Inventory에는 존재할 수 있지만 runtime chunk source로는 금지:
 | Source | Status | Runtime chunk 사용 |
 | --- | --- | --- |
 | `KOR-003` | `active` | 허용 |
+| `KOR-004` | `active` | 허용. confirmed speed policy / crosswalk operation 2개 chunk만 해당 |
 | `PRJ-AGENT` | `active_internal` | 허용 |
 | `PRJ-DOE` | `active_internal` | 허용 |
 | `PRJ-EVAL` | `active_internal` | 허용 |
@@ -144,19 +147,19 @@ Inventory에는 존재할 수 있지만 runtime chunk source로는 금지:
 
 | Source | Status | Runtime chunk 사용 |
 | --- | --- | --- |
-| `KOR-004` | `candidate_active` | 금지 |
 | `RSR-001` | `supporting_candidate` | 금지 |
 | `KOR-001` | `reference_only` | 금지 |
 | `KOR-002` | `reference_only` | 금지 |
 | `KOR-005` | `reference_only` 또는 `review_candidate` | 금지 |
 
-`KOR-004` 또는 `RSR-001`을 runtime RAG chunk에 반영하려면 먼저 source inventory의 status와 review 결과를 명시적으로 업데이트해야 한다. 단순히 `policy_rag_chunks.jsonl`의 `sourceIds`에 추가하는 방식은 validator에서 실패해야 한다.
+`RSR-001`, `KOR-002`, `KOR-001`, `KOR-005`를 runtime RAG chunk에 반영하려면 먼저 source inventory의 status와 review 결과를 명시적으로 업데이트해야 한다. 단순히 `policy_rag_chunks.jsonl`의 `sourceIds`에 추가하는 방식은 validator에서 실패해야 한다.
 
 Candidate chunk 작성, 검토, 수동 승격 절차는 [Policy Chunk Candidate Promotion Workflow](POLICY_CHUNK_PROMOTION_WORKFLOW.md)를 따른다.
 
 요약:
 
-- `KOR-004`, `RSR-001`은 아직 runtime RAG에 반영된 상태가 아니다.
+- `KOR-004`는 confirmed speed policy / crosswalk operation 2개만 runtime RAG에 반영된 상태다.
+- `RSR-001`, `KOR-002`, `KOR-001`, `KOR-005`는 아직 runtime RAG에 반영된 상태가 아니다.
 - Candidate chunk는 `data/sources/review/candidates` 아래에서 관리한다.
 - `confirmed` 전에는 `policy_rag_chunks.jsonl`에 넣지 않는다.
 - Runtime 승격은 source status 변경과 validator PASS가 필요하다.
@@ -208,7 +211,7 @@ Candidate chunk 작성, 검토, 수동 승격 절차는 [Policy Chunk Candidate 
 - `app/services/policy_rag_retriever.py`는 계속 `data/rag/policy_rag_chunks.jsonl`을 읽는다.
 - `scripts/search_policy_rag.py`는 기존 JSONL retriever를 사용한다.
 - `data/run_queue_exports`는 UE 전달용 산출물 저장소로 유지한다.
-- `data/rag/policy_rag_chunks.jsonl`은 현재 15개 chunk 기준 테스트를 통과해야 한다.
+- `data/rag/policy_rag_chunks.jsonl`은 현재 17개 chunk 기준 테스트를 통과해야 한다.
 - vector DB 관련 폴더가 생기지 않아야 한다.
 
 ## Validation / Guardrails
@@ -236,9 +239,9 @@ uv run python scripts/validate_policy_chunk_candidates.py
 
 ```text
 runtime chunk file: OK
-chunk count: 15
+chunk count: 17
 knowledge card file: OK
-knowledge card count: 9
+knowledge card count: 11
 vector db directories: absent
 result: PASS
 ```
@@ -248,15 +251,15 @@ Validator가 확인하는 항목:
 - `data/rag/policy_rag_chunks.jsonl` 존재 여부
 - runtime chunk JSONL의 각 line이 valid JSON object인지
 - runtime chunk JSONL에 빈 line이 없는지
-- runtime chunk count가 현재 기준 15개인지
+- runtime chunk count가 현재 기준 17개인지
 - chunk top-level field `chunkId`, `cardId`, `chunkText`, `metadata` 존재 여부
 - chunk metadata field `sourceIds`, `category`, `relatedPolicyParams`, `relatedRequestFields`, `relatedActions`, `relatedMetrics`, `evidenceLocation`, `createdFromCandidateId`, `status` 존재 여부
 - `sourceIds`, `category`, `chunkText`가 비어 있지 않은지
 - `relatedActions`, `relatedPolicyParams`가 list 타입인지
 - `data/rag/policy_knowledge_cards.jsonl` 존재 여부
 - policy card JSONL의 각 line이 valid JSON object인지
-- policy card count가 현재 기준 9개인지
-- 현재 policy card가 모두 `KOR-003` 기반인지
+- policy card count가 현재 기준 11개인지
+- 현재 policy card가 `KOR-003` 또는 confirmed `KOR-004` 기반인지
 - `data/sources/source_inventory.json` 존재 여부
 - source inventory가 valid JSON object인지
 - source inventory의 `schema`, `version`, `sources` 구조가 맞는지
@@ -266,6 +269,7 @@ Validator가 확인하는 항목:
 - source status가 허용 목록(`active`, `candidate_active`, `supporting_candidate`, `reference_only`, `review_candidate`, `active_internal`)에 들어 있는지
 - `policy_rag_chunks.jsonl`의 모든 `sourceIds`가 source inventory에 등록되어 있는지
 - runtime chunk의 `sourceIds`가 `active` 또는 `active_internal` status만 사용하는지
+- `KOR-004` runtime chunk가 confirmed speed policy / crosswalk operation 2개로 제한되는지
 - `candidate_active`, `supporting_candidate`, `reference_only`, `review_candidate` source가 runtime chunk에 들어가지 않았는지
 - `data/rag/embeddings`, `data/rag/vector_db`, `data/rag/chroma` 디렉터리가 없는지
 
@@ -277,6 +281,7 @@ Validator가 확인하는 항목:
 - Source 반영 상태는 `data/sources/source_inventory.json`에서 기계 검증 가능한 metadata로 관리한다.
 - Runtime chunk에 사용할 수 있는 source status는 `active`, `active_internal`뿐이다.
 - Candidate/reference source는 inventory에는 남기되 review와 status 변경 전에는 runtime chunk로 승격하지 않는다.
+- 이미 승격된 confirmed candidate는 review 당시 `source_status_at_review`를 보존하되, runtime source inventory에서는 `active` 상태를 사용한다.
 - Vector DB 디렉터리는 현재 runtime 구조에 없어야 한다.
 - DB server는 현재 도입하지 않는다.
 - Validator 기본 실행은 report나 generated output 파일을 만들지 않는다.

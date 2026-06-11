@@ -1,0 +1,34 @@
+{
+  "schema": "policy_chunk_candidate",
+  "version": 1,
+  "source_id": "RSR-001",
+  "source_status_at_review": "supporting_candidate",
+  "candidate_id": "CAND-RSR-001-PEDESTRIAN-001",
+  "review_status": "needs_revision",
+  "category": "pedestrian_interaction",
+  "chunkText": "METRANS 연구 보고서 후보 근거에 따르면 보도 자율배송로봇은 보행자와 자전거 이용자를 위해 설계된 경로를 공유하며, 이로 인해 경로 이용자 간 충돌 가능성 및 안전하지 않은 통행 조건이 생길 수 있다. 이 후보는 법적 정책 근거가 아니라 near-miss, 보행자 상호작용, 시나리오 난이도, 실험 설계 보조 근거로만 검토한다.",
+  "relatedActions": [
+    "SlowDown",
+    "YieldWait",
+    "LocalAvoidance",
+    "Stop"
+  ],
+  "relatedPolicyParams": [
+    "safeDistanceCm",
+    "ttcThresholdSec",
+    "nearMissDistanceCm"
+  ],
+  "sourceEvidence": {
+    "document_path": "data/sources/processed/research/RSR-001_METRANS_Sidewalk_ADR_Interactions.md",
+    "page": "processed lines 238-245",
+    "section": "Abstract / sidewalk autonomous delivery robot interactions",
+    "evidence_text": "(SADRs) has provided students, staff, and faculty a convenient last-mile delivery option. However, SADRs \ntraverse campuses on paths designed for pedestrians and bicyclists, which could potentially result in \nconflicts among different pathway users and unsafe travel conditions. This report—comprising two \nstudies—offers evidence on the objective safety and perceived comfort experienced by pedestrians and \nbicyclists interacting with SADRs on multi-use paths. In the first study, SADR interactions with human \npathway users observed via field-recorded video collected at Northern Arizona University (NAU) campus \nwere examined by employing the surrogate safety measure of post-encroachment time."
+  },
+  "reviewNotes": "sourceEvidence.evidence_text가 processed MD lines 238-244에 존재하도록 줄바꿈과 문장 시작점을 원문 형태로 보정했다. 보행자/자전거 이용자와의 conflict, unsafe travel conditions, PET 기반 관찰 근거는 확인되지만, 현재 relatedActions의 LocalAvoidance/Stop 및 nearMissDistanceCm 정책 파라미터 연결은 연구 보고서가 직접 처방한 로봇 정책으로 보기에는 강하다. 법적 근거가 아니라 scenario_difficulty, pedestrian_interaction, near-miss 분석 보조 근거로 재작성해야 한다.",
+  "promotionDecision": {
+    "can_promote_to_runtime": false,
+    "decision_reason": "근거 문장은 확인되었지만 supporting_candidate 연구 보고서이므로 법적 정책 chunk로 직접 승격하기에는 부적절하다. 로봇 행동 처방이 아니라 실험 설계/near-miss 분석 보조 chunk로 범위를 좁혀 재검토해야 한다.",
+    "reviewed_by": "codex_source_review",
+    "reviewed_at": "2026-06-11"
+  }
+}

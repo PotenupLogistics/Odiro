@@ -1,4 +1,4 @@
-"""신규 RAG 카드 보강(10~15)과 EpisodeSetup·PolicyServer 컨텍스트 빌더 테스트."""
+"""신규 RAG 카드 보강과 EpisodeSetup·PolicyServer 컨텍스트 빌더 테스트."""
 from __future__ import annotations
 
 from app.models.rag import RagChunkMetadata, RagSearchQuery
@@ -77,9 +77,9 @@ def _measurement_stats(
 # ── 카드 로딩/스키마 ────────────────────────────────────────────────────────
 
 
-def test_jsonl_loads_15_chunks() -> None:
+def test_jsonl_loads_17_chunks() -> None:
     chunks = load_chunks()
-    assert len(chunks) == 15
+    assert len(chunks) == 17
     card_ids = {c["cardId"] for c in chunks}
     assert NEW_CARD_IDS.issubset(card_ids)
 

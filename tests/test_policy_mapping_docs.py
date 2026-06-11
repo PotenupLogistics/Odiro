@@ -14,13 +14,13 @@ COVERAGE_REPORT_JSON = ROOT / "data" / "rag" / "policy_card_coverage_report.json
 COVERAGE_REPORT_MD = ROOT / "data" / "rag" / "policy_card_coverage_report.md"
 
 
-def test_policy_card_count_is_nine() -> None:
+def test_policy_card_count_is_eleven() -> None:
     cards = [
         json.loads(line)
         for line in POLICY_CARDS_PATH.read_text(encoding="utf-8-sig").splitlines()
         if line.strip()
     ]
-    assert len(cards) == 9
+    assert len(cards) == 11
 
 
 def test_coverage_report_exists() -> None:

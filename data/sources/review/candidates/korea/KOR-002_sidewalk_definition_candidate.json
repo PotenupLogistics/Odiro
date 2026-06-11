@@ -1,0 +1,32 @@
+{
+  "schema": "policy_chunk_candidate",
+  "version": 1,
+  "source_id": "KOR-002",
+  "source_status_at_review": "reference_only",
+  "candidate_id": "CAND-KOR-002-SIDEWALK-001",
+  "review_status": "needs_revision",
+  "category": "sidewalk_operation",
+  "chunkText": "도로교통법 후보 근거에 따르면 보도는 보행자가 통행할 수 있도록 한 도로의 부분이며, 해당 보행자 범위에는 제21호의3에 따른 실외이동로봇이 포함된다. 이 후보는 실외이동로봇의 보도 통행 가능 영역을 해석할 때 보조 근거로 사용할 수 있다.",
+  "relatedActions": [
+    "Continue",
+    "SlowDown",
+    "YieldWait"
+  ],
+  "relatedPolicyParams": [
+    "safeDistanceCm",
+    "sidewalkWidthCm"
+  ],
+  "sourceEvidence": {
+    "document_path": "data/sources/processed/korea/KOR-002_도로교통법_실외이동로봇.md",
+    "page": "processed lines 90-92",
+    "section": "도로교통법 제2조 정의 10. 보도",
+    "evidence_text": "10. “보도”(步道)란 연석선, 안전표지나 그와 비슷한 인공구조물로 경계를 표시하여 보행자(유모차, 보행보조용\n의자차, 노약자용 보행기 등 행정안전부령으로 정하는 기구ㆍ장치를 이용하여 통행하는 사람 및 제21호의\n3에 따른 실외이동로봇을 포함한다. 이하 같다)가 통행할 수 있도록 한 도로의 부분을 말한다."
+  },
+  "reviewNotes": "sourceEvidence.evidence_text가 processed MD lines 90-92에 존재하도록 줄바꿈을 원문 형태로 보정했다. 보도 정의와 실외이동로봇 포함 근거는 확인되지만, 현재 relatedActions의 SlowDown/YieldWait 및 safeDistanceCm 연결은 법률 정의 문장만으로는 직접 도출하기 어렵다. KOR-002는 reference_only source이므로 단독 runtime chunk 승격보다 KOR-003/KOR-004의 보도 통행 근거를 보조하는 방식으로 재작성하는 것이 적절하다.",
+  "promotionDecision": {
+    "can_promote_to_runtime": false,
+    "decision_reason": "근거 문장은 확인되었지만 법률상 보도 정의만으로 SlowDown/YieldWait 또는 safeDistanceCm 정책 행동을 직접 확정하기에는 연결이 약하다. reference_only source로서 보조 근거 형태로 재작성 후 재검토해야 한다.",
+    "reviewed_by": "codex_source_review",
+    "reviewed_at": "2026-06-11"
+  }
+}

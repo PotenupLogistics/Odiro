@@ -17,8 +17,8 @@ def _read_chunks() -> list[dict]:
 
 def test_policy_rag_chunks_exist_and_match_card_count() -> None:
     chunks = _read_chunks()
-    # 기존 KOR-003 자동 생성 9장 + 수동 보충 6장 (PRJ-DOE/PRJ-EVAL/PRJ-AGENT)
-    assert len(chunks) == 15
+    # KOR-003 자동 생성 9장 + 수동 보충 6장 + KOR-004 confirmed runtime 승격 2장
+    assert len(chunks) == 17
 
 
 def test_policy_rag_chunk_report_exists() -> None:

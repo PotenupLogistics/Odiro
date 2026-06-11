@@ -57,7 +57,6 @@ private:
 	void SmoothGlobalPath();
 	bool CanConnectPathPoints(const FVector& fromLocation, const FVector& toLocation) const;
 	
-	bool BuildPathByHybridAStar(const FVector& startLocation, const FVector& goalLocation, const FDeliveryBotHybridAStarConfigInfo& hybridAStarConfigInfo);
 	void BuildGlobalPathPointInfosFromGlobalPath(EDeliveryBotMoveDirectionType moveDirectionType);
 	
 	FDeliveryBotHybridAStarConfigInfo NormalizeHybridAStarConfigInfo(const FDeliveryBotHybridAStarConfigInfo& hybridAStarConfigInfo) const;

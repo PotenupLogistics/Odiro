@@ -151,15 +151,13 @@ private:
 		const FString& instanceId,
 		const FString& assetId,
 		EEpisodeActorCategory category,
-		EEpisodeMobilityMode mobilityMode,
 		AActor* actor);
 
 	void ConfigurePlaceableComponent(
 		UEpisodePlaceableComponent* placeableComponent,
 		const FString& instanceId,
 		const FString& assetId,
-		EEpisodeActorCategory category,
-		EEpisodeMobilityMode mobilityMode) const;
+		EEpisodeActorCategory category) const;
 
 	static double GetFloatProperty(
 		const TMap<FString, FEpisodeParamValue>& properties,

@@ -114,10 +114,6 @@ struct PROTOROBOTSIM_API FEpisodeMeasurementLogActorInfo
 	/// Semantic actor category.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|MeasurementLog")
 	EEpisodeActorCategory ActorCategory = EEpisodeActorCategory::StaticObstacle;
-
-	/// Expected actor movement mode.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|MeasurementLog")
-	EEpisodeMobilityMode Mobility = EEpisodeMobilityMode::Static;
 };
 
 /// Per-sample transform and velocity for an actor.
@@ -379,7 +375,6 @@ struct PROTOROBOTSIM_API FEpisodeMeasurementLogJson
 	static FString SanitizeFileToken(const FString& Value);
 	static FString ToSeverityString(EEpisodeMeasurementLogSeverity Severity);
 	static FString ToActorCategoryString(EEpisodeActorCategory Category);
-	static FString ToMobilityString(EEpisodeMobilityMode Mobility);
 
 	static FEpisodeMeasurementLogDiagnostic MakeDiagnostic(
 		EEpisodeMeasurementLogSeverity Severity,

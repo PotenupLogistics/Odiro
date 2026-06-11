@@ -17,12 +17,6 @@ namespace
 		const UEnum* Enum = StaticEnum<EEpisodeActorCategory>();
 		return Enum && Enum->IsValidEnumValue(static_cast<int64>(Category));
 	}
-
-	bool IsValidMobilityMode(EEpisodeMobilityMode MobilityMode)
-	{
-		const UEnum* Enum = StaticEnum<EEpisodeMobilityMode>();
-		return Enum && Enum->IsValidEnumValue(static_cast<int64>(MobilityMode));
-	}
 }
 
 void UEpisodeLogSubjectRegistry::Reset()
@@ -306,19 +300,6 @@ bool UEpisodeLogSubjectRegistry::AddCandidateToTable(
 		return false;
 	}
 
-	if (!IsValidMobilityMode(PlaceableComponent->MobilityMode))
-	{
-		AddDiagnostic(
-			EEpisodeMeasurementLogSeverity::Error,
-			TEXT("invalid_mobility_mode"),
-			FString::Printf(
-				TEXT("Placeable actor '%s' with InstanceId '%s' has an invalid MobilityMode."),
-				*ActorName,
-				*PlaceableComponent->InstanceId),
-			WorldTimeSeconds);
-		return false;
-	}
-
 	const int32 ActorIndex = ActorTable.Num();
 
 	FEpisodeMeasurementLogActorInfo ActorInfo;
@@ -326,16 +307,10 @@ bool UEpisodeLogSubjectRegistry::AddCandidateToTable(
 	ActorInfo.Id = PlaceableComponent->InstanceId;
 	ActorInfo.AssetId = PlaceableComponent->AssetId;
 	ActorInfo.ActorCategory = PlaceableComponent->Category;
-	ActorInfo.Mobility = PlaceableComponent->MobilityMode;
 
 	ActorTable.Add(ActorInfo);
 	ActorsByIndex.Add(Actor);
 	ActorIndexById.Add(ActorInfo.Id, ActorIndex);
-
-	if (ActorInfo.Mobility == EEpisodeMobilityMode::Moving)
-	{
-		MovingActors.Add(Actor);
-	}
 
 	return true;
 }

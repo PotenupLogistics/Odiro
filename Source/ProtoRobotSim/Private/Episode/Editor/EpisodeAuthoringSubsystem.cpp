@@ -1328,7 +1328,7 @@ bool UEpisodeAuthoringSubsystem::ExportEpisodeSetupJsonString(
 
 	for (const FEpisodePlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
 	{
-		if (spec.Category != EEpisodeActorCategory::DeliveryBot && spec.Category != EEpisodeActorCategory::RoadVehicle)
+		if (spec.Category != EEpisodeActorCategory::DeliveryBot)
 		{
 			continue;
 		}
@@ -1821,7 +1821,7 @@ bool UEpisodeAuthoringSubsystem::EnsureSingleRobotRouteSpec(
 	int32 robotSpecCount = 0;
 	for (FEpisodePlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
 	{
-		if (spec.Category == EEpisodeActorCategory::DeliveryBot || spec.Category == EEpisodeActorCategory::RoadVehicle)
+		if (spec.Category == EEpisodeActorCategory::DeliveryBot)
 		{
 			++robotSpecCount;
 			if (!robotSpec)
@@ -1914,7 +1914,7 @@ bool UEpisodeAuthoringSubsystem::ValidateSingleRobotRouteSpecForExport(TArray<FS
 	int32 robotSpecCount = 0;
 	for (const FEpisodePlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
 	{
-		if (spec.Category == EEpisodeActorCategory::DeliveryBot || spec.Category == EEpisodeActorCategory::RoadVehicle)
+		if (spec.Category == EEpisodeActorCategory::DeliveryBot)
 		{
 			++robotSpecCount;
 			if (!robotSpec)
@@ -2014,7 +2014,7 @@ bool UEpisodeAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& out
 	bool bSucceeded = true;
 	for (const FEpisodePlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
 	{
-		if (spec.Category == EEpisodeActorCategory::DeliveryBot || spec.Category == EEpisodeActorCategory::RoadVehicle)
+		if (spec.Category == EEpisodeActorCategory::DeliveryBot)
 		{
 			if (!SpawnRobotRouteMarkers(spec, outDiagnostics))
 			{
@@ -2270,7 +2270,6 @@ bool UEpisodeAuthoringSubsystem::ConfigureRobotRouteMarkerActor(
 	placeableComponent->InstanceId = bStartMarker ? RobotStartMarkerInstanceId : RobotGoalMarkerInstanceId;
 	placeableComponent->AssetId = bStartMarker ? RobotStartMarkerAssetId : RobotGoalMarkerAssetId;
 	placeableComponent->Category = EEpisodeActorCategory::DeliveryBot;
-	placeableComponent->MobilityMode = EEpisodeMobilityMode::Static;
 	placeableComponent->AuthoringRole = markerRole;
 	placeableComponent->bAuthoringSelectable = true;
 	placeableComponent->bAuthoringRenamable = false;
@@ -2461,7 +2460,6 @@ bool UEpisodeAuthoringSubsystem::SpawnEditorPedestrianActor(
 		placeableComponent->InstanceId = spec.InstanceId;
 		placeableComponent->AssetId = spec.AssetId;
 		placeableComponent->Category = EEpisodeActorCategory::Pedestrian;
-		placeableComponent->MobilityMode = EEpisodeMobilityMode::Static;
 		placeableComponent->bAuthoringSelectable = false;
 	}
 	else
@@ -2536,7 +2534,7 @@ FEpisodePlaceableInstanceSpec* UEpisodeAuthoringSubsystem::FindDeliveryBotSpec()
 {
 	for (FEpisodePlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
 	{
-		if (spec.Category == EEpisodeActorCategory::DeliveryBot || spec.Category == EEpisodeActorCategory::RoadVehicle)
+		if (spec.Category == EEpisodeActorCategory::DeliveryBot)
 		{
 			return &spec;
 		}
@@ -2549,7 +2547,7 @@ const FEpisodePlaceableInstanceSpec* UEpisodeAuthoringSubsystem::FindDeliveryBot
 {
 	for (const FEpisodePlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
 	{
-		if (spec.Category == EEpisodeActorCategory::DeliveryBot || spec.Category == EEpisodeActorCategory::RoadVehicle)
+		if (spec.Category == EEpisodeActorCategory::DeliveryBot)
 		{
 			return &spec;
 		}
@@ -2625,7 +2623,6 @@ void UEpisodeAuthoringSubsystem::ConfigureAuthoredStaticObstacleActor(
 		placeableComponent->InstanceId = spec.InstanceId;
 		placeableComponent->AssetId = spec.AssetId;
 		placeableComponent->Category = spec.Category;
-		placeableComponent->MobilityMode = EEpisodeMobilityMode::Static;
 		placeableComponent->AuthoringRole = EEpisodePlaceableAuthoringRole::Generic;
 		placeableComponent->bAuthoringSelectable = true;
 		placeableComponent->bAuthoringRenamable = true;

@@ -2213,8 +2213,7 @@ bool AEpisodeEditorController::HasAuthoredRobotStart(
 	const FEpisodeWorldSpec draftWorldSpec = authoringSubsystem->GetDraftWorldSpec();
 	for (const FEpisodePlaceableInstanceSpec& spec : draftWorldSpec.Placeables)
 	{
-		if ((spec.Category == EEpisodeActorCategory::DeliveryBot
-				|| spec.Category == EEpisodeActorCategory::RoadVehicle)
+		if ((spec.Category == EEpisodeActorCategory::DeliveryBot)
 			&& spec.DeliveryBot.bHasStartLocation)
 		{
 			return true;

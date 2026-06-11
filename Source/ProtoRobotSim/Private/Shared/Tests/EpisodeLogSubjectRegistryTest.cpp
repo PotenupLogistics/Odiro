@@ -11,8 +11,7 @@ namespace
 	UEpisodePlaceableComponent* MakePlaceableComponent(
 		const FString& InstanceId,
 		const FString& AssetId,
-		EEpisodeActorCategory Category,
-		EEpisodeMobilityMode MobilityMode)
+		EEpisodeActorCategory Category)
 	{
 		AActor* Actor = NewObject<AActor>(GetTransientPackage());
 		UEpisodePlaceableComponent* PlaceableComponent = NewObject<UEpisodePlaceableComponent>(Actor);
@@ -21,7 +20,6 @@ namespace
 		PlaceableComponent->InstanceId = InstanceId;
 		PlaceableComponent->AssetId = AssetId;
 		PlaceableComponent->Category = Category;
-		PlaceableComponent->MobilityMode = MobilityMode;
 		return PlaceableComponent;
 	}
 
@@ -59,18 +57,15 @@ bool FEpisodeLogSubjectRegistryTableTest::RunTest(const FString& Parameters)
 	PlaceableComponents.Add(MakePlaceableComponent(
 		TEXT("static_01"),
 		TEXT("trash_bag"),
-		EEpisodeActorCategory::StaticObstacle,
-		EEpisodeMobilityMode::Static));
+		EEpisodeActorCategory::StaticObstacle));
 	PlaceableComponents.Add(MakePlaceableComponent(
 		TEXT("robot_01"),
 		TEXT("delivery_bot"),
-		EEpisodeActorCategory::DeliveryBot,
-		EEpisodeMobilityMode::Moving));
+		EEpisodeActorCategory::DeliveryBot));
 	PlaceableComponents.Add(MakePlaceableComponent(
 		TEXT("ped_01"),
 		TEXT("adult_pedestrian"),
-		EEpisodeActorCategory::Pedestrian,
-		EEpisodeMobilityMode::Moving));
+		EEpisodeActorCategory::Pedestrian));
 
 	UEpisodeLogSubjectRegistry* Registry = NewObject<UEpisodeLogSubjectRegistry>();
 	TestTrue(TEXT("registry builds from placeables"), Registry->BuildFromComponents(PlaceableComponents));
@@ -99,16 +94,6 @@ bool FEpisodeLogSubjectRegistryTableTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("robot actor index lookup"), Registry->FindActorIndexById(TEXT("robot_01")), RobotInfo->Index);
 	}
 
-	if (PedestrianInfo)
-	{
-		TestEqual(TEXT("pedestrian mobility"), PedestrianInfo->Mobility, EEpisodeMobilityMode::Moving);
-	}
-
-	if (StaticInfo)
-	{
-		TestEqual(TEXT("static obstacle mobility"), StaticInfo->Mobility, EEpisodeMobilityMode::Static);
-	}
-
 	TestEqual(TEXT("moving actor count"), Registry->GetMovingActors().Num(), 2);
 
 	return true;
@@ -125,18 +110,15 @@ bool FEpisodeLogSubjectRegistryValidationTest::RunTest(const FString& Parameters
 	PlaceableComponents.Add(MakePlaceableComponent(
 		TEXT("dup_01"),
 		TEXT("delivery_bot"),
-		EEpisodeActorCategory::DeliveryBot,
-		EEpisodeMobilityMode::Moving));
+		EEpisodeActorCategory::DeliveryBot));
 	PlaceableComponents.Add(MakePlaceableComponent(
 		TEXT("dup_01"),
 		TEXT("adult_pedestrian"),
-		EEpisodeActorCategory::Pedestrian,
-		EEpisodeMobilityMode::Moving));
+		EEpisodeActorCategory::Pedestrian));
 	PlaceableComponents.Add(MakePlaceableComponent(
 		FString(),
 		TEXT("trash_bag"),
-		EEpisodeActorCategory::StaticObstacle,
-		EEpisodeMobilityMode::Static));
+		EEpisodeActorCategory::StaticObstacle));
 
 	UEpisodeLogSubjectRegistry* Registry = NewObject<UEpisodeLogSubjectRegistry>();
 	TestFalse(TEXT("duplicate or missing identity blocks registry"), Registry->BuildFromComponents(PlaceableComponents));
@@ -167,13 +149,11 @@ bool FEpisodeLogSubjectRegistryDynamicTest::RunTest(const FString& Parameters)
 	UEpisodePlaceableComponent* RobotComponent = MakePlaceableComponent(
 		TEXT("robot_01"),
 		TEXT("delivery_bot"),
-		EEpisodeActorCategory::DeliveryBot,
-		EEpisodeMobilityMode::Moving);
+		EEpisodeActorCategory::DeliveryBot);
 	UEpisodePlaceableComponent* PedestrianComponent = MakePlaceableComponent(
 		TEXT("ped_late_01"),
 		TEXT("adult_pedestrian"),
-		EEpisodeActorCategory::Pedestrian,
-		EEpisodeMobilityMode::Moving);
+		EEpisodeActorCategory::Pedestrian);
 
 	UEpisodeLogSubjectRegistry* Registry = NewObject<UEpisodeLogSubjectRegistry>();
 	TestTrue(TEXT("initial registry builds"), Registry->BuildFromComponents({ RobotComponent }));

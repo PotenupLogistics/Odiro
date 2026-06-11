@@ -51,7 +51,6 @@ AEpisodeGroundRegion::AEpisodeGroundRegion()
 
 	PlaceableComponent = CreateDefaultSubobject<UEpisodePlaceableComponent>(TEXT("PlaceableComponent"));
 	PlaceableComponent->Category = EEpisodeActorCategory::GroundRegion;
-	PlaceableComponent->MobilityMode = EEpisodeMobilityMode::Static;
 	PlaceableComponent->AuthoringRole = EEpisodePlaceableAuthoringRole::Generic;
 	PlaceableComponent->bAuthoringSelectable = true;
 	PlaceableComponent->bAuthoringRenamable = false;

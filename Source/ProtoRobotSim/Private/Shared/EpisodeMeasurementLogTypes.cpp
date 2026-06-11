@@ -218,25 +218,6 @@ FString FEpisodeMeasurementLogJson::ToActorCategoryString(EEpisodeActorCategory 
 		return TEXT("StaticObstacle");
 	case EEpisodeActorCategory::Pedestrian:
 		return TEXT("Pedestrian");
-	case EEpisodeActorCategory::RoadVehicle:
-		return TEXT("RoadVehicle");
-	case EEpisodeActorCategory::PersonalMobility:
-		return TEXT("PersonalMobility");
-	default:
-		return TEXT("Unknown");
-	}
-}
-
-FString FEpisodeMeasurementLogJson::ToMobilityString(EEpisodeMobilityMode Mobility)
-{
-	switch (Mobility)
-	{
-	case EEpisodeMobilityMode::Static:
-		return TEXT("Static");
-	case EEpisodeMobilityMode::Parked:
-		return TEXT("Parked");
-	case EEpisodeMobilityMode::Moving:
-		return TEXT("Moving");
 	default:
 		return TEXT("Unknown");
 	}
@@ -568,7 +549,6 @@ TSharedRef<FJsonObject> FEpisodeMeasurementLogJson::MakeHeaderObject(
 		ActorObject->SetStringField(TEXT("id"), Actor.Id);
 		ActorObject->SetStringField(TEXT("assetId"), Actor.AssetId);
 		ActorObject->SetStringField(TEXT("actorCategory"), ToActorCategoryString(Actor.ActorCategory));
-		ActorObject->SetStringField(TEXT("mobility"), ToMobilityString(Actor.Mobility));
 		ActorValues.Add(MakeShared<FJsonValueObject>(ActorObject));
 	}
 

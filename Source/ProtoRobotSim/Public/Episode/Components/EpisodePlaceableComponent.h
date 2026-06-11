@@ -41,9 +41,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	EEpisodeActorCategory Category = EEpisodeActorCategory::StaticObstacle;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	EEpisodeMobilityMode MobilityMode = EEpisodeMobilityMode::Static;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Editor")
 	bool bAuthoringSelectable = true;
 

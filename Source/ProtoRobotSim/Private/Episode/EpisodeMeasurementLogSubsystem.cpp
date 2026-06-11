@@ -538,11 +538,6 @@ void UEpisodeMeasurementLogSubsystem::CaptureMovingActors(
 	const TArray<FEpisodeMeasurementLogActorInfo>& ActorTable = SubjectRegistry->GetActorTable();
 	for (const FEpisodeMeasurementLogActorInfo& ActorInfo : ActorTable)
 	{
-		if (ActorInfo.Mobility != EEpisodeMobilityMode::Moving)
-		{
-			continue;
-		}
-
 		AActor* Actor = SubjectRegistry->GetActorByIndex(ActorInfo.Index);
 		if (!IsValid(Actor))
 		{

@@ -25,34 +25,7 @@ enum class EEpisodeActorCategory : uint8
 	DeliveryBot,
 	StaticObstacle,
 	Pedestrian,
-	RoadVehicle,
-	PersonalMobility,
 	GroundRegion
-};
-
-UENUM(BlueprintType)
-enum class EEpisodeMobilityMode : uint8
-{
-	Static,
-	Parked,
-	Moving
-};
-
-UENUM(BlueprintType)
-enum class EEpisodeRoadVehicleState : uint8
-{
-	Parked,
-	Driving,
-	PullingOut
-};
-
-UENUM(BlueprintType)
-enum class EEpisodePersonalMobilityType : uint8
-{
-	Bicycle,
-	PM,
-	Scooter,
-	Motorcycle
 };
 
 UENUM(BlueprintType)

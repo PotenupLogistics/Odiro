@@ -6,11 +6,6 @@
 #include "Struct/DeliveryBot/Setup/DeliveryBotSetupInfo.h"
 #include "EpisodeSpecTypes.generated.h"
 
-// 언리얼에서 ScenarioSpec 해석 후 에피소드를 생성하기 위한 에피소드 명세.
-// 컴파일된 에피소드 명세를 JSON 친화적인 데이터로 정의하는 파일.
-// Episode : ScenarioSpec + seed를 컴파일한 single instance
-// "이번 한 번의 실행에서 무엇을 어디에 배치하고 어떻게 실행할 것인가"를 결정하기 위한 실행 계약
-
 UENUM(BlueprintType)
 enum class EEpisodePathType : uint8
 {

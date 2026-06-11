@@ -1,0 +1,22 @@
+{
+  "sequence": 1,
+  "runTimeSeconds": 1.0,
+  "robotState": {
+    "x": 0,
+    "y": 0,
+    "z": 0,
+    "yawDegree": 0,
+    "speedKmh": 0
+  },
+  "lidarRays": [
+    {
+      "hit": false,
+      "distanceM": 5.0,
+      "rayIndex": 0,
+      "rayYawDegree": 0.0,
+      "actorName": null,
+      "actorTags": []
+    }
+  ],
+  "observedObjects": []
+}

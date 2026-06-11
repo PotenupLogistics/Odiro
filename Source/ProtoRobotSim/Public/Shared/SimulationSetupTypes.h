@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Shared/EpisodeCompileTypes.h"
+#include "Shared/ScenarioCompileTypes.h"
 #include "Shared/EpisodeMeasurementLogTypes.h"
 #include "SimulationSetupTypes.generated.h"
 
@@ -58,9 +58,9 @@ struct PROTOROBOTSIM_API FSimulationSetup
 
 	// SimulatorMode에서 로드할 UE level identifier
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
-	FString MapId = TEXT("EpisodeSimulationMap");
+	FString MapId = TEXT("ScenarioSimulationMap");
 
-	// EpisodeSetup, DeliveryBotSetup, PolicySpec 조합 목록을 담은 EpisodeRunQueue JSON path
+	// ScenarioSetup, DeliveryBotSetup, PolicySpec 조합 목록을 담은 EpisodeRunQueue JSON path
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
 	FString RunQueueJsonPath;
 
@@ -97,7 +97,7 @@ struct PROTOROBOTSIM_API FSimulationSetupParseResult
 
 	// setup 파일 또는 field validation 중 발견한 메시지
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
-	TArray<FEpisodeCompileDiagnostic> Diagnostics;
+	TArray<FScenarioCompileDiagnostic> Diagnostics;
 };
 
 // launcher와 simulator가 공유하는 public command line 계약
@@ -135,7 +135,7 @@ struct PROTOROBOTSIM_API FSimulationCommandLineParseResult
 
 	// command line validation 중 발견한 메시지
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|CommandLine")
-	TArray<FEpisodeCompileDiagnostic> Diagnostics;
+	TArray<FScenarioCompileDiagnostic> Diagnostics;
 };
 
 // launcher UI가 polling하는 simulator run 상태

@@ -13,23 +13,23 @@ bool FSimulatorProcessMapIdTest::RunTest(const FString& parameters)
 {
 	TestEqual(
 		TEXT("short map id stays short"),
-		USimulatorProcessSubsystem::NormalizeMapIdForOpenLevel(TEXT("EpisodeSimulationMap")),
-		FString(TEXT("EpisodeSimulationMap")));
+		USimulatorProcessSubsystem::NormalizeMapIdForOpenLevel(TEXT("ScenarioSimulationMap")),
+		FString(TEXT("ScenarioSimulationMap")));
 	TestEqual(
 		TEXT("object path drops asset object suffix"),
-		USimulatorProcessSubsystem::NormalizeMapIdForOpenLevel(TEXT("/Game/Maps/EpisodeSimulationMap.EpisodeSimulationMap")),
-		FString(TEXT("/Game/Maps/EpisodeSimulationMap")));
+		USimulatorProcessSubsystem::NormalizeMapIdForOpenLevel(TEXT("/Game/Maps/ScenarioSimulationMap.ScenarioSimulationMap")),
+		FString(TEXT("/Game/Maps/ScenarioSimulationMap")));
 	TestEqual(
 		TEXT("package path short name"),
-		USimulatorProcessSubsystem::GetMapShortNameFromId(TEXT("/Game/Maps/EpisodeSimulationMap")),
-		FString(TEXT("EpisodeSimulationMap")));
+		USimulatorProcessSubsystem::GetMapShortNameFromId(TEXT("/Game/Maps/ScenarioSimulationMap")),
+		FString(TEXT("ScenarioSimulationMap")));
 	TestEqual(
 		TEXT("empty map id falls back"),
 		USimulatorProcessSubsystem::NormalizeMapIdForOpenLevel(FString()),
-		FString(TEXT("EpisodeSimulationMap")));
+		FString(TEXT("ScenarioSimulationMap")));
 	TestFalse(
 		TEXT("null world never matches"),
-		USimulatorProcessSubsystem::DoesWorldMatchMapId(nullptr, TEXT("EpisodeSimulationMap")));
+		USimulatorProcessSubsystem::DoesWorldMatchMapId(nullptr, TEXT("ScenarioSimulationMap")));
 
 	return true;
 }
@@ -60,15 +60,15 @@ bool FSimulatorProcessRunnerStateTest::RunTest(const FString& parameters)
 {
 	TestEqual(
 		TEXT("preparing maps to running"),
-		USimulatorProcessSubsystem::ConvertRunnerStateToRunState(EEpisodeRunnerState::Preparing),
+		USimulatorProcessSubsystem::ConvertRunnerStateToRunState(EScenarioRunnerState::Preparing),
 		ESimulationRunState::Running);
 	TestEqual(
 		TEXT("completed maps to completed"),
-		USimulatorProcessSubsystem::ConvertRunnerStateToRunState(EEpisodeRunnerState::Completed),
+		USimulatorProcessSubsystem::ConvertRunnerStateToRunState(EScenarioRunnerState::Completed),
 		ESimulationRunState::Completed);
 	TestEqual(
 		TEXT("cancelled maps to canceled"),
-		USimulatorProcessSubsystem::ConvertRunnerStateToRunState(EEpisodeRunnerState::Cancelled),
+		USimulatorProcessSubsystem::ConvertRunnerStateToRunState(EScenarioRunnerState::Cancelled),
 		ESimulationRunState::Canceled);
 
 	return true;

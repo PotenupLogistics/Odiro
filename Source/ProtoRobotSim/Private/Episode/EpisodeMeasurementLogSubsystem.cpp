@@ -3,7 +3,7 @@
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
-#include "Episode/EpisodeEvaluationSubsystem.h"
+#include "Scenario/ScenarioEvaluationSubsystem.h"
 #include "Episode/EpisodeRobotMeasurementAdapter.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
@@ -67,10 +67,10 @@ namespace
 		}
 	}
 
-	FEpisodeParamValue MakeMeasurementStringParamValue(const FString& Value)
+	FScenarioParamValue MakeMeasurementStringParamValue(const FString& Value)
 	{
-		FEpisodeParamValue ParamValue;
-		ParamValue.Type = EEpisodeParamValueType::String;
+		FScenarioParamValue ParamValue;
+		ParamValue.Type = EScenarioParamValueType::String;
 		ParamValue.StringValue = Value;
 		return ParamValue;
 	}
@@ -488,7 +488,7 @@ ADeliveryBot* UEpisodeMeasurementLogSubsystem::FindRobotActor() const
 	{
 		for (const FEpisodeMeasurementLogActorInfo& ActorInfo : SubjectRegistry->GetActorTable())
 		{
-			if (ActorInfo.ActorCategory != EEpisodeActorCategory::DeliveryBot)
+			if (ActorInfo.ActorCategory != EScenarioActorCategory::DeliveryBot)
 			{
 				continue;
 			}
@@ -538,11 +538,6 @@ void UEpisodeMeasurementLogSubsystem::CaptureMovingActors(
 	const TArray<FEpisodeMeasurementLogActorInfo>& ActorTable = SubjectRegistry->GetActorTable();
 	for (const FEpisodeMeasurementLogActorInfo& ActorInfo : ActorTable)
 	{
-		if (ActorInfo.Mobility != EEpisodeMobilityMode::Moving)
-		{
-			continue;
-		}
-
 		AActor* Actor = SubjectRegistry->GetActorByIndex(ActorInfo.Index);
 		if (!IsValid(Actor))
 		{
@@ -561,7 +556,7 @@ void UEpisodeMeasurementLogSubsystem::CaptureMovingActors(
 			continue;
 		}
 
-		if (Actor == RobotActor || ActorInfo.ActorCategory == EEpisodeActorCategory::DeliveryBot)
+		if (Actor == RobotActor || ActorInfo.ActorCategory == EScenarioActorCategory::DeliveryBot)
 		{
 			continue;
 		}
@@ -638,8 +633,8 @@ void UEpisodeMeasurementLogSubsystem::AppendRegistryDiagnostics()
 void UEpisodeMeasurementLogSubsystem::BindEvaluationSubsystem()
 {
 	UWorld* World = GetWorld();
-	UEpisodeEvaluationSubsystem* EvaluationSubsystem = World
-		? World->GetSubsystem<UEpisodeEvaluationSubsystem>()
+	UScenarioEvaluationSubsystem* EvaluationSubsystem = World
+		? World->GetSubsystem<UScenarioEvaluationSubsystem>()
 		: nullptr;
 	if (!EvaluationSubsystem)
 	{

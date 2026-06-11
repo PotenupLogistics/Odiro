@@ -1,9 +1,7 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
 #include "CoreMinimal.h"
-
 #include "WheeledVehiclePawn.h"
 #include "Shared/Struct/DeliveryBot/Perception/DeliveryBotLidarSensorInfo.h"
 #include "Shared/Struct/DeliveryBot/Drive/DeliveryBotMovementInfo.h"
@@ -33,7 +31,7 @@ class UDeliveryBot_PolicyControllerComponent;
 class UDeliveryBot_HttpPolicyComponent;
 class UDeliveryBot_DriveComponent;
 class UDeliveryBot_LidarSensorComponent;
-class UEpisodePlaceableComponent;
+class UScenarioPlaceableComponent;
 UCLASS(Blueprintable)
 class PROTOROBOTSIM_API ADeliveryBot : public AWheeledVehiclePawn
 {
@@ -124,7 +122,7 @@ protected:
 	TObjectPtr<UDeliveryBot_PolicyControllerComponent> PolicyControllerComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
-	TObjectPtr<UEpisodePlaceableComponent> PlaceableComponent;
+	TObjectPtr<UScenarioPlaceableComponent> PlaceableComponent;
 	
 	
 	

@@ -1,14 +1,14 @@
 
 #include "Platform/SimulatorProcessSubsystem.h"
 #include "Episode/EpisodeMeasurementLogSubsystem.h"
-#include "Episode/EpisodeRunnerSubsystem.h"
+#include "Scenario/ScenarioRunnerSubsystem.h"
 #include "Kismet/GameplayStatics.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSimulatorProcess, Log, All);
 
 namespace
 {
-	const TCHAR* DefaultSimulationMapId = TEXT("EpisodeSimulationMap");
+	const TCHAR* DefaultSimulationMapId = TEXT("ScenarioSimulationMap");
 
 	FString TrimMapId(const FString& mapId)
 	{
@@ -39,7 +39,7 @@ namespace
 			|| world->GetOutermost()->GetName().StartsWith(TEXT("/Temp/"));
 	}
 
-	bool HasFailedRunRecord(const UEpisodeRunnerSubsystem* runnerSubsystem)
+	bool HasFailedRunRecord(const UScenarioRunnerSubsystem* runnerSubsystem)
 	{
 		if (!runnerSubsystem)
 		{
@@ -89,7 +89,7 @@ void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	const FSimulationCommandLineParseResult commandLineResult = FSimulationCommandLine::ParseCurrent();
 	if (!commandLineResult.bSuccess)
 	{
-		for (const FEpisodeCompileDiagnostic& diagnostic : commandLineResult.Diagnostics)
+		for (const FScenarioCompileDiagnostic& diagnostic : commandLineResult.Diagnostics)
 		{
 			UE_LOG(
 				LogSimulatorProcess,
@@ -127,7 +127,7 @@ void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection
 
 	if (UGameInstance* gameInstance = GetGameInstance())
 	{
-		ConfigureRunnerSubsystem(gameInstance->GetSubsystem<UEpisodeRunnerSubsystem>());
+		ConfigureRunnerSubsystem(gameInstance->GetSubsystem<UScenarioRunnerSubsystem>());
 	}
 
 	ApplyFixedStep();
@@ -222,21 +222,21 @@ double USimulatorProcessSubsystem::CalculateFixedDeltaSeconds(int32 fps)
 	return 1.0 / static_cast<double>(FMath::Max(1, fps));
 }
 
-ESimulationRunState USimulatorProcessSubsystem::ConvertRunnerStateToRunState(EEpisodeRunnerState runnerState)
+ESimulationRunState USimulatorProcessSubsystem::ConvertRunnerStateToRunState(EScenarioRunnerState runnerState)
 {
 	switch (runnerState)
 	{
-	case EEpisodeRunnerState::Preparing:
-	case EEpisodeRunnerState::Running:
-	case EEpisodeRunnerState::Ending:
+	case EScenarioRunnerState::Preparing:
+	case EScenarioRunnerState::Running:
+	case EScenarioRunnerState::Ending:
 		return ESimulationRunState::Running;
-	case EEpisodeRunnerState::Completed:
+	case EScenarioRunnerState::Completed:
 		return ESimulationRunState::Completed;
-	case EEpisodeRunnerState::Failed:
+	case EScenarioRunnerState::Failed:
 		return ESimulationRunState::Failed;
-	case EEpisodeRunnerState::Cancelled:
+	case EScenarioRunnerState::Cancelled:
 		return ESimulationRunState::Canceled;
-	case EEpisodeRunnerState::Idle:
+	case EScenarioRunnerState::Idle:
 	default:
 		return ESimulationRunState::Pending;
 	}
@@ -354,14 +354,14 @@ void USimulatorProcessSubsystem::StartSimulationRun(UWorld* world)
 	}
 
 	UGameInstance* gameInstance = GetGameInstance();
-	UEpisodeRunnerSubsystem* runnerSubsystem = gameInstance
-		? gameInstance->GetSubsystem<UEpisodeRunnerSubsystem>()
+	UScenarioRunnerSubsystem* runnerSubsystem = gameInstance
+		? gameInstance->GetSubsystem<UScenarioRunnerSubsystem>()
 		: nullptr;
 	ConfigureRunnerSubsystem(runnerSubsystem);
 	if (!runnerSubsystem)
 	{
-		UE_LOG(LogSimulatorProcess, Error, TEXT("Simulator run 시작 실패: EpisodeRunnerSubsystem 없음"));
-		WriteStatus(ESimulationRunState::Failed, TEXT("EpisodeRunnerSubsystem was not available."));
+		UE_LOG(LogSimulatorProcess, Error, TEXT("Simulator run 시작 실패: ScenarioRunnerSubsystem 없음"));
+		WriteStatus(ESimulationRunState::Failed, TEXT("ScenarioRunnerSubsystem was not available."));
 		return;
 	}
 
@@ -423,7 +423,7 @@ void USimulatorProcessSubsystem::StartSimulationRun(UWorld* world)
 		*ActiveSetup.RunQueueJsonPath);
 }
 
-void USimulatorProcessSubsystem::ConfigureRunnerSubsystem(UEpisodeRunnerSubsystem* runnerSubsystem)
+void USimulatorProcessSubsystem::ConfigureRunnerSubsystem(UScenarioRunnerSubsystem* runnerSubsystem)
 {
 	if (!runnerSubsystem)
 	{
@@ -435,7 +435,7 @@ void USimulatorProcessSubsystem::ConfigureRunnerSubsystem(UEpisodeRunnerSubsyste
 	BindRunnerDelegates(runnerSubsystem);
 }
 
-void USimulatorProcessSubsystem::BindRunnerDelegates(UEpisodeRunnerSubsystem* runnerSubsystem)
+void USimulatorProcessSubsystem::BindRunnerDelegates(UScenarioRunnerSubsystem* runnerSubsystem)
 {
 	if (!runnerSubsystem || BoundRunnerSubsystem == runnerSubsystem)
 	{
@@ -486,28 +486,28 @@ void USimulatorProcessSubsystem::StopMeasurementLogging(UWorld* world, const FSt
 	}
 }
 
-void USimulatorProcessSubsystem::HandleRunnerStateChanged(EEpisodeRunnerState runnerState)
+void USimulatorProcessSubsystem::HandleRunnerStateChanged(EScenarioRunnerState runnerState)
 {
-	if (bReplacingExistingRunnerBatch && runnerState == EEpisodeRunnerState::Cancelled)
+	if (bReplacingExistingRunnerBatch && runnerState == EScenarioRunnerState::Cancelled)
 	{
 		return;
 	}
 
-	if (runnerState == EEpisodeRunnerState::Completed)
+	if (runnerState == EScenarioRunnerState::Completed)
 	{
 		if (UGameInstance* gameInstance = GetGameInstance())
 		{
 			StopMeasurementLogging(gameInstance->GetWorld(), TEXT("simulation_completed"));
 		}
 	}
-	else if (runnerState == EEpisodeRunnerState::Failed)
+	else if (runnerState == EScenarioRunnerState::Failed)
 	{
 		if (UGameInstance* gameInstance = GetGameInstance())
 		{
 			StopMeasurementLogging(gameInstance->GetWorld(), TEXT("simulation_failed"));
 		}
 	}
-	else if (runnerState == EEpisodeRunnerState::Cancelled)
+	else if (runnerState == EScenarioRunnerState::Cancelled)
 	{
 		if (UGameInstance* gameInstance = GetGameInstance())
 		{
@@ -540,9 +540,9 @@ void USimulatorProcessSubsystem::ApplyFixedStep() const
 
 void USimulatorProcessSubsystem::LogSetupDiagnostics(const FSimulationSetupParseResult& parseResult) const
 {
-	for (const FEpisodeCompileDiagnostic& diagnostic : parseResult.Diagnostics)
+	for (const FScenarioCompileDiagnostic& diagnostic : parseResult.Diagnostics)
 	{
-		if (diagnostic.Severity == EEpisodeCompileDiagnosticSeverity::Error)
+		if (diagnostic.Severity == EScenarioCompileDiagnosticSeverity::Error)
 		{
 			UE_LOG(
 				LogSimulatorProcess,
@@ -605,7 +605,7 @@ void USimulatorProcessSubsystem::WriteStatus(ESimulationRunState state, const FS
 	bStatusTerminal = IsTerminalRunState(state);
 }
 
-void USimulatorProcessSubsystem::WriteStatusFromRunnerState(EEpisodeRunnerState runnerState, const FString& error)
+void USimulatorProcessSubsystem::WriteStatusFromRunnerState(EScenarioRunnerState runnerState, const FString& error)
 {
 	ESimulationRunState runState = ConvertRunnerStateToRunState(runnerState);
 	FString statusError = error;
@@ -621,7 +621,7 @@ void USimulatorProcessSubsystem::WriteStatusFromRunnerState(EEpisodeRunnerState 
 	WriteStatus(runState, statusError);
 }
 
-void USimulatorProcessSubsystem::RefreshStatusFromRunner(const UEpisodeRunnerSubsystem* runnerSubsystem)
+void USimulatorProcessSubsystem::RefreshStatusFromRunner(const UScenarioRunnerSubsystem* runnerSubsystem)
 {
 	if (!runnerSubsystem)
 	{

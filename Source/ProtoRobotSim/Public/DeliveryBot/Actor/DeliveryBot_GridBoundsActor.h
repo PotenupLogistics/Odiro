@@ -1,9 +1,7 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
+﻿
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Actor.h"
 #include "Shared/Struct/DeliveryBot/Navigation/DeliveryBotGridInfo.h"
 #include "DeliveryBot_GridBoundsActor.generated.h"
 

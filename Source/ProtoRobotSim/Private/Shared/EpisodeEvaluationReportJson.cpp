@@ -44,33 +44,33 @@ namespace
 		return Array;
 	}
 
-	TSharedPtr<FJsonValue> MakeReportParamJsonValue(const FEpisodeParamValue& ParamValue)
+	TSharedPtr<FJsonValue> MakeReportParamJsonValue(const FScenarioParamValue& ParamValue)
 	{
 		switch (ParamValue.Type)
 		{
-		case EEpisodeParamValueType::Bool:
+		case EScenarioParamValueType::Bool:
 			return MakeShared<FJsonValueBoolean>(ParamValue.BoolValue);
-		case EEpisodeParamValueType::Integer:
+		case EScenarioParamValueType::Integer:
 			return MakeShared<FJsonValueNumber>(ParamValue.IntegerValue);
-		case EEpisodeParamValueType::Float:
+		case EScenarioParamValueType::Float:
 			return MakeShared<FJsonValueNumber>(ParamValue.FloatValue);
-		case EEpisodeParamValueType::String:
+		case EScenarioParamValueType::String:
 			return MakeShared<FJsonValueString>(ParamValue.StringValue);
-		case EEpisodeParamValueType::Vector:
+		case EScenarioParamValueType::Vector:
 			return MakeShared<FJsonValueArray>(MakeReportVectorArray(ParamValue.VectorValue));
-		case EEpisodeParamValueType::None:
+		case EScenarioParamValueType::None:
 		default:
 			return MakeShared<FJsonValueNull>();
 		}
 	}
 
 	bool TryGetStringParam(
-		const TMap<FString, FEpisodeParamValue>& Params,
+		const TMap<FString, FScenarioParamValue>& Params,
 		const FString& Key,
 		FString& OutValue)
 	{
-		const FEpisodeParamValue* ParamValue = Params.Find(Key);
-		if (!ParamValue || ParamValue->Type != EEpisodeParamValueType::String)
+		const FScenarioParamValue* ParamValue = Params.Find(Key);
+		if (!ParamValue || ParamValue->Type != EScenarioParamValueType::String)
 		{
 			return false;
 		}
@@ -80,23 +80,23 @@ namespace
 	}
 
 	bool TryGetNumberParam(
-		const TMap<FString, FEpisodeParamValue>& Params,
+		const TMap<FString, FScenarioParamValue>& Params,
 		const FString& Key,
 		double& OutValue)
 	{
-		const FEpisodeParamValue* ParamValue = Params.Find(Key);
+		const FScenarioParamValue* ParamValue = Params.Find(Key);
 		if (!ParamValue)
 		{
 			return false;
 		}
 
-		if (ParamValue->Type == EEpisodeParamValueType::Float)
+		if (ParamValue->Type == EScenarioParamValueType::Float)
 		{
 			OutValue = ParamValue->FloatValue;
 			return true;
 		}
 
-		if (ParamValue->Type == EEpisodeParamValueType::Integer)
+		if (ParamValue->Type == EScenarioParamValueType::Integer)
 		{
 			OutValue = ParamValue->IntegerValue;
 			return true;
@@ -232,7 +232,7 @@ namespace
 	void SetParamField(
 		const TSharedRef<FJsonObject>& Object,
 		const FString& Key,
-		const FEpisodeParamValue& ParamValue)
+		const FScenarioParamValue& ParamValue)
 	{
 		Object->SetField(Key, MakeReportParamJsonValue(ParamValue));
 	}
@@ -318,14 +318,14 @@ namespace
 
 		for (const FString& Key : Keys)
 		{
-			const FEpisodeParamValue* ParamValue = Record.EvaluationResult.Metrics.Find(Key);
+			const FScenarioParamValue* ParamValue = Record.EvaluationResult.Metrics.Find(Key);
 			if (!ParamValue || IsPolicyReportKey(Key))
 			{
 				continue;
 			}
 
 			if (Key == TEXT("delivery_bot_failure_location_cm")
-				&& ParamValue->Type == EEpisodeParamValueType::Vector)
+				&& ParamValue->Type == EScenarioParamValueType::Vector)
 			{
 				Object->SetArrayField(
 					TEXT("delivery_bot_failure_xy_m"),
@@ -395,7 +395,7 @@ namespace
 
 		for (const FString& Key : Keys)
 		{
-			const FEpisodeParamValue* ParamValue = Event.Properties.Find(Key);
+			const FScenarioParamValue* ParamValue = Event.Properties.Find(Key);
 			if (!ParamValue || IsPolicyReportKey(Key))
 			{
 				continue;

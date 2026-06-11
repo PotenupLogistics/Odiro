@@ -8,7 +8,7 @@ class UButton;
 class UCheckBox;
 class UComboBoxString;
 class UEditableTextBox;
-class UEpisodeEditorLaunchSubsystem;
+class UScenarioEditorLaunchSubsystem;
 class UExperimentResultIterationButton;
 class UFileListItemWidget;
 class UPlatformAnalysisAiSubsystem;
@@ -102,13 +102,13 @@ protected:
 	void HandleExperimentConfigBackClicked();
 
 	UFUNCTION()
-	void HandleScenarioEpisodeSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
+	void HandleScenarioSetupSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
 
 	UFUNCTION()
 	void HandlePolicyDeliveryBotSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
 
 	UFUNCTION()
-	void HandleExperimentEpisodeSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
+	void HandleExperimentScenarioSetupSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
 
 	UFUNCTION()
 	void HandleExperimentDeliveryBotSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
@@ -137,14 +137,14 @@ private:
 	void SetExperimentConfigDetailVisible(bool bVisible);
 	void SetExperimentResultDetailVisible(bool bVisible);
 	void SetSelectedSetupPath(const FString& setupPath);
-	void SetSelectedEpisodeSetupPath(const FString& episodeSetupPath);
+	void SetSelectedScenarioSetupPath(const FString& scenarioSetupPath);
 	void SetSelectedDeliveryBotSetupPath(const FString& deliveryBotSetupPath);
 	void SetSelectedPolicySpecPath(const FString& policySpecPath);
 	void SetSelectedExperimentResultRunDirectory(const FString& runDirectory);
 	void SetSelectedExperimentResultPath(const FString& reportPath);
 	void ClearExperimentResultIterationWidgets();
-	bool CreateScenarioFileFromTemplate(const FString& episodeSetupPath);
-	bool OpenScenarioInEditor(const FString& episodeSetupPath);
+	bool CreateScenarioFileFromTemplate(const FString& scenarioSetupPath);
+	bool OpenScenarioInEditor(const FString& scenarioSetupPath);
 	bool BuildSimulationSetupFromControls(
 		const FSimulationSetup& baseSetup,
 		const FString& runQueuePath,
@@ -157,11 +157,11 @@ private:
 	void UpdateReportAndLogText();
 	void SetDiagnosticsText(const FString& message);
 	FString GetSelectedSetupPath() const;
-	FString GetSelectedEpisodeSetupPath() const;
+	FString GetSelectedScenarioSetupPath() const;
 	FString GetSelectedDeliveryBotSetupPath() const;
 	FString GetSelectedPolicySpecPath() const;
 	USimulatorLaunchSubsystem* GetSimulatorLaunchSubsystem() const;
-	UEpisodeEditorLaunchSubsystem* GetEpisodeEditorLaunchSubsystem() const;
+	UScenarioEditorLaunchSubsystem* GetScenarioEditorLaunchSubsystem() const;
 	UPlatformAnalysisAiSubsystem* GetPlatformAnalysisAiSubsystem() const;
 
 	UPROPERTY(Transient, meta = (BindWidget))
@@ -219,10 +219,10 @@ private:
 	TObjectPtr<UButton> ExperimentResultBackButton;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UComboBoxString> ScenarioEpisodeSetupComboBox;
+	TObjectPtr<UComboBoxString> ScenarioSetupComboBox;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableTextBox> ScenarioEpisodePathTextBox;
+	TObjectPtr<UEditableTextBox> ScenarioSetupPathTextBox;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UComboBoxString> PolicyDeliveryBotSetupComboBox;
@@ -267,7 +267,7 @@ private:
 	TObjectPtr<UEditableTextBox> StatusOutputPathTextBox;
 
 	UPROPERTY(Transient, meta = (BindWidget))
-	TObjectPtr<UComboBoxString> EpisodeSetupComboBox;
+	TObjectPtr<UComboBoxString> ExperimentScenarioSetupComboBox;
 
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UComboBoxString> DeliveryBotSetupComboBox;
@@ -361,7 +361,7 @@ private:
 	TArray<TObjectPtr<UExperimentResultIterationButton>> ExperimentResultIterationButtons;
 
 	FString SelectedSetupPath;
-	FString SelectedEpisodeSetupPath;
+	FString SelectedScenarioSetupPath;
 	FString SelectedDeliveryBotSetupPath;
 	FString SelectedPolicySpecJsonPath;
 	FString SelectedExperimentResultRunDirectory;

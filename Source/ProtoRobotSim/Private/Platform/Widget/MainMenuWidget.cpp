@@ -9,7 +9,7 @@
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
-#include "Platform/EpisodeEditorLaunchSubsystem.h"
+#include "Platform/ScenarioEditorLaunchSubsystem.h"
 #include "Platform/PlatformAnalysisAiSubsystem.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Platform/Widget/ExperimentResultIterationButton.h"
@@ -22,14 +22,14 @@ namespace
 	const int32 ReportPreviewCharacterLimit = 4000;
 	const int32 LogPreviewEdgeLineCount = 5;
 	const TCHAR* DefaultSimulationSetupPath = TEXT("Json/Input/SimulationSetupNew.json");
-	const TCHAR* MainMenuDefaultSimulationMapId = TEXT("EpisodeSimulationMap");
+	const TCHAR* MainMenuDefaultSimulationMapId = TEXT("ScenarioSimulationMap");
 	const TCHAR* DefaultMeasurementOutputDirectory = TEXT("Saved/AnalysisLogs");
 	const TCHAR* DefaultMeasurementFilePrefix = TEXT("MeasurementLog");
 	const TCHAR* DefaultReportOutputDirectory = TEXT("Json/Output");
 	const TCHAR* DefaultStatusOutputPath = TEXT("Saved/SimulationRuns/latest_status.json");
 	const TCHAR* MainMenuDefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	const int32 DefaultFlushIntervalTicks = 60;
-	const TCHAR* EpisodeSetupTemplatePath = TEXT("Json/Input/EpisodeSetupSample_0.json");
+	const TCHAR* ScenarioSetupTemplatePath = TEXT("Json/Input/EpisodeSetupSample_0.json");
 	const TCHAR* DeliveryBotTemplatePath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
 	const TCHAR* FileListItemWidgetBlueprintClassPath =
 		TEXT("/Game/Widgets/MainMenu/WBP_FileListItem.WBP_FileListItem_C");
@@ -468,14 +468,14 @@ void UMainMenuWidget::RefreshSetupOptions()
 	}
 	RefreshExperimentConfigList();
 
-	const TArray<FString> episodeSetupFiles = subsystem->ListEpisodeSetupFiles();
-	const FString currentEpisodeSetupPath = GetSelectedEpisodeSetupPath();
-	const FString selectedEpisodeSetupPath = episodeSetupFiles.Contains(currentEpisodeSetupPath)
-		? currentEpisodeSetupPath
-		: (episodeSetupFiles.IsEmpty() ? FString() : episodeSetupFiles[0]);
-	SetComboBoxOptions(EpisodeSetupComboBox, episodeSetupFiles, selectedEpisodeSetupPath);
-	SetComboBoxOptions(ScenarioEpisodeSetupComboBox, episodeSetupFiles, selectedEpisodeSetupPath);
-	SetSelectedEpisodeSetupPath(selectedEpisodeSetupPath);
+	const TArray<FString> scenarioSetupFiles = subsystem->ListScenarioSetupFiles();
+	const FString currentScenarioSetupPath = GetSelectedScenarioSetupPath();
+	const FString selectedScenarioSetupPath = scenarioSetupFiles.Contains(currentScenarioSetupPath)
+		? currentScenarioSetupPath
+		: (scenarioSetupFiles.IsEmpty() ? FString() : scenarioSetupFiles[0]);
+	SetComboBoxOptions(ExperimentScenarioSetupComboBox, scenarioSetupFiles, selectedScenarioSetupPath);
+	SetComboBoxOptions(ScenarioSetupComboBox, scenarioSetupFiles, selectedScenarioSetupPath);
+	SetSelectedScenarioSetupPath(selectedScenarioSetupPath);
 	RefreshScenarioList();
 
 	const TArray<FString> deliveryBotSetupFiles = subsystem->ListDeliveryBotSetupFiles();
@@ -656,12 +656,12 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 		return;
 	}
 
-	const FString episodeSetupPath = GetSelectedEpisodeSetupPath();
+	const FString scenarioSetupPath = GetSelectedScenarioSetupPath();
 	const FString deliveryBotSetupPath = GetSelectedDeliveryBotSetupPath();
 	const FString policySpecPath = GetSelectedPolicySpecPath();
-	if (episodeSetupPath.TrimStartAndEnd().IsEmpty() || deliveryBotSetupPath.TrimStartAndEnd().IsEmpty())
+	if (scenarioSetupPath.TrimStartAndEnd().IsEmpty() || deliveryBotSetupPath.TrimStartAndEnd().IsEmpty())
 	{
-		SetDiagnosticsText(TEXT("EpisodeSetup과 DeliveryBotSetup을 선택해야 합니다."));
+		SetDiagnosticsText(TEXT("ScenarioSetup과 DeliveryBotSetup을 선택해야 합니다."));
 		return;
 	}
 	if (policySpecPath.TrimStartAndEnd().IsEmpty())
@@ -669,7 +669,7 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 		SetDiagnosticsText(TEXT("PolicySpec JSON을 선택해야 합니다."));
 		return;
 	}
-	if (IsReferenceSampleJsonPath(episodeSetupPath) || IsReferenceSampleJsonPath(deliveryBotSetupPath))
+	if (IsReferenceSampleJsonPath(scenarioSetupPath) || IsReferenceSampleJsonPath(deliveryBotSetupPath))
 	{
 		SetDiagnosticsText(TEXT("샘플 JSON은 편집 가능한 SimulationSetup에 사용할 수 없습니다. 먼저 편집 가능한 시나리오/행동 정책 파일을 만드세요."));
 		return;
@@ -694,16 +694,16 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 		RunCountTextBox ? FCString::Atoi(*RunCountTextBox->GetText().ToString()) : 1);
 
 	// MainMenu edits a single scenario/policy pair plus repeat count into the SimulationSetup-owned RunQueue.
-	TArray<FEpisodeRunInput> runInputs;
+	TArray<FScenarioRunInput> runInputs;
 	runInputs.Reserve(runCount);
 	const FString pairIdBase = FPaths::GetBaseFilename(setupPath).IsEmpty()
 		? FString(TEXT("run"))
 		: FPaths::GetBaseFilename(setupPath);
 	for (int32 runIndex = 0; runIndex < runCount; ++runIndex)
 	{
-		FEpisodeRunInput runInput;
+		FScenarioRunInput runInput;
 		runInput.PairId = FString::Printf(TEXT("%s_%03d"), *pairIdBase, runIndex);
-		runInput.EpisodeSetupJsonPath = episodeSetupPath;
+		runInput.ScenarioSetupJsonPath = scenarioSetupPath;
 		runInput.DeliveryBotSetupJsonPath = deliveryBotSetupPath;
 		runInput.PolicySpecJsonPath = policySpecPath;
 		runInputs.Add(runInput);
@@ -738,18 +738,18 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 
 void UMainMenuWidget::HandleOpenEditorClicked()
 {
-	OpenScenarioInEditor(GetSelectedEpisodeSetupPath());
+	OpenScenarioInEditor(GetSelectedScenarioSetupPath());
 }
 
 void UMainMenuWidget::HandleNewScenarioClicked()
 {
-	const FString newScenarioPath = MakeUniqueInputJsonPath(TEXT("EpisodeSetupNew"));
+	const FString newScenarioPath = MakeUniqueInputJsonPath(TEXT("ScenarioSetupNew"));
 	if (!CreateScenarioFileFromTemplate(newScenarioPath))
 	{
 		return;
 	}
 
-	SetSelectedEpisodeSetupPath(newScenarioPath);
+	SetSelectedScenarioSetupPath(newScenarioPath);
 	RefreshSetupOptions();
 	SetDiagnosticsText(FString::Printf(TEXT("시나리오 생성됨: %s"), *newScenarioPath));
 }
@@ -762,7 +762,7 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 	const FString targetPath = NormalizeInputJsonPath(requestedPath);
 	if (!IsEditableInputJsonPath(sourcePath))
 	{
-		SetDiagnosticsText(TEXT("Json/Input 아래의 편집 가능한 EpisodeSetup JSON만 이름을 변경할 수 있습니다."));
+		SetDiagnosticsText(TEXT("Json/Input 아래의 편집 가능한 ScenarioSetup JSON만 이름을 변경할 수 있습니다."));
 		return;
 	}
 	if (!IsEditableInputJsonPath(targetPath))
@@ -772,7 +772,7 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 	}
 	if (sourcePath.Equals(targetPath, ESearchCase::IgnoreCase))
 	{
-		SetSelectedEpisodeSetupPath(sourcePath);
+		SetSelectedScenarioSetupPath(sourcePath);
 		RefreshScenarioList();
 		return;
 	}
@@ -792,7 +792,7 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 	}
 
 	TArray<FString> diagnostics;
-	if (!subsystem->ReplaceEpisodeSetupReferencesInRunQueues(sourcePath, targetPath, diagnostics))
+	if (!subsystem->ReplaceScenarioSetupReferencesInRunQueues(sourcePath, targetPath, diagnostics))
 	{
 		FString rollbackError;
 		if (MoveProjectRelativeFile(targetPath, sourcePath, TEXT("Scenario rollback"), rollbackError))
@@ -808,7 +808,7 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 		return;
 	}
 
-	SetSelectedEpisodeSetupPath(targetPath);
+	SetSelectedScenarioSetupPath(targetPath);
 	RefreshSetupOptions();
 	diagnostics.Insert(FString::Printf(TEXT("시나리오 이름 변경됨: %s -> %s"), *sourcePath, *targetPath), 0);
 	SetDiagnosticsText(JoinStringLines(diagnostics));
@@ -818,9 +818,9 @@ void UMainMenuWidget::HandleScenarioEditRequested(UFileListItemWidget* itemWidge
 {
 	if (!IsValid(itemWidget)) return;
 
-	const FString episodeSetupPath = itemWidget->GetOriginalPath();
-	SetSelectedEpisodeSetupPath(episodeSetupPath);
-	OpenScenarioInEditor(episodeSetupPath);
+	const FString scenarioSetupPath = itemWidget->GetOriginalPath();
+	SetSelectedScenarioSetupPath(scenarioSetupPath);
+	OpenScenarioInEditor(scenarioSetupPath);
 }
 
 void UMainMenuWidget::HandlePolicyRenameRequested(UFileListItemWidget* itemWidget, const FString& requestedPath)
@@ -1107,10 +1107,10 @@ void UMainMenuWidget::HandleExperimentConfigBackClicked()
 	SetDiagnosticsText(TEXT("SimulationSetup 목록으로 돌아왔습니다."));
 }
 
-void UMainMenuWidget::HandleScenarioEpisodeSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType)
+void UMainMenuWidget::HandleScenarioSetupSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType)
 {
 	(void)selectionType;
-	SetSelectedEpisodeSetupPath(selectedItem);
+	SetSelectedScenarioSetupPath(selectedItem);
 }
 
 void UMainMenuWidget::HandlePolicyDeliveryBotSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType)
@@ -1119,10 +1119,10 @@ void UMainMenuWidget::HandlePolicyDeliveryBotSelectionChanged(FString selectedIt
 	SetSelectedDeliveryBotSetupPath(selectedItem);
 }
 
-void UMainMenuWidget::HandleExperimentEpisodeSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType)
+void UMainMenuWidget::HandleExperimentScenarioSetupSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType)
 {
 	(void)selectionType;
-	SetSelectedEpisodeSetupPath(selectedItem);
+	SetSelectedScenarioSetupPath(selectedItem);
 }
 
 void UMainMenuWidget::HandleExperimentDeliveryBotSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType)
@@ -1199,7 +1199,7 @@ bool UMainMenuWidget::ValidateRequiredBindings() const
 	requireWidget(ExperimentResultBackButton, TEXT("ExperimentResultBackButton"));
 	requireWidget(FixedStepFpsTextBox, TEXT("FixedStepFpsTextBox"));
 	requireWidget(RunCountTextBox, TEXT("RunCountTextBox"));
-	requireWidget(EpisodeSetupComboBox, TEXT("EpisodeSetupComboBox"));
+	requireWidget(ExperimentScenarioSetupComboBox, TEXT("ExperimentScenarioSetupComboBox"));
 	requireWidget(DeliveryBotSetupComboBox, TEXT("DeliveryBotSetupComboBox"));
 	requireWidget(NewSetupButton, TEXT("NewSetupButton"));
 	requireWidget(SaveSetupButton, TEXT("SaveSetupButton"));
@@ -1279,12 +1279,12 @@ void UMainMenuWidget::BindControls()
 		SetupComboBox->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::HandleSetupSelectionChanged);
 	}
 
-	if (ScenarioEpisodeSetupComboBox)
+	if (ScenarioSetupComboBox)
 	{
-		ScenarioEpisodeSetupComboBox->OnGenerateWidgetEvent.Unbind();
-		ScenarioEpisodeSetupComboBox->OnGenerateWidgetEvent.BindDynamic(this, &UMainMenuWidget::HandleGenerateComboBoxItem);
-		ScenarioEpisodeSetupComboBox->OnSelectionChanged.RemoveDynamic(this, &UMainMenuWidget::HandleScenarioEpisodeSelectionChanged);
-		ScenarioEpisodeSetupComboBox->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::HandleScenarioEpisodeSelectionChanged);
+		ScenarioSetupComboBox->OnGenerateWidgetEvent.Unbind();
+		ScenarioSetupComboBox->OnGenerateWidgetEvent.BindDynamic(this, &UMainMenuWidget::HandleGenerateComboBoxItem);
+		ScenarioSetupComboBox->OnSelectionChanged.RemoveDynamic(this, &UMainMenuWidget::HandleScenarioSetupSelectionChanged);
+		ScenarioSetupComboBox->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::HandleScenarioSetupSelectionChanged);
 	}
 
 	if (PolicyDeliveryBotSetupComboBox)
@@ -1295,12 +1295,12 @@ void UMainMenuWidget::BindControls()
 		PolicyDeliveryBotSetupComboBox->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::HandlePolicyDeliveryBotSelectionChanged);
 	}
 
-	if (EpisodeSetupComboBox)
+	if (ExperimentScenarioSetupComboBox)
 	{
-		EpisodeSetupComboBox->OnGenerateWidgetEvent.Unbind();
-		EpisodeSetupComboBox->OnGenerateWidgetEvent.BindDynamic(this, &UMainMenuWidget::HandleGenerateComboBoxItem);
-		EpisodeSetupComboBox->OnSelectionChanged.RemoveDynamic(this, &UMainMenuWidget::HandleExperimentEpisodeSelectionChanged);
-		EpisodeSetupComboBox->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::HandleExperimentEpisodeSelectionChanged);
+		ExperimentScenarioSetupComboBox->OnGenerateWidgetEvent.Unbind();
+		ExperimentScenarioSetupComboBox->OnGenerateWidgetEvent.BindDynamic(this, &UMainMenuWidget::HandleGenerateComboBoxItem);
+		ExperimentScenarioSetupComboBox->OnSelectionChanged.RemoveDynamic(this, &UMainMenuWidget::HandleExperimentScenarioSetupSelectionChanged);
+		ExperimentScenarioSetupComboBox->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::HandleExperimentScenarioSetupSelectionChanged);
 	}
 
 	if (DeliveryBotSetupComboBox)
@@ -1408,7 +1408,7 @@ void UMainMenuWidget::LoadSelectedSetup()
 
 		// Start Run 전에 setup 계약 위반을 보여줘 simulator process를 불필요하게 띄우지 않는다.
 		TArray<FString> diagnostics;
-		for (const FEpisodeCompileDiagnostic& diagnostic : parseResult.Diagnostics)
+		for (const FScenarioCompileDiagnostic& diagnostic : parseResult.Diagnostics)
 		{
 			diagnostics.Add(FString::Printf(TEXT("%s: %s"), *diagnostic.Code, *diagnostic.Message));
 		}
@@ -1427,13 +1427,13 @@ void UMainMenuWidget::LoadSelectedSetup()
 	}
 
 	// SimulationSetup stores a generated EpisodeRunQueue path; the detail page exposes the resolved pair and run count.
-	TArray<FEpisodeRunInput> loadedRunInputs;
+	TArray<FScenarioRunInput> loadedRunInputs;
 	TArray<FString> runQueueDiagnostics;
 	if (subsystem->LoadEpisodeRunQueueFile(parseResult.Setup.RunQueueJsonPath, loadedRunInputs, runQueueDiagnostics)
 		&& !loadedRunInputs.IsEmpty())
 	{
-		const FEpisodeRunInput& firstRunInput = loadedRunInputs[0];
-		SetSelectedEpisodeSetupPath(firstRunInput.EpisodeSetupJsonPath);
+		const FScenarioRunInput& firstRunInput = loadedRunInputs[0];
+		SetSelectedScenarioSetupPath(firstRunInput.ScenarioSetupJsonPath);
 		if (DeliveryBotSetupComboBox)
 		{
 			DeliveryBotSetupComboBox->SetSelectedOption(firstRunInput.DeliveryBotSetupJsonPath);
@@ -1481,7 +1481,7 @@ void UMainMenuWidget::LoadSelectedSetup()
 	lines.Add(FString::Printf(TEXT("RunQueue: %s"), *parseResult.Setup.RunQueueJsonPath));
 	if (!loadedRunInputs.IsEmpty())
 	{
-		lines.Add(FString::Printf(TEXT("시나리오(EpisodeSetup): %s"), *loadedRunInputs[0].EpisodeSetupJsonPath));
+		lines.Add(FString::Printf(TEXT("시나리오(ScenarioSetup): %s"), *loadedRunInputs[0].ScenarioSetupJsonPath));
 		lines.Add(FString::Printf(TEXT("행동 정책(DeliveryBotSetup): %s"), *loadedRunInputs[0].DeliveryBotSetupJsonPath));
 		lines.Add(FString::Printf(
 			TEXT("PolicySpec: %s"),
@@ -1582,22 +1582,22 @@ void UMainMenuWidget::RefreshScenarioList()
 		return;
 	}
 
-	const TArray<FString> episodeSetupFiles = subsystem->ListEpisodeSetupFiles();
-	if (!episodeSetupFiles.Contains(SelectedEpisodeSetupPath))
+	const TArray<FString> scenarioSetupFiles = subsystem->ListScenarioSetupFiles();
+	if (!scenarioSetupFiles.Contains(SelectedScenarioSetupPath))
 	{
-		SetSelectedEpisodeSetupPath(episodeSetupFiles.IsEmpty() ? FString() : episodeSetupFiles[0]);
+		SetSelectedScenarioSetupPath(scenarioSetupFiles.IsEmpty() ? FString() : scenarioSetupFiles[0]);
 	}
 
 	ScenarioListScrollBox->ClearChildren();
 	ScenarioListItems.Reset();
-	ScenarioListItems.Reserve(episodeSetupFiles.Num());
+	ScenarioListItems.Reserve(scenarioSetupFiles.Num());
 
-	for (const FString& episodeSetupFile : episodeSetupFiles)
+	for (const FString& scenarioSetupFile : scenarioSetupFiles)
 	{
 		UFileListItemWidget* itemWidget = CreateWidget<UFileListItemWidget>(this, itemWidgetClass);
 		if (!itemWidget) continue;
 
-		itemWidget->InitializeItem(episodeSetupFile, TEXT("편집"), TEXT("실행"), true, true, false);
+		itemWidget->InitializeItem(scenarioSetupFile, TEXT("편집"), TEXT("실행"), true, true, false);
 		itemWidget->OnRenameRequested.AddUObject(this, &UMainMenuWidget::HandleScenarioRenameRequested);
 		itemWidget->OnPrimaryActionRequested.AddUObject(this, &UMainMenuWidget::HandleScenarioEditRequested);
 		ScenarioListScrollBox->AddChild(itemWidget);
@@ -1832,17 +1832,17 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 	}
 }
 
-void UMainMenuWidget::SetSelectedEpisodeSetupPath(const FString& episodeSetupPath)
+void UMainMenuWidget::SetSelectedScenarioSetupPath(const FString& scenarioSetupPath)
 {
-	SelectedEpisodeSetupPath = episodeSetupPath.TrimStartAndEnd();
-	SelectedEpisodeSetupPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+	SelectedScenarioSetupPath = scenarioSetupPath.TrimStartAndEnd();
+	SelectedScenarioSetupPath.ReplaceInline(TEXT("\\"), TEXT("/"));
 
-	if (ScenarioEpisodePathTextBox)
+	if (ScenarioSetupPathTextBox)
 	{
-		ScenarioEpisodePathTextBox->SetText(FText::FromString(SelectedEpisodeSetupPath));
+		ScenarioSetupPathTextBox->SetText(FText::FromString(SelectedScenarioSetupPath));
 	}
-	SyncComboBoxSelection(EpisodeSetupComboBox, SelectedEpisodeSetupPath);
-	SyncComboBoxSelection(ScenarioEpisodeSetupComboBox, SelectedEpisodeSetupPath);
+	SyncComboBoxSelection(ExperimentScenarioSetupComboBox, SelectedScenarioSetupPath);
+	SyncComboBoxSelection(ScenarioSetupComboBox, SelectedScenarioSetupPath);
 }
 
 void UMainMenuWidget::SetSelectedSetupPath(const FString& setupPath)
@@ -1905,68 +1905,68 @@ void UMainMenuWidget::ClearExperimentResultIterationWidgets()
 	}
 }
 
-bool UMainMenuWidget::CreateScenarioFileFromTemplate(const FString& episodeSetupPath)
+bool UMainMenuWidget::CreateScenarioFileFromTemplate(const FString& scenarioSetupPath)
 {
-	const FString resolvedTemplatePath = FSimulationSetupJson::ResolveProjectPath(EpisodeSetupTemplatePath);
+	const FString resolvedTemplatePath = FSimulationSetupJson::ResolveProjectPath(ScenarioSetupTemplatePath);
 	FString templateJson;
 	if (!FFileHelper::LoadFileToString(templateJson, *resolvedTemplatePath))
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("시나리오 템플릿 읽기 실패: %s"), EpisodeSetupTemplatePath));
+		SetDiagnosticsText(FString::Printf(TEXT("시나리오 템플릿 읽기 실패: %s"), ScenarioSetupTemplatePath));
 		return false;
 	}
 
-	const FString normalizedEpisodeSetupPath = NormalizeInputJsonPath(episodeSetupPath);
-	if (!IsEditableInputJsonPath(normalizedEpisodeSetupPath))
+	const FString normalizedScenarioSetupPath = NormalizeInputJsonPath(scenarioSetupPath);
+	if (!IsEditableInputJsonPath(normalizedScenarioSetupPath))
 	{
 		SetDiagnosticsText(TEXT("새 시나리오 경로는 편집 가능한 Json/Input/*.json 경로여야 합니다."));
 		return false;
 	}
 
-	const FString resolvedEpisodeSetupPath = FSimulationSetupJson::ResolveProjectPath(normalizedEpisodeSetupPath);
-	if (FPaths::FileExists(resolvedEpisodeSetupPath))
+	const FString resolvedScenarioSetupPath = FSimulationSetupJson::ResolveProjectPath(normalizedScenarioSetupPath);
+	if (FPaths::FileExists(resolvedScenarioSetupPath))
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("시나리오 파일이 이미 존재합니다: %s"), *normalizedEpisodeSetupPath));
+		SetDiagnosticsText(FString::Printf(TEXT("시나리오 파일이 이미 존재합니다: %s"), *normalizedScenarioSetupPath));
 		return false;
 	}
 
-	const FString outputDirectory = FPaths::GetPath(resolvedEpisodeSetupPath);
+	const FString outputDirectory = FPaths::GetPath(resolvedScenarioSetupPath);
 	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true)
 		|| !FFileHelper::SaveStringToFile(
 			templateJson,
-			*resolvedEpisodeSetupPath,
+			*resolvedScenarioSetupPath,
 			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("시나리오 파일 생성 실패: %s"), *resolvedEpisodeSetupPath));
+		SetDiagnosticsText(FString::Printf(TEXT("시나리오 파일 생성 실패: %s"), *resolvedScenarioSetupPath));
 		return false;
 	}
 
 	return true;
 }
 
-bool UMainMenuWidget::OpenScenarioInEditor(const FString& episodeSetupPath)
+bool UMainMenuWidget::OpenScenarioInEditor(const FString& scenarioSetupPath)
 {
-	UEpisodeEditorLaunchSubsystem* subsystem = GetEpisodeEditorLaunchSubsystem();
+	UScenarioEditorLaunchSubsystem* subsystem = GetScenarioEditorLaunchSubsystem();
 	if (!subsystem)
 	{
-		SetDiagnosticsText(TEXT("EpisodeEditorLaunchSubsystem을 사용할 수 없습니다."));
+		SetDiagnosticsText(TEXT("ScenarioEditorLaunchSubsystem을 사용할 수 없습니다."));
 		return false;
 	}
 
-	const FString normalizedEpisodeSetupPath = NormalizeInputJsonPath(episodeSetupPath);
-	if (normalizedEpisodeSetupPath.TrimStartAndEnd().IsEmpty())
+	const FString normalizedScenarioSetupPath = NormalizeInputJsonPath(scenarioSetupPath);
+	if (normalizedScenarioSetupPath.TrimStartAndEnd().IsEmpty())
 	{
-		SetDiagnosticsText(TEXT("EpisodeSetup 파일이 선택되지 않았습니다."));
+		SetDiagnosticsText(TEXT("ScenarioSetup 파일이 선택되지 않았습니다."));
 		return false;
 	}
-	if (!IsEditableInputJsonPath(normalizedEpisodeSetupPath))
+	if (!IsEditableInputJsonPath(normalizedScenarioSetupPath))
 	{
-		SetDiagnosticsText(TEXT("Json/Input 아래의 편집 가능한 EpisodeSetup JSON을 선택하세요."));
+		SetDiagnosticsText(TEXT("Json/Input 아래의 편집 가능한 ScenarioSetup JSON을 선택하세요."));
 		return false;
 	}
 
-	if (!subsystem->OpenEpisodeEditor(normalizedEpisodeSetupPath))
+	if (!subsystem->OpenScenarioEditor(normalizedScenarioSetupPath))
 	{
-		SetDiagnosticsText(TEXT("EpisodeEditorMap 열기 실패."));
+		SetDiagnosticsText(TEXT("ScenarioEditorMap 열기 실패."));
 		return false;
 	}
 
@@ -2209,23 +2209,23 @@ FString UMainMenuWidget::GetSelectedSetupPath() const
 	return SetupComboBox ? SetupComboBox->GetSelectedOption() : FString();
 }
 
-FString UMainMenuWidget::GetSelectedEpisodeSetupPath() const
+FString UMainMenuWidget::GetSelectedScenarioSetupPath() const
 {
-	if (!SelectedEpisodeSetupPath.TrimStartAndEnd().IsEmpty())
+	if (!SelectedScenarioSetupPath.TrimStartAndEnd().IsEmpty())
 	{
-		return SelectedEpisodeSetupPath;
+		return SelectedScenarioSetupPath;
 	}
 
-	if (ScenarioEpisodePathTextBox)
+	if (ScenarioSetupPathTextBox)
 	{
-		const FString episodeSetupPath = ScenarioEpisodePathTextBox->GetText().ToString().TrimStartAndEnd();
-		if (!episodeSetupPath.IsEmpty())
+		const FString scenarioSetupPath = ScenarioSetupPathTextBox->GetText().ToString().TrimStartAndEnd();
+		if (!scenarioSetupPath.IsEmpty())
 		{
-			return episodeSetupPath;
+			return scenarioSetupPath;
 		}
 	}
 
-	return EpisodeSetupComboBox ? EpisodeSetupComboBox->GetSelectedOption() : FString();
+	return ExperimentScenarioSetupComboBox ? ExperimentScenarioSetupComboBox->GetSelectedOption() : FString();
 }
 
 FString UMainMenuWidget::GetSelectedDeliveryBotSetupPath() const
@@ -2259,10 +2259,10 @@ USimulatorLaunchSubsystem* UMainMenuWidget::GetSimulatorLaunchSubsystem() const
 	return gameInstance ? gameInstance->GetSubsystem<USimulatorLaunchSubsystem>() : nullptr;
 }
 
-UEpisodeEditorLaunchSubsystem* UMainMenuWidget::GetEpisodeEditorLaunchSubsystem() const
+UScenarioEditorLaunchSubsystem* UMainMenuWidget::GetScenarioEditorLaunchSubsystem() const
 {
 	const UGameInstance* gameInstance = GetGameInstance();
-	return gameInstance ? gameInstance->GetSubsystem<UEpisodeEditorLaunchSubsystem>() : nullptr;
+	return gameInstance ? gameInstance->GetSubsystem<UScenarioEditorLaunchSubsystem>() : nullptr;
 }
 
 UPlatformAnalysisAiSubsystem* UMainMenuWidget::GetPlatformAnalysisAiSubsystem() const

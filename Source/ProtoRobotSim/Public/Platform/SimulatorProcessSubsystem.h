@@ -3,11 +3,12 @@
 #include "CoreMinimal.h"
 #include "Engine/World.h"
 #include "Shared/EpisodeConfigTypes.h"
+#include "Shared/ScenarioConfigTypes.h"
 #include "Shared/SimulationSetupTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "SimulatorProcessSubsystem.generated.h"
 
-class UEpisodeRunnerSubsystem;
+class UScenarioRunnerSubsystem;
 
 // `-Simulate=<SimulationSetupFile>` process를 감지하고 simulator bootstrap을 수행하는 subsystem
 UCLASS(BlueprintType)
@@ -44,7 +45,7 @@ public:
 	static double CalculateFixedDeltaSeconds(int32 fps);
 
 	// EpisodeRunner lifecycle 상태를 launcher polling 상태로 변환
-	static ESimulationRunState ConvertRunnerStateToRunState(EEpisodeRunnerState runnerState);
+	static ESimulationRunState ConvertRunnerStateToRunState(EScenarioRunnerState runnerState);
 
 private:
 	void HandlePostWorldInitialization(UWorld* world, const UWorld::InitializationValues initializationValues);
@@ -52,19 +53,19 @@ private:
 	void ProcessLoadedWorld(UWorld* world);
 	void QueueStartSimulationRun(UWorld* world);
 	void StartSimulationRun(UWorld* world);
-	void ConfigureRunnerSubsystem(UEpisodeRunnerSubsystem* runnerSubsystem);
-	void BindRunnerDelegates(UEpisodeRunnerSubsystem* runnerSubsystem);
+	void ConfigureRunnerSubsystem(UScenarioRunnerSubsystem* runnerSubsystem);
+	void BindRunnerDelegates(UScenarioRunnerSubsystem* runnerSubsystem);
 	void UnbindRunnerDelegates();
 	void ApplyWorldSetup(UWorld* world, bool bRestartMeasurementLog);
 	void StopMeasurementLogging(UWorld* world, const FString& closeReason);
-	void HandleRunnerStateChanged(EEpisodeRunnerState runnerState);
+	void HandleRunnerStateChanged(EScenarioRunnerState runnerState);
 	void HandleRunRecordCompleted(const FEpisodeRunRecord& runRecord);
 	void ApplyFixedStep() const;
 	void LogSetupDiagnostics(const FSimulationSetupParseResult& parseResult) const;
 	void InitializeStatus();
 	void WriteStatus(ESimulationRunState state, const FString& error = FString());
-	void WriteStatusFromRunnerState(EEpisodeRunnerState runnerState, const FString& error = FString());
-	void RefreshStatusFromRunner(const UEpisodeRunnerSubsystem* runnerSubsystem);
+	void WriteStatusFromRunnerState(EScenarioRunnerState runnerState, const FString& error = FString());
+	void RefreshStatusFromRunner(const UScenarioRunnerSubsystem* runnerSubsystem);
 	void RefreshStatusFromWorld(UWorld* world);
 
 	UPROPERTY(Transient)
@@ -98,7 +99,7 @@ private:
 	FString ActiveStatusPath;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UEpisodeRunnerSubsystem> BoundRunnerSubsystem;
+	TObjectPtr<UScenarioRunnerSubsystem> BoundRunnerSubsystem;
 
 	UPROPERTY(Transient)
 	bool bStatusInitialized = false;

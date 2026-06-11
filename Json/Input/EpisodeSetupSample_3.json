@@ -1,5 +1,5 @@
 {
-  "schema": "episode_actor_spawn_mvp",
+  "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "obstacle_chicane_slowdown_003",
   "map_id": "EpisodeSandbox",

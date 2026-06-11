@@ -8,7 +8,7 @@
 #include "EpisodeMeasurementLogSubsystem.generated.h"
 
 class UEpisodeLogSubjectRegistry;
-class UEpisodeEvaluationSubsystem;
+class UScenarioEvaluationSubsystem;
 class ADeliveryBot;
 
 /// Owns measurement log lifecycle for a PIE or game world.
@@ -79,7 +79,7 @@ private:
 	TObjectPtr<UEpisodeLogSubjectRegistry> SubjectRegistry;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UEpisodeEvaluationSubsystem> BoundEvaluationSubsystem;
+	TObjectPtr<UScenarioEvaluationSubsystem> BoundEvaluationSubsystem;
 
 	TUniquePtr<FEpisodeJsonlMeasurementWriter> Writer;
 	TArray<FEpisodeMeasurementLogDiagnostic> Diagnostics;

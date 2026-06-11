@@ -15,26 +15,26 @@ namespace
 		return FJsonSerializer::Deserialize(Reader, OutObject) && OutObject.IsValid();
 	}
 
-	FEpisodeParamValue MakeReportStringParam(const FString& Value)
+	FScenarioParamValue MakeReportStringParam(const FString& Value)
 	{
-		FEpisodeParamValue Param;
-		Param.Type = EEpisodeParamValueType::String;
+		FScenarioParamValue Param;
+		Param.Type = EScenarioParamValueType::String;
 		Param.StringValue = Value;
 		return Param;
 	}
 
-	FEpisodeParamValue MakeReportFloatParam(double Value)
+	FScenarioParamValue MakeReportFloatParam(double Value)
 	{
-		FEpisodeParamValue Param;
-		Param.Type = EEpisodeParamValueType::Float;
+		FScenarioParamValue Param;
+		Param.Type = EScenarioParamValueType::Float;
 		Param.FloatValue = Value;
 		return Param;
 	}
 
-	FEpisodeParamValue MakeReportVectorParam(const FVector& Value)
+	FScenarioParamValue MakeReportVectorParam(const FVector& Value)
 	{
-		FEpisodeParamValue Param;
-		Param.Type = EEpisodeParamValueType::Vector;
+		FScenarioParamValue Param;
+		Param.Type = EScenarioParamValueType::Vector;
 		Param.VectorValue = Value;
 		return Param;
 	}

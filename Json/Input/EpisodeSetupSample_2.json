@@ -1,5 +1,5 @@
 {
-  "schema": "episode_actor_spawn_mvp",
+  "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "two_pedestrian_near_miss_002",
   "map_id": "EpisodeSandbox",

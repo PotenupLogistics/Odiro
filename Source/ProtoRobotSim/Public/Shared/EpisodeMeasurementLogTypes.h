@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "EpisodeCoreTypes.h"
+#include "ScenarioCoreTypes.h"
 #include "EpisodeMeasurementLogTypes.generated.h"
 
 class FJsonObject;
@@ -113,11 +113,7 @@ struct PROTOROBOTSIM_API FEpisodeMeasurementLogActorInfo
 
 	/// Semantic actor category.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|MeasurementLog")
-	EEpisodeActorCategory ActorCategory = EEpisodeActorCategory::StaticObstacle;
-
-	/// Expected actor movement mode.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|MeasurementLog")
-	EEpisodeMobilityMode Mobility = EEpisodeMobilityMode::Static;
+	EScenarioActorCategory ActorCategory = EScenarioActorCategory::StaticObstacle;
 };
 
 /// Per-sample transform and velocity for an actor.
@@ -342,7 +338,7 @@ struct PROTOROBOTSIM_API FEpisodeMeasurementLogEventRecord
 
 	/// Additional event-specific properties.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|MeasurementLog")
-	TMap<FString, FEpisodeParamValue> Properties;
+	TMap<FString, FScenarioParamValue> Properties;
 };
 
 /// Final JSONL record summarizing the log session.
@@ -378,8 +374,7 @@ struct PROTOROBOTSIM_API FEpisodeMeasurementLogJson
 
 	static FString SanitizeFileToken(const FString& Value);
 	static FString ToSeverityString(EEpisodeMeasurementLogSeverity Severity);
-	static FString ToActorCategoryString(EEpisodeActorCategory Category);
-	static FString ToMobilityString(EEpisodeMobilityMode Mobility);
+	static FString ToActorCategoryString(EScenarioActorCategory Category);
 
 	static FEpisodeMeasurementLogDiagnostic MakeDiagnostic(
 		EEpisodeMeasurementLogSeverity Severity,

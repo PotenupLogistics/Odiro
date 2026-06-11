@@ -1,8 +1,8 @@
 {
-	"schema": "episode_actor_spawn_mvp",
+	"schema": "scenario_actor_spawn_mvp",
 	"version": 1,
 	"scenario_id": "playable_route_001",
-	"map_id": "EpisodeEditorMap",
+	"map_id": "ScenarioEditorMap",
 	"run":
 	{
 		"base_seed": 2001,

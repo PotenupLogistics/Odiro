@@ -6,7 +6,7 @@
 #include "EpisodeLogSubjectRegistry.generated.h"
 
 class AActor;
-class UEpisodePlaceableComponent;
+class UScenarioPlaceableComponent;
 class UWorld;
 
 /// Builds the measurement log actor table from episode placeable actors.
@@ -24,7 +24,7 @@ public:
 
 	/// Rebuilds the actor table from explicit placeable components.
 	bool BuildFromComponents(
-		const TArray<UEpisodePlaceableComponent*>& PlaceableComponents,
+		const TArray<UScenarioPlaceableComponent*>& PlaceableComponents,
 		double WorldTimeSeconds = 0.0);
 
 	/// Reports placeable actors discovered after the table was built.
@@ -32,7 +32,7 @@ public:
 
 	/// Reports explicit placeable components discovered after the table was built.
 	bool DetectNewSubjects(
-		const TArray<UEpisodePlaceableComponent*>& PlaceableComponents,
+		const TArray<UScenarioPlaceableComponent*>& PlaceableComponents,
 		double WorldTimeSeconds = 0.0);
 
 	/// Returns the stable actor table written to the log header.
@@ -58,7 +58,7 @@ private:
 	struct FSubjectCandidate
 	{
 		TWeakObjectPtr<AActor> Actor;
-		TWeakObjectPtr<UEpisodePlaceableComponent> PlaceableComponent;
+		TWeakObjectPtr<UScenarioPlaceableComponent> PlaceableComponent;
 	};
 
 	TArray<FEpisodeMeasurementLogActorInfo> ActorTable;
@@ -71,10 +71,10 @@ private:
 
 	static void CollectWorldPlaceables(
 		UWorld* World,
-		TArray<UEpisodePlaceableComponent*>& OutPlaceableComponents);
+		TArray<UScenarioPlaceableComponent*>& OutPlaceableComponents);
 
 	static bool MakeCandidate(
-		UEpisodePlaceableComponent* PlaceableComponent,
+		UScenarioPlaceableComponent* PlaceableComponent,
 		FSubjectCandidate& OutCandidate);
 
 	void AddDiagnostic(

@@ -1,6 +1,8 @@
 
 #include "Episode/Actors/EpisodeGroundRegion.h"
 
+#include "Episode/Components/EpisodePlaceableComponent.h"
+
 namespace
 {
 	const FName WalkableRegionCollisionProfileName{ TEXT("Walkable") };
@@ -47,6 +49,17 @@ AEpisodeGroundRegion::AEpisodeGroundRegion()
 	RegionBoundsComponent->SetGenerateOverlapEvents(false);
 	RegionBoundsComponent->SetMobility(EComponentMobility::Movable);
 
+	PlaceableComponent = CreateDefaultSubobject<UEpisodePlaceableComponent>(TEXT("PlaceableComponent"));
+	PlaceableComponent->Category = EEpisodeActorCategory::GroundRegion;
+	PlaceableComponent->MobilityMode = EEpisodeMobilityMode::Static;
+	PlaceableComponent->AuthoringRole = EEpisodePlaceableAuthoringRole::Generic;
+	PlaceableComponent->bAuthoringSelectable = true;
+	PlaceableComponent->bAuthoringRenamable = false;
+	PlaceableComponent->bAuthoringDeletable = true;
+	PlaceableComponent->bAuthoringAllowLocationEdit = true;
+	PlaceableComponent->bAuthoringAllowRotationEdit = true;
+	PlaceableComponent->bAuthoringAllowScaleEdit = false;
+
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> cubeMeshAsset(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (cubeMeshAsset.Succeeded())
 	{
@@ -86,6 +99,11 @@ void AEpisodeGroundRegion::ConfigureRegion(const FEpisodeGroundRegionSpec& inReg
 	RegionSpec = inRegionSpec;
 	RegionSpec.Size.X = FMath::Max(RegionSpec.Size.X, 1.0);
 	RegionSpec.Size.Y = FMath::Max(RegionSpec.Size.Y, 1.0);
+
+	if (PlaceableComponent)
+	{
+		PlaceableComponent->InstanceId = RegionSpec.RegionId;
+	}
 
 	SetActorLocation(RegionSpec.Center);
 	SetActorRotation(FRotator(0.0, RegionSpec.YawDegrees, 0.0));

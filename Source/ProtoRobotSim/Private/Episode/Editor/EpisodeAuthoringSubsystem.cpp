@@ -847,6 +847,84 @@ bool UEpisodeAuthoringSubsystem::AddGroundRegion(
 	return true;
 }
 
+bool UEpisodeAuthoringSubsystem::UpdateGroundRegionTransform(
+	const FString& regionId,
+	const FTransform& transform,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+
+	if (regionId.IsEmpty())
+	{
+		outFailureReason = TEXT("Ground region id is empty.");
+		return false;
+	}
+
+	FEpisodeGroundRegionSpec* regionSpec = DraftWorldSpec.GroundRegions.FindByPredicate(
+		[&regionId](const FEpisodeGroundRegionSpec& spec)
+		{
+			return spec.RegionId == regionId;
+		});
+	if (!regionSpec)
+	{
+		outFailureReason = FString::Printf(TEXT("Ground region spec '%s' was not found."), *regionId);
+		return false;
+	}
+
+	// 이동(Center)과 yaw 회전만 반영하고 Size는 보존함.
+	regionSpec->Center = transform.GetLocation();
+	regionSpec->YawDegrees = transform.GetRotation().Rotator().Yaw;
+
+	if (const TObjectPtr<AEpisodeGroundRegion>* actorPtr = GroundRegionActors.Find(regionId))
+	{
+		if (AEpisodeGroundRegion* actor = actorPtr->Get())
+		{
+			actor->ConfigureRegion(*regionSpec);
+		}
+	}
+
+	DraftWorldSpec.SpecHash.Reset();
+	bDirty = true;
+	return true;
+}
+
+bool UEpisodeAuthoringSubsystem::RemoveGroundRegion(
+	const FString& regionId,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+
+	if (regionId.IsEmpty())
+	{
+		outFailureReason = TEXT("Ground region id is empty.");
+		return false;
+	}
+
+	const int32 removedSpecCount = DraftWorldSpec.GroundRegions.RemoveAll(
+		[&regionId](const FEpisodeGroundRegionSpec& spec)
+		{
+			return spec.RegionId == regionId;
+		});
+	if (removedSpecCount <= 0)
+	{
+		outFailureReason = FString::Printf(TEXT("Ground region spec '%s' was not found."), *regionId);
+		return false;
+	}
+
+	TObjectPtr<AEpisodeGroundRegion> actorPtr;
+	GroundRegionActors.RemoveAndCopyValue(regionId, actorPtr);
+	if (AEpisodeGroundRegion* actor = actorPtr.Get())
+	{
+		actor->Destroy();
+	}
+
+	DraftWorldSpec.SpecHash.Reset();
+	bDirty = true;
+
+	UE_LOG(LogEpisodeAuthoring, Log, TEXT("Removed ground region | RegionId: %s"), *regionId);
+	return true;
+}
+
 FEpisodeGroundRegionSpec UEpisodeAuthoringSubsystem::MakeGroundRegionSpec(
 	const FString& regionId,
 	EEpisodeGroundRegionType regionType,

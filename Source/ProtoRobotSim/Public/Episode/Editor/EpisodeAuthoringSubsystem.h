@@ -170,6 +170,18 @@ public:
 		FEpisodeGroundRegionSpec& outSpec,
 		FString& outFailureReason);
 
+	// gizmo 편집 결과(이동·yaw 회전)를 region spec의 Center/YawDegrees에 반영함. Size는 불변.
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	bool UpdateGroundRegionTransform(
+		const FString& regionId,
+		const FTransform& transform,
+		FString& outFailureReason);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	bool RemoveGroundRegion(
+		const FString& regionId,
+		FString& outFailureReason);
+
 	bool AddStaticObstacleInternal(
 		FName propId,
 		const FTransform& transform,

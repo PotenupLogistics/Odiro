@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Episode/Editor/EpisodeEditorTypes.h"
+#include "Episode/Widget/EpisodeEditorRootWidget.h"
 #include "GameFramework/PlayerController.h"
 #include "Shared/EpisodeCoreTypes.h"
 #include "Shared/EpisodeSpecTypes.h"
@@ -145,6 +146,15 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor")
 	void ToggleEditorViewMode();
+
+	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Placement")
+	bool IsPlacementSnapToGridEnabled() const { return bSnapPlacementToGrid; }
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	void SetPlacementSnapToGridEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Placement")
+	void TogglePlacementSnapToGrid();
 
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Gizmo")
 	EEpisodeTransformGizmoMode GetTransformGizmoMode() const { return TransformGizmoMode; }

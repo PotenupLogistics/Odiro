@@ -8,6 +8,7 @@ enum class EEpisodeEditorViewMode : uint8;
 
 class UButton;
 class USizeBox;
+class UTextBlock;
 class UEpisodeAssetPaletteWidget;
 class UEpisodeEditorToolbarWidget;
 class UEpisodeLlmPromptWidget;
@@ -45,6 +46,12 @@ public:
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
 	TObjectPtr<UButton> PerspectiveModeButton;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	TObjectPtr<UButton> SnapPlacementToGridButton;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
+	TObjectPtr<UTextBlock> SnapPlacementToGridButtonText;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Episode|Editor|Root")
 	TObjectPtr<UWidget> PlaceableContextMenuPanel;
@@ -86,6 +93,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Root")
 	void RefreshViewModeButtons();
 
+	UFUNCTION(BlueprintCallable, Category = "Episode|Editor|Root")
+	void RefreshPlacementSnapButton();
+
 	UFUNCTION(BlueprintPure, Category = "Episode|Editor|Root")
 	UEpisodeAssetPaletteWidget* GetAssetPaletteWidget() const { return AssetPaletteWidget.Get(); }
 
@@ -102,8 +112,11 @@ private:
 	UFUNCTION()
 	void HandlePerspectiveModeButtonClicked();
 
-	void BindViewModeButtons();
-	void UnbindViewModeButtons();
+	UFUNCTION()
+	void HandleSnapPlacementToGridButtonClicked();
+
+	void BindEditorModeButtons();
+	void UnbindEditorModeButtons();
 	class AEpisodeEditorController* GetEditorController() const;
 
 	void BindEditorLaunchSubsystem();
@@ -121,4 +134,6 @@ private:
 	// keyboard toggle 등 외부 변경과 버튼 표시를 동기화하기 위한 최근 view mode 캐시.
 	EEpisodeEditorViewMode LastSeenViewMode = static_cast<EEpisodeEditorViewMode>(0);
 	bool bHasCachedViewMode = false;
+	bool bLastSeenPlacementSnapToGrid = false;
+	bool bHasCachedPlacementSnapToGrid = false;
 };

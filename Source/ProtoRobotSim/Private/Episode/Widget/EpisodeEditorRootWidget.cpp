@@ -1,6 +1,7 @@
 #include "Episode/Widget/EpisodeEditorRootWidget.h"
 
 #include "Components/Button.h"
+#include "Components/TextBlock.h"
 #include "Components/Widget.h"
 #include "Episode/Components/EpisodePlaceableComponent.h"
 #include "Episode/Editor/EpisodeEditorController.h"
@@ -23,14 +24,15 @@ void UEpisodeEditorRootWidget::NativeConstruct()
 	HidePlaceableContextMenu();
 	HideAssetPaletteWidget();
 	SetLlmPanelVisible(false);
-	BindViewModeButtons();
+	BindEditorModeButtons();
 	RefreshViewModeButtons();
+	RefreshPlacementSnapButton();
 	BindEditorLaunchSubsystem();
 }
 
 void UEpisodeEditorRootWidget::NativeDestruct()
 {
-	UnbindViewModeButtons();
+	UnbindEditorModeButtons();
 	UnbindEditorLaunchSubsystem();
 	Super::NativeDestruct();
 }
@@ -50,6 +52,12 @@ void UEpisodeEditorRootWidget::NativeTick(const FGeometry& myGeometry, const flo
 		if (!bHasCachedViewMode || controller->GetEditorViewMode() != LastSeenViewMode)
 		{
 			RefreshViewModeButtons();
+		}
+
+		if (!bHasCachedPlacementSnapToGrid
+			|| controller->IsPlacementSnapToGridEnabled() != bLastSeenPlacementSnapToGrid)
+		{
+			RefreshPlacementSnapButton();
 		}
 	}
 }
@@ -138,6 +146,36 @@ void UEpisodeEditorRootWidget::RefreshViewModeButtons()
 	}
 }
 
+void UEpisodeEditorRootWidget::RefreshPlacementSnapButton()
+{
+	const AEpisodeEditorController* controller = GetEditorController();
+	if (!controller)
+	{
+		return;
+	}
+
+	const bool bSnapEnabled = controller->IsPlacementSnapToGridEnabled();
+	bLastSeenPlacementSnapToGrid = bSnapEnabled;
+	bHasCachedPlacementSnapToGrid = true;
+
+	if (SnapPlacementToGridButton)
+	{
+		SnapPlacementToGridButton->SetRenderOpacity(bSnapEnabled ? 1.0f : 0.55f);
+		SnapPlacementToGridButton->SetToolTipText(
+			bSnapEnabled
+				? FText::FromString(TEXT("Disable placement grid snap"))
+				: FText::FromString(TEXT("Enable placement grid snap")));
+	}
+
+	if (SnapPlacementToGridButtonText)
+	{
+		SnapPlacementToGridButtonText->SetText(
+			bSnapEnabled
+				? FText::FromString(TEXT("Snap On"))
+				: FText::FromString(TEXT("Snap Off")));
+	}
+}
+
 void UEpisodeEditorRootWidget::HandleTopDownOrthoModeButtonClicked()
 {
 	if (AEpisodeEditorController* controller = GetEditorController())
@@ -156,7 +194,16 @@ void UEpisodeEditorRootWidget::HandlePerspectiveModeButtonClicked()
 	}
 }
 
-void UEpisodeEditorRootWidget::BindViewModeButtons()
+void UEpisodeEditorRootWidget::HandleSnapPlacementToGridButtonClicked()
+{
+	if (AEpisodeEditorController* controller = GetEditorController())
+	{
+		controller->TogglePlacementSnapToGrid();
+		RefreshPlacementSnapButton();
+	}
+}
+
+void UEpisodeEditorRootWidget::BindEditorModeButtons()
 {
 	if (TopDownOrthoModeButton)
 	{
@@ -172,9 +219,16 @@ void UEpisodeEditorRootWidget::BindViewModeButtons()
 		PerspectiveModeButton->OnClicked.AddDynamic(
 			this, &UEpisodeEditorRootWidget::HandlePerspectiveModeButtonClicked);
 	}
+	if (SnapPlacementToGridButton)
+	{
+		SnapPlacementToGridButton->OnClicked.RemoveDynamic(
+			this, &UEpisodeEditorRootWidget::HandleSnapPlacementToGridButtonClicked);
+		SnapPlacementToGridButton->OnClicked.AddDynamic(
+			this, &UEpisodeEditorRootWidget::HandleSnapPlacementToGridButtonClicked);
+	}
 }
 
-void UEpisodeEditorRootWidget::UnbindViewModeButtons()
+void UEpisodeEditorRootWidget::UnbindEditorModeButtons()
 {
 	if (TopDownOrthoModeButton)
 	{
@@ -185,6 +239,11 @@ void UEpisodeEditorRootWidget::UnbindViewModeButtons()
 	{
 		PerspectiveModeButton->OnClicked.RemoveDynamic(
 			this, &UEpisodeEditorRootWidget::HandlePerspectiveModeButtonClicked);
+	}
+	if (SnapPlacementToGridButton)
+	{
+		SnapPlacementToGridButton->OnClicked.RemoveDynamic(
+			this, &UEpisodeEditorRootWidget::HandleSnapPlacementToGridButtonClicked);
 	}
 }
 

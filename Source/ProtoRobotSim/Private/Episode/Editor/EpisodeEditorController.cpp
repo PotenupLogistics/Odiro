@@ -41,7 +41,8 @@ namespace
 		case EEpisodeTransformGizmoMode::Rotate:
 			return placeableComponent->bAuthoringAllowRotationEdit;
 		case EEpisodeTransformGizmoMode::Scale:
-			return placeableComponent->bAuthoringAllowScaleEdit;
+			// scale은 gizmo로 동작하는 핸들이 없으므로 모드 진입 자체를 막음(빈 gizmo 방지).
+			return false;
 		default:
 			return false;
 		}
@@ -247,6 +248,16 @@ void AEpisodeEditorController::ToggleEditorViewMode()
 		EditorViewMode == EEpisodeEditorViewMode::Perspective
 			? EEpisodeEditorViewMode::TopDownOrtho
 			: EEpisodeEditorViewMode::Perspective);
+}
+
+void AEpisodeEditorController::SetPlacementSnapToGridEnabled(const bool bEnabled)
+{
+	bSnapPlacementToGrid = bEnabled;
+}
+
+void AEpisodeEditorController::TogglePlacementSnapToGrid()
+{
+	SetPlacementSnapToGridEnabled(!bSnapPlacementToGrid);
 }
 
 void AEpisodeEditorController::RequestEditorWidgetInputMode(UWidget* focusWidget)
@@ -844,6 +855,13 @@ bool AEpisodeEditorController::TryUpdateSelectedPlaceableTransform(
 			requestedTransform,
 			outFailureReason);
 	}
+	else if (selectedPlaceable->Category == EEpisodeActorCategory::GroundRegion)
+	{
+		bUpdated = authoringSubsystem->UpdateGroundRegionTransform(
+			selectedPlaceable->InstanceId,
+			requestedTransform,
+			outFailureReason);
+	}
 	else if (selectedPlaceable->AuthoringRole == EEpisodePlaceableAuthoringRole::RobotStartMarker)
 	{
 		bUpdated = authoringSubsystem->UpdateRobotStartPointTransform(requestedTransform, outFailureReason);
@@ -932,8 +950,12 @@ bool AEpisodeEditorController::DeleteSelectedPlaceable(FString& outFailureReason
 	}
 
 	const FString instanceId = selectedPlaceable->InstanceId;
+	const bool bIsGroundRegion = selectedPlaceable->Category == EEpisodeActorCategory::GroundRegion;
 	selectedPlaceable->SetAuthoringSelected(false);
-	if (!authoringSubsystem->RemoveStaticObstacle(instanceId, outFailureReason))
+	const bool bRemoved = bIsGroundRegion
+		? authoringSubsystem->RemoveGroundRegion(instanceId, outFailureReason)
+		: authoringSubsystem->RemoveStaticObstacle(instanceId, outFailureReason);
+	if (!bRemoved)
 	{
 		selectedPlaceable->SetAuthoringSelected(true);
 		return false;
@@ -1684,6 +1706,13 @@ bool AEpisodeEditorController::ApplyTransformGizmoDragTransform(const FTransform
 			requestedTransform,
 			failureReason);
 	}
+	else if (draggedPlaceable->Category == EEpisodeActorCategory::GroundRegion)
+	{
+		bUpdated = authoringSubsystem->UpdateGroundRegionTransform(
+			ActiveTransformGizmoInstanceId,
+			requestedTransform,
+			failureReason);
+	}
 	else if (draggedPlaceable->AuthoringRole == EEpisodePlaceableAuthoringRole::RobotStartMarker)
 	{
 		bUpdated = authoringSubsystem->UpdateRobotStartPointTransform(requestedTransform, failureReason);
@@ -1809,6 +1838,7 @@ bool AEpisodeEditorController::IsEditorSelectablePlaceable(const UEpisodePlaceab
 	return placeableComponent
 		&& placeableComponent->bAuthoringSelectable
 		&& (placeableComponent->Category == EEpisodeActorCategory::StaticObstacle
+			|| placeableComponent->Category == EEpisodeActorCategory::GroundRegion
 			|| IsRobotRouteMarkerPlaceable(placeableComponent));
 }
 

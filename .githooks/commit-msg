@@ -1,0 +1,98 @@
+#!/bin/sh
+
+message_file=$1
+
+print_help() {
+  cat >&2 <<'EOF'
+Invalid commit message.
+
+Expected:
+  <type>: <imperative summary>
+  <type>(<scope>): <imperative summary>
+
+Allowed types:
+  feat, fix, refactor, test, spec, plan, docs, asset, build, ci, chore
+
+Recommended scopes:
+  client, service, agents, contract, tool, docs, ui, sample, git
+
+Rules:
+  - subject must be 72 characters or less
+  - subject must not end with a period
+  - body, if present, must start after one blank line
+  - scope, if present, must be lowercase kebab-case
+  - unknown scopes warn but do not block commits
+
+Examples:
+  docs: define project file naming rules
+  chore(git): enforce commit message format
+  spec(contract): define episode setup schema
+  asset(sample): add default pathfinding policy
+  refactor(docs): move migration procedure into plan
+EOF
+}
+
+fail() {
+  echo "commit-msg: $1" >&2
+  echo >&2
+  print_help
+  exit 1
+}
+
+if [ -z "$message_file" ] || [ ! -f "$message_file" ]; then
+  fail "message file is missing"
+fi
+
+clean_message=$(sed 's/\r$//' "$message_file" | sed '/^#/d')
+subject=$(printf '%s\n' "$clean_message" | sed -n '1p')
+second_line=$(printf '%s\n' "$clean_message" | sed -n '2p')
+line_count=$(printf '%s\n' "$clean_message" | wc -l | tr -d ' ')
+
+if [ -z "$subject" ]; then
+  fail "subject is empty"
+fi
+
+case "$subject" in
+  Merge\ *|Revert\ \"*)
+    exit 0
+    ;;
+esac
+
+if ! printf '%s' "$subject" | grep -Eq '^(feat|fix|refactor|test|spec|plan|docs|asset|build|ci|chore)(\([a-z0-9][a-z0-9-]*\))?: [^[:space:]]'; then
+  fail "subject must match '<type>: <summary>' or '<type>(<scope>): <summary>'"
+fi
+
+scope=$(printf '%s\n' "$subject" | sed -n 's/^[a-z][a-z]*(\([a-z0-9][a-z0-9-]*\)): .*/\1/p')
+known_scopes="client service agents contract tool docs ui sample git"
+
+if [ -n "$scope" ]; then
+  case " $known_scopes " in
+    *" $scope "*)
+      ;;
+    *)
+      echo "commit-msg: warning: unknown scope '$scope'" >&2
+      echo "commit-msg: known scopes: $known_scopes" >&2
+      ;;
+  esac
+fi
+
+subject_length=$(printf '%s' "$subject" | wc -m | tr -d ' ')
+if [ "$subject_length" -gt 72 ]; then
+  fail "subject is longer than 72 characters"
+fi
+
+case "$subject" in
+  *.)
+    fail "subject must not end with a period"
+    ;;
+esac
+
+if printf '%s' "$subject" | grep -Eiq '(^|[[:space:]:])(wip|todo|tmp)($|[[:space:]])'; then
+  fail "subject must not contain WIP, TODO, or TMP"
+fi
+
+if [ "$line_count" -gt 1 ] && [ -n "$second_line" ]; then
+  fail "body must be separated from subject by a blank line"
+fi
+
+exit 0

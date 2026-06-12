@@ -25,6 +25,10 @@
 | Shared | Episode, Simulation, DeliveryBot 사이의 공유 타입, 실행 설정, 리플레이, 측정 로그, 시나리오 스펙 |
 
 ## Scripts
+- `BuildProject.bat`: PowerShell/Rider/Visual Studio 없이 UnrealBuildTool로 프로젝트 빌드
+  - 기본값: `ProtoRobotSimEditor Win64 Development`
+  - 예: `BuildProject.bat -Target Game -Configuration Development`
+  - `UE_ENGINE_DIR`, `UE_EDITOR_EXE`, `PATH`, `ProtoRobotSim.uproject`의 `EngineAssociation` 순서로 로컬 Unreal Engine 경로 탐색
 - `RunPreview.bat`: 패키징 프리뷰 (`UnrealEditor.exe <uproject> -game -NoSplash`)
   - `-Simulate=<SimulationSetupFile> -RunId=<RunId>` 로 시뮬레이터 실행
 - `RunPythonPolicyServer.bat`: 로봇의 정책 실현 서버 `Tools\PythonPolicyServer\server.py`를 `127.0.0.1:8000`에서 runtime policy mode로 실행한다.

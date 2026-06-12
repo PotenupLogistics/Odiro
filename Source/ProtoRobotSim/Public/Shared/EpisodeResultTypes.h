@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "ScenarioConfigTypes.h"
-#include "EpisodeConfigTypes.generated.h"
+#include "EpisodeResultTypes.generated.h"
 
 UENUM(BlueprintType)
 enum class EEpisodeEvaluationOutcome : uint8

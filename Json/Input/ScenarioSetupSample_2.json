@@ -2,7 +2,7 @@
   "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "two_pedestrian_near_miss_002",
-  "map_id": "EpisodeSandbox",
+  "map_id": "ScenarioEditorMap",
   "run": {
     "base_seed": 1002,
     "iteration_index": 2,

@@ -1,12 +1,12 @@
 {
   "schema": "scenario_actor_spawn_mvp",
   "version": 1,
-  "scenario_id": "sensor_route_layout_004",
-  "map_id": "EpisodeSandbox",
+  "scenario_id": "sidewalk_baseline_tuned_000",
+  "map_id": "ScenarioEditorMap",
   "run": {
-    "base_seed": 1004,
-    "iteration_index": 4,
-    "time_limit_s": 45
+    "base_seed": 1000,
+    "iteration_index": 0,
+    "time_limit_s": 60
   },
   "evaluation": {
     "goal_acceptance_radius_m": 1,
@@ -26,23 +26,39 @@
     "default_region_type": "walkable",
     "regions": [
       {
-        "region_id": "sensor_test_pad",
+        "region_id": "sidewalk_main",
         "region_type": "walkable",
         "shape": {
           "type": "rectangle",
           "center_xy_m": [0, 0],
-          "size_m": [10, 8],
+          "size_m": [12, 8],
           "yaw_deg": 0
         },
         "traversability_score": 1
       },
       {
-        "region_id": "rear_blocked_wall",
+        "region_id": "road_penalty",
+        "region_type": "penalty",
+        "shape": {
+          "type": "rectangle",
+          "center_xy_m": [0, 5.5],
+          "size_m": [12, 3],
+          "yaw_deg": 0
+        },
+        "penalty": {
+          "kind": "sidewalk_departure",
+          "cost": 5,
+          "violation_after_s": 0.25
+        },
+        "traversability_score": 0.6
+      },
+      {
+        "region_id": "building_edge",
         "region_type": "blocked",
         "shape": {
           "type": "rectangle",
-          "center_xy_m": [0, -4.8],
-          "size_m": [10, 1.2],
+          "center_xy_m": [0, -5],
+          "size_m": [12, 2],
           "yaw_deg": 0
         },
         "collision_tag": "wall"
@@ -51,10 +67,10 @@
   },
   "paths": [
     {
-      "path_id": "ped_static_observer",
+      "path_id": "ped_crossing_01",
       "points_xy_m": [
-        [-4, 3],
-        [4, 3]
+        [-2.5, -3],
+        [2.5, 3]
       ],
       "closed_loop": false
     }
@@ -62,47 +78,41 @@
   "actors": {
     "static_obstacles": [
       {
-        "instance_id": "cone_sensor_01",
-        "prop_id": "obstacle.road_cone_01",
-        "xy_m": [1.2, 0],
-        "yaw_deg": 0
+        "instance_id": "bin_01",
+        "prop_id": "obstacle.bin",
+        "xy_m": [3.4, 0.7],
+        "yaw_deg": 15
       },
       {
-        "instance_id": "hydrant_sensor_01",
-        "prop_id": "obstacle.fire_hydrant",
-        "xy_m": [2.5, 1.2],
-        "yaw_deg": 20
-      },
-      {
-        "instance_id": "trash_sensor_01",
-        "prop_id": "obstacle.trash_bin",
-        "xy_m": [-2, -1],
-        "yaw_deg": -10
+        "instance_id": "barrier_01",
+        "prop_id": "obstacle.road_barrier_01",
+        "xy_m": [-1.7, -0.5],
+        "yaw_deg": 90
       }
     ],
     "pedestrians": [
       {
-        "instance_id": "ped_observer_01",
+        "instance_id": "ped_01",
         "archetype_id": "adult_pedestrian",
-        "path_id": "ped_static_observer",
-        "xy_m": [-4, 3],
-        "yaw_deg": 0,
+        "path_id": "ped_crossing_01",
+        "xy_m": [-2.5, -3],
+        "yaw_deg": 50,
         "movement": {
           "model": "straight_line",
-          "speed_mps": 0.7,
+          "speed_mps": 1.2,
           "initial_distance_m": 0,
-          "auto_start": false
+          "auto_start": true
         }
       }
     ],
     "robot": {
-      "instance_id": "robot_sensor_route",
+      "instance_id": "robot_01",
       "asset_id": "delivery_bot",
       "spawn_only": false,
-      "xy_m": [-4, -2.8],
+      "xy_m": [-5, 0],
       "yaw_deg": 0,
       "route": {
-        "goal_xy_m": [4, -2.8],
+        "goal_xy_m": [5, 0],
         "auto_start": true
       }
     }

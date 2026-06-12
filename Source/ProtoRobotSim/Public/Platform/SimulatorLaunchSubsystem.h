@@ -78,9 +78,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
 	TArray<FString> ListPolicySpecFiles() const;
 
-	// Json/Input 아래에서 EpisodeRunQueue 계약으로 읽히는 JSON 파일 목록
+	// Json/Input 아래에서 ScenarioRunQueue 계약으로 읽히는 JSON 파일 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
-	TArray<FString> ListEpisodeRunQueueFiles() const;
+	TArray<FString> ListScenarioRunQueueFiles() const;
 
 	// Json/Output 아래 evaluation report JSON 후보 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
@@ -112,13 +112,13 @@ public:
 	bool SaveSimulationSetupFile(const FString& setupPath, const FSimulationSetup& setup, TArray<FString>& outDiagnostics) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
-	bool LoadEpisodeRunQueueFile(
+	bool LoadScenarioRunQueueFile(
 		const FString& runQueuePath,
 		TArray<FScenarioRunInput>& outRunInputs,
 		TArray<FString>& outDiagnostics) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
-	bool SaveEpisodeRunQueueFile(
+	bool SaveScenarioRunQueueFile(
 		const FString& runQueuePath,
 		const TArray<FScenarioRunInput>& runInputs,
 		TArray<FString>& outDiagnostics) const;
@@ -186,12 +186,12 @@ public:
 		const FString& setupPath,
 		const FString& runId);
 
-	static bool TryReadEpisodeRunQueueJson(
+	static bool TryReadScenarioRunQueueJson(
 		const FString& jsonString,
 		TArray<FScenarioRunInput>& outRunInputs,
 		TArray<FString>& outDiagnostics);
 
-	static bool TryWriteEpisodeRunQueueJson(
+	static bool TryWriteScenarioRunQueueJson(
 		const TArray<FScenarioRunInput>& runInputs,
 		FString& outJson,
 		TArray<FString>& outDiagnostics);

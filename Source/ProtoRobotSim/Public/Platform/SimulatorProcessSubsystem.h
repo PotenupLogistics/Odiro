@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/World.h"
-#include "Shared/EpisodeConfigTypes.h"
+#include "Shared/EpisodeResultTypes.h"
 #include "Shared/ScenarioConfigTypes.h"
 #include "Shared/SimulationSetupTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"

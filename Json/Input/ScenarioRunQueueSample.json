@@ -4,31 +4,31 @@
   "runs": [
     {
       "pair_id": "sample_0",
-      "scenario_setup": "Json/Input/EpisodeSetupSample_0.json",
+      "scenario_setup": "Json/Input/ScenarioSetupSample_0.json",
       "delivery_bot_setup": "Json/Input/DeliveryBotSetupSample_0.json",
       "policy_spec": "Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json"
     },
     {
       "pair_id": "sample_1",
-      "scenario_setup": "Json/Input/EpisodeSetupSample_1.json",
+      "scenario_setup": "Json/Input/ScenarioSetupSample_1.json",
       "delivery_bot_setup": "Json/Input/DeliveryBotSetupSample_1.json",
       "policy_spec": "Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json"
     },
     {
       "pair_id": "sample_2",
-      "scenario_setup": "Json/Input/EpisodeSetupSample_2.json",
+      "scenario_setup": "Json/Input/ScenarioSetupSample_2.json",
       "delivery_bot_setup": "Json/Input/DeliveryBotSetupSample_2.json",
       "policy_spec": "Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json"
     },
     {
       "pair_id": "sample_3",
-      "scenario_setup": "Json/Input/EpisodeSetupSample_3.json",
+      "scenario_setup": "Json/Input/ScenarioSetupSample_3.json",
       "delivery_bot_setup": "Json/Input/DeliveryBotSetupSample_3.json",
       "policy_spec": "Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json"
     },
     {
       "pair_id": "sample_4",
-      "scenario_setup": "Json/Input/EpisodeSetupSample_4.json",
+      "scenario_setup": "Json/Input/ScenarioSetupSample_4.json",
       "delivery_bot_setup": "Json/Input/DeliveryBotSetupSample_4.json",
       "policy_spec": "Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json"
     }

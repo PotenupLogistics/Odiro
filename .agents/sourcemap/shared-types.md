@@ -3,15 +3,16 @@
 Covers: `Source/ProtoRobotSim/Public/Shared`, `Source/ProtoRobotSim/Private/Shared`
 
 ## Entry Points
-- `EpisodeCoreTypes.h`: shared episode enums and parameter values
-- `EpisodeSpecTypes.h`: compiled world, ground, path, actor, and event specs
-- `EpisodeCompileTypes.h`: compiler diagnostics and result wrapper
-- `EpisodeConfigTypes.h`: run config, seed ledger, runner records, saved report path
-- `EpisodeReplayTypes.h` and `.cpp`: replay settings, actor info, frame/header/footer records
-- `SimulationSetupTypes.h` and `.cpp`: launcher/simulator shared simulation setup, run status, status JSON reader/writer, and command-line contract types
-- `ScenarioSpecTypes.h`: scenario authoring structs
-- `Struct/`: delivery bot pathing, movement, drive, and legacy replay structs
+- `ScenarioCoreTypes.h`: shared scenario enums, `FScenarioParamValue` variant, static obstacle prop entry
+- `ScenarioSpecTypes.h`: compiled world/ground/path/actor/event specs (`FScenarioWorldSpec`, `FScenarioSimulationSetupSpec`)
+- `ScenarioCompileTypes.h`: compiler diagnostics and result wrapper (`FScenarioCompileResult`)
+- `ScenarioConfigTypes.h`: run config (template id/version, generator version, base seed, iteration), seed ledger, evaluation config, runner state
+- `ScenarioPedestrianPlanTypes.h`: pedestrian plan points/reservations, behavior params, path shape params, plan hash fields
+- `EpisodeConfigTypes.h`: episode evaluation outcome/event/result, `FEpisodeRunRecord` (see episode.md)
+- `EpisodeMeasurementLogTypes.h`, `EpisodeJsonlMeasurementWriter.h`, `EpisodeLogSubjectRegistry.h`, `EpisodeEvaluationReportJson.h`: episode-scoped logging and report (see episode.md)
+- `SimulationSetupTypes.h` and `.cpp`: launcher/simulator shared simulation setup, run status JSON reader/writer, command-line contract types
+- `Struct/`: delivery bot pathing, movement, drive, policy, observation structs
 
 ## Notes
-- Surface: `FEpisodeWorldSpec`, `FEpisodeCompileResult`, `FEpisodeRunConfig`, `FEpisodeReplay*`, `FSimulationSetup`, `FSimulationRunStatus`, `FScenarioSpec`, `FDeliveryBot*`
-- Prefer adding focused structs here over coupling Delivery Bot and Episode headers directly
+- Surface: `FScenarioWorldSpec`, `FScenarioCompileResult`, `FScenarioRunConfig`, `FScenarioPedestrianPlan`, `FEpisodeEvaluationResult`, `FEpisodeRunRecord`, `FSimulationSetup`, `FSimulationRunStatus`, `FDeliveryBot*`
+- Prefer adding focused structs here over coupling Delivery Bot and Scenario headers directly

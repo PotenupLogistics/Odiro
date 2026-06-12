@@ -45,7 +45,7 @@ bool UScenarioLlmPromptWidget::GenerateFromPromptTextBox()
 	if (!TryGetScenarioCount(scenarioCount)) return false;
 
 	SetStatusText(TEXT("생성 요청 중."));
-	return llmSubsystem->GenerateEpisodeFromPrompt(prompt, scenarioCount);
+	return llmSubsystem->GenerateScenariosFromPrompt(prompt, scenarioCount);
 }
 
 bool UScenarioLlmPromptWidget::LoadGeneratedScenario()
@@ -285,7 +285,7 @@ bool UScenarioLlmPromptWidget::TryGetScenarioCount(int32& outScenarioCount)
 	{
 		if (const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem())
 		{
-			outScenarioCount = llmSubsystem->DefaultEpisodeCount;
+			outScenarioCount = llmSubsystem->DefaultScenarioCount;
 			return true;
 		}
 
@@ -298,7 +298,7 @@ bool UScenarioLlmPromptWidget::TryGetScenarioCount(int32& outScenarioCount)
 	{
 		if (const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem())
 		{
-			outScenarioCount = llmSubsystem->DefaultEpisodeCount;
+			outScenarioCount = llmSubsystem->DefaultScenarioCount;
 			return true;
 		}
 

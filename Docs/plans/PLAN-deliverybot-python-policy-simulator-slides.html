@@ -592,10 +592,10 @@
           <div class="card accent-amber">
             <h3>JSON 입력</h3>
             <ul>
-              <li><code>EpisodeSetup</code>: 환경, 배치, 목표, 평가</li>
+              <li><code>ScenarioSetup</code>: 환경, 배치, 목표, 평가</li>
               <li><code>DeliveryBotSetup</code>: 주행, 라이다, 제어 튜닝</li>
               <li><code>PolicySpec</code>: 정책 묶음과 우선순위</li>
-              <li><code>EpisodeRunQueue</code>: 실행 pair 목록</li>
+              <li><code>ScenarioRunQueue</code>: 실행 pair 목록</li>
             </ul>
           </div>
         </div>
@@ -609,7 +609,7 @@
         <div class="flow">
           <div class="flow-step">
             <strong>1. 입력 선택</strong>
-            <span>RunQueue가 EpisodeSetup과 DeliveryBotSetup pair를 지정합니다.</span>
+            <span>RunQueue가 ScenarioSetup과 DeliveryBotSetup pair를 지정합니다.</span>
           </div>
           <div class="flow-step">
             <strong>2. Grid 생성</strong>
@@ -740,10 +740,10 @@
     <section class="slide">
       <div class="slide-inner">
         <div class="kicker">JSON 입력 해석</div>
-        <h2>실험 단위는 EpisodeSetup + DeliveryBotSetup + PolicySpec</h2>
+        <h2>실험 단위는 ScenarioSetup + DeliveryBotSetup + PolicySpec</h2>
         <div class="grid cols-2">
           <div class="card accent-blue">
-            <h3><code>EpisodeSetup_scenario_001_000.json</code></h3>
+            <h3><code>ScenarioSetup_scenario_001_000.json</code></h3>
             <ul>
               <li>14m x 8m 보도 baseline scenario</li>
               <li>북쪽 curb penalty, 남쪽 storefront blocked region</li>
@@ -1194,7 +1194,7 @@
             <tr>
               <td>Unreal automation</td>
               <td>JSON compile, Grid rebuild, spawn, route validation</td>
-              <td>EpisodeSetup/DeliveryBotSetup pair 실행과 grid cell count 확인</td>
+              <td>ScenarioSetup/DeliveryBotSetup pair 실행과 grid cell count 확인</td>
             </tr>
             <tr>
               <td>PIE 시나리오</td>

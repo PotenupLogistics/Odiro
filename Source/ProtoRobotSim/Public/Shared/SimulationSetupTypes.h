@@ -60,7 +60,7 @@ struct PROTOROBOTSIM_API FSimulationSetup
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
 	FString MapId = TEXT("ScenarioSimulationMap");
 
-	// ScenarioSetup, DeliveryBotSetup, PolicySpec 조합 목록을 담은 EpisodeRunQueue JSON path
+	// ScenarioSetup, DeliveryBotSetup, PolicySpec 조합 목록을 담은 ScenarioRunQueue JSON path
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
 	FString RunQueueJsonPath;
 
@@ -179,7 +179,7 @@ struct PROTOROBOTSIM_API FSimulationRunStatus
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Status")
 	FString UpdatedAt;
 
-	// 현재 실행 중인 EpisodeRunQueue pair id
+	// 현재 실행 중인 ScenarioRunQueue pair id
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Status")
 	FString CurrentPairId;
 

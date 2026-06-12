@@ -1,11 +1,11 @@
 {
   "schema": "scenario_actor_spawn_mvp",
   "version": 1,
-  "scenario_id": "planned_pedestrian_obstacle_001",
-  "map_id": "EpisodeSandbox",
+  "scenario_id": "planned_pedestrian_robot_overlap_001",
+  "map_id": "ScenarioEditorMap",
   "run": {
     "base_seed": 20260604,
-    "iteration_index": 0,
+    "iteration_index": 1,
     "time_limit_s": 30
   },
   "evaluation": {
@@ -31,7 +31,7 @@
         "shape": {
           "type": "rectangle",
           "center_xy_m": [0, 0],
-          "size_m": [10, 6],
+          "size_m": [20, 8],
           "yaw_deg": 0
         },
         "traversability_score": 1
@@ -40,36 +40,43 @@
   },
   "paths": [],
   "actors": {
-    "static_obstacles": [
-      {
-        "instance_id": "barrier_center_01",
-        "prop_id": "obstacle.road_barrier_01",
-        "xy_m": [0, 0],
-        "yaw_deg": 0
-      }
-    ],
+    "static_obstacles": [],
     "pedestrians": [
       {
-        "instance_id": "ped_planned_01",
+        "instance_id": "ped_planned_overlap_01",
         "archetype_id": "adult_pedestrian",
-        "xy_m": [-4, 0],
-        "yaw_deg": 0,
-        "start_xy_m": [-4, 0],
-        "goal_xy_m": [4, 0],
+        "xy_m": [4, 0],
+        "yaw_deg": 180,
+        "start_xy_m": [8, 0],
+        "goal_xy_m": [-8, 0],
         "movement": {
           "model": "planned_trajectory",
-          "speed_mps": 1.2,
+          "speed_mps": 1.5,
+          "curve_offset_m": 1.0,
+          "curve_sample_spacing_m": 0.2,
           "initial_distance_m": 0,
           "auto_start": true
+        },
+        "behavior": {
+          "cooperation": 0.1,
+          "evasiveness": 0.75,
+          "personal_space_m": 0.9,
+          "awareness_horizon_s": 3,
+          "max_yield_wait_s": 3.5,
+          "sidestep_distance_m": 0.8
         }
       }
     ],
     "robot": {
       "instance_id": "robot_01",
       "asset_id": "delivery_bot",
-      "spawn_only": true,
-      "xy_m": [-5, -2],
-      "yaw_deg": 0
+      "spawn_only": false,
+      "xy_m": [-9, 3],
+      "yaw_deg": 0,
+      "route": {
+        "goal_xy_m": [9, -3],
+        "auto_start": true
+      }
     }
   }
 }

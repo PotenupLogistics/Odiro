@@ -29,7 +29,7 @@ namespace
 	const TCHAR* DefaultStatusOutputPath = TEXT("Saved/SimulationRuns/latest_status.json");
 	const TCHAR* MainMenuDefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	const int32 DefaultFlushIntervalTicks = 60;
-	const TCHAR* ScenarioSetupTemplatePath = TEXT("Json/Input/EpisodeSetupSample_0.json");
+	const TCHAR* ScenarioSetupTemplatePath = TEXT("Json/Input/ScenarioSetupSample_0.json");
 	const TCHAR* DeliveryBotTemplatePath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
 	const TCHAR* FileListItemWidgetBlueprintClassPath =
 		TEXT("/Game/Widgets/MainMenu/WBP_FileListItem.WBP_FileListItem_C");
@@ -710,7 +710,7 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 	}
 
 	TArray<FString> diagnostics;
-	if (!subsystem->SaveEpisodeRunQueueFile(runQueuePath, runInputs, diagnostics))
+	if (!subsystem->SaveScenarioRunQueueFile(runQueuePath, runInputs, diagnostics))
 	{
 		SetDiagnosticsText(JoinStringLines(diagnostics));
 		return;
@@ -1426,10 +1426,10 @@ void UMainMenuWidget::LoadSelectedSetup()
 		MapIdTextBox->SetText(FText::FromString(parseResult.Setup.MapId));
 	}
 
-	// SimulationSetup stores a generated EpisodeRunQueue path; the detail page exposes the resolved pair and run count.
+	// SimulationSetup stores a generated ScenarioRunQueue path; the detail page exposes the resolved pair and run count.
 	TArray<FScenarioRunInput> loadedRunInputs;
 	TArray<FString> runQueueDiagnostics;
-	if (subsystem->LoadEpisodeRunQueueFile(parseResult.Setup.RunQueueJsonPath, loadedRunInputs, runQueueDiagnostics)
+	if (subsystem->LoadScenarioRunQueueFile(parseResult.Setup.RunQueueJsonPath, loadedRunInputs, runQueueDiagnostics)
 		&& !loadedRunInputs.IsEmpty())
 	{
 		const FScenarioRunInput& firstRunInput = loadedRunInputs[0];

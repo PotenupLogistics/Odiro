@@ -69,8 +69,8 @@ bool FEpisodeMeasurementLogJsonSerializationTest::RunTest(const FString& Paramet
 {
 	FEpisodeMeasurementLogHeaderRecord Header;
 	Header.LogId = TEXT("log_01");
-	Header.MapName = TEXT("EpisodeSandbox");
-	Header.SourceJsonPath = TEXT("Json/Input/EpisodeSetupSample.json");
+	Header.MapName = TEXT("ScenarioEditorMap");
+	Header.SourceJsonPath = TEXT("Json/Input/ScenarioSetupSample.json");
 	Header.SpecHash = TEXT("abc123");
 
 	FEpisodeMeasurementLogActorInfo RobotActor;
@@ -197,7 +197,7 @@ bool FEpisodeMeasurementLogValidationTest::RunTest(const FString& Parameters)
 {
 	FEpisodeMeasurementLogHeaderRecord Header;
 	Header.LogId = TEXT("log_bad");
-	Header.MapName = TEXT("EpisodeSandbox");
+	Header.MapName = TEXT("ScenarioEditorMap");
 
 	FEpisodeMeasurementLogActorInfo BadActor;
 	BadActor.Index = 3;

@@ -19,7 +19,7 @@ namespace
 {
 	const TCHAR* ExpectedRunQueueSchema = TEXT("episode_run_queue");
 
-	bool TryReadRunQueueScenarioSetupPath(const FJsonObject& runObject, FString& outScenarioSetupPath)
+	bool TryReadLlmRunQueueScenarioSetupPath(const FJsonObject& runObject, FString& outScenarioSetupPath)
 	{
 		return runObject.TryGetStringField(TEXT("scenario_setup"), outScenarioSetupPath)
 			|| runObject.TryGetStringField(TEXT("scenario_setup_json_path"), outScenarioSetupPath);
@@ -283,7 +283,7 @@ bool UScenarioLlmAuthoringSubsystem::TryValidateAndSaveRunQueue(
 		FString scenarioSetupPath;
 		FString deliveryBotSetupPath;
 		FString policySpecPath;
-		TryReadRunQueueScenarioSetupPath(*runObject, scenarioSetupPath);
+		TryReadLlmRunQueueScenarioSetupPath(*runObject, scenarioSetupPath);
 		runObject->TryGetStringField(TEXT("delivery_bot_setup"), deliveryBotSetupPath);
 		if (!runObject->TryGetStringField(TEXT("policy_spec"), policySpecPath))
 		{

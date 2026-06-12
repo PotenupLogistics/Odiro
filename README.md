@@ -27,7 +27,7 @@
 ## Scripts
 - `RunPreview.bat`: 패키징 프리뷰 (`UnrealEditor.exe <uproject> -game -NoSplash`)
   - `-Simulate=<SimulationSetupFile> -RunId=<RunId>` 로 시뮬레이터 실행
-- `RunPythonPolicyServer.bat`: 로봇의 정책 실현 서버 `Tools\PythonPolicyServer\server.py`를 `127.0.0.1:8000`에서 runtime policy mode로 실행한다.
+- `RunPythonPolicyServer.bat`: 새 PythonAgent 서버 `Tools\PythonAgent\server.py`를 `127.0.0.1:8000`에서 실행한다.
 - `RunLlmServer.bat`: `Proto-AI` FastAPI LLM authoring server를 `127.0.0.1:8711`에서 실행한다. 생성 JSON 산출물은 배치 파일 위치 기준 프로젝트 루트의 `Json\Input`으로 저장되도록 설정한다. `OPENAI_API_KEY`는 환경변수로 미리 설정하거나 실행 시 입력한다.
 - `.run/GeneratePreviewConfigs.ps1`: Rider 시작 시 `.run/*.local.run.xml` Preview 실행 설정 생성
   - `ProtoRobotSim.uproject`의 `EngineAssociation` 기반으로 로컬 Unreal Editor 경로 탐색

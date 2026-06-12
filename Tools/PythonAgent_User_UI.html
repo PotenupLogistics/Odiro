@@ -1,0 +1,898 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PythonAgent 사용자 UI 예상안</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --panel: #ffffff;
+      --panel-soft: #f9fbfd;
+      --ink: #1d2430;
+      --muted: #657184;
+      --line: #d9e0ea;
+      --blue: #2563eb;
+      --blue-soft: #eaf1ff;
+      --green: #17803d;
+      --green-soft: #e9f8ee;
+      --amber: #a56500;
+      --amber-soft: #fff3d7;
+      --red: #c62828;
+      --red-soft: #ffeded;
+      --purple: #7048e8;
+      --purple-soft: #f1edff;
+      --code: #111827;
+      --code-ink: #e8eef7;
+      --shadow: 0 12px 32px rgba(23, 31, 50, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", "Malgun Gothic", Arial, sans-serif;
+      line-height: 1.5;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 5px;
+      background: #eef2f7;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 0.95em;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+    }
+
+    .rail {
+      padding: 22px;
+      border-right: 1px solid var(--line);
+      background: #18202d;
+      color: #e9eef6;
+    }
+
+    .brand {
+      margin-bottom: 24px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .brand p {
+      margin: 8px 0 0;
+      color: #b9c5d6;
+      font-size: 13px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 28px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: rgba(23, 128, 61, 0.16);
+      color: #8de0a6;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .workflow {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .workflow-item {
+      padding: 13px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .workflow-item.active {
+      border-color: rgba(116, 185, 255, 0.55);
+      background: rgba(37, 99, 235, 0.22);
+    }
+
+    .workflow-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-weight: 800;
+    }
+
+    .workflow-item p {
+      margin: 6px 0 0;
+      color: #b9c5d6;
+      font-size: 13px;
+    }
+
+    .rail-note {
+      margin-top: 24px;
+      padding: 13px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #cbd6e5;
+      font-size: 13px;
+    }
+
+    .main {
+      min-width: 0;
+      padding: 22px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .title h2 {
+      margin: 0;
+      font-size: 25px;
+      letter-spacing: 0;
+    }
+
+    .title p {
+      margin: 5px 0 0;
+      color: var(--muted);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .btn {
+      min-height: 38px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .btn:hover {
+      border-color: #b9c4d4;
+      background: #f8fafc;
+    }
+
+    .btn.primary {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .btn.success {
+      border-color: var(--green);
+      background: var(--green);
+      color: #fff;
+    }
+
+    .btn.warn {
+      border-color: var(--amber);
+      background: var(--amber);
+      color: #fff;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(340px, 0.95fr) minmax(420px, 1.35fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 15px 16px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel-soft);
+    }
+
+    .panel-head h3 {
+      margin: 0;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    .panel-body {
+      padding: 16px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 16px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    input,
+    select {
+      width: 100%;
+      min-height: 38px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .server-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 116px;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .metric {
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 20px;
+      line-height: 1.2;
+    }
+
+    .map-wrap {
+      display: grid;
+      gap: 12px;
+    }
+
+    .map {
+      width: 100%;
+      min-height: 276px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #eef2f7;
+      overflow: hidden;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .key {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      display: inline-block;
+    }
+
+    .policy-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .policy {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .policy.active {
+      border-color: #9cc5ff;
+      background: var(--blue-soft);
+    }
+
+    .rank {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: #eef2f7;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .policy.active .rank {
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .policy strong {
+      display: block;
+      line-height: 1.2;
+    }
+
+    .policy small {
+      color: var(--muted);
+    }
+
+    .badge {
+      min-width: 72px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #eef2f7;
+      color: var(--muted);
+      text-align: center;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .badge.ok {
+      background: var(--green-soft);
+      color: var(--green);
+    }
+
+    .badge.warn {
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .badge.off {
+      background: #eef2f7;
+      color: var(--muted);
+    }
+
+    .action-output {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .action-card {
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .action-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .action-card strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 18px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      min-height: 34px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--muted);
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .tab.active {
+      border-color: var(--blue);
+      background: var(--blue-soft);
+      color: var(--blue);
+    }
+
+    pre {
+      min-height: 260px;
+      max-height: 420px;
+      margin: 0;
+      padding: 15px;
+      border-radius: 8px;
+      background: var(--code);
+      color: var(--code-ink);
+      overflow: auto;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .log {
+      display: grid;
+      gap: 8px;
+      max-height: 250px;
+      overflow: auto;
+    }
+
+    .log-row {
+      display: grid;
+      grid-template-columns: 78px 92px minmax(0, 1fr);
+      gap: 8px;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      font-size: 13px;
+    }
+
+    .log-row b {
+      color: var(--muted);
+    }
+
+    .compact {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 1100px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .rail {
+        border-right: 0;
+      }
+
+      .layout,
+      .topbar {
+        grid-template-columns: 1fr;
+      }
+
+      .actions {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .main {
+        padding: 14px;
+      }
+
+      .form-grid,
+      .metrics,
+      .action-output {
+        grid-template-columns: 1fr;
+      }
+
+      .server-row {
+        grid-template-columns: 1fr;
+      }
+
+      .log-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div class="brand">
+        <h1>PythonAgent Console</h1>
+        <p>사용자가 Python 정책 서버를 실행하고, Start/Decide/End 흐름을 확인하는 예상 UI</p>
+      </div>
+
+      <div class="status-pill"><span class="dot"></span><span id="serverState">Server Ready</span></div>
+
+      <div class="workflow" aria-label="실행 단계">
+        <div class="workflow-item active" id="flowStart">
+          <div class="workflow-title"><span>Start</span><code>/scenario/start</code></div>
+          <p>Grid, Start, Goal, vehicle/lidar spec 전송</p>
+        </div>
+        <div class="workflow-item" id="flowDecide">
+          <div class="workflow-title"><span>Decide</span><code>/scenario/decide</code></div>
+          <p>Observation 전송, Action 수신</p>
+        </div>
+        <div class="workflow-item" id="flowEnd">
+          <div class="workflow-title"><span>End</span><code>/scenario/end</code></div>
+          <p>성공/실패 결과와 metrics 기록</p>
+        </div>
+      </div>
+
+      <div class="rail-note">
+        <strong>설계 원칙</strong>
+        <p>Unreal은 판단하지 않는다. Python이 action을 만들고 Unreal은 검증 후 실행한다.</p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="title">
+          <h2>DeliveryBot Python Agent 사용자 화면 예상안</h2>
+          <p>실제 구현 전, 사용자가 어떤 정보를 보고 어떤 버튼을 누를지 보여주는 정적 UI 프로토타입</p>
+        </div>
+        <div class="actions">
+          <button class="btn" id="connectBtn" type="button">연결 확인</button>
+          <button class="btn primary" id="startBtn" type="button">Start 전송</button>
+          <button class="btn success" id="decideBtn" type="button">Decide 1회</button>
+          <button class="btn warn" id="endBtn" type="button">End 기록</button>
+        </div>
+      </div>
+
+      <div class="metrics">
+        <div class="metric"><span>Endpoint</span><strong id="activeEndpoint">/scenario/start</strong></div>
+        <div class="metric"><span>Sequence</span><strong id="sequenceValue">0</strong></div>
+        <div class="metric"><span>Internal Policy</span><strong id="selectedPolicy">None</strong></div>
+        <div class="metric"><span>Path Status</span><strong id="pathStatus">Ready</strong></div>
+      </div>
+
+      <div class="layout">
+        <div class="stack">
+          <section class="panel">
+            <div class="panel-head">
+              <h3>서버와 실행 설정</h3>
+              <span class="badge ok">online</span>
+            </div>
+            <div class="panel-body">
+              <div class="server-row">
+                <label>
+                  Server URL
+                  <input id="serverUrl" value="http://127.0.0.1:8000" aria-label="Server URL">
+                </label>
+                <button class="btn" type="button" id="copyUrlBtn">URL 확인</button>
+              </div>
+              <div class="form-grid" style="margin-top: 12px;">
+                <label>
+                  Episode ID
+                  <input value="episode_001" aria-label="Episode ID">
+                </label>
+                <label>
+                  Robot Instance
+                  <input value="delivery_bot_01" aria-label="Robot Instance">
+                </label>
+                <label>
+                  Max Speed
+                  <input value="10 km/h" aria-label="Max Speed">
+                </label>
+                <label>
+                  LiDAR Range
+                  <input value="5 m" aria-label="LiDAR Range">
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Grid와 현재 경로</h3>
+              <span class="badge ok">path valid</span>
+            </div>
+            <div class="panel-body map-wrap">
+              <svg class="map" viewBox="0 0 520 300" role="img" aria-label="DeliveryBot grid and route preview">
+                <rect x="0" y="0" width="520" height="300" fill="#eef2f7"></rect>
+                <g transform="translate(42 26)">
+                  <g fill="#ffffff" stroke="#cfd8e6" stroke-width="2">
+                    <rect x="0" y="0" width="70" height="70"></rect>
+                    <rect x="70" y="0" width="70" height="70"></rect>
+                    <rect x="140" y="0" width="70" height="70" fill="#fff6d7"></rect>
+                    <rect x="210" y="0" width="70" height="70"></rect>
+                    <rect x="280" y="0" width="70" height="70"></rect>
+                    <rect x="350" y="0" width="70" height="70"></rect>
+                    <rect x="0" y="70" width="70" height="70"></rect>
+                    <rect x="70" y="70" width="70" height="70"></rect>
+                    <rect x="140" y="70" width="70" height="70"></rect>
+                    <rect x="210" y="70" width="70" height="70" fill="#ffdede"></rect>
+                    <rect x="280" y="70" width="70" height="70"></rect>
+                    <rect x="350" y="70" width="70" height="70"></rect>
+                    <rect x="0" y="140" width="70" height="70"></rect>
+                    <rect x="70" y="140" width="70" height="70" fill="#ffdede"></rect>
+                    <rect x="140" y="140" width="70" height="70"></rect>
+                    <rect x="210" y="140" width="70" height="70"></rect>
+                    <rect x="280" y="140" width="70" height="70" fill="#fff6d7"></rect>
+                    <rect x="350" y="140" width="70" height="70"></rect>
+                  </g>
+                  <path d="M35 175 C75 122 108 95 145 95 S226 104 258 82 S319 42 385 35" fill="none" stroke="#2563eb" stroke-width="8" stroke-linecap="round"></path>
+                  <circle cx="35" cy="175" r="13" fill="#17803d"></circle>
+                  <circle cx="385" cy="35" r="13" fill="#7048e8"></circle>
+                  <circle cx="252" cy="83" r="10" fill="#a56500"></circle>
+                  <text x="18" y="215" fill="#1d2430" font-size="14" font-family="Segoe UI">Start</text>
+                  <text x="365" y="20" fill="#1d2430" font-size="14" font-family="Segoe UI">Goal</text>
+                  <text x="266" y="72" fill="#1d2430" font-size="13" font-family="Segoe UI">Front object</text>
+                </g>
+              </svg>
+              <div class="legend">
+                <span><i class="key" style="background:#fff"></i>Walkable</span>
+                <span><i class="key" style="background:#fff6d7"></i>Penalty</span>
+                <span><i class="key" style="background:#ffdede"></i>Blocked</span>
+                <span><i class="key" style="background:#2563eb"></i>Route</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>정책 실행 순서</h3>
+              <span class="badge warn">editable</span>
+            </div>
+            <div class="panel-body">
+              <div class="policy-list">
+                <div class="policy" data-policy="StopPolicy">
+                  <span class="rank">1</span>
+                  <div><strong>StopPolicy</strong><small>즉시 정지 판단</small></div>
+                  <span class="badge off">idle</span>
+                </div>
+                <div class="policy" data-policy="RePathPolicy">
+                  <span class="rank">2</span>
+                  <div><strong>RePathPolicy</strong><small>경로 막힘 또는 A* 재탐색</small></div>
+                  <span class="badge off">idle</span>
+                </div>
+                <div class="policy active" data-policy="SlowDownPolicy">
+                  <span class="rank">3</span>
+                  <div><strong>SlowDownPolicy</strong><small>전방 장애물 감속</small></div>
+                  <span class="badge warn">selected</span>
+                </div>
+                <div class="policy" data-policy="PathFollower">
+                  <span class="rank">4</span>
+                  <div><strong>PathFollower</strong><small>경로를 action으로 변환</small></div>
+                  <span class="badge off">fallback</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="stack">
+          <section class="panel">
+            <div class="panel-head">
+              <h3>현재 Action 출력</h3>
+              <span class="badge ok" id="actionState">valid</span>
+            </div>
+            <div class="panel-body">
+              <div class="action-output">
+                <div class="action-card"><span>Steering</span><strong id="steeringValue">0.15</strong></div>
+                <div class="action-card"><span>Target Speed</span><strong id="speedValue">3.0</strong></div>
+                <div class="action-card"><span>Brake</span><strong id="brakeValue">0.0</strong></div>
+                <div class="action-card"><span>Direction</span><strong id="directionValue">Forward</strong></div>
+              </div>
+              <p class="compact" id="reasonText">reason: front obstacle distance 2.1m</p>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>요청/응답 미리보기</h3>
+              <div class="tabs" role="tablist" aria-label="payload tabs">
+                <button class="tab active" type="button" data-tab="start">Start</button>
+                <button class="tab" type="button" data-tab="decide">Decide</button>
+                <button class="tab" type="button" data-tab="end">End</button>
+              </div>
+            </div>
+            <div class="panel-body">
+              <pre id="payloadPreview"></pre>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>실행 로그</h3>
+              <span class="badge ok">live</span>
+            </div>
+            <div class="panel-body">
+              <div class="log" id="runLog">
+                <div class="log-row"><b>00:00.0</b><span>ready</span><span>PythonAgent console initialized.</span></div>
+                <div class="log-row"><b>00:01.2</b><span>start</span><span>initial path ready, cells=18.</span></div>
+                <div class="log-row"><b>00:03.2</b><span>decide</span><span>SlowDownPolicy selected, speed=3.0 km/h.</span></div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const payloads = {
+      start: {
+        method: "POST",
+        url: "/scenario/start",
+        request: {
+          experimentId: 1,
+          episodeId: "episode_001",
+          robotInstanceId: "delivery_bot_01",
+          start: { x: 0, y: 0, z: 0, yawDegree: 0 },
+          goal: { hasGoal: true, x: 150, y: 150, z: 0, acceptanceRadiusCm: 100 },
+          vehicleSpec: { maxSpeedKmh: 10, maxReverseSpeedKmh: 3 },
+          lidarSpec: { mode: "TwoD", scanRangeM: 5 },
+          controlSpec: { mode: "TargetSpeed" },
+          grid: { gridSizeX: 6, gridSizeY: 3, cellSizeCm: 100, cellCount: 18 }
+        },
+        response: {
+          status: "ok",
+          accepted: true,
+          pathStatus: "valid",
+          debug: { reason: "initial_path_ready" }
+        }
+      },
+      decide: {
+        method: "POST",
+        url: "/scenario/decide",
+        request: {
+          sequence: 12,
+          worldTimeSeconds: 3.25,
+          robotState: { x: 120.0, y: 80.0, z: 0.0, yawDegree: 15.0, speedKmh: 2.5 },
+          lidarRays: [
+            { rayIndex: 0, rayYawDegree: 0.0, distanceM: 2.1, hit: true, actorName: "Obstacle_01", actorTags: ["ObjectType.StaticObstacle"] }
+          ],
+          observedObjects: []
+        },
+        response: {
+          sequence: 12,
+          status: "ok",
+          action: { steering: 0.15, targetSpeedKmh: 3.0, brake: 0.0, direction: "Forward" },
+          debug: { selectedPolicy: "SlowDownPolicy", reason: "front obstacle distance 2.1m", pathStatus: "valid" }
+        }
+      },
+      end: {
+        method: "POST",
+        url: "/scenario/end",
+        request: {
+          episodeId: "episode_001",
+          sequence: 13,
+          status: "ok",
+          error: null,
+          metrics: { elapsedTimeSeconds: 12.4, stopCount: 2, nearMissCount: 0 },
+          debug: { selectedPolicy: "PathFollower", pathStatus: "goal_reached" }
+        },
+        response: {
+          status: "ok",
+          accepted: true,
+          debug: { reason: "episode_end_recorded" }
+        }
+      }
+    };
+
+    const preview = document.getElementById("payloadPreview");
+    const tabs = document.querySelectorAll(".tab");
+    const flow = {
+      start: document.getElementById("flowStart"),
+      decide: document.getElementById("flowDecide"),
+      end: document.getElementById("flowEnd")
+    };
+    let sequence = 0;
+
+    function setStage(stage) {
+      tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === stage));
+      Object.entries(flow).forEach(([key, el]) => el.classList.toggle("active", key === stage));
+      document.getElementById("activeEndpoint").textContent = payloads[stage].url;
+      preview.textContent = JSON.stringify(payloads[stage], null, 2);
+      if (stage === "start") {
+        document.getElementById("selectedPolicy").textContent = "None";
+        document.getElementById("pathStatus").textContent = "Valid";
+      }
+      if (stage === "decide") {
+        document.getElementById("selectedPolicy").textContent = "SlowDownPolicy";
+        document.getElementById("pathStatus").textContent = "Valid";
+      }
+      if (stage === "end") {
+        document.getElementById("selectedPolicy").textContent = "PathFollower";
+        document.getElementById("pathStatus").textContent = "GoalReached";
+      }
+    }
+
+    function addLog(type, message) {
+      const log = document.getElementById("runLog");
+      const row = document.createElement("div");
+      row.className = "log-row";
+      const stamp = (sequence * 0.2 + 4).toFixed(1).padStart(4, "0");
+      row.innerHTML = `<b>00:${stamp}</b><span>${type}</span><span>${message}</span>`;
+      log.prepend(row);
+    }
+
+    document.getElementById("connectBtn").addEventListener("click", () => {
+      document.getElementById("serverState").textContent = "Server Online";
+      addLog("health", "GET /health ok at " + document.getElementById("serverUrl").value);
+    });
+
+    document.getElementById("copyUrlBtn").addEventListener("click", () => {
+      addLog("config", "server url checked: " + document.getElementById("serverUrl").value);
+    });
+
+    document.getElementById("startBtn").addEventListener("click", () => {
+      sequence = 0;
+      document.getElementById("sequenceValue").textContent = sequence;
+      setStage("start");
+      addLog("start", "POST /scenario/start accepted, initial path valid.");
+    });
+
+    document.getElementById("decideBtn").addEventListener("click", () => {
+      sequence += 1;
+      document.getElementById("sequenceValue").textContent = sequence;
+      setStage("decide");
+      addLog("decide", "SlowDownPolicy selected, reason=front obstacle distance 2.1m.");
+    });
+
+    document.getElementById("endBtn").addEventListener("click", () => {
+      setStage("end");
+      addLog("end", "episode result recorded, status=ok.");
+    });
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => setStage(tab.dataset.tab));
+    });
+
+    setStage("start");
+  </script>
+</body>
+</html>

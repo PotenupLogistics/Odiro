@@ -59,7 +59,7 @@ private:
 	float CellSize{ 50.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
-	FVector RobotBoxExtent{ 60.f, 90.f, 25.f };
+	FVector RobotBoxExtent{ 30.f, 45.f, 25.f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
 	float MaxWalkableSlopeDegree{ 60.f };

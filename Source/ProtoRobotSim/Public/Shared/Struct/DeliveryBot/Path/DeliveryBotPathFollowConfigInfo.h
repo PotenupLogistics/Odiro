@@ -24,7 +24,16 @@ public:
 	float GoalAcceptanceDistanceM{ 0.8f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float SteeringSensitivity{ 0.8f };
+	float SteeringSensitivity{ 1.1f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SteeringFullScaleDegree{ 80.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float MaxSteering{ 0.5f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float MaxSteeringDelta{ 0.09f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float MinTurnSpeedKmh{ 1.f };

@@ -2,6 +2,8 @@
 #include "ChaosVehicleMovementComponent.h"
 #include "ChaosWheeledVehicleMovementComponent.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotDrive, Log, All);
+
 namespace
 {
 	constexpr float KMH_TO_CMS = 27.777778f;
@@ -14,8 +16,8 @@ UDeliveryBot_DriveComponent::UDeliveryBot_DriveComponent()
 }
 
 // 이동 명령을 현재 차량 상태에 맞는 기어, 스로틀, 브레이크, 조향 입력으로 변환한다.
-void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponent* vehicleMovement,	
-	const FDeliveryBotMoveCommandInfo& moveCommandInfo,	float deltaTime)
+void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponent* vehicleMovement,
+	const FDeliveryBotMoveCommandInfo& moveCommandInfo, float deltaTime)
 {
 	if (!IsValid(vehicleMovement))
 		return;
@@ -23,8 +25,12 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 	const float safeDeltaTime = FMath::Max(deltaTime, 0.f);
 	const int32 targetGear = GetTargetGear(moveCommandInfo);
 	const float targetMaxSpeedKmh = GetTargetMaxSpeedKmh(moveCommandInfo);
+	const bool bReverseCommand = moveCommandInfo.MoveDirectionType == EDeliveryBotMoveDirectionType::Reverse;
 
-	if (ShouldBrakeBeforeGearSwitch(vehicleMovement, targetGear))
+	vehicleMovement->SetUseAutomaticGears(false);
+
+	const bool bBrakeBeforeGearSwitch = ShouldBrakeBeforeGearSwitch(vehicleMovement, targetGear);
+	if (bBrakeBeforeGearSwitch)
 	{
 		CurrentTargetSpeedKmh = 0.f;
 
@@ -37,10 +43,53 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 			targetMaxSpeedKmh,
 			safeDeltaTime);
 
+		if (bReverseCommand)
+		{
+			UE_LOG(
+				LogDeliveryBotDrive,
+				Warning,
+				TEXT("ReverseDebug | WaitingGearSwitch TargetGear=%d CurrentGear=%d RuntimeTargetGear=%d SignedSpeedKmh=%.2f BrakeInput=%.3f Handbrake=false"),
+				targetGear,
+				vehicleMovement->GetCurrentGear(),
+				vehicleMovement->GetTargetGear(),
+				GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed()),
+				CurrentBrakeInput);
+		}
+
 		return;
 	}
 
 	vehicleMovement->SetTargetGear(targetGear, true);
+
+	if (moveCommandInfo.MoveDirectionType == EDeliveryBotMoveDirectionType::Reverse && !moveCommandInfo.bBrake)
+	{
+		CurrentBrakeInput = 0.f;
+		vehicleMovement->SetBrakeInput(0.f);
+		vehicleMovement->SetHandbrakeInput(false);
+	}
+
+	const bool bWaitingReverseGear = bReverseCommand && vehicleMovement->GetCurrentGear() != targetGear;
+	if (bWaitingReverseGear)
+	{
+		CurrentTargetSpeedKmh = 0.f;
+		CurrentThrottleInput = 0.f;
+		CurrentBrakeInput = 0.f;
+
+		vehicleMovement->SetThrottleInput(0.f);
+		vehicleMovement->SetBrakeInput(0.f);
+		vehicleMovement->SetHandbrakeInput(false);
+
+		UE_LOG(
+			LogDeliveryBotDrive,
+			Warning,
+			TEXT("ReverseDebug | WaitingReverseGear TargetGear=%d CurrentGear=%d RuntimeTargetGear=%d SignedSpeedKmh=%.2f Throttle=0 Brake=0 Handbrake=false"),
+			targetGear,
+			vehicleMovement->GetCurrentGear(),
+			vehicleMovement->GetTargetGear(),
+			GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed()));
+
+		return;
+	}
 
 	const float requestedTargetSpeedKmh = moveCommandInfo.bBrake
 		? 0.f
@@ -59,7 +108,12 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 	const float speedErrorKmh = CurrentTargetSpeedKmh - currentSpeedKmh;
 	const float speedControlRangeKmh = FMath::Max(DriveConfigInfo.SlowdownSpeedRangeKmh, 0.1f);
 
-	const float throttle = FMath::Clamp(speedErrorKmh / speedControlRangeKmh, 0.f, 1.f);
+	float throttle = FMath::Clamp(speedErrorKmh / speedControlRangeKmh, 0.f, 1.f);
+	if (bReverseCommand && !moveCommandInfo.bBrake)
+	{
+		throttle = FMath::Max(throttle, 0.35f);
+		CurrentThrottleInput = FMath::Max(CurrentThrottleInput, 0.25f);
+	}
 
 	float brake = FMath::Clamp(moveCommandInfo.Brake, 0.f, 1.f);
 
@@ -73,14 +127,37 @@ void UDeliveryBot_DriveComponent::ApplyMoveCommand(UChaosVehicleMovementComponen
 		brake = FMath::Max(brake, FMath::Min(overspeedBrake, DriveConfigInfo.SpeedLimitBrake));
 	}
 
+	const bool bTargetHandbrake = DriveConfigInfo.bUseHandbrakeWhenBrake && moveCommandInfo.bBrake;
+
 	ApplyDriveInput(
 		vehicleMovement,
 		throttle,
 		moveCommandInfo.Steering,
 		brake,
-		DriveConfigInfo.bUseHandbrakeWhenBrake && moveCommandInfo.bBrake,
+		bTargetHandbrake,
 		targetMaxSpeedKmh,
 		safeDeltaTime);
+
+	if (bReverseCommand)
+	{
+		UE_LOG(
+			LogDeliveryBotDrive,
+			Warning,
+			TEXT("ReverseDebug | Applied TargetGear=%d CurrentGear=%d RuntimeTargetGear=%d SignedSpeedKmh=%.2f RequestedTargetSpeed=%.2f CurrentTargetSpeed=%.2f RawThrottle=%.3f AppliedThrottle=%.3f RawBrake=%.3f AppliedBrake=%.3f Handbrake=%s MaxReverse=%.2f Delta=%.3f"),
+			targetGear,
+			vehicleMovement->GetCurrentGear(),
+			vehicleMovement->GetTargetGear(),
+			GetCmPerSecondToKmh(vehicleMovement->GetForwardSpeed()),
+			requestedTargetSpeedKmh,
+			CurrentTargetSpeedKmh,
+			throttle,
+			CurrentThrottleInput,
+			brake,
+			CurrentBrakeInput,
+			bTargetHandbrake ? TEXT("true") : TEXT("false"),
+			DriveConfigInfo.MaxReverseSpeedKmh,
+			safeDeltaTime);
+	}
 }
 
 void UDeliveryBot_DriveComponent::ApplyParkingStop(UChaosVehicleMovementComponent* vehicleMovement)

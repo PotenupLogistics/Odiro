@@ -26,7 +26,7 @@
     "episode_id": "sensor_route_layout_004",
     "pair_id": "sample_4",
     "episode_setup": {
-      "path": "Json/Input/EpisodeSetupSample_4.json",
+      "path": "Json/Input/ScenarioSetupSample_4.json",
       "hash": "252738887"
     },
     "delivery_bot_setup": {

@@ -57,10 +57,10 @@ public:
 	FString GenerateEndpoint = TEXT("/api/v1/scenarios/generate");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM")
-	FString LatestRunQueueJsonPath = TEXT("Json/Input/EpisodeRunQueue_LlmLatest.json");
+	FString LatestRunQueueJsonPath = TEXT("Json/Input/ScenarioRunQueue_LlmLatest.json");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM", meta = (ClampMin = "1", ClampMax = "20"))
-	int32 DefaultEpisodeCount = 1;
+	int32 DefaultScenarioCount = 1;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM", meta = (ClampMin = "1.0"))
 	float RequestTimeoutSeconds = 120.0f;
@@ -69,7 +69,7 @@ public:
 	FScenarioLlmGenerationCompletedSignature OnGenerationCompleted;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|LLM")
-	bool GenerateEpisodeFromPrompt(const FString& prompt, int32 episodeCount);
+	bool GenerateScenariosFromPrompt(const FString& prompt, int32 scenarioCount);
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|LLM")
 	void CancelPendingRequest();
@@ -86,7 +86,7 @@ public:
 private:
 	void HandleGenerateResponse(int32 responseCode, const FString& responseBody, bool bWasSuccessful);
 	void CompleteRequest(const FScenarioLlmGenerationResult& result);
-	bool TryBuildRequestBody(const FString& prompt, int32 episodeCount, FString& outBody, FScenarioLlmGenerationResult& outFailure) const;
+	bool TryBuildRequestBody(const FString& prompt, int32 scenarioCount, FString& outBody, FScenarioLlmGenerationResult& outFailure) const;
 	bool TryValidateAndSaveRunQueue(
 		const FString& responseBody,
 		int32 responseCode,

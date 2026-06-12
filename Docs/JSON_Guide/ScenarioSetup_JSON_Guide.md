@@ -1,6 +1,6 @@
 # ScenarioSetup JSON Guide
 
-이 문서는 LLM이 ScenarioSetup JSON을 안정적으로 생성하기 위한 축약 양식을 설명한다. 기본 샘플은 `Json/Input/EpisodeSetupSample.json` 및 `Json/Input/EpisodeSetupSample_*.json`을 기준으로 한다. Planned pedestrian 샘플은 `Json/Input/EpisodeSetupSample_PlannedPedestrianObstacle.json`, `Json/Input/EpisodeSetupSample_PlannedPedestrianRobotOverlap.json`을 참고한다.
+이 문서는 LLM이 ScenarioSetup JSON을 안정적으로 생성하기 위한 축약 양식을 설명한다. 기본 샘플은 `Json/Input/ScenarioSetupSample.json` 및 `Json/Input/ScenarioSetupSample_*.json`을 기준으로 한다. Planned pedestrian 샘플은 `Json/Input/ScenarioSetupSample_PlannedPedestrianObstacle.json`, `Json/Input/ScenarioSetupSample_PlannedPedestrianRobotOverlap.json`을 참고한다.
 
 ScenarioSetup JSON은 시나리오 실행 정보, 지면 영역, 보행자 경로, 정적 장애물, 보행자, 로봇 배치와 로봇 목적지를 정의한다. DeliveryBot의 주행/센서/정책 튜닝값은 같은 실행 pair의 DeliveryBotSetup JSON에서 정의한다.
 
@@ -23,7 +23,7 @@ ScenarioSetup JSON은 시나리오 실행 정보, 지면 영역, 보행자 경�
   "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "sidewalk_actor_spawn_001",
-  "map_id": "EpisodeSandbox",
+  "map_id": "ScenarioEditorMap",
   "run": {},
   "evaluation": {},
   "ground_model": {},

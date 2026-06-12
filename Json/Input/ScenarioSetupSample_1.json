@@ -2,7 +2,7 @@
   "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "legacy_route_fallback_001",
-  "map_id": "EpisodeSandbox",
+  "map_id": "ScenarioEditorMap",
   "run": {
     "base_seed": 1001,
     "iteration_index": 1,

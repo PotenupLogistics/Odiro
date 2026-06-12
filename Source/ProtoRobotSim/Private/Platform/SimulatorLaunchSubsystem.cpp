@@ -15,7 +15,7 @@ namespace
 	const TCHAR* LaunchSimulationSetupSchema = TEXT("simulation_setup");
 	const TCHAR* LaunchScenarioSetupSchema = TEXT("scenario_actor_spawn_mvp");
 	const TCHAR* LaunchDeliveryBotSetupSchema = TEXT("delivery_bot_setup");
-	const TCHAR* LaunchEpisodeRunQueueSchema = TEXT("episode_run_queue");
+	const TCHAR* LaunchScenarioRunQueueSchema = TEXT("episode_run_queue");
 	const TCHAR* LaunchEvaluationReportSchema = TEXT("episode_evaluation_report");
 	const TCHAR* LaunchDefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	const TCHAR* SimulatorProcessFlags = TEXT("-nosound -unattended -NoLoadingScreen");
@@ -203,16 +203,10 @@ namespace
 			&& policySpecObject->IsValid();
 	}
 
-	bool TryReadRunQueueScenarioSetupPath(const FJsonObject& runObject, FString& outScenarioSetupJsonPath)
-	{
-		return runObject.TryGetStringField(TEXT("scenario_setup"), outScenarioSetupJsonPath)
-			|| runObject.TryGetStringField(TEXT("scenario_setup_json_path"), outScenarioSetupJsonPath);
-	}
-
-	TSharedRef<FJsonObject> MakeEpisodeRunQueueObject(const TArray<FScenarioRunInput>& runInputs)
+	TSharedRef<FJsonObject> MakeScenarioRunQueueObject(const TArray<FScenarioRunInput>& runInputs)
 	{
 		TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
-		rootObject->SetStringField(TEXT("schema"), LaunchEpisodeRunQueueSchema);
+		rootObject->SetStringField(TEXT("schema"), LaunchScenarioRunQueueSchema);
 		rootObject->SetNumberField(TEXT("version"), 1);
 
 		TArray<TSharedPtr<FJsonValue>> runValues;
@@ -327,7 +321,7 @@ TArray<FString> USimulatorLaunchSubsystem::ListPolicySpecFiles() const
 	return policySpecFiles;
 }
 
-TArray<FString> USimulatorLaunchSubsystem::ListEpisodeRunQueueFiles() const
+TArray<FString> USimulatorLaunchSubsystem::ListScenarioRunQueueFiles() const
 {
 	TArray<FString> jsonFiles;
 	FindProjectJsonFiles(SimulationSetupInputDirectory, jsonFiles);
@@ -340,7 +334,7 @@ TArray<FString> USimulatorLaunchSubsystem::ListEpisodeRunQueueFiles() const
 			continue;
 		}
 
-		if (!HasJsonSchema(jsonFile, LaunchEpisodeRunQueueSchema))
+		if (!HasJsonSchema(jsonFile, LaunchScenarioRunQueueSchema))
 		{
 			continue;
 		}
@@ -353,7 +347,7 @@ TArray<FString> USimulatorLaunchSubsystem::ListEpisodeRunQueueFiles() const
 
 		TArray<FScenarioRunInput> runInputs;
 		TArray<FString> diagnostics;
-		if (TryReadEpisodeRunQueueJson(jsonString, runInputs, diagnostics))
+		if (TryReadScenarioRunQueueJson(jsonString, runInputs, diagnostics))
 		{
 			runQueueFiles.Add(jsonFile);
 		}
@@ -550,7 +544,7 @@ bool USimulatorLaunchSubsystem::SaveSimulationSetupFile(
 	return parseResult.bSuccess;
 }
 
-bool USimulatorLaunchSubsystem::LoadEpisodeRunQueueFile(
+bool USimulatorLaunchSubsystem::LoadScenarioRunQueueFile(
 	const FString& runQueuePath,
 	TArray<FScenarioRunInput>& outRunInputs,
 	TArray<FString>& outDiagnostics) const
@@ -559,7 +553,7 @@ bool USimulatorLaunchSubsystem::LoadEpisodeRunQueueFile(
 	outDiagnostics.Reset();
 	if (runQueuePath.TrimStartAndEnd().IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("EpisodeRunQueue path must not be empty."));
+		outDiagnostics.Add(TEXT("ScenarioRunQueue path must not be empty."));
 		return false;
 	}
 
@@ -567,14 +561,14 @@ bool USimulatorLaunchSubsystem::LoadEpisodeRunQueueFile(
 	const FString resolvedRunQueuePath = FSimulationSetupJson::ResolveProjectPath(runQueuePath);
 	if (!FFileHelper::LoadFileToString(jsonString, *resolvedRunQueuePath))
 	{
-		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue read failed: %s"), *resolvedRunQueuePath));
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue read failed: %s"), *resolvedRunQueuePath));
 		return false;
 	}
 
-	return TryReadEpisodeRunQueueJson(jsonString, outRunInputs, outDiagnostics);
+	return TryReadScenarioRunQueueJson(jsonString, outRunInputs, outDiagnostics);
 }
 
-bool USimulatorLaunchSubsystem::SaveEpisodeRunQueueFile(
+bool USimulatorLaunchSubsystem::SaveScenarioRunQueueFile(
 	const FString& runQueuePath,
 	const TArray<FScenarioRunInput>& runInputs,
 	TArray<FString>& outDiagnostics) const
@@ -582,12 +576,12 @@ bool USimulatorLaunchSubsystem::SaveEpisodeRunQueueFile(
 	outDiagnostics.Reset();
 	if (runQueuePath.TrimStartAndEnd().IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("EpisodeRunQueue path must not be empty."));
+		outDiagnostics.Add(TEXT("ScenarioRunQueue path must not be empty."));
 		return false;
 	}
 
 	FString jsonString;
-	if (!TryWriteEpisodeRunQueueJson(runInputs, jsonString, outDiagnostics))
+	if (!TryWriteScenarioRunQueueJson(runInputs, jsonString, outDiagnostics))
 	{
 		return false;
 	}
@@ -596,7 +590,7 @@ bool USimulatorLaunchSubsystem::SaveEpisodeRunQueueFile(
 	const FString outputDirectory = FPaths::GetPath(resolvedRunQueuePath);
 	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true))
 	{
-		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue directory create failed: %s"), *outputDirectory));
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue directory create failed: %s"), *outputDirectory));
 		return false;
 	}
 
@@ -605,7 +599,7 @@ bool USimulatorLaunchSubsystem::SaveEpisodeRunQueueFile(
 			*resolvedRunQueuePath,
 			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
-		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue write failed: %s"), *resolvedRunQueuePath));
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue write failed: %s"), *resolvedRunQueuePath));
 		return false;
 	}
 
@@ -625,7 +619,7 @@ bool USimulatorLaunchSubsystem::AppendRunQueuePair(
 	const FString resolvedRunQueuePath = FSimulationSetupJson::ResolveProjectPath(runQueuePath);
 	if (FPaths::FileExists(resolvedRunQueuePath))
 	{
-		if (!LoadEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics))
+		if (!LoadScenarioRunQueueFile(runQueuePath, runInputs, outDiagnostics))
 		{
 			return false;
 		}
@@ -637,7 +631,7 @@ bool USimulatorLaunchSubsystem::AppendRunQueuePair(
 	runInput.DeliveryBotSetupJsonPath = deliveryBotSetupPath.TrimStartAndEnd();
 	runInput.PolicySpecJsonPath = LaunchDefaultPolicySpecJsonPath;
 	runInputs.Add(runInput);
-	return SaveEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics);
+	return SaveScenarioRunQueueFile(runQueuePath, runInputs, outDiagnostics);
 }
 
 bool USimulatorLaunchSubsystem::RemoveRunQueuePair(
@@ -646,19 +640,19 @@ bool USimulatorLaunchSubsystem::RemoveRunQueuePair(
 	TArray<FString>& outDiagnostics) const
 {
 	TArray<FScenarioRunInput> runInputs;
-	if (!LoadEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics))
+	if (!LoadScenarioRunQueueFile(runQueuePath, runInputs, outDiagnostics))
 	{
 		return false;
 	}
 
 	if (!runInputs.IsValidIndex(runIndex))
 	{
-		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue index is out of range: %d"), runIndex));
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue index is out of range: %d"), runIndex));
 		return false;
 	}
 
 	runInputs.RemoveAt(runIndex);
-	return SaveEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics);
+	return SaveScenarioRunQueueFile(runQueuePath, runInputs, outDiagnostics);
 }
 
 bool USimulatorLaunchSubsystem::MoveRunQueuePair(
@@ -668,14 +662,14 @@ bool USimulatorLaunchSubsystem::MoveRunQueuePair(
 	TArray<FString>& outDiagnostics) const
 {
 	TArray<FScenarioRunInput> runInputs;
-	if (!LoadEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics))
+	if (!LoadScenarioRunQueueFile(runQueuePath, runInputs, outDiagnostics))
 	{
 		return false;
 	}
 
 	if (!runInputs.IsValidIndex(runIndex))
 	{
-		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue index is out of range: %d"), runIndex));
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue index is out of range: %d"), runIndex));
 		return false;
 	}
 
@@ -683,12 +677,12 @@ bool USimulatorLaunchSubsystem::MoveRunQueuePair(
 	const int32 targetIndex = runIndex + step;
 	if (!runInputs.IsValidIndex(targetIndex))
 	{
-		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue target index is out of range: %d"), targetIndex));
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue target index is out of range: %d"), targetIndex));
 		return false;
 	}
 
 	runInputs.Swap(runIndex, targetIndex);
-	return SaveEpisodeRunQueueFile(runQueuePath, runInputs, outDiagnostics);
+	return SaveScenarioRunQueueFile(runQueuePath, runInputs, outDiagnostics);
 }
 
 bool USimulatorLaunchSubsystem::ReplaceScenarioSetupReferencesInRunQueues(
@@ -723,7 +717,7 @@ bool USimulatorLaunchSubsystem::ReplaceRunQueueReferences(
 
 	if (normalizedOldPath.IsEmpty() || normalizedNewPath.IsEmpty())
 	{
-		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue %s reference paths must not be empty."), referenceFieldName));
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue %s reference paths must not be empty."), referenceFieldName));
 		return false;
 	}
 
@@ -736,13 +730,13 @@ bool USimulatorLaunchSubsystem::ReplaceRunQueueReferences(
 	TArray<FString> changedRunQueueJsonStrings;
 	int32 changedReferenceCount = 0;
 
-	for (const FString& runQueuePath : ListEpisodeRunQueueFiles())
+	for (const FString& runQueuePath : ListScenarioRunQueueFiles())
 	{
 		TArray<FScenarioRunInput> runInputs;
 		TArray<FString> loadDiagnostics;
-		if (!LoadEpisodeRunQueueFile(runQueuePath, runInputs, loadDiagnostics))
+		if (!LoadScenarioRunQueueFile(runQueuePath, runInputs, loadDiagnostics))
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue load failed before reference update: %s"), *runQueuePath));
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue load failed before reference update: %s"), *runQueuePath));
 			outDiagnostics.Append(loadDiagnostics);
 			return false;
 		}
@@ -767,9 +761,9 @@ bool USimulatorLaunchSubsystem::ReplaceRunQueueReferences(
 
 		FString jsonString;
 		TArray<FString> writeDiagnostics;
-		if (!TryWriteEpisodeRunQueueJson(runInputs, jsonString, writeDiagnostics))
+		if (!TryWriteScenarioRunQueueJson(runInputs, jsonString, writeDiagnostics))
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue reference update validation failed: %s"), *runQueuePath));
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue reference update validation failed: %s"), *runQueuePath));
 			outDiagnostics.Append(writeDiagnostics);
 			return false;
 		}
@@ -788,7 +782,7 @@ bool USimulatorLaunchSubsystem::ReplaceRunQueueReferences(
 				*resolvedRunQueuePath,
 				FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue reference update write failed: %s"), *resolvedRunQueuePath));
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue reference update write failed: %s"), *resolvedRunQueuePath));
 			return false;
 		}
 	}
@@ -796,14 +790,14 @@ bool USimulatorLaunchSubsystem::ReplaceRunQueueReferences(
 	if (changedReferenceCount > 0)
 	{
 		outDiagnostics.Add(FString::Printf(
-			TEXT("Updated %d %s reference(s) in %d EpisodeRunQueue file(s)."),
+			TEXT("Updated %d %s reference(s) in %d ScenarioRunQueue file(s)."),
 			changedReferenceCount,
 			referenceFieldName,
 			changedRunQueueFiles.Num()));
 		UE_LOG(
 			LogSimulatorLaunch,
 			Log,
-			TEXT("EpisodeRunQueue references updated | Field: %s, Old: %s, New: %s, References: %d, Files: %d"),
+			TEXT("ScenarioRunQueue references updated | Field: %s, Old: %s, New: %s, References: %d, Files: %d"),
 			referenceFieldName,
 			*normalizedOldPath,
 			*normalizedNewPath,
@@ -1064,7 +1058,7 @@ FString USimulatorLaunchSubsystem::BuildPreviewLauncherArgumentString(
 		SimulatorProcessFlags);
 }
 
-bool USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(
+bool USimulatorLaunchSubsystem::TryReadScenarioRunQueueJson(
 	const FString& jsonString,
 	TArray<FScenarioRunInput>& outRunInputs,
 	TArray<FString>& outDiagnostics)
@@ -1076,33 +1070,33 @@ bool USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(
 	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(jsonString);
 	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
 	{
-		outDiagnostics.Add(TEXT("EpisodeRunQueue JSON parse failed."));
+		outDiagnostics.Add(TEXT("ScenarioRunQueue JSON parse failed."));
 		return false;
 	}
 
 	FString schema;
-	if (!rootObject->TryGetStringField(TEXT("schema"), schema) || !schema.Equals(LaunchEpisodeRunQueueSchema, ESearchCase::CaseSensitive))
+	if (!rootObject->TryGetStringField(TEXT("schema"), schema) || !schema.Equals(LaunchScenarioRunQueueSchema, ESearchCase::CaseSensitive))
 	{
-		outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue schema must be '%s'."), LaunchEpisodeRunQueueSchema));
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue schema must be '%s'."), LaunchScenarioRunQueueSchema));
 	}
 
 	double version = 0.0;
 	if (!rootObject->TryGetNumberField(TEXT("version"), version) || version <= 0.0)
 	{
-		outDiagnostics.Add(TEXT("EpisodeRunQueue version must be > 0."));
+		outDiagnostics.Add(TEXT("ScenarioRunQueue version must be > 0."));
 	}
 
 	const TSharedPtr<FJsonValue> runsValue = rootObject->TryGetField(TEXT("runs"));
 	if (!runsValue.IsValid() || runsValue->Type != EJson::Array)
 	{
-		outDiagnostics.Add(TEXT("EpisodeRunQueue runs must be an array."));
+		outDiagnostics.Add(TEXT("ScenarioRunQueue runs must be an array."));
 		return false;
 	}
 
 	const TArray<TSharedPtr<FJsonValue>> runValues = runsValue->AsArray();
 	if (runValues.IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("EpisodeRunQueue runs must contain at least one pair."));
+		outDiagnostics.Add(TEXT("ScenarioRunQueue runs must contain at least one pair."));
 	}
 
 	for (int32 index = 0; index < runValues.Num(); ++index)
@@ -1110,22 +1104,16 @@ bool USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(
 		const TSharedPtr<FJsonValue>& runValue = runValues[index];
 		if (!runValue.IsValid() || runValue->Type != EJson::Object)
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue runs[%d] must be an object."), index));
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue runs[%d] must be an object."), index));
 			continue;
 		}
 
 		const TSharedPtr<FJsonObject> runObject = runValue->AsObject();
 		FScenarioRunInput runInput;
 		runObject->TryGetStringField(TEXT("pair_id"), runInput.PairId);
-		TryReadRunQueueScenarioSetupPath(*runObject, runInput.ScenarioSetupJsonPath);
-		if (!runObject->TryGetStringField(TEXT("delivery_bot_setup"), runInput.DeliveryBotSetupJsonPath))
-		{
-			runObject->TryGetStringField(TEXT("delivery_bot_setup_json_path"), runInput.DeliveryBotSetupJsonPath);
-		}
-		if (!runObject->TryGetStringField(TEXT("policy_spec"), runInput.PolicySpecJsonPath))
-		{
-			runObject->TryGetStringField(TEXT("policy_spec_json_path"), runInput.PolicySpecJsonPath);
-		}
+		runObject->TryGetStringField(TEXT("scenario_setup"), runInput.ScenarioSetupJsonPath);
+		runObject->TryGetStringField(TEXT("delivery_bot_setup"), runInput.DeliveryBotSetupJsonPath);
+		runObject->TryGetStringField(TEXT("policy_spec"), runInput.PolicySpecJsonPath);
 
 		runInput.PairId = runInput.PairId.TrimStartAndEnd();
 		runInput.ScenarioSetupJsonPath = NormalizeRunQueueReferencePath(runInput.ScenarioSetupJsonPath);
@@ -1134,12 +1122,12 @@ bool USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(
 
 		if (runInput.ScenarioSetupJsonPath.TrimStartAndEnd().IsEmpty())
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue runs[%d].scenario_setup must not be empty."), index));
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue runs[%d].scenario_setup must not be empty."), index));
 		}
 
 		if (runInput.DeliveryBotSetupJsonPath.TrimStartAndEnd().IsEmpty())
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue runs[%d].delivery_bot_setup must not be empty."), index));
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue runs[%d].delivery_bot_setup must not be empty."), index));
 		}
 
 		outRunInputs.Add(runInput);
@@ -1148,7 +1136,7 @@ bool USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(
 	return outDiagnostics.IsEmpty();
 }
 
-bool USimulatorLaunchSubsystem::TryWriteEpisodeRunQueueJson(
+bool USimulatorLaunchSubsystem::TryWriteScenarioRunQueueJson(
 	const TArray<FScenarioRunInput>& runInputs,
 	FString& outJson,
 	TArray<FString>& outDiagnostics)
@@ -1158,7 +1146,7 @@ bool USimulatorLaunchSubsystem::TryWriteEpisodeRunQueueJson(
 
 	if (runInputs.IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("EpisodeRunQueue requires at least one pair."));
+		outDiagnostics.Add(TEXT("ScenarioRunQueue requires at least one pair."));
 	}
 
 	for (int32 index = 0; index < runInputs.Num(); ++index)
@@ -1166,7 +1154,7 @@ bool USimulatorLaunchSubsystem::TryWriteEpisodeRunQueueJson(
 		const FScenarioRunInput& runInput = runInputs[index];
 		if (runInput.ScenarioSetupJsonPath.TrimStartAndEnd().IsEmpty())
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue pair %d requires scenario_setup."), index));
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue pair %d requires scenario_setup."), index));
 		}
 		else if (!IsScenarioSetupFile(runInput.ScenarioSetupJsonPath))
 		{
@@ -1175,7 +1163,7 @@ bool USimulatorLaunchSubsystem::TryWriteEpisodeRunQueueJson(
 
 		if (runInput.DeliveryBotSetupJsonPath.TrimStartAndEnd().IsEmpty())
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("EpisodeRunQueue pair %d requires delivery_bot_setup."), index));
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue pair %d requires delivery_bot_setup."), index));
 		}
 		else if (!IsDeliveryBotSetupFile(runInput.DeliveryBotSetupJsonPath))
 		{
@@ -1196,9 +1184,9 @@ bool USimulatorLaunchSubsystem::TryWriteEpisodeRunQueueJson(
 
 	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
 		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&outJson);
-	if (!FJsonSerializer::Serialize(MakeEpisodeRunQueueObject(runInputs), writer))
+	if (!FJsonSerializer::Serialize(MakeScenarioRunQueueObject(runInputs), writer))
 	{
-		outDiagnostics.Add(TEXT("EpisodeRunQueue JSON serialization failed."));
+		outDiagnostics.Add(TEXT("ScenarioRunQueue JSON serialization failed."));
 		return false;
 	}
 

@@ -2,7 +2,7 @@
   "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "sidewalk_actor_spawn_001",
-  "map_id": "EpisodeSandbox",
+  "map_id": "ScenarioEditorMap",
   "run": {
     "base_seed": 42,
     "iteration_index": 0,

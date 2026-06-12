@@ -1,8 +1,5 @@
 # Pedestrian Social Evaluation Design
 
-작성일: 2026-06-04  
-상태: MVP1 완료, MVP2 core 구현 진행 중
-
 ## 목적
 
 이 문서는 ProtoRobotSim의 보행자를 단순 이동 장애물이 아니라 로봇 정책을 검증하는 사회적/동적 평가 장치로 확장하기 위한 설계와 구현 단계를 정리한다.
@@ -24,7 +21,7 @@ Pedestrian = setup-time planned baseline trajectory + deterministic robot reacti
 - 정적 장애물 footprint 기반 deterministic detour 생성
 - optional deterministic path curve sampling
 - `UEpisodePedestrianPlanSubsystem` plan cache
-- pure C++ `FEpisodePedestrianPlanBuilder`
+- pure C++ `FScenarioPedestrianPlanBuilder`
 - `UEpisodePedestrianRuntimeComponent` baseline follow
 - behavior parameter optional parsing
 - `BehaviorHash`, `PedestrianScenarioHash`
@@ -36,12 +33,12 @@ Pedestrian = setup-time planned baseline trajectory + deterministic robot reacti
 
 - pedestrian runtime metric의 evaluation report / JSONL 정식 집계
 - pedestrian-pedestrian path conflict / reservation scheduling
-- authored `paths[]` / spline을 `FEpisodePedestrianPlan` source로 변환
+- authored `paths[]` / spline을 `FScenarioPedestrianPlan` source로 변환
 - A-Star/NavMesh/flow-field 수준의 전역 planner
 - named profile preset expansion
 - final scalar score collapse
 
-## EpisodeSetup 입력 모델
+## ScenarioSetup 입력 모델
 
 현재 planned pedestrian의 기본 입력은 다음 형태다.
 
@@ -113,15 +110,15 @@ planned trajectory의 baseline geometry는 `movement` 아래 optional curve fiel
 ]
 ```
 
-현재 `planned_trajectory`는 이 `paths[]`를 plan source로 사용하지 않는다. 장기적으로는 `paths[]` 또는 editor-authored spline을 route source로 받아 `FEpisodePedestrianPlan`으로 샘플링하는 방향이 맞다.
+현재 `planned_trajectory`는 이 `paths[]`를 plan source로 사용하지 않는다. 장기적으로는 `paths[]` 또는 editor-authored spline을 route source로 받아 `FScenarioPedestrianPlan`으로 샘플링하는 방향이 맞다.
 
 ## 시스템 책임
 
-### UEpisodeCompiler
+### UScenarioCompiler
 
 책임:
 
-- EpisodeSetup JSON을 `FEpisodeWorldSpec` / `FEpisodeSimulationSetupSpec`로 컴파일한다.
+- ScenarioSetup JSON을 `FScenarioWorldSpec` / `FScenarioSimulationSetupSpec`로 컴파일한다.
 - 기존 `path_id` 기반 보행자와 신규 `planned_trajectory` 보행자를 모두 허용한다.
 - `planned_trajectory` 보행자에 대해 `start_xy_m`, `goal_xy_m`을 필수로 검증한다.
 - `actors.pedestrians[].behavior`가 있으면 optional numeric property로 복사한다.
@@ -142,7 +139,7 @@ planned trajectory의 baseline geometry는 `movement` 아래 optional curve fiel
 - ground region, path actor, static obstacle, robot, pedestrian actor를 spawn/clear한다.
 - static obstacle actor spawn 이후 resolved footprint를 수집한다.
 - `UEpisodePedestrianPlanSubsystem::BuildPlans`를 호출한다.
-- planned pedestrian spawn 시 `FEpisodePedestrianPlan`을 runtime component에 주입한다.
+- planned pedestrian spawn 시 `FScenarioPedestrianPlan`을 runtime component에 주입한다.
 - planned pedestrian runtime component에 평가 대상 robot actor weak reference를 주입한다.
 
 현재 world setup 순서:
@@ -192,7 +189,7 @@ SetupEpisodeWorld
 - robot reaction 실행
 - evaluation score 산출
 
-### FEpisodePedestrianPlanBuilder
+### FScenarioPedestrianPlanBuilder
 
 타입: pure C++ helper/algorithm class
 
@@ -218,7 +215,7 @@ SetupEpisodeWorld
 
 책임:
 
-- 자신에게 주입된 `FEpisodePedestrianPlan`을 따라 baseline progress 기반으로 이동한다.
+- 자신에게 주입된 `FScenarioPedestrianPlan`을 따라 baseline progress 기반으로 이동한다.
 - 로봇 weak reference와 위치 변화 기반 observed velocity를 사용해 fixed-sample conflict prediction을 수행한다.
 - 로봇의 live global path/repath 결과는 보행자 반응 입력으로 사용하지 않는다. 이는 로봇 정책의 회피 행동과 보행자 회피 행동이 서로를 따라가며 지표를 오염시키는 피드백을 막기 위함이다.
 - deterministic state machine을 실행한다.
@@ -270,7 +267,7 @@ Hash는 값을 대체하기 위한 저장 방식이 아니라, derived artifact�
 
 | Hash | 의미 |
 | --- | --- |
-| `SourceSpecHash` | source EpisodeSetup spec fingerprint |
+| `SourceSpecHash` | source ScenarioSetup spec fingerprint |
 | `ResolvedFootprintHash` | spawn 이후 resolve된 static obstacle footprint fingerprint |
 | `PlanHash` | baseline path/timing fingerprint |
 | `BehaviorHash` | resolved behavior parameter fingerprint |
@@ -280,7 +277,7 @@ Hash는 값을 대체하기 위한 저장 방식이 아니라, derived artifact�
 
 ```text
 SourceSpec + Seed + ResolvedFootprints + SemanticNavConfig
-  -> FEpisodePedestrianPlan
+  -> FScenarioPedestrianPlan
   -> PlanHash
 
 Behavior JSON/defaults
@@ -359,7 +356,7 @@ MVP3에 우선 포함할 후보:
 - shared plan/point/reservation type 추가
 - compiler에 `planned_trajectory` 입력 파싱 추가
 - `UEpisodePedestrianPlanSubsystem` 추가
-- `FEpisodePedestrianPlanBuilder` 추가
+- `FScenarioPedestrianPlanBuilder` 추가
 - static obstacle footprint 수집 경로 추가
 - deterministic static obstacle detour 생성
 - `PlanHash` 산출
@@ -450,17 +447,3 @@ MVP3에 우선 포함할 후보:
 | Blocked 회복 | MVP2에서는 conflict clear 후 `Recover`. reroute 없음 |
 | multi robot | 현재는 평가 대상 robot 1대 weak reference 주입. 다중 로봇은 registry/snapshot으로 확장 |
 | hash algorithm | 현재 `uint32` 문자열. 장기적으로 canonical SHA-256 필요 |
-
-## 테스트 현황
-
-자동화 테스트:
-
-- `ProtoRobotSim.Episode.PedestrianPlan.BuilderDeterminism`
-- `ProtoRobotSim.Episode.PedestrianPlan.BuilderObstacleDetour`
-- `ProtoRobotSim.Episode.PedestrianPlan.BehaviorParams`
-- `ProtoRobotSim.Episode.Compiler.PedestrianBehaviorOptional`
-- `ProtoRobotSim.Episode.Compiler.PedestrianBehaviorValues`
-
-샘플:
-
-- `Json/Input/EpisodeSetupSample_PlannedPedestrianObstacle.json`

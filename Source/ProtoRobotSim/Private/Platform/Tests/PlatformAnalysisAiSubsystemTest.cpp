@@ -52,7 +52,7 @@ bool FPlatformAnalysisAiReportPathExtractionTest::RunTest(const FString& Paramet
 		"schema": "episode_evaluation_report",
 		"version": 1,
 		"run": {
-			"episode_setup": { "path": "Json/Input/EpisodeSetupSample_1.json", "hash": "episode-hash" },
+			"episode_setup": { "path": "Json/Input/ScenarioSetupSample_1.json", "hash": "episode-hash" },
 			"delivery_bot_setup": { "path": "Json/Input/DeliveryBotSetupSample_1.json", "hash": "bot-hash" }
 		}
 	})");
@@ -68,7 +68,7 @@ bool FPlatformAnalysisAiReportPathExtractionTest::RunTest(const FString& Paramet
 			DeliveryBotSetupPath,
 			Diagnostics));
 	TestEqual(TEXT("diagnostics"), Diagnostics.Num(), 0);
-	TestEqual(TEXT("episode setup path"), EpisodeSetupPath, FString(TEXT("Json/Input/EpisodeSetupSample_1.json")));
+	TestEqual(TEXT("episode setup path"), EpisodeSetupPath, FString(TEXT("Json/Input/ScenarioSetupSample_1.json")));
 	TestEqual(TEXT("delivery bot setup path"), DeliveryBotSetupPath, FString(TEXT("Json/Input/DeliveryBotSetupSample_1.json")));
 
 	return true;
@@ -162,7 +162,7 @@ bool FPlatformAnalysisAiStaleAbsoluteSetupPathRemapTest::RunTest(const FString& 
 		"version": 1,
 		"run": {
 			"episode_setup": {
-				"path": "C:/Users/old/Documents/Unreal Projects/Proto-Unreal/Json/Input/EpisodeSetupSample_1.json",
+				"path": "C:/Users/old/Documents/Unreal Projects/Proto-Unreal/Json/Input/ScenarioSetupSample_1.json",
 				"hash": "episode-hash"
 			},
 			"delivery_bot_setup": {
@@ -197,7 +197,7 @@ bool FPlatformAnalysisAiStaleAbsoluteSetupPathRemapTest::RunTest(const FString& 
 	TestTrue(TEXT("has episode setup path"), RequestObject->TryGetStringField(TEXT("episode_setup_path"), RequestEpisodeSetupPath));
 	TestTrue(TEXT("has bot setup path"), RequestObject->TryGetStringField(TEXT("bot_setup_path"), RequestBotSetupPath));
 
-	FString ExpectedEpisodeSetupPath = FPaths::Combine(FPaths::ProjectDir(), TEXT("Json/Input/EpisodeSetupSample_1.json"));
+	FString ExpectedEpisodeSetupPath = FPaths::Combine(FPaths::ProjectDir(), TEXT("Json/Input/ScenarioSetupSample_1.json"));
 	FString ExpectedBotSetupPath = FPaths::Combine(FPaths::ProjectDir(), TEXT("Json/Input/DeliveryBotSetupSample_1.json"));
 	FPaths::NormalizeFilename(ExpectedEpisodeSetupPath);
 	FPaths::NormalizeFilename(ExpectedBotSetupPath);

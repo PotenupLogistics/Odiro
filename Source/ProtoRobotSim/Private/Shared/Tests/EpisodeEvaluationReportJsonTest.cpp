@@ -52,7 +52,7 @@ bool FEpisodeEvaluationReportJsonSerializationTest::RunTest(const FString& Param
 	Record.RunIndex = 4;
 	Record.EpisodeId = TEXT("sensor_route_layout_004");
 	Record.PairId = TEXT("sample_4");
-	Record.EpisodeSetupJsonPath = TEXT("Json/Input/EpisodeSetupSample_4.json");
+	Record.EpisodeSetupJsonPath = TEXT("Json/Input/ScenarioSetupSample_4.json");
 	Record.EpisodeSetupHash = TEXT("252738887");
 	Record.DeliveryBotSetupJsonPath = TEXT("Json/Input/DeliveryBotSetupSample_4.json");
 	Record.DeliveryBotSetupHash = TEXT("109204312");

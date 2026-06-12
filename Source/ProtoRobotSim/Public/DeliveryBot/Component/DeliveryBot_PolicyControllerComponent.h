@@ -1,11 +1,11 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Shared/Struct/DeliveryBot/Drive/DeliveryBotDriveConfigInfo.h"
 #include "Shared/Struct/DeliveryBot/Drive/DeliveryBotMovementInfo.h"
 #include "Shared/Struct/DeliveryBot/Policy/DeliveryBotHttpPolicyResponseInfo.h"
-#include "Shared/EpisodeConfigTypes.h"
+#include "Shared/EpisodeResultTypes.h"
 #include "DeliveryBot_PolicyControllerComponent.generated.h"
 
 class ADeliveryBot;

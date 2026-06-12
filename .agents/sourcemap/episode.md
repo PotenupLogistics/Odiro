@@ -1,18 +1,18 @@
-# Episode
+# Episode Logging
 
-Covers: `Source/ProtoRobotSim/Public/Episode`, `Source/ProtoRobotSim/Private/Episode`, `Docs/EpisodeSetup_JSON_Guide.md`
+Covers: `Source/ProtoRobotSim/Public/Episode`, `Source/ProtoRobotSim/Private/Episode`, episode-scoped types in `Shared`
+
+"Episode" = one completed simulation iteration and its result artifacts. The old scenario-wide meaning was renamed; environment authoring/compile/spawn now lives in [Scenario](scenario.md).
 
 ## Entry Points
-- `Public/Episode/EpisodeCompiler.h`: JSON to `FEpisodeWorldSpec` compile entry points
-- `Public/Episode/EpisodeSimulationSubsystem.h`: runtime spawn and lookup API
-- `Public/Episode/Editor/EpisodeEditorController.h`: `EpisodeEditorMap` controller, authoring input, save API, editor toolbar lifecycle
-- `Public/Episode/Widget/EpisodeEditorToolbarWidget.h`: `WBP_EpisodeEditorToolbar` binding contract and C++ handlers for save path, save, and return to `MainMenuMap`
-- `Public/Episode/Actors`: ground region, spline path, static obstacle, pedestrian, vehicle actors
-- `Public/Episode/Components`: placeable metadata, obstacle collision, path follower components
-- `Public/Episode/Interfaces`: physics participant and replay trackable extension points
-- `Docs/EpisodeSetup_JSON_Guide.md`: authored JSON contract
+- `Public/Episode/EpisodeMeasurementLogSubsystem.h`: per-world measurement log lifecycle (header/tick/event/footer JSONL records)
+- `Public/Episode/EpisodeRobotMeasurementAdapter.h`: robot state/lidar/action snapshot adapter feeding tick records
+- `Shared/EpisodeMeasurementLogTypes.h`: log record structs and settings
+- `Shared/EpisodeJsonlMeasurementWriter.h`: JSONL file writer
+- `Shared/EpisodeLogSubjectRegistry.h`: subject id registry for log records
+- `Shared/EpisodeEvaluationReportJson.h`: `episode_evaluation_report` JSON build/save
+- `Shared/EpisodeConfigTypes.h`: episode evaluation outcome/event/result enums and structs, `FEpisodeRunRecord`
 
 ## Notes
-- Surface: `UEpisodeCompiler`, `UEpisodeSimulationSubsystem`, `UEpisodeDefinition`, `UEpisodePlaceableAssetCatalog`, episode actors/components, `IEpisode*`
-- Authored JSON uses meters/degrees; runtime transforms use Unreal centimeters/degrees
-- Actor `instance_id` is unique across static obstacles, pedestrians, and robot
+- These types keep the `Episode` prefix intentionally under the new terminology (per-iteration artifacts)
+- External contracts that must not be renamed unilaterally: report schema `episode_evaluation_report`, policy-server `episode_start`/config-update protocol (`DeliveryBot` HTTP policy components), AI analysis request fields

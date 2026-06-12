@@ -139,12 +139,12 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
 ```json
 {
   "pair_id": "sample_0",
-  "scenario_setup": "Json/Input/EpisodeSetupSample_0.json",
+  "scenario_setup": "Json/Input/ScenarioSetupSample_0.json",
   "delivery_bot_setup": "Json/Input/DeliveryBotSetupSample_0.json"
 }
 ```
 
-여러 pair를 순서대로 실행할 때는 `Json/Input/EpisodeRunQueueSample.json`처럼 `runs` 배열로 묶고 `UScenarioRunnerSubsystem::StartBatchFromRunQueueJsonFile()`에 큐 파일 경로를 전달한다.
+여러 pair를 순서대로 실행할 때는 `Json/Input/ScenarioRunQueueSample.json`처럼 `runs` 배열로 묶고 `UScenarioRunnerSubsystem::StartBatchFromRunQueueJsonFile()`에 큐 파일 경로를 전달한다.
 `scenario_setup`과 `delivery_bot_setup`은 둘 다 필수이며, Runner는 더 이상 기본 DeliveryBotSetup 파일로 fallback하지 않는다.
 
 ```json
@@ -154,7 +154,7 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
   "runs": [
     {
       "pair_id": "sample_0",
-      "scenario_setup": "Json/Input/EpisodeSetupSample_0.json",
+      "scenario_setup": "Json/Input/ScenarioSetupSample_0.json",
       "delivery_bot_setup": "Json/Input/DeliveryBotSetupSample_0.json"
     }
   ]

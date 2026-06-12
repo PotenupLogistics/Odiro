@@ -1,12 +1,78 @@
 from .action import BotAction
 from .contract import ScenarioDecideRequest, ScenarioEndRequest, ScenarioStartRequest
+from .debug_logger import DecisionLogWatcher
 from .pathfinding.astar import AStarPathfinder
 from .policies.path_follower import PathFollower
 from .policies.repath_policy import RePathPolicy
-from .policies.slowdown_policy import SlowDownPolicy
 from .policies.stop_policy import StopPolicy
 from .state import AgentState
 
+
+# Print front lidar minimum distance for decide debugging.
+def get_front_lidar_min_distance_text(request: ScenarioDecideRequest, front_angle_degree: float = 30.0) -> str:
+    hit_rays = [ray for ray in request.lidarRays if ray.hit]
+    front_rays = [
+        ray
+        for ray in hit_rays
+        if abs(normalize_angle_degree(ray.rayYawDegree)) <= front_angle_degree
+    ]
+
+    if not front_rays:
+        return f"none(hitRays={len(hit_rays)})"
+
+    nearest_ray = min(front_rays, key=lambda ray: ray.distanceM)
+    nearest_yaw = normalize_angle_degree(nearest_ray.rayYawDegree)
+    return f"{nearest_ray.distanceM:.2f}@{nearest_yaw:.0f}deg"
+
+
+def normalize_angle_degree(angle_degree: float) -> float:
+    return (angle_degree + 180.0) % 360.0 - 180.0
+
+
+# path cell 목록을 Unreal world 좌표 목록으로 변환한다.
+def build_path_world_points(state: AgentState) -> list[dict]:
+    if state.grid is None:
+        return []
+
+    z = state.start.z if state.start is not None else 0.0
+    result = []
+
+    for cell_x, cell_y in state.path:
+        result.append({
+            "x": state.grid.originCm.x + (cell_x + 0.5) * state.grid.cellSizeCm,
+            "y": state.grid.originCm.y + (cell_y + 0.5) * state.grid.cellSizeCm,
+            "z": z,
+        })
+
+    return result
+
+
+def build_decision_log_snapshot(
+    request: ScenarioDecideRequest,
+    state: AgentState,
+    policy_name: str,
+    reason: str,
+    action_dict: dict | None,
+) -> dict:
+    action_dict = action_dict or {}
+
+    return {
+        "seq": request.sequence,
+        "runTimeSeconds": request.runTimeSeconds,
+        "policy": policy_name,
+        "reason": reason,
+        "frontMinM": get_front_lidar_min_distance_text(request),
+        "nearMiss": state.nearMissCount,
+        "lastNearMissCell": state.lastNearMissCell,
+        "lastNearMissSource": state.lastNearMissSource,
+        "blockedCorridor": len(state.lastBlockedCorridorCells),
+        "pathIndex": state.pathIndex,
+        "pathLength": len(state.path),
+        "direction": action_dict.get("direction"),
+        "targetSpeedKmh": action_dict.get("targetSpeedKmh"),
+        "steering": action_dict.get("steering"),
+        "brake": action_dict.get("brake"),
+    }
 
 
 # PythonAgent의 전체 정책 흐름을 담당하는 클래스
@@ -14,11 +80,20 @@ class BotPolicy:
 
     # 사용할 정책 목록과 길찾기 객체를 준비
     def __init__(self, policies: list):
+        self.decisionLogWatcher = DecisionLogWatcher()
         self.policies = policies                  # decide 때 순서대로 실행할 정책 목록
         self.pathfinder = AStarPathfinder()       # start 때 최초 경로를 만들 A* 객체
 
 
   # /scenario/start 요청 처리
+    # /scenario/start의 spec 값을 각 정책 객체에 전달한다.
+    def configure_policies_from_start(self, request: ScenarioStartRequest) -> None:
+        for policy in self.policies:
+            configure_from_start = getattr(policy, "configure_from_start", None)
+            if callable(configure_from_start):
+                configure_from_start(request)
+
+
     def start(
         self,
         request: ScenarioStartRequest,
@@ -32,6 +107,9 @@ class BotPolicy:
             goal=request.goal,
             grid=request.grid,
         )
+
+        self.decisionLogWatcher.reset()
+        self.configure_policies_from_start(request)
 
         result = self.pathfinder.find_path(
             start=request.start,
@@ -67,7 +145,8 @@ class BotPolicy:
         }
         
         
-        # /scenario/decide 요청 처리
+        # /scenario/end 요청 처리
+    # /scenario/decide 요청을 처리하고 action과 path debug 정보를 반환한다.
     def decide(
         self,
         request: ScenarioDecideRequest,
@@ -92,6 +171,16 @@ class BotPolicy:
             action_dict = action.to_dict()
             state.remember_action(action_dict, reason)
 
+            self.decisionLogWatcher.emit_if_changed(
+                build_decision_log_snapshot(
+                    request=request,
+                    state=state,
+                    policy_name=policy.name,
+                    reason=reason,
+                    action_dict=action_dict,
+                )
+            )
+
             return {
                 "sequence": request.sequence,
                 "status": "ok",
@@ -101,8 +190,29 @@ class BotPolicy:
                     "reason": reason,
                     "pathStatus": "valid" if state.has_path() else "empty",
                     "pathIndex": state.pathIndex,
+                    "pathLength": len(state.path),
+                    "pathWorldPoints": build_path_world_points(state),
+                    "targetPathIndex": state.targetPathIndex,
+                    "targetWorldPoint": state.targetWorldPoint,
+                    "closestPathDistanceCm": state.closestPathDistanceCm,
+                    "maxPathErrorCm": state.maxPathErrorCm,
+                    "nearMissCount": state.nearMissCount,
+                    "lastNearMissCell": state.lastNearMissCell,
+                    "lastNearMissSource": state.lastNearMissSource,
+                    "blockedCorridorCellCount": len(state.lastBlockedCorridorCells),
+                    "recoveryUntilSeconds": state.recoveryUntilSeconds,
                 },
             }
+
+        self.decisionLogWatcher.emit_if_changed(
+            build_decision_log_snapshot(
+                request=request,
+                state=state,
+                policy_name="None",
+                reason=last_reason or "no_action",
+                action_dict=None,
+            )
+        )
 
         return {
             "sequence": request.sequence,
@@ -115,12 +225,22 @@ class BotPolicy:
             "debug": {
                 "reason": last_reason or "no_action",
                 "pathStatus": "valid" if state.has_path() else "empty",
+                "pathIndex": state.pathIndex,
+                "pathLength": len(state.path),
+                "pathWorldPoints": build_path_world_points(state),
+                "targetPathIndex": state.targetPathIndex,
+                "targetWorldPoint": state.targetWorldPoint,
+                "closestPathDistanceCm": state.closestPathDistanceCm,
+                "maxPathErrorCm": state.maxPathErrorCm,
+                "nearMissCount": state.nearMissCount,
+                "lastNearMissCell": state.lastNearMissCell,
+                "lastNearMissSource": state.lastNearMissSource,
+                "blockedCorridorCellCount": len(state.lastBlockedCorridorCells),
+                "recoveryUntilSeconds": state.recoveryUntilSeconds,
             },
         }
-        
-        
-        
-        # /scenario/end 요청 처리
+
+
     def end(
         self,
         request: ScenarioEndRequest,
@@ -133,6 +253,10 @@ class BotPolicy:
             "stopCount": state.stopCount,
             "repathCount": state.repathCount,
             "slowdownCount": state.slowdownCount,
+            "nearMissCount": state.nearMissCount,
+            "lastNearMissCell": state.lastNearMissCell,
+            "lastNearMissSource": state.lastNearMissSource,
+            "blockedCorridorCellCount": len(state.lastBlockedCorridorCells),
         }
 
         state.clear_after_end()
@@ -140,6 +264,12 @@ class BotPolicy:
         return {
             "status": "ok",
             "accepted": True,
+            "metrics": {
+                "nearMissCount": debug["nearMissCount"],
+                "stopCount": debug["stopCount"],
+                "repathCount": debug["repathCount"],
+                "slowdownCount": debug["slowdownCount"],
+            },
             "debug": debug,
         }
 
@@ -148,8 +278,7 @@ class BotPolicy:
 # Unreal은 policy를 선택하지 않고, Python은 여기 작성된 순서대로 동작
 def create_policy() -> BotPolicy:
     return BotPolicy([
-        StopPolicy(),
         RePathPolicy(),
-        SlowDownPolicy(),
-        PathFollower(),
+       # StopPolicy(),
+        PathFollower()
     ])

@@ -9,7 +9,7 @@ public class ProtoRobotSim : ModuleRules
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "SlateCore",
-			"ChaosVehicles", "Json", "JsonUtilities", "HTTP" });
+			"ChaosVehicles", "Json", "JsonUtilities", "HTTP", "DeveloperSettings" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "Slate" });
 		

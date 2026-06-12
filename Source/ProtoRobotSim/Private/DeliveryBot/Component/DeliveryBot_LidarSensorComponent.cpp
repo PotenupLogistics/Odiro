@@ -16,7 +16,16 @@ void UDeliveryBot_LidarSensorComponent::InitializeLidar(const FDeliveryBotLidarS
 	LidarSensorConfigInfo.SensorHeightM = FMath::Max(LidarSensorConfigInfo.SensorHeightM, 0.f);
 	LidarSensorConfigInfo.FrontHalfAngleDegree = FMath::Clamp(LidarSensorConfigInfo.FrontHalfAngleDegree, 0.f, 180.f);
 	LidarSensorConfigInfo.StopDistanceM = FMath::Max(LidarSensorConfigInfo.StopDistanceM, 0.f);
-	LidarSensorConfigInfo.SlowDownDistanceM = FMath::Max(LidarSensorConfigInfo.SlowDownDistanceM,LidarSensorConfigInfo.StopDistanceM + 0.1f);
+	LidarSensorConfigInfo.NearMissDistanceM = FMath::Max(LidarSensorConfigInfo.NearMissDistanceM, LidarSensorConfigInfo.StopDistanceM + 0.1f);
+	LidarSensorConfigInfo.SlowDownDistanceM = FMath::Max(LidarSensorConfigInfo.SlowDownDistanceM, LidarSensorConfigInfo.NearMissDistanceM + 0.1f);
+	LidarSensorConfigInfo.CollisionStopHalfAngleDegree = FMath::Clamp(
+		LidarSensorConfigInfo.CollisionStopHalfAngleDegree,
+		0.f,
+		LidarSensorConfigInfo.FrontHalfAngleDegree);
+	LidarSensorConfigInfo.CollisionStopDistanceM = FMath::Clamp(
+		LidarSensorConfigInfo.CollisionStopDistanceM,
+		0.f,
+		LidarSensorConfigInfo.SlowDownDistanceM);
 }
 
 FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar() const
@@ -52,6 +61,8 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar1D() const
 	const float scanRangeCm = LidarSensorConfigInfo.ScanRangeM * 100.f;
 	const FVector endLocationCm = sensorLocationCm + owner->GetActorForwardVector() * scanRangeCm;
 
+	DrawDebugNearMissRange(sensorLocationCm);
+
 	FHitResult hitResult;
 	const bool bHit = TraceLidarRay(sensorLocationCm, endLocationCm, hitResult);
 
@@ -80,6 +91,8 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar2D() const
 
 	const float angleStepDegree = FMath::Max(LidarSensorConfigInfo.AngleStepDegree, 1.f);
 	const float scanRangeCm = LidarSensorConfigInfo.ScanRangeM * 100.f;
+
+	DrawDebugNearMissRange(sensorLocationCm);
 
 	int32 rayIndex = 0;
 
@@ -172,7 +185,7 @@ FDeliveryBotLidarRayInfo UDeliveryBot_LidarSensorComponent::MakeRayInfo(
 	FDeliveryBotLidarRayInfo rayInfo;
 
 	rayInfo.RayIndex = rayIndex;
-	rayInfo.RayYawDegree = rayYawDegree;
+	rayInfo.RayYawDegree = GetSignedYawDegree(rayYawDegree);
 	rayInfo.StartLocationCm = startLocationCm;
 	rayInfo.EndLocationCm = endLocationCm;
 	rayInfo.DistanceM = FVector::Dist(startLocationCm, endLocationCm) / 100.f;
@@ -238,6 +251,131 @@ void UDeliveryBot_LidarSensorComponent::DrawDebugLidarRay(
 			0.f
 		);
 	}
+}
+
+void UDeliveryBot_LidarSensorComponent::DrawDebugNearMissRange(const FVector& sensorLocationCm) const
+{
+	if (!LidarSensorConfigInfo.bDrawDebug || !LidarSensorConfigInfo.bDrawNearMissDebug)
+	{
+		return;
+	}
+
+	UWorld* world = GetWorld();
+	const AActor* owner = GetOwner();
+
+	if (world == nullptr || !IsValid(owner))
+	{
+		return;
+	}
+
+	const float frontHalfAngleDegree = FMath::Max(LidarSensorConfigInfo.FrontHalfAngleDegree, 0.f);
+	const float collisionHalfAngleDegree = FMath::Clamp(
+		LidarSensorConfigInfo.CollisionStopHalfAngleDegree,
+		0.f,
+		frontHalfAngleDegree);
+	const float stopDistanceCm = FMath::Max(LidarSensorConfigInfo.StopDistanceM * 100.f, 0.f);
+	const float nearMissDistanceCm = FMath::Max(LidarSensorConfigInfo.NearMissDistanceM * 100.f, stopDistanceCm + 1.f);
+	const float slowDownDistanceCm = FMath::Max(LidarSensorConfigInfo.SlowDownDistanceM * 100.f, 0.f);
+	const float collisionStopDistanceCm = FMath::Clamp(
+		LidarSensorConfigInfo.CollisionStopDistanceM * 100.f,
+		0.f,
+		slowDownDistanceCm);
+
+	if (frontHalfAngleDegree <= KINDA_SMALL_NUMBER || slowDownDistanceCm <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const FColor nearMissColor = FColor::Cyan;
+	const FColor slowDownColor(255, 128, 0);
+	const FColor collisionColor = FColor::Red;
+	const float lifeTimeSeconds = 0.f;
+	const uint8 depthPriority = 0;
+
+	const auto getPointAtYaw = [owner, sensorLocationCm](float yawDegree, float distanceCm)
+	{
+		const FVector localDirection = FRotator(0.f, yawDegree, 0.f).Vector();
+		const FVector worldDirection = owner->GetActorRotation().RotateVector(localDirection);
+		return sensorLocationCm + worldDirection * distanceCm;
+	};
+
+	const auto drawYawLine = [&](float yawDegree, float distanceCm, const FColor& color, float thickness)
+	{
+		DrawDebugLine(
+			world,
+			sensorLocationCm,
+			getPointAtYaw(yawDegree, distanceCm),
+			color,
+			false,
+			lifeTimeSeconds,
+			depthPriority,
+			thickness);
+	};
+
+	const auto drawArc = [&](float startYawDegree, float endYawDegree, float radiusCm, const FColor& color, float thickness)
+	{
+		if (radiusCm <= KINDA_SMALL_NUMBER || FMath::IsNearlyEqual(startYawDegree, endYawDegree))
+		{
+			return;
+		}
+
+		const int32 segmentCount = FMath::Max(4, FMath::CeilToInt(FMath::Abs(endYawDegree - startYawDegree) / 5.f));
+		FVector previousPoint = getPointAtYaw(startYawDegree, radiusCm);
+
+		for (int32 segmentIndex = 1; segmentIndex <= segmentCount; ++segmentIndex)
+		{
+			const float alpha = static_cast<float>(segmentIndex) / static_cast<float>(segmentCount);
+			const float yawDegree = FMath::Lerp(startYawDegree, endYawDegree, alpha);
+			const FVector nextPoint = getPointAtYaw(yawDegree, radiusCm);
+
+			DrawDebugLine(
+				world,
+				previousPoint,
+				nextPoint,
+				color,
+				false,
+				lifeTimeSeconds,
+				depthPriority,
+				thickness);
+
+			previousPoint = nextPoint;
+		}
+	};
+
+	drawArc(-180.f, 180.f, nearMissDistanceCm, nearMissColor, 3.f);
+	drawArc(-frontHalfAngleDegree, frontHalfAngleDegree, slowDownDistanceCm, slowDownColor, 2.f);
+	drawYawLine(-frontHalfAngleDegree, slowDownDistanceCm, slowDownColor, 2.f);
+	drawYawLine(frontHalfAngleDegree, slowDownDistanceCm, slowDownColor, 2.f);
+
+	if (collisionHalfAngleDegree > KINDA_SMALL_NUMBER)
+	{
+		drawYawLine(-collisionHalfAngleDegree, slowDownDistanceCm, slowDownColor, 2.f);
+		drawYawLine(collisionHalfAngleDegree, slowDownDistanceCm, slowDownColor, 2.f);
+	}
+
+	if (stopDistanceCm > KINDA_SMALL_NUMBER)
+	{
+		drawArc(-frontHalfAngleDegree, frontHalfAngleDegree, stopDistanceCm, collisionColor, 3.f);
+	}
+
+	if (collisionStopDistanceCm > KINDA_SMALL_NUMBER)
+	{
+		drawArc(-180.f, 180.f, collisionStopDistanceCm, collisionColor, 1.5f);
+	}
+
+	const FVector labelLocationCm = getPointAtYaw(0.f, slowDownDistanceCm + 35.f) + FVector(0.f, 0.f, 20.f);
+	DrawDebugString(
+		world,
+		labelLocationCm,
+		FString::Printf(
+			TEXT("Stop %.2fm | NearMiss %.2fm | Slow %.2fm"),
+			LidarSensorConfigInfo.StopDistanceM,
+			LidarSensorConfigInfo.NearMissDistanceM,
+			LidarSensorConfigInfo.SlowDownDistanceM),
+		nullptr,
+		nearMissColor,
+		lifeTimeSeconds,
+		true);
 }
 
 float UDeliveryBot_LidarSensorComponent::GetSignedYawDegree(float yawDegree) const

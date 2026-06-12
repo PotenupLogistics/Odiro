@@ -66,89 +66,78 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Policy")
 	bool StartPolicyRunWithPolicySpecFileName(const FString& policySpecFileName);
 
-	UFUNCTION(BlueprintCallable, CallInEditor, Category = "DeliveryBot|Debug")
-	void SendCurrentRuntimeConfigUpdateToPolicyServerOnce();
-	
-	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Sensor")
-	void UpdateSensorSnapshot();
-
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Observation")
 	FDeliveryBotObservationInfo BuildPolicyObservation();
-	
+
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Sensor")
 	bool GetSensorSnapshot(FDeliveryBotSensorSnapshot& outSnapshot) const;
 
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Measurement")
 	bool GetLastMoveCommandInfo(FDeliveryBotMoveCommandInfo& outMoveCommandInfo, FString& outActionReason) const;
-	
+
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Observation")
 	FDeliveryBotObservationInfo BuildObservation() const;
-	
+
 	TArray<FDeliveryBotLidarObservedObjectInfo> BuildObservedObjectsForPolicy() const;
-	
-	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Observation")
-	bool BuildObservationJson(const FDeliveryBotObservationInfo& observation, FString& outJson) const;
-	
-	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
-	bool BuildEpisodeStartJson(FString& outJson) const;
-	
-	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
-	bool BuildEpisodeConfigUpdateJson(FString& outJson) const;
-	
-	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|HttpPolicy")
-	bool SendPolicyObservationOnce();
-	
-	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Policy")
-	float GetMaxPolicySpeedKmh(EDeliveryBotMoveDirectionType moveDirectionType) const;
-	
-	
+
+	// 현재 로봇 setup 정보를 읽기 전용으로 반환한다.
+	const FDeliveryBotSetupInfo& GetSetupInfo() const { return SetupInfo; }
+
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Python")
+	void NotifyGoalReachedByEvaluation(); // 평가 시스템이 목표 도착을 알렸을 때 Python 서버에 종료를 요청한다
+
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
+	FString GetLastPythonScenarioResultJson() const; // Python 서버에서 받은 마지막 scenario result JSON을 반환한다
+
+
 private:
 	void ApplySetupInfo();
 
 	void FillObservation(FDeliveryBotObservationInfo& observation) const;
 	void DebugLogObservation(float deltaTime);
 
+	void RefreshSensorSnapshot(); // 현재 LiDAR 센서 관측값을 LastSensorSnapshot에 저장한다
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
 	TObjectPtr<UDeliveryBot_DriveComponent> DriveComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
 	TObjectPtr<UDeliveryBot_LidarSensorComponent> LidarSensorComponent;
-	
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
 	TObjectPtr<UDeliveryBot_HttpPolicyComponent> HttpPolicyComponent;
-	
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
 	TObjectPtr<UDeliveryBot_PolicyControllerComponent> PolicyControllerComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
 	TObjectPtr<UScenarioPlaceableComponent> PlaceableComponent;
-	
-	
-	
+
+
+
 protected:
 	float DebugLogElapsedSeconds{ 0.f };
 	int32 SensorSnapshotSequence{ 0 };
 	int32 PolicyObservationSequence{ 0 };
-	
+
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Setup")
 	FDeliveryBotSetupInfo SetupInfo{};
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|VehicleSpec")
-	FVector RobotBoxExtentCm{ 60.f, 90.f, 25.f }; // 길찾기 할 때 쓰이는 로봇의 충돌 박스 사이즈
+	FVector RobotBoxExtentCm{ 30.f, 45.f, 25.f }; // 길찾기 할 때 쓰이는 로봇의 충돌 박스 사이즈
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|VehicleSpec")
 	float MinTurningRadiusCm{ 300.f }; //  최소 회전 반경
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Debug")
 	bool bLogPolicyObservationRequests{ false };
-	
+
 
 private:
 	FDeliveryBotSensorSnapshot LastSensorSnapshot{};
 	FDeliveryBotMoveCommandInfo LastMoveCommandInfo{};
 	FString LastActionReason{ TEXT("unknown") };
 	bool bHasLastMoveCommand{ false };
-	
+
 };

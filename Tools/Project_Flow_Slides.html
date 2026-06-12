@@ -1,0 +1,1068 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ProtoRobotSim 프로젝트 흐름 대시보드</title>
+  <style>
+    :root {
+      --bg: #f4f1e9;
+      --surface: #fffdf8;
+      --surface-2: #fbf6ec;
+      --ink: #17211e;
+      --muted: #68716d;
+      --line: #d9d1bf;
+      --teal: #1d756f;
+      --teal-soft: #dcefeb;
+      --blue: #3b638b;
+      --blue-soft: #dce8f2;
+      --clay: #ad5b38;
+      --clay-soft: #f1ded3;
+      --olive: #667637;
+      --olive-soft: #e5ead1;
+      --rose: #a34458;
+      --rose-soft: #efd9df;
+      --amber: #b3842d;
+      --amber-soft: #f0e4c8;
+      --shadow: 0 12px 34px rgba(32, 27, 19, 0.11);
+      --radius: 8px;
+      font-family: "Pretendard", "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(23, 33, 30, 0.035) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(23, 33, 30, 0.035) 1px, transparent 1px),
+        var(--bg);
+      background-size: 42px 42px;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    code {
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 0.92em;
+      background: rgba(23, 33, 30, 0.07);
+      border: 1px solid rgba(23, 33, 30, 0.1);
+      border-radius: 5px;
+      padding: 2px 5px;
+    }
+
+    .page {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 248px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 22px 18px;
+      background: #18211e;
+      color: #fffdf8;
+      border-right: 1px solid rgba(255, 253, 248, 0.14);
+      overflow: auto;
+    }
+
+    .brand {
+      display: grid;
+      gap: 12px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid rgba(255, 253, 248, 0.18);
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, var(--teal) 0 48%, transparent 48% 52%, var(--clay) 52% 100%);
+      box-shadow: inset 0 0 0 1px rgba(255, 253, 248, 0.2);
+      flex: 0 0 auto;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.16;
+      letter-spacing: 0;
+    }
+
+    .brand p {
+      margin: 0;
+      color: rgba(255, 253, 248, 0.68);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .nav {
+      display: grid;
+      gap: 6px;
+      margin-top: 18px;
+    }
+
+    .nav a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 38px;
+      padding: 9px 10px;
+      border-radius: 6px;
+      color: rgba(255, 253, 248, 0.78);
+      font-size: 13px;
+      font-weight: 760;
+    }
+
+    .nav a:hover {
+      background: rgba(255, 253, 248, 0.08);
+      color: #fffdf8;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--teal);
+      flex: 0 0 auto;
+    }
+
+    .dot.blue { background: var(--blue); }
+    .dot.clay { background: var(--clay); }
+    .dot.olive { background: var(--olive); }
+    .dot.rose { background: var(--rose); }
+    .dot.amber { background: var(--amber); }
+
+    .side-note {
+      margin-top: 20px;
+      padding: 14px;
+      border: 1px solid rgba(255, 253, 248, 0.14);
+      border-radius: var(--radius);
+      background: rgba(255, 253, 248, 0.06);
+      color: rgba(255, 253, 248, 0.72);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .content {
+      min-width: 0;
+      padding: 24px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 18px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--teal);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h2,
+    h3,
+    h4,
+    p {
+      margin: 0;
+      letter-spacing: 0;
+    }
+
+    .hero h2 {
+      max-width: 980px;
+      font-size: clamp(34px, 5vw, 66px);
+      line-height: 1.02;
+      font-weight: 920;
+    }
+
+    .hero p {
+      max-width: 880px;
+      margin-top: 14px;
+      color: #35443f;
+      font-size: 18px;
+      line-height: 1.55;
+    }
+
+    .date-chip {
+      min-width: 180px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 14px 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .date-chip span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .date-chip strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 18px;
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .panel {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-2);
+    }
+
+    .panel-header h3 {
+      font-size: 17px;
+      line-height: 1.25;
+      font-weight: 880;
+    }
+
+    .panel-header span {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .panel-body {
+      padding: 18px;
+    }
+
+    .span-12 { grid-column: span 12; }
+    .span-8 { grid-column: span 8; }
+    .span-7 { grid-column: span 7; }
+    .span-6 { grid-column: span 6; }
+    .span-5 { grid-column: span 5; }
+    .span-4 { grid-column: span 4; }
+
+    .flow-strip {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .flow-card {
+      position: relative;
+      min-height: 128px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fffaf0;
+      padding: 14px;
+    }
+
+    .flow-card::after {
+      content: "";
+      position: absolute;
+      right: -10px;
+      top: 50%;
+      width: 10px;
+      height: 2px;
+      background: var(--line);
+    }
+
+    .flow-card:last-child::after {
+      display: none;
+    }
+
+    .flow-index {
+      display: inline-grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      color: #fffdf8;
+      background: var(--ink);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .flow-card strong {
+      display: block;
+      margin-top: 12px;
+      font-size: 16px;
+      line-height: 1.22;
+    }
+
+    .flow-card p {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .teal { background: var(--teal-soft); border-color: #afd3ce; }
+    .blue { background: var(--blue-soft); border-color: #b9d0e4; }
+    .clay { background: var(--clay-soft); border-color: #dfbaa7; }
+    .olive { background: var(--olive-soft); border-color: #cad3a4; }
+    .rose { background: var(--rose-soft); border-color: #deb5bf; }
+    .amber { background: var(--amber-soft); border-color: #dfc78b; }
+
+    .domain-grid,
+    .contract-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .domain,
+    .contract,
+    .owner,
+    .artifact,
+    .focus,
+    .source-link {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fffaf0;
+      padding: 15px;
+    }
+
+    .domain {
+      min-height: 148px;
+    }
+
+    .domain-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .domain h4,
+    .contract h4,
+    .owner h4 {
+      font-size: 16px;
+      font-weight: 880;
+    }
+
+    .domain p,
+    .contract p,
+    .artifact p,
+    .focus p {
+      margin-top: 10px;
+      color: #374640;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 25px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(23, 33, 30, 0.08);
+      color: #33413d;
+      font-size: 11px;
+      font-weight: 820;
+      white-space: nowrap;
+    }
+
+    .contract {
+      min-height: 170px;
+    }
+
+    .contract h4 {
+      font-size: 18px;
+    }
+
+    .contract code {
+      display: inline-block;
+      margin-top: 12px;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .table th,
+    .table td {
+      padding: 12px 13px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .table th {
+      background: #efe7d6;
+      color: #24322e;
+      font-weight: 880;
+    }
+
+    .table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .ownership,
+    .artifact-grid,
+    .source-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .owner h4 {
+      margin-bottom: 12px;
+    }
+
+    .list {
+      display: grid;
+      gap: 9px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .list li {
+      display: grid;
+      grid-template-columns: 10px minmax(0, 1fr);
+      gap: 9px;
+      align-items: start;
+      color: #374640;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .list li::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      margin-top: 7px;
+      border-radius: 999px;
+      background: var(--teal);
+    }
+
+    .owner.python .list li::before {
+      background: var(--olive);
+    }
+
+    .stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .stack-row {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      min-height: 62px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fffaf0;
+      padding: 11px 13px;
+    }
+
+    .stack-num {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      background: var(--ink);
+      color: #fffdf8;
+      font-weight: 900;
+      font-size: 12px;
+    }
+
+    .stack-row b,
+    .artifact b,
+    .focus b,
+    .source-link strong {
+      display: block;
+      font-size: 14px;
+    }
+
+    .stack-row span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .path {
+      max-width: 210px;
+      color: var(--muted);
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 11px;
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+
+    .artifact {
+      min-height: 112px;
+    }
+
+    .focus-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .focus {
+      min-height: 130px;
+    }
+
+    .source-link {
+      display: grid;
+      gap: 6px;
+      min-height: 82px;
+    }
+
+    .source-link span {
+      color: var(--muted);
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .source-link:hover {
+      border-color: var(--teal);
+      background: var(--teal-soft);
+    }
+
+    .footer {
+      margin-top: 16px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 253, 248, 0.72);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    @media (max-width: 1220px) {
+      .page {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: static;
+        height: auto;
+      }
+
+      .nav {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
+      .span-8,
+      .span-7,
+      .span-6,
+      .span-5,
+      .span-4 {
+        grid-column: span 12;
+      }
+
+      .flow-strip,
+      .domain-grid,
+      .focus-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .flow-card::after {
+        display: none;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .content {
+        padding: 14px;
+      }
+
+      .sidebar {
+        padding: 18px 14px;
+      }
+
+      .nav,
+      .flow-strip,
+      .domain-grid,
+      .contract-grid,
+      .ownership,
+      .artifact-grid,
+      .source-grid,
+      .focus-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero h2 {
+        font-size: 34px;
+      }
+
+      .hero p {
+        font-size: 16px;
+      }
+
+      .panel-header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .panel-header span {
+        white-space: normal;
+      }
+
+      .stack-row {
+        grid-template-columns: 34px minmax(0, 1fr);
+      }
+
+      .path {
+        grid-column: 2;
+        max-width: none;
+        text-align: left;
+      }
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .page {
+        display: block;
+      }
+
+      .sidebar {
+        display: none;
+      }
+
+      .content {
+        padding: 0;
+      }
+
+      .panel,
+      .date-chip,
+      .footer {
+        box-shadow: none;
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-row">
+          <div class="mark" aria-hidden="true"></div>
+          <h1>ProtoRobotSim<br>Flow Dashboard</h1>
+        </div>
+        <p>Platform, Episode, Runtime Actor, PythonAgent, Output Artifact를 한 화면에서 보는 구조 지도</p>
+      </div>
+
+      <nav class="nav" aria-label="대시보드 섹션">
+        <a href="#flow"><span class="dot"></span>전체 흐름</a>
+        <a href="#domains"><span class="dot blue"></span>영역 책임</a>
+        <a href="#contract"><span class="dot olive"></span>Python 계약</a>
+        <a href="#data"><span class="dot clay"></span>데이터 계약</a>
+        <a href="#ownership"><span class="dot rose"></span>소유권</a>
+        <a href="#sources"><span class="dot amber"></span>읽는 순서</a>
+      </nav>
+
+      <div class="side-note">
+        기준 문서는 <code>Tools/PythonAgent.md</code>와 <code>Tools/BotPolicy_Interface.md</code>다. Unreal은 policy를 고르지 않고, PythonAgent는 <code>agent/user_agent.py</code>에 작성된 BotPolicy 기준으로 동작한다.
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Project Runtime Map</p>
+          <h2>사용자 선택에서 실행 산출물까지 이어지는 전체 흐름</h2>
+          <p>
+            이 대시보드는 DeliveryBot 하나에 갇히지 않고, ProtoRobotSim의 실행 흐름을 Platform, Shared, Episode,
+            Runtime Actor, PythonAgent, Output Artifact 관점으로 나눠 보여준다.
+          </p>
+        </div>
+        <div class="date-chip">
+          <span>문서 기준</span>
+          <strong>2026-06-11</strong>
+        </div>
+      </header>
+
+      <section class="dashboard">
+        <article id="flow" class="panel span-12">
+          <div class="panel-header">
+            <h3>전체 실행 흐름</h3>
+            <span>MainMenu에서 산출물까지</span>
+          </div>
+          <div class="panel-body">
+            <div class="flow-strip">
+              <div class="flow-card teal">
+                <span class="flow-index">1</span>
+                <strong>사용자 선택</strong>
+                <p>MainMenu에서 SimulationSetup과 EpisodeSetup을 고른다. Policy 선택은 Unreal 단계에 없다.</p>
+              </div>
+              <div class="flow-card blue">
+                <span class="flow-index">2</span>
+                <strong>Process 실행</strong>
+                <p>Platform이 simulator process를 시작하고 run id와 setup 경로를 전달한다.</p>
+              </div>
+              <div class="flow-card clay">
+                <span class="flow-index">3</span>
+                <strong>Episode 구성</strong>
+                <p>EpisodeCompiler가 JSON을 검증하고 runtime world spec으로 바꾼다.</p>
+              </div>
+              <div class="flow-card amber">
+                <span class="flow-index">4</span>
+                <strong>Actor Spawn</strong>
+                <p>지면, 장애물, 보행자, robot actor, grid bounds가 world에 배치된다.</p>
+              </div>
+              <div class="flow-card olive">
+                <span class="flow-index">5</span>
+                <strong>정책 루프</strong>
+                <p>Unreal observation을 PythonAgent가 action으로 바꾸고 Unreal이 실행한다.</p>
+              </div>
+              <div class="flow-card rose">
+                <span class="flow-index">6</span>
+                <strong>산출물 기록</strong>
+                <p>status, report, measurement log, replay record가 run id로 연결된다.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article id="domains" class="panel span-8">
+          <div class="panel-header">
+            <h3>영역별 책임 지도</h3>
+            <span>어디를 봐야 하는가</span>
+          </div>
+          <div class="panel-body">
+            <div class="domain-grid">
+              <div class="domain">
+                <div class="domain-top"><h4>Platform</h4><span class="badge">UI/Launch</span></div>
+                <p>MainMenu, simulator launch, status polling, report/log preview를 담당한다.</p>
+              </div>
+              <div class="domain">
+                <div class="domain-top"><h4>Shared</h4><span class="badge">Contracts</span></div>
+                <p>SimulationSetup, RunStatus, Episode spec, replay, 공통 struct를 묶는다.</p>
+              </div>
+              <div class="domain">
+                <div class="domain-top"><h4>Episode</h4><span class="badge">World</span></div>
+                <p>JSON compile, runtime actor spawn, instance id, semantic tag, 평가 흐름을 담당한다.</p>
+              </div>
+              <div class="domain">
+                <div class="domain-top"><h4>Runtime Actors</h4><span class="badge">Execution</span></div>
+                <p>로봇, 보행자, 장애물, collision, movement, sensor observation이 실행된다.</p>
+              </div>
+              <div class="domain">
+                <div class="domain-top"><h4>PythonAgent</h4><span class="badge">Policy</span></div>
+                <p>경로 탐색, stop/repath/slowdown/follow 판단, action 생성을 담당한다.</p>
+              </div>
+              <div class="domain">
+                <div class="domain-top"><h4>Artifacts</h4><span class="badge">Evidence</span></div>
+                <p>status JSON, report JSON, measurement log, replay가 실행 근거로 남는다.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel span-4">
+          <div class="panel-header">
+            <h3>실행 진입점</h3>
+            <span>public boundary</span>
+          </div>
+          <div class="panel-body">
+            <div class="stack">
+              <div class="stack-row">
+                <span class="stack-num">1</span>
+                <div><b>MainMenu</b><span>scenario와 experiment config 선택</span></div>
+                <span class="path">Source/ProtoRobotSim/Public/Platform</span>
+              </div>
+              <div class="stack-row">
+                <span class="stack-num">2</span>
+                <div><b>Simulator Mode</b><span><code>-Simulate=&lt;SimulationSetupFile&gt;</code></span></div>
+                <span class="path">SimulationSetupTypes</span>
+              </div>
+              <div class="stack-row">
+                <span class="stack-num">3</span>
+                <div><b>Episode Runner</b><span>compile, spawn, metric, status 기록</span></div>
+                <span class="path">EpisodeRunnerSubsystem</span>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article id="contract" class="panel span-12">
+          <div class="panel-header">
+            <h3>PythonAgent HTTP 계약</h3>
+            <span>start, decide, end</span>
+          </div>
+          <div class="panel-body">
+            <div class="contract-grid">
+              <div class="contract teal">
+                <h4>Start</h4>
+                <code>POST /scenario/start</code>
+                <p>Episode 시작 시 grid, start, goal, 초기 설정을 한 번 전달한다. Python은 최초 경로와 runtime state를 준비한다.</p>
+              </div>
+              <div class="contract olive">
+                <h4>Decide</h4>
+                <code>POST /scenario/decide</code>
+                <p>주행 중 observation을 반복 전달한다. Python은 정책 우선순위에 따라 action을 만들어 반환한다.</p>
+              </div>
+              <div class="contract clay">
+                <h4>End</h4>
+                <code>POST /scenario/end</code>
+                <p>도착 또는 실패 시 최종 상태와 metric을 전달한다. Python은 episode 상태를 정리하고 기록한다.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article id="data" class="panel span-7">
+          <div class="panel-header">
+            <h3>데이터 계약 매트릭스</h3>
+            <span>파일과 runtime 객체의 역할</span>
+          </div>
+          <div class="panel-body">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>계약</th>
+                  <th>내용</th>
+                  <th>소유 영역</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>SimulationSetup</code></td>
+                  <td>run queue, target map, fixed-step, logging, status path</td>
+                  <td>Platform / Shared</td>
+                </tr>
+                <tr>
+                  <td><code>EpisodeSetup</code></td>
+                  <td>ground, obstacle, pedestrian, robot spawn, route goal</td>
+                  <td>Episode</td>
+                </tr>
+                <tr>
+                  <td><code>Runtime Context</code></td>
+                  <td>actor instance id, tags, transform, grid bounds</td>
+                  <td>Episode / Actors</td>
+                </tr>
+                <tr>
+                  <td><code>BotPolicy</code></td>
+                  <td>ScenarioStartRequest, ScenarioDecideRequest, ScenarioEndRequest</td>
+                  <td>PythonAgent</td>
+                </tr>
+                <tr>
+                  <td><code>Output Artifacts</code></td>
+                  <td>status JSON, report JSON, measurement log, replay record</td>
+                  <td>Platform / Runner</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article id="ownership" class="panel span-5">
+          <div class="panel-header">
+            <h3>정책 소유권</h3>
+            <span>판단과 실행의 분리</span>
+          </div>
+          <div class="panel-body">
+            <div class="ownership">
+              <div class="owner unreal">
+                <h4>Unreal</h4>
+                <ul class="list">
+                  <li>Episode compile과 actor spawn</li>
+                  <li>movement, collision, physics 실행</li>
+                  <li>실패, 도착, metric 검증</li>
+                  <li>status와 log 기록</li>
+                </ul>
+              </div>
+              <div class="owner python">
+                <h4>PythonAgent</h4>
+                <ul class="list">
+                  <li>A* 경로 탐색</li>
+                  <li>stop, repath, slowdown 판단</li>
+                  <li>path follower action 생성</li>
+                  <li>episode 종료 상태 정리</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel span-6">
+          <div class="panel-header">
+            <h3>구현 순서</h3>
+            <span>새 PythonAgent 기준</span>
+          </div>
+          <div class="panel-body">
+            <div class="stack">
+              <div class="stack-row">
+                <span class="stack-num">1</span>
+                <div><b>계약 고정</b><span>md의 request, response, endpoint 이름을 기준으로 삼는다.</span></div>
+                <span class="path">Tools/PythonAgent.md</span>
+              </div>
+              <div class="stack-row">
+                <span class="stack-num">2</span>
+                <div><b>Python package 생성</b><span>server, contract, user_agent, state, action부터 만든다.</span></div>
+                <span class="path">Tools/PythonAgent/agent</span>
+              </div>
+              <div class="stack-row">
+                <span class="stack-num">3</span>
+                <div><b>정책 조립</b><span><code>agent/user_agent.py</code>의 <code>create_policy()</code>와 BotPolicy 구성이 정책 순서를 결정한다.</span></div>
+                <span class="path">agent/user_agent.py</span>
+              </div>
+              <div class="stack-row">
+                <span class="stack-num">4</span>
+                <div><b>Unreal 연결</b><span>runtime observation을 start, decide, end로 보낸다.</span></div>
+                <span class="path">DeliveryBot / Components</span>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel span-6">
+          <div class="panel-header">
+            <h3>산출물 흐름</h3>
+            <span>실험 후 남는 근거</span>
+          </div>
+          <div class="panel-body">
+            <div class="artifact-grid">
+              <div class="artifact">
+                <b>Status JSON</b>
+                <p>run 상태, 실패 이유, 진행 상태를 MainMenu가 읽는다.</p>
+              </div>
+              <div class="artifact">
+                <b>Report JSON</b>
+                <p>실험 요약, 평가 결과, 관련 setup 경로를 연결한다.</p>
+              </div>
+              <div class="artifact">
+                <b>Measurement Log</b>
+                <p>frame별 metric과 event를 분석 가능한 형태로 남긴다.</p>
+              </div>
+              <div class="artifact">
+                <b>Replay Record</b>
+                <p>actor frame과 episode 흐름을 재현할 수 있게 저장한다.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel span-12">
+          <div class="panel-header">
+            <h3>다음 구현 포커스</h3>
+            <span>흐름 기준 체크포인트</span>
+          </div>
+          <div class="panel-body">
+            <div class="focus-grid">
+              <div class="focus">
+                <b>기존 정책 호출 제거</b>
+                <p>남아 있는 이전 endpoint와 fallback 판단 경로를 확인한다.</p>
+              </div>
+              <div class="focus">
+                <b>Observation 정렬</b>
+                <p>Episode semantic tag와 runtime actor context가 Python request에 들어가야 한다.</p>
+              </div>
+              <div class="focus">
+                <b>Action 실행 검증</b>
+                <p>Python action을 Unreal이 그대로 실행하고 실패는 기록해야 한다.</p>
+              </div>
+              <div class="focus">
+                <b>Run evidence 연결</b>
+                <p>Python log, Unreal status, report JSON이 같은 run id로 추적되어야 한다.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article id="sources" class="panel span-12">
+          <div class="panel-header">
+            <h3>읽는 순서</h3>
+            <span>처음 보는 사람용 경로</span>
+          </div>
+          <div class="panel-body">
+            <div class="source-grid">
+              <a class="source-link" href="../.agents/sourcemap/INDEX.md">
+                <strong>1. Sourcemap Index</strong>
+                <span>.agents/sourcemap/INDEX.md</span>
+              </a>
+              <a class="source-link" href="../.agents/sourcemap/platform.md">
+                <strong>2. Platform</strong>
+                <span>.agents/sourcemap/platform.md</span>
+              </a>
+              <a class="source-link" href="../.agents/sourcemap/episode.md">
+                <strong>3. Episode</strong>
+                <span>.agents/sourcemap/episode.md</span>
+              </a>
+              <a class="source-link" href="PythonAgent.md">
+                <strong>4. PythonAgent 외부 계약</strong>
+                <span>Tools/PythonAgent.md</span>
+              </a>
+              <a class="source-link" href="BotPolicy_Interface.md">
+                <strong>5. BotPolicy 내부 계약</strong>
+                <span>Tools/BotPolicy_Interface.md</span>
+              </a>
+              <a class="source-link" href="../.agents/sourcemap/shared-types.md">
+                <strong>6. Shared Types</strong>
+                <span>.agents/sourcemap/shared-types.md</span>
+              </a>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <footer class="footer">
+        기준: <code>README.md</code>, <code>.agents/sourcemap/*.md</code>, <code>Tools/PythonAgent.md</code>,
+        <code>Tools/BotPolicy_Interface.md</code>. 이 파일은 정적 HTML 대시보드이며 별도 서버 없이 열 수 있다.
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

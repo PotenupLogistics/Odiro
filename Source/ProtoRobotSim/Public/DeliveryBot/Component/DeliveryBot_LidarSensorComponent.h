@@ -55,6 +55,8 @@ private:
 		const FVector& startLocationCm,
 		const FVector& endLocationCm,
 		const FHitResult* hitResult) const;
+
+	void DrawDebugNearMissRange(const FVector& sensorLocationCm) const;
 	
 	
 	

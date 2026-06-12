@@ -28,7 +28,24 @@ class AgentState:
     stopCount: int = 0                        # 정지 action 발생 횟수
     repathCount: int = 0                      # 재경로 탐색 횟수
     slowdownCount: int = 0                    # 감속 action 발생 횟수
+    nearMissCount: int = 0
+    bNearMissRecorded: bool = False
+    nearMissRecordedSources: set[str] = field(default_factory=set)
+    lastNearMissCell: tuple[int, int] | None = None
+    lastNearMissSource: str = ""
+    dynamicBlockedCells: set[tuple[int, int]] = field(default_factory=set)  # LiDAR로 새로 막은 동적 장애물 cell 목록
+    lastRepathTimeSeconds: float = -999.0                                   # 마지막 재탐색 시간
+    frontObstacleStopStartSeconds: float | None = None
+    lastBlockedCorridorCells: set[tuple[int, int]] = field(default_factory=set)
+    recoveryUntilSeconds: float = 0.0                                       # 후진 회복 동작을 유지할 시간
+    recoverySteering: float = 0.0                                           # 후진 회복 동작 중 사용할 조향 값
+    lastSteering: float = 0.0                                               # 마지막으로 보낸 조향 값
 
+    bRepathRequested: bool = False                                      # 다음 decide에서 재경로 탐색을 요청할지 저장한다.
+    targetPathIndex: int = 0                                            # 현재 실제로 바라보는 path index
+    targetWorldPoint: dict[str, float] | None = None                    # 현재 실제로 바라보는 world point
+    closestPathDistanceCm: float = 0.0                                  # 로봇과 경로 선분 사이 최소 거리
+    maxPathErrorCm: float = 0.0                                         # 허용 가능한 경로 이탈 거리
 
     # /scenario/start가 들어왔을 때 episode 상태를 새로 시작
     def reset_for_start(
@@ -59,7 +76,23 @@ class AgentState:
         self.stopCount = 0
         self.repathCount = 0
         self.slowdownCount = 0
-
+        self.nearMissCount = 0
+        self.bNearMissRecorded = False
+        self.nearMissRecordedSources = set()
+        self.lastNearMissCell = None
+        self.lastNearMissSource = ""
+        self.dynamicBlockedCells = set()
+        self.lastRepathTimeSeconds = -999.0
+        self.frontObstacleStopStartSeconds = None
+        self.lastBlockedCorridorCells = set()
+        self.recoveryUntilSeconds = 0.0
+        self.recoverySteering = 0.0
+        self.lastSteering = 0.0
+        self.bRepathRequested = False
+        self.targetPathIndex = 0
+        self.targetWorldPoint = None
+        self.closestPathDistanceCm = 0.0
+        self.maxPathErrorCm = 0.0
 
     # /scenario/decide가 들어왔을 때 마지막 observation 시간 정보 저장
     def update_decide_time(self, sequence: int, run_time_seconds: float) -> None:
@@ -105,3 +138,20 @@ class AgentState:
         self.stopCount = 0
         self.repathCount = 0
         self.slowdownCount = 0
+        self.nearMissCount = 0
+        self.bNearMissRecorded = False
+        self.nearMissRecordedSources = set()
+        self.lastNearMissCell = None
+        self.lastNearMissSource = ""
+        self.dynamicBlockedCells = set()
+        self.lastRepathTimeSeconds = -999.0
+        self.frontObstacleStopStartSeconds = None
+        self.lastBlockedCorridorCells = set()
+        self.recoveryUntilSeconds = 0.0
+        self.recoverySteering = 0.0
+        self.lastSteering = 0.0
+        self.bRepathRequested = False
+        self.targetPathIndex = 0
+        self.targetWorldPoint = None
+        self.closestPathDistanceCm = 0.0
+        self.maxPathErrorCm = 0.0

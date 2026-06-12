@@ -24,6 +24,9 @@ public:
 	bool bDrawDebug{ true };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bDrawNearMissDebug{ true };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float ScanRangeM{ 5.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -40,9 +43,18 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float StopDistanceM{ 1.5f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float NearMissDistanceM{ 2.f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SlowDownDistanceM{ 5.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float CollisionStopHalfAngleDegree{ 8.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float CollisionStopDistanceM{ 0.45f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TEnumAsByte<ECollisionChannel> TraceChannel{ ECC_Visibility };

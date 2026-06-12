@@ -23,6 +23,12 @@ void UDeliveryBot_PathFollowComponent::InitializePathFollow(
 	PathFollowConfigInfo.PathPointAcceptanceDistanceM = FMath::Max(PathFollowConfigInfo.PathPointAcceptanceDistanceM, 0.1f);
 	PathFollowConfigInfo.GoalAcceptanceDistanceM = FMath::Max(PathFollowConfigInfo.GoalAcceptanceDistanceM, 0.1f);
 	PathFollowConfigInfo.SteeringSensitivity = FMath::Max(PathFollowConfigInfo.SteeringSensitivity, 0.f);
+	PathFollowConfigInfo.SteeringFullScaleDegree = FMath::Max(PathFollowConfigInfo.SteeringFullScaleDegree, 1.f);
+	PathFollowConfigInfo.MaxSteering = FMath::Clamp(PathFollowConfigInfo.MaxSteering, 0.01f, 1.f);
+	PathFollowConfigInfo.MaxSteeringDelta = FMath::Clamp(
+		PathFollowConfigInfo.MaxSteeringDelta,
+		0.001f,
+		PathFollowConfigInfo.MaxSteering);
 	PathFollowConfigInfo.MinTurnSpeedKmh = FMath::Max(PathFollowConfigInfo.MinTurnSpeedKmh, 0.f);
 	PathFollowConfigInfo.ObstacleSlowSpeedKmh = FMath::Max(PathFollowConfigInfo.ObstacleSlowSpeedKmh, 0.f);
 }
@@ -374,11 +380,14 @@ float UDeliveryBot_PathFollowComponent::GetSteeringToLocation(
 	const double angleRad = FMath::Atan2(crossZ, dot);
 
 	const double steering =
-		(angleRad / FMath::DegreesToRadians(45.0)) *
+		(angleRad / FMath::DegreesToRadians(PathFollowConfigInfo.SteeringFullScaleDegree)) *
 		PathFollowConfigInfo.SteeringSensitivity *
 		steeringDirectionSign;
 
-	return static_cast<float>(FMath::Clamp(steering, -1.0, 1.0));
+	return static_cast<float>(FMath::Clamp(
+		steering,
+		-static_cast<double>(PathFollowConfigInfo.MaxSteering),
+		static_cast<double>(PathFollowConfigInfo.MaxSteering)));
 }
 
 // 전진 기준으로 목표 위치를 향하는 조향 입력값을 계산한다.
@@ -405,9 +414,14 @@ float UDeliveryBot_PathFollowComponent::GetSteeringToLocation(const FVector& tar
 	const double dot = FVector::DotProduct(forward, targetDirection);
 	const double angleRad = FMath::Atan2(crossZ, dot);
 
-	const double steering = (angleRad / FMath::DegreesToRadians(45.0)) * PathFollowConfigInfo.SteeringSensitivity;
+	const double steering =
+		(angleRad / FMath::DegreesToRadians(PathFollowConfigInfo.SteeringFullScaleDegree)) *
+		PathFollowConfigInfo.SteeringSensitivity;
 
-	return static_cast<float>(FMath::Clamp(steering, -1.0, 1.0));
+	return static_cast<float>(FMath::Clamp(
+		steering,
+		-static_cast<double>(PathFollowConfigInfo.MaxSteering),
+		static_cast<double>(PathFollowConfigInfo.MaxSteering)));
 }
 
 // 두 위치 사이의 2D 거리(cm)를 계산한다.

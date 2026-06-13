@@ -246,21 +246,21 @@ T04로 남긴 범위:
 - Launcher process에서 simulator 실행 command를 조립하는 launcher service 생성
 - launcher는 `-Simulate=<SimulationSetupFile>`, `-RunId=<RunId>` 전달
 - launcher process에는 fixed-step 관련 command line을 넘기지 않음
-- packaged simulator exe가 아직 없으면 개발 검증 fallback으로 `RunPreview.bat "-Simulate=<SimulationSetupFile>" "-RunId=<RunId>"`를 subprocess로 호출
-- `RunPreview.bat` fallback은 packaged exe와 같은 public command parameter를 받되 내부적으로 `UnrealEditor.exe <uproject> -game -NoSplash`를 붙여 실행
+- packaged simulator exe가 아직 없으면 개발 검증 fallback으로 `Task-RunPreview.bat "-Simulate=<SimulationSetupFile>" "-RunId=<RunId>"`를 subprocess로 호출
+- `Task-RunPreview.bat` fallback은 packaged exe와 같은 public command parameter를 받되 내부적으로 `UnrealEditor.exe <uproject> -game -NoSplash`를 붙여 실행
 - process start 실패와 simulator status 실패 구분
 - status file polling으로 `Pending`, `Running`, `Completed`, `Failed`, `Canceled` 상태 추적
 
 검증:
 - MainMenu에서 sample setup으로 simulator process 시작
-- 패키징 전 환경에서는 `RunPreview.bat` fallback으로 같은 `-Simulate`, `-RunId` 인자를 전달해 subprocess 시작
+- 패키징 전 환경에서는 `Task-RunPreview.bat` fallback으로 같은 `-Simulate`, `-RunId` 인자를 전달해 subprocess 시작
 - MainMenu process가 `EpisodeSimulationMap`을 로드하지 않은 상태로 run 상태 표시
 - simulator 종료 후 report/log/status path를 조회
 - 동일 setup을 새 run id로 다시 실행
 
 구현 위치:
 - [SimulatorLaunchSubsystem.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Platform/SimulatorLaunchSubsystem.h): simulator launcher API, active run 상태, command argument helper
-- [SimulatorLaunchSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/SimulatorLaunchSubsystem.cpp): packaged exe 실행, `RunPreview.bat` fallback, process start/status failure 분리, status polling
+- [SimulatorLaunchSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/SimulatorLaunchSubsystem.cpp): packaged exe 실행, `Task-RunPreview.bat` fallback, process start/status failure 분리, status polling
 - [SimulationSetupTypes.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Shared/SimulationSetupTypes.h): `FSimulationRunStatusJson` read API
 - [SimulationSetupTypes.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Shared/SimulationSetupTypes.cpp): `SimulationRunStatus JSON` reader/writer 대칭 구현
 - [SimulatorLaunchSubsystemTest.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/Tests/SimulatorLaunchSubsystemTest.cpp): launcher command contract와 terminal state automation
@@ -426,7 +426,7 @@ T04로 남긴 범위:
 ### T04 완료
 
 - `USimulatorLaunchSubsystem`으로 simulator subprocess command 조립과 실행 lifecycle 관리 추가
-- packaged exe가 없을 때 `RunPreview.bat` fallback으로 같은 public command parameter 전달
+- packaged exe가 없을 때 `Task-RunPreview.bat` fallback으로 같은 public command parameter 전달
 - status file polling으로 `Pending`, `Running`, `Completed`, `Failed`, `Canceled` terminal state 추적
 - process start failure와 simulator status failure를 분리해 UI가 진단할 수 있게 함
 
@@ -455,7 +455,7 @@ T04로 남긴 범위:
 ### 현재 결과
 
 T01~T07 완료.
-Launcher process는 packaged exe 또는 개발 fallback `RunPreview.bat`를 별도 process로 실행한다.
+Launcher process는 packaged exe 또는 개발 fallback `Task-RunPreview.bat`를 별도 process로 실행한다.
 Simulator process는 `SimulationSetup JSON` 기반 fixed-step run을 수행하고, Platform UI는 status/report/log 파일로 진행 상황과 결과를 조회한다.
 MainMenu는 실험 설정과 run queue를 편집하고, 선택한 EpisodeSetup으로 `EpisodeEditorMap`에 진입할 수 있다.
 남은 큰 범위는 T08 LLM 연동이다.

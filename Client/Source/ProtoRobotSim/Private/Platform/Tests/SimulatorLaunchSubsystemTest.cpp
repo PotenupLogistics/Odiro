@@ -21,7 +21,7 @@ bool FSimulatorLaunchCommandLineBuildTest::RunTest(const FString& parameters)
 
 	// 개발 fallback도 packaged exe와 같은 public args를 유지해야 한다.
 	const FString previewArguments = USimulatorLaunchSubsystem::BuildPreviewLauncherArgumentString(
-		TEXT("RunPreview.bat"),
+		TEXT("Task-RunPreview.bat"),
 		TEXT("Json/Input/SimulationSetupSample.json"),
 		TEXT("run-001"));
 	TestTrue(TEXT("preview uses cmd run wrapper"), previewArguments.StartsWith(TEXT("/d /s /c \"\"")));

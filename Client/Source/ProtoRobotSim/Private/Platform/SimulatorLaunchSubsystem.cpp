@@ -11,7 +11,7 @@ namespace
 	const TCHAR* SimulatorLaunchPolicySpecInputDirectory = TEXT("Json/Input/PolicySpecs");
 	const TCHAR* EvaluationReportOutputDirectory = TEXT("Json/Output");
 	const TCHAR* SimulationRunStatusDirectory = TEXT("Saved/SimulationRuns");
-	const TCHAR* PreviewLauncherFileName = TEXT("RunPreview.bat");
+	const TCHAR* PreviewLauncherFileName = TEXT("Task-RunPreview.bat");
 	const TCHAR* LaunchSimulationSetupSchema = TEXT("simulation_setup");
 	const TCHAR* LaunchScenarioSetupSchema = TEXT("scenario_actor_spawn_mvp");
 	const TCHAR* LaunchDeliveryBotSetupSchema = TEXT("delivery_bot_setup");
@@ -155,7 +155,7 @@ namespace
 
 	bool IsUnrealEditorExecutable()
 	{
-		// Editor preview에서만 RunPreview.bat fallback을 쓴다. Packaged game은 자기 executable을 다시 실행한다.
+		// Editor preview에서만 Task-RunPreview.bat fallback을 쓴다. Packaged game은 자기 executable을 다시 실행한다.
 		const FString executableName = FPaths::GetBaseFilename(FPlatformProcess::ExecutablePath());
 		return executableName.StartsWith(TEXT("UnrealEditor"), ESearchCase::IgnoreCase);
 	}

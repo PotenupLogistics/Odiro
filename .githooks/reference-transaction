@@ -1,0 +1,198 @@
+#!/bin/sh
+
+state=$1
+
+if [ "$state" != "prepared" ]; then
+  exit 0
+fi
+
+allowed_kinds="fix refactor hotfix temp"
+allowed_scopes="client agent contract tool bridge"
+reserved_names="$allowed_kinds $allowed_scopes release"
+help_printed=0
+cr=$(printf '\r')
+
+print_help() {
+  cat >&2 <<'EOF'
+Invalid branch name.
+
+Expected:
+  <topic>
+  <scope>/<topic>
+  <kind>/<topic>
+  <kind>/<scope>/<topic>
+
+Allowed kinds:
+  fix, refactor, hotfix, temp
+
+Allowed scopes:
+  client, agent, contract, tool, bridge
+
+Rules:
+  - each path segment must be lowercase kebab-case
+  - kind must be the first segment when present
+  - release/* is tag-only and must not be used as a branch
+  - reserved top-level names must not be used alone
+
+Examples:
+  context-engineering
+  client/robot
+  agent/scenario
+  contract/log
+  tool/context-engineering
+  bridge/host
+  fix/login-timeout
+  fix/client/login-timeout
+  refactor/project-structure
+  refactor/bridge/project-structure
+  hotfix/bridge/host-startup
+  temp/agent/scenario-runner
+EOF
+}
+
+reject_branch() {
+  echo "branch-naming: invalid branch '$1': $2" >&2
+  if [ "$help_printed" -eq 0 ]; then
+    echo >&2
+    print_help
+    help_printed=1
+  fi
+}
+
+is_zero_oid() {
+  case "$1" in
+    ""|*[!0]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+is_kebab_segment() {
+  case "$1" in
+    ""|-*|*-|*--*|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+contains_word() {
+  case " $1 " in
+    *" $2 "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_allowed_kind() {
+  contains_word "$allowed_kinds" "$1"
+}
+
+is_allowed_scope() {
+  contains_word "$allowed_scopes" "$1"
+}
+
+is_reserved_name() {
+  contains_word "$reserved_names" "$1"
+}
+
+validate_branch_name() {
+  branch_name=$1
+
+  case "$branch_name" in
+    main)
+      return 0
+      ;;
+    release|release/*)
+      reject_branch "$branch_name" "release/* is reserved for tags"
+      return 1
+      ;;
+  esac
+
+  old_ifs=$IFS
+  IFS='/'
+  set -- $branch_name
+  IFS=$old_ifs
+
+  segment_count=$#
+  if [ "$segment_count" -lt 1 ] || [ "$segment_count" -gt 3 ]; then
+    reject_branch "$branch_name" "expected one to three path segments"
+    return 1
+  fi
+
+  first_segment=$1
+  second_segment=$2
+  third_segment=$3
+
+  for segment in "$@"; do
+    if ! is_kebab_segment "$segment"; then
+      reject_branch "$branch_name" "path segment '$segment' is not lowercase kebab-case"
+      return 1
+    fi
+  done
+
+  if [ "$segment_count" -eq 1 ]; then
+    if is_reserved_name "$first_segment"; then
+      reject_branch "$branch_name" "reserved top-level name needs a topic"
+      return 1
+    fi
+    return 0
+  fi
+
+  if is_allowed_kind "$first_segment"; then
+    if [ "$segment_count" -eq 2 ]; then
+      if is_reserved_name "$second_segment"; then
+        reject_branch "$branch_name" "kind branch needs a non-reserved topic"
+        return 1
+      fi
+      return 0
+    fi
+
+    if ! is_allowed_scope "$second_segment"; then
+      reject_branch "$branch_name" "second segment after kind must be an allowed scope"
+      return 1
+    fi
+
+    if is_reserved_name "$third_segment"; then
+      reject_branch "$branch_name" "topic must not be a reserved name"
+      return 1
+    fi
+
+    return 0
+  fi
+
+  if is_allowed_scope "$first_segment"; then
+    if [ "$segment_count" -ne 2 ]; then
+      reject_branch "$branch_name" "scope branches must use '<scope>/<topic>'"
+      return 1
+    fi
+
+    if is_reserved_name "$second_segment"; then
+      reject_branch "$branch_name" "topic must not be a reserved name"
+      return 1
+    fi
+
+    return 0
+  fi
+
+  reject_branch "$branch_name" "first segment must be an allowed kind or scope"
+  return 1
+}
+
+status=0
+
+while read old_oid new_oid ref_name; do
+  ref_name=${ref_name%"$cr"}
+  case "$ref_name" in
+    refs/heads/*)
+      if is_zero_oid "$old_oid" && ! is_zero_oid "$new_oid"; then
+        branch_name=${ref_name#refs/heads/}
+        if ! validate_branch_name "$branch_name"; then
+          status=1
+        fi
+      fi
+      ;;
+  esac
+done
+
+exit "$status"

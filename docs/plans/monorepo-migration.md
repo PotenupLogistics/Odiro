@@ -67,7 +67,7 @@ local secrets
 - `git subtree add --prefix=<target>`를 기본 통합 방식으로 사용한다.
 - `git filter-repo`는 Temp repo history 안에 제외 대상이 이미 들어간 경우에만 사용한다.
 - `Client`와 `Agents`는 원형 통합을 먼저 완료하고, contracts 승격과 문서 이동은 후속 commit으로 분리한다.
-- `ProtoRobotSim` rename, Git LFS lock 설정, Service skeleton, packaging은 이 migration plan의 구현 범위가 아니다.
+- `ProtoRobotSim` rename, Git LFS lock 설정, Bridge skeleton, packaging은 이 migration plan의 구현 범위가 아니다.
 
 ## 작업 과정
 
@@ -223,7 +223,7 @@ git -C X:\Odiro check-ignore -v Client\Binaries\ Client\Intermediate\ Client\Sav
 상세 작업:
 
 - `Agents` 테스트가 가능한 상태면 실행한다.
-- `Service`가 아직 없으면 `go test ./...`는 "not implemented"로 기록한다.
+- `Bridge`가 아직 없으면 `go test ./...`는 "not implemented"로 기록한다.
 - `Client/RunPreview.bat --dry-run`이 없거나 미구현이면 "not implemented"로 기록한다.
 - 실패는 숨기지 않고 명령, exit code, 원인을 기록한다.
 
@@ -233,7 +233,7 @@ git -C X:\Odiro check-ignore -v Client\Binaries\ Client\Intermediate\ Client\Sav
 cd X:\Odiro\Agents
 uv run pytest
 
-cd X:\Odiro\Service
+cd X:\Odiro\Bridge
 go test ./...
 
 cd X:\Odiro
@@ -259,14 +259,14 @@ git status --short
 cd Agents
 uv run pytest
 
-cd ..\Service
+cd ..\Bridge
 go test ./...
 
 cd ..
 Client\RunPreview.bat --dry-run
 ```
 
-`Service`가 아직 없거나 `Client/RunPreview.bat --dry-run`이 구현 전이면 해당 검증은 "not implemented"로 기록한다.
+`Bridge`가 아직 없거나 `Client/RunPreview.bat --dry-run`이 구현 전이면 해당 검증은 "not implemented"로 기록한다.
 
 ## 완료 기준
 
@@ -275,4 +275,4 @@ Client\RunPreview.bat --dry-run
 - 각 Temp repo의 migration 시작 commit이 `migrated-1` 같은 tag로 표시된다.
 - migration commit은 `Client` 원형 통합과 `Agents` 원형 통합을 구분한다.
 - project-wide 규칙은 `docs/specs`와 `docs/guides`에 남고, migration 절차는 이 plan에만 남는다.
-- contracts 승격, 문서 이동, ProtoRobotSim renaming, Git LFS lock 설정, `tools/dev.ps1 preview`, `Service` skeleton, packaging 작업은 별도 commit 또는 별도 plan으로 진행할 수 있다.
+- contracts 승격, 문서 이동, ProtoRobotSim renaming, Git LFS lock 설정, `tools/dev.ps1 preview`, `Bridge` skeleton, packaging 작업은 별도 commit 또는 별도 plan으로 진행할 수 있다.

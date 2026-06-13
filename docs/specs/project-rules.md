@@ -38,7 +38,7 @@ Client/Content/UI/WBP_MainMenu.uasset
 
 ```text
 Client/
-Service/
+Bridge/
 Agents/
 ```
 
@@ -54,7 +54,7 @@ build/
 
 규칙:
 
-- `Client`, `Service`, `Agents`는 Release에도 직접 대응되는 제품 구성 단위다.
+- `Client`, `Bridge`, `Agents`는 Release에도 직접 대응되는 제품 구성 단위다.
 - `contracts`, `docs`, `tools`, `tests`는 개발과 검증을 위한 source 영역이다.
 - `build`는 자동 생성 output 영역이며 Git 추적 대상이 아니다.
 - Unreal 프로젝트 내부는 Unreal 관례를 유지한다.
@@ -66,7 +66,7 @@ build/
 
 ```text
 Client
-Service
+Bridge
 ```
 
 여러 기능, 파일, 계약, 문서, 테스트 묶음은 plural를 기본값으로 둔다.
@@ -111,9 +111,9 @@ Client/Static/PolicyRuntime/
 
 `PolicyRuntime`은 Unreal `Client`가 사용자 Python interpreter로 실행하는 보조 런타임이다.
 
-### Service
+### Bridge
 
-`Service`는 Go background service를 소유한다.
+`Bridge`는 Go background service를 소유한다.
 
 역할:
 
@@ -126,7 +126,7 @@ Client/Static/PolicyRuntime/
 Release에서는 단일 바이너리로 배포한다.
 
 ```text
-Release/OdiroService.exe
+Release/OdiroHost.exe
 ```
 
 ### Agents
@@ -142,7 +142,7 @@ Release/OdiroService.exe
 - 시뮬레이션 결과 분석
 - 정책 개선안 또는 자동 정책 생성
 
-`Agents`는 `Service`와 별도 프로세스로 실행한다.
+`Agents`는 `Bridge`와 별도 프로세스로 실행한다.
 
 ## Static 규칙
 
@@ -150,7 +150,7 @@ Release/OdiroService.exe
 
 ```text
 Client/Static/
-Service/static/
+Bridge/static/
 Agents/static/
 ```
 
@@ -160,14 +160,14 @@ top-level `Static` 폴더는 만들지 않는다.
 
 - `Client/Static`은 Unreal 관례와 기존 구조를 유지한다.
 - `Client/Static/PolicyRuntime`은 `Client` 소유이며 Release에 복사한다.
-- `Service/static/Dashboard`는 개발용 Dashboard 원본이다.
-- `Service/static/Dashboard`는 Release에서 `OdiroService.exe`에 embed한다.
+- `Bridge/static/Dashboard`는 개발용 Dashboard 원본이다.
+- `Bridge/static/Dashboard`는 Release에서 `OdiroHost.exe`에 embed한다.
 - `Agents/static`은 Agents가 Release에서도 직접 읽는 파일이 있을 때만 사용한다.
 
-`Service` 개발 모드에서는 Dashboard directory를 옵션으로 지정할 수 있다.
+`Bridge` 개발 모드에서는 Dashboard directory를 옵션으로 지정할 수 있다.
 
 ```powershell
-go run ./Service/cmd/OdiroService --dashboard-dir ./Service/static/Dashboard
+go run ./Bridge/cmd/OdiroHost --dashboard-dir ./Bridge/static/Dashboard
 ```
 
 Release에서는 `--dashboard-dir`을 사용하지 않는다.
@@ -203,7 +203,7 @@ contracts/
 
 공유 여부 기준:
 
-- `Client`, `Service`, `Agents` 중 둘 이상이 참조하면 `contracts` 후보
+- `Client`, `Bridge`, `Agents` 중 둘 이상이 참조하면 `contracts` 후보
 - 한 프로젝트만 참조하면 해당 프로젝트 내부에 둔다
 
 ## docs 규칙
@@ -252,13 +252,13 @@ Unreal `Client`는 repository 또는 Release 상대 경로를 직접 추측하�
 3. 설정 파일
 4. 개발용 fallback autodetect
 
-`Service`는 실행 환경에 맞는 경로를 계산하고 `Client` 실행 인자로 전달한다.
+`Bridge`는 실행 환경에 맞는 경로를 계산하고 `Client` 실행 인자로 전달한다.
 
 예:
 
 ```powershell
 Client/RunPreview.bat `
-  -OdiroServiceUrl="http://127.0.0.1:3333" `
+  -OdiroHostUrl="http://127.0.0.1:3333" `
   -OdiroProjectRoot="X:\Odiro\samples\default-project" `
   -OdiroPolicyRuntime="X:\Odiro\Client\Static\PolicyRuntime"
 ```
@@ -267,7 +267,7 @@ Release 예:
 
 ```powershell
 Client/WindowsNoEditor/OdiroSim.exe `
-  -OdiroServiceUrl="http://127.0.0.1:3333" `
+  -OdiroHostUrl="http://127.0.0.1:3333" `
   -OdiroProjectRoot="D:\OdiroProjects\Sample" `
   -OdiroPolicyRuntime="C:\Program Files\OdiroSim\Client\Static\PolicyRuntime"
 ```
@@ -288,14 +288,14 @@ Client/WindowsNoEditor/OdiroSim.exe `
 
 권장 동작:
 
-1. `Service`를 `go run`으로 실행한다.
-2. 개발 모드에서는 `--dashboard-dir ./Service/static/Dashboard`를 전달한다.
+1. `Bridge`를 `go run`으로 실행한다.
+2. 개발 모드에서는 `--dashboard-dir ./Bridge/static/Dashboard`를 전달한다.
 3. `Agents`를 `uv run`으로 실행한다.
-4. `Service`와 `Agents` health check를 수행한다.
+4. `Bridge`와 `Agents` health check를 수행한다.
 5. `Client/RunPreview.bat`을 실행한다.
-6. `Client`에 Service URL, User Directory, runtime 경로를 인자로 전달한다.
+6. `Client`에 Bridge endpoint, User Directory, runtime 경로를 인자로 전달한다.
 
-개발 중에는 `OdiroService.exe`를 수동 build하지 않는다.
+개발 중에는 `OdiroHost.exe`를 수동 build하지 않는다.
 
 Release 조립 단계에서만 `go build`를 사용한다.
 
@@ -305,15 +305,15 @@ Release 구조는 사용자 실행과 배포를 기준으로 최소화한다.
 
 ```text
 Release/
-  OdiroService.exe
+  OdiroHost.exe
   Client/
   Agents/
 ```
 
 규칙:
 
-- `OdiroService.exe`는 top-level 단일 바이너리다.
-- Dashboard 정적 파일은 `OdiroService.exe`에 embed한다.
+- `OdiroHost.exe`는 top-level 단일 바이너리다.
+- Dashboard 정적 파일은 `OdiroHost.exe`에 embed한다.
 - `Client/Static/PolicyRuntime`은 Release에 복사한다.
 - `Agents`는 PyInstaller onedir 패키징을 기본값으로 둔다.
 - 사용자 프로젝트 파일은 Release 내부에 저장하지 않는다.

@@ -1,2 +1,7 @@
-# Auto detect text files and perform LF normalization
+# Follow the repository text policy while keeping Unreal assets binary.
 * text=auto
+
+*.uasset binary
+*.umap binary
+*.ubulk binary
+*.uexp binary

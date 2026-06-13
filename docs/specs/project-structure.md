@@ -39,10 +39,10 @@ Odiro/
     OdiroSim.uproject
     RunPreview.bat                # 개발용 Controller 실행 wrapper
 
-  Service/                        # Go background service
+  Bridge/                        # Go background service
     go.mod
     cmd/
-      OdiroService/
+      OdiroHost/
         main.go
     internal/
       api/                        # Controller/Dashboard용 HTTP API
@@ -52,7 +52,7 @@ Odiro/
       project/                    # User Directory 접근
       runs/                       # 실행 상태 추적
     static/
-      Dashboard/                  # 개발용 Dashboard 원본. Release에서는 OdiroService.exe에 embed
+      Dashboard/                  # 개발용 Dashboard 원본. Release에서는 OdiroHost.exe에 embed
         index.html
         dashboard.js
         dashboard.css
@@ -87,7 +87,7 @@ Odiro/
 
 ```text
 Release/
-  OdiroService.exe                # Go 단일 바이너리. Dashboard 정적 파일 embed
+  OdiroHost.exe                # Go 단일 바이너리. Dashboard 정적 파일 embed
 
   Client/                         # Unreal 패키징 결과
     WindowsNoEditor/
@@ -112,21 +112,21 @@ Release/
 
 권장 동작:
 
-1. `Service`를 `go run`으로 실행한다.
-2. 개발 모드에서는 `--dashboard-dir ./Service/static/Dashboard` 옵션을 전달한다.
-3. `Service`가 `Agents` 서버를 실행하거나, 초기 구현 단계에서는 `tools/dev.ps1`이 대신 실행한다.
-4. `Service`와 `Agents` health check를 통과하면 `Client/RunPreview.bat`을 실행한다.
-5. `Client`에는 `Service` 주소와 필요한 runtime 경로를 실행 인자로 전달한다.
+1. `Bridge`를 `go run`으로 실행한다.
+2. 개발 모드에서는 `--dashboard-dir ./Bridge/static/Dashboard` 옵션을 전달한다.
+3. `Bridge`가 `Agents` 서버를 실행하거나, 초기 구현 단계에서는 `tools/dev.ps1`이 대신 실행한다.
+4. `Bridge`와 `Agents` health check를 통과하면 `Client/RunPreview.bat`을 실행한다.
+5. `Client`에는 `Bridge` 주소와 필요한 runtime 경로를 실행 인자로 전달한다.
 
 ```powershell
-go run ./Service/cmd/OdiroService --dashboard-dir ./Service/static/Dashboard
+go run ./Bridge/cmd/OdiroHost --dashboard-dir ./Bridge/static/Dashboard
 ```
 
-Release에서는 `--dashboard-dir`을 사용하지 않는다. `OdiroService.exe`는 embed된 Dashboard 파일을 사용한다.
+Release에서는 `--dashboard-dir`을 사용하지 않는다. `OdiroHost.exe`는 embed된 Dashboard 파일을 사용한다.
 
 ## 경로 처리 규칙
 
 - Unreal `Client`는 Release 또는 Repository 상대 경로를 직접 추측하지 않는다.
-- `Service`는 실행 환경에 맞는 경로를 계산하고 `Client` 실행 인자로 전달한다.
+- `Bridge`는 실행 환경에 맞는 경로를 계산하고 `Client` 실행 인자로 전달한다.
 - `Client/Static/PolicyRuntime`은 개발 중과 Release에서 같은 소유권을 유지한다.
 - 사용자 프로젝트 경로는 Release 폴더 내부가 아니라 사용자가 선택한 User Directory를 사용한다.

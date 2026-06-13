@@ -47,16 +47,16 @@ Agents/docs/
 
 목표:
 
-- 작업자가 `Service`, `Agents`, `Client`를 각각 수동 실행하지 않는다.
-- 개발 중 `OdiroService.exe`를 매번 직접 build하지 않는다.
-- `Service`는 개발 중 `go run`으로 실행한다.
+- 작업자가 `Bridge`, `Agents`, `Client`를 각각 수동 실행하지 않는다.
+- 개발 중 `OdiroHost.exe`를 매번 직접 build하지 않는다.
+- `Bridge`는 개발 중 `go run`으로 실행한다.
 - `Agents`는 `uv run`으로 실행한다.
 - `Client`는 `Client/RunPreview.bat`을 통해 실행한다.
 
 `tools/dev.ps1 preview` 권장 순서:
 
 1. 필수 도구 존재 확인
-2. `Service` 실행
+2. `Bridge` 실행
 3. `Agents` 실행
 4. health check 대기
 5. `Client/RunPreview.bat` 실행
@@ -69,7 +69,7 @@ Unreal `Client`는 다른 프로젝트 경로를 직접 계산하지 않는다.
 
 ```text
 ../Agents
-../Service
+../Bridge
 ../../contracts
 현재 작업 디렉터리 기반 repository 추측
 packaged exe 위치 기반 개발 경로 추측
@@ -81,7 +81,7 @@ packaged exe 위치 기반 개발 경로 추측
 명시적 실행 인자
 환경 변수
 설정 파일
-Service가 전달한 경로
+Bridge가 전달한 경로
 ```
 
 `PolicyRuntime`은 `Client` 소유다.
@@ -95,8 +95,8 @@ Client/Static/PolicyRuntime
 컴포넌트 경계는 명확히 둔다.
 
 ```text
-Client  <-> Service
-Service <-> Agents
+Client  <-> Bridge
+Bridge <-> Agents
 Client  <-> PolicyRuntime
 ```
 
@@ -104,7 +104,7 @@ Client  <-> PolicyRuntime
 
 - `Client`는 `Agents`를 직접 호출하지 않는다.
 - `Agents`는 `Client` 내부 파일을 직접 수정하지 않는다.
-- `Agents`가 생성한 결과를 User Directory에 최종 반영하는 책임은 `Service`가 가진다.
+- `Agents`가 생성한 결과를 User Directory에 최종 반영하는 책임은 `Bridge`가 가진다.
 - 공유 JSON payload는 `contracts`의 schema/example과 맞아야 한다.
 - contract 변경은 가능하면 하위 호환성을 유지한다.
 
@@ -122,8 +122,8 @@ Get-Content -Raw docs/specs/project-structure.md
 cd Agents
 uv run pytest
 
-# Service
-cd Service
+# Bridge
+cd Bridge
 go test ./...
 
 # Client

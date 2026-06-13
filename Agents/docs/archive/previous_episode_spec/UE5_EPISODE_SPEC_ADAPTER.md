@@ -1,13 +1,13 @@
 > Archived document.
 > This document is kept for historical reference and is not the current UE contract.
-> Current UE contracts live under `docs/ue_contracts/`.
+> Current UE contracts live under `contracts/specs/`.
 
 # UE5 EpisodeSpec Adapter
 
 ## 1. 목적
 
 AI 내부 `WorldConfig`를 UE5 MVP 컴파일러가 읽을 수 있는 `EpisodeSpec`으로 변환한다.
-legacy EpisodeSpec 참고 문서는 `docs/archive/previous_episode_spec/UE_EPISODE_SPEC_JSON_GUIDE.md`이다. 현재 UE 계약은 `docs/ue_contracts/` 아래 문서를 기준으로 한다.
+legacy EpisodeSpec 참고 문서는 `docs/archive/previous_episode_spec/UE_EPISODE_SPEC_JSON_GUIDE.md`이다. 현재 UE 계약은 `contracts/specs/` 아래 문서를 기준으로 한다.
 
 ## 2. 왜 adapter가 필요한가
 

@@ -13,6 +13,7 @@ from app.services.environment_parameter_sampler import sample_environment_parame
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "sample_environment_parameters.py"
+CONTRACT_SCHEMA_DIR = ROOT.parent / "contracts" / "schemas"
 
 
 REQUIRED_PATHS = [
@@ -34,12 +35,12 @@ FORBIDDEN_ARTIFACTS = [
 ]
 
 SCHEMA_PATHS = [
-    ROOT / "schemas" / "world_config.schema.json",
-    ROOT / "schemas" / "decision_request.schema.json",
-    ROOT / "schemas" / "decision_response.schema.json",
-    ROOT / "schemas" / "evaluation_spec.schema.json",
-    ROOT / "schemas" / "policy_config.schema.json",
-    ROOT / "schemas" / "run_result.schema.json",
+    CONTRACT_SCHEMA_DIR / "world_config.schema.json",
+    CONTRACT_SCHEMA_DIR / "decision_request.schema.json",
+    CONTRACT_SCHEMA_DIR / "decision_response.schema.json",
+    CONTRACT_SCHEMA_DIR / "evaluation_spec.schema.json",
+    CONTRACT_SCHEMA_DIR / "policy_config.schema.json",
+    CONTRACT_SCHEMA_DIR / "run_result.schema.json",
 ]
 
 

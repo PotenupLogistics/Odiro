@@ -6,6 +6,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
+CONTRACT_SCHEMA_DIR = ROOT.parent / "contracts" / "schemas"
 
 INTENT_EXTRACTOR = ROOT / "app" / "services" / "world_config_scenario_intent_extractor.py"
 POST_PROCESSOR = ROOT / "app" / "services" / "world_config_scenario_post_processor.py"
@@ -73,7 +74,7 @@ def run_check() -> dict[str, Any]:
             or "FastAPI route와 OpenAPI에서 제거" in docs_text
         ),
         "forbiddenArtifacts": forbidden,
-        "schemaFilesPresent": (ROOT / "schemas" / "world_config.schema.json").exists(),
+        "schemaFilesPresent": (CONTRACT_SCHEMA_DIR / "world_config.schema.json").exists(),
         "errors": [],
         "warnings": [],
     }

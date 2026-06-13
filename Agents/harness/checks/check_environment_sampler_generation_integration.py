@@ -6,6 +6,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
+CONTRACT_SCHEMA_DIR = ROOT.parent / "contracts" / "schemas"
 BUILDER = ROOT / "app" / "services" / "environment_generation_constraints_builder.py"
 GUIDE = ROOT / "docs" / "environment" / "ENVIRONMENT_SAMPLER_GENERATION_INTEGRATION.md"
 GENERATION_MODEL = ROOT / "app" / "models" / "generation.py"
@@ -74,7 +75,7 @@ def run_check() -> dict[str, Any]:
         ),
         "docsStateNoDoe": "DOE matrix" in guide_text and "DOE/batch는 후속 단계" in guide_text,
         "forbiddenArtifacts": forbidden,
-        "schemaFilesPresent": (ROOT / "schemas" / "world_config.schema.json").exists(),
+        "schemaFilesPresent": (CONTRACT_SCHEMA_DIR / "world_config.schema.json").exists(),
         "errors": [],
         "warnings": [],
     }

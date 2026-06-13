@@ -8,6 +8,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
+CONTRACT_SCHEMA_DIR = ROOT.parent / "contracts" / "schemas"
 MODEL_PATH = ROOT / "app" / "models" / "episode_spec.py"
 ADAPTER_PATH = ROOT / "app" / "services" / "world_config_to_episode_spec_adapter.py"
 VALIDATOR_PATH = ROOT / "app" / "services" / "episode_spec_validator.py"
@@ -20,7 +21,7 @@ POLICY_CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 RAG_CHUNKS_PATH = ROOT / "data" / "rag" / "policy_rag_chunks.jsonl"
 EXPECTED_POLICY_CARD_COUNT = 9
 EXPECTED_RAG_CHUNK_COUNT = 15
-SCHEMA_PATH = ROOT / "schemas" / "world_config.schema.json"
+SCHEMA_PATH = CONTRACT_SCHEMA_DIR / "world_config.schema.json"
 
 
 def _jsonl_count(path: Path) -> int:

@@ -11,7 +11,9 @@ from app.models.run_result import RunResult
 from app.models.world import WorldConfig
 
 
-ROOT = Path(__file__).resolve().parents[2]
+AGENTS_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = AGENTS_ROOT.parent
+CONTRACT_SCHEMA_DIR = REPO_ROOT / "contracts" / "schemas"
 
 
 class ContractType(str, Enum):
@@ -24,12 +26,12 @@ class ContractType(str, Enum):
 
 
 CONTRACT_SCHEMA_FILES: dict[ContractType, Path] = {
-    ContractType.policy_config: ROOT / "schemas" / "policy_config.schema.json",
-    ContractType.world_config: ROOT / "schemas" / "world_config.schema.json",
-    ContractType.decision_request: ROOT / "schemas" / "decision_request.schema.json",
-    ContractType.decision_response: ROOT / "schemas" / "decision_response.schema.json",
-    ContractType.evaluation_spec: ROOT / "schemas" / "evaluation_spec.schema.json",
-    ContractType.run_result: ROOT / "schemas" / "run_result.schema.json",
+    ContractType.policy_config: CONTRACT_SCHEMA_DIR / "policy_config.schema.json",
+    ContractType.world_config: CONTRACT_SCHEMA_DIR / "world_config.schema.json",
+    ContractType.decision_request: CONTRACT_SCHEMA_DIR / "decision_request.schema.json",
+    ContractType.decision_response: CONTRACT_SCHEMA_DIR / "decision_response.schema.json",
+    ContractType.evaluation_spec: CONTRACT_SCHEMA_DIR / "evaluation_spec.schema.json",
+    ContractType.run_result: CONTRACT_SCHEMA_DIR / "run_result.schema.json",
 }
 
 CONTRACT_MODELS: dict[ContractType, type[Any]] = {

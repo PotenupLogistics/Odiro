@@ -6,7 +6,7 @@
 
 ## 2. Required Nested Paths
 
-현재 output contract는 `schemas/world_config.schema.json`에서 파생된다. 필수 nested path는 다음과 같다.
+현재 output contract는 `contracts/schemas/world_config.schema.json`에서 파생된다. 필수 nested path는 다음과 같다.
 
 * `schemaVersion`
 * `worldId`

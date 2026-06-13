@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_DIR = ROOT / "schemas"
+SCHEMA_DIR = ROOT.parent / "contracts" / "schemas"
 EXPECTED_SCHEMAS = {
     "policy_config.schema.json",
     "world_config.schema.json",

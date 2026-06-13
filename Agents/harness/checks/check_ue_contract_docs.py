@@ -7,17 +7,17 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = ROOT.parent
 DOCS = ROOT / "docs"
-UE_CONTRACTS = DOCS / "ue_contracts"
+CONTRACT_SPECS = REPO_ROOT / "contracts" / "specs"
 README = ROOT / "README.md"
 DOCS_README = DOCS / "README.md"
 
 CONTRACT_DOCS = [
-    UE_CONTRACTS / "EPISODE_JSON_GUIDE.md",
-    UE_CONTRACTS / "EPISODE_SETUP_JSON.md",
-    UE_CONTRACTS / "DELIVERY_BOT_SETUP_JSON.md",
-    UE_CONTRACTS / "RUN_QUEUE_JSON.md",
-    UE_CONTRACTS / "EVALUATION_REPORT_JSON.md",
+    CONTRACT_SPECS / "EpisodeSetup.json.md",
+    CONTRACT_SPECS / "DeliveryBotSetup.json.md",
+    CONTRACT_SPECS / "RunQueue.json.md",
+    CONTRACT_SPECS / "EpisodeEvaluationReport.json.md",
 ]
 
 PLAN_DOCS = [
@@ -51,10 +51,10 @@ def _imports_live_http_client(path: Path) -> bool:
 
 
 def run_check() -> dict[str, Any]:
-    episode_setup = _read(UE_CONTRACTS / "EPISODE_SETUP_JSON.md")
-    delivery_bot_setup = _read(UE_CONTRACTS / "DELIVERY_BOT_SETUP_JSON.md")
-    run_queue = _read(UE_CONTRACTS / "RUN_QUEUE_JSON.md")
-    evaluation_report = _read(UE_CONTRACTS / "EVALUATION_REPORT_JSON.md")
+    episode_setup = _read(CONTRACT_SPECS / "EpisodeSetup.json.md")
+    delivery_bot_setup = _read(CONTRACT_SPECS / "DeliveryBotSetup.json.md")
+    run_queue = _read(CONTRACT_SPECS / "RunQueue.json.md")
+    evaluation_report = _read(CONTRACT_SPECS / "EpisodeEvaluationReport.json.md")
     terminology = _read(DOCS / "architecture" / "SCENARIO_EPISODE_TERMINOLOGY.md")
     migration_plan = _read(DOCS / "architecture" / "UE_CONTRACT_MIGRATION_PLAN.md")
     readme_text = _read(README) + "\n" + _read(DOCS_README)
@@ -107,7 +107,7 @@ def run_check() -> dict[str, Any]:
         "legacyDocsArchived": (DOCS / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_ADAPTER.md").exists(),
         "readmesLinkPlans": all(
             term in readme_text
-            for term in ["UE_CONTRACT_MIGRATION_PLAN.md", "SCENARIO_EPISODE_TERMINOLOGY.md", "ue_contracts", "archive/previous_episode_spec"]
+            for term in ["UE_CONTRACT_MIGRATION_PLAN.md", "SCENARIO_EPISODE_TERMINOLOGY.md", "contracts/specs", "archive/previous_episode_spec"]
         ),
         "noLiveProviderCallsInHarness": not _imports_live_http_client(Path(__file__)),
         "forbiddenArtifacts": forbidden_artifacts,

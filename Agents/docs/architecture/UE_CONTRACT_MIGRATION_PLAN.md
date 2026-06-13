@@ -6,11 +6,10 @@
 
 ## 2. 최신 UE 계약 문서
 
-* `docs/ue_contracts/EPISODE_JSON_GUIDE.md`
-* `docs/ue_contracts/EPISODE_SETUP_JSON.md`
-* `docs/ue_contracts/DELIVERY_BOT_SETUP_JSON.md`
-* `docs/ue_contracts/RUN_QUEUE_JSON.md`
-* `docs/ue_contracts/EVALUATION_REPORT_JSON.md`
+* `contracts/specs/EpisodeSetup.json.md`
+* `contracts/specs/DeliveryBotSetup.json.md`
+* `contracts/specs/RunQueue.json.md`
+* `contracts/specs/EpisodeEvaluationReport.json.md`
 
 ## 3. 용어 기준
 

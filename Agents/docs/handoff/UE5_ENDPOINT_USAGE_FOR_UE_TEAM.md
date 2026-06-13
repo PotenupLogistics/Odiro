@@ -35,7 +35,7 @@ EpisodeSpec JSON 계약의 기준 문서는 `docs/archive/previous_episode_spec/
 
 ## 4. 최신 EpisodeSetup + DeliveryBotSetup pair 생성 기준
 
-최신 UE 계약 기준 문서는 `docs/ue_contracts/` 아래 문서다.
+공유 실행 계약 기준 문서는 `contracts/specs/` 아래 문서다.
 
 최신 setup pair 생성은 `/api/v1/scenarios/generate`와 RunQueue export 경로를 기준으로 한다.
 

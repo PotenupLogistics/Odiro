@@ -356,7 +356,7 @@
 
 ## UE Contract Migration 결정
 
-* 최신 UE 계약 문서는 `docs/ue_contracts/` 아래 문서를 기준으로 한다.
+* 최신 UE 계약 문서는 `contracts/specs/` 아래 문서를 기준으로 한다.
 * Scenario는 추상적인 상황 유형이고 Episode는 실제 한 번 실행되는 구체 시뮬레이션 인스턴스다.
 * `scenario_id`는 생성 의도/유형 식별자로 사용하고 실제 실행 단위는 `pair_id`, `run_id`, `requestId` 등으로 추적한다.
 * 현재 구현된 EpisodeSpec handoff service/model은 legacy archive/tooling 목적으로 유지하되 public route는 제거한다.
@@ -374,7 +374,7 @@
 
 ## Docs Inventory And Cleanup 결정
 
-* `docs/ue_contracts/`는 공식 UE 계약 문서 경로로 유지하고 이동/rename하지 않는다.
+* `contracts/specs/`는 공식 UE 계약 문서 경로로 유지하고 이동/rename하지 않는다.
 * `docs/policy_server/POLICY_DECISION_JSON_GUIDE.md`는 공식 Policy Decision 계약 문서 경로로 유지하고 이동/rename하지 않는다.
 * 기존 EpisodeSpec 문서는 파일 상단에 legacy 문구를 추가하지 않고 `docs/archive/previous_episode_spec/` 위치로 구분한다.
 * 영어 설명이 많은 문서는 별도 계획 문서가 아니라 실제 문서 본문에서 단계적으로 한국어화한다.
@@ -384,7 +384,7 @@
 
 * 자연어 시나리오 1개에서 기본 5개 EpisodeSetup + DeliveryBotSetup pair를 생성한다.
 * episode variation은 LLM을 episode 수만큼 재호출하지 않고 deterministic variation과 environment sampling 값을 사용한다.
-* RunQueue JSON은 `docs/ue_contracts/RUN_QUEUE_JSON.md` 계약 그대로 `schema`, `version`, `runs`만 포함한다.
+* RunQueue JSON은 `contracts/specs/RunQueue.json.md` 계약 그대로 `schema`, `version`, `runs`만 포함한다.
 * RunQueue JSON에는 `success`, `responseFormat`, `diagnostics`, `setupPairs`, `episodeSetup`, `deliveryBotSetup`, `validation`, `trace`를 넣지 않는다.
 * diagnostics, validation, trace summary는 UE용 RunQueue JSON과 분리해 local ignored report로만 저장한다.
 * RunQueue export는 `scripts/export_ue5_run_queue_package.py`와 사용자용 `POST /api/v1/scenarios/generate` 경로에서 제공한다.
@@ -400,5 +400,5 @@
 * optional field는 policy, deterministic variation, adapter가 실제 값을 지정한 경우에만 출력한다.
 * 생략된 DeliveryBotSetup field는 UE C++ 구조체 기본값 fallback에 맡긴다.
 * DeliveryBotSetup tuning 값은 LLM이 직접 임의 수치로 생성하지 않는다.
-* DeliveryBotSetup tuning 값은 `docs/ue_contracts/DELIVERY_BOT_SETUP_JSON.md` default catalog와 deterministic variation policy 기준으로 생성한다.
+* DeliveryBotSetup tuning 값은 `contracts/specs/DeliveryBotSetup.json.md` default catalog와 deterministic variation policy 기준으로 생성한다.
 * 사용자용 `POST /api/v1/scenarios/generate`는 prompt 하나만 받고 RunQueue JSON 계약 그대로 반환한다.

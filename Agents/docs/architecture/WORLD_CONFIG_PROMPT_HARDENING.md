@@ -24,7 +24,7 @@
 
 ## 3. 강화 전략 (Hardening Strategy)
 
-- `schemas/world_config.schema.json`에서 required field checklist를 직접 만든다.
+- `contracts/schemas/world_config.schema.json`에서 required field checklist를 직접 만든다.
 - prompt에 allowed top-level field guidance를 포함한다.
 - top-level과 nested object 내부의 extra key를 명시적으로 금지한다.
 - required field에는 `null`을 사용하지 말라고 지시한다.

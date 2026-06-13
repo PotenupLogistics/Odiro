@@ -6,6 +6,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
+CONTRACT_SCHEMA_DIR = ROOT.parent / "contracts" / "schemas"
 HELPER = ROOT / "app" / "utils" / "handoff_response_summary.py"
 GUIDE = ROOT / "docs" / "handoff" / "GENERIC_OBSTACLE_SMOKE_REPORTING.md"
 SCRIPT_PATHS = [
@@ -62,7 +63,7 @@ def run_check() -> dict[str, Any]:
         "docsStateNoFullPayload": "full payload 저장 금지" in guide_text
         and "API key 저장 금지" in guide_text,
         "forbiddenArtifacts": forbidden,
-        "schemaFilesPresent": (ROOT / "schemas" / "world_config.schema.json").exists(),
+        "schemaFilesPresent": (CONTRACT_SCHEMA_DIR / "world_config.schema.json").exists(),
         "errors": [],
         "warnings": [],
     }

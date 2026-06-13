@@ -6,19 +6,18 @@
 
 공식 계약 문서 경로는 팀 공유 경로이므로 이동하거나 rename하지 않습니다.
 
-* [Episode JSON Guide](ue_contracts/EPISODE_JSON_GUIDE.md)
-* [EpisodeSetup JSON](ue_contracts/EPISODE_SETUP_JSON.md)
-* [DeliveryBotSetup JSON](ue_contracts/DELIVERY_BOT_SETUP_JSON.md)
-* [RunQueue JSON](ue_contracts/RUN_QUEUE_JSON.md)
-* [EvaluationReport JSON](ue_contracts/EVALUATION_REPORT_JSON.md)
+* [contracts/specs/EpisodeSetup.json.md](../../contracts/specs/EpisodeSetup.json.md)
+* [contracts/specs/DeliveryBotSetup.json.md](../../contracts/specs/DeliveryBotSetup.json.md)
+* [contracts/specs/RunQueue.json.md](../../contracts/specs/RunQueue.json.md)
+* [contracts/specs/EpisodeEvaluationReport.json.md](../../contracts/specs/EpisodeEvaluationReport.json.md)
 * [Policy Decision JSON Guide](policy_server/POLICY_DECISION_JSON_GUIDE.md)
 
 기준 경로:
 
-* `docs/ue_contracts/EPISODE_SETUP_JSON.md`
-* `docs/ue_contracts/DELIVERY_BOT_SETUP_JSON.md`
-* `docs/ue_contracts/RUN_QUEUE_JSON.md`
-* `docs/ue_contracts/EVALUATION_REPORT_JSON.md`
+* `contracts/specs/EpisodeSetup.json.md`
+* `contracts/specs/DeliveryBotSetup.json.md`
+* `contracts/specs/RunQueue.json.md`
+* `contracts/specs/EpisodeEvaluationReport.json.md`
 * `docs/policy_server/POLICY_DECISION_JSON_GUIDE.md`
 
 ## 아키텍처
@@ -37,6 +36,13 @@
 * [World Config Prompt Hardening](architecture/WORLD_CONFIG_PROMPT_HARDENING.md)
 * [World Config Output Contract](architecture/WORLD_CONFIG_OUTPUT_CONTRACT.md)
 * [World Config Generation Orchestrator](architecture/WORLD_CONFIG_GENERATION_ORCHESTRATOR.md)
+
+## 상태
+
+* [Capabilities](status/CAPABILITIES.md)
+* [Verification Status](status/VERIFICATION_STATUS.md)
+* [Next Actions](status/NEXT_ACTIONS.md)
+* [Decisions](status/DECISIONS.md)
 
 ## 환경 파라미터
 
@@ -84,7 +90,7 @@
 * [UE 전달 manifest](handoff/UE_HANDOFF_DELIVERY_MANIFEST.md)
 * [전달 release notes](handoff/HANDOFF_RELEASE_NOTES.md)
 
-RunQueue package export는 `scripts/export_ue5_run_queue_package.py`를 사용합니다. 산출물은 `data/run_queue_exports/` 아래 local ignored path에 저장하며, UE용 RunQueue JSON은 `docs/ue_contracts/RUN_QUEUE_JSON.md` 계약 필드만 포함합니다.
+RunQueue package export는 `scripts/export_ue5_run_queue_package.py`를 사용합니다. 산출물은 `data/run_queue_exports/` 아래 local ignored path에 저장하며, RunQueue JSON은 `contracts/specs/RunQueue.json.md` 계약 필드만 포함합니다.
 
 사용자용 scenario 생성 API는 `POST /api/v1/scenarios/generate`입니다. 입력은 자연어 `prompt`를 필수로 받고, 선택적으로 `episode_count`를 허용합니다. 성공 응답은 wrapper field 없는 RunQueue JSON입니다. `episode_count`를 생략하면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용하고, 요청값은 1 이상 `SCENARIO_EPISODE_MAX_COUNT` 이하의 strict integer여야 합니다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하는 구조는 아닙니다. EpisodeSetup / DeliveryBotSetup / RunQueue JSON은 null-free 정책을 따르고 optional field는 값이 없으면 생략합니다.
 

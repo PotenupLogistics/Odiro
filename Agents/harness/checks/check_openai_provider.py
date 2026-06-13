@@ -8,6 +8,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
+CONTRACT_SCHEMA_DIR = ROOT.parent / "contracts" / "schemas"
 SCRIPT = ROOT / "scripts" / "run_openai_world_config_smoke.py"
 
 REQUIRED_FILES = [
@@ -77,7 +78,7 @@ def run_check() -> dict[str, Any]:
         "dryRunWorks": dry_run.returncode == 0 and '"openaiCalled": false' in dry_run.stdout,
         "hardcodedKeyWarnings": _detect_hardcoded_keys(),
         "forbiddenArtifacts": forbidden,
-        "schemaFilesPresent": (ROOT / "schemas" / "world_config.schema.json").exists(),
+        "schemaFilesPresent": (CONTRACT_SCHEMA_DIR / "world_config.schema.json").exists(),
         "errors": [],
         "warnings": [],
     }

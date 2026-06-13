@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any
 
 
-ROOT = Path(__file__).resolve().parents[2]
-WORLD_SCHEMA_PATH = ROOT / "schemas" / "world_config.schema.json"
+AGENTS_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = AGENTS_ROOT.parent
+WORLD_SCHEMA_PATH = REPO_ROOT / "contracts" / "schemas" / "world_config.schema.json"
 
 
 def _load_schema() -> dict[str, Any]:

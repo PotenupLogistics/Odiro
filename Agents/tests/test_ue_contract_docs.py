@@ -4,8 +4,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parent
 DOCS = ROOT / "docs"
-UE_CONTRACTS = DOCS / "ue_contracts"
+CONTRACT_SPECS = REPO_ROOT / "contracts" / "specs"
 
 
 def _read(path: Path) -> str:
@@ -14,13 +15,12 @@ def _read(path: Path) -> str:
 
 def test_ue_contract_docs_and_plans_exist() -> None:
     for name in [
-        "EPISODE_JSON_GUIDE.md",
-        "EPISODE_SETUP_JSON.md",
-        "DELIVERY_BOT_SETUP_JSON.md",
-        "RUN_QUEUE_JSON.md",
-        "EVALUATION_REPORT_JSON.md",
+        "EpisodeSetup.json.md",
+        "DeliveryBotSetup.json.md",
+        "RunQueue.json.md",
+        "EpisodeEvaluationReport.json.md",
     ]:
-        assert (UE_CONTRACTS / name).exists()
+        assert (CONTRACT_SPECS / name).exists()
 
     assert (DOCS / "architecture" / "SCENARIO_EPISODE_TERMINOLOGY.md").exists()
     assert (DOCS / "architecture" / "UE_CONTRACT_MIGRATION_PLAN.md").exists()
@@ -40,7 +40,7 @@ def test_scenario_episode_terminology_distinguishes_core_terms() -> None:
 
 
 def test_episode_setup_contract_uses_new_coordinate_fields_and_forbids_legacy_transform_fields() -> None:
-    text = _read(UE_CONTRACTS / "EPISODE_SETUP_JSON.md")
+    text = _read(CONTRACT_SPECS / "EpisodeSetup.json.md")
 
     for term in ["xy_m", "yaw_deg", "goal_xy_m", "center_xy_m", "points_xy_m"]:
         assert term in text
@@ -52,7 +52,7 @@ def test_episode_setup_contract_uses_new_coordinate_fields_and_forbids_legacy_tr
 
 
 def test_episode_setup_contract_documents_robot_profile() -> None:
-    text = _read(UE_CONTRACTS / "EPISODE_SETUP_JSON.md")
+    text = _read(CONTRACT_SPECS / "EpisodeSetup.json.md")
 
     for term in [
         "robot_profile",
@@ -70,7 +70,7 @@ def test_episode_setup_contract_documents_robot_profile() -> None:
 
 
 def test_delivery_bot_setup_contract_keeps_tuning_separate_from_episode_placement() -> None:
-    text = _read(UE_CONTRACTS / "DELIVERY_BOT_SETUP_JSON.md")
+    text = _read(CONTRACT_SPECS / "DeliveryBotSetup.json.md")
 
     for term in ["drive", "path_follow", "lidar"]:
         assert term in text
@@ -83,8 +83,8 @@ def test_delivery_bot_setup_contract_keeps_tuning_separate_from_episode_placemen
 
 
 def test_run_queue_and_evaluation_report_contracts_are_indexed_without_implementation_scope() -> None:
-    run_queue_text = _read(UE_CONTRACTS / "RUN_QUEUE_JSON.md")
-    evaluation_text = _read(UE_CONTRACTS / "EVALUATION_REPORT_JSON.md")
+    run_queue_text = _read(CONTRACT_SPECS / "RunQueue.json.md")
+    evaluation_text = _read(CONTRACT_SPECS / "EpisodeEvaluationReport.json.md")
     migration_text = _read(DOCS / "architecture" / "UE_CONTRACT_MIGRATION_PLAN.md")
 
     for term in ["pair_id", "episode_setup", "delivery_bot_setup"]:
@@ -103,7 +103,7 @@ def test_readmes_link_ue_contract_migration_and_cleanup_docs() -> None:
     assert "UE_CONTRACT_MIGRATION_PLAN.md" in text
     assert "SCENARIO_EPISODE_TERMINOLOGY.md" in text
     assert "archive/previous_episode_spec" in text
-    assert "docs/ue_contracts" in text or "ue_contracts" in text
+    assert "contracts/specs" in text
 
 
 def test_ue_contract_doc_tests_do_not_import_live_provider_sdks() -> None:

@@ -399,7 +399,7 @@ confirmed 후보가 0개이고 `policy_knowledge_cards.jsonl`이 없으면 PASS�
 
 검증 항목:
 
-- `schemas/*.schema.json` 6개 존재 여부
+- `contracts/schemas/*.schema.json` 6개 존재 여부
 - 각 schema JSON 파싱 가능 여부
 - 각 schema의 `schemaVersion` 정의 여부
 - 각 schema의 `required` 필드 존재 여부

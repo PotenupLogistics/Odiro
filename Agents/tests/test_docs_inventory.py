@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parent
 DOCS = ROOT / "docs"
 
 
@@ -18,11 +19,11 @@ def test_temporary_management_docs_are_removed_after_cleanup() -> None:
 
 
 def test_canonical_contract_paths_are_not_moved_or_renamed() -> None:
-    assert (DOCS / "ue_contracts" / "EPISODE_JSON_GUIDE.md").exists()
-    assert (DOCS / "ue_contracts" / "EPISODE_SETUP_JSON.md").exists()
-    assert (DOCS / "ue_contracts" / "DELIVERY_BOT_SETUP_JSON.md").exists()
-    assert (DOCS / "ue_contracts" / "RUN_QUEUE_JSON.md").exists()
-    assert (DOCS / "ue_contracts" / "EVALUATION_REPORT_JSON.md").exists()
+    contract_specs = REPO_ROOT / "contracts" / "specs"
+    assert (contract_specs / "EpisodeSetup.json.md").exists()
+    assert (contract_specs / "DeliveryBotSetup.json.md").exists()
+    assert (contract_specs / "RunQueue.json.md").exists()
+    assert (contract_specs / "EpisodeEvaluationReport.json.md").exists()
     assert (DOCS / "policy_server" / "POLICY_DECISION_JSON_GUIDE.md").exists()
 
 
@@ -73,7 +74,7 @@ def test_readmes_link_new_structure_and_canonical_contracts() -> None:
     assert "docs/architecture/UE_CONTRACT_MIGRATION_PLAN.md" in text
     assert "docs/providers/OPENAI_PROVIDER_GUIDE.md" in text
     assert "archive/previous_episode_spec" in text
-    assert "docs/ue_contracts/EPISODE_SETUP_JSON.md" in text
+    assert "contracts/specs/EpisodeSetup.json.md" in text
     assert "docs/policy_server/POLICY_DECISION_JSON_GUIDE.md" in text
     assert "experiment/EXPERIMENT_WORKSPACE_LAYOUT.md" in text
 

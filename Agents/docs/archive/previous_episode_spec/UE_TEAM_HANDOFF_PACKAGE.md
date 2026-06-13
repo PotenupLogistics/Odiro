@@ -1,12 +1,12 @@
 > Archived document.
 > This document is kept for historical reference and is not the current UE contract.
-> Current UE contracts live under `docs/ue_contracts/`.
+> Current UE contracts live under `contracts/specs/`.
 
 # UE Team Handoff Package
 
 ## 1. 현재 AI Backend 상태
 
-legacy EpisodeSpec JSON 참고 문서는 `docs/archive/previous_episode_spec/UE_EPISODE_SPEC_JSON_GUIDE.md`이다. 현재 UE 계약은 `docs/ue_contracts/` 아래 문서를 기준으로 한다.
+legacy EpisodeSpec JSON 참고 문서는 `docs/archive/previous_episode_spec/UE_EPISODE_SPEC_JSON_GUIDE.md`이다. 현재 UE 계약은 `contracts/specs/` 아래 문서를 기준으로 한다.
 
 * 자연어 기반 `WorldConfig` 생성 가능
 * `WorldConfig` schema validation 가능

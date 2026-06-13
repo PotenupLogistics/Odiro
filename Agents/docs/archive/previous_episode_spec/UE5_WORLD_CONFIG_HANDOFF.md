@@ -1,6 +1,6 @@
 > Archived document.
 > This document is kept for historical reference and is not the current UE contract.
-> Current UE contracts live under `docs/ue_contracts/`.
+> Current UE contracts live under `contracts/specs/`.
 
 # UE5 World Config Handoff
 

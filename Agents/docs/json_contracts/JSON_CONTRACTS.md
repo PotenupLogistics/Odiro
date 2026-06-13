@@ -20,12 +20,12 @@
 
 ## 4. schema 파일 위치
 
-- `schemas/policy_config.schema.json`
-- `schemas/world_config.schema.json`
-- `schemas/decision_request.schema.json`
-- `schemas/decision_response.schema.json`
-- `schemas/evaluation_spec.schema.json`
-- `schemas/run_result.schema.json`
+- `contracts/schemas/policy_config.schema.json`
+- `contracts/schemas/world_config.schema.json`
+- `contracts/schemas/decision_request.schema.json`
+- `contracts/schemas/decision_response.schema.json`
+- `contracts/schemas/evaluation_spec.schema.json`
+- `contracts/schemas/run_result.schema.json`
 
 ## 5. Pydantic 모델 위치
 

@@ -6,6 +6,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
+CONTRACT_SCHEMA_DIR = ROOT.parent / "contracts" / "schemas"
 RESULT_DOC = ROOT / "docs" / "handoff" / "HANDOFF_RELEASE_NOTES.md"
 ROOT_README = ROOT / "README.md"
 DOCS_README = ROOT / "docs" / "README.md"
@@ -73,7 +74,7 @@ def run_check() -> dict[str, Any]:
         "mentionsFullPayloadNotStored": "full WorldConfig" in related_text and "full EpisodeSpec" in related_text,
         "hardcodedKeyWarnings": _detect_hardcoded_keys(),
         "forbiddenArtifacts": forbidden,
-        "schemaFilesPresent": (ROOT / "schemas" / "world_config.schema.json").exists(),
+        "schemaFilesPresent": (CONTRACT_SCHEMA_DIR / "world_config.schema.json").exists(),
         "errors": [],
         "warnings": [],
     }

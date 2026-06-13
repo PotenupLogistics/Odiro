@@ -7,14 +7,16 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = ROOT.parent
 DOCS = ROOT / "docs"
 README = ROOT / "README.md"
 DOCS_README = DOCS / "README.md"
 
-EPISODE_SETUP_CONTRACT = DOCS / "ue_contracts" / "EPISODE_SETUP_JSON.md"
-DELIVERY_BOT_CONTRACT = DOCS / "ue_contracts" / "DELIVERY_BOT_SETUP_JSON.md"
-RUN_QUEUE_CONTRACT = DOCS / "ue_contracts" / "RUN_QUEUE_JSON.md"
-EVALUATION_REPORT_CONTRACT = DOCS / "ue_contracts" / "EVALUATION_REPORT_JSON.md"
+CONTRACT_SPECS = REPO_ROOT / "contracts" / "specs"
+EPISODE_SETUP_CONTRACT = CONTRACT_SPECS / "EpisodeSetup.json.md"
+DELIVERY_BOT_CONTRACT = CONTRACT_SPECS / "DeliveryBotSetup.json.md"
+RUN_QUEUE_CONTRACT = CONTRACT_SPECS / "RunQueue.json.md"
+EVALUATION_REPORT_CONTRACT = CONTRACT_SPECS / "EpisodeEvaluationReport.json.md"
 POLICY_DECISION_CONTRACT = DOCS / "policy_server" / "POLICY_DECISION_JSON_GUIDE.md"
 
 FORBIDDEN_CODE_PATHS = [
@@ -112,10 +114,10 @@ def run_check() -> dict[str, Any]:
         "readmesLinkCanonicalContractPaths": all(
             term in readme_text
             for term in [
-                "docs/ue_contracts/EPISODE_SETUP_JSON.md",
-                "docs/ue_contracts/DELIVERY_BOT_SETUP_JSON.md",
-                "docs/ue_contracts/RUN_QUEUE_JSON.md",
-                "docs/ue_contracts/EVALUATION_REPORT_JSON.md",
+                "contracts/specs/EpisodeSetup.json.md",
+                "contracts/specs/DeliveryBotSetup.json.md",
+                "contracts/specs/RunQueue.json.md",
+                "contracts/specs/EpisodeEvaluationReport.json.md",
                 "docs/policy_server/POLICY_DECISION_JSON_GUIDE.md",
             ]
         ),

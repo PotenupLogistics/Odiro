@@ -6,7 +6,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCHEMA_DIR = ROOT / "schemas"
+SCHEMA_DIR = ROOT.parent / "contracts" / "schemas"
 POLICY_CARDS_PATH = ROOT / "data" / "rag" / "policy_knowledge_cards.jsonl"
 EXPECTED_SCHEMAS = {
     "policy_config.schema.json",

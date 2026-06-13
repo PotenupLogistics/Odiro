@@ -32,8 +32,9 @@ from app.services.world_config_scenario_intent_extractor import (
 from app.models.robot_profile import robot_physical_constraints_prompt_section
 
 
-ROOT = Path(__file__).resolve().parents[2]
-WORLD_SCHEMA_PATH = ROOT / "schemas" / "world_config.schema.json"
+AGENTS_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = AGENTS_ROOT.parent
+WORLD_SCHEMA_PATH = REPO_ROOT / "contracts" / "schemas" / "world_config.schema.json"
 
 SYSTEM_PROMPT = """You are a World Config JSON generator for a UE5 delivery robot simulation.
 Follow world_config.schema.json exactly.
@@ -56,7 +57,7 @@ def _load_world_schema() -> dict[str, Any]:
 def _schema_summary() -> dict[str, Any]:
     schema = _load_world_schema()
     return {
-        "schemaPath": "schemas/world_config.schema.json",
+        "schemaPath": "contracts/schemas/world_config.schema.json",
         "title": schema.get("title", "world_config"),
         "required": schema.get("required", []),
         "properties": sorted(schema.get("properties", {}).keys()),

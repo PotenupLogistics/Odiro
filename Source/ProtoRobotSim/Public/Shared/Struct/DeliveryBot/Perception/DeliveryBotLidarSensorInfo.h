@@ -24,7 +24,7 @@ public:
 	bool bDrawDebug{ true };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bDrawNearMissDebug{ true };
+	bool bDrawNearObstacleWarningDebug{ true };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float ScanRangeM{ 5.f };
@@ -45,7 +45,7 @@ public:
 	float StopDistanceM{ 1.5f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float NearMissDistanceM{ 2.f };
+	float NearObstacleWarningDistanceM{ 2.f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SlowDownDistanceM{ 5.f };
@@ -132,6 +132,15 @@ public: // 탐지된 액터
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> ActorTags{};
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bHasBounds{ false };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector BoundsOriginCm{ FVector::ZeroVector };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector BoundsExtentCm{ FVector::ZeroVector };
+
 public: // 가장 가까운 액터와의 위치 정보
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FVector ClosestHitLocationCm{ FVector::ZeroVector };
@@ -173,6 +182,15 @@ struct FDeliveryBotLidarObservedObjectInfo
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> ActorTags{};
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bHasBounds{ false };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector BoundsOriginCm{ FVector::ZeroVector };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector BoundsExtentCm{ FVector::ZeroVector };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FVector ClosestHitLocationCm{ FVector::ZeroVector };

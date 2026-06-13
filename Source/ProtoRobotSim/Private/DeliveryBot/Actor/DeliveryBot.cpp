@@ -4,8 +4,11 @@
 #include "DeliveryBot/Component/DeliveryBot_DriveComponent.h"
 #include "DeliveryBot/Component/DeliveryBot_HttpPolicyComponent.h"
 #include "DeliveryBot/Component/DeliveryBot_LidarSensorComponent.h"
-#include "DeliveryBot/Component/DeliveryBot_PolicyControllerComponent.h"
+#include "Scenario/Actors/ScenarioGroundRegion.h"
+#include "Scenario/Actors/ScenarioPedestrian.h"
+#include "Scenario/Actors/ScenarioStaticObstacle.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
+#include "Components/PrimitiveComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBot, Log, All);
 
@@ -16,7 +19,6 @@ ADeliveryBot::ADeliveryBot()
 	DriveComponent = CreateDefaultSubobject<UDeliveryBot_DriveComponent>(TEXT("DriveComponent"));
 	LidarSensorComponent = CreateDefaultSubobject<UDeliveryBot_LidarSensorComponent>(TEXT("LidarSensorComponent"));
 	HttpPolicyComponent = CreateDefaultSubobject<UDeliveryBot_HttpPolicyComponent>(TEXT("HttpPolicyComponent"));
-	PolicyControllerComponent = CreateDefaultSubobject<UDeliveryBot_PolicyControllerComponent>(TEXT("PolicyControllerComponent"));
 	PlaceableComponent = CreateDefaultSubobject<UScenarioPlaceableComponent>(TEXT("PlaceableComponent"));
 
 	UChaosWheeledVehicleMovementComponent* wheeledMovement =
@@ -40,6 +42,8 @@ void ADeliveryBot::BeginPlay()
 		vehicleMovement->SetUseAutomaticGears(false);
 		vehicleMovement->SetTargetGear(1, true);
 	}
+
+	BindCollisionStopHitDelegates();
 
 	// BeginPlay에서 Python 서버에 scenario start를 요청한다.
 	if (SetupInfo.LocationSetupInfo.bAutoStartRoute && IsValid(HttpPolicyComponent))
@@ -74,6 +78,87 @@ void ADeliveryBot::Tick(float DeltaTime)
 void ADeliveryBot::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	Super::EndPlay(EndPlayReason);
+}
+
+void ADeliveryBot::BindCollisionStopHitDelegates()
+{
+	TArray<UPrimitiveComponent*> primitiveComponents;
+	GetComponents<UPrimitiveComponent>(primitiveComponents);
+
+	for (UPrimitiveComponent* primitiveComponent : primitiveComponents)
+	{
+		if (!IsValid(primitiveComponent))
+		{
+			continue;
+		}
+
+		primitiveComponent->OnComponentHit.RemoveDynamic(this, &ADeliveryBot::HandleCollisionStopHit);
+		primitiveComponent->OnComponentHit.AddDynamic(this, &ADeliveryBot::HandleCollisionStopHit);
+		primitiveComponent->SetNotifyRigidBodyCollision(true);
+	}
+}
+
+bool ADeliveryBot::IsCollisionStopActor(const AActor* otherActor) const
+{
+	if (!IsValid(otherActor) || otherActor == this)
+	{
+		return false;
+	}
+
+	if (Cast<AScenarioStaticObstacle>(otherActor) || Cast<AScenarioPedestrian>(otherActor))
+	{
+		return true;
+	}
+
+	if (const AScenarioGroundRegion* groundRegion = Cast<AScenarioGroundRegion>(otherActor))
+	{
+		return groundRegion->RegionSpec.RegionType == EScenarioGroundRegionType::Blocked;
+	}
+
+	for (const FName& tag : otherActor->Tags)
+	{
+		if (tag.ToString().StartsWith(TEXT("ObjectType.")))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void ADeliveryBot::ResetCollisionStopState()
+{
+	bCollisionStopActive = false;
+	CollisionStopActorName.Reset();
+	CollisionStopActorTags.Reset();
+}
+
+void ADeliveryBot::HandleCollisionStopHit(
+	UPrimitiveComponent* hitComponent,
+	AActor* otherActor,
+	UPrimitiveComponent* otherComp,
+	FVector normalImpulse,
+	const FHitResult& hit)
+{
+	(void)hitComponent;
+	(void)otherComp;
+	(void)normalImpulse;
+	(void)hit;
+
+	if (!IsCollisionStopActor(otherActor))
+	{
+		return;
+	}
+
+	if (!bCollisionStopActive)
+	{
+		CollisionStopActorName = otherActor->GetName();
+		CollisionStopActorTags = otherActor->Tags;
+		UE_LOG(LogDeliveryBot, Warning, TEXT("Collision stop locked | Actor=%s"), *CollisionStopActorName);
+	}
+
+	bCollisionStopActive = true;
+	ApplyParkingStop();
 }
 
 void ADeliveryBot::DebugLogObservation(float deltaTime)
@@ -119,12 +204,19 @@ void ADeliveryBot::RefreshSensorSnapshot()
 }
 void ADeliveryBot::InitializeSetupInfo(const FDeliveryBotSetupInfo& setupInfo)
 {
+	ResetCollisionStopState();
 	SetupInfo = setupInfo;
 	ApplySetupInfo();
 }
 
 void ADeliveryBot::ApplyMoveCommand(const FDeliveryBotMoveCommandInfo& moveCommandInfo, float deltaTime)
 {
+	if (bCollisionStopActive)
+	{
+		ApplyParkingStop();
+		return;
+	}
+
 	if (!IsValid(DriveComponent))
 		return;
 
@@ -217,6 +309,7 @@ bool ADeliveryBot::StartPolicyRunWithPolicySpecFileName(const FString& policySpe
 	if (!IsValid(HttpPolicyComponent))
 		return false;
 
+	ResetCollisionStopState();
 	HttpPolicyComponent->RequestStartScenario();
 	return true;
 }
@@ -263,6 +356,9 @@ TArray<FDeliveryBotLidarObservedObjectInfo> ADeliveryBot::BuildObservedObjectsFo
 		FDeliveryBotLidarObservedObjectInfo target;
 		target.ActorName = source.ActorName;
 		target.ActorTags = source.ActorTags;
+		target.bHasBounds = source.bHasBounds;
+		target.BoundsOriginCm = source.BoundsOriginCm;
+		target.BoundsExtentCm = source.BoundsExtentCm;
 		target.ClosestHitLocationCm = source.ClosestHitLocationCm;
 		target.ClosestDistanceM = source.ClosestDistanceM;
 		target.ClosestRayYawDegree = source.ClosestRayYawDegree;
@@ -301,10 +397,14 @@ void ADeliveryBot::FillObservation(FDeliveryBotObservationInfo& observation) con
 	observation.RobotState.YawDegree = GetActorRotation().Yaw;
 	observation.RobotState.VelocityCmPerSecond = GetVelocity();
 	observation.RobotState.SpeedKmh = GetVelocity().Size() * 0.036f;
+	observation.RobotState.bColliding = bCollisionStopActive;
+	observation.RobotState.CollisionActorName = CollisionStopActorName;
+	observation.RobotState.CollisionActorTags = CollisionStopActorTags;
 
 	observation.VehicleSpec.MaxSpeedKmh = SetupInfo.ChaosDriveConfigInfo.MaxSpeedKmh;
 	observation.VehicleSpec.MaxReverseSpeedKmh = SetupInfo.ChaosDriveConfigInfo.MaxReverseSpeedKmh;
 	observation.VehicleSpec.RobotBoxExtentCm = RobotBoxExtentCm;
+	observation.VehicleSpec.WheelBaseCm = WheelBaseCm;
 	observation.VehicleSpec.MinTurningRadiusCm = MinTurningRadiusCm;
 	observation.VehicleSpec.LidarModeType = SetupInfo.LidarSensorConfigInfo.LidarModeType;
 	observation.VehicleSpec.LidarScanRangeM = SetupInfo.LidarSensorConfigInfo.ScanRangeM;

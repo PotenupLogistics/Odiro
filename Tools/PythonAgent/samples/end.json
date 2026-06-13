@@ -1,13 +1,11 @@
 {
-  "experimentId": 1,
-  "episodeId": "episode_001",
   "robotInstanceId": "delivery_bot_01",
   "sequence": 2,
   "status": "ok",
   "metrics": {
     "elapsedTimeSeconds": 12.4,
     "stopCount": 0,
-    "nearMissCount": 0
+    "nearObstacleWarningCount": 0
   },
   "debug": {
     "reason": "sample_episode_finished"

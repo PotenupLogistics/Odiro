@@ -234,7 +234,7 @@ void UDeliveryBotSetupCompiler::CompileDrive( const FJsonObject& robotObject, FD
 	ReadOptionalFloatField(*driveObject, TEXT("engine_rev_down_rate"), path, result, driveConfigInfo.EngineRevDownRate, 0.0f);
 }
 
-void UDeliveryBotSetupCompiler::CompilePathFollow(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotPathFollowConfigInfo& pathFollowConfigInfo)
+void UDeliveryBotSetupCompiler::WarnDeprecatedPathFollow(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result)
 {
 	const TSharedPtr<FJsonValue> pathFollowValue = robotObject.TryGetField(TEXT("path_follow"));
 	if (!pathFollowValue.IsValid()) return;
@@ -243,9 +243,9 @@ void UDeliveryBotSetupCompiler::CompilePathFollow(const FJsonObject& robotObject
 	{
 		AddDiagnostic(
 			result,
-			EScenarioCompileDiagnosticSeverity::Error,
-			TEXT("invalid_object"),
-			TEXT("robot.path_follow 필드는 object여야 함."));
+			EScenarioCompileDiagnosticSeverity::Warning,
+			TEXT("deprecated_path_follow"),
+			TEXT("robot.path_follow is ignored. Goal arrival is evaluated by ScenarioEvaluation, and Python policy tuning lives in Tools/PythonAgent."));
 		return;
 	}
 
@@ -253,17 +253,53 @@ void UDeliveryBotSetupCompiler::CompilePathFollow(const FJsonObject& robotObject
 	if (!pathFollowObject.IsValid()) return;
 
 	const FString path = TEXT("robot.path_follow");
-	ReadOptionalBoolField(*pathFollowObject, TEXT("draw_debug"), path, result, pathFollowConfigInfo.bDrawDebug);
-	ReadOptionalFloatField(*pathFollowObject, TEXT("target_speed_kmh"), path, result, pathFollowConfigInfo.TargetSpeedKmh, 0.0f);
-	ReadOptionalFloatField(*pathFollowObject, TEXT("look_ahead_distance_m"), path, result, pathFollowConfigInfo.LookAheadDistanceM, 0.1f);
-	ReadOptionalFloatField(*pathFollowObject, TEXT("path_point_acceptance_distance_m"), path, result, pathFollowConfigInfo.PathPointAcceptanceDistanceM, 0.1f);
-	ReadOptionalFloatField(*pathFollowObject, TEXT("goal_acceptance_distance_m"), path, result, pathFollowConfigInfo.GoalAcceptanceDistanceM, 0.1f);
-	ReadOptionalFloatField(*pathFollowObject, TEXT("steering_sensitivity"), path, result, pathFollowConfigInfo.SteeringSensitivity, 0.0f);
-	ReadOptionalFloatField(*pathFollowObject, TEXT("steering_full_scale_degree"), path, result, pathFollowConfigInfo.SteeringFullScaleDegree, 1.0f);
-	ReadOptionalFloatField(*pathFollowObject, TEXT("max_steering"), path, result, pathFollowConfigInfo.MaxSteering, 0.01f, 1.0f);
-	ReadOptionalFloatField(*pathFollowObject, TEXT("max_steering_delta"), path, result, pathFollowConfigInfo.MaxSteeringDelta, 0.001f, 1.0f);
-	ReadOptionalFloatField(*pathFollowObject, TEXT("min_turn_speed_kmh"), path, result, pathFollowConfigInfo.MinTurnSpeedKmh, 0.0f);
-	ReadOptionalFloatField(*pathFollowObject, TEXT("obstacle_slow_speed_kmh"), path, result, pathFollowConfigInfo.ObstacleSlowSpeedKmh, 0.0f);
+
+	static const TCHAR* DeprecatedPathFollowFields[] = {
+		TEXT("goal_acceptance_distance_m"),
+		TEXT("draw_debug"),
+		TEXT("target_speed_kmh"),
+		TEXT("look_ahead_distance_m"),
+		TEXT("min_look_ahead_distance_m"),
+		TEXT("max_look_ahead_distance_m"),
+		TEXT("look_ahead_speed_gain_m_per_kmh"),
+		TEXT("look_ahead_steering_reduction_ratio"),
+		TEXT("look_ahead_smoothing_ratio"),
+		TEXT("path_point_acceptance_distance_m"),
+		TEXT("goal_slow_down_distance_m"),
+		TEXT("goal_approach_speed_kmh"),
+		TEXT("goal_approach_look_ahead_distance_m"),
+		TEXT("steering_sensitivity"),
+		TEXT("steering_full_scale_degree"),
+		TEXT("max_steering"),
+		TEXT("max_steering_delta"),
+		TEXT("min_turn_speed_kmh"),
+		TEXT("obstacle_slow_speed_kmh"),
+		TEXT("obstacle_soft_cost_radius_m"),
+		TEXT("obstacle_soft_cost_max_penalty"),
+		TEXT("obstacle_soft_cost_power"),
+		TEXT("path_turn_cost_penalty"),
+		TEXT("path_smoothing_distance_m"),
+		TEXT("allow_diagonal_pathfinding"),
+		TEXT("smooth_path_with_line_of_sight"),
+		TEXT("use_exact_goal_as_final_point"),
+	};
+
+	for (const TCHAR* deprecatedField : DeprecatedPathFollowFields)
+	{
+		if (!pathFollowObject->HasField(deprecatedField))
+		{
+			continue;
+		}
+
+		AddDiagnostic(
+			result,
+			EScenarioCompileDiagnosticSeverity::Warning,
+			TEXT("deprecated_path_follow_field"),
+			FString::Printf(
+				TEXT("%s.%s is ignored. Goal arrival is evaluated by ScenarioEvaluation, and Python policy tuning lives in Tools/PythonAgent."),
+				*path,
+				deprecatedField));
+	}
 }
 
 void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo)
@@ -286,26 +322,28 @@ void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDe
 
 	const FString path = TEXT("robot.lidar");
 	ReadOptionalBoolField(*lidarObject, TEXT("draw_debug"), path, result, lidarSensorConfigInfo.bDrawDebug);
-	ReadOptionalBoolField(*lidarObject, TEXT("draw_near_miss_debug"), path, result, lidarSensorConfigInfo.bDrawNearMissDebug);
+	ReadOptionalBoolField(*lidarObject, TEXT("draw_near_obstacle_warning_debug"), path, result, lidarSensorConfigInfo.bDrawNearObstacleWarningDebug);
+	ReadOptionalBoolField(*lidarObject, TEXT("draw_near_miss_debug"), path, result, lidarSensorConfigInfo.bDrawNearObstacleWarningDebug);
 	ReadOptionalFloatField(*lidarObject, TEXT("scan_range_m"), path, result, lidarSensorConfigInfo.ScanRangeM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("angle_step_degree"), path, result, lidarSensorConfigInfo.AngleStepDegree, 1.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("sensor_height_m"), path, result, lidarSensorConfigInfo.SensorHeightM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("front_half_angle_degree"), path, result, lidarSensorConfigInfo.FrontHalfAngleDegree, 0.0f, 180.0f);
 	ReadOptionalBoolField(*lidarObject, TEXT("store_missed_rays"), path, result, lidarSensorConfigInfo.bStoreMissedRays);
 	ReadOptionalFloatField(*lidarObject, TEXT("stop_distance_m"), path, result, lidarSensorConfigInfo.StopDistanceM, 0.0f);
-	ReadOptionalFloatField(*lidarObject, TEXT("near_miss_distance_m"), path, result, lidarSensorConfigInfo.NearMissDistanceM, 0.0f);
+	ReadOptionalFloatField(*lidarObject, TEXT("near_obstacle_warning_distance_m"), path, result, lidarSensorConfigInfo.NearObstacleWarningDistanceM, 0.0f);
+	ReadOptionalFloatField(*lidarObject, TEXT("near_miss_distance_m"), path, result, lidarSensorConfigInfo.NearObstacleWarningDistanceM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("slow_down_distance_m"), path, result, lidarSensorConfigInfo.SlowDownDistanceM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("collision_stop_half_angle_degree"), path, result, lidarSensorConfigInfo.CollisionStopHalfAngleDegree, 0.0f, 180.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("collision_stop_distance_m"), path, result, lidarSensorConfigInfo.CollisionStopDistanceM, 0.0f);
 	ReadOptionalCollisionChannelField(*lidarObject, TEXT("trace_channel"), path, result, lidarSensorConfigInfo.TraceChannel);
 	ReadOptionalNameArrayField(*lidarObject, TEXT("ignore_tags"), path, result, lidarSensorConfigInfo.IgnoreTags);
 
-	lidarSensorConfigInfo.NearMissDistanceM = FMath::Max(
-		lidarSensorConfigInfo.NearMissDistanceM,
+	lidarSensorConfigInfo.NearObstacleWarningDistanceM = FMath::Max(
+		lidarSensorConfigInfo.NearObstacleWarningDistanceM,
 		lidarSensorConfigInfo.StopDistanceM + 0.1f);
 	lidarSensorConfigInfo.SlowDownDistanceM = FMath::Max(
 		lidarSensorConfigInfo.SlowDownDistanceM,
-		lidarSensorConfigInfo.NearMissDistanceM + 0.1f);
+		lidarSensorConfigInfo.NearObstacleWarningDistanceM + 0.1f);
 	lidarSensorConfigInfo.CollisionStopHalfAngleDegree = FMath::Clamp(
 		lidarSensorConfigInfo.CollisionStopHalfAngleDegree,
 		0.0f,
@@ -395,7 +433,7 @@ void UDeliveryBotSetupCompiler::CompileRobotObject(const FJsonObject& rootObject
 	}
 
 	CompileDrive(*robotObject, result, result.SetupInfo.ChaosDriveConfigInfo);
-	CompilePathFollow(*robotObject, result, result.SetupInfo.PathFollowConfigInfo);
+	WarnDeprecatedPathFollow(*robotObject, result);
 	CompileLidar(*robotObject, result, result.SetupInfo.LidarSensorConfigInfo);
 	CompilePolicy(*robotObject, result, result.SetupInfo.StartupPolicySpecFileName);
 }

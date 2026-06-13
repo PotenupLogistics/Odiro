@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "Shared/Struct/DeliveryBot/Path/DeliveryBotPathInfo.h"
+#include "Shared/Types/DeliveryBotMovementTypes.h"
 #include "DeliveryBotMovementInfo.generated.h"
 
 USTRUCT(BlueprintType)

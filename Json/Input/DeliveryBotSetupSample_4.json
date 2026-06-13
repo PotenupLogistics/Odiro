@@ -8,13 +8,6 @@
       "throttle_input_rate_per_second": 0.3,
       "brake_input_rate_per_second": 0.6
     },
-    "path_follow": {
-      "target_speed_kmh": 7.0,
-      "look_ahead_distance_m": 1.1,
-      "path_point_acceptance_distance_m": 0.4,
-      "goal_acceptance_distance_m": 0.8,
-      "obstacle_slow_speed_kmh": 1.8
-    },
     "lidar": {
       "scan_range_m": 6.5,
       "angle_step_degree": 2.0,

@@ -16,8 +16,12 @@ void UDeliveryBot_LidarSensorComponent::InitializeLidar(const FDeliveryBotLidarS
 	LidarSensorConfigInfo.SensorHeightM = FMath::Max(LidarSensorConfigInfo.SensorHeightM, 0.f);
 	LidarSensorConfigInfo.FrontHalfAngleDegree = FMath::Clamp(LidarSensorConfigInfo.FrontHalfAngleDegree, 0.f, 180.f);
 	LidarSensorConfigInfo.StopDistanceM = FMath::Max(LidarSensorConfigInfo.StopDistanceM, 0.f);
-	LidarSensorConfigInfo.NearMissDistanceM = FMath::Max(LidarSensorConfigInfo.NearMissDistanceM, LidarSensorConfigInfo.StopDistanceM + 0.1f);
-	LidarSensorConfigInfo.SlowDownDistanceM = FMath::Max(LidarSensorConfigInfo.SlowDownDistanceM, LidarSensorConfigInfo.NearMissDistanceM + 0.1f);
+	LidarSensorConfigInfo.NearObstacleWarningDistanceM = FMath::Max(
+		LidarSensorConfigInfo.NearObstacleWarningDistanceM,
+		LidarSensorConfigInfo.StopDistanceM + 0.1f);
+	LidarSensorConfigInfo.SlowDownDistanceM = FMath::Max(
+		LidarSensorConfigInfo.SlowDownDistanceM,
+		LidarSensorConfigInfo.NearObstacleWarningDistanceM + 0.1f);
 	LidarSensorConfigInfo.CollisionStopHalfAngleDegree = FMath::Clamp(
 		LidarSensorConfigInfo.CollisionStopHalfAngleDegree,
 		0.f,
@@ -61,7 +65,7 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar1D() const
 	const float scanRangeCm = LidarSensorConfigInfo.ScanRangeM * 100.f;
 	const FVector endLocationCm = sensorLocationCm + owner->GetActorForwardVector() * scanRangeCm;
 
-	DrawDebugNearMissRange(sensorLocationCm);
+	DrawDebugNearObstacleWarningRange(sensorLocationCm);
 
 	FHitResult hitResult;
 	const bool bHit = TraceLidarRay(sensorLocationCm, endLocationCm, hitResult);
@@ -92,7 +96,7 @@ FDeliveryBotLidarScanInfo UDeliveryBot_LidarSensorComponent::ScanLidar2D() const
 	const float angleStepDegree = FMath::Max(LidarSensorConfigInfo.AngleStepDegree, 1.f);
 	const float scanRangeCm = LidarSensorConfigInfo.ScanRangeM * 100.f;
 
-	DrawDebugNearMissRange(sensorLocationCm);
+	DrawDebugNearObstacleWarningRange(sensorLocationCm);
 
 	int32 rayIndex = 0;
 
@@ -253,9 +257,9 @@ void UDeliveryBot_LidarSensorComponent::DrawDebugLidarRay(
 	}
 }
 
-void UDeliveryBot_LidarSensorComponent::DrawDebugNearMissRange(const FVector& sensorLocationCm) const
+void UDeliveryBot_LidarSensorComponent::DrawDebugNearObstacleWarningRange(const FVector& sensorLocationCm) const
 {
-	if (!LidarSensorConfigInfo.bDrawDebug || !LidarSensorConfigInfo.bDrawNearMissDebug)
+	if (!LidarSensorConfigInfo.bDrawDebug || !LidarSensorConfigInfo.bDrawNearObstacleWarningDebug)
 	{
 		return;
 	}
@@ -274,7 +278,9 @@ void UDeliveryBot_LidarSensorComponent::DrawDebugNearMissRange(const FVector& se
 		0.f,
 		frontHalfAngleDegree);
 	const float stopDistanceCm = FMath::Max(LidarSensorConfigInfo.StopDistanceM * 100.f, 0.f);
-	const float nearMissDistanceCm = FMath::Max(LidarSensorConfigInfo.NearMissDistanceM * 100.f, stopDistanceCm + 1.f);
+	const float nearObstacleWarningDistanceCm = FMath::Max(
+		LidarSensorConfigInfo.NearObstacleWarningDistanceM * 100.f,
+		stopDistanceCm + 1.f);
 	const float slowDownDistanceCm = FMath::Max(LidarSensorConfigInfo.SlowDownDistanceM * 100.f, 0.f);
 	const float collisionStopDistanceCm = FMath::Clamp(
 		LidarSensorConfigInfo.CollisionStopDistanceM * 100.f,
@@ -286,7 +292,7 @@ void UDeliveryBot_LidarSensorComponent::DrawDebugNearMissRange(const FVector& se
 		return;
 	}
 
-	const FColor nearMissColor = FColor::Cyan;
+	const FColor nearObstacleWarningColor = FColor::Cyan;
 	const FColor slowDownColor(255, 128, 0);
 	const FColor collisionColor = FColor::Red;
 	const float lifeTimeSeconds = 0.f;
@@ -342,7 +348,7 @@ void UDeliveryBot_LidarSensorComponent::DrawDebugNearMissRange(const FVector& se
 		}
 	};
 
-	drawArc(-180.f, 180.f, nearMissDistanceCm, nearMissColor, 3.f);
+	drawArc(-180.f, 180.f, nearObstacleWarningDistanceCm, nearObstacleWarningColor, 3.f);
 	drawArc(-frontHalfAngleDegree, frontHalfAngleDegree, slowDownDistanceCm, slowDownColor, 2.f);
 	drawYawLine(-frontHalfAngleDegree, slowDownDistanceCm, slowDownColor, 2.f);
 	drawYawLine(frontHalfAngleDegree, slowDownDistanceCm, slowDownColor, 2.f);
@@ -368,12 +374,12 @@ void UDeliveryBot_LidarSensorComponent::DrawDebugNearMissRange(const FVector& se
 		world,
 		labelLocationCm,
 		FString::Printf(
-			TEXT("Stop %.2fm | NearMiss %.2fm | Slow %.2fm"),
+			TEXT("Stop %.2fm | NearObstacleWarning %.2fm | Slow %.2fm"),
 			LidarSensorConfigInfo.StopDistanceM,
-			LidarSensorConfigInfo.NearMissDistanceM,
+			LidarSensorConfigInfo.NearObstacleWarningDistanceM,
 			LidarSensorConfigInfo.SlowDownDistanceM),
 		nullptr,
-		nearMissColor,
+		nearObstacleWarningColor,
 		lifeTimeSeconds,
 		true);
 }
@@ -424,6 +430,8 @@ TArray<FDeliveryBotLidarDetectedObjectInfo> UDeliveryBot_LidarSensorComponent::B
 			newObjectInfo.DetectedActor = rayInfo.HitActor;
 			newObjectInfo.ActorName = rayInfo.ActorName;
 			newObjectInfo.ActorTags = rayInfo.ActorTags;
+			rayInfo.HitActor->GetActorBounds(true, newObjectInfo.BoundsOriginCm, newObjectInfo.BoundsExtentCm);
+			newObjectInfo.bHasBounds = !newObjectInfo.BoundsExtentCm.IsNearlyZero();
 			newObjectInfo.ClosestHitLocationCm = rayInfo.HitLocationCm;
 			newObjectInfo.ClosestDistanceM = rayInfo.DistanceM;
 			newObjectInfo.ClosestRayYawDegree = rayInfo.RayYawDegree;

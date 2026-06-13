@@ -1,14 +1,11 @@
 ---
 name: ue5-dev
-description: UE5 C++ Blueprint build and log checks for ProtoRobotSim
+description: UE5 C++ Blueprint build and log checks
 ---
 
 # UE5 Dev
 
-Unreal C++, Blueprint, build, packaging, log triage
-
-## Use
-- Trigger: C++, Blueprint, build, module dependency, packaging, UE log
+UE5 C++, Blueprint, asset, build, packaging, and log triage.
 
 ## Inspect
 - Project: `*.uproject`, `Source/*.Target.cs`, `Source/**/*.Build.cs`
@@ -23,8 +20,8 @@ Unreal C++, Blueprint, build, packaging, log triage
 - Include cycle: move concrete includes from `.h` to `.cpp`, forward declare where possible
 
 ## Commands
-- Use repo-relative project references such as `*.uproject` when describing commands
-- If local UE path or build command is unknown, ask the user to run the build
+- Use repo-relative project references such as `*.uproject`.
+- If local UE path or build command is unknown, ask the user to run the build.
 
 ## Blueprint Boundary
 - Commandlet OK: asset creation, parent class assignment, default property edits, compile/save
@@ -41,4 +38,3 @@ Unreal C++, Blueprint, build, packaging, log triage
 - Live Coding Start: trigger once only through an existing local command or hook
 - Do not bypass with alternate UE path, copied workspace, clean/delete of `Binaries` or `Intermediate`, packaging command, IDE build, or generated project refresh
 - Otherwise ask the user to close the editor or disable Live Coding, then run their local build command
-

@@ -24,7 +24,7 @@ public:
 	bool bDrawDebug{ true };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bDrawNearMissDebug{ true };
+	bool bDrawNearObstacleWarningDebug{ true };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float ScanRangeM{ 5.f };
@@ -45,7 +45,7 @@ public:
 	float StopDistanceM{ 1.5f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float NearMissDistanceM{ 2.f };
+	float NearObstacleWarningDistanceM{ 2.f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SlowDownDistanceM{ 5.f };

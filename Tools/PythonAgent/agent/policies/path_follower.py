@@ -1,6 +1,6 @@
 import math
 
-from ..action import BotAction, clamp, drive_action, stop_action
+from ..action import BotAction, clamp, drive_action, soft_stop_action, stop_action
 from ..contract import GridMap, RobotState, ScenarioDecideRequest
 from ..state import AgentState
 
@@ -12,13 +12,13 @@ class PathFollower:
    # 경로 추종 속도, 조향 제한, 경로 이탈 허용 거리를 설정한다.
     def __init__(
         self,
-        follow_speed_kmh: float = 4.0,
+        follow_speed_kmh: float = 4.5,
         waypoint_acceptance_ratio: float = 0.45,
-        slow_down_distance_m: float = 4.5,
-        slow_down_speed_kmh: float = 1.2,
-        front_angle_degree: float = 35.0,
-        stop_distance_m: float = 1.5,
-        near_miss_distance_m: float = 2.0,
+        slow_down_distance_m: float = 4.8,
+        slow_down_speed_kmh: float = 1.0,
+        front_angle_degree: float = 25.0,
+        stop_distance_m: float = 1.4,
+        near_obstacle_warning_distance_m: float = 2.0,
         look_ahead_distance_m: float = 1.2,
         min_look_ahead_distance_m: float = 0.75,
         max_look_ahead_distance_m: float = 2.4,
@@ -37,6 +37,11 @@ class PathFollower:
         collision_stop_distance_m: float = 0.45,
         obstacle_turn_slowdown_steering_ratio: float = 0.6,
         obstacle_turn_slowdown_max_reduction: float = 0.3,
+        goal_slow_down_distance_m: float = 1.8,
+        goal_approach_speed_kmh: float = 0.7,
+        goal_approach_look_ahead_distance_m: float = 0.7,
+        soft_stop_brake: float = 0.18,
+        use_exact_goal_as_final_point: bool = True,
     ):
         self.followSpeedKmh = follow_speed_kmh
         self.waypointAcceptanceRatio = waypoint_acceptance_ratio
@@ -44,7 +49,7 @@ class PathFollower:
         self.slowDownSpeedKmh = slow_down_speed_kmh
         self.frontAngleDegree = front_angle_degree
         self.stopDistanceM = stop_distance_m
-        self.nearMissDistanceM = near_miss_distance_m
+        self.nearObstacleWarningDistanceM = near_obstacle_warning_distance_m
         self.lookAheadDistanceM = look_ahead_distance_m
         self.minLookAheadDistanceM = min_look_ahead_distance_m
         self.maxLookAheadDistanceM = max_look_ahead_distance_m
@@ -63,11 +68,18 @@ class PathFollower:
         self.collisionStopDistanceM = collision_stop_distance_m
         self.obstacleTurnSlowdownSteeringRatio = obstacle_turn_slowdown_steering_ratio
         self.obstacleTurnSlowdownMaxReduction = obstacle_turn_slowdown_max_reduction
+        self.goalSlowDownDistanceM = goal_slow_down_distance_m
+        self.goalApproachSpeedKmh = goal_approach_speed_kmh
+        self.goalApproachLookAheadDistanceM = goal_approach_look_ahead_distance_m
+        self.softStopBrake = soft_stop_brake
+        self.bUseExactGoalAsFinalPoint = use_exact_goal_as_final_point
 
     # /scenario/start의 spec 값으로 주행 기준을 갱신한다.
     def configure_from_start(self, request) -> None:
         lidar_spec = request.lidarSpec or {}
         control_spec = request.controlSpec or {}
+        robot_spec = request.robotSpec or request.vehicleSpec or {}
+        drive_spec = request.driveSpec or {}
 
         self.followSpeedKmh = float(control_spec.get("targetSpeedKmh", self.followSpeedKmh))
         self.maxPathErrorM = float(control_spec.get("maxPathErrorM", self.maxPathErrorM))
@@ -107,10 +119,32 @@ class PathFollower:
         self.obstacleTurnSlowdownMaxReduction = float(
             control_spec.get("obstacleTurnSlowdownMaxReduction", self.obstacleTurnSlowdownMaxReduction)
         )
+        self.goalSlowDownDistanceM = float(
+            control_spec.get("goalSlowDownDistanceM", self.goalSlowDownDistanceM)
+        )
+        self.goalApproachSpeedKmh = float(
+            control_spec.get("goalApproachSpeedKmh", self.goalApproachSpeedKmh)
+        )
+        self.goalApproachLookAheadDistanceM = float(
+            control_spec.get("goalApproachLookAheadDistanceM", self.goalApproachLookAheadDistanceM)
+        )
+        self.softStopBrake = float(
+            control_spec.get("softStopBrakeInput", drive_spec.get("stopBrakeInput", self.softStopBrake))
+        )
+        self.bUseExactGoalAsFinalPoint = self.get_bool_config(
+            control_spec,
+            "useExactGoalAsFinalPoint",
+            self.bUseExactGoalAsFinalPoint,
+        )
         self.stopDistanceM = float(lidar_spec.get("stopDistanceM", self.stopDistanceM))
-        self.nearMissDistanceM = float(lidar_spec.get("nearMissDistanceM", self.nearMissDistanceM))
+        self.nearObstacleWarningDistanceM = float(
+            lidar_spec.get(
+                "nearObstacleWarningDistanceM",
+                lidar_spec.get("nearMissDistanceM", self.nearObstacleWarningDistanceM),
+            )
+        )
         self.slowDownDistanceM = max(
-            self.nearMissDistanceM + 0.1,
+            self.nearObstacleWarningDistanceM + 0.1,
             float(lidar_spec.get("slowDownDistanceM", self.slowDownDistanceM)),
         )
         self.frontAngleDegree = float(lidar_spec.get("frontHalfAngleDegree", self.frontAngleDegree))
@@ -120,6 +154,9 @@ class PathFollower:
         self.collisionStopDistanceM = float(
             lidar_spec.get("collisionStopDistanceM", self.collisionStopDistanceM)
         )
+        max_speed_kmh = float(robot_spec.get("maxSpeedKmh", 0.0))
+        if max_speed_kmh > 0.0:
+            self.followSpeedKmh = min(self.followSpeedKmh, max_speed_kmh)
         self.followSpeedKmh = max(0.0, self.followSpeedKmh)
         self.slowDownSpeedKmh = max(0.0, self.slowDownSpeedKmh)
         self.lookAheadDistanceM = max(0.1, self.lookAheadDistanceM)
@@ -139,9 +176,13 @@ class PathFollower:
         self.collisionStopDistanceM = max(0.0, self.collisionStopDistanceM)
         self.obstacleTurnSlowdownSteeringRatio = clamp(self.obstacleTurnSlowdownSteeringRatio, 0.0, 1.0)
         self.obstacleTurnSlowdownMaxReduction = clamp(self.obstacleTurnSlowdownMaxReduction, 0.0, 0.8)
+        self.goalSlowDownDistanceM = max(0.1, self.goalSlowDownDistanceM)
+        self.goalApproachSpeedKmh = max(0.0, self.goalApproachSpeedKmh)
+        self.goalApproachLookAheadDistanceM = max(0.1, self.goalApproachLookAheadDistanceM)
+        self.softStopBrake = clamp(self.softStopBrake, 0.0, 1.0)
         self.stopDistanceM = max(0.0, self.stopDistanceM)
-        self.nearMissDistanceM = max(self.stopDistanceM + 0.1, self.nearMissDistanceM)
-        self.slowDownDistanceM = max(self.nearMissDistanceM + 0.1, self.slowDownDistanceM)
+        self.nearObstacleWarningDistanceM = max(self.stopDistanceM + 0.1, self.nearObstacleWarningDistanceM)
+        self.slowDownDistanceM = max(self.nearObstacleWarningDistanceM + 0.1, self.slowDownDistanceM)
         self.frontAngleDegree = clamp(self.frontAngleDegree, 0.0, 180.0)
         
         
@@ -166,14 +207,10 @@ class PathFollower:
         if not follow_points:
             return stop_action(), "empty_follow_path"
 
-        if self.is_goal_reached(request.robotState, state):
-            state.pathIndex = len(follow_points) - 1
-            return stop_action(), "goal_reached"
-
         self.update_path_index_by_robot_location(request.robotState, state, follow_points)
 
         if self.is_follow_path_finished(state, follow_points):
-            return stop_action(), "path_finished"
+            return self.make_goal_stop_action(state), "path_finished"
 
         lookahead_distance_m = self.calculate_adaptive_lookahead_distance_m(
             robot_state=request.robotState,
@@ -205,14 +242,14 @@ class PathFollower:
             return stop_action(), "robot_outside_grid_bounds"
 
         if robot_grid_cell.blocked:
-            self.record_near_miss_once(state, robot_grid_cell)
+            self.record_near_obstacle_warning_once(state, robot_grid_cell)
 
         if self.is_too_far_from_path(state):
             state.bRepathRequested = True
             state.lastSteering = 0.0
             return stop_action(), "path_deviation_repath_required"
 
-        self.record_lidar_near_misses(request, state)
+        self.record_lidar_near_obstacle_warnings(request, state)
 
         speed_kmh, reason = self.get_target_speed_kmh(request, state)
         steering = self.calculate_steering(request.robotState, target_x, target_y)
@@ -255,6 +292,7 @@ class PathFollower:
         steering = self.smooth_steering(state, steering)
         speed_kmh = self.limit_speed_by_steering(speed_kmh, steering)
         speed_kmh = self.limit_obstacle_slowdown_speed_by_steering(speed_kmh, steering, reason)
+        speed_kmh = self.limit_speed_by_goal_approach(speed_kmh, request.robotState, state)
 
         if reason == "front_obstacle_slowdown":
             state.slowdownCount += 1
@@ -270,7 +308,37 @@ class PathFollower:
             return []
 
         raw_points = [self.cell_to_world_center(cell, state.grid) for cell in state.path]
+        raw_points = self.with_exact_goal_point(raw_points, state)
         return self.get_smoothed_path_points(raw_points, state)
+
+    def with_exact_goal_point(
+        self,
+        raw_points: list[tuple[float, float]],
+        state: AgentState,
+    ) -> list[tuple[float, float]]:
+        if (
+            not self.bUseExactGoalAsFinalPoint
+            or state.goal is None
+            or not state.goal.hasGoal
+        ):
+            return raw_points
+
+        goal_point = (state.goal.x, state.goal.y)
+        if not raw_points:
+            return [goal_point]
+
+        if self.get_distance_cm(raw_points[-1][0], raw_points[-1][1], goal_point[0], goal_point[1]) <= 1.0:
+            result = list(raw_points)
+            result[-1] = goal_point
+            return result
+
+        grid_cell_lookup = self.build_grid_cell_lookup(state)
+        if self.is_smoothing_segment_walkable(raw_points[-1], goal_point, state, grid_cell_lookup):
+            result = list(raw_points)
+            result.append(goal_point)
+            return result
+
+        return raw_points
 
     def get_smoothed_path_points(
         self,
@@ -447,6 +515,11 @@ class PathFollower:
             self.minLookAheadDistanceM,
             self.maxLookAheadDistanceM,
         )
+        target_distance_m = self.limit_lookahead_by_goal_approach(
+            target_distance_m,
+            robot_state,
+            state,
+        )
 
         if not bSmooth:
             return target_distance_m
@@ -506,15 +579,79 @@ class PathFollower:
 
             state.pathIndex = next_index
 
-    # 목표 위치에 도착했는지 goal acceptance radius로 판단한다.
-    def is_goal_reached(self, robot_state: RobotState, state: AgentState) -> bool:
+    def get_goal_distance_cm(self, robot_state: RobotState, state: AgentState) -> float:
         if state.goal is None or not state.goal.hasGoal:
-            return False
+            return float("inf")
 
-        acceptance_cm = max(state.goal.acceptanceRadiusCm, 1.0)
-        distance_cm = self.get_distance_cm(robot_state.x, robot_state.y, state.goal.x, state.goal.y)
+        return self.get_distance_cm(robot_state.x, robot_state.y, state.goal.x, state.goal.y)
 
-        return distance_cm <= acceptance_cm
+    def limit_speed_by_goal_approach(
+        self,
+        speed_kmh: float,
+        robot_state: RobotState,
+        state: AgentState,
+    ) -> float:
+        if speed_kmh <= 0.0 or state.goal is None or not state.goal.hasGoal:
+            return speed_kmh
+
+        distance_m = self.get_goal_distance_cm(robot_state, state) / 100.0
+        stop_distance_m = 0.0
+        slow_down_distance_m = max(self.goalSlowDownDistanceM, stop_distance_m + 0.1)
+
+        if distance_m >= slow_down_distance_m:
+            return speed_kmh
+
+        if distance_m <= stop_distance_m:
+            return 0.0
+
+        distance_ratio = clamp(
+            (distance_m - stop_distance_m) / max(slow_down_distance_m - stop_distance_m, 0.01),
+            0.0,
+            1.0,
+        )
+        smooth_ratio = distance_ratio * distance_ratio * (3.0 - 2.0 * distance_ratio)
+        approach_speed_kmh = min(self.goalApproachSpeedKmh, speed_kmh)
+        target_speed_kmh = approach_speed_kmh + ((speed_kmh - approach_speed_kmh) * smooth_ratio)
+
+        return max(0.0, target_speed_kmh)
+
+    def limit_lookahead_by_goal_approach(
+        self,
+        lookahead_distance_m: float,
+        robot_state: RobotState,
+        state: AgentState,
+    ) -> float:
+        if state.goal is None or not state.goal.hasGoal:
+            return lookahead_distance_m
+
+        distance_m = self.get_goal_distance_cm(robot_state, state) / 100.0
+        stop_distance_m = 0.0
+        slow_down_distance_m = max(self.goalSlowDownDistanceM, stop_distance_m + 0.1)
+
+        if distance_m >= slow_down_distance_m:
+            return lookahead_distance_m
+
+        distance_ratio = clamp(
+            (distance_m - stop_distance_m) / max(slow_down_distance_m - stop_distance_m, 0.01),
+            0.0,
+            1.0,
+        )
+        approach_lookahead_m = clamp(
+            min(self.goalApproachLookAheadDistanceM, max(distance_m * 0.75, self.minLookAheadDistanceM)),
+            self.minLookAheadDistanceM,
+            self.maxLookAheadDistanceM,
+        )
+        blended_lookahead_m = approach_lookahead_m + (
+            (lookahead_distance_m - approach_lookahead_m) * distance_ratio
+        )
+
+        return clamp(blended_lookahead_m, self.minLookAheadDistanceM, self.maxLookAheadDistanceM)
+
+    def make_goal_stop_action(self, state: AgentState) -> BotAction:
+        return soft_stop_action(
+            brake=self.softStopBrake,
+            steering=state.lastSteering * 0.5,
+        )
 
     # grid cell 좌표를 Unreal world 중심 좌표로 변환한다.
     def cell_to_world_center(self, cell: tuple[int, int], grid: GridMap) -> tuple[float, float]:
@@ -661,52 +798,52 @@ class PathFollower:
         cell = self.world_to_cell(robot_state.x, robot_state.y, state.grid)
         return self.get_grid_cell(cell, state.grid)
 
-    def record_near_miss_once(self, state: AgentState, grid_cell) -> None:
+    def record_near_obstacle_warning_once(self, state: AgentState, grid_cell) -> None:
         source = f"GridCell:{grid_cell.x}:{grid_cell.y}:{grid_cell.sourceCollisionProfile}"
-        if not self.record_near_miss_source_once(state, source):
+        if not self.record_near_obstacle_warning_source_once(state, source):
             return
 
-        state.lastNearMissCell = (grid_cell.x, grid_cell.y)
-        state.lastNearMissSource = grid_cell.sourceCollisionProfile
+        state.lastNearObstacleWarningCell = (grid_cell.x, grid_cell.y)
+        state.lastNearObstacleWarningSource = grid_cell.sourceCollisionProfile
 
-    def record_lidar_near_miss_once(self, state: AgentState, ray) -> None:
-        source = self.get_lidar_near_miss_source(ray)
-        if not self.record_near_miss_source_once(state, source):
+    def record_lidar_near_obstacle_warning_once(self, state: AgentState, ray) -> None:
+        source = self.get_lidar_near_obstacle_warning_source(ray)
+        if not self.record_near_obstacle_warning_source_once(state, source):
             return
 
-        state.lastNearMissCell = None
-        state.lastNearMissSource = source
+        state.lastNearObstacleWarningCell = None
+        state.lastNearObstacleWarningSource = source
 
-    def record_lidar_near_misses(self, request: ScenarioDecideRequest, state: AgentState) -> None:
+    def record_lidar_near_obstacle_warnings(self, request: ScenarioDecideRequest, state: AgentState) -> None:
         for ray in request.lidarRays:
-            if not self.is_lidar_near_miss_ray(ray):
+            if not self.is_lidar_near_obstacle_warning_ray(ray):
                 continue
 
-            self.record_lidar_near_miss_once(state, ray)
+            self.record_lidar_near_obstacle_warning_once(state, ray)
 
-    def record_near_miss_source_once(self, state: AgentState, source: str) -> bool:
-        if source in state.nearMissRecordedSources:
+    def record_near_obstacle_warning_source_once(self, state: AgentState, source: str) -> bool:
+        if source in state.nearObstacleWarningRecordedSources:
             return False
 
-        state.nearMissRecordedSources.add(source)
-        state.nearMissCount += 1
-        state.bNearMissRecorded = True
+        state.nearObstacleWarningRecordedSources.add(source)
+        state.nearObstacleWarningCount += 1
+        state.bNearObstacleWarningRecorded = True
         return True
 
-    def get_lidar_near_miss_source(self, ray) -> str:
+    def get_lidar_near_obstacle_warning_source(self, ray) -> str:
         if ray.actorName:
             return ray.actorName
 
         if ray.rayIndex is not None:
             return f"LidarRay:{ray.rayIndex}"
 
-        return "LidarNearMiss"
+        return "LidarNearObstacleWarning"
 
-    def is_lidar_near_miss_ray(self, ray) -> bool:
+    def is_lidar_near_obstacle_warning_ray(self, ray) -> bool:
         if (
             not ray.hit
             or self.is_ignored_lidar_policy_ray(ray)
-            or ray.distanceM > self.nearMissDistanceM
+            or ray.distanceM > self.nearObstacleWarningDistanceM
         ):
             return False
 
@@ -920,9 +1057,9 @@ class PathFollower:
         if front_ray is None or front_ray.distanceM > self.slowDownDistanceM:
             return self.followSpeedKmh, "follow_path"
 
-        if not self.is_collision_stop_ray(front_ray) and front_ray.distanceM <= self.nearMissDistanceM:
-            self.record_lidar_near_miss_once(state, front_ray)
-            return self.followSpeedKmh, "front_obstacle_near_miss_pass"
+        if not self.is_collision_stop_ray(front_ray) and front_ray.distanceM <= self.nearObstacleWarningDistanceM:
+            self.record_lidar_near_obstacle_warning_once(state, front_ray)
+            return self.followSpeedKmh, "front_obstacle_near_obstacle_warning_pass"
 
         if front_ray.distanceM <= self.stopDistanceM:
             return 0.0, "front_obstacle_soft_stop"
@@ -959,3 +1096,21 @@ class PathFollower:
     # 각도를 -180도에서 180도 사이로 정규화한다.
     def normalize_angle_degree(self, angle_degree: float) -> float:
         return (angle_degree + 180.0) % 360.0 - 180.0
+
+    def get_bool_config(self, config: dict, key: str, default_value: bool) -> bool:
+        value = config.get(key, default_value)
+
+        if isinstance(value, bool):
+            return value
+
+        if isinstance(value, (int, float)):
+            return value != 0
+
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes", "on"}:
+                return True
+            if normalized in {"false", "0", "no", "off"}:
+                return False
+
+        return default_value

@@ -52,7 +52,7 @@ private:
 
 	static void CompileRobotObject(const FJsonObject& rootObject, FDeliveryBotSetupCompileResult& result);
 	static void CompileDrive(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotDriveConfigInfo& driveConfigInfo);
-	static void CompilePathFollow(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotPathFollowConfigInfo& pathFollowConfigInfo);
+	static void WarnDeprecatedPathFollow(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result);
 	static void CompileLidar(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo);
 	static bool ReadOptionalStringField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, FString& targetValue);
 

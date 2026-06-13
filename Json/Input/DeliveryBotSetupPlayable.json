@@ -14,27 +14,12 @@
       "deceleration_rate_kmh_per_second": 0.9,
       "use_handbrake_when_brake": false
     },
-    "path_follow": {
-      "target_speed_kmh": 4.5,
-      "look_ahead_distance_m": 1.2,
-      "path_point_acceptance_distance_m": 0.45,
-      "steering_sensitivity": 1.1,
-      "steering_full_scale_degree": 80.0,
-      "max_steering": 0.5,
-      "max_steering_delta": 0.09,
-      "min_turn_speed_kmh": 0.8,
-      "obstacle_slow_speed_kmh": 1.0,
-      "obstacle_soft_cost_radius_m": 1.0,
-      "obstacle_soft_cost_max_penalty": 8.0,
-      "obstacle_soft_cost_power": 2.0,
-      "path_turn_cost_penalty": 1.5
-    },
     "lidar": {
       "scan_range_m": 6.0,
       "angle_step_degree": 5.0,
       "front_half_angle_degree": 25.0,
       "stop_distance_m": 1.4,
-      "near_miss_distance_m": 2.0,
+      "near_obstacle_warning_distance_m": 2.0,
       "slow_down_distance_m": 4.8
     }
   }

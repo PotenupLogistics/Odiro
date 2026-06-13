@@ -135,6 +135,9 @@ protected:
 	FDeliveryBotSetupInfo SetupInfo{};
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|VehicleSpec")
+	float WheelBaseCm{ 42.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|VehicleSpec")
 	FVector RobotBoxExtentCm{ 30.f, 45.f, 25.f }; // 길찾기 할 때 쓰이는 로봇의 충돌 박스 사이즈
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|VehicleSpec")

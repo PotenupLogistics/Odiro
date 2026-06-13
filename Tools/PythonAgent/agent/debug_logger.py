@@ -21,7 +21,7 @@ WATCH_FIELDS = {
     "closestPathDistanceCm",
     "lookAheadDistanceM",
     "recoveryUntilSeconds",
-    "nearMiss",
+    "nearObstacleWarning",
 }
 
 # 숫자 필드는 이 차이 이상 변했을 때만 출력한다.
@@ -36,7 +36,7 @@ WATCH_THRESHOLDS = {
 
 # 첫 snapshot에서 이미 이 값보다 커져 있으면 변화로 출력한다.
 WATCH_INITIAL_VALUES = {
-    "nearMiss": 0,
+    "nearObstacleWarning": 0,
     "blockedCorridor": 0,
 }
 
@@ -59,7 +59,7 @@ CONTEXT_FIELDS = (
     "maxPathErrorCm",
     "lookAheadDistanceM",
     "recoveryUntilSeconds",
-    "lastNearMissSource",
+    "lastNearObstacleWarningSource",
 )
 
 
@@ -185,8 +185,8 @@ class DecisionLogWatcher:
 
 # 사용 방법:
 # 1. 현재 기본 설정은 경로 추종 문제 추적용이다. reason, steering, speed, pathIndex,
-#    targetPathIndex, closestPathDistanceCm, recoveryUntilSeconds, nearMiss 변화를 출력한다.
-# 2. NearMiss만 보고 싶으면 WATCH_FIELDS = {"nearMiss"} 로 줄인다.
+#    targetPathIndex, closestPathDistanceCm, recoveryUntilSeconds, nearObstacleWarning 변화를 출력한다.
+# 2. Near obstacle warning만 보고 싶으면 WATCH_FIELDS = {"nearObstacleWarning"} 로 줄인다.
 # 3. targetSpeedKmh, steering, brake 같은 숫자 필드는 WATCH_THRESHOLDS 값 이상 변할 때만 출력된다.
 # 4. 로그 한 줄에 같이 붙는 참고 정보는 CONTEXT_FIELDS에서 추가하거나 제거한다.
 # 5. 파일 저장이 필요하면 user_agent.py의 DecisionLogWatcher(...) 생성자에

@@ -10,20 +10,11 @@
       "steering_input_rate_per_second": 3.2,
       "use_handbrake_when_brake": true
     },
-    "path_follow": {
-      "target_speed_kmh": 8.0,
-      "look_ahead_distance_m": 1.0,
-      "steering_sensitivity": 1.1,
-      "steering_full_scale_degree": 80.0,
-      "max_steering": 0.5,
-      "max_steering_delta": 0.09,
-      "obstacle_slow_speed_kmh": 2.0
-    },
     "lidar": {
       "scan_range_m": 5.0,
       "angle_step_degree": 5.0,
       "stop_distance_m": 0.5,
-      "near_miss_distance_m": 1.0,
+      "near_obstacle_warning_distance_m": 1.0,
       "slow_down_distance_m": 3.5
     }
   }

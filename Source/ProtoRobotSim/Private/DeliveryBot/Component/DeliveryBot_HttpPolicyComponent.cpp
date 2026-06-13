@@ -252,13 +252,6 @@ bool UDeliveryBot_HttpPolicyComponent::BuildMessagePayload(const FString& messag
 	rootObject->SetStringField(TEXT("type"), messageType);
 	rootObject->SetObjectField(TEXT("request"), requestObject);
 
-	TSharedRef<FJsonObject> responseObject = MakeShared<FJsonObject>();
-	responseObject->SetStringField(TEXT("status"), TEXT("pending"));
-	responseObject->SetField(TEXT("action"), MakeShared<FJsonValueNull>());
-	responseObject->SetField(TEXT("error"), MakeShared<FJsonValueNull>());
-	responseObject->SetObjectField(TEXT("debug"), MakeShared<FJsonObject>());
-	rootObject->SetObjectField(TEXT("response"), responseObject);
-
 	const TSharedRef<TJsonWriter<>> writer = TJsonWriterFactory<>::Create(&outPayload);
 	return FJsonSerializer::Serialize(rootObject, writer);
 }
@@ -398,54 +391,36 @@ bool UDeliveryBot_HttpPolicyComponent::BuildStartPayload(FString& outPayload)
 	goalObject->SetNumberField(TEXT("x"), setupInfo.LocationSetupInfo.GoalLocationCm.X);
 	goalObject->SetNumberField(TEXT("y"), setupInfo.LocationSetupInfo.GoalLocationCm.Y);
 	goalObject->SetNumberField(TEXT("z"), setupInfo.LocationSetupInfo.GoalLocationCm.Z);
-	goalObject->SetNumberField(TEXT("acceptanceRadiusCm"), setupInfo.PathFollowConfigInfo.GoalAcceptanceDistanceM * 100.f);
 	requestObject->SetObjectField(TEXT("goal"), goalObject);
 
 	requestObject->SetObjectField(TEXT("grid"), gridObject);
 
-	TSharedRef<FJsonObject> vehicleSpecObject = MakeShared<FJsonObject>();
-	vehicleSpecObject->SetNumberField(TEXT("maxSpeedKmh"), observation.VehicleSpec.MaxSpeedKmh);
-	vehicleSpecObject->SetNumberField(TEXT("maxReverseSpeedKmh"), observation.VehicleSpec.MaxReverseSpeedKmh);
-	requestObject->SetObjectField(TEXT("vehicleSpec"), vehicleSpecObject);
+	const FVector robotBodySizeCm = observation.VehicleSpec.RobotBoxExtentCm * 2.0;
+
+	TSharedRef<FJsonObject> robotSpecObject = MakeShared<FJsonObject>();
+	robotSpecObject->SetNumberField(TEXT("maxSpeedKmh"), observation.VehicleSpec.MaxSpeedKmh);
+	robotSpecObject->SetNumberField(TEXT("maxReverseSpeedKmh"), observation.VehicleSpec.MaxReverseSpeedKmh);
+	robotSpecObject->SetNumberField(TEXT("bodyLengthCm"), robotBodySizeCm.X);
+	robotSpecObject->SetNumberField(TEXT("bodyWidthCm"), robotBodySizeCm.Y);
+	robotSpecObject->SetNumberField(TEXT("bodyHeightCm"), robotBodySizeCm.Z);
+	robotSpecObject->SetNumberField(TEXT("wheelBaseCm"), observation.VehicleSpec.WheelBaseCm);
+	robotSpecObject->SetNumberField(TEXT("turningRadiusCm"), observation.VehicleSpec.MinTurningRadiusCm);
+	requestObject->SetObjectField(TEXT("robotSpec"), robotSpecObject);
+
+	TSharedRef<FJsonObject> driveSpecObject = MakeShared<FJsonObject>();
+	driveSpecObject->SetNumberField(TEXT("accelerationRateKmhPerSecond"), setupInfo.ChaosDriveConfigInfo.AccelerationRateKmhPerSecond);
+	driveSpecObject->SetNumberField(TEXT("decelerationRateKmhPerSecond"), setupInfo.ChaosDriveConfigInfo.DecelerationRateKmhPerSecond);
+	driveSpecObject->SetNumberField(TEXT("steeringInputRatePerSecond"), setupInfo.ChaosDriveConfigInfo.SteeringInputRatePerSecond);
+	driveSpecObject->SetNumberField(TEXT("throttleInputRatePerSecond"), setupInfo.ChaosDriveConfigInfo.ThrottleInputRatePerSecond);
+	driveSpecObject->SetNumberField(TEXT("brakeInputRatePerSecond"), setupInfo.ChaosDriveConfigInfo.BrakeInputRatePerSecond);
+	driveSpecObject->SetNumberField(TEXT("stopBrakeInput"), setupInfo.ChaosDriveConfigInfo.StopBrakeInput);
+	requestObject->SetObjectField(TEXT("driveSpec"), driveSpecObject);
 
 	TSharedRef<FJsonObject> lidarSpecObject = MakeShared<FJsonObject>();
 	lidarSpecObject->SetNumberField(TEXT("scanRangeM"), observation.VehicleSpec.LidarScanRangeM);
 	lidarSpecObject->SetNumberField(TEXT("angleStepDegree"), setupInfo.LidarSensorConfigInfo.AngleStepDegree);
 	lidarSpecObject->SetNumberField(TEXT("sensorHeightM"), setupInfo.LidarSensorConfigInfo.SensorHeightM);
-	lidarSpecObject->SetNumberField(TEXT("frontHalfAngleDegree"), setupInfo.LidarSensorConfigInfo.FrontHalfAngleDegree);
-	lidarSpecObject->SetNumberField(TEXT("stopDistanceM"), setupInfo.LidarSensorConfigInfo.StopDistanceM);
-	lidarSpecObject->SetNumberField(TEXT("nearMissDistanceM"), setupInfo.LidarSensorConfigInfo.NearMissDistanceM);
-	lidarSpecObject->SetNumberField(TEXT("slowDownDistanceM"), setupInfo.LidarSensorConfigInfo.SlowDownDistanceM);
-	lidarSpecObject->SetNumberField(TEXT("collisionStopHalfAngleDegree"), setupInfo.LidarSensorConfigInfo.CollisionStopHalfAngleDegree);
-	lidarSpecObject->SetNumberField(TEXT("collisionStopDistanceM"), setupInfo.LidarSensorConfigInfo.CollisionStopDistanceM);
 	requestObject->SetObjectField(TEXT("lidarSpec"), lidarSpecObject);
-
-	const float policySoftStopBrakeInput = FMath::Clamp(setupInfo.ChaosDriveConfigInfo.StopBrakeInput, 0.0f, 0.35f);
-	const float policyEmergencyBrakeInput = FMath::Clamp(FMath::Max(policySoftStopBrakeInput, 0.45f), 0.0f, 0.6f);
-
-	TSharedRef<FJsonObject> controlSpecObject = MakeShared<FJsonObject>();
-	controlSpecObject->SetNumberField(TEXT("targetSpeedKmh"), setupInfo.PathFollowConfigInfo.TargetSpeedKmh);
-	controlSpecObject->SetNumberField(TEXT("lookAheadDistanceM"), setupInfo.PathFollowConfigInfo.LookAheadDistanceM);
-	controlSpecObject->SetNumberField(TEXT("minLookAheadDistanceM"), setupInfo.PathFollowConfigInfo.MinLookAheadDistanceM);
-	controlSpecObject->SetNumberField(TEXT("maxLookAheadDistanceM"), setupInfo.PathFollowConfigInfo.MaxLookAheadDistanceM);
-	controlSpecObject->SetNumberField(TEXT("lookAheadSpeedGainMPerKmh"), setupInfo.PathFollowConfigInfo.LookAheadSpeedGainMPerKmh);
-	controlSpecObject->SetNumberField(TEXT("lookAheadSteeringReductionRatio"), setupInfo.PathFollowConfigInfo.LookAheadSteeringReductionRatio);
-	controlSpecObject->SetNumberField(TEXT("lookAheadSmoothingRatio"), setupInfo.PathFollowConfigInfo.LookAheadSmoothingRatio);
-	controlSpecObject->SetNumberField(TEXT("pathPointAcceptanceDistanceM"), setupInfo.PathFollowConfigInfo.PathPointAcceptanceDistanceM);
-	controlSpecObject->SetNumberField(TEXT("steeringSensitivity"), setupInfo.PathFollowConfigInfo.SteeringSensitivity);
-	controlSpecObject->SetNumberField(TEXT("steeringFullScaleDegree"), setupInfo.PathFollowConfigInfo.SteeringFullScaleDegree);
-	controlSpecObject->SetNumberField(TEXT("maxSteering"), setupInfo.PathFollowConfigInfo.MaxSteering);
-	controlSpecObject->SetNumberField(TEXT("maxSteeringDelta"), setupInfo.PathFollowConfigInfo.MaxSteeringDelta);
-	controlSpecObject->SetNumberField(TEXT("minTurnSpeedKmh"), setupInfo.PathFollowConfigInfo.MinTurnSpeedKmh);
-	controlSpecObject->SetNumberField(TEXT("obstacleSlowSpeedKmh"), setupInfo.PathFollowConfigInfo.ObstacleSlowSpeedKmh);
-	controlSpecObject->SetNumberField(TEXT("obstacleSoftCostRadiusM"), setupInfo.PathFollowConfigInfo.ObstacleSoftCostRadiusM);
-	controlSpecObject->SetNumberField(TEXT("obstacleSoftCostMaxPenalty"), setupInfo.PathFollowConfigInfo.ObstacleSoftCostMaxPenalty);
-	controlSpecObject->SetNumberField(TEXT("obstacleSoftCostPower"), setupInfo.PathFollowConfigInfo.ObstacleSoftCostPower);
-	controlSpecObject->SetNumberField(TEXT("pathTurnCostPenalty"), setupInfo.PathFollowConfigInfo.PathTurnCostPenalty);
-	controlSpecObject->SetNumberField(TEXT("softStopBrakeInput"), policySoftStopBrakeInput);
-	controlSpecObject->SetNumberField(TEXT("emergencyBrakeInput"), policyEmergencyBrakeInput);
-	controlSpecObject->SetNumberField(TEXT("recoverySpeedKmh"), setupInfo.ChaosDriveConfigInfo.MaxReverseSpeedKmh * 0.4f);
-	requestObject->SetObjectField(TEXT("controlSpec"), controlSpecObject);
 
 	return BuildMessagePayload(TEXT("scenario_start"), requestObject, outPayload);
 }

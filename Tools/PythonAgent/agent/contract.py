@@ -26,7 +26,6 @@ class GoalLocation:
     x: float
     y: float
     z: float = 0.0
-    acceptanceRadiusCm: float = 100.0   # 도착 판정 오차 범위
 
 
 #  Grid 한 칸
@@ -80,9 +79,11 @@ class ScenarioStartRequest:
     start: StartLocation
     goal: GoalLocation
     grid: GridMap
-    vehicleSpec: dict[str, Any] = field(default_factory=dict)
+    robotSpec: dict[str, Any] = field(default_factory=dict)
+    driveSpec: dict[str, Any] = field(default_factory=dict)
     lidarSpec: dict[str, Any] = field(default_factory=dict)
-    controlSpec: dict[str, Any] = field(default_factory=dict)  # 제어용 설정 값   (TargetSpeed, MaxSpeed etc)
+    vehicleSpec: dict[str, Any] = field(default_factory=dict)  # legacy: use robotSpec instead
+    controlSpec: dict[str, Any] = field(default_factory=dict)  # legacy: Python-side policy config now owns these values
 
 
 # decide 요청 데이터, 즉, observation 값

@@ -5,7 +5,7 @@
   "metrics": {
     "elapsedTimeSeconds": 12.4,
     "stopCount": 0,
-    "nearMissCount": 0
+    "nearObstacleWarningCount": 0
   },
   "debug": {
     "reason": "sample_episode_finished"

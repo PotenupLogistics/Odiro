@@ -1,136 +1,152 @@
 {
-  "robotInstanceId": "delivery_bot_01",
-  "start": {
-    "x": 0,
-    "y": 0,
-    "z": 0,
-    "yawDegree": 0
-  },
-  "goal": {
-    "hasGoal": true,
-    "x": 300,
-    "y": 0,
-    "z": 0,
-    "acceptanceRadiusCm": 100
-  },
-  "vehicleSpec": {
-    "maxSpeedKmh": 10,
-    "maxReverseSpeedKmh": 3
-  },
-  "lidarSpec": {
-    "mode": "TwoD",
-    "scanRangeM": 5
-  },
-  "controlSpec": {
-    "mode": "TargetSpeed"
-  },
-  "grid": {
-    "gridSizeX": 4,
-    "gridSizeY": 3,
-    "cellSizeCm": 100,
-    "cellCount": 12,
-    "originCm": {
+  "schema": "delivery_bot_python_message",
+  "version": 1,
+  "type": "scenario_start",
+  "request": {
+    "robotInstanceId": "delivery_bot_01",
+    "start": {
       "x": 0,
+      "y": 0,
+      "z": 0,
+      "yawDegree": 0
+    },
+    "goal": {
+      "hasGoal": true,
+      "x": 300,
       "y": 0,
       "z": 0
     },
-    "cells": [
-      {
+    "grid": {
+      "gridSizeX": 4,
+      "gridSizeY": 3,
+      "cellSizeCm": 100,
+      "cellCount": 12,
+      "originCm": {
         "x": 0,
         "y": 0,
-        "areaType": "Walkable",
-        "cost": 1,
-        "blocked": false,
-        "sourceCollisionProfile": "Walkable"
+        "z": 0,
+        "yawDegree": 0
       },
-      {
-        "x": 1,
-        "y": 0,
-        "areaType": "Walkable",
-        "cost": 1,
-        "blocked": false,
-        "sourceCollisionProfile": "Walkable"
-      },
-      {
-        "x": 2,
-        "y": 0,
-        "areaType": "Walkable",
-        "cost": 1,
-        "blocked": false,
-        "sourceCollisionProfile": "Walkable"
-      },
-      {
-        "x": 3,
-        "y": 0,
-        "areaType": "Walkable",
-        "cost": 1,
-        "blocked": false,
-        "sourceCollisionProfile": "Walkable"
-      },
-      {
-        "x": 0,
-        "y": 1,
-        "areaType": "Walkable",
-        "cost": 1,
-        "blocked": false,
-        "sourceCollisionProfile": "Walkable"
-      },
-      {
-        "x": 1,
-        "y": 1,
-        "areaType": "Blocked",
-        "cost": 9999,
-        "blocked": true,
-        "sourceCollisionProfile": "Blocked"
-      },
-      {
-        "x": 2,
-        "y": 1,
-        "areaType": "Blocked",
-        "cost": 9999,
-        "blocked": true,
-        "sourceCollisionProfile": "Blocked"
-      },
-      {
-        "x": 3,
-        "y": 1,
-        "areaType": "Walkable",
-        "cost": 1,
-        "blocked": false,
-        "sourceCollisionProfile": "Walkable"
-      },
-      {
-        "x": 0,
-        "y": 2,
-        "areaType": "Walkable",
-        "cost": 1,
-        "blocked": false,
-        "sourceCollisionProfile": "Walkable"
-      },
-      {
-        "x": 1,
-        "y": 2,
-        "areaType": "Walkable",
-        "cost": 1,
-        "blocked": false,
-        "sourceCollisionProfile": "Walkable"
-      },
-      {
-        "x": 2,
-        "y": 2,
-        "areaType": "Walkable",
-        "cost": 1,
-        "blocked": false,
-        "sourceCollisionProfile": "Walkable"
-      },
-      {
-        "x": 3,
-        "y": 2,
-        "areaType": "Walkable",
-        "cost": 1,
-        "blocked": false,
-        "sourceCollisionProfile": "Walkable"
-      }
-    ]
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "areaType": "Walkable",
+          "cost": 1,
+          "blocked": false,
+          "sourceCollisionProfile": "Walkable"
+        },
+        {
+          "x": 1,
+          "y": 0,
+          "areaType": "Walkable",
+          "cost": 1,
+          "blocked": false,
+          "sourceCollisionProfile": "Walkable"
+        },
+        {
+          "x": 2,
+          "y": 0,
+          "areaType": "Walkable",
+          "cost": 1,
+          "blocked": false,
+          "sourceCollisionProfile": "Walkable"
+        },
+        {
+          "x": 3,
+          "y": 0,
+          "areaType": "Walkable",
+          "cost": 1,
+          "blocked": false,
+          "sourceCollisionProfile": "Walkable"
+        },
+        {
+          "x": 0,
+          "y": 1,
+          "areaType": "Walkable",
+          "cost": 1,
+          "blocked": false,
+          "sourceCollisionProfile": "Walkable"
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "areaType": "Blocked",
+          "cost": 9999,
+          "blocked": true,
+          "sourceCollisionProfile": "Blocked"
+        },
+        {
+          "x": 2,
+          "y": 1,
+          "areaType": "Blocked",
+          "cost": 9999,
+          "blocked": true,
+          "sourceCollisionProfile": "Blocked"
+        },
+        {
+          "x": 3,
+          "y": 1,
+          "areaType": "Walkable",
+          "cost": 1,
+          "blocked": false,
+          "sourceCollisionProfile": "Walkable"
+        },
+        {
+          "x": 0,
+          "y": 2,
+          "areaType": "Walkable",
+          "cost": 1,
+          "blocked": false,
+          "sourceCollisionProfile": "Walkable"
+        },
+        {
+          "x": 1,
+          "y": 2,
+          "areaType": "Walkable",
+          "cost": 1,
+          "blocked": false,
+          "sourceCollisionProfile": "Walkable"
+        },
+        {
+          "x": 2,
+          "y": 2,
+          "areaType": "Walkable",
+          "cost": 1,
+          "blocked": false,
+          "sourceCollisionProfile": "Walkable"
+        },
+        {
+          "x": 3,
+          "y": 2,
+          "areaType": "Walkable",
+          "cost": 1,
+          "blocked": false,
+          "sourceCollisionProfile": "Walkable"
+        }
+      ]
+    },
+    "robotSpec": {
+      "maxSpeedKmh": 7.0,
+      "maxReverseSpeedKmh": 3.0,
+      "bodyLengthCm": 72.0,
+      "bodyWidthCm": 48.0,
+      "bodyHeightCm": 55.0,
+      "wheelBaseCm": 42.0,
+      "turningRadiusCm": 120.0
+    },
+    "driveSpec": {
+      "accelerationRateKmhPerSecond": 1.2,
+      "decelerationRateKmhPerSecond": 0.9,
+      "steeringInputRatePerSecond": 3.2,
+      "throttleInputRatePerSecond": 0.28,
+      "brakeInputRatePerSecond": 0.35,
+      "stopBrakeInput": 0.18
+    },
+    "lidarSpec": {
+      "scanRangeM": 6.0,
+      "angleStepDegree": 5.0,
+      "sensorHeightM": 0.07
+    }
   }
 }

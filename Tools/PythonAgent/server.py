@@ -46,11 +46,18 @@ def parse_policy_error(data: dict | None) -> PolicyError | None:
 # /scenario/start 요청 JSON을 ScenarioStartRequest로 변환
 def parse_start(data: dict) -> ScenarioStartRequest:
     grid_data = data["grid"]
+    goal_data = data["goal"]
+    robot_spec = data.get("robotSpec") or data.get("vehicleSpec", {})
 
     return ScenarioStartRequest(
         robotInstanceId=data["robotInstanceId"],
         start=StartLocation(**data["start"]),
-        goal=GoalLocation(**data["goal"]),
+        goal=GoalLocation(
+            hasGoal=goal_data["hasGoal"],
+            x=goal_data["x"],
+            y=goal_data["y"],
+            z=goal_data.get("z", 0.0),
+        ),
         grid=GridMap(
             gridSizeX=grid_data["gridSizeX"],
             gridSizeY=grid_data["gridSizeY"],
@@ -62,8 +69,10 @@ def parse_start(data: dict) -> ScenarioStartRequest:
                 for cell_data in grid_data.get("cells", [])
             ],
         ),
-        vehicleSpec=data.get("vehicleSpec", {}),
+        robotSpec=robot_spec,
+        driveSpec=data.get("driveSpec", {}),
         lidarSpec=data.get("lidarSpec", {}),
+        vehicleSpec=data.get("vehicleSpec", robot_spec),
         controlSpec=data.get("controlSpec", {}),
     )
 

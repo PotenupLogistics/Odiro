@@ -9,7 +9,7 @@ from .state import AgentState
 
 
 # Print front lidar minimum distance for decide debugging.
-def get_front_lidar_min_distance_text(request: ScenarioDecideRequest, front_angle_degree: float = 30.0) -> str:
+def get_front_lidar_min_distance_text(request: ScenarioDecideRequest, front_angle_degree: float = 25.0) -> str:
     hit_rays = [ray for ray in request.lidarRays if ray.hit and not is_ignored_lidar_policy_ray(ray)]
     front_rays = [
         ray
@@ -80,10 +80,12 @@ def build_decision_log_snapshot(
         "bColliding": request.robotState.bColliding,
         "collisionActorName": request.robotState.collisionActorName,
         "frontMinM": get_front_lidar_min_distance_text(request),
-        "nearMiss": state.nearMissCount,
-        "lastNearMissCell": state.lastNearMissCell,
-        "lastNearMissSource": state.lastNearMissSource,
+        "nearObstacleWarning": state.nearObstacleWarningCount,
+        "lastNearObstacleWarningCell": state.lastNearObstacleWarningCell,
+        "lastNearObstacleWarningSource": state.lastNearObstacleWarningSource,
         "blockedCorridor": len(state.lastBlockedCorridorCells),
+        "repathDebounceKey": state.lastRepathDebounceKey,
+        "repathDebounceCount": len(state.repathDebounceUntilSeconds),
         "pathIndex": state.pathIndex,
         "pathLength": get_debug_path_length(state),
         "targetPathIndex": state.targetPathIndex,
@@ -221,9 +223,9 @@ class BotPolicy:
                     "closestPathDistanceCm": state.closestPathDistanceCm,
                     "maxPathErrorCm": state.maxPathErrorCm,
                     "lookAheadDistanceM": state.currentLookAheadDistanceM,
-                    "nearMissCount": state.nearMissCount,
-                    "lastNearMissCell": state.lastNearMissCell,
-                    "lastNearMissSource": state.lastNearMissSource,
+                    "nearObstacleWarningCount": state.nearObstacleWarningCount,
+                    "lastNearObstacleWarningCell": state.lastNearObstacleWarningCell,
+                    "lastNearObstacleWarningSource": state.lastNearObstacleWarningSource,
                     "bColliding": request.robotState.bColliding,
                     "collisionActorName": request.robotState.collisionActorName,
                     "blockedCorridorCellCount": len(state.lastBlockedCorridorCells),
@@ -261,13 +263,15 @@ class BotPolicy:
                 "closestPathDistanceCm": state.closestPathDistanceCm,
                 "maxPathErrorCm": state.maxPathErrorCm,
                 "lookAheadDistanceM": state.currentLookAheadDistanceM,
-                "nearMissCount": state.nearMissCount,
-                "lastNearMissCell": state.lastNearMissCell,
-                "lastNearMissSource": state.lastNearMissSource,
+                "nearObstacleWarningCount": state.nearObstacleWarningCount,
+                "lastNearObstacleWarningCell": state.lastNearObstacleWarningCell,
+                "lastNearObstacleWarningSource": state.lastNearObstacleWarningSource,
                 "bColliding": request.robotState.bColliding,
                 "collisionActorName": request.robotState.collisionActorName,
                 "blockedCorridorCellCount": len(state.lastBlockedCorridorCells),
                 "dynamicBlockedCellCount": len(state.dynamicBlockedCells),
+                "repathDebounceKey": state.lastRepathDebounceKey,
+                "repathDebounceCount": len(state.repathDebounceUntilSeconds),
                 "recoveryUntilSeconds": state.recoveryUntilSeconds,
             },
         }
@@ -284,9 +288,9 @@ class BotPolicy:
             "stopCount": state.stopCount,
             "repathCount": state.repathCount,
             "slowdownCount": state.slowdownCount,
-            "nearMissCount": state.nearMissCount,
-            "lastNearMissCell": state.lastNearMissCell,
-            "lastNearMissSource": state.lastNearMissSource,
+            "nearObstacleWarningCount": state.nearObstacleWarningCount,
+            "lastNearObstacleWarningCell": state.lastNearObstacleWarningCell,
+            "lastNearObstacleWarningSource": state.lastNearObstacleWarningSource,
             "blockedCorridorCellCount": len(state.lastBlockedCorridorCells),
         }
 
@@ -296,7 +300,7 @@ class BotPolicy:
             "status": "ok",
             "accepted": True,
             "metrics": {
-                "nearMissCount": debug["nearMissCount"],
+                "nearObstacleWarningCount": debug["nearObstacleWarningCount"],
                 "stopCount": debug["stopCount"],
                 "repathCount": debug["repathCount"],
                 "slowdownCount": debug["slowdownCount"],

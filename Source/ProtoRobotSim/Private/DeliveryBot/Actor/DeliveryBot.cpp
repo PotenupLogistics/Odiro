@@ -404,6 +404,7 @@ void ADeliveryBot::FillObservation(FDeliveryBotObservationInfo& observation) con
 	observation.VehicleSpec.MaxSpeedKmh = SetupInfo.ChaosDriveConfigInfo.MaxSpeedKmh;
 	observation.VehicleSpec.MaxReverseSpeedKmh = SetupInfo.ChaosDriveConfigInfo.MaxReverseSpeedKmh;
 	observation.VehicleSpec.RobotBoxExtentCm = RobotBoxExtentCm;
+	observation.VehicleSpec.WheelBaseCm = WheelBaseCm;
 	observation.VehicleSpec.MinTurningRadiusCm = MinTurningRadiusCm;
 	observation.VehicleSpec.LidarModeType = SetupInfo.LidarSensorConfigInfo.LidarModeType;
 	observation.VehicleSpec.LidarScanRangeM = SetupInfo.LidarSensorConfigInfo.ScanRangeM;

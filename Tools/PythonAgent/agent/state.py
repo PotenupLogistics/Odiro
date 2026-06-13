@@ -27,13 +27,15 @@ class AgentState:
     repathCount: int = 0                      # 재경로 탐색 횟수
     slowdownCount: int = 0                    # 감속 action 발생 횟수
     followPathWorldPoints: list[dict[str, float]] = field(default_factory=list)
-    nearMissCount: int = 0
-    bNearMissRecorded: bool = False
-    nearMissRecordedSources: set[str] = field(default_factory=set)
-    lastNearMissCell: tuple[int, int] | None = None
-    lastNearMissSource: str = ""
+    nearObstacleWarningCount: int = 0
+    bNearObstacleWarningRecorded: bool = False
+    nearObstacleWarningRecordedSources: set[str] = field(default_factory=set)
+    lastNearObstacleWarningCell: tuple[int, int] | None = None
+    lastNearObstacleWarningSource: str = ""
     dynamicBlockedCells: set[tuple[int, int]] = field(default_factory=set)  # LiDAR로 새로 막은 동적 장애물 cell 목록
     lastRepathTimeSeconds: float = -999.0                                   # 마지막 재탐색 시간
+    repathDebounceUntilSeconds: dict[str, float] = field(default_factory=dict)
+    lastRepathDebounceKey: str = ""
     frontObstacleStopStartSeconds: float | None = None
     lastBlockedCorridorCells: set[tuple[int, int]] = field(default_factory=set)
     recoveryUntilSeconds: float = 0.0                                       # 후진 회복 동작을 유지할 시간
@@ -73,13 +75,15 @@ class AgentState:
         self.stopCount = 0
         self.repathCount = 0
         self.slowdownCount = 0
-        self.nearMissCount = 0
-        self.bNearMissRecorded = False
-        self.nearMissRecordedSources = set()
-        self.lastNearMissCell = None
-        self.lastNearMissSource = ""
+        self.nearObstacleWarningCount = 0
+        self.bNearObstacleWarningRecorded = False
+        self.nearObstacleWarningRecordedSources = set()
+        self.lastNearObstacleWarningCell = None
+        self.lastNearObstacleWarningSource = ""
         self.dynamicBlockedCells = set()
         self.lastRepathTimeSeconds = -999.0
+        self.repathDebounceUntilSeconds = {}
+        self.lastRepathDebounceKey = ""
         self.frontObstacleStopStartSeconds = None
         self.lastBlockedCorridorCells = set()
         self.recoveryUntilSeconds = 0.0
@@ -136,13 +140,15 @@ class AgentState:
         self.stopCount = 0
         self.repathCount = 0
         self.slowdownCount = 0
-        self.nearMissCount = 0
-        self.bNearMissRecorded = False
-        self.nearMissRecordedSources = set()
-        self.lastNearMissCell = None
-        self.lastNearMissSource = ""
+        self.nearObstacleWarningCount = 0
+        self.bNearObstacleWarningRecorded = False
+        self.nearObstacleWarningRecordedSources = set()
+        self.lastNearObstacleWarningCell = None
+        self.lastNearObstacleWarningSource = ""
         self.dynamicBlockedCells = set()
         self.lastRepathTimeSeconds = -999.0
+        self.repathDebounceUntilSeconds = {}
+        self.lastRepathDebounceKey = ""
         self.frontObstacleStopStartSeconds = None
         self.lastBlockedCorridorCells = set()
         self.recoveryUntilSeconds = 0.0

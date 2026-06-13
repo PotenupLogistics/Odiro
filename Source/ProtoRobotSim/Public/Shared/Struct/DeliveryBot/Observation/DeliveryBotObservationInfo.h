@@ -47,6 +47,9 @@ struct FDeliveryBotVehicleSpecInfo
 	FVector RobotBoxExtentCm{ FVector::ZeroVector };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float WheelBaseCm{ 0.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float MinTurningRadiusCm{ 0.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)

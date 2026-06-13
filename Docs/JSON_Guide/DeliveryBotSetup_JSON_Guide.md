@@ -21,8 +21,8 @@ DeliveryBotSetup JSON이 담당하는 값:
 | 범위 | 예시 |
 | --- | --- |
 | 주행 속도 튜닝 | `robot.drive.max_speed_kmh`, `robot.drive.slowdown_speed_range_kmh` |
-| 경로 추종 튜닝 | `robot.path_follow.target_speed_kmh`, `robot.path_follow.look_ahead_distance_m`, `robot.path_follow.obstacle_slow_speed_kmh` |
-| 라이다 반응 튜닝 | `robot.lidar.scan_range_m`, `robot.lidar.angle_step_degree`, `robot.lidar.stop_distance_m`, `robot.lidar.slow_down_distance_m` |
+| 라이다 반응/표시 튜닝 | `robot.lidar.scan_range_m`, `robot.lidar.angle_step_degree`, `robot.lidar.stop_distance_m`, `robot.lidar.near_obstacle_warning_distance_m`, `robot.lidar.slow_down_distance_m` |
+| 시작 정책 선택 | `robot.policy.startup_policy_spec_file_name` |
 
 JSON에서 생략한 값은 C++ 구조체 기본값으로 fallback된다.
 
@@ -34,8 +34,8 @@ JSON에서 생략한 값은 C++ 구조체 기본값으로 fallback된다.
   "version": 1,
   "robot": {
     "drive": {},
-    "path_follow": {},
-    "lidar": {}
+    "lidar": {},
+    "policy": {}
   }
 }
 ```
@@ -71,35 +71,6 @@ JSON에서 생략한 값은 C++ 구조체 기본값으로 fallback된다.
 | `engine_rev_up_moi` | 선택 | number | `5.0` | `ChaosDriveConfigInfo.EngineRevUpMOI` | 엔진 rev-up inertia. |
 | `engine_rev_down_rate` | 선택 | number | `600.0` | `ChaosDriveConfigInfo.EngineRevDownRate` | 엔진 rev-down rate. |
 
-## path_follow fields
-
-```json
-"path_follow": {
-  "target_speed_kmh": 10.0,
-  "look_ahead_distance_m": 1.0,
-  "obstacle_slow_speed_kmh": 2.0,
-  "obstacle_soft_cost_radius_m": 2.0,
-  "obstacle_soft_cost_max_penalty": 8.0,
-  "obstacle_soft_cost_power": 2.0,
-  "path_turn_cost_penalty": 1.5
-}
-```
-
-| 필드 | 필수 | 타입/단위 | 기본값 | C++ 매핑 | 설명 |
-| --- | --- | --- | --- | --- | --- |
-| `target_speed_kmh` | 선택 | number, km/h | `10.0` | `PathFollowConfigInfo.TargetSpeedKmh` | 경로 추종 목표 속도. |
-| `look_ahead_distance_m` | 선택 | number, meter | `1.0` | `PathFollowConfigInfo.LookAheadDistanceM` | 현재 위치보다 앞쪽의 추종 목표점을 얼마나 멀리 볼지 정한다. |
-| `obstacle_slow_speed_kmh` | 선택 | number, km/h | `1.5` | `PathFollowConfigInfo.ObstacleSlowSpeedKmh` | 장애물 감속 구간에서 사용할 목표 속도. |
-| `obstacle_soft_cost_radius_m` | 선택 | number, meter | `2.0` | `PathFollowConfigInfo.ObstacleSoftCostRadiusM` | A*가 장애물 주변 cell을 더 비싸게 평가하는 반경. |
-| `obstacle_soft_cost_max_penalty` | 선택 | number | `8.0` | `PathFollowConfigInfo.ObstacleSoftCostMaxPenalty` | 장애물 바로 옆 cell에 더하는 최대 비용. |
-| `obstacle_soft_cost_power` | 선택 | number | `2.0` | `PathFollowConfigInfo.ObstacleSoftCostPower` | 장애물과의 거리별 비용 감쇠 곡선. |
-| `path_turn_cost_penalty` | 선택 | number | `1.5` | `PathFollowConfigInfo.PathTurnCostPenalty` | A*가 방향을 바꿀 때 더하는 비용. 값이 클수록 덜 꺾는 경로를 선호한다. |
-| `draw_debug` | 선택 | bool | `true` | `PathFollowConfigInfo.bDrawDebug` | path follow debug draw 여부. |
-| `path_point_acceptance_distance_m` | 선택 | number, meter | `0.4` | `PathFollowConfigInfo.PathPointAcceptanceDistanceM` | 중간 path point 통과 판정 거리. |
-| `goal_acceptance_distance_m` | 선택 | number, meter | `0.8` | `PathFollowConfigInfo.GoalAcceptanceDistanceM` | path follower의 목표 도착 판정 거리. |
-| `steering_sensitivity` | 선택 | number | `0.8` | `PathFollowConfigInfo.SteeringSensitivity` | 목표 방향에 대한 조향 민감도. |
-| `min_turn_speed_kmh` | 선택 | number, km/h | `1.5` | `PathFollowConfigInfo.MinTurnSpeedKmh` | 큰 조향 시 낮출 최소 속도. |
-
 ## lidar fields
 
 ```json
@@ -107,6 +78,7 @@ JSON에서 생략한 값은 C++ 구조체 기본값으로 fallback된다.
   "scan_range_m": 5.0,
   "angle_step_degree": 5.0,
   "stop_distance_m": 1.5,
+  "near_obstacle_warning_distance_m": 2.0,
   "slow_down_distance_m": 3.5
 }
 ```
@@ -116,8 +88,10 @@ JSON에서 생략한 값은 C++ 구조체 기본값으로 fallback된다.
 | `scan_range_m` | 선택 | number, meter | `5.0` | `LidarSensorConfigInfo.ScanRangeM` | 라이다가 장애물을 탐지할 최대 거리. |
 | `angle_step_degree` | 선택 | number, degree | `2.0` | `LidarSensorConfigInfo.AngleStepDegree` | 라이다 레이 간격. 작을수록 촘촘하게 감지한다. |
 | `stop_distance_m` | 선택 | number, meter | `1.2` | `LidarSensorConfigInfo.StopDistanceM` | 전방 장애물이 이 거리 안에 있으면 정지한다. |
+| `near_obstacle_warning_distance_m` | 선택 | number, meter | `2.0` | `LidarSensorConfigInfo.NearObstacleWarningDistanceM` | cyan debug ring으로 표시되는 경고 반경. 공식 near-miss 평가는 아니다. |
 | `slow_down_distance_m` | 선택 | number, meter | `3.5` | `LidarSensorConfigInfo.SlowDownDistanceM` | 전방 장애물이 이 거리 안에 있으면 감속한다. |
 | `draw_debug` | 선택 | bool | `true` | `LidarSensorConfigInfo.bDrawDebug` | lidar debug draw 여부. |
+| `draw_near_obstacle_warning_debug` | 선택 | bool | `true` | `LidarSensorConfigInfo.bDrawNearObstacleWarningDebug` | near obstacle warning 반경을 cyan ring으로 표시할지 여부. |
 | `sensor_height_m` | 선택 | number, meter | `0.07` | `LidarSensorConfigInfo.SensorHeightM` | 라이다 ray 시작 높이. |
 | `front_half_angle_degree` | 선택 | number, degree | `20.0` | `LidarSensorConfigInfo.FrontHalfAngleDegree` | 전방 물체로 분류할 좌우 half angle. |
 | `store_missed_rays` | 선택 | bool | `false` | `LidarSensorConfigInfo.bStoreMissedRays` | hit하지 않은 ray도 scan에 저장할지 여부. |
@@ -132,17 +106,11 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
 | --- | --- |
 | `max_speed_kmh` | `0` 이상 |
 | `slowdown_speed_range_kmh` | 최소 `0.1` |
-| `target_speed_kmh` | `0` 이상 |
-| `look_ahead_distance_m` | 최소 `0.1` |
-| `obstacle_slow_speed_kmh` | `0` 이상 |
-| `obstacle_soft_cost_radius_m` | `0` 이상 |
-| `obstacle_soft_cost_max_penalty` | `0` 이상 |
-| `obstacle_soft_cost_power` | 최소 `0.1` |
-| `path_turn_cost_penalty` | `0` 이상 |
 | `scan_range_m` | `0` 이상 |
 | `angle_step_degree` | 최소 `1.0` |
 | `stop_distance_m` | `0` 이상 |
-| `slow_down_distance_m` | `stop_distance_m + 0.1` 이상 |
+| `near_obstacle_warning_distance_m` | `stop_distance_m + 0.1` 이상 |
+| `slow_down_distance_m` | `near_obstacle_warning_distance_m + 0.1` 이상 |
 | `speed_limit_brake`, `stop_brake_input` | `0`-`1` |
 | `front_half_angle_degree` | `0`-`180` |
 
@@ -184,19 +152,11 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
       "max_speed_kmh": 10.0,
       "slowdown_speed_range_kmh": 2.0
     },
-    "path_follow": {
-      "target_speed_kmh": 10.0,
-      "look_ahead_distance_m": 1.0,
-      "obstacle_slow_speed_kmh": 2.0,
-      "obstacle_soft_cost_radius_m": 2.0,
-      "obstacle_soft_cost_max_penalty": 8.0,
-      "obstacle_soft_cost_power": 2.0,
-      "path_turn_cost_penalty": 1.5
-    },
     "lidar": {
       "scan_range_m": 5.0,
       "angle_step_degree": 5.0,
       "stop_distance_m": 1.5,
+      "near_obstacle_warning_distance_m": 2.0,
       "slow_down_distance_m": 3.5
     }
   }
@@ -208,4 +168,4 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
 `UScenarioCompiler::CompileRobotSpawn()`은 로봇 배치와 목적지를 ScenarioSetup에서 읽는다. 시작 위치는 `actors.robot.xy_m`/`actors.robot.yaw_deg`, 목적지는 `actors.robot.route.goal_xy_m`을 사용한다.
 `UDeliveryBotSetupCompiler`는 DeliveryBotSetup JSON을 `FDeliveryBotSetupInfo`로 컴파일한다. Runner는 두 결과를 merge할 때 `LocationSetupInfo`만 ScenarioSetup 결과로 유지하고, 나머지 DeliveryBot setup 값은 DeliveryBotSetup 결과를 사용한다.
 
-DeliveryBot 튜닝값은 `drive`, `path_follow`, `lidar`만 `FDeliveryBotSetupInfo`로 전달한다. `LocationSetupInfo`는 DeliveryBotSetup JSON에서 직접 열지 않고 ScenarioSetup의 배치/route 결과로 채운다.
+DeliveryBot 튜닝값은 `drive`, `lidar`, `policy`만 `FDeliveryBotSetupInfo`로 전달한다. `LocationSetupInfo`는 DeliveryBotSetup JSON에서 직접 열지 않고 ScenarioSetup의 배치/route 결과로 채운다.

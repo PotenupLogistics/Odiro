@@ -18,11 +18,15 @@ class AStarPathfinder:
         obstacle_soft_cost_max_penalty: float = 8.0,
         obstacle_soft_cost_power: float = 2.0,
         path_turn_cost_penalty: float = 1.5,
+        allow_diagonal_pathfinding: bool = True,
+        smooth_path_with_line_of_sight: bool = True,
     ):
         self.obstacleSoftCostRadiusM = obstacle_soft_cost_radius_m
         self.obstacleSoftCostMaxPenalty = obstacle_soft_cost_max_penalty
         self.obstacleSoftCostPower = obstacle_soft_cost_power
         self.pathTurnCostPenalty = path_turn_cost_penalty
+        self.bAllowDiagonalPathfinding = allow_diagonal_pathfinding
+        self.bSmoothPathWithLineOfSight = smooth_path_with_line_of_sight
 
     def configure_from_control_spec(self, control_spec: dict | None) -> None:
         control_spec = control_spec or {}
@@ -41,6 +45,16 @@ class AStarPathfinder:
         self.pathTurnCostPenalty = max(
             0.0,
             float(control_spec.get("pathTurnCostPenalty", self.pathTurnCostPenalty)),
+        )
+        self.bAllowDiagonalPathfinding = self.get_bool_config(
+            control_spec,
+            "allowDiagonalPathfinding",
+            self.bAllowDiagonalPathfinding,
+        )
+        self.bSmoothPathWithLineOfSight = self.get_bool_config(
+            control_spec,
+            "smoothPathWithLineOfSight",
+            self.bSmoothPathWithLineOfSight,
         )
 
     def find_path(
@@ -79,12 +93,13 @@ class AStarPathfinder:
 
             if current == goal_cell:
                 path = self.reconstruct_path(came_from, current_state)
+                path = self.smooth_path(path, grid, cell_lookup)
                 return AStarResult(True, path, "path_found")
 
             for neighbor in self.get_neighbors(current, grid, cell_lookup):
                 next_direction = self.get_move_direction(current, neighbor)
                 next_state = self.make_path_state(neighbor, next_direction)
-                move_cost = self.get_cell_cost(neighbor, grid, cell_lookup, obstacle_soft_costs)
+                move_cost = self.get_move_cost(current, neighbor, grid, cell_lookup, obstacle_soft_costs)
                 turn_cost = self.get_turn_cost(current_direction, next_direction)
                 next_score = g_score[current_state] + move_cost + turn_cost
 
@@ -111,12 +126,57 @@ class AStarPathfinder:
     ) -> list[tuple[int, int]]:
         x, y = cell
         candidates = [
-            (x + 1, y),
-            (x - 1, y),
-            (x, y + 1),
-            (x, y - 1),
+            (x + direction_x, y + direction_y)
+            for direction_x, direction_y in self.get_neighbor_directions()
         ]
-        return [candidate for candidate in candidates if self.is_walkable(candidate, grid, cell_lookup)]
+        return [
+            candidate
+            for candidate in candidates
+            if self.can_move_between(cell, candidate, grid, cell_lookup)
+        ]
+
+    def get_neighbor_directions(self) -> list[tuple[int, int]]:
+        directions = [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+        ]
+
+        if self.bAllowDiagonalPathfinding:
+            directions.extend([
+                (1, 1),
+                (1, -1),
+                (-1, 1),
+                (-1, -1),
+            ])
+
+        return directions
+
+    def can_move_between(
+        self,
+        from_cell: tuple[int, int],
+        to_cell: tuple[int, int],
+        grid: GridMap,
+        cell_lookup: dict[tuple[int, int], GridCell] | None = None,
+    ) -> bool:
+        if not self.is_walkable(to_cell, grid, cell_lookup):
+            return False
+
+        direction = self.get_move_direction(from_cell, to_cell)
+        if not self.is_diagonal_direction(direction):
+            return True
+
+        if not self.bAllowDiagonalPathfinding:
+            return False
+
+        # Prevent cutting through a blocked obstacle corner.
+        side_a = (from_cell[0] + direction[0], from_cell[1])
+        side_b = (from_cell[0], from_cell[1] + direction[1])
+        return (
+            self.is_walkable(side_a, grid, cell_lookup)
+            and self.is_walkable(side_b, grid, cell_lookup)
+        )
 
     def is_walkable(
         self,
@@ -163,6 +223,21 @@ class AStarPathfinder:
         soft_cost = 0.0 if obstacle_soft_costs is None else obstacle_soft_costs.get(cell, 0.0)
         return base_cost + soft_cost
 
+    def get_move_cost(
+        self,
+        from_cell: tuple[int, int],
+        to_cell: tuple[int, int],
+        grid: GridMap,
+        cell_lookup: dict[tuple[int, int], GridCell] | None = None,
+        obstacle_soft_costs: dict[tuple[int, int], float] | None = None,
+    ) -> float:
+        cost = self.get_cell_cost(to_cell, grid, cell_lookup, obstacle_soft_costs)
+        direction = self.get_move_direction(from_cell, to_cell)
+        if self.is_diagonal_direction(direction):
+            return cost * math.sqrt(2.0)
+
+        return cost
+
     def make_path_state(
         self,
         cell: tuple[int, int],
@@ -183,6 +258,9 @@ class AStarPathfinder:
     ) -> tuple[int, int]:
         return to_cell[0] - from_cell[0], to_cell[1] - from_cell[1]
 
+    def is_diagonal_direction(self, direction: tuple[int, int]) -> bool:
+        return direction[0] != 0 and direction[1] != 0
+
     def get_turn_cost(
         self,
         previous_direction: tuple[int, int],
@@ -197,11 +275,15 @@ class AStarPathfinder:
         previous_x, previous_y = previous_direction
         next_x, next_y = next_direction
         dot = previous_x * next_x + previous_y * next_y
+        previous_length = math.hypot(previous_x, previous_y)
+        next_length = math.hypot(next_x, next_y)
 
-        if dot < 0:
-            return self.pathTurnCostPenalty * 2.0
+        if previous_length <= 0.0 or next_length <= 0.0:
+            return 0.0
 
-        return self.pathTurnCostPenalty
+        normalized_dot = max(-1.0, min(1.0, dot / (previous_length * next_length)))
+        turn_angle_degree = math.degrees(math.acos(normalized_dot))
+        return self.pathTurnCostPenalty * (turn_angle_degree / 90.0)
 
     def build_cell_lookup(self, grid: GridMap) -> dict[tuple[int, int], GridCell]:
         return {(grid_cell.x, grid_cell.y): grid_cell for grid_cell in grid.cells}
@@ -260,7 +342,15 @@ class AStarPathfinder:
         return soft_costs
 
     def heuristic(self, a: tuple[int, int], b: tuple[int, int]) -> float:
-        return abs(a[0] - b[0]) + abs(a[1] - b[1])
+        delta_x = abs(a[0] - b[0])
+        delta_y = abs(a[1] - b[1])
+
+        if not self.bAllowDiagonalPathfinding:
+            return delta_x + delta_y
+
+        diagonal = min(delta_x, delta_y)
+        straight = max(delta_x, delta_y) - diagonal
+        return (math.sqrt(2.0) * diagonal) + straight
 
     def reconstruct_path(
         self,
@@ -275,3 +365,84 @@ class AStarPathfinder:
 
         path.reverse()
         return path
+
+    def smooth_path(
+        self,
+        path: list[tuple[int, int]],
+        grid: GridMap,
+        cell_lookup: dict[tuple[int, int], GridCell],
+    ) -> list[tuple[int, int]]:
+        if not self.bSmoothPathWithLineOfSight or len(path) < 3:
+            return path
+
+        smoothed_path = [path[0]]
+        anchor_index = 0
+
+        while anchor_index < len(path) - 1:
+            next_index = len(path) - 1
+            while next_index > anchor_index + 1:
+                if self.has_line_of_sight(path[anchor_index], path[next_index], grid, cell_lookup):
+                    break
+                next_index -= 1
+
+            smoothed_path.append(path[next_index])
+            anchor_index = next_index
+
+        return smoothed_path
+
+    def has_line_of_sight(
+        self,
+        from_cell: tuple[int, int],
+        to_cell: tuple[int, int],
+        grid: GridMap,
+        cell_lookup: dict[tuple[int, int], GridCell],
+    ) -> bool:
+        delta_x = to_cell[0] - from_cell[0]
+        delta_y = to_cell[1] - from_cell[1]
+        steps = max(abs(delta_x), abs(delta_y)) * 4
+
+        if steps <= 0:
+            return self.is_walkable(from_cell, grid, cell_lookup)
+
+        previous_cell = from_cell
+        for index in range(steps + 1):
+            alpha = index / steps
+            sample_x = from_cell[0] + 0.5 + (delta_x * alpha)
+            sample_y = from_cell[1] + 0.5 + (delta_y * alpha)
+            sample_cell = (int(math.floor(sample_x)), int(math.floor(sample_y)))
+
+            if sample_cell == to_cell:
+                sample_cell = to_cell
+
+            if not self.is_walkable(sample_cell, grid, cell_lookup):
+                return False
+
+            if sample_cell != previous_cell and not self.can_move_between(
+                previous_cell,
+                sample_cell,
+                grid,
+                cell_lookup,
+            ):
+                return False
+
+            previous_cell = sample_cell
+
+        return True
+
+    def get_bool_config(self, config: dict, key: str, default_value: bool) -> bool:
+        value = config.get(key, default_value)
+
+        if isinstance(value, bool):
+            return value
+
+        if isinstance(value, (int, float)):
+            return value != 0
+
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes", "on"}:
+                return True
+            if normalized in {"false", "0", "no", "off"}:
+                return False
+
+        return default_value

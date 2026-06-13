@@ -7,8 +7,20 @@ from typing import Any
 
 WATCH_ENABLED = True
 
-# 기본값은 NearMiss 변화만 출력한다.
+# Watch Fields 값이 바뀔 때마다
 WATCH_FIELDS = {
+    "reason",
+    "bColliding",
+    "collisionActorName",
+    "steering",
+    "targetSpeedKmh",
+    "direction",
+    "frontMinM",
+    "pathIndex",
+    "targetPathIndex",
+    "closestPathDistanceCm",
+    "lookAheadDistanceM",
+    "recoveryUntilSeconds",
     "nearMiss",
 }
 
@@ -17,6 +29,9 @@ WATCH_THRESHOLDS = {
     "targetSpeedKmh": 0.5,
     "steering": 0.1,
     "brake": 0.1,
+    "closestPathDistanceCm": 15.0,
+    "lookAheadDistanceM": 0.1,
+    "recoveryUntilSeconds": 0.1,
 }
 
 # 첫 snapshot에서 이미 이 값보다 커져 있으면 변화로 출력한다.
@@ -29,6 +44,8 @@ WATCH_INITIAL_VALUES = {
 CONTEXT_FIELDS = (
     "reason",
     "policy",
+    "bColliding",
+    "collisionActorName",
     "frontMinM",
     "direction",
     "targetSpeedKmh",
@@ -36,6 +53,12 @@ CONTEXT_FIELDS = (
     "brake",
     "pathIndex",
     "pathLength",
+    "targetPathIndex",
+    "targetWorldPoint",
+    "closestPathDistanceCm",
+    "maxPathErrorCm",
+    "lookAheadDistanceM",
+    "recoveryUntilSeconds",
     "lastNearMissSource",
 )
 
@@ -161,9 +184,11 @@ class DecisionLogWatcher:
 
 
 # 사용 방법:
-# 1. 기본 설정은 WATCH_FIELDS = {"nearMiss"} 이므로 NearMiss 값이 바뀔 때만 콘솔에 출력된다.
-# 2. reason 변화도 보고 싶으면 WATCH_FIELDS = {"nearMiss", "reason"} 처럼 필드를 추가한다.
+# 1. 현재 기본 설정은 경로 추종 문제 추적용이다. reason, steering, speed, pathIndex,
+#    targetPathIndex, closestPathDistanceCm, recoveryUntilSeconds, nearMiss 변화를 출력한다.
+# 2. NearMiss만 보고 싶으면 WATCH_FIELDS = {"nearMiss"} 로 줄인다.
 # 3. targetSpeedKmh, steering, brake 같은 숫자 필드는 WATCH_THRESHOLDS 값 이상 변할 때만 출력된다.
-# 4. 로그 줄에 같이 붙는 주변 정보는 CONTEXT_FIELDS에서 추가하거나 제거한다.
-# 5. 파일 저장이 필요하면 user_agent.py의 DecisionLogWatcher(...) 생성자에 jsonl_path="Logs/PythonAgent/decision_watch.jsonl"을 넘긴다.
+# 4. 로그 한 줄에 같이 붙는 참고 정보는 CONTEXT_FIELDS에서 추가하거나 제거한다.
+# 5. 파일 저장이 필요하면 user_agent.py의 DecisionLogWatcher(...) 생성자에
+#    jsonl_path="Logs/PythonAgent/decision_watch.jsonl" 을 넣는다.
 # 6. 설정을 바꾼 뒤에는 실행 중인 PythonAgent 서버를 재시작해야 반영된다.

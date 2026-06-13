@@ -48,8 +48,6 @@ def parse_start(data: dict) -> ScenarioStartRequest:
     grid_data = data["grid"]
 
     return ScenarioStartRequest(
-        experimentId=data.get("experimentId"),
-        episodeId=data["episodeId"],
         robotInstanceId=data["robotInstanceId"],
         start=StartLocation(**data["start"]),
         goal=GoalLocation(**data["goal"]),
@@ -87,8 +85,6 @@ def parse_decide(data: dict) -> ScenarioDecideRequest:
 # /scenario/end 요청 JSON을 ScenarioEndRequest로 변환
 def parse_end(data: dict) -> ScenarioEndRequest:
     return ScenarioEndRequest(
-        experimentId=data.get("experimentId"),
-        episodeId=data["episodeId"],
         robotInstanceId=data["robotInstanceId"],
         sequence=data["sequence"],
         status=data["status"],

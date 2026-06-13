@@ -10,7 +10,7 @@ from .state import AgentState
 
 # Print front lidar minimum distance for decide debugging.
 def get_front_lidar_min_distance_text(request: ScenarioDecideRequest, front_angle_degree: float = 30.0) -> str:
-    hit_rays = [ray for ray in request.lidarRays if ray.hit]
+    hit_rays = [ray for ray in request.lidarRays if ray.hit and not is_ignored_lidar_policy_ray(ray)]
     front_rays = [
         ray
         for ray in hit_rays
@@ -25,12 +25,21 @@ def get_front_lidar_min_distance_text(request: ScenarioDecideRequest, front_angl
     return f"{nearest_ray.distanceM:.2f}@{nearest_yaw:.0f}deg"
 
 
+def is_ignored_lidar_policy_ray(ray) -> bool:
+    actor_name = ray.actorName or ""
+    actor_tags = ray.actorTags or []
+    return actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0
+
+
 def normalize_angle_degree(angle_degree: float) -> float:
     return (angle_degree + 180.0) % 360.0 - 180.0
 
 
 # path cell 목록을 Unreal world 좌표 목록으로 변환한다.
 def build_path_world_points(state: AgentState) -> list[dict]:
+    if state.followPathWorldPoints:
+        return state.followPathWorldPoints
+
     if state.grid is None:
         return []
 
@@ -47,6 +56,13 @@ def build_path_world_points(state: AgentState) -> list[dict]:
     return result
 
 
+def get_debug_path_length(state: AgentState) -> int:
+    if state.followPathWorldPoints:
+        return len(state.followPathWorldPoints)
+
+    return len(state.path)
+
+
 def build_decision_log_snapshot(
     request: ScenarioDecideRequest,
     state: AgentState,
@@ -61,13 +77,21 @@ def build_decision_log_snapshot(
         "runTimeSeconds": request.runTimeSeconds,
         "policy": policy_name,
         "reason": reason,
+        "bColliding": request.robotState.bColliding,
+        "collisionActorName": request.robotState.collisionActorName,
         "frontMinM": get_front_lidar_min_distance_text(request),
         "nearMiss": state.nearMissCount,
         "lastNearMissCell": state.lastNearMissCell,
         "lastNearMissSource": state.lastNearMissSource,
         "blockedCorridor": len(state.lastBlockedCorridorCells),
         "pathIndex": state.pathIndex,
-        "pathLength": len(state.path),
+        "pathLength": get_debug_path_length(state),
+        "targetPathIndex": state.targetPathIndex,
+        "targetWorldPoint": state.targetWorldPoint,
+        "closestPathDistanceCm": state.closestPathDistanceCm,
+        "maxPathErrorCm": state.maxPathErrorCm,
+        "lookAheadDistanceM": state.currentLookAheadDistanceM,
+        "recoveryUntilSeconds": state.recoveryUntilSeconds,
         "direction": action_dict.get("direction"),
         "targetSpeedKmh": action_dict.get("targetSpeedKmh"),
         "steering": action_dict.get("steering"),
@@ -100,8 +124,6 @@ class BotPolicy:
         state: AgentState,
     ) -> dict:
         state.reset_for_start(
-            experiment_id=request.experimentId,
-            episode_id=request.episodeId,
             robot_instance_id=request.robotInstanceId,
             start=request.start,
             goal=request.goal,
@@ -110,6 +132,7 @@ class BotPolicy:
 
         self.decisionLogWatcher.reset()
         self.configure_policies_from_start(request)
+        self.pathfinder.configure_from_control_spec(request.controlSpec)
 
         result = self.pathfinder.find_path(
             start=request.start,
@@ -133,6 +156,7 @@ class BotPolicy:
 
         state.path = result.path
         state.pathIndex = 0
+        state.followPathWorldPoints = []
 
         return {
             "status": "ok",
@@ -190,16 +214,20 @@ class BotPolicy:
                     "reason": reason,
                     "pathStatus": "valid" if state.has_path() else "empty",
                     "pathIndex": state.pathIndex,
-                    "pathLength": len(state.path),
+                    "pathLength": get_debug_path_length(state),
                     "pathWorldPoints": build_path_world_points(state),
                     "targetPathIndex": state.targetPathIndex,
                     "targetWorldPoint": state.targetWorldPoint,
                     "closestPathDistanceCm": state.closestPathDistanceCm,
                     "maxPathErrorCm": state.maxPathErrorCm,
+                    "lookAheadDistanceM": state.currentLookAheadDistanceM,
                     "nearMissCount": state.nearMissCount,
                     "lastNearMissCell": state.lastNearMissCell,
                     "lastNearMissSource": state.lastNearMissSource,
+                    "bColliding": request.robotState.bColliding,
+                    "collisionActorName": request.robotState.collisionActorName,
                     "blockedCorridorCellCount": len(state.lastBlockedCorridorCells),
+                    "dynamicBlockedCellCount": len(state.dynamicBlockedCells),
                     "recoveryUntilSeconds": state.recoveryUntilSeconds,
                 },
             }
@@ -226,16 +254,20 @@ class BotPolicy:
                 "reason": last_reason or "no_action",
                 "pathStatus": "valid" if state.has_path() else "empty",
                 "pathIndex": state.pathIndex,
-                "pathLength": len(state.path),
+                "pathLength": get_debug_path_length(state),
                 "pathWorldPoints": build_path_world_points(state),
                 "targetPathIndex": state.targetPathIndex,
                 "targetWorldPoint": state.targetWorldPoint,
                 "closestPathDistanceCm": state.closestPathDistanceCm,
                 "maxPathErrorCm": state.maxPathErrorCm,
+                "lookAheadDistanceM": state.currentLookAheadDistanceM,
                 "nearMissCount": state.nearMissCount,
                 "lastNearMissCell": state.lastNearMissCell,
                 "lastNearMissSource": state.lastNearMissSource,
+                "bColliding": request.robotState.bColliding,
+                "collisionActorName": request.robotState.collisionActorName,
                 "blockedCorridorCellCount": len(state.lastBlockedCorridorCells),
+                "dynamicBlockedCellCount": len(state.dynamicBlockedCells),
                 "recoveryUntilSeconds": state.recoveryUntilSeconds,
             },
         }
@@ -248,7 +280,6 @@ class BotPolicy:
     ) -> dict:
         debug = {
             "reason": "episode_end_recorded",
-            "episodeId": request.episodeId,
             "status": request.status,
             "stopCount": state.stopCount,
             "repathCount": state.repathCount,

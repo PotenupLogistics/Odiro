@@ -424,6 +424,8 @@ TArray<FDeliveryBotLidarDetectedObjectInfo> UDeliveryBot_LidarSensorComponent::B
 			newObjectInfo.DetectedActor = rayInfo.HitActor;
 			newObjectInfo.ActorName = rayInfo.ActorName;
 			newObjectInfo.ActorTags = rayInfo.ActorTags;
+			rayInfo.HitActor->GetActorBounds(true, newObjectInfo.BoundsOriginCm, newObjectInfo.BoundsExtentCm);
+			newObjectInfo.bHasBounds = !newObjectInfo.BoundsExtentCm.IsNearlyZero();
 			newObjectInfo.ClosestHitLocationCm = rayInfo.HitLocationCm;
 			newObjectInfo.ClosestDistanceM = rayInfo.DistanceM;
 			newObjectInfo.ClosestRayYawDegree = rayInfo.RayYawDegree;

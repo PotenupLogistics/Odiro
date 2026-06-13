@@ -59,6 +59,9 @@ class RobotState:
     z: float = 0.0
     yawDegree: float = 0.0
     speedKmh: float = 0.0
+    bColliding: bool = False
+    collisionActorName: str = ""
+    collisionActorTags: list[str] = field(default_factory=list)
 
 # LiDAR에서 발사한 Ray 하나의 관측 결과
 @dataclass
@@ -73,8 +76,6 @@ class LidarRay:
 # Scenario 시작 시 초기 설정
 @dataclass
 class ScenarioStartRequest:
-    experimentId: str   # 실험 ID (샘플 혹은 에피소드의 묶음 ID)   
-    episodeId: str      # 하나의 사이클 ID 
     robotInstanceId: str# 로봇 ID (로봇 여러 개인 경우 대비)
     start: StartLocation
     goal: GoalLocation
@@ -96,8 +97,6 @@ class ScenarioDecideRequest:
 
 @dataclass
 class ScenarioEndRequest:
-    experimentId: str   # 실험 ID (샘플 혹은 에피소드의 묶음 ID)   
-    episodeId: str      # 하나의 사이클 ID 
     robotInstanceId: str# 로봇 ID (로봇 여러 개인 경우 대비)
     sequence: int       # 마지막 요청 번호
     status: str         # 종료 상태. 보통 ok 또는 error

@@ -256,6 +256,11 @@ void UDeliveryBotSetupCompiler::CompilePathFollow(const FJsonObject& robotObject
 	ReadOptionalBoolField(*pathFollowObject, TEXT("draw_debug"), path, result, pathFollowConfigInfo.bDrawDebug);
 	ReadOptionalFloatField(*pathFollowObject, TEXT("target_speed_kmh"), path, result, pathFollowConfigInfo.TargetSpeedKmh, 0.0f);
 	ReadOptionalFloatField(*pathFollowObject, TEXT("look_ahead_distance_m"), path, result, pathFollowConfigInfo.LookAheadDistanceM, 0.1f);
+	ReadOptionalFloatField(*pathFollowObject, TEXT("min_look_ahead_distance_m"), path, result, pathFollowConfigInfo.MinLookAheadDistanceM, 0.1f);
+	ReadOptionalFloatField(*pathFollowObject, TEXT("max_look_ahead_distance_m"), path, result, pathFollowConfigInfo.MaxLookAheadDistanceM, 0.1f);
+	ReadOptionalFloatField(*pathFollowObject, TEXT("look_ahead_speed_gain_m_per_kmh"), path, result, pathFollowConfigInfo.LookAheadSpeedGainMPerKmh, 0.0f);
+	ReadOptionalFloatField(*pathFollowObject, TEXT("look_ahead_steering_reduction_ratio"), path, result, pathFollowConfigInfo.LookAheadSteeringReductionRatio, 0.0f, 0.9f);
+	ReadOptionalFloatField(*pathFollowObject, TEXT("look_ahead_smoothing_ratio"), path, result, pathFollowConfigInfo.LookAheadSmoothingRatio, 0.05f, 1.0f);
 	ReadOptionalFloatField(*pathFollowObject, TEXT("path_point_acceptance_distance_m"), path, result, pathFollowConfigInfo.PathPointAcceptanceDistanceM, 0.1f);
 	ReadOptionalFloatField(*pathFollowObject, TEXT("goal_acceptance_distance_m"), path, result, pathFollowConfigInfo.GoalAcceptanceDistanceM, 0.1f);
 	ReadOptionalFloatField(*pathFollowObject, TEXT("steering_sensitivity"), path, result, pathFollowConfigInfo.SteeringSensitivity, 0.0f);
@@ -264,6 +269,10 @@ void UDeliveryBotSetupCompiler::CompilePathFollow(const FJsonObject& robotObject
 	ReadOptionalFloatField(*pathFollowObject, TEXT("max_steering_delta"), path, result, pathFollowConfigInfo.MaxSteeringDelta, 0.001f, 1.0f);
 	ReadOptionalFloatField(*pathFollowObject, TEXT("min_turn_speed_kmh"), path, result, pathFollowConfigInfo.MinTurnSpeedKmh, 0.0f);
 	ReadOptionalFloatField(*pathFollowObject, TEXT("obstacle_slow_speed_kmh"), path, result, pathFollowConfigInfo.ObstacleSlowSpeedKmh, 0.0f);
+	ReadOptionalFloatField(*pathFollowObject, TEXT("obstacle_soft_cost_radius_m"), path, result, pathFollowConfigInfo.ObstacleSoftCostRadiusM, 0.0f);
+	ReadOptionalFloatField(*pathFollowObject, TEXT("obstacle_soft_cost_max_penalty"), path, result, pathFollowConfigInfo.ObstacleSoftCostMaxPenalty, 0.0f);
+	ReadOptionalFloatField(*pathFollowObject, TEXT("obstacle_soft_cost_power"), path, result, pathFollowConfigInfo.ObstacleSoftCostPower, 0.1f);
+	ReadOptionalFloatField(*pathFollowObject, TEXT("path_turn_cost_penalty"), path, result, pathFollowConfigInfo.PathTurnCostPenalty, 0.0f);
 }
 
 void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo)

@@ -73,8 +73,6 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
   "version": 1,
   "type": "scenario_start",
   "request": {
-    "experimentId": "unreal_runtime",
-    "episodeId": "62834EB0-4749-AAFC-91C8-4ABC942ED264",
     "robotInstanceId": "BP_DeliveryBot_C_0",
     "start": {
       "x": -500.0,
@@ -137,6 +135,11 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
     "controlSpec": {
       "targetSpeedKmh": 4.5,
       "lookAheadDistanceM": 1.2,
+      "minLookAheadDistanceM": 0.75,
+      "maxLookAheadDistanceM": 2.4,
+      "lookAheadSpeedGainMPerKmh": 0.12,
+      "lookAheadSteeringReductionRatio": 0.45,
+      "lookAheadSmoothingRatio": 0.35,
       "pathPointAcceptanceDistanceM": 0.45,
       "steeringSensitivity": 1.1,
       "steeringFullScaleDegree": 80.0,
@@ -144,9 +147,10 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
       "maxSteeringDelta": 0.09,
       "minTurnSpeedKmh": 0.8,
       "obstacleSlowSpeedKmh": 1.0,
-      "nearMissDistanceM": 2.0,
-      "collisionStopHalfAngleDegree": 8.0,
-      "collisionStopDistanceM": 0.45,
+      "obstacleSoftCostRadiusM": 2.0,
+      "obstacleSoftCostMaxPenalty": 8.0,
+      "obstacleSoftCostPower": 2.0,
+      "pathTurnCostPenalty": 1.5,
       "softStopBrakeInput": 0.18,
       "emergencyBrakeInput": 0.45,
       "recoverySpeedKmh": 1.2
@@ -165,8 +169,6 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
 
 | 필드 | 구분 | 설명 |
 | --- | --- | --- |
-| `request.experimentId` | 고정 | 실험 또는 런타임 묶음 ID. 현재 Unreal 기본값은 `unreal_runtime` |
-| `request.episodeId` | 고정 | episode 하나를 구분하는 ID |
 | `request.robotInstanceId` | 고정 | 현재 DeliveryBot Actor 이름 |
 | `request.start` | 고정 | 시작 위치와 yaw. 단위는 cm, degree |
 | `request.goal` | 고정 | 목표 위치와 도착 판정 반경. 단위는 cm |
@@ -185,6 +187,11 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
 | `request.lidarSpec.collisionStopDistanceM` | 확장 가능 | 각도와 무관하게 너무 가까우면 충돌 위험으로 보는 거리 |
 | `request.controlSpec.targetSpeedKmh` | 확장 가능 | 기본 경로 추종 목표 속도 |
 | `request.controlSpec.lookAheadDistanceM` | 확장 가능 | 경로 추종 lookahead 거리 |
+| `request.controlSpec.minLookAheadDistanceM` | 확장 가능 | 자동 lookahead 최소 거리 |
+| `request.controlSpec.maxLookAheadDistanceM` | 확장 가능 | 자동 lookahead 최대 거리 |
+| `request.controlSpec.lookAheadSpeedGainMPerKmh` | 확장 가능 | 속도 1km/h당 늘릴 lookahead 거리 |
+| `request.controlSpec.lookAheadSteeringReductionRatio` | 확장 가능 | 조향량이 클 때 lookahead를 줄이는 비율 |
+| `request.controlSpec.lookAheadSmoothingRatio` | 확장 가능 | lookahead 변화 보간 비율 |
 | `request.controlSpec.pathPointAcceptanceDistanceM` | 확장 가능 | path index 진행 판정 거리 |
 | `request.controlSpec.steeringSensitivity` | 확장 가능 | Python 조향 민감도 |
 | `request.controlSpec.steeringFullScaleDegree` | 확장 가능 | 조향 입력 1.0에 대응하는 yaw error 기준 |
@@ -192,17 +199,62 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
 | `request.controlSpec.maxSteeringDelta` | 확장 가능 | decide 1회당 조향 변화 제한 |
 | `request.controlSpec.minTurnSpeedKmh` | 확장 가능 | 큰 조향 시에도 유지할 최소 목표 속도 |
 | `request.controlSpec.obstacleSlowSpeedKmh` | 확장 가능 | 장애물 감속 구간의 저속 기준 |
-| `request.controlSpec.nearMissDistanceM` | 확장 가능 | Python 정책이 직접 사용하는 NearMiss 거리 |
-| `request.controlSpec.collisionStopHalfAngleDegree` | 확장 가능 | Python 정책이 직접 사용하는 중앙 충돌 코리더 반각 |
-| `request.controlSpec.collisionStopDistanceM` | 확장 가능 | Python 정책이 직접 사용하는 근접 충돌 거리 |
+| `request.controlSpec.obstacleSoftCostRadiusM` | 확장 가능 | A*가 장애물 주변 cell을 더 비싸게 평가하는 반경. 값이 클수록 멀리서부터 피한다. |
+| `request.controlSpec.obstacleSoftCostMaxPenalty` | 확장 가능 | 장애물 바로 옆 cell에 더하는 최대 비용. 값이 클수록 장애물에 덜 붙는다. |
+| `request.controlSpec.obstacleSoftCostPower` | 확장 가능 | 거리별 비용 감쇠 곡선. 값이 클수록 장애물 바로 근처에 비용이 집중된다. |
+| `request.controlSpec.pathTurnCostPenalty` | 확장 가능 | A*가 방향을 바꿀 때 더하는 비용. 값이 클수록 덜 꺾는 경로를 선호한다. |
 | `request.controlSpec.softStopBrakeInput` | 확장 가능 | 부드러운 정지용 brake 기준 |
 | `request.controlSpec.emergencyBrakeInput` | 확장 가능 | 비상 정지용 brake 기준 |
 | `request.controlSpec.recoverySpeedKmh` | 확장 가능 | RePathPolicy recovery reverse 속도 |
 
 주의:
 
-- `nearMissDistanceM`, `collisionStopHalfAngleDegree`, `collisionStopDistanceM`은 현재 `lidarSpec`과 `controlSpec`에 모두 들어간다. Python 정책은 `controlSpec` 값을 우선 사용한다.
+- `nearMissDistanceM`, `collisionStopHalfAngleDegree`, `collisionStopDistanceM`은 `lidarSpec`에서만 전달한다. 같은 값을 `controlSpec`에 중복해서 넣지 않는다.
 - `draw_near_miss_debug`는 DeliveryBotSetup JSON 설정값이며 Python 통신 payload에는 포함되지 않는다.
+
+### 사용자가 수정하기 좋은 값
+
+실제 사용자가 자신의 로봇 스펙을 입력해 시뮬레이션할 때 열어두기 좋은 값이다.
+
+| 값 | 위치 | 의미 |
+| --- | --- | --- |
+| `vehicleSpec.maxSpeedKmh` | `vehicleSpec` | 로봇의 실제 최고 전진 속도 |
+| `vehicleSpec.maxReverseSpeedKmh` | `vehicleSpec` | 로봇의 실제 최고 후진 속도 |
+| `lidarSpec.scanRangeM` | `lidarSpec` | 실제 라이다 탐지 거리 |
+| `lidarSpec.angleStepDegree` | `lidarSpec` | 실제 라이다 ray 간격/해상도 |
+| `lidarSpec.sensorHeightM` | `lidarSpec` | 실제 라이다 장착 높이 |
+| `lidarSpec.frontHalfAngleDegree` | `lidarSpec` | 전방 장애물로 판단할 라이다 각도 범위 |
+| `controlSpec.targetSpeedKmh` | `controlSpec` | 주행 목표 속도. 로봇 최고 속도 이하로 제한된다. |
+| `controlSpec.lookAheadDistanceM` | `controlSpec` | 경로 추종 기본 lookahead 거리 |
+
+아래 값은 정책 안정성, 평가 기준, 안전 판정에 가까우므로 일반 사용자 설정에서는 숨기고 관리자/개발자 튜닝값으로 두는 것을 권장한다.
+
+| 값 | 이유 |
+| --- | --- |
+| `lidarSpec.nearMissDistanceM` | NearMiss 평가 기준이므로 사용자가 바꾸면 결과 비교가 흔들린다. |
+| `lidarSpec.stopDistanceM` | 안전 정지 기준이라 로봇 스펙보다 정책/평가 기준에 가깝다. |
+| `lidarSpec.slowDownDistanceM` | 장애물 감속 시작 기준이라 정책 튜닝값에 가깝다. |
+| `lidarSpec.collisionStopHalfAngleDegree` | 충돌 위험 중앙 코리더 기준이라 안전 판정값이다. |
+| `lidarSpec.collisionStopDistanceM` | 근접 충돌 위험 기준이라 안전 판정값이다. |
+| `controlSpec.minLookAheadDistanceM` | 자동 lookahead 하한 튜닝값이다. |
+| `controlSpec.maxLookAheadDistanceM` | 자동 lookahead 상한 튜닝값이다. |
+| `controlSpec.lookAheadSpeedGainMPerKmh` | 속도별 lookahead 증가량 튜닝값이다. |
+| `controlSpec.lookAheadSteeringReductionRatio` | 회전 시 lookahead 감소량 튜닝값이다. |
+| `controlSpec.lookAheadSmoothingRatio` | lookahead 변화 보간 튜닝값이다. |
+| `controlSpec.pathPointAcceptanceDistanceM` | path index 진행 판정 튜닝값이다. |
+| `controlSpec.steeringSensitivity` | 조향 민감도 튜닝값이다. |
+| `controlSpec.steeringFullScaleDegree` | yaw error를 조향으로 바꾸는 내부 기준이다. |
+| `controlSpec.maxSteering` | 정책 출력 조향 제한값이다. |
+| `controlSpec.maxSteeringDelta` | decide 1회당 조향 변화 제한값이다. |
+| `controlSpec.minTurnSpeedKmh` | 큰 회전 시 속도 제한 튜닝값이다. |
+| `controlSpec.obstacleSlowSpeedKmh` | 장애물 감속 구간의 정책 속도 기준이다. |
+| `controlSpec.obstacleSoftCostRadiusM` | 장애물 주변을 미리 피하도록 만드는 A* soft cost 반경이다. |
+| `controlSpec.obstacleSoftCostMaxPenalty` | 장애물 주변 soft cost의 최대 패널티다. |
+| `controlSpec.obstacleSoftCostPower` | 장애물과의 거리별 soft cost 감쇠 곡선이다. |
+| `controlSpec.pathTurnCostPenalty` | A* 회전 비용이다. 값이 클수록 직각/지그재그 경로를 덜 선택한다. |
+| `controlSpec.softStopBrakeInput` | drive 설정에서 파생된 내부 brake 기준이다. |
+| `controlSpec.emergencyBrakeInput` | drive 설정에서 파생된 내부 비상 brake 기준이다. |
+| `controlSpec.recoverySpeedKmh` | 후진 회복 동작 속도이며 drive 설정에서 파생된다. |
 
 ### 정상 응답 예시
 
@@ -514,6 +566,7 @@ repath recovery 후진:
 | `response.debug.targetWorldPoint` | 확장 가능 | 실제 추종 target world 좌표 |
 | `response.debug.closestPathDistanceCm` | 확장 가능 | 로봇과 경로 선분 사이 최소 거리 |
 | `response.debug.maxPathErrorCm` | 확장 가능 | 허용 가능한 경로 이탈 거리 |
+| `response.debug.lookAheadDistanceM` | 확장 가능 | 현재 decide에서 적용한 자동 lookahead 거리 |
 | `response.debug.nearMissCount` | 확장 가능 | 현재 episode에서 actor/source별로 기록한 NearMiss 횟수 |
 | `response.debug.lastNearMissCell` | 확장 가능 | grid cell 기반 NearMiss일 때 마지막 cell. 라이다 기반이면 `null` |
 | `response.debug.lastNearMissSource` | 확장 가능 | 마지막 NearMiss 원인 actor 또는 source 이름 |
@@ -550,8 +603,6 @@ robot_outside_grid_bounds
   "version": 1,
   "type": "scenario_end",
   "request": {
-    "experimentId": "unreal_runtime",
-    "episodeId": "62834EB0-4749-AAFC-91C8-4ABC942ED264",
     "robotInstanceId": "BP_DeliveryBot_C_0",
     "sequence": 120,
     "status": "arrived",
@@ -573,8 +624,6 @@ robot_outside_grid_bounds
 
 | 필드 | 구분 | 설명 |
 | --- | --- | --- |
-| `request.experimentId` | 고정 | start와 같은 experiment ID |
-| `request.episodeId` | 고정 | 종료할 episode ID |
 | `request.robotInstanceId` | 고정 | 종료 대상 로봇 ID |
 | `request.sequence` | 고정 | 마지막 decide sequence |
 | `request.status` | 고정 | 예: `arrived`, `failed`, `timeout` |
@@ -601,7 +650,6 @@ robot_outside_grid_bounds
     },
     "debug": {
       "reason": "episode_end_recorded",
-      "episodeId": "62834EB0-4749-AAFC-91C8-4ABC942ED264",
       "status": "arrived",
       "stopCount": 0,
       "repathCount": 1,
@@ -669,8 +717,6 @@ response.debug
 `/scenario/start`:
 
 ```text
-request.experimentId
-request.episodeId
 request.robotInstanceId
 request.start.x
 request.start.y
@@ -721,8 +767,6 @@ response.action.direction
 `/scenario/end`:
 
 ```text
-request.experimentId
-request.episodeId
 request.robotInstanceId
 request.sequence
 request.status

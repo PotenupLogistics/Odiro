@@ -132,6 +132,15 @@ public: // 탐지된 액터
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> ActorTags{};
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bHasBounds{ false };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector BoundsOriginCm{ FVector::ZeroVector };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector BoundsExtentCm{ FVector::ZeroVector };
+
 public: // 가장 가까운 액터와의 위치 정보
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FVector ClosestHitLocationCm{ FVector::ZeroVector };
@@ -173,6 +182,15 @@ struct FDeliveryBotLidarObservedObjectInfo
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> ActorTags{};
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bHasBounds{ false };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector BoundsOriginCm{ FVector::ZeroVector };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector BoundsExtentCm{ FVector::ZeroVector };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FVector ClosestHitLocationCm{ FVector::ZeroVector };

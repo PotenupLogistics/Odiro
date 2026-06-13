@@ -42,7 +42,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float BrakeInputRatePerSecond{ 0.35f };
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) 
 	float SteeringInputRatePerSecond{ 3.2f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)

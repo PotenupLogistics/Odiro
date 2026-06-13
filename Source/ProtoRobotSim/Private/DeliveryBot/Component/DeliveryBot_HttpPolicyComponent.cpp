@@ -53,6 +53,15 @@ namespace
 
 		return jsonValues;
 	}
+
+	TSharedRef<FJsonObject> MakeJsonVectorObject(const FVector& vector)
+	{
+		TSharedRef<FJsonObject> jsonObject = MakeShared<FJsonObject>();
+		jsonObject->SetNumberField(TEXT("x"), vector.X);
+		jsonObject->SetNumberField(TEXT("y"), vector.Y);
+		jsonObject->SetNumberField(TEXT("z"), vector.Z);
+		return jsonObject;
+	}
 }
 
 // 컴포넌트 Tick은 끄고 DeliveryBot Tick에서 명시적으로 갱신한다.
@@ -378,8 +387,6 @@ bool UDeliveryBot_HttpPolicyComponent::BuildStartPayload(FString& outPayload)
 	const FDeliveryBotObservationInfo observation = deliveryBot->BuildObservation();
 
 	TSharedRef<FJsonObject> requestObject = MakeShared<FJsonObject>();
-	requestObject->SetStringField(TEXT("experimentId"), TEXT("unreal_runtime"));
-	requestObject->SetStringField(TEXT("episodeId"), EpisodeId);
 	requestObject->SetStringField(TEXT("robotInstanceId"), RobotInstanceId);
 
 	requestObject->SetObjectField(
@@ -419,6 +426,11 @@ bool UDeliveryBot_HttpPolicyComponent::BuildStartPayload(FString& outPayload)
 	TSharedRef<FJsonObject> controlSpecObject = MakeShared<FJsonObject>();
 	controlSpecObject->SetNumberField(TEXT("targetSpeedKmh"), setupInfo.PathFollowConfigInfo.TargetSpeedKmh);
 	controlSpecObject->SetNumberField(TEXT("lookAheadDistanceM"), setupInfo.PathFollowConfigInfo.LookAheadDistanceM);
+	controlSpecObject->SetNumberField(TEXT("minLookAheadDistanceM"), setupInfo.PathFollowConfigInfo.MinLookAheadDistanceM);
+	controlSpecObject->SetNumberField(TEXT("maxLookAheadDistanceM"), setupInfo.PathFollowConfigInfo.MaxLookAheadDistanceM);
+	controlSpecObject->SetNumberField(TEXT("lookAheadSpeedGainMPerKmh"), setupInfo.PathFollowConfigInfo.LookAheadSpeedGainMPerKmh);
+	controlSpecObject->SetNumberField(TEXT("lookAheadSteeringReductionRatio"), setupInfo.PathFollowConfigInfo.LookAheadSteeringReductionRatio);
+	controlSpecObject->SetNumberField(TEXT("lookAheadSmoothingRatio"), setupInfo.PathFollowConfigInfo.LookAheadSmoothingRatio);
 	controlSpecObject->SetNumberField(TEXT("pathPointAcceptanceDistanceM"), setupInfo.PathFollowConfigInfo.PathPointAcceptanceDistanceM);
 	controlSpecObject->SetNumberField(TEXT("steeringSensitivity"), setupInfo.PathFollowConfigInfo.SteeringSensitivity);
 	controlSpecObject->SetNumberField(TEXT("steeringFullScaleDegree"), setupInfo.PathFollowConfigInfo.SteeringFullScaleDegree);
@@ -426,9 +438,10 @@ bool UDeliveryBot_HttpPolicyComponent::BuildStartPayload(FString& outPayload)
 	controlSpecObject->SetNumberField(TEXT("maxSteeringDelta"), setupInfo.PathFollowConfigInfo.MaxSteeringDelta);
 	controlSpecObject->SetNumberField(TEXT("minTurnSpeedKmh"), setupInfo.PathFollowConfigInfo.MinTurnSpeedKmh);
 	controlSpecObject->SetNumberField(TEXT("obstacleSlowSpeedKmh"), setupInfo.PathFollowConfigInfo.ObstacleSlowSpeedKmh);
-	controlSpecObject->SetNumberField(TEXT("nearMissDistanceM"), setupInfo.LidarSensorConfigInfo.NearMissDistanceM);
-	controlSpecObject->SetNumberField(TEXT("collisionStopHalfAngleDegree"), setupInfo.LidarSensorConfigInfo.CollisionStopHalfAngleDegree);
-	controlSpecObject->SetNumberField(TEXT("collisionStopDistanceM"), setupInfo.LidarSensorConfigInfo.CollisionStopDistanceM);
+	controlSpecObject->SetNumberField(TEXT("obstacleSoftCostRadiusM"), setupInfo.PathFollowConfigInfo.ObstacleSoftCostRadiusM);
+	controlSpecObject->SetNumberField(TEXT("obstacleSoftCostMaxPenalty"), setupInfo.PathFollowConfigInfo.ObstacleSoftCostMaxPenalty);
+	controlSpecObject->SetNumberField(TEXT("obstacleSoftCostPower"), setupInfo.PathFollowConfigInfo.ObstacleSoftCostPower);
+	controlSpecObject->SetNumberField(TEXT("pathTurnCostPenalty"), setupInfo.PathFollowConfigInfo.PathTurnCostPenalty);
 	controlSpecObject->SetNumberField(TEXT("softStopBrakeInput"), policySoftStopBrakeInput);
 	controlSpecObject->SetNumberField(TEXT("emergencyBrakeInput"), policyEmergencyBrakeInput);
 	controlSpecObject->SetNumberField(TEXT("recoverySpeedKmh"), setupInfo.ChaosDriveConfigInfo.MaxReverseSpeedKmh * 0.4f);
@@ -459,6 +472,9 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 	robotStateObject->SetNumberField(TEXT("z"), observation.RobotState.LocationCm.Z);
 	robotStateObject->SetNumberField(TEXT("yawDegree"), observation.RobotState.YawDegree);
 	robotStateObject->SetNumberField(TEXT("speedKmh"), observation.RobotState.SpeedKmh);
+	robotStateObject->SetBoolField(TEXT("bColliding"), observation.RobotState.bColliding);
+	robotStateObject->SetStringField(TEXT("collisionActorName"), observation.RobotState.CollisionActorName);
+	robotStateObject->SetArrayField(TEXT("collisionActorTags"), MakeJsonStringArrayFromNames(observation.RobotState.CollisionActorTags));
 	requestObject->SetObjectField(TEXT("robotState"), robotStateObject);
 
 	TArray<TSharedPtr<FJsonValue>> lidarRayValues;
@@ -487,6 +503,10 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 		TSharedRef<FJsonObject> objectJson = MakeShared<FJsonObject>();
 		objectJson->SetStringField(TEXT("actorName"), objectInfo.ActorName);
 		objectJson->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(objectInfo.ActorTags));
+		objectJson->SetBoolField(TEXT("hasBounds"), objectInfo.bHasBounds);
+		objectJson->SetObjectField(TEXT("boundsOriginCm"), MakeJsonVectorObject(objectInfo.BoundsOriginCm));
+		objectJson->SetObjectField(TEXT("boundsExtentCm"), MakeJsonVectorObject(objectInfo.BoundsExtentCm));
+		objectJson->SetObjectField(TEXT("closestHitLocationCm"), MakeJsonVectorObject(objectInfo.ClosestHitLocationCm));
 		objectJson->SetNumberField(TEXT("closestDistanceM"), objectInfo.ClosestDistanceM);
 		objectJson->SetNumberField(TEXT("closestRayYawDegree"), objectInfo.ClosestRayYawDegree);
 		objectJson->SetNumberField(TEXT("totalHitRayCount"), objectInfo.TotalHitRayCount);
@@ -713,8 +733,6 @@ bool UDeliveryBot_HttpPolicyComponent::BuildEndPayload(const FString& status, FS
 
 	TSharedRef<FJsonObject> requestObject = MakeShared<FJsonObject>();
 
-	requestObject->SetStringField(TEXT("experimentId"), TEXT("unreal_runtime"));
-	requestObject->SetStringField(TEXT("episodeId"), EpisodeId);
 	requestObject->SetStringField(TEXT("robotInstanceId"), RobotInstanceId);
 	requestObject->SetNumberField(TEXT("sequence"), LastDecisionSequence);
 	requestObject->SetStringField(TEXT("status"), status);

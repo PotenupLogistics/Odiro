@@ -43,10 +43,14 @@ class StopPolicy:
         control_spec = request.controlSpec or {}
 
         self.stopDistanceM = float(lidar_spec.get("stopDistanceM", self.stopDistanceM))
-        self.nearMissDistanceM = float(
-            control_spec.get("nearMissDistanceM", lidar_spec.get("nearMissDistanceM", self.nearMissDistanceM))
-        )
+        self.nearMissDistanceM = float(lidar_spec.get("nearMissDistanceM", self.nearMissDistanceM))
         self.frontAngleDegree = float(lidar_spec.get("frontHalfAngleDegree", self.frontAngleDegree))
+        self.collisionStopHalfAngleDegree = float(
+            lidar_spec.get("collisionStopHalfAngleDegree", self.collisionStopHalfAngleDegree)
+        )
+        self.collisionStopDistanceM = float(
+            lidar_spec.get("collisionStopDistanceM", self.collisionStopDistanceM)
+        )
         self.softStopBrake = clamp(
             float(control_spec.get("softStopBrakeInput", self.softStopBrake)),
             0.0,
@@ -81,15 +85,8 @@ class StopPolicy:
             0.0,
             float(control_spec.get("blockedCorridorExtraDistanceM", self.blockedCorridorExtraDistanceM)),
         )
-        self.collisionStopHalfAngleDegree = clamp(
-            float(control_spec.get("collisionStopHalfAngleDegree", self.collisionStopHalfAngleDegree)),
-            0.0,
-            self.frontAngleDegree,
-        )
-        self.collisionStopDistanceM = max(
-            0.0,
-            float(control_spec.get("collisionStopDistanceM", self.collisionStopDistanceM)),
-        )
+        self.collisionStopHalfAngleDegree = clamp(self.collisionStopHalfAngleDegree, 0.0, self.frontAngleDegree)
+        self.collisionStopDistanceM = max(0.0, self.collisionStopDistanceM)
         self.nearMissDistanceM = max(self.stopDistanceM + 0.1, self.nearMissDistanceM)
 
     def decide(
@@ -135,6 +132,7 @@ class StopPolicy:
             for ray in request.lidarRays
             if (
                 ray.hit
+                and not self.is_ignored_lidar_policy_ray(ray)
                 and ray.distanceM <= self.stopDistanceM
                 and self.is_collision_stop_ray(ray)
             )
@@ -151,7 +149,11 @@ class StopPolicy:
 
     def record_side_near_miss_once(self, request: ScenarioDecideRequest, state: AgentState) -> None:
         for ray in request.lidarRays:
-            if not ray.hit or ray.distanceM > self.nearMissDistanceM:
+            if (
+                not ray.hit
+                or self.is_ignored_lidar_policy_ray(ray)
+                or ray.distanceM > self.nearMissDistanceM
+            ):
                 continue
 
             if ray.distanceM <= self.stopDistanceM and self.is_collision_stop_ray(ray):
@@ -175,6 +177,11 @@ class StopPolicy:
             return f"LidarRay:{ray.rayIndex}"
 
         return "LidarNearMiss"
+
+    def is_ignored_lidar_policy_ray(self, ray) -> bool:
+        actor_name = ray.actorName or ""
+        actor_tags = ray.actorTags or []
+        return actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0
 
     def mark_blocked_forward_corridor(self, request: ScenarioDecideRequest, state: AgentState, ray) -> None:
         if state.grid is None or state.goal is None:

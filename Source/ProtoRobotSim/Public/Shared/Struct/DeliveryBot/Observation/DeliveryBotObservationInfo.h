@@ -20,6 +20,15 @@ struct FDeliveryBotRobotStateInfo
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SpeedKmh{ 0.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bColliding{ false };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString CollisionActorName{};
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FName> CollisionActorTags{};
 };
 
 // Python이 로봇의 물리/센서 한계를 알기 위해 사용하는 정적 스펙 정보.

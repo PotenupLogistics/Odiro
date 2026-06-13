@@ -23,7 +23,11 @@
       "max_steering": 0.5,
       "max_steering_delta": 0.09,
       "min_turn_speed_kmh": 0.8,
-      "obstacle_slow_speed_kmh": 1.0
+      "obstacle_slow_speed_kmh": 1.0,
+      "obstacle_soft_cost_radius_m": 1.0,
+      "obstacle_soft_cost_max_penalty": 8.0,
+      "obstacle_soft_cost_power": 2.0,
+      "path_turn_cost_penalty": 1.5
     },
     "lidar": {
       "scan_range_m": 6.0,

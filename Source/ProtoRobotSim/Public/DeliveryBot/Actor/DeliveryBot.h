@@ -27,11 +27,13 @@ struct FDeliveryBotSensorSnapshot
 	bool bHasFrontObject{ false };
 };
 
-class UDeliveryBot_PolicyControllerComponent;
 class UDeliveryBot_HttpPolicyComponent;
 class UDeliveryBot_DriveComponent;
 class UDeliveryBot_LidarSensorComponent;
 class UScenarioPlaceableComponent;
+class UPrimitiveComponent;
+struct FHitResult;
+
 UCLASS(Blueprintable)
 class PROTOROBOTSIM_API ADeliveryBot : public AWheeledVehiclePawn
 {
@@ -97,6 +99,17 @@ private:
 	void DebugLogObservation(float deltaTime);
 
 	void RefreshSensorSnapshot(); // 현재 LiDAR 센서 관측값을 LastSensorSnapshot에 저장한다
+	void BindCollisionStopHitDelegates();
+	bool IsCollisionStopActor(const AActor* otherActor) const;
+	void ResetCollisionStopState();
+
+	UFUNCTION()
+	void HandleCollisionStopHit(
+		UPrimitiveComponent* hitComponent,
+		AActor* otherActor,
+		UPrimitiveComponent* otherComp,
+		FVector normalImpulse,
+		const FHitResult& hit);
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
 	TObjectPtr<UDeliveryBot_DriveComponent> DriveComponent;
@@ -106,9 +119,6 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
 	TObjectPtr<UDeliveryBot_HttpPolicyComponent> HttpPolicyComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
-	TObjectPtr<UDeliveryBot_PolicyControllerComponent> PolicyControllerComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
 	TObjectPtr<UScenarioPlaceableComponent> PlaceableComponent;
@@ -139,5 +149,8 @@ private:
 	FDeliveryBotMoveCommandInfo LastMoveCommandInfo{};
 	FString LastActionReason{ TEXT("unknown") };
 	bool bHasLastMoveCommand{ false };
+	bool bCollisionStopActive{ false };
+	FString CollisionStopActorName{};
+	TArray<FName> CollisionStopActorTags{};
 
 };

@@ -77,7 +77,11 @@ JSON에서 생략한 값은 C++ 구조체 기본값으로 fallback된다.
 "path_follow": {
   "target_speed_kmh": 10.0,
   "look_ahead_distance_m": 1.0,
-  "obstacle_slow_speed_kmh": 2.0
+  "obstacle_slow_speed_kmh": 2.0,
+  "obstacle_soft_cost_radius_m": 2.0,
+  "obstacle_soft_cost_max_penalty": 8.0,
+  "obstacle_soft_cost_power": 2.0,
+  "path_turn_cost_penalty": 1.5
 }
 ```
 
@@ -86,6 +90,10 @@ JSON에서 생략한 값은 C++ 구조체 기본값으로 fallback된다.
 | `target_speed_kmh` | 선택 | number, km/h | `10.0` | `PathFollowConfigInfo.TargetSpeedKmh` | 경로 추종 목표 속도. |
 | `look_ahead_distance_m` | 선택 | number, meter | `1.0` | `PathFollowConfigInfo.LookAheadDistanceM` | 현재 위치보다 앞쪽의 추종 목표점을 얼마나 멀리 볼지 정한다. |
 | `obstacle_slow_speed_kmh` | 선택 | number, km/h | `1.5` | `PathFollowConfigInfo.ObstacleSlowSpeedKmh` | 장애물 감속 구간에서 사용할 목표 속도. |
+| `obstacle_soft_cost_radius_m` | 선택 | number, meter | `2.0` | `PathFollowConfigInfo.ObstacleSoftCostRadiusM` | A*가 장애물 주변 cell을 더 비싸게 평가하는 반경. |
+| `obstacle_soft_cost_max_penalty` | 선택 | number | `8.0` | `PathFollowConfigInfo.ObstacleSoftCostMaxPenalty` | 장애물 바로 옆 cell에 더하는 최대 비용. |
+| `obstacle_soft_cost_power` | 선택 | number | `2.0` | `PathFollowConfigInfo.ObstacleSoftCostPower` | 장애물과의 거리별 비용 감쇠 곡선. |
+| `path_turn_cost_penalty` | 선택 | number | `1.5` | `PathFollowConfigInfo.PathTurnCostPenalty` | A*가 방향을 바꿀 때 더하는 비용. 값이 클수록 덜 꺾는 경로를 선호한다. |
 | `draw_debug` | 선택 | bool | `true` | `PathFollowConfigInfo.bDrawDebug` | path follow debug draw 여부. |
 | `path_point_acceptance_distance_m` | 선택 | number, meter | `0.4` | `PathFollowConfigInfo.PathPointAcceptanceDistanceM` | 중간 path point 통과 판정 거리. |
 | `goal_acceptance_distance_m` | 선택 | number, meter | `0.8` | `PathFollowConfigInfo.GoalAcceptanceDistanceM` | path follower의 목표 도착 판정 거리. |
@@ -127,6 +135,10 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
 | `target_speed_kmh` | `0` 이상 |
 | `look_ahead_distance_m` | 최소 `0.1` |
 | `obstacle_slow_speed_kmh` | `0` 이상 |
+| `obstacle_soft_cost_radius_m` | `0` 이상 |
+| `obstacle_soft_cost_max_penalty` | `0` 이상 |
+| `obstacle_soft_cost_power` | 최소 `0.1` |
+| `path_turn_cost_penalty` | `0` 이상 |
 | `scan_range_m` | `0` 이상 |
 | `angle_step_degree` | 최소 `1.0` |
 | `stop_distance_m` | `0` 이상 |
@@ -175,7 +187,11 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
     "path_follow": {
       "target_speed_kmh": 10.0,
       "look_ahead_distance_m": 1.0,
-      "obstacle_slow_speed_kmh": 2.0
+      "obstacle_slow_speed_kmh": 2.0,
+      "obstacle_soft_cost_radius_m": 2.0,
+      "obstacle_soft_cost_max_penalty": 8.0,
+      "obstacle_soft_cost_power": 2.0,
+      "path_turn_cost_penalty": 1.5
     },
     "lidar": {
       "scan_range_m": 5.0,

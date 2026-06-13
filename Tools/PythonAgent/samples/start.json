@@ -1,6 +1,4 @@
 {
-  "experimentId": 1,
-  "episodeId": "episode_001",
   "robotInstanceId": "delivery_bot_01",
   "start": {
     "x": 0,

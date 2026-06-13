@@ -1,6 +1,9 @@
 #!/bin/sh
 
 message_file=$1
+allowed_types="feat fix refactor test spec plan docs asset build ci chore"
+recommended_scopes="client bridge agents contract tool docs ui sample git"
+cr=$(printf '\r')
 
 print_help() {
   cat >&2 <<'EOF'
@@ -14,7 +17,7 @@ Allowed types:
   feat, fix, refactor, test, spec, plan, docs, asset, build, ci, chore
 
 Recommended scopes:
-  client, service, agents, contract, tool, docs, ui, sample, git
+  client, bridge, agents, contract, tool, docs, ui, sample, git
 
 Rules:
   - subject must be 72 characters or less
@@ -39,14 +42,72 @@ fail() {
   exit 1
 }
 
+contains_word() {
+  case " $1 " in
+    *" $2 "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_lower_letters() {
+  case "$1" in
+    ""|*[!abcdefghijklmnopqrstuvwxyz]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+is_kebab_segment() {
+  case "$1" in
+    ""|-*|*-|*--*|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+has_token() {
+  token_pattern=$1
+  text=$2
+
+  case "$text" in
+    $token_pattern|$token_pattern[[:space:]]*|*[[:space:]:]$token_pattern|*[[:space:]:]$token_pattern[[:space:]]*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+has_blocked_token() {
+  has_token '[Ww][Ii][Pp]' "$1" ||
+    has_token '[Tt][Oo][Dd][Oo]' "$1" ||
+    has_token '[Tt][Mm][Pp]' "$1"
+}
+
 if [ -z "$message_file" ] || [ ! -f "$message_file" ]; then
   fail "message file is missing"
 fi
 
-clean_message=$(sed 's/\r$//' "$message_file" | sed '/^#/d')
-subject=$(printf '%s\n' "$clean_message" | sed -n '1p')
-second_line=$(printf '%s\n' "$clean_message" | sed -n '2p')
-line_count=$(printf '%s\n' "$clean_message" | wc -l | tr -d ' ')
+subject=
+second_line=
+line_count=0
+
+while IFS= read -r line || [ -n "$line" ]; do
+  line=${line%"$cr"}
+  case "$line" in
+    \#*) continue ;;
+  esac
+
+  line_count=$((line_count + 1))
+  if [ "$line_count" -eq 1 ]; then
+    subject=$line
+  elif [ "$line_count" -eq 2 ]; then
+    second_line=$line
+  fi
+done < "$message_file"
 
 if [ -z "$subject" ]; then
   fail "subject is empty"
@@ -58,26 +119,59 @@ case "$subject" in
     ;;
 esac
 
-if ! printf '%s' "$subject" | grep -Eq '^(feat|fix|refactor|test|spec|plan|docs|asset|build|ci|chore)(\([a-z0-9][a-z0-9-]*\))?: [^[:space:]]'; then
+case "$subject" in
+  *": "*)
+    ;;
+  *)
+    fail "subject must match '<type>: <summary>' or '<type>(<scope>): <summary>'"
+    ;;
+esac
+
+header=${subject%%: *}
+summary=${subject#*: }
+
+case "$summary" in
+  ""|[[:space:]]*)
+    fail "subject must match '<type>: <summary>' or '<type>(<scope>): <summary>'"
+    ;;
+esac
+
+scope=
+case "$header" in
+  *"("*")")
+    type=${header%%(*}
+    prefix="$type("
+    scope=${header#"$prefix"}
+    scope=${scope%)}
+    ;;
+  *"("*|*")"*)
+    fail "subject must match '<type>: <summary>' or '<type>(<scope>): <summary>'"
+    ;;
+  *)
+    type=$header
+    ;;
+esac
+
+if ! is_lower_letters "$type"; then
   fail "subject must match '<type>: <summary>' or '<type>(<scope>): <summary>'"
 fi
 
-scope=$(printf '%s\n' "$subject" | sed -n 's/^[a-z][a-z]*(\([a-z0-9][a-z0-9-]*\)): .*/\1/p')
-known_scopes="client service agents contract tool docs ui sample git"
-
-if [ -n "$scope" ]; then
-  case " $known_scopes " in
-    *" $scope "*)
-      ;;
-    *)
-      echo "commit-msg: warning: unknown scope '$scope'" >&2
-      echo "commit-msg: known scopes: $known_scopes" >&2
-      ;;
-  esac
+if ! contains_word "$allowed_types" "$type"; then
+  fail "subject must match '<type>: <summary>' or '<type>(<scope>): <summary>'"
 fi
 
-subject_length=$(printf '%s' "$subject" | wc -m | tr -d ' ')
-if [ "$subject_length" -gt 72 ]; then
+if [ -n "$scope" ]; then
+  if ! is_kebab_segment "$scope"; then
+    fail "subject must match '<type>: <summary>' or '<type>(<scope>): <summary>'"
+  fi
+
+  if ! contains_word "$recommended_scopes" "$scope"; then
+    echo "commit-msg: warning: unknown scope '$scope'" >&2
+    echo "commit-msg: recommended scopes: $recommended_scopes" >&2
+  fi
+fi
+
+if [ "${#subject}" -gt 72 ]; then
   fail "subject is longer than 72 characters"
 fi
 
@@ -87,7 +181,7 @@ case "$subject" in
     ;;
 esac
 
-if printf '%s' "$subject" | grep -Eiq '(^|[[:space:]:])(wip|todo|tmp)($|[[:space:]])'; then
+if has_blocked_token "$subject"; then
   fail "subject must not contain WIP, TODO, or TMP"
 fi
 

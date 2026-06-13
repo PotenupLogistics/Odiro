@@ -1,3 +1,5 @@
+# DeliveryBot 정책 결정을 위한 Client-local Python Agent HTTP 서버를 실행한다.
+import argparse
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -165,13 +167,42 @@ class PythonAgentHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+class PythonAgentServer(HTTPServer):
+    allow_reuse_address = True
+
+
+# 명령줄 인자를 읽어 서버 실행 옵션으로 변환
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the DeliveryBot Python Agent HTTP server.")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--policy-mode", default="runtime")
+    parser.add_argument("--verbose-runtime-log", action="store_true")
+    return parser.parse_args()
+
+
 # HTTP 서버 실행
-def run_server(host: str = "127.0.0.1", port: int = 8000) -> None:
-    server = HTTPServer((host, port), PythonAgentHandler)
+def run_server(
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    policy_mode: str = "runtime",
+    verbose_runtime_log: bool = False,
+) -> None:
+    server = PythonAgentServer((host, port), PythonAgentHandler)
     print(f"PythonAgent server listening on http://{host}:{port}")
+    print(f"PythonAgent policy mode: {policy_mode}")
+    if verbose_runtime_log:
+        print("PythonAgent verbose runtime log enabled")
+
     server.serve_forever()
 
 
 # python server.py로 실행했을 때 서버 시작
 if __name__ == "__main__":
-    run_server()
+    arguments = parse_arguments()
+    run_server(
+        host=arguments.host,
+        port=arguments.port,
+        policy_mode=arguments.policy_mode,
+        verbose_runtime_log=arguments.verbose_runtime_log,
+    )

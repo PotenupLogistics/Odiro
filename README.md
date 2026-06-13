@@ -6,10 +6,10 @@
 
 ## 리포지토리 구성
 
-| 구성 요소                        | 유형                   | 설명                                                  |
+| 구성 요소                    | 유형                   | 설명                                                  |
 | ---------------------------- | ---------------------- | ----------------------------------------------------- |
-| [`Client`](Client/README.md)     | Unreal 프로젝트        | 시뮬레이터, 시나리오 에디터, 클라이언트 구현          |
-| [`Agents`](Agents/README.md)     | Python 서버            | 자연어 시나리오 생성, 시뮬 레이션 결과 분석 기능      |
+| [`Client`](Client/README.md) | Unreal 프로젝트        | 시뮬레이터, 시나리오 에디터, 클라이언트 구현          |
+| [`Agents`](Agents/README.md) | Python 서버            | 자연어 시나리오 생성, 시뮬 레이션 결과 분석 기능      |
 | [`Bridge`](Bridge/README.md) | Go 백그라운드 프로세스 | 각 구현체 연결, 서브 프로세스 생성 및 추적, 파일 관리 |
 
 
@@ -22,7 +22,7 @@
 - Windows 10/11 64-bit
 - `Client`: Unreal Engine 5.7, Visual Studio 2022
 - `Agents`: `uv` with Python 3.12, OpenAI API key
-- `Bridge`: Go (1.21 권장)
+- `Bridge`: Go (1.26에서 테스트됨)
 
 자세한 내용은 [개발 환경 설치 안내](docs/guides/development-environment.md) 참고.
 

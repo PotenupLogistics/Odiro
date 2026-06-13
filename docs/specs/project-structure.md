@@ -47,7 +47,7 @@ Odiro/
     Task-RunPreview.bat           # 단독 모드 PIE 프리뷰 실행
     ProtoRobotSim.uproject
 
-  Bridge/                       # --- Go 백그라운드 서비스 ---
+  Bridge/                         # --- Go 백그라운드 서비스 ---
     go.mod
     README.md
     cmd/

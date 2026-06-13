@@ -1,132 +1,157 @@
-# Odiro 프로젝트 구조
+# 프로젝트 구조
 
-Odiro는 자연어 기반 시나리오 생성, 시뮬레이션 실행, 결과 분석, 정책 개선을 하나의 개발/배포 단위로 묶는 시뮬레이션 플랫폼이다.
-
-공통 구조와 소유권 규칙은 [project-rules.md](./project-rules.md)를 따른다.
+공통 구조와 소유권 규칙은 [프로젝트 규칙](./project-rules.md)을 따른다.
 
 ## Repository
 
-- 실행 또는 패키징 단위인 서브 프로젝트는 PascalCase를 사용한다.
-- 개발 보조 폴더는 lowercase 또는 kebab-case를 사용한다.
-- 루트 `docs`의 일반 문서 파일명은 kebab-case를 사용한다.
-- 런타임에 사용하는 정적 파일은 각 프로젝트 내부에 둔다.
-- top-level `Static` 폴더는 만들지 않는다.
+- 실행, 패키징 단위인 서브 프로젝트는 PascalCase 사용
+- 개발 보조 폴더는 kebab-case 사용
 
-```text
+```sh
 Odiro/
-  Agents/                         # Python Agent Server
-    app/                          # FastAPI app, models, services
-    data/                         # RAG chunk, processed source, knowledge card
-    docs/                         # Agent 전용 도메인 문서
-    harness/                      # Agent 검증 harness
-    schemas/                      # Agent 내부 JSON schema
-    scripts/                      # Agent 전용 CLI/tooling
-    tests/                        # Agent 단위/계약 테스트
-    static/                       # Agents가 Release에서도 직접 사용하는 정적 파일
+  .agents/                        # 프로젝트 관련 agent context
+    index/                         # agent source index cards
+    skills/
+      ue5-dev/
+        SKILL.md
+
+  Agents/                         # --- Python Agent 서버 ---
+    app/                          # FastAPI 구현체
+    data/                         # Agents 데이터. TODO: static으로 이동
+    docs/                         # Agent 도메인 문서
+    harness/                      # Agent-local 검증 harness
+    scripts/                      # Agent 전용 CLI/tooling. TODO: tools로 이동
+    tools/                        # Agents 전용 보조 도구
+    tests/                        # Agent 단위 테스트
+    static/                       # 런타임에 사용하는 정적 파일
+    task-setup.bat                # uv sync 의존성 설치
+    task-run.bat                  # Agents API server 실행
+    task-dev.bat                  # 개발용으로 실행 (코드 변경 시 자동 재시작)
     main.py
     uv.lock
     pyproject.toml
 
-  Client/                         # Unreal 프로젝트
+  Client/                         # --- Unreal 프로젝트 ---
     Config/
     Content/
     Plugins/
     Source/
-    Static/                       # Client가 소유하고 Release에 포함하는 정적 파일
+    Static/                       # 런타임에 사용하는 정적 파일
       PolicyRuntime/              # 사용자 행동 정책 Python과 Unreal을 연결하는 런타임 스크립트
-    Tools/                        # Unreal 전용 개발 도구
+    Tools/                        # Unreal 전용 보조 도구
+      PythonAgent/                # Client 전용 Python helper. Agents 실행 환경과 공유하지 않음. TODO: 구조 변경 및 Static으로 이동
     Docs/                         # Unreal 전용 문서
-    OdiroSim.uproject
-    RunPreview.bat                # 개발용 Controller 실행 wrapper
+    Task-Setup.bat                # 의존성 확인
+    Task-Build.bat                # C++ 컴파일
+    Task-Dev.bat                  # Unreal Editor 실행
+    Task-RunPreview.bat           # 단독 모드 PIE 프리뷰 실행
+    ProtoRobotSim.uproject
 
-  Bridge/                        # Go background service
+  Bridge/                       # --- Go 백그라운드 서비스 ---
     go.mod
+    README.md
     cmd/
       OdiroHost/
-        main.go
+        main.go                   # host 실행 진입점
     internal/
-      api/                        # Controller/Dashboard용 HTTP API
-      agents/                     # Agents process 실행과 통신
-      dashboard/                  # Dashboard serving
+      client/                     # Client API
+      agents/                     # Agents API
       process/                    # Simulator 등 child process 관리
-      project/                    # User Directory 접근
       runs/                       # 실행 상태 추적
-    static/
-      Dashboard/                  # 개발용 Dashboard 원본. Release에서는 OdiroHost.exe에 embed
-        index.html
-        dashboard.js
-        dashboard.css
+      appdata/                    # 로컬 데이터 관리
+    Tools/
+      CheckPrerequisites.ps1
+      Build.ps1
+      Run.ps1
+    task-setup.bat
+    task-build.bat
+    task-run.bat
 
-  contracts/                      # 프로젝트 간 공유 인터페이스
+  contracts/                      # --- 공통 규약 및 인터페이스 정의 ---
     schemas/                      # 공유 JSON Schema
-    examples/                     # 공유 예제 payload
+    specs/                        # 사람이 읽는 공유 contract spec
+    examples/                     # 예제 payload
     openapi/                      # 공개 HTTP API 명세가 필요할 경우
 
-  docs/                           # 리포지토리 전체 개발 문서
+  docs/                           # --- 리포지토리 전체 개발 문서 ---
     specs/                        # 현재 구조와 요구사항
     plans/                        # 변경 계획
     decisions/                    # 장기 의사결정
     guides/                       # 개발/운영 가이드
 
-  tools/                          # 전체 프로젝트 개발 도구
-    bootstrap.ps1                 # 의존성 확인 및 안내
-    setup-git-hooks.ps1           # Git hook local 설정
-    dev.ps1                       # 개발용 통합 실행
-    package.ps1                   # Release 조립
-
-  setup.bat                       # clone 직후 실행하는 Windows setup entrypoint
-
-  tests/                          # 컴포넌트 간 통합 테스트
+  tools/                          # 프로젝트 단위 도구
+  tests/                          # 통합 테스트
     integration/
     fixtures/
 
-  build/                          # 자동 생성되는 빌드/패키징 output
+  build/                          # 패키징 결과물
+    Release/
+
+  task-setup.bat                  # 개발 환경 설정 및 의존성 설치
+  task-build.bat                  # 전체 빌드
+  task-run.bat                    # 패키징 없이 프리뷰 실행
+  task-dev.bat                    # 개발용 hot reload 세션 실행
+
+  README.md
+  AGENTS.md
 ```
 
 ## Release
 
-```text
-Release/
-  OdiroHost.exe                # Go 단일 바이너리. Dashboard 정적 파일 embed
+```sh
+build/Release/
+  OdiroHost.exe                   # 백그라운드 서비스
 
   Client/                         # Unreal 패키징 결과
     WindowsNoEditor/
-      OdiroSim.exe                # 기본 실행: Controller + Scenario Editor
-                                  # 옵션 실행: Simulator / FixedStep Mode
-    Static/
-      PolicyRuntime/              # Client/Static/PolicyRuntime에서 복사
+      ProtoRobotSim.exe
+    Static/                       # Client/Static 복사
+      PolicyRuntime/
 
-  Agents/                         # Agent Runtime
-    OdiroAgents.exe
-    _internal/                    # PyInstaller onedir 내부 Python 실행 환경
-    static/                       # Agents/static에서 복사. 필요 없으면 생략 가능
+  Agents/                         # Agent 런타임
+    OdiroAgents.exe               # 패키징된 Python 런타임
+    _internal/                    # 패키징된 내부 모듈
+    static/                       # Agents/static 복사
 ```
 
-## 개발 실행
+## AppData
 
-개발 중에는 사람이 여러 프로그램을 직접 켜지 않고 `tools/dev.ps1` 하나로 실행한다.
+사용자 데이터, 로그, 설정 등 런타임 생성 파일.
 
-```powershell
-.\tools\dev.ps1 preview
+```sh
+%appdata%/Odiro/
+  templates/                    # --- 템플릿 ---
+    scenarios/                  # 시나리오 템플릿. 에디터와 Agent는 이걸 수정
+      <Scenario1>.template.json # 시나리오 구성. 랜덤 요소 넣기 가능
+    profiles/                   # 시뮬레이션 환경 프로필 설정
+      <Profile1>.json           # 기존 DeliveryBotSetup 포함
+
+  experiments/                  # --- 실험 구성 ---
+    <Experiment1>/              # 폴더로 구분
+      setting.json              # 실험 설정. FPS 등
+      profile.json              # 환경 프로필 설정, 템플릿에서 복사됨
+
+      scenarios/
+        <000001>.json           # 시나리오 샘플. 시나리오 템플릿에서 샘플링된 구성. 실험 중 고정되어야 함
+        ...
+
+      policy/                   # 행동 정책. 실험마다 수정
+        __init__.py             # entrypoint. 지정된 인터페이스로 구현해야 함
+        <subscript>.py          # 파일 분리하고 __init__.py에서 import 가능
+
+      runs/                     # --- 실행 결과 ---
+        <000001>/               # 실행할 때 폴더 생성
+          policy/               # 해당 실행에 사용된 policy snapshot 통째로 복사
+
+          summary.json          # 총 실행 시간, 통계 등
+          review/               # AI 분석 결과 저장
+
+          episodes/             # 에피소드마다 결과 폴더 생성
+            <000001>/
+              actions.jsonl     # 로봇의 입출력 기록 (주기마다 센서 데이터, 현재 위치, 행동 변경 등)
+              events.jsonl      # 발생 이벤트 (장애물 감지, 충돌 등)
+              trace.jsonl       # 환경 정보 기록. 로봇이 못본 데이터 분석/리플레이에 활용
+              result.json       # 실행 시간, 성공/실패, 충돌 횟수 등
+              preview.png       # 대표 이벤트 이미지
+              captures/         # 센서 데이터 이미지
 ```
-
-권장 동작:
-
-1. `Bridge`를 `go run`으로 실행한다.
-2. 개발 모드에서는 `--dashboard-dir ./Bridge/static/Dashboard` 옵션을 전달한다.
-3. `Bridge`가 `Agents` 서버를 실행하거나, 초기 구현 단계에서는 `tools/dev.ps1`이 대신 실행한다.
-4. `Bridge`와 `Agents` health check를 통과하면 `Client/RunPreview.bat`을 실행한다.
-5. `Client`에는 `Bridge` 주소와 필요한 runtime 경로를 실행 인자로 전달한다.
-
-```powershell
-go run ./Bridge/cmd/OdiroHost --dashboard-dir ./Bridge/static/Dashboard
-```
-
-Release에서는 `--dashboard-dir`을 사용하지 않는다. `OdiroHost.exe`는 embed된 Dashboard 파일을 사용한다.
-
-## 경로 처리 규칙
-
-- Unreal `Client`는 Release 또는 Repository 상대 경로를 직접 추측하지 않는다.
-- `Bridge`는 실행 환경에 맞는 경로를 계산하고 `Client` 실행 인자로 전달한다.
-- `Client/Static/PolicyRuntime`은 개발 중과 Release에서 같은 소유권을 유지한다.
-- 사용자 프로젝트 경로는 Release 폴더 내부가 아니라 사용자가 선택한 User Directory를 사용한다.

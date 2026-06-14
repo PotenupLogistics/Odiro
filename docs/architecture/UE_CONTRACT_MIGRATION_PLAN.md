@@ -6,7 +6,6 @@
 
 ## 2. 최신 UE 계약 문서
 
-* `docs/ue_contracts/EPISODE_JSON_GUIDE.md`
 * `docs/ue_contracts/EPISODE_SETUP_JSON.md`
 * `docs/ue_contracts/DELIVERY_BOT_SETUP_JSON.md`
 * `docs/ue_contracts/RUN_QUEUE_JSON.md`

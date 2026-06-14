@@ -14,7 +14,6 @@ def _read(path: Path) -> str:
 
 def test_ue_contract_docs_and_plans_exist() -> None:
     for name in [
-        "EPISODE_JSON_GUIDE.md",
         "EPISODE_SETUP_JSON.md",
         "DELIVERY_BOT_SETUP_JSON.md",
         "RUN_QUEUE_JSON.md",

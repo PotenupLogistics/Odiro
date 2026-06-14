@@ -6,7 +6,6 @@
 
 공식 계약 문서 경로는 팀 공유 경로이므로 이동하거나 rename하지 않습니다.
 
-* [Episode JSON Guide](ue_contracts/EPISODE_JSON_GUIDE.md)
 * [EpisodeSetup JSON](ue_contracts/EPISODE_SETUP_JSON.md)
 * [DeliveryBotSetup JSON](ue_contracts/DELIVERY_BOT_SETUP_JSON.md)
 * [RunQueue JSON](ue_contracts/RUN_QUEUE_JSON.md)
@@ -23,6 +22,7 @@
 
 ## 아키텍처
 
+* [v2 Agent Architecture](agents/V2_AGENT_ARCHITECTURE.md)
 * [Scenario / Episode 용어 정리](architecture/SCENARIO_EPISODE_TERMINOLOGY.md)
 * [UE 계약 마이그레이션 계획](architecture/UE_CONTRACT_MIGRATION_PLAN.md)
 * [맵 생성 데이터 근거](architecture/MAP_GENERATION_DATA_SOURCES.md)
@@ -47,6 +47,14 @@
 ## 실험
 
 * [알파 단계 실험 workspace layout](experiment/EXPERIMENT_WORKSPACE_LAYOUT.md)
+
+## API
+
+* [v2 Agent API 문서](api/V2_AGENT_APIS.md)
+
+## 상태와 운영
+
+* [v2 Agent 테스트/운영 가이드](development/V2_AGENT_TESTING_GUIDE.md)
 
 ## 정책
 

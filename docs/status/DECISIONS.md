@@ -402,3 +402,15 @@
 * DeliveryBotSetup tuning 값은 LLM이 직접 임의 수치로 생성하지 않는다.
 * DeliveryBotSetup tuning 값은 `docs/ue_contracts/DELIVERY_BOT_SETUP_JSON.md` default catalog와 deterministic variation policy 기준으로 생성한다.
 * 사용자용 `POST /api/v1/scenarios/generate`는 prompt 하나만 받고 RunQueue JSON 계약 그대로 반환한다.
+
+## v2 Agent API 결정
+
+* v2 Agent API는 v1 API 계약을 변경하지 않는 신규 경로로 유지한다.
+* `/api/v2/scenarios/generate`는 prompt만 받고 `scenario.template.json` 형태의 template을 반환한다.
+* v2 scenario generation은 `episode_count`, `count`, `iterations`, `run_count`, seed, RunQueue 생성을 담당하지 않는다.
+* `scenario.template.json`은 range/choice/random 요소를 가질 수 있는 원본 template이고, `scenario.json`은 template sampling 결과로 확정값을 가진 실행 sample이다.
+* `/api/v2/analysis/run`은 현재 파라미터 없이 experiments root 전체를 분석한다.
+* v2 Agent 기본값은 deterministic/rule-based mode이며 외부 API key 없이 테스트가 통과해야 한다.
+* `V2_AGENT_LLM_ENABLED=true`일 때만 optional LLM JSON 경로를 사용한다.
+* LLM 호출 실패, JSON 파싱 실패, validator 실패, 잘못된 evidence는 API 500이 아니라 fallback response와 warning으로 처리한다.
+* LLM은 수치 계산을 하지 않고 해석과 추천만 담당한다. raw log 전체는 LLM에 전달하지 않는다.

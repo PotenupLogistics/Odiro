@@ -18,7 +18,6 @@ def test_temporary_management_docs_are_removed_after_cleanup() -> None:
 
 
 def test_canonical_contract_paths_are_not_moved_or_renamed() -> None:
-    assert (DOCS / "ue_contracts" / "EPISODE_JSON_GUIDE.md").exists()
     assert (DOCS / "ue_contracts" / "EPISODE_SETUP_JSON.md").exists()
     assert (DOCS / "ue_contracts" / "DELIVERY_BOT_SETUP_JSON.md").exists()
     assert (DOCS / "ue_contracts" / "RUN_QUEUE_JSON.md").exists()

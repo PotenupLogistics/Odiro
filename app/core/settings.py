@@ -108,6 +108,27 @@ class Settings(BaseSettings):
             "scenarioArtifactWriteEnabled",
         ),
     )
+    experiments_dir: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "ODIROSIM_EXPERIMENTS_DIR",
+            "EXPERIMENTS_DIR",
+            "experiments_dir",
+            "experimentsDir",
+        ),
+    )
+    v2AgentLlmEnabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("V2_AGENT_LLM_ENABLED", "v2AgentLlmEnabled"),
+    )
+    v2AgentLlmRepairEnabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("V2_AGENT_LLM_REPAIR_ENABLED", "v2AgentLlmRepairEnabled"),
+    )
+    v2AgentLlmMaxRepairAttempts: int = Field(
+        default=1,
+        validation_alias=AliasChoices("V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS", "v2AgentLlmMaxRepairAttempts"),
+    )
     googleDriveUploadEnabled: bool = Field(
         default=False,
         validation_alias=AliasChoices("GOOGLE_DRIVE_UPLOAD_ENABLED", "googleDriveUploadEnabled"),

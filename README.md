@@ -48,7 +48,7 @@ Natural Language Prompt
 
 현재 프로젝트 검증 상태:
 
-* `uv run pytest` -> `500 passed, 1 warning`
+* `uv run pytest` -> `693 passed, 1 warning`
 * `uv run python -m harness.checks.check_all` -> `PASS_WITH_WARNING`
 
 현재 harness warning은 일부 source document와 manual review workflow가 아직 완료되지 않았기 때문에 남아 있습니다. Legacy UE handoff route는 제거되었고, 사용자용 scenario generation과 RunQueue export check를 기준으로 검증합니다.
@@ -96,6 +96,10 @@ Setup pair live smoke 상태:
 * `GET /health`
 * `POST /api/v1/scenarios/generate`
 * `POST /api/v1/analysis/run`
+* `POST /api/v2/scenarios/generate`
+* `POST /api/v2/analysis/run`
+
+v2 Agent API는 v1 실행 계약을 변경하지 않는 신규 경로입니다. `/api/v2/scenarios/generate`는 prompt만 받아 `scenario.template.json` 형태의 템플릿을 반환하고, 실행 개수, seed, scenario sample, RunQueue 생성은 담당하지 않습니다. `/api/v2/analysis/run`은 body 없음 또는 `{}`로 experiments root 전체를 분석합니다. 기본값은 deterministic/rule-based이며, `V2_AGENT_LLM_ENABLED=true`일 때만 optional LLM JSON mode를 사용합니다. 자세한 내용은 [v2 Agent API 문서](docs/api/V2_AGENT_APIS.md), [v2 Agent Architecture](docs/agents/V2_AGENT_ARCHITECTURE.md)를 참고합니다.
 
 UE 연동 기본 권장 endpoint:
 
@@ -221,6 +225,9 @@ uv run python scripts/export_ue5_handoff_payload.py --prompt "좁은 보도에�
 * [Policy Decision Contract](docs/policy_server/POLICY_DECISION_JSON_GUIDE.md)
 * [Legacy EpisodeSpec Archive](docs/archive/previous_episode_spec/)
 * [UE AI Integration Issues](docs/handoff/UE_AI_INTEGRATION_ISSUES.md)
+* [v2 Agent API 문서](docs/api/V2_AGENT_APIS.md)
+* [v2 Agent Architecture](docs/agents/V2_AGENT_ARCHITECTURE.md)
+* [v2 Agent Testing And Operations Guide](docs/development/V2_AGENT_TESTING_GUIDE.md)
 
 ## 현재 제한 사항
 
@@ -234,7 +241,7 @@ uv run python scripts/export_ue5_handoff_payload.py --prompt "좁은 보도에�
 * `environmentSampling.enabled=true`이면 seed 기반 numeric parameter set을 `Numeric Environment Constraints`로 WorldConfig generation prompt와 deterministic post-processing에 연결합니다.
 * environmentSampling 기반 단일 EpisodeSpec handoff smoke는 통과했으며, DOE matrix와 batch scenario generation은 아직 후속 단계입니다.
 * `responseFormat=setup_pair` live smoke는 통과했으며, fine-tuning candidate는 `data/fine_tuning_candidates/`에 로컬 저장하고 git commit 대상에서 제외합니다.
-* EvaluationReport 기반 결과 분석과 Result Analysis Agent 구현은 현재 담당 범위가 아니며 별도 단계에서 진행합니다.
+* v2 Result Analysis Agent는 experiments root 전체 분석 MVP로 구현되어 있으며, UE 실행 결과 schema 확정에 따라 추가 지표와 evidence summary를 보강해야 합니다.
 
 ## 다음 액션
 
@@ -244,4 +251,5 @@ uv run python scripts/export_ue5_handoff_payload.py --prompt "좁은 보도에�
 4. 최종 Kickboard prop ID를 확정합니다.
 5. UE 피드백에 따라 adapter를 조정합니다.
 6. 이후 Run Result API와 scoring을 별도 단계에서 진행합니다.
-7. DOE / scenario matrix / batch generation은 UE 단일 케이스 검증 후 진행합니다.
+7. v2 Agent의 final Unreal template schema와 representative failed episode timeline summary를 보강합니다.
+8. DOE / scenario matrix / batch generation은 UE 단일 케이스 검증 후 진행합니다.

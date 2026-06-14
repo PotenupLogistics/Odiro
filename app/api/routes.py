@@ -4,9 +4,13 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from app.agents.result_analysis_v2 import ResultAnalysisV2Agent
+from app.agents.scenario_generation_v2 import ScenarioGenerationV2Agent
+from app.models.analysis_v2 import AnalysisRunV2Request, AnalysisRunV2Response
 from app.models.recommendation import EpisodeAnalysisRequest, IntegratedRecommendationResult
 from app.models.run_queue import EpisodeRunQueue
 from app.models.scenario_generation import ScenarioGenerateRequest
+from app.models.scenario_generation_v2 import ScenarioGenerateV2Request, ScenarioGenerateV2Response
 from app.services.policy_recommendation_orchestrator import analyze_full_setup_and_recommend
 from app.services.scenario_generation_service import (
     ScenarioArtifactStorageError,
@@ -76,6 +80,16 @@ def scenario_generate_endpoint(
 
 
 @router.post(
+    "/api/v2/scenarios/generate",
+    response_model=ScenarioGenerateV2Response,
+)
+def scenario_generate_v2_endpoint(
+    request: ScenarioGenerateV2Request,
+) -> ScenarioGenerateV2Response:
+    return ScenarioGenerationV2Agent().generate(request)
+
+
+@router.post(
     "/api/v1/analysis/run",
     response_model=IntegratedRecommendationResult,
 )
@@ -125,3 +139,13 @@ def analysis_run_endpoint(
                 "message": "Episode analysis failed.",
             },
         ) from exc
+
+
+@router.post(
+    "/api/v2/analysis/run",
+    response_model=AnalysisRunV2Response,
+)
+def analysis_run_v2_endpoint(
+    request: AnalysisRunV2Request | None = None,
+) -> AnalysisRunV2Response:
+    return ResultAnalysisV2Agent().run()

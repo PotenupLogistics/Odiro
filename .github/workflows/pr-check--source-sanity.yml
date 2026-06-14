@@ -1,4 +1,4 @@
-name: Build - Pull Request Check
+name: Sanity Check
 
 on:
   pull_request:
@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 jobs:
-  verify-staged:
-    name: Verify staged build checks
+  source-code-sanity:
+    name: Source code
     runs-on: windows-latest
 
     steps:
@@ -40,6 +40,6 @@ jobs:
           git reset --soft $mergeBase
           git diff --cached --name-status
 
-      - name: Run staged verification
+      - name: Run source code sanity check
         shell: pwsh
-        run: ./tools/verify-staged.ps1 -Hook pr-check -Force
+        run: ./tools/check-source-sanity.ps1 -Hook pr-check -Force

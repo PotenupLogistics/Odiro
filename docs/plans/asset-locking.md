@@ -98,8 +98,8 @@ script 실행 시 `.lfsconfig`와 Unreal asset attribute도 함께 확인한다.
 
 - main direct commit early reject
 - main local merge early reject
-- feature branch에서는 staged verification skip
-- PR build check Action에서 staged verification 수행
+- feature branch에서는 source code sanity check skip
+- PR source code sanity Action에서 staged source diff 검증
 - local merge 적용 후 commit 전 차단되므로 사용자는 `git merge --abort`로 정리
 
 `.githooks/pre-push`:
@@ -139,9 +139,9 @@ Provider:
 
 ## GitHub Actions
 
-### PR build check
+### PR source code sanity check
 
-파일: `.github/workflows/build--pr-check.yml`
+파일: `.github/workflows/pr-check--source-sanity.yml`
 
 트리거: `pull_request`
 
@@ -150,11 +150,11 @@ Provider:
 - PR head checkout
 - `merge-base` 기준 `git reset --soft`
 - PR 변경분을 staged diff처럼 구성
-- `tools/verify-staged.ps1 -Hook pr-check -Force`
+- `tools/check-source-sanity.ps1 -Hook pr-check -Force`
 
 ### PR lock check
 
-파일: `.github/workflows/asset-lock--pr-check.yml`
+파일: `.github/workflows/pr-check--asset-lock.yml`
 
 트리거: `pull_request`
 
@@ -173,7 +173,7 @@ Provider:
 
 ### Main auto unlock
 
-파일: `.github/workflows/asset-lock--auto-unlock.yml`
+파일: `.github/workflows/merged--asset-unlock.yml`
 
 트리거:
 
@@ -255,8 +255,8 @@ docs/specs/project-structure.md
 AGENTS.md
 .agents/index/root-dev-workflow.md
 .agents/index/client-runtime-foundation.md
-.github/workflows/asset-lock--pr-check.yml
-.github/workflows/asset-lock--auto-unlock.yml
+.github/workflows/pr-check--asset-lock.yml
+.github/workflows/merged--asset-unlock.yml
 ```
 
 ## 작업
@@ -351,7 +351,7 @@ git push --force origin HEAD:main
 
 ### T05 PR lock check Action [x]
 
-- `.github/workflows/asset-lock--pr-check.yml`
+- `.github/workflows/pr-check--asset-lock.yml`
 - PR changed files 계산
 - LFS lock 목록 조회
 - PR author와 lock owner 매핑
@@ -371,7 +371,7 @@ main 동일 asset 선변경 -> 실패
 
 ### T06 main auto unlock Action [x]
 
-- `.github/workflows/asset-lock--auto-unlock.yml`
+- `.github/workflows/merged--asset-unlock.yml`
 - 일반 update와 force update 분기
 - 일반 update: 변경 asset만 unlock
 - force update: event 이전 lock cleanup

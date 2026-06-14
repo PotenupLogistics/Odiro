@@ -1,4 +1,4 @@
-name: Asset Lock - Pull Request Check
+name: Lock Ownership Check
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   verify:
-    name: Verify Unreal asset locks
+    name: Unreal assets
     runs-on: ubuntu-latest
 
     steps:

@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Shared/ScenarioCompileTypes.h"
 #include "Shared/ScenarioConfigTypes.h"
-#include "Shared/EpisodeConfigTypes.h"
+#include "Shared/EpisodeResultTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "ScenarioRunnerSubsystem.generated.h"
 

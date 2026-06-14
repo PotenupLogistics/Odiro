@@ -2,7 +2,7 @@
   "schema": "simulation_setup",
   "version": 1,
   "map_id": "ScenarioSimulationMap",
-  "run_queue": "Json/Input/EpisodeRunQueueSample.json",
+  "run_queue": "Json/Input/ScenarioRunQueueSample.json",
   "fixed_step": {
     "fps": 60
   },

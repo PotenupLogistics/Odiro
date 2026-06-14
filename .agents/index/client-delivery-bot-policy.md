@@ -9,12 +9,17 @@ paths:
   - Client/Json/Input/PolicySpecs/**
 entry:
   - DeliveryBot_GridSubsystem.h / .cpp
-  - DeliveryBot_*Component
+  - DeliveryBot_DriveComponent.h / .cpp
+  - DeliveryBot_HttpPolicyComponent.h / .cpp
+  - DeliveryBot_LidarSensorComponent.h / .cpp
   - DeliveryBotSetupCompiler.h / .cpp
-  - DeliveryBotPolicyActionType.h
+  - DeliveryBotPythonDeveloperSettings.h / .cpp
+  - DeliveryBotPythonProcessSubsystem.h / .cpp
+  - DeliveryBotPythonSettings.h
   - Client/Json/Input/PolicySpecs
 keep:
   - Prefer focused shared structs over direct DeliveryBot to Scenario/Episode header coupling.
+  - Python policy process ownership lives in DeliveryBot Python subsystem/settings, not legacy root batch files.
 verify:
   - DeliveryBot automation tests for component changes
   - policy request/response contract for HTTP policy fields

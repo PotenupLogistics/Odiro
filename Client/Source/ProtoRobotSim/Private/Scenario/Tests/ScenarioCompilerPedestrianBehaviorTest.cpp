@@ -41,7 +41,7 @@ bool FScenarioCompilerPedestrianBehaviorOptionalTest::RunTest(const FString& Par
   "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "pedestrian_behavior_optional_test",
-  "map_id": "EpisodeSandbox",
+  "map_id": "ScenarioEditorMap",
   "actors": {
     "pedestrians": [
       {
@@ -81,7 +81,7 @@ bool FScenarioCompilerPedestrianBehaviorValuesTest::RunTest(const FString& Param
   "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "pedestrian_behavior_values_test",
-  "map_id": "EpisodeSandbox",
+  "map_id": "ScenarioEditorMap",
   "actors": {
     "pedestrians": [
       {
@@ -134,7 +134,7 @@ bool FScenarioCompilerPedestrianPathCurveValuesTest::RunTest(const FString& Para
   "schema": "scenario_actor_spawn_mvp",
   "version": 1,
   "scenario_id": "pedestrian_path_curve_values_test",
-  "map_id": "EpisodeSandbox",
+  "map_id": "ScenarioEditorMap",
   "actors": {
     "pedestrians": [
       {

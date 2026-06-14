@@ -16,5 +16,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bAutoStartRoute{ true };
-};
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bHasGoal{ false };
+};

@@ -25,31 +25,31 @@ public:
 	float GearSwitchBrakeInput{ 0.2f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float SlowdownSpeedRangeKmh{ 4.f };
+	float SlowdownSpeedRangeKmh{ 5.f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SpeedLimitToleranceKmh{ 0.5f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float SpeedLimitBrake{ 0.08f };
+	float SpeedLimitBrake{ 0.06f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float StopBrakeInput{ 0.15f };
+	float StopBrakeInput{ 0.18f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float ThrottleInputRatePerSecond{ 0.35f };
+	float ThrottleInputRatePerSecond{ 0.28f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float BrakeInputRatePerSecond{ 0.5f };
+	float BrakeInputRatePerSecond{ 0.35f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float SteeringInputRatePerSecond{ 3.f };
+	float SteeringInputRatePerSecond{ 3.2f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float AccelerationRateKmhPerSecond{ 2.f };
+	float AccelerationRateKmhPerSecond{ 1.2f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float DecelerationRateKmhPerSecond{ 1.5f };
+	float DecelerationRateKmhPerSecond{ 0.9f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bUseHandbrakeWhenBrake{ false };

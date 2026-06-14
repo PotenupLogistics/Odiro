@@ -2,7 +2,7 @@
 status: Draft
 type: feature
 specs:
-  - Docs/EpisodeSetup_JSON_Guide.md
+  - Docs/JSON_Guide/ScenarioSetup_JSON_Guide.md
 ---
 
 # Simulation Measurement Logging 계획
@@ -15,7 +15,7 @@ PIE에서 실행 중인 시뮬레이션의 measurement를 JSONL 로그로 저장
 - logging system은 simulation 시작, 종료, fixed step, 종료 조건을 소유하지 않음
 - 매 Tick마다 robot perception, robot action, moving actor transform 기록
 - collision, near-miss, emergency stop 같은 event는 발생 시점에 즉시 기록
-- 정적 환경 정보는 `Docs/EpisodeSetup_JSON_Guide.md`와 source JSON을 우선 참조하고 로그에는 중복 저장하지 않음
+- 정적 환경 정보는 `Docs/JSON_Guide/ScenarioSetup_JSON_Guide.md`와 source JSON을 우선 참조하고 로그에는 중복 저장하지 않음
 - AI 분석이 robot perception/action과 simulation truth를 구분해 읽을 수 있는 근거 생성
 
 ## 비목표
@@ -132,7 +132,7 @@ MVP 기준
 Record는 `type` discriminator를 사용한다.
 
 ```json
-{"type":"header","version":1,"logId":"...","mapName":"EpisodeSandbox","sourceJsonPath":"Json/Input/EpisodeSetupSample.json","specHash":"...","units":{"position":"cm","velocity":"cm/s","rotation":"quat_xyzw","axes":"UE_XForward_YRight_ZUp"},"categories":["perception","action","truth","event","diagnostic"],"actors":[{"index":0,"id":"robot_01","assetId":"delivery_bot","actorCategory":"DeliveryBot","mobility":"Moving"},{"index":1,"id":"ped_01","assetId":"adult_pedestrian","actorCategory":"Pedestrian","mobility":"Moving"}]}
+{"type":"header","version":1,"logId":"...","mapName":"ScenarioEditorMap","sourceJsonPath":"Json/Input/ScenarioSetupSample.json","specHash":"...","units":{"position":"cm","velocity":"cm/s","rotation":"quat_xyzw","axes":"UE_XForward_YRight_ZUp"},"categories":["perception","action","truth","event","diagnostic"],"actors":[{"index":0,"id":"robot_01","assetId":"delivery_bot","actorCategory":"DeliveryBot","mobility":"Moving"},{"index":1,"id":"ped_01","assetId":"adult_pedestrian","actorCategory":"Pedestrian","mobility":"Moving"}]}
 {"type":"tick","tickIndex":0,"worldTimeSeconds":12.345,"deltaSeconds":0.0167,"robot":{"id":"robot_01","truth":{"p":[0,0,0],"q":[0,0,0,1],"v":[0,0,0]},"perception":{"lidar":{"hasFrontObject":true,"frontObjectId":"ped_01","frontDistanceM":2.4,"frontYawDegree":-5.0,"hitCount":8}},"action":{"targetSpeedKmh":4.0,"steering":0.1,"brake":0.0,"brakeApplied":false,"reason":"path_follow"}},"movingActors":[{"i":1,"p":[120,40,0],"q":[0,0,0,1],"v":[0,80,0]}]}
 {"type":"event","eventIndex":0,"worldTimeSeconds":13.2,"kind":"pedestrian_near_miss","severity":"warning","subjectId":"robot_01","targetId":"ped_01","location":[130,42,0],"value":-3.0,"properties":{"minDistanceM":0.35,"durationSeconds":0.7}}
 {"type":"footer","ticks":1800,"events":1,"closeReason":"pie_end","diagnostics":[]}
@@ -145,7 +145,7 @@ Record는 `type` discriminator를 사용한다.
 - unknown `type`은 warning 후 skip 가능
 - malformed record는 structured diagnostic으로 보고
 - 외부 분석 도구는 JSONL을 untrusted input으로 검증
-- input EpisodeSetup JSON은 snake_case, output JSONL은 camelCase 사용
+- input ScenarioSetup JSON은 snake_case, output JSONL은 camelCase 사용
 - `p`는 UE cm 위치 `[x,y,z]`
 - `q`는 quaternion `[x,y,z,w]`
 - `v`는 UE cm/s 선속도 `[x,y,z]`

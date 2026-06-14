@@ -1,0 +1,12 @@
+{
+  "schema": "episode_run_queue",
+  "version": 1,
+  "runs": [
+    {
+      "pair_id": "playable_route_001",
+      "scenario_setup": "Json/Input/ScenarioSetupPlayable.json",
+      "delivery_bot_setup": "Json/Input/DeliveryBotSetupPlayable.json",
+      "policy_spec": "Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json"
+    }
+  ]
+}

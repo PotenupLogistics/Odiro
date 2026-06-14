@@ -100,12 +100,6 @@ namespace
 		return normalizedJsonFilePath;
 	}
 
-	bool TryReadRunQueueScenarioSetupPath(const FJsonObject& runObject, FString& outScenarioSetupJsonPath)
-	{
-		return runObject.TryGetStringField(TEXT("scenario_setup"), outScenarioSetupJsonPath)
-			|| runObject.TryGetStringField(TEXT("scenario_setup_json_path"), outScenarioSetupJsonPath);
-	}
-
 	FScenarioSimulationSetupSpec MakeSimulationSetupSpec(const FScenarioWorldSpec& worldSpec)
 	{
 		FScenarioSimulationSetupSpec setupSpec;
@@ -338,15 +332,9 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunQueueJsonFileForRun(
 
 		FScenarioRunInput runInput;
 		runObject->TryGetStringField(TEXT("pair_id"), runInput.PairId);
-		TryReadRunQueueScenarioSetupPath(*runObject, runInput.ScenarioSetupJsonPath);
-		if (!runObject->TryGetStringField(TEXT("delivery_bot_setup"), runInput.DeliveryBotSetupJsonPath))
-		{
-			runObject->TryGetStringField(TEXT("delivery_bot_setup_json_path"), runInput.DeliveryBotSetupJsonPath);
-		}
-		if (!runObject->TryGetStringField(TEXT("policy_spec"), runInput.PolicySpecJsonPath))
-		{
-			runObject->TryGetStringField(TEXT("policy_spec_json_path"), runInput.PolicySpecJsonPath);
-		}
+		runObject->TryGetStringField(TEXT("scenario_setup"), runInput.ScenarioSetupJsonPath);
+		runObject->TryGetStringField(TEXT("delivery_bot_setup"), runInput.DeliveryBotSetupJsonPath);
+		runObject->TryGetStringField(TEXT("policy_spec"), runInput.PolicySpecJsonPath);
 
 		runInput.PairId = runInput.PairId.TrimStartAndEnd();
 		runInput.ScenarioSetupJsonPath = runInput.ScenarioSetupJsonPath.TrimStartAndEnd();

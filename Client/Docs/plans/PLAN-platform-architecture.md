@@ -32,14 +32,14 @@ specs:
 
 하나의 프로젝트로 Unreal Engine 클라이언트를 모두 개발한다.
 그냥 켜면 플랫폼 MainMenu가 실행되고, 시뮬레이터는 Commandline Parameter와 함께 별도의 프로세스로 실행된다.
-시나리오 편집기는 `EpisodeEditorMap`에서 제공하며, MainMenu는 에디터 내부 기능을 구현하지 않고 에디터 map으로 진입하는 역할만 맡는다.
+시나리오 편집기는 `ScenarioEditorMap`에서 제공하며, MainMenu는 에디터 내부 기능을 구현하지 않고 에디터 map으로 진입하는 역할만 맡는다.
 
 ### Main Window
 
 - 플랫폼 UI 표시. 창모드로 실행, Unreal Engine의 Slate 또는 UMG를 활용하여 UI 구현
 - 좌측 사이드바: 내비게이션 메뉴, 각 메뉴 클릭 시 우측 콘텐츠 영역에 해당 화면 표시
   - 홈: 랜딩 페이지, 공지사항, 최근 활동 등 표시
-  - 시나리오: 시나리오 구성 목록 표시, 각 항목 클릭 시 `EpisodeEditorMap` 열기
+  - 시나리오: 시나리오 구성 목록 표시, 각 항목 클릭 시 `ScenarioEditorMap` 열기
   - 행동 정책: 행동 정책 목록 표시, 각 항목 클릭 시 텍스트 에디터 열기
   - 실험 구성: 시뮬레이션 구성 목록 표시, 각 항목 클릭 시 설정 값 편집 화면 전환
   - 실험 현황: 시뮬레이션 실행 현황 확인 및 관리
@@ -48,9 +48,9 @@ specs:
 
 ### 시나리오 편집기
 
-- 특정 시나리오 구성 JSON 파일을 열어 시각적으로 표현. Editor Level은 `EpisodeEditorMap`에서 실행
-- 에디터 UI와 authoring 기능은 에디터 담당 작업자의 소유로 두고, Platform 작업은 MainMenu에서 `EpisodeEditorMap`으로 진입하는 Level 전환만 담당
-- MVP에서는 MainMenu와 EpisodeEditorMap을 같은 Unreal process의 별도 map으로 취급한다. 같은 process 안에서 두 map을 각각 독립 창으로 동시에 실행하는 구조는 구현하지 않는다
+- 특정 시나리오 구성 JSON 파일을 열어 시각적으로 표현. Editor Level은 `ScenarioEditorMap`에서 실행
+- 에디터 UI와 authoring 기능은 에디터 담당 작업자의 소유로 두고, Platform 작업은 MainMenu에서 `ScenarioEditorMap`으로 진입하는 Level 전환만 담당
+- MVP에서는 MainMenu와 ScenarioEditorMap을 같은 Unreal process의 별도 map으로 취급한다. 같은 process 안에서 두 map을 각각 독립 창으로 동시에 실행하는 구조는 구현하지 않는다
 - 월드 뷰: 액터 배치 및 시뮬레이션 환경 시각화. 액터를 클릭하여 속성 패널에서 편집 가능
 - 시나리오 구성 트리: 시나리오 구성 요소를 트리 형태로 표시, 각 요소 클릭 시 속성 패널에 상세 정보 표시
 - 속성 패널: 선택한 요소의 속성 편집 가능. 예: 액터 위치, 행동 정책 매핑 등
@@ -82,14 +82,14 @@ specs:
 
 ### 범위
 
-- `EpisodeSimulationMap`: 시뮬레이션 수행
-- `EpisodeEditorMap`: 구현된 시나리오 에디터 map. 에디터 UI와 authoring 기능은 다른 작업자 담당으로 제외. 이 계획은 MainMenu에서 에디터 map을 여는 진입점만 포함
+- `ScenarioSimulationMap`: 시뮬레이션 수행
+- `ScenarioEditorMap`: 구현된 시나리오 에디터 map. 에디터 UI와 authoring 기능은 다른 작업자 담당으로 제외. 이 계획은 MainMenu에서 에디터 map을 여는 진입점만 포함
 - Platform UI와 Simulator는 별도 프로세스로 실행
-- Platform UI 프로세스는 fixed-step을 적용하지 않고 `EpisodeSimulationMap`을 직접 로드하지 않음
-- Simulator 프로세스는 `EpisodeSimulationMap`을 로드하고 fixed-step으로 실행
+- Platform UI 프로세스는 fixed-step을 적용하지 않고 `ScenarioSimulationMap`을 직접 로드하지 않음
+- Simulator 프로세스는 `ScenarioSimulationMap`을 로드하고 fixed-step으로 실행
 - 로봇 구현은 다른 작업자가 진행 중으로 이 계획에서 Python API Server 통신 구현 제외
 - 이 계획은 플랫폼이 시뮬레이션 실행, 상태 추적, 결과 조회, 시나리오 에디터 진입을 연결하는 범위만 다룸
-- `EpisodeSimulationMap`의 Episode spawn 경로는 즉시 구현
+- `ScenarioSimulationMap`의 Scenario spawn 경로는 즉시 구현
 
 ### 현재 구현
 
@@ -97,12 +97,12 @@ specs:
 | ------------------------- | ------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | Runtime module            | 구현    | `ProtoRobotSim.uproject`, `Source/ProtoRobotSim/ProtoRobotSim.Build.cs` | 플랫폼, 시뮬레이터, 편집기 기능을 같은 runtime module 안에서 시작 가능 |
 | Episode JSON compile      | 구현    | `UEpisodeCompiler`                                                      | 시나리오 구성 JSON을 검증하고 runtime spec으로 변환하는 기반           |
-| Episode world setup       | 구현    | `UEpisodeSimulationSubsystem`                                           | `EpisodeSimulationMap`에서 실행할 월드 배치 기반                       |
+| Scenario world setup       | 구현    | `UScenarioSimulationSubsystem`                                           | `ScenarioSimulationMap`에서 실행할 월드 배치 기반                       |
 | DeliveryBot setup compile | 구현    | `UDeliveryBotSetupCompiler`                                             | 실행 설정의 입력 파일로 선택하고 검증 가능                             |
 | Batch runner              | 구현    | `UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile`               | 실험 구성 실행의 핵심 API                                              |
 | Evaluation report         | 구현    | `FEpisodeEvaluationReportJson`                                          | 실험 결과 화면의 요약 데이터 기반                                      |
 | Measurement log           | 구현    | `UEpisodeMeasurementLogSubsystem`                                       | 결과 분석 Agent와 결과 상세 화면의 raw log 기반                        |
-| Map 분리                  | 구현    | `EpisodeSimulationMap`, `EpisodeEditorMap`                              | 시뮬레이션 실행과 시나리오 편집 map을 분리                             |
+| Map 분리                  | 구현    | `ScenarioSimulationMap`, `ScenarioEditorMap`                              | 시뮬레이션 실행과 시나리오 편집 map을 분리                             |
 | Remote policy API         | 범위 밖 | `UDeliveryBot_PolicyJudgmentComponent`                                  | 로봇 담당 작업자의 구현 범위                                           |
 | Platform UI               | 구현    | `AMainMenuPlayerController`, `UMainMenuWidget`                          | MainMenu에서 simulation 실행과 status/report/log 조회 가능             |
 | Simulator CLI bootstrap   | 구현    | `USimulatorProcessSubsystem`, `FSimulationCommandLine`                 | `-Simulate=<SimulationSetupFile>` 감지, fixed-step 적용, map load, runner 시작, status 기록 |
@@ -113,11 +113,11 @@ specs:
 
 ### 판단
 
-- `EpisodeSetup JSON`, `DeliveryBotSetup JSON`, `EpisodeRunQueue JSON` 유지
+- `ScenarioSetup JSON`, `DeliveryBotSetup JSON`, `ScenarioRunQueue JSON` 유지
 - `SimulationSetup JSON`을 실행 설정 파일로 추가해 platform과 simulator가 같은 run queue, logging, report, status, fixed-step 설정 읽음
 - Platform UI는 Simulator process를 실행하고 status/report/log만 읽음
-- Platform UI는 `EpisodeSimulationMap`을 직접 로드하지 않음
-- Simulator process는 SimulatorMode 내부에서 `UseFixedTimeStep`을 적용하고 `EpisodeSimulationMap` 로드
+- Platform UI는 `ScenarioSimulationMap`을 직접 로드하지 않음
+- Simulator process는 SimulatorMode 내부에서 `UseFixedTimeStep`을 적용하고 `ScenarioSimulationMap` 로드
 - fixed-step FPS는 Platform UI에서 실행 전 설정하고 `SimulationSetup JSON.fixed_step.fps`에 저장
 - 시뮬레이터 프로세스는 `-Simulate=<SimulationSetupFile>` 인자를 받으면 내부적으로 SimulatorMode로 진입
 - `-Simulate=<SimulationSetupFile>`은 기존 `-SimulatorMode -SimulationSetup=<file>` 조합을 대체
@@ -125,10 +125,10 @@ specs:
 - `SimulationSetup JSON.fixed_step.fps`는 SimulatorMode의 fixed-step FPS 값으로 적용
 - 시뮬레이터는 주기적으로 실험 현황 Status JSON으로 기록, 플랫폼도 주기적으로 읽어 UI 표시
 - 시뮬레이터 중단, 오류 시 Status JSON에 실패 기록 필요
-- `EpisodeSimulationMap`의 spawn 실행을 먼저 연결
-- `EpisodeEditorMap` 내부 authoring, spawn/preview, 저장 흐름은 에디터 담당 작업자 소유로 두고 Platform에서는 직접 구현하지 않음
-- MainMenu에서 `EpisodeEditorMap`을 열 때는 같은 process 안의 `OpenLevel` 기반 전환을 MVP 기본값으로 둠
-- 같은 Unreal process 안에서 MainMenuMap과 EpisodeEditorMap을 각각 별도 runtime window로 동시에 띄우는 구조는 `SWindow`만으로 해결되지 않고 별도 `UWorld`/viewport lifecycle 관리가 필요하므로 MVP 범위에서 제외
+- `ScenarioSimulationMap`의 spawn 실행을 먼저 연결
+- `ScenarioEditorMap` 내부 authoring, spawn/preview, 저장 흐름은 에디터 담당 작업자 소유로 두고 Platform에서는 직접 구현하지 않음
+- MainMenu에서 `ScenarioEditorMap`을 열 때는 같은 process 안의 `OpenLevel` 기반 전환을 MVP 기본값으로 둠
+- 같은 Unreal process 안에서 MainMenuMap과 ScenarioEditorMap을 각각 별도 runtime window로 동시에 띄우는 구조는 `SWindow`만으로 해결되지 않고 별도 `UWorld`/viewport lifecycle 관리가 필요하므로 MVP 범위에서 제외
 - 에디터를 MainMenu와 동시에 유지해야 하는 요구가 생기면, 별도 Unreal process를 실행하는 launcher 방식으로 확장한다
 - LLM 서버는 runtime 필수 의존성이 아니라 파일 생성, 분석, 수정 제안 도구로 둔다
 
@@ -138,10 +138,10 @@ MVP 범위: T01~T05 / T06: 사용성 확장 / T07~T08은 병렬 작업자의 산
 
 공통 경계:
 - Platform UI, Simulator는 별도 process
-- Platform UI는 fixed-step 적용 X, `EpisodeSimulationMap` 직접 로드 X
+- Platform UI는 fixed-step 적용 X, `ScenarioSimulationMap` 직접 로드 X
 - Simulator는 `-Simulate=<SimulationSetupFile>`로 진입, fixed-step 적용
 - 로봇 내부 구현, Python API Server 통신은 이 계획에서 구현 X
-- `EpisodeEditorMap` 에디터 UI와 authoring 기능은 별도 작업자 담당, 이 계획은 MainMenu의 에디터 진입점만 다룬다.
+- `ScenarioEditorMap` 에디터 UI와 authoring 기능은 별도 작업자 담당, 이 계획은 MainMenu의 에디터 진입점만 다룬다.
 
 ### T01 실행 계약과 타입 고정 [x]
 
@@ -172,7 +172,7 @@ MVP 범위: T01~T05 / T06: 사용성 확장 / T07~T08은 병렬 작업자의 산
 
 ### T02 Simulator bootstrap 구현 [x]
 
-목표: Platform UI 없이 simulator process만 실행해 `EpisodeSimulationMap`에서 batch run을 시작한다.
+목표: Platform UI 없이 simulator process만 실행해 `ScenarioSimulationMap`에서 batch run을 시작한다.
 
 의존:
 - T01
@@ -180,10 +180,10 @@ MVP 범위: T01~T05 / T06: 사용성 확장 / T07~T08은 병렬 작업자의 산
 상세 작업:
 - game instance 또는 engine startup 경로에서 `-Simulate=<SimulationSetupFile>` 감지
 - SimulatorMode 진입 시 Main Window와 Platform UI 생성 경로 차단
-- SimulatorMode에서 `EpisodeSimulationMap` 로드
+- SimulatorMode에서 `ScenarioSimulationMap` 로드
 - SimulatorMode에서 `FApp::SetUseFixedTimeStep(true)`, `FApp::SetFixedDeltaTime(1 / fixed_step.fps)` 적용
-- setup의 `run_queue`를 [EpisodeRunnerSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Episode/EpisodeRunnerSubsystem.cpp)의 `UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile`에 전달
-- [EpisodeSimulationSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Episode/EpisodeSimulationSubsystem.cpp) 경로로 `EpisodeSimulationMap`의 Episode spawn 수행
+- setup의 `run_queue`를 [EpisodeRunnerSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Scenario/EpisodeRunnerSubsystem.cpp)의 `UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile`에 전달
+- [ScenarioSimulationSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Scenario/ScenarioSimulationSubsystem.cpp) 경로로 `ScenarioSimulationMap`의 Scenario spawn 수행
 
 구현 위치:
 - [SimulatorProcessSubsystem.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Platform/SimulatorProcessSubsystem.h): SimulatorMode 상태, setup/run id 조회, map/fixed-step helper
@@ -199,7 +199,7 @@ T03 완료 범위:
 - `-Simulate=Json/Input/SimulationSetupSample.json`으로 simulator process가 단독 실행
 - Platform UI process는 fixed-step을 적용 X
 - Simulator process는 setup의 FPS로 fixed-step을 적용
-- sample run queue가 runner에 전달되고 Episode spawn이 발생
+- sample run queue가 runner에 전달되고 Scenario spawn이 발생
 
 ### T03 결과와 상태 기록 연결 [x]
 
@@ -210,8 +210,8 @@ T03 완료 범위:
 
 상세 작업:
 - simulator 시작, 진행, 완료, 실패, 취소 상태를 `Run Status JSON`으로 기록
-- [EpisodeMeasurementLogSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Episode/EpisodeMeasurementLogSubsystem.cpp)에 setup의 logging 설정 적용
-- [EpisodeRunnerSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Episode/EpisodeRunnerSubsystem.cpp)에 setup의 evaluation report JSON output 경로 적용
+- [EpisodeMeasurementLogSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Scenario/EpisodeMeasurementLogSubsystem.cpp)에 setup의 logging 설정 적용
+- [EpisodeRunnerSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Scenario/EpisodeRunnerSubsystem.cpp)에 setup의 evaluation report JSON output 경로 적용
 - runner 완료 시 status에 report path와 log path 기록
 - setup 읽기 실패, map load 실패, runner 실패는 status `Failed`와 error message 남김
 
@@ -219,7 +219,7 @@ T03 완료 범위:
 - [SimulationSetupTypes.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Shared/SimulationSetupTypes.h): `FSimulationRunStatusJson`
 - [SimulationSetupTypes.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Shared/SimulationSetupTypes.cpp): `SimulationRunStatus JSON` serialization/file writer
 - [EpisodeRunnerSubsystem.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Episode/EpisodeRunnerSubsystem.h): runner state/record completion native delegate, total/completed/current pair 조회
-- [EpisodeRunnerSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Episode/EpisodeRunnerSubsystem.cpp): report output path를 `FEpisodeRunRecord`에 기록, runner state change broadcast
+- [EpisodeRunnerSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Scenario/EpisodeRunnerSubsystem.cpp): report output path를 `FEpisodeRunRecord`에 기록, runner state change broadcast
 - [EpisodeMeasurementLogSubsystem.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Episode/EpisodeMeasurementLogSubsystem.h): runtime logging settings 적용 API
 - [SimulatorProcessSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/SimulatorProcessSubsystem.cpp): report/logging setup 적용, runner 상태를 status JSON에 기록, 완료 시 log/report path 반영
 - `-Simulate` 모드에서 target map이 기존 batch를 먼저 시작하면 해당 batch를 취소하고 `SimulationSetup.run_queue`를 실행 기준으로 사용
@@ -254,7 +254,7 @@ T04로 남긴 범위:
 검증:
 - MainMenu에서 sample setup으로 simulator process 시작
 - 패키징 전 환경에서는 `Task-RunPreview.bat` fallback으로 같은 `-Simulate`, `-RunId` 인자를 전달해 subprocess 시작
-- MainMenu process가 `EpisodeSimulationMap`을 로드하지 않은 상태로 run 상태 표시
+- MainMenu process가 `ScenarioSimulationMap`을 로드하지 않은 상태로 run 상태 표시
 - simulator 종료 후 report/log/status path를 조회
 - 동일 setup을 새 run id로 다시 실행
 
@@ -268,7 +268,7 @@ T04로 남긴 범위:
 수동/후속 확인:
 - Platform UI에서 Start Run 버튼으로 실제 simulator window가 뜨고 terminal status에서 종료되는지 화면 확인
 - packaged exe가 생기면 같은 executable self-launch 경로로 `-Simulate=<SimulationSetupFile>`, `-RunId=<RunId>`가 전달되는지 확인
-- packaged build에서 `MainMenuMap`, `EpisodeSimulationMap`, `Json/Input`, `Json/Output` staging/cook 설정 확인
+- packaged build에서 `MainMenuMap`, `ScenarioSimulationMap`, `Json/Input`, `Json/Output` staging/cook 설정 확인
 
 ### T05 Platform 최소 실행 화면 구현 [x]
 
@@ -315,14 +315,14 @@ T04로 남긴 범위:
 - T05
 
 상세 작업:
-- `Json/Input`에서 `SimulationSetup`, `EpisodeSetup`, `DeliveryBotSetup`, `EpisodeRunQueue` 후보 파일을 분류해 selector에 표시
-- `EpisodeRunQueue` editor에서 EpisodeSetup과 DeliveryBotSetup pair를 추가, 제거, 위/아래 이동
+- `Json/Input`에서 `SimulationSetup`, `ScenarioSetup`, `DeliveryBotSetup`, `ScenarioRunQueue` 후보 파일을 분류해 selector에 표시
+- `ScenarioRunQueue` editor에서 ScenarioSetup과 DeliveryBotSetup pair를 추가, 제거, 위/아래 이동
 - `SimulationSetup` editor에서 map, run queue, fixed-step FPS, logging, report, status output 편집
 - 새 queue 파일은 사용자가 입력한 path에 첫 pair를 추가하는 방식으로 생성
-- 저장 전 `EpisodeSetup`은 `UEpisodeCompiler`, `DeliveryBotSetup`은 `UDeliveryBotSetupCompiler`, `SimulationSetup`은 `FSimulationSetupJson` 계약으로 validation
+- 저장 전 `ScenarioSetup`은 `UScenarioCompiler`, `DeliveryBotSetup`은 `UDeliveryBotSetupCompiler`, `SimulationSetup`은 `FSimulationSetupJson` 계약으로 validation
 
 검증:
-- 기존 EpisodeSetup과 DeliveryBotSetup pair를 queue에 추가
+- 기존 ScenarioSetup과 DeliveryBotSetup pair를 queue에 추가
 - 저장된 queue와 setup을 simulator runner가 그대로 실행
 - validation 실패 항목은 파일과 run item 단위로 확인
 - `ProtoRobotSim.SimulationSetup` automation과 `ProtoRobotSim.SimulatorLaunch` automation 통과
@@ -332,31 +332,31 @@ T04로 남긴 범위:
 - `WBP_MainMenu` layout 변경 시 `UMainMenuWidget`의 `BindWidget` 이름과 타입을 맞춘다
 - 새 SimulationSetup 파일 생성은 path 입력 후 `Save Setup`으로 가능하지만, MVP UI에는 별도 "Create Setup" 버튼을 두지 않음
 
-### T07 EpisodeEditorMap 진입점 연결 [x]
+### T07 ScenarioEditorMap 진입점 연결 [x]
 
-목표: MainMenu에서 구현된 `EpisodeEditorMap`을 열 수 있게 한다.
+목표: MainMenu에서 구현된 `ScenarioEditorMap`을 열 수 있게 한다.
 
 의존:
 - T05
-- 에디터 UI 담당 작업자의 `EpisodeEditorMap` 기본 진입 lifecycle 확정
+- 에디터 UI 담당 작업자의 `ScenarioEditorMap` 기본 진입 lifecycle 확정
 
 상세 작업:
-- 에디터 UI 담당 작업자의 `EpisodeEditorMap` 진입 조건과 초기 로드 인자를 확인
-- MainMenu에서 선택한 EpisodeSetup 파일을 기준으로 `EpisodeEditorMap`을 연다
+- 에디터 UI 담당 작업자의 `ScenarioEditorMap` 진입 조건과 초기 로드 인자를 확인
+- MainMenu에서 선택한 ScenarioSetup 파일을 기준으로 `ScenarioEditorMap`을 연다
 - MVP에서는 같은 process 안에서 `OpenLevel`로 전환한다
-- `UEpisodeEditorLaunchSubsystem`이 선택한 EpisodeSetup path를 보관하고 `EpisodeEditorMap` load 후 `AEpisodeEditorController::LoadEpisodeSetupJsonFile` 자동 호출을 시도한다
-- MainMenuMap과 EpisodeEditorMap을 동시에 유지하는 별도 runtime window 구조는 MVP 범위에서 제외한다
-- 후속으로 에디터를 별도 프로세스로 열 필요가 생기면 `-EditScenario=<EpisodeSetupFile>` 같은 명시적 command line 계약을 추가한다
+- `UScenarioEditorLaunchSubsystem`이 선택한 ScenarioSetup path를 보관하고 `ScenarioEditorMap` load 후 `AScenarioEditorController::LoadScenarioSetupJsonFile` 자동 호출을 시도한다
+- MainMenuMap과 ScenarioEditorMap을 동시에 유지하는 별도 runtime window 구조는 MVP 범위에서 제외한다
+- 후속으로 에디터를 별도 프로세스로 열 필요가 생기면 `-EditScenario=<ScenarioSetupFile>` 같은 명시적 command line 계약을 추가한다
 
 검증:
 - Platform에서 시나리오 에디터를 열 수 있는 진입점이 있다
-- MainMenu에서 `EpisodeEditorMap`으로 전환해 에디터 담당 기능이 시작된다
+- MainMenu에서 `ScenarioEditorMap`으로 전환해 에디터 담당 기능이 시작된다
 - 에디터 진입 경로가 simulator fixed-step이나 runner 실행 경로에 영향을 주지 않는다
 - `ProtoRobotSimEditor` build 통과
 
 수동/후속 확인:
-- `EpisodeEditorMap`의 GameMode/PlayerController가 `AEpisodeEditorController` 또는 그 Blueprint subclass를 사용해야 선택한 EpisodeSetup 자동 로드가 동작한다
-- visible run 또는 PIE에서 `Open Editor` 버튼 클릭 후 `EpisodeEditorMap` 전환과 선택 EpisodeSetup 로드 상태를 확인
+- `ScenarioEditorMap`의 GameMode/PlayerController가 `AScenarioEditorController` 또는 그 Blueprint subclass를 사용해야 선택한 ScenarioSetup 자동 로드가 동작한다
+- visible run 또는 PIE에서 `Open Editor` 버튼 클릭 후 `ScenarioEditorMap` 전환과 선택 ScenarioSetup 로드 상태를 확인
 - 에디터에서 MainMenu로 돌아가는 버튼은 MVP 범위에 없음. 현재는 같은 process level 전환이므로 필요하면 후속으로 back navigation 또는 별도 editor process 방식을 선택
 
 ### T08 LLM 연동 후속 연결 [ ]
@@ -386,7 +386,7 @@ T04로 남긴 범위:
 - [x] T04 Platform launcher 구현
 - [x] T05 Platform 최소 실행 화면 구현
 - [x] T06 실험 설정 편집 구현
-- [x] T07 EpisodeEditorMap 진입점 연결
+- [x] T07 ScenarioEditorMap 진입점 연결
 - [ ] T08 LLM 연동 후속 연결
 
 ## 검증
@@ -398,8 +398,8 @@ T04로 남긴 범위:
 | T03 | sample setup 실행 후 report/log/status 생성 확인 |
 | T04 | Platform launcher command automation, process start/status polling 코드 경로 빌드 확인, visible subprocess smoke는 수동 확인 |
 | T05 | Platform UI widget 빌드 확인, invalid JSON validation 표시 코드 경로 구현, visible UI smoke는 수동 확인 |
-| T06 | `SimulationSetup` writer round-trip, `EpisodeRunQueue` writer/parser automation, Editor target build |
-| T07 | `UEpisodeEditorLaunchSubsystem` compile 확인, visible `EpisodeEditorMap` 진입은 수동 확인 |
+| T06 | `SimulationSetup` writer round-trip, `ScenarioRunQueue` writer/parser automation, Editor target build |
+| T07 | `UScenarioEditorLaunchSubsystem` compile 확인, visible `ScenarioEditorMap` 진입은 수동 확인 |
 | T08 | LLM analysis payload와 report 표시 확인 |
 
 ## 완료 기록
@@ -440,16 +440,16 @@ T04로 남긴 범위:
 ### T06 완료
 
 - `FSimulationSetupJson`에 `SimulationSetup JSON` writer와 file save API 추가
-- `USimulatorLaunchSubsystem`에 EpisodeSetup, DeliveryBotSetup, EpisodeRunQueue selector용 파일 분류 API 추가
-- `USimulatorLaunchSubsystem`에 `EpisodeRunQueue JSON` read/write, pair 추가, 제거, 재정렬 API 추가
+- `USimulatorLaunchSubsystem`에 ScenarioSetup, DeliveryBotSetup, ScenarioRunQueue selector용 파일 분류 API 추가
+- `USimulatorLaunchSubsystem`에 `ScenarioRunQueue JSON` read/write, pair 추가, 제거, 재정렬 API 추가
 - `WBP_MainMenu` layout과 `UMainMenuWidget` C++ event handler로 setup 실행/저장 UI 제공
-- queue 저장 전 EpisodeSetup/DeliveryBotSetup validation을 수행해 잘못된 pair 저장을 차단
+- queue 저장 전 ScenarioSetup/DeliveryBotSetup validation을 수행해 잘못된 pair 저장을 차단
 
 ### T07 완료
 
-- `UEpisodeEditorLaunchSubsystem` 추가
-- MainMenu에서 선택한 EpisodeSetup을 보관하고 `EpisodeEditorMap`을 `OpenLevel`로 연다
-- `EpisodeEditorMap` load 후 PlayerController가 `AEpisodeEditorController`이면 선택한 EpisodeSetup 자동 로드를 시도
+- `UScenarioEditorLaunchSubsystem` 추가
+- MainMenu에서 선택한 ScenarioSetup을 보관하고 `ScenarioEditorMap`을 `OpenLevel`로 연다
+- `ScenarioEditorMap` load 후 PlayerController가 `AScenarioEditorController`이면 선택한 ScenarioSetup 자동 로드를 시도
 - 같은 process 안의 별도 runtime window 동시 실행은 MVP 범위에서 제외하고 Plan에 후속 선택지로 남김
 
 ### 현재 결과
@@ -457,5 +457,5 @@ T04로 남긴 범위:
 T01~T07 완료.
 Launcher process는 packaged exe 또는 개발 fallback `Task-RunPreview.bat`를 별도 process로 실행한다.
 Simulator process는 `SimulationSetup JSON` 기반 fixed-step run을 수행하고, Platform UI는 status/report/log 파일로 진행 상황과 결과를 조회한다.
-MainMenu는 실험 설정과 run queue를 편집하고, 선택한 EpisodeSetup으로 `EpisodeEditorMap`에 진입할 수 있다.
+MainMenu는 실험 설정과 run queue를 편집하고, 선택한 ScenarioSetup으로 `ScenarioEditorMap`에 진입할 수 있다.
 남은 큰 범위는 T08 LLM 연동이다.

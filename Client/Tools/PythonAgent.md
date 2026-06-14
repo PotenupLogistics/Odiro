@@ -126,8 +126,7 @@ http://127.0.0.1:8000/scenario/start
     "hasGoal": true,
     "x": 150,
     "y": 150,
-    "z": 0,
-    "acceptanceRadiusCm": 100
+    "z": 0
   },
   "vehicleSpec": {
     "maxSpeedKmh": 10,
@@ -309,7 +308,7 @@ http://127.0.0.1:8000/scenario/end
   "metrics": {
     "elapsedTimeSeconds": 12.4,
     "stopCount": 2,
-    "nearMissCount": 0
+    "obstacleWarningCount": 0
   },
   "debug": {
     "selectedPolicy": "RePathPolicy",

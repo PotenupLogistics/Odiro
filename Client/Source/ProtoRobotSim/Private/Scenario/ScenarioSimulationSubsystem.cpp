@@ -789,6 +789,8 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 	if (!bHasGoal)
 	{
 		goalLocation = setupInfo.LocationSetupInfo.StartLocationCm;
+		setupInfo.LocationSetupInfo.GoalLocationCm = goalLocation;
+		setupInfo.LocationSetupInfo.bHasGoal = bHasGoal;
 	}
 
 	const bool bRouteGridValid = ValidateDeliveryBotRouteOnGrid(

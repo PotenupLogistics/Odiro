@@ -14,10 +14,12 @@ entry:
   - ScenarioRunnerSubsystem.h / .cpp
   - EpisodeMeasurementLogSubsystem.h / .cpp
   - EpisodeEvaluationReportJson.h / .cpp
+  - EpisodeResultTypes.h
   - Client/Json/Input
   - contracts/specs
 keep:
   - Parser-only samples/schemas owned only by Client stay in Client.
+  - Scenario setup/run queue samples in Client/Json/Input are client-owned examples; shared contract truth stays in contracts/specs.
 verify:
   - contract specs vs sample JSON alignment
   - focused automation tests for Scenario/Episode changes

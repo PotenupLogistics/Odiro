@@ -8,6 +8,7 @@ Rules:
 - Update cards when entry points, ownership, boundaries, or verification flow changes.
 
 Cards:
+- [agent-context](agent-context.md): root agent rules and source index ownership
 - [root-dev-workflow](root-dev-workflow.md): root setup/build/run/dev, hooks, repo tools
 - [agents-generation-runtime](agents-generation-runtime.md): FastAPI generation, WorldConfig, setup pairs, RunQueue
 - [agents-policy-rag-data](agents-policy-rag-data.md): policy RAG, policy cards, source/review data

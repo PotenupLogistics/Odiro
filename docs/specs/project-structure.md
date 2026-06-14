@@ -51,18 +51,17 @@ Odiro/
     go.mod
     README.md
     cmd/
-      OdiroHost/
+      odirohost/
         main.go                   # host 실행 진입점
     internal/
+      ipc/                        # IPC 전송 레이어
+      protocol/                   # JSON 통신 프로토콜
       client/                     # Client API
       agents/                     # Agents API
       process/                    # Simulator 등 child process 관리
       runs/                       # 실행 상태 추적
       appdata/                    # 로컬 데이터 관리
-    Tools/
-      CheckPrerequisites.ps1
-      Build.ps1
-      Run.ps1
+    tools/
     task-setup.bat
     task-build.bat
     task-run.bat

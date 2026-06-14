@@ -24,13 +24,15 @@ entry:
 keep:
   - Root scripts orchestrate project-owned task scripts; they do not implement Unreal or Agents startup details.
   - Root setup calls project task scripts directly, not project public .bat wrappers, to avoid duplicate phases.
-  - Go is excluded from setup checks until Bridge exists.
+  - Root build includes Bridge and Client; Agents has no build phase.
 verify:
   - PowerShell parse check for script edits
   - hook syntax and stdin smoke for .githooks changes
   - task-setup.bat -AllowMissingPrerequisites -SkipAgents
   - tools/check-prerequisites.ps1 -AllowMissing
+  - tools/build.ps1 -Target bridge
 related:
   - agents-tooling-harness
+  - bridge-host
   - client-platform-execution
 ---

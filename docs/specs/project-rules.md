@@ -10,7 +10,7 @@
 - 각 프로젝트는 자체 관례를 우선한다.
   - `Client`: Unreal 관례 우선. PascalCase, Unreal prefix 사용
   - `Agents`: Python 관례 우선. snake_case 사용
-  - `Bridge`: Go 관례 우선. snake_case 사용
+  - `Bridge`: Go 관례 우선. flatcase/snake_case 사용
 
 예:
 
@@ -24,6 +24,10 @@ Client/Content/UI/WBP_MainMenu.uasset
 ### Module
 
 서브 프로젝트는 PascalCase, 그 외는 kebab-case 기본 사용.
+
+### Executable
+
+Release executable 이름은 PascalCase 사용.
 
 ## Ownership 관리
 

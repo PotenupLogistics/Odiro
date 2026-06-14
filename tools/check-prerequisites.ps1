@@ -20,6 +20,7 @@ Write-Step "Check repository prerequisites"
 $repoRoot = Get-RepoRoot
 $issues = @()
 $issues += @(& (Join-Path $repoRoot "Agents\tools\check-prerequisites.ps1") -PassThru)
+$issues += @(& (Join-Path $repoRoot "Bridge\tools\check-prerequisites.ps1") -PassThru)
 $issues += @(& (Join-Path $repoRoot "Client\Tools\CheckPrerequisites.ps1") -PassThru)
 
 if ($PassThru) {

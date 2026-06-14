@@ -13,6 +13,7 @@ Cards:
 - [agents-generation-runtime](agents-generation-runtime.md): FastAPI generation, WorldConfig, setup pairs, RunQueue
 - [agents-policy-rag-data](agents-policy-rag-data.md): policy RAG, policy cards, source/review data
 - [agents-tooling-harness](agents-tooling-harness.md): Agents scripts, harness, pytest
+- [bridge-host](bridge-host.md): Go host process, portless IPC, Bridge tooling
 - [client-runtime-foundation](client-runtime-foundation.md): Unreal project config, targets, module deps, assets
 - [client-simulation](client-simulation.md): Scenario/Episode runtime, RunQueue, reports
 - [client-delivery-bot-policy](client-delivery-bot-policy.md): DeliveryBot movement, grid, policy HTTP

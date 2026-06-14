@@ -274,7 +274,6 @@ FodyWeavers.xsd
 *.la
 *.a
 *.lib
-*.mod
 *.exe
 *.out
 *.app

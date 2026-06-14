@@ -322,28 +322,30 @@ void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDe
 
 	const FString path = TEXT("robot.lidar");
 	ReadOptionalBoolField(*lidarObject, TEXT("draw_debug"), path, result, lidarSensorConfigInfo.bDrawDebug);
-	ReadOptionalBoolField(*lidarObject, TEXT("draw_near_obstacle_warning_debug"), path, result, lidarSensorConfigInfo.bDrawNearObstacleWarningDebug);
-	ReadOptionalBoolField(*lidarObject, TEXT("draw_near_miss_debug"), path, result, lidarSensorConfigInfo.bDrawNearObstacleWarningDebug);
+	ReadOptionalBoolField(*lidarObject, TEXT("draw_near_miss_debug"), path, result, lidarSensorConfigInfo.bDrawObstacleWarningDebug);
+	ReadOptionalBoolField(*lidarObject, TEXT("draw_near_obstacle_warning_debug"), path, result, lidarSensorConfigInfo.bDrawObstacleWarningDebug);
+	ReadOptionalBoolField(*lidarObject, TEXT("draw_obstacle_warning_debug"), path, result, lidarSensorConfigInfo.bDrawObstacleWarningDebug);
 	ReadOptionalFloatField(*lidarObject, TEXT("scan_range_m"), path, result, lidarSensorConfigInfo.ScanRangeM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("angle_step_degree"), path, result, lidarSensorConfigInfo.AngleStepDegree, 1.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("sensor_height_m"), path, result, lidarSensorConfigInfo.SensorHeightM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("front_half_angle_degree"), path, result, lidarSensorConfigInfo.FrontHalfAngleDegree, 0.0f, 180.0f);
 	ReadOptionalBoolField(*lidarObject, TEXT("store_missed_rays"), path, result, lidarSensorConfigInfo.bStoreMissedRays);
 	ReadOptionalFloatField(*lidarObject, TEXT("stop_distance_m"), path, result, lidarSensorConfigInfo.StopDistanceM, 0.0f);
-	ReadOptionalFloatField(*lidarObject, TEXT("near_obstacle_warning_distance_m"), path, result, lidarSensorConfigInfo.NearObstacleWarningDistanceM, 0.0f);
-	ReadOptionalFloatField(*lidarObject, TEXT("near_miss_distance_m"), path, result, lidarSensorConfigInfo.NearObstacleWarningDistanceM, 0.0f);
+	ReadOptionalFloatField(*lidarObject, TEXT("near_miss_distance_m"), path, result, lidarSensorConfigInfo.ObstacleWarningDistanceM, 0.0f);
+	ReadOptionalFloatField(*lidarObject, TEXT("near_obstacle_warning_distance_m"), path, result, lidarSensorConfigInfo.ObstacleWarningDistanceM, 0.0f);
+	ReadOptionalFloatField(*lidarObject, TEXT("obstacle_warning_distance_m"), path, result, lidarSensorConfigInfo.ObstacleWarningDistanceM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("slow_down_distance_m"), path, result, lidarSensorConfigInfo.SlowDownDistanceM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("collision_stop_half_angle_degree"), path, result, lidarSensorConfigInfo.CollisionStopHalfAngleDegree, 0.0f, 180.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("collision_stop_distance_m"), path, result, lidarSensorConfigInfo.CollisionStopDistanceM, 0.0f);
 	ReadOptionalCollisionChannelField(*lidarObject, TEXT("trace_channel"), path, result, lidarSensorConfigInfo.TraceChannel);
 	ReadOptionalNameArrayField(*lidarObject, TEXT("ignore_tags"), path, result, lidarSensorConfigInfo.IgnoreTags);
 
-	lidarSensorConfigInfo.NearObstacleWarningDistanceM = FMath::Max(
-		lidarSensorConfigInfo.NearObstacleWarningDistanceM,
+	lidarSensorConfigInfo.ObstacleWarningDistanceM = FMath::Max(
+		lidarSensorConfigInfo.ObstacleWarningDistanceM,
 		lidarSensorConfigInfo.StopDistanceM + 0.1f);
 	lidarSensorConfigInfo.SlowDownDistanceM = FMath::Max(
 		lidarSensorConfigInfo.SlowDownDistanceM,
-		lidarSensorConfigInfo.NearObstacleWarningDistanceM + 0.1f);
+		lidarSensorConfigInfo.ObstacleWarningDistanceM + 0.1f);
 	lidarSensorConfigInfo.CollisionStopHalfAngleDegree = FMath::Clamp(
 		lidarSensorConfigInfo.CollisionStopHalfAngleDegree,
 		0.0f,

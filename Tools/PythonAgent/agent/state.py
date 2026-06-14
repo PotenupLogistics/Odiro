@@ -27,11 +27,11 @@ class AgentState:
     repathCount: int = 0                      # 재경로 탐색 횟수
     slowdownCount: int = 0                    # 감속 action 발생 횟수
     followPathWorldPoints: list[dict[str, float]] = field(default_factory=list)
-    nearObstacleWarningCount: int = 0
-    bNearObstacleWarningRecorded: bool = False
-    nearObstacleWarningRecordedSources: set[str] = field(default_factory=set)
-    lastNearObstacleWarningCell: tuple[int, int] | None = None
-    lastNearObstacleWarningSource: str = ""
+    obstacleWarningCount: int = 0
+    bObstacleWarningRecorded: bool = False
+    obstacleWarningRecordedSources: set[str] = field(default_factory=set)
+    lastObstacleWarningCell: tuple[int, int] | None = None
+    lastObstacleWarningSource: str = ""
     dynamicBlockedCells: set[tuple[int, int]] = field(default_factory=set)  # LiDAR로 새로 막은 동적 장애물 cell 목록
     lastRepathTimeSeconds: float = -999.0                                   # 마지막 재탐색 시간
     repathDebounceUntilSeconds: dict[str, float] = field(default_factory=dict)
@@ -75,11 +75,11 @@ class AgentState:
         self.stopCount = 0
         self.repathCount = 0
         self.slowdownCount = 0
-        self.nearObstacleWarningCount = 0
-        self.bNearObstacleWarningRecorded = False
-        self.nearObstacleWarningRecordedSources = set()
-        self.lastNearObstacleWarningCell = None
-        self.lastNearObstacleWarningSource = ""
+        self.obstacleWarningCount = 0
+        self.bObstacleWarningRecorded = False
+        self.obstacleWarningRecordedSources = set()
+        self.lastObstacleWarningCell = None
+        self.lastObstacleWarningSource = ""
         self.dynamicBlockedCells = set()
         self.lastRepathTimeSeconds = -999.0
         self.repathDebounceUntilSeconds = {}
@@ -140,11 +140,11 @@ class AgentState:
         self.stopCount = 0
         self.repathCount = 0
         self.slowdownCount = 0
-        self.nearObstacleWarningCount = 0
-        self.bNearObstacleWarningRecorded = False
-        self.nearObstacleWarningRecordedSources = set()
-        self.lastNearObstacleWarningCell = None
-        self.lastNearObstacleWarningSource = ""
+        self.obstacleWarningCount = 0
+        self.bObstacleWarningRecorded = False
+        self.obstacleWarningRecordedSources = set()
+        self.lastObstacleWarningCell = None
+        self.lastObstacleWarningSource = ""
         self.dynamicBlockedCells = set()
         self.lastRepathTimeSeconds = -999.0
         self.repathDebounceUntilSeconds = {}

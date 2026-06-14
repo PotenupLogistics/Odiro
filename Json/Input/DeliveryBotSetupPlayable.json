@@ -19,7 +19,7 @@
       "angle_step_degree": 5.0,
       "front_half_angle_degree": 25.0,
       "stop_distance_m": 1.4,
-      "near_obstacle_warning_distance_m": 2.0,
+      "obstacle_warning_distance_m": 2.0,
       "slow_down_distance_m": 4.8
     }
   }

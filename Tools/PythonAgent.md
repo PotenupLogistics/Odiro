@@ -308,7 +308,7 @@ http://127.0.0.1:8000/scenario/end
   "metrics": {
     "elapsedTimeSeconds": 12.4,
     "stopCount": 2,
-    "nearObstacleWarningCount": 0
+    "obstacleWarningCount": 0
   },
   "debug": {
     "selectedPolicy": "RePathPolicy",

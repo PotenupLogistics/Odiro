@@ -49,6 +49,7 @@ LLM API key
 - `.uasset`, `.umap`, `.ubulk`, `.uexp` 수정 시 lock 필요
   - `task-setup.bat` 또는 `tools/set-git-config.ps1` 실행해야 설정 적용
 - Unreal Editor: `Check Out`만 수행. `Submit`, `Push`, `Unlock`, repository initialize 기능 사용 금지
+  - Source Control 탭에서 `Git LFS 2 provider` 설정 필요
 - Checkout 실패 시 다른 사람이 lock한 상태. 해당 asset 수정 금지
 - main 반영 후 변경된 애셋 자동 unlock됨
 - dangling lock은 `tools/manual-unlock.ps1`로 해제 가능. 일반 작업 시 금지

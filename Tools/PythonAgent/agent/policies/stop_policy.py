@@ -15,7 +15,7 @@ class StopPolicy:
         soft_stop_brake: float = 0.18,
         emergency_stop_distance_m: float = 0.45,
         emergency_brake: float = 0.45,
-        near_obstacle_warning_distance_m: float = 2.0,
+        obstacle_warning_distance_m: float = 2.0,
         stop_hold_seconds: float = 3.0,
         recovery_seconds: float = 3.0,
         recovery_speed_kmh: float = 1.2,
@@ -29,7 +29,7 @@ class StopPolicy:
         self.softStopBrake = soft_stop_brake
         self.emergencyStopDistanceM = emergency_stop_distance_m
         self.emergencyBrake = emergency_brake
-        self.nearObstacleWarningDistanceM = near_obstacle_warning_distance_m
+        self.obstacleWarningDistanceM = obstacle_warning_distance_m
         self.stopHoldSeconds = stop_hold_seconds
         self.recoverySeconds = recovery_seconds
         self.recoverySpeedKmh = recovery_speed_kmh
@@ -45,10 +45,19 @@ class StopPolicy:
         drive_spec = request.driveSpec or {}
 
         self.stopDistanceM = float(lidar_spec.get("stopDistanceM", self.stopDistanceM))
-        self.nearObstacleWarningDistanceM = float(
+        self.obstacleWarningDistanceM = float(
             lidar_spec.get(
-                "nearObstacleWarningDistanceM",
-                lidar_spec.get("nearMissDistanceM", self.nearObstacleWarningDistanceM),
+                "obstacleWarningDistanceM",
+                lidar_spec.get(
+                    "obstacle_warning_distance_m",
+                    lidar_spec.get(
+                        "nearObstacleWarningDistanceM",
+                        lidar_spec.get(
+                            "near_obstacle_warning_distance_m",
+                            lidar_spec.get("nearMissDistanceM", self.obstacleWarningDistanceM),
+                        ),
+                    ),
+                ),
             )
         )
         self.frontAngleDegree = float(lidar_spec.get("frontHalfAngleDegree", self.frontAngleDegree))
@@ -97,7 +106,7 @@ class StopPolicy:
         )
         self.collisionStopHalfAngleDegree = clamp(self.collisionStopHalfAngleDegree, 0.0, self.frontAngleDegree)
         self.collisionStopDistanceM = max(0.0, self.collisionStopDistanceM)
-        self.nearObstacleWarningDistanceM = max(self.stopDistanceM + 0.1, self.nearObstacleWarningDistanceM)
+        self.obstacleWarningDistanceM = max(self.stopDistanceM + 0.1, self.obstacleWarningDistanceM)
 
     def decide(
         self,
@@ -106,7 +115,7 @@ class StopPolicy:
     ) -> tuple[BotAction | None, str]:
         front_ray = self.find_nearest_stop_ray(request)
         if front_ray is None:
-            self.record_side_near_obstacle_warning_once(request, state)
+            self.record_side_obstacle_warning_once(request, state)
             state.frontObstacleStopStartSeconds = None
             return None, ""
 
@@ -157,36 +166,36 @@ class StopPolicy:
         yaw_degree = abs(normalize_angle_degree(ray.rayYawDegree))
         return yaw_degree <= self.collisionStopHalfAngleDegree or ray.distanceM <= self.collisionStopDistanceM
 
-    def record_side_near_obstacle_warning_once(self, request: ScenarioDecideRequest, state: AgentState) -> None:
+    def record_side_obstacle_warning_once(self, request: ScenarioDecideRequest, state: AgentState) -> None:
         for ray in request.lidarRays:
             if (
                 not ray.hit
                 or self.is_ignored_lidar_policy_ray(ray)
-                or ray.distanceM > self.nearObstacleWarningDistanceM
+                or ray.distanceM > self.obstacleWarningDistanceM
             ):
                 continue
 
             if ray.distanceM <= self.stopDistanceM and self.is_collision_stop_ray(ray):
                 continue
 
-            source = self.get_lidar_near_obstacle_warning_source(ray)
-            if source in state.nearObstacleWarningRecordedSources:
+            source = self.get_lidar_obstacle_warning_source(ray)
+            if source in state.obstacleWarningRecordedSources:
                 continue
 
-            state.nearObstacleWarningRecordedSources.add(source)
-            state.nearObstacleWarningCount += 1
-            state.bNearObstacleWarningRecorded = True
-            state.lastNearObstacleWarningCell = None
-            state.lastNearObstacleWarningSource = source
+            state.obstacleWarningRecordedSources.add(source)
+            state.obstacleWarningCount += 1
+            state.bObstacleWarningRecorded = True
+            state.lastObstacleWarningCell = None
+            state.lastObstacleWarningSource = source
 
-    def get_lidar_near_obstacle_warning_source(self, ray) -> str:
+    def get_lidar_obstacle_warning_source(self, ray) -> str:
         if ray.actorName:
             return ray.actorName
 
         if ray.rayIndex is not None:
             return f"LidarRay:{ray.rayIndex}"
 
-        return "LidarNearObstacleWarning"
+        return "LidarObstacleWarning"
 
     def is_ignored_lidar_policy_ray(self, ray) -> bool:
         actor_name = ray.actorName or ""

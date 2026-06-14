@@ -59,7 +59,7 @@
 				"prop_id": "obstacle.box_02",
 				"xy_m": [
 					0.30024164199829101,
-					-0.023388869762420654
+					-0.26165602101704344
 				],
 				"yaw_deg": 0
 			},
@@ -68,7 +68,7 @@
 				"prop_id": "obstacle.box_02",
 				"xy_m": [
 					0,
-					1
+					-1.2222943616422788
 				],
 				"yaw_deg": 0
 			},
@@ -87,6 +87,24 @@
 				"xy_m": [
 					-2,
 					-2.6312137671104403
+				],
+				"yaw_deg": 0
+			},
+			{
+				"instance_id": "obstacle_005",
+				"prop_id": "obstacle.box_02",
+				"xy_m": [
+					0.5,
+					-2.5
+				],
+				"yaw_deg": 0
+			},
+			{
+				"instance_id": "obstacle_006",
+				"prop_id": "obstacle.fire_hydrant",
+				"xy_m": [
+					3.5,
+					1
 				],
 				"yaw_deg": 0
 			}

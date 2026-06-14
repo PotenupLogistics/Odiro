@@ -40,7 +40,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           lfs: false
           token: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
 
@@ -117,6 +117,17 @@ jobs:
                   return @($locks.Value)
               }
               return @($Payload)
+          }
+
+          if (
+              $env:EVENT_NAME -ne "workflow_dispatch" -and
+              $env:PUSH_FORCED -ne "true" -and
+              -not (Test-ZeroOid $env:PUSH_BEFORE)
+          ) {
+              git fetch --no-tags --depth=1 origin $env:PUSH_BEFORE
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to fetch push before commit $env:PUSH_BEFORE."
+              }
           }
 
           $locksPayload = (git lfs locks --json | Out-String) | ConvertFrom-Json

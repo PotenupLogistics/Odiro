@@ -1,0 +1,214 @@
+name: Asset Lock - Auto Unlock
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Dry-run lists targets. Unlock requires an exact path.
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - unlock
+      path:
+        description: Repository-relative exact path for manual unlock.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  unlock:
+    name: Unlock merged Unreal assets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require LFS lock bot token
+        shell: pwsh
+        env:
+          LFS_LOCK_BOT_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:LFS_LOCK_BOT_TOKEN)) {
+              throw "Repository secret LFS_LOCK_BOT_TOKEN is required for Git LFS unlock."
+          }
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+          token: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
+
+      - name: Verify Git LFS
+        run: git lfs version
+
+      - name: Unlock targets
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+          PUSH_FORCED: ${{ github.event.forced }}
+          HEAD_COMMIT_TIMESTAMP: ${{ github.event.head_commit.timestamp }}
+          DISPATCH_MODE: ${{ github.event.inputs.mode }}
+          DISPATCH_PATH: ${{ github.event.inputs.path }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
+
+          function ConvertTo-GitPath {
+              param([string] $Path)
+              if ([string]::IsNullOrWhiteSpace($Path)) {
+                  return ""
+              }
+              if ($Path -match "[*?\[\]]") {
+                  throw "Wildcard paths are not allowed: $Path"
+              }
+              $gitPath = ($Path -replace "\\", "/").Trim().TrimStart("./")
+              if ($gitPath -match "(^|/)\.\.($|/)") {
+                  throw "Parent directory segments are not allowed: $Path"
+              }
+              return $gitPath
+          }
+
+          function Test-ZeroOid {
+              param([string] $Oid)
+              return -not [string]::IsNullOrWhiteSpace($Oid) -and $Oid -match "^0+$"
+          }
+
+          function Test-UnrealAssetPath {
+              param([string] $Path)
+              return (ConvertTo-GitPath $Path) -match "\.(uasset|umap|ubulk|uexp)$"
+          }
+
+          function Get-LockPath {
+              param([object] $Lock)
+              $property = $Lock.PSObject.Properties["path"]
+              if ($null -eq $property -or [string]::IsNullOrWhiteSpace([string] $property.Value)) {
+                  return ""
+              }
+              return ConvertTo-GitPath ([string] $property.Value)
+          }
+
+          function Get-LockTime {
+              param([object] $Lock)
+              $property = $Lock.PSObject.Properties["locked_at"]
+              if ($null -eq $property -or [string]::IsNullOrWhiteSpace([string] $property.Value)) {
+                  return $null
+              }
+              return [datetime]::Parse([string] $property.Value).ToUniversalTime()
+          }
+
+          function Get-LockArray {
+              param([object] $Payload)
+              if ($null -eq $Payload) {
+                  return @()
+              }
+              if ($Payload -is [array]) {
+                  return @($Payload)
+              }
+              $locks = $Payload.PSObject.Properties["locks"]
+              if ($null -ne $locks) {
+                  return @($locks.Value)
+              }
+              return @($Payload)
+          }
+
+          $locksPayload = (git lfs locks --json | Out-String) | ConvertFrom-Json
+          $locks = @(Get-LockArray $locksPayload)
+          $locksByPath = @{}
+          foreach ($lock in $locks) {
+              $path = Get-LockPath $lock
+              if (-not [string]::IsNullOrWhiteSpace($path)) {
+                  $locksByPath[$path] = $lock
+              }
+          }
+
+          $mode = if ([string]::IsNullOrWhiteSpace($env:DISPATCH_MODE)) { "unlock" } else { $env:DISPATCH_MODE }
+          $dryRun = $mode -ne "unlock"
+          $targets = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+          if ($env:EVENT_NAME -eq "workflow_dispatch") {
+              $manualPath = ConvertTo-GitPath $env:DISPATCH_PATH
+              if ([string]::IsNullOrWhiteSpace($manualPath)) {
+                  foreach ($lock in $locks) {
+                      $path = Get-LockPath $lock
+                      if (Test-UnrealAssetPath $path) {
+                          [void] $targets.Add($path)
+                      }
+                  }
+                  if (-not $dryRun) {
+                      throw "workflow_dispatch unlock requires an exact repository-relative path."
+                  }
+              }
+              else {
+                  if (-not (Test-UnrealAssetPath $manualPath)) {
+                      throw "Manual unlock path is not an Unreal binary asset: $manualPath"
+                  }
+                  [void] $targets.Add($manualPath)
+              }
+          }
+          elseif ($env:PUSH_FORCED -eq "true") {
+              if ([string]::IsNullOrWhiteSpace($env:HEAD_COMMIT_TIMESTAMP)) {
+                  throw "Forced push event has no head_commit timestamp; use manual unlock for stale locks."
+              }
+              $cutoff = [datetime]::Parse($env:HEAD_COMMIT_TIMESTAMP).ToUniversalTime()
+              Write-Host "Forced main update. Cleaning Unreal asset locks with locked_at <= $($cutoff.ToString("o"))."
+              foreach ($lock in $locks) {
+                  $path = Get-LockPath $lock
+                  $lockedAt = Get-LockTime $lock
+                  if ((Test-UnrealAssetPath $path) -and $null -ne $lockedAt -and $lockedAt -le $cutoff) {
+                      [void] $targets.Add($path)
+                  }
+              }
+          }
+          else {
+              if (Test-ZeroOid $env:PUSH_BEFORE) {
+                  $changed = @(git diff-tree --root --no-commit-id --name-only -r $env:PUSH_AFTER)
+              }
+              else {
+                  $changed = @(git diff --name-only $env:PUSH_BEFORE $env:PUSH_AFTER)
+              }
+
+              foreach ($path in $changed) {
+                  $gitPath = ConvertTo-GitPath $path
+                  if (Test-UnrealAssetPath $gitPath) {
+                      [void] $targets.Add($gitPath)
+                  }
+              }
+          }
+
+          if ($targets.Count -eq 0) {
+              Write-Host "No Unreal binary asset unlock targets."
+              exit 0
+          }
+
+          foreach ($path in ($targets | Sort-Object)) {
+              if (-not $locksByPath.ContainsKey($path)) {
+                  Write-Host "Already unlocked: $path"
+                  continue
+              }
+
+              $lock = $locksByPath[$path]
+              $id = [string] $lock.id
+              if ($dryRun) {
+                  Write-Host "Dry-run unlock target: $path id=$id"
+                  continue
+              }
+
+              if ([string]::IsNullOrWhiteSpace($id)) {
+                  git lfs unlock --force $path
+              }
+              else {
+                  git lfs unlock --force "--id=$id"
+              }
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to unlock $path."
+              }
+              Write-Host "Unlocked: $path"
+          }

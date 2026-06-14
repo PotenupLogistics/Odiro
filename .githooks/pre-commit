@@ -6,5 +6,10 @@ if [ -z "$repo_root" ]; then
   exit 1
 fi
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$repo_root/tools/verify-staged.ps1" -Hook pre-commit
-exit $?
+current_branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null)
+if [ "$current_branch" != "main" ]; then
+  exit 0
+fi
+
+echo "main-workflow: direct commits on main are blocked; use a PR branch." >&2
+exit 1

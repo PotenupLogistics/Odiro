@@ -1,6 +1,6 @@
-# Verifies main-branch staged changes before commit or merge commit creation.
+# Verifies staged changes for local main gates and pull request checks.
 param(
-    [ValidateSet("manual", "pre-commit", "pre-merge-commit")]
+    [ValidateSet("manual", "pre-commit", "pre-merge-commit", "pr-check")]
     [string] $Hook = "manual",
     [switch] $Force
 )

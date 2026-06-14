@@ -40,6 +40,9 @@ LLM API key
 - 긴급 수정 시 hotfix branch 작성 후 Pull Request 수행
 - 상태 변경 시 빌드 및 테스트 통과 필요
 - main force push는 의도적 복구 작업으로 허용. force push 후 남은 stale lock은 manual unlock으로 정리
+- main 동기화는 fast-forward pull만 허용: `git pull --ff-only origin main`
+
+설정이 꼬였으면 `.\tools\set-git-config.ps1`를 다시 실행한다.
 
 ## Binary Asset lock 규칙
 

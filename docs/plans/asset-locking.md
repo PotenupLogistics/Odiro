@@ -278,6 +278,7 @@ git check-attr lockable -- Client/Content/<sample>.uasset
 
 - `tools/set-git-config.ps1` 추가
 - 기존 `core.hooksPath`, `merge.ff=false` 유지
+- `pull.ff=only` 설정으로 `git pull`은 fast-forward sync만 허용
 - LFS manual install/update/config 추가
 - 이미 설정된 값은 `Already configured`로 표시
 - `.lfsconfig`, Unreal asset attribute 확인
@@ -292,6 +293,7 @@ git check-attr lockable -- Client/Content/<sample>.uasset
 .\tools\set-git-config.ps1
 git config --local --get core.hooksPath
 git config --local --get merge.ff
+git config --local --get pull.ff
 git config --local --get lfs.locksverify
 git config --local --get lfs.setlockablereadonly
 ```

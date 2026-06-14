@@ -130,6 +130,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Step "Git LFS hook snippets verified."
 
 Set-ExpectedLocalGitConfig -Name "merge.ff" -Expected "false"
+Set-ExpectedLocalGitConfig -Name "pull.ff" -Expected "only"
 Set-ExpectedLocalGitConfig -Name "lfs.locksverify" -Expected "true"
 Set-ExpectedLocalGitConfig -Name "lfs.setlockablereadonly" -Expected "true"
 

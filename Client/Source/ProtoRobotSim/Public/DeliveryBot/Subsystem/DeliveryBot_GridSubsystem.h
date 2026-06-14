@@ -122,13 +122,13 @@ public:
 	
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Grid")
-	float DynamicObstacleBlockBound{ 0.5f };
+	float DynamicObstacleBlockBound{ 0.4f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Grid")
 	bool bDrawDebug{ true };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Grid")
-	float CellSize{50.f};  // Grid 사이즈 
+	float CellSize{25.f};  // Grid 사이즈
 	
 private:
 	UPROPERTY()

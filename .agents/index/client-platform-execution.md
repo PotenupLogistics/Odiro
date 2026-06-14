@@ -13,7 +13,7 @@ paths:
 entry:
   - SimulatorLaunchSubsystem.h / .cpp
   - SimulatorProcessSubsystem.h / .cpp
-  - EpisodeEditorLaunchSubsystem.h / .cpp
+  - ScenarioEditorLaunchSubsystem.h / .cpp
   - PlatformAnalysisAiSubsystem.h / .cpp
   - MainMenuPlayerController.h / .cpp
   - Widget/MainMenuWidget.h / .cpp
@@ -27,6 +27,7 @@ keep:
   - Platform UI reads simulator state via status/report/log files, not simulator world objects.
   - Client/Tools use Client/Tools/Common.ps1, never root tools/common.ps1.
   - Client prerequisite checks cover Windows Unreal C++ only; Android/iOS/macOS/MAUI are not failures.
+  - Legacy Client root scripts such as BuildProject.bat, RunPreview.bat, and RunPythonPolicyServer.bat stay folded into Task-* wrappers.
 verify:
   - launcher command contract tests for launch arg changes
   - runtime log plus status JSON for process changes

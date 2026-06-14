@@ -8,12 +8,6 @@
       "acceleration_rate_kmh_per_second": 1.8,
       "deceleration_rate_kmh_per_second": 3.2
     },
-    "path_follow": {
-      "target_speed_kmh": 7.5,
-      "look_ahead_distance_m": 1.2,
-      "goal_acceptance_distance_m": 0.8,
-      "obstacle_slow_speed_kmh": 2.0
-    },
     "lidar": {
       "scan_range_m": 5.5,
       "angle_step_degree": 4.0,

@@ -42,7 +42,7 @@ bool FSimulationSetupJsonParseSampleTest::RunTest(const FString& parameters)
 	TestEqual(TEXT("schema"), result.Setup.Schema, FString(TEXT("simulation_setup")));
 	TestEqual(TEXT("version"), result.Setup.Version, 1);
 	TestEqual(TEXT("map id"), result.Setup.MapId, FString(TEXT("ScenarioSimulationMap")));
-	TestEqual(TEXT("run queue"), result.Setup.RunQueueJsonPath, FString(TEXT("Json/Input/EpisodeRunQueueSample.json")));
+	TestEqual(TEXT("run queue"), result.Setup.RunQueueJsonPath, FString(TEXT("Json/Input/ScenarioRunQueueSample.json")));
 	TestEqual(TEXT("fixed step fps"), result.Setup.FixedStep.Fps, 60);
 	TestTrue(TEXT("measurement enabled"), result.Setup.MeasurementLog.bEnabled);
 	TestEqual(TEXT("measurement output directory"), result.Setup.MeasurementLog.OutputDirectory, FString(TEXT("Saved/AnalysisLogs")));
@@ -68,22 +68,22 @@ bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters
 
 	TestTrue(TEXT("playable setup parses"), setupResult.bSuccess);
 	TestEqual(TEXT("playable map id"), setupResult.Setup.MapId, FString(TEXT("ScenarioSimulationMap")));
-	TestEqual(TEXT("playable run queue"), setupResult.Setup.RunQueueJsonPath, FString(TEXT("Json/Input/EpisodeRunQueuePlayable.json")));
+	TestEqual(TEXT("playable run queue"), setupResult.Setup.RunQueueJsonPath, FString(TEXT("Json/Input/ScenarioRunQueuePlayable.json")));
 
 	FString runQueueJson;
 	TestTrue(
 		TEXT("playable run queue loads"),
 		FFileHelper::LoadFileToString(
 			runQueueJson,
-			*FSimulationSetupJson::ResolveProjectPath(TEXT("Json/Input/EpisodeRunQueuePlayable.json"))));
+			*FSimulationSetupJson::ResolveProjectPath(TEXT("Json/Input/ScenarioRunQueuePlayable.json"))));
 
 	TArray<FScenarioRunInput> runInputs;
 	TArray<FString> runQueueDiagnostics;
 	TestTrue(
 		TEXT("playable run queue reads"),
-		USimulatorLaunchSubsystem::TryReadEpisodeRunQueueJson(runQueueJson, runInputs, runQueueDiagnostics));
+		USimulatorLaunchSubsystem::TryReadScenarioRunQueueJson(runQueueJson, runInputs, runQueueDiagnostics));
 	TestEqual(TEXT("playable run input count"), runInputs.Num(), 1);
-	TestEqual(TEXT("playable scenario setup path"), runInputs[0].ScenarioSetupJsonPath, FString(TEXT("Json/Input/EpisodeSetupPlayable.json")));
+	TestEqual(TEXT("playable scenario setup path"), runInputs[0].ScenarioSetupJsonPath, FString(TEXT("Json/Input/ScenarioSetupPlayable.json")));
 	TestEqual(TEXT("playable policy path"), runInputs[0].DeliveryBotSetupJsonPath, FString(TEXT("Json/Input/DeliveryBotSetupPlayable.json")));
 	TestEqual(
 		TEXT("playable policy spec path"),
@@ -97,7 +97,7 @@ bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters
 
 	const UScenarioCompiler* episodeCompiler = NewObject<UScenarioCompiler>();
 	const FScenarioCompileResult episodeResult =
-		episodeCompiler->CompileScenarioWorldSpecFromJsonFile(TEXT("Json/Input/EpisodeSetupPlayable.json"));
+		episodeCompiler->CompileScenarioWorldSpecFromJsonFile(TEXT("Json/Input/ScenarioSetupPlayable.json"));
 	TestTrue(TEXT("playable episode compiles"), episodeResult.bSuccess);
 
 	const FScenarioPlaceableInstanceSpec* robotSpec = nullptr;
@@ -165,7 +165,7 @@ bool FSimulationSetupJsonWriteRoundTripTest::RunTest(const FString& parameters)
 {
 	FSimulationSetup setup;
 	setup.MapId = TEXT("ScenarioSimulationMap");
-	setup.RunQueueJsonPath = TEXT("Json/Input/EpisodeRunQueueSample.json");
+	setup.RunQueueJsonPath = TEXT("Json/Input/ScenarioRunQueueSample.json");
 	setup.FixedStep.Fps = 30;
 	setup.MeasurementLog.bEnabled = true;
 	setup.MeasurementLog.OutputDirectory = TEXT("Saved/TestLogs");

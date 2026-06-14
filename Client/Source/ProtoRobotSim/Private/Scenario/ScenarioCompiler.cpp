@@ -1052,8 +1052,9 @@ void UScenarioCompiler::CompileRobotSpawn(const FJsonObject& actorsObject, FScen
 		}
 	}
 
-	robotSetupInfo.LocationSetupInfo.bAutoStartRoute =
-		!bSpawnOnly && robotSetupInfo.LocationSetupInfo.bAutoStartRoute && bHasGoal;
+	// 목표 존재 여부를 SetupInfo에도 저장한다.
+	robotSetupInfo.LocationSetupInfo.bHasGoal = bHasGoal;
+	robotSetupInfo.LocationSetupInfo.bAutoStartRoute = !bSpawnOnly && robotSetupInfo.LocationSetupInfo.bAutoStartRoute && bHasGoal;
 	robotSpec.DeliveryBot.bHasGoalLocation = bHasGoal;
 
 	AddJsonProperties(*robotObject, robotSpec.Properties);

@@ -18,12 +18,6 @@ DEFINE_LOG_CATEGORY_STATIC(LogScenarioLlmAuthoring, Log, All);
 namespace
 {
 	const TCHAR* ExpectedRunQueueSchema = TEXT("episode_run_queue");
-
-	bool TryReadRunQueueScenarioSetupPath(const FJsonObject& runObject, FString& outScenarioSetupPath)
-	{
-		return runObject.TryGetStringField(TEXT("scenario_setup"), outScenarioSetupPath)
-			|| runObject.TryGetStringField(TEXT("scenario_setup_json_path"), outScenarioSetupPath);
-	}
 }
 
 void UScenarioLlmAuthoringSubsystem::Deinitialize()
@@ -32,7 +26,7 @@ void UScenarioLlmAuthoringSubsystem::Deinitialize()
 	Super::Deinitialize();
 }
 
-bool UScenarioLlmAuthoringSubsystem::GenerateEpisodeFromPrompt(const FString& prompt, const int32 episodeCount)
+bool UScenarioLlmAuthoringSubsystem::GenerateScenariosFromPrompt(const FString& prompt, const int32 scenarioCount)
 {
 	if (PendingHttpRequest.IsValid())
 	{
@@ -45,7 +39,7 @@ bool UScenarioLlmAuthoringSubsystem::GenerateEpisodeFromPrompt(const FString& pr
 
 	FString requestBody;
 	FScenarioLlmGenerationResult failureResult;
-	if (!TryBuildRequestBody(prompt, episodeCount, requestBody, failureResult))
+	if (!TryBuildRequestBody(prompt, scenarioCount, requestBody, failureResult))
 	{
 		CompleteRequest(failureResult);
 		return false;
@@ -167,7 +161,7 @@ void UScenarioLlmAuthoringSubsystem::CompleteRequest(const FScenarioLlmGeneratio
 
 bool UScenarioLlmAuthoringSubsystem::TryBuildRequestBody(
 	const FString& prompt,
-	const int32 episodeCount,
+	const int32 scenarioCount,
 	FString& outBody,
 	FScenarioLlmGenerationResult& outFailure) const
 {
@@ -182,17 +176,18 @@ bool UScenarioLlmAuthoringSubsystem::TryBuildRequestBody(
 		return false;
 	}
 
-	const int32 resolvedEpisodeCount = episodeCount > 0 ? episodeCount : DefaultEpisodeCount;
-	if (resolvedEpisodeCount <= 0)
+	const int32 resolvedScenarioCount = scenarioCount > 0 ? scenarioCount : DefaultScenarioCount;
+	if (resolvedScenarioCount <= 0)
 	{
-		outFailure.Message = TEXT("Episode count must be greater than zero.");
+		outFailure.Message = TEXT("Scenario count must be greater than zero.");
 		outFailure.Diagnostics.Add(outFailure.Message);
 		return false;
 	}
 
 	TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
 	rootObject->SetStringField(TEXT("prompt"), trimmedPrompt);
-	rootObject->SetNumberField(TEXT("episode_count"), resolvedEpisodeCount);
+	// Proto-AI currently expects this request key; rename it with the server contract.
+	rootObject->SetNumberField(TEXT("episode_count"), resolvedScenarioCount);
 
 	const TSharedRef<TJsonWriter<>> writer = TJsonWriterFactory<>::Create(&outBody);
 	if (!FJsonSerializer::Serialize(rootObject, writer))
@@ -283,12 +278,9 @@ bool UScenarioLlmAuthoringSubsystem::TryValidateAndSaveRunQueue(
 		FString scenarioSetupPath;
 		FString deliveryBotSetupPath;
 		FString policySpecPath;
-		TryReadRunQueueScenarioSetupPath(*runObject, scenarioSetupPath);
+		runObject->TryGetStringField(TEXT("scenario_setup"), scenarioSetupPath);
 		runObject->TryGetStringField(TEXT("delivery_bot_setup"), deliveryBotSetupPath);
-		if (!runObject->TryGetStringField(TEXT("policy_spec"), policySpecPath))
-		{
-			runObject->TryGetStringField(TEXT("policy_spec_json_path"), policySpecPath);
-		}
+		runObject->TryGetStringField(TEXT("policy_spec"), policySpecPath);
 		scenarioSetupPath = scenarioSetupPath.TrimStartAndEnd();
 		deliveryBotSetupPath = deliveryBotSetupPath.TrimStartAndEnd();
 		policySpecPath = policySpecPath.TrimStartAndEnd();

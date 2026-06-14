@@ -1,1126 +1,785 @@
-﻿#include "DeliveryBot/Component/DeliveryBot_HttpPolicyComponent.h"
-
-#include "Async/Async.h"
+#include "DeliveryBot/Component/DeliveryBot_HttpPolicyComponent.h"
+#include "DrawDebugHelpers.h"
+#include "DeliveryBot/Actor/DeliveryBot.h"
+#include "DeliveryBot/Subsystem/DeliveryBotPythonProcessSubsystem.h"
+#include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
-#include "Interfaces/IHttpResponse.h"
-#include "Dom/JsonObject.h"
+#include "Misc/Guid.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
-#include "Misc/FileHelper.h"
-#include "Misc/Paths.h"
-
-namespace
-{
-	const TCHAR* PolicySpecInputDirectory = TEXT("Json/Input/PolicySpecs");
-
-	FString ResolvePolicySpecJsonFilePath(const FString& policySpecJsonFilePath)
-	{
-		FString normalizedPath = policySpecJsonFilePath.TrimStartAndEnd();
-
-		if (normalizedPath.IsEmpty())
-		{
-			return FString{};
-		}
-
-		FPaths::NormalizeFilename(normalizedPath);
-
-		if (FPaths::GetExtension(normalizedPath).IsEmpty())
-		{
-			normalizedPath = FPaths::SetExtension(normalizedPath, TEXT("json"));
-		}
-
-		if (FPaths::IsRelative(normalizedPath) && FPaths::GetPath(normalizedPath).IsEmpty())
-		{
-			normalizedPath = FPaths::Combine(PolicySpecInputDirectory, normalizedPath);
-		}
-
-		if (FPaths::IsRelative(normalizedPath))
-		{
-			return FPaths::ConvertRelativePathToFull(
-				FPaths::Combine(FPaths::ProjectDir(), normalizedPath)
-			);
-		}
-
-		return normalizedPath;
-	}
-
-	bool TryReadVectorObject(const TSharedPtr<FJsonObject>& object, FVector& outVector)
-	{
-		if (!object.IsValid())
-			return false;
-
-		double x = 0.0;
-		double y = 0.0;
-		double z = 0.0;
-
-		if (!object->TryGetNumberField(TEXT("x"), x) || !object->TryGetNumberField(TEXT("y"), y))
-			return false;
-
-		object->TryGetNumberField(TEXT("z"), z);
-		outVector = FVector(x, y, z);
-		return true;
-	}
-
-	void ReadVectorArrayField(const TSharedPtr<FJsonObject>& object, const TCHAR* fieldName, TArray<FVector>& outVectors)
-	{
-		outVectors.Reset();
-
-		const TArray<TSharedPtr<FJsonValue>>* values = nullptr;
-		if (!object.IsValid() || !object->TryGetArrayField(fieldName, values) || values == nullptr)
-			return;
-
-		for (const TSharedPtr<FJsonValue>& value : *values)
-		{
-			if (!value.IsValid())
-				continue;
-
-			FVector vector;
-			if (TryReadVectorObject(value->AsObject(), vector))
-			{
-				outVectors.Add(vector);
-			}
-		}
-	}
-}
-
-
+#include "Interfaces/IHttpResponse.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotHttpPolicy, Log, All);
 
+namespace
+{
+
+	// JSON object field를 안전하게 가져온다.
+	bool TryGetJsonObjectField(const FJsonObject& jsonObject, const FString& fieldName, TSharedPtr<FJsonObject>& outObject)
+	{
+		const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
+		if (!jsonValue.IsValid() || jsonValue->Type != EJson::Object)
+			return false;
+
+		outObject = jsonValue->AsObject();
+		return outObject.IsValid();
+	}
+
+	// JSON array field를 안전하게 가져온다.
+	bool TryGetJsonArrayField(const FJsonObject& jsonObject, const FString& fieldName, TArray<TSharedPtr<FJsonValue>>& outArray)
+	{
+		const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
+		if (!jsonValue.IsValid() || jsonValue->Type != EJson::Array)
+			return false;
+
+		outArray = jsonValue->AsArray();
+		return true;
+	}
+
+	// FName 태그 배열을 JSON string 배열로 변환한다.
+	TArray<TSharedPtr<FJsonValue>> MakeJsonStringArrayFromNames(const TArray<FName>& names)
+	{
+		TArray<TSharedPtr<FJsonValue>> jsonValues;
+		jsonValues.Reserve(names.Num());
+
+		for (const FName& name : names)
+		{
+			jsonValues.Add(MakeShared<FJsonValueString>(name.ToString()));
+		}
+
+		return jsonValues;
+	}
+
+	TSharedRef<FJsonObject> MakeJsonVectorObject(const FVector& vector)
+	{
+		TSharedRef<FJsonObject> jsonObject = MakeShared<FJsonObject>();
+		jsonObject->SetNumberField(TEXT("x"), vector.X);
+		jsonObject->SetNumberField(TEXT("y"), vector.Y);
+		jsonObject->SetNumberField(TEXT("z"), vector.Z);
+		return jsonObject;
+	}
+}
+
+// 컴포넌트 Tick은 끄고 DeliveryBot Tick에서 명시적으로 갱신한다.
 UDeliveryBot_HttpPolicyComponent::UDeliveryBot_HttpPolicyComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-void UDeliveryBot_HttpPolicyComponent::BeginPlay()
+// BeginPlay에서 호출되어 scenario start를 예약한다.
+void UDeliveryBot_HttpPolicyComponent::RequestStartScenario()
 {
-	Super::BeginPlay();
+	if (bScenarioStarted || bStartRequestInFlight)
+		return;
 
-	bIsEndingPlay = false;
+	ResetScenarioState(false);
+
+	bStartRequested = true;
+	TryStartScenario();
 }
 
-void UDeliveryBot_HttpPolicyComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+// start 전에는 재시도하고 start 후에는 decide를 반복 호출한다.
+void UDeliveryBot_HttpPolicyComponent::UpdatePolicy(float deltaTime)
 {
-	bIsEndingPlay = true;
+	if (bEndRequestInFlight)
+		return;
 
-	CancelActiveRequest();
-	CancelActiveGridRequest();
-	CancelActiveEpisodeStartRequest();
-	CancelActiveEpisodeConfigUpdateRequest();
-	CancelActivePolicyCatalogSourcesRequest();
-	CancelActivePolicyCatalogRequest();
-	CancelActivePolicySpecUpdateRequest();
-
-	OnPolicyResponse.Clear();
-	OnParsedPolicyResponse.Clear();
-	OnGridResponse.Clear();
-	OnEpisodeStartResponse.Clear();
-	OnEpisodeConfigUpdateResponse.Clear();
-	OnPolicyCatalogSourcesResponse.Clear();
-	OnParsedPolicyCatalogSourcesResponse.Clear();
-	OnPolicyCatalogResponse.Clear();
-	OnParsedPolicyCatalogResponse.Clear();
-	OnPolicySpecUpdateResponse.Clear();
-	
-	Super::EndPlay(EndPlayReason);
-}
-
-bool UDeliveryBot_HttpPolicyComponent::SendObservationJson(const FString& observationJson)
-{
-	if (observationJson.IsEmpty())
+	if (bStartRequested && !bScenarioStarted)
 	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Observation JSON is empty."));
-		return false;
-	}
-
-	if (bIsEndingPlay)
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy request skipped because component is ending play."));
-		return false;
-	}
-
-	if (bRequestInFlight)
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy request skipped because previous request is still in flight."));
-		return false;
-	}
-	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request = FHttpModule::Get().CreateRequest();
-
-	request->SetURL(PolicyServerUrl);
-	request->SetVerb(TEXT("POST"));
-	request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-	request->SetContentAsString(observationJson);
-	request->SetTimeout(RequestTimeoutSecond);
-
-	TWeakObjectPtr<UDeliveryBot_HttpPolicyComponent> weakThis(this);
-	request->OnProcessRequestComplete().BindLambda([weakThis](FHttpRequestPtr httpRequest, FHttpResponsePtr httpResponse, bool bWasSuccessful)
-	{
-		const int32 responseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode() : 0;
-		const FString responseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString{};
-		AsyncTask(ENamedThreads::GameThread, [weakThis, responseCode, responseBody, bWasSuccessful]()
+		StartRetryElapsedSeconds += deltaTime;
+		if (StartRetryElapsedSeconds >= StartRetryIntervalSeconds)
 		{
-			if (!weakThis.IsValid())
-				return;
+			StartRetryElapsedSeconds = 0.f;
+			TryStartScenario();
+		}
+		return;
+	}
 
-			UDeliveryBot_HttpPolicyComponent* component = weakThis.Get();
-			component->bRequestInFlight = false;
-			component->ActiveRequest.Reset();
+	if (!bScenarioStarted)
+		return;
 
-			if (component->bIsEndingPlay)
-				return;
+	DecideElapsedSeconds += deltaTime;
+	if (DecideElapsedSeconds >= DecideIntervalSeconds)
+	{
+		const float decisionDeltaTime = DecideElapsedSeconds;
+		DecideElapsedSeconds = 0.f;
+		RequestDecision(decisionDeltaTime);
+	}
+}
 
-			if (component->bLogPolicyResponseBody)
+// Python 서버에 /scenario/start 요청을 보낸다.
+bool UDeliveryBot_HttpPolicyComponent::TryStartScenario()
+{
+	if (bScenarioStarted || bStartRequestInFlight)
+		return true;
+
+	FString payload;
+	if (!BuildStartPayload(payload))
+		return false;
+
+	bStartRequestInFlight = true;
+
+	const bool bRequestStarted = SendPostRequest(
+		TEXT("/scenario/start"),
+		payload,
+		[this](FHttpResponsePtr response, bool bSucceeded)
+		{
+			bStartRequestInFlight = false;
+
+			// /scenario/start envelope 응답의 response.status를 확인한다.
+			// /scenario/start envelope 응답의 response.status를 확인한다.
+			if (!bSucceeded || !IsPythonResponseOk(response))
 			{
+				const int32 responseCode = response.IsValid() ? response->GetResponseCode() : 0;
+				const FString responseBody = response.IsValid() ? response->GetContentAsString() : FString();
+
 				UE_LOG(
 					LogDeliveryBotHttpPolicy,
-					Log,
-					TEXT("Policy response | Success: %s, Code: %d, Body: %s"),
-					bWasSuccessful ? TEXT("true") : TEXT("false"),
+					Warning,
+					TEXT("Python scenario start failed. Succeeded=%s, Code=%d, Body=%s"),
+					bSucceeded ? TEXT("true") : TEXT("false"),
 					responseCode,
-					*responseBody
-				);
+					*responseBody);
+
+				return;
 			}
 
-			component->OnPolicyResponse.Broadcast(bWasSuccessful, responseCode, responseBody);
-			FDeliveryBotHttpPolicyResponseInfo responseInfo;
-			if (bWasSuccessful && responseCode >= 200 && responseCode < 300)
-			{
-				component->TryParsePolicyResponseJson(responseBody, responseInfo);
-			}
-			else
-			{
-				responseInfo.RawResponseBody = responseBody;
-				responseInfo.ErrorMessage = TEXT("HTTP request failed.");
-			}
-
-			component->OnParsedPolicyResponse.Broadcast(responseInfo);
+			bScenarioStarted = true;
+			UE_LOG(LogDeliveryBotHttpPolicy, Log, TEXT("Python scenario started."));
 		});
-	}
-	);
 
-	bRequestInFlight = true;
-	ActiveRequest = request;
-
-	if (!request->ProcessRequest())
+	if (!bRequestStarted)
 	{
-		bRequestInFlight = false;
-		ActiveRequest.Reset();
-		return false;
+		bStartRequestInFlight = false;
 	}
 
-	return true;
+	return bRequestStarted;
 }
 
-void UDeliveryBot_HttpPolicyComponent::CancelActiveRequest()
+
+// Python 서버에 /scenario/decide 요청을 보내고 action을 차량에 적용한다.
+bool UDeliveryBot_HttpPolicyComponent::RequestDecision(float deltaTime)
 {
-	if (ActiveRequest.IsValid())
-	{
-		ActiveRequest->OnProcessRequestComplete().Unbind();
-		ActiveRequest->CancelRequest();
-		ActiveRequest.Reset();
-	}
-
-	bRequestInFlight = false;
-}
-
-bool UDeliveryBot_HttpPolicyComponent::TryParsePolicyResponseJson(const FString& responseBody, FDeliveryBotHttpPolicyResponseInfo& outResponseInfo) const
-{
-	outResponseInfo = FDeliveryBotHttpPolicyResponseInfo{};
-	outResponseInfo.RawResponseBody = responseBody;
-
-	if (responseBody.IsEmpty())
-	{
-		outResponseInfo.ErrorMessage = TEXT("Response body is empty.");
+	if (!bScenarioStarted || bDecisionRequestInFlight)
 		return false;
-	}
 
-	TSharedPtr<FJsonObject> rootObject;
-	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(responseBody);
-
-	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
-	{
-		outResponseInfo.ErrorMessage = TEXT("Failed to parse policy response JSON.");
+	FString payload;
+	if (!BuildDecidePayload(payload))
 		return false;
-	}
 
-	outResponseInfo.Sequence = rootObject->GetIntegerField(TEXT("sequence"));
-	rootObject->TryGetStringField(TEXT("status"), outResponseInfo.Status);
+	bDecisionRequestInFlight = true;
 
-	rootObject->TryGetNumberField(TEXT("episodeVersion"), outResponseInfo.EpisodeVersion);
-	rootObject->TryGetNumberField(TEXT("configVersion"), outResponseInfo.ConfigVersion);
-	rootObject->TryGetNumberField(TEXT("gridVersion"), outResponseInfo.GridVersion);
-
-	const TSharedPtr<FJsonObject>* actionObject = nullptr;
-	if (rootObject->TryGetObjectField(TEXT("action"), actionObject) && actionObject && actionObject->IsValid())
-	{
-		outResponseInfo.bHasAction = true;
-
-		(*actionObject)->TryGetNumberField(TEXT("steering"), outResponseInfo.Action.Steering);
-		(*actionObject)->TryGetNumberField(TEXT("throttle"), outResponseInfo.Action.Throttle);
-		(*actionObject)->TryGetNumberField(TEXT("brake"), outResponseInfo.Action.Brake);
-		(*actionObject)->TryGetNumberField(TEXT("targetSpeedKmh"), outResponseInfo.Action.TargetSpeedKmh);
-		(*actionObject)->TryGetStringField(TEXT("direction"), outResponseInfo.Action.Direction);
-	}
-
-	const TSharedPtr<FJsonObject>* debugObject = nullptr;
-	if (rootObject->TryGetObjectField(TEXT("debug"), debugObject) && debugObject && debugObject->IsValid())
-	{
-		(*debugObject)->TryGetStringField(TEXT("policyName"), outResponseInfo.Debug.PolicyName);
-		(*debugObject)->TryGetStringField(TEXT("reason"), outResponseInfo.Debug.Reason);
-		(*debugObject)->TryGetStringField(TEXT("pathStatus"), outResponseInfo.Debug.PathStatus);
-		(*debugObject)->TryGetNumberField(TEXT("pathLength"), outResponseInfo.Debug.PathLength);
-
-		double lookAheadX = 0.0;
-		double lookAheadY = 0.0;
-		double lookAheadZ = 0.0;
-		if ((*debugObject)->TryGetNumberField(TEXT("lookAheadWorldX"), lookAheadX)
-			&& (*debugObject)->TryGetNumberField(TEXT("lookAheadWorldY"), lookAheadY))
+	const bool bRequestStarted = SendPostRequest(
+		TEXT("/scenario/decide"),
+		payload,
+		[this, deltaTime](FHttpResponsePtr response, bool bSucceeded)
 		{
-			(*debugObject)->TryGetNumberField(TEXT("lookAheadWorldZ"), lookAheadZ);
-			outResponseInfo.Debug.LookAheadWorldLocationCm = FVector(lookAheadX, lookAheadY, lookAheadZ);
-			outResponseInfo.Debug.bHasLookAheadWorldLocation = true;
-		}
+			bDecisionRequestInFlight = false;
 
-		ReadVectorArrayField(*debugObject, TEXT("pathWorldPoints"), outResponseInfo.Debug.PathWorldPointsCm);
-	}
-
-	if (!outResponseInfo.Status.Equals(TEXT("ok"), ESearchCase::IgnoreCase))
-	{
-		outResponseInfo.ErrorMessage = TEXT("Policy response status is not ok.");
-		return false;
-	}
-
-	if (!outResponseInfo.bHasAction)
-	{
-		outResponseInfo.ErrorMessage = TEXT("Policy response has no action object.");
-		return false;
-	}
-	return true;
-}
-
-bool UDeliveryBot_HttpPolicyComponent::SendGridJson(const FString& gridJson)
-{
-	if (gridJson.IsEmpty())
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Grid JSON is empty."));
-		return false;
-	}
-
-	if (bIsEndingPlay)
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Grid request skipped because component is ending play."));
-		return false;
-	}
-
-	if (bGridRequestInFlight)
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Grid request skipped because previous grid request is still in flight."));
-		return false;
-	}
-
-	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request = FHttpModule::Get().CreateRequest();
-
-	request->SetURL(GridServerUrl);
-	request->SetVerb(TEXT("POST"));
-	request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-	request->SetContentAsString(gridJson);
-	request->SetTimeout(RequestTimeoutSecond);
-
-	TWeakObjectPtr<UDeliveryBot_HttpPolicyComponent> weakThis(this);
-
-	request->OnProcessRequestComplete().BindLambda(
-		[weakThis](FHttpRequestPtr httpRequest, FHttpResponsePtr httpResponse, bool bWasSuccessful)
-		{
-			const int32 responseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode() : 0;
-			const FString responseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString{};
-
-			AsyncTask(ENamedThreads::GameThread, [weakThis, responseCode, responseBody, bWasSuccessful]()
+			FDeliveryBotMoveCommandInfo moveCommand;
+			if (!bSucceeded || !TryParseMoveCommand(response, moveCommand))
 			{
-				if (!weakThis.IsValid())
-					return;
-
-				UDeliveryBot_HttpPolicyComponent* component = weakThis.Get();
-				component->bGridRequestInFlight = false;
-				component->ActiveGridRequest.Reset();
-
-				if (component->bIsEndingPlay)
-					return;
-
-				UE_LOG(
-					LogDeliveryBotHttpPolicy,
-					Log,
-					TEXT("Grid response | Success: %s, Code: %d, Body: %s"),
-					bWasSuccessful ? TEXT("true") : TEXT("false"),
-					responseCode,
-					*responseBody
-				);
-
-				component->OnGridResponse.Broadcast(bWasSuccessful, responseCode, responseBody);
-			});
-		}
-	);
-
-	bGridRequestInFlight = true;
-	ActiveGridRequest = request;
-
-	if (!request->ProcessRequest())
-	{
-		bGridRequestInFlight = false;
-		ActiveGridRequest.Reset();
-		return false;
-	}
-
-	return true;
-}
-
-bool UDeliveryBot_HttpPolicyComponent::SendEpisodeStartJson(const FString& episodeStartJson)
-{
-	if (episodeStartJson.IsEmpty())
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Episode start JSON is empty."));
-		return false;
-	}
-
-	if (bIsEndingPlay)
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Episode start request skipped because component is ending play."));
-		return false;
-	}
-
-	if (bEpisodeStartRequestInFlight)
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Episode start request skipped because previous request is still in flight."));
-		return false;
-	}
-
-	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request = FHttpModule::Get().CreateRequest();
-
-	request->SetURL(EpisodeStartServerUrl);
-	request->SetVerb(TEXT("POST"));
-	request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-	request->SetContentAsString(episodeStartJson);
-	request->SetTimeout(RequestTimeoutSecond);
-
-	TWeakObjectPtr<UDeliveryBot_HttpPolicyComponent> weakThis(this);
-
-	request->OnProcessRequestComplete().BindLambda(
-		[weakThis](FHttpRequestPtr httpRequest, FHttpResponsePtr httpResponse, bool bWasSuccessful)
-		{
-			const int32 responseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode() : 0;
-			const FString responseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString{};
-
-			AsyncTask(ENamedThreads::GameThread, [weakThis, responseCode, responseBody, bWasSuccessful]()
-			{
-				if (!weakThis.IsValid())
-					return;
-
-				UDeliveryBot_HttpPolicyComponent* component = weakThis.Get();
-				component->bEpisodeStartRequestInFlight = false;
-				component->ActiveEpisodeStartRequest.Reset();
-
-				if (component->bIsEndingPlay)
-					return;
-
-				UE_LOG(
-					LogDeliveryBotHttpPolicy,
-					Log,
-					TEXT("Episode start response | Success: %s, Code: %d, Body: %s"),
-					bWasSuccessful ? TEXT("true") : TEXT("false"),
-					responseCode,
-					*responseBody
-				);
-
-				component->OnEpisodeStartResponse.Broadcast(bWasSuccessful, responseCode, responseBody);
-			});
-		}
-	);
-
-	bEpisodeStartRequestInFlight = true;
-	ActiveEpisodeStartRequest = request;
-
-	if (!request->ProcessRequest())
-	{
-		bEpisodeStartRequestInFlight = false;
-		ActiveEpisodeStartRequest.Reset();
-		return false;
-	}
-
-	return true;
-}
-
-bool UDeliveryBot_HttpPolicyComponent::SendEpisodeConfigUpdateJson(const FString& configUpdateJson)
-{
-	if (configUpdateJson.IsEmpty())
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Episode config update JSON is empty."));
-		return false;
-	}
-
-	if (bIsEndingPlay)
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Episode config update request skipped because component is ending play."));
-		return false;
-	}
-
-	if (bEpisodeConfigUpdateRequestInFlight)
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Episode config update request skipped because previous request is still in flight."));
-		return false;
-	}
-
-	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request = FHttpModule::Get().CreateRequest();
-
-	request->SetURL(EpisodeConfigUpdateServerUrl);
-	request->SetVerb(TEXT("POST"));
-	request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-	request->SetContentAsString(configUpdateJson);
-	request->SetTimeout(RequestTimeoutSecond);
-
-	TWeakObjectPtr<UDeliveryBot_HttpPolicyComponent> weakThis(this);
-
-	request->OnProcessRequestComplete().BindLambda(
-		[weakThis](FHttpRequestPtr httpRequest, FHttpResponsePtr httpResponse, bool bWasSuccessful)
-		{
-			const int32 responseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode() : 0;
-			const FString responseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString{};
-
-			AsyncTask(ENamedThreads::GameThread, [weakThis, responseCode, responseBody, bWasSuccessful]()
-			{
-				if (!weakThis.IsValid())
-					return;
-
-				UDeliveryBot_HttpPolicyComponent* component = weakThis.Get();
-				component->bEpisodeConfigUpdateRequestInFlight = false;
-				component->ActiveEpisodeConfigUpdateRequest.Reset();
-
-				if (component->bIsEndingPlay)
-					return;
-
-				UE_LOG(
-					LogDeliveryBotHttpPolicy,
-					Log,
-					TEXT("Episode config update response | Success: %s, Code: %d, Body: %s"),
-					bWasSuccessful ? TEXT("true") : TEXT("false"),
-					responseCode,
-					*responseBody
-				);
-
-				component->OnEpisodeConfigUpdateResponse.Broadcast(bWasSuccessful, responseCode, responseBody);
-			});
-		}
-	);
-
-	bEpisodeConfigUpdateRequestInFlight = true;
-	ActiveEpisodeConfigUpdateRequest = request;
-
-	if (!request->ProcessRequest())
-	{
-		bEpisodeConfigUpdateRequestInFlight = false;
-		ActiveEpisodeConfigUpdateRequest.Reset();
-		return false;
-	}
-
-	return true;
-}
-
-bool UDeliveryBot_HttpPolicyComponent::RequestPolicyCatalogSources()
-{
-	if (bIsEndingPlay)
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy catalog sources request skipped because component is ending play."));
-		return false;
-	}
-
-	if (bPolicyCatalogSourcesRequestInFlight)
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy catalog sources request skipped because previous request is still in flight."));
-		return false;
-	}
-
-	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request = FHttpModule::Get().CreateRequest();
-
-	request->SetURL(PolicyCatalogSourcesServerUrl);
-	request->SetVerb(TEXT("GET"));
-	request->SetTimeout(RequestTimeoutSecond);
-
-	TWeakObjectPtr<UDeliveryBot_HttpPolicyComponent> weakThis(this);
-
-	request->OnProcessRequestComplete().BindLambda(
-		[weakThis](FHttpRequestPtr httpRequest, FHttpResponsePtr httpResponse, bool bWasSuccessful)
-		{
-			const int32 responseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode() : 0;
-			const FString responseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString{};
-
-			AsyncTask(ENamedThreads::GameThread, [weakThis, responseCode, responseBody, bWasSuccessful]()
-			{
-				if (!weakThis.IsValid())
-					return;
-
-				UDeliveryBot_HttpPolicyComponent* component = weakThis.Get();
-				component->bPolicyCatalogSourcesRequestInFlight = false;
-				component->ActivePolicyCatalogSourcesRequest.Reset();
-
-				if (component->bIsEndingPlay)
-					return;
-
-				UE_LOG(
-					LogDeliveryBotHttpPolicy,
-					Log,
-					TEXT("Policy catalog sources response | Success: %s, Code: %d, Body: %s"),
-					bWasSuccessful ? TEXT("true") : TEXT("false"),
-					responseCode,
-					*responseBody
-				);
-
-				component->OnPolicyCatalogSourcesResponse.Broadcast(bWasSuccessful, responseCode, responseBody);
-
-				FDeliveryBotPolicyCatalogSourcesInfo sourcesInfo;
-				sourcesInfo.bWasSuccessful = bWasSuccessful;
-				sourcesInfo.ResponseCode = responseCode;
-				sourcesInfo.RawResponseBody = responseBody;
-
-				if (bWasSuccessful && responseCode >= 200 && responseCode < 300)
+				if (ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(GetOwner()))
 				{
-					component->TryParsePolicyCatalogSourcesJson(responseBody, sourcesInfo);
+					deliveryBot->ApplyParkingStop();
 				}
-				else
-				{
-					sourcesInfo.ErrorMessage = TEXT("Policy catalog sources HTTP request failed.");
-				}
+				return;
+			}
 
-				component->OnParsedPolicyCatalogSourcesResponse.Broadcast(sourcesInfo);
-			});
-		}
-	);
+			if (ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(GetOwner()))
+			{
+				deliveryBot->ApplyMoveCommand(moveCommand, deltaTime);
+			}
+		});
 
-	bPolicyCatalogSourcesRequestInFlight = true;
-	ActivePolicyCatalogSourcesRequest = request;
-
-	if (!request->ProcessRequest())
+	if (!bRequestStarted)
 	{
-		bPolicyCatalogSourcesRequestInFlight = false;
-		ActivePolicyCatalogSourcesRequest.Reset();
-		return false;
+		bDecisionRequestInFlight = false;
 	}
 
-	return true;
+	return bRequestStarted;
 }
 
-bool UDeliveryBot_HttpPolicyComponent::TryParsePolicyCatalogSourcesJson(const FString& responseBody,
-	FDeliveryBotPolicyCatalogSourcesInfo& outSourcesInfo) const
+
+// 현재 GameInstance에서 Python process subsystem을 가져온다.
+UDeliveryBotPythonProcessSubsystem* UDeliveryBot_HttpPolicyComponent::GetPythonProcessSubsystem() const
 {
-	outSourcesInfo.RawResponseBody = responseBody;
+	AActor* owner = GetOwner();
+	if (!IsValid(owner))
+		return nullptr;
 
-	if (responseBody.IsEmpty())
-	{
-		outSourcesInfo.ErrorMessage = TEXT("Policy catalog sources response body is empty.");
-		return false;
-	}
+	UGameInstance* gameInstance = owner->GetGameInstance();
+	if (!IsValid(gameInstance))
+		return nullptr;
 
-	TSharedPtr<FJsonObject> rootObject;
-	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(responseBody);
-
-	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
-	{
-		outSourcesInfo.ErrorMessage = TEXT("Failed to parse policy catalog sources JSON.");
-		return false;
-	}
-
-	rootObject->TryGetStringField(TEXT("status"), outSourcesInfo.Status);
-	rootObject->TryGetStringField(TEXT("activeCatalogId"), outSourcesInfo.ActiveCatalogId);
-
-	const TArray<TSharedPtr<FJsonValue>>* sourceValues = nullptr;
-	if (!rootObject->TryGetArrayField(TEXT("sources"), sourceValues) || sourceValues == nullptr)
-	{
-		outSourcesInfo.ErrorMessage = TEXT("Policy catalog sources response has no sources array.");
-		return false;
-	}
-
-	outSourcesInfo.Sources.Reset();
-
-	for (const TSharedPtr<FJsonValue>& sourceValue : *sourceValues)
-	{
-		if (!sourceValue.IsValid())
-			continue;
-
-		const TSharedPtr<FJsonObject> sourceObject = sourceValue->AsObject();
-		if (!sourceObject.IsValid())
-			continue;
-
-		FDeliveryBotPolicyCatalogSourceEntryInfo entryInfo;
-		sourceObject->TryGetStringField(TEXT("catalogId"), entryInfo.CatalogId);
-		sourceObject->TryGetNumberField(TEXT("catalogVersion"), entryInfo.CatalogVersion);
-		sourceObject->TryGetStringField(TEXT("displayName"), entryInfo.DisplayName);
-		sourceObject->TryGetStringField(TEXT("relativePath"), entryInfo.RelativePath);
-		sourceObject->TryGetNumberField(TEXT("policyCount"), entryInfo.PolicyCount);
-
-		if (entryInfo.CatalogId.IsEmpty())
-			continue;
-
-		outSourcesInfo.Sources.Add(entryInfo);
-	}
-
-	if (!outSourcesInfo.Status.Equals(TEXT("ok"), ESearchCase::IgnoreCase))
-	{
-		outSourcesInfo.ErrorMessage = TEXT("Policy catalog sources status is not ok.");
-		return false;
-	}
-
-	if (outSourcesInfo.Sources.IsEmpty())
-	{
-		outSourcesInfo.ErrorMessage = TEXT("Policy catalog sources list is empty.");
-		return false;
-	}
-
-	return true;
+	return gameInstance->GetSubsystem<UDeliveryBotPythonProcessSubsystem>();
 }
 
-// 사용자가 고른 catalogId를 Python에 보내고, 선택된 정책 catalog 전체를 응답으로 받음
-bool UDeliveryBot_HttpPolicyComponent::RequestPolicyCatalogSource(const FString& catalogId)
+// Python 서버에 POST 요청을 보낸다.
+bool UDeliveryBot_HttpPolicyComponent::SendPostRequest(const FString& endpoint, const FString& payload, TFunction<void(FHttpResponsePtr, bool)> onComplete)
 {
-	if (catalogId.IsEmpty())
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy catalog source request skipped because catalogId is empty."));
+	const UDeliveryBotPythonProcessSubsystem* pythonProcessSubsystem = GetPythonProcessSubsystem();
+	if (!IsValid(pythonProcessSubsystem) || !pythonProcessSubsystem->IsReady())
 		return false;
-	}
 
-	if (bIsEndingPlay)
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy catalog source request skipped because component is ending play."));
-		return false;
-	}
+	const FString normalizedEndpoint = endpoint.StartsWith(TEXT("/")) ? endpoint : TEXT("/") + endpoint;
+	const FString url = pythonProcessSubsystem->GetBaseUrl() + normalizedEndpoint;
 
-	if (bPolicyCatalogRequestInFlight)
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy catalog source request skipped because previous request is still in flight."));
-		return false;
-	}
-
-	TSharedPtr<FJsonObject> rootObject = MakeShared<FJsonObject>();
-	rootObject->SetStringField(TEXT("catalogId"), catalogId);
-
-	FString requestBody;
-	const TSharedRef<TJsonWriter<>> writer = TJsonWriterFactory<>::Create(&requestBody);
-	if (!FJsonSerializer::Serialize(rootObject.ToSharedRef(), writer))
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Failed to serialize policy catalog source request body."));
-		return false;
-	}
-
-	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request = FHttpModule::Get().CreateRequest();
-	request->SetURL(PolicyCatalogSourceServerUrl);
+	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request = FHttpModule::Get().CreateRequest();
+	request->SetURL(url);
 	request->SetVerb(TEXT("POST"));
 	request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-	request->SetContentAsString(requestBody);
-	request->SetTimeout(RequestTimeoutSecond);
+	request->SetContentAsString(payload);
 
-	TWeakObjectPtr<UDeliveryBot_HttpPolicyComponent> weakThis(this);
+	request->OnProcessRequestComplete().BindWeakLambda(this, [onComplete = MoveTemp(onComplete)](FHttpRequestPtr, FHttpResponsePtr response,
+				bool bWasSuccessful) mutable{onComplete(response, bWasSuccessful);});
 
-	request->OnProcessRequestComplete().BindLambda(
-		[weakThis](FHttpRequestPtr httpRequest, FHttpResponsePtr httpResponse, bool bWasSuccessful)
-		{
-			const int32 responseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode() : 0;
-			const FString responseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString{};
-
-			AsyncTask(ENamedThreads::GameThread, [weakThis, responseCode, responseBody, bWasSuccessful]()
-			{
-				if (!weakThis.IsValid())
-					return;
-
-				UDeliveryBot_HttpPolicyComponent* component = weakThis.Get();
-				component->bPolicyCatalogRequestInFlight = false;
-				component->ActivePolicyCatalogRequest.Reset();
-
-				if (component->bIsEndingPlay)
-					return;
-
-				component->OnPolicyCatalogResponse.Broadcast(bWasSuccessful, responseCode, responseBody);
-
-				FDeliveryBotPolicyCatalogInfo catalogInfo;
-				catalogInfo.bWasSuccessful = bWasSuccessful;
-				catalogInfo.ResponseCode = responseCode;
-				catalogInfo.RawResponseBody = responseBody;
-
-				if (bWasSuccessful && responseCode >= 200 && responseCode < 300)
-				{
-					component->TryParsePolicyCatalogJson(responseBody, catalogInfo);
-				}
-				else
-				{
-					catalogInfo.ErrorMessage = TEXT("Policy catalog HTTP request failed.");
-				}
-
-				component->OnParsedPolicyCatalogResponse.Broadcast(catalogInfo);
-			});
-		}
-	);
-
-	bPolicyCatalogRequestInFlight = true;
-	ActivePolicyCatalogRequest = request;
-
-	if (!request->ProcessRequest())
-	{
-		bPolicyCatalogRequestInFlight = false;
-		ActivePolicyCatalogRequest.Reset();
-		return false;
-	}
-
-	return true;
+	return request->ProcessRequest();
 }
 
-// Python 응답 JSON에서 policies 배열을 Unreal 구조체로 변환함
-bool UDeliveryBot_HttpPolicyComponent::TryParsePolicyCatalogJson(const FString& responseBody, FDeliveryBotPolicyCatalogInfo& outCatalogInfo) const
+// request 객체를 Python message envelope으로 감싼다.
+bool UDeliveryBot_HttpPolicyComponent::BuildMessagePayload(const FString& messageType, const TSharedRef<FJsonObject>& requestObject, FString& outPayload) const
 {
-	outCatalogInfo.RawResponseBody = responseBody;
-
-	TSharedPtr<FJsonObject> rootObject;
-	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(responseBody);
-
-	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
-	{
-		outCatalogInfo.ErrorMessage = TEXT("Failed to parse policy catalog JSON.");
-		return false;
-	}
-
-	rootObject->TryGetStringField(TEXT("status"), outCatalogInfo.Status);
-	rootObject->TryGetStringField(TEXT("activeCatalogId"), outCatalogInfo.ActiveCatalogId);
-	rootObject->TryGetStringField(TEXT("catalogId"), outCatalogInfo.CatalogId);
-	rootObject->TryGetNumberField(TEXT("catalogVersion"), outCatalogInfo.CatalogVersion);
-	rootObject->TryGetStringField(TEXT("displayName"), outCatalogInfo.DisplayName);
-	rootObject->TryGetStringField(TEXT("description"), outCatalogInfo.Description);
-
-	const TArray<TSharedPtr<FJsonValue>>* policyValues = nullptr;
-	if (!rootObject->TryGetArrayField(TEXT("policies"), policyValues) || policyValues == nullptr)
-	{
-		outCatalogInfo.ErrorMessage = TEXT("Policy catalog response has no policies array.");
-		return false;
-	}
-
-	outCatalogInfo.Policies.Reset();
-
-	for (const TSharedPtr<FJsonValue>& policyValue : *policyValues)
-	{
-		const TSharedPtr<FJsonObject> policyObject = policyValue.IsValid() ? policyValue->AsObject() : nullptr;
-		if (!policyObject.IsValid())
-			continue;
-
-		FDeliveryBotPolicyCatalogPolicyInfo policyInfo;
-		policyObject->TryGetStringField(TEXT("policyId"), policyInfo.PolicyId);
-		policyObject->TryGetStringField(TEXT("displayName"), policyInfo.DisplayName);
-		policyObject->TryGetStringField(TEXT("description"), policyInfo.Description);
-		policyObject->TryGetStringField(TEXT("category"), policyInfo.Category);
-		policyObject->TryGetBoolField(TEXT("defaultEnabled"), policyInfo.bDefaultEnabled);
-		policyObject->TryGetNumberField(TEXT("defaultPriority"), policyInfo.DefaultPriority);
-		policyObject->TryGetBoolField(TEXT("requiresGrid"), policyInfo.bRequiresGrid);
-		policyObject->TryGetBoolField(TEXT("requiresGoal"), policyInfo.bRequiresGoal);
-
-		if (!policyInfo.PolicyId.IsEmpty())
-		{
-			outCatalogInfo.Policies.Add(policyInfo);
-		}
-	}
-
-	outCatalogInfo.bWasSuccessful = outCatalogInfo.Status.Equals(TEXT("ok"), ESearchCase::IgnoreCase)
-		&& !outCatalogInfo.Policies.IsEmpty();
-
-	return outCatalogInfo.bWasSuccessful;
-}
-
-void UDeliveryBot_HttpPolicyComponent::CancelActiveGridRequest()
-{
-	if (ActiveGridRequest.IsValid())
-	{
-		ActiveGridRequest->OnProcessRequestComplete().Unbind();
-		ActiveGridRequest->CancelRequest();
-		ActiveGridRequest.Reset();
-	}
-
-	bGridRequestInFlight = false;
-}
-
-void UDeliveryBot_HttpPolicyComponent::CancelActiveEpisodeStartRequest()
-{
-	if (ActiveEpisodeStartRequest.IsValid())
-	{
-		ActiveEpisodeStartRequest->OnProcessRequestComplete().Unbind();
-		ActiveEpisodeStartRequest->CancelRequest();
-		ActiveEpisodeStartRequest.Reset();
-	}
-
-	bEpisodeStartRequestInFlight = false;
-}
-
-void UDeliveryBot_HttpPolicyComponent::CancelActiveEpisodeConfigUpdateRequest()
-{
-	if (ActiveEpisodeConfigUpdateRequest.IsValid())
-	{
-		ActiveEpisodeConfigUpdateRequest->OnProcessRequestComplete().Unbind();
-		ActiveEpisodeConfigUpdateRequest->CancelRequest();
-		ActiveEpisodeConfigUpdateRequest.Reset();
-	}
-
-	bEpisodeConfigUpdateRequestInFlight = false;
-}
-
-void UDeliveryBot_HttpPolicyComponent::CancelActivePolicyCatalogSourcesRequest()
-{
-	if (ActivePolicyCatalogSourcesRequest.IsValid())
-	{
-		ActivePolicyCatalogSourcesRequest->OnProcessRequestComplete().Unbind();
-		ActivePolicyCatalogSourcesRequest->CancelRequest();
-		ActivePolicyCatalogSourcesRequest.Reset();
-	}
-
-	bPolicyCatalogSourcesRequestInFlight = false;
-}
-
-
-void UDeliveryBot_HttpPolicyComponent::CancelActivePolicyCatalogRequest()
-{
-	if (ActivePolicyCatalogRequest.IsValid())
-	{
-		ActivePolicyCatalogRequest->OnProcessRequestComplete().Unbind();
-		ActivePolicyCatalogRequest->CancelRequest();
-		ActivePolicyCatalogRequest.Reset();
-	}
-
-	bPolicyCatalogRequestInFlight = false;
-}
-
-// 임시 값임
-bool UDeliveryBot_HttpPolicyComponent::SendDefaultRuntimePolicySpecUpdate()
-{
-	const FString policySpecUpdateJson = TEXT(R"({
-		"policySpec": {
-			"catalogId": "default_delivery",
-			"catalogVersion": 1,
-			"enabledPolicies": [
-				{ "policyId": "front_obstacle_stop", "priority": 10 },
-				{ "policyId": "reroute_when_blocked", "priority": 20 },
-				{ "policyId": "front_obstacle_slowdown", "priority": 30 },
-				{ "policyId": "normal_path_follow", "priority": 100 }
-			]
-		}
-	})");
-
-	return SendPolicySpecUpdateJson(policySpecUpdateJson);
-}
-
-bool UDeliveryBot_HttpPolicyComponent::SendPolicySpecUpdateJson(const FString& policySpecUpdateJson)
-{
-	if (policySpecUpdateJson.IsEmpty())
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy spec update JSON is empty."));
-		return false;
-	}
-
-	if (bIsEndingPlay)
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy spec update skipped because component is ending play."));
-		return false;
-	}
-
-	if (bPolicySpecUpdateRequestInFlight)
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy spec update skipped because previous request is still in flight."));
-		return false;
-	}
-
-	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request = FHttpModule::Get().CreateRequest();
-
-	request->SetURL(PolicySpecUpdateServerUrl);
-	request->SetVerb(TEXT("POST"));
-	request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-	request->SetContentAsString(policySpecUpdateJson);
-	request->SetTimeout(RequestTimeoutSecond);
-
-	TWeakObjectPtr<UDeliveryBot_HttpPolicyComponent> weakThis(this);
-
-	request->OnProcessRequestComplete().BindLambda(
-		[weakThis](FHttpRequestPtr httpRequest, FHttpResponsePtr httpResponse, bool bWasSuccessful)
-		{
-			const int32 responseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode() : 0;
-			const FString responseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString{};
-
-			AsyncTask(ENamedThreads::GameThread, [weakThis, responseCode, responseBody, bWasSuccessful]()
-			{
-				if (!weakThis.IsValid())
-					return;
-
-				UDeliveryBot_HttpPolicyComponent* component = weakThis.Get();
-				component->bPolicySpecUpdateRequestInFlight = false;
-				component->ActivePolicySpecUpdateRequest.Reset();
-
-				if (component->bIsEndingPlay)
-					return;
-
-				UE_LOG(
-					LogDeliveryBotHttpPolicy,
-					Log,
-					TEXT("Policy spec update response | Success: %s, Code: %d, Body: %s"),
-					bWasSuccessful ? TEXT("true") : TEXT("false"),
-					responseCode,
-					*responseBody
-				);
-
-				component->OnPolicySpecUpdateResponse.Broadcast(bWasSuccessful, responseCode, responseBody);
-			});
-		}
-	);
-
-	bPolicySpecUpdateRequestInFlight = true;
-	ActivePolicySpecUpdateRequest = request;
-
-	if (!request->ProcessRequest())
-	{
-		bPolicySpecUpdateRequestInFlight = false;
-		ActivePolicySpecUpdateRequest.Reset();
-		return false;
-	}
-
-	return true;
-}
-
-void UDeliveryBot_HttpPolicyComponent::CancelActivePolicySpecUpdateRequest()
-{
-	if (ActivePolicySpecUpdateRequest.IsValid())
-	{
-		ActivePolicySpecUpdateRequest->OnProcessRequestComplete().Unbind();
-		ActivePolicySpecUpdateRequest->CancelRequest();
-		ActivePolicySpecUpdateRequest.Reset();
-	}
-
-	bPolicySpecUpdateRequestInFlight = false;
-}
-
-bool UDeliveryBot_HttpPolicyComponent::SendRuntimePolicySpecUpdateByPolicyIds(
-	const FString& catalogId,
-	int32 catalogVersion,
-	const TArray<FString>& enabledPolicyIds
-)
-{
-	if (catalogId.IsEmpty() || enabledPolicyIds.IsEmpty())
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy spec update skipped. CatalogId or policy list is empty."));
-		return false;
-	}
+	outPayload.Reset();
 
 	TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
-	TSharedRef<FJsonObject> policySpecObject = MakeShared<FJsonObject>();
+	rootObject->SetStringField(TEXT("schema"), TEXT("delivery_bot_python_message"));
+	rootObject->SetNumberField(TEXT("version"), 1);
+	rootObject->SetStringField(TEXT("type"), messageType);
+	rootObject->SetObjectField(TEXT("request"), requestObject);
 
-	policySpecObject->SetStringField(TEXT("catalogId"), catalogId);
-	policySpecObject->SetNumberField(TEXT("catalogVersion"), catalogVersion);
+	const TSharedRef<TJsonWriter<>> writer = TJsonWriterFactory<>::Create(&outPayload);
+	return FJsonSerializer::Serialize(rootObject, writer);
+}
 
-	TArray<TSharedPtr<FJsonValue>> enabledPoliciesArray;
+// FVector를 Python 서버 location JSON 객체로 변환한다.
+TSharedRef<FJsonObject> UDeliveryBot_HttpPolicyComponent::BuildLocationObject(const FVector& location, float yawDegree) const
+{
+	TSharedRef<FJsonObject> locationObject = MakeShared<FJsonObject>();
 
-	for (int32 index = 0; index < enabledPolicyIds.Num(); ++index)
+	locationObject->SetNumberField(TEXT("x"), location.X);
+	locationObject->SetNumberField(TEXT("y"), location.Y);
+	locationObject->SetNumberField(TEXT("z"), location.Z);
+	locationObject->SetNumberField(TEXT("yawDegree"), yawDegree);
+
+	return locationObject;
+}
+
+// GridSubsystem JSON에서 Python 서버가 받는 필드만 추려 grid 객체를 만든다.
+bool UDeliveryBot_HttpPolicyComponent::BuildPythonGridObject(TSharedPtr<FJsonObject>& outGridObject) const
+{
+	outGridObject.Reset();
+
+	const UWorld* world = GetWorld();
+	if (!IsValid(world))
+		return false;
+
+	const UDeliveryBot_GridSubsystem* gridSubsystem = world->GetSubsystem<UDeliveryBot_GridSubsystem>();
+	if (!IsValid(gridSubsystem) || !gridSubsystem->HasBuiltGrid())
+		return false;
+
+	FString gridJson;
+	if (!gridSubsystem->BuildGridJson(gridJson))
+		return false;
+
+	TSharedPtr<FJsonObject> sourceGridObject;
+	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(gridJson);
+	if (!FJsonSerializer::Deserialize(reader, sourceGridObject) || !sourceGridObject.IsValid())
+		return false;
+
+	outGridObject = MakeShared<FJsonObject>();
+
+	double numberValue = 0.0;
+
+	sourceGridObject->TryGetNumberField(TEXT("gridSizeX"), numberValue);
+	outGridObject->SetNumberField(TEXT("gridSizeX"), numberValue);
+
+	sourceGridObject->TryGetNumberField(TEXT("gridSizeY"), numberValue);
+	outGridObject->SetNumberField(TEXT("gridSizeY"), numberValue);
+
+	sourceGridObject->TryGetNumberField(TEXT("cellSizeCm"), numberValue);
+	outGridObject->SetNumberField(TEXT("cellSizeCm"), numberValue);
+
+	sourceGridObject->TryGetNumberField(TEXT("cellCount"), numberValue);
+	outGridObject->SetNumberField(TEXT("cellCount"), numberValue);
+
+	TSharedPtr<FJsonObject> originObject;
+	if (!TryGetJsonObjectField(*sourceGridObject, TEXT("originCm"), originObject))
+		return false;
+
+	outGridObject->SetObjectField(TEXT("originCm"), originObject);
+
+	TArray<TSharedPtr<FJsonValue>> sourceCellValues;
+	if (!TryGetJsonArrayField(*sourceGridObject, TEXT("cells"), sourceCellValues))
+		return false;
+
+	TArray<TSharedPtr<FJsonValue>> targetCellValues;
+	targetCellValues.Reserve(sourceCellValues.Num());
+
+	for (const TSharedPtr<FJsonValue>& sourceCellValue : sourceCellValues)
 	{
-		const FString policyId = enabledPolicyIds[index].TrimStartAndEnd();
-
-		if (policyId.IsEmpty())
-		{
+		const TSharedPtr<FJsonObject> sourceCellObject = sourceCellValue.IsValid() ? sourceCellValue->AsObject() : nullptr;
+		if (!sourceCellObject.IsValid())
 			continue;
-		}
 
-		TSharedRef<FJsonObject> policyObject = MakeShared<FJsonObject>();
-		policyObject->SetStringField(TEXT("policyId"), policyId);
-		policyObject->SetNumberField(TEXT("priority"), (index + 1) * 10);
+		TSharedRef<FJsonObject> targetCellObject = MakeShared<FJsonObject>();
 
-		enabledPoliciesArray.Add(MakeShared<FJsonValueObject>(policyObject));
+		sourceCellObject->TryGetNumberField(TEXT("x"), numberValue);
+		targetCellObject->SetNumberField(TEXT("x"), numberValue);
+
+		sourceCellObject->TryGetNumberField(TEXT("y"), numberValue);
+		targetCellObject->SetNumberField(TEXT("y"), numberValue);
+
+		FString areaType;
+		sourceCellObject->TryGetStringField(TEXT("areaType"), areaType);
+		targetCellObject->SetStringField(TEXT("areaType"), areaType);
+
+		sourceCellObject->TryGetNumberField(TEXT("cost"), numberValue);
+		targetCellObject->SetNumberField(TEXT("cost"), numberValue);
+
+		bool bBlocked = false;
+		sourceCellObject->TryGetBoolField(TEXT("blocked"), bBlocked);
+		targetCellObject->SetBoolField(TEXT("blocked"), bBlocked);
+
+		FString sourceCollisionProfile;
+		sourceCellObject->TryGetStringField(TEXT("sourceCollisionProfile"), sourceCollisionProfile);
+		targetCellObject->SetStringField(TEXT("sourceCollisionProfile"), sourceCollisionProfile);
+
+		targetCellValues.Add(MakeShared<FJsonValueObject>(targetCellObject));
 	}
 
-	if (enabledPoliciesArray.IsEmpty())
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy spec update skipped. No valid policy ids."));
-		return false;
-	}
-
-	policySpecObject->SetArrayField(TEXT("enabledPolicies"), enabledPoliciesArray);
-	rootObject->SetObjectField(TEXT("policySpec"), policySpecObject);
-
-	FString policySpecUpdateJson;
-	TSharedRef<TJsonWriter<>> writer = TJsonWriterFactory<>::Create(&policySpecUpdateJson);
-
-	if (!FJsonSerializer::Serialize(rootObject, writer))
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy spec update JSON serialization failed."));
-		return false;
-	}
-
-	return SendPolicySpecUpdateJson(policySpecUpdateJson);
+	outGridObject->SetArrayField(TEXT("cells"), targetCellValues);
+	return true;
 }
 
-bool UDeliveryBot_HttpPolicyComponent::SendNormalOnlyRuntimePolicySpecUpdate()
+// /scenario/start 요청 envelope body를 만든다.
+bool UDeliveryBot_HttpPolicyComponent::BuildStartPayload(FString& outPayload)
 {
-	TArray<FString> enabledPolicyIds;
-	enabledPolicyIds.Add(TEXT("normal_path_follow"));
+	outPayload.Reset();
 
-	return SendRuntimePolicySpecUpdateByPolicyIds(
-		TEXT("default_delivery"),
-		1,
-		enabledPolicyIds
-	);
+	ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(GetOwner());
+	if (!IsValid(deliveryBot))
+		return false;
+
+	TSharedPtr<FJsonObject> gridObject;
+	if (!BuildPythonGridObject(gridObject) || !gridObject.IsValid())
+		return false;
+
+	if (EpisodeId.IsEmpty())
+	{
+		EpisodeId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
+	}
+
+	RobotInstanceId = deliveryBot->GetName();
+
+	const FDeliveryBotSetupInfo& setupInfo = deliveryBot->GetSetupInfo();
+	const FDeliveryBotObservationInfo observation = deliveryBot->BuildObservation();
+
+	TSharedRef<FJsonObject> requestObject = MakeShared<FJsonObject>();
+	requestObject->SetStringField(TEXT("robotInstanceId"), RobotInstanceId);
+
+	requestObject->SetObjectField(
+		TEXT("start"),
+		BuildLocationObject(deliveryBot->GetActorLocation(), deliveryBot->GetActorRotation().Yaw));
+
+	TSharedRef<FJsonObject> goalObject = MakeShared<FJsonObject>();
+	goalObject->SetBoolField(TEXT("hasGoal"), setupInfo.LocationSetupInfo.bHasGoal);
+	goalObject->SetNumberField(TEXT("x"), setupInfo.LocationSetupInfo.GoalLocationCm.X);
+	goalObject->SetNumberField(TEXT("y"), setupInfo.LocationSetupInfo.GoalLocationCm.Y);
+	goalObject->SetNumberField(TEXT("z"), setupInfo.LocationSetupInfo.GoalLocationCm.Z);
+	requestObject->SetObjectField(TEXT("goal"), goalObject);
+
+	requestObject->SetObjectField(TEXT("grid"), gridObject);
+
+	const FVector robotBodySizeCm = observation.VehicleSpec.RobotBoxExtentCm * 2.0;
+
+	TSharedRef<FJsonObject> robotSpecObject = MakeShared<FJsonObject>();
+	robotSpecObject->SetNumberField(TEXT("maxSpeedKmh"), observation.VehicleSpec.MaxSpeedKmh);
+	robotSpecObject->SetNumberField(TEXT("maxReverseSpeedKmh"), observation.VehicleSpec.MaxReverseSpeedKmh);
+	robotSpecObject->SetNumberField(TEXT("bodyLengthCm"), robotBodySizeCm.X);
+	robotSpecObject->SetNumberField(TEXT("bodyWidthCm"), robotBodySizeCm.Y);
+	robotSpecObject->SetNumberField(TEXT("bodyHeightCm"), robotBodySizeCm.Z);
+	robotSpecObject->SetNumberField(TEXT("wheelBaseCm"), observation.VehicleSpec.WheelBaseCm);
+	robotSpecObject->SetNumberField(TEXT("turningRadiusCm"), observation.VehicleSpec.MinTurningRadiusCm);
+	requestObject->SetObjectField(TEXT("robotSpec"), robotSpecObject);
+
+	TSharedRef<FJsonObject> driveSpecObject = MakeShared<FJsonObject>();
+	driveSpecObject->SetNumberField(TEXT("accelerationRateKmhPerSecond"), setupInfo.ChaosDriveConfigInfo.AccelerationRateKmhPerSecond);
+	driveSpecObject->SetNumberField(TEXT("decelerationRateKmhPerSecond"), setupInfo.ChaosDriveConfigInfo.DecelerationRateKmhPerSecond);
+	driveSpecObject->SetNumberField(TEXT("steeringInputRatePerSecond"), setupInfo.ChaosDriveConfigInfo.SteeringInputRatePerSecond);
+	driveSpecObject->SetNumberField(TEXT("throttleInputRatePerSecond"), setupInfo.ChaosDriveConfigInfo.ThrottleInputRatePerSecond);
+	driveSpecObject->SetNumberField(TEXT("brakeInputRatePerSecond"), setupInfo.ChaosDriveConfigInfo.BrakeInputRatePerSecond);
+	driveSpecObject->SetNumberField(TEXT("stopBrakeInput"), setupInfo.ChaosDriveConfigInfo.StopBrakeInput);
+	requestObject->SetObjectField(TEXT("driveSpec"), driveSpecObject);
+
+	TSharedRef<FJsonObject> lidarSpecObject = MakeShared<FJsonObject>();
+	lidarSpecObject->SetNumberField(TEXT("scanRangeM"), observation.VehicleSpec.LidarScanRangeM);
+	lidarSpecObject->SetNumberField(TEXT("angleStepDegree"), setupInfo.LidarSensorConfigInfo.AngleStepDegree);
+	lidarSpecObject->SetNumberField(TEXT("sensorHeightM"), setupInfo.LidarSensorConfigInfo.SensorHeightM);
+	requestObject->SetObjectField(TEXT("lidarSpec"), lidarSpecObject);
+
+	return BuildMessagePayload(TEXT("scenario_start"), requestObject, outPayload);
 }
 
-bool UDeliveryBot_HttpPolicyComponent::LoadPolicySpecUpdateJsonFile(const FString& policySpecJsonFilePath,	FString& outPolicySpecUpdateJson) const
+// /scenario/decide 요청 envelope body를 만든다.
+bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 {
-	outPolicySpecUpdateJson.Reset();
+	outPayload.Reset();
 
-	const FString resolvedFilePath = ResolvePolicySpecJsonFilePath(policySpecJsonFilePath);
-
-	if (resolvedFilePath.IsEmpty())
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy spec file path is empty."));
+	ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(GetOwner());
+	if (!IsValid(deliveryBot))
 		return false;
+
+	const FDeliveryBotObservationInfo observation = deliveryBot->BuildPolicyObservation();
+	LastDecisionSequence = observation.Sequence;
+
+	TSharedRef<FJsonObject> requestObject = MakeShared<FJsonObject>();
+	requestObject->SetNumberField(TEXT("sequence"), observation.Sequence);
+	requestObject->SetNumberField(TEXT("runTimeSeconds"), observation.WorldTimeSeconds);
+
+	TSharedRef<FJsonObject> robotStateObject = MakeShared<FJsonObject>();
+	robotStateObject->SetNumberField(TEXT("x"), observation.RobotState.LocationCm.X);
+	robotStateObject->SetNumberField(TEXT("y"), observation.RobotState.LocationCm.Y);
+	robotStateObject->SetNumberField(TEXT("z"), observation.RobotState.LocationCm.Z);
+	robotStateObject->SetNumberField(TEXT("yawDegree"), observation.RobotState.YawDegree);
+	robotStateObject->SetNumberField(TEXT("speedKmh"), observation.RobotState.SpeedKmh);
+	robotStateObject->SetBoolField(TEXT("bColliding"), observation.RobotState.bColliding);
+	robotStateObject->SetStringField(TEXT("collisionActorName"), observation.RobotState.CollisionActorName);
+	robotStateObject->SetArrayField(TEXT("collisionActorTags"), MakeJsonStringArrayFromNames(observation.RobotState.CollisionActorTags));
+	requestObject->SetObjectField(TEXT("robotState"), robotStateObject);
+
+	TArray<TSharedPtr<FJsonValue>> lidarRayValues;
+	lidarRayValues.Reserve(observation.LidarScanInfo.RayInfos.Num());
+
+	for (const FDeliveryBotLidarRayInfo& rayInfo : observation.LidarScanInfo.RayInfos)
+	{
+		TSharedRef<FJsonObject> rayObject = MakeShared<FJsonObject>();
+		rayObject->SetBoolField(TEXT("hit"), rayInfo.bHit);
+		rayObject->SetNumberField(TEXT("distanceM"), rayInfo.DistanceM);
+		rayObject->SetNumberField(TEXT("rayIndex"), rayInfo.RayIndex);
+		rayObject->SetNumberField(TEXT("rayYawDegree"), rayInfo.RayYawDegree);
+		rayObject->SetStringField(TEXT("actorName"), rayInfo.ActorName);
+		rayObject->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(rayInfo.ActorTags));
+
+		lidarRayValues.Add(MakeShared<FJsonValueObject>(rayObject));
 	}
 
-	if (!FPaths::FileExists(resolvedFilePath))
+	requestObject->SetArrayField(TEXT("lidarRays"), lidarRayValues);
+
+	TArray<TSharedPtr<FJsonValue>> observedObjectValues;
+	observedObjectValues.Reserve(observation.ObservedObjects.Num());
+
+	for (const FDeliveryBotLidarObservedObjectInfo& objectInfo : observation.ObservedObjects)
 	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy spec file does not exist: %s"), *resolvedFilePath);
-		return false;
+		TSharedRef<FJsonObject> objectJson = MakeShared<FJsonObject>();
+		objectJson->SetStringField(TEXT("actorName"), objectInfo.ActorName);
+		objectJson->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(objectInfo.ActorTags));
+		objectJson->SetBoolField(TEXT("hasBounds"), objectInfo.bHasBounds);
+		objectJson->SetObjectField(TEXT("boundsOriginCm"), MakeJsonVectorObject(objectInfo.BoundsOriginCm));
+		objectJson->SetObjectField(TEXT("boundsExtentCm"), MakeJsonVectorObject(objectInfo.BoundsExtentCm));
+		objectJson->SetObjectField(TEXT("closestHitLocationCm"), MakeJsonVectorObject(objectInfo.ClosestHitLocationCm));
+		objectJson->SetNumberField(TEXT("closestDistanceM"), objectInfo.ClosestDistanceM);
+		objectJson->SetNumberField(TEXT("closestRayYawDegree"), objectInfo.ClosestRayYawDegree);
+		objectJson->SetNumberField(TEXT("totalHitRayCount"), objectInfo.TotalHitRayCount);
+		objectJson->SetNumberField(TEXT("frontHitRayCount"), objectInfo.FrontHitRayCount);
+		objectJson->SetBoolField(TEXT("inFront"), objectInfo.bInFront);
+
+		observedObjectValues.Add(MakeShared<FJsonValueObject>(objectJson));
 	}
 
-	if (!FFileHelper::LoadFileToString(outPolicySpecUpdateJson, *resolvedFilePath))
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Failed to load policy spec file: %s"), *resolvedFilePath);
+	requestObject->SetArrayField(TEXT("observedObjects"), observedObjectValues);
+
+	return BuildMessagePayload(TEXT("scenario_decide"), requestObject, outPayload);
+}
+
+// envelope 응답에서 response 객체를 가져온다.
+bool UDeliveryBot_HttpPolicyComponent::TryGetPythonResponseObject(const FHttpResponsePtr& response, TSharedPtr<FJsonObject>& outResponseObject) const
+{
+	outResponseObject.Reset();
+
+	if (!response.IsValid() || response->GetResponseCode() < 200 || response->GetResponseCode() >= 300)
 		return false;
-	}
 
 	TSharedPtr<FJsonObject> rootObject;
-	TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(outPolicySpecUpdateJson);
-
+	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(response->GetContentAsString());
 	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy spec file has invalid JSON: %s"), *resolvedFilePath);
-		outPolicySpecUpdateJson.Reset();
 		return false;
-	}
 
-	const TSharedPtr<FJsonObject>* policySpecObject = nullptr;
-	if (!rootObject->TryGetObjectField(TEXT("policySpec"), policySpecObject)	|| policySpecObject == nullptr || !policySpecObject->IsValid())
-	{
-		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Policy spec file has no policySpec object: %s"), *resolvedFilePath);
-		outPolicySpecUpdateJson.Reset();
+	return TryGetJsonObjectField(*rootObject, TEXT("response"), outResponseObject);
+}
+
+// envelope 응답의 response.status가 ok인지 확인한다.
+bool UDeliveryBot_HttpPolicyComponent::IsPythonResponseOk(const FHttpResponsePtr& response) const
+{
+	TSharedPtr<FJsonObject> responseObject;
+	if (!TryGetPythonResponseObject(response, responseObject))
 		return false;
-	}
+
+	FString status;
+	return responseObject->TryGetStringField(TEXT("status"), status)
+		&& status.Equals(TEXT("ok"), ESearchCase::IgnoreCase);
+}
+
+// /scenario/decide envelope 응답의 response.action을 이동 명령으로 변환한다.
+bool UDeliveryBot_HttpPolicyComponent::TryParseMoveCommand(
+	const FHttpResponsePtr& response,
+	FDeliveryBotMoveCommandInfo& outMoveCommand) const
+{
+	outMoveCommand = FDeliveryBotMoveCommandInfo{};
+
+	TSharedPtr<FJsonObject> responseObject;
+	if (!TryGetPythonResponseObject(response, responseObject))
+		return false;
+
+	FString status;
+	if (!responseObject->TryGetStringField(TEXT("status"), status) || !status.Equals(TEXT("ok"), ESearchCase::IgnoreCase))
+		return false;
+
+	DrawPythonPathDebug(responseObject);
+
+	TSharedPtr<FJsonObject> actionObject;
+	if (!TryGetJsonObjectField(*responseObject, TEXT("action"), actionObject))
+		return false;
+
+	double steering = 0.0;
+	double targetSpeedKmh = 0.0;
+	double brake = 0.0;
+	FString direction = TEXT("Forward");
+
+	actionObject->TryGetNumberField(TEXT("steering"), steering);
+	actionObject->TryGetNumberField(TEXT("targetSpeedKmh"), targetSpeedKmh);
+	actionObject->TryGetNumberField(TEXT("brake"), brake);
+	actionObject->TryGetStringField(TEXT("direction"), direction);
+
+	outMoveCommand.Steering = FMath::Clamp(static_cast<float>(steering), -1.f, 1.f);
+	outMoveCommand.TargetSpeedKmh = FMath::Max(static_cast<float>(targetSpeedKmh), 0.f);
+	outMoveCommand.Brake = FMath::Clamp(static_cast<float>(brake), 0.f, 1.f);
+	outMoveCommand.bBrake = outMoveCommand.Brake > KINDA_SMALL_NUMBER;
+
+	outMoveCommand.MoveDirectionType = direction.Equals(TEXT("Reverse"), ESearchCase::IgnoreCase)
+		? EDeliveryBotMoveDirectionType::Reverse
+		: EDeliveryBotMoveDirectionType::Forward;
 
 	return true;
 }
 
-bool UDeliveryBot_HttpPolicyComponent::SendPolicySpecUpdateJsonFile(const FString& policySpecJsonFilePath)
+// Python path debug 좌표를 경로선, 현재 인덱스, 실제 추종 목표점으로 그린다.
+void UDeliveryBot_HttpPolicyComponent::DrawPythonPathDebug(const TSharedPtr<FJsonObject>& responseObject) const
 {
-	FString policySpecUpdateJson;
+	if (!bDrawPythonPathDebug || !responseObject.IsValid())
+		return;
 
-	if (!LoadPolicySpecUpdateJsonFile(policySpecJsonFilePath, policySpecUpdateJson))
+	UWorld* world = GetWorld();
+	if (!IsValid(world))
+		return;
+
+	TSharedPtr<FJsonObject> debugObject;
+	if (!TryGetJsonObjectField(*responseObject, TEXT("debug"), debugObject))
+		return;
+
+	const TArray<TSharedPtr<FJsonValue>>* pathValues = nullptr;
+	if (!debugObject->TryGetArrayField(TEXT("pathWorldPoints"), pathValues) || pathValues == nullptr || pathValues->Num() < 2)
+		return;
+
+	TArray<FVector> pathPoints;
+	pathPoints.Reserve(pathValues->Num());
+
+	for (const TSharedPtr<FJsonValue>& pointValue : *pathValues)
 	{
-		return false;
+		FVector locationCm;
+		if (!TryParsePythonPathDebugPoint(pointValue, locationCm))
+			continue;
+
+		locationCm.Z += PythonPathDebugHeightCm;
+		pathPoints.Add(locationCm);
 	}
 
-	return SendPolicySpecUpdateJson(policySpecUpdateJson);
+	for (int32 index = 1; index < pathPoints.Num(); ++index)
+	{
+		DrawDebugLine(
+			world,
+			pathPoints[index - 1],
+			pathPoints[index],
+			FColor::Cyan,
+			false,
+			DecideIntervalSeconds * 2.f,
+			0,
+			PythonPathDebugLineThickness);
+	}
+
+	double pathIndex = 0.0;
+	if (debugObject->TryGetNumberField(TEXT("pathIndex"), pathIndex))
+	{
+		const int32 currentIndex = FMath::Clamp(static_cast<int32>(pathIndex), 0, pathPoints.Num() - 1);
+		DrawDebugSphere(
+			world,
+			pathPoints[currentIndex],
+			18.f,
+			12,
+			FColor::Yellow,
+			false,
+			DecideIntervalSeconds * 2.f,
+			0,
+			2.f);
+	}
+
+	TSharedPtr<FJsonObject> targetPointObject;
+	if (TryGetJsonObjectField(*debugObject, TEXT("targetWorldPoint"), targetPointObject))
+	{
+		double x = 0.0;
+		double y = 0.0;
+		double z = 0.0;
+
+		if (targetPointObject->TryGetNumberField(TEXT("x"), x) &&
+			targetPointObject->TryGetNumberField(TEXT("y"), y))
+		{
+			targetPointObject->TryGetNumberField(TEXT("z"), z);
+
+			FVector targetLocationCm(
+				static_cast<float>(x),
+				static_cast<float>(y),
+				static_cast<float>(z) + PythonPathDebugHeightCm + 20.f);
+
+			DrawDebugSphere(
+				world,
+				targetLocationCm,
+				24.f,
+				12,
+				FColor::Green,
+				false,
+				DecideIntervalSeconds * 2.f,
+				0,
+				3.f);
+
+			if (const AActor* owner = GetOwner(); IsValid(owner))
+			{
+				DrawDebugLine(
+					world,
+					owner->GetActorLocation() + FVector(0.f, 0.f, 45.f),
+					targetLocationCm,
+					FColor::Green,
+					false,
+					DecideIntervalSeconds * 2.f,
+					0,
+					3.f);
+			}
+		}
+	}
 }
 
+// path debug point JSON을 FVector로 변환한다.
+bool UDeliveryBot_HttpPolicyComponent::TryParsePythonPathDebugPoint(
+	const TSharedPtr<FJsonValue>& pointValue,
+	FVector& outLocationCm) const
+{
+	outLocationCm = FVector::ZeroVector;
 
+	if (!pointValue.IsValid() || pointValue->Type != EJson::Object)
+		return false;
 
+	const TSharedPtr<FJsonObject> pointObject = pointValue->AsObject();
+	if (!pointObject.IsValid())
+		return false;
 
+	double x = 0.0;
+	double y = 0.0;
+	double z = 0.0;
+
+	if (!pointObject->TryGetNumberField(TEXT("x"), x) || !pointObject->TryGetNumberField(TEXT("y"), y))
+		return false;
+
+	pointObject->TryGetNumberField(TEXT("z"), z);
+
+	outLocationCm = FVector(x, y, z);
+	return true;
+}
+
+// /scenario/end 요청 envelope body를 만든다.
+bool UDeliveryBot_HttpPolicyComponent::BuildEndPayload(const FString& status, FString& outPayload) const
+{
+	outPayload.Reset();
+
+	if (EpisodeId.IsEmpty() || RobotInstanceId.IsEmpty())
+		return false;
+
+	TSharedRef<FJsonObject> requestObject = MakeShared<FJsonObject>();
+
+	requestObject->SetStringField(TEXT("robotInstanceId"), RobotInstanceId);
+	requestObject->SetNumberField(TEXT("sequence"), LastDecisionSequence);
+	requestObject->SetStringField(TEXT("status"), status);
+
+	TSharedRef<FJsonObject> metricsObject = MakeShared<FJsonObject>();
+	requestObject->SetObjectField(TEXT("metrics"), metricsObject);
+
+	TSharedRef<FJsonObject> debugObject = MakeShared<FJsonObject>();
+	debugObject->SetStringField(TEXT("endSource"), TEXT("UScenarioEvaluationSubsystem"));
+	requestObject->SetObjectField(TEXT("debug"), debugObject);
+
+	return BuildMessagePayload(TEXT("scenario_end"), requestObject, outPayload);
+}
+
+// scenario 진행 상태를 초기화한다.
+void UDeliveryBot_HttpPolicyComponent::ResetScenarioState(bool bKeepLastResult)
+{
+	EpisodeId.Reset();
+	RobotInstanceId.Reset();
+
+	LastDecisionSequence = 0;
+	StartRetryElapsedSeconds = 0.f;
+	DecideElapsedSeconds = 0.f;
+
+	bStartRequested = false;
+	bScenarioStarted = false;
+	bStartRequestInFlight = false;
+	bDecisionRequestInFlight = false;
+	bEndRequestInFlight = false;
+
+	if (!bKeepLastResult)
+	{
+		LastScenarioResultJson.Reset();
+	}
+}
+
+// 목표 도착 시 Python 서버에 /scenario/end 요청을 보내고 결과 JSON을 저장한다.
+void UDeliveryBot_HttpPolicyComponent::EndScenario(const FString& status)
+{
+	if (!bScenarioStarted || bEndRequestInFlight)
+		return;
+
+	FString payload;
+	if (!BuildEndPayload(status, payload))
+		return;
+
+	bEndRequestInFlight = true;
+
+	// /scenario/end 응답을 저장하고 scenario 상태를 종료 상태로 초기화한다.
+	const bool bRequestStarted = SendPostRequest(
+		TEXT("/scenario/end"),
+		payload,
+		[this](FHttpResponsePtr response, bool bSucceeded)
+		{
+			bEndRequestInFlight = false;
+
+			LastScenarioResultJson = response.IsValid() ? response->GetContentAsString() : FString();
+
+			ResetScenarioState(true);
+
+			// /scenario/end envelope 응답의 response.status를 확인한다.
+			if (!bSucceeded || !IsPythonResponseOk(response))
+			{
+				UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Python scenario end failed."));
+				return;
+			}
+
+			UE_LOG(LogDeliveryBotHttpPolicy, Log, TEXT("Python scenario result saved. Length=%d"), LastScenarioResultJson.Len());
+		});
+
+	if (!bRequestStarted)
+	{
+		bEndRequestInFlight = false;
+	}
+}

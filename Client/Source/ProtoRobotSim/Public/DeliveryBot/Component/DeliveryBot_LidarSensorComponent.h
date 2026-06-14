@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
@@ -55,6 +55,8 @@ private:
 		const FVector& startLocationCm,
 		const FVector& endLocationCm,
 		const FHitResult* hitResult) const;
+
+	void DrawDebugObstacleWarningRange(const FVector& sensorLocationCm) const;
 	
 	
 	

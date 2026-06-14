@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "DeliveryBotLidarSensorInfo.generated.h"
@@ -24,6 +24,9 @@ public:
 	bool bDrawDebug{ true };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bDrawObstacleWarningDebug{ true };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float ScanRangeM{ 5.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -40,9 +43,18 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float StopDistanceM{ 1.5f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ObstacleWarningDistanceM{ 2.f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SlowDownDistanceM{ 5.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float CollisionStopHalfAngleDegree{ 8.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float CollisionStopDistanceM{ 0.45f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TEnumAsByte<ECollisionChannel> TraceChannel{ ECC_Visibility };
@@ -120,6 +132,15 @@ public: // 탐지된 액터
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> ActorTags{};
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bHasBounds{ false };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector BoundsOriginCm{ FVector::ZeroVector };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector BoundsExtentCm{ FVector::ZeroVector };
+
 public: // 가장 가까운 액터와의 위치 정보
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FVector ClosestHitLocationCm{ FVector::ZeroVector };
@@ -161,6 +182,15 @@ struct FDeliveryBotLidarObservedObjectInfo
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> ActorTags{};
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bHasBounds{ false };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector BoundsOriginCm{ FVector::ZeroVector };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector BoundsExtentCm{ FVector::ZeroVector };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FVector ClosestHitLocationCm{ FVector::ZeroVector };

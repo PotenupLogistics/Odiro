@@ -28,7 +28,7 @@ class SlowDownPolicy:
             if not ray.hit:
                 continue
 
-            if abs(ray.rayYawDegree) > self.frontAngleDegree:
+            if abs(normalize_angle_degree(ray.rayYawDegree)) > self.frontAngleDegree:
                 continue
 
             if ray.distanceM <= self.slowdownDistanceM:
@@ -39,3 +39,7 @@ class SlowDownPolicy:
                 ), "front_obstacle_slowdown"
 
         return None, ""
+
+
+def normalize_angle_degree(angle_degree: float) -> float:
+    return (angle_degree + 180.0) % 360.0 - 180.0

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Shared/EpisodeConfigTypes.h"
+#include "Shared/EpisodeResultTypes.h"
 #include "Shared/EpisodeJsonlMeasurementWriter.h"
 #include "Shared/EpisodeMeasurementLogTypes.h"
 #include "Subsystems/WorldSubsystem.h"

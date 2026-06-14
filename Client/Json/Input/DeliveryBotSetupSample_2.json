@@ -6,11 +6,6 @@
       "max_speed_kmh": 8.0,
       "slowdown_speed_range_kmh": 5.0
     },
-    "path_follow": {
-      "target_speed_kmh": 6.0,
-      "look_ahead_distance_m": 0.8,
-      "obstacle_slow_speed_kmh": 1.5
-    },
     "lidar": {
       "scan_range_m": 6.0,
       "angle_step_degree": 3.0,

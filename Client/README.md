@@ -19,6 +19,6 @@
   - 시뮬레이터: `-Simulate=<SimulationSetupFile> -RunId=<RunId>`
 - `Task-RunPythonPolicyServer.bat`: 로봇의 정책 실현 서버 `Tools\PythonAgent\server.py`를 `127.0.0.1:8000`에서 runtime policy mode로 실행
 - `.run/GeneratePreviewConfigs.ps1`: Rider 시작 시 `.run/*.local.run.xml` Preview 실행 설정 생성
-  - `ProtoRobotSim.uproject`의 `EngineAssociation` 기반으로 로컬 Unreal Editor 경로 탐색
+  - `OdiroSim.uproject`의 `EngineAssociation` 기반으로 로컬 Unreal Editor 경로 탐색
   - 생성된 `*.local.run.xml`은 사용자별 절대 경로를 담으므로 git에서 제외
 - `.run/SetEnginePath.ps1`: `UE_INSTALL_DIR` Path Variable 수동 설정용 보조 스크립트

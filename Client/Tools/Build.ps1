@@ -15,7 +15,7 @@ Invoke-External `
     -WorkingDirectory $clientDir `
     -FilePath $buildBat `
     -Arguments @(
-        "ProtoRobotSimEditor",
+        "OdiroSimEditor",
         "Win64",
         "Development",
         "-Project=$projectFile",

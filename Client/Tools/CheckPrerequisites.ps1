@@ -153,9 +153,9 @@ function Test-UnrealEnginePrerequisite {
         return @(
             New-PrerequisiteIssue `
                 -Name "Unreal Engine $RequiredUnrealEngineVersion" `
-                -Detail "Client/ProtoRobotSim.uproject EngineAssociation is '$engineAssociation'." `
+                -Detail "Client/OdiroSim.uproject EngineAssociation is '$engineAssociation'." `
                 -Reason "Client build, run preview, and editor development scripts resolve UE $RequiredUnrealEngineVersion tools from this project association." `
-                -Install "Install Unreal Engine $RequiredUnrealEngineVersion with Epic Games Launcher, then keep Client/ProtoRobotSim.uproject EngineAssociation=$RequiredUnrealEngineVersion." `
+                -Install "Install Unreal Engine $RequiredUnrealEngineVersion with Epic Games Launcher, then keep Client/OdiroSim.uproject EngineAssociation=$RequiredUnrealEngineVersion." `
                 -Verify ".\Client\Tools\CheckPrerequisites.ps1 -AllowMissing" `
                 -Docs $UnrealDocs
         )

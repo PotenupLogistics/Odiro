@@ -3,19 +3,19 @@ id: client-runtime-foundation
 owner: Client
 paths:
   - Client/AGENTS.md
-  - Client/ProtoRobotSim.uproject
+  - Client/OdiroSim.uproject
   - Client/Source/*.Target.cs
-  - Client/Source/ProtoRobotSim/ProtoRobotSim.Build.cs
+  - Client/Source/OdiroSim/OdiroSim.Build.cs
   - Client/Config/**
   - Client/Plugins/UEGitPlugin/**
   - Client/Content/**
 entry:
   - Client/AGENTS.md
-  - Client/ProtoRobotSim.uproject
+  - Client/OdiroSim.uproject
   - Client/Plugins/UEGitPlugin/GitSourceControl.uplugin
-  - Client/Source/ProtoRobotSim.Target.cs
-  - Client/Source/ProtoRobotSimEditor.Target.cs
-  - Client/Source/ProtoRobotSim/ProtoRobotSim.Build.cs
+  - Client/Source/OdiroSim.Target.cs
+  - Client/Source/OdiroSimEditor.Target.cs
+  - Client/Source/OdiroSim/OdiroSim.Build.cs
   - Client/Config/Default*.ini
   - Client/Content/Maps
   - Client/Content/Blueprints

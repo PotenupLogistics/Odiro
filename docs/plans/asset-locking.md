@@ -135,7 +135,7 @@ Provider:
 - plugin initialize UI는 `filter=lfs`를 만들 수 있으므로 사용 금지
 - provider가 실제 동작 중 `filter=lfs`를 요구하면 작업 중단, LFS object 전환 X
 - `git check-attr lockable -- "*.uasset" "*.umap"` 통과
-- `ProtoRobotSimEditor Win64 Development` build 통과
+- `OdiroSimEditor Win64 Development` build 통과
 
 ## GitHub Actions
 
@@ -243,7 +243,7 @@ Coding agents must never run manual LFS unlock scripts unless the user explicitl
 .githooks/pre-push
 .githooks/reference-transaction
 Client/Plugins/UEGitPlugin
-Client/ProtoRobotSim.uproject
+Client/OdiroSim.uproject
 tools/set-git-config.ps1
 tools/install.ps1
 tools/check-prerequisites.ps1

@@ -18,12 +18,12 @@
 		"pair_id": "EpisodeSetupSample_1",
 		"episode_setup":
 		{
-			"path": "D:/UnrealProjects/ProtoRobotSim/Json/Input/EpisodeSetupSample_1.json",
+			"path": "D:/UnrealProjects/OdiroSim/Json/Input/EpisodeSetupSample_1.json",
 			"hash": "2517930182"
 		},
 		"delivery_bot_setup":
 		{
-			"path": "D:/UnrealProjects/ProtoRobotSim/Json/Input/DeliveryBotSetupSample_1.json",
+			"path": "D:/UnrealProjects/OdiroSim/Json/Input/DeliveryBotSetupSample_1.json",
 			"hash": "2279911084"
 		},
 		"pair_hash": "1213026427"

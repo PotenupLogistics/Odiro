@@ -2,10 +2,10 @@
 id: client-delivery-bot-policy
 owner: Client
 paths:
-  - Client/Source/ProtoRobotSim/Public/DeliveryBot/**
-  - Client/Source/ProtoRobotSim/Private/DeliveryBot/**
-  - Client/Source/ProtoRobotSim/Public/Shared/Struct/DeliveryBot/**
-  - Client/Source/ProtoRobotSim/Public/Shared/Types/DeliveryBot*.h
+  - Client/Source/OdiroSim/Public/DeliveryBot/**
+  - Client/Source/OdiroSim/Private/DeliveryBot/**
+  - Client/Source/OdiroSim/Public/Shared/Struct/DeliveryBot/**
+  - Client/Source/OdiroSim/Public/Shared/Types/DeliveryBot*.h
   - Client/Json/Input/PolicySpecs/**
 entry:
   - DeliveryBot_GridSubsystem.h / .cpp

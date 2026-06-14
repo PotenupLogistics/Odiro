@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 $runDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = (Resolve-Path (Join-Path $runDir '..')).Path
-$projectFile = Join-Path $projectRoot 'ProtoRobotSim.uproject'
+$projectFile = Join-Path $projectRoot 'OdiroSim.uproject'
 
 if (-not (Test-Path $projectFile)) {
     throw "Project file not found: $projectFile"
@@ -164,9 +164,9 @@ function Set-RiderPathVariable {
 $engineRoot = Find-EngineRoot
 $updatedFiles = Set-RiderPathVariable 'UE_INSTALL_DIR' $engineRoot
 
-Write-Host "[ProtoRobotSim] UE_INSTALL_DIR = $engineRoot"
-Write-Host "[ProtoRobotSim] Updated Rider Path Variables:"
+Write-Host "[OdiroSim] UE_INSTALL_DIR = $engineRoot"
+Write-Host "[OdiroSim] Updated Rider Path Variables:"
 foreach ($file in $updatedFiles) {
     Write-Host "  $file"
 }
-Write-Host "[ProtoRobotSim] Restart Rider if it is already open."
+Write-Host "[OdiroSim] Restart Rider if it is already open."

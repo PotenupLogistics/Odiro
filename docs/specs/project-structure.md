@@ -52,7 +52,7 @@ Odiro/
     Task-Build.bat                # C++ 컴파일
     Task-Dev.bat                  # Unreal Editor 실행
     Task-RunPreview.bat           # 단독 모드 PIE 프리뷰 실행
-    ProtoRobotSim.uproject
+    OdiroSim.uproject
 
   Bridge/                         # --- Go 백그라운드 서비스 ---
     go.mod
@@ -112,7 +112,7 @@ build/Release/
 
   Client/                         # Unreal 패키징 결과
     WindowsNoEditor/
-      ProtoRobotSim.exe
+      OdiroSim.exe
     Static/                       # Client/Static 복사
       PolicyRuntime/
 

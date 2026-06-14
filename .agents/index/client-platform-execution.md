@@ -2,8 +2,8 @@
 id: client-platform-execution
 owner: Client
 paths:
-  - Client/Source/ProtoRobotSim/Public/Platform/**
-  - Client/Source/ProtoRobotSim/Private/Platform/**
+  - Client/Source/OdiroSim/Public/Platform/**
+  - Client/Source/OdiroSim/Private/Platform/**
   - Client/Task-*.bat
   - Client/Tools/**
   - task-run.bat

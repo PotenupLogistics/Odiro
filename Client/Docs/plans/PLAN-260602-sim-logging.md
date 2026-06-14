@@ -291,13 +291,13 @@ Record는 `type` discriminator를 사용한다.
 
 - T01: `FEpisodeMeasurementLogSettings`, actor/tick/event/footer DTO와 JSONL serializer 추가
 - T01: fixed-step 관련 시작/종료/cadence field 미포함 확인
-- T01/T02: UE 5.7 `ProtoRobotSimEditor Win64 Development` build 성공
+- T01/T02: UE 5.7 `OdiroSimEditor Win64 Development` build 성공
 - T02: `UEpisodeLogSubjectRegistry`가 placeable actor table, moving actor 목록, duplicate/dynamic diagnostic 생성
 - T02: `UEpisodeSimulationSubsystem` spawn metadata가 `UEpisodePlaceableComponent.MobilityMode`까지 설정
-- T02: `ProtoRobotSim.MeasurementLog.SubjectRegistry.*` automation 3건 성공
+- T02: `OdiroSim.MeasurementLog.SubjectRegistry.*` automation 3건 성공
 - T03: `FEpisodeJsonlMeasurementWriter`와 `UEpisodeMeasurementLogSubsystem` 추가
 - T03: header/tick/event/footer를 LF-only JSONL로 streaming write하고 stop/endplay에서 footer 후 close
-- T03: `ProtoRobotSim.MeasurementLog.JsonlWriter.Streaming` automation 성공
+- T03: `OdiroSim.MeasurementLog.JsonlWriter.Streaming` automation 성공
 - T04: `ADeliveryBot_ChaosActor` logging snapshot API와 `FEpisodeRobotMeasurementAdapter` 추가
 - T04: latest lidar front object, latest move command, `brakeApplied`, action reason, robot truth를 Tick payload로 변환
 - T04: Delivery Bot에 `UEpisodePlaceableComponent` 추가해 actor table identity에 포함

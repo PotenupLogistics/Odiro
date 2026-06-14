@@ -32,6 +32,7 @@ keep:
   - Root build includes Bridge and Client; Agents has no build phase.
   - Main branch direct commits, local merges, and fast-forward pushes are blocked by hooks; intentional non-fast-forward force push is allowed.
   - Unreal binary assets stay Git blobs; Git LFS is used for lock/read-only/push verification only.
+  - Feature branch commit and merge hooks return without staged build verification; PR build check runs tools/verify-staged.ps1 on a soft-reset staged diff.
   - Manual LFS unlock is human-only exact-path recovery.
 verify:
   - PowerShell parse check for script edits
@@ -40,6 +41,7 @@ verify:
   - tools/set-git-config.ps1 local config smoke
   - pre-push dry-run with empty updates and main fast-forward rejection
   - tools/verify-staged.ps1 with no staged build inputs
+  - GitHub PR build workflow stages PR diff and runs tools/verify-staged.ps1 -Hook pr-check -Force
   - task-setup.bat -AllowMissingPrerequisites -SkipAgents
   - tools/check-prerequisites.ps1 -AllowMissing
   - tools/build.ps1 -Target bridge

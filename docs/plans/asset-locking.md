@@ -98,7 +98,8 @@ script 실행 시 `.lfsconfig`와 Unreal asset attribute도 함께 확인한다.
 
 - main direct commit early reject
 - main local merge early reject
-- 기존 staged verification 유지
+- feature branch에서는 staged verification skip
+- PR build check Action에서 staged verification 수행
 - local merge 적용 후 commit 전 차단되므로 사용자는 `git merge --abort`로 정리
 
 `.githooks/pre-push`:
@@ -136,6 +137,19 @@ Provider:
 - `ProtoRobotSimEditor Win64 Development` build 통과
 
 ## GitHub Actions
+
+### PR build check
+
+파일: `.github/workflows/build--pr-check.yml`
+
+트리거: `pull_request`
+
+검증:
+
+- PR head checkout
+- `merge-base` 기준 `git reset --soft`
+- PR 변경분을 staged diff처럼 구성
+- `tools/verify-staged.ps1 -Hook pr-check -Force`
 
 ### PR lock check
 

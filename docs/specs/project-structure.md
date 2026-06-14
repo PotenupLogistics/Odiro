@@ -11,6 +11,7 @@
 Odiro/
   .github/
     workflows/                    # GitHub Actions checks
+      build--pr-check.yml         # PR 시 build 검증
       asset-lock--pr-check.yml    # PR 시 lock 소유권 검증
       asset-lock--auto-unlock.yml # main 반영 후 LFS unlock
 

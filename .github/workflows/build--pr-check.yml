@@ -1,0 +1,45 @@
+name: Build - Pull Request Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify-staged:
+    name: Verify staged build checks
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: Bridge/go.mod
+          cache: false
+
+      - name: Stage PR changes
+        shell: pwsh
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          git fetch --no-tags origin "+refs/heads/$env:BASE_REF`:refs/remotes/origin/$env:BASE_REF"
+          $mergeBase = (git merge-base "refs/remotes/origin/$env:BASE_REF" HEAD).Trim()
+          if ([string]::IsNullOrWhiteSpace($mergeBase)) {
+              throw "Failed to find merge-base for origin/$env:BASE_REF and HEAD."
+          }
+          git reset --soft $mergeBase
+          git diff --cached --name-status
+
+      - name: Run staged verification
+        shell: pwsh
+        run: ./tools/verify-staged.ps1 -Hook pr-check -Force

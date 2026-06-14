@@ -7,10 +7,9 @@ if [ -z "$repo_root" ]; then
 fi
 
 current_branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null)
-if [ "$current_branch" = "main" ]; then
-  echo "main-workflow: local merges into main are blocked; merge through PR." >&2
-  exit 1
+if [ "$current_branch" != "main" ]; then
+  exit 0
 fi
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$repo_root/tools/verify-staged.ps1" -Hook pre-merge-commit
-exit $?
+echo "main-workflow: local merges into main are blocked; merge through PR." >&2
+exit 1

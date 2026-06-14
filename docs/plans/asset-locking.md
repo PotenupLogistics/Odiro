@@ -40,6 +40,7 @@ Binary asset 동시 수정 충돌 예방. Git LFS object 저장 X, LFS locking�
 | main local merge           | 차단                                      |
 | main 일반 push             | 차단                                      |
 | main force push            | 허용                                      |
+| 최초 main 생성             | 허용                                      |
 | main force push 후 lock    | force push 이전 Unreal asset lock cleanup |
 | manual unlock              | 사람이 exact path 지정                    |
 | AI agent                   | manual unlock script 자동 호출 금지       |
@@ -104,12 +105,14 @@ script 실행 시 `.lfsconfig`와 Unreal asset attribute도 함께 확인한다.
 
 - local policy/lock 검증 후 Git LFS `pre-push` 호출
 - `refs/heads/main` delete → 차단
+- `refs/heads/main` creation → 허용
 - `refs/heads/main` fast-forward push → 차단
 - `refs/heads/main` non-fast-forward push → 허용
 - main non-fast-forward push는 asset lock 검증 skip
 - lockable asset push 시 active lock 검증
 
 구현 기준: `--force` flag가 아니라 remote ref 기준 non-fast-forward 여부.
+remote에 `main`이 없으면 creation으로 보이므로 허용한다.
 
 `.githooks/post-checkout`, `.githooks/post-commit`, `.githooks/post-merge`:
 
@@ -305,6 +308,7 @@ git merge --ff-only <test-branch>
 - `.githooks/pre-push` 추가
 - Git LFS `pre-push` 호출
 - main delete 차단
+- main creation 허용
 - main fast-forward push 차단
 - main non-fast-forward push 허용
 - main non-fast-forward push에서 asset lock 검증 skip
@@ -321,6 +325,12 @@ git lfs locks --verify
 ```
 
 검증은 test remote 또는 throwaway repo에서 수행.
+
+복구 또는 최초 main 생성:
+
+```powershell
+git push --force origin HEAD:main
+```
 
 ### T05 PR lock check Action [x]
 
@@ -415,17 +425,18 @@ git check-attr -a -- Client/Content/<sample>.uasset
 
 ## 위험
 
-| 위험                            | 대응                                  |
-| ------------------------------- | ------------------------------------- |
-| read-only 수동 해제             | PR lock check, pre-push lock 검증     |
-| hook skip                       | 의도적 우회, 팀 규칙 처리             |
-| Fork hook 미실행                | 검증 후 CLI push 제한                 |
-| auto unlock 실패                | lock 유지, manual unlock              |
-| bot token 권한 과다             | repo scope 최소화                     |
-| main force push 후 stale lock   | force event 이전 lock cleanup         |
-| force cleanup race              | `locked_at`이 force event 이후면 유지 |
-| force cleanup cutoff 보수성     | stale lock 유지, manual unlock        |
-| plugin이 `filter=lfs` 요구      | 작업 중단, LFS object 전환 X          |
+| 위험                          | 대응                                  |
+| ----------------------------- | ------------------------------------- |
+| read-only 수동 해제           | PR lock check, pre-push lock 검증     |
+| hook skip                     | 의도적 우회, 팀 규칙 처리             |
+| Fork hook 미실행              | 검증 후 CLI push 제한                 |
+| auto unlock 실패              | lock 유지, manual unlock              |
+| bot token 권한 과다           | repo scope 최소화                     |
+| main branch가 remote에 없음   | main creation push 허용               |
+| main force push 후 stale lock | force event 이전 lock cleanup         |
+| force cleanup race            | `locked_at`이 force event 이후면 유지 |
+| force cleanup cutoff 보수성   | stale lock 유지, manual unlock        |
+| plugin이 `filter=lfs` 요구    | 작업 중단, LFS object 전환 X          |
 
 ## 완료 기준
 

@@ -170,16 +170,19 @@ foreach ($line in $updates) {
             throw "main delete push is blocked."
         }
         if (Test-ZeroOid $remoteOid) {
-            throw "main creation push is blocked."
+            Write-Step "main creation allowed: $localRef -> $remoteRef"
+            $skipAssetLockVerification = $true
         }
-        if (-not (Test-GitCommitExists $remoteOid)) {
+        elseif (-not (Test-GitCommitExists $remoteOid)) {
             throw "Cannot classify main push because remote main object $remoteOid is not present locally. Fetch $RemoteName and retry."
         }
-        if (Test-GitAncestor -Ancestor $remoteOid -Descendant $localOid) {
+        elseif (Test-GitAncestor -Ancestor $remoteOid -Descendant $localOid) {
             throw "main fast-forward push is blocked. Merge to main through PR, or use an intentional non-fast-forward force push."
         }
-        Write-Step "main non-fast-forward push allowed: $localRef -> $remoteRef"
-        $skipAssetLockVerification = $true
+        else {
+            Write-Step "main non-fast-forward push allowed: $localRef -> $remoteRef"
+            $skipAssetLockVerification = $true
+        }
     }
 
     if ($skipAssetLockVerification) {

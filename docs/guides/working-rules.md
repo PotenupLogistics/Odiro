@@ -36,9 +36,10 @@ LLM API key
 
 ## `main` branch 규칙
 
-- Pull Request merge만 허용. 직접 push 금지
+- Pull Request merge가 기본. main 일반 직접 push 금지
 - 긴급 수정 시 hotfix branch 작성 후 Pull Request 수행
 - 상태 변경 시 빌드 및 테스트 통과 필요
+- main force push는 의도적 복구 작업으로 허용. force push 후 남은 stale lock은 manual unlock으로 정리
 
 ## Binary Asset lock 규칙
 

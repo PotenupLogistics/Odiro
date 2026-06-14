@@ -1,0 +1,187 @@
+name: Asset Lock - Pull Request Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify Unreal asset locks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+
+      - name: Verify Git LFS
+        run: git lfs version
+
+      - name: Fetch PR refs
+        shell: pwsh
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          git fetch --no-tags origin "+refs/heads/$env:BASE_REF`:refs/remotes/origin/$env:BASE_REF"
+          git fetch --no-tags origin "+refs/pull/$env:PR_NUMBER/head`:refs/remotes/origin/pr/$env:PR_NUMBER"
+
+      - name: Verify lock ownership and stale assets
+        shell: pwsh
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LOCK_OWNER_ALIASES: ${{ vars.LFS_LOCK_OWNER_ALIASES }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
+
+          function ConvertTo-GitPath {
+              param([string] $Path)
+              return ($Path -replace "\\", "/").TrimStart("./")
+          }
+
+          function Test-UnrealAssetPath {
+              param([string] $Path)
+              return (ConvertTo-GitPath $Path) -match "\.(uasset|umap|ubulk|uexp)$"
+          }
+
+          function Get-LockPath {
+              param([object] $Lock)
+              $property = $Lock.PSObject.Properties["path"]
+              if ($null -eq $property -or [string]::IsNullOrWhiteSpace([string] $property.Value)) {
+                  return ""
+              }
+              return ConvertTo-GitPath ([string] $property.Value)
+          }
+
+          function Get-LockOwner {
+              param([object] $Lock)
+              $owner = $Lock.PSObject.Properties["owner"]
+              if ($null -eq $owner -or $null -eq $owner.Value) {
+                  return ""
+              }
+              $name = $owner.Value.PSObject.Properties["name"]
+              if ($null -eq $name) {
+                  return ""
+              }
+              return [string] $name.Value
+          }
+
+          function Test-LockOwnerMatchesAuthor {
+              param(
+                  [string] $Owner,
+                  [string] $Author,
+                  [string] $Aliases
+              )
+
+              if ([string]::IsNullOrWhiteSpace($Owner) -or [string]::IsNullOrWhiteSpace($Author)) {
+                  return $false
+              }
+              if ($Owner -ieq $Author) {
+                  return $true
+              }
+
+              foreach ($entry in (($Aliases -split ";") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+                  $parts = $entry -split "=", 2
+                  if ($parts.Count -ne 2) {
+                      continue
+                  }
+                  $login = $parts[0].Trim()
+                  if ($login -ine $Author) {
+                      continue
+                  }
+
+                  foreach ($alias in (($parts[1] -split ",") | ForEach-Object { $_.Trim() })) {
+                      if (-not [string]::IsNullOrWhiteSpace($alias) -and $Owner -ieq $alias) {
+                          return $true
+                      }
+                  }
+              }
+
+              return $false
+          }
+
+          function Get-LockArray {
+              param([object] $Payload)
+              if ($null -eq $Payload) {
+                  return @()
+              }
+              if ($Payload -is [array]) {
+                  return @($Payload)
+              }
+              $locks = $Payload.PSObject.Properties["locks"]
+              if ($null -ne $locks) {
+                  return @($locks.Value)
+              }
+              return @($Payload)
+          }
+
+          $baseRef = "refs/remotes/origin/$env:BASE_REF"
+          $headRef = "refs/remotes/origin/pr/$env:PR_NUMBER"
+          $mergeBaseRaw = git merge-base $baseRef $headRef
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($mergeBaseRaw)) {
+              throw "Failed to find merge-base for $baseRef and $headRef."
+          }
+          $mergeBase = $mergeBaseRaw.Trim()
+
+          $prChanged = @(
+              git diff --name-only $mergeBase $headRef |
+                  ForEach-Object { ConvertTo-GitPath $_ } |
+                  Where-Object { Test-UnrealAssetPath $_ } |
+                  Sort-Object -Unique
+          )
+
+          if ($prChanged.Count -eq 0) {
+              Write-Host "No Unreal binary asset changes in this PR."
+              exit 0
+          }
+
+          $baseChangedSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+          git diff --name-only $mergeBase $baseRef |
+              ForEach-Object { ConvertTo-GitPath $_ } |
+              Where-Object { Test-UnrealAssetPath $_ } |
+              ForEach-Object { [void] $baseChangedSet.Add($_) }
+
+          $stale = @($prChanged | Where-Object { $baseChangedSet.Contains($_) })
+          if ($stale.Count -gt 0) {
+              $message = ($stale | ForEach-Object { "  - $_" }) -join "`n"
+              Write-Error "Unreal asset changed on main after this branch diverged. Rebase from main, lock again, then update the PR.`n$message"
+          }
+
+          $locksPayload = (git lfs locks --json | Out-String) | ConvertFrom-Json
+          $locksByPath = @{}
+          foreach ($lock in Get-LockArray $locksPayload) {
+              $path = Get-LockPath $lock
+              if (-not [string]::IsNullOrWhiteSpace($path)) {
+                  $locksByPath[$path] = $lock
+              }
+          }
+
+          $failures = @()
+          foreach ($asset in $prChanged) {
+              if (-not $locksByPath.ContainsKey($asset)) {
+                  $failures += "$asset`: no active Git LFS lock"
+                  continue
+              }
+
+              $owner = Get-LockOwner $locksByPath[$asset]
+              if (-not (Test-LockOwnerMatchesAuthor -Owner $owner -Author $env:PR_AUTHOR -Aliases $env:LOCK_OWNER_ALIASES)) {
+                  $failures += "$asset`: lock owner '$owner' does not match PR author '$env:PR_AUTHOR'"
+              }
+          }
+
+          if ($failures.Count -gt 0) {
+              $message = ($failures | ForEach-Object { "  - $_" }) -join "`n"
+              Write-Error "Unreal asset locks are invalid.`n$message"
+          }
+
+          Write-Host "Verified Git LFS locks for $($prChanged.Count) Unreal binary asset(s)."

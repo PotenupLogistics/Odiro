@@ -1,7 +1,7 @@
 # Follow the repository text policy while keeping Unreal assets binary.
 * text=auto
 
-*.uasset binary
-*.umap binary
-*.ubulk binary
-*.uexp binary
+*.uasset ue-lock
+*.umap ue-lock
+*.ubulk ue-lock
+*.uexp ue-lock

@@ -7,10 +7,12 @@
 .githooks/* text eol=lf
 
 # Unreal and binary assets.
-*.uasset binary
-*.umap binary
-*.ubulk binary
-*.uexp binary
+[attr]ue-lock -diff -merge -text -eol lockable
+
+*.uasset ue-lock
+*.umap ue-lock
+*.ubulk ue-lock
+*.uexp ue-lock
 *.png binary
 *.jpg binary
 *.jpeg binary

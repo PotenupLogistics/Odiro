@@ -96,6 +96,60 @@ is_reserved_name() {
   contains_word "$reserved_names" "$1"
 }
 
+reject_main_update() {
+  echo "main-update: rejected '$1': $2" >&2
+}
+
+is_remote_main_oid() {
+  target_oid=$1
+
+  for remote_main_oid in $(git for-each-ref --format='%(objectname)' refs/remotes/*/main 2>/dev/null); do
+    if [ "$remote_main_oid" = "$target_oid" ]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+validate_main_update() {
+  old_oid=$1
+  new_oid=$2
+  ref_name=$3
+
+  if is_zero_oid "$old_oid" && ! is_zero_oid "$new_oid"; then
+    return 0
+  fi
+
+  if ! is_zero_oid "$old_oid" && is_zero_oid "$new_oid"; then
+    reject_main_update "$ref_name" "main deletion is blocked"
+    return 1
+  fi
+
+  if ! git cat-file -e "$old_oid^{commit}" 2>/dev/null || ! git cat-file -e "$new_oid^{commit}" 2>/dev/null; then
+    reject_main_update "$ref_name" "unable to classify update; fetch main and retry"
+    return 1
+  fi
+
+  git merge-base --is-ancestor "$old_oid" "$new_oid" 2>/dev/null
+  merge_base_status=$?
+  if [ "$merge_base_status" -eq 0 ]; then
+    if is_remote_main_oid "$new_oid"; then
+      return 0
+    fi
+
+    reject_main_update "$ref_name" "fast-forward main updates are blocked unless syncing to remote main"
+    return 1
+  fi
+
+  if [ "$merge_base_status" -eq 1 ]; then
+    return 0
+  fi
+
+  reject_main_update "$ref_name" "unable to classify update; fetch main and retry"
+  return 1
+}
+
 validate_branch_name() {
   branch_name=$1
 
@@ -184,6 +238,11 @@ status=0
 while read old_oid new_oid ref_name; do
   ref_name=${ref_name%"$cr"}
   case "$ref_name" in
+    refs/heads/main)
+      if ! validate_main_update "$old_oid" "$new_oid" "$ref_name"; then
+        status=1
+      fi
+      ;;
     refs/heads/*)
       if is_zero_oid "$old_oid" && ! is_zero_oid "$new_oid"; then
         branch_name=${ref_name#refs/heads/}

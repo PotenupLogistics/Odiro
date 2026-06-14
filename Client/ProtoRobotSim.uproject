@@ -19,6 +19,13 @@
 			"Enabled": true
 		},
 		{
+			"Name": "GitSourceControl",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
 			"Name": "UmgMcp",
 			"Enabled": true
 		},

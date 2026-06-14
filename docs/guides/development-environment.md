@@ -5,11 +5,48 @@
 
 ## 대상
 
-| 영역     | 필요 도구                                          |
-| -------- | -------------------------------------------------- |
-| `Agents` | `uv`                                               |
-| `Client` | Unreal Engine 5.7, Visual Studio 2022, Windows SDK |
-| `Bridge` | Go                                                 |
+| 영역     | 필요 도구                                                   |
+| -------- | ----------------------------------------------------------- |
+| `Agents` | `uv`                                                        |
+| `Client` | Unreal Engine 5.7, Visual Studio 2022, Windows SDK, Git LFS |
+| `Bridge` | Go                                                          |
+
+## Git setup
+
+처음 clone 후 실행:
+
+```powershell
+.\task-setup.bat
+```
+
+Git submodule 초기화, hook 설정, LFS lock 설정 수행.
+완료 후 Unreal asset에 read-only 상태가 재적용된다.
+
+```powershell
+# 직접 재설정
+git submodule update --init --recursive
+.\tools\set-git-config.ps1
+
+# 적용값
+git config --local core.hooksPath .githooks
+git config --local merge.ff false
+git config --local lfs.locksverify true
+git config --local lfs.setlockablereadonly true
+```
+
+### 확인
+
+```powershell
+git check-attr lockable -- Client/Content/<sample>.uasset
+.\tools\set-git-config.ps1
+```
+
+`lockable: set`이어야 한다. `set-git-config.ps1`은 이미 적용된 설정은 `Already configured`로 표시하고, setup 완료 후 lock 전 Unreal asset에 read-only 상태를 재적용한다.
+
+GitHub repository 설정:
+
+- Secret: `LFS_LOCK_BOT_TOKEN`
+- Optional variable: `LFS_LOCK_OWNER_ALIASES`, 예: `github-login=Lock Owner Name,other-alias`
 
 ## uv
 
@@ -54,6 +91,15 @@ $env:UE_EDITOR_EXE = "D:\Epic Games\UE_5.7\Engine\Binaries\Win64\UnrealEditor.ex
 ```
 
 공식 문서: [Install Unreal Engine](https://dev.epicgames.com/documentation/unreal-engine/install-unreal-engine), [Offline Installer](https://dev.epicgames.com/documentation/unreal-engine/offline-installer-of-unreal-engine)
+
+### Source Control
+
+ProjectBorealis UEGitPlugin를 사용한다.
+
+- Editor source control provider: `Git LFS 2`
+- 프로젝트 정책: `lockable`만 사용, LFS object 저장 금지
+  - 허용: `Checkout`
+  - 금지: `Submit`, `Push`, `Unlock`, repository initialize, auto-create `.gitattributes`
 
 ## Visual Studio 2022
 

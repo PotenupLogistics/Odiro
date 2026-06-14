@@ -9,11 +9,17 @@
 
 ```sh
 Odiro/
+  .github/
+    workflows/                    # GitHub Actions checks
+      asset-lock--pr-check.yml    # PR 시 lock 소유권 검증
+      asset-lock--auto-unlock.yml # main 반영 후 LFS unlock
+
+  .githooks/                      # Git hooks
+
   .agents/                        # 프로젝트 관련 agent context
-    index/                         # agent source index cards
+    index/                        # agent source index cards
     skills/
       ue5-dev/
-        SKILL.md
 
   Agents/                         # --- Python Agent 서버 ---
     app/                          # FastAPI 구현체
@@ -79,6 +85,8 @@ Odiro/
     guides/                       # 개발/운영 가이드
 
   tools/                          # 프로젝트 단위 도구
+    set-git-config.ps1             # Git hook/LFS 설정
+    manual-unlock.ps1              # human-only dangling lock 정리
   tests/                          # 통합 테스트
     integration/
     fixtures/

@@ -1,0 +1,40 @@
+#!/bin/sh
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -z "$repo_root" ]; then
+  echo "pre-push: not inside a Git repository" >&2
+  exit 1
+fi
+
+remote_name=$1
+remote_url=$2
+updates_file=$(git rev-parse --git-path "odiro-pre-push.$$.updates") || exit 1
+ODIRO_PRE_PUSH_UPDATES=$updates_file
+export ODIRO_PRE_PUSH_UPDATES
+
+cleanup_updates_file() {
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command 'Remove-Item -LiteralPath $env:ODIRO_PRE_PUSH_UPDATES -ErrorAction SilentlyContinue' >/dev/null 2>&1
+}
+trap cleanup_updates_file EXIT HUP INT TERM
+
+: > "$updates_file" || exit 1
+while IFS= read -r update_line || [ -n "$update_line" ]; do
+  printf '%s\n' "$update_line" >> "$updates_file"
+done
+
+command -v git-lfs >/dev/null 2>&1 || {
+  printf >&2 "\n%s\n\n" "This repository uses Git LFS locking, but 'git-lfs' was not found on PATH."
+  exit 2
+}
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$repo_root/tools/pre-push-policy.ps1" -UpdatesFile "$updates_file" -RemoteName "$remote_name" -RemoteUrl "$remote_url"
+verify_status=$?
+if [ "$verify_status" -ne 0 ]; then
+  exit "$verify_status"
+fi
+
+git lfs pre-push "$remote_name" "$remote_url" < "$updates_file"
+lfs_status=$?
+if [ "$lfs_status" -ne 0 ]; then
+  exit "$lfs_status"
+fi

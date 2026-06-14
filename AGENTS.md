@@ -15,6 +15,10 @@
 - Code shape: avoid all-public types; expose only the surface other modules need
 - Boundary validation: validate objects, pointers, handles, paths, and external payloads at trust boundaries
 
+## Version Control
+- Binary assets use Git LFS locking only; do not convert them to LFS objects; never add `filter=lfs`
+- Do not run `tools/manual-unlock.ps1` unless the user explicitly requests unlock for a dangling path
+
 ## Comments
 - User-facing docs and code comments follow prompt language unless a stronger project convention applies
 - Do not restate code behavior in prose

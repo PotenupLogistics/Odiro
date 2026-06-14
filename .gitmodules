@@ -1,0 +1,3 @@
+[submodule "Client/Plugins/UEGitPlugin"]
+	path = Client/Plugins/UEGitPlugin
+	url = https://github.com/ProjectBorealis/UEGitPlugin.git

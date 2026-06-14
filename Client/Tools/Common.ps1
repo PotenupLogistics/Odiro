@@ -10,7 +10,7 @@ function Get-ClientRoot {
 }
 
 function Get-ClientProjectFile {
-    $projectFile = Join-Path (Get-ClientRoot) "ProtoRobotSim.uproject"
+    $projectFile = Join-Path (Get-ClientRoot) "OdiroSim.uproject"
     if (-not (Test-Path -LiteralPath $projectFile -PathType Leaf)) {
         throw "Client project file not found: $projectFile"
     }

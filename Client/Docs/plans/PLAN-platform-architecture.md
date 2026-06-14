@@ -95,7 +95,7 @@ specs:
 
 | 영역                      | 상태    | 근거                                                                    | 플랫폼 설계에서의 의미                                                 |
 | ------------------------- | ------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Runtime module            | 구현    | `ProtoRobotSim.uproject`, `Source/ProtoRobotSim/ProtoRobotSim.Build.cs` | 플랫폼, 시뮬레이터, 편집기 기능을 같은 runtime module 안에서 시작 가능 |
+| Runtime module            | 구현    | `OdiroSim.uproject`, `Source/OdiroSim/OdiroSim.Build.cs` | 플랫폼, 시뮬레이터, 편집기 기능을 같은 runtime module 안에서 시작 가능 |
 | Episode JSON compile      | 구현    | `UEpisodeCompiler`                                                      | 시나리오 구성 JSON을 검증하고 runtime spec으로 변환하는 기반           |
 | Scenario world setup       | 구현    | `UScenarioSimulationSubsystem`                                           | `ScenarioSimulationMap`에서 실행할 월드 배치 기반                       |
 | DeliveryBot setup compile | 구현    | `UDeliveryBotSetupCompiler`                                             | 실행 설정의 입력 파일로 선택하고 검증 가능                             |
@@ -159,11 +159,11 @@ MVP 범위: T01~T05 / T06: 사용성 확장 / T07~T08은 병렬 작업자의 산
 - 신규 C++ 타입과 bootstrap 파일 위치 확정
 
 구현 위치:
-- [SimulationSetupTypes.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Shared/SimulationSetupTypes.h): `FSimulationSetup`, `FSimulationRunStatus`, `FSimulationCommandLineOptions`
-- [SimulationSetupTypes.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Shared/SimulationSetupTypes.cpp): `SimulationSetup JSON` parser, `-Simulate`/`-RunId` parser
-- [SimulationSetupTypesTest.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Shared/Tests/SimulationSetupTypesTest.cpp): sample parse, invalid field, missing file, command line parser automation
+- [SimulationSetupTypes.h](x:/UE5/Proto-Unreal/Source/OdiroSim/Public/Shared/SimulationSetupTypes.h): `FSimulationSetup`, `FSimulationRunStatus`, `FSimulationCommandLineOptions`
+- [SimulationSetupTypes.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Shared/SimulationSetupTypes.cpp): `SimulationSetup JSON` parser, `-Simulate`/`-RunId` parser
+- [SimulationSetupTypesTest.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Shared/Tests/SimulationSetupTypesTest.cpp): sample parse, invalid field, missing file, command line parser automation
 - [SimulationSetupSample.json](x:/UE5/Proto-Unreal/Json/Input/SimulationSetupSample.json): T02 bootstrap용 sample setup
-- T02 bootstrap 예정 위치: `Source/ProtoRobotSim/Public/Platform/SimulatorProcessSubsystem.h`, `Source/ProtoRobotSim/Private/Platform/SimulatorProcessSubsystem.cpp`
+- T02 bootstrap 예정 위치: `Source/OdiroSim/Public/Platform/SimulatorProcessSubsystem.h`, `Source/OdiroSim/Private/Platform/SimulatorProcessSubsystem.cpp`
 
 검증:
 - `SimulationSetup JSON` parser가 sample file을 읽고 validation error를 반환
@@ -182,13 +182,13 @@ MVP 범위: T01~T05 / T06: 사용성 확장 / T07~T08은 병렬 작업자의 산
 - SimulatorMode 진입 시 Main Window와 Platform UI 생성 경로 차단
 - SimulatorMode에서 `ScenarioSimulationMap` 로드
 - SimulatorMode에서 `FApp::SetUseFixedTimeStep(true)`, `FApp::SetFixedDeltaTime(1 / fixed_step.fps)` 적용
-- setup의 `run_queue`를 [EpisodeRunnerSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Scenario/EpisodeRunnerSubsystem.cpp)의 `UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile`에 전달
-- [ScenarioSimulationSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Scenario/ScenarioSimulationSubsystem.cpp) 경로로 `ScenarioSimulationMap`의 Scenario spawn 수행
+- setup의 `run_queue`를 [EpisodeRunnerSubsystem.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Scenario/EpisodeRunnerSubsystem.cpp)의 `UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile`에 전달
+- [ScenarioSimulationSubsystem.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Scenario/ScenarioSimulationSubsystem.cpp) 경로로 `ScenarioSimulationMap`의 Scenario spawn 수행
 
 구현 위치:
-- [SimulatorProcessSubsystem.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Platform/SimulatorProcessSubsystem.h): SimulatorMode 상태, setup/run id 조회, map/fixed-step helper
-- [SimulatorProcessSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/SimulatorProcessSubsystem.cpp): `-Simulate` 감지, setup parse, fixed-step 적용, target map load, runner start
-- [SimulatorProcessSubsystemTest.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/Tests/SimulatorProcessSubsystemTest.cpp): map id 정규화와 fixed-step 계산 automation
+- [SimulatorProcessSubsystem.h](x:/UE5/Proto-Unreal/Source/OdiroSim/Public/Platform/SimulatorProcessSubsystem.h): SimulatorMode 상태, setup/run id 조회, map/fixed-step helper
+- [SimulatorProcessSubsystem.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Platform/SimulatorProcessSubsystem.cpp): `-Simulate` 감지, setup parse, fixed-step 적용, target map load, runner start
+- [SimulatorProcessSubsystemTest.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Platform/Tests/SimulatorProcessSubsystemTest.cpp): map id 정규화와 fixed-step 계산 automation
 
 T03 완료 범위:
 - Run Status JSON writer
@@ -210,18 +210,18 @@ T03 완료 범위:
 
 상세 작업:
 - simulator 시작, 진행, 완료, 실패, 취소 상태를 `Run Status JSON`으로 기록
-- [EpisodeMeasurementLogSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Scenario/EpisodeMeasurementLogSubsystem.cpp)에 setup의 logging 설정 적용
-- [EpisodeRunnerSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Scenario/EpisodeRunnerSubsystem.cpp)에 setup의 evaluation report JSON output 경로 적용
+- [EpisodeMeasurementLogSubsystem.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Scenario/EpisodeMeasurementLogSubsystem.cpp)에 setup의 logging 설정 적용
+- [EpisodeRunnerSubsystem.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Scenario/EpisodeRunnerSubsystem.cpp)에 setup의 evaluation report JSON output 경로 적용
 - runner 완료 시 status에 report path와 log path 기록
 - setup 읽기 실패, map load 실패, runner 실패는 status `Failed`와 error message 남김
 
 구현 위치:
-- [SimulationSetupTypes.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Shared/SimulationSetupTypes.h): `FSimulationRunStatusJson`
-- [SimulationSetupTypes.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Shared/SimulationSetupTypes.cpp): `SimulationRunStatus JSON` serialization/file writer
-- [EpisodeRunnerSubsystem.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Episode/EpisodeRunnerSubsystem.h): runner state/record completion native delegate, total/completed/current pair 조회
-- [EpisodeRunnerSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Scenario/EpisodeRunnerSubsystem.cpp): report output path를 `FEpisodeRunRecord`에 기록, runner state change broadcast
-- [EpisodeMeasurementLogSubsystem.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Episode/EpisodeMeasurementLogSubsystem.h): runtime logging settings 적용 API
-- [SimulatorProcessSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/SimulatorProcessSubsystem.cpp): report/logging setup 적용, runner 상태를 status JSON에 기록, 완료 시 log/report path 반영
+- [SimulationSetupTypes.h](x:/UE5/Proto-Unreal/Source/OdiroSim/Public/Shared/SimulationSetupTypes.h): `FSimulationRunStatusJson`
+- [SimulationSetupTypes.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Shared/SimulationSetupTypes.cpp): `SimulationRunStatus JSON` serialization/file writer
+- [EpisodeRunnerSubsystem.h](x:/UE5/Proto-Unreal/Source/OdiroSim/Public/Episode/EpisodeRunnerSubsystem.h): runner state/record completion native delegate, total/completed/current pair 조회
+- [EpisodeRunnerSubsystem.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Scenario/EpisodeRunnerSubsystem.cpp): report output path를 `FEpisodeRunRecord`에 기록, runner state change broadcast
+- [EpisodeMeasurementLogSubsystem.h](x:/UE5/Proto-Unreal/Source/OdiroSim/Public/Episode/EpisodeMeasurementLogSubsystem.h): runtime logging settings 적용 API
+- [SimulatorProcessSubsystem.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Platform/SimulatorProcessSubsystem.cpp): report/logging setup 적용, runner 상태를 status JSON에 기록, 완료 시 log/report path 반영
 - `-Simulate` 모드에서 target map이 기존 batch를 먼저 시작하면 해당 batch를 취소하고 `SimulationSetup.run_queue`를 실행 기준으로 사용
 
 T04로 남긴 범위:
@@ -259,11 +259,11 @@ T04로 남긴 범위:
 - 동일 setup을 새 run id로 다시 실행
 
 구현 위치:
-- [SimulatorLaunchSubsystem.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Platform/SimulatorLaunchSubsystem.h): simulator launcher API, active run 상태, command argument helper
-- [SimulatorLaunchSubsystem.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/SimulatorLaunchSubsystem.cpp): packaged exe 실행, `Task-RunPreview.bat` fallback, process start/status failure 분리, status polling
-- [SimulationSetupTypes.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Shared/SimulationSetupTypes.h): `FSimulationRunStatusJson` read API
-- [SimulationSetupTypes.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Shared/SimulationSetupTypes.cpp): `SimulationRunStatus JSON` reader/writer 대칭 구현
-- [SimulatorLaunchSubsystemTest.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/Tests/SimulatorLaunchSubsystemTest.cpp): launcher command contract와 terminal state automation
+- [SimulatorLaunchSubsystem.h](x:/UE5/Proto-Unreal/Source/OdiroSim/Public/Platform/SimulatorLaunchSubsystem.h): simulator launcher API, active run 상태, command argument helper
+- [SimulatorLaunchSubsystem.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Platform/SimulatorLaunchSubsystem.cpp): packaged exe 실행, `Task-RunPreview.bat` fallback, process start/status failure 분리, status polling
+- [SimulationSetupTypes.h](x:/UE5/Proto-Unreal/Source/OdiroSim/Public/Shared/SimulationSetupTypes.h): `FSimulationRunStatusJson` read API
+- [SimulationSetupTypes.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Shared/SimulationSetupTypes.cpp): `SimulationRunStatus JSON` reader/writer 대칭 구현
+- [SimulatorLaunchSubsystemTest.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Platform/Tests/SimulatorLaunchSubsystemTest.cpp): launcher command contract와 terminal state automation
 
 수동/후속 확인:
 - Platform UI에서 Start Run 버튼으로 실제 simulator window가 뜨고 terminal status에서 종료되는지 화면 확인
@@ -293,11 +293,11 @@ T04로 남긴 범위:
 - UI는 simulator world object를 직접 참조하지 않음
 
 구현 위치:
-- [MainMenuPlayerController.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Platform/MainMenuPlayerController.h): MainMenu widget 생성, viewport 부착, menu input mode 적용
-- [MainMenuPlayerController.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/MainMenuPlayerController.cpp): `WBP_MainMenu` class resolution, widget lifecycle, cursor/input mode 관리
+- [MainMenuPlayerController.h](x:/UE5/Proto-Unreal/Source/OdiroSim/Public/Platform/MainMenuPlayerController.h): MainMenu widget 생성, viewport 부착, menu input mode 적용
+- [MainMenuPlayerController.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Platform/MainMenuPlayerController.cpp): `WBP_MainMenu` class resolution, widget lifecycle, cursor/input mode 관리
 - [BP_MainMenuGameMode.uasset](x:/UE5/Proto-Unreal/Content/Blueprints/MainMenu/BP_MainMenuGameMode.uasset): MainMenuMap이 `AMainMenuPlayerController`를 사용하도록 연결하는 Blueprint GameMode
-- [MainMenuWidget.h](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Public/Platform/Widget/MainMenuWidget.h): `WBP_MainMenu` binding 계약과 platform event handler
-- [MainMenuWidget.cpp](x:/UE5/Proto-Unreal/Source/ProtoRobotSim/Private/Platform/Widget/MainMenuWidget.cpp): `BindWidget` control wiring, `Json/Input` setup 목록, fixed-step FPS 저장, run 시작, status/report/log preview 표시
+- [MainMenuWidget.h](x:/UE5/Proto-Unreal/Source/OdiroSim/Public/Platform/Widget/MainMenuWidget.h): `WBP_MainMenu` binding 계약과 platform event handler
+- [MainMenuWidget.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Platform/Widget/MainMenuWidget.cpp): `BindWidget` control wiring, `Json/Input` setup 목록, fixed-step FPS 저장, run 시작, status/report/log preview 표시
 
 수동/후속 확인:
 - `MainMenuMap`의 World Settings에서 GameMode Override를 `BP_MainMenuGameMode`로 지정한다
@@ -325,7 +325,7 @@ T04로 남긴 범위:
 - 기존 ScenarioSetup과 DeliveryBotSetup pair를 queue에 추가
 - 저장된 queue와 setup을 simulator runner가 그대로 실행
 - validation 실패 항목은 파일과 run item 단위로 확인
-- `ProtoRobotSim.SimulationSetup` automation과 `ProtoRobotSim.SimulatorLaunch` automation 통과
+- `OdiroSim.SimulationSetup` automation과 `OdiroSim.SimulatorLaunch` automation 통과
 
 수동/후속 확인:
 - 실제 `MainMenuMap` visible run 또는 PIE에서 `WBP_MainMenu`가 화면에 표시되고 버튼 클릭이 가능한지 확인
@@ -352,7 +352,7 @@ T04로 남긴 범위:
 - Platform에서 시나리오 에디터를 열 수 있는 진입점이 있다
 - MainMenu에서 `ScenarioEditorMap`으로 전환해 에디터 담당 기능이 시작된다
 - 에디터 진입 경로가 simulator fixed-step이나 runner 실행 경로에 영향을 주지 않는다
-- `ProtoRobotSimEditor` build 통과
+- `OdiroSimEditor` build 통과
 
 수동/후속 확인:
 - `ScenarioEditorMap`의 GameMode/PlayerController가 `AScenarioEditorController` 또는 그 Blueprint subclass를 사용해야 선택한 ScenarioSetup 자동 로드가 동작한다

@@ -6,7 +6,7 @@
 - Commands: no hardcoded local UE install paths
 
 ## MCP
-- Reuse an open `Client/ProtoRobotSim.uproject` editor when possible; launch it only when MCP needs an editor-backed server
+- Reuse an open `Client/OdiroSim.uproject` editor when possible; launch it only when MCP needs an editor-backed server
 - Treat early `connection refused` as editor/MCP startup state
 - Use `UmgMcp` for UMG writes and `ue-mcp` for PIE/runtime screenshots, logs, build status, and screen-debug work
 - Do not use `ue-mcp` UI write actions unless explicitly requested

@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 $runDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = (Resolve-Path (Join-Path $runDir '..')).Path
-$projectFile = Join-Path $projectRoot 'ProtoRobotSim.uproject'
+$projectFile = Join-Path $projectRoot 'OdiroSim.uproject'
 
 if (-not (Test-Path -LiteralPath $projectFile)) {
     throw "Project file not found: $projectFile"
@@ -135,7 +135,7 @@ function Add-LaunchProfile {
     Add-Option $Document $profile 'PASS_PARENT_ENVS' '1'
     Add-Option $Document $profile 'USE_EXTERNAL_CONSOLE' '1'
     Add-Option $Document $profile 'TERMINAL_INTERACTION_BEHAVIOR' 'FORCE_CONSOLE'
-    Add-Option $Document $profile 'PROJECT_FILE_PATH' '$PROJECT_DIR$/ProtoRobotSim.uproject'
+    Add-Option $Document $profile 'PROJECT_FILE_PATH' '$PROJECT_DIR$/OdiroSim.uproject'
 }
 
 function New-PreviewConfigurationDocument {
@@ -155,14 +155,14 @@ function New-PreviewConfigurationDocument {
     $configuration.SetAttribute('factoryName', 'rider.uproject')
     [void]$document.component.AppendChild($configuration)
 
-    Add-LaunchProfile $document $configuration 1 'DebugGame Editor' "$engineRootPath/Engine/Binaries/Win64/UnrealEditor-Win64-DebugGame.exe" ' "$PROJECT_DIR$/ProtoRobotSim.uproject"' $CustomProgramParameters $engineRootPath
-    Add-LaunchProfile $document $configuration 2 'DebugGame' '$PROJECT_DIR$/Binaries/Win64/ProtoRobotSim-Win64-DebugGame.exe' '' '' $engineRootPath
-    Add-LaunchProfile $document $configuration 3 'Development Editor' "$engineRootPath/Engine/Binaries/Win64/UnrealEditor.exe" ' "$PROJECT_DIR$/ProtoRobotSim.uproject"' $CustomProgramParameters $engineRootPath
-    Add-LaunchProfile $document $configuration 4 'Development' '$PROJECT_DIR$/Binaries/Win64/ProtoRobotSim.exe' '' '' $engineRootPath
-    Add-LaunchProfile $document $configuration 5 'Shipping' '$PROJECT_DIR$/Binaries/Win64/ProtoRobotSim-Win64-Shipping.exe' '' '' $engineRootPath
+    Add-LaunchProfile $document $configuration 1 'DebugGame Editor' "$engineRootPath/Engine/Binaries/Win64/UnrealEditor-Win64-DebugGame.exe" ' "$PROJECT_DIR$/OdiroSim.uproject"' $CustomProgramParameters $engineRootPath
+    Add-LaunchProfile $document $configuration 2 'DebugGame' '$PROJECT_DIR$/Binaries/Win64/OdiroSim-Win64-DebugGame.exe' '' '' $engineRootPath
+    Add-LaunchProfile $document $configuration 3 'Development Editor' "$engineRootPath/Engine/Binaries/Win64/UnrealEditor.exe" ' "$PROJECT_DIR$/OdiroSim.uproject"' $CustomProgramParameters $engineRootPath
+    Add-LaunchProfile $document $configuration 4 'Development' '$PROJECT_DIR$/Binaries/Win64/OdiroSim.exe' '' '' $engineRootPath
+    Add-LaunchProfile $document $configuration 5 'Shipping' '$PROJECT_DIR$/Binaries/Win64/OdiroSim-Win64-Shipping.exe' '' '' $engineRootPath
 
-    Add-Option $document $configuration 'DEFAULT_PROJECT_PATH' '$PROJECT_DIR$/ProtoRobotSim.uproject'
-    Add-Option $document $configuration 'PROJECT_FILE_PATH' '$PROJECT_DIR$/ProtoRobotSim.uproject'
+    Add-Option $document $configuration 'DEFAULT_PROJECT_PATH' '$PROJECT_DIR$/OdiroSim.uproject'
+    Add-Option $document $configuration 'PROJECT_FILE_PATH' '$PROJECT_DIR$/OdiroSim.uproject'
     Add-Option $document $configuration 'AUTO_SELECT_PRIORITY' '10010'
 
     $method = $document.CreateElement('method')
@@ -212,7 +212,7 @@ $simulatorDocument = New-PreviewConfigurationDocument `
 Save-Xml $previewDocument $previewPath
 Save-Xml $simulatorDocument $simulatorPath
 
-Write-Host "[ProtoRobotSim] Unreal Engine root: $engineRoot"
-Write-Host "[ProtoRobotSim] Generated Rider Preview configs:"
+Write-Host "[OdiroSim] Unreal Engine root: $engineRoot"
+Write-Host "[OdiroSim] Generated Rider Preview configs:"
 Write-Host "  $previewPath"
 Write-Host "  $simulatorPath"

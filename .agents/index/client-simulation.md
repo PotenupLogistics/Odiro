@@ -2,10 +2,10 @@
 id: client-simulation
 owner: Client
 paths:
-  - Client/Source/ProtoRobotSim/Public/Scenario/**
-  - Client/Source/ProtoRobotSim/Private/Scenario/**
-  - Client/Source/ProtoRobotSim/Public/Episode/**
-  - Client/Source/ProtoRobotSim/Private/Episode/**
+  - Client/Source/OdiroSim/Public/Scenario/**
+  - Client/Source/OdiroSim/Private/Scenario/**
+  - Client/Source/OdiroSim/Public/Episode/**
+  - Client/Source/OdiroSim/Private/Episode/**
   - Client/Json/Input/**
   - contracts/specs/**
 entry:

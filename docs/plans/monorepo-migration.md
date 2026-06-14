@@ -40,7 +40,7 @@ X:\Temp\Proto-AI     -> Odiro/Agents
 - 한 프로젝트에서만 쓰는 파일은 해당 프로젝트 내부에 둔다.
 - 프로젝트 전용 내용은 루트로 복제하지 않고, 루트에서는 위치를 찾기 위한 힌트만 둔다.
 - `Client`와 `Agents` 양쪽에 중복된 제품 개념 문서는 루트에 새 canonical 문서를 만들고 기존 파일은 삭제 판단 전까지 보존한다.
-- ProtoRobotSim/OdiroSim renaming은 migration과 분리해 별도 작업으로 진행한다.
+- Client project rename to OdiroSim은 migration과 분리해 별도 작업으로 진행한다.
 - Git LFS 설정과 exclusive lock 정책은 migration과 분리해 별도 작업으로 진행한다.
 - `.uasset`은 현재 계획에서 LFS object로 관리하지 않는다.
 - 문서 이동과 정리는 원형 migration 후 별도 commit으로 진행한다.
@@ -69,7 +69,7 @@ local secrets
 - `git subtree add --prefix=<target>`를 기본 통합 방식으로 사용한다.
 - `git filter-repo`는 Temp repo history 안에 제외 대상이 이미 들어간 경우에만 사용한다.
 - `Client`와 `Agents`는 원형 통합을 먼저 완료하고, contracts 승격과 문서 이동은 후속 commit으로 분리한다.
-- `ProtoRobotSim` rename, Git LFS lock 설정, Bridge skeleton, packaging은 이 migration plan의 구현 범위가 아니다.
+- Client project rename to OdiroSim, Git LFS lock 설정, Bridge skeleton, packaging은 이 migration plan의 구현 범위가 아니다.
 
 ## 작업 과정
 
@@ -150,7 +150,7 @@ git -C X:\Temp\Proto-AI rev-list --objects --all
 - `X:\Temp\Proto-Unreal`을 local remote로 추가하거나 직접 path로 참조한다.
 - `git subtree add --prefix=Client` 방식으로 Temp repo의 `main`을 통합한다.
 - 통합 후 `Client` 아래에 Unreal 프로젝트 원형이 유지되는지 확인한다.
-- `ProtoRobotSim` rename이나 문서 재배치는 하지 않는다.
+- Client project rename to OdiroSim이나 문서 재배치는 하지 않는다.
 
 검증:
 
@@ -292,4 +292,4 @@ Client\Task-RunPreview.bat --dry-run
 - 각 Temp repo의 migration 시작 commit이 `migrated-1` 같은 tag로 표시된다.
 - migration commit은 `Client` 원형 통합과 `Agents` 원형 통합을 구분한다.
 - project-wide 규칙은 `docs/specs`와 `docs/guides`에 남고, migration 절차는 이 plan에만 남는다.
-- contracts 승격 재검토, 중복 문서 canonical화, ProtoRobotSim renaming, Git LFS lock 설정, `task-run.bat` preview, `task-dev.bat` development loop, `Bridge` skeleton, packaging 작업은 별도 commit 또는 별도 plan으로 진행할 수 있다.
+- contracts 승격 재검토, 중복 문서 canonical화, Client project rename to OdiroSim, Git LFS lock 설정, `task-run.bat` preview, `task-dev.bat` development loop, `Bridge` skeleton, packaging 작업은 별도 commit 또는 별도 plan으로 진행할 수 있다.

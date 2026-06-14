@@ -35,8 +35,13 @@ Scenario/Episode 용어 기준은 [Scenario / Episode Terminology](docs/architec
 - `GET /health`
 - `POST /api/v1/scenarios/generate`
 - `POST /api/v1/analysis/run`
+- `POST /api/v2/scenarios/generate`
+- `POST /api/v2/analysis/run`
 
 `POST /api/v1/scenarios/generate`는 자연어 `prompt`를 필수로 받고 선택적으로 `episode_count`를 허용합니다. 성공 응답은 wrapper field 없는 RunQueue JSON입니다.
+`POST /api/v1/scenarios/generate`는 자연어 `prompt`를 필수로 받고 선택적으로 `episode_count`를 허용합니다. 성공 응답은 wrapper field 없는 RunQueue JSON입니다. UE 연동 기본 권장 endpoint입니다.
+
+v2 Agent API는 v1 실행 계약을 변경하지 않는 신규 경로입니다. `/api/v2/scenarios/generate`는 prompt만 받아 `scenario.template.json` 형태의 템플릿을 반환하고, 실행 개수, seed, scenario sample, RunQueue 생성은 담당하지 않습니다. `/api/v2/analysis/run`은 body 없음 또는 `{}`로 experiments root 전체를 분석합니다. 기본값은 deterministic/rule-based이며, `V2_AGENT_LLM_ENABLED=true`일 때만 optional LLM JSON mode를 사용합니다. 자세한 내용은 [v2 Agent API 문서](docs/api/V2_AGENT_APIS.md), [v2 Agent Architecture](docs/agents/V2_AGENT_ARCHITECTURE.md)를 참고합니다.
 
 Legacy `/api/v1/ue5/world-config/handoff` endpoint는 현재 FastAPI/OpenAPI에서 제거되었습니다. 이전 `responseFormat=episode_spec`, `responseFormat=setup_pair`, `responseFormat=both` 기반 handoff 설명은 archive 문서와 CLI tooling 참고용입니다.
 
@@ -75,9 +80,13 @@ ollama pull llama3.1:8b
 - [UE5 Endpoint Usage For UE Team](docs/handoff/UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md)
 - [Legacy EpisodeSpec Archive](docs/archive/previous_episode_spec/)
 - [OpenAI Provider Guide](docs/providers/OPENAI_PROVIDER_GUIDE.md)
+- [v2 Agent API 문서](docs/api/V2_AGENT_APIS.md)
+- [v2 Agent Architecture](docs/agents/V2_AGENT_ARCHITECTURE.md)
+- [v2 Agent Testing And Operations Guide](docs/development/V2_AGENT_TESTING_GUIDE.md)
 
 ## Legacy Notes
 
 `EpisodeSpec`은 이전 UE MVP JSON guide에 맞춘 legacy payload 형식입니다. 현재 UE object catalog에 `obstacle.kickboard`가 없으므로 legacy adapter는 임시로 `obstacle.road_barrier_01`을 사용합니다. 원래 시나리오 의미는 `semantic_type="Kickboard"`로 보존합니다.
 
 UE setup pair smoke, environmentSampling smoke, policy comparison smoke 결과는 [Verification Status](docs/status/VERIFICATION_STATUS.md)와 [Handoff Release Notes](docs/handoff/HANDOFF_RELEASE_NOTES.md)를 참고합니다.
+RunQueue export CLI는 `--out`을 지정하지 않으면 파일을 생성하지 않습니다.

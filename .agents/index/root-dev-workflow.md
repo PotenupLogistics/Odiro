@@ -33,6 +33,7 @@ keep:
   - Main branch direct commits, local merges, and fast-forward pushes are blocked by hooks; intentional non-fast-forward force push is allowed.
   - Local pulls are fast-forward only via pull.ff=only so main sync does not create merge commits.
   - Unreal binary assets stay Git blobs; Git LFS is used for lock/read-only/push verification only.
+  - post-commit skips Git LFS read-only refresh when HEAD has no Unreal binary asset changes.
   - Feature branch commit and merge hooks return without staged build verification; PR build check runs tools/verify-staged.ps1 on a soft-reset staged diff.
   - Manual LFS unlock is human-only exact-path recovery.
 verify:

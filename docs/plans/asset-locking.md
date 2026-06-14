@@ -118,6 +118,7 @@ remote에 `main`이 없으면 creation으로 보이므로 허용한다.
 `.githooks/post-checkout`, `.githooks/post-commit`, `.githooks/post-merge`:
 
 - Git LFS lockable read-only 상태 재적용
+- `post-commit`은 HEAD commit에 Unreal binary asset 변경이 없으면 skip
 
 ### Unreal Editor
 

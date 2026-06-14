@@ -5,4 +5,23 @@ command -v git-lfs >/dev/null 2>&1 || {
   exit 2
 }
 
-git lfs post-commit "$@"
+changed_paths=$(git diff-tree --root --no-commit-id --name-only -r HEAD --) || exit 1
+asset_changed=0
+old_ifs=$IFS
+IFS='
+'
+for path in $changed_paths; do
+  case "$path" in
+    .gitattributes|*/.gitattributes|*.[uU][aA][sS][sS][eE][tT]|*.[uU][mM][aA][pP]|*.[uU][bB][uU][lL][kK]|*.[uU][eE][xX][pP])
+      asset_changed=1
+      break
+      ;;
+  esac
+done
+IFS=$old_ifs
+
+if [ "$asset_changed" -eq 0 ]; then
+  exit 0
+fi
+
+git-lfs post-commit "$@"

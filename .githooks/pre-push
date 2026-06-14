@@ -33,7 +33,7 @@ if [ "$verify_status" -ne 0 ]; then
   exit "$verify_status"
 fi
 
-git lfs pre-push "$remote_name" "$remote_url" < "$updates_file"
+git-lfs pre-push "$remote_name" "$remote_url" < "$updates_file"
 lfs_status=$?
 if [ "$lfs_status" -ne 0 ]; then
   exit "$lfs_status"

@@ -21,13 +21,16 @@ entry:
   - tools/run-preview.ps1
   - tools/dev-session.ps1
   - tools/set-git-hooks.ps1
+  - tools/verify-staged.ps1
 keep:
   - Root scripts orchestrate project-owned task scripts; they do not implement Unreal or Agents startup details.
   - Root setup calls project task scripts directly, not project public .bat wrappers, to avoid duplicate phases.
   - Root build includes Bridge and Client; Agents has no build phase.
+  - Main branch commits and merge commits are gated by staged verification; setup configures merge.ff=false so normal merges create merge commits for the gate.
 verify:
   - PowerShell parse check for script edits
-  - hook syntax and stdin smoke for .githooks changes
+  - hook syntax and staged smoke for .githooks changes
+  - tools/verify-staged.ps1 with no staged build inputs
   - task-setup.bat -AllowMissingPrerequisites -SkipAgents
   - tools/check-prerequisites.ps1 -AllowMissing
   - tools/build.ps1 -Target bridge

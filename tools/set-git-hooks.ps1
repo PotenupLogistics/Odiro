@@ -22,3 +22,9 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to configure core.hooksPath."
 }
 Write-Step "Git hooks configured: core.hooksPath=.githooks"
+
+git -C $repoRoot config --local merge.ff false
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to configure merge.ff."
+}
+Write-Step "Git merge configured: merge.ff=false"

@@ -11,6 +11,8 @@ Set-StrictMode -Version Latest
 . "$PSScriptRoot\common.ps1"
 Set-ToolPrefix "check/source-sanity"
 
+$script:ReadStagedFilesFromWorktree = $false
+
 trap {
     Write-ErrorMessage $_.Exception.Message
     exit 1
@@ -143,9 +145,13 @@ function Get-ClientIndexCppFiles {
     return @($paths | Where-Object { $_ -match '^Client/.*\.(c|cc|cpp|cxx)$' })
 }
 
-# Reads text lines for one file from the Git index.
+# Reads text lines for one staged file, using the worktree only after CI has staged the PR merge result.
 function Read-IndexFileLines {
     param([Parameter(Mandatory = $true)][string] $Path)
+
+    if ($script:ReadStagedFilesFromWorktree -and (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return @(Get-Content -LiteralPath $Path)
+    }
 
     $content = @(& git show ":$Path")
     if ($LASTEXITCODE -ne 0) {
@@ -552,6 +558,48 @@ function Get-RiskyClientCppFunctions {
     return $definitions
 }
 
+# Returns staged Client C++ files containing any changed risky helper name.
+function Get-ClientCppFilesContainingNames {
+    param([Parameter(Mandatory = $true)][string[]] $Names)
+
+    $uniqueNames = @(
+        $Names |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Sort-Object -Unique
+    )
+    if ($uniqueNames.Count -eq 0) {
+        return @()
+    }
+
+    $matches = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $chunkSize = 50
+    for ($offset = 0; $offset -lt $uniqueNames.Count; $offset += $chunkSize) {
+        $chunk = @($uniqueNames[$offset..([Math]::Min($offset + $chunkSize - 1, $uniqueNames.Count - 1))])
+        $arguments = @("grep", "--cached", "-l", "-F")
+        foreach ($name in $chunk) {
+            $arguments += @("-e", $name)
+        }
+        $arguments += @("--", "Client")
+
+        $output = @(& git @arguments)
+        if ($LASTEXITCODE -eq 1) {
+            continue
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw "git $($arguments -join " ") failed with exit code $LASTEXITCODE."
+        }
+
+        foreach ($path in $output) {
+            $normalized = ([string] $path).TrimEnd("`r")
+            if (Test-ClientImplementationPath -Path $normalized) {
+                [void] $matches.Add($normalized)
+            }
+        }
+    }
+
+    return @($matches | Sort-Object)
+}
+
 # Blocks UnityBuild-prone duplicate file-private helper definitions touched by staged Client C++ changes.
 function Test-ClientUnityFunctionNames {
     param([Parameter(Mandatory = $true)][string[]] $ChangedCppPaths)
@@ -561,10 +609,39 @@ function Test-ClientUnityFunctionNames {
         [void] $changedSet.Add($path)
     }
 
-    $definitions = New-Object System.Collections.Generic.List[object]
-    foreach ($path in Get-ClientIndexCppFiles) {
+    $changedDefinitions = New-Object System.Collections.Generic.List[object]
+    foreach ($path in $ChangedCppPaths) {
         foreach ($definition in Get-RiskyClientCppFunctions -Path $path) {
-            $definitions.Add($definition) | Out-Null
+            $changedDefinitions.Add($definition) | Out-Null
+        }
+    }
+
+    if ($changedDefinitions.Count -eq 0) {
+        Write-Success "Client UnityBuild helper-name check passed."
+        return
+    }
+
+    $changedKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    $changedNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($definition in $changedDefinitions) {
+        [void] $changedKeys.Add([string] $definition.Key)
+        [void] $changedNames.Add([string] $definition.Name)
+    }
+
+    $definitions = New-Object System.Collections.Generic.List[object]
+    foreach ($definition in $changedDefinitions) {
+        $definitions.Add($definition) | Out-Null
+    }
+
+    $candidatePaths = @(
+        Get-ClientCppFilesContainingNames -Names @($changedNames) |
+            Where-Object { -not $changedSet.Contains($_) }
+    )
+    foreach ($path in $candidatePaths) {
+        foreach ($definition in Get-RiskyClientCppFunctions -Path $path) {
+            if ($changedKeys.Contains([string] $definition.Key)) {
+                $definitions.Add($definition) | Out-Null
+            }
         }
     }
 
@@ -596,6 +673,8 @@ function Test-ClientUnityFunctionNames {
 }
 
 Assert-Command "git"
+
+$script:ReadStagedFilesFromWorktree = $Hook -eq "pr-check" -and $env:GITHUB_ACTIONS -eq "true"
 
 $branch = Get-CurrentBranchName
 if (-not $Force -and $branch -ne "main") {

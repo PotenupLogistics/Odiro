@@ -34,7 +34,7 @@ keep:
   - Local pulls are fast-forward only via pull.ff=only so main sync does not create merge commits.
   - Unreal binary assets stay Git blobs; Git LFS is used for lock/read-only/push verification only.
   - post-commit skips Git LFS read-only refresh when HEAD has no Unreal binary asset changes.
-  - Feature branch commit and merge hooks return without source sanity checks; PR source sanity check runs tools/check-source-sanity.ps1 on a shallow merge-ref soft-reset staged diff.
+  - Feature branch commit and merge hooks return without source sanity checks; PR source sanity check runs tools/check-source-sanity.ps1 on a shallow merge-ref soft-reset staged diff and narrows UnityBuild helper scans from changed definitions.
   - Manual LFS unlock is human-only exact-path recovery.
 verify:
   - PowerShell parse check for script edits

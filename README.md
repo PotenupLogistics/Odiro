@@ -37,3 +37,11 @@
 .\task-run.bat     # 프리뷰 세션 실행
 .\task-dev.bat     # 개발 세션 (Hot Reload 지원 예정)
 ```
+
+### 규칙
+
+자세한 내용은 [작업 규칙](docs/guides/working-rules.md) 참고.
+
+- `main` 브랜치 직접 작업 금지. Subbranch 생성 후 Pull Request로 병합
+- Unreal asset 수정 전 Editor에서 Checkout 또는 git lfs lock 필요
+  - Source Control 탭에서 `Git LFS 2 provider` 설정

@@ -40,12 +40,16 @@ LLM API key
 - 긴급 수정 시 hotfix branch 작성 후 Pull Request 수행
 - 상태 변경 시 빌드 및 테스트 통과 필요
 - main force push는 의도적 복구 작업으로 허용. force push 후 남은 stale lock은 manual unlock으로 정리
+- main 동기화는 fast-forward pull만 허용: `git pull --ff-only origin main`
+
+설정이 꼬였으면 `.\tools\set-git-config.ps1`를 다시 실행한다.
 
 ## Binary Asset lock 규칙
 
 - `.uasset`, `.umap`, `.ubulk`, `.uexp` 수정 시 lock 필요
   - `task-setup.bat` 또는 `tools/set-git-config.ps1` 실행해야 설정 적용
 - Unreal Editor: `Check Out`만 수행. `Submit`, `Push`, `Unlock`, repository initialize 기능 사용 금지
+  - Source Control 탭에서 `Git LFS 2 provider` 설정 필요
 - Checkout 실패 시 다른 사람이 lock한 상태. 해당 asset 수정 금지
 - main 반영 후 변경된 애셋 자동 unlock됨
 - dangling lock은 `tools/manual-unlock.ps1`로 해제 가능. 일반 작업 시 금지

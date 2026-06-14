@@ -1,4 +1,4 @@
-# Verifies staged changes for local main gates and pull request checks.
+# Checks source code sanity for staged local changes and pull request diffs.
 param(
     [ValidateSet("manual", "pre-commit", "pre-merge-commit", "pr-check")]
     [string] $Hook = "manual",
@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 . "$PSScriptRoot\common.ps1"
-Set-ToolPrefix "verify/staged"
+Set-ToolPrefix "check/source-sanity"
 
 trap {
     Write-ErrorMessage $_.Exception.Message
@@ -599,13 +599,13 @@ Assert-Command "git"
 
 $branch = Get-CurrentBranchName
 if (-not $Force -and $branch -ne "main") {
-    Write-Step "Skipping staged verification on branch '$branch'. Main branch commits and merge commits are gated."
+    Write-Step "Skipping source sanity check on branch '$branch'. Main branch commits and merge commits are gated."
     exit 0
 }
 
 $stagedPaths = @(Get-StagedChangedPaths)
 if ($stagedPaths.Count -eq 0) {
-    Write-Step "No staged changes to verify."
+    Write-Step "No staged source code changes to check."
     exit 0
 }
 
@@ -628,4 +628,4 @@ if ($bridgePaths.Count -gt 0) {
     Write-Success "Bridge staged go build passed."
 }
 
-Write-Success "Staged verification complete for $Hook."
+Write-Success "Source code sanity check complete for $Hook."

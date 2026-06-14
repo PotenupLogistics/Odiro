@@ -57,7 +57,7 @@
 | `response.status` | 고정 | `ok`, `error` |
 | `response.action` | 고정 | `/scenario/decide`에서 Unreal이 실제 이동 명령으로 사용하는 값 |
 | `response.error` | 고정 | 실패 시 에러 정보 |
-| `response.debug` | 확장 가능 | 경로, 정책 이유, near obstacle warning 같은 디버그 정보 |
+| `response.debug` | 확장 가능 | 경로, 정책 이유, obstacle warning 같은 디버그 정보 |
 
 ## GET /health
 
@@ -189,9 +189,9 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
 주의:
 
 - `scenario_start`는 Unreal에서 실제로 설정/측정할 수 있는 로봇, 구동, 라이다 스펙만 보낸다.
-- `nearObstacleWarningDistanceM`, `stopDistanceM`, `slowDownDistanceM`, `frontHalfAngleDegree` 같은 정책 판정값은 더 이상 start JSON에 싣지 않는다. Python 예시 정책의 기본값 또는 사용자가 작성한 Python 정책 코드에서 관리한다.
+- `obstacleWarningDistanceM`, `stopDistanceM`, `slowDownDistanceM`, `frontHalfAngleDegree` 같은 정책 판정값은 더 이상 start JSON에 싣지 않는다. Python 예시 정책의 기본값 또는 사용자가 작성한 Python 정책 코드에서 관리한다.
 - 과거 호환을 위해 Python parser는 legacy `vehicleSpec`, `controlSpec`를 읽을 수 있지만, 새 Unreal payload는 `robotSpec`, `driveSpec`, `lidarSpec`만 보낸다.
-- `draw_near_obstacle_warning_debug`는 DeliveryBotSetup JSON 설정값이며 Python 통신 payload에는 포함되지 않는다.
+- `draw_obstacle_warning_debug`는 DeliveryBotSetup JSON 설정값이며 Python 통신 payload에는 포함되지 않는다.
 - `allowDiagonalPathfinding=true`이면 A*가 대각선 cell 이동을 허용한다. 단, 대각선으로 장애물 모서리를 뚫고 지나가지 않도록 양옆 cell이 모두 walkable일 때만 대각선 이동한다.
 - `smoothPathWithLineOfSight=true`이면 A* 결과가 line-of-sight shortcut으로 줄어든다. 이후 `pathWorldPoints`에는 follower corner smoothing과 `useExactGoalAsFinalPoint`가 반영된 실제 추종 경로가 들어간다.
 
@@ -228,7 +228,7 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
 | `pathPointAcceptanceDistanceM`, `pathSmoothingDistanceM` | path index 진행과 corner smoothing 기준이다. |
 | `goalSlowDownDistanceM`, `goalApproachSpeedKmh`, `goalApproachLookAheadDistanceM` | 목표 지점 접근 시 감속/추종 기준이다. |
 | `steeringSensitivity`, `steeringFullScaleDegree`, `maxSteering`, `maxSteeringDelta`, `minTurnSpeedKmh` | 조향 출력과 회전 시 속도 제한 튜닝값이다. |
-| `frontHalfAngleDegree`, `stopDistanceM`, `nearObstacleWarningDistanceM`, `slowDownDistanceM` | 라이다 hit를 전방 장애물, near obstacle warning, 감속 구간으로 해석하는 정책 판정값이다. |
+| `frontHalfAngleDegree`, `stopDistanceM`, `obstacleWarningDistanceM`, `slowDownDistanceM` | 라이다 hit를 전방 장애물, obstacle warning, 감속 구간으로 해석하는 정책 판정값이다. |
 | `collisionStopHalfAngleDegree`, `collisionStopDistanceM` | 충돌 위험 중앙 코리더와 즉시 정지 기준이다. |
 | `repathDistanceM`, `repathDebounceSeconds`, `pathCorridorHalfWidthM` | RePathPolicy가 재탐색을 시작하는 거리, 같은 actor/cell 재탐색 억제 시간, 현재 path corridor 판정 폭이다. |
 | `obstacleSlowSpeedKmh` | 장애물 감속 구간의 정책 속도 기준이다. |
@@ -435,9 +435,9 @@ decision tick마다 호출한다. Unreal은 현재 로봇 상태, 라이다 ray,
       },
       "closestPathDistanceCm": 42.0,
       "maxPathErrorCm": 120.0,
-      "nearObstacleWarningCount": 0,
-      "lastNearObstacleWarningCell": null,
-      "lastNearObstacleWarningSource": "",
+      "obstacleWarningCount": 0,
+      "lastObstacleWarningCell": null,
+      "lastObstacleWarningSource": "",
       "blockedCorridorCellCount": 0,
       "recoveryUntilSeconds": 0.0
     }
@@ -447,13 +447,13 @@ decision tick마다 호출한다. Unreal은 현재 로봇 상태, 라이다 ray,
 
 ### Near Obstacle Warning 통과 응답 예시
 
-Near obstacle warning은 모든 hit ray를 검사해서 actor/source별 1회만 기록하는 정책 디버그 값이다.
+Obstacle warning은 모든 hit ray를 검사해서 actor/source별 1회만 기록하는 정책 디버그 값이다.
 공식 episode near-miss 평가는 Unreal의 `UScenarioEvaluationSubsystem`이 ground truth 거리로 기록한다.
 기본 공식은 아래와 같다.
 
 ```text
 hit == true
-AND distanceM <= nearObstacleWarningDistanceM
+AND distanceM <= obstacleWarningDistanceM
 AND NOT (distanceM <= stopDistanceM AND isCollisionStopRay)
 AND same actor/source not recorded yet
 ```
@@ -465,7 +465,7 @@ abs(rayYawDegree) <= collisionStopHalfAngleDegree
 OR distanceM <= collisionStopDistanceM
 ```
 
-즉 `StopDistance < NearObstacleWarningDistance < SlowDownDistance` 순서에서 실제 stop으로 보는 ray는 먼저 제외하고, 그 다음 warning을 actor/source별로 기록한다.
+즉 `StopDistance < ObstacleWarningDistance < SlowDownDistance` 순서에서 실제 stop으로 보는 ray는 먼저 제외하고, 그 다음 warning을 actor/source별로 기록한다.
 
 ```json
 {
@@ -515,13 +515,13 @@ OR distanceM <= collisionStopDistanceM
     },
     "debug": {
       "selectedPolicy": "PathFollower",
-      "reason": "front_obstacle_near_obstacle_warning_pass",
+      "reason": "front_obstacle_warning_pass",
       "pathStatus": "valid",
       "pathIndex": 4,
       "pathLength": 22,
-      "nearObstacleWarningCount": 1,
-      "lastNearObstacleWarningCell": null,
-      "lastNearObstacleWarningSource": "barrier_01",
+      "obstacleWarningCount": 1,
+      "lastObstacleWarningCell": null,
+      "lastObstacleWarningSource": "barrier_01",
       "blockedCorridorCellCount": 0,
       "recoveryUntilSeconds": 0.0
     }
@@ -618,9 +618,9 @@ repath recovery 후진:
 | `response.debug.closestPathDistanceCm` | 확장 가능 | 로봇과 경로 선분 사이 최소 거리 |
 | `response.debug.maxPathErrorCm` | 확장 가능 | 허용 가능한 경로 이탈 거리 |
 | `response.debug.lookAheadDistanceM` | 확장 가능 | 현재 decide에서 적용한 자동 lookahead 거리 |
-| `response.debug.nearObstacleWarningCount` | 확장 가능 | 현재 Python policy가 actor/source별로 기록한 near obstacle warning 횟수. 공식 평가 metric이 아니다. |
-| `response.debug.lastNearObstacleWarningCell` | 확장 가능 | grid cell 기반 warning일 때 마지막 cell. 라이다 기반이면 `null` |
-| `response.debug.lastNearObstacleWarningSource` | 확장 가능 | 마지막 warning 원인 actor 또는 source 이름 |
+| `response.debug.obstacleWarningCount` | 확장 가능 | 현재 Python policy가 actor/source별로 기록한 obstacle warning 횟수. 공식 평가 metric이 아니다. |
+| `response.debug.lastObstacleWarningCell` | 확장 가능 | grid cell 기반 warning일 때 마지막 cell. 라이다 기반이면 `null` |
+| `response.debug.lastObstacleWarningSource` | 확장 가능 | 마지막 warning 원인 actor 또는 source 이름 |
 | `response.debug.blockedCorridorCellCount` | 확장 가능 | 최근 blocked corridor cell 개수 |
 | `response.debug.recoveryUntilSeconds` | 확장 가능 | recovery reverse가 유지되는 Unreal time |
 
@@ -628,7 +628,7 @@ repath recovery 후진:
 
 ```text
 follow_path
-front_obstacle_near_obstacle_warning_pass
+front_obstacle_warning_pass
 front_obstacle_slowdown
 front_obstacle_soft_stop
 path_deviation_repath_required
@@ -688,7 +688,7 @@ robot_outside_grid_bounds
     "status": "ok",
     "accepted": true,
     "metrics": {
-      "nearObstacleWarningCount": 1,
+      "obstacleWarningCount": 1,
       "stopCount": 0,
       "repathCount": 1,
       "slowdownCount": 3
@@ -699,9 +699,9 @@ robot_outside_grid_bounds
       "stopCount": 0,
       "repathCount": 1,
       "slowdownCount": 3,
-      "nearObstacleWarningCount": 1,
-      "lastNearObstacleWarningCell": null,
-      "lastNearObstacleWarningSource": "barrier_01",
+      "obstacleWarningCount": 1,
+      "lastObstacleWarningCell": null,
+      "lastObstacleWarningSource": "barrier_01",
       "blockedCorridorCellCount": 0
     }
   }
@@ -861,11 +861,11 @@ request.status
 | 목적 | 권장 위치 |
 | --- | --- |
 | 목표 속도, 조향 민감도, 회복 속도 같은 정책 설정 | Python 정책 코드의 설정값 |
-| 전방 각도, near obstacle warning/충돌 경계 같은 라이다 해석 기준 | Python 정책 코드의 설정값 |
+| 전방 각도, obstacle warning/충돌 경계 같은 라이다 해석 기준 | Python 정책 코드의 설정값 |
 | 로봇 물리/속도 제약 | `request.robotSpec`, `request.driveSpec` |
 | 라이다 장비 스펙 | `request.lidarSpec` |
 | actor 단위 관측 요약 | `request.observedObjects` |
-| 경로 시각화, 정책 선택 이유, near obstacle warning 카운트 | `response.debug` |
+| 경로 시각화, 정책 선택 이유, obstacle warning 카운트 | `response.debug` |
 | episode 종료 metric | `request.metrics`, `/scenario/end`의 `response.metrics` |
 
 ## Version을 올려야 하는 경우
@@ -883,16 +883,16 @@ request.status
 ## 관련 DeliveryBotSetup JSON 메모
 
 아래 값은 Python 통신 payload가 아니라 `Json/Input/DeliveryBotSetup*.json`에서 읽는 로컬 설정이다.
-near obstacle warning 범위를 화면에서 보고 싶을 때 사용한다.
+obstacle warning 범위를 화면에서 보고 싶을 때 사용한다.
 
 ```json
 {
   "robot": {
     "lidar": {
       "draw_debug": true,
-      "draw_near_obstacle_warning_debug": true,
+      "draw_obstacle_warning_debug": true,
       "front_half_angle_degree": 25.0,
-      "near_obstacle_warning_distance_m": 2.0,
+      "obstacle_warning_distance_m": 2.0,
       "collision_stop_half_angle_degree": 8.0,
       "collision_stop_distance_m": 0.45,
       "slow_down_distance_m": 4.8
@@ -904,7 +904,7 @@ near obstacle warning 범위를 화면에서 보고 싶을 때 사용한다.
 색상 기준:
 
 ```text
-Cyan   = Near obstacle warning 후보 범위
+Cyan   = Obstacle warning 후보 범위
 Orange = 중앙 충돌/감속 코리더
 Red    = 매우 가까운 충돌 반경
 ```

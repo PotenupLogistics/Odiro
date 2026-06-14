@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "DeliveryBotLidarSensorInfo.generated.h"
@@ -24,7 +24,7 @@ public:
 	bool bDrawDebug{ true };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bDrawNearObstacleWarningDebug{ true };
+	bool bDrawObstacleWarningDebug{ true };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float ScanRangeM{ 5.f };
@@ -45,7 +45,7 @@ public:
 	float StopDistanceM{ 1.5f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float NearObstacleWarningDistanceM{ 2.f };
+	float ObstacleWarningDistanceM{ 2.f };
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SlowDownDistanceM{ 5.f };

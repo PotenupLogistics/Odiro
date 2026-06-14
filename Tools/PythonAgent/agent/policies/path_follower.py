@@ -18,7 +18,7 @@ class PathFollower:
         slow_down_speed_kmh: float = 1.0,
         front_angle_degree: float = 25.0,
         stop_distance_m: float = 1.4,
-        near_obstacle_warning_distance_m: float = 2.0,
+        obstacle_warning_distance_m: float = 2.0,
         look_ahead_distance_m: float = 1.2,
         min_look_ahead_distance_m: float = 0.75,
         max_look_ahead_distance_m: float = 2.4,
@@ -49,7 +49,7 @@ class PathFollower:
         self.slowDownSpeedKmh = slow_down_speed_kmh
         self.frontAngleDegree = front_angle_degree
         self.stopDistanceM = stop_distance_m
-        self.nearObstacleWarningDistanceM = near_obstacle_warning_distance_m
+        self.obstacleWarningDistanceM = obstacle_warning_distance_m
         self.lookAheadDistanceM = look_ahead_distance_m
         self.minLookAheadDistanceM = min_look_ahead_distance_m
         self.maxLookAheadDistanceM = max_look_ahead_distance_m
@@ -137,14 +137,23 @@ class PathFollower:
             self.bUseExactGoalAsFinalPoint,
         )
         self.stopDistanceM = float(lidar_spec.get("stopDistanceM", self.stopDistanceM))
-        self.nearObstacleWarningDistanceM = float(
+        self.obstacleWarningDistanceM = float(
             lidar_spec.get(
-                "nearObstacleWarningDistanceM",
-                lidar_spec.get("nearMissDistanceM", self.nearObstacleWarningDistanceM),
+                "obstacleWarningDistanceM",
+                lidar_spec.get(
+                    "obstacle_warning_distance_m",
+                    lidar_spec.get(
+                        "nearObstacleWarningDistanceM",
+                        lidar_spec.get(
+                            "near_obstacle_warning_distance_m",
+                            lidar_spec.get("nearMissDistanceM", self.obstacleWarningDistanceM),
+                        ),
+                    ),
+                ),
             )
         )
         self.slowDownDistanceM = max(
-            self.nearObstacleWarningDistanceM + 0.1,
+            self.obstacleWarningDistanceM + 0.1,
             float(lidar_spec.get("slowDownDistanceM", self.slowDownDistanceM)),
         )
         self.frontAngleDegree = float(lidar_spec.get("frontHalfAngleDegree", self.frontAngleDegree))
@@ -181,8 +190,8 @@ class PathFollower:
         self.goalApproachLookAheadDistanceM = max(0.1, self.goalApproachLookAheadDistanceM)
         self.softStopBrake = clamp(self.softStopBrake, 0.0, 1.0)
         self.stopDistanceM = max(0.0, self.stopDistanceM)
-        self.nearObstacleWarningDistanceM = max(self.stopDistanceM + 0.1, self.nearObstacleWarningDistanceM)
-        self.slowDownDistanceM = max(self.nearObstacleWarningDistanceM + 0.1, self.slowDownDistanceM)
+        self.obstacleWarningDistanceM = max(self.stopDistanceM + 0.1, self.obstacleWarningDistanceM)
+        self.slowDownDistanceM = max(self.obstacleWarningDistanceM + 0.1, self.slowDownDistanceM)
         self.frontAngleDegree = clamp(self.frontAngleDegree, 0.0, 180.0)
         
         
@@ -242,14 +251,14 @@ class PathFollower:
             return stop_action(), "robot_outside_grid_bounds"
 
         if robot_grid_cell.blocked:
-            self.record_near_obstacle_warning_once(state, robot_grid_cell)
+            self.record_obstacle_warning_once(state, robot_grid_cell)
 
         if self.is_too_far_from_path(state):
             state.bRepathRequested = True
             state.lastSteering = 0.0
             return stop_action(), "path_deviation_repath_required"
 
-        self.record_lidar_near_obstacle_warnings(request, state)
+        self.record_lidar_obstacle_warnings(request, state)
 
         speed_kmh, reason = self.get_target_speed_kmh(request, state)
         steering = self.calculate_steering(request.robotState, target_x, target_y)
@@ -798,52 +807,52 @@ class PathFollower:
         cell = self.world_to_cell(robot_state.x, robot_state.y, state.grid)
         return self.get_grid_cell(cell, state.grid)
 
-    def record_near_obstacle_warning_once(self, state: AgentState, grid_cell) -> None:
+    def record_obstacle_warning_once(self, state: AgentState, grid_cell) -> None:
         source = f"GridCell:{grid_cell.x}:{grid_cell.y}:{grid_cell.sourceCollisionProfile}"
-        if not self.record_near_obstacle_warning_source_once(state, source):
+        if not self.record_obstacle_warning_source_once(state, source):
             return
 
-        state.lastNearObstacleWarningCell = (grid_cell.x, grid_cell.y)
-        state.lastNearObstacleWarningSource = grid_cell.sourceCollisionProfile
+        state.lastObstacleWarningCell = (grid_cell.x, grid_cell.y)
+        state.lastObstacleWarningSource = grid_cell.sourceCollisionProfile
 
-    def record_lidar_near_obstacle_warning_once(self, state: AgentState, ray) -> None:
-        source = self.get_lidar_near_obstacle_warning_source(ray)
-        if not self.record_near_obstacle_warning_source_once(state, source):
+    def record_lidar_obstacle_warning_once(self, state: AgentState, ray) -> None:
+        source = self.get_lidar_obstacle_warning_source(ray)
+        if not self.record_obstacle_warning_source_once(state, source):
             return
 
-        state.lastNearObstacleWarningCell = None
-        state.lastNearObstacleWarningSource = source
+        state.lastObstacleWarningCell = None
+        state.lastObstacleWarningSource = source
 
-    def record_lidar_near_obstacle_warnings(self, request: ScenarioDecideRequest, state: AgentState) -> None:
+    def record_lidar_obstacle_warnings(self, request: ScenarioDecideRequest, state: AgentState) -> None:
         for ray in request.lidarRays:
-            if not self.is_lidar_near_obstacle_warning_ray(ray):
+            if not self.is_lidar_obstacle_warning_ray(ray):
                 continue
 
-            self.record_lidar_near_obstacle_warning_once(state, ray)
+            self.record_lidar_obstacle_warning_once(state, ray)
 
-    def record_near_obstacle_warning_source_once(self, state: AgentState, source: str) -> bool:
-        if source in state.nearObstacleWarningRecordedSources:
+    def record_obstacle_warning_source_once(self, state: AgentState, source: str) -> bool:
+        if source in state.obstacleWarningRecordedSources:
             return False
 
-        state.nearObstacleWarningRecordedSources.add(source)
-        state.nearObstacleWarningCount += 1
-        state.bNearObstacleWarningRecorded = True
+        state.obstacleWarningRecordedSources.add(source)
+        state.obstacleWarningCount += 1
+        state.bObstacleWarningRecorded = True
         return True
 
-    def get_lidar_near_obstacle_warning_source(self, ray) -> str:
+    def get_lidar_obstacle_warning_source(self, ray) -> str:
         if ray.actorName:
             return ray.actorName
 
         if ray.rayIndex is not None:
             return f"LidarRay:{ray.rayIndex}"
 
-        return "LidarNearObstacleWarning"
+        return "LidarObstacleWarning"
 
-    def is_lidar_near_obstacle_warning_ray(self, ray) -> bool:
+    def is_lidar_obstacle_warning_ray(self, ray) -> bool:
         if (
             not ray.hit
             or self.is_ignored_lidar_policy_ray(ray)
-            or ray.distanceM > self.nearObstacleWarningDistanceM
+            or ray.distanceM > self.obstacleWarningDistanceM
         ):
             return False
 
@@ -1057,9 +1066,9 @@ class PathFollower:
         if front_ray is None or front_ray.distanceM > self.slowDownDistanceM:
             return self.followSpeedKmh, "follow_path"
 
-        if not self.is_collision_stop_ray(front_ray) and front_ray.distanceM <= self.nearObstacleWarningDistanceM:
-            self.record_lidar_near_obstacle_warning_once(state, front_ray)
-            return self.followSpeedKmh, "front_obstacle_near_obstacle_warning_pass"
+        if not self.is_collision_stop_ray(front_ray) and front_ray.distanceM <= self.obstacleWarningDistanceM:
+            self.record_lidar_obstacle_warning_once(state, front_ray)
+            return self.followSpeedKmh, "front_obstacle_warning_pass"
 
         if front_ray.distanceM <= self.stopDistanceM:
             return 0.0, "front_obstacle_soft_stop"

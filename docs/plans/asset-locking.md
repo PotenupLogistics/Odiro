@@ -139,26 +139,20 @@ Provider:
 
 ## GitHub Actions
 
-### PR source code sanity check
+### Pull request checks
 
-파일: `.github/workflows/pr-check--source-sanity.yml`
+파일: `.github/workflows/pull-request-check.yml`
 
 트리거: `pull_request`
 
-검증:
+`Source Sanity`:
 
-- PR head checkout
-- `merge-base` 기준 `git reset --soft`
+- PR merge ref checkout
+- merge ref의 first parent 기준 `git reset --soft`
 - PR 변경분을 staged diff처럼 구성
 - `tools/check-source-sanity.ps1 -Hook pr-check -Force`
 
-### PR lock check
-
-파일: `.github/workflows/pr-check--asset-lock.yml`
-
-트리거: `pull_request`
-
-검증:
+`Asset Lock Ownership`:
 
 - PR 변경 Unreal asset 목록
 - active LFS lock 존재
@@ -171,9 +165,9 @@ Provider:
 - 타인 lock
 - stale asset
 
-### Main auto unlock
+### Post-merge asset unlock
 
-파일: `.github/workflows/merged--asset-unlock.yml`
+파일: `.github/workflows/post-merge-task.yml`
 
 트리거:
 
@@ -190,9 +184,10 @@ Provider:
 force push:
 
 - `github.event.forced == true`
-- `head_commit.timestamp` 이전 생성된 Unreal asset lock cleanup
-- timestamp 이후 생성된 lock 유지
-- 오래된 commit으로 force push하면 stale lock이 남을 수 있음
+- `before..after` 변경 Unreal asset만 cleanup 대상으로 제한
+- GitHub push 시각 기준 cutoff 이후 생성된 lock 유지
+- unlock 직전 lock id와 locked_at 재조회
+- before commit fetch 실패 시 fail-closed 후 수동 unlock 사용
 
 실패:
 
@@ -255,8 +250,8 @@ docs/specs/project-structure.md
 AGENTS.md
 .agents/index/root-dev-workflow.md
 .agents/index/client-runtime-foundation.md
-.github/workflows/pr-check--asset-lock.yml
-.github/workflows/merged--asset-unlock.yml
+.github/workflows/pull-request-check.yml
+.github/workflows/post-merge-task.yml
 ```
 
 ## 작업
@@ -349,9 +344,10 @@ git lfs locks --verify
 git push --force origin HEAD:main
 ```
 
-### T05 PR lock check Action [x]
+### T05 pull request check Action [x]
 
-- `.github/workflows/pr-check--asset-lock.yml`
+- `.github/workflows/pull-request-check.yml`
+- Source Sanity job
 - PR changed files 계산
 - LFS lock 목록 조회
 - PR author와 lock owner 매핑
@@ -371,10 +367,10 @@ main 동일 asset 선변경 -> 실패
 
 ### T06 main auto unlock Action [x]
 
-- `.github/workflows/merged--asset-unlock.yml`
+- `.github/workflows/post-merge-task.yml`
 - 일반 update와 force update 분기
 - 일반 update: 변경 asset만 unlock
-- force update: event 이전 lock cleanup
+- force update: 변경 asset만 unlock 대상으로 제한하고 lock id/time 재확인
 - `workflow_dispatch`: dry-run 또는 exact path unlock
 - secret: `LFS_LOCK_BOT_TOKEN`
 - local dry-run/no-op/force no-op runtime 통과

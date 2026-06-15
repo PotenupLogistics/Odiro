@@ -11,9 +11,8 @@
 Odiro/
   .github/
     workflows/                    # GitHub Actions checks
-      pr-check--source-sanity.yml # PR 시 소스코드 sanity 검증
-      pr-check--asset-lock.yml    # PR 시 lock 소유권 검증
-      merged--asset-unlock.yml    # main 반영 후 LFS unlock
+      pull-request-check.yml      # PR merge 전 검증
+      post-merge-task.yml         # main 반영 후 LFS unlock
 
   .githooks/                      # Git hooks
 

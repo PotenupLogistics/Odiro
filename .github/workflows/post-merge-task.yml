@@ -1,4 +1,4 @@
-name: Resolve Locks
+name: Post-Merge Tasks
 
 on:
   push:
@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   unlock:
-    name: Unreal assets
+    name: Asset Unlock
     runs-on: ubuntu-latest
 
     steps:

@@ -31,7 +31,7 @@ keep:
   - Root setup calls project task scripts directly, not project public .bat wrappers, to avoid duplicate phases.
   - Root build includes Bridge and Client; Agents has no build phase.
   - Main branch direct commits, local merges, and fast-forward pushes are blocked by hooks; intentional non-fast-forward force push is allowed.
-  - Local pulls are fast-forward only via pull.ff=only so main sync does not create merge commits.
+  - Local pulls prefer rebase via pull.rebase=true, rebase.autoStash=true, branch.autoSetupRebase=always, and pull.ff=true so main sync and subbranch updates avoid merge commits without ff-only rejection.
   - Unreal binary assets stay Git blobs; Git LFS is used for lock/read-only/push verification only.
   - post-commit skips Git LFS read-only refresh when HEAD has no Unreal binary asset changes.
   - Feature branch commit and merge hooks return without source sanity checks; PR source sanity check runs tools/check-source-sanity.ps1 on a shallow merge-ref soft-reset staged diff and narrows UnityBuild helper scans from changed definitions.
@@ -42,7 +42,7 @@ verify:
   - hook syntax and staged smoke for .githooks changes
   - git check-attr lockable for sample Unreal asset
   - tools/set-git-config.ps1 local config smoke
-  - git config --local --get pull.ff returns only
+  - git config --local --get pull.ff returns true; pull.rebase returns true; rebase.autoStash returns true; branch.autoSetupRebase returns always
   - pre-push dry-run with empty updates and main fast-forward rejection
   - tools/check-source-sanity.ps1 with no staged source inputs
   - GitHub PR source sanity workflow shallow-checks out the PR merge ref, stages the first-parent diff, conditionally sets up Go for Bridge changes, and runs tools/check-source-sanity.ps1 -Hook pr-check -Force

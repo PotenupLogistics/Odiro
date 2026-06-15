@@ -9,7 +9,7 @@ experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/events.jsonl
 schema:
 
 ```json
-"episode_event_v1"
+"episode_event"
 ```
 
 ## 합의
@@ -28,7 +28,7 @@ schema:
 
 ```json
 {
-  "schema": "episode_event_v1",
+  "schema": "episode_event",
   "version": 1,
   "event_index": 1,
   "run_time_seconds": 4.12,
@@ -58,7 +58,7 @@ schema:
 
 | 필드 | 타입 | 합의 |
 | --- | --- | --- |
-| `schema` | string | 고정값 `episode_event_v1` |
+| `schema` | string | 고정값 `episode_event` |
 | `version` | number | schema version. v1은 `1` |
 | `event_index` | number | episode 내 event 순번 |
 | `run_time_seconds` | number | episode 실행 시간. 단위 s |
@@ -146,7 +146,7 @@ events.jsonl.action_sequence == actions.jsonl.sequence
 
 ```json
 {
-  "schema": "episode_event_v1",
+  "schema": "episode_event",
   "version": 1,
   "event_index": 4,
   "run_time_seconds": 13.0,

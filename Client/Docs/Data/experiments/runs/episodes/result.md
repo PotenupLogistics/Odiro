@@ -9,7 +9,7 @@ experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/result.json
 schema:
 
 ```json
-"episode_result_v1"
+"episode_result"
 ```
 
 ## 합의
@@ -25,7 +25,7 @@ schema:
 
 ```json
 {
-  "schema": "episode_result_v1",
+  "schema": "episode_result",
   "version": 1,
   "sample": {},
   "run": {},

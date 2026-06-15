@@ -9,14 +9,14 @@ experiments/<Experiment>/setting.json
 schema:
 
 ```json
-"experiment_setting_v1"
+"experiment_setting"
 ```
 
 ## Root
 
 ```json
 {
-  "schema": "experiment_setting_v1",
+  "schema": "experiment_setting",
   "version": 1,
   "experiment_id": "exp_pinch_policy_a",
   "sampling": {},
@@ -27,7 +27,7 @@ schema:
 
 | 필드 | 합의 |
 | --- | --- |
-| `schema` | `experiment_setting_v1` |
+| `schema` | `experiment_setting` |
 | `version` | schema version |
 | `experiment_id` | 실험 식별자 |
 | `sampling` | sample 생성 조건 |

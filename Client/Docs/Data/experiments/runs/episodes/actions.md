@@ -9,7 +9,7 @@ experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/actions.jsonl
 schema:
 
 ```json
-"robot_action_v1"
+"robot_action"
 ```
 
 ## 합의
@@ -27,7 +27,7 @@ schema:
 
 ```json
 {
-  "schema": "robot_action_v1",
+  "schema": "robot_action",
   "version": 1,
   "sequence": 75,
   "run_time_seconds": 12.5,
@@ -101,7 +101,7 @@ schema:
 
 | 필드 | 타입 | 합의 |
 | --- | --- | --- |
-| `schema` | string | 고정값 `robot_action_v1` |
+| `schema` | string | 고정값 `robot_action` |
 | `version` | number | schema version. v1은 `1` |
 | `sequence` | number | episode 내 decide/action 순번. 실패 line도 sequence를 유지한다 |
 | `run_time_seconds` | number | episode 실행 시간. 단위 s |
@@ -177,7 +177,7 @@ Python `/scenario/decide`가 action을 반환하지 못했거나 통신/처리 �
 
 ```json
 {
-  "schema": "robot_action_v1",
+  "schema": "robot_action",
   "version": 1,
   "sequence": 80,
   "run_time_seconds": 13.0,

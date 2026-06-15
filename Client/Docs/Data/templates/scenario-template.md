@@ -9,7 +9,7 @@ templates/scenarios/<Scenario>.template.json
 schema:
 
 ```json
-"scenario_template_v1"
+"scenario_template"
 ```
 
 ## 역할
@@ -27,7 +27,7 @@ Scenario Template은 시나리오 샘플을 만들기 위한 소스이며 world 
 
 ```json
 {
-  "schema": "scenario_template_v1",
+  "schema": "scenario_template",
   "version": 1,
   "template_id": "pinch_oncoming_low_coop",
   "intent": "협폭 구간에서 대향 보행자와 조우할 때 로봇이 안전하게 통과하는지 검증한다.",
@@ -40,7 +40,7 @@ Scenario Template은 시나리오 샘플을 만들기 위한 소스이며 world 
 
 | 필드 | 필수 | 합의 |
 | --- | --- | --- |
-| `schema` | 필수 | 고정값 `scenario_template_v1` |
+| `schema` | 필수 | 고정값 `scenario_template` |
 | `version` | 필수 | schema version. v1은 `1` |
 | `template_id` | 필수 | 사람이 읽을 수 있는 snake_case 식별자 |
 | `intent` | 필수 | 이 template이 검증하려는 상황/가설 |

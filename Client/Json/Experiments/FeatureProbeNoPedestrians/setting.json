@@ -1,0 +1,24 @@
+{
+  "schema": "experiment_setting",
+  "version": 1,
+  "experiment_id": "feature_probe_no_pedestrians",
+  "display_name": "Feature Probe No Pedestrians",
+  "sampling": {
+    "scenario_template_ref": "Json/Templates/Scenarios/FeatureProbeNoPedestrians.template.json",
+    "profile_template_ref": "Json/Templates/Profiles/TemplateProfileForTest.json",
+    "base_seed": 260615001,
+    "sample_count": 1,
+    "generator_version": "scenario_template_sampler_v1"
+  },
+  "runtime": {
+    "map_id": "ScenarioSimulationMap",
+    "fixed_fps": 60,
+    "time_scale": 1.0,
+    "max_duration_s": 120.0
+  },
+  "evaluation": {
+    "goal_acceptance_radius_m": 0.5,
+    "tip_over_angle_deg": 60.0,
+    "near_miss_distance_m": 0.5
+  }
+}

@@ -30,6 +30,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	bool StartBatchFromRunInputs(const TArray<FScenarioRunInput>& runInputs);
 
+	// Starts direct runner inputs while preserving one externally assigned run id for result joins.
+	bool StartBatchFromRunInputsForRun(const TArray<FScenarioRunInput>& runInputs, const FString& activeRunId);
+
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	bool StartBatchFromRunQueueJsonFile(const FString& runQueueJsonFilePath);
 
@@ -95,6 +98,11 @@ private:
 	void AppendSimulationProfileDiagnostics(const FScenarioSimulationProfileCompileResult& compileResult);
 	double GetRunTimeLimitSeconds(const FScenarioRunConfig& runConfig) const;
 	FString BuildRunId() const;
+	bool SaveEpisodeResultFilesForRecord(FEpisodeRunRecord& runRecord) const;
+	bool SaveRunSummaryJson() const;
+	FString BuildRunSummaryJsonFilePath() const;
+	FString BuildEpisodeResultJsonFilePath(const FEpisodeRunRecord& runRecord) const;
+	FString BuildEpisodeEventsJsonlFilePath(const FEpisodeRunRecord& runRecord) const;
 	bool SaveEvaluationReportJsonForRecord(FEpisodeRunRecord& runRecord) const;
 	FString BuildEvaluationReportJsonFilePath(const FEpisodeRunRecord& runRecord) const;
 	static FString BuildPairId(const FScenarioRunInput& runInput, int32 runIndex);

@@ -4,9 +4,11 @@
 
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
+#include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Scenario/ScenarioSimulationProfileAdapter.h"
+#include "Scenario/ScenarioTemplateSampler.h"
 #include "Scenario/ScenarioTemplateWorldSpecAdapter.h"
 
 namespace
@@ -40,9 +42,10 @@ bool FSimulationSetupJsonParseSampleTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("sample parses"), result.bSuccess);
 	TestEqual(TEXT("diagnostics"), result.Diagnostics.Num(), 0);
 	TestEqual(TEXT("schema"), result.Setup.Schema, FString(TEXT("simulation_setup")));
-	TestEqual(TEXT("version"), result.Setup.Version, 1);
+	TestEqual(TEXT("version"), result.Setup.Version, 2);
 	TestEqual(TEXT("map id"), result.Setup.MapId, FString(TEXT("ScenarioSimulationMap")));
-	TestEqual(TEXT("run queue"), result.Setup.RunQueueJsonPath, FString(TEXT("Json/Input/ScenarioRunQueueSample.json")));
+	TestEqual(TEXT("experiment ref"), result.Setup.ExperimentRef, FString(TEXT("Json/Experiments/FeatureProbeNoPedestrians")));
+	TestEqual(TEXT("sample selection"), static_cast<int32>(result.Setup.SampleSelection.Kind), static_cast<int32>(EExperimentSampleSelectionKind::All));
 	TestEqual(TEXT("fixed step fps"), result.Setup.FixedStep.Fps, 60);
 	TestTrue(TEXT("measurement enabled"), result.Setup.MeasurementLog.bEnabled);
 	TestEqual(TEXT("measurement output directory"), result.Setup.MeasurementLog.OutputDirectory, FString(TEXT("Saved/AnalysisLogs")));
@@ -52,6 +55,131 @@ bool FSimulationSetupJsonParseSampleTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("save report"), result.Setup.Report.bSaveEvaluationReportJson);
 	TestEqual(TEXT("report output directory"), result.Setup.Report.OutputDirectory, FString(TEXT("Json/Output")));
 	TestEqual(TEXT("status output path"), result.Setup.Status.OutputPath, FString(TEXT("Saved/SimulationRuns/latest_status.json")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FExperimentSettingJsonParseSampleTest,
+	"OdiroSim.ExperimentSetting.Json.ParseSample",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FExperimentSettingJsonParseSampleTest::RunTest(const FString& parameters)
+{
+	const FExperimentSettingParseResult result =
+		FExperimentSettingJson::ParseFromFile(TEXT("Json/Experiments/FeatureProbeNoPedestrians/setting.json"));
+
+	TestTrue(TEXT("experiment setting parses"), result.bSuccess);
+	TestEqual(TEXT("diagnostics"), result.Diagnostics.Num(), 0);
+	TestEqual(TEXT("schema"), result.Document.Schema, FString(TEXT("experiment_setting")));
+	TestEqual(TEXT("version"), result.Document.Version, 1);
+	TestEqual(TEXT("experiment id"), result.Document.ExperimentId, FString(TEXT("feature_probe_no_pedestrians")));
+	TestEqual(
+		TEXT("scenario template ref"),
+		result.Document.Sampling.ScenarioTemplateRef,
+		FString(TEXT("Json/Templates/Scenarios/FeatureProbeNoPedestrians.template.json")));
+	TestEqual(
+		TEXT("profile template ref"),
+		result.Document.Sampling.ProfileTemplateRef,
+		FString(TEXT("Json/Templates/Profiles/TemplateProfileForTest.json")));
+	TestEqual(TEXT("sample count"), result.Document.Sampling.SampleCount, 1);
+	TestEqual(TEXT("runtime map"), result.Document.Runtime.MapId, FString(TEXT("ScenarioSimulationMap")));
+	TestEqual(TEXT("runtime fps"), result.Document.Runtime.FixedFps, 60);
+	TestEqual(TEXT("goal radius"), result.Document.Evaluation.GoalAcceptanceRadiusMeters, 0.5);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FExperimentSettingJsonWriteRoundTripTest,
+	"OdiroSim.ExperimentSetting.Json.WriteRoundTrip",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FExperimentSettingJsonWriteRoundTripTest::RunTest(const FString& parameters)
+{
+	FExperimentSettingDocument document;
+	document.ExperimentId = TEXT("roundtrip_experiment");
+	document.DisplayName = TEXT("Roundtrip Experiment");
+	document.Sampling.ScenarioTemplateRef = TEXT("Json/Templates/Scenarios/FeatureProbeNoPedestrians.template.json");
+	document.Sampling.ProfileTemplateRef = TEXT("Json/Templates/Profiles/TemplateProfileForTest.json");
+	document.Sampling.BaseSeed = 42;
+	document.Sampling.SampleCount = 2;
+	document.Runtime.MapId = TEXT("ScenarioSimulationMap");
+	document.Runtime.FixedFps = 30;
+	document.Runtime.TimeScale = 1.0;
+	document.Evaluation.GoalAcceptanceRadiusMeters = 0.75;
+
+	FString json;
+	TArray<FScenarioSchemaDiagnostic> diagnostics;
+	TestTrue(TEXT("experiment setting writes"), FExperimentSettingJson::TryWriteJson(document, json, diagnostics));
+	TestEqual(TEXT("diagnostics"), diagnostics.Num(), 0);
+	TestTrue(TEXT("experiment field"), json.Contains(TEXT("\"experiment_id\"")));
+	TestTrue(TEXT("sampling field"), json.Contains(TEXT("\"sampling\"")));
+
+	const FExperimentSettingParseResult parsed = FExperimentSettingJson::ParseFromString(json);
+	TestTrue(TEXT("written setting parses"), parsed.bSuccess);
+	TestEqual(TEXT("written sample count"), parsed.Document.Sampling.SampleCount, 2);
+	TestEqual(TEXT("written fixed fps"), parsed.Document.Runtime.FixedFps, 30);
+	TestEqual(TEXT("written goal radius"), parsed.Document.Evaluation.GoalAcceptanceRadiusMeters, 0.75);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FExperimentSettingBuildRunInputsTest,
+	"OdiroSim.ExperimentSetting.Json.BuildRunInputs",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FExperimentSettingBuildRunInputsTest::RunTest(const FString& parameters)
+{
+	const FString experimentRef = FString::Printf(
+		TEXT("Saved/Automation/OdiroSim/Experiments/%s"),
+		*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+
+	FExperimentSettingDocument document;
+	document.ExperimentId = TEXT("automation_experiment");
+	document.Sampling.ScenarioTemplateRef = TEXT("Json/Templates/Scenarios/FeatureProbeNoPedestrians.template.json");
+	document.Sampling.ProfileTemplateRef = TEXT("Json/Templates/Profiles/TemplateProfileForTest.json");
+	document.Sampling.BaseSeed = 260615001;
+	document.Sampling.SampleCount = 1;
+	document.Runtime.MapId = TEXT("ScenarioSimulationMap");
+	document.Runtime.FixedFps = 60;
+
+	TArray<FScenarioSchemaDiagnostic> diagnostics;
+	TestTrue(
+		TEXT("experiment setting saves"),
+		FExperimentSettingJson::SaveToFile(
+			document,
+			FExperimentSettingJson::BuildExperimentSettingPath(experimentRef),
+			diagnostics));
+	TestEqual(TEXT("save diagnostics"), diagnostics.Num(), 0);
+
+	FExperimentSampleSelection selection;
+	selection.Kind = EExperimentSampleSelectionKind::All;
+	const FExperimentRunInputBuildResult result =
+		FExperimentSettingJson::BuildRunInputsFromExperiment(experimentRef, selection);
+	TestTrue(TEXT("run inputs build"), result.bSuccess);
+	TestEqual(TEXT("build diagnostics"), result.Diagnostics.Num(), 0);
+	TestEqual(TEXT("run input count"), result.RunInputs.Num(), 1);
+	TestEqual(TEXT("sample path count"), result.ScenarioSampleJsonPaths.Num(), 1);
+
+	const FString expectedProfilePath = FExperimentSettingJson::BuildExperimentProfilePath(experimentRef);
+	FString expectedSamplePath = FPaths::Combine(
+		FExperimentSettingJson::BuildExperimentScenariosDirectory(experimentRef),
+		TEXT("000001.json"));
+	FPaths::NormalizeFilename(expectedSamplePath);
+	if (result.RunInputs.Num() > 0)
+	{
+		TestEqual(TEXT("run input pair id"), result.RunInputs[0].PairId, FString(TEXT("000001")));
+		TestEqual(TEXT("run input profile"), result.RunInputs[0].SimulationProfileJsonPath, expectedProfilePath);
+		TestEqual(TEXT("run input sample"), result.RunInputs[0].ScenarioSourceJsonPath, expectedSamplePath);
+	}
+	TestTrue(
+		TEXT("profile materialized"),
+		FPaths::FileExists(FExperimentSettingJson::ResolveProjectPath(expectedProfilePath)));
+	TestTrue(
+		TEXT("scenario sample materialized"),
+		FPaths::FileExists(FExperimentSettingJson::ResolveProjectPath(expectedSamplePath)));
 
 	return true;
 }
@@ -68,44 +196,37 @@ bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters
 
 	TestTrue(TEXT("playable setup parses"), setupResult.bSuccess);
 	TestEqual(TEXT("playable map id"), setupResult.Setup.MapId, FString(TEXT("ScenarioSimulationMap")));
-	TestEqual(TEXT("playable run queue"), setupResult.Setup.RunQueueJsonPath, FString(TEXT("Json/Input/SimulationSetupPlayable_RunQueue.json")));
+	TestEqual(TEXT("playable experiment"), setupResult.Setup.ExperimentRef, FString(TEXT("Json/Experiments/FeatureProbeNoPedestrians")));
 
-	FString runQueueJson;
-	TestTrue(
-		TEXT("playable run queue loads"),
-		FFileHelper::LoadFileToString(
-			runQueueJson,
-			*FSimulationSetupJson::ResolveProjectPath(TEXT("Json/Input/ScenarioRunQueuePlayable.json"))));
-
-	TArray<FScenarioRunInput> runInputs;
-	TArray<FString> runQueueDiagnostics;
-	TestTrue(
-		TEXT("playable run queue reads"),
-		USimulatorLaunchSubsystem::TryReadScenarioRunQueueJson(runQueueJson, runInputs, runQueueDiagnostics));
-	TestEqual(TEXT("playable run input count"), runInputs.Num(), 1);
+	const FString experimentSettingPath = FExperimentSettingJson::BuildExperimentSettingPath(setupResult.Setup.ExperimentRef);
+	const FExperimentSettingParseResult experimentSettingResult =
+		FExperimentSettingJson::ParseFromFile(experimentSettingPath);
+	TestTrue(TEXT("playable experiment setting parses"), experimentSettingResult.bSuccess);
 	TestEqual(
 		TEXT("playable scenario template path"),
-		runInputs[0].ScenarioSourceJsonPath,
-		FString(TEXT("Json/Input/ScenarioTemplates/FeatureProbeNoPedestrians.template.json")));
-	TestEqual(
-		TEXT("playable simulation profile path"),
-		runInputs[0].SimulationProfileJsonPath,
-		FString(TEXT("Json/Input/ScenarioTemplates/TemplateProfileForTest.json")));
-	TestEqual(
-		TEXT("playable policy spec path"),
-		runInputs[0].PolicySpecJsonPath,
-		FString(TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json")));
+		experimentSettingResult.Document.Sampling.ScenarioTemplateRef,
+		FString(TEXT("Json/Templates/Scenarios/FeatureProbeNoPedestrians.template.json")));
+	const FString experimentProfilePath = FExperimentSettingJson::BuildExperimentProfilePath(setupResult.Setup.ExperimentRef);
 
 	const FScenarioSimulationProfileCompileResult profileResult =
-		FScenarioSimulationProfileAdapter::CompileProfileFromJsonFile(runInputs[0].SimulationProfileJsonPath);
+		FScenarioSimulationProfileAdapter::CompileProfileFromJsonFile(experimentProfilePath);
 	TestTrue(TEXT("playable profile compiles"), profileResult.bSuccess);
 
-	FScenarioTemplateSampleRequest sampleRequest =
-		FScenarioTemplateWorldSpecAdapter::MakeDefaultSampleRequest(runInputs[0].ScenarioSourceJsonPath, runInputs[0].PairId);
-	sampleRequest.ProfileRef = runInputs[0].SimulationProfileJsonPath;
-	sampleRequest.ProfileHash = FScenarioSimulationProfileAdapter::MakeProfileFileHash(runInputs[0].SimulationProfileJsonPath);
+	FScenarioTemplateSampleRequest sampleRequest;
+	sampleRequest.SampleId = FExperimentSettingJson::MakeSampleId(0);
+	sampleRequest.ScenarioId = TEXT("feature_probe_no_pedestrians_000001");
+	sampleRequest.Seed = experimentSettingResult.Document.Sampling.BaseSeed;
+	sampleRequest.TemplateRef = experimentSettingResult.Document.Sampling.ScenarioTemplateRef;
+	sampleRequest.TemplateHash = FExperimentSettingJson::MakeFileHash(experimentSettingResult.Document.Sampling.ScenarioTemplateRef);
+	sampleRequest.ProfileRef = experimentProfilePath;
+	sampleRequest.ProfileHash = FScenarioSimulationProfileAdapter::MakeProfileFileHash(experimentProfilePath);
+	sampleRequest.SettingRef = experimentSettingPath;
+	sampleRequest.SettingHash = FExperimentSettingJson::MakeFileHash(experimentSettingPath);
+	sampleRequest.GeneratorVersion = FScenarioTemplateSampler::GeneratorVersion;
 	const FScenarioTemplateWorldSpecCompileResult scenarioResult =
-		FScenarioTemplateWorldSpecAdapter::CompileScenarioWorldSpecFromTemplateFile(runInputs[0].ScenarioSourceJsonPath, sampleRequest);
+		FScenarioTemplateWorldSpecAdapter::CompileScenarioWorldSpecFromTemplateFile(
+			experimentSettingResult.Document.Sampling.ScenarioTemplateRef,
+			sampleRequest);
 	TestTrue(TEXT("playable scenario template compiles"), scenarioResult.bSuccess);
 
 	const FScenarioPlaceableInstanceSpec* robotSpec = nullptr;
@@ -144,9 +265,10 @@ bool FSimulationSetupJsonValidationTest::RunTest(const FString& parameters)
 	const FString invalidJson =
 		TEXT("{")
 		TEXT("\"schema\":\"simulation_setup\",")
-		TEXT("\"version\":1,")
+		TEXT("\"version\":2,")
 		TEXT("\"map_id\":\"ScenarioSimulationMap\",")
-		TEXT("\"run_queue\":\"\",")
+		TEXT("\"experiment_ref\":\"\",")
+		TEXT("\"sample_selection\":{\"kind\":\"explicit_ids\",\"sample_ids\":[]},")
 		TEXT("\"fixed_step\":{\"fps\":0},")
 		TEXT("\"logging\":{\"flush_interval_ticks\":0},")
 		TEXT("\"report\":{\"output_directory\":\"Json/Output\"},")
@@ -156,7 +278,8 @@ bool FSimulationSetupJsonValidationTest::RunTest(const FString& parameters)
 	const FSimulationSetupParseResult result = FSimulationSetupJson::ParseFromString(invalidJson);
 
 	TestFalse(TEXT("invalid setup fails"), result.bSuccess);
-	TestTrue(TEXT("empty run queue diagnostic"), HasSimulationDiagnosticCode(result.Diagnostics, TEXT("empty_run_queue")));
+	TestTrue(TEXT("missing experiment diagnostic"), HasSimulationDiagnosticCode(result.Diagnostics, TEXT("missing_experiment_ref")));
+	TestTrue(TEXT("empty sample ids diagnostic"), HasSimulationDiagnosticCode(result.Diagnostics, TEXT("empty_sample_ids")));
 	TestTrue(TEXT("invalid fps diagnostic"), HasSimulationDiagnosticCode(result.Diagnostics, TEXT("invalid_fps")));
 	TestTrue(TEXT("invalid flush interval diagnostic"), HasSimulationDiagnosticCode(result.Diagnostics, TEXT("invalid_flush_interval_ticks")));
 	TestTrue(TEXT("missing status output path diagnostic"), HasSimulationDiagnosticCode(result.Diagnostics, TEXT("missing_output_path")));
@@ -173,7 +296,8 @@ bool FSimulationSetupJsonWriteRoundTripTest::RunTest(const FString& parameters)
 {
 	FSimulationSetup setup;
 	setup.MapId = TEXT("ScenarioSimulationMap");
-	setup.RunQueueJsonPath = TEXT("Json/Input/ScenarioRunQueueSample.json");
+	setup.ExperimentRef = TEXT("Json/Experiments/FeatureProbeNoPedestrians");
+	setup.SampleSelection.Kind = EExperimentSampleSelectionKind::All;
 	setup.FixedStep.Fps = 30;
 	setup.MeasurementLog.bEnabled = true;
 	setup.MeasurementLog.OutputDirectory = TEXT("Saved/TestLogs");
@@ -188,7 +312,8 @@ bool FSimulationSetupJsonWriteRoundTripTest::RunTest(const FString& parameters)
 	TArray<FString> diagnostics;
 	TestTrue(TEXT("setup JSON writes"), FSimulationSetupJson::TryWriteSetupJson(setup, json, diagnostics));
 	TestEqual(TEXT("diagnostics"), diagnostics.Num(), 0);
-	TestTrue(TEXT("run queue field"), json.Contains(TEXT("\"run_queue\"")));
+	TestTrue(TEXT("experiment field"), json.Contains(TEXT("\"experiment_ref\"")));
+	TestFalse(TEXT("omits run queue field"), json.Contains(TEXT("\"run_queue\"")));
 
 	const FSimulationSetupParseResult result = FSimulationSetupJson::ParseFromString(json);
 	TestTrue(TEXT("written setup parses"), result.bSuccess);
@@ -208,28 +333,29 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FSimulationSetupRunOutputPathsTest::RunTest(const FString& parameters)
 {
 	FSimulationSetup setup;
+	setup.ExperimentRef = TEXT("Json/Experiments/FeatureProbeNoPedestrians");
 	FSimulationSetupJson::ApplyRunOutputPaths(setup, TEXT("run-001"));
 
 	TestEqual(
 		TEXT("run output directory"),
-		FSimulationSetupJson::BuildRunOutputDirectory(TEXT("run-001")),
-		FString(TEXT("Saved/SimulationRuns/run-001")));
+		FSimulationSetupJson::BuildRunOutputDirectory(setup, TEXT("run-001")),
+		FString(TEXT("Json/Experiments/FeatureProbeNoPedestrians/runs/run-001")));
 	TestEqual(
 		TEXT("run setup path"),
-		FSimulationSetupJson::BuildRunSetupPath(TEXT("run-001")),
-		FString(TEXT("Saved/SimulationRuns/run-001/simulation_setup.json")));
+		FSimulationSetupJson::BuildRunSetupPath(setup, TEXT("run-001")),
+		FString(TEXT("Json/Experiments/FeatureProbeNoPedestrians/runs/run-001/simulation_setup.json")));
 	TestEqual(
 		TEXT("measurement output directory"),
 		setup.MeasurementLog.OutputDirectory,
-		FString(TEXT("Saved/SimulationRuns/run-001")));
+		FString(TEXT("Json/Experiments/FeatureProbeNoPedestrians/runs/run-001")));
 	TestEqual(
 		TEXT("report output directory"),
 		setup.Report.OutputDirectory,
-		FString(TEXT("Saved/SimulationRuns/run-001")));
+		FString(TEXT("Json/Experiments/FeatureProbeNoPedestrians/runs/run-001")));
 	TestEqual(
 		TEXT("status output path"),
 		setup.Status.OutputPath,
-		FString(TEXT("Saved/SimulationRuns/run-001/status.json")));
+		FString(TEXT("Json/Experiments/FeatureProbeNoPedestrians/runs/run-001/status.json")));
 
 	return true;
 }

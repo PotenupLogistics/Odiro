@@ -7,6 +7,7 @@
 #include "Scenario/ScenarioSimulationProfileAdapter.h"
 #include "Scenario/ScenarioTemplateWorldSpecAdapter.h"
 #include "Shared/EpisodeEvaluationReportJson.h"
+#include "Shared/EpisodeRunResultJson.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioRunner, Log, All);
 
@@ -229,6 +230,13 @@ bool UScenarioRunnerSubsystem::StartScenarioPairFromJsonFiles(
 bool UScenarioRunnerSubsystem::StartBatchFromRunInputs(const TArray<FScenarioRunInput>& runInputs)
 {
 	return StartBatchFromRunInputsInternal(runInputs, FString(), FString());
+}
+
+bool UScenarioRunnerSubsystem::StartBatchFromRunInputsForRun(
+	const TArray<FScenarioRunInput>& runInputs,
+	const FString& activeRunId)
+{
+	return StartBatchFromRunInputsInternal(runInputs, FString(), activeRunId);
 }
 
 bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
@@ -545,6 +553,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 {
 	if (PendingRunInputs.IsEmpty())
 	{
+		SaveRunSummaryJson();
 		SetRunnerState(EScenarioRunnerState::Completed);
 		ActiveRunQueueJsonFilePath.Reset();
 		ActiveBatchRunId.Reset();
@@ -842,6 +851,7 @@ void UScenarioRunnerSubsystem::CompleteCurrentRecord(
 	}
 
 	RunRecords.Add(CurrentRecord);
+	SaveEpisodeResultFilesForRecord(RunRecords.Last());
 	if (bSaveEvaluationReportJson)
 	{
 		SaveEvaluationReportJsonForRecord(RunRecords.Last());
@@ -922,6 +932,128 @@ FString UScenarioRunnerSubsystem::BuildRunId() const
 	}
 
 	return FString::Printf(TEXT("episode_run_%04d"), CurrentRunIndex);
+}
+
+bool UScenarioRunnerSubsystem::SaveEpisodeResultFilesForRecord(FEpisodeRunRecord& runRecord) const
+{
+	const FString eventsFilePath = BuildEpisodeEventsJsonlFilePath(runRecord);
+	const FString resultFilePath = BuildEpisodeResultJsonFilePath(runRecord);
+	const FString outputDirectory = FPaths::GetPath(resultFilePath);
+	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true))
+	{
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Episode result save failed: directory create failed | Path: %s"),
+			*outputDirectory);
+		return false;
+	}
+
+	FString eventsJsonl;
+	TArray<FString> eventDiagnostics;
+	if (!FEpisodeRunResultJson::TryWriteEpisodeEventsJsonl(runRecord, eventsJsonl, eventDiagnostics))
+	{
+		for (const FString& diagnostic : eventDiagnostics)
+		{
+			UE_LOG(LogScenarioRunner, Warning, TEXT("Episode events JSONL diagnostic | %s"), *diagnostic);
+		}
+		return false;
+	}
+	if (!FFileHelper::SaveStringToFile(eventsJsonl, *eventsFilePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		UE_LOG(LogScenarioRunner, Warning, TEXT("Episode events JSONL save failed | Path: %s"), *eventsFilePath);
+		return false;
+	}
+
+	FString resultJson;
+	TArray<FString> resultDiagnostics;
+	if (!FEpisodeRunResultJson::TryWriteEpisodeResultJson(runRecord, resultJson, resultDiagnostics))
+	{
+		for (const FString& diagnostic : resultDiagnostics)
+		{
+			UE_LOG(LogScenarioRunner, Warning, TEXT("Episode result JSON diagnostic | %s"), *diagnostic);
+		}
+		return false;
+	}
+	if (!FFileHelper::SaveStringToFile(resultJson, *resultFilePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		UE_LOG(LogScenarioRunner, Warning, TEXT("Episode result JSON save failed | Path: %s"), *resultFilePath);
+		return false;
+	}
+
+	runRecord.EpisodeEventsJsonlPath = MakeEpisodeRunnerProjectRelativePath(eventsFilePath);
+	runRecord.EpisodeResultJsonPath = MakeEpisodeRunnerProjectRelativePath(resultFilePath);
+	UE_LOG(
+		LogScenarioRunner,
+		Log,
+		TEXT("Episode result files saved | RunId: %s, Episode: %s, Result: %s, Events: %s"),
+		*runRecord.RunId,
+		*runRecord.EpisodeId,
+		*resultFilePath,
+		*eventsFilePath);
+	return true;
+}
+
+bool UScenarioRunnerSubsystem::SaveRunSummaryJson() const
+{
+	FString summaryJson;
+	TArray<FString> diagnostics;
+	if (!FEpisodeRunResultJson::TryWriteRunSummaryJson(RunRecords, summaryJson, diagnostics))
+	{
+		for (const FString& diagnostic : diagnostics)
+		{
+			UE_LOG(LogScenarioRunner, Warning, TEXT("Run summary JSON diagnostic | %s"), *diagnostic);
+		}
+		return false;
+	}
+
+	const FString outputFilePath = BuildRunSummaryJsonFilePath();
+	const FString outputDirectory = FPaths::GetPath(outputFilePath);
+	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true))
+	{
+		UE_LOG(LogScenarioRunner, Warning, TEXT("Run summary JSON save failed: directory create failed | Path: %s"), *outputDirectory);
+		return false;
+	}
+
+	if (!FFileHelper::SaveStringToFile(summaryJson, *outputFilePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		UE_LOG(LogScenarioRunner, Warning, TEXT("Run summary JSON save failed | Path: %s"), *outputFilePath);
+		return false;
+	}
+
+	UE_LOG(LogScenarioRunner, Log, TEXT("Run summary JSON saved | Records: %d, Path: %s"), RunRecords.Num(), *outputFilePath);
+	return true;
+}
+
+FString UScenarioRunnerSubsystem::BuildRunSummaryJsonFilePath() const
+{
+	const FString directory = EvaluationReportOutputDirectory.IsEmpty()
+		? TEXT("Json/Output")
+		: EvaluationReportOutputDirectory;
+	const FString resolvedDirectory = FPaths::IsRelative(directory)
+		? FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), directory))
+		: directory;
+	return FPaths::Combine(resolvedDirectory, TEXT("summary.json"));
+}
+
+FString UScenarioRunnerSubsystem::BuildEpisodeResultJsonFilePath(const FEpisodeRunRecord& runRecord) const
+{
+	const FString directory = EvaluationReportOutputDirectory.IsEmpty()
+		? TEXT("Json/Output")
+		: EvaluationReportOutputDirectory;
+	const FString resolvedDirectory = FPaths::IsRelative(directory)
+		? FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), directory))
+		: directory;
+	return FPaths::Combine(
+		resolvedDirectory,
+		TEXT("episodes"),
+		SanitizeReportFileToken(runRecord.PairId),
+		TEXT("result.json"));
+}
+
+FString UScenarioRunnerSubsystem::BuildEpisodeEventsJsonlFilePath(const FEpisodeRunRecord& runRecord) const
+{
+	return FPaths::Combine(FPaths::GetPath(BuildEpisodeResultJsonFilePath(runRecord)), TEXT("events.jsonl"));
 }
 
 bool UScenarioRunnerSubsystem::SaveEvaluationReportJsonForRecord(FEpisodeRunRecord& runRecord) const

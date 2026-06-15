@@ -9,6 +9,8 @@ paths:
   - Client/Source/OdiroSim/Public/Shared/**
   - Client/Source/OdiroSim/Private/Shared/**
   - Client/Json/Input/**
+  - Client/Json/Templates/**
+  - Client/Json/Experiments/**
   - contracts/specs/**
 entry:
   - ScenarioCompiler.h / .cpp
@@ -21,6 +23,7 @@ entry:
   - ScenarioSampleWorldSpecAdapter.h / .cpp
   - ScenarioSimulationProfileAdapter.h / .cpp
   - ScenarioTemplateWorldSpecAdapter.h / .cpp
+  - ExperimentSettingTypes.h / .cpp
   - Scenario/Editor/ScenarioAuthoringSubsystem.h / .cpp
   - ScenarioTemplateSampleJsonTest.cpp
   - ScenarioTemplateSamplerTest.cpp
@@ -29,21 +32,30 @@ entry:
   - ScenarioRunnerSubsystem.h / .cpp
   - EpisodeMeasurementLogSubsystem.h / .cpp
   - EpisodeEvaluationReportJson.h / .cpp
+  - EpisodeRunResultJson.h / .cpp
   - EpisodeResultTypes.h
   - Client/Json/Input
+  - Client/Json/Templates
+  - Client/Json/Experiments
   - contracts/specs
 keep:
   - Parser-only samples/schemas owned only by Client stay in Client.
-  - ScenarioRunQueue samples in Client/Json/Input point at scenario_template and simulation_profile sources; legacy ScenarioSetup/DeliveryBotSetup JSON examples are removed.
+  - Client/Json/Templates stores reusable scenario_template and simulation_profile library files.
+  - Client/Json/Experiments stores experiment folders with setting.json, profile.json, scenarios, and runs.
+  - SimulationSetup v2 points at experiment_ref; ScenarioRunQueue is only a transitional launcher/UI fallback.
   - Scenario template/sample authoring types stay separate from runtime WorldSpec and actor-spawn payload types.
   - ScenarioSampleWorldSpecAdapter is the thin scenario_sample to runtime WorldSpec boundary; do not fold it into the legacy runtime ScenarioCompiler.
   - ScenarioSimulationProfileAdapter maps simulation_profile to DeliveryBot setup info for template-driven runs without turning it into legacy DeliveryBotSetup JSON.
   - ScenarioTemplateSampler owns deterministic scenario_template to scenario_sample generation; keep it separate from the runtime ScenarioCompiler and sample adapter.
   - ScenarioTemplateWorldSpecAdapter is the runner/launcher boundary for scenario_template files; it samples templates before handing the frozen sample to ScenarioSampleWorldSpecAdapter.
+  - ExperimentSettingTypes owns experiment_setting parsing, materializes missing scenario_sample files, and builds direct ScenarioRunInput arrays from profile.json plus selected samples.
+  - EpisodeRunResultJson owns canonical run outputs: summary.json, episodes/<SampleId>/result.json, and episodes/<SampleId>/events.jsonl.
   - ScenarioAuthoringSubsystem stores the editor draft as scenario_template and builds runtime WorldSpec only as a preview/compatibility projection.
 verify:
   - contract specs vs sample JSON alignment
   - scenario_template/scenario_sample docs vs Client shared schema type alignment
+  - ExperimentSettingTypes parser, writer, sample materialization, and direct runner input automation tests
+  - EpisodeRunResultJson automation tests for run_summary, episode_result, and episode_event output split
   - ScenarioTemplateJson/ScenarioSampleJson parse, version mismatch, and round-trip automation tests
   - ScenarioTemplateSampler automation tests for layout, robot anchors, fixed obstacle placement, deterministic range sampling, and version mismatch
   - ScenarioSimulationProfileAdapter automation tests for test profile to DeliveryBot setup mapping

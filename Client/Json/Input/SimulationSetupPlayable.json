@@ -1,8 +1,12 @@
 {
 	"schema": "simulation_setup",
-	"version": 1,
+	"version": 2,
 	"map_id": "ScenarioSimulationMap",
-	"run_queue": "Json/Input/SimulationSetupPlayable_RunQueue.json",
+	"experiment_ref": "Json/Experiments/FeatureProbeNoPedestrians",
+	"sample_selection":
+	{
+		"kind": "all"
+	},
 	"fixed_step":
 	{
 		"fps": 60

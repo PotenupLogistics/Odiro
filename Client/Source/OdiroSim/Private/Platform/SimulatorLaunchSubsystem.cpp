@@ -114,6 +114,16 @@ namespace
 		return FString::Join(diagnostics, TEXT("\n"));
 	}
 
+	void AppendExperimentSettingDiagnostics(
+		const TArray<FScenarioSchemaDiagnostic>& diagnostics,
+		TArray<FString>& outDiagnostics)
+	{
+		for (const FScenarioSchemaDiagnostic& diagnostic : diagnostics)
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s: %s"), *diagnostic.Code, *diagnostic.Message));
+		}
+	}
+
 	FString NormalizeRunQueueReferencePath(FString jsonPath)
 	{
 		jsonPath = jsonPath.TrimStartAndEnd();
@@ -927,8 +937,24 @@ bool USimulatorLaunchSubsystem::CreateRuntimeSimulationSetupFile(
 {
 	outDiagnostics.Reset();
 	outRuntimeSetup = sourceSetup;
+	const FString experimentRef = outRuntimeSetup.ExperimentRef.TrimStartAndEnd();
+	if (!experimentRef.IsEmpty())
+	{
+		const FExperimentSettingParseResult settingResult =
+			FExperimentSettingJson::ParseFromFile(FExperimentSettingJson::BuildExperimentSettingPath(experimentRef));
+		if (!settingResult.bSuccess)
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("experiment_setting read failed: %s"), *experimentRef));
+			AppendExperimentSettingDiagnostics(settingResult.Diagnostics, outDiagnostics);
+			return false;
+		}
+
+		// The persisted runtime setup mirrors the effective runtime values from the experiment.
+		outRuntimeSetup.MapId = settingResult.Document.Runtime.MapId;
+		outRuntimeSetup.FixedStep.Fps = settingResult.Document.Runtime.FixedFps;
+	}
 	FSimulationSetupJson::ApplyRunOutputPaths(outRuntimeSetup, runId);
-	outRuntimeSetupPath = FSimulationSetupJson::BuildRunSetupPath(runId);
+	outRuntimeSetupPath = FSimulationSetupJson::BuildRunSetupPath(outRuntimeSetup, runId);
 
 	if (!FSimulationSetupJson::SaveToFile(outRuntimeSetup, outRuntimeSetupPath, outDiagnostics))
 	{

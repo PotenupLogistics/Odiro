@@ -218,6 +218,162 @@ namespace
 		return true;
 	}
 
+	bool TryParseSimulationSampleSelectionKind(
+		const FString& value,
+		EExperimentSampleSelectionKind& outKind)
+	{
+		if (value.Equals(TEXT("all"), ESearchCase::IgnoreCase))
+		{
+			outKind = EExperimentSampleSelectionKind::All;
+			return true;
+		}
+
+		if (value.Equals(TEXT("explicit_ids"), ESearchCase::IgnoreCase)
+			|| value.Equals(TEXT("ids"), ESearchCase::IgnoreCase))
+		{
+			outKind = EExperimentSampleSelectionKind::ExplicitIds;
+			return true;
+		}
+
+		return false;
+	}
+
+	FString ToSimulationSampleSelectionKindString(const EExperimentSampleSelectionKind kind)
+	{
+		switch (kind)
+		{
+		case EExperimentSampleSelectionKind::ExplicitIds:
+			return TEXT("explicit_ids");
+		case EExperimentSampleSelectionKind::All:
+		default:
+			return TEXT("all");
+		}
+	}
+
+	bool TryReadOptionalStringArrayField(
+		const FJsonObject& jsonObject,
+		const FString& fieldName,
+		const FString& path,
+		TArray<FScenarioCompileDiagnostic>& diagnostics,
+		TArray<FString>& targetValues)
+	{
+		const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
+		if (!jsonValue.IsValid())
+		{
+			return true;
+		}
+
+		if (jsonValue->Type != EJson::Array)
+		{
+			AddSimulationDiagnostic(
+				diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				FString::Printf(TEXT("invalid_%s"), *fieldName),
+				FString::Printf(TEXT("%s.%s must be an array."), *path, *fieldName));
+			return false;
+		}
+
+		targetValues.Reset();
+		const TArray<TSharedPtr<FJsonValue>>& arrayValues = jsonValue->AsArray();
+		for (int32 index = 0; index < arrayValues.Num(); ++index)
+		{
+			const TSharedPtr<FJsonValue>& itemValue = arrayValues[index];
+			if (!itemValue.IsValid() || itemValue->Type != EJson::String)
+			{
+				AddSimulationDiagnostic(
+					diagnostics,
+					EScenarioCompileDiagnosticSeverity::Error,
+					FString::Printf(TEXT("invalid_%s_item"), *fieldName),
+					FString::Printf(TEXT("%s.%s[%d] must be a string."), *path, *fieldName, index));
+				return false;
+			}
+
+			const FString sampleId = itemValue->AsString();
+			if (sampleId.TrimStartAndEnd().IsEmpty())
+			{
+				AddSimulationDiagnostic(
+					diagnostics,
+					EScenarioCompileDiagnosticSeverity::Error,
+					FString::Printf(TEXT("empty_%s_item"), *fieldName),
+					FString::Printf(TEXT("%s.%s[%d] must not be empty."), *path, *fieldName, index));
+				return false;
+			}
+
+			targetValues.Add(sampleId);
+		}
+
+		return true;
+	}
+
+	void ParseSimulationSampleSelectionObject(
+		const FJsonObject& rootObject,
+		FSimulationSetupParseResult& result)
+	{
+		const TSharedPtr<FJsonValue> sampleSelectionValue = rootObject.TryGetField(TEXT("sample_selection"));
+		if (!sampleSelectionValue.IsValid())
+		{
+			if (!result.Setup.ExperimentRef.TrimStartAndEnd().IsEmpty())
+			{
+				result.Setup.SampleSelection.Kind = EExperimentSampleSelectionKind::All;
+			}
+			return;
+		}
+
+		if (sampleSelectionValue->Type != EJson::Object)
+		{
+			AddSimulationDiagnostic(
+				result.Diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				TEXT("invalid_sample_selection"),
+				TEXT("$.sample_selection must be an object."));
+			return;
+		}
+
+		const TSharedPtr<FJsonObject> sampleSelectionObject = sampleSelectionValue->AsObject();
+		if (!sampleSelectionObject.IsValid())
+		{
+			AddSimulationDiagnostic(
+				result.Diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				TEXT("invalid_sample_selection"),
+				TEXT("$.sample_selection must be an object."));
+			return;
+		}
+
+		FString kindString;
+		if (TryReadRequiredStringField(
+				*sampleSelectionObject,
+				TEXT("kind"),
+				TEXT("$.sample_selection"),
+				result.Diagnostics,
+				kindString)
+			&& !TryParseSimulationSampleSelectionKind(kindString, result.Setup.SampleSelection.Kind))
+		{
+			AddSimulationDiagnostic(
+				result.Diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				TEXT("invalid_sample_selection_kind"),
+				FString::Printf(TEXT("$.sample_selection.kind has unsupported value '%s'."), *kindString));
+		}
+
+		TryReadOptionalStringArrayField(
+			*sampleSelectionObject,
+			TEXT("sample_ids"),
+			TEXT("$.sample_selection"),
+			result.Diagnostics,
+			result.Setup.SampleSelection.SampleIds);
+
+		if (result.Setup.SampleSelection.Kind == EExperimentSampleSelectionKind::ExplicitIds
+			&& result.Setup.SampleSelection.SampleIds.IsEmpty())
+		{
+			AddSimulationDiagnostic(
+				result.Diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				TEXT("empty_sample_ids"),
+				TEXT("$.sample_selection.sample_ids must contain at least one id when kind is explicit_ids."));
+		}
+	}
+
 	bool TryReadRequiredPositiveIntField(
 		const FJsonObject& jsonObject,
 		const FString& fieldName,
@@ -276,9 +432,31 @@ namespace
 		}
 
 		TryReadRequiredPositiveIntField(rootObject, TEXT("version"), TEXT("$"), result.Diagnostics, result.Setup.Version);
+		if (result.Setup.Version != FSimulationSetupJson::SupportedVersion)
+		{
+			AddSimulationDiagnostic(
+				result.Diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				TEXT("unsupported_simulation_setup_version"),
+				FString::Printf(
+					TEXT("simulation_setup version must match the current validator version: %d."),
+					FSimulationSetupJson::SupportedVersion));
+		}
 
 		TryReadRequiredStringField(rootObject, TEXT("map_id"), TEXT("$"), result.Diagnostics, result.Setup.MapId);
-		TryReadRequiredStringField(rootObject, TEXT("run_queue"), TEXT("$"), result.Diagnostics, result.Setup.RunQueueJsonPath);
+		TryReadOptionalStringField(rootObject, TEXT("experiment_ref"), TEXT("$"), result.Diagnostics, result.Setup.ExperimentRef);
+		TryReadOptionalStringField(rootObject, TEXT("run_id"), TEXT("$"), result.Diagnostics, result.Setup.RunId);
+		TryReadOptionalStringField(rootObject, TEXT("run_queue"), TEXT("$"), result.Diagnostics, result.Setup.RunQueueJsonPath);
+		ParseSimulationSampleSelectionObject(rootObject, result);
+		if (result.Setup.ExperimentRef.TrimStartAndEnd().IsEmpty()
+			&& result.Setup.RunQueueJsonPath.TrimStartAndEnd().IsEmpty())
+		{
+			AddSimulationDiagnostic(
+				result.Diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				TEXT("missing_experiment_ref"),
+				TEXT("simulation_setup requires experiment_ref. run_queue is only a transitional fallback."));
+		}
 
 		TSharedPtr<FJsonObject> fixedStepObject;
 		if (TryGetObjectField(rootObject, TEXT("fixed_step"), TEXT("$"), result.Diagnostics, fixedStepObject))
@@ -480,13 +658,48 @@ namespace
 		return object;
 	}
 
+	TArray<TSharedPtr<FJsonValue>> MakeSimulationSampleIdArrayField(const TArray<FString>& values)
+	{
+		TArray<TSharedPtr<FJsonValue>> jsonValues;
+		jsonValues.Reserve(values.Num());
+		for (const FString& value : values)
+		{
+			jsonValues.Add(MakeShared<FJsonValueString>(value));
+		}
+
+		return jsonValues;
+	}
+
+	TSharedRef<FJsonObject> MakeSimulationSampleSelectionObject(const FExperimentSampleSelection& selection)
+	{
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		object->SetStringField(TEXT("kind"), ToSimulationSampleSelectionKindString(selection.Kind));
+		if (selection.Kind == EExperimentSampleSelectionKind::ExplicitIds)
+		{
+			object->SetArrayField(TEXT("sample_ids"), MakeSimulationSampleIdArrayField(selection.SampleIds));
+		}
+		return object;
+	}
+
 	TSharedRef<FJsonObject> MakeSimulationSetupObject(const FSimulationSetup& setup)
 	{
 		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
 		object->SetStringField(TEXT("schema"), setup.Schema);
 		object->SetNumberField(TEXT("version"), setup.Version);
 		object->SetStringField(TEXT("map_id"), setup.MapId);
-		object->SetStringField(TEXT("run_queue"), setup.RunQueueJsonPath);
+		if (!setup.ExperimentRef.TrimStartAndEnd().IsEmpty())
+		{
+			object->SetStringField(TEXT("experiment_ref"), setup.ExperimentRef);
+			if (!setup.RunId.TrimStartAndEnd().IsEmpty())
+			{
+				object->SetStringField(TEXT("run_id"), setup.RunId);
+			}
+			object->SetObjectField(TEXT("sample_selection"), MakeSimulationSampleSelectionObject(setup.SampleSelection));
+		}
+		else if (!setup.RunQueueJsonPath.TrimStartAndEnd().IsEmpty())
+		{
+			object->SetStringField(TEXT("run_queue"), setup.RunQueueJsonPath);
+		}
 
 		TSharedRef<FJsonObject> fixedStepObject = MakeShared<FJsonObject>();
 		fixedStepObject->SetNumberField(TEXT("fps"), setup.FixedStep.Fps);
@@ -522,9 +735,11 @@ namespace
 			outDiagnostics.Add(FString::Printf(TEXT("SimulationSetup schema must be '%s'."), SimulationSetupSchema));
 		}
 
-		if (setup.Version <= 0)
+		if (setup.Version != FSimulationSetupJson::SupportedVersion)
 		{
-			outDiagnostics.Add(TEXT("SimulationSetup version must be > 0."));
+			outDiagnostics.Add(FString::Printf(
+				TEXT("SimulationSetup version must be %d."),
+				FSimulationSetupJson::SupportedVersion));
 		}
 
 		if (setup.MapId.TrimStartAndEnd().IsEmpty())
@@ -532,9 +747,17 @@ namespace
 			outDiagnostics.Add(TEXT("SimulationSetup map_id must not be empty."));
 		}
 
-		if (setup.RunQueueJsonPath.TrimStartAndEnd().IsEmpty())
+		if (setup.ExperimentRef.TrimStartAndEnd().IsEmpty()
+			&& setup.RunQueueJsonPath.TrimStartAndEnd().IsEmpty())
 		{
-			outDiagnostics.Add(TEXT("SimulationSetup run_queue must not be empty."));
+			outDiagnostics.Add(TEXT("SimulationSetup experiment_ref must not be empty. run_queue is only a transitional fallback."));
+		}
+
+		if (!setup.ExperimentRef.TrimStartAndEnd().IsEmpty()
+			&& setup.SampleSelection.Kind == EExperimentSampleSelectionKind::ExplicitIds
+			&& setup.SampleSelection.SampleIds.IsEmpty())
+		{
+			outDiagnostics.Add(TEXT("SimulationSetup sample_selection.sample_ids must not be empty when kind is explicit_ids."));
 		}
 
 		if (setup.FixedStep.Fps <= 0)
@@ -830,6 +1053,20 @@ FString FSimulationSetupJson::BuildRunOutputDirectory(const FString& runId)
 		SanitizeSimulationRunPathToken(runId)));
 }
 
+FString FSimulationSetupJson::BuildRunOutputDirectory(const FSimulationSetup& setup, const FString& runId)
+{
+	const FString experimentRef = NormalizeSimulationSetupPath(setup.ExperimentRef.TrimStartAndEnd());
+	if (experimentRef.IsEmpty())
+	{
+		return BuildRunOutputDirectory(runId);
+	}
+
+	return NormalizeSimulationSetupPath(FPaths::Combine(
+		experimentRef,
+		TEXT("runs"),
+		SanitizeSimulationRunPathToken(runId)));
+}
+
 FString FSimulationSetupJson::BuildRunSetupPath(const FString& runId)
 {
 	return NormalizeSimulationSetupPath(FPaths::Combine(
@@ -837,10 +1074,18 @@ FString FSimulationSetupJson::BuildRunSetupPath(const FString& runId)
 		TEXT("simulation_setup.json")));
 }
 
+FString FSimulationSetupJson::BuildRunSetupPath(const FSimulationSetup& setup, const FString& runId)
+{
+	return NormalizeSimulationSetupPath(FPaths::Combine(
+		BuildRunOutputDirectory(setup, runId),
+		TEXT("simulation_setup.json")));
+}
+
 void FSimulationSetupJson::ApplyRunOutputPaths(FSimulationSetup& setup, const FString& runId)
 {
 	// A simulator run writes every generated artifact into one stable run directory.
-	const FString runOutputDirectory = BuildRunOutputDirectory(runId);
+	const FString runOutputDirectory = BuildRunOutputDirectory(setup, runId);
+	setup.RunId = runId;
 	setup.MeasurementLog.OutputDirectory = runOutputDirectory;
 	setup.Report.OutputDirectory = runOutputDirectory;
 	setup.Status.OutputPath = NormalizeSimulationSetupPath(FPaths::Combine(runOutputDirectory, TEXT("status.json")));

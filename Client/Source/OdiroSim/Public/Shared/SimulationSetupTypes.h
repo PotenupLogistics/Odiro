@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Shared/ExperimentSettingTypes.h"
 #include "Shared/ScenarioCompileTypes.h"
 #include "Shared/EpisodeMeasurementLogTypes.h"
 #include "SimulationSetupTypes.generated.h"
@@ -54,13 +55,25 @@ struct ODIROSIM_API FSimulationSetup
 
 	// JSON 계약 버전
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup", meta = (ClampMin = "1"))
-	int32 Version = 1;
+	int32 Version = 2;
 
 	// SimulatorMode에서 로드할 UE level identifier
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
 	FString MapId = TEXT("ScenarioSimulationMap");
 
-	// ScenarioSetup, DeliveryBotSetup, PolicySpec 조합 목록을 담은 ScenarioRunQueue JSON path
+	// Experiment folder that owns setting.json, profile.json, scenarios, and runs.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
+	FString ExperimentRef;
+
+	// Optional run id stored in the setup; command-line -RunId overrides it.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
+	FString RunId;
+
+	// Scenario sample subset requested from the experiment folder.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
+	FExperimentSampleSelection SampleSelection;
+
+	// Transitional ScenarioRunQueue fallback used by older UI paths until MainMenu is experiment-based.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
 	FString RunQueueJsonPath;
 
@@ -207,6 +220,8 @@ struct ODIROSIM_API FSimulationRunStatus
 // SimulationSetup JSON을 C++ 계약 타입으로 읽는 utility
 struct ODIROSIM_API FSimulationSetupJson
 {
+	static constexpr int32 SupportedVersion = 2;
+
 	static FSimulationSetupParseResult ParseFromFile(const FString& jsonFilePath);
 	static FSimulationSetupParseResult ParseFromString(const FString& jsonString);
 	static bool TryWriteSetupJson(
@@ -219,7 +234,9 @@ struct ODIROSIM_API FSimulationSetupJson
 		TArray<FString>& outDiagnostics);
 	static FString ResolveProjectPath(const FString& filePath);
 	static FString BuildRunOutputDirectory(const FString& runId);
+	static FString BuildRunOutputDirectory(const FSimulationSetup& setup, const FString& runId);
 	static FString BuildRunSetupPath(const FString& runId);
+	static FString BuildRunSetupPath(const FSimulationSetup& setup, const FString& runId);
 	static void ApplyRunOutputPaths(FSimulationSetup& setup, const FString& runId);
 };
 

@@ -28,7 +28,8 @@ keep:
   - Client/Tools use Client/Tools/Common.ps1, never root tools/common.ps1.
   - Client prerequisite checks cover Windows Unreal C++ only; Android/iOS/macOS/MAUI are not failures.
   - Legacy Client root scripts such as BuildProject.bat, RunPreview.bat, and RunPythonPolicyServer.bat stay folded into Task-* wrappers.
-  - ScenarioRunQueue entries use scenario_template and simulation_profile keys; legacy scenario_setup/delivery_bot_setup inputs are not accepted by the launcher.
+  - SimulationSetup v2 uses experiment_ref for experiment-folder runs; ScenarioRunQueue is only a transitional launcher/UI fallback.
+  - Runtime SimulationSetup files are written under the owning experiment runs/<RunId> folder when experiment_ref is present.
 verify:
   - launcher command contract tests for launch arg changes
   - runtime log plus status JSON for process changes

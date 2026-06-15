@@ -34,17 +34,14 @@ class V2ValidationResult(BaseModel):
 
 
 class ScenarioGenerateV2Response(BaseModel):
+    """Scenario template generation response returned without file ownership decisions."""
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    schema_: Literal["scenario_generate_response_v2"] = Field(
-        default="scenario_generate_response_v2",
-        alias="schema",
-    )
-    version: Literal[2] = 2
     status: Literal["success", "failed"]
-    scenario_id: str | None = None
+    template_id: str | None = None
     summary: str
-    scenario_template: dict[str, Any] | None = None
+    template: dict[str, Any] | None = None
     validation: V2ValidationResult
     assumptions: list[str] = Field(default_factory=list)
-    generation_mode: Literal["deterministic", "llm", "llm_repaired", "fallback"] = "deterministic"
+    generation_mode: Literal["deterministic", "llm", "llm_repaired", "fallback", "langgraph"] = "deterministic"

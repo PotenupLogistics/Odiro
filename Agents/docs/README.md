@@ -64,7 +64,7 @@
 
 * [v2 Agent 테스트/운영 가이드](development/V2_AGENT_TESTING_GUIDE.md)
 
-v2 Agent의 LangGraph runner는 optional skeleton입니다. `V2_AGENT_GRAPH_ENABLED=false`가 기본값이며, false일 때는 기존 deterministic/rule-based v2 pipeline을 그대로 사용합니다.
+Scenario generation v2는 항상 LangGraph runner를 사용합니다. `V2_AGENT_LLM_ENABLED=false`이면 deterministic graph path를 사용하고, `true`이면 graph 내부 LLM-assisted node를 시도한 뒤 validator/fallback을 거칩니다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아니며, 결과 분석 v2 graph 경로 제어를 위해 유지합니다.
 
 ## 정책
 

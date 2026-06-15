@@ -4,12 +4,21 @@ from typing import Any, TypedDict
 
 
 class ScenarioGenerationGraphStateV2(TypedDict, total=False):
-    request: Any
-    normalized_prompt: str
-    intent: dict[str, Any]
-    scenario_type: str
-    plan: Any
-    scenario_template: dict[str, Any]
+    """Prompt-only LangGraph state for scenario_template v1 generation."""
+
+    request: dict[str, Any]
+    prompt: str | None
+    interpreted_intent: Any
+    selected_pattern: str | None
+    llm_template_candidate: dict[str, Any] | None
+    llm_validation: Any
+    llm_warnings: list[Any]
+    scenario_template: dict[str, Any] | None
     validation: Any
+    diagnostics: list[dict[str, Any]]
+    repair_count: int
+    status: str | None
+    summary: str | None
+    assumptions: list[str]
     response: Any
-    warnings: list[str]
+    output: Any

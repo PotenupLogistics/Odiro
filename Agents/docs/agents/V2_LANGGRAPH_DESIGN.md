@@ -2,30 +2,28 @@
 
 ## 1. 적용 이유
 
-v2 Agent는 이미 deterministic/rule-based 기본 경로와 optional LLM fallback 구조를 갖고 있습니다. LangGraph는 이 흐름을 node, edge, state, guardrail 단위로 명시해 분석 가능성과 단계별 테스트 가능성을 높이기 위한 후보입니다.
+v2 Agent는 deterministic/rule-based 경로와 optional LLM fallback 구조를 갖고 있습니다. LangGraph는 이 흐름을 node, edge, state, guardrail 단위로 명시해 분석 가능성과 단계별 테스트 가능성을 높이기 위한 구조입니다.
 
 특히 scenario generation은 template 생성, 검증, repair, fallback이 분기형 workflow이고, result analysis는 workspace scan부터 RAG context, LLM recommendation validation까지 긴 pipeline입니다. Graph 표현은 각 단계의 입력/출력과 실패 처리 책임을 분리하는 데 유리합니다.
 
-## 2. optional로 두는 이유
+## 2. 적용 범위
 
-현재 v2 API의 기본 동작은 이미 배포 가능한 형태입니다. LangGraph를 필수 dependency로 추가하면 설치/CI/운영 환경이 바뀌고, 아직 확정되지 않은 response JSON 및 Unreal `scenario.template.json` schema를 과도하게 고정할 위험이 있습니다.
+Scenario generation v2는 `/api/v2/scenarios/generate`에서 항상 LangGraph runner를 사용합니다. `V2_AGENT_LLM_ENABLED=false`이면 deterministic graph path만 사용하고, `true`이면 graph 내부 LLM-assisted node가 OpenAI JSON 호출을 시도한 뒤 validator/fallback을 거칩니다.
 
-따라서 `V2_AGENT_GRAPH_ENABLED=false`를 기본값으로 둡니다. ResultAnalysisV2 runner는 node 메서드 기반 graph-compatible pipeline으로 확장되었지만, `langgraph` 자체는 여전히 optional dependency입니다. graph mode가 꺼져 있으면 기존 v2 pipeline 결과가 그대로 유지되어야 합니다.
+`V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아닙니다. 이 설정은 ResultAnalysisV2 graph 경로와 legacy rollback 호환을 위해 유지합니다.
 
 ## 3. ScenarioGenerationV2 graph 설계
 
 ```text
 START
-→ normalize_prompt_node
-→ classify_intent_node
-→ select_scenario_type_node
-→ plan_template_node
-→ generate_template_json_node
-→ validate_template_node
-→ route_validation_node
+→ validate_request_node
+→ interpret_user_prompt_node
+→ select_scenario_pattern_node
+→ build_scenario_template_node
+→ validate_scenario_template_node
     ├─ valid → build_response_node → END
-    ├─ invalid_and_repairable → repair_template_node → validate_template_node
-    └─ failed → deterministic_fallback_node → build_response_node → END
+    ├─ repair → repair_scenario_template_node → validate_scenario_template_node
+    └─ fallback → fallback_scenario_template_node → validate_scenario_template_node
 ```
 
 ## 4. ResultAnalysisV2 graph 설계
@@ -57,7 +55,7 @@ START
 
 ## 5. State 정의
 
-`ScenarioGenerationGraphStateV2`는 request, normalized prompt, parsed intent, selected scenario type, template plan, generated template, validation result, response, warnings를 가진 느슨한 state입니다.
+`ScenarioGenerationGraphStateV2`는 request, prompt, parsed intent, selected pattern, optional LLM template candidate, generated template, validation result, response, warnings를 가진 state입니다.
 
 `ResultAnalysisGraphStateV2`는 request, experiments root, artifacts, classified/parsed artifacts, parse warnings, episode metrics, timelines, representative failed episodes, run/experiment aggregates, failure patterns, RAG queries/context, analysis context, LLM analysis, recommendations, validation errors, response, warnings를 가집니다.
 
@@ -65,14 +63,13 @@ START
 
 Scenario nodes:
 
-* `normalize_prompt_node`
-* `classify_intent_node`
-* `select_scenario_type_node`
-* `plan_template_node`
-* `generate_template_json_node`
-* `validate_template_node`
-* `repair_template_node`
-* `deterministic_fallback_node`
+* `validate_request_node`
+* `interpret_user_prompt_node`
+* `select_scenario_pattern_node`
+* `build_scenario_template_node`
+* `validate_scenario_template_node`
+* `repair_scenario_template_node`
+* `fallback_scenario_template_node`
 * `build_response_node`
 
 Analysis nodes:
@@ -95,11 +92,11 @@ Analysis nodes:
 * `rule_based_fallback_node`
 * `build_response_node`
 
-현재 `ResultAnalysisGraphRunnerV2`는 위 node들을 Python 메서드로 순차 실행합니다. 이 구조는 나중에 `StateGraph`에 연결할 수 있도록 node 이름과 state update boundary를 유지합니다.
+Scenario generation v2 runner는 실제 LangGraph `StateGraph`를 compile/invoke합니다. ResultAnalysisGraphRunnerV2도 graph-compatible node boundary를 유지합니다.
 
 ## 7. Edge와 조건 분기
 
-Scenario validation 결과는 `valid`, `invalid_and_repairable`, `failed`로 route합니다. repair는 제한 횟수 안에서만 validate node로 되돌아가며, 실패 시 deterministic fallback으로 이동합니다.
+Scenario validation 결과는 `valid`, `repair`, `fallback`으로 route합니다. repair는 제한 횟수 안에서만 validate node로 되돌아가며, 실패 시 deterministic fallback으로 이동합니다.
 
 Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터가 없으면 insufficient data response, 반복 패턴이 없으면 no-change response를 만듭니다. 반복 패턴이 있으면 RAG query/context를 구성하고 optional LLM 또는 rule-based recommendation 경로를 탑니다.
 
@@ -131,8 +128,8 @@ Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터�
 ## 9. Guardrail 목록
 
 * v1 Agent/API는 변경하지 않습니다.
-* LangGraph dependency는 optional입니다.
-* graph mode 기본값은 `false`입니다.
+* Scenario generation v2는 항상 LangGraph runner를 사용합니다.
+* `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아닙니다.
 * raw log 전체를 LLM에 전달하지 않습니다.
 * response JSON 최종 계약처럼 field를 고정하지 않습니다.
 * LLM 출력은 validator와 evidence validation을 통과해야 합니다.
@@ -148,9 +145,8 @@ Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터�
 
 ## 11. 실제 LangGraph 전환 계획
 
-1. `V2_AGENT_GRAPH_ENABLED=false` 기본값을 유지합니다.
-2. ResultAnalysisV2 graph-compatible node pipeline을 기존 v2 response schema와 동등하게 검증합니다.
-3. LangGraph 설치 환경에서만 실제 `StateGraph` integration test를 별도 marker로 실행합니다.
-4. ScenarioGenerationV2 runner도 같은 node pipeline 방식으로 확장합니다.
-5. v2 response schema와 Unreal template schema가 확정되면 graph state 타입을 더 엄격하게 좁힙니다.
-6. 운영 환경에서 canary 방식으로 graph mode를 켜고 warning/fallback 비율을 확인합니다.
+1. ScenarioGenerationV2 runner는 실제 `StateGraph` 경로를 기본으로 유지합니다.
+2. `V2_AGENT_LLM_ENABLED`로 scenario generation graph 내부 LLM-assisted node 사용 여부를 제어합니다.
+3. ResultAnalysisV2 graph-compatible node pipeline을 기존 v2 response schema와 동등하게 검증합니다.
+4. v2 response schema와 Unreal template schema가 확정되면 graph state 타입을 더 엄격하게 좁힙니다.
+5. 운영 환경에서 LLM validator failure와 fallback warning 비율을 확인합니다.

@@ -6,7 +6,6 @@ from fastapi import APIRouter, HTTPException
 
 from app.agents.result_analysis_v2 import ResultAnalysisV2Agent
 from app.agents.result_analysis_v2.graph_runner import ResultAnalysisGraphRunnerV2
-from app.agents.scenario_generation_v2 import ScenarioGenerationV2Agent
 from app.agents.scenario_generation_v2.graph_runner import ScenarioGenerationGraphRunnerV2
 from app.core.settings import Settings
 from app.models.analysis_v2 import AnalysisRunV2Request, AnalysisRunV2Response
@@ -90,9 +89,7 @@ def scenario_generate_v2_endpoint(
     request: ScenarioGenerateV2Request,
 ) -> ScenarioGenerateV2Response:
     settings = Settings()
-    if settings.v2AgentGraphEnabled:
-        return ScenarioGenerationGraphRunnerV2(settings=settings).run(request)
-    return ScenarioGenerationV2Agent(settings=settings).generate(request)
+    return ScenarioGenerationGraphRunnerV2(settings=settings).run(request)
 
 
 @router.post(

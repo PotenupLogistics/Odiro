@@ -2,7 +2,7 @@
 
 ## 개요
 
-v2 Agent는 기존 v1 실행 계약을 건드리지 않고, 시나리오 템플릿 생성과 실험 결과 분석을 분리합니다. 기본 동작은 deterministic/rule-based이며, `V2_AGENT_LLM_ENABLED=true`일 때만 optional LLM JSON 호출 경로를 사용합니다. LangGraph 전환 설계는 [V2_LANGGRAPH_DESIGN.md](V2_LANGGRAPH_DESIGN.md)에 정리되어 있으며, `V2_AGENT_GRAPH_ENABLED=false`가 기본값입니다.
+v2 Agent는 기존 v1 실행 계약을 건드리지 않고, 시나리오 템플릿 생성과 실험 결과 분석을 분리합니다. Scenario generation v2는 항상 LangGraph runner를 사용하며, `V2_AGENT_LLM_ENABLED=true`일 때만 graph 내부 LLM-assisted JSON 호출 경로를 시도합니다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아니며 결과 분석 v2 graph 경로 제어를 위해 유지합니다.
 
 핵심 원칙:
 
@@ -15,14 +15,14 @@ v2 Agent는 기존 v1 실행 계약을 건드리지 않고, 시나리오 템플�
 ## ScenarioGenerationV2 흐름
 
 ```text
-RequestNormalizer
--> IntentParser
--> ScenarioTypeSelector
--> TemplatePlanner
--> TemplateJsonWriter
--> TemplateValidator
--> RepairHandler
--> ResponseBuilder
+START
+-> validate_request_node
+-> interpret_user_prompt_node
+-> select_scenario_pattern_node
+-> build_scenario_template_node
+-> validate_scenario_template_node
+-> build_response_node
+-> END
 ```
 
 ### `RequestNormalizer`
@@ -59,15 +59,15 @@ template이 dict인지, `scenario_id`, `schema/version`, `intent.summary`, `grou
 
 ## ScenarioGenerationV2 LLM mode
 
-LLM mode는 `V2_AGENT_LLM_ENABLED=true`일 때만 사용합니다. Agent는 `prompts/system_prompt.md`, `prompts/template_writer_prompt.md`, `prompts/repair_prompt.md`를 읽고 JSON-only 출력을 요청합니다.
+LLM mode는 `V2_AGENT_LLM_ENABLED=true`일 때만 사용합니다. LangGraph의 `interpret_user_prompt_node`는 `prompts/system_prompt.md`와 `prompts/template_writer_prompt.md`를 읽고 JSON-only `scenario_template` 후보 출력을 요청합니다.
 
 LLM output 처리 순서:
 
 1. JSON object 또는 Markdown JSON block을 파싱합니다.
-2. `TemplateValidator`를 통과하면 `generation_mode="llm"`으로 응답합니다.
-3. 검증 실패 시 repair prompt로 1회 보정을 시도합니다.
-4. repair 결과가 통과하면 `generation_mode="llm_repaired"`로 응답합니다.
-5. 생성/repair가 모두 실패하면 deterministic fallback을 사용하고 warning을 남깁니다.
+2. `TemplateValidator`를 통과하면 LangGraph response의 template 후보로 사용합니다.
+3. 검증 실패 시 warning을 남기고 deterministic graph path를 사용합니다.
+4. 최종 template이 invalid이면 deterministic repair/fallback node를 거칩니다.
+5. Scenario generation v2 response는 graph 실행 결과이므로 `generation_mode="langgraph"`를 유지합니다.
 
 ## ResultAnalysisV2 흐름
 
@@ -174,9 +174,9 @@ Analysis에서 LLM 호출, JSON 파싱, recommendation validation, evidence vali
 
 fallback은 정상적인 degradation path입니다. API는 success response를 유지하고, warning으로 원인을 노출합니다.
 
-## LangGraph optional runner
+## LangGraph runner
 
-`ScenarioGenerationGraphRunnerV2`는 아직 LangGraph 전환을 위한 skeleton입니다. `ResultAnalysisGraphRunnerV2`는 graph-compatible node pipeline으로 확장되어 scan, classify, parse, metric extraction, timeline/RAG context, recommendation validation, response build를 node 메서드 단위로 실행합니다.
+`ScenarioGenerationGraphRunnerV2`는 실제 LangGraph `StateGraph`를 compile/invoke하는 scenario generation v2 기본 실행 경로입니다. `ResultAnalysisGraphRunnerV2`는 graph-compatible node pipeline으로 확장되어 scan, classify, parse, metric extraction, timeline/RAG context, recommendation validation, response build를 node 메서드 단위로 실행합니다.
 
 `langgraph` import가 실패해도 module import와 테스트가 깨지지 않도록 `StateGraph = None` fallback을 사용합니다. ResultAnalysisV2 graph runner는 실제 `langgraph` dependency 없이도 순차 node pipeline으로 동작합니다. graph mode가 꺼져 있으면 기존 `ResultAnalysisV2Agent` 경로를 그대로 사용합니다.
 

@@ -38,9 +38,9 @@ V2_AGENT_GRAPH_ENABLED=false
 
 이 상태에서는 외부 LLM provider를 호출하지 않습니다.
 
-* scenario generation은 deterministic template writer를 사용합니다.
+* scenario generation v2는 항상 LangGraph runner를 사용하며 deterministic graph path로 template을 생성합니다.
 * analysis는 rule-based failure pattern detector와 recommendation generator를 사용합니다.
-* LangGraph runner를 사용하지 않고 기존 v2 pipeline을 그대로 사용합니다.
+* `V2_AGENT_GRAPH_ENABLED=false`는 scenario generation v2의 graph off switch가 아닙니다.
 * 외부 API key 없이 테스트가 통과해야 합니다.
 
 ## 5. fake/mock client 기반 LLM 경로 테스트
@@ -100,7 +100,7 @@ LLM mode를 켜도 API는 fallback 정책을 유지합니다. LLM 호출 실패,
 V2_AGENT_GRAPH_ENABLED=false
 ```
 
-LangGraph는 optional 설계입니다. 현재 기본값은 false입니다. ResultAnalysisV2 graph runner는 `langgraph`가 설치되지 않은 환경에서도 graph-compatible node pipeline으로 동작해야 하며, response schema는 기존 `analysis_run_response_v2`를 유지해야 합니다.
+Scenario generation v2는 `V2_AGENT_GRAPH_ENABLED` 값과 무관하게 LangGraph runner를 사용합니다. ResultAnalysisV2 graph runner는 `V2_AGENT_GRAPH_ENABLED`로 graph 경로와 legacy 경로를 선택하며, `langgraph`가 설치되지 않은 환경에서도 graph-compatible node pipeline으로 동작해야 합니다. response schema는 기존 `analysis_run_response_v2`를 유지해야 합니다.
 
 ```powershell
 uv run pytest tests/test_v2_result_analysis_graph_runner.py -q

@@ -7,47 +7,56 @@ from app.agents.scenario_generation_v2.intent_parser import ScenarioIntent
 
 @dataclass(frozen=True)
 class TemplatePlan:
-    scenario_id: str
-    scenario_type: str
+    """Normalized generation plan shared by template planners and response builders."""
+
+    template_id: str
+    pattern: str
     summary: str
-    sidewalk_width_m: dict[str, float]
-    obstacle_count: dict[str, int]
-    pedestrian_count: dict[str, int]
+    intent: str
+    encounter_type: str
+    persona: str
+    include_obstacle: bool
     pedestrian_speed_mps: dict[str, float]
     risk_factors: list[str]
     assumptions: list[str]
 
 
 class TemplatePlanner:
-    def plan(self, intent: ScenarioIntent, scenario_type: str) -> TemplatePlan:
-        narrow = scenario_type == "narrow_sidewalk"
-        has_obstacle = "static_obstacle_ahead" in intent.risk_factors
-        has_pedestrian = "pedestrian_crossing" in intent.risk_factors
-        scenario_id = self._scenario_id(scenario_type, intent.risk_factors)
+    """Builds a deterministic template plan from a selected alpha pattern."""
 
+    def plan(self, intent: ScenarioIntent, scenario_type: str) -> TemplatePlan:
+        encounter_type = "oncoming_pass" if scenario_type == "pinch_oncoming_pass" else "cross_path"
+        include_obstacle = scenario_type in {"narrow_sidewalk_cross_path", "static_obstacle_ahead"}
         return TemplatePlan(
-            scenario_id=scenario_id,
-            scenario_type=scenario_type,
-            summary=self._summary(scenario_type, has_obstacle, has_pedestrian),
-            sidewalk_width_m={"min": 1.0, "max": 1.5} if narrow else {"min": 1.5, "max": 2.2},
-            obstacle_count={"min": 1, "max": 2} if has_obstacle else {"min": 0, "max": 0},
-            pedestrian_count={"min": 1, "max": 3} if has_pedestrian else {"min": 0, "max": 0},
+            template_id=scenario_type,
+            pattern=scenario_type,
+            summary=self._summary(scenario_type),
+            intent=self._intent(scenario_type),
+            encounter_type=encounter_type,
+            persona="assertive" if scenario_type == "pinch_oncoming_pass" else "normal",
+            include_obstacle=include_obstacle,
             pedestrian_speed_mps={"min": 0.8, "max": 1.4},
             risk_factors=intent.risk_factors,
             assumptions=[
-                "좌표 단위는 meter로 가정했습니다.",
-                "각도 단위는 degree로 가정했습니다.",
+                "template은 파일 저장 경로와 신규/수정 판단을 포함하지 않습니다.",
+                "알파 단계 지원 패턴 중 가장 가까운 패턴으로 해석했습니다.",
             ],
         )
 
-    def _scenario_id(self, scenario_type: str, risk_factors: list[str]) -> str:
-        suffix = "_".join(factor.replace("_ahead", "") for factor in risk_factors if factor != "baseline_navigation")
-        return f"{scenario_type}_{suffix}" if suffix else scenario_type
+    def _summary(self, scenario_type: str) -> str:
+        """Return a Korean user-facing summary for the selected pattern."""
+        labels = {
+            "narrow_sidewalk_cross_path": "좁은 보도에서 전방 장애물과 횡단 보행자가 함께 발생하는 scenario_template JSON을 생성했습니다.",
+            "pinch_oncoming_pass": "협폭 구간에서 대향 보행자와 마주치는 scenario_template JSON을 생성했습니다.",
+            "static_obstacle_ahead": "로봇 전방 경로 중앙의 정적 장애물을 회피하는 scenario_template JSON을 생성했습니다.",
+        }
+        return labels[scenario_type]
 
-    def _summary(self, scenario_type: str, has_obstacle: bool, has_pedestrian: bool) -> str:
-        parts = [scenario_type.replace("_", " ")]
-        if has_obstacle:
-            parts.append("정적 장애물")
-        if has_pedestrian:
-            parts.append("보행자 횡단")
-        return " / ".join(parts) + " 시나리오 템플릿을 생성했습니다."
+    def _intent(self, scenario_type: str) -> str:
+        """Return the template intent text stored in the scenario_template root."""
+        labels = {
+            "narrow_sidewalk_cross_path": "좁은 보도에서 로봇 전방 장애물과 횡단 보행자가 동시에 발생할 때 로봇의 감속, 회피, 양보 판단을 검증한다.",
+            "pinch_oncoming_pass": "협폭 구간에서 마주 오는 보행자와 조우할 때 로봇이 안전하게 감속, 양보, 통과하는지 검증한다.",
+            "static_obstacle_ahead": "로봇 진행 경로 중앙의 정적 장애물 앞에서 로봇이 안전하게 감속하고 우회하는지 검증한다.",
+        }
+        return labels[scenario_type]

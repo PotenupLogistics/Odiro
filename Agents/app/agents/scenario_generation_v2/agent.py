@@ -17,12 +17,15 @@ from app.models.scenario_generation_v2 import ScenarioGenerateV2Request, Scenari
 
 
 class ScenarioGenerationV2Agent:
+    """Coordinates prompt-only scenario_template generation and validation."""
+
     def __init__(
         self,
         *,
         settings: Settings | None = None,
         llm_client: AgentLlmClient | None = None,
     ) -> None:
+        """Owns the agent components while leaving template persistence to callers."""
         self.settings = settings or Settings()
         self.llm_client = llm_client
         self.normalizer = RequestNormalizer()
@@ -35,6 +38,7 @@ class ScenarioGenerationV2Agent:
         self.response_builder = ResponseBuilder()
 
     def generate(self, request: ScenarioGenerateV2Request) -> ScenarioGenerateV2Response:
+        """Generate a scenario_template JSON object from a single natural-language prompt."""
         normalized = self.normalizer.normalize(request.prompt)
         intent = self.intent_parser.parse(normalized.normalized_prompt)
         scenario_type = self.type_selector.select(intent)
@@ -75,9 +79,9 @@ class ScenarioGenerationV2Agent:
             )
 
         return self.response_builder.success(
-            scenario_id=template["scenario_id"],
+            template_id=template["template_id"],
             summary=plan.summary,
-            scenario_template=template,
+            template=template,
             validation=validation,
             assumptions=plan.assumptions,
             generation_mode=generation_mode,
@@ -89,19 +93,17 @@ class ScenarioGenerationV2Agent:
         fallback_summary: str,
         assumptions: list[str],
     ) -> ScenarioGenerateV2Response | None:
+        """Try LLM generation and at most one repair before deterministic fallback."""
         client = self.llm_client or AgentLlmJsonClient(settings=self.settings)
         try:
-            template = client.generate_json(
-                system_prompt=self._read_prompt("system_prompt.md"),
-                user_prompt=self._template_user_prompt(prompt),
-                response_name="scenario_template_v2",
-            )
+            template = self._generate_llm_template(prompt, client=client, response_name="scenario_template")
+            template = self.repair_handler.repair(template)
             validation = self.validator.validate(template)
             if validation.valid:
                 return self.response_builder.success(
-                    scenario_id=template["scenario_id"],
+                    template_id=template["template_id"],
                     summary=self._summary_from_template(template, fallback_summary),
-                    scenario_template=template,
+                    template=template,
                     validation=validation,
                     assumptions=assumptions,
                     generation_mode="llm",
@@ -115,14 +117,15 @@ class ScenarioGenerationV2Agent:
                 repaired = client.generate_json(
                     system_prompt=self._read_prompt("system_prompt.md"),
                     user_prompt=self._repair_user_prompt(prompt, template, validation),
-                    response_name="scenario_template_v2_repair",
+                    response_name="scenario_template_repair",
                 )
+                repaired = self.repair_handler.repair(repaired)
                 repaired_validation = self.validator.validate(repaired)
                 if repaired_validation.valid:
                     return self.response_builder.success(
-                        scenario_id=repaired["scenario_id"],
+                        template_id=repaired["template_id"],
                         summary=self._summary_from_template(repaired, fallback_summary),
-                        scenario_template=repaired,
+                        template=repaired,
                         validation=repaired_validation,
                         assumptions=assumptions,
                         generation_mode="llm_repaired",
@@ -131,18 +134,36 @@ class ScenarioGenerationV2Agent:
                 return None
         return None
 
+    def _generate_llm_template(
+        self,
+        prompt: str,
+        *,
+        client: AgentLlmClient | None = None,
+        response_name: str,
+    ) -> dict:
+        """Request a scenario_template-shaped JSON object from the configured LLM provider."""
+        llm_client = client or self.llm_client or AgentLlmJsonClient(settings=self.settings)
+        return llm_client.generate_json(
+            system_prompt=self._read_prompt("system_prompt.md"),
+            user_prompt=self._template_user_prompt(prompt),
+            response_name=response_name,
+        )
+
     def _template_user_prompt(self, prompt: str) -> str:
+        """Build the LLM instruction for current scenario_template v1 output."""
         return "\n\n".join(
             [
                 self._read_prompt("template_writer_prompt.md"),
-                "scenario.template.json과 scenario.json은 같은 구조를 공유하지만 template은 범위값을 가질 수 있다.",
-                "실행용 scenario sample, seed, 실행 개수, RunQueue는 생성하지 않는다.",
-                "최소 필드: schema 또는 version, scenario_id, intent.summary, ground_model, robot, 장애물 또는 보행자 조건.",
+                "scenario_template schema version 1 JSON 객체만 생성한다.",
+                "필수 root: schema, version, template_id, intent, corridor, obstacles, pedestrians, robot.",
+                "금지: template_path, current_template, sample_count, base_seed, experiment_id, run_id, scenario_id, ground_model, static_obstacles, pedestrians.path.",
+                "surface/prop/persona/encounter type은 catalog 허용값만 사용한다.",
                 f"사용자 prompt:\n{prompt}",
             ]
         )
 
     def _repair_user_prompt(self, prompt: str, template: object, validation: object) -> str:
+        """Build the one-shot LLM repair instruction for invalid template JSON."""
         return "\n\n".join(
             [
                 self._read_prompt("repair_prompt.md"),
@@ -153,13 +174,15 @@ class ScenarioGenerationV2Agent:
         )
 
     def _read_prompt(self, filename: str) -> str:
+        """Read a bundled prompt fragment for the scenario generation agent."""
         return (Path(__file__).parent / "prompts" / filename).read_text(encoding="utf-8")
 
     def _summary_from_template(self, template: dict, fallback: str) -> str:
+        """Prefer template intent text for summaries and fall back to deterministic plan text."""
         summary = template.get("summary")
         if isinstance(summary, str) and summary:
             return summary
         intent = template.get("intent")
-        if isinstance(intent, dict) and isinstance(intent.get("summary"), str) and intent["summary"]:
-            return intent["summary"]
+        if isinstance(intent, str) and intent:
+            return intent
         return fallback

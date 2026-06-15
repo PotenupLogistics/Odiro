@@ -1,8 +1,8 @@
 #include "Platform/Widget/ExperimentResultIterationButton.h"
 
-void UExperimentResultIterationButton::Configure(const FString& reportPath, const int32 runIndex)
+void UExperimentResultIterationButton::Configure(const FString& resultPath, const int32 runIndex)
 {
-	ReportPath = reportPath;
+	ResultPath = resultPath;
 	RunIndex = runIndex;
 
 	OnClicked.RemoveDynamic(this, &UExperimentResultIterationButton::HandleClicked);

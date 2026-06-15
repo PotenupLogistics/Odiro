@@ -11,12 +11,12 @@ namespace
 	const TCHAR* ScenarioInputDirectory = TEXT("Json/Input");
 	const TCHAR* ExperimentInputDirectory = TEXT("Json/Experiments");
 	const TCHAR* SimulatorLaunchPolicySpecInputDirectory = TEXT("Json/Input/PolicySpecs");
-	const TCHAR* EvaluationReportOutputDirectory = TEXT("Json/Output");
+	const TCHAR* LegacyEvaluationReportOutputDirectory = TEXT("Json/Output");
 	const TCHAR* SimulationRunStatusDirectory = TEXT("Saved/SimulationRuns");
 	const TCHAR* PreviewLauncherFileName = TEXT("Task-RunPreview.bat");
-	const TCHAR* LaunchEvaluationReportSchema = TEXT("episode_evaluation_report");
-	const TCHAR* LaunchEpisodeResultSchema = TEXT("episode_result");
-	const TCHAR* LaunchRunSummarySchema = TEXT("run_summary");
+	const TCHAR* LegacyEvaluationReportSchema = TEXT("episode_evaluation_report");
+	const TCHAR* EpisodeResultSchema = TEXT("episode_result");
+	const TCHAR* RunSummarySchema = TEXT("run_summary");
 	const TCHAR* SimulatorProcessFlags = TEXT("-nosound -unattended -NoLoadingScreen");
 
 	FString ToProjectRelativePath(FString filePath)
@@ -288,11 +288,11 @@ TArray<FString> USimulatorLaunchSubsystem::ListPolicySpecFiles() const
 	return policySpecFiles;
 }
 
-TArray<FString> USimulatorLaunchSubsystem::ListEvaluationReportFiles() const
+TArray<FString> USimulatorLaunchSubsystem::ListLegacyEvaluationReportFiles() const
 {
 	TArray<FString> reportFiles;
-	FindJsonFilesWithSchema(EvaluationReportOutputDirectory, LaunchEvaluationReportSchema, reportFiles);
-	FindJsonFilesWithSchema(SimulationRunStatusDirectory, LaunchEvaluationReportSchema, reportFiles);
+	FindJsonFilesWithSchema(LegacyEvaluationReportOutputDirectory, LegacyEvaluationReportSchema, reportFiles);
+	FindJsonFilesWithSchema(SimulationRunStatusDirectory, LegacyEvaluationReportSchema, reportFiles);
 	reportFiles.Sort();
 	return reportFiles;
 }
@@ -318,8 +318,8 @@ TArray<FString> USimulatorLaunchSubsystem::ListSimulationRunResultDirectories() 
 		}
 
 		if (!schema.Equals(TEXT("simulation_run_status"), ESearchCase::CaseSensitive)
-			&& !schema.Equals(LaunchEvaluationReportSchema, ESearchCase::CaseSensitive)
-			&& !schema.Equals(LaunchRunSummarySchema, ESearchCase::CaseSensitive))
+			&& !schema.Equals(LegacyEvaluationReportSchema, ESearchCase::CaseSensitive)
+			&& !schema.Equals(RunSummarySchema, ESearchCase::CaseSensitive))
 		{
 			continue;
 		}
@@ -336,23 +336,22 @@ TArray<FString> USimulatorLaunchSubsystem::ListSimulationRunResultDirectories() 
 	return resultDirectories;
 }
 
-TArray<FString> USimulatorLaunchSubsystem::ListEvaluationReportFilesInDirectory(const FString& runDirectory) const
+TArray<FString> USimulatorLaunchSubsystem::ListEpisodeResultFilesInDirectory(const FString& runDirectory) const
 {
 	TArray<FString> candidateFiles;
 	FindProjectFiles(runDirectory, TEXT("*.json"), candidateFiles);
 
-	TArray<FString> reportFiles;
+	TArray<FString> resultFiles;
 	for (const FString& candidateFile : candidateFiles)
 	{
-		if (HasJsonSchema(candidateFile, LaunchEvaluationReportSchema)
-			|| HasJsonSchema(candidateFile, LaunchEpisodeResultSchema))
+		if (HasJsonSchema(candidateFile, EpisodeResultSchema))
 		{
-			reportFiles.Add(candidateFile);
+			resultFiles.Add(candidateFile);
 		}
 	}
 
-	reportFiles.Sort();
-	return reportFiles;
+	resultFiles.Sort();
+	return resultFiles;
 }
 
 TArray<FString> USimulatorLaunchSubsystem::ListMeasurementLogFilesInDirectory(const FString& runDirectory) const

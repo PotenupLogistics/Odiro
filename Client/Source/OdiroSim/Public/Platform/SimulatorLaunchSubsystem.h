@@ -91,9 +91,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
 	TArray<FString> ListPolicySpecFiles() const;
 
-	// Json/Output 아래 evaluation report JSON 후보 목록
+	// Legacy episode_evaluation_report JSON candidates kept for compatibility tools.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
-	TArray<FString> ListEvaluationReportFiles() const;
+	TArray<FString> ListLegacyEvaluationReportFiles() const;
 
 	// Saved/SimulationRuns 아래 simulation run status JSON 후보 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
@@ -103,9 +103,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	TArray<FString> ListSimulationRunResultDirectories() const;
 
-	// 특정 run 결과 폴더 안의 evaluation report JSON 목록
+	// Canonical episode_result JSON files under one run result directory.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
-	TArray<FString> ListEvaluationReportFilesInDirectory(const FString& runDirectory) const;
+	TArray<FString> ListEpisodeResultFilesInDirectory(const FString& runDirectory) const;
 
 	// 특정 run 결과 폴더 안의 measurement JSONL 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")

@@ -184,7 +184,7 @@ namespace
 		return FilePath;
 	}
 
-	TArray<TSharedPtr<FJsonValue>> MakeStatusReportPathArrayField(const TArray<FString>& Values)
+	TArray<TSharedPtr<FJsonValue>> MakeStatusResultPathArrayField(const TArray<FString>& Values)
 	{
 		TArray<TSharedPtr<FJsonValue>> JsonValues;
 		JsonValues.Reserve(Values.Num());
@@ -208,7 +208,7 @@ namespace
 		SetOptionalStringField(Object, TEXT("current_pair_id"), Status.CurrentPairId);
 		Object->SetNumberField(TEXT("completed_runs"), Status.CompletedRuns);
 		Object->SetNumberField(TEXT("total_runs"), Status.TotalRuns);
-		Object->SetArrayField(TEXT("report_paths"), MakeStatusReportPathArrayField(Status.ReportPaths));
+		Object->SetArrayField(TEXT("report_paths"), MakeStatusResultPathArrayField(Status.ResultPaths));
 		Object->SetArrayField(TEXT("log_paths"), MakeStringArrayField(Status.LogPaths));
 		SetOptionalStringField(Object, TEXT("error"), Status.Error);
 		return Object;
@@ -245,7 +245,7 @@ bool FSimulationRunStatusJson::TryReadStatusJson(
 	TryReadStatusStringField(*RootObject, TEXT("current_pair_id"), OutDiagnostics, OutStatus.CurrentPairId, false);
 	TryReadStatusIntField(*RootObject, TEXT("completed_runs"), OutDiagnostics, OutStatus.CompletedRuns);
 	TryReadStatusIntField(*RootObject, TEXT("total_runs"), OutDiagnostics, OutStatus.TotalRuns);
-	TryReadStatusStringArrayField(*RootObject, TEXT("report_paths"), OutDiagnostics, OutStatus.ReportPaths);
+	TryReadStatusStringArrayField(*RootObject, TEXT("report_paths"), OutDiagnostics, OutStatus.ResultPaths);
 	TryReadStatusStringArrayField(*RootObject, TEXT("log_paths"), OutDiagnostics, OutStatus.LogPaths);
 	TryReadStatusStringField(*RootObject, TEXT("error"), OutDiagnostics, OutStatus.Error, false);
 

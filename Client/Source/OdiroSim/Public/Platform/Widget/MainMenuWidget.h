@@ -140,7 +140,7 @@ private:
 	void SetSelectedDeliveryBotSetupPath(const FString& deliveryBotSetupPath);
 	void SetSelectedPolicySpecPath(const FString& policySpecPath);
 	void SetSelectedExperimentResultRunDirectory(const FString& runDirectory);
-	void SetSelectedExperimentResultPath(const FString& reportPath);
+	void SetSelectedExperimentResultPath(const FString& resultPath);
 	void ClearExperimentResultIterationWidgets();
 	bool CreateScenarioFileFromTemplate(const FString& scenarioSetupPath);
 	bool OpenScenarioInEditor(const FString& scenarioSetupPath);
@@ -148,7 +148,7 @@ private:
 	void HandleRunInfoChanged(const struct FSimulatorRunInfo& runInfo);
 	void HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response);
 	void UpdateStatusText(const FString& extraMessage = FString());
-	void UpdateReportAndLogText();
+	void UpdateResultAndLogText();
 	void SetDiagnosticsText(const FString& message);
 	FString GetSelectedSetupPath() const;
 	FString GetSelectedScenarioSetupPath() const;
@@ -332,7 +332,7 @@ private:
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> LogPreviewTextBlock;
 
-	FString CurrentPreviewReportPath;
+	FString CurrentPreviewResultPath;
 	FString CurrentPreviewLogPath;
 	FTimerHandle RefreshTimerHandle;
 

@@ -691,9 +691,9 @@ void UScenarioRunnerSubsystem::CompleteCurrentRecord(
 
 	RunRecords.Add(CurrentRecord);
 	SaveEpisodeResultFilesForRecord(RunRecords.Last());
-	if (bSaveEvaluationReportJson)
+	if (bSaveLegacyEvaluationReportJson)
 	{
-		SaveEvaluationReportJsonForRecord(RunRecords.Last());
+		SaveLegacyEvaluationReportJsonForRecord(RunRecords.Last());
 	}
 	OnRunRecordCompleted.Broadcast(RunRecords.Last());
 
@@ -866,9 +866,9 @@ bool UScenarioRunnerSubsystem::SaveRunSummaryJson() const
 
 FString UScenarioRunnerSubsystem::BuildRunSummaryJsonFilePath() const
 {
-	const FString directory = EvaluationReportOutputDirectory.IsEmpty()
+	const FString directory = RunOutputDirectory.IsEmpty()
 		? TEXT("Json/Output")
-		: EvaluationReportOutputDirectory;
+		: RunOutputDirectory;
 	const FString resolvedDirectory = FPaths::IsRelative(directory)
 		? FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), directory))
 		: directory;
@@ -877,9 +877,9 @@ FString UScenarioRunnerSubsystem::BuildRunSummaryJsonFilePath() const
 
 FString UScenarioRunnerSubsystem::BuildEpisodeResultJsonFilePath(const FEpisodeRunRecord& runRecord) const
 {
-	const FString directory = EvaluationReportOutputDirectory.IsEmpty()
+	const FString directory = RunOutputDirectory.IsEmpty()
 		? TEXT("Json/Output")
-		: EvaluationReportOutputDirectory;
+		: RunOutputDirectory;
 	const FString resolvedDirectory = FPaths::IsRelative(directory)
 		? FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), directory))
 		: directory;
@@ -895,7 +895,7 @@ FString UScenarioRunnerSubsystem::BuildEpisodeEventsJsonlFilePath(const FEpisode
 	return FPaths::Combine(FPaths::GetPath(BuildEpisodeResultJsonFilePath(runRecord)), TEXT("events.jsonl"));
 }
 
-bool UScenarioRunnerSubsystem::SaveEvaluationReportJsonForRecord(FEpisodeRunRecord& runRecord) const
+bool UScenarioRunnerSubsystem::SaveLegacyEvaluationReportJsonForRecord(FEpisodeRunRecord& runRecord) const
 {
 	FString jsonString;
 	TArray<FString> diagnostics;
@@ -908,7 +908,7 @@ bool UScenarioRunnerSubsystem::SaveEvaluationReportJsonForRecord(FEpisodeRunReco
 		return false;
 	}
 
-	const FString outputFilePath = BuildEvaluationReportJsonFilePath(runRecord);
+	const FString outputFilePath = BuildLegacyEvaluationReportJsonFilePath(runRecord);
 	const FString outputDirectory = FPaths::GetPath(outputFilePath);
 	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true))
 	{
@@ -941,11 +941,11 @@ bool UScenarioRunnerSubsystem::SaveEvaluationReportJsonForRecord(FEpisodeRunReco
 	return true;
 }
 
-FString UScenarioRunnerSubsystem::BuildEvaluationReportJsonFilePath(const FEpisodeRunRecord& runRecord) const
+FString UScenarioRunnerSubsystem::BuildLegacyEvaluationReportJsonFilePath(const FEpisodeRunRecord& runRecord) const
 {
-	const FString directory = EvaluationReportOutputDirectory.IsEmpty()
+	const FString directory = RunOutputDirectory.IsEmpty()
 		? TEXT("Json/Output")
-		: EvaluationReportOutputDirectory;
+		: RunOutputDirectory;
 	const FString resolvedDirectory = FPaths::IsRelative(directory)
 		? FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), directory))
 		: directory;

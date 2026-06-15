@@ -24,12 +24,13 @@ entry:
   - Client/Tools/Dev.ps1
   - Client/Tools/RunPreview.ps1
 keep:
-  - Platform UI reads simulator state via status/report/log files, not simulator world objects.
+  - Platform UI reads simulator state via status/result/log files, not simulator world objects.
   - Client/Tools use Client/Tools/Common.ps1, never root tools/common.ps1.
   - Client prerequisite checks cover Windows Unreal C++ only; Android/iOS/macOS/MAUI are not failures.
   - Legacy Client root scripts such as BuildProject.bat, RunPreview.bat, and RunPythonPolicyServer.bat stay folded into Task-* wrappers.
   - Simulator launch public contract is `-Experiment=<ExperimentRef>` with optional `-RunId=<RunId>` and `-SampleIds=<Ids>`.
   - MainMenu launches experiment folders directly; child simulator runs write `runs/<RunId>/status.json` under the selected experiment folder.
+  - MainMenu result detail reads canonical `episode_result` files; legacy evaluation reports remain only for compatibility analysis tools.
 verify:
   - launcher command contract tests for launch arg changes
   - runtime log plus status JSON for process changes

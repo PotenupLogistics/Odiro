@@ -238,8 +238,8 @@ bool FSimulationRunStatusJsonWriteTest::RunTest(const FString& parameters)
 	status.CurrentPairId = TEXT("sample_0");
 	status.CompletedRuns = 1;
 	status.TotalRuns = 5;
-	status.ReportPaths.Add(TEXT("Json/Output/sample_report.json"));
-	status.ReportPaths.Add(FPaths::ConvertRelativePathToFull(FPaths::Combine(
+	status.ResultPaths.Add(TEXT("Json/Output/sample_report.json"));
+	status.ResultPaths.Add(FPaths::ConvertRelativePathToFull(FPaths::Combine(
 		FPaths::ProjectDir(),
 		TEXT("Json/Output/absolute_sample_report.json"))));
 	status.LogPaths.Add(TEXT("Saved/AnalysisLogs/sample.jsonl"));
@@ -252,9 +252,9 @@ bool FSimulationRunStatusJsonWriteTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("status JSON writes"), FSimulationRunStatusJson::TryWriteStatusJson(status, json, diagnostics));
 	TestEqual(TEXT("status diagnostics"), diagnostics.Num(), 0);
 	TestTrue(TEXT("state field"), json.Contains(TEXT("\"state\": \"Running\"")));
-	TestTrue(TEXT("report path"), json.Contains(TEXT("Json/Output/sample_report.json")));
-	TestTrue(TEXT("absolute report path is written project-relative"), json.Contains(TEXT("Json/Output/absolute_sample_report.json")));
-	TestFalse(TEXT("report path does not include project root"), json.Contains(normalizedProjectDir));
+	TestTrue(TEXT("result path"), json.Contains(TEXT("Json/Output/sample_report.json")));
+	TestTrue(TEXT("absolute result path is written project-relative"), json.Contains(TEXT("Json/Output/absolute_sample_report.json")));
+	TestFalse(TEXT("result path does not include project root"), json.Contains(normalizedProjectDir));
 	TestTrue(TEXT("log path"), json.Contains(TEXT("Saved/AnalysisLogs/sample.jsonl")));
 
 	return true;
@@ -291,7 +291,7 @@ bool FSimulationRunStatusJsonReadTest::RunTest(const FString& parameters)
 	TestEqual(TEXT("state"), status.State, ESimulationRunState::Completed);
 	TestEqual(TEXT("completed runs"), status.CompletedRuns, 5);
 	TestEqual(TEXT("total runs"), status.TotalRuns, 5);
-	TestEqual(TEXT("report count"), status.ReportPaths.Num(), 1);
+	TestEqual(TEXT("result count"), status.ResultPaths.Num(), 1);
 	TestEqual(TEXT("log count"), status.LogPaths.Num(), 1);
 	TestTrue(TEXT("nullable current pair"), status.CurrentPairId.IsEmpty());
 	TestTrue(TEXT("nullable error"), status.Error.IsEmpty());

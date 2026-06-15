@@ -20,7 +20,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogMainMenuWidget, Log, All);
 
 namespace
 {
-	const int32 ReportPreviewCharacterLimit = 4000;
+	const int32 ResultPreviewCharacterLimit = 4000;
 	const int32 LogPreviewEdgeLineCount = 5;
 	const TCHAR* DefaultExperimentRef = TEXT("Json/Experiments/FeatureProbeNoPedestrians");
 	const TCHAR* MainMenuDefaultSimulationMapId = TEXT("ScenarioSimulationMap");
@@ -44,9 +44,9 @@ namespace
 		ExperimentResult,
 	};
 
-	struct FExperimentResultReportItem
+	struct FExperimentEpisodeResultItem
 	{
-		FString ReportPath;
+		FString ResultPath;
 		int32 RunIndex = INDEX_NONE;
 	};
 
@@ -130,19 +130,19 @@ namespace
 		return FString::Join(lines, TEXT("\n"));
 	}
 
-	bool TryReadExperimentResultReportItem(const FString& reportPath, FExperimentResultReportItem& outItem)
+	bool TryReadExperimentEpisodeResultItem(const FString& resultPath, FExperimentEpisodeResultItem& outItem)
 	{
-		outItem = FExperimentResultReportItem{};
-		outItem.ReportPath = reportPath;
+		outItem = FExperimentEpisodeResultItem{};
+		outItem.ResultPath = resultPath;
 
-		FString reportJson;
-		if (!FFileHelper::LoadFileToString(reportJson, *FExperimentSettingJson::ResolveProjectPath(reportPath)))
+		FString resultJson;
+		if (!FFileHelper::LoadFileToString(resultJson, *FExperimentSettingJson::ResolveProjectPath(resultPath)))
 		{
 			return false;
 		}
 
 		TSharedPtr<FJsonObject> rootObject;
-		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(reportJson);
+		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(resultJson);
 		if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
 		{
 			return false;
@@ -154,59 +154,37 @@ namespace
 			return false;
 		}
 
-		if (schema.Equals(TEXT("episode_result"), ESearchCase::CaseSensitive))
+		if (!schema.Equals(TEXT("episode_result"), ESearchCase::CaseSensitive))
 		{
-			const TSharedPtr<FJsonValue> sampleValue = rootObject->TryGetField(TEXT("sample"));
-			if (sampleValue.IsValid() && sampleValue->Type == EJson::Object)
+			return false;
+		}
+
+		const TSharedPtr<FJsonValue> sampleValue = rootObject->TryGetField(TEXT("sample"));
+		if (sampleValue.IsValid() && sampleValue->Type == EJson::Object)
+		{
+			FString sampleId;
+			if (sampleValue->AsObject()->TryGetStringField(TEXT("sample_id"), sampleId))
 			{
-				FString sampleId;
-				if (sampleValue->AsObject()->TryGetStringField(TEXT("sample_id"), sampleId))
-				{
-					outItem.RunIndex = FCString::Atoi(*sampleId);
-				}
+				outItem.RunIndex = FCString::Atoi(*sampleId);
 			}
-			return true;
-		}
-
-		if (!schema.Equals(TEXT("episode_evaluation_report"), ESearchCase::CaseSensitive))
-		{
-			return false;
-		}
-
-		const TSharedPtr<FJsonValue> runValue = rootObject->TryGetField(TEXT("run"));
-		if (!runValue.IsValid() || runValue->Type != EJson::Object)
-		{
-			return false;
-		}
-
-		const TSharedPtr<FJsonObject> runObject = runValue->AsObject();
-		if (!runObject.IsValid())
-		{
-			return false;
-		}
-
-		double runIndex = 0.0;
-		if (runObject->TryGetNumberField(TEXT("run_index"), runIndex))
-		{
-			outItem.RunIndex = FMath::RoundToInt(runIndex);
 		}
 		return true;
 	}
 
-	TArray<FExperimentResultReportItem> BuildExperimentResultReportItems(const TArray<FString>& reportPaths)
+	TArray<FExperimentEpisodeResultItem> BuildExperimentEpisodeResultItems(const TArray<FString>& resultPaths)
 	{
-		TArray<FExperimentResultReportItem> items;
-		items.Reserve(reportPaths.Num());
-		for (const FString& reportPath : reportPaths)
+		TArray<FExperimentEpisodeResultItem> items;
+		items.Reserve(resultPaths.Num());
+		for (const FString& resultPath : resultPaths)
 		{
-			FExperimentResultReportItem item;
-			if (TryReadExperimentResultReportItem(reportPath, item))
+			FExperimentEpisodeResultItem item;
+			if (TryReadExperimentEpisodeResultItem(resultPath, item))
 			{
 				items.Add(item);
 			}
 		}
 
-		items.Sort([](const FExperimentResultReportItem& left, const FExperimentResultReportItem& right)
+		items.Sort([](const FExperimentEpisodeResultItem& left, const FExperimentEpisodeResultItem& right)
 		{
 			if (left.RunIndex != right.RunIndex)
 			{
@@ -221,7 +199,7 @@ namespace
 				return left.RunIndex < right.RunIndex;
 			}
 
-			return left.ReportPath < right.ReportPath;
+			return left.ResultPath < right.ResultPath;
 		});
 		return items;
 	}
@@ -427,7 +405,7 @@ void UMainMenuWidget::NativeConstruct()
 	}
 
 	UpdateStatusText();
-	UpdateReportAndLogText();
+	UpdateResultAndLogText();
 }
 
 void UMainMenuWidget::NativeDestruct()
@@ -516,7 +494,7 @@ void UMainMenuWidget::RefreshFromSubsystem()
 	}
 
 	UpdateStatusText();
-	UpdateReportAndLogText();
+	UpdateResultAndLogText();
 }
 
 void UMainMenuWidget::HandleSetupSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType)
@@ -696,7 +674,7 @@ void UMainMenuWidget::HandleExperimentResultDetailsRequested(UFileListItemWidget
 
 	SetSelectedExperimentResultRunDirectory(itemWidget->GetOriginalPath());
 	RefreshExperimentResultIterationList();
-	UpdateReportAndLogText();
+	UpdateResultAndLogText();
 	SetExperimentResultDetailVisible(true);
 }
 
@@ -704,9 +682,9 @@ void UMainMenuWidget::HandleExperimentResultIterationButtonClicked(UExperimentRe
 {
 	if (!IsValid(buttonWidget)) return;
 
-	SetSelectedExperimentResultPath(buttonWidget->GetReportPath());
+	SetSelectedExperimentResultPath(buttonWidget->GetResultPath());
 	RefreshExperimentResultIterationList();
-	UpdateReportAndLogText();
+	UpdateResultAndLogText();
 }
 
 void UMainMenuWidget::HandleOpenPolicyTextEditorClicked()
@@ -792,40 +770,19 @@ void UMainMenuWidget::HandleRefreshClicked()
 
 void UMainMenuWidget::HandleSendToAiClicked()
 {
-	if (CurrentPreviewReportPath.IsEmpty())
+	if (CurrentPreviewResultPath.IsEmpty())
 	{
 		if (AiAnalysisTextBlock)
 		{
-			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: no evaluation report selected.")));
-		}
-		return;
-	}
-
-	if (CurrentPreviewLogPath.IsEmpty())
-	{
-		if (AiAnalysisTextBlock)
-		{
-			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: no measurement log available.")));
-		}
-		return;
-	}
-
-	UPlatformAnalysisAiSubsystem* analysisSubsystem = GetPlatformAnalysisAiSubsystem();
-	if (!analysisSubsystem)
-	{
-		if (AiAnalysisTextBlock)
-		{
-			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: subsystem not found.")));
+			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: no episode result selected.")));
 		}
 		return;
 	}
 
 	if (AiAnalysisTextBlock)
 	{
-		AiAnalysisTextBlock->SetText(FText::FromString(TEXT("Analyzing...")));
+		AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis still requires a legacy evaluation report. episode_result support is pending.")));
 	}
-
-	analysisSubsystem->RequestAnalysisForReport(CurrentPreviewReportPath, CurrentPreviewLogPath);
 }
 
 void UMainMenuWidget::HandleShowScenarioClicked()
@@ -1463,38 +1420,38 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 		return;
 	}
 
-	TArray<FString> reportPaths = subsystem->ListEvaluationReportFilesInDirectory(SelectedExperimentResultRunDirectory);
+	TArray<FString> resultPaths = subsystem->ListEpisodeResultFilesInDirectory(SelectedExperimentResultRunDirectory);
 	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
 	if (FPaths::GetPath(runInfo.StatusPath).Equals(SelectedExperimentResultRunDirectory, ESearchCase::IgnoreCase))
 	{
-		for (const FString& reportPath : runInfo.Status.ReportPaths)
+		for (const FString& resultPath : runInfo.Status.ResultPaths)
 		{
-			reportPaths.AddUnique(reportPath);
+			resultPaths.AddUnique(resultPath);
 		}
 	}
 
-	const TArray<FExperimentResultReportItem> reportItems = BuildExperimentResultReportItems(reportPaths);
-	if (reportItems.IsEmpty())
+	const TArray<FExperimentEpisodeResultItem> resultItems = BuildExperimentEpisodeResultItems(resultPaths);
+	if (resultItems.IsEmpty())
 	{
 		SetSelectedExperimentResultPath(FString());
 		return;
 	}
 
-	bool bSelectedReportStillExists = false;
-	for (const FExperimentResultReportItem& reportItem : reportItems)
+	bool bSelectedResultStillExists = false;
+	for (const FExperimentEpisodeResultItem& resultItem : resultItems)
 	{
-		if (reportItem.ReportPath.Equals(SelectedExperimentResultPath, ESearchCase::IgnoreCase))
+		if (resultItem.ResultPath.Equals(SelectedExperimentResultPath, ESearchCase::IgnoreCase))
 		{
-			bSelectedReportStillExists = true;
+			bSelectedResultStillExists = true;
 			break;
 		}
 	}
-	if (!bSelectedReportStillExists)
+	if (!bSelectedResultStillExists)
 	{
-		SetSelectedExperimentResultPath(reportItems[0].ReportPath);
+		SetSelectedExperimentResultPath(resultItems[0].ResultPath);
 	}
 
-	for (const FExperimentResultReportItem& reportItem : reportItems)
+	for (const FExperimentEpisodeResultItem& resultItem : resultItems)
 	{
 		USizeBox* sizeBox = WidgetTree->ConstructWidget<USizeBox>(
 			USizeBox::StaticClass(),
@@ -1505,13 +1462,13 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 		UTextBlock* label = MakeTextBlock(
 			WidgetTree,
 			TEXT("ExperimentResultIterationButtonLabel"),
-			reportItem.RunIndex == INDEX_NONE ? FString(TEXT("?")) : FString::FromInt(reportItem.RunIndex),
+			resultItem.RunIndex == INDEX_NONE ? FString(TEXT("?")) : FString::FromInt(resultItem.RunIndex),
 			18);
 
 		if (!sizeBox || !button || !label) continue;
 
-		const bool bSelected = reportItem.ReportPath.Equals(SelectedExperimentResultPath, ESearchCase::IgnoreCase);
-		button->Configure(reportItem.ReportPath, reportItem.RunIndex);
+		const bool bSelected = resultItem.ResultPath.Equals(SelectedExperimentResultPath, ESearchCase::IgnoreCase);
+		button->Configure(resultItem.ResultPath, resultItem.RunIndex);
 		button->SetBackgroundColor(bSelected
 			? FLinearColor(0.16f, 0.42f, 0.78f, 1.0f)
 			: FLinearColor(0.10f, 0.11f, 0.14f, 1.0f));
@@ -1584,9 +1541,9 @@ void UMainMenuWidget::SetSelectedExperimentResultRunDirectory(const FString& run
 	}
 }
 
-void UMainMenuWidget::SetSelectedExperimentResultPath(const FString& reportPath)
+void UMainMenuWidget::SetSelectedExperimentResultPath(const FString& resultPath)
 {
-	SelectedExperimentResultPath = reportPath.TrimStartAndEnd();
+	SelectedExperimentResultPath = resultPath.TrimStartAndEnd();
 	SelectedExperimentResultPath.ReplaceInline(TEXT("\\"), TEXT("/"));
 }
 
@@ -1709,7 +1666,7 @@ void UMainMenuWidget::HandleRunInfoChanged(const FSimulatorRunInfo& runInfo)
 	{
 		RefreshExperimentResultList();
 	}
-	UpdateReportAndLogText();
+	UpdateResultAndLogText();
 }
 
 void UMainMenuWidget::HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response)
@@ -1738,7 +1695,7 @@ void UMainMenuWidget::HandleAnalysisCompleted(const FPlatformAnalysisAiResponse&
 	if (!response.ResponseBody.IsEmpty())
 	{
 		lines.Add(TEXT(""));
-		lines.Add(TruncatePreview(response.ResponseBody, ReportPreviewCharacterLimit));
+		lines.Add(TruncatePreview(response.ResponseBody, ResultPreviewCharacterLimit));
 	}
 
 	AiAnalysisTextBlock->SetText(FText::FromString(JoinStringLines(lines)));
@@ -1817,7 +1774,7 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 	StatusTextBlock->SetText(FText::FromString(JoinStringLines(lines)));
 }
 
-void UMainMenuWidget::UpdateReportAndLogText()
+void UMainMenuWidget::UpdateResultAndLogText()
 {
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
 	if (!subsystem)
@@ -1827,28 +1784,28 @@ void UMainMenuWidget::UpdateReportAndLogText()
 
 	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
 
-	CurrentPreviewReportPath = SelectedExperimentResultPath;
+	CurrentPreviewResultPath = SelectedExperimentResultPath;
 	CurrentPreviewLogPath.Reset();
 
 	if (ReportTextBlock)
 	{
-		TArray<FString> reportLines;
-		reportLines.Add(SelectedExperimentResultRunDirectory.IsEmpty()
+		TArray<FString> resultLines;
+		resultLines.Add(SelectedExperimentResultRunDirectory.IsEmpty()
 			? TEXT("Experiment Run: <none>")
 			: FString::Printf(TEXT("Experiment Run: %s"), *SelectedExperimentResultRunDirectory));
 
 		if (!SelectedExperimentResultPath.IsEmpty())
 		{
-			FString reportJson;
-			if (FFileHelper::LoadFileToString(reportJson, *FExperimentSettingJson::ResolveProjectPath(SelectedExperimentResultPath)))
+			FString resultJson;
+			if (FFileHelper::LoadFileToString(resultJson, *FExperimentSettingJson::ResolveProjectPath(SelectedExperimentResultPath)))
 			{
-				reportLines.Add(TEXT(""));
-				reportLines.Add(FString::Printf(TEXT("Details: %s"), *SelectedExperimentResultPath));
-				reportLines.Add(TruncatePreview(reportJson, ReportPreviewCharacterLimit));
+				resultLines.Add(TEXT(""));
+				resultLines.Add(FString::Printf(TEXT("Episode Result: %s"), *SelectedExperimentResultPath));
+				resultLines.Add(TruncatePreview(resultJson, ResultPreviewCharacterLimit));
 			}
 		}
 
-		ReportTextBlock->SetText(FText::FromString(JoinStringLines(reportLines)));
+		ReportTextBlock->SetText(FText::FromString(JoinStringLines(resultLines)));
 	}
 
 	if (LogPreviewTextBlock)

@@ -10,7 +10,7 @@ DECLARE_MULTICAST_DELEGATE_OneParam(
 	FExperimentResultIterationClickedNative,
 	UExperimentResultIterationButton*);
 
-// Compact selector button for one evaluation-report iteration in the experiment result detail page.
+// Compact selector button for one episode_result entry in the experiment result detail page.
 UCLASS()
 class ODIROSIM_API UExperimentResultIterationButton : public UButton
 {
@@ -19,9 +19,10 @@ class ODIROSIM_API UExperimentResultIterationButton : public UButton
 public:
 	FExperimentResultIterationClickedNative OnIterationClicked;
 
-	void Configure(const FString& reportPath, int32 runIndex);
+	// Stores the selected episode_result path and label index for click callbacks.
+	void Configure(const FString& resultPath, int32 runIndex);
 
-	FString GetReportPath() const { return ReportPath; }
+	FString GetResultPath() const { return ResultPath; }
 	int32 GetRunIndex() const { return RunIndex; }
 
 protected:
@@ -31,6 +32,9 @@ private:
 	UFUNCTION()
 	void HandleClicked();
 
-	FString ReportPath;
+	// Project-relative or absolute episode_result JSON path represented by this button.
+	FString ResultPath;
+
+	// Numeric label used by the compact result selector.
 	int32 RunIndex = INDEX_NONE;
 };

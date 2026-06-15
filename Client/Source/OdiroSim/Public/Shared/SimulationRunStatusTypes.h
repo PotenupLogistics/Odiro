@@ -58,7 +58,7 @@ struct ODIROSIM_API FSimulationRunStatus
 
 	// Completed result JSON paths exposed to the launcher UI.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Status")
-	TArray<FString> ReportPaths;
+	TArray<FString> ResultPaths;
 
 	// Generated measurement or event log paths exposed to the launcher UI.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Status")

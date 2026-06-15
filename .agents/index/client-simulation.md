@@ -6,6 +6,8 @@ paths:
   - Client/Source/OdiroSim/Private/Scenario/**
   - Client/Source/OdiroSim/Public/Episode/**
   - Client/Source/OdiroSim/Private/Episode/**
+  - Client/Source/OdiroSim/Public/Shared/**
+  - Client/Source/OdiroSim/Private/Shared/**
   - Client/Json/Input/**
   - contracts/specs/**
 entry:
@@ -13,6 +15,9 @@ entry:
   - ScenarioSchemaTypes.h
   - ScenarioTemplateTypes.h
   - ScenarioSampleTypes.h
+  - ScenarioTemplateJson.h / .cpp
+  - ScenarioSampleJson.h / .cpp
+  - ScenarioTemplateSampleJsonTest.cpp
   - ScenarioSimulationSubsystem.h / .cpp
   - ScenarioRunnerSubsystem.h / .cpp
   - EpisodeMeasurementLogSubsystem.h / .cpp
@@ -27,6 +32,7 @@ keep:
 verify:
   - contract specs vs sample JSON alignment
   - scenario_template/scenario_sample docs vs Client shared schema type alignment
+  - ScenarioTemplateJson/ScenarioSampleJson parse, version mismatch, and round-trip automation tests
   - focused automation tests for Scenario/Episode changes
   - Client/Task-RunPreview.bat smoke when wrapper supports the changed mode
 related:

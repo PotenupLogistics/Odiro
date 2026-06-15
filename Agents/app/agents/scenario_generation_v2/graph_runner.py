@@ -213,6 +213,9 @@ class ScenarioGenerationGraphRunnerV2:
                 {"level": "warning", "field": issue.field, "message": issue.message}
                 for issue in validation.errors
             ]
+            repaired_update = self._llm_repair_candidate_update(prompt, candidate, validation, diagnostics)
+            if repaired_update is not None:
+                return repaired_update
             return {
                 "llm_template_candidate": candidate,
                 "llm_validation": validation,
@@ -231,6 +234,74 @@ class ScenarioGenerationGraphRunnerV2:
                 ],
                 "diagnostics": [
                     {"level": "warning", "field": "llm", "message": "LLM-assisted graph node failed."}
+                ],
+            }
+
+    def _llm_repair_candidate_update(
+        self,
+        prompt: str,
+        candidate: dict[str, Any],
+        validation: V2ValidationResult,
+        diagnostics: list[dict[str, Any]],
+    ) -> ScenarioGenerationGraphStateV2 | None:
+        """Try one validator-error-guided LLM repair for an invalid LLM candidate."""
+        if not self.settings.v2AgentLlmRepairEnabled or self.settings.v2AgentLlmMaxRepairAttempts <= 0:
+            return None
+        try:
+            repaired = self.agent._repair_llm_template(
+                prompt,
+                candidate,
+                validation,
+                response_name="scenario_graph_repair",
+            )
+            repaired = self.agent.repair_handler.repair(repaired)
+            repaired_validation = self.agent.validator.validate(repaired)
+            repair_diagnostics = [
+                *diagnostics,
+                {"level": "repair", "field": "scenario_template", "message": "LLM-assisted repair was attempted."},
+            ]
+            if repaired_validation.valid:
+                return {
+                    "llm_template_candidate": repaired,
+                    "llm_validation": repaired_validation,
+                    "llm_warnings": [
+                        V2ValidationIssue(
+                            field="scenario_template",
+                            message="LLM-assisted repair produced a valid scenario_template.",
+                        )
+                    ],
+                    "diagnostics": repair_diagnostics,
+                }
+            return {
+                "llm_template_candidate": candidate,
+                "llm_validation": validation,
+                "llm_warnings": [
+                    V2ValidationIssue(
+                        field="scenario_template",
+                        message="LLM-assisted repair failed; deterministic fallback template was used.",
+                    )
+                ],
+                "diagnostics": [
+                    *repair_diagnostics,
+                    *[
+                        {"level": "warning", "field": issue.field, "message": issue.message}
+                        for issue in repaired_validation.errors
+                    ],
+                ],
+            }
+        except Exception:
+            return {
+                "llm_template_candidate": candidate,
+                "llm_validation": validation,
+                "llm_warnings": [
+                    V2ValidationIssue(
+                        field="scenario_template",
+                        message="LLM-assisted repair failed; deterministic fallback template was used.",
+                    )
+                ],
+                "diagnostics": [
+                    *diagnostics,
+                    {"level": "warning", "field": "llm_repair", "message": "LLM-assisted repair failed."},
                 ],
             }
 

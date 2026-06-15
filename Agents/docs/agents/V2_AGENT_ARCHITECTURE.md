@@ -59,15 +59,17 @@ template이 dict인지, `scenario_id`, `schema/version`, `intent.summary`, `grou
 
 ## ScenarioGenerationV2 LLM mode
 
-LLM mode는 `V2_AGENT_LLM_ENABLED=true`일 때만 사용합니다. LangGraph의 `interpret_user_prompt_node`는 `prompts/system_prompt.md`와 `prompts/template_writer_prompt.md`를 읽고 JSON-only `scenario_template` 후보 출력을 요청합니다.
+LLM mode는 `V2_AGENT_LLM_ENABLED=true`일 때만 사용합니다. LangGraph의 `interpret_user_prompt_node`는 `prompts/system_prompt.md`와 `prompts/template_writer_prompt.md`를 읽고 JSON Schema structured output 기반 `scenario_template` 후보 출력을 요청합니다.
 
 LLM output 처리 순서:
 
-1. JSON object 또는 Markdown JSON block을 파싱합니다.
+1. 가능하면 `scenario_template_v1` JSON Schema structured output으로 JSON object를 요청합니다.
 2. `TemplateValidator`를 통과하면 LangGraph response의 template 후보로 사용합니다.
-3. 검증 실패 시 warning을 남기고 deterministic graph path를 사용합니다.
-4. 최종 template이 invalid이면 deterministic repair/fallback node를 거칩니다.
-5. Scenario generation v2 response는 graph 실행 결과이므로 `generation_mode="langgraph"`를 유지합니다.
+3. 검증 실패 시 deterministic repair를 먼저 적용합니다.
+4. 그래도 invalid이면 validator errors, 원본 prompt, invalid template을 포함한 LLM-assisted repair를 1회 시도합니다.
+5. repair 결과가 `TemplateValidator`를 통과하면 repaired template을 사용합니다.
+6. repair도 실패하면 warning을 남기고 deterministic graph path/fallback을 사용합니다.
+7. Scenario generation v2 response는 graph 실행 결과이므로 `generation_mode="langgraph"`를 유지합니다.
 
 ## ResultAnalysisV2 흐름
 

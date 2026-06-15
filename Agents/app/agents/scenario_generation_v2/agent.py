@@ -9,6 +9,7 @@ from app.agents.scenario_generation_v2.intent_parser import IntentParser
 from app.agents.scenario_generation_v2.repair_handler import RepairHandler
 from app.agents.scenario_generation_v2.request_normalizer import RequestNormalizer
 from app.agents.scenario_generation_v2.response_builder import ResponseBuilder
+from app.agents.scenario_generation_v2.scenario_template_schema import scenario_template_v1_response_schema
 from app.agents.scenario_generation_v2.scenario_type_selector import ScenarioTypeSelector
 from app.agents.scenario_generation_v2.template_json_writer import TemplateJsonWriter
 from app.agents.scenario_generation_v2.template_planner import TemplatePlanner
@@ -114,9 +115,11 @@ class ScenarioGenerationV2Agent:
 
         if self.settings.v2AgentLlmRepairEnabled and self.settings.v2AgentLlmMaxRepairAttempts > 0:
             try:
-                repaired = client.generate_json(
-                    system_prompt=self._read_prompt("system_prompt.md"),
-                    user_prompt=self._repair_user_prompt(prompt, template, validation),
+                repaired = self._repair_llm_template(
+                    prompt,
+                    template,
+                    validation,
+                    client=client,
                     response_name="scenario_template_repair",
                 )
                 repaired = self.repair_handler.repair(repaired)
@@ -147,6 +150,25 @@ class ScenarioGenerationV2Agent:
             system_prompt=self._read_prompt("system_prompt.md"),
             user_prompt=self._template_user_prompt(prompt),
             response_name=response_name,
+            response_schema=scenario_template_v1_response_schema(),
+        )
+
+    def _repair_llm_template(
+        self,
+        prompt: str,
+        template: object,
+        validation: object,
+        *,
+        client: AgentLlmClient | None = None,
+        response_name: str,
+    ) -> dict:
+        """Request a validator-error-guided scenario_template repair from the LLM."""
+        llm_client = client or self.llm_client or AgentLlmJsonClient(settings=self.settings)
+        return llm_client.generate_json(
+            system_prompt=self._read_prompt("system_prompt.md"),
+            user_prompt=self._repair_user_prompt(prompt, template, validation),
+            response_name=response_name,
+            response_schema=scenario_template_v1_response_schema(),
         )
 
     def _template_user_prompt(self, prompt: str) -> str:

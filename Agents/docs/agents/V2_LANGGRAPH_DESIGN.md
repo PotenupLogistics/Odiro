@@ -8,7 +8,7 @@ v2 Agent는 deterministic/rule-based 경로와 optional LLM fallback 구조를 �
 
 ## 2. 적용 범위
 
-Scenario generation v2는 `/api/v2/scenarios/generate`에서 항상 LangGraph runner를 사용합니다. `V2_AGENT_LLM_ENABLED=false`이면 deterministic graph path만 사용하고, `true`이면 graph 내부 LLM-assisted node가 OpenAI JSON 호출을 시도한 뒤 validator/fallback을 거칩니다.
+Scenario generation v2는 `/api/v2/scenarios/generate`에서 항상 LangGraph runner를 사용합니다. `V2_AGENT_LLM_ENABLED=false`이면 deterministic graph path만 사용하고, `true`이면 graph 내부 LLM-assisted node가 OpenAI JSON Schema structured output 호출을 시도한 뒤 validator/repair/fallback을 거칩니다.
 
 `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아닙니다. 이 설정은 ResultAnalysisV2 graph 경로와 legacy rollback 호환을 위해 유지합니다.
 
@@ -147,6 +147,7 @@ Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터�
 
 1. ScenarioGenerationV2 runner는 실제 `StateGraph` 경로를 기본으로 유지합니다.
 2. `V2_AGENT_LLM_ENABLED`로 scenario generation graph 내부 LLM-assisted node 사용 여부를 제어합니다.
-3. ResultAnalysisV2 graph-compatible node pipeline을 기존 v2 response schema와 동등하게 검증합니다.
-4. v2 response schema와 Unreal template schema가 확정되면 graph state 타입을 더 엄격하게 좁힙니다.
-5. 운영 환경에서 LLM validator failure와 fallback warning 비율을 확인합니다.
+3. LLM generation은 `scenario_template_v1` structured output schema를 우선 사용하고, 모든 결과는 `TemplateValidator`를 통과해야 합니다.
+4. ResultAnalysisV2 graph-compatible node pipeline을 기존 v2 response schema와 동등하게 검증합니다.
+5. v2 response schema와 Unreal template schema가 확정되면 graph state 타입을 더 엄격하게 좁힙니다.
+6. 운영 환경에서 LLM validator failure와 fallback warning 비율을 확인합니다.

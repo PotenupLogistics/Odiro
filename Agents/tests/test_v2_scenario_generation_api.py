@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from app.agents.common.json_response_parser import parse_json_response
 from app.agents.scenario_generation_v2 import ScenarioGenerationV2Agent
 from app.agents.scenario_generation_v2.graph_runner import ScenarioGenerationGraphRunnerV2
+from app.agents.scenario_generation_v2.scenario_template_schema import scenario_template_v1_json_schema
 from app.core.settings import Settings
 from app.main import app
 from app.models.scenario_generation_v2 import ScenarioGenerateV2Request
@@ -15,12 +16,13 @@ class _FakeJsonClient:
         self.responses = list(responses)
         self.calls = []
 
-    def generate_json(self, *, system_prompt: str, user_prompt: str, response_name: str):
+    def generate_json(self, *, system_prompt: str, user_prompt: str, response_name: str, response_schema=None):
         self.calls.append(
             {
                 "system_prompt": system_prompt,
                 "user_prompt": user_prompt,
                 "response_name": response_name,
+                "response_schema": response_schema,
             }
         )
         response = self.responses.pop(0)
@@ -123,7 +125,7 @@ def test_v2_scenario_endpoint_uses_langgraph_when_graph_flag_is_false(monkeypatc
     assert payload["validation"]["valid"] is True
 
 
-def test_v2_scenario_graph_calls_llm_node_and_falls_back_when_invalid() -> None:
+def test_v2_scenario_graph_calls_llm_repair_and_falls_back_when_invalid() -> None:
     fake = _FakeJsonClient([{"schema": "scenario_template", "version": 1}])
     runner = ScenarioGenerationGraphRunnerV2(
         settings=Settings(_env_file=None, v2AgentLlmEnabled=True),
@@ -139,10 +141,77 @@ def test_v2_scenario_graph_calls_llm_node_and_falls_back_when_invalid() -> None:
     assert response.template["schema"] == "scenario_template"
     assert fake.calls
     assert fake.calls[0]["response_name"] == "scenario_graph_intent"
+    assert len(fake.calls) == 2
+    assert fake.calls[1]["response_name"] == "scenario_graph_repair"
     assert any(
-        warning.message == "LLM output validation failed; deterministic fallback template was used."
+        warning.message == "LLM-assisted repair failed; deterministic fallback template was used."
         for warning in response.validation.warnings
     )
+
+
+def test_v2_scenario_template_schema_includes_validator_required_shape() -> None:
+    schema = scenario_template_v1_json_schema()
+
+    assert schema["type"] == "object"
+    assert set(schema["required"]) == {
+        "schema",
+        "version",
+        "template_id",
+        "intent",
+        "corridor",
+        "obstacles",
+        "pedestrians",
+        "robot",
+    }
+    assert schema["properties"]["schema"]["const"] == "scenario_template"
+    assert schema["properties"]["version"]["const"] == 1
+    corridor = schema["properties"]["corridor"]
+    assert {"axis", "walkway_width_m", "building_side", "curb_side", "segments"} <= set(corridor["required"])
+    assert corridor["properties"]["axis"]["properties"]["type"]["const"] == "polyline"
+    assert "placements" in schema["properties"]["obstacles"]["required"]
+    encounter = schema["properties"]["pedestrians"]["properties"]["encounters"]["items"]
+    assert set(encounter["properties"]["type"]["enum"]) >= {"oncoming_pass", "cross_path"}
+    assert set(encounter["properties"]["persona"]["enum"]) >= {"normal", "assertive"}
+    assert {"start", "goal"} <= set(schema["properties"]["robot"]["required"])
+
+
+def test_v2_scenario_graph_passes_structured_output_schema_to_llm() -> None:
+    fake = _FakeJsonClient([_llm_template("structured_llm_template")])
+    runner = ScenarioGenerationGraphRunnerV2(
+        settings=Settings(_env_file=None, v2AgentLlmEnabled=True),
+        llm_client=fake,
+    )
+
+    response = runner.run(ScenarioGenerateV2Request(prompt="좁은 보도에서 대향 보행자를 만나는 시나리오"))
+
+    assert response.status == "success"
+    assert fake.calls[0]["response_name"] == "scenario_graph_intent"
+    assert fake.calls[0]["response_schema"]["name"] == "scenario_template_v1"
+    assert fake.calls[0]["response_schema"]["strict"] is True
+    assert fake.calls[0]["response_schema"]["schema"]["properties"]["schema"]["const"] == "scenario_template"
+
+
+def test_v2_scenario_graph_uses_llm_assisted_repair_when_candidate_invalid() -> None:
+    fake = _FakeJsonClient([
+        {"schema": "scenario_template", "version": 1},
+        _llm_template("llm_repaired_graph_template"),
+    ])
+    runner = ScenarioGenerationGraphRunnerV2(
+        settings=Settings(_env_file=None, v2AgentLlmEnabled=True, v2AgentLlmRepairEnabled=True),
+        llm_client=fake,
+    )
+
+    response = runner.run(ScenarioGenerateV2Request(prompt="좁은 보도에서 대향 보행자를 만나는 시나리오"))
+
+    assert response.status == "success"
+    assert response.generation_mode == "langgraph"
+    assert response.template_id == "llm_repaired_graph_template"
+    assert response.validation.valid is True
+    assert len(fake.calls) == 2
+    assert fake.calls[1]["response_name"] == "scenario_graph_repair"
+    assert "corridor.axis.type" in fake.calls[1]["user_prompt"]
+    assert "수정 대상 JSON" in fake.calls[1]["user_prompt"]
+    assert fake.calls[1]["response_schema"]["name"] == "scenario_template_v1"
 
 
 def test_v2_scenario_graph_uses_valid_llm_template_without_fallback_warning() -> None:

@@ -92,7 +92,7 @@ V2_AGENT_LLM_REPAIR_ENABLED=true
 V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS=1
 ```
 
-LLM mode를 켜도 API는 fallback 정책을 유지합니다. LLM 호출 실패, JSON 파싱 실패, validator 실패는 API 500이 아니라 fallback response와 warning으로 처리합니다.
+LLM mode를 켜면 scenario generation v2는 `scenario_template_v1` JSON Schema structured output을 우선 사용합니다. 그래도 API는 fallback 정책을 유지합니다. LLM 호출 실패, JSON 파싱 실패, validator 실패, LLM-assisted repair 실패는 API 500이 아니라 fallback response와 warning으로 처리합니다.
 
 ## 9. Graph mode 운영 설정
 

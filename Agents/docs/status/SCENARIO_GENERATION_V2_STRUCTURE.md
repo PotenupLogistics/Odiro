@@ -41,9 +41,11 @@ scenario_generate_v2_endpoint()
 
 `/api/v2/scenarios/generate`는 v2 LangGraph workflow를 기본 실행 경로로 사용한다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2 endpoint의 일반 실행 분기에 사용하지 않는다. LangGraph import가 불가능한 환경에서는 runner 내부에서만 기존 sequential agent로 fallback한다.
 
-`V2_AGENT_LLM_ENABLED=false`이면 LangGraph 내부 deterministic parser/selector/builder 경로만 사용한다. `V2_AGENT_LLM_ENABLED=true`이면 `interpret_user_prompt_node`에서 LLM-assisted 후보 template 생성을 시도하고, validator를 통과한 경우에만 그 후보를 사용한다. LLM 호출 실패 또는 LLM output validation 실패 시 deterministic graph path로 fallback하며, 응답은 계속 `generation_mode="langgraph"`를 유지한다.
+`V2_AGENT_LLM_ENABLED=false`이면 LangGraph 내부 deterministic parser/selector/builder 경로만 사용한다. `V2_AGENT_LLM_ENABLED=true`이면 `interpret_user_prompt_node`에서 JSON Schema structured output 기반 LLM-assisted 후보 template 생성을 시도하고, validator를 통과한 경우에만 그 후보를 사용한다. LLM 호출 실패 또는 LLM output validation 실패 시 deterministic graph path로 fallback하며, 응답은 계속 `generation_mode="langgraph"`를 유지한다.
 
 LLM prompt는 validator가 요구하는 최소 `scenario_template` v1 구조를 직접 제시한다. 특히 `corridor.axis`, `corridor.walkway_width_m`, `corridor.segments`, object형 `obstacles`, `pedestrians.encounters`, `robot.start`, `robot.goal`을 명시해 WorldConfig-style output이 나오지 않도록 한다.
+
+Structured output schema는 `app/agents/scenario_generation_v2/scenario_template_schema.py`에 있다. 이 schema는 root required fields, corridor/obstacles/pedestrians/robot 최소 구조, surface/placement/encounter/persona enum을 제한한다. Segment id cross-reference 같은 관계 검증은 계속 `TemplateValidator`가 담당한다.
 
 ## 3. Request / Response 구조
 
@@ -181,7 +183,7 @@ Validation checks include:
 - ownership/runtime fields 금지: `experiment_id`, `run_id`, `sample_count`, `base_seed`, `seed`, `sample_id`, `scenario_path`, `template_path`, `generated_count`, `ue_payload`
 - policy/robot setup field 금지: `policy`, `robot_setup`, `robot.setup`
 
-Repair is deterministic and local-only. It normalizes `template_id`, removes legacy `scenario_id`, and swaps inverted `min/max` ranges. If LLM output is invalid, the graph records a fallback warning and continues with the deterministic planner/writer path. If the final template validation remains invalid after two repair attempts, fallback template generation runs.
+Repair first applies deterministic local repair. It normalizes `template_id`, removes legacy `scenario_id`, and swaps inverted `min/max` ranges. If LLM output remains invalid and LLM repair is enabled, the graph sends the original prompt, invalid template, and validator errors to an LLM-assisted repair call using the same structured output schema. Only repair results that pass `TemplateValidator` are used. If repair still fails, deterministic fallback template generation runs.
 
 ## 8. 하지 않는 일
 
@@ -221,10 +223,10 @@ uv run pytest -q
 Latest observed results:
 
 ```text
-21 passed
+24 passed
 3 passed
 All checks passed!
-703 passed, 1 warning
+707 passed, 1 warning
 ```
 
 Latest OpenAI smoke:
@@ -235,6 +237,7 @@ V2_AGENT_GRAPH_ENABLED=false
 POST /api/v2/scenarios/generate
 → HTTP 200 / status success / generation_mode langgraph
 → LLM candidate validator valid true
+→ structured output schema used by scenario_template LLM call
 → final validation.valid true
 → fallback warning 없음
 ```

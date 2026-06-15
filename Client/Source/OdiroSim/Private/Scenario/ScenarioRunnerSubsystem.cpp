@@ -4,6 +4,7 @@
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
 #include "Scenario/ScenarioCompiler.h"
 #include "Scenario/ScenarioEvaluationSubsystem.h"
+#include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Scenario/ScenarioSimulationSubsystem.h"
 #include "Shared/EpisodeEvaluationReportJson.h"
 
@@ -112,6 +113,20 @@ namespace
 		setupSpec.Paths = worldSpec.Paths;
 		setupSpec.Events = worldSpec.Events;
 		return setupSpec;
+	}
+
+	FScenarioCompileResult CompileRunnerScenarioWorldSpec(
+		const FString& scenarioJsonPath,
+		const UScenarioCompiler* runtimeCompiler)
+	{
+		if (FScenarioSampleWorldSpecAdapter::IsScenarioSampleFile(scenarioJsonPath))
+		{
+			return FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleFile(scenarioJsonPath);
+		}
+
+		return runtimeCompiler
+			? runtimeCompiler->CompileScenarioWorldSpecFromJsonFile(scenarioJsonPath)
+			: FScenarioCompileResult();
 	}
 
 	bool ApplyDeliveryBotSetupToWorldSpec(
@@ -571,7 +586,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		return;
 	}
 
-	FScenarioCompileResult compileResult = compiler->CompileScenarioWorldSpecFromJsonFile(CurrentRunInput.ScenarioSetupJsonPath);
+	FScenarioCompileResult compileResult = CompileRunnerScenarioWorldSpec(CurrentRunInput.ScenarioSetupJsonPath, compiler);
 	CurrentRecord.bEpisodeSetupCompileSucceeded = compileResult.bSuccess;
 	CurrentRecord.EpisodeId = compileResult.WorldSpec.RunConfig.TemplateId;
 	CurrentRecord.SpecHash = compileResult.WorldSpec.SpecHash;

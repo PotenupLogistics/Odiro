@@ -11,6 +11,7 @@
 #include "Scenario/Components/ScenarioPedestrianRuntimeComponent.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
 #include "Scenario/ScenarioCompiler.h"
+#include "Shared/ScenarioTemplateJson.h"
 #include "UObject/ConstructorHelpers.h"
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
@@ -109,11 +110,14 @@ void UScenarioAuthoringSubsystem::Deinitialize()
 void UScenarioAuthoringSubsystem::ClearDraft()
 {
 	ClearEditorView();
-	DraftWorldSpec = FScenarioWorldSpec();
-	SourceScenarioSetupJsonPath.Reset();
+	DraftScenarioTemplate = FScenarioTemplateDocument();
+	DraftGroundRegions.Reset();
+	DraftPedestrianSpecs.Reset();
+	SourceScenarioTemplateJsonPath.Reset();
 	bDirty = false;
 	NextStaticObstacleIndex = 1;
 	NextPedestrianIndex = 1;
+	NextGroundRegionIndex = 1;
 }
 
 void UScenarioAuthoringSubsystem::NewDraft()
@@ -147,23 +151,18 @@ bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonFile(
 
 	outResolvedJsonFilePath = ResolveScenarioSetupLoadPath(trimmedJsonFilePath);
 
-	UScenarioCompiler* compiler = CreateScenarioCompiler();
-	if (!compiler)
+	const FScenarioTemplateParseResult parseResult = FScenarioTemplateJson::ParseFromFile(outResolvedJsonFilePath);
+	AppendSchemaDiagnostics(parseResult.Diagnostics, outDiagnostics);
+	if (!parseResult.bSuccess)
 	{
-		outDiagnostics.Add(TEXT("Scenario compiler creation failed."));
+		outDiagnostics.Add(TEXT("ScenarioTemplate JSON import failed validation."));
 		return false;
 	}
 
-	const FScenarioCompileResult compileResult = compiler->CompileScenarioWorldSpecFromJsonFile(outResolvedJsonFilePath);
-	AppendCompileDiagnostics(compileResult, outDiagnostics);
-	if (!compileResult.bSuccess)
-	{
-		outDiagnostics.Add(TEXT("ScenarioSetup JSON import failed compiler validation."));
-		return false;
-	}
-
-	DraftWorldSpec = compileResult.WorldSpec;
-	SourceScenarioSetupJsonPath = outResolvedJsonFilePath;
+	DraftScenarioTemplate = parseResult.Document;
+	DraftGroundRegions.Reset();
+	DraftPedestrianSpecs.Reset();
+	SourceScenarioTemplateJsonPath = outResolvedJsonFilePath;
 	bDirty = false;
 	return RebuildEditorViewFromDraft(outDiagnostics);
 }
@@ -180,23 +179,18 @@ bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonString(
 		return false;
 	}
 
-	UScenarioCompiler* compiler = CreateScenarioCompiler();
-	if (!compiler)
+	const FScenarioTemplateParseResult parseResult = FScenarioTemplateJson::ParseFromString(jsonString);
+	AppendSchemaDiagnostics(parseResult.Diagnostics, outDiagnostics);
+	if (!parseResult.bSuccess)
 	{
-		outDiagnostics.Add(TEXT("Scenario compiler creation failed."));
+		outDiagnostics.Add(TEXT("ScenarioTemplate JSON import failed validation."));
 		return false;
 	}
 
-	const FScenarioCompileResult compileResult = compiler->CompileScenarioWorldSpecFromJsonString(jsonString);
-	AppendCompileDiagnostics(compileResult, outDiagnostics);
-	if (!compileResult.bSuccess)
-	{
-		outDiagnostics.Add(TEXT("ScenarioSetup JSON import failed compiler validation."));
-		return false;
-	}
-
-	DraftWorldSpec = compileResult.WorldSpec;
-	SourceScenarioSetupJsonPath.Reset();
+	DraftScenarioTemplate = parseResult.Document;
+	DraftGroundRegions.Reset();
+	DraftPedestrianSpecs.Reset();
+	SourceScenarioTemplateJsonPath.Reset();
 	bDirty = false;
 	return RebuildEditorViewFromDraft(outDiagnostics);
 }
@@ -206,8 +200,8 @@ bool UScenarioAuthoringSubsystem::ImportCompiledWorldSpec(
 	TArray<FString>& outDiagnostics)
 {
 	outDiagnostics.Reset();
-	DraftWorldSpec = worldSpec;
-	SourceScenarioSetupJsonPath.Reset();
+	ImportWorldSpecAsScenarioTemplate(worldSpec);
+	SourceScenarioTemplateJsonPath.Reset();
 	bDirty = false;
 	return RebuildEditorViewFromDraft(outDiagnostics);
 }
@@ -320,8 +314,8 @@ bool UScenarioAuthoringSubsystem::CanUpdateStaticObstacleTransform(
 		return false;
 	}
 
-	const FScenarioPlaceableInstanceSpec* spec = FindStaticObstacleSpecByInstanceId(instanceId);
-	if (!spec)
+	const FScenarioTemplateObstaclePlacement* placement = FindStaticObstaclePlacementByInstanceId(instanceId);
+	if (!placement)
 	{
 		outFailureReason = FString::Printf(TEXT("Static obstacle spec '%s' was not found."), *instanceId);
 		return false;
@@ -340,7 +334,7 @@ bool UScenarioAuthoringSubsystem::CanUpdateStaticObstacleTransform(
 		return false;
 	}
 
-	return CanPlaceStaticObstacleInternal(FName(*spec->AssetId), transform, instanceId, outFailureReason);
+	return CanPlaceStaticObstacleInternal(FName(*placement->PropId), transform, instanceId, outFailureReason);
 }
 
 bool UScenarioAuthoringSubsystem::CanPlaceStaticObstacleInternal(
@@ -419,11 +413,7 @@ bool UScenarioAuthoringSubsystem::AddPedestrian(
 		return false;
 	}
 
-	if (DraftWorldSpec.RunConfig.TemplateId.IsEmpty()
-		&& DraftWorldSpec.Placeables.IsEmpty()
-		&& DraftWorldSpec.DynamicActors.IsEmpty()
-		&& DraftWorldSpec.GroundRegions.IsEmpty()
-		&& DraftWorldSpec.Paths.IsEmpty())
+	if (IsDraftScenarioTemplateEmpty())
 	{
 		InitializeDraftDefaults();
 	}
@@ -436,9 +426,8 @@ bool UScenarioAuthoringSubsystem::AddPedestrian(
 		return false;
 	}
 
-	DraftWorldSpec.DynamicActors.Add(outSpec);
+	DraftPedestrianSpecs.Add(outSpec);
 	AddPedestrianViewRecord(outSpec, outActor);
-	DraftWorldSpec.SpecHash.Reset();
 	bDirty = true;
 
 	UE_LOG(
@@ -468,11 +457,7 @@ bool UScenarioAuthoringSubsystem::SetRobotStartLocation(
 		return false;
 	}
 
-	if (DraftWorldSpec.RunConfig.TemplateId.IsEmpty()
-		&& DraftWorldSpec.Placeables.IsEmpty()
-		&& DraftWorldSpec.DynamicActors.IsEmpty()
-		&& DraftWorldSpec.GroundRegions.IsEmpty()
-		&& DraftWorldSpec.Paths.IsEmpty())
+	if (IsDraftScenarioTemplateEmpty())
 	{
 		InitializeDraftDefaults();
 	}
@@ -488,36 +473,15 @@ bool UScenarioAuthoringSubsystem::SetRobotStartLocation(
 		return false;
 	}
 
-	FScenarioPlaceableInstanceSpec* robotSpec = FindDeliveryBotSpec();
-	if (!robotSpec)
-	{
-		FScenarioPlaceableInstanceSpec newRobotSpec;
-		newRobotSpec.InstanceId = ContainsInstanceId(TEXT("robot_01")) ? FString::Printf(TEXT("robot_%03d"), DraftWorldSpec.Placeables.Num() + 1) : TEXT("robot_01");
-		newRobotSpec.AssetId = assetId.IsNone() ? TEXT("delivery_bot") : assetId.ToString();
-		newRobotSpec.Category = EScenarioActorCategory::DeliveryBot;
-		newRobotSpec.DeliveryBot.bSpawnOnly = true;
-		DraftWorldSpec.Placeables.Add(newRobotSpec);
-		robotSpec = &DraftWorldSpec.Placeables.Last();
-	}
-
-	robotSpec->Transform = transform;
-	robotSpec->AssetId = assetId.IsNone() ? TEXT("delivery_bot") : assetId.ToString();
-	robotSpec->DeliveryBot.bHasStartLocation = true;
-	robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = transform.GetLocation();
-	if (!robotSpec->DeliveryBot.bHasGoalLocation)
-	{
-		robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = transform.GetLocation();
-	}
-
-	outSpec = *robotSpec;
-	DraftWorldSpec.SpecHash.Reset();
+	DraftScenarioTemplate.Robot.Start = MakeRobotAnchorFromLocationCm(transform.GetLocation());
+	outSpec = MakeDeliveryBotSpecFromTemplateRobot();
 	bDirty = true;
 
 	UE_LOG(
 		LogScenarioAuthoring,
 		Log,
 		TEXT("Set robot start | InstanceId: %s | Location: %s"),
-		*robotSpec->InstanceId,
+		*outSpec.InstanceId,
 		*transform.GetLocation().ToCompactString());
 
 	return true;
@@ -538,8 +502,7 @@ bool UScenarioAuthoringSubsystem::SetRobotGoalLocation(
 		return false;
 	}
 
-	FScenarioPlaceableInstanceSpec* robotSpec = FindDeliveryBotSpec();
-	if (!robotSpec || !robotSpec->DeliveryBot.bHasStartLocation)
+	if (IsDraftScenarioTemplateEmpty())
 	{
 		outFailureReason = TEXT("Robot start point must be placed before a goal point.");
 		return false;
@@ -556,20 +519,15 @@ bool UScenarioAuthoringSubsystem::SetRobotGoalLocation(
 		return false;
 	}
 
-	robotSpec->DeliveryBot.bSpawnOnly = false;
-	robotSpec->DeliveryBot.bHasGoalLocation = true;
-	robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = transform.GetLocation();
-	robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
-
-	outSpec = *robotSpec;
-	DraftWorldSpec.SpecHash.Reset();
+	DraftScenarioTemplate.Robot.Goal = MakeRobotAnchorFromLocationCm(transform.GetLocation());
+	outSpec = MakeDeliveryBotSpecFromTemplateRobot();
 	bDirty = true;
 
 	UE_LOG(
 		LogScenarioAuthoring,
 		Log,
 		TEXT("Set robot goal | InstanceId: %s | Location: %s"),
-		*robotSpec->InstanceId,
+		*outSpec.InstanceId,
 		*transform.GetLocation().ToCompactString());
 
 	return true;
@@ -585,9 +543,9 @@ bool UScenarioAuthoringSubsystem::UpdateStaticObstacleTransform(
 		return false;
 	}
 
-	FScenarioPlaceableInstanceSpec* spec = FindStaticObstacleSpecByInstanceId(instanceId);
+	FScenarioTemplateObstaclePlacement* placement = FindStaticObstaclePlacementByInstanceId(instanceId);
 	FScenarioAuthoringStaticObstacleRecord* record = FindStaticObstacleRecordByInstanceId(instanceId);
-	if (!spec || !record)
+	if (!placement || !record)
 	{
 		outFailureReason = FString::Printf(TEXT("Static obstacle '%s' is not editable."), *instanceId);
 		return false;
@@ -601,11 +559,11 @@ bool UScenarioAuthoringSubsystem::UpdateStaticObstacleTransform(
 		return false;
 	}
 
-	spec->Transform = transform;
+	const FName propId(*placement->PropId);
+	*placement = MakeStaticObstaclePlacement(instanceId, propId, transform);
 	record->Transform = transform;
 	actor->SetActorTransform(transform, false, nullptr, ETeleportType::TeleportPhysics);
 
-	DraftWorldSpec.SpecHash.Reset();
 	bDirty = true;
 
 	UE_LOG(
@@ -629,8 +587,7 @@ bool UScenarioAuthoringSubsystem::UpdateRobotStartPointTransform(
 		return false;
 	}
 
-	FScenarioPlaceableInstanceSpec* robotSpec = FindDeliveryBotSpec();
-	if (!robotSpec || !robotSpec->DeliveryBot.bHasStartLocation || !robotSpec->DeliveryBot.bHasGoalLocation)
+	if (IsDraftScenarioTemplateEmpty())
 	{
 		outFailureReason = TEXT("Robot route points are not initialized.");
 		return false;
@@ -642,11 +599,9 @@ bool UScenarioAuthoringSubsystem::UpdateRobotStartPointTransform(
 	}
 
 	const FVector location = transform.GetLocation();
-	robotSpec->Transform.SetLocation(location);
-	robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = location;
+	DraftScenarioTemplate.Robot.Start = MakeRobotAnchorFromLocationCm(location);
 	RobotStartMarkerActor->SetActorLocation(location, false, nullptr, ETeleportType::TeleportPhysics);
 
-	DraftWorldSpec.SpecHash.Reset();
 	bDirty = true;
 	return true;
 }
@@ -661,8 +616,7 @@ bool UScenarioAuthoringSubsystem::UpdateRobotGoalPointTransform(
 		return false;
 	}
 
-	FScenarioPlaceableInstanceSpec* robotSpec = FindDeliveryBotSpec();
-	if (!robotSpec || !robotSpec->DeliveryBot.bHasStartLocation || !robotSpec->DeliveryBot.bHasGoalLocation)
+	if (IsDraftScenarioTemplateEmpty())
 	{
 		outFailureReason = TEXT("Robot route points are not initialized.");
 		return false;
@@ -674,12 +628,9 @@ bool UScenarioAuthoringSubsystem::UpdateRobotGoalPointTransform(
 	}
 
 	const FVector location = transform.GetLocation();
-	robotSpec->DeliveryBot.bSpawnOnly = false;
-	robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = location;
-	robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
+	DraftScenarioTemplate.Robot.Goal = MakeRobotAnchorFromLocationCm(location);
 	RobotGoalMarkerActor->SetActorLocation(location, false, nullptr, ETeleportType::TeleportPhysics);
 
-	DraftWorldSpec.SpecHash.Reset();
 	bDirty = true;
 	return true;
 }
@@ -712,9 +663,9 @@ bool UScenarioAuthoringSubsystem::RenameStaticObstacleInstanceId(
 		return false;
 	}
 
-	FScenarioPlaceableInstanceSpec* spec = FindStaticObstacleSpecByInstanceId(oldInstanceId);
+	FScenarioTemplateObstaclePlacement* placement = FindStaticObstaclePlacementByInstanceId(oldInstanceId);
 	FScenarioAuthoringStaticObstacleRecord* record = FindStaticObstacleRecordByInstanceId(oldInstanceId);
-	if (!spec || !record)
+	if (!placement || !record)
 	{
 		outFailureReason = FString::Printf(TEXT("Static obstacle '%s' is not editable."), *oldInstanceId);
 		return false;
@@ -728,7 +679,7 @@ bool UScenarioAuthoringSubsystem::RenameStaticObstacleInstanceId(
 	}
 	AScenarioStaticObstacle* actor = actorPtr->Get();
 
-	spec->InstanceId = trimmedNewInstanceId;
+	placement->PlacementId = trimmedNewInstanceId;
 	record->InstanceId = trimmedNewInstanceId;
 	StaticObstacleActors.Remove(oldInstanceId);
 	TObjectPtr<AScenarioStaticObstacle> renamedActorPtr = actor;
@@ -739,7 +690,6 @@ bool UScenarioAuthoringSubsystem::RenameStaticObstacleInstanceId(
 		placeableComponent->InstanceId = trimmedNewInstanceId;
 	}
 
-	DraftWorldSpec.SpecHash.Reset();
 	bDirty = true;
 
 	UE_LOG(
@@ -764,10 +714,10 @@ bool UScenarioAuthoringSubsystem::RemoveStaticObstacle(
 		return false;
 	}
 
-	const int32 removedSpecCount = DraftWorldSpec.Placeables.RemoveAll(
-		[&instanceId](const FScenarioPlaceableInstanceSpec& spec)
+	const int32 removedSpecCount = DraftScenarioTemplate.Obstacles.Placements.RemoveAll(
+		[&instanceId](const FScenarioTemplateObstaclePlacement& placement)
 		{
-			return spec.InstanceId == instanceId && spec.Category == EScenarioActorCategory::StaticObstacle;
+			return placement.PlacementId == instanceId;
 		});
 	if (removedSpecCount <= 0)
 	{
@@ -788,7 +738,6 @@ bool UScenarioAuthoringSubsystem::RemoveStaticObstacle(
 		actor->Destroy();
 	}
 
-	DraftWorldSpec.SpecHash.Reset();
 	bDirty = true;
 
 	UE_LOG(LogScenarioAuthoring, Log, TEXT("Removed static obstacle | InstanceId: %s"), *instanceId);
@@ -812,11 +761,7 @@ bool UScenarioAuthoringSubsystem::AddGroundRegion(
 		return false;
 	}
 
-	if (DraftWorldSpec.RunConfig.TemplateId.IsEmpty()
-		&& DraftWorldSpec.Placeables.IsEmpty()
-		&& DraftWorldSpec.DynamicActors.IsEmpty()
-		&& DraftWorldSpec.GroundRegions.IsEmpty()
-		&& DraftWorldSpec.Paths.IsEmpty())
+	if (IsDraftScenarioTemplateEmpty())
 	{
 		InitializeDraftDefaults();
 	}
@@ -831,8 +776,7 @@ bool UScenarioAuthoringSubsystem::AddGroundRegion(
 		return false;
 	}
 
-	DraftWorldSpec.GroundRegions.Add(outSpec);
-	DraftWorldSpec.SpecHash.Reset();
+	DraftGroundRegions.Add(outSpec);
 	bDirty = true;
 
 	UE_LOG(
@@ -860,7 +804,7 @@ bool UScenarioAuthoringSubsystem::UpdateGroundRegionTransform(
 		return false;
 	}
 
-	FScenarioGroundRegionSpec* regionSpec = DraftWorldSpec.GroundRegions.FindByPredicate(
+	FScenarioGroundRegionSpec* regionSpec = DraftGroundRegions.FindByPredicate(
 		[&regionId](const FScenarioGroundRegionSpec& spec)
 		{
 			return spec.RegionId == regionId;
@@ -883,7 +827,6 @@ bool UScenarioAuthoringSubsystem::UpdateGroundRegionTransform(
 		}
 	}
 
-	DraftWorldSpec.SpecHash.Reset();
 	bDirty = true;
 	return true;
 }
@@ -900,7 +843,7 @@ bool UScenarioAuthoringSubsystem::RemoveGroundRegion(
 		return false;
 	}
 
-	const int32 removedSpecCount = DraftWorldSpec.GroundRegions.RemoveAll(
+	const int32 removedSpecCount = DraftGroundRegions.RemoveAll(
 		[&regionId](const FScenarioGroundRegionSpec& spec)
 		{
 			return spec.RegionId == regionId;
@@ -918,7 +861,6 @@ bool UScenarioAuthoringSubsystem::RemoveGroundRegion(
 		actor->Destroy();
 	}
 
-	DraftWorldSpec.SpecHash.Reset();
 	bDirty = true;
 
 	UE_LOG(LogScenarioAuthoring, Log, TEXT("Removed ground region | RegionId: %s"), *regionId);
@@ -972,7 +914,7 @@ FString UScenarioAuthoringSubsystem::GenerateGroundRegionId()
 
 bool UScenarioAuthoringSubsystem::ContainsGroundRegionId(const FString& regionId) const
 {
-	for (const FScenarioGroundRegionSpec& spec : DraftWorldSpec.GroundRegions)
+	for (const FScenarioGroundRegionSpec& spec : DraftGroundRegions)
 	{
 		if (spec.RegionId == regionId)
 		{
@@ -1044,17 +986,14 @@ bool UScenarioAuthoringSubsystem::AddStaticObstacleInternal(
 		return false;
 	}
 
-	if (DraftWorldSpec.RunConfig.TemplateId.IsEmpty()
-		&& DraftWorldSpec.Placeables.IsEmpty()
-		&& DraftWorldSpec.DynamicActors.IsEmpty()
-		&& DraftWorldSpec.GroundRegions.IsEmpty()
-		&& DraftWorldSpec.Paths.IsEmpty())
+	if (IsDraftScenarioTemplateEmpty())
 	{
 		InitializeDraftDefaults();
 	}
 
 	const FString instanceId = GenerateStaticObstacleInstanceId();
 	outSpec = MakeStaticObstacleSpec(instanceId, propId, transform);
+	const FScenarioTemplateObstaclePlacement placement = MakeStaticObstaclePlacement(instanceId, propId, transform);
 
 	if (!SpawnEditorStaticObstacleActor(outSpec, outActor, failureReason))
 	{
@@ -1064,8 +1003,7 @@ bool UScenarioAuthoringSubsystem::AddStaticObstacleInternal(
 	FScenarioStaticObstaclePropEntry propEntry;
 	TryFindStaticObstacleProp(propId, propEntry);
 	AddStaticObstacleViewRecord(outSpec, propEntry, outActor);
-	DraftWorldSpec.Placeables.Add(outSpec);
-	DraftWorldSpec.SpecHash.Reset();
+	DraftScenarioTemplate.Obstacles.Placements.Add(placement);
 	bDirty = true;
 	return true;
 }
@@ -1073,12 +1011,13 @@ bool UScenarioAuthoringSubsystem::AddStaticObstacleInternal(
 TArray<FScenarioPlaceableInstanceSpec> UScenarioAuthoringSubsystem::GetAuthoredStaticObstacleSpecs() const
 {
 	TArray<FScenarioPlaceableInstanceSpec> staticObstacleSpecs;
-	for (const FScenarioPlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
+	for (const FScenarioTemplateObstaclePlacement& placement : DraftScenarioTemplate.Obstacles.Placements)
 	{
-		if (spec.Category == EScenarioActorCategory::StaticObstacle)
+		if (placement.Kind != EScenarioTemplateObstaclePlacementKind::Fixed || placement.PropId.IsEmpty())
 		{
-			staticObstacleSpecs.Add(spec);
+			continue;
 		}
+		staticObstacleSpecs.Add(MakeStaticObstacleSpecFromPlacement(placement));
 	}
 
 	return staticObstacleSpecs;
@@ -1095,281 +1034,10 @@ bool UScenarioAuthoringSubsystem::ExportScenarioSetupJsonString(
 		return false;
 	}
 
-	TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
-	rootObject->SetStringField(TEXT("schema"), TEXT("scenario_actor_spawn_mvp"));
-	rootObject->SetNumberField(TEXT("version"), DraftWorldSpec.RunConfig.TemplateVersion > 0 ? DraftWorldSpec.RunConfig.TemplateVersion : 1);
-	rootObject->SetStringField(
-		TEXT("scenario_id"),
-		DraftWorldSpec.RunConfig.TemplateId.IsEmpty() ? ScenarioId : DraftWorldSpec.RunConfig.TemplateId);
-	rootObject->SetStringField(TEXT("map_id"), MapId);
-
-	TSharedRef<FJsonObject> runObject = MakeShared<FJsonObject>();
-	runObject->SetNumberField(TEXT("base_seed"), static_cast<double>(DraftWorldSpec.RunConfig.BaseSeed));
-	runObject->SetNumberField(TEXT("iteration_index"), DraftWorldSpec.RunConfig.IterationIndex);
-
-	double timeLimitSeconds = TimeLimitSeconds;
-	if (TryGetFloatProperty(DraftWorldSpec.RunConfig.Parameters, TEXT("time_limit_s"), timeLimitSeconds))
-	{
-		timeLimitSeconds = FMath::Max(timeLimitSeconds, 0.0);
-	}
-	runObject->SetNumberField(TEXT("time_limit_s"), timeLimitSeconds);
-	rootObject->SetObjectField(TEXT("run"), runObject);
-
-	TSharedRef<FJsonObject> evaluationObject = MakeShared<FJsonObject>();
-	evaluationObject->SetNumberField(
-		TEXT("goal_acceptance_radius_m"),
-		DraftWorldSpec.EvaluationConfig.GoalAcceptanceRadiusCm * CentimetersToMeters);
-	evaluationObject->SetNumberField(TEXT("tip_over_angle_deg"), DraftWorldSpec.EvaluationConfig.TipOverAngleDegrees);
-
-	TSharedRef<FJsonObject> nearMissObject = MakeShared<FJsonObject>();
-	nearMissObject->SetNumberField(TEXT("distance_m"), DraftWorldSpec.EvaluationConfig.NearMissDistanceCm * CentimetersToMeters);
-	evaluationObject->SetObjectField(TEXT("near_miss"), nearMissObject);
-
-	TSharedRef<FJsonObject> scoringObject = MakeShared<FJsonObject>();
-	scoringObject->SetNumberField(TEXT("static_obstacle_collision"), DraftWorldSpec.EvaluationConfig.StaticObstacleCollisionScore);
-	scoringObject->SetNumberField(TEXT("blocked_region_collision"), DraftWorldSpec.EvaluationConfig.BlockedRegionCollisionScore);
-	scoringObject->SetNumberField(TEXT("penalty_region_violation"), DraftWorldSpec.EvaluationConfig.PenaltyRegionViolationScore);
-	scoringObject->SetNumberField(TEXT("pedestrian_near_miss"), DraftWorldSpec.EvaluationConfig.PedestrianNearMissScore);
-	scoringObject->SetNumberField(TEXT("pedestrian_collision"), DraftWorldSpec.EvaluationConfig.PedestrianCollisionScore);
-	evaluationObject->SetObjectField(TEXT("scoring"), scoringObject);
-	rootObject->SetObjectField(TEXT("evaluation"), evaluationObject);
-
-	TSharedRef<FJsonObject> groundModelObject = MakeShared<FJsonObject>();
-	groundModelObject->SetStringField(TEXT("default_region_type"), TEXT("walkable"));
-	TArray<TSharedPtr<FJsonValue>> groundRegionValues;
-	groundRegionValues.Reserve(DraftWorldSpec.GroundRegions.Num());
-	for (const FScenarioGroundRegionSpec& regionSpec : DraftWorldSpec.GroundRegions)
-	{
-		TSharedRef<FJsonObject> regionObject = MakeShared<FJsonObject>();
-		regionObject->SetStringField(TEXT("region_id"), regionSpec.RegionId);
-		regionObject->SetStringField(TEXT("region_type"), GroundRegionTypeToString(regionSpec.RegionType));
-
-		TSharedRef<FJsonObject> shapeObject = MakeShared<FJsonObject>();
-		shapeObject->SetStringField(TEXT("type"), GroundShapeTypeToString(regionSpec.ShapeType));
-		shapeObject->SetArrayField(TEXT("center_xy_m"), MakeXyArrayMeters(regionSpec.Center));
-		shapeObject->SetArrayField(TEXT("size_m"), MakeSizeArrayMeters(regionSpec.Size));
-		shapeObject->SetNumberField(TEXT("yaw_deg"), regionSpec.YawDegrees);
-		regionObject->SetObjectField(TEXT("shape"), shapeObject);
-
-		regionObject->SetNumberField(TEXT("traversability_score"), regionSpec.TraversabilityScore);
-		if (!regionSpec.PenaltyKind.IsEmpty() || !FMath::IsNearlyZero(regionSpec.PenaltyCost) || !FMath::IsNearlyZero(regionSpec.ViolationAfterSeconds))
-		{
-			TSharedRef<FJsonObject> penaltyObject = MakeShared<FJsonObject>();
-			if (!regionSpec.PenaltyKind.IsEmpty())
-			{
-				penaltyObject->SetStringField(TEXT("kind"), regionSpec.PenaltyKind);
-			}
-			penaltyObject->SetNumberField(TEXT("cost"), regionSpec.PenaltyCost);
-			penaltyObject->SetNumberField(TEXT("violation_after_s"), regionSpec.ViolationAfterSeconds);
-			regionObject->SetObjectField(TEXT("penalty"), penaltyObject);
-		}
-		if (!regionSpec.CollisionTag.IsEmpty())
-		{
-			regionObject->SetStringField(TEXT("collision_tag"), regionSpec.CollisionTag);
-		}
-
-		groundRegionValues.Add(MakeShared<FJsonValueObject>(regionObject));
-	}
-	groundModelObject->SetArrayField(TEXT("regions"), groundRegionValues);
-	rootObject->SetObjectField(TEXT("ground_model"), groundModelObject);
-
-	TArray<TSharedPtr<FJsonValue>> pathValues;
-	pathValues.Reserve(DraftWorldSpec.Paths.Num());
-	for (const FScenarioPathSpec& pathSpec : DraftWorldSpec.Paths)
-	{
-		TSharedRef<FJsonObject> pathObject = MakeShared<FJsonObject>();
-		pathObject->SetStringField(TEXT("path_id"), pathSpec.PathId);
-
-		TArray<TSharedPtr<FJsonValue>> pointValues;
-		pointValues.Reserve(pathSpec.Points.Num());
-		for (const FVector& pointCm : pathSpec.Points)
-		{
-			pointValues.Add(MakeShared<FJsonValueArray>(MakeXyArrayMeters(pointCm)));
-		}
-		pathObject->SetArrayField(TEXT("points_xy_m"), pointValues);
-		pathObject->SetBoolField(TEXT("closed_loop"), pathSpec.bClosedLoop);
-		pathValues.Add(MakeShared<FJsonValueObject>(pathObject));
-	}
-	rootObject->SetArrayField(TEXT("paths"), pathValues);
-
-	TSharedRef<FJsonObject> actorsObject = MakeShared<FJsonObject>();
-	TArray<TSharedPtr<FJsonValue>> staticObstacleValues;
-	staticObstacleValues.Reserve(DraftWorldSpec.Placeables.Num());
-	for (const FScenarioPlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
-	{
-		if (spec.Category != EScenarioActorCategory::StaticObstacle)
-		{
-			continue;
-		}
-
-		TSharedRef<FJsonObject> obstacleObject = MakeShared<FJsonObject>();
-		obstacleObject->SetStringField(TEXT("instance_id"), spec.InstanceId);
-		obstacleObject->SetStringField(TEXT("prop_id"), spec.AssetId);
-		obstacleObject->SetArrayField(TEXT("xy_m"), MakeXyArrayMeters(spec.Transform.GetLocation()));
-		obstacleObject->SetNumberField(TEXT("yaw_deg"), spec.Transform.Rotator().Yaw);
-
-		TSharedPtr<FJsonObject> propertiesObject = MakePropertiesObject(spec.Properties);
-		if (propertiesObject.IsValid())
-		{
-			obstacleObject->SetObjectField(TEXT("properties"), propertiesObject);
-		}
-
-		staticObstacleValues.Add(MakeShared<FJsonValueObject>(obstacleObject));
-	}
-	actorsObject->SetArrayField(TEXT("static_obstacles"), staticObstacleValues);
-
-	TArray<TSharedPtr<FJsonValue>> pedestrianValues;
-	pedestrianValues.Reserve(DraftWorldSpec.DynamicActors.Num());
-	for (const FScenarioDynamicActorSpec& dynamicActorSpec : DraftWorldSpec.DynamicActors)
-	{
-		if (dynamicActorSpec.Category != EScenarioActorCategory::Pedestrian)
-		{
-			continue;
-		}
-
-		TSharedRef<FJsonObject> pedestrianObject = MakeShared<FJsonObject>();
-		pedestrianObject->SetStringField(TEXT("instance_id"), dynamicActorSpec.InstanceId);
-		if (!dynamicActorSpec.AssetId.IsEmpty())
-		{
-			pedestrianObject->SetStringField(TEXT("archetype_id"), dynamicActorSpec.AssetId);
-		}
-
-		FString movementModel;
-		TryGetStringProperty(dynamicActorSpec.Properties, MovementModelKey, movementModel);
-		const bool bPlannedTrajectory = movementModel.Equals(TEXT("planned_trajectory"), ESearchCase::IgnoreCase);
-		const bool bStaticPlacement = movementModel.Equals(TEXT("static_placement"), ESearchCase::IgnoreCase);
-		if (!bPlannedTrajectory && !bStaticPlacement)
-		{
-			pedestrianObject->SetStringField(TEXT("path_id"), dynamicActorSpec.PathId);
-		}
-		else if (bPlannedTrajectory)
-		{
-			FVector plannedStartCm = dynamicActorSpec.InitialTransform.GetLocation();
-			FVector plannedGoalCm = FVector::ZeroVector;
-			const FScenarioParamValue* startParam = dynamicActorSpec.Properties.Find(PlannedStartCmKey);
-			const FScenarioParamValue* goalParam = dynamicActorSpec.Properties.Find(PlannedGoalCmKey);
-			if (startParam && startParam->Type == EScenarioParamValueType::Vector)
-			{
-				plannedStartCm = startParam->VectorValue;
-			}
-			if (goalParam && goalParam->Type == EScenarioParamValueType::Vector)
-			{
-				plannedGoalCm = goalParam->VectorValue;
-			}
-			pedestrianObject->SetArrayField(TEXT("start_xy_m"), MakeXyArrayMeters(plannedStartCm));
-			pedestrianObject->SetArrayField(TEXT("goal_xy_m"), MakeXyArrayMeters(plannedGoalCm));
-			if (!dynamicActorSpec.PathId.IsEmpty())
-			{
-				pedestrianObject->SetStringField(TEXT("path_id"), dynamicActorSpec.PathId);
-			}
-		}
-
-		pedestrianObject->SetArrayField(TEXT("xy_m"), MakeXyArrayMeters(dynamicActorSpec.InitialTransform.GetLocation()));
-		pedestrianObject->SetNumberField(TEXT("yaw_deg"), dynamicActorSpec.InitialTransform.Rotator().Yaw);
-
-		TSharedRef<FJsonObject> movementObject = MakeShared<FJsonObject>();
-		movementObject->SetStringField(TEXT("model"), movementModel.IsEmpty() ? TEXT("spline_Relative") : movementModel);
-
-		double speedCmPerSecond = 120.0;
-		if (TryGetFloatProperty(dynamicActorSpec.Properties, SpeedCmPerSecondKey, speedCmPerSecond))
-		{
-			movementObject->SetNumberField(TEXT("speed_mps"), speedCmPerSecond * CentimetersToMeters);
-		}
-		else
-		{
-			double speedMps = 1.2;
-			if (TryGetFloatProperty(dynamicActorSpec.Properties, SpeedMpsKey, speedMps))
-			{
-				movementObject->SetNumberField(TEXT("speed_mps"), speedMps);
-			}
-		}
-
-		double initialDistanceCm = 0.0;
-		if (TryGetFloatProperty(dynamicActorSpec.Properties, InitialDistanceCmKey, initialDistanceCm))
-		{
-			movementObject->SetNumberField(TEXT("initial_distance_m"), initialDistanceCm * CentimetersToMeters);
-		}
-		else
-		{
-			double initialDistanceM = 0.0;
-			if (TryGetFloatProperty(dynamicActorSpec.Properties, InitialDistanceMKey, initialDistanceM))
-			{
-				movementObject->SetNumberField(TEXT("initial_distance_m"), initialDistanceM);
-			}
-		}
-
-		bool bAutoStart = true;
-		if (TryGetBoolProperty(dynamicActorSpec.Properties, AutoStartKey, bAutoStart))
-		{
-			movementObject->SetBoolField(TEXT("auto_start"), bAutoStart);
-		}
-		pedestrianObject->SetObjectField(TEXT("movement"), movementObject);
-
-		const TSet<FString> excludedPedestrianKeys =
-		{
-			SpeedMpsKey,
-			SpeedCmPerSecondKey,
-			InitialDistanceMKey,
-			InitialDistanceCmKey,
-			AutoStartKey,
-			MovementModelKey,
-			PlannedStartCmKey,
-			PlannedGoalCmKey
-		};
-		TSharedPtr<FJsonObject> propertiesObject = MakeFilteredPropertiesObject(dynamicActorSpec.Properties, excludedPedestrianKeys);
-		if (propertiesObject.IsValid())
-		{
-			pedestrianObject->SetObjectField(TEXT("properties"), propertiesObject);
-		}
-
-		pedestrianValues.Add(MakeShared<FJsonValueObject>(pedestrianObject));
-	}
-	actorsObject->SetArrayField(TEXT("pedestrians"), pedestrianValues);
-
-	for (const FScenarioPlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
-	{
-		if (spec.Category != EScenarioActorCategory::DeliveryBot)
-		{
-			continue;
-		}
-
-		TSharedRef<FJsonObject> robotObject = MakeShared<FJsonObject>();
-		robotObject->SetStringField(TEXT("instance_id"), spec.InstanceId);
-		robotObject->SetStringField(TEXT("asset_id"), spec.AssetId.IsEmpty() ? TEXT("delivery_bot") : spec.AssetId);
-		robotObject->SetBoolField(TEXT("spawn_only"), spec.DeliveryBot.bSpawnOnly);
-		robotObject->SetArrayField(TEXT("xy_m"), MakeXyArrayMeters(spec.Transform.GetLocation()));
-		robotObject->SetNumberField(TEXT("yaw_deg"), spec.Transform.Rotator().Yaw);
-
-		if (spec.DeliveryBot.bHasGoalLocation)
-		{
-			TSharedRef<FJsonObject> routeObject = MakeShared<FJsonObject>();
-			routeObject->SetArrayField(
-				TEXT("goal_xy_m"),
-				MakeXyArrayMeters(spec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm));
-			routeObject->SetBoolField(TEXT("auto_start"), spec.DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute);
-			robotObject->SetObjectField(TEXT("route"), routeObject);
-		}
-
-		TSharedPtr<FJsonObject> propertiesObject = MakePropertiesObject(spec.Properties);
-		if (propertiesObject.IsValid())
-		{
-			robotObject->SetObjectField(TEXT("properties"), propertiesObject);
-		}
-
-		actorsObject->SetObjectField(TEXT("robot"), robotObject);
-		break;
-	}
-
-	rootObject->SetObjectField(TEXT("actors"), actorsObject);
-
-	const TSharedRef<TJsonWriter<>> writer = TJsonWriterFactory<>::Create(&outJsonString);
-	if (!FJsonSerializer::Serialize(rootObject, writer))
-	{
-		outDiagnostics.Add(TEXT("ScenarioSetup JSON serialization failed."));
-		return false;
-	}
-
-	return true;
+	TArray<FScenarioSchemaDiagnostic> schemaDiagnostics;
+	const bool bWritten = FScenarioTemplateJson::TryWriteJson(DraftScenarioTemplate, outJsonString, schemaDiagnostics);
+	AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+	return bWritten;
 }
 
 bool UScenarioAuthoringSubsystem::ExportAndValidateScenarioSetupJsonString(
@@ -1381,22 +1049,14 @@ bool UScenarioAuthoringSubsystem::ExportAndValidateScenarioSetupJsonString(
 		return false;
 	}
 
-	UScenarioCompiler* compiler = CreateScenarioCompiler();
-	if (!compiler)
+	FScenarioTemplateParseResult parseResult = FScenarioTemplateJson::ParseFromString(outJsonString);
+	AppendSchemaDiagnostics(parseResult.Diagnostics, outDiagnostics);
+	if (!parseResult.bSuccess)
 	{
-		outDiagnostics.Add(TEXT("Scenario compiler creation failed."));
-		return false;
+		outDiagnostics.Add(TEXT("Exported ScenarioTemplate JSON failed validation."));
 	}
 
-	const FScenarioCompileResult compileResult = compiler->CompileScenarioWorldSpecFromJsonString(outJsonString);
-	AppendCompileDiagnostics(compileResult, outDiagnostics);
-
-	if (!compileResult.bSuccess)
-	{
-		outDiagnostics.Add(TEXT("Exported ScenarioSetup JSON failed compiler validation."));
-	}
-
-	return compileResult.bSuccess;
+	return parseResult.bSuccess;
 }
 
 bool UScenarioAuthoringSubsystem::SaveScenarioSetupJsonFile(
@@ -1432,7 +1092,7 @@ bool UScenarioAuthoringSubsystem::SaveScenarioSetupJsonFile(
 		return false;
 	}
 
-	SourceScenarioSetupJsonPath = outResolvedJsonFilePath;
+	SourceScenarioTemplateJsonPath = outResolvedJsonFilePath;
 	bDirty = false;
 	return true;
 }
@@ -1647,6 +1307,76 @@ bool UScenarioAuthoringSubsystem::TryGetStringProperty(
 	return true;
 }
 
+void UScenarioAuthoringSubsystem::AppendSchemaDiagnostics(
+	const TArray<FScenarioSchemaDiagnostic>& schemaDiagnostics,
+	TArray<FString>& outDiagnostics)
+{
+	for (const FScenarioSchemaDiagnostic& diagnostic : schemaDiagnostics)
+	{
+		FString severity = TEXT("Info");
+		switch (diagnostic.Severity)
+		{
+		case EScenarioSchemaDiagnosticSeverity::Warning:
+			severity = TEXT("Warning");
+			break;
+		case EScenarioSchemaDiagnosticSeverity::Repair:
+			severity = TEXT("Repair");
+			break;
+		case EScenarioSchemaDiagnosticSeverity::Error:
+			severity = TEXT("Error");
+			break;
+		case EScenarioSchemaDiagnosticSeverity::Info:
+		default:
+			break;
+		}
+
+		const FString pathSuffix = diagnostic.Path.IsEmpty()
+			? FString()
+			: FString::Printf(TEXT(" | %s"), *diagnostic.Path);
+		outDiagnostics.Add(FString::Printf(
+			TEXT("[%s] %s: %s%s"),
+			*severity,
+			*diagnostic.Code,
+			*diagnostic.Message,
+			*pathSuffix));
+	}
+}
+
+FScenarioTemplateNumberValue UScenarioAuthoringSubsystem::MakeFixedTemplateNumber(double value)
+{
+	FScenarioTemplateNumberValue numberValue;
+	numberValue.bIsSet = true;
+	numberValue.Mode = EScenarioTemplateNumberValueMode::Fixed;
+	numberValue.FixedValue = value;
+	return numberValue;
+}
+
+FScenarioTemplateIntegerValue UScenarioAuthoringSubsystem::MakeFixedTemplateInteger(int32 value)
+{
+	FScenarioTemplateIntegerValue integerValue;
+	integerValue.bIsSet = true;
+	integerValue.Mode = EScenarioTemplateNumberValueMode::Fixed;
+	integerValue.FixedValue = value;
+	return integerValue;
+}
+
+double UScenarioAuthoringSubsystem::GetFixedTemplateNumber(
+	const FScenarioTemplateNumberValue& value,
+	double defaultValue)
+{
+	if (!value.bIsSet)
+	{
+		return defaultValue;
+	}
+
+	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
+	{
+		return (value.MinValue + value.MaxValue) * 0.5;
+	}
+
+	return value.FixedValue;
+}
+
 UScenarioCompiler* UScenarioAuthoringSubsystem::CreateScenarioCompiler() const
 {
 	UScenarioCompiler* compiler = NewObject<UScenarioCompiler>();
@@ -1758,15 +1488,16 @@ FString UScenarioAuthoringSubsystem::GeneratePedestrianInstanceId()
 
 bool UScenarioAuthoringSubsystem::ContainsInstanceId(const FString& instanceId) const
 {
-	for (const FScenarioPlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
+	if (DraftScenarioTemplate.Obstacles.Placements.ContainsByPredicate(
+			[&instanceId](const FScenarioTemplateObstaclePlacement& placement)
+			{
+				return placement.PlacementId == instanceId;
+			}))
 	{
-		if (spec.InstanceId == instanceId)
-		{
-			return true;
-		}
+		return true;
 	}
 
-	for (const FScenarioDynamicActorSpec& spec : DraftWorldSpec.DynamicActors)
+	for (const FScenarioDynamicActorSpec& spec : DraftPedestrianSpecs)
 	{
 		if (spec.InstanceId == instanceId)
 		{
@@ -1777,38 +1508,53 @@ bool UScenarioAuthoringSubsystem::ContainsInstanceId(const FString& instanceId) 
 	return false;
 }
 
+bool UScenarioAuthoringSubsystem::IsDraftScenarioTemplateEmpty() const
+{
+	return DraftScenarioTemplate.TemplateId.IsEmpty()
+		&& DraftScenarioTemplate.Intent.IsEmpty()
+		&& DraftScenarioTemplate.Corridor.Axis.PointsMeters.IsEmpty()
+		&& DraftScenarioTemplate.Corridor.Segments.IsEmpty()
+		&& DraftScenarioTemplate.Obstacles.Placements.IsEmpty()
+		&& DraftGroundRegions.IsEmpty()
+		&& DraftPedestrianSpecs.IsEmpty();
+}
+
 void UScenarioAuthoringSubsystem::InitializeDraftDefaults()
 {
-	DraftWorldSpec = FScenarioWorldSpec();
-	DraftWorldSpec.RunConfig.TemplateId = ScenarioId;
-	DraftWorldSpec.RunConfig.TemplateVersion = 1;
-	DraftWorldSpec.RunConfig.BaseSeed = BaseSeed;
-	DraftWorldSpec.RunConfig.IterationIndex = IterationIndex;
+	DraftScenarioTemplate = FScenarioTemplateDocument();
+	DraftScenarioTemplate.TemplateId = ScenarioId;
+	DraftScenarioTemplate.Intent = TEXT("Editor authored scenario template.");
+	DraftScenarioTemplate.Corridor.Axis.Type = EScenarioCorridorAxisType::Polyline;
+	DraftScenarioTemplate.Corridor.Axis.PointsMeters =
+	{
+		FVector2D(DefaultRobotStartLocationCm.X * CentimetersToMeters, DefaultRobotStartLocationCm.Y * CentimetersToMeters),
+		FVector2D(DefaultRobotGoalLocationCm.X * CentimetersToMeters, DefaultRobotGoalLocationCm.Y * CentimetersToMeters)
+	};
+	DraftScenarioTemplate.Corridor.WalkwayWidthMeters = MakeFixedTemplateNumber(3.0);
 
-	FScenarioParamValue timeLimitParam;
-	timeLimitParam.Type = EScenarioParamValueType::Float;
-	timeLimitParam.FloatValue = TimeLimitSeconds;
-	DraftWorldSpec.RunConfig.Parameters.Add(TEXT("time_limit_s"), timeLimitParam);
+	FScenarioTemplateSegment mainSegment;
+	mainSegment.SegmentId = TEXT("main");
+	mainSegment.Type = EScenarioTemplateSegmentType::Straight;
+	mainSegment.AlongRangeMeters.StartMeters = 0.0;
+	mainSegment.AlongRangeMeters.EndMeters =
+		(DraftScenarioTemplate.Corridor.Axis.PointsMeters[1] - DraftScenarioTemplate.Corridor.Axis.PointsMeters[0]).Size();
+	DraftScenarioTemplate.Corridor.Segments.Add(mainSegment);
 
-	DraftWorldSpec.Seeds.WorldSeed = BaseSeed;
-	DraftWorldSpec.Seeds.LayoutSeed = BaseSeed + 101;
-	DraftWorldSpec.Seeds.StaticObstacleSeed = BaseSeed + 202;
-	DraftWorldSpec.Seeds.DynamicActorSeed = BaseSeed + 303;
-	DraftWorldSpec.Seeds.EventSeed = BaseSeed + 404;
-	DraftWorldSpec.Seeds.PolicySeed = BaseSeed + 505;
+	FScenarioTemplateLaneRule buildingLane;
+	buildingLane.SurfaceId = TEXT("building");
+	buildingLane.WidthMeters = MakeFixedTemplateNumber(1.0);
+	DraftScenarioTemplate.Corridor.BuildingSide.Add(buildingLane);
 
-	FScenarioPlaceableInstanceSpec robotSpec;
-	robotSpec.InstanceId = DefaultRobotInstanceId;
-	robotSpec.AssetId = DefaultRobotAssetId;
-	robotSpec.Category = EScenarioActorCategory::DeliveryBot;
-	robotSpec.Transform = FTransform(FRotator::ZeroRotator, DefaultRobotStartLocationCm);
-	robotSpec.DeliveryBot.bSpawnOnly = false;
-	robotSpec.DeliveryBot.bHasStartLocation = true;
-	robotSpec.DeliveryBot.bHasGoalLocation = true;
-	robotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = DefaultRobotStartLocationCm;
-	robotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = DefaultRobotGoalLocationCm;
-	robotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
-	DraftWorldSpec.Placeables.Add(robotSpec);
+	FScenarioTemplateLaneRule curbLane;
+	curbLane.SurfaceId = TEXT("road");
+	curbLane.WidthMeters = MakeFixedTemplateNumber(1.0);
+	DraftScenarioTemplate.Corridor.CurbSide.Add(curbLane);
+
+	DraftScenarioTemplate.Obstacles.MinClearWidthMeters = MakeFixedTemplateNumber(1.0);
+	DraftScenarioTemplate.Pedestrians.Background.Count = MakeFixedTemplateInteger(0);
+	DraftScenarioTemplate.Pedestrians.Background.SpeedMetersPerSecond = MakeFixedTemplateNumber(1.2);
+	DraftScenarioTemplate.Robot.Start = MakeRobotAnchorFromLocationCm(DefaultRobotStartLocationCm);
+	DraftScenarioTemplate.Robot.Goal = MakeRobotAnchorFromLocationCm(DefaultRobotGoalLocationCm);
 }
 
 bool UScenarioAuthoringSubsystem::EnsureSingleRobotRouteSpec(
@@ -1817,91 +1563,50 @@ bool UScenarioAuthoringSubsystem::EnsureSingleRobotRouteSpec(
 {
 	bOutDraftChanged = false;
 
-	FScenarioPlaceableInstanceSpec* robotSpec = nullptr;
-	int32 robotSpecCount = 0;
-	for (FScenarioPlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
+	if (IsDraftScenarioTemplateEmpty())
 	{
-		if (spec.Category == EScenarioActorCategory::DeliveryBot)
-		{
-			++robotSpecCount;
-			if (!robotSpec)
-			{
-				robotSpec = &spec;
-			}
-		}
-	}
-
-	if (robotSpecCount > 1)
-	{
-		outDiagnostics.Add(FString::Printf(
-			TEXT("Scenario editor requires exactly one robot route, but %d robot specs were found."),
-			robotSpecCount));
-		return false;
-	}
-
-	if (!robotSpec)
-	{
-		FScenarioPlaceableInstanceSpec newRobotSpec;
-		newRobotSpec.InstanceId = DefaultRobotInstanceId;
-		newRobotSpec.AssetId = DefaultRobotAssetId;
-		newRobotSpec.Category = EScenarioActorCategory::DeliveryBot;
-		newRobotSpec.Transform = FTransform(FRotator::ZeroRotator, DefaultRobotStartLocationCm);
-		newRobotSpec.DeliveryBot.bSpawnOnly = false;
-		newRobotSpec.DeliveryBot.bHasStartLocation = true;
-		newRobotSpec.DeliveryBot.bHasGoalLocation = true;
-		newRobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = DefaultRobotStartLocationCm;
-		newRobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = DefaultRobotGoalLocationCm;
-		newRobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
-		DraftWorldSpec.Placeables.Add(newRobotSpec);
+		InitializeDraftDefaults();
 		bOutDraftChanged = true;
 		outDiagnostics.Add(TEXT("Robot route was missing; default StartPoint and GoalPoint were added."));
-		return true;
 	}
 
-	if (robotSpec->InstanceId.IsEmpty())
+	if (DraftScenarioTemplate.TemplateId.IsEmpty())
 	{
-		robotSpec->InstanceId = ContainsInstanceId(DefaultRobotInstanceId)
-			? FString::Printf(TEXT("robot_%03d"), DraftWorldSpec.Placeables.Num() + 1)
-			: DefaultRobotInstanceId;
-		bOutDraftChanged = true;
-	}
-	if (robotSpec->AssetId.IsEmpty())
-	{
-		robotSpec->AssetId = DefaultRobotAssetId;
+		DraftScenarioTemplate.TemplateId = ScenarioId;
 		bOutDraftChanged = true;
 	}
 
-	if (!robotSpec->DeliveryBot.bHasStartLocation)
+	if (DraftScenarioTemplate.Intent.IsEmpty())
 	{
-		robotSpec->Transform.SetLocation(DefaultRobotStartLocationCm);
-		robotSpec->DeliveryBot.bHasStartLocation = true;
-		robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = DefaultRobotStartLocationCm;
-		bOutDraftChanged = true;
-	}
-	else if (!robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.Equals(robotSpec->Transform.GetLocation()))
-	{
-		robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = robotSpec->Transform.GetLocation();
+		DraftScenarioTemplate.Intent = TEXT("Editor authored scenario template.");
 		bOutDraftChanged = true;
 	}
 
-	if (!robotSpec->DeliveryBot.bHasGoalLocation)
+	if (DraftScenarioTemplate.Corridor.Axis.PointsMeters.Num() < 2)
 	{
-		const FVector defaultRouteOffset = DefaultRobotGoalLocationCm - DefaultRobotStartLocationCm;
-		robotSpec->DeliveryBot.bHasGoalLocation = true;
-		robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm =
-			robotSpec->Transform.GetLocation() + defaultRouteOffset;
+		DraftScenarioTemplate.Corridor.Axis.PointsMeters =
+		{
+			FVector2D(DefaultRobotStartLocationCm.X * CentimetersToMeters, DefaultRobotStartLocationCm.Y * CentimetersToMeters),
+			FVector2D(DefaultRobotGoalLocationCm.X * CentimetersToMeters, DefaultRobotGoalLocationCm.Y * CentimetersToMeters)
+		};
 		bOutDraftChanged = true;
-		outDiagnostics.Add(TEXT("Robot goal was missing; a default GoalPoint was added."));
 	}
 
-	if (robotSpec->DeliveryBot.bSpawnOnly)
+	if (DraftScenarioTemplate.Corridor.Segments.IsEmpty())
 	{
-		robotSpec->DeliveryBot.bSpawnOnly = false;
+		FScenarioTemplateSegment mainSegment;
+		mainSegment.SegmentId = TEXT("main");
+		mainSegment.Type = EScenarioTemplateSegmentType::Straight;
+		mainSegment.AlongRangeMeters.StartMeters = 0.0;
+		mainSegment.AlongRangeMeters.EndMeters =
+			(DraftScenarioTemplate.Corridor.Axis.PointsMeters.Last() - DraftScenarioTemplate.Corridor.Axis.PointsMeters[0]).Size();
+		DraftScenarioTemplate.Corridor.Segments.Add(mainSegment);
 		bOutDraftChanged = true;
 	}
-	if (!robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute)
+
+	if (!DraftScenarioTemplate.Corridor.WalkwayWidthMeters.bIsSet)
 	{
-		robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
+		DraftScenarioTemplate.Corridor.WalkwayWidthMeters = MakeFixedTemplateNumber(3.0);
 		bOutDraftChanged = true;
 	}
 
@@ -1910,44 +1615,190 @@ bool UScenarioAuthoringSubsystem::EnsureSingleRobotRouteSpec(
 
 bool UScenarioAuthoringSubsystem::ValidateSingleRobotRouteSpecForExport(TArray<FString>& outDiagnostics) const
 {
-	const FScenarioPlaceableInstanceSpec* robotSpec = nullptr;
-	int32 robotSpecCount = 0;
-	for (const FScenarioPlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
+	if (DraftScenarioTemplate.Corridor.Axis.PointsMeters.Num() < 2)
 	{
-		if (spec.Category == EScenarioActorCategory::DeliveryBot)
-		{
-			++robotSpecCount;
-			if (!robotSpec)
-			{
-				robotSpec = &spec;
-			}
-		}
-	}
-
-	if (robotSpecCount != 1 || !robotSpec)
-	{
-		outDiagnostics.Add(FString::Printf(
-			TEXT("Scenario must contain exactly one robot route before export. Found: %d."),
-			robotSpecCount));
-		return false;
-	}
-	if (!robotSpec->DeliveryBot.bHasStartLocation)
-	{
-		outDiagnostics.Add(TEXT("Robot StartPoint is missing."));
-		return false;
-	}
-	if (!robotSpec->DeliveryBot.bHasGoalLocation)
-	{
-		outDiagnostics.Add(TEXT("Robot GoalPoint is missing."));
-		return false;
-	}
-	if (robotSpec->DeliveryBot.bSpawnOnly)
-	{
-		outDiagnostics.Add(TEXT("Robot route cannot be exported as spawn_only when StartPoint and GoalPoint are authored."));
+		outDiagnostics.Add(TEXT("Robot route axis must contain at least two points."));
 		return false;
 	}
 
 	return true;
+}
+
+FScenarioWorldSpec UScenarioAuthoringSubsystem::BuildDraftWorldSpecForPreview() const
+{
+	FScenarioWorldSpec worldSpec;
+	worldSpec.RunConfig.TemplateId = DraftScenarioTemplate.TemplateId.IsEmpty() ? ScenarioId : DraftScenarioTemplate.TemplateId;
+	worldSpec.RunConfig.TemplateVersion = DraftScenarioTemplate.Version > 0 ? DraftScenarioTemplate.Version : FScenarioTemplateJson::SupportedVersion;
+	worldSpec.RunConfig.GeneratorVersion = FScenarioTemplateJson::SupportedVersion;
+	worldSpec.RunConfig.BaseSeed = BaseSeed;
+	worldSpec.RunConfig.IterationIndex = IterationIndex;
+
+	FScenarioParamValue timeLimitParam;
+	timeLimitParam.Type = EScenarioParamValueType::Float;
+	timeLimitParam.FloatValue = TimeLimitSeconds;
+	worldSpec.RunConfig.Parameters.Add(TEXT("time_limit_s"), timeLimitParam);
+
+	worldSpec.Seeds.WorldSeed = BaseSeed;
+	worldSpec.Seeds.LayoutSeed = BaseSeed + 101;
+	worldSpec.Seeds.StaticObstacleSeed = BaseSeed + 202;
+	worldSpec.Seeds.DynamicActorSeed = BaseSeed + 303;
+	worldSpec.Seeds.EventSeed = BaseSeed + 404;
+	worldSpec.Seeds.PolicySeed = BaseSeed + 505;
+
+	worldSpec.Placeables.Add(MakeDeliveryBotSpecFromTemplateRobot());
+	for (const FScenarioTemplateObstaclePlacement& placement : DraftScenarioTemplate.Obstacles.Placements)
+	{
+		if (placement.Kind != EScenarioTemplateObstaclePlacementKind::Fixed || placement.PropId.IsEmpty())
+		{
+			continue;
+		}
+		worldSpec.Placeables.Add(MakeStaticObstacleSpecFromPlacement(placement));
+	}
+	worldSpec.GroundRegions = DraftGroundRegions;
+	worldSpec.DynamicActors = DraftPedestrianSpecs;
+	return worldSpec;
+}
+
+FScenarioTemplateRobotAnchor UScenarioAuthoringSubsystem::MakeRobotAnchorFromLocationCm(const FVector& locationCm) const
+{
+	FScenarioTemplateRobotAnchor anchor;
+	anchor.Type = EScenarioTemplateRobotAnchorType::CorridorPose;
+	anchor.SegmentId = DraftScenarioTemplate.Corridor.Segments.IsEmpty()
+		? TEXT("main")
+		: DraftScenarioTemplate.Corridor.Segments[0].SegmentId;
+	anchor.AlongMeters = MakeFixedTemplateNumber(locationCm.X * CentimetersToMeters);
+	anchor.OffsetMeters = MakeFixedTemplateNumber(locationCm.Y * CentimetersToMeters);
+	anchor.LaneId = TEXT("walkway");
+	anchor.Heading = EScenarioTemplateRobotHeading::Forward;
+	return anchor;
+}
+
+FVector UScenarioAuthoringSubsystem::ResolveRobotAnchorLocationCm(
+	const FScenarioTemplateRobotAnchor& anchor,
+	bool bGoalAnchor) const
+{
+	if (anchor.Type == EScenarioTemplateRobotAnchorType::CorridorPose)
+	{
+		return FVector(
+			GetFixedTemplateNumber(anchor.AlongMeters, bGoalAnchor ? DefaultRobotGoalLocationCm.X * CentimetersToMeters : DefaultRobotStartLocationCm.X * CentimetersToMeters) / CentimetersToMeters,
+			GetFixedTemplateNumber(anchor.OffsetMeters, bGoalAnchor ? DefaultRobotGoalLocationCm.Y * CentimetersToMeters : DefaultRobotStartLocationCm.Y * CentimetersToMeters) / CentimetersToMeters,
+			0.0);
+	}
+
+	if (DraftScenarioTemplate.Corridor.Axis.PointsMeters.Num() >= 2)
+	{
+		const FVector2D axisPointMeters = anchor.Type == EScenarioTemplateRobotAnchorType::Exit
+			? DraftScenarioTemplate.Corridor.Axis.PointsMeters.Last()
+			: DraftScenarioTemplate.Corridor.Axis.PointsMeters[0];
+		return FVector(
+			axisPointMeters.X / CentimetersToMeters,
+			axisPointMeters.Y / CentimetersToMeters,
+			0.0);
+	}
+
+	return bGoalAnchor ? DefaultRobotGoalLocationCm : DefaultRobotStartLocationCm;
+}
+
+FScenarioTemplateObstaclePlacement UScenarioAuthoringSubsystem::MakeStaticObstaclePlacement(
+	const FString& placementId,
+	FName propId,
+	const FTransform& transform) const
+{
+	FScenarioTemplateObstaclePlacement placement;
+	placement.PlacementId = placementId;
+	placement.Kind = EScenarioTemplateObstaclePlacementKind::Fixed;
+	placement.PropId = propId.ToString();
+	placement.At.SegmentId = DraftScenarioTemplate.Corridor.Segments.IsEmpty()
+		? TEXT("main")
+		: DraftScenarioTemplate.Corridor.Segments[0].SegmentId;
+	placement.At.AlongMeters = MakeFixedTemplateNumber(transform.GetLocation().X * CentimetersToMeters);
+	placement.At.OffsetMeters = MakeFixedTemplateNumber(transform.GetLocation().Y * CentimetersToMeters);
+	placement.At.LaneId = TEXT("walkway");
+	placement.YawDegrees = MakeFixedTemplateNumber(transform.Rotator().Yaw);
+	return placement;
+}
+
+FScenarioPlaceableInstanceSpec UScenarioAuthoringSubsystem::MakeStaticObstacleSpecFromPlacement(
+	const FScenarioTemplateObstaclePlacement& placement) const
+{
+	FScenarioPlaceableInstanceSpec spec;
+	spec.InstanceId = placement.PlacementId;
+	spec.AssetId = placement.PropId;
+	spec.Category = EScenarioActorCategory::StaticObstacle;
+	const FVector locationCm(
+		GetFixedTemplateNumber(placement.At.AlongMeters, 0.0) / CentimetersToMeters,
+		GetFixedTemplateNumber(placement.At.OffsetMeters, 0.0) / CentimetersToMeters,
+		0.0);
+	spec.Transform = FTransform(FRotator(0.0, GetFixedTemplateNumber(placement.YawDegrees, 0.0), 0.0), locationCm);
+	return spec;
+}
+
+FScenarioPlaceableInstanceSpec UScenarioAuthoringSubsystem::MakeDeliveryBotSpecFromTemplateRobot() const
+{
+	const FVector startLocationCm = ResolveRobotAnchorLocationCm(DraftScenarioTemplate.Robot.Start, false);
+	const FVector goalLocationCm = ResolveRobotAnchorLocationCm(DraftScenarioTemplate.Robot.Goal, true);
+
+	FScenarioPlaceableInstanceSpec robotSpec;
+	robotSpec.InstanceId = DefaultRobotInstanceId;
+	robotSpec.AssetId = DefaultRobotAssetId;
+	robotSpec.Category = EScenarioActorCategory::DeliveryBot;
+	robotSpec.Transform = FTransform(FRotator::ZeroRotator, startLocationCm);
+	robotSpec.DeliveryBot.bSpawnOnly = false;
+	robotSpec.DeliveryBot.bHasStartLocation = true;
+	robotSpec.DeliveryBot.bHasGoalLocation = true;
+	robotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = startLocationCm;
+	robotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = goalLocationCm;
+	robotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
+	return robotSpec;
+}
+
+FScenarioTemplateObstaclePlacement* UScenarioAuthoringSubsystem::FindStaticObstaclePlacementByInstanceId(
+	const FString& instanceId)
+{
+	return DraftScenarioTemplate.Obstacles.Placements.FindByPredicate(
+		[&instanceId](const FScenarioTemplateObstaclePlacement& placement)
+		{
+			return placement.PlacementId == instanceId;
+		});
+}
+
+const FScenarioTemplateObstaclePlacement* UScenarioAuthoringSubsystem::FindStaticObstaclePlacementByInstanceId(
+	const FString& instanceId) const
+{
+	return DraftScenarioTemplate.Obstacles.Placements.FindByPredicate(
+		[&instanceId](const FScenarioTemplateObstaclePlacement& placement)
+		{
+			return placement.PlacementId == instanceId;
+		});
+}
+
+void UScenarioAuthoringSubsystem::ImportWorldSpecAsScenarioTemplate(const FScenarioWorldSpec& worldSpec)
+{
+	InitializeDraftDefaults();
+	DraftScenarioTemplate.TemplateId = worldSpec.RunConfig.TemplateId.IsEmpty() ? ScenarioId : worldSpec.RunConfig.TemplateId;
+	DraftScenarioTemplate.Version = worldSpec.RunConfig.TemplateVersion > 0 ? worldSpec.RunConfig.TemplateVersion : FScenarioTemplateJson::SupportedVersion;
+	DraftScenarioTemplate.Obstacles.Placements.Reset();
+	DraftGroundRegions = worldSpec.GroundRegions;
+	DraftPedestrianSpecs = worldSpec.DynamicActors;
+
+	for (const FScenarioPlaceableInstanceSpec& spec : worldSpec.Placeables)
+	{
+		if (spec.Category == EScenarioActorCategory::DeliveryBot)
+		{
+			DraftScenarioTemplate.Robot.Start = MakeRobotAnchorFromLocationCm(spec.DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm);
+			if (spec.DeliveryBot.bHasGoalLocation)
+			{
+				DraftScenarioTemplate.Robot.Goal = MakeRobotAnchorFromLocationCm(spec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm);
+			}
+			continue;
+		}
+
+		if (spec.Category == EScenarioActorCategory::StaticObstacle)
+		{
+			DraftScenarioTemplate.Obstacles.Placements.Add(
+				MakeStaticObstaclePlacement(spec.InstanceId, FName(*spec.AssetId), spec.Transform));
+		}
+	}
 }
 
 void UScenarioAuthoringSubsystem::ClearEditorView()
@@ -2005,14 +1856,14 @@ bool UScenarioAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& ou
 	}
 	if (bDraftChanged)
 	{
-		DraftWorldSpec.SpecHash.Reset();
 		bDirty = true;
 	}
 
 	ClearEditorView();
+	const FScenarioWorldSpec previewWorldSpec = BuildDraftWorldSpecForPreview();
 
 	bool bSucceeded = true;
-	for (const FScenarioPlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
+	for (const FScenarioPlaceableInstanceSpec& spec : previewWorldSpec.Placeables)
 	{
 		if (spec.Category == EScenarioActorCategory::DeliveryBot)
 		{
@@ -2047,7 +1898,7 @@ bool UScenarioAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& ou
 		}
 	}
 
-	for (const FScenarioDynamicActorSpec& spec : DraftWorldSpec.DynamicActors)
+	for (const FScenarioDynamicActorSpec& spec : previewWorldSpec.DynamicActors)
 	{
 		if (spec.Category != EScenarioActorCategory::Pedestrian)
 		{
@@ -2069,7 +1920,7 @@ bool UScenarioAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& ou
 		AddPedestrianViewRecord(spec, spawnedActor);
 	}
 
-	for (const FScenarioGroundRegionSpec& regionSpec : DraftWorldSpec.GroundRegions)
+	for (const FScenarioGroundRegionSpec& regionSpec : previewWorldSpec.GroundRegions)
 	{
 		AScenarioGroundRegion* spawnedRegion = nullptr;
 		FString failureReason;
@@ -2528,60 +2379,6 @@ FScenarioDynamicActorSpec UScenarioAuthoringSubsystem::MakePedestrianSpec(
 	spec.Properties.Add(MovementModelKey, MakeStringParamValue(TEXT("static_placement")));
 	spec.Properties.Add(AutoStartKey, MakeBoolParamValue(false));
 	return spec;
-}
-
-FScenarioPlaceableInstanceSpec* UScenarioAuthoringSubsystem::FindDeliveryBotSpec()
-{
-	for (FScenarioPlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
-	{
-		if (spec.Category == EScenarioActorCategory::DeliveryBot)
-		{
-			return &spec;
-		}
-	}
-
-	return nullptr;
-}
-
-const FScenarioPlaceableInstanceSpec* UScenarioAuthoringSubsystem::FindDeliveryBotSpec() const
-{
-	for (const FScenarioPlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
-	{
-		if (spec.Category == EScenarioActorCategory::DeliveryBot)
-		{
-			return &spec;
-		}
-	}
-
-	return nullptr;
-}
-
-FScenarioPlaceableInstanceSpec* UScenarioAuthoringSubsystem::FindStaticObstacleSpecByInstanceId(
-	const FString& instanceId)
-{
-	for (FScenarioPlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
-	{
-		if (spec.InstanceId == instanceId && spec.Category == EScenarioActorCategory::StaticObstacle)
-		{
-			return &spec;
-		}
-	}
-
-	return nullptr;
-}
-
-const FScenarioPlaceableInstanceSpec* UScenarioAuthoringSubsystem::FindStaticObstacleSpecByInstanceId(
-	const FString& instanceId) const
-{
-	for (const FScenarioPlaceableInstanceSpec& spec : DraftWorldSpec.Placeables)
-	{
-		if (spec.InstanceId == instanceId && spec.Category == EScenarioActorCategory::StaticObstacle)
-		{
-			return &spec;
-		}
-	}
-
-	return nullptr;
 }
 
 FScenarioAuthoringStaticObstacleRecord* UScenarioAuthoringSubsystem::FindStaticObstacleRecordByInstanceId(

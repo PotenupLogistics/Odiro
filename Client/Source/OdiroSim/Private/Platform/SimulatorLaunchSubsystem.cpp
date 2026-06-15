@@ -2,6 +2,7 @@
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
 #include "Scenario/ScenarioCompiler.h"
+#include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSimulatorLaunch, Log, All);
 
@@ -162,6 +163,11 @@ namespace
 
 	bool IsScenarioSetupFile(const FString& jsonFile)
 	{
+		if (FScenarioSampleWorldSpecAdapter::IsScenarioSampleFile(jsonFile))
+		{
+			return FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleFile(jsonFile).bSuccess;
+		}
+
 		if (!HasJsonSchema(jsonFile, LaunchScenarioSetupSchema))
 		{
 			return false;
@@ -1158,7 +1164,7 @@ bool USimulatorLaunchSubsystem::TryWriteScenarioRunQueueJson(
 		}
 		else if (!IsScenarioSetupFile(runInput.ScenarioSetupJsonPath))
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("ScenarioSetup validation failed: %s"), *runInput.ScenarioSetupJsonPath));
+			outDiagnostics.Add(FString::Printf(TEXT("Scenario source validation failed: %s"), *runInput.ScenarioSetupJsonPath));
 		}
 
 		if (runInput.DeliveryBotSetupJsonPath.TrimStartAndEnd().IsEmpty())

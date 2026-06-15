@@ -28,7 +28,7 @@ POST /api/v1/scenarios/generate
 POST /api/v1/analysis/run
 ```
 
-사용자용 기본 `/api/v1` endpoint는 `POST /api/v1/scenarios/generate`다. 실행 결과 분석과 다음 setup 추천은 `POST /api/v1/analysis/run`을 사용한다. `POST /api/v1/scenarios/generate-drive`와 `POST /api/v1/scenarios/generate-artifacts`는 public API에서 제거되었고 OpenAPI에 노출되지 않아야 한다.
+사용자용 기본 `/api/v1` endpoint는 `POST /api/v1/scenarios/generate`다. 실행 결과 분석과 다음 setup 추천은 `POST /api/v1/analysis/run`을 사용한다.
 
 ## 3. 사용자용 scenario generation API
 
@@ -53,18 +53,7 @@ POST /api/v1/scenarios/generate
 * 좁은 보도 장애물 policy comparison queue는 동일 EpisodeSetup을 공유하고 DeliveryBotSetup만 policy별로 다르게 만든다.
 * 로봇 실측 크기 W/D/H `0.44m / 1.00m / 0.64m`는 request body가 아니라 서버 기본 `RobotProfile`로 주입한다. 생성/export된 `EpisodeSetup_*.json`에는 additive root field `robot_profile`이 포함되며, `min_passable_width_m`은 `0.84m`이다.
 
-## 4. Removed scenario artifact APIs
-
-```text
-POST /api/v1/scenarios/generate-drive
-POST /api/v1/scenarios/generate-artifacts
-```
-
-위 endpoint는 public API에서 제거되었다. 해당 URL 요청은 route not found로 남아야 하며 OpenAPI에 노출되지 않아야 한다.
-
-RunQueue, EpisodeSetup, DeliveryBotSetup 생성과 `data/run_queue_exports/` 계열 local 산출물 저장 흐름은 `POST /api/v1/scenarios/generate` 내부 동작으로 유지한다. Google Drive 업로드 tooling은 별도 smoke/tooling 맥락으로만 남기며 public route로 안내하지 않는다.
-
-## 5. WorldConfig generation service
+## 4. WorldConfig generation service
 
 WorldConfig generation은 더 이상 `/api/v1/generation/world-config` HTTP endpoint로 노출하지 않는다. 내부 구현은 `app.services.world_config_generation_orchestrator.generate_world_config()` service 함수로 유지한다.
 
@@ -79,7 +68,7 @@ provider 값:
 
 `generatedPayload`는 LLM 응답에서 JSON 추출과 `world_config` validation이 통과한 뒤에만 채워진다.
 
-## 6. Removed legacy UE5 handoff API
+## 5. Removed legacy UE5 handoff API
 
 ```text
 POST /api/v1/ue5/world-config/handoff

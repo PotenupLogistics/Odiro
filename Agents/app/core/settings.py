@@ -133,42 +133,6 @@ class Settings(BaseSettings):
         default=False,
         validation_alias=AliasChoices("V2_AGENT_GRAPH_ENABLED", "v2AgentGraphEnabled"),
     )
-    googleDriveUploadEnabled: bool = Field(
-        default=False,
-        validation_alias=AliasChoices("GOOGLE_DRIVE_UPLOAD_ENABLED", "googleDriveUploadEnabled"),
-    )
-    googleDriveAuthMode: str = Field(
-        default="service_account",
-        validation_alias=AliasChoices("GOOGLE_DRIVE_AUTH_MODE", "googleDriveAuthMode"),
-    )
-    googleDriveFolderId: str = Field(
-        default="",
-        validation_alias=AliasChoices("GOOGLE_DRIVE_FOLDER_ID", "googleDriveFolderId"),
-    )
-    googleDriveServiceAccountFile: str = Field(
-        default="secrets/credentials.json",
-        validation_alias=AliasChoices("GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE", "googleDriveServiceAccountFile"),
-    )
-    googleDriveOauthClientFile: str = Field(
-        default="secrets/oauth_client.json",
-        validation_alias=AliasChoices("GOOGLE_DRIVE_OAUTH_CLIENT_FILE", "googleDriveOauthClientFile"),
-    )
-    googleDriveOauthTokenFile: str = Field(
-        default="secrets/google_drive_token.json",
-        validation_alias=AliasChoices("GOOGLE_DRIVE_OAUTH_TOKEN_FILE", "googleDriveOauthTokenFile"),
-    )
-    googleDriveBackupBeforeUpload: bool = Field(
-        default=False,
-        validation_alias=AliasChoices("GOOGLE_DRIVE_BACKUP_BEFORE_UPLOAD", "googleDriveBackupBeforeUpload"),
-    )
-    googleDriveBackupFolderName: str = Field(
-        default="백업",
-        validation_alias=AliasChoices("GOOGLE_DRIVE_BACKUP_FOLDER_NAME", "googleDriveBackupFolderName"),
-    )
-    googleDriveBackupFolderId: str = Field(
-        default="",
-        validation_alias=AliasChoices("GOOGLE_DRIVE_BACKUP_FOLDER_ID", "googleDriveBackupFolderId"),
-    )
 
     @field_validator("llmProviderChain", mode="before")
     @classmethod

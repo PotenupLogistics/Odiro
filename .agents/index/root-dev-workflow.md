@@ -32,7 +32,7 @@ keep:
   - Root scripts orchestrate project-owned task scripts; they do not implement Unreal or Agents startup details.
   - Root setup calls project task scripts directly, not project public .bat wrappers, to avoid duplicate phases.
   - Root build includes Bridge and Client; Agents has no build phase.
-  - Main branch direct commits, local merges, and fast-forward pushes are blocked by hooks; intentional non-fast-forward force push is allowed.
+  - Main branch direct commits, local merges, and fast-forward pushes are blocked by hooks; local main deletion and intentional non-fast-forward force push are allowed.
   - Local pulls prefer rebase via pull.rebase=true, rebase.autoStash=true, branch.autoSetupRebase=always, and pull.ff=true so main sync and subbranch updates avoid merge commits without ff-only rejection.
   - Unreal binary assets stay Git blobs; Git LFS is used for lock/read-only/push verification only.
   - post-commit skips Git LFS read-only refresh when HEAD has no Unreal binary asset changes.
@@ -42,7 +42,7 @@ keep:
   - Manual LFS unlock is human-only exact-path recovery.
 verify:
   - PowerShell parse check for script edits
-  - hook syntax and staged smoke for .githooks changes
+  - hook syntax plus staged main-delete smoke for .githooks changes
   - git check-attr lockable for sample Unreal asset
   - tools/set-git-config.ps1 local config smoke
   - git config --local --get pull.ff returns true; pull.rebase returns true; rebase.autoStash returns true; branch.autoSetupRebase returns always

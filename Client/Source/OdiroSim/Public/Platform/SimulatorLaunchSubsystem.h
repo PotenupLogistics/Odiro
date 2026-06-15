@@ -91,10 +91,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
 	TArray<FString> ListPolicySpecFiles() const;
 
-	// Legacy episode_evaluation_report JSON candidates kept for compatibility tools.
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
-	TArray<FString> ListLegacyEvaluationReportFiles() const;
-
 	// Saved/SimulationRuns 아래 simulation run status JSON 후보 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	TArray<FString> ListSimulationRunStatusFiles() const;

@@ -21,7 +21,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogMainMenuWidget, Log, All);
 namespace
 {
 	const int32 ResultPreviewCharacterLimit = 4000;
-	const int32 LogPreviewEdgeLineCount = 5;
+	const int32 JsonlPreviewEdgeLineCount = 5;
 	const TCHAR* DefaultExperimentRef = TEXT("Json/Experiments/FeatureProbeNoPedestrians");
 	const TCHAR* MainMenuDefaultSimulationMapId = TEXT("ScenarioSimulationMap");
 	const TCHAR* DefaultMeasurementOutputDirectory = TEXT("Saved/AnalysisLogs");
@@ -96,27 +96,56 @@ namespace
 		return text.Left(characterLimit) + TEXT("\n...");
 	}
 
-	FString BuildLogPreview(const FString& logPath)
+	FString NormalizePreviewPath(FString Path)
+	{
+		Path.ReplaceInline(TEXT("\\"), TEXT("/"));
+		FPaths::NormalizeFilename(Path);
+		FPaths::CollapseRelativeDirectories(Path);
+		return Path;
+	}
+
+	FString BuildRunSummaryPath(const FString& runDirectory)
+	{
+		return runDirectory.IsEmpty()
+			? FString()
+			: NormalizePreviewPath(FPaths::Combine(runDirectory, TEXT("summary.json")));
+	}
+
+	FString BuildEpisodeEventsPath(const FString& resultPath)
+	{
+		return resultPath.IsEmpty()
+			? FString()
+			: NormalizePreviewPath(FPaths::Combine(FPaths::GetPath(resultPath), TEXT("events.jsonl")));
+	}
+
+	bool LoadPreviewTextFile(const FString& path, FString& outText)
+	{
+		outText.Reset();
+		return !path.IsEmpty()
+			&& FFileHelper::LoadFileToString(outText, *FExperimentSettingJson::ResolveProjectPath(path));
+	}
+
+	FString BuildJsonlPreview(const FString& jsonlPath)
 	{
 		TArray<FString> lines;
-		if (!FFileHelper::LoadFileToStringArray(lines, *FExperimentSettingJson::ResolveProjectPath(logPath)))
+		if (!FFileHelper::LoadFileToStringArray(lines, *FExperimentSettingJson::ResolveProjectPath(jsonlPath)))
 		{
-			return FString::Printf(TEXT("Log read failed: %s"), *logPath);
+			return FString::Printf(TEXT("JSONL read failed: %s"), *jsonlPath);
 		}
 
 		TArray<FString> previewLines;
-		for (int32 lineIndex = 0; lineIndex < FMath::Min(LogPreviewEdgeLineCount, lines.Num()); ++lineIndex)
+		for (int32 lineIndex = 0; lineIndex < FMath::Min(JsonlPreviewEdgeLineCount, lines.Num()); ++lineIndex)
 		{
 			previewLines.Add(lines[lineIndex]);
 		}
 
-		// Measurement JSONL은 tick record가 커질 수 있어 전체 내용을 UI에 펼치지 않는다.
-		if (lines.Num() > LogPreviewEdgeLineCount * 2)
+		// Event JSONL can grow; the detail panel only needs enough context for quick inspection.
+		if (lines.Num() > JsonlPreviewEdgeLineCount * 2)
 		{
 			previewLines.Add(TEXT("..."));
 		}
 
-		const int32 tailStartIndex = FMath::Max(LogPreviewEdgeLineCount, lines.Num() - LogPreviewEdgeLineCount);
+		const int32 tailStartIndex = FMath::Max(JsonlPreviewEdgeLineCount, lines.Num() - JsonlPreviewEdgeLineCount);
 		for (int32 lineIndex = tailStartIndex; lineIndex < lines.Num(); ++lineIndex)
 		{
 			previewLines.Add(lines[lineIndex]);
@@ -1797,16 +1826,7 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 
 void UMainMenuWidget::UpdateResultAndLogText()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		return;
-	}
-
-	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
-
 	CurrentPreviewResultPath = SelectedExperimentResultPath;
-	CurrentPreviewLogPath.Reset();
 
 	if (ReportTextBlock)
 	{
@@ -1815,15 +1835,25 @@ void UMainMenuWidget::UpdateResultAndLogText()
 			? TEXT("Experiment Run: <none>")
 			: FString::Printf(TEXT("Experiment Run: %s"), *SelectedExperimentResultRunDirectory));
 
+		const FString summaryPath = BuildRunSummaryPath(SelectedExperimentResultRunDirectory);
+		if (!summaryPath.IsEmpty())
+		{
+			FString summaryJson;
+			resultLines.Add(TEXT(""));
+			resultLines.Add(FString::Printf(TEXT("Run Summary: %s"), *summaryPath));
+			resultLines.Add(LoadPreviewTextFile(summaryPath, summaryJson)
+				? TruncatePreview(summaryJson, ResultPreviewCharacterLimit)
+				: TEXT("<missing>"));
+		}
+
 		if (!SelectedExperimentResultPath.IsEmpty())
 		{
 			FString resultJson;
-			if (FFileHelper::LoadFileToString(resultJson, *FExperimentSettingJson::ResolveProjectPath(SelectedExperimentResultPath)))
-			{
-				resultLines.Add(TEXT(""));
-				resultLines.Add(FString::Printf(TEXT("Episode Result: %s"), *SelectedExperimentResultPath));
-				resultLines.Add(TruncatePreview(resultJson, ResultPreviewCharacterLimit));
-			}
+			resultLines.Add(TEXT(""));
+			resultLines.Add(FString::Printf(TEXT("Episode Result: %s"), *SelectedExperimentResultPath));
+			resultLines.Add(LoadPreviewTextFile(SelectedExperimentResultPath, resultJson)
+				? TruncatePreview(resultJson, ResultPreviewCharacterLimit)
+				: TEXT("<missing>"));
 		}
 
 		ReportTextBlock->SetText(FText::FromString(JoinStringLines(resultLines)));
@@ -1831,37 +1861,22 @@ void UMainMenuWidget::UpdateResultAndLogText()
 
 	if (LogPreviewTextBlock)
 	{
-		TArray<FString> logLines;
-		logLines.Add(TEXT("Measurement Logs"));
-		TArray<FString> logPaths;
-		if (!SelectedExperimentResultRunDirectory.IsEmpty())
-		{
-			logPaths = subsystem->ListMeasurementLogFilesInDirectory(SelectedExperimentResultRunDirectory);
-			if (FPaths::GetPath(runInfo.StatusPath).Equals(SelectedExperimentResultRunDirectory, ESearchCase::IgnoreCase))
-			{
-				for (const FString& logPath : runInfo.Status.LogPaths)
-				{
-					logPaths.AddUnique(logPath);
-				}
-			}
-		}
-		logPaths.Sort();
-		CurrentPreviewLogPath = logPaths.IsEmpty() ? FString() : logPaths.Last();
+		TArray<FString> eventLines;
+		eventLines.Add(TEXT("Episode Events"));
 
-		for (const FString& logPath : logPaths)
+		const FString eventsPath = BuildEpisodeEventsPath(SelectedExperimentResultPath);
+		if (eventsPath.IsEmpty())
 		{
-			logLines.Add(FString::Printf(TEXT("- %s"), *logPath));
+			eventLines.Add(TEXT("<none>"));
+		}
+		else
+		{
+			eventLines.Add(FString::Printf(TEXT("events.jsonl: %s"), *eventsPath));
+			eventLines.Add(TEXT(""));
+			eventLines.Add(BuildJsonlPreview(eventsPath));
 		}
 
-		if (!logPaths.IsEmpty())
-		{
-			const FString previewLogPath = CurrentPreviewLogPath;
-			logLines.Add(TEXT(""));
-			logLines.Add(FString::Printf(TEXT("Preview: %s"), *previewLogPath));
-			logLines.Add(BuildLogPreview(previewLogPath));
-		}
-
-		LogPreviewTextBlock->SetText(FText::FromString(JoinStringLines(logLines)));
+		LogPreviewTextBlock->SetText(FText::FromString(JoinStringLines(eventLines)));
 	}
 }
 

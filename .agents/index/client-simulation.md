@@ -33,7 +33,6 @@ entry:
   - ScenarioSimulationSubsystem.h / .cpp
   - ScenarioRunnerSubsystem.h / .cpp
   - EpisodeMeasurementLogSubsystem.h / .cpp
-  - EpisodeEvaluationReportJson.h / .cpp
   - EpisodeRunResultJson.h / .cpp
   - EpisodeResultTypes.h
   - Client/Json/Input
@@ -53,7 +52,7 @@ keep:
   - ScenarioTemplateSampler owns deterministic scenario_template to scenario_sample generation; keep it separate from the runtime ScenarioCompiler and sample adapter.
   - ScenarioTemplateWorldSpecAdapter is the runner/launcher boundary for scenario_template files; it samples templates before handing the frozen sample to ScenarioSampleWorldSpecAdapter.
   - EpisodeRunResultJson owns canonical run outputs: summary.json, episodes/<SampleId>/result.json, and episodes/<SampleId>/events.jsonl.
-  - ScenarioRunnerSubsystem writes canonical outputs under RunOutputDirectory; legacy episode_evaluation_report output is opt-in compatibility behavior.
+  - ScenarioRunnerSubsystem writes only canonical `summary.json`, `result.json`, and `events.jsonl` outputs under RunOutputDirectory.
   - ScenarioAuthoringSubsystem stores the editor draft as scenario_template and builds runtime WorldSpec only as a preview/compatibility projection.
 verify:
   - contract specs vs sample JSON alignment

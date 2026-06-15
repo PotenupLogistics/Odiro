@@ -30,7 +30,7 @@ keep:
   - Legacy Client root scripts such as BuildProject.bat, RunPreview.bat, and RunPythonPolicyServer.bat stay folded into Task-* wrappers.
   - Simulator launch public contract is `-Experiment=<ExperimentRef>` with optional `-RunId=<RunId>` and `-SampleIds=<Ids>`.
   - MainMenu launches experiment folders directly; child simulator runs write `runs/<RunId>/status.json` under the selected experiment folder.
-  - MainMenu result detail reads canonical `episode_result` files and sends run_summary/result/events artifacts to AI analysis.
+  - MainMenu result detail previews canonical `summary.json`, `episode_result`, and `events.jsonl` artifacts and sends the same artifact set to AI analysis.
 verify:
   - launcher command contract tests for launch arg changes
   - runtime log plus status JSON for process changes

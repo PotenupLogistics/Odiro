@@ -6,7 +6,6 @@
 #include "Scenario/ScenarioSimulationSubsystem.h"
 #include "Scenario/ScenarioSimulationProfileAdapter.h"
 #include "Scenario/ScenarioTemplateWorldSpecAdapter.h"
-#include "Shared/EpisodeEvaluationReportJson.h"
 #include "Shared/EpisodeRunResultJson.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioRunner, Log, All);
@@ -319,44 +318,6 @@ void UScenarioRunnerSubsystem::SetRunnerState(EScenarioRunnerState runnerState)
 	OnRunnerStateChanged.Broadcast(RunnerState);
 }
 
-bool UScenarioRunnerSubsystem::BuildLatestEvaluationReportJson(FString& outJson) const
-{
-	if (RunRecords.IsEmpty())
-	{
-		outJson.Reset();
-		UE_LOG(LogScenarioRunner, Warning, TEXT("Evaluation report JSON 생성 실패: 기록이 없음"));
-		return false;
-	}
-
-	return BuildEvaluationReportJson(RunRecords.Num() - 1, outJson);
-}
-
-bool UScenarioRunnerSubsystem::BuildEvaluationReportJson(int32 runRecordIndex, FString& outJson) const
-{
-	if (!RunRecords.IsValidIndex(runRecordIndex))
-	{
-		outJson.Reset();
-		UE_LOG(
-			LogScenarioRunner,
-			Warning,
-			TEXT("Evaluation report JSON 생성 실패: 기록 index가 유효하지 않음 | Index: %d, Records: %d"),
-			runRecordIndex,
-			RunRecords.Num());
-		return false;
-	}
-
-	TArray<FString> diagnostics;
-	const bool bSucceeded = FEpisodeEvaluationReportJson::TryWriteReportJson(
-		RunRecords[runRecordIndex],
-		outJson,
-		diagnostics);
-	for (const FString& diagnostic : diagnostics)
-	{
-		UE_LOG(LogScenarioRunner, Warning, TEXT("Evaluation report JSON 진단 | %s"), *diagnostic);
-	}
-
-	return bSucceeded;
-}
 
 void UScenarioRunnerSubsystem::HandleEpisodeEnded(FEpisodeEvaluationResult result)
 {
@@ -691,10 +652,6 @@ void UScenarioRunnerSubsystem::CompleteCurrentRecord(
 
 	RunRecords.Add(CurrentRecord);
 	SaveEpisodeResultFilesForRecord(RunRecords.Last());
-	if (bSaveLegacyEvaluationReportJson)
-	{
-		SaveLegacyEvaluationReportJsonForRecord(RunRecords.Last());
-	}
 	OnRunRecordCompleted.Broadcast(RunRecords.Last());
 
 	UE_LOG(
@@ -895,68 +852,6 @@ FString UScenarioRunnerSubsystem::BuildEpisodeEventsJsonlFilePath(const FEpisode
 	return FPaths::Combine(FPaths::GetPath(BuildEpisodeResultJsonFilePath(runRecord)), TEXT("events.jsonl"));
 }
 
-bool UScenarioRunnerSubsystem::SaveLegacyEvaluationReportJsonForRecord(FEpisodeRunRecord& runRecord) const
-{
-	FString jsonString;
-	TArray<FString> diagnostics;
-	if (!FEpisodeEvaluationReportJson::TryWriteReportJson(runRecord, jsonString, diagnostics))
-	{
-		for (const FString& diagnostic : diagnostics)
-		{
-			UE_LOG(LogScenarioRunner, Warning, TEXT("Evaluation report JSON 저장 전 직렬화 진단 | %s"), *diagnostic);
-		}
-		return false;
-	}
-
-	const FString outputFilePath = BuildLegacyEvaluationReportJsonFilePath(runRecord);
-	const FString outputDirectory = FPaths::GetPath(outputFilePath);
-	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true))
-	{
-		UE_LOG(
-			LogScenarioRunner,
-			Warning,
-			TEXT("Evaluation report JSON 저장 실패: 디렉터리 생성 실패 | Path: %s"),
-			*outputDirectory);
-		return false;
-	}
-
-	if (!FFileHelper::SaveStringToFile(jsonString, *outputFilePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
-	{
-		UE_LOG(
-			LogScenarioRunner,
-			Warning,
-			TEXT("Evaluation report JSON 저장 실패: 파일 쓰기 실패 | Path: %s"),
-			*outputFilePath);
-		return false;
-	}
-
-	UE_LOG(
-		LogScenarioRunner,
-		Log,
-		TEXT("Evaluation report JSON 저장 완료 | RunId: %s, Episode: %s, Path: %s"),
-		*runRecord.RunId,
-		*runRecord.EpisodeId,
-		*outputFilePath);
-	runRecord.EvaluationReportJsonPath = MakeEpisodeRunnerProjectRelativePath(outputFilePath);
-	return true;
-}
-
-FString UScenarioRunnerSubsystem::BuildLegacyEvaluationReportJsonFilePath(const FEpisodeRunRecord& runRecord) const
-{
-	const FString directory = RunOutputDirectory.IsEmpty()
-		? TEXT("Json/Output")
-		: RunOutputDirectory;
-	const FString resolvedDirectory = FPaths::IsRelative(directory)
-		? FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), directory))
-		: directory;
-
-	const FString fileName = FString::Printf(
-		TEXT("%s_%s_%s_evaluation_report.json"),
-		*SanitizeReportFileToken(runRecord.RunId),
-		*SanitizeReportFileToken(runRecord.PairId),
-		*SanitizeReportFileToken(runRecord.EpisodeId));
-	return FPaths::Combine(resolvedDirectory, fileName);
-}
 
 FString UScenarioRunnerSubsystem::BuildPairId(const FScenarioRunInput& runInput, int32 runIndex)
 {

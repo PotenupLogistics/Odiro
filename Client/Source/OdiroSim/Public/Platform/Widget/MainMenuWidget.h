@@ -333,7 +333,6 @@ private:
 	TObjectPtr<UTextBlock> LogPreviewTextBlock;
 
 	FString CurrentPreviewResultPath;
-	FString CurrentPreviewLogPath;
 	FTimerHandle RefreshTimerHandle;
 
 	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|List")

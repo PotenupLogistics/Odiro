@@ -102,7 +102,7 @@ specs:
 | Scenario world setup       | 구현    | `UScenarioSimulationSubsystem`                                           | `ScenarioSimulationMap`에서 실행할 월드 배치 기반                       |
 | DeliveryBot setup compile | 구현    | `UDeliveryBotSetupCompiler`                                             | 실행 설정의 입력 파일로 선택하고 검증 가능                             |
 | Batch runner              | 구현    | `UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile`               | 실험 구성 실행의 핵심 API                                              |
-| Evaluation report         | 구현    | `FEpisodeEvaluationReportJson`                                          | 실험 결과 화면의 요약 데이터 기반                                      |
+| Run result artifacts      | 구현    | `FEpisodeRunResultJson`                                                 | 실험 결과 화면의 `summary.json`, `result.json`, `events.jsonl` 기반    |
 | Measurement log           | 구현    | `UEpisodeMeasurementLogSubsystem`                                       | 결과 분석 Agent와 결과 상세 화면의 raw log 기반                        |
 | Map 분리                  | 구현    | `ScenarioSimulationMap`, `ScenarioEditorMap`                              | 시뮬레이션 실행과 시나리오 편집 map을 분리                             |
 | Remote policy API         | 범위 밖 | `UDeliveryBot_PolicyJudgmentComponent`                                  | 로봇 담당 작업자의 구현 범위                                           |

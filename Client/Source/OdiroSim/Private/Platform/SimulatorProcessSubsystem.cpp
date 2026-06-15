@@ -458,7 +458,6 @@ void USimulatorProcessSubsystem::ConfigureRunnerSubsystem(UScenarioRunnerSubsyst
 		return;
 	}
 
-	runnerSubsystem->bSaveLegacyEvaluationReportJson = false;
 	runnerSubsystem->RunOutputDirectory = ActiveRunOutputDirectory;
 	BindRunnerDelegates(runnerSubsystem);
 }
@@ -668,10 +667,6 @@ void USimulatorProcessSubsystem::RefreshStatusFromRunner(const UScenarioRunnerSu
 		if (!runRecord.EpisodeResultJsonPath.IsEmpty())
 		{
 			ActiveStatus.ResultPaths.Add(ToProjectRelativePathIfPossible(runRecord.EpisodeResultJsonPath));
-		}
-		if (!runRecord.EvaluationReportJsonPath.IsEmpty())
-		{
-			ActiveStatus.ResultPaths.Add(ToProjectRelativePathIfPossible(runRecord.EvaluationReportJsonPath));
 		}
 	}
 }

@@ -54,21 +54,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	FString GetCurrentPairId() const { return CurrentRecord.PairId; }
 
-	// Enables the legacy episode_evaluation_report artifact beside canonical run outputs.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Runner|Result")
-	bool bSaveLegacyEvaluationReportJson = false;
-
 	// Directory that owns summary.json and episodes/<SampleId>/ result artifacts.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Runner|Result")
 	FString RunOutputDirectory = TEXT("Json/Output");
-
-	// Builds the legacy episode_evaluation_report JSON for compatibility callers.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
-	bool BuildLatestEvaluationReportJson(FString& outJson) const;
-
-	// Builds the legacy episode_evaluation_report JSON for one completed record.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
-	bool BuildEvaluationReportJson(int32 runRecordIndex, FString& outJson) const;
 
 private:
 	UFUNCTION()
@@ -96,8 +84,6 @@ private:
 	FString BuildRunSummaryJsonFilePath() const;
 	FString BuildEpisodeResultJsonFilePath(const FEpisodeRunRecord& runRecord) const;
 	FString BuildEpisodeEventsJsonlFilePath(const FEpisodeRunRecord& runRecord) const;
-	bool SaveLegacyEvaluationReportJsonForRecord(FEpisodeRunRecord& runRecord) const;
-	FString BuildLegacyEvaluationReportJsonFilePath(const FEpisodeRunRecord& runRecord) const;
 	static FString BuildPairId(const FScenarioRunInput& runInput, int32 runIndex);
 	static FString SanitizeReportFileToken(const FString& value);
 

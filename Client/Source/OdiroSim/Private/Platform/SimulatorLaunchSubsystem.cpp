@@ -11,10 +11,8 @@ namespace
 	const TCHAR* ScenarioInputDirectory = TEXT("Json/Input");
 	const TCHAR* ExperimentInputDirectory = TEXT("Json/Experiments");
 	const TCHAR* SimulatorLaunchPolicySpecInputDirectory = TEXT("Json/Input/PolicySpecs");
-	const TCHAR* LegacyEvaluationReportOutputDirectory = TEXT("Json/Output");
 	const TCHAR* SimulationRunStatusDirectory = TEXT("Saved/SimulationRuns");
 	const TCHAR* PreviewLauncherFileName = TEXT("Task-RunPreview.bat");
-	const TCHAR* LegacyEvaluationReportSchema = TEXT("episode_evaluation_report");
 	const TCHAR* EpisodeResultSchema = TEXT("episode_result");
 	const TCHAR* RunSummarySchema = TEXT("run_summary");
 	const TCHAR* SimulatorProcessFlags = TEXT("-nosound -unattended -NoLoadingScreen");
@@ -288,15 +286,6 @@ TArray<FString> USimulatorLaunchSubsystem::ListPolicySpecFiles() const
 	return policySpecFiles;
 }
 
-TArray<FString> USimulatorLaunchSubsystem::ListLegacyEvaluationReportFiles() const
-{
-	TArray<FString> reportFiles;
-	FindJsonFilesWithSchema(LegacyEvaluationReportOutputDirectory, LegacyEvaluationReportSchema, reportFiles);
-	FindJsonFilesWithSchema(SimulationRunStatusDirectory, LegacyEvaluationReportSchema, reportFiles);
-	reportFiles.Sort();
-	return reportFiles;
-}
-
 TArray<FString> USimulatorLaunchSubsystem::ListSimulationRunResultDirectories() const
 {
 	TArray<FString> candidateFiles;
@@ -318,7 +307,6 @@ TArray<FString> USimulatorLaunchSubsystem::ListSimulationRunResultDirectories() 
 		}
 
 		if (!schema.Equals(TEXT("simulation_run_status"), ESearchCase::CaseSensitive)
-			&& !schema.Equals(LegacyEvaluationReportSchema, ESearchCase::CaseSensitive)
 			&& !schema.Equals(RunSummarySchema, ESearchCase::CaseSensitive))
 		{
 			continue;

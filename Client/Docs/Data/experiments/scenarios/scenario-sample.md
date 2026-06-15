@@ -9,7 +9,7 @@ experiments/<Experiment>/scenarios/<SampleId>.json
 schema:
 
 ```json
-"scenario_sample_v1"
+"scenario_sample"
 ```
 
 ## 역할
@@ -22,13 +22,13 @@ Scenario Sample은 Scenario Template을 seed로 확정한 canonical scenario다.
 - LLM이 직접 작성하는 파일이 아니라 생성기가 만든다.
 - LLM과 분석 도구의 기본 입력은 `sample`, `scenario`, `validation`이다.
 - Unreal 실행용 `ScenarioSetup`/world payload는 이 파일에 저장하지 않는다.
-- 실행 payload는 run 또는 preview 시점에 `scenario_sample_v1`에서 파생해 생성한다.
+- 실행 payload는 run 또는 preview 시점에 `scenario_sample`에서 파생해 생성한다.
 
 ## Root
 
 ```json
 {
-  "schema": "scenario_sample_v1",
+  "schema": "scenario_sample",
   "version": 1,
   "sample": {},
   "scenario": {},
@@ -38,7 +38,7 @@ Scenario Sample은 Scenario Template을 seed로 확정한 canonical scenario다.
 
 | 필드 | 필수 | 합의 |
 | --- | --- | --- |
-| `schema` | 필수 | 고정값 `scenario_sample_v1` |
+| `schema` | 필수 | 고정값 `scenario_sample` |
 | `version` | 필수 | schema version. v1은 `1` |
 | `sample` | 필수 | sample 식별자와 생성 계보 |
 | `scenario` | 필수 | seed로 확정된 시나리오 본문 |

@@ -9,7 +9,7 @@ templates/profiles/<Profile>.json
 schema:
 
 ```json
-"simulation_profile_v1"
+"simulation_profile"
 ```
 
 상태: v1 합의. 실험에 복사될 고정 robot capability/setup profile이다.
@@ -20,14 +20,14 @@ schema:
 - Scenario Sample의 `sample.source.profile_ref`와 `sample.source.profile_hash`가 이 계보를 기록한다.
 - profile 값은 실험의 고정 입력이다. 실행마다 randomize하지 않는다.
 - robot policy 코드와 policy config는 `experiments/<Experiment>/policy/`가 소유한다.
-- 환경 해석 catalog(surface/prop/pedestrian catalog 등)는 profile에 넣지 않는다. 별도 guide 또는 시스템 프롬프트 입력으로 분리한다.
+- 환경 해석 catalog(surface/prop/pedestrian catalog 등)는 profile에 넣지 않는다. [Environment Catalog](../environment-catalog.md) 또는 시스템 프롬프트 입력으로 분리한다.
 - 전역 위치/거리/크기 단위는 meter다.
 
 ## Root
 
 ```json
 {
-  "schema": "simulation_profile_v1",
+  "schema": "simulation_profile",
   "version": 1,
   "profile_id": "deliverybot_default",
   "display_name": "Default DeliveryBot",
@@ -42,7 +42,7 @@ schema:
 
 | 필드 | 타입 | 합의 |
 | --- | --- | --- |
-| `schema` | string | 고정값 `simulation_profile_v1` |
+| `schema` | string | 고정값 `simulation_profile` |
 | `version` | number | schema version. v1은 `1` |
 | `profile_id` | string | 사람이 읽고 참조할 수 있는 profile id |
 | `display_name` | string | UI 표시명 |
@@ -107,7 +107,7 @@ schema:
 | --- | --- |
 | policy 파일명/config/tuning | `policy/` package가 소유 |
 | scenario start/goal | Scenario Template/Sample의 `robot`이 소유 |
-| surface/prop/pedestrian catalog | schema 외부 guide 또는 시스템 프롬프트 입력으로 분리 |
+| surface/prop/pedestrian catalog | [Environment Catalog](../environment-catalog.md) 또는 시스템 프롬프트 입력으로 분리 |
 | LiDAR 전방 판정 snapshot | `actions.jsonl.front_half_angle_degree`가 소유 |
 | randomization range | profile 값은 실험 고정 입력 |
 

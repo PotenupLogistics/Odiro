@@ -46,18 +46,18 @@
 
 | Schema | 경로 | Schema / 형식 | 문서 |
 | --- | --- | --- | --- |
-| Scenario Template | `templates/scenarios/*.template.json` | `scenario_template_v1` | [Data/templates/scenario-template.md](Data/templates/scenario-template.md) |
-| Profile Template | `templates/profiles/*.json` | `simulation_profile_v1` | [Data/templates/profile-template.md](Data/templates/profile-template.md) |
-| Experiment Setting | `experiments/<Experiment>/setting.json` | `experiment_setting_v1` | [Data/experiments/setting.md](Data/experiments/setting.md) |
-| Experiment Profile | `experiments/<Experiment>/profile.json` | `simulation_profile_v1` | [Data/experiments/profile.md](Data/experiments/profile.md) |
+| Scenario Template | `templates/scenarios/*.template.json` | `scenario_template` | [Data/templates/scenario-template.md](Data/templates/scenario-template.md) |
+| Profile Template | `templates/profiles/*.json` | `simulation_profile` | [Data/templates/profile-template.md](Data/templates/profile-template.md) |
+| Experiment Setting | `experiments/<Experiment>/setting.json` | `experiment_setting` | [Data/experiments/setting.md](Data/experiments/setting.md) |
+| Experiment Profile | `experiments/<Experiment>/profile.json` | `simulation_profile` | [Data/experiments/profile.md](Data/experiments/profile.md) |
 | Policy Package | `experiments/<Experiment>/policy/` | Python package + config | [Data/experiments/policy/policy-package.md](Data/experiments/policy/policy-package.md) |
-| Scenario Sample | `experiments/<Experiment>/scenarios/*.json` | `scenario_sample_v1` | [Data/experiments/scenarios/scenario-sample.md](Data/experiments/scenarios/scenario-sample.md) |
+| Scenario Sample | `experiments/<Experiment>/scenarios/*.json` | `scenario_sample` | [Data/experiments/scenarios/scenario-sample.md](Data/experiments/scenarios/scenario-sample.md) |
 | Run Policy Snapshot | `experiments/<Experiment>/runs/<RunId>/policy/` | copied policy package | [Data/experiments/runs/policy-snapshot.md](Data/experiments/runs/policy-snapshot.md) |
-| Run Summary | `experiments/<Experiment>/runs/<RunId>/summary.json` | `run_summary_v1` | [Data/experiments/runs/summary.md](Data/experiments/runs/summary.md) |
+| Run Summary | `experiments/<Experiment>/runs/<RunId>/summary.json` | `run_summary` | [Data/experiments/runs/summary.md](Data/experiments/runs/summary.md) |
 | AI Review | `experiments/<Experiment>/runs/<RunId>/review/` | 논의중 | [Data/experiments/runs/review.md](Data/experiments/runs/review.md) |
-| Episode Result | `experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/result.json` | `episode_result_v1` | [Data/experiments/runs/episodes/result.md](Data/experiments/runs/episodes/result.md) |
-| Episode Events | `experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/events.jsonl` | `episode_event_v1` | [Data/experiments/runs/episodes/events.md](Data/experiments/runs/episodes/events.md) |
-| Robot Actions | `experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/actions.jsonl` | `robot_action_v1` | [Data/experiments/runs/episodes/actions.md](Data/experiments/runs/episodes/actions.md) |
+| Episode Result | `experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/result.json` | `episode_result` | [Data/experiments/runs/episodes/result.md](Data/experiments/runs/episodes/result.md) |
+| Episode Events | `experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/events.jsonl` | `episode_event` | [Data/experiments/runs/episodes/events.md](Data/experiments/runs/episodes/events.md) |
+| Robot Actions | `experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/actions.jsonl` | `robot_action` | [Data/experiments/runs/episodes/actions.md](Data/experiments/runs/episodes/actions.md) |
 | Episode Trace | `experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/trace.jsonl` | 논의중 | [Data/experiments/runs/episodes/trace.md](Data/experiments/runs/episodes/trace.md) |
 | Episode Preview | `experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/preview.png` | PNG artifact | [Data/experiments/runs/episodes/preview.md](Data/experiments/runs/episodes/preview.md) |
 | Sensor Captures | `experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/captures/` | image/data artifacts | [Data/experiments/runs/episodes/captures.md](Data/experiments/runs/episodes/captures.md) |
@@ -70,14 +70,14 @@
 
 | Schema | 상태 |
 | --- | --- |
-| `scenario_template_v1` | template authoring source |
-| `scenario_sample_v1` | template에서 생성된 고정 scenario sample |
-| `simulation_profile_v1` | 실험에 고정되는 robot capability/setup profile |
-| `experiment_setting_v1` | 실험 sampling/runtime/evaluation 설정 |
-| `run_summary_v1` | run-level 집계 |
-| `episode_result_v1` | episode terminal result |
-| `episode_event_v1` | episode event log |
-| `robot_action_v1` | policy `/scenario/decide` 요청/응답 로그 |
+| `scenario_template` | template authoring source |
+| `scenario_sample` | template에서 생성된 고정 scenario sample |
+| `simulation_profile` | 실험에 고정되는 robot capability/setup profile |
+| `experiment_setting` | 실험 sampling/runtime/evaluation 설정 |
+| `run_summary` | run-level 집계 |
+| `episode_result` | episode terminal result |
+| `episode_event` | episode event log |
+| `robot_action` | policy `/scenario/decide` 요청/응답 로그 |
 
 ### 논의중인 schema surface
 
@@ -122,7 +122,13 @@
 - Editor와 LLM은 `scenarios/*.template.json`을 작성/편집한다.
 - `profiles/*.json`은 실험 생성 시 `experiments/<Experiment>/profile.json`으로 복사된다.
 - profile 값은 실험의 고정 입력이며, 실행마다 randomize하지 않는다.
-- surface/prop/pedestrian catalog 같은 환경 해석 정보는 profile에 넣지 않고 별도 guide 또는 시스템 프롬프트 입력으로 분리한다.
+- surface/prop/pedestrian catalog 같은 환경 해석 정보는 profile에 넣지 않고 [Data/environment-catalog.md](Data/environment-catalog.md) 또는 시스템 프롬프트 입력으로 분리한다.
+
+## Catalog Guides
+
+| 문서 | 역할 |
+| --- | --- |
+| [Data/environment-catalog.md](Data/environment-catalog.md) | Scenario Template 작성을 위한 surface/prop/pedestrian 어휘 |
 
 ## Experiments
 
@@ -147,7 +153,7 @@
 합의:
 
 - `setting.json`은 sample 생성 조건, runtime 조건, evaluation 기준을 소유한다.
-- `profile.json`은 template profile에서 복사된 `simulation_profile_v1` 고정 입력이다.
+- `profile.json`은 template profile에서 복사된 `simulation_profile` 고정 입력이다.
 - `scenarios/*.json`은 template + profile + setting + seed로 생성된다.
 - `scenarios/*.json`은 실험 중 고정되어야 한다.
 - run 시작 시 `runs/<RunId>/`가 생성된다.

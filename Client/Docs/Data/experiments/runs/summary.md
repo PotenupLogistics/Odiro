@@ -9,7 +9,7 @@ experiments/<Experiment>/runs/<RunId>/summary.json
 schema:
 
 ```json
-"run_summary_v1"
+"run_summary"
 ```
 
 ## 합의
@@ -23,7 +23,7 @@ schema:
 
 ```json
 {
-  "schema": "run_summary_v1",
+  "schema": "run_summary",
   "version": 1,
   "run": {},
   "rows": []

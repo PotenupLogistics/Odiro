@@ -157,7 +157,15 @@ jobs:
               Write-Error "Unreal asset changed on main after this branch diverged. Rebase from main, lock again, then update the PR.`n$message"
           }
 
-          $locksPayload = (git lfs locks --json | Out-String) | ConvertFrom-Json
+          $locksJson = @(git lfs locks --json)
+          if ($LASTEXITCODE -ne 0) {
+              throw "Failed to query Git LFS locks."
+          }
+          $locksText = ($locksJson -join "`n").Trim()
+          if ([string]::IsNullOrWhiteSpace($locksText)) {
+              throw "Git LFS locks returned empty JSON."
+          }
+          $locksPayload = $locksText | ConvertFrom-Json
           $locksByPath = @{}
           foreach ($lock in Get-LockArray $locksPayload) {
               $path = Get-LockPath $lock

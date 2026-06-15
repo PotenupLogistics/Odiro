@@ -14,7 +14,7 @@ entry:
   - SimulatorLaunchSubsystem.h / .cpp
   - SimulatorProcessSubsystem.h / .cpp
   - ScenarioEditorLaunchSubsystem.h / .cpp
-  - PlatformAnalysisAiSubsystem.h / .cpp
+  - PlatformRunAnalysisSubsystem.h / .cpp
   - MainMenuPlayerController.h / .cpp
   - Widget/MainMenuWidget.h / .cpp
   - Client/Task-RunPreview.bat
@@ -30,7 +30,7 @@ keep:
   - Legacy Client root scripts such as BuildProject.bat, RunPreview.bat, and RunPythonPolicyServer.bat stay folded into Task-* wrappers.
   - Simulator launch public contract is `-Experiment=<ExperimentRef>` with optional `-RunId=<RunId>` and `-SampleIds=<Ids>`.
   - MainMenu launches experiment folders directly; child simulator runs write `runs/<RunId>/status.json` under the selected experiment folder.
-  - MainMenu result detail reads canonical `episode_result` files; legacy evaluation reports remain only for compatibility analysis tools.
+  - MainMenu result detail reads canonical `episode_result` files and sends run_summary/result/events artifacts to AI analysis.
 verify:
   - launcher command contract tests for launch arg changes
   - runtime log plus status JSON for process changes

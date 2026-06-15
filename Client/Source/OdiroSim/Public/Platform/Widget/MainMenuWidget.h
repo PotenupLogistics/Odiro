@@ -11,13 +11,13 @@ class UEditableTextBox;
 class UScenarioEditorLaunchSubsystem;
 class UExperimentResultIterationButton;
 class UFileListItemWidget;
-class UPlatformAnalysisAiSubsystem;
+class UPlatformRunAnalysisSubsystem;
 class USimulatorLaunchSubsystem;
 class UScrollBox;
 class UTextBlock;
 class UWidget;
 class UWidgetSwitcher;
-struct FPlatformAnalysisAiResponse;
+struct FPlatformRunAnalysisResponse;
 
 // MainMenuMap에서 UMG Blueprint layout과 platform event handler를 연결하는 widget
 UCLASS(BlueprintType, Blueprintable)
@@ -146,7 +146,7 @@ private:
 	bool OpenScenarioInEditor(const FString& scenarioSetupPath);
 	TSubclassOf<UFileListItemWidget> ResolveFileListItemWidgetClass() const;
 	void HandleRunInfoChanged(const struct FSimulatorRunInfo& runInfo);
-	void HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response);
+	void HandleAnalysisCompleted(const FPlatformRunAnalysisResponse& response);
 	void UpdateStatusText(const FString& extraMessage = FString());
 	void UpdateResultAndLogText();
 	void SetDiagnosticsText(const FString& message);
@@ -156,7 +156,7 @@ private:
 	FString GetSelectedPolicySpecPath() const;
 	USimulatorLaunchSubsystem* GetSimulatorLaunchSubsystem() const;
 	UScenarioEditorLaunchSubsystem* GetScenarioEditorLaunchSubsystem() const;
-	UPlatformAnalysisAiSubsystem* GetPlatformAnalysisAiSubsystem() const;
+	UPlatformRunAnalysisSubsystem* GetPlatformRunAnalysisSubsystem() const;
 
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UWidgetSwitcher> MainContentSwitcher;

@@ -10,7 +10,7 @@
 #include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
 #include "Platform/ScenarioEditorLaunchSubsystem.h"
-#include "Platform/PlatformAnalysisAiSubsystem.h"
+#include "Platform/PlatformRunAnalysisSubsystem.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Platform/Widget/ExperimentResultIterationButton.h"
 #include "Platform/Widget/FileListItemWidget.h"
@@ -388,7 +388,7 @@ void UMainMenuWidget::NativeConstruct()
 		subsystem->OnRunInfoChanged.AddUObject(this, &UMainMenuWidget::HandleRunInfoChanged);
 	}
 
-	if (UPlatformAnalysisAiSubsystem* analysisSubsystem = GetPlatformAnalysisAiSubsystem())
+	if (UPlatformRunAnalysisSubsystem* analysisSubsystem = GetPlatformRunAnalysisSubsystem())
 	{
 		analysisSubsystem->OnAnalysisCompleted.RemoveAll(this);
 		analysisSubsystem->OnAnalysisCompleted.AddUObject(this, &UMainMenuWidget::HandleAnalysisCompleted);
@@ -420,7 +420,7 @@ void UMainMenuWidget::NativeDestruct()
 		subsystem->OnRunInfoChanged.RemoveAll(this);
 	}
 
-	if (UPlatformAnalysisAiSubsystem* analysisSubsystem = GetPlatformAnalysisAiSubsystem())
+	if (UPlatformRunAnalysisSubsystem* analysisSubsystem = GetPlatformRunAnalysisSubsystem())
 	{
 		analysisSubsystem->OnAnalysisCompleted.RemoveAll(this);
 	}
@@ -779,10 +779,31 @@ void UMainMenuWidget::HandleSendToAiClicked()
 		return;
 	}
 
+	UPlatformRunAnalysisSubsystem* AnalysisSubsystem = GetPlatformRunAnalysisSubsystem();
+	if (!AnalysisSubsystem)
+	{
+		if (AiAnalysisTextBlock)
+		{
+			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: PlatformRunAnalysisSubsystem is missing.")));
+		}
+		return;
+	}
+
+	if (AnalysisSubsystem->IsAnalysisRequestPending())
+	{
+		if (AiAnalysisTextBlock)
+		{
+			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis request is already pending.")));
+		}
+		return;
+	}
+
 	if (AiAnalysisTextBlock)
 	{
-		AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis still requires a legacy evaluation report. episode_result support is pending.")));
+		AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis request started.")));
 	}
+
+	AnalysisSubsystem->RequestAnalysisForEpisodeResult(CurrentPreviewResultPath);
 }
 
 void UMainMenuWidget::HandleShowScenarioClicked()
@@ -1669,7 +1690,7 @@ void UMainMenuWidget::HandleRunInfoChanged(const FSimulatorRunInfo& runInfo)
 	UpdateResultAndLogText();
 }
 
-void UMainMenuWidget::HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response)
+void UMainMenuWidget::HandleAnalysisCompleted(const FPlatformRunAnalysisResponse& response)
 {
 	if (!AiAnalysisTextBlock)
 	{
@@ -1924,8 +1945,8 @@ UScenarioEditorLaunchSubsystem* UMainMenuWidget::GetScenarioEditorLaunchSubsyste
 	return gameInstance ? gameInstance->GetSubsystem<UScenarioEditorLaunchSubsystem>() : nullptr;
 }
 
-UPlatformAnalysisAiSubsystem* UMainMenuWidget::GetPlatformAnalysisAiSubsystem() const
+UPlatformRunAnalysisSubsystem* UMainMenuWidget::GetPlatformRunAnalysisSubsystem() const
 {
 	const UGameInstance* gameInstance = GetGameInstance();
-	return gameInstance ? gameInstance->GetSubsystem<UPlatformAnalysisAiSubsystem>() : nullptr;
+	return gameInstance ? gameInstance->GetSubsystem<UPlatformRunAnalysisSubsystem>() : nullptr;
 }

@@ -370,4 +370,5 @@ go.work.sum
 /build/
 
 ## Local files
+*.local
 *.local.*

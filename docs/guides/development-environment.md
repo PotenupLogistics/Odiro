@@ -30,6 +30,10 @@ git submodule update --init --recursive
 # 적용값
 git config --local core.hooksPath .githooks
 git config --local merge.ff false
+git config --local pull.ff true
+git config --local pull.rebase true
+git config --local rebase.autoStash true
+git config --local branch.autoSetupRebase always
 git config --local lfs.locksverify true
 git config --local lfs.setlockablereadonly true
 ```

@@ -6,6 +6,7 @@
 #include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "Shared/ScenarioCompileTypes.h"
 #include "Shared/ScenarioSpecTypes.h"
+#include "Shared/ScenarioTemplateTypes.h"
 #include "Scenario/Actors/ScenarioPedestrian.h"
 #include "Scenario/Actors/ScenarioStaticObstacle.h"
 #include "Subsystems/WorldSubsystem.h"
@@ -189,10 +190,13 @@ public:
 		AScenarioStaticObstacle*& outActor);
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
-	FScenarioWorldSpec GetDraftWorldSpec() const { return DraftWorldSpec; }
+	FScenarioWorldSpec GetDraftWorldSpec() const { return BuildDraftWorldSpecForPreview(); }
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
-	FString GetSourceScenarioSetupJsonPath() const { return SourceScenarioSetupJsonPath; }
+	FScenarioTemplateDocument GetDraftScenarioTemplate() const { return DraftScenarioTemplate; }
+
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
+	FString GetSourceScenarioSetupJsonPath() const { return SourceScenarioTemplateJsonPath; }
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	bool IsDraftDirty() const { return bDirty; }
@@ -237,6 +241,10 @@ private:
 	static bool TryGetFloatProperty(const TMap<FString, FScenarioParamValue>& properties, const FString& key, double& outValue);
 	static bool TryGetBoolProperty(const TMap<FString, FScenarioParamValue>& properties, const FString& key, bool& outValue);
 	static bool TryGetStringProperty(const TMap<FString, FScenarioParamValue>& properties, const FString& key, FString& outValue);
+	static void AppendSchemaDiagnostics(const TArray<FScenarioSchemaDiagnostic>& schemaDiagnostics, TArray<FString>& outDiagnostics);
+	static FScenarioTemplateNumberValue MakeFixedTemplateNumber(double value);
+	static FScenarioTemplateIntegerValue MakeFixedTemplateInteger(int32 value);
+	static double GetFixedTemplateNumber(const FScenarioTemplateNumberValue& value, double defaultValue);
 
 	UScenarioCompiler* CreateScenarioCompiler() const;
 	const UScenarioStaticObstaclePropCatalog* GetStaticObstaclePropCatalog() const;
@@ -257,9 +265,23 @@ private:
 	FString GenerateGroundRegionId();
 	bool ContainsInstanceId(const FString& instanceId) const;
 	bool ContainsGroundRegionId(const FString& regionId) const;
+	bool IsDraftScenarioTemplateEmpty() const;
 	void InitializeDraftDefaults();
 	bool EnsureSingleRobotRouteSpec(TArray<FString>& outDiagnostics, bool& bOutDraftChanged);
 	bool ValidateSingleRobotRouteSpecForExport(TArray<FString>& outDiagnostics) const;
+	FScenarioWorldSpec BuildDraftWorldSpecForPreview() const;
+	FScenarioTemplateRobotAnchor MakeRobotAnchorFromLocationCm(const FVector& locationCm) const;
+	FVector ResolveRobotAnchorLocationCm(const FScenarioTemplateRobotAnchor& anchor, bool bGoalAnchor) const;
+	FScenarioTemplateObstaclePlacement MakeStaticObstaclePlacement(
+		const FString& placementId,
+		FName propId,
+		const FTransform& transform) const;
+	FScenarioPlaceableInstanceSpec MakeStaticObstacleSpecFromPlacement(
+		const FScenarioTemplateObstaclePlacement& placement) const;
+	FScenarioPlaceableInstanceSpec MakeDeliveryBotSpecFromTemplateRobot() const;
+	FScenarioTemplateObstaclePlacement* FindStaticObstaclePlacementByInstanceId(const FString& instanceId);
+	const FScenarioTemplateObstaclePlacement* FindStaticObstaclePlacementByInstanceId(const FString& instanceId) const;
+	void ImportWorldSpecAsScenarioTemplate(const FScenarioWorldSpec& worldSpec);
 	void ClearEditorView();
 
 	// import된 draft에서 정적 장애물만 AScenarioStaticObstacle로 EditorMap에 재생성.
@@ -307,10 +329,6 @@ private:
 		const FString& instanceId,
 		FName archetypeId,
 		const FTransform& transform) const;
-	FScenarioPlaceableInstanceSpec* FindDeliveryBotSpec();
-	const FScenarioPlaceableInstanceSpec* FindDeliveryBotSpec() const;
-	FScenarioPlaceableInstanceSpec* FindStaticObstacleSpecByInstanceId(const FString& instanceId);
-	const FScenarioPlaceableInstanceSpec* FindStaticObstacleSpecByInstanceId(const FString& instanceId) const;
 	FScenarioAuthoringStaticObstacleRecord* FindStaticObstacleRecordByInstanceId(const FString& instanceId);
 	const FScenarioAuthoringStaticObstacleRecord* FindStaticObstacleRecordByInstanceId(const FString& instanceId) const;
 	void ConfigureAuthoredStaticObstacleActor(
@@ -318,10 +336,16 @@ private:
 		const FScenarioPlaceableInstanceSpec& spec) const;
 
 	UPROPERTY(Transient)
-	FScenarioWorldSpec DraftWorldSpec;
+	FScenarioTemplateDocument DraftScenarioTemplate;
 
 	UPROPERTY(Transient)
-	FString SourceScenarioSetupJsonPath;
+	TArray<FScenarioGroundRegionSpec> DraftGroundRegions;
+
+	UPROPERTY(Transient)
+	TArray<FScenarioDynamicActorSpec> DraftPedestrianSpecs;
+
+	UPROPERTY(Transient)
+	FString SourceScenarioTemplateJsonPath;
 
 	UPROPERTY(Transient)
 	bool bDirty = false;

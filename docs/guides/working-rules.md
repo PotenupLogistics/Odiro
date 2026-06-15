@@ -79,8 +79,13 @@ Lock 성공 시 해당 asset이 writable 상태가 된다. 실패 시 다른 사
 #### 3. 수정 후 Pull Request
 
 ```powershell
+# 작업 사항 커밋
 git add Client/Content/<path>/<asset>.uasset
 git commit -m "feat: ..."
+
+# push 및 PR 생성
+.\task-push.bat
+# 또는 수동 push
 git push origin <branch>
 ```
 

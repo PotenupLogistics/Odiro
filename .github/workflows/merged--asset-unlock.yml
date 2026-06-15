@@ -19,6 +19,10 @@ on:
         required: false
         type: string
 
+concurrency:
+  group: ${{ github.workflow }}-asset-locks
+  queue: max
+
 permissions:
   contents: read
 
@@ -40,7 +44,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           lfs: false
           token: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
 
@@ -54,12 +58,33 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
           PUSH_AFTER: ${{ github.sha }}
           PUSH_FORCED: ${{ github.event.forced }}
-          HEAD_COMMIT_TIMESTAMP: ${{ github.event.head_commit.timestamp }}
+          PUSHED_AT: ${{ github.event.repository.pushed_at }}
           DISPATCH_MODE: ${{ github.event.inputs.mode }}
           DISPATCH_PATH: ${{ github.event.inputs.path }}
         run: |
           $ErrorActionPreference = "Stop"
           Set-StrictMode -Version Latest
+
+          # Parses GitHub and Git LFS timestamp payloads as UTC.
+          function ConvertTo-UtcTimestamp {
+              param(
+                  [Parameter(Mandatory = $true)][string] $Value,
+                  [Parameter(Mandatory = $true)][string] $Name
+              )
+
+              if ([string]::IsNullOrWhiteSpace($Value)) {
+                  throw "$Name is required."
+              }
+
+              $text = $Value.Trim()
+              $epochSeconds = [int64] 0
+              if ([int64]::TryParse($text, [ref] $epochSeconds)) {
+                  return [datetimeoffset]::FromUnixTimeSeconds($epochSeconds).UtcDateTime
+              }
+
+              $style = [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal
+              return [datetimeoffset]::Parse($text, [Globalization.CultureInfo]::InvariantCulture, $style).UtcDateTime
+          }
 
           function ConvertTo-GitPath {
               param([string] $Path)
@@ -95,13 +120,22 @@ jobs:
               return ConvertTo-GitPath ([string] $property.Value)
           }
 
+          function Get-LockId {
+              param([object] $Lock)
+              $property = $Lock.PSObject.Properties["id"]
+              if ($null -eq $property -or [string]::IsNullOrWhiteSpace([string] $property.Value)) {
+                  return ""
+              }
+              return [string] $property.Value
+          }
+
           function Get-LockTime {
               param([object] $Lock)
               $property = $Lock.PSObject.Properties["locked_at"]
               if ($null -eq $property -or [string]::IsNullOrWhiteSpace([string] $property.Value)) {
                   return $null
               }
-              return [datetime]::Parse([string] $property.Value).ToUniversalTime()
+              return ConvertTo-UtcTimestamp -Value ([string] $property.Value) -Name "lock locked_at"
           }
 
           function Get-LockArray {
@@ -119,15 +153,54 @@ jobs:
               return @($Payload)
           }
 
-          $locksPayload = (git lfs locks --json | Out-String) | ConvertFrom-Json
-          $locks = @(Get-LockArray $locksPayload)
-          $locksByPath = @{}
-          foreach ($lock in $locks) {
-              $path = Get-LockPath $lock
-              if (-not [string]::IsNullOrWhiteSpace($path)) {
-                  $locksByPath[$path] = $lock
+          # Reads current Git LFS locks and fails closed on query or JSON errors.
+          function Get-Locks {
+              $locksJson = @(git lfs locks --json)
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to query Git LFS locks."
+              }
+
+              $locksText = ($locksJson -join "`n").Trim()
+              if ([string]::IsNullOrWhiteSpace($locksText)) {
+                  throw "Git LFS locks returned empty JSON."
+              }
+
+              return @(Get-LockArray ($locksText | ConvertFrom-Json))
+          }
+
+          # Maps normalized Git LFS locks by repository path.
+          function Get-LocksByPath {
+              param([object[]] $Locks = @())
+
+              $locksByPath = @{}
+              foreach ($lock in $Locks) {
+                  $path = Get-LockPath $lock
+                  if (-not [string]::IsNullOrWhiteSpace($path)) {
+                      $locksByPath[$path] = $lock
+                  }
+              }
+              return $locksByPath
+          }
+
+          $automaticUnlock = $env:EVENT_NAME -ne "workflow_dispatch"
+          $cutoff = $null
+          if ($automaticUnlock) {
+              $cutoff = ConvertTo-UtcTimestamp -Value $env:PUSHED_AT -Name "github.event.repository.pushed_at"
+              Write-Host "Automatic unlock cutoff: $($cutoff.ToString("o"))."
+          }
+
+          if (
+              $automaticUnlock -and
+              -not (Test-ZeroOid $env:PUSH_BEFORE)
+          ) {
+              git fetch --no-tags --depth=1 origin $env:PUSH_BEFORE
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to fetch push before commit $env:PUSH_BEFORE; use manual unlock for any stale locks."
               }
           }
+
+          $locks = @(Get-Locks)
+          $locksByPath = Get-LocksByPath -Locks $locks
 
           $mode = if ([string]::IsNullOrWhiteSpace($env:DISPATCH_MODE)) { "unlock" } else { $env:DISPATCH_MODE }
           $dryRun = $mode -ne "unlock"
@@ -153,26 +226,22 @@ jobs:
                   [void] $targets.Add($manualPath)
               }
           }
-          elseif ($env:PUSH_FORCED -eq "true") {
-              if ([string]::IsNullOrWhiteSpace($env:HEAD_COMMIT_TIMESTAMP)) {
-                  throw "Forced push event has no head_commit timestamp; use manual unlock for stale locks."
-              }
-              $cutoff = [datetime]::Parse($env:HEAD_COMMIT_TIMESTAMP).ToUniversalTime()
-              Write-Host "Forced main update. Cleaning Unreal asset locks with locked_at <= $($cutoff.ToString("o"))."
-              foreach ($lock in $locks) {
-                  $path = Get-LockPath $lock
-                  $lockedAt = Get-LockTime $lock
-                  if ((Test-UnrealAssetPath $path) -and $null -ne $lockedAt -and $lockedAt -le $cutoff) {
-                      [void] $targets.Add($path)
-                  }
-              }
-          }
           else {
               if (Test-ZeroOid $env:PUSH_BEFORE) {
                   $changed = @(git diff-tree --root --no-commit-id --name-only -r $env:PUSH_AFTER)
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "Failed to inspect pushed paths for $env:PUSH_AFTER."
+                  }
               }
               else {
                   $changed = @(git diff --name-only $env:PUSH_BEFORE $env:PUSH_AFTER)
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "Failed to inspect pushed paths between $env:PUSH_BEFORE and $env:PUSH_AFTER."
+                  }
+              }
+
+              if ($env:PUSH_FORCED -eq "true") {
+                  Write-Host "Forced main update. Unlocking only changed Unreal assets locked at or before the automatic cutoff."
               }
 
               foreach ($path in $changed) {
@@ -195,10 +264,47 @@ jobs:
               }
 
               $lock = $locksByPath[$path]
-              $id = [string] $lock.id
+              $id = Get-LockId $lock
               if ($dryRun) {
                   Write-Host "Dry-run unlock target: $path id=$id"
                   continue
+              }
+
+              if ($automaticUnlock) {
+                  $lockedAt = Get-LockTime $lock
+                  if ([string]::IsNullOrWhiteSpace($id)) {
+                      throw "Cannot safely auto-unlock $path because the Git LFS lock id is missing."
+                  }
+                  if ($null -eq $lockedAt) {
+                      throw "Cannot safely auto-unlock $path because the Git LFS lock timestamp is missing."
+                  }
+                  if ($lockedAt -gt $cutoff) {
+                      Write-Host "Skipping newer lock: $path locked_at=$($lockedAt.ToString("o")) cutoff=$($cutoff.ToString("o"))"
+                      continue
+                  }
+
+                  $currentLocksByPath = Get-LocksByPath -Locks @(Get-Locks)
+                  if (-not $currentLocksByPath.ContainsKey($path)) {
+                      Write-Host "Already unlocked: $path"
+                      continue
+                  }
+
+                  $currentLock = $currentLocksByPath[$path]
+                  $currentId = Get-LockId $currentLock
+                  $currentLockedAt = Get-LockTime $currentLock
+                  if ($currentId -ne $id) {
+                      Write-Host "Skipping changed lock id: $path initial=$id current=$currentId"
+                      continue
+                  }
+                  if ($null -eq $currentLockedAt) {
+                      throw "Cannot safely auto-unlock $path because the current Git LFS lock timestamp is missing."
+                  }
+                  if ($currentLockedAt -gt $cutoff) {
+                      Write-Host "Skipping newer current lock: $path locked_at=$($currentLockedAt.ToString("o")) cutoff=$($cutoff.ToString("o"))"
+                      continue
+                  }
+
+                  $id = $currentId
               }
 
               if ([string]::IsNullOrWhiteSpace($id)) {

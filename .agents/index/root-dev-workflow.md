@@ -34,7 +34,8 @@ keep:
   - Local pulls are fast-forward only via pull.ff=only so main sync does not create merge commits.
   - Unreal binary assets stay Git blobs; Git LFS is used for lock/read-only/push verification only.
   - post-commit skips Git LFS read-only refresh when HEAD has no Unreal binary asset changes.
-  - Feature branch commit and merge hooks return without source sanity checks; PR source sanity check runs tools/check-source-sanity.ps1 on a soft-reset staged diff.
+  - Feature branch commit and merge hooks return without source sanity checks; PR source sanity check runs tools/check-source-sanity.ps1 on a shallow merge-ref soft-reset staged diff and narrows UnityBuild helper scans from changed definitions.
+  - Merged asset unlock queues lock-mutating runs, uses shallow checkout, path-limits auto unlocks to pushed Unreal assets, and rechecks lock id plus trusted push cutoff before unlock.
   - Manual LFS unlock is human-only exact-path recovery.
 verify:
   - PowerShell parse check for script edits
@@ -44,7 +45,9 @@ verify:
   - git config --local --get pull.ff returns only
   - pre-push dry-run with empty updates and main fast-forward rejection
   - tools/check-source-sanity.ps1 with no staged source inputs
-  - GitHub PR source sanity workflow stages PR diff and runs tools/check-source-sanity.ps1 -Hook pr-check -Force
+  - GitHub PR source sanity workflow shallow-checks out the PR merge ref, stages the first-parent diff, conditionally sets up Go for Bridge changes, and runs tools/check-source-sanity.ps1 -Hook pr-check -Force
+  - GitHub merged asset unlock workflow shallow-checks out main, queues lock-mutating runs, fetches the before commit for automatic push diffs, rechecks lock id/time before unlock, and preserves manual exact-path unlock handling
+  - GitHub asset lock workflows fail closed when Git LFS lock queries fail or return empty JSON
   - task-setup.bat -AllowMissingPrerequisites -SkipAgents
   - tools/check-prerequisites.ps1 -AllowMissing
   - tools/build.ps1 -Target bridge

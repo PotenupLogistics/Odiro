@@ -38,6 +38,7 @@ Binary asset 동시 수정 충돌 예방. Git LFS object 저장 X, LFS locking�
 | Fork                       | hook 실행 가정, skip hooks는 의도적 우회  |
 | main local commit          | 차단                                      |
 | main local merge           | 차단                                      |
+| main local delete          | 허용                                      |
 | main 일반 push             | 차단                                      |
 | main force push            | 허용                                      |
 | 최초 main 생성             | 허용                                      |
@@ -89,7 +90,7 @@ script 실행 시 `.lfsconfig`와 Unreal asset attribute도 함께 확인한다.
 
 `.githooks/reference-transaction`:
 
-- `refs/heads/main` delete → 차단
+- `refs/heads/main` local delete → 허용
 - `refs/heads/main` fast-forward update → remote main sync만 허용
 - `refs/heads/main` non-fast-forward update → 허용
 - 기존 branch naming 검증 유지
@@ -298,7 +299,7 @@ git config --local --get lfs.setlockablereadonly
 
 - `reference-transaction` main ref update 검증
 - `pre-commit`, `pre-merge-commit` main early reject
-- main delete 차단
+- main local delete 허용
 - main fast-forward update는 remote main sync만 허용
 - main non-fast-forward update 허용
 - branch naming 검증 유지
@@ -458,6 +459,7 @@ git check-attr -a -- Client/Content/<sample>.uasset
 - setup 완료 후 lock 전 asset read-only
 - Editor checkout = lock + writable
 - main 일반 commit/local merge/fast-forward push 차단
+- main local delete 허용
 - main non-fast-forward push 허용
 - PR lock check 동작
 - main 반영 후 auto unlock 동작

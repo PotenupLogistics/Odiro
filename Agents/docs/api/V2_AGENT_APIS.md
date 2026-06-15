@@ -7,7 +7,7 @@ v2 API는 기존 v1 실행 중심 흐름과 별도로, Agent 역할을 명확히
 * `/api/v2/scenarios/generate`: 사용자 자연어 `prompt`를 입력받아 Unreal에서 샘플링 가능한 `scenario.template.json` 형태의 템플릿을 생성합니다.
 * `/api/v2/analysis/run`: `experiments` root 하위 파일을 스캔/분류/파싱/집계하여 정책 또는 환경 개선 필요 여부를 판단합니다.
 
-기본 동작은 deterministic/rule-based입니다. `V2_AGENT_LLM_ENABLED=true`일 때만 optional LLM JSON 호출 경로를 사용합니다.
+기본 동작은 deterministic/rule-based입니다. `V2_AGENT_LLM_ENABLED=true`일 때만 optional LLM JSON 호출 경로를 사용합니다. LangGraph runner는 optional skeleton이며 `V2_AGENT_GRAPH_ENABLED=false`가 기본값입니다.
 
 현재 v2 response schema는 MVP 단계의 임시 wrapper이며, 최종 Unreal 연동 규격과 분석 결과 JSON 계약이 확정되면 조정될 수 있습니다.
 
@@ -215,6 +215,17 @@ V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS=1
 * `V2_AGENT_LLM_REPAIR_ENABLED`: LLM 생성 결과가 validator를 통과하지 못할 때 repair를 시도할지 결정합니다.
 * `V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS`: repair 최대 시도 횟수입니다.
 
+## Graph mode 설정
+
+```text
+V2_AGENT_GRAPH_ENABLED=false
+```
+
+* 기본값은 `false`입니다.
+* `false`면 기존 v2 deterministic/rule-based pipeline을 그대로 사용합니다.
+* `true`여도 현재 runner는 skeleton이며, `langgraph`가 설치되지 않았거나 graph implementation이 준비되지 않은 경우 기존 v2 agent로 fallback합니다.
+* LangGraph는 필수 dependency가 아닙니다.
+
 ## fallback 정책
 
 * LLM 호출 실패 시 API 500이 아니라 fallback 응답을 반환합니다.
@@ -239,5 +250,6 @@ V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS=1
 
 * `scenario_template` schema는 최종 Unreal 계약 확정 전까지 최소 구조 검증만 수행합니다.
 * 이미지 파일은 path, size, modified time 같은 metadata만 기록합니다.
+* timeline builder와 RAG query builder 결과는 내부 analysis context에 포함되며, 현재 final response schema에는 새 field를 추가하지 않습니다.
 * LLM mode는 optional이며, 기본 테스트는 fake/mock client 또는 disabled mode로 외부 API key 없이 통과해야 합니다.
 * provider별 attempt log와 representative failed episode timeline 요약은 후속 보강 대상입니다.

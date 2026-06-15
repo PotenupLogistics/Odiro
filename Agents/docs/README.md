@@ -23,6 +23,7 @@
 ## 아키텍처
 
 * [v2 Agent Architecture](agents/V2_AGENT_ARCHITECTURE.md)
+* [v2 Agent LangGraph 설계](agents/V2_LANGGRAPH_DESIGN.md)
 * [Scenario / Episode 용어 정리](architecture/SCENARIO_EPISODE_TERMINOLOGY.md)
 * [UE 계약 마이그레이션 계획](architecture/UE_CONTRACT_MIGRATION_PLAN.md)
 * [맵 생성 데이터 근거](architecture/MAP_GENERATION_DATA_SOURCES.md)
@@ -62,6 +63,8 @@
 ## 상태와 운영
 
 * [v2 Agent 테스트/운영 가이드](development/V2_AGENT_TESTING_GUIDE.md)
+
+v2 Agent의 LangGraph runner는 optional skeleton입니다. `V2_AGENT_GRAPH_ENABLED=false`가 기본값이며, false일 때는 기존 deterministic/rule-based v2 pipeline을 그대로 사용합니다.
 
 ## 정책
 

@@ -2,7 +2,7 @@
 
 ## 개요
 
-v2 Agent는 기존 v1 실행 계약을 건드리지 않고, 시나리오 템플릿 생성과 실험 결과 분석을 분리합니다. 기본 동작은 deterministic/rule-based이며, `V2_AGENT_LLM_ENABLED=true`일 때만 optional LLM JSON 호출 경로를 사용합니다.
+v2 Agent는 기존 v1 실행 계약을 건드리지 않고, 시나리오 템플릿 생성과 실험 결과 분석을 분리합니다. 기본 동작은 deterministic/rule-based이며, `V2_AGENT_LLM_ENABLED=true`일 때만 optional LLM JSON 호출 경로를 사용합니다. LangGraph 전환 설계는 [V2_LANGGRAPH_DESIGN.md](V2_LANGGRAPH_DESIGN.md)에 정리되어 있으며, `V2_AGENT_GRAPH_ENABLED=false`가 기본값입니다.
 
 핵심 원칙:
 
@@ -76,9 +76,11 @@ WorkspaceScanner
 -> ArtifactClassifier
 -> ArtifactParser
 -> EpisodeMetricExtractor
+-> EventTimelineBuilderV2
 -> RunAggregator
 -> ExperimentAggregator
 -> FailurePatternDetector
+-> RagQueryBuilderV2
 -> AnalysisContextBuilder
 -> LlmFailureAnalyzer
 -> RecommendationGenerator
@@ -102,6 +104,10 @@ JSON은 `json.loads`, JSONL은 line-by-line 파싱합니다. 깨진 JSONL line�
 
 episode별 success, failure, collision, near miss, blocked/penalty region violation, timeout, duration 같은 지표를 코드로 계산합니다. 값이 없으면 count는 0, 알 수 없는 값은 null로 둡니다.
 
+### `EventTimelineBuilderV2`
+
+episode event/action artifact에서 핵심 event timeline을 정규화합니다. `event_type`, `type`, `name` 같은 입력 차이를 흡수하고, collision, near miss, blocked region violation, timeout 같은 key event만 내부 analysis context에 포함합니다. 최종 response schema는 변경하지 않습니다.
+
 ### `RunAggregator`
 
 episode metric을 run 단위로 집계합니다. `episode_count`, `success_count`, `failure_count`, `success_rate`, 주요 failure type을 계산합니다.
@@ -113,6 +119,10 @@ run summary를 experiment 단위로 묶습니다. 전체 success rate와 main fa
 ### `FailurePatternDetector`
 
 반복 `blocked_region_violation`, `near_miss`, `collision`, `timeout`, `goal_not_reached` 패턴을 rule-based로 탐지합니다. 반복 기준은 같은 유형이 2개 이상 확인되는 것입니다.
+
+### `RagQueryBuilderV2`
+
+반복 실패 패턴을 RAG 검색 query 후보로 변환합니다. 예를 들어 `blocked_region_violation_repeated`는 `policy_safety`, `near_miss_repeated`는 `pedestrian_safety` query로 매핑합니다. 현재 retriever adapter는 vector DB 없이 실패하지 않는 skeleton이며, query와 빈 context만 내부 analysis context에 제공합니다.
 
 ### `AnalysisContextBuilder`
 
@@ -163,3 +173,11 @@ Scenario generation에서 LLM output 또는 repair output이 검증 실패하면
 Analysis에서 LLM 호출, JSON 파싱, recommendation validation, evidence validation이 실패하면 rule-based fallback을 사용합니다.
 
 fallback은 정상적인 degradation path입니다. API는 success response를 유지하고, warning으로 원인을 노출합니다.
+
+## LangGraph optional runner
+
+`ScenarioGenerationGraphRunnerV2`는 아직 LangGraph 전환을 위한 skeleton입니다. `ResultAnalysisGraphRunnerV2`는 graph-compatible node pipeline으로 확장되어 scan, classify, parse, metric extraction, timeline/RAG context, recommendation validation, response build를 node 메서드 단위로 실행합니다.
+
+`langgraph` import가 실패해도 module import와 테스트가 깨지지 않도록 `StateGraph = None` fallback을 사용합니다. ResultAnalysisV2 graph runner는 실제 `langgraph` dependency 없이도 순차 node pipeline으로 동작합니다. graph mode가 꺼져 있으면 기존 `ResultAnalysisV2Agent` 경로를 그대로 사용합니다.
+
+graph mode true에서도 final response는 기존 `analysis_run_response_v2` schema를 유지합니다. episode timeline, representative failed episode, RAG query/context는 내부 `analysis_context`와 runner state에만 존재하며 API response field로 추가하지 않습니다.

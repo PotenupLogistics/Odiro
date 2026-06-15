@@ -1,0 +1,226 @@
+{
+  "schema": "scenario_template",
+  "version": 1,
+  "template_id": "feature_probe_no_pedestrians",
+  "intent": "Exercise corridor layout, surface lanes, static obstacle placement kinds, sampled values, and robot anchors without adding pedestrians.",
+  "corridor": {
+    "axis": {
+      "type": "polyline",
+      "points_m": [
+        [0.0, 0.0],
+        [8.0, 0.0],
+        [16.0, 2.0],
+        [26.0, 2.0],
+        [34.0, 0.0]
+      ]
+    },
+    "walkway_width_m": {
+      "min": 2.6,
+      "max": 3.2
+    },
+    "building_side": [
+      {
+        "surface": "wall",
+        "width_m": 0.4
+      },
+      {
+        "surface": "building",
+        "width_m": {
+          "min": 0.8,
+          "max": 1.2
+        }
+      }
+    ],
+    "curb_side": [
+      {
+        "surface": "grass",
+        "width_m": {
+          "min": 0.4,
+          "max": 0.8
+        }
+      },
+      {
+        "surface": "road",
+        "width_m": 3.0
+      }
+    ],
+    "segments": [
+      {
+        "id": "entry",
+        "type": "straight",
+        "along_range_m": [0.0, 6.0]
+      },
+      {
+        "id": "building_entry",
+        "type": "entrance",
+        "along_range_m": [6.0, 11.0],
+        "replaced_by": "driveway"
+      },
+      {
+        "id": "pinch",
+        "type": "narrowing",
+        "along_range_m": [11.0, 17.0],
+        "replaced_by": {
+          "choices": ["grass", "road"]
+        }
+      },
+      {
+        "id": "crosswalk",
+        "type": "crosswalk",
+        "along_range_m": [17.0, 23.0],
+        "replaced_by": "crosswalk_stripe"
+      },
+      {
+        "id": "exit",
+        "type": "straight",
+        "along_range_m": [23.0, 34.0]
+      }
+    ]
+  },
+  "obstacles": {
+    "min_clear_width_m": 1.05,
+    "placements": [
+      {
+        "id": "entry_curb_cone",
+        "kind": "fixed",
+        "prop": "obstacle.road_cone_01",
+        "at": {
+          "segment": "entry",
+          "along_m": {
+            "min": 2.5,
+            "max": 4.0
+          },
+          "offset_m": 0.15,
+          "lane": "curb_edge"
+        },
+        "yaw_deg": {
+          "min": -10.0,
+          "max": 10.0
+        },
+        "allow_blocking": false
+      },
+      {
+        "id": "pinch_building_cone",
+        "kind": "fixed",
+        "prop": "obstacle.road_cone_01",
+        "at": {
+          "segment": "pinch",
+          "along_m": 13.25,
+          "offset_m": -0.2,
+          "lane": "building_edge"
+        },
+        "yaw_deg": 90.0,
+        "allow_blocking": false
+      },
+      {
+        "id": "crosswalk_gate",
+        "kind": "pattern",
+        "pattern": "gate",
+        "prop": "obstacle.road_cone_01",
+        "at": {
+          "segment": "crosswalk",
+          "along_m": {
+            "min": 18.0,
+            "max": 21.0
+          },
+          "offset_m": 0.0,
+          "lane": "across"
+        },
+        "count": 2,
+        "gap_width_m": {
+          "min": 1.2,
+          "max": 1.5
+        },
+        "yaw_deg": 0.0,
+        "allow_blocking": false
+      },
+      {
+        "id": "building_entry_curb_line",
+        "kind": "pattern",
+        "pattern": "line",
+        "prop": "obstacle.road_cone_01",
+        "at": {
+          "segment": "building_entry",
+          "along_m": 8.5,
+          "offset_m": 0.1,
+          "lane": "curb_edge"
+        },
+        "count": {
+          "min": 3,
+          "max": 5
+        },
+        "spacing_m": 0.9,
+        "yaw_deg": {
+          "min": 0.0,
+          "max": 15.0
+        },
+        "allow_blocking": false
+      },
+      {
+        "id": "exit_edge_clutter",
+        "kind": "scatter",
+        "zone": {
+          "segments": ["exit"],
+          "lanes": ["building_edge", "curb_edge"]
+        },
+        "density_per_10m": {
+          "min": 1.0,
+          "max": 2.0
+        },
+        "count": {
+          "min": 1,
+          "max": 4
+        },
+        "palette": {
+          "categories": ["street_furniture", "utility"],
+          "classes": ["blocking"]
+        },
+        "allow_blocking": false
+      },
+      {
+        "id": "surface_object_noise",
+        "kind": "scatter",
+        "zone": {
+          "segments": ["entry", "building_entry"],
+          "lanes": ["center"]
+        },
+        "density_per_10m": {
+          "min": 0.0,
+          "max": 1.0
+        },
+        "palette": {
+          "categories": ["surface_object"],
+          "classes": ["traversable_cost"]
+        },
+        "allow_blocking": false
+      }
+    ]
+  },
+  "pedestrians": {
+    "background": {
+      "count": 0,
+      "speed_mps": 0.0
+    },
+    "encounters": []
+  },
+  "robot": {
+    "start": {
+      "type": "corridor_pose",
+      "segment": "entry",
+      "along_m": {
+        "min": 0.5,
+        "max": 1.0
+      },
+      "offset_m": {
+        "min": -0.1,
+        "max": 0.1
+      },
+      "lane": "center",
+      "heading": "forward"
+    },
+    "goal": {
+      "type": "exit",
+      "heading": "auto"
+    }
+  }
+}

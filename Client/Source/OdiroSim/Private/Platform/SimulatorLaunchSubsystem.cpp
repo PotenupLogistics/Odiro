@@ -3,6 +3,8 @@
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
 #include "Scenario/ScenarioCompiler.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
+#include "Scenario/ScenarioSimulationProfileAdapter.h"
+#include "Scenario/ScenarioTemplateWorldSpecAdapter.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSimulatorLaunch, Log, All);
 
@@ -168,6 +170,13 @@ namespace
 			return FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleFile(jsonFile).bSuccess;
 		}
 
+		if (FScenarioTemplateWorldSpecAdapter::IsScenarioTemplateFile(jsonFile))
+		{
+			const FScenarioTemplateSampleRequest request =
+				FScenarioTemplateWorldSpecAdapter::MakeDefaultSampleRequest(jsonFile);
+			return FScenarioTemplateWorldSpecAdapter::CompileScenarioWorldSpecFromTemplateFile(jsonFile, request).bSuccess;
+		}
+
 		if (!HasJsonSchema(jsonFile, LaunchScenarioSetupSchema))
 		{
 			return false;
@@ -179,6 +188,11 @@ namespace
 
 	bool IsDeliveryBotSetupFile(const FString& jsonFile)
 	{
+		if (FScenarioSimulationProfileAdapter::IsSimulationProfileFile(jsonFile))
+		{
+			return FScenarioSimulationProfileAdapter::CompileProfileFromJsonFile(jsonFile).bSuccess;
+		}
+
 		if (!HasJsonSchema(jsonFile, LaunchDeliveryBotSetupSchema))
 		{
 			return false;

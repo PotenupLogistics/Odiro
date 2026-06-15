@@ -1,0 +1,44 @@
+{
+  "schema": "simulation_profile",
+  "version": 1,
+  "profile_id": "deliverybot_default",
+  "display_name": "Default DeliveryBot",
+  "description": "Default DeliveryBot profile used for this simulation.",
+  "robot_spec": {
+    "length_cm": 90.0,
+    "width_cm": 60.0,
+    "height_cm": 50.0,
+    "wheel_base_cm": 42.0,
+    "turning_radius_cm": 300.0
+  },
+  "drive_spec": {
+    "max_speed_kmh": 10.0,
+    "max_reverse_kmh": 3.0,
+    "accel_kmh_per_s": 1.2,
+    "decel_kmh_per_s": 0.9,
+    "reverse_accel_kmh_per_s": 1.0,
+    "steering_rate_per_s": 3.2,
+    "throttle_rate_per_s": 0.28,
+    "brake_rate_per_s": 0.35,
+    "stop_brake": 0.18,
+    "gear_switch_stop_kmh": 0.3,
+    "gear_switch_brake": 0.2,
+    "slowdown_range_kmh": 5.0,
+    "speed_tolerance_kmh": 0.5,
+    "speed_limit_brake": 0.06,
+    "use_handbrake": false,
+    "max_torque": 220.0,
+    "max_rpm": 2000.0,
+    "idle_rpm": 600.0,
+    "engine_brake": 0.04,
+    "rev_up_moi": 5.0,
+    "rev_down_rate": 600.0
+  },
+  "lidar_spec": {
+    "mode": "TwoD",
+    "range_m": 5.0,
+    "angle_step_degree": 2.0,
+    "height_m": 0.07,
+    "store_missed_rays": false
+  }
+}

@@ -119,11 +119,24 @@ bool UScenarioSimulationSubsystem::RebuildDeliveryBotGridFromScenarioGroundRegio
 
 	FBox2D xyBounds(ForceInit);
 	double centerZ = 0.0;
-	if (!TryBuildGroundRegionXYBounds(setupSpec.GroundRegions, xyBounds, centerZ))
+	if (!TryBuildRuntimeGroundRegionXYBounds(xyBounds, centerZ)
+		&& !TryBuildGroundRegionXYBounds(setupSpec.GroundRegions, xyBounds, centerZ))
 	{
 		UE_LOG(LogScenarioSimulation, Warning, TEXT("DeliveryBot grid bounds build failed. No valid ground regions."));
 		return false;
 	}
+
+	for (const FScenarioPlaceableInstanceSpec& placeableSpec : setupSpec.Placeables)
+	{
+		ExpandXYBoundsWithDeliveryBotRoute(placeableSpec, xyBounds);
+	}
+
+	UE_LOG(
+		LogScenarioSimulation,
+		Log,
+		TEXT("DeliveryBot grid bounds resolved from ground regions and robot route anchors. Min: %s, Max: %s"),
+		*xyBounds.Min.ToString(),
+		*xyBounds.Max.ToString());
 
 	if (IsValid(RuntimeGridBoundsActor))
 	{
@@ -177,6 +190,71 @@ bool UScenarioSimulationSubsystem::TryBuildGroundRegionXYBounds(
 
 	outCenterZ = zSum / static_cast<double>(validRegionCount);
 	return true;
+}
+
+bool UScenarioSimulationSubsystem::TryBuildRuntimeGroundRegionXYBounds(
+	FBox2D& outXYBounds,
+	double& outCenterZ) const
+{
+	outXYBounds = FBox2D(ForceInit);
+
+	double zSum = 0.0;
+	int32 validRegionCount = 0;
+
+	for (const TPair<FString, TObjectPtr<AScenarioGroundRegion>>& pair : RuntimeGroundRegions)
+	{
+		const AScenarioGroundRegion* groundRegion = pair.Value.Get();
+		if (!IsValid(groundRegion))
+		{
+			continue;
+		}
+
+		const FBox componentBounds = groundRegion->GetComponentsBoundingBox(true);
+		if (!componentBounds.IsValid)
+		{
+			continue;
+		}
+
+		outXYBounds += FVector2D(componentBounds.Min.X, componentBounds.Min.Y);
+		outXYBounds += FVector2D(componentBounds.Max.X, componentBounds.Max.Y);
+		zSum += componentBounds.GetCenter().Z;
+		++validRegionCount;
+	}
+
+	if (!outXYBounds.bIsValid || validRegionCount <= 0)
+	{
+		return false;
+	}
+
+	outCenterZ = zSum / static_cast<double>(validRegionCount);
+	return true;
+}
+
+void UScenarioSimulationSubsystem::ExpandXYBoundsWithDeliveryBotRoute(
+	const FScenarioPlaceableInstanceSpec& placeableSpec,
+	FBox2D& inOutXYBounds)
+{
+	if (placeableSpec.Category != EScenarioActorCategory::DeliveryBot)
+	{
+		return;
+	}
+
+	if (placeableSpec.DeliveryBot.bHasStartLocation)
+	{
+		const FVector& startLocation = placeableSpec.DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm;
+		inOutXYBounds += FVector2D(startLocation.X, startLocation.Y);
+	}
+	else
+	{
+		const FVector startLocation = placeableSpec.Transform.GetLocation();
+		inOutXYBounds += FVector2D(startLocation.X, startLocation.Y);
+	}
+
+	if (placeableSpec.DeliveryBot.bHasGoalLocation)
+	{
+		const FVector& goalLocation = placeableSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm;
+		inOutXYBounds += FVector2D(goalLocation.X, goalLocation.Y);
+	}
 }
 
 ADeliveryBot_GridBoundsActor* UScenarioSimulationSubsystem::SpawnDeliveryBotGridBoundsActor(
@@ -258,10 +336,10 @@ void UScenarioSimulationSubsystem::ExpandXYBoundsWithGroundRegion(
 	}
 }
 
-bool UScenarioSimulationSubsystem::ValidateDeliveryBotGridLocation(
+bool UScenarioSimulationSubsystem::ResolveDeliveryBotGridLocation(
 	const FString& robotInstanceId,
 	const FString& locationLabel,
-	const FVector& worldLocation) const
+	FVector& inOutWorldLocation) const
 {
 	UWorld* world = GetWorld();
 	if (!IsValid(world)) return false;
@@ -269,12 +347,33 @@ bool UScenarioSimulationSubsystem::ValidateDeliveryBotGridLocation(
 	const UDeliveryBot_GridSubsystem* gridSubsystem = world->GetSubsystem<UDeliveryBot_GridSubsystem>();
 	if (!IsValid(gridSubsystem) || !gridSubsystem->HasBuiltGrid()) return false;
 
-	const FIntPoint gridIndex = gridSubsystem->GetGridIndexByWorldLocation(worldLocation);
+	const FIntPoint gridIndex = gridSubsystem->GetGridIndexByWorldLocation(inOutWorldLocation);
 	const FDeliveryBotGridCellInfo* cellInfo = gridSubsystem->FindCellInfoByGridIndex(gridIndex);
 
-	if (!cellInfo || !gridSubsystem->IsWalkableGridIndex(gridIndex))
+	if (cellInfo && gridSubsystem->IsWalkableGridIndex(gridIndex))
 	{
-		const FString worldLocationString = worldLocation.ToString();
+		inOutWorldLocation = gridSubsystem->GetWorldLocationByGridIndex(gridIndex);
+		return true;
+	}
+
+	FVector snappedLocation = FVector::ZeroVector;
+	if (gridSubsystem->GetNearestWalkableWorldLocation(inOutWorldLocation, 96, snappedLocation))
+	{
+		UE_LOG(
+			LogScenarioSimulation,
+			Warning,
+			TEXT("DeliveryBot %s location snapped to nearest walkable grid cell. Robot: %s, From: %s, To: %s, OriginalGrid: %s"),
+			*locationLabel,
+			*robotInstanceId,
+			*inOutWorldLocation.ToString(),
+			*snappedLocation.ToString(),
+			*gridIndex.ToString());
+		inOutWorldLocation = snappedLocation;
+		return true;
+	}
+
+	{
+		const FString worldLocationString = inOutWorldLocation.ToString();
 		const FString gridIndexString = gridIndex.ToString();
 		const FString sourceProfileName = cellInfo
 			? cellInfo->SourceCollisionProfileName.ToString()
@@ -291,29 +390,37 @@ bool UScenarioSimulationSubsystem::ValidateDeliveryBotGridLocation(
 			*sourceProfileName
 		);
 
-		return false;
 	}
 
-	return true;
+	return false;
 }
 
 bool UScenarioSimulationSubsystem::ValidateDeliveryBotRouteOnGrid(
 	const FScenarioPlaceableInstanceSpec& placeableSpec,
-	const FDeliveryBotSetupInfo& setupInfo,
+	FDeliveryBotSetupInfo& setupInfo,
 	bool bHasGoal,
-	const FVector& goalLocation) const
+	FVector& inOutGoalLocation) const
 {
-	const bool bStartValid = ValidateDeliveryBotGridLocation(
+	FVector startLocation = setupInfo.LocationSetupInfo.StartLocationCm;
+	const bool bStartValid = ResolveDeliveryBotGridLocation(
 		placeableSpec.InstanceId,
 		TEXT("start"),
-		setupInfo.LocationSetupInfo.StartLocationCm
+		startLocation
 	);
+	if (bStartValid)
+	{
+		setupInfo.LocationSetupInfo.StartLocationCm = startLocation;
+	}
 
-	const bool bGoalValid = !bHasGoal || ValidateDeliveryBotGridLocation(
+	const bool bGoalValid = !bHasGoal || ResolveDeliveryBotGridLocation(
 		placeableSpec.InstanceId,
 		TEXT("goal"),
-		goalLocation
+		inOutGoalLocation
 	);
+	if (bGoalValid && bHasGoal)
+	{
+		setupInfo.LocationSetupInfo.GoalLocationCm = inOutGoalLocation;
+	}
 
 	return bStartValid && bGoalValid;
 }

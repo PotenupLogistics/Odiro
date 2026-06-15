@@ -6,6 +6,8 @@
 #include "Scenario/ScenarioEvaluationSubsystem.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Scenario/ScenarioSimulationSubsystem.h"
+#include "Scenario/ScenarioSimulationProfileAdapter.h"
+#include "Scenario/ScenarioTemplateWorldSpecAdapter.h"
 #include "Shared/EpisodeEvaluationReportJson.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioRunner, Log, All);
@@ -116,12 +118,20 @@ namespace
 	}
 
 	FScenarioCompileResult CompileRunnerScenarioWorldSpec(
-		const FString& scenarioJsonPath,
+		const FScenarioRunInput& runInput,
 		const UScenarioCompiler* runtimeCompiler)
 	{
+		const FString& scenarioJsonPath = runInput.ScenarioSetupJsonPath;
 		if (FScenarioSampleWorldSpecAdapter::IsScenarioSampleFile(scenarioJsonPath))
 		{
 			return FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleFile(scenarioJsonPath);
+		}
+
+		if (FScenarioTemplateWorldSpecAdapter::IsScenarioTemplateFile(scenarioJsonPath))
+		{
+			const FScenarioTemplateSampleRequest request =
+				FScenarioTemplateWorldSpecAdapter::MakeDefaultSampleRequest(scenarioJsonPath, runInput.PairId);
+			return FScenarioTemplateWorldSpecAdapter::CompileScenarioWorldSpecFromTemplateFile(scenarioJsonPath, request).CompileResult;
 		}
 
 		return runtimeCompiler
@@ -156,6 +166,28 @@ namespace
 		}
 
 		return bApplied;
+	}
+
+	FDeliveryBotSetupCompileResult CompileRunnerDeliveryBotSetupInfo(
+		const FString& deliveryBotSetupJsonPath,
+		const UDeliveryBotSetupCompiler* deliveryBotSetupCompiler)
+	{
+		if (FScenarioSimulationProfileAdapter::IsSimulationProfileFile(deliveryBotSetupJsonPath))
+		{
+			const FScenarioSimulationProfileCompileResult profileResult =
+				FScenarioSimulationProfileAdapter::CompileProfileFromJsonFile(deliveryBotSetupJsonPath);
+
+			FDeliveryBotSetupCompileResult deliveryBotResult;
+			deliveryBotResult.bSuccess = profileResult.bSuccess;
+			deliveryBotResult.SetupInfo = profileResult.SetupInfo;
+			deliveryBotResult.SpecHash = profileResult.ProfileHash;
+			deliveryBotResult.Diagnostics = profileResult.Diagnostics;
+			return deliveryBotResult;
+		}
+
+		return deliveryBotSetupCompiler
+			? deliveryBotSetupCompiler->CompileDeliveryBotSetupFromJsonFile(deliveryBotSetupJsonPath)
+			: FDeliveryBotSetupCompileResult();
 	}
 
 	FString BuildPairHash(
@@ -586,7 +618,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		return;
 	}
 
-	FScenarioCompileResult compileResult = CompileRunnerScenarioWorldSpec(CurrentRunInput.ScenarioSetupJsonPath, compiler);
+	FScenarioCompileResult compileResult = CompileRunnerScenarioWorldSpec(CurrentRunInput, compiler);
 	CurrentRecord.bEpisodeSetupCompileSucceeded = compileResult.bSuccess;
 	CurrentRecord.EpisodeId = compileResult.WorldSpec.RunConfig.TemplateId;
 	CurrentRecord.SpecHash = compileResult.WorldSpec.SpecHash;
@@ -615,7 +647,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	}
 
 	FDeliveryBotSetupCompileResult deliveryBotCompileResult =
-		deliveryBotSetupCompiler->CompileDeliveryBotSetupFromJsonFile(CurrentRunInput.DeliveryBotSetupJsonPath);
+		CompileRunnerDeliveryBotSetupInfo(CurrentRunInput.DeliveryBotSetupJsonPath, deliveryBotSetupCompiler);
 
 	CurrentRecord.bDeliveryBotSetupCompileSucceeded = deliveryBotCompileResult.bSuccess;
 	CurrentRecord.DeliveryBotSetupHash = deliveryBotCompileResult.SpecHash;

@@ -129,6 +129,10 @@ private:
 		const TArray<FScenarioGroundRegionSpec>& groundRegionSpecs,
 		FBox2D& outXYBounds,
 		double& outCenterZ) const;
+	// Builds grid bounds from the spawned ground-region actors that the user actually sees in the world.
+	bool TryBuildRuntimeGroundRegionXYBounds(
+		FBox2D& outXYBounds,
+		double& outCenterZ) const;
 	ADeliveryBot_GridBoundsActor* SpawnDeliveryBotGridBoundsActor(const FBox2D& xyBounds, double centerZ);
 	void ApplyXYBoundsToGridBoundsActor(
 		ADeliveryBot_GridBoundsActor* gridBoundsActor,
@@ -137,15 +141,19 @@ private:
 	static void ExpandXYBoundsWithGroundRegion(
 		const FScenarioGroundRegionSpec& regionSpec,
 		FBox2D& inOutXYBounds);
-	bool ValidateDeliveryBotGridLocation(
+	// Ensures DeliveryBot start and goal anchors are inside the generated navigation grid bounds.
+	static void ExpandXYBoundsWithDeliveryBotRoute(
+		const FScenarioPlaceableInstanceSpec& placeableSpec,
+		FBox2D& inOutXYBounds);
+	bool ResolveDeliveryBotGridLocation(
 		const FString& robotInstanceId,
 		const FString& locationLabel,
-		const FVector& worldLocation) const;
+		FVector& inOutWorldLocation) const;
 	bool ValidateDeliveryBotRouteOnGrid(
 		const FScenarioPlaceableInstanceSpec& placeableSpec,
-		const FDeliveryBotSetupInfo& setupInfo,
+		FDeliveryBotSetupInfo& setupInfo,
 		bool bHasGoal,
-		const FVector& goalLocation) const;
+		FVector& inOutGoalLocation) const;
 
 	void RegisterRuntimeActor(
 		const FString& instanceId,

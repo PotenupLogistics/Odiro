@@ -8,6 +8,8 @@ specs:
 
 # 플랫폼 설계
 
+> 현재 simulator 실행 계약은 이 초안의 `-Simulate=<SimulationSetupFile>` 흐름이 아니라 experiment folder 기반 `-Experiment=<ExperimentRef>` 흐름을 따른다. 최신 실행 경계는 `Docs/Data/experiments/setting.md`와 `.agents/index/client-platform-execution.md`를 기준으로 한다.
+
 ## 목표
 
 시나리오 편집기, 시뮬레이터 실행, Python API 서버, LLM 서버를 하나의 플랫폼으로 통합하여 사용자에게 일관된 인터페이스를 제공한다.
@@ -78,7 +80,7 @@ specs:
 ## 분석
 
 > 이하 `## 분석`은 위 설계를 바탕으로 Codex가 작성한 실행 계획이다.
-> 위쪽 원문 예시와 충돌하면 본 절의 `-Simulate=<SimulationSetupFile>` 계약을 우선한다.
+> 이 절은 historical plan이다. 현재 구현과 충돌하면 `Docs/Data/experiments/setting.md`의 experiment folder 계약을 우선한다.
 
 ### 범위
 

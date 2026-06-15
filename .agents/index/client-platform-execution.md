@@ -28,8 +28,8 @@ keep:
   - Client/Tools use Client/Tools/Common.ps1, never root tools/common.ps1.
   - Client prerequisite checks cover Windows Unreal C++ only; Android/iOS/macOS/MAUI are not failures.
   - Legacy Client root scripts such as BuildProject.bat, RunPreview.bat, and RunPythonPolicyServer.bat stay folded into Task-* wrappers.
-  - SimulationSetup v2 uses experiment_ref for experiment-folder runs; ScenarioRunQueue is only a transitional launcher/UI fallback.
-  - Runtime SimulationSetup files are written under the owning experiment runs/<RunId> folder when experiment_ref is present.
+  - Simulator launch public contract is `-Experiment=<ExperimentRef>` with optional `-RunId=<RunId>` and `-SampleIds=<Ids>`.
+  - MainMenu launches experiment folders directly; child simulator runs write `runs/<RunId>/status.json` under the selected experiment folder.
 verify:
   - launcher command contract tests for launch arg changes
   - runtime log plus status JSON for process changes

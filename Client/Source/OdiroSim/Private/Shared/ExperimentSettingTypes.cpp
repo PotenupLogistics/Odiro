@@ -3,6 +3,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
+#include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Scenario/ScenarioTemplateSampler.h"
@@ -53,6 +54,15 @@ namespace
 	{
 		Path.ReplaceInline(TEXT("\\"), TEXT("/"));
 		return Path;
+	}
+
+	FString SanitizeExperimentPathToken(const FString& Value)
+	{
+		FString SafeValue = FPaths::MakeValidFileName(Value.TrimStartAndEnd());
+		SafeValue.ReplaceInline(TEXT(".."), TEXT("_"));
+		SafeValue.ReplaceInline(TEXT("/"), TEXT("_"));
+		SafeValue.ReplaceInline(TEXT("\\"), TEXT("_"));
+		return SafeValue.IsEmpty() ? FString(TEXT("run")) : SafeValue;
 	}
 
 	FString MakeProjectRelativeIfPossible(FString Path)
@@ -616,6 +626,85 @@ namespace
 
 		return true;
 	}
+
+	bool TryGetExperimentSwitchValue(
+		const FString& CommandLine,
+		const FString& Key,
+		FString& OutValue,
+		bool& bOutHasBareSwitch)
+	{
+		bOutHasBareSwitch = false;
+
+		TArray<FString> Tokens;
+		TArray<FString> Switches;
+		FCommandLine::Parse(*CommandLine, Tokens, Switches);
+
+		const FString Prefix = Key + TEXT("=");
+		for (const FString& CommandSwitch : Switches)
+		{
+			if (CommandSwitch.Equals(Key, ESearchCase::IgnoreCase))
+			{
+				bOutHasBareSwitch = true;
+				continue;
+			}
+
+			if (CommandSwitch.StartsWith(Prefix, ESearchCase::IgnoreCase))
+			{
+				OutValue = CommandSwitch.RightChop(Prefix.Len()).TrimStartAndEnd();
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	void ParseExperimentSampleIdsSwitch(
+		const FString& SampleIdsSwitch,
+		FExperimentRunCommandLineParseResult& Result)
+	{
+		if (SampleIdsSwitch.TrimStartAndEnd().IsEmpty())
+		{
+			AddExperimentDiagnostic(
+				Result.Diagnostics,
+				EScenarioSchemaDiagnosticSeverity::Error,
+				TEXT("empty_sample_ids_switch"),
+				TEXT("command_line.sample_ids"),
+				TEXT("-SampleIds must contain at least one comma-separated sample id."));
+			return;
+		}
+
+		TArray<FString> SampleIds;
+		SampleIdsSwitch.ParseIntoArray(SampleIds, TEXT(","), false);
+		Result.Options.Request.SampleSelection.Kind = EExperimentSampleSelectionKind::ExplicitIds;
+		Result.Options.Request.SampleSelection.SampleIds.Reset();
+
+		for (const FString& RawSampleId : SampleIds)
+		{
+			const FString SampleId = RawSampleId.TrimStartAndEnd();
+			if (SampleId.IsEmpty())
+			{
+				AddExperimentDiagnostic(
+					Result.Diagnostics,
+					EScenarioSchemaDiagnosticSeverity::Error,
+					TEXT("empty_sample_id"),
+					TEXT("command_line.sample_ids"),
+					TEXT("-SampleIds must not contain empty sample ids."));
+				continue;
+			}
+
+			Result.Options.Request.SampleSelection.SampleIds.Add(SampleId);
+		}
+
+		if (Result.Options.Request.SampleSelection.SampleIds.IsEmpty())
+		{
+			AddExperimentDiagnostic(
+				Result.Diagnostics,
+				EScenarioSchemaDiagnosticSeverity::Error,
+				TEXT("empty_sample_ids"),
+				TEXT("command_line.sample_ids"),
+				TEXT("-SampleIds did not contain any usable sample ids."));
+		}
+	}
 }
 
 FExperimentSettingParseResult FExperimentSettingJson::ParseFromFile(const FString& JsonFilePath)
@@ -841,6 +930,20 @@ FString FExperimentSettingJson::BuildExperimentRunsDirectory(const FString& Expe
 	return BuildExperimentDirectoryPath(ExperimentRef, ExperimentRunsDirectoryName);
 }
 
+FString FExperimentSettingJson::BuildExperimentRunDirectory(const FString& ExperimentRef, const FString& RunId)
+{
+	return NormalizeExperimentPath(FPaths::Combine(
+		BuildExperimentRunsDirectory(ExperimentRef),
+		SanitizeExperimentPathToken(RunId)));
+}
+
+FString FExperimentSettingJson::BuildExperimentRunStatusPath(const FString& ExperimentRef, const FString& RunId)
+{
+	return NormalizeExperimentPath(FPaths::Combine(
+		BuildExperimentRunDirectory(ExperimentRef, RunId),
+		TEXT("status.json")));
+}
+
 FString FExperimentSettingJson::MakeSampleId(const int32 SampleIndex)
 {
 	return FString::Printf(TEXT("%06d"), FMath::Max(0, SampleIndex) + 1);
@@ -931,6 +1034,84 @@ FExperimentRunInputBuildResult FExperimentSettingJson::EnsureScenarioSamples(
 
 	Result.bSuccess = !ExperimentHasErrors(Result.Diagnostics);
 	return Result;
+}
+
+FExperimentRunCommandLineParseResult FExperimentRunCommandLine::Parse(const FString& CommandLine)
+{
+	FExperimentRunCommandLineParseResult Result;
+	Result.Options.Request.SampleSelection.Kind = EExperimentSampleSelectionKind::All;
+
+	bool bHasBareExperiment = false;
+	if (TryGetExperimentSwitchValue(CommandLine, TEXT("Experiment"), Result.Options.Request.ExperimentRef, bHasBareExperiment))
+	{
+		Result.Options.bExperimentRun = true;
+	}
+	else if (bHasBareExperiment)
+	{
+		AddExperimentDiagnostic(
+			Result.Diagnostics,
+			EScenarioSchemaDiagnosticSeverity::Error,
+			TEXT("missing_experiment_value"),
+			TEXT("command_line.experiment"),
+			TEXT("-Experiment requires an experiment folder path."));
+	}
+
+	bool bHasBareRunId = false;
+	const bool bHasRunId = TryGetExperimentSwitchValue(CommandLine, TEXT("RunId"), Result.Options.Request.RunId, bHasBareRunId);
+	if ((bHasRunId || bHasBareRunId) && Result.Options.Request.RunId.TrimStartAndEnd().IsEmpty())
+	{
+		AddExperimentDiagnostic(
+			Result.Diagnostics,
+			EScenarioSchemaDiagnosticSeverity::Error,
+			TEXT("missing_run_id_value"),
+			TEXT("command_line.run_id"),
+			TEXT("-RunId requires a non-empty value."));
+	}
+
+	FString SampleIdsSwitch;
+	bool bHasBareSampleIds = false;
+	const bool bHasSampleIds = TryGetExperimentSwitchValue(CommandLine, TEXT("SampleIds"), SampleIdsSwitch, bHasBareSampleIds);
+	if (bHasSampleIds)
+	{
+		ParseExperimentSampleIdsSwitch(SampleIdsSwitch, Result);
+	}
+	else if (bHasBareSampleIds)
+	{
+		AddExperimentDiagnostic(
+			Result.Diagnostics,
+			EScenarioSchemaDiagnosticSeverity::Error,
+			TEXT("missing_sample_ids_value"),
+			TEXT("command_line.sample_ids"),
+			TEXT("-SampleIds requires a comma-separated value."));
+	}
+
+	if (Result.Options.bExperimentRun && Result.Options.Request.ExperimentRef.TrimStartAndEnd().IsEmpty())
+	{
+		AddExperimentDiagnostic(
+			Result.Diagnostics,
+			EScenarioSchemaDiagnosticSeverity::Error,
+			TEXT("empty_experiment_value"),
+			TEXT("command_line.experiment"),
+			TEXT("-Experiment value must not be empty."));
+	}
+
+	if (!Result.Options.bExperimentRun && (bHasRunId || bHasSampleIds))
+	{
+		AddExperimentDiagnostic(
+			Result.Diagnostics,
+			EScenarioSchemaDiagnosticSeverity::Error,
+			TEXT("missing_experiment_switch"),
+			TEXT("command_line.experiment"),
+			TEXT("-RunId and -SampleIds require -Experiment."));
+	}
+
+	Result.bSuccess = !ExperimentHasErrors(Result.Diagnostics);
+	return Result;
+}
+
+FExperimentRunCommandLineParseResult FExperimentRunCommandLine::ParseCurrent()
+{
+	return Parse(FCommandLine::Get());
 }
 
 FExperimentRunInputBuildResult FExperimentSettingJson::BuildRunInputsFromExperiment(

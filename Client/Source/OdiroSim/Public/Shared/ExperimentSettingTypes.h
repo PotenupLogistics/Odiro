@@ -174,6 +174,59 @@ struct ODIROSIM_API FExperimentRunInputBuildResult
 	TArray<FScenarioSchemaDiagnostic> Diagnostics;
 };
 
+// Request envelope for one simulator run against an experiment folder.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FExperimentRunRequest
+{
+	GENERATED_BODY()
+
+	// Experiment folder that owns setting.json, profile.json, scenarios, and runs.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Experiment|Run")
+	FString ExperimentRef;
+
+	// Stable run id used as the runs/<RunId> folder name.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Experiment|Run")
+	FString RunId;
+
+	// Scenario sample subset requested for this run.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Experiment|Run")
+	FExperimentSampleSelection SampleSelection;
+};
+
+// Parsed public simulator command-line options for experiment runs.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FExperimentRunCommandLineOptions
+{
+	GENERATED_BODY()
+
+	// True when the process was launched with -Experiment=<ExperimentRef>.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Experiment|CommandLine")
+	bool bExperimentRun = false;
+
+	// Experiment run request parsed from command-line switches.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Experiment|CommandLine")
+	FExperimentRunRequest Request;
+};
+
+// Parse result for experiment-run command-line switches.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FExperimentRunCommandLineParseResult
+{
+	GENERATED_BODY()
+
+	// True when command-line parsing produced no errors.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Experiment|CommandLine")
+	bool bSuccess = false;
+
+	// Parsed command-line options.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Experiment|CommandLine")
+	FExperimentRunCommandLineOptions Options;
+
+	// Command-line validation diagnostics.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Experiment|CommandLine")
+	TArray<FScenarioSchemaDiagnostic> Diagnostics;
+};
+
 // JSON reader, writer, and experiment folder helper for experiment_setting documents.
 struct ODIROSIM_API FExperimentSettingJson
 {
@@ -221,6 +274,12 @@ struct ODIROSIM_API FExperimentSettingJson
 	// Returns experiments/<Experiment>/runs for an experiment folder path.
 	static FString BuildExperimentRunsDirectory(const FString& ExperimentRef);
 
+	// Returns experiments/<Experiment>/runs/<RunId> for one simulator run.
+	static FString BuildExperimentRunDirectory(const FString& ExperimentRef, const FString& RunId);
+
+	// Returns experiments/<Experiment>/runs/<RunId>/status.json for launcher polling.
+	static FString BuildExperimentRunStatusPath(const FString& ExperimentRef, const FString& RunId);
+
 	// Returns a stable scenario sample id for a zero-based sample index.
 	static FString MakeSampleId(int32 SampleIndex);
 
@@ -233,4 +292,14 @@ struct ODIROSIM_API FExperimentSettingJson
 	static FExperimentRunInputBuildResult BuildRunInputsFromExperiment(
 		const FString& ExperimentRef,
 		const FExperimentSampleSelection& Selection);
+};
+
+// Parser for the public simulator experiment-run command-line contract.
+struct ODIROSIM_API FExperimentRunCommandLine
+{
+	// Parses an explicit command-line string for -Experiment, -RunId, and -SampleIds switches.
+	static FExperimentRunCommandLineParseResult Parse(const FString& CommandLine);
+
+	// Parses the current process command line.
+	static FExperimentRunCommandLineParseResult ParseCurrent();
 };

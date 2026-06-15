@@ -14,6 +14,7 @@
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Platform/Widget/ExperimentResultIterationButton.h"
 #include "Platform/Widget/FileListItemWidget.h"
+#include "Shared/ExperimentSettingTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMainMenuWidget, Log, All);
 
@@ -21,7 +22,7 @@ namespace
 {
 	const int32 ReportPreviewCharacterLimit = 4000;
 	const int32 LogPreviewEdgeLineCount = 5;
-	const TCHAR* DefaultSimulationSetupPath = TEXT("Json/Input/SimulationSetupNew.json");
+	const TCHAR* DefaultExperimentRef = TEXT("Json/Experiments/FeatureProbeNoPedestrians");
 	const TCHAR* MainMenuDefaultSimulationMapId = TEXT("ScenarioSimulationMap");
 	const TCHAR* DefaultMeasurementOutputDirectory = TEXT("Saved/AnalysisLogs");
 	const TCHAR* DefaultMeasurementFilePrefix = TEXT("MeasurementLog");
@@ -98,7 +99,7 @@ namespace
 	FString BuildLogPreview(const FString& logPath)
 	{
 		TArray<FString> lines;
-		if (!FFileHelper::LoadFileToStringArray(lines, *FSimulationSetupJson::ResolveProjectPath(logPath)))
+		if (!FFileHelper::LoadFileToStringArray(lines, *FExperimentSettingJson::ResolveProjectPath(logPath)))
 		{
 			return FString::Printf(TEXT("Log read failed: %s"), *logPath);
 		}
@@ -135,7 +136,7 @@ namespace
 		outItem.ReportPath = reportPath;
 
 		FString reportJson;
-		if (!FFileHelper::LoadFileToString(reportJson, *FSimulationSetupJson::ResolveProjectPath(reportPath)))
+		if (!FFileHelper::LoadFileToString(reportJson, *FExperimentSettingJson::ResolveProjectPath(reportPath)))
 		{
 			return false;
 		}
@@ -148,8 +149,26 @@ namespace
 		}
 
 		FString schema;
-		if (!rootObject->TryGetStringField(TEXT("schema"), schema)
-			|| !schema.Equals(TEXT("episode_evaluation_report"), ESearchCase::CaseSensitive))
+		if (!rootObject->TryGetStringField(TEXT("schema"), schema))
+		{
+			return false;
+		}
+
+		if (schema.Equals(TEXT("episode_result"), ESearchCase::CaseSensitive))
+		{
+			const TSharedPtr<FJsonValue> sampleValue = rootObject->TryGetField(TEXT("sample"));
+			if (sampleValue.IsValid() && sampleValue->Type == EJson::Object)
+			{
+				FString sampleId;
+				if (sampleValue->AsObject()->TryGetStringField(TEXT("sample_id"), sampleId))
+				{
+					outItem.RunIndex = FCString::Atoi(*sampleId);
+				}
+			}
+			return true;
+		}
+
+		if (!schema.Equals(TEXT("episode_evaluation_report"), ESearchCase::CaseSensitive))
 		{
 			return false;
 		}
@@ -271,8 +290,8 @@ namespace
 			return true;
 		}
 
-		const FString resolvedSourcePath = FSimulationSetupJson::ResolveProjectPath(sourcePath);
-		const FString resolvedTargetPath = FSimulationSetupJson::ResolveProjectPath(targetPath);
+		const FString resolvedSourcePath = FExperimentSettingJson::ResolveProjectPath(sourcePath);
+		const FString resolvedTargetPath = FExperimentSettingJson::ResolveProjectPath(targetPath);
 		if (!FPaths::FileExists(resolvedSourcePath))
 		{
 			outError = FString::Printf(TEXT("%s 파일을 찾을 수 없습니다: %s"), *itemLabel, *sourcePath);
@@ -304,7 +323,7 @@ namespace
 				: FString::Printf(TEXT("%s_%d.json"), *baseFileName, index);
 			FString relativePath = FPaths::Combine(TEXT("Json/Input"), fileName);
 			relativePath.ReplaceInline(TEXT("\\"), TEXT("/"));
-			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(relativePath)))
+			if (!FPaths::FileExists(FExperimentSettingJson::ResolveProjectPath(relativePath)))
 			{
 				return relativePath;
 			}
@@ -315,19 +334,6 @@ namespace
 			FString::Printf(TEXT("%s_%s.json"), *baseFileName, *FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(8)));
 		fallbackPath.ReplaceInline(TEXT("\\"), TEXT("/"));
 		return fallbackPath;
-	}
-
-	FString MakeGeneratedRunQueuePathForSetup(const FString& setupPath)
-	{
-		FString baseName = FPaths::GetBaseFilename(setupPath);
-		if (baseName.IsEmpty())
-		{
-			baseName = TEXT("SimulationSetup");
-		}
-
-		FString runQueuePath = FPaths::Combine(TEXT("Json/Input"), FString::Printf(TEXT("%s_RunQueue.json"), *baseName));
-		runQueuePath.ReplaceInline(TEXT("\\"), TEXT("/"));
-		return runQueuePath;
 	}
 
 	bool OpenTextFileInExternalEditor(const FString& resolvedFilePath, FString& outError)
@@ -450,7 +456,7 @@ void UMainMenuWidget::RefreshSetupOptions()
 	if (!subsystem) return;
 
 	const FString currentPath = GetSelectedSetupPath();
-	const TArray<FString> setupFiles = subsystem->ListSimulationSetupFiles();
+	const TArray<FString> setupFiles = subsystem->ListExperimentRefs();
 	SetComboBoxOptions(SetupComboBox, setupFiles, currentPath);
 
 	const FString selectedPath = setupFiles.Contains(currentPath)
@@ -463,8 +469,8 @@ void UMainMenuWidget::RefreshSetupOptions()
 	}
 	else
 	{
-		ApplyNewSetupDefaults(DefaultSimulationSetupPath);
-		SetDiagnosticsText(TEXT("편집 가능한 SimulationSetup JSON이 없습니다. 저장하면 새 파일을 생성합니다."));
+		ApplyNewSetupDefaults(DefaultExperimentRef);
+		SetDiagnosticsText(TEXT("실행 가능한 experiment folder가 없습니다."));
 	}
 	RefreshExperimentConfigList();
 
@@ -527,7 +533,7 @@ void UMainMenuWidget::HandleLoadClicked()
 	{
 		SetExperimentConfigDetailVisible(false);
 		RefreshExperimentConfigList();
-		SetDiagnosticsText(TEXT("SimulationSetup 목록으로 돌아왔습니다."));
+		SetDiagnosticsText(TEXT("Experiment 목록으로 돌아왔습니다."));
 		return;
 	}
 
@@ -535,9 +541,9 @@ void UMainMenuWidget::HandleLoadClicked()
 	{
 		SetupComboBox->SetVisibility(ESlateVisibility::Visible);
 		if (GetSelectedSetupPath().TrimStartAndEnd().IsEmpty()
-			|| !FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(GetSelectedSetupPath())))
+			|| !FPaths::FileExists(FExperimentSettingJson::ResolveProjectPath(GetSelectedSetupPath())))
 		{
-			SetDiagnosticsText(TEXT("SimulationSetup을 선택하거나 새 구성을 만든 뒤 불러오세요."));
+			SetDiagnosticsText(TEXT("Experiment folder를 선택한 뒤 불러오세요."));
 			return;
 		}
 	}
@@ -547,193 +553,17 @@ void UMainMenuWidget::HandleLoadClicked()
 
 void UMainMenuWidget::HandleNewSetupClicked()
 {
-	const FString newSetupPath = MakeUniqueInputJsonPath(TEXT("SimulationSetupNew"));
-	SetExperimentConfigDetailVisible(true);
-	ApplyNewSetupDefaults(newSetupPath);
-	if (SetupComboBox)
-	{
-		SetupComboBox->SetVisibility(ESlateVisibility::Collapsed);
-	}
-
-	SetDiagnosticsText(TEXT("새 SimulationSetup 초안입니다. 시나리오와 행동 정책을 고른 뒤 저장하세요."));
+	SetDiagnosticsText(TEXT("Experiment 생성/편집 UI는 다음 slice에서 setting.json/profile override 흐름으로 교체합니다."));
 }
 
 void UMainMenuWidget::HandleSaveFpsClicked()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem || !FixedStepFpsTextBox)
-	{
-		return;
-	}
-
-	const int32 fps = FCString::Atoi(*FixedStepFpsTextBox->GetText().ToString());
-	if (IsReferenceSampleJsonPath(GetSelectedSetupPath()))
-	{
-		SetDiagnosticsText(TEXT("샘플 JSON은 읽기 전용입니다. 저장하기 전에 새 SimulationSetup을 만드세요."));
-		return;
-	}
-
-	TArray<FString> diagnostics;
-	if (subsystem->SaveFixedStepFpsToSetupFile(GetSelectedSetupPath(), fps, diagnostics))
-	{
-		UpdateStatusText(FString::Printf(TEXT("fixed_step.fps 저장됨: %d"), fps));
-		return;
-	}
-
-	SetDiagnosticsText(JoinStringLines(diagnostics));
-}
-
-bool UMainMenuWidget::BuildSimulationSetupFromControls(
-	const FSimulationSetup& baseSetup,
-	const FString& runQueuePath,
-	FSimulationSetup& outSetup,
-	TArray<FString>& outDiagnostics) const
-{
-	outDiagnostics.Reset();
-	outSetup = baseSetup;
-
-	outSetup.Schema = TEXT("simulation_setup");
-	outSetup.Version = FMath::Max(1, outSetup.Version);
-	outSetup.RunQueueJsonPath = runQueuePath.TrimStartAndEnd();
-
-	if (MapIdTextBox)
-	{
-		outSetup.MapId = MapIdTextBox->GetText().ToString().TrimStartAndEnd();
-	}
-
-	if (FixedStepFpsTextBox)
-	{
-		outSetup.FixedStep.Fps = FCString::Atoi(*FixedStepFpsTextBox->GetText().ToString().TrimStartAndEnd());
-	}
-
-	if (MeasurementLogEnabledCheckBox)
-	{
-		outSetup.MeasurementLog.bEnabled = MeasurementLogEnabledCheckBox->IsChecked();
-	}
-	if (MeasurementOutputDirectoryTextBox)
-	{
-		outSetup.MeasurementLog.OutputDirectory = MeasurementOutputDirectoryTextBox->GetText().ToString().TrimStartAndEnd();
-	}
-	if (MeasurementFilePrefixTextBox)
-	{
-		outSetup.MeasurementLog.FilePrefix = MeasurementFilePrefixTextBox->GetText().ToString().TrimStartAndEnd();
-	}
-	if (FlushIntervalTicksTextBox)
-	{
-		outSetup.MeasurementLog.FlushIntervalTicks =
-			FCString::Atoi(*FlushIntervalTicksTextBox->GetText().ToString().TrimStartAndEnd());
-	}
-	if (ReportOutputDirectoryTextBox)
-	{
-		outSetup.Report.OutputDirectory = ReportOutputDirectoryTextBox->GetText().ToString().TrimStartAndEnd();
-	}
-	if (StatusOutputPathTextBox)
-	{
-		outSetup.Status.OutputPath = StatusOutputPathTextBox->GetText().ToString().TrimStartAndEnd();
-	}
-
-	if (outSetup.RunQueueJsonPath.IsEmpty())
-	{
-		outDiagnostics.Add(TEXT("SimulationSetup run_queue는 비어 있을 수 없습니다."));
-		return false;
-	}
-
-	return true;
+	SetDiagnosticsText(TEXT("fixed_fps는 experiment setting.json의 runtime.fixed_fps에서 관리합니다."));
 }
 
 void UMainMenuWidget::HandleSaveSetupClicked()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		return;
-	}
-
-	const FString setupPath = GetSelectedSetupPath();
-	if (IsReferenceSampleJsonPath(setupPath))
-	{
-		SetDiagnosticsText(TEXT("샘플 JSON은 읽기 전용입니다. 저장하기 전에 새 SimulationSetup을 만드세요."));
-		return;
-	}
-
-	const FString scenarioSetupPath = GetSelectedScenarioSetupPath();
-	const FString deliveryBotSetupPath = GetSelectedDeliveryBotSetupPath();
-	const FString policySpecPath = GetSelectedPolicySpecPath();
-	if (scenarioSetupPath.TrimStartAndEnd().IsEmpty() || deliveryBotSetupPath.TrimStartAndEnd().IsEmpty())
-	{
-		SetDiagnosticsText(TEXT("ScenarioSetup과 DeliveryBotSetup을 선택해야 합니다."));
-		return;
-	}
-	if (policySpecPath.TrimStartAndEnd().IsEmpty())
-	{
-		SetDiagnosticsText(TEXT("PolicySpec JSON을 선택해야 합니다."));
-		return;
-	}
-	if (IsReferenceSampleJsonPath(scenarioSetupPath) || IsReferenceSampleJsonPath(deliveryBotSetupPath))
-	{
-		SetDiagnosticsText(TEXT("샘플 JSON은 편집 가능한 SimulationSetup에 사용할 수 없습니다. 먼저 편집 가능한 시나리오/행동 정책 파일을 만드세요."));
-		return;
-	}
-
-	FSimulationSetup setupBase;
-	const FSimulationSetupParseResult parseResult = subsystem->LoadSimulationSetupFile(setupPath);
-	if (parseResult.bSuccess)
-	{
-		setupBase = parseResult.Setup;
-	}
-
-	FString runQueuePath = setupBase.RunQueueJsonPath.TrimStartAndEnd();
-	runQueuePath.ReplaceInline(TEXT("\\"), TEXT("/"));
-	if (runQueuePath.IsEmpty())
-	{
-		runQueuePath = MakeGeneratedRunQueuePathForSetup(setupPath);
-	}
-
-	const int32 runCount = FMath::Max(
-		1,
-		RunCountTextBox ? FCString::Atoi(*RunCountTextBox->GetText().ToString()) : 1);
-
-	// MainMenu edits a single scenario/policy pair plus repeat count into the SimulationSetup-owned RunQueue.
-	TArray<FScenarioRunInput> runInputs;
-	runInputs.Reserve(runCount);
-	const FString pairIdBase = FPaths::GetBaseFilename(setupPath).IsEmpty()
-		? FString(TEXT("run"))
-		: FPaths::GetBaseFilename(setupPath);
-	for (int32 runIndex = 0; runIndex < runCount; ++runIndex)
-	{
-		FScenarioRunInput runInput;
-		runInput.PairId = FString::Printf(TEXT("%s_%03d"), *pairIdBase, runIndex);
-		runInput.ScenarioSourceJsonPath = scenarioSetupPath;
-		runInput.SimulationProfileJsonPath = deliveryBotSetupPath;
-		runInput.PolicySpecJsonPath = policySpecPath;
-		runInputs.Add(runInput);
-	}
-
-	TArray<FString> diagnostics;
-	if (!subsystem->SaveScenarioRunQueueFile(runQueuePath, runInputs, diagnostics))
-	{
-		SetDiagnosticsText(JoinStringLines(diagnostics));
-		return;
-	}
-
-	FSimulationSetup setup;
-	diagnostics.Reset();
-	if (!BuildSimulationSetupFromControls(setupBase, runQueuePath, setup, diagnostics))
-	{
-		SetDiagnosticsText(JoinStringLines(diagnostics));
-		return;
-	}
-
-	if (subsystem->SaveSimulationSetupFile(setupPath, setup, diagnostics))
-	{
-		RefreshSetupOptions();
-		SetExperimentConfigDetailVisible(false);
-		ShowMainMenuSection(static_cast<int32>(EMainMenuSection::ExperimentConfig));
-		SetDiagnosticsText(FString::Printf(TEXT("SimulationSetup saved: %s\nRunQueue saved: %s"), *setupPath, *runQueuePath));
-		return;
-	}
-
-	SetDiagnosticsText(JoinStringLines(diagnostics));
+	SetDiagnosticsText(TEXT("Experiment setting 편집 UI로 실행 설정 저장 흐름을 대체 예정입니다."));
 }
 
 void UMainMenuWidget::HandleOpenEditorClicked()
@@ -777,13 +607,6 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 		return;
 	}
 
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		SetDiagnosticsText(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
-		return;
-	}
-
 	FString moveError;
 	if (!MoveProjectRelativeFile(sourcePath, targetPath, TEXT("Scenario"), moveError))
 	{
@@ -791,27 +614,9 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 		return;
 	}
 
-	TArray<FString> diagnostics;
-	if (!subsystem->ReplaceScenarioSetupReferencesInRunQueues(sourcePath, targetPath, diagnostics))
-	{
-		FString rollbackError;
-		if (MoveProjectRelativeFile(targetPath, sourcePath, TEXT("Scenario rollback"), rollbackError))
-		{
-			diagnostics.Add(TEXT("시나리오 이름 변경을 롤백했습니다."));
-		}
-		else
-		{
-			diagnostics.Add(rollbackError);
-		}
-
-		SetDiagnosticsText(JoinStringLines(diagnostics));
-		return;
-	}
-
 	SetSelectedScenarioSetupPath(targetPath);
 	RefreshSetupOptions();
-	diagnostics.Insert(FString::Printf(TEXT("시나리오 이름 변경됨: %s -> %s"), *sourcePath, *targetPath), 0);
-	SetDiagnosticsText(JoinStringLines(diagnostics));
+	SetDiagnosticsText(FString::Printf(TEXT("시나리오 이름 변경됨: %s -> %s"), *sourcePath, *targetPath));
 }
 
 void UMainMenuWidget::HandleScenarioEditRequested(UFileListItemWidget* itemWidget)
@@ -835,13 +640,6 @@ void UMainMenuWidget::HandlePolicyRenameRequested(UFileListItemWidget* itemWidge
 		return;
 	}
 
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		SetDiagnosticsText(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
-		return;
-	}
-
 	FString moveError;
 	if (!MoveProjectRelativeFile(sourcePath, targetPath, TEXT("Policy"), moveError))
 	{
@@ -849,27 +647,9 @@ void UMainMenuWidget::HandlePolicyRenameRequested(UFileListItemWidget* itemWidge
 		return;
 	}
 
-	TArray<FString> diagnostics;
-	if (!subsystem->ReplaceDeliveryBotSetupReferencesInRunQueues(sourcePath, targetPath, diagnostics))
-	{
-		FString rollbackError;
-		if (MoveProjectRelativeFile(targetPath, sourcePath, TEXT("Policy rollback"), rollbackError))
-		{
-			diagnostics.Add(TEXT("행동 정책 이름 변경을 롤백했습니다."));
-		}
-		else
-		{
-			diagnostics.Add(rollbackError);
-		}
-
-		SetDiagnosticsText(JoinStringLines(diagnostics));
-		return;
-	}
-
 	SetSelectedDeliveryBotSetupPath(targetPath);
 	RefreshSetupOptions();
-	diagnostics.Insert(FString::Printf(TEXT("행동 정책 이름 변경됨: %s -> %s"), *sourcePath, *targetPath), 0);
-	SetDiagnosticsText(JoinStringLines(diagnostics));
+	SetDiagnosticsText(FString::Printf(TEXT("행동 정책 이름 변경됨: %s -> %s"), *sourcePath, *targetPath));
 }
 
 void UMainMenuWidget::HandlePolicyEditRequested(UFileListItemWidget* itemWidget)
@@ -886,24 +666,8 @@ void UMainMenuWidget::HandleExperimentConfigRenameRequested(
 {
 	if (!IsValid(itemWidget)) return;
 
-	const FString sourcePath = NormalizeInputJsonPath(itemWidget->GetOriginalPath());
-	const FString targetPath = NormalizeInputJsonPath(requestedPath);
-	if (!IsEditableInputJsonPath(sourcePath) || !IsEditableInputJsonPath(targetPath))
-	{
-		SetDiagnosticsText(TEXT("SimulationSetup 파일 이름은 편집 가능한 Json/Input/*.json 경로여야 합니다."));
-		return;
-	}
-
-	FString moveError;
-	if (!MoveProjectRelativeFile(sourcePath, targetPath, TEXT("SimulationSetup"), moveError))
-	{
-		SetDiagnosticsText(moveError);
-		return;
-	}
-
-	SetSelectedSetupPath(targetPath);
-	RefreshSetupOptions();
-	SetDiagnosticsText(FString::Printf(TEXT("SimulationSetup 이름 변경됨: %s -> %s"), *sourcePath, *targetPath));
+	(void)requestedPath;
+	SetDiagnosticsText(TEXT("Experiment folder rename은 setting/profile override UI slice에서 별도 처리합니다."));
 }
 
 void UMainMenuWidget::HandleExperimentConfigEditRequested(UFileListItemWidget* itemWidget)
@@ -911,7 +675,7 @@ void UMainMenuWidget::HandleExperimentConfigEditRequested(UFileListItemWidget* i
 	if (!IsValid(itemWidget)) return;
 
 	SetExperimentConfigDetailVisible(true);
-	const FString setupPath = NormalizeInputJsonPath(itemWidget->GetOriginalPath());
+	const FString setupPath = itemWidget->GetOriginalPath();
 	SetSelectedSetupPath(setupPath);
 	LoadSelectedSetup();
 }
@@ -920,7 +684,7 @@ void UMainMenuWidget::HandleExperimentConfigPlayRequested(UFileListItemWidget* i
 {
 	if (!IsValid(itemWidget)) return;
 
-	const FString setupPath = NormalizeInputJsonPath(itemWidget->GetOriginalPath());
+	const FString setupPath = itemWidget->GetOriginalPath();
 	SetSelectedSetupPath(setupPath);
 	LoadSelectedSetup();
 	HandleStartClicked();
@@ -959,7 +723,7 @@ void UMainMenuWidget::HandleOpenPolicyTextEditorClicked()
 		return;
 	}
 
-	const FString resolvedPolicyPath = FSimulationSetupJson::ResolveProjectPath(policyPath);
+	const FString resolvedPolicyPath = FExperimentSettingJson::ResolveProjectPath(policyPath);
 	if (!FPaths::FileExists(resolvedPolicyPath))
 	{
 		SetDiagnosticsText(FString::Printf(TEXT("행동 정책 파일을 찾을 수 없습니다: %s"), *resolvedPolicyPath));
@@ -978,7 +742,7 @@ void UMainMenuWidget::HandleOpenPolicyTextEditorClicked()
 
 void UMainMenuWidget::HandleNewPolicyClicked()
 {
-	const FString templatePath = FSimulationSetupJson::ResolveProjectPath(DeliveryBotTemplatePath);
+	const FString templatePath = FExperimentSettingJson::ResolveProjectPath(DeliveryBotTemplatePath);
 	FString templateJson;
 	if (!FFileHelper::LoadFileToString(templateJson, *templatePath))
 	{
@@ -987,7 +751,7 @@ void UMainMenuWidget::HandleNewPolicyClicked()
 	}
 
 	const FString newPolicyPath = MakeUniqueInputJsonPath(TEXT("SimulationProfileNew"));
-	const FString resolvedNewPolicyPath = FSimulationSetupJson::ResolveProjectPath(newPolicyPath);
+	const FString resolvedNewPolicyPath = FExperimentSettingJson::ResolveProjectPath(newPolicyPath);
 	const FString outputDirectory = FPaths::GetPath(resolvedNewPolicyPath);
 	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true)
 		|| !FFileHelper::SaveStringToFile(
@@ -1011,7 +775,7 @@ void UMainMenuWidget::HandleStartClicked()
 	if (!subsystem) return;
 
 	const FString requestedRunId = RunIdTextBox ? RunIdTextBox->GetText().ToString().TrimStartAndEnd() : FString();
-	if (subsystem->StartSimulationRun(GetSelectedSetupPath(), requestedRunId))
+	if (subsystem->StartExperimentRun(GetSelectedSetupPath(), requestedRunId))
 	{
 		UpdateStatusText(TEXT("Simulator launch requested."));
 		return;
@@ -1104,7 +868,7 @@ void UMainMenuWidget::HandleExperimentConfigBackClicked()
 {
 	SetExperimentConfigDetailVisible(false);
 	RefreshExperimentConfigList();
-	SetDiagnosticsText(TEXT("SimulationSetup 목록으로 돌아왔습니다."));
+	SetDiagnosticsText(TEXT("Experiment 목록으로 돌아왔습니다."));
 }
 
 void UMainMenuWidget::HandleScenarioSetupSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType)
@@ -1391,105 +1155,43 @@ void UMainMenuWidget::LoadSelectedSetup()
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
 	if (!subsystem) return;
 
-	const FSimulationSetupParseResult parseResult = subsystem->LoadSimulationSetupFile(GetSelectedSetupPath());
-	if (!parseResult.bSuccess)
+	const FExperimentSettingParseResult experimentResult = subsystem->LoadExperimentSettingFile(GetSelectedSetupPath());
+	if (!experimentResult.bSuccess)
 	{
-		if (GetSelectedSetupPath().TrimStartAndEnd().IsEmpty())
-		{
-			SetDiagnosticsText(TEXT("SimulationSetup이 선택되지 않았습니다."));
-			return;
-		}
-
-		if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(GetSelectedSetupPath())))
-		{
-			SetDiagnosticsText(FString::Printf(TEXT("SimulationSetup 파일이 아직 없습니다: %s\n저장 버튼으로 생성하세요."), *GetSelectedSetupPath()));
-			return;
-		}
-
-		// Start Run 전에 setup 계약 위반을 보여줘 simulator process를 불필요하게 띄우지 않는다.
 		TArray<FString> diagnostics;
-		for (const FScenarioCompileDiagnostic& diagnostic : parseResult.Diagnostics)
+		for (const FScenarioSchemaDiagnostic& diagnostic : experimentResult.Diagnostics)
 		{
 			diagnostics.Add(FString::Printf(TEXT("%s: %s"), *diagnostic.Code, *diagnostic.Message));
 		}
-		SetDiagnosticsText(JoinStringLines(diagnostics));
+		SetDiagnosticsText(diagnostics.IsEmpty() ? TEXT("experiment_setting을 읽을 수 없습니다.") : JoinStringLines(diagnostics));
 		return;
 	}
 
 	if (FixedStepFpsTextBox)
 	{
-		FixedStepFpsTextBox->SetText(FText::AsNumber(parseResult.Setup.FixedStep.Fps));
+		FixedStepFpsTextBox->SetText(FText::AsNumber(experimentResult.Document.Runtime.FixedFps));
 	}
-
 	if (MapIdTextBox)
 	{
-		MapIdTextBox->SetText(FText::FromString(parseResult.Setup.MapId));
+		MapIdTextBox->SetText(FText::FromString(experimentResult.Document.Runtime.MapId));
+	}
+	if (RunCountTextBox)
+	{
+		RunCountTextBox->SetText(FText::AsNumber(experimentResult.Document.Sampling.SampleCount));
 	}
 
-	// SimulationSetup stores a generated ScenarioRunQueue path; the detail page exposes the resolved pair and run count.
-	TArray<FScenarioRunInput> loadedRunInputs;
-	TArray<FString> runQueueDiagnostics;
-	if (subsystem->LoadScenarioRunQueueFile(parseResult.Setup.RunQueueJsonPath, loadedRunInputs, runQueueDiagnostics)
-		&& !loadedRunInputs.IsEmpty())
-	{
-		const FScenarioRunInput& firstRunInput = loadedRunInputs[0];
-		SetSelectedScenarioSetupPath(firstRunInput.ScenarioSourceJsonPath);
-		if (DeliveryBotSetupComboBox)
-		{
-			DeliveryBotSetupComboBox->SetSelectedOption(firstRunInput.SimulationProfileJsonPath);
-		}
-		if (PolicyDeliveryBotSetupComboBox)
-		{
-			PolicyDeliveryBotSetupComboBox->SetSelectedOption(firstRunInput.SimulationProfileJsonPath);
-		}
-		SetSelectedDeliveryBotSetupPath(firstRunInput.SimulationProfileJsonPath);
-		SetSelectedPolicySpecPath(firstRunInput.PolicySpecJsonPath.IsEmpty()
-			? FString(MainMenuDefaultPolicySpecJsonPath)
-			: firstRunInput.PolicySpecJsonPath);
-		if (RunCountTextBox)
-		{
-			RunCountTextBox->SetText(FText::AsNumber(loadedRunInputs.Num()));
-		}
-	}
-	if (MeasurementLogEnabledCheckBox)
-	{
-		MeasurementLogEnabledCheckBox->SetIsChecked(parseResult.Setup.MeasurementLog.bEnabled);
-	}
-	if (MeasurementOutputDirectoryTextBox)
-	{
-		MeasurementOutputDirectoryTextBox->SetText(FText::FromString(parseResult.Setup.MeasurementLog.OutputDirectory));
-	}
-	if (MeasurementFilePrefixTextBox)
-	{
-		MeasurementFilePrefixTextBox->SetText(FText::FromString(parseResult.Setup.MeasurementLog.FilePrefix));
-	}
-	if (FlushIntervalTicksTextBox)
-	{
-		FlushIntervalTicksTextBox->SetText(FText::AsNumber(parseResult.Setup.MeasurementLog.FlushIntervalTicks));
-	}
-	if (ReportOutputDirectoryTextBox)
-	{
-		ReportOutputDirectoryTextBox->SetText(FText::FromString(parseResult.Setup.Report.OutputDirectory));
-	}
-	if (StatusOutputPathTextBox)
-	{
-		StatusOutputPathTextBox->SetText(FText::FromString(parseResult.Setup.Status.OutputPath));
-	}
+	SetSelectedScenarioSetupPath(experimentResult.Document.Sampling.ScenarioTemplateRef);
+	SetSelectedDeliveryBotSetupPath(experimentResult.Document.Sampling.ProfileTemplateRef);
 
-	TArray<FString> lines;
-	lines.Add(FString::Printf(TEXT("로드한 SimulationSetup: %s"), *GetSelectedSetupPath()));
-	lines.Add(FString::Printf(TEXT("RunQueue: %s"), *parseResult.Setup.RunQueueJsonPath));
-	if (!loadedRunInputs.IsEmpty())
-	{
-		lines.Add(FString::Printf(TEXT("시나리오(ScenarioSetup): %s"), *loadedRunInputs[0].ScenarioSourceJsonPath));
-		lines.Add(FString::Printf(TEXT("행동 정책(DeliveryBotSetup): %s"), *loadedRunInputs[0].SimulationProfileJsonPath));
-		lines.Add(FString::Printf(
-			TEXT("PolicySpec: %s"),
-			loadedRunInputs[0].PolicySpecJsonPath.IsEmpty() ? MainMenuDefaultPolicySpecJsonPath : *loadedRunInputs[0].PolicySpecJsonPath));
-		lines.Add(FString::Printf(TEXT("실행 수: %d"), loadedRunInputs.Num()));
-	}
-	lines.Add(FString::Printf(TEXT("고정 스텝 FPS: %d"), parseResult.Setup.FixedStep.Fps));
-	SetDiagnosticsText(JoinStringLines(lines));
+	TArray<FString> experimentLines;
+	experimentLines.Add(FString::Printf(TEXT("Experiment: %s"), *GetSelectedSetupPath()));
+	experimentLines.Add(FString::Printf(TEXT("setting.json: %s"), *FExperimentSettingJson::BuildExperimentSettingPath(GetSelectedSetupPath())));
+	experimentLines.Add(FString::Printf(TEXT("Scenario Template: %s"), *experimentResult.Document.Sampling.ScenarioTemplateRef));
+	experimentLines.Add(FString::Printf(TEXT("Profile Template: %s"), *experimentResult.Document.Sampling.ProfileTemplateRef));
+	experimentLines.Add(FString::Printf(TEXT("Samples: %d"), experimentResult.Document.Sampling.SampleCount));
+	experimentLines.Add(FString::Printf(TEXT("Map: %s"), *experimentResult.Document.Runtime.MapId));
+	experimentLines.Add(FString::Printf(TEXT("Fixed FPS: %d"), experimentResult.Document.Runtime.FixedFps));
+	SetDiagnosticsText(JoinStringLines(experimentLines));
 }
 
 void UMainMenuWidget::ApplyNewSetupDefaults(const FString& setupPath)
@@ -1655,7 +1357,7 @@ void UMainMenuWidget::RefreshExperimentConfigList()
 	const TSubclassOf<UFileListItemWidget> itemWidgetClass = ResolveFileListItemWidgetClass();
 	if (!itemWidgetClass) return;
 
-	const TArray<FString> setupFiles = subsystem->ListSimulationSetupFiles();
+	const TArray<FString> setupFiles = subsystem->ListExperimentRefs();
 	const FString currentPath = GetSelectedSetupPath();
 	const FString selectedPath = setupFiles.Contains(currentPath)
 		? currentPath
@@ -1671,7 +1373,7 @@ void UMainMenuWidget::RefreshExperimentConfigList()
 
 	if (setupFiles.IsEmpty())
 	{
-		AddEmptyListMessage(WidgetTree, ExperimentConfigListScrollBox, TEXT("편집 가능한 SimulationSetup JSON이 없습니다."));
+		AddEmptyListMessage(WidgetTree, ExperimentConfigListScrollBox, TEXT("실행 가능한 experiment folder가 없습니다."));
 		return;
 	}
 
@@ -1680,7 +1382,7 @@ void UMainMenuWidget::RefreshExperimentConfigList()
 		UFileListItemWidget* itemWidget = CreateWidget<UFileListItemWidget>(this, itemWidgetClass);
 		if (!itemWidget) continue;
 
-		itemWidget->InitializeItem(setupFile, TEXT("편집"), TEXT("실행"), true, true, true);
+		itemWidget->InitializeDisplayItem(setupFile, FPaths::GetBaseFilename(setupFile), TEXT("열기"), TEXT("실행"), false, true, true);
 		itemWidget->OnRenameRequested.AddUObject(this, &UMainMenuWidget::HandleExperimentConfigRenameRequested);
 		itemWidget->OnPrimaryActionRequested.AddUObject(this, &UMainMenuWidget::HandleExperimentConfigEditRequested);
 		itemWidget->OnSecondaryActionRequested.AddUObject(this, &UMainMenuWidget::HandleExperimentConfigPlayRequested);
@@ -1907,7 +1609,7 @@ void UMainMenuWidget::ClearExperimentResultIterationWidgets()
 
 bool UMainMenuWidget::CreateScenarioFileFromTemplate(const FString& scenarioSetupPath)
 {
-	const FString resolvedTemplatePath = FSimulationSetupJson::ResolveProjectPath(ScenarioSetupTemplatePath);
+	const FString resolvedTemplatePath = FExperimentSettingJson::ResolveProjectPath(ScenarioSetupTemplatePath);
 	FString templateJson;
 	if (!FFileHelper::LoadFileToString(templateJson, *resolvedTemplatePath))
 	{
@@ -1922,7 +1624,7 @@ bool UMainMenuWidget::CreateScenarioFileFromTemplate(const FString& scenarioSetu
 		return false;
 	}
 
-	const FString resolvedScenarioSetupPath = FSimulationSetupJson::ResolveProjectPath(normalizedScenarioSetupPath);
+	const FString resolvedScenarioSetupPath = FExperimentSettingJson::ResolveProjectPath(normalizedScenarioSetupPath);
 	if (FPaths::FileExists(resolvedScenarioSetupPath))
 	{
 		SetDiagnosticsText(FString::Printf(TEXT("시나리오 파일이 이미 존재합니다: %s"), *normalizedScenarioSetupPath));
@@ -2054,11 +1756,11 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 
 	if (USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem())
 	{
-		const FSimulationSetupParseResult setupParseResult = subsystem->LoadSimulationSetupFile(GetSelectedSetupPath());
+		const FExperimentSettingParseResult setupParseResult = subsystem->LoadExperimentSettingFile(GetSelectedSetupPath());
 		if (setupParseResult.bSuccess)
 		{
-			lines.Add(FString::Printf(TEXT("Setup: %s"), *GetSelectedSetupPath()));
-			lines.Add(FString::Printf(TEXT("Fixed-Step FPS: %d"), setupParseResult.Setup.FixedStep.Fps));
+			lines.Add(FString::Printf(TEXT("Experiment: %s"), *GetSelectedSetupPath()));
+			lines.Add(FString::Printf(TEXT("Fixed-Step FPS: %d"), setupParseResult.Document.Runtime.FixedFps));
 		}
 
 		const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
@@ -2138,7 +1840,7 @@ void UMainMenuWidget::UpdateReportAndLogText()
 		if (!SelectedExperimentResultPath.IsEmpty())
 		{
 			FString reportJson;
-			if (FFileHelper::LoadFileToString(reportJson, *FSimulationSetupJson::ResolveProjectPath(SelectedExperimentResultPath)))
+			if (FFileHelper::LoadFileToString(reportJson, *FExperimentSettingJson::ResolveProjectPath(SelectedExperimentResultPath)))
 			{
 				reportLines.Add(TEXT(""));
 				reportLines.Add(FString::Printf(TEXT("Details: %s"), *SelectedExperimentResultPath));

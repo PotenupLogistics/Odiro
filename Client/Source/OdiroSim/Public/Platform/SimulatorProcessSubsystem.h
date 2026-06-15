@@ -3,14 +3,16 @@
 #include "CoreMinimal.h"
 #include "Engine/World.h"
 #include "Shared/EpisodeResultTypes.h"
+#include "Shared/EpisodeMeasurementLogTypes.h"
+#include "Shared/ExperimentSettingTypes.h"
 #include "Shared/ScenarioConfigTypes.h"
-#include "Shared/SimulationSetupTypes.h"
+#include "Shared/SimulationRunStatusTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "SimulatorProcessSubsystem.generated.h"
 
 class UScenarioRunnerSubsystem;
 
-// `-Simulate=<SimulationSetupFile>` process를 감지하고 simulator bootstrap을 수행하는 subsystem
+// `-Experiment=<ExperimentRef>` process를 감지하고 simulator bootstrap을 수행하는 subsystem
 UCLASS(BlueprintType)
 class ODIROSIM_API USimulatorProcessSubsystem : public UGameInstanceSubsystem
 {
@@ -20,13 +22,19 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
-	// 현재 process가 `-Simulate` 계약으로 실행 중이면 true
+	// Whether this process was launched as an automated simulator run.
 	UFUNCTION(BlueprintPure, Category = "Simulation|Process")
 	bool IsSimulatorMode() const { return bSimulatorMode; }
 
-	// SimulatorMode에서 읽은 setup 값
+	// Active experiment folder used by this simulator process.
 	UFUNCTION(BlueprintPure, Category = "Simulation|Process")
-	FSimulationSetup GetActiveSetup() const { return ActiveSetup; }
+	FString GetActiveExperimentRef() const { return ActiveRequest.ExperimentRef; }
+
+	// Active experiment run request parsed from process command-line switches.
+	FExperimentRunRequest GetActiveRequest() const { return ActiveRequest; }
+
+	// Active experiment_setting document loaded for this simulator process.
+	FExperimentSettingDocument GetActiveSetting() const { return ActiveSetting; }
 
 	// 현재 process에 전달된 optional run id
 	UFUNCTION(BlueprintPure, Category = "Simulation|Process")
@@ -51,8 +59,8 @@ private:
 	void HandlePostWorldInitialization(UWorld* world, const UWorld::InitializationValues initializationValues);
 	void HandlePostLoadMapWithWorld(UWorld* loadedWorld);
 	void ProcessLoadedWorld(UWorld* world);
-	void QueueStartSimulationRun(UWorld* world);
-	void StartSimulationRun(UWorld* world);
+	void QueueStartExperimentRun(UWorld* world);
+	void StartExperimentRun(UWorld* world);
 	void ConfigureRunnerSubsystem(UScenarioRunnerSubsystem* runnerSubsystem);
 	void BindRunnerDelegates(UScenarioRunnerSubsystem* runnerSubsystem);
 	void UnbindRunnerDelegates();
@@ -61,7 +69,7 @@ private:
 	void HandleRunnerStateChanged(EScenarioRunnerState runnerState);
 	void HandleRunRecordCompleted(const FEpisodeRunRecord& runRecord);
 	void ApplyFixedStep() const;
-	void LogSetupDiagnostics(const FSimulationSetupParseResult& parseResult) const;
+	void LogExperimentDiagnostics(const FExperimentSettingParseResult& parseResult) const;
 	void InitializeStatus();
 	void WriteStatus(ESimulationRunState state, const FString& error = FString());
 	void WriteStatusFromRunnerState(EScenarioRunnerState runnerState, const FString& error = FString());
@@ -83,11 +91,21 @@ private:
 	UPROPERTY(Transient)
 	bool bReplacingExistingRunnerBatch = false;
 
+	// Experiment launch request parsed from this process command line.
 	UPROPERTY(Transient)
-	FSimulationSetup ActiveSetup;
+	FExperimentRunRequest ActiveRequest;
 
+	// Loaded experiment setting used to materialize scenario/profile run inputs.
 	UPROPERTY(Transient)
-	FString ActiveSetupPath;
+	FExperimentSettingDocument ActiveSetting;
+
+	// Measurement log options derived from the active experiment setting.
+	UPROPERTY(Transient)
+	FEpisodeMeasurementLogSettings ActiveMeasurementLogSettings;
+
+	// Canonical output directory for this active run.
+	UPROPERTY(Transient)
+	FString ActiveRunOutputDirectory;
 
 	UPROPERTY(Transient)
 	FString ActiveRunId;

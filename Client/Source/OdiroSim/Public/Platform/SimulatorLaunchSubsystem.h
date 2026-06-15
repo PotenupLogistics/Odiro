@@ -1,57 +1,70 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Shared/ExperimentSettingTypes.h"
 #include "Shared/ScenarioConfigTypes.h"
-#include "Shared/SimulationSetupTypes.h"
+#include "Shared/SimulationRunStatusTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "SimulatorLaunchSubsystem.generated.h"
 
-// Main menu process가 별도 simulator process 하나를 실행하고 status file로 추적한 결과
+// Main menu process launch state mirrored from the child simulator status file.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FSimulatorRunInfo
 {
 	GENERATED_BODY()
 
+	// Stable run folder id used under the selected experiment folder.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	FString RunId;
 
+	// Selected experiment folder; legacy name is kept for Blueprint compatibility.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	FString SetupPath;
 
+	// Status JSON path polled by the launcher while the child process runs.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	FString StatusPath;
 
+	// Executable or command host used for the child simulator process.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	FString LaunchExecutable;
 
+	// Full command-line arguments passed to LaunchExecutable.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	FString LaunchArguments;
 
+	// True when editor fallback routing uses Task-RunPreview.bat instead of a packaged executable.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	bool bUsedPreviewLauncher = false;
 
+	// True after FPlatformProcess successfully created the child process.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	bool bProcessStarted = false;
 
+	// Last observed process liveness.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	bool bProcessRunning = false;
 
+	// Last return code captured after the child process exits.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	int32 ProcessReturnCode = INDEX_NONE;
 
+	// Last parsed simulation run status.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	FSimulationRunStatus Status;
 
+	// Launcher-side validation or polling diagnostics.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	TArray<FString> Diagnostics;
 
+	// Most recent launch or simulator error text shown by the main menu.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	FString LastError;
 };
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FSimulatorRunInfoChangedNative, const FSimulatorRunInfo&);
 
-// MainMenuMap에서 simulation setup을 골라 별도 simulator process를 실행하는 launcher
+// MainMenuMap launcher for selecting an experiment folder and starting a child simulator process.
 UCLASS(BlueprintType)
 class ODIROSIM_API USimulatorLaunchSubsystem : public UGameInstanceSubsystem
 {
@@ -62,9 +75,9 @@ public:
 
 	FSimulatorRunInfoChangedNative OnRunInfoChanged;
 
-	// Json/Input 아래에서 SimulationSetup 계약으로 읽히는 JSON 파일 목록
+	// Json/Experiments folders that contain a valid experiment setting.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
-	TArray<FString> ListSimulationSetupFiles() const;
+	TArray<FString> ListExperimentRefs() const;
 
 	// Json/Input 아래에서 scenario_template/scenario_sample 계약으로 컴파일되는 JSON 파일 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
@@ -77,10 +90,6 @@ public:
 	// Json/Input/PolicySpecs 아래에서 policySpec update payload로 읽히는 JSON 파일 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
 	TArray<FString> ListPolicySpecFiles() const;
-
-	// Json/Input 아래에서 ScenarioRunQueue 계약으로 읽히는 JSON 파일 목록
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
-	TArray<FString> ListScenarioRunQueueFiles() const;
 
 	// Json/Output 아래 evaluation report JSON 후보 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
@@ -103,61 +112,11 @@ public:
 	TArray<FString> ListMeasurementLogFilesInDirectory(const FString& runDirectory) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
-	FSimulationSetupParseResult LoadSimulationSetupFile(const FString& setupPath) const;
+	FExperimentSettingParseResult LoadExperimentSettingFile(const FString& experimentRef) const;
 
+	// Starts a child simulator process through the canonical experiment folder contract.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
-	bool SaveFixedStepFpsToSetupFile(const FString& setupPath, int32 fps, TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
-	bool SaveSimulationSetupFile(const FString& setupPath, const FSimulationSetup& setup, TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
-	bool LoadScenarioRunQueueFile(
-		const FString& runQueuePath,
-		TArray<FScenarioRunInput>& outRunInputs,
-		TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
-	bool SaveScenarioRunQueueFile(
-		const FString& runQueuePath,
-		const TArray<FScenarioRunInput>& runInputs,
-		TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
-	bool AppendRunQueuePair(
-		const FString& runQueuePath,
-		const FString& pairId,
-		const FString& scenarioSetupPath,
-		const FString& deliveryBotSetupPath,
-		TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
-	bool RemoveRunQueuePair(
-		const FString& runQueuePath,
-		int32 runIndex,
-		TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
-	bool MoveRunQueuePair(
-		const FString& runQueuePath,
-		int32 runIndex,
-		int32 direction,
-		TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
-	bool ReplaceScenarioSetupReferencesInRunQueues(
-		const FString& oldScenarioSetupPath,
-		const FString& newScenarioSetupPath,
-		TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
-	bool ReplaceDeliveryBotSetupReferencesInRunQueues(
-		const FString& oldDeliveryBotSetupPath,
-		const FString& newDeliveryBotSetupPath,
-		TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
-	bool StartSimulationRun(const FString& setupPath, const FString& requestedRunId);
+	bool StartExperimentRun(const FString& experimentRef, const FString& requestedRunId);
 
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	bool RefreshActiveRunStatus();
@@ -178,38 +137,17 @@ public:
 	static FString QuoteCommandLineArgument(const FString& value);
 
 	UFUNCTION(BlueprintPure, Category = "Simulator|Launch")
-	static FString BuildSimulatorArgumentString(const FString& setupPath, const FString& runId);
+	static FString BuildSimulatorArgumentString(const FString& experimentRef, const FString& runId);
 
 	UFUNCTION(BlueprintPure, Category = "Simulator|Launch")
 	static FString BuildPreviewLauncherArgumentString(
 		const FString& previewBatPath,
-		const FString& setupPath,
+		const FString& experimentRef,
 		const FString& runId);
 
-	static bool TryReadScenarioRunQueueJson(
-		const FString& jsonString,
-		TArray<FScenarioRunInput>& outRunInputs,
-		TArray<FString>& outDiagnostics);
-
-	static bool TryWriteScenarioRunQueueJson(
-		const TArray<FScenarioRunInput>& runInputs,
-		FString& outJson,
-		TArray<FString>& outDiagnostics);
-
 private:
-	bool ReplaceRunQueueReferences(
-		const FString& oldPath,
-		const FString& newPath,
-		bool bReplaceScenarioSetupReference,
-		TArray<FString>& outDiagnostics) const;
-	bool BuildLaunchCommand(const FString& setupPath, const FString& runId, FString& outExecutable, FString& outArguments, bool& bOutUsesPreviewLauncher) const;
+	bool BuildLaunchCommand(const FString& experimentRef, const FString& runId, FString& outExecutable, FString& outArguments, bool& bOutUsesPreviewLauncher) const;
 	bool ShouldUsePreviewLauncher(FString& outPreviewBatPath) const;
-	bool CreateRuntimeSimulationSetupFile(
-		const FSimulationSetup& sourceSetup,
-		const FString& runId,
-		FString& outRuntimeSetupPath,
-		FSimulationSetup& outRuntimeSetup,
-		TArray<FString>& outDiagnostics) const;
 	void PollActiveRunStatus();
 	void StartPolling();
 	void StopPolling();
@@ -222,6 +160,9 @@ private:
 	UPROPERTY(Transient)
 	FSimulatorRunInfo ActiveRunInfo;
 
+	// OS process handle owned by this subsystem while a child simulator is active.
 	FProcHandle ActiveProcessHandle;
+
+	// Polling timer used to refresh status.json and process liveness.
 	FTimerHandle PollTimerHandle;
 };

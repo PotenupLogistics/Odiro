@@ -66,7 +66,7 @@ schema:
 ## 위치 결정
 
 - sample 생성 수와 seed는 `setting.sampling` 소유다.
-- 실행 요청의 `simulation_setup`은 `experiment_ref`로 experiment folder를 지정한다.
+- 실행 요청은 experiment folder를 직접 지정한다. 현재 Unreal process boundary는 `-Experiment=<ExperimentRef>`와 optional `-RunId=<RunId>`를 사용한다.
 - simulator는 실행 전에 `experiments/<Experiment>/scenarios/<SampleId>.json`이 없으면 deterministic하게 materialize한다.
 - `experiments/<Experiment>/profile.json`은 선택된 profile template을 복사하고 override한 실행 고정 입력이다.
 - run 결과는 `experiments/<Experiment>/runs/<RunId>/` 아래에 저장한다.

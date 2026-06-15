@@ -11,7 +11,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
-#include "Shared/SimulationSetupTypes.h"
+#include "Shared/ExperimentSettingTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPlatformAnalysisAi, Log, All);
 
@@ -70,7 +70,7 @@ namespace
 		Path = Path.TrimStartAndEnd();
 		Path.ReplaceInline(TEXT("\\"), TEXT("/"));
 
-		const FString ResolvedPath = NormalizeResolvedPath(FSimulationSetupJson::ResolveProjectPath(Path));
+		const FString ResolvedPath = NormalizeResolvedPath(FExperimentSettingJson::ResolveProjectPath(Path));
 		if (FPaths::FileExists(ResolvedPath))
 		{
 			return ResolvedPath;

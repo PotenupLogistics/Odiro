@@ -21,16 +21,7 @@ struct ODIROSIM_API FScenarioLlmGenerationResult
 	FString Message;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
-	FString SavedRunQueueJsonPath;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
-	FString ResolvedSavedRunQueueJsonPath;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
 	FString FirstScenarioSourceJsonPath;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
-	FString FirstSimulationProfileJsonPath;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
 	int32 RunCount = 0;
@@ -56,9 +47,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM")
 	FString GenerateEndpoint = TEXT("/api/v1/scenarios/generate");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM")
-	FString LatestRunQueueJsonPath = TEXT("Json/Input/ScenarioRunQueue_LlmLatest.json");
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM", meta = (ClampMin = "1", ClampMax = "20"))
 	int32 DefaultScenarioCount = 1;
 
@@ -80,17 +68,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|LLM")
 	FScenarioLlmGenerationResult GetLatestResult() const { return LatestResult; }
 
-	UFUNCTION(BlueprintPure, Category = "Scenario|LLM")
-	FString GetLatestRunQueueJsonPath() const { return LatestRunQueueJsonPath; }
-
 private:
 	void HandleGenerateResponse(int32 responseCode, const FString& responseBody, bool bWasSuccessful);
 	void CompleteRequest(const FScenarioLlmGenerationResult& result);
 	bool TryBuildRequestBody(const FString& prompt, int32 scenarioCount, FString& outBody, FScenarioLlmGenerationResult& outFailure) const;
-	bool TryValidateAndSaveRunQueue(
-		const FString& responseBody,
-		int32 responseCode,
-		FScenarioLlmGenerationResult& outResult) const;
 
 	static FString BuildUrl(const FString& baseUrl, const FString& endpoint);
 	static FString TruncateForDiagnostic(const FString& value);

@@ -93,29 +93,12 @@ namespace
 		return FString::Join(Lines, TEXT(" | "));
 	}
 
-	bool ApplyExperimentRuntimeSettings(
-		FSimulationSetup& setup,
-		TArray<FScenarioSchemaDiagnostic>& outDiagnostics)
+	void ConfigureExperimentMeasurementLogSettings(
+		const FString& runOutputDirectory,
+		FEpisodeMeasurementLogSettings& settings)
 	{
-		outDiagnostics.Reset();
-		const FString experimentRef = setup.ExperimentRef.TrimStartAndEnd();
-		if (experimentRef.IsEmpty())
-		{
-			return true;
-		}
-
-		const FString settingPath = FExperimentSettingJson::BuildExperimentSettingPath(experimentRef);
-		const FExperimentSettingParseResult settingResult = FExperimentSettingJson::ParseFromFile(settingPath);
-		outDiagnostics = settingResult.Diagnostics;
-		if (!settingResult.bSuccess)
-		{
-			return false;
-		}
-
-		// Experiment setting owns runtime values; SimulationSetup is only the process launch envelope.
-		setup.MapId = settingResult.Document.Runtime.MapId;
-		setup.FixedStep.Fps = settingResult.Document.Runtime.FixedFps;
-		return true;
+		settings = FEpisodeMeasurementLogSettings{};
+		settings.OutputDirectory = runOutputDirectory;
 	}
 }
 
@@ -123,10 +106,10 @@ void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection
 {
 	Super::Initialize(Collection);
 
-	const FSimulationCommandLineParseResult commandLineResult = FSimulationCommandLine::ParseCurrent();
+	const FExperimentRunCommandLineParseResult commandLineResult = FExperimentRunCommandLine::ParseCurrent();
 	if (!commandLineResult.bSuccess)
 	{
-		for (const FScenarioCompileDiagnostic& diagnostic : commandLineResult.Diagnostics)
+		for (const FScenarioSchemaDiagnostic& diagnostic : commandLineResult.Diagnostics)
 		{
 			UE_LOG(
 				LogSimulatorProcess,
@@ -138,52 +121,36 @@ void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection
 		return;
 	}
 
-	if (!commandLineResult.Options.bSimulate)
+	if (!commandLineResult.Options.bExperimentRun)
 	{
 		return;
 	}
 
 	bSimulatorMode = true;
-	ActiveSetupPath = commandLineResult.Options.SimulationSetupFile;
-	ActiveRunId = commandLineResult.Options.RunId;
+	ActiveRequest = commandLineResult.Options.Request;
+	ActiveRunId = ActiveRequest.RunId;
 
-	const FSimulationSetupParseResult setupParseResult = FSimulationSetupJson::ParseFromFile(ActiveSetupPath);
-	ActiveSetup = setupParseResult.Setup;
 	if (ActiveRunId.IsEmpty())
 	{
-		ActiveRunId = ActiveSetup.RunId.IsEmpty()
-			? FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens)
-			: ActiveSetup.RunId;
+		ActiveRunId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
 	}
-	TArray<FScenarioSchemaDiagnostic> experimentRuntimeDiagnostics;
-	const bool bExperimentRuntimeSettingsLoaded = setupParseResult.bSuccess
-		? ApplyExperimentRuntimeSettings(ActiveSetup, experimentRuntimeDiagnostics)
-		: true;
-	// Direct -Simulate launches and launcher-generated runtime setup files share the same run-folder contract.
-	FSimulationSetupJson::ApplyRunOutputPaths(ActiveSetup, ActiveRunId);
+	ActiveRunOutputDirectory = FExperimentSettingJson::BuildExperimentRunDirectory(ActiveRequest.ExperimentRef, ActiveRunId);
+	ConfigureExperimentMeasurementLogSettings(ActiveRunOutputDirectory, ActiveMeasurementLogSettings);
 	InitializeStatus();
-	LogSetupDiagnostics(setupParseResult);
-	if (!setupParseResult.bSuccess)
+	const FExperimentSettingParseResult settingParseResult =
+		FExperimentSettingJson::ParseFromFile(FExperimentSettingJson::BuildExperimentSettingPath(ActiveRequest.ExperimentRef));
+	ActiveSetting = settingParseResult.Document;
+	LogExperimentDiagnostics(settingParseResult);
+	if (!settingParseResult.bSuccess)
 	{
-		UE_LOG(LogSimulatorProcess, Error, TEXT("SimulatorMode 진입 실패: SimulationSetup 파싱 실패 | Path: %s"), *ActiveSetupPath);
-		WriteStatus(ESimulationRunState::Failed, TEXT("SimulationSetup parse failed."));
-		return;
-	}
-	if (!bExperimentRuntimeSettingsLoaded)
-	{
-		const FString diagnosticMessage = JoinExperimentSchemaDiagnostics(experimentRuntimeDiagnostics);
-		UE_LOG(
-			LogSimulatorProcess,
-			Error,
-			TEXT("SimulatorMode entry failed: experiment_setting parse failed | Experiment: %s, Diagnostics: %s"),
-			*ActiveSetup.ExperimentRef,
-			*diagnosticMessage);
+		UE_LOG(LogSimulatorProcess, Error, TEXT("SimulatorMode entry failed: experiment_setting parse failed | Experiment: %s"), *ActiveRequest.ExperimentRef);
+		const FString diagnosticMessage = JoinExperimentSchemaDiagnostics(settingParseResult.Diagnostics);
+		(void)ActiveRequest;
 		WriteStatus(
 			ESimulationRunState::Failed,
 			diagnosticMessage.IsEmpty() ? TEXT("experiment_setting parse failed.") : diagnosticMessage);
 		return;
 	}
-
 	if (UGameInstance* gameInstance = GetGameInstance())
 	{
 		ConfigureRunnerSubsystem(gameInstance->GetSubsystem<UScenarioRunnerSubsystem>());
@@ -208,18 +175,14 @@ void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection
 
 	WriteStatus(ESimulationRunState::Pending);
 
-	const FString ActiveSourceLabel = !ActiveSetup.ExperimentRef.TrimStartAndEnd().IsEmpty()
-		? FString::Printf(TEXT("Experiment: %s"), *ActiveSetup.ExperimentRef)
-		: FString::Printf(TEXT("RunQueue: %s"), *ActiveSetup.RunQueueJsonPath);
 	UE_LOG(
 		LogSimulatorProcess,
 		Log,
-		TEXT("SimulatorMode active | Setup: %s, RunId: %s, MapId: %s, Source: %s, FixedStepFps: %d"),
-		*ActiveSetupPath,
+		TEXT("SimulatorMode active | Experiment: %s, RunId: %s, MapId: %s, FixedStepFps: %d"),
+		*ActiveRequest.ExperimentRef,
 		ActiveRunId.IsEmpty() ? TEXT("<auto>") : *ActiveRunId,
-		*ActiveSetup.MapId,
-		*ActiveSourceLabel,
-		ActiveSetup.FixedStep.Fps);
+		*ActiveSetting.Runtime.MapId,
+		ActiveSetting.Runtime.FixedFps);
 }
 
 void USimulatorProcessSubsystem::Deinitialize()
@@ -315,7 +278,7 @@ void USimulatorProcessSubsystem::HandlePostWorldInitialization(
 		return;
 	}
 
-	if (DoesWorldMatchMapId(world, ActiveSetup.MapId))
+	if (DoesWorldMatchMapId(world, ActiveSetting.Runtime.MapId))
 	{
 		ApplyWorldSetup(world, false);
 		return;
@@ -323,7 +286,7 @@ void USimulatorProcessSubsystem::HandlePostWorldInitialization(
 
 	if (UEpisodeMeasurementLogSubsystem* measurementLogSubsystem = world->GetSubsystem<UEpisodeMeasurementLogSubsystem>())
 	{
-		FEpisodeMeasurementLogSettings disabledSettings = ActiveSetup.MeasurementLog;
+		FEpisodeMeasurementLogSettings disabledSettings = ActiveMeasurementLogSettings;
 		disabledSettings.bEnabled = false;
 		measurementLogSubsystem->ApplySettings(disabledSettings, true);
 	}
@@ -346,7 +309,7 @@ void USimulatorProcessSubsystem::ProcessLoadedWorld(UWorld* world)
 		return;
 	}
 
-	if (!DoesWorldMatchMapId(world, ActiveSetup.MapId))
+	if (!DoesWorldMatchMapId(world, ActiveSetting.Runtime.MapId))
 	{
 		if (bMapLoadRequested)
 		{
@@ -355,15 +318,15 @@ void USimulatorProcessSubsystem::ProcessLoadedWorld(UWorld* world)
 				Error,
 				TEXT("Simulator map load 후에도 target map이 아님 | Current: %s, Target: %s"),
 				*world->GetMapName(),
-				*ActiveSetup.MapId);
+				*ActiveSetting.Runtime.MapId);
 			WriteStatus(
 				ESimulationRunState::Failed,
-				FString::Printf(TEXT("Loaded map '%s' did not match target '%s'."), *world->GetMapName(), *ActiveSetup.MapId));
+				FString::Printf(TEXT("Loaded map '%s' did not match target '%s'."), *world->GetMapName(), *ActiveSetting.Runtime.MapId));
 			return;
 		}
 
 		bMapLoadRequested = true;
-		const FString openLevelName = NormalizeMapIdForOpenLevel(ActiveSetup.MapId);
+		const FString openLevelName = NormalizeMapIdForOpenLevel(ActiveSetting.Runtime.MapId);
 		UE_LOG(
 			LogSimulatorProcess,
 			Log,
@@ -375,10 +338,10 @@ void USimulatorProcessSubsystem::ProcessLoadedWorld(UWorld* world)
 	}
 
 	ApplyWorldSetup(world, true);
-	QueueStartSimulationRun(world);
+	QueueStartExperimentRun(world);
 }
 
-void USimulatorProcessSubsystem::QueueStartSimulationRun(UWorld* world)
+void USimulatorProcessSubsystem::QueueStartExperimentRun(UWorld* world)
 {
 	if (bRunStarted || bRunStartQueued || !IsValid(world))
 	{
@@ -389,11 +352,11 @@ void USimulatorProcessSubsystem::QueueStartSimulationRun(UWorld* world)
 	world->GetTimerManager().SetTimerForNextTick(
 		FTimerDelegate::CreateUObject(
 			this,
-			&USimulatorProcessSubsystem::StartSimulationRun,
+			&USimulatorProcessSubsystem::StartExperimentRun,
 			world));
 }
 
-void USimulatorProcessSubsystem::StartSimulationRun(UWorld* world)
+void USimulatorProcessSubsystem::StartExperimentRun(UWorld* world)
 {
 	bRunStartQueued = false;
 	if (bRunStarted || !bSimulatorMode || !IsValid(world))
@@ -401,17 +364,17 @@ void USimulatorProcessSubsystem::StartSimulationRun(UWorld* world)
 		return;
 	}
 
-	if (!DoesWorldMatchMapId(world, ActiveSetup.MapId))
+	if (!DoesWorldMatchMapId(world, ActiveSetting.Runtime.MapId))
 	{
 		UE_LOG(
 			LogSimulatorProcess,
 			Error,
 			TEXT("Simulator run 시작 거부: 현재 map이 setup map과 다름 | Current: %s, Target: %s"),
 			*world->GetMapName(),
-			*ActiveSetup.MapId);
+			*ActiveSetting.Runtime.MapId);
 		WriteStatus(
 			ESimulationRunState::Failed,
-			FString::Printf(TEXT("Current map '%s' did not match target '%s'."), *world->GetMapName(), *ActiveSetup.MapId));
+			FString::Printf(TEXT("Current map '%s' did not match target '%s'."), *world->GetMapName(), *ActiveSetting.Runtime.MapId));
 		return;
 	}
 
@@ -427,30 +390,11 @@ void USimulatorProcessSubsystem::StartSimulationRun(UWorld* world)
 		return;
 	}
 
-	const bool bUseExperiment = !ActiveSetup.ExperimentRef.TrimStartAndEnd().IsEmpty();
-	const FString RequestedSourceLabel = bUseExperiment
-		? FString::Printf(TEXT("Experiment: %s"), *ActiveSetup.ExperimentRef)
-		: FString::Printf(TEXT("RunQueue: %s"), *ActiveSetup.RunQueueJsonPath);
-	if (!bUseExperiment && runnerSubsystem->IsRunningRunQueueJsonFile(ActiveSetup.RunQueueJsonPath))
-	{
-		bRunStarted = true;
-		WriteStatusFromRunnerState(runnerSubsystem->GetRunnerState());
-		UE_LOG(
-			LogSimulatorProcess,
-			Log,
-			TEXT("Simulator run already active | Setup: %s, RunId: %s, MapId: %s, Source: %s"),
-			*ActiveSetupPath,
-			ActiveRunId.IsEmpty() ? TEXT("<auto>") : *ActiveRunId,
-			*ActiveSetup.MapId,
-			*RequestedSourceLabel);
-		return;
-	}
+	const FString RequestedSourceLabel = FString::Printf(TEXT("Experiment: %s"), *ActiveRequest.ExperimentRef);
 
 	if (runnerSubsystem->IsBatchActive())
 	{
-		const FString CurrentSourceLabel = runnerSubsystem->GetActiveRunQueueJsonFilePath().IsEmpty()
-			? FString(TEXT("<direct>"))
-			: FString::Printf(TEXT("RunQueue: %s"), *runnerSubsystem->GetActiveRunQueueJsonFilePath());
+		const FString CurrentSourceLabel = TEXT("<active batch>");
 		UE_LOG(
 			LogSimulatorProcess,
 			Warning,
@@ -464,63 +408,46 @@ void USimulatorProcessSubsystem::StartSimulationRun(UWorld* world)
 	}
 
 	bRunStarted = true;
-	if (bUseExperiment)
+	const FExperimentRunInputBuildResult buildResult =
+		FExperimentSettingJson::BuildRunInputsFromExperiment(ActiveRequest.ExperimentRef, ActiveRequest.SampleSelection);
+	if (!buildResult.bSuccess)
 	{
-		const FExperimentRunInputBuildResult buildResult =
-			FExperimentSettingJson::BuildRunInputsFromExperiment(ActiveSetup.ExperimentRef, ActiveSetup.SampleSelection);
-		if (!buildResult.bSuccess)
-		{
-			bRunStarted = false;
-			const FString diagnosticMessage = JoinExperimentSchemaDiagnostics(buildResult.Diagnostics);
-			UE_LOG(
-				LogSimulatorProcess,
-				Error,
-				TEXT("Simulator run 시작 실패: experiment 준비 실패 | Experiment: %s, Diagnostics: %s"),
-				*ActiveSetup.ExperimentRef,
-				*diagnosticMessage);
-			WriteStatus(
-				ESimulationRunState::Failed,
-				diagnosticMessage.IsEmpty() ? TEXT("Experiment preparation failed.") : diagnosticMessage);
-			return;
-		}
-
-		if (!runnerSubsystem->StartBatchFromRunInputsForRun(buildResult.RunInputs, ActiveRunId))
-		{
-			bRunStarted = false;
-			UE_LOG(
-				LogSimulatorProcess,
-				Error,
-				TEXT("Simulator run 시작 실패: experiment run input 실행 실패 | Experiment: %s"),
-				*ActiveSetup.ExperimentRef);
-			WriteStatus(
-				ESimulationRunState::Failed,
-				FString::Printf(TEXT("Experiment run inputs failed to start: %s"), *ActiveSetup.ExperimentRef));
-			return;
-		}
+		bRunStarted = false;
+		const FString diagnosticMessage = JoinExperimentSchemaDiagnostics(buildResult.Diagnostics);
+		UE_LOG(
+			LogSimulatorProcess,
+			Error,
+			TEXT("Simulator run 시작 실패: experiment 준비 실패 | Experiment: %s, Diagnostics: %s"),
+			*ActiveRequest.ExperimentRef,
+			*diagnosticMessage);
+		WriteStatus(
+			ESimulationRunState::Failed,
+			diagnosticMessage.IsEmpty() ? TEXT("Experiment preparation failed.") : diagnosticMessage);
+		return;
 	}
-	else if (!runnerSubsystem->StartBatchFromRunQueueJsonFileForRun(ActiveSetup.RunQueueJsonPath, ActiveRunId))
+
+	if (!runnerSubsystem->StartBatchFromRunInputsForRun(buildResult.RunInputs, ActiveRunId))
 	{
 		bRunStarted = false;
 		UE_LOG(
 			LogSimulatorProcess,
 			Error,
-			TEXT("Simulator run 시작 실패: run queue 실행 실패 | RunQueue: %s"),
-			*ActiveSetup.RunQueueJsonPath);
+			TEXT("Simulator run 시작 실패: experiment run input 실행 실패 | Experiment: %s"),
+			*ActiveRequest.ExperimentRef);
 		WriteStatus(
 			ESimulationRunState::Failed,
-			FString::Printf(TEXT("Run queue failed to start: %s"), *ActiveSetup.RunQueueJsonPath));
+			FString::Printf(TEXT("Experiment run inputs failed to start: %s"), *ActiveRequest.ExperimentRef));
 		return;
 	}
-
 	WriteStatusFromRunnerState(runnerSubsystem->GetRunnerState());
 
 	UE_LOG(
 		LogSimulatorProcess,
 		Log,
-		TEXT("Simulator run started | Setup: %s, RunId: %s, MapId: %s, Source: %s"),
-		*ActiveSetupPath,
+		TEXT("Simulator run started | Experiment: %s, RunId: %s, MapId: %s, Source: %s"),
+		*ActiveRequest.ExperimentRef,
 		ActiveRunId.IsEmpty() ? TEXT("<auto>") : *ActiveRunId,
-		*ActiveSetup.MapId,
+		*ActiveSetting.Runtime.MapId,
 		*RequestedSourceLabel);
 }
 
@@ -531,8 +458,8 @@ void USimulatorProcessSubsystem::ConfigureRunnerSubsystem(UScenarioRunnerSubsyst
 		return;
 	}
 
-	runnerSubsystem->bSaveEvaluationReportJson = ActiveSetup.Report.bSaveEvaluationReportJson;
-	runnerSubsystem->EvaluationReportOutputDirectory = ActiveSetup.Report.OutputDirectory;
+	runnerSubsystem->bSaveEvaluationReportJson = false;
+	runnerSubsystem->EvaluationReportOutputDirectory = ActiveRunOutputDirectory;
 	BindRunnerDelegates(runnerSubsystem);
 }
 
@@ -570,7 +497,7 @@ void USimulatorProcessSubsystem::ApplyWorldSetup(UWorld* world, bool bRestartMea
 
 	if (UEpisodeMeasurementLogSubsystem* measurementLogSubsystem = world->GetSubsystem<UEpisodeMeasurementLogSubsystem>())
 	{
-		measurementLogSubsystem->ApplySettings(ActiveSetup.MeasurementLog, bRestartMeasurementLog);
+		measurementLogSubsystem->ApplySettings(ActiveMeasurementLogSettings, bRestartMeasurementLog);
 	}
 }
 
@@ -627,7 +554,7 @@ void USimulatorProcessSubsystem::HandleRunRecordCompleted(const FEpisodeRunRecor
 
 void USimulatorProcessSubsystem::ApplyFixedStep() const
 {
-	const double fixedDeltaSeconds = CalculateFixedDeltaSeconds(ActiveSetup.FixedStep.Fps);
+	const double fixedDeltaSeconds = CalculateFixedDeltaSeconds(ActiveSetting.Runtime.FixedFps);
 	FApp::SetUseFixedTimeStep(true);
 	FApp::SetFixedDeltaTime(fixedDeltaSeconds);
 
@@ -635,20 +562,20 @@ void USimulatorProcessSubsystem::ApplyFixedStep() const
 		LogSimulatorProcess,
 		Log,
 		TEXT("Simulator fixed-step 적용 | Fps: %d, DeltaSeconds: %.6f"),
-		ActiveSetup.FixedStep.Fps,
+		ActiveSetting.Runtime.FixedFps,
 		fixedDeltaSeconds);
 }
 
-void USimulatorProcessSubsystem::LogSetupDiagnostics(const FSimulationSetupParseResult& parseResult) const
+void USimulatorProcessSubsystem::LogExperimentDiagnostics(const FExperimentSettingParseResult& parseResult) const
 {
-	for (const FScenarioCompileDiagnostic& diagnostic : parseResult.Diagnostics)
+	for (const FScenarioSchemaDiagnostic& diagnostic : parseResult.Diagnostics)
 	{
-		if (diagnostic.Severity == EScenarioCompileDiagnosticSeverity::Error)
+		if (diagnostic.Severity == EScenarioSchemaDiagnosticSeverity::Error)
 		{
 			UE_LOG(
 				LogSimulatorProcess,
 				Error,
-				TEXT("SimulationSetup 진단 | Code: %s, Message: %s"),
+				TEXT("experiment_setting diagnostic | Code: %s, Message: %s"),
 				*diagnostic.Code,
 				*diagnostic.Message);
 			continue;
@@ -657,7 +584,7 @@ void USimulatorProcessSubsystem::LogSetupDiagnostics(const FSimulationSetupParse
 		UE_LOG(
 			LogSimulatorProcess,
 			Warning,
-			TEXT("SimulationSetup 진단 | Code: %s, Message: %s"),
+			TEXT("experiment_setting diagnostic | Code: %s, Message: %s"),
 			*diagnostic.Code,
 			*diagnostic.Message);
 	}
@@ -667,8 +594,8 @@ void USimulatorProcessSubsystem::InitializeStatus()
 {
 	ActiveStatus = FSimulationRunStatus{};
 	ActiveStatus.RunId = ActiveRunId;
-	ActiveStatus.SetupPath = ActiveSetupPath;
-	ActiveStatusPath = ActiveSetup.Status.OutputPath;
+	ActiveStatus.SetupPath = ActiveRequest.ExperimentRef;
+	ActiveStatusPath = FExperimentSettingJson::BuildExperimentRunStatusPath(ActiveRequest.ExperimentRef, ActiveRunId);
 	bStatusInitialized = true;
 	bStatusTerminal = false;
 }

@@ -5,7 +5,6 @@
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/TextBlock.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
-#include "Scenario/ScenarioRunnerSubsystem.h"
 
 void UScenarioLlmPromptWidget::NativeOnInitialized()
 {
@@ -66,7 +65,7 @@ bool UScenarioLlmPromptWidget::LoadGeneratedScenario()
 
 	if (result.FirstScenarioSourceJsonPath.IsEmpty())
 	{
-		SetStatusText(TEXT("생성된 RunQueue가 ScenarioSetup 경로를 포함하지 않습니다."));
+		SetStatusText(TEXT("생성된 시나리오 경로가 없습니다."));
 		return false;
 	}
 
@@ -96,40 +95,8 @@ bool UScenarioLlmPromptWidget::LoadGeneratedScenario()
 
 bool UScenarioLlmPromptWidget::RunGeneratedSimulation()
 {
-	const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem();
-	if (!llmSubsystem) return false;
-
-	const FScenarioLlmGenerationResult result = llmSubsystem->GetLatestResult();
-	if (!result.bSuccess)
-	{
-		SetStatusText(TEXT("성공한 LLM 생성 결과가 없습니다."));
-		return false;
-	}
-
-	if (result.SavedRunQueueJsonPath.IsEmpty())
-	{
-		SetStatusText(TEXT("생성된 RunQueue 경로가 비어 있습니다."));
-		return false;
-	}
-
-	UGameInstance* gameInstance = GetGameInstance();
-	UScenarioRunnerSubsystem* runnerSubsystem = gameInstance
-		? gameInstance->GetSubsystem<UScenarioRunnerSubsystem>()
-		: nullptr;
-	if (!runnerSubsystem)
-	{
-		SetStatusText(TEXT("ScenarioRunnerSubsystem을 사용할 수 없습니다."));
-		return false;
-	}
-
-	if (!runnerSubsystem->StartBatchFromRunQueueJsonFile(result.SavedRunQueueJsonPath))
-	{
-		SetStatusText(FString::Printf(TEXT("생성된 RunQueue 실행 실패: %s"), *result.SavedRunQueueJsonPath));
-		return false;
-	}
-
-	SetStatusText(FString::Printf(TEXT("생성된 RunQueue 실행 시작: %s"), *result.SavedRunQueueJsonPath));
-	return true;
+	SetStatusText(TEXT("LLM 생성 결과 즉시 실행은 experiment folder 실행 흐름으로 교체 예정입니다."));
+	return false;
 }
 
 void UScenarioLlmPromptWidget::SetStatusText(const FString& message)
@@ -166,9 +133,8 @@ void UScenarioLlmPromptWidget::HandleGenerationCompleted(const FScenarioLlmGener
 	}
 
 	SetStatusText(FString::Printf(
-		TEXT("%d개의 실행을 생성했습니다. 저장된 RunQueue: %s"),
-		result.RunCount,
-		*result.SavedRunQueueJsonPath));
+		TEXT("LLM 생성 완료: %s"),
+		*result.Message));
 
 	if (bLoadFirstScenarioAfterGenerate)
 	{

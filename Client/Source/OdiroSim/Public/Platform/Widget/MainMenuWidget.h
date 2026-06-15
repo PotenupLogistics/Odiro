@@ -18,7 +18,6 @@ class UTextBlock;
 class UWidget;
 class UWidgetSwitcher;
 struct FPlatformAnalysisAiResponse;
-struct FSimulationSetup;
 
 // MainMenuMap에서 UMG Blueprint layout과 platform event handler를 연결하는 widget
 UCLASS(BlueprintType, Blueprintable)
@@ -145,11 +144,6 @@ private:
 	void ClearExperimentResultIterationWidgets();
 	bool CreateScenarioFileFromTemplate(const FString& scenarioSetupPath);
 	bool OpenScenarioInEditor(const FString& scenarioSetupPath);
-	bool BuildSimulationSetupFromControls(
-		const FSimulationSetup& baseSetup,
-		const FString& runQueuePath,
-		FSimulationSetup& outSetup,
-		TArray<FString>& outDiagnostics) const;
 	TSubclassOf<UFileListItemWidget> ResolveFileListItemWidgetClass() const;
 	void HandleRunInfoChanged(const struct FSimulatorRunInfo& runInfo);
 	void HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response);

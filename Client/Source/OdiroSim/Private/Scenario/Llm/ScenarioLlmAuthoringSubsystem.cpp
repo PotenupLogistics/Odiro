@@ -1,24 +1,13 @@
 #include "Scenario/Llm/ScenarioLlmAuthoringSubsystem.h"
 
 #include "Dom/JsonObject.h"
-#include "Dom/JsonValue.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
-#include "HAL/FileManager.h"
-#include "Misc/FileHelper.h"
-#include "Misc/Paths.h"
-#include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
-#include "Shared/SimulationSetupTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioLlmAuthoring, Log, All);
-
-namespace
-{
-	const TCHAR* ExpectedRunQueueSchema = TEXT("episode_run_queue");
-}
 
 void UScenarioLlmAuthoringSubsystem::Deinitialize()
 {
@@ -120,17 +109,13 @@ void UScenarioLlmAuthoringSubsystem::HandleGenerateResponse(
 	}
 
 	FScenarioLlmGenerationResult result;
-	if (!TryValidateAndSaveRunQueue(responseBody, responseCode, result))
-	{
-		CompleteRequest(result);
-		return;
-	}
-
-	result.bSuccess = true;
 	result.HttpStatusCode = responseCode;
-	result.Message = FString::Printf(
-		TEXT("Generated RunQueue saved: %s"),
-		*result.SavedRunQueueJsonPath);
+	result.Message = TEXT("Legacy LLM generation response is no longer supported. Use the scenario_template and experiment flow.");
+	result.Diagnostics.Add(result.Message);
+	if (!responseBody.IsEmpty())
+	{
+		result.Diagnostics.Add(FString::Printf(TEXT("Response: %s"), *TruncateForDiagnostic(responseBody)));
+	}
 	CompleteRequest(result);
 }
 
@@ -142,16 +127,16 @@ void UScenarioLlmAuthoringSubsystem::CompleteRequest(const FScenarioLlmGeneratio
 		UE_LOG(
 			LogScenarioLlmAuthoring,
 			Log,
-			TEXT("LLM generation completed | Runs: %d | RunQueue: %s"),
+			TEXT("LLM generation completed | Runs: %d | FirstScenario: %s"),
 			result.RunCount,
-			*result.SavedRunQueueJsonPath);
+			*result.FirstScenarioSourceJsonPath);
 	}
 	else
 	{
 		UE_LOG(
 			LogScenarioLlmAuthoring,
 			Warning,
-			TEXT("LLM generation failed | HTTP: %d | Message: %s"),
+			TEXT("LLM generation unavailable | HTTP: %d | Message: %s"),
 			result.HttpStatusCode,
 			*result.Message);
 	}
@@ -194,208 +179,6 @@ bool UScenarioLlmAuthoringSubsystem::TryBuildRequestBody(
 	{
 		outFailure.Message = TEXT("Failed to serialize LLM generation request JSON.");
 		outFailure.Diagnostics.Add(outFailure.Message);
-		return false;
-	}
-
-	return true;
-}
-
-bool UScenarioLlmAuthoringSubsystem::TryValidateAndSaveRunQueue(
-	const FString& responseBody,
-	const int32 responseCode,
-	FScenarioLlmGenerationResult& outResult) const
-{
-	outResult = FScenarioLlmGenerationResult{};
-	outResult.HttpStatusCode = responseCode;
-	outResult.SavedRunQueueJsonPath = LatestRunQueueJsonPath;
-	outResult.ResolvedSavedRunQueueJsonPath = FSimulationSetupJson::ResolveProjectPath(LatestRunQueueJsonPath);
-
-	if (responseBody.TrimStartAndEnd().IsEmpty())
-	{
-		outResult.Message = TEXT("LLM generation response body is empty.");
-		outResult.Diagnostics.Add(outResult.Message);
-		return false;
-	}
-
-	TSharedPtr<FJsonObject> rootObject;
-	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(responseBody);
-	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
-	{
-		outResult.Message = TEXT("LLM generation response is not valid RunQueue JSON.");
-		outResult.Diagnostics.Add(outResult.Message);
-		outResult.Diagnostics.Add(FString::Printf(
-			TEXT("Response: %s"),
-			*TruncateForDiagnostic(responseBody)));
-		return false;
-	}
-
-	FString schema;
-	if (!rootObject->TryGetStringField(TEXT("schema"), schema) || schema != ExpectedRunQueueSchema)
-	{
-		outResult.Diagnostics.Add(FString::Printf(
-			TEXT("RunQueue schema must be '%s'."),
-			ExpectedRunQueueSchema));
-	}
-
-	double version = 0.0;
-	if (!rootObject->TryGetNumberField(TEXT("version"), version) || version < 1.0)
-	{
-		outResult.Diagnostics.Add(TEXT("RunQueue version must be >= 1."));
-	}
-
-	const TSharedPtr<FJsonValue> runsValue = rootObject->TryGetField(TEXT("runs"));
-	if (!runsValue.IsValid() || runsValue->Type != EJson::Array)
-	{
-		outResult.Diagnostics.Add(TEXT("RunQueue runs must be an array."));
-	}
-
-	const TArray<TSharedPtr<FJsonValue>> runValues =
-		runsValue.IsValid() && runsValue->Type == EJson::Array
-			? runsValue->AsArray()
-			: TArray<TSharedPtr<FJsonValue>>();
-	outResult.RunCount = runValues.Num();
-	if (runValues.IsEmpty())
-	{
-		outResult.Diagnostics.Add(TEXT("RunQueue must contain at least one run."));
-	}
-
-	for (int32 index = 0; index < runValues.Num(); ++index)
-	{
-		const TSharedPtr<FJsonValue>& runValue = runValues[index];
-		if (!runValue.IsValid() || runValue->Type != EJson::Object)
-		{
-			outResult.Diagnostics.Add(FString::Printf(TEXT("runs[%d] must be an object."), index));
-			continue;
-		}
-
-		const TSharedPtr<FJsonObject> runObject = runValue->AsObject();
-		if (!runObject.IsValid())
-		{
-			outResult.Diagnostics.Add(FString::Printf(TEXT("runs[%d] could not be read as an object."), index));
-			continue;
-		}
-
-		FString scenarioSourcePath;
-		FString simulationProfilePath;
-		FString policySpecPath;
-		runObject->TryGetStringField(TEXT("scenario_template"), scenarioSourcePath);
-		runObject->TryGetStringField(TEXT("simulation_profile"), simulationProfilePath);
-		runObject->TryGetStringField(TEXT("policy_spec"), policySpecPath);
-		scenarioSourcePath = scenarioSourcePath.TrimStartAndEnd();
-		simulationProfilePath = simulationProfilePath.TrimStartAndEnd();
-		policySpecPath = policySpecPath.TrimStartAndEnd();
-
-		if (scenarioSourcePath.IsEmpty())
-		{
-			outResult.Diagnostics.Add(FString::Printf(TEXT("runs[%d].scenario_template must not be empty."), index));
-		}
-		else
-		{
-			if (!scenarioSourcePath.StartsWith(TEXT("Json/Input/")))
-			{
-				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("runs[%d].scenario_template must start with Json/Input/: %s"),
-					index,
-					*scenarioSourcePath));
-			}
-
-			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(scenarioSourcePath)))
-			{
-				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("Scenario template file does not exist: %s"),
-					*scenarioSourcePath));
-			}
-		}
-
-		if (simulationProfilePath.IsEmpty())
-		{
-			outResult.Diagnostics.Add(FString::Printf(TEXT("runs[%d].simulation_profile must not be empty."), index));
-		}
-		else
-		{
-			if (!simulationProfilePath.StartsWith(TEXT("Json/Input/")))
-			{
-				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("runs[%d].simulation_profile must start with Json/Input/: %s"),
-					index,
-					*simulationProfilePath));
-			}
-
-			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(simulationProfilePath)))
-			{
-				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("Simulation profile file does not exist: %s"),
-					*simulationProfilePath));
-			}
-		}
-
-		if (!policySpecPath.IsEmpty())
-		{
-			if (!policySpecPath.StartsWith(TEXT("Json/Input/")))
-			{
-				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("runs[%d].policy_spec must start with Json/Input/: %s"),
-					index,
-					*policySpecPath));
-			}
-
-			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(policySpecPath)))
-			{
-				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("PolicySpec file does not exist: %s"),
-					*policySpecPath));
-			}
-		}
-
-		if (index == 0)
-		{
-			outResult.FirstScenarioSourceJsonPath = scenarioSourcePath;
-			outResult.FirstSimulationProfileJsonPath = simulationProfilePath;
-		}
-
-		if (!scenarioSourcePath.IsEmpty())
-		{
-			runObject->SetStringField(TEXT("scenario_template"), scenarioSourcePath);
-		}
-
-		if (!simulationProfilePath.IsEmpty())
-		{
-			runObject->SetStringField(TEXT("simulation_profile"), simulationProfilePath);
-		}
-	}
-
-	if (!outResult.Diagnostics.IsEmpty())
-	{
-		outResult.Message = TEXT("Generated RunQueue validation failed.");
-		return false;
-	}
-
-	const FString outputFilePath = outResult.ResolvedSavedRunQueueJsonPath;
-	const FString outputDirectory = FPaths::GetPath(outputFilePath);
-	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true))
-	{
-		outResult.Message = FString::Printf(TEXT("Failed to create RunQueue output directory: %s"), *outputDirectory);
-		outResult.Diagnostics.Add(outResult.Message);
-		return false;
-	}
-
-	FString normalizedRunQueueJson;
-	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
-		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&normalizedRunQueueJson);
-	if (!FJsonSerializer::Serialize(rootObject.ToSharedRef(), writer))
-	{
-		outResult.Message = TEXT("Failed to serialize normalized RunQueue JSON.");
-		outResult.Diagnostics.Add(outResult.Message);
-		return false;
-	}
-
-	if (!FFileHelper::SaveStringToFile(
-			normalizedRunQueueJson,
-			*outputFilePath,
-			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
-	{
-		outResult.Message = FString::Printf(TEXT("Failed to save generated RunQueue: %s"), *outputFilePath);
-		outResult.Diagnostics.Add(outResult.Message);
 		return false;
 	}
 

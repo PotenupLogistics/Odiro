@@ -27,10 +27,10 @@ struct ODIROSIM_API FScenarioLlmGenerationResult
 	FString ResolvedSavedRunQueueJsonPath;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
-	FString FirstScenarioSetupJsonPath;
+	FString FirstScenarioSourceJsonPath;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
-	FString FirstDeliveryBotSetupJsonPath;
+	FString FirstSimulationProfileJsonPath;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|LLM")
 	int32 RunCount = 0;

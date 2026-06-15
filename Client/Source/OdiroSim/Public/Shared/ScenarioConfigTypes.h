@@ -100,7 +100,7 @@ enum class EScenarioRunnerState : uint8
 	Failed
 };
 
-// Runner가 한 번의 실행으로 묶어 처리할 ScenarioSetup/DeliveryBotSetup 파일 pair.
+// Runner input binding for one scenario source, one simulation profile, and an optional policy spec.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FScenarioRunInput
 {
@@ -110,10 +110,10 @@ struct ODIROSIM_API FScenarioRunInput
 	FString PairId;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
-	FString ScenarioSetupJsonPath;
+	FString ScenarioSourceJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
-	FString DeliveryBotSetupJsonPath;
+	FString SimulationProfileJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString PolicySpecJsonPath;

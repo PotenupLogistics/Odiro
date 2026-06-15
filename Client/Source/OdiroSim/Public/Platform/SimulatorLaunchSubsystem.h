@@ -66,11 +66,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	TArray<FString> ListSimulationSetupFiles() const;
 
-	// Json/Input 아래에서 ScenarioSetup 계약으로 컴파일되는 JSON 파일 목록
+	// Json/Input 아래에서 scenario_template/scenario_sample 계약으로 컴파일되는 JSON 파일 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
 	TArray<FString> ListScenarioSetupFiles() const;
 
-	// Json/Input 아래에서 DeliveryBotSetup 계약으로 컴파일되는 JSON 파일 목록
+	// Json/Input 아래에서 simulation_profile 계약으로 컴파일되는 JSON 파일 목록
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup")
 	TArray<FString> ListDeliveryBotSetupFiles() const;
 

@@ -7,7 +7,7 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "ScenarioRunnerSubsystem.generated.h"
 
-struct FDeliveryBotSetupCompileResult;
+struct FScenarioSimulationProfileCompileResult;
 class UScenarioEvaluationSubsystem;
 class UScenarioSimulationSubsystem;
 
@@ -25,7 +25,7 @@ public:
 	FScenarioRunRecordCompletedNative OnRunRecordCompleted;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
-	bool StartScenarioPairFromJsonFiles(const FString& scenarioSetupJsonPath, const FString& deliveryBotSetupJsonPath);
+	bool StartScenarioPairFromJsonFiles(const FString& scenarioSourceJsonPath, const FString& simulationProfileJsonPath);
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	bool StartBatchFromRunInputs(const TArray<FScenarioRunInput>& runInputs);
@@ -92,7 +92,7 @@ private:
 		const FEpisodeEvaluationResult* evaluationResult = nullptr);
 
 	void AppendCompileDiagnostics(const FScenarioCompileResult& compileResult);
-	void AppendDeliveryBotSetupDiagnostics(const FDeliveryBotSetupCompileResult& compileResult);
+	void AppendSimulationProfileDiagnostics(const FScenarioSimulationProfileCompileResult& compileResult);
 	double GetRunTimeLimitSeconds(const FScenarioRunConfig& runConfig) const;
 	FString BuildRunId() const;
 	bool SaveEvaluationReportJsonForRecord(FEpisodeRunRecord& runRecord) const;

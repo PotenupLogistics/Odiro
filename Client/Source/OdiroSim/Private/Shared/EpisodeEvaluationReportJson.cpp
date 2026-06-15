@@ -181,8 +181,8 @@ namespace
 	bool IsUsableForLlmTuning(const FEpisodeRunRecord& Record)
 	{
 		if (!Record.bCompileSucceeded
-			|| !Record.bEpisodeSetupCompileSucceeded
-			|| !Record.bDeliveryBotSetupCompileSucceeded
+			|| !Record.bScenarioSourceCompileSucceeded
+			|| !Record.bSimulationProfileCompileSucceeded
 			|| !Record.bSetupSucceeded
 			|| !Record.bEvaluationCompleted)
 		{
@@ -251,13 +251,13 @@ namespace
 
 	TSharedRef<FJsonObject> MakeRunObject(const FEpisodeRunRecord& Record)
 	{
-		TSharedRef<FJsonObject> EpisodeSetupObject = MakeShared<FJsonObject>();
-		EpisodeSetupObject->SetStringField(TEXT("path"), Record.EpisodeSetupJsonPath);
-		EpisodeSetupObject->SetStringField(TEXT("hash"), Record.EpisodeSetupHash);
+		TSharedRef<FJsonObject> ScenarioSourceObject = MakeShared<FJsonObject>();
+		ScenarioSourceObject->SetStringField(TEXT("path"), Record.ScenarioSourceJsonPath);
+		ScenarioSourceObject->SetStringField(TEXT("hash"), Record.ScenarioSourceHash);
 
-		TSharedRef<FJsonObject> DeliveryBotSetupObject = MakeShared<FJsonObject>();
-		DeliveryBotSetupObject->SetStringField(TEXT("path"), Record.DeliveryBotSetupJsonPath);
-		DeliveryBotSetupObject->SetStringField(TEXT("hash"), Record.DeliveryBotSetupHash);
+		TSharedRef<FJsonObject> SimulationProfileObject = MakeShared<FJsonObject>();
+		SimulationProfileObject->SetStringField(TEXT("path"), Record.SimulationProfileJsonPath);
+		SimulationProfileObject->SetStringField(TEXT("hash"), Record.SimulationProfileHash);
 
 		TSharedRef<FJsonObject> PolicySpecObject = MakeShared<FJsonObject>();
 		PolicySpecObject->SetStringField(TEXT("path"), Record.PolicySpecJsonPath);
@@ -267,8 +267,8 @@ namespace
 		Object->SetNumberField(TEXT("run_index"), Record.RunIndex);
 		Object->SetStringField(TEXT("episode_id"), Record.EpisodeId);
 		Object->SetStringField(TEXT("pair_id"), Record.PairId);
-		Object->SetObjectField(TEXT("episode_setup"), EpisodeSetupObject);
-		Object->SetObjectField(TEXT("delivery_bot_setup"), DeliveryBotSetupObject);
+		Object->SetObjectField(TEXT("scenario_source"), ScenarioSourceObject);
+		Object->SetObjectField(TEXT("simulation_profile"), SimulationProfileObject);
 		if (!Record.PolicySpecJsonPath.IsEmpty())
 		{
 			Object->SetObjectField(TEXT("policy_spec"), PolicySpecObject);
@@ -300,8 +300,8 @@ namespace
 		}
 
 		TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
-		Object->SetBoolField(TEXT("episode_setup_compiled"), Record.bEpisodeSetupCompileSucceeded);
-		Object->SetBoolField(TEXT("delivery_bot_setup_compiled"), Record.bDeliveryBotSetupCompileSucceeded);
+		Object->SetBoolField(TEXT("scenario_source_compiled"), Record.bScenarioSourceCompileSucceeded);
+		Object->SetBoolField(TEXT("simulation_profile_compiled"), Record.bSimulationProfileCompileSucceeded);
 		Object->SetBoolField(TEXT("world_setup_succeeded"), Record.bSetupSucceeded);
 		Object->SetBoolField(TEXT("evaluation_completed"), Record.bEvaluationCompleted);
 		Object->SetArrayField(TEXT("diagnostics"), DiagnosticValues);

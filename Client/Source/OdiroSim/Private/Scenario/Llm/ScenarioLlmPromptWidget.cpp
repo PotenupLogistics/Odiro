@@ -64,7 +64,7 @@ bool UScenarioLlmPromptWidget::LoadGeneratedScenario()
 		return false;
 	}
 
-	if (result.FirstScenarioSetupJsonPath.IsEmpty())
+	if (result.FirstScenarioSourceJsonPath.IsEmpty())
 	{
 		SetStatusText(TEXT("생성된 RunQueue가 ScenarioSetup 경로를 포함하지 않습니다."));
 		return false;
@@ -80,12 +80,12 @@ bool UScenarioLlmPromptWidget::LoadGeneratedScenario()
 	FString resolvedJsonFilePath;
 	TArray<FString> diagnostics;
 	if (!editorController->LoadScenarioSetupJsonFile(
-			result.FirstScenarioSetupJsonPath,
+			result.FirstScenarioSourceJsonPath,
 			resolvedJsonFilePath,
 			diagnostics))
 	{
 		SetStatusText(diagnostics.IsEmpty()
-			? FString::Printf(TEXT("생성된 ScenarioSetup 불러오기 실패: %s"), *result.FirstScenarioSetupJsonPath)
+			? FString::Printf(TEXT("생성된 ScenarioSetup 불러오기 실패: %s"), *result.FirstScenarioSourceJsonPath)
 			: FString::Printf(TEXT("ScenarioSetup 불러오기 실패:\n%s"), *FString::Join(diagnostics, TEXT("\n"))));
 		return false;
 	}

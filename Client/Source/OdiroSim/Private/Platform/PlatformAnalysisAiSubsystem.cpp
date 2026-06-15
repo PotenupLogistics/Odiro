@@ -397,12 +397,12 @@ void UPlatformAnalysisAiSubsystem::CancelPendingAnalysisRequest()
 
 bool UPlatformAnalysisAiSubsystem::ExtractSetupPathsFromReportJson(
 	const FString& reportJson,
-	FString& outEpisodeSetupPath,
-	FString& outDeliveryBotSetupPath,
+	FString& outScenarioSourcePath,
+	FString& outSimulationProfilePath,
 	TArray<FString>& outDiagnostics)
 {
-	outEpisodeSetupPath.Reset();
-	outDeliveryBotSetupPath.Reset();
+	outScenarioSourcePath.Reset();
+	outSimulationProfilePath.Reset();
 	outDiagnostics.Reset();
 
 	TSharedPtr<FJsonObject> RootObject;
@@ -427,16 +427,16 @@ bool UPlatformAnalysisAiSubsystem::ExtractSetupPathsFromReportJson(
 		return false;
 	}
 
-	if (!TryGetStringFromObjectField(*RunObject, TEXT("episode_setup"), TEXT("path"), outEpisodeSetupPath)
-		|| outEpisodeSetupPath.IsEmpty())
+	if (!TryGetStringFromObjectField(*RunObject, TEXT("scenario_source"), TEXT("path"), outScenarioSourcePath)
+		|| outScenarioSourcePath.IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("Evaluation report field missing or invalid: run.episode_setup.path."));
+		outDiagnostics.Add(TEXT("Evaluation report field missing or invalid: run.scenario_source.path."));
 	}
 
-	if (!TryGetStringFromObjectField(*RunObject, TEXT("delivery_bot_setup"), TEXT("path"), outDeliveryBotSetupPath)
-		|| outDeliveryBotSetupPath.IsEmpty())
+	if (!TryGetStringFromObjectField(*RunObject, TEXT("simulation_profile"), TEXT("path"), outSimulationProfilePath)
+		|| outSimulationProfilePath.IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("Evaluation report field missing or invalid: run.delivery_bot_setup.path."));
+		outDiagnostics.Add(TEXT("Evaluation report field missing or invalid: run.simulation_profile.path."));
 	}
 
 	return outDiagnostics.IsEmpty();
@@ -469,17 +469,17 @@ bool UPlatformAnalysisAiSubsystem::BuildAnalysisRequestJsonFromReport(
 		return false;
 	}
 
-	FString EpisodeSetupPath;
-	FString DeliveryBotSetupPath;
-	if (!ExtractSetupPathsFromReportJson(ReportJson, EpisodeSetupPath, DeliveryBotSetupPath, outDiagnostics))
+	FString ScenarioSourcePath;
+	FString SimulationProfilePath;
+	if (!ExtractSetupPathsFromReportJson(ReportJson, ScenarioSourcePath, SimulationProfilePath, outDiagnostics))
 	{
 		return false;
 	}
 
-	const FString ResolvedEpisodeSetupPath = ResolveAnalysisPath(EpisodeSetupPath);
-	const FString ResolvedDeliveryBotSetupPath = ResolveAnalysisPath(DeliveryBotSetupPath);
-	RequireExistingFile(TEXT("episode_setup_path"), ResolvedEpisodeSetupPath, outDiagnostics);
-	RequireExistingFile(TEXT("bot_setup_path"), ResolvedDeliveryBotSetupPath, outDiagnostics);
+	const FString ResolvedScenarioSourcePath = ResolveAnalysisPath(ScenarioSourcePath);
+	const FString ResolvedSimulationProfilePath = ResolveAnalysisPath(SimulationProfilePath);
+	RequireExistingFile(TEXT("scenario_source_path"), ResolvedScenarioSourcePath, outDiagnostics);
+	RequireExistingFile(TEXT("simulation_profile_path"), ResolvedSimulationProfilePath, outDiagnostics);
 	if (!outDiagnostics.IsEmpty())
 	{
 		return false;
@@ -488,8 +488,8 @@ bool UPlatformAnalysisAiSubsystem::BuildAnalysisRequestJsonFromReport(
 	TSharedRef<FJsonObject> RequestObject = MakeShared<FJsonObject>();
 	RequestObject->SetStringField(TEXT("evaluation_report_path"), ResolvedReportPath);
 	RequestObject->SetStringField(TEXT("measurement_log_path"), ResolvedLogPath);
-	RequestObject->SetStringField(TEXT("episode_setup_path"), ResolvedEpisodeSetupPath);
-	RequestObject->SetStringField(TEXT("bot_setup_path"), ResolvedDeliveryBotSetupPath);
+	RequestObject->SetStringField(TEXT("scenario_source_path"), ResolvedScenarioSourcePath);
+	RequestObject->SetStringField(TEXT("simulation_profile_path"), ResolvedSimulationProfilePath);
 	RequestObject->SetBoolField(TEXT("fallback_only"), bFallbackOnly);
 
 	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&outRequestJson);

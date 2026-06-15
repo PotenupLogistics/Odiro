@@ -144,10 +144,10 @@ struct ODIROSIM_API FEpisodeRunRecord
 	FString SourceJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString EpisodeSetupJsonPath;
+	FString ScenarioSourceJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString DeliveryBotSetupJsonPath;
+	FString SimulationProfileJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FString PolicySpecJsonPath;
@@ -156,10 +156,10 @@ struct ODIROSIM_API FEpisodeRunRecord
 	FString SpecHash;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString EpisodeSetupHash;
+	FString ScenarioSourceHash;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString DeliveryBotSetupHash;
+	FString SimulationProfileHash;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FString PairHash;
@@ -168,10 +168,10 @@ struct ODIROSIM_API FEpisodeRunRecord
 	bool bCompileSucceeded = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	bool bEpisodeSetupCompileSucceeded = false;
+	bool bScenarioSourceCompileSucceeded = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	bool bDeliveryBotSetupCompileSucceeded = false;
+	bool bSimulationProfileCompileSucceeded = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	bool bSetupSucceeded = false;

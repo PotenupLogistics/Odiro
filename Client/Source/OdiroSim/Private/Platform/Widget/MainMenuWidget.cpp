@@ -29,8 +29,8 @@ namespace
 	const TCHAR* DefaultStatusOutputPath = TEXT("Saved/SimulationRuns/latest_status.json");
 	const TCHAR* MainMenuDefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	const int32 DefaultFlushIntervalTicks = 60;
-	const TCHAR* ScenarioSetupTemplatePath = TEXT("Json/Input/ScenarioSetupSample_0.json");
-	const TCHAR* DeliveryBotTemplatePath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
+	const TCHAR* ScenarioSetupTemplatePath = TEXT("Json/Input/ScenarioTemplates/FeatureProbeNoPedestrians.template.json");
+	const TCHAR* DeliveryBotTemplatePath = TEXT("Json/Input/ScenarioTemplates/TemplateProfileForTest.json");
 	const TCHAR* FileListItemWidgetBlueprintClassPath =
 		TEXT("/Game/Widgets/MainMenu/WBP_FileListItem.WBP_FileListItem_C");
 
@@ -703,8 +703,8 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 	{
 		FScenarioRunInput runInput;
 		runInput.PairId = FString::Printf(TEXT("%s_%03d"), *pairIdBase, runIndex);
-		runInput.ScenarioSetupJsonPath = scenarioSetupPath;
-		runInput.DeliveryBotSetupJsonPath = deliveryBotSetupPath;
+		runInput.ScenarioSourceJsonPath = scenarioSetupPath;
+		runInput.SimulationProfileJsonPath = deliveryBotSetupPath;
 		runInput.PolicySpecJsonPath = policySpecPath;
 		runInputs.Add(runInput);
 	}
@@ -743,7 +743,7 @@ void UMainMenuWidget::HandleOpenEditorClicked()
 
 void UMainMenuWidget::HandleNewScenarioClicked()
 {
-	const FString newScenarioPath = MakeUniqueInputJsonPath(TEXT("ScenarioSetupNew"));
+	const FString newScenarioPath = MakeUniqueInputJsonPath(TEXT("ScenarioTemplateNew"));
 	if (!CreateScenarioFileFromTemplate(newScenarioPath))
 	{
 		return;
@@ -986,7 +986,7 @@ void UMainMenuWidget::HandleNewPolicyClicked()
 		return;
 	}
 
-	const FString newPolicyPath = MakeUniqueInputJsonPath(TEXT("DeliveryBotSetupNew"));
+	const FString newPolicyPath = MakeUniqueInputJsonPath(TEXT("SimulationProfileNew"));
 	const FString resolvedNewPolicyPath = FSimulationSetupJson::ResolveProjectPath(newPolicyPath);
 	const FString outputDirectory = FPaths::GetPath(resolvedNewPolicyPath);
 	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true)
@@ -1433,16 +1433,16 @@ void UMainMenuWidget::LoadSelectedSetup()
 		&& !loadedRunInputs.IsEmpty())
 	{
 		const FScenarioRunInput& firstRunInput = loadedRunInputs[0];
-		SetSelectedScenarioSetupPath(firstRunInput.ScenarioSetupJsonPath);
+		SetSelectedScenarioSetupPath(firstRunInput.ScenarioSourceJsonPath);
 		if (DeliveryBotSetupComboBox)
 		{
-			DeliveryBotSetupComboBox->SetSelectedOption(firstRunInput.DeliveryBotSetupJsonPath);
+			DeliveryBotSetupComboBox->SetSelectedOption(firstRunInput.SimulationProfileJsonPath);
 		}
 		if (PolicyDeliveryBotSetupComboBox)
 		{
-			PolicyDeliveryBotSetupComboBox->SetSelectedOption(firstRunInput.DeliveryBotSetupJsonPath);
+			PolicyDeliveryBotSetupComboBox->SetSelectedOption(firstRunInput.SimulationProfileJsonPath);
 		}
-		SetSelectedDeliveryBotSetupPath(firstRunInput.DeliveryBotSetupJsonPath);
+		SetSelectedDeliveryBotSetupPath(firstRunInput.SimulationProfileJsonPath);
 		SetSelectedPolicySpecPath(firstRunInput.PolicySpecJsonPath.IsEmpty()
 			? FString(MainMenuDefaultPolicySpecJsonPath)
 			: firstRunInput.PolicySpecJsonPath);
@@ -1481,8 +1481,8 @@ void UMainMenuWidget::LoadSelectedSetup()
 	lines.Add(FString::Printf(TEXT("RunQueue: %s"), *parseResult.Setup.RunQueueJsonPath));
 	if (!loadedRunInputs.IsEmpty())
 	{
-		lines.Add(FString::Printf(TEXT("시나리오(ScenarioSetup): %s"), *loadedRunInputs[0].ScenarioSetupJsonPath));
-		lines.Add(FString::Printf(TEXT("행동 정책(DeliveryBotSetup): %s"), *loadedRunInputs[0].DeliveryBotSetupJsonPath));
+		lines.Add(FString::Printf(TEXT("시나리오(ScenarioSetup): %s"), *loadedRunInputs[0].ScenarioSourceJsonPath));
+		lines.Add(FString::Printf(TEXT("행동 정책(DeliveryBotSetup): %s"), *loadedRunInputs[0].SimulationProfileJsonPath));
 		lines.Add(FString::Printf(
 			TEXT("PolicySpec: %s"),
 			loadedRunInputs[0].PolicySpecJsonPath.IsEmpty() ? MainMenuDefaultPolicySpecJsonPath : *loadedRunInputs[0].PolicySpecJsonPath));

@@ -28,7 +28,7 @@ keep:
   - Client/Tools use Client/Tools/Common.ps1, never root tools/common.ps1.
   - Client prerequisite checks cover Windows Unreal C++ only; Android/iOS/macOS/MAUI are not failures.
   - Legacy Client root scripts such as BuildProject.bat, RunPreview.bat, and RunPythonPolicyServer.bat stay folded into Task-* wrappers.
-  - The legacy delivery_bot_setup launch slot can accept simulation_profile while template/sample execution is being bridged to DeliveryBot setup injection.
+  - ScenarioRunQueue entries use scenario_template and simulation_profile keys; legacy scenario_setup/delivery_bot_setup inputs are not accepted by the launcher.
 verify:
   - launcher command contract tests for launch arg changes
   - runtime log plus status JSON for process changes

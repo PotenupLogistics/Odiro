@@ -4,8 +4,8 @@
   "runs": [
     {
       "pair_id": "playable_route_001",
-      "scenario_setup": "Json/Input/ScenarioSetupPlayable.json",
-      "delivery_bot_setup": "Json/Input/DeliveryBotSetupPlayable.json",
+      "scenario_template": "Json/Input/ScenarioTemplates/FeatureProbeNoPedestrians.template.json",
+      "simulation_profile": "Json/Input/ScenarioTemplates/TemplateProfileForTest.json",
       "policy_spec": "Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json"
     }
   ]

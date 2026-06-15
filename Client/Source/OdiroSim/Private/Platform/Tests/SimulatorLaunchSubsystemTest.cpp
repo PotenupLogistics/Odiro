@@ -57,8 +57,8 @@ bool FSimulatorLaunchRunQueueJsonRoundTripTest::RunTest(const FString& parameter
 	TArray<FScenarioRunInput> runInputs;
 	FScenarioRunInput runInput;
 	runInput.PairId = TEXT("sample_0");
-	runInput.ScenarioSetupJsonPath = TEXT("Json/Input/ScenarioSetupSample_0.json");
-	runInput.DeliveryBotSetupJsonPath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
+	runInput.ScenarioSourceJsonPath = TEXT("Json/Input/ScenarioTemplates/FeatureProbeNoPedestrians.template.json");
+	runInput.SimulationProfileJsonPath = TEXT("Json/Input/ScenarioTemplates/TemplateProfileForTest.json");
 	runInput.PolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	runInputs.Add(runInput);
 
@@ -67,8 +67,9 @@ bool FSimulatorLaunchRunQueueJsonRoundTripTest::RunTest(const FString& parameter
 	TestTrue(TEXT("run queue writes"), USimulatorLaunchSubsystem::TryWriteScenarioRunQueueJson(runInputs, json, diagnostics));
 	TestEqual(TEXT("write diagnostics"), diagnostics.Num(), 0);
 	TestTrue(TEXT("schema field"), json.Contains(TEXT("\"schema\"")));
-	TestTrue(TEXT("scenario setup field"), json.Contains(TEXT("\"scenario_setup\"")));
-	TestTrue(TEXT("scenario setup path"), json.Contains(TEXT("ScenarioSetupSample_0.json")));
+	TestTrue(TEXT("scenario template field"), json.Contains(TEXT("\"scenario_template\"")));
+	TestTrue(TEXT("scenario template path"), json.Contains(TEXT("FeatureProbeNoPedestrians.template.json")));
+	TestTrue(TEXT("simulation profile field"), json.Contains(TEXT("\"simulation_profile\"")));
 	TestTrue(TEXT("policy spec field"), json.Contains(TEXT("\"policy_spec\"")));
 
 	TArray<FScenarioRunInput> parsedRunInputs;
@@ -78,12 +79,12 @@ bool FSimulatorLaunchRunQueueJsonRoundTripTest::RunTest(const FString& parameter
 	TestEqual(TEXT("pair id"), parsedRunInputs[0].PairId, FString(TEXT("sample_0")));
 	TestEqual(
 		TEXT("scenario setup"),
-		parsedRunInputs[0].ScenarioSetupJsonPath,
-		FString(TEXT("Json/Input/ScenarioSetupSample_0.json")));
+		parsedRunInputs[0].ScenarioSourceJsonPath,
+		FString(TEXT("Json/Input/ScenarioTemplates/FeatureProbeNoPedestrians.template.json")));
 	TestEqual(
 		TEXT("delivery setup"),
-		parsedRunInputs[0].DeliveryBotSetupJsonPath,
-		FString(TEXT("Json/Input/DeliveryBotSetupSample_0.json")));
+		parsedRunInputs[0].SimulationProfileJsonPath,
+		FString(TEXT("Json/Input/ScenarioTemplates/TemplateProfileForTest.json")));
 	TestEqual(
 		TEXT("policy spec"),
 		parsedRunInputs[0].PolicySpecJsonPath,

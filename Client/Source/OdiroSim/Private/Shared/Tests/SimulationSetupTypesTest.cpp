@@ -2,12 +2,12 @@
 
 #include "Shared/SimulationSetupTypes.h"
 
-#include "DeliveryBot/DeliveryBotSetupCompiler.h"
-#include "Scenario/ScenarioCompiler.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
+#include "Scenario/ScenarioSimulationProfileAdapter.h"
+#include "Scenario/ScenarioTemplateWorldSpecAdapter.h"
 
 namespace
 {
@@ -68,7 +68,7 @@ bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters
 
 	TestTrue(TEXT("playable setup parses"), setupResult.bSuccess);
 	TestEqual(TEXT("playable map id"), setupResult.Setup.MapId, FString(TEXT("ScenarioSimulationMap")));
-	TestEqual(TEXT("playable run queue"), setupResult.Setup.RunQueueJsonPath, FString(TEXT("Json/Input/ScenarioRunQueuePlayable.json")));
+	TestEqual(TEXT("playable run queue"), setupResult.Setup.RunQueueJsonPath, FString(TEXT("Json/Input/SimulationSetupPlayable_RunQueue.json")));
 
 	FString runQueueJson;
 	TestTrue(
@@ -83,25 +83,33 @@ bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters
 		TEXT("playable run queue reads"),
 		USimulatorLaunchSubsystem::TryReadScenarioRunQueueJson(runQueueJson, runInputs, runQueueDiagnostics));
 	TestEqual(TEXT("playable run input count"), runInputs.Num(), 1);
-	TestEqual(TEXT("playable scenario setup path"), runInputs[0].ScenarioSetupJsonPath, FString(TEXT("Json/Input/ScenarioSetupPlayable.json")));
-	TestEqual(TEXT("playable policy path"), runInputs[0].DeliveryBotSetupJsonPath, FString(TEXT("Json/Input/DeliveryBotSetupPlayable.json")));
+	TestEqual(
+		TEXT("playable scenario template path"),
+		runInputs[0].ScenarioSourceJsonPath,
+		FString(TEXT("Json/Input/ScenarioTemplates/FeatureProbeNoPedestrians.template.json")));
+	TestEqual(
+		TEXT("playable simulation profile path"),
+		runInputs[0].SimulationProfileJsonPath,
+		FString(TEXT("Json/Input/ScenarioTemplates/TemplateProfileForTest.json")));
 	TestEqual(
 		TEXT("playable policy spec path"),
 		runInputs[0].PolicySpecJsonPath,
 		FString(TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json")));
 
-	const UDeliveryBotSetupCompiler* deliveryBotCompiler = NewObject<UDeliveryBotSetupCompiler>();
-	const FDeliveryBotSetupCompileResult deliveryBotResult =
-		deliveryBotCompiler->CompileDeliveryBotSetupFromJsonFile(TEXT("Json/Input/DeliveryBotSetupPlayable.json"));
-	TestTrue(TEXT("playable policy compiles"), deliveryBotResult.bSuccess);
+	const FScenarioSimulationProfileCompileResult profileResult =
+		FScenarioSimulationProfileAdapter::CompileProfileFromJsonFile(runInputs[0].SimulationProfileJsonPath);
+	TestTrue(TEXT("playable profile compiles"), profileResult.bSuccess);
 
-	const UScenarioCompiler* episodeCompiler = NewObject<UScenarioCompiler>();
-	const FScenarioCompileResult episodeResult =
-		episodeCompiler->CompileScenarioWorldSpecFromJsonFile(TEXT("Json/Input/ScenarioSetupPlayable.json"));
-	TestTrue(TEXT("playable episode compiles"), episodeResult.bSuccess);
+	FScenarioTemplateSampleRequest sampleRequest =
+		FScenarioTemplateWorldSpecAdapter::MakeDefaultSampleRequest(runInputs[0].ScenarioSourceJsonPath, runInputs[0].PairId);
+	sampleRequest.ProfileRef = runInputs[0].SimulationProfileJsonPath;
+	sampleRequest.ProfileHash = FScenarioSimulationProfileAdapter::MakeProfileFileHash(runInputs[0].SimulationProfileJsonPath);
+	const FScenarioTemplateWorldSpecCompileResult scenarioResult =
+		FScenarioTemplateWorldSpecAdapter::CompileScenarioWorldSpecFromTemplateFile(runInputs[0].ScenarioSourceJsonPath, sampleRequest);
+	TestTrue(TEXT("playable scenario template compiles"), scenarioResult.bSuccess);
 
 	const FScenarioPlaceableInstanceSpec* robotSpec = nullptr;
-	for (const FScenarioPlaceableInstanceSpec& placeable : episodeResult.WorldSpec.Placeables)
+	for (const FScenarioPlaceableInstanceSpec& placeable : scenarioResult.CompileResult.WorldSpec.Placeables)
 	{
 		if (placeable.Category == EScenarioActorCategory::DeliveryBot)
 		{
@@ -110,17 +118,17 @@ bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters
 		}
 	}
 
-	TestNotNull(TEXT("playable episode has robot"), robotSpec);
+	TestNotNull(TEXT("playable scenario has robot"), robotSpec);
 	if (robotSpec)
 	{
 		TestFalse(TEXT("playable robot is not spawn-only"), robotSpec->DeliveryBot.bSpawnOnly);
 		TestTrue(TEXT("playable robot has start"), robotSpec->DeliveryBot.bHasStartLocation);
 		TestTrue(TEXT("playable robot has goal"), robotSpec->DeliveryBot.bHasGoalLocation);
 		TestTrue(TEXT("playable route auto-starts"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute);
-		TestEqual(TEXT("playable robot start x cm"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.X, -600.0);
-		TestEqual(TEXT("playable robot start y cm"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.Y, 0.0);
-		TestEqual(TEXT("playable robot goal x cm"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.X, 600.0);
-		TestEqual(TEXT("playable robot goal y cm"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.Y, 0.0);
+		TestNotEqual(
+			TEXT("playable robot start and goal differ"),
+			robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm,
+			robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm);
 	}
 
 	return true;

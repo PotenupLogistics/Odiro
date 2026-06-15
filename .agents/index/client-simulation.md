@@ -34,7 +34,7 @@ entry:
   - contracts/specs
 keep:
   - Parser-only samples/schemas owned only by Client stay in Client.
-  - Scenario setup/run queue samples in Client/Json/Input are client-owned examples; shared contract truth stays in contracts/specs.
+  - ScenarioRunQueue samples in Client/Json/Input point at scenario_template and simulation_profile sources; legacy ScenarioSetup/DeliveryBotSetup JSON examples are removed.
   - Scenario template/sample authoring types stay separate from runtime WorldSpec and actor-spawn payload types.
   - ScenarioSampleWorldSpecAdapter is the thin scenario_sample to runtime WorldSpec boundary; do not fold it into the legacy runtime ScenarioCompiler.
   - ScenarioSimulationProfileAdapter maps simulation_profile to DeliveryBot setup info for template-driven runs without turning it into legacy DeliveryBotSetup JSON.

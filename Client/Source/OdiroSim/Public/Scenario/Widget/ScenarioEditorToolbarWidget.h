@@ -19,7 +19,7 @@ public:
 	virtual void NativeDestruct() override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Toolbar")
-	FString DefaultSavePath = TEXT("Json/Input/ScenarioSetupNew.json");
+	FString DefaultSavePath = TEXT("Json/Input/ScenarioTemplates/ScenarioTemplateNew.template.json");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Toolbar")
 	FString MainMenuMapId = TEXT("MainMenuMap");

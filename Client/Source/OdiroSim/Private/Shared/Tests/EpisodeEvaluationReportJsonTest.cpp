@@ -52,14 +52,14 @@ bool FEpisodeEvaluationReportJsonSerializationTest::RunTest(const FString& Param
 	Record.RunIndex = 4;
 	Record.EpisodeId = TEXT("sensor_route_layout_004");
 	Record.PairId = TEXT("sample_4");
-	Record.EpisodeSetupJsonPath = TEXT("Json/Input/ScenarioSetupSample_4.json");
-	Record.EpisodeSetupHash = TEXT("252738887");
-	Record.DeliveryBotSetupJsonPath = TEXT("Json/Input/DeliveryBotSetupSample_4.json");
-	Record.DeliveryBotSetupHash = TEXT("109204312");
+	Record.ScenarioSourceJsonPath = TEXT("Json/Input/ScenarioTemplates/FeatureProbeNoPedestrians.template.json");
+	Record.ScenarioSourceHash = TEXT("252738887");
+	Record.SimulationProfileJsonPath = TEXT("Json/Input/ScenarioTemplates/TemplateProfileForTest.json");
+	Record.SimulationProfileHash = TEXT("109204312");
 	Record.PairHash = TEXT("83029122");
 	Record.bCompileSucceeded = true;
-	Record.bEpisodeSetupCompileSucceeded = true;
-	Record.bDeliveryBotSetupCompileSucceeded = true;
+	Record.bScenarioSourceCompileSucceeded = true;
+	Record.bSimulationProfileCompileSucceeded = true;
 	Record.bSetupSucceeded = true;
 	Record.bEvaluationCompleted = true;
 	Record.bSuccess = false;
@@ -122,6 +122,18 @@ bool FEpisodeEvaluationReportJsonSerializationTest::RunTest(const FString& Param
 	}
 
 	TestEqual(TEXT("schema"), RootObject->GetStringField(TEXT("schema")), FString(TEXT("episode_evaluation_report")));
+
+	const TSharedPtr<FJsonObject> RunObject = RootObject->GetObjectField(TEXT("run"));
+	TestTrue(TEXT("run has scenario source"), RunObject->HasField(TEXT("scenario_source")));
+	TestTrue(TEXT("run has simulation profile"), RunObject->HasField(TEXT("simulation_profile")));
+	TestFalse(TEXT("run omits legacy episode setup"), RunObject->HasField(TEXT("episode_setup")));
+	TestFalse(TEXT("run omits legacy delivery setup"), RunObject->HasField(TEXT("delivery_bot_setup")));
+
+	const TSharedPtr<FJsonObject> PipelineObject = RootObject->GetObjectField(TEXT("pipeline"));
+	TestTrue(TEXT("pipeline has scenario source compile"), PipelineObject->HasField(TEXT("scenario_source_compiled")));
+	TestTrue(TEXT("pipeline has simulation profile compile"), PipelineObject->HasField(TEXT("simulation_profile_compiled")));
+	TestFalse(TEXT("pipeline omits legacy episode setup compile"), PipelineObject->HasField(TEXT("episode_setup_compiled")));
+	TestFalse(TEXT("pipeline omits legacy delivery setup compile"), PipelineObject->HasField(TEXT("delivery_bot_setup_compiled")));
 
 	const TSharedPtr<FJsonObject> SummaryObject = RootObject->GetObjectField(TEXT("summary"));
 	TestTrue(TEXT("usable for llm tuning"), SummaryObject->GetBoolField(TEXT("usable_for_llm_tuning")));

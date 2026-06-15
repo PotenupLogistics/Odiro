@@ -2,7 +2,7 @@
 
 이 문서는 한 번의 Episode 실행 결과를 담은 `episode_evaluation_report` JSON 양식을 설명한다.
 
-이 report를 통해 Episode에서 어떤 사건이 있었는지, 평가 결과가 왜 그렇게 나왔는지 해석한 뒤 EpisodeSetup JSON, DeliveryBotSetup JSON, 로봇 정책 파라미터, 환경 구성 변수를 조정할 근거로 삼을 수 있다.
+이 report를 통해 Episode에서 어떤 사건이 있었는지, 평가 결과가 왜 그렇게 나왔는지 해석한 뒤 Scenario Template JSON, simulation_profile JSON, 로봇 정책 파라미터, 환경 구성 변수를 조정할 근거로 삼을 수 있다.
 
 정책 서버 통신 실패처럼 LLM/사용자가 직접 조정할 수 없는 인프라 오류는 이 report의 핵심 평가 데이터에서 제외한다. 이런 오류는 추후 사용자 에러 팝업이나 operator log에서 따로 다룬다.
 
@@ -25,12 +25,12 @@
     "run_index": 4,
     "episode_id": "sensor_route_layout_004",
     "pair_id": "sample_4",
-    "episode_setup": {
-      "path": "Json/Input/ScenarioSetupSample_4.json",
+    "scenario_source": {
+      "path": "Json/Input/ScenarioTemplates/FeatureProbeNoPedestrians.template.json",
       "hash": "252738887"
     },
-    "delivery_bot_setup": {
-      "path": "Json/Input/DeliveryBotSetupSample_4.json",
+    "simulation_profile": {
+      "path": "Json/Input/simulation_profileSample_4.json",
       "hash": "109204312"
     },
     "policy_spec": {
@@ -48,8 +48,8 @@
     "usable_for_llm_tuning": true
   },
   "pipeline": {
-    "episode_setup_compiled": true,
-    "delivery_bot_setup_compiled": true,
+    "scenario_source_compiled": true,
+    "simulation_profile_compiled": true,
     "world_setup_succeeded": true,
     "evaluation_completed": true,
     "diagnostics": []
@@ -148,7 +148,7 @@
 | `schema` | string | 고정값. `episode_evaluation_report`를 사용한다. |
 | `version` | integer | report 양식 버전. 초기 버전은 `1`이다. |
 | `units` | object | report 전체에서 사용하는 단위 계약. |
-| `run` | object | 실행 ID, EpisodeSetup/DeliveryBotSetup/PolicySpec 조합, hash 정보. |
+| `run` | object | 실행 ID, Scenario Template/simulation_profile/PolicySpec 조합, hash 정보. |
 | `summary` | object | Episode 최종 평가 요약. |
 | `pipeline` | object | compile, setup, evaluation pipeline 성공 여부와 진단 정보. |
 | `metrics` | object | Episode 전체에 대한 누적 수치와 최종 상태. |
@@ -174,16 +174,16 @@
 | --- | --- | --- |
 | `run.run_id` | string | Runner가 부여한 단일 실행 ID. |
 | `run.run_index` | integer | batch queue 안에서의 실행 순서. 단일 실행이면 `0`을 권장한다. |
-| `run.episode_id` | string | EpisodeSetup JSON의 scenario/episode ID. |
-| `run.pair_id` | string | EpisodeSetup JSON과 DeliveryBotSetup JSON을 묶는 pair ID. |
-| `run.episode_setup.path` | string | 실행에 사용한 EpisodeSetup JSON 경로. |
-| `run.episode_setup.hash` | string | EpisodeSetup JSON 또는 compile spec hash. |
-| `run.delivery_bot_setup.path` | string | 실행에 사용한 DeliveryBotSetup JSON 경로. |
-| `run.delivery_bot_setup.hash` | string | DeliveryBotSetup JSON 또는 compile spec hash. |
+| `run.episode_id` | string | Scenario Template JSON의 scenario/episode ID. |
+| `run.pair_id` | string | Scenario Template JSON과 simulation_profile JSON을 묶는 pair ID. |
+| `run.scenario_source.path` | string | 실행에 사용한 Scenario Template JSON 경로. |
+| `run.scenario_source.hash` | string | Scenario Template JSON 또는 compile spec hash. |
+| `run.simulation_profile.path` | string | 실행에 사용한 simulation_profile JSON 경로. |
+| `run.simulation_profile.hash` | string | simulation_profile JSON 또는 compile spec hash. |
 | `run.policy_spec.path` | string | 실행에 사용한 PolicySpec JSON 경로. |
-| `run.pair_hash` | string | EpisodeSetup hash, DeliveryBotSetup hash, PolicySpec 경로를 조합한 pair hash. |
+| `run.pair_hash` | string | Scenario Template hash, simulation_profile hash, PolicySpec 경로를 조합한 pair hash. |
 
-`pair_id`와 `pair_hash`는 LLM이 "어떤 환경 구성, 로봇 설정, 정책 스펙의 조합에서 나온 결과인지"를 추적하기 위한 값이다. EpisodeSetup, DeliveryBotSetup, PolicySpec 중 하나만 바꾸는 실험에서도 pair 단위로 결과를 비교한다.
+`pair_id`와 `pair_hash`는 LLM이 "어떤 환경 구성, 로봇 설정, 정책 스펙의 조합에서 나온 결과인지"를 추적하기 위한 값이다. Scenario Template, simulation_profile, PolicySpec 중 하나만 바꾸는 실험에서도 pair 단위로 결과를 비교한다.
 
 ## Summary
 
@@ -214,7 +214,7 @@
 | `Timeout` | true | 제한 시간 안에 목표에 도달하지 못했다. |
 | `RobotTipOver` | true | 로봇 기울기가 tip-over threshold를 넘었다. |
 | `DeliveryBotSimulationFailed` | depends | DeliveryBot actor가 simulation failure를 보고했다. |
-| `CompileFailed` | false | EpisodeSetup 또는 DeliveryBotSetup compile 실패. |
+| `CompileFailed` | false | Scenario Template 또는 simulation_profile compile 실패. |
 | `SetupFailed` | false | 월드 배치 또는 runtime setup 실패. |
 | `EvaluationStartFailed` | false | 평가 시작 조건이 충족되지 않았다. |
 | `Cancelled` | false | 외부 중단. |
@@ -227,8 +227,8 @@
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `pipeline.episode_setup_compiled` | bool | EpisodeSetup JSON compile 성공 여부. |
-| `pipeline.delivery_bot_setup_compiled` | bool | DeliveryBotSetup JSON compile 성공 여부. |
+| `pipeline.scenario_source_compiled` | bool | Scenario Template JSON compile 성공 여부. |
+| `pipeline.simulation_profile_compiled` | bool | simulation_profile JSON compile 성공 여부. |
 | `pipeline.world_setup_succeeded` | bool | runtime actor, ground region, path 등 월드 배치 성공 여부. |
 | `pipeline.evaluation_completed` | bool | EvaluationSubsystem이 최종 result를 완성했는지 여부. |
 | `pipeline.diagnostics` | string array | compile/setup/evaluation 단계의 경고 또는 오류 메시지. |
@@ -354,7 +354,7 @@ metric이 발생하지 않은 경우에는 생략하거나 `0`을 사용할 수 
 | `PathFindingFailed` | `true` | route, obstacle, blocked region, path planning setting 조정 근거가 된다. |
 | `Stuck` | `true` | local policy, obstacle avoidance, speed, route setting 조정 근거가 된다. |
 | Compile/setup/evaluation start failure | `false` | JSON 형식, asset, pipeline 문제이지 episode behavior 평가가 아니다. |
-| Policy server communication failure | `false` | LLM이 EpisodeSetup/DeliveryBotSetup을 바꿔도 해결할 수 없는 인프라 문제이다. |
+| Policy server communication failure | `false` | LLM이 Scenario Template/simulation_profile을 바꿔도 해결할 수 없는 인프라 문제이다. |
 | User cancelled | `false` | 의도적인 중단이라 평가 근거로 쓰지 않는다. |
 
 ## Output Rules

@@ -1,7 +1,5 @@
 
 #include "Platform/SimulatorLaunchSubsystem.h"
-#include "DeliveryBot/DeliveryBotSetupCompiler.h"
-#include "Scenario/ScenarioCompiler.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Scenario/ScenarioSimulationProfileAdapter.h"
 #include "Scenario/ScenarioTemplateWorldSpecAdapter.h"
@@ -16,8 +14,6 @@ namespace
 	const TCHAR* SimulationRunStatusDirectory = TEXT("Saved/SimulationRuns");
 	const TCHAR* PreviewLauncherFileName = TEXT("Task-RunPreview.bat");
 	const TCHAR* LaunchSimulationSetupSchema = TEXT("simulation_setup");
-	const TCHAR* LaunchScenarioSetupSchema = TEXT("scenario_actor_spawn_mvp");
-	const TCHAR* LaunchDeliveryBotSetupSchema = TEXT("delivery_bot_setup");
 	const TCHAR* LaunchScenarioRunQueueSchema = TEXT("episode_run_queue");
 	const TCHAR* LaunchEvaluationReportSchema = TEXT("episode_evaluation_report");
 	const TCHAR* LaunchDefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
@@ -163,7 +159,7 @@ namespace
 		return executableName.StartsWith(TEXT("UnrealEditor"), ESearchCase::IgnoreCase);
 	}
 
-	bool IsScenarioSetupFile(const FString& jsonFile)
+	bool IsScenarioSourceFile(const FString& jsonFile)
 	{
 		if (FScenarioSampleWorldSpecAdapter::IsScenarioSampleFile(jsonFile))
 		{
@@ -177,29 +173,17 @@ namespace
 			return FScenarioTemplateWorldSpecAdapter::CompileScenarioWorldSpecFromTemplateFile(jsonFile, request).bSuccess;
 		}
 
-		if (!HasJsonSchema(jsonFile, LaunchScenarioSetupSchema))
-		{
-			return false;
-		}
-
-		UScenarioCompiler* compiler = NewObject<UScenarioCompiler>();
-		return compiler && compiler->CompileScenarioWorldSpecFromJsonFile(jsonFile).bSuccess;
+		return false;
 	}
 
-	bool IsDeliveryBotSetupFile(const FString& jsonFile)
+	bool IsSimulationProfileFile(const FString& jsonFile)
 	{
 		if (FScenarioSimulationProfileAdapter::IsSimulationProfileFile(jsonFile))
 		{
 			return FScenarioSimulationProfileAdapter::CompileProfileFromJsonFile(jsonFile).bSuccess;
 		}
 
-		if (!HasJsonSchema(jsonFile, LaunchDeliveryBotSetupSchema))
-		{
-			return false;
-		}
-
-		UDeliveryBotSetupCompiler* compiler = NewObject<UDeliveryBotSetupCompiler>();
-		return compiler && compiler->CompileDeliveryBotSetupFromJsonFile(jsonFile).bSuccess;
+		return false;
 	}
 
 	bool IsPolicySpecFile(const FString& jsonFile)
@@ -238,8 +222,8 @@ namespace
 			{
 				runObject->SetStringField(TEXT("pair_id"), runInput.PairId);
 			}
-			runObject->SetStringField(TEXT("scenario_setup"), runInput.ScenarioSetupJsonPath);
-			runObject->SetStringField(TEXT("delivery_bot_setup"), runInput.DeliveryBotSetupJsonPath);
+			runObject->SetStringField(TEXT("scenario_template"), runInput.ScenarioSourceJsonPath);
+			runObject->SetStringField(TEXT("simulation_profile"), runInput.SimulationProfileJsonPath);
 			if (!runInput.PolicySpecJsonPath.IsEmpty())
 			{
 				runObject->SetStringField(TEXT("policy_spec"), runInput.PolicySpecJsonPath);
@@ -293,7 +277,7 @@ TArray<FString> USimulatorLaunchSubsystem::ListScenarioSetupFiles() const
 			continue;
 		}
 
-		if (IsScenarioSetupFile(jsonFile))
+		if (IsScenarioSourceFile(jsonFile))
 		{
 			setupFiles.Add(jsonFile);
 		}
@@ -315,7 +299,7 @@ TArray<FString> USimulatorLaunchSubsystem::ListDeliveryBotSetupFiles() const
 			continue;
 		}
 
-		if (IsDeliveryBotSetupFile(jsonFile))
+		if (IsSimulationProfileFile(jsonFile))
 		{
 			setupFiles.Add(jsonFile);
 		}
@@ -647,8 +631,8 @@ bool USimulatorLaunchSubsystem::AppendRunQueuePair(
 
 	FScenarioRunInput runInput;
 	runInput.PairId = pairId.TrimStartAndEnd();
-	runInput.ScenarioSetupJsonPath = scenarioSetupPath.TrimStartAndEnd();
-	runInput.DeliveryBotSetupJsonPath = deliveryBotSetupPath.TrimStartAndEnd();
+	runInput.ScenarioSourceJsonPath = scenarioSetupPath.TrimStartAndEnd();
+	runInput.SimulationProfileJsonPath = deliveryBotSetupPath.TrimStartAndEnd();
 	runInput.PolicySpecJsonPath = LaunchDefaultPolicySpecJsonPath;
 	runInputs.Add(runInput);
 	return SaveScenarioRunQueueFile(runQueuePath, runInputs, outDiagnostics);
@@ -732,8 +716,8 @@ bool USimulatorLaunchSubsystem::ReplaceRunQueueReferences(
 	const FString normalizedOldPath = NormalizeRunQueueReferencePath(oldPath);
 	const FString normalizedNewPath = NormalizeRunQueueReferencePath(newPath);
 	const TCHAR* referenceFieldName = bReplaceScenarioSetupReference
-		? TEXT("scenario_setup")
-		: TEXT("delivery_bot_setup");
+		? TEXT("scenario_template")
+		: TEXT("simulation_profile");
 
 	if (normalizedOldPath.IsEmpty() || normalizedNewPath.IsEmpty())
 	{
@@ -765,8 +749,8 @@ bool USimulatorLaunchSubsystem::ReplaceRunQueueReferences(
 		for (FScenarioRunInput& runInput : runInputs)
 		{
 			FString& referencePath = bReplaceScenarioSetupReference
-				? runInput.ScenarioSetupJsonPath
-				: runInput.DeliveryBotSetupJsonPath;
+				? runInput.ScenarioSourceJsonPath
+				: runInput.SimulationProfileJsonPath;
 			if (NormalizeRunQueueReferencePath(referencePath).Equals(normalizedOldPath, ESearchCase::IgnoreCase))
 			{
 				referencePath = normalizedNewPath;
@@ -1131,23 +1115,23 @@ bool USimulatorLaunchSubsystem::TryReadScenarioRunQueueJson(
 		const TSharedPtr<FJsonObject> runObject = runValue->AsObject();
 		FScenarioRunInput runInput;
 		runObject->TryGetStringField(TEXT("pair_id"), runInput.PairId);
-		runObject->TryGetStringField(TEXT("scenario_setup"), runInput.ScenarioSetupJsonPath);
-		runObject->TryGetStringField(TEXT("delivery_bot_setup"), runInput.DeliveryBotSetupJsonPath);
+		runObject->TryGetStringField(TEXT("scenario_template"), runInput.ScenarioSourceJsonPath);
+		runObject->TryGetStringField(TEXT("simulation_profile"), runInput.SimulationProfileJsonPath);
 		runObject->TryGetStringField(TEXT("policy_spec"), runInput.PolicySpecJsonPath);
 
 		runInput.PairId = runInput.PairId.TrimStartAndEnd();
-		runInput.ScenarioSetupJsonPath = NormalizeRunQueueReferencePath(runInput.ScenarioSetupJsonPath);
-		runInput.DeliveryBotSetupJsonPath = NormalizeRunQueueReferencePath(runInput.DeliveryBotSetupJsonPath);
+		runInput.ScenarioSourceJsonPath = NormalizeRunQueueReferencePath(runInput.ScenarioSourceJsonPath);
+		runInput.SimulationProfileJsonPath = NormalizeRunQueueReferencePath(runInput.SimulationProfileJsonPath);
 		runInput.PolicySpecJsonPath = NormalizeRunQueueReferencePath(runInput.PolicySpecJsonPath);
 
-		if (runInput.ScenarioSetupJsonPath.TrimStartAndEnd().IsEmpty())
+		if (runInput.ScenarioSourceJsonPath.TrimStartAndEnd().IsEmpty())
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue runs[%d].scenario_setup must not be empty."), index));
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue runs[%d].scenario_template must not be empty."), index));
 		}
 
-		if (runInput.DeliveryBotSetupJsonPath.TrimStartAndEnd().IsEmpty())
+		if (runInput.SimulationProfileJsonPath.TrimStartAndEnd().IsEmpty())
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue runs[%d].delivery_bot_setup must not be empty."), index));
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue runs[%d].simulation_profile must not be empty."), index));
 		}
 
 		outRunInputs.Add(runInput);
@@ -1172,22 +1156,22 @@ bool USimulatorLaunchSubsystem::TryWriteScenarioRunQueueJson(
 	for (int32 index = 0; index < runInputs.Num(); ++index)
 	{
 		const FScenarioRunInput& runInput = runInputs[index];
-		if (runInput.ScenarioSetupJsonPath.TrimStartAndEnd().IsEmpty())
+		if (runInput.ScenarioSourceJsonPath.TrimStartAndEnd().IsEmpty())
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue pair %d requires scenario_setup."), index));
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue pair %d requires scenario_template."), index));
 		}
-		else if (!IsScenarioSetupFile(runInput.ScenarioSetupJsonPath))
+		else if (!IsScenarioSourceFile(runInput.ScenarioSourceJsonPath))
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("Scenario source validation failed: %s"), *runInput.ScenarioSetupJsonPath));
+			outDiagnostics.Add(FString::Printf(TEXT("Scenario source validation failed: %s"), *runInput.ScenarioSourceJsonPath));
 		}
 
-		if (runInput.DeliveryBotSetupJsonPath.TrimStartAndEnd().IsEmpty())
+		if (runInput.SimulationProfileJsonPath.TrimStartAndEnd().IsEmpty())
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue pair %d requires delivery_bot_setup."), index));
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue pair %d requires simulation_profile."), index));
 		}
-		else if (!IsDeliveryBotSetupFile(runInput.DeliveryBotSetupJsonPath))
+		else if (!IsSimulationProfileFile(runInput.SimulationProfileJsonPath))
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("DeliveryBotSetup validation failed: %s"), *runInput.DeliveryBotSetupJsonPath));
+			outDiagnostics.Add(FString::Printf(TEXT("SimulationProfile validation failed: %s"), *runInput.SimulationProfileJsonPath));
 		}
 
 		if (!runInput.PolicySpecJsonPath.TrimStartAndEnd().IsEmpty()

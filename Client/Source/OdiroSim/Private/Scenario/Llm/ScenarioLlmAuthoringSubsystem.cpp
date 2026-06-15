@@ -275,57 +275,57 @@ bool UScenarioLlmAuthoringSubsystem::TryValidateAndSaveRunQueue(
 			continue;
 		}
 
-		FString scenarioSetupPath;
-		FString deliveryBotSetupPath;
+		FString scenarioSourcePath;
+		FString simulationProfilePath;
 		FString policySpecPath;
-		runObject->TryGetStringField(TEXT("scenario_setup"), scenarioSetupPath);
-		runObject->TryGetStringField(TEXT("delivery_bot_setup"), deliveryBotSetupPath);
+		runObject->TryGetStringField(TEXT("scenario_template"), scenarioSourcePath);
+		runObject->TryGetStringField(TEXT("simulation_profile"), simulationProfilePath);
 		runObject->TryGetStringField(TEXT("policy_spec"), policySpecPath);
-		scenarioSetupPath = scenarioSetupPath.TrimStartAndEnd();
-		deliveryBotSetupPath = deliveryBotSetupPath.TrimStartAndEnd();
+		scenarioSourcePath = scenarioSourcePath.TrimStartAndEnd();
+		simulationProfilePath = simulationProfilePath.TrimStartAndEnd();
 		policySpecPath = policySpecPath.TrimStartAndEnd();
 
-		if (scenarioSetupPath.IsEmpty())
+		if (scenarioSourcePath.IsEmpty())
 		{
-			outResult.Diagnostics.Add(FString::Printf(TEXT("runs[%d].scenario_setup must not be empty."), index));
+			outResult.Diagnostics.Add(FString::Printf(TEXT("runs[%d].scenario_template must not be empty."), index));
 		}
 		else
 		{
-			if (!scenarioSetupPath.StartsWith(TEXT("Json/Input/")))
+			if (!scenarioSourcePath.StartsWith(TEXT("Json/Input/")))
 			{
 				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("runs[%d].scenario_setup must start with Json/Input/: %s"),
+					TEXT("runs[%d].scenario_template must start with Json/Input/: %s"),
 					index,
-					*scenarioSetupPath));
+					*scenarioSourcePath));
 			}
 
-			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(scenarioSetupPath)))
+			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(scenarioSourcePath)))
 			{
 				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("ScenarioSetup file does not exist: %s"),
-					*scenarioSetupPath));
+					TEXT("Scenario template file does not exist: %s"),
+					*scenarioSourcePath));
 			}
 		}
 
-		if (deliveryBotSetupPath.IsEmpty())
+		if (simulationProfilePath.IsEmpty())
 		{
-			outResult.Diagnostics.Add(FString::Printf(TEXT("runs[%d].delivery_bot_setup must not be empty."), index));
+			outResult.Diagnostics.Add(FString::Printf(TEXT("runs[%d].simulation_profile must not be empty."), index));
 		}
 		else
 		{
-			if (!deliveryBotSetupPath.StartsWith(TEXT("Json/Input/")))
+			if (!simulationProfilePath.StartsWith(TEXT("Json/Input/")))
 			{
 				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("runs[%d].delivery_bot_setup must start with Json/Input/: %s"),
+					TEXT("runs[%d].simulation_profile must start with Json/Input/: %s"),
 					index,
-					*deliveryBotSetupPath));
+					*simulationProfilePath));
 			}
 
-			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(deliveryBotSetupPath)))
+			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(simulationProfilePath)))
 			{
 				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("DeliveryBotSetup file does not exist: %s"),
-					*deliveryBotSetupPath));
+					TEXT("Simulation profile file does not exist: %s"),
+					*simulationProfilePath));
 			}
 		}
 
@@ -349,13 +349,18 @@ bool UScenarioLlmAuthoringSubsystem::TryValidateAndSaveRunQueue(
 
 		if (index == 0)
 		{
-			outResult.FirstScenarioSetupJsonPath = scenarioSetupPath;
-			outResult.FirstDeliveryBotSetupJsonPath = deliveryBotSetupPath;
+			outResult.FirstScenarioSourceJsonPath = scenarioSourcePath;
+			outResult.FirstSimulationProfileJsonPath = simulationProfilePath;
 		}
 
-		if (!scenarioSetupPath.IsEmpty())
+		if (!scenarioSourcePath.IsEmpty())
 		{
-			runObject->SetStringField(TEXT("scenario_setup"), scenarioSetupPath);
+			runObject->SetStringField(TEXT("scenario_template"), scenarioSourcePath);
+		}
+
+		if (!simulationProfilePath.IsEmpty())
+		{
+			runObject->SetStringField(TEXT("simulation_profile"), simulationProfilePath);
 		}
 	}
 

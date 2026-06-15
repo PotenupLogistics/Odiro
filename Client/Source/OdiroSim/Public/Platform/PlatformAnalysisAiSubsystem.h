@@ -52,8 +52,8 @@ public:
 
 	static bool ExtractSetupPathsFromReportJson(
 		const FString& reportJson,
-		FString& outEpisodeSetupPath,
-		FString& outDeliveryBotSetupPath,
+		FString& outScenarioSourcePath,
+		FString& outSimulationProfilePath,
 		TArray<FString>& outDiagnostics);
 
 	static bool BuildAnalysisRequestJsonFromReport(

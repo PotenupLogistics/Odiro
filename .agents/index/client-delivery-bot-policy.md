@@ -12,7 +12,6 @@ entry:
   - DeliveryBot_DriveComponent.h / .cpp
   - DeliveryBot_HttpPolicyComponent.h / .cpp
   - DeliveryBot_LidarSensorComponent.h / .cpp
-  - DeliveryBotSetupCompiler.h / .cpp
   - DeliveryBotPythonDeveloperSettings.h / .cpp
   - DeliveryBotPythonProcessSubsystem.h / .cpp
   - DeliveryBotPythonSettings.h

@@ -29,7 +29,6 @@ Odiro/
     scripts/                      # Agent 전용 CLI/tooling. TODO: tools로 이동
     tools/                        # Agents 전용 보조 도구
     tests/                        # Agent 단위 테스트
-    static/                       # 런타임에 사용하는 정적 파일
     task-setup.bat                # uv sync 의존성 설치
     task-run.bat                  # Agents API server 실행
     task-dev.bat                  # 개발용으로 실행 (코드 변경 시 자동 재시작)
@@ -42,10 +41,9 @@ Odiro/
     Content/
     Plugins/
     Source/
-    Static/                       # 런타임에 사용하는 정적 파일
-      PolicyRuntime/              # 사용자 행동 정책 Python과 Unreal을 연결하는 런타임 스크립트
+    Resources/
+      policy-runtime.py           # 사용자 행동 정책 Python과 Unreal을 연결하는 런타임 스크립트
     Tools/                        # Unreal 전용 보조 도구
-      PythonAgent/                # Client 전용 Python helper. Agents 실행 환경과 공유하지 않음. TODO: 구조 변경 및 Static으로 이동
     Docs/                         # Unreal 전용 문서
     Task-Setup.bat                # 의존성 확인
     Task-Build.bat                # C++ 컴파일
@@ -62,11 +60,10 @@ Odiro/
     internal/
       ipc/                        # IPC 전송 레이어
       protocol/                   # JSON 통신 프로토콜
-      client/                     # Client API
-      agents/                     # Agents API
-      process/                    # Simulator 등 child process 관리
-      runs/                       # 실행 상태 추적
-      appdata/                    # 로컬 데이터 관리
+      api/                        # Client, Agents, Simulator가 사용할 API
+      process/                    # Simulator 등 child process 실행, 추적, lifecycle 관리
+      workspace/                  # 사용자 project root, 파일 layout, 경로 검증 관리
+    public/                       # Bridge가 사용하는 정적 파일 (예: HTML)
     tools/
     task-setup.bat
     task-build.bat
@@ -77,6 +74,10 @@ Odiro/
     specs/                        # 사람이 읽는 공유 contract spec
     examples/                     # 예제 payload
     openapi/                      # 공개 HTTP API 명세가 필요할 경우
+
+  static/                         # --- 배포/초기화용 기본 리소스 ---
+    agents/                       # Agents 런타임 데이터
+    defaults/                     # 프로젝트 초기화 소스 bundle
 
   docs/                           # --- 리포지토리 전체 개발 문서 ---
     specs/                        # 현재 구조와 요구사항
@@ -108,57 +109,53 @@ Odiro/
 ```sh
 build/Release/
   OdiroHost.exe                   # 백그라운드 서비스
+  resources/
+    agents/                       # Agents 런타임 데이터
+    defaults/                     # 프로젝트 초기화 소스 bundle
+    policy-runtime.pyz             # 패키징된 Python 런타임
 
   Client/                         # Unreal 패키징 결과
     WindowsNoEditor/
       OdiroSim.exe
-    Static/                       # Client/Static 복사
-      PolicyRuntime/
 
   Agents/                         # Agent 런타임
     OdiroAgents.exe               # 패키징된 Python 런타임
     _internal/                    # 패키징된 내부 모듈
-    static/                       # Agents/static 복사
 ```
 
-## AppData
+## Project Structure
 
-사용자 데이터, 로그, 설정 등 런타임 생성 파일.
+한 프로젝트는 하나의 시뮬레이션 구성을 나타내며, 시나리오, 행동 정책, 실행 결과를 포함한다.
 
 ```sh
-%appdata%/Odiro/
-  templates/                    # --- 템플릿 ---
-    scenarios/                  # 시나리오 템플릿. 에디터와 Agent는 이걸 수정
-      <Scenario1>.template.json # 시나리오 구성. 랜덤 요소 넣기 가능
-    profiles/                   # 시뮬레이션 환경 프로필 설정
-      <Profile1>.json           # 기존 DeliveryBotSetup 포함
+<UserProject>/                    # 사용자 프로젝트 루트
+  setting.json                    # 프로젝트 설정. FPS, seed, episode count 등
+  profile.json                    # 시뮬레이션 환경 프로필 설정. 기존 DeliveryBotSetup 포함
 
-  experiments/                  # --- 실험 구성 ---
-    <Experiment1>/              # 폴더로 구분
-      setting.json              # 실험 설정. FPS 등
-      profile.json              # 환경 프로필 설정, 템플릿에서 복사됨
+  scenario.json                   # 편집 가능한 단일 시나리오. 랜덤 요소 가능. seed/count는 setting.json 소유
 
-      scenarios/
-        <000001>.json           # 시나리오 샘플. 시나리오 템플릿에서 샘플링된 구성. 실험 중 고정되어야 함
-        ...
+  policy/                         # 행동 정책
+    __init__.py                   # entrypoint. 지정된 인터페이스로 구현해야 함
+    <subscript>.py                # 파일 분리하고 __init__.py에서 import 가능
 
-      policy/                   # 행동 정책. 실험마다 수정
-        __init__.py             # entrypoint. 지정된 인터페이스로 구현해야 함
-        <subscript>.py          # 파일 분리하고 __init__.py에서 import 가능
+  runs/                           # --- 실행 결과 ---
+    <000001>/                     # 실행할 때 폴더 생성
+      snapshot/                   # 해당 실행에 사용된 입력 snapshot
+        setting.json
+        profile.json
+        scenario.json
+        policy/
 
-      runs/                     # --- 실행 결과 ---
-        <000001>/               # 실행할 때 폴더 생성
-          policy/               # 해당 실행에 사용된 policy snapshot 통째로 복사
+      summary.json                # 총 실행 시간, 통계 등
+      review/                     # AI 분석 결과 저장
 
-          summary.json          # 총 실행 시간, 통계 등
-          review/               # AI 분석 결과 저장
-
-          episodes/             # 에피소드마다 결과 폴더 생성
-            <000001>/
-              actions.jsonl     # 로봇의 입출력 기록 (주기마다 센서 데이터, 현재 위치, 행동 변경 등)
-              events.jsonl      # 발생 이벤트 (장애물 감지, 충돌 등)
-              trace.jsonl       # 환경 정보 기록. 로봇이 못본 데이터 분석/리플레이에 활용
-              result.json       # 실행 시간, 성공/실패, 충돌 횟수 등
-              preview.png       # 대표 이벤트 이미지
-              captures/         # 센서 데이터 이미지
+      episodes/                   # 에피소드마다 결과 폴더 생성
+        <000001>/
+          scenario.json           # snapshot/scenario.json과 setting seed로 확정한 episode scenario
+          actions.jsonl           # 로봇의 입출력 기록 (주기마다 센서 데이터, 현재 위치, 행동 변경 등)
+          events.jsonl            # 발생 이벤트 (장애물 감지, 충돌 등)
+          trace.jsonl             # 환경 정보 기록. 로봇이 못본 데이터 분석/리플레이에 활용
+          result.json             # 실행 시간, 성공/실패, 충돌 횟수 등
+          preview.png             # 대표 이벤트 이미지
+          captures/               # 센서 데이터 이미지
 ```

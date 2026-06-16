@@ -1,6 +1,11 @@
 # Profile Template
 
-경로:
+상태: 폐기.
+
+profile template을 별도 template root에서 자동 설치하는 구조는 사용하지 않는다.
+사용자가 만든 project는 [Project Profile](../experiments/profile.md)의 `<UserProject>/profile.json`을 직접 가진다.
+
+이전 경로:
 
 ```text
 templates/profiles/<Profile>.json
@@ -12,14 +17,18 @@ schema:
 "simulation_profile"
 ```
 
-상태: v1 합의. 실험에 복사될 고정 robot capability/setup profile이다.
+이전 schema:
+
+```json
+"simulation_profile"
+```
 
 ## 합의
 
-- 실험 생성 시 `experiments/<Experiment>/profile.json`으로 복사된다.
-- Scenario Sample의 `sample.source.profile_ref`와 `sample.source.profile_hash`가 이 계보를 기록한다.
-- profile 값은 실험의 고정 입력이다. 실행마다 randomize하지 않는다.
-- robot policy 코드와 policy config는 `experiments/<Experiment>/policy/`가 소유한다.
+- 최종 입력은 `<UserProject>/profile.json`이다.
+- Episode scenario의 `source.profile_ref`와 `source.profile_hash`가 run snapshot 계보를 기록한다.
+- profile 값은 project의 고정 입력이다. 실행마다 randomize하지 않는다.
+- robot policy 코드와 policy config는 `<UserProject>/policy/`가 소유한다.
 - 환경 해석 catalog(surface/prop/pedestrian catalog 등)는 profile에 넣지 않는다. [Environment Catalog](../environment-catalog.md) 또는 시스템 프롬프트 입력으로 분리한다.
 - 전역 위치/거리/크기 단위는 meter다.
 
@@ -106,7 +115,7 @@ schema:
 | 항목 | 이유 |
 | --- | --- |
 | policy 파일명/config/tuning | `policy/` package가 소유 |
-| scenario start/goal | Scenario Template/Sample의 `robot`이 소유 |
+| scenario start/goal | `<UserProject>/scenario.json`의 `robot`이 소유 |
 | surface/prop/pedestrian catalog | [Environment Catalog](../environment-catalog.md) 또는 시스템 프롬프트 입력으로 분리 |
 | LiDAR 전방 판정 snapshot | `actions.jsonl.front_half_angle_degree`가 소유 |
 | randomization range | profile 값은 실험 고정 입력 |

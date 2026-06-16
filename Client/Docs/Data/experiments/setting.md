@@ -1,24 +1,24 @@
-# Experiment Setting
+# Project Setting
 
 경로:
 
 ```text
-experiments/<Experiment>/setting.json
+<UserProject>/setting.json
 ```
 
 schema:
 
 ```json
-"experiment_setting"
+"project_setting"
 ```
 
 ## Root
 
 ```json
 {
-  "schema": "experiment_setting",
+  "schema": "project_setting",
   "version": 1,
-  "experiment_id": "exp_pinch_policy_a",
+  "project_id": "pinch_policy_a",
   "sampling": {},
   "runtime": {},
   "evaluation": {}
@@ -27,27 +27,25 @@ schema:
 
 | 필드 | 합의 |
 | --- | --- |
-| `schema` | `experiment_setting` |
+| `schema` | `project_setting` |
 | `version` | schema version |
-| `experiment_id` | 실험 식별자 |
-| `sampling` | sample 생성 조건 |
+| `project_id` | project 식별자 |
+| `sampling` | episode scenario 생성 조건 |
 | `runtime` | 실행 조건 |
 
 ## sampling
 
 | 필드 | 합의 |
 | --- | --- |
-| `scenario_template_ref` | 사용할 `templates/scenarios/*.template.json` |
-| `profile_template_ref` | 복사할 `templates/profiles/*.json` |
-| `base_seed` | sample seed 생성 기준값 |
-| `sample_count` | 생성할 scenario sample 수 |
-| `generator_version` | sample 생성기 버전 기록 |
+| `base_seed` | episode seed 생성 기준값 |
+| `episode_count` | 한 run에서 생성할 episode 수 |
+| `generator_version` | episode scenario 생성기 버전 기록 |
 
 ## runtime
 
 | 필드 | 합의 |
 | --- | --- |
-| `fixed_fps` | 실험 실행 FPS |
+| `fixed_fps` | project 실행 FPS |
 | `time_scale` | 필요 시 실행 시간 배율 |
 
 ## evaluation
@@ -60,4 +58,5 @@ schema:
 
 ## 위치 결정
 
-- sample 생성 수와 seed는 `setting.sampling` 소유다.
+- scenario의 랜덤 range/choices는 `scenario.json`에 남기고, seed와 episode 수는 `setting.sampling` 소유다.
+- episode seed는 `base_seed`와 `episode_id`에서 deterministic하게 파생한다.

@@ -43,7 +43,7 @@ template에 들어갈 보도 폭, 장애물 수, 보행자 수, 속도 범위 �
 
 ### `TemplateJsonWriter`
 
-`TemplatePlan`을 `scenario.template.json` 형태의 dict로 변환합니다. 이 단계는 RunQueue, seed, episode sample을 생성하지 않습니다.
+`TemplatePlan`을 project `scenario.json` 후보 dict로 변환합니다. 이 단계는 RunQueue, seed, episode scenario를 생성하지 않습니다.
 
 ### `TemplateValidator`
 
@@ -92,11 +92,11 @@ WorkspaceScanner
 
 ### `WorkspaceScanner`
 
-configured experiments root 하위 파일을 스캔합니다. 숨김 파일과 과도하게 큰 파일은 제외하고 warning으로 기록합니다.
+configured user project root 하위 파일을 스캔합니다. 숨김 파일과 과도하게 큰 파일은 제외하고 warning으로 기록합니다.
 
 ### `ArtifactClassifier`
 
-파일 경로와 이름으로 artifact type을 분류합니다. 지원 타입은 `experiment_setting`, `experiment_profile`, `experiment_policy_config`, `experiment_policy_source`, `scenario_sample`, `run_summary`, `run_policy_snapshot`, `episode_result`, `episode_events`, `episode_actions`, `episode_trace`, `episode_preview`, `episode_capture`, `unknown`입니다.
+파일 경로와 이름으로 artifact type을 분류합니다. 최종 user project 계약의 지원 타입은 `project_setting`, `project_profile`, `project_policy_config`, `project_policy_source`, `scenario`, `episode_scenario`, `run_summary`, `run_policy_snapshot`, `episode_result`, `episode_events`, `episode_actions`, `episode_trace`, `episode_preview`, `episode_capture`, `unknown`입니다. 현재 구현에 남은 `experiment_*`/`scenario_sample` 이름은 legacy compatibility로만 취급합니다.
 
 ### `ArtifactParser`
 
@@ -116,7 +116,7 @@ episode metric을 run 단위로 집계합니다. `episode_count`, `success_count
 
 ### `ExperimentAggregator`
 
-run summary를 experiment 단위로 묶습니다. 전체 success rate와 main failure patterns를 계산하고, 여러 run이 있으면 간단한 trend를 기록합니다.
+run summary를 project 단위로 묶습니다. 전체 success rate와 main failure patterns를 계산하고, 여러 run이 있으면 간단한 trend를 기록합니다.
 
 ### `FailurePatternDetector`
 
@@ -153,7 +153,7 @@ LLM mode는 summarized context만 전달합니다.
 전달 대상:
 
 * workspace summary
-* experiment summaries
+* project summaries
 * run aggregates
 * detected failure patterns
 * representative evidence summary

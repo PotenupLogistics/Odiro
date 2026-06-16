@@ -1,8 +1,12 @@
 # Input - RunQueue JSON
 
+상태: legacy contract. 최종 실행 계약에서는 사용하지 않는다.
+새 실행 입력은 사용자가 직접 만든 `<UserProject>/scenario.json`, `<UserProject>/setting.json`, `<UserProject>/profile.json`, `<UserProject>/policy/`에서 파생한다.
+RunQueue adapter는 만들지 않는다. 기존 reader/writer는 project runner 입력 생성으로 대체한 뒤 제거한다.
+
 # 목적
 
-RunQueue JSON은 여러 EpisodeSetup/DeliveryBotSetup pair를 순서대로 실행하기 위한 입력이다. 샘플 경로는 `Json/Input/EpisodeRunQueueSample.json`이다.
+RunQueue JSON은 기존 시스템에서 여러 EpisodeSetup/DeliveryBotSetup pair를 순서대로 실행하기 위한 입력이었다. 샘플 경로는 `Json/Input/EpisodeRunQueueSample.json`이다. 새 구조에서는 한 project가 하나의 scenario를 가지며, run 생성 시 seed로 episode scenario를 만든다.
 
 # pair 개념
 
@@ -65,7 +69,7 @@ Runner는 더 이상 기본 DeliveryBotSetup 파일로 fallback하지 않는다.
 # 사용 규칙
 
 - `pair_id`는 batch 안에서 unique하게 두는 것을 권장한다.
-- 경로는 프로젝트 기준 상대 경로를 사용한다.
+- 경로는 legacy client project 기준 상대 경로를 사용했다.
 - Input JSON은 `Json/Input` 아래에 둔다.
 - EvaluationReport 자동 저장이 켜져 있으면 결과는 `Json/Output` 아래에 저장된다.
 - pair 하나가 compile/setup에 실패해도 Runner는 기록을 남기고 다음 pair로 넘어갈 수 있다.

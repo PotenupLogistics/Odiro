@@ -3,7 +3,7 @@
 경로:
 
 ```text
-experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/trace.jsonl
+<UserProject>/runs/<RunId>/episodes/<EpisodeId>/trace.jsonl
 ```
 
 schema:

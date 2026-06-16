@@ -3,7 +3,7 @@
 경로:
 
 ```text
-experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/result.json
+<UserProject>/runs/<RunId>/episodes/<EpisodeId>/result.json
 ```
 
 schema:
@@ -27,7 +27,7 @@ schema:
 {
   "schema": "episode_result",
   "version": 1,
-  "sample": {},
+  "episode": {},
   "run": {},
   "summary": {},
   "metrics": {},
@@ -35,24 +35,23 @@ schema:
 }
 ```
 
-## sample
+## episode
 
 | 필드 | 합의 |
 | --- | --- |
-| `sample_id` | 실행한 sample id |
+| `episode_id` | 실행한 episode id |
 | `scenario_id` | scenario 표시 식별자 |
-| `template_id` | 원본 template id |
-| `template_hash` | 원본 template hash |
+| `scenario_hash` | episode scenario hash |
+| `scenario_source_hash` | snapshot scenario hash |
 | `profile_hash` | profile hash |
 | `setting_hash` | setting hash |
-| `seed` | sample seed |
+| `seed` | episode seed |
 
 ## run
 
 | 필드 | 합의 |
 | --- | --- |
 | `run_id` | run 식별자 |
-| `episode_id` | episode 식별자 |
 | `policy_snapshot_hash` | opaque policy snapshot hash |
 
 ## summary

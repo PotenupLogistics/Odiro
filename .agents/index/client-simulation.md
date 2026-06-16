@@ -8,6 +8,8 @@ paths:
   - Client/Source/OdiroSim/Private/Episode/**
   - Client/Source/OdiroSim/Public/Shared/**
   - Client/Source/OdiroSim/Private/Shared/**
+  - Client/Docs/README.md
+  - Client/Docs/Data/**
   - Client/Json/Input/**
   - contracts/specs/**
 entry:
@@ -30,15 +32,15 @@ entry:
   - contracts/specs
 keep:
   - Parser-only samples/schemas owned only by Client stay in Client.
-  - Scenario setup/run queue samples in Client/Json/Input are client-owned examples; shared contract truth stays in contracts/specs.
-  - Scenario template/sample authoring types stay separate from runtime WorldSpec and actor-spawn payload types.
-  - ScenarioSampleWorldSpecAdapter is the thin scenario_sample to runtime WorldSpec boundary; do not fold it into the legacy runtime ScenarioCompiler.
-  - ScenarioAuthoringSubsystem stores the editor draft as scenario_template and builds runtime WorldSpec only as a preview/compatibility projection.
+  - Scenario setup/run queue samples in Client/Json/Input are legacy client-owned examples until the user project migration removes them.
+  - Final user project contract uses one editable `<UserProject>/scenario.json`; do not add new user-facing template/sample split.
+  - Episode scenario files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
+  - Scenario authoring/runtime projection stays separate from runtime WorldSpec and actor-spawn payload types.
 verify:
   - contract specs vs sample JSON alignment
-  - scenario_template/scenario_sample docs vs Client shared schema type alignment
-  - ScenarioTemplateJson/ScenarioSampleJson parse, version mismatch, and round-trip automation tests
-  - ScenarioSampleWorldSpecAdapter automation tests and OdiroSimEditor build after adapter/editor draft changes
+  - `scenario`/`episode_scenario` docs vs Client shared schema type alignment
+  - Scenario parse, version mismatch, episode scenario generation, and round-trip automation tests
+  - Scenario-to-WorldSpec adapter automation tests and OdiroSimEditor build after adapter/editor draft changes
   - focused automation tests for Scenario/Episode changes
   - Client/Task-RunPreview.bat smoke when wrapper supports the changed mode
 related:

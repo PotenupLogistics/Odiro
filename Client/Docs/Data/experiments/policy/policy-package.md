@@ -3,7 +3,7 @@
 경로:
 
 ```text
-experiments/<Experiment>/policy/
+<UserProject>/policy/
 ```
 
 형식:
@@ -19,7 +19,7 @@ Python package + config
 - experiment에서 실행할 행동 정책 원본이다.
 - `__init__.py`가 runtime entrypoint다.
 - 보조 Python 파일과 policy가 해석하는 설정 파일을 함께 둘 수 있다.
-- run 시작 시 이 폴더는 `runs/<RunId>/policy/`로 snapshot된다.
+- run 시작 시 이 폴더는 `runs/<RunId>/snapshot/policy/`로 snapshot된다.
 
 ## 현재 확정된 Schema
 

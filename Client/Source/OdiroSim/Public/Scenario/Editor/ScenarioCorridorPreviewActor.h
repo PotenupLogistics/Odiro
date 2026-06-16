@@ -67,8 +67,13 @@ private:
 	// Rebuilds the preview spline points from template-local meters.
 	void RebuildAxisSpline(const TArray<FVector2D>& pointsMeters);
 
-	// Adds one visual lane strip across the full current axis.
-	void AddLaneStrip(const FString& laneId, const FString& surfaceId, double minOffsetMeters, double maxOffsetMeters);
+	// 현재 axis 전체에 하나의 lane strip을 추가하고 필요하면 중심 Z offset을 적용.
+	void AddLaneStrip(
+		const FString& laneId,
+		const FString& surfaceId,
+		double minOffsetMeters,
+		double maxOffsetMeters,
+		double surfaceZOffsetCm);
 
 	// Resolves fixed/range template numbers to a deterministic editor-preview value.
 	static double ResolvePreviewNumber(const FScenarioTemplateNumberValue& value, double defaultValue);

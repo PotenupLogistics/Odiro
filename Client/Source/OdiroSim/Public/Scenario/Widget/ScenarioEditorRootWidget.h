@@ -14,6 +14,7 @@ class UScenarioEditorToolbarWidget;
 class UScenarioLlmPromptWidget;
 class UScenarioPlaceableComponent;
 class UScenarioPlaceableContextMenuWidget;
+class UScenarioPlaceableDetailsWidget;
 class UWidget;
 
 UCLASS(BlueprintType, Blueprintable)
@@ -26,15 +27,31 @@ public:
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& myGeometry, float inDeltaTime) override;
 
+	// Controls whether the asset palette is shown immediately when auto reveal is disabled.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root")
 	bool bShowAssetPaletteOnEditorSessionStart = true;
 
+	// Controls whether the asset palette appears while the cursor is near the bottom edge.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root")
+	bool bAutoRevealAssetPaletteOnBottomEdge = true;
+
+	// Bottom-edge distance that reveals the asset palette.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root", meta = (ClampMin = "0.0"))
+	float AssetPaletteRevealBottomEdgePixels = 24.0f;
+
+	// Bottom-edge distance that keeps the asset palette visible after it has opened.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root", meta = (ClampMin = "0.0"))
+	float AssetPaletteHideBottomEdgePixels = 96.0f;
+
+	// Controls whether the LLM prompt panel appears while the cursor is near the right edge.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root")
 	bool bAutoRevealLlmPanelOnRightEdge = true;
 
+	// Right-edge distance that reveals the LLM prompt panel.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root", meta = (ClampMin = "0.0"))
 	float LlmPanelRevealRightEdgePixels = 24.0f;
 
+	// Right-edge distance that keeps the LLM prompt panel visible after it has opened.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root", meta = (ClampMin = "0.0"))
 	float LlmPanelHideRightEdgePixels = 96.0f;
 
@@ -56,8 +73,9 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UWidget> PlaceableContextMenuPanel;
 
+	// Legacy bind name used as the placeable details widget slot until the UMG tree is renamed.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
-	TObjectPtr<UScenarioPlaceableContextMenuWidget> PlaceableContextMenuWidget;
+	TObjectPtr<UScenarioPlaceableDetailsWidget> PlaceableContextMenuWidget;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UWidget> AssetPalettePanel;
@@ -77,9 +95,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void HideAssetPaletteWidget();
 
+	// Shows the selection details panel for a placeable-backed editor item.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
+	UScenarioPlaceableDetailsWidget* ShowPlaceableDetails(UScenarioPlaceableComponent* selectedPlaceable);
+
+	// Hides the selection details panel and clears the selected placeable reference.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
+	void HidePlaceableDetails();
+
+	// Legacy compatibility wrapper for old context-menu callers.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	UScenarioPlaceableContextMenuWidget* ShowPlaceableContextMenu(UScenarioPlaceableComponent* selectedPlaceable);
 
+	// Legacy compatibility wrapper for old context-menu callers.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void HidePlaceableContextMenu();
 
@@ -102,8 +130,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Root")
 	UScenarioEditorToolbarWidget* GetToolbarWidget() const { return ToolbarWidget.Get(); }
 
+	// Returns the active placeable details widget, including legacy context-menu UMG bindings.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Root")
-	UScenarioPlaceableContextMenuWidget* GetPlaceableContextMenuWidget() const { return PlaceableContextMenuWidget.Get(); }
+	UScenarioPlaceableDetailsWidget* GetPlaceableDetailsWidget() const { return PlaceableContextMenuWidget.Get(); }
+
+	// Legacy compatibility wrapper for old context-menu callers.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Root")
+	UScenarioPlaceableContextMenuWidget* GetPlaceableContextMenuWidget() const;
 
 private:
 	UFUNCTION()
@@ -122,10 +155,14 @@ private:
 	void BindEditorLaunchSubsystem();
 	void UnbindEditorLaunchSubsystem();
 	void HandleAutoStartCompleted(bool bLoadedExistingScenario);
-	UWidget* ResolvePlaceableContextMenuVisibilityTarget() const;
+	UWidget* ResolvePlaceableDetailsVisibilityTarget() const;
 	UWidget* ResolveAssetPaletteVisibilityTarget() const;
 	UWidget* ResolveLlmPanelVisibilityTarget() const;
+	// Applies asset palette visibility without rebuilding it on every tick.
+	void SetAssetPaletteVisible(bool bVisible, bool bRebuildWhenShowing = false);
 	void SetPanelVisibility(UWidget* targetWidget, bool bVisible) const;
+	// Checks whether the cursor is near enough to the bottom edge to reveal the asset palette.
+	bool ShouldRevealAssetPaletteFromMouseEdge() const;
 	bool ShouldRevealLlmPanelFromMouseEdge() const;
 	bool IsMouseOverWidget(const UWidget* targetWidget) const;
 

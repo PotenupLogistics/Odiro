@@ -62,6 +62,12 @@ keep:
   - EpisodeRunResultJson owns canonical run outputs: summary.json, episodes/<SampleId>/result.json, and episodes/<SampleId>/events.jsonl.
   - ScenarioRunnerSubsystem writes only canonical `summary.json`, `result.json`, and `events.jsonl` outputs under RunOutputDirectory.
   - ScenarioAuthoringSubsystem stores the editor draft as scenario_template, exposes Corridor axis/profile/segment authoring APIs, spawns editor-only Corridor handles and spline lane preview actors, and builds runtime WorldSpec only as a preview/compatibility projection.
+  - ScenarioAuthoringSubsystem exposes `RefreshEditorPreviewFromDraft` for rebuilding generated preview actors after catalog or material edits.
+  - ScenarioCorridorPreviewActor renders blocked Corridor surfaces as 2m spline collision strips using the Blocked profile so robot sensors can detect wall/building lanes.
+  - ScenarioCorridorPreviewActor renders curb_side lane strips 15cm below the walkway to show the curb-side grade separation.
+  - ScenarioCorridorPreviewActor keeps non-blocking Corridor surface strips at least 20cm thick so adjacent Z-offset lanes have no vertical gap.
+  - ScenarioAuthoringSubsystem normalizes static obstacle editor transforms to the Corridor surface Z offset before preview validation, spawn, update, and editor-view rebuild.
+  - ScenarioEditorRootWidget owns edge-revealed editor panels: asset palette from the bottom edge and LLM prompt panel from the right edge.
   - ScenarioPlaceableDetailsWidget owns the placeable selection details panel; ScenarioPlaceableContextMenuWidget remains only as a legacy UMG compatibility wrapper.
 verify:
   - contract specs vs sample JSON alignment

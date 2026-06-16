@@ -8,6 +8,7 @@
 class UMaterialInterface;
 class USceneComponent;
 class UScenarioPlaceableComponent;
+class USplineMeshComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
 
@@ -24,9 +25,13 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Corridor")
 	TObjectPtr<USceneComponent> SceneRoot;
 
-	// Mesh that provides both visible feedback and selectable trace geometry.
+	// Sphere mesh that provides visible feedback and selectable trace geometry for vertex handles.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Corridor")
 	TObjectPtr<UStaticMeshComponent> HandleMeshComponent;
+
+	// Spline-deformed cylinder mesh that provides visible feedback and selectable trace geometry for segment handles.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Corridor")
+	TObjectPtr<USplineMeshComponent> SegmentSplineMeshComponent;
 
 	// Placeable identity that routes selection and gizmo updates back to the authoring subsystem.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Corridor")
@@ -48,7 +53,11 @@ public:
 	void ConfigureVertexHandle(int32 InVertexIndex, const FString& InInstanceId, const FTransform& InTransform);
 
 	// Configure this actor as a draggable corridor polyline segment handle.
-	void ConfigureSegmentHandle(int32 InSegmentIndex, const FString& InInstanceId, const FTransform& InTransform);
+	void ConfigureSegmentHandle(
+		int32 InSegmentIndex,
+		const FString& InInstanceId,
+		const FTransform& InTransform,
+		double InSegmentLengthCm);
 
 private:
 	// Mesh loaded from engine content for vertex handles.
@@ -62,6 +71,9 @@ private:
 	// Material loaded from engine content for lightweight editor visualization.
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> HandleMaterial;
+
+	// Current segment handle length used when rebuilding the spline cylinder.
+	double SegmentLengthCm = 0.0;
 
 	// Applies mesh, material, and editable flags for the current handle type.
 	void ApplyHandleVisual();

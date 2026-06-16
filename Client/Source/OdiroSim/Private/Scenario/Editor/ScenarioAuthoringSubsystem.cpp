@@ -50,7 +50,8 @@ namespace
 	const double CorridorVertexHandleHeightCm = 32.0;
 	const double CorridorSegmentHandleHeightCm = 18.0;
 	const double CorridorVertexHandleScale = 0.28;
-	const double CorridorSegmentHandleScale = 0.24;
+	// Static obstacle 배치는 Corridor preview surface와 같은 curb-side 하강값을 사용.
+	const double CurbSideSurfaceZOffsetCm = -15.0;
 
 	FScenarioParamValue MakeStringParamValue(const FString& value)
 	{
@@ -219,6 +220,19 @@ bool UScenarioAuthoringSubsystem::ImportCompiledWorldSpec(
 	return RebuildEditorViewFromDraft(outDiagnostics);
 }
 
+bool UScenarioAuthoringSubsystem::RefreshEditorPreviewFromDraft(TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+
+	if (IsDraftScenarioTemplateEmpty())
+	{
+		InitializeDraftDefaults();
+		return RebuildEditorViewFromDraft(outDiagnostics);
+	}
+
+	return RefreshGeneratedEditorPreviewActorsFromDraft(outDiagnostics);
+}
+
 void UScenarioAuthoringSubsystem::GetStaticObstaclePaletteEntries(TArray<FScenarioStaticObstaclePropEntry>& outEntries) const
 {
 	outEntries.Reset();
@@ -247,7 +261,15 @@ void UScenarioAuthoringSubsystem::GetCorridorSurfaceEntries(TArray<FScenarioCorr
 		{
 			if (!entry.SurfaceId.IsNone() && !seenSurfaceIds.Contains(entry.SurfaceId))
 			{
-				outEntries.Add(entry);
+				FScenarioCorridorSurfaceEntry resolvedEntry;
+				if (surfaceCatalog->FindSurfaceEntryById(entry.SurfaceId, resolvedEntry))
+				{
+					outEntries.Add(resolvedEntry);
+				}
+				else
+				{
+					outEntries.Add(entry);
+				}
 				seenSurfaceIds.Add(entry.SurfaceId);
 			}
 		}
@@ -557,6 +579,19 @@ bool UScenarioAuthoringSubsystem::CanPlaceStaticObstacle(
 	return CanPlaceStaticObstacleInternal(propId, transform, FString(), outFailureReason);
 }
 
+FTransform UScenarioAuthoringSubsystem::ResolveStaticObstaclePlacementTransform(const FTransform& transform) const
+{
+	FTransform resolvedTransform = transform;
+	FVector locationCm = transform.GetLocation();
+	double surfaceZOffsetCm = 0.0;
+	if (TryResolveCorridorSurfaceZOffsetCm(locationCm, surfaceZOffsetCm))
+	{
+		locationCm.Z = surfaceZOffsetCm;
+		resolvedTransform.SetLocation(locationCm);
+	}
+	return resolvedTransform;
+}
+
 bool UScenarioAuthoringSubsystem::CanPlaceEditorGroundActor(
 	const FTransform& transform,
 	FString& outFailureReason) const
@@ -635,18 +670,14 @@ bool UScenarioAuthoringSubsystem::CanPlaceStaticObstacleInternal(
 	}
 
 	const FVector2D candidateHalfExtent = ComputePlacementHalfExtent2D(candidateProp);
-	const FVector candidateLocation = transform.GetLocation();
-	if (candidateLocation.Z < -KINDA_SMALL_NUMBER)
+	const FTransform candidateTransform = ResolveStaticObstaclePlacementTransform(transform);
+	const FVector candidateLocation = candidateTransform.GetLocation();
+	double surfaceZOffsetCm = 0.0;
+	if (!TryResolveCorridorSurfaceZOffsetCm(transform.GetLocation(), surfaceZOffsetCm)
+		&& (candidateLocation.Z < -KINDA_SMALL_NUMBER || candidateLocation.Z > StaticObstacleGroundZToleranceCm))
 	{
 		outFailureReason = FString::Printf(
-			TEXT("Placement location Z must be 0.00 cm or higher. Current Z: %.2f."),
-			candidateLocation.Z);
-		return false;
-	}
-	if (candidateLocation.Z > StaticObstacleGroundZToleranceCm)
-	{
-		outFailureReason = FString::Printf(
-			TEXT("Placement location Z must be %.2f cm or lower. Current Z: %.2f."),
+			TEXT("Placement location Z must be between 0.00 cm and %.2f cm. Current Z: %.2f."),
 			StaticObstacleGroundZToleranceCm,
 			candidateLocation.Z);
 		return false;
@@ -820,7 +851,8 @@ bool UScenarioAuthoringSubsystem::UpdateStaticObstacleTransform(
 	const FTransform& transform,
 	FString& outFailureReason)
 {
-	if (!CanUpdateStaticObstacleTransform(instanceId, transform, outFailureReason))
+	const FTransform resolvedTransform = ResolveStaticObstaclePlacementTransform(transform);
+	if (!CanUpdateStaticObstacleTransform(instanceId, resolvedTransform, outFailureReason))
 	{
 		return false;
 	}
@@ -842,9 +874,9 @@ bool UScenarioAuthoringSubsystem::UpdateStaticObstacleTransform(
 	}
 
 	const FName propId(*placement->PropId);
-	*placement = MakeStaticObstaclePlacement(instanceId, propId, transform);
-	record->Transform = transform;
-	actor->SetActorTransform(transform, false, nullptr, ETeleportType::TeleportPhysics);
+	*placement = MakeStaticObstaclePlacement(instanceId, propId, resolvedTransform);
+	record->Transform = resolvedTransform;
+	actor->SetActorTransform(resolvedTransform, false, nullptr, ETeleportType::TeleportPhysics);
 
 	bDirty = true;
 
@@ -853,8 +885,8 @@ bool UScenarioAuthoringSubsystem::UpdateStaticObstacleTransform(
 		Verbose,
 		TEXT("Updated static obstacle transform | InstanceId: %s, Location: %s, Yaw: %.2f"),
 		*instanceId,
-		*transform.GetLocation().ToCompactString(),
-		transform.Rotator().Yaw);
+		*resolvedTransform.GetLocation().ToCompactString(),
+		resolvedTransform.Rotator().Yaw);
 
 	return true;
 }
@@ -1262,8 +1294,9 @@ bool UScenarioAuthoringSubsystem::AddStaticObstacleInternal(
 	outActor = nullptr;
 	outSpec = FScenarioPlaceableInstanceSpec();
 
+	const FTransform resolvedTransform = ResolveStaticObstaclePlacementTransform(transform);
 	FString failureReason;
-	if (!CanPlaceStaticObstacle(propId, transform, failureReason))
+	if (!CanPlaceStaticObstacle(propId, resolvedTransform, failureReason))
 	{
 		return false;
 	}
@@ -1274,8 +1307,8 @@ bool UScenarioAuthoringSubsystem::AddStaticObstacleInternal(
 	}
 
 	const FString instanceId = GenerateStaticObstacleInstanceId();
-	outSpec = MakeStaticObstacleSpec(instanceId, propId, transform);
-	const FScenarioTemplateObstaclePlacement placement = MakeStaticObstaclePlacement(instanceId, propId, transform);
+	outSpec = MakeStaticObstacleSpec(instanceId, propId, resolvedTransform);
+	const FScenarioTemplateObstaclePlacement placement = MakeStaticObstaclePlacement(instanceId, propId, resolvedTransform);
 
 	if (!SpawnEditorStaticObstacleActor(outSpec, outActor, failureReason))
 	{
@@ -1792,7 +1825,7 @@ FTransform UScenarioAuthoringSubsystem::MakeCorridorSegmentHandleTransform(
 	return FTransform(
 		FRotator(0.0, yawDegrees, 0.0),
 		FVector(midpointMeters.X / CentimetersToMeters, midpointMeters.Y / CentimetersToMeters, CorridorSegmentHandleHeightCm),
-		FVector(CorridorSegmentHandleScale));
+		FVector::OneVector);
 }
 
 bool UScenarioAuthoringSubsystem::CommitCorridorDraftEdit(
@@ -2306,6 +2339,42 @@ bool UScenarioAuthoringSubsystem::TryResolveCorridorPoseMeters(
 	return true;
 }
 
+double UScenarioAuthoringSubsystem::ResolveCorridorSurfaceZOffsetCm(double offsetMeters) const
+{
+	const double walkwayWidthMeters = GetFixedTemplateNumber(DraftScenarioTemplate.Corridor.WalkwayWidthMeters, 3.0);
+	const double halfWalkwayWidthMeters = FMath::Max(walkwayWidthMeters, 0.0) * 0.5;
+	if (offsetMeters <= halfWalkwayWidthMeters + KINDA_SMALL_NUMBER)
+	{
+		return 0.0;
+	}
+
+	double curbSideWidthMeters = 0.0;
+	for (const FScenarioTemplateLaneRule& laneRule : DraftScenarioTemplate.Corridor.CurbSide)
+	{
+		curbSideWidthMeters += FMath::Max(GetFixedTemplateNumber(laneRule.WidthMeters, 0.0), 0.0);
+	}
+
+	return curbSideWidthMeters > KINDA_SMALL_NUMBER ? CurbSideSurfaceZOffsetCm : 0.0;
+}
+
+bool UScenarioAuthoringSubsystem::TryResolveCorridorSurfaceZOffsetCm(
+	const FVector& locationCm,
+	double& outSurfaceZOffsetCm) const
+{
+	outSurfaceZOffsetCm = 0.0;
+
+	double alongMeters = 0.0;
+	double offsetMeters = 0.0;
+	FString segmentId;
+	if (!TryProjectLocationToCorridor(locationCm, alongMeters, offsetMeters, segmentId))
+	{
+		return false;
+	}
+
+	outSurfaceZOffsetCm = ResolveCorridorSurfaceZOffsetCm(offsetMeters);
+	return true;
+}
+
 UScenarioCompiler* UScenarioAuthoringSubsystem::CreateScenarioCompiler() const
 {
 	UScenarioCompiler* compiler = NewObject<UScenarioCompiler>();
@@ -2785,7 +2854,10 @@ FScenarioPlaceableInstanceSpec UScenarioAuthoringSubsystem::MakeStaticObstacleSp
 	FVector locationCm(alongMeters / CentimetersToMeters, offsetMeters / CentimetersToMeters, 0.0);
 	if (TryResolveCorridorPoseMeters(alongMeters, offsetMeters, pointMeters, axisYawDegrees))
 	{
-		locationCm = FVector(pointMeters.X / CentimetersToMeters, pointMeters.Y / CentimetersToMeters, 0.0);
+		locationCm = FVector(
+			pointMeters.X / CentimetersToMeters,
+			pointMeters.Y / CentimetersToMeters,
+			ResolveCorridorSurfaceZOffsetCm(offsetMeters));
 	}
 	spec.Transform = FTransform(FRotator(0.0, FRotator::ClampAxis(axisYawDegrees + localYawDegrees), 0.0), locationCm);
 	return spec;
@@ -2979,9 +3051,12 @@ bool UScenarioAuthoringSubsystem::RefreshGeneratedEditorPreviewActorsFromDraft(T
 			continue;
 		}
 
+		FScenarioPlaceableInstanceSpec resolvedSpec = spec;
+		resolvedSpec.Transform = ResolveStaticObstaclePlacementTransform(spec.Transform);
+
 		AScenarioStaticObstacle* spawnedActor = nullptr;
 		FString failureReason;
-		if (!SpawnEditorStaticObstacleActor(spec, spawnedActor, failureReason))
+		if (!SpawnEditorStaticObstacleActor(resolvedSpec, spawnedActor, failureReason))
 		{
 			outDiagnostics.Add(FString::Printf(
 				TEXT("Failed to create editor view for static obstacle '%s': %s"),
@@ -2992,9 +3067,9 @@ bool UScenarioAuthoringSubsystem::RefreshGeneratedEditorPreviewActorsFromDraft(T
 		}
 
 		FScenarioStaticObstaclePropEntry propEntry;
-		if (TryFindStaticObstacleProp(FName(*spec.AssetId), propEntry))
+		if (TryFindStaticObstacleProp(FName(*resolvedSpec.AssetId), propEntry))
 		{
-			AddStaticObstacleViewRecord(spec, propEntry, spawnedActor);
+			AddStaticObstacleViewRecord(resolvedSpec, propEntry, spawnedActor);
 		}
 	}
 
@@ -3136,7 +3211,8 @@ bool UScenarioAuthoringSubsystem::SpawnCorridorHandleActors(TArray<FString>& out
 		handleActor->ConfigureSegmentHandle(
 			segmentIndex,
 			handleId,
-			MakeCorridorSegmentHandleTransform(pointsMeters[segmentIndex], pointsMeters[segmentIndex + 1]));
+			MakeCorridorSegmentHandleTransform(pointsMeters[segmentIndex], pointsMeters[segmentIndex + 1]),
+			(pointsMeters[segmentIndex + 1] - pointsMeters[segmentIndex]).Size() / CentimetersToMeters);
 		CorridorHandleActors.Add(handleId, handleActor);
 	}
 
@@ -3175,7 +3251,8 @@ void UScenarioAuthoringSubsystem::SyncCorridorHandleActors()
 				(*handleActor)->ConfigureSegmentHandle(
 					segmentIndex,
 					handleId,
-					MakeCorridorSegmentHandleTransform(pointsMeters[segmentIndex], pointsMeters[segmentIndex + 1]));
+					MakeCorridorSegmentHandleTransform(pointsMeters[segmentIndex], pointsMeters[segmentIndex + 1]),
+					(pointsMeters[segmentIndex + 1] - pointsMeters[segmentIndex]).Size() / CentimetersToMeters);
 			}
 		}
 	}

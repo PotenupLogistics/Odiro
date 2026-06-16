@@ -102,6 +102,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
 	bool ImportCompiledWorldSpec(const FScenarioWorldSpec& worldSpec, TArray<FString>& outDiagnostics);
 
+	// 현재 draft에서 생성 preview actor를 다시 만들며 가능하면 Corridor authoring handle은 유지.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Preview")
+	bool RefreshEditorPreviewFromDraft(TArray<FString>& outDiagnostics);
+
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Palette")
 	void GetStaticObstaclePaletteEntries(TArray<FScenarioStaticObstaclePropEntry>& outEntries) const;
 
@@ -167,6 +171,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool CanPlaceStaticObstacle(FName propId, const FTransform& transform, FString& outFailureReason) const;
+
+	// Static obstacle 배치 transform을 현재 Corridor surface Z offset에 맞게 보정.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
+	FTransform ResolveStaticObstaclePlacementTransform(const FTransform& transform) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool CanPlaceEditorGroundActor(const FTransform& transform, FString& outFailureReason) const;
@@ -420,6 +428,10 @@ private:
 		double offsetMeters,
 		FVector2D& outPointMeters,
 		double& outYawDegrees) const;
+	// Corridor offset이 속한 surface band의 Z offset을 계산.
+	double ResolveCorridorSurfaceZOffsetCm(double offsetMeters) const;
+	// World 위치가 놓일 Corridor surface의 Z offset을 계산.
+	bool TryResolveCorridorSurfaceZOffsetCm(const FVector& locationCm, double& outSurfaceZOffsetCm) const;
 	// Draft template을 editor preview용 world spec으로 투영하고, 실패 시 compatibility projection으로 대체함.
 	FScenarioWorldSpec BuildDraftWorldSpecForPreview(TArray<FString>* outDiagnostics = nullptr) const;
 	// 기존 fixed obstacle/robot marker projection을 유지하는 fallback preview 경로임.

@@ -10,6 +10,7 @@
 #include "Scenario/Widget/ScenarioAssetPaletteWidget.h"
 #include "Scenario/Widget/ScenarioEditorToolbarWidget.h"
 #include "Scenario/Widget/ScenarioPlaceableContextMenuWidget.h"
+#include "Scenario/Widget/ScenarioPlaceableDetailsWidget.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
@@ -21,7 +22,7 @@ void UScenarioEditorRootWidget::NativeConstruct()
 	Super::NativeConstruct();
 
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-	HidePlaceableContextMenu();
+	HidePlaceableDetails();
 	HideAssetPaletteWidget();
 	SetLlmPanelVisible(false);
 	BindEditorModeButtons();
@@ -44,6 +45,10 @@ void UScenarioEditorRootWidget::NativeTick(const FGeometry& myGeometry, const fl
 	if (bAutoRevealLlmPanelOnRightEdge)
 	{
 		SetLlmPanelVisible(ShouldRevealLlmPanelFromMouseEdge());
+	}
+	if (bAutoRevealAssetPaletteOnBottomEdge)
+	{
+		SetAssetPaletteVisible(ShouldRevealAssetPaletteFromMouseEdge(), true);
 	}
 
 	// keyboard toggle 등 버튼 외 경로로 view mode가 바뀐 경우를 따라잡음.
@@ -70,40 +75,55 @@ UScenarioAssetPaletteWidget* UScenarioEditorRootWidget::ShowAssetPaletteWidget()
 	}
 
 	AssetPaletteWidget->RebuildPalette();
-	SetPanelVisibility(ResolveAssetPaletteVisibilityTarget(), true);
-	SetPanelVisibility(AssetPaletteWidget.Get(), true);
+	SetAssetPaletteVisible(true);
 	return AssetPaletteWidget.Get();
 }
 
 void UScenarioEditorRootWidget::HideAssetPaletteWidget()
 {
-	SetPanelVisibility(ResolveAssetPaletteVisibilityTarget(), false);
-	SetPanelVisibility(AssetPaletteWidget.Get(), false);
+	SetAssetPaletteVisible(false);
 }
 
-UScenarioPlaceableContextMenuWidget* UScenarioEditorRootWidget::ShowPlaceableContextMenu(
+UScenarioPlaceableDetailsWidget* UScenarioEditorRootWidget::ShowPlaceableDetails(
 	UScenarioPlaceableComponent* selectedPlaceable)
 {
 	if (!PlaceableContextMenuWidget || !selectedPlaceable)
 	{
-		HidePlaceableContextMenu();
+		HidePlaceableDetails();
 		return nullptr;
 	}
 
 	PlaceableContextMenuWidget->SetSelectedPlaceable(selectedPlaceable);
-	SetPanelVisibility(ResolvePlaceableContextMenuVisibilityTarget(), true);
+	SetPanelVisibility(ResolvePlaceableDetailsVisibilityTarget(), true);
 	SetPanelVisibility(PlaceableContextMenuWidget.Get(), true);
 	return PlaceableContextMenuWidget.Get();
 }
 
-void UScenarioEditorRootWidget::HidePlaceableContextMenu()
+void UScenarioEditorRootWidget::HidePlaceableDetails()
 {
 	if (PlaceableContextMenuWidget)
 	{
 		PlaceableContextMenuWidget->SetSelectedPlaceable(nullptr);
 	}
-	SetPanelVisibility(ResolvePlaceableContextMenuVisibilityTarget(), false);
+	SetPanelVisibility(ResolvePlaceableDetailsVisibilityTarget(), false);
 	SetPanelVisibility(PlaceableContextMenuWidget.Get(), false);
+}
+
+UScenarioPlaceableContextMenuWidget* UScenarioEditorRootWidget::ShowPlaceableContextMenu(
+	UScenarioPlaceableComponent* selectedPlaceable)
+{
+	ShowPlaceableDetails(selectedPlaceable);
+	return Cast<UScenarioPlaceableContextMenuWidget>(PlaceableContextMenuWidget.Get());
+}
+
+void UScenarioEditorRootWidget::HidePlaceableContextMenu()
+{
+	HidePlaceableDetails();
+}
+
+UScenarioPlaceableContextMenuWidget* UScenarioEditorRootWidget::GetPlaceableContextMenuWidget() const
+{
+	return Cast<UScenarioPlaceableContextMenuWidget>(PlaceableContextMenuWidget.Get());
 }
 
 void UScenarioEditorRootWidget::SetLlmPanelVisible(const bool bVisible)
@@ -114,6 +134,12 @@ void UScenarioEditorRootWidget::SetLlmPanelVisible(const bool bVisible)
 
 void UScenarioEditorRootWidget::HandleEditorSessionStarted(const bool)
 {
+	if (bAutoRevealAssetPaletteOnBottomEdge)
+	{
+		SetAssetPaletteVisible(ShouldRevealAssetPaletteFromMouseEdge(), true);
+		return;
+	}
+
 	if (bShowAssetPaletteOnEditorSessionStart)
 	{
 		ShowAssetPaletteWidget();
@@ -302,7 +328,7 @@ void UScenarioEditorRootWidget::HandleAutoStartCompleted(const bool bLoadedExist
 	HandleEditorSessionStarted(bLoadedExistingScenario);
 }
 
-UWidget* UScenarioEditorRootWidget::ResolvePlaceableContextMenuVisibilityTarget() const
+UWidget* UScenarioEditorRootWidget::ResolvePlaceableDetailsVisibilityTarget() const
 {
 	return PlaceableContextMenuPanel ? PlaceableContextMenuPanel.Get() : Cast<UWidget>(PlaceableContextMenuWidget.Get());
 }
@@ -317,12 +343,62 @@ UWidget* UScenarioEditorRootWidget::ResolveLlmPanelVisibilityTarget() const
 	return LlmPanel ? LlmPanel.Get() : Cast<UWidget>(ScenarioEditorLlmWidget.Get());
 }
 
+void UScenarioEditorRootWidget::SetAssetPaletteVisible(const bool bVisible, const bool bRebuildWhenShowing)
+{
+	const UWidget* visibilityTarget = ResolveAssetPaletteVisibilityTarget();
+	const bool bWasVisible = visibilityTarget && visibilityTarget->GetVisibility() != ESlateVisibility::Collapsed;
+	if (bVisible && bRebuildWhenShowing && !bWasVisible && AssetPaletteWidget)
+	{
+		AssetPaletteWidget->RebuildPalette();
+	}
+
+	SetPanelVisibility(ResolveAssetPaletteVisibilityTarget(), bVisible);
+	SetPanelVisibility(AssetPaletteWidget.Get(), bVisible);
+}
+
 void UScenarioEditorRootWidget::SetPanelVisibility(UWidget* targetWidget, const bool bVisible) const
 {
 	if (targetWidget)
 	{
 		targetWidget->SetVisibility(bVisible ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	}
+}
+
+bool UScenarioEditorRootWidget::ShouldRevealAssetPaletteFromMouseEdge() const
+{
+	const APlayerController* owningPlayer = GetOwningPlayer();
+	if (!owningPlayer)
+	{
+		return false;
+	}
+
+	float mouseX = 0.0f;
+	float mouseY = 0.0f;
+	if (!owningPlayer->GetMousePosition(mouseX, mouseY))
+	{
+		return false;
+	}
+	(void)mouseX;
+
+	int32 viewportSizeX = 0;
+	int32 viewportSizeY = 0;
+	owningPlayer->GetViewportSize(viewportSizeX, viewportSizeY);
+	(void)viewportSizeX;
+	if (viewportSizeY <= 0)
+	{
+		return false;
+	}
+
+	const UWidget* paletteVisibilityTarget = ResolveAssetPaletteVisibilityTarget();
+	const bool bPanelVisible = paletteVisibilityTarget && paletteVisibilityTarget->GetVisibility() != ESlateVisibility::Collapsed;
+	if (bPanelVisible && IsMouseOverWidget(paletteVisibilityTarget))
+	{
+		return true;
+	}
+
+	const float hideThreshold = FMath::Max(AssetPaletteRevealBottomEdgePixels, AssetPaletteHideBottomEdgePixels);
+	const float threshold = bPanelVisible ? hideThreshold : AssetPaletteRevealBottomEdgePixels;
+	return (static_cast<float>(viewportSizeY) - mouseY) <= threshold;
 }
 
 bool UScenarioEditorRootWidget::ShouldRevealLlmPanelFromMouseEdge() const

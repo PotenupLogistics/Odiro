@@ -1,10 +1,17 @@
 #include "Scenario/Editor/ScenarioCorridorHandleActor.h"
 
 #include "Components/SceneComponent.h"
+#include "Components/SplineMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
 #include "UObject/ConstructorHelpers.h"
+
+namespace
+{
+	const double BasicShapeCylinderRadiusCm = 50.0;
+	const double SegmentHandleCylinderRadiusCm = 7.5;
+}
 
 AScenarioCorridorHandleActor::AScenarioCorridorHandleActor()
 {
@@ -22,6 +29,17 @@ AScenarioCorridorHandleActor::AScenarioCorridorHandleActor()
 	HandleMeshComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	HandleMeshComponent->SetGenerateOverlapEvents(false);
 
+	SegmentSplineMeshComponent = CreateDefaultSubobject<USplineMeshComponent>(TEXT("SegmentSplineMeshComponent"));
+	SegmentSplineMeshComponent->SetupAttachment(SceneRoot);
+	SegmentSplineMeshComponent->SetMobility(EComponentMobility::Movable);
+	SegmentSplineMeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	SegmentSplineMeshComponent->SetCollisionObjectType(ECC_WorldDynamic);
+	SegmentSplineMeshComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+	SegmentSplineMeshComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	SegmentSplineMeshComponent->SetGenerateOverlapEvents(false);
+	SegmentSplineMeshComponent->SetForwardAxis(ESplineMeshAxis::Z, false);
+	SegmentSplineMeshComponent->SetCastShadow(false);
+
 	PlaceableComponent = CreateDefaultSubobject<UScenarioPlaceableComponent>(TEXT("PlaceableComponent"));
 	PlaceableComponent->Category = EScenarioActorCategory::GroundRegion;
 	PlaceableComponent->bAuthoringSelectable = true;
@@ -36,14 +54,14 @@ AScenarioCorridorHandleActor::AScenarioCorridorHandleActor()
 		VertexMesh = vertexMeshAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> segmentMeshAsset(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> segmentMeshAsset(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	if (segmentMeshAsset.Succeeded())
 	{
 		SegmentMesh = segmentMeshAsset.Object;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> handleMaterialAsset(
-		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+		TEXT("/Game/Materials/Gizmo/M_GizmoAxis.M_GizmoAxis"));
 	if (handleMaterialAsset.Succeeded())
 	{
 		HandleMaterial = handleMaterialAsset.Object;
@@ -75,11 +93,13 @@ void AScenarioCorridorHandleActor::ConfigureVertexHandle(
 void AScenarioCorridorHandleActor::ConfigureSegmentHandle(
 	int32 InSegmentIndex,
 	const FString& InInstanceId,
-	const FTransform& InTransform)
+	const FTransform& InTransform,
+	double InSegmentLengthCm)
 {
 	HandleType = EScenarioCorridorHandleType::Segment;
 	VertexIndex = INDEX_NONE;
 	SegmentIndex = InSegmentIndex;
+	SegmentLengthCm = FMath::Max(InSegmentLengthCm, 0.0);
 	SetActorTransform(InTransform);
 
 	if (PlaceableComponent)
@@ -101,12 +121,40 @@ void AScenarioCorridorHandleActor::ApplyHandleVisual()
 
 	if (HandleType == EScenarioCorridorHandleType::Segment)
 	{
-		HandleMeshComponent->SetStaticMesh(SegmentMesh);
+		HandleMeshComponent->SetVisibility(false, true);
+		HandleMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		if (SegmentSplineMeshComponent)
+		{
+			const double halfLengthCm = SegmentLengthCm * 0.5;
+			const FVector startLocation(-halfLengthCm, 0.0, 0.0);
+			const FVector endLocation(halfLengthCm, 0.0, 0.0);
+			const FVector tangent(FMath::Max(SegmentLengthCm, 1.0), 0.0, 0.0);
+			const float radiusScale = static_cast<float>(SegmentHandleCylinderRadiusCm / BasicShapeCylinderRadiusCm);
+			SegmentSplineMeshComponent->SetVisibility(true, true);
+			SegmentSplineMeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+			SegmentSplineMeshComponent->SetStaticMesh(SegmentMesh);
+			SegmentSplineMeshComponent->SetForwardAxis(ESplineMeshAxis::Z, false);
+			SegmentSplineMeshComponent->SetStartAndEnd(startLocation, tangent, endLocation, tangent, false);
+			SegmentSplineMeshComponent->SetStartScale(FVector2D(radiusScale, radiusScale), false);
+			SegmentSplineMeshComponent->SetEndScale(FVector2D(radiusScale, radiusScale), false);
+			if (HandleMaterial)
+			{
+				SegmentSplineMeshComponent->SetMaterial(0, HandleMaterial);
+			}
+			SegmentSplineMeshComponent->UpdateMesh();
+		}
 		PlaceableComponent->bAuthoringAllowRotationEdit = true;
 	}
 	else
 	{
+		HandleMeshComponent->SetVisibility(true, true);
+		HandleMeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		HandleMeshComponent->SetStaticMesh(VertexMesh);
+		if (SegmentSplineMeshComponent)
+		{
+			SegmentSplineMeshComponent->SetVisibility(false, true);
+			SegmentSplineMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
 		PlaceableComponent->bAuthoringAllowRotationEdit = false;
 	}
 

@@ -156,6 +156,21 @@ bool UScenarioCorridorSurfaceCatalog::FindSurfaceEntryById(
 	{
 		if (entry.SurfaceId == surfaceId)
 		{
+			FScenarioCorridorSurfaceEntry defaultEntry;
+			if (entry.bInheritBuiltInSemanticDefaults && FindDefaultSurfaceEntryById(surfaceId, defaultEntry))
+			{
+				outSurfaceEntry = defaultEntry;
+				if (!entry.DisplayName.IsEmpty())
+				{
+					outSurfaceEntry.DisplayName = entry.DisplayName;
+				}
+				if (!entry.PreviewMaterial.IsNull())
+				{
+					outSurfaceEntry.PreviewMaterial = entry.PreviewMaterial;
+				}
+				return true;
+			}
+
 			outSurfaceEntry = entry;
 			return true;
 		}

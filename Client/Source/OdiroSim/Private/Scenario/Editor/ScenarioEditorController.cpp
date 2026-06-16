@@ -2157,6 +2157,11 @@ void AScenarioEditorController::UpdatePlacementPreview()
 	CurrentPlacementTransform = BuildPlacementTransform(hit.ImpactPoint);
 
 	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (SelectedPlacementItemType == EScenarioPaletteItemType::StaticObstacle && authoringSubsystem)
+	{
+		CurrentPlacementTransform =
+			authoringSubsystem->ResolveStaticObstaclePlacementTransform(CurrentPlacementTransform);
+	}
 	if (!authoringSubsystem)
 	{
 		bCurrentPlacementValid = false;

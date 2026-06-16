@@ -49,6 +49,10 @@ struct ODIROSIM_API FScenarioCorridorSurfaceEntry
 	// Material used by editor-only Corridor spline surface preview.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor Surface")
 	TSoftObjectPtr<UMaterialInterface> PreviewMaterial;
+
+	// Keeps built-in semantic defaults for known ids while allowing visual overrides from this entry.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor Surface")
+	bool bInheritBuiltInSemanticDefaults = true;
 };
 
 // DataAsset catalog for Corridor surface ids from the authoring vocabulary.

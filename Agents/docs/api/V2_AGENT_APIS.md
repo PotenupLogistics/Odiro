@@ -9,7 +9,8 @@ v2 API는 기존 v1 실행 중심 흐름과 별도로, Agent 역할을 명확히
 
 Scenario generation v2는 항상 LangGraph runner를 실행합니다. `V2_AGENT_LLM_ENABLED=true`일 때만 LangGraph 내부 LLM-assisted node에서 JSON 호출을 시도하고, 실패하거나 validator를 통과하지 못하면 deterministic graph path로 fallback합니다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아니며, 현재 결과 분석 v2 graph 경로 제어에 사용됩니다.
 
-현재 v2 response schema는 MVP 단계의 임시 wrapper이며, 최종 Unreal 연동 규격과 분석 결과 JSON 계약이 확정되면 조정될 수 있습니다.
+Scenario generation v2의 외부 response body는 API wrapper가 아니라 `scenario_template` v1 JSON 객체 자체입니다.
+Obstacle placement kind는 Unreal parser와 맞춰 `fixed`, `pattern`, `scatter`를 허용합니다. 기본 LLM 생성은 여전히 단순한 `fixed` placement를 우선 사용합니다.
 
 ## v1과 v2 차이
 
@@ -76,36 +77,30 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 
 ```json
 {
-  "status": "success",
+  "schema": "scenario_template",
+  "version": 1,
   "template_id": "pinch_oncoming_pass",
-  "summary": "협폭 구간에서 대향 보행자와 마주치는 scenario_template JSON을 생성했습니다.",
-  "template": {
-    "schema": "scenario_template",
-    "version": 1,
-    "template_id": "pinch_oncoming_pass",
-    "intent": "협폭 구간에서 마주 오는 보행자와 조우할 때 로봇이 안전하게 감속, 양보, 통과하는지 검증한다.",
-    "corridor": {},
-    "obstacles": {},
-    "pedestrians": {},
-    "robot": {}
-  },
-  "validation": {
-    "valid": true,
-    "errors": [],
-    "warnings": []
-  },
-  "assumptions": [
-    "알파 단계 지원 패턴 중 가장 가까운 패턴으로 해석했습니다."
-  ],
-  "generation_mode": "langgraph"
+  "intent": "협폭 구간에서 마주 오는 보행자와 조우할 때 로봇이 안전하게 감속, 양보, 통과하는지 검증한다.",
+  "corridor": {},
+  "obstacles": {},
+  "pedestrians": {},
+  "robot": {}
 }
 ```
 
-### `generation_mode`
+외부 응답 최상위에는 `status`, `summary`, `template`, `validation`, `assumptions`, `generation_mode` wrapper field를 포함하지 않습니다. LangGraph mode와 validation 결과는 내부 graph state에서만 사용합니다.
 
-| 값 | 의미 |
-| --- | --- |
-| `langgraph` | Scenario generation v2 기본 경로. LLM disabled면 deterministic graph path, LLM enabled면 graph 내부 LLM-assisted node 후 validator/fallback을 거친 결과 |
+`scenario_template` v1은 다음 값을 허용합니다.
+
+* robot anchor `type`: `entry`, `exit`, `corridor_pose`
+  * `entry`/`exit`: 추상 anchor이며 `{ "type": "entry" }`, `{ "type": "exit" }`처럼 concrete pose field 없이 사용합니다.
+  * `corridor_pose`: concrete anchor이며 `segment`, `along_m`, `offset_m`를 포함해야 합니다.
+* 수치 필드: 고정 숫자 또는 `{ "min": ..., "max": ... }`
+* `obstacles.placements[].kind`: `fixed`, `pattern`, `scatter`
+* `pedestrians.encounters[].overrides`: `cooperation`, `evasiveness`, `personal_space_m`, `awareness_horizon_s`, `max_yield_wait_s`, `sidestep_distance_m`
+* `obstacles.placements[].allow_blocking`: optional boolean
+* `pedestrians.background.spawn_zone.segments`: optional segment id 목록
+* `corridor.segments[].replaced_by`: fixed string 또는 `{ "choices": [...] }`
 
 ## `POST /api/v2/analysis/run`
 

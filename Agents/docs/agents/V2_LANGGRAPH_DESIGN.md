@@ -130,8 +130,13 @@ Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터�
 * v1 Agent/API는 변경하지 않습니다.
 * Scenario generation v2는 항상 LangGraph runner를 사용합니다.
 * `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아닙니다.
+* `/api/v2/scenarios/generate`의 외부 response body는 raw `scenario_template` v1 객체입니다.
+* Scenario generation v2 structured output은 `corridor_pose`, fixed number/range value, Unreal-supported override fields, optional `allow_blocking`, optional background `spawn_zone`을 허용합니다.
+* Robot `entry`/`exit`는 추상 anchor로 concrete pose field를 섞지 않으며, segment/along/offset이 필요하면 `corridor_pose`로 표현합니다.
+* Obstacle placement는 Unreal parser와 맞춰 `fixed`, `pattern`, `scatter`를 허용합니다. 기본 생성은 단순한 `fixed` placement를 우선합니다.
+* 문자열 choices는 `corridor.segments[].replaced_by`에만 제한적으로 허용합니다.
 * raw log 전체를 LLM에 전달하지 않습니다.
-* response JSON 최종 계약처럼 field를 고정하지 않습니다.
+* graph 내부 diagnostics, validation, generation mode는 외부 scenario generation response wrapper로 노출하지 않습니다.
 * LLM 출력은 validator와 evidence validation을 통과해야 합니다.
 * 실패 시 기존 deterministic/rule-based fallback을 사용합니다.
 

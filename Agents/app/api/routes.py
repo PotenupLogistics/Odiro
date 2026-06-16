@@ -12,7 +12,7 @@ from app.models.analysis_v2 import AnalysisRunV2Request, AnalysisRunV2Response
 from app.models.recommendation import EpisodeAnalysisRequest, IntegratedRecommendationResult
 from app.models.run_queue import EpisodeRunQueue
 from app.models.scenario_generation import ScenarioGenerateRequest
-from app.models.scenario_generation_v2 import ScenarioGenerateV2Request, ScenarioGenerateV2Response
+from app.models.scenario_generation_v2 import ScenarioGenerateV2Request, ScenarioTemplateV1Response
 from app.services.policy_recommendation_orchestrator import analyze_full_setup_and_recommend
 from app.services.scenario_generation_service import (
     ScenarioArtifactStorageError,
@@ -83,13 +83,16 @@ def scenario_generate_endpoint(
 
 @router.post(
     "/api/v2/scenarios/generate",
-    response_model=ScenarioGenerateV2Response,
+    response_model=ScenarioTemplateV1Response,
 )
 def scenario_generate_v2_endpoint(
     request: ScenarioGenerateV2Request,
-) -> ScenarioGenerateV2Response:
+) -> ScenarioTemplateV1Response:
     settings = Settings()
-    return ScenarioGenerationGraphRunnerV2(settings=settings).run(request)
+    response = ScenarioGenerationGraphRunnerV2(settings=settings).run(request)
+    if response.template is None or not response.validation.valid:
+        raise HTTPException(status_code=500, detail=_scenario_generation_error_detail(Exception(response.summary)))
+    return ScenarioTemplateV1Response.model_validate(response.template)
 
 
 @router.post(

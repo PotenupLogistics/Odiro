@@ -16,6 +16,59 @@ def _range_schema() -> dict[str, Any]:
     }
 
 
+def _number_or_range_schema() -> dict[str, Any]:
+    """Return a schema accepting either a fixed number or a numeric min/max range."""
+    return {
+        "anyOf": [
+            {"type": "number"},
+            _range_schema(),
+        ],
+    }
+
+
+def _integer_or_range_schema() -> dict[str, Any]:
+    """Return a schema accepting either a fixed integer or an integer min/max range."""
+    return {
+        "anyOf": [
+            {"type": "integer"},
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["min", "max"],
+                "properties": {
+                    "min": {"type": "integer"},
+                    "max": {"type": "integer"},
+                },
+            },
+        ],
+    }
+
+
+def _string_choices_schema() -> dict[str, Any]:
+    """Return a schema accepting a fixed string or a choices list."""
+    return {
+        "anyOf": [
+            {"type": "string"},
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["choices"],
+                "properties": {
+                    "choices": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+            },
+        ],
+    }
+
+
+def _nullable(schema: dict[str, Any]) -> dict[str, Any]:
+    """Return a nullable union schema for OpenAI strict structured outputs."""
+    return {"anyOf": [schema, {"type": "null"}]}
+
+
 def scenario_template_v1_json_schema() -> dict[str, Any]:
     """Return a structured-output schema for current scenario_template v1 LLM calls."""
     return {
@@ -59,7 +112,7 @@ def scenario_template_v1_json_schema() -> dict[str, Any]:
                             },
                         },
                     },
-                    "walkway_width_m": _range_schema(),
+                    "walkway_width_m": _number_or_range_schema(),
                     "building_side": {
                         "type": "array",
                         "items": _surface_lane_schema(),
@@ -74,7 +127,7 @@ def scenario_template_v1_json_schema() -> dict[str, Any]:
                         "items": {
                             "type": "object",
                             "additionalProperties": False,
-                            "required": ["id", "type", "along_range_m"],
+                            "required": ["id", "type", "along_range_m", "replaced_by"],
                             "properties": {
                                 "id": {"type": "string"},
                                 "type": {"type": "string", "enum": ["straight", "narrowing", "crosswalk", "entrance"]},
@@ -84,6 +137,7 @@ def scenario_template_v1_json_schema() -> dict[str, Any]:
                                     "maxItems": 2,
                                     "items": {"type": "number"},
                                 },
+                                "replaced_by": _nullable(_string_choices_schema()),
                             },
                         },
                     },
@@ -94,29 +148,51 @@ def scenario_template_v1_json_schema() -> dict[str, Any]:
                 "additionalProperties": False,
                 "required": ["min_clear_width_m", "placements"],
                 "properties": {
-                    "min_clear_width_m": {"type": "number"},
+                    "min_clear_width_m": _number_or_range_schema(),
                     "placements": {
                         "type": "array",
                         "items": {
                             "type": "object",
                             "additionalProperties": False,
-                            "required": ["kind", "id", "prop", "at", "yaw_deg"],
+                            "required": [
+                                "kind",
+                                "id",
+                                "prop",
+                                "pattern",
+                                "at",
+                                "count",
+                                "spacing_m",
+                                "gap_width_m",
+                                "yaw_deg",
+                                "zone",
+                                "density_per_10m",
+                                "palette",
+                                "allow_blocking",
+                            ],
                             "properties": {
                                 "kind": {"type": "string", "enum": ["fixed", "pattern", "scatter"]},
                                 "id": {"type": "string"},
-                                "prop": {"type": "string", "enum": ["traffic_cone_01"]},
-                                "at": {
+                                "prop": {"type": ["string", "null"], "enum": ["traffic_cone_01", None]},
+                                "pattern": {"type": ["string", "null"], "enum": ["gate", "line", "cluster", None]},
+                                "at": _nullable({
                                     "type": "object",
                                     "additionalProperties": False,
                                     "required": ["segment", "along_m", "offset_m", "lane"],
                                     "properties": {
                                         "segment": {"type": "string"},
-                                        "along_m": _range_schema(),
-                                        "offset_m": _range_schema(),
+                                        "along_m": _number_or_range_schema(),
+                                        "offset_m": _number_or_range_schema(),
                                         "lane": {"type": "string"},
                                     },
-                                },
-                                "yaw_deg": {"type": "number"},
+                                }),
+                                "count": _nullable(_integer_or_range_schema()),
+                                "spacing_m": _nullable(_number_or_range_schema()),
+                                "gap_width_m": _nullable(_number_or_range_schema()),
+                                "yaw_deg": _nullable(_number_or_range_schema()),
+                                "zone": _nullable(_scatter_zone_schema()),
+                                "density_per_10m": _nullable(_number_or_range_schema()),
+                                "palette": _nullable(_palette_schema()),
+                                "allow_blocking": {"type": ["boolean", "null"]},
                             },
                         },
                     },
@@ -130,10 +206,11 @@ def scenario_template_v1_json_schema() -> dict[str, Any]:
                     "background": {
                         "type": "object",
                         "additionalProperties": False,
-                        "required": ["count", "speed_mps"],
+                        "required": ["count", "speed_mps", "spawn_zone"],
                         "properties": {
-                            "count": _range_schema(),
-                            "speed_mps": _range_schema(),
+                            "count": _integer_or_range_schema(),
+                            "speed_mps": _number_or_range_schema(),
+                            "spawn_zone": _nullable(_spawn_zone_schema()),
                         },
                     },
                     "encounters": {
@@ -149,14 +226,26 @@ def scenario_template_v1_json_schema() -> dict[str, Any]:
                                     "enum": ["oncoming_pass", "overtake", "cross_path", "standing_group"],
                                 },
                                 "at": {"type": "string"},
-                                "meet_offset_m": {"type": "number"},
+                                "meet_offset_m": _number_or_range_schema(),
                                 "persona": {"type": "string", "enum": ["passive", "normal", "assertive", "vulnerable"]},
                                 "overrides": {
                                     "type": "object",
                                     "additionalProperties": False,
-                                    "required": ["cooperation"],
+                                    "required": [
+                                        "cooperation",
+                                        "evasiveness",
+                                        "personal_space_m",
+                                        "awareness_horizon_s",
+                                        "max_yield_wait_s",
+                                        "sidestep_distance_m",
+                                    ],
                                     "properties": {
-                                        "cooperation": _range_schema(),
+                                        "cooperation": _nullable(_number_or_range_schema()),
+                                        "evasiveness": _nullable(_number_or_range_schema()),
+                                        "personal_space_m": _nullable(_number_or_range_schema()),
+                                        "awareness_horizon_s": _nullable(_number_or_range_schema()),
+                                        "max_yield_wait_s": _nullable(_number_or_range_schema()),
+                                        "sidestep_distance_m": _nullable(_number_or_range_schema()),
                                     },
                                 },
                             },
@@ -197,7 +286,60 @@ def _surface_lane_schema() -> dict[str, Any]:
                 "type": "string",
                 "enum": ["sidewalk", "crosswalk_stripe", "grass", "road", "driveway", "wall", "building"],
             },
-            "width_m": {"type": "number"},
+            "width_m": _number_or_range_schema(),
+        },
+    }
+
+
+def _spawn_zone_schema() -> dict[str, Any]:
+    """Return optional background pedestrian spawn-zone schema."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["segments"],
+        "properties": {
+            "segments": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+    }
+
+
+def _scatter_zone_schema() -> dict[str, Any]:
+    """Return scatter placement zone schema."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["segments", "lanes"],
+        "properties": {
+            "segments": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "lanes": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+    }
+
+
+def _palette_schema() -> dict[str, Any]:
+    """Return scatter placement palette schema."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["categories", "classes"],
+        "properties": {
+            "categories": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "classes": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
         },
     }
 
@@ -205,10 +347,41 @@ def _surface_lane_schema() -> dict[str, Any]:
 def _robot_anchor_schema() -> dict[str, Any]:
     """Return the robot start/goal anchor schema."""
     return {
+        "anyOf": [
+            _abstract_robot_anchor_schema("entry"),
+            _abstract_robot_anchor_schema("exit"),
+            _corridor_pose_robot_anchor_schema(),
+        ],
+    }
+
+
+def _abstract_robot_anchor_schema(anchor_type: str) -> dict[str, Any]:
+    """Return an abstract entry/exit robot anchor schema without concrete pose fields."""
+    return {
         "type": "object",
         "additionalProperties": False,
         "required": ["type"],
         "properties": {
-            "type": {"type": "string", "enum": ["entry", "exit"]},
+            "type": {"type": "string", "const": anchor_type},
+        },
+    }
+
+
+def _corridor_pose_robot_anchor_schema() -> dict[str, Any]:
+    """Return a concrete corridor-local robot anchor schema."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["type", "segment", "along_m", "offset_m", "lane", "heading"],
+        "properties": {
+            "type": {"type": "string", "const": "corridor_pose"},
+            "segment": {"type": "string"},
+            "along_m": _number_or_range_schema(),
+            "offset_m": _number_or_range_schema(),
+            "lane": {"type": ["string", "null"]},
+            "heading": {
+                "type": ["string", "null"],
+                "enum": ["forward", "backward", "auto", None],
+            },
         },
     }

@@ -33,6 +33,21 @@ class V2ValidationResult(BaseModel):
     warnings: list[V2ValidationIssue] = Field(default_factory=list)
 
 
+class ScenarioTemplateV1Response(BaseModel):
+    """External scenario_template v1 response body returned by the v2 generation endpoint."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    schema_: Literal["scenario_template"] = Field(alias="schema")
+    version: Literal[1]
+    template_id: str
+    intent: str
+    corridor: dict[str, Any]
+    obstacles: dict[str, Any]
+    pedestrians: dict[str, Any]
+    robot: dict[str, Any]
+
+
 class ScenarioGenerateV2Response(BaseModel):
     """Scenario template generation response returned without file ownership decisions."""
 

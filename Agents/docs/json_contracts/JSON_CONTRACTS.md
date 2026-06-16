@@ -50,7 +50,7 @@
 * `app.services.json_contract_validator.validate_payload()`: 제출된 JSON payload를 schema와 Pydantic 모델로 검증한다.
 * `app.services.world_config_generation_orchestrator.generate_world_config()`: 자연어 기반 WorldConfig generation 내부 흐름을 수행한다.
 
-`POST /api/v1/scenarios/generate-artifacts`와 `POST /api/v1/scenarios/generate-drive`는 public API에서 제거되었다. sample JSON fixture 작성은 현재 repository 공유 범위가 아니다. runtime export는 local ignored path에만 저장한다.
+Sample JSON fixture 작성은 현재 repository 공유 범위가 아니다. runtime export는 local ignored path에만 저장한다.
 
 ## 8. Validation Layer
 

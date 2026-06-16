@@ -7,7 +7,7 @@ v2 API는 기존 v1 실행 중심 흐름과 별도로, Agent 역할을 명확히
 * `/api/v2/scenarios/generate`: 사용자 자연어 `prompt`를 입력받아 Unreal에서 샘플링 가능한 `scenario.template.json` 형태의 템플릿을 생성합니다.
 * `/api/v2/analysis/run`: `experiments` root 하위 파일을 스캔/분류/파싱/집계하여 정책 또는 환경 개선 필요 여부를 판단합니다.
 
-기본 동작은 deterministic/rule-based입니다. `V2_AGENT_LLM_ENABLED=true`일 때만 optional LLM JSON 호출 경로를 사용합니다.
+Scenario generation v2는 항상 LangGraph runner를 실행합니다. `V2_AGENT_LLM_ENABLED=true`일 때만 LangGraph 내부 LLM-assisted node에서 JSON 호출을 시도하고, 실패하거나 validator를 통과하지 못하면 deterministic graph path로 fallback합니다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아니며, 현재 결과 분석 v2 graph 경로 제어에 사용됩니다.
 
 현재 v2 response schema는 MVP 단계의 임시 wrapper이며, 최종 Unreal 연동 규격과 분석 결과 JSON 계약이 확정되면 조정될 수 있습니다.
 
@@ -15,7 +15,7 @@ v2 API는 기존 v1 실행 중심 흐름과 별도로, Agent 역할을 명확히
 
 | 구분 | v1 | v2 |
 | --- | --- | --- |
-| Scenario generation | 기존 RunQueue 생성 흐름 유지 | prompt만 받아 `scenario.template.json` 생성 |
+| Scenario generation | 기존 RunQueue 생성 흐름 유지 | prompt만 받아 `scenario_template` v1 JSON 생성 |
 | 실행 개수 | `episode_count` 선택 허용 | 실행 개수 관련 필드 거부 |
 | 실행 산출물 | EpisodeSetup / DeliveryBotSetup / RunQueue 생성 | 실행 샘플, seed, RunQueue 생성하지 않음 |
 | Analysis | 명시적 입력 파일 경로 기반 분석 | 파라미터 없이 experiments root 전체 분석 |
@@ -47,7 +47,7 @@ v2 API는 기존 v1 실행 중심 흐름과 별도로, Agent 역할을 명확히
 
 ### 목적
 
-사용자 자연어 `prompt`를 입력받아 Unreal에서 샘플링 가능한 `scenario.template.json`을 생성합니다.
+사용자 자연어 `prompt`를 입력받아 `scenario_template` v1 JSON 객체를 생성합니다. 이 endpoint는 `V2_AGENT_GRAPH_ENABLED` 값과 무관하게 LangGraph runner를 사용합니다.
 
 ### Request
 
@@ -67,49 +67,27 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 * `run_count`
 * `seed`
 * `run_queue`
+* `experiment_id`
+* `run_id`
+* `current_template`
+* `mode`
 
 ### Response
 
 ```json
 {
-  "schema": "scenario_generate_response_v2",
-  "version": 2,
   "status": "success",
-  "scenario_id": "narrow_sidewalk_static_obstacle_pedestrian_crossing",
-  "summary": "narrow sidewalk / 정적 장애물 / 보행자 횡단 시나리오 템플릿을 생성했습니다.",
-  "scenario_template": {
+  "template_id": "pinch_oncoming_pass",
+  "summary": "협폭 구간에서 대향 보행자와 마주치는 scenario_template JSON을 생성했습니다.",
+  "template": {
     "schema": "scenario_template",
-    "version": 2,
-    "scenario_id": "narrow_sidewalk_static_obstacle_pedestrian_crossing",
-    "scenario_type": "narrow_sidewalk",
-    "intent": {
-      "summary": "narrow sidewalk / 정적 장애물 / 보행자 횡단 시나리오 템플릿을 생성했습니다.",
-      "risk_factors": [
-        "narrow_sidewalk",
-        "static_obstacle_ahead",
-        "pedestrian_crossing"
-      ]
-    },
-    "ground_model": {
-      "default_region_type": "walkable"
-    },
-    "robot": {
-      "type": "delivery_robot",
-      "start_area": {},
-      "goal_area": {}
-    },
-    "static_obstacles": {
-      "count": {
-        "min": 1,
-        "max": 2
-      }
-    },
-    "pedestrians": {
-      "count": {
-        "min": 1,
-        "max": 3
-      }
-    }
+    "version": 1,
+    "template_id": "pinch_oncoming_pass",
+    "intent": "협폭 구간에서 마주 오는 보행자와 조우할 때 로봇이 안전하게 감속, 양보, 통과하는지 검증한다.",
+    "corridor": {},
+    "obstacles": {},
+    "pedestrians": {},
+    "robot": {}
   },
   "validation": {
     "valid": true,
@@ -117,10 +95,9 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
     "warnings": []
   },
   "assumptions": [
-    "좌표 단위는 meter로 가정했습니다.",
-    "각도 단위는 degree로 가정했습니다."
+    "알파 단계 지원 패턴 중 가장 가까운 패턴으로 해석했습니다."
   ],
-  "generation_mode": "deterministic"
+  "generation_mode": "langgraph"
 }
 ```
 
@@ -128,10 +105,7 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 
 | 값 | 의미 |
 | --- | --- |
-| `deterministic` | LLM 비활성 상태에서 deterministic template 생성 경로 사용 |
-| `llm` | LLM이 유효한 `scenario_template` JSON을 생성했고 검증 통과 |
-| `llm_repaired` | LLM 최초 결과는 실패했지만 repair 결과가 검증 통과 |
-| `fallback` | LLM/repair 실패 후 deterministic fallback 사용 |
+| `langgraph` | Scenario generation v2 기본 경로. LLM disabled면 deterministic graph path, LLM enabled면 graph 내부 LLM-assisted node 후 validator/fallback을 거친 결과 |
 
 ## `POST /api/v2/analysis/run`
 
@@ -215,6 +189,16 @@ V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS=1
 * `V2_AGENT_LLM_REPAIR_ENABLED`: LLM 생성 결과가 validator를 통과하지 못할 때 repair를 시도할지 결정합니다.
 * `V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS`: repair 최대 시도 횟수입니다.
 
+## Graph mode 설정
+
+```text
+V2_AGENT_GRAPH_ENABLED=false
+```
+
+* 이 설정은 scenario generation v2 endpoint의 graph on/off switch가 아닙니다.
+* `/api/v2/scenarios/generate`는 이 값과 무관하게 LangGraph runner를 사용합니다.
+* 현재 이 설정은 결과 분석 v2 graph 경로 제어와 legacy rollback 호환을 위해 유지합니다.
+
 ## fallback 정책
 
 * LLM 호출 실패 시 API 500이 아니라 fallback 응답을 반환합니다.
@@ -239,5 +223,6 @@ V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS=1
 
 * `scenario_template` schema는 최종 Unreal 계약 확정 전까지 최소 구조 검증만 수행합니다.
 * 이미지 파일은 path, size, modified time 같은 metadata만 기록합니다.
+* timeline builder와 RAG query builder 결과는 내부 analysis context에 포함되며, 현재 final response schema에는 새 field를 추가하지 않습니다.
 * LLM mode는 optional이며, 기본 테스트는 fake/mock client 또는 disabled mode로 외부 API key 없이 통과해야 합니다.
 * provider별 attempt log와 representative failed episode timeline 요약은 후속 보강 대상입니다.

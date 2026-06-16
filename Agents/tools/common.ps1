@@ -225,7 +225,6 @@ function Set-AgentsRuntimeEnvironment {
 
     $env:SCENARIO_ARTIFACT_OUTPUT_DIR = $ArtifactOutputDir
     $env:SCENARIO_ARTIFACT_WRITE_ENABLED = "true"
-    $env:GOOGLE_DRIVE_UPLOAD_ENABLED = "false"
 }
 
 function Get-AgentsServerArguments {

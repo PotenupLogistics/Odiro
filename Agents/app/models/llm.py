@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -39,6 +39,9 @@ class LlmGenerationRequest(BaseModel):
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     maxTokens: int = Field(default=2048, ge=1)
     responseFormat: Literal["json_object", "text"] = "json_object"
+    responseJsonSchema: dict[str, Any] | None = None
+    responseSchemaName: str | None = None
+    responseSchemaStrict: bool = False
     requestId: str
     timeoutSec: int | None = Field(default=None, ge=1)
 

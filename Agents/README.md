@@ -79,6 +79,7 @@ ollama pull llama3.1:8b
 - [UE Handoff Delivery Manifest](docs/handoff/UE_HANDOFF_DELIVERY_MANIFEST.md)
 - [UE5 Endpoint Usage For UE Team](docs/handoff/UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md)
 - [Legacy EpisodeSpec Archive](docs/archive/previous_episode_spec/)
+- [UE EpisodeSpec JSON Guide](docs/archive/previous_episode_spec/UE_EPISODE_SPEC_JSON_GUIDE.md)
 - [OpenAI Provider Guide](docs/providers/OPENAI_PROVIDER_GUIDE.md)
 - [v2 Agent API 문서](docs/api/V2_AGENT_APIS.md)
 - [v2 Agent Architecture](docs/agents/V2_AGENT_ARCHITECTURE.md)

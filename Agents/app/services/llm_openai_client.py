@@ -51,7 +51,16 @@ class OpenAILlmClient:
             "temperature": self.settings.openaiTemperature,
             "max_output_tokens": self.settings.openaiMaxTokens,
         }
-        if request.model in GENERIC_JSON_MODELS:
+        if request.responseJsonSchema is not None:
+            body["text"] = {
+                "format": {
+                    "type": "json_schema",
+                    "name": request.responseSchemaName or "structured_output",
+                    "schema": request.responseJsonSchema,
+                    "strict": request.responseSchemaStrict,
+                }
+            }
+        elif request.model in GENERIC_JSON_MODELS:
             body["text"] = {"format": {"type": "json_object"}}
         else:
             body["text"] = {

@@ -19,10 +19,8 @@ dependencies = [
     "langchain>=0.3.0",
     "langchain-openai>=0.3.0",
     "langchain-chroma>=0.2.0",
+    "langgraph>=1.2.2",
     "chromadb>=0.6.0",
-    "google-api-python-client>=2.197.0",
-    "google-auth>=2.53.0",
-    "google-auth-oauthlib>=1.4.0",
 ]
 
 [project.optional-dependencies]

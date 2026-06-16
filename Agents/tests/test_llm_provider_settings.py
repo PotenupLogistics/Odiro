@@ -17,6 +17,7 @@ def test_default_settings_load_without_env_file() -> None:
     assert settings.llmProviderChain == ["openai", "ollama"]
     assert settings.openaiApiKey == ""
     assert settings.ollamaBaseUrl == "http://localhost:11434"
+    assert settings.v2AgentGraphEnabled is False
 
 
 def test_default_provider_chain_is_openai_then_ollama() -> None:

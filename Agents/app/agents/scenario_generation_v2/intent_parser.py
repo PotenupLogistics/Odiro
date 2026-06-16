@@ -13,6 +13,8 @@ class ScenarioIntent:
 
 
 class IntentParser:
+    """Extracts coarse scenario intent signals from the prompt without owning generation output."""
+
     def parse(self, prompt: str) -> ScenarioIntent:
         lowered = prompt.lower()
         risk_factors: list[str] = []
@@ -24,6 +26,10 @@ class IntentParser:
             difficulty = "medium_high"
         if any(token in prompt for token in ("장애물", "obstacle")):
             risk_factors.append("static_obstacle_ahead")
+        if any(token in prompt for token in ("옆에서", "가로지", "끼어드", "횡단", "cross")):
+            risk_factors.append("cross_path")
+        if any(token in prompt for token in ("마주", "대향", "반대편", "oncoming")):
+            risk_factors.append("oncoming_pass")
         if any(token in prompt for token in ("보행자", "pedestrian", "횡단", "cross")):
             risk_factors.append("pedestrian_crossing")
         if any(token in prompt for token in ("횡단보도", "crosswalk")):

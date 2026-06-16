@@ -3,7 +3,7 @@
 경로:
 
 ```text
-experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/preview.png
+<UserProject>/runs/<RunId>/episodes/<EpisodeId>/preview.png
 ```
 
 형식:

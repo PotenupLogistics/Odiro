@@ -1,20 +1,20 @@
 # Environment Catalog
 
-상태: LLM이 `scenario_template`을 작성할 때 참고하는 환경 어휘 가이드다.
+상태: LLM이 `scenario.json`을 작성할 때 참고하는 환경 어휘 가이드다.
 
-LLM은 여기 있는 어휘를 Scenario Template의 `corridor`, `obstacles`, `pedestrians`에 사용한다.
+LLM은 여기 있는 어휘를 Project Scenario의 `corridor`, `obstacles`, `pedestrians`에 사용한다.
 
 ## 작성 원칙
 
 - surface, prop, persona, encounter type 이름은 이 문서의 어휘만 사용한다.
 - 모르는 surface/prop/persona 이름을 임의로 만들지 않는다.
-- catalog 정보를 template 안에 복사하지 않는다.
-- Template에는 “무엇을 배치/생성할지”만 쓴다.
+- catalog 정보를 scenario 안에 복사하지 않는다.
+- Scenario에는 “무엇을 배치/생성할지”만 쓴다.
 - 전역 거리/크기 단위는 meter다.
 
-## Template에서 쓰는 위치
+## Scenario에서 쓰는 위치
 
-| Template field | 사용하는 어휘 |
+| Scenario field | 사용하는 어휘 |
 | --- | --- |
 | `corridor.building_side[].surface` | surface id |
 | `corridor.curb_side[].surface` | surface id |
@@ -100,7 +100,7 @@ LLM은 여기 있는 어휘를 Scenario Template의 `corridor`, `obstacles`, `pe
 - 통로를 일부 막는 문/게이트 형태는 `pattern`을 쓴다.
 - 보도 가장자리 clutter는 `scatter`를 쓴다.
 - `palette.categories`와 `palette.classes`는 scatter에서 후보 prop을 제한할 때 쓴다.
-- 장애물의 구체 표현 방식은 template에 쓰지 않는다.
+- 장애물의 구체 표현 방식은 scenario에 쓰지 않는다.
 
 예시:
 
@@ -150,7 +150,7 @@ LLM은 여기 있는 어휘를 Scenario Template의 `corridor`, `obstacles`, `pe
 | `assertive` | 잘 비켜주지 않는 보행자 | 협폭/대향 통과 스트레스 테스트 |
 | `vulnerable` | 저속, 큰 personal space, 낮은 회피 성향 | 조심스럽게 접근해야 하는 보행자 |
 
-`persona`는 생성 시 구체 `behavior` 값으로 전개된다. Template에서는 persona와 필요한 override만 쓴다.
+`persona`는 생성 시 구체 `behavior` 값으로 전개된다. Scenario에서는 persona와 필요한 override만 쓴다.
 
 ### Behavior Override
 
@@ -211,5 +211,5 @@ LLM은 여기 있는 어휘를 Scenario Template의 `corridor`, `obstacles`, `pe
 - `palette.classes`가 정의된 prop class인가
 - `persona`가 정의된 persona id인가
 - `encounters[].type`이 정의된 encounter type인가
-- template에 catalog 정의 자체를 복사하지 않았는가
+- scenario에 catalog 정의 자체를 복사하지 않았는가
 - 너무 많은 macro pedestrian 분포 값을 넣지 않았는가

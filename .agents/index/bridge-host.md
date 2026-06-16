@@ -9,6 +9,9 @@ entry:
   - Bridge/cmd/odirohost/main.go
   - Bridge/internal/ipc
   - Bridge/internal/protocol
+  - Bridge/internal/api
+  - Bridge/internal/process
+  - Bridge/internal/workspace
   - Bridge/internal/tooling
   - Bridge/tools/common.ps1
   - Bridge/tools/check-prerequisites.ps1

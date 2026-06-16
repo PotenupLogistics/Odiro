@@ -3,7 +3,7 @@
 경로:
 
 ```text
-experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/captures/
+<UserProject>/runs/<RunId>/episodes/<EpisodeId>/captures/
 ```
 
 형식:
@@ -24,7 +24,7 @@ image/data artifacts
 
 | 항목 | 합의 |
 | --- | --- |
-| location | `episodes/<SampleId>/captures/` |
+| location | `episodes/<EpisodeId>/captures/` |
 | content | sensor image 또는 sensor data artifact |
 | reference | `run_time_seconds`, frame index, sensor id 등으로 조인 가능해야 함 |
 

@@ -62,26 +62,26 @@ v2 LLM mode는 optional 기능입니다. CI와 로컬 개발 기본 경로는 de
 
 운영에서 LLM을 켤 때만 provider 설정과 API key를 준비합니다.
 
-## 7. experiments root 설정
+## 7. user project root 설정
 
-`/api/v2/analysis/run`은 experiments root 하위 파일을 분석합니다. 기본 fallback은 `%APPDATA%/OdiroSim/experiments` 계열이며, 명시적으로 지정하려면 `ODIROSIM_EXPERIMENTS_DIR`을 사용합니다.
+`/api/v2/analysis/run`은 사용자가 직접 만든 project root 하위 파일을 분석합니다. 자동 생성되는 기본 root는 사용하지 않습니다. 현재 구현에 legacy environment variable이 남아 있으면 값은 `<UserProject>` 또는 user project collection root를 가리켜야 하며, 최종 API에서는 명시적 project root 전달로 대체합니다.
 
 Unix-like 예:
 
 ```text
-ODIROSIM_EXPERIMENTS_DIR=/path/to/OdiroSim/experiments
+ODIROSIM_EXPERIMENTS_DIR=/path/to/UserProject
 ```
 
 Windows cmd 예:
 
 ```text
-set ODIROSIM_EXPERIMENTS_DIR=C:\Users\<USER>\AppData\Roaming\OdiroSim\experiments
+set ODIROSIM_EXPERIMENTS_DIR=D:\OdiroProjects\DeliveryBotBaseline
 ```
 
 PowerShell 예:
 
 ```powershell
-$env:ODIROSIM_EXPERIMENTS_DIR="C:\Users\<USER>\AppData\Roaming\OdiroSim\experiments"
+$env:ODIROSIM_EXPERIMENTS_DIR="D:\OdiroProjects\DeliveryBotBaseline"
 ```
 
 ## 8. LLM mode 운영 설정

@@ -10,7 +10,10 @@ paths:
   - Agents/app/services/*episode*
   - Agents/app/services/*run_queue*
   - Agents/docs/README.md
+  - Agents/docs/agents/**
   - Agents/docs/architecture/**
+  - Agents/docs/development/**
+  - Agents/docs/experiment/**
   - Agents/docs/json_contracts/**
   - Agents/docs/status/**
 entry:
@@ -26,6 +29,7 @@ entry:
   - Agents/app/services/run_queue_export_service.py
 keep:
   - Do not re-expose legacy UE handoff routes unless intentionally restoring them.
+  - Final user project contract should write project/run/episode artifacts, not wrapper-free RunQueue JSON.
 verify:
   - focused pytest for touched route/model/service
   - contract validation when payload fields change

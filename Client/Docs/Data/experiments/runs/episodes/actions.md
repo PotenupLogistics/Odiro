@@ -3,7 +3,7 @@
 경로:
 
 ```text
-experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/actions.jsonl
+<UserProject>/runs/<RunId>/episodes/<EpisodeId>/actions.jsonl
 ```
 
 schema:
@@ -21,7 +21,7 @@ schema:
 - `sequence`는 `events.jsonl.action_sequence`와의 action/event 조인 전용 key다.
 - `run_time_seconds`는 episode 실행 시간이며, `trace.jsonl`과의 시간 조인 key다.
 - 전역 위치/거리 단위는 meter다. 속도는 km/h, 각도는 degree를 사용한다.
-- `target_id`는 Scenario Sample의 `scenario.semantic.static_obstacles[].id` 또는 `scenario.semantic.pedestrians[].id`와 조인되는 semantic id다.
+- `target_id`는 같은 episode의 episode scenario `semantic.static_obstacles[].id` 또는 `semantic.pedestrians[].id`와 조인되는 semantic id다.
 
 ## Line
 
@@ -123,7 +123,7 @@ schema:
 | `ray_index` | number | ray index |
 | `ray_yaw_degree` | number | 로봇 기준 signed local yaw. 단위 degree |
 | `actor_name` | string | hit actor 이름. miss면 빈 문자열 |
-| `target_id` | string or null | sample semantic id. 조인할 수 없으면 `null` |
+| `target_id` | string or null | episode scenario semantic id. 조인할 수 없으면 `null` |
 | `actor_tags` | string[] | hit actor tag 목록 |
 
 ## observed_objects
@@ -131,7 +131,7 @@ schema:
 | 필드 | 타입 | 합의 |
 | --- | --- | --- |
 | `actor_name` | string | 관측된 actor 이름 |
-| `target_id` | string or null | sample semantic id. 조인할 수 없으면 `null` |
+| `target_id` | string or null | episode scenario semantic id. 조인할 수 없으면 `null` |
 | `actor_tags` | string[] | 관측된 actor tag 목록 |
 | `closest_distance_m` | number | 해당 actor와의 최단 hit 거리. 단위 m |
 | `closest_ray_yaw_degree` | number | 가장 가까운 hit ray yaw. 단위 degree |
@@ -216,4 +216,4 @@ Python `/scenario/decide`가 action을 반환하지 못했거나 통신/처리 �
 | --- | --- | --- |
 | `events.jsonl` | `events.jsonl.action_sequence == actions.jsonl.sequence` | action/event 조인 |
 | `trace.jsonl` | `run_time_seconds` | 시간 기반 조인 |
-| `result.json` | episode folder + `sample_id` | episode 최종 결과와 같은 폴더에서 조인 |
+| `result.json` | episode folder + `episode_id` | episode 최종 결과와 같은 폴더에서 조인 |

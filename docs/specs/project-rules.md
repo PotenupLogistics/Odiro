@@ -67,14 +67,16 @@ Release에서는 host 단일 바이너리로 배포됨.
 
 ## Static Files
 
-각 서브 프로젝트는 Release에서도 사용하는 정적 파일을 지정된 서브폴더에 둔다.
+런타임에서 사용하는 정적 파일을 top-level `static` 폴더에 둔다.
+Release 배포 시 `resources` 폴더로 복사된다.
 
-```text
-Client/Static/
-Agents/static/
-```
+- RAG 등 Agents 런타임 데이터: `static/agents/`
+- 런타임에 생성되는 파일 기본값: `static/defaults/`
 
-> `Bridge`에 release static asset이 생기면 `Bridge/static/`에 두고 host binary에 embed한다.
+런타임에서 사용되나 배포 과정에서 변형되는 파일은 각 프로젝트 내부에서 관리한다.
+
+- 로봇 정책 Python 서버 스크립트: `Client/Resources/policy-runtime.py`에 두고, 배포 시 `resources/policy-runtime.pyz`로 패키징된다.
+- `Bridge`가 사용하는 HTML 파일 등은 `Bridge/public/`에 두고 host binary에 embed한다.
 
 ## contracts
 

@@ -16,7 +16,7 @@ class UScenarioAuthoringSubsystem;
 class UScenarioEditorRootWidget;
 class UScenarioEditorToolbarWidget;
 class UScenarioPlaceableComponent;
-class UScenarioPlaceableContextMenuWidget;
+class UScenarioPlaceableDetailsWidget;
 class UInputAction;
 class UInputMappingContext;
 class UMaterialInterface;
@@ -90,11 +90,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement", meta = (ClampMin = "0.0"))
 	double PlacementGroundSnapToleranceCm = 5.0;
 
-	// 지면 영역을 그리는 평면의 높이(cm). 코너 trace가 이 평면에 투영됨.
+	// 지�??�역??그리???�면???�이(cm). 코너 trace가 ???�면???�영??
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|RegionDraw")
 	double GroundRegionDrawPlaneZCm = 0.0;
 
-	// 드래그한 사각형의 가로/세로가 모두 이 값 이상이어야 커밋됨(짧은 클릭은 무시).
+	// ?�래그한 ?�각?�의 가�??�로가 모두 ??�??�상?�어??커밋??짧�? ?�릭?� 무시).
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|RegionDraw", meta = (ClampMin = "0.0"))
 	double RegionDrawMinSizeCm = 10.0;
 
@@ -125,7 +125,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool BeginPalettePlacement(EScenarioPaletteItemType itemType, FName assetId);
 
-	// 지면 영역(walkable/penalty/blocked)을 drag-out으로 그리는 모드로 진입함.
+	// 지�??�역(walkable/penalty/blocked)??drag-out?�로 그리??모드�?진입??
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|RegionDraw")
 	bool BeginGroundRegionDraw(EScenarioGroundRegionType regionType);
 
@@ -300,9 +300,9 @@ private:
 		FVector& outXAxis,
 		FVector& outYAxis,
 		FVector& outZAxis) const;
-	UScenarioPlaceableContextMenuWidget* EnsurePlaceableContextMenuWidget();
-	void UpdatePlaceableContextMenuForSelection(bool bRepositionToMouse = true);
-	void HidePlaceableContextMenu();
+	UScenarioPlaceableDetailsWidget* EnsurePlaceableDetailsWidget();
+	void UpdatePlaceableDetailsForSelection(bool bRepositionToMouse = true);
+	void HidePlaceableDetails();
 	AScenarioEditorPawn* GetEditorPawn() const;
 	UScenarioAuthoringSubsystem* GetAuthoringSubsystem() const;
 

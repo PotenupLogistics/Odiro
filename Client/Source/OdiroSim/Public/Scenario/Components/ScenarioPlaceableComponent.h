@@ -13,7 +13,9 @@ enum class EScenarioPlaceableAuthoringRole : uint8
 {
 	Generic,
 	RobotStartMarker,
-	RobotGoalMarker
+	RobotGoalMarker,
+	CorridorVertexHandle,
+	CorridorSegmentHandle
 };
 
 struct FScenarioAuthoringMeshCustomDepthState

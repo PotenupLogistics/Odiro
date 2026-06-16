@@ -23,9 +23,16 @@ entry:
   - ScenarioSampleWorldSpecAdapter.h / .cpp
   - ScenarioSimulationProfileAdapter.h / .cpp
   - ScenarioTemplateWorldSpecAdapter.h / .cpp
+  - Scenario/Data/ScenarioCorridorSurfaceCatalog.h / .cpp
   - ExperimentSettingTypes.h / .cpp
   - SimulationRunStatusTypes.h / .cpp
   - Scenario/Editor/ScenarioAuthoringSubsystem.h / .cpp
+  - Scenario/Editor/ScenarioCorridorHandleActor.h / .cpp
+  - Scenario/Editor/ScenarioCorridorPreviewActor.h / .cpp
+  - Scenario/Editor/ScenarioEditorController.h / .cpp
+  - Scenario/Widget/ScenarioEditorRootWidget.h / .cpp
+  - Scenario/Widget/ScenarioPlaceableDetailsWidget.h / .cpp
+  - Scenario/Widget/ScenarioPlaceableContextMenuWidget.h / .cpp
   - ExperimentSettingTypesTest.cpp
   - ScenarioTemplateSampleJsonTest.cpp
   - ScenarioTemplateSamplerTest.cpp
@@ -50,10 +57,12 @@ keep:
   - ScenarioSampleWorldSpecAdapter is the thin scenario_sample to runtime WorldSpec boundary; do not fold it into the legacy runtime ScenarioCompiler.
   - ScenarioSimulationProfileAdapter maps simulation_profile to DeliveryBot setup info for template-driven runs without turning it into legacy DeliveryBotSetup JSON.
   - ScenarioTemplateSampler owns deterministic scenario_template to scenario_sample generation; keep it separate from the runtime ScenarioCompiler and sample adapter.
+  - ScenarioCorridorSurfaceCatalog owns project-private Corridor surface metadata for authoring vocabulary ids such as sidewalk, grass, road, wall, and building.
   - ScenarioTemplateWorldSpecAdapter is the runner/launcher boundary for scenario_template files; it samples templates before handing the frozen sample to ScenarioSampleWorldSpecAdapter.
   - EpisodeRunResultJson owns canonical run outputs: summary.json, episodes/<SampleId>/result.json, and episodes/<SampleId>/events.jsonl.
   - ScenarioRunnerSubsystem writes only canonical `summary.json`, `result.json`, and `events.jsonl` outputs under RunOutputDirectory.
-  - ScenarioAuthoringSubsystem stores the editor draft as scenario_template and builds runtime WorldSpec only as a preview/compatibility projection.
+  - ScenarioAuthoringSubsystem stores the editor draft as scenario_template, exposes Corridor axis/profile/segment authoring APIs, spawns editor-only Corridor handles and spline lane preview actors, and builds runtime WorldSpec only as a preview/compatibility projection.
+  - ScenarioPlaceableDetailsWidget owns the placeable selection details panel; ScenarioPlaceableContextMenuWidget remains only as a legacy UMG compatibility wrapper.
 verify:
   - contract specs vs sample JSON alignment
   - scenario_template/scenario_sample docs vs Client shared schema type alignment
@@ -63,7 +72,7 @@ verify:
   - ScenarioTemplateSampler automation tests for layout, robot anchors, fixed obstacle placement, deterministic range sampling, and version mismatch
   - ScenarioSimulationProfileAdapter automation tests for test profile to DeliveryBot setup mapping
   - ScenarioTemplateWorldSpecAdapter file-flow automation test for template to deterministic sample to runtime WorldSpec
-  - ScenarioSampleWorldSpecAdapter automation tests and OdiroSimEditor build after adapter/editor draft changes
+  - ScenarioSampleWorldSpecAdapter automation tests and OdiroSimEditor build after adapter/editor draft, Corridor surface catalog, Corridor authoring API, Corridor spline preview, or Corridor handle/gizmo changes
   - focused automation tests for Scenario/Episode changes
   - Client/Task-RunPreview.bat smoke when wrapper supports the changed mode
 related:

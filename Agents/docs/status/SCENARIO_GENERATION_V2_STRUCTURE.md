@@ -2,7 +2,7 @@
 
 ## 1. 역할
 
-Scenario Generation v2는 사용자 자연어 `prompt` 하나를 `scenario_template` v1 JSON 객체로 변환하고 validation 결과와 함께 반환한다.
+Scenario Generation v2는 사용자 자연어 `prompt` 하나를 `scenario_template` v1 JSON 객체로 변환해 외부 API response body로 직접 반환한다.
 
 이 기능은 template 파일 관리, experiment 설정 반영, seed/sample 확정, Unreal 실행 payload 생성, RunQueue 생성, 결과 분석을 담당하지 않는다.
 
@@ -28,7 +28,7 @@ app.models.scenario_generation_v2.ScenarioGenerateV2Request
 Response model:
 
 ```text
-app.models.scenario_generation_v2.ScenarioGenerateV2Response
+app.models.scenario_generation_v2.ScenarioTemplateV1Response
 ```
 
 Routing:
@@ -37,15 +37,19 @@ Routing:
 scenario_generate_v2_endpoint()
 → Settings()
 → ScenarioGenerationGraphRunnerV2(settings=settings).run(request)
+→ response.template 추출
+→ ScenarioTemplateV1Response
 ```
 
 `/api/v2/scenarios/generate`는 v2 LangGraph workflow를 기본 실행 경로로 사용한다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2 endpoint의 일반 실행 분기에 사용하지 않는다. LangGraph import가 불가능한 환경에서는 runner 내부에서만 기존 sequential agent로 fallback한다.
 
-`V2_AGENT_LLM_ENABLED=false`이면 LangGraph 내부 deterministic parser/selector/builder 경로만 사용한다. `V2_AGENT_LLM_ENABLED=true`이면 `interpret_user_prompt_node`에서 JSON Schema structured output 기반 LLM-assisted 후보 template 생성을 시도하고, validator를 통과한 경우에만 그 후보를 사용한다. LLM 호출 실패 또는 LLM output validation 실패 시 deterministic graph path로 fallback하며, 응답은 계속 `generation_mode="langgraph"`를 유지한다.
+`V2_AGENT_LLM_ENABLED=false`이면 LangGraph 내부 deterministic parser/selector/builder 경로만 사용한다. `V2_AGENT_LLM_ENABLED=true`이면 `interpret_user_prompt_node`에서 JSON Schema structured output 기반 LLM-assisted 후보 template 생성을 시도하고, validator를 통과한 경우에만 그 후보를 사용한다. LLM 호출 실패 또는 LLM output validation 실패 시 deterministic graph path로 fallback한다. `generation_mode`는 내부 graph response metadata로만 유지하고 외부 API response body에는 노출하지 않는다.
 
 LLM prompt는 validator가 요구하는 최소 `scenario_template` v1 구조를 직접 제시한다. 특히 `corridor.axis`, `corridor.walkway_width_m`, `corridor.segments`, object형 `obstacles`, `pedestrians.encounters`, `robot.start`, `robot.goal`을 명시해 WorldConfig-style output이 나오지 않도록 한다.
 
 Structured output schema는 `app/agents/scenario_generation_v2/scenario_template_schema.py`에 있다. 이 schema는 root required fields, corridor/obstacles/pedestrians/robot 최소 구조, surface/placement/encounter/persona enum을 제한한다. Segment id cross-reference 같은 관계 검증은 계속 `TemplateValidator`가 담당한다.
+
+현재 schema는 Scenario Template v1 계약에 맞춰 robot abstract anchor(`entry`/`exit`)와 concrete anchor(`corridor_pose`)를 구분하고, 고정 숫자 또는 `{min,max}` 범위값, fixed/pattern/scatter obstacle placement, Unreal-supported override fields, placement `allow_blocking`, background `spawn_zone.segments`, 제한적 `corridor.segments[].replaced_by` choices를 허용한다. 기본 LLM 생성은 단순한 `fixed` placement를 우선한다.
 
 ## 3. Request / Response 구조
 
@@ -57,34 +61,22 @@ Request는 `prompt`만 받는다. Pydantic model은 `extra="forbid"`이므로 `e
 }
 ```
 
-Response는 기존 `template` 필드를 유지한다.
+Response body는 wrapper 없이 `scenario_template` v1 root object 자체를 반환한다.
 
 ```json
 {
-  "status": "success",
+  "schema": "scenario_template",
+  "version": 1,
   "template_id": "pinch_oncoming_pass",
-  "summary": "협폭 구간에서 대향 보행자와 마주치는 scenario_template JSON을 생성했습니다.",
-  "template": {
-    "schema": "scenario_template",
-    "version": 1,
-    "template_id": "pinch_oncoming_pass",
-    "intent": "협폭 구간에서 마주 오는 보행자와 조우할 때 로봇이 안전하게 감속, 양보, 통과하는지 검증한다.",
-    "corridor": {},
-    "obstacles": {},
-    "pedestrians": {},
-    "robot": {}
-  },
-  "validation": {
-    "valid": true,
-    "errors": [],
-    "warnings": []
-  },
-  "assumptions": [],
-  "generation_mode": "langgraph"
+  "intent": "협폭 구간에서 마주 오는 보행자와 조우할 때 로봇이 안전하게 감속, 양보, 통과하는지 검증한다.",
+  "corridor": {},
+  "obstacles": {},
+  "pedestrians": {},
+  "robot": {}
 }
 ```
 
-Response에는 `template_path`, `scenario_path`, `sample_id`, `generated_count`, `scenario_sample`을 넣지 않는다.
+Response에는 `status`, `summary`, `template`, `validation`, `assumptions`, `generation_mode`, `template_path`, `scenario_path`, `sample_id`, `generated_count`, `scenario_sample`을 넣지 않는다.
 
 ## 4. 실제 LangGraph StateGraph 흐름
 
@@ -161,7 +153,7 @@ Excluded:
 | `validate_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.validate_scenario_template_node` | Guardrail / validator | `scenario_template` | `validation`, `diagnostics`, `status` | 기존 `TemplateValidator`로 schema, 참조, catalog, forbidden field를 검사한다. |
 | `repair_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.repair_scenario_template_node` | Repair | invalid `scenario_template`, `repair_count` | repaired `scenario_template`, incremented `repair_count`, diagnostics | 기존 `RepairHandler`로 deterministic repair를 적용한다. 최대 2회 경로만 허용된다. |
 | `fallback_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.fallback_scenario_template_node` | Fallback | invalid state after repair attempts | fallback `scenario_template`, `validation`, `assumptions` | `narrow_sidewalk_cross_path` deterministic fallback template을 생성한다. |
-| `build_response_node` | `ScenarioGenerationGraphRunnerV2.build_response_node` | Response builder | final `scenario_template`, `validation`, `summary`, `assumptions` | `response`, `output` | 기존 response model로 감싸고 graph path에서는 `generation_mode="langgraph"`를 설정한다. |
+| `build_response_node` | `ScenarioGenerationGraphRunnerV2.build_response_node` | Response builder | final `scenario_template`, `validation`, `summary`, `assumptions` | internal `response`, `output` | graph 내부 결과와 diagnostics를 담은 internal response를 만든다. FastAPI boundary에서는 이 중 `template`만 외부 raw `scenario_template` response로 반환한다. |
 
 테스트 환경의 재현성 검증은 `V2_AGENT_LLM_ENABLED=false`로 실행되어 deterministic parser/selector/builder/validator path만으로 통과한다. LLM enabled 경로는 mock LLM client로 graph node 내부 호출과 invalid output fallback을 검증한다.
 
@@ -174,11 +166,19 @@ Validation checks include:
 - `template_id` snake_case
 - `intent`, `corridor`, `robot` 존재
 - `corridor.axis.type == "polyline"`
+- fixed number 또는 `{min,max}` 범위값
 - corridor segment id unique
 - obstacle placement id unique
+- obstacle placement kind-specific required fields for `fixed`, `pattern`, `scatter`
 - pedestrian encounter id unique
 - placement/encounter/robot `corridor_pose` segment 참조 무결성
 - `corridor_pose.along_m` segment range 검사
+- `entry`/`exit` robot anchor에 concrete pose field 혼합 금지
+- LLM output의 mixed abstract anchor는 repair 단계에서 `corridor_pose`로 보정하거나 concrete field를 제거
+- background `spawn_zone.segments` segment 참조 무결성
+- supported override fields: `cooperation`, `evasiveness`, `personal_space_m`, `awareness_horizon_s`, `max_yield_wait_s`, `sidestep_distance_m`
+- optional placement `allow_blocking` boolean
+- `corridor.segments[].replaced_by` string 또는 `{choices:[...]}`
 - legacy fields 금지: `ground_model`, `static_obstacles`, `pedestrians.path`
 - ownership/runtime fields 금지: `experiment_id`, `run_id`, `sample_count`, `base_seed`, `seed`, `sample_id`, `scenario_path`, `template_path`, `generated_count`, `ue_payload`
 - policy/robot setup field 금지: `policy`, `robot_setup`, `robot.setup`
@@ -207,8 +207,8 @@ Scenario Generation v2 does not:
 Reproducibility:
 
 - Scenario Generation v2 does not accept `seed`, `base_seed`, or `sample_count`.
-- These fields are not part of the request model, graph state, response model, or generated template.
-- The deterministic parser/selector/builder path is tested to return the same `template_id` and same `template` for the same prompt.
+- These fields are not part of the request model, external response model, or generated template.
+- The deterministic parser/selector/builder path is tested to return the same raw `scenario_template` for the same prompt.
 - Tests do not depend on LLM output; graph-path reproducibility tests run with `V2_AGENT_LLM_ENABLED=false`.
 
 Latest verification commands:
@@ -235,7 +235,7 @@ Latest OpenAI smoke:
 V2_AGENT_LLM_ENABLED=true
 V2_AGENT_GRAPH_ENABLED=false
 POST /api/v2/scenarios/generate
-→ HTTP 200 / status success / generation_mode langgraph
+→ HTTP 200 / raw scenario_template v1 response
 → LLM candidate validator valid true
 → structured output schema used by scenario_template LLM call
 → final validation.valid true

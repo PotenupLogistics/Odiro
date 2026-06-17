@@ -504,42 +504,42 @@ void UScenarioEditorSidebarMainPanel::ConfigureFieldRows()
 	{
 		SchemaFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 		SchemaFieldRow->SetFieldLabel(TEXT("schema"));
-		SchemaFieldRow->SetMultilineValue(false);
+		SchemaFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
 		SchemaFieldRow->SetEditable(false);
 	}
 	if (TemplateIdFieldRow)
 	{
 		TemplateIdFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 		TemplateIdFieldRow->SetFieldLabel(TEXT("template_id"));
-		TemplateIdFieldRow->SetMultilineValue(false);
+		TemplateIdFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
 		TemplateIdFieldRow->SetEditable(true);
 	}
 	if (VersionFieldRow)
 	{
 		VersionFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 		VersionFieldRow->SetFieldLabel(TEXT("version"));
-		VersionFieldRow->SetMultilineValue(false);
+		VersionFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Integer);
 		VersionFieldRow->SetEditable(false);
 	}
 	if (IntentFieldRow)
 	{
 		IntentFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 		IntentFieldRow->SetFieldLabel(TEXT("intent"));
-		IntentFieldRow->SetMultilineValue(true);
+		IntentFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::MultilineText);
 		IntentFieldRow->SetEditable(true);
 	}
 	if (RobotStartFieldRow)
 	{
 		RobotStartFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 		RobotStartFieldRow->SetFieldLabel(TEXT("robot.start"));
-		RobotStartFieldRow->SetMultilineValue(false);
+		RobotStartFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
 		RobotStartFieldRow->SetEditable(false);
 	}
 	if (RobotGoalFieldRow)
 	{
 		RobotGoalFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 		RobotGoalFieldRow->SetFieldLabel(TEXT("robot.goal"));
-		RobotGoalFieldRow->SetMultilineValue(false);
+		RobotGoalFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
 		RobotGoalFieldRow->SetEditable(false);
 	}
 	ConfigureRobotAnchorRows(
@@ -647,15 +647,17 @@ void UScenarioEditorSidebarMainPanel::ConfigureRobotAnchorRows(
 		UScenarioEditorSidebarFieldRow* Row = nullptr;
 		// Scenario Template detail field label.
 		const TCHAR* Label = TEXT("");
+		// Preferred editor type for this detail field.
+		EScenarioEditorSidebarFieldInputType InputType = EScenarioEditorSidebarFieldInputType::Text;
 	};
 
 	for (const FAnchorRowConfig& config : {
-		FAnchorRowConfig{ typeRow, TEXT("type") },
-		FAnchorRowConfig{ segmentRow, TEXT("segment") },
-		FAnchorRowConfig{ alongRow, TEXT("along_m") },
-		FAnchorRowConfig{ offsetRow, TEXT("offset_m") },
-		FAnchorRowConfig{ laneRow, TEXT("lane") },
-		FAnchorRowConfig{ headingRow, TEXT("heading") } })
+		FAnchorRowConfig{ typeRow, TEXT("type"), EScenarioEditorSidebarFieldInputType::EnumText },
+		FAnchorRowConfig{ segmentRow, TEXT("segment"), EScenarioEditorSidebarFieldInputType::Text },
+		FAnchorRowConfig{ alongRow, TEXT("along_m"), EScenarioEditorSidebarFieldInputType::Range },
+		FAnchorRowConfig{ offsetRow, TEXT("offset_m"), EScenarioEditorSidebarFieldInputType::Range },
+		FAnchorRowConfig{ laneRow, TEXT("lane"), EScenarioEditorSidebarFieldInputType::EnumText },
+		FAnchorRowConfig{ headingRow, TEXT("heading"), EScenarioEditorSidebarFieldInputType::EnumText } })
 	{
 		if (!config.Row)
 		{
@@ -664,7 +666,7 @@ void UScenarioEditorSidebarMainPanel::ConfigureRobotAnchorRows(
 
 		config.Row->SetTextStyleCatalog(TextStyleCatalog);
 		config.Row->SetFieldLabel(config.Label);
-		config.Row->SetMultilineValue(false);
+		config.Row->SetInputType(config.InputType);
 		config.Row->SetEditable(false);
 	}
 }

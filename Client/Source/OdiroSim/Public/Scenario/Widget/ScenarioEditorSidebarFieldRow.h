@@ -6,11 +6,25 @@
 #include "ScenarioEditorSidebarFieldRow.generated.h"
 
 class UEditableTextBox;
+class UButton;
+class UHorizontalBox;
 class UMultiLineEditableTextBox;
 class USizeBox;
 class UTextBlock;
 class UWidgetTextStyleCatalog;
 class SWidget;
+
+// Value editor shape used by one Scenario Template field row.
+UENUM(BlueprintType)
+enum class EScenarioEditorSidebarFieldInputType : uint8
+{
+	Text,
+	MultilineText,
+	Integer,
+	Number,
+	EnumText,
+	Range
+};
 
 // Broadcasts when a Scenario Template field row commits an editable text value.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
@@ -19,6 +33,19 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	Text,
 	ETextCommit::Type,
 	CommitMethod);
+
+// Broadcasts when a range field commits either min or max text.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
+	FScenarioEditorSidebarFieldRowRangeCommitted,
+	const FText&,
+	MinText,
+	const FText&,
+	MaxText,
+	ETextCommit::Type,
+	CommitMethod);
+
+// Broadcasts when an array-capable row requests a structural edit.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FScenarioEditorSidebarFieldRowActionRequested);
 
 // Leaf property row for Scenario Template sidebar fields such as "template_id : value".
 UCLASS(BlueprintType, Blueprintable)
@@ -39,6 +66,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	FString ValueText;
 
+	// Optional minimum text used when the field is edited as a range.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	FString MinValueText;
+
+	// Optional maximum text used when the field is edited as a range.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	FString MaxValueText;
+
+	// Preferred editor control shape for this row.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	EScenarioEditorSidebarFieldInputType InputType = EScenarioEditorSidebarFieldInputType::Text;
+
 	// Controls whether the row should expose the editable text box when one is bound.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	bool bEditable = true;
@@ -46,6 +85,14 @@ public:
 	// Controls whether editable values use the bounded multiline input instead of the single-line input.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	bool bMultilineValue = false;
+
+	// Controls whether range-capable rows show min/max boxes instead of a single value.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bRangeInputEnabled = false;
+
+	// Controls whether this row exposes add/remove buttons for array-like fields.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bArrayControlsEnabled = false;
 
 	// Minimum height used by multiline inputs before content-driven expansion.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template", meta = (ClampMin = "24.0"))
@@ -79,9 +126,61 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UMultiLineEditableTextBox> ValueMultiLineEditableTextBox;
 
+	// Optional horizontal range editor container used for min/max field values.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UHorizontalBox> ValueRangeBox;
+
+	// Optional editable text box for the range minimum value.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UEditableTextBox> MinValueEditableTextBox;
+
+	// Optional separator text shown between range min and max values.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UTextBlock> RangeSeparatorTextBlock;
+
+	// Optional editable text box for the range maximum value.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UEditableTextBox> MaxValueEditableTextBox;
+
+	// Optional button that toggles a range-capable field between single and min/max input.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UButton> RangeToggleButton;
+
+	// Optional text used by the range toggle button.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UTextBlock> RangeToggleTextBlock;
+
+	// Optional button that requests adding an array item near this row.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UButton> AddItemButton;
+
+	// Optional text used by the add item button.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UTextBlock> AddItemTextBlock;
+
+	// Optional button that requests removing an array item represented by this row.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UButton> RemoveItemButton;
+
+	// Optional text used by the remove item button.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UTextBlock> RemoveItemTextBlock;
+
 	// Emits committed text from the editable value control.
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
 	FScenarioEditorSidebarFieldRowTextCommitted OnValueTextCommitted;
+
+	// Emits committed min/max text from the editable range controls.
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarFieldRowRangeCommitted OnRangeValueTextCommitted;
+
+	// Emits when the row requests adding an array item.
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarFieldRowActionRequested OnAddItemRequested;
+
+	// Emits when the row requests removing an array item.
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarFieldRowActionRequested OnRemoveItemRequested;
 
 	// Updates the row label and refreshes bound controls.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
@@ -91,6 +190,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetValueText(const FString& text);
 
+	// Updates the min/max value text used by range-capable rows.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetRangeValueText(const FString& minText, const FString& maxText);
+
+	// Updates the preferred editor control shape for this row.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetInputType(EScenarioEditorSidebarFieldInputType inInputType);
+
 	// Toggles editable versus read-only value presentation.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetEditable(bool bInEditable);
@@ -98,6 +205,14 @@ public:
 	// Toggles multiline editable presentation for long string values.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetMultilineValue(bool bInMultilineValue);
+
+	// Toggles range-capable rows between single-value and min/max editing.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetRangeInputEnabled(bool bInRangeInputEnabled);
+
+	// Toggles add/remove controls for array-like fields.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetArrayControlsEnabled(bool bInArrayControlsEnabled);
 
 	// Updates the shared typography catalog reference used by this row.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
@@ -107,10 +222,34 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
 	FString GetValueText() const;
 
+	// Returns the minimum text currently displayed by the range editor.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	FString GetMinValueText() const;
+
+	// Returns the maximum text currently displayed by the range editor.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	FString GetMaxValueText() const;
+
 private:
 	// Handles text commits from the optional editable value control.
 	UFUNCTION()
 	void HandleValueTextCommitted(const FText& text, ETextCommit::Type commitMethod);
+
+	// Handles range minimum text commits.
+	UFUNCTION()
+	void HandleMinValueTextCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles range maximum text commits.
+	UFUNCTION()
+	void HandleMaxValueTextCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles clicks on the range mode toggle.
+	UFUNCTION()
+	void HandleRangeToggleClicked();
+	// Handles clicks on the add array item button.
+	UFUNCTION()
+	void HandleAddItemClicked();
+	// Handles clicks on the remove array item button.
+	UFUNCTION()
+	void HandleRemoveItemClicked();
 
 	// Builds the native fallback row tree when no Blueprint-authored tree is present.
 	void BuildDefaultWidgetTree();
@@ -120,6 +259,12 @@ private:
 	void UnbindControls();
 	// Applies stored label, value, and editability state to bound controls.
 	void RefreshRow();
+	// Returns whether the current type should show the multiline editor.
+	bool UsesMultilineInput() const;
+	// Returns whether the current type can toggle to min/max input.
+	bool IsRangeCapable() const;
+	// Returns whether the row should currently show min/max input.
+	bool UsesRangeInput() const;
 	// Applies text to a bound text block.
 	void SetTextBlockText(UTextBlock* textBlock, const FString& text) const;
 };

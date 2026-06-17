@@ -17,6 +17,7 @@
 #include "Engine/World.h"
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
 #include "Scenario/Widget/ScenarioEditorSidebarMainPanel.h"
 #include "Widget/WidgetTextStyleCatalog.h"
 
@@ -115,6 +116,37 @@ namespace
 		}
 	}
 
+	// Infers a conservative editor control type for generated read-only rows.
+	EScenarioEditorSidebarFieldInputType InferGeneratedFieldInputType(const FString& label)
+	{
+		const FString normalizedLabel = label.ToLower();
+		if (normalizedLabel.Contains(TEXT("range"))
+			|| normalizedLabel.Contains(TEXT("along_m"))
+			|| normalizedLabel.Contains(TEXT("offset_m")))
+		{
+			return EScenarioEditorSidebarFieldInputType::Range;
+		}
+		if (normalizedLabel.Contains(TEXT("count"))
+			|| normalizedLabel.Contains(TEXT("version")))
+		{
+			return EScenarioEditorSidebarFieldInputType::Integer;
+		}
+		if (normalizedLabel.Contains(TEXT("_m"))
+			|| normalizedLabel.Contains(TEXT("density"))
+			|| normalizedLabel.Contains(TEXT("cooperation"))
+			|| normalizedLabel.Contains(TEXT("speed")))
+		{
+			return EScenarioEditorSidebarFieldInputType::Number;
+		}
+		if (normalizedLabel.Contains(TEXT("type"))
+			|| normalizedLabel.Contains(TEXT("kind"))
+			|| normalizedLabel.Contains(TEXT("allow_")))
+		{
+			return EScenarioEditorSidebarFieldInputType::EnumText;
+		}
+		return EScenarioEditorSidebarFieldInputType::Text;
+	}
+
 	void AddFieldRow(
 		UWidgetTree* widgetTree,
 		UVerticalBox* body,
@@ -127,22 +159,19 @@ namespace
 			return;
 		}
 
-		UHorizontalBox* row = widgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
-		AddTextToHorizontalBox(
-			row,
-			MakeStyledText(widgetTree, label, catalog, EWidgetTextStyleRole::Label),
-			ESlateSizeRule::Automatic,
-			FMargin(0.0f, 2.0f, 8.0f, 2.0f));
-		AddTextToHorizontalBox(
-			row,
-			MakeStyledText(widgetTree, TEXT(":"), catalog, EWidgetTextStyleRole::Label),
-			ESlateSizeRule::Automatic,
-			FMargin(0.0f, 2.0f, 8.0f, 2.0f));
-		AddTextToHorizontalBox(
-			row,
-			MakeStyledText(widgetTree, value, catalog, EWidgetTextStyleRole::Value, true),
-			ESlateSizeRule::Fill,
-			FMargin(0.0f, 2.0f, 0.0f, 2.0f));
+		UScenarioEditorSidebarFieldRow* row =
+			widgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
+				UScenarioEditorSidebarFieldRow::StaticClass());
+		if (!row)
+		{
+			return;
+		}
+
+		row->SetTextStyleCatalog(catalog);
+		row->SetFieldLabel(label);
+		row->SetValueText(value);
+		row->SetInputType(InferGeneratedFieldInputType(label));
+		row->SetEditable(false);
 		AddWidgetToVerticalBox(body, row);
 	}
 

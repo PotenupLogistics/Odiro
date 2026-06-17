@@ -34,6 +34,9 @@ type PingResult struct {
 	Status string `json:"status"`
 }
 
+// MethodHandler resolves a validated request into a response.
+type MethodHandler func(Request) Response
+
 func ReadRequest(reader io.Reader) (Request, error) {
 	var request Request
 	if err := json.NewDecoder(reader).Decode(&request); err != nil {
@@ -60,34 +63,52 @@ func WriteResponse(writer io.Writer, response Response) error {
 
 // --- Protocol boundary handler ---
 
-// Validate boundary fields and dispatch to supported methods
+// Validate boundary fields and dispatch to built-in methods.
 func Handle(request Request) Response {
+	return HandleWith(request, nil)
+}
+
+// Validate boundary fields and dispatch through the supplied method handler.
+func HandleWith(request Request, handler MethodHandler) Response {
 	// Common error for invalid version and missing required fields
 	if request.Version != Version {
-		return errorResponse(request.ID, "INVALID_VERSION", fmt.Sprintf("unsupported protocol version %d", request.Version))
+		return ErrorResponse(request.ID, "INVALID_VERSION", fmt.Sprintf("unsupported protocol version %d", request.Version))
 	}
 	if request.ID == "" {
-		return errorResponse(request.ID, "INVALID_REQUEST", "id is required")
+		return ErrorResponse(request.ID, "INVALID_REQUEST", "id is required")
 	}
 	if request.Method == "" {
-		return errorResponse(request.ID, "INVALID_REQUEST", "method is required")
+		return ErrorResponse(request.ID, "INVALID_REQUEST", "method is required")
 	}
 
+	if handler != nil {
+		return handler(request)
+	}
+	return handleBuiltIn(request)
+}
+
+// handleBuiltIn dispatches the minimal protocol-owned method set.
+func handleBuiltIn(request Request) Response {
 	switch request.Method {
 	case "ping":
-		return Response{
-			Version: Version,
-			ID:      request.ID,
-			OK:      true,
-			Result:  PingResult{Status: "ok"},
-		}
+		return SuccessResponse(request.ID, PingResult{Status: "ok"})
 	default:
-		return errorResponse(request.ID, "UNKNOWN_METHOD", fmt.Sprintf("unknown method %q", request.Method))
+		return ErrorResponse(request.ID, "UNKNOWN_METHOD", fmt.Sprintf("unknown method %q", request.Method))
 	}
 }
 
-// normalizes all failures into the same response shape
-func errorResponse(id string, code string, message string) Response {
+// SuccessResponse normalizes successful method responses.
+func SuccessResponse(id string, result any) Response {
+	return Response{
+		Version: Version,
+		ID:      id,
+		OK:      true,
+		Result:  result,
+	}
+}
+
+// ErrorResponse normalizes all failures into the same response shape.
+func ErrorResponse(id string, code string, message string) Response {
 	return Response{
 		Version: Version,
 		ID:      id,

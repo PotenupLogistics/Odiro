@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 
+	"odiro/bridge/internal/api"
 	"odiro/bridge/internal/ipc"
 	"odiro/bridge/internal/protocol"
 )
@@ -21,6 +22,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("OdiroHost", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	endpointName := flags.String("endpoint", "", "IPC endpoint name or OS-specific address")
+	simulatorExecutable := flags.String("simulator-executable", "", "simulator executable path")
 	once := flags.Bool("once", false, "accept one connection and then exit")
 	ping := flags.Bool("ping", false, "check a running Bridge endpoint and exit")
 	help := flags.Bool("help", false, "show usage")
@@ -44,11 +46,17 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		return runPing(*endpointName, stdout, stderr)
 	}
 
-	return runServe(*endpointName, *once, stdout, stderr)
+	return runServe(*endpointName, *simulatorExecutable, *once, stdout, stderr)
 }
 
 // Default Host mode. Listen for incoming connections
-func runServe(endpointName string, once bool, stdout io.Writer, stderr io.Writer) int {
+func runServe(endpointName string, simulatorExecutable string, once bool, stdout io.Writer, stderr io.Writer) int {
+	router, err := api.NewDefaultRouter(simulatorExecutable)
+	if err != nil {
+		fmt.Fprintf(stderr, "router setup failed: %v\n", err)
+		return 1
+	}
+
 	listener, err := ipc.Listen(endpointName)
 	if err != nil {
 		fmt.Fprintf(stderr, "listen failed: %v\n", err)
@@ -70,7 +78,7 @@ func runServe(endpointName string, once bool, stdout io.Writer, stderr io.Writer
 		}
 
 		if once {
-			if err := serveConn(conn); err != nil && !errors.Is(err, io.EOF) {
+			if err := serveConn(conn, router.Handle); err != nil && !errors.Is(err, io.EOF) {
 				fmt.Fprintf(stderr, "connection failed: %v\n", err)
 				return 1
 			}
@@ -78,7 +86,7 @@ func runServe(endpointName string, once bool, stdout io.Writer, stderr io.Writer
 		}
 
 		go func() {
-			if err := serveConn(conn); err != nil && !errors.Is(err, io.EOF) {
+			if err := serveConn(conn, router.Handle); err != nil && !errors.Is(err, io.EOF) {
 				fmt.Fprintf(stderr, "connection failed: %v\n", err)
 			}
 		}()
@@ -123,7 +131,7 @@ func runPing(endpointName string, stdout io.Writer, stderr io.Writer) int {
 }
 
 // IPC connection handler
-func serveConn(conn ipc.Conn) error {
+func serveConn(conn ipc.Conn, handler protocol.MethodHandler) error {
 	defer conn.Close()
 
 	decoder := json.NewDecoder(conn)
@@ -133,7 +141,7 @@ func serveConn(conn ipc.Conn) error {
 		if err := decoder.Decode(&request); err != nil {
 			return err
 		}
-		if err := encoder.Encode(protocol.Handle(request)); err != nil {
+		if err := encoder.Encode(protocol.HandleWith(request, handler)); err != nil {
 			return err
 		}
 	}
@@ -142,7 +150,7 @@ func serveConn(conn ipc.Conn) error {
 // writeUsage는 CLI 표면을 한 곳에서 유지
 func writeUsage(writer io.Writer) {
 	fmt.Fprintln(writer, "Usage:")
-	fmt.Fprintln(writer, "  OdiroHost [--endpoint name] [--once]")
+	fmt.Fprintln(writer, "  OdiroHost [--endpoint name] [--simulator-executable path] [--once]")
 	fmt.Fprintln(writer, "  OdiroHost --ping [--endpoint name]")
 	fmt.Fprintln(writer, "  OdiroHost --help")
 }

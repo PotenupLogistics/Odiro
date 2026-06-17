@@ -157,6 +157,18 @@ public:
 		const TArray<FScenarioTemplateSegment>& segments,
 		TArray<FString>& outDiagnostics);
 
+	// Draft obstacle min_clear_width_m is replaced with a fixed or range value.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Obstacle")
+	bool SetObstacleMinClearWidthMeters(
+		const FScenarioTemplateNumberValue& widthMeters,
+		TArray<FString>& outDiagnostics);
+
+	// Draft obstacle placement rules are replaced as one template-owned array.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Obstacle")
+	bool SetObstaclePlacements(
+		const TArray<FScenarioTemplateObstaclePlacement>& placements,
+		TArray<FString>& outDiagnostics);
+
 	// Corridor vertex handle transform result applied to the draft template axis.
 	bool UpdateCorridorVertexHandleTransform(
 		const FString& handleId,
@@ -379,6 +391,11 @@ private:
 		const FScenarioTemplateDocument& previousTemplate,
 		bool bPreviousDirty,
 		TArray<FString>& outDiagnostics);
+	// Obstacle edit validation plus generated preview rebuild with rollback.
+	bool CommitObstacleDraftEdit(
+		const FScenarioTemplateDocument& previousTemplate,
+		bool bPreviousDirty,
+		TArray<FString>& outDiagnostics);
 	// Side lane profile 편집 입력이 surface와 width 조건을 만족하는지 확인함.
 	// Commits metadata-only draft edits without rebuilding generated preview actors.
 	bool CommitTemplateMetadataDraftEdit(
@@ -404,6 +421,10 @@ private:
 	bool ValidateCorridorSurfaceValue(
 		const FScenarioTemplateStringValue& value,
 		const FString& path,
+		TArray<FString>& outDiagnostics) const;
+	// Validates Obstacle placement ids and fixed-placement fields before applying an edit.
+	bool ValidateObstaclePlacements(
+		const TArray<FScenarioTemplateObstaclePlacement>& placements,
 		TArray<FString>& outDiagnostics) const;
 	// Axis 길이 변경에 맞춰 along 기반 robot/obstacle reference 값을 같은 비율로 보정함.
 	void RescaleCorridorAlongReferences(double oldLengthMeters, double newLengthMeters);

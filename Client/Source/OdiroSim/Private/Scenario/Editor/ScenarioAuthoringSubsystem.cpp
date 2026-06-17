@@ -501,6 +501,77 @@ bool UScenarioAuthoringSubsystem::SetCorridorSegments(
 	return CommitCorridorDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
 }
 
+bool UScenarioAuthoringSubsystem::SetObstacleMinClearWidthMeters(
+	const FScenarioTemplateNumberValue& widthMeters,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+	if (!IsPositiveTemplateNumber(widthMeters))
+	{
+		outDiagnostics.Add(TEXT("Obstacle min_clear_width_m must be a positive fixed value or positive min/max range."));
+		return false;
+	}
+
+	const FScenarioTemplateDocument previousTemplate = DraftScenarioTemplate;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioTemplateEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	DraftScenarioTemplate.Obstacles.MinClearWidthMeters = widthMeters;
+	return CommitObstacleDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::SetObstaclePlacements(
+	const TArray<FScenarioTemplateObstaclePlacement>& placements,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+
+	TArray<FScenarioTemplateObstaclePlacement> normalizedPlacements = placements;
+	for (FScenarioTemplateObstaclePlacement& placement : normalizedPlacements)
+	{
+		placement.PlacementId = placement.PlacementId.TrimStartAndEnd();
+		placement.PropId = placement.PropId.TrimStartAndEnd();
+		placement.PatternId = placement.PatternId.TrimStartAndEnd();
+		placement.At.SegmentId = placement.At.SegmentId.TrimStartAndEnd();
+		placement.At.LaneId = placement.At.LaneId.TrimStartAndEnd();
+		for (FString& segmentId : placement.Zone.SegmentIds)
+		{
+			segmentId = segmentId.TrimStartAndEnd();
+		}
+		for (FString& laneId : placement.Zone.LaneIds)
+		{
+			laneId = laneId.TrimStartAndEnd();
+		}
+		for (FString& categoryId : placement.Palette.CategoryIds)
+		{
+			categoryId = categoryId.TrimStartAndEnd();
+		}
+		for (FString& classId : placement.Palette.ClassIds)
+		{
+			classId = classId.TrimStartAndEnd();
+		}
+	}
+
+	if (!ValidateObstaclePlacements(normalizedPlacements, outDiagnostics))
+	{
+		return false;
+	}
+
+	const FScenarioTemplateDocument previousTemplate = DraftScenarioTemplate;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioTemplateEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	DraftScenarioTemplate.Obstacles.Placements = normalizedPlacements;
+	RepairCorridorReferenceSegmentIds();
+	return CommitObstacleDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
 bool UScenarioAuthoringSubsystem::UpdateCorridorVertexHandleTransform(
 	const FString& handleId,
 	const FTransform& transform,
@@ -930,7 +1001,9 @@ bool UScenarioAuthoringSubsystem::UpdateStaticObstacleTransform(
 	}
 
 	const FName propId(*placement->PropId);
+	const bool bAllowBlocking = placement->bAllowBlocking;
 	*placement = MakeStaticObstaclePlacement(instanceId, propId, resolvedTransform);
+	placement->bAllowBlocking = bAllowBlocking;
 	record->Transform = resolvedTransform;
 	actor->SetActorTransform(resolvedTransform, false, nullptr, ETeleportType::TeleportPhysics);
 
@@ -1915,6 +1988,38 @@ bool UScenarioAuthoringSubsystem::CommitCorridorDraftEdit(
 	return false;
 }
 
+bool UScenarioAuthoringSubsystem::CommitObstacleDraftEdit(
+	const FScenarioTemplateDocument& previousTemplate,
+	bool bPreviousDirty,
+	TArray<FString>& outDiagnostics)
+{
+	TArray<FScenarioSchemaDiagnostic> schemaDiagnostics;
+	if (!FScenarioTemplateJson::ValidateDocument(DraftScenarioTemplate, schemaDiagnostics))
+	{
+		AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+		DraftScenarioTemplate = previousTemplate;
+		bDirty = bPreviousDirty;
+		return false;
+	}
+	AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+
+	bDirty = true;
+	if (RefreshGeneratedEditorPreviewActorsFromDraft(outDiagnostics))
+	{
+		return true;
+	}
+
+	DraftScenarioTemplate = previousTemplate;
+	bDirty = bPreviousDirty;
+
+	TArray<FString> rollbackDiagnostics;
+	RefreshGeneratedEditorPreviewActorsFromDraft(rollbackDiagnostics);
+	SyncCorridorHandleActors();
+	bDirty = bPreviousDirty;
+	outDiagnostics.Add(TEXT("Obstacle edit was rejected because the editor preview could not be refreshed."));
+	return false;
+}
+
 bool UScenarioAuthoringSubsystem::CommitTemplateMetadataDraftEdit(
 	const FScenarioTemplateDocument& previousTemplate,
 	bool bPreviousDirty,
@@ -2068,6 +2173,78 @@ bool UScenarioAuthoringSubsystem::ValidateCorridorSurfaceValue(
 	}
 
 	return ValidateCorridorSurfaceId(value.FixedValue, path, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::ValidateObstaclePlacements(
+	const TArray<FScenarioTemplateObstaclePlacement>& placements,
+	TArray<FString>& outDiagnostics) const
+{
+	TSet<FString> placementIds;
+	for (int32 index = 0; index < placements.Num(); ++index)
+	{
+		const FScenarioTemplateObstaclePlacement& placement = placements[index];
+		const FString placementPath = FString::Printf(TEXT("obstacles.placements[%d]"), index);
+		if (placement.PlacementId.IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s.id must not be empty."), *placementPath));
+			return false;
+		}
+		if (placementIds.Contains(placement.PlacementId))
+		{
+			outDiagnostics.Add(FString::Printf(
+				TEXT("Duplicate obstacle placement id '%s'."),
+				*placement.PlacementId));
+			return false;
+		}
+		placementIds.Add(placement.PlacementId);
+
+		if (placement.Kind != EScenarioTemplateObstaclePlacementKind::Fixed)
+		{
+			continue;
+		}
+
+		if (placement.PropId.IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s.prop is required for fixed placement."), *placementPath));
+			return false;
+		}
+
+		FScenarioStaticObstaclePropEntry propEntry;
+		if (!TryFindStaticObstacleProp(FName(*placement.PropId), propEntry))
+		{
+			outDiagnostics.Add(FString::Printf(
+				TEXT("%s.prop references unknown static obstacle prop '%s'."),
+				*placementPath,
+				*placement.PropId));
+			return false;
+		}
+
+		if (placement.At.SegmentId.IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s.at.segment is required for fixed placement."), *placementPath));
+			return false;
+		}
+		if (!placement.At.AlongMeters.bIsSet
+			|| placement.At.AlongMeters.Mode != EScenarioTemplateNumberValueMode::Fixed
+			|| !FMath::IsFinite(placement.At.AlongMeters.FixedValue))
+		{
+			outDiagnostics.Add(FString::Printf(
+				TEXT("%s.at.along_m must be a fixed finite meter value."),
+				*placementPath));
+			return false;
+		}
+		if (!placement.At.OffsetMeters.bIsSet
+			|| placement.At.OffsetMeters.Mode != EScenarioTemplateNumberValueMode::Fixed
+			|| !FMath::IsFinite(placement.At.OffsetMeters.FixedValue))
+		{
+			outDiagnostics.Add(FString::Printf(
+				TEXT("%s.at.offset_m must be a fixed finite meter value."),
+				*placementPath));
+			return false;
+		}
+	}
+
+	return true;
 }
 
 void UScenarioAuthoringSubsystem::RescaleCorridorAlongReferences(double oldLengthMeters, double newLengthMeters)

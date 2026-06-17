@@ -1,8 +1,13 @@
-# Input - RunQueue JSON
+# RunQueue JSON
 
-상태: legacy contract. 최종 실행 계약에서는 사용하지 않는다.
-새 실행 입력은 사용자가 직접 만든 `<UserProject>/scenario.json`, `<UserProject>/setting.json`, `<UserProject>/profile.json`, `<UserProject>/policy/`에서 파생한다.
-RunQueue adapter는 만들지 않는다. 기존 reader/writer는 project runner 입력 생성으로 대체한 뒤 제거한다.
+상태: legacy input contract.
+
+- 최종 실행 계약에서 사용하지 않음
+- 새 실행 입력: `<UserProject>/setting.json`, `profile.json`, `scenario.json`, `policy/`
+- 새 episode 입력: `runs/<RunId>/episodes/<EpisodeId>/scenario.json`
+- RunQueue adapter 금지
+- 기존 reader/writer: project runner 입력 생성으로 대체 후 제거
+- 최종 기준: `contracts/specs/user-project-data.md`
 
 # 목적
 

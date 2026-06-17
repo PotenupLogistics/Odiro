@@ -3,7 +3,8 @@
 - 기준: 사용자 project root의 공유 파일 형식
 - 대상: Bridge, Client, Agents가 함께 읽고 쓰는 파일
 - 제외: Bridge IPC 요청/응답 형식. 해당 계약은 `bridge-ipc.md`가 소유
-- 제외: `Client/Docs/Data/**`. 이전 문서이며, 필요한 내용은 이 문서로 이관 후 제거
+- 제외: 제거된 `Client/Docs/Data/**`
+- 최종 기준: 새 writer/API/schema는 이 문서를 우선
 
 ## 공통 규칙
 
@@ -751,6 +752,12 @@ runs/<RunId>/snapshot/policy/
 policy/__init__.py:create_policy
 ```
 
+진입점 규칙:
+
+- `create_policy()`는 인자 없이 호출 가능해야 함
+- 반환값은 `Client/Resources/policy-runtime.py`가 호출하는 policy object
+- runtime은 policy object의 `start`, `decide`, `end`를 JSON 직렬화 가능한 dict 입출력으로 호출한다.
+
 snapshot 복사 규칙:
 
 - `policy/` 전체 copy
@@ -829,6 +836,12 @@ build/Release/resources/run-defaults/
 review/
 episodes/
 ```
+
+source-only marker:
+
+- `review/.gitkeep`
+- `episodes/.gitkeep`
+- `workspace.createRun` 복사 제외
 
 금지 내용:
 

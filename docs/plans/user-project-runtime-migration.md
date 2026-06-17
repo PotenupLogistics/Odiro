@@ -1,5 +1,5 @@
 ---
-status: Draft
+status: In Progress
 type: change
 specs:
   - docs/specs/project-structure.md
@@ -28,14 +28,14 @@ specs:
 
 - `project-structure.md`, `simulation-interface.md`: 최종 상태 기준
 - 현재 구현 상태에 맞춘 두 문서 되돌림 금지
-- `Client/Docs/Data/**`: 전역 데이터 계약 기준 아님
-- `Client/Docs/Data/**` 내용: 필요한 항목만 `user-project-data.md`로 이관 후 제거
+- `Client/Docs/Data/**`: 제거됨. 전역 데이터 계약 기준 아님
 
 ## 현재 상태
 
-- git `HEAD` 기준 변경분: 완료 구현으로 간주 X
-- 현재 worktree 변경분: 중단된 초안
-- 각 단계 완료 조건: 재검토 + 검증 통과
+- T01-T09: 런타임 구현 완료. 최종 검증 진행 중
+- T10: 이전 계약 정리 진행 중
+- Client UI 전환: 보류. 이번 변경은 UI를 만들기 전 가능한 기능 검증까지 수행
+- `MainMenuWidget`: 이번 non-UI commit 범위에서 제외
 
 ## 문서별 책임
 
@@ -92,7 +92,8 @@ specs:
 - `simulation-interface.md`: 최종 용어와 실행 흐름만 유지
 - 공유 데이터 파일 형식 → `contracts/specs/user-project-data.md`
 - Bridge IPC 호출 형식 → `contracts/specs/bridge-ipc.md`
-- `Client/Docs/Data/**` 전역 계약 내용 → `user-project-data.md` 기준 재작성
+- `Client/Docs/Data/**` 전역 계약 내용 → `user-project-data.md`로 통합
+- 남은 `Client/Docs/Data/**` 제거
 - 남은 `Client/Docs/**` → Client 전용 문서만 유지
 
 검증:
@@ -113,6 +114,9 @@ specs:
 - 지원 template id: 문서 고정 목록 X
 - 지원 template id source: `static/project-templates/` 직접 하위 폴더
 - 필수 파일: `setting.json`, `profile.json`, `scenario.json`, `policy/__init__.py:create_policy`
+- `demo/policy`: 기존 `Client/Tools/PythonAgent/agent` 내용을 project policy 형태로 이전
+- `blank/policy`: 최소 유효 skeleton. demo policy 기준으로 쓰지 않음
+- `Client/Tools/PythonAgent/samples`: 사용처 확인 후 fixture 유지 또는 제거
 
 검증:
 
@@ -139,7 +143,7 @@ specs:
 - static copy dry-run
 - run directory 구조 확인
 
-### T04 Bridge 기본 기능
+### T04 Bridge 기본 기능 [완료]
 
 목적:
 
@@ -154,13 +158,17 @@ specs:
 - `validateProject`
 - `createRun`
 - `startSimulator`
+- `getRunStatus`
+- `stopSimulator`
+- `status.json` 작성
 
 검증:
 
 - `cd Bridge; go test ./...`
 - build script
+- `git diff --check`
 
-### T05 Agents 경계 정리
+### T05 Agents 경계 정리 [완료]
 
 목적:
 
@@ -171,32 +179,42 @@ specs:
 - v1 scenario route: 제거 안내만 유지
 - v2 scenario 응답: `scenario`
 - v2 analysis 입력: `project_path + run_id`
+- RunQueue API 생성 경로 제거
+- Agents 문서의 현재 API 설명 정리
 
 검증:
 
 - 관련 pytest
+- `cd Agents; uv run ruff check app tests`
+- `git diff --check`
 
-### T06 Client project 실행 기반
+### T06 Client project 실행 기반 [완료]
 
 목적:
 
-- snapshot 기반 simulator 실행
+- Bridge가 만든 run snapshot으로 simulator process bootstrap
 
 변경:
 
 - `-OdiroProject`
 - `-RunId`
+- `-PolicyPort`
 - snapshot parse
-- policy 준비 확인
+- `setting.runtime.map_id`, `setting.runtime.fixed_fps` 적용
+- `policy/__init__.py:create_policy` 확인
+- `Client/Tools/PythonAgent/server.py` → `Client/Resources/policy-runtime.py` 이전
+- project template에는 policy runtime을 복사하지 않음
 - 실패 시 0이 아닌 종료 코드
+- episode scenario 생성과 실제 episode 실행 연결은 T07에서 처리
 
 검증:
 
-- UE build
-- ProjectRuntime automation
-- SimulatorProcess automation
+- `Build.bat OdiroSimEditor Win64 Development -Project=X:\Odiro\Client\OdiroSim.uproject -WaitMutex -FromMsBuild -NoXGE -MaxParallelActions=1`
+- `OdiroSim.UserProjectRun`
+- `OdiroSim.SimulationSetup.CommandLine.Parse`
+- `OdiroSim.SimulatorLaunch.CommandLine`
 
-### T07 Client 입력 계약 정리
+### T07 Client 입력 계약 정리 [완료]
 
 목적:
 
@@ -204,22 +222,46 @@ specs:
 
 변경:
 
-- MainMenu/launcher project root 선택
+- command-line/launcher project root 전달
 - `setting/profile/scenario` read/write
 - `EpisodeScenario` reader/writer
+- project run은 RunQueue 파일을 만들지 않고 episode input 배열로 runner 시작
+- `episode_scenario` → runtime WorldSpec adapter
+- `simulation_profile` field alias → 기존 DeliveryBot setup compiler
 
 검증:
 
-- 오래된 Client symbol 검색
-- editor/runtime automation
+- `Build.bat OdiroSimEditor Win64 Development -Project=X:\Odiro\Client\OdiroSim.uproject -WaitMutex -FromMsBuild -NoXGE -MaxParallelActions=1`
+- `OdiroSim.UserProjectEpisodeScenario.WorldSpecAdapter.Valid`
+- `OdiroSim.UserProjectData`
+- `OdiroSim.SimulatorLaunch.ProjectRun.Validation`
+- `git diff --check`
+- project run direct input 경로 확인
+- 오래된 Client symbol 검색은 T10에서 최종 제거 기준으로 재수행
 
-### T08 로그 계약 정리
+### T08 로그 계약 정리 [완료]
 
 목적:
 
 - 단일 MeasurementLog 분리
 
 변경:
+
+- 완료:
+  - project run episode 종료 시 `result.json` 작성
+  - project run policy decide 시 `actions.jsonl` 작성
+  - `events.jsonl` 작성
+  - 종료 원인 event 항상 기록
+  - project run runtime tick에서 `trace.jsonl` 작성
+  - run 종료 시 `summary.json` 작성
+  - `PlatformAnalysisAiSubsystem` v2 project run 입력 추가
+  - v2 analysis 응답을 `runs/<RunId>/review/analysis_run_response_v2.json`에 저장
+
+T10 처리:
+
+- legacy report/log analysis 요청 제거 또는 보관 범위 명시
+
+세부 변경 대상:
 
 - `actions` writer
 - `events` writer
@@ -229,10 +271,15 @@ specs:
 
 검증:
 
+- `Build.bat OdiroSimEditor Win64 Development -Project=X:\Odiro\Client\OdiroSim.uproject -WaitMutex -FromMsBuild -NoXGE -MaxParallelActions=1`
+- `OdiroSim.UserProjectData.RunOutput.Write`
+- `OdiroSim.UserProjectData.RobotAction.Write`
+- `OdiroSim.UserProjectData.EpisodeTrace.Write`
+- `OdiroSim.Platform.AnalysisAi.ProjectRunRequestJsonBuild`
 - log 파일 간단 점검
-- 오래된 `Saved/AnalysisLogs` 검색
+- 오래된 `Saved/AnalysisLogs` 검색 결과를 T10 대상과 대조
 
-### T09 전체 흐름 점검
+### T09 전체 흐름 점검 [완료]
 
 목적:
 
@@ -240,14 +287,30 @@ specs:
 
 변경:
 
-- static project template 목록 조회
-- project 생성
-- run 생성
-- Bridge 경유 simulator 실행
-- 결과 파일 확인
+- 완료:
+  - Bridge process lifecycle test 보강
+  - fake simulator child 실행으로 `status.json` lifecycle 확인
+  - 실제 `static/project-templates` 기준 project 생성 dry-run
+  - 실제 `static/run-defaults` 기준 run 생성 dry-run
+  - run snapshot 경로와 generated cache 제외 확인
+  - 실제 simulator process smoke 확인
+    - `-OdiroProject`, `-RunId`, `-PolicyPort`로 실행
+    - run 완료 후 simulator child process 정상 종료
+    - Simulator는 `status.json`을 쓰지 않음. `status.json` lifecycle은 Bridge process test로 검증
+    - `episodes/000001/result.json`
+    - `episodes/000001/actions.jsonl`
+    - `episodes/000001/events.jsonl`
+    - `episodes/000001/trace.jsonl`
+    - `summary.json`
+    - `review/` directory 유지
 
 검증:
 
+- `cd Bridge; go test ./...`
+- OdiroSimEditor build
+- `OdiroSim.UserProjectData`
+- `OdiroSim.SimulatorLaunch.ProjectRun.Validation`
+- `OdiroSim.Platform.AnalysisAi.ProjectRunRequestJsonBuild`
 - `status`
 - `snapshot`
 - `episode`
@@ -255,7 +318,7 @@ specs:
 - `summary`
 - `review`
 
-### T10 이전 계약 정리
+### T10 이전 계약 정리 [진행 중]
 
 목적:
 
@@ -263,13 +326,26 @@ specs:
 
 변경:
 
-- 오래된 samples/tests/docs 보관 또는 삭제
-- `Client/Docs/Data/**` 제거
-- `.agents/index` 재검토
+- 완료:
+  - `Client/Docs/Data/**` 제거
+  - Scenario LLM authoring의 RunQueue 저장/실행 경로 제거
+  - Scenario LLM authoring은 v2 `scenario` 응답을 user project `scenario.json`에 저장
+  - `SimulatorLaunchSubsystem`의 SimulationSetup/RunQueue/legacy report helper는 Blueprint 호환용 deprecated API로 보관
+  - Agents RunQueue export tooling/test는 legacy tooling 범위로 보관
+  - legacy contract 문서(`RunQueue`, `DeliveryBotSetup`, `EpisodeEvaluationReport`)는 보관 guide로 명시
+
+보류:
+
+- MainMenu project root 선택 UI
+- MainMenu project run 목록과 결과 미리보기
+- MainMenu v2 analysis 실행 UI
+- MainMenu legacy `Json/Input`, `RunQueue`, `Saved/AnalysisLogs` fallback 제거
 
 검증:
 
 - repo 전체 오래된 계약 검색
+- OdiroSimEditor build
+- Agents focused pytest/ruff
 
 ## 검색 명령
 
@@ -293,16 +369,6 @@ rg -n "RunQueue|run_queue|scenario_template|scenario_sample|SimulationSetup|Deli
 - 이전 계획 기록
 - 전환 보호 규칙
 
-## 보류 결정
-
-| 항목                                 | 결정 시점                                                                           |
-| ------------------------------------ | ----------------------------------------------------------------------------------- |
-| `review/` 추가 report/finding schema | Agents analysis 재작성 전                                                           |
-| `summary.json` 집계 field            | Client result writer 후                                                             |
-| `result.json` advanced metrics       | Client result writer 후                                                             |
-| snapshot hash 산정 규칙              | `workspace.createRun` 안정화 후                                                     |
-| 패키징된 policy runtime 형태         | 배포 패키징 전. `Client/Resources/policy-runtime.py` 유지 또는 `policy-runtime.pyz` |
-
 ## 위험
 
 | 위험                                | 대응                                                                      |
@@ -315,9 +381,26 @@ rg -n "RunQueue|run_queue|scenario_template|scenario_sample|SimulationSetup|Deli
 | Bridge/Simulator 책임 혼선          | Bridge는 process 생명주기, Simulator는 episode 결과 파일                  |
 | 이전 log 분석 의존                  | 이전 log 호환 없음 명시, 새 analysis 입력만 검증                          |
 
-## 중단 조건
+## 완료 검증
 
-- scenario editor/type/runner 변경이 최종 계약 재결정을 요구
-- project template schema와 `user-project-data.md` schema 충돌
-- Bridge 경로 안전성 보장 실패
-- snapshot `policy/__init__.py:create_policy` 계약 불일치
+- `git diff --check`
+- `cd Bridge; go test ./...`
+- `cd Agents; uv run ruff check app tests`
+- `cd Agents; uv run pytest tests/test_scenario_generation_api.py tests/test_v2_analysis_run_api.py tests/test_v2_graph_settings.py tests/test_v2_result_analysis_graph_runner.py`
+- `Build.bat OdiroSimEditor Win64 Development -Project=X:\Odiro\Client\OdiroSim.uproject -WaitMutex -FromMsBuild -NoXGE -MaxParallelActions=1`
+- UE automation:
+  - `OdiroSim.SimulationSetup.CommandLine.Parse`
+  - `OdiroSim.UserProjectRun.Snapshot`
+  - `OdiroSim.UserProjectData`
+  - `OdiroSim.UserProjectEpisodeScenario.WorldSpecAdapter.Valid`
+  - `OdiroSim.ScenarioSample.WorldSpecAdapter.Valid`
+  - `OdiroSim.SimulatorLaunch.ProjectRun.Validation`
+  - `OdiroSim.Platform.AnalysisAi.ProjectRunRequestJsonBuild`
+- Direct process smoke:
+  - `-OdiroProject`, `-RunId=000001`, `-PolicyPort=18145`
+  - exit code `0`
+  - `status.json` 없음
+  - `summary.json` rows `3`
+  - `episodes/000001/result.json` success `true`, terminal reason `GoalReached`
+  - `summary.json`/`result.json` policy snapshot hash 일치
+  - `actions.jsonl`, `events.jsonl`, `trace.jsonl` 생성

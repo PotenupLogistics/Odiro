@@ -1,5 +1,12 @@
 # 인터페이스 설계
 
+상태: legacy Client interface note.
+
+- 최종 사용자 project 실행 계약 아님
+- 최신 기준: `docs/specs/project-structure.md`, `docs/specs/simulation-interface.md`
+- 공유 파일 계약: `contracts/specs/user-project-data.md`
+- 이 문서는 기존 UI/API 개념 추적용
+
 ## 프로젝트의 목적
 
 주행 로봇 시뮬레이션 환경을 제공하고, 다양한 시나리오에서 로봇의 성능을 평가할 수 있는 플랫폼을 구축한다.

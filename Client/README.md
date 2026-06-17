@@ -16,8 +16,8 @@
 - `Task-Build.bat`: Unreal 빌드
 - `Task-Dev.bat`: Unreal Editor 실행
 - `Task-RunPreview.bat`: Standalone PIE 실행 (`UnrealEditor.exe <uproject> -game -NoSplash`)
-  - 시뮬레이터: `-Simulate=<SimulationSetupFile> -RunId=<RunId>`
-- `Task-RunPythonPolicyServer.bat`: 로봇의 정책 실현 서버 `Tools\PythonAgent\server.py`를 `127.0.0.1:8000`에서 runtime policy mode로 실행
+  - user project run: `-OdiroProject=<UserProject> -RunId=<RunId> [-PolicyPort=<Port>]`
+- `Task-RunPythonPolicyServer.bat`: `Resources\policy-runtime.py` 실행
 - `.run/GeneratePreviewConfigs.ps1`: Rider 시작 시 `.run/*.local.run.xml` Preview 실행 설정 생성
   - `OdiroSim.uproject`의 `EngineAssociation` 기반으로 로컬 Unreal Editor 경로 탐색
   - 생성된 `*.local.run.xml`은 사용자별 절대 경로를 담으므로 git에서 제외

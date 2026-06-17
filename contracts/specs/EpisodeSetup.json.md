@@ -1,5 +1,13 @@
 # EpisodeSetup JSON Guide
 
+상태: legacy Client input guide.
+
+- 최종 사용자 project 계약 아님
+- 새 scenario 기준: `contracts/specs/user-project-data.md`의 `scenario.json`
+- 새 episode 입력 기준: `episode_scenario`
+- 새 writer는 `EpisodeSetup` JSON을 만들지 않음
+- 이 문서는 기존 compiler와 field 출처 확인용
+
 이 문서는 LLM이 EpisodeSetup JSON을 안정적으로 생성하기 위한 축약 양식을 설명한다. 샘플은 `Json/Input/EpisodeSetupSample.json` 및 `Json/Input/EpisodeSetupSample_*.json`을 기준으로 한다.
 
 EpisodeSetup JSON은 에피소드 실행 정보, 지면 영역, 보행자 경로, 정적 장애물, 보행자, 로봇 배치와 로봇 목적지를 정의한다. DeliveryBot의 주행/센서/정책 튜닝값은 같은 실행 pair의 DeliveryBotSetup JSON에서 정의한다.

@@ -1,5 +1,11 @@
 # Pedestrian Social Evaluation Design
 
+상태: Client implementation design note.
+
+- 최종 사용자 project 계약 아님
+- 새 scenario/log 기준: `contracts/specs/user-project-data.md`
+- 기존 ScenarioSetup 기반 내용은 migration 전 구현 맥락
+
 ## 목적
 
 이 문서는 OdiroSim의 보행자를 단순 이동 장애물이 아니라 로봇 정책을 검증하는 사회적/동적 평가 장치로 확장하기 위한 설계와 구현 단계를 정리한다.

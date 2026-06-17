@@ -1,5 +1,14 @@
 # Episode Evaluation Report JSON Guide
 
+상태: legacy Client output guide.
+
+- 최종 사용자 project 결과 계약 아님
+- 새 episode 결과 기준: `contracts/specs/user-project-data.md`의 `result.json`
+- 새 event log 기준: `events.jsonl`
+- 새 run 집계 기준: `summary.json`
+- 새 writer는 `EpisodeEvaluationReport` JSON을 만들지 않음
+- 이 문서는 기존 report field 출처 확인용
+
 이 문서는 한 번의 Episode 실행 결과를 담은 `episode_evaluation_report` JSON 양식을 설명한다.
 
 이 report를 통해 Episode에서 어떤 사건이 있었는지, 평가 결과가 왜 그렇게 나왔는지 해석한 뒤 EpisodeSetup JSON, DeliveryBotSetup JSON, 로봇 정책 파라미터, 환경 구성 변수를 조정할 근거로 삼을 수 있다.

@@ -942,6 +942,10 @@ bool AScenarioEditorController::TryUpdateSelectedPlaceableTransform(
 
 	UpdateTransformGizmoForSelection();
 	UpdatePlaceableDetailsForSelection(false);
+	if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
+	{
+		rootWidget->RefreshTemplateSidebarWidget();
+	}
 	return true;
 }
 
@@ -1566,6 +1570,10 @@ void AScenarioEditorController::EndTransformGizmoDrag()
 
 	ResetTransformGizmoDrag();
 	UpdateTransformGizmoForSelection();
+	if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
+	{
+		rootWidget->RefreshTemplateSidebarWidget();
+	}
 	ApplyInputMode();
 }
 

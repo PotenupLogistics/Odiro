@@ -76,6 +76,7 @@ keep:
   - ScenarioCorridorPreviewActor renders curb_side lane strips 15cm below the walkway to show the curb-side grade separation.
   - ScenarioCorridorPreviewActor keeps non-blocking Corridor surface strips at least 20cm thick so adjacent Z-offset lanes have no vertical gap.
   - ScenarioAuthoringSubsystem normalizes static obstacle editor transforms to the Corridor surface Z offset before preview validation, spawn, update, and editor-view rebuild.
+  - ScenarioEditorController routes viewport transform edits through ScenarioAuthoringSubsystem and refreshes the Scenario Template sidebar after accepted transform commits.
   - ScenarioEditorRootWidget owns edge-revealed editor panels: asset palette from the bottom edge and LLM prompt panel from the right edge.
   - WBP_ScenarioEditorRootWidget currently binds the Scenario Template side panel through the SidebarWidget child name; ScenarioEditorRootWidget keeps compatibility binds for SidebarWidget and ScenarioEditorSidebarWidget until the WBP and compiled class are migrated together.
   - ScenarioEditorToolbarWidget owns the Main/Corridor/Obstacle/Pedestrian template sidebar tab state, broadcasts panel changes, and directly synchronizes the root widget as a fallback.

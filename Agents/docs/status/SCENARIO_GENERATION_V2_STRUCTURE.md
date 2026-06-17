@@ -2,7 +2,7 @@
 
 ## 1. 역할
 
-Scenario Generation v2는 사용자 자연어 `prompt` 하나를 `scenario_template` v1 JSON 객체로 변환해 외부 API response body로 직접 반환한다.
+Scenario Generation v2는 사용자 자연어 `prompt` 하나를 `scenario` v1 JSON 객체로 변환해 외부 API response body로 직접 반환한다.
 
 이 기능은 template 파일 관리, experiment 설정 반영, seed/sample 확정, Unreal 실행 payload 생성, RunQueue 생성, 결과 분석을 담당하지 않는다.
 
@@ -28,7 +28,7 @@ app.models.scenario_generation_v2.ScenarioGenerateV2Request
 Response model:
 
 ```text
-app.models.scenario_generation_v2.ScenarioTemplateV1Response
+app.models.scenario_generation_v2.ProjectScenarioV1Response
 ```
 
 Routing:
@@ -37,23 +37,23 @@ Routing:
 scenario_generate_v2_endpoint()
 → Settings()
 → ScenarioGenerationGraphRunnerV2(settings=settings).run(request)
-→ response.template 추출
-→ ScenarioTemplateV1Response
+→ response.scenario 추출
+→ ProjectScenarioV1Response
 ```
 
 `/api/v2/scenarios/generate`는 v2 LangGraph workflow를 기본 실행 경로로 사용한다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2 endpoint의 일반 실행 분기에 사용하지 않는다. LangGraph import가 불가능한 환경에서는 runner 내부에서만 기존 sequential agent로 fallback한다.
 
-`V2_AGENT_LLM_ENABLED=false`이면 LangGraph 내부 deterministic parser/selector/builder 경로만 사용한다. `V2_AGENT_LLM_ENABLED=true`이면 `interpret_user_prompt_node`에서 JSON Schema structured output 기반 LLM-assisted 후보 template 생성을 시도하고, validator를 통과한 경우에만 그 후보를 사용한다. LLM 호출 실패 또는 LLM output validation 실패 시 deterministic graph path로 fallback한다. `generation_mode`는 내부 graph response metadata로만 유지하고 외부 API response body에는 노출하지 않는다.
+`V2_AGENT_LLM_ENABLED=false`이면 LangGraph 내부 deterministic parser/selector/builder 경로만 사용한다. `V2_AGENT_LLM_ENABLED=true`이면 `interpret_user_prompt_node`에서 JSON Schema structured output 기반 LLM-assisted 후보 scenario 생성을 시도하고, validator를 통과한 경우에만 그 후보를 사용한다. LLM 호출 실패 또는 LLM output validation 실패 시 deterministic graph path로 fallback한다. `generation_mode`는 내부 graph response metadata로만 유지하고 외부 API response body에는 노출하지 않는다.
 
-LLM prompt는 validator가 요구하는 최소 `scenario_template` v1 구조를 직접 제시한다. 특히 `corridor.axis`, `corridor.walkway_width_m`, `corridor.segments`, object형 `obstacles`, `pedestrians.encounters`, `robot.start`, `robot.goal`을 명시해 WorldConfig-style output이 나오지 않도록 한다.
+LLM prompt는 validator가 요구하는 최소 `scenario` v1 구조를 직접 제시한다. 특히 `corridor.axis`, `corridor.walkway_width_m`, `corridor.segments`, object형 `obstacles`, `pedestrians.encounters`, `robot.start`, `robot.goal`을 명시해 WorldConfig-style output이 나오지 않도록 한다.
 
 Structured output schema는 `app/agents/scenario_generation_v2/scenario_template_schema.py`에 있다. 이 schema는 root required fields, corridor/obstacles/pedestrians/robot 최소 구조, surface/placement/encounter/persona enum을 제한한다. Segment id cross-reference 같은 관계 검증은 계속 `TemplateValidator`가 담당한다.
 
-현재 schema는 Scenario Template v1 계약에 맞춰 robot abstract anchor(`entry`/`exit`)와 concrete anchor(`corridor_pose`)를 구분하고, 고정 숫자 또는 `{min,max}` 범위값, fixed/pattern/scatter obstacle placement, Unreal-supported override fields, placement `allow_blocking`, background `spawn_zone.segments`, 제한적 `corridor.segments[].replaced_by` choices를 허용한다. 기본 LLM 생성은 단순한 `fixed` placement를 우선한다.
+현재 schema는 Project Scenario v1 계약에 맞춰 robot abstract anchor(`entry`/`exit`)와 concrete anchor(`corridor_pose`)를 구분하고, 고정 숫자 또는 `{min,max}` 범위값, fixed/pattern/scatter obstacle placement, Unreal-supported override fields, placement `allow_blocking`, background `spawn_zone.segments`, 제한적 `corridor.segments[].replaced_by` choices를 허용한다. 기본 LLM 생성은 단순한 `fixed` placement를 우선한다.
 
 ## 3. Request / Response 구조
 
-Request는 `prompt`만 받는다. Pydantic model은 `extra="forbid"`이므로 `experiment_id`, `run_id`, `template_id`, `sample_count`, `base_seed`, `seed`, `current_template`, `mode` 같은 필드는 허용하지 않는다.
+Request는 `prompt`만 받는다. Pydantic model은 `extra="forbid"`이므로 `experiment_id`, `run_id`, `project_id`, `sample_count`, `episode_count`, `base_seed`, `seed`, `current_template`, `mode` 같은 필드는 허용하지 않는다.
 
 ```json
 {
@@ -61,13 +61,13 @@ Request는 `prompt`만 받는다. Pydantic model은 `extra="forbid"`이므로 `e
 }
 ```
 
-Response body는 wrapper 없이 `scenario_template` v1 root object 자체를 반환한다.
+Response body는 wrapper 없이 `scenario` v1 root object 자체를 반환한다.
 
 ```json
 {
-  "schema": "scenario_template",
+  "schema": "scenario",
   "version": 1,
-  "template_id": "pinch_oncoming_pass",
+  "scenario_id": "pinch_oncoming_pass",
   "intent": "협폭 구간에서 마주 오는 보행자와 조우할 때 로봇이 안전하게 감속, 양보, 통과하는지 검증한다.",
   "corridor": {},
   "obstacles": {},
@@ -119,7 +119,7 @@ Included:
 - `llm_template_candidate`
 - `llm_validation`
 - `llm_warnings`
-- `scenario_template`
+- `scenario`
 - `validation`
 - `diagnostics`
 - `repair_count`
@@ -149,11 +149,11 @@ Excluded:
 | `validate_request_node` | `ScenarioGenerationGraphRunnerV2.validate_request_node` | Guardrail / validator | `request`, `prompt` | `prompt`, optional failed `validation` | prompt 존재와 문자열/blank 여부를 확인한다. |
 | `interpret_user_prompt_node` | `ScenarioGenerationGraphRunnerV2.interpret_user_prompt_node` | LLM-assisted / Deterministic parser | `prompt` | normalized `prompt`, `interpreted_intent`, optional `llm_template_candidate`, `llm_validation`, `llm_warnings` | 기존 normalizer와 `IntentParser`로 자연어 의도를 구조화한다. `V2_AGENT_LLM_ENABLED=true`이면 graph node 내부에서 OpenAI provider 호출을 시도한다. |
 | `select_scenario_pattern_node` | `ScenarioGenerationGraphRunnerV2.select_scenario_pattern_node` | Deterministic selector | `interpreted_intent` | `selected_pattern` | 기존 `ScenarioTypeSelector`로 지원 패턴 중 하나를 선택한다. |
-| `build_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.build_scenario_template_node` | Template builder | `interpreted_intent`, `selected_pattern`, optional validated `llm_template_candidate` | `scenario_template`, `summary`, `assumptions` | validator를 통과한 LLM 후보가 있으면 사용하고, 없으면 기존 planner/writer로 deterministic `scenario_template` v1 객체를 만든다. |
-| `validate_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.validate_scenario_template_node` | Guardrail / validator | `scenario_template` | `validation`, `diagnostics`, `status` | 기존 `TemplateValidator`로 schema, 참조, catalog, forbidden field를 검사한다. |
-| `repair_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.repair_scenario_template_node` | Repair | invalid `scenario_template`, `repair_count` | repaired `scenario_template`, incremented `repair_count`, diagnostics | 기존 `RepairHandler`로 deterministic repair를 적용한다. 최대 2회 경로만 허용된다. |
-| `fallback_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.fallback_scenario_template_node` | Fallback | invalid state after repair attempts | fallback `scenario_template`, `validation`, `assumptions` | `narrow_sidewalk_cross_path` deterministic fallback template을 생성한다. |
-| `build_response_node` | `ScenarioGenerationGraphRunnerV2.build_response_node` | Response builder | final `scenario_template`, `validation`, `summary`, `assumptions` | internal `response`, `output` | graph 내부 결과와 diagnostics를 담은 internal response를 만든다. FastAPI boundary에서는 이 중 `template`만 외부 raw `scenario_template` response로 반환한다. |
+| `build_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.build_scenario_template_node` | Scenario builder | `interpreted_intent`, `selected_pattern`, optional validated `llm_template_candidate` | `scenario`, `summary`, `assumptions` | validator를 통과한 LLM 후보가 있으면 사용하고, 없으면 기존 planner/writer로 deterministic `scenario` v1 객체를 만든다. |
+| `validate_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.validate_scenario_template_node` | Guardrail / validator | `scenario` | `validation`, `diagnostics`, `status` | 기존 `TemplateValidator`로 schema, 참조, catalog, forbidden field를 검사한다. |
+| `repair_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.repair_scenario_template_node` | Repair | invalid `scenario`, `repair_count` | repaired `scenario`, incremented `repair_count`, diagnostics | 기존 `RepairHandler`로 deterministic repair를 적용한다. 최대 2회 경로만 허용된다. |
+| `fallback_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.fallback_scenario_template_node` | Fallback | invalid state after repair attempts | fallback `scenario`, `validation`, `assumptions` | `narrow_sidewalk_cross_path` deterministic fallback scenario를 생성한다. |
+| `build_response_node` | `ScenarioGenerationGraphRunnerV2.build_response_node` | Response builder | final `scenario`, `validation`, `summary`, `assumptions` | internal `response`, `output` | graph 내부 결과와 diagnostics를 담은 internal response를 만든다. FastAPI boundary에서는 이 중 `scenario`만 외부 raw `scenario` response로 반환한다. |
 
 테스트 환경의 재현성 검증은 `V2_AGENT_LLM_ENABLED=false`로 실행되어 deterministic parser/selector/builder/validator path만으로 통과한다. LLM enabled 경로는 mock LLM client로 graph node 내부 호출과 invalid output fallback을 검증한다.
 
@@ -161,9 +161,9 @@ Excluded:
 
 Validation checks include:
 
-- `schema == "scenario_template"`
+- `schema == "scenario"`
 - `version == 1`
-- `template_id` snake_case
+- `scenario_id` snake_case
 - `intent`, `corridor`, `robot` 존재
 - `corridor.axis.type == "polyline"`
 - fixed number 또는 `{min,max}` 범위값
@@ -183,7 +183,7 @@ Validation checks include:
 - ownership/runtime fields 금지: `experiment_id`, `run_id`, `sample_count`, `base_seed`, `seed`, `sample_id`, `scenario_path`, `template_path`, `generated_count`, `ue_payload`
 - policy/robot setup field 금지: `policy`, `robot_setup`, `robot.setup`
 
-Repair first applies deterministic local repair. It normalizes `template_id`, removes legacy `scenario_id`, and swaps inverted `min/max` ranges. If LLM output remains invalid and LLM repair is enabled, the graph sends the original prompt, invalid template, and validator errors to an LLM-assisted repair call using the same structured output schema. Only repair results that pass `TemplateValidator` are used. If repair still fails, deterministic fallback template generation runs.
+Repair first applies deterministic local repair. It normalizes `scenario_id`, migrates legacy `template_id` to `scenario_id`, removes `template_id`, and swaps inverted `min/max` ranges. If LLM output remains invalid and LLM repair is enabled, the graph sends the original prompt, invalid scenario, and validator errors to an LLM-assisted repair call using the same structured output schema. Only repair results that pass `TemplateValidator` are used. If repair still fails, deterministic fallback scenario generation runs.
 
 ## 8. 하지 않는 일
 
@@ -192,8 +192,8 @@ Scenario Generation v2 does not:
 - accept seed, base_seed, or sample_count as API inputs
 - load `experiments/<ExperimentId>/setting.json`
 - load `experiments/<ExperimentId>/profile.json`
-- load `templates/scenarios/*.template.json`
-- save template files
+- load legacy `templates/scenarios/*.template.json`
+- save scenario files
 - create `scenario_sample`
 - apply `sample_count`, `base_seed`, or `seed`
 - require `experiment_id` or `run_id`
@@ -207,8 +207,8 @@ Scenario Generation v2 does not:
 Reproducibility:
 
 - Scenario Generation v2 does not accept `seed`, `base_seed`, or `sample_count`.
-- These fields are not part of the request model, external response model, or generated template.
-- The deterministic parser/selector/builder path is tested to return the same raw `scenario_template` for the same prompt.
+- These fields are not part of the request model, external response model, or generated scenario.
+- The deterministic parser/selector/builder path is tested to return the same raw `scenario` for the same prompt.
 - Tests do not depend on LLM output; graph-path reproducibility tests run with `V2_AGENT_LLM_ENABLED=false`.
 
 Latest verification commands:
@@ -235,9 +235,9 @@ Latest OpenAI smoke:
 V2_AGENT_LLM_ENABLED=true
 V2_AGENT_GRAPH_ENABLED=false
 POST /api/v2/scenarios/generate
-→ HTTP 200 / raw scenario_template v1 response
+→ HTTP 200 / raw scenario v1 response
 → LLM candidate validator valid true
-→ structured output schema used by scenario_template LLM call
+→ structured output schema used by scenario LLM call
 → final validation.valid true
 → fallback warning 없음
 ```

@@ -51,7 +51,7 @@ LLM mode 테스트는 실제 provider를 호출하지 않고 fake JSON client를
 
 * valid LLM JSON output
 * Markdown JSON code block parsing
-* invalid template 후 repair 성공
+* invalid scenario 후 repair 성공
 * LLM generation/repair 모두 실패 후 fallback
 * LLM recommendation evidence validation
 * invalid recommendation 후 rule-based fallback
@@ -92,9 +92,9 @@ V2_AGENT_LLM_REPAIR_ENABLED=true
 V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS=1
 ```
 
-LLM mode를 켜면 scenario generation v2는 `scenario_template_v1` JSON Schema structured output을 우선 사용합니다. 그래도 API는 fallback 정책을 유지합니다. LLM 호출 실패, JSON 파싱 실패, validator 실패, LLM-assisted repair 실패는 내부 fallback 경로로 처리한 뒤 raw `scenario_template` response를 반환합니다.
+LLM mode를 켜면 scenario generation v2는 `project_scenario_v1` JSON Schema structured output을 우선 사용합니다. 그래도 API는 fallback 정책을 유지합니다. LLM 호출 실패, JSON 파싱 실패, validator 실패, LLM-assisted repair 실패는 내부 fallback 경로로 처리한 뒤 raw `scenario` response를 반환합니다.
 
-Scenario generation contract tests cover raw `scenario_template` response shape, abstract `entry`/`exit` robot anchors, concrete `corridor_pose` robot anchors, mixed-anchor repair, fixed number or min/max range values, fixed/pattern/scatter obstacle placements, Unreal-supported persona override fields, optional placement `allow_blocking`, optional background `spawn_zone` segment references, optional `meet_offset_m`, and limited `corridor.segments[].replaced_by` string choices.
+Scenario generation contract tests cover raw `scenario` response shape, abstract `entry`/`exit` robot anchors, concrete `corridor_pose` robot anchors, mixed-anchor repair, fixed number or min/max range values, fixed/pattern/scatter obstacle placements, Unreal-supported persona override fields, optional placement `allow_blocking`, optional background `spawn_zone` segment references, optional `meet_offset_m`, and limited `corridor.segments[].replaced_by` string choices.
 
 ## 9. Graph mode 운영 설정
 
@@ -125,4 +125,4 @@ uv run pytest tests/test_v2_result_analysis_timeline_builder.py tests/test_v2_ra
 3. 실행 개수 필드가 422로 거부되는지 확인합니다.
 4. `/api/v2/analysis/run`이 `{}` 또는 body 없음으로 200을 반환하는지 확인합니다.
 5. 데이터가 없을 때 `overall_judgement="insufficient_data"`인지 확인합니다.
-6. LLM mode를 켠 경우 scenario generation은 raw `scenario_template` root field를, analysis는 `analysis_mode`와 `warnings`를 함께 확인합니다.
+6. LLM mode를 켠 경우 scenario generation은 raw `scenario` root field를, analysis는 `analysis_mode`와 `warnings`를 함께 확인합니다.

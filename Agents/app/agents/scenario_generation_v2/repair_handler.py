@@ -9,11 +9,14 @@ class RepairHandler:
     """Applies deterministic, local-only repairs before validation."""
 
     def repair(self, template: dict[str, Any]) -> dict[str, Any]:
-        """Normalize template_id and simple inverted ranges without changing ownership fields."""
+        """Normalize scenario_id, absorb legacy template roots, and repair simple ranges."""
         repaired = deepcopy(template)
-        template_id = str(repaired.get("template_id") or repaired.get("scenario_id") or "scenario_template").strip()
-        repaired["template_id"] = re.sub(r"[^a-zA-Z0-9]+", "_", template_id).strip("_").lower() or "scenario_template"
-        repaired.pop("scenario_id", None)
+        if repaired.get("schema") == "scenario_template":
+            repaired["schema"] = "scenario"
+        scenario_id = str(repaired.get("scenario_id") or repaired.get("template_id") or "project_scenario").strip()
+        repaired["scenario_id"] = re.sub(r"[^a-zA-Z0-9]+", "_", scenario_id).strip("_").lower() or "project_scenario"
+        for legacy_field in ("template_id", "scenario_template"):
+            repaired.pop(legacy_field, None)
         self._remove_null_fields(repaired)
         self._repair_robot_anchors(repaired)
         self._swap_inverted_ranges(repaired)

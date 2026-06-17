@@ -11,19 +11,19 @@ class ResponseBuilder:
     def success(
         self,
         *,
-        template_id: str,
+        scenario_id: str,
         summary: str,
-        template: dict[str, Any],
+        scenario: dict[str, Any],
         validation: V2ValidationResult,
         assumptions: list[str],
         generation_mode: str = "deterministic",
     ) -> ScenarioGenerateV2Response:
-        """Return a successful scenario_template response."""
+        """Return a successful project scenario response."""
         return ScenarioGenerateV2Response(
             status="success",
-            template_id=template_id,
+            scenario_id=scenario_id,
             summary=summary,
-            template=template,
+            scenario=scenario,
             validation=validation,
             assumptions=assumptions,
             generation_mode=generation_mode,
@@ -33,9 +33,9 @@ class ResponseBuilder:
         """Return a failed response that contains only deterministic validation details."""
         return ScenarioGenerateV2Response(
             status="failed",
-            template_id=None,
+            scenario_id=None,
             summary=summary,
-            template=None,
+            scenario=None,
             validation=validation,
             assumptions=[],
         )

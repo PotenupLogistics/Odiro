@@ -4,28 +4,28 @@
 
 v2 API는 기존 v1 실행 중심 흐름과 별도로, Agent 역할을 명확히 나눈 API입니다.
 
-* `/api/v2/scenarios/generate`: 사용자 자연어 `prompt`를 입력받아 Unreal에서 샘플링 가능한 `scenario.template.json` 형태의 템플릿을 생성합니다.
+* `/api/v2/scenarios/generate`: 사용자 자연어 `prompt`를 입력받아 `<UserProject>/scenario.json`에 저장 가능한 Project Scenario JSON을 생성합니다.
 * `/api/v2/analysis/run`: `experiments` root 하위 파일을 스캔/분류/파싱/집계하여 정책 또는 환경 개선 필요 여부를 판단합니다.
 
 Scenario generation v2는 항상 LangGraph runner를 실행합니다. `V2_AGENT_LLM_ENABLED=true`일 때만 LangGraph 내부 LLM-assisted node에서 JSON 호출을 시도하고, 실패하거나 validator를 통과하지 못하면 deterministic graph path로 fallback합니다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아니며, 현재 결과 분석 v2 graph 경로 제어에 사용됩니다.
 
-Scenario generation v2의 외부 response body는 API wrapper가 아니라 `scenario_template` v1 JSON 객체 자체입니다.
+Scenario generation v2의 외부 response body는 API wrapper가 아니라 `scenario` v1 JSON 객체 자체입니다.
 Obstacle placement kind는 Unreal parser와 맞춰 `fixed`, `pattern`, `scatter`를 허용합니다. 기본 LLM 생성은 여전히 단순한 `fixed` placement를 우선 사용합니다.
 
 ## v1과 v2 차이
 
 | 구분 | v1 | v2 |
 | --- | --- | --- |
-| Scenario generation | 기존 RunQueue 생성 흐름 유지 | prompt만 받아 `scenario_template` v1 JSON 생성 |
+| Scenario generation | 기존 RunQueue 생성 흐름 유지 | prompt만 받아 `scenario` v1 JSON 생성 |
 | 실행 개수 | `episode_count` 선택 허용 | 실행 개수 관련 필드 거부 |
 | 실행 산출물 | EpisodeSetup / DeliveryBotSetup / RunQueue 생성 | 실행 샘플, seed, RunQueue 생성하지 않음 |
 | Analysis | 명시적 입력 파일 경로 기반 분석 | 파라미터 없이 experiments root 전체 분석 |
 | LLM | 기존 provider 흐름 유지 | optional LLM mode + deterministic/rule-based fallback |
 | 호환성 | 기존 API 계약 유지 | v1 계약을 변경하지 않는 신규 API |
 
-## `scenario.template.json`과 `scenario.json`
+## Project Scenario와 Episode Scenario
 
-`scenario.template.json`은 Agent 또는 시나리오 에디터가 생성/수정하는 원본 템플릿입니다. 범위값, 선택값, 랜덤 요소를 포함할 수 있습니다.
+Project Scenario는 Agent 또는 시나리오 에디터가 생성/수정하는 `<UserProject>/scenario.json` 원본입니다. 범위값, 선택값, 랜덤 요소를 포함할 수 있습니다.
 
 ```json
 {
@@ -36,7 +36,7 @@ Obstacle placement kind는 Unreal parser와 맞춰 `fixed`, `pattern`, `scatter`
 }
 ```
 
-`scenario.json`은 `scenario.template.json`으로부터 샘플링된 실행용 시나리오 샘플입니다. template과 같은 양식을 공유하되, 범위값이 resolve된 확정값으로 바뀐 형태입니다.
+Episode Scenario는 run 시점에 snapshot scenario와 seed로 확정되는 실행용 artifact입니다. v2 scenario generation endpoint는 episode scenario를 생성하지 않습니다.
 
 ```json
 {
@@ -48,7 +48,7 @@ Obstacle placement kind는 Unreal parser와 맞춰 `fixed`, `pattern`, `scatter`
 
 ### 목적
 
-사용자 자연어 `prompt`를 입력받아 `scenario_template` v1 JSON 객체를 생성합니다. 이 endpoint는 `V2_AGENT_GRAPH_ENABLED` 값과 무관하게 LangGraph runner를 사용합니다.
+사용자 자연어 `prompt`를 입력받아 `scenario` v1 JSON 객체를 생성합니다. 이 endpoint는 `V2_AGENT_GRAPH_ENABLED` 값과 무관하게 LangGraph runner를 사용합니다.
 
 ### Request
 
@@ -77,9 +77,9 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 
 ```json
 {
-  "schema": "scenario_template",
+  "schema": "scenario",
   "version": 1,
-  "template_id": "pinch_oncoming_pass",
+  "scenario_id": "pinch_oncoming_pass",
   "intent": "협폭 구간에서 마주 오는 보행자와 조우할 때 로봇이 안전하게 감속, 양보, 통과하는지 검증한다.",
   "corridor": {},
   "obstacles": {},
@@ -90,7 +90,7 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 
 외부 응답 최상위에는 `status`, `summary`, `template`, `validation`, `assumptions`, `generation_mode` wrapper field를 포함하지 않습니다. LangGraph mode와 validation 결과는 내부 graph state에서만 사용합니다.
 
-`scenario_template` v1은 다음 값을 허용합니다.
+`scenario` v1은 다음 값을 허용합니다.
 
 * robot anchor `type`: `entry`, `exit`, `corridor_pose`
   * `entry`/`exit`: 추상 anchor이며 `{ "type": "entry" }`, `{ "type": "exit" }`처럼 concrete pose field 없이 사용합니다.
@@ -198,7 +198,7 @@ V2_AGENT_GRAPH_ENABLED=false
 
 * LLM 호출 실패 시 API 500이 아니라 fallback 응답을 반환합니다.
 * LLM JSON 파싱 실패 시 fallback합니다.
-* `scenario_template` 검증 실패 시 repair를 시도하고, repair도 실패하면 deterministic fallback합니다.
+* `scenario` 검증 실패 시 repair를 시도하고, repair도 실패하면 deterministic fallback합니다.
 * analysis recommendation의 evidence가 실제 experiment/run/episode와 맞지 않으면 rule-based fallback합니다.
 * fallback이 발생하면 `warnings` 또는 `validation.warnings`에 사유를 남깁니다.
 
@@ -216,7 +216,7 @@ V2_AGENT_GRAPH_ENABLED=false
 
 ## 현재 MVP 한계
 
-* `scenario_template` schema는 최종 Unreal 계약 확정 전까지 최소 구조 검증만 수행합니다.
+* `scenario` schema는 최종 Unreal 계약 확정 전까지 최소 구조 검증만 수행합니다.
 * 이미지 파일은 path, size, modified time 같은 metadata만 기록합니다.
 * timeline builder와 RAG query builder 결과는 내부 analysis context에 포함되며, 현재 final response schema에는 새 field를 추가하지 않습니다.
 * LLM mode는 optional이며, 기본 테스트는 fake/mock client 또는 disabled mode로 외부 API key 없이 통과해야 합니다.

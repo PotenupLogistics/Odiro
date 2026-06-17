@@ -12,6 +12,7 @@ class UTextBlock;
 class UScenarioAuthoringSubsystem;
 class UScenarioEditorSidebarBlockWidget;
 class UScenarioEditorSidebarCorridorLaneWidget;
+class UScenarioEditorSidebarCorridorSegmentWidget;
 class UWidgetTextStyleCatalog;
 class SWidget;
 
@@ -148,6 +149,42 @@ private:
 	UFUNCTION()
 	void HandleCurbSideCountRemoveRequested();
 
+	// Handles segment id edits committed by dynamic segment widgets.
+	UFUNCTION()
+	void HandleSegmentIdCommitted(int32 segmentIndex, const FText& text, ETextCommit::Type commitMethod);
+
+	// Handles segment type edits committed by dynamic segment widgets.
+	UFUNCTION()
+	void HandleSegmentTypeCommitted(int32 segmentIndex, const FText& text, ETextCommit::Type commitMethod);
+
+	// Handles segment along-range edits committed by dynamic segment widgets.
+	UFUNCTION()
+	void HandleSegmentAlongRangeCommitted(
+		int32 segmentIndex,
+		const FText& minText,
+		const FText& maxText,
+		ETextCommit::Type commitMethod);
+
+	// Handles segment replaced_by edits committed by dynamic segment widgets.
+	UFUNCTION()
+	void HandleSegmentReplacedByCommitted(int32 segmentIndex, const FText& text, ETextCommit::Type commitMethod);
+
+	// Handles add requests from dynamic segment widgets and count rows.
+	UFUNCTION()
+	void HandleSegmentAddRequested(int32 segmentIndex);
+
+	// Handles remove requests from dynamic segment widgets and count rows.
+	UFUNCTION()
+	void HandleSegmentRemoveRequested(int32 segmentIndex);
+
+	// Handles add requests from the segments count row.
+	UFUNCTION()
+	void HandleSegmentsCountAddRequested();
+
+	// Handles remove requests from the segments count row.
+	UFUNCTION()
+	void HandleSegmentsCountRemoveRequested();
+
 	// Dynamic count row for root.corridor.building_side[].
 	UPROPERTY(Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> BuildingSideCountFieldRow;
@@ -164,6 +201,14 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UScenarioEditorSidebarCorridorLaneWidget>> CurbSideLaneWidgets;
 
+	// Dynamic count row for root.corridor.segments[].
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorSidebarFieldRow> SegmentsCountFieldRow;
+
+	// Dynamic segment widgets owned by root.corridor.segments[].
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UScenarioEditorSidebarCorridorSegmentWidget>> SegmentWidgets;
+
 	// Builds the native fallback panel tree when no Blueprint-authored tree is present.
 	void BuildDefaultWidgetTree();
 	// Binds child field row delegates owned by this panel.
@@ -179,28 +224,31 @@ private:
 		EScenarioEditorCorridorSide side,
 		UScenarioEditorSidebarBlockWidget* sideBlockWidget,
 		const TArray<FScenarioTemplateLaneRule>& lanes);
-	// Rebuilds read-only rows for semantic Corridor segments.
-	void RefreshSegmentRows(const TArray<FScenarioTemplateSegment>& segments) const;
+	// Rebuilds editable segment widgets for semantic Corridor segments.
+	void RefreshSegmentRows(const TArray<FScenarioTemplateSegment>& segments);
 	// Adds a read-only field row to a dynamic block body.
 	UScenarioEditorSidebarFieldRow* AddReadOnlyFieldRow(
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget,
 		const FString& label,
 		const FString& value,
 		EScenarioEditorSidebarFieldInputType inputType) const;
-	// Adds a nested segment block to the semantic segment list.
-	UScenarioEditorSidebarBlockWidget* AddSegmentBlock(
-		UScenarioEditorSidebarBlockWidget* parentBlockWidget,
-		const FScenarioTemplateSegment& segment) const;
 	// Adds an editable lane widget to a side profile block.
 	UScenarioEditorSidebarCorridorLaneWidget* AddLaneWidget(
 		EScenarioEditorCorridorSide side,
 		int32 laneIndex,
 		const FScenarioTemplateLaneRule& lane,
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget);
+	// Adds an editable segment widget to the segment list block.
+	UScenarioEditorSidebarCorridorSegmentWidget* AddSegmentWidget(
+		int32 segmentIndex,
+		const FScenarioTemplateSegment& segment,
+		UScenarioEditorSidebarBlockWidget* parentBlockWidget);
 	// Resolves the authoring subsystem that owns the draft template.
 	UScenarioAuthoringSubsystem* GetAuthoringSubsystem() const;
 	// Returns the current draft side lane profile by value for mutation.
 	TArray<FScenarioTemplateLaneRule> GetDraftLaneProfile(EScenarioEditorCorridorSide side) const;
+	// Returns the current draft segment list by value for mutation.
+	TArray<FScenarioTemplateSegment> GetDraftSegments() const;
 	// Commits a fixed walkway width edit to the draft template.
 	void CommitWalkwayWidthText(const FText& text);
 	// Commits a min/max walkway width edit to the draft template.
@@ -228,24 +276,36 @@ private:
 		EScenarioEditorCorridorSide side,
 		const TArray<FScenarioTemplateLaneRule>& existingLanes,
 		int32 neighborIndex);
+	// Commits one segment id edit to the draft template.
+	void CommitSegmentIdText(int32 segmentIndex, const FText& text);
+	// Commits one segment type edit to the draft template.
+	void CommitSegmentTypeText(int32 segmentIndex, const FText& text);
+	// Commits one segment along-range edit to the draft template.
+	void CommitSegmentAlongRangeText(int32 segmentIndex, const FText& minText, const FText& maxText);
+	// Commits one segment replaced_by edit to the draft template.
+	void CommitSegmentReplacedByText(int32 segmentIndex, const FText& text);
+	// Commits a full segment list through the authoring subsystem.
+	void CommitSegments(const TArray<FScenarioTemplateSegment>& segments);
+	// Adds a segment after the provided segment index.
+	void AddSegmentAfter(int32 segmentIndex);
+	// Removes the segment at the provided segment index.
+	void RemoveSegmentAt(int32 segmentIndex);
+	// Creates a valid default segment rule near another segment.
+	FScenarioTemplateSegment MakeDefaultSegment(
+		const TArray<FScenarioTemplateSegment>& existingSegments,
+		int32 neighborIndex) const;
 	// Applies diagnostics to the optional diagnostics text block.
 	void SetDiagnosticsText(const FString& text) const;
 	// Parses one meter value from field row text.
 	static bool TryParseMeters(const FText& text, double& outMeters);
+	// Parses one corridor segment type from field row text.
+	static bool TryParseSegmentType(const FText& text, EScenarioTemplateSegmentType& outType);
 	// Returns a stable label for a corridor axis type.
 	static FString AxisTypeToString(EScenarioCorridorAxisType type);
 	// Returns a stable label for a corridor segment type.
 	static FString SegmentTypeToString(EScenarioTemplateSegmentType type);
-	// Formats one authored numeric value for compact display.
-	static FString FormatNumberValue(const FScenarioTemplateNumberValue& value, const FString& suffix = FString());
 	// Formats one authored numeric value for editable text controls.
 	static FString FormatEditableNumber(double value);
-	// Formats one authored string value for compact display.
-	static FString FormatStringValue(const FScenarioTemplateStringValue& value);
-	// Formats a comma-separated string list.
-	static FString FormatStringList(const TArray<FString>& values);
-	// Formats one Corridor side lane rule.
-	static FString FormatLaneRule(const FScenarioTemplateLaneRule& lane);
 	// Formats a compact summary of Corridor axis points.
 	static FString FormatAxisPointsSummary(const TArray<FVector2D>& pointsMeters);
 	// Measures the authored corridor polyline in meters.

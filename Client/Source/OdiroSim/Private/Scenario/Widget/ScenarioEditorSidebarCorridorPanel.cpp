@@ -8,6 +8,7 @@
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorLaneWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarCorridorSegmentWidget.h"
 #include "Widget/WidgetTextStyleCatalog.h"
 
 namespace
@@ -301,6 +302,83 @@ void UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountRemoveRequested()
 	RemoveLaneAt(EScenarioEditorCorridorSide::Curb, GetDraftLaneProfile(EScenarioEditorCorridorSide::Curb).Num() - 1);
 }
 
+void UScenarioEditorSidebarCorridorPanel::HandleSegmentIdCommitted(
+	const int32 segmentIndex,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	if (commitMethod == ETextCommit::OnCleared)
+	{
+		RefreshFromDraft();
+		return;
+	}
+
+	CommitSegmentIdText(segmentIndex, text);
+}
+
+void UScenarioEditorSidebarCorridorPanel::HandleSegmentTypeCommitted(
+	const int32 segmentIndex,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	if (commitMethod == ETextCommit::OnCleared)
+	{
+		RefreshFromDraft();
+		return;
+	}
+
+	CommitSegmentTypeText(segmentIndex, text);
+}
+
+void UScenarioEditorSidebarCorridorPanel::HandleSegmentAlongRangeCommitted(
+	const int32 segmentIndex,
+	const FText& minText,
+	const FText& maxText,
+	const ETextCommit::Type commitMethod)
+{
+	if (commitMethod == ETextCommit::OnCleared)
+	{
+		RefreshFromDraft();
+		return;
+	}
+
+	CommitSegmentAlongRangeText(segmentIndex, minText, maxText);
+}
+
+void UScenarioEditorSidebarCorridorPanel::HandleSegmentReplacedByCommitted(
+	const int32 segmentIndex,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	if (commitMethod == ETextCommit::OnCleared)
+	{
+		RefreshFromDraft();
+		return;
+	}
+
+	CommitSegmentReplacedByText(segmentIndex, text);
+}
+
+void UScenarioEditorSidebarCorridorPanel::HandleSegmentAddRequested(const int32 segmentIndex)
+{
+	AddSegmentAfter(segmentIndex);
+}
+
+void UScenarioEditorSidebarCorridorPanel::HandleSegmentRemoveRequested(const int32 segmentIndex)
+{
+	RemoveSegmentAt(segmentIndex);
+}
+
+void UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested()
+{
+	AddSegmentAfter(INDEX_NONE);
+}
+
+void UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountRemoveRequested()
+{
+	RemoveSegmentAt(GetDraftSegments().Num() - 1);
+}
+
 void UScenarioEditorSidebarCorridorPanel::BuildDefaultWidgetTree()
 {
 	if (!WidgetTree || WidgetTree->RootWidget)
@@ -457,6 +535,15 @@ void UScenarioEditorSidebarCorridorPanel::UnbindFieldRows()
 			this,
 			&UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountRemoveRequested);
 	}
+	if (SegmentsCountFieldRow)
+	{
+		SegmentsCountFieldRow->OnAddItemRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested);
+		SegmentsCountFieldRow->OnRemoveItemRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountRemoveRequested);
+	}
 	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : BuildingSideLaneWidgets)
 	{
 		if (!laneWidget)
@@ -502,6 +589,32 @@ void UScenarioEditorSidebarCorridorPanel::UnbindFieldRows()
 		laneWidget->OnRemoveLaneRequested.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorPanel::HandleLaneRemoveRequested);
+	}
+	for (UScenarioEditorSidebarCorridorSegmentWidget* segmentWidget : SegmentWidgets)
+	{
+		if (!segmentWidget)
+		{
+			continue;
+		}
+
+		segmentWidget->OnIdCommitted.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentIdCommitted);
+		segmentWidget->OnTypeCommitted.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentTypeCommitted);
+		segmentWidget->OnAlongRangeCommitted.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentAlongRangeCommitted);
+		segmentWidget->OnReplacedByCommitted.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentReplacedByCommitted);
+		segmentWidget->OnAddSegmentRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentAddRequested);
+		segmentWidget->OnRemoveSegmentRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentRemoveRequested);
 	}
 }
 
@@ -607,7 +720,8 @@ void UScenarioEditorSidebarCorridorPanel::ApplyTextStyles()
 		AxisPointsFieldRow.Get(),
 		WalkwayWidthFieldRow.Get(),
 		BuildingSideCountFieldRow.Get(),
-		CurbSideCountFieldRow.Get() })
+		CurbSideCountFieldRow.Get(),
+		SegmentsCountFieldRow.Get() })
 	{
 		if (fieldRow)
 		{
@@ -627,6 +741,13 @@ void UScenarioEditorSidebarCorridorPanel::ApplyTextStyles()
 		if (laneWidget)
 		{
 			laneWidget->SetTextStyleCatalog(TextStyleCatalog);
+		}
+	}
+	for (UScenarioEditorSidebarCorridorSegmentWidget* segmentWidget : SegmentWidgets)
+	{
+		if (segmentWidget)
+		{
+			segmentWidget->SetTextStyleCatalog(TextStyleCatalog);
 		}
 	}
 
@@ -710,45 +831,45 @@ void UScenarioEditorSidebarCorridorPanel::RefreshLaneProfileRows(
 }
 
 void UScenarioEditorSidebarCorridorPanel::RefreshSegmentRows(
-	const TArray<FScenarioTemplateSegment>& segments) const
+	const TArray<FScenarioTemplateSegment>& segments)
 {
 	if (!SegmentsBlockWidget)
 	{
 		return;
 	}
 
+	SegmentWidgets.Reset();
 	SegmentsBlockWidget->ClearBodyChildren();
-	AddReadOnlyFieldRow(
+	UScenarioEditorSidebarFieldRow* countRow = AddReadOnlyFieldRow(
 		SegmentsBlockWidget.Get(),
 		TEXT("count"),
 		FString::FromInt(segments.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer);
-	for (const FScenarioTemplateSegment& segment : segments)
+	if (countRow)
 	{
-		UScenarioEditorSidebarBlockWidget* segmentBlock = AddSegmentBlock(SegmentsBlockWidget.Get(), segment);
-		AddReadOnlyFieldRow(
-			segmentBlock,
-			TEXT("id"),
-			segment.SegmentId.IsEmpty() ? FString(TEXT("(unset)")) : segment.SegmentId,
-			EScenarioEditorSidebarFieldInputType::Text);
-		AddReadOnlyFieldRow(
-			segmentBlock,
-			TEXT("type"),
-			SegmentTypeToString(segment.Type),
-			EScenarioEditorSidebarFieldInputType::EnumText);
-		AddReadOnlyFieldRow(
-			segmentBlock,
-			TEXT("along_range_m"),
-			FString::Printf(
-				TEXT("%.2f..%.2fm"),
-				segment.AlongRangeMeters.StartMeters,
-				segment.AlongRangeMeters.EndMeters),
-			EScenarioEditorSidebarFieldInputType::Range);
-		AddReadOnlyFieldRow(
-			segmentBlock,
-			TEXT("replaced_by"),
-			FormatStringValue(segment.ReplacedBySurfaceId),
-			EScenarioEditorSidebarFieldInputType::Text);
+		SegmentsCountFieldRow = countRow;
+		countRow->SetArrayControlsEnabled(true);
+		countRow->OnAddItemRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested);
+		countRow->OnAddItemRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested);
+		countRow->OnRemoveItemRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountRemoveRequested);
+		countRow->OnRemoveItemRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountRemoveRequested);
+	}
+
+	for (int32 segmentIndex = 0; segmentIndex < segments.Num(); ++segmentIndex)
+	{
+		if (UScenarioEditorSidebarCorridorSegmentWidget* segmentWidget =
+			AddSegmentWidget(segmentIndex, segments[segmentIndex], SegmentsBlockWidget.Get()))
+		{
+			SegmentWidgets.Add(segmentWidget);
+		}
 	}
 }
 
@@ -778,34 +899,6 @@ UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarCorridorPanel::AddReadOnly
 	fieldRow->SetEditable(false);
 	parentBlockWidget->AddBodyChild(fieldRow);
 	return fieldRow;
-}
-
-UScenarioEditorSidebarBlockWidget* UScenarioEditorSidebarCorridorPanel::AddSegmentBlock(
-	UScenarioEditorSidebarBlockWidget* parentBlockWidget,
-	const FScenarioTemplateSegment& segment) const
-{
-	if (!WidgetTree || !parentBlockWidget)
-	{
-		return nullptr;
-	}
-
-	UScenarioEditorSidebarBlockWidget* segmentBlock =
-		WidgetTree->ConstructWidget<UScenarioEditorSidebarBlockWidget>(
-			UScenarioEditorSidebarBlockWidget::StaticClass());
-	if (!segmentBlock)
-	{
-		return nullptr;
-	}
-
-	segmentBlock->SetTextStyleCatalog(TextStyleCatalog);
-	segmentBlock->SetBlockMetadata(
-		segment.SegmentId.IsEmpty() ? FString(TEXT("(unnamed)")) : segment.SegmentId,
-		TEXT("root.corridor.segments[]"),
-		TEXT("Detail"));
-	segmentBlock->SetNested(true);
-	segmentBlock->SetShowNormalOutline(false);
-	parentBlockWidget->AddBodyChild(segmentBlock);
-	return segmentBlock;
 }
 
 UScenarioEditorSidebarCorridorLaneWidget* UScenarioEditorSidebarCorridorPanel::AddLaneWidget(
@@ -864,6 +957,67 @@ UScenarioEditorSidebarCorridorLaneWidget* UScenarioEditorSidebarCorridorPanel::A
 	return laneWidget;
 }
 
+UScenarioEditorSidebarCorridorSegmentWidget* UScenarioEditorSidebarCorridorPanel::AddSegmentWidget(
+	const int32 segmentIndex,
+	const FScenarioTemplateSegment& segment,
+	UScenarioEditorSidebarBlockWidget* parentBlockWidget)
+{
+	if (!WidgetTree || !parentBlockWidget)
+	{
+		return nullptr;
+	}
+
+	UScenarioEditorSidebarCorridorSegmentWidget* segmentWidget =
+		WidgetTree->ConstructWidget<UScenarioEditorSidebarCorridorSegmentWidget>(
+			UScenarioEditorSidebarCorridorSegmentWidget::StaticClass());
+	if (!segmentWidget)
+	{
+		return nullptr;
+	}
+
+	segmentWidget->SetTextStyleCatalog(TextStyleCatalog);
+	segmentWidget->SetSegmentIndex(segmentIndex);
+	segmentWidget->RefreshFromSegment(segment);
+	segmentWidget->OnIdCommitted.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleSegmentIdCommitted);
+	segmentWidget->OnIdCommitted.AddDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleSegmentIdCommitted);
+	segmentWidget->OnTypeCommitted.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleSegmentTypeCommitted);
+	segmentWidget->OnTypeCommitted.AddDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleSegmentTypeCommitted);
+	segmentWidget->OnAlongRangeCommitted.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleSegmentAlongRangeCommitted);
+	segmentWidget->OnAlongRangeCommitted.AddDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleSegmentAlongRangeCommitted);
+	segmentWidget->OnReplacedByCommitted.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleSegmentReplacedByCommitted);
+	segmentWidget->OnReplacedByCommitted.AddDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleSegmentReplacedByCommitted);
+	segmentWidget->OnAddSegmentRequested.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleSegmentAddRequested);
+	segmentWidget->OnAddSegmentRequested.AddDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleSegmentAddRequested);
+	segmentWidget->OnRemoveSegmentRequested.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleSegmentRemoveRequested);
+	segmentWidget->OnRemoveSegmentRequested.AddDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleSegmentRemoveRequested);
+	parentBlockWidget->AddBodyChild(segmentWidget);
+	return segmentWidget;
+}
+
 UScenarioAuthoringSubsystem* UScenarioEditorSidebarCorridorPanel::GetAuthoringSubsystem() const
 {
 	UWorld* world = GetWorld();
@@ -883,6 +1037,17 @@ TArray<FScenarioTemplateLaneRule> UScenarioEditorSidebarCorridorPanel::GetDraftL
 	return side == EScenarioEditorCorridorSide::Building
 		? corridor.BuildingSide
 		: corridor.CurbSide;
+}
+
+TArray<FScenarioTemplateSegment> UScenarioEditorSidebarCorridorPanel::GetDraftSegments() const
+{
+	const UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		return {};
+	}
+
+	return authoringSubsystem->GetDraftScenarioTemplate().Corridor.Segments;
 }
 
 void UScenarioEditorSidebarCorridorPanel::CommitWalkwayWidthText(const FText& text)
@@ -1079,6 +1244,194 @@ FScenarioTemplateLaneRule UScenarioEditorSidebarCorridorPanel::MakeDefaultLaneRu
 	return lane;
 }
 
+void UScenarioEditorSidebarCorridorPanel::CommitSegmentIdText(
+	const int32 segmentIndex,
+	const FText& text)
+{
+	TArray<FScenarioTemplateSegment> segments = GetDraftSegments();
+	if (!segments.IsValidIndex(segmentIndex))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(TEXT("Segment index is no longer valid."));
+		return;
+	}
+
+	segments[segmentIndex].SegmentId = text.ToString().TrimStartAndEnd();
+	CommitSegments(segments);
+}
+
+void UScenarioEditorSidebarCorridorPanel::CommitSegmentTypeText(
+	const int32 segmentIndex,
+	const FText& text)
+{
+	EScenarioTemplateSegmentType segmentType = EScenarioTemplateSegmentType::Straight;
+	if (!TryParseSegmentType(text, segmentType))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(TEXT("segment type must be straight, narrowing, crosswalk, or entrance."));
+		return;
+	}
+
+	TArray<FScenarioTemplateSegment> segments = GetDraftSegments();
+	if (!segments.IsValidIndex(segmentIndex))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(TEXT("Segment index is no longer valid."));
+		return;
+	}
+
+	segments[segmentIndex].Type = segmentType;
+	CommitSegments(segments);
+}
+
+void UScenarioEditorSidebarCorridorPanel::CommitSegmentAlongRangeText(
+	const int32 segmentIndex,
+	const FText& minText,
+	const FText& maxText)
+{
+	double startMeters = 0.0;
+	double endMeters = 0.0;
+	if (!TryParseMeters(minText, startMeters) || !TryParseMeters(maxText, endMeters))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(TEXT("segment along_range_m must use numeric start/end meters."));
+		return;
+	}
+
+	TArray<FScenarioTemplateSegment> segments = GetDraftSegments();
+	if (!segments.IsValidIndex(segmentIndex))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(TEXT("Segment index is no longer valid."));
+		return;
+	}
+
+	segments[segmentIndex].AlongRangeMeters.StartMeters = startMeters;
+	segments[segmentIndex].AlongRangeMeters.EndMeters = endMeters;
+	CommitSegments(segments);
+}
+
+void UScenarioEditorSidebarCorridorPanel::CommitSegmentReplacedByText(
+	const int32 segmentIndex,
+	const FText& text)
+{
+	TArray<FScenarioTemplateSegment> segments = GetDraftSegments();
+	if (!segments.IsValidIndex(segmentIndex))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(TEXT("Segment index is no longer valid."));
+		return;
+	}
+
+	const FString surfaceId = text.ToString().TrimStartAndEnd();
+	FScenarioTemplateStringValue replacementSurface;
+	if (!surfaceId.IsEmpty())
+	{
+		replacementSurface.bIsSet = true;
+		replacementSurface.Mode = EScenarioTemplateStringValueMode::Fixed;
+		replacementSurface.FixedValue = surfaceId;
+	}
+	segments[segmentIndex].ReplacedBySurfaceId = replacementSurface;
+	CommitSegments(segments);
+}
+
+void UScenarioEditorSidebarCorridorPanel::CommitSegments(
+	const TArray<FScenarioTemplateSegment>& segments)
+{
+	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioAuthoringSubsystem unavailable."));
+		return;
+	}
+
+	TArray<FString> diagnostics;
+	if (!authoringSubsystem->SetCorridorSegments(segments, diagnostics))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(JoinCorridorPanelDiagnostics(diagnostics));
+		return;
+	}
+
+	RefreshFromDraft();
+}
+
+void UScenarioEditorSidebarCorridorPanel::AddSegmentAfter(const int32 segmentIndex)
+{
+	TArray<FScenarioTemplateSegment> segments = GetDraftSegments();
+	const int32 insertionIndex = segments.IsValidIndex(segmentIndex)
+		? segmentIndex + 1
+		: segments.Num();
+	segments.Insert(MakeDefaultSegment(segments, segmentIndex), insertionIndex);
+	CommitSegments(segments);
+}
+
+void UScenarioEditorSidebarCorridorPanel::RemoveSegmentAt(const int32 segmentIndex)
+{
+	TArray<FScenarioTemplateSegment> segments = GetDraftSegments();
+	if (!segments.IsValidIndex(segmentIndex))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(TEXT("Segment index is no longer valid."));
+		return;
+	}
+
+	segments.RemoveAt(segmentIndex);
+	CommitSegments(segments);
+}
+
+FScenarioTemplateSegment UScenarioEditorSidebarCorridorPanel::MakeDefaultSegment(
+	const TArray<FScenarioTemplateSegment>& existingSegments,
+	const int32 neighborIndex) const
+{
+	TSet<FString> usedIds;
+	for (const FScenarioTemplateSegment& segment : existingSegments)
+	{
+		if (!segment.SegmentId.IsEmpty())
+		{
+			usedIds.Add(segment.SegmentId);
+		}
+	}
+
+	FString segmentId;
+	for (int32 index = 1; index < 10000; ++index)
+	{
+		const FString candidateId = FString::Printf(TEXT("segment_%d"), index);
+		if (!usedIds.Contains(candidateId))
+		{
+			segmentId = candidateId;
+			break;
+		}
+	}
+	if (segmentId.IsEmpty())
+	{
+		segmentId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+	}
+
+	FScenarioTemplateSegment segment;
+	if (existingSegments.IsValidIndex(neighborIndex))
+	{
+		segment = existingSegments[neighborIndex];
+	}
+	else if (!existingSegments.IsEmpty())
+	{
+		segment = existingSegments.Last();
+	}
+	else
+	{
+		const UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+		const double axisLengthMeters = authoringSubsystem
+			? MeasureAxisLengthMeters(authoringSubsystem->GetDraftScenarioTemplate().Corridor.Axis.PointsMeters)
+			: 1.0;
+		segment.Type = EScenarioTemplateSegmentType::Straight;
+		segment.AlongRangeMeters.StartMeters = 0.0;
+		segment.AlongRangeMeters.EndMeters = FMath::Max(1.0, axisLengthMeters);
+	}
+
+	segment.SegmentId = segmentId;
+	return segment;
+}
+
 void UScenarioEditorSidebarCorridorPanel::SetDiagnosticsText(const FString& text) const
 {
 	if (DiagnosticsTextBlock)
@@ -1093,6 +1446,35 @@ bool UScenarioEditorSidebarCorridorPanel::TryParseMeters(const FText& text, doub
 	meterText.RemoveFromEnd(TEXT("m"), ESearchCase::IgnoreCase);
 	meterText.TrimStartAndEndInline();
 	return LexTryParseString(outMeters, *meterText);
+}
+
+bool UScenarioEditorSidebarCorridorPanel::TryParseSegmentType(
+	const FText& text,
+	EScenarioTemplateSegmentType& outType)
+{
+	const FString segmentTypeText = text.ToString().TrimStartAndEnd().ToLower();
+	if (segmentTypeText == TEXT("straight"))
+	{
+		outType = EScenarioTemplateSegmentType::Straight;
+		return true;
+	}
+	if (segmentTypeText == TEXT("narrowing"))
+	{
+		outType = EScenarioTemplateSegmentType::Narrowing;
+		return true;
+	}
+	if (segmentTypeText == TEXT("crosswalk"))
+	{
+		outType = EScenarioTemplateSegmentType::Crosswalk;
+		return true;
+	}
+	if (segmentTypeText == TEXT("entrance"))
+	{
+		outType = EScenarioTemplateSegmentType::Entrance;
+		return true;
+	}
+
+	return false;
 }
 
 FString UScenarioEditorSidebarCorridorPanel::AxisTypeToString(
@@ -1125,57 +1507,9 @@ FString UScenarioEditorSidebarCorridorPanel::SegmentTypeToString(
 	}
 }
 
-FString UScenarioEditorSidebarCorridorPanel::FormatNumberValue(
-	const FScenarioTemplateNumberValue& value,
-	const FString& suffix)
-{
-	if (!value.bIsSet)
-	{
-		return TEXT("(unset)");
-	}
-
-	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
-	{
-		return FString::Printf(TEXT("%.2f..%.2f%s"), value.MinValue, value.MaxValue, *suffix);
-	}
-
-	return FString::Printf(TEXT("%.2f%s"), value.FixedValue, *suffix);
-}
-
 FString UScenarioEditorSidebarCorridorPanel::FormatEditableNumber(const double value)
 {
 	return FString::Printf(TEXT("%.2f"), value);
-}
-
-FString UScenarioEditorSidebarCorridorPanel::FormatStringValue(
-	const FScenarioTemplateStringValue& value)
-{
-	if (!value.bIsSet)
-	{
-		return TEXT("(unset)");
-	}
-
-	if (value.Mode == EScenarioTemplateStringValueMode::Choices)
-	{
-		return FString::Printf(TEXT("[%s]"), *FormatStringList(value.Choices));
-	}
-
-	return value.FixedValue.IsEmpty() ? FString(TEXT("(empty)")) : value.FixedValue;
-}
-
-FString UScenarioEditorSidebarCorridorPanel::FormatStringList(
-	const TArray<FString>& values)
-{
-	return values.IsEmpty() ? FString(TEXT("(none)")) : FString::Join(values, TEXT(", "));
-}
-
-FString UScenarioEditorSidebarCorridorPanel::FormatLaneRule(
-	const FScenarioTemplateLaneRule& lane)
-{
-	return FString::Printf(
-		TEXT("%s | width: %s"),
-		lane.SurfaceId.IsEmpty() ? TEXT("(unset)") : *lane.SurfaceId,
-		*FormatNumberValue(lane.WidthMeters, TEXT("m")));
 }
 
 FString UScenarioEditorSidebarCorridorPanel::FormatAxisPointsSummary(

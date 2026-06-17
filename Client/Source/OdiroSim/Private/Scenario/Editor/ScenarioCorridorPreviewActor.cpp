@@ -12,7 +12,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogScenarioCorridorPreview, Log, All);
 namespace
 {
 	// Template coordinates are stored in meters while Unreal actors use centimeters.
-	const double MetersToCentimeters = 100.0;
+	const double CorridorPreviewMetersToCentimeters = 100.0;
 	// Thin surface tops stay slightly above the ground to avoid z-fighting.
 	const double PreviewSurfaceTopZCm = 1.0;
 	// Non-blocking surfaces are thick enough to overlap 15cm side offsets without vertical holes.
@@ -156,8 +156,8 @@ void AScenarioCorridorPreviewActor::RebuildAxisSpline(const TArray<FVector2D>& p
 	{
 		const FVector2D& pointMeters = pointsMeters[index];
 		const FVector pointCm(
-			pointMeters.X * MetersToCentimeters,
-			pointMeters.Y * MetersToCentimeters,
+			pointMeters.X * CorridorPreviewMetersToCentimeters,
+			pointMeters.Y * CorridorPreviewMetersToCentimeters,
 			PreviewSurfaceTopZCm);
 		AxisSplineComponent->AddSplinePoint(pointCm, ESplineCoordinateSpace::Local, false);
 		AxisSplineComponent->SetSplinePointType(index, ESplinePointType::Curve, false);
@@ -184,8 +184,8 @@ void AScenarioCorridorPreviewActor::AddLaneStrip(
 		return;
 	}
 
-	const double centerOffsetCm = ((minOffsetMeters + maxOffsetMeters) * 0.5) * MetersToCentimeters;
-	const double laneWidthCm = laneWidthMeters * MetersToCentimeters;
+	const double centerOffsetCm = ((minOffsetMeters + maxOffsetMeters) * 0.5) * CorridorPreviewMetersToCentimeters;
+	const double laneWidthCm = laneWidthMeters * CorridorPreviewMetersToCentimeters;
 	FScenarioCorridorSurfaceEntry surfaceEntry;
 	ResolveSurfaceEntry(surfaceId, surfaceEntry);
 	UMaterialInterface* material = ResolveSurfaceMaterial(surfaceEntry);

@@ -31,6 +31,8 @@ entry:
   - Scenario/Editor/ScenarioCorridorPreviewActor.h / .cpp
   - Scenario/Editor/ScenarioEditorController.h / .cpp
   - Scenario/Widget/ScenarioEditorRootWidget.h / .cpp
+  - Scenario/Widget/ScenarioEditorToolbarWidget.h / .cpp
+  - Scenario/Widget/ScenarioTemplateSidebarWidget.h / .cpp
   - Scenario/Widget/ScenarioPlaceableDetailsWidget.h / .cpp
   - Scenario/Widget/ScenarioPlaceableContextMenuWidget.h / .cpp
   - ExperimentSettingTypesTest.cpp
@@ -68,6 +70,8 @@ keep:
   - ScenarioCorridorPreviewActor keeps non-blocking Corridor surface strips at least 20cm thick so adjacent Z-offset lanes have no vertical gap.
   - ScenarioAuthoringSubsystem normalizes static obstacle editor transforms to the Corridor surface Z offset before preview validation, spawn, update, and editor-view rebuild.
   - ScenarioEditorRootWidget owns edge-revealed editor panels: asset palette from the bottom edge and LLM prompt panel from the right edge.
+  - ScenarioEditorToolbarWidget owns the Main/Corridor/Obstacle/Pedestrian template sidebar tab state and broadcasts panel changes to the root widget.
+  - ScenarioTemplateSidebarWidget owns the read-only Scenario Template block summary shown in the editor side sidebar.
   - ScenarioPlaceableDetailsWidget owns the placeable selection details panel; ScenarioPlaceableContextMenuWidget remains only as a legacy UMG compatibility wrapper.
 verify:
   - contract specs vs sample JSON alignment

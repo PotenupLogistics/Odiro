@@ -11,6 +11,7 @@
 #include "Scenario/Widget/ScenarioEditorToolbarWidget.h"
 #include "Scenario/Widget/ScenarioPlaceableContextMenuWidget.h"
 #include "Scenario/Widget/ScenarioPlaceableDetailsWidget.h"
+#include "Scenario/Widget/ScenarioTemplateSidebarWidget.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
@@ -26,6 +27,8 @@ void UScenarioEditorRootWidget::NativeConstruct()
 	HideAssetPaletteWidget();
 	SetLlmPanelVisible(false);
 	BindEditorModeButtons();
+	BindTemplateSidebarToolbar();
+	RefreshTemplateSidebarWidget();
 	RefreshViewModeButtons();
 	RefreshPlacementSnapButton();
 	BindEditorLaunchSubsystem();
@@ -33,6 +36,7 @@ void UScenarioEditorRootWidget::NativeConstruct()
 
 void UScenarioEditorRootWidget::NativeDestruct()
 {
+	UnbindTemplateSidebarToolbar();
 	UnbindEditorModeButtons();
 	UnbindEditorLaunchSubsystem();
 	Super::NativeDestruct();
@@ -132,8 +136,26 @@ void UScenarioEditorRootWidget::SetLlmPanelVisible(const bool bVisible)
 	SetPanelVisibility(ScenarioEditorLlmWidget.Get(), bVisible);
 }
 
+void UScenarioEditorRootWidget::SetTemplateSidebarPanel(const EScenarioTemplateSidebarPanel activePanel)
+{
+	ApplyTemplateSidebarPanel(activePanel);
+	RefreshTemplateSidebarWidget();
+}
+
+void UScenarioEditorRootWidget::RefreshTemplateSidebarWidget()
+{
+	SetPanelVisibility(ResolveTemplateSidebarVisibilityTarget(), true);
+	SetPanelVisibility(ScenarioTemplateSidebarWidget.Get(), true);
+	if (ScenarioTemplateSidebarWidget)
+	{
+		ScenarioTemplateSidebarWidget->RefreshFromDraft();
+	}
+}
+
 void UScenarioEditorRootWidget::HandleEditorSessionStarted(const bool)
 {
+	RefreshTemplateSidebarWidget();
+
 	if (bAutoRevealAssetPaletteOnBottomEdge)
 	{
 		SetAssetPaletteVisible(ShouldRevealAssetPaletteFromMouseEdge(), true);
@@ -229,6 +251,12 @@ void UScenarioEditorRootWidget::HandleSnapPlacementToGridButtonClicked()
 	}
 }
 
+void UScenarioEditorRootWidget::HandleTemplateSidebarPanelChanged(
+	const EScenarioTemplateSidebarPanel activePanel)
+{
+	SetTemplateSidebarPanel(activePanel);
+}
+
 void UScenarioEditorRootWidget::BindEditorModeButtons()
 {
 	if (TopDownOrthoModeButton)
@@ -270,6 +298,40 @@ void UScenarioEditorRootWidget::UnbindEditorModeButtons()
 	{
 		SnapPlacementToGridButton->OnClicked.RemoveDynamic(
 			this, &UScenarioEditorRootWidget::HandleSnapPlacementToGridButtonClicked);
+	}
+}
+
+void UScenarioEditorRootWidget::BindTemplateSidebarToolbar()
+{
+	if (!ToolbarWidget)
+	{
+		return;
+	}
+
+	ToolbarWidget->OnSidebarPanelChanged.RemoveDynamic(
+		this,
+		&UScenarioEditorRootWidget::HandleTemplateSidebarPanelChanged);
+	ToolbarWidget->OnSidebarPanelChanged.AddDynamic(
+		this,
+		&UScenarioEditorRootWidget::HandleTemplateSidebarPanelChanged);
+	ApplyTemplateSidebarPanel(ToolbarWidget->GetActiveSidebarPanel());
+}
+
+void UScenarioEditorRootWidget::UnbindTemplateSidebarToolbar()
+{
+	if (ToolbarWidget)
+	{
+		ToolbarWidget->OnSidebarPanelChanged.RemoveDynamic(
+			this,
+			&UScenarioEditorRootWidget::HandleTemplateSidebarPanelChanged);
+	}
+}
+
+void UScenarioEditorRootWidget::ApplyTemplateSidebarPanel(const EScenarioTemplateSidebarPanel activePanel)
+{
+	if (ScenarioTemplateSidebarWidget)
+	{
+		ScenarioTemplateSidebarWidget->SetActivePanel(activePanel);
 	}
 }
 
@@ -331,6 +393,11 @@ void UScenarioEditorRootWidget::HandleAutoStartCompleted(const bool bLoadedExist
 UWidget* UScenarioEditorRootWidget::ResolvePlaceableDetailsVisibilityTarget() const
 {
 	return PlaceableContextMenuPanel ? PlaceableContextMenuPanel.Get() : Cast<UWidget>(PlaceableContextMenuWidget.Get());
+}
+
+UWidget* UScenarioEditorRootWidget::ResolveTemplateSidebarVisibilityTarget() const
+{
+	return TemplateSidebarPanel ? TemplateSidebarPanel.Get() : Cast<UWidget>(ScenarioTemplateSidebarWidget.Get());
 }
 
 UWidget* UScenarioEditorRootWidget::ResolveAssetPaletteVisibilityTarget() const

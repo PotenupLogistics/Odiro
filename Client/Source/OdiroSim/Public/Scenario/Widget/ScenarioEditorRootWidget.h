@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Scenario/Widget/ScenarioEditorToolbarWidget.h"
 #include "ScenarioEditorRootWidget.generated.h"
 
 enum class EScenarioEditorViewMode : uint8;
@@ -15,6 +16,7 @@ class UScenarioLlmPromptWidget;
 class UScenarioPlaceableComponent;
 class UScenarioPlaceableContextMenuWidget;
 class UScenarioPlaceableDetailsWidget;
+class UScenarioTemplateSidebarWidget;
 class UWidget;
 
 UCLASS(BlueprintType, Blueprintable)
@@ -57,6 +59,14 @@ public:
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UScenarioEditorToolbarWidget> ToolbarWidget;
+
+	// Optional visibility wrapper for the Scenario Template sidebar.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UWidget> TemplateSidebarPanel;
+
+	// Optional read-only Scenario Template block sidebar.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UScenarioTemplateSidebarWidget> ScenarioTemplateSidebarWidget;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UButton> TopDownOrthoModeButton;
@@ -114,6 +124,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void SetLlmPanelVisible(bool bVisible);
 
+	// Selects the Scenario Template sidebar panel shown by the root widget.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
+	void SetTemplateSidebarPanel(EScenarioTemplateSidebarPanel activePanel);
+
+	// Refreshes the read-only Scenario Template sidebar from the authoring draft.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
+	void RefreshTemplateSidebarWidget();
+
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void HandleEditorSessionStarted(bool bLoadedExistingScenario);
 
@@ -148,14 +166,24 @@ private:
 	UFUNCTION()
 	void HandleSnapPlacementToGridButtonClicked();
 
+	UFUNCTION()
+	void HandleTemplateSidebarPanelChanged(EScenarioTemplateSidebarPanel activePanel);
+
 	void BindEditorModeButtons();
 	void UnbindEditorModeButtons();
+	// Binds toolbar tab changes to the Scenario Template sidebar.
+	void BindTemplateSidebarToolbar();
+	// Releases toolbar tab bindings owned by the root widget.
+	void UnbindTemplateSidebarToolbar();
+	// Applies one template sidebar panel to the sidebar and records the synchronized value.
+	void ApplyTemplateSidebarPanel(EScenarioTemplateSidebarPanel activePanel);
 	class AScenarioEditorController* GetEditorController() const;
 
 	void BindEditorLaunchSubsystem();
 	void UnbindEditorLaunchSubsystem();
 	void HandleAutoStartCompleted(bool bLoadedExistingScenario);
 	UWidget* ResolvePlaceableDetailsVisibilityTarget() const;
+	UWidget* ResolveTemplateSidebarVisibilityTarget() const;
 	UWidget* ResolveAssetPaletteVisibilityTarget() const;
 	UWidget* ResolveLlmPanelVisibilityTarget() const;
 	// Applies asset palette visibility without rebuilding it on every tick.

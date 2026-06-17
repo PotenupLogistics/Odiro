@@ -4,6 +4,7 @@
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
+#include "Scenario/Widget/ScenarioEditorRootWidget.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
@@ -51,6 +52,7 @@ void UScenarioEditorToolbarWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	BindControls();
+	RefreshSidebarPanelButtons();
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	RequestEditorWidgetInputMode();
 	SetStatusText(TEXT("준비됨"));
@@ -94,6 +96,29 @@ void UScenarioEditorToolbarWidget::ReturnToMainMenu()
 	}
 }
 
+void UScenarioEditorToolbarWidget::SetActiveSidebarPanel(const EScenarioTemplateSidebarPanel panel)
+{
+	ActiveSidebarPanel = panel;
+	RefreshSidebarPanelButtons();
+	OnSidebarPanelChanged.Broadcast(ActiveSidebarPanel);
+
+	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	{
+		if (UScenarioEditorRootWidget* rootWidget = editorController->GetEditorRootWidget())
+		{
+			rootWidget->SetTemplateSidebarPanel(ActiveSidebarPanel);
+		}
+	}
+}
+
+void UScenarioEditorToolbarWidget::RefreshSidebarPanelButtons()
+{
+	ApplySidebarPanelButtonState(MainPanelButton.Get(), EScenarioTemplateSidebarPanel::Main);
+	ApplySidebarPanelButtonState(CorridorPanelButton.Get(), EScenarioTemplateSidebarPanel::Corridor);
+	ApplySidebarPanelButtonState(ObstaclePanelButton.Get(), EScenarioTemplateSidebarPanel::Obstacle);
+	ApplySidebarPanelButtonState(PedestrianPanelButton.Get(), EScenarioTemplateSidebarPanel::Pedestrian);
+}
+
 void UScenarioEditorToolbarWidget::HandleSaveButtonClicked()
 {
 	SaveScenario();
@@ -102,6 +127,26 @@ void UScenarioEditorToolbarWidget::HandleSaveButtonClicked()
 void UScenarioEditorToolbarWidget::HandleReturnButtonClicked()
 {
 	ReturnToMainMenu();
+}
+
+void UScenarioEditorToolbarWidget::HandleMainPanelButtonClicked()
+{
+	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Main);
+}
+
+void UScenarioEditorToolbarWidget::HandleCorridorPanelButtonClicked()
+{
+	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Corridor);
+}
+
+void UScenarioEditorToolbarWidget::HandleObstaclePanelButtonClicked()
+{
+	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Obstacle);
+}
+
+void UScenarioEditorToolbarWidget::HandlePedestrianPanelButtonClicked()
+{
+	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Pedestrian);
 }
 
 void UScenarioEditorToolbarWidget::BindControls()
@@ -116,6 +161,30 @@ void UScenarioEditorToolbarWidget::BindControls()
 	{
 		ReturnToMainMenuButton->OnClicked.RemoveDynamic(this, &UScenarioEditorToolbarWidget::HandleReturnButtonClicked);
 		ReturnToMainMenuButton->OnClicked.AddDynamic(this, &UScenarioEditorToolbarWidget::HandleReturnButtonClicked);
+	}
+
+	if (MainPanelButton)
+	{
+		MainPanelButton->OnClicked.RemoveDynamic(this, &UScenarioEditorToolbarWidget::HandleMainPanelButtonClicked);
+		MainPanelButton->OnClicked.AddDynamic(this, &UScenarioEditorToolbarWidget::HandleMainPanelButtonClicked);
+	}
+
+	if (CorridorPanelButton)
+	{
+		CorridorPanelButton->OnClicked.RemoveDynamic(this, &UScenarioEditorToolbarWidget::HandleCorridorPanelButtonClicked);
+		CorridorPanelButton->OnClicked.AddDynamic(this, &UScenarioEditorToolbarWidget::HandleCorridorPanelButtonClicked);
+	}
+
+	if (ObstaclePanelButton)
+	{
+		ObstaclePanelButton->OnClicked.RemoveDynamic(this, &UScenarioEditorToolbarWidget::HandleObstaclePanelButtonClicked);
+		ObstaclePanelButton->OnClicked.AddDynamic(this, &UScenarioEditorToolbarWidget::HandleObstaclePanelButtonClicked);
+	}
+
+	if (PedestrianPanelButton)
+	{
+		PedestrianPanelButton->OnClicked.RemoveDynamic(this, &UScenarioEditorToolbarWidget::HandlePedestrianPanelButtonClicked);
+		PedestrianPanelButton->OnClicked.AddDynamic(this, &UScenarioEditorToolbarWidget::HandlePedestrianPanelButtonClicked);
 	}
 }
 
@@ -169,4 +238,14 @@ FString UScenarioEditorToolbarWidget::ResolveSavePath() const
 	}
 
 	return MakeUniqueSavePath(DefaultSavePath);
+}
+
+void UScenarioEditorToolbarWidget::ApplySidebarPanelButtonState(
+	UButton* button,
+	const EScenarioTemplateSidebarPanel panel) const
+{
+	if (button)
+	{
+		button->SetRenderOpacity(ActiveSidebarPanel == panel ? 1.0f : 0.55f);
+	}
 }

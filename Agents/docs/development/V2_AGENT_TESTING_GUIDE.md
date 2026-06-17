@@ -62,26 +62,17 @@ v2 LLM mode는 optional 기능입니다. CI와 로컬 개발 기본 경로는 de
 
 운영에서 LLM을 켤 때만 provider 설정과 API key를 준비합니다.
 
-## 7. user project root 설정
+## 7. analysis run 입력
 
-`/api/v2/analysis/run`은 사용자가 직접 만든 project root 하위 파일을 분석합니다. 자동 생성되는 기본 root는 사용하지 않습니다. 현재 구현에 legacy environment variable이 남아 있으면 값은 `<UserProject>` 또는 user project collection root를 가리켜야 하며, 최종 API에서는 명시적 project root 전달로 대체합니다.
+`/api/v2/analysis/run`은 사용자가 직접 만든 project root와 run id를 요청 body로 받습니다. 자동 생성되는 기본 root나 environment variable을 사용하지 않습니다.
 
-Unix-like 예:
+요청 예:
 
-```text
-ODIROSIM_EXPERIMENTS_DIR=/path/to/UserProject
-```
-
-Windows cmd 예:
-
-```text
-set ODIROSIM_EXPERIMENTS_DIR=D:\OdiroProjects\DeliveryBotBaseline
-```
-
-PowerShell 예:
-
-```powershell
-$env:ODIROSIM_EXPERIMENTS_DIR="D:\OdiroProjects\DeliveryBotBaseline"
+```json
+{
+  "project_path": "D:/OdiroProjects/DeliveryBotBaseline",
+  "run_id": "000001"
+}
 ```
 
 ## 8. LLM mode 운영 설정
@@ -123,6 +114,6 @@ uv run pytest tests/test_v2_result_analysis_timeline_builder.py tests/test_v2_ra
 1. `/health`가 200을 반환하는지 확인합니다.
 2. `/api/v2/scenarios/generate`가 prompt-only request로 200을 반환하는지 확인합니다.
 3. 실행 개수 필드가 422로 거부되는지 확인합니다.
-4. `/api/v2/analysis/run`이 `{}` 또는 body 없음으로 200을 반환하는지 확인합니다.
+4. `/api/v2/analysis/run`이 `project_path`, `run_id` 없이 호출되면 422를 반환하는지 확인합니다.
 5. 데이터가 없을 때 `overall_judgement="insufficient_data"`인지 확인합니다.
 6. LLM mode를 켠 경우 scenario generation은 raw `scenario` root field를, analysis는 `analysis_mode`와 `warnings`를 함께 확인합니다.

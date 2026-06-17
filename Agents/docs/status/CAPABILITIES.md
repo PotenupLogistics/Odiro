@@ -12,7 +12,7 @@
 - deterministic scenario post-processing
 - `WorldConfig` -> EpisodeSetup adapter
 - `WorldConfig` -> DeliveryBotSetup adapter
-- RunQueue model, service, export
+- Legacy RunQueue model, service, export tooling
 - OpenAI-first / Ollama fallback provider chain
 - local `WorldConfig` generation via Ollama provider
 
@@ -32,11 +32,12 @@
 
 ## UE Integration
 
-- 사용자용 `/api/v1/scenarios/generate` endpoint
-- EpisodeSetup + DeliveryBotSetup execution pair 생성
-- RunQueue export/API path
+- `/api/v1/scenarios/generate` removal notice
+- `/api/v2/scenarios/generate` Project Scenario 생성
+- `/api/v2/analysis/run` project/run 분석
+- Legacy EpisodeSetup + DeliveryBotSetup + RunQueue export tooling
 - environmentSampling 기반 numeric constraints의 실행 계약 반영
-- UE team RunQueue/setup pair 전달 문서
+- UE team RunQueue/setup pair 전달 문서는 legacy reference
 - legacy `WorldConfig` -> `EpisodeSpec` adapter와 validator/archive tooling
 
 Legacy `EpisodeSpec` 자료는 `Agents/docs/archive/previous_episode_spec` 아래에서 과거 구현 추적용으로만 유지합니다.

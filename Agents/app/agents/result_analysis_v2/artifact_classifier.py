@@ -18,7 +18,10 @@ class ArtifactClassifier:
     def classify(self, root: Path, path: Path) -> ArtifactInfo:
         relative = path.relative_to(root)
         parts = relative.parts
-        experiment_id = parts[0] if parts else None
+        if parts and parts[0] == "runs":
+            experiment_id = root.name
+        else:
+            experiment_id = parts[0] if parts else None
         run_id = self._after(parts, "runs")
         episode_id = self._after(parts, "episodes")
         name = path.name.lower()

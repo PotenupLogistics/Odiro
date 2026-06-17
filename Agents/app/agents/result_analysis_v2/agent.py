@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from collections import defaultdict
 from dataclasses import asdict
 from pathlib import Path
@@ -22,9 +21,9 @@ from app.agents.result_analysis_v2.representative_selector import Representative
 from app.agents.result_analysis_v2.response_builder import ResponseBuilder
 from app.agents.result_analysis_v2.run_aggregator import RunAggregator
 from app.agents.result_analysis_v2.timeline_builder import EventTimelineBuilderV2
-from app.agents.result_analysis_v2.workspace_scanner import WorkspaceScanner
+from app.agents.result_analysis_v2.workspace_scanner import WorkspaceScan, WorkspaceScanner
 from app.core.settings import Settings
-from app.models.analysis_v2 import AnalysisMetricsV2, AnalysisRunV2Response
+from app.models.analysis_v2 import AnalysisMetricsV2, AnalysisRunV2Request, AnalysisRunV2Response
 
 
 class ResultAnalysisV2Agent:
@@ -56,9 +55,9 @@ class ResultAnalysisV2Agent:
         self.recommendation_validator = RecommendationValidator()
         self.response_builder = ResponseBuilder()
 
-    def run(self) -> AnalysisRunV2Response:
-        root = self.experiments_root or self._default_root()
-        scan = self.scanner.scan(root)
+    def run(self, request: AnalysisRunV2Request | None = None) -> AnalysisRunV2Response:
+        scan = self.scan(request)
+        root = scan.root
         parsed = [self.parser.parse(self.classifier.classify(root, path)) for path in scan.files]
         warnings = [*scan.warnings]
         for artifact in parsed:
@@ -122,10 +121,32 @@ class ResultAnalysisV2Agent:
         configured_root = self.settings.experiments_dir
         if configured_root:
             return Path(configured_root)
-        appdata = os.getenv("APPDATA")
-        if appdata:
-            return Path(appdata) / "OdiroSim" / "experiments"
         return Path("data") / "experiments"
+
+    def scan(self, request: AnalysisRunV2Request | None = None) -> WorkspaceScan:
+        if request is None:
+            root = self.experiments_root or self._default_root()
+            return self.scanner.scan(root)
+
+        project_root = Path(request.project_path)
+        scan = self.scanner.scan(project_root)
+        run_path = project_root / "runs" / request.run_id
+        warnings = [*scan.warnings]
+        if project_root.exists() and not run_path.is_dir():
+            warnings.append(f"run directory does not exist: {run_path}")
+        files = [
+            path
+            for path in scan.files
+            if self._is_requested_run_file(project_root=project_root, path=path, run_id=request.run_id)
+        ]
+        return WorkspaceScan(root=project_root, files=files, warnings=warnings)
+
+    def _is_requested_run_file(self, *, project_root: Path, path: Path, run_id: str) -> bool:
+        try:
+            parts = path.relative_to(project_root).parts
+        except ValueError:
+            return False
+        return len(parts) >= 2 and parts[0] == "runs" and parts[1] == run_id
 
     def _extract_episodes(self, artifacts: list[ParsedArtifact]) -> list[EpisodeMetrics]:
         results: dict[tuple[str, str, str], dict[str, Any]] = {}

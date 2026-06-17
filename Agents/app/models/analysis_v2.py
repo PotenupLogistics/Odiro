@@ -2,11 +2,21 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class AnalysisRunV2Request(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    project_path: str = Field(min_length=1)
+    run_id: str = Field(pattern=r"^\d{6}$")
+
+    @field_validator("project_path")
+    @classmethod
+    def reject_blank_project_path(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("project_path must not be empty.")
+        return value
 
 
 class AnalysisScopeV2(BaseModel):

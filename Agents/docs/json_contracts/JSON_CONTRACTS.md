@@ -1,10 +1,16 @@
 # JSON Contracts
 
+상태: Agents 내부/legacy JSON contract index.
+
+- 사용자 project 공유 파일 계약 기준: `contracts/specs/user-project-data.md`
+- Bridge IPC 계약 기준: `contracts/specs/bridge-ipc.md`
+- WorldConfig, RunQueue, legacy UE handoff 문서는 현재 실행 파일 계약이 아님
+
 ## 1. 목적
 
 이 문서는 UE5 배달 로봇 시뮬레이션과 AI 정책 판단 서버가 주고받을 JSON 계약의 위치와 단위 기준을 정리한다.
 
-현재 프로젝트는 JSON Schema, Pydantic 모델, validation CLI/service, WorldConfig generation service, 사용자용 RunQueue generation API를 함께 제공한다. sample JSON과 fixture 파일은 repository에 추가하지 않는다.
+현재 프로젝트는 JSON Schema, Pydantic 모델, validation CLI/service, WorldConfig generation service, v2 scenario generation API를 제공한다. RunQueue generation API는 제거 안내만 반환한다. sample JSON과 fixture 파일은 repository에 추가하지 않는다.
 
 ## 2. UE5가 생성하는 JSON
 
@@ -45,7 +51,9 @@
 
 ## 7. 현재 API / service 연결
 
-* `POST /api/v1/scenarios/generate`: 사용자 자연어 `prompt`를 필수로 받고, 선택적 `episode_count`로 episode/run 개수를 지정할 수 있으며, wrapper 없는 RunQueue JSON을 반환한다.
+* `POST /api/v1/scenarios/generate`: `410 RUN_QUEUE_REMOVED` 안내를 반환한다.
+* `POST /api/v2/scenarios/generate`: 사용자 자연어 `prompt`를 받고 `scenario` JSON을 반환한다.
+* `POST /api/v2/analysis/run`: `project_path`, `run_id`로 특정 user project run을 분석한다.
 * `POST /api/v1/analysis/run`: UE 실행 결과 파일과 setup 파일을 입력으로 받아 분석과 추천 결과를 반환한다.
 * `app.services.json_contract_validator.validate_payload()`: 제출된 JSON payload를 schema와 Pydantic 모델로 검증한다.
 * `app.services.world_config_generation_orchestrator.generate_world_config()`: 자연어 기반 WorldConfig generation 내부 흐름을 수행한다.

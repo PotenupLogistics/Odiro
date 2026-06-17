@@ -22,6 +22,19 @@ def _write_blocked_episode(experiments, episode_id: str) -> None:
     )
 
 
+def _write_project_blocked_episode(project, episode_id: str) -> None:
+    episode_dir = project / "runs" / "000001" / "episodes" / episode_id
+    episode_dir.mkdir(parents=True)
+    (episode_dir / "result.json").write_text(
+        json.dumps({"success": False, "failure_type": "blocked_region_violation"}),
+        encoding="utf-8",
+    )
+    (episode_dir / "events.jsonl").write_text(
+        '{"event_type": "blocked_region_violation", "time_s": 6.4}\n',
+        encoding="utf-8",
+    )
+
+
 def test_result_analysis_graph_runner_imports_without_langgraph_dependency() -> None:
     assert ResultAnalysisGraphRunnerV2
 
@@ -68,13 +81,12 @@ def test_graph_runner_exposes_node_state_without_response_schema_changes(tmp_pat
 
 
 def test_graph_mode_false_keeps_existing_v2_api_behavior(monkeypatch, tmp_path) -> None:
-    experiments = tmp_path / "experiments"
-    _write_blocked_episode(experiments, "000001")
-    _write_blocked_episode(experiments, "000002")
+    project = tmp_path / "Project1"
+    _write_project_blocked_episode(project, "000001")
+    _write_project_blocked_episode(project, "000002")
     monkeypatch.setenv("V2_AGENT_GRAPH_ENABLED", "false")
-    monkeypatch.setenv("ODIROSIM_EXPERIMENTS_DIR", str(experiments))
 
-    response = TestClient(app).post("/api/v2/analysis/run", json={})
+    response = TestClient(app).post("/api/v2/analysis/run", json={"project_path": str(project), "run_id": "000001"})
 
     assert response.status_code == 200
     payload = response.json()
@@ -84,13 +96,12 @@ def test_graph_mode_false_keeps_existing_v2_api_behavior(monkeypatch, tmp_path) 
 
 
 def test_graph_mode_true_uses_graph_runner_path(monkeypatch, tmp_path) -> None:
-    experiments = tmp_path / "experiments"
-    _write_blocked_episode(experiments, "000001")
-    _write_blocked_episode(experiments, "000002")
+    project = tmp_path / "Project1"
+    _write_project_blocked_episode(project, "000001")
+    _write_project_blocked_episode(project, "000002")
     monkeypatch.setenv("V2_AGENT_GRAPH_ENABLED", "true")
-    monkeypatch.setenv("ODIROSIM_EXPERIMENTS_DIR", str(experiments))
 
-    response = TestClient(app).post("/api/v2/analysis/run", json={})
+    response = TestClient(app).post("/api/v2/analysis/run", json={"project_path": str(project), "run_id": "000001"})
 
     assert response.status_code == 200
     payload = response.json()

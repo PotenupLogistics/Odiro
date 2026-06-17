@@ -1,8 +1,8 @@
 # UE Team Message Draft
 
-AI Backend에서 최신 UE 계약 기반 setup pair 생성 smoke가 성공했습니다.
+AI Backend에서 legacy UE 계약 기반 EpisodeSetup + DeliveryBotSetup pair 생성 smoke가 성공했습니다.
 
-현재 UE 연동 기준 API는 `/api/v1/scenarios/generate`입니다. 이 경로는 자연어 `prompt`와 선택적 `episode_count`를 받아 wrapper 없는 RunQueue JSON을 반환하며, backend가 내부적으로 EpisodeSetup + DeliveryBotSetup pair를 생성합니다. 기존 `/api/v1/ue5/world-config/handoff?provider=openai&responseFormat=setup_pair` 및 `responseFormat=episode_spec` 경로는 FastAPI/OpenAPI에서 제거된 legacy handoff입니다.
+이 문서는 과거 handoff 기록입니다. 현재 `/api/v1/scenarios/generate`는 `410 RUN_QUEUE_REMOVED` 안내만 반환합니다. 이전 wrapper 없는 RunQueue JSON 응답은 legacy tooling으로만 남습니다. 기존 `/api/v1/ue5/world-config/handoff?provider=openai&responseFormat=setup_pair` 및 `responseFormat=episode_spec` 경로는 FastAPI/OpenAPI에서 제거된 legacy handoff입니다.
 
 로컬 candidate path:
 

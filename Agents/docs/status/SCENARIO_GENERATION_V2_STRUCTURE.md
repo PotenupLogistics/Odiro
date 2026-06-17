@@ -49,6 +49,8 @@ LLM prompt는 validator가 요구하는 최소 `scenario` v1 구조를 직접 �
 
 Structured output schema는 `app/agents/scenario_generation_v2/scenario_template_schema.py`에 있다. 이 schema는 root required fields, corridor/obstacles/pedestrians/robot 최소 구조, surface/placement/encounter/persona enum을 제한한다. Segment id cross-reference 같은 관계 검증은 계속 `TemplateValidator`가 담당한다.
 
+주의: `scenario_template_schema.py`, `TemplateValidator`는 legacy 내부 이름입니다. 외부 API와 저장 파일 계약은 `scenario` JSON입니다.
+
 현재 schema는 Project Scenario v1 계약에 맞춰 robot abstract anchor(`entry`/`exit`)와 concrete anchor(`corridor_pose`)를 구분하고, 고정 숫자 또는 `{min,max}` 범위값, fixed/pattern/scatter obstacle placement, Unreal-supported override fields, placement `allow_blocking`, background `spawn_zone.segments`, 제한적 `corridor.segments[].replaced_by` choices를 허용한다. 기본 LLM 생성은 단순한 `fixed` placement를 우선한다.
 
 ## 3. Request / Response 구조

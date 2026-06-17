@@ -1,18 +1,26 @@
 # Natural Language Generation Contract
 
-이 문서는 자연어 입력을 기반으로 `WorldConfig` 또는 UE 실행용 RunQueue를 생성하는 API 계약을 설명한다. 파일명, API path, JSON field name은 영어 원문을 유지한다.
+이 문서는 자연어 입력을 기반으로 `WorldConfig`를 생성하던 legacy 계약과 user project scenario 생성 경로를 설명한다. 파일명, API path, JSON field name은 영어 원문을 유지한다.
 
 ## Generation Endpoint Contract
 
 WorldConfig generation은 `app.services.world_config_generation_orchestrator.generate_world_config()` service 함수가 `WorldConfigGenerationRequest`를 입력받고 `WorldConfigGenerationResult`를 반환한다. 이전 `/api/v1/generation/world-config` endpoint는 public API에서 제거되었다.
 
-사용자용 scenario 생성 API는 다음 endpoint다.
+현재 사용자용 scenario 생성 API는 다음 endpoint다.
+
+```text
+POST /api/v2/scenarios/generate
+```
+
+이 endpoint는 자연어 `prompt`를 필수로 받고 `<UserProject>/scenario.json`에 저장 가능한 `scenario` JSON을 반환한다. 실행 개수, seed, scenario sample, RunQueue 생성은 담당하지 않는다.
+
+Legacy RunQueue endpoint:
 
 ```text
 POST /api/v1/scenarios/generate
 ```
 
-이 endpoint는 자연어 `prompt`를 필수로 받고, 선택적으로 `episode_count`를 허용한다. 성공 시 wrapper field 없는 RunQueue JSON을 반환한다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하지 않는다. `episode_count`가 없으면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용한다.
+이 endpoint는 현재 `410 RUN_QUEUE_REMOVED` 안내만 반환한다. 이전 자연어 prompt 기반 RunQueue 응답은 legacy tooling 기록으로만 남긴다.
 
 현재 provider 동작:
 
@@ -41,7 +49,7 @@ generation contract는 prompt package 생성 후 LLM client abstraction을 사�
 - prompt package 출력은 `WorldConfigPromptPackage`로 표현한다.
 - repair prompt는 `WorldConfigRepairPromptPackage`로 표현한다.
 - `targetContractType`은 `world_config` 중심으로 유지한다.
-- 최신 사용자용 RunQueue 생성은 `POST /api/v1/scenarios/generate`에서 backend 내부 변환/export 경로를 통해 제공한다.
+- RunQueue 생성은 더 이상 사용자용 API가 아니다. 필요한 경우 legacy export tooling에서만 다룬다.
 
 ## 1. Generation Request 초안
 
@@ -94,7 +102,7 @@ constraints:
 - targetContractType은 world_config만 허용
 - generatedPayload는 validation 통과 후에만 반환
 - 사용자가 UE JSON을 직접 입력하는 구조는 제공하지 않음
-- RunQueue JSON은 AI/backend 내부 생성 산출물로만 반환
+- RunQueue JSON은 사용자용 API 응답으로 반환하지 않음
 
 ## Scenario Reflection Field
 

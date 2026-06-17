@@ -2,7 +2,7 @@
 
 ## 개요
 
-v2 Agent는 기존 v1 실행 계약을 건드리지 않고, Project Scenario 생성과 실험 결과 분석을 분리합니다. Scenario generation v2는 항상 LangGraph runner를 사용하며, `V2_AGENT_LLM_ENABLED=true`일 때만 graph 내부 LLM-assisted JSON 호출 경로를 시도합니다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아니며 결과 분석 v2 graph 경로 제어를 위해 유지합니다.
+v2 Agent는 user project 전환 기준으로 Project Scenario 생성과 run 결과 분석을 분리합니다. Scenario generation v2는 항상 LangGraph runner를 사용하며, `V2_AGENT_LLM_ENABLED=true`일 때만 graph 내부 LLM-assisted JSON 호출 경로를 시도합니다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아니며 결과 분석 v2 graph 경로 제어를 위해 유지합니다.
 
 핵심 원칙:
 
@@ -47,7 +47,7 @@ scenario에 들어갈 보도 폭, 장애물 수, 보행자 수, 속도 범위 �
 
 ### `TemplateValidator`
 
-scenario가 dict인지, `scenario_id`, `schema/version`, `intent`, `ground_model`, `robot`, 장애물/보행자 조건을 갖는지 검증합니다. 중첩된 `{"min": ..., "max": ...}` 범위는 재귀적으로 `min <= max`를 확인합니다.
+scenario가 dict인지, `scenario_id`, `schema/version`, `intent`, `corridor`, `robot`, 장애물/보행자 조건을 갖는지 검증합니다. 중첩된 `{"min": ..., "max": ...}` 범위는 재귀적으로 `min <= max`를 확인합니다.
 
 ### `RepairHandler`
 

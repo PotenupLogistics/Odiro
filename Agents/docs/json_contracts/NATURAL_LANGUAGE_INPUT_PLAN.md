@@ -2,13 +2,13 @@
 
 ## API Shell Status
 
-Natural-language input can now be accepted through the following API endpoints:
+Natural-language input currently uses the v2 scenario endpoint:
 
 ```text
-POST /api/v1/scenarios/generate
+POST /api/v2/scenarios/generate
 ```
 
-사용자용 기본 Public API는 `scenarios/generate`다. Prompt package 생성은 `build_world_config_prompt_package()` service 함수로, WorldConfig generation은 `generate_world_config()` service 함수로 검증한다. 사용자용 `scenarios/generate` endpoint는 자연어 `prompt`를 필수로 받고 선택적으로 `episode_count`를 허용하며, wrapper 없는 RunQueue JSON을 반환한다. `scenarios/generate-artifacts`와 `scenarios/generate-drive`는 public API에서 제거되었다.
+사용자용 scenario 생성 API는 `/api/v2/scenarios/generate`다. Prompt package 생성은 `build_world_config_prompt_package()` service 함수로, WorldConfig generation은 `generate_world_config()` service 함수로 검증한다. `/api/v1/scenarios/generate`는 `410 RUN_QUEUE_REMOVED` 안내만 반환한다.
 
 ## Retrieval Connection
 
@@ -44,8 +44,8 @@ MVP에서는 자연어 입력을 World Config JSON 생성에만 사용한다.
 
 - API 기반 입력 구현 완료
 - Swagger/Postman 또는 간단한 UI에서 prompt 입력 가능
-- `/api/v1/scenarios/generate`는 사용자용 natural-language RunQueue 생성 entrypoint
-- `episode_count`가 없으면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용
+- `/api/v2/scenarios/generate`는 사용자용 natural-language Project Scenario 생성 entrypoint
+- 실행 개수, seed, RunQueue 생성은 담당하지 않음
 - CLI는 주로 JSON 검증과 export tooling 용도로 사용
 
 후속 단계:

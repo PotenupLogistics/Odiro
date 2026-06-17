@@ -12,6 +12,8 @@ Scenario generation v2는 `/api/v2/scenarios/generate`에서 항상 LangGraph ru
 
 `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아닙니다. 이 설정은 ResultAnalysisV2 graph 경로와 legacy rollback 호환을 위해 유지합니다.
 
+주의: 일부 내부 node 이름에 남은 `template`은 legacy 구현 명칭입니다. 외부 계약과 저장 대상은 `scenario` JSON입니다.
+
 ## 3. ScenarioGenerationV2 graph 설계
 
 ```text
@@ -57,7 +59,7 @@ START
 
 `ScenarioGenerationGraphStateV2`는 request, prompt, parsed intent, selected pattern, optional LLM scenario candidate, generated scenario, validation result, response, warnings를 가진 state입니다.
 
-`ResultAnalysisGraphStateV2`는 request, experiments root, artifacts, classified/parsed artifacts, parse warnings, episode metrics, timelines, representative failed episodes, run/experiment aggregates, failure patterns, RAG queries/context, analysis context, LLM analysis, recommendations, validation errors, response, warnings를 가집니다.
+`ResultAnalysisGraphStateV2`는 request, user project run root, artifacts, classified/parsed artifacts, parse warnings, episode metrics, timelines, representative failed episodes, run aggregates, failure patterns, RAG queries/context, analysis context, LLM analysis, recommendations, validation errors, response, warnings를 가집니다.
 
 ## 6. Node 목록
 

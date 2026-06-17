@@ -218,11 +218,26 @@ void UScenarioEditorSidebarFieldRow::UnbindControls()
 
 void UScenarioEditorSidebarFieldRow::RefreshRow()
 {
-	ApplyTextBlockStyle(LabelTextBlock.Get(), EWidgetTextStyleRole::Label);
-	ApplyTextBlockStyle(SeparatorTextBlock.Get(), EWidgetTextStyleRole::Label);
-	ApplyTextBlockStyle(ValueTextBlock.Get(), EWidgetTextStyleRole::Value);
-	ApplyEditableTextBoxStyle(ValueEditableTextBox.Get());
-	ApplyMultiLineEditableTextBoxStyle(ValueMultiLineEditableTextBox.Get());
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		LabelTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Label);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		SeparatorTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Label);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		ValueTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(
+		ValueEditableTextBox.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyMultiLineEditableTextBoxStyle(
+		ValueMultiLineEditableTextBox.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value);
 
 	SetTextBlockText(LabelTextBlock.Get(), FieldLabel);
 	SetTextBlockText(SeparatorTextBlock.Get(), TEXT(":"));
@@ -263,71 +278,6 @@ void UScenarioEditorSidebarFieldRow::RefreshRow()
 			? ESlateVisibility::Collapsed
 			: ESlateVisibility::Visible);
 	}
-}
-
-FWidgetTextStyle UScenarioEditorSidebarFieldRow::ResolveTextStyle(
-	const EWidgetTextStyleRole role) const
-{
-	if (const UWidgetTextStyleCatalog* catalog = TextStyleCatalog.LoadSynchronous())
-	{
-		return catalog->GetStyle(role);
-	}
-
-	TSoftObjectPtr<UWidgetTextStyleCatalog> defaultCatalog =
-		UWidgetTextStyleCatalog::MakeDefaultCatalogReference();
-	if (const UWidgetTextStyleCatalog* catalog = defaultCatalog.LoadSynchronous())
-	{
-		return catalog->GetStyle(role);
-	}
-
-	return UWidgetTextStyleCatalog::MakeDefaultStyle(role);
-}
-
-void UScenarioEditorSidebarFieldRow::ApplyTextBlockStyle(
-	UTextBlock* textBlock,
-	const EWidgetTextStyleRole role) const
-{
-	if (!textBlock)
-	{
-		return;
-	}
-
-	const FWidgetTextStyle style = ResolveTextStyle(role);
-	textBlock->SetFont(style.Font);
-	textBlock->SetColorAndOpacity(FSlateColor(style.Color));
-}
-
-void UScenarioEditorSidebarFieldRow::ApplyEditableTextBoxStyle(UEditableTextBox* textBox) const
-{
-	if (!textBox)
-	{
-		return;
-	}
-
-	const FWidgetTextStyle style = ResolveTextStyle(EWidgetTextStyleRole::Value);
-	FEditableTextBoxStyle textBoxStyle = textBox->GetWidgetStyle();
-	FTextBlockStyle textStyle = textBoxStyle.TextStyle;
-	textStyle.SetFont(style.Font);
-	textStyle.SetColorAndOpacity(FSlateColor(style.Color));
-	textBoxStyle.SetTextStyle(textStyle);
-	textBoxStyle.SetForegroundColor(FSlateColor(style.Color));
-	textBox->SetWidgetStyle(textBoxStyle);
-}
-
-void UScenarioEditorSidebarFieldRow::ApplyMultiLineEditableTextBoxStyle(
-	UMultiLineEditableTextBox* textBox) const
-{
-	if (!textBox)
-	{
-		return;
-	}
-
-	const FWidgetTextStyle style = ResolveTextStyle(EWidgetTextStyleRole::Value);
-	FTextBlockStyle textStyle = FTextBlockStyle::GetDefault();
-	textStyle.SetFont(style.Font);
-	textStyle.SetColorAndOpacity(FSlateColor(style.Color));
-	textBox->SetTextStyle(textStyle);
-	textBox->SetForegroundColor(style.Color);
 }
 
 void UScenarioEditorSidebarFieldRow::SetTextBlockText(UTextBlock* textBlock, const FString& text) const

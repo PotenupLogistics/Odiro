@@ -78,7 +78,7 @@ keep:
   - ScenarioEditorSidebarWidget owns the Scenario Template block summary shown in the editor side sidebar, binds FallbackSummaryContainer for legacy read-only text, and switches specialized Main/Corridor/Obstacle/Pedestrian panel widgets when bound.
   - ScenarioEditorSidebarMainPanel owns Main-panel metadata field rows for template_id, version, intent, and robot anchor summaries, including a native fallback tree when no Blueprint-authored tree is bound.
   - ScenarioEditorSidebarFieldRow owns the common leaf property row pattern for label/separator/value editing in Scenario Template side panels, including single-line and bounded multiline value inputs in its native fallback row tree.
-  - WidgetTextStyleCatalog owns shared UMG typography roles Title, Label, and Value, each limited to FSlateFontInfo and FLinearColor so editor and non-editor widgets can share font and color tuning.
+  - WidgetTextStyleCatalog owns shared UMG typography roles Title, Label, and Value, each limited to FSlateFontInfo and FLinearColor, plus common style application helpers for TextBlock and editable text controls.
   - ScenarioPlaceableDetailsWidget owns the placeable selection details panel; ScenarioPlaceableContextMenuWidget remains only as a legacy UMG compatibility wrapper.
 verify:
   - contract specs vs sample JSON alignment

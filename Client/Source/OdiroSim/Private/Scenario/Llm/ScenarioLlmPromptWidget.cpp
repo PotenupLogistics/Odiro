@@ -5,6 +5,7 @@
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/TextBlock.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
+#include "Widget/WidgetTextStyleCatalog.h"
 
 void UScenarioLlmPromptWidget::NativeOnInitialized()
 {
@@ -17,6 +18,9 @@ void UScenarioLlmPromptWidget::NativeConstruct()
 	Super::NativeConstruct();
 	BindLlmSubsystem();
 	ConfigureStatusTextBlock();
+	UWidgetTextStyleCatalog::ApplyMultiLineEditableTextBoxStyle(PromptTextBox.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(ScenarioCountTextBox.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(StatusTextBlock.Get(), EWidgetTextStyleRole::Value);
 	RequestEditorWidgetInputMode();
 	SetStatusText(TEXT("대기 중."));
 }

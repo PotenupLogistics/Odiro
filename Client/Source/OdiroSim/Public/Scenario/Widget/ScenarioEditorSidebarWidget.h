@@ -11,8 +11,6 @@ class UScenarioEditorSidebarMainPanel;
 class UWidget;
 class UWidgetSwitcher;
 class UWidgetTextStyleCatalog;
-enum class EWidgetTextStyleRole : uint8;
-struct FWidgetTextStyle;
 
 // Scenario Template block viewer and panel switch host used by the editor side sidebar.
 UCLASS(BlueprintType, Blueprintable)
@@ -136,10 +134,6 @@ private:
 	void SetTextBlockText(UTextBlock* textBlock, const FString& text) const;
 	// Applies shared typography to title, summary text, and child panel widgets.
 	void ApplyTextStyles();
-	// Resolves one shared text style from the configured catalog or built-in defaults.
-	FWidgetTextStyle ResolveTextStyle(EWidgetTextStyleRole role) const;
-	// Applies one shared style to a TextBlock control.
-	void ApplyTextBlockStyle(UTextBlock* textBlock, EWidgetTextStyleRole role) const;
 	// Returns the display title for one template sidebar panel.
 	static FString PanelToTitle(EScenarioTemplateSidebarPanel panel);
 	// Returns a stable label for a robot anchor type.

@@ -10,6 +10,7 @@
 #include "GameFramework/Actor.h"
 #include "Styling/SlateTypes.h"
 #include "TimerManager.h"
+#include "Widget/WidgetTextStyleCatalog.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioPlaceableDetailsWidget, Log, All);
 
@@ -130,6 +131,17 @@ void UScenarioPlaceableDetailsWidget::NativeOnInitialized()
 void UScenarioPlaceableDetailsWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+	UWidgetTextStyleCatalog::ApplyEditableTextStyle(InstanceIdEditableText.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(AssetNameTextBlock.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(LocationXTextBox.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(LocationYTextBox.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(LocationZTextBox.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(RotationXTextBox.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(RotationYTextBox.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(RotationZTextBox.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(ScaleXTextBox.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(ScaleYTextBox.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(ScaleZTextBox.Get(), EWidgetTextStyleRole::Value);
 	RequestEditorWidgetInputMode();
 	RefreshFromSelectedPlaceable();
 }
@@ -595,7 +607,7 @@ void UScenarioPlaceableDetailsWidget::FlashInvalidField(UEditableTextBox* textBo
 		{
 			if (UEditableTextBox* validTextBox = weakTextBox.Get())
 			{
-				SetTextBoxFieldColor(validTextBox, NormalFieldTextColor);
+				SetTextBoxFieldColor(validTextBox, ResolveNormalFieldTextColor());
 			}
 		});
 
@@ -607,14 +619,13 @@ void UScenarioPlaceableDetailsWidget::SetTextBoxFieldColor(UEditableTextBox* tex
 {
 	if (!textBox) return;
 
-	const FSlateColor slateColor(color);
-	FEditableTextBoxStyle textBoxStyle = textBox->GetWidgetStyle();
-	textBoxStyle.SetForegroundColor(slateColor);
-	textBoxStyle.SetReadOnlyForegroundColor(slateColor);
-	textBoxStyle.SetFocusedForegroundColor(slateColor);
-	textBox->SetWidgetStyle(textBoxStyle);
-	textBox->SynchronizeProperties();
+	textBox->SetForegroundColor(color);
 	textBox->InvalidateLayoutAndVolatility();
+}
+
+FLinearColor UScenarioPlaceableDetailsWidget::ResolveNormalFieldTextColor() const
+{
+	return UWidgetTextStyleCatalog::ResolveStyle(EWidgetTextStyleRole::Value).Color;
 }
 
 void UScenarioPlaceableDetailsWidget::FlashInvalidInstanceIdField()
@@ -634,7 +645,7 @@ void UScenarioPlaceableDetailsWidget::FlashInvalidInstanceIdField()
 			if (UEditableText* validEditableText = weakEditableText.Get())
 			{
 				FEditableTextStyle textStyle = validEditableText->WidgetStyle;
-				textStyle.ColorAndOpacity = FSlateColor(NormalFieldTextColor);
+				textStyle.ColorAndOpacity = FSlateColor(ResolveNormalFieldTextColor());
 				validEditableText->WidgetStyle = textStyle;
 				validEditableText->SynchronizeProperties();
 			}
@@ -660,7 +671,7 @@ void UScenarioPlaceableDetailsWidget::SetInstanceIdFieldText(const FString& inst
 	if (InstanceIdEditableText)
 	{
 		InstanceIdEditableText->SetText(FText::FromString(instanceId));
-		SetInstanceIdFieldColor(NormalFieldTextColor);
+		SetInstanceIdFieldColor(ResolveNormalFieldTextColor());
 	}
 }
 
@@ -686,6 +697,6 @@ void UScenarioPlaceableDetailsWidget::SetFieldText(UEditableTextBox* textBox, do
 	if (textBox)
 	{
 		textBox->SetText(MakeNumberText(value));
-		SetTextBoxFieldColor(textBox, NormalFieldTextColor);
+		SetTextBoxFieldColor(textBox, ResolveNormalFieldTextColor());
 	}
 }

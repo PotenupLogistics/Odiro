@@ -11,8 +11,6 @@ class USizeBox;
 class UTextBlock;
 class UWidgetTextStyleCatalog;
 class SWidget;
-enum class EWidgetTextStyleRole : uint8;
-struct FWidgetTextStyle;
 
 // Broadcasts when a Scenario Template field row commits an editable text value.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
@@ -122,14 +120,6 @@ private:
 	void UnbindControls();
 	// Applies stored label, value, and editability state to bound controls.
 	void RefreshRow();
-	// Resolves one shared text style from the configured catalog or built-in defaults.
-	FWidgetTextStyle ResolveTextStyle(EWidgetTextStyleRole role) const;
-	// Applies one shared style to a TextBlock control.
-	void ApplyTextBlockStyle(UTextBlock* textBlock, EWidgetTextStyleRole role) const;
-	// Applies the shared Value style to a single-line editable control.
-	void ApplyEditableTextBoxStyle(UEditableTextBox* textBox) const;
-	// Applies the shared Value style to a multiline editable control.
-	void ApplyMultiLineEditableTextBoxStyle(UMultiLineEditableTextBox* textBox) const;
 	// Applies text to a bound text block.
 	void SetTextBlockText(UTextBlock* textBlock, const FString& text) const;
 };

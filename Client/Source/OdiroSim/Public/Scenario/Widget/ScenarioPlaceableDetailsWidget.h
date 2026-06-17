@@ -41,7 +41,7 @@ public:
 	// Releases widget input mode when the details panel is removed.
 	virtual void NativeDestruct() override;
 
-	// Text color used for valid editable fields.
+	// Legacy valid-field color retained for older Blueprint defaults; normal fields now use the shared Value style.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Details")
 	FLinearColor NormalFieldTextColor = FLinearColor::White;
 
@@ -222,6 +222,8 @@ private:
 	void FlashInvalidField(UEditableTextBox* textBox);
 	// Applies a foreground color to a numeric field.
 	void SetTextBoxFieldColor(UEditableTextBox* textBox, const FLinearColor& color) const;
+	// Resolves the normal editable-field color from the shared Value style.
+	FLinearColor ResolveNormalFieldTextColor() const;
 	// Temporarily highlights the instance-id field after validation failure.
 	void FlashInvalidInstanceIdField();
 	// Applies a foreground color to the instance-id field.

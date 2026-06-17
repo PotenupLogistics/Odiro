@@ -1,6 +1,14 @@
 #include "Widget/WidgetTextStyleCatalog.h"
 
+#include "Blueprint/WidgetTree.h"
+#include "Components/EditableText.h"
+#include "Components/EditableTextBox.h"
+#include "Components/MultiLineEditableTextBox.h"
+#include "Components/TextBlock.h"
+#include "Components/Widget.h"
+#include "Fonts/FontProviderInterface.h"
 #include "Styling/CoreStyle.h"
+#include "Styling/SlateTypes.h"
 #include "UObject/SoftObjectPath.h"
 
 namespace
@@ -17,10 +25,17 @@ namespace
 	{
 		FSlateFontInfo fallbackFont = UWidgetTextStyleCatalog::MakeDefaultStyle(role).Font;
 		FSlateFontInfo normalizedFont = candidate;
-		if (!normalizedFont.FontObject && !normalizedFont.CompositeFont.IsValid())
+		const IFontProviderInterface* fontProvider =
+			Cast<const IFontProviderInterface>(normalizedFont.FontObject);
+		const bool bHasUsableFont = normalizedFont.CompositeFont.IsValid()
+			|| (fontProvider && fontProvider->GetCompositeFont());
+		if (!bHasUsableFont)
 		{
 			normalizedFont.FontObject = fallbackFont.FontObject;
+			normalizedFont.FontMaterial = fallbackFont.FontMaterial;
 			normalizedFont.CompositeFont = fallbackFont.CompositeFont;
+			normalizedFont.OutlineSettings = fallbackFont.OutlineSettings;
+			normalizedFont.TypefaceFontName = fallbackFont.TypefaceFontName;
 		}
 		if (normalizedFont.Size <= 0.0f)
 		{
@@ -31,6 +46,67 @@ namespace
 			normalizedFont.TypefaceFontName = fallbackFont.TypefaceFontName;
 		}
 		return normalizedFont;
+	}
+
+	const FWidgetTextStyle& SelectStyleForRole(
+		const EWidgetTextStyleRole role,
+		const FWidgetTextStyle& titleStyle,
+		const FWidgetTextStyle& labelStyle,
+		const FWidgetTextStyle& valueStyle)
+	{
+		switch (role)
+		{
+		case EWidgetTextStyleRole::Title:
+			return titleStyle;
+		case EWidgetTextStyleRole::Label:
+			return labelStyle;
+		case EWidgetTextStyleRole::Value:
+		default:
+			return valueStyle;
+		}
+	}
+
+	void ApplyResolvedTextBlockStyle(UTextBlock* textBlock, const FWidgetTextStyle& style)
+	{
+		if (!IsValid(textBlock))
+		{
+			return;
+		}
+
+		textBlock->SetFont(style.Font);
+		textBlock->SetColorAndOpacity(FSlateColor(style.Color));
+	}
+
+	void ApplyResolvedEditableTextStyle(UEditableText* editableText, const FWidgetTextStyle& /*style*/)
+	{
+		if (!IsValid(editableText))
+		{
+			return;
+		}
+
+		// UEditableText only exposes whole-style replacement, which can crash Slate Prepass at runtime.
+	}
+
+	void ApplyResolvedEditableTextBoxStyle(UEditableTextBox* textBox, const FWidgetTextStyle& style)
+	{
+		if (!IsValid(textBox))
+		{
+			return;
+		}
+
+		textBox->SetForegroundColor(style.Color);
+	}
+
+	void ApplyResolvedMultiLineEditableTextBoxStyle(
+		UMultiLineEditableTextBox* textBox,
+		const FWidgetTextStyle& style)
+	{
+		if (!IsValid(textBox))
+		{
+			return;
+		}
+
+		textBox->SetForegroundColor(style.Color);
 	}
 
 	FLinearColor NormalizeColor(const FLinearColor& candidate, const FLinearColor& fallbackColor)
@@ -54,6 +130,28 @@ namespace
 		return FWidgetTextStyle(
 			NormalizeFont(candidate.Font, role),
 			NormalizeColor(candidate.Color, fallbackStyle.Color));
+	}
+
+	EWidgetTextStyleRole InferRoleFromWidgetName(const UWidget* widget)
+	{
+		if (!IsValid(widget))
+		{
+			return EWidgetTextStyleRole::Value;
+		}
+
+		const FString normalizedName = widget->GetName().ToLower();
+		if (normalizedName.Contains(TEXT("title")) || normalizedName.Contains(TEXT("heading")))
+		{
+			return EWidgetTextStyleRole::Title;
+		}
+		if (normalizedName.Contains(TEXT("label"))
+			|| normalizedName.Contains(TEXT("category"))
+			|| normalizedName.Contains(TEXT("button"))
+			|| normalizedName.Contains(TEXT("tab")))
+		{
+			return EWidgetTextStyleRole::Label;
+		}
+		return EWidgetTextStyleRole::Value;
 	}
 }
 
@@ -99,6 +197,158 @@ FWidgetTextStyle UWidgetTextStyleCatalog::MakeDefaultStyle(const EWidgetTextStyl
 			MakeDefaultFont(TEXT("Regular"), 13.0f),
 			FLinearColor(0.88f, 0.90f, 0.95f, 1.0f));
 	}
+}
+
+FWidgetTextStyle UWidgetTextStyleCatalog::ResolveStyle(
+	const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference,
+	const EWidgetTextStyleRole role)
+{
+	if (const UWidgetTextStyleCatalog* catalog = catalogReference.LoadSynchronous())
+	{
+		return catalog->GetStyle(role);
+	}
+
+	TSoftObjectPtr<UWidgetTextStyleCatalog> defaultCatalog = MakeDefaultCatalogReference();
+	if (const UWidgetTextStyleCatalog* catalog = defaultCatalog.LoadSynchronous())
+	{
+		return catalog->GetStyle(role);
+	}
+
+	return MakeDefaultStyle(role);
+}
+
+FWidgetTextStyle UWidgetTextStyleCatalog::ResolveStyle(const EWidgetTextStyleRole role)
+{
+	return ResolveStyle(MakeDefaultCatalogReference(), role);
+}
+
+void UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+	UTextBlock* textBlock,
+	const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference,
+	const EWidgetTextStyleRole role)
+{
+	if (!IsValid(textBlock))
+	{
+		return;
+	}
+	const FWidgetTextStyle style = ResolveStyle(catalogReference, role);
+	ApplyResolvedTextBlockStyle(textBlock, style);
+}
+
+void UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+	UTextBlock* textBlock,
+	const EWidgetTextStyleRole role)
+{
+	ApplyTextBlockStyle(textBlock, MakeDefaultCatalogReference(), role);
+}
+
+void UWidgetTextStyleCatalog::ApplyEditableTextStyle(
+	UEditableText* editableText,
+	const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference,
+	const EWidgetTextStyleRole role)
+{
+	if (!IsValid(editableText))
+	{
+		return;
+	}
+	const FWidgetTextStyle style = ResolveStyle(catalogReference, role);
+	ApplyResolvedEditableTextStyle(editableText, style);
+}
+
+void UWidgetTextStyleCatalog::ApplyEditableTextStyle(
+	UEditableText* editableText,
+	const EWidgetTextStyleRole role)
+{
+	ApplyEditableTextStyle(editableText, MakeDefaultCatalogReference(), role);
+}
+
+void UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(
+	UEditableTextBox* textBox,
+	const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference,
+	const EWidgetTextStyleRole role)
+{
+	if (!IsValid(textBox))
+	{
+		return;
+	}
+	const FWidgetTextStyle style = ResolveStyle(catalogReference, role);
+	ApplyResolvedEditableTextBoxStyle(textBox, style);
+}
+
+void UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(
+	UEditableTextBox* textBox,
+	const EWidgetTextStyleRole role)
+{
+	ApplyEditableTextBoxStyle(textBox, MakeDefaultCatalogReference(), role);
+}
+
+void UWidgetTextStyleCatalog::ApplyMultiLineEditableTextBoxStyle(
+	UMultiLineEditableTextBox* textBox,
+	const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference,
+	const EWidgetTextStyleRole role)
+{
+	if (!IsValid(textBox))
+	{
+		return;
+	}
+	const FWidgetTextStyle style = ResolveStyle(catalogReference, role);
+	ApplyResolvedMultiLineEditableTextBoxStyle(textBox, style);
+}
+
+void UWidgetTextStyleCatalog::ApplyMultiLineEditableTextBoxStyle(
+	UMultiLineEditableTextBox* textBox,
+	const EWidgetTextStyleRole role)
+{
+	ApplyMultiLineEditableTextBoxStyle(textBox, MakeDefaultCatalogReference(), role);
+}
+
+void UWidgetTextStyleCatalog::ApplyWidgetTreeTextStyles(
+	UWidgetTree* widgetTree,
+	const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference)
+{
+	if (!IsValid(widgetTree))
+	{
+		return;
+	}
+	const FWidgetTextStyle titleStyle = ResolveStyle(catalogReference, EWidgetTextStyleRole::Title);
+	const FWidgetTextStyle labelStyle = ResolveStyle(catalogReference, EWidgetTextStyleRole::Label);
+	const FWidgetTextStyle valueStyle = ResolveStyle(catalogReference, EWidgetTextStyleRole::Value);
+
+	widgetTree->ForEachWidgetAndDescendants(
+		[&titleStyle, &labelStyle, &valueStyle](UWidget* widget)
+		{
+			if (!IsValid(widget))
+			{
+				return;
+			}
+
+			if (UTextBlock* textBlock = Cast<UTextBlock>(widget))
+			{
+				ApplyResolvedTextBlockStyle(
+					textBlock,
+					SelectStyleForRole(InferRoleFromWidgetName(textBlock), titleStyle, labelStyle, valueStyle));
+				return;
+			}
+			if (UEditableText* editableText = Cast<UEditableText>(widget))
+			{
+				ApplyResolvedEditableTextStyle(editableText, valueStyle);
+				return;
+			}
+			if (UEditableTextBox* editableTextBox = Cast<UEditableTextBox>(widget))
+			{
+				ApplyResolvedEditableTextBoxStyle(editableTextBox, valueStyle);
+				return;
+			}
+			if (UMultiLineEditableTextBox* multilineTextBox = Cast<UMultiLineEditableTextBox>(widget))
+			{
+				ApplyResolvedMultiLineEditableTextBoxStyle(multilineTextBox, valueStyle);
+			}
+		});
+}
+
+void UWidgetTextStyleCatalog::ApplyWidgetTreeTextStyles(UWidgetTree* widgetTree)
+{
+	ApplyWidgetTreeTextStyles(widgetTree, MakeDefaultCatalogReference());
 }
 
 FWidgetTextStyle UWidgetTextStyleCatalog::GetStyle(const EWidgetTextStyleRole role) const

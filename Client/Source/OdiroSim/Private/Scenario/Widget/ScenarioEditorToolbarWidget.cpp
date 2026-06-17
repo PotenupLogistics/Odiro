@@ -9,6 +9,7 @@
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "Shared/ExperimentSettingTypes.h"
+#include "Widget/WidgetTextStyleCatalog.h"
 
 namespace
 {
@@ -52,6 +53,7 @@ void UScenarioEditorToolbarWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	BindControls();
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(StatusTextBlock.Get(), EWidgetTextStyleRole::Value);
 	RefreshSidebarPanelButtons();
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	RequestEditorWidgetInputMode();

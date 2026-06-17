@@ -313,47 +313,30 @@ void UScenarioEditorSidebarWidget::SetTextBlockText(UTextBlock* textBlock, const
 
 void UScenarioEditorSidebarWidget::ApplyTextStyles()
 {
-	ApplyTextBlockStyle(PanelTitleTextBlock.Get(), EWidgetTextStyleRole::Title);
-	ApplyTextBlockStyle(PrimaryFieldsTextBlock.Get(), EWidgetTextStyleRole::Value);
-	ApplyTextBlockStyle(SecondaryFieldsTextBlock.Get(), EWidgetTextStyleRole::Value);
-	ApplyTextBlockStyle(ListSummaryTextBlock.Get(), EWidgetTextStyleRole::Value);
-	ApplyTextBlockStyle(DiagnosticsTextBlock.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		PanelTitleTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Title);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		PrimaryFieldsTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		SecondaryFieldsTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		ListSummaryTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		DiagnosticsTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value);
 	if (MainPanelWidget)
 	{
 		MainPanelWidget->SetTextStyleCatalog(TextStyleCatalog);
 	}
-}
-
-FWidgetTextStyle UScenarioEditorSidebarWidget::ResolveTextStyle(
-	const EWidgetTextStyleRole role) const
-{
-	if (const UWidgetTextStyleCatalog* catalog = TextStyleCatalog.LoadSynchronous())
-	{
-		return catalog->GetStyle(role);
-	}
-
-	TSoftObjectPtr<UWidgetTextStyleCatalog> defaultCatalog =
-		UWidgetTextStyleCatalog::MakeDefaultCatalogReference();
-	if (const UWidgetTextStyleCatalog* catalog = defaultCatalog.LoadSynchronous())
-	{
-		return catalog->GetStyle(role);
-	}
-
-	return UWidgetTextStyleCatalog::MakeDefaultStyle(role);
-}
-
-void UScenarioEditorSidebarWidget::ApplyTextBlockStyle(
-	UTextBlock* textBlock,
-	const EWidgetTextStyleRole role) const
-{
-	if (!textBlock)
-	{
-		return;
-	}
-
-	const FWidgetTextStyle style = ResolveTextStyle(role);
-	textBlock->SetFont(style.Font);
-	textBlock->SetColorAndOpacity(FSlateColor(style.Color));
 }
 
 FString UScenarioEditorSidebarWidget::PanelToTitle(const EScenarioTemplateSidebarPanel panel)

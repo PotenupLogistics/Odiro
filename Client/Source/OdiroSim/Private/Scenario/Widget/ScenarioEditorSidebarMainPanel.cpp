@@ -15,25 +15,6 @@ namespace
 	{
 		return diagnostics.IsEmpty() ? FString(TEXT("Unknown edit failure.")) : FString::Join(diagnostics, TEXT("\n"));
 	}
-
-	FWidgetTextStyle ResolveWidgetTextStyle(
-		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference,
-		const EWidgetTextStyleRole role)
-	{
-		if (const UWidgetTextStyleCatalog* catalog = catalogReference.LoadSynchronous())
-		{
-			return catalog->GetStyle(role);
-		}
-
-		TSoftObjectPtr<UWidgetTextStyleCatalog> defaultCatalog =
-			UWidgetTextStyleCatalog::MakeDefaultCatalogReference();
-		if (const UWidgetTextStyleCatalog* catalog = defaultCatalog.LoadSynchronous())
-		{
-			return catalog->GetStyle(role);
-		}
-
-		return UWidgetTextStyleCatalog::MakeDefaultStyle(role);
-	}
 }
 
 TSharedRef<SWidget> UScenarioEditorSidebarMainPanel::RebuildWidget()
@@ -287,11 +268,10 @@ void UScenarioEditorSidebarMainPanel::ApplyTextStyles()
 	}
 	if (DiagnosticsTextBlock)
 	{
-		const FWidgetTextStyle style = ResolveWidgetTextStyle(
+		UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+			DiagnosticsTextBlock.Get(),
 			TextStyleCatalog,
 			EWidgetTextStyleRole::Value);
-		DiagnosticsTextBlock->SetFont(style.Font);
-		DiagnosticsTextBlock->SetColorAndOpacity(FSlateColor(style.Color));
 	}
 }
 

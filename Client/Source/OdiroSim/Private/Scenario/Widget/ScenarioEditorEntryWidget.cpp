@@ -8,6 +8,7 @@
 #include "Platform/ScenarioEditorLaunchSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "GameFramework/PlayerController.h"
+#include "Widget/WidgetTextStyleCatalog.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorEntryWidget, Log, All);
 
@@ -31,6 +32,9 @@ void UScenarioEditorEntryWidget::NativeOnInitialized()
 void UScenarioEditorEntryWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(
+		ScenarioSetupJsonPathTextBox.Get(),
+		EWidgetTextStyleRole::Value);
 	RequestEditorWidgetInputMode();
 	BindScenarioEditorLaunchSubsystem();
 }

@@ -61,8 +61,8 @@ Odiro/
       ipc/                        # IPC 전송 레이어
       protocol/                   # JSON 통신 프로토콜
       api/                        # Client, Agents, Simulator가 사용할 API
-      process/                    # Simulator 등 child process 실행, 추적, lifecycle 관리
-      workspace/                  # 사용자 project root, 파일 layout, 경로 검증 관리
+      process/                    # Simulator 등 자식 process 실행, 추적, 생명주기 관리
+      workspace/                  # 사용자 project root, 파일 구조, 경로 검증 관리
     public/                       # Bridge가 사용하는 정적 파일 (예: HTML)
     tools/
     task-setup.bat
@@ -77,7 +77,10 @@ Odiro/
 
   static/                         # --- 배포/초기화용 기본 리소스 ---
     agents/                       # Agents 런타임 데이터
-    defaults/                     # 프로젝트 초기화 소스 bundle
+    project-templates/            # project 생성용 template set
+      blank/                      # 최소 유효 skeleton project
+      demo/                       # 예시 scenario/profile/policy 포함 project
+    run-defaults/                 # run 생성 시 복사할 기본 폴더
 
   docs/                           # --- 리포지토리 전체 개발 문서 ---
     specs/                        # 현재 구조와 요구사항
@@ -111,7 +114,10 @@ build/Release/
   OdiroHost.exe                   # 백그라운드 서비스
   resources/
     agents/                       # Agents 런타임 데이터
-    defaults/                     # 프로젝트 초기화 소스 bundle
+    project-templates/            # project 생성용 template set
+      blank/
+      demo/
+    run-defaults/                 # run 생성 시 복사할 기본 폴더
     policy-runtime.pyz             # 패키징된 Python 런타임
 
   Client/                         # Unreal 패키징 결과
@@ -123,9 +129,10 @@ build/Release/
     _internal/                    # 패키징된 내부 모듈
 ```
 
-## Project Structure
+## 사용자 프로젝트 구조
 
 한 프로젝트는 하나의 시뮬레이션 구성을 나타내며, 시나리오, 행동 정책, 실행 결과를 포함한다.
+이 문서는 폴더 배치만 나타낸다. 실행 순서는 [시뮬레이션 인터페이스](./simulation-interface.md)를 따른다.
 
 ```sh
 <UserProject>/                    # 사용자 프로젝트 루트
@@ -135,11 +142,12 @@ build/Release/
   scenario.json                   # 편집 가능한 단일 시나리오. 랜덤 요소 가능. seed/count는 setting.json 소유
 
   policy/                         # 행동 정책
-    __init__.py                   # entrypoint. 지정된 인터페이스로 구현해야 함
+    __init__.py                   # 진입점. 지정된 인터페이스로 구현해야 함
     <subscript>.py                # 파일 분리하고 __init__.py에서 import 가능
 
   runs/                           # --- 실행 결과 ---
-    <000001>/                     # 실행할 때 폴더 생성
+    <000001>/                     # 실행할 때 폴더 생성. RunId는 6자리 decimal string
+      status.json                 # Bridge가 갱신하는 run process 생명주기 상태
       snapshot/                   # 해당 실행에 사용된 입력 snapshot
         setting.json
         profile.json
@@ -150,7 +158,7 @@ build/Release/
       review/                     # AI 분석 결과 저장
 
       episodes/                   # 에피소드마다 결과 폴더 생성
-        <000001>/
+        <000001>/                 # EpisodeId: 1-based 6자리 decimal string
           scenario.json           # snapshot/scenario.json과 setting seed로 확정한 episode scenario
           actions.jsonl           # 로봇의 입출력 기록 (주기마다 센서 데이터, 현재 위치, 행동 변경 등)
           events.jsonl            # 발생 이벤트 (장애물 감지, 충돌 등)
@@ -159,3 +167,5 @@ build/Release/
           preview.png             # 대표 이벤트 이미지
           captures/               # 센서 데이터 이미지
 ```
+
+- 사용자는 project root를 직접 생성하거나 Bridge `workspace.createProject`로 생성한다.

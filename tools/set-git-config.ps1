@@ -47,7 +47,7 @@ function Get-GitConfigFromFile {
     return (($value -join "`n").Trim())
 }
 
-# Sets one local Git config key and logs whether it was already correct.
+# Sets one local Git config key and logs only when it changes.
 function Set-ExpectedLocalGitConfig {
     param(
         [string] $Name,
@@ -56,7 +56,6 @@ function Set-ExpectedLocalGitConfig {
 
     $actual = Get-LocalGitConfig -Name $Name
     if ($actual -eq $Expected) {
-        Write-Step "Already configured: $Name=$Expected"
         return
     }
 
@@ -106,14 +105,12 @@ function Assert-UnrealAssetAttributes {
         }
     }
 
-    Write-Step "Attributes OK: $Path"
 }
 
 git -C $repoRoot lfs version | Out-Null
 if ($LASTEXITCODE -ne 0) {
     throw "Git LFS was not found. Install git-lfs and rerun setup."
 }
-Write-Step "Git LFS available."
 
 Set-ExpectedLocalGitConfig -Name "core.hooksPath" -Expected ".githooks"
 
@@ -121,13 +118,11 @@ git -C $repoRoot lfs install --local --manual | Out-Null
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to initialize Git LFS local config."
 }
-Write-Step "Git LFS local config checked."
 
 git -C $repoRoot lfs update --manual | Out-Null
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to verify Git LFS hook snippets."
 }
-Write-Step "Git LFS hook snippets verified."
 
 Set-ExpectedLocalGitConfig -Name "merge.ff" -Expected "false"
 Set-ExpectedLocalGitConfig -Name "pull.ff" -Expected "true"
@@ -144,7 +139,6 @@ if (-not (Test-Path -LiteralPath $lfsConfig -PathType Leaf)) {
 if ((Get-GitConfigFromFile -File $lfsConfig -Name "lfs.locksverify") -ne "true") {
     throw ".lfsconfig must set lfs.locksverify=true."
 }
-Write-Step ".lfsconfig OK: lfs.locksverify=true"
 
 Assert-UnrealAssetAttributes -Path "*.uasset"
 Assert-UnrealAssetAttributes -Path "*.umap"
@@ -156,7 +150,6 @@ if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($head)) {
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to apply read-only state to current lockable files."
     }
-    Write-Step "Git LFS lockable read-only state applied to current checkout."
 }
 
 Write-Success "Git config complete."

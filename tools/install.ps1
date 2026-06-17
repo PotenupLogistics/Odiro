@@ -22,7 +22,6 @@ if (Test-Path -LiteralPath (Join-Path $repoRoot ".gitmodules") -PathType Leaf) {
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to initialize Git submodules."
     }
-    Write-Step "Git submodules initialized."
 }
 
 if (-not $SkipGitHooks) {

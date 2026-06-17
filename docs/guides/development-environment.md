@@ -45,7 +45,7 @@ git check-attr lockable -- Client/Content/<sample>.uasset
 .\tools\set-git-config.ps1
 ```
 
-`lockable: set`이어야 한다. `set-git-config.ps1`은 이미 적용된 설정은 `Already configured`로 표시하고, setup 완료 후 lock 전 Unreal asset에 read-only 상태를 재적용한다.
+`lockable: set`이어야 한다. `set-git-config.ps1`은 필요한 설정 변경과 완료 문구만 출력하고, setup 완료 후 lock 전 Unreal asset에 read-only 상태를 재적용한다. 이미 맞는 상태의 성공 검증은 출력하지 않는다.
 
 GitHub repository 설정:
 

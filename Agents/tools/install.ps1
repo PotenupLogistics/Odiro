@@ -17,6 +17,19 @@ if (-not (Test-Path -LiteralPath (Join-Path $agentsDir "pyproject.toml") -PathTy
 }
 
 Assert-Command "uv"
+
+Push-Location $agentsDir
+try {
+    & uv sync --check --dev --quiet
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "Agents install phase complete."
+        return
+    }
+}
+finally {
+    Pop-Location
+}
+
 Write-Step "Sync Agents development dependencies"
 Invoke-External -WorkingDirectory $agentsDir -FilePath "uv" -Arguments @("sync", "--dev")
 

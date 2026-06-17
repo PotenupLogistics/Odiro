@@ -35,13 +35,16 @@ private:
 private:
 	// decide 응답을 이동 명령으로 변환한다
 	bool TryParseMoveCommand(const FHttpResponsePtr& response, FDeliveryBotMoveCommandInfo& outMoveCommand) const;
-	void DrawPythonPathDebug(const TSharedPtr<FJsonObject>& responseObject) const; // Python path debug 좌표를 월드에 그린다
+	void DrawPythonPathDebug(const TSharedPtr<FJsonObject>& responseObject) const; // Python response.path 좌표를 월드에 그린다.
 	bool TryParsePythonPathDebugPoint(const TSharedPtr<FJsonValue>& pointValue, FVector& outLocationCm) const; // path debug point JSON을 FVector로 변환한다
 	bool BuildDecidePayload(FString& outPayload);		// /scenario/decide 요청 body를 만든다
 	bool RequestDecision(float deltaTime);				// Python 서버에 /scenario/decide 요청을 보낸다
 
 
 private:
+	TSharedRef<FJsonObject> BuildPointCloudOptionsObject() const; // Python point cloud capture 옵션 JSON을 만든다
+	TSharedRef<FJsonObject> BuildArtifactSpecObject() const; // Python capture artifact 저장 경로 JSON을 만든다
+	void LogPythonCaptureRefs(const TSharedPtr<FJsonObject>& responseObject) const; // Python response.captures 참조를 로그로 남긴다
 	bool BuildEndPayload(const FString& status, FString& outPayload) const; // /scenario/end 요청 body를 만든다
 
 private:
@@ -74,6 +77,25 @@ private:
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Debug")
 	float PythonPathDebugLineThickness{ 5.f };
 
+	
+private:
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture")
+	FString PythonObservationProfile{ TEXT("point_cloud_capture") }; // Python LiDAR observation profile 이름
+
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture")
+	bool bEnablePythonPointCloudCapture{ true }; // Python point cloud capture 저장 여부
+
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture")
+	int32 PythonPointCloudCaptureEveryNSensorFrames{ 10 }; // point cloud capture 저장 sensor frame 간격
+
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture")
+	int32 PythonPointCloudMaxPoints{ 4096 }; // point cloud frame당 최대 저장 point 수
+
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture")
+	bool bPythonPointCloudIncludeGroundPoints{ true }; // tag 없는 ground point 저장 여부
+
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture")
+	float PythonPointCloudRangeLimitM{ 0.f }; // 0보다 크면 point cloud 저장 거리 제한으로 사용
 
 private:
 	FString EpisodeId;

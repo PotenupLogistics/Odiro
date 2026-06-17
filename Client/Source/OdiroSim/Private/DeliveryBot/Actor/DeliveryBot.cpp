@@ -57,22 +57,95 @@ void ADeliveryBot::BeginPlay()
 
 }
 
-// 매 Tick마다 센서 관측을 갱신하고 Python decide 요청을 갱신한다.
+// 렌더 Tick에서 고정 시뮬레이션 루프만 진행한다.
 void ADeliveryBot::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	RefreshSensorSnapshot();
+	UpdateFixedSimulation(DeltaTime);
+}
 
+// 렌더 delta를 누적해서 고정 간격만큼 시뮬레이션을 진행한다.
+void ADeliveryBot::UpdateFixedSimulation(float deltaTime)
+{
+	const float fixedTickIntervalSeconds = GetFixedTickIntervalSeconds();
+
+	FixedTickElapsedSeconds += FMath::Max(deltaTime, 0.f);
+
+	while (FixedTickElapsedSeconds >= fixedTickIntervalSeconds)
+	{
+		FixedTickElapsedSeconds -= fixedTickIntervalSeconds;
+		StepFixedSimulation(fixedTickIntervalSeconds);
+	}
+}
+
+// 한 번의 고정 틱에서 순서가 중요한 런타임 갱신을 처리한다.
+void ADeliveryBot::StepFixedSimulation(float fixedDeltaSeconds)
+{
+	FixedSimulationTimeSeconds += fixedDeltaSeconds;
+	
+	UpdateFixedSensor(fixedDeltaSeconds);
+	UpdateFixedPolicy(fixedDeltaSeconds);
+	ApplyLatestMoveCommand(fixedDeltaSeconds);
+	
 	if (bLogPolicyObservationRequests)
 	{
-		DebugLogObservation(DeltaTime);
+		DebugLogObservation(fixedDeltaSeconds);
 	}
+}
 
-	if (IsValid(HttpPolicyComponent))
-	{
-		HttpPolicyComponent->UpdatePolicy(DeltaTime);
-	}
+// 고정 틱 간격을 초 단위로 반환한다.
+float ADeliveryBot::GetFixedTickIntervalSeconds() const
+{
+	const float fixedTickRateHz = FMath::Max(FixedTickRateHz, 1.f);
+	return 1.f / fixedTickRateHz;
+}
+
+// 고정 틱 위에서 LiDAR scan rate에 맞춰 센서 snapshot을 갱신한다.
+void ADeliveryBot::UpdateFixedSensor(float fixedDeltaSeconds)
+{
+	SensorElapsedSeconds += fixedDeltaSeconds;
+
+	const float scanRateHz = FMath::Max(SetupInfo.LidarSensorConfigInfo.ScanRateHz, 0.1f);
+	const float scanIntervalSeconds = 1.f / scanRateHz;
+
+	if (SensorSnapshotSequence > 0 && SensorElapsedSeconds < scanIntervalSeconds)
+		return;
+
+	SensorElapsedSeconds -= scanIntervalSeconds;
+	if (SensorElapsedSeconds < 0.f)
+		SensorElapsedSeconds = 0.f;
+
+	RefreshSensorSnapshot();
+}
+
+// 현재 LiDAR 센서 관측값을 LastSensorSnapshot에 저장한다.
+void ADeliveryBot::RefreshSensorSnapshot()
+{
+	LastSensorSnapshot = FDeliveryBotSensorSnapshot{};
+	LastSensorSnapshot.SimulationTimeSeconds = FixedSimulationTimeSeconds;
+
+	if (!IsValid(LidarSensorComponent))
+		return;
+
+	const FDeliveryBotLidarScanInfo rawScanInfo = LidarSensorComponent->ScanLidar();
+	LastSensorSnapshot.LidarScanInfo = rawScanInfo;
+	LastSensorSnapshot.LidarScanInfo.SimulationTimeSeconds = FixedSimulationTimeSeconds;
+	LastSensorSnapshot.DetectedObjects = LidarSensorComponent->BuildDetectedObjects(LastSensorSnapshot.LidarScanInfo);
+	LastSensorSnapshot.bHasFrontObject = LidarSensorComponent->FindNearestFrontObject(
+		LastSensorSnapshot.LidarScanInfo,
+		LastSensorSnapshot.FrontObjectInfo);
+
+	++SensorSnapshotSequence;
+}
+
+// 고정 틱마다 Python policy component의 start retry와 decide 누적 시간을 진행한다.
+void ADeliveryBot::UpdateFixedPolicy(float fixedDeltaSeconds)
+{
+	if (!IsValid(HttpPolicyComponent))
+		return;
+
+	HttpPolicyComponent->UpdatePolicy(fixedDeltaSeconds);
 }
 
 void ADeliveryBot::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -186,22 +259,6 @@ void ADeliveryBot::DebugLogObservation(float deltaTime)
 	observation.VehicleSpec.LidarScanRangeM);
 }
 
-// 현재 LiDAR 센서 관측값을 LastSensorSnapshot에 저장한다.
-void ADeliveryBot::RefreshSensorSnapshot()
-{
-	LastSensorSnapshot = FDeliveryBotSensorSnapshot{};
-
-	if (!IsValid(LidarSensorComponent))
-		return;
-
-	LastSensorSnapshot.LidarScanInfo = LidarSensorComponent->ScanLidar();
-	LastSensorSnapshot.DetectedObjects = LidarSensorComponent->BuildDetectedObjects(LastSensorSnapshot.LidarScanInfo);
-	LastSensorSnapshot.bHasFrontObject = LidarSensorComponent->FindNearestFrontObject(
-		LastSensorSnapshot.LidarScanInfo,
-		LastSensorSnapshot.FrontObjectInfo);
-
-	++SensorSnapshotSequence;
-}
 void ADeliveryBot::InitializeSetupInfo(const FDeliveryBotSetupInfo& setupInfo)
 {
 	ResetCollisionStopState();
@@ -211,23 +268,36 @@ void ADeliveryBot::InitializeSetupInfo(const FDeliveryBotSetupInfo& setupInfo)
 
 void ADeliveryBot::ApplyMoveCommand(const FDeliveryBotMoveCommandInfo& moveCommandInfo, float deltaTime)
 {
+	(void)deltaTime;
+
 	if (bCollisionStopActive)
 	{
 		ApplyParkingStop();
 		return;
 	}
 
-	if (!IsValid(DriveComponent))
+	LastMoveCommandInfo = moveCommandInfo;
+	LastActionReason = TEXT("python_policy");
+	bHasLastMoveCommand = true;
+}
+
+// 저장된 최신 이동 명령을 매 고정 틱마다 차량에 적용한다.
+void ADeliveryBot::ApplyLatestMoveCommand(float fixedDeltaSeconds)
+{
+	if (bCollisionStopActive)
+	{
+		ApplyParkingStop();
+		return;
+	}
+
+	if (!bHasLastMoveCommand || !IsValid(DriveComponent))
 		return;
 
 	UChaosVehicleMovementComponent* vehicleMovement = GetVehicleMovementComponent();
 	if (!IsValid(vehicleMovement))
 		return;
 
-	DriveComponent->ApplyMoveCommand(vehicleMovement, moveCommandInfo, deltaTime);
-	LastMoveCommandInfo = moveCommandInfo;
-	LastActionReason = TEXT("python_policy");
-	bHasLastMoveCommand = true;
+	DriveComponent->ApplyMoveCommand(vehicleMovement, LastMoveCommandInfo, fixedDeltaSeconds);
 }
 
 void ADeliveryBot::ApplyParkingStop()

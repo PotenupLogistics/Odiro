@@ -48,14 +48,5 @@ def drive_action(steering: float, speed_kmh: float) -> BotAction:
     )
 
 
-def reverse_action(steering: float, speed_kmh: float) -> BotAction:
-    return BotAction(
-        steering=clamp(steering, -1.0, 1.0),
-        targetSpeedKmh=max(0.0, speed_kmh),
-        brake=0.0,
-        direction="Reverse",
-    )
-
-
 def fail_safe_action() -> BotAction:
     return stop_action()

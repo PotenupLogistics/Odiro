@@ -25,6 +25,10 @@ struct FDeliveryBotSensorSnapshot
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bHasFrontObject{ false };
+
+	// 이 센서 snapshot이 만들어진 고정 시뮬레이션 시간
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SimulationTimeSeconds{ 0.f };
 };
 
 class UDeliveryBot_HttpPolicyComponent;
@@ -110,6 +114,17 @@ private:
 		UPrimitiveComponent* otherComp,
 		FVector normalImpulse,
 		const FHitResult& hit);
+
+
+private:  // tick/Hz 관련 함수
+	void UpdateFixedSimulation(float deltaTime);
+	void StepFixedSimulation(float fixedDeltaSeconds);
+	void UpdateFixedSensor(float fixedDeltaSeconds);
+	void UpdateFixedPolicy(float fixedDeltaSeconds);
+	void ApplyLatestMoveCommand(float fixedDeltaSeconds);
+	float GetFixedTickIntervalSeconds() const;
+
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
 	TObjectPtr<UDeliveryBot_DriveComponent> DriveComponent;
@@ -150,10 +165,25 @@ protected:
 private:
 	FDeliveryBotSensorSnapshot LastSensorSnapshot{};
 	FDeliveryBotMoveCommandInfo LastMoveCommandInfo{};
+
+	FString CollisionStopActorName{};
 	FString LastActionReason{ TEXT("unknown") };
+
 	bool bHasLastMoveCommand{ false };
 	bool bCollisionStopActive{ false };
-	FString CollisionStopActorName{};
+
 	TArray<FName> CollisionStopActorTags{};
 
+
+protected:   // tick/Hz 관련 변수
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|FixedTick", meta = (AllowPrivateAccess = "true"))
+	float FixedTickRateHz{ 30.f };
+
+private:
+	// 고정 시뮬레이션 틱 누적 시간.
+	float FixedTickElapsedSeconds{ 0.f };
+	// 고정 시뮬레이션이 진행한 총 시간.
+	float FixedSimulationTimeSeconds{ 0.f };
+	// LiDAR scan rate를 맞추기 위한 누적 시간.
+	float SensorElapsedSeconds{ 0.f };
 };

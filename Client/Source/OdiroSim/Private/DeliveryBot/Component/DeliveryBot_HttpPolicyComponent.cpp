@@ -8,6 +8,7 @@
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Misc/Guid.h"
+#include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -61,6 +62,69 @@ namespace
 		jsonObject->SetNumberField(TEXT("y"), vector.Y);
 		jsonObject->SetNumberField(TEXT("z"), vector.Z);
 		return jsonObject;
+	}
+	
+	// LiDAR mode enum을 Python debug용 문자열로 변환한다.
+	FString ToJsonLidarModeString(EDeliveryBotLidarModeType lidarModeType)
+	{
+		switch (lidarModeType)
+		{
+		case EDeliveryBotLidarModeType::OneD:
+			return TEXT("OneD");
+		case EDeliveryBotLidarModeType::TwoD:
+			return TEXT("TwoD");
+		case EDeliveryBotLidarModeType::ThreeD:
+			return TEXT("ThreeD");
+		case EDeliveryBotLidarModeType::OneDAndTwoD:
+			return TEXT("OneDAndTwoD");
+		case EDeliveryBotLidarModeType::TwoDAndThreeD:
+			return TEXT("TwoDAndThreeD");
+		case EDeliveryBotLidarModeType::All:
+			return TEXT("All");
+		default:
+			return TEXT("TwoD");
+		}
+	}
+
+	// 기존 Python 정책 호환용 2D LiDAR ray JSON을 만든다.
+	TSharedRef<FJsonObject> MakeJsonLegacyLidarRayObject(const FDeliveryBotLidarRayInfo& rayInfo)
+	{
+		TSharedRef<FJsonObject> rayObject = MakeShared<FJsonObject>();
+		rayObject->SetBoolField(TEXT("hit"), rayInfo.bHit);
+		rayObject->SetNumberField(TEXT("distanceM"), rayInfo.DistanceM);
+		rayObject->SetNumberField(TEXT("rayIndex"), rayInfo.RayIndex);
+		rayObject->SetNumberField(TEXT("rayYawDegree"), rayInfo.RayYawDegree);
+		rayObject->SetStringField(TEXT("actorName"), rayInfo.ActorName);
+		rayObject->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(rayInfo.ActorTags));
+		return rayObject;
+	}
+
+	// 1D LiDAR ray JSON을 만든다.
+	TSharedRef<FJsonObject> MakeJsonLidarRay1DObject(const FDeliveryBotLidarRayInfo& rayInfo)
+	{
+		TSharedRef<FJsonObject> rayObject = MakeShared<FJsonObject>();
+		rayObject->SetBoolField(TEXT("hit"), rayInfo.bHit);
+		rayObject->SetNumberField(TEXT("distanceM"), rayInfo.DistanceM);
+		rayObject->SetNumberField(TEXT("rayIndex"), rayInfo.RayIndex);
+		rayObject->SetStringField(TEXT("actorName"), rayInfo.ActorName);
+		rayObject->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(rayInfo.ActorTags));
+		return rayObject;
+	}
+
+	// 2D LiDAR ray JSON을 만든다.
+	TSharedRef<FJsonObject> MakeJsonLidarRay2DObject(const FDeliveryBotLidarRayInfo& rayInfo)
+	{
+		TSharedRef<FJsonObject> rayObject = MakeJsonLidarRay1DObject(rayInfo);
+		rayObject->SetNumberField(TEXT("yawDegree"), rayInfo.RayYawDegree);
+		return rayObject;
+	}
+
+	// 3D LiDAR ray JSON을 만든다.
+	TSharedRef<FJsonObject> MakeJsonLidarRay3DObject(const FDeliveryBotLidarRayInfo& rayInfo)
+	{
+		TSharedRef<FJsonObject> rayObject = MakeJsonLidarRay2DObject(rayInfo);
+		rayObject->SetNumberField(TEXT("pitchDegree"), rayInfo.RayPitchDegree);
+		return rayObject;
 	}
 }
 
@@ -356,6 +420,77 @@ bool UDeliveryBot_HttpPolicyComponent::BuildPythonGridObject(TSharedPtr<FJsonObj
 	return true;
 }
 
+// Python point cloud capture 옵션 JSON을 만든다.
+TSharedRef<FJsonObject> UDeliveryBot_HttpPolicyComponent::BuildPointCloudOptionsObject() const
+{
+	TSharedRef<FJsonObject> optionsObject = MakeShared<FJsonObject>();
+
+	optionsObject->SetBoolField(TEXT("captureEnabled"), bEnablePythonPointCloudCapture);
+	optionsObject->SetNumberField(TEXT("captureEveryNSensorFrames"), FMath::Max(1, PythonPointCloudCaptureEveryNSensorFrames));
+	optionsObject->SetNumberField(TEXT("maxPoints"), FMath::Max(1, PythonPointCloudMaxPoints));
+	optionsObject->SetBoolField(TEXT("includeGroundPoints"), bPythonPointCloudIncludeGroundPoints);
+
+	if (PythonPointCloudRangeLimitM > 0.f)
+	{
+		optionsObject->SetNumberField(TEXT("rangeLimitM"), PythonPointCloudRangeLimitM);
+	}
+
+	return optionsObject;
+}
+
+// Python capture artifact 저장 경로 JSON을 만든다.
+TSharedRef<FJsonObject> UDeliveryBot_HttpPolicyComponent::BuildArtifactSpecObject() const
+{
+	const FString captureRoot = FPaths::Combine(
+		FPaths::ProjectSavedDir(),
+		TEXT("LidarPointCloudCaptures"),
+		EpisodeId,
+		TEXT("captures"));
+
+	TSharedRef<FJsonObject> artifactSpecObject = MakeShared<FJsonObject>();
+	artifactSpecObject->SetStringField(TEXT("capturesRoot"), captureRoot);
+	artifactSpecObject->SetStringField(TEXT("capturesRootRelative"), TEXT("captures"));
+
+	return artifactSpecObject;
+}
+
+// Python response.captures 참조를 로그로 남긴다.
+void UDeliveryBot_HttpPolicyComponent::LogPythonCaptureRefs(const TSharedPtr<FJsonObject>& responseObject) const
+{
+	if (!responseObject.IsValid())
+		return;
+
+	TArray<TSharedPtr<FJsonValue>> captureValues;
+	if (!TryGetJsonArrayField(*responseObject, TEXT("captures"), captureValues))
+		return;
+
+	for (const TSharedPtr<FJsonValue>& captureValue : captureValues)
+	{
+		if (!captureValue.IsValid() || captureValue->Type != EJson::Object)
+			continue;
+
+		const TSharedPtr<FJsonObject> captureObject = captureValue->AsObject();
+		if (!captureObject.IsValid())
+			continue;
+
+		FString captureType;
+		FString path;
+		double sensorSequence = 0.0;
+
+		captureObject->TryGetStringField(TEXT("captureType"), captureType);
+		captureObject->TryGetStringField(TEXT("path"), path);
+		captureObject->TryGetNumberField(TEXT("sensorSequence"), sensorSequence);
+
+		UE_LOG(
+			LogDeliveryBotHttpPolicy,
+			Log,
+			TEXT("Python capture ref: type=%s sensorSequence=%d path=%s"),
+			*captureType,
+			static_cast<int32>(sensorSequence),
+			*path);
+	}
+}
+
 // /scenario/start 요청 envelope body를 만든다.
 bool UDeliveryBot_HttpPolicyComponent::BuildStartPayload(FString& outPayload)
 {
@@ -417,11 +552,22 @@ bool UDeliveryBot_HttpPolicyComponent::BuildStartPayload(FString& outPayload)
 	requestObject->SetObjectField(TEXT("driveSpec"), driveSpecObject);
 
 	TSharedRef<FJsonObject> lidarSpecObject = MakeShared<FJsonObject>();
-	lidarSpecObject->SetNumberField(TEXT("scanRangeM"), observation.VehicleSpec.LidarScanRangeM);
+	lidarSpecObject->SetNumberField(TEXT("scanRangeM"), setupInfo.LidarSensorConfigInfo.ScanRangeM);
 	lidarSpecObject->SetNumberField(TEXT("angleStepDegree"), setupInfo.LidarSensorConfigInfo.AngleStepDegree);
 	lidarSpecObject->SetNumberField(TEXT("sensorHeightM"), setupInfo.LidarSensorConfigInfo.SensorHeightM);
+	lidarSpecObject->SetNumberField(TEXT("frontHalfAngleDegree"), setupInfo.LidarSensorConfigInfo.FrontHalfAngleDegree);
+	lidarSpecObject->SetNumberField(TEXT("stopDistanceM"), setupInfo.LidarSensorConfigInfo.StopDistanceM);
+	lidarSpecObject->SetNumberField(TEXT("obstacleWarningDistanceM"), setupInfo.LidarSensorConfigInfo.ObstacleWarningDistanceM);
+	lidarSpecObject->SetNumberField(TEXT("slowDownDistanceM"), setupInfo.LidarSensorConfigInfo.SlowDownDistanceM);
+	lidarSpecObject->SetNumberField(TEXT("collisionStopHalfAngleDegree"), setupInfo.LidarSensorConfigInfo.CollisionStopHalfAngleDegree);
+	lidarSpecObject->SetNumberField(TEXT("collisionStopDistanceM"), setupInfo.LidarSensorConfigInfo.CollisionStopDistanceM);
+	lidarSpecObject->SetNumberField(TEXT("scanRateHz"), setupInfo.LidarSensorConfigInfo.ScanRateHz);
+	lidarSpecObject->SetStringField(TEXT("observationProfile"), PythonObservationProfile);
+	lidarSpecObject->SetObjectField(TEXT("pointCloudOptions"), BuildPointCloudOptionsObject());
+	
 	requestObject->SetObjectField(TEXT("lidarSpec"), lidarSpecObject);
-
+	requestObject->SetObjectField(TEXT("artifactSpec"), BuildArtifactSpecObject());
+	
 	return BuildMessagePayload(TEXT("scenario_start"), requestObject, outPayload);
 }
 
@@ -434,12 +580,15 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 	if (!IsValid(deliveryBot))
 		return false;
 
+	const FDeliveryBotSetupInfo& setupInfo = deliveryBot->GetSetupInfo();
 	const FDeliveryBotObservationInfo observation = deliveryBot->BuildPolicyObservation();
 	LastDecisionSequence = observation.Sequence;
 
 	TSharedRef<FJsonObject> requestObject = MakeShared<FJsonObject>();
 	requestObject->SetNumberField(TEXT("sequence"), observation.Sequence);
 	requestObject->SetNumberField(TEXT("runTimeSeconds"), observation.WorldTimeSeconds);
+	requestObject->SetNumberField(TEXT("sensorSequence"), observation.SensorSequence);
+	requestObject->SetNumberField(TEXT("sensorTimeSeconds"), observation.LidarScanInfo.SimulationTimeSeconds);
 
 	TSharedRef<FJsonObject> robotStateObject = MakeShared<FJsonObject>();
 	robotStateObject->SetNumberField(TEXT("x"), observation.RobotState.LocationCm.X);
@@ -452,23 +601,48 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 	robotStateObject->SetArrayField(TEXT("collisionActorTags"), MakeJsonStringArrayFromNames(observation.RobotState.CollisionActorTags));
 	requestObject->SetObjectField(TEXT("robotState"), robotStateObject);
 
-	TArray<TSharedPtr<FJsonValue>> lidarRayValues;
-	lidarRayValues.Reserve(observation.LidarScanInfo.RayInfos.Num());
+	TArray<TSharedPtr<FJsonValue>> legacyLidarRayValues;
+	TArray<TSharedPtr<FJsonValue>> lidarRay1DValues;
+	TArray<TSharedPtr<FJsonValue>> lidarRay2DValues;
+	TArray<TSharedPtr<FJsonValue>> lidarRay3DValues;
+
+	legacyLidarRayValues.Reserve(observation.LidarScanInfo.RayInfos.Num());
+	lidarRay1DValues.Reserve(observation.LidarScanInfo.RayInfos.Num());
+	lidarRay2DValues.Reserve(observation.LidarScanInfo.RayInfos.Num());
+	lidarRay3DValues.Reserve(observation.LidarScanInfo.RayInfos.Num());
 
 	for (const FDeliveryBotLidarRayInfo& rayInfo : observation.LidarScanInfo.RayInfos)
 	{
-		TSharedRef<FJsonObject> rayObject = MakeShared<FJsonObject>();
-		rayObject->SetBoolField(TEXT("hit"), rayInfo.bHit);
-		rayObject->SetNumberField(TEXT("distanceM"), rayInfo.DistanceM);
-		rayObject->SetNumberField(TEXT("rayIndex"), rayInfo.RayIndex);
-		rayObject->SetNumberField(TEXT("rayYawDegree"), rayInfo.RayYawDegree);
-		rayObject->SetStringField(TEXT("actorName"), rayInfo.ActorName);
-		rayObject->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(rayInfo.ActorTags));
+		switch (rayInfo.RayDimensionType)
+		{
+		case EDeliveryBotLidarRayDimensionType::OneD:
+			lidarRay1DValues.Add(MakeShared<FJsonValueObject>(MakeJsonLidarRay1DObject(rayInfo)));
+			break;
 
-		lidarRayValues.Add(MakeShared<FJsonValueObject>(rayObject));
+		case EDeliveryBotLidarRayDimensionType::TwoD:
+			lidarRay2DValues.Add(MakeShared<FJsonValueObject>(MakeJsonLidarRay2DObject(rayInfo)));
+			legacyLidarRayValues.Add(MakeShared<FJsonValueObject>(MakeJsonLegacyLidarRayObject(rayInfo)));
+			break;
+
+		case EDeliveryBotLidarRayDimensionType::ThreeD:
+			lidarRay3DValues.Add(MakeShared<FJsonValueObject>(MakeJsonLidarRay3DObject(rayInfo)));
+			break;
+
+		default:
+			break;
+		}
 	}
 
-	requestObject->SetArrayField(TEXT("lidarRays"), lidarRayValues);
+	requestObject->SetArrayField(TEXT("lidarRays"), legacyLidarRayValues);
+
+	TSharedRef<FJsonObject> lidarObject = MakeShared<FJsonObject>();
+	lidarObject->SetStringField(TEXT("mode"), ToJsonLidarModeString(setupInfo.LidarSensorConfigInfo.LidarModeType));
+	lidarObject->SetNumberField(TEXT("sensorSequence"), observation.SensorSequence);
+	lidarObject->SetNumberField(TEXT("sensorTimeSeconds"), observation.LidarScanInfo.SimulationTimeSeconds);
+	lidarObject->SetArrayField(TEXT("rays1d"), lidarRay1DValues);
+	lidarObject->SetArrayField(TEXT("rays2d"), lidarRay2DValues);
+	lidarObject->SetArrayField(TEXT("rays3d"), lidarRay3DValues);
+	requestObject->SetObjectField(TEXT("lidar"), lidarObject);
 
 	TArray<TSharedPtr<FJsonValue>> observedObjectValues;
 	observedObjectValues.Reserve(observation.ObservedObjects.Num());
@@ -540,7 +714,8 @@ bool UDeliveryBot_HttpPolicyComponent::TryParseMoveCommand(
 		return false;
 
 	DrawPythonPathDebug(responseObject);
-
+	LogPythonCaptureRefs(responseObject);
+	
 	TSharedPtr<FJsonObject> actionObject;
 	if (!TryGetJsonObjectField(*responseObject, TEXT("action"), actionObject))
 		return false;
@@ -567,7 +742,7 @@ bool UDeliveryBot_HttpPolicyComponent::TryParseMoveCommand(
 	return true;
 }
 
-// Python path debug 좌표를 경로선, 현재 인덱스, 실제 추종 목표점으로 그린다.
+// Python response.path 좌표를 경로선, 현재 인덱스, 실제 추종 목표점으로 그린다.
 void UDeliveryBot_HttpPolicyComponent::DrawPythonPathDebug(const TSharedPtr<FJsonObject>& responseObject) const
 {
 	if (!bDrawPythonPathDebug || !responseObject.IsValid())
@@ -577,12 +752,12 @@ void UDeliveryBot_HttpPolicyComponent::DrawPythonPathDebug(const TSharedPtr<FJso
 	if (!IsValid(world))
 		return;
 
-	TSharedPtr<FJsonObject> debugObject;
-	if (!TryGetJsonObjectField(*responseObject, TEXT("debug"), debugObject))
+	TSharedPtr<FJsonObject> pathObject;
+	if (!TryGetJsonObjectField(*responseObject, TEXT("path"), pathObject))
 		return;
 
 	const TArray<TSharedPtr<FJsonValue>>* pathValues = nullptr;
-	if (!debugObject->TryGetArrayField(TEXT("pathWorldPoints"), pathValues) || pathValues == nullptr || pathValues->Num() < 2)
+	if (!pathObject->TryGetArrayField(TEXT("pathWorldPoints"), pathValues) || pathValues == nullptr || pathValues->Num() < 2)
 		return;
 
 	TArray<FVector> pathPoints;
@@ -612,7 +787,7 @@ void UDeliveryBot_HttpPolicyComponent::DrawPythonPathDebug(const TSharedPtr<FJso
 	}
 
 	double pathIndex = 0.0;
-	if (debugObject->TryGetNumberField(TEXT("pathIndex"), pathIndex))
+	if (pathObject->TryGetNumberField(TEXT("pathIndex"), pathIndex))
 	{
 		const int32 currentIndex = FMath::Clamp(static_cast<int32>(pathIndex), 0, pathPoints.Num() - 1);
 		DrawDebugSphere(
@@ -628,7 +803,7 @@ void UDeliveryBot_HttpPolicyComponent::DrawPythonPathDebug(const TSharedPtr<FJso
 	}
 
 	TSharedPtr<FJsonObject> targetPointObject;
-	if (TryGetJsonObjectField(*debugObject, TEXT("targetWorldPoint"), targetPointObject))
+	if (TryGetJsonObjectField(*pathObject, TEXT("targetWorldPoint"), targetPointObject))
 	{
 		double x = 0.0;
 		double y = 0.0;

@@ -32,7 +32,9 @@ entry:
   - Scenario/Editor/ScenarioEditorController.h / .cpp
   - Scenario/Widget/ScenarioEditorRootWidget.h / .cpp
   - Scenario/Widget/ScenarioEditorToolbarWidget.h / .cpp
-  - Scenario/Widget/ScenarioTemplateSidebarWidget.h / .cpp
+  - Scenario/Widget/ScenarioEditorSidebarWidget.h / .cpp
+  - Scenario/Widget/ScenarioEditorSidebarMainPanel.h / .cpp
+  - Scenario/Widget/ScenarioEditorSidebarFieldRow.h / .cpp
   - Scenario/Widget/ScenarioPlaceableDetailsWidget.h / .cpp
   - Scenario/Widget/ScenarioPlaceableContextMenuWidget.h / .cpp
   - ExperimentSettingTypesTest.cpp
@@ -63,7 +65,7 @@ keep:
   - ScenarioTemplateWorldSpecAdapter is the runner/launcher boundary for scenario_template files; it samples templates before handing the frozen sample to ScenarioSampleWorldSpecAdapter.
   - EpisodeRunResultJson owns canonical run outputs: summary.json, episodes/<SampleId>/result.json, and episodes/<SampleId>/events.jsonl.
   - ScenarioRunnerSubsystem writes only canonical `summary.json`, `result.json`, and `events.jsonl` outputs under RunOutputDirectory.
-  - ScenarioAuthoringSubsystem stores the editor draft as scenario_template, exposes Corridor axis/profile/segment authoring APIs, spawns editor-only Corridor handles and spline lane preview actors, and builds runtime WorldSpec only as a preview/compatibility projection.
+  - ScenarioAuthoringSubsystem stores the editor draft as scenario_template, exposes template metadata and Corridor axis/profile/segment authoring APIs, spawns editor-only Corridor handles and spline lane preview actors, and builds runtime WorldSpec only as a preview/compatibility projection.
   - ScenarioAuthoringSubsystem exposes `RefreshEditorPreviewFromDraft` for rebuilding generated preview actors after catalog or material edits.
   - ScenarioCorridorPreviewActor renders blocked Corridor surfaces as 2m spline collision strips using the Blocked profile so robot sensors can detect wall/building lanes.
   - ScenarioCorridorPreviewActor renders curb_side lane strips 15cm below the walkway to show the curb-side grade separation.
@@ -71,7 +73,9 @@ keep:
   - ScenarioAuthoringSubsystem normalizes static obstacle editor transforms to the Corridor surface Z offset before preview validation, spawn, update, and editor-view rebuild.
   - ScenarioEditorRootWidget owns edge-revealed editor panels: asset palette from the bottom edge and LLM prompt panel from the right edge.
   - ScenarioEditorToolbarWidget owns the Main/Corridor/Obstacle/Pedestrian template sidebar tab state and broadcasts panel changes to the root widget.
-  - ScenarioTemplateSidebarWidget owns the read-only Scenario Template block summary shown in the editor side sidebar.
+  - ScenarioEditorSidebarWidget owns the Scenario Template block summary shown in the editor side sidebar, binds FallbackSummaryContainer for legacy read-only text, and switches specialized Main/Corridor/Obstacle/Pedestrian panel widgets when bound.
+  - ScenarioEditorSidebarMainPanel owns Main-panel metadata field rows for template_id, version, intent, and robot anchor summaries, including a native fallback tree when no Blueprint-authored tree is bound.
+  - ScenarioEditorSidebarFieldRow owns the common leaf property row pattern for label/separator/value editing in Scenario Template side panels, including a native fallback row tree.
   - ScenarioPlaceableDetailsWidget owns the placeable selection details panel; ScenarioPlaceableContextMenuWidget remains only as a legacy UMG compatibility wrapper.
 verify:
   - contract specs vs sample JSON alignment

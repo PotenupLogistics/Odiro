@@ -16,7 +16,7 @@ class UScenarioLlmPromptWidget;
 class UScenarioPlaceableComponent;
 class UScenarioPlaceableContextMenuWidget;
 class UScenarioPlaceableDetailsWidget;
-class UScenarioTemplateSidebarWidget;
+class UScenarioEditorSidebarWidget;
 class UWidget;
 
 UCLASS(BlueprintType, Blueprintable)
@@ -64,13 +64,17 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UWidget> TemplateSidebarPanel;
 
-	// Optional read-only Scenario Template block sidebar.
+	// Optional Scenario Editor sidebar bound by the new UMG child name.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
-	TObjectPtr<UScenarioTemplateSidebarWidget> ScenarioTemplateSidebarWidget;
+	TObjectPtr<UScenarioEditorSidebarWidget> ScenarioEditorSidebarWidget;
+
+	// Compatibility bind for the previous Scenario Template sidebar UMG child name.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UScenarioEditorSidebarWidget> ScenarioTemplateSidebarWidget;
 
 	// Compatibility bind for the current UMG child name used by the Scenario Template sidebar.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
-	TObjectPtr<UScenarioTemplateSidebarWidget> SidebarWidget;
+	TObjectPtr<UScenarioEditorSidebarWidget> SidebarWidget;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UButton> TopDownOrthoModeButton;
@@ -139,7 +143,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void HandleEditorSessionStarted(bool bLoadedExistingScenario);
 
-	// 현재 view mode에 맞춰 두 모드 전환 버튼의 노출 상태를 갱신함.
+	// ?�재 view mode??맞춰 ??모드 ?�환 버튼???�출 ?�태�?갱신??
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void RefreshViewModeButtons();
 
@@ -188,7 +192,7 @@ private:
 	void HandleAutoStartCompleted(bool bLoadedExistingScenario);
 	UWidget* ResolvePlaceableDetailsVisibilityTarget() const;
 	// Resolves the read-only Scenario Template sidebar across current and legacy UMG child names.
-	UScenarioTemplateSidebarWidget* ResolveTemplateSidebarWidget() const;
+	UScenarioEditorSidebarWidget* ResolveTemplateSidebarWidget() const;
 	UWidget* ResolveTemplateSidebarVisibilityTarget() const;
 	UWidget* ResolveAssetPaletteVisibilityTarget() const;
 	UWidget* ResolveLlmPanelVisibilityTarget() const;
@@ -202,7 +206,7 @@ private:
 
 	FDelegateHandle AutoStartCompletedHandle;
 
-	// keyboard toggle 등 외부 변경과 버튼 표시를 동기화하기 위한 최근 view mode 캐시.
+	// keyboard toggle ???��? 변경과 버튼 ?�시�??�기?�하�??�한 최근 view mode 캐시.
 	EScenarioEditorViewMode LastSeenViewMode = static_cast<EScenarioEditorViewMode>(0);
 	bool bHasCachedViewMode = false;
 	bool bLastSeenPlacementSnapToGrid = false;

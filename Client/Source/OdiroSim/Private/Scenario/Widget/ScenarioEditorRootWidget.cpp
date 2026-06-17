@@ -11,7 +11,7 @@
 #include "Scenario/Widget/ScenarioEditorToolbarWidget.h"
 #include "Scenario/Widget/ScenarioPlaceableContextMenuWidget.h"
 #include "Scenario/Widget/ScenarioPlaceableDetailsWidget.h"
-#include "Scenario/Widget/ScenarioTemplateSidebarWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarWidget.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
@@ -55,7 +55,7 @@ void UScenarioEditorRootWidget::NativeTick(const FGeometry& myGeometry, const fl
 		SetAssetPaletteVisible(ShouldRevealAssetPaletteFromMouseEdge(), true);
 	}
 
-	// keyboard toggle 등 버튼 외 경로로 view mode가 바뀐 경우를 따라잡음.
+	// keyboard toggle ??버튼 ??경로�?view mode가 바�?경우�??�라?�음.
 	if (const AScenarioEditorController* controller = GetEditorController())
 	{
 		if (!bHasCachedViewMode || controller->GetEditorViewMode() != LastSeenViewMode)
@@ -144,7 +144,7 @@ void UScenarioEditorRootWidget::SetTemplateSidebarPanel(const EScenarioTemplateS
 
 void UScenarioEditorRootWidget::RefreshTemplateSidebarWidget()
 {
-	UScenarioTemplateSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget();
+	UScenarioEditorSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget();
 	SetPanelVisibility(ResolveTemplateSidebarVisibilityTarget(), true);
 	SetPanelVisibility(sidebarWidget, true);
 	if (sidebarWidget)
@@ -181,7 +181,7 @@ void UScenarioEditorRootWidget::RefreshViewModeButtons()
 	LastSeenViewMode = viewMode;
 	bHasCachedViewMode = true;
 
-	// 현재 모드가 아닌, 전환 대상 모드의 버튼만 노출함.
+	// ?�재 모드가 ?�닌, ?�환 ?�??모드??버튼�??�출??
 	const bool bTopDownActive = viewMode == EScenarioEditorViewMode::TopDownOrtho;
 	if (TopDownOrthoModeButton)
 	{
@@ -330,7 +330,7 @@ void UScenarioEditorRootWidget::UnbindTemplateSidebarToolbar()
 
 void UScenarioEditorRootWidget::ApplyTemplateSidebarPanel(const EScenarioTemplateSidebarPanel activePanel)
 {
-	UScenarioTemplateSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget();
+	UScenarioEditorSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget();
 	if (sidebarWidget)
 	{
 		sidebarWidget->SetActivePanel(activePanel);
@@ -397,9 +397,17 @@ UWidget* UScenarioEditorRootWidget::ResolvePlaceableDetailsVisibilityTarget() co
 	return PlaceableContextMenuPanel ? PlaceableContextMenuPanel.Get() : Cast<UWidget>(PlaceableContextMenuWidget.Get());
 }
 
-UScenarioTemplateSidebarWidget* UScenarioEditorRootWidget::ResolveTemplateSidebarWidget() const
+UScenarioEditorSidebarWidget* UScenarioEditorRootWidget::ResolveTemplateSidebarWidget() const
 {
-	return ScenarioTemplateSidebarWidget ? ScenarioTemplateSidebarWidget.Get() : SidebarWidget.Get();
+	if (ScenarioEditorSidebarWidget)
+	{
+		return ScenarioEditorSidebarWidget.Get();
+	}
+	if (ScenarioTemplateSidebarWidget)
+	{
+		return ScenarioTemplateSidebarWidget.Get();
+	}
+	return SidebarWidget.Get();
 }
 
 UWidget* UScenarioEditorRootWidget::ResolveTemplateSidebarVisibilityTarget() const

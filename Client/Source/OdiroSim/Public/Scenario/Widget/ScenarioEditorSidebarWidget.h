@@ -4,13 +4,16 @@
 #include "Blueprint/UserWidget.h"
 #include "Scenario/Widget/ScenarioEditorToolbarWidget.h"
 #include "Shared/ScenarioTemplateTypes.h"
-#include "ScenarioTemplateSidebarWidget.generated.h"
+#include "ScenarioEditorSidebarWidget.generated.h"
 
 class UTextBlock;
+class UScenarioEditorSidebarMainPanel;
+class UWidget;
+class UWidgetSwitcher;
 
-// Read-only Scenario Template block viewer used by the editor side sidebar.
+// Scenario Template block viewer and panel switch host used by the editor side sidebar.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UScenarioTemplateSidebarWidget : public UUserWidget
+class ODIROSIM_API UScenarioEditorSidebarWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
@@ -42,7 +45,31 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UTextBlock> DiagnosticsTextBlock;
 
-	// Selects the Scenario Template block displayed by the read-only sidebar.
+	// Optional container that groups legacy read-only summary text widgets.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UWidget> FallbackSummaryContainer;
+
+	// Optional switcher that hosts Main/Corridor/Obstacle/Pedestrian panel widgets.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UWidgetSwitcher> PanelSwitcher;
+
+	// Optional specialized Main panel widget for template metadata and robot anchors.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarMainPanel> MainPanelWidget;
+
+	// Optional specialized Corridor panel placeholder used by the panel switcher.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UWidget> CorridorPanelWidget;
+
+	// Optional specialized Obstacle panel placeholder used by the panel switcher.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UWidget> ObstaclePanelWidget;
+
+	// Optional specialized Pedestrian panel placeholder used by the panel switcher.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UWidget> PedestrianPanelWidget;
+
+	// Selects the Scenario Template block displayed by the sidebar.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetActivePanel(EScenarioTemplateSidebarPanel panel);
 
@@ -55,6 +82,14 @@ public:
 	void RefreshFromTemplate(const FScenarioTemplateDocument& scenarioTemplate);
 
 private:
+	// Applies the active panel to the optional UMG widget switcher.
+	void RefreshPanelSwitcher();
+	// Shows read-only summary text when the active panel has no specialized widget yet.
+	void RefreshFallbackTextVisibility() const;
+	// Applies one visibility state to the legacy read-only summary area.
+	void SetFallbackTextVisibility(ESlateVisibility visibility) const;
+	// Resolves the switcher child widget for one sidebar panel.
+	UWidget* ResolvePanelWidget(EScenarioTemplateSidebarPanel panel) const;
 	// Builds read-only text for root template metadata and robot anchors.
 	void BuildMainPanelText(
 		const FScenarioTemplateDocument& scenarioTemplate,

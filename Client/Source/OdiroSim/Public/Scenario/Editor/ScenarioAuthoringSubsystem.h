@@ -268,6 +268,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	FScenarioTemplateDocument GetDraftScenarioTemplate() const { return DraftScenarioTemplate; }
 
+	// Replaces the draft scenario_template template_id metadata field.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	bool SetDraftTemplateId(const FString& templateId, TArray<FString>& outDiagnostics);
+
+	// Replaces the draft scenario_template intent metadata field.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	bool SetDraftIntent(const FString& intent, TArray<FString>& outDiagnostics);
+
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	FString GetSourceScenarioSetupJsonPath() const { return SourceScenarioTemplateJsonPath; }
 
@@ -372,6 +380,12 @@ private:
 		bool bPreviousDirty,
 		TArray<FString>& outDiagnostics);
 	// Side lane profile 편집 입력이 surface와 width 조건을 만족하는지 확인함.
+	// Commits metadata-only draft edits without rebuilding generated preview actors.
+	bool CommitTemplateMetadataDraftEdit(
+		const FScenarioTemplateDocument& previousTemplate,
+		bool bPreviousDirty,
+		TArray<FString>& outDiagnostics);
+	// Validates side lane profile inputs before applying them to the draft.
 	bool ValidateCorridorLaneProfile(
 		const TArray<FScenarioTemplateLaneRule>& lanes,
 		const FString& path,

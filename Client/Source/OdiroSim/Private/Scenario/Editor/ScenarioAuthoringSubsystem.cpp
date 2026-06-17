@@ -307,6 +307,62 @@ double UScenarioAuthoringSubsystem::GetDraftCorridorAxisLengthMeters() const
 	return MeasureCorridorAxisLengthMeters(DraftScenarioTemplate.Corridor.Axis.PointsMeters);
 }
 
+bool UScenarioAuthoringSubsystem::SetDraftTemplateId(
+	const FString& templateId,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+	const FString normalizedTemplateId = templateId.TrimStartAndEnd();
+	if (normalizedTemplateId.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("scenario_template template_id must not be empty."));
+		return false;
+	}
+
+	if (!IsDraftScenarioTemplateEmpty() && DraftScenarioTemplate.TemplateId == normalizedTemplateId)
+	{
+		return true;
+	}
+
+	const FScenarioTemplateDocument previousTemplate = DraftScenarioTemplate;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioTemplateEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	DraftScenarioTemplate.TemplateId = normalizedTemplateId;
+	return CommitTemplateMetadataDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::SetDraftIntent(
+	const FString& intent,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+	const FString normalizedIntent = intent.TrimStartAndEnd();
+	if (normalizedIntent.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("scenario_template intent must not be empty."));
+		return false;
+	}
+
+	if (!IsDraftScenarioTemplateEmpty() && DraftScenarioTemplate.Intent == normalizedIntent)
+	{
+		return true;
+	}
+
+	const FScenarioTemplateDocument previousTemplate = DraftScenarioTemplate;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioTemplateEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	DraftScenarioTemplate.Intent = normalizedIntent;
+	return CommitTemplateMetadataDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
 bool UScenarioAuthoringSubsystem::SetCorridorAxisPointsMeters(
 	const TArray<FVector2D>& pointsMeters,
 	TArray<FString>& outDiagnostics)
@@ -1857,6 +1913,25 @@ bool UScenarioAuthoringSubsystem::CommitCorridorDraftEdit(
 	bDirty = bPreviousDirty;
 	outDiagnostics.Add(TEXT("Corridor edit was rejected because the editor preview could not be rebuilt."));
 	return false;
+}
+
+bool UScenarioAuthoringSubsystem::CommitTemplateMetadataDraftEdit(
+	const FScenarioTemplateDocument& previousTemplate,
+	bool bPreviousDirty,
+	TArray<FString>& outDiagnostics)
+{
+	TArray<FScenarioSchemaDiagnostic> schemaDiagnostics;
+	if (!FScenarioTemplateJson::ValidateDocument(DraftScenarioTemplate, schemaDiagnostics))
+	{
+		AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+		DraftScenarioTemplate = previousTemplate;
+		bDirty = bPreviousDirty;
+		return false;
+	}
+
+	AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+	bDirty = true;
+	return true;
 }
 
 bool UScenarioAuthoringSubsystem::ValidateCorridorLaneProfile(

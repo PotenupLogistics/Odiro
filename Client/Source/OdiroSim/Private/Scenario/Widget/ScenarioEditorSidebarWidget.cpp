@@ -1,8 +1,11 @@
-#include "Scenario/Widget/ScenarioTemplateSidebarWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarWidget.h"
 
 #include "Components/TextBlock.h"
+#include "Components/Widget.h"
+#include "Components/WidgetSwitcher.h"
 #include "Engine/World.h"
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
+#include "Scenario/Widget/ScenarioEditorSidebarMainPanel.h"
 
 namespace
 {
@@ -17,20 +20,20 @@ namespace
 	}
 }
 
-void UScenarioTemplateSidebarWidget::NativeConstruct()
+void UScenarioEditorSidebarWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	RefreshFromDraft();
 }
 
-void UScenarioTemplateSidebarWidget::SetActivePanel(const EScenarioTemplateSidebarPanel panel)
+void UScenarioEditorSidebarWidget::SetActivePanel(const EScenarioTemplateSidebarPanel panel)
 {
 	ActivePanel = panel;
 	RefreshFromDraft();
 }
 
-void UScenarioTemplateSidebarWidget::RefreshFromDraft()
+void UScenarioEditorSidebarWidget::RefreshFromDraft()
 {
 	UWorld* world = GetWorld();
 	const UScenarioAuthoringSubsystem* authoringSubsystem = world
@@ -44,13 +47,14 @@ void UScenarioTemplateSidebarWidget::RefreshFromDraft()
 			TEXT(""),
 			TEXT(""),
 			TEXT("ScenarioAuthoringSubsystem unavailable."));
+		SetFallbackTextVisibility(ESlateVisibility::SelfHitTestInvisible);
 		return;
 	}
 
 	RefreshFromTemplate(authoringSubsystem->GetDraftScenarioTemplate());
 }
 
-void UScenarioTemplateSidebarWidget::RefreshFromTemplate(const FScenarioTemplateDocument& scenarioTemplate)
+void UScenarioEditorSidebarWidget::RefreshFromTemplate(const FScenarioTemplateDocument& scenarioTemplate)
 {
 	FString primaryText;
 	FString secondaryText;
@@ -75,9 +79,84 @@ void UScenarioTemplateSidebarWidget::RefreshFromTemplate(const FScenarioTemplate
 	}
 
 	SetSidebarText(PanelToTitle(ActivePanel), primaryText, secondaryText, listText, TEXT(""));
+	if (MainPanelWidget)
+	{
+		MainPanelWidget->RefreshFromTemplate(scenarioTemplate);
+	}
+	RefreshPanelSwitcher();
+	RefreshFallbackTextVisibility();
 }
 
-void UScenarioTemplateSidebarWidget::BuildMainPanelText(
+void UScenarioEditorSidebarWidget::RefreshPanelSwitcher()
+{
+	if (!PanelSwitcher)
+	{
+		return;
+	}
+
+	if (UWidget* panelWidget = ResolvePanelWidget(ActivePanel))
+	{
+		PanelSwitcher->SetActiveWidget(panelWidget);
+	}
+}
+
+void UScenarioEditorSidebarWidget::RefreshFallbackTextVisibility() const
+{
+	const bool bHasSpecializedMainPanel = ActivePanel == EScenarioTemplateSidebarPanel::Main
+		&& PanelSwitcher
+		&& MainPanelWidget;
+	const ESlateVisibility visibility = bHasSpecializedMainPanel
+		? ESlateVisibility::Collapsed
+		: ESlateVisibility::SelfHitTestInvisible;
+
+	SetFallbackTextVisibility(visibility);
+}
+
+void UScenarioEditorSidebarWidget::SetFallbackTextVisibility(const ESlateVisibility visibility) const
+{
+	if (FallbackSummaryContainer)
+	{
+		FallbackSummaryContainer->SetVisibility(visibility);
+		return;
+	}
+
+	if (PrimaryFieldsTextBlock)
+	{
+		PrimaryFieldsTextBlock->SetVisibility(visibility);
+	}
+	if (SecondaryFieldsTextBlock)
+	{
+		SecondaryFieldsTextBlock->SetVisibility(visibility);
+	}
+	if (ListSummaryTextBlock)
+	{
+		ListSummaryTextBlock->SetVisibility(visibility);
+	}
+	if (DiagnosticsTextBlock)
+	{
+		DiagnosticsTextBlock->SetVisibility(visibility);
+	}
+}
+
+UWidget* UScenarioEditorSidebarWidget::ResolvePanelWidget(
+	const EScenarioTemplateSidebarPanel panel) const
+{
+	switch (panel)
+	{
+	case EScenarioTemplateSidebarPanel::Main:
+		return Cast<UWidget>(MainPanelWidget.Get());
+	case EScenarioTemplateSidebarPanel::Corridor:
+		return CorridorPanelWidget.Get();
+	case EScenarioTemplateSidebarPanel::Obstacle:
+		return ObstaclePanelWidget.Get();
+	case EScenarioTemplateSidebarPanel::Pedestrian:
+		return PedestrianPanelWidget.Get();
+	default:
+		return nullptr;
+	}
+}
+
+void UScenarioEditorSidebarWidget::BuildMainPanelText(
 	const FScenarioTemplateDocument& scenarioTemplate,
 	FString& outPrimaryText,
 	FString& outSecondaryText,
@@ -99,7 +178,7 @@ void UScenarioTemplateSidebarWidget::BuildMainPanelText(
 	outListText = JoinLines(robotLines);
 }
 
-void UScenarioTemplateSidebarWidget::BuildCorridorPanelText(
+void UScenarioEditorSidebarWidget::BuildCorridorPanelText(
 	const FScenarioTemplateDocument& scenarioTemplate,
 	FString& outPrimaryText,
 	FString& outSecondaryText,
@@ -139,7 +218,7 @@ void UScenarioTemplateSidebarWidget::BuildCorridorPanelText(
 	outListText = JoinLines(segmentLines);
 }
 
-void UScenarioTemplateSidebarWidget::BuildObstaclePanelText(
+void UScenarioEditorSidebarWidget::BuildObstaclePanelText(
 	const FScenarioTemplateDocument& scenarioTemplate,
 	FString& outPrimaryText,
 	FString& outSecondaryText,
@@ -168,7 +247,7 @@ void UScenarioTemplateSidebarWidget::BuildObstaclePanelText(
 	outListText = JoinLines(placementLines);
 }
 
-void UScenarioTemplateSidebarWidget::BuildPedestrianPanelText(
+void UScenarioEditorSidebarWidget::BuildPedestrianPanelText(
 	const FScenarioTemplateDocument& scenarioTemplate,
 	FString& outPrimaryText,
 	FString& outSecondaryText,
@@ -199,7 +278,7 @@ void UScenarioTemplateSidebarWidget::BuildPedestrianPanelText(
 	outListText = JoinLines(encounterLines);
 }
 
-void UScenarioTemplateSidebarWidget::SetSidebarText(
+void UScenarioEditorSidebarWidget::SetSidebarText(
 	const FString& title,
 	const FString& primaryText,
 	const FString& secondaryText,
@@ -213,7 +292,7 @@ void UScenarioTemplateSidebarWidget::SetSidebarText(
 	SetTextBlockText(DiagnosticsTextBlock.Get(), diagnosticsText);
 }
 
-void UScenarioTemplateSidebarWidget::SetTextBlockText(UTextBlock* textBlock, const FString& text) const
+void UScenarioEditorSidebarWidget::SetTextBlockText(UTextBlock* textBlock, const FString& text) const
 {
 	if (textBlock)
 	{
@@ -221,7 +300,7 @@ void UScenarioTemplateSidebarWidget::SetTextBlockText(UTextBlock* textBlock, con
 	}
 }
 
-FString UScenarioTemplateSidebarWidget::PanelToTitle(const EScenarioTemplateSidebarPanel panel)
+FString UScenarioEditorSidebarWidget::PanelToTitle(const EScenarioTemplateSidebarPanel panel)
 {
 	switch (panel)
 	{
@@ -238,7 +317,7 @@ FString UScenarioTemplateSidebarWidget::PanelToTitle(const EScenarioTemplateSide
 	}
 }
 
-FString UScenarioTemplateSidebarWidget::RobotAnchorTypeToString(const EScenarioTemplateRobotAnchorType type)
+FString UScenarioEditorSidebarWidget::RobotAnchorTypeToString(const EScenarioTemplateRobotAnchorType type)
 {
 	switch (type)
 	{
@@ -253,7 +332,7 @@ FString UScenarioTemplateSidebarWidget::RobotAnchorTypeToString(const EScenarioT
 	}
 }
 
-FString UScenarioTemplateSidebarWidget::RobotHeadingToString(const EScenarioTemplateRobotHeading heading)
+FString UScenarioEditorSidebarWidget::RobotHeadingToString(const EScenarioTemplateRobotHeading heading)
 {
 	switch (heading)
 	{
@@ -268,7 +347,7 @@ FString UScenarioTemplateSidebarWidget::RobotHeadingToString(const EScenarioTemp
 	}
 }
 
-FString UScenarioTemplateSidebarWidget::SegmentTypeToString(const EScenarioTemplateSegmentType type)
+FString UScenarioEditorSidebarWidget::SegmentTypeToString(const EScenarioTemplateSegmentType type)
 {
 	switch (type)
 	{
@@ -285,7 +364,7 @@ FString UScenarioTemplateSidebarWidget::SegmentTypeToString(const EScenarioTempl
 	}
 }
 
-FString UScenarioTemplateSidebarWidget::ObstaclePlacementKindToString(
+FString UScenarioEditorSidebarWidget::ObstaclePlacementKindToString(
 	const EScenarioTemplateObstaclePlacementKind kind)
 {
 	switch (kind)
@@ -301,7 +380,7 @@ FString UScenarioTemplateSidebarWidget::ObstaclePlacementKindToString(
 	}
 }
 
-FString UScenarioTemplateSidebarWidget::EncounterTypeToString(const EScenarioTemplateEncounterType type)
+FString UScenarioEditorSidebarWidget::EncounterTypeToString(const EScenarioTemplateEncounterType type)
 {
 	switch (type)
 	{
@@ -318,7 +397,7 @@ FString UScenarioTemplateSidebarWidget::EncounterTypeToString(const EScenarioTem
 	}
 }
 
-FString UScenarioTemplateSidebarWidget::FormatNumberValue(
+FString UScenarioEditorSidebarWidget::FormatNumberValue(
 	const FScenarioTemplateNumberValue& value,
 	const FString& suffix)
 {
@@ -335,7 +414,7 @@ FString UScenarioTemplateSidebarWidget::FormatNumberValue(
 	return FString::Printf(TEXT("%.2f%s"), value.FixedValue, *suffix);
 }
 
-FString UScenarioTemplateSidebarWidget::FormatIntegerValue(const FScenarioTemplateIntegerValue& value)
+FString UScenarioEditorSidebarWidget::FormatIntegerValue(const FScenarioTemplateIntegerValue& value)
 {
 	if (!value.bIsSet)
 	{
@@ -350,7 +429,7 @@ FString UScenarioTemplateSidebarWidget::FormatIntegerValue(const FScenarioTempla
 	return FString::FromInt(value.FixedValue);
 }
 
-FString UScenarioTemplateSidebarWidget::FormatStringValue(const FScenarioTemplateStringValue& value)
+FString UScenarioEditorSidebarWidget::FormatStringValue(const FScenarioTemplateStringValue& value)
 {
 	if (!value.bIsSet)
 	{
@@ -365,7 +444,7 @@ FString UScenarioTemplateSidebarWidget::FormatStringValue(const FScenarioTemplat
 	return value.FixedValue.IsEmpty() ? FString(TEXT("(empty)")) : value.FixedValue;
 }
 
-FString UScenarioTemplateSidebarWidget::FormatRobotAnchor(const FScenarioTemplateRobotAnchor& anchor)
+FString UScenarioEditorSidebarWidget::FormatRobotAnchor(const FScenarioTemplateRobotAnchor& anchor)
 {
 	if (anchor.Type != EScenarioTemplateRobotAnchorType::CorridorPose)
 	{
@@ -384,7 +463,7 @@ FString UScenarioTemplateSidebarWidget::FormatRobotAnchor(const FScenarioTemplat
 		*RobotHeadingToString(anchor.Heading));
 }
 
-FString UScenarioTemplateSidebarWidget::FormatLaneRule(const FScenarioTemplateLaneRule& lane)
+FString UScenarioEditorSidebarWidget::FormatLaneRule(const FScenarioTemplateLaneRule& lane)
 {
 	return FString::Printf(
 		TEXT("%s | width: %s"),
@@ -392,12 +471,12 @@ FString UScenarioTemplateSidebarWidget::FormatLaneRule(const FScenarioTemplateLa
 		*FormatNumberValue(lane.WidthMeters, TEXT("m")));
 }
 
-FString UScenarioTemplateSidebarWidget::FormatStringList(const TArray<FString>& values)
+FString UScenarioEditorSidebarWidget::FormatStringList(const TArray<FString>& values)
 {
 	return values.IsEmpty() ? FString(TEXT("(none)")) : FString::Join(values, TEXT(", "));
 }
 
-double UScenarioTemplateSidebarWidget::MeasureAxisLengthMeters(const TArray<FVector2D>& pointsMeters)
+double UScenarioEditorSidebarWidget::MeasureAxisLengthMeters(const TArray<FVector2D>& pointsMeters)
 {
 	double lengthMeters = 0.0;
 	for (int32 index = 1; index < pointsMeters.Num(); ++index)

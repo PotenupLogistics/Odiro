@@ -268,6 +268,7 @@ Client, Agents, Simulator 간 JSON-lines IPC 송수신 규약.
 - `summaryPath`: Simulator가 run 종료 시 작성할 run summary. `workspace.createRun` 생성 대상 아님
 - `snapshotPaths`: 복사된 snapshot file의 absolute path 목록
 - snapshot `policy/` copy 제외: `__pycache__`, `.pyc`, `.pyo`
+- run 기본 폴더 copy 제외: `.gitkeep`
 - 이전 queue 파일 생성 없음
 
 ### `process.startSimulator`

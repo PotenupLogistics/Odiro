@@ -106,17 +106,29 @@ struct ODIROSIM_API FSimulationCommandLineOptions
 {
 	GENERATED_BODY()
 
-	// `-Simulate=<SimulationSetupFile>`가 있으면 SimulatorMode로 진입
+	// legacy `-Simulate=<SimulationSetupFile>`가 있으면 SimulatorMode로 진입
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|CommandLine")
 	bool bSimulate = false;
 
-	// `-Simulate`가 가리키는 SimulationSetup JSON path
+	// legacy `-Simulate`가 가리키는 SimulationSetup JSON path
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|CommandLine")
 	FString SimulationSetupFile;
+
+	// `-OdiroProject=<UserProject>`가 있으면 user project run으로 진입
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|CommandLine")
+	bool bProjectRun = false;
+
+	// `-OdiroProject`가 가리키는 user project root path
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|CommandLine")
+	FString ProjectPath;
 
 	// 외부에서 지정한 run id. 비어 있으면 simulator가 생성
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|CommandLine")
 	FString RunId;
+
+	// Bridge가 project run마다 할당한 Python policy runtime port. 0이면 기본 설정값 사용
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|CommandLine", meta = (ClampMin = "0", ClampMax = "65535"))
+	int32 PolicyPort = 0;
 };
 
 // Command line parse 결과와 diagnostic 묶음
@@ -228,6 +240,123 @@ struct ODIROSIM_API FSimulationCommandLine
 {
 	static FSimulationCommandLineParseResult Parse(const FString& commandLine);
 	static FSimulationCommandLineParseResult ParseCurrent();
+};
+
+// user project run snapshot의 고정 path 묶음
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FUserProjectRunSnapshotPaths
+{
+	GENERATED_BODY()
+
+	// user project root absolute path
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString ProjectPath;
+
+	// Bridge가 할당한 6자리 run id
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString RunId;
+
+	// `<UserProject>/runs/<RunId>` path
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString RunPath;
+
+	// `<RunPath>/snapshot` path
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString SnapshotPath;
+
+	// snapshot setting JSON path
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString SettingPath;
+
+	// snapshot profile JSON path
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString ProfilePath;
+
+	// snapshot scenario JSON path
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString ScenarioPath;
+
+	// snapshot policy package directory
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString PolicyPath;
+
+	// snapshot policy entrypoint file
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString PolicyEntrypointPath;
+
+	// run review output directory
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString ReviewPath;
+
+	// run episodes output directory
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString EpisodesPath;
+
+	// Bridge-owned run status path
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString StatusPath;
+
+	// Simulator-owned run summary path
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString SummaryPath;
+};
+
+// snapshot setting에서 simulator bootstrap에 필요한 최소 설정
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FUserProjectRunSetting
+{
+	GENERATED_BODY()
+
+	// simulator가 열 target map id
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString MapId;
+
+	// fixed timestep FPS
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun", meta = (ClampMin = "1"))
+	int32 FixedFps = 60;
+
+	// run 안에서 생성할 episode 수
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun", meta = (ClampMin = "1"))
+	int32 EpisodeCount = 1;
+
+	// episode seed 계산 기준값
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	int64 BaseSeed = 0;
+
+	// episode scenario 생성기 버전
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FString GeneratorVersion;
+};
+
+// user project run snapshot 검증과 bootstrap parse 결과
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FUserProjectRunSnapshotParseResult
+{
+	GENERATED_BODY()
+
+	// snapshot 구조와 최소 JSON 계약이 유효하면 true
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	bool bSuccess = false;
+
+	// 고정 path 묶음
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FUserProjectRunSnapshotPaths Paths;
+
+	// simulator bootstrap에 필요한 setting 값
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FUserProjectRunSetting Setting;
+
+	// snapshot 검증 중 발견한 메시지
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	TArray<FScenarioCompileDiagnostic> Diagnostics;
+};
+
+// user project run snapshot path와 최소 계약을 검증하는 utility
+struct ODIROSIM_API FUserProjectRunSnapshot
+{
+	static bool IsValidRunId(const FString& runId);
+	static FUserProjectRunSnapshotPaths BuildPaths(const FString& projectPath, const FString& runId);
+	static FUserProjectRunSnapshotParseResult Parse(const FString& projectPath, const FString& runId);
 };
 
 // SimulationRunStatus JSON을 launcher UI가 polling할 파일로 쓰는 utility

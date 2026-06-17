@@ -119,6 +119,7 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 		TestEqual(TEXT("robot start x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.X, 0.0);
 		TestEqual(TEXT("robot goal x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.X, 1000.0);
 		TestTrue(TEXT("robot has route"), RobotSpec->DeliveryBot.bHasStartLocation && RobotSpec->DeliveryBot.bHasGoalLocation);
+		TestTrue(TEXT("robot setup has goal"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bHasGoal);
 	}
 
 	TestFalse(TEXT("spec hash populated"), Result.WorldSpec.SpecHash.IsEmpty());

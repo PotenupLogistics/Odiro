@@ -393,6 +393,7 @@ namespace
 		RobotSpec.DeliveryBot.bHasGoalLocation = true;
 		RobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = StartPose.LocationCm;
 		RobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = GoalPose.LocationCm;
+		RobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.bHasGoal = true;
 		RobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
 		RobotSpec.Properties.Add(TEXT("sample_start_segment"), MakeRuntimeStringParam(Semantic.Robot.Start.SegmentId));
 		RobotSpec.Properties.Add(TEXT("sample_goal_segment"), MakeRuntimeStringParam(Semantic.Robot.Goal.SegmentId));

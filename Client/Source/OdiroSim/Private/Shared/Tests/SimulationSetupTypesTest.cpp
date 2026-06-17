@@ -7,6 +7,7 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 
 namespace
@@ -24,6 +25,56 @@ namespace
 		}
 
 		return false;
+	}
+
+	bool SaveSimulationTestFile(const FString& filePath, const FString& contents)
+	{
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(filePath), true);
+		return FFileHelper::SaveStringToFile(contents, *filePath);
+	}
+
+	bool WriteValidUserProjectRunSnapshot(const FString& projectPath)
+	{
+		const FUserProjectRunSnapshotPaths paths = FUserProjectRunSnapshot::BuildPaths(projectPath, TEXT("000001"));
+		IFileManager::Get().MakeDirectory(*paths.ReviewPath, true);
+		IFileManager::Get().MakeDirectory(*paths.EpisodesPath, true);
+		IFileManager::Get().MakeDirectory(*paths.PolicyPath, true);
+
+		return SaveSimulationTestFile(
+				paths.SettingPath,
+				TEXT("{")
+				TEXT("\"schema\":\"project_setting\",")
+				TEXT("\"version\":1,")
+				TEXT("\"project_id\":\"automation_project\",")
+				TEXT("\"sampling\":{\"base_seed\":1000,\"episode_count\":3,\"generator_version\":\"0.1.0\"},")
+				TEXT("\"runtime\":{\"map_id\":\"ScenarioSimulationMap\",\"fixed_fps\":45,\"time_scale\":1.0,\"max_duration_s\":60},")
+				TEXT("\"evaluation\":{\"goal_acceptance_radius_m\":1.0,\"tip_over_angle_deg\":60,\"near_miss_distance_m\":0.5}")
+				TEXT("}"))
+			&& SaveSimulationTestFile(
+				paths.ProfilePath,
+				TEXT("{")
+				TEXT("\"schema\":\"simulation_profile\",")
+				TEXT("\"version\":1,")
+				TEXT("\"profile_id\":\"automation_profile\",")
+				TEXT("\"display_name\":\"Automation\",")
+				TEXT("\"description\":\"Automation profile\",")
+				TEXT("\"robot\":{}")
+				TEXT("}"))
+			&& SaveSimulationTestFile(
+				paths.ScenarioPath,
+				TEXT("{")
+				TEXT("\"schema\":\"scenario\",")
+				TEXT("\"version\":1,")
+				TEXT("\"scenario_id\":\"automation_scenario\",")
+				TEXT("\"intent\":\"Automation\",")
+				TEXT("\"corridor\":{},")
+				TEXT("\"obstacles\":{},")
+				TEXT("\"pedestrians\":{},")
+				TEXT("\"robot\":{}")
+				TEXT("}"))
+			&& SaveSimulationTestFile(
+				paths.PolicyEntrypointPath,
+				TEXT("def create_policy():\n    return None\n"));
 	}
 }
 
@@ -68,14 +119,14 @@ bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters
 
 	TestTrue(TEXT("playable setup parses"), setupResult.bSuccess);
 	TestEqual(TEXT("playable map id"), setupResult.Setup.MapId, FString(TEXT("ScenarioSimulationMap")));
-	TestEqual(TEXT("playable run queue"), setupResult.Setup.RunQueueJsonPath, FString(TEXT("Json/Input/ScenarioRunQueuePlayable.json")));
+	TestEqual(TEXT("playable run queue"), setupResult.Setup.RunQueueJsonPath, FString(TEXT("Json/Input/SimulationSetupPlayable_RunQueue.json")));
 
 	FString runQueueJson;
 	TestTrue(
 		TEXT("playable run queue loads"),
 		FFileHelper::LoadFileToString(
 			runQueueJson,
-			*FSimulationSetupJson::ResolveProjectPath(TEXT("Json/Input/ScenarioRunQueuePlayable.json"))));
+			*FSimulationSetupJson::ResolveProjectPath(setupResult.Setup.RunQueueJsonPath)));
 
 	TArray<FScenarioRunInput> runInputs;
 	TArray<FString> runQueueDiagnostics;
@@ -88,7 +139,7 @@ bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters
 	TestEqual(
 		TEXT("playable policy spec path"),
 		runInputs[0].PolicySpecJsonPath,
-		FString(TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json")));
+		FString(TEXT("Json/Input/PolicySpecs/PolicySpec_NormalOnly.json")));
 
 	const UDeliveryBotSetupCompiler* deliveryBotCompiler = NewObject<UDeliveryBotSetupCompiler>();
 	const FDeliveryBotSetupCompileResult deliveryBotResult =
@@ -227,6 +278,48 @@ bool FSimulationSetupRunOutputPathsTest::RunTest(const FString& parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUserProjectRunSnapshotParseTest,
+	"OdiroSim.UserProjectRun.Snapshot.Parse",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUserProjectRunSnapshotParseTest::RunTest(const FString& parameters)
+{
+	const FString projectPath = FPaths::Combine(
+		FPaths::ProjectSavedDir(),
+		TEXT("Automation/UserProjectRunSnapshot"),
+		FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	TestTrue(TEXT("write project snapshot"), WriteValidUserProjectRunSnapshot(projectPath));
+
+	const FUserProjectRunSnapshotParseResult result = FUserProjectRunSnapshot::Parse(projectPath, TEXT("000001"));
+
+	TestTrue(TEXT("snapshot parses"), result.bSuccess);
+	TestEqual(TEXT("run id"), result.Paths.RunId, FString(TEXT("000001")));
+	TestEqual(TEXT("map id"), result.Setting.MapId, FString(TEXT("ScenarioSimulationMap")));
+	TestEqual(TEXT("fixed fps"), result.Setting.FixedFps, 45);
+	TestEqual(TEXT("episode count"), result.Setting.EpisodeCount, 3);
+	TestTrue(TEXT("policy entrypoint path"), result.Paths.PolicyEntrypointPath.EndsWith(TEXT("snapshot/policy/__init__.py")));
+
+	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUserProjectRunSnapshotInvalidRunIdTest,
+	"OdiroSim.UserProjectRun.Snapshot.InvalidRunId",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUserProjectRunSnapshotInvalidRunIdTest::RunTest(const FString& parameters)
+{
+	const FUserProjectRunSnapshotParseResult result =
+		FUserProjectRunSnapshot::Parse(TEXT("X:/Projects/DeliveryBotA"), TEXT("run-001"));
+
+	TestFalse(TEXT("snapshot fails"), result.bSuccess);
+	TestTrue(TEXT("invalid run id diagnostic"), HasSimulationDiagnosticCode(result.Diagnostics, TEXT("invalid_run_id")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSimulationSetupJsonMissingFileTest,
 	"OdiroSim.SimulationSetup.Json.MissingFile",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -261,6 +354,33 @@ bool FSimulationCommandLineParseTest::RunTest(const FString& parameters)
 		simulatorResult.Options.SimulationSetupFile,
 		FString(TEXT("Json/Input/SimulationSetupSample.json")));
 	TestEqual(TEXT("run id"), simulatorResult.Options.RunId, FString(TEXT("sample-run-001")));
+
+	const FSimulationCommandLineParseResult projectRunResult =
+		FSimulationCommandLine::Parse(TEXT("-unattended -OdiroProject=\"X:/Projects/DeliveryBotA\" -RunId=000001 -PolicyPort=18124"));
+
+	TestTrue(TEXT("project run command succeeds"), projectRunResult.bSuccess);
+	TestTrue(TEXT("project run enabled"), projectRunResult.Options.bProjectRun);
+	TestFalse(TEXT("project run does not use legacy simulate"), projectRunResult.Options.bSimulate);
+	TestEqual(
+		TEXT("project path"),
+		projectRunResult.Options.ProjectPath,
+		FString(TEXT("X:/Projects/DeliveryBotA")));
+	TestEqual(TEXT("project run id"), projectRunResult.Options.RunId, FString(TEXT("000001")));
+	TestEqual(TEXT("project policy port"), projectRunResult.Options.PolicyPort, 18124);
+
+	const FSimulationCommandLineParseResult invalidProjectRunIdResult =
+		FSimulationCommandLine::Parse(TEXT("-OdiroProject=X:/Projects/DeliveryBotA -RunId=run-001"));
+	TestFalse(TEXT("invalid project run id fails"), invalidProjectRunIdResult.bSuccess);
+	TestTrue(
+		TEXT("invalid run id diagnostic"),
+		HasSimulationDiagnosticCode(invalidProjectRunIdResult.Diagnostics, TEXT("invalid_run_id")));
+
+	const FSimulationCommandLineParseResult invalidPolicyPortResult =
+		FSimulationCommandLine::Parse(TEXT("-OdiroProject=X:/Projects/DeliveryBotA -RunId=000001 -PolicyPort=0"));
+	TestFalse(TEXT("invalid policy port fails"), invalidPolicyPortResult.bSuccess);
+	TestTrue(
+		TEXT("invalid policy port diagnostic"),
+		HasSimulationDiagnosticCode(invalidPolicyPortResult.Diagnostics, TEXT("invalid_policy_port")));
 
 	const FSimulationCommandLineParseResult nonSimulatorResult =
 		FSimulationCommandLine::Parse(TEXT("-unattended -NoSplash"));

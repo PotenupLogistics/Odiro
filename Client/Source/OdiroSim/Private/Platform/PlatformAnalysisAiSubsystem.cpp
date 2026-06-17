@@ -2,6 +2,7 @@
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "HAL/FileManager.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
@@ -341,6 +342,7 @@ bool UPlatformAnalysisAiSubsystem::RequestAnalysisForReport(
 	}
 
 	PendingRequestId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
+	PendingReviewOutputPath.Reset();
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetURL(AnalysisEndpointUrl);
@@ -382,6 +384,75 @@ bool UPlatformAnalysisAiSubsystem::RequestAnalysisForReport(
 	return true;
 }
 
+bool UPlatformAnalysisAiSubsystem::RequestAnalysisForProjectRun(
+	const FString& projectPath,
+	const FString& runId)
+{
+	if (PendingHttpRequest.IsValid())
+	{
+		BroadcastFailure(0, TEXT("An AI analysis request is already pending."));
+		return false;
+	}
+
+	if (ProjectRunAnalysisEndpointUrl.TrimStartAndEnd().IsEmpty())
+	{
+		BroadcastFailure(0, TEXT("Project run AI analysis endpoint URL is empty."));
+		return false;
+	}
+
+	FString RequestJson;
+	TArray<FString> Diagnostics;
+	if (!BuildAnalysisRequestJsonForProjectRun(projectPath, runId, RequestJson, Diagnostics))
+	{
+		BroadcastFailure(0, JoinLines(Diagnostics));
+		return false;
+	}
+
+	const FUserProjectRunSnapshotPaths Paths = FUserProjectRunSnapshot::BuildPaths(projectPath, runId);
+	PendingRequestId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
+	PendingReviewOutputPath = FPaths::Combine(Paths.ReviewPath, TEXT("analysis_run_response_v2.json"));
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+	Request->SetURL(ProjectRunAnalysisEndpointUrl);
+	Request->SetVerb(TEXT("POST"));
+	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+	Request->SetContentAsString(RequestJson);
+	Request->SetTimeout(RequestTimeoutSeconds);
+
+	TWeakObjectPtr<UPlatformAnalysisAiSubsystem> WeakThis = this;
+	const FString CapturedRequestId = PendingRequestId;
+	Request->OnProcessRequestComplete().BindLambda(
+		[WeakThis, CapturedRequestId](FHttpRequestPtr HttpRequest, FHttpResponsePtr HttpResponse, bool bWasSuccessful)
+		{
+			if (!WeakThis.IsValid())
+			{
+				return;
+			}
+
+			WeakThis->HandleAnalysisResponse(CapturedRequestId, HttpRequest, HttpResponse, bWasSuccessful);
+		});
+
+	PendingHttpRequest = Request;
+	if (!Request->ProcessRequest())
+	{
+		PendingHttpRequest.Reset();
+		PendingRequestId.Reset();
+		PendingReviewOutputPath.Reset();
+		BroadcastFailure(0, TEXT("Failed to start project run AI analysis request."));
+		return false;
+	}
+
+	UE_LOG(
+		LogPlatformAnalysisAi,
+		Log,
+		TEXT("Project run AI analysis request started | Url: %s, Project: %s, RunId: %s"),
+		*ProjectRunAnalysisEndpointUrl,
+		*projectPath,
+		*runId);
+
+	return true;
+}
+
 void UPlatformAnalysisAiSubsystem::CancelPendingAnalysisRequest()
 {
 	if (!PendingHttpRequest.IsValid())
@@ -393,6 +464,7 @@ void UPlatformAnalysisAiSubsystem::CancelPendingAnalysisRequest()
 	PendingHttpRequest->CancelRequest();
 	PendingHttpRequest.Reset();
 	PendingRequestId.Reset();
+	PendingReviewOutputPath.Reset();
 }
 
 bool UPlatformAnalysisAiSubsystem::ExtractSetupPathsFromReportJson(
@@ -502,6 +574,45 @@ bool UPlatformAnalysisAiSubsystem::BuildAnalysisRequestJsonFromReport(
 	return true;
 }
 
+bool UPlatformAnalysisAiSubsystem::BuildAnalysisRequestJsonForProjectRun(
+	const FString& projectPath,
+	const FString& runId,
+	FString& outRequestJson,
+	TArray<FString>& outDiagnostics)
+{
+	outRequestJson.Reset();
+	outDiagnostics.Reset();
+
+	const FUserProjectRunSnapshotParseResult SnapshotResult = FUserProjectRunSnapshot::Parse(projectPath, runId);
+	if (!SnapshotResult.bSuccess)
+	{
+		for (const FScenarioCompileDiagnostic& Diagnostic : SnapshotResult.Diagnostics)
+		{
+			outDiagnostics.Add(Diagnostic.Message);
+		}
+		return false;
+	}
+
+	if (!FPaths::FileExists(SnapshotResult.Paths.SummaryPath))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("summary.json file not found: %s"), *SnapshotResult.Paths.SummaryPath));
+		return false;
+	}
+
+	TSharedRef<FJsonObject> RequestObject = MakeShared<FJsonObject>();
+	RequestObject->SetStringField(TEXT("project_path"), SnapshotResult.Paths.ProjectPath);
+	RequestObject->SetStringField(TEXT("run_id"), SnapshotResult.Paths.RunId);
+
+	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&outRequestJson);
+	if (!FJsonSerializer::Serialize(RequestObject, Writer))
+	{
+		outDiagnostics.Add(TEXT("Project run AI analysis request JSON serialization failed."));
+		return false;
+	}
+
+	return true;
+}
+
 FString UPlatformAnalysisAiSubsystem::BuildDisplayTextFromAnalysisResponse(
 	const FString& responseBody,
 	TArray<FString>& outDiagnostics)
@@ -563,6 +674,8 @@ void UPlatformAnalysisAiSubsystem::HandleAnalysisResponse(
 
 	PendingHttpRequest.Reset();
 	PendingRequestId.Reset();
+	const FString ReviewOutputPath = PendingReviewOutputPath;
+	PendingReviewOutputPath.Reset();
 
 	const int32 ResponseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode() : 0;
 	const FString ResponseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString();
@@ -577,6 +690,19 @@ void UPlatformAnalysisAiSubsystem::HandleAnalysisResponse(
 		const FString Message = FString::Printf(TEXT("AI analysis HTTP error: %d"), ResponseCode);
 		BroadcastFailure(ResponseCode, Message, ResponseBody);
 		return;
+	}
+
+	if (!ReviewOutputPath.IsEmpty())
+	{
+		const FString ReviewDirectory = FPaths::GetPath(ReviewOutputPath);
+		if (!IFileManager::Get().MakeDirectory(*ReviewDirectory, true)
+			|| !FFileHelper::SaveStringToFile(
+				ResponseBody,
+				*ReviewOutputPath,
+				FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			UE_LOG(LogPlatformAnalysisAi, Warning, TEXT("AI analysis review snapshot write failed: %s"), *ReviewOutputPath);
+		}
 	}
 
 	TArray<FString> Diagnostics;

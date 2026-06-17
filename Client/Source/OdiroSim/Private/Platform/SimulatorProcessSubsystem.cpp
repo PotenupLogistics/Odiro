@@ -1,7 +1,9 @@
 
 #include "Platform/SimulatorProcessSubsystem.h"
 #include "Episode/EpisodeMeasurementLogSubsystem.h"
+#include "HAL/PlatformMisc.h"
 #include "Scenario/ScenarioRunnerSubsystem.h"
+#include "Shared/UserProjectDataTypes.h"
 #include "Kismet/GameplayStatics.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSimulatorProcess, Log, All);
@@ -98,19 +100,107 @@ void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection
 				*diagnostic.Code,
 				*diagnostic.Message);
 		}
+		RequestProcessExitWithError(TEXT("Simulator command line parse failed."));
 		return;
 	}
 
-	if (!commandLineResult.Options.bSimulate)
+	if (!commandLineResult.Options.bSimulate && !commandLineResult.Options.bProjectRun)
 	{
 		return;
 	}
 
 	bSimulatorMode = true;
-	ActiveSetupPath = commandLineResult.Options.SimulationSetupFile;
+	bProjectRunMode = commandLineResult.Options.bProjectRun;
 	ActiveRunId = commandLineResult.Options.RunId.IsEmpty()
 		? FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens)
 		: commandLineResult.Options.RunId;
+
+	if (bProjectRunMode)
+	{
+		ActiveProjectPath = commandLineResult.Options.ProjectPath;
+		const FUserProjectRunSnapshotParseResult projectRunParseResult =
+			FUserProjectRunSnapshot::Parse(ActiveProjectPath, ActiveRunId);
+		ActiveProjectRunPaths = projectRunParseResult.Paths;
+		LogProjectRunDiagnostics(projectRunParseResult);
+		if (!projectRunParseResult.bSuccess)
+		{
+			RequestProcessExitWithError(TEXT("User project run snapshot validation failed."));
+			return;
+		}
+
+		TArray<FUserProjectEpisodeScenarioWriteResult> episodeScenarioResults;
+		TArray<FScenarioCompileDiagnostic> episodeScenarioDiagnostics;
+		ActiveProjectRunInputs.Reset();
+		if (!FUserProjectEpisodeScenarioJson::WriteAllEpisodeScenarios(
+				projectRunParseResult.Paths,
+				projectRunParseResult.Setting,
+				episodeScenarioResults,
+				episodeScenarioDiagnostics))
+		{
+			for (const FScenarioCompileDiagnostic& diagnostic : episodeScenarioDiagnostics)
+			{
+				UE_LOG(
+					LogSimulatorProcess,
+					Error,
+					TEXT("EpisodeScenario 생성 진단 | Code: %s, Message: %s"),
+					*diagnostic.Code,
+					*diagnostic.Message);
+			}
+			RequestProcessExitWithError(TEXT("EpisodeScenario generation failed."));
+			return;
+		}
+		for (const FUserProjectEpisodeScenarioWriteResult& episodeScenarioResult : episodeScenarioResults)
+		{
+			FScenarioRunInput runInput;
+			runInput.PairId = episodeScenarioResult.EpisodeId;
+			runInput.ScenarioSetupJsonPath = episodeScenarioResult.ScenarioPath;
+			runInput.DeliveryBotSetupJsonPath = projectRunParseResult.Paths.ProfilePath;
+			ActiveProjectRunInputs.Add(runInput);
+		}
+		if (ActiveProjectRunInputs.IsEmpty())
+		{
+			RequestProcessExitWithError(TEXT("Project run did not produce episode inputs."));
+			return;
+		}
+
+		ActiveProjectPath = ActiveProjectRunPaths.ProjectPath;
+		ActiveSetup = FSimulationSetup{};
+		ActiveSetup.MapId = projectRunParseResult.Setting.MapId;
+		ActiveSetup.FixedStep.Fps = projectRunParseResult.Setting.FixedFps;
+		ActiveSetup.MeasurementLog.bEnabled = false;
+		ActiveSetup.Report.bSaveEvaluationReportJson = false;
+		ActiveSetup.Report.OutputDirectory = ActiveProjectRunPaths.RunPath;
+
+		ApplyFixedStep();
+
+		PostWorldInitializationHandle = FWorldDelegates::OnPostWorldInitialization.AddUObject(
+			this,
+			&USimulatorProcessSubsystem::HandlePostWorldInitialization);
+		PostLoadMapHandle = FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(
+			this,
+			&USimulatorProcessSubsystem::HandlePostLoadMapWithWorld);
+
+		if (UGameInstance* gameInstance = GetGameInstance())
+		{
+			if (UWorld* world = gameInstance->GetWorld())
+			{
+				ProcessLoadedWorld(world);
+			}
+		}
+
+		UE_LOG(
+			LogSimulatorProcess,
+			Log,
+			TEXT("ProjectRun 활성화 | Project: %s, RunId: %s, MapId: %s, Snapshot: %s, EpisodeCount: %d"),
+			*ActiveProjectPath,
+			*ActiveRunId,
+			*ActiveSetup.MapId,
+			*ActiveProjectRunPaths.SnapshotPath,
+			projectRunParseResult.Setting.EpisodeCount);
+		return;
+	}
+
+	ActiveSetupPath = commandLineResult.Options.SimulationSetupFile;
 
 	const FSimulationSetupParseResult setupParseResult = FSimulationSetupJson::ParseFromFile(ActiveSetupPath);
 	ActiveSetup = setupParseResult.Setup;
@@ -122,6 +212,7 @@ void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	{
 		UE_LOG(LogSimulatorProcess, Error, TEXT("SimulatorMode 진입 실패: SimulationSetup 파싱 실패 | Path: %s"), *ActiveSetupPath);
 		WriteStatus(ESimulationRunState::Failed, TEXT("SimulationSetup parse failed."));
+		RequestProcessExitWithError(TEXT("SimulationSetup parse failed."));
 		return;
 	}
 
@@ -294,9 +385,18 @@ void USimulatorProcessSubsystem::ProcessLoadedWorld(UWorld* world)
 				TEXT("Simulator map load 후에도 target map이 아님 | Current: %s, Target: %s"),
 				*world->GetMapName(),
 				*ActiveSetup.MapId);
-			WriteStatus(
-				ESimulationRunState::Failed,
-				FString::Printf(TEXT("Loaded map '%s' did not match target '%s'."), *world->GetMapName(), *ActiveSetup.MapId));
+			const FString error = FString::Printf(
+				TEXT("Loaded map '%s' did not match target '%s'."),
+				*world->GetMapName(),
+				*ActiveSetup.MapId);
+			if (bProjectRunMode)
+			{
+				RequestProcessExitWithError(error);
+			}
+			else
+			{
+				WriteStatus(ESimulationRunState::Failed, error);
+			}
 			return;
 		}
 
@@ -365,7 +465,7 @@ void USimulatorProcessSubsystem::StartSimulationRun(UWorld* world)
 		return;
 	}
 
-	if (runnerSubsystem->IsRunningRunQueueJsonFile(ActiveSetup.RunQueueJsonPath))
+	if (!bProjectRunMode && runnerSubsystem->IsRunningRunQueueJsonFile(ActiveSetup.RunQueueJsonPath))
 	{
 		bRunStarted = true;
 		WriteStatusFromRunnerState(runnerSubsystem->GetRunnerState());
@@ -397,6 +497,37 @@ void USimulatorProcessSubsystem::StartSimulationRun(UWorld* world)
 	}
 
 	bRunStarted = true;
+	if (bProjectRunMode)
+	{
+		if (!runnerSubsystem->StartBatchFromRunInputsForRun(ActiveProjectRunInputs, ActiveRunId))
+		{
+			bRunStarted = false;
+			UE_LOG(
+				LogSimulatorProcess,
+				Error,
+				TEXT("Project run 시작 실패: episode input 실행 실패 | Project: %s, RunId: %s, Count: %d"),
+				*ActiveProjectPath,
+				*ActiveRunId,
+				ActiveProjectRunInputs.Num());
+			WriteStatus(
+				ESimulationRunState::Failed,
+				FString::Printf(TEXT("Project run inputs failed to start: %s"), *ActiveRunId));
+			return;
+		}
+
+		WriteStatusFromRunnerState(runnerSubsystem->GetRunnerState());
+
+		UE_LOG(
+			LogSimulatorProcess,
+			Log,
+			TEXT("Project run 시작 | Project: %s, RunId: %s, MapId: %s, Episodes: %d"),
+			*ActiveProjectPath,
+			*ActiveRunId,
+			*ActiveSetup.MapId,
+			ActiveProjectRunInputs.Num());
+		return;
+	}
+
 	if (!runnerSubsystem->StartBatchFromRunQueueJsonFileForRun(ActiveSetup.RunQueueJsonPath, ActiveRunId))
 	{
 		bRunStarted = false;
@@ -499,12 +630,40 @@ void USimulatorProcessSubsystem::HandleRunnerStateChanged(EScenarioRunnerState r
 		{
 			StopMeasurementLogging(gameInstance->GetWorld(), TEXT("simulation_completed"));
 		}
+		if (bProjectRunMode && BoundRunnerSubsystem)
+		{
+			TArray<FString> diagnostics;
+			if (!FUserProjectRunOutputJson::SaveRunSummary(
+					ActiveProjectRunPaths,
+					BoundRunnerSubsystem->GetRunRecords(),
+					diagnostics))
+			{
+				for (const FString& diagnostic : diagnostics)
+				{
+					UE_LOG(LogSimulatorProcess, Warning, TEXT("ProjectRun summary 저장 진단 | %s"), *diagnostic);
+				}
+			}
+		}
 	}
 	else if (runnerState == EScenarioRunnerState::Failed)
 	{
 		if (UGameInstance* gameInstance = GetGameInstance())
 		{
 			StopMeasurementLogging(gameInstance->GetWorld(), TEXT("simulation_failed"));
+		}
+		if (bProjectRunMode && BoundRunnerSubsystem)
+		{
+			TArray<FString> diagnostics;
+			if (!FUserProjectRunOutputJson::SaveRunSummary(
+					ActiveProjectRunPaths,
+					BoundRunnerSubsystem->GetRunRecords(),
+					diagnostics))
+			{
+				for (const FString& diagnostic : diagnostics)
+				{
+					UE_LOG(LogSimulatorProcess, Warning, TEXT("ProjectRun summary 저장 진단 | %s"), *diagnostic);
+				}
+			}
 		}
 	}
 	else if (runnerState == EScenarioRunnerState::Cancelled)
@@ -513,14 +672,50 @@ void USimulatorProcessSubsystem::HandleRunnerStateChanged(EScenarioRunnerState r
 		{
 			StopMeasurementLogging(gameInstance->GetWorld(), TEXT("simulation_canceled"));
 		}
+		if (bProjectRunMode && BoundRunnerSubsystem)
+		{
+			TArray<FString> diagnostics;
+			if (!FUserProjectRunOutputJson::SaveRunSummary(
+					ActiveProjectRunPaths,
+					BoundRunnerSubsystem->GetRunRecords(),
+					diagnostics))
+			{
+				for (const FString& diagnostic : diagnostics)
+				{
+					UE_LOG(LogSimulatorProcess, Warning, TEXT("ProjectRun summary 저장 진단 | %s"), *diagnostic);
+				}
+			}
+		}
 	}
 
 	WriteStatusFromRunnerState(runnerState);
+	if (bProjectRunMode && runnerState == EScenarioRunnerState::Completed)
+	{
+		RequestProjectRunProcessExit(true, TEXT("completed"));
+	}
+	else if (bProjectRunMode && runnerState == EScenarioRunnerState::Failed)
+	{
+		RequestProjectRunProcessExit(false, TEXT("failed"));
+	}
+	else if (bProjectRunMode && runnerState == EScenarioRunnerState::Cancelled)
+	{
+		RequestProjectRunProcessExit(false, TEXT("cancelled"));
+	}
 }
 
 void USimulatorProcessSubsystem::HandleRunRecordCompleted(const FEpisodeRunRecord& runRecord)
 {
-	(void)runRecord;
+	if (bProjectRunMode)
+	{
+		TArray<FString> diagnostics;
+		if (!FUserProjectRunOutputJson::SaveEpisodeArtifacts(ActiveProjectRunPaths, runRecord, diagnostics))
+		{
+			for (const FString& diagnostic : diagnostics)
+			{
+				UE_LOG(LogSimulatorProcess, Warning, TEXT("ProjectRun episode artifact 저장 진단 | %s"), *diagnostic);
+			}
+		}
+	}
 	WriteStatus(ESimulationRunState::Running);
 }
 
@@ -562,11 +757,61 @@ void USimulatorProcessSubsystem::LogSetupDiagnostics(const FSimulationSetupParse
 	}
 }
 
+void USimulatorProcessSubsystem::LogProjectRunDiagnostics(const FUserProjectRunSnapshotParseResult& parseResult) const
+{
+	for (const FScenarioCompileDiagnostic& diagnostic : parseResult.Diagnostics)
+	{
+		if (diagnostic.Severity == EScenarioCompileDiagnosticSeverity::Error)
+		{
+			UE_LOG(
+				LogSimulatorProcess,
+				Error,
+				TEXT("ProjectRun snapshot 진단 | Code: %s, Message: %s"),
+				*diagnostic.Code,
+				*diagnostic.Message);
+			continue;
+		}
+
+		UE_LOG(
+			LogSimulatorProcess,
+			Warning,
+			TEXT("ProjectRun snapshot 진단 | Code: %s, Message: %s"),
+			*diagnostic.Code,
+			*diagnostic.Message);
+	}
+}
+
+void USimulatorProcessSubsystem::RequestProcessExitWithError(const FString& error) const
+{
+	UE_LOG(LogSimulatorProcess, Error, TEXT("%s"), *error);
+	FPlatformMisc::RequestExitWithStatus(false, 1, TEXT("USimulatorProcessSubsystem::RequestProcessExitWithError"));
+}
+
+void USimulatorProcessSubsystem::RequestProjectRunProcessExit(bool bSuccess, const FString& reason)
+{
+	if (bProjectRunExitRequested)
+	{
+		return;
+	}
+
+	bProjectRunExitRequested = true;
+	UE_LOG(
+		LogSimulatorProcess,
+		Log,
+		TEXT("Project run process 종료 요청 | Success: %s, Reason: %s"),
+		bSuccess ? TEXT("true") : TEXT("false"),
+		*reason);
+	FPlatformMisc::RequestExitWithStatus(
+		false,
+		bSuccess ? 0 : 1,
+		TEXT("USimulatorProcessSubsystem::RequestProjectRunProcessExit"));
+}
+
 void USimulatorProcessSubsystem::InitializeStatus()
 {
 	ActiveStatus = FSimulationRunStatus{};
 	ActiveStatus.RunId = ActiveRunId;
-	ActiveStatus.SetupPath = ActiveSetupPath;
+	ActiveStatus.SetupPath = bProjectRunMode ? ActiveProjectRunPaths.SnapshotPath : ActiveSetupPath;
 	ActiveStatusPath = ActiveSetup.Status.OutputPath;
 	bStatusInitialized = true;
 	bStatusTerminal = false;
@@ -574,6 +819,12 @@ void USimulatorProcessSubsystem::InitializeStatus()
 
 void USimulatorProcessSubsystem::WriteStatus(ESimulationRunState state, const FString& error)
 {
+	if (bProjectRunMode)
+	{
+		// Project run process 생명주기 status는 Bridge가 소유한다.
+		return;
+	}
+
 	if (!bStatusInitialized)
 	{
 		return;

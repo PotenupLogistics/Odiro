@@ -786,11 +786,11 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 		}
 	}
 
+	setupInfo.LocationSetupInfo.bHasGoal = bHasGoal;
 	if (!bHasGoal)
 	{
 		goalLocation = setupInfo.LocationSetupInfo.StartLocationCm;
 		setupInfo.LocationSetupInfo.GoalLocationCm = goalLocation;
-		setupInfo.LocationSetupInfo.bHasGoal = bHasGoal;
 	}
 
 	const bool bRouteGridValid = ValidateDeliveryBotRouteOnGrid(

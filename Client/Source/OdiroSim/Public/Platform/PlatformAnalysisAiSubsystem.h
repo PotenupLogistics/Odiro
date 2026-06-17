@@ -30,7 +30,7 @@ struct ODIROSIM_API FPlatformAnalysisAiResponse
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlatformAnalysisAiCompletedNative, const FPlatformAnalysisAiResponse&);
 
-// Platform UI에서 evaluation report와 measurement log를 결과 분석 AI 서버로 보내는 클라이언트.
+// Platform UI에서 user project run을 결과 분석 AI 서버로 보내는 클라이언트.
 UCLASS(BlueprintType, Config = Game)
 class ODIROSIM_API UPlatformAnalysisAiSubsystem : public UGameInstanceSubsystem
 {
@@ -41,8 +41,12 @@ public:
 
 	FPlatformAnalysisAiCompletedNative OnAnalysisCompleted;
 
+	// Legacy report/log 분석 요청. MainMenu project mode에서는 사용하지 않는다.
 	UFUNCTION(BlueprintCallable, Category = "Platform|AI")
 	bool RequestAnalysisForReport(const FString& evaluationReportPath, const FString& measurementLogPath);
+
+	UFUNCTION(BlueprintCallable, Category = "Platform|AI")
+	bool RequestAnalysisForProjectRun(const FString& projectPath, const FString& runId);
 
 	UFUNCTION(BlueprintCallable, Category = "Platform|AI")
 	void CancelPendingAnalysisRequest();
@@ -63,12 +67,21 @@ public:
 		FString& outRequestJson,
 		TArray<FString>& outDiagnostics);
 
+	static bool BuildAnalysisRequestJsonForProjectRun(
+		const FString& projectPath,
+		const FString& runId,
+		FString& outRequestJson,
+		TArray<FString>& outDiagnostics);
+
 	static FString BuildDisplayTextFromAnalysisResponse(
 		const FString& responseBody,
 		TArray<FString>& outDiagnostics);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Config, Category = "Platform|AI")
 	FString AnalysisEndpointUrl = TEXT("http://127.0.0.1:8711/api/v1/analysis/run");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Config, Category = "Platform|AI")
+	FString ProjectRunAnalysisEndpointUrl = TEXT("http://127.0.0.1:8711/api/v2/analysis/run");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Config, Category = "Platform|AI", meta = (ClampMin = "1.0"))
 	float RequestTimeoutSeconds = 60.0f;
@@ -86,5 +99,6 @@ private:
 	void BroadcastFailure(int32 responseCode, const FString& message, const FString& responseBody = FString());
 
 	FString PendingRequestId;
+	FString PendingReviewOutputPath;
 	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> PendingHttpRequest;
 };

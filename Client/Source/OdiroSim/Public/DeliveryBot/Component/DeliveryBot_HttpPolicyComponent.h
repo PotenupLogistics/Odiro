@@ -47,6 +47,11 @@ private:
 private:
 	// Python 서버에 POST 요청을 보낸다
 	bool SendPostRequest(const FString& endpoint, const FString& payload, TFunction<void(FHttpResponsePtr, bool)> onComplete);
+	FString ResolveProjectEpisodeId() const; // project run의 현재 episode id를 가져온다
+	void WriteProjectActionRecord(
+		const TSharedPtr<FJsonObject>& requestObject,
+		const FHttpResponsePtr& response,
+		bool bActionSucceeded) const; // project actions.jsonl에 decide 결과를 기록한다
 
 	TSharedRef<FJsonObject> BuildLocationObject(const FVector& location, float yawDegree = 0.f) const; // 위치 JSON 객체를 만든다
 	bool BuildPythonGridObject(TSharedPtr<FJsonObject>& outGridObject) const; // Python 서버용 grid JSON 객체를 만든다
@@ -81,6 +86,7 @@ private:
 	FString LastScenarioResultJson;
 
 	int32 LastDecisionSequence{ 0 };
+	TSharedPtr<FJsonObject> LastDecisionRequestObject;
 
 	float StartRetryElapsedSeconds{ 0.f };
 	float DecideElapsedSeconds{ 0.f };

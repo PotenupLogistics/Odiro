@@ -920,6 +920,100 @@ bool USimulatorLaunchSubsystem::StartSimulationRun(const FString& setupPath, con
 	return true;
 }
 
+bool USimulatorLaunchSubsystem::StartProjectRun(const FString& projectPath, const FString& runId)
+{
+	if (ActiveProcessHandle.IsValid() && FPlatformProcess::IsProcRunning(ActiveProcessHandle))
+	{
+		ActiveRunInfo.LastError = TEXT("A simulator process is already running.");
+		BroadcastRunInfoChanged();
+		return false;
+	}
+
+	CloseActiveProcessHandle();
+
+	const FUserProjectRunSnapshotParseResult snapshotParseResult =
+		FUserProjectRunSnapshot::Parse(projectPath, runId);
+	if (!snapshotParseResult.bSuccess)
+	{
+		ActiveRunInfo = FSimulatorRunInfo{};
+		ActiveRunInfo.RunId = runId;
+		ActiveRunInfo.ProjectPath = projectPath;
+		ActiveRunInfo.bProjectRun = true;
+		ActiveRunInfo.Status.State = ESimulationRunState::Failed;
+		ActiveRunInfo.LastError = JoinDiagnostics(snapshotParseResult.Diagnostics);
+		BroadcastRunInfoChanged();
+		return false;
+	}
+
+	FString executable;
+	FString arguments;
+	bool bUsesPreviewLauncher = false;
+	if (!BuildProjectRunLaunchCommand(
+			snapshotParseResult.Paths.ProjectPath,
+			snapshotParseResult.Paths.RunId,
+			executable,
+			arguments,
+			bUsesPreviewLauncher))
+	{
+		ActiveRunInfo = FSimulatorRunInfo{};
+		ActiveRunInfo.RunId = snapshotParseResult.Paths.RunId;
+		ActiveRunInfo.ProjectPath = snapshotParseResult.Paths.ProjectPath;
+		ActiveRunInfo.StatusPath = snapshotParseResult.Paths.StatusPath;
+		ActiveRunInfo.bProjectRun = true;
+		MarkActiveRunFailed(TEXT("Project run launch command could not be built."));
+		return false;
+	}
+
+	ActiveRunInfo = FSimulatorRunInfo{};
+	ActiveRunInfo.RunId = snapshotParseResult.Paths.RunId;
+	ActiveRunInfo.ProjectPath = snapshotParseResult.Paths.ProjectPath;
+	ActiveRunInfo.StatusPath = snapshotParseResult.Paths.StatusPath;
+	ActiveRunInfo.LaunchExecutable = executable;
+	ActiveRunInfo.LaunchArguments = arguments;
+	ActiveRunInfo.bUsedPreviewLauncher = bUsesPreviewLauncher;
+	ActiveRunInfo.bProjectRun = true;
+	ActiveRunInfo.Status.RunId = snapshotParseResult.Paths.RunId;
+	ActiveRunInfo.Status.SetupPath = snapshotParseResult.Paths.SnapshotPath;
+	ActiveRunInfo.Status.State = ESimulationRunState::Pending;
+
+	uint32 processId = 0;
+	const FString workingDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	ActiveProcessHandle = FPlatformProcess::CreateProc(
+		*executable,
+		*arguments,
+		false,
+		false,
+		false,
+		&processId,
+		0,
+		*workingDirectory,
+		nullptr);
+
+	if (!ActiveProcessHandle.IsValid())
+	{
+		ActiveRunInfo.bProcessStarted = false;
+		MarkActiveRunFailed(FString::Printf(TEXT("Project run process start failed: %s"), *executable));
+		return false;
+	}
+
+	ActiveRunInfo.bProcessStarted = true;
+	ActiveRunInfo.bProcessRunning = true;
+	ActiveRunInfo.Status.State = ESimulationRunState::Running;
+	StartPolling();
+	BroadcastRunInfoChanged();
+
+	UE_LOG(
+		LogSimulatorLaunch,
+		Log,
+		TEXT("Project run process started | Project: %s, RunId: %s, Executable: %s, Arguments: %s"),
+		*snapshotParseResult.Paths.ProjectPath,
+		*snapshotParseResult.Paths.RunId,
+		*executable,
+		*arguments);
+
+	return true;
+}
+
 bool USimulatorLaunchSubsystem::CreateRuntimeSimulationSetupFile(
 	const FSimulationSetup& sourceSetup,
 	const FString& runId,
@@ -945,6 +1039,33 @@ bool USimulatorLaunchSubsystem::RefreshActiveRunStatus()
 	if (ActiveRunInfo.RunId.IsEmpty() && !ActiveRunInfo.bProcessStarted)
 	{
 		return false;
+	}
+
+	if (ActiveRunInfo.bProjectRun)
+	{
+		RefreshActiveProcessState();
+
+		if (ActiveRunInfo.bProcessStarted && !ActiveRunInfo.bProcessRunning)
+		{
+			ActiveRunInfo.Status.State = ActiveRunInfo.ProcessReturnCode == 0
+				? ESimulationRunState::Completed
+				: ESimulationRunState::Failed;
+			if (ActiveRunInfo.Status.State == ESimulationRunState::Failed && ActiveRunInfo.LastError.IsEmpty())
+			{
+				ActiveRunInfo.LastError = FString::Printf(
+					TEXT("Project run process exited with code %d."),
+					ActiveRunInfo.ProcessReturnCode);
+			}
+			StopPolling();
+			CloseActiveProcessHandle();
+		}
+		else if (ActiveRunInfo.bProcessStarted)
+		{
+			ActiveRunInfo.Status.State = ESimulationRunState::Running;
+		}
+
+		BroadcastRunInfoChanged();
+		return ActiveRunInfo.Status.State != ESimulationRunState::Failed;
 	}
 
 	FSimulationRunStatus status;
@@ -1050,6 +1171,15 @@ FString USimulatorLaunchSubsystem::BuildSimulatorArgumentString(const FString& s
 		SimulatorProcessFlags);
 }
 
+FString USimulatorLaunchSubsystem::BuildProjectRunSimulatorArgumentString(const FString& projectPath, const FString& runId)
+{
+	return FString::Printf(
+		TEXT("%s %s %s"),
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-OdiroProject=%s"), *projectPath)),
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
+		SimulatorProcessFlags);
+}
+
 FString USimulatorLaunchSubsystem::BuildPreviewLauncherArgumentString(
 	const FString& previewBatPath,
 	const FString& setupPath,
@@ -1060,6 +1190,20 @@ FString USimulatorLaunchSubsystem::BuildPreviewLauncherArgumentString(
 		TEXT("/d /s /c \"\"%s\" %s %s %s\""),
 		*previewBatPath,
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-Simulate=%s"), *setupPath)),
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
+		SimulatorProcessFlags);
+}
+
+FString USimulatorLaunchSubsystem::BuildProjectRunPreviewLauncherArgumentString(
+	const FString& previewBatPath,
+	const FString& projectPath,
+	const FString& runId)
+{
+	// cmd.exe quoting is intentionally centralized here; CreateProc receives cmd.exe as executable.
+	return FString::Printf(
+		TEXT("/d /s /c \"\"%s\" %s %s %s\""),
+		*previewBatPath,
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-OdiroProject=%s"), *projectPath)),
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
 		SimulatorProcessFlags);
 }
@@ -1219,6 +1363,29 @@ bool USimulatorLaunchSubsystem::BuildLaunchCommand(
 
 	outExecutable = FPlatformProcess::ExecutablePath();
 	outArguments = BuildSimulatorArgumentString(setupPath, runId);
+	return !outExecutable.IsEmpty();
+}
+
+bool USimulatorLaunchSubsystem::BuildProjectRunLaunchCommand(
+	const FString& projectPath,
+	const FString& runId,
+	FString& outExecutable,
+	FString& outArguments,
+	bool& bOutUsesPreviewLauncher) const
+{
+	bOutUsesPreviewLauncher = false;
+
+	FString previewBatPath;
+	if (ShouldUsePreviewLauncher(previewBatPath))
+	{
+		outExecutable = TEXT("cmd.exe");
+		outArguments = BuildProjectRunPreviewLauncherArgumentString(previewBatPath, projectPath, runId);
+		bOutUsesPreviewLauncher = true;
+		return true;
+	}
+
+	outExecutable = FPlatformProcess::ExecutablePath();
+	outArguments = BuildProjectRunSimulatorArgumentString(projectPath, runId);
 	return !outExecutable.IsEmpty();
 }
 

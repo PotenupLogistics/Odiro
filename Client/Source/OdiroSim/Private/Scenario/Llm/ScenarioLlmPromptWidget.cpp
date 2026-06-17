@@ -5,7 +5,6 @@
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/TextBlock.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
-#include "Scenario/ScenarioRunnerSubsystem.h"
 
 void UScenarioLlmPromptWidget::NativeOnInitialized()
 {
@@ -41,11 +40,12 @@ bool UScenarioLlmPromptWidget::GenerateFromPromptTextBox()
 	FString prompt;
 	if (!TryGetPrompt(prompt)) return false;
 
-	int32 scenarioCount = 0;
-	if (!TryGetScenarioCount(scenarioCount)) return false;
+	FString projectPath;
+	if (!TryGetProjectPath(projectPath)) return false;
+	llmSubsystem->SetTargetProjectPath(projectPath);
 
 	SetStatusText(TEXT("생성 요청 중."));
-	return llmSubsystem->GenerateScenariosFromPrompt(prompt, scenarioCount);
+	return llmSubsystem->GenerateScenariosFromPrompt(prompt, 1);
 }
 
 bool UScenarioLlmPromptWidget::LoadGeneratedScenario()
@@ -64,72 +64,22 @@ bool UScenarioLlmPromptWidget::LoadGeneratedScenario()
 		return false;
 	}
 
-	if (result.FirstScenarioSetupJsonPath.IsEmpty())
+	if (result.SavedScenarioJsonPath.IsEmpty())
 	{
-		SetStatusText(TEXT("생성된 RunQueue가 ScenarioSetup 경로를 포함하지 않습니다."));
+		SetStatusText(TEXT("저장된 scenario.json 경로가 없습니다."));
 		return false;
 	}
 
-	AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
-	if (!editorController)
-	{
-		SetStatusText(TEXT("소유 플레이어가 ScenarioEditorController가 아닙니다."));
-		return false;
-	}
-
-	FString resolvedJsonFilePath;
-	TArray<FString> diagnostics;
-	if (!editorController->LoadScenarioSetupJsonFile(
-			result.FirstScenarioSetupJsonPath,
-			resolvedJsonFilePath,
-			diagnostics))
-	{
-		SetStatusText(diagnostics.IsEmpty()
-			? FString::Printf(TEXT("생성된 ScenarioSetup 불러오기 실패: %s"), *result.FirstScenarioSetupJsonPath)
-			: FString::Printf(TEXT("ScenarioSetup 불러오기 실패:\n%s"), *FString::Join(diagnostics, TEXT("\n"))));
-		return false;
-	}
-
-	SetStatusText(FString::Printf(TEXT("ScenarioSetup 불러오기: %s"), *resolvedJsonFilePath));
+	SetStatusText(FString::Printf(
+		TEXT("scenario.json 저장 완료: %s"),
+		*result.SavedScenarioJsonPath));
 	return true;
 }
 
 bool UScenarioLlmPromptWidget::RunGeneratedSimulation()
 {
-	const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem();
-	if (!llmSubsystem) return false;
-
-	const FScenarioLlmGenerationResult result = llmSubsystem->GetLatestResult();
-	if (!result.bSuccess)
-	{
-		SetStatusText(TEXT("성공한 LLM 생성 결과가 없습니다."));
-		return false;
-	}
-
-	if (result.SavedRunQueueJsonPath.IsEmpty())
-	{
-		SetStatusText(TEXT("생성된 RunQueue 경로가 비어 있습니다."));
-		return false;
-	}
-
-	UGameInstance* gameInstance = GetGameInstance();
-	UScenarioRunnerSubsystem* runnerSubsystem = gameInstance
-		? gameInstance->GetSubsystem<UScenarioRunnerSubsystem>()
-		: nullptr;
-	if (!runnerSubsystem)
-	{
-		SetStatusText(TEXT("ScenarioRunnerSubsystem을 사용할 수 없습니다."));
-		return false;
-	}
-
-	if (!runnerSubsystem->StartBatchFromRunQueueJsonFile(result.SavedRunQueueJsonPath))
-	{
-		SetStatusText(FString::Printf(TEXT("생성된 RunQueue 실행 실패: %s"), *result.SavedRunQueueJsonPath));
-		return false;
-	}
-
-	SetStatusText(FString::Printf(TEXT("생성된 RunQueue 실행 시작: %s"), *result.SavedRunQueueJsonPath));
-	return true;
+	SetStatusText(TEXT("RunQueue 실행은 제거되었습니다. MainMenu에서 user project run을 시작하세요."));
+	return false;
 }
 
 void UScenarioLlmPromptWidget::SetStatusText(const FString& message)
@@ -166,9 +116,8 @@ void UScenarioLlmPromptWidget::HandleGenerationCompleted(const FScenarioLlmGener
 	}
 
 	SetStatusText(FString::Printf(
-		TEXT("%d개의 실행을 생성했습니다. 저장된 RunQueue: %s"),
-		result.RunCount,
-		*result.SavedRunQueueJsonPath));
+		TEXT("scenario 생성 완료: %s"),
+		*result.SavedScenarioJsonPath));
 
 	if (bLoadFirstScenarioAfterGenerate)
 	{
@@ -278,44 +227,29 @@ bool UScenarioLlmPromptWidget::TryGetPrompt(FString& outPrompt)
 	return true;
 }
 
-bool UScenarioLlmPromptWidget::TryGetScenarioCount(int32& outScenarioCount)
+bool UScenarioLlmPromptWidget::TryGetProjectPath(FString& outProjectPath)
 {
-	outScenarioCount = 0;
-	if (!ScenarioCountTextBox)
+	outProjectPath.Reset();
+	const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem();
+	if (!ProjectPathTextBox)
 	{
-		if (const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem())
+		if (llmSubsystem)
 		{
-			outScenarioCount = llmSubsystem->DefaultScenarioCount;
-			return true;
+			outProjectPath = llmSubsystem->GetResolvedTargetProjectPath().TrimStartAndEnd();
 		}
-
-		outScenarioCount = 1;
-		return true;
 	}
-
-	const FString text = ScenarioCountTextBox->GetText().ToString().TrimStartAndEnd();
-	if (text.IsEmpty())
+	else
 	{
-		if (const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem())
+		outProjectPath = ProjectPathTextBox->GetText().ToString().TrimStartAndEnd();
+		if (outProjectPath.IsEmpty() && llmSubsystem)
 		{
-			outScenarioCount = llmSubsystem->DefaultScenarioCount;
-			return true;
+			outProjectPath = llmSubsystem->GetResolvedTargetProjectPath().TrimStartAndEnd();
 		}
-
-		outScenarioCount = 1;
-		return true;
 	}
 
-	if (!text.IsNumeric())
+	if (outProjectPath.IsEmpty())
 	{
-		SetStatusText(TEXT("생성 횟수는 정수여야 합니다."));
-		return false;
-	}
-
-	outScenarioCount = FCString::Atoi(*text);
-	if (outScenarioCount <= 0)
-	{
-		SetStatusText(TEXT("생성 횟수는 1 이상이어야 합니다."));
+		SetStatusText(TEXT("User project root를 입력해야 scenario.json을 저장할 수 있습니다."));
 		return false;
 	}
 

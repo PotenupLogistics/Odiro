@@ -2,6 +2,7 @@
 
 #include "Platform/SimulatorLaunchSubsystem.h"
 
+#include "Engine/GameInstance.h"
 #include "Misc/AutomationTest.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -11,22 +12,24 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSimulatorLaunchCommandLineBuildTest::RunTest(const FString& parameters)
 {
-	// Launcher는 simulator public 계약만 넘기고 fixed-step은 SimulationSetup JSON에만 둔다.
-	const FString simulatorArguments = USimulatorLaunchSubsystem::BuildSimulatorArgumentString(
-		TEXT("Json/Input/SimulationSetupSample.json"),
-		TEXT("run-001"));
-	TestTrue(TEXT("simulator passes simulate setup"), simulatorArguments.Contains(TEXT("\"-Simulate=Json/Input/SimulationSetupSample.json\"")));
-	TestTrue(TEXT("simulator passes run id"), simulatorArguments.Contains(TEXT("\"-RunId=run-001\"")));
+	// Launcher는 project/run만 넘기고 실행 설정은 run snapshot에서 읽는다.
+	const FString simulatorArguments = USimulatorLaunchSubsystem::BuildProjectRunSimulatorArgumentString(
+		TEXT("X:/Projects/DeliveryBotA"),
+		TEXT("000001"));
+	TestTrue(TEXT("simulator passes project path"), simulatorArguments.Contains(TEXT("\"-OdiroProject=X:/Projects/DeliveryBotA\"")));
+	TestTrue(TEXT("simulator passes run id"), simulatorArguments.Contains(TEXT("\"-RunId=000001\"")));
+	TestFalse(TEXT("simulator omits legacy simulate setup"), simulatorArguments.Contains(TEXT("-Simulate")));
 	TestFalse(TEXT("simulator omits fixed step args"), simulatorArguments.Contains(TEXT("UseFixedTimeStep")));
 
 	// 개발 fallback도 packaged exe와 같은 public args를 유지해야 한다.
-	const FString previewArguments = USimulatorLaunchSubsystem::BuildPreviewLauncherArgumentString(
+	const FString previewArguments = USimulatorLaunchSubsystem::BuildProjectRunPreviewLauncherArgumentString(
 		TEXT("Task-RunPreview.bat"),
-		TEXT("Json/Input/SimulationSetupSample.json"),
-		TEXT("run-001"));
+		TEXT("X:/Projects/DeliveryBotA"),
+		TEXT("000001"));
 	TestTrue(TEXT("preview uses cmd run wrapper"), previewArguments.StartsWith(TEXT("/d /s /c \"\"")));
-	TestTrue(TEXT("preview passes simulate setup"), previewArguments.Contains(TEXT("\"-Simulate=Json/Input/SimulationSetupSample.json\"")));
-	TestTrue(TEXT("preview passes run id"), previewArguments.Contains(TEXT("\"-RunId=run-001\"")));
+	TestTrue(TEXT("preview passes project path"), previewArguments.Contains(TEXT("\"-OdiroProject=X:/Projects/DeliveryBotA\"")));
+	TestTrue(TEXT("preview passes run id"), previewArguments.Contains(TEXT("\"-RunId=000001\"")));
+	TestFalse(TEXT("preview omits legacy simulate setup"), previewArguments.Contains(TEXT("-Simulate")));
 
 	return true;
 }
@@ -43,6 +46,33 @@ bool FSimulatorLaunchRunStateTerminalTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("completed is terminal"), USimulatorLaunchSubsystem::IsTerminalRunState(ESimulationRunState::Completed));
 	TestTrue(TEXT("failed is terminal"), USimulatorLaunchSubsystem::IsTerminalRunState(ESimulationRunState::Failed));
 	TestTrue(TEXT("canceled is terminal"), USimulatorLaunchSubsystem::IsTerminalRunState(ESimulationRunState::Canceled));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimulatorLaunchProjectRunValidationTest,
+	"OdiroSim.SimulatorLaunch.ProjectRun.Validation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimulatorLaunchProjectRunValidationTest::RunTest(const FString& parameters)
+{
+	UGameInstance* gameInstance = NewObject<UGameInstance>();
+	USimulatorLaunchSubsystem* subsystem = NewObject<USimulatorLaunchSubsystem>(gameInstance);
+	TestNotNull(TEXT("subsystem created"), subsystem);
+	if (!subsystem)
+	{
+		return false;
+	}
+
+	const bool bStarted = subsystem->StartProjectRun(TEXT("X:/Odiro/MissingProject"), TEXT("000001"));
+	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
+
+	TestFalse(TEXT("missing project does not start"), bStarted);
+	TestTrue(TEXT("run info records project mode"), runInfo.bProjectRun);
+	TestEqual(TEXT("run id recorded"), runInfo.RunId, FString(TEXT("000001")));
+	TestEqual(TEXT("failed state"), runInfo.Status.State, ESimulationRunState::Failed);
+	TestFalse(TEXT("error recorded"), runInfo.LastError.IsEmpty());
 
 	return true;
 }

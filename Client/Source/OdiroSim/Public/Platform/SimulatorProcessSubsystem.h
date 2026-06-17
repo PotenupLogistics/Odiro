@@ -10,7 +10,7 @@
 
 class UScenarioRunnerSubsystem;
 
-// `-Simulate=<SimulationSetupFile>` process를 감지하고 simulator bootstrap을 수행하는 subsystem
+// simulator public command line을 감지하고 runtime bootstrap을 수행하는 subsystem
 UCLASS(BlueprintType)
 class ODIROSIM_API USimulatorProcessSubsystem : public UGameInstanceSubsystem
 {
@@ -20,13 +20,21 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
-	// 현재 process가 `-Simulate` 계약으로 실행 중이면 true
+	// 현재 process가 simulator 계약으로 실행 중이면 true
 	UFUNCTION(BlueprintPure, Category = "Simulation|Process")
 	bool IsSimulatorMode() const { return bSimulatorMode; }
+
+	// 현재 process가 user project run snapshot으로 실행 중이면 true
+	UFUNCTION(BlueprintPure, Category = "Simulation|Process")
+	bool IsProjectRunMode() const { return bProjectRunMode; }
 
 	// SimulatorMode에서 읽은 setup 값
 	UFUNCTION(BlueprintPure, Category = "Simulation|Process")
 	FSimulationSetup GetActiveSetup() const { return ActiveSetup; }
+
+	// ProjectRunMode에서 읽은 user project root
+	UFUNCTION(BlueprintPure, Category = "Simulation|Process")
+	FString GetActiveProjectPath() const { return ActiveProjectPath; }
 
 	// 현재 process에 전달된 optional run id
 	UFUNCTION(BlueprintPure, Category = "Simulation|Process")
@@ -67,9 +75,15 @@ private:
 	void WriteStatusFromRunnerState(EScenarioRunnerState runnerState, const FString& error = FString());
 	void RefreshStatusFromRunner(const UScenarioRunnerSubsystem* runnerSubsystem);
 	void RefreshStatusFromWorld(UWorld* world);
+	void LogProjectRunDiagnostics(const FUserProjectRunSnapshotParseResult& parseResult) const;
+	void RequestProcessExitWithError(const FString& error) const;
+	void RequestProjectRunProcessExit(bool bSuccess, const FString& reason);
 
 	UPROPERTY(Transient)
 	bool bSimulatorMode = false;
+
+	UPROPERTY(Transient)
+	bool bProjectRunMode = false;
 
 	UPROPERTY(Transient)
 	bool bMapLoadRequested = false;
@@ -84,10 +98,22 @@ private:
 	bool bReplacingExistingRunnerBatch = false;
 
 	UPROPERTY(Transient)
+	bool bProjectRunExitRequested = false;
+
+	UPROPERTY(Transient)
 	FSimulationSetup ActiveSetup;
 
 	UPROPERTY(Transient)
 	FString ActiveSetupPath;
+
+	UPROPERTY(Transient)
+	FString ActiveProjectPath;
+
+	UPROPERTY(Transient)
+	FUserProjectRunSnapshotPaths ActiveProjectRunPaths;
+
+	UPROPERTY(Transient)
+	TArray<FScenarioRunInput> ActiveProjectRunInputs;
 
 	UPROPERTY(Transient)
 	FString ActiveRunId;

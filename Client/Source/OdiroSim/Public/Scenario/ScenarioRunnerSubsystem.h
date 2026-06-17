@@ -30,6 +30,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	bool StartBatchFromRunInputs(const TArray<FScenarioRunInput>& runInputs);
 
+	// Starts direct run inputs under one externally-owned run id.
+	bool StartBatchFromRunInputsForRun(const TArray<FScenarioRunInput>& runInputs, const FString& activeRunId);
+
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	bool StartBatchFromRunQueueJsonFile(const FString& runQueueJsonFilePath);
 

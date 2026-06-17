@@ -2,11 +2,16 @@
 #include "Scenario/ScenarioRunnerSubsystem.h"
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
+#include "Episode/EpisodeMeasurementLogSubsystem.h"
 #include "Scenario/ScenarioCompiler.h"
 #include "Scenario/ScenarioEvaluationSubsystem.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Scenario/ScenarioSimulationSubsystem.h"
+#include "Scenario/UserProjectEpisodeScenarioWorldSpecAdapter.h"
+#include "Misc/Paths.h"
 #include "Shared/EpisodeEvaluationReportJson.h"
+#include "Shared/SimulationSetupTypes.h"
+#include "Shared/UserProjectDataTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioRunner, Log, All);
 
@@ -58,6 +63,62 @@ namespace
 			ToRunnerCompileSeverityString(diagnostic.Severity),
 			*diagnostic.Code,
 			*diagnostic.Message);
+	}
+
+	FString BuildProjectTracePathForEpisode(const FString& episodeId)
+	{
+		const FSimulationCommandLineParseResult commandLineResult = FSimulationCommandLine::ParseCurrent();
+		if (!commandLineResult.bSuccess || !commandLineResult.Options.bProjectRun)
+		{
+			return FString();
+		}
+
+		if (!FUserProjectEpisodeScenarioJson::IsValidEpisodeId(episodeId))
+		{
+			return FString();
+		}
+
+		const FUserProjectRunSnapshotPaths paths = FUserProjectRunSnapshot::BuildPaths(
+			commandLineResult.Options.ProjectPath,
+			commandLineResult.Options.RunId);
+		return FPaths::Combine(
+			FUserProjectRunOutputJson::BuildEpisodeDirectory(paths, episodeId),
+			TEXT("trace.jsonl"));
+	}
+
+	void StartProjectTraceLoggingForEpisode(UWorld* world, const FString& episodeId)
+	{
+		if (!IsValid(world))
+		{
+			return;
+		}
+
+		const FString tracePath = BuildProjectTracePathForEpisode(episodeId);
+		if (tracePath.IsEmpty())
+		{
+			return;
+		}
+
+		if (UEpisodeMeasurementLogSubsystem* measurementLogSubsystem = world->GetSubsystem<UEpisodeMeasurementLogSubsystem>())
+		{
+			if (!measurementLogSubsystem->StartProjectTraceLogging(tracePath))
+			{
+				UE_LOG(LogScenarioRunner, Warning, TEXT("Project trace 시작 실패 | Episode: %s, Trace: %s"), *episodeId, *tracePath);
+			}
+		}
+	}
+
+	void StopProjectTraceLogging(UWorld* world)
+	{
+		if (!IsValid(world))
+		{
+			return;
+		}
+
+		if (UEpisodeMeasurementLogSubsystem* measurementLogSubsystem = world->GetSubsystem<UEpisodeMeasurementLogSubsystem>())
+		{
+			measurementLogSubsystem->StopProjectTraceLogging();
+		}
 	}
 
 	FString ResolveRunnerJsonFilePath(const FString& jsonFilePath)
@@ -119,6 +180,11 @@ namespace
 		const FString& scenarioJsonPath,
 		const UScenarioCompiler* runtimeCompiler)
 	{
+		if (FUserProjectEpisodeScenarioWorldSpecAdapter::IsEpisodeScenarioFile(scenarioJsonPath))
+		{
+			return FUserProjectEpisodeScenarioWorldSpecAdapter::CompileScenarioWorldSpecFromEpisodeScenarioFile(scenarioJsonPath);
+		}
+
 		if (FScenarioSampleWorldSpecAdapter::IsScenarioSampleFile(scenarioJsonPath))
 		{
 			return FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleFile(scenarioJsonPath);
@@ -192,6 +258,13 @@ bool UScenarioRunnerSubsystem::StartScenarioPairFromJsonFiles(
 bool UScenarioRunnerSubsystem::StartBatchFromRunInputs(const TArray<FScenarioRunInput>& runInputs)
 {
 	return StartBatchFromRunInputsInternal(runInputs, FString(), FString());
+}
+
+bool UScenarioRunnerSubsystem::StartBatchFromRunInputsForRun(
+	const TArray<FScenarioRunInput>& runInputs,
+	const FString& activeRunId)
+{
+	return StartBatchFromRunInputsInternal(runInputs, FString(), activeRunId);
 }
 
 bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
@@ -386,6 +459,7 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunQueueJsonFileForRun(
 
 void UScenarioRunnerSubsystem::CancelRun()
 {
+	StopProjectTraceLogging(ResolveWorld());
 	PendingRunInputs.Reset();
 	ActiveRunQueueJsonFilePath.Reset();
 	ActiveBatchRunId.Reset();
@@ -396,6 +470,8 @@ void UScenarioRunnerSubsystem::CancelRun()
 		evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
 		evaluationSubsystem->StopEvaluation();
 	}
+
+	StopProjectTraceLogging(ResolveWorld());
 
 	if (UScenarioSimulationSubsystem* simulationSubsystem = ResolveSimulationSubsystem())
 	{
@@ -773,8 +849,11 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
 	evaluationSubsystem->OnEpisodeEnded.AddDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
 
+	StartProjectTraceLoggingForEpisode(world, runtimeContext.EpisodeId);
+
 	if (!evaluationSubsystem->StartEvaluation(compileResult.WorldSpec.EvaluationConfig, runtimeContext, timeLimitSeconds))
 	{
+		StopProjectTraceLogging(world);
 		evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
 		UE_LOG(LogScenarioRunner, Warning, TEXT("평가 시작 실패 | RunId: %s, Episode: %s"), *CurrentRecord.RunId, *runtimeContext.EpisodeId);
 		CompleteCurrentRecord(

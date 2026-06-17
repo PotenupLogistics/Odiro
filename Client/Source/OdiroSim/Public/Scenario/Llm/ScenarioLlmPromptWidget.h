@@ -57,7 +57,7 @@ private:
 	void RequestEditorWidgetInputMode();
 	void ReleaseEditorWidgetInputMode();
 	bool TryGetPrompt(FString& outPrompt);
-	bool TryGetScenarioCount(int32& outScenarioCount);
+	bool TryGetProjectPath(FString& outProjectPath);
 	UWidget* ResolveInputModeFocusWidget();
 	UScenarioLlmAuthoringSubsystem* GetLlmAuthoringSubsystem() const;
 
@@ -68,7 +68,7 @@ private:
 	TObjectPtr<UMultiLineEditableTextBox> PromptTextBox;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableTextBox> ScenarioCountTextBox;
+	TObjectPtr<UEditableTextBox> ProjectPathTextBox;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> GenerateButton;

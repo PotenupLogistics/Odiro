@@ -79,7 +79,7 @@ specs:
 
 ## 작업 단계
 
-### T01 계약 문서 정리
+### T01 계약 문서 정리 [완료]
 
 목적:
 
@@ -100,7 +100,7 @@ specs:
 - 오래된 용어 검색
 - `git diff --check`
 
-### T02 Project template 정리
+### T02 Project template 정리 [완료]
 
 목적:
 
@@ -119,7 +119,7 @@ specs:
 - Bridge build
 - 개발/배포 내용 비교
 
-### T03 Run 기본 폴더
+### T03 Run 기본 폴더 [완료]
 
 목적:
 
@@ -131,11 +131,12 @@ specs:
 - 배포 원본: `resources/run-defaults/`
 - 새 run directory 생성 전 복사
 - 허용: `review/`, `episodes/` 같은 빈 폴더
+- source-only marker: `.gitkeep`
 - 금지: `status.json`, `summary.json`, `snapshot/`, 실제 episode 결과
 
 검증:
 
-- createRun 간단 점검
+- static copy dry-run
 - run directory 구조 확인
 
 ### T04 Bridge 기본 기능

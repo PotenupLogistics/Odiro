@@ -11,15 +11,61 @@ class UScenarioEditorSidebarBlockWidget;
 class UWidgetTextStyleCatalog;
 class SWidget;
 
-// Broadcasts a committed static obstacle placement text edit with placement index context.
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
-	FScenarioEditorSidebarObstaclePlacementTextCommitted,
+// Editable field ids exposed by one root.obstacles.placements[] widget.
+UENUM(BlueprintType)
+enum class EScenarioEditorSidebarObstaclePlacementField : uint8
+{
+	PlacementId,
+	Kind,
+	Prop,
+	Pattern,
+	Segment,
+	Lane,
+	Along,
+	Offset,
+	ZoneSegments,
+	ZoneLanes,
+	PaletteCategories,
+	PaletteClasses,
+	Count,
+	Spacing,
+	GapWidth,
+	Density,
+	Yaw,
+	AllowBlocking
+};
+
+// Broadcasts a committed text edit for one static obstacle placement field.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
+	FScenarioEditorSidebarObstaclePlacementFieldTextCommitted,
 	int32,
 	PlacementIndex,
+	EScenarioEditorSidebarObstaclePlacementField,
+	Field,
 	const FText&,
 	Text,
 	ETextCommit::Type,
 	CommitMethod);
+
+// Broadcasts a committed min/max edit for one static obstacle placement numeric field.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FiveParams(
+	FScenarioEditorSidebarObstaclePlacementFieldRangeCommitted,
+	int32,
+	PlacementIndex,
+	EScenarioEditorSidebarObstaclePlacementField,
+	Field,
+	const FText&,
+	MinText,
+	const FText&,
+	MaxText,
+	ETextCommit::Type,
+	CommitMethod);
+
+// Broadcasts a structural edit request for one placement index.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FScenarioEditorSidebarObstaclePlacementActionRequested,
+	int32,
+	PlacementIndex);
 
 // Detail block for one root.obstacles.placements[] entry.
 UCLASS(BlueprintType, Blueprintable)
@@ -49,11 +95,11 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarBlockWidget> PlacementBlockWidget;
 
-	// Optional editable row for root.obstacles.placements[].placement_id.
+	// Optional editable row for root.obstacles.placements[].id.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarFieldRow> PlacementIdFieldRow;
 
-	// Optional read-only row for root.obstacles.placements[].kind.
+	// Optional editable row for root.obstacles.placements[].kind.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarFieldRow> KindFieldRow;
 
@@ -61,9 +107,17 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarFieldRow> PropFieldRow;
 
+	// Optional editable row for root.obstacles.placements[].pattern.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarFieldRow> PatternFieldRow;
+
 	// Optional editable row for root.obstacles.placements[].at.segment.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarFieldRow> SegmentFieldRow;
+
+	// Optional editable row for root.obstacles.placements[].at.lane.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarFieldRow> LaneFieldRow;
 
 	// Optional editable row for root.obstacles.placements[].at.along_m.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
@@ -73,33 +127,61 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarFieldRow> OffsetFieldRow;
 
+	// Optional editable row for root.obstacles.placements[].zone.segments[].
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarFieldRow> ZoneSegmentsFieldRow;
+
+	// Optional editable row for root.obstacles.placements[].zone.lanes[].
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarFieldRow> ZoneLanesFieldRow;
+
+	// Optional editable row for root.obstacles.placements[].palette.categories[].
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarFieldRow> PaletteCategoriesFieldRow;
+
+	// Optional editable row for root.obstacles.placements[].palette.classes[].
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarFieldRow> PaletteClassesFieldRow;
+
+	// Optional editable row for root.obstacles.placements[].count.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarFieldRow> CountFieldRow;
+
+	// Optional editable row for root.obstacles.placements[].spacing_m.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarFieldRow> SpacingFieldRow;
+
+	// Optional editable row for root.obstacles.placements[].gap_width_m.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarFieldRow> GapWidthFieldRow;
+
+	// Optional editable row for root.obstacles.placements[].density_per_10m.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarFieldRow> DensityFieldRow;
+
+	// Optional editable row for root.obstacles.placements[].yaw_deg.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarFieldRow> YawFieldRow;
+
 	// Optional editable row for root.obstacles.placements[].allow_blocking.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarFieldRow> AllowBlockingFieldRow;
 
-	// Emits committed placement_id text with placement index context.
+	// Emits committed text for string, enum, boolean, or fixed numeric placement fields.
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
-	FScenarioEditorSidebarObstaclePlacementTextCommitted OnPlacementIdCommitted;
+	FScenarioEditorSidebarObstaclePlacementFieldTextCommitted OnFieldTextCommitted;
 
-	// Emits committed prop text with placement index context.
+	// Emits committed range text for numeric placement fields.
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
-	FScenarioEditorSidebarObstaclePlacementTextCommitted OnPropCommitted;
+	FScenarioEditorSidebarObstaclePlacementFieldRangeCommitted OnFieldRangeCommitted;
 
-	// Emits committed at.segment text with placement index context.
+	// Emits an add request using this placement index as insertion context.
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
-	FScenarioEditorSidebarObstaclePlacementTextCommitted OnSegmentCommitted;
+	FScenarioEditorSidebarObstaclePlacementActionRequested OnAddRequested;
 
-	// Emits committed at.along_m text with placement index context.
+	// Emits a remove request for this placement index.
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
-	FScenarioEditorSidebarObstaclePlacementTextCommitted OnAlongCommitted;
-
-	// Emits committed at.offset_m text with placement index context.
-	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
-	FScenarioEditorSidebarObstaclePlacementTextCommitted OnOffsetCommitted;
-
-	// Emits committed allow_blocking text with placement index context.
-	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
-	FScenarioEditorSidebarObstaclePlacementTextCommitted OnAllowBlockingCommitted;
+	FScenarioEditorSidebarObstaclePlacementActionRequested OnRemoveRequested;
 
 	// Updates index context and refreshes the placement block metadata.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
@@ -114,29 +196,87 @@ public:
 	void RefreshFromPlacement(const FScenarioTemplateObstaclePlacement& placement);
 
 private:
-	// Handles placement_id commits from the id row.
+	// Handles id row commits.
 	UFUNCTION()
 	void HandlePlacementIdCommitted(const FText& text, ETextCommit::Type commitMethod);
-
-	// Handles prop commits from the prop row.
+	// Handles kind row commits.
+	UFUNCTION()
+	void HandleKindCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles prop row commits.
 	UFUNCTION()
 	void HandlePropCommitted(const FText& text, ETextCommit::Type commitMethod);
-
-	// Handles at.segment commits from the segment row.
+	// Handles pattern row commits.
+	UFUNCTION()
+	void HandlePatternCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles at.segment row commits.
 	UFUNCTION()
 	void HandleSegmentCommitted(const FText& text, ETextCommit::Type commitMethod);
-
-	// Handles at.along_m commits from the along row.
+	// Handles at.lane row commits.
+	UFUNCTION()
+	void HandleLaneCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles fixed at.along_m commits.
 	UFUNCTION()
 	void HandleAlongCommitted(const FText& text, ETextCommit::Type commitMethod);
-
-	// Handles at.offset_m commits from the offset row.
+	// Handles min/max at.along_m commits.
+	UFUNCTION()
+	void HandleAlongRangeCommitted(const FText& minText, const FText& maxText, ETextCommit::Type commitMethod);
+	// Handles fixed at.offset_m commits.
 	UFUNCTION()
 	void HandleOffsetCommitted(const FText& text, ETextCommit::Type commitMethod);
-
-	// Handles allow_blocking commits from the boolean row.
+	// Handles min/max at.offset_m commits.
+	UFUNCTION()
+	void HandleOffsetRangeCommitted(const FText& minText, const FText& maxText, ETextCommit::Type commitMethod);
+	// Handles zone.segments row commits.
+	UFUNCTION()
+	void HandleZoneSegmentsCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles zone.lanes row commits.
+	UFUNCTION()
+	void HandleZoneLanesCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles palette.categories row commits.
+	UFUNCTION()
+	void HandlePaletteCategoriesCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles palette.classes row commits.
+	UFUNCTION()
+	void HandlePaletteClassesCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles fixed count commits.
+	UFUNCTION()
+	void HandleCountCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles min/max count commits.
+	UFUNCTION()
+	void HandleCountRangeCommitted(const FText& minText, const FText& maxText, ETextCommit::Type commitMethod);
+	// Handles fixed spacing_m commits.
+	UFUNCTION()
+	void HandleSpacingCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles min/max spacing_m commits.
+	UFUNCTION()
+	void HandleSpacingRangeCommitted(const FText& minText, const FText& maxText, ETextCommit::Type commitMethod);
+	// Handles fixed gap_width_m commits.
+	UFUNCTION()
+	void HandleGapWidthCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles min/max gap_width_m commits.
+	UFUNCTION()
+	void HandleGapWidthRangeCommitted(const FText& minText, const FText& maxText, ETextCommit::Type commitMethod);
+	// Handles fixed density_per_10m commits.
+	UFUNCTION()
+	void HandleDensityCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles min/max density_per_10m commits.
+	UFUNCTION()
+	void HandleDensityRangeCommitted(const FText& minText, const FText& maxText, ETextCommit::Type commitMethod);
+	// Handles fixed yaw_deg commits.
+	UFUNCTION()
+	void HandleYawCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles min/max yaw_deg commits.
+	UFUNCTION()
+	void HandleYawRangeCommitted(const FText& minText, const FText& maxText, ETextCommit::Type commitMethod);
+	// Handles allow_blocking commits.
 	UFUNCTION()
 	void HandleAllowBlockingCommitted(const FText& text, ETextCommit::Type commitMethod);
+	// Handles placement add button requests.
+	UFUNCTION()
+	void HandleAddRequested();
+	// Handles placement remove button requests.
+	UFUNCTION()
+	void HandleRemoveRequested();
 
 	// Last placement used to refresh this widget across UMG construction timing.
 	UPROPERTY(Transient)
@@ -158,10 +298,24 @@ private:
 	void ApplyCachedPlacementToRows();
 	// Applies shared typography to this placement block and rows.
 	void ApplyTextStyles();
-	// Returns whether the cached placement kind should expose fixed-placement edits.
-	bool IsFixedPlacement() const;
+	// Broadcasts a text commit for one placement field.
+	void BroadcastText(EScenarioEditorSidebarObstaclePlacementField field, const FText& text, ETextCommit::Type commitMethod);
+	// Broadcasts a range commit for one placement field.
+	void BroadcastRange(
+		EScenarioEditorSidebarObstaclePlacementField field,
+		const FText& minText,
+		const FText& maxText,
+		ETextCommit::Type commitMethod);
 	// Returns a stable label for an obstacle placement kind.
 	static FString PlacementKindToString(EScenarioTemplateObstaclePlacementKind kind);
+	// Joins a string list for one editable field row.
+	static FString JoinStringList(const TArray<FString>& values);
+	// Applies one authored number value to a field row.
+	static void SetNumberRowValue(UScenarioEditorSidebarFieldRow* fieldRow, const FScenarioTemplateNumberValue& value);
+	// Applies one authored integer value to a field row.
+	static void SetIntegerRowValue(UScenarioEditorSidebarFieldRow* fieldRow, const FScenarioTemplateIntegerValue& value);
 	// Formats one authored numeric value for editable text controls.
-	static FString FormatEditableNumber(const FScenarioTemplateNumberValue& value);
+	static FString FormatEditableNumber(double value);
+	// Formats one authored integer value for editable text controls.
+	static FString FormatEditableInteger(int32 value);
 };

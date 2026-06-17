@@ -21,6 +21,7 @@
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
 #include "Scenario/Widget/ScenarioEditorSidebarMainPanel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarObstaclePanel.h"
+#include "Scenario/Widget/ScenarioEditorSidebarPedestrianPanel.h"
 #include "Widget/WidgetTextStyleCatalog.h"
 
 namespace
@@ -663,6 +664,21 @@ UWidget* UScenarioEditorSidebarWidget::BuildGeneratedPanelContent(
 		obstaclePanel->SetTextStyleCatalog(TextStyleCatalog);
 		obstaclePanel->RefreshFromTemplate(scenarioTemplate);
 		return obstaclePanel;
+	}
+
+	if (panel == EScenarioTemplateSidebarPanel::Pedestrian)
+	{
+		UScenarioEditorSidebarPedestrianPanel* pedestrianPanel =
+			WidgetTree->ConstructWidget<UScenarioEditorSidebarPedestrianPanel>(
+				UScenarioEditorSidebarPedestrianPanel::StaticClass());
+		if (!pedestrianPanel)
+		{
+			return nullptr;
+		}
+
+		pedestrianPanel->SetTextStyleCatalog(TextStyleCatalog);
+		pedestrianPanel->RefreshFromTemplate(scenarioTemplate);
+		return pedestrianPanel;
 	}
 
 	UVerticalBox* panelRoot = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());

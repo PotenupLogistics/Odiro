@@ -4,13 +4,13 @@
 #include "Blueprint/UserWidget.h"
 #include "Types/SlateEnums.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
+#include "Scenario/Widget/ScenarioEditorSidebarObstaclePlacementWidget.h"
 #include "Shared/ScenarioTemplateTypes.h"
 #include "ScenarioEditorSidebarObstaclePanel.generated.h"
 
 class UTextBlock;
 class UScenarioAuthoringSubsystem;
 class UScenarioEditorSidebarBlockWidget;
-class UScenarioEditorSidebarObstaclePlacementWidget;
 class UWidgetTextStyleCatalog;
 class SWidget;
 
@@ -78,29 +78,38 @@ private:
 		const FText& maxText,
 		ETextCommit::Type commitMethod);
 
-	// Handles placement_id edits committed by dynamic placement widgets.
+	// Handles add requests from the placements count row.
 	UFUNCTION()
-	void HandlePlacementIdCommitted(int32 placementIndex, const FText& text, ETextCommit::Type commitMethod);
+	void HandlePlacementsCountAddRequested();
 
-	// Handles prop edits committed by dynamic placement widgets.
+	// Handles remove requests from the placements count row.
 	UFUNCTION()
-	void HandlePlacementPropCommitted(int32 placementIndex, const FText& text, ETextCommit::Type commitMethod);
+	void HandlePlacementsCountRemoveRequested();
 
-	// Handles at.segment edits committed by dynamic placement widgets.
+	// Handles text commits from dynamic placement widgets.
 	UFUNCTION()
-	void HandlePlacementSegmentCommitted(int32 placementIndex, const FText& text, ETextCommit::Type commitMethod);
+	void HandlePlacementFieldTextCommitted(
+		int32 placementIndex,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		const FText& text,
+		ETextCommit::Type commitMethod);
 
-	// Handles at.along_m edits committed by dynamic placement widgets.
+	// Handles range commits from dynamic placement widgets.
 	UFUNCTION()
-	void HandlePlacementAlongCommitted(int32 placementIndex, const FText& text, ETextCommit::Type commitMethod);
+	void HandlePlacementFieldRangeCommitted(
+		int32 placementIndex,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		const FText& minText,
+		const FText& maxText,
+		ETextCommit::Type commitMethod);
 
-	// Handles at.offset_m edits committed by dynamic placement widgets.
+	// Handles add requests from dynamic placement widgets.
 	UFUNCTION()
-	void HandlePlacementOffsetCommitted(int32 placementIndex, const FText& text, ETextCommit::Type commitMethod);
+	void HandlePlacementAddRequested(int32 placementIndex);
 
-	// Handles allow_blocking edits committed by dynamic placement widgets.
+	// Handles remove requests from dynamic placement widgets.
 	UFUNCTION()
-	void HandlePlacementAllowBlockingCommitted(int32 placementIndex, const FText& text, ETextCommit::Type commitMethod);
+	void HandlePlacementRemoveRequested(int32 placementIndex);
 
 	// Dynamic placement widgets owned by root.obstacles.placements[].
 	UPROPERTY(Transient)
@@ -122,12 +131,14 @@ private:
 	void ApplyTextStyles();
 	// Rebuilds editable placement widgets for obstacle placement rules.
 	void RefreshPlacementRows(const TArray<FScenarioTemplateObstaclePlacement>& placements);
-	// Adds a read-only field row to a dynamic block body.
-	UScenarioEditorSidebarFieldRow* AddReadOnlyFieldRow(
+	// Adds one field row to a dynamic block body.
+	UScenarioEditorSidebarFieldRow* AddFieldRow(
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget,
 		const FString& label,
 		const FString& value,
-		EScenarioEditorSidebarFieldInputType inputType) const;
+		EScenarioEditorSidebarFieldInputType inputType,
+		bool bEditable,
+		bool bArrayControlsEnabled = false) const;
 	// Adds an editable placement widget to the placements block.
 	UScenarioEditorSidebarObstaclePlacementWidget* AddPlacementWidget(
 		int32 placementIndex,
@@ -143,28 +154,61 @@ private:
 	void CommitMinClearWidthRangeText(const FText& minText, const FText& maxText);
 	// Commits a validated min_clear_width_m value through the authoring subsystem.
 	void CommitMinClearWidthValue(const FScenarioTemplateNumberValue& widthMeters);
-	// Commits one placement_id edit to the draft template.
-	void CommitPlacementIdText(int32 placementIndex, const FText& text);
-	// Commits one prop edit to the draft template.
-	void CommitPlacementPropText(int32 placementIndex, const FText& text);
-	// Commits one at.segment edit to the draft template.
-	void CommitPlacementSegmentText(int32 placementIndex, const FText& text);
-	// Commits one fixed at.along_m edit to the draft template.
-	void CommitPlacementAlongText(int32 placementIndex, const FText& text);
-	// Commits one fixed at.offset_m edit to the draft template.
-	void CommitPlacementOffsetText(int32 placementIndex, const FText& text);
-	// Commits one allow_blocking edit to the draft template.
-	void CommitPlacementAllowBlockingText(int32 placementIndex, const FText& text);
+	// Commits one placement text field edit to the draft template.
+	void CommitPlacementText(
+		int32 placementIndex,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		const FText& text);
+	// Commits one placement range field edit to the draft template.
+	void CommitPlacementRange(
+		int32 placementIndex,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		const FText& minText,
+		const FText& maxText);
+	// Adds one placement after the provided placement index.
+	void AddPlacementAfter(int32 placementIndex);
+	// Removes one placement at the provided placement index.
+	void RemovePlacementAt(int32 placementIndex);
+	// Creates a default placement that can pass the current template validation.
+	FScenarioTemplateObstaclePlacement MakeDefaultPlacement(
+		const TArray<FScenarioTemplateObstaclePlacement>& existingPlacements,
+		int32 neighborIndex) const;
 	// Commits a full placement list through the authoring subsystem.
 	void CommitPlacements(const TArray<FScenarioTemplateObstaclePlacement>& placements);
 	// Applies diagnostics to the optional diagnostics text block.
 	void SetDiagnosticsText(const FString& text) const;
-	// Parses one meter value from field row text.
-	static bool TryParseMeters(const FText& text, double& outMeters);
+	// Applies one number value to the selected placement field.
+	static bool SetPlacementNumberField(
+		FScenarioTemplateObstaclePlacement& placement,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		const FScenarioTemplateNumberValue& value);
+	// Applies one integer value to the selected placement field.
+	static bool SetPlacementIntegerField(
+		FScenarioTemplateObstaclePlacement& placement,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		const FScenarioTemplateIntegerValue& value);
+	// Parses a placement kind from editor text.
+	static bool TryParsePlacementKind(const FText& text, EScenarioTemplateObstaclePlacementKind& outKind);
+	// Parses one meter/degree scalar from field row text.
+	static bool TryParseScalar(const FText& text, double& outValue);
+	// Parses one optional number value from field row text.
+	static bool TryParseOptionalNumber(const FText& text, FScenarioTemplateNumberValue& outValue);
+	// Parses one optional number range from field row text.
+	static bool TryParseOptionalNumberRange(
+		const FText& minText,
+		const FText& maxText,
+		FScenarioTemplateNumberValue& outValue);
+	// Parses one optional integer value from field row text.
+	static bool TryParseOptionalInteger(const FText& text, FScenarioTemplateIntegerValue& outValue);
+	// Parses one optional integer range from field row text.
+	static bool TryParseOptionalIntegerRange(
+		const FText& minText,
+		const FText& maxText,
+		FScenarioTemplateIntegerValue& outValue);
 	// Parses one boolean value from field row text.
 	static bool TryParseBool(const FText& text, bool& outValue);
+	// Parses a comma-separated string list, trimming empty elements.
+	static TArray<FString> ParseStringList(const FString& text);
 	// Formats one authored numeric value for editable text controls.
 	static FString FormatEditableNumber(double value);
-	// Formats one authored numeric value for editable text controls.
-	static FString FormatEditableNumber(const FScenarioTemplateNumberValue& value);
 };

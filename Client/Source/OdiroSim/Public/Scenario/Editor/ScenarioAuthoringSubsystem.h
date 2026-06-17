@@ -128,6 +128,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
 	static FScenarioTemplateNumberValue MakeRangeTemplateNumberValue(double minValue, double maxValue);
 
+	// Fixed integer template value helper for Blueprint and sidebar editors.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	static FScenarioTemplateIntegerValue MakeFixedTemplateIntegerValue(int32 value);
+
 	// 현재 draft의 corridor authoring source를 반환함.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Corridor")
 	FScenarioTemplateCorridor GetDraftCorridor() const { return DraftScenarioTemplate.Corridor; }
@@ -168,6 +172,10 @@ public:
 	bool SetObstaclePlacements(
 		const TArray<FScenarioTemplateObstaclePlacement>& placements,
 		TArray<FString>& outDiagnostics);
+
+	// Range integer template value helper for Blueprint and sidebar editors.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
+	static FScenarioTemplateIntegerValue MakeRangeTemplateIntegerValue(int32 minValue, int32 maxValue);
 
 	// Corridor vertex handle transform result applied to the draft template axis.
 	bool UpdateCorridorVertexHandleTransform(
@@ -339,9 +347,17 @@ private:
 	// Min/max 순서를 정규화한 range template number를 생성함.
 	static FScenarioTemplateNumberValue MakeRangeTemplateNumber(double minValue, double maxValue);
 	static FScenarioTemplateIntegerValue MakeFixedTemplateInteger(int32 value);
+	// Min/max order-normalized range template integer.
+	static FScenarioTemplateIntegerValue MakeRangeTemplateInteger(int32 minValue, int32 maxValue);
 	static double GetFixedTemplateNumber(const FScenarioTemplateNumberValue& value, double defaultValue);
 	// Template number가 width 같은 양수 필드에 쓸 수 있는지 확인함.
 	static bool IsPositiveTemplateNumber(const FScenarioTemplateNumberValue& value);
+	// Template number is unset or contains finite values in allowed min/max order.
+	static bool IsValidOptionalTemplateNumber(const FScenarioTemplateNumberValue& value);
+	// Template integer is unset or contains values in allowed min/max order.
+	static bool IsValidOptionalTemplateInteger(const FScenarioTemplateIntegerValue& value);
+	// Template integer is unset or non-negative across fixed and range values.
+	static bool IsNonNegativeTemplateInteger(const FScenarioTemplateIntegerValue& value);
 	// Corridor axis polyline의 누적 길이를 meter 단위로 계산함.
 	static double MeasureCorridorAxisLengthMeters(const TArray<FVector2D>& pointsMeters);
 	// Corridor axis polyline 편집 입력의 기본 수치 조건을 검증함.
@@ -425,6 +441,11 @@ private:
 	// Validates Obstacle placement ids and fixed-placement fields before applying an edit.
 	bool ValidateObstaclePlacements(
 		const TArray<FScenarioTemplateObstaclePlacement>& placements,
+		TArray<FString>& outDiagnostics) const;
+	// Validates that a template segment reference points at the current Corridor segments.
+	bool ValidateCorridorSegmentReference(
+		const FString& segmentId,
+		const FString& path,
 		TArray<FString>& outDiagnostics) const;
 	// Axis 길이 변경에 맞춰 along 기반 robot/obstacle reference 값을 같은 비율로 보정함.
 	void RescaleCorridorAlongReferences(double oldLengthMeters, double newLengthMeters);

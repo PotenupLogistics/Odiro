@@ -302,6 +302,18 @@ FScenarioTemplateNumberValue UScenarioAuthoringSubsystem::MakeRangeTemplateNumbe
 	return MakeRangeTemplateNumber(minValue, maxValue);
 }
 
+FScenarioTemplateIntegerValue UScenarioAuthoringSubsystem::MakeRangeTemplateIntegerValue(
+	const int32 minValue,
+	const int32 maxValue)
+{
+	return MakeRangeTemplateInteger(minValue, maxValue);
+}
+
+FScenarioTemplateIntegerValue UScenarioAuthoringSubsystem::MakeFixedTemplateIntegerValue(const int32 value)
+{
+	return MakeFixedTemplateInteger(value);
+}
+
 double UScenarioAuthoringSubsystem::GetDraftCorridorAxisLengthMeters() const
 {
 	return MeasureCorridorAxisLengthMeters(DraftScenarioTemplate.Corridor.Axis.PointsMeters);
@@ -1814,6 +1826,18 @@ FScenarioTemplateIntegerValue UScenarioAuthoringSubsystem::MakeFixedTemplateInte
 	return integerValue;
 }
 
+FScenarioTemplateIntegerValue UScenarioAuthoringSubsystem::MakeRangeTemplateInteger(
+	const int32 minValue,
+	const int32 maxValue)
+{
+	FScenarioTemplateIntegerValue integerValue;
+	integerValue.bIsSet = true;
+	integerValue.Mode = EScenarioTemplateNumberValueMode::Range;
+	integerValue.MinValue = FMath::Min(minValue, maxValue);
+	integerValue.MaxValue = FMath::Max(minValue, maxValue);
+	return integerValue;
+}
+
 double UScenarioAuthoringSubsystem::GetFixedTemplateNumber(
 	const FScenarioTemplateNumberValue& value,
 	double defaultValue)
@@ -1847,6 +1871,50 @@ bool UScenarioAuthoringSubsystem::IsPositiveTemplateNumber(const FScenarioTempla
 	}
 
 	return FMath::IsFinite(value.FixedValue) && value.FixedValue > KINDA_SMALL_NUMBER;
+}
+
+bool UScenarioAuthoringSubsystem::IsValidOptionalTemplateNumber(const FScenarioTemplateNumberValue& value)
+{
+	if (!value.bIsSet)
+	{
+		return true;
+	}
+
+	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
+	{
+		return FMath::IsFinite(value.MinValue)
+			&& FMath::IsFinite(value.MaxValue)
+			&& value.MinValue <= value.MaxValue;
+	}
+
+	return FMath::IsFinite(value.FixedValue);
+}
+
+bool UScenarioAuthoringSubsystem::IsValidOptionalTemplateInteger(const FScenarioTemplateIntegerValue& value)
+{
+	if (!value.bIsSet)
+	{
+		return true;
+	}
+
+	return value.Mode != EScenarioTemplateNumberValueMode::Range || value.MinValue <= value.MaxValue;
+}
+
+bool UScenarioAuthoringSubsystem::IsNonNegativeTemplateInteger(const FScenarioTemplateIntegerValue& value)
+{
+	if (!IsValidOptionalTemplateInteger(value))
+	{
+		return false;
+	}
+	if (!value.bIsSet)
+	{
+		return true;
+	}
+	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
+	{
+		return value.MinValue >= 0 && value.MaxValue >= 0;
+	}
+	return value.FixedValue >= 0;
 }
 
 double UScenarioAuthoringSubsystem::MeasureCorridorAxisLengthMeters(const TArray<FVector2D>& pointsMeters)
@@ -2179,6 +2247,60 @@ bool UScenarioAuthoringSubsystem::ValidateObstaclePlacements(
 	const TArray<FScenarioTemplateObstaclePlacement>& placements,
 	TArray<FString>& outDiagnostics) const
 {
+	auto validateRequiredNumber =
+		[this, &outDiagnostics](const FScenarioTemplateNumberValue& value, const FString& path)
+	{
+		if (!value.bIsSet || !IsValidOptionalTemplateNumber(value))
+		{
+			outDiagnostics.Add(FString::Printf(
+				TEXT("%s must be a finite fixed number or finite min/max range."),
+				*path));
+			return false;
+		}
+		return true;
+	};
+
+	auto validateOptionalNumber =
+		[this, &outDiagnostics](const FScenarioTemplateNumberValue& value, const FString& path)
+	{
+		if (!IsValidOptionalTemplateNumber(value))
+		{
+			outDiagnostics.Add(FString::Printf(
+				TEXT("%s must be unset, a finite fixed number, or a finite min/max range."),
+				*path));
+			return false;
+		}
+		return true;
+	};
+
+	auto validateNonNegativeNumber =
+		[this, &outDiagnostics, &validateOptionalNumber](const FScenarioTemplateNumberValue& value, const FString& path)
+	{
+		if (!validateOptionalNumber(value, path))
+		{
+			return false;
+		}
+		if (!value.bIsSet)
+		{
+			return true;
+		}
+		if (value.Mode == EScenarioTemplateNumberValueMode::Range)
+		{
+			if (value.MinValue < 0.0 || value.MaxValue < 0.0)
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s must not contain negative values."), *path));
+				return false;
+			}
+			return true;
+		}
+		if (value.FixedValue < 0.0)
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s must not be negative."), *path));
+			return false;
+		}
+		return true;
+	};
+
 	TSet<FString> placementIds;
 	for (int32 index = 0; index < placements.Num(); ++index)
 	{
@@ -2198,50 +2320,124 @@ bool UScenarioAuthoringSubsystem::ValidateObstaclePlacements(
 		}
 		placementIds.Add(placement.PlacementId);
 
-		if (placement.Kind != EScenarioTemplateObstaclePlacementKind::Fixed)
+		if (!IsNonNegativeTemplateInteger(placement.Count))
 		{
-			continue;
+			outDiagnostics.Add(FString::Printf(TEXT("%s.count must be unset or a non-negative fixed/range integer."), *placementPath));
+			return false;
 		}
-
-		if (placement.PropId.IsEmpty())
+		if (!validateNonNegativeNumber(placement.SpacingMeters, FString::Printf(TEXT("%s.spacing_m"), *placementPath))
+			|| !validateNonNegativeNumber(placement.GapWidthMeters, FString::Printf(TEXT("%s.gap_width_m"), *placementPath))
+			|| !validateNonNegativeNumber(placement.DensityPer10Meters, FString::Printf(TEXT("%s.density_per_10m"), *placementPath))
+			|| !validateOptionalNumber(placement.YawDegrees, FString::Printf(TEXT("%s.yaw_deg"), *placementPath)))
 		{
-			outDiagnostics.Add(FString::Printf(TEXT("%s.prop is required for fixed placement."), *placementPath));
 			return false;
 		}
 
-		FScenarioStaticObstaclePropEntry propEntry;
-		if (!TryFindStaticObstacleProp(FName(*placement.PropId), propEntry))
+		if (placement.Kind == EScenarioTemplateObstaclePlacementKind::Fixed
+			|| placement.Kind == EScenarioTemplateObstaclePlacementKind::Pattern)
 		{
-			outDiagnostics.Add(FString::Printf(
-				TEXT("%s.prop references unknown static obstacle prop '%s'."),
-				*placementPath,
-				*placement.PropId));
-			return false;
-		}
+			if (placement.PropId.IsEmpty())
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s.prop is required for fixed and pattern placement."), *placementPath));
+				return false;
+			}
 
-		if (placement.At.SegmentId.IsEmpty())
-		{
-			outDiagnostics.Add(FString::Printf(TEXT("%s.at.segment is required for fixed placement."), *placementPath));
-			return false;
+			FScenarioStaticObstaclePropEntry propEntry;
+			if (!TryFindStaticObstacleProp(FName(*placement.PropId), propEntry))
+			{
+				outDiagnostics.Add(FString::Printf(
+					TEXT("%s.prop references unknown static obstacle prop '%s'."),
+					*placementPath,
+					*placement.PropId));
+				return false;
+			}
+
+			if (placement.Kind == EScenarioTemplateObstaclePlacementKind::Pattern && placement.PatternId.IsEmpty())
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s.pattern is required for pattern placement."), *placementPath));
+				return false;
+			}
+			if (!ValidateCorridorSegmentReference(
+				placement.At.SegmentId,
+				FString::Printf(TEXT("%s.at.segment"), *placementPath),
+				outDiagnostics))
+			{
+				return false;
+			}
+			if (!validateRequiredNumber(placement.At.AlongMeters, FString::Printf(TEXT("%s.at.along_m"), *placementPath))
+				|| !validateRequiredNumber(placement.At.OffsetMeters, FString::Printf(TEXT("%s.at.offset_m"), *placementPath)))
+			{
+				return false;
+			}
 		}
-		if (!placement.At.AlongMeters.bIsSet
-			|| placement.At.AlongMeters.Mode != EScenarioTemplateNumberValueMode::Fixed
-			|| !FMath::IsFinite(placement.At.AlongMeters.FixedValue))
+		else if (placement.Kind == EScenarioTemplateObstaclePlacementKind::Scatter)
 		{
-			outDiagnostics.Add(FString::Printf(
-				TEXT("%s.at.along_m must be a fixed finite meter value."),
-				*placementPath));
-			return false;
+			if (placement.Zone.SegmentIds.IsEmpty())
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s.zone.segments must contain at least one segment id."), *placementPath));
+				return false;
+			}
+			TSet<FString> zoneSegmentIds;
+			for (int32 segmentIndex = 0; segmentIndex < placement.Zone.SegmentIds.Num(); ++segmentIndex)
+			{
+				const FString path = FString::Printf(TEXT("%s.zone.segments[%d]"), *placementPath, segmentIndex);
+				const FString& segmentId = placement.Zone.SegmentIds[segmentIndex];
+				if (!ValidateCorridorSegmentReference(segmentId, path, outDiagnostics))
+				{
+					return false;
+				}
+				if (zoneSegmentIds.Contains(segmentId))
+				{
+					outDiagnostics.Add(FString::Printf(TEXT("Duplicate scatter zone segment '%s'."), *segmentId));
+					return false;
+				}
+				zoneSegmentIds.Add(segmentId);
+			}
+			if (placement.Zone.LaneIds.IsEmpty())
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s.zone.lanes must contain at least one lane id."), *placementPath));
+				return false;
+			}
+			if (!placement.DensityPer10Meters.bIsSet)
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s.density_per_10m is required for scatter placement."), *placementPath));
+				return false;
+			}
+			if (placement.Palette.CategoryIds.IsEmpty() && placement.Palette.ClassIds.IsEmpty())
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s.palette must contain categories or classes for scatter placement."), *placementPath));
+				return false;
+			}
 		}
-		if (!placement.At.OffsetMeters.bIsSet
-			|| placement.At.OffsetMeters.Mode != EScenarioTemplateNumberValueMode::Fixed
-			|| !FMath::IsFinite(placement.At.OffsetMeters.FixedValue))
+	}
+
+	return true;
+}
+
+bool UScenarioAuthoringSubsystem::ValidateCorridorSegmentReference(
+	const FString& segmentId,
+	const FString& path,
+	TArray<FString>& outDiagnostics) const
+{
+	const FString normalizedSegmentId = segmentId.TrimStartAndEnd();
+	if (normalizedSegmentId.IsEmpty())
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("%s must reference a Corridor segment."), *path));
+		return false;
+	}
+
+	const bool bFoundSegment = DraftScenarioTemplate.Corridor.Segments.ContainsByPredicate(
+		[&normalizedSegmentId](const FScenarioTemplateSegment& segment)
 		{
-			outDiagnostics.Add(FString::Printf(
-				TEXT("%s.at.offset_m must be a fixed finite meter value."),
-				*placementPath));
-			return false;
-		}
+			return segment.SegmentId == normalizedSegmentId;
+		});
+	if (!bFoundSegment)
+	{
+		outDiagnostics.Add(FString::Printf(
+			TEXT("%s references unknown Corridor segment '%s'."),
+			*path,
+			*normalizedSegmentId));
+		return false;
 	}
 
 	return true;

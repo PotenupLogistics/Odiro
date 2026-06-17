@@ -70,7 +70,7 @@ keep:
   - ScenarioTemplateWorldSpecAdapter is the runner/launcher boundary for scenario_template files; it samples templates before handing the frozen sample to ScenarioSampleWorldSpecAdapter.
   - EpisodeRunResultJson owns canonical run outputs: summary.json, episodes/<SampleId>/result.json, and episodes/<SampleId>/events.jsonl.
   - ScenarioRunnerSubsystem writes only canonical `summary.json`, `result.json`, and `events.jsonl` outputs under RunOutputDirectory.
-  - ScenarioAuthoringSubsystem stores the editor draft as scenario_template, exposes template metadata, Corridor axis/profile/segment, and Obstacle rule authoring APIs, spawns editor-only Corridor handles and spline lane preview actors, and builds runtime WorldSpec only as a preview/compatibility projection.
+  - ScenarioAuthoringSubsystem stores the editor draft as scenario_template, exposes template metadata, Corridor axis/profile/segment and Obstacle rule authoring APIs, spawns editor-only Corridor handles and spline lane preview actors, and builds runtime WorldSpec only as a preview/compatibility projection.
   - ScenarioAuthoringSubsystem exposes `RefreshEditorPreviewFromDraft` for rebuilding generated preview actors after catalog or material edits.
   - ScenarioCorridorPreviewActor renders blocked Corridor surfaces as 2m spline collision strips using the Blocked profile so robot sensors can detect wall/building lanes.
   - ScenarioCorridorPreviewActor renders curb_side lane strips 15cm below the walkway to show the curb-side grade separation.
@@ -86,8 +86,10 @@ keep:
   - ScenarioEditorSidebarCorridorLaneWidget owns one editable building_side or curb_side lane detail block and reports surface, width, add, and remove requests with side/index context.
   - ScenarioEditorSidebarCorridorPointWidget owns one editable corridor.axis.points_m[] detail block and reports x, y, add, and remove requests with point index context.
   - ScenarioEditorSidebarCorridorSegmentWidget owns one editable corridor.segments[] detail block and reports id, type, along_range_m, replaced_by, add, and remove requests with segment index context.
-  - ScenarioEditorSidebarObstaclePanel owns Obstacle-panel field rows for min_clear_width_m and existing fixed placement edits through ScenarioAuthoringSubsystem.
-  - ScenarioEditorSidebarObstaclePlacementWidget owns one root.obstacles.placements[] detail block and reports fixed placement field commits with placement index context.
+  - ScenarioEditorSidebarObstaclePanel owns Obstacle-panel field rows for min_clear_width_m and root.obstacles.placements[] fixed/pattern/scatter edits through ScenarioAuthoringSubsystem.
+  - ScenarioEditorSidebarObstaclePlacementWidget owns one root.obstacles.placements[] detail block and reports kind-specific field commits with placement index context.
+  - ScenarioEditorSidebarPedestrianPanel owns a structure-only Pedestrian panel for background count/speed/spawn segments and encounter rule fields; draft commits remain out of scope until the Pedestrian template contract is finalized.
+  - ScenarioEditorSidebarPedestrianEncounterWidget owns one root.pedestrians.encounters[] detail block for the current structure-only Pedestrian panel.
   - ScenarioEditorSidebarFieldRow owns the common leaf property row pattern for label/separator/value editing in Scenario Template side panels, including single-line and bounded multiline value inputs in its native fallback row tree.
   - WidgetTextStyleCatalog owns shared UMG typography roles Title, Label, and Value, each limited to FSlateFontInfo and FLinearColor, plus common style application helpers for TextBlock and editable text controls.
   - ScenarioPlaceableDetailsWidget owns the placeable selection details panel; ScenarioPlaceableContextMenuWidget remains only as a legacy UMG compatibility wrapper.

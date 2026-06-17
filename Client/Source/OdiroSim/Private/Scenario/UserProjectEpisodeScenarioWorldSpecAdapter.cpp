@@ -11,7 +11,7 @@
 namespace
 {
 	const TCHAR* EpisodeScenarioSchemaName = TEXT("episode_scenario");
-	const double MetersToCentimeters = 100.0;
+	const double UserProjectMetersToCentimeters = 100.0;
 
 	struct FProjectScenarioSegment
 	{
@@ -31,7 +31,7 @@ namespace
 		return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), jsonFilePath));
 	}
 
-	void AddAdapterDiagnostic(
+	void AddUserProjectAdapterDiagnostic(
 		FScenarioCompileResult& result,
 		EScenarioCompileDiagnosticSeverity severity,
 		const FString& code,
@@ -44,7 +44,7 @@ namespace
 		result.Diagnostics.Add(diagnostic);
 	}
 
-	bool HasErrorDiagnostics(const TArray<FScenarioCompileDiagnostic>& diagnostics)
+	bool HasUserProjectErrorDiagnostics(const TArray<FScenarioCompileDiagnostic>& diagnostics)
 	{
 		for (const FScenarioCompileDiagnostic& diagnostic : diagnostics)
 		{
@@ -91,7 +91,7 @@ namespace
 		const TSharedPtr<FJsonValue> value = object.TryGetField(fieldName);
 		if (!value.IsValid() || value->Type != EJson::Object)
 		{
-			AddAdapterDiagnostic(
+			AddUserProjectAdapterDiagnostic(
 				result,
 				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("missing_%s"), *fieldName),
@@ -147,7 +147,7 @@ namespace
 		return paramValue;
 	}
 
-	FScenarioParamValue MakeFloatParam(double value)
+	FScenarioParamValue MakeUserProjectFloatParam(double value)
 	{
 		FScenarioParamValue paramValue;
 		paramValue.Type = EScenarioParamValueType::Float;
@@ -155,7 +155,7 @@ namespace
 		return paramValue;
 	}
 
-	FScenarioParamValue MakeStringParam(const FString& value)
+	FScenarioParamValue MakeUserProjectStringParam(const FString& value)
 	{
 		FScenarioParamValue paramValue;
 		paramValue.Type = EScenarioParamValueType::String;
@@ -208,8 +208,8 @@ namespace
 		region.RegionId = regionId;
 		region.RegionType = ToGroundRegionType(surfaceId);
 		region.ShapeType = EScenarioGroundShapeType::Rectangle;
-		region.Center = FVector((startMeters + endMeters) * 0.5 * MetersToCentimeters, centerOffsetMeters * MetersToCentimeters, 0.0);
-		region.Size = FVector2D((endMeters - startMeters) * MetersToCentimeters, widthMeters * MetersToCentimeters);
+		region.Center = FVector((startMeters + endMeters) * 0.5 * UserProjectMetersToCentimeters, centerOffsetMeters * UserProjectMetersToCentimeters, 0.0);
+		region.Size = FVector2D((endMeters - startMeters) * UserProjectMetersToCentimeters, widthMeters * UserProjectMetersToCentimeters);
 		region.YawDegrees = 0.0;
 		region.TraversabilityScore = ToTraversabilityScore(region.RegionType);
 		if (region.RegionType == EScenarioGroundRegionType::Penalty)
@@ -240,7 +240,7 @@ namespace
 		const TArray<TSharedPtr<FJsonValue>>* segmentValues = TryGetArrayField(*corridorObject, TEXT("segments"));
 		if (!segmentValues || segmentValues->IsEmpty())
 		{
-			AddAdapterDiagnostic(
+			AddUserProjectAdapterDiagnostic(
 				result,
 				EScenarioCompileDiagnosticSeverity::Error,
 				TEXT("missing_segments"),
@@ -254,7 +254,7 @@ namespace
 			const TSharedPtr<FJsonValue>& segmentValue = (*segmentValues)[index];
 			if (!segmentValue.IsValid() || segmentValue->Type != EJson::Object)
 			{
-				AddAdapterDiagnostic(
+				AddUserProjectAdapterDiagnostic(
 					result,
 					EScenarioCompileDiagnosticSeverity::Error,
 					TEXT("invalid_segment"),
@@ -289,7 +289,7 @@ namespace
 
 			if (segment.EndMeters <= segment.StartMeters)
 			{
-				AddAdapterDiagnostic(
+				AddUserProjectAdapterDiagnostic(
 					result,
 					EScenarioCompileDiagnosticSeverity::Error,
 					TEXT("invalid_segment_range"),
@@ -317,7 +317,7 @@ namespace
 
 	FVector MakeCorridorLocation(double alongMeters, double offsetMeters)
 	{
-		return FVector(alongMeters * MetersToCentimeters, offsetMeters * MetersToCentimeters, 0.0);
+		return FVector(alongMeters * UserProjectMetersToCentimeters, offsetMeters * UserProjectMetersToCentimeters, 0.0);
 	}
 
 	void AddCorridorGroundRegions(
@@ -473,7 +473,7 @@ namespace
 			const FString kind = ReadStringOrDefault(*placementObject, TEXT("kind"), TEXT("fixed")).ToLower();
 			if (kind != TEXT("fixed"))
 			{
-				AddAdapterDiagnostic(
+				AddUserProjectAdapterDiagnostic(
 					result,
 					EScenarioCompileDiagnosticSeverity::Warning,
 					TEXT("unsupported_project_obstacle_rule"),
@@ -490,7 +490,7 @@ namespace
 			const FString propId = ReadStringOrDefault(*placementObject, TEXT("prop"));
 			if (propId.IsEmpty())
 			{
-				AddAdapterDiagnostic(
+				AddUserProjectAdapterDiagnostic(
 					result,
 					EScenarioCompileDiagnosticSeverity::Error,
 					TEXT("missing_obstacle_prop"),
@@ -507,7 +507,7 @@ namespace
 			obstacleSpec.AssetId = propId;
 			obstacleSpec.Category = EScenarioActorCategory::StaticObstacle;
 			obstacleSpec.Transform = FTransform(FRotator(0.0, yawDegrees, 0.0), MakeCorridorLocation(alongMeters, offsetMeters));
-			obstacleSpec.Properties.Add(TEXT("placed_by"), MakeStringParam(TEXT("project_scenario")));
+			obstacleSpec.Properties.Add(TEXT("placed_by"), MakeUserProjectStringParam(TEXT("project_scenario")));
 			worldSpec.Placeables.Add(obstacleSpec);
 		}
 	}
@@ -544,7 +544,7 @@ namespace
 			const FProjectScenarioSegment* segment = FindSegmentById(segments, atSegmentId);
 			if (!segment)
 			{
-				AddAdapterDiagnostic(
+				AddUserProjectAdapterDiagnostic(
 					result,
 					EScenarioCompileDiagnosticSeverity::Warning,
 					TEXT("unknown_encounter_segment"),
@@ -563,12 +563,12 @@ namespace
 			actorSpec.Category = EScenarioActorCategory::Pedestrian;
 			actorSpec.InitialTransform = FTransform(FRotator(0.0, 180.0, 0.0), startLocationCm);
 			actorSpec.PathId = FString::Printf(TEXT("%s_path"), *encounterId);
-			actorSpec.Properties.Add(TEXT("movement_model"), MakeStringParam(TEXT("spline_Relative")));
-			actorSpec.Properties.Add(TEXT("speed_mps"), MakeFloatParam(speedMetersPerSecond));
-			actorSpec.Properties.Add(TEXT("speed_cm_per_second"), MakeFloatParam(speedMetersPerSecond * MetersToCentimeters));
+			actorSpec.Properties.Add(TEXT("movement_model"), MakeUserProjectStringParam(TEXT("spline_Relative")));
+			actorSpec.Properties.Add(TEXT("speed_mps"), MakeUserProjectFloatParam(speedMetersPerSecond));
+			actorSpec.Properties.Add(TEXT("speed_cm_per_second"), MakeUserProjectFloatParam(speedMetersPerSecond * UserProjectMetersToCentimeters));
 			actorSpec.Properties.Add(TEXT("auto_start"), MakeBoolParam(true));
-			actorSpec.Properties.Add(TEXT("role"), MakeStringParam(TEXT("encounter")));
-			actorSpec.Properties.Add(TEXT("persona"), MakeStringParam(ReadStringOrDefault(*encounterObject, TEXT("persona"), TEXT("normal"))));
+			actorSpec.Properties.Add(TEXT("role"), MakeUserProjectStringParam(TEXT("encounter")));
+			actorSpec.Properties.Add(TEXT("persona"), MakeUserProjectStringParam(ReadStringOrDefault(*encounterObject, TEXT("persona"), TEXT("normal"))));
 			worldSpec.DynamicActors.Add(actorSpec);
 
 			FScenarioPathSpec pathSpec;
@@ -608,9 +608,9 @@ namespace
 		worldSpec.RunConfig.IterationIndex = episodeObject.IsValid()
 			? ReadIntegerOrDefault(*episodeObject, TEXT("episode_index"), 0)
 			: 0;
-		worldSpec.RunConfig.Parameters.Add(TEXT("episode_id"), MakeStringParam(episodeId));
-		worldSpec.RunConfig.Parameters.Add(TEXT("scenario_id"), MakeStringParam(scenarioId));
-		worldSpec.RunConfig.Parameters.Add(TEXT("scenario_schema"), MakeStringParam(ReadStringOrDefault(semanticObject, TEXT("schema"), TEXT("scenario"))));
+		worldSpec.RunConfig.Parameters.Add(TEXT("episode_id"), MakeUserProjectStringParam(episodeId));
+		worldSpec.RunConfig.Parameters.Add(TEXT("scenario_id"), MakeUserProjectStringParam(scenarioId));
+		worldSpec.RunConfig.Parameters.Add(TEXT("scenario_schema"), MakeUserProjectStringParam(ReadStringOrDefault(semanticObject, TEXT("schema"), TEXT("scenario"))));
 
 		worldSpec.Seeds.WorldSeed = seed;
 		worldSpec.Seeds.LayoutSeed = seed + 101;
@@ -638,7 +638,7 @@ FScenarioCompileResult FUserProjectEpisodeScenarioWorldSpecAdapter::CompileScena
 	FString jsonString;
 	if (!TryLoadJsonObject(jsonFilePath, rootObject, jsonString) || !rootObject.IsValid())
 	{
-		AddAdapterDiagnostic(
+		AddUserProjectAdapterDiagnostic(
 			result,
 			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("episode_scenario_read_failed"),
@@ -650,7 +650,7 @@ FScenarioCompileResult FUserProjectEpisodeScenarioWorldSpecAdapter::CompileScena
 	const FString schema = ReadStringOrDefault(*rootObject, TEXT("schema"));
 	if (!schema.Equals(EpisodeScenarioSchemaName, ESearchCase::CaseSensitive))
 	{
-		AddAdapterDiagnostic(
+		AddUserProjectAdapterDiagnostic(
 			result,
 			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("invalid_episode_scenario_schema"),
@@ -682,7 +682,7 @@ FScenarioCompileResult FUserProjectEpisodeScenarioWorldSpecAdapter::CompileScena
 
 	if (worldSpec.Placeables.IsEmpty())
 	{
-		AddAdapterDiagnostic(
+		AddUserProjectAdapterDiagnostic(
 			result,
 			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("missing_runtime_placeables"),
@@ -690,6 +690,6 @@ FScenarioCompileResult FUserProjectEpisodeScenarioWorldSpecAdapter::CompileScena
 	}
 
 	result.WorldSpec = worldSpec;
-	result.bSuccess = !HasErrorDiagnostics(result.Diagnostics);
+	result.bSuccess = !HasUserProjectErrorDiagnostics(result.Diagnostics);
 	return result;
 }

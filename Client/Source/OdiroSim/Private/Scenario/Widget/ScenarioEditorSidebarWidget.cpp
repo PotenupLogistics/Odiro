@@ -17,6 +17,7 @@
 #include "Engine/World.h"
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarCorridorPanel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
 #include "Scenario/Widget/ScenarioEditorSidebarMainPanel.h"
 #include "Widget/WidgetTextStyleCatalog.h"
@@ -633,6 +634,21 @@ UWidget* UScenarioEditorSidebarWidget::BuildGeneratedPanelContent(
 		return nullptr;
 	}
 
+	if (panel == EScenarioTemplateSidebarPanel::Corridor)
+	{
+		UScenarioEditorSidebarCorridorPanel* corridorPanel =
+			WidgetTree->ConstructWidget<UScenarioEditorSidebarCorridorPanel>(
+				UScenarioEditorSidebarCorridorPanel::StaticClass());
+		if (!corridorPanel)
+		{
+			return nullptr;
+		}
+
+		corridorPanel->SetTextStyleCatalog(TextStyleCatalog);
+		corridorPanel->RefreshFromTemplate(scenarioTemplate);
+		return corridorPanel;
+	}
+
 	UVerticalBox* panelRoot = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
 	if (!panelRoot)
 	{
@@ -667,76 +683,6 @@ UWidget* UScenarioEditorSidebarWidget::BuildGeneratedPanelContent(
 			true);
 		AddFieldRow(WidgetTree, robotBody, TEXT("start"), FormatRobotAnchor(scenarioTemplate.Robot.Start), TextStyleCatalog);
 		AddFieldRow(WidgetTree, robotBody, TEXT("goal"), FormatRobotAnchor(scenarioTemplate.Robot.Goal), TextStyleCatalog);
-		break;
-	}
-	case EScenarioTemplateSidebarPanel::Corridor:
-	{
-		const FScenarioTemplateCorridor& corridor = scenarioTemplate.Corridor;
-		UVerticalBox* corridorBody = AddBlockWidget(
-			WidgetTree,
-			panelRoot,
-			TEXT("corridor"),
-			TEXT("root.corridor"),
-			TEXT("Template"),
-			TextStyleCatalog,
-			true);
-		AddFieldRow(WidgetTree, corridorBody, TEXT("axis.type"), TEXT("polyline"), TextStyleCatalog);
-		AddFieldRow(WidgetTree, corridorBody, TEXT("axis.points_m"), FString::Printf(TEXT("%d point(s), %s"), corridor.Axis.PointsMeters.Num(), *FormatMeters(MeasureAxisLengthMeters(corridor.Axis.PointsMeters))), TextStyleCatalog);
-		AddFieldRow(WidgetTree, corridorBody, TEXT("walkway_width_m"), FormatNumberValue(corridor.WalkwayWidthMeters, TEXT("m")), TextStyleCatalog);
-
-		UVerticalBox* buildingBody = AddBlockWidget(
-			WidgetTree,
-			corridorBody,
-			TEXT("building_side"),
-			TEXT("root.corridor.building_side[]"),
-			TEXT("Property"),
-			TextStyleCatalog,
-			false,
-			true);
-		for (int32 index = 0; index < corridor.BuildingSide.Num(); ++index)
-		{
-			AddFieldRow(WidgetTree, buildingBody, FString::Printf(TEXT("lane[%d]"), index), FormatLaneRule(corridor.BuildingSide[index]), TextStyleCatalog);
-		}
-
-		UVerticalBox* curbBody = AddBlockWidget(
-			WidgetTree,
-			corridorBody,
-			TEXT("curb_side"),
-			TEXT("root.corridor.curb_side[]"),
-			TEXT("Property"),
-			TextStyleCatalog,
-			false,
-			true);
-		for (int32 index = 0; index < corridor.CurbSide.Num(); ++index)
-		{
-			AddFieldRow(WidgetTree, curbBody, FString::Printf(TEXT("lane[%d]"), index), FormatLaneRule(corridor.CurbSide[index]), TextStyleCatalog);
-		}
-
-		UVerticalBox* segmentsBody = AddBlockWidget(
-			WidgetTree,
-			corridorBody,
-			TEXT("segments"),
-			TEXT("root.corridor.segments[]"),
-			TEXT("Property"),
-			TextStyleCatalog,
-			false,
-			true);
-		for (const FScenarioTemplateSegment& segment : corridor.Segments)
-		{
-			UVerticalBox* segmentBody = AddBlockWidget(
-				WidgetTree,
-				segmentsBody,
-				segment.SegmentId.IsEmpty() ? FString(TEXT("(unnamed)")) : segment.SegmentId,
-				SegmentTypeToString(segment.Type),
-				TEXT("Detail"),
-				TextStyleCatalog,
-				false,
-				true);
-			AddFieldRow(WidgetTree, segmentBody, TEXT("id"), segment.SegmentId, TextStyleCatalog);
-			AddFieldRow(WidgetTree, segmentBody, TEXT("type"), SegmentTypeToString(segment.Type), TextStyleCatalog);
-			AddFieldRow(WidgetTree, segmentBody, TEXT("along_range_m"), FString::Printf(TEXT("%.2f..%.2fm"), segment.AlongRangeMeters.StartMeters, segment.AlongRangeMeters.EndMeters), TextStyleCatalog);
-			AddFieldRow(WidgetTree, segmentBody, TEXT("replaced_by"), FormatStringValue(segment.ReplacedBySurfaceId), TextStyleCatalog);
-		}
 		break;
 	}
 	case EScenarioTemplateSidebarPanel::Obstacle:

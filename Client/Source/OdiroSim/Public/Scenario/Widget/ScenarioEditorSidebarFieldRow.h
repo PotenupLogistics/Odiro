@@ -6,8 +6,13 @@
 #include "ScenarioEditorSidebarFieldRow.generated.h"
 
 class UEditableTextBox;
+class UMultiLineEditableTextBox;
+class USizeBox;
 class UTextBlock;
+class UWidgetTextStyleCatalog;
 class SWidget;
+enum class EWidgetTextStyleRole : uint8;
+struct FWidgetTextStyle;
 
 // Broadcasts when a Scenario Template field row commits an editable text value.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
@@ -40,6 +45,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	bool bEditable = true;
 
+	// Controls whether editable values use the bounded multiline input instead of the single-line input.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bMultilineValue = false;
+
+	// Fixed height used by multiline inputs so long text stays inside the sidebar layout.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template", meta = (ClampMin = "24.0"))
+	float MultilineValueHeight = 96.0f;
+
+	// Shared typography catalog used to style label and value controls.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
+
 	// Optional label text block bound by the UMG row.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UTextBlock> LabelTextBlock;
@@ -56,6 +73,14 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UEditableTextBox> ValueEditableTextBox;
 
+	// Optional fixed-size wrapper for editable multiline values.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<USizeBox> ValueMultiLineSizeBox;
+
+	// Optional multiline editable text box for long string values.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UMultiLineEditableTextBox> ValueMultiLineEditableTextBox;
+
 	// Emits committed text from the editable value control.
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
 	FScenarioEditorSidebarFieldRowTextCommitted OnValueTextCommitted;
@@ -71,6 +96,14 @@ public:
 	// Toggles editable versus read-only value presentation.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetEditable(bool bInEditable);
+
+	// Toggles multiline editable presentation for long string values.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetMultilineValue(bool bInMultilineValue);
+
+	// Updates the shared typography catalog reference used by this row.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
 
 	// Returns the value currently displayed by the row.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
@@ -89,6 +122,14 @@ private:
 	void UnbindControls();
 	// Applies stored label, value, and editability state to bound controls.
 	void RefreshRow();
+	// Resolves one shared text style from the configured catalog or built-in defaults.
+	FWidgetTextStyle ResolveTextStyle(EWidgetTextStyleRole role) const;
+	// Applies one shared style to a TextBlock control.
+	void ApplyTextBlockStyle(UTextBlock* textBlock, EWidgetTextStyleRole role) const;
+	// Applies the shared Value style to a single-line editable control.
+	void ApplyEditableTextBoxStyle(UEditableTextBox* textBox) const;
+	// Applies the shared Value style to a multiline editable control.
+	void ApplyMultiLineEditableTextBoxStyle(UMultiLineEditableTextBox* textBox) const;
 	// Applies text to a bound text block.
 	void SetTextBlockText(UTextBlock* textBlock, const FString& text) const;
 };

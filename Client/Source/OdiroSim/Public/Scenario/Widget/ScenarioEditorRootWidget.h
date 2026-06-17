@@ -64,17 +64,17 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UWidget> TemplateSidebarPanel;
 
-	// Optional Scenario Editor sidebar bound by the new UMG child name.
+	// Optional Scenario Editor sidebar bound by the preferred UMG child name.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UScenarioEditorSidebarWidget> ScenarioEditorSidebarWidget;
 
-	// Compatibility bind for the previous Scenario Template sidebar UMG child name.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
-	TObjectPtr<UScenarioEditorSidebarWidget> ScenarioTemplateSidebarWidget;
-
-	// Compatibility bind for the current UMG child name used by the Scenario Template sidebar.
+	// Compatibility bind for the current Root WBP sidebar child name.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UScenarioEditorSidebarWidget> SidebarWidget;
+
+	// Compatibility bind for the previous Scenario Template sidebar child name.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UScenarioEditorSidebarWidget> ScenarioTemplateSidebarWidget;
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UButton> TopDownOrthoModeButton;
@@ -191,7 +191,7 @@ private:
 	void UnbindEditorLaunchSubsystem();
 	void HandleAutoStartCompleted(bool bLoadedExistingScenario);
 	UWidget* ResolvePlaceableDetailsVisibilityTarget() const;
-	// Resolves the read-only Scenario Template sidebar across current and legacy UMG child names.
+	// Resolves the read-only Scenario Template sidebar across current and migrated UMG child names.
 	UScenarioEditorSidebarWidget* ResolveTemplateSidebarWidget() const;
 	UWidget* ResolveTemplateSidebarVisibilityTarget() const;
 	UWidget* ResolveAssetPaletteVisibilityTarget() const;

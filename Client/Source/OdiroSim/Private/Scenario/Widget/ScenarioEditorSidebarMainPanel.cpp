@@ -7,12 +7,32 @@
 #include "Engine/World.h"
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
+#include "Widget/WidgetTextStyleCatalog.h"
 
 namespace
 {
 	FString JoinMainPanelDiagnostics(const TArray<FString>& diagnostics)
 	{
 		return diagnostics.IsEmpty() ? FString(TEXT("Unknown edit failure.")) : FString::Join(diagnostics, TEXT("\n"));
+	}
+
+	FWidgetTextStyle ResolveWidgetTextStyle(
+		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference,
+		const EWidgetTextStyleRole role)
+	{
+		if (const UWidgetTextStyleCatalog* catalog = catalogReference.LoadSynchronous())
+		{
+			return catalog->GetStyle(role);
+		}
+
+		TSoftObjectPtr<UWidgetTextStyleCatalog> defaultCatalog =
+			UWidgetTextStyleCatalog::MakeDefaultCatalogReference();
+		if (const UWidgetTextStyleCatalog* catalog = defaultCatalog.LoadSynchronous())
+		{
+			return catalog->GetStyle(role);
+		}
+
+		return UWidgetTextStyleCatalog::MakeDefaultStyle(role);
 	}
 }
 
@@ -35,6 +55,13 @@ void UScenarioEditorSidebarMainPanel::NativeDestruct()
 {
 	UnbindFieldRows();
 	Super::NativeDestruct();
+}
+
+void UScenarioEditorSidebarMainPanel::SetTextStyleCatalog(
+	TSoftObjectPtr<UWidgetTextStyleCatalog> catalog)
+{
+	TextStyleCatalog = catalog;
+	ApplyTextStyles();
 }
 
 void UScenarioEditorSidebarMainPanel::RefreshFromDraft()
@@ -200,28 +227,71 @@ void UScenarioEditorSidebarMainPanel::ConfigureFieldRows()
 {
 	if (TemplateIdFieldRow)
 	{
+		TemplateIdFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 		TemplateIdFieldRow->SetFieldLabel(TEXT("template_id"));
+		TemplateIdFieldRow->SetMultilineValue(false);
 		TemplateIdFieldRow->SetEditable(true);
 	}
 	if (VersionFieldRow)
 	{
+		VersionFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 		VersionFieldRow->SetFieldLabel(TEXT("version"));
+		VersionFieldRow->SetMultilineValue(false);
 		VersionFieldRow->SetEditable(false);
 	}
 	if (IntentFieldRow)
 	{
+		IntentFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 		IntentFieldRow->SetFieldLabel(TEXT("intent"));
+		IntentFieldRow->SetMultilineValue(true);
 		IntentFieldRow->SetEditable(true);
 	}
 	if (RobotStartFieldRow)
 	{
+		RobotStartFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 		RobotStartFieldRow->SetFieldLabel(TEXT("robot.start"));
+		RobotStartFieldRow->SetMultilineValue(false);
 		RobotStartFieldRow->SetEditable(false);
 	}
 	if (RobotGoalFieldRow)
 	{
+		RobotGoalFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 		RobotGoalFieldRow->SetFieldLabel(TEXT("robot.goal"));
+		RobotGoalFieldRow->SetMultilineValue(false);
 		RobotGoalFieldRow->SetEditable(false);
+	}
+	ApplyTextStyles();
+}
+
+void UScenarioEditorSidebarMainPanel::ApplyTextStyles()
+{
+	if (TemplateIdFieldRow)
+	{
+		TemplateIdFieldRow->SetTextStyleCatalog(TextStyleCatalog);
+	}
+	if (VersionFieldRow)
+	{
+		VersionFieldRow->SetTextStyleCatalog(TextStyleCatalog);
+	}
+	if (IntentFieldRow)
+	{
+		IntentFieldRow->SetTextStyleCatalog(TextStyleCatalog);
+	}
+	if (RobotStartFieldRow)
+	{
+		RobotStartFieldRow->SetTextStyleCatalog(TextStyleCatalog);
+	}
+	if (RobotGoalFieldRow)
+	{
+		RobotGoalFieldRow->SetTextStyleCatalog(TextStyleCatalog);
+	}
+	if (DiagnosticsTextBlock)
+	{
+		const FWidgetTextStyle style = ResolveWidgetTextStyle(
+			TextStyleCatalog,
+			EWidgetTextStyleRole::Value);
+		DiagnosticsTextBlock->SetFont(style.Font);
+		DiagnosticsTextBlock->SetColorAndOpacity(FSlateColor(style.Color));
 	}
 }
 

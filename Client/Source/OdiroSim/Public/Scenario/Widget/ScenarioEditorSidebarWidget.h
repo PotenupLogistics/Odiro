@@ -10,6 +10,9 @@ class UTextBlock;
 class UScenarioEditorSidebarMainPanel;
 class UWidget;
 class UWidgetSwitcher;
+class UWidgetTextStyleCatalog;
+enum class EWidgetTextStyleRole : uint8;
+struct FWidgetTextStyle;
 
 // Scenario Template block viewer and panel switch host used by the editor side sidebar.
 UCLASS(BlueprintType, Blueprintable)
@@ -24,6 +27,10 @@ public:
 	// Scenario Template block currently displayed by the sidebar.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	EScenarioTemplateSidebarPanel ActivePanel = EScenarioTemplateSidebarPanel::Main;
+
+	// Shared typography catalog used by the sidebar and child panel widgets.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
 
 	// Optional title text for the active Scenario Template block.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
@@ -72,6 +79,10 @@ public:
 	// Selects the Scenario Template block displayed by the sidebar.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetActivePanel(EScenarioTemplateSidebarPanel panel);
+
+	// Updates the shared typography catalog used by this sidebar and its children.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
 
 	// Pulls the current draft Scenario Template from the authoring subsystem and renders it.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
@@ -123,6 +134,12 @@ private:
 		const FString& diagnosticsText);
 	// Applies text to a bound text block when it exists.
 	void SetTextBlockText(UTextBlock* textBlock, const FString& text) const;
+	// Applies shared typography to title, summary text, and child panel widgets.
+	void ApplyTextStyles();
+	// Resolves one shared text style from the configured catalog or built-in defaults.
+	FWidgetTextStyle ResolveTextStyle(EWidgetTextStyleRole role) const;
+	// Applies one shared style to a TextBlock control.
+	void ApplyTextBlockStyle(UTextBlock* textBlock, EWidgetTextStyleRole role) const;
 	// Returns the display title for one template sidebar panel.
 	static FString PanelToTitle(EScenarioTemplateSidebarPanel panel);
 	// Returns a stable label for a robot anchor type.

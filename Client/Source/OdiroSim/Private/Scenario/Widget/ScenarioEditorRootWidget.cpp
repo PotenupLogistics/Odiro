@@ -403,11 +403,11 @@ UScenarioEditorSidebarWidget* UScenarioEditorRootWidget::ResolveTemplateSidebarW
 	{
 		return ScenarioEditorSidebarWidget.Get();
 	}
-	if (ScenarioTemplateSidebarWidget)
+	if (SidebarWidget)
 	{
-		return ScenarioTemplateSidebarWidget.Get();
+		return SidebarWidget.Get();
 	}
-	return SidebarWidget.Get();
+	return ScenarioTemplateSidebarWidget.Get();
 }
 
 UWidget* UScenarioEditorRootWidget::ResolveTemplateSidebarVisibilityTarget() const

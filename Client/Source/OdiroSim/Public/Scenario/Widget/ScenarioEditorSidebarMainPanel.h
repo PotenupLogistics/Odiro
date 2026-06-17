@@ -9,6 +9,7 @@
 class UTextBlock;
 class UScenarioAuthoringSubsystem;
 class UScenarioEditorSidebarFieldRow;
+class UWidgetTextStyleCatalog;
 class SWidget;
 
 // Main Scenario Template sidebar panel for template metadata and robot anchors.
@@ -46,6 +47,14 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UTextBlock> DiagnosticsTextBlock;
 
+	// Shared typography catalog passed down to field rows.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
+
+	// Updates the shared typography catalog used by this panel and its field rows.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
+
 	// Pulls the current draft Scenario Template and refreshes this panel.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void RefreshFromDraft();
@@ -71,6 +80,8 @@ private:
 	void UnbindFieldRows();
 	// Applies static labels and editability to field rows.
 	void ConfigureFieldRows();
+	// Applies shared typography to diagnostic text and child rows.
+	void ApplyTextStyles();
 	// Resolves the authoring subsystem that owns the draft template.
 	UScenarioAuthoringSubsystem* GetAuthoringSubsystem() const;
 	// Commits a template_id edit to the draft template.

@@ -37,6 +37,7 @@ entry:
   - Scenario/Widget/ScenarioEditorSidebarFieldRow.h / .cpp
   - Scenario/Widget/ScenarioPlaceableDetailsWidget.h / .cpp
   - Scenario/Widget/ScenarioPlaceableContextMenuWidget.h / .cpp
+  - Widget/WidgetTextStyleCatalog.h / .cpp
   - ExperimentSettingTypesTest.cpp
   - ScenarioTemplateSampleJsonTest.cpp
   - ScenarioTemplateSamplerTest.cpp
@@ -72,10 +73,12 @@ keep:
   - ScenarioCorridorPreviewActor keeps non-blocking Corridor surface strips at least 20cm thick so adjacent Z-offset lanes have no vertical gap.
   - ScenarioAuthoringSubsystem normalizes static obstacle editor transforms to the Corridor surface Z offset before preview validation, spawn, update, and editor-view rebuild.
   - ScenarioEditorRootWidget owns edge-revealed editor panels: asset palette from the bottom edge and LLM prompt panel from the right edge.
-  - ScenarioEditorToolbarWidget owns the Main/Corridor/Obstacle/Pedestrian template sidebar tab state and broadcasts panel changes to the root widget.
+  - WBP_ScenarioEditorRootWidget currently binds the Scenario Template side panel through the SidebarWidget child name; ScenarioEditorRootWidget keeps compatibility binds for SidebarWidget and ScenarioEditorSidebarWidget until the WBP and compiled class are migrated together.
+  - ScenarioEditorToolbarWidget owns the Main/Corridor/Obstacle/Pedestrian template sidebar tab state, broadcasts panel changes, and directly synchronizes the root widget as a fallback.
   - ScenarioEditorSidebarWidget owns the Scenario Template block summary shown in the editor side sidebar, binds FallbackSummaryContainer for legacy read-only text, and switches specialized Main/Corridor/Obstacle/Pedestrian panel widgets when bound.
   - ScenarioEditorSidebarMainPanel owns Main-panel metadata field rows for template_id, version, intent, and robot anchor summaries, including a native fallback tree when no Blueprint-authored tree is bound.
-  - ScenarioEditorSidebarFieldRow owns the common leaf property row pattern for label/separator/value editing in Scenario Template side panels, including a native fallback row tree.
+  - ScenarioEditorSidebarFieldRow owns the common leaf property row pattern for label/separator/value editing in Scenario Template side panels, including single-line and bounded multiline value inputs in its native fallback row tree.
+  - WidgetTextStyleCatalog owns shared UMG typography roles Title, Label, and Value, each limited to FSlateFontInfo and FLinearColor so editor and non-editor widgets can share font and color tuning.
   - ScenarioPlaceableDetailsWidget owns the placeable selection details panel; ScenarioPlaceableContextMenuWidget remains only as a legacy UMG compatibility wrapper.
 verify:
   - contract specs vs sample JSON alignment

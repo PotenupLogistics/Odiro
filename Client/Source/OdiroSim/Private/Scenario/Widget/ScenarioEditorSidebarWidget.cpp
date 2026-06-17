@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorSidebarMainPanel.h"
+#include "Widget/WidgetTextStyleCatalog.h"
 
 namespace
 {
@@ -24,6 +25,7 @@ void UScenarioEditorSidebarWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	ApplyTextStyles();
 	RefreshFromDraft();
 }
 
@@ -31,6 +33,13 @@ void UScenarioEditorSidebarWidget::SetActivePanel(const EScenarioTemplateSidebar
 {
 	ActivePanel = panel;
 	RefreshFromDraft();
+}
+
+void UScenarioEditorSidebarWidget::SetTextStyleCatalog(
+	TSoftObjectPtr<UWidgetTextStyleCatalog> catalog)
+{
+	TextStyleCatalog = catalog;
+	ApplyTextStyles();
 }
 
 void UScenarioEditorSidebarWidget::RefreshFromDraft()
@@ -81,10 +90,12 @@ void UScenarioEditorSidebarWidget::RefreshFromTemplate(const FScenarioTemplateDo
 	SetSidebarText(PanelToTitle(ActivePanel), primaryText, secondaryText, listText, TEXT(""));
 	if (MainPanelWidget)
 	{
+		MainPanelWidget->SetTextStyleCatalog(TextStyleCatalog);
 		MainPanelWidget->RefreshFromTemplate(scenarioTemplate);
 	}
 	RefreshPanelSwitcher();
 	RefreshFallbackTextVisibility();
+	ApplyTextStyles();
 }
 
 void UScenarioEditorSidebarWidget::RefreshPanelSwitcher()
@@ -298,6 +309,51 @@ void UScenarioEditorSidebarWidget::SetTextBlockText(UTextBlock* textBlock, const
 	{
 		textBlock->SetText(FText::FromString(text));
 	}
+}
+
+void UScenarioEditorSidebarWidget::ApplyTextStyles()
+{
+	ApplyTextBlockStyle(PanelTitleTextBlock.Get(), EWidgetTextStyleRole::Title);
+	ApplyTextBlockStyle(PrimaryFieldsTextBlock.Get(), EWidgetTextStyleRole::Value);
+	ApplyTextBlockStyle(SecondaryFieldsTextBlock.Get(), EWidgetTextStyleRole::Value);
+	ApplyTextBlockStyle(ListSummaryTextBlock.Get(), EWidgetTextStyleRole::Value);
+	ApplyTextBlockStyle(DiagnosticsTextBlock.Get(), EWidgetTextStyleRole::Value);
+	if (MainPanelWidget)
+	{
+		MainPanelWidget->SetTextStyleCatalog(TextStyleCatalog);
+	}
+}
+
+FWidgetTextStyle UScenarioEditorSidebarWidget::ResolveTextStyle(
+	const EWidgetTextStyleRole role) const
+{
+	if (const UWidgetTextStyleCatalog* catalog = TextStyleCatalog.LoadSynchronous())
+	{
+		return catalog->GetStyle(role);
+	}
+
+	TSoftObjectPtr<UWidgetTextStyleCatalog> defaultCatalog =
+		UWidgetTextStyleCatalog::MakeDefaultCatalogReference();
+	if (const UWidgetTextStyleCatalog* catalog = defaultCatalog.LoadSynchronous())
+	{
+		return catalog->GetStyle(role);
+	}
+
+	return UWidgetTextStyleCatalog::MakeDefaultStyle(role);
+}
+
+void UScenarioEditorSidebarWidget::ApplyTextBlockStyle(
+	UTextBlock* textBlock,
+	const EWidgetTextStyleRole role) const
+{
+	if (!textBlock)
+	{
+		return;
+	}
+
+	const FWidgetTextStyle style = ResolveTextStyle(role);
+	textBlock->SetFont(style.Font);
+	textBlock->SetColorAndOpacity(FSlateColor(style.Color));
 }
 
 FString UScenarioEditorSidebarWidget::PanelToTitle(const EScenarioTemplateSidebarPanel panel)

@@ -100,12 +100,7 @@ void UScenarioEditorToolbarWidget::SetActiveSidebarPanel(const EScenarioTemplate
 {
 	ActiveSidebarPanel = panel;
 	RefreshSidebarPanelButtons();
-	const bool bHasSidebarPanelListener = OnSidebarPanelChanged.IsBound();
 	OnSidebarPanelChanged.Broadcast(ActiveSidebarPanel);
-	if (bHasSidebarPanelListener)
-	{
-		return;
-	}
 
 	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
 	{

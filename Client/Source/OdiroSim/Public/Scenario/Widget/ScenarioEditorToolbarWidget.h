@@ -58,6 +58,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
 	void SetActiveSidebarPanel(EScenarioTemplateSidebarPanel panel);
 
+	// Selects the root Scenario Template fields panel.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
+	void SelectMainSidebarPanel();
+
+	// Selects the Corridor fields panel.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
+	void SelectCorridorSidebarPanel();
+
+	// Selects the static obstacle fields panel.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
+	void SelectObstacleSidebarPanel();
+
+	// Selects the pedestrian fields panel.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
+	void SelectPedestrianSidebarPanel();
+
 	// Returns the active Scenario Template sidebar panel.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Toolbar")
 	EScenarioTemplateSidebarPanel GetActiveSidebarPanel() const { return ActiveSidebarPanel; }

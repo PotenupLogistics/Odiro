@@ -100,7 +100,12 @@ void UScenarioEditorToolbarWidget::SetActiveSidebarPanel(const EScenarioTemplate
 {
 	ActiveSidebarPanel = panel;
 	RefreshSidebarPanelButtons();
+	const bool bHasSidebarPanelListener = OnSidebarPanelChanged.IsBound();
 	OnSidebarPanelChanged.Broadcast(ActiveSidebarPanel);
+	if (bHasSidebarPanelListener)
+	{
+		return;
+	}
 
 	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
 	{
@@ -109,6 +114,26 @@ void UScenarioEditorToolbarWidget::SetActiveSidebarPanel(const EScenarioTemplate
 			rootWidget->SetTemplateSidebarPanel(ActiveSidebarPanel);
 		}
 	}
+}
+
+void UScenarioEditorToolbarWidget::SelectMainSidebarPanel()
+{
+	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Main);
+}
+
+void UScenarioEditorToolbarWidget::SelectCorridorSidebarPanel()
+{
+	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Corridor);
+}
+
+void UScenarioEditorToolbarWidget::SelectObstacleSidebarPanel()
+{
+	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Obstacle);
+}
+
+void UScenarioEditorToolbarWidget::SelectPedestrianSidebarPanel()
+{
+	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Pedestrian);
 }
 
 void UScenarioEditorToolbarWidget::RefreshSidebarPanelButtons()
@@ -131,22 +156,22 @@ void UScenarioEditorToolbarWidget::HandleReturnButtonClicked()
 
 void UScenarioEditorToolbarWidget::HandleMainPanelButtonClicked()
 {
-	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Main);
+	SelectMainSidebarPanel();
 }
 
 void UScenarioEditorToolbarWidget::HandleCorridorPanelButtonClicked()
 {
-	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Corridor);
+	SelectCorridorSidebarPanel();
 }
 
 void UScenarioEditorToolbarWidget::HandleObstaclePanelButtonClicked()
 {
-	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Obstacle);
+	SelectObstacleSidebarPanel();
 }
 
 void UScenarioEditorToolbarWidget::HandlePedestrianPanelButtonClicked()
 {
-	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Pedestrian);
+	SelectPedestrianSidebarPanel();
 }
 
 void UScenarioEditorToolbarWidget::BindControls()

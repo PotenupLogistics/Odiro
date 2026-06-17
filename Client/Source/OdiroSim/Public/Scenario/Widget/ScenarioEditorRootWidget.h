@@ -68,6 +68,10 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UScenarioTemplateSidebarWidget> ScenarioTemplateSidebarWidget;
 
+	// Compatibility bind for the current UMG child name used by the Scenario Template sidebar.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UScenarioTemplateSidebarWidget> SidebarWidget;
+
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UButton> TopDownOrthoModeButton;
 
@@ -183,6 +187,8 @@ private:
 	void UnbindEditorLaunchSubsystem();
 	void HandleAutoStartCompleted(bool bLoadedExistingScenario);
 	UWidget* ResolvePlaceableDetailsVisibilityTarget() const;
+	// Resolves the read-only Scenario Template sidebar across current and legacy UMG child names.
+	UScenarioTemplateSidebarWidget* ResolveTemplateSidebarWidget() const;
 	UWidget* ResolveTemplateSidebarVisibilityTarget() const;
 	UWidget* ResolveAssetPaletteVisibilityTarget() const;
 	UWidget* ResolveLlmPanelVisibilityTarget() const;

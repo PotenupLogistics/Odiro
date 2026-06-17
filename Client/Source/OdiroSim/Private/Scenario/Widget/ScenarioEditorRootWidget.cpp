@@ -144,11 +144,12 @@ void UScenarioEditorRootWidget::SetTemplateSidebarPanel(const EScenarioTemplateS
 
 void UScenarioEditorRootWidget::RefreshTemplateSidebarWidget()
 {
+	UScenarioTemplateSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget();
 	SetPanelVisibility(ResolveTemplateSidebarVisibilityTarget(), true);
-	SetPanelVisibility(ScenarioTemplateSidebarWidget.Get(), true);
-	if (ScenarioTemplateSidebarWidget)
+	SetPanelVisibility(sidebarWidget, true);
+	if (sidebarWidget)
 	{
-		ScenarioTemplateSidebarWidget->RefreshFromDraft();
+		sidebarWidget->RefreshFromDraft();
 	}
 }
 
@@ -329,9 +330,10 @@ void UScenarioEditorRootWidget::UnbindTemplateSidebarToolbar()
 
 void UScenarioEditorRootWidget::ApplyTemplateSidebarPanel(const EScenarioTemplateSidebarPanel activePanel)
 {
-	if (ScenarioTemplateSidebarWidget)
+	UScenarioTemplateSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget();
+	if (sidebarWidget)
 	{
-		ScenarioTemplateSidebarWidget->SetActivePanel(activePanel);
+		sidebarWidget->SetActivePanel(activePanel);
 	}
 }
 
@@ -395,9 +397,14 @@ UWidget* UScenarioEditorRootWidget::ResolvePlaceableDetailsVisibilityTarget() co
 	return PlaceableContextMenuPanel ? PlaceableContextMenuPanel.Get() : Cast<UWidget>(PlaceableContextMenuWidget.Get());
 }
 
+UScenarioTemplateSidebarWidget* UScenarioEditorRootWidget::ResolveTemplateSidebarWidget() const
+{
+	return ScenarioTemplateSidebarWidget ? ScenarioTemplateSidebarWidget.Get() : SidebarWidget.Get();
+}
+
 UWidget* UScenarioEditorRootWidget::ResolveTemplateSidebarVisibilityTarget() const
 {
-	return TemplateSidebarPanel ? TemplateSidebarPanel.Get() : Cast<UWidget>(ScenarioTemplateSidebarWidget.Get());
+	return TemplateSidebarPanel ? TemplateSidebarPanel.Get() : Cast<UWidget>(ResolveTemplateSidebarWidget());
 }
 
 UWidget* UScenarioEditorRootWidget::ResolveAssetPaletteVisibilityTarget() const

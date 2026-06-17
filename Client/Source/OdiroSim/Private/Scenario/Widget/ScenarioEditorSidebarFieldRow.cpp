@@ -6,7 +6,6 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/SizeBox.h"
-#include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Styling/SlateTypes.h"
 #include "Widget/WidgetTextStyleCatalog.h"
@@ -107,9 +106,6 @@ void UScenarioEditorSidebarFieldRow::BuildDefaultWidgetTree()
 	SeparatorTextBlock = WidgetTree->ConstructWidget<UTextBlock>(
 		UTextBlock::StaticClass(),
 		TEXT("SeparatorTextBlock"));
-	USpacer* spacer = WidgetTree->ConstructWidget<USpacer>(
-		USpacer::StaticClass(),
-		TEXT("ValueSpacer"));
 	ValueTextBlock = WidgetTree->ConstructWidget<UTextBlock>(
 		UTextBlock::StaticClass(),
 		TEXT("ValueTextBlock"));
@@ -139,20 +135,14 @@ void UScenarioEditorSidebarFieldRow::BuildDefaultWidgetTree()
 			slot->SetVerticalAlignment(VAlign_Top);
 		}
 	}
-	if (spacer)
-	{
-		spacer->SetSize(FVector2D(8.0f, 1.0f));
-		if (UHorizontalBoxSlot* slot = rootBox->AddChildToHorizontalBox(spacer))
-		{
-			slot->SetPadding(FMargin(0.0f));
-		}
-	}
 	if (ValueTextBlock)
 	{
 		ValueTextBlock->SetAutoWrapText(true);
+		ValueTextBlock->SetJustification(ETextJustify::Right);
 		if (UHorizontalBoxSlot* slot = rootBox->AddChildToHorizontalBox(ValueTextBlock))
 		{
 			slot->SetPadding(FMargin(8.0f, 2.0f, 0.0f, 2.0f));
+			slot->SetHorizontalAlignment(HAlign_Fill);
 			slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		}
 	}
@@ -162,17 +152,21 @@ void UScenarioEditorSidebarFieldRow::BuildDefaultWidgetTree()
 		if (UHorizontalBoxSlot* slot = rootBox->AddChildToHorizontalBox(ValueEditableTextBox))
 		{
 			slot->SetPadding(FMargin(8.0f, 0.0f, 0.0f, 0.0f));
+			slot->SetHorizontalAlignment(HAlign_Fill);
 			slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		}
 	}
 	if (ValueMultiLineSizeBox && ValueMultiLineEditableTextBox)
 	{
-		ValueMultiLineSizeBox->SetHeightOverride(MultilineValueHeight);
+		ValueMultiLineSizeBox->ClearHeightOverride();
+		ValueMultiLineSizeBox->ClearMinDesiredWidth();
+		ValueMultiLineSizeBox->SetMinDesiredHeight(MultilineValueHeight);
 		ValueMultiLineEditableTextBox->SetAutoWrapText(true);
 		ValueMultiLineSizeBox->SetContent(ValueMultiLineEditableTextBox);
 		if (UHorizontalBoxSlot* slot = rootBox->AddChildToHorizontalBox(ValueMultiLineSizeBox))
 		{
 			slot->SetPadding(FMargin(8.0f, 0.0f, 0.0f, 0.0f));
+			slot->SetHorizontalAlignment(HAlign_Fill);
 			slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		}
 	}
@@ -262,7 +256,9 @@ void UScenarioEditorSidebarFieldRow::RefreshRow()
 
 	if (ValueMultiLineSizeBox)
 	{
-		ValueMultiLineSizeBox->SetHeightOverride(MultilineValueHeight);
+		ValueMultiLineSizeBox->ClearHeightOverride();
+		ValueMultiLineSizeBox->ClearMinDesiredWidth();
+		ValueMultiLineSizeBox->SetMinDesiredHeight(MultilineValueHeight);
 		ValueMultiLineSizeBox->SetVisibility(bEditable && bMultilineValue && ValueMultiLineEditableTextBox
 			? ESlateVisibility::Visible
 			: ESlateVisibility::Collapsed);

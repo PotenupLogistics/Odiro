@@ -8,6 +8,7 @@
 
 class UTextBlock;
 class UScenarioAuthoringSubsystem;
+class UScenarioEditorSidebarBlockWidget;
 class UScenarioEditorSidebarFieldRow;
 class UWidgetTextStyleCatalog;
 class SWidget;
@@ -51,6 +52,26 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
 
+	// Optional root Scenario Template block.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarBlockWidget> RootBlockWidget;
+
+	// Optional robot template block nested under the root block.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarBlockWidget> RobotBlockWidget;
+
+	// Optional fixed robot start block nested under the robot block.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarBlockWidget> RobotStartBlockWidget;
+
+	// Optional fixed robot goal block nested under the robot block.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarBlockWidget> RobotGoalBlockWidget;
+
+	// Optional read-only row for scenario_template.schema.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarFieldRow> SchemaFieldRow;
+
 	// Updates the shared typography catalog used by this panel and its field rows.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
@@ -72,6 +93,54 @@ private:
 	UFUNCTION()
 	void HandleIntentCommitted(const FText& text, ETextCommit::Type commitMethod);
 
+	// Optional read-only row for robot.start.type.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotStartTypeFieldRow;
+
+	// Optional read-only row for robot.start.segment.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotStartSegmentFieldRow;
+
+	// Optional read-only row for robot.start.along_m.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotStartAlongFieldRow;
+
+	// Optional read-only row for robot.start.offset_m.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotStartOffsetFieldRow;
+
+	// Optional read-only row for robot.start.lane.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotStartLaneFieldRow;
+
+	// Optional read-only row for robot.start.heading.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotStartHeadingFieldRow;
+
+	// Optional read-only row for robot.goal.type.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotGoalTypeFieldRow;
+
+	// Optional read-only row for robot.goal.segment.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotGoalSegmentFieldRow;
+
+	// Optional read-only row for robot.goal.along_m.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotGoalAlongFieldRow;
+
+	// Optional read-only row for robot.goal.offset_m.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotGoalOffsetFieldRow;
+
+	// Optional read-only row for robot.goal.lane.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotGoalLaneFieldRow;
+
+	// Optional read-only row for robot.goal.heading.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotGoalHeadingFieldRow;
+
 	// Builds the native fallback panel tree when no Blueprint-authored tree is present.
 	void BuildDefaultWidgetTree();
 	// Binds child field row delegates owned by this panel.
@@ -82,6 +151,23 @@ private:
 	void ConfigureFieldRows();
 	// Applies shared typography to diagnostic text and child rows.
 	void ApplyTextStyles();
+	// Applies static labels and editability to one robot anchor detail row group.
+	void ConfigureRobotAnchorRows(
+		UScenarioEditorSidebarFieldRow* typeRow,
+		UScenarioEditorSidebarFieldRow* segmentRow,
+		UScenarioEditorSidebarFieldRow* alongRow,
+		UScenarioEditorSidebarFieldRow* offsetRow,
+		UScenarioEditorSidebarFieldRow* laneRow,
+		UScenarioEditorSidebarFieldRow* headingRow);
+	// Refreshes one robot anchor detail row group from template data.
+	void RefreshRobotAnchorRows(
+		const FScenarioTemplateRobotAnchor& anchor,
+		UScenarioEditorSidebarFieldRow* typeRow,
+		UScenarioEditorSidebarFieldRow* segmentRow,
+		UScenarioEditorSidebarFieldRow* alongRow,
+		UScenarioEditorSidebarFieldRow* offsetRow,
+		UScenarioEditorSidebarFieldRow* laneRow,
+		UScenarioEditorSidebarFieldRow* headingRow) const;
 	// Resolves the authoring subsystem that owns the draft template.
 	UScenarioAuthoringSubsystem* GetAuthoringSubsystem() const;
 	// Commits a template_id edit to the draft template.

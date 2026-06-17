@@ -6,11 +6,13 @@
 #include "Shared/ScenarioTemplateTypes.h"
 #include "ScenarioEditorSidebarWidget.generated.h"
 
+class UScrollBox;
 class UTextBlock;
 class UScenarioEditorSidebarMainPanel;
 class UWidget;
 class UWidgetSwitcher;
 class UWidgetTextStyleCatalog;
+class SWidget;
 
 // Scenario Template block viewer and panel switch host used by the editor side sidebar.
 UCLASS(BlueprintType, Blueprintable)
@@ -19,6 +21,9 @@ class ODIROSIM_API UScenarioEditorSidebarWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	// Builds a native sidebar tree when no Blueprint-authored root widget exists.
+	virtual TSharedRef<SWidget> RebuildWidget() override;
+
 	// Refreshes the read-only sidebar after UMG construction.
 	virtual void NativeConstruct() override;
 
@@ -49,6 +54,10 @@ public:
 	// Optional status text for missing draft or sidebar binding diagnostics.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UTextBlock> DiagnosticsTextBlock;
+
+	// Optional scroll area that owns the active Scenario Template block panel.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScrollBox> SidebarScrollBox;
 
 	// Optional container that groups legacy read-only summary text widgets.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
@@ -91,8 +100,44 @@ public:
 	void RefreshFromTemplate(const FScenarioTemplateDocument& scenarioTemplate);
 
 private:
+	// Generated Main panel used only when no specialized Main panel is bound.
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> GeneratedMainPanelWidget;
+
+	// Generated Corridor panel used only when no Blueprint placeholder is bound.
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> GeneratedCorridorPanelWidget;
+
+	// Generated Obstacle panel used only when no Blueprint placeholder is bound.
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> GeneratedObstaclePanelWidget;
+
+	// Generated Pedestrian panel used only when no Blueprint placeholder is bound.
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> GeneratedPedestrianPanelWidget;
+
+	// Builds the native sidebar tree that mirrors the HTML discussion prototype.
+	void BuildDefaultWidgetTree();
+	// Applies scroll box defaults shared by native and Blueprint-authored trees.
+	void ConfigureScrollBox() const;
+	// Wraps a Blueprint-authored PanelSwitcher in a generated scroll area when no scroll box is bound.
+	bool EnsurePanelSwitcherIsScrollable();
+	// Rebuilds generated block content for placeholder panel widgets.
+	void RefreshGeneratedPanelContent(const FScenarioTemplateDocument& scenarioTemplate);
+	// Creates or returns the generated fallback widget for one panel.
+	UWidget* EnsureGeneratedPanelWidget(EScenarioTemplateSidebarPanel panel);
+	// Returns the generated fallback widget for one panel without creating it.
+	UWidget* ResolveGeneratedPanelWidget(EScenarioTemplateSidebarPanel panel) const;
+	// Replaces a panel placeholder's content with generated block content.
+	bool ApplyGeneratedContentToPanelWidget(UWidget* panelWidget, UWidget* contentWidget) const;
+	// Builds one generated block panel for the active template data.
+	UWidget* BuildGeneratedPanelContent(
+		EScenarioTemplateSidebarPanel panel,
+		const FScenarioTemplateDocument& scenarioTemplate);
 	// Applies the active panel to the optional UMG widget switcher.
 	void RefreshPanelSwitcher();
+	// Applies a small inset so panel outlines are not clipped by the switcher viewport.
+	void ApplyPanelContentPadding(UWidget* panelWidget) const;
 	// Shows read-only summary text when the active panel has no specialized widget yet.
 	void RefreshFallbackTextVisibility() const;
 	// Applies one visibility state to the legacy read-only summary area.

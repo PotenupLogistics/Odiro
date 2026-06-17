@@ -8,6 +8,7 @@
 #include "Components/Widget.h"
 #include "Fonts/FontProviderInterface.h"
 #include "Styling/CoreStyle.h"
+#include "Styling/SlateBrush.h"
 #include "Styling/SlateTypes.h"
 #include "UObject/SoftObjectPath.h"
 
@@ -52,7 +53,8 @@ namespace
 		const EWidgetTextStyleRole role,
 		const FWidgetTextStyle& titleStyle,
 		const FWidgetTextStyle& labelStyle,
-		const FWidgetTextStyle& valueStyle)
+		const FWidgetTextStyle& valueStyle,
+		const FWidgetTextStyle& captionStyle)
 	{
 		switch (role)
 		{
@@ -60,6 +62,8 @@ namespace
 			return titleStyle;
 		case EWidgetTextStyleRole::Label:
 			return labelStyle;
+		case EWidgetTextStyleRole::Caption:
+			return captionStyle;
 		case EWidgetTextStyleRole::Value:
 		default:
 			return valueStyle;
@@ -87,6 +91,44 @@ namespace
 		// UEditableText only exposes whole-style replacement, which can crash Slate Prepass at runtime.
 	}
 
+	FSlateFontInfo MakeScenarioEditorEditableFont(const FWidgetTextStyle& style)
+	{
+		return NormalizeFont(style.Font, EWidgetTextStyleRole::Value);
+	}
+
+	FSlateBrush MakeScenarioEditorEditableBackgroundBrush()
+	{
+		FSlateBrush brush;
+		brush.DrawAs = ESlateBrushDrawType::Box;
+		brush.TintColor = FSlateColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.5f));
+		return brush;
+	}
+
+	void ApplyScenarioEditorEditableTextBoxStyle(
+		FEditableTextBoxStyle& textBoxStyle,
+		const FWidgetTextStyle& style)
+	{
+		const FSlateFontInfo editableFont = MakeScenarioEditorEditableFont(style);
+		const FSlateColor textColor(style.Color);
+		FTextBlockStyle textStyle = textBoxStyle.TextStyle;
+		textStyle.SetFont(editableFont);
+		textStyle.SetColorAndOpacity(textColor);
+
+		const FSlateBrush backgroundBrush = MakeScenarioEditorEditableBackgroundBrush();
+		textBoxStyle
+			.SetTextStyle(textStyle)
+			.SetFont(editableFont)
+			.SetForegroundColor(textColor)
+			.SetReadOnlyForegroundColor(textColor)
+			.SetFocusedForegroundColor(textColor)
+			.SetBackgroundColor(FSlateColor(FLinearColor::White))
+			.SetBackgroundImageNormal(backgroundBrush)
+			.SetBackgroundImageHovered(backgroundBrush)
+			.SetBackgroundImageFocused(backgroundBrush)
+			.SetBackgroundImageReadOnly(backgroundBrush)
+			.SetPadding(FMargin(8.0f, 4.0f));
+	}
+
 	void ApplyResolvedEditableTextBoxStyle(UEditableTextBox* textBox, const FWidgetTextStyle& style)
 	{
 		if (!IsValid(textBox))
@@ -94,6 +136,8 @@ namespace
 			return;
 		}
 
+		ApplyScenarioEditorEditableTextBoxStyle(textBox->WidgetStyle, style);
+		textBox->SynchronizeProperties();
 		textBox->SetForegroundColor(style.Color);
 	}
 
@@ -106,6 +150,8 @@ namespace
 			return;
 		}
 
+		ApplyScenarioEditorEditableTextBoxStyle(textBox->WidgetStyle, style);
+		textBox->SynchronizeProperties();
 		textBox->SetForegroundColor(style.Color);
 	}
 
@@ -144,6 +190,12 @@ namespace
 		{
 			return EWidgetTextStyleRole::Title;
 		}
+		if (normalizedName.Contains(TEXT("caption"))
+			|| normalizedName.Contains(TEXT("path"))
+			|| normalizedName.Contains(TEXT("address")))
+		{
+			return EWidgetTextStyleRole::Caption;
+		}
 		if (normalizedName.Contains(TEXT("label"))
 			|| normalizedName.Contains(TEXT("category"))
 			|| normalizedName.Contains(TEXT("button"))
@@ -172,6 +224,7 @@ UWidgetTextStyleCatalog::UWidgetTextStyleCatalog()
 	Title = MakeDefaultStyle(EWidgetTextStyleRole::Title);
 	Label = MakeDefaultStyle(EWidgetTextStyleRole::Label);
 	Value = MakeDefaultStyle(EWidgetTextStyleRole::Value);
+	Caption = MakeDefaultStyle(EWidgetTextStyleRole::Caption);
 }
 
 TSoftObjectPtr<UWidgetTextStyleCatalog> UWidgetTextStyleCatalog::MakeDefaultCatalogReference()
@@ -192,6 +245,13 @@ FWidgetTextStyle UWidgetTextStyleCatalog::MakeDefaultStyle(const EWidgetTextStyl
 			MakeDefaultFont(TEXT("Bold"), 14.0f),
 			FLinearColor(0.93f, 0.94f, 0.98f, 1.0f));
 	case EWidgetTextStyleRole::Value:
+		return FWidgetTextStyle(
+			MakeDefaultFont(TEXT("Regular"), 13.0f),
+			FLinearColor(0.88f, 0.90f, 0.95f, 1.0f));
+	case EWidgetTextStyleRole::Caption:
+		return FWidgetTextStyle(
+			MakeDefaultFont(TEXT("Regular"), 11.0f),
+			FLinearColor(0.68f, 0.73f, 0.80f, 1.0f));
 	default:
 		return FWidgetTextStyle(
 			MakeDefaultFont(TEXT("Regular"), 13.0f),
@@ -313,9 +373,10 @@ void UWidgetTextStyleCatalog::ApplyWidgetTreeTextStyles(
 	const FWidgetTextStyle titleStyle = ResolveStyle(catalogReference, EWidgetTextStyleRole::Title);
 	const FWidgetTextStyle labelStyle = ResolveStyle(catalogReference, EWidgetTextStyleRole::Label);
 	const FWidgetTextStyle valueStyle = ResolveStyle(catalogReference, EWidgetTextStyleRole::Value);
+	const FWidgetTextStyle captionStyle = ResolveStyle(catalogReference, EWidgetTextStyleRole::Caption);
 
 	widgetTree->ForEachWidgetAndDescendants(
-		[&titleStyle, &labelStyle, &valueStyle](UWidget* widget)
+		[&titleStyle, &labelStyle, &valueStyle, &captionStyle](UWidget* widget)
 		{
 			if (!IsValid(widget))
 			{
@@ -326,7 +387,12 @@ void UWidgetTextStyleCatalog::ApplyWidgetTreeTextStyles(
 			{
 				ApplyResolvedTextBlockStyle(
 					textBlock,
-					SelectStyleForRole(InferRoleFromWidgetName(textBlock), titleStyle, labelStyle, valueStyle));
+					SelectStyleForRole(
+						InferRoleFromWidgetName(textBlock),
+						titleStyle,
+						labelStyle,
+						valueStyle,
+						captionStyle));
 				return;
 			}
 			if (UEditableText* editableText = Cast<UEditableText>(widget))
@@ -360,7 +426,10 @@ FWidgetTextStyle UWidgetTextStyleCatalog::GetStyle(const EWidgetTextStyleRole ro
 	case EWidgetTextStyleRole::Label:
 		return NormalizeStyle(Label, role);
 	case EWidgetTextStyleRole::Value:
-	default:
 		return NormalizeStyle(Value, role);
+	case EWidgetTextStyleRole::Caption:
+		return NormalizeStyle(Caption, role);
+	default:
+		return NormalizeStyle(Value, EWidgetTextStyleRole::Value);
 	}
 }

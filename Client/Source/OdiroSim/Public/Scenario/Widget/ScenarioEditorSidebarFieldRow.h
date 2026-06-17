@@ -47,7 +47,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	bool bMultilineValue = false;
 
-	// Fixed height used by multiline inputs so long text stays inside the sidebar layout.
+	// Minimum height used by multiline inputs before content-driven expansion.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template", meta = (ClampMin = "24.0"))
 	float MultilineValueHeight = 96.0f;
 

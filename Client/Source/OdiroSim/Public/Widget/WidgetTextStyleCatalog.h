@@ -11,7 +11,8 @@ enum class EWidgetTextStyleRole : uint8
 {
 	Title,
 	Label,
-	Value
+	Value,
+	Caption
 };
 
 // Font and color pair used by one semantic UMG text role.
@@ -113,13 +114,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Widget|Text Style")
 	FWidgetTextStyle Title;
 
-	// Text style used for field labels and compact captions.
+	// Text style used for field labels and compact command text.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Widget|Text Style")
 	FWidgetTextStyle Label;
 
 	// Text style used for field values and body-like UI text.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Widget|Text Style")
 	FWidgetTextStyle Value;
+
+	// Text style used for compact metadata such as Scenario Template field addresses.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Widget|Text Style")
+	FWidgetTextStyle Caption;
 
 	// Returns the style configured for one semantic role.
 	UFUNCTION(BlueprintPure, Category = "Widget|Text Style")

@@ -36,6 +36,7 @@ entry:
   - Scenario/Widget/ScenarioEditorSidebarMainPanel.h / .cpp
   - Scenario/Widget/ScenarioEditorSidebarCorridorPanel.h / .cpp
   - Scenario/Widget/ScenarioEditorSidebarCorridorLaneWidget.h / .cpp
+  - Scenario/Widget/ScenarioEditorSidebarCorridorPointWidget.h / .cpp
   - Scenario/Widget/ScenarioEditorSidebarCorridorSegmentWidget.h / .cpp
   - Scenario/Widget/ScenarioEditorSidebarFieldRow.h / .cpp
   - Scenario/Widget/ScenarioPlaceableDetailsWidget.h / .cpp
@@ -80,8 +81,9 @@ keep:
   - ScenarioEditorToolbarWidget owns the Main/Corridor/Obstacle/Pedestrian template sidebar tab state, broadcasts panel changes, and directly synchronizes the root widget as a fallback.
   - ScenarioEditorSidebarWidget owns the Scenario Template block summary shown in the editor side sidebar, binds FallbackSummaryContainer for legacy read-only text, and switches specialized Main/Corridor/Obstacle/Pedestrian panel widgets when bound.
   - ScenarioEditorSidebarMainPanel owns Main-panel metadata field rows for template_id, version, intent, and robot anchor summaries, including a native fallback tree when no Blueprint-authored tree is bound.
-  - ScenarioEditorSidebarCorridorPanel owns Corridor-panel field rows, including editable walkway_width_m, side lane profile, and semantic segment commits through ScenarioAuthoringSubsystem while axis fields remain read-only.
+  - ScenarioEditorSidebarCorridorPanel owns Corridor-panel field rows, including editable axis points, walkway_width_m, side lane profile, and semantic segment commits through ScenarioAuthoringSubsystem.
   - ScenarioEditorSidebarCorridorLaneWidget owns one editable building_side or curb_side lane detail block and reports surface, width, add, and remove requests with side/index context.
+  - ScenarioEditorSidebarCorridorPointWidget owns one editable corridor.axis.points_m[] detail block and reports x, y, add, and remove requests with point index context.
   - ScenarioEditorSidebarCorridorSegmentWidget owns one editable corridor.segments[] detail block and reports id, type, along_range_m, replaced_by, add, and remove requests with segment index context.
   - ScenarioEditorSidebarFieldRow owns the common leaf property row pattern for label/separator/value editing in Scenario Template side panels, including single-line and bounded multiline value inputs in its native fallback row tree.
   - WidgetTextStyleCatalog owns shared UMG typography roles Title, Label, and Value, each limited to FSlateFontInfo and FLinearColor, plus common style application helpers for TextBlock and editable text controls.

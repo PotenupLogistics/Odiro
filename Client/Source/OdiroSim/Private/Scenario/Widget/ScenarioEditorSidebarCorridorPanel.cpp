@@ -8,6 +8,7 @@
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorLaneWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarCorridorPointWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorSegmentWidget.h"
 #include "Widget/WidgetTextStyleCatalog.h"
 
@@ -156,10 +157,7 @@ void UScenarioEditorSidebarCorridorPanel::RefreshFromTemplate(
 	{
 		AxisTypeFieldRow->SetValueText(AxisTypeToString(corridor.Axis.Type));
 	}
-	if (AxisPointsFieldRow)
-	{
-		AxisPointsFieldRow->SetValueText(FormatAxisPointsSummary(corridor.Axis.PointsMeters));
-	}
+	RefreshAxisPointRows(corridor.Axis.PointsMeters);
 	if (WalkwayWidthFieldRow)
 	{
 		const FScenarioTemplateNumberValue& walkwayWidth = corridor.WalkwayWidthMeters;
@@ -302,6 +300,54 @@ void UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountRemoveRequested()
 	RemoveLaneAt(EScenarioEditorCorridorSide::Curb, GetDraftLaneProfile(EScenarioEditorCorridorSide::Curb).Num() - 1);
 }
 
+void UScenarioEditorSidebarCorridorPanel::HandleAxisPointXCommitted(
+	const int32 pointIndex,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	if (commitMethod == ETextCommit::OnCleared)
+	{
+		RefreshFromDraft();
+		return;
+	}
+
+	CommitAxisPointXText(pointIndex, text);
+}
+
+void UScenarioEditorSidebarCorridorPanel::HandleAxisPointYCommitted(
+	const int32 pointIndex,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	if (commitMethod == ETextCommit::OnCleared)
+	{
+		RefreshFromDraft();
+		return;
+	}
+
+	CommitAxisPointYText(pointIndex, text);
+}
+
+void UScenarioEditorSidebarCorridorPanel::HandleAxisPointAddRequested(const int32 pointIndex)
+{
+	AddAxisPointAfter(pointIndex);
+}
+
+void UScenarioEditorSidebarCorridorPanel::HandleAxisPointRemoveRequested(const int32 pointIndex)
+{
+	RemoveAxisPointAt(pointIndex);
+}
+
+void UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested()
+{
+	AddAxisPointAfter(INDEX_NONE);
+}
+
+void UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountRemoveRequested()
+{
+	RemoveAxisPointAt(GetDraftAxisPoints().Num() - 1);
+}
+
 void UScenarioEditorSidebarCorridorPanel::HandleSegmentIdCommitted(
 	const int32 segmentIndex,
 	const FText& text,
@@ -420,7 +466,20 @@ void UScenarioEditorSidebarCorridorPanel::BuildDefaultWidgetTree()
 		true,
 		false);
 	AddCorridorPanelFieldRow(WidgetTree, axisBody, AxisTypeFieldRow, TEXT("AxisTypeFieldRow"));
-	AddCorridorPanelFieldRow(WidgetTree, axisBody, AxisPointsFieldRow, TEXT("AxisPointsFieldRow"));
+	UVerticalBox* axisPointsBody = AddCorridorPanelBlockWidget(
+		WidgetTree,
+		axisBody,
+		AxisPointsBlockWidget,
+		TEXT("AxisPointsBlockWidget"),
+		TEXT("points_m"),
+		TEXT("root.corridor.axis.points_m[]"),
+		TEXT("Property"),
+		TextStyleCatalog,
+		false,
+		true,
+		true,
+		false);
+	AddCorridorPanelFieldRow(WidgetTree, axisPointsBody, AxisPointsFieldRow, TEXT("AxisPointsFieldRow"));
 
 	UVerticalBox* walkwayBody = AddCorridorPanelBlockWidget(
 		WidgetTree,
@@ -535,6 +594,15 @@ void UScenarioEditorSidebarCorridorPanel::UnbindFieldRows()
 			this,
 			&UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountRemoveRequested);
 	}
+	if (AxisPointsFieldRow)
+	{
+		AxisPointsFieldRow->OnAddItemRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested);
+		AxisPointsFieldRow->OnRemoveItemRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountRemoveRequested);
+	}
 	if (SegmentsCountFieldRow)
 	{
 		SegmentsCountFieldRow->OnAddItemRequested.RemoveDynamic(
@@ -590,6 +658,26 @@ void UScenarioEditorSidebarCorridorPanel::UnbindFieldRows()
 			this,
 			&UScenarioEditorSidebarCorridorPanel::HandleLaneRemoveRequested);
 	}
+	for (UScenarioEditorSidebarCorridorPointWidget* pointWidget : AxisPointWidgets)
+	{
+		if (!pointWidget)
+		{
+			continue;
+		}
+
+		pointWidget->OnXCommitted.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointXCommitted);
+		pointWidget->OnYCommitted.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointYCommitted);
+		pointWidget->OnAddPointRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointAddRequested);
+		pointWidget->OnRemovePointRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointRemoveRequested);
+	}
 	for (UScenarioEditorSidebarCorridorSegmentWidget* segmentWidget : SegmentWidgets)
 	{
 		if (!segmentWidget)
@@ -633,6 +721,16 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 		AxisBlockWidget->SetBlockMetadata(TEXT("axis"), TEXT("root.corridor.axis"), TEXT("Property"));
 		AxisBlockWidget->SetNested(true);
 		AxisBlockWidget->SetShowNormalOutline(false);
+	}
+	if (AxisPointsBlockWidget)
+	{
+		AxisPointsBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
+		AxisPointsBlockWidget->SetBlockMetadata(
+			TEXT("points_m"),
+			TEXT("root.corridor.axis.points_m[]"),
+			TEXT("Property"));
+		AxisPointsBlockWidget->SetNested(true);
+		AxisPointsBlockWidget->SetShowNormalOutline(false);
 	}
 	if (WalkwayWidthBlockWidget)
 	{
@@ -684,8 +782,8 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 	if (AxisPointsFieldRow)
 	{
 		AxisPointsFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		AxisPointsFieldRow->SetFieldLabel(TEXT("points_m"));
-		AxisPointsFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
+		AxisPointsFieldRow->SetFieldLabel(TEXT("count"));
+		AxisPointsFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Integer);
 		AxisPointsFieldRow->SetEditable(false);
 	}
 	if (WalkwayWidthFieldRow)
@@ -704,6 +802,7 @@ void UScenarioEditorSidebarCorridorPanel::ApplyTextStyles()
 	for (UScenarioEditorSidebarBlockWidget* blockWidget : {
 		CorridorBlockWidget.Get(),
 		AxisBlockWidget.Get(),
+		AxisPointsBlockWidget.Get(),
 		WalkwayWidthBlockWidget.Get(),
 		BuildingSideBlockWidget.Get(),
 		CurbSideBlockWidget.Get(),
@@ -743,6 +842,13 @@ void UScenarioEditorSidebarCorridorPanel::ApplyTextStyles()
 			laneWidget->SetTextStyleCatalog(TextStyleCatalog);
 		}
 	}
+	for (UScenarioEditorSidebarCorridorPointWidget* pointWidget : AxisPointWidgets)
+	{
+		if (pointWidget)
+		{
+			pointWidget->SetTextStyleCatalog(TextStyleCatalog);
+		}
+	}
 	for (UScenarioEditorSidebarCorridorSegmentWidget* segmentWidget : SegmentWidgets)
 	{
 		if (segmentWidget)
@@ -758,6 +864,54 @@ void UScenarioEditorSidebarCorridorPanel::ApplyTextStyles()
 	if (WidgetTree)
 	{
 		UWidgetTextStyleCatalog::ApplyWidgetTreeTextStyles(WidgetTree, TextStyleCatalog);
+	}
+}
+
+void UScenarioEditorSidebarCorridorPanel::RefreshAxisPointRows(
+	const TArray<FVector2D>& pointsMeters)
+{
+	AxisPointWidgets.Reset();
+
+	if (AxisPointsFieldRow)
+	{
+		AxisPointsFieldRow->SetTextStyleCatalog(TextStyleCatalog);
+		AxisPointsFieldRow->SetFieldLabel(TEXT("count"));
+		AxisPointsFieldRow->SetValueText(FString::FromInt(pointsMeters.Num()));
+		AxisPointsFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Integer);
+		AxisPointsFieldRow->SetEditable(false);
+		AxisPointsFieldRow->SetArrayControlsEnabled(true);
+		AxisPointsFieldRow->OnAddItemRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested);
+		AxisPointsFieldRow->OnAddItemRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested);
+		AxisPointsFieldRow->OnRemoveItemRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountRemoveRequested);
+		AxisPointsFieldRow->OnRemoveItemRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountRemoveRequested);
+	}
+
+	if (!AxisPointsBlockWidget)
+	{
+		return;
+	}
+
+	AxisPointsBlockWidget->ClearBodyChildren();
+	if (AxisPointsFieldRow)
+	{
+		AxisPointsBlockWidget->AddBodyChild(AxisPointsFieldRow.Get());
+	}
+
+	for (int32 pointIndex = 0; pointIndex < pointsMeters.Num(); ++pointIndex)
+	{
+		if (UScenarioEditorSidebarCorridorPointWidget* pointWidget =
+			AddAxisPointWidget(pointIndex, pointsMeters[pointIndex], AxisPointsBlockWidget.Get()))
+		{
+			AxisPointWidgets.Add(pointWidget);
+		}
 	}
 }
 
@@ -901,6 +1055,55 @@ UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarCorridorPanel::AddReadOnly
 	return fieldRow;
 }
 
+UScenarioEditorSidebarCorridorPointWidget* UScenarioEditorSidebarCorridorPanel::AddAxisPointWidget(
+	const int32 pointIndex,
+	const FVector2D& pointMeters,
+	UScenarioEditorSidebarBlockWidget* parentBlockWidget)
+{
+	if (!WidgetTree || !parentBlockWidget)
+	{
+		return nullptr;
+	}
+
+	UScenarioEditorSidebarCorridorPointWidget* pointWidget =
+		WidgetTree->ConstructWidget<UScenarioEditorSidebarCorridorPointWidget>(
+			UScenarioEditorSidebarCorridorPointWidget::StaticClass());
+	if (!pointWidget)
+	{
+		return nullptr;
+	}
+
+	pointWidget->SetTextStyleCatalog(TextStyleCatalog);
+	pointWidget->SetPointIndex(pointIndex);
+	pointWidget->RefreshFromPoint(pointMeters);
+	pointWidget->OnXCommitted.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleAxisPointXCommitted);
+	pointWidget->OnXCommitted.AddDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleAxisPointXCommitted);
+	pointWidget->OnYCommitted.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleAxisPointYCommitted);
+	pointWidget->OnYCommitted.AddDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleAxisPointYCommitted);
+	pointWidget->OnAddPointRequested.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleAxisPointAddRequested);
+	pointWidget->OnAddPointRequested.AddDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleAxisPointAddRequested);
+	pointWidget->OnRemovePointRequested.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleAxisPointRemoveRequested);
+	pointWidget->OnRemovePointRequested.AddDynamic(
+		this,
+		&UScenarioEditorSidebarCorridorPanel::HandleAxisPointRemoveRequested);
+	parentBlockWidget->AddBodyChild(pointWidget);
+	return pointWidget;
+}
+
 UScenarioEditorSidebarCorridorLaneWidget* UScenarioEditorSidebarCorridorPanel::AddLaneWidget(
 	const EScenarioEditorCorridorSide side,
 	const int32 laneIndex,
@@ -1037,6 +1240,17 @@ TArray<FScenarioTemplateLaneRule> UScenarioEditorSidebarCorridorPanel::GetDraftL
 	return side == EScenarioEditorCorridorSide::Building
 		? corridor.BuildingSide
 		: corridor.CurbSide;
+}
+
+TArray<FVector2D> UScenarioEditorSidebarCorridorPanel::GetDraftAxisPoints() const
+{
+	const UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		return {};
+	}
+
+	return authoringSubsystem->GetDraftScenarioTemplate().Corridor.Axis.PointsMeters;
 }
 
 TArray<FScenarioTemplateSegment> UScenarioEditorSidebarCorridorPanel::GetDraftSegments() const
@@ -1242,6 +1456,134 @@ FScenarioTemplateLaneRule UScenarioEditorSidebarCorridorPanel::MakeDefaultLaneRu
 		: FString(TEXT("road"));
 	lane.WidthMeters = UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(0.4);
 	return lane;
+}
+
+void UScenarioEditorSidebarCorridorPanel::CommitAxisPointXText(
+	const int32 pointIndex,
+	const FText& text)
+{
+	double xMeters = 0.0;
+	if (!TryParseMeters(text, xMeters))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(TEXT("axis point x must be a finite number in meters."));
+		return;
+	}
+
+	TArray<FVector2D> pointsMeters = GetDraftAxisPoints();
+	if (!pointsMeters.IsValidIndex(pointIndex))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(TEXT("Axis point index is no longer valid."));
+		return;
+	}
+
+	pointsMeters[pointIndex].X = xMeters;
+	CommitAxisPoints(pointsMeters);
+}
+
+void UScenarioEditorSidebarCorridorPanel::CommitAxisPointYText(
+	const int32 pointIndex,
+	const FText& text)
+{
+	double yMeters = 0.0;
+	if (!TryParseMeters(text, yMeters))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(TEXT("axis point y must be a finite number in meters."));
+		return;
+	}
+
+	TArray<FVector2D> pointsMeters = GetDraftAxisPoints();
+	if (!pointsMeters.IsValidIndex(pointIndex))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(TEXT("Axis point index is no longer valid."));
+		return;
+	}
+
+	pointsMeters[pointIndex].Y = yMeters;
+	CommitAxisPoints(pointsMeters);
+}
+
+void UScenarioEditorSidebarCorridorPanel::CommitAxisPoints(
+	const TArray<FVector2D>& pointsMeters)
+{
+	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioAuthoringSubsystem unavailable."));
+		return;
+	}
+
+	TArray<FString> diagnostics;
+	if (!authoringSubsystem->SetCorridorAxisPointsMeters(pointsMeters, diagnostics))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(JoinCorridorPanelDiagnostics(diagnostics));
+		return;
+	}
+
+	RefreshFromDraft();
+}
+
+void UScenarioEditorSidebarCorridorPanel::AddAxisPointAfter(const int32 pointIndex)
+{
+	TArray<FVector2D> pointsMeters = GetDraftAxisPoints();
+	const int32 insertionIndex = pointsMeters.IsValidIndex(pointIndex)
+		? pointIndex + 1
+		: pointsMeters.Num();
+	pointsMeters.Insert(MakeDefaultAxisPoint(pointsMeters, pointIndex), insertionIndex);
+	CommitAxisPoints(pointsMeters);
+}
+
+void UScenarioEditorSidebarCorridorPanel::RemoveAxisPointAt(const int32 pointIndex)
+{
+	TArray<FVector2D> pointsMeters = GetDraftAxisPoints();
+	if (!pointsMeters.IsValidIndex(pointIndex))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(TEXT("Axis point index is no longer valid."));
+		return;
+	}
+
+	pointsMeters.RemoveAt(pointIndex);
+	CommitAxisPoints(pointsMeters);
+}
+
+FVector2D UScenarioEditorSidebarCorridorPanel::MakeDefaultAxisPoint(
+	const TArray<FVector2D>& existingPoints,
+	const int32 neighborIndex)
+{
+	if (existingPoints.IsValidIndex(neighborIndex)
+		&& existingPoints.IsValidIndex(neighborIndex + 1))
+	{
+		return (existingPoints[neighborIndex] + existingPoints[neighborIndex + 1]) * 0.5;
+	}
+
+	if (existingPoints.IsValidIndex(neighborIndex))
+	{
+		const FVector2D basePoint = existingPoints[neighborIndex];
+		if (existingPoints.IsValidIndex(neighborIndex - 1))
+		{
+			const FVector2D direction = (basePoint - existingPoints[neighborIndex - 1]).GetSafeNormal();
+			return basePoint + (direction.IsNearlyZero() ? FVector2D(1.0, 0.0) : direction);
+		}
+		return basePoint + FVector2D(1.0, 0.0);
+	}
+
+	if (!existingPoints.IsEmpty())
+	{
+		const FVector2D basePoint = existingPoints.Last();
+		if (existingPoints.Num() >= 2)
+		{
+			const FVector2D direction = (basePoint - existingPoints[existingPoints.Num() - 2]).GetSafeNormal();
+			return basePoint + (direction.IsNearlyZero() ? FVector2D(1.0, 0.0) : direction);
+		}
+		return basePoint + FVector2D(1.0, 0.0);
+	}
+
+	return FVector2D(1.0, 0.0);
 }
 
 void UScenarioEditorSidebarCorridorPanel::CommitSegmentIdText(
@@ -1510,15 +1852,6 @@ FString UScenarioEditorSidebarCorridorPanel::SegmentTypeToString(
 FString UScenarioEditorSidebarCorridorPanel::FormatEditableNumber(const double value)
 {
 	return FString::Printf(TEXT("%.2f"), value);
-}
-
-FString UScenarioEditorSidebarCorridorPanel::FormatAxisPointsSummary(
-	const TArray<FVector2D>& pointsMeters)
-{
-	return FString::Printf(
-		TEXT("%d point(s), %.2fm"),
-		pointsMeters.Num(),
-		MeasureAxisLengthMeters(pointsMeters));
 }
 
 double UScenarioEditorSidebarCorridorPanel::MeasureAxisLengthMeters(

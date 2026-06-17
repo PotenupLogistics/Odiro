@@ -12,6 +12,7 @@ class UTextBlock;
 class UScenarioAuthoringSubsystem;
 class UScenarioEditorSidebarBlockWidget;
 class UScenarioEditorSidebarCorridorLaneWidget;
+class UScenarioEditorSidebarCorridorPointWidget;
 class UScenarioEditorSidebarCorridorSegmentWidget;
 class UWidgetTextStyleCatalog;
 class SWidget;
@@ -44,6 +45,10 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarBlockWidget> AxisBlockWidget;
 
+	// Optional axis points property block under root.corridor.axis.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UScenarioEditorSidebarBlockWidget> AxisPointsBlockWidget;
+
 	// Optional walkway width property block under root.corridor.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarBlockWidget> WalkwayWidthBlockWidget;
@@ -64,7 +69,7 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarFieldRow> AxisTypeFieldRow;
 
-	// Optional read-only row for root.corridor.axis.points_m.
+	// Optional editable count row for root.corridor.axis.points_m[].
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarFieldRow> AxisPointsFieldRow;
 
@@ -149,6 +154,30 @@ private:
 	UFUNCTION()
 	void HandleCurbSideCountRemoveRequested();
 
+	// Handles axis point x edits committed by dynamic point widgets.
+	UFUNCTION()
+	void HandleAxisPointXCommitted(int32 pointIndex, const FText& text, ETextCommit::Type commitMethod);
+
+	// Handles axis point y edits committed by dynamic point widgets.
+	UFUNCTION()
+	void HandleAxisPointYCommitted(int32 pointIndex, const FText& text, ETextCommit::Type commitMethod);
+
+	// Handles add requests from dynamic point widgets and count row.
+	UFUNCTION()
+	void HandleAxisPointAddRequested(int32 pointIndex);
+
+	// Handles remove requests from dynamic point widgets and count row.
+	UFUNCTION()
+	void HandleAxisPointRemoveRequested(int32 pointIndex);
+
+	// Handles add requests from the axis points count row.
+	UFUNCTION()
+	void HandleAxisPointsCountAddRequested();
+
+	// Handles remove requests from the axis points count row.
+	UFUNCTION()
+	void HandleAxisPointsCountRemoveRequested();
+
 	// Handles segment id edits committed by dynamic segment widgets.
 	UFUNCTION()
 	void HandleSegmentIdCommitted(int32 segmentIndex, const FText& text, ETextCommit::Type commitMethod);
@@ -201,6 +230,10 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UScenarioEditorSidebarCorridorLaneWidget>> CurbSideLaneWidgets;
 
+	// Dynamic point widgets owned by root.corridor.axis.points_m[].
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UScenarioEditorSidebarCorridorPointWidget>> AxisPointWidgets;
+
 	// Dynamic count row for root.corridor.segments[].
 	UPROPERTY(Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> SegmentsCountFieldRow;
@@ -224,6 +257,8 @@ private:
 		EScenarioEditorCorridorSide side,
 		UScenarioEditorSidebarBlockWidget* sideBlockWidget,
 		const TArray<FScenarioTemplateLaneRule>& lanes);
+	// Rebuilds editable point widgets for the Corridor axis polyline.
+	void RefreshAxisPointRows(const TArray<FVector2D>& pointsMeters);
 	// Rebuilds editable segment widgets for semantic Corridor segments.
 	void RefreshSegmentRows(const TArray<FScenarioTemplateSegment>& segments);
 	// Adds a read-only field row to a dynamic block body.
@@ -238,6 +273,11 @@ private:
 		int32 laneIndex,
 		const FScenarioTemplateLaneRule& lane,
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget);
+	// Adds an editable axis point widget to the axis points block.
+	UScenarioEditorSidebarCorridorPointWidget* AddAxisPointWidget(
+		int32 pointIndex,
+		const FVector2D& pointMeters,
+		UScenarioEditorSidebarBlockWidget* parentBlockWidget);
 	// Adds an editable segment widget to the segment list block.
 	UScenarioEditorSidebarCorridorSegmentWidget* AddSegmentWidget(
 		int32 segmentIndex,
@@ -247,6 +287,8 @@ private:
 	UScenarioAuthoringSubsystem* GetAuthoringSubsystem() const;
 	// Returns the current draft side lane profile by value for mutation.
 	TArray<FScenarioTemplateLaneRule> GetDraftLaneProfile(EScenarioEditorCorridorSide side) const;
+	// Returns the current draft axis points by value for mutation.
+	TArray<FVector2D> GetDraftAxisPoints() const;
 	// Returns the current draft segment list by value for mutation.
 	TArray<FScenarioTemplateSegment> GetDraftSegments() const;
 	// Commits a fixed walkway width edit to the draft template.
@@ -275,6 +317,20 @@ private:
 	static FScenarioTemplateLaneRule MakeDefaultLaneRule(
 		EScenarioEditorCorridorSide side,
 		const TArray<FScenarioTemplateLaneRule>& existingLanes,
+		int32 neighborIndex);
+	// Commits one axis point x edit to the draft template.
+	void CommitAxisPointXText(int32 pointIndex, const FText& text);
+	// Commits one axis point y edit to the draft template.
+	void CommitAxisPointYText(int32 pointIndex, const FText& text);
+	// Commits a full axis point list through the authoring subsystem.
+	void CommitAxisPoints(const TArray<FVector2D>& pointsMeters);
+	// Adds an axis point after the provided point index.
+	void AddAxisPointAfter(int32 pointIndex);
+	// Removes the axis point at the provided point index.
+	void RemoveAxisPointAt(int32 pointIndex);
+	// Creates a default axis point near another point.
+	static FVector2D MakeDefaultAxisPoint(
+		const TArray<FVector2D>& existingPoints,
 		int32 neighborIndex);
 	// Commits one segment id edit to the draft template.
 	void CommitSegmentIdText(int32 segmentIndex, const FText& text);
@@ -306,8 +362,6 @@ private:
 	static FString SegmentTypeToString(EScenarioTemplateSegmentType type);
 	// Formats one authored numeric value for editable text controls.
 	static FString FormatEditableNumber(double value);
-	// Formats a compact summary of Corridor axis points.
-	static FString FormatAxisPointsSummary(const TArray<FVector2D>& pointsMeters);
 	// Measures the authored corridor polyline in meters.
 	static double MeasureAxisLengthMeters(const TArray<FVector2D>& pointsMeters);
 };

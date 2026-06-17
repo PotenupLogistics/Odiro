@@ -2,7 +2,7 @@
 
 ## 개요
 
-v2 Agent는 기존 v1 실행 계약을 건드리지 않고, 시나리오 템플릿 생성과 실험 결과 분석을 분리합니다. Scenario generation v2는 항상 LangGraph runner를 사용하며, `V2_AGENT_LLM_ENABLED=true`일 때만 graph 내부 LLM-assisted JSON 호출 경로를 시도합니다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아니며 결과 분석 v2 graph 경로 제어를 위해 유지합니다.
+v2 Agent는 기존 v1 실행 계약을 건드리지 않고, Project Scenario 생성과 실험 결과 분석을 분리합니다. Scenario generation v2는 항상 LangGraph runner를 사용하며, `V2_AGENT_LLM_ENABLED=true`일 때만 graph 내부 LLM-assisted JSON 호출 경로를 시도합니다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아니며 결과 분석 v2 graph 경로 제어를 위해 유지합니다.
 
 핵심 원칙:
 
@@ -19,8 +19,8 @@ START
 -> validate_request_node
 -> interpret_user_prompt_node
 -> select_scenario_pattern_node
--> build_scenario_template_node
--> validate_scenario_template_node
+-> build_scenario_node
+-> validate_scenario_node
 -> build_response_node
 -> END
 ```
@@ -39,7 +39,7 @@ START
 
 ### `TemplatePlanner`
 
-template에 들어갈 보도 폭, 장애물 수, 보행자 수, 속도 범위 같은 sampling 가능 값을 계획합니다. 좌표와 개수는 실행 샘플로 확정하지 않고 range로 유지합니다.
+scenario에 들어갈 보도 폭, 장애물 수, 보행자 수, 속도 범위 같은 sampling 가능 값을 계획합니다. 좌표와 개수는 실행 샘플로 확정하지 않고 range로 유지합니다.
 
 ### `TemplateJsonWriter`
 
@@ -47,7 +47,7 @@ template에 들어갈 보도 폭, 장애물 수, 보행자 수, 속도 범위 �
 
 ### `TemplateValidator`
 
-template이 dict인지, `scenario_id`, `schema/version`, `intent.summary`, `ground_model`, `robot`, 장애물/보행자 조건을 갖는지 검증합니다. 중첩된 `{"min": ..., "max": ...}` 범위는 재귀적으로 `min <= max`를 확인합니다.
+scenario가 dict인지, `scenario_id`, `schema/version`, `intent`, `ground_model`, `robot`, 장애물/보행자 조건을 갖는지 검증합니다. 중첩된 `{"min": ..., "max": ...}` 범위는 재귀적으로 `min <= max`를 확인합니다.
 
 ### `RepairHandler`
 
@@ -59,15 +59,15 @@ template이 dict인지, `scenario_id`, `schema/version`, `intent.summary`, `grou
 
 ## ScenarioGenerationV2 LLM mode
 
-LLM mode는 `V2_AGENT_LLM_ENABLED=true`일 때만 사용합니다. LangGraph의 `interpret_user_prompt_node`는 `prompts/system_prompt.md`와 `prompts/template_writer_prompt.md`를 읽고 JSON Schema structured output 기반 `scenario_template` 후보 출력을 요청합니다.
+LLM mode는 `V2_AGENT_LLM_ENABLED=true`일 때만 사용합니다. LangGraph의 `interpret_user_prompt_node`는 `prompts/system_prompt.md`와 `prompts/template_writer_prompt.md`를 읽고 JSON Schema structured output 기반 `scenario` 후보 출력을 요청합니다.
 
 LLM output 처리 순서:
 
-1. 가능하면 `scenario_template_v1` JSON Schema structured output으로 JSON object를 요청합니다.
-2. `TemplateValidator`를 통과하면 LangGraph response의 template 후보로 사용합니다.
+1. 가능하면 `project_scenario_v1` JSON Schema structured output으로 JSON object를 요청합니다.
+2. `TemplateValidator`를 통과하면 LangGraph response의 scenario 후보로 사용합니다.
 3. 검증 실패 시 deterministic repair를 먼저 적용합니다.
-4. 그래도 invalid이면 validator errors, 원본 prompt, invalid template을 포함한 LLM-assisted repair를 1회 시도합니다.
-5. repair 결과가 `TemplateValidator`를 통과하면 repaired template을 사용합니다.
+4. 그래도 invalid이면 validator errors, 원본 prompt, invalid scenario를 포함한 LLM-assisted repair를 1회 시도합니다.
+5. repair 결과가 `TemplateValidator`를 통과하면 repaired scenario를 사용합니다.
 6. repair도 실패하면 warning을 남기고 deterministic graph path/fallback을 사용합니다.
 7. Scenario generation v2 response는 graph 실행 결과이므로 `generation_mode="langgraph"`를 유지합니다.
 

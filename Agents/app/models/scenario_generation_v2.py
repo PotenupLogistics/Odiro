@@ -33,14 +33,14 @@ class V2ValidationResult(BaseModel):
     warnings: list[V2ValidationIssue] = Field(default_factory=list)
 
 
-class ScenarioTemplateV1Response(BaseModel):
-    """External scenario_template v1 response body returned by the v2 generation endpoint."""
+class ProjectScenarioV1Response(BaseModel):
+    """External Project Scenario v1 response body returned by the v2 generation endpoint."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    schema_: Literal["scenario_template"] = Field(alias="schema")
+    schema_: Literal["scenario"] = Field(alias="schema")
     version: Literal[1]
-    template_id: str
+    scenario_id: str
     intent: str
     corridor: dict[str, Any]
     obstacles: dict[str, Any]
@@ -49,14 +49,14 @@ class ScenarioTemplateV1Response(BaseModel):
 
 
 class ScenarioGenerateV2Response(BaseModel):
-    """Scenario template generation response returned without file ownership decisions."""
+    """Internal scenario generation response returned without file ownership decisions."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     status: Literal["success", "failed"]
-    template_id: str | None = None
+    scenario_id: str | None = None
     summary: str
-    template: dict[str, Any] | None = None
+    scenario: dict[str, Any] | None = None
     validation: V2ValidationResult
     assumptions: list[str] = Field(default_factory=list)
     generation_mode: Literal["deterministic", "llm", "llm_repaired", "fallback", "langgraph"] = "deterministic"

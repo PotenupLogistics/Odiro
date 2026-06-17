@@ -4,7 +4,7 @@
 
 v2 Agent는 deterministic/rule-based 경로와 optional LLM fallback 구조를 갖고 있습니다. LangGraph는 이 흐름을 node, edge, state, guardrail 단위로 명시해 분석 가능성과 단계별 테스트 가능성을 높이기 위한 구조입니다.
 
-특히 scenario generation은 template 생성, 검증, repair, fallback이 분기형 workflow이고, result analysis는 workspace scan부터 RAG context, LLM recommendation validation까지 긴 pipeline입니다. Graph 표현은 각 단계의 입력/출력과 실패 처리 책임을 분리하는 데 유리합니다.
+특히 scenario generation은 scenario 생성, 검증, repair, fallback이 분기형 workflow이고, result analysis는 workspace scan부터 RAG context, LLM recommendation validation까지 긴 pipeline입니다. Graph 표현은 각 단계의 입력/출력과 실패 처리 책임을 분리하는 데 유리합니다.
 
 ## 2. 적용 범위
 
@@ -55,7 +55,7 @@ START
 
 ## 5. State 정의
 
-`ScenarioGenerationGraphStateV2`는 request, prompt, parsed intent, selected pattern, optional LLM template candidate, generated template, validation result, response, warnings를 가진 state입니다.
+`ScenarioGenerationGraphStateV2`는 request, prompt, parsed intent, selected pattern, optional LLM scenario candidate, generated scenario, validation result, response, warnings를 가진 state입니다.
 
 `ResultAnalysisGraphStateV2`는 request, experiments root, artifacts, classified/parsed artifacts, parse warnings, episode metrics, timelines, representative failed episodes, run/experiment aggregates, failure patterns, RAG queries/context, analysis context, LLM analysis, recommendations, validation errors, response, warnings를 가집니다.
 
@@ -130,7 +130,7 @@ Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터�
 * v1 Agent/API는 변경하지 않습니다.
 * Scenario generation v2는 항상 LangGraph runner를 사용합니다.
 * `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아닙니다.
-* `/api/v2/scenarios/generate`의 외부 response body는 raw `scenario_template` v1 객체입니다.
+* `/api/v2/scenarios/generate`의 외부 response body는 raw `scenario` v1 객체입니다.
 * Scenario generation v2 structured output은 `corridor_pose`, fixed number/range value, Unreal-supported override fields, optional `allow_blocking`, optional background `spawn_zone`을 허용합니다.
 * Robot `entry`/`exit`는 추상 anchor로 concrete pose field를 섞지 않으며, segment/along/offset이 필요하면 `corridor_pose`로 표현합니다.
 * Obstacle placement는 Unreal parser와 맞춰 `fixed`, `pattern`, `scatter`를 허용합니다. 기본 생성은 단순한 `fixed` placement를 우선합니다.
@@ -142,7 +142,7 @@ Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터�
 
 ## 10. HITL 후보
 
-* scenario template validation 실패가 반복될 때 repair 후보 승인
+* Project Scenario validation 실패가 반복될 때 repair 후보 승인
 * blocked region violation 같은 safety-critical pattern의 원인 분류 확인
 * RAG query keyword와 expected context 검토
 * recommendation의 policy/environment target 확정
@@ -152,7 +152,7 @@ Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터�
 
 1. ScenarioGenerationV2 runner는 실제 `StateGraph` 경로를 기본으로 유지합니다.
 2. `V2_AGENT_LLM_ENABLED`로 scenario generation graph 내부 LLM-assisted node 사용 여부를 제어합니다.
-3. LLM generation은 `scenario_template_v1` structured output schema를 우선 사용하고, 모든 결과는 `TemplateValidator`를 통과해야 합니다.
+3. LLM generation은 `project_scenario_v1` structured output schema를 우선 사용하고, 모든 결과는 `TemplateValidator`를 통과해야 합니다.
 4. ResultAnalysisV2 graph-compatible node pipeline을 기존 v2 response schema와 동등하게 검증합니다.
-5. v2 response schema와 Unreal template schema가 확정되면 graph state 타입을 더 엄격하게 좁힙니다.
+5. v2 response schema와 Unreal scenario schema가 확정되면 graph state 타입을 더 엄격하게 좁힙니다.
 6. 운영 환경에서 LLM validator failure와 fallback warning 비율을 확인합니다.

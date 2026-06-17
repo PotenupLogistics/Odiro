@@ -17,7 +17,7 @@ except ImportError:  # pragma: no cover - depends on optional local dependency
 
 
 class ScenarioGenerationGraphRunnerV2:
-    """Runs prompt-only scenario_template generation through a compiled LangGraph graph."""
+    """Runs prompt-only project scenario generation through a compiled LangGraph graph."""
 
     def __init__(
         self,
@@ -98,7 +98,7 @@ class ScenarioGenerationGraphRunnerV2:
             "llm_template_candidate": None,
             "llm_validation": None,
             "llm_warnings": [],
-            "scenario_template": None,
+            "scenario": None,
             "validation": None,
             "diagnostics": [],
             "repair_count": 0,
@@ -139,41 +139,41 @@ class ScenarioGenerationGraphRunnerV2:
         return {**state, "selected_pattern": scenario_type}
 
     def build_scenario_template_node(self, state: ScenarioGenerationGraphStateV2) -> ScenarioGenerationGraphStateV2:
-        """Build a scenario_template v1 object without sample or runtime payload ownership."""
+        """Build a project scenario v1 object without sample or runtime payload ownership."""
         if state.get("status") == "failed":
             return state
         llm_candidate = state.get("llm_template_candidate")
         llm_validation = state.get("llm_validation")
         if isinstance(llm_candidate, dict) and llm_validation is not None and llm_validation.valid:
-            summary = self.agent._summary_from_template(llm_candidate, "LLM-assisted graph node가 scenario_template을 생성했습니다.")
+            summary = self.agent._summary_from_template(llm_candidate, "LLM-assisted graph node가 scenario를 생성했습니다.")
             assumptions = [
                 *state.get("assumptions", []),
                 "LangGraph 내부 LLM-assisted node 결과를 validator 통과 후 사용했습니다.",
             ]
             return {
                 **state,
-                "scenario_template": llm_candidate,
-                "selected_pattern": llm_candidate.get("template_id") or state.get("selected_pattern"),
+                "scenario": llm_candidate,
+                "selected_pattern": llm_candidate.get("scenario_id") or state.get("selected_pattern"),
                 "summary": summary,
                 "assumptions": assumptions,
             }
         intent = state.get("interpreted_intent")
         scenario_type = str(state.get("selected_pattern") or "narrow_sidewalk_cross_path")
         plan = self.agent.planner.plan(intent, scenario_type)
-        template = self.agent.writer.write(plan)
+        scenario = self.agent.writer.write(plan)
         return {
             **state,
-            "scenario_template": template,
+            "scenario": scenario,
             "summary": plan.summary,
             "assumptions": plan.assumptions,
         }
 
     def validate_scenario_template_node(self, state: ScenarioGenerationGraphStateV2) -> ScenarioGenerationGraphStateV2:
-        """Validate the generated scenario_template and expose diagnostics to the graph."""
+        """Validate the generated project scenario and expose diagnostics to the graph."""
         if state.get("status") == "failed" and state.get("validation") is not None:
             return state
-        template = state.get("scenario_template")
-        validation = self.agent.validator.validate(template or {})
+        scenario = state.get("scenario")
+        validation = self.agent.validator.validate(scenario or {})
         validation.warnings.extend(state.get("llm_warnings", []))
         diagnostics = [
             *[
@@ -195,8 +195,8 @@ class ScenarioGenerationGraphRunnerV2:
     def _llm_template_candidate_update(self, prompt: str) -> ScenarioGenerationGraphStateV2:
         """Call the LLM inside the graph and return validated candidate state fields."""
         warning = V2ValidationIssue(
-            field="scenario_template",
-            message="LLM output validation failed; deterministic fallback template was used.",
+            field="scenario",
+            message="LLM output validation failed; deterministic fallback scenario was used.",
         )
         try:
             candidate = self.agent._generate_llm_template(prompt, response_name="scenario_graph_intent")
@@ -228,8 +228,8 @@ class ScenarioGenerationGraphRunnerV2:
                 "llm_validation": None,
                 "llm_warnings": [
                     V2ValidationIssue(
-                        field="scenario_template",
-                        message=f"LLM call failed; deterministic fallback template was used: {type(exc).__name__}",
+                        field="scenario",
+                        message=f"LLM call failed; deterministic fallback scenario was used: {type(exc).__name__}",
                     )
                 ],
                 "diagnostics": [
@@ -258,7 +258,7 @@ class ScenarioGenerationGraphRunnerV2:
             repaired_validation = self.agent.validator.validate(repaired)
             repair_diagnostics = [
                 *diagnostics,
-                {"level": "repair", "field": "scenario_template", "message": "LLM-assisted repair was attempted."},
+                {"level": "repair", "field": "scenario", "message": "LLM-assisted repair was attempted."},
             ]
             if repaired_validation.valid:
                 return {
@@ -266,8 +266,8 @@ class ScenarioGenerationGraphRunnerV2:
                     "llm_validation": repaired_validation,
                     "llm_warnings": [
                         V2ValidationIssue(
-                            field="scenario_template",
-                            message="LLM-assisted repair produced a valid scenario_template.",
+                            field="scenario",
+                            message="LLM-assisted repair produced a valid scenario.",
                         )
                     ],
                     "diagnostics": repair_diagnostics,
@@ -277,8 +277,8 @@ class ScenarioGenerationGraphRunnerV2:
                 "llm_validation": validation,
                 "llm_warnings": [
                     V2ValidationIssue(
-                        field="scenario_template",
-                        message="LLM-assisted repair failed; deterministic fallback template was used.",
+                        field="scenario",
+                        message="LLM-assisted repair failed; deterministic fallback scenario was used.",
                     )
                 ],
                 "diagnostics": [
@@ -295,8 +295,8 @@ class ScenarioGenerationGraphRunnerV2:
                 "llm_validation": validation,
                 "llm_warnings": [
                     V2ValidationIssue(
-                        field="scenario_template",
-                        message="LLM-assisted repair failed; deterministic fallback template was used.",
+                        field="scenario",
+                        message="LLM-assisted repair failed; deterministic fallback scenario was used.",
                     )
                 ],
                 "diagnostics": [
@@ -315,33 +315,33 @@ class ScenarioGenerationGraphRunnerV2:
         return "fallback"
 
     def repair_scenario_template_node(self, state: ScenarioGenerationGraphStateV2) -> ScenarioGenerationGraphStateV2:
-        """Apply deterministic local template repair and record the attempt."""
-        repaired = self.agent.repair_handler.repair(state.get("scenario_template") or {})
+        """Apply deterministic local scenario repair and record the attempt."""
+        repaired = self.agent.repair_handler.repair(state.get("scenario") or {})
         repair_count = int(state.get("repair_count") or 0) + 1
         diagnostics = [
             *state.get("diagnostics", []),
-            {"level": "repair", "field": "scenario_template", "message": "deterministic repair was applied."},
+            {"level": "repair", "field": "scenario", "message": "deterministic repair was applied."},
         ]
-        return {**state, "scenario_template": repaired, "repair_count": repair_count, "diagnostics": diagnostics}
+        return {**state, "scenario": repaired, "repair_count": repair_count, "diagnostics": diagnostics}
 
     def fallback_scenario_template_node(self, state: ScenarioGenerationGraphStateV2) -> ScenarioGenerationGraphStateV2:
-        """Build the deterministic fallback template after repair attempts are exhausted."""
+        """Build the deterministic fallback scenario after repair attempts are exhausted."""
         prompt = str(state.get("prompt") or "")
         fallback_intent = self.agent.intent_parser.parse(prompt)
         fallback_plan = self.agent.planner.plan(fallback_intent, "narrow_sidewalk_cross_path")
-        fallback_template = self.agent.writer.write(fallback_plan)
+        fallback_scenario = self.agent.writer.write(fallback_plan)
         assumptions = [
             *state.get("assumptions", []),
-            "validation 실패 후 deterministic fallback template을 사용했습니다.",
+            "validation 실패 후 deterministic fallback scenario를 사용했습니다.",
         ]
-        validation = self.agent.validator.validate(fallback_template)
+        validation = self.agent.validator.validate(fallback_scenario)
         if not validation.warnings:
             validation.warnings.append(
-                V2ValidationIssue(field="scenario_template", message="deterministic fallback template was used.")
+                V2ValidationIssue(field="scenario", message="deterministic fallback scenario was used.")
             )
         return {
             **state,
-            "scenario_template": fallback_template,
+            "scenario": fallback_scenario,
             "validation": validation,
             "repair_count": 2,
             "selected_pattern": "narrow_sidewalk_cross_path",
@@ -351,24 +351,24 @@ class ScenarioGenerationGraphRunnerV2:
         }
 
     def build_response_node(self, state: ScenarioGenerationGraphStateV2) -> ScenarioGenerationGraphStateV2:
-        """Wrap the final template and validation result in the existing response model."""
+        """Wrap the final scenario and validation result in the existing response model."""
         validation = state.get("validation")
-        template = state.get("scenario_template")
-        if validation is None or not validation.valid or not isinstance(template, dict):
+        scenario = state.get("scenario")
+        if validation is None or not validation.valid or not isinstance(scenario, dict):
             response = self.agent.response_builder.failed(
-                summary=state.get("summary") or "시나리오 템플릿 생성에 실패했습니다.",
+                summary=state.get("summary") or "시나리오 생성에 실패했습니다.",
                 validation=validation
                 or V2ValidationResult(
                     valid=False,
-                    errors=[V2ValidationIssue(field="scenario_template", message="유효한 scenario_template이 없습니다.")],
+                    errors=[V2ValidationIssue(field="scenario", message="유효한 scenario가 없습니다.")],
                     warnings=[],
                 ),
             )
         else:
             response = self.agent.response_builder.success(
-                template_id=template["template_id"],
-                summary=state.get("summary") or self.agent._summary_from_template(template, "scenario_template을 생성했습니다."),
-                template=template,
+                scenario_id=scenario["scenario_id"],
+                summary=state.get("summary") or self.agent._summary_from_template(scenario, "scenario를 생성했습니다."),
+                scenario=scenario,
                 validation=validation,
                 assumptions=state.get("assumptions", []),
                 generation_mode="langgraph",

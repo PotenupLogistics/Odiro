@@ -4,7 +4,7 @@ from typing import Any
 
 
 def _range_schema() -> dict[str, Any]:
-    """Return the shared numeric min/max range schema used by scenario_template v1."""
+    """Return the shared numeric min/max range schema used by project scenario v1."""
     return {
         "type": "object",
         "additionalProperties": False,
@@ -69,15 +69,15 @@ def _nullable(schema: dict[str, Any]) -> dict[str, Any]:
     return {"anyOf": [schema, {"type": "null"}]}
 
 
-def scenario_template_v1_json_schema() -> dict[str, Any]:
-    """Return a structured-output schema for current scenario_template v1 LLM calls."""
+def project_scenario_v1_json_schema() -> dict[str, Any]:
+    """Return a structured-output schema for current Project Scenario v1 LLM calls."""
     return {
         "type": "object",
         "additionalProperties": False,
         "required": [
             "schema",
             "version",
-            "template_id",
+            "scenario_id",
             "intent",
             "corridor",
             "obstacles",
@@ -85,9 +85,9 @@ def scenario_template_v1_json_schema() -> dict[str, Any]:
             "robot",
         ],
         "properties": {
-            "schema": {"type": "string", "const": "scenario_template"},
+            "schema": {"type": "string", "const": "scenario"},
             "version": {"type": "integer", "const": 1},
-            "template_id": {"type": "string"},
+            "scenario_id": {"type": "string"},
             "intent": {"type": "string"},
             "corridor": {
                 "type": "object",
@@ -266,11 +266,11 @@ def scenario_template_v1_json_schema() -> dict[str, Any]:
     }
 
 
-def scenario_template_v1_response_schema() -> dict[str, Any]:
+def project_scenario_v1_response_schema() -> dict[str, Any]:
     """Return the response schema envelope expected by the common LLM JSON client."""
     return {
-        "name": "scenario_template_v1",
-        "schema": scenario_template_v1_json_schema(),
+        "name": "project_scenario_v1",
+        "schema": project_scenario_v1_json_schema(),
         "strict": True,
     }
 

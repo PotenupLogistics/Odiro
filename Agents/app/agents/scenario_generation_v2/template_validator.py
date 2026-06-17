@@ -23,34 +23,43 @@ ALLOWED_OVERRIDE_FIELDS = {
 }
 FORBIDDEN_ROOT_FIELDS = {
     "base_seed",
+    "center_xy_m",
+    "episode",
+    "episode_count",
     "experiment_id",
     "generated_count",
+    "params",
     "policy",
+    "radius_m",
     "robot_setup",
+    "route",
     "run_id",
     "sample_count",
     "sample_id",
-    "scenario_id",
     "scenario_path",
+    "scenario_sample",
+    "scenario_template",
+    "semantic",
     "seed",
+    "source",
+    "template_hash",
+    "template_id",
     "template_path",
     "ue_payload",
+    "validation",
+    "world_xy",
 }
 
 
 class TemplateValidator:
-    """Deterministically validates current scenario_template v1 objects."""
+    """Deterministically validates current project scenario v1 objects."""
 
     def validate(self, template: dict[str, Any]) -> V2ValidationResult:
         """Return catalog and structure diagnostics without invoking an LLM."""
         errors: list[V2ValidationIssue] = []
         warnings: list[V2ValidationIssue] = []
         if not isinstance(template, dict):
-            return V2ValidationResult(
-                valid=False,
-                errors=[V2ValidationIssue(field="template", message="template은 dict여야 합니다.")],
-                warnings=[],
-            )
+            return V2ValidationResult(valid=False, errors=[V2ValidationIssue(field="scenario", message="scenario는 dict여야 합니다.")], warnings=[])
 
         self._validate_root(template, errors)
         segment_ids = self._validate_corridor(template.get("corridor"), errors)
@@ -63,15 +72,15 @@ class TemplateValidator:
 
     def _validate_root(self, template: dict[str, Any], errors: list[V2ValidationIssue]) -> None:
         """Validate required root fields and reject obsolete generation ownership fields."""
-        if template.get("schema") != "scenario_template":
-            errors.append(V2ValidationIssue(field="schema", message="schema는 scenario_template이어야 합니다."))
+        if template.get("schema") != "scenario":
+            errors.append(V2ValidationIssue(field="schema", message="schema는 scenario이어야 합니다."))
         if template.get("version") != 1:
             errors.append(V2ValidationIssue(field="version", message="version은 1이어야 합니다."))
-        template_id = template.get("template_id")
-        if not isinstance(template_id, str) or not template_id:
-            errors.append(V2ValidationIssue(field="template_id", message="template_id가 필요합니다."))
-        elif not re.fullmatch(r"[a-z0-9]+(?:_[a-z0-9]+)*", template_id):
-            errors.append(V2ValidationIssue(field="template_id", message="template_id는 snake_case여야 합니다."))
+        scenario_id = template.get("scenario_id")
+        if not isinstance(scenario_id, str) or not scenario_id:
+            errors.append(V2ValidationIssue(field="scenario_id", message="scenario_id가 필요합니다."))
+        elif not re.fullmatch(r"[a-z0-9]+(?:_[a-z0-9]+)*", scenario_id):
+            errors.append(V2ValidationIssue(field="scenario_id", message="scenario_id는 snake_case여야 합니다."))
         if not isinstance(template.get("intent"), str) or not template["intent"].strip():
             errors.append(V2ValidationIssue(field="intent", message="intent가 필요합니다."))
         if "corridor" not in template:
@@ -80,7 +89,7 @@ class TemplateValidator:
             errors.append(V2ValidationIssue(field="robot", message="robot이 필요합니다."))
         for field in sorted(FORBIDDEN_ROOT_FIELDS):
             if field in template:
-                errors.append(V2ValidationIssue(field=field, message="scenario_template root에 포함할 수 없는 필드입니다."))
+                errors.append(V2ValidationIssue(field=field, message="scenario root에 포함할 수 없는 필드입니다."))
         if "ground_model" in template:
             errors.append(V2ValidationIssue(field="ground_model", message="ground_model 대신 corridor를 사용해야 합니다."))
         if "static_obstacles" in template:
@@ -326,7 +335,7 @@ class TemplateValidator:
             errors.append(V2ValidationIssue(field="robot", message="robot은 object여야 합니다."))
             return
         if "setup" in robot:
-            errors.append(V2ValidationIssue(field="robot.setup", message="robot setup 세부값은 scenario_template에 포함할 수 없습니다."))
+            errors.append(V2ValidationIssue(field="robot.setup", message="robot setup 세부값은 scenario에 포함할 수 없습니다."))
         for key in ("start", "goal"):
             anchor = robot.get(key)
             field = f"robot.{key}"

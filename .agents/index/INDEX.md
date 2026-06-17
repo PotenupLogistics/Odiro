@@ -10,7 +10,7 @@ Rules:
 Cards:
 - [agent-context](agent-context.md): root agent rules and source index ownership
 - [root-dev-workflow](root-dev-workflow.md): root setup/build/run/dev, hooks, repo tools
-- [agents-generation-runtime](agents-generation-runtime.md): FastAPI generation, WorldConfig, legacy RunQueue export
+- [agents-generation-runtime](agents-generation-runtime.md): FastAPI generation, WorldConfig, user project migration boundary
 - [agents-policy-rag-data](agents-policy-rag-data.md): policy RAG, policy cards, source/review data
 - [agents-tooling-harness](agents-tooling-harness.md): Agents scripts, harness, pytest
 - [bridge-host](bridge-host.md): Go host process, portless IPC, Bridge tooling

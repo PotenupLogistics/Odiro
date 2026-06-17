@@ -365,6 +365,7 @@ celerybeat.pid
 *.test
 *.prof
 go.work.sum
+.gocache/
 
 ## Packaging output
 /build/

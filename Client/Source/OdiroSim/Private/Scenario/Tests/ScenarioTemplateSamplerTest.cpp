@@ -4,8 +4,6 @@
 
 #include "Misc/AutomationTest.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
-#include "Scenario/ScenarioSimulationProfileAdapter.h"
-#include "Scenario/ScenarioTemplateWorldSpecAdapter.h"
 #include "Shared/ScenarioSampleJson.h"
 #include "Shared/ScenarioTemplateJson.h"
 
@@ -134,82 +132,6 @@ bool FScenarioTemplateSamplerFixedObstacleTest::RunTest(const FString& Parameter
 	TestTrue(TEXT("sample adapts to world spec"), CompileResult.bSuccess);
 	TestEqual(TEXT("runtime ground regions"), CompileResult.WorldSpec.GroundRegions.Num(), 3);
 	TestEqual(TEXT("runtime placeables"), CompileResult.WorldSpec.Placeables.Num(), 2);
-	return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FScenarioSimulationProfileAdapterTest,
-	"OdiroSim.ScenarioTemplate.SimulationProfileAdapter.DefaultProfile",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FScenarioSimulationProfileAdapterTest::RunTest(const FString& Parameters)
-{
-	const FString ProfilePath = TEXT("Json/Input/ScenarioTemplates/TemplateProfileForTest.json");
-
-	TestTrue(TEXT("profile file detected"), FScenarioSimulationProfileAdapter::IsSimulationProfileFile(ProfilePath));
-
-	const FScenarioSimulationProfileCompileResult Result =
-		FScenarioSimulationProfileAdapter::CompileProfileFromJsonFile(ProfilePath);
-
-	TestTrue(TEXT("profile compiles"), Result.bSuccess);
-	TestEqual(TEXT("profile id"), Result.ProfileId, FString(TEXT("deliverybot_default")));
-	TestEqual(TEXT("profile max speed"), Result.SetupInfo.ChaosDriveConfigInfo.MaxSpeedKmh, 10.0f);
-	TestEqual(TEXT("profile max reverse speed"), Result.SetupInfo.ChaosDriveConfigInfo.MaxReverseSpeedKmh, 3.0f);
-	TestEqual(TEXT("profile lidar range"), Result.SetupInfo.LidarSensorConfigInfo.ScanRangeM, 5.0f);
-	TestEqual(TEXT("profile lidar mode"), static_cast<int32>(Result.SetupInfo.LidarSensorConfigInfo.LidarModeType), static_cast<int32>(EDeliveryBotLidarModeType::TwoD));
-	return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FScenarioTemplateWorldSpecAdapterFeatureProbeFileTest,
-	"OdiroSim.ScenarioTemplate.WorldSpecAdapter.FeatureProbeFile",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FScenarioTemplateWorldSpecAdapterFeatureProbeFileTest::RunTest(const FString& Parameters)
-{
-	const FString TemplatePath = TEXT("Json/Input/ScenarioTemplates/FeatureProbeNoPedestrians.template.json");
-	const FScenarioTemplateSampleRequest Request =
-		FScenarioTemplateWorldSpecAdapter::MakeDefaultSampleRequest(TemplatePath, TEXT("feature_probe_test"));
-
-	TestEqual(TEXT("default profile ref"), Request.ProfileRef, FString(TEXT("Json/Input/ScenarioTemplates/TemplateProfileForTest.json")));
-	TestTrue(TEXT("template file detected"), FScenarioTemplateWorldSpecAdapter::IsScenarioTemplateFile(TemplatePath));
-
-	const FScenarioTemplateWorldSpecCompileResult FirstResult =
-		FScenarioTemplateWorldSpecAdapter::CompileScenarioWorldSpecFromTemplateFile(TemplatePath, Request);
-	const FScenarioTemplateWorldSpecCompileResult SecondResult =
-		FScenarioTemplateWorldSpecAdapter::CompileScenarioWorldSpecFromTemplateFile(TemplatePath, Request);
-
-	TestTrue(TEXT("first template compiles"), FirstResult.bSuccess);
-	TestTrue(TEXT("second template compiles"), SecondResult.bSuccess);
-	TestEqual(TEXT("sample schema"), FirstResult.SampleDocument.Schema, FString(TEXT("scenario_sample")));
-	TestEqual(TEXT("sample profile ref"), FirstResult.SampleDocument.Sample.Source.ProfileRef, Request.ProfileRef);
-	TestEqual(TEXT("sample profile hash"), FirstResult.SampleDocument.Sample.Source.ProfileHash, Request.ProfileHash);
-	TestEqual(TEXT("fixed obstacle sample count"), FirstResult.SampleDocument.Scenario.Semantic.StaticObstacles.Num(), 2);
-
-	FString FirstJson;
-	FString SecondJson;
-	TArray<FScenarioSchemaDiagnostic> FirstDiagnostics;
-	TArray<FScenarioSchemaDiagnostic> SecondDiagnostics;
-	TestTrue(TEXT("first sample writes"), FScenarioSampleJson::TryWriteJson(FirstResult.SampleDocument, FirstJson, FirstDiagnostics));
-	TestTrue(TEXT("second sample writes"), FScenarioSampleJson::TryWriteJson(SecondResult.SampleDocument, SecondJson, SecondDiagnostics));
-	TestEqual(TEXT("same request produces same sample JSON"), FirstJson, SecondJson);
-
-	TestEqual(TEXT("runtime ground regions"), FirstResult.CompileResult.WorldSpec.GroundRegions.Num(), 25);
-	TestEqual(TEXT("runtime placeables"), FirstResult.CompileResult.WorldSpec.Placeables.Num(), 3);
-	TestEqual(TEXT("runtime dynamic actors"), FirstResult.CompileResult.WorldSpec.DynamicActors.Num(), 0);
-
-	const FScenarioPlaceableInstanceSpec* RobotSpec = FirstResult.CompileResult.WorldSpec.Placeables.FindByPredicate(
-		[](const FScenarioPlaceableInstanceSpec& PlaceableSpec)
-		{
-			return PlaceableSpec.Category == EScenarioActorCategory::DeliveryBot;
-		});
-	TestNotNull(TEXT("runtime robot spec"), RobotSpec);
-	if (RobotSpec)
-	{
-		TestEqual(TEXT("runtime profile max speed"), RobotSpec->DeliveryBot.SetupInfo.ChaosDriveConfigInfo.MaxSpeedKmh, 10.0f);
-		TestEqual(TEXT("runtime profile lidar range"), RobotSpec->DeliveryBot.SetupInfo.LidarSensorConfigInfo.ScanRangeM, 5.0f);
-		TestEqual(TEXT("runtime profile lidar mode"), static_cast<int32>(RobotSpec->DeliveryBot.SetupInfo.LidarSensorConfigInfo.LidarModeType), static_cast<int32>(EDeliveryBotLidarModeType::TwoD));
-	}
 	return true;
 }
 

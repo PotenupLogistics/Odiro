@@ -931,7 +931,7 @@ namespace
 
 		FString scenarioJson;
 		TArray<FScenarioCompileDiagnostic> diagnostics;
-		if (TryLoadJsonStringFromFile(runRecord.EpisodeSetupJsonPath, scenarioJson, diagnostics))
+		if (TryLoadJsonStringFromFile(runRecord.EpisodeScenarioJsonPath, scenarioJson, diagnostics))
 		{
 			outScenarioHash = MakeContentHash(scenarioJson);
 		}
@@ -1254,7 +1254,7 @@ namespace
 		const FEpisodeRunRecord& runRecord)
 	{
 		const FString episodeId = GetEpisodeIdForOutput(runRecord);
-		const TSharedPtr<FJsonObject> episodeScenarioObject = LoadJsonObjectOrEmpty(runRecord.EpisodeSetupJsonPath);
+		const TSharedPtr<FJsonObject> episodeScenarioObject = LoadJsonObjectOrEmpty(runRecord.EpisodeScenarioJsonPath);
 		FString scenarioId;
 		FString scenarioHash;
 		FString scenarioSourceHash;
@@ -1312,7 +1312,7 @@ bool FUserProjectRunOutputJson::SaveEpisodeArtifacts(
 	const FString eventsPath = FPaths::Combine(episodeDirectory, TEXT("events.jsonl"));
 	const FString tracePath = FPaths::Combine(episodeDirectory, TEXT("trace.jsonl"));
 
-	const TSharedPtr<FJsonObject> episodeScenarioObject = LoadJsonObjectOrEmpty(runRecord.EpisodeSetupJsonPath);
+	const TSharedPtr<FJsonObject> episodeScenarioObject = LoadJsonObjectOrEmpty(runRecord.EpisodeScenarioJsonPath);
 	FString scenarioId;
 	FString scenarioHash;
 	FString scenarioSourceHash;

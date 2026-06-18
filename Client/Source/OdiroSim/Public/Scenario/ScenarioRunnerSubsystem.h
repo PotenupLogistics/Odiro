@@ -25,9 +25,6 @@ public:
 	FScenarioRunRecordCompletedNative OnRunRecordCompleted;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
-	bool StartScenarioPairFromJsonFiles(const FString& scenarioSetupJsonPath, const FString& deliveryBotSetupJsonPath);
-
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	bool StartBatchFromRunInputs(const TArray<FScenarioRunInput>& runInputs);
 
 	// Starts direct run inputs under one externally-owned run id.

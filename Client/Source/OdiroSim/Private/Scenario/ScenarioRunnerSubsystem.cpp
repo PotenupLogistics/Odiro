@@ -3,9 +3,7 @@
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
 #include "Episode/EpisodeMeasurementLogSubsystem.h"
-#include "Scenario/ScenarioCompiler.h"
 #include "Scenario/ScenarioEvaluationSubsystem.h"
-#include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Scenario/ScenarioSimulationSubsystem.h"
 #include "Scenario/UserProjectEpisodeScenarioWorldSpecAdapter.h"
 #include "Misc/Paths.h"
@@ -154,23 +152,22 @@ namespace
 		return setupSpec;
 	}
 
-	FScenarioCompileResult CompileRunnerScenarioWorldSpec(
-		const FString& scenarioJsonPath,
-		const UScenarioCompiler* runtimeCompiler)
+	FScenarioCompileResult CompileRunnerEpisodeScenarioWorldSpec(const FString& episodeScenarioJsonPath)
 	{
-		if (FUserProjectEpisodeScenarioWorldSpecAdapter::IsEpisodeScenarioFile(scenarioJsonPath))
+		if (FUserProjectEpisodeScenarioWorldSpecAdapter::IsEpisodeScenarioFile(episodeScenarioJsonPath))
 		{
-			return FUserProjectEpisodeScenarioWorldSpecAdapter::CompileScenarioWorldSpecFromEpisodeScenarioFile(scenarioJsonPath);
+			return FUserProjectEpisodeScenarioWorldSpecAdapter::CompileScenarioWorldSpecFromEpisodeScenarioFile(episodeScenarioJsonPath);
 		}
 
-		if (FScenarioSampleWorldSpecAdapter::IsScenarioSampleFile(scenarioJsonPath))
-		{
-			return FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleFile(scenarioJsonPath);
-		}
-
-		return runtimeCompiler
-			? runtimeCompiler->CompileScenarioWorldSpecFromJsonFile(scenarioJsonPath)
-			: FScenarioCompileResult();
+		FScenarioCompileResult result;
+		FScenarioCompileDiagnostic diagnostic;
+		diagnostic.Severity = EScenarioCompileDiagnosticSeverity::Error;
+		diagnostic.Code = TEXT("invalid_episode_scenario_input");
+		diagnostic.Message = FString::Printf(
+			TEXT("Runner input must be an episode_scenario JSON file: %s"),
+			*episodeScenarioJsonPath);
+		result.Diagnostics.Add(diagnostic);
+		return result;
 	}
 
 	bool ApplyDeliveryBotSetupToWorldSpec(
@@ -218,21 +215,6 @@ namespace
 	}
 }
 
-bool UScenarioRunnerSubsystem::StartScenarioPairFromJsonFiles(
-	const FString& scenarioSetupJsonPath,
-	const FString& deliveryBotSetupJsonPath)
-{
-	if (scenarioSetupJsonPath.IsEmpty() || deliveryBotSetupJsonPath.IsEmpty()) return false;
-
-	FScenarioRunInput runInput;
-	runInput.ScenarioSetupJsonPath = scenarioSetupJsonPath;
-	runInput.DeliveryBotSetupJsonPath = deliveryBotSetupJsonPath;
-
-	TArray<FScenarioRunInput> runInputs;
-	runInputs.Add(runInput);
-	return StartBatchFromRunInputs(runInputs);
-}
-
 bool UScenarioRunnerSubsystem::StartBatchFromRunInputs(const TArray<FScenarioRunInput>& runInputs)
 {
 	return StartBatchFromRunInputsInternal(runInputs, FString());
@@ -262,7 +244,7 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
 	PendingRunInputs.Reset();
 	for (const FScenarioRunInput& runInput : runInputs)
 	{
-		if (!runInput.ScenarioSetupJsonPath.IsEmpty() && !runInput.DeliveryBotSetupJsonPath.IsEmpty())
+		if (!runInput.EpisodeScenarioJsonPath.IsEmpty() && !runInput.ProfileJsonPath.IsEmpty())
 		{
 			PendingRunInputs.Add(runInput);
 		}
@@ -271,10 +253,10 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
 			UE_LOG(
 				LogScenarioRunner,
 				Warning,
-				TEXT("Scenario pair 입력 무시: ScenarioSetup 또는 DeliveryBotSetup 경로가 비어 있음 | Pair: %s, ScenarioSetup: %s, DeliveryBotSetup: %s"),
+				TEXT("Episode run input ignored: episode_scenario or profile path is empty | Pair: %s, EpisodeScenario: %s, Profile: %s"),
 				*runInput.PairId,
-				*runInput.ScenarioSetupJsonPath,
-				*runInput.DeliveryBotSetupJsonPath);
+				*runInput.EpisodeScenarioJsonPath,
+				*runInput.ProfileJsonPath);
 		}
 	}
 
@@ -410,9 +392,9 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	CurrentRecord.RunIndex = CurrentRunIndex;
 	CurrentRecord.RunId = BuildRunId();
 	CurrentRecord.PairId = CurrentRunInput.PairId;
-	CurrentRecord.SourceJsonPath = CurrentRunInput.ScenarioSetupJsonPath;
-	CurrentRecord.EpisodeSetupJsonPath = CurrentRunInput.ScenarioSetupJsonPath;
-	CurrentRecord.DeliveryBotSetupJsonPath = CurrentRunInput.DeliveryBotSetupJsonPath;
+	CurrentRecord.SourceJsonPath = CurrentRunInput.EpisodeScenarioJsonPath;
+	CurrentRecord.EpisodeScenarioJsonPath = CurrentRunInput.EpisodeScenarioJsonPath;
+	CurrentRecord.ProfileJsonPath = CurrentRunInput.ProfileJsonPath;
 	CurrentRecord.PolicySpecJsonPath = CurrentRunInput.PolicySpecJsonPath;
 	CurrentRecord.StartTimeSeconds = world->GetTimeSeconds();
 
@@ -421,26 +403,14 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	UE_LOG(
 		LogScenarioRunner,
 		Log,
-		TEXT("Scenario pair 준비 중 | RunId: %s, Pair: %s, Index: %d, ScenarioSetup: %s, DeliveryBotSetup: %s, PolicySpec: %s, Remaining: %d"),
+		TEXT("Episode input preparing | RunId: %s, Pair: %s, Index: %d, EpisodeScenario: %s, Profile: %s, PolicySpec: %s, Remaining: %d"),
 		*CurrentRecord.RunId,
 		*CurrentRecord.PairId,
 		CurrentRecord.RunIndex,
-		*CurrentRunInput.ScenarioSetupJsonPath,
-		*CurrentRunInput.DeliveryBotSetupJsonPath,
-		CurrentRunInput.PolicySpecJsonPath.IsEmpty() ? TEXT("<delivery_bot_setup>") : *CurrentRunInput.PolicySpecJsonPath,
+		*CurrentRunInput.EpisodeScenarioJsonPath,
+		*CurrentRunInput.ProfileJsonPath,
+		CurrentRunInput.PolicySpecJsonPath.IsEmpty() ? TEXT("<profile>") : *CurrentRunInput.PolicySpecJsonPath,
 		PendingRunInputs.Num());
-
-	UScenarioCompiler* compiler = NewObject<UScenarioCompiler>(this);
-	if (!compiler)
-	{
-		UE_LOG(LogScenarioRunner, Warning, TEXT("Episode 컴파일러 생성 실패 | RunId: %s"), *CurrentRecord.RunId);
-		CompleteCurrentRecord(
-			false,
-			EEpisodeEvaluationOutcome::Failure,
-			EEpisodeEvaluationTerminalReason::CompilerCreateFailed);
-		QueueStartNextScenario();
-		return;
-	}
 
 	UDeliveryBotSetupCompiler* deliveryBotSetupCompiler = NewObject<UDeliveryBotSetupCompiler>(this);
 	if (!deliveryBotSetupCompiler)
@@ -454,7 +424,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		return;
 	}
 
-	FScenarioCompileResult compileResult = CompileRunnerScenarioWorldSpec(CurrentRunInput.ScenarioSetupJsonPath, compiler);
+	FScenarioCompileResult compileResult = CompileRunnerEpisodeScenarioWorldSpec(CurrentRunInput.EpisodeScenarioJsonPath);
 	CurrentRecord.bEpisodeSetupCompileSucceeded = compileResult.bSuccess;
 	CurrentRecord.EpisodeId = compileResult.WorldSpec.RunConfig.TemplateId;
 	CurrentRecord.SpecHash = compileResult.WorldSpec.SpecHash;
@@ -464,7 +434,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	UE_LOG(
 		LogScenarioRunner,
 		Warning,
-		TEXT("ScenarioSetup 컴파일 완료 | RunId: %s, Pair: %s, Scenario: %s, Success: %s, Diagnostics: %d, SpecHash: %s"),
+		TEXT("episode_scenario compile completed | RunId: %s, Pair: %s, Scenario: %s, Success: %s, Diagnostics: %d, SpecHash: %s"),
 		*CurrentRecord.RunId,
 		*CurrentRecord.PairId,
 		*CurrentRecord.EpisodeId,
@@ -483,7 +453,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	}
 
 	FDeliveryBotSetupCompileResult deliveryBotCompileResult =
-		deliveryBotSetupCompiler->CompileDeliveryBotSetupFromJsonFile(CurrentRunInput.DeliveryBotSetupJsonPath);
+		deliveryBotSetupCompiler->CompileDeliveryBotSetupFromJsonFile(CurrentRunInput.ProfileJsonPath);
 
 	CurrentRecord.bDeliveryBotSetupCompileSucceeded = deliveryBotCompileResult.bSuccess;
 	CurrentRecord.DeliveryBotSetupHash = deliveryBotCompileResult.SpecHash;
@@ -721,7 +691,7 @@ void UScenarioRunnerSubsystem::AppendCompileDiagnostics(const FScenarioCompileRe
 	for (const FScenarioCompileDiagnostic& diagnostic : compileResult.Diagnostics)
 	{
 		CurrentRecord.Diagnostics.Add(FString::Printf(
-			TEXT("ScenarioSetup %s [%s]: %s"),
+			TEXT("episode_scenario %s [%s]: %s"),
 			ToRunnerCompileSeverityString(diagnostic.Severity),
 			*diagnostic.Code,
 			*diagnostic.Message));
@@ -782,7 +752,7 @@ FString UScenarioRunnerSubsystem::BuildPairId(const FScenarioRunInput& runInput,
 {
 	if (!runInput.PairId.IsEmpty()) return runInput.PairId;
 
-	FString baseName = FPaths::GetBaseFilename(runInput.ScenarioSetupJsonPath);
+	FString baseName = FPaths::GetBaseFilename(runInput.EpisodeScenarioJsonPath);
 	if (baseName.IsEmpty())
 	{
 		baseName = FString::Printf(TEXT("pair_%04d"), runIndex);

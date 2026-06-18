@@ -144,10 +144,10 @@ struct ODIROSIM_API FEpisodeRunRecord
 	FString SourceJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString EpisodeSetupJsonPath;
+	FString EpisodeScenarioJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString DeliveryBotSetupJsonPath;
+	FString ProfileJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FString PolicySpecJsonPath;

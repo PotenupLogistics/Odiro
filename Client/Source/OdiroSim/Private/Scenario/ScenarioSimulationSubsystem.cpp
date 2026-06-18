@@ -596,13 +596,6 @@ FScenarioRuntimeContext UScenarioSimulationSubsystem::BuildRuntimeContext(const 
 				runtimeContext.GoalLocation = placeableSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm;
 				runtimeContext.bHasGoalLocation = true;
 			}
-			else if (!placeableSpec.DeliveryBot.bHasStartLocation)
-			{
-				runtimeContext.bHasGoalLocation = GetVectorProperty(
-					placeableSpec.Properties,
-					TEXT("goal_cm"),
-					runtimeContext.GoalLocation);
-			}
 			continue;
 		}
 
@@ -864,10 +857,7 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 	if (!world || placeableSpec.InstanceId.IsEmpty() || !RobotActorClass) return nullptr;
 
 	const FScenarioDeliveryBotSpawnSpec& deliveryBotSpec = placeableSpec.DeliveryBot;
-	const bool bUseLegacyPropertyFallback = !deliveryBotSpec.bHasStartLocation;
-	const bool bSpawnOnly = bUseLegacyPropertyFallback
-		? GetBoolProperty(placeableSpec.Properties, TEXT("spawn_only"), deliveryBotSpec.bSpawnOnly)
-		: deliveryBotSpec.bSpawnOnly;
+	const bool bSpawnOnly = deliveryBotSpec.bSpawnOnly;
 
 	FDeliveryBotSetupInfo setupInfo = deliveryBotSpec.SetupInfo;
 	if (!deliveryBotSpec.bHasStartLocation)
@@ -876,22 +866,9 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 		setupInfo.LocationSetupInfo.GoalLocationCm = setupInfo.LocationSetupInfo.StartLocationCm;
 	}
 
-	bool bRouteAutoStart = setupInfo.LocationSetupInfo.bAutoStartRoute;
-	if (bUseLegacyPropertyFallback)
-	{
-		bRouteAutoStart = GetBoolProperty(placeableSpec.Properties, TEXT("route_auto_start"), bRouteAutoStart);
-	}
-
+	const bool bRouteAutoStart = setupInfo.LocationSetupInfo.bAutoStartRoute;
 	FVector goalLocation = setupInfo.LocationSetupInfo.GoalLocationCm;
-	bool bHasGoal = deliveryBotSpec.bHasGoalLocation;
-	if (!bHasGoal && bUseLegacyPropertyFallback)
-	{
-		bHasGoal = GetVectorProperty(placeableSpec.Properties, TEXT("goal_cm"), goalLocation);
-		if (bHasGoal)
-		{
-			setupInfo.LocationSetupInfo.GoalLocationCm = goalLocation;
-		}
-	}
+	const bool bHasGoal = deliveryBotSpec.bHasGoalLocation;
 
 	if (!bHasGoal)
 	{

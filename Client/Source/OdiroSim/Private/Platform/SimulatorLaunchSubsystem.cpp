@@ -1,8 +1,7 @@
 
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
-#include "Scenario/ScenarioCompiler.h"
-#include "Scenario/ScenarioSampleWorldSpecAdapter.h"
+#include "Scenario/UserProjectEpisodeScenarioWorldSpecAdapter.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSimulatorLaunch, Log, All);
 
@@ -12,7 +11,6 @@ namespace
 	const TCHAR* SimulatorLaunchPolicySpecInputDirectory = TEXT("Json/Input/PolicySpecs");
 	const TCHAR* SimulationRunStatusDirectory = TEXT("Saved/SimulationRuns");
 	const TCHAR* PreviewLauncherFileName = TEXT("Task-RunPreview.bat");
-	const TCHAR* LaunchScenarioSetupSchema = TEXT("scenario_actor_spawn_mvp");
 	const TCHAR* LaunchDeliveryBotSetupSchema = TEXT("delivery_bot_setup");
 	const TCHAR* SimulatorProcessFlags = TEXT("-nosound -unattended -NoLoadingScreen");
 
@@ -292,20 +290,10 @@ namespace
 		return executableName.StartsWith(TEXT("UnrealEditor"), ESearchCase::IgnoreCase);
 	}
 
-	bool IsScenarioSetupFile(const FString& jsonFile)
+	bool IsEpisodeScenarioFile(const FString& jsonFile)
 	{
-		if (FScenarioSampleWorldSpecAdapter::IsScenarioSampleFile(jsonFile))
-		{
-			return FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleFile(jsonFile).bSuccess;
-		}
-
-		if (!HasJsonSchema(jsonFile, LaunchScenarioSetupSchema))
-		{
-			return false;
-		}
-
-		UScenarioCompiler* compiler = NewObject<UScenarioCompiler>();
-		return compiler && compiler->CompileScenarioWorldSpecFromJsonFile(jsonFile).bSuccess;
+		return FUserProjectEpisodeScenarioWorldSpecAdapter::IsEpisodeScenarioFile(jsonFile)
+			&& FUserProjectEpisodeScenarioWorldSpecAdapter::CompileScenarioWorldSpecFromEpisodeScenarioFile(jsonFile).bSuccess;
 	}
 
 	bool IsDeliveryBotSetupFile(const FString& jsonFile)
@@ -361,7 +349,7 @@ TArray<FString> USimulatorLaunchSubsystem::ListScenarioSetupFiles() const
 			continue;
 		}
 
-		if (IsScenarioSetupFile(jsonFile))
+		if (IsEpisodeScenarioFile(jsonFile))
 		{
 			setupFiles.Add(jsonFile);
 		}

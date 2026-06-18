@@ -22,7 +22,6 @@ class AActor;
 class FJsonObject;
 class FJsonValue;
 class UScenarioCorridorSurfaceCatalog;
-class UScenarioCompiler;
 
 UCLASS(BlueprintType)
 class ODIROSIM_API UScenarioAuthoringSubsystem : public UWorldSubsystem
@@ -74,9 +73,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Catalog")
 	TSoftObjectPtr<UScenarioCorridorSurfaceCatalog> CorridorSurfaceCatalog;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Import")
-	FString ScenarioSetupInputDirectory = TEXT("Json/Input");
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement", meta = (ClampMin = "0.0"))
 	double StaticObstacleGroundZToleranceCm = 5.0;
 
@@ -97,14 +93,6 @@ public:
 	// Imports a user project scenario JSON string into the editor.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
 	bool LoadProjectScenarioJsonString(const FString& jsonString, TArray<FString>& outDiagnostics);
-
-	// Legacy Blueprint entry point kept for assets that still call scenario setup imports.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import", meta = (DeprecatedFunction, DeprecationMessage = "Use LoadProjectScenarioJsonFile."))
-	bool LoadScenarioSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
-
-	// Legacy Blueprint entry point kept for assets that still call scenario setup imports.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import", meta = (DeprecatedFunction, DeprecationMessage = "Use LoadProjectScenarioJsonString."))
-	bool LoadScenarioSetupJsonString(const FString& jsonString, TArray<FString>& outDiagnostics);
 
 	// 이미 컴파일된 FScenarioWorldSpec 직접 import.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
@@ -324,10 +312,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	FString GetSourceProjectScenarioJsonPath() const { return SourceScenarioTemplateJsonPath; }
 
-	// Legacy Blueprint entry point kept for assets that still request the setup JSON path.
-	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring", meta = (DeprecatedFunction, DeprecationMessage = "Use GetSourceProjectScenarioJsonPath."))
-	FString GetSourceScenarioSetupJsonPath() const { return GetSourceProjectScenarioJsonPath(); }
-
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	bool IsDraftDirty() const { return bDirty; }
 
@@ -349,27 +333,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
 	bool ExportAndValidateProjectScenarioJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
 
-	// Legacy Blueprint entry point kept for assets that still export setup JSON.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export", meta = (DeprecatedFunction, DeprecationMessage = "Use ExportProjectScenarioJsonString."))
-	bool ExportScenarioSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
-
-	// Legacy Blueprint entry point kept for assets that still validate setup JSON.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export", meta = (DeprecatedFunction, DeprecationMessage = "Use ExportAndValidateProjectScenarioJsonString."))
-	bool ExportAndValidateScenarioSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
-
 	// Saves a validated user project scenario.json draft and clears the dirty state.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
 	bool SaveProjectScenarioJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
-
-	// Legacy Blueprint entry point kept for assets that still save setup JSON.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export", meta = (DeprecatedFunction, DeprecationMessage = "Use SaveProjectScenarioJsonFile."))
-	bool SaveScenarioSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
 private:
 	static constexpr double CentimetersToMeters = 0.01;
 
 	static FString ResolveProjectRelativePath(const FString& filePath);
-	FString ResolveScenarioSetupLoadPath(const FString& filePath) const;
+	// Resolves explicit project scenario paths without legacy Json/Input lookup.
+	static FString ResolveProjectScenarioLoadPath(const FString& filePath);
 	static FString CompileSeverityToString(EScenarioCompileDiagnosticSeverity severity);
 	static void AppendCompileDiagnostics(const FScenarioCompileResult& compileResult, TArray<FString>& outDiagnostics);
 	static FString GroundRegionTypeToString(EScenarioGroundRegionType regionType);
@@ -417,7 +390,6 @@ private:
 	// Converts two axis points in meters into the actor transform used by the segment handle.
 	static FTransform MakeCorridorSegmentHandleTransform(const FVector2D& startMeters, const FVector2D& endMeters);
 
-	UScenarioCompiler* CreateScenarioCompiler() const;
 	const UScenarioStaticObstaclePropCatalog* GetStaticObstaclePropCatalog() const;
 	bool TryFindStaticObstacleProp(FName propId, FScenarioStaticObstaclePropEntry& outPropEntry) const;
 	// Loads the configured Corridor surface catalog asset when available.
@@ -540,10 +512,8 @@ private:
 	double ResolveCorridorSurfaceZOffsetCm(double offsetMeters) const;
 	// World 위치가 놓일 Corridor surface의 Z offset을 계산.
 	bool TryResolveCorridorSurfaceZOffsetCm(const FVector& locationCm, double& outSurfaceZOffsetCm) const;
-	// Draft template을 editor preview용 world spec으로 투영하고, 실패 시 compatibility projection으로 대체함.
+	// Draft template을 editor preview용 world spec으로 투영함.
 	FScenarioWorldSpec BuildDraftWorldSpecForPreview(TArray<FString>* outDiagnostics = nullptr) const;
-	// 기존 fixed obstacle/robot marker projection을 유지하는 fallback preview 경로임.
-	FScenarioWorldSpec BuildCompatibilityDraftWorldSpecForPreview() const;
 	// Editor preview projection이 사용하는 run config와 seed 값을 draft state로 맞춤.
 	void ApplyEditorPreviewRunConfig(FScenarioWorldSpec& worldSpec) const;
 	FScenarioTemplateRobotAnchor MakeRobotAnchorFromLocationCm(const FVector& locationCm) const;

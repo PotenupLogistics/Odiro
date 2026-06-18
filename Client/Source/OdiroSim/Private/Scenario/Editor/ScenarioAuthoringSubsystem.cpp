@@ -13,7 +13,6 @@
 #include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
 #include "Scenario/Editor/ScenarioCorridorHandleActor.h"
 #include "Scenario/Editor/ScenarioCorridorPreviewActor.h"
-#include "Scenario/ScenarioCompiler.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Scenario/ScenarioTemplateSampler.h"
 #include "Shared/ScenarioTemplateJson.h"
@@ -163,7 +162,7 @@ bool UScenarioAuthoringSubsystem::LoadProjectScenarioJsonFile(
 		return false;
 	}
 
-	outResolvedJsonFilePath = ResolveScenarioSetupLoadPath(trimmedJsonFilePath);
+	outResolvedJsonFilePath = ResolveProjectScenarioLoadPath(trimmedJsonFilePath);
 
 	const FScenarioTemplateParseResult parseResult = FScenarioTemplateJson::ParseProjectScenarioFromFile(outResolvedJsonFilePath);
 	AppendSchemaDiagnostics(parseResult.Diagnostics, outDiagnostics);
@@ -179,14 +178,6 @@ bool UScenarioAuthoringSubsystem::LoadProjectScenarioJsonFile(
 	SourceScenarioTemplateJsonPath = outResolvedJsonFilePath;
 	bDirty = false;
 	return RebuildEditorViewFromDraft(outDiagnostics);
-}
-
-bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonFile(
-	const FString& jsonFilePath,
-	FString& outResolvedJsonFilePath,
-	TArray<FString>& outDiagnostics)
-{
-	return LoadProjectScenarioJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
 }
 
 bool UScenarioAuthoringSubsystem::LoadProjectScenarioJsonString(
@@ -215,13 +206,6 @@ bool UScenarioAuthoringSubsystem::LoadProjectScenarioJsonString(
 	SourceScenarioTemplateJsonPath.Reset();
 	bDirty = false;
 	return RebuildEditorViewFromDraft(outDiagnostics);
-}
-
-bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonString(
-	const FString& jsonString,
-	TArray<FString>& outDiagnostics)
-{
-	return LoadProjectScenarioJsonString(jsonString, outDiagnostics);
 }
 
 bool UScenarioAuthoringSubsystem::ImportCompiledWorldSpec(
@@ -1574,13 +1558,6 @@ bool UScenarioAuthoringSubsystem::ExportProjectScenarioJsonString(
 	return bWritten;
 }
 
-bool UScenarioAuthoringSubsystem::ExportScenarioSetupJsonString(
-	FString& outJsonString,
-	TArray<FString>& outDiagnostics) const
-{
-	return ExportProjectScenarioJsonString(outJsonString, outDiagnostics);
-}
-
 bool UScenarioAuthoringSubsystem::ExportAndValidateProjectScenarioJsonString(
 	FString& outJsonString,
 	TArray<FString>& outDiagnostics) const
@@ -1598,13 +1575,6 @@ bool UScenarioAuthoringSubsystem::ExportAndValidateProjectScenarioJsonString(
 	}
 
 	return parseResult.bSuccess;
-}
-
-bool UScenarioAuthoringSubsystem::ExportAndValidateScenarioSetupJsonString(
-	FString& outJsonString,
-	TArray<FString>& outDiagnostics) const
-{
-	return ExportAndValidateProjectScenarioJsonString(outJsonString, outDiagnostics);
 }
 
 bool UScenarioAuthoringSubsystem::SaveProjectScenarioJsonFile(
@@ -1645,14 +1615,6 @@ bool UScenarioAuthoringSubsystem::SaveProjectScenarioJsonFile(
 	return true;
 }
 
-bool UScenarioAuthoringSubsystem::SaveScenarioSetupJsonFile(
-	const FString& jsonFilePath,
-	FString& outResolvedJsonFilePath,
-	TArray<FString>& outDiagnostics)
-{
-	return SaveProjectScenarioJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
-}
-
 FString UScenarioAuthoringSubsystem::ResolveProjectRelativePath(const FString& filePath)
 {
 	if (FPaths::IsRelative(filePath))
@@ -1663,7 +1625,7 @@ FString UScenarioAuthoringSubsystem::ResolveProjectRelativePath(const FString& f
 	return filePath;
 }
 
-FString UScenarioAuthoringSubsystem::ResolveScenarioSetupLoadPath(const FString& filePath) const
+FString UScenarioAuthoringSubsystem::ResolveProjectScenarioLoadPath(const FString& filePath)
 {
 	FString normalizedPath = filePath;
 	normalizedPath.TrimStartAndEndInline();
@@ -1677,12 +1639,6 @@ FString UScenarioAuthoringSubsystem::ResolveScenarioSetupLoadPath(const FString&
 	if (!FPaths::IsRelative(normalizedPath))
 	{
 		return normalizedPath;
-	}
-
-	if (FPaths::GetPath(normalizedPath).IsEmpty())
-	{
-		return FPaths::ConvertRelativePathToFull(
-			FPaths::Combine(FPaths::ProjectDir(), ScenarioSetupInputDirectory, normalizedPath));
 	}
 
 	return ResolveProjectRelativePath(normalizedPath);
@@ -2990,15 +2946,6 @@ bool UScenarioAuthoringSubsystem::TryResolveCorridorSurfaceZOffsetCm(
 	return true;
 }
 
-UScenarioCompiler* UScenarioAuthoringSubsystem::CreateScenarioCompiler() const
-{
-	UScenarioCompiler* compiler = NewObject<UScenarioCompiler>();
-	if (!compiler) return nullptr;
-
-	compiler->StaticObstaclePropCatalog = StaticObstaclePropCatalog;
-	return compiler;
-}
-
 const UScenarioStaticObstaclePropCatalog* UScenarioAuthoringSubsystem::GetStaticObstaclePropCatalog() const
 {
 	const UScenarioStaticObstaclePropCatalog* propCatalog = StaticObstaclePropCatalog.LoadSynchronous();
@@ -3276,8 +3223,6 @@ bool UScenarioAuthoringSubsystem::ValidateSingleRobotRouteSpecForExport(TArray<F
 
 FScenarioWorldSpec UScenarioAuthoringSubsystem::BuildDraftWorldSpecForPreview(TArray<FString>* outDiagnostics) const
 {
-	FScenarioWorldSpec fallbackWorldSpec = BuildCompatibilityDraftWorldSpecForPreview();
-
 	FScenarioTemplateSampleRequest sampleRequest;
 	sampleRequest.SampleId = TEXT("editor_preview");
 	sampleRequest.ScenarioId = DraftScenarioTemplate.TemplateId.IsEmpty()
@@ -3303,9 +3248,11 @@ FScenarioWorldSpec UScenarioAuthoringSubsystem::BuildDraftWorldSpecForPreview(TA
 		if (outDiagnostics)
 		{
 			AppendSchemaDiagnostics(sampleResult.Diagnostics, *outDiagnostics);
-			outDiagnostics->Add(TEXT("ScenarioTemplate sampler preview failed; using compatibility preview projection."));
+			outDiagnostics->Add(TEXT("ScenarioTemplate sampler preview failed; editor runtime preview was not materialized."));
 		}
-		return fallbackWorldSpec;
+		FScenarioWorldSpec emptyWorldSpec;
+		ApplyEditorPreviewRunConfig(emptyWorldSpec);
+		return emptyWorldSpec;
 	}
 
 	FScenarioCompileResult compileResult =
@@ -3315,9 +3262,11 @@ FScenarioWorldSpec UScenarioAuthoringSubsystem::BuildDraftWorldSpecForPreview(TA
 		if (outDiagnostics)
 		{
 			AppendCompileDiagnostics(compileResult, *outDiagnostics);
-			outDiagnostics->Add(TEXT("ScenarioSample world spec preview failed; using compatibility preview projection."));
+			outDiagnostics->Add(TEXT("ScenarioSample world spec preview failed; editor runtime preview was not materialized."));
 		}
-		return fallbackWorldSpec;
+		FScenarioWorldSpec emptyWorldSpec;
+		ApplyEditorPreviewRunConfig(emptyWorldSpec);
+		return emptyWorldSpec;
 	}
 
 	if (outDiagnostics)
@@ -3330,25 +3279,6 @@ FScenarioWorldSpec UScenarioAuthoringSubsystem::BuildDraftWorldSpecForPreview(TA
 	ApplyEditorPreviewRunConfig(worldSpec);
 	worldSpec.GroundRegions.Append(DraftGroundRegions);
 	worldSpec.DynamicActors.Append(DraftPedestrianSpecs);
-	return worldSpec;
-}
-
-FScenarioWorldSpec UScenarioAuthoringSubsystem::BuildCompatibilityDraftWorldSpecForPreview() const
-{
-	FScenarioWorldSpec worldSpec;
-	ApplyEditorPreviewRunConfig(worldSpec);
-
-	worldSpec.Placeables.Add(MakeDeliveryBotSpecFromTemplateRobot());
-	for (const FScenarioTemplateObstaclePlacement& placement : DraftScenarioTemplate.Obstacles.Placements)
-	{
-		if (placement.Kind != EScenarioTemplateObstaclePlacementKind::Fixed || placement.PropId.IsEmpty())
-		{
-			continue;
-		}
-		worldSpec.Placeables.Add(MakeStaticObstacleSpecFromPlacement(placement));
-	}
-	worldSpec.GroundRegions = DraftGroundRegions;
-	worldSpec.DynamicActors = DraftPedestrianSpecs;
 	return worldSpec;
 }
 

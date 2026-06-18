@@ -8,7 +8,6 @@
 #include "Kismet/GameplayStatics.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
-#include "Shared/SimulationSetupTypes.h"
 #include "Widget/WidgetTextStyleCatalog.h"
 
 namespace
@@ -18,7 +17,7 @@ namespace
 		FString directory = FPaths::GetPath(preferredPath);
 		if (directory.IsEmpty())
 		{
-			directory = TEXT("Json/Input");
+			directory = TEXT("Saved/UserProjects/ScenarioEditor");
 		}
 
 		const FString baseName = FPaths::GetBaseFilename(preferredPath).IsEmpty()
@@ -35,7 +34,10 @@ namespace
 				: FString::Printf(TEXT("%s_%d.%s"), *baseName, index, *extension);
 			FString candidatePath = FPaths::Combine(directory, fileName);
 			candidatePath.ReplaceInline(TEXT("\\"), TEXT("/"));
-			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(candidatePath)))
+			const FString resolvedCandidatePath = FPaths::IsRelative(candidatePath)
+				? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), candidatePath)
+				: FPaths::ConvertRelativePathToFull(candidatePath);
+			if (!FPaths::FileExists(resolvedCandidatePath))
 			{
 				return candidatePath;
 			}

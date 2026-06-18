@@ -3,7 +3,6 @@
 #include "Shared/SimulationSetupTypes.h"
 
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
-#include "Scenario/ScenarioCompiler.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -122,34 +121,6 @@ bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters
 	const FDeliveryBotSetupCompileResult deliveryBotResult =
 		deliveryBotCompiler->CompileDeliveryBotSetupFromJsonFile(TEXT("Json/Input/DeliveryBotSetupPlayable.json"));
 	TestTrue(TEXT("playable policy compiles"), deliveryBotResult.bSuccess);
-
-	const UScenarioCompiler* episodeCompiler = NewObject<UScenarioCompiler>();
-	const FScenarioCompileResult episodeResult =
-		episodeCompiler->CompileScenarioWorldSpecFromJsonFile(TEXT("Json/Input/ScenarioSetupPlayable.json"));
-	TestTrue(TEXT("playable episode compiles"), episodeResult.bSuccess);
-
-	const FScenarioPlaceableInstanceSpec* robotSpec = nullptr;
-	for (const FScenarioPlaceableInstanceSpec& placeable : episodeResult.WorldSpec.Placeables)
-	{
-		if (placeable.Category == EScenarioActorCategory::DeliveryBot)
-		{
-			robotSpec = &placeable;
-			break;
-		}
-	}
-
-	TestNotNull(TEXT("playable episode has robot"), robotSpec);
-	if (robotSpec)
-	{
-		TestFalse(TEXT("playable robot is not spawn-only"), robotSpec->DeliveryBot.bSpawnOnly);
-		TestTrue(TEXT("playable robot has start"), robotSpec->DeliveryBot.bHasStartLocation);
-		TestTrue(TEXT("playable robot has goal"), robotSpec->DeliveryBot.bHasGoalLocation);
-		TestTrue(TEXT("playable route auto-starts"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute);
-		TestEqual(TEXT("playable robot start x cm"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.X, -600.0);
-		TestEqual(TEXT("playable robot start y cm"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.Y, 0.0);
-		TestEqual(TEXT("playable robot goal x cm"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.X, 600.0);
-		TestEqual(TEXT("playable robot goal y cm"), robotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.Y, 0.0);
-	}
 
 	return true;
 }

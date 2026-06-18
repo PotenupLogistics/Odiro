@@ -710,13 +710,6 @@ bool AScenarioEditorController::ExportAndValidateProjectScenarioJsonString(
 	return authoringSubsystem->ExportAndValidateProjectScenarioJsonString(outJsonString, outDiagnostics);
 }
 
-bool AScenarioEditorController::ExportAndValidateScenarioSetupJsonString(
-	FString& outJsonString,
-	TArray<FString>& outDiagnostics) const
-{
-	return ExportAndValidateProjectScenarioJsonString(outJsonString, outDiagnostics);
-}
-
 bool AScenarioEditorController::LoadProjectScenarioJsonFile(
 	const FString& jsonFilePath,
 	FString& outResolvedJsonFilePath,
@@ -734,14 +727,6 @@ bool AScenarioEditorController::LoadProjectScenarioJsonFile(
 
 	CancelPlacement();
 	return authoringSubsystem->LoadProjectScenarioJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
-}
-
-bool AScenarioEditorController::LoadScenarioSetupJsonFile(
-	const FString& jsonFilePath,
-	FString& outResolvedJsonFilePath,
-	TArray<FString>& outDiagnostics)
-{
-	return LoadProjectScenarioJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
 }
 
 void AScenarioEditorController::NewScenarioDraft()
@@ -771,23 +756,10 @@ bool AScenarioEditorController::SaveProjectScenarioJsonFile(
 	return authoringSubsystem->SaveProjectScenarioJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
 }
 
-bool AScenarioEditorController::SaveScenarioSetupJsonFile(
-	const FString& jsonFilePath,
-	FString& outResolvedJsonFilePath,
-	TArray<FString>& outDiagnostics)
-{
-	return SaveProjectScenarioJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
-}
-
 FString AScenarioEditorController::GetSourceProjectScenarioJsonPath() const
 {
 	const UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	return authoringSubsystem ? authoringSubsystem->GetSourceProjectScenarioJsonPath() : FString();
-}
-
-FString AScenarioEditorController::GetSourceScenarioSetupJsonPath() const
-{
-	return GetSourceProjectScenarioJsonPath();
 }
 
 UScenarioEditorToolbarWidget* AScenarioEditorController::ShowToolbarWidget()

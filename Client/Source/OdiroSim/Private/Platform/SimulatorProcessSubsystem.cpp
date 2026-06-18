@@ -97,8 +97,8 @@ void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	{
 		FScenarioRunInput runInput;
 		runInput.PairId = episodeScenarioResult.EpisodeId;
-		runInput.ScenarioSetupJsonPath = episodeScenarioResult.ScenarioPath;
-		runInput.DeliveryBotSetupJsonPath = projectRunParseResult.Paths.ProfilePath;
+		runInput.EpisodeScenarioJsonPath = episodeScenarioResult.ScenarioPath;
+		runInput.ProfileJsonPath = projectRunParseResult.Paths.ProfilePath;
 		ActiveProjectRunInputs.Add(runInput);
 	}
 	if (ActiveProjectRunInputs.IsEmpty())

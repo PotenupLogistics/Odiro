@@ -58,7 +58,6 @@ bool UScenarioEvaluationSubsystem::StartEvaluation(
 	UWorld* world = GetWorld();
 	EvaluationStartTimeSeconds = world ? world->GetTimeSeconds() : 0.0;
 	TimeLimitSeconds = FMath::Max(0.0, inTimeLimitSeconds);
-	CurrentScore = 0.0;
 	NearMissCount = 0;
 	NearMissTotalDurationSeconds = 0.0;
 	NearMissMinDistanceCm = TNumericLimits<double>::Max();
@@ -72,7 +71,6 @@ bool UScenarioEvaluationSubsystem::StartEvaluation(
 	BlockedRegionCollisionCount = 0;
 	PenaltyRegionViolationCount = 0;
 	PedestrianCollisionCount = 0;
-	SetFloatMetric(TEXT("score"), CurrentScore);
 	SetFloatMetric(TEXT("goal_reached"), 0.0);
 	SetFloatMetric(TEXT("robot_tip_over_count"), 0.0);
 	SetFloatMetric(TEXT("static_obstacle_collision_count"), 0.0);
@@ -114,7 +112,6 @@ void UScenarioEvaluationSubsystem::StopEvaluation()
 	ActiveRuntimeContext = FScenarioRuntimeContext{};
 	TimeLimitSeconds = 0.0;
 	EvaluationStartTimeSeconds = 0.0;
-	CurrentScore = 0.0;
 	NearMissCount = 0;
 	NearMissTotalDurationSeconds = 0.0;
 	NearMissMinDistanceCm = TNumericLimits<double>::Max();
@@ -195,13 +192,12 @@ void UScenarioEvaluationSubsystem::RequestEndEpisode(const FEpisodeEvaluationRes
 	UE_LOG(
 		LogScenarioEvaluation,
 		Warning,
-		TEXT("평가 종료 | Episode: %s, Success: %s, Outcome: %s, TerminalReason: %s, Duration: %.2fs, Score: %.2f, Events: %d, Metrics: %d"),
+		TEXT("평가 종료 | Episode: %s, Success: %s, Outcome: %s, TerminalReason: %s, Duration: %.2fs, Events: %d, Metrics: %d"),
 		*CurrentResult.EpisodeId,
 		CurrentResult.bSuccess ? TEXT("true") : TEXT("false"),
 		*ToEvaluationEnumString(CurrentResult.Outcome),
 		*ToEvaluationEnumString(CurrentResult.TerminalReason),
 		CurrentResult.DurationSeconds,
-		CurrentScore,
 		CurrentResult.Events.Num(),
 		CurrentResult.Metrics.Num());
 
@@ -527,7 +523,7 @@ void UScenarioEvaluationSubsystem::HandleObservedComponentHit(
 				EEpisodeEvaluationEventType::BlockedRegionCollision,
 				targetActor,
 				eventLocation,
-				ActiveEvaluationConfig.BlockedRegionCollisionScore,
+				ActiveEvaluationConfig.BlockedRegionCollisionEventValue,
 				TEXT("로봇이 blocked region과 충돌함."));
 		}
 		return;
@@ -539,7 +535,7 @@ void UScenarioEvaluationSubsystem::HandleObservedComponentHit(
 			EEpisodeEvaluationEventType::StaticObstacleCollision,
 			targetActor,
 			eventLocation,
-			ActiveEvaluationConfig.StaticObstacleCollisionScore,
+			ActiveEvaluationConfig.StaticObstacleCollisionEventValue,
 			TEXT("로봇이 정적 장애물과 충돌함."));
 		return;
 	}
@@ -550,7 +546,7 @@ void UScenarioEvaluationSubsystem::HandleObservedComponentHit(
 			EEpisodeEvaluationEventType::PedestrianCollision,
 			targetActor,
 			eventLocation,
-			ActiveEvaluationConfig.PedestrianCollisionScore,
+			ActiveEvaluationConfig.PedestrianCollisionEventValue,
 			TEXT("로봇이 보행자와 충돌함."));
 	}
 }
@@ -577,7 +573,7 @@ bool UScenarioEvaluationSubsystem::CheckGoalReached()
 
 	FinishEpisode(
 		true,
-		HasWarningEventsOrScore() ? EEpisodeEvaluationOutcome::Warning : EEpisodeEvaluationOutcome::Success,
+		HasWarningEvents() ? EEpisodeEvaluationOutcome::Warning : EEpisodeEvaluationOutcome::Success,
 		EEpisodeEvaluationTerminalReason::GoalReached);
 	return true;
 }
@@ -649,7 +645,7 @@ void UScenarioEvaluationSubsystem::UpdateBlockedRegionViolations()
 			EEpisodeEvaluationEventType::BlockedRegionCollision,
 			groundRegion,
 			robotLocation,
-			ActiveEvaluationConfig.BlockedRegionCollisionScore,
+			ActiveEvaluationConfig.BlockedRegionCollisionEventValue,
 			TEXT("로봇이 blocked region에 진입함."));
 	}
 
@@ -703,7 +699,7 @@ void UScenarioEvaluationSubsystem::UpdatePenaltyRegionViolations()
 		const double requiredDurationSeconds = FMath::Max(0.0, groundRegion->RegionSpec.ViolationAfterSeconds);
 		if (regionState.bEventRecorded || elapsedTimeSeconds - regionState.EnterTimeSeconds < requiredDurationSeconds) continue;
 
-		const double scoreDelta = ActiveEvaluationConfig.PenaltyRegionViolationScore;
+		const double eventValue = ActiveEvaluationConfig.PenaltyRegionViolationEventValue;
 		TMap<FString, FScenarioParamValue> properties;
 		properties.Add(TEXT("region_id"), MakeStringParam(regionId));
 		properties.Add(TEXT("enter_time_s"), MakeFloatParam(regionState.EnterTimeSeconds));
@@ -715,10 +711,8 @@ void UScenarioEvaluationSubsystem::UpdatePenaltyRegionViolations()
 			TEXT("로봇이 penalty region 조건을 위반함."),
 			regionId,
 			robotLocation,
-			scoreDelta,
+			eventValue,
 			properties);
-		AddScore(scoreDelta);
-
 		++PenaltyRegionViolationCount;
 		SetFloatMetric(TEXT("penalty_region_violation_count"), PenaltyRegionViolationCount);
 		regionState.bEventRecorded = true;
@@ -833,7 +827,7 @@ void UScenarioEvaluationSubsystem::CloseNearMissInterval(
 	if (state.MinDistanceCm == TNumericLimits<double>::Max()) return;
 
 	const double durationSeconds = FMath::Max(0.0, endTimeSeconds - state.StartTimeSeconds);
-	const double scoreDelta = ActiveEvaluationConfig.PedestrianNearMissScore;
+	const double eventValue = ActiveEvaluationConfig.PedestrianNearMissEventValue;
 
 	FEpisodeEvaluationEvent event;
 	event.ElapsedTimeSeconds = endTimeSeconds;
@@ -843,7 +837,7 @@ void UScenarioEvaluationSubsystem::CloseNearMissInterval(
 	event.SubjectInstanceId = ActiveRuntimeContext.RobotInstanceId;
 	event.TargetInstanceId = pedestrianInstanceId;
 	event.Location = state.ClosestRobotLocation;
-	event.Value = scoreDelta;
+	event.Value = eventValue;
 	event.Message = TEXT("보행자 near-miss 구간.");
 	event.Properties.Add(TEXT("start_time_s"), MakeFloatParam(state.StartTimeSeconds));
 	event.Properties.Add(TEXT("end_time_s"), MakeFloatParam(endTimeSeconds));
@@ -855,7 +849,7 @@ void UScenarioEvaluationSubsystem::CloseNearMissInterval(
 	UE_LOG(
 		LogScenarioEvaluation,
 		Log,
-		TEXT("평가 이벤트 기록 | Episode: %s, Index: %d, Type: %s, Severity: %s, Subject: %s, Target: %s, Duration: %.2fs, MinDistance: %.2fm, ScoreDelta: %.2f"),
+		TEXT("평가 이벤트 기록 | Episode: %s, Index: %d, Type: %s, Severity: %s, Subject: %s, Target: %s, Duration: %.2fs, MinDistance: %.2fm, Value: %.2f"),
 		*CurrentResult.EpisodeId,
 		event.EventIndex,
 		*ToEvaluationEnumString(event.EventType),
@@ -864,9 +858,8 @@ void UScenarioEvaluationSubsystem::CloseNearMissInterval(
 		*event.TargetInstanceId,
 		durationSeconds,
 		state.MinDistanceCm / 100.0,
-		scoreDelta);
+		eventValue);
 
-	AddScore(scoreDelta);
 	++NearMissCount;
 	NearMissTotalDurationSeconds += durationSeconds;
 	NearMissMinDistanceCm = FMath::Min(NearMissMinDistanceCm, state.MinDistanceCm);
@@ -879,12 +872,6 @@ void UScenarioEvaluationSubsystem::CloseNearMissInterval(
 void UScenarioEvaluationSubsystem::SetFloatMetric(const FString& key, double value)
 {
 	CurrentResult.Metrics.Add(key, MakeFloatParam(value));
-}
-
-void UScenarioEvaluationSubsystem::AddScore(double scoreDelta)
-{
-	CurrentScore += scoreDelta;
-	SetFloatMetric(TEXT("score"), CurrentScore);
 }
 
 void UScenarioEvaluationSubsystem::FinishEpisode(
@@ -910,7 +897,7 @@ void UScenarioEvaluationSubsystem::RecordCollisionEvent(
 	EEpisodeEvaluationEventType eventType,
 	AActor* targetActor,
 	const FVector& location,
-	double scoreDelta,
+	double eventValue,
 	const FString& message)
 {
 	if (!bEvaluating) return;
@@ -942,9 +929,8 @@ void UScenarioEvaluationSubsystem::RecordCollisionEvent(
 		message,
 		targetInstanceId,
 		location,
-		scoreDelta,
+		eventValue,
 		properties);
-	AddScore(scoreDelta);
 
 	switch (eventType)
 	{
@@ -965,10 +951,8 @@ void UScenarioEvaluationSubsystem::RecordCollisionEvent(
 	}
 }
 
-bool UScenarioEvaluationSubsystem::HasWarningEventsOrScore() const
+bool UScenarioEvaluationSubsystem::HasWarningEvents() const
 {
-	if (CurrentScore < 0.0) return true;
-
 	for (const FEpisodeEvaluationEvent& event : CurrentResult.Events)
 	{
 		if (event.Severity == EEpisodeEvaluationEventSeverity::Warning) return true;

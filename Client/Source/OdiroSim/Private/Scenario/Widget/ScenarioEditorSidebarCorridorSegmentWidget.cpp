@@ -75,6 +75,16 @@ void UScenarioEditorSidebarCorridorSegmentWidget::SetTextStyleCatalog(
 	ApplyTextStyles();
 }
 
+void UScenarioEditorSidebarCorridorSegmentWidget::SetSurfaceOptions(
+	const TArray<FString>& surfaceIds)
+{
+	SurfaceOptions = surfaceIds;
+	if (ReplacedByFieldRow)
+	{
+		ReplacedByFieldRow->SetComboOptions(SurfaceOptions);
+	}
+}
+
 void UScenarioEditorSidebarCorridorSegmentWidget::RefreshFromSegment(
 	const FScenarioTemplateSegment& segment)
 {
@@ -263,9 +273,16 @@ void UScenarioEditorSidebarCorridorSegmentWidget::ConfigureFieldRows()
 	}
 	if (TypeFieldRow)
 	{
+		TArray<FString> segmentTypeOptions;
+		segmentTypeOptions.Add(TEXT("straight"));
+		segmentTypeOptions.Add(TEXT("narrowing"));
+		segmentTypeOptions.Add(TEXT("crosswalk"));
+		segmentTypeOptions.Add(TEXT("entrance"));
 		TypeFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 		TypeFieldRow->SetFieldLabel(TEXT("type"));
-		TypeFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::EnumText);
+		TypeFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::ComboBox);
+		TypeFieldRow->SetComboOptions(segmentTypeOptions);
+		TypeFieldRow->SetComboAllowsUnset(false, FString());
 		TypeFieldRow->SetEditable(true);
 	}
 	if (AlongRangeFieldRow)
@@ -280,7 +297,9 @@ void UScenarioEditorSidebarCorridorSegmentWidget::ConfigureFieldRows()
 	{
 		ReplacedByFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 		ReplacedByFieldRow->SetFieldLabel(TEXT("replaced_by"));
-		ReplacedByFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
+		ReplacedByFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::ComboBox);
+		ReplacedByFieldRow->SetComboOptions(SurfaceOptions);
+		ReplacedByFieldRow->SetComboAllowsUnset(true, TEXT("(unset)"));
 		ReplacedByFieldRow->SetEditable(true);
 	}
 }

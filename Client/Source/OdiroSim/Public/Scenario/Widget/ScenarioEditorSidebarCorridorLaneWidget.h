@@ -126,6 +126,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
 
+	// Updates available Corridor surface ids for the surface combo box.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetSurfaceOptions(const TArray<FString>& surfaceIds);
+
 	// Refreshes this lane widget from one Scenario Template lane rule.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void RefreshFromLane(const FScenarioTemplateLaneRule& lane);
@@ -161,6 +165,10 @@ private:
 	// True when CachedLane contains valid lane data from RefreshFromLane.
 	UPROPERTY(Transient)
 	bool bHasCachedLane = false;
+
+	// Catalog-backed Corridor surface ids available to the surface row.
+	UPROPERTY(Transient)
+	TArray<FString> SurfaceOptions;
 
 	// Builds the native fallback lane tree when no Blueprint-authored tree is present.
 	void BuildDefaultWidgetTree();

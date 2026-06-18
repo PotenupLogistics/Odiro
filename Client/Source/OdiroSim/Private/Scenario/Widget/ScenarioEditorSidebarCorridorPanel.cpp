@@ -5,6 +5,7 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
+#include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorLaneWidget.h"
@@ -932,6 +933,7 @@ void UScenarioEditorSidebarCorridorPanel::RefreshLaneProfileRows(
 	laneWidgets.Reset();
 
 	sideBlockWidget->ClearBodyChildren();
+	const TArray<FString> surfaceOptions = GetCorridorSurfaceIdOptions();
 	UScenarioEditorSidebarFieldRow* countRow = AddReadOnlyFieldRow(
 		sideBlockWidget,
 		TEXT("count"),
@@ -977,7 +979,7 @@ void UScenarioEditorSidebarCorridorPanel::RefreshLaneProfileRows(
 	for (int32 laneIndex = 0; laneIndex < lanes.Num(); ++laneIndex)
 	{
 		if (UScenarioEditorSidebarCorridorLaneWidget* laneWidget =
-			AddLaneWidget(side, laneIndex, lanes[laneIndex], sideBlockWidget))
+			AddLaneWidget(side, laneIndex, lanes[laneIndex], surfaceOptions, sideBlockWidget))
 		{
 			laneWidgets.Add(laneWidget);
 		}
@@ -994,6 +996,7 @@ void UScenarioEditorSidebarCorridorPanel::RefreshSegmentRows(
 
 	SegmentWidgets.Reset();
 	SegmentsBlockWidget->ClearBodyChildren();
+	const TArray<FString> surfaceOptions = GetCorridorSurfaceIdOptions();
 	UScenarioEditorSidebarFieldRow* countRow = AddReadOnlyFieldRow(
 		SegmentsBlockWidget.Get(),
 		TEXT("count"),
@@ -1020,7 +1023,7 @@ void UScenarioEditorSidebarCorridorPanel::RefreshSegmentRows(
 	for (int32 segmentIndex = 0; segmentIndex < segments.Num(); ++segmentIndex)
 	{
 		if (UScenarioEditorSidebarCorridorSegmentWidget* segmentWidget =
-			AddSegmentWidget(segmentIndex, segments[segmentIndex], SegmentsBlockWidget.Get()))
+			AddSegmentWidget(segmentIndex, segments[segmentIndex], surfaceOptions, SegmentsBlockWidget.Get()))
 		{
 			SegmentWidgets.Add(segmentWidget);
 		}
@@ -1108,6 +1111,7 @@ UScenarioEditorSidebarCorridorLaneWidget* UScenarioEditorSidebarCorridorPanel::A
 	const EScenarioEditorCorridorSide side,
 	const int32 laneIndex,
 	const FScenarioTemplateLaneRule& lane,
+	const TArray<FString>& surfaceOptions,
 	UScenarioEditorSidebarBlockWidget* parentBlockWidget)
 {
 	if (!WidgetTree || !parentBlockWidget)
@@ -1125,6 +1129,7 @@ UScenarioEditorSidebarCorridorLaneWidget* UScenarioEditorSidebarCorridorPanel::A
 
 	laneWidget->SetTextStyleCatalog(TextStyleCatalog);
 	laneWidget->SetLaneContext(side, laneIndex);
+	laneWidget->SetSurfaceOptions(surfaceOptions);
 	laneWidget->RefreshFromLane(lane);
 	laneWidget->OnSurfaceCommitted.RemoveDynamic(
 		this,
@@ -1163,6 +1168,7 @@ UScenarioEditorSidebarCorridorLaneWidget* UScenarioEditorSidebarCorridorPanel::A
 UScenarioEditorSidebarCorridorSegmentWidget* UScenarioEditorSidebarCorridorPanel::AddSegmentWidget(
 	const int32 segmentIndex,
 	const FScenarioTemplateSegment& segment,
+	const TArray<FString>& surfaceOptions,
 	UScenarioEditorSidebarBlockWidget* parentBlockWidget)
 {
 	if (!WidgetTree || !parentBlockWidget)
@@ -1180,6 +1186,7 @@ UScenarioEditorSidebarCorridorSegmentWidget* UScenarioEditorSidebarCorridorPanel
 
 	segmentWidget->SetTextStyleCatalog(TextStyleCatalog);
 	segmentWidget->SetSegmentIndex(segmentIndex);
+	segmentWidget->SetSurfaceOptions(surfaceOptions);
 	segmentWidget->RefreshFromSegment(segment);
 	segmentWidget->OnIdCommitted.RemoveDynamic(
 		this,
@@ -1225,6 +1232,40 @@ UScenarioAuthoringSubsystem* UScenarioEditorSidebarCorridorPanel::GetAuthoringSu
 {
 	UWorld* world = GetWorld();
 	return world ? world->GetSubsystem<UScenarioAuthoringSubsystem>() : nullptr;
+}
+
+TArray<FString> UScenarioEditorSidebarCorridorPanel::GetCorridorSurfaceIdOptions() const
+{
+	TArray<FScenarioCorridorSurfaceEntry> surfaceEntries;
+	if (const UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem())
+	{
+		authoringSubsystem->GetCorridorSurfaceEntries(surfaceEntries);
+	}
+	else
+	{
+		surfaceEntries = UScenarioCorridorSurfaceCatalog::MakeDefaultEntries();
+	}
+
+	TArray<FString> surfaceIds;
+	TSet<FString> seenSurfaceIds;
+	for (const FScenarioCorridorSurfaceEntry& surfaceEntry : surfaceEntries)
+	{
+		if (surfaceEntry.SurfaceId.IsNone())
+		{
+			continue;
+		}
+
+		const FString surfaceId = surfaceEntry.SurfaceId.ToString();
+		if (surfaceId.IsEmpty() || seenSurfaceIds.Contains(surfaceId))
+		{
+			continue;
+		}
+
+		seenSurfaceIds.Add(surfaceId);
+		surfaceIds.Add(surfaceId);
+	}
+
+	return surfaceIds;
 }
 
 TArray<FScenarioTemplateLaneRule> UScenarioEditorSidebarCorridorPanel::GetDraftLaneProfile(

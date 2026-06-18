@@ -7,6 +7,7 @@
 
 class UEditableTextBox;
 class UButton;
+class UComboBoxString;
 class UHorizontalBox;
 class UMultiLineEditableTextBox;
 class USizeBox;
@@ -23,6 +24,7 @@ enum class EScenarioEditorSidebarFieldInputType : uint8
 	Integer,
 	Number,
 	EnumText,
+	ComboBox,
 	Range
 };
 
@@ -74,6 +76,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	FString MaxValueText;
 
+	// Option list used when this row is edited through a combo box.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	TArray<FString> ComboOptions;
+
 	// Preferred editor control shape for this row.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	EScenarioEditorSidebarFieldInputType InputType = EScenarioEditorSidebarFieldInputType::Text;
@@ -93,6 +99,14 @@ public:
 	// Controls whether this row exposes add/remove buttons for array-like fields.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	bool bArrayControlsEnabled = false;
+
+	// Controls whether combo-box input exposes an explicit unset option.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bComboAllowsUnset = false;
+
+	// Display label used for an unset combo-box value.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	FString ComboUnsetDisplayText = TEXT("(unset)");
 
 	// Minimum height used by multiline inputs before content-driven expansion.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template", meta = (ClampMin = "24.0"))
@@ -117,6 +131,10 @@ public:
 	// Optional editable text box for editable rows.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UEditableTextBox> ValueEditableTextBox;
+
+	// Optional combo box for fields constrained to a known option set.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UComboBoxString> ValueComboBox;
 
 	// Optional fixed-size wrapper for editable multiline values.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
@@ -194,6 +212,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetRangeValueText(const FString& minText, const FString& maxText);
 
+	// Updates the options available when this row uses combo-box input.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetComboOptions(const TArray<FString>& options);
+
 	// Updates the preferred editor control shape for this row.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetInputType(EScenarioEditorSidebarFieldInputType inInputType);
@@ -213,6 +235,10 @@ public:
 	// Toggles add/remove controls for array-like fields.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetArrayControlsEnabled(bool bInArrayControlsEnabled);
+
+	// Toggles the explicit unset option for combo-box fields.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetComboAllowsUnset(bool bInComboAllowsUnset, const FString& unsetDisplayText);
 
 	// Updates the shared typography catalog reference used by this row.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
@@ -234,6 +260,10 @@ private:
 	// Handles text commits from the optional editable value control.
 	UFUNCTION()
 	void HandleValueTextCommitted(const FText& text, ETextCommit::Type commitMethod);
+
+	// Handles committed selections from the optional combo box.
+	UFUNCTION()
+	void HandleValueComboSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
 
 	// Handles range minimum text commits.
 	UFUNCTION()
@@ -261,10 +291,14 @@ private:
 	void RefreshRow();
 	// Returns whether the current type should show the multiline editor.
 	bool UsesMultilineInput() const;
+	// Returns whether the current type should show the combo-box editor.
+	bool UsesComboInput() const;
 	// Returns whether the current type can toggle to min/max input.
 	bool IsRangeCapable() const;
 	// Returns whether the row should currently show min/max input.
 	bool UsesRangeInput() const;
+	// Applies combo options and selected value to the bound combo box.
+	void RefreshComboBoxOptions();
 	// Applies text to a bound text block.
 	void SetTextBlockText(UTextBlock* textBlock, const FString& text) const;
 };

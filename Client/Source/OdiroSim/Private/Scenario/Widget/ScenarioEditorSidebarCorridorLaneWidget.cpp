@@ -78,6 +78,16 @@ void UScenarioEditorSidebarCorridorLaneWidget::SetTextStyleCatalog(
 	ApplyTextStyles();
 }
 
+void UScenarioEditorSidebarCorridorLaneWidget::SetSurfaceOptions(
+	const TArray<FString>& surfaceIds)
+{
+	SurfaceOptions = surfaceIds;
+	if (SurfaceFieldRow)
+	{
+		SurfaceFieldRow->SetComboOptions(SurfaceOptions);
+	}
+}
+
 void UScenarioEditorSidebarCorridorLaneWidget::RefreshFromLane(
 	const FScenarioTemplateLaneRule& lane)
 {
@@ -227,7 +237,9 @@ void UScenarioEditorSidebarCorridorLaneWidget::ConfigureFieldRows()
 	{
 		SurfaceFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 		SurfaceFieldRow->SetFieldLabel(TEXT("surface"));
-		SurfaceFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
+		SurfaceFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::ComboBox);
+		SurfaceFieldRow->SetComboOptions(SurfaceOptions);
+		SurfaceFieldRow->SetComboAllowsUnset(false, FString());
 		SurfaceFieldRow->SetEditable(true);
 		SurfaceFieldRow->SetArrayControlsEnabled(true);
 	}

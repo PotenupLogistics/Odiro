@@ -29,6 +29,11 @@ namespace
 		return diagnostics.IsEmpty() ? FString(TEXT("Unknown edit failure.")) : FString::Join(diagnostics, TEXT("\n"));
 	}
 
+	FScenarioTemplateNumberValue MakeUnsetMainPanelNumberValue()
+	{
+		return FScenarioTemplateNumberValue();
+	}
+
 	FSlateBrush MakeMainPanelColorBrush(const FLinearColor& color)
 	{
 		FSlateBrush brush;
@@ -313,6 +318,190 @@ void UScenarioEditorSidebarMainPanel::HandleIntentCommitted(
 	CommitIntentText(text);
 }
 
+void UScenarioEditorSidebarMainPanel::HandleRobotStartTypeCommitted(
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorTextCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Start,
+		EScenarioEditorSidebarRobotAnchorField::Type,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotStartSegmentCommitted(
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorTextCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Start,
+		EScenarioEditorSidebarRobotAnchorField::Segment,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotStartAlongCommitted(
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorTextCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Start,
+		EScenarioEditorSidebarRobotAnchorField::Along,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotStartAlongRangeCommitted(
+	const FText& minText,
+	const FText& maxText,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorRangeCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Start,
+		EScenarioEditorSidebarRobotAnchorField::Along,
+		minText,
+		maxText,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotStartOffsetCommitted(
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorTextCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Start,
+		EScenarioEditorSidebarRobotAnchorField::Offset,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotStartOffsetRangeCommitted(
+	const FText& minText,
+	const FText& maxText,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorRangeCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Start,
+		EScenarioEditorSidebarRobotAnchorField::Offset,
+		minText,
+		maxText,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotStartLaneCommitted(
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorTextCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Start,
+		EScenarioEditorSidebarRobotAnchorField::Lane,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotStartHeadingCommitted(
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorTextCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Start,
+		EScenarioEditorSidebarRobotAnchorField::Heading,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotGoalTypeCommitted(
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorTextCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Goal,
+		EScenarioEditorSidebarRobotAnchorField::Type,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotGoalSegmentCommitted(
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorTextCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Goal,
+		EScenarioEditorSidebarRobotAnchorField::Segment,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotGoalAlongCommitted(
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorTextCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Goal,
+		EScenarioEditorSidebarRobotAnchorField::Along,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotGoalAlongRangeCommitted(
+	const FText& minText,
+	const FText& maxText,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorRangeCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Goal,
+		EScenarioEditorSidebarRobotAnchorField::Along,
+		minText,
+		maxText,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotGoalOffsetCommitted(
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorTextCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Goal,
+		EScenarioEditorSidebarRobotAnchorField::Offset,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotGoalOffsetRangeCommitted(
+	const FText& minText,
+	const FText& maxText,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorRangeCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Goal,
+		EScenarioEditorSidebarRobotAnchorField::Offset,
+		minText,
+		maxText,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotGoalLaneCommitted(
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorTextCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Goal,
+		EScenarioEditorSidebarRobotAnchorField::Lane,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotGoalHeadingCommitted(
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	HandleRobotAnchorTextCommitted(
+		EScenarioEditorSidebarRobotAnchorTarget::Goal,
+		EScenarioEditorSidebarRobotAnchorField::Heading,
+		text,
+		commitMethod);
+}
+
 void UScenarioEditorSidebarMainPanel::BuildDefaultWidgetTree()
 {
 	if (!WidgetTree || WidgetTree->RootWidget)
@@ -453,6 +642,75 @@ void UScenarioEditorSidebarMainPanel::BindFieldRows()
 			this,
 			&UScenarioEditorSidebarMainPanel::HandleIntentCommitted);
 	}
+
+	if (RobotStartTypeFieldRow)
+	{
+		RobotStartTypeFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartTypeCommitted);
+		RobotStartTypeFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartTypeCommitted);
+	}
+	if (RobotStartSegmentFieldRow)
+	{
+		RobotStartSegmentFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartSegmentCommitted);
+		RobotStartSegmentFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartSegmentCommitted);
+	}
+	if (RobotStartAlongFieldRow)
+	{
+		RobotStartAlongFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartAlongCommitted);
+		RobotStartAlongFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartAlongCommitted);
+		RobotStartAlongFieldRow->OnRangeValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartAlongRangeCommitted);
+		RobotStartAlongFieldRow->OnRangeValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartAlongRangeCommitted);
+	}
+	if (RobotStartOffsetFieldRow)
+	{
+		RobotStartOffsetFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartOffsetCommitted);
+		RobotStartOffsetFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartOffsetCommitted);
+		RobotStartOffsetFieldRow->OnRangeValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartOffsetRangeCommitted);
+		RobotStartOffsetFieldRow->OnRangeValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartOffsetRangeCommitted);
+	}
+	if (RobotStartLaneFieldRow)
+	{
+		RobotStartLaneFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartLaneCommitted);
+		RobotStartLaneFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartLaneCommitted);
+	}
+	if (RobotStartHeadingFieldRow)
+	{
+		RobotStartHeadingFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartHeadingCommitted);
+		RobotStartHeadingFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartHeadingCommitted);
+	}
+	if (RobotGoalTypeFieldRow)
+	{
+		RobotGoalTypeFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalTypeCommitted);
+		RobotGoalTypeFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalTypeCommitted);
+	}
+	if (RobotGoalSegmentFieldRow)
+	{
+		RobotGoalSegmentFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalSegmentCommitted);
+		RobotGoalSegmentFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalSegmentCommitted);
+	}
+	if (RobotGoalAlongFieldRow)
+	{
+		RobotGoalAlongFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalAlongCommitted);
+		RobotGoalAlongFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalAlongCommitted);
+		RobotGoalAlongFieldRow->OnRangeValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalAlongRangeCommitted);
+		RobotGoalAlongFieldRow->OnRangeValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalAlongRangeCommitted);
+	}
+	if (RobotGoalOffsetFieldRow)
+	{
+		RobotGoalOffsetFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalOffsetCommitted);
+		RobotGoalOffsetFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalOffsetCommitted);
+		RobotGoalOffsetFieldRow->OnRangeValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalOffsetRangeCommitted);
+		RobotGoalOffsetFieldRow->OnRangeValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalOffsetRangeCommitted);
+	}
+	if (RobotGoalLaneFieldRow)
+	{
+		RobotGoalLaneFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalLaneCommitted);
+		RobotGoalLaneFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalLaneCommitted);
+	}
+	if (RobotGoalHeadingFieldRow)
+	{
+		RobotGoalHeadingFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalHeadingCommitted);
+		RobotGoalHeadingFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalHeadingCommitted);
+	}
 }
 
 void UScenarioEditorSidebarMainPanel::UnbindFieldRows()
@@ -469,6 +727,59 @@ void UScenarioEditorSidebarMainPanel::UnbindFieldRows()
 		IntentFieldRow->OnValueTextCommitted.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarMainPanel::HandleIntentCommitted);
+	}
+
+	if (RobotStartTypeFieldRow)
+	{
+		RobotStartTypeFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartTypeCommitted);
+	}
+	if (RobotStartSegmentFieldRow)
+	{
+		RobotStartSegmentFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartSegmentCommitted);
+	}
+	if (RobotStartAlongFieldRow)
+	{
+		RobotStartAlongFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartAlongCommitted);
+		RobotStartAlongFieldRow->OnRangeValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartAlongRangeCommitted);
+	}
+	if (RobotStartOffsetFieldRow)
+	{
+		RobotStartOffsetFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartOffsetCommitted);
+		RobotStartOffsetFieldRow->OnRangeValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartOffsetRangeCommitted);
+	}
+	if (RobotStartLaneFieldRow)
+	{
+		RobotStartLaneFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartLaneCommitted);
+	}
+	if (RobotStartHeadingFieldRow)
+	{
+		RobotStartHeadingFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotStartHeadingCommitted);
+	}
+	if (RobotGoalTypeFieldRow)
+	{
+		RobotGoalTypeFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalTypeCommitted);
+	}
+	if (RobotGoalSegmentFieldRow)
+	{
+		RobotGoalSegmentFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalSegmentCommitted);
+	}
+	if (RobotGoalAlongFieldRow)
+	{
+		RobotGoalAlongFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalAlongCommitted);
+		RobotGoalAlongFieldRow->OnRangeValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalAlongRangeCommitted);
+	}
+	if (RobotGoalOffsetFieldRow)
+	{
+		RobotGoalOffsetFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalOffsetCommitted);
+		RobotGoalOffsetFieldRow->OnRangeValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalOffsetRangeCommitted);
+	}
+	if (RobotGoalLaneFieldRow)
+	{
+		RobotGoalLaneFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalLaneCommitted);
+	}
+	if (RobotGoalHeadingFieldRow)
+	{
+		RobotGoalHeadingFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarMainPanel::HandleRobotGoalHeadingCommitted);
 	}
 }
 
@@ -641,6 +952,16 @@ void UScenarioEditorSidebarMainPanel::ConfigureRobotAnchorRows(
 	UScenarioEditorSidebarFieldRow* laneRow,
 	UScenarioEditorSidebarFieldRow* headingRow)
 {
+	TArray<FString> anchorTypeOptions;
+	anchorTypeOptions.Add(TEXT("entry"));
+	anchorTypeOptions.Add(TEXT("exit"));
+	anchorTypeOptions.Add(TEXT("corridor_pose"));
+
+	TArray<FString> headingOptions;
+	headingOptions.Add(TEXT("forward"));
+	headingOptions.Add(TEXT("backward"));
+	headingOptions.Add(TEXT("auto"));
+
 	struct FAnchorRowConfig
 	{
 		// Row widget receiving label and editability setup.
@@ -652,12 +973,12 @@ void UScenarioEditorSidebarMainPanel::ConfigureRobotAnchorRows(
 	};
 
 	for (const FAnchorRowConfig& config : {
-		FAnchorRowConfig{ typeRow, TEXT("type"), EScenarioEditorSidebarFieldInputType::EnumText },
+		FAnchorRowConfig{ typeRow, TEXT("type"), EScenarioEditorSidebarFieldInputType::ComboBox },
 		FAnchorRowConfig{ segmentRow, TEXT("segment"), EScenarioEditorSidebarFieldInputType::Text },
 		FAnchorRowConfig{ alongRow, TEXT("along_m"), EScenarioEditorSidebarFieldInputType::Range },
 		FAnchorRowConfig{ offsetRow, TEXT("offset_m"), EScenarioEditorSidebarFieldInputType::Range },
 		FAnchorRowConfig{ laneRow, TEXT("lane"), EScenarioEditorSidebarFieldInputType::EnumText },
-		FAnchorRowConfig{ headingRow, TEXT("heading"), EScenarioEditorSidebarFieldInputType::EnumText } })
+		FAnchorRowConfig{ headingRow, TEXT("heading"), EScenarioEditorSidebarFieldInputType::ComboBox } })
 	{
 		if (!config.Row)
 		{
@@ -667,7 +988,17 @@ void UScenarioEditorSidebarMainPanel::ConfigureRobotAnchorRows(
 		config.Row->SetTextStyleCatalog(TextStyleCatalog);
 		config.Row->SetFieldLabel(config.Label);
 		config.Row->SetInputType(config.InputType);
-		config.Row->SetEditable(false);
+		if (config.Row == typeRow)
+		{
+			config.Row->SetComboOptions(anchorTypeOptions);
+			config.Row->SetComboAllowsUnset(false, FString());
+		}
+		else if (config.Row == headingRow)
+		{
+			config.Row->SetComboOptions(headingOptions);
+			config.Row->SetComboAllowsUnset(false, FString());
+		}
+		config.Row->SetEditable(true);
 	}
 }
 
@@ -682,38 +1013,38 @@ void UScenarioEditorSidebarMainPanel::RefreshRobotAnchorRows(
 {
 	const bool bUsesCorridorPose = anchor.Type == EScenarioTemplateRobotAnchorType::CorridorPose;
 	const ESlateVisibility poseVisibility = bUsesCorridorPose
-		? ESlateVisibility::SelfHitTestInvisible
+		? ESlateVisibility::Visible
 		: ESlateVisibility::Collapsed;
 
 	if (typeRow)
 	{
 		typeRow->SetValueText(RobotAnchorTypeToString(anchor.Type));
-		typeRow->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		typeRow->SetVisibility(ESlateVisibility::Visible);
 	}
 	if (segmentRow)
 	{
-		segmentRow->SetValueText(anchor.SegmentId.IsEmpty() ? FString(TEXT("(unset)")) : anchor.SegmentId);
+		segmentRow->SetValueText(anchor.SegmentId);
 		segmentRow->SetVisibility(poseVisibility);
 	}
 	if (alongRow)
 	{
-		alongRow->SetValueText(FormatNumberValue(anchor.AlongMeters, TEXT("m")));
+		SetNumberRowValue(alongRow, anchor.AlongMeters);
 		alongRow->SetVisibility(poseVisibility);
 	}
 	if (offsetRow)
 	{
-		offsetRow->SetValueText(FormatNumberValue(anchor.OffsetMeters, TEXT("m")));
+		SetNumberRowValue(offsetRow, anchor.OffsetMeters);
 		offsetRow->SetVisibility(poseVisibility);
 	}
 	if (laneRow)
 	{
-		laneRow->SetValueText(anchor.LaneId.IsEmpty() ? FString(TEXT("(unset)")) : anchor.LaneId);
+		laneRow->SetValueText(anchor.LaneId);
 		laneRow->SetVisibility(poseVisibility);
 	}
 	if (headingRow)
 	{
 		headingRow->SetValueText(RobotHeadingToString(anchor.Heading));
-		headingRow->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		headingRow->SetVisibility(ESlateVisibility::Visible);
 	}
 }
 
@@ -763,12 +1094,335 @@ void UScenarioEditorSidebarMainPanel::CommitIntentText(const FText& text)
 	RefreshFromDraft();
 }
 
+void UScenarioEditorSidebarMainPanel::CommitRobotAnchorText(
+	const EScenarioEditorSidebarRobotAnchorTarget target,
+	const EScenarioEditorSidebarRobotAnchorField field,
+	const FText& text)
+{
+	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioAuthoringSubsystem unavailable."));
+		return;
+	}
+
+	const FScenarioTemplateDocument scenarioTemplate = authoringSubsystem->GetDraftScenarioTemplate();
+	FScenarioTemplateRobotAnchor anchor = target == EScenarioEditorSidebarRobotAnchorTarget::Start
+		? scenarioTemplate.Robot.Start
+		: scenarioTemplate.Robot.Goal;
+	const FString trimmedText = text.ToString().TrimStartAndEnd();
+
+	switch (field)
+	{
+	case EScenarioEditorSidebarRobotAnchorField::Type:
+	{
+		EScenarioTemplateRobotAnchorType anchorType = anchor.Type;
+		if (!TryParseRobotAnchorType(text, anchorType))
+		{
+			RefreshFromDraft();
+			SetDiagnosticsText(TEXT("robot anchor type must be entry, exit, or corridor_pose."));
+			return;
+		}
+		anchor.Type = anchorType;
+		if (anchor.Type == EScenarioTemplateRobotAnchorType::CorridorPose)
+		{
+			if (anchor.SegmentId.IsEmpty() && !scenarioTemplate.Corridor.Segments.IsEmpty())
+			{
+				anchor.SegmentId = scenarioTemplate.Corridor.Segments[0].SegmentId;
+			}
+			if (!anchor.AlongMeters.bIsSet)
+			{
+				anchor.AlongMeters = UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(0.0);
+			}
+			if (!anchor.OffsetMeters.bIsSet)
+			{
+				anchor.OffsetMeters = UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(0.0);
+			}
+			if (anchor.LaneId.IsEmpty())
+			{
+				anchor.LaneId = TEXT("walkway");
+			}
+		}
+		break;
+	}
+	case EScenarioEditorSidebarRobotAnchorField::Segment:
+		anchor.SegmentId = trimmedText;
+		break;
+	case EScenarioEditorSidebarRobotAnchorField::Along:
+	case EScenarioEditorSidebarRobotAnchorField::Offset:
+	{
+		FScenarioTemplateNumberValue numberValue;
+		if (!TryParseOptionalNumber(text, numberValue))
+		{
+			RefreshFromDraft();
+			SetDiagnosticsText(TEXT("robot anchor numeric fields must be finite numbers or empty optional values."));
+			return;
+		}
+		if (field == EScenarioEditorSidebarRobotAnchorField::Along)
+		{
+			anchor.AlongMeters = numberValue;
+		}
+		else
+		{
+			anchor.OffsetMeters = numberValue;
+		}
+		break;
+	}
+	case EScenarioEditorSidebarRobotAnchorField::Lane:
+		anchor.LaneId = trimmedText;
+		break;
+	case EScenarioEditorSidebarRobotAnchorField::Heading:
+	{
+		EScenarioTemplateRobotHeading heading = anchor.Heading;
+		if (!TryParseRobotHeading(text, heading))
+		{
+			RefreshFromDraft();
+			SetDiagnosticsText(TEXT("robot heading must be forward, backward, or auto."));
+			return;
+		}
+		anchor.Heading = heading;
+		break;
+	}
+	default:
+		break;
+	}
+
+	CommitRobotAnchorValue(target, anchor);
+}
+
+void UScenarioEditorSidebarMainPanel::CommitRobotAnchorRange(
+	const EScenarioEditorSidebarRobotAnchorTarget target,
+	const EScenarioEditorSidebarRobotAnchorField field,
+	const FText& minText,
+	const FText& maxText)
+{
+	if (field != EScenarioEditorSidebarRobotAnchorField::Along
+		&& field != EScenarioEditorSidebarRobotAnchorField::Offset)
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(TEXT("Only robot along_m and offset_m support range editing."));
+		return;
+	}
+
+	FScenarioTemplateNumberValue numberValue;
+	if (!TryParseOptionalNumberRange(minText, maxText, numberValue))
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(TEXT("robot anchor range fields must use numeric min/max values."));
+		return;
+	}
+
+	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioAuthoringSubsystem unavailable."));
+		return;
+	}
+
+	const FScenarioTemplateDocument scenarioTemplate = authoringSubsystem->GetDraftScenarioTemplate();
+	FScenarioTemplateRobotAnchor anchor = target == EScenarioEditorSidebarRobotAnchorTarget::Start
+		? scenarioTemplate.Robot.Start
+		: scenarioTemplate.Robot.Goal;
+	if (field == EScenarioEditorSidebarRobotAnchorField::Along)
+	{
+		anchor.AlongMeters = numberValue;
+	}
+	else
+	{
+		anchor.OffsetMeters = numberValue;
+	}
+
+	CommitRobotAnchorValue(target, anchor);
+}
+
+void UScenarioEditorSidebarMainPanel::CommitRobotAnchorValue(
+	const EScenarioEditorSidebarRobotAnchorTarget target,
+	const FScenarioTemplateRobotAnchor& anchor)
+{
+	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioAuthoringSubsystem unavailable."));
+		return;
+	}
+
+	TArray<FString> diagnostics;
+	const bool bCommitted = target == EScenarioEditorSidebarRobotAnchorTarget::Start
+		? authoringSubsystem->SetDraftRobotStartAnchor(anchor, diagnostics)
+		: authoringSubsystem->SetDraftRobotGoalAnchor(anchor, diagnostics);
+	if (!bCommitted)
+	{
+		RefreshFromDraft();
+		SetDiagnosticsText(JoinMainPanelDiagnostics(diagnostics));
+		return;
+	}
+
+	RefreshFromDraft();
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotAnchorTextCommitted(
+	const EScenarioEditorSidebarRobotAnchorTarget target,
+	const EScenarioEditorSidebarRobotAnchorField field,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	if (commitMethod == ETextCommit::OnCleared)
+	{
+		RefreshFromDraft();
+		return;
+	}
+
+	CommitRobotAnchorText(target, field, text);
+}
+
+void UScenarioEditorSidebarMainPanel::HandleRobotAnchorRangeCommitted(
+	const EScenarioEditorSidebarRobotAnchorTarget target,
+	const EScenarioEditorSidebarRobotAnchorField field,
+	const FText& minText,
+	const FText& maxText,
+	const ETextCommit::Type commitMethod)
+{
+	if (commitMethod == ETextCommit::OnCleared)
+	{
+		RefreshFromDraft();
+		return;
+	}
+
+	CommitRobotAnchorRange(target, field, minText, maxText);
+}
+
 void UScenarioEditorSidebarMainPanel::SetDiagnosticsText(const FString& text) const
 {
 	if (DiagnosticsTextBlock)
 	{
 		DiagnosticsTextBlock->SetText(FText::FromString(text));
 	}
+}
+
+void UScenarioEditorSidebarMainPanel::SetNumberRowValue(
+	UScenarioEditorSidebarFieldRow* fieldRow,
+	const FScenarioTemplateNumberValue& value)
+{
+	if (!fieldRow)
+	{
+		return;
+	}
+
+	if (!value.bIsSet)
+	{
+		fieldRow->SetValueText(FString());
+		fieldRow->SetRangeValueText(FString(), FString());
+		fieldRow->SetRangeInputEnabled(false);
+		return;
+	}
+	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
+	{
+		fieldRow->SetValueText(FormatNumberValue(UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue((value.MinValue + value.MaxValue) * 0.5)));
+		fieldRow->SetRangeValueText(FormatNumberValue(UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(value.MinValue)), FormatNumberValue(UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(value.MaxValue)));
+		fieldRow->SetRangeInputEnabled(true);
+		return;
+	}
+
+	const FString fixedValueText = FormatNumberValue(value);
+	fieldRow->SetValueText(fixedValueText);
+	fieldRow->SetRangeValueText(fixedValueText, fixedValueText);
+	fieldRow->SetRangeInputEnabled(false);
+}
+
+bool UScenarioEditorSidebarMainPanel::TryParseOptionalNumber(
+	const FText& text,
+	FScenarioTemplateNumberValue& outValue)
+{
+	FString numberText = text.ToString().TrimStartAndEnd();
+	if (numberText.IsEmpty())
+	{
+		outValue = MakeUnsetMainPanelNumberValue();
+		return true;
+	}
+
+	numberText.RemoveFromEnd(TEXT("m"), ESearchCase::IgnoreCase);
+	numberText.TrimStartAndEndInline();
+	double parsedValue = 0.0;
+	if (!LexTryParseString(parsedValue, *numberText) || !FMath::IsFinite(parsedValue))
+	{
+		return false;
+	}
+
+	outValue = UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(parsedValue);
+	return true;
+}
+
+bool UScenarioEditorSidebarMainPanel::TryParseOptionalNumberRange(
+	const FText& minText,
+	const FText& maxText,
+	FScenarioTemplateNumberValue& outValue)
+{
+	const bool bMinEmpty = minText.ToString().TrimStartAndEnd().IsEmpty();
+	const bool bMaxEmpty = maxText.ToString().TrimStartAndEnd().IsEmpty();
+	if (bMinEmpty && bMaxEmpty)
+	{
+		outValue = MakeUnsetMainPanelNumberValue();
+		return true;
+	}
+
+	FScenarioTemplateNumberValue minValue;
+	FScenarioTemplateNumberValue maxValue;
+	if (!TryParseOptionalNumber(minText, minValue)
+		|| !TryParseOptionalNumber(maxText, maxValue)
+		|| !minValue.bIsSet
+		|| !maxValue.bIsSet)
+	{
+		return false;
+	}
+
+	outValue = UScenarioAuthoringSubsystem::MakeRangeTemplateNumberValue(minValue.FixedValue, maxValue.FixedValue);
+	return true;
+}
+
+bool UScenarioEditorSidebarMainPanel::TryParseRobotAnchorType(
+	const FText& text,
+	EScenarioTemplateRobotAnchorType& outType)
+{
+	const FString typeText = text.ToString().TrimStartAndEnd().ToLower();
+	if (typeText == TEXT("entry"))
+	{
+		outType = EScenarioTemplateRobotAnchorType::Entry;
+		return true;
+	}
+	if (typeText == TEXT("exit"))
+	{
+		outType = EScenarioTemplateRobotAnchorType::Exit;
+		return true;
+	}
+	if (typeText == TEXT("corridor_pose"))
+	{
+		outType = EScenarioTemplateRobotAnchorType::CorridorPose;
+		return true;
+	}
+	return false;
+}
+
+bool UScenarioEditorSidebarMainPanel::TryParseRobotHeading(
+	const FText& text,
+	EScenarioTemplateRobotHeading& outHeading)
+{
+	const FString headingText = text.ToString().TrimStartAndEnd().ToLower();
+	if (headingText == TEXT("forward"))
+	{
+		outHeading = EScenarioTemplateRobotHeading::Forward;
+		return true;
+	}
+	if (headingText == TEXT("backward"))
+	{
+		outHeading = EScenarioTemplateRobotHeading::Backward;
+		return true;
+	}
+	if (headingText == TEXT("auto"))
+	{
+		outHeading = EScenarioTemplateRobotHeading::Auto;
+		return true;
+	}
+	return false;
 }
 
 FString UScenarioEditorSidebarMainPanel::RobotAnchorTypeToString(

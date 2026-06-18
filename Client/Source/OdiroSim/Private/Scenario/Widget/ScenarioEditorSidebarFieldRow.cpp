@@ -2,6 +2,7 @@
 
 #include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
+#include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
@@ -87,6 +88,12 @@ void UScenarioEditorSidebarFieldRow::SetRangeValueText(const FString& minText, c
 	RefreshRow();
 }
 
+void UScenarioEditorSidebarFieldRow::SetComboOptions(const TArray<FString>& options)
+{
+	ComboOptions = options;
+	RefreshRow();
+}
+
 void UScenarioEditorSidebarFieldRow::SetInputType(const EScenarioEditorSidebarFieldInputType inInputType)
 {
 	InputType = inInputType;
@@ -126,6 +133,15 @@ void UScenarioEditorSidebarFieldRow::SetArrayControlsEnabled(const bool bInArray
 	RefreshRow();
 }
 
+void UScenarioEditorSidebarFieldRow::SetComboAllowsUnset(
+	const bool bInComboAllowsUnset,
+	const FString& unsetDisplayText)
+{
+	bComboAllowsUnset = bInComboAllowsUnset;
+	ComboUnsetDisplayText = unsetDisplayText.IsEmpty() ? FString(TEXT("(unset)")) : unsetDisplayText;
+	RefreshRow();
+}
+
 void UScenarioEditorSidebarFieldRow::SetTextStyleCatalog(
 	TSoftObjectPtr<UWidgetTextStyleCatalog> catalog)
 {
@@ -147,6 +163,15 @@ FString UScenarioEditorSidebarFieldRow::GetValueText() const
 	{
 		return ValueEditableTextBox->GetText().ToString();
 	}
+	if (bEditable && UsesComboInput() && ValueComboBox)
+	{
+		const FString selectedOption = ValueComboBox->GetSelectedOption();
+		if (bComboAllowsUnset && selectedOption == ComboUnsetDisplayText)
+		{
+			return FString();
+		}
+		return selectedOption.IsEmpty() ? ValueText : selectedOption;
+	}
 
 	return ValueText;
 }
@@ -167,6 +192,20 @@ void UScenarioEditorSidebarFieldRow::HandleValueTextCommitted(
 {
 	ValueText = text.ToString();
 	OnValueTextCommitted.Broadcast(text, commitMethod);
+}
+
+void UScenarioEditorSidebarFieldRow::HandleValueComboSelectionChanged(
+	FString selectedItem,
+	const ESelectInfo::Type selectionType)
+{
+	if (selectionType == ESelectInfo::Direct)
+	{
+		return;
+	}
+
+	const bool bSelectedUnset = bComboAllowsUnset && selectedItem == ComboUnsetDisplayText;
+	ValueText = bSelectedUnset ? FString() : selectedItem;
+	OnValueTextCommitted.Broadcast(FText::FromString(ValueText), ETextCommit::Default);
 }
 
 void UScenarioEditorSidebarFieldRow::HandleMinValueTextCommitted(
@@ -229,6 +268,9 @@ void UScenarioEditorSidebarFieldRow::BuildDefaultWidgetTree()
 	ValueEditableTextBox = WidgetTree->ConstructWidget<UEditableTextBox>(
 		UEditableTextBox::StaticClass(),
 		TEXT("ValueEditableTextBox"));
+	ValueComboBox = WidgetTree->ConstructWidget<UComboBoxString>(
+		UComboBoxString::StaticClass(),
+		TEXT("ValueComboBox"));
 	ValueMultiLineSizeBox = WidgetTree->ConstructWidget<USizeBox>(
 		USizeBox::StaticClass(),
 		TEXT("ValueMultiLineSizeBox"));
@@ -303,6 +345,15 @@ void UScenarioEditorSidebarFieldRow::BuildDefaultWidgetTree()
 			slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		}
 	}
+	if (ValueComboBox)
+	{
+		if (UHorizontalBoxSlot* slot = rootBox->AddChildToHorizontalBox(ValueComboBox.Get()))
+		{
+			slot->SetPadding(FMargin(8.0f, 0.0f, 0.0f, 0.0f));
+			slot->SetHorizontalAlignment(HAlign_Fill);
+			slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		}
+	}
 	if (ValueMultiLineSizeBox && ValueMultiLineEditableTextBox)
 	{
 		ValueMultiLineSizeBox->ClearHeightOverride();
@@ -371,6 +422,15 @@ void UScenarioEditorSidebarFieldRow::BindControls()
 			this,
 			&UScenarioEditorSidebarFieldRow::HandleValueTextCommitted);
 	}
+	if (ValueComboBox)
+	{
+		ValueComboBox->OnSelectionChanged.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarFieldRow::HandleValueComboSelectionChanged);
+		ValueComboBox->OnSelectionChanged.AddDynamic(
+			this,
+			&UScenarioEditorSidebarFieldRow::HandleValueComboSelectionChanged);
+	}
 	if (MinValueEditableTextBox)
 	{
 		MinValueEditableTextBox->OnTextCommitted.RemoveDynamic(
@@ -431,6 +491,12 @@ void UScenarioEditorSidebarFieldRow::UnbindControls()
 		ValueMultiLineEditableTextBox->OnTextCommitted.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarFieldRow::HandleValueTextCommitted);
+	}
+	if (ValueComboBox)
+	{
+		ValueComboBox->OnSelectionChanged.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarFieldRow::HandleValueComboSelectionChanged);
 	}
 	if (MinValueEditableTextBox)
 	{
@@ -522,7 +588,15 @@ void UScenarioEditorSidebarFieldRow::RefreshRow()
 	if (ValueEditableTextBox)
 	{
 		ValueEditableTextBox->SetText(FText::FromString(ValueText));
-		ValueEditableTextBox->SetVisibility(bEditable && !UsesMultilineInput() && !UsesRangeInput()
+		ValueEditableTextBox->SetVisibility(bEditable && !UsesMultilineInput() && !UsesComboInput() && !UsesRangeInput()
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+	}
+
+	if (ValueComboBox)
+	{
+		RefreshComboBoxOptions();
+		ValueComboBox->SetVisibility(bEditable && UsesComboInput()
 			? ESlateVisibility::Visible
 			: ESlateVisibility::Collapsed);
 	}
@@ -583,8 +657,9 @@ void UScenarioEditorSidebarFieldRow::RefreshRow()
 	{
 		ValueTextBlock->SetAutoWrapText(true);
 		const bool bHasEditableControl = bEditable
-			&& ((!UsesMultilineInput() && !UsesRangeInput() && ValueEditableTextBox)
+			&& ((!UsesMultilineInput() && !UsesComboInput() && !UsesRangeInput() && ValueEditableTextBox)
 				|| (UsesMultilineInput() && ValueMultiLineEditableTextBox)
+				|| (UsesComboInput() && ValueComboBox)
 				|| (UsesRangeInput() && ValueRangeBox));
 		ValueTextBlock->SetVisibility(bHasEditableControl
 			? ESlateVisibility::Collapsed
@@ -597,6 +672,11 @@ bool UScenarioEditorSidebarFieldRow::UsesMultilineInput() const
 	return bMultilineValue || InputType == EScenarioEditorSidebarFieldInputType::MultilineText;
 }
 
+bool UScenarioEditorSidebarFieldRow::UsesComboInput() const
+{
+	return InputType == EScenarioEditorSidebarFieldInputType::ComboBox;
+}
+
 bool UScenarioEditorSidebarFieldRow::IsRangeCapable() const
 {
 	return InputType == EScenarioEditorSidebarFieldInputType::Range;
@@ -605,6 +685,46 @@ bool UScenarioEditorSidebarFieldRow::IsRangeCapable() const
 bool UScenarioEditorSidebarFieldRow::UsesRangeInput() const
 {
 	return bEditable && IsRangeCapable() && bRangeInputEnabled;
+}
+
+void UScenarioEditorSidebarFieldRow::RefreshComboBoxOptions()
+{
+	if (!ValueComboBox)
+	{
+		return;
+	}
+
+	TArray<FString> resolvedOptions = ComboOptions;
+	if (!ValueText.IsEmpty() && !resolvedOptions.Contains(ValueText))
+	{
+		resolvedOptions.Add(ValueText);
+	}
+
+	ValueComboBox->ClearOptions();
+	if (bComboAllowsUnset)
+	{
+		ValueComboBox->AddOption(ComboUnsetDisplayText);
+	}
+	for (const FString& option : resolvedOptions)
+	{
+		if (!option.IsEmpty())
+		{
+			ValueComboBox->AddOption(option);
+		}
+	}
+
+	if (!ValueText.IsEmpty() && resolvedOptions.Contains(ValueText))
+	{
+		ValueComboBox->SetSelectedOption(ValueText);
+	}
+	else if (bComboAllowsUnset)
+	{
+		ValueComboBox->SetSelectedOption(ComboUnsetDisplayText);
+	}
+	else
+	{
+		ValueComboBox->ClearSelection();
+	}
 }
 
 void UScenarioEditorSidebarFieldRow::SetTextBlockText(UTextBlock* textBlock, const FString& text) const

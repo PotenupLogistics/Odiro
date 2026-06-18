@@ -375,6 +375,62 @@ bool UScenarioAuthoringSubsystem::SetDraftIntent(
 	return CommitTemplateMetadataDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
 }
 
+bool UScenarioAuthoringSubsystem::SetDraftRobotStartAnchor(
+	const FScenarioTemplateRobotAnchor& anchor,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+
+	FScenarioTemplateRobotAnchor normalizedAnchor = anchor;
+	normalizedAnchor.SegmentId = normalizedAnchor.SegmentId.TrimStartAndEnd();
+	normalizedAnchor.LaneId = normalizedAnchor.LaneId.TrimStartAndEnd();
+
+	const FScenarioTemplateDocument previousTemplate = DraftScenarioTemplate;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioTemplateEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	if (!ValidateRobotAnchor(normalizedAnchor, TEXT("robot.start"), outDiagnostics))
+	{
+		DraftScenarioTemplate = previousTemplate;
+		bDirty = bPreviousDirty;
+		return false;
+	}
+
+	DraftScenarioTemplate.Robot.Start = normalizedAnchor;
+	return CommitRobotDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::SetDraftRobotGoalAnchor(
+	const FScenarioTemplateRobotAnchor& anchor,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+
+	FScenarioTemplateRobotAnchor normalizedAnchor = anchor;
+	normalizedAnchor.SegmentId = normalizedAnchor.SegmentId.TrimStartAndEnd();
+	normalizedAnchor.LaneId = normalizedAnchor.LaneId.TrimStartAndEnd();
+
+	const FScenarioTemplateDocument previousTemplate = DraftScenarioTemplate;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioTemplateEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	if (!ValidateRobotAnchor(normalizedAnchor, TEXT("robot.goal"), outDiagnostics))
+	{
+		DraftScenarioTemplate = previousTemplate;
+		bDirty = bPreviousDirty;
+		return false;
+	}
+
+	DraftScenarioTemplate.Robot.Goal = normalizedAnchor;
+	return CommitRobotDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
 bool UScenarioAuthoringSubsystem::SetCorridorAxisPointsMeters(
 	const TArray<FVector2D>& pointsMeters,
 	TArray<FString>& outDiagnostics)
@@ -2088,6 +2144,38 @@ bool UScenarioAuthoringSubsystem::CommitObstacleDraftEdit(
 	return false;
 }
 
+bool UScenarioAuthoringSubsystem::CommitRobotDraftEdit(
+	const FScenarioTemplateDocument& previousTemplate,
+	bool bPreviousDirty,
+	TArray<FString>& outDiagnostics)
+{
+	TArray<FScenarioSchemaDiagnostic> schemaDiagnostics;
+	if (!FScenarioTemplateJson::ValidateDocument(DraftScenarioTemplate, schemaDiagnostics))
+	{
+		AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+		DraftScenarioTemplate = previousTemplate;
+		bDirty = bPreviousDirty;
+		return false;
+	}
+	AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+
+	bDirty = true;
+	if (RefreshGeneratedEditorPreviewActorsFromDraft(outDiagnostics))
+	{
+		return true;
+	}
+
+	DraftScenarioTemplate = previousTemplate;
+	bDirty = bPreviousDirty;
+
+	TArray<FString> rollbackDiagnostics;
+	RefreshGeneratedEditorPreviewActorsFromDraft(rollbackDiagnostics);
+	SyncCorridorHandleActors();
+	bDirty = bPreviousDirty;
+	outDiagnostics.Add(TEXT("Robot edit was rejected because the editor preview could not be refreshed."));
+	return false;
+}
+
 bool UScenarioAuthoringSubsystem::CommitTemplateMetadataDraftEdit(
 	const FScenarioTemplateDocument& previousTemplate,
 	bool bPreviousDirty,
@@ -2437,6 +2525,41 @@ bool UScenarioAuthoringSubsystem::ValidateCorridorSegmentReference(
 			TEXT("%s references unknown Corridor segment '%s'."),
 			*path,
 			*normalizedSegmentId));
+		return false;
+	}
+
+	return true;
+}
+
+bool UScenarioAuthoringSubsystem::ValidateRobotAnchor(
+	const FScenarioTemplateRobotAnchor& anchor,
+	const FString& path,
+	TArray<FString>& outDiagnostics) const
+{
+	if (anchor.Type != EScenarioTemplateRobotAnchorType::CorridorPose)
+	{
+		return true;
+	}
+
+	if (!ValidateCorridorSegmentReference(
+			anchor.SegmentId,
+			FString::Printf(TEXT("%s.segment"), *path),
+			outDiagnostics))
+	{
+		return false;
+	}
+	if (!anchor.AlongMeters.bIsSet || !IsValidOptionalTemplateNumber(anchor.AlongMeters))
+	{
+		outDiagnostics.Add(FString::Printf(
+			TEXT("%s.along_m must be a finite fixed number or finite min/max range."),
+			*path));
+		return false;
+	}
+	if (!anchor.OffsetMeters.bIsSet || !IsValidOptionalTemplateNumber(anchor.OffsetMeters))
+	{
+		outDiagnostics.Add(FString::Printf(
+			TEXT("%s.offset_m must be a finite fixed number or finite min/max range."),
+			*path));
 		return false;
 	}
 

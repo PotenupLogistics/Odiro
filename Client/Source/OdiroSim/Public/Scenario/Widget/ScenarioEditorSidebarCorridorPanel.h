@@ -272,6 +272,7 @@ private:
 		EScenarioEditorCorridorSide side,
 		int32 laneIndex,
 		const FScenarioTemplateLaneRule& lane,
+		const TArray<FString>& surfaceOptions,
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget);
 	// Adds an editable axis point widget to the axis points block.
 	UScenarioEditorSidebarCorridorPointWidget* AddAxisPointWidget(
@@ -282,9 +283,12 @@ private:
 	UScenarioEditorSidebarCorridorSegmentWidget* AddSegmentWidget(
 		int32 segmentIndex,
 		const FScenarioTemplateSegment& segment,
+		const TArray<FString>& surfaceOptions,
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget);
 	// Resolves the authoring subsystem that owns the draft template.
 	UScenarioAuthoringSubsystem* GetAuthoringSubsystem() const;
+	// Returns catalog-backed Corridor surface ids for combo-box fields.
+	TArray<FString> GetCorridorSurfaceIdOptions() const;
 	// Returns the current draft side lane profile by value for mutation.
 	TArray<FScenarioTemplateLaneRule> GetDraftLaneProfile(EScenarioEditorCorridorSide side) const;
 	// Returns the current draft axis points by value for mutation.

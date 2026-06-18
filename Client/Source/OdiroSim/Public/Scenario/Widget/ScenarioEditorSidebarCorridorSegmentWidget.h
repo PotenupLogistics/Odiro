@@ -115,6 +115,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
 
+	// Updates available Corridor surface ids for the replaced_by combo box.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetSurfaceOptions(const TArray<FString>& surfaceIds);
+
 	// Refreshes this segment widget from one Scenario Template segment rule.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void RefreshFromSegment(const FScenarioTemplateSegment& segment);
@@ -154,6 +158,10 @@ private:
 	// True when CachedSegment contains valid segment data from RefreshFromSegment.
 	UPROPERTY(Transient)
 	bool bHasCachedSegment = false;
+
+	// Catalog-backed Corridor surface ids available to the replaced_by row.
+	UPROPERTY(Transient)
+	TArray<FString> SurfaceOptions;
 
 	// Builds the native fallback segment tree when no Blueprint-authored tree is present.
 	void BuildDefaultWidgetTree();

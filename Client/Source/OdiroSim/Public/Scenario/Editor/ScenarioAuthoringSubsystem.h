@@ -173,6 +173,18 @@ public:
 		const TArray<FScenarioTemplateObstaclePlacement>& placements,
 		TArray<FString>& outDiagnostics);
 
+	// Draft robot.start anchor is replaced as one template-owned object.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Robot")
+	bool SetDraftRobotStartAnchor(
+		const FScenarioTemplateRobotAnchor& anchor,
+		TArray<FString>& outDiagnostics);
+
+	// Draft robot.goal anchor is replaced as one template-owned object.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Robot")
+	bool SetDraftRobotGoalAnchor(
+		const FScenarioTemplateRobotAnchor& anchor,
+		TArray<FString>& outDiagnostics);
+
 	// Range integer template value helper for Blueprint and sidebar editors.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")
 	static FScenarioTemplateIntegerValue MakeRangeTemplateIntegerValue(int32 minValue, int32 maxValue);
@@ -412,6 +424,11 @@ private:
 		const FScenarioTemplateDocument& previousTemplate,
 		bool bPreviousDirty,
 		TArray<FString>& outDiagnostics);
+	// Robot anchor edit validation plus generated preview refresh with rollback.
+	bool CommitRobotDraftEdit(
+		const FScenarioTemplateDocument& previousTemplate,
+		bool bPreviousDirty,
+		TArray<FString>& outDiagnostics);
 	// Side lane profile 편집 입력이 surface와 width 조건을 만족하는지 확인함.
 	// Commits metadata-only draft edits without rebuilding generated preview actors.
 	bool CommitTemplateMetadataDraftEdit(
@@ -445,6 +462,11 @@ private:
 	// Validates that a template segment reference points at the current Corridor segments.
 	bool ValidateCorridorSegmentReference(
 		const FString& segmentId,
+		const FString& path,
+		TArray<FString>& outDiagnostics) const;
+	// Validates one robot anchor object before applying a root.robot edit.
+	bool ValidateRobotAnchor(
+		const FScenarioTemplateRobotAnchor& anchor,
 		const FString& path,
 		TArray<FString>& outDiagnostics) const;
 	// Axis 길이 변경에 맞춰 along 기반 robot/obstacle reference 값을 같은 비율로 보정함.

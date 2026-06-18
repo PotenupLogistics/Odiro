@@ -5,6 +5,7 @@
 #include "Shared/EpisodeJsonlMeasurementWriter.h"
 #include "Shared/EpisodeMeasurementLogTypes.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "TimerManager.h"
 #include "EpisodeMeasurementLogSubsystem.generated.h"
 
 class UEpisodeLogSubjectRegistry;
@@ -107,6 +108,8 @@ private:
 	bool bProjectTraceLogging = false;
 	FString CurrentProjectTracePath;
 	int32 NextProjectTraceSampleIndex = 0;
+	FTimerHandle ProjectTraceTimerHandle;
+	float ProjectTraceIntervalSeconds = 1.0f / 60.0f;
 
 	UFUNCTION()
 	void HandleEvaluationEvent(FEpisodeEvaluationEvent Event);
@@ -116,6 +119,7 @@ private:
 	bool WriteHeader(double WorldTimeSeconds);
 	bool WriteTick(float DeltaTime);
 	bool WriteProjectTraceTick(float DeltaTime);
+	void HandleProjectTraceTimerTick();
 	bool WriteFooter(const FString& CloseReason);
 	FEpisodeMeasurementLogTickRecord BuildTickRecord(float DeltaTime);
 	FEpisodeMeasurementLogHeaderRecord BuildHeaderRecord(double WorldTimeSeconds) const;

@@ -310,7 +310,6 @@ void UEpisodeMeasurementLogSubsystem::Tick(float DeltaTime)
 {
 	if (IsProjectTraceLogging())
 	{
-		WriteProjectTraceTick(DeltaTime);
 		return;
 	}
 
@@ -324,7 +323,7 @@ void UEpisodeMeasurementLogSubsystem::Tick(float DeltaTime)
 
 bool UEpisodeMeasurementLogSubsystem::IsTickable() const
 {
-	return IsLogging() || IsProjectTraceLogging();
+	return IsLogging();
 }
 
 TStatId UEpisodeMeasurementLogSubsystem::GetStatId() const
@@ -428,6 +427,15 @@ bool UEpisodeMeasurementLogSubsystem::StartProjectTraceLogging(const FString& Tr
 	SubjectRegistry->BuildFromWorld(World, World->GetTimeSeconds());
 	AppendRegistryDiagnostics();
 	bProjectTraceLogging = true;
+	WriteProjectTraceTick(0.0f);
+
+	World->GetTimerManager().SetTimer(
+		ProjectTraceTimerHandle,
+		this,
+		&UEpisodeMeasurementLogSubsystem::HandleProjectTraceTimerTick,
+		FMath::Max(ProjectTraceIntervalSeconds, 0.001f),
+		true,
+		FMath::Max(ProjectTraceIntervalSeconds, 0.001f));
 	return true;
 }
 
@@ -436,6 +444,11 @@ void UEpisodeMeasurementLogSubsystem::StopProjectTraceLogging()
 	if (!bProjectTraceLogging)
 	{
 		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ProjectTraceTimerHandle);
 	}
 
 	bProjectTraceLogging = false;
@@ -541,6 +554,12 @@ bool UEpisodeMeasurementLogSubsystem::WriteProjectTraceTick(float DeltaTime)
 	}
 
 	return bWrote;
+}
+
+void UEpisodeMeasurementLogSubsystem::HandleProjectTraceTimerTick()
+{
+	const UWorld* World = GetWorld();
+	WriteProjectTraceTick(World ? World->GetDeltaSeconds() : ProjectTraceIntervalSeconds);
 }
 
 bool UEpisodeMeasurementLogSubsystem::WriteFooter(const FString& CloseReason)

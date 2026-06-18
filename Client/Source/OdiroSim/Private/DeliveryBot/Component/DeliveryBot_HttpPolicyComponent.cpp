@@ -85,6 +85,11 @@ void UDeliveryBot_HttpPolicyComponent::RequestStartScenario()
 	TryStartScenario();
 }
 
+void UDeliveryBot_HttpPolicyComponent::ConfigureProjectActionLogging(const FString& projectOutputEpisodeId)
+{
+	ProjectActionEpisodeId = projectOutputEpisodeId.TrimStartAndEnd();
+}
+
 // start 전에는 재시도하고 start 후에는 decide를 반복 호출한다.
 void UDeliveryBot_HttpPolicyComponent::UpdatePolicy(float deltaTime)
 {
@@ -153,6 +158,7 @@ bool UDeliveryBot_HttpPolicyComponent::TryStartScenario()
 
 			bScenarioStarted = true;
 			UE_LOG(LogDeliveryBotHttpPolicy, Log, TEXT("Python scenario started."));
+			RequestDecision(0.0f);
 		});
 
 	if (!bRequestStarted)
@@ -176,17 +182,18 @@ bool UDeliveryBot_HttpPolicyComponent::RequestDecision(float deltaTime)
 
 	bDecisionRequestInFlight = true;
 	const TSharedPtr<FJsonObject> requestObjectForLog = LastDecisionRequestObject;
+	const FString projectEpisodeIdForLog = ResolveProjectEpisodeId();
 
 	const bool bRequestStarted = SendPostRequest(
 		TEXT("/scenario/decide"),
 		payload,
-		[this, deltaTime, requestObjectForLog](FHttpResponsePtr response, bool bSucceeded)
+		[this, deltaTime, requestObjectForLog, projectEpisodeIdForLog](FHttpResponsePtr response, bool bSucceeded)
 		{
 			bDecisionRequestInFlight = false;
 
 			FDeliveryBotMoveCommandInfo moveCommand;
 			const bool bActionSucceeded = bSucceeded && TryParseMoveCommand(response, moveCommand);
-			WriteProjectActionRecord(requestObjectForLog, response, bActionSucceeded);
+			WriteProjectActionRecord(projectEpisodeIdForLog, requestObjectForLog, response, bActionSucceeded);
 
 			if (!bActionSucceeded)
 			{
@@ -206,6 +213,7 @@ bool UDeliveryBot_HttpPolicyComponent::RequestDecision(float deltaTime)
 	if (!bRequestStarted)
 	{
 		bDecisionRequestInFlight = false;
+		WriteProjectActionRecord(projectEpisodeIdForLog, requestObjectForLog, nullptr, false);
 	}
 
 	return bRequestStarted;
@@ -256,6 +264,11 @@ FString UDeliveryBot_HttpPolicyComponent::ResolveProjectEpisodeId() const
 		return FString();
 	}
 
+	if (FUserProjectEpisodeScenarioJson::IsValidEpisodeId(ProjectActionEpisodeId))
+	{
+		return ProjectActionEpisodeId;
+	}
+
 	UWorld* world = GetWorld();
 	if (!IsValid(world))
 	{
@@ -263,7 +276,7 @@ FString UDeliveryBot_HttpPolicyComponent::ResolveProjectEpisodeId() const
 	}
 
 	const UScenarioEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UScenarioEvaluationSubsystem>();
-	if (!IsValid(evaluationSubsystem) || !evaluationSubsystem->IsEvaluating())
+	if (!IsValid(evaluationSubsystem))
 	{
 		return FString();
 	}
@@ -272,6 +285,7 @@ FString UDeliveryBot_HttpPolicyComponent::ResolveProjectEpisodeId() const
 }
 
 void UDeliveryBot_HttpPolicyComponent::WriteProjectActionRecord(
+	const FString& projectEpisodeId,
 	const TSharedPtr<FJsonObject>& requestObject,
 	const FHttpResponsePtr& response,
 	bool bActionSucceeded) const
@@ -287,7 +301,12 @@ void UDeliveryBot_HttpPolicyComponent::WriteProjectActionRecord(
 		return;
 	}
 
-	const FString episodeId = ResolveProjectEpisodeId();
+	FString episodeId = projectEpisodeId.TrimStartAndEnd();
+	if (!FUserProjectEpisodeScenarioJson::IsValidEpisodeId(episodeId))
+	{
+		episodeId = ResolveProjectEpisodeId();
+	}
+
 	if (!FUserProjectEpisodeScenarioJson::IsValidEpisodeId(episodeId))
 	{
 		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Project action record skipped: invalid episode id '%s'."), *episodeId);

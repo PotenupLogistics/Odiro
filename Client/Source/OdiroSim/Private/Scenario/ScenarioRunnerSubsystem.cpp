@@ -6,6 +6,8 @@
 #include "Scenario/ScenarioEvaluationSubsystem.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Scenario/ScenarioSimulationSubsystem.h"
+#include "HAL/FileManager.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Shared/ScenarioSampleJson.h"
 #include "Shared/UserProjectDataTypes.h"
@@ -94,7 +96,22 @@ namespace
 			*diagnostic.Message);
 	}
 
-	FString BuildProjectTracePathForEpisode(const FString& episodeId)
+	FString ResolveProjectOutputEpisodeId(const FEpisodeRunRecord& runRecord)
+	{
+		if (FUserProjectEpisodeScenarioJson::IsValidEpisodeId(runRecord.EpisodeId))
+		{
+			return runRecord.EpisodeId;
+		}
+
+		if (FUserProjectEpisodeScenarioJson::IsValidEpisodeId(runRecord.PairId))
+		{
+			return runRecord.PairId;
+		}
+
+		return FUserProjectEpisodeScenarioJson::BuildEpisodeId(FMath::Max(0, runRecord.RunIndex));
+	}
+
+	FString BuildProjectOutputPathForEpisode(const FString& projectOutputEpisodeId, const TCHAR* fileName)
 	{
 		const FSimulationCommandLineParseResult commandLineResult = FSimulationCommandLine::ParseCurrent();
 		if (!commandLineResult.bSuccess || !commandLineResult.Options.bProjectRun)
@@ -102,7 +119,7 @@ namespace
 			return FString();
 		}
 
-		if (!FUserProjectEpisodeScenarioJson::IsValidEpisodeId(episodeId))
+		if (!FUserProjectEpisodeScenarioJson::IsValidEpisodeId(projectOutputEpisodeId))
 		{
 			return FString();
 		}
@@ -111,28 +128,59 @@ namespace
 			commandLineResult.Options.ProjectPath,
 			commandLineResult.Options.RunId);
 		return FPaths::Combine(
-			FUserProjectRunOutputJson::BuildEpisodeDirectory(paths, episodeId),
-			TEXT("trace.jsonl"));
+			FUserProjectRunOutputJson::BuildEpisodeDirectory(paths, projectOutputEpisodeId),
+			fileName);
 	}
 
-	void StartProjectTraceLoggingForEpisode(UWorld* world, const FString& episodeId)
+	bool EnsureProjectJsonlFileExists(const FString& jsonlPath)
+	{
+		if (jsonlPath.TrimStartAndEnd().IsEmpty())
+		{
+			return false;
+		}
+
+		if (FPaths::FileExists(jsonlPath))
+		{
+			return true;
+		}
+
+		const FString jsonlDirectory = FPaths::GetPath(jsonlPath);
+		if (!IFileManager::Get().MakeDirectory(*jsonlDirectory, true))
+		{
+			UE_LOG(LogScenarioRunner, Warning, TEXT("Project JSONL directory create failed | Path: %s"), *jsonlDirectory);
+			return false;
+		}
+
+		if (!FFileHelper::SaveStringToFile(FString(), *jsonlPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			UE_LOG(LogScenarioRunner, Warning, TEXT("Project JSONL file create failed | Path: %s"), *jsonlPath);
+			return false;
+		}
+
+		return true;
+	}
+
+	void StartProjectTraceLoggingForEpisode(UWorld* world, const FString& projectOutputEpisodeId)
 	{
 		if (!IsValid(world))
 		{
 			return;
 		}
 
-		const FString tracePath = BuildProjectTracePathForEpisode(episodeId);
+		const FString tracePath = BuildProjectOutputPathForEpisode(projectOutputEpisodeId, TEXT("trace.jsonl"));
 		if (tracePath.IsEmpty())
 		{
 			return;
 		}
 
+		const FString actionsPath = BuildProjectOutputPathForEpisode(projectOutputEpisodeId, TEXT("actions.jsonl"));
+		EnsureProjectJsonlFileExists(actionsPath);
+
 		if (UEpisodeMeasurementLogSubsystem* measurementLogSubsystem = world->GetSubsystem<UEpisodeMeasurementLogSubsystem>())
 		{
 			if (!measurementLogSubsystem->StartProjectTraceLogging(tracePath))
 			{
-				UE_LOG(LogScenarioRunner, Warning, TEXT("Project trace 시작 실패 | Episode: %s, Trace: %s"), *episodeId, *tracePath);
+				UE_LOG(LogScenarioRunner, Warning, TEXT("Project trace 시작 실패 | Episode: %s, Trace: %s"), *projectOutputEpisodeId, *tracePath);
 			}
 		}
 	}
@@ -147,6 +195,17 @@ namespace
 		if (UEpisodeMeasurementLogSubsystem* measurementLogSubsystem = world->GetSubsystem<UEpisodeMeasurementLogSubsystem>())
 		{
 			measurementLogSubsystem->StopProjectTraceLogging();
+		}
+	}
+
+	void ConfigureProjectActionLoggingForEpisode(
+		const FScenarioRuntimeContext& runtimeContext,
+		const FString& projectOutputEpisodeId)
+	{
+		ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(runtimeContext.RobotActor);
+		if (IsValid(deliveryBot))
+		{
+			deliveryBot->ConfigureProjectActionLogging(projectOutputEpisodeId);
 		}
 	}
 
@@ -374,6 +433,7 @@ void UScenarioRunnerSubsystem::HandleEpisodeEnded(FEpisodeEvaluationResult resul
 		result.DurationSeconds,
 		result.Events.Num());
 
+	StopProjectTraceLogging(ResolveWorld());
 	CompleteCurrentRecord(result.bSuccess, result.Outcome, result.TerminalReason, &result);
 
 	if (UScenarioEvaluationSubsystem* evaluationSubsystem = ResolveEvaluationSubsystem())
@@ -418,6 +478,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		return;
 	}
 
+	StopProjectTraceLogging(world);
 	CurrentRunInput = PendingRunInputs[0];
 	PendingRunInputs.RemoveAt(0);
 	++CurrentRunIndex;
@@ -559,6 +620,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	}
 
 	const FScenarioRuntimeContext runtimeContext = simulationSubsystem->BuildRuntimeContext(simulationSetupSpec);
+	const FString projectOutputEpisodeId = ResolveProjectOutputEpisodeId(CurrentRecord);
 	if (!IsValid(runtimeContext.RobotActor))
 	{
 		CurrentRecord.bSetupSucceeded = false;
@@ -576,6 +638,8 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		QueueStartNextScenario();
 		return;
 	}
+
+	ConfigureProjectActionLoggingForEpisode(runtimeContext, projectOutputEpisodeId);
 
 	if (bRunnerManagedPolicyStart)
 	{
@@ -646,8 +710,6 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
 	evaluationSubsystem->OnEpisodeEnded.AddDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
 
-	StartProjectTraceLoggingForEpisode(world, runtimeContext.EpisodeId);
-
 	if (!evaluationSubsystem->StartEvaluation(compileResult.WorldSpec.EvaluationConfig, runtimeContext, timeLimitSeconds))
 	{
 		StopProjectTraceLogging(world);
@@ -661,6 +723,8 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		QueueStartNextScenario();
 		return;
 	}
+
+	StartProjectTraceLoggingForEpisode(world, projectOutputEpisodeId);
 
 	SetRunnerState(EScenarioRunnerState::Running);
 	UE_LOG(LogScenarioRunner, Log, TEXT("Scenario 실행 중 | RunId: %s, Scenario: %s"), *CurrentRecord.RunId, *runtimeContext.EpisodeId);

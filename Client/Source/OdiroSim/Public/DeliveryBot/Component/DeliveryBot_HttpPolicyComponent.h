@@ -19,6 +19,7 @@ public:
 	void RequestStartScenario();				// Python 서버에 scenario start 요청을 예약한다
 	void UpdatePolicy(float deltaTime);			// start 재시도와 decide 반복 요청을 갱신한다
 	void EndScenario(const FString& status);	// Python 서버에 scenario end 요청을 보낸다
+	void ConfigureProjectActionLogging(const FString& projectOutputEpisodeId); // project actions.jsonl 기록 대상 output episode를 고정한다
 
 
 public:
@@ -47,8 +48,9 @@ private:
 private:
 	// Python 서버에 POST 요청을 보낸다
 	bool SendPostRequest(const FString& endpoint, const FString& payload, TFunction<void(FHttpResponsePtr, bool)> onComplete);
-	FString ResolveProjectEpisodeId() const; // project run의 현재 episode id를 가져온다
+	FString ResolveProjectEpisodeId() const; // project run의 현재 output episode id를 가져온다
 	void WriteProjectActionRecord(
+		const FString& projectEpisodeId,
 		const TSharedPtr<FJsonObject>& requestObject,
 		const FHttpResponsePtr& response,
 		bool bActionSucceeded) const; // project actions.jsonl에 decide 결과를 기록한다
@@ -82,6 +84,7 @@ private:
 
 private:
 	FString EpisodeId;
+	FString ProjectActionEpisodeId; // runner가 지정한 user project output episode id
 	FString RobotInstanceId;
 	FString LastScenarioResultJson;
 

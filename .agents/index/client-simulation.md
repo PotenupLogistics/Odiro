@@ -45,6 +45,8 @@ keep:
   - Final user project contract uses one editable `<UserProject>/scenario.json`; do not add new user-facing template/sample split.
   - Generated `scenario_sample` files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
   - Project run generates `scenario_sample` episode artifacts and compiles them through `ScenarioSampleWorldSpecAdapter`; generated ground-region specs preserve lane `surface` ids so runtime visuals can use the same Corridor surface catalog as the editor preview.
+  - Project run runner owns the active output episode id for `actions.jsonl` and `trace.jsonl`; DeliveryBot policy logging must use the runner-provided output context instead of the evaluation template id.
+  - Project `trace.jsonl` sampling is timer-driven from EpisodeMeasurementLogSubsystem once the runner starts the episode trace path, so short episodes still produce samples before terminal artifact write.
   - ScenarioRunnerSubsystem public start API accepts direct scenario_sample/profile run inputs; file-based RunQueue and ScenarioSetup start helpers are removed.
   - Scenario LLM authoring saves v2 `scenario` responses to user project `scenario.json`; it must not save or execute RunQueue files.
   - Scenario LLM prompt generate/load/run is scoped to the current `<UserProject>/scenario.json`; run launches create `<UserProject>/runs/<RunId>` snapshots through SimulatorLaunchSubsystem.

@@ -9,7 +9,11 @@ from agent.contract import (
     GoalLocation,
     GridCell,
     GridMap,
+    LidarObservation,
     LidarRay,
+    LidarRay1D,
+    LidarRay2D,
+    LidarRay3D,
     PolicyError,
     RobotState,
     ScenarioDecideRequest,
@@ -32,85 +36,242 @@ state = AgentState()
 policy = create_policy()
 
 
-# dict 데이터를 PolicyError 객체로 변환
+# dict 데이터를 PolicyError 객체로 변환한다.
 def parse_policy_error(data: dict | None) -> PolicyError | None:
     if not data:
         return None
 
     return PolicyError(
-        code=data.get("code", "UNKNOWN_ERROR"),
-        message=data.get("message", ""),
-        retryable=data.get("retryable", False),
+        code=str(data.get("code", "UNKNOWN_ERROR")),
+        message=str(data.get("message", "")),
+        retryable=bool(data.get("retryable", False)),
         details=data.get("details", {}),
     )
 
 
-# /scenario/start 요청 JSON을 ScenarioStartRequest로 변환
+# dict 데이터를 StartLocation 객체로 변환한다.
+def parse_start_location(data: dict) -> StartLocation:
+    return StartLocation(
+        x=float(data.get("x", 0.0)),
+        y=float(data.get("y", 0.0)),
+        z=float(data.get("z", 0.0)),
+        yawDegree=float(data.get("yawDegree", 0.0)),
+    )
+
+
+# dict 데이터를 GoalLocation 객체로 변환한다.
+def parse_goal_location(data: dict) -> GoalLocation:
+    return GoalLocation(
+        hasGoal=bool(data.get("hasGoal", False)),
+        x=float(data.get("x", 0.0)),
+        y=float(data.get("y", 0.0)),
+        z=float(data.get("z", 0.0)),
+    )
+
+
+# dict 데이터를 GridCell 객체로 변환한다.
+def parse_grid_cell(data: dict) -> GridCell:
+    return GridCell(
+        x=int(data.get("x", 0)),
+        y=int(data.get("y", 0)),
+        areaType=str(data.get("areaType", "Walkable")),
+        cost=float(data.get("cost", 1.0)),
+        blocked=bool(data.get("blocked", False)),
+        sourceCollisionProfile=str(data.get("sourceCollisionProfile", "")),
+    )
+
+
+# /scenario/start 요청 JSON을 ScenarioStartRequest로 변환한다.
 def parse_start(data: dict) -> ScenarioStartRequest:
     grid_data = data["grid"]
     goal_data = data["goal"]
     robot_spec = data.get("robotSpec") or data.get("vehicleSpec", {})
 
     return ScenarioStartRequest(
-        robotInstanceId=data["robotInstanceId"],
-        start=StartLocation(**data["start"]),
-        goal=GoalLocation(
-            hasGoal=goal_data["hasGoal"],
-            x=goal_data["x"],
-            y=goal_data["y"],
-            z=goal_data.get("z", 0.0),
-        ),
+        robotInstanceId=str(data["robotInstanceId"]),
+        start=parse_start_location(data["start"]),
+        goal=parse_goal_location(goal_data),
         grid=GridMap(
-            gridSizeX=grid_data["gridSizeX"],
-            gridSizeY=grid_data["gridSizeY"],
-            cellSizeCm=grid_data["cellSizeCm"],
-            cellCount=grid_data["cellCount"],
-            originCm=StartLocation(**grid_data["originCm"]),
+            gridSizeX=int(grid_data["gridSizeX"]),
+            gridSizeY=int(grid_data["gridSizeY"]),
+            cellSizeCm=float(grid_data["cellSizeCm"]),
+            cellCount=int(grid_data["cellCount"]),
+            originCm=parse_start_location(grid_data["originCm"]),
             cells=[
-                GridCell(**cell_data)
+                parse_grid_cell(cell_data)
                 for cell_data in grid_data.get("cells", [])
+                if isinstance(cell_data, dict)
             ],
         ),
         robotSpec=robot_spec,
         driveSpec=data.get("driveSpec", {}),
         lidarSpec=data.get("lidarSpec", {}),
+        artifactSpec=data.get("artifactSpec", {}),
         vehicleSpec=data.get("vehicleSpec", robot_spec),
         controlSpec=data.get("controlSpec", {}),
     )
 
 
-# /scenario/decide 요청 JSON을 ScenarioDecideRequest로 변환
+# LiDAR actor tag 입력을 list[str] 형태로 정리한다.
+def parse_actor_tags(data: dict) -> list[str]:
+    actor_tags = data.get("actorTags", [])
+
+    if not isinstance(actor_tags, list):
+        return []
+
+    return [str(actor_tag) for actor_tag in actor_tags]
+
+
+# Unreal vector JSON을 cm 단위 dict로 변환한다.
+def parse_vector_cm(data: object) -> dict[str, float] | None:
+    if not isinstance(data, dict):
+        return None
+
+    try:
+        return {
+            "x": float(data.get("x", 0.0)),
+            "y": float(data.get("y", 0.0)),
+            "z": float(data.get("z", 0.0)),
+        }
+    except (TypeError, ValueError):
+        return None
+
+
+# legacy 2D LiDAR ray 입력을 정책용 구조체로 변환한다.
+def parse_legacy_lidar_ray(data: dict) -> LidarRay:
+    return LidarRay(
+        hit=bool(data.get("hit", False)),
+        distanceM=float(data.get("distanceM", 0.0)),
+        rayIndex=data.get("rayIndex"),
+        rayYawDegree=float(data.get("rayYawDegree", data.get("yawDegree", 0.0))),
+        actorName=data.get("actorName"),
+        actorTags=parse_actor_tags(data),
+    )
+
+
+# 1D LiDAR ray 입력을 구조체로 변환한다.
+def parse_lidar_ray_1d(data: dict) -> LidarRay1D:
+    return LidarRay1D(
+        hit=bool(data.get("hit", False)),
+        distanceM=float(data.get("distanceM", 0.0)),
+        rayIndex=data.get("rayIndex"),
+        actorName=data.get("actorName"),
+        actorTags=parse_actor_tags(data),
+    )
+
+
+# 2D LiDAR ray 입력을 구조체로 변환한다.
+def parse_lidar_ray_2d(data: dict) -> LidarRay2D:
+    return LidarRay2D(
+        hit=bool(data.get("hit", False)),
+        distanceM=float(data.get("distanceM", 0.0)),
+        yawDegree=float(data.get("yawDegree", data.get("rayYawDegree", 0.0))),
+        rayIndex=data.get("rayIndex"),
+        actorName=data.get("actorName"),
+        actorTags=parse_actor_tags(data),
+    )
+
+
+# 3D LiDAR ray 입력을 구조체로 변환한다.
+def parse_lidar_ray_3d(data: dict) -> LidarRay3D:
+    return LidarRay3D(
+        hit=bool(data.get("hit", False)),
+        distanceM=float(data.get("distanceM", 0.0)),
+        yawDegree=float(data.get("yawDegree", data.get("rayYawDegree", 0.0))),
+        pitchDegree=float(data.get("pitchDegree", data.get("rayPitchDegree", 0.0))),
+        rayIndex=data.get("rayIndex"),
+        actorName=data.get("actorName"),
+        actorTags=parse_actor_tags(data),
+        hitLocationCm=parse_vector_cm(data.get("hitLocationCm")),
+    )
+
+
+# LiDAR ray 배열을 안전하게 파싱한다.
+def parse_lidar_ray_array(values: object, parse_ray) -> list:
+    if not isinstance(values, list):
+        return []
+
+    return [
+        parse_ray(ray_data)
+        for ray_data in values
+        if isinstance(ray_data, dict)
+    ]
+
+
+# typed LiDAR observation 입력을 구조체로 변환한다.
+def parse_lidar_observation(data: dict) -> LidarObservation:
+    lidar_data = data.get("lidar", {})
+
+    if not isinstance(lidar_data, dict):
+        lidar_data = {}
+
+    return LidarObservation(
+        mode=str(lidar_data.get("mode", "")),
+        sensorSequence=int(lidar_data.get("sensorSequence", data.get("sensorSequence", 0))),
+        sensorTimeSeconds=float(
+            lidar_data.get(
+                "sensorTimeSeconds",
+                data.get("sensorTimeSeconds", data.get("runTimeSeconds", 0.0)),
+            )
+        ),
+        rays1d=parse_lidar_ray_array(lidar_data.get("rays1d", []), parse_lidar_ray_1d),
+        rays2d=parse_lidar_ray_array(lidar_data.get("rays2d", []), parse_lidar_ray_2d),
+        rays3d=parse_lidar_ray_array(lidar_data.get("rays3d", []), parse_lidar_ray_3d),
+    )
+
+
+# dict 데이터를 RobotState 객체로 변환한다.
+def parse_robot_state(data: dict) -> RobotState:
+    collision_actor_tags = data.get("collisionActorTags", [])
+    if not isinstance(collision_actor_tags, list):
+        collision_actor_tags = []
+
+    return RobotState(
+        x=float(data.get("x", 0.0)),
+        y=float(data.get("y", 0.0)),
+        z=float(data.get("z", 0.0)),
+        yawDegree=float(data.get("yawDegree", 0.0)),
+        speedKmh=float(data.get("speedKmh", 0.0)),
+        bColliding=bool(data.get("bColliding", False)),
+        collisionActorName=str(data.get("collisionActorName", "")),
+        collisionActorTags=[str(actor_tag) for actor_tag in collision_actor_tags],
+    )
+
+
+# /scenario/decide 요청 JSON을 ScenarioDecideRequest로 변환한다.
 def parse_decide(data: dict) -> ScenarioDecideRequest:
+    lidar = parse_lidar_observation(data)
+
     return ScenarioDecideRequest(
-        sequence=data["sequence"],
-        runTimeSeconds=data["runTimeSeconds"],
-        robotState=RobotState(**data["robotState"]),
-        lidarRays=[
-            LidarRay(**ray_data)
-            for ray_data in data.get("lidarRays", [])
-        ],
+        sequence=int(data["sequence"]),
+        runTimeSeconds=float(data["runTimeSeconds"]),
+        sensorSequence=int(data.get("sensorSequence", lidar.sensorSequence)),
+        sensorTimeSeconds=float(data.get("sensorTimeSeconds", lidar.sensorTimeSeconds)),
+        robotState=parse_robot_state(data["robotState"]),
+        lidar=lidar,
+        lidarRays=parse_lidar_ray_array(data.get("lidarRays", []), parse_legacy_lidar_ray),
         observedObjects=data.get("observedObjects", []),
     )
 
 
-# /scenario/end 요청 JSON을 ScenarioEndRequest로 변환
+# /scenario/end 요청 JSON을 ScenarioEndRequest로 변환한다.
 def parse_end(data: dict) -> ScenarioEndRequest:
     return ScenarioEndRequest(
-        robotInstanceId=data["robotInstanceId"],
-        sequence=data["sequence"],
-        status=data["status"],
+        robotInstanceId=str(data["robotInstanceId"]),
+        sequence=int(data["sequence"]),
+        status=str(data["status"]),
         error=parse_policy_error(data.get("error")),
         metrics=data.get("metrics", {}),
         debug=data.get("debug", {}),
     )
 
 
-# dict를 JSON bytes로 변환
+# dict를 JSON bytes로 변환한다.
 def to_json_bytes(data: dict) -> bytes:
     return json.dumps(data, ensure_ascii=False).encode("utf-8")
 
 
-# Unreal이 PythonAgent 실행/재사용 여부를 확인할 때 쓰는 가장 가벼운 응답
+# Unreal이 PythonAgent 실행/재사용 여부를 확인할 때 쓰는 가벼운 응답
 def build_health_response() -> dict:
     return {
         "status": "ok",
@@ -145,9 +306,20 @@ def build_error_message(message: dict, code: str, error_message: str, reason: st
                 "code": code,
                 "message": error_message,
             },
-            "debug": {
+            "decision": {
+                "selectedPolicy": "PythonAgentServer",
                 "reason": reason,
             },
+            "path": {
+                "pathStatus": "empty",
+                "pathIndex": 0,
+                "pathLength": 0,
+                "targetPathIndex": 0,
+                "targetWorldPoint": None,
+                "pathWorldPoints": [],
+            },
+            "events": [],
+            "captures": [],
         },
     )
 
@@ -155,10 +327,11 @@ def build_error_message(message: dict, code: str, error_message: str, reason: st
 # HTTP 요청을 처리하는 handler
 class PythonAgentHandler(BaseHTTPRequestHandler):
 
+    # BaseHTTPRequestHandler 기본 로그 출력을 막는다.
     def log_message(self, format: str, *args) -> None:
         return
 
-    # GET 요청 처리
+    # GET 요청을 처리한다.
     def do_GET(self) -> None:
         request_path = self.get_request_path()
 
@@ -174,14 +347,24 @@ class PythonAgentHandler(BaseHTTPRequestHandler):
                     "code": "NOT_FOUND",
                     "message": request_path,
                 },
-                "debug": {
+                "decision": {
+                    "selectedPolicy": "PythonAgentServer",
                     "reason": "unknown_endpoint",
                 },
+                "path": {
+                    "pathStatus": "empty",
+                    "pathIndex": 0,
+                    "pathLength": 0,
+                    "targetPathIndex": 0,
+                    "targetWorldPoint": None,
+                    "pathWorldPoints": [],
+                },
+                "events": [],
+                "captures": [],
             },
         )
 
-
-    # POST 요청 처리
+    # POST 요청을 처리한다.
     def do_POST(self) -> None:
         request_json = {}
 
@@ -201,13 +384,11 @@ class PythonAgentHandler(BaseHTTPRequestHandler):
                 ),
             )
 
-
     # query string을 제외하고 endpoint path만 가져온다.
     def get_request_path(self) -> str:
         return urlparse(self.path).path
 
-
-    # HTTP body에서 JSON 읽기
+    # HTTP body에서 JSON을 읽는다.
     def read_json_body(self) -> dict:
         content_length = int(self.headers.get("Content-Length", "0"))
         raw_body = self.rfile.read(content_length)
@@ -216,7 +397,6 @@ class PythonAgentHandler(BaseHTTPRequestHandler):
             return {}
 
         return json.loads(raw_body.decode("utf-8"))
-
 
     # 요청 path에 따라 request를 처리하고 response를 envelope에 채운다.
     def route_request(self, request_json: dict) -> dict:
@@ -242,8 +422,7 @@ class PythonAgentHandler(BaseHTTPRequestHandler):
             "unknown_endpoint",
         )
 
-
-    # JSON 응답 쓰기
+    # JSON 응답을 쓴다.
     def write_json_response(self, status_code: int, data: dict) -> None:
         body = to_json_bytes(data)
 
@@ -254,11 +433,12 @@ class PythonAgentHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+# PythonAgent 전용 HTTPServer 설정
 class PythonAgentServer(HTTPServer):
     allow_reuse_address = True
 
 
-# 명령줄 인자를 읽어 서버 실행 옵션으로 변환
+# 명령줄 인자를 서버 실행 옵션으로 변환한다.
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the DeliveryBot Python Agent HTTP server.")
     parser.add_argument("--host", default="127.0.0.1")
@@ -268,7 +448,7 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# HTTP 서버 실행
+# HTTP 서버를 실행한다.
 def run_server(
     host: str = "127.0.0.1",
     port: int = 8000,
@@ -284,7 +464,7 @@ def run_server(
     server.serve_forever()
 
 
-# python server.py로 실행했을 때 서버 시작
+# python server.py로 실행했을 때 서버를 시작한다.
 if __name__ == "__main__":
     arguments = parse_arguments()
     run_server(

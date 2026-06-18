@@ -29,7 +29,7 @@ DeliveryBotSetup JSON이 담당하는 값:
 | 범위 | 예시 |
 | --- | --- |
 | 주행 속도 튜닝 | `robot.drive.max_speed_kmh`, `robot.drive.slowdown_speed_range_kmh` |
-| 라이다 반응/표시 튜닝 | `robot.lidar.scan_range_m`, `robot.lidar.angle_step_degree`, `robot.lidar.stop_distance_m`, `robot.lidar.near_obstacle_warning_distance_m`, `robot.lidar.slow_down_distance_m` |
+| 라이다 반응/표시 튜닝 | `robot.lidar.scan_range_m`, `robot.lidar.angle_step_degree`, `robot.lidar.stop_distance_m`, `robot.lidar.obstacle_warning_distance_m`, `robot.lidar.slow_down_distance_m` |
 | 시작 정책 선택 | `robot.policy.startup_policy_spec_file_name` |
 
 JSON에서 생략한 값은 C++ 구조체 기본값으로 fallback된다.
@@ -86,8 +86,8 @@ JSON에서 생략한 값은 C++ 구조체 기본값으로 fallback된다.
   "scan_range_m": 5.0,
   "angle_step_degree": 5.0,
   "stop_distance_m": 1.5,
-  "near_obstacle_warning_distance_m": 2.0,
-  "slow_down_distance_m": 3.5
+  "obstacle_warning_distance_m": 2.5,
+  "slow_down_distance_m": 5.0
 }
 ```
 
@@ -95,16 +95,20 @@ JSON에서 생략한 값은 C++ 구조체 기본값으로 fallback된다.
 | --- | --- | --- | --- | --- | --- |
 | `scan_range_m` | 선택 | number, meter | `5.0` | `LidarSensorConfigInfo.ScanRangeM` | 라이다가 장애물을 탐지할 최대 거리. |
 | `angle_step_degree` | 선택 | number, degree | `2.0` | `LidarSensorConfigInfo.AngleStepDegree` | 라이다 레이 간격. 작을수록 촘촘하게 감지한다. |
-| `stop_distance_m` | 선택 | number, meter | `1.2` | `LidarSensorConfigInfo.StopDistanceM` | 전방 장애물이 이 거리 안에 있으면 정지한다. |
-| `near_obstacle_warning_distance_m` | 선택 | number, meter | `2.0` | `LidarSensorConfigInfo.NearObstacleWarningDistanceM` | cyan debug ring으로 표시되는 경고 반경. 공식 near-miss 평가는 아니다. |
-| `slow_down_distance_m` | 선택 | number, meter | `3.5` | `LidarSensorConfigInfo.SlowDownDistanceM` | 전방 장애물이 이 거리 안에 있으면 감속한다. |
+| `stop_distance_m` | 선택 | number, meter | `1.5` | `LidarSensorConfigInfo.StopDistanceM` | 전방 장애물이 이 거리 안에 있으면 정지한다. |
+| `obstacle_warning_distance_m` | 선택 | number, meter | `2.5` | `LidarSensorConfigInfo.ObstacleWarningDistanceM` | cyan debug ring으로 표시되는 장애물 경고/재경로 후보 반경. 공식 near-miss 평가는 아니다. |
+| `slow_down_distance_m` | 선택 | number, meter | `5.0` | `LidarSensorConfigInfo.SlowDownDistanceM` | 전방 장애물이 이 거리 안에 있으면 감속한다. |
+| `collision_stop_half_angle_degree` | 선택 | number, degree | `8.0` | `LidarSensorConfigInfo.CollisionStopHalfAngleDegree` | 이 각도 안의 가까운 장애물을 collision stop 후보로 본다. |
+| `collision_stop_distance_m` | 선택 | number, meter | `0.45` | `LidarSensorConfigInfo.CollisionStopDistanceM` | 각도와 무관하게 초근접 충돌 정지로 볼 거리. |
 | `draw_debug` | 선택 | bool | `true` | `LidarSensorConfigInfo.bDrawDebug` | lidar debug draw 여부. |
-| `draw_near_obstacle_warning_debug` | 선택 | bool | `true` | `LidarSensorConfigInfo.bDrawNearObstacleWarningDebug` | near obstacle warning 반경을 cyan ring으로 표시할지 여부. |
+| `draw_obstacle_warning_debug` | 선택 | bool | `true` | `LidarSensorConfigInfo.bDrawObstacleWarningDebug` | obstacle warning 반경을 cyan ring으로 표시할지 여부. |
 | `sensor_height_m` | 선택 | number, meter | `0.07` | `LidarSensorConfigInfo.SensorHeightM` | 라이다 ray 시작 높이. |
 | `front_half_angle_degree` | 선택 | number, degree | `20.0` | `LidarSensorConfigInfo.FrontHalfAngleDegree` | 전방 물체로 분류할 좌우 half angle. |
-| `store_missed_rays` | 선택 | bool | `false` | `LidarSensorConfigInfo.bStoreMissedRays` | hit하지 않은 ray도 scan에 저장할지 여부. |
+| `store_missed_rays` | 사용 안 함 | bool | `true` | 고정값 | Python 정책 입력 안정성을 위해 miss ray도 항상 scan에 저장한다. |
 | `trace_channel` | 선택 | string/number | `visibility` | `LidarSensorConfigInfo.TraceChannel` | lidar line trace channel. |
 | `ignore_tags` | 선택 | string array | `["NoCollision"]` | `LidarSensorConfigInfo.IgnoreTags` | lidar가 무시할 actor tag 목록. |
+
+호환 alias로 `near_obstacle_warning_distance_m`, `near_miss_distance_m`, `draw_near_obstacle_warning_debug`, `draw_near_miss_debug`도 읽지만, 새 문서와 샘플에서는 `obstacle_warning_*` 이름을 우선 사용한다.
 
 ## 검증 규칙
 
@@ -117,10 +121,12 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
 | `scan_range_m` | `0` 이상 |
 | `angle_step_degree` | 최소 `1.0` |
 | `stop_distance_m` | `0` 이상 |
-| `near_obstacle_warning_distance_m` | `stop_distance_m + 0.1` 이상 |
-| `slow_down_distance_m` | `near_obstacle_warning_distance_m + 0.1` 이상 |
+| `obstacle_warning_distance_m` | `stop_distance_m + 0.1` 이상 |
+| `slow_down_distance_m` | `obstacle_warning_distance_m + 0.1` 이상 |
 | `speed_limit_brake`, `stop_brake_input` | `0`-`1` |
 | `front_half_angle_degree` | `0`-`180` |
+| `collision_stop_half_angle_degree` | `0`-`front_half_angle_degree` |
+| `collision_stop_distance_m` | `0`-`slow_down_distance_m` |
 
 ## Pair 실행 예시
 
@@ -164,8 +170,8 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
       "scan_range_m": 5.0,
       "angle_step_degree": 5.0,
       "stop_distance_m": 1.5,
-      "near_obstacle_warning_distance_m": 2.0,
-      "slow_down_distance_m": 3.5
+      "obstacle_warning_distance_m": 2.5,
+      "slow_down_distance_m": 5.0
     }
   }
 }

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "DeliveryBotLidarSensorInfo.generated.h"
 
+// 사용할 Ray 종류
 UENUM(BlueprintType)
 enum class EDeliveryBotLidarModeType : uint8
 {
@@ -12,6 +13,15 @@ enum class EDeliveryBotLidarModeType : uint8
 	OneDAndTwoD,
 	TwoDAndThreeD,
 	All
+};
+
+// LiDAR ray가 어떤 scan 방식에서 생성됐는지 구분한다.(즉, Ray 구분)
+UENUM(BlueprintType)
+enum class EDeliveryBotLidarRayDimensionType : uint8
+{
+	OneD,
+	TwoD,
+	ThreeD
 };
 
 USTRUCT(BlueprintType)
@@ -25,7 +35,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bDrawObstacleWarningDebug{ true };
-
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float ScanRangeM{ 5.f };
 
@@ -38,8 +48,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float FrontHalfAngleDegree{ 20.f };
 	
+	// 3D LiDAR의 아래쪽 수직 스캔 각도.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bStoreMissedRays{ false };
+	float VerticalMinDegree{ -10.f };
+
+	// 3D LiDAR의 위쪽 수직 스캔 각도.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float VerticalMaxDegree{ 10.f };
+
+	// 3D LiDAR의 수직 ray 간격.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float VerticalStepDegree{ 5.f };
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bStoreMissedRays{ true };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float StopDistanceM{ 1.5f };
@@ -64,7 +86,11 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> IgnoreTags{ TEXT("NoCollision") };
-	
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ScanRateHz{ 10.f };
+
+
 };
 
 USTRUCT(BlueprintType)
@@ -73,6 +99,10 @@ struct FDeliveryBotLidarRayInfo
 	GENERATED_BODY()
 
 public:
+	// Python 전송 시 1D/2D/3D 배열 분리에 사용한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EDeliveryBotLidarRayDimensionType RayDimensionType{ EDeliveryBotLidarRayDimensionType::TwoD }; 
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bHit{ false };
 
@@ -81,6 +111,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float RayYawDegree{ 0.f };
+
+	// 로봇 기준 ray의 수직 각도.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float RayPitchDegree{ 0.f };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float DistanceM{ 0.f };
@@ -115,6 +149,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FDeliveryBotLidarRayInfo> RayInfos{};
+
+	// 이 LiDAR scan이 만들어진 고정 시뮬레이션 시간.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SimulationTimeSeconds{ 0.f };
 };
 
 USTRUCT(BlueprintType)

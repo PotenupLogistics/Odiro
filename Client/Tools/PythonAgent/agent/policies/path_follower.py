@@ -2,6 +2,7 @@ import math
 
 from ..action import BotAction, clamp, drive_action, soft_stop_action, stop_action
 from ..contract import GridMap, RobotState, ScenarioDecideRequest
+from ..lidar_selector import is_policy_lidar_one_dimensional, select_policy_lidar_rays_2d
 from ..state import AgentState
 
 
@@ -18,7 +19,7 @@ class PathFollower:
         slow_down_speed_kmh: float = 1.0,
         front_angle_degree: float = 25.0,
         stop_distance_m: float = 1.4,
-        obstacle_warning_distance_m: float = 2.0,
+        obstacle_warning_distance_m: float = 2.5,
         look_ahead_distance_m: float = 1.2,
         min_look_ahead_distance_m: float = 0.75,
         max_look_ahead_distance_m: float = 2.4,
@@ -37,6 +38,7 @@ class PathFollower:
         collision_stop_distance_m: float = 0.45,
         obstacle_turn_slowdown_steering_ratio: float = 0.6,
         obstacle_turn_slowdown_max_reduction: float = 0.3,
+        path_corridor_half_width_m: float = 0.65,
         goal_slow_down_distance_m: float = 1.8,
         goal_approach_speed_kmh: float = 0.7,
         goal_approach_look_ahead_distance_m: float = 0.7,
@@ -68,6 +70,7 @@ class PathFollower:
         self.collisionStopDistanceM = collision_stop_distance_m
         self.obstacleTurnSlowdownSteeringRatio = obstacle_turn_slowdown_steering_ratio
         self.obstacleTurnSlowdownMaxReduction = obstacle_turn_slowdown_max_reduction
+        self.pathCorridorHalfWidthM = path_corridor_half_width_m
         self.goalSlowDownDistanceM = goal_slow_down_distance_m
         self.goalApproachSpeedKmh = goal_approach_speed_kmh
         self.goalApproachLookAheadDistanceM = goal_approach_look_ahead_distance_m
@@ -119,6 +122,7 @@ class PathFollower:
         self.obstacleTurnSlowdownMaxReduction = float(
             control_spec.get("obstacleTurnSlowdownMaxReduction", self.obstacleTurnSlowdownMaxReduction)
         )
+        self.pathCorridorHalfWidthM = self.get_path_corridor_half_width_m(control_spec, robot_spec)
         self.goalSlowDownDistanceM = float(
             control_spec.get("goalSlowDownDistanceM", self.goalSlowDownDistanceM)
         )
@@ -137,7 +141,7 @@ class PathFollower:
             self.bUseExactGoalAsFinalPoint,
         )
         self.stopDistanceM = float(lidar_spec.get("stopDistanceM", self.stopDistanceM))
-        self.obstacleWarningDistanceM = float(
+        obstacle_warning_distance_m = float(
             lidar_spec.get(
                 "obstacleWarningDistanceM",
                 lidar_spec.get(
@@ -152,6 +156,13 @@ class PathFollower:
                 ),
             )
         )
+        near_object_distance_m = float(
+            control_spec.get(
+                "nearObjectDistanceM",
+                lidar_spec.get("nearObjectDistanceM", obstacle_warning_distance_m),
+            )
+        )
+        self.obstacleWarningDistanceM = max(obstacle_warning_distance_m, near_object_distance_m)
         self.slowDownDistanceM = max(
             self.obstacleWarningDistanceM + 0.1,
             float(lidar_spec.get("slowDownDistanceM", self.slowDownDistanceM)),
@@ -262,7 +273,7 @@ class PathFollower:
 
         speed_kmh, reason = self.get_target_speed_kmh(request, state)
         steering = self.calculate_steering(request.robotState, target_x, target_y)
-        steering = self.apply_front_obstacle_avoidance(request, steering)
+        steering = self.apply_front_obstacle_avoidance(request, state, steering)
         preview_steering = self.preview_smooth_steering(state, steering)
         preview_speed_kmh = self.limit_speed_by_steering(speed_kmh, preview_steering)
         preview_speed_kmh = self.limit_obstacle_slowdown_speed_by_steering(
@@ -296,15 +307,23 @@ class PathFollower:
                 target_y,
             )
             steering = self.calculate_steering(request.robotState, target_x, target_y)
-            steering = self.apply_front_obstacle_avoidance(request, steering)
+            steering = self.apply_front_obstacle_avoidance(request, state, steering)
 
         steering = self.smooth_steering(state, steering)
         speed_kmh = self.limit_speed_by_steering(speed_kmh, steering)
         speed_kmh = self.limit_obstacle_slowdown_speed_by_steering(speed_kmh, steering, reason)
         speed_kmh = self.limit_speed_by_goal_approach(speed_kmh, request.robotState, state)
 
-        if reason == "front_obstacle_slowdown":
+        if reason in {"front_obstacle_slowdown", "front_obstacle_caution_slowdown"}:
             state.slowdownCount += 1
+
+        if reason == "front_obstacle_soft_stop":
+            state.bRepathRequested = True
+            state.lastSteering = steering
+            return soft_stop_action(
+                brake=self.softStopBrake,
+                steering=state.lastSteering * 0.5,
+            ), reason
 
         return drive_action(
             steering=steering,
@@ -824,7 +843,9 @@ class PathFollower:
         state.lastObstacleWarningSource = source
 
     def record_lidar_obstacle_warnings(self, request: ScenarioDecideRequest, state: AgentState) -> None:
-        for ray in request.lidarRays:
+        lidar_rays = select_policy_lidar_rays_2d(request)
+
+        for ray in lidar_rays:
             if not self.is_lidar_obstacle_warning_ray(ray):
                 continue
 
@@ -1044,8 +1065,16 @@ class PathFollower:
         return max(min(self.minTurnSpeedKmh, speed_kmh), reduced_speed_kmh)
 
     # 전방 장애물의 반대 방향으로 조향 보정값을 더한다.
-    def apply_front_obstacle_avoidance(self, request: ScenarioDecideRequest, steering: float) -> float:
-        front_ray = self.find_nearest_front_hit_ray(request)
+    def apply_front_obstacle_avoidance(
+        self,
+        request: ScenarioDecideRequest,
+        state: AgentState,
+        steering: float,
+    ) -> float:
+        if is_policy_lidar_one_dimensional(request):
+            return steering
+
+        front_ray = self.find_nearest_path_blocking_front_hit_ray(request, state)
         if front_ray is None or front_ray.distanceM > self.slowDownDistanceM:
             return steering
 
@@ -1062,16 +1091,17 @@ class PathFollower:
 
     # 전방 장애물 거리 기준으로 목표 속도와 reason을 결정한다.
     def get_target_speed_kmh(self, request: ScenarioDecideRequest, state: AgentState) -> tuple[float, str]:
-        front_ray = self.find_nearest_front_hit_ray(request)
+        front_ray = self.find_nearest_path_blocking_front_hit_ray(request, state)
         if front_ray is None or front_ray.distanceM > self.slowDownDistanceM:
             return self.followSpeedKmh, "follow_path"
 
+        if front_ray.distanceM <= self.stopDistanceM:
+            self.record_lidar_obstacle_warning_once(state, front_ray)
+            return 0.0, "front_obstacle_soft_stop"
+
         if not self.is_collision_stop_ray(front_ray) and front_ray.distanceM <= self.obstacleWarningDistanceM:
             self.record_lidar_obstacle_warning_once(state, front_ray)
-            return self.followSpeedKmh, "front_obstacle_warning_pass"
-
-        if front_ray.distanceM <= self.stopDistanceM:
-            return 0.0, "front_obstacle_soft_stop"
+            return min(self.slowDownSpeedKmh, self.followSpeedKmh), "front_obstacle_caution_slowdown"
 
         slowdown_range_m = max(self.slowDownDistanceM - self.stopDistanceM, 0.1)
         distance_ratio = clamp((front_ray.distanceM - self.stopDistanceM) / slowdown_range_m, 0.0, 1.0)
@@ -1081,15 +1111,38 @@ class PathFollower:
 
         return max(0.0, target_speed_kmh), "front_obstacle_slowdown"
 
+    # 현재 path corridor 위에 있는 전방 hit ray 중 가장 가까운 값을 찾는다.
+    def find_nearest_path_blocking_front_hit_ray(
+        self,
+        request: ScenarioDecideRequest,
+        state: AgentState,
+    ):
+        return self.find_nearest_front_hit_ray(
+            request=request,
+            state=state,
+            bRequirePathCorridor=True,
+        )
+
     # 전방 각도 안에서 가장 가까운 hit ray를 찾는다.
-    def find_nearest_front_hit_ray(self, request: ScenarioDecideRequest):
+    def find_nearest_front_hit_ray(
+        self,
+        request: ScenarioDecideRequest,
+        state: AgentState | None = None,
+        bRequirePathCorridor: bool = False,
+    ):
+        lidar_rays = select_policy_lidar_rays_2d(request)
         front_rays = [
             ray
-            for ray in request.lidarRays
+            for ray in lidar_rays
             if (
                 ray.hit
                 and not self.is_ignored_lidar_policy_ray(ray)
                 and abs(self.normalize_angle_degree(ray.rayYawDegree)) <= self.frontAngleDegree
+                and (
+                    not bRequirePathCorridor
+                    or state is None
+                    or self.is_ray_on_current_path_corridor(request, state, ray)
+                )
             )
         ]
 
@@ -1102,9 +1155,98 @@ class PathFollower:
         yaw_degree = abs(self.normalize_angle_degree(ray.rayYawDegree))
         return yaw_degree <= self.collisionStopHalfAngleDegree or ray.distanceM <= self.collisionStopDistanceM
 
+    # LiDAR hit이 현재 추종 경로 복도 위에 있는지 확인한다.
+    def is_ray_on_current_path_corridor(
+        self,
+        request: ScenarioDecideRequest,
+        state: AgentState,
+        ray,
+    ) -> bool:
+        if is_policy_lidar_one_dimensional(request):
+            return True
+
+        path_points = self.get_current_follow_path_points(state)
+        if not path_points:
+            return True
+
+        hit_x, hit_y = self.get_ray_hit_world_location(request, ray)
+        start_index = min(max(state.targetPathIndex - 1, 0), max(len(path_points) - 1, 0))
+        distance_cm = self.get_distance_to_path_points_cm(
+            x=hit_x,
+            y=hit_y,
+            path_points=path_points[start_index:],
+        )
+
+        return distance_cm <= self.pathCorridorHalfWidthM * 100.0
+
+    # 현재 PathFollower가 추종 중인 world path point 목록을 가져온다.
+    def get_current_follow_path_points(self, state: AgentState) -> list[tuple[float, float]]:
+        if state.followPathWorldPoints:
+            return [
+                (float(point.get("x", 0.0)), float(point.get("y", 0.0)))
+                for point in state.followPathWorldPoints
+            ]
+
+        return self.get_follow_path_points(state)
+
+    # LiDAR ray 거리와 각도로 world hit 위치를 계산한다.
+    def get_ray_hit_world_location(
+        self,
+        request: ScenarioDecideRequest,
+        ray,
+    ) -> tuple[float, float]:
+        world_yaw_degree = request.robotState.yawDegree + self.normalize_angle_degree(ray.rayYawDegree)
+        world_yaw_radian = math.radians(world_yaw_degree)
+        distance_cm = ray.distanceM * 100.0
+
+        return (
+            request.robotState.x + math.cos(world_yaw_radian) * distance_cm,
+            request.robotState.y + math.sin(world_yaw_radian) * distance_cm,
+        )
+
+    # 점과 path point 목록 사이의 최소 거리를 계산한다.
+    def get_distance_to_path_points_cm(
+        self,
+        x: float,
+        y: float,
+        path_points: list[tuple[float, float]],
+    ) -> float:
+        if not path_points:
+            return 0.0
+
+        if len(path_points) == 1:
+            return self.get_distance_cm(x, y, path_points[0][0], path_points[0][1])
+
+        min_distance_cm = float("inf")
+        for index in range(len(path_points) - 1):
+            min_distance_cm = min(
+                min_distance_cm,
+                self.get_distance_to_segment_cm(
+                    x,
+                    y,
+                    path_points[index][0],
+                    path_points[index][1],
+                    path_points[index + 1][0],
+                    path_points[index + 1][1],
+                ),
+            )
+
+        return min_distance_cm
+
     # 각도를 -180도에서 180도 사이로 정규화한다.
     def normalize_angle_degree(self, angle_degree: float) -> float:
         return (angle_degree + 180.0) % 360.0 - 180.0
+
+    # path corridor 폭을 설정값 또는 로봇 폭 기준으로 계산한다.
+    def get_path_corridor_half_width_m(self, control_spec: dict, robot_spec: dict) -> float:
+        if "pathCorridorHalfWidthM" in control_spec:
+            return max(0.1, float(control_spec["pathCorridorHalfWidthM"]))
+
+        body_width_cm = float(robot_spec.get("bodyWidthCm", 0.0))
+        if body_width_cm > 0.0:
+            return max(0.25, (body_width_cm * 0.5 / 100.0) + 0.25)
+
+        return max(0.1, self.pathCorridorHalfWidthM)
 
     def get_bool_config(self, config: dict, key: str, default_value: bool) -> bool:
         value = config.get(key, default_value)

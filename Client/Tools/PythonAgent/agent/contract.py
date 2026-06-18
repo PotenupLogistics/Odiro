@@ -2,15 +2,16 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-
+# Policy error payload returned to Unreal.
 @dataclass
-class PolicyError:   
-    code: str     # 에러 구분 
-    message: str  # 에러 설명
-    retryable: bool = False  # 다시 요청 시도 가능한 에러인가?
-    details: dict[str, Any] = field(default_factory=dict)  # 디버그 정보 
+class PolicyError:
+    code: str
+    message: str
+    retryable: bool = False
+    details: dict[str, Any] = field(default_factory=dict)
 
-#  Transform 정보
+
+# Unreal world location and yaw.
 @dataclass
 class StartLocation:
     x: float
@@ -18,39 +19,39 @@ class StartLocation:
     z: float = 0.0
     yawDegree: float = 0.0
 
-#  목표 지점
-@dataclass
+
+# Goal location for route planning.
 @dataclass
 class GoalLocation:
-    hasGoal: bool   # 목표가 존재하는가
+    hasGoal: bool
     x: float
     y: float
     z: float = 0.0
 
 
-#  Grid 한 칸
+# Navigation grid cell state.
 @dataclass
 class GridCell:
     x: int
     y: int
-    areaType: str = "Walkable"  
-    cost: float = 1.0 # 길찾기 비용
-    blocked: bool = False 
-    sourceCollisionProfile: str = ""   # 콜리전 프로필 정보
+    areaType: str = "Walkable"
+    cost: float = 1.0
+    blocked: bool = False
+    sourceCollisionProfile: str = ""
 
 
-#  Grid 전체
+# Navigation grid payload.
 @dataclass
 class GridMap:
-    gridSizeX: int      # X축 셀 개수
-    gridSizeY: int      # Y축 셀 개수
-    cellSizeCm: float   # 셀 크기
-    cellCount: int      # 셀 개수
-    originCm: StartLocation      # 그리드의 원점 위치
-    cells: list[GridCell]   # 셀 목록
+    gridSizeX: int
+    gridSizeY: int
+    cellSizeCm: float
+    cellCount: int
+    originCm: StartLocation
+    cells: list[GridCell]
 
 
-#  decide 단계에서 전달하는 로봇의 상태
+# Robot state sent with every decide request.
 @dataclass
 class RobotState:
     x: float
@@ -62,45 +63,97 @@ class RobotState:
     collisionActorName: str = ""
     collisionActorTags: list[str] = field(default_factory=list)
 
-# LiDAR에서 발사한 Ray 하나의 관측 결과
+
+# Legacy 2D LiDAR ray used by current driving policies.
 @dataclass
 class LidarRay:
-    hit: bool  # 부딪혔는가
+    hit: bool
     distanceM: float
-    rayIndex: int | None = None     # 인덱스가 없을 수 있다.
-    rayYawDegree: float = 0.0       # 로봇의 방향 기준으로 Ray의 로컬 방향
-    actorName: str | None = None    # 맞은 액터 이름
-    actorTags: list[str] = field(default_factory=list)  # 맞은 액터의 태그 목록
+    rayIndex: int | None = None
+    rayYawDegree: float = 0.0
+    actorName: str | None = None
+    actorTags: list[str] = field(default_factory=list)
 
-# Scenario 시작 시 초기 설정
+
+# 1D LiDAR ray input.
+@dataclass
+class LidarRay1D:
+    hit: bool
+    distanceM: float
+    rayIndex: int | None = None
+    actorName: str | None = None
+    actorTags: list[str] = field(default_factory=list)
+
+
+# 2D LiDAR ray input.
+@dataclass
+class LidarRay2D:
+    hit: bool
+    distanceM: float
+    yawDegree: float = 0.0
+    rayIndex: int | None = None
+    actorName: str | None = None
+    actorTags: list[str] = field(default_factory=list)
+
+
+# 3D LiDAR ray input.
+@dataclass
+class LidarRay3D:
+    hit: bool
+    distanceM: float
+    yawDegree: float = 0.0
+    pitchDegree: float = 0.0
+    rayIndex: int | None = None
+    actorName: str | None = None
+    actorTags: list[str] = field(default_factory=list)
+    hitLocationCm: dict[str, float] | None = None
+
+
+# Typed LiDAR observation grouped by scan dimension.
+@dataclass
+class LidarObservation:
+    mode: str = ""
+    sensorSequence: int = 0
+    sensorTimeSeconds: float = 0.0
+    rays1d: list[LidarRay1D] = field(default_factory=list)
+    rays2d: list[LidarRay2D] = field(default_factory=list)
+    rays3d: list[LidarRay3D] = field(default_factory=list)
+
+
+# Scenario start request.
 @dataclass
 class ScenarioStartRequest:
-    robotInstanceId: str# 로봇 ID (로봇 여러 개인 경우 대비)
+    robotInstanceId: str
     start: StartLocation
     goal: GoalLocation
     grid: GridMap
     robotSpec: dict[str, Any] = field(default_factory=dict)
     driveSpec: dict[str, Any] = field(default_factory=dict)
     lidarSpec: dict[str, Any] = field(default_factory=dict)
-    vehicleSpec: dict[str, Any] = field(default_factory=dict)  # legacy: use robotSpec instead
-    controlSpec: dict[str, Any] = field(default_factory=dict)  # legacy: Python-side policy config now owns these values
+    artifactSpec: dict[str, Any] = field(default_factory=dict)  # Python capture artifact 저장 위치와 참조 기준
+    vehicleSpec: dict[str, Any] = field(default_factory=dict)
+    controlSpec: dict[str, Any] = field(default_factory=dict)
 
 
-# decide 요청 데이터, 즉, observation 값
+# Scenario decide request.
 @dataclass
 class ScenarioDecideRequest:
-    sequence: int           # 요청 들어온 순서
-    runTimeSeconds: float   # 플레이 시간 
-    robotState: RobotState  # 현재 로봇 상태
-    lidarRays: list[LidarRay] = field(default_factory=list) # Ray 목록
-    observedObjects: list[dict[str, Any]] = field(default_factory=list) # 관측된 Actor 목록
+    sequence: int
+    runTimeSeconds: float
+    robotState: RobotState
+    sensorSequence: int = 0
+    sensorTimeSeconds: float = 0.0
+    lidar: LidarObservation = field(default_factory=LidarObservation)
+    lidarRays: list[LidarRay] = field(default_factory=list)
+    observedObjects: list[dict[str, Any]] = field(default_factory=list)
 
 
+# Scenario end request.
 @dataclass
 class ScenarioEndRequest:
-    robotInstanceId: str# 로봇 ID (로봇 여러 개인 경우 대비)
-    sequence: int       # 마지막 요청 번호
-    status: str         # 종료 상태. 보통 ok 또는 error
-    error: PolicyError | None = None   # 실패한 경우 실패 이유
-    metrics: dict[str, Any] = field(default_factory=dict)   # 주행 시간, 정지 횟수, near miss 같은 결과 지표
-    debug: dict[str, Any] = field(default_factory=dict)     # 종료 시점의 디버그 정보
+    robotInstanceId: str
+    sequence: int
+    status: str
+    error: PolicyError | None = None
+    metrics: dict[str, Any] = field(default_factory=dict)
+    debug: dict[str, Any] = field(default_factory=dict)

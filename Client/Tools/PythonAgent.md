@@ -52,8 +52,8 @@ DeliveryBot이 소환되거나 episode가 시작될 때 최초 한 번 실행한
 
 전달하는 대표 데이터:
 
-- 로봇 스펙: 최대 속도, 후진 최대 속도 등
-- 정책 판단에 필요한 값: 감속 거리, 정지 거리, 제한 시간 등
+- 로봇 스펙: 최대 속도, 본체 크기 등
+- 정책 판단에 필요한 값: 감속 거리, 정지 거리, NearObject 거리 등
 - 길찾기에 필요한 정보: Grid, Start Location, Goal Location
 - LiDAR 스펙 정보
 
@@ -68,7 +68,8 @@ DeliveryBot이 움직이기 시작하면 Goal 도착 또는 실패 전까지 반
 - 로봇 상태 정보
 - 관측된 장애물/객체 정보
 
-Python은 현재 observation을 보고 Stop, RePath, SlowDown, PathFollower 순서로 판단한다.
+Python은 현재 observation을 보고 RePath, PathFollower 순서로 판단한다.
+RePath는 필요할 때 path만 갱신하고, 실제 steering/speed는 PathFollower가 현재 path를 기준으로 만든다.
 
 ### 3. End
 
@@ -129,8 +130,7 @@ http://127.0.0.1:8000/scenario/start
     "z": 0
   },
   "vehicleSpec": {
-    "maxSpeedKmh": 10,
-    "maxReverseSpeedKmh": 3
+    "maxSpeedKmh": 10
   },
   "lidarSpec": {
     "mode": "TwoD",
@@ -337,6 +337,7 @@ Tools/PythonAgent/
   agent/
     __init__.py
     contract.py
+    lidar_selector.py
     user_agent.py
     state.py
     action.py
@@ -358,6 +359,7 @@ Tools/PythonAgent/
 | `server.py` | HTTP 서버. 사용자가 수정하지 않는 영역 |
 | `agent/__init__.py` | `agent` 패키지의 대표 진입점. 필요하면 `user_agent.py`의 생성 함수를 re-export한다. |
 | `agent/contract.py` | Request/Response 데이터 구조 |
+| `agent/lidar_selector.py` | 1D/2D/3D LiDAR 입력 중 Python 정책이 사용할 ray 선택 |
 | `agent/user_agent.py` | Python에서 작성한 정책 동작의 기준 파일. BotPolicy 생성과 start/decide/end 공통 흐름 |
 | `agent/state.py` | episode/path/policy 상태 |
 | `agent/action.py` | Action 생성 유틸 |
@@ -368,6 +370,23 @@ Tools/PythonAgent/
 | `agent/policies/slowdown_policy.py` | 감속 판단 |
 | `agent/policies/repath_policy.py` | 재경로 탐색 판단 |
 | `agent/policies/path_follower.py` | 경로를 action으로 변환 |
+
+## LiDAR 정책 입력 규칙
+
+Python 정책은 Unreal이 보낸 typed LiDAR 모드를 기준으로 입력을 고른다.
+
+| 모드 | 정책 입력 |
+|---|---|
+| `OneD` | `lidar.rays1d`만 사용한다. 전방 거리로 NearObject와 정지/감속을 판단한다. |
+| `TwoD` | `lidar.rays2d`만 사용한다. 정책 판단과 재경로 기준은 2D 수평 ray다. |
+| `ThreeD` | `lidar.rays3d` 중 pitch 0도에 가장 가까운 horizontal slice만 사용한다. |
+| `OneDAndTwoD`, `TwoDAndThreeD` | 2D가 포함된 모드는 2D를 정책 기준으로 사용한다. |
+| `All` | 2D, 3D horizontal, 1D 순서로 사용할 수 있는 입력을 고른다. |
+
+`NearObject`는 Python 정책이 위험 장애물로 판단하는 거리다.
+`NearMiss`는 평가/분석용 개념이므로 정책 판단 기준인 NearObject와 분리한다.
+`obstacleWarningDistanceM`과 `nearObjectDistanceM`이 둘 다 있으면 Python 예시 정책은 더 긴 값을 공통 기준으로 사용한다.
+PathFollower는 현재 path corridor 위의 LiDAR hit만 감속/정지 판단에 사용해서, 새로 찾은 경로를 따라가는 동작을 우선한다.
 
 ## 구현 원칙
 
@@ -401,8 +420,8 @@ Tools/PythonAgent/
 - Python이 A* 경로를 생성한다.
 - Unreal이 `/scenario/decide`를 반복 호출한다.
 - Python이 `steering`, `targetSpeedKmh`, `brake`, `direction`을 반환한다.
-- 장애물이 가까우면 `SlowDownPolicy` 또는 `StopPolicy`가 선택된다.
-- 현재 경로가 막히면 `RePathPolicy`가 A*를 다시 실행한다.
+- 장애물이 현재 path corridor 위에서 가까우면 `PathFollower`가 감속 또는 정지한다.
+- NearObject 거리 안의 장애물이 현재 경로를 막으면 `RePathPolicy`가 A*를 다시 실행한다.
 - A* 실패 시 Python은 `PATH_NOT_FOUND` 오류를 반환한다.
 - episode가 끝나면 Unreal이 `/scenario/end`를 호출한다.
 - Unreal은 Python Action을 임의로 보정하지 않는다.

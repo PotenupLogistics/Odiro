@@ -21,6 +21,8 @@ entry:
   - ScenarioSampleWorldSpecAdapter.h / .cpp
   - UserProjectEpisodeScenarioWorldSpecAdapter.h / .cpp
   - Scenario/Editor/ScenarioAuthoringSubsystem.h / .cpp
+  - Scenario/Llm/ScenarioLlmAuthoringSubsystem.h / .cpp
+  - Scenario/Llm/ScenarioLlmPromptWidget.h / .cpp
   - SimulationSetupTypes.h / .cpp
   - UserProjectDataTypes.h / .cpp
   - SimulationSetupTypesTest.cpp
@@ -47,6 +49,7 @@ keep:
   - Project run uses episode input arrays and `episode_scenario` adapter, not generated RunQueue files.
   - ScenarioRunnerSubsystem public start API accepts direct run inputs; file-based RunQueue start helpers are removed.
   - Scenario LLM authoring saves v2 `scenario` responses to user project `scenario.json`; it must not save or execute RunQueue files.
+  - Scenario LLM prompt generate/load/run is scoped to the current `<UserProject>/scenario.json`; run launches create `<UserProject>/runs/<RunId>` snapshots through SimulatorLaunchSubsystem.
   - Project run output uses `FUserProjectRunOutputJson` for `result.json`, `events.jsonl`, `actions.jsonl`, `trace.jsonl`, and `summary.json`.
   - Scenario authoring/runtime projection stays separate from runtime WorldSpec and actor-spawn payload types.
 verify:

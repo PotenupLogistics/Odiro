@@ -11,7 +11,7 @@
 
 # 목적
 
-RunQueue JSON은 기존 시스템에서 여러 EpisodeSetup/DeliveryBotSetup pair를 순서대로 실행하기 위한 입력이었다. 샘플 경로는 `Json/Input/EpisodeRunQueueSample.json`이다. 새 구조에서는 한 project가 하나의 scenario를 가지며, run 생성 시 seed로 episode scenario를 만든다.
+RunQueue JSON은 기존 시스템에서 여러 EpisodeSetup/DeliveryBotSetup pair를 순서대로 실행하기 위한 입력이었다. 샘플 경로는 `Json/Input/EpisodeRunQueueSample.json`이다. 새 구조에서는 한 project가 하나의 scenario를 가지며, run 생성 시 seed로 `scenario_sample`을 만든다.
 
 # pair 개념
 

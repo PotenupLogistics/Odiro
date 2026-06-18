@@ -37,7 +37,7 @@ verify:
   - DeliveryBot automation tests for component changes
   - policy request/response contract for HTTP policy fields
   - `OdiroSim.UserProjectData.RobotAction.Write` after action JSONL contract changes
-  - user-project episode scenario adapter test when profile field aliases change
+  - user-project scenario_sample adapter test when profile field aliases change
   - project template policy entrypoint smoke when template policy changes
   - runtime movement/pathing smoke for behavior changes
 related:

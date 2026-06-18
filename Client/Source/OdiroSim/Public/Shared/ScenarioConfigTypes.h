@@ -105,7 +105,7 @@ enum class EScenarioRunnerState : uint8
 	Failed
 };
 
-// Runner input resolved from one user-project episode scenario and its profile.
+// Runner input resolved from one user-project scenario_sample and its profile.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FScenarioRunInput
 {

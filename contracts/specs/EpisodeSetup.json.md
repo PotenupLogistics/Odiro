@@ -4,7 +4,7 @@
 
 - 최종 사용자 project 계약 아님
 - 새 scenario 기준: `contracts/specs/user-project-data.md`의 `scenario.json`
-- 새 episode 입력 기준: `episode_scenario`
+- 새 episode 입력 기준: `scenario_sample`
 - 새 writer는 `EpisodeSetup` JSON을 만들지 않음
 - 이 문서는 기존 compiler와 field 출처 확인용
 

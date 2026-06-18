@@ -297,7 +297,7 @@ struct ODIROSIM_API FUserProjectRunSetting
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
 	int64 BaseSeed = 0;
 
-	// episode scenario 생성기 버전
+	// scenario_sample 생성기 버전
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
 	FString GeneratorVersion;
 };

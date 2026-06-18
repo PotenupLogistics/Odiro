@@ -32,7 +32,7 @@ struct ODIROSIM_API FUserProjectJsonParseResult
 	TArray<FScenarioCompileDiagnostic> Diagnostics;
 };
 
-// episode scenario 파일 생성 결과.
+// episode별 scenario_sample 파일 생성 결과.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FUserProjectEpisodeScenarioWriteResult
 {
@@ -46,7 +46,7 @@ struct ODIROSIM_API FUserProjectEpisodeScenarioWriteResult
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|UserProject")
 	FString EpisodeId;
 
-	// 생성한 episode scenario JSON path.
+	// 생성한 scenario_sample JSON path.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|UserProject")
 	FString ScenarioPath;
 
@@ -63,7 +63,7 @@ struct ODIROSIM_API FUserProjectEpisodeScenarioWriteResult
 	TArray<FScenarioCompileDiagnostic> Diagnostics;
 };
 
-// episode scenario 파일 parse 결과.
+// episode별 scenario_sample 파일 parse 결과.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FUserProjectEpisodeScenarioParseResult
 {
@@ -107,7 +107,7 @@ struct ODIROSIM_API FUserProjectDataJson
 		TArray<FScenarioCompileDiagnostic>& outDiagnostics);
 };
 
-// run snapshot에서 episode scenario JSON을 생성하고 읽는 utility.
+// run snapshot에서 episode별 scenario_sample JSON을 생성하고 읽는 utility.
 struct ODIROSIM_API FUserProjectEpisodeScenarioJson
 {
 	// 0-based episode index를 1-based 6자리 episode id로 변환한다.
@@ -116,23 +116,23 @@ struct ODIROSIM_API FUserProjectEpisodeScenarioJson
 	// episode id가 6자리 decimal string이면 true.
 	static bool IsValidEpisodeId(const FString& episodeId);
 
-	// snapshot/scenario.json과 setting seed로 episode scenario 하나를 생성한다.
+	// snapshot/scenario.json과 setting seed로 scenario_sample 하나를 생성한다.
 	static FUserProjectEpisodeScenarioWriteResult WriteEpisodeScenario(
 		const FUserProjectRunSnapshotPaths& paths,
 		const FUserProjectRunSetting& setting,
 		int32 episodeIndex);
 
-	// setting.episode_count만큼 episode scenario를 생성한다.
+	// setting.episode_count만큼 scenario_sample을 생성한다.
 	static bool WriteAllEpisodeScenarios(
 		const FUserProjectRunSnapshotPaths& paths,
 		const FUserProjectRunSetting& setting,
 		TArray<FUserProjectEpisodeScenarioWriteResult>& outResults,
 		TArray<FScenarioCompileDiagnostic>& outDiagnostics);
 
-	// episode scenario JSON 문자열의 root 계약을 읽는다.
+	// scenario_sample JSON 문자열의 root 계약을 읽는다.
 	static FUserProjectEpisodeScenarioParseResult ParseFromString(const FString& jsonString);
 
-	// episode scenario JSON 파일의 root 계약을 읽는다.
+	// scenario_sample JSON 파일의 root 계약을 읽는다.
 	static FUserProjectEpisodeScenarioParseResult ParseFromFile(const FString& jsonFilePath);
 };
 

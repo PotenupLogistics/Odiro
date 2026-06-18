@@ -15,7 +15,7 @@ Cards:
 - [agents-tooling-harness](agents-tooling-harness.md): Agents scripts, harness, pytest
 - [bridge-host](bridge-host.md): Go host process, portless IPC, Bridge tooling
 - [client-runtime-foundation](client-runtime-foundation.md): Unreal project config, targets, module deps, assets
-- [client-simulation](client-simulation.md): Scenario/Episode runtime, episode scenario generation, reports
+- [client-simulation](client-simulation.md): Scenario/Episode runtime, scenario_sample generation, reports
 - [client-delivery-bot-policy](client-delivery-bot-policy.md): DeliveryBot movement, grid, policy HTTP
 - [client-platform-execution](client-platform-execution.md): MainMenu, launcher, process status, AI analysis
 - [contracts-shared-data](contracts-shared-data.md): shared schemas, specs, payload/API/file contracts

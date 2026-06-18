@@ -400,7 +400,7 @@ struct ODIROSIM_API FScenarioTemplateRobot
 	FScenarioTemplateRobotAnchor Goal;
 };
 
-// Authoring source edited by users and LLMs before episode scenario sampling.
+// Authoring source edited by users and LLMs before scenario_sample generation.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FScenarioDocument
 {

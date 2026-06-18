@@ -38,7 +38,7 @@ schema:
 | `schema`     | string | 고정값 `project_setting`       |
 | `version`    | number | 고정값 `1`                     |
 | `project_id` | string | project 식별자                 |
-| `sampling`   | object | episode scenario 생성 조건     |
+| `sampling`   | object | `scenario_sample` 생성 조건     |
 | `runtime`    | object | simulator 실행 조건            |
 | `evaluation` | object | episode result/evaluation 기준 |
 
@@ -48,7 +48,7 @@ schema:
 | ------------------- | ------ | ---------------------------- |
 | `base_seed`         | number | episode seed 기준값          |
 | `episode_count`     | number | 한 run에서 생성할 episode 수 |
-| `generator_version` | string | episode scenario 생성기 버전 |
+| `generator_version` | string | `scenario_sample` 생성기 버전 |
 
 `runtime` 최소 field:
 
@@ -77,7 +77,7 @@ episode_seed = sampling.base_seed + episode_index
 - `EpisodeId`: 1-based 6자리 decimal string
 - random range/choices: `scenario.json` 소유
 - seed, episode 수: `setting.sampling` 소유
-- 생성기 버전 기록 위치: episode scenario의 `source.generator_version`
+- 생성기 버전 기록 위치: `scenario_sample.sample.source.generator_version`
 
 ### `profile.json`
 
@@ -172,10 +172,10 @@ schema:
 | `height_m`          | number  | ray 시작 높이            |
 | `store_missed_rays` | boolean | miss ray도 저장할지 여부 |
 
-Episode scenario 참조:
+생성된 `scenario_sample` 참조:
 
-- `source.profile_ref`: run snapshot의 profile 경로
-- `source.profile_hash`: run snapshot profile hash
+- `sample.source.profile_ref`: run snapshot의 profile 경로
+- `sample.source.profile_hash`: run snapshot profile hash
 
 ### `scenario.json`
 
@@ -229,15 +229,49 @@ Random 값 표현:
 "replaced_by": { "choices": ["grass", "road"] }
 ```
 
+`corridor` 최소 field:
+
+| Field             | Type   | 의미                                           |
+| ----------------- | ------ | ---------------------------------------------- |
+| `axis`            | object | `type: "polyline"`과 `points_m` 경로 점 목록   |
+| `walkway_width_m` | number | 주 보행로 폭. number 또는 `{min,max}`          |
+| `building_side`   | array  | 보행로 건물 측 lane/surface 폭 규칙            |
+| `curb_side`       | array  | 보행로 연석 측 lane/surface 폭 규칙            |
+| `segments`        | array  | axis 상의 의미 segment 목록                    |
+
+`corridor.segments[]` 최소 field:
+
+| Field           | Type   | 의미                                           |
+| --------------- | ------ | ---------------------------------------------- |
+| `id`            | string | obstacle, pedestrian, robot anchor 참조 id      |
+| `type`          | string | `straight`, `narrowing`, `crosswalk`, `entrance` |
+| `along_range_m` | array  | `[start_m, end_m]`                             |
+
+규칙:
+
+- `corridor.axis.points_m`은 최소 두 점
+- `corridor.segments[].type`을 사용
+- `walkway_width_m`은 `corridor` 바로 아래에 둠
+
+`robot.start`, `robot.goal` anchor:
+
+| Field      | Type   | 의미                                           |
+| ---------- | ------ | ---------------------------------------------- |
+| `type`     | string | `entry`, `exit`, `corridor_pose`               |
+| `segment`  | string | `corridor_pose`일 때 참조 segment id           |
+| `along_m`  | number | `corridor_pose`일 때 segment 상 거리           |
+| `offset_m` | number | `corridor_pose`일 때 axis 기준 lateral offset  |
+| `heading`  | string | 선택값. `forward`, `backward`, `auto`          |
+
 생성 규칙:
 
-- range/choices는 episode scenario 생성 시 seed로 확정
-- 확정 결과는 `episodes/<EpisodeId>/scenario.json`의 `params`, `semantic`에 기록
+- range/choices는 `scenario_sample` 생성 시 seed로 확정
+- 확정 결과는 `episodes/<EpisodeId>/scenario.json`의 `scenario.params`, `scenario.semantic`에 기록
 
 검증 규칙:
 
 - Scenario 저장 시 검증
-- Episode scenario 생성 직후 검증
+- `scenario_sample` 생성 직후 검증
 - `error`: 저장 또는 episode 생성 중단
 - `warning`: 생성 계속, `validation.diagnostics`에 기록
 - `repair`: 보정 후 생성 계속, 보정 사실을 `validation.diagnostics`에 기록
@@ -398,7 +432,7 @@ Encounter type:
 
 ## Run 결과 파일
 
-### Episode Scenario
+### Scenario Sample
 
 경로:
 
@@ -409,20 +443,31 @@ runs/<RunId>/episodes/<EpisodeId>/scenario.json
 schema:
 
 ```json
-"episode_scenario"
+"scenario_sample"
 ```
 
 필수 root:
 
-| Field        | Type   | 의미                               |
-| ------------ | ------ | ---------------------------------- |
-| `schema`     | string | 고정값 `episode_scenario`          |
-| `version`    | number | 고정값 `1`                         |
-| `episode`    | object | episode id와 seed                  |
-| `source`     | object | snapshot 입력 참조와 hash          |
-| `params`     | object | seed로 확정한 primitive parameter  |
-| `semantic`   | object | 실행/분석이 참조하는 의미 시나리오 |
-| `validation` | object | 생성 진단                          |
+| Field        | Type   | 의미                                        |
+| ------------ | ------ | ------------------------------------------- |
+| `schema`     | string | 고정값 `scenario_sample`                    |
+| `version`    | number | 고정값 `1`                                  |
+| `sample`     | object | sample id, scenario id, source 입력과 seed  |
+| `scenario`   | object | seed로 확정한 `params`와 실행용 `semantic`  |
+| `validation` | object | 생성 진단                                   |
+
+`sample.source` 최소 field:
+
+| Field               | Type   | 의미                         |
+| ------------------- | ------ | ---------------------------- |
+| `template_ref`      | string | run snapshot scenario 경로   |
+| `template_hash`     | string | run snapshot scenario hash   |
+| `profile_ref`       | string | run snapshot profile 경로    |
+| `profile_hash`      | string | run snapshot profile hash    |
+| `setting_ref`       | string | run snapshot setting 경로    |
+| `setting_hash`      | string | run snapshot setting hash    |
+| `seed`              | number | episode seed                 |
+| `generator_version` | string | sampler 구현/설정 버전       |
 
 규칙:
 
@@ -512,7 +557,7 @@ schema:
 | ----------------------- | ------- | --------------------------------------- |
 | `episode_id`            | string  | 6자리 decimal string                    |
 | `scenario_id`           | string  | scenario 표시 식별자                    |
-| `scenario_hash`         | string  | episode scenario hash                   |
+| `scenario_hash`         | string  | `scenario_sample` hash                  |
 | `scenario_source_hash`  | string  | snapshot scenario hash                  |
 | `profile_hash`          | string  | snapshot profile hash                   |
 | `setting_hash`          | string  | snapshot setting hash                   |
@@ -522,8 +567,8 @@ schema:
 | `duration_s`            | number  | episode 실행 시간                       |
 | `usable_for_llm_tuning` | boolean | 분석/튜닝 근거 사용 가능 여부           |
 | `metrics`               | object  | 주요 count/distance metric subset       |
-| `scenario_params`       | object  | 핵심 `episode_scenario.params` subset   |
-| `scenario_semantic`     | object  | 핵심 `episode_scenario.semantic` subset |
+| `scenario_params`       | object  | 핵심 `scenario_sample.scenario.params` subset   |
+| `scenario_semantic`     | object  | 핵심 `scenario_sample.scenario.semantic` subset |
 
 규칙:
 
@@ -734,7 +779,7 @@ schema:
 - AI 분석 결과물
 - `/api/v2/analysis/run` 응답과 같은 JSON을 `analysis_run_response_v2.json`에 저장
 - 분석 근거는 `project_id`, `run_id`, `episode_id` 증거로 추적 가능
-- 근거 대상: `summary.json`, `result.json`, `events.jsonl`, episode scenario
+- 근거 대상: `summary.json`, `result.json`, `events.jsonl`, `scenario_sample`
 - 추가 report/finding schema와 prompt 기록 방식은 추후 확정
 
 ## 행동 정책 패키지

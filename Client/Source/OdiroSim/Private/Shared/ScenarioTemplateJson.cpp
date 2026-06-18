@@ -12,6 +12,7 @@
 namespace
 {
 	const TCHAR* ScenarioTemplateSchema = TEXT("scenario_template");
+	const TCHAR* ProjectScenarioSchema = TEXT("scenario");
 
 	FString ResolveScenarioSchemaPath(const FString& filePath)
 	{
@@ -1004,6 +1005,62 @@ namespace
 		result.bSuccess = !HasTemplateErrors(result.Diagnostics);
 	}
 
+	void RewriteTemplateRootDiagnosticsForProjectScenario(TArray<FScenarioSchemaDiagnostic>& diagnostics)
+	{
+		for (FScenarioSchemaDiagnostic& diagnostic : diagnostics)
+		{
+			if (diagnostic.Code == TEXT("empty_template_id"))
+			{
+				diagnostic.Code = TEXT("empty_scenario_id");
+			}
+			if (diagnostic.Path == TEXT("$.template_id"))
+			{
+				diagnostic.Path = TEXT("$.scenario_id");
+			}
+			diagnostic.Message.ReplaceInline(TEXT("scenario_template"), TEXT("scenario"));
+			diagnostic.Message.ReplaceInline(TEXT("Scenario template"), TEXT("Scenario"));
+			diagnostic.Message.ReplaceInline(TEXT("template_id"), TEXT("scenario_id"));
+		}
+	}
+
+	bool ValidateProjectScenarioDraft(
+		const FScenarioTemplateDocument& document,
+		TArray<FScenarioSchemaDiagnostic>& diagnostics)
+	{
+		FScenarioTemplateDocument validationDocument = document;
+		validationDocument.Schema = ScenarioTemplateSchema;
+
+		TArray<FScenarioSchemaDiagnostic> validationDiagnostics;
+		const bool bValid = FScenarioTemplateJson::ValidateDocument(validationDocument, validationDiagnostics);
+		RewriteTemplateRootDiagnosticsForProjectScenario(validationDiagnostics);
+		diagnostics.Append(validationDiagnostics);
+		return bValid;
+	}
+
+	void ParseProjectScenarioRoot(
+		const FJsonObject& rootObject,
+		FScenarioTemplateParseResult& result)
+	{
+		FString schema;
+		TryReadTemplateRequiredStringField(rootObject, TEXT("schema"), TEXT("$"), result.Diagnostics, schema);
+		if (!schema.Equals(ProjectScenarioSchema, ESearchCase::CaseSensitive))
+		{
+			AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_schema"), TEXT("$.schema"), FString::Printf(TEXT("$.schema must be '%s'."), ProjectScenarioSchema));
+		}
+
+		result.Document.Schema = ScenarioTemplateSchema;
+		TryReadRequiredVersion(rootObject, result.Diagnostics, result.Document.Version);
+		TryReadTemplateRequiredStringField(rootObject, TEXT("scenario_id"), TEXT("$"), result.Diagnostics, result.Document.TemplateId);
+		TryReadTemplateRequiredStringField(rootObject, TEXT("intent"), TEXT("$"), result.Diagnostics, result.Document.Intent);
+		ParseCorridor(rootObject, result.Diagnostics, result.Document.Corridor);
+		ParseObstacles(rootObject, result.Diagnostics, result.Document.Obstacles);
+		ParsePedestrians(rootObject, result.Diagnostics, result.Document.Pedestrians);
+		ParseRobot(rootObject, result.Diagnostics, result.Document.Robot);
+		RewriteTemplateRootDiagnosticsForProjectScenario(result.Diagnostics);
+		ValidateProjectScenarioDraft(result.Document, result.Diagnostics);
+		result.bSuccess = !HasTemplateErrors(result.Diagnostics);
+	}
+
 	void ValidateNumberValue(
 		const FScenarioTemplateNumberValue& value,
 		const FString& path,
@@ -1439,6 +1496,20 @@ namespace
 		object->SetObjectField(TEXT("robot"), MakeRobotObject(document.Robot));
 		return object;
 	}
+
+	TSharedRef<FJsonObject> MakeProjectScenarioObject(const FScenarioTemplateDocument& document)
+	{
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		object->SetStringField(TEXT("schema"), ProjectScenarioSchema);
+		object->SetNumberField(TEXT("version"), document.Version);
+		object->SetStringField(TEXT("scenario_id"), document.TemplateId);
+		object->SetStringField(TEXT("intent"), document.Intent);
+		object->SetObjectField(TEXT("corridor"), MakeCorridorObject(document.Corridor));
+		object->SetObjectField(TEXT("obstacles"), MakeObstaclesObject(document.Obstacles));
+		object->SetObjectField(TEXT("pedestrians"), MakePedestriansObject(document.Pedestrians));
+		object->SetObjectField(TEXT("robot"), MakeRobotObject(document.Robot));
+		return object;
+	}
 }
 
 FScenarioTemplateParseResult FScenarioTemplateJson::ParseFromFile(const FString& JsonFilePath)
@@ -1479,6 +1550,47 @@ FScenarioTemplateParseResult FScenarioTemplateJson::ParseFromString(const FStrin
 	}
 
 	ParseTemplateRoot(*rootObject, result);
+	return result;
+}
+
+FScenarioTemplateParseResult FScenarioTemplateJson::ParseProjectScenarioFromFile(const FString& JsonFilePath)
+{
+	FScenarioTemplateParseResult result;
+	if (JsonFilePath.TrimStartAndEnd().IsEmpty())
+	{
+		AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_scenario_path"), TEXT("$"), TEXT("Project scenario file path must not be empty."));
+		return result;
+	}
+
+	const FString resolvedPath = ResolveScenarioSchemaPath(JsonFilePath);
+	FString jsonString;
+	if (!FFileHelper::LoadFileToString(jsonString, *resolvedPath))
+	{
+		AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("scenario_file_read_failed"), TEXT("$"), FString::Printf(TEXT("Project scenario JSON read failed: %s"), *resolvedPath));
+		return result;
+	}
+
+	return ParseProjectScenarioFromString(jsonString);
+}
+
+FScenarioTemplateParseResult FScenarioTemplateJson::ParseProjectScenarioFromString(const FString& JsonString)
+{
+	FScenarioTemplateParseResult result;
+	if (JsonString.TrimStartAndEnd().IsEmpty())
+	{
+		AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_scenario_json"), TEXT("$"), TEXT("Project scenario JSON must not be empty."));
+		return result;
+	}
+
+	TSharedPtr<FJsonObject> rootObject;
+	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(JsonString);
+	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+	{
+		AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_scenario_json"), TEXT("$"), TEXT("Project scenario JSON parse failed."));
+		return result;
+	}
+
+	ParseProjectScenarioRoot(*rootObject, result);
 	return result;
 }
 
@@ -1654,6 +1766,32 @@ bool FScenarioTemplateJson::TryWriteJson(
 	if (!FJsonSerializer::Serialize(MakeTemplateObject(Document), writer))
 	{
 		AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("template_json_serialize_failed"), TEXT("$"), TEXT("Scenario template JSON serialization failed."));
+		return false;
+	}
+
+	return true;
+}
+
+bool FScenarioTemplateJson::TryWriteProjectScenarioJson(
+	const FScenarioTemplateDocument& Document,
+	FString& OutJson,
+	TArray<FScenarioSchemaDiagnostic>& OutDiagnostics)
+{
+	OutJson.Reset();
+	OutDiagnostics.Reset();
+	if (!ValidateProjectScenarioDraft(Document, OutDiagnostics))
+	{
+		return false;
+	}
+
+	FScenarioTemplateDocument outputDocument = Document;
+	outputDocument.Schema = ScenarioTemplateSchema;
+
+	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
+		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&OutJson);
+	if (!FJsonSerializer::Serialize(MakeProjectScenarioObject(outputDocument), writer))
+	{
+		AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("scenario_json_serialize_failed"), TEXT("$"), TEXT("Project scenario JSON serialization failed."));
 		return false;
 	}
 

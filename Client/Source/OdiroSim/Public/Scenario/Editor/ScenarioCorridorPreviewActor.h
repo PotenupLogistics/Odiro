@@ -13,7 +13,7 @@ class USplineComponent;
 class USplineMeshComponent;
 class UStaticMesh;
 
-// Editor-only spline visualization for the scenario_template corridor surface.
+// Editor-only spline visualization for the authored project scenario corridor.
 UCLASS()
 class ODIROSIM_API AScenarioCorridorPreviewActor : public AActor
 {
@@ -22,7 +22,7 @@ class ODIROSIM_API AScenarioCorridorPreviewActor : public AActor
 public:
 	AScenarioCorridorPreviewActor();
 
-	// Root kept at world origin so template-local meters map directly to world centimeters.
+	// Root kept at world origin so draft-local meters map directly to world centimeters.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Corridor")
 	TObjectPtr<USceneComponent> SceneRoot;
 

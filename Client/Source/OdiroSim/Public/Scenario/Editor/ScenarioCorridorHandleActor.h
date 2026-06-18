@@ -12,7 +12,7 @@ class USplineMeshComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
 
-// Editor-only visual handle for authoring the scenario_template corridor axis.
+// Editor-only visual handle for authoring the project scenario corridor axis.
 UCLASS()
 class ODIROSIM_API AScenarioCorridorHandleActor : public AActor
 {

@@ -42,7 +42,7 @@ keep:
   - Client/Docs/plans/PLAN-260602-sim-logging.md is superseded legacy context; final log file contracts belong in contracts/specs/user-project-data.md.
   - Client/Docs/Data was removed; shared user project file contracts belong in contracts/specs/user-project-data.md.
   - Scenario setup/run queue samples in Client/Json/Input are legacy client-owned examples until the user project migration removes them.
-  - ScenarioTemplate*, ScenarioSample*, and EpisodeEvaluationReportJson are legacy compatibility surfaces unless a task explicitly targets them.
+  - ScenarioTemplate* and ScenarioSample* are legacy compatibility surfaces unless a task explicitly targets them; ScenarioTemplateJson also owns the temporary editor-draft to project `scenario.json` adapter until internal draft types are renamed.
   - Final user project contract uses one editable `<UserProject>/scenario.json`; do not add new user-facing template/sample split.
   - Episode scenario files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
   - Project run uses episode input arrays and `episode_scenario` adapter, not generated RunQueue files.
@@ -52,7 +52,7 @@ keep:
 verify:
   - contract specs vs sample JSON alignment
   - `scenario`/`episode_scenario` docs vs Client shared schema type alignment
-  - Scenario parse, version mismatch, episode scenario generation, and round-trip automation tests
+  - Scenario parse, project `scenario.json` adapter, version mismatch, episode scenario generation, and round-trip automation tests
   - Scenario-to-WorldSpec adapter automation tests, including user-project episode scenario adapter, and OdiroSimEditor build after adapter/editor draft changes
   - `OdiroSim.UserProjectData.RunOutput.Write` after user project result writer changes
   - `OdiroSim.UserProjectData.RobotAction.Write` after policy action logging changes

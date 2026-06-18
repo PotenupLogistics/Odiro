@@ -71,7 +71,7 @@ bool UScenarioEditorEntryWidget::LoadScenarioFromPathTextBox()
 	const FString jsonFilePath = ScenarioSetupJsonPathTextBox->GetText().ToString();
 	if (jsonFilePath.IsEmpty())
 	{
-		UE_LOG(LogScenarioEditorEntryWidget, Warning, TEXT("ScenarioSetup JSON path is empty."));
+		UE_LOG(LogScenarioEditorEntryWidget, Warning, TEXT("Project scenario JSON path is empty."));
 		return false;
 	}
 
@@ -84,14 +84,14 @@ bool UScenarioEditorEntryWidget::LoadScenarioFromPathTextBox()
 
 	FString resolvedJsonFilePath;
 	TArray<FString> loadMessages;
-	UE_LOG(LogScenarioEditorEntryWidget, Log, TEXT("ScenarioSetup JSON load requested | Input: %s"), *jsonFilePath);
+	UE_LOG(LogScenarioEditorEntryWidget, Log, TEXT("Project scenario JSON load requested | Input: %s"), *jsonFilePath);
 
 	const bool bLoaded = editorController->LoadScenarioSetupJsonFile(jsonFilePath, resolvedJsonFilePath, loadMessages);
 	if (loadMessages.IsEmpty())
 	{
 		loadMessages.Add(bLoaded
-			? FString::Printf(TEXT("Loaded ScenarioSetup JSON: %s"), *resolvedJsonFilePath)
-			: TEXT("ScenarioSetup JSON load failed."));
+			? FString::Printf(TEXT("Loaded project scenario JSON: %s"), *resolvedJsonFilePath)
+			: TEXT("Project scenario JSON load failed."));
 	}
 
 	if (bLoaded)
@@ -99,7 +99,7 @@ bool UScenarioEditorEntryWidget::LoadScenarioFromPathTextBox()
 		UE_LOG(
 			LogScenarioEditorEntryWidget,
 			Log,
-			TEXT("ScenarioSetup JSON load succeeded | Input: %s | Resolved: %s"),
+			TEXT("Project scenario JSON load succeeded | Input: %s | Resolved: %s"),
 			*jsonFilePath,
 			*resolvedJsonFilePath);
 	}
@@ -108,13 +108,13 @@ bool UScenarioEditorEntryWidget::LoadScenarioFromPathTextBox()
 		UE_LOG(
 			LogScenarioEditorEntryWidget,
 			Warning,
-			TEXT("ScenarioSetup JSON load failed | Input: %s | Resolved: %s"),
+			TEXT("Project scenario JSON load failed | Input: %s | Resolved: %s"),
 			*jsonFilePath,
 			*resolvedJsonFilePath);
 	}
 	for (const FString& loadMessage : loadMessages)
 	{
-		UE_LOG(LogScenarioEditorEntryWidget, Log, TEXT("ScenarioSetup JSON load message | %s"), *loadMessage);
+		UE_LOG(LogScenarioEditorEntryWidget, Log, TEXT("Project scenario JSON load message | %s"), *loadMessage);
 	}
 
 	if (bLoaded)

@@ -22,7 +22,7 @@ namespace
 		}
 
 		const FString baseName = FPaths::GetBaseFilename(preferredPath).IsEmpty()
-			? FString(TEXT("ScenarioTemplateNew.template"))
+			? FString(TEXT("scenario"))
 			: FPaths::GetBaseFilename(preferredPath);
 		const FString extension = FPaths::GetExtension(preferredPath).IsEmpty()
 			? FString(TEXT("json"))

@@ -78,7 +78,7 @@ bool UScenarioEditorLaunchSubsystem::OpenScenarioEditorInternal(
 
 	const FString openLevelName = NormalizeMapIdForOpenLevel(ScenarioEditorMapId);
 	const FString openLevelOptions = launchMode == EScenarioEditorAutoStartMode::LoadFromPath
-		? FString::Printf(TEXT("ScenarioSetup=%s"), *PendingScenarioSetupPath)
+		? FString::Printf(TEXT("Scenario=%s"), *PendingScenarioSetupPath)
 		: TEXT("NewScenario=1");
 
 	// The URL options keep the transition inspectable in logs/console, while the subsystem state is the authoritative
@@ -154,7 +154,7 @@ void UScenarioEditorLaunchSubsystem::TryApplyPendingEditorStartup(UWorld* loaded
 			UE_LOG(
 				LogScenarioEditorLaunch,
 				Warning,
-				TEXT("ScenarioSetup 자동 로드 실패 | Path: %s, Diagnostics: %s"),
+				TEXT("Project scenario 자동 로드 실패 | Path: %s, Diagnostics: %s"),
 				*PendingScenarioSetupPath,
 				*FString::Join(diagnostics, TEXT(" | ")));
 			return;
@@ -164,7 +164,7 @@ void UScenarioEditorLaunchSubsystem::TryApplyPendingEditorStartup(UWorld* loaded
 		UE_LOG(
 			LogScenarioEditorLaunch,
 			Log,
-			TEXT("ScenarioSetup 자동 로드 완료 | Path: %s"),
+			TEXT("Project scenario 자동 로드 완료 | Path: %s"),
 			*resolvedPath);
 	}
 

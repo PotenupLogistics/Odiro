@@ -4,7 +4,7 @@
 #include "Shared/ScenarioTemplateTypes.h"
 #include "ScenarioTemplateJson.generated.h"
 
-// Parse and validation result for a scenario_template JSON document.
+// Parse and validation result for a scenario authoring JSON document.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FScenarioTemplateParseResult
 {
@@ -14,7 +14,7 @@ struct ODIROSIM_API FScenarioTemplateParseResult
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Template")
 	bool bSuccess = false;
 
-	// Parsed scenario_template document.
+	// Parsed authoring document; project scenarios are mapped onto the template draft model.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Template")
 	FScenarioTemplateDocument Document;
 
@@ -23,7 +23,7 @@ struct ODIROSIM_API FScenarioTemplateParseResult
 	TArray<FScenarioSchemaDiagnostic> Diagnostics;
 };
 
-// JSON reader, writer, and latest-version validator for scenario_template documents.
+// JSON reader, writer, and latest-version validator for scenario authoring documents.
 struct ODIROSIM_API FScenarioTemplateJson
 {
 	// Latest scenario_template schema version supported by this compiler and validator.
@@ -35,6 +35,12 @@ struct ODIROSIM_API FScenarioTemplateJson
 	// Parses and validates a scenario_template JSON string.
 	static FScenarioTemplateParseResult ParseFromString(const FString& JsonString);
 
+	// Parses and validates a user project scenario JSON file for editor authoring.
+	static FScenarioTemplateParseResult ParseProjectScenarioFromFile(const FString& JsonFilePath);
+
+	// Parses and validates a user project scenario JSON string for editor authoring.
+	static FScenarioTemplateParseResult ParseProjectScenarioFromString(const FString& JsonString);
+
 	// Validates an already-populated scenario_template document against the latest schema version.
 	static bool ValidateDocument(
 		const FScenarioTemplateDocument& Document,
@@ -42,6 +48,12 @@ struct ODIROSIM_API FScenarioTemplateJson
 
 	// Serializes a valid scenario_template document to formatted JSON.
 	static bool TryWriteJson(
+		const FScenarioTemplateDocument& Document,
+		FString& OutJson,
+		TArray<FScenarioSchemaDiagnostic>& OutDiagnostics);
+
+	// Serializes a valid editor draft as the user project scenario.json contract.
+	static bool TryWriteProjectScenarioJson(
 		const FScenarioTemplateDocument& Document,
 		FString& OutJson,
 		TArray<FScenarioSchemaDiagnostic>& OutDiagnostics);

@@ -90,11 +90,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Authoring")
 	void NewDraft();
 
-	// 기존 ScenarioSetup JSON을 UScenarioCompiler로 컴파일하고, 성공하면 DraftWorldSpec으로 import.
+	// Imports a user project scenario.json draft into the editor.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
 	bool LoadScenarioSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
-	// 문자열 기반 import.
+	// Imports a user project scenario JSON string into the editor.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
 	bool LoadScenarioSetupJsonString(const FString& jsonString, TArray<FString>& outDiagnostics);
 
@@ -300,11 +300,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	FScenarioTemplateDocument GetDraftScenarioTemplate() const { return DraftScenarioTemplate; }
 
-	// Replaces the draft scenario_template template_id metadata field.
+	// Replaces the draft project scenario_id metadata field.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	bool SetDraftTemplateId(const FString& templateId, TArray<FString>& outDiagnostics);
 
-	// Replaces the draft scenario_template intent metadata field.
+	// Replaces the draft project scenario intent metadata field.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	bool SetDraftIntent(const FString& intent, TArray<FString>& outDiagnostics);
 
@@ -324,14 +324,14 @@ public:
 
 	void GetEditorPlacementIgnoredActors(TArray<AActor*>& outActors) const;
 
-	// DraftWorldSpec 전체 기준으로 JSON을 다시 작성하고, 다시 compiler로 round-trip 검증.
+	// Exports the current editor draft as the user project scenario.json contract.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
 	bool ExportScenarioSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
 	bool ExportAndValidateScenarioSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
 
-	// 검증 성공 시 저장하고 dirty 상태 해제.
+	// Saves a validated user project scenario.json draft and clears the dirty state.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
 	bool SaveScenarioSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
@@ -475,7 +475,7 @@ private:
 	void RescaleCorridorSegmentsForAxisLength(double oldLengthMeters, double newLengthMeters);
 	// Along 값 기준으로 robot/obstacle reference의 segment id를 현재 segment 목록에 맞춤.
 	void RepairCorridorReferenceSegmentIds();
-	// Applies axis point edits without changing the scenario_template schema shape.
+	// Applies axis point edits without changing the editor draft corridor shape.
 	bool ApplyCorridorAxisPointsEdit(
 		const TArray<FVector2D>& pointsMeters,
 		bool bRebuildAllPreviewActors,

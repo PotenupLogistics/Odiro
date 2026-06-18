@@ -36,6 +36,7 @@ keep:
   - Project run child process exits after terminal runner state; Bridge owns status JSON lifecycle.
   - Project run completion writes user project result artifacts through the simulator process path; episode trace starts/stops through runner lifecycle.
   - PlatformAnalysisAi has a v2 project-run request path using `project_path` + `run_id`; successful responses are saved under run `review/`.
+  - ScenarioEditorLaunchSubsystem treats the pending path as a project scenario JSON path; URL options are inspectable only and subsystem state is authoritative.
   - MainMenu project-mode UI migration is deferred; do not claim UI completion until widget changes and UI smoke pass.
   - Future MainMenu project mode must read result runs from `<UserProject>/runs/<RunId>` and send AI analysis through the v2 project-run path.
   - Future MainMenu project mode must not call SimulationSetup or RunQueue writer/launcher paths.

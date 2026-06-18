@@ -159,17 +159,17 @@ bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonFile(
 	const FString trimmedJsonFilePath = jsonFilePath.TrimStartAndEnd();
 	if (trimmedJsonFilePath.IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("ScenarioSetup JSON file path is empty."));
+		outDiagnostics.Add(TEXT("Project scenario JSON file path is empty."));
 		return false;
 	}
 
 	outResolvedJsonFilePath = ResolveScenarioSetupLoadPath(trimmedJsonFilePath);
 
-	const FScenarioTemplateParseResult parseResult = FScenarioTemplateJson::ParseFromFile(outResolvedJsonFilePath);
+	const FScenarioTemplateParseResult parseResult = FScenarioTemplateJson::ParseProjectScenarioFromFile(outResolvedJsonFilePath);
 	AppendSchemaDiagnostics(parseResult.Diagnostics, outDiagnostics);
 	if (!parseResult.bSuccess)
 	{
-		outDiagnostics.Add(TEXT("ScenarioTemplate JSON import failed validation."));
+		outDiagnostics.Add(TEXT("Project scenario JSON import failed validation."));
 		return false;
 	}
 
@@ -189,15 +189,15 @@ bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonString(
 
 	if (jsonString.IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("ScenarioSetup JSON string is empty."));
+		outDiagnostics.Add(TEXT("Project scenario JSON string is empty."));
 		return false;
 	}
 
-	const FScenarioTemplateParseResult parseResult = FScenarioTemplateJson::ParseFromString(jsonString);
+	const FScenarioTemplateParseResult parseResult = FScenarioTemplateJson::ParseProjectScenarioFromString(jsonString);
 	AppendSchemaDiagnostics(parseResult.Diagnostics, outDiagnostics);
 	if (!parseResult.bSuccess)
 	{
-		outDiagnostics.Add(TEXT("ScenarioTemplate JSON import failed validation."));
+		outDiagnostics.Add(TEXT("Project scenario JSON import failed validation."));
 		return false;
 	}
 
@@ -327,7 +327,7 @@ bool UScenarioAuthoringSubsystem::SetDraftTemplateId(
 	const FString normalizedTemplateId = templateId.TrimStartAndEnd();
 	if (normalizedTemplateId.IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("scenario_template template_id must not be empty."));
+		outDiagnostics.Add(TEXT("scenario scenario_id must not be empty."));
 		return false;
 	}
 
@@ -355,7 +355,7 @@ bool UScenarioAuthoringSubsystem::SetDraftIntent(
 	const FString normalizedIntent = intent.TrimStartAndEnd();
 	if (normalizedIntent.IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("scenario_template intent must not be empty."));
+		outDiagnostics.Add(TEXT("scenario intent must not be empty."));
 		return false;
 	}
 
@@ -1547,7 +1547,7 @@ bool UScenarioAuthoringSubsystem::ExportScenarioSetupJsonString(
 	}
 
 	TArray<FScenarioSchemaDiagnostic> schemaDiagnostics;
-	const bool bWritten = FScenarioTemplateJson::TryWriteJson(DraftScenarioTemplate, outJsonString, schemaDiagnostics);
+	const bool bWritten = FScenarioTemplateJson::TryWriteProjectScenarioJson(DraftScenarioTemplate, outJsonString, schemaDiagnostics);
 	AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
 	return bWritten;
 }
@@ -1561,11 +1561,11 @@ bool UScenarioAuthoringSubsystem::ExportAndValidateScenarioSetupJsonString(
 		return false;
 	}
 
-	FScenarioTemplateParseResult parseResult = FScenarioTemplateJson::ParseFromString(outJsonString);
+	FScenarioTemplateParseResult parseResult = FScenarioTemplateJson::ParseProjectScenarioFromString(outJsonString);
 	AppendSchemaDiagnostics(parseResult.Diagnostics, outDiagnostics);
 	if (!parseResult.bSuccess)
 	{
-		outDiagnostics.Add(TEXT("Exported ScenarioTemplate JSON failed validation."));
+		outDiagnostics.Add(TEXT("Exported project scenario JSON failed validation."));
 	}
 
 	return parseResult.bSuccess;
@@ -1580,7 +1580,7 @@ bool UScenarioAuthoringSubsystem::SaveScenarioSetupJsonFile(
 	if (jsonFilePath.IsEmpty())
 	{
 		outResolvedJsonFilePath.Reset();
-		outDiagnostics.Add(TEXT("ScenarioSetup JSON file path is empty."));
+		outDiagnostics.Add(TEXT("Project scenario JSON file path is empty."));
 		return false;
 	}
 
@@ -1600,7 +1600,7 @@ bool UScenarioAuthoringSubsystem::SaveScenarioSetupJsonFile(
 
 	if (!FFileHelper::SaveStringToFile(jsonString, *outResolvedJsonFilePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
-		outDiagnostics.Add(FString::Printf(TEXT("Failed to save ScenarioSetup JSON to '%s'."), *outResolvedJsonFilePath));
+		outDiagnostics.Add(FString::Printf(TEXT("Failed to save project scenario JSON to '%s'."), *outResolvedJsonFilePath));
 		return false;
 	}
 

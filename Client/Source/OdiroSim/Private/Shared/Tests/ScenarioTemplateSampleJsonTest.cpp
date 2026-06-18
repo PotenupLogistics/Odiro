@@ -206,6 +206,31 @@ bool FScenarioTemplateJsonRoundTripTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioProjectScenarioJsonRoundTripTest,
+	"OdiroSim.ScenarioTemplate.Json.ProjectScenarioRoundTrip",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioProjectScenarioJsonRoundTripTest::RunTest(const FString& Parameters)
+{
+	const FScenarioTemplateDocument Document = MakeMinimalTemplateDocument();
+
+	FString Json;
+	TArray<FScenarioSchemaDiagnostic> Diagnostics;
+	TestTrue(TEXT("project scenario writes"), FScenarioTemplateJson::TryWriteProjectScenarioJson(Document, Json, Diagnostics));
+	TestEqual(TEXT("project write diagnostics"), Diagnostics.Num(), 0);
+	TestTrue(TEXT("project scenario schema field"), Json.Contains(TEXT("\"schema\": \"scenario\"")));
+	TestTrue(TEXT("project scenario id field"), Json.Contains(TEXT("\"scenario_id\": \"pinch_oncoming_low_coop\"")));
+	TestFalse(TEXT("project scenario omits template id field"), Json.Contains(TEXT("\"template_id\"")));
+
+	const FScenarioTemplateParseResult Result = FScenarioTemplateJson::ParseProjectScenarioFromString(Json);
+	TestTrue(TEXT("project scenario roundtrip parses"), Result.bSuccess);
+	TestEqual(TEXT("project roundtrip diagnostics"), Result.Diagnostics.Num(), 0);
+	TestEqual(TEXT("project roundtrip scenario id"), Result.Document.TemplateId, Document.TemplateId);
+	TestEqual(TEXT("project roundtrip keeps internal draft schema"), Result.Document.Schema, FString(TEXT("scenario_template")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FScenarioSampleJsonParseValidTest,
 	"OdiroSim.ScenarioSample.Json.ParseValid",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

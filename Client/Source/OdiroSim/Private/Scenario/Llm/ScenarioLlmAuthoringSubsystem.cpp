@@ -110,7 +110,7 @@ void UScenarioLlmAuthoringSubsystem::HandleGenerateResponse(
 
 	FScenarioLlmGenerationResult result;
 	result.HttpStatusCode = responseCode;
-	result.Message = TEXT("Legacy LLM generation response is no longer supported. Use the scenario_template and experiment flow.");
+	result.Message = TEXT("Legacy LLM generation response is no longer supported. Use the user project scenario.json flow.");
 	result.Diagnostics.Add(result.Message);
 	if (!responseBody.IsEmpty())
 	{

@@ -32,7 +32,7 @@ struct ODIROSIM_API FScenarioLlmGenerationResult
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FScenarioLlmGenerationCompletedSignature, const FScenarioLlmGenerationResult&, Result);
 
-// 시나리오 에디터에서 AI 서버로 자연어 기반 시나리오 생성 요청을 보내고 ScenarioSetup JSON을 받는 책임.
+// Owns natural-language scenario generation requests for the editor's user project scenario.json flow.
 UCLASS(BlueprintType)
 class ODIROSIM_API UScenarioLlmAuthoringSubsystem : public UGameInstanceSubsystem
 {

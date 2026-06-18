@@ -88,12 +88,12 @@ bool UScenarioLlmPromptWidget::LoadGeneratedScenario()
 			diagnostics))
 	{
 		SetStatusText(diagnostics.IsEmpty()
-			? FString::Printf(TEXT("생성된 ScenarioSetup 불러오기 실패: %s"), *result.FirstScenarioSourceJsonPath)
-			: FString::Printf(TEXT("ScenarioSetup 불러오기 실패:\n%s"), *FString::Join(diagnostics, TEXT("\n"))));
+			? FString::Printf(TEXT("생성된 scenario.json 불러오기 실패: %s"), *result.FirstScenarioSourceJsonPath)
+			: FString::Printf(TEXT("scenario.json 불러오기 실패:\n%s"), *FString::Join(diagnostics, TEXT("\n"))));
 		return false;
 	}
 
-	SetStatusText(FString::Printf(TEXT("ScenarioSetup 불러오기: %s"), *resolvedJsonFilePath));
+	SetStatusText(FString::Printf(TEXT("scenario.json 불러오기: %s"), *resolvedJsonFilePath));
 	return true;
 }
 

@@ -8,9 +8,8 @@ paths:
   - Client/Source/OdiroSim/Private/Episode/**
   - Client/Source/OdiroSim/Public/Shared/**
   - Client/Source/OdiroSim/Private/Shared/**
+  - Client/Docs/plans/PLAN-260602-sim-logging.md
   - Client/Json/Input/**
-  - Client/Json/Templates/**
-  - Client/Json/Experiments/**
   - contracts/specs/**
 entry:
   - ScenarioCompiler.h / .cpp
@@ -19,91 +18,45 @@ entry:
   - ScenarioSampleTypes.h
   - ScenarioTemplateJson.h / .cpp
   - ScenarioSampleJson.h / .cpp
-  - ScenarioTemplateSampler.h / .cpp
   - ScenarioSampleWorldSpecAdapter.h / .cpp
-  - ScenarioSimulationProfileAdapter.h / .cpp
-  - ScenarioTemplateWorldSpecAdapter.h / .cpp
-  - Scenario/Data/ScenarioCorridorSurfaceCatalog.h / .cpp
-  - ExperimentSettingTypes.h / .cpp
-  - SimulationRunStatusTypes.h / .cpp
+  - UserProjectEpisodeScenarioWorldSpecAdapter.h / .cpp
   - Scenario/Editor/ScenarioAuthoringSubsystem.h / .cpp
-  - Scenario/Editor/ScenarioCorridorHandleActor.h / .cpp
-  - Scenario/Editor/ScenarioCorridorPreviewActor.h / .cpp
-  - Scenario/Editor/ScenarioEditorController.h / .cpp
-  - Scenario/Widget/ScenarioEditorRootWidget.h / .cpp
-  - Scenario/Widget/ScenarioEditorToolbarWidget.h / .cpp
-  - Scenario/Widget/ScenarioEditorSidebarWidget.h / .cpp
-  - Scenario/Widget/ScenarioEditorSidebarMainPanel.h / .cpp
-  - Scenario/Widget/ScenarioEditorSidebarCorridorPanel.h / .cpp
-  - Scenario/Widget/ScenarioEditorSidebarCorridorLaneWidget.h / .cpp
-  - Scenario/Widget/ScenarioEditorSidebarCorridorPointWidget.h / .cpp
-  - Scenario/Widget/ScenarioEditorSidebarCorridorSegmentWidget.h / .cpp
-  - Scenario/Widget/ScenarioEditorSidebarFieldRow.h / .cpp
-  - Scenario/Widget/ScenarioPlaceableDetailsWidget.h / .cpp
-  - Scenario/Widget/ScenarioPlaceableContextMenuWidget.h / .cpp
-  - Widget/WidgetTextStyleCatalog.h / .cpp
-  - ExperimentSettingTypesTest.cpp
+  - SimulationSetupTypes.h / .cpp
+  - UserProjectDataTypes.h / .cpp
+  - SimulationSetupTypesTest.cpp
+  - UserProjectDataTypesTest.cpp
   - ScenarioTemplateSampleJsonTest.cpp
-  - ScenarioTemplateSamplerTest.cpp
   - ScenarioSampleWorldSpecAdapterTest.cpp
+  - UserProjectEpisodeScenarioWorldSpecAdapterTest.cpp
   - ScenarioSimulationSubsystem.h / .cpp
   - ScenarioRunnerSubsystem.h / .cpp
   - EpisodeMeasurementLogSubsystem.h / .cpp
-  - EpisodeRunResultJson.h / .cpp
+  - EpisodeEvaluationReportJson.h / .cpp
   - EpisodeResultTypes.h
+  - Client/Docs/plans/PLAN-260602-sim-logging.md
   - Client/Json/Input
-  - Client/Json/Templates
-  - Client/Json/Experiments
   - contracts/specs
+  - contracts/specs/user-project-data.md
 keep:
   - Parser-only samples/schemas owned only by Client stay in Client.
-  - Client/Json/Templates stores reusable scenario_template and simulation_profile library files.
-  - Client/Json/Experiments stores experiment folders with setting.json, profile.json, scenarios, and runs.
-  - ExperimentSettingTypes owns the canonical experiment execution boundary: setting parsing, `-Experiment` command-line parsing, run directory/status path helpers, sample materialization, and direct ScenarioRunInput arrays.
-  - SimulationRunStatusTypes owns child-process status.json parsing/writing; legacy simulation_setup parsing is not a supported execution boundary.
-  - The status JSON key `report_paths` is retained for launcher compatibility, but C++ code treats those values as result paths.
-  - Scenario template/sample authoring types stay separate from runtime WorldSpec and actor-spawn payload types.
-  - ScenarioSampleWorldSpecAdapter is the thin scenario_sample to runtime WorldSpec boundary; do not fold it into the legacy runtime ScenarioCompiler.
-  - ScenarioSimulationProfileAdapter maps simulation_profile to DeliveryBot setup info for template-driven runs without turning it into legacy DeliveryBotSetup JSON.
-  - ScenarioTemplateSampler owns deterministic scenario_template to scenario_sample generation; keep it separate from the runtime ScenarioCompiler and sample adapter.
-  - ScenarioCorridorSurfaceCatalog owns project-private Corridor surface metadata for authoring vocabulary ids such as sidewalk, grass, road, wall, and building.
-  - ScenarioTemplateWorldSpecAdapter is the runner/launcher boundary for scenario_template files; it samples templates before handing the frozen sample to ScenarioSampleWorldSpecAdapter.
-  - EpisodeRunResultJson owns canonical run outputs: summary.json, episodes/<SampleId>/result.json, and episodes/<SampleId>/events.jsonl.
-  - ScenarioRunnerSubsystem writes only canonical `summary.json`, `result.json`, and `events.jsonl` outputs under RunOutputDirectory.
-  - ScenarioAuthoringSubsystem stores the editor draft as scenario_template, exposes template metadata, root.robot anchor, Corridor axis/profile/segment, and Obstacle rule authoring APIs, spawns editor-only Corridor handles and spline lane preview actors, and builds runtime WorldSpec only as a preview/compatibility projection.
-  - ScenarioAuthoringSubsystem exposes `RefreshEditorPreviewFromDraft` for rebuilding generated preview actors after catalog or material edits.
-  - ScenarioCorridorPreviewActor renders blocked Corridor surfaces as 2m spline collision strips using the Blocked profile so robot sensors can detect wall/building lanes.
-  - ScenarioCorridorPreviewActor renders curb_side lane strips 15cm below the walkway to show the curb-side grade separation.
-  - ScenarioCorridorPreviewActor keeps non-blocking Corridor surface strips at least 20cm thick so adjacent Z-offset lanes have no vertical gap.
-  - ScenarioAuthoringSubsystem normalizes static obstacle editor transforms to the Corridor surface Z offset before preview validation, spawn, update, and editor-view rebuild.
-  - ScenarioEditorController routes viewport transform edits through ScenarioAuthoringSubsystem and refreshes the Scenario Template sidebar after accepted transform commits.
-  - ScenarioEditorRootWidget owns edge-revealed editor panels: asset palette from the bottom edge and LLM prompt panel from the right edge.
-  - WBP_ScenarioEditorRootWidget currently binds the Scenario Template side panel through the SidebarWidget child name; ScenarioEditorRootWidget keeps compatibility binds for SidebarWidget and ScenarioEditorSidebarWidget until the WBP and compiled class are migrated together.
-  - ScenarioEditorToolbarWidget owns the Main/Corridor/Obstacle/Pedestrian template sidebar tab state, broadcasts panel changes, and directly synchronizes the root widget as a fallback.
-  - ScenarioEditorSidebarWidget owns the Scenario Template block summary shown in the editor side sidebar, binds FallbackSummaryContainer for legacy read-only text, and switches specialized Main/Corridor/Obstacle/Pedestrian panel widgets when bound.
-  - ScenarioEditorSidebarFieldRow owns shared Scenario Template field input presentation for read-only text, single-line text, multiline text, range values, array add/remove controls, and combo-box option sets.
-  - ScenarioEditorSidebarMainPanel owns Main-panel metadata field rows for template_id, version, intent, and editable robot start/goal anchor detail rows, including a native fallback tree when no Blueprint-authored tree is bound.
-  - ScenarioEditorSidebarCorridorPanel owns Corridor-panel field rows, including editable axis points, walkway_width_m, side lane profile, and semantic segment commits through ScenarioAuthoringSubsystem.
-  - ScenarioEditorSidebarCorridorLaneWidget owns one editable building_side or curb_side lane detail block and reports catalog-backed surface combo, width, add, and remove requests with side/index context.
-  - ScenarioEditorSidebarCorridorPointWidget owns one editable corridor.axis.points_m[] detail block and reports x, y, add, and remove requests with point index context.
-  - ScenarioEditorSidebarCorridorSegmentWidget owns one editable corridor.segments[] detail block and reports id, type combo, along_range_m, catalog-backed replaced_by combo, add, and remove requests with segment index context.
-  - ScenarioEditorSidebarObstaclePanel owns Obstacle-panel field rows for min_clear_width_m and root.obstacles.placements[] fixed/pattern/scatter edits through ScenarioAuthoringSubsystem.
-  - ScenarioEditorSidebarObstaclePlacementWidget owns one root.obstacles.placements[] detail block and reports kind-specific field commits with placement index context.
-  - ScenarioEditorSidebarPedestrianPanel owns a structure-only Pedestrian panel for background count/speed/spawn segments and encounter rule fields; draft commits remain out of scope until the Pedestrian template contract is finalized.
-  - ScenarioEditorSidebarPedestrianEncounterWidget owns one root.pedestrians.encounters[] detail block for the current structure-only Pedestrian panel.
-  - ScenarioEditorSidebarFieldRow owns the common leaf property row pattern for label/separator/value editing in Scenario Template side panels, including single-line and bounded multiline value inputs in its native fallback row tree.
-  - WidgetTextStyleCatalog owns shared UMG typography roles Title, Label, and Value, each limited to FSlateFontInfo and FLinearColor, plus common style application helpers for TextBlock and editable text controls.
-  - ScenarioPlaceableDetailsWidget owns the placeable selection details panel; ScenarioPlaceableContextMenuWidget remains only as a legacy UMG compatibility wrapper.
+  - Client/Docs/plans/PLAN-260602-sim-logging.md is superseded legacy context; final log file contracts belong in contracts/specs/user-project-data.md.
+  - Client/Docs/Data was removed; shared user project file contracts belong in contracts/specs/user-project-data.md.
+  - Scenario setup/run queue samples in Client/Json/Input are legacy client-owned examples until the user project migration removes them.
+  - ScenarioTemplate*, ScenarioSample*, and EpisodeEvaluationReportJson are legacy compatibility surfaces unless a task explicitly targets them.
+  - Final user project contract uses one editable `<UserProject>/scenario.json`; do not add new user-facing template/sample split.
+  - Episode scenario files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
+  - Project run uses episode input arrays and `episode_scenario` adapter, not generated RunQueue files.
+  - Scenario LLM authoring saves v2 `scenario` responses to user project `scenario.json`; it must not save or execute RunQueue files.
+  - Project run output uses `FUserProjectRunOutputJson` for `result.json`, `events.jsonl`, `actions.jsonl`, `trace.jsonl`, and `summary.json`.
+  - Scenario authoring/runtime projection stays separate from runtime WorldSpec and actor-spawn payload types.
 verify:
   - contract specs vs sample JSON alignment
-  - scenario_template/scenario_sample docs vs Client shared schema type alignment
-  - ExperimentSettingTypes parser, writer, sample materialization, direct runner input, and SimulationRunStatus automation tests
-  - EpisodeRunResultJson automation tests for run_summary, episode_result, and episode_event output split
-  - ScenarioTemplateJson/ScenarioSampleJson parse, version mismatch, and round-trip automation tests
-  - ScenarioTemplateSampler automation tests for layout, robot anchors, fixed obstacle placement, deterministic range sampling, and version mismatch
-  - ScenarioSimulationProfileAdapter automation tests for test profile to DeliveryBot setup mapping
-  - ScenarioTemplateWorldSpecAdapter file-flow automation test for template to deterministic sample to runtime WorldSpec
-  - ScenarioSampleWorldSpecAdapter automation tests and OdiroSimEditor build after adapter/editor draft, Corridor surface catalog, Corridor authoring API, Corridor spline preview, or Corridor handle/gizmo changes
+  - `scenario`/`episode_scenario` docs vs Client shared schema type alignment
+  - Scenario parse, version mismatch, episode scenario generation, and round-trip automation tests
+  - Scenario-to-WorldSpec adapter automation tests, including user-project episode scenario adapter, and OdiroSimEditor build after adapter/editor draft changes
+  - `OdiroSim.UserProjectData.RunOutput.Write` after user project result writer changes
+  - `OdiroSim.UserProjectData.RobotAction.Write` after policy action logging changes
+  - `OdiroSim.UserProjectData.EpisodeTrace.Write` after runtime trace logging changes
   - focused automation tests for Scenario/Episode changes
   - Client/Task-RunPreview.bat smoke when wrapper supports the changed mode
 related:

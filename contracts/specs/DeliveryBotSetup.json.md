@@ -152,7 +152,7 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
 }
 ```
 
-여러 pair를 순서대로 실행할 때는 `Json/Input/EpisodeRunQueueSample.json`처럼 `runs` 배열로 묶고 `UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile()`에 큐 파일 경로를 전달한다.
+legacy 실행에서는 여러 pair를 `Json/Input/EpisodeRunQueueSample.json`처럼 `runs` 배열로 묶고 `UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile()`에 큐 파일 경로를 전달했다. 최종 user project 계약에서는 RunQueue를 새 adapter로 연장하지 않고 `<UserProject>/scenario.json`, `<UserProject>/setting.json`, `<UserProject>/profile.json`, `<UserProject>/policy/`에서 runner 입력을 만든다.
 `episode_setup`과 `delivery_bot_setup`은 둘 다 필수이며, Runner는 더 이상 기본 DeliveryBotSetup 파일로 fallback하지 않는다.
 
 ```json

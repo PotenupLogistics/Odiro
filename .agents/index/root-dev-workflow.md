@@ -34,6 +34,8 @@ keep:
   - Root build includes Bridge and Client; Agents has no build phase.
   - Main branch direct commits, local merges, and fast-forward pushes are blocked by hooks; local main deletion and intentional non-fast-forward force push are allowed.
   - Local pulls prefer rebase via pull.rebase=true, rebase.autoStash=true, branch.autoSetupRebase=always, and pull.ff=true so main sync and subbranch updates avoid merge commits without ff-only rejection.
+  - post-merge and rebase post-rewrite hooks call tools/install.ps1 through .githooks/helpers/run-install after pulls update the worktree.
+  - tools/set-git-config.ps1 stays idempotent and reports only changed Git config values plus completion, not already-correct keys or routine successful checks.
   - Unreal binary assets stay Git blobs; Git LFS is used for lock/read-only/push verification only.
   - post-commit skips Git LFS read-only refresh when HEAD has no Unreal binary asset changes.
   - Feature branch commit and merge hooks return without source sanity checks; PR source sanity check runs tools/check-source-sanity.ps1 on a shallow merge-ref soft-reset staged diff and narrows UnityBuild helper scans from changed definitions.
@@ -42,7 +44,7 @@ keep:
   - Manual LFS unlock is human-only exact-path recovery.
 verify:
   - PowerShell parse check for script edits
-  - hook syntax plus staged main-delete smoke for .githooks changes
+  - hook syntax plus run-install smoke and staged main-delete smoke for .githooks changes
   - git check-attr lockable for sample Unreal asset
   - tools/set-git-config.ps1 local config smoke
   - git config --local --get pull.ff returns true; pull.rebase returns true; rebase.autoStash returns true; branch.autoSetupRebase returns always

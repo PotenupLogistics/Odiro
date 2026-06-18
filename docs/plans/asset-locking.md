@@ -79,7 +79,7 @@ git config --local lfs.setlockablereadonly true
 git lfs post-checkout 0000000000000000000000000000000000000000 HEAD 1
 ```
 
-이미 적용된 설정은 `Already configured`로 로그를 남긴다.
+이미 적용된 Git config 값과 성공 검증은 출력하지 않고, 변경이 필요한 값과 완료 문구만 로그를 남긴다.
 script 실행 시 `.lfsconfig`와 Unreal asset attribute도 함께 확인한다.
 
 `task-setup.bat`: 새 script 호출.
@@ -277,7 +277,7 @@ git check-attr lockable -- Client/Content/<sample>.uasset
 - 기존 `core.hooksPath`, `merge.ff=false` 유지
 - `pull.ff=only` 설정으로 `git pull`은 fast-forward sync만 허용
 - LFS manual install/update/config 추가
-- 이미 설정된 값은 `Already configured`로 표시
+- 이미 설정된 Git config 값과 성공 검증은 생략하고 변경된 값과 완료 문구만 표시
 - `.lfsconfig`, Unreal asset attribute 확인
 - current checkout read-only 재적용
 - `task-setup.bat`에서 Git submodule update 수행

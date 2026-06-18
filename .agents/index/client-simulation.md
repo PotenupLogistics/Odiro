@@ -45,6 +45,7 @@ keep:
   - Final user project contract uses one editable `<UserProject>/scenario.json`; do not add new user-facing template/sample split.
   - Generated `scenario_sample` files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
   - Project run generates `scenario_sample` episode artifacts and compiles them through `ScenarioSampleWorldSpecAdapter`; sampled layout lanes become runtime Corridor specs/actors used by grid and evaluation, while manual GroundRegions remain a separate compatibility surface.
+  - Runtime corridor surfaces are materialized as procedural prism meshes from sampled axis points and lane offset ranges; keep visual/collision footprint deterministic and aligned with the analytic surface query.
   - ScenarioSampleWorldSpecAdapter keeps sampled Entry/Exit robot anchors in `scenario_sample` and deterministically insets their runtime WorldSpec poses before spawning.
   - ScenarioSimulationSubsystem owns runtime DeliveryBot grid rebuild after scenario surfaces spawn; runtime GridBoundsActor BeginPlay auto-build is disabled for that path.
   - Project run runner owns the active output episode id for `actions.jsonl` and `trace.jsonl`; DeliveryBot policy logging must use the runner-provided output context instead of the evaluation template id.

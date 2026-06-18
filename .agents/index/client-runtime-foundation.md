@@ -22,6 +22,7 @@ entry:
 keep:
   - Unreal-specific config/assets stay in Client.
   - Add module dependencies only at the public/private boundary that needs them.
+  - ProceduralMeshComponent is a private OdiroSim dependency used by runtime scenario corridor surface materialization.
   - ProjectBorealis UEGitPlugin is used for Editor checkout only; do not initialize `filter=lfs` attributes from the plugin UI.
   - DefaultEditorPerProjectUserSettings.ini defaults asset-modification checkout prompts; tools/set-git-config.ps1 corrects existing local Saved settings.
 verify:

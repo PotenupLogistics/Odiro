@@ -161,6 +161,17 @@ bool FScenarioSamplerFixedObstacleTest::RunTest(const FString& Parameters)
 			return Lane.SurfaceId == TEXT("building");
 		}));
 	TestEqual(TEXT("runtime placeables"), CompileResult.WorldSpec.Placeables.Num(), 2);
+	const FScenarioPlaceableInstanceSpec* RobotSpec = CompileResult.WorldSpec.Placeables.FindByPredicate(
+		[](const FScenarioPlaceableInstanceSpec& Spec)
+		{
+			return Spec.Category == EScenarioActorCategory::DeliveryBot;
+		});
+	TestNotNull(TEXT("runtime robot spec"), RobotSpec);
+	if (RobotSpec)
+	{
+		TestEqual(TEXT("runtime entry anchor inset"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.X, 100.0);
+		TestEqual(TEXT("runtime exit anchor inset"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.X, 900.0);
+	}
 	return true;
 }
 

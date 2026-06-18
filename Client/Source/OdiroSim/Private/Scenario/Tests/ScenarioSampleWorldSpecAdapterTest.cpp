@@ -128,10 +128,26 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	TestNotNull(TEXT("robot spec"), RobotSpec);
 	if (RobotSpec)
 	{
-		TestEqual(TEXT("robot start x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.X, 0.0);
-		TestEqual(TEXT("robot goal x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.X, 1000.0);
+		TestEqual(TEXT("robot start x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.X, 100.0);
+		TestEqual(TEXT("robot goal x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.X, 900.0);
 		TestTrue(TEXT("robot has route"), RobotSpec->DeliveryBot.bHasStartLocation && RobotSpec->DeliveryBot.bHasGoalLocation);
 		TestTrue(TEXT("robot setup has goal"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bHasGoal);
+
+		const FScenarioParamValue* SampleStartAlong = RobotSpec->Properties.Find(TEXT("sample_start_along_m"));
+		const FScenarioParamValue* SampleGoalAlong = RobotSpec->Properties.Find(TEXT("sample_goal_along_m"));
+		const FScenarioParamValue* RuntimeStartAlong = RobotSpec->Properties.Find(TEXT("runtime_start_along_m"));
+		const FScenarioParamValue* RuntimeGoalAlong = RobotSpec->Properties.Find(TEXT("runtime_goal_along_m"));
+		TestNotNull(TEXT("sample start along property"), SampleStartAlong);
+		TestNotNull(TEXT("sample goal along property"), SampleGoalAlong);
+		TestNotNull(TEXT("runtime start along property"), RuntimeStartAlong);
+		TestNotNull(TEXT("runtime goal along property"), RuntimeGoalAlong);
+		if (SampleStartAlong && SampleGoalAlong && RuntimeStartAlong && RuntimeGoalAlong)
+		{
+			TestEqual(TEXT("sample start along"), SampleStartAlong->FloatValue, 0.0);
+			TestEqual(TEXT("sample goal along"), SampleGoalAlong->FloatValue, 10.0);
+			TestEqual(TEXT("runtime start along"), RuntimeStartAlong->FloatValue, 1.0);
+			TestEqual(TEXT("runtime goal along"), RuntimeGoalAlong->FloatValue, 9.0);
+		}
 	}
 
 	TestFalse(TEXT("spec hash populated"), Result.WorldSpec.SpecHash.IsEmpty());

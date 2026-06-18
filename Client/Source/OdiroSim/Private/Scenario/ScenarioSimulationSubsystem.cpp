@@ -281,7 +281,11 @@ ADeliveryBot_GridBoundsActor* UScenarioSimulationSubsystem::SpawnDeliveryBotGrid
 	if (!IsValid(world))
 		return nullptr;
 
-	TSubclassOf<ADeliveryBot_GridBoundsActor> spawnClass = ADeliveryBot_GridBoundsActor::StaticClass();
+	TSubclassOf<ADeliveryBot_GridBoundsActor> spawnClass = GridBoundsActorClass;
+	if (!spawnClass)
+	{
+		spawnClass = ADeliveryBot_GridBoundsActor::StaticClass();
+	}
 
 	ADeliveryBot_GridBoundsActor* gridBoundsActor = world->SpawnActorDeferred<ADeliveryBot_GridBoundsActor>(
 		spawnClass,
@@ -293,6 +297,7 @@ ADeliveryBot_GridBoundsActor* UScenarioSimulationSubsystem::SpawnDeliveryBotGrid
 	if (!IsValid(gridBoundsActor))
 		return nullptr;
 
+	gridBoundsActor->SetBuildGridOnBeginPlay(false);
 	ApplyXYBoundsToGridBoundsActor(gridBoundsActor, xyBounds, centerZ);
 
 	UGameplayStatics::FinishSpawningActor(gridBoundsActor, gridBoundsActor->GetActorTransform());
@@ -965,11 +970,13 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 	}
 
 	setupInfo.LocationSetupInfo.bAutoStartRoute = !bSpawnOnly && bRouteAutoStart && bHasGoal;
+	FTransform robotSpawnTransform = placeableSpec.Transform;
+	robotSpawnTransform.SetLocation(setupInfo.LocationSetupInfo.StartLocationCm);
 
 	ADeliveryBot* robotActor{
 		world->SpawnActorDeferred<ADeliveryBot>(
 			RobotActorClass,
-			placeableSpec.Transform,
+			robotSpawnTransform,
 			nullptr,
 			nullptr,
 			ESpawnActorCollisionHandlingMethod::AlwaysSpawn
@@ -982,7 +989,7 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 
 	UGameplayStatics::FinishSpawningActor(
 		robotActor,
-		placeableSpec.Transform
+		robotSpawnTransform
 	);
 
 	RegisterRuntimeActor(
@@ -1015,7 +1022,7 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 			FActorSpawnParameters spawnParams;
 			spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-			if (AActor* startPointActor = world->SpawnActor<AActor>(StartPointClass, FTransform(placeableSpec.Transform), spawnParams))
+			if (AActor* startPointActor = world->SpawnActor<AActor>(StartPointClass, robotSpawnTransform, spawnParams))
 			{
 				RuntimeActors.Add(startPointActor);
 			}

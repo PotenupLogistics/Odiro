@@ -40,6 +40,9 @@ ADeliveryBot_GridBoundsActor::ADeliveryBot_GridBoundsActor()
 void ADeliveryBot_GridBoundsActor::BeginPlay()
 {
 	Super::BeginPlay();
+	if (!bBuildGridOnBeginPlay)
+		return;
+
 	UWorld* world = GetWorld();
 	if (!IsValid(world))
 		return;
@@ -57,3 +60,7 @@ void ADeliveryBot_GridBoundsActor::Tick(float DeltaTime)
 	
 }
 
+void ADeliveryBot_GridBoundsActor::SetBuildGridOnBeginPlay(bool bEnabled)
+{
+	bBuildGridOnBeginPlay = bEnabled;
+}

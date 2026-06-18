@@ -8,6 +8,7 @@
 namespace
 {
 	const double MetersToCentimeters = 100.0;
+	const double RobotEndpointInsetMeters = 1.0;
 
 	struct FResolvedSamplePose
 	{
@@ -185,6 +186,42 @@ namespace
 		return true;
 	}
 
+	double CalculateSampleAxisLengthMeters(const FScenarioSampleRouteAxis& Axis)
+	{
+		double PolylineLengthMeters = 0.0;
+		for (int32 Index = 0; Index < Axis.PointsMeters.Num() - 1; ++Index)
+		{
+			PolylineLengthMeters += (Axis.PointsMeters[Index + 1] - Axis.PointsMeters[Index]).Size();
+		}
+
+		return PolylineLengthMeters > KINDA_SMALL_NUMBER
+			? PolylineLengthMeters
+			: FMath::Max(Axis.LengthMeters, 0.0);
+	}
+
+	double ResolveRuntimeRobotAlongMeters(
+		const FScenarioSampleRouteAxis& Axis,
+		const FScenarioSampleRobotPose& Pose)
+	{
+		const double AxisLengthMeters = CalculateSampleAxisLengthMeters(Axis);
+		if (AxisLengthMeters <= KINDA_SMALL_NUMBER)
+		{
+			return FMath::Max(Pose.AlongMeters, 0.0);
+		}
+
+		const double SafeInsetMeters = FMath::Min(RobotEndpointInsetMeters, AxisLengthMeters * 0.5);
+		switch (Pose.SourceAnchorType)
+		{
+		case EScenarioTemplateRobotAnchorType::Entry:
+			return FMath::Clamp(FMath::Max(Pose.AlongMeters, SafeInsetMeters), 0.0, AxisLengthMeters);
+		case EScenarioTemplateRobotAnchorType::Exit:
+			return FMath::Clamp(FMath::Min(Pose.AlongMeters, AxisLengthMeters - SafeInsetMeters), 0.0, AxisLengthMeters);
+		case EScenarioTemplateRobotAnchorType::CorridorPose:
+		default:
+			return FMath::Clamp(Pose.AlongMeters, 0.0, AxisLengthMeters);
+		}
+	}
+
 	EScenarioGroundRegionType ToGroundRegionType(EScenarioSampleLaneType LaneType)
 	{
 		switch (LaneType)
@@ -338,14 +375,20 @@ namespace
 	{
 		FResolvedSamplePose StartPose;
 		FResolvedSamplePose GoalPose;
+		const double RuntimeStartAlongMeters = ResolveRuntimeRobotAlongMeters(
+			Semantic.RouteAxis,
+			Semantic.Robot.Start);
+		const double RuntimeGoalAlongMeters = ResolveRuntimeRobotAlongMeters(
+			Semantic.RouteAxis,
+			Semantic.Robot.Goal);
 		const bool bResolvedStart = ResolveSampleAxisPose(
 			Semantic.RouteAxis,
-			Semantic.Robot.Start.AlongMeters,
+			RuntimeStartAlongMeters,
 			Semantic.Robot.Start.OffsetMeters,
 			StartPose);
 		const bool bResolvedGoal = ResolveSampleAxisPose(
 			Semantic.RouteAxis,
-			Semantic.Robot.Goal.AlongMeters,
+			RuntimeGoalAlongMeters,
 			Semantic.Robot.Goal.OffsetMeters,
 			GoalPose);
 
@@ -371,6 +414,10 @@ namespace
 		RobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = GoalPose.LocationCm;
 		RobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.bHasGoal = true;
 		RobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
+		RobotSpec.Properties.Add(TEXT("sample_start_along_m"), MakeRuntimeFloatParam(Semantic.Robot.Start.AlongMeters));
+		RobotSpec.Properties.Add(TEXT("sample_goal_along_m"), MakeRuntimeFloatParam(Semantic.Robot.Goal.AlongMeters));
+		RobotSpec.Properties.Add(TEXT("runtime_start_along_m"), MakeRuntimeFloatParam(RuntimeStartAlongMeters));
+		RobotSpec.Properties.Add(TEXT("runtime_goal_along_m"), MakeRuntimeFloatParam(RuntimeGoalAlongMeters));
 		RobotSpec.Properties.Add(TEXT("sample_start_segment"), MakeRuntimeStringParam(Semantic.Robot.Start.SegmentId));
 		RobotSpec.Properties.Add(TEXT("sample_goal_segment"), MakeRuntimeStringParam(Semantic.Robot.Goal.SegmentId));
 		WorldSpec.Placeables.Add(RobotSpec);

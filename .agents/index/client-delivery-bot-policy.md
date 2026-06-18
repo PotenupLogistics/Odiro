@@ -27,6 +27,7 @@ keep:
   - Prefer focused shared structs over direct DeliveryBot to Scenario/Episode header coupling.
   - Python policy process ownership lives in DeliveryBot Python subsystem/settings, not legacy root batch files.
   - Keep Unreal-only debug/log toggles on components or developer settings instead of user-facing DeliveryBotSetup JSON.
+  - Runtime scenario grid rebuilds are orchestrated by ScenarioSimulationSubsystem; level-placed GridBoundsActor BeginPlay remains legacy/manual behavior.
   - Keep Python-side LiDAR Point Cloud support user-selectable through observation profiles, not mandatory policy behavior.
   - Prefer Unreal raycast hit locations for Point Cloud export when the request payload provides them.
   - Use LiDAR component hit-location debug before diagnosing Point Cloud import alignment issues.

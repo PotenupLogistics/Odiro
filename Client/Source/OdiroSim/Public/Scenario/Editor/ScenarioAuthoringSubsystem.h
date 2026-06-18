@@ -7,7 +7,7 @@
 #include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "Shared/ScenarioCompileTypes.h"
 #include "Shared/ScenarioSpecTypes.h"
-#include "Shared/ScenarioTemplateTypes.h"
+#include "Shared/ScenarioDocumentTypes.h"
 #include "Scenario/Actors/ScenarioPedestrian.h"
 #include "Scenario/Actors/ScenarioStaticObstacle.h"
 #include "Subsystems/WorldSubsystem.h"
@@ -130,7 +130,7 @@ public:
 
 	// 현재 draft의 corridor authoring source를 반환함.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Corridor")
-	FScenarioTemplateCorridor GetDraftCorridor() const { return DraftScenarioTemplate.Corridor; }
+	FScenarioTemplateCorridor GetDraftCorridor() const { return DraftScenario.Corridor; }
 
 	// Draft corridor axis polyline의 누적 길이를 meter 단위로 반환함.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Corridor")
@@ -294,15 +294,11 @@ public:
 	FScenarioWorldSpec GetDraftWorldSpec() const { return BuildDraftWorldSpecForPreview(); }
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
-	FScenarioTemplateDocument GetDraftScenarioTemplate() const { return DraftScenarioTemplate; }
+	FScenarioDocument GetDraftScenario() const { return DraftScenario; }
 
 	// Replaces the draft project scenario_id metadata field.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	bool SetDraftScenarioId(const FString& newScenarioId, TArray<FString>& outDiagnostics);
-
-	// Legacy Blueprint entry point kept while internal draft types still carry template naming.
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template", meta = (DeprecatedFunction, DeprecationMessage = "Use SetDraftScenarioId."))
-	bool SetDraftTemplateId(const FString& templateId, TArray<FString>& outDiagnostics);
 
 	// Replaces the draft project scenario intent metadata field.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
@@ -310,7 +306,7 @@ public:
 
 	// Returns the file path that currently owns the editor draft.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
-	FString GetSourceProjectScenarioJsonPath() const { return SourceScenarioTemplateJsonPath; }
+	FString GetSourceProjectScenarioJsonPath() const { return SourceProjectScenarioJsonPath; }
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	bool IsDraftDirty() const { return bDirty; }
@@ -412,29 +408,29 @@ private:
 	FString GenerateGroundRegionId();
 	bool ContainsInstanceId(const FString& instanceId) const;
 	bool ContainsGroundRegionId(const FString& regionId) const;
-	bool IsDraftScenarioTemplateEmpty() const;
+	bool IsDraftScenarioEmpty() const;
 	void InitializeDraftDefaults();
 	bool EnsureSingleRobotRouteSpec(TArray<FString>& outDiagnostics, bool& bOutDraftChanged);
 	bool ValidateSingleRobotRouteSpecForExport(TArray<FString>& outDiagnostics) const;
 	// Corridor 편집 결과를 schema 검증과 preview rebuild까지 통과한 경우에만 확정함.
 	bool CommitCorridorDraftEdit(
-		const FScenarioTemplateDocument& previousTemplate,
+		const FScenarioDocument& previousTemplate,
 		bool bPreviousDirty,
 		TArray<FString>& outDiagnostics);
 	// Obstacle edit validation plus generated preview rebuild with rollback.
 	bool CommitObstacleDraftEdit(
-		const FScenarioTemplateDocument& previousTemplate,
+		const FScenarioDocument& previousTemplate,
 		bool bPreviousDirty,
 		TArray<FString>& outDiagnostics);
 	// Robot anchor edit validation plus generated preview refresh with rollback.
 	bool CommitRobotDraftEdit(
-		const FScenarioTemplateDocument& previousTemplate,
+		const FScenarioDocument& previousTemplate,
 		bool bPreviousDirty,
 		TArray<FString>& outDiagnostics);
 	// Side lane profile 편집 입력이 surface와 width 조건을 만족하는지 확인함.
 	// Commits metadata-only draft edits without rebuilding generated preview actors.
-	bool CommitTemplateMetadataDraftEdit(
-		const FScenarioTemplateDocument& previousTemplate,
+	bool CommitScenarioMetadataDraftEdit(
+		const FScenarioDocument& previousTemplate,
 		bool bPreviousDirty,
 		TArray<FString>& outDiagnostics);
 	// Validates side lane profile inputs before applying them to the draft.
@@ -527,7 +523,7 @@ private:
 	FScenarioPlaceableInstanceSpec MakeDeliveryBotSpecFromTemplateRobot() const;
 	FScenarioTemplateObstaclePlacement* FindStaticObstaclePlacementByInstanceId(const FString& instanceId);
 	const FScenarioTemplateObstaclePlacement* FindStaticObstaclePlacementByInstanceId(const FString& instanceId) const;
-	void ImportWorldSpecAsScenarioTemplate(const FScenarioWorldSpec& worldSpec);
+	void ImportWorldSpecAsScenarioDocument(const FScenarioWorldSpec& worldSpec);
 	void ClearEditorView();
 
 	// import된 draft에서 정적 장애물만 AScenarioStaticObstacle로 EditorMap에 재생성.
@@ -582,7 +578,7 @@ private:
 		const FScenarioPlaceableInstanceSpec& spec) const;
 
 	UPROPERTY(Transient)
-	FScenarioTemplateDocument DraftScenarioTemplate;
+	FScenarioDocument DraftScenario;
 
 	UPROPERTY(Transient)
 	TArray<FScenarioGroundRegionSpec> DraftGroundRegions;
@@ -591,7 +587,7 @@ private:
 	TArray<FScenarioDynamicActorSpec> DraftPedestrianSpecs;
 
 	UPROPERTY(Transient)
-	FString SourceScenarioTemplateJsonPath;
+	FString SourceProjectScenarioJsonPath;
 
 	UPROPERTY(Transient)
 	bool bDirty = false;

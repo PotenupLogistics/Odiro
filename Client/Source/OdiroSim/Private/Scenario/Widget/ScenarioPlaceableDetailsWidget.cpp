@@ -10,7 +10,7 @@
 #include "GameFramework/Actor.h"
 #include "Styling/SlateTypes.h"
 #include "TimerManager.h"
-#include "Widget/WidgetTextStyleCatalog.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioPlaceableDetailsWidget, Log, All);
 

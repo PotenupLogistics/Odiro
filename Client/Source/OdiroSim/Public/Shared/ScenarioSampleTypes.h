@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Shared/ScenarioSchemaTypes.h"
-#include "Shared/ScenarioTemplateTypes.h"
+#include "Shared/ScenarioDocumentTypes.h"
 #include "ScenarioSampleTypes.generated.h"
 
 // Lane traversability type stored in scenario_sample semantic layout.

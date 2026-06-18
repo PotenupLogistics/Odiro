@@ -1,4 +1,4 @@
-#include "Shared/ScenarioTemplateJson.h"
+#include "Shared/ScenarioDocumentJson.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -11,8 +11,7 @@
 
 namespace
 {
-	const TCHAR* ScenarioTemplateSchema = TEXT("scenario_template");
-	const TCHAR* ProjectScenarioSchema = TEXT("scenario");
+	const TCHAR* ScenarioSchema = TEXT("scenario");
 
 	FString ResolveScenarioSchemaPath(const FString& filePath)
 	{
@@ -24,7 +23,7 @@ namespace
 		return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), filePath));
 	}
 
-	void AddTemplateDiagnostic(
+	void AddScenarioDiagnostic(
 		TArray<FScenarioSchemaDiagnostic>& diagnostics,
 		EScenarioSchemaDiagnosticSeverity severity,
 		const FString& code,
@@ -39,7 +38,7 @@ namespace
 		diagnostics.Add(diagnostic);
 	}
 
-	bool HasTemplateErrors(const TArray<FScenarioSchemaDiagnostic>& diagnostics)
+	bool HasScenarioErrors(const TArray<FScenarioSchemaDiagnostic>& diagnostics)
 	{
 		for (const FScenarioSchemaDiagnostic& diagnostic : diagnostics)
 		{
@@ -70,7 +69,7 @@ namespace
 		{
 			if (bRequired)
 			{
-				AddTemplateDiagnostic(
+				AddScenarioDiagnostic(
 					diagnostics,
 					EScenarioSchemaDiagnosticSeverity::Error,
 					FString::Printf(TEXT("missing_%s"), *fieldName),
@@ -82,7 +81,7 @@ namespace
 
 		if (value->Type != EJson::Object)
 		{
-			AddTemplateDiagnostic(
+			AddScenarioDiagnostic(
 				diagnostics,
 				EScenarioSchemaDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
@@ -108,7 +107,7 @@ namespace
 		{
 			if (bRequired)
 			{
-				AddTemplateDiagnostic(
+				AddScenarioDiagnostic(
 					diagnostics,
 					EScenarioSchemaDiagnosticSeverity::Error,
 					FString::Printf(TEXT("missing_%s"), *fieldName),
@@ -120,7 +119,7 @@ namespace
 
 		if (value->Type != EJson::Array)
 		{
-			AddTemplateDiagnostic(
+			AddScenarioDiagnostic(
 				diagnostics,
 				EScenarioSchemaDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
@@ -133,7 +132,7 @@ namespace
 		return true;
 	}
 
-	bool TryReadTemplateRequiredStringField(
+	bool TryReadRequiredStringField(
 		const FJsonObject& object,
 		const FString& fieldName,
 		const FString& path,
@@ -143,7 +142,7 @@ namespace
 		const TSharedPtr<FJsonValue> value = object.TryGetField(fieldName);
 		if (!value.IsValid())
 		{
-			AddTemplateDiagnostic(
+			AddScenarioDiagnostic(
 				diagnostics,
 				EScenarioSchemaDiagnosticSeverity::Error,
 				FString::Printf(TEXT("missing_%s"), *fieldName),
@@ -154,7 +153,7 @@ namespace
 
 		if (value->Type != EJson::String)
 		{
-			AddTemplateDiagnostic(
+			AddScenarioDiagnostic(
 				diagnostics,
 				EScenarioSchemaDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
@@ -166,7 +165,7 @@ namespace
 		outValue = value->AsString();
 		if (IsStringEmpty(outValue))
 		{
-			AddTemplateDiagnostic(
+			AddScenarioDiagnostic(
 				diagnostics,
 				EScenarioSchemaDiagnosticSeverity::Error,
 				FString::Printf(TEXT("empty_%s"), *fieldName),
@@ -193,7 +192,7 @@ namespace
 
 		if (value->Type != EJson::String)
 		{
-			AddTemplateDiagnostic(
+			AddScenarioDiagnostic(
 				diagnostics,
 				EScenarioSchemaDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
@@ -221,7 +220,7 @@ namespace
 
 		if (value->Type != EJson::Boolean)
 		{
-			AddTemplateDiagnostic(
+			AddScenarioDiagnostic(
 				diagnostics,
 				EScenarioSchemaDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
@@ -242,7 +241,7 @@ namespace
 		const TSharedPtr<FJsonValue> value = object.TryGetField(TEXT("version"));
 		if (!value.IsValid())
 		{
-			AddTemplateDiagnostic(
+			AddScenarioDiagnostic(
 				diagnostics,
 				EScenarioSchemaDiagnosticSeverity::Error,
 				TEXT("missing_version"),
@@ -253,7 +252,7 @@ namespace
 
 		if (value->Type != EJson::Number)
 		{
-			AddTemplateDiagnostic(
+			AddScenarioDiagnostic(
 				diagnostics,
 				EScenarioSchemaDiagnosticSeverity::Error,
 				TEXT("invalid_version"),
@@ -263,16 +262,16 @@ namespace
 		}
 
 		outVersion = FMath::RoundToInt(value->AsNumber());
-		if (outVersion != FScenarioTemplateJson::SupportedVersion)
+		if (outVersion != FScenarioDocumentJson::SupportedVersion)
 		{
-			AddTemplateDiagnostic(
+			AddScenarioDiagnostic(
 				diagnostics,
 				EScenarioSchemaDiagnosticSeverity::Error,
 				TEXT("unsupported_schema_version"),
 				TEXT("$.version"),
 				FString::Printf(
-					TEXT("scenario_template version must match the current compiler and validator version: %d."),
-					FScenarioTemplateJson::SupportedVersion));
+					TEXT("scenario version must match the current reader and validator version: %d."),
+					FScenarioDocumentJson::SupportedVersion));
 			return false;
 		}
 
@@ -293,7 +292,7 @@ namespace
 		{
 			if (bRequired)
 			{
-				AddTemplateDiagnostic(
+				AddScenarioDiagnostic(
 					diagnostics,
 					EScenarioSchemaDiagnosticSeverity::Error,
 					FString::Printf(TEXT("missing_%s"), *fieldName),
@@ -320,7 +319,7 @@ namespace
 				|| !rangeObject->TryGetNumberField(TEXT("min"), minValue)
 				|| !rangeObject->TryGetNumberField(TEXT("max"), maxValue))
 			{
-				AddTemplateDiagnostic(
+				AddScenarioDiagnostic(
 					diagnostics,
 					EScenarioSchemaDiagnosticSeverity::Error,
 					FString::Printf(TEXT("invalid_%s"), *fieldName),
@@ -335,7 +334,7 @@ namespace
 			return true;
 		}
 
-		AddTemplateDiagnostic(
+		AddScenarioDiagnostic(
 			diagnostics,
 			EScenarioSchemaDiagnosticSeverity::Error,
 			FString::Printf(TEXT("invalid_%s"), *fieldName),
@@ -381,7 +380,7 @@ namespace
 		{
 			if (bRequired)
 			{
-				AddTemplateDiagnostic(
+				AddScenarioDiagnostic(
 					diagnostics,
 					EScenarioSchemaDiagnosticSeverity::Error,
 					FString::Printf(TEXT("missing_%s"), *fieldName),
@@ -414,7 +413,7 @@ namespace
 				const TSharedPtr<FJsonValue>& choiceValue = choices[index];
 				if (!choiceValue.IsValid() || choiceValue->Type != EJson::String)
 				{
-					AddTemplateDiagnostic(
+					AddScenarioDiagnostic(
 						diagnostics,
 						EScenarioSchemaDiagnosticSeverity::Error,
 						FString::Printf(TEXT("invalid_%s_choice"), *fieldName),
@@ -427,7 +426,7 @@ namespace
 			return true;
 		}
 
-		AddTemplateDiagnostic(
+		AddScenarioDiagnostic(
 			diagnostics,
 			EScenarioSchemaDiagnosticSeverity::Error,
 			FString::Printf(TEXT("invalid_%s"), *fieldName),
@@ -455,7 +454,7 @@ namespace
 		}
 		if (values.Num() != 2)
 		{
-			AddTemplateDiagnostic(
+			AddScenarioDiagnostic(
 				diagnostics,
 				EScenarioSchemaDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
@@ -465,7 +464,7 @@ namespace
 		}
 		if (!values[0].IsValid() || values[0]->Type != EJson::Number || !values[1].IsValid() || values[1]->Type != EJson::Number)
 		{
-			AddTemplateDiagnostic(
+			AddScenarioDiagnostic(
 				diagnostics,
 				EScenarioSchemaDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
@@ -499,7 +498,7 @@ namespace
 			const TSharedPtr<FJsonValue>& pointValue = values[index];
 			if (!pointValue.IsValid() || pointValue->Type != EJson::Array)
 			{
-				AddTemplateDiagnostic(
+				AddScenarioDiagnostic(
 					diagnostics,
 					EScenarioSchemaDiagnosticSeverity::Error,
 					FString::Printf(TEXT("invalid_%s"), *fieldName),
@@ -511,7 +510,7 @@ namespace
 			const TArray<TSharedPtr<FJsonValue>> point = pointValue->AsArray();
 			if (point.Num() != 2 || !point[0].IsValid() || point[0]->Type != EJson::Number || !point[1].IsValid() || point[1]->Type != EJson::Number)
 			{
-				AddTemplateDiagnostic(
+				AddScenarioDiagnostic(
 					diagnostics,
 					EScenarioSchemaDiagnosticSeverity::Error,
 					FString::Printf(TEXT("invalid_%s"), *fieldName),
@@ -546,7 +545,7 @@ namespace
 			const TSharedPtr<FJsonValue>& value = values[index];
 			if (!value.IsValid() || value->Type != EJson::String)
 			{
-				AddTemplateDiagnostic(
+				AddScenarioDiagnostic(
 					diagnostics,
 					EScenarioSchemaDiagnosticSeverity::Error,
 					FString::Printf(TEXT("invalid_%s"), *fieldName),
@@ -670,7 +669,7 @@ namespace
 		TArray<FScenarioSchemaDiagnostic>& diagnostics,
 		FScenarioTemplateCorridorPlacement& outPlacement)
 	{
-		TryReadTemplateRequiredStringField(object, TEXT("segment"), path, diagnostics, outPlacement.SegmentId);
+		TryReadRequiredStringField(object, TEXT("segment"), path, diagnostics, outPlacement.SegmentId);
 		TryReadNumberValue(object, TEXT("along_m"), path, diagnostics, outPlacement.AlongMeters, false);
 		TryReadNumberValue(object, TEXT("offset_m"), path, diagnostics, outPlacement.OffsetMeters, false);
 		TryReadOptionalStringField(object, TEXT("lane"), path, diagnostics, outPlacement.LaneId);
@@ -695,13 +694,13 @@ namespace
 			const FString lanePath = FString::Printf(TEXT("%s.%s[%d]"), *path, *fieldName, index);
 			if (!laneValues[index].IsValid() || laneValues[index]->Type != EJson::Object)
 			{
-				AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_lane"), lanePath, FString::Printf(TEXT("%s must be an object."), *lanePath));
+				AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_lane"), lanePath, FString::Printf(TEXT("%s must be an object."), *lanePath));
 				continue;
 			}
 
 			FScenarioTemplateLaneRule laneRule;
 			const TSharedPtr<FJsonObject> laneObject = laneValues[index]->AsObject();
-			TryReadTemplateRequiredStringField(*laneObject, TEXT("surface"), lanePath, diagnostics, laneRule.SurfaceId);
+			TryReadRequiredStringField(*laneObject, TEXT("surface"), lanePath, diagnostics, laneRule.SurfaceId);
 			TryReadNumberValue(*laneObject, TEXT("width_m"), lanePath, diagnostics, laneRule.WidthMeters, true);
 			outRules.Add(laneRule);
 		}
@@ -724,18 +723,18 @@ namespace
 			const FString segmentPath = FString::Printf(TEXT("%s.segments[%d]"), *path, index);
 			if (!segmentValues[index].IsValid() || segmentValues[index]->Type != EJson::Object)
 			{
-				AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_segment"), segmentPath, FString::Printf(TEXT("%s must be an object."), *segmentPath));
+				AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_segment"), segmentPath, FString::Printf(TEXT("%s must be an object."), *segmentPath));
 				continue;
 			}
 
 			FScenarioTemplateSegment segment;
 			const TSharedPtr<FJsonObject> segmentObject = segmentValues[index]->AsObject();
-			TryReadTemplateRequiredStringField(*segmentObject, TEXT("id"), segmentPath, diagnostics, segment.SegmentId);
+			TryReadRequiredStringField(*segmentObject, TEXT("id"), segmentPath, diagnostics, segment.SegmentId);
 			FString typeString;
-			if (TryReadTemplateRequiredStringField(*segmentObject, TEXT("type"), segmentPath, diagnostics, typeString)
+			if (TryReadRequiredStringField(*segmentObject, TEXT("type"), segmentPath, diagnostics, typeString)
 				&& !ParseSegmentType(typeString, segment.Type))
 			{
-				AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_segment_type"), FString::Printf(TEXT("%s.type"), *segmentPath), FString::Printf(TEXT("%s.type has unsupported value '%s'."), *segmentPath, *typeString));
+				AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_segment_type"), FString::Printf(TEXT("%s.type"), *segmentPath), FString::Printf(TEXT("%s.type has unsupported value '%s'."), *segmentPath, *typeString));
 			}
 			TryReadAlongRange(*segmentObject, TEXT("along_range_m"), segmentPath, diagnostics, segment.AlongRangeMeters, true);
 			TryReadStringValue(*segmentObject, TEXT("replaced_by"), segmentPath, diagnostics, segment.ReplacedBySurfaceId, false);
@@ -756,10 +755,10 @@ namespace
 		}
 
 		FString typeString;
-		if (TryReadTemplateRequiredStringField(*axisObject, TEXT("type"), FString::Printf(TEXT("%s.axis"), *path), diagnostics, typeString)
+		if (TryReadRequiredStringField(*axisObject, TEXT("type"), FString::Printf(TEXT("%s.axis"), *path), diagnostics, typeString)
 			&& !typeString.Equals(TEXT("polyline"), ESearchCase::IgnoreCase))
 		{
-			AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_axis_type"), FString::Printf(TEXT("%s.axis.type"), *path), TEXT("corridor.axis.type must be 'polyline'."));
+			AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_axis_type"), FString::Printf(TEXT("%s.axis.type"), *path), TEXT("corridor.axis.type must be 'polyline'."));
 		}
 		TryReadVector2DArray(*axisObject, TEXT("points_m"), FString::Printf(TEXT("%s.axis"), *path), diagnostics, outAxis.PointsMeters, true);
 	}
@@ -788,12 +787,12 @@ namespace
 		TArray<FScenarioSchemaDiagnostic>& diagnostics,
 		FScenarioTemplateObstaclePlacement& outPlacement)
 	{
-		TryReadTemplateRequiredStringField(placementObject, TEXT("id"), path, diagnostics, outPlacement.PlacementId);
+		TryReadRequiredStringField(placementObject, TEXT("id"), path, diagnostics, outPlacement.PlacementId);
 		FString kindString;
-		if (TryReadTemplateRequiredStringField(placementObject, TEXT("kind"), path, diagnostics, kindString)
+		if (TryReadRequiredStringField(placementObject, TEXT("kind"), path, diagnostics, kindString)
 			&& !ParsePlacementKind(kindString, outPlacement.Kind))
 		{
-			AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_placement_kind"), FString::Printf(TEXT("%s.kind"), *path), FString::Printf(TEXT("%s.kind has unsupported value '%s'."), *path, *kindString));
+			AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_placement_kind"), FString::Printf(TEXT("%s.kind"), *path), FString::Printf(TEXT("%s.kind has unsupported value '%s'."), *path, *kindString));
 		}
 		TryReadOptionalStringField(placementObject, TEXT("prop"), path, diagnostics, outPlacement.PropId);
 		TryReadOptionalStringField(placementObject, TEXT("pattern"), path, diagnostics, outPlacement.PatternId);
@@ -849,7 +848,7 @@ namespace
 			const FString placementPath = FString::Printf(TEXT("$.obstacles.placements[%d]"), index);
 			if (!placementValues[index].IsValid() || placementValues[index]->Type != EJson::Object)
 			{
-				AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_obstacle_placement"), placementPath, FString::Printf(TEXT("%s must be an object."), *placementPath));
+				AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_obstacle_placement"), placementPath, FString::Printf(TEXT("%s must be an object."), *placementPath));
 				continue;
 			}
 
@@ -907,21 +906,21 @@ namespace
 			const FString encounterPath = FString::Printf(TEXT("$.pedestrians.encounters[%d]"), index);
 			if (!encounterValues[index].IsValid() || encounterValues[index]->Type != EJson::Object)
 			{
-				AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_encounter"), encounterPath, FString::Printf(TEXT("%s must be an object."), *encounterPath));
+				AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_encounter"), encounterPath, FString::Printf(TEXT("%s must be an object."), *encounterPath));
 				continue;
 			}
 
 			FScenarioTemplatePedestrianEncounter encounter;
 			const TSharedPtr<FJsonObject> encounterObject = encounterValues[index]->AsObject();
-			TryReadTemplateRequiredStringField(*encounterObject, TEXT("id"), encounterPath, diagnostics, encounter.EncounterId);
+			TryReadRequiredStringField(*encounterObject, TEXT("id"), encounterPath, diagnostics, encounter.EncounterId);
 			FString typeString;
-			if (TryReadTemplateRequiredStringField(*encounterObject, TEXT("type"), encounterPath, diagnostics, typeString)
+			if (TryReadRequiredStringField(*encounterObject, TEXT("type"), encounterPath, diagnostics, typeString)
 				&& !ParseEncounterType(typeString, encounter.Type))
 			{
-				AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_encounter_type"), FString::Printf(TEXT("%s.type"), *encounterPath), FString::Printf(TEXT("%s.type has unsupported value '%s'."), *encounterPath, *typeString));
+				AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_encounter_type"), FString::Printf(TEXT("%s.type"), *encounterPath), FString::Printf(TEXT("%s.type has unsupported value '%s'."), *encounterPath, *typeString));
 			}
-			TryReadTemplateRequiredStringField(*encounterObject, TEXT("at"), encounterPath, diagnostics, encounter.AtSegmentId);
-			TryReadTemplateRequiredStringField(*encounterObject, TEXT("persona"), encounterPath, diagnostics, encounter.PersonaId);
+			TryReadRequiredStringField(*encounterObject, TEXT("at"), encounterPath, diagnostics, encounter.AtSegmentId);
+			TryReadRequiredStringField(*encounterObject, TEXT("persona"), encounterPath, diagnostics, encounter.PersonaId);
 			TryReadNumberValue(*encounterObject, TEXT("meet_offset_m"), encounterPath, diagnostics, encounter.MeetOffsetMeters, false);
 
 			TSharedPtr<FJsonObject> overridesObject;
@@ -941,10 +940,10 @@ namespace
 		FScenarioTemplateRobotAnchor& outAnchor)
 	{
 		FString typeString;
-		if (TryReadTemplateRequiredStringField(anchorObject, TEXT("type"), path, diagnostics, typeString)
+		if (TryReadRequiredStringField(anchorObject, TEXT("type"), path, diagnostics, typeString)
 			&& !ParseAnchorType(typeString, outAnchor.Type))
 		{
-			AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_anchor_type"), FString::Printf(TEXT("%s.type"), *path), FString::Printf(TEXT("%s.type has unsupported value '%s'."), *path, *typeString));
+			AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_anchor_type"), FString::Printf(TEXT("%s.type"), *path), FString::Printf(TEXT("%s.type has unsupported value '%s'."), *path, *typeString));
 		}
 
 		TryReadOptionalStringField(anchorObject, TEXT("segment"), path, diagnostics, outAnchor.SegmentId);
@@ -956,7 +955,7 @@ namespace
 		if (TryReadOptionalStringField(anchorObject, TEXT("heading"), path, diagnostics, headingString) && !headingString.IsEmpty()
 			&& !ParseHeading(headingString, outAnchor.Heading))
 		{
-			AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_anchor_heading"), FString::Printf(TEXT("%s.heading"), *path), FString::Printf(TEXT("%s.heading has unsupported value '%s'."), *path, *headingString));
+			AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_anchor_heading"), FString::Printf(TEXT("%s.heading"), *path), FString::Printf(TEXT("%s.heading has unsupported value '%s'."), *path, *headingString));
 		}
 	}
 
@@ -984,81 +983,42 @@ namespace
 		}
 	}
 
-	void ParseTemplateRoot(
+	void ParseScenarioRoot(
 		const FJsonObject& rootObject,
-		FScenarioTemplateParseResult& result)
+		FScenarioDocumentParseResult& result)
 	{
-		TryReadTemplateRequiredStringField(rootObject, TEXT("schema"), TEXT("$"), result.Diagnostics, result.Document.Schema);
-		if (!result.Document.Schema.Equals(ScenarioTemplateSchema, ESearchCase::CaseSensitive))
+		TryReadRequiredStringField(rootObject, TEXT("schema"), TEXT("$"), result.Diagnostics, result.Document.Schema);
+		if (!result.Document.Schema.Equals(ScenarioSchema, ESearchCase::CaseSensitive))
 		{
-			AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_schema"), TEXT("$.schema"), FString::Printf(TEXT("$.schema must be '%s'."), ScenarioTemplateSchema));
+			AddScenarioDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_schema"), TEXT("$.schema"), FString::Printf(TEXT("$.schema must be '%s'."), ScenarioSchema));
 		}
 
 		TryReadRequiredVersion(rootObject, result.Diagnostics, result.Document.Version);
-		TryReadTemplateRequiredStringField(rootObject, TEXT("template_id"), TEXT("$"), result.Diagnostics, result.Document.TemplateId);
-		TryReadTemplateRequiredStringField(rootObject, TEXT("intent"), TEXT("$"), result.Diagnostics, result.Document.Intent);
+		TryReadRequiredStringField(rootObject, TEXT("scenario_id"), TEXT("$"), result.Diagnostics, result.Document.ScenarioId);
+		TryReadRequiredStringField(rootObject, TEXT("intent"), TEXT("$"), result.Diagnostics, result.Document.Intent);
 		ParseCorridor(rootObject, result.Diagnostics, result.Document.Corridor);
 		ParseObstacles(rootObject, result.Diagnostics, result.Document.Obstacles);
 		ParsePedestrians(rootObject, result.Diagnostics, result.Document.Pedestrians);
 		ParseRobot(rootObject, result.Diagnostics, result.Document.Robot);
-		FScenarioTemplateJson::ValidateDocument(result.Document, result.Diagnostics);
-		result.bSuccess = !HasTemplateErrors(result.Diagnostics);
-	}
-
-	void RewriteTemplateRootDiagnosticsForProjectScenario(TArray<FScenarioSchemaDiagnostic>& diagnostics)
-	{
-		for (FScenarioSchemaDiagnostic& diagnostic : diagnostics)
-		{
-			if (diagnostic.Code == TEXT("empty_template_id"))
-			{
-				diagnostic.Code = TEXT("empty_scenario_id");
-			}
-			if (diagnostic.Path == TEXT("$.template_id"))
-			{
-				diagnostic.Path = TEXT("$.scenario_id");
-			}
-			diagnostic.Message.ReplaceInline(TEXT("scenario_template"), TEXT("scenario"));
-			diagnostic.Message.ReplaceInline(TEXT("Scenario template"), TEXT("Scenario"));
-			diagnostic.Message.ReplaceInline(TEXT("template_id"), TEXT("scenario_id"));
-		}
+		FScenarioDocumentJson::ValidateDocument(result.Document, result.Diagnostics);
+		result.bSuccess = !HasScenarioErrors(result.Diagnostics);
 	}
 
 	bool ValidateProjectScenarioDraft(
-		const FScenarioTemplateDocument& document,
+		const FScenarioDocument& document,
 		TArray<FScenarioSchemaDiagnostic>& diagnostics)
 	{
-		FScenarioTemplateDocument validationDocument = document;
-		validationDocument.Schema = ScenarioTemplateSchema;
-
 		TArray<FScenarioSchemaDiagnostic> validationDiagnostics;
-		const bool bValid = FScenarioTemplateJson::ValidateDocument(validationDocument, validationDiagnostics);
-		RewriteTemplateRootDiagnosticsForProjectScenario(validationDiagnostics);
+		const bool bValid = FScenarioDocumentJson::ValidateDocument(document, validationDiagnostics);
 		diagnostics.Append(validationDiagnostics);
 		return bValid;
 	}
 
 	void ParseProjectScenarioRoot(
 		const FJsonObject& rootObject,
-		FScenarioTemplateParseResult& result)
+		FScenarioDocumentParseResult& result)
 	{
-		FString schema;
-		TryReadTemplateRequiredStringField(rootObject, TEXT("schema"), TEXT("$"), result.Diagnostics, schema);
-		if (!schema.Equals(ProjectScenarioSchema, ESearchCase::CaseSensitive))
-		{
-			AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_schema"), TEXT("$.schema"), FString::Printf(TEXT("$.schema must be '%s'."), ProjectScenarioSchema));
-		}
-
-		result.Document.Schema = ScenarioTemplateSchema;
-		TryReadRequiredVersion(rootObject, result.Diagnostics, result.Document.Version);
-		TryReadTemplateRequiredStringField(rootObject, TEXT("scenario_id"), TEXT("$"), result.Diagnostics, result.Document.TemplateId);
-		TryReadTemplateRequiredStringField(rootObject, TEXT("intent"), TEXT("$"), result.Diagnostics, result.Document.Intent);
-		ParseCorridor(rootObject, result.Diagnostics, result.Document.Corridor);
-		ParseObstacles(rootObject, result.Diagnostics, result.Document.Obstacles);
-		ParsePedestrians(rootObject, result.Diagnostics, result.Document.Pedestrians);
-		ParseRobot(rootObject, result.Diagnostics, result.Document.Robot);
-		RewriteTemplateRootDiagnosticsForProjectScenario(result.Diagnostics);
-		ValidateProjectScenarioDraft(result.Document, result.Diagnostics);
-		result.bSuccess = !HasTemplateErrors(result.Diagnostics);
+		ParseScenarioRoot(rootObject, result);
 	}
 
 	void ValidateNumberValue(
@@ -1071,14 +1031,14 @@ namespace
 		{
 			if (bRequired)
 			{
-				AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("missing_number_value"), path, FString::Printf(TEXT("%s is required."), *path));
+				AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("missing_number_value"), path, FString::Printf(TEXT("%s is required."), *path));
 			}
 			return;
 		}
 
 		if (value.Mode == EScenarioTemplateNumberValueMode::Range && value.MinValue > value.MaxValue)
 		{
-			AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_range"), path, FString::Printf(TEXT("%s min must be <= max."), *path));
+			AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_range"), path, FString::Printf(TEXT("%s min must be <= max."), *path));
 		}
 	}
 
@@ -1092,14 +1052,14 @@ namespace
 		{
 			if (bRequired)
 			{
-				AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("missing_integer_value"), path, FString::Printf(TEXT("%s is required."), *path));
+				AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("missing_integer_value"), path, FString::Printf(TEXT("%s is required."), *path));
 			}
 			return;
 		}
 
 		if (value.Mode == EScenarioTemplateNumberValueMode::Range && value.MinValue > value.MaxValue)
 		{
-			AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_range"), path, FString::Printf(TEXT("%s min must be <= max."), *path));
+			AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_range"), path, FString::Printf(TEXT("%s min must be <= max."), *path));
 		}
 	}
 
@@ -1115,11 +1075,11 @@ namespace
 
 		if (value.Mode == EScenarioTemplateStringValueMode::Fixed && IsStringEmpty(value.FixedValue))
 		{
-			AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_string_value"), path, FString::Printf(TEXT("%s must not be empty."), *path));
+			AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_string_value"), path, FString::Printf(TEXT("%s must not be empty."), *path));
 		}
 		if (value.Mode == EScenarioTemplateStringValueMode::Choices && value.Choices.IsEmpty())
 		{
-			AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_choices"), path, FString::Printf(TEXT("%s choices must not be empty."), *path));
+			AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_choices"), path, FString::Printf(TEXT("%s choices must not be empty."), *path));
 		}
 	}
 
@@ -1130,12 +1090,12 @@ namespace
 	{
 		if (range.StartMeters > range.EndMeters)
 		{
-			AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_along_range"), path, FString::Printf(TEXT("%s start must be <= end."), *path));
+			AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_along_range"), path, FString::Printf(TEXT("%s start must be <= end."), *path));
 		}
 	}
 
 	const FScenarioTemplateSegment* FindSegment(
-		const FScenarioTemplateDocument& document,
+		const FScenarioDocument& document,
 		const FString& segmentId)
 	{
 		for (const FScenarioTemplateSegment& segment : document.Corridor.Segments)
@@ -1149,24 +1109,24 @@ namespace
 	}
 
 	void ValidateSegmentReference(
-		const FScenarioTemplateDocument& document,
+		const FScenarioDocument& document,
 		const FString& segmentId,
 		const FString& path,
 		TArray<FScenarioSchemaDiagnostic>& diagnostics)
 	{
 		if (IsStringEmpty(segmentId))
 		{
-			AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("missing_segment_ref"), path, FString::Printf(TEXT("%s must reference a segment."), *path));
+			AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("missing_segment_ref"), path, FString::Printf(TEXT("%s must reference a segment."), *path));
 			return;
 		}
 		if (!FindSegment(document, segmentId))
 		{
-			AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("unknown_segment_ref"), path, FString::Printf(TEXT("%s references unknown segment '%s'."), *path, *segmentId));
+			AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("unknown_segment_ref"), path, FString::Printf(TEXT("%s references unknown segment '%s'."), *path, *segmentId));
 		}
 	}
 
 	void ValidateRobotAnchor(
-		const FScenarioTemplateDocument& document,
+		const FScenarioDocument& document,
 		const FScenarioTemplateRobotAnchor& anchor,
 		const FString& path,
 		TArray<FScenarioSchemaDiagnostic>& diagnostics)
@@ -1186,7 +1146,7 @@ namespace
 			const double along = anchor.AlongMeters.FixedValue;
 			if (along < segment->AlongRangeMeters.StartMeters || along > segment->AlongRangeMeters.EndMeters)
 			{
-				AddTemplateDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("anchor_outside_segment"), FString::Printf(TEXT("%s.along_m"), *path), FString::Printf(TEXT("%s.along_m must be inside segment '%s' along_range_m."), *path, *anchor.SegmentId));
+				AddScenarioDiagnostic(diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("anchor_outside_segment"), FString::Printf(TEXT("%s.along_m"), *path), FString::Printf(TEXT("%s.along_m must be inside segment '%s' along_range_m."), *path, *anchor.SegmentId));
 			}
 		}
 	}
@@ -1483,12 +1443,12 @@ namespace
 		return object;
 	}
 
-	TSharedRef<FJsonObject> MakeTemplateObject(const FScenarioTemplateDocument& document)
+	TSharedRef<FJsonObject> MakeScenarioObject(const FScenarioDocument& document)
 	{
 		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
-		object->SetStringField(TEXT("schema"), document.Schema);
+		object->SetStringField(TEXT("schema"), ScenarioSchema);
 		object->SetNumberField(TEXT("version"), document.Version);
-		object->SetStringField(TEXT("template_id"), document.TemplateId);
+		object->SetStringField(TEXT("scenario_id"), document.ScenarioId);
 		object->SetStringField(TEXT("intent"), document.Intent);
 		object->SetObjectField(TEXT("corridor"), MakeCorridorObject(document.Corridor));
 		object->SetObjectField(TEXT("obstacles"), MakeObstaclesObject(document.Obstacles));
@@ -1497,27 +1457,18 @@ namespace
 		return object;
 	}
 
-	TSharedRef<FJsonObject> MakeProjectScenarioObject(const FScenarioTemplateDocument& document)
+	TSharedRef<FJsonObject> MakeProjectScenarioObject(const FScenarioDocument& document)
 	{
-		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
-		object->SetStringField(TEXT("schema"), ProjectScenarioSchema);
-		object->SetNumberField(TEXT("version"), document.Version);
-		object->SetStringField(TEXT("scenario_id"), document.TemplateId);
-		object->SetStringField(TEXT("intent"), document.Intent);
-		object->SetObjectField(TEXT("corridor"), MakeCorridorObject(document.Corridor));
-		object->SetObjectField(TEXT("obstacles"), MakeObstaclesObject(document.Obstacles));
-		object->SetObjectField(TEXT("pedestrians"), MakePedestriansObject(document.Pedestrians));
-		object->SetObjectField(TEXT("robot"), MakeRobotObject(document.Robot));
-		return object;
+		return MakeScenarioObject(document);
 	}
 }
 
-FScenarioTemplateParseResult FScenarioTemplateJson::ParseFromFile(const FString& JsonFilePath)
+FScenarioDocumentParseResult FScenarioDocumentJson::ParseFromFile(const FString& JsonFilePath)
 {
-	FScenarioTemplateParseResult result;
+	FScenarioDocumentParseResult result;
 	if (JsonFilePath.TrimStartAndEnd().IsEmpty())
 	{
-		AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_template_path"), TEXT("$"), TEXT("Scenario template file path must not be empty."));
+		AddScenarioDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_scenario_path"), TEXT("$"), TEXT("Scenario file path must not be empty."));
 		return result;
 	}
 
@@ -1525,19 +1476,19 @@ FScenarioTemplateParseResult FScenarioTemplateJson::ParseFromFile(const FString&
 	FString jsonString;
 	if (!FFileHelper::LoadFileToString(jsonString, *resolvedPath))
 	{
-		AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("template_file_read_failed"), TEXT("$"), FString::Printf(TEXT("Scenario template JSON read failed: %s"), *resolvedPath));
+		AddScenarioDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("scenario_file_read_failed"), TEXT("$"), FString::Printf(TEXT("Scenario JSON read failed: %s"), *resolvedPath));
 		return result;
 	}
 
 	return ParseFromString(jsonString);
 }
 
-FScenarioTemplateParseResult FScenarioTemplateJson::ParseFromString(const FString& JsonString)
+FScenarioDocumentParseResult FScenarioDocumentJson::ParseFromString(const FString& JsonString)
 {
-	FScenarioTemplateParseResult result;
+	FScenarioDocumentParseResult result;
 	if (JsonString.TrimStartAndEnd().IsEmpty())
 	{
-		AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_template_json"), TEXT("$"), TEXT("Scenario template JSON must not be empty."));
+		AddScenarioDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_scenario_json"), TEXT("$"), TEXT("Scenario JSON must not be empty."));
 		return result;
 	}
 
@@ -1545,20 +1496,20 @@ FScenarioTemplateParseResult FScenarioTemplateJson::ParseFromString(const FStrin
 	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(JsonString);
 	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
 	{
-		AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_template_json"), TEXT("$"), TEXT("Scenario template JSON parse failed."));
+		AddScenarioDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_scenario_json"), TEXT("$"), TEXT("Scenario JSON parse failed."));
 		return result;
 	}
 
-	ParseTemplateRoot(*rootObject, result);
+	ParseScenarioRoot(*rootObject, result);
 	return result;
 }
 
-FScenarioTemplateParseResult FScenarioTemplateJson::ParseProjectScenarioFromFile(const FString& JsonFilePath)
+FScenarioDocumentParseResult FScenarioDocumentJson::ParseProjectScenarioFromFile(const FString& JsonFilePath)
 {
-	FScenarioTemplateParseResult result;
+	FScenarioDocumentParseResult result;
 	if (JsonFilePath.TrimStartAndEnd().IsEmpty())
 	{
-		AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_scenario_path"), TEXT("$"), TEXT("Project scenario file path must not be empty."));
+		AddScenarioDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_scenario_path"), TEXT("$"), TEXT("Project scenario file path must not be empty."));
 		return result;
 	}
 
@@ -1566,19 +1517,19 @@ FScenarioTemplateParseResult FScenarioTemplateJson::ParseProjectScenarioFromFile
 	FString jsonString;
 	if (!FFileHelper::LoadFileToString(jsonString, *resolvedPath))
 	{
-		AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("scenario_file_read_failed"), TEXT("$"), FString::Printf(TEXT("Project scenario JSON read failed: %s"), *resolvedPath));
+		AddScenarioDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("scenario_file_read_failed"), TEXT("$"), FString::Printf(TEXT("Project scenario JSON read failed: %s"), *resolvedPath));
 		return result;
 	}
 
 	return ParseProjectScenarioFromString(jsonString);
 }
 
-FScenarioTemplateParseResult FScenarioTemplateJson::ParseProjectScenarioFromString(const FString& JsonString)
+FScenarioDocumentParseResult FScenarioDocumentJson::ParseProjectScenarioFromString(const FString& JsonString)
 {
-	FScenarioTemplateParseResult result;
+	FScenarioDocumentParseResult result;
 	if (JsonString.TrimStartAndEnd().IsEmpty())
 	{
-		AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_scenario_json"), TEXT("$"), TEXT("Project scenario JSON must not be empty."));
+		AddScenarioDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_scenario_json"), TEXT("$"), TEXT("Project scenario JSON must not be empty."));
 		return result;
 	}
 
@@ -1586,7 +1537,7 @@ FScenarioTemplateParseResult FScenarioTemplateJson::ParseProjectScenarioFromStri
 	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(JsonString);
 	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
 	{
-		AddTemplateDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_scenario_json"), TEXT("$"), TEXT("Project scenario JSON parse failed."));
+		AddScenarioDiagnostic(result.Diagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_scenario_json"), TEXT("$"), TEXT("Project scenario JSON parse failed."));
 		return result;
 	}
 
@@ -1594,34 +1545,34 @@ FScenarioTemplateParseResult FScenarioTemplateJson::ParseProjectScenarioFromStri
 	return result;
 }
 
-bool FScenarioTemplateJson::ValidateDocument(
-	const FScenarioTemplateDocument& Document,
+bool FScenarioDocumentJson::ValidateDocument(
+	const FScenarioDocument& Document,
 	TArray<FScenarioSchemaDiagnostic>& OutDiagnostics)
 {
-	if (!Document.Schema.Equals(ScenarioTemplateSchema, ESearchCase::CaseSensitive))
+	if (!Document.Schema.Equals(ScenarioSchema, ESearchCase::CaseSensitive))
 	{
-		AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_schema"), TEXT("$.schema"), FString::Printf(TEXT("$.schema must be '%s'."), ScenarioTemplateSchema));
+		AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("invalid_schema"), TEXT("$.schema"), FString::Printf(TEXT("$.schema must be '%s'."), ScenarioSchema));
 	}
 	if (Document.Version != SupportedVersion)
 	{
-		AddTemplateDiagnostic(
+		AddScenarioDiagnostic(
 			OutDiagnostics,
 			EScenarioSchemaDiagnosticSeverity::Error,
 			TEXT("unsupported_schema_version"),
 			TEXT("$.version"),
-			FString::Printf(TEXT("scenario_template version must match the current compiler and validator version: %d."), SupportedVersion));
+			FString::Printf(TEXT("scenario version must match the current reader and validator version: %d."), SupportedVersion));
 	}
-	if (IsStringEmpty(Document.TemplateId))
+	if (IsStringEmpty(Document.ScenarioId))
 	{
-		AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_template_id"), TEXT("$.template_id"), TEXT("$.template_id must not be empty."));
+		AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_scenario_id"), TEXT("$.scenario_id"), TEXT("$.scenario_id must not be empty."));
 	}
 	if (IsStringEmpty(Document.Intent))
 	{
-		AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_intent"), TEXT("$.intent"), TEXT("$.intent must not be empty."));
+		AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_intent"), TEXT("$.intent"), TEXT("$.intent must not be empty."));
 	}
 	if (Document.Corridor.Axis.PointsMeters.Num() < 2)
 	{
-		AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("too_few_axis_points"), TEXT("$.corridor.axis.points_m"), TEXT("$.corridor.axis.points_m must contain at least two points."));
+		AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("too_few_axis_points"), TEXT("$.corridor.axis.points_m"), TEXT("$.corridor.axis.points_m must contain at least two points."));
 	}
 	ValidateNumberValue(Document.Corridor.WalkwayWidthMeters, TEXT("$.corridor.walkway_width_m"), OutDiagnostics, true);
 
@@ -1632,11 +1583,11 @@ bool FScenarioTemplateJson::ValidateDocument(
 		const FString segmentPath = FString::Printf(TEXT("$.corridor.segments[%d]"), index);
 		if (IsStringEmpty(segment.SegmentId))
 		{
-			AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_segment_id"), FString::Printf(TEXT("%s.id"), *segmentPath), FString::Printf(TEXT("%s.id must not be empty."), *segmentPath));
+			AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_segment_id"), FString::Printf(TEXT("%s.id"), *segmentPath), FString::Printf(TEXT("%s.id must not be empty."), *segmentPath));
 		}
 		else if (segmentIds.Contains(segment.SegmentId))
 		{
-			AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("duplicate_segment_id"), FString::Printf(TEXT("%s.id"), *segmentPath), FString::Printf(TEXT("Duplicate corridor segment id '%s'."), *segment.SegmentId));
+			AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("duplicate_segment_id"), FString::Printf(TEXT("%s.id"), *segmentPath), FString::Printf(TEXT("Duplicate corridor segment id '%s'."), *segment.SegmentId));
 		}
 		else
 		{
@@ -1651,7 +1602,7 @@ bool FScenarioTemplateJson::ValidateDocument(
 		const FScenarioTemplateLaneRule& lane = Document.Corridor.BuildingSide[index];
 		if (IsStringEmpty(lane.SurfaceId))
 		{
-			AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_surface"), FString::Printf(TEXT("$.corridor.building_side[%d].surface"), index), TEXT("Building-side lane surface must not be empty."));
+			AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_surface"), FString::Printf(TEXT("$.corridor.building_side[%d].surface"), index), TEXT("Building-side lane surface must not be empty."));
 		}
 		ValidateNumberValue(lane.WidthMeters, FString::Printf(TEXT("$.corridor.building_side[%d].width_m"), index), OutDiagnostics, true);
 	}
@@ -1661,7 +1612,7 @@ bool FScenarioTemplateJson::ValidateDocument(
 		const FScenarioTemplateLaneRule& lane = Document.Corridor.CurbSide[index];
 		if (IsStringEmpty(lane.SurfaceId))
 		{
-			AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_surface"), FString::Printf(TEXT("$.corridor.curb_side[%d].surface"), index), TEXT("Curb-side lane surface must not be empty."));
+			AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_surface"), FString::Printf(TEXT("$.corridor.curb_side[%d].surface"), index), TEXT("Curb-side lane surface must not be empty."));
 		}
 		ValidateNumberValue(lane.WidthMeters, FString::Printf(TEXT("$.corridor.curb_side[%d].width_m"), index), OutDiagnostics, true);
 	}
@@ -1674,11 +1625,11 @@ bool FScenarioTemplateJson::ValidateDocument(
 		const FString placementPath = FString::Printf(TEXT("$.obstacles.placements[%d]"), index);
 		if (IsStringEmpty(placement.PlacementId))
 		{
-			AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_placement_id"), FString::Printf(TEXT("%s.id"), *placementPath), FString::Printf(TEXT("%s.id must not be empty."), *placementPath));
+			AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_placement_id"), FString::Printf(TEXT("%s.id"), *placementPath), FString::Printf(TEXT("%s.id must not be empty."), *placementPath));
 		}
 		else if (placementIds.Contains(placement.PlacementId))
 		{
-			AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("duplicate_placement_id"), FString::Printf(TEXT("%s.id"), *placementPath), FString::Printf(TEXT("Duplicate obstacle placement id '%s'."), *placement.PlacementId));
+			AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("duplicate_placement_id"), FString::Printf(TEXT("%s.id"), *placementPath), FString::Printf(TEXT("Duplicate obstacle placement id '%s'."), *placement.PlacementId));
 		}
 		else
 		{
@@ -1689,7 +1640,7 @@ bool FScenarioTemplateJson::ValidateDocument(
 		{
 			if (IsStringEmpty(placement.PropId))
 			{
-				AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("missing_prop"), FString::Printf(TEXT("%s.prop"), *placementPath), FString::Printf(TEXT("%s.prop is required for fixed and pattern placement."), *placementPath));
+				AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("missing_prop"), FString::Printf(TEXT("%s.prop"), *placementPath), FString::Printf(TEXT("%s.prop is required for fixed and pattern placement."), *placementPath));
 			}
 			ValidateSegmentReference(Document, placement.At.SegmentId, FString::Printf(TEXT("%s.at.segment"), *placementPath), OutDiagnostics);
 			ValidateNumberValue(placement.At.AlongMeters, FString::Printf(TEXT("%s.at.along_m"), *placementPath), OutDiagnostics, true);
@@ -1719,11 +1670,11 @@ bool FScenarioTemplateJson::ValidateDocument(
 		const FString encounterPath = FString::Printf(TEXT("$.pedestrians.encounters[%d]"), index);
 		if (IsStringEmpty(encounter.EncounterId))
 		{
-			AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_encounter_id"), FString::Printf(TEXT("%s.id"), *encounterPath), FString::Printf(TEXT("%s.id must not be empty."), *encounterPath));
+			AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_encounter_id"), FString::Printf(TEXT("%s.id"), *encounterPath), FString::Printf(TEXT("%s.id must not be empty."), *encounterPath));
 		}
 		else if (encounterIds.Contains(encounter.EncounterId))
 		{
-			AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("duplicate_encounter_id"), FString::Printf(TEXT("%s.id"), *encounterPath), FString::Printf(TEXT("Duplicate pedestrian encounter id '%s'."), *encounter.EncounterId));
+			AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("duplicate_encounter_id"), FString::Printf(TEXT("%s.id"), *encounterPath), FString::Printf(TEXT("Duplicate pedestrian encounter id '%s'."), *encounter.EncounterId));
 		}
 		else
 		{
@@ -1732,7 +1683,7 @@ bool FScenarioTemplateJson::ValidateDocument(
 		ValidateSegmentReference(Document, encounter.AtSegmentId, FString::Printf(TEXT("%s.at"), *encounterPath), OutDiagnostics);
 		if (IsStringEmpty(encounter.PersonaId))
 		{
-			AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_persona"), FString::Printf(TEXT("%s.persona"), *encounterPath), FString::Printf(TEXT("%s.persona must not be empty."), *encounterPath));
+			AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_persona"), FString::Printf(TEXT("%s.persona"), *encounterPath), FString::Printf(TEXT("%s.persona must not be empty."), *encounterPath));
 		}
 		ValidateNumberValue(encounter.MeetOffsetMeters, FString::Printf(TEXT("%s.meet_offset_m"), *encounterPath), OutDiagnostics, false);
 		ValidateNumberValue(encounter.Overrides.Cooperation, FString::Printf(TEXT("%s.overrides.cooperation"), *encounterPath), OutDiagnostics, false);
@@ -1746,11 +1697,11 @@ bool FScenarioTemplateJson::ValidateDocument(
 	ValidateRobotAnchor(Document, Document.Robot.Start, TEXT("$.robot.start"), OutDiagnostics);
 	ValidateRobotAnchor(Document, Document.Robot.Goal, TEXT("$.robot.goal"), OutDiagnostics);
 
-	return !HasTemplateErrors(OutDiagnostics);
+	return !HasScenarioErrors(OutDiagnostics);
 }
 
-bool FScenarioTemplateJson::TryWriteJson(
-	const FScenarioTemplateDocument& Document,
+bool FScenarioDocumentJson::TryWriteJson(
+	const FScenarioDocument& Document,
 	FString& OutJson,
 	TArray<FScenarioSchemaDiagnostic>& OutDiagnostics)
 {
@@ -1763,17 +1714,17 @@ bool FScenarioTemplateJson::TryWriteJson(
 
 	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
 		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&OutJson);
-	if (!FJsonSerializer::Serialize(MakeTemplateObject(Document), writer))
+	if (!FJsonSerializer::Serialize(MakeScenarioObject(Document), writer))
 	{
-		AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("template_json_serialize_failed"), TEXT("$"), TEXT("Scenario template JSON serialization failed."));
+		AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("scenario_json_serialize_failed"), TEXT("$"), TEXT("Scenario JSON serialization failed."));
 		return false;
 	}
 
 	return true;
 }
 
-bool FScenarioTemplateJson::TryWriteProjectScenarioJson(
-	const FScenarioTemplateDocument& Document,
+bool FScenarioDocumentJson::TryWriteProjectScenarioJson(
+	const FScenarioDocument& Document,
 	FString& OutJson,
 	TArray<FScenarioSchemaDiagnostic>& OutDiagnostics)
 {
@@ -1784,29 +1735,26 @@ bool FScenarioTemplateJson::TryWriteProjectScenarioJson(
 		return false;
 	}
 
-	FScenarioTemplateDocument outputDocument = Document;
-	outputDocument.Schema = ScenarioTemplateSchema;
-
 	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
 		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&OutJson);
-	if (!FJsonSerializer::Serialize(MakeProjectScenarioObject(outputDocument), writer))
+	if (!FJsonSerializer::Serialize(MakeProjectScenarioObject(Document), writer))
 	{
-		AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("scenario_json_serialize_failed"), TEXT("$"), TEXT("Project scenario JSON serialization failed."));
+		AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("scenario_json_serialize_failed"), TEXT("$"), TEXT("Project scenario JSON serialization failed."));
 		return false;
 	}
 
 	return true;
 }
 
-bool FScenarioTemplateJson::SaveToFile(
-	const FScenarioTemplateDocument& Document,
+bool FScenarioDocumentJson::SaveToFile(
+	const FScenarioDocument& Document,
 	const FString& JsonFilePath,
 	TArray<FScenarioSchemaDiagnostic>& OutDiagnostics)
 {
 	OutDiagnostics.Reset();
 	if (JsonFilePath.TrimStartAndEnd().IsEmpty())
 	{
-		AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_template_output_path"), TEXT("$"), TEXT("Scenario template output path must not be empty."));
+		AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("empty_scenario_output_path"), TEXT("$"), TEXT("Scenario output path must not be empty."));
 		return false;
 	}
 
@@ -1820,13 +1768,13 @@ bool FScenarioTemplateJson::SaveToFile(
 	const FString outputDirectory = FPaths::GetPath(resolvedPath);
 	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true))
 	{
-		AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("template_output_directory_failed"), TEXT("$"), FString::Printf(TEXT("Scenario template output directory create failed: %s"), *outputDirectory));
+		AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("scenario_output_directory_failed"), TEXT("$"), FString::Printf(TEXT("Scenario output directory create failed: %s"), *outputDirectory));
 		return false;
 	}
 
 	if (!FFileHelper::SaveStringToFile(json, *resolvedPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
-		AddTemplateDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("template_file_write_failed"), TEXT("$"), FString::Printf(TEXT("Scenario template file write failed: %s"), *resolvedPath));
+		AddScenarioDiagnostic(OutDiagnostics, EScenarioSchemaDiagnosticSeverity::Error, TEXT("scenario_file_write_failed"), TEXT("$"), FString::Printf(TEXT("Scenario file write failed: %s"), *resolvedPath));
 		return false;
 	}
 

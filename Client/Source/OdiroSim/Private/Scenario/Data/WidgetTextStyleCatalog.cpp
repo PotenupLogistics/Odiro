@@ -1,4 +1,4 @@
-#include "Widget/WidgetTextStyleCatalog.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
 
 #include "Blueprint/WidgetTree.h"
 #include "Components/EditableText.h"

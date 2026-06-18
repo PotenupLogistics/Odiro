@@ -5,7 +5,7 @@
 #include "Types/SlateEnums.h"
 #include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
-#include "Shared/ScenarioTemplateTypes.h"
+#include "Shared/ScenarioDocumentTypes.h"
 #include "ScenarioEditorSidebarCorridorPanel.generated.h"
 
 class UTextBlock;
@@ -91,7 +91,7 @@ public:
 
 	// Refreshes this panel from the provided Scenario Template document.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void RefreshFromTemplate(const FScenarioTemplateDocument& scenarioTemplate);
+	void RefreshFromTemplate(const FScenarioDocument& scenarioTemplate);
 
 private:
 	// Handles fixed walkway width edits committed by the field row.

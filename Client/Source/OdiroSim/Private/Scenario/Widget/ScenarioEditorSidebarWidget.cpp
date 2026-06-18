@@ -22,7 +22,7 @@
 #include "Scenario/Widget/ScenarioEditorSidebarMainPanel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarObstaclePanel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarPedestrianPanel.h"
-#include "Widget/WidgetTextStyleCatalog.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
 
 namespace
 {
@@ -323,10 +323,10 @@ void UScenarioEditorSidebarWidget::RefreshFromDraft()
 		return;
 	}
 
-	RefreshFromTemplate(authoringSubsystem->GetDraftScenarioTemplate());
+	RefreshFromTemplate(authoringSubsystem->GetDraftScenario());
 }
 
-void UScenarioEditorSidebarWidget::RefreshFromTemplate(const FScenarioTemplateDocument& scenarioTemplate)
+void UScenarioEditorSidebarWidget::RefreshFromTemplate(const FScenarioDocument& scenarioTemplate)
 {
 	FString primaryText;
 	FString secondaryText;
@@ -513,7 +513,7 @@ bool UScenarioEditorSidebarWidget::EnsurePanelSwitcherIsScrollable()
 }
 
 void UScenarioEditorSidebarWidget::RefreshGeneratedPanelContent(
-	const FScenarioTemplateDocument& scenarioTemplate)
+	const FScenarioDocument& scenarioTemplate)
 {
 	if (!PanelSwitcher || !WidgetTree)
 	{
@@ -629,7 +629,7 @@ bool UScenarioEditorSidebarWidget::ApplyGeneratedContentToPanelWidget(
 
 UWidget* UScenarioEditorSidebarWidget::BuildGeneratedPanelContent(
 	const EScenarioTemplateSidebarPanel panel,
-	const FScenarioTemplateDocument& scenarioTemplate)
+	const FScenarioDocument& scenarioTemplate)
 {
 	if (!WidgetTree)
 	{
@@ -701,7 +701,7 @@ UWidget* UScenarioEditorSidebarWidget::BuildGeneratedPanelContent(
 			true);
 		AddFieldRow(WidgetTree, rootBody, TEXT("schema"), scenarioTemplate.Schema, TextStyleCatalog);
 		AddFieldRow(WidgetTree, rootBody, TEXT("version"), FString::FromInt(scenarioTemplate.Version), TextStyleCatalog);
-		AddFieldRow(WidgetTree, rootBody, TEXT("scenario_id"), scenarioTemplate.TemplateId, TextStyleCatalog);
+		AddFieldRow(WidgetTree, rootBody, TEXT("scenario_id"), scenarioTemplate.ScenarioId, TextStyleCatalog);
 		AddFieldRow(WidgetTree, rootBody, TEXT("intent"), scenarioTemplate.Intent, TextStyleCatalog);
 
 		UVerticalBox* robotBody = AddBlockWidget(
@@ -901,7 +901,7 @@ UWidget* UScenarioEditorSidebarWidget::ResolvePanelWidget(
 }
 
 void UScenarioEditorSidebarWidget::BuildMainPanelText(
-	const FScenarioTemplateDocument& scenarioTemplate,
+	const FScenarioDocument& scenarioTemplate,
 	FString& outPrimaryText,
 	FString& outSecondaryText,
 	FString& outListText) const
@@ -910,7 +910,7 @@ void UScenarioEditorSidebarWidget::BuildMainPanelText(
 		TEXT("schema: %s\nversion: %d\nscenario_id: %s"),
 		*scenarioTemplate.Schema,
 		scenarioTemplate.Version,
-		scenarioTemplate.TemplateId.IsEmpty() ? TEXT("(unset)") : *scenarioTemplate.TemplateId);
+		scenarioTemplate.ScenarioId.IsEmpty() ? TEXT("(unset)") : *scenarioTemplate.ScenarioId);
 
 	outSecondaryText = FString::Printf(
 		TEXT("intent: %s"),
@@ -923,7 +923,7 @@ void UScenarioEditorSidebarWidget::BuildMainPanelText(
 }
 
 void UScenarioEditorSidebarWidget::BuildCorridorPanelText(
-	const FScenarioTemplateDocument& scenarioTemplate,
+	const FScenarioDocument& scenarioTemplate,
 	FString& outPrimaryText,
 	FString& outSecondaryText,
 	FString& outListText) const
@@ -963,7 +963,7 @@ void UScenarioEditorSidebarWidget::BuildCorridorPanelText(
 }
 
 void UScenarioEditorSidebarWidget::BuildObstaclePanelText(
-	const FScenarioTemplateDocument& scenarioTemplate,
+	const FScenarioDocument& scenarioTemplate,
 	FString& outPrimaryText,
 	FString& outSecondaryText,
 	FString& outListText) const
@@ -992,7 +992,7 @@ void UScenarioEditorSidebarWidget::BuildObstaclePanelText(
 }
 
 void UScenarioEditorSidebarWidget::BuildPedestrianPanelText(
-	const FScenarioTemplateDocument& scenarioTemplate,
+	const FScenarioDocument& scenarioTemplate,
 	FString& outPrimaryText,
 	FString& outSecondaryText,
 	FString& outListText) const

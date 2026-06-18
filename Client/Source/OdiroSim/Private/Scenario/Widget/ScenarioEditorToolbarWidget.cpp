@@ -8,7 +8,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
-#include "Widget/WidgetTextStyleCatalog.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
 
 namespace
 {

@@ -7,7 +7,7 @@
 #include "Misc/Paths.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
-#include "Widget/WidgetTextStyleCatalog.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
 
 namespace
 {

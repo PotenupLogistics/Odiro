@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Shared/ScenarioSchemaTypes.h"
-#include "ScenarioTemplateTypes.generated.h"
+#include "ScenarioDocumentTypes.generated.h"
 
 // Corridor segment kinds supported by scenario_template v1.
 UENUM(BlueprintType)
@@ -400,41 +400,41 @@ struct ODIROSIM_API FScenarioTemplateRobot
 	FScenarioTemplateRobotAnchor Goal;
 };
 
-// Authoring source edited by users and LLMs before experiment sampling.
+// Authoring source edited by users and LLMs before episode scenario sampling.
 USTRUCT(BlueprintType)
-struct ODIROSIM_API FScenarioTemplateDocument
+struct ODIROSIM_API FScenarioDocument
 {
 	GENERATED_BODY()
 
-	// JSON schema name; v1 stores scenario_template.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Template")
-	FString Schema = TEXT("scenario_template");
+	// JSON schema name; v1 stores project scenario documents.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Document")
+	FString Schema = TEXT("scenario");
 
-	// Scenario template schema version.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Template")
+	// Scenario document schema version.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Document")
 	int32 Version = 1;
 
-	// Human-readable snake_case template identifier.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Template")
-	FString TemplateId;
+	// Human-readable snake_case scenario identifier.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Document")
+	FString ScenarioId;
 
 	// Natural-language scenario intent or hypothesis.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Template")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Document")
 	FString Intent;
 
 	// Spatial skeleton and lane rules.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Template")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Document")
 	FScenarioTemplateCorridor Corridor;
 
 	// Static obstacle generation rules.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Template")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Document")
 	FScenarioTemplateObstacleRules Obstacles;
 
 	// Pedestrian generation rules.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Template")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Document")
 	FScenarioTemplatePedestrianRules Pedestrians;
 
 	// Robot start and goal anchors.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Template")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Document")
 	FScenarioTemplateRobot Robot;
 };

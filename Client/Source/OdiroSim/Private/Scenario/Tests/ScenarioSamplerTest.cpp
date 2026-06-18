@@ -1,11 +1,11 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
-#include "Scenario/ScenarioTemplateSampler.h"
+#include "Scenario/ScenarioSampler.h"
 
 #include "Misc/AutomationTest.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Shared/ScenarioSampleJson.h"
-#include "Shared/ScenarioTemplateJson.h"
+#include "Shared/ScenarioDocumentJson.h"
 
 namespace
 {
@@ -28,26 +28,26 @@ namespace
 		return NumberValue;
 	}
 
-	FScenarioTemplateSampleRequest MakeSamplerTestRequest()
+	FScenarioSamplerRequest MakeSamplerTestRequest()
 	{
-		FScenarioTemplateSampleRequest Request;
+		FScenarioSamplerRequest Request;
 		Request.SampleId = TEXT("000123");
 		Request.ScenarioId = TEXT("fixed_curb_obstacle_000123");
 		Request.Seed = 123;
-		Request.TemplateRef = TEXT("templates/scenarios/fixed_curb_obstacle.template.json");
-		Request.TemplateHash = TEXT("sha256:template123");
+		Request.SourceScenarioRef = TEXT("runs/test/snapshot/scenario.json");
+		Request.SourceScenarioHash = TEXT("sha256:scenario123");
 		Request.ProfileRef = TEXT("experiments/test/profile.json");
 		Request.ProfileHash = TEXT("sha256:profile123");
 		Request.SettingRef = TEXT("experiments/test/setting.json");
 		Request.SettingHash = TEXT("sha256:setting123");
-		Request.GeneratorVersion = TEXT("scenario_template_sampler_v1");
+		Request.GeneratorVersion = TEXT("scenario_sampler_v1");
 		return Request;
 	}
 
-	FScenarioTemplateDocument MakeSamplerTestTemplate()
+	FScenarioDocument MakeSamplerTestScenario()
 	{
-		FScenarioTemplateDocument Document;
-		Document.TemplateId = TEXT("fixed_curb_obstacle");
+		FScenarioDocument Document;
+		Document.ScenarioId = TEXT("fixed_curb_obstacle");
 		Document.Intent = TEXT("Generate a deterministic fixed obstacle relative to a curb edge.");
 		Document.Corridor.Axis.PointsMeters = { FVector2D(0.0, 0.0), FVector2D(10.0, 0.0) };
 		Document.Corridor.WalkwayWidthMeters = MakeSamplerTestFixedNumber(2.0);
@@ -89,9 +89,9 @@ namespace
 		return Document;
 	}
 
-	FScenarioTemplateDocument MakeSamplerTestTemplateWithRange()
+	FScenarioDocument MakeSamplerTestScenarioWithRange()
 	{
-		FScenarioTemplateDocument Document = MakeSamplerTestTemplate();
+		FScenarioDocument Document = MakeSamplerTestScenario();
 		Document.Corridor.WalkwayWidthMeters = MakeSamplerTestRangeNumber(2.0, 3.0);
 		Document.Obstacles.Placements[0].At.AlongMeters = MakeSamplerTestRangeNumber(3.0, 5.0);
 		return Document;
@@ -99,14 +99,14 @@ namespace
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FScenarioTemplateSamplerFixedObstacleTest,
-	"OdiroSim.ScenarioTemplate.Sampler.FixedObstacle",
+	FScenarioSamplerFixedObstacleTest,
+	"OdiroSim.Scenario.Sampler.FixedObstacle",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FScenarioTemplateSamplerFixedObstacleTest::RunTest(const FString& Parameters)
+bool FScenarioSamplerFixedObstacleTest::RunTest(const FString& Parameters)
 {
-	const FScenarioTemplateSampleResult Result =
-		FScenarioTemplateSampler::GenerateSample(MakeSamplerTestTemplate(), MakeSamplerTestRequest());
+	const FScenarioSamplerResult Result =
+		FScenarioSampler::GenerateSample(MakeSamplerTestScenario(), MakeSamplerTestRequest());
 
 	TestTrue(TEXT("sampler succeeds"), Result.bSuccess);
 	TestEqual(TEXT("layout count"), Result.Document.Scenario.Semantic.Layout.Num(), 1);
@@ -136,19 +136,19 @@ bool FScenarioTemplateSamplerFixedObstacleTest::RunTest(const FString& Parameter
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FScenarioTemplateSamplerDeterministicRangeTest,
-	"OdiroSim.ScenarioTemplate.Sampler.DeterministicRange",
+	FScenarioSamplerDeterministicRangeTest,
+	"OdiroSim.Scenario.Sampler.DeterministicRange",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FScenarioTemplateSamplerDeterministicRangeTest::RunTest(const FString& Parameters)
+bool FScenarioSamplerDeterministicRangeTest::RunTest(const FString& Parameters)
 {
-	const FScenarioTemplateDocument TemplateDocument = MakeSamplerTestTemplateWithRange();
-	const FScenarioTemplateSampleRequest Request = MakeSamplerTestRequest();
+	const FScenarioDocument ScenarioDocument = MakeSamplerTestScenarioWithRange();
+	const FScenarioSamplerRequest Request = MakeSamplerTestRequest();
 
-	const FScenarioTemplateSampleResult FirstResult =
-		FScenarioTemplateSampler::GenerateSample(TemplateDocument, Request);
-	const FScenarioTemplateSampleResult SecondResult =
-		FScenarioTemplateSampler::GenerateSample(TemplateDocument, Request);
+	const FScenarioSamplerResult FirstResult =
+		FScenarioSampler::GenerateSample(ScenarioDocument, Request);
+	const FScenarioSamplerResult SecondResult =
+		FScenarioSampler::GenerateSample(ScenarioDocument, Request);
 
 	TestTrue(TEXT("first sampler succeeds"), FirstResult.bSuccess);
 	TestTrue(TEXT("second sampler succeeds"), SecondResult.bSuccess);
@@ -166,17 +166,17 @@ bool FScenarioTemplateSamplerDeterministicRangeTest::RunTest(const FString& Para
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FScenarioTemplateSamplerVersionMismatchTest,
-	"OdiroSim.ScenarioTemplate.Sampler.VersionMismatch",
+	FScenarioSamplerVersionMismatchTest,
+	"OdiroSim.Scenario.Sampler.VersionMismatch",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FScenarioTemplateSamplerVersionMismatchTest::RunTest(const FString& Parameters)
+bool FScenarioSamplerVersionMismatchTest::RunTest(const FString& Parameters)
 {
-	FScenarioTemplateDocument TemplateDocument = MakeSamplerTestTemplate();
-	TemplateDocument.Version = FScenarioTemplateJson::SupportedVersion + 1;
+	FScenarioDocument ScenarioDocument = MakeSamplerTestScenario();
+	ScenarioDocument.Version = FScenarioDocumentJson::SupportedVersion + 1;
 
-	const FScenarioTemplateSampleResult Result =
-		FScenarioTemplateSampler::GenerateSample(TemplateDocument, MakeSamplerTestRequest());
+	const FScenarioSamplerResult Result =
+		FScenarioSampler::GenerateSample(ScenarioDocument, MakeSamplerTestRequest());
 
 	TestFalse(TEXT("version mismatch fails"), Result.bSuccess);
 	TestTrue(TEXT("unsupported version diagnostic"), Result.Diagnostics.ContainsByPredicate(

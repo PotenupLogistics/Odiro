@@ -1,16 +1,16 @@
-#include "Scenario/ScenarioTemplateSampler.h"
+#include "Scenario/ScenarioSampler.h"
 
 #include "Misc/Crc.h"
 #include "Shared/ScenarioSampleJson.h"
-#include "Shared/ScenarioTemplateJson.h"
+#include "Shared/ScenarioDocumentJson.h"
 
-const TCHAR* FScenarioTemplateSampler::GeneratorVersion = TEXT("scenario_template_sampler_v1");
+const TCHAR* FScenarioSampler::GeneratorVersion = TEXT("scenario_sampler_v1");
 
 namespace
 {
-	const double TemplateSamplerMetersToCentimeters = 100.0;
+	const double ScenarioSamplerMetersToCentimeters = 100.0;
 
-	struct FTemplateSamplerResolvedLane
+	struct FScenarioSamplerResolvedLane
 	{
 		FString SegmentId;
 		FString LaneId;
@@ -20,7 +20,7 @@ namespace
 		EScenarioSampleLaneType Type = EScenarioSampleLaneType::Walkable;
 	};
 
-	void TemplateSamplerAddDiagnostic(
+	void ScenarioSamplerAddDiagnostic(
 		TArray<FScenarioSchemaDiagnostic>& Diagnostics,
 		EScenarioSchemaDiagnosticSeverity Severity,
 		const FString& Code,
@@ -35,7 +35,7 @@ namespace
 		Diagnostics.Add(Diagnostic);
 	}
 
-	bool TemplateSamplerHasErrors(const TArray<FScenarioSchemaDiagnostic>& Diagnostics)
+	bool ScenarioSamplerHasErrors(const TArray<FScenarioSchemaDiagnostic>& Diagnostics)
 	{
 		for (const FScenarioSchemaDiagnostic& Diagnostic : Diagnostics)
 		{
@@ -48,23 +48,23 @@ namespace
 		return false;
 	}
 
-	bool TemplateSamplerIsEmptyString(const FString& Value)
+	bool ScenarioSamplerIsEmptyString(const FString& Value)
 	{
 		return Value.TrimStartAndEnd().IsEmpty();
 	}
 
-	uint32 TemplateSamplerMakeScopedSeed(int64 Seed, const FString& Scope)
+	uint32 ScenarioSamplerMakeScopedSeed(int64 Seed, const FString& Scope)
 	{
 		const FString SeedSource = FString::Printf(TEXT("%lld:%s"), Seed, *Scope);
 		return FCrc::StrCrc32(*SeedSource);
 	}
 
-	FRandomStream TemplateSamplerMakeStream(int64 Seed, const FString& Scope)
+	FRandomStream ScenarioSamplerMakeStream(int64 Seed, const FString& Scope)
 	{
-		return FRandomStream(static_cast<int32>(TemplateSamplerMakeScopedSeed(Seed, Scope)));
+		return FRandomStream(static_cast<int32>(ScenarioSamplerMakeScopedSeed(Seed, Scope)));
 	}
 
-	FScenarioSampleParamValue TemplateSamplerMakeFloatParam(double Value)
+	FScenarioSampleParamValue ScenarioSamplerMakeFloatParam(double Value)
 	{
 		FScenarioSampleParamValue ParamValue;
 		ParamValue.Type = EScenarioSampleParamValueType::Float;
@@ -72,7 +72,7 @@ namespace
 		return ParamValue;
 	}
 
-	FScenarioSampleParamValue TemplateSamplerMakeIntegerParam(int32 Value)
+	FScenarioSampleParamValue ScenarioSamplerMakeIntegerParam(int32 Value)
 	{
 		FScenarioSampleParamValue ParamValue;
 		ParamValue.Type = EScenarioSampleParamValueType::Integer;
@@ -80,7 +80,7 @@ namespace
 		return ParamValue;
 	}
 
-	FScenarioSampleParamValue TemplateSamplerMakeStringParam(const FString& Value)
+	FScenarioSampleParamValue ScenarioSamplerMakeStringParam(const FString& Value)
 	{
 		FScenarioSampleParamValue ParamValue;
 		ParamValue.Type = EScenarioSampleParamValueType::String;
@@ -88,7 +88,7 @@ namespace
 		return ParamValue;
 	}
 
-	double TemplateSamplerResolveNumber(
+	double ScenarioSamplerResolveNumber(
 		const FScenarioTemplateNumberValue& Value,
 		double DefaultValue,
 		const FString& ParamKey,
@@ -104,16 +104,16 @@ namespace
 		{
 			const double MinValue = FMath::Min(Value.MinValue, Value.MaxValue);
 			const double MaxValue = FMath::Max(Value.MinValue, Value.MaxValue);
-			FRandomStream Stream = TemplateSamplerMakeStream(Seed, ParamKey);
+			FRandomStream Stream = ScenarioSamplerMakeStream(Seed, ParamKey);
 			const double ResolvedValue = FMath::Lerp(MinValue, MaxValue, static_cast<double>(Stream.GetFraction()));
-			Params.Add(ParamKey, TemplateSamplerMakeFloatParam(ResolvedValue));
+			Params.Add(ParamKey, ScenarioSamplerMakeFloatParam(ResolvedValue));
 			return ResolvedValue;
 		}
 
 		return Value.FixedValue;
 	}
 
-	int32 TemplateSamplerResolveInteger(
+	int32 ScenarioSamplerResolveInteger(
 		const FScenarioTemplateIntegerValue& Value,
 		int32 DefaultValue,
 		const FString& ParamKey,
@@ -129,16 +129,16 @@ namespace
 		{
 			const int32 MinValue = FMath::Min(Value.MinValue, Value.MaxValue);
 			const int32 MaxValue = FMath::Max(Value.MinValue, Value.MaxValue);
-			FRandomStream Stream = TemplateSamplerMakeStream(Seed, ParamKey);
+			FRandomStream Stream = ScenarioSamplerMakeStream(Seed, ParamKey);
 			const int32 ResolvedValue = Stream.RandRange(MinValue, MaxValue);
-			Params.Add(ParamKey, TemplateSamplerMakeIntegerParam(ResolvedValue));
+			Params.Add(ParamKey, ScenarioSamplerMakeIntegerParam(ResolvedValue));
 			return ResolvedValue;
 		}
 
 		return Value.FixedValue;
 	}
 
-	FString TemplateSamplerResolveString(
+	FString ScenarioSamplerResolveString(
 		const FScenarioTemplateStringValue& Value,
 		const FString& DefaultValue,
 		const FString& ParamKey,
@@ -152,16 +152,16 @@ namespace
 
 		if (Value.Mode == EScenarioTemplateStringValueMode::Choices && !Value.Choices.IsEmpty())
 		{
-			FRandomStream Stream = TemplateSamplerMakeStream(Seed, ParamKey);
+			FRandomStream Stream = ScenarioSamplerMakeStream(Seed, ParamKey);
 			const FString ResolvedValue = Value.Choices[Stream.RandRange(0, Value.Choices.Num() - 1)];
-			Params.Add(ParamKey, TemplateSamplerMakeStringParam(ResolvedValue));
+			Params.Add(ParamKey, ScenarioSamplerMakeStringParam(ResolvedValue));
 			return ResolvedValue;
 		}
 
 		return Value.FixedValue;
 	}
 
-	double TemplateSamplerMeasureAxisLength(const TArray<FVector2D>& PointsMeters)
+	double ScenarioSamplerMeasureAxisLength(const TArray<FVector2D>& PointsMeters)
 	{
 		double LengthMeters = 0.0;
 		for (int32 Index = 0; Index < PointsMeters.Num() - 1; ++Index)
@@ -172,7 +172,7 @@ namespace
 		return LengthMeters;
 	}
 
-	bool TemplateSamplerResolveAxisPose(
+	bool ScenarioSamplerResolveAxisPose(
 		const TArray<FVector2D>& PointsMeters,
 		double AlongMeters,
 		double OffsetMeters,
@@ -216,7 +216,7 @@ namespace
 		return true;
 	}
 
-	EScenarioSampleLaneType TemplateSamplerSurfaceToLaneType(const FString& SurfaceId)
+	EScenarioSampleLaneType ScenarioSamplerSurfaceToLaneType(const FString& SurfaceId)
 	{
 		const FString Normalized = SurfaceId.ToLower();
 		if (Normalized.Contains(TEXT("building")) || Normalized.Contains(TEXT("wall")) || Normalized.Contains(TEXT("block")))
@@ -231,31 +231,31 @@ namespace
 		return EScenarioSampleLaneType::Walkable;
 	}
 
-	const FScenarioTemplateSegment* TemplateSamplerFindSegment(
-		const FScenarioTemplateDocument& TemplateDocument,
+	const FScenarioTemplateSegment* ScenarioSamplerFindSegment(
+		const FScenarioDocument& ScenarioDocument,
 		const FString& SegmentId)
 	{
-		return TemplateDocument.Corridor.Segments.FindByPredicate(
+		return ScenarioDocument.Corridor.Segments.FindByPredicate(
 			[&SegmentId](const FScenarioTemplateSegment& Segment)
 			{
 				return Segment.SegmentId == SegmentId;
 			});
 	}
 
-	const FTemplateSamplerResolvedLane* TemplateSamplerFindLane(
-		const TArray<FTemplateSamplerResolvedLane>& Lanes,
+	const FScenarioSamplerResolvedLane* ScenarioSamplerFindLane(
+		const TArray<FScenarioSamplerResolvedLane>& Lanes,
 		const FString& SegmentId,
 		const FString& LaneId)
 	{
 		return Lanes.FindByPredicate(
-			[&SegmentId, &LaneId](const FTemplateSamplerResolvedLane& Lane)
+			[&SegmentId, &LaneId](const FScenarioSamplerResolvedLane& Lane)
 			{
 				return Lane.SegmentId == SegmentId && Lane.LaneId == LaneId;
 			});
 	}
 
-	bool TemplateSamplerResolveLaneOffset(
-		const TArray<FTemplateSamplerResolvedLane>& Lanes,
+	bool ScenarioSamplerResolveLaneOffset(
+		const TArray<FScenarioSamplerResolvedLane>& Lanes,
 		const FString& SegmentId,
 		const FString& LaneId,
 		double LocalOffsetMeters,
@@ -268,7 +268,7 @@ namespace
 		}
 
 		const FString NormalizedLane = LaneId.ToLower();
-		const FTemplateSamplerResolvedLane* WalkwayLane = TemplateSamplerFindLane(Lanes, SegmentId, TEXT("walkway"));
+		const FScenarioSamplerResolvedLane* WalkwayLane = ScenarioSamplerFindLane(Lanes, SegmentId, TEXT("walkway"));
 		if (NormalizedLane == TEXT("center") || NormalizedLane == TEXT("across"))
 		{
 			OutAxisOffsetMeters = LocalOffsetMeters;
@@ -285,7 +285,7 @@ namespace
 			return true;
 		}
 
-		if (const FTemplateSamplerResolvedLane* Lane = TemplateSamplerFindLane(Lanes, SegmentId, LaneId))
+		if (const FScenarioSamplerResolvedLane* Lane = ScenarioSamplerFindLane(Lanes, SegmentId, LaneId))
 		{
 			const double LaneCenter = (Lane->OffsetRangeMeters.MinMeters + Lane->OffsetRangeMeters.MaxMeters) * 0.5;
 			OutAxisOffsetMeters = LaneCenter + LocalOffsetMeters;
@@ -295,25 +295,25 @@ namespace
 		return false;
 	}
 
-	void TemplateSamplerResolveLayout(
-		const FScenarioTemplateDocument& TemplateDocument,
+	void ScenarioSamplerResolveLayout(
+		const FScenarioDocument& ScenarioDocument,
 		int64 Seed,
 		TMap<FString, FScenarioSampleParamValue>& Params,
 		TArray<FScenarioSampleLayoutEntry>& OutLayout,
-		TArray<FTemplateSamplerResolvedLane>& OutLanes)
+		TArray<FScenarioSamplerResolvedLane>& OutLanes)
 	{
 		OutLayout.Reset();
 		OutLanes.Reset();
 
-		const double WalkwayWidthMeters = TemplateSamplerResolveNumber(
-			TemplateDocument.Corridor.WalkwayWidthMeters,
+		const double WalkwayWidthMeters = ScenarioSamplerResolveNumber(
+			ScenarioDocument.Corridor.WalkwayWidthMeters,
 			3.0,
 			TEXT("corridor.walkway_width_m"),
 			Seed,
 			Params);
 		const double HalfWalkwayWidthMeters = WalkwayWidthMeters * 0.5;
 
-		for (const FScenarioTemplateSegment& Segment : TemplateDocument.Corridor.Segments)
+		for (const FScenarioTemplateSegment& Segment : ScenarioDocument.Corridor.Segments)
 		{
 			FScenarioSampleLayoutEntry LayoutEntry;
 			LayoutEntry.SegmentId = Segment.SegmentId;
@@ -323,7 +323,7 @@ namespace
 			WalkwayLane.LaneId = TEXT("walkway");
 			WalkwayLane.OffsetRangeMeters.MinMeters = -HalfWalkwayWidthMeters;
 			WalkwayLane.OffsetRangeMeters.MaxMeters = HalfWalkwayWidthMeters;
-			WalkwayLane.SurfaceId = TemplateSamplerResolveString(
+			WalkwayLane.SurfaceId = ScenarioSamplerResolveString(
 				Segment.ReplacedBySurfaceId,
 				TEXT("sidewalk"),
 				FString::Printf(TEXT("corridor.segments.%s.replaced_by"), *Segment.SegmentId),
@@ -332,7 +332,7 @@ namespace
 			WalkwayLane.Type = EScenarioSampleLaneType::Walkable;
 			LayoutEntry.Lanes.Add(WalkwayLane);
 
-			FTemplateSamplerResolvedLane WalkwayRegion;
+			FScenarioSamplerResolvedLane WalkwayRegion;
 			WalkwayRegion.SegmentId = Segment.SegmentId;
 			WalkwayRegion.LaneId = WalkwayLane.LaneId;
 			WalkwayRegion.SurfaceId = WalkwayLane.SurfaceId;
@@ -342,11 +342,11 @@ namespace
 			OutLanes.Add(WalkwayRegion);
 
 			double BuildingMaxOffset = -HalfWalkwayWidthMeters;
-			for (int32 Index = 0; Index < TemplateDocument.Corridor.BuildingSide.Num(); ++Index)
+			for (int32 Index = 0; Index < ScenarioDocument.Corridor.BuildingSide.Num(); ++Index)
 			{
-				const FScenarioTemplateLaneRule& LaneRule = TemplateDocument.Corridor.BuildingSide[Index];
+				const FScenarioTemplateLaneRule& LaneRule = ScenarioDocument.Corridor.BuildingSide[Index];
 				const FString ParamKey = FString::Printf(TEXT("corridor.building_side[%d].width_m"), Index);
-				const double WidthMeters = TemplateSamplerResolveNumber(LaneRule.WidthMeters, 0.0, ParamKey, Seed, Params);
+				const double WidthMeters = ScenarioSamplerResolveNumber(LaneRule.WidthMeters, 0.0, ParamKey, Seed, Params);
 				if (WidthMeters <= KINDA_SMALL_NUMBER)
 				{
 					continue;
@@ -357,11 +357,11 @@ namespace
 				Lane.OffsetRangeMeters.MinMeters = BuildingMaxOffset - WidthMeters;
 				Lane.OffsetRangeMeters.MaxMeters = BuildingMaxOffset;
 				Lane.SurfaceId = LaneRule.SurfaceId;
-				Lane.Type = TemplateSamplerSurfaceToLaneType(Lane.SurfaceId);
+				Lane.Type = ScenarioSamplerSurfaceToLaneType(Lane.SurfaceId);
 				LayoutEntry.Lanes.Add(Lane);
 				BuildingMaxOffset -= WidthMeters;
 
-				FTemplateSamplerResolvedLane Region;
+				FScenarioSamplerResolvedLane Region;
 				Region.SegmentId = Segment.SegmentId;
 				Region.LaneId = Lane.LaneId;
 				Region.SurfaceId = Lane.SurfaceId;
@@ -372,11 +372,11 @@ namespace
 			}
 
 			double CurbMinOffset = HalfWalkwayWidthMeters;
-			for (int32 Index = 0; Index < TemplateDocument.Corridor.CurbSide.Num(); ++Index)
+			for (int32 Index = 0; Index < ScenarioDocument.Corridor.CurbSide.Num(); ++Index)
 			{
-				const FScenarioTemplateLaneRule& LaneRule = TemplateDocument.Corridor.CurbSide[Index];
+				const FScenarioTemplateLaneRule& LaneRule = ScenarioDocument.Corridor.CurbSide[Index];
 				const FString ParamKey = FString::Printf(TEXT("corridor.curb_side[%d].width_m"), Index);
-				const double WidthMeters = TemplateSamplerResolveNumber(LaneRule.WidthMeters, 0.0, ParamKey, Seed, Params);
+				const double WidthMeters = ScenarioSamplerResolveNumber(LaneRule.WidthMeters, 0.0, ParamKey, Seed, Params);
 				if (WidthMeters <= KINDA_SMALL_NUMBER)
 				{
 					continue;
@@ -387,11 +387,11 @@ namespace
 				Lane.OffsetRangeMeters.MinMeters = CurbMinOffset;
 				Lane.OffsetRangeMeters.MaxMeters = CurbMinOffset + WidthMeters;
 				Lane.SurfaceId = LaneRule.SurfaceId;
-				Lane.Type = TemplateSamplerSurfaceToLaneType(Lane.SurfaceId);
+				Lane.Type = ScenarioSamplerSurfaceToLaneType(Lane.SurfaceId);
 				LayoutEntry.Lanes.Add(Lane);
 				CurbMinOffset += WidthMeters;
 
-				FTemplateSamplerResolvedLane Region;
+				FScenarioSamplerResolvedLane Region;
 				Region.SegmentId = Segment.SegmentId;
 				Region.LaneId = Lane.LaneId;
 				Region.SurfaceId = Lane.SurfaceId;
@@ -405,8 +405,8 @@ namespace
 		}
 	}
 
-	void TemplateSamplerResolveRobotPose(
-		const FScenarioTemplateDocument& TemplateDocument,
+	void ScenarioSamplerResolveRobotPose(
+		const FScenarioDocument& ScenarioDocument,
 		const FScenarioTemplateRobotAnchor& Anchor,
 		bool bGoalAnchor,
 		int64 Seed,
@@ -416,11 +416,11 @@ namespace
 		const FScenarioTemplateSegment* Segment = nullptr;
 		if (Anchor.Type == EScenarioTemplateRobotAnchorType::CorridorPose)
 		{
-			Segment = TemplateSamplerFindSegment(TemplateDocument, Anchor.SegmentId);
+			Segment = ScenarioSamplerFindSegment(ScenarioDocument, Anchor.SegmentId);
 		}
-		if (!Segment && !TemplateDocument.Corridor.Segments.IsEmpty())
+		if (!Segment && !ScenarioDocument.Corridor.Segments.IsEmpty())
 		{
-			Segment = bGoalAnchor ? &TemplateDocument.Corridor.Segments.Last() : &TemplateDocument.Corridor.Segments[0];
+			Segment = bGoalAnchor ? &ScenarioDocument.Corridor.Segments.Last() : &ScenarioDocument.Corridor.Segments[0];
 		}
 
 		const double DefaultAlongMeters = Segment
@@ -429,17 +429,17 @@ namespace
 		OutPose.SegmentId = Segment ? Segment->SegmentId : Anchor.SegmentId;
 		const FString ParamPrefix = bGoalAnchor ? TEXT("robot.goal") : TEXT("robot.start");
 		OutPose.AlongMeters = Anchor.Type == EScenarioTemplateRobotAnchorType::CorridorPose
-			? TemplateSamplerResolveNumber(Anchor.AlongMeters, DefaultAlongMeters, FString::Printf(TEXT("%s.along_m"), *ParamPrefix), Seed, Params)
+			? ScenarioSamplerResolveNumber(Anchor.AlongMeters, DefaultAlongMeters, FString::Printf(TEXT("%s.along_m"), *ParamPrefix), Seed, Params)
 			: DefaultAlongMeters;
 		OutPose.OffsetMeters = Anchor.Type == EScenarioTemplateRobotAnchorType::CorridorPose
-			? TemplateSamplerResolveNumber(Anchor.OffsetMeters, 0.0, FString::Printf(TEXT("%s.offset_m"), *ParamPrefix), Seed, Params)
+			? ScenarioSamplerResolveNumber(Anchor.OffsetMeters, 0.0, FString::Printf(TEXT("%s.offset_m"), *ParamPrefix), Seed, Params)
 			: 0.0;
 		OutPose.LaneId = Anchor.LaneId.IsEmpty() ? TEXT("walkway") : Anchor.LaneId;
 		OutPose.SourceAnchorType = Anchor.Type;
 
 		FVector2D PointMeters;
 		double YawDegrees = 0.0;
-		TemplateSamplerResolveAxisPose(TemplateDocument.Corridor.Axis.PointsMeters, OutPose.AlongMeters, OutPose.OffsetMeters, PointMeters, YawDegrees);
+		ScenarioSamplerResolveAxisPose(ScenarioDocument.Corridor.Axis.PointsMeters, OutPose.AlongMeters, OutPose.OffsetMeters, PointMeters, YawDegrees);
 		if (Anchor.Heading == EScenarioTemplateRobotHeading::Backward)
 		{
 			YawDegrees += 180.0;
@@ -447,9 +447,9 @@ namespace
 		OutPose.HeadingDegrees = FRotator::ClampAxis(YawDegrees);
 	}
 
-	void TemplateSamplerResolveFixedObstacles(
-		const FScenarioTemplateDocument& TemplateDocument,
-		const TArray<FTemplateSamplerResolvedLane>& Lanes,
+	void ScenarioSamplerResolveFixedObstacles(
+		const FScenarioDocument& ScenarioDocument,
+		const TArray<FScenarioSamplerResolvedLane>& Lanes,
 		int64 Seed,
 		double MinClearWidthMeters,
 		TMap<FString, FScenarioSampleParamValue>& Params,
@@ -457,7 +457,7 @@ namespace
 		TArray<FScenarioSampleStaticObstacle>& OutObstacles)
 	{
 		OutObstacles.Reset();
-		for (const FScenarioTemplateObstaclePlacement& Placement : TemplateDocument.Obstacles.Placements)
+		for (const FScenarioTemplateObstaclePlacement& Placement : ScenarioDocument.Obstacles.Placements)
 		{
 			if (Placement.Kind != EScenarioTemplateObstaclePlacementKind::Fixed)
 			{
@@ -465,10 +465,10 @@ namespace
 			}
 
 			const FString PlacementPath = FString::Printf(TEXT("$.obstacles.placements.%s"), *Placement.PlacementId);
-			const FScenarioTemplateSegment* Segment = TemplateSamplerFindSegment(TemplateDocument, Placement.At.SegmentId);
+			const FScenarioTemplateSegment* Segment = ScenarioSamplerFindSegment(ScenarioDocument, Placement.At.SegmentId);
 			if (!Segment)
 			{
-				TemplateSamplerAddDiagnostic(
+				ScenarioSamplerAddDiagnostic(
 					Diagnostics,
 					EScenarioSchemaDiagnosticSeverity::Error,
 					TEXT("unknown_obstacle_segment"),
@@ -479,19 +479,19 @@ namespace
 
 			const FString ParamPrefix = FString::Printf(TEXT("obstacles.%s"), *Placement.PlacementId);
 			const double DefaultAlongMeters = (Segment->AlongRangeMeters.StartMeters + Segment->AlongRangeMeters.EndMeters) * 0.5;
-			const double AlongMeters = TemplateSamplerResolveNumber(
+			const double AlongMeters = ScenarioSamplerResolveNumber(
 				Placement.At.AlongMeters,
 				DefaultAlongMeters,
 				FString::Printf(TEXT("%s.at.along_m"), *ParamPrefix),
 				Seed,
 				Params);
-			const double LocalOffsetMeters = TemplateSamplerResolveNumber(
+			const double LocalOffsetMeters = ScenarioSamplerResolveNumber(
 				Placement.At.OffsetMeters,
 				0.0,
 				FString::Printf(TEXT("%s.at.offset_m"), *ParamPrefix),
 				Seed,
 				Params);
-			const double YawLocalDegrees = TemplateSamplerResolveNumber(
+			const double YawLocalDegrees = ScenarioSamplerResolveNumber(
 				Placement.YawDegrees,
 				0.0,
 				FString::Printf(TEXT("%s.yaw_deg"), *ParamPrefix),
@@ -499,9 +499,9 @@ namespace
 				Params);
 
 			double AxisOffsetMeters = 0.0;
-			if (!TemplateSamplerResolveLaneOffset(Lanes, Segment->SegmentId, Placement.At.LaneId, LocalOffsetMeters, AxisOffsetMeters))
+			if (!ScenarioSamplerResolveLaneOffset(Lanes, Segment->SegmentId, Placement.At.LaneId, LocalOffsetMeters, AxisOffsetMeters))
 			{
-				TemplateSamplerAddDiagnostic(
+				ScenarioSamplerAddDiagnostic(
 					Diagnostics,
 					EScenarioSchemaDiagnosticSeverity::Error,
 					TEXT("unknown_obstacle_lane"),
@@ -512,9 +512,9 @@ namespace
 
 			FVector2D PointMeters;
 			double AxisYawDegrees = 0.0;
-			if (!TemplateSamplerResolveAxisPose(TemplateDocument.Corridor.Axis.PointsMeters, AlongMeters, AxisOffsetMeters, PointMeters, AxisYawDegrees))
+			if (!ScenarioSamplerResolveAxisPose(ScenarioDocument.Corridor.Axis.PointsMeters, AlongMeters, AxisOffsetMeters, PointMeters, AxisYawDegrees))
 			{
-				TemplateSamplerAddDiagnostic(
+				ScenarioSamplerAddDiagnostic(
 					Diagnostics,
 					EScenarioSchemaDiagnosticSeverity::Error,
 					TEXT("obstacle_axis_pose_failed"),
@@ -534,8 +534,8 @@ namespace
 			Obstacle.YawDegrees = FRotator::ClampAxis(AxisYawDegrees + YawLocalDegrees);
 			Obstacle.FootprintMeters = FVector2D(0.5, 0.5);
 			Obstacle.PlacedBy = Placement.PlacementId;
-			Obstacle.ClearWidthRemainingMeters = FMath::Max(0.0, TemplateSamplerResolveNumber(
-				TemplateDocument.Corridor.WalkwayWidthMeters,
+			Obstacle.ClearWidthRemainingMeters = FMath::Max(0.0, ScenarioSamplerResolveNumber(
+				ScenarioDocument.Corridor.WalkwayWidthMeters,
 				3.0,
 				TEXT("corridor.walkway_width_m"),
 				Seed,
@@ -545,7 +545,7 @@ namespace
 				&& MinClearWidthMeters > KINDA_SMALL_NUMBER
 				&& Obstacle.ClearWidthRemainingMeters + KINDA_SMALL_NUMBER < MinClearWidthMeters)
 			{
-				TemplateSamplerAddDiagnostic(
+				ScenarioSamplerAddDiagnostic(
 					Diagnostics,
 					EScenarioSchemaDiagnosticSeverity::Error,
 					TEXT("min_clear_width_violation"),
@@ -561,7 +561,7 @@ namespace
 		}
 	}
 
-	void TemplateSamplerBuildClearWidthProfile(
+	void ScenarioSamplerBuildClearWidthProfile(
 		const TArray<FScenarioSampleLayoutEntry>& Layout,
 		const TArray<FScenarioSampleStaticObstacle>& Obstacles,
 		TArray<FScenarioSampleClearWidthEntry>& OutProfile,
@@ -618,18 +618,18 @@ namespace
 		}
 	}
 
-	FString TemplateSamplerResolveRequiredSourceText(
+	FString ScenarioSamplerResolveRequiredSourceText(
 		const FString& Value,
 		const FString& Fallback,
 		const FString& Path,
 		TArray<FScenarioSchemaDiagnostic>& Diagnostics)
 	{
-		if (!TemplateSamplerIsEmptyString(Value))
+		if (!ScenarioSamplerIsEmptyString(Value))
 		{
 			return Value;
 		}
 
-		TemplateSamplerAddDiagnostic(
+		ScenarioSamplerAddDiagnostic(
 			Diagnostics,
 			EScenarioSchemaDiagnosticSeverity::Warning,
 			TEXT("missing_sample_source"),
@@ -639,72 +639,72 @@ namespace
 	}
 }
 
-FScenarioTemplateSampleResult FScenarioTemplateSampler::GenerateSample(
-	const FScenarioTemplateDocument& TemplateDocument,
-	const FScenarioTemplateSampleRequest& Request)
+FScenarioSamplerResult FScenarioSampler::GenerateSample(
+	const FScenarioDocument& ScenarioDocument,
+	const FScenarioSamplerRequest& Request)
 {
-	FScenarioTemplateSampleResult Result;
+	FScenarioSamplerResult Result;
 
-	TArray<FScenarioSchemaDiagnostic> TemplateDiagnostics;
-	if (!FScenarioTemplateJson::ValidateDocument(TemplateDocument, TemplateDiagnostics))
+	TArray<FScenarioSchemaDiagnostic> ScenarioDiagnostics;
+	if (!FScenarioDocumentJson::ValidateDocument(ScenarioDocument, ScenarioDiagnostics))
 	{
-		Result.Diagnostics.Append(TemplateDiagnostics);
+		Result.Diagnostics.Append(ScenarioDiagnostics);
 		Result.bSuccess = false;
 		return Result;
 	}
-	Result.Diagnostics.Append(TemplateDiagnostics);
+	Result.Diagnostics.Append(ScenarioDiagnostics);
 
 	FScenarioSampleDocument Document;
-	Document.Sample.SampleId = TemplateSamplerIsEmptyString(Request.SampleId)
+	Document.Sample.SampleId = ScenarioSamplerIsEmptyString(Request.SampleId)
 		? FString::Printf(TEXT("%06lld"), FMath::Abs(Request.Seed))
 		: Request.SampleId;
-	Document.Sample.ScenarioId = TemplateSamplerIsEmptyString(Request.ScenarioId)
-		? FString::Printf(TEXT("%s_%s"), *TemplateDocument.TemplateId, *Document.Sample.SampleId)
+	Document.Sample.ScenarioId = ScenarioSamplerIsEmptyString(Request.ScenarioId)
+		? FString::Printf(TEXT("%s_%s"), *ScenarioDocument.ScenarioId, *Document.Sample.SampleId)
 		: Request.ScenarioId;
-	Document.Sample.Source.TemplateRef = TemplateSamplerResolveRequiredSourceText(Request.TemplateRef, TEXT("unspecified_template_ref"), TEXT("$.sample.source.template_ref"), Result.Diagnostics);
-	Document.Sample.Source.TemplateHash = TemplateSamplerResolveRequiredSourceText(Request.TemplateHash, TEXT("unspecified_template_hash"), TEXT("$.sample.source.template_hash"), Result.Diagnostics);
-	Document.Sample.Source.ProfileRef = TemplateSamplerResolveRequiredSourceText(Request.ProfileRef, TEXT("unspecified_profile_ref"), TEXT("$.sample.source.profile_ref"), Result.Diagnostics);
-	Document.Sample.Source.ProfileHash = TemplateSamplerResolveRequiredSourceText(Request.ProfileHash, TEXT("unspecified_profile_hash"), TEXT("$.sample.source.profile_hash"), Result.Diagnostics);
-	Document.Sample.Source.SettingRef = TemplateSamplerResolveRequiredSourceText(Request.SettingRef, TEXT("unspecified_setting_ref"), TEXT("$.sample.source.setting_ref"), Result.Diagnostics);
-	Document.Sample.Source.SettingHash = TemplateSamplerResolveRequiredSourceText(Request.SettingHash, TEXT("unspecified_setting_hash"), TEXT("$.sample.source.setting_hash"), Result.Diagnostics);
+	Document.Sample.Source.TemplateRef = ScenarioSamplerResolveRequiredSourceText(Request.SourceScenarioRef, TEXT("unspecified_scenario_ref"), TEXT("$.sample.source.template_ref"), Result.Diagnostics);
+	Document.Sample.Source.TemplateHash = ScenarioSamplerResolveRequiredSourceText(Request.SourceScenarioHash, TEXT("unspecified_scenario_hash"), TEXT("$.sample.source.template_hash"), Result.Diagnostics);
+	Document.Sample.Source.ProfileRef = ScenarioSamplerResolveRequiredSourceText(Request.ProfileRef, TEXT("unspecified_profile_ref"), TEXT("$.sample.source.profile_ref"), Result.Diagnostics);
+	Document.Sample.Source.ProfileHash = ScenarioSamplerResolveRequiredSourceText(Request.ProfileHash, TEXT("unspecified_profile_hash"), TEXT("$.sample.source.profile_hash"), Result.Diagnostics);
+	Document.Sample.Source.SettingRef = ScenarioSamplerResolveRequiredSourceText(Request.SettingRef, TEXT("unspecified_setting_ref"), TEXT("$.sample.source.setting_ref"), Result.Diagnostics);
+	Document.Sample.Source.SettingHash = ScenarioSamplerResolveRequiredSourceText(Request.SettingHash, TEXT("unspecified_setting_hash"), TEXT("$.sample.source.setting_hash"), Result.Diagnostics);
 	Document.Sample.Source.Seed = Request.Seed;
-	Document.Sample.Source.GeneratorVersion = TemplateSamplerIsEmptyString(Request.GeneratorVersion)
+	Document.Sample.Source.GeneratorVersion = ScenarioSamplerIsEmptyString(Request.GeneratorVersion)
 		? GeneratorVersion
 		: Request.GeneratorVersion;
 
 	FScenarioSampleScenario& Scenario = Document.Scenario;
-	TArray<FTemplateSamplerResolvedLane> ResolvedLanes;
-	TemplateSamplerResolveLayout(
-		TemplateDocument,
+	TArray<FScenarioSamplerResolvedLane> ResolvedLanes;
+	ScenarioSamplerResolveLayout(
+		ScenarioDocument,
 		Request.Seed,
 		Scenario.Params,
 		Scenario.Semantic.Layout,
 		ResolvedLanes);
 
-	Scenario.Semantic.RouteAxis.Type = TemplateDocument.Corridor.Axis.Type;
+	Scenario.Semantic.RouteAxis.Type = ScenarioDocument.Corridor.Axis.Type;
 	Scenario.Semantic.RouteAxis.OriginXYMeters = FVector2D::ZeroVector;
 	Scenario.Semantic.RouteAxis.HeadingDegrees = 0.0;
-	Scenario.Semantic.RouteAxis.PointsMeters = TemplateDocument.Corridor.Axis.PointsMeters;
-	Scenario.Semantic.RouteAxis.LengthMeters = TemplateSamplerMeasureAxisLength(TemplateDocument.Corridor.Axis.PointsMeters);
+	Scenario.Semantic.RouteAxis.PointsMeters = ScenarioDocument.Corridor.Axis.PointsMeters;
+	Scenario.Semantic.RouteAxis.LengthMeters = ScenarioSamplerMeasureAxisLength(ScenarioDocument.Corridor.Axis.PointsMeters);
 
-	TemplateSamplerResolveRobotPose(TemplateDocument, TemplateDocument.Robot.Start, false, Request.Seed, Scenario.Params, Scenario.Semantic.Robot.Start);
-	TemplateSamplerResolveRobotPose(TemplateDocument, TemplateDocument.Robot.Goal, true, Request.Seed, Scenario.Params, Scenario.Semantic.Robot.Goal);
+	ScenarioSamplerResolveRobotPose(ScenarioDocument, ScenarioDocument.Robot.Start, false, Request.Seed, Scenario.Params, Scenario.Semantic.Robot.Start);
+	ScenarioSamplerResolveRobotPose(ScenarioDocument, ScenarioDocument.Robot.Goal, true, Request.Seed, Scenario.Params, Scenario.Semantic.Robot.Goal);
 
-	const double MinClearWidthMeters = TemplateSamplerResolveNumber(
-		TemplateDocument.Obstacles.MinClearWidthMeters,
+	const double MinClearWidthMeters = ScenarioSamplerResolveNumber(
+		ScenarioDocument.Obstacles.MinClearWidthMeters,
 		0.0,
 		TEXT("obstacles.min_clear_width_m"),
 		Request.Seed,
 		Scenario.Params);
-	TemplateSamplerResolveFixedObstacles(
-		TemplateDocument,
+	ScenarioSamplerResolveFixedObstacles(
+		ScenarioDocument,
 		ResolvedLanes,
 		Request.Seed,
 		MinClearWidthMeters,
 		Scenario.Params,
 		Result.Diagnostics,
 		Scenario.Semantic.StaticObstacles);
-	TemplateSamplerBuildClearWidthProfile(
+	ScenarioSamplerBuildClearWidthProfile(
 		Scenario.Semantic.Layout,
 		Scenario.Semantic.StaticObstacles,
 		Scenario.Semantic.ClearWidthProfile,
@@ -718,6 +718,6 @@ FScenarioTemplateSampleResult FScenarioTemplateSampler::GenerateSample(
 	Result.Diagnostics.Append(SampleDiagnostics);
 	Document.Validation.Diagnostics = Result.Diagnostics;
 	Result.Document = Document;
-	Result.bSuccess = bValidSample && !TemplateSamplerHasErrors(Result.Diagnostics);
+	Result.bSuccess = bValidSample && !ScenarioSamplerHasErrors(Result.Diagnostics);
 	return Result;
 }

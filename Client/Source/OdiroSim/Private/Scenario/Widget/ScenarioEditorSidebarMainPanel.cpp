@@ -13,7 +13,7 @@
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
 #include "Styling/SlateBrush.h"
-#include "Widget/WidgetTextStyleCatalog.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
 
 namespace
 {
@@ -241,10 +241,10 @@ void UScenarioEditorSidebarMainPanel::RefreshFromDraft()
 		return;
 	}
 
-	RefreshFromTemplate(authoringSubsystem->GetDraftScenarioTemplate());
+	RefreshFromTemplate(authoringSubsystem->GetDraftScenario());
 }
 
-void UScenarioEditorSidebarMainPanel::RefreshFromTemplate(const FScenarioTemplateDocument& scenarioTemplate)
+void UScenarioEditorSidebarMainPanel::RefreshFromTemplate(const FScenarioDocument& scenarioTemplate)
 {
 	ConfigureFieldRows();
 
@@ -252,9 +252,9 @@ void UScenarioEditorSidebarMainPanel::RefreshFromTemplate(const FScenarioTemplat
 	{
 		SchemaFieldRow->SetValueText(scenarioTemplate.Schema);
 	}
-	if (TemplateIdFieldRow)
+	if (ScenarioIdFieldRow)
 	{
-		TemplateIdFieldRow->SetValueText(scenarioTemplate.TemplateId);
+		ScenarioIdFieldRow->SetValueText(scenarioTemplate.ScenarioId);
 	}
 	if (VersionFieldRow)
 	{
@@ -292,7 +292,7 @@ void UScenarioEditorSidebarMainPanel::RefreshFromTemplate(const FScenarioTemplat
 	SetDiagnosticsText(TEXT(""));
 }
 
-void UScenarioEditorSidebarMainPanel::HandleTemplateIdCommitted(
+void UScenarioEditorSidebarMainPanel::HandleScenarioIdCommitted(
 	const FText& text,
 	const ETextCommit::Type commitMethod)
 {
@@ -302,7 +302,7 @@ void UScenarioEditorSidebarMainPanel::HandleTemplateIdCommitted(
 		return;
 	}
 
-	CommitTemplateIdText(text);
+	CommitScenarioIdText(text);
 }
 
 void UScenarioEditorSidebarMainPanel::HandleIntentCommitted(
@@ -555,7 +555,7 @@ void UScenarioEditorSidebarMainPanel::BuildDefaultWidgetTree()
 
 	addFieldRow(rootBody, SchemaFieldRow, TEXT("SchemaFieldRow"));
 	addFieldRow(rootBody, VersionFieldRow, TEXT("VersionFieldRow"));
-	addFieldRow(rootBody, TemplateIdFieldRow, TEXT("TemplateIdFieldRow"));
+	addFieldRow(rootBody, ScenarioIdFieldRow, TEXT("ScenarioIdFieldRow"));
 	addFieldRow(rootBody, IntentFieldRow, TEXT("IntentFieldRow"));
 
 	UVerticalBox* robotBody = AddMainPanelBlockWidget(
@@ -623,14 +623,14 @@ void UScenarioEditorSidebarMainPanel::BuildDefaultWidgetTree()
 
 void UScenarioEditorSidebarMainPanel::BindFieldRows()
 {
-	if (TemplateIdFieldRow)
+	if (ScenarioIdFieldRow)
 	{
-		TemplateIdFieldRow->OnValueTextCommitted.RemoveDynamic(
+		ScenarioIdFieldRow->OnValueTextCommitted.RemoveDynamic(
 			this,
-			&UScenarioEditorSidebarMainPanel::HandleTemplateIdCommitted);
-		TemplateIdFieldRow->OnValueTextCommitted.AddDynamic(
+			&UScenarioEditorSidebarMainPanel::HandleScenarioIdCommitted);
+		ScenarioIdFieldRow->OnValueTextCommitted.AddDynamic(
 			this,
-			&UScenarioEditorSidebarMainPanel::HandleTemplateIdCommitted);
+			&UScenarioEditorSidebarMainPanel::HandleScenarioIdCommitted);
 	}
 
 	if (IntentFieldRow)
@@ -715,11 +715,11 @@ void UScenarioEditorSidebarMainPanel::BindFieldRows()
 
 void UScenarioEditorSidebarMainPanel::UnbindFieldRows()
 {
-	if (TemplateIdFieldRow)
+	if (ScenarioIdFieldRow)
 	{
-		TemplateIdFieldRow->OnValueTextCommitted.RemoveDynamic(
+		ScenarioIdFieldRow->OnValueTextCommitted.RemoveDynamic(
 			this,
-			&UScenarioEditorSidebarMainPanel::HandleTemplateIdCommitted);
+			&UScenarioEditorSidebarMainPanel::HandleScenarioIdCommitted);
 	}
 
 	if (IntentFieldRow)
@@ -818,12 +818,12 @@ void UScenarioEditorSidebarMainPanel::ConfigureFieldRows()
 		SchemaFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
 		SchemaFieldRow->SetEditable(false);
 	}
-	if (TemplateIdFieldRow)
+	if (ScenarioIdFieldRow)
 	{
-		TemplateIdFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		TemplateIdFieldRow->SetFieldLabel(TEXT("scenario_id"));
-		TemplateIdFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
-		TemplateIdFieldRow->SetEditable(true);
+		ScenarioIdFieldRow->SetTextStyleCatalog(TextStyleCatalog);
+		ScenarioIdFieldRow->SetFieldLabel(TEXT("scenario_id"));
+		ScenarioIdFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
+		ScenarioIdFieldRow->SetEditable(true);
 	}
 	if (VersionFieldRow)
 	{
@@ -892,9 +892,9 @@ void UScenarioEditorSidebarMainPanel::ApplyTextStyles()
 	{
 		SchemaFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 	}
-	if (TemplateIdFieldRow)
+	if (ScenarioIdFieldRow)
 	{
-		TemplateIdFieldRow->SetTextStyleCatalog(TextStyleCatalog);
+		ScenarioIdFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 	}
 	if (VersionFieldRow)
 	{
@@ -1054,7 +1054,7 @@ UScenarioAuthoringSubsystem* UScenarioEditorSidebarMainPanel::GetAuthoringSubsys
 	return world ? world->GetSubsystem<UScenarioAuthoringSubsystem>() : nullptr;
 }
 
-void UScenarioEditorSidebarMainPanel::CommitTemplateIdText(const FText& text)
+void UScenarioEditorSidebarMainPanel::CommitScenarioIdText(const FText& text)
 {
 	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 	if (!authoringSubsystem)
@@ -1106,7 +1106,7 @@ void UScenarioEditorSidebarMainPanel::CommitRobotAnchorText(
 		return;
 	}
 
-	const FScenarioTemplateDocument scenarioTemplate = authoringSubsystem->GetDraftScenarioTemplate();
+	const FScenarioDocument scenarioTemplate = authoringSubsystem->GetDraftScenario();
 	FScenarioTemplateRobotAnchor anchor = target == EScenarioEditorSidebarRobotAnchorTarget::Start
 		? scenarioTemplate.Robot.Start
 		: scenarioTemplate.Robot.Goal;
@@ -1219,7 +1219,7 @@ void UScenarioEditorSidebarMainPanel::CommitRobotAnchorRange(
 		return;
 	}
 
-	const FScenarioTemplateDocument scenarioTemplate = authoringSubsystem->GetDraftScenarioTemplate();
+	const FScenarioDocument scenarioTemplate = authoringSubsystem->GetDraftScenario();
 	FScenarioTemplateRobotAnchor anchor = target == EScenarioEditorSidebarRobotAnchorTarget::Start
 		? scenarioTemplate.Robot.Start
 		: scenarioTemplate.Robot.Goal;

@@ -4,7 +4,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Types/SlateEnums.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
-#include "Shared/ScenarioTemplateTypes.h"
+#include "Shared/ScenarioDocumentTypes.h"
 #include "ScenarioEditorSidebarCorridorSegmentWidget.generated.h"
 
 class UScenarioEditorSidebarBlockWidget;

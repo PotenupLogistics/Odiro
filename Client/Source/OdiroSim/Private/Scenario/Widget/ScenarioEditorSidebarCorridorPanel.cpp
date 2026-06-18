@@ -11,7 +11,7 @@
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorLaneWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorPointWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorSegmentWidget.h"
-#include "Widget/WidgetTextStyleCatalog.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
 
 namespace
 {
@@ -145,11 +145,11 @@ void UScenarioEditorSidebarCorridorPanel::RefreshFromDraft()
 		return;
 	}
 
-	RefreshFromTemplate(authoringSubsystem->GetDraftScenarioTemplate());
+	RefreshFromTemplate(authoringSubsystem->GetDraftScenario());
 }
 
 void UScenarioEditorSidebarCorridorPanel::RefreshFromTemplate(
-	const FScenarioTemplateDocument& scenarioTemplate)
+	const FScenarioDocument& scenarioTemplate)
 {
 	ConfigureFieldRows();
 
@@ -1277,7 +1277,7 @@ TArray<FScenarioTemplateLaneRule> UScenarioEditorSidebarCorridorPanel::GetDraftL
 		return {};
 	}
 
-	const FScenarioTemplateCorridor& corridor = authoringSubsystem->GetDraftScenarioTemplate().Corridor;
+	const FScenarioTemplateCorridor& corridor = authoringSubsystem->GetDraftScenario().Corridor;
 	return side == EScenarioEditorCorridorSide::Building
 		? corridor.BuildingSide
 		: corridor.CurbSide;
@@ -1291,7 +1291,7 @@ TArray<FVector2D> UScenarioEditorSidebarCorridorPanel::GetDraftAxisPoints() cons
 		return {};
 	}
 
-	return authoringSubsystem->GetDraftScenarioTemplate().Corridor.Axis.PointsMeters;
+	return authoringSubsystem->GetDraftScenario().Corridor.Axis.PointsMeters;
 }
 
 TArray<FScenarioTemplateSegment> UScenarioEditorSidebarCorridorPanel::GetDraftSegments() const
@@ -1302,7 +1302,7 @@ TArray<FScenarioTemplateSegment> UScenarioEditorSidebarCorridorPanel::GetDraftSe
 		return {};
 	}
 
-	return authoringSubsystem->GetDraftScenarioTemplate().Corridor.Segments;
+	return authoringSubsystem->GetDraftScenario().Corridor.Segments;
 }
 
 void UScenarioEditorSidebarCorridorPanel::CommitWalkwayWidthText(const FText& text)
@@ -1804,7 +1804,7 @@ FScenarioTemplateSegment UScenarioEditorSidebarCorridorPanel::MakeDefaultSegment
 	{
 		const UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
 		const double axisLengthMeters = authoringSubsystem
-			? MeasureAxisLengthMeters(authoringSubsystem->GetDraftScenarioTemplate().Corridor.Axis.PointsMeters)
+			? MeasureAxisLengthMeters(authoringSubsystem->GetDraftScenario().Corridor.Axis.PointsMeters)
 			: 1.0;
 		segment.Type = EScenarioTemplateSegmentType::Straight;
 		segment.AlongRangeMeters.StartMeters = 0.0;

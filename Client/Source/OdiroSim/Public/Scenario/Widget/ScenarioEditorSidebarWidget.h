@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Scenario/Widget/ScenarioEditorToolbarWidget.h"
-#include "Shared/ScenarioTemplateTypes.h"
+#include "Shared/ScenarioDocumentTypes.h"
 #include "ScenarioEditorSidebarWidget.generated.h"
 
 class UScrollBox;
@@ -97,7 +97,7 @@ public:
 
 	// Renders a read-only view of the provided Scenario Template document.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void RefreshFromTemplate(const FScenarioTemplateDocument& scenarioTemplate);
+	void RefreshFromTemplate(const FScenarioDocument& scenarioTemplate);
 
 private:
 	// Generated Main panel used only when no specialized Main panel is bound.
@@ -123,7 +123,7 @@ private:
 	// Wraps a Blueprint-authored PanelSwitcher in a generated scroll area when no scroll box is bound.
 	bool EnsurePanelSwitcherIsScrollable();
 	// Rebuilds generated block content for the active placeholder panel widget.
-	void RefreshGeneratedPanelContent(const FScenarioTemplateDocument& scenarioTemplate);
+	void RefreshGeneratedPanelContent(const FScenarioDocument& scenarioTemplate);
 	// Creates or returns the generated fallback widget for one panel.
 	UWidget* EnsureGeneratedPanelWidget(EScenarioTemplateSidebarPanel panel);
 	// Returns the generated fallback widget for one panel without creating it.
@@ -133,7 +133,7 @@ private:
 	// Builds one generated block panel for the active template data.
 	UWidget* BuildGeneratedPanelContent(
 		EScenarioTemplateSidebarPanel panel,
-		const FScenarioTemplateDocument& scenarioTemplate);
+		const FScenarioDocument& scenarioTemplate);
 	// Applies the active panel to the optional UMG widget switcher.
 	void RefreshPanelSwitcher();
 	// Applies a small inset so panel outlines are not clipped by the switcher viewport.
@@ -146,25 +146,25 @@ private:
 	UWidget* ResolvePanelWidget(EScenarioTemplateSidebarPanel panel) const;
 	// Builds read-only text for root template metadata and robot anchors.
 	void BuildMainPanelText(
-		const FScenarioTemplateDocument& scenarioTemplate,
+		const FScenarioDocument& scenarioTemplate,
 		FString& outPrimaryText,
 		FString& outSecondaryText,
 		FString& outListText) const;
 	// Builds read-only text for Corridor axis, side lanes, and semantic segments.
 	void BuildCorridorPanelText(
-		const FScenarioTemplateDocument& scenarioTemplate,
+		const FScenarioDocument& scenarioTemplate,
 		FString& outPrimaryText,
 		FString& outSecondaryText,
 		FString& outListText) const;
 	// Builds read-only text for obstacle rules and placement blocks.
 	void BuildObstaclePanelText(
-		const FScenarioTemplateDocument& scenarioTemplate,
+		const FScenarioDocument& scenarioTemplate,
 		FString& outPrimaryText,
 		FString& outSecondaryText,
 		FString& outListText) const;
 	// Builds read-only text for pedestrian background and encounter rules.
 	void BuildPedestrianPanelText(
-		const FScenarioTemplateDocument& scenarioTemplate,
+		const FScenarioDocument& scenarioTemplate,
 		FString& outPrimaryText,
 		FString& outSecondaryText,
 		FString& outListText) const;

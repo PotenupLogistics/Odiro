@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
-#include "Shared/ScenarioTemplateTypes.h"
+#include "Shared/ScenarioDocumentTypes.h"
 #include "ScenarioCorridorPreviewActor.generated.h"
 
 class UMaterialInterface;

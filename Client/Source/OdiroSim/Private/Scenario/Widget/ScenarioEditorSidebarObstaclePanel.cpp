@@ -8,7 +8,7 @@
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Shared/ScenarioCoreTypes.h"
-#include "Widget/WidgetTextStyleCatalog.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
 
 namespace
 {
@@ -152,11 +152,11 @@ void UScenarioEditorSidebarObstaclePanel::RefreshFromDraft()
 		return;
 	}
 
-	RefreshFromTemplate(authoringSubsystem->GetDraftScenarioTemplate());
+	RefreshFromTemplate(authoringSubsystem->GetDraftScenario());
 }
 
 void UScenarioEditorSidebarObstaclePanel::RefreshFromTemplate(
-	const FScenarioTemplateDocument& scenarioTemplate)
+	const FScenarioDocument& scenarioTemplate)
 {
 	ConfigureFieldRows();
 
@@ -598,7 +598,7 @@ TArray<FScenarioTemplateObstaclePlacement> UScenarioEditorSidebarObstaclePanel::
 		return {};
 	}
 
-	return authoringSubsystem->GetDraftScenarioTemplate().Obstacles.Placements;
+	return authoringSubsystem->GetDraftScenario().Obstacles.Placements;
 }
 
 void UScenarioEditorSidebarObstaclePanel::CommitMinClearWidthText(const FText& text)
@@ -916,7 +916,7 @@ FScenarioTemplateObstaclePlacement UScenarioEditorSidebarObstaclePanel::MakeDefa
 	}
 	else if (const UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem())
 	{
-		const FScenarioTemplateDocument scenarioTemplate = authoringSubsystem->GetDraftScenarioTemplate();
+		const FScenarioDocument scenarioTemplate = authoringSubsystem->GetDraftScenario();
 		const TArray<FScenarioTemplateSegment>& segments = scenarioTemplate.Corridor.Segments;
 		if (!segments.IsEmpty())
 		{

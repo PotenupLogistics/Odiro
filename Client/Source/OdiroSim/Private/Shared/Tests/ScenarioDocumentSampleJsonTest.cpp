@@ -1,7 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Shared/ScenarioSampleJson.h"
-#include "Shared/ScenarioTemplateJson.h"
+#include "Shared/ScenarioDocumentJson.h"
 
 #include "Misc/AutomationTest.h"
 
@@ -27,11 +27,11 @@ namespace
 		return NumberValue;
 	}
 
-	FScenarioTemplateDocument MakeMinimalTemplateDocument()
+	FScenarioDocument MakeMinimalScenarioDocument()
 	{
-		FScenarioTemplateDocument Document;
-		Document.TemplateId = TEXT("pinch_oncoming_low_coop");
-		Document.Intent = TEXT("Validate a narrow corridor preview template.");
+		FScenarioDocument Document;
+		Document.ScenarioId = TEXT("pinch_oncoming_low_coop");
+		Document.Intent = TEXT("Validate a narrow corridor preview scenario.");
 		Document.Corridor.Axis.PointsMeters = { FVector2D(0.0, 0.0), FVector2D(12.0, 0.0) };
 		Document.Corridor.WalkwayWidthMeters = MakeTestTemplateNumber(2.5);
 
@@ -71,8 +71,8 @@ namespace
 		FScenarioSampleDocument Document;
 		Document.Sample.SampleId = TEXT("000001");
 		Document.Sample.ScenarioId = TEXT("pinch_oncoming_low_coop_000001");
-		Document.Sample.Source.TemplateRef = TEXT("templates/scenarios/pinch_oncoming_low_coop.template.json");
-		Document.Sample.Source.TemplateHash = TEXT("sha256:templatehash0001");
+		Document.Sample.Source.TemplateRef = TEXT("runs/test/snapshot/scenario.json");
+		Document.Sample.Source.TemplateHash = TEXT("sha256:scenariohash0001");
 		Document.Sample.Source.ProfileRef = TEXT("experiments/E/profile.json");
 		Document.Sample.Source.ProfileHash = TEXT("sha256:profilehash0001");
 		Document.Sample.Source.SettingRef = TEXT("experiments/E/setting.json");
@@ -122,18 +122,18 @@ namespace
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FScenarioTemplateJsonParseValidTest,
-	"OdiroSim.ScenarioTemplate.Json.ParseValid",
+	FScenarioDocumentJsonParseValidTest,
+	"OdiroSim.ScenarioDocument.Json.ParseValid",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FScenarioTemplateJsonParseValidTest::RunTest(const FString& Parameters)
+bool FScenarioDocumentJsonParseValidTest::RunTest(const FString& Parameters)
 {
 	const FString Json = TEXT(R"json(
 {
-  "schema": "scenario_template",
+  "schema": "scenario",
   "version": 1,
-  "template_id": "pinch_oncoming_low_coop",
-  "intent": "Validate a narrow corridor preview template.",
+  "scenario_id": "pinch_oncoming_low_coop",
+  "intent": "Validate a narrow corridor preview scenario.",
   "corridor": {
     "axis": { "type": "polyline", "points_m": [[0, 0], [12, 0]] },
     "walkway_width_m": 2.5,
@@ -159,74 +159,74 @@ bool FScenarioTemplateJsonParseValidTest::RunTest(const FString& Parameters)
 }
 )json");
 
-	const FScenarioTemplateParseResult Result = FScenarioTemplateJson::ParseFromString(Json);
-	TestTrue(TEXT("template parses"), Result.bSuccess);
-	TestEqual(TEXT("template diagnostics"), Result.Diagnostics.Num(), 0);
-	TestEqual(TEXT("template id"), Result.Document.TemplateId, FString(TEXT("pinch_oncoming_low_coop")));
+	const FScenarioDocumentParseResult Result = FScenarioDocumentJson::ParseFromString(Json);
+	TestTrue(TEXT("scenario parses"), Result.bSuccess);
+	TestEqual(TEXT("scenario diagnostics"), Result.Diagnostics.Num(), 0);
+	TestEqual(TEXT("scenario id"), Result.Document.ScenarioId, FString(TEXT("pinch_oncoming_low_coop")));
 	TestEqual(TEXT("segment count"), Result.Document.Corridor.Segments.Num(), 1);
 	TestEqual(TEXT("placement prop"), Result.Document.Obstacles.Placements[0].PropId, FString(TEXT("crate")));
 	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FScenarioTemplateJsonVersionMismatchTest,
-	"OdiroSim.ScenarioTemplate.Json.VersionMismatch",
+	FScenarioDocumentJsonVersionMismatchTest,
+	"OdiroSim.ScenarioDocument.Json.VersionMismatch",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FScenarioTemplateJsonVersionMismatchTest::RunTest(const FString& Parameters)
+bool FScenarioDocumentJsonVersionMismatchTest::RunTest(const FString& Parameters)
 {
-	FScenarioTemplateDocument Document = MakeMinimalTemplateDocument();
-	Document.Version = FScenarioTemplateJson::SupportedVersion + 1;
+	FScenarioDocument Document = MakeMinimalScenarioDocument();
+	Document.Version = FScenarioDocumentJson::SupportedVersion + 1;
 
 	TArray<FScenarioSchemaDiagnostic> Diagnostics;
-	TestFalse(TEXT("version mismatch fails"), FScenarioTemplateJson::ValidateDocument(Document, Diagnostics));
+	TestFalse(TEXT("version mismatch fails"), FScenarioDocumentJson::ValidateDocument(Document, Diagnostics));
 	TestTrue(TEXT("unsupported version diagnostic"), HasScenarioSchemaDiagnosticCode(Diagnostics, TEXT("unsupported_schema_version")));
 	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FScenarioTemplateJsonRoundTripTest,
-	"OdiroSim.ScenarioTemplate.Json.RoundTrip",
+	FScenarioDocumentJsonRoundTripTest,
+	"OdiroSim.ScenarioDocument.Json.RoundTrip",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FScenarioTemplateJsonRoundTripTest::RunTest(const FString& Parameters)
+bool FScenarioDocumentJsonRoundTripTest::RunTest(const FString& Parameters)
 {
-	const FScenarioTemplateDocument Document = MakeMinimalTemplateDocument();
+	const FScenarioDocument Document = MakeMinimalScenarioDocument();
 
 	FString Json;
 	TArray<FScenarioSchemaDiagnostic> Diagnostics;
-	TestTrue(TEXT("template writes"), FScenarioTemplateJson::TryWriteJson(Document, Json, Diagnostics));
+	TestTrue(TEXT("scenario writes"), FScenarioDocumentJson::TryWriteJson(Document, Json, Diagnostics));
 	TestEqual(TEXT("write diagnostics"), Diagnostics.Num(), 0);
 
-	const FScenarioTemplateParseResult Result = FScenarioTemplateJson::ParseFromString(Json);
-	TestTrue(TEXT("template roundtrip parses"), Result.bSuccess);
-	TestEqual(TEXT("roundtrip template id"), Result.Document.TemplateId, Document.TemplateId);
+	const FScenarioDocumentParseResult Result = FScenarioDocumentJson::ParseFromString(Json);
+	TestTrue(TEXT("scenario roundtrip parses"), Result.bSuccess);
+	TestEqual(TEXT("roundtrip scenario id"), Result.Document.ScenarioId, Document.ScenarioId);
 	TestEqual(TEXT("roundtrip walkway width"), Result.Document.Corridor.WalkwayWidthMeters.FixedValue, 2.5);
 	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FScenarioProjectScenarioJsonRoundTripTest,
-	"OdiroSim.ScenarioTemplate.Json.ProjectScenarioRoundTrip",
+	"OdiroSim.ScenarioDocument.Json.ProjectScenarioRoundTrip",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FScenarioProjectScenarioJsonRoundTripTest::RunTest(const FString& Parameters)
 {
-	const FScenarioTemplateDocument Document = MakeMinimalTemplateDocument();
+	const FScenarioDocument Document = MakeMinimalScenarioDocument();
 
 	FString Json;
 	TArray<FScenarioSchemaDiagnostic> Diagnostics;
-	TestTrue(TEXT("project scenario writes"), FScenarioTemplateJson::TryWriteProjectScenarioJson(Document, Json, Diagnostics));
+	TestTrue(TEXT("project scenario writes"), FScenarioDocumentJson::TryWriteProjectScenarioJson(Document, Json, Diagnostics));
 	TestEqual(TEXT("project write diagnostics"), Diagnostics.Num(), 0);
 	TestTrue(TEXT("project scenario schema field"), Json.Contains(TEXT("\"schema\": \"scenario\"")));
 	TestTrue(TEXT("project scenario id field"), Json.Contains(TEXT("\"scenario_id\": \"pinch_oncoming_low_coop\"")));
 	TestFalse(TEXT("project scenario omits template id field"), Json.Contains(TEXT("\"template_id\"")));
 
-	const FScenarioTemplateParseResult Result = FScenarioTemplateJson::ParseProjectScenarioFromString(Json);
+	const FScenarioDocumentParseResult Result = FScenarioDocumentJson::ParseProjectScenarioFromString(Json);
 	TestTrue(TEXT("project scenario roundtrip parses"), Result.bSuccess);
 	TestEqual(TEXT("project roundtrip diagnostics"), Result.Diagnostics.Num(), 0);
-	TestEqual(TEXT("project roundtrip scenario id"), Result.Document.TemplateId, Document.TemplateId);
-	TestEqual(TEXT("project roundtrip keeps internal draft schema"), Result.Document.Schema, FString(TEXT("scenario_template")));
+	TestEqual(TEXT("project roundtrip scenario id"), Result.Document.ScenarioId, Document.ScenarioId);
+	TestEqual(TEXT("project roundtrip keeps scenario schema"), Result.Document.Schema, FString(TEXT("scenario")));
 	return true;
 }
 
@@ -245,8 +245,8 @@ bool FScenarioSampleJsonParseValidTest::RunTest(const FString& Parameters)
     "sample_id": "000001",
     "scenario_id": "pinch_oncoming_low_coop_000001",
     "source": {
-      "template_ref": "templates/scenarios/pinch_oncoming_low_coop.template.json",
-      "template_hash": "sha256:templatehash0001",
+      "template_ref": "runs/test/snapshot/scenario.json",
+      "template_hash": "sha256:scenariohash0001",
       "profile_ref": "experiments/E/profile.json",
       "profile_hash": "sha256:profilehash0001",
       "setting_ref": "experiments/E/setting.json",

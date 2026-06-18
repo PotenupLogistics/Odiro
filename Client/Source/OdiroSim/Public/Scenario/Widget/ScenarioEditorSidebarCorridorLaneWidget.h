@@ -5,7 +5,7 @@
 #include "Types/SlateEnums.h"
 #include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
-#include "Shared/ScenarioTemplateTypes.h"
+#include "Shared/ScenarioDocumentTypes.h"
 #include "ScenarioEditorSidebarCorridorLaneWidget.generated.h"
 
 class UScenarioEditorSidebarBlockWidget;

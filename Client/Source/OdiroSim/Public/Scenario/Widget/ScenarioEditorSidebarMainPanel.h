@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Types/SlateEnums.h"
-#include "Shared/ScenarioTemplateTypes.h"
+#include "Shared/ScenarioDocumentTypes.h"
 #include "ScenarioEditorSidebarMainPanel.generated.h"
 
 class UTextBlock;
@@ -46,7 +46,7 @@ public:
 
 	// Optional editable row for scenario.scenario_id.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UScenarioEditorSidebarFieldRow> TemplateIdFieldRow;
+	TObjectPtr<UScenarioEditorSidebarFieldRow> ScenarioIdFieldRow;
 
 	// Optional read-only row for scenario.version.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
@@ -102,12 +102,12 @@ public:
 
 	// Refreshes this panel from the provided draft scenario document.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void RefreshFromTemplate(const FScenarioTemplateDocument& scenarioTemplate);
+	void RefreshFromTemplate(const FScenarioDocument& scenarioTemplate);
 
 private:
 	// Handles scenario_id edits committed by the field row.
 	UFUNCTION()
-	void HandleTemplateIdCommitted(const FText& text, ETextCommit::Type commitMethod);
+	void HandleScenarioIdCommitted(const FText& text, ETextCommit::Type commitMethod);
 
 	// Handles intent edits committed by the field row.
 	UFUNCTION()
@@ -240,7 +240,7 @@ private:
 	// Resolves the authoring subsystem that owns the draft template.
 	UScenarioAuthoringSubsystem* GetAuthoringSubsystem() const;
 	// Commits a scenario_id edit to the draft scenario.
-	void CommitTemplateIdText(const FText& text);
+	void CommitScenarioIdText(const FText& text);
 	// Commits an intent edit to the draft template.
 	void CommitIntentText(const FText& text);
 	// Commits one robot anchor text field edit to the draft template.

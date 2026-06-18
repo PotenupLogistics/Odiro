@@ -4,7 +4,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
 #include "Scenario/Widget/ScenarioEditorSidebarPedestrianEncounterWidget.h"
-#include "Shared/ScenarioTemplateTypes.h"
+#include "Shared/ScenarioDocumentTypes.h"
 #include "ScenarioEditorSidebarPedestrianPanel.generated.h"
 
 class UTextBlock;
@@ -72,7 +72,7 @@ public:
 
 	// Refreshes this panel from the provided Scenario Template document.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
-	void RefreshFromTemplate(const FScenarioTemplateDocument& scenarioTemplate);
+	void RefreshFromTemplate(const FScenarioDocument& scenarioTemplate);
 
 private:
 	// Dynamic count row for root.pedestrians.encounters[].

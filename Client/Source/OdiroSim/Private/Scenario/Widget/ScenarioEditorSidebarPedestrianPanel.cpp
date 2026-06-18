@@ -7,7 +7,7 @@
 #include "Engine/World.h"
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
-#include "Widget/WidgetTextStyleCatalog.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
 
 namespace
 {
@@ -130,11 +130,11 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshFromDraft()
 		return;
 	}
 
-	RefreshFromTemplate(authoringSubsystem->GetDraftScenarioTemplate());
+	RefreshFromTemplate(authoringSubsystem->GetDraftScenario());
 }
 
 void UScenarioEditorSidebarPedestrianPanel::RefreshFromTemplate(
-	const FScenarioTemplateDocument& scenarioTemplate)
+	const FScenarioDocument& scenarioTemplate)
 {
 	ConfigureFieldRows();
 

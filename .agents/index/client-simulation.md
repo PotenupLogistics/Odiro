@@ -13,9 +13,9 @@ paths:
   - contracts/specs/**
 entry:
   - ScenarioSchemaTypes.h
-  - ScenarioTemplateTypes.h
+  - ScenarioDocumentTypes.h
   - ScenarioSampleTypes.h
-  - ScenarioTemplateJson.h / .cpp
+  - ScenarioDocumentJson.h / .cpp
   - ScenarioSampleJson.h / .cpp
   - ScenarioSampleWorldSpecAdapter.h / .cpp
   - UserProjectEpisodeScenarioWorldSpecAdapter.h / .cpp
@@ -26,7 +26,7 @@ entry:
   - UserProjectDataTypes.h / .cpp
   - SimulationSetupTypesTest.cpp
   - UserProjectDataTypesTest.cpp
-  - ScenarioTemplateSampleJsonTest.cpp
+  - ScenarioDocumentSampleJsonTest.cpp
   - ScenarioSampleWorldSpecAdapterTest.cpp
   - UserProjectEpisodeScenarioWorldSpecAdapterTest.cpp
   - ScenarioSimulationSubsystem.h / .cpp
@@ -42,7 +42,7 @@ keep:
   - Client/Docs/plans/PLAN-260602-sim-logging.md is superseded legacy context; final log file contracts belong in contracts/specs/user-project-data.md.
   - Client/Docs/Data was removed; shared user project file contracts belong in contracts/specs/user-project-data.md.
   - Scenario setup/run queue samples in Client/Json/Input are legacy client-owned examples; project run execution no longer accepts them through ScenarioRunnerSubsystem.
-  - ScenarioTemplate* and ScenarioSample* remain internal editor/materialization surfaces unless a task explicitly targets them; public C++ editor entry points use project scenario naming.
+  - ScenarioDocument* and ScenarioSample* remain internal editor/materialization surfaces unless a task explicitly targets them; public C++ editor entry points use project scenario naming.
   - Final user project contract uses one editable `<UserProject>/scenario.json`; do not add new user-facing template/sample split.
   - Episode scenario files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
   - Project run uses episode input arrays and `episode_scenario` adapter, not generated RunQueue files or old actor-spawn scenario setup JSON.
@@ -54,7 +54,7 @@ keep:
 verify:
   - contract specs vs sample JSON alignment
   - `scenario`/`episode_scenario` docs vs Client shared schema type alignment
-  - Scenario parse, project `scenario.json` adapter, version mismatch, episode scenario generation, and round-trip automation tests
+  - Scenario document parse, project `scenario.json` adapter, version mismatch, episode scenario generation, and round-trip automation tests
   - Scenario-to-WorldSpec adapter automation tests, including user-project episode scenario adapter, and OdiroSimEditor build after adapter/editor draft changes
   - `OdiroSim.UserProjectData.RunOutput.Write` after user project result writer changes
   - `OdiroSim.UserProjectData.RobotAction.Write` after policy action logging changes

@@ -12,7 +12,7 @@
 #include "Components/Widget.h"
 #include "Styling/SlateBrush.h"
 #include "Styling/SlateTypes.h"
-#include "Widget/WidgetTextStyleCatalog.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
 
 namespace
 {

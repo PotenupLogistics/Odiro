@@ -143,7 +143,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void HandleEditorSessionStarted(bool bLoadedExistingScenario);
 
-	// ?„ì¬ view mode??ë§ì¶° ??ëª¨ë“œ ?„í™˜ ë²„íŠ¼???¸ì¶œ ?íƒœë¥?ê°±ì‹ ??
+	// Synchronizes the view-mode toggle buttons with the active editor view mode.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void RefreshViewModeButtons();
 
@@ -206,7 +206,7 @@ private:
 
 	FDelegateHandle AutoStartCompletedHandle;
 
-	// keyboard toggle ???¸ë? ë³€ê²½ê³¼ ë²„íŠ¼ ?œì‹œë¥??™ê¸°?”í•˜ê¸??„í•œ ìµœê·¼ view mode ìºì‹œ.
+	// Cached view-mode state used to keep keyboard toggles and button visibility in sync.
 	EScenarioEditorViewMode LastSeenViewMode = static_cast<EScenarioEditorViewMode>(0);
 	bool bHasCachedViewMode = false;
 	bool bLastSeenPlacementSnapToGrid = false;

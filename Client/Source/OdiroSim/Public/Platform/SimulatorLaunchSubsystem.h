@@ -171,6 +171,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	bool StartProjectRun(const FString& projectPath, const FString& runId);
 
+	// Creates a local user project run snapshot before StartProjectRun consumes it.
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
+	bool PrepareProjectRunSnapshot(
+		const FString& projectPath,
+		const FString& requestedRunId,
+		FString& outRunId,
+		TArray<FString>& outDiagnostics) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	bool RefreshActiveRunStatus();
 

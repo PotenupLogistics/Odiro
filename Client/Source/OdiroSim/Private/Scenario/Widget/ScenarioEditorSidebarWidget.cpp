@@ -53,7 +53,7 @@ namespace
 		return brush;
 	}
 
-	void ApplyBorderFill(UBorder* border, const FLinearColor& color, const FMargin& padding)
+	void ApplySidebarBorderFill(UBorder* border, const FLinearColor& color, const FMargin& padding)
 	{
 		if (!border)
 		{
@@ -194,13 +194,13 @@ namespace
 		}
 
 		UBorder* outlineBorder = widgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-		ApplyBorderFill(
+		ApplySidebarBorderFill(
 			outlineBorder,
 			bHighlighted ? ActiveBlockOutlineColor : BlockOutlineColor,
 			FMargin(BlockOutlineThickness));
 
 		UBorder* contentBorder = widgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-		ApplyBorderFill(contentBorder, bNested ? NestedBlockColor : BlockColor, FMargin(SidebarPadding));
+		ApplySidebarBorderFill(contentBorder, bNested ? NestedBlockColor : BlockColor, FMargin(SidebarPadding));
 		outlineBorder->SetContent(contentBorder);
 
 		UVerticalBox* blockBox = widgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
@@ -381,7 +381,7 @@ void UScenarioEditorSidebarWidget::BuildDefaultWidgetTree()
 	UBorder* headerBorder = WidgetTree->ConstructWidget<UBorder>(
 		UBorder::StaticClass(),
 		TEXT("GeneratedSidebarHeaderBorder"));
-	ApplyBorderFill(headerBorder, PanelColor, FMargin(14.0f));
+	ApplySidebarBorderFill(headerBorder, PanelColor, FMargin(14.0f));
 	PanelTitleTextBlock = WidgetTree->ConstructWidget<UTextBlock>(
 		UTextBlock::StaticClass(),
 		TEXT("PanelTitleTextBlock"));

@@ -72,7 +72,7 @@ namespace
 		case EScenarioTransformGizmoMode::Rotate:
 			return placeableComponent->bAuthoringAllowRotationEdit;
 		case EScenarioTransformGizmoMode::Scale:
-			// scale?€ gizmoë¡??™ì‘?˜ëŠ” ?¸ë“¤???†ìœ¼ë¯€ë¡?ëª¨ë“œ ì§„ì… ?ì²´ë¥?ë§‰ìŒ(ë¹?gizmo ë°©ì?).
+			// Scale has no dedicated gizmo handle, so block entering scale mode.
 			return false;
 		default:
 			return false;
@@ -504,7 +504,7 @@ bool AScenarioEditorController::BeginGroundRegionDraw(EScenarioGroundRegionType 
 
 	PendingGroundRegionType = regionType;
 
-	// ?„ë¦¬ë·?actorë¥?ë¯¸ë¦¬ ì¤€ë¹„í•˜???œë˜ê·??œì‘ ?„ê¹Œì§€???¨ê?.
+	// Prepare the preview actor before the drag interaction starts.
 	if (AScenarioGroundRegion* previewActor = EnsureRegionDrawPreviewActor())
 	{
 		previewActor->SetActorHiddenInGame(true);
@@ -566,7 +566,7 @@ void AScenarioEditorController::FinalizeRegionDrag()
 		previewActor->SetActorHiddenInGame(true);
 	}
 
-	// ?ˆë¬´ ?‘ì? ?¬ê°?•ì? stray click?¼ë¡œ ë³´ê³  ì»¤ë°‹?˜ì? ?ŠìŒ.
+	// Treat rectangles below the minimum size as stray clicks and skip committing them.
 	if (size.X < RegionDrawMinSizeCm || size.Y < RegionDrawMinSizeCm)
 	{
 		return;
@@ -595,7 +595,7 @@ void AScenarioEditorController::FinalizeRegionDrag()
 			*failureReason);
 	}
 
-	// ?°ì† ê·¸ë¦¬ê¸? EditRegionDraw ëª¨ë“œë¥?? ì???
+	// Keep EditRegionDraw mode active for continuous drawing.
 }
 
 bool AScenarioEditorController::TraceMouseToGroundRegionPlane(FVector& outPoint) const
@@ -1200,7 +1200,7 @@ void AScenarioEditorController::HandleEditorMoveAction(const FInputActionValue& 
 
 	if (EditorViewMode == EScenarioEditorViewMode::TopDownOrtho)
 	{
-		// top-down?ì„œ??zoom??ë§ˆìš°????EditorZoomAction)?¼ë¡œë§?ì²˜ë¦¬?˜ê³  Zì¶??…ë ¥?€ ë¬´ì‹œ??
+		// In top-down view, zoom is handled by mouse-wheel input, so ignore Z-axis movement here.
 		editorPawn->ApplyTopDownPanInput(forwardValue, rightValue);
 		return;
 	}
@@ -1242,8 +1242,8 @@ void AScenarioEditorController::HandleEditorLookAction(const FInputActionValue& 
 
 	LookCaptureAccumulatedDelta += FVector2D(yawValue, pitchValue).Size();
 
-	// top-down?ì„œ???Œì „ ?€??drag pan?¼ë¡œ ?¼ìš°?…í•¨.
-	// ?´ë¦­ ? íƒ??look capture???„ì  delta???˜ì¡´?˜ë?ë¡?capture ?ì²´??? ì???
+	// In top-down view, route look input to drag panning instead of rotation.
+	// Selection clicks depend on accumulated look-capture delta, so capture state remains active.
 	if (EditorViewMode == EScenarioEditorViewMode::TopDownOrtho)
 	{
 		editorPawn->ApplyTopDownDragPanInput(yawValue, pitchValue);

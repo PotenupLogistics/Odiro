@@ -29,7 +29,14 @@ namespace
 	const TCHAR* DefaultStatusOutputPath = TEXT("Saved/SimulationRuns/latest_status.json");
 	const TCHAR* MainMenuDefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	const int32 DefaultFlushIntervalTicks = 60;
-	const TCHAR* ScenarioSetupTemplatePath = TEXT("Json/Input/ScenarioSetupSample_0.json");
+	const TCHAR* UserProjectDirectory = TEXT("Saved/UserProjects");
+	const TCHAR* UserProjectScenarioFileName = TEXT("scenario.json");
+	const TCHAR* UserProjectSettingFileName = TEXT("setting.json");
+	const TCHAR* UserProjectProfileFileName = TEXT("profile.json");
+	const TCHAR* UserProjectPolicyDirectoryName = TEXT("policy");
+	const TCHAR* BlankProjectTemplateDirectory = TEXT("../static/project-templates/blank");
+	const TCHAR* PackagedBlankProjectTemplateDirectory = TEXT("resources/project-templates/blank");
+	const TCHAR* DefaultScenarioEditorProjectName = TEXT("ScenarioEditor");
 	const TCHAR* DeliveryBotTemplatePath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
 	const TCHAR* FileListItemWidgetBlueprintClassPath =
 		TEXT("/Game/Widgets/MainMenu/WBP_FileListItem.WBP_FileListItem_C");
@@ -240,6 +247,185 @@ namespace
 		return NormalizeJsonPathInDirectory(rawPath, TEXT("Json/Input"));
 	}
 
+	FString ToMainMenuProjectRelativePath(FString filePath)
+	{
+		filePath.TrimStartAndEndInline();
+		filePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (filePath.IsEmpty() || FPaths::IsRelative(filePath))
+		{
+			return filePath;
+		}
+
+		const FString projectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+		if (FPaths::MakePathRelativeTo(filePath, *projectDir))
+		{
+			filePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		}
+		return filePath;
+	}
+
+	FString NormalizeUserProjectScenarioPath(FString rawPath)
+	{
+		rawPath.TrimStartAndEndInline();
+		rawPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (rawPath.IsEmpty())
+		{
+			return FString();
+		}
+
+		if (FPaths::GetExtension(rawPath).Equals(TEXT("json"), ESearchCase::IgnoreCase))
+		{
+			return rawPath;
+		}
+
+		if (FPaths::IsRelative(rawPath) && !rawPath.Contains(TEXT("/")))
+		{
+			rawPath = FPaths::Combine(UserProjectDirectory, rawPath);
+		}
+
+		rawPath = FPaths::Combine(rawPath, UserProjectScenarioFileName);
+		rawPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		return rawPath;
+	}
+
+	bool IsUserProjectScenarioPath(const FString& scenarioPath)
+	{
+		return FPaths::GetCleanFilename(scenarioPath).Equals(UserProjectScenarioFileName, ESearchCase::IgnoreCase);
+	}
+
+	FString ResolveUserProjectRootFromScenarioPath(const FString& scenarioJsonPath)
+	{
+		const FString normalizedScenarioJsonPath = NormalizeUserProjectScenarioPath(scenarioJsonPath);
+		if (normalizedScenarioJsonPath.IsEmpty() || !IsUserProjectScenarioPath(normalizedScenarioJsonPath))
+		{
+			return FString();
+		}
+
+		return FSimulationSetupJson::ResolveProjectPath(FPaths::GetPath(normalizedScenarioJsonPath));
+	}
+
+	FString ResolveBlankProjectTemplateDirectory()
+	{
+		TArray<FString> candidates;
+		candidates.Add(FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), BlankProjectTemplateDirectory)));
+		candidates.Add(FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), PackagedBlankProjectTemplateDirectory)));
+
+		for (FString candidate : candidates)
+		{
+			candidate.ReplaceInline(TEXT("\\"), TEXT("/"));
+			if (FPaths::DirectoryExists(candidate))
+			{
+				return candidate;
+			}
+		}
+
+		return FString();
+	}
+
+	bool CopyDefaultFileIfMissing(
+		const FString& sourceFile,
+		const FString& destinationFile,
+		const TCHAR* label,
+		TArray<FString>& outDiagnostics)
+	{
+		if (FPaths::FileExists(destinationFile))
+		{
+			return true;
+		}
+		if (!FPaths::FileExists(sourceFile))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s template file is missing: %s"), label, *sourceFile));
+			return false;
+		}
+
+		const FString destinationDirectory = FPaths::GetPath(destinationFile);
+		if (!IFileManager::Get().MakeDirectory(*destinationDirectory, true))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s directory create failed: %s"), label, *destinationDirectory));
+			return false;
+		}
+
+		TArray<uint8> fileBytes;
+		if (!FFileHelper::LoadFileToArray(fileBytes, *sourceFile))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s template read failed: %s"), label, *sourceFile));
+			return false;
+		}
+		if (!FFileHelper::SaveArrayToFile(fileBytes, *destinationFile))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s project file write failed: %s"), label, *destinationFile));
+			return false;
+		}
+
+		return true;
+	}
+
+	bool CopyDefaultDirectoryIfMissing(
+		const FString& sourceDirectory,
+		const FString& destinationDirectory,
+		const TCHAR* label,
+		TArray<FString>& outDiagnostics)
+	{
+		if (FPaths::DirectoryExists(destinationDirectory))
+		{
+			return true;
+		}
+		if (!FPaths::DirectoryExists(sourceDirectory))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s template directory is missing: %s"), label, *sourceDirectory));
+			return false;
+		}
+		if (!IFileManager::Get().MakeDirectory(*destinationDirectory, true))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s project directory create failed: %s"), label, *destinationDirectory));
+			return false;
+		}
+
+		FString sourceDirectoryRoot = sourceDirectory;
+		sourceDirectoryRoot.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (!sourceDirectoryRoot.EndsWith(TEXT("/")))
+		{
+			sourceDirectoryRoot += TEXT("/");
+		}
+
+		TArray<FString> sourceFiles;
+		IFileManager::Get().FindFilesRecursive(sourceFiles, *sourceDirectory, TEXT("*"), true, false);
+		for (FString sourceFile : sourceFiles)
+		{
+			sourceFile.ReplaceInline(TEXT("\\"), TEXT("/"));
+			FString relativeFile = sourceFile;
+			FPaths::MakePathRelativeTo(relativeFile, *sourceDirectoryRoot);
+			if (!CopyDefaultFileIfMissing(
+					sourceFile,
+					FPaths::Combine(destinationDirectory, relativeFile),
+					label,
+					outDiagnostics))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	FString GetDefaultUserProjectScenarioPath()
+	{
+		return NormalizeUserProjectScenarioPath(DefaultScenarioEditorProjectName);
+	}
+
+	void FindUserProjectScenarioFiles(TArray<FString>& outFiles)
+	{
+		outFiles.Reset();
+		const FString searchRoot = FSimulationSetupJson::ResolveProjectPath(UserProjectDirectory);
+		TArray<FString> foundFiles;
+		IFileManager::Get().FindFilesRecursive(foundFiles, *searchRoot, UserProjectScenarioFileName, true, false);
+		for (FString filePath : foundFiles)
+		{
+			outFiles.Add(ToMainMenuProjectRelativePath(filePath));
+		}
+		outFiles.Sort();
+	}
+
 	FString NormalizeOutputJsonPath(const FString& rawPath)
 	{
 		return NormalizeJsonPathInDirectory(rawPath, TEXT("Json/Output"));
@@ -315,6 +501,29 @@ namespace
 			FString::Printf(TEXT("%s_%s.json"), *baseFileName, *FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(8)));
 		fallbackPath.ReplaceInline(TEXT("\\"), TEXT("/"));
 		return fallbackPath;
+	}
+
+	FString MakeUniqueUserProjectScenarioPath(const FString& baseProjectName)
+	{
+		const FString safeBaseProjectName = baseProjectName.TrimStartAndEnd().IsEmpty()
+			? FString(DefaultScenarioEditorProjectName)
+			: baseProjectName.TrimStartAndEnd();
+		for (int32 index = 0; index < 1000; ++index)
+		{
+			const FString projectName = index == 0
+				? safeBaseProjectName
+				: FString::Printf(TEXT("%s_%d"), *safeBaseProjectName, index);
+			const FString relativePath = NormalizeUserProjectScenarioPath(projectName);
+			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(relativePath)))
+			{
+				return relativePath;
+			}
+		}
+
+		return NormalizeUserProjectScenarioPath(FString::Printf(
+			TEXT("%s_%s"),
+			*safeBaseProjectName,
+			*FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(8)));
 	}
 
 	FString MakeGeneratedRunQueuePathForSetup(const FString& setupPath)
@@ -474,8 +683,16 @@ void UMainMenuWidget::RefreshSetupOptions()
 		? currentScenarioSetupPath
 		: (scenarioSetupFiles.IsEmpty() ? FString() : scenarioSetupFiles[0]);
 	SetComboBoxOptions(ExperimentScenarioSetupComboBox, scenarioSetupFiles, selectedScenarioSetupPath);
-	SetComboBoxOptions(ScenarioSetupComboBox, scenarioSetupFiles, selectedScenarioSetupPath);
 	SetSelectedScenarioSetupPath(selectedScenarioSetupPath);
+
+	TArray<FString> projectScenarioFiles;
+	FindUserProjectScenarioFiles(projectScenarioFiles);
+	const FString currentProjectScenarioPath = GetSelectedProjectScenarioPath();
+	const FString selectedProjectScenarioPath = projectScenarioFiles.Contains(currentProjectScenarioPath)
+		? currentProjectScenarioPath
+		: (projectScenarioFiles.IsEmpty() ? GetDefaultUserProjectScenarioPath() : projectScenarioFiles[0]);
+	SetComboBoxOptions(ScenarioSetupComboBox, projectScenarioFiles, selectedProjectScenarioPath);
+	SetSelectedProjectScenarioPath(selectedProjectScenarioPath);
 	RefreshScenarioList();
 
 	const TArray<FString> deliveryBotSetupFiles = subsystem->ListDeliveryBotSetupFiles();
@@ -738,20 +955,20 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 
 void UMainMenuWidget::HandleOpenEditorClicked()
 {
-	OpenScenarioInEditor(GetSelectedScenarioSetupPath());
+	OpenScenarioInEditor(GetSelectedProjectScenarioPath());
 }
 
 void UMainMenuWidget::HandleNewScenarioClicked()
 {
-	const FString newScenarioPath = MakeUniqueInputJsonPath(TEXT("ScenarioSetupNew"));
-	if (!CreateScenarioFileFromTemplate(newScenarioPath))
+	const FString newScenarioPath = MakeUniqueUserProjectScenarioPath(DefaultScenarioEditorProjectName);
+	if (!OpenNewProjectScenarioInEditor(newScenarioPath))
 	{
 		return;
 	}
 
-	SetSelectedScenarioSetupPath(newScenarioPath);
-	RefreshSetupOptions();
-	SetDiagnosticsText(FString::Printf(TEXT("시나리오 생성됨: %s"), *newScenarioPath));
+	SetSelectedProjectScenarioPath(newScenarioPath);
+	RefreshScenarioList();
+	SetDiagnosticsText(FString::Printf(TEXT("project scenario 생성됨: %s"), *newScenarioPath));
 }
 
 void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWidget, const FString& requestedPath)
@@ -818,9 +1035,9 @@ void UMainMenuWidget::HandleScenarioEditRequested(UFileListItemWidget* itemWidge
 {
 	if (!IsValid(itemWidget)) return;
 
-	const FString scenarioSetupPath = itemWidget->GetOriginalPath();
-	SetSelectedScenarioSetupPath(scenarioSetupPath);
-	OpenScenarioInEditor(scenarioSetupPath);
+	const FString scenarioJsonPath = itemWidget->GetOriginalPath();
+	SetSelectedProjectScenarioPath(scenarioJsonPath);
+	OpenScenarioInEditor(scenarioJsonPath);
 }
 
 void UMainMenuWidget::HandlePolicyRenameRequested(UFileListItemWidget* itemWidget, const FString& requestedPath)
@@ -1007,17 +1224,12 @@ void UMainMenuWidget::HandleNewPolicyClicked()
 
 void UMainMenuWidget::HandleStartClicked()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem) return;
-
 	const FString requestedRunId = RunIdTextBox ? RunIdTextBox->GetText().ToString().TrimStartAndEnd() : FString();
-	if (subsystem->StartSimulationRun(GetSelectedSetupPath(), requestedRunId))
+	if (StartProjectRunFromScenario(GetSelectedProjectScenarioPath(), requestedRunId))
 	{
-		UpdateStatusText(TEXT("Simulator launch requested."));
+		UpdateStatusText(TEXT("Project run launch requested."));
 		return;
 	}
-
-	UpdateStatusText(subsystem->GetLastError());
 }
 
 void UMainMenuWidget::HandleRefreshClicked()
@@ -1110,7 +1322,7 @@ void UMainMenuWidget::HandleExperimentConfigBackClicked()
 void UMainMenuWidget::HandleScenarioSetupSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType)
 {
 	(void)selectionType;
-	SetSelectedScenarioSetupPath(selectedItem);
+	SetSelectedProjectScenarioPath(selectedItem);
 }
 
 void UMainMenuWidget::HandlePolicyDeliveryBotSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType)
@@ -1572,9 +1784,6 @@ void UMainMenuWidget::RefreshScenarioList()
 {
 	if (!ScenarioListScrollBox) return;
 
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem) return;
-
 	const TSubclassOf<UFileListItemWidget> itemWidgetClass = ResolveFileListItemWidgetClass();
 	if (!itemWidgetClass)
 	{
@@ -1582,23 +1791,31 @@ void UMainMenuWidget::RefreshScenarioList()
 		return;
 	}
 
-	const TArray<FString> scenarioSetupFiles = subsystem->ListScenarioSetupFiles();
-	if (!scenarioSetupFiles.Contains(SelectedScenarioSetupPath))
+	TArray<FString> projectScenarioFiles;
+	FindUserProjectScenarioFiles(projectScenarioFiles);
+	if (!projectScenarioFiles.Contains(SelectedProjectScenarioPath))
 	{
-		SetSelectedScenarioSetupPath(scenarioSetupFiles.IsEmpty() ? FString() : scenarioSetupFiles[0]);
+		SetSelectedProjectScenarioPath(projectScenarioFiles.IsEmpty() ? GetDefaultUserProjectScenarioPath() : projectScenarioFiles[0]);
 	}
 
 	ScenarioListScrollBox->ClearChildren();
 	ScenarioListItems.Reset();
-	ScenarioListItems.Reserve(scenarioSetupFiles.Num());
+	ScenarioListItems.Reserve(projectScenarioFiles.Num());
 
-	for (const FString& scenarioSetupFile : scenarioSetupFiles)
+	if (projectScenarioFiles.IsEmpty())
+	{
+		AddEmptyListMessage(
+			WidgetTree,
+			ScenarioListScrollBox,
+			FString::Printf(TEXT("%s 아래에 scenario.json이 없습니다. 새 시나리오를 만들거나 project 경로를 입력하세요."), UserProjectDirectory));
+	}
+
+	for (const FString& projectScenarioFile : projectScenarioFiles)
 	{
 		UFileListItemWidget* itemWidget = CreateWidget<UFileListItemWidget>(this, itemWidgetClass);
 		if (!itemWidget) continue;
 
-		itemWidget->InitializeItem(scenarioSetupFile, TEXT("편집"), TEXT("실행"), true, true, false);
-		itemWidget->OnRenameRequested.AddUObject(this, &UMainMenuWidget::HandleScenarioRenameRequested);
+		itemWidget->InitializeItem(projectScenarioFile, TEXT("편집"), TEXT("실행"), false, true, false);
 		itemWidget->OnPrimaryActionRequested.AddUObject(this, &UMainMenuWidget::HandleScenarioEditRequested);
 		ScenarioListScrollBox->AddChild(itemWidget);
 		ScenarioListItems.Add(itemWidget);
@@ -1837,12 +2054,18 @@ void UMainMenuWidget::SetSelectedScenarioSetupPath(const FString& scenarioSetupP
 	SelectedScenarioSetupPath = scenarioSetupPath.TrimStartAndEnd();
 	SelectedScenarioSetupPath.ReplaceInline(TEXT("\\"), TEXT("/"));
 
+	SyncComboBoxSelection(ExperimentScenarioSetupComboBox, SelectedScenarioSetupPath);
+}
+
+void UMainMenuWidget::SetSelectedProjectScenarioPath(const FString& scenarioJsonPath)
+{
+	SelectedProjectScenarioPath = NormalizeUserProjectScenarioPath(scenarioJsonPath);
+
 	if (ScenarioSetupPathTextBox)
 	{
-		ScenarioSetupPathTextBox->SetText(FText::FromString(SelectedScenarioSetupPath));
+		ScenarioSetupPathTextBox->SetText(FText::FromString(SelectedProjectScenarioPath));
 	}
-	SyncComboBoxSelection(ExperimentScenarioSetupComboBox, SelectedScenarioSetupPath);
-	SyncComboBoxSelection(ScenarioSetupComboBox, SelectedScenarioSetupPath);
+	SyncComboBoxSelection(ScenarioSetupComboBox, SelectedProjectScenarioPath);
 }
 
 void UMainMenuWidget::SetSelectedSetupPath(const FString& setupPath)
@@ -1905,45 +2128,55 @@ void UMainMenuWidget::ClearExperimentResultIterationWidgets()
 	}
 }
 
-bool UMainMenuWidget::CreateScenarioFileFromTemplate(const FString& scenarioSetupPath)
+bool UMainMenuWidget::EnsureProjectDefaultsForScenario(const FString& scenarioJsonPath)
 {
-	const FString resolvedTemplatePath = FSimulationSetupJson::ResolveProjectPath(ScenarioSetupTemplatePath);
-	FString templateJson;
-	if (!FFileHelper::LoadFileToString(templateJson, *resolvedTemplatePath))
+	const FString normalizedScenarioJsonPath = NormalizeUserProjectScenarioPath(scenarioJsonPath);
+	const FString projectRoot = ResolveUserProjectRootFromScenarioPath(normalizedScenarioJsonPath);
+	if (projectRoot.IsEmpty())
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("시나리오 템플릿 읽기 실패: %s"), ScenarioSetupTemplatePath));
+		SetDiagnosticsText(TEXT("Project scenario path must be <UserProject>/scenario.json."));
 		return false;
 	}
 
-	const FString normalizedScenarioSetupPath = NormalizeInputJsonPath(scenarioSetupPath);
-	if (!IsEditableInputJsonPath(normalizedScenarioSetupPath))
+	if (!IFileManager::Get().MakeDirectory(*projectRoot, true))
 	{
-		SetDiagnosticsText(TEXT("새 시나리오 경로는 편집 가능한 Json/Input/*.json 경로여야 합니다."));
+		SetDiagnosticsText(FString::Printf(TEXT("Project directory create failed: %s"), *projectRoot));
 		return false;
 	}
 
-	const FString resolvedScenarioSetupPath = FSimulationSetupJson::ResolveProjectPath(normalizedScenarioSetupPath);
-	if (FPaths::FileExists(resolvedScenarioSetupPath))
+	const FString templateRoot = ResolveBlankProjectTemplateDirectory();
+	if (templateRoot.IsEmpty())
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("시나리오 파일이 이미 존재합니다: %s"), *normalizedScenarioSetupPath));
+		SetDiagnosticsText(TEXT("Blank project template directory was not found."));
 		return false;
 	}
 
-	const FString outputDirectory = FPaths::GetPath(resolvedScenarioSetupPath);
-	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true)
-		|| !FFileHelper::SaveStringToFile(
-			templateJson,
-			*resolvedScenarioSetupPath,
-			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
-	{
-		SetDiagnosticsText(FString::Printf(TEXT("시나리오 파일 생성 실패: %s"), *resolvedScenarioSetupPath));
-		return false;
-	}
+	TArray<FString> diagnostics;
+	const bool bDefaultsReady =
+		CopyDefaultFileIfMissing(
+			FPaths::Combine(templateRoot, UserProjectSettingFileName),
+			FPaths::Combine(projectRoot, UserProjectSettingFileName),
+			TEXT("setting"),
+			diagnostics)
+		&& CopyDefaultFileIfMissing(
+			FPaths::Combine(templateRoot, UserProjectProfileFileName),
+			FPaths::Combine(projectRoot, UserProjectProfileFileName),
+			TEXT("profile"),
+			diagnostics)
+		&& CopyDefaultDirectoryIfMissing(
+			FPaths::Combine(templateRoot, UserProjectPolicyDirectoryName),
+			FPaths::Combine(projectRoot, UserProjectPolicyDirectoryName),
+			TEXT("policy"),
+			diagnostics);
 
-	return true;
+	if (!bDefaultsReady)
+	{
+		SetDiagnosticsText(JoinStringLines(diagnostics));
+	}
+	return bDefaultsReady;
 }
 
-bool UMainMenuWidget::OpenScenarioInEditor(const FString& scenarioSetupPath)
+bool UMainMenuWidget::OpenNewProjectScenarioInEditor(const FString& scenarioJsonPath)
 {
 	UScenarioEditorLaunchSubsystem* subsystem = GetScenarioEditorLaunchSubsystem();
 	if (!subsystem)
@@ -1952,24 +2185,125 @@ bool UMainMenuWidget::OpenScenarioInEditor(const FString& scenarioSetupPath)
 		return false;
 	}
 
-	const FString normalizedScenarioSetupPath = NormalizeInputJsonPath(scenarioSetupPath);
-	if (normalizedScenarioSetupPath.TrimStartAndEnd().IsEmpty())
+	const FString normalizedScenarioJsonPath = NormalizeUserProjectScenarioPath(scenarioJsonPath);
+	if (normalizedScenarioJsonPath.IsEmpty())
 	{
-		SetDiagnosticsText(TEXT("ScenarioSetup 파일이 선택되지 않았습니다."));
+		SetDiagnosticsText(TEXT("새 project scenario 경로가 비어 있습니다."));
 		return false;
 	}
-	if (!IsEditableInputJsonPath(normalizedScenarioSetupPath))
+	if (!IsUserProjectScenarioPath(normalizedScenarioJsonPath))
 	{
-		SetDiagnosticsText(TEXT("Json/Input 아래의 편집 가능한 ScenarioSetup JSON을 선택하세요."));
+		SetDiagnosticsText(TEXT("project scenario는 <UserProject>/scenario.json 경로여야 합니다."));
 		return false;
 	}
 
-	if (!subsystem->OpenScenarioEditor(normalizedScenarioSetupPath))
+	const FString resolvedScenarioJsonPath = FSimulationSetupJson::ResolveProjectPath(normalizedScenarioJsonPath);
+	if (FPaths::FileExists(resolvedScenarioJsonPath))
+	{
+		SetDiagnosticsText(FString::Printf(TEXT("project scenario 파일이 이미 존재합니다: %s"), *normalizedScenarioJsonPath));
+		return false;
+	}
+
+	if (!EnsureProjectDefaultsForScenario(normalizedScenarioJsonPath))
+	{
+		return false;
+	}
+
+	if (!subsystem->OpenNewScenarioEditorAtPath(normalizedScenarioJsonPath))
 	{
 		SetDiagnosticsText(TEXT("ScenarioEditorMap 열기 실패."));
 		return false;
 	}
 
+	return true;
+}
+
+bool UMainMenuWidget::OpenScenarioInEditor(const FString& scenarioJsonPath)
+{
+	UScenarioEditorLaunchSubsystem* subsystem = GetScenarioEditorLaunchSubsystem();
+	if (!subsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioEditorLaunchSubsystem을 사용할 수 없습니다."));
+		return false;
+	}
+
+	const FString normalizedScenarioJsonPath = NormalizeUserProjectScenarioPath(scenarioJsonPath);
+	if (normalizedScenarioJsonPath.TrimStartAndEnd().IsEmpty())
+	{
+		SetDiagnosticsText(TEXT("project scenario 파일이 선택되지 않았습니다."));
+		return false;
+	}
+	if (!IsUserProjectScenarioPath(normalizedScenarioJsonPath))
+	{
+		SetDiagnosticsText(TEXT("project scenario는 <UserProject>/scenario.json 경로여야 합니다."));
+		return false;
+	}
+
+	const FString resolvedScenarioJsonPath = FSimulationSetupJson::ResolveProjectPath(normalizedScenarioJsonPath);
+	if (!FPaths::FileExists(resolvedScenarioJsonPath))
+	{
+		SetDiagnosticsText(FString::Printf(TEXT("project scenario 파일이 없습니다: %s"), *normalizedScenarioJsonPath));
+		return false;
+	}
+
+	if (!subsystem->OpenScenarioEditor(normalizedScenarioJsonPath))
+	{
+		SetDiagnosticsText(TEXT("ScenarioEditorMap 열기 실패."));
+		return false;
+	}
+
+	return true;
+}
+
+bool UMainMenuWidget::StartProjectRunFromScenario(const FString& scenarioJsonPath, const FString& requestedRunId)
+{
+	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
+	if (!subsystem)
+	{
+		SetDiagnosticsText(TEXT("SimulatorLaunchSubsystem is unavailable."));
+		return false;
+	}
+
+	const FString normalizedScenarioJsonPath = NormalizeUserProjectScenarioPath(scenarioJsonPath);
+	if (!IsUserProjectScenarioPath(normalizedScenarioJsonPath))
+	{
+		SetDiagnosticsText(TEXT("Project run requires <UserProject>/scenario.json."));
+		return false;
+	}
+
+	const FString resolvedScenarioJsonPath = FSimulationSetupJson::ResolveProjectPath(normalizedScenarioJsonPath);
+	if (!FPaths::FileExists(resolvedScenarioJsonPath))
+	{
+		SetDiagnosticsText(FString::Printf(TEXT("Project scenario file is missing: %s"), *normalizedScenarioJsonPath));
+		return false;
+	}
+
+	if (!EnsureProjectDefaultsForScenario(normalizedScenarioJsonPath))
+	{
+		return false;
+	}
+
+	const FString projectRoot = ResolveUserProjectRootFromScenarioPath(normalizedScenarioJsonPath);
+	FString runId;
+	TArray<FString> diagnostics;
+	if (!subsystem->PrepareProjectRunSnapshot(projectRoot, requestedRunId, runId, diagnostics))
+	{
+		SetDiagnosticsText(JoinStringLines(diagnostics));
+		return false;
+	}
+
+	if (!subsystem->StartProjectRun(projectRoot, runId))
+	{
+		SetDiagnosticsText(subsystem->GetLastError());
+		return false;
+	}
+
+	if (RunIdTextBox)
+	{
+		RunIdTextBox->SetText(FText::FromString(runId));
+	}
+	SetSelectedProjectScenarioPath(normalizedScenarioJsonPath);
+	SetDiagnosticsText(FString::Printf(TEXT("Project run launch requested: %s / %s"), *projectRoot, *runId));
 	return true;
 }
 
@@ -2216,16 +2550,27 @@ FString UMainMenuWidget::GetSelectedScenarioSetupPath() const
 		return SelectedScenarioSetupPath;
 	}
 
+	return ExperimentScenarioSetupComboBox ? ExperimentScenarioSetupComboBox->GetSelectedOption() : FString();
+}
+
+FString UMainMenuWidget::GetSelectedProjectScenarioPath() const
+{
+	if (!SelectedProjectScenarioPath.TrimStartAndEnd().IsEmpty())
+	{
+		return SelectedProjectScenarioPath;
+	}
+
 	if (ScenarioSetupPathTextBox)
 	{
-		const FString scenarioSetupPath = ScenarioSetupPathTextBox->GetText().ToString().TrimStartAndEnd();
-		if (!scenarioSetupPath.IsEmpty())
+		const FString scenarioJsonPath = NormalizeUserProjectScenarioPath(ScenarioSetupPathTextBox->GetText().ToString());
+		if (!scenarioJsonPath.IsEmpty())
 		{
-			return scenarioSetupPath;
+			return scenarioJsonPath;
 		}
 	}
 
-	return ExperimentScenarioSetupComboBox ? ExperimentScenarioSetupComboBox->GetSelectedOption() : FString();
+	const FString selectedOption = ScenarioSetupComboBox ? ScenarioSetupComboBox->GetSelectedOption() : FString();
+	return selectedOption.IsEmpty() ? GetDefaultUserProjectScenarioPath() : selectedOption;
 }
 
 FString UMainMenuWidget::GetSelectedDeliveryBotSetupPath() const

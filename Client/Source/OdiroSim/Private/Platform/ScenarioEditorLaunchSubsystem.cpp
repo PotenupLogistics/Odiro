@@ -60,6 +60,11 @@ bool UScenarioEditorLaunchSubsystem::OpenNewScenarioEditor()
 	return OpenScenarioEditorInternal(EScenarioEditorAutoStartMode::NewDraft, FString());
 }
 
+bool UScenarioEditorLaunchSubsystem::OpenNewScenarioEditorAtPath(const FString& scenarioJsonPath)
+{
+	return OpenScenarioEditorInternal(EScenarioEditorAutoStartMode::NewDraft, scenarioJsonPath.TrimStartAndEnd());
+}
+
 bool UScenarioEditorLaunchSubsystem::OpenScenarioEditorInternal(
 	const EScenarioEditorAutoStartMode launchMode,
 	const FString& scenarioSetupPath)
@@ -143,6 +148,23 @@ void UScenarioEditorLaunchSubsystem::TryApplyPendingEditorStartup(UWorld* loaded
 	if (PendingAutoStartMode == EScenarioEditorAutoStartMode::NewDraft)
 	{
 		editorController->NewScenarioDraft();
+		if (!PendingScenarioSetupPath.IsEmpty())
+		{
+			FString resolvedPath;
+			TArray<FString> diagnostics;
+			if (!editorController->SaveScenarioSetupJsonFile(PendingScenarioSetupPath, resolvedPath, diagnostics))
+			{
+				UE_LOG(
+					LogScenarioEditorLaunch,
+					Warning,
+					TEXT("Project scenario 새 draft 저장 실패 | Path: %s, Diagnostics: %s"),
+					*PendingScenarioSetupPath,
+					*FString::Join(diagnostics, TEXT(" | ")));
+				return;
+			}
+
+			UE_LOG(LogScenarioEditorLaunch, Log, TEXT("Project scenario 새 draft 저장 완료 | Path: %s"), *resolvedPath);
+		}
 		UE_LOG(LogScenarioEditorLaunch, Log, TEXT("ScenarioEditor 새 draft 자동 시작 완료"));
 	}
 	else

@@ -822,7 +822,7 @@ AScenarioStaticObstacle* UScenarioSimulationSubsystem::SpawnStaticObstacle(const
 		UE_LOG(
 			LogScenarioSimulation,
 			Warning,
-			TEXT("?뺤쟻 ?μ븷臾?'%s'??prop '%s' entry ?곸슜 ?ㅽ뙣."),
+			TEXT("Static obstacle '%s' failed to apply prop '%s'."),
 			*placeableSpec.InstanceId,
 			*placeableSpec.AssetId);
 		staticObstacle->Destroy();

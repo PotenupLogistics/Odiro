@@ -154,6 +154,156 @@ namespace
 		return FString::Printf(TEXT("simulator-run-%s-%s"), *timestamp, *guid);
 	}
 
+	bool IsSixDigitRunDirectoryName(const FString& runDirectoryName)
+	{
+		if (runDirectoryName.Len() != 6)
+		{
+			return false;
+		}
+
+		for (const TCHAR character : runDirectoryName)
+		{
+			if (!FChar::IsDigit(character))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	FString MakeNextProjectRunId(const FString& projectPath)
+	{
+		const FString runsPath = FPaths::Combine(projectPath, TEXT("runs"));
+		TArray<FString> runDirectoryNames;
+		IFileManager::Get().FindFiles(runDirectoryNames, *FPaths::Combine(runsPath, TEXT("*")), false, true);
+
+		int32 maxRunNumber = 0;
+		for (const FString& runDirectoryName : runDirectoryNames)
+		{
+			if (!IsSixDigitRunDirectoryName(runDirectoryName))
+			{
+				continue;
+			}
+
+			maxRunNumber = FMath::Max(maxRunNumber, FCString::Atoi(*runDirectoryName));
+		}
+
+		if (maxRunNumber >= 999999)
+		{
+			return FString();
+		}
+
+		return FString::Printf(TEXT("%06d"), maxRunNumber + 1);
+	}
+
+	void AddLaunchDiagnostic(TArray<FString>& diagnostics, const FString& message)
+	{
+		diagnostics.Add(message);
+	}
+
+	bool CopyProjectRunFileSnapshot(
+		const FString& sourcePath,
+		const FString& destinationPath,
+		const TCHAR* label,
+		TArray<FString>& diagnostics)
+	{
+		if (!FPaths::FileExists(sourcePath))
+		{
+			AddLaunchDiagnostic(
+				diagnostics,
+				FString::Printf(TEXT("%s source file is required: %s"), label, *sourcePath));
+			return false;
+		}
+
+		const FString destinationDirectory = FPaths::GetPath(destinationPath);
+		if (!IFileManager::Get().MakeDirectory(*destinationDirectory, true))
+		{
+			AddLaunchDiagnostic(
+				diagnostics,
+				FString::Printf(TEXT("%s snapshot directory create failed: %s"), label, *destinationDirectory));
+			return false;
+		}
+
+		TArray<uint8> fileBytes;
+		if (!FFileHelper::LoadFileToArray(fileBytes, *sourcePath))
+		{
+			AddLaunchDiagnostic(
+				diagnostics,
+				FString::Printf(TEXT("%s source file read failed: %s"), label, *sourcePath));
+			return false;
+		}
+
+		if (!FFileHelper::SaveArrayToFile(fileBytes, *destinationPath))
+		{
+			AddLaunchDiagnostic(
+				diagnostics,
+				FString::Printf(TEXT("%s snapshot file write failed: %s"), label, *destinationPath));
+			return false;
+		}
+
+		return true;
+	}
+
+	bool ShouldSkipPolicySnapshotFile(FString policyFilePath)
+	{
+		policyFilePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		const FString extension = FPaths::GetExtension(policyFilePath);
+		return policyFilePath.Contains(TEXT("/__pycache__/"))
+			|| extension.Equals(TEXT("pyc"), ESearchCase::IgnoreCase)
+			|| extension.Equals(TEXT("pyo"), ESearchCase::IgnoreCase);
+	}
+
+	bool CopyProjectRunPolicySnapshot(
+		const FString& sourcePolicyPath,
+		const FString& destinationPolicyPath,
+		TArray<FString>& diagnostics)
+	{
+		if (!FPaths::DirectoryExists(sourcePolicyPath))
+		{
+			AddLaunchDiagnostic(
+				diagnostics,
+				FString::Printf(TEXT("policy source directory is required: %s"), *sourcePolicyPath));
+			return false;
+		}
+
+		if (!IFileManager::Get().MakeDirectory(*destinationPolicyPath, true))
+		{
+			AddLaunchDiagnostic(
+				diagnostics,
+				FString::Printf(TEXT("policy snapshot directory create failed: %s"), *destinationPolicyPath));
+			return false;
+		}
+
+		FString sourcePolicyRoot = sourcePolicyPath;
+		sourcePolicyRoot.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (!sourcePolicyRoot.EndsWith(TEXT("/")))
+		{
+			sourcePolicyRoot += TEXT("/");
+		}
+
+		TArray<FString> policyFiles;
+		IFileManager::Get().FindFilesRecursive(policyFiles, *sourcePolicyPath, TEXT("*"), true, false);
+		for (FString policyFile : policyFiles)
+		{
+			policyFile.ReplaceInline(TEXT("\\"), TEXT("/"));
+			if (ShouldSkipPolicySnapshotFile(policyFile))
+			{
+				continue;
+			}
+
+			FString relativePolicyFile = policyFile;
+			FPaths::MakePathRelativeTo(relativePolicyFile, *sourcePolicyRoot);
+			const FString destinationFile = FPaths::Combine(destinationPolicyPath, relativePolicyFile);
+			if (!CopyProjectRunFileSnapshot(policyFile, destinationFile, TEXT("policy"), diagnostics))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	bool IsUnrealEditorExecutable()
 	{
 		// Editor preview에서만 Task-RunPreview.bat fallback을 쓴다. Packaged game은 자기 executable을 다시 실행한다.
@@ -917,6 +1067,107 @@ bool USimulatorLaunchSubsystem::StartSimulationRun(const FString& setupPath, con
 		*executable,
 		*arguments);
 
+	return true;
+}
+
+bool USimulatorLaunchSubsystem::PrepareProjectRunSnapshot(
+	const FString& projectPath,
+	const FString& requestedRunId,
+	FString& outRunId,
+	TArray<FString>& outDiagnostics) const
+{
+	outRunId.Reset();
+	outDiagnostics.Reset();
+
+	FString normalizedProjectPath = projectPath.TrimStartAndEnd();
+	normalizedProjectPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+	if (normalizedProjectPath.IsEmpty())
+	{
+		AddLaunchDiagnostic(outDiagnostics, TEXT("Project path must not be empty."));
+		return false;
+	}
+
+	if (FPaths::IsRelative(normalizedProjectPath))
+	{
+		normalizedProjectPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), normalizedProjectPath));
+		normalizedProjectPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+	}
+
+	if (!FPaths::DirectoryExists(normalizedProjectPath))
+	{
+		AddLaunchDiagnostic(
+			outDiagnostics,
+			FString::Printf(TEXT("Project directory is required: %s"), *normalizedProjectPath));
+		return false;
+	}
+
+	const FString runId = requestedRunId.TrimStartAndEnd().IsEmpty()
+		? MakeNextProjectRunId(normalizedProjectPath)
+		: requestedRunId.TrimStartAndEnd();
+	if (runId.IsEmpty())
+	{
+		AddLaunchDiagnostic(outDiagnostics, TEXT("No available 6-digit project run id."));
+		return false;
+	}
+	if (!FUserProjectRunSnapshot::IsValidRunId(runId))
+	{
+		AddLaunchDiagnostic(outDiagnostics, TEXT("Project run id must be a 6-digit decimal string."));
+		return false;
+	}
+
+	const FUserProjectRunSnapshotPaths paths = FUserProjectRunSnapshot::BuildPaths(normalizedProjectPath, runId);
+	if (FPaths::DirectoryExists(paths.RunPath))
+	{
+		AddLaunchDiagnostic(
+			outDiagnostics,
+			FString::Printf(TEXT("Project run directory already exists: %s"), *paths.RunPath));
+		return false;
+	}
+
+	if (!IFileManager::Get().MakeDirectory(*paths.ReviewPath, true)
+		|| !IFileManager::Get().MakeDirectory(*paths.EpisodesPath, true)
+		|| !IFileManager::Get().MakeDirectory(*paths.SnapshotPath, true))
+	{
+		AddLaunchDiagnostic(
+			outDiagnostics,
+			FString::Printf(TEXT("Project run directories could not be created: %s"), *paths.RunPath));
+		return false;
+	}
+
+	if (!CopyProjectRunFileSnapshot(
+			FPaths::Combine(paths.ProjectPath, TEXT("setting.json")),
+			paths.SettingPath,
+			TEXT("setting"),
+			outDiagnostics)
+		|| !CopyProjectRunFileSnapshot(
+			FPaths::Combine(paths.ProjectPath, TEXT("profile.json")),
+			paths.ProfilePath,
+			TEXT("profile"),
+			outDiagnostics)
+		|| !CopyProjectRunFileSnapshot(
+			FPaths::Combine(paths.ProjectPath, TEXT("scenario.json")),
+			paths.ScenarioPath,
+			TEXT("scenario"),
+			outDiagnostics)
+		|| !CopyProjectRunPolicySnapshot(
+			FPaths::Combine(paths.ProjectPath, TEXT("policy")),
+			paths.PolicyPath,
+			outDiagnostics))
+	{
+		return false;
+	}
+
+	const FUserProjectRunSnapshotParseResult parseResult = FUserProjectRunSnapshot::Parse(paths.ProjectPath, paths.RunId);
+	for (const FScenarioCompileDiagnostic& diagnostic : parseResult.Diagnostics)
+	{
+		AddLaunchDiagnostic(outDiagnostics, FString::Printf(TEXT("%s: %s"), *diagnostic.Code, *diagnostic.Message));
+	}
+	if (!parseResult.bSuccess)
+	{
+		return false;
+	}
+
+	outRunId = paths.RunId;
 	return true;
 }
 

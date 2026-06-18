@@ -138,13 +138,16 @@ private:
 	void SetExperimentResultDetailVisible(bool bVisible);
 	void SetSelectedSetupPath(const FString& setupPath);
 	void SetSelectedScenarioSetupPath(const FString& scenarioSetupPath);
+	void SetSelectedProjectScenarioPath(const FString& scenarioJsonPath);
 	void SetSelectedDeliveryBotSetupPath(const FString& deliveryBotSetupPath);
 	void SetSelectedPolicySpecPath(const FString& policySpecPath);
 	void SetSelectedExperimentResultRunDirectory(const FString& runDirectory);
 	void SetSelectedExperimentResultPath(const FString& reportPath);
 	void ClearExperimentResultIterationWidgets();
-	bool CreateScenarioFileFromTemplate(const FString& scenarioSetupPath);
-	bool OpenScenarioInEditor(const FString& scenarioSetupPath);
+	bool EnsureProjectDefaultsForScenario(const FString& scenarioJsonPath);
+	bool OpenNewProjectScenarioInEditor(const FString& scenarioJsonPath);
+	bool OpenScenarioInEditor(const FString& scenarioJsonPath);
+	bool StartProjectRunFromScenario(const FString& scenarioJsonPath, const FString& requestedRunId);
 	bool BuildSimulationSetupFromControls(
 		const FSimulationSetup& baseSetup,
 		const FString& runQueuePath,
@@ -158,6 +161,7 @@ private:
 	void SetDiagnosticsText(const FString& message);
 	FString GetSelectedSetupPath() const;
 	FString GetSelectedScenarioSetupPath() const;
+	FString GetSelectedProjectScenarioPath() const;
 	FString GetSelectedDeliveryBotSetupPath() const;
 	FString GetSelectedPolicySpecPath() const;
 	USimulatorLaunchSubsystem* GetSimulatorLaunchSubsystem() const;
@@ -362,6 +366,7 @@ private:
 
 	FString SelectedSetupPath;
 	FString SelectedScenarioSetupPath;
+	FString SelectedProjectScenarioPath;
 	FString SelectedDeliveryBotSetupPath;
 	FString SelectedPolicySpecJsonPath;
 	FString SelectedExperimentResultRunDirectory;

@@ -31,6 +31,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Platform|ScenarioEditor")
 	bool OpenNewScenarioEditor();
 
+	// Opens a new draft and saves its initial project scenario.json to the requested path.
+	UFUNCTION(BlueprintCallable, Category = "Platform|ScenarioEditor")
+	bool OpenNewScenarioEditorAtPath(const FString& scenarioJsonPath);
+
 	UFUNCTION(BlueprintPure, Category = "Platform|ScenarioEditor")
 	FString GetPendingScenarioSetupPath() const { return PendingScenarioSetupPath; }
 

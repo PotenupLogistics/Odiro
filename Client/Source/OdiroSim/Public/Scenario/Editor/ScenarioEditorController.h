@@ -90,11 +90,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement", meta = (ClampMin = "0.0"))
 	double PlacementGroundSnapToleranceCm = 5.0;
 
-	// ì§€ë©??ì—­??ê·¸ë¦¬???‰ë©´???’ì´(cm). ì½”ë„ˆ traceê°€ ???‰ë©´???¬ì˜??
+	// Z height of the plane used while drawing ground regions; corner traces are projected onto it.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|RegionDraw")
 	double GroundRegionDrawPlaneZCm = 0.0;
 
-	// ?œë˜ê·¸í•œ ?¬ê°?•ì˜ ê°€ë¡??¸ë¡œê°€ ëª¨ë‘ ??ê°??´ìƒ?´ì–´??ì»¤ë°‹??ì§§ì? ?´ë¦­?€ ë¬´ì‹œ).
+	// Minimum rectangle size required before a dragged ground-region box is committed.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|RegionDraw", meta = (ClampMin = "0.0"))
 	double RegionDrawMinSizeCm = 10.0;
 
@@ -125,7 +125,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool BeginPalettePlacement(EScenarioPaletteItemType itemType, FName assetId);
 
-	// ì§€ë©??ì—­(walkable/penalty/blocked)??drag-out?¼ë¡œ ê·¸ë¦¬??ëª¨ë“œë¡?ì§„ì…??
+	// Enters drag-out drawing mode for walkable, penalty, or blocked ground regions.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|RegionDraw")
 	bool BeginGroundRegionDraw(EScenarioGroundRegionType regionType);
 

@@ -55,7 +55,7 @@ void UScenarioEditorRootWidget::NativeTick(const FGeometry& myGeometry, const fl
 		SetAssetPaletteVisible(ShouldRevealAssetPaletteFromMouseEdge(), true);
 	}
 
-	// keyboard toggle ??ë²„íŠ¼ ??ê²½ë¡œë¡?view modeê°€ ë°”ë€?ê²½ìš°ë¥??°ë¼?¡ìŒ.
+	// Polls external view-mode changes from keyboard shortcuts and controller-owned transitions.
 	if (const AScenarioEditorController* controller = GetEditorController())
 	{
 		if (!bHasCachedViewMode || controller->GetEditorViewMode() != LastSeenViewMode)
@@ -183,7 +183,7 @@ void UScenarioEditorRootWidget::RefreshViewModeButtons()
 	LastSeenViewMode = viewMode;
 	bHasCachedViewMode = true;
 
-	// ?„ìž¬ ëª¨ë“œê°€ ?„ë‹Œ, ?„í™˜ ?€??ëª¨ë“œ??ë²„íŠ¼ë§??¸ì¶œ??
+	// Only show the button for the view mode that is not currently active.
 	const bool bTopDownActive = viewMode == EScenarioEditorViewMode::TopDownOrtho;
 	if (TopDownOrthoModeButton)
 	{

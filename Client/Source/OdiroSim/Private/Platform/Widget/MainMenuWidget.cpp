@@ -26,7 +26,6 @@ namespace
 	const TCHAR* MainMenuDefaultSimulationMapId = TEXT("ScenarioSimulationMap");
 	const TCHAR* DefaultMeasurementOutputDirectory = TEXT("Saved/AnalysisLogs");
 	const TCHAR* DefaultMeasurementFilePrefix = TEXT("MeasurementLog");
-	const TCHAR* DefaultReportOutputDirectory = TEXT("Json/Output");
 	const TCHAR* DefaultStatusOutputPath = TEXT("Saved/SimulationRuns/latest_status.json");
 	const TCHAR* MainMenuDefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	const int32 DefaultFlushIntervalTicks = 60;
@@ -932,10 +931,6 @@ bool UMainMenuWidget::BuildSimulationSetupFromControls(
 		outSetup.MeasurementLog.FlushIntervalTicks =
 			FCString::Atoi(*FlushIntervalTicksTextBox->GetText().ToString().TrimStartAndEnd());
 	}
-	if (ReportOutputDirectoryTextBox)
-	{
-		outSetup.Report.OutputDirectory = ReportOutputDirectoryTextBox->GetText().ToString().TrimStartAndEnd();
-	}
 	if (StatusOutputPathTextBox)
 	{
 		outSetup.Status.OutputPath = StatusOutputPathTextBox->GetText().ToString().TrimStartAndEnd();
@@ -1771,10 +1766,6 @@ void UMainMenuWidget::LoadSelectedSetup()
 	{
 		FlushIntervalTicksTextBox->SetText(FText::AsNumber(parseResult.Setup.MeasurementLog.FlushIntervalTicks));
 	}
-	if (ReportOutputDirectoryTextBox)
-	{
-		ReportOutputDirectoryTextBox->SetText(FText::FromString(parseResult.Setup.Report.OutputDirectory));
-	}
 	if (StatusOutputPathTextBox)
 	{
 		StatusOutputPathTextBox->SetText(FText::FromString(parseResult.Setup.Status.OutputPath));
@@ -1827,10 +1818,6 @@ void UMainMenuWidget::ApplyNewSetupDefaults(const FString& setupPath)
 	if (FlushIntervalTicksTextBox)
 	{
 		FlushIntervalTicksTextBox->SetText(FText::AsNumber(DefaultFlushIntervalTicks));
-	}
-	if (ReportOutputDirectoryTextBox)
-	{
-		ReportOutputDirectoryTextBox->SetText(FText::FromString(DefaultReportOutputDirectory));
 	}
 	if (StatusOutputPathTextBox)
 	{

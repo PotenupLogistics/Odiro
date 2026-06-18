@@ -28,7 +28,7 @@ entry:
   - Client/Tools/Dev.ps1
   - Client/Tools/RunPreview.ps1
 keep:
-  - Platform UI reads simulator state via status/report/log files, not simulator world objects.
+  - Platform UI reads simulator state via status and canonical user-project run artifacts, not simulator world objects.
   - Client/Tools use Client/Tools/Common.ps1, never root tools/common.ps1.
   - Client prerequisite checks cover Windows Unreal C++ only; Android/iOS/macOS/MAUI are not failures.
   - Legacy Client root scripts such as BuildProject.bat, RunPreview.bat, and RunPythonPolicyServer.bat stay folded into Task-* wrappers.
@@ -42,8 +42,8 @@ keep:
   - MainMenu project result mode reads result runs from `<UserProject>/runs/<RunId>` and sends AI analysis through the v2 project-run path.
   - Future MainMenu project mode must not call SimulationSetup or RunQueue writer/launcher paths.
   - MainMenu project result mode does not fall back to legacy Json/Input, SimulationSetup, RunQueue, Saved/SimulationRuns, or Saved/AnalysisLogs lists.
-  - Legacy report + MeasurementLog analysis must not be used by MainMenu project mode.
-  - SimulatorLaunchSubsystem legacy SimulationSetup/RunQueue/report helpers are Blueprint compatibility APIs only and should stay deprecated while retained.
+  - Legacy report + MeasurementLog analysis is removed; MainMenu project mode sends v2 project-run analysis only.
+  - SimulatorLaunchSubsystem legacy SimulationSetup/RunQueue helpers are Blueprint compatibility APIs only and should stay deprecated while retained.
 verify:
   - launcher command contract tests for launch arg changes
   - runtime log plus status JSON for process changes

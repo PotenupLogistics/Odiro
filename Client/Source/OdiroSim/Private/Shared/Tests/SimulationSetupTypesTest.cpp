@@ -100,8 +100,6 @@ bool FSimulationSetupJsonParseSampleTest::RunTest(const FString& parameters)
 	TestEqual(TEXT("measurement file prefix"), result.Setup.MeasurementLog.FilePrefix, FString(TEXT("MeasurementLog")));
 	TestEqual(TEXT("flush interval ticks"), result.Setup.MeasurementLog.FlushIntervalTicks, 60);
 	TestTrue(TEXT("flush on event"), result.Setup.MeasurementLog.bFlushOnEvent);
-	TestTrue(TEXT("save report"), result.Setup.Report.bSaveEvaluationReportJson);
-	TestEqual(TEXT("report output directory"), result.Setup.Report.OutputDirectory, FString(TEXT("Json/Output")));
 	TestEqual(TEXT("status output path"), result.Setup.Status.OutputPath, FString(TEXT("Saved/SimulationRuns/latest_status.json")));
 
 	return true;
@@ -223,8 +221,6 @@ bool FSimulationSetupJsonWriteRoundTripTest::RunTest(const FString& parameters)
 	setup.MeasurementLog.FilePrefix = TEXT("TestMeasurement");
 	setup.MeasurementLog.FlushIntervalTicks = 10;
 	setup.MeasurementLog.bFlushOnEvent = false;
-	setup.Report.bSaveEvaluationReportJson = true;
-	setup.Report.OutputDirectory = TEXT("Json/TestOutput");
 	setup.Status.OutputPath = TEXT("Saved/SimulationRuns/test_status.json");
 
 	FString json;
@@ -232,6 +228,7 @@ bool FSimulationSetupJsonWriteRoundTripTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("setup JSON writes"), FSimulationSetupJson::TryWriteSetupJson(setup, json, diagnostics));
 	TestEqual(TEXT("diagnostics"), diagnostics.Num(), 0);
 	TestTrue(TEXT("run queue field"), json.Contains(TEXT("\"run_queue\"")));
+	TestFalse(TEXT("legacy report field omitted"), json.Contains(TEXT("\"report\"")));
 
 	const FSimulationSetupParseResult result = FSimulationSetupJson::ParseFromString(json);
 	TestTrue(TEXT("written setup parses"), result.bSuccess);
@@ -264,10 +261,6 @@ bool FSimulationSetupRunOutputPathsTest::RunTest(const FString& parameters)
 	TestEqual(
 		TEXT("measurement output directory"),
 		setup.MeasurementLog.OutputDirectory,
-		FString(TEXT("Saved/SimulationRuns/run-001")));
-	TestEqual(
-		TEXT("report output directory"),
-		setup.Report.OutputDirectory,
 		FString(TEXT("Saved/SimulationRuns/run-001")));
 	TestEqual(
 		TEXT("status output path"),
@@ -412,10 +405,10 @@ bool FSimulationRunStatusJsonWriteTest::RunTest(const FString& parameters)
 	status.CurrentPairId = TEXT("sample_0");
 	status.CompletedRuns = 1;
 	status.TotalRuns = 5;
-	status.ReportPaths.Add(TEXT("Json/Output/sample_report.json"));
-	status.ReportPaths.Add(FPaths::ConvertRelativePathToFull(FPaths::Combine(
+	status.ResultPaths.Add(TEXT("runs/000001/episodes/000001/result.json"));
+	status.ResultPaths.Add(FPaths::ConvertRelativePathToFull(FPaths::Combine(
 		FPaths::ProjectDir(),
-		TEXT("Json/Output/absolute_sample_report.json"))));
+		TEXT("runs/000001/episodes/000002/result.json"))));
 	status.LogPaths.Add(TEXT("Saved/AnalysisLogs/sample.jsonl"));
 
 	FString json;
@@ -426,9 +419,9 @@ bool FSimulationRunStatusJsonWriteTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("status JSON writes"), FSimulationRunStatusJson::TryWriteStatusJson(status, json, diagnostics));
 	TestEqual(TEXT("status diagnostics"), diagnostics.Num(), 0);
 	TestTrue(TEXT("state field"), json.Contains(TEXT("\"state\": \"Running\"")));
-	TestTrue(TEXT("report path"), json.Contains(TEXT("Json/Output/sample_report.json")));
-	TestTrue(TEXT("absolute report path is written project-relative"), json.Contains(TEXT("Json/Output/absolute_sample_report.json")));
-	TestFalse(TEXT("report path does not include project root"), json.Contains(normalizedProjectDir));
+	TestTrue(TEXT("result path"), json.Contains(TEXT("runs/000001/episodes/000001/result.json")));
+	TestTrue(TEXT("absolute result path is written project-relative"), json.Contains(TEXT("runs/000001/episodes/000002/result.json")));
+	TestFalse(TEXT("result path does not include project root"), json.Contains(normalizedProjectDir));
 	TestTrue(TEXT("log path"), json.Contains(TEXT("Saved/AnalysisLogs/sample.jsonl")));
 
 	return true;
@@ -452,7 +445,7 @@ bool FSimulationRunStatusJsonReadTest::RunTest(const FString& parameters)
 		TEXT("\"current_pair_id\":null,")
 		TEXT("\"completed_runs\":5,")
 		TEXT("\"total_runs\":5,")
-		TEXT("\"report_paths\":[\"Json/Output/sample_report.json\"],")
+		TEXT("\"result_paths\":[\"runs/000001/episodes/000001/result.json\"],")
 		TEXT("\"log_paths\":[\"Saved/AnalysisLogs/sample.jsonl\"],")
 		TEXT("\"error\":null")
 		TEXT("}");
@@ -465,7 +458,7 @@ bool FSimulationRunStatusJsonReadTest::RunTest(const FString& parameters)
 	TestEqual(TEXT("state"), status.State, ESimulationRunState::Completed);
 	TestEqual(TEXT("completed runs"), status.CompletedRuns, 5);
 	TestEqual(TEXT("total runs"), status.TotalRuns, 5);
-	TestEqual(TEXT("report count"), status.ReportPaths.Num(), 1);
+	TestEqual(TEXT("result count"), status.ResultPaths.Num(), 1);
 	TestEqual(TEXT("log count"), status.LogPaths.Num(), 1);
 	TestTrue(TEXT("nullable current pair"), status.CurrentPairId.IsEmpty());
 	TestTrue(TEXT("nullable error"), status.Error.IsEmpty());

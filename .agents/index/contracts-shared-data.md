@@ -25,7 +25,7 @@ keep:
   - Client/Docs/specs is legacy Client interface context; final product structure and execution flow belong in docs/specs.
   - docs/specs is for repository/product structure, rules, and requirements.
   - Bridge IPC uses local portless transports; message compatibility belongs in contracts/specs/bridge-ipc.md.
-  - `RunQueue`, `DeliveryBotSetup`, and `EpisodeEvaluationReport` specs are legacy guides; new shared file contracts belong in user-project-data.md.
+  - `RunQueue` and `DeliveryBotSetup` specs are legacy guides; new shared file contracts belong in user-project-data.md.
 verify:
   - consuming project schema validation
   - contract specs vs generated examples before implementation changes

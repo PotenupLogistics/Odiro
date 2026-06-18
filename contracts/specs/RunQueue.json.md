@@ -76,7 +76,6 @@ Runner는 더 이상 기본 DeliveryBotSetup 파일로 fallback하지 않는다.
 - `pair_id`는 batch 안에서 unique하게 두는 것을 권장한다.
 - 경로는 legacy client project 기준 상대 경로를 사용했다.
 - Input JSON은 `Json/Input` 아래에 둔다.
-- EvaluationReport 자동 저장이 켜져 있으면 결과는 `Json/Output` 아래에 저장된다.
 - pair 하나가 compile/setup에 실패해도 Runner는 기록을 남기고 다음 pair로 넘어갈 수 있다.
 
 # 체크리스트

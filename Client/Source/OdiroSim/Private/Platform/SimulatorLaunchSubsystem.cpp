@@ -10,14 +10,12 @@ namespace
 {
 	const TCHAR* SimulationSetupInputDirectory = TEXT("Json/Input");
 	const TCHAR* SimulatorLaunchPolicySpecInputDirectory = TEXT("Json/Input/PolicySpecs");
-	const TCHAR* EvaluationReportOutputDirectory = TEXT("Json/Output");
 	const TCHAR* SimulationRunStatusDirectory = TEXT("Saved/SimulationRuns");
 	const TCHAR* PreviewLauncherFileName = TEXT("Task-RunPreview.bat");
 	const TCHAR* LaunchSimulationSetupSchema = TEXT("simulation_setup");
 	const TCHAR* LaunchScenarioSetupSchema = TEXT("scenario_actor_spawn_mvp");
 	const TCHAR* LaunchDeliveryBotSetupSchema = TEXT("delivery_bot_setup");
 	const TCHAR* LaunchScenarioRunQueueSchema = TEXT("episode_run_queue");
-	const TCHAR* LaunchEvaluationReportSchema = TEXT("episode_evaluation_report");
 	const TCHAR* LaunchDefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	const TCHAR* SimulatorProcessFlags = TEXT("-nosound -unattended -NoLoadingScreen");
 
@@ -512,15 +510,6 @@ TArray<FString> USimulatorLaunchSubsystem::ListScenarioRunQueueFiles() const
 	return runQueueFiles;
 }
 
-TArray<FString> USimulatorLaunchSubsystem::ListEvaluationReportFiles() const
-{
-	TArray<FString> reportFiles;
-	FindJsonFilesWithSchema(EvaluationReportOutputDirectory, LaunchEvaluationReportSchema, reportFiles);
-	FindJsonFilesWithSchema(SimulationRunStatusDirectory, LaunchEvaluationReportSchema, reportFiles);
-	reportFiles.Sort();
-	return reportFiles;
-}
-
 TArray<FString> USimulatorLaunchSubsystem::ListSimulationRunResultDirectories() const
 {
 	TArray<FString> candidateFiles;
@@ -535,8 +524,7 @@ TArray<FString> USimulatorLaunchSubsystem::ListSimulationRunResultDirectories() 
 			continue;
 		}
 
-		if (!schema.Equals(TEXT("simulation_run_status"), ESearchCase::CaseSensitive)
-			&& !schema.Equals(LaunchEvaluationReportSchema, ESearchCase::CaseSensitive))
+		if (!schema.Equals(TEXT("simulation_run_status"), ESearchCase::CaseSensitive))
 		{
 			continue;
 		}
@@ -552,24 +540,6 @@ TArray<FString> USimulatorLaunchSubsystem::ListSimulationRunResultDirectories() 
 
 	resultDirectories.Sort();
 	return resultDirectories;
-}
-
-TArray<FString> USimulatorLaunchSubsystem::ListEvaluationReportFilesInDirectory(const FString& runDirectory) const
-{
-	TArray<FString> candidateFiles;
-	FindProjectFiles(runDirectory, TEXT("*.json"), candidateFiles);
-
-	TArray<FString> reportFiles;
-	for (const FString& candidateFile : candidateFiles)
-	{
-		if (HasJsonSchema(candidateFile, LaunchEvaluationReportSchema))
-		{
-			reportFiles.Add(candidateFile);
-		}
-	}
-
-	reportFiles.Sort();
-	return reportFiles;
 }
 
 TArray<FString> USimulatorLaunchSubsystem::ListMeasurementLogFilesInDirectory(const FString& runDirectory) const

@@ -23,6 +23,28 @@ namespace
 		return FDateTime::UtcNow().ToString(TEXT("%Y-%m-%dT%H:%M:%SZ"));
 	}
 
+	FString ResolveRunRecordEpisodeId(const FEpisodeRunRecord& runRecord)
+	{
+		if (FUserProjectEpisodeScenarioJson::IsValidEpisodeId(runRecord.EpisodeId))
+		{
+			return runRecord.EpisodeId;
+		}
+		if (FUserProjectEpisodeScenarioJson::IsValidEpisodeId(runRecord.PairId))
+		{
+			return runRecord.PairId;
+		}
+		return FUserProjectEpisodeScenarioJson::BuildEpisodeId(FMath::Max(0, runRecord.RunIndex));
+	}
+
+	FString BuildRunRecordResultPath(
+		const FUserProjectRunSnapshotPaths& paths,
+		const FEpisodeRunRecord& runRecord)
+	{
+		return FPaths::Combine(
+			FUserProjectRunOutputJson::BuildEpisodeDirectory(paths, ResolveRunRecordEpisodeId(runRecord)),
+			TEXT("result.json"));
+	}
+
 	bool IsTerminalRunState(ESimulationRunState state)
 	{
 		return state == ESimulationRunState::Completed
@@ -168,8 +190,6 @@ void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection
 		ActiveSetup.MapId = projectRunParseResult.Setting.MapId;
 		ActiveSetup.FixedStep.Fps = projectRunParseResult.Setting.FixedFps;
 		ActiveSetup.MeasurementLog.bEnabled = false;
-		ActiveSetup.Report.bSaveEvaluationReportJson = false;
-		ActiveSetup.Report.OutputDirectory = ActiveProjectRunPaths.RunPath;
 
 		ApplyFixedStep();
 
@@ -561,8 +581,6 @@ void USimulatorProcessSubsystem::ConfigureRunnerSubsystem(UScenarioRunnerSubsyst
 		return;
 	}
 
-	runnerSubsystem->bSaveEvaluationReportJson = ActiveSetup.Report.bSaveEvaluationReportJson;
-	runnerSubsystem->EvaluationReportOutputDirectory = ActiveSetup.Report.OutputDirectory;
 	BindRunnerDelegates(runnerSubsystem);
 }
 
@@ -885,13 +903,15 @@ void USimulatorProcessSubsystem::RefreshStatusFromRunner(const UScenarioRunnerSu
 		? runnerSubsystem->GetCurrentPairId()
 		: FString();
 
-	ActiveStatus.ReportPaths.Reset();
+	ActiveStatus.ResultPaths.Reset();
+	if (ActiveProjectRunPaths.RunPath.IsEmpty())
+	{
+		return;
+	}
+
 	for (const FEpisodeRunRecord& runRecord : runnerSubsystem->GetRunRecords())
 	{
-		if (!runRecord.EvaluationReportJsonPath.IsEmpty())
-		{
-			ActiveStatus.ReportPaths.Add(ToProjectRelativePathIfPossible(runRecord.EvaluationReportJsonPath));
-		}
+		ActiveStatus.ResultPaths.Add(ToProjectRelativePathIfPossible(BuildRunRecordResultPath(ActiveProjectRunPaths, runRecord)));
 	}
 }
 

@@ -266,9 +266,6 @@ private:
 	TObjectPtr<UEditableTextBox> FlushIntervalTicksTextBox;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UEditableTextBox> ReportOutputDirectoryTextBox;
-
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableTextBox> StatusOutputPathTextBox;
 
 	UPROPERTY(Transient, meta = (BindWidget))

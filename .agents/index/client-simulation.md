@@ -31,7 +31,6 @@ entry:
   - ScenarioSimulationSubsystem.h / .cpp
   - ScenarioRunnerSubsystem.h / .cpp
   - EpisodeMeasurementLogSubsystem.h / .cpp
-  - EpisodeEvaluationReportJson.h / .cpp
   - EpisodeResultTypes.h
   - Client/Docs/plans/PLAN-260602-sim-logging.md
   - Client/Json/Input

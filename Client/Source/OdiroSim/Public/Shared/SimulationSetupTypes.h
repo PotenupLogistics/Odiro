@@ -16,20 +16,6 @@ struct ODIROSIM_API FSimulationFixedStepSettings
 	int32 Fps = 60;
 };
 
-// Episode evaluation report 출력 설정
-USTRUCT(BlueprintType)
-struct ODIROSIM_API FSimulationReportSettings
-{
-	GENERATED_BODY()
-
-	// EpisodeRunner가 evaluation report JSON을 저장할지 결정
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
-	bool bSaveEvaluationReportJson = true;
-
-	// Evaluation report JSON을 저장할 project-relative 또는 absolute directory
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
-	FString OutputDirectory = TEXT("Json/Output");
-};
 
 // 별도 simulator process가 launcher UI에 노출할 status 파일 설정
 USTRUCT(BlueprintType)
@@ -71,10 +57,6 @@ struct ODIROSIM_API FSimulationSetup
 	// Measurement JSONL writer에 전달할 logging 설정
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
 	FEpisodeMeasurementLogSettings MeasurementLog;
-
-	// Evaluation report JSON 출력 설정
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
-	FSimulationReportSettings Report;
 
 	// launcher UI가 polling할 status file 설정
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Setup")
@@ -203,9 +185,9 @@ struct ODIROSIM_API FSimulationRunStatus
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Status", meta = (ClampMin = "0"))
 	int32 TotalRuns = 0;
 
-	// 완료된 evaluation report JSON path 목록
+	// Completed episode result.json path list.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Status")
-	TArray<FString> ReportPaths;
+	TArray<FString> ResultPaths;
 
 	// 생성된 measurement log JSONL path 목록
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|Status")

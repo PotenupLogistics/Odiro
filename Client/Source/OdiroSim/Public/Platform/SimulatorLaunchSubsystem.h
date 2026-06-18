@@ -90,9 +90,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup", meta = (DeprecatedFunction, DeprecationMessage = "Legacy RunQueue API. Use user project runs."))
 	TArray<FString> ListScenarioRunQueueFiles() const;
 
-	// Legacy evaluation report 목록. 새 결과는 user project runs/<RunId>/에 기록한다.
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch", meta = (DeprecatedFunction, DeprecationMessage = "Legacy report API. Use user project run artifacts."))
-	TArray<FString> ListEvaluationReportFiles() const;
 
 	// Legacy status 목록. 새 run 상태는 project run status.json을 사용한다.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch", meta = (DeprecatedFunction, DeprecationMessage = "Legacy status API. Use user project run status.json."))
@@ -102,9 +99,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch", meta = (DeprecatedFunction, DeprecationMessage = "Legacy result directory API. Use user project runs."))
 	TArray<FString> ListSimulationRunResultDirectories() const;
 
-	// Legacy evaluation report 조회. 새 결과는 result.json과 summary.json을 사용한다.
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch", meta = (DeprecatedFunction, DeprecationMessage = "Legacy report API. Use user project result.json and summary.json."))
-	TArray<FString> ListEvaluationReportFilesInDirectory(const FString& runDirectory) const;
 
 	// Legacy measurement log 조회. 새 결과는 actions/events/trace JSONL을 사용한다.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch", meta = (DeprecatedFunction, DeprecationMessage = "Legacy measurement log API. Use user project actions/events/trace JSONL."))

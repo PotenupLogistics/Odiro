@@ -65,18 +65,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	FString GetCurrentPairId() const { return CurrentRecord.PairId; }
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Runner|Report")
-	bool bSaveEvaluationReportJson = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Runner|Report")
-	FString EvaluationReportOutputDirectory = TEXT("Json/Output");
-
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
-	bool BuildLatestEvaluationReportJson(FString& outJson) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
-	bool BuildEvaluationReportJson(int32 runRecordIndex, FString& outJson) const;
-
 private:
 	UFUNCTION()
 	void HandleEpisodeEnded(FEpisodeEvaluationResult result);
@@ -98,10 +86,7 @@ private:
 	void AppendDeliveryBotSetupDiagnostics(const FDeliveryBotSetupCompileResult& compileResult);
 	double GetRunTimeLimitSeconds(const FScenarioRunConfig& runConfig) const;
 	FString BuildRunId() const;
-	bool SaveEvaluationReportJsonForRecord(FEpisodeRunRecord& runRecord) const;
-	FString BuildEvaluationReportJsonFilePath(const FEpisodeRunRecord& runRecord) const;
 	static FString BuildPairId(const FScenarioRunInput& runInput, int32 runIndex);
-	static FString SanitizeReportFileToken(const FString& value);
 
 	UWorld* ResolveWorld() const;
 	UScenarioSimulationSubsystem* ResolveSimulationSubsystem() const;

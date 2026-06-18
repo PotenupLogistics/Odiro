@@ -144,6 +144,11 @@ void UDeliveryBot_HttpPolicyComponent::RequestStartScenario()
 	ResetScenarioState(false);
 
 	bStartRequested = true;
+	UE_LOG(
+		LogDeliveryBotHttpPolicy,
+		Log,
+		TEXT("Python scenario start requested. Owner=%s"),
+		*GetNameSafe(GetOwner()));
 	TryStartScenario();
 }
 
@@ -184,7 +189,14 @@ bool UDeliveryBot_HttpPolicyComponent::TryStartScenario()
 
 	FString payload;
 	if (!BuildStartPayload(payload))
+	{
+		UE_LOG(
+			LogDeliveryBotHttpPolicy,
+			Warning,
+			TEXT("Python scenario start payload build failed. Owner=%s"),
+			*GetNameSafe(GetOwner()));
 		return false;
+	}
 
 	bStartRequestInFlight = true;
 
@@ -214,12 +226,28 @@ bool UDeliveryBot_HttpPolicyComponent::TryStartScenario()
 			}
 
 			bScenarioStarted = true;
+			bLoggedStartWaitingForPython = false;
 			UE_LOG(LogDeliveryBotHttpPolicy, Log, TEXT("Python scenario started."));
 		});
 
 	if (!bRequestStarted)
 	{
 		bStartRequestInFlight = false;
+		if (!bLoggedStartWaitingForPython)
+		{
+			const UDeliveryBotPythonProcessSubsystem* pythonProcessSubsystem = GetPythonProcessSubsystem();
+			const FString processStatus = IsValid(pythonProcessSubsystem)
+				? pythonProcessSubsystem->GetDebugStatus()
+				: TEXT("PythonProcessSubsystem=<invalid>");
+
+			UE_LOG(
+				LogDeliveryBotHttpPolicy,
+				Warning,
+				TEXT("Python scenario start is waiting for policy server. %s"),
+				*processStatus);
+
+			bLoggedStartWaitingForPython = true;
+		}
 	}
 
 	return bRequestStarted;
@@ -564,11 +592,17 @@ bool UDeliveryBot_HttpPolicyComponent::BuildStartPayload(FString& outPayload)
 
 	ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(GetOwner());
 	if (!IsValid(deliveryBot))
+	{
+		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Python start payload build failed. DeliveryBot owner is invalid."));
 		return false;
+	}
 
 	TSharedPtr<FJsonObject> gridObject;
 	if (!BuildPythonGridObject(gridObject) || !gridObject.IsValid())
+	{
+		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Python start payload build failed. Grid object is unavailable."));
 		return false;
+	}
 
 	if (EpisodeId.IsEmpty())
 	{
@@ -999,6 +1033,7 @@ void UDeliveryBot_HttpPolicyComponent::ResetScenarioState(bool bKeepLastResult)
 	bStartRequestInFlight = false;
 	bDecisionRequestInFlight = false;
 	bEndRequestInFlight = false;
+	bLoggedStartWaitingForPython = false;
 
 	if (!bKeepLastResult)
 	{

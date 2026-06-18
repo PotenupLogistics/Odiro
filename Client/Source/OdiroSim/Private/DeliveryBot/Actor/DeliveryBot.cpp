@@ -45,6 +45,16 @@ void ADeliveryBot::BeginPlay()
 
 	BindCollisionStopHitDelegates();
 
+	UE_LOG(
+		LogDeliveryBot,
+		Log,
+		TEXT("DeliveryBot policy auto start evaluated | Actor=%s AutoStartRoute=%s HasGoal=%s Start=%s Goal=%s"),
+		*GetName(),
+		SetupInfo.LocationSetupInfo.bAutoStartRoute ? TEXT("true") : TEXT("false"),
+		SetupInfo.LocationSetupInfo.bHasGoal ? TEXT("true") : TEXT("false"),
+		*GetActorLocation().ToString(),
+		*SetupInfo.LocationSetupInfo.GoalLocationCm.ToString());
+
 	// BeginPlay에서 Python 서버에 scenario start를 요청한다.
 	if (SetupInfo.LocationSetupInfo.bAutoStartRoute && IsValid(HttpPolicyComponent))
 	{
@@ -274,6 +284,19 @@ void ADeliveryBot::ApplyMoveCommand(const FDeliveryBotMoveCommandInfo& moveComma
 	{
 		ApplyParkingStop();
 		return;
+	}
+
+	if (!bHasLastMoveCommand)
+	{
+		UE_LOG(
+			LogDeliveryBot,
+			Log,
+			TEXT("DeliveryBot received first policy move command | Actor=%s TargetSpeed=%.2f Steering=%.3f Brake=%.3f Direction=%d"),
+			*GetName(),
+			moveCommandInfo.TargetSpeedKmh,
+			moveCommandInfo.Steering,
+			moveCommandInfo.Brake,
+			static_cast<int32>(moveCommandInfo.MoveDirectionType));
 	}
 
 	LastMoveCommandInfo = moveCommandInfo;

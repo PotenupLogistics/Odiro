@@ -264,6 +264,49 @@ namespace
 		return true;
 	}
 
+	bool TryReadRequiredNonNegativeDoubleField(
+		const FJsonObject& jsonObject,
+		const FString& fieldName,
+		const FString& path,
+		TArray<FScenarioCompileDiagnostic>& diagnostics,
+		double& outValue)
+	{
+		const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
+		if (!jsonValue.IsValid())
+		{
+			AddSimulationDiagnostic(
+				diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				FString::Printf(TEXT("missing_%s"), *fieldName),
+				FString::Printf(TEXT("%s.%s field is required."), *path, *fieldName));
+			return false;
+		}
+
+		if (jsonValue->Type != EJson::Number)
+		{
+			AddSimulationDiagnostic(
+				diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				FString::Printf(TEXT("invalid_%s"), *fieldName),
+				FString::Printf(TEXT("%s.%s must be a number."), *path, *fieldName));
+			return false;
+		}
+
+		const double numberValue = jsonValue->AsNumber();
+		if (numberValue < 0.0)
+		{
+			AddSimulationDiagnostic(
+				diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				FString::Printf(TEXT("invalid_%s"), *fieldName),
+				FString::Printf(TEXT("%s.%s must be >= 0."), *path, *fieldName));
+			return false;
+		}
+
+		outValue = numberValue;
+		return true;
+	}
+
 	bool TryReadRequiredInt64Field(
 		const FJsonObject& jsonObject,
 		const FString& fieldName,
@@ -552,6 +595,12 @@ namespace
 				TEXT("$.runtime"),
 				diagnostics,
 				outSetting.FixedFps);
+			TryReadRequiredNonNegativeDoubleField(
+				*runtimeObject,
+				TEXT("max_duration_s"),
+				TEXT("$.runtime"),
+				diagnostics,
+				outSetting.MaxDurationSeconds);
 		}
 
 		TSharedPtr<FJsonObject> samplingObject;

@@ -16,7 +16,7 @@ struct ODIROSIM_API FDeliveryBotPythonSettings
 
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Python")
-	FString PythonExecutablePath{ TEXT("python") };
+	FString PythonExecutablePath{ TEXT("py") }; // Policy runtime을 실행할 Python launcher 또는 실행 파일
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Python")
 	FString ServerScriptRelativePath{ TEXT("Resources/policy-runtime.py") };

@@ -141,4 +141,5 @@ private:
 	bool bStartRequestInFlight{ false };
 	bool bDecisionRequestInFlight{ false };
 	bool bEndRequestInFlight{ false };
+	bool bLoggedStartWaitingForPython{ false }; // Python 서버 준비 대기 로그 중복 방지
 };

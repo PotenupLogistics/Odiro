@@ -111,6 +111,7 @@ bool FUserProjectScenarioSampleWorldSpecAdapterTest::RunTest(const FString& para
 
 	const FUserProjectRunSnapshotParseResult snapshotResult = FUserProjectRunSnapshot::Parse(projectPath, TEXT("000001"));
 	TestTrue(TEXT("snapshot parses"), snapshotResult.bSuccess);
+	TestEqual(TEXT("max duration parses"), snapshotResult.Setting.MaxDurationSeconds, 60.0);
 
 	TArray<FUserProjectEpisodeScenarioWriteResult> writeResults;
 	TArray<FScenarioCompileDiagnostic> writeDiagnostics;
@@ -136,6 +137,13 @@ bool FUserProjectScenarioSampleWorldSpecAdapterTest::RunTest(const FString& para
 	TestTrue(TEXT("scenario sample adapts"), compileResult.bSuccess);
 	TestEqual(TEXT("sample scenario id"), compileResult.WorldSpec.RunConfig.TemplateId, FString(TEXT("adapter_sidewalk_000001")));
 	TestEqual(TEXT("seed"), compileResult.WorldSpec.RunConfig.BaseSeed, static_cast<int64>(2000));
+	const FScenarioParamValue* timeLimitParam = compileResult.WorldSpec.RunConfig.Parameters.Find(TEXT("time_limit_s"));
+	TestNotNull(TEXT("time limit param exists"), timeLimitParam);
+	if (timeLimitParam != nullptr)
+	{
+		TestEqual(TEXT("time limit param type"), timeLimitParam->Type, EScenarioParamValueType::Float);
+		TestEqual(TEXT("time limit value"), timeLimitParam->FloatValue, 60.0);
+	}
 	TestEqual(TEXT("runtime corridor count"), compileResult.WorldSpec.Corridors.Num(), 1);
 	if (compileResult.WorldSpec.Corridors.IsEmpty())
 	{

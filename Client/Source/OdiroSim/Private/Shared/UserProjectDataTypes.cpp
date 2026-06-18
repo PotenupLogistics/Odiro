@@ -310,6 +310,14 @@ namespace
 
 		return true;
 	}
+
+	FScenarioSampleParamValue MakeScenarioSampleFloatParam(double value)
+	{
+		FScenarioSampleParamValue paramValue;
+		paramValue.Type = EScenarioSampleParamValueType::Float;
+		paramValue.FloatValue = value;
+		return paramValue;
+	}
 }
 
 FUserProjectJsonParseResult FUserProjectDataJson::ValidateRootJsonString(
@@ -458,10 +466,13 @@ FUserProjectEpisodeScenarioWriteResult FUserProjectEpisodeScenarioJson::WriteEpi
 		return result;
 	}
 
+	FScenarioSampleDocument sampleDocument = sampleResult.Document;
+	sampleDocument.Scenario.Params.Add(TEXT("time_limit_s"), MakeScenarioSampleFloatParam(setting.MaxDurationSeconds));
+
 	FString outputJson;
 	TArray<FScenarioSchemaDiagnostic> sampleWriteDiagnostics;
 	const bool bSampleJsonWritten =
-		FScenarioSampleJson::TryWriteJson(sampleResult.Document, outputJson, sampleWriteDiagnostics);
+		FScenarioSampleJson::TryWriteJson(sampleDocument, outputJson, sampleWriteDiagnostics);
 	AppendScenarioSchemaDiagnostics(sampleWriteDiagnostics, diagnostics);
 	if (!bSampleJsonWritten
 		|| !TryWriteTextFile(result.ScenarioPath, outputJson, diagnostics))

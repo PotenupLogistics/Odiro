@@ -300,6 +300,10 @@ struct ODIROSIM_API FUserProjectRunSetting
 	// scenario_sample 생성기 버전
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
 	FString GeneratorVersion;
+
+	// Episode timeout seconds from setting.runtime.max_duration_s. 0 disables timeout.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun", meta = (ClampMin = "0"))
+	double MaxDurationSeconds = 0.0;
 };
 
 // user project run snapshot 검증과 bootstrap parse 결과

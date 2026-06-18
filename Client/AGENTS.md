@@ -19,6 +19,8 @@
 - Expose tunables via `UPROPERTY(EditAnywhere)` or `BlueprintReadOnly`
 - Use `IsValid()` at UObject boundaries because callbacks may deliver pending-kill pointers
 - Do not rename reflected symbols without a migration plan
+- UMG: layout and styling live in Widget Blueprint assets. C++ owns behavior, binding, and data flow only.
+- Dynamic UMG item widgets: create a Widget Blueprint per item type and instantiate it from C++; do not build the visual tree in C++.
 
 ## Naming
 - Class/member/function: PascalCase, e.g. `class Apple`, `void SetDead()`, `float Hp = 0.f;`

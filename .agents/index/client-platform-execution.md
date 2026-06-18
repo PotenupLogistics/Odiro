@@ -5,6 +5,7 @@ paths:
   - Client/README.md
   - Client/Source/OdiroSim/Public/Platform/**
   - Client/Source/OdiroSim/Private/Platform/**
+  - Client/Plugins/UmgMcp/Source/**
   - Client/Task-*.bat
   - Client/Docs/plans/PLAN-platform-architecture.md
   - Client/Tools/**
@@ -20,6 +21,9 @@ entry:
   - PlatformAnalysisAiSubsystem.h / .cpp
   - MainMenuPlayerController.h / .cpp
   - Widget/MainMenuWidget.h / .cpp
+  - Widget/ProjectTemplateCardWidget.h / .cpp
+  - WBP_ProjectTemplateCard
+  - UmgMcp Widget/UmgSetSubsystem.cpp
   - Client/Docs/plans/PLAN-platform-architecture.md
   - Client/Task-RunPreview.bat
   - Client/Task-RunPythonPolicyServer.bat
@@ -32,22 +36,34 @@ keep:
   - Client/Tools use Client/Tools/Common.ps1, never root tools/common.ps1.
   - Client prerequisite checks cover Windows Unreal C++ only; Android/iOS/macOS/MAUI are not failures.
   - Legacy Client root scripts such as BuildProject.bat, RunPreview.bat, and RunPythonPolicyServer.bat stay folded into Task-* wrappers.
-  - Project run launch passes `-OdiroProject`, `-RunId`, and Bridge-assigned `-PolicyPort`; simulator starts direct episode inputs instead of a generated RunQueue file.
+  - Project run launch passes `-OdiroProject`, `-RunId`, and `-PolicyPort`; Bridge assigns the port in Bridge flow, while the temporary MainMenu direct launcher uses a fixed development port.
   - Project run child process exits after terminal runner state; Bridge owns status JSON lifecycle.
   - Project run completion writes user project result artifacts through the simulator process path; episode trace starts/stops through runner lifecycle.
   - PlatformAnalysisAi has a v2 project-run request path using `project_path` + `run_id`; successful responses are saved under run `review/`.
-  - MainMenu project-mode UI migration is deferred; do not claim UI completion until widget changes and UI smoke pass.
-  - Future MainMenu project mode must read result runs from `<UserProject>/runs/<RunId>` and send AI analysis through the v2 project-run path.
-  - Future MainMenu project mode must not call SimulationSetup or RunQueue writer/launcher paths.
-  - Future MainMenu project mode must not fall back to legacy Json/Input, SimulationSetup, RunQueue, Saved/SimulationRuns, or Saved/AnalysisLogs lists.
-  - Legacy report + MeasurementLog analysis must not be used by future MainMenu project mode.
+  - MainMenu project mode UI layout is owned by `WBP_MainMenu`; C++ only binds widget events and workflow logic.
+  - Project template cards use `WBP_ProjectTemplateCard`; card item layout, thumbnail fallback, and shadow styling stay in UMG assets.
+  - MainMenu project opening UI takes a parent folder and project name; runtime default parent folder comes from `FPlatformProcess::UserDir()` (Windows Documents).
+  - UmgMcp `query_widget_properties` must not request `Slot`; use `get_widget_tree`, export JSON, or direct `set_widget_properties` slot updates instead.
+  - MainMenu project scenario tab opens ScenarioEditorMap only; it does not create/load scenario editor drafts.
+  - MainMenu project result rows use `WBP_FileListItem` primary action for completed detail view and secondary display text for run state.
+  - UmgMcp widget create/delete must keep `WidgetVariableNameToGuidMap` consistent; persistent variable widgets should use GUID-safe creation paths and wait for structural edits to finish.
+  - MainMenu project mode creates/validates projects and run snapshots through temporary file-based SimulatorLaunchSubsystem workspace helpers.
+  - MainMenu project mode reads result runs from `<UserProject>/runs/<RunId>` and sends AI analysis through the v2 project-run path.
+  - MainMenu project experiment Add opens a WBP-owned setting editor; its 실행 action saves `<UserProject>/setting.json`, creates a run snapshot, starts the simulator, and then exposes the run in the status list.
+  - MainMenu project mode must not call SimulationSetup or RunQueue writer/launcher paths.
+  - MainMenu project mode must not fall back to legacy Json/Input, SimulationSetup, RunQueue, Saved/SimulationRuns, or Saved/AnalysisLogs lists.
+  - Legacy report + MeasurementLog analysis must not be used by MainMenu project mode.
+  - SimulatorLaunchSubsystem workspace helpers are a UI prototype bridge; replace internals with Bridge `workspace.*` and `process.*` once a UE Bridge IPC client exists.
   - SimulatorLaunchSubsystem legacy SimulationSetup/RunQueue/report helpers are Blueprint compatibility APIs only and should stay deprecated while retained.
 verify:
   - launcher command contract tests for launch arg changes
   - runtime log plus status JSON for process changes
+  - `OdiroSim.MainMenu.ProjectMode.Smoke` for MainMenu project create/validate/run snapshot path changes
+  - `OdiroSim.SimulatorLaunch.ProjectWorkspace` for temporary workspace helper changes
   - `OdiroSim.SimulatorLaunch.ProjectRun.Validation` for project launch validation changes
   - `OdiroSim.Platform.AnalysisAi.ProjectRunRequestJsonBuild` for v2 analysis request changes
   - OdiroSimEditor build after runner/trace lifecycle changes
+  - Blueprint compile/save plus latest log scan for `WidgetVariableNameToGuidMap` after UMG MCP asset edits
   - UI smoke only after MainMenu workflow changes
 related:
   - client-runtime-foundation

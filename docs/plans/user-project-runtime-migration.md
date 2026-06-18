@@ -34,8 +34,8 @@ specs:
 
 - T01-T09: 런타임 구현 완료. 최종 검증 진행 중
 - T10: 이전 계약 정리 진행 중
-- Client UI 전환: 보류. 이번 변경은 UI를 만들기 전 가능한 기능 검증까지 수행
-- `MainMenuWidget`: 이번 non-UI commit 범위에서 제외
+- T11: Client UI 프로토타입 구현 완료. 수동/Editor 검증 대기
+- `MainMenuWidget`: user project 실행 중심 prototype 적용
 
 ## 문서별 책임
 
@@ -336,16 +336,100 @@ T10 처리:
 
 보류:
 
-- MainMenu project root 선택 UI
-- MainMenu project run 목록과 결과 미리보기
-- MainMenu v2 analysis 실행 UI
-- MainMenu legacy `Json/Input`, `RunQueue`, `Saved/AnalysisLogs` fallback 제거
+- MainMenu legacy `Json/Input`, `RunQueue`, `Saved/AnalysisLogs` fallback 완전 제거
+- UE 내부 Bridge IPC client 연결
 
 검증:
 
 - repo 전체 오래된 계약 검색
 - OdiroSimEditor build
 - Agents focused pytest/ruff
+
+### T11 Client UI 프로토타입 [구현 완료, 검증 완료]
+
+목적:
+
+- MainMenu에서 사용자 project를 선택하고 실행
+- 디자인보다 기능 우선
+- UI 배치는 `WBP_MainMenu`가 소유
+- C++는 widget binding, event 연결, workflow logic만 소유
+
+구현 판단:
+
+- 현재 UE Client에는 Bridge IPC client가 없음
+- 이번 UI는 `USimulatorLaunchSubsystem`에 임시 file 기반 workspace helper를 둠
+- 나중에 Bridge IPC client가 생기면 helper 구현을 `workspace.*`, `process.*` 호출로 대체
+- `StartProjectRun(projectPath, runId)`는 기존 direct simulator launch를 사용
+- Bridge `status.json` lifecycle은 아직 UI direct path에서 사용하지 않음
+- UI direct launch는 임시 고정 `-PolicyPort=18145` 사용
+- Bridge 연결 후 `process.startSimulator`가 port를 소유하고 전달
+- UMG 수정은 MCP로 수행. `apply_layout` 대신 `create_widget` 경로를 사용해 Blueprint variable GUID를 유지
+
+프로토타입 UI:
+
+- project path 입력
+- template 선택: `static/project-templates/*` 또는 `resources/project-templates/*`
+- project 생성
+- project 검증
+- run 생성
+- run 시작
+- run 목록 표시
+- `summary.json`, episode `result.json`, `actions/events/trace` 미리보기
+- v2 AI 분석 요청: `project_path + run_id`
+
+구현 대상:
+
+- `SimulatorLaunchSubsystem`
+  - project template 목록 [구현]
+  - project 생성 [구현]
+  - project 검증 [구현]
+  - run snapshot 생성 [구현]
+  - project run directory/result/log 목록 [구현]
+- `MainMenuWidget`
+  - `WBP_MainMenu`의 project controls optional binding [구현]
+  - project path 입력 시 project mode로 분기 [구현]
+  - project mode 결과 목록은 `<UserProject>/runs/<RunId>` 기준 [구현]
+  - project run preview는 `summary.json`, episode `result.json`, `actions/events/trace` 기준 [구현]
+  - project run 선택 시 v2 analysis 호출 [구현]
+- `UmgMcp`
+  - `create_widget`가 생성 widget을 Blueprint variable로 등록 [구현]
+  - `delete_widget`가 subtree와 stale GUID를 함께 정리 [구현]
+
+주의:
+
+- project path가 비어 있으면 기존 MainMenu legacy 흐름 유지
+- project path가 있으면 project mode가 우선
+- project mode에서는 legacy `SimulationSetup`, RunQueue writer/launcher를 호출하지 않음
+- project mode UI control은 C++에서 생성하지 않음
+- 이번 단계는 Bridge IPC 미연결. UI 검증 후 helper 내부를 Bridge 호출로 교체
+
+검증:
+
+- 통과:
+  - `git diff --check`
+  - OdiroSimEditor build
+    - `Client\Task-Build.bat`
+  - MCP Blueprint compile/save
+    - `WBP_MainMenu`
+    - project mode BindWidget 이름 존재 확인
+  - `OdiroSim.MainMenu.ProjectMode.Smoke`
+    - MainMenu prototype API로 project 생성
+    - project 검증
+    - run snapshot 생성과 선택
+  - MainMenuMap headless smoke
+    - `Project mode controls bound: true`
+    - `WBP_MainMenu_C` shown
+  - 최신 Blueprint compile/save 구간에서 widget GUID ensure 재발 없음
+- 미검증:
+  - 실제 버튼 click event 경유 smoke
+  - simulator process 실행 버튼 smoke
+  - project run result preview visual 확인
+  - policy-runtime 기본 포트 bind 오류 원인
+
+남은 판단:
+
+- Bridge IPC client를 UE에 붙일 시점
+- root `Client/Task-Build.bat`는 병렬/XGE에서 MSVC PCH memory 부족 가능
 
 ## 검색 명령
 

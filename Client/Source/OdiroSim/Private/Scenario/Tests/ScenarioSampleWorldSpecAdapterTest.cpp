@@ -52,11 +52,19 @@ namespace
 		WalkwayLane.SurfaceId = TEXT("sidewalk");
 		WalkwayLane.Type = EScenarioSampleLaneType::Walkable;
 
+		FScenarioSampleLayoutLane CurbLane;
+		CurbLane.LaneId = TEXT("curb_edge");
+		CurbLane.OffsetRangeMeters.MinMeters = 1.0;
+		CurbLane.OffsetRangeMeters.MaxMeters = 2.0;
+		CurbLane.SurfaceId = TEXT("road");
+		CurbLane.Type = EScenarioSampleLaneType::Penalty;
+
 		FScenarioSampleLayoutEntry LayoutEntry;
 		LayoutEntry.AlongRangeMeters.StartMeters = 0.0;
 		LayoutEntry.AlongRangeMeters.EndMeters = 10.0;
 		LayoutEntry.SegmentId = TEXT("main");
 		LayoutEntry.Lanes.Add(WalkwayLane);
+		LayoutEntry.Lanes.Add(CurbLane);
 		Semantic.Layout.Add(LayoutEntry);
 
 		FScenarioSampleStaticObstacle Obstacle;
@@ -66,7 +74,7 @@ namespace
 		Obstacle.ObstacleClass = EScenarioSampleObstacleClass::Blocking;
 		Obstacle.SensorProfile = TEXT("solid");
 		Obstacle.AlongMeters = 4.0;
-		Obstacle.OffsetMeters = 0.5;
+		Obstacle.OffsetMeters = 1.5;
 		Obstacle.YawDegrees = 15.0;
 		Obstacle.FootprintMeters = FVector2D(0.5, 0.5);
 		Obstacle.PlacedBy = TEXT("crate_fixed");
@@ -113,12 +121,36 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 		return false;
 	}
 	TestEqual(TEXT("runtime corridor lane surface"), RuntimeCorridor.Layout[0].Lanes[0].SurfaceId, FString(TEXT("sidewalk")));
+	const FScenarioRuntimeCorridorLaneSpec* CurbRuntimeLane = RuntimeCorridor.Layout[0].Lanes.FindByPredicate(
+		[](const FScenarioRuntimeCorridorLaneSpec& Lane)
+		{
+			return Lane.LaneId == TEXT("curb_edge");
+		});
+	TestNotNull(TEXT("runtime curb lane"), CurbRuntimeLane);
+	if (CurbRuntimeLane)
+	{
+		TestEqual(TEXT("runtime curb lane z offset"), CurbRuntimeLane->SurfaceZOffsetCm, -15.0);
+		TestEqual(
+			TEXT("runtime curb lane region type"),
+			static_cast<int32>(CurbRuntimeLane->RegionType),
+			static_cast<int32>(EScenarioGroundRegionType::Penalty));
+	}
 	TestEqual(TEXT("placeable count"), Result.WorldSpec.Placeables.Num(), 2);
 	TestEqual(TEXT("static obstacle count"), Result.WorldSpec.Placeables.FilterByPredicate(
 		[](const FScenarioPlaceableInstanceSpec& Spec)
 		{
 			return Spec.Category == EScenarioActorCategory::StaticObstacle;
 		}).Num(), 1);
+	const FScenarioPlaceableInstanceSpec* StaticObstacleSpec = Result.WorldSpec.Placeables.FindByPredicate(
+		[](const FScenarioPlaceableInstanceSpec& Spec)
+		{
+			return Spec.Category == EScenarioActorCategory::StaticObstacle;
+		});
+	TestNotNull(TEXT("static obstacle spec"), StaticObstacleSpec);
+	if (StaticObstacleSpec)
+	{
+		TestEqual(TEXT("static obstacle surface z"), StaticObstacleSpec->Transform.GetLocation().Z, -15.0);
+	}
 
 	const FScenarioPlaceableInstanceSpec* RobotSpec = Result.WorldSpec.Placeables.FindByPredicate(
 		[](const FScenarioPlaceableInstanceSpec& Spec)

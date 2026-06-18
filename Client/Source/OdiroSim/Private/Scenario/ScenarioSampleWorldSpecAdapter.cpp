@@ -9,6 +9,10 @@ namespace
 {
 	const double MetersToCentimeters = 100.0;
 	const double RobotEndpointInsetMeters = 1.0;
+	// Mirrors the editor preview curb-side drop for sampled runtime surfaces.
+	const double RuntimeCurbSideSurfaceZOffsetCm = -15.0;
+	// Keeps pose-to-lane lookup stable on exact layout boundaries.
+	const double RuntimeSurfaceQueryToleranceMeters = 0.001;
 
 	struct FResolvedSamplePose
 	{
@@ -133,6 +137,60 @@ namespace
 		return FVector2D(
 			(Point.X * CosHeading) - (Point.Y * SinHeading),
 			(Point.X * SinHeading) + (Point.Y * CosHeading));
+	}
+
+	// Handles inclusive sampled layout intervals with a small deterministic tolerance.
+	bool ContainsRuntimeRangeValue(double Value, double MinValue, double MaxValue)
+	{
+		const double SafeMin = FMath::Min(MinValue, MaxValue) - RuntimeSurfaceQueryToleranceMeters;
+		const double SafeMax = FMath::Max(MinValue, MaxValue) + RuntimeSurfaceQueryToleranceMeters;
+		return Value >= SafeMin && Value <= SafeMax;
+	}
+
+	// Identifies sampler-owned curb-side lane ids that should share editor surface height.
+	bool IsRuntimeCurbSideLane(const FString& LaneId)
+	{
+		const FString NormalizedLaneId = LaneId.ToLower();
+		return NormalizedLaneId == TEXT("curb_edge")
+			|| NormalizedLaneId.StartsWith(TEXT("curb_"))
+			|| NormalizedLaneId.StartsWith(TEXT("curbside"));
+	}
+
+	// Maps sampled lane identity to runtime surface height without changing public JSON.
+	double ResolveRuntimeLaneSurfaceZOffsetCm(const FString& LaneId)
+	{
+		return IsRuntimeCurbSideLane(LaneId) ? RuntimeCurbSideSurfaceZOffsetCm : 0.0;
+	}
+
+	// Resolves the surface height at a sampled pose so actors spawn on the matching lane surface.
+	double ResolveRuntimeSurfaceZOffsetCm(
+		const FScenarioSampleSemantic& Semantic,
+		double AlongMeters,
+		double OffsetMeters)
+	{
+		for (const FScenarioSampleLayoutEntry& LayoutEntry : Semantic.Layout)
+		{
+			if (!ContainsRuntimeRangeValue(
+					AlongMeters,
+					LayoutEntry.AlongRangeMeters.StartMeters,
+					LayoutEntry.AlongRangeMeters.EndMeters))
+			{
+				continue;
+			}
+
+			for (const FScenarioSampleLayoutLane& Lane : LayoutEntry.Lanes)
+			{
+				if (ContainsRuntimeRangeValue(
+						OffsetMeters,
+						Lane.OffsetRangeMeters.MinMeters,
+						Lane.OffsetRangeMeters.MaxMeters))
+				{
+					return ResolveRuntimeLaneSurfaceZOffsetCm(Lane.LaneId);
+				}
+			}
+		}
+
+		return 0.0;
 	}
 
 	bool ResolveSampleAxisPose(
@@ -349,6 +407,7 @@ namespace
 				RuntimeLane.OffsetRangeMeters = Lane.OffsetRangeMeters;
 				RuntimeLane.SurfaceId = Lane.SurfaceId;
 				RuntimeLane.RegionType = ToGroundRegionType(Lane.Type);
+				RuntimeLane.SurfaceZOffsetCm = ResolveRuntimeLaneSurfaceZOffsetCm(Lane.LaneId);
 				RuntimeLane.TraversabilityScore = ToTraversabilityScore(Lane.Type);
 				if (Lane.Type == EScenarioSampleLaneType::Blocked)
 				{
@@ -402,6 +461,15 @@ namespace
 			return;
 		}
 
+		StartPose.LocationCm.Z = ResolveRuntimeSurfaceZOffsetCm(
+			Semantic,
+			RuntimeStartAlongMeters,
+			Semantic.Robot.Start.OffsetMeters);
+		GoalPose.LocationCm.Z = ResolveRuntimeSurfaceZOffsetCm(
+			Semantic,
+			RuntimeGoalAlongMeters,
+			Semantic.Robot.Goal.OffsetMeters);
+
 		FScenarioPlaceableInstanceSpec RobotSpec;
 		RobotSpec.InstanceId = TEXT("robot_01");
 		RobotSpec.AssetId = TEXT("delivery_bot");
@@ -440,6 +508,8 @@ namespace
 					FString::Printf(TEXT("Failed to resolve static obstacle '%s' pose."), *Obstacle.ObstacleId));
 				continue;
 			}
+
+			Pose.LocationCm.Z = ResolveRuntimeSurfaceZOffsetCm(Semantic, Obstacle.AlongMeters, Obstacle.OffsetMeters);
 
 			FScenarioPlaceableInstanceSpec ObstacleSpec;
 			ObstacleSpec.InstanceId = Obstacle.ObstacleId;

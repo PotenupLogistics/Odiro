@@ -486,21 +486,21 @@ AScenarioCorridorRuntimeActor::AScenarioCorridorRuntimeActor()
 	SurfaceCatalog = UScenarioCorridorSurfaceCatalog::MakeDefaultCatalogReference();
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> walkableGroundMaterialAsset(
-		TEXT("/Game/Materials/M_ScenarioGroundWalkable.M_ScenarioGroundWalkable"));
+		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorSidewalk.M_ScenarioCorridorSidewalk"));
 	if (walkableGroundMaterialAsset.Succeeded())
 	{
 		WalkableGroundMaterial = walkableGroundMaterialAsset.Object;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> penaltyGroundMaterialAsset(
-		TEXT("/Game/Materials/M_ScenarioGroundPenalty.M_ScenarioGroundPenalty"));
+		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorRoad.M_ScenarioCorridorRoad"));
 	if (penaltyGroundMaterialAsset.Succeeded())
 	{
 		PenaltyGroundMaterial = penaltyGroundMaterialAsset.Object;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> blockedGroundMaterialAsset(
-		TEXT("/Game/Materials/M_ScenarioGroundBlock.M_ScenarioGroundBlock"));
+		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorBuilding.M_ScenarioCorridorBuilding"));
 	if (blockedGroundMaterialAsset.Succeeded())
 	{
 		BlockedGroundMaterial = blockedGroundMaterialAsset.Object;
@@ -581,6 +581,7 @@ bool AScenarioCorridorRuntimeActor::TryFindSurfaceAtWorldLocation2D(
 			outSurface.LaneId = laneSpec.LaneId;
 			outSurface.SurfaceId = laneSpec.SurfaceId;
 			outSurface.RegionType = laneSpec.RegionType;
+			outSurface.SurfaceZOffsetCm = laneSpec.SurfaceZOffsetCm;
 			outSurface.AlongMeters = alongMeters;
 			outSurface.OffsetMeters = offsetMeters;
 			return true;
@@ -622,8 +623,9 @@ void AScenarioCorridorRuntimeActor::AddLaneStrip(
 
 	const bool bBlockedSurface = laneSpec.RegionType == EScenarioGroundRegionType::Blocked;
 	const double laneHeightCm = bBlockedSurface ? RuntimeBlockedHeightCm : RuntimeSurfaceHeightCm;
-	const double laneBottomZCm = bBlockedSurface ? RuntimeSurfaceTopZCm : RuntimeSurfaceTopZCm - laneHeightCm;
-	const double laneTopZCm = bBlockedSurface ? RuntimeSurfaceTopZCm + laneHeightCm : RuntimeSurfaceTopZCm;
+	const double laneSurfaceZCm = RuntimeSurfaceTopZCm + laneSpec.SurfaceZOffsetCm;
+	const double laneBottomZCm = bBlockedSurface ? laneSurfaceZCm : laneSurfaceZCm - laneHeightCm;
+	const double laneTopZCm = bBlockedSurface ? laneSurfaceZCm + laneHeightCm : laneSurfaceZCm;
 	const FName collisionProfileName = GetRuntimeCollisionProfileName(laneSpec.RegionType);
 
 	FRuntimeLanePrismMesh prismMesh;
@@ -732,6 +734,12 @@ UMaterialInterface* AScenarioCorridorRuntimeActor::ResolveSurfaceMaterial(
 {
 	if (UMaterialInterface* catalogMaterial = surfaceEntry.PreviewMaterial.LoadSynchronous())
 	{
+		UE_LOG(
+			LogScenarioCorridorRuntime,
+			Log,
+			TEXT("Using runtime Corridor surface material. Surface: %s | Material: %s"),
+			*surfaceEntry.SurfaceId.ToString(),
+			*catalogMaterial->GetPathName());
 		return catalogMaterial;
 	}
 
@@ -745,7 +753,15 @@ UMaterialInterface* AScenarioCorridorRuntimeActor::ResolveSurfaceMaterial(
 			*surfaceEntry.PreviewMaterial.ToSoftObjectPath().ToString());
 	}
 
-	return ResolveFallbackSurfaceMaterial(surfaceEntry.GroundRegionType);
+	UMaterialInterface* fallbackMaterial = ResolveFallbackSurfaceMaterial(surfaceEntry.GroundRegionType);
+	UE_LOG(
+		LogScenarioCorridorRuntime,
+		Log,
+		TEXT("Using runtime Corridor fallback material. Surface: %s | RegionType: %d | Material: %s"),
+		*surfaceEntry.SurfaceId.ToString(),
+		static_cast<int32>(surfaceEntry.GroundRegionType),
+		fallbackMaterial ? *fallbackMaterial->GetPathName() : TEXT("<null>"));
+	return fallbackMaterial;
 }
 
 UMaterialInterface* AScenarioCorridorRuntimeActor::ResolveFallbackSurfaceMaterial(EScenarioGroundRegionType regionType) const

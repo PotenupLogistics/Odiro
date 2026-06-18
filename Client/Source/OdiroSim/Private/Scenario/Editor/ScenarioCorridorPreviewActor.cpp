@@ -6,7 +6,7 @@
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 
-// Corridor preview surface/material 해석 상태를 추적하는 로그 카테고리.
+// Log category for corridor preview surface and material resolution.
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioCorridorPreview, Log, All);
 
 namespace
@@ -19,7 +19,7 @@ namespace
 	const double MinimumSurfacePreviewHeightCm = 20.0;
 	// Blocked corridor surfaces match the legacy blocked ground-region collision height.
 	const double BlockedPreviewHeightCm = 200.0;
-	// curb_side lane은 walkway보다 낮은 노면으로 보여 계단식 경계가 드러나게 한다.
+	// Curb-side lanes render lower than the walkway so the step boundary is visible.
 	const double CurbSidePreviewDropCm = 15.0;
 	// Blocked corridor surfaces use the same collision profile as blocked ground regions.
 	const FName BlockedPreviewCollisionProfileName{ TEXT("Blocked") };
@@ -52,21 +52,21 @@ AScenarioCorridorPreviewActor::AScenarioCorridorPreviewActor()
 	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> walkableGroundMaterialAsset(
-		TEXT("/Game/Materials/M_ScenarioGroundWalkable.M_ScenarioGroundWalkable"));
+		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorSidewalk.M_ScenarioCorridorSidewalk"));
 	if (walkableGroundMaterialAsset.Succeeded())
 	{
 		WalkableGroundMaterial = walkableGroundMaterialAsset.Object;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> penaltyGroundMaterialAsset(
-		TEXT("/Game/Materials/M_ScenarioGroundPenalty.M_ScenarioGroundPenalty"));
+		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorRoad.M_ScenarioCorridorRoad"));
 	if (penaltyGroundMaterialAsset.Succeeded())
 	{
 		PenaltyGroundMaterial = penaltyGroundMaterialAsset.Object;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> blockedGroundMaterialAsset(
-		TEXT("/Game/Materials/M_ScenarioGroundBlock.M_ScenarioGroundBlock"));
+		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorBuilding.M_ScenarioCorridorBuilding"));
 	if (blockedGroundMaterialAsset.Succeeded())
 	{
 		BlockedGroundMaterial = blockedGroundMaterialAsset.Object;

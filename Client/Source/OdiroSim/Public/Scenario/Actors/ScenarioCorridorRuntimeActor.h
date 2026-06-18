@@ -40,6 +40,10 @@ struct ODIROSIM_API FScenarioRuntimeCorridorSurfaceQueryResult
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor")
 	EScenarioGroundRegionType RegionType = EScenarioGroundRegionType::Walkable;
 
+	// Surface height offset relative to the scenario base plane in centimeters.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor")
+	double SurfaceZOffsetCm = 0.0;
+
 	// Along distance on the corridor axis in meters.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor")
 	double AlongMeters = 0.0;

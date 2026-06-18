@@ -51,6 +51,10 @@ struct ODIROSIM_API FScenarioRuntimeCorridorLaneSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
 	EScenarioGroundRegionType RegionType = EScenarioGroundRegionType::Walkable;
 
+	// Surface height offset relative to the scenario base plane in centimeters.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	double SurfaceZOffsetCm = 0.0;
+
 	// Normalized traversability score copied from the sampled lane type.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
 	double TraversabilityScore = 1.0;

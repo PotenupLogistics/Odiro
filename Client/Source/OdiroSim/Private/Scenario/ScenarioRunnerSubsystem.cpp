@@ -236,6 +236,7 @@ namespace
 		setupSpec.EpisodeId = worldSpec.RunConfig.TemplateId;
 		setupSpec.SpecHash = worldSpec.SpecHash;
 		setupSpec.Seeds = worldSpec.Seeds;
+		setupSpec.Corridors = worldSpec.Corridors;
 		setupSpec.GroundRegions = worldSpec.GroundRegions;
 		setupSpec.Placeables = worldSpec.Placeables;
 		setupSpec.DynamicActors = worldSpec.DynamicActors;

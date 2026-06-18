@@ -79,6 +79,23 @@ namespace
 				outPaths.PolicyEntrypointPath,
 				TEXT("def create_policy():\n    return None\n"));
 	}
+
+	bool HasRuntimeCorridorSurface(const FScenarioRuntimeCorridorSpec& corridorSpec, const FString& surfaceId)
+	{
+		for (const FScenarioRuntimeCorridorLayoutEntry& layoutEntry : corridorSpec.Layout)
+		{
+			if (layoutEntry.Lanes.ContainsByPredicate(
+					[&surfaceId](const FScenarioRuntimeCorridorLaneSpec& laneSpec)
+					{
+						return laneSpec.SurfaceId == surfaceId;
+					}))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -119,22 +136,18 @@ bool FUserProjectScenarioSampleWorldSpecAdapterTest::RunTest(const FString& para
 	TestTrue(TEXT("scenario sample adapts"), compileResult.bSuccess);
 	TestEqual(TEXT("sample scenario id"), compileResult.WorldSpec.RunConfig.TemplateId, FString(TEXT("adapter_sidewalk_000001")));
 	TestEqual(TEXT("seed"), compileResult.WorldSpec.RunConfig.BaseSeed, static_cast<int64>(2000));
-	TestTrue(TEXT("ground regions generated"), compileResult.WorldSpec.GroundRegions.Num() >= 3);
-	TestTrue(TEXT("runtime sidewalk surface preserved"), compileResult.WorldSpec.GroundRegions.ContainsByPredicate(
-		[](const FScenarioGroundRegionSpec& region)
-		{
-			return region.SurfaceId == TEXT("sidewalk");
-		}));
-	TestTrue(TEXT("runtime wall surface preserved"), compileResult.WorldSpec.GroundRegions.ContainsByPredicate(
-		[](const FScenarioGroundRegionSpec& region)
-		{
-			return region.SurfaceId == TEXT("wall");
-		}));
-	TestTrue(TEXT("runtime road surface preserved"), compileResult.WorldSpec.GroundRegions.ContainsByPredicate(
-		[](const FScenarioGroundRegionSpec& region)
-		{
-			return region.SurfaceId == TEXT("road");
-		}));
+	TestEqual(TEXT("runtime corridor count"), compileResult.WorldSpec.Corridors.Num(), 1);
+	if (compileResult.WorldSpec.Corridors.IsEmpty())
+	{
+		IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+		return false;
+	}
+
+	const FScenarioRuntimeCorridorSpec& runtimeCorridor = compileResult.WorldSpec.Corridors[0];
+	TestEqual(TEXT("generated ground region count"), compileResult.WorldSpec.GroundRegions.Num(), 0);
+	TestTrue(TEXT("runtime sidewalk surface preserved"), HasRuntimeCorridorSurface(runtimeCorridor, TEXT("sidewalk")));
+	TestTrue(TEXT("runtime wall surface preserved"), HasRuntimeCorridorSurface(runtimeCorridor, TEXT("wall")));
+	TestTrue(TEXT("runtime road surface preserved"), HasRuntimeCorridorSurface(runtimeCorridor, TEXT("road")));
 	TestTrue(TEXT("spec hash populated"), !compileResult.WorldSpec.SpecHash.IsEmpty());
 
 	const FScenarioPlaceableInstanceSpec* robotSpec = compileResult.WorldSpec.Placeables.FindByPredicate(

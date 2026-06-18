@@ -100,12 +100,19 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	TestTrue(TEXT("sample adapts"), Result.bSuccess);
 	TestEqual(TEXT("scenario id"), Result.WorldSpec.RunConfig.TemplateId, Document.Sample.ScenarioId);
 	TestEqual(TEXT("base seed"), Result.WorldSpec.RunConfig.BaseSeed, Document.Sample.Source.Seed);
-	TestEqual(TEXT("ground region count"), Result.WorldSpec.GroundRegions.Num(), 1);
-	if (Result.WorldSpec.GroundRegions.IsEmpty())
+	TestEqual(TEXT("runtime corridor count"), Result.WorldSpec.Corridors.Num(), 1);
+	if (Result.WorldSpec.Corridors.IsEmpty())
 	{
 		return false;
 	}
-	TestEqual(TEXT("ground region surface"), Result.WorldSpec.GroundRegions[0].SurfaceId, FString(TEXT("sidewalk")));
+	TestEqual(TEXT("generated ground region count"), Result.WorldSpec.GroundRegions.Num(), 0);
+	const FScenarioRuntimeCorridorSpec& RuntimeCorridor = Result.WorldSpec.Corridors[0];
+	TestEqual(TEXT("runtime corridor layout count"), RuntimeCorridor.Layout.Num(), 1);
+	if (RuntimeCorridor.Layout.IsEmpty() || RuntimeCorridor.Layout[0].Lanes.IsEmpty())
+	{
+		return false;
+	}
+	TestEqual(TEXT("runtime corridor lane surface"), RuntimeCorridor.Layout[0].Lanes[0].SurfaceId, FString(TEXT("sidewalk")));
 	TestEqual(TEXT("placeable count"), Result.WorldSpec.Placeables.Num(), 2);
 	TestEqual(TEXT("static obstacle count"), Result.WorldSpec.Placeables.FilterByPredicate(
 		[](const FScenarioPlaceableInstanceSpec& Spec)

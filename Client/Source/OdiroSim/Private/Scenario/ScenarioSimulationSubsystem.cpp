@@ -1,4 +1,5 @@
 #include "Scenario/ScenarioSimulationSubsystem.h"
+#include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
 #include "Scenario/Actors/ScenarioGroundRegion.h"
 #include "Scenario/Actors/ScenarioPedestrian.h"
 #include "Scenario/Actors/ScenarioSplinePath.h"
@@ -61,6 +62,7 @@ void UScenarioSimulationSubsystem::ClearScenario()
 	const int32 actorCount = RuntimeActors.Num();
 	const int32 actorIdCount = RuntimeActorsById.Num();
 	const int32 groundRegionCount = RuntimeGroundRegions.Num();
+	const int32 corridorCount = RuntimeCorridors.Num();
 	const int32 pathCount = RuntimePaths.Num();
 
 	if (IsValid(RuntimeGridBoundsActor))
@@ -79,6 +81,7 @@ void UScenarioSimulationSubsystem::ClearScenario()
 
 	RuntimeActors.Reset();
 	RuntimeGroundRegions.Reset();
+	RuntimeCorridors.Reset();
 	RuntimePaths.Reset();
 	RuntimeActorsById.Reset();
 	FlushPersistentDebugLines(GetWorld());
@@ -91,20 +94,21 @@ void UScenarioSimulationSubsystem::ClearScenario()
 		}
 	}
 
-	if (actorCount > 0 || actorIdCount > 0 || groundRegionCount > 0 || pathCount > 0)
+	if (actorCount > 0 || actorIdCount > 0 || groundRegionCount > 0 || corridorCount > 0 || pathCount > 0)
 	{
 		UE_LOG(
 			LogScenarioSimulation,
 			 Warning,
-			TEXT("Scenario 런타임 정리 완료 | Actors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
+			TEXT("Scenario runtime cleanup complete | Actors: %d, ActorIds: %d, GroundRegions: %d, Corridors: %d, Paths: %d"),
 		actorCount,
 		actorIdCount,
 		groundRegionCount,
+		corridorCount,
 		pathCount);
 	}
 }
 
-bool UScenarioSimulationSubsystem::RebuildDeliveryBotGridFromScenarioGroundRegions(const FScenarioSimulationSetupSpec& setupSpec)
+bool UScenarioSimulationSubsystem::RebuildDeliveryBotGridFromScenarioSurfaces(const FScenarioSimulationSetupSpec& setupSpec)
 {
 	UWorld* world = GetWorld();
 	if (!IsValid(world))
@@ -119,10 +123,10 @@ bool UScenarioSimulationSubsystem::RebuildDeliveryBotGridFromScenarioGroundRegio
 
 	FBox2D xyBounds(ForceInit);
 	double centerZ = 0.0;
-	if (!TryBuildRuntimeGroundRegionXYBounds(xyBounds, centerZ)
+	if (!TryBuildRuntimeSurfaceXYBounds(xyBounds, centerZ)
 		&& !TryBuildGroundRegionXYBounds(setupSpec.GroundRegions, xyBounds, centerZ))
 	{
-		UE_LOG(LogScenarioSimulation, Warning, TEXT("DeliveryBot grid bounds build failed. No valid ground regions."));
+		UE_LOG(LogScenarioSimulation, Warning, TEXT("DeliveryBot grid bounds build failed. No valid scenario surfaces."));
 		return false;
 	}
 
@@ -134,7 +138,7 @@ bool UScenarioSimulationSubsystem::RebuildDeliveryBotGridFromScenarioGroundRegio
 	UE_LOG(
 		LogScenarioSimulation,
 		Log,
-		TEXT("DeliveryBot grid bounds resolved from ground regions and robot route anchors. Min: %s, Max: %s"),
+		TEXT("DeliveryBot grid bounds resolved from scenario surfaces and robot route anchors. Min: %s, Max: %s"),
 		*xyBounds.Min.ToString(),
 		*xyBounds.Max.ToString());
 
@@ -156,7 +160,7 @@ bool UScenarioSimulationSubsystem::RebuildDeliveryBotGridFromScenarioGroundRegio
 	UE_LOG(
 		LogScenarioSimulation,
 		Log,
-		TEXT("DeliveryBot grid rebuilt from episode ground regions. BoundsActor: %s, HasGrid: %s, Cells: %d"),
+		TEXT("DeliveryBot grid rebuilt from episode scenario surfaces. BoundsActor: %s, HasGrid: %s, Cells: %d"),
 		*gridBoundsActor->GetName(),
 		gridSubsystem->HasBuiltGrid() ? TEXT("true") : TEXT("false"),
 		gridSubsystem->GetGridCellCount()
@@ -192,42 +196,55 @@ bool UScenarioSimulationSubsystem::TryBuildGroundRegionXYBounds(
 	return true;
 }
 
-bool UScenarioSimulationSubsystem::TryBuildRuntimeGroundRegionXYBounds(
+bool UScenarioSimulationSubsystem::TryBuildRuntimeSurfaceXYBounds(
 	FBox2D& outXYBounds,
 	double& outCenterZ) const
 {
 	outXYBounds = FBox2D(ForceInit);
 
 	double zSum = 0.0;
-	int32 validRegionCount = 0;
+	int32 validActorCount = 0;
+
+	for (const TPair<FString, TObjectPtr<AScenarioCorridorRuntimeActor>>& pair : RuntimeCorridors)
+	{
+		ExpandXYBoundsWithActor(pair.Value.Get(), outXYBounds, zSum, validActorCount);
+	}
 
 	for (const TPair<FString, TObjectPtr<AScenarioGroundRegion>>& pair : RuntimeGroundRegions)
 	{
-		const AScenarioGroundRegion* groundRegion = pair.Value.Get();
-		if (!IsValid(groundRegion))
-		{
-			continue;
-		}
-
-		const FBox componentBounds = groundRegion->GetComponentsBoundingBox(true);
-		if (!componentBounds.IsValid)
-		{
-			continue;
-		}
-
-		outXYBounds += FVector2D(componentBounds.Min.X, componentBounds.Min.Y);
-		outXYBounds += FVector2D(componentBounds.Max.X, componentBounds.Max.Y);
-		zSum += componentBounds.GetCenter().Z;
-		++validRegionCount;
+		ExpandXYBoundsWithActor(pair.Value.Get(), outXYBounds, zSum, validActorCount);
 	}
 
-	if (!outXYBounds.bIsValid || validRegionCount <= 0)
+	if (!outXYBounds.bIsValid || validActorCount <= 0)
 	{
 		return false;
 	}
 
-	outCenterZ = zSum / static_cast<double>(validRegionCount);
+	outCenterZ = zSum / static_cast<double>(validActorCount);
 	return true;
+}
+
+void UScenarioSimulationSubsystem::ExpandXYBoundsWithActor(
+	const AActor* actor,
+	FBox2D& inOutXYBounds,
+	double& inOutZSum,
+	int32& inOutValidActorCount)
+{
+	if (!IsValid(actor))
+	{
+		return;
+	}
+
+	const FBox componentBounds = actor->GetComponentsBoundingBox(true);
+	if (!componentBounds.IsValid)
+	{
+		return;
+	}
+
+	inOutXYBounds += FVector2D(componentBounds.Min.X, componentBounds.Min.Y);
+	inOutXYBounds += FVector2D(componentBounds.Max.X, componentBounds.Max.Y);
+	inOutZSum += componentBounds.GetCenter().Z;
+	++inOutValidActorCount;
 }
 
 void UScenarioSimulationSubsystem::ExpandXYBoundsWithDeliveryBotRoute(
@@ -256,7 +273,6 @@ void UScenarioSimulationSubsystem::ExpandXYBoundsWithDeliveryBotRoute(
 		inOutXYBounds += FVector2D(goalLocation.X, goalLocation.Y);
 	}
 }
-
 ADeliveryBot_GridBoundsActor* UScenarioSimulationSubsystem::SpawnDeliveryBotGridBoundsActor(
 	const FBox2D& xyBounds,
 	double centerZ)
@@ -432,8 +448,9 @@ bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationS
 	UE_LOG(
 		LogScenarioSimulation,
 		Log,
-		TEXT("Scenario 월드 설정 시작 | Scenario: %s, GroundRegions: %d, Paths: %d, Placeables: %d, DynamicActors: %d, Events: %d"),
+		TEXT("Scenario world setup started | Scenario: %s, Corridors: %d, GroundRegions: %d, Paths: %d, Placeables: %d, DynamicActors: %d, Events: %d"),
 		*setupSpec.EpisodeId,
+		setupSpec.Corridors.Num(),
 		setupSpec.GroundRegions.Num(),
 		setupSpec.Paths.Num(),
 		setupSpec.Placeables.Num(),
@@ -441,6 +458,15 @@ bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationS
 		setupSpec.Events.Num());
 
 	bool bAllSpawned{ true };
+
+	for (const FScenarioRuntimeCorridorSpec& corridorSpec : setupSpec.Corridors)
+	{
+		if (!SpawnCorridor(corridorSpec))
+		{
+			UE_LOG(LogScenarioSimulation, Warning, TEXT("Runtime corridor spawn failed. CorridorId: %s"), *corridorSpec.CorridorId);
+			bAllSpawned = false;
+		}
+	}
 
 	for (const FScenarioGroundRegionSpec& regionSpec : setupSpec.GroundRegions)
 	{
@@ -475,9 +501,9 @@ bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationS
 			return placeableSpec.Category == EScenarioActorCategory::DeliveryBot;
 		});
 
-	if (bHasDeliveryBotPlaceable && !RebuildDeliveryBotGridFromScenarioGroundRegions(setupSpec))
+	if (bHasDeliveryBotPlaceable && !RebuildDeliveryBotGridFromScenarioSurfaces(setupSpec))
 	{
-		UE_LOG(LogScenarioSimulation, Warning, TEXT("DeliveryBot grid rebuild failed after ground regions were spawned."));
+		UE_LOG(LogScenarioSimulation, Warning, TEXT("DeliveryBot grid rebuild failed after scenario surfaces were spawned."));
 		bAllSpawned = false;
 	}
 
@@ -542,12 +568,13 @@ bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationS
 	UE_LOG(
 		LogScenarioSimulation,
 		Log,
-		TEXT("Scenario 월드 설정 완료 | Scenario: %s, Success: %s, RuntimeActors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
+		TEXT("Scenario world setup complete | Scenario: %s, Success: %s, RuntimeActors: %d, ActorIds: %d, GroundRegions: %d, Corridors: %d, Paths: %d"),
 		*setupSpec.EpisodeId,
 		bAllSpawned ? TEXT("true") : TEXT("false"),
 		RuntimeActors.Num(),
 		RuntimeActorsById.Num(),
 		RuntimeGroundRegions.Num(),
+		RuntimeCorridors.Num(),
 		RuntimePaths.Num());
 
 	return bAllSpawned;
@@ -663,6 +690,40 @@ AScenarioSplinePath* UScenarioSimulationSubsystem::FindSplinePath(const FString&
 	if (const TObjectPtr<AScenarioSplinePath>* foundPath = RuntimePaths.Find(pathId)) return foundPath->Get();
 
 	return nullptr;
+}
+
+AScenarioCorridorRuntimeActor* UScenarioSimulationSubsystem::SpawnCorridor(const FScenarioRuntimeCorridorSpec& corridorSpec)
+{
+	UWorld* world = GetWorld();
+	if (!world || corridorSpec.CorridorId.IsEmpty() || corridorSpec.PointsMeters.Num() < 2)
+	{
+		return nullptr;
+	}
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AScenarioCorridorRuntimeActor* corridorActor = world->SpawnActor<AScenarioCorridorRuntimeActor>(
+		AScenarioCorridorRuntimeActor::StaticClass(),
+		FTransform::Identity,
+		spawnParams);
+	if (!corridorActor)
+	{
+		return nullptr;
+	}
+
+	corridorActor->ConfigureCorridor(corridorSpec);
+	RuntimeActors.Add(corridorActor);
+	RuntimeCorridors.Add(corridorSpec.CorridorId, corridorActor);
+	return corridorActor;
+}
+
+void UScenarioSimulationSubsystem::SpawnCorridors(const TArray<FScenarioRuntimeCorridorSpec>& corridorSpecs)
+{
+	for (const FScenarioRuntimeCorridorSpec& corridorSpec : corridorSpecs)
+	{
+		SpawnCorridor(corridorSpec);
+	}
 }
 
 AScenarioGroundRegion* UScenarioSimulationSubsystem::SpawnGroundRegion(const FScenarioGroundRegionSpec& regionSpec)

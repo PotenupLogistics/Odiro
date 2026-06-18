@@ -130,21 +130,35 @@ bool FScenarioSamplerFixedObstacleTest::RunTest(const FString& Parameters)
 	const FScenarioCompileResult CompileResult =
 		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Result.Document);
 	TestTrue(TEXT("sample adapts to world spec"), CompileResult.bSuccess);
-	TestEqual(TEXT("runtime ground regions"), CompileResult.WorldSpec.GroundRegions.Num(), 3);
-	TestTrue(TEXT("runtime sidewalk surface preserved"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
-		[](const FScenarioGroundRegionSpec& Region)
+	TestEqual(TEXT("runtime corridor count"), CompileResult.WorldSpec.Corridors.Num(), 1);
+	if (CompileResult.WorldSpec.Corridors.IsEmpty())
+	{
+		return false;
+	}
+
+	const FScenarioRuntimeCorridorSpec& RuntimeCorridor = CompileResult.WorldSpec.Corridors[0];
+	TestEqual(TEXT("runtime corridor layout count"), RuntimeCorridor.Layout.Num(), 1);
+	if (RuntimeCorridor.Layout.IsEmpty())
+	{
+		return false;
+	}
+
+	TestEqual(TEXT("runtime corridor lane count"), RuntimeCorridor.Layout[0].Lanes.Num(), 3);
+	TestEqual(TEXT("generated ground regions"), CompileResult.WorldSpec.GroundRegions.Num(), 0);
+	TestTrue(TEXT("runtime sidewalk surface preserved"), RuntimeCorridor.Layout[0].Lanes.ContainsByPredicate(
+		[](const FScenarioRuntimeCorridorLaneSpec& Lane)
 		{
-			return Region.SurfaceId == TEXT("sidewalk");
+			return Lane.SurfaceId == TEXT("sidewalk");
 		}));
-	TestTrue(TEXT("runtime road surface preserved"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
-		[](const FScenarioGroundRegionSpec& Region)
+	TestTrue(TEXT("runtime road surface preserved"), RuntimeCorridor.Layout[0].Lanes.ContainsByPredicate(
+		[](const FScenarioRuntimeCorridorLaneSpec& Lane)
 		{
-			return Region.SurfaceId == TEXT("road");
+			return Lane.SurfaceId == TEXT("road");
 		}));
-	TestTrue(TEXT("runtime building surface preserved"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
-		[](const FScenarioGroundRegionSpec& Region)
+	TestTrue(TEXT("runtime building surface preserved"), RuntimeCorridor.Layout[0].Lanes.ContainsByPredicate(
+		[](const FScenarioRuntimeCorridorLaneSpec& Lane)
 		{
-			return Region.SurfaceId == TEXT("building");
+			return Lane.SurfaceId == TEXT("building");
 		}));
 	TestEqual(TEXT("runtime placeables"), CompileResult.WorldSpec.Placeables.Num(), 2);
 	return true;

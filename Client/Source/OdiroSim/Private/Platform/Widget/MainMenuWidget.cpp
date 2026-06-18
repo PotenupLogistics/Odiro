@@ -50,8 +50,8 @@ namespace
 	const TCHAR* ProjectOpenParentFolderConfigKey = TEXT("ParentFolder");
 	const TCHAR* ProjectOpenProjectNameConfigKey = TEXT("ProjectName");
 	const TCHAR* ProjectOpenTemplateIdConfigKey = TEXT("TemplateId");
-	const TCHAR* UserProjectSettingFileName = TEXT("setting.json");
-	const TCHAR* UserProjectScenarioFileName = TEXT("scenario.json");
+	const TCHAR* MainMenuUserProjectSettingFileName = TEXT("setting.json");
+	const TCHAR* MainMenuUserProjectScenarioFileName = TEXT("scenario.json");
 	const TCHAR* MainMenuRegularFontPath =
 		TEXT("/Game/Fonts/Freesentation/Freesentation-4Regular_Font.Freesentation-4Regular_Font");
 	const TCHAR* MainMenuBoldFontPath =
@@ -205,12 +205,12 @@ namespace
 
 	FString BuildProjectSettingPath(const FString& projectPath)
 	{
-		return NormalizeMainMenuPath(FPaths::Combine(projectPath, UserProjectSettingFileName));
+		return NormalizeMainMenuPath(FPaths::Combine(projectPath, MainMenuUserProjectSettingFileName));
 	}
 
 	FString BuildProjectScenarioPath(const FString& projectPath)
 	{
-		return NormalizeMainMenuPath(FPaths::Combine(projectPath, UserProjectScenarioFileName));
+		return NormalizeMainMenuPath(FPaths::Combine(projectPath, MainMenuUserProjectScenarioFileName));
 	}
 
 	bool TryLoadJsonRootObject(const FString& jsonFilePath, TSharedPtr<FJsonObject>& outRootObject, FString& outError)
@@ -3270,7 +3270,7 @@ bool UMainMenuWidget::OpenScenarioInEditor(const FString& scenarioSetupPath)
 		SetDiagnosticsText(TEXT("scenario 파일이 선택되지 않았습니다."));
 		return false;
 	}
-	if (!bLegacyInputScenario && !FPaths::GetCleanFilename(normalizedScenarioPath).Equals(UserProjectScenarioFileName, ESearchCase::IgnoreCase))
+	if (!bLegacyInputScenario && !FPaths::GetCleanFilename(normalizedScenarioPath).Equals(MainMenuUserProjectScenarioFileName, ESearchCase::IgnoreCase))
 	{
 		SetDiagnosticsText(TEXT("project scenario는 <UserProject>/scenario.json 경로여야 합니다."));
 		return false;

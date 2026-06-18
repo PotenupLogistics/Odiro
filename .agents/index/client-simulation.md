@@ -18,7 +18,6 @@ entry:
   - ScenarioDocumentJson.h / .cpp
   - ScenarioSampleJson.h / .cpp
   - ScenarioSampleWorldSpecAdapter.h / .cpp
-  - UserProjectEpisodeScenarioWorldSpecAdapter.h / .cpp
   - Scenario/Editor/ScenarioAuthoringSubsystem.h / .cpp
   - Scenario/Llm/ScenarioLlmAuthoringSubsystem.h / .cpp
   - Scenario/Llm/ScenarioLlmPromptWidget.h / .cpp
@@ -28,7 +27,7 @@ entry:
   - UserProjectDataTypesTest.cpp
   - ScenarioDocumentSampleJsonTest.cpp
   - ScenarioSampleWorldSpecAdapterTest.cpp
-  - UserProjectEpisodeScenarioWorldSpecAdapterTest.cpp
+  - UserProjectScenarioSampleWorldSpecAdapterTest.cpp
   - ScenarioSimulationSubsystem.h / .cpp
   - ScenarioRunnerSubsystem.h / .cpp
   - EpisodeMeasurementLogSubsystem.h / .cpp
@@ -44,18 +43,18 @@ keep:
   - Scenario setup/run queue samples in Client/Json/Input are legacy client-owned examples; project run execution no longer accepts them through ScenarioRunnerSubsystem.
   - ScenarioDocument* and ScenarioSample* remain internal editor/materialization surfaces unless a task explicitly targets them; public C++ editor entry points use project scenario naming.
   - Final user project contract uses one editable `<UserProject>/scenario.json`; do not add new user-facing template/sample split.
-  - Episode scenario files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
-  - Project run uses episode input arrays and `episode_scenario` adapter, not generated RunQueue files or old actor-spawn scenario setup JSON.
-  - ScenarioRunnerSubsystem public start API accepts direct episode scenario/profile run inputs; file-based RunQueue and ScenarioSetup start helpers are removed.
+  - Generated `scenario_sample` files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
+  - Project run generates `scenario_sample` episode artifacts and compiles them through `ScenarioSampleWorldSpecAdapter`; generated ground-region specs preserve lane `surface` ids so runtime visuals can use the same Corridor surface catalog as the editor preview.
+  - ScenarioRunnerSubsystem public start API accepts direct scenario_sample/profile run inputs; file-based RunQueue and ScenarioSetup start helpers are removed.
   - Scenario LLM authoring saves v2 `scenario` responses to user project `scenario.json`; it must not save or execute RunQueue files.
   - Scenario LLM prompt generate/load/run is scoped to the current `<UserProject>/scenario.json`; run launches create `<UserProject>/runs/<RunId>` snapshots through SimulatorLaunchSubsystem.
   - Project run output uses `FUserProjectRunOutputJson` for `result.json`, `events.jsonl`, `actions.jsonl`, `trace.jsonl`, and `summary.json`.
   - Scenario authoring/runtime projection stays separate from runtime WorldSpec and actor-spawn payload types.
 verify:
   - contract specs vs sample JSON alignment
-  - `scenario`/`episode_scenario` docs vs Client shared schema type alignment
-  - Scenario document parse, project `scenario.json` adapter, version mismatch, episode scenario generation, and round-trip automation tests
-  - Scenario-to-WorldSpec adapter automation tests, including user-project episode scenario adapter, and OdiroSimEditor build after adapter/editor draft changes
+  - `scenario`/`scenario_sample` docs vs Client shared schema type alignment
+  - Scenario document parse, project `scenario.json` adapter, version mismatch, scenario sample generation, and round-trip automation tests
+  - Scenario-to-WorldSpec adapter automation tests, including generated user-project scenario sample adapter coverage, and OdiroSimEditor build after adapter/editor draft changes
   - `OdiroSim.UserProjectData.RunOutput.Write` after user project result writer changes
   - `OdiroSim.UserProjectData.RobotAction.Write` after policy action logging changes
   - `OdiroSim.UserProjectData.EpisodeTrace.Write` after runtime trace logging changes

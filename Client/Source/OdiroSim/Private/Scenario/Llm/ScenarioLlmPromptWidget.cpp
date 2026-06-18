@@ -4,7 +4,41 @@
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/TextBlock.h"
+#include "Misc/Paths.h"
+#include "Platform/SimulatorLaunchSubsystem.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
+
+namespace
+{
+	const TCHAR* ProjectScenarioFileName = TEXT("scenario.json");
+
+	FString ResolveProjectScenarioJsonPath(FString rawPath)
+	{
+		rawPath.TrimStartAndEndInline();
+		rawPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (rawPath.IsEmpty())
+		{
+			return FString();
+		}
+
+		if (FPaths::GetExtension(rawPath).IsEmpty())
+		{
+			rawPath = FPaths::Combine(rawPath, ProjectScenarioFileName);
+		}
+		if (FPaths::IsRelative(rawPath))
+		{
+			rawPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), rawPath);
+		}
+		FPaths::NormalizeFilename(rawPath);
+		return rawPath;
+	}
+
+	bool IsProjectScenarioJsonPath(const FString& scenarioJsonPath)
+	{
+		return FPaths::GetCleanFilename(scenarioJsonPath).Equals(ProjectScenarioFileName, ESearchCase::IgnoreCase);
+	}
+}
 
 void UScenarioLlmPromptWidget::NativeOnInitialized()
 {
@@ -17,6 +51,9 @@ void UScenarioLlmPromptWidget::NativeConstruct()
 	Super::NativeConstruct();
 	BindLlmSubsystem();
 	ConfigureStatusTextBlock();
+	UWidgetTextStyleCatalog::ApplyMultiLineEditableTextBoxStyle(PromptTextBox.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(ScenarioCountTextBox.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(StatusTextBlock.Get(), EWidgetTextStyleRole::Value);
 	RequestEditorWidgetInputMode();
 	SetStatusText(TEXT("대기 중."));
 }
@@ -33,53 +70,96 @@ bool UScenarioLlmPromptWidget::GenerateFromPromptTextBox()
 	UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem();
 	if (!llmSubsystem)
 	{
-		SetStatusText(TEXT("LLM 서버와 연결되어 있지 않습니다."));
+		SetStatusText(TEXT("LLM authoring subsystem is unavailable."));
 		return false;
 	}
 
 	FString prompt;
 	if (!TryGetPrompt(prompt)) return false;
 
-	FString projectPath;
-	if (!TryGetProjectPath(projectPath)) return false;
-	llmSubsystem->SetTargetProjectPath(projectPath);
+	int32 episodeCount = 0;
+	if (!TryGetEpisodeCount(episodeCount)) return false;
 
-	SetStatusText(TEXT("생성 요청 중."));
-	return llmSubsystem->GenerateScenariosFromPrompt(prompt, 1);
+	FString scenarioJsonPath;
+	FString projectPath;
+	if (!TryResolveCurrentProjectScenarioPath(scenarioJsonPath, projectPath)) return false;
+
+	SetStatusText(TEXT("Requesting project scenario generation."));
+	return llmSubsystem->GenerateProjectScenarioFromPrompt(prompt, scenarioJsonPath, episodeCount);
 }
 
 bool UScenarioLlmPromptWidget::LoadGeneratedScenario()
 {
-	const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem();
-	if (!llmSubsystem)
+	AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
+	if (!editorController)
 	{
-		SetStatusText(TEXT("LLM 서버와 연결되어 있지 않습니다."));
+		SetStatusText(TEXT("Owning player is not ScenarioEditorController."));
 		return false;
 	}
 
-	const FScenarioLlmGenerationResult result = llmSubsystem->GetLatestResult();
-	if (!result.bSuccess)
+	FString scenarioJsonPath;
+	FString projectPath;
+	if (const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem())
 	{
-		SetStatusText(TEXT("이용 가능한 LLM 생성 결과가 없습니다."));
+		const FScenarioLlmGenerationResult result = llmSubsystem->GetLatestResult();
+		if (result.bSuccess && !result.ProjectScenarioJsonPath.IsEmpty())
+		{
+			scenarioJsonPath = ResolveProjectScenarioJsonPath(result.ProjectScenarioJsonPath);
+		}
+	}
+	if (scenarioJsonPath.IsEmpty())
+	{
+		if (!TryResolveCurrentProjectScenarioPath(scenarioJsonPath, projectPath)) return false;
+	}
+
+	FString resolvedJsonFilePath;
+	TArray<FString> diagnostics;
+	if (!editorController->LoadProjectScenarioJsonFile(
+			scenarioJsonPath,
+			resolvedJsonFilePath,
+			diagnostics))
+	{
+		SetStatusText(diagnostics.IsEmpty()
+			? FString::Printf(TEXT("scenario.json load failed: %s"), *scenarioJsonPath)
+			: FString::Printf(TEXT("scenario.json load failed:\n%s"), *FString::Join(diagnostics, TEXT("\n"))));
 		return false;
 	}
 
-	if (result.SavedScenarioJsonPath.IsEmpty())
-	{
-		SetStatusText(TEXT("저장된 scenario.json 경로가 없습니다."));
-		return false;
-	}
-
-	SetStatusText(FString::Printf(
-		TEXT("scenario.json 저장 완료: %s"),
-		*result.SavedScenarioJsonPath));
+	SetStatusText(FString::Printf(TEXT("Loaded project scenario: %s"), *resolvedJsonFilePath));
 	return true;
 }
 
 bool UScenarioLlmPromptWidget::RunGeneratedSimulation()
 {
-	SetStatusText(TEXT("RunQueue 실행은 제거되었습니다. MainMenu에서 user project run을 시작하세요."));
-	return false;
+	USimulatorLaunchSubsystem* launchSubsystem = GetSimulatorLaunchSubsystem();
+	if (!launchSubsystem)
+	{
+		SetStatusText(TEXT("SimulatorLaunchSubsystem is unavailable."));
+		return false;
+	}
+
+	FString scenarioJsonPath;
+	FString projectPath;
+	if (!TrySaveCurrentProjectScenario(scenarioJsonPath, projectPath)) return false;
+
+	FString runId;
+	TArray<FString> diagnostics;
+	if (!launchSubsystem->PrepareProjectRunSnapshot(projectPath, FString(), runId, diagnostics))
+	{
+		SetStatusText(diagnostics.IsEmpty()
+			? FString::Printf(TEXT("Project run snapshot preparation failed: %s"), *projectPath)
+			: FString::Printf(TEXT("Project run snapshot preparation failed:\n%s"), *FString::Join(diagnostics, TEXT("\n"))));
+		return false;
+	}
+
+	if (!launchSubsystem->StartProjectRun(projectPath, runId))
+	{
+		SetStatusText(launchSubsystem->GetLastError());
+		return false;
+	}
+
+	SetStatusText(FString::Printf(TEXT("Project run launch requested: %s / %s"), *projectPath, *runId));
+	return true;
 }
 
 void UScenarioLlmPromptWidget::SetStatusText(const FString& message)
@@ -110,16 +190,17 @@ void UScenarioLlmPromptWidget::HandleGenerationCompleted(const FScenarioLlmGener
 	if (!result.bSuccess)
 	{
 		SetStatusText(result.Diagnostics.IsEmpty()
-			? FString::Printf(TEXT("LLM 생성 실패: %s"), *result.Message)
-			: FString::Printf(TEXT("LLM 생성 실패:\n%s"), *FString::Join(result.Diagnostics, TEXT("\n"))));
+			? FString::Printf(TEXT("LLM generation failed: %s"), *result.Message)
+			: FString::Printf(TEXT("LLM generation failed:\n%s"), *FString::Join(result.Diagnostics, TEXT("\n"))));
 		return;
 	}
 
 	SetStatusText(FString::Printf(
-		TEXT("scenario 생성 완료: %s"),
-		*result.SavedScenarioJsonPath));
+		TEXT("LLM generation completed: %s\n%s"),
+		*result.Message,
+		*result.ProjectScenarioJsonPath));
 
-	if (bLoadFirstScenarioAfterGenerate)
+	if (bLoadProjectScenarioAfterGenerate)
 	{
 		LoadGeneratedScenario();
 	}
@@ -227,32 +308,108 @@ bool UScenarioLlmPromptWidget::TryGetPrompt(FString& outPrompt)
 	return true;
 }
 
-bool UScenarioLlmPromptWidget::TryGetProjectPath(FString& outProjectPath)
+bool UScenarioLlmPromptWidget::TryGetEpisodeCount(int32& outEpisodeCount)
 {
-	outProjectPath.Reset();
-	const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem();
-	if (!ProjectPathTextBox)
+	outEpisodeCount = 0;
+	if (!ScenarioCountTextBox)
 	{
-		if (llmSubsystem)
+		if (const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem())
 		{
-			outProjectPath = llmSubsystem->GetResolvedTargetProjectPath().TrimStartAndEnd();
+			outEpisodeCount = llmSubsystem->DefaultEpisodeCount;
+			return true;
 		}
-	}
-	else
-	{
-		outProjectPath = ProjectPathTextBox->GetText().ToString().TrimStartAndEnd();
-		if (outProjectPath.IsEmpty() && llmSubsystem)
-		{
-			outProjectPath = llmSubsystem->GetResolvedTargetProjectPath().TrimStartAndEnd();
-		}
+
+		outEpisodeCount = 1;
+		return true;
 	}
 
-	if (outProjectPath.IsEmpty())
+	const FString text = ScenarioCountTextBox->GetText().ToString().TrimStartAndEnd();
+	if (text.IsEmpty())
 	{
-		SetStatusText(TEXT("User project root를 입력해야 scenario.json을 저장할 수 있습니다."));
+		if (const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem())
+		{
+			outEpisodeCount = llmSubsystem->DefaultEpisodeCount;
+			return true;
+		}
+
+		outEpisodeCount = 1;
+		return true;
+	}
+
+	if (!text.IsNumeric())
+	{
+		SetStatusText(TEXT("생성 횟수는 정수여야 합니다."));
 		return false;
 	}
 
+	outEpisodeCount = FCString::Atoi(*text);
+	if (outEpisodeCount <= 0)
+	{
+		SetStatusText(TEXT("생성 횟수는 1 이상이어야 합니다."));
+		return false;
+	}
+
+	return true;
+}
+
+bool UScenarioLlmPromptWidget::TryResolveCurrentProjectScenarioPath(FString& outScenarioJsonPath, FString& outProjectPath)
+{
+	outScenarioJsonPath.Reset();
+	outProjectPath.Reset();
+
+	const AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
+	if (!editorController)
+	{
+		SetStatusText(TEXT("Owning player is not ScenarioEditorController."));
+		return false;
+	}
+
+	outScenarioJsonPath = ResolveProjectScenarioJsonPath(editorController->GetSourceProjectScenarioJsonPath());
+	if (!IsProjectScenarioJsonPath(outScenarioJsonPath))
+	{
+		SetStatusText(TEXT("LLM generate/load/run requires the editor source to be <UserProject>/scenario.json."));
+		return false;
+	}
+
+	outProjectPath = FPaths::GetPath(outScenarioJsonPath);
+	if (outProjectPath.IsEmpty())
+	{
+		SetStatusText(TEXT("Project path could not be resolved from scenario.json."));
+		return false;
+	}
+
+	return true;
+}
+
+bool UScenarioLlmPromptWidget::TrySaveCurrentProjectScenario(FString& outScenarioJsonPath, FString& outProjectPath)
+{
+	outScenarioJsonPath.Reset();
+	outProjectPath.Reset();
+
+	AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
+	if (!editorController)
+	{
+		SetStatusText(TEXT("Owning player is not ScenarioEditorController."));
+		return false;
+	}
+
+	if (!TryResolveCurrentProjectScenarioPath(outScenarioJsonPath, outProjectPath))
+	{
+		return false;
+	}
+
+	FString resolvedJsonFilePath;
+	TArray<FString> diagnostics;
+	if (!editorController->SaveProjectScenarioJsonFile(outScenarioJsonPath, resolvedJsonFilePath, diagnostics))
+	{
+		SetStatusText(diagnostics.IsEmpty()
+			? FString::Printf(TEXT("scenario.json save failed: %s"), *outScenarioJsonPath)
+			: FString::Printf(TEXT("scenario.json save failed:\n%s"), *FString::Join(diagnostics, TEXT("\n"))));
+		return false;
+	}
+
+	outScenarioJsonPath = ResolveProjectScenarioJsonPath(resolvedJsonFilePath);
+	outProjectPath = FPaths::GetPath(outScenarioJsonPath);
 	return true;
 }
 
@@ -275,4 +432,10 @@ UScenarioLlmAuthoringSubsystem* UScenarioLlmPromptWidget::GetLlmAuthoringSubsyst
 {
 	UGameInstance* gameInstance = GetGameInstance();
 	return gameInstance ? gameInstance->GetSubsystem<UScenarioLlmAuthoringSubsystem>() : nullptr;
+}
+
+USimulatorLaunchSubsystem* UScenarioLlmPromptWidget::GetSimulatorLaunchSubsystem() const
+{
+	UGameInstance* gameInstance = GetGameInstance();
+	return gameInstance ? gameInstance->GetSubsystem<USimulatorLaunchSubsystem>() : nullptr;
 }

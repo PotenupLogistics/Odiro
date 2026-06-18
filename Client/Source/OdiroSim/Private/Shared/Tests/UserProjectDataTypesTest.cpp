@@ -316,8 +316,8 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	runRecord.RunIndex = 0;
 	runRecord.EpisodeId = writeResults[0].EpisodeId;
 	runRecord.PairId = writeResults[0].EpisodeId;
-	runRecord.EpisodeSetupJsonPath = writeResults[0].ScenarioPath;
-	runRecord.DeliveryBotSetupJsonPath = snapshotResult.Paths.ProfilePath;
+	runRecord.EpisodeScenarioJsonPath = writeResults[0].ScenarioPath;
+	runRecord.ProfileJsonPath = snapshotResult.Paths.ProfilePath;
 	runRecord.PolicySpecJsonPath = snapshotResult.Paths.PolicyEntrypointPath;
 	runRecord.EpisodeSetupHash = writeResults[0].ScenarioHash;
 	runRecord.DeliveryBotSetupHash = TEXT("crc32:profile");
@@ -338,6 +338,7 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	runRecord.EvaluationResult.TerminalReason = EEpisodeEvaluationTerminalReason::GoalReached;
 	runRecord.EvaluationResult.DurationSeconds = 12.5;
 	runRecord.EvaluationResult.Metrics.Add(TEXT("score"), MakeUserProjectFloatParam(98.0));
+	runRecord.EvaluationResult.Metrics.Add(TEXT("near_miss_count"), MakeUserProjectFloatParam(0.0));
 
 	FEpisodeEvaluationEvent nearMissEvent;
 	nearMissEvent.EventIndex = 0;

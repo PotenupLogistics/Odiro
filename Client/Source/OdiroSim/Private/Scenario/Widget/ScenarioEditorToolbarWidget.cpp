@@ -4,10 +4,11 @@
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
+#include "Scenario/Widget/ScenarioEditorRootWidget.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
-#include "Shared/SimulationSetupTypes.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
 
 namespace
 {
@@ -16,11 +17,11 @@ namespace
 		FString directory = FPaths::GetPath(preferredPath);
 		if (directory.IsEmpty())
 		{
-			directory = TEXT("Json/Input");
+			directory = TEXT("Saved/UserProjects/ScenarioEditor");
 		}
 
 		const FString baseName = FPaths::GetBaseFilename(preferredPath).IsEmpty()
-			? FString(TEXT("ScenarioSetupNew"))
+			? FString(TEXT("scenario"))
 			: FPaths::GetBaseFilename(preferredPath);
 		const FString extension = FPaths::GetExtension(preferredPath).IsEmpty()
 			? FString(TEXT("json"))
@@ -33,7 +34,10 @@ namespace
 				: FString::Printf(TEXT("%s_%d.%s"), *baseName, index, *extension);
 			FString candidatePath = FPaths::Combine(directory, fileName);
 			candidatePath.ReplaceInline(TEXT("\\"), TEXT("/"));
-			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(candidatePath)))
+			const FString resolvedCandidatePath = FPaths::IsRelative(candidatePath)
+				? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), candidatePath)
+				: FPaths::ConvertRelativePathToFull(candidatePath);
+			if (!FPaths::FileExists(resolvedCandidatePath))
 			{
 				return candidatePath;
 			}
@@ -51,6 +55,8 @@ void UScenarioEditorToolbarWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	BindControls();
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(StatusTextBlock.Get(), EWidgetTextStyleRole::Value);
+	RefreshSidebarPanelButtons();
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	RequestEditorWidgetInputMode();
 	SetStatusText(TEXT("준비됨"));
@@ -74,7 +80,7 @@ bool UScenarioEditorToolbarWidget::SaveScenario()
 	FString resolvedPath;
 	TArray<FString> diagnostics;
 	const FString savePath = ResolveSavePath();
-	if (!editorController->SaveScenarioSetupJsonFile(savePath, resolvedPath, diagnostics))
+	if (!editorController->SaveProjectScenarioJsonFile(savePath, resolvedPath, diagnostics))
 	{
 		SetStatusText(diagnostics.IsEmpty()
 			? FString::Printf(TEXT("저장 실패: %s"), *savePath)
@@ -94,6 +100,54 @@ void UScenarioEditorToolbarWidget::ReturnToMainMenu()
 	}
 }
 
+void UScenarioEditorToolbarWidget::SetActiveSidebarPanel(const EScenarioTemplateSidebarPanel panel)
+{
+	if (ActiveSidebarPanel == panel)
+	{
+		return;
+	}
+
+	ActiveSidebarPanel = panel;
+	RefreshSidebarPanelButtons();
+	OnSidebarPanelChanged.Broadcast(ActiveSidebarPanel);
+
+	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	{
+		if (UScenarioEditorRootWidget* rootWidget = editorController->GetEditorRootWidget())
+		{
+			rootWidget->SetTemplateSidebarPanel(ActiveSidebarPanel);
+		}
+	}
+}
+
+void UScenarioEditorToolbarWidget::SelectMainSidebarPanel()
+{
+	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Main);
+}
+
+void UScenarioEditorToolbarWidget::SelectCorridorSidebarPanel()
+{
+	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Corridor);
+}
+
+void UScenarioEditorToolbarWidget::SelectObstacleSidebarPanel()
+{
+	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Obstacle);
+}
+
+void UScenarioEditorToolbarWidget::SelectPedestrianSidebarPanel()
+{
+	SetActiveSidebarPanel(EScenarioTemplateSidebarPanel::Pedestrian);
+}
+
+void UScenarioEditorToolbarWidget::RefreshSidebarPanelButtons()
+{
+	ApplySidebarPanelButtonState(MainPanelButton.Get(), EScenarioTemplateSidebarPanel::Main);
+	ApplySidebarPanelButtonState(CorridorPanelButton.Get(), EScenarioTemplateSidebarPanel::Corridor);
+	ApplySidebarPanelButtonState(ObstaclePanelButton.Get(), EScenarioTemplateSidebarPanel::Obstacle);
+	ApplySidebarPanelButtonState(PedestrianPanelButton.Get(), EScenarioTemplateSidebarPanel::Pedestrian);
+}
+
 void UScenarioEditorToolbarWidget::HandleSaveButtonClicked()
 {
 	SaveScenario();
@@ -102,6 +156,26 @@ void UScenarioEditorToolbarWidget::HandleSaveButtonClicked()
 void UScenarioEditorToolbarWidget::HandleReturnButtonClicked()
 {
 	ReturnToMainMenu();
+}
+
+void UScenarioEditorToolbarWidget::HandleMainPanelButtonClicked()
+{
+	SelectMainSidebarPanel();
+}
+
+void UScenarioEditorToolbarWidget::HandleCorridorPanelButtonClicked()
+{
+	SelectCorridorSidebarPanel();
+}
+
+void UScenarioEditorToolbarWidget::HandleObstaclePanelButtonClicked()
+{
+	SelectObstacleSidebarPanel();
+}
+
+void UScenarioEditorToolbarWidget::HandlePedestrianPanelButtonClicked()
+{
+	SelectPedestrianSidebarPanel();
 }
 
 void UScenarioEditorToolbarWidget::BindControls()
@@ -116,6 +190,30 @@ void UScenarioEditorToolbarWidget::BindControls()
 	{
 		ReturnToMainMenuButton->OnClicked.RemoveDynamic(this, &UScenarioEditorToolbarWidget::HandleReturnButtonClicked);
 		ReturnToMainMenuButton->OnClicked.AddDynamic(this, &UScenarioEditorToolbarWidget::HandleReturnButtonClicked);
+	}
+
+	if (MainPanelButton)
+	{
+		MainPanelButton->OnClicked.RemoveDynamic(this, &UScenarioEditorToolbarWidget::HandleMainPanelButtonClicked);
+		MainPanelButton->OnClicked.AddDynamic(this, &UScenarioEditorToolbarWidget::HandleMainPanelButtonClicked);
+	}
+
+	if (CorridorPanelButton)
+	{
+		CorridorPanelButton->OnClicked.RemoveDynamic(this, &UScenarioEditorToolbarWidget::HandleCorridorPanelButtonClicked);
+		CorridorPanelButton->OnClicked.AddDynamic(this, &UScenarioEditorToolbarWidget::HandleCorridorPanelButtonClicked);
+	}
+
+	if (ObstaclePanelButton)
+	{
+		ObstaclePanelButton->OnClicked.RemoveDynamic(this, &UScenarioEditorToolbarWidget::HandleObstaclePanelButtonClicked);
+		ObstaclePanelButton->OnClicked.AddDynamic(this, &UScenarioEditorToolbarWidget::HandleObstaclePanelButtonClicked);
+	}
+
+	if (PedestrianPanelButton)
+	{
+		PedestrianPanelButton->OnClicked.RemoveDynamic(this, &UScenarioEditorToolbarWidget::HandlePedestrianPanelButtonClicked);
+		PedestrianPanelButton->OnClicked.AddDynamic(this, &UScenarioEditorToolbarWidget::HandlePedestrianPanelButtonClicked);
 	}
 }
 
@@ -161,7 +259,7 @@ FString UScenarioEditorToolbarWidget::ResolveSavePath() const
 {
 	if (const AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
 	{
-		const FString sourcePath = editorController->GetSourceScenarioSetupJsonPath();
+		const FString sourcePath = editorController->GetSourceProjectScenarioJsonPath();
 		if (!sourcePath.IsEmpty())
 		{
 			return sourcePath;
@@ -169,4 +267,14 @@ FString UScenarioEditorToolbarWidget::ResolveSavePath() const
 	}
 
 	return MakeUniqueSavePath(DefaultSavePath);
+}
+
+void UScenarioEditorToolbarWidget::ApplySidebarPanelButtonState(
+	UButton* button,
+	const EScenarioTemplateSidebarPanel panel) const
+{
+	if (button)
+	{
+		button->SetRenderOpacity(ActiveSidebarPanel == panel ? 1.0f : 0.55f);
+	}
 }

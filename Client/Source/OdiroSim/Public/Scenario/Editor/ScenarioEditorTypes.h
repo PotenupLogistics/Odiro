@@ -21,6 +21,22 @@ enum class EScenarioEditorViewMode : uint8
 	TopDownOrtho
 };
 
+// Corridor 단면 lane이 붙는 축의 좌우 측면을 구분함.
+UENUM(BlueprintType)
+enum class EScenarioEditorCorridorSide : uint8
+{
+	Building,
+	Curb
+};
+
+// Corridor authoring handle shape; handles edit the template axis without changing the schema.
+UENUM(BlueprintType)
+enum class EScenarioCorridorHandleType : uint8
+{
+	Vertex,
+	Segment
+};
+
 UENUM(BlueprintType)
 enum class EScenarioTransformGizmoHandle : uint8
 {

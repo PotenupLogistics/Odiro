@@ -276,6 +276,8 @@ private:
 	FString GetSelectedProjectName() const;
 	// 선택된 user project root absolute path를 반환한다.
 	FString GetSelectedProjectPath() const;
+	// 선택된 user project의 editable scenario.json path를 반환한다.
+	FString GetSelectedProjectScenarioPath() const;
 	// 선택된 project template id를 반환한다.
 	FString GetSelectedProjectTemplateId() const;
 	// 선택된 project run id를 반환한다.

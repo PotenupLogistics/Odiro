@@ -41,9 +41,6 @@ public:
 
 	FPlatformAnalysisAiCompletedNative OnAnalysisCompleted;
 
-	// Legacy report/log 분석 요청. MainMenu project mode에서는 사용하지 않는다.
-	UFUNCTION(BlueprintCallable, Category = "Platform|AI")
-	bool RequestAnalysisForReport(const FString& evaluationReportPath, const FString& measurementLogPath);
 
 	UFUNCTION(BlueprintCallable, Category = "Platform|AI")
 	bool RequestAnalysisForProjectRun(const FString& projectPath, const FString& runId);
@@ -53,19 +50,6 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Platform|AI")
 	bool IsAnalysisRequestPending() const { return PendingHttpRequest.IsValid(); }
-
-	static bool ExtractSetupPathsFromReportJson(
-		const FString& reportJson,
-		FString& outEpisodeSetupPath,
-		FString& outDeliveryBotSetupPath,
-		TArray<FString>& outDiagnostics);
-
-	static bool BuildAnalysisRequestJsonFromReport(
-		const FString& evaluationReportPath,
-		const FString& measurementLogPath,
-		bool bFallbackOnly,
-		FString& outRequestJson,
-		TArray<FString>& outDiagnostics);
 
 	static bool BuildAnalysisRequestJsonForProjectRun(
 		const FString& projectPath,
@@ -78,16 +62,10 @@ public:
 		TArray<FString>& outDiagnostics);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Config, Category = "Platform|AI")
-	FString AnalysisEndpointUrl = TEXT("http://127.0.0.1:8711/api/v1/analysis/run");
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Config, Category = "Platform|AI")
 	FString ProjectRunAnalysisEndpointUrl = TEXT("http://127.0.0.1:8711/api/v2/analysis/run");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Config, Category = "Platform|AI", meta = (ClampMin = "1.0"))
 	float RequestTimeoutSeconds = 60.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Config, Category = "Platform|AI")
-	bool bFallbackOnly = false;
 
 private:
 	void HandleAnalysisResponse(

@@ -336,7 +336,7 @@ T10 처리:
 
 보류:
 
-- MainMenu legacy `Json/Input`, `RunQueue`, `Saved/AnalysisLogs` fallback 완전 제거
+- MainMenu legacy `Json/Input`, `RunQueue`, `Saved/AnalysisLogs` fallback 제거
 - UE 내부 Bridge IPC client 연결
 
 검증:

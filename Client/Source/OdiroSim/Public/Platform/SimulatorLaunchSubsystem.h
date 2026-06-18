@@ -187,6 +187,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")
 	bool CreateProjectRun(const FString& projectPath, FString& outRunId, TArray<FString>& outDiagnostics) const;
 
+	// 사용자 project 입력을 지정 또는 다음 run id snapshot으로 고정한다.
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
+	bool PrepareProjectRunSnapshot(
+		const FString& projectPath,
+		const FString& requestedRunId,
+		FString& outRunId,
+		TArray<FString>& outDiagnostics) const;
+
 	// 사용자 project의 run directory 목록을 반환한다.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")
 	TArray<FString> ListProjectRunDirectories(const FString& projectPath) const;
@@ -248,6 +256,12 @@ public:
 		TArray<FString>& outDiagnostics);
 
 private:
+	bool CreateProjectRunSnapshot(
+		const FString& projectPath,
+		const FString& requestedRunId,
+		FString& outRunId,
+		TArray<FString>& outDiagnostics) const;
+
 	bool ReplaceRunQueueReferences(
 		const FString& oldPath,
 		const FString& newPath,

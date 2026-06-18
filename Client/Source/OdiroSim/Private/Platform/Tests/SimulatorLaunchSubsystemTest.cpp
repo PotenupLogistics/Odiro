@@ -3,17 +3,56 @@
 #include "Platform/SimulatorLaunchSubsystem.h"
 
 #include "Engine/GameInstance.h"
+#include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
 namespace
 {
-	FString MakeSimulatorLaunchProjectWorkspaceTestRoot()
+	bool SaveSimulatorLaunchTestFile(const FString& filePath, const FString& contents)
 	{
-		return FPaths::ConvertRelativePathToFull(FPaths::Combine(
-			FPaths::ProjectSavedDir(),
-			TEXT("Automation/ProjectWorkspace"),
-			FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(filePath), true);
+		return FFileHelper::SaveStringToFile(contents, *filePath);
+	}
+
+	bool WriteSimulatorLaunchProject(const FString& projectPath)
+	{
+		return SaveSimulatorLaunchTestFile(
+				FPaths::Combine(projectPath, TEXT("setting.json")),
+				TEXT("{")
+				TEXT("\"schema\":\"project_setting\",")
+				TEXT("\"version\":1,")
+				TEXT("\"project_id\":\"launcher_project\",")
+				TEXT("\"sampling\":{\"base_seed\":1000,\"episode_count\":1,\"generator_version\":\"0.1.0\"},")
+				TEXT("\"runtime\":{\"map_id\":\"ScenarioSimulationMap\",\"fixed_fps\":60,\"time_scale\":1.0,\"max_duration_s\":60},")
+				TEXT("\"evaluation\":{\"goal_acceptance_radius_m\":1.0,\"tip_over_angle_deg\":60,\"near_miss_distance_m\":0.5}")
+				TEXT("}"))
+			&& SaveSimulatorLaunchTestFile(
+				FPaths::Combine(projectPath, TEXT("profile.json")),
+				TEXT("{")
+				TEXT("\"schema\":\"simulation_profile\",")
+				TEXT("\"version\":1,")
+				TEXT("\"profile_id\":\"launcher_profile\",")
+				TEXT("\"display_name\":\"Launcher\",")
+				TEXT("\"description\":\"Launcher profile\",")
+				TEXT("\"robot\":{}")
+				TEXT("}"))
+			&& SaveSimulatorLaunchTestFile(
+				FPaths::Combine(projectPath, TEXT("scenario.json")),
+				TEXT("{")
+				TEXT("\"schema\":\"scenario\",")
+				TEXT("\"version\":1,")
+				TEXT("\"scenario_id\":\"launcher_scenario\",")
+				TEXT("\"intent\":\"Launcher\",")
+				TEXT("\"corridor\":{},")
+				TEXT("\"obstacles\":{},")
+				TEXT("\"pedestrians\":{},")
+				TEXT("\"robot\":{}")
+				TEXT("}"))
+			&& SaveSimulatorLaunchTestFile(
+				FPaths::Combine(projectPath, TEXT("policy"), TEXT("__init__.py")),
+				TEXT("def create_policy():\n    return None\n"));
 	}
 }
 
@@ -24,13 +63,12 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSimulatorLaunchCommandLineBuildTest::RunTest(const FString& parameters)
 {
-	// Launcher는 project/run/policy port만 넘기고 실행 설정은 run snapshot에서 읽는다.
+	// Launcher는 project/run만 넘기고 실행 설정은 run snapshot에서 읽는다.
 	const FString simulatorArguments = USimulatorLaunchSubsystem::BuildProjectRunSimulatorArgumentString(
 		TEXT("X:/Projects/DeliveryBotA"),
 		TEXT("000001"));
 	TestTrue(TEXT("simulator passes project path"), simulatorArguments.Contains(TEXT("\"-OdiroProject=X:/Projects/DeliveryBotA\"")));
 	TestTrue(TEXT("simulator passes run id"), simulatorArguments.Contains(TEXT("\"-RunId=000001\"")));
-	TestTrue(TEXT("simulator passes policy port"), simulatorArguments.Contains(TEXT("\"-PolicyPort=18145\"")));
 	TestFalse(TEXT("simulator omits legacy simulate setup"), simulatorArguments.Contains(TEXT("-Simulate")));
 	TestFalse(TEXT("simulator omits fixed step args"), simulatorArguments.Contains(TEXT("UseFixedTimeStep")));
 
@@ -42,7 +80,6 @@ bool FSimulatorLaunchCommandLineBuildTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("preview uses cmd run wrapper"), previewArguments.StartsWith(TEXT("/d /s /c \"\"")));
 	TestTrue(TEXT("preview passes project path"), previewArguments.Contains(TEXT("\"-OdiroProject=X:/Projects/DeliveryBotA\"")));
 	TestTrue(TEXT("preview passes run id"), previewArguments.Contains(TEXT("\"-RunId=000001\"")));
-	TestTrue(TEXT("preview passes policy port"), previewArguments.Contains(TEXT("\"-PolicyPort=18145\"")));
 	TestFalse(TEXT("preview omits legacy simulate setup"), previewArguments.Contains(TEXT("-Simulate")));
 
 	return true;
@@ -92,12 +129,18 @@ bool FSimulatorLaunchProjectRunValidationTest::RunTest(const FString& parameters
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FSimulatorLaunchProjectWorkspaceTest,
-	"OdiroSim.SimulatorLaunch.ProjectWorkspace",
+	FSimulatorLaunchProjectRunSnapshotPrepareTest,
+	"OdiroSim.SimulatorLaunch.ProjectRun.PrepareSnapshot",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FSimulatorLaunchProjectWorkspaceTest::RunTest(const FString& parameters)
+bool FSimulatorLaunchProjectRunSnapshotPrepareTest::RunTest(const FString& parameters)
 {
+	const FString projectPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+		FPaths::ProjectSavedDir(),
+		TEXT("Automation/SimulatorLaunchProjectRunPrepare"),
+		FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+	TestTrue(TEXT("write project inputs"), WriteSimulatorLaunchProject(projectPath));
+
 	UGameInstance* gameInstance = NewObject<UGameInstance>();
 	USimulatorLaunchSubsystem* subsystem = NewObject<USimulatorLaunchSubsystem>(gameInstance);
 	TestNotNull(TEXT("subsystem created"), subsystem);
@@ -106,95 +149,29 @@ bool FSimulatorLaunchProjectWorkspaceTest::RunTest(const FString& parameters)
 		return false;
 	}
 
-	const TArray<FString> templates = subsystem->ListProjectTemplates();
-	TestTrue(TEXT("blank template exists"), templates.Contains(TEXT("blank")));
-
-	const FString projectPath = MakeSimulatorLaunchProjectWorkspaceTestRoot();
-	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
-
-	TArray<FString> diagnostics;
-	TestTrue(
-		TEXT("project created from blank template"),
-		subsystem->CreateProjectFromTemplate(projectPath, TEXT("blank"), diagnostics));
-	if (!diagnostics.IsEmpty())
-	{
-		AddInfo(FString::Printf(TEXT("create diagnostics: %s"), *FString::Join(diagnostics, TEXT("\n"))));
-	}
-
-	TestTrue(TEXT("project validates"), subsystem->ValidateUserProject(projectPath, diagnostics));
-	TestTrue(TEXT("setting exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("setting.json"))));
-	TestTrue(TEXT("profile exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("profile.json"))));
-	TestTrue(TEXT("scenario exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("scenario.json"))));
-	TestTrue(TEXT("policy entrypoint exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("policy/__init__.py"))));
-
 	FString runId;
-	TestTrue(TEXT("project run created"), subsystem->CreateProjectRun(projectPath, runId, diagnostics));
-	if (!diagnostics.IsEmpty())
+	TArray<FString> diagnostics;
+	const bool bPrepared = subsystem->PrepareProjectRunSnapshot(projectPath, FString(), runId, diagnostics);
+	for (const FString& diagnostic : diagnostics)
 	{
-		AddInfo(FString::Printf(TEXT("run diagnostics: %s"), *FString::Join(diagnostics, TEXT("\n"))));
+		AddInfo(FString::Printf(TEXT("PrepareProjectRunSnapshot diagnostic: %s"), *diagnostic));
+	}
+	TestTrue(TEXT("prepare snapshot"), bPrepared);
+	if (!bPrepared)
+	{
+		return false;
 	}
 	TestEqual(TEXT("first run id"), runId, FString(TEXT("000001")));
+	TestEqual(TEXT("diagnostics"), diagnostics.Num(), 0);
 
-	const FString runPath = FPaths::Combine(projectPath, TEXT("runs"), runId);
-	TestTrue(TEXT("snapshot setting exists"), FPaths::FileExists(FPaths::Combine(runPath, TEXT("snapshot/setting.json"))));
-	TestTrue(TEXT("snapshot profile exists"), FPaths::FileExists(FPaths::Combine(runPath, TEXT("snapshot/profile.json"))));
-	TestTrue(TEXT("snapshot scenario exists"), FPaths::FileExists(FPaths::Combine(runPath, TEXT("snapshot/scenario.json"))));
-	TestTrue(TEXT("snapshot policy entrypoint exists"), FPaths::FileExists(FPaths::Combine(runPath, TEXT("snapshot/policy/__init__.py"))));
-	TestTrue(TEXT("episodes directory exists"), IFileManager::Get().DirectoryExists(*FPaths::Combine(runPath, TEXT("episodes"))));
-	TestTrue(TEXT("review directory exists"), IFileManager::Get().DirectoryExists(*FPaths::Combine(runPath, TEXT("review"))));
+	const FUserProjectRunSnapshotPaths paths = FUserProjectRunSnapshot::BuildPaths(projectPath, runId);
+	TestTrue(TEXT("snapshot setting exists"), FPaths::FileExists(paths.SettingPath));
+	TestTrue(TEXT("snapshot profile exists"), FPaths::FileExists(paths.ProfilePath));
+	TestTrue(TEXT("snapshot scenario exists"), FPaths::FileExists(paths.ScenarioPath));
+	TestTrue(TEXT("snapshot policy entrypoint exists"), FPaths::FileExists(paths.PolicyEntrypointPath));
 
-	const TArray<FString> runDirectories = subsystem->ListProjectRunDirectories(projectPath);
-	FString normalizedRunPath = FPaths::ConvertRelativePathToFull(runPath);
-	FPaths::NormalizeFilename(normalizedRunPath);
-	TestEqual(TEXT("run directory count"), runDirectories.Num(), 1);
-	TestTrue(TEXT("run directory listed"), runDirectories.Contains(normalizedRunPath));
-
-	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
-	return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FSimulatorLaunchRunQueueJsonRoundTripTest,
-	"OdiroSim.SimulatorLaunch.RunQueueJson.RoundTrip",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FSimulatorLaunchRunQueueJsonRoundTripTest::RunTest(const FString& parameters)
-{
-	TArray<FScenarioRunInput> runInputs;
-	FScenarioRunInput runInput;
-	runInput.PairId = TEXT("sample_0");
-	runInput.ScenarioSetupJsonPath = TEXT("Json/Input/ScenarioSetupSample_0.json");
-	runInput.DeliveryBotSetupJsonPath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
-	runInput.PolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
-	runInputs.Add(runInput);
-
-	FString json;
-	TArray<FString> diagnostics;
-	TestTrue(TEXT("run queue writes"), USimulatorLaunchSubsystem::TryWriteScenarioRunQueueJson(runInputs, json, diagnostics));
-	TestEqual(TEXT("write diagnostics"), diagnostics.Num(), 0);
-	TestTrue(TEXT("schema field"), json.Contains(TEXT("\"schema\"")));
-	TestTrue(TEXT("scenario setup field"), json.Contains(TEXT("\"scenario_setup\"")));
-	TestTrue(TEXT("scenario setup path"), json.Contains(TEXT("ScenarioSetupSample_0.json")));
-	TestTrue(TEXT("policy spec field"), json.Contains(TEXT("\"policy_spec\"")));
-
-	TArray<FScenarioRunInput> parsedRunInputs;
-	TestTrue(TEXT("run queue reads"), USimulatorLaunchSubsystem::TryReadScenarioRunQueueJson(json, parsedRunInputs, diagnostics));
-	TestEqual(TEXT("read diagnostics"), diagnostics.Num(), 0);
-	TestEqual(TEXT("run input count"), parsedRunInputs.Num(), 1);
-	TestEqual(TEXT("pair id"), parsedRunInputs[0].PairId, FString(TEXT("sample_0")));
-	TestEqual(
-		TEXT("scenario setup"),
-		parsedRunInputs[0].ScenarioSetupJsonPath,
-		FString(TEXT("Json/Input/ScenarioSetupSample_0.json")));
-	TestEqual(
-		TEXT("delivery setup"),
-		parsedRunInputs[0].DeliveryBotSetupJsonPath,
-		FString(TEXT("Json/Input/DeliveryBotSetupSample_0.json")));
-	TestEqual(
-		TEXT("policy spec"),
-		parsedRunInputs[0].PolicySpecJsonPath,
-		FString(TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json")));
-
+	const FUserProjectRunSnapshotParseResult parseResult = FUserProjectRunSnapshot::Parse(projectPath, runId);
+	TestTrue(TEXT("snapshot parses"), parseResult.bSuccess);
 	return true;
 }
 

@@ -10,10 +10,15 @@
 #include "Scenario/Components/ScenarioPathFollowerComponent.h"
 #include "Scenario/Components/ScenarioPedestrianRuntimeComponent.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
-#include "Scenario/ScenarioCompiler.h"
-#include "Shared/ScenarioTemplateJson.h"
+#include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
+#include "Scenario/Editor/ScenarioCorridorHandleActor.h"
+#include "Scenario/Editor/ScenarioCorridorPreviewActor.h"
+#include "Scenario/ScenarioSampleWorldSpecAdapter.h"
+#include "Scenario/ScenarioSampler.h"
+#include "Shared/ScenarioDocumentJson.h"
 #include "UObject/ConstructorHelpers.h"
 #include "HAL/FileManager.h"
+#include "Misc/Crc.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonSerializer.h"
@@ -39,6 +44,13 @@ namespace
 	const FString RobotGoalMarkerAssetId(TEXT("goal_point"));
 	const FVector DefaultRobotStartLocationCm(-600.0, 0.0, 0.0);
 	const FVector DefaultRobotGoalLocationCm(600.0, 0.0, 0.0);
+	const FString CorridorVertexHandleIdPrefix(TEXT("corridor_vertex_"));
+	const FString CorridorSegmentHandleIdPrefix(TEXT("corridor_segment_"));
+	const double CorridorVertexHandleHeightCm = 32.0;
+	const double CorridorSegmentHandleHeightCm = 18.0;
+	const double CorridorVertexHandleScale = 0.28;
+	// Static obstacle 배치는 Corridor preview surface와 같은 curb-side 하강값을 사용.
+	const double CurbSideSurfaceZOffsetCm = -15.0;
 
 	FScenarioParamValue MakeStringParamValue(const FString& value)
 	{
@@ -62,6 +74,7 @@ UScenarioAuthoringSubsystem::UScenarioAuthoringSubsystem()
 	StaticObstacleClass = AScenarioStaticObstacle::StaticClass();
 	PedestrianClass = AScenarioPedestrian::StaticClass();
 	StaticObstaclePropCatalog = UScenarioStaticObstaclePropCatalog::MakeDefaultCatalogReference();
+	CorridorSurfaceCatalog = UScenarioCorridorSurfaceCatalog::MakeDefaultCatalogReference();
 
 	static ConstructorHelpers::FClassFinder<AScenarioPedestrian> pedestrianBlueprintClass(
 		TEXT("/Game/Blueprints/Scenario/BP_ScenarioPedestrian"));
@@ -110,10 +123,10 @@ void UScenarioAuthoringSubsystem::Deinitialize()
 void UScenarioAuthoringSubsystem::ClearDraft()
 {
 	ClearEditorView();
-	DraftScenarioTemplate = FScenarioTemplateDocument();
+	DraftScenario = FScenarioDocument();
 	DraftGroundRegions.Reset();
 	DraftPedestrianSpecs.Reset();
-	SourceScenarioTemplateJsonPath.Reset();
+	SourceProjectScenarioJsonPath.Reset();
 	bDirty = false;
 	NextStaticObstacleIndex = 1;
 	NextPedestrianIndex = 1;
@@ -134,7 +147,7 @@ void UScenarioAuthoringSubsystem::NewDraft()
 	}
 }
 
-bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonFile(
+bool UScenarioAuthoringSubsystem::LoadProjectScenarioJsonFile(
 	const FString& jsonFilePath,
 	FString& outResolvedJsonFilePath,
 	TArray<FString>& outDiagnostics)
@@ -145,29 +158,29 @@ bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonFile(
 	const FString trimmedJsonFilePath = jsonFilePath.TrimStartAndEnd();
 	if (trimmedJsonFilePath.IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("ScenarioSetup JSON file path is empty."));
+		outDiagnostics.Add(TEXT("Project scenario JSON file path is empty."));
 		return false;
 	}
 
-	outResolvedJsonFilePath = ResolveScenarioSetupLoadPath(trimmedJsonFilePath);
+	outResolvedJsonFilePath = ResolveProjectScenarioLoadPath(trimmedJsonFilePath);
 
-	const FScenarioTemplateParseResult parseResult = FScenarioTemplateJson::ParseFromFile(outResolvedJsonFilePath);
+	const FScenarioDocumentParseResult parseResult = FScenarioDocumentJson::ParseProjectScenarioFromFile(outResolvedJsonFilePath);
 	AppendSchemaDiagnostics(parseResult.Diagnostics, outDiagnostics);
 	if (!parseResult.bSuccess)
 	{
-		outDiagnostics.Add(TEXT("ScenarioTemplate JSON import failed validation."));
+		outDiagnostics.Add(TEXT("Project scenario JSON import failed validation."));
 		return false;
 	}
 
-	DraftScenarioTemplate = parseResult.Document;
+	DraftScenario = parseResult.Document;
 	DraftGroundRegions.Reset();
 	DraftPedestrianSpecs.Reset();
-	SourceScenarioTemplateJsonPath = outResolvedJsonFilePath;
+	SourceProjectScenarioJsonPath = outResolvedJsonFilePath;
 	bDirty = false;
 	return RebuildEditorViewFromDraft(outDiagnostics);
 }
 
-bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonString(
+bool UScenarioAuthoringSubsystem::LoadProjectScenarioJsonString(
 	const FString& jsonString,
 	TArray<FString>& outDiagnostics)
 {
@@ -175,22 +188,22 @@ bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonString(
 
 	if (jsonString.IsEmpty())
 	{
-		outDiagnostics.Add(TEXT("ScenarioSetup JSON string is empty."));
+		outDiagnostics.Add(TEXT("Project scenario JSON string is empty."));
 		return false;
 	}
 
-	const FScenarioTemplateParseResult parseResult = FScenarioTemplateJson::ParseFromString(jsonString);
+	const FScenarioDocumentParseResult parseResult = FScenarioDocumentJson::ParseProjectScenarioFromString(jsonString);
 	AppendSchemaDiagnostics(parseResult.Diagnostics, outDiagnostics);
 	if (!parseResult.bSuccess)
 	{
-		outDiagnostics.Add(TEXT("ScenarioTemplate JSON import failed validation."));
+		outDiagnostics.Add(TEXT("Project scenario JSON import failed validation."));
 		return false;
 	}
 
-	DraftScenarioTemplate = parseResult.Document;
+	DraftScenario = parseResult.Document;
 	DraftGroundRegions.Reset();
 	DraftPedestrianSpecs.Reset();
-	SourceScenarioTemplateJsonPath.Reset();
+	SourceProjectScenarioJsonPath.Reset();
 	bDirty = false;
 	return RebuildEditorViewFromDraft(outDiagnostics);
 }
@@ -200,10 +213,23 @@ bool UScenarioAuthoringSubsystem::ImportCompiledWorldSpec(
 	TArray<FString>& outDiagnostics)
 {
 	outDiagnostics.Reset();
-	ImportWorldSpecAsScenarioTemplate(worldSpec);
-	SourceScenarioTemplateJsonPath.Reset();
+	ImportWorldSpecAsScenarioDocument(worldSpec);
+	SourceProjectScenarioJsonPath.Reset();
 	bDirty = false;
 	return RebuildEditorViewFromDraft(outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::RefreshEditorPreviewFromDraft(TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+
+	if (IsDraftScenarioEmpty())
+	{
+		InitializeDraftDefaults();
+		return RebuildEditorViewFromDraft(outDiagnostics);
+	}
+
+	return RefreshGeneratedEditorPreviewActorsFromDraft(outDiagnostics);
 }
 
 void UScenarioAuthoringSubsystem::GetStaticObstaclePaletteEntries(TArray<FScenarioStaticObstaclePropEntry>& outEntries) const
@@ -221,6 +247,473 @@ bool UScenarioAuthoringSubsystem::TryGetStaticObstaclePropEntry(
 	FScenarioStaticObstaclePropEntry& outPropEntry) const
 {
 	return TryFindStaticObstacleProp(propId, outPropEntry);
+}
+
+void UScenarioAuthoringSubsystem::GetCorridorSurfaceEntries(TArray<FScenarioCorridorSurfaceEntry>& outEntries) const
+{
+	outEntries.Reset();
+
+	TSet<FName> seenSurfaceIds;
+	if (const UScenarioCorridorSurfaceCatalog* surfaceCatalog = GetCorridorSurfaceCatalog())
+	{
+		for (const FScenarioCorridorSurfaceEntry& entry : surfaceCatalog->GetEntries())
+		{
+			if (!entry.SurfaceId.IsNone() && !seenSurfaceIds.Contains(entry.SurfaceId))
+			{
+				FScenarioCorridorSurfaceEntry resolvedEntry;
+				if (surfaceCatalog->FindSurfaceEntryById(entry.SurfaceId, resolvedEntry))
+				{
+					outEntries.Add(resolvedEntry);
+				}
+				else
+				{
+					outEntries.Add(entry);
+				}
+				seenSurfaceIds.Add(entry.SurfaceId);
+			}
+		}
+	}
+
+	for (const FScenarioCorridorSurfaceEntry& entry : UScenarioCorridorSurfaceCatalog::MakeDefaultEntries())
+	{
+		if (!entry.SurfaceId.IsNone() && !seenSurfaceIds.Contains(entry.SurfaceId))
+		{
+			outEntries.Add(entry);
+			seenSurfaceIds.Add(entry.SurfaceId);
+		}
+	}
+}
+
+bool UScenarioAuthoringSubsystem::TryGetCorridorSurfaceEntry(
+	FName surfaceId,
+	FScenarioCorridorSurfaceEntry& outSurfaceEntry) const
+{
+	return TryFindCorridorSurfaceEntry(surfaceId, outSurfaceEntry);
+}
+
+FScenarioTemplateNumberValue UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(double value)
+{
+	return MakeFixedTemplateNumber(value);
+}
+
+FScenarioTemplateNumberValue UScenarioAuthoringSubsystem::MakeRangeTemplateNumberValue(double minValue, double maxValue)
+{
+	return MakeRangeTemplateNumber(minValue, maxValue);
+}
+
+FScenarioTemplateIntegerValue UScenarioAuthoringSubsystem::MakeRangeTemplateIntegerValue(
+	const int32 minValue,
+	const int32 maxValue)
+{
+	return MakeRangeTemplateInteger(minValue, maxValue);
+}
+
+FScenarioTemplateIntegerValue UScenarioAuthoringSubsystem::MakeFixedTemplateIntegerValue(const int32 value)
+{
+	return MakeFixedTemplateInteger(value);
+}
+
+double UScenarioAuthoringSubsystem::GetDraftCorridorAxisLengthMeters() const
+{
+	return MeasureCorridorAxisLengthMeters(DraftScenario.Corridor.Axis.PointsMeters);
+}
+
+bool UScenarioAuthoringSubsystem::SetDraftScenarioId(
+	const FString& newScenarioId,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+	const FString normalizedScenarioId = newScenarioId.TrimStartAndEnd();
+	if (normalizedScenarioId.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("scenario scenario_id must not be empty."));
+		return false;
+	}
+
+	if (!IsDraftScenarioEmpty() && DraftScenario.ScenarioId == normalizedScenarioId)
+	{
+		return true;
+	}
+
+	const FScenarioDocument previousScenario = DraftScenario;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	DraftScenario.ScenarioId = normalizedScenarioId;
+	return CommitScenarioMetadataDraftEdit(previousScenario, bPreviousDirty, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::SetDraftIntent(
+	const FString& intent,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+	const FString normalizedIntent = intent.TrimStartAndEnd();
+	if (normalizedIntent.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("scenario intent must not be empty."));
+		return false;
+	}
+
+	if (!IsDraftScenarioEmpty() && DraftScenario.Intent == normalizedIntent)
+	{
+		return true;
+	}
+
+	const FScenarioDocument previousTemplate = DraftScenario;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	DraftScenario.Intent = normalizedIntent;
+	return CommitScenarioMetadataDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::SetDraftRobotStartAnchor(
+	const FScenarioTemplateRobotAnchor& anchor,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+
+	FScenarioTemplateRobotAnchor normalizedAnchor = anchor;
+	normalizedAnchor.SegmentId = normalizedAnchor.SegmentId.TrimStartAndEnd();
+	normalizedAnchor.LaneId = normalizedAnchor.LaneId.TrimStartAndEnd();
+
+	const FScenarioDocument previousTemplate = DraftScenario;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	if (!ValidateRobotAnchor(normalizedAnchor, TEXT("robot.start"), outDiagnostics))
+	{
+		DraftScenario = previousTemplate;
+		bDirty = bPreviousDirty;
+		return false;
+	}
+
+	DraftScenario.Robot.Start = normalizedAnchor;
+	return CommitRobotDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::SetDraftRobotGoalAnchor(
+	const FScenarioTemplateRobotAnchor& anchor,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+
+	FScenarioTemplateRobotAnchor normalizedAnchor = anchor;
+	normalizedAnchor.SegmentId = normalizedAnchor.SegmentId.TrimStartAndEnd();
+	normalizedAnchor.LaneId = normalizedAnchor.LaneId.TrimStartAndEnd();
+
+	const FScenarioDocument previousTemplate = DraftScenario;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	if (!ValidateRobotAnchor(normalizedAnchor, TEXT("robot.goal"), outDiagnostics))
+	{
+		DraftScenario = previousTemplate;
+		bDirty = bPreviousDirty;
+		return false;
+	}
+
+	DraftScenario.Robot.Goal = normalizedAnchor;
+	return CommitRobotDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::SetCorridorAxisPointsMeters(
+	const TArray<FVector2D>& pointsMeters,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+
+	FString failureReason;
+	if (!AreCorridorAxisPointsValid(pointsMeters, failureReason))
+	{
+		outDiagnostics.Add(failureReason);
+		return false;
+	}
+
+	const FScenarioDocument previousTemplate = DraftScenario;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	const double oldLengthMeters = MeasureCorridorAxisLengthMeters(DraftScenario.Corridor.Axis.PointsMeters);
+	DraftScenario.Corridor.Axis.Type = EScenarioCorridorAxisType::Polyline;
+	DraftScenario.Corridor.Axis.PointsMeters = pointsMeters;
+	const double newLengthMeters = MeasureCorridorAxisLengthMeters(DraftScenario.Corridor.Axis.PointsMeters);
+
+	RescaleCorridorSegmentsForAxisLength(oldLengthMeters, newLengthMeters);
+	RescaleCorridorAlongReferences(oldLengthMeters, newLengthMeters);
+	RepairCorridorReferenceSegmentIds();
+	return CommitCorridorDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::SetCorridorWalkwayWidthMeters(
+	const FScenarioTemplateNumberValue& widthMeters,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+	if (!IsPositiveTemplateNumber(widthMeters))
+	{
+		outDiagnostics.Add(TEXT("Corridor walkway width must be a positive fixed value or positive min/max range."));
+		return false;
+	}
+
+	const FScenarioDocument previousTemplate = DraftScenario;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	DraftScenario.Corridor.WalkwayWidthMeters = widthMeters;
+	return CommitCorridorDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::SetCorridorSideLaneProfile(
+	EScenarioEditorCorridorSide side,
+	const TArray<FScenarioTemplateLaneRule>& lanes,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+	const FString path = side == EScenarioEditorCorridorSide::Building
+		? TEXT("$.corridor.building_side")
+		: TEXT("$.corridor.curb_side");
+	if (!ValidateCorridorLaneProfile(lanes, path, outDiagnostics))
+	{
+		return false;
+	}
+
+	TArray<FScenarioTemplateLaneRule> normalizedLanes = lanes;
+	for (FScenarioTemplateLaneRule& lane : normalizedLanes)
+	{
+		lane.SurfaceId = lane.SurfaceId.TrimStartAndEnd();
+	}
+
+	const FScenarioDocument previousTemplate = DraftScenario;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	if (side == EScenarioEditorCorridorSide::Building)
+	{
+		DraftScenario.Corridor.BuildingSide = normalizedLanes;
+	}
+	else
+	{
+		DraftScenario.Corridor.CurbSide = normalizedLanes;
+	}
+
+	return CommitCorridorDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::SetCorridorSegments(
+	const TArray<FScenarioTemplateSegment>& segments,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+
+	const FScenarioDocument previousTemplate = DraftScenario;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	const double axisLengthMeters = MeasureCorridorAxisLengthMeters(DraftScenario.Corridor.Axis.PointsMeters);
+	TArray<FScenarioTemplateSegment> normalizedSegments = segments;
+	for (FScenarioTemplateSegment& segment : normalizedSegments)
+	{
+		segment.SegmentId = segment.SegmentId.TrimStartAndEnd();
+		if (segment.ReplacedBySurfaceId.bIsSet)
+		{
+			if (segment.ReplacedBySurfaceId.Mode == EScenarioTemplateStringValueMode::Choices)
+			{
+				for (FString& choice : segment.ReplacedBySurfaceId.Choices)
+				{
+					choice = choice.TrimStartAndEnd();
+				}
+			}
+			else
+			{
+				segment.ReplacedBySurfaceId.FixedValue = segment.ReplacedBySurfaceId.FixedValue.TrimStartAndEnd();
+			}
+		}
+	}
+
+	if (!ValidateCorridorSegments(normalizedSegments, axisLengthMeters, outDiagnostics))
+	{
+		DraftScenario = previousTemplate;
+		bDirty = bPreviousDirty;
+		return false;
+	}
+
+	DraftScenario.Corridor.Segments = normalizedSegments;
+	RepairCorridorReferenceSegmentIds();
+	return CommitCorridorDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::SetObstacleMinClearWidthMeters(
+	const FScenarioTemplateNumberValue& widthMeters,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+	if (!IsPositiveTemplateNumber(widthMeters))
+	{
+		outDiagnostics.Add(TEXT("Obstacle min_clear_width_m must be a positive fixed value or positive min/max range."));
+		return false;
+	}
+
+	const FScenarioDocument previousTemplate = DraftScenario;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	DraftScenario.Obstacles.MinClearWidthMeters = widthMeters;
+	return CommitObstacleDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::SetObstaclePlacements(
+	const TArray<FScenarioTemplateObstaclePlacement>& placements,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+
+	TArray<FScenarioTemplateObstaclePlacement> normalizedPlacements = placements;
+	for (FScenarioTemplateObstaclePlacement& placement : normalizedPlacements)
+	{
+		placement.PlacementId = placement.PlacementId.TrimStartAndEnd();
+		placement.PropId = placement.PropId.TrimStartAndEnd();
+		placement.PatternId = placement.PatternId.TrimStartAndEnd();
+		placement.At.SegmentId = placement.At.SegmentId.TrimStartAndEnd();
+		placement.At.LaneId = placement.At.LaneId.TrimStartAndEnd();
+		for (FString& segmentId : placement.Zone.SegmentIds)
+		{
+			segmentId = segmentId.TrimStartAndEnd();
+		}
+		for (FString& laneId : placement.Zone.LaneIds)
+		{
+			laneId = laneId.TrimStartAndEnd();
+		}
+		for (FString& categoryId : placement.Palette.CategoryIds)
+		{
+			categoryId = categoryId.TrimStartAndEnd();
+		}
+		for (FString& classId : placement.Palette.ClassIds)
+		{
+			classId = classId.TrimStartAndEnd();
+		}
+	}
+
+	if (!ValidateObstaclePlacements(normalizedPlacements, outDiagnostics))
+	{
+		return false;
+	}
+
+	const FScenarioDocument previousTemplate = DraftScenario;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	DraftScenario.Obstacles.Placements = normalizedPlacements;
+	RepairCorridorReferenceSegmentIds();
+	return CommitObstacleDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::UpdateCorridorVertexHandleTransform(
+	const FString& handleId,
+	const FTransform& transform,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+
+	int32 vertexIndex = INDEX_NONE;
+	if (!TryParseCorridorVertexHandleId(handleId, vertexIndex))
+	{
+		outFailureReason = TEXT("Invalid corridor vertex handle id.");
+		return false;
+	}
+
+	TArray<FVector2D> pointsMeters = DraftScenario.Corridor.Axis.PointsMeters;
+	if (!pointsMeters.IsValidIndex(vertexIndex))
+	{
+		outFailureReason = FString::Printf(TEXT("Corridor vertex handle index %d is out of range."), vertexIndex);
+		return false;
+	}
+
+	const FVector locationCm = transform.GetLocation();
+	pointsMeters[vertexIndex] = FVector2D(locationCm.X * CentimetersToMeters, locationCm.Y * CentimetersToMeters);
+	return ApplyCorridorAxisPointsEdit(pointsMeters, false, outFailureReason);
+}
+
+bool UScenarioAuthoringSubsystem::UpdateCorridorSegmentHandleTransform(
+	const FString& handleId,
+	const FTransform& transform,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+
+	int32 segmentIndex = INDEX_NONE;
+	if (!TryParseCorridorSegmentHandleId(handleId, segmentIndex))
+	{
+		outFailureReason = TEXT("Invalid corridor segment handle id.");
+		return false;
+	}
+
+	TArray<FVector2D> pointsMeters = DraftScenario.Corridor.Axis.PointsMeters;
+	if (!pointsMeters.IsValidIndex(segmentIndex) || !pointsMeters.IsValidIndex(segmentIndex + 1))
+	{
+		outFailureReason = FString::Printf(TEXT("Corridor segment handle index %d is out of range."), segmentIndex);
+		return false;
+	}
+
+	const FTransform currentHandleTransform = MakeCorridorSegmentHandleTransform(
+		pointsMeters[segmentIndex],
+		pointsMeters[segmentIndex + 1]);
+	const FVector currentLocationCm = currentHandleTransform.GetLocation();
+	const FVector requestedLocationCm = transform.GetLocation();
+	const FVector2D centerMeters(currentLocationCm.X * CentimetersToMeters, currentLocationCm.Y * CentimetersToMeters);
+	const FVector2D deltaMeters(
+		(requestedLocationCm.X - currentLocationCm.X) * CentimetersToMeters,
+		(requestedLocationCm.Y - currentLocationCm.Y) * CentimetersToMeters);
+	const double currentYawDegrees = currentHandleTransform.GetRotation().Rotator().Yaw;
+	const double requestedYawDegrees = transform.GetRotation().Rotator().Yaw;
+	const double deltaYawRadians = FMath::DegreesToRadians(
+		FMath::FindDeltaAngleDegrees(currentYawDegrees, requestedYawDegrees));
+	const double cosYaw = FMath::Cos(deltaYawRadians);
+	const double sinYaw = FMath::Sin(deltaYawRadians);
+
+	auto transformPoint = [centerMeters, deltaMeters, cosYaw, sinYaw](const FVector2D& pointMeters)
+	{
+		const FVector2D localPoint = pointMeters - centerMeters;
+		const FVector2D rotatedPoint(
+			localPoint.X * cosYaw - localPoint.Y * sinYaw,
+			localPoint.X * sinYaw + localPoint.Y * cosYaw);
+		return centerMeters + rotatedPoint + deltaMeters;
+	};
+
+	pointsMeters[segmentIndex] = transformPoint(pointsMeters[segmentIndex]);
+	pointsMeters[segmentIndex + 1] = transformPoint(pointsMeters[segmentIndex + 1]);
+	return ApplyCorridorAxisPointsEdit(pointsMeters, false, outFailureReason);
 }
 
 void UScenarioAuthoringSubsystem::GetAuthoredStaticObstacleActors(TArray<AScenarioStaticObstacle*>& outActors) const
@@ -265,6 +758,11 @@ void UScenarioAuthoringSubsystem::GetEditorPlacementIgnoredActors(TArray<AActor*
 			outActors.Add(actor);
 		}
 	}
+
+	if (AActor* actor = CorridorPreviewActor.Get())
+	{
+		outActors.Add(actor);
+	}
 }
 
 bool UScenarioAuthoringSubsystem::CanPlaceStaticObstacle(
@@ -273,6 +771,19 @@ bool UScenarioAuthoringSubsystem::CanPlaceStaticObstacle(
 	FString& outFailureReason) const
 {
 	return CanPlaceStaticObstacleInternal(propId, transform, FString(), outFailureReason);
+}
+
+FTransform UScenarioAuthoringSubsystem::ResolveStaticObstaclePlacementTransform(const FTransform& transform) const
+{
+	FTransform resolvedTransform = transform;
+	FVector locationCm = transform.GetLocation();
+	double surfaceZOffsetCm = 0.0;
+	if (TryResolveCorridorSurfaceZOffsetCm(locationCm, surfaceZOffsetCm))
+	{
+		locationCm.Z = surfaceZOffsetCm;
+		resolvedTransform.SetLocation(locationCm);
+	}
+	return resolvedTransform;
 }
 
 bool UScenarioAuthoringSubsystem::CanPlaceEditorGroundActor(
@@ -353,18 +864,14 @@ bool UScenarioAuthoringSubsystem::CanPlaceStaticObstacleInternal(
 	}
 
 	const FVector2D candidateHalfExtent = ComputePlacementHalfExtent2D(candidateProp);
-	const FVector candidateLocation = transform.GetLocation();
-	if (candidateLocation.Z < -KINDA_SMALL_NUMBER)
+	const FTransform candidateTransform = ResolveStaticObstaclePlacementTransform(transform);
+	const FVector candidateLocation = candidateTransform.GetLocation();
+	double surfaceZOffsetCm = 0.0;
+	if (!TryResolveCorridorSurfaceZOffsetCm(transform.GetLocation(), surfaceZOffsetCm)
+		&& (candidateLocation.Z < -KINDA_SMALL_NUMBER || candidateLocation.Z > StaticObstacleGroundZToleranceCm))
 	{
 		outFailureReason = FString::Printf(
-			TEXT("Placement location Z must be 0.00 cm or higher. Current Z: %.2f."),
-			candidateLocation.Z);
-		return false;
-	}
-	if (candidateLocation.Z > StaticObstacleGroundZToleranceCm)
-	{
-		outFailureReason = FString::Printf(
-			TEXT("Placement location Z must be %.2f cm or lower. Current Z: %.2f."),
+			TEXT("Placement location Z must be between 0.00 cm and %.2f cm. Current Z: %.2f."),
 			StaticObstacleGroundZToleranceCm,
 			candidateLocation.Z);
 		return false;
@@ -413,7 +920,7 @@ bool UScenarioAuthoringSubsystem::AddPedestrian(
 		return false;
 	}
 
-	if (IsDraftScenarioTemplateEmpty())
+	if (IsDraftScenarioEmpty())
 	{
 		InitializeDraftDefaults();
 	}
@@ -457,7 +964,7 @@ bool UScenarioAuthoringSubsystem::SetRobotStartLocation(
 		return false;
 	}
 
-	if (IsDraftScenarioTemplateEmpty())
+	if (IsDraftScenarioEmpty())
 	{
 		InitializeDraftDefaults();
 	}
@@ -473,7 +980,7 @@ bool UScenarioAuthoringSubsystem::SetRobotStartLocation(
 		return false;
 	}
 
-	DraftScenarioTemplate.Robot.Start = MakeRobotAnchorFromLocationCm(transform.GetLocation());
+	DraftScenario.Robot.Start = MakeRobotAnchorFromLocationCm(transform.GetLocation());
 	outSpec = MakeDeliveryBotSpecFromTemplateRobot();
 	bDirty = true;
 
@@ -502,7 +1009,7 @@ bool UScenarioAuthoringSubsystem::SetRobotGoalLocation(
 		return false;
 	}
 
-	if (IsDraftScenarioTemplateEmpty())
+	if (IsDraftScenarioEmpty())
 	{
 		outFailureReason = TEXT("Robot start point must be placed before a goal point.");
 		return false;
@@ -519,7 +1026,7 @@ bool UScenarioAuthoringSubsystem::SetRobotGoalLocation(
 		return false;
 	}
 
-	DraftScenarioTemplate.Robot.Goal = MakeRobotAnchorFromLocationCm(transform.GetLocation());
+	DraftScenario.Robot.Goal = MakeRobotAnchorFromLocationCm(transform.GetLocation());
 	outSpec = MakeDeliveryBotSpecFromTemplateRobot();
 	bDirty = true;
 
@@ -538,7 +1045,8 @@ bool UScenarioAuthoringSubsystem::UpdateStaticObstacleTransform(
 	const FTransform& transform,
 	FString& outFailureReason)
 {
-	if (!CanUpdateStaticObstacleTransform(instanceId, transform, outFailureReason))
+	const FTransform resolvedTransform = ResolveStaticObstaclePlacementTransform(transform);
+	if (!CanUpdateStaticObstacleTransform(instanceId, resolvedTransform, outFailureReason))
 	{
 		return false;
 	}
@@ -560,9 +1068,11 @@ bool UScenarioAuthoringSubsystem::UpdateStaticObstacleTransform(
 	}
 
 	const FName propId(*placement->PropId);
-	*placement = MakeStaticObstaclePlacement(instanceId, propId, transform);
-	record->Transform = transform;
-	actor->SetActorTransform(transform, false, nullptr, ETeleportType::TeleportPhysics);
+	const bool bAllowBlocking = placement->bAllowBlocking;
+	*placement = MakeStaticObstaclePlacement(instanceId, propId, resolvedTransform);
+	placement->bAllowBlocking = bAllowBlocking;
+	record->Transform = resolvedTransform;
+	actor->SetActorTransform(resolvedTransform, false, nullptr, ETeleportType::TeleportPhysics);
 
 	bDirty = true;
 
@@ -571,8 +1081,8 @@ bool UScenarioAuthoringSubsystem::UpdateStaticObstacleTransform(
 		Verbose,
 		TEXT("Updated static obstacle transform | InstanceId: %s, Location: %s, Yaw: %.2f"),
 		*instanceId,
-		*transform.GetLocation().ToCompactString(),
-		transform.Rotator().Yaw);
+		*resolvedTransform.GetLocation().ToCompactString(),
+		resolvedTransform.Rotator().Yaw);
 
 	return true;
 }
@@ -587,7 +1097,7 @@ bool UScenarioAuthoringSubsystem::UpdateRobotStartPointTransform(
 		return false;
 	}
 
-	if (IsDraftScenarioTemplateEmpty())
+	if (IsDraftScenarioEmpty())
 	{
 		outFailureReason = TEXT("Robot route points are not initialized.");
 		return false;
@@ -599,7 +1109,7 @@ bool UScenarioAuthoringSubsystem::UpdateRobotStartPointTransform(
 	}
 
 	const FVector location = transform.GetLocation();
-	DraftScenarioTemplate.Robot.Start = MakeRobotAnchorFromLocationCm(location);
+	DraftScenario.Robot.Start = MakeRobotAnchorFromLocationCm(location);
 	RobotStartMarkerActor->SetActorLocation(location, false, nullptr, ETeleportType::TeleportPhysics);
 
 	bDirty = true;
@@ -616,7 +1126,7 @@ bool UScenarioAuthoringSubsystem::UpdateRobotGoalPointTransform(
 		return false;
 	}
 
-	if (IsDraftScenarioTemplateEmpty())
+	if (IsDraftScenarioEmpty())
 	{
 		outFailureReason = TEXT("Robot route points are not initialized.");
 		return false;
@@ -628,7 +1138,7 @@ bool UScenarioAuthoringSubsystem::UpdateRobotGoalPointTransform(
 	}
 
 	const FVector location = transform.GetLocation();
-	DraftScenarioTemplate.Robot.Goal = MakeRobotAnchorFromLocationCm(location);
+	DraftScenario.Robot.Goal = MakeRobotAnchorFromLocationCm(location);
 	RobotGoalMarkerActor->SetActorLocation(location, false, nullptr, ETeleportType::TeleportPhysics);
 
 	bDirty = true;
@@ -714,7 +1224,7 @@ bool UScenarioAuthoringSubsystem::RemoveStaticObstacle(
 		return false;
 	}
 
-	const int32 removedSpecCount = DraftScenarioTemplate.Obstacles.Placements.RemoveAll(
+	const int32 removedSpecCount = DraftScenario.Obstacles.Placements.RemoveAll(
 		[&instanceId](const FScenarioTemplateObstaclePlacement& placement)
 		{
 			return placement.PlacementId == instanceId;
@@ -761,7 +1271,7 @@ bool UScenarioAuthoringSubsystem::AddGroundRegion(
 		return false;
 	}
 
-	if (IsDraftScenarioTemplateEmpty())
+	if (IsDraftScenarioEmpty())
 	{
 		InitializeDraftDefaults();
 	}
@@ -980,20 +1490,21 @@ bool UScenarioAuthoringSubsystem::AddStaticObstacleInternal(
 	outActor = nullptr;
 	outSpec = FScenarioPlaceableInstanceSpec();
 
+	const FTransform resolvedTransform = ResolveStaticObstaclePlacementTransform(transform);
 	FString failureReason;
-	if (!CanPlaceStaticObstacle(propId, transform, failureReason))
+	if (!CanPlaceStaticObstacle(propId, resolvedTransform, failureReason))
 	{
 		return false;
 	}
 
-	if (IsDraftScenarioTemplateEmpty())
+	if (IsDraftScenarioEmpty())
 	{
 		InitializeDraftDefaults();
 	}
 
 	const FString instanceId = GenerateStaticObstacleInstanceId();
-	outSpec = MakeStaticObstacleSpec(instanceId, propId, transform);
-	const FScenarioTemplateObstaclePlacement placement = MakeStaticObstaclePlacement(instanceId, propId, transform);
+	outSpec = MakeStaticObstacleSpec(instanceId, propId, resolvedTransform);
+	const FScenarioTemplateObstaclePlacement placement = MakeStaticObstaclePlacement(instanceId, propId, resolvedTransform);
 
 	if (!SpawnEditorStaticObstacleActor(outSpec, outActor, failureReason))
 	{
@@ -1003,7 +1514,7 @@ bool UScenarioAuthoringSubsystem::AddStaticObstacleInternal(
 	FScenarioStaticObstaclePropEntry propEntry;
 	TryFindStaticObstacleProp(propId, propEntry);
 	AddStaticObstacleViewRecord(outSpec, propEntry, outActor);
-	DraftScenarioTemplate.Obstacles.Placements.Add(placement);
+	DraftScenario.Obstacles.Placements.Add(placement);
 	bDirty = true;
 	return true;
 }
@@ -1011,7 +1522,7 @@ bool UScenarioAuthoringSubsystem::AddStaticObstacleInternal(
 TArray<FScenarioPlaceableInstanceSpec> UScenarioAuthoringSubsystem::GetAuthoredStaticObstacleSpecs() const
 {
 	TArray<FScenarioPlaceableInstanceSpec> staticObstacleSpecs;
-	for (const FScenarioTemplateObstaclePlacement& placement : DraftScenarioTemplate.Obstacles.Placements)
+	for (const FScenarioTemplateObstaclePlacement& placement : DraftScenario.Obstacles.Placements)
 	{
 		if (placement.Kind != EScenarioTemplateObstaclePlacementKind::Fixed || placement.PropId.IsEmpty())
 		{
@@ -1023,7 +1534,7 @@ TArray<FScenarioPlaceableInstanceSpec> UScenarioAuthoringSubsystem::GetAuthoredS
 	return staticObstacleSpecs;
 }
 
-bool UScenarioAuthoringSubsystem::ExportScenarioSetupJsonString(
+bool UScenarioAuthoringSubsystem::ExportProjectScenarioJsonString(
 	FString& outJsonString,
 	TArray<FString>& outDiagnostics) const
 {
@@ -1035,31 +1546,31 @@ bool UScenarioAuthoringSubsystem::ExportScenarioSetupJsonString(
 	}
 
 	TArray<FScenarioSchemaDiagnostic> schemaDiagnostics;
-	const bool bWritten = FScenarioTemplateJson::TryWriteJson(DraftScenarioTemplate, outJsonString, schemaDiagnostics);
+	const bool bWritten = FScenarioDocumentJson::TryWriteProjectScenarioJson(DraftScenario, outJsonString, schemaDiagnostics);
 	AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
 	return bWritten;
 }
 
-bool UScenarioAuthoringSubsystem::ExportAndValidateScenarioSetupJsonString(
+bool UScenarioAuthoringSubsystem::ExportAndValidateProjectScenarioJsonString(
 	FString& outJsonString,
 	TArray<FString>& outDiagnostics) const
 {
-	if (!ExportScenarioSetupJsonString(outJsonString, outDiagnostics))
+	if (!ExportProjectScenarioJsonString(outJsonString, outDiagnostics))
 	{
 		return false;
 	}
 
-	FScenarioTemplateParseResult parseResult = FScenarioTemplateJson::ParseFromString(outJsonString);
+	FScenarioDocumentParseResult parseResult = FScenarioDocumentJson::ParseProjectScenarioFromString(outJsonString);
 	AppendSchemaDiagnostics(parseResult.Diagnostics, outDiagnostics);
 	if (!parseResult.bSuccess)
 	{
-		outDiagnostics.Add(TEXT("Exported ScenarioTemplate JSON failed validation."));
+		outDiagnostics.Add(TEXT("Exported project scenario JSON failed validation."));
 	}
 
 	return parseResult.bSuccess;
 }
 
-bool UScenarioAuthoringSubsystem::SaveScenarioSetupJsonFile(
+bool UScenarioAuthoringSubsystem::SaveProjectScenarioJsonFile(
 	const FString& jsonFilePath,
 	FString& outResolvedJsonFilePath,
 	TArray<FString>& outDiagnostics)
@@ -1068,14 +1579,14 @@ bool UScenarioAuthoringSubsystem::SaveScenarioSetupJsonFile(
 	if (jsonFilePath.IsEmpty())
 	{
 		outResolvedJsonFilePath.Reset();
-		outDiagnostics.Add(TEXT("ScenarioSetup JSON file path is empty."));
+		outDiagnostics.Add(TEXT("Project scenario JSON file path is empty."));
 		return false;
 	}
 
 	outResolvedJsonFilePath = ResolveProjectRelativePath(jsonFilePath);
 
 	FString jsonString;
-	if (!ExportAndValidateScenarioSetupJsonString(jsonString, outDiagnostics))
+	if (!ExportAndValidateProjectScenarioJsonString(jsonString, outDiagnostics))
 	{
 		return false;
 	}
@@ -1088,11 +1599,11 @@ bool UScenarioAuthoringSubsystem::SaveScenarioSetupJsonFile(
 
 	if (!FFileHelper::SaveStringToFile(jsonString, *outResolvedJsonFilePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
-		outDiagnostics.Add(FString::Printf(TEXT("Failed to save ScenarioSetup JSON to '%s'."), *outResolvedJsonFilePath));
+		outDiagnostics.Add(FString::Printf(TEXT("Failed to save project scenario JSON to '%s'."), *outResolvedJsonFilePath));
 		return false;
 	}
 
-	SourceScenarioTemplateJsonPath = outResolvedJsonFilePath;
+	SourceProjectScenarioJsonPath = outResolvedJsonFilePath;
 	bDirty = false;
 	return true;
 }
@@ -1107,7 +1618,7 @@ FString UScenarioAuthoringSubsystem::ResolveProjectRelativePath(const FString& f
 	return filePath;
 }
 
-FString UScenarioAuthoringSubsystem::ResolveScenarioSetupLoadPath(const FString& filePath) const
+FString UScenarioAuthoringSubsystem::ResolveProjectScenarioLoadPath(const FString& filePath)
 {
 	FString normalizedPath = filePath;
 	normalizedPath.TrimStartAndEndInline();
@@ -1121,12 +1632,6 @@ FString UScenarioAuthoringSubsystem::ResolveScenarioSetupLoadPath(const FString&
 	if (!FPaths::IsRelative(normalizedPath))
 	{
 		return normalizedPath;
-	}
-
-	if (FPaths::GetPath(normalizedPath).IsEmpty())
-	{
-		return FPaths::ConvertRelativePathToFull(
-			FPaths::Combine(FPaths::ProjectDir(), ScenarioSetupInputDirectory, normalizedPath));
 	}
 
 	return ResolveProjectRelativePath(normalizedPath);
@@ -1351,12 +1856,34 @@ FScenarioTemplateNumberValue UScenarioAuthoringSubsystem::MakeFixedTemplateNumbe
 	return numberValue;
 }
 
+FScenarioTemplateNumberValue UScenarioAuthoringSubsystem::MakeRangeTemplateNumber(double minValue, double maxValue)
+{
+	FScenarioTemplateNumberValue numberValue;
+	numberValue.bIsSet = true;
+	numberValue.Mode = EScenarioTemplateNumberValueMode::Range;
+	numberValue.MinValue = FMath::Min(minValue, maxValue);
+	numberValue.MaxValue = FMath::Max(minValue, maxValue);
+	return numberValue;
+}
+
 FScenarioTemplateIntegerValue UScenarioAuthoringSubsystem::MakeFixedTemplateInteger(int32 value)
 {
 	FScenarioTemplateIntegerValue integerValue;
 	integerValue.bIsSet = true;
 	integerValue.Mode = EScenarioTemplateNumberValueMode::Fixed;
 	integerValue.FixedValue = value;
+	return integerValue;
+}
+
+FScenarioTemplateIntegerValue UScenarioAuthoringSubsystem::MakeRangeTemplateInteger(
+	const int32 minValue,
+	const int32 maxValue)
+{
+	FScenarioTemplateIntegerValue integerValue;
+	integerValue.bIsSet = true;
+	integerValue.Mode = EScenarioTemplateNumberValueMode::Range;
+	integerValue.MinValue = FMath::Min(minValue, maxValue);
+	integerValue.MaxValue = FMath::Max(minValue, maxValue);
 	return integerValue;
 }
 
@@ -1377,13 +1904,1039 @@ double UScenarioAuthoringSubsystem::GetFixedTemplateNumber(
 	return value.FixedValue;
 }
 
-UScenarioCompiler* UScenarioAuthoringSubsystem::CreateScenarioCompiler() const
+bool UScenarioAuthoringSubsystem::IsPositiveTemplateNumber(const FScenarioTemplateNumberValue& value)
 {
-	UScenarioCompiler* compiler = NewObject<UScenarioCompiler>();
-	if (!compiler) return nullptr;
+	if (!value.bIsSet)
+	{
+		return false;
+	}
 
-	compiler->StaticObstaclePropCatalog = StaticObstaclePropCatalog;
-	return compiler;
+	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
+	{
+		return FMath::IsFinite(value.MinValue)
+			&& FMath::IsFinite(value.MaxValue)
+			&& value.MinValue > KINDA_SMALL_NUMBER
+			&& value.MaxValue > KINDA_SMALL_NUMBER;
+	}
+
+	return FMath::IsFinite(value.FixedValue) && value.FixedValue > KINDA_SMALL_NUMBER;
+}
+
+bool UScenarioAuthoringSubsystem::IsValidOptionalTemplateNumber(const FScenarioTemplateNumberValue& value)
+{
+	if (!value.bIsSet)
+	{
+		return true;
+	}
+
+	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
+	{
+		return FMath::IsFinite(value.MinValue)
+			&& FMath::IsFinite(value.MaxValue)
+			&& value.MinValue <= value.MaxValue;
+	}
+
+	return FMath::IsFinite(value.FixedValue);
+}
+
+bool UScenarioAuthoringSubsystem::IsValidOptionalTemplateInteger(const FScenarioTemplateIntegerValue& value)
+{
+	if (!value.bIsSet)
+	{
+		return true;
+	}
+
+	return value.Mode != EScenarioTemplateNumberValueMode::Range || value.MinValue <= value.MaxValue;
+}
+
+bool UScenarioAuthoringSubsystem::IsNonNegativeTemplateInteger(const FScenarioTemplateIntegerValue& value)
+{
+	if (!IsValidOptionalTemplateInteger(value))
+	{
+		return false;
+	}
+	if (!value.bIsSet)
+	{
+		return true;
+	}
+	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
+	{
+		return value.MinValue >= 0 && value.MaxValue >= 0;
+	}
+	return value.FixedValue >= 0;
+}
+
+double UScenarioAuthoringSubsystem::MeasureCorridorAxisLengthMeters(const TArray<FVector2D>& pointsMeters)
+{
+	double lengthMeters = 0.0;
+	for (int32 index = 0; index < pointsMeters.Num() - 1; ++index)
+	{
+		lengthMeters += (pointsMeters[index + 1] - pointsMeters[index]).Size();
+	}
+
+	return lengthMeters;
+}
+
+bool UScenarioAuthoringSubsystem::AreCorridorAxisPointsValid(
+	const TArray<FVector2D>& pointsMeters,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+	if (pointsMeters.Num() < 2)
+	{
+		outFailureReason = TEXT("Corridor axis must contain at least two points.");
+		return false;
+	}
+
+	for (int32 index = 0; index < pointsMeters.Num(); ++index)
+	{
+		const FVector2D& pointMeters = pointsMeters[index];
+		if (!FMath::IsFinite(pointMeters.X) || !FMath::IsFinite(pointMeters.Y))
+		{
+			outFailureReason = FString::Printf(TEXT("Corridor axis point %d must be finite."), index);
+			return false;
+		}
+	}
+
+	if (MeasureCorridorAxisLengthMeters(pointsMeters) <= KINDA_SMALL_NUMBER)
+	{
+		outFailureReason = TEXT("Corridor axis length must be positive.");
+		return false;
+	}
+
+	return true;
+}
+
+FString UScenarioAuthoringSubsystem::MakeCorridorVertexHandleId(int32 vertexIndex)
+{
+	return FString::Printf(TEXT("%s%03d"), *CorridorVertexHandleIdPrefix, vertexIndex);
+}
+
+FString UScenarioAuthoringSubsystem::MakeCorridorSegmentHandleId(int32 segmentIndex)
+{
+	return FString::Printf(TEXT("%s%03d"), *CorridorSegmentHandleIdPrefix, segmentIndex);
+}
+
+bool UScenarioAuthoringSubsystem::TryParseCorridorVertexHandleId(const FString& handleId, int32& outVertexIndex)
+{
+	outVertexIndex = INDEX_NONE;
+	if (!handleId.StartsWith(CorridorVertexHandleIdPrefix))
+	{
+		return false;
+	}
+
+	const FString indexText = handleId.RightChop(CorridorVertexHandleIdPrefix.Len());
+	if (indexText.IsEmpty() || !indexText.IsNumeric())
+	{
+		return false;
+	}
+
+	outVertexIndex = FCString::Atoi(*indexText);
+	return outVertexIndex >= 0;
+}
+
+bool UScenarioAuthoringSubsystem::TryParseCorridorSegmentHandleId(const FString& handleId, int32& outSegmentIndex)
+{
+	outSegmentIndex = INDEX_NONE;
+	if (!handleId.StartsWith(CorridorSegmentHandleIdPrefix))
+	{
+		return false;
+	}
+
+	const FString indexText = handleId.RightChop(CorridorSegmentHandleIdPrefix.Len());
+	if (indexText.IsEmpty() || !indexText.IsNumeric())
+	{
+		return false;
+	}
+
+	outSegmentIndex = FCString::Atoi(*indexText);
+	return outSegmentIndex >= 0;
+}
+
+FTransform UScenarioAuthoringSubsystem::MakeCorridorVertexHandleTransform(const FVector2D& pointMeters)
+{
+	return FTransform(
+		FRotator::ZeroRotator,
+		FVector(pointMeters.X / CentimetersToMeters, pointMeters.Y / CentimetersToMeters, CorridorVertexHandleHeightCm),
+		FVector(CorridorVertexHandleScale));
+}
+
+FTransform UScenarioAuthoringSubsystem::MakeCorridorSegmentHandleTransform(
+	const FVector2D& startMeters,
+	const FVector2D& endMeters)
+{
+	const FVector2D segmentVectorMeters = endMeters - startMeters;
+	const FVector2D midpointMeters = (startMeters + endMeters) * 0.5;
+	const double yawDegrees = FMath::RadiansToDegrees(FMath::Atan2(segmentVectorMeters.Y, segmentVectorMeters.X));
+	return FTransform(
+		FRotator(0.0, yawDegrees, 0.0),
+		FVector(midpointMeters.X / CentimetersToMeters, midpointMeters.Y / CentimetersToMeters, CorridorSegmentHandleHeightCm),
+		FVector::OneVector);
+}
+
+bool UScenarioAuthoringSubsystem::CommitCorridorDraftEdit(
+	const FScenarioDocument& previousTemplate,
+	bool bPreviousDirty,
+	TArray<FString>& outDiagnostics)
+{
+	TArray<FScenarioSchemaDiagnostic> schemaDiagnostics;
+	if (!FScenarioDocumentJson::ValidateDocument(DraftScenario, schemaDiagnostics))
+	{
+		AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+		DraftScenario = previousTemplate;
+		bDirty = bPreviousDirty;
+		return false;
+	}
+	AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+
+	bDirty = true;
+	if (RebuildEditorViewFromDraft(outDiagnostics))
+	{
+		return true;
+	}
+
+	DraftScenario = previousTemplate;
+	bDirty = bPreviousDirty;
+
+	TArray<FString> rollbackDiagnostics;
+	RebuildEditorViewFromDraft(rollbackDiagnostics);
+	bDirty = bPreviousDirty;
+	outDiagnostics.Add(TEXT("Corridor edit was rejected because the editor preview could not be rebuilt."));
+	return false;
+}
+
+bool UScenarioAuthoringSubsystem::CommitObstacleDraftEdit(
+	const FScenarioDocument& previousTemplate,
+	bool bPreviousDirty,
+	TArray<FString>& outDiagnostics)
+{
+	TArray<FScenarioSchemaDiagnostic> schemaDiagnostics;
+	if (!FScenarioDocumentJson::ValidateDocument(DraftScenario, schemaDiagnostics))
+	{
+		AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+		DraftScenario = previousTemplate;
+		bDirty = bPreviousDirty;
+		return false;
+	}
+	AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+
+	bDirty = true;
+	if (RefreshGeneratedEditorPreviewActorsFromDraft(outDiagnostics))
+	{
+		return true;
+	}
+
+	DraftScenario = previousTemplate;
+	bDirty = bPreviousDirty;
+
+	TArray<FString> rollbackDiagnostics;
+	RefreshGeneratedEditorPreviewActorsFromDraft(rollbackDiagnostics);
+	SyncCorridorHandleActors();
+	bDirty = bPreviousDirty;
+	outDiagnostics.Add(TEXT("Obstacle edit was rejected because the editor preview could not be refreshed."));
+	return false;
+}
+
+bool UScenarioAuthoringSubsystem::CommitRobotDraftEdit(
+	const FScenarioDocument& previousTemplate,
+	bool bPreviousDirty,
+	TArray<FString>& outDiagnostics)
+{
+	TArray<FScenarioSchemaDiagnostic> schemaDiagnostics;
+	if (!FScenarioDocumentJson::ValidateDocument(DraftScenario, schemaDiagnostics))
+	{
+		AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+		DraftScenario = previousTemplate;
+		bDirty = bPreviousDirty;
+		return false;
+	}
+	AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+
+	bDirty = true;
+	if (RefreshGeneratedEditorPreviewActorsFromDraft(outDiagnostics))
+	{
+		return true;
+	}
+
+	DraftScenario = previousTemplate;
+	bDirty = bPreviousDirty;
+
+	TArray<FString> rollbackDiagnostics;
+	RefreshGeneratedEditorPreviewActorsFromDraft(rollbackDiagnostics);
+	SyncCorridorHandleActors();
+	bDirty = bPreviousDirty;
+	outDiagnostics.Add(TEXT("Robot edit was rejected because the editor preview could not be refreshed."));
+	return false;
+}
+
+bool UScenarioAuthoringSubsystem::CommitScenarioMetadataDraftEdit(
+	const FScenarioDocument& previousTemplate,
+	bool bPreviousDirty,
+	TArray<FString>& outDiagnostics)
+{
+	TArray<FScenarioSchemaDiagnostic> schemaDiagnostics;
+	if (!FScenarioDocumentJson::ValidateDocument(DraftScenario, schemaDiagnostics))
+	{
+		AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+		DraftScenario = previousTemplate;
+		bDirty = bPreviousDirty;
+		return false;
+	}
+
+	AppendSchemaDiagnostics(schemaDiagnostics, outDiagnostics);
+	bDirty = true;
+	return true;
+}
+
+bool UScenarioAuthoringSubsystem::ValidateCorridorLaneProfile(
+	const TArray<FScenarioTemplateLaneRule>& lanes,
+	const FString& path,
+	TArray<FString>& outDiagnostics) const
+{
+	for (int32 index = 0; index < lanes.Num(); ++index)
+	{
+		const FScenarioTemplateLaneRule& lane = lanes[index];
+		const FString surfacePath = FString::Printf(TEXT("%s[%d].surface"), *path, index);
+		if (!ValidateCorridorSurfaceId(lane.SurfaceId, surfacePath, outDiagnostics))
+		{
+			return false;
+		}
+		if (!IsPositiveTemplateNumber(lane.WidthMeters))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s[%d].width_m must be a positive fixed value or positive min/max range."), *path, index));
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool UScenarioAuthoringSubsystem::ValidateCorridorSegments(
+	const TArray<FScenarioTemplateSegment>& segments,
+	double axisLengthMeters,
+	TArray<FString>& outDiagnostics) const
+{
+	if (segments.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("Corridor must contain at least one segment."));
+		return false;
+	}
+
+	TSet<FString> segmentIds;
+	for (int32 index = 0; index < segments.Num(); ++index)
+	{
+		const FScenarioTemplateSegment& segment = segments[index];
+		const FString segmentId = segment.SegmentId.TrimStartAndEnd();
+		if (segmentId.IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("corridor.segments[%d].id must not be empty."), index));
+			return false;
+		}
+		if (segmentIds.Contains(segmentId))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("Duplicate corridor segment id '%s'."), *segmentId));
+			return false;
+		}
+		segmentIds.Add(segmentId);
+
+		const FString replacedByPath = FString::Printf(TEXT("corridor.segments[%d].replaced_by"), index);
+		if (!ValidateCorridorSurfaceValue(segment.ReplacedBySurfaceId, replacedByPath, outDiagnostics))
+		{
+			return false;
+		}
+
+		const double startMeters = segment.AlongRangeMeters.StartMeters;
+		const double endMeters = segment.AlongRangeMeters.EndMeters;
+		if (!FMath::IsFinite(startMeters) || !FMath::IsFinite(endMeters))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("corridor.segments[%d].along_range_m must be finite."), index));
+			return false;
+		}
+		if (startMeters < -KINDA_SMALL_NUMBER || endMeters > axisLengthMeters + KINDA_SMALL_NUMBER)
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("corridor.segments[%d].along_range_m must stay within the corridor axis length."), index));
+			return false;
+		}
+		if (endMeters <= startMeters + KINDA_SMALL_NUMBER)
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("corridor.segments[%d].along_range_m must have positive length."), index));
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool UScenarioAuthoringSubsystem::ValidateCorridorSurfaceId(
+	const FString& surfaceId,
+	const FString& path,
+	TArray<FString>& outDiagnostics) const
+{
+	const FString normalizedSurfaceId = surfaceId.TrimStartAndEnd();
+	if (normalizedSurfaceId.IsEmpty())
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("%s must not be empty."), *path));
+		return false;
+	}
+
+	FScenarioCorridorSurfaceEntry surfaceEntry;
+	if (!TryFindCorridorSurfaceEntry(FName(*normalizedSurfaceId), surfaceEntry))
+	{
+		outDiagnostics.Add(FString::Printf(
+			TEXT("%s references unknown Corridor surface '%s'."),
+			*path,
+			*normalizedSurfaceId));
+		return false;
+	}
+
+	return true;
+}
+
+bool UScenarioAuthoringSubsystem::ValidateCorridorSurfaceValue(
+	const FScenarioTemplateStringValue& value,
+	const FString& path,
+	TArray<FString>& outDiagnostics) const
+{
+	if (!value.bIsSet)
+	{
+		return true;
+	}
+
+	if (value.Mode == EScenarioTemplateStringValueMode::Choices)
+	{
+		if (value.Choices.IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s choices must not be empty."), *path));
+			return false;
+		}
+
+		for (int32 choiceIndex = 0; choiceIndex < value.Choices.Num(); ++choiceIndex)
+		{
+			const FString choicePath = FString::Printf(TEXT("%s.choices[%d]"), *path, choiceIndex);
+			if (!ValidateCorridorSurfaceId(value.Choices[choiceIndex], choicePath, outDiagnostics))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	return ValidateCorridorSurfaceId(value.FixedValue, path, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::ValidateObstaclePlacements(
+	const TArray<FScenarioTemplateObstaclePlacement>& placements,
+	TArray<FString>& outDiagnostics) const
+{
+	auto validateRequiredNumber =
+		[this, &outDiagnostics](const FScenarioTemplateNumberValue& value, const FString& path)
+	{
+		if (!value.bIsSet || !IsValidOptionalTemplateNumber(value))
+		{
+			outDiagnostics.Add(FString::Printf(
+				TEXT("%s must be a finite fixed number or finite min/max range."),
+				*path));
+			return false;
+		}
+		return true;
+	};
+
+	auto validateOptionalNumber =
+		[this, &outDiagnostics](const FScenarioTemplateNumberValue& value, const FString& path)
+	{
+		if (!IsValidOptionalTemplateNumber(value))
+		{
+			outDiagnostics.Add(FString::Printf(
+				TEXT("%s must be unset, a finite fixed number, or a finite min/max range."),
+				*path));
+			return false;
+		}
+		return true;
+	};
+
+	auto validateNonNegativeNumber =
+		[this, &outDiagnostics, &validateOptionalNumber](const FScenarioTemplateNumberValue& value, const FString& path)
+	{
+		if (!validateOptionalNumber(value, path))
+		{
+			return false;
+		}
+		if (!value.bIsSet)
+		{
+			return true;
+		}
+		if (value.Mode == EScenarioTemplateNumberValueMode::Range)
+		{
+			if (value.MinValue < 0.0 || value.MaxValue < 0.0)
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s must not contain negative values."), *path));
+				return false;
+			}
+			return true;
+		}
+		if (value.FixedValue < 0.0)
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s must not be negative."), *path));
+			return false;
+		}
+		return true;
+	};
+
+	TSet<FString> placementIds;
+	for (int32 index = 0; index < placements.Num(); ++index)
+	{
+		const FScenarioTemplateObstaclePlacement& placement = placements[index];
+		const FString placementPath = FString::Printf(TEXT("obstacles.placements[%d]"), index);
+		if (placement.PlacementId.IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s.id must not be empty."), *placementPath));
+			return false;
+		}
+		if (placementIds.Contains(placement.PlacementId))
+		{
+			outDiagnostics.Add(FString::Printf(
+				TEXT("Duplicate obstacle placement id '%s'."),
+				*placement.PlacementId));
+			return false;
+		}
+		placementIds.Add(placement.PlacementId);
+
+		if (!IsNonNegativeTemplateInteger(placement.Count))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s.count must be unset or a non-negative fixed/range integer."), *placementPath));
+			return false;
+		}
+		if (!validateNonNegativeNumber(placement.SpacingMeters, FString::Printf(TEXT("%s.spacing_m"), *placementPath))
+			|| !validateNonNegativeNumber(placement.GapWidthMeters, FString::Printf(TEXT("%s.gap_width_m"), *placementPath))
+			|| !validateNonNegativeNumber(placement.DensityPer10Meters, FString::Printf(TEXT("%s.density_per_10m"), *placementPath))
+			|| !validateOptionalNumber(placement.YawDegrees, FString::Printf(TEXT("%s.yaw_deg"), *placementPath)))
+		{
+			return false;
+		}
+
+		if (placement.Kind == EScenarioTemplateObstaclePlacementKind::Fixed
+			|| placement.Kind == EScenarioTemplateObstaclePlacementKind::Pattern)
+		{
+			if (placement.PropId.IsEmpty())
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s.prop is required for fixed and pattern placement."), *placementPath));
+				return false;
+			}
+
+			FScenarioStaticObstaclePropEntry propEntry;
+			if (!TryFindStaticObstacleProp(FName(*placement.PropId), propEntry))
+			{
+				outDiagnostics.Add(FString::Printf(
+					TEXT("%s.prop references unknown static obstacle prop '%s'."),
+					*placementPath,
+					*placement.PropId));
+				return false;
+			}
+
+			if (placement.Kind == EScenarioTemplateObstaclePlacementKind::Pattern && placement.PatternId.IsEmpty())
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s.pattern is required for pattern placement."), *placementPath));
+				return false;
+			}
+			if (!ValidateCorridorSegmentReference(
+				placement.At.SegmentId,
+				FString::Printf(TEXT("%s.at.segment"), *placementPath),
+				outDiagnostics))
+			{
+				return false;
+			}
+			if (!validateRequiredNumber(placement.At.AlongMeters, FString::Printf(TEXT("%s.at.along_m"), *placementPath))
+				|| !validateRequiredNumber(placement.At.OffsetMeters, FString::Printf(TEXT("%s.at.offset_m"), *placementPath)))
+			{
+				return false;
+			}
+		}
+		else if (placement.Kind == EScenarioTemplateObstaclePlacementKind::Scatter)
+		{
+			if (placement.Zone.SegmentIds.IsEmpty())
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s.zone.segments must contain at least one segment id."), *placementPath));
+				return false;
+			}
+			TSet<FString> zoneSegmentIds;
+			for (int32 segmentIndex = 0; segmentIndex < placement.Zone.SegmentIds.Num(); ++segmentIndex)
+			{
+				const FString path = FString::Printf(TEXT("%s.zone.segments[%d]"), *placementPath, segmentIndex);
+				const FString& segmentId = placement.Zone.SegmentIds[segmentIndex];
+				if (!ValidateCorridorSegmentReference(segmentId, path, outDiagnostics))
+				{
+					return false;
+				}
+				if (zoneSegmentIds.Contains(segmentId))
+				{
+					outDiagnostics.Add(FString::Printf(TEXT("Duplicate scatter zone segment '%s'."), *segmentId));
+					return false;
+				}
+				zoneSegmentIds.Add(segmentId);
+			}
+			if (placement.Zone.LaneIds.IsEmpty())
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s.zone.lanes must contain at least one lane id."), *placementPath));
+				return false;
+			}
+			if (!placement.DensityPer10Meters.bIsSet)
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s.density_per_10m is required for scatter placement."), *placementPath));
+				return false;
+			}
+			if (placement.Palette.CategoryIds.IsEmpty() && placement.Palette.ClassIds.IsEmpty())
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s.palette must contain categories or classes for scatter placement."), *placementPath));
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+bool UScenarioAuthoringSubsystem::ValidateCorridorSegmentReference(
+	const FString& segmentId,
+	const FString& path,
+	TArray<FString>& outDiagnostics) const
+{
+	const FString normalizedSegmentId = segmentId.TrimStartAndEnd();
+	if (normalizedSegmentId.IsEmpty())
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("%s must reference a Corridor segment."), *path));
+		return false;
+	}
+
+	const bool bFoundSegment = DraftScenario.Corridor.Segments.ContainsByPredicate(
+		[&normalizedSegmentId](const FScenarioTemplateSegment& segment)
+		{
+			return segment.SegmentId == normalizedSegmentId;
+		});
+	if (!bFoundSegment)
+	{
+		outDiagnostics.Add(FString::Printf(
+			TEXT("%s references unknown Corridor segment '%s'."),
+			*path,
+			*normalizedSegmentId));
+		return false;
+	}
+
+	return true;
+}
+
+bool UScenarioAuthoringSubsystem::ValidateRobotAnchor(
+	const FScenarioTemplateRobotAnchor& anchor,
+	const FString& path,
+	TArray<FString>& outDiagnostics) const
+{
+	if (anchor.Type != EScenarioTemplateRobotAnchorType::CorridorPose)
+	{
+		return true;
+	}
+
+	if (!ValidateCorridorSegmentReference(
+			anchor.SegmentId,
+			FString::Printf(TEXT("%s.segment"), *path),
+			outDiagnostics))
+	{
+		return false;
+	}
+	if (!anchor.AlongMeters.bIsSet || !IsValidOptionalTemplateNumber(anchor.AlongMeters))
+	{
+		outDiagnostics.Add(FString::Printf(
+			TEXT("%s.along_m must be a finite fixed number or finite min/max range."),
+			*path));
+		return false;
+	}
+	if (!anchor.OffsetMeters.bIsSet || !IsValidOptionalTemplateNumber(anchor.OffsetMeters))
+	{
+		outDiagnostics.Add(FString::Printf(
+			TEXT("%s.offset_m must be a finite fixed number or finite min/max range."),
+			*path));
+		return false;
+	}
+
+	return true;
+}
+
+void UScenarioAuthoringSubsystem::RescaleCorridorAlongReferences(double oldLengthMeters, double newLengthMeters)
+{
+	if (oldLengthMeters <= KINDA_SMALL_NUMBER || newLengthMeters <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const double scale = newLengthMeters / oldLengthMeters;
+	auto scaleNumber = [scale](FScenarioTemplateNumberValue& numberValue)
+	{
+		if (!numberValue.bIsSet)
+		{
+			return;
+		}
+
+		if (numberValue.Mode == EScenarioTemplateNumberValueMode::Range)
+		{
+			numberValue.MinValue *= scale;
+			numberValue.MaxValue *= scale;
+			return;
+		}
+
+		numberValue.FixedValue *= scale;
+	};
+
+	if (DraftScenario.Robot.Start.Type == EScenarioTemplateRobotAnchorType::CorridorPose)
+	{
+		scaleNumber(DraftScenario.Robot.Start.AlongMeters);
+	}
+	if (DraftScenario.Robot.Goal.Type == EScenarioTemplateRobotAnchorType::CorridorPose)
+	{
+		scaleNumber(DraftScenario.Robot.Goal.AlongMeters);
+	}
+
+	for (FScenarioTemplateObstaclePlacement& placement : DraftScenario.Obstacles.Placements)
+	{
+		if (placement.Kind == EScenarioTemplateObstaclePlacementKind::Fixed
+			|| placement.Kind == EScenarioTemplateObstaclePlacementKind::Pattern)
+		{
+			scaleNumber(placement.At.AlongMeters);
+		}
+	}
+}
+
+void UScenarioAuthoringSubsystem::RescaleCorridorSegmentsForAxisLength(
+	double oldLengthMeters,
+	double newLengthMeters)
+{
+	if (newLengthMeters <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	if (DraftScenario.Corridor.Segments.IsEmpty())
+	{
+		FScenarioTemplateSegment mainSegment;
+		mainSegment.SegmentId = TEXT("main");
+		mainSegment.Type = EScenarioTemplateSegmentType::Straight;
+		mainSegment.AlongRangeMeters.StartMeters = 0.0;
+		mainSegment.AlongRangeMeters.EndMeters = newLengthMeters;
+		DraftScenario.Corridor.Segments.Add(mainSegment);
+		return;
+	}
+
+	double basisLengthMeters = oldLengthMeters;
+	if (basisLengthMeters <= KINDA_SMALL_NUMBER)
+	{
+		for (const FScenarioTemplateSegment& segment : DraftScenario.Corridor.Segments)
+		{
+			basisLengthMeters = FMath::Max(basisLengthMeters, segment.AlongRangeMeters.EndMeters);
+		}
+	}
+
+	const double scale = basisLengthMeters > KINDA_SMALL_NUMBER
+		? newLengthMeters / basisLengthMeters
+		: 1.0;
+	for (FScenarioTemplateSegment& segment : DraftScenario.Corridor.Segments)
+	{
+		segment.AlongRangeMeters.StartMeters =
+			FMath::Clamp(segment.AlongRangeMeters.StartMeters * scale, 0.0, newLengthMeters);
+		segment.AlongRangeMeters.EndMeters =
+			FMath::Clamp(segment.AlongRangeMeters.EndMeters * scale, 0.0, newLengthMeters);
+		if (segment.AlongRangeMeters.EndMeters <= segment.AlongRangeMeters.StartMeters + KINDA_SMALL_NUMBER)
+		{
+			segment.AlongRangeMeters.EndMeters = FMath::Min(newLengthMeters, segment.AlongRangeMeters.StartMeters + 0.01);
+		}
+	}
+}
+
+void UScenarioAuthoringSubsystem::RepairCorridorReferenceSegmentIds()
+{
+	auto repairAnchor = [this](FScenarioTemplateRobotAnchor& anchor)
+	{
+		if (anchor.Type != EScenarioTemplateRobotAnchorType::CorridorPose)
+		{
+			return;
+		}
+
+		const double alongMeters = GetFixedTemplateNumber(anchor.AlongMeters, 0.0);
+		anchor.SegmentId = FindCorridorSegmentIdForAlongMeters(alongMeters);
+	};
+
+	repairAnchor(DraftScenario.Robot.Start);
+	repairAnchor(DraftScenario.Robot.Goal);
+
+	for (FScenarioTemplateObstaclePlacement& placement : DraftScenario.Obstacles.Placements)
+	{
+		if (placement.Kind != EScenarioTemplateObstaclePlacementKind::Fixed
+			&& placement.Kind != EScenarioTemplateObstaclePlacementKind::Pattern)
+		{
+			continue;
+		}
+
+		const double alongMeters = GetFixedTemplateNumber(placement.At.AlongMeters, 0.0);
+		placement.At.SegmentId = FindCorridorSegmentIdForAlongMeters(alongMeters);
+	}
+}
+
+bool UScenarioAuthoringSubsystem::ApplyCorridorAxisPointsEdit(
+	const TArray<FVector2D>& pointsMeters,
+	bool bRebuildAllPreviewActors,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+
+	FString validationFailureReason;
+	if (!AreCorridorAxisPointsValid(pointsMeters, validationFailureReason))
+	{
+		outFailureReason = validationFailureReason;
+		return false;
+	}
+
+	const FScenarioDocument previousTemplate = DraftScenario;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	const double oldLengthMeters = MeasureCorridorAxisLengthMeters(DraftScenario.Corridor.Axis.PointsMeters);
+	DraftScenario.Corridor.Axis.Type = EScenarioCorridorAxisType::Polyline;
+	DraftScenario.Corridor.Axis.PointsMeters = pointsMeters;
+	const double newLengthMeters = MeasureCorridorAxisLengthMeters(DraftScenario.Corridor.Axis.PointsMeters);
+
+	RescaleCorridorSegmentsForAxisLength(oldLengthMeters, newLengthMeters);
+	RescaleCorridorAlongReferences(oldLengthMeters, newLengthMeters);
+	RepairCorridorReferenceSegmentIds();
+
+	TArray<FScenarioSchemaDiagnostic> schemaDiagnostics;
+	TArray<FString> diagnostics;
+	if (!FScenarioDocumentJson::ValidateDocument(DraftScenario, schemaDiagnostics))
+	{
+		AppendSchemaDiagnostics(schemaDiagnostics, diagnostics);
+		DraftScenario = previousTemplate;
+		bDirty = bPreviousDirty;
+		outFailureReason = diagnostics.IsEmpty()
+			? TEXT("Corridor axis edit failed schema validation.")
+			: FString::Join(diagnostics, TEXT(" "));
+		return false;
+	}
+
+	bDirty = true;
+	bool bPreviewRefreshed = false;
+	if (bRebuildAllPreviewActors)
+	{
+		TArray<FString> rebuildDiagnostics;
+		bPreviewRefreshed = RebuildEditorViewFromDraft(rebuildDiagnostics);
+		diagnostics.Append(rebuildDiagnostics);
+	}
+	else
+	{
+		TArray<FString> refreshDiagnostics;
+		bPreviewRefreshed = RefreshGeneratedEditorPreviewActorsFromDraft(refreshDiagnostics);
+		diagnostics.Append(refreshDiagnostics);
+		if (bPreviewRefreshed)
+		{
+			SyncCorridorHandleActors();
+		}
+	}
+
+	if (bPreviewRefreshed)
+	{
+		return true;
+	}
+
+	DraftScenario = previousTemplate;
+	bDirty = bPreviousDirty;
+	if (bRebuildAllPreviewActors)
+	{
+		TArray<FString> rollbackDiagnostics;
+		RebuildEditorViewFromDraft(rollbackDiagnostics);
+	}
+	else
+	{
+		TArray<FString> rollbackDiagnostics;
+		RefreshGeneratedEditorPreviewActorsFromDraft(rollbackDiagnostics);
+		SyncCorridorHandleActors();
+	}
+	bDirty = bPreviousDirty;
+	outFailureReason = diagnostics.IsEmpty()
+		? TEXT("Corridor axis edit was rejected because the editor preview could not be refreshed.")
+		: FString::Join(diagnostics, TEXT(" "));
+	return false;
+}
+
+FString UScenarioAuthoringSubsystem::FindCorridorSegmentIdForAlongMeters(double alongMeters) const
+{
+	const TArray<FScenarioTemplateSegment>& segments = DraftScenario.Corridor.Segments;
+	if (segments.IsEmpty())
+	{
+		return TEXT("main");
+	}
+
+	const FScenarioTemplateSegment* nearestSegment = &segments[0];
+	double nearestDistanceMeters = TNumericLimits<double>::Max();
+	for (const FScenarioTemplateSegment& segment : segments)
+	{
+		if (alongMeters >= segment.AlongRangeMeters.StartMeters - KINDA_SMALL_NUMBER
+			&& alongMeters <= segment.AlongRangeMeters.EndMeters + KINDA_SMALL_NUMBER)
+		{
+			return segment.SegmentId;
+		}
+
+		const double distanceMeters = FMath::Min(
+			FMath::Abs(alongMeters - segment.AlongRangeMeters.StartMeters),
+			FMath::Abs(alongMeters - segment.AlongRangeMeters.EndMeters));
+		if (distanceMeters < nearestDistanceMeters)
+		{
+			nearestDistanceMeters = distanceMeters;
+			nearestSegment = &segment;
+		}
+	}
+
+	return nearestSegment ? nearestSegment->SegmentId : FString(TEXT("main"));
+}
+
+bool UScenarioAuthoringSubsystem::TryProjectLocationToCorridor(
+	const FVector& locationCm,
+	double& outAlongMeters,
+	double& outOffsetMeters,
+	FString& outSegmentId) const
+{
+	outAlongMeters = 0.0;
+	outOffsetMeters = 0.0;
+	outSegmentId.Reset();
+
+	const TArray<FVector2D>& pointsMeters = DraftScenario.Corridor.Axis.PointsMeters;
+	if (pointsMeters.Num() < 2)
+	{
+		return false;
+	}
+
+	const FVector2D locationMeters(locationCm.X * CentimetersToMeters, locationCm.Y * CentimetersToMeters);
+	double cumulativeLengthMeters = 0.0;
+	double bestDistanceSquared = TNumericLimits<double>::Max();
+	bool bFoundSegment = false;
+
+	for (int32 index = 0; index < pointsMeters.Num() - 1; ++index)
+	{
+		const FVector2D segmentStart = pointsMeters[index];
+		const FVector2D segmentEnd = pointsMeters[index + 1];
+		const FVector2D segmentVector = segmentEnd - segmentStart;
+		const double segmentLengthSquared = segmentVector.SizeSquared();
+		const double segmentLengthMeters = FMath::Sqrt(segmentLengthSquared);
+		if (segmentLengthMeters <= KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+
+		const double projectedAlpha = FMath::Clamp(
+			FVector2D::DotProduct(locationMeters - segmentStart, segmentVector) / segmentLengthSquared,
+			0.0,
+			1.0);
+		const FVector2D projectedPoint = segmentStart + (segmentVector * projectedAlpha);
+		const double distanceSquared = (locationMeters - projectedPoint).SizeSquared();
+		if (distanceSquared < bestDistanceSquared)
+		{
+			const FVector2D direction = segmentVector / segmentLengthMeters;
+			const FVector2D normal(-direction.Y, direction.X);
+			bestDistanceSquared = distanceSquared;
+			outAlongMeters = cumulativeLengthMeters + (segmentLengthMeters * projectedAlpha);
+			outOffsetMeters = FVector2D::DotProduct(locationMeters - projectedPoint, normal);
+			bFoundSegment = true;
+		}
+
+		cumulativeLengthMeters += segmentLengthMeters;
+	}
+
+	if (!bFoundSegment)
+	{
+		return false;
+	}
+
+	outSegmentId = FindCorridorSegmentIdForAlongMeters(outAlongMeters);
+	return true;
+}
+
+bool UScenarioAuthoringSubsystem::TryResolveCorridorPoseMeters(
+	double alongMeters,
+	double offsetMeters,
+	FVector2D& outPointMeters,
+	double& outYawDegrees) const
+{
+	outPointMeters = FVector2D::ZeroVector;
+	outYawDegrees = 0.0;
+
+	const TArray<FVector2D>& pointsMeters = DraftScenario.Corridor.Axis.PointsMeters;
+	if (pointsMeters.Num() < 2)
+	{
+		return false;
+	}
+
+	double remainingMeters = FMath::Max(alongMeters, 0.0);
+	FVector2D direction = pointsMeters[1] - pointsMeters[0];
+	FVector2D pointMeters = pointsMeters[0];
+
+	for (int32 index = 0; index < pointsMeters.Num() - 1; ++index)
+	{
+		const FVector2D segmentStart = pointsMeters[index];
+		const FVector2D segmentEnd = pointsMeters[index + 1];
+		const FVector2D segmentVector = segmentEnd - segmentStart;
+		const double segmentLengthMeters = segmentVector.Size();
+		if (segmentLengthMeters <= KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+
+		direction = segmentVector / segmentLengthMeters;
+		if (remainingMeters <= segmentLengthMeters || index == pointsMeters.Num() - 2)
+		{
+			const double segmentDistanceMeters = FMath::Clamp(remainingMeters, 0.0, segmentLengthMeters);
+			pointMeters = segmentStart + (direction * segmentDistanceMeters);
+			break;
+		}
+
+		remainingMeters -= segmentLengthMeters;
+	}
+
+	const FVector2D normal(-direction.Y, direction.X);
+	outPointMeters = pointMeters + (normal * offsetMeters);
+	outYawDegrees = FMath::RadiansToDegrees(FMath::Atan2(direction.Y, direction.X));
+	return true;
+}
+
+double UScenarioAuthoringSubsystem::ResolveCorridorSurfaceZOffsetCm(double offsetMeters) const
+{
+	const double walkwayWidthMeters = GetFixedTemplateNumber(DraftScenario.Corridor.WalkwayWidthMeters, 3.0);
+	const double halfWalkwayWidthMeters = FMath::Max(walkwayWidthMeters, 0.0) * 0.5;
+	if (offsetMeters <= halfWalkwayWidthMeters + KINDA_SMALL_NUMBER)
+	{
+		return 0.0;
+	}
+
+	double curbSideWidthMeters = 0.0;
+	for (const FScenarioTemplateLaneRule& laneRule : DraftScenario.Corridor.CurbSide)
+	{
+		curbSideWidthMeters += FMath::Max(GetFixedTemplateNumber(laneRule.WidthMeters, 0.0), 0.0);
+	}
+
+	return curbSideWidthMeters > KINDA_SMALL_NUMBER ? CurbSideSurfaceZOffsetCm : 0.0;
+}
+
+bool UScenarioAuthoringSubsystem::TryResolveCorridorSurfaceZOffsetCm(
+	const FVector& locationCm,
+	double& outSurfaceZOffsetCm) const
+{
+	outSurfaceZOffsetCm = 0.0;
+
+	double alongMeters = 0.0;
+	double offsetMeters = 0.0;
+	FString segmentId;
+	if (!TryProjectLocationToCorridor(locationCm, alongMeters, offsetMeters, segmentId))
+	{
+		return false;
+	}
+
+	outSurfaceZOffsetCm = ResolveCorridorSurfaceZOffsetCm(offsetMeters);
+	return true;
 }
 
 const UScenarioStaticObstaclePropCatalog* UScenarioAuthoringSubsystem::GetStaticObstaclePropCatalog() const
@@ -1412,6 +2965,43 @@ bool UScenarioAuthoringSubsystem::TryFindStaticObstacleProp(
 	if (!propCatalog) return false;
 
 	return propCatalog->FindPropEntryById(propId, outPropEntry);
+}
+
+const UScenarioCorridorSurfaceCatalog* UScenarioAuthoringSubsystem::GetCorridorSurfaceCatalog() const
+{
+	const UScenarioCorridorSurfaceCatalog* surfaceCatalog = CorridorSurfaceCatalog.LoadSynchronous();
+	if (!IsValid(surfaceCatalog))
+	{
+		UE_LOG(
+			LogScenarioAuthoring,
+			Verbose,
+			TEXT("Corridor surface catalog is unavailable; using built-in fallback entries. Path: %s"),
+			*CorridorSurfaceCatalog.ToSoftObjectPath().ToString());
+		return nullptr;
+	}
+
+	return surfaceCatalog;
+}
+
+bool UScenarioAuthoringSubsystem::TryFindCorridorSurfaceEntry(
+	FName surfaceId,
+	FScenarioCorridorSurfaceEntry& outSurfaceEntry) const
+{
+	outSurfaceEntry = FScenarioCorridorSurfaceEntry();
+	if (surfaceId.IsNone())
+	{
+		return false;
+	}
+
+	if (const UScenarioCorridorSurfaceCatalog* surfaceCatalog = GetCorridorSurfaceCatalog())
+	{
+		if (surfaceCatalog->FindSurfaceEntryById(surfaceId, outSurfaceEntry))
+		{
+			return true;
+		}
+	}
+
+	return UScenarioCorridorSurfaceCatalog::FindDefaultSurfaceEntryById(surfaceId, outSurfaceEntry);
 }
 
 double UScenarioAuthoringSubsystem::ComputePlacementRadius2D(const FScenarioStaticObstaclePropEntry& propEntry) const
@@ -1488,7 +3078,7 @@ FString UScenarioAuthoringSubsystem::GeneratePedestrianInstanceId()
 
 bool UScenarioAuthoringSubsystem::ContainsInstanceId(const FString& instanceId) const
 {
-	if (DraftScenarioTemplate.Obstacles.Placements.ContainsByPredicate(
+	if (DraftScenario.Obstacles.Placements.ContainsByPredicate(
 			[&instanceId](const FScenarioTemplateObstaclePlacement& placement)
 			{
 				return placement.PlacementId == instanceId;
@@ -1508,53 +3098,53 @@ bool UScenarioAuthoringSubsystem::ContainsInstanceId(const FString& instanceId) 
 	return false;
 }
 
-bool UScenarioAuthoringSubsystem::IsDraftScenarioTemplateEmpty() const
+bool UScenarioAuthoringSubsystem::IsDraftScenarioEmpty() const
 {
-	return DraftScenarioTemplate.TemplateId.IsEmpty()
-		&& DraftScenarioTemplate.Intent.IsEmpty()
-		&& DraftScenarioTemplate.Corridor.Axis.PointsMeters.IsEmpty()
-		&& DraftScenarioTemplate.Corridor.Segments.IsEmpty()
-		&& DraftScenarioTemplate.Obstacles.Placements.IsEmpty()
+	return DraftScenario.ScenarioId.IsEmpty()
+		&& DraftScenario.Intent.IsEmpty()
+		&& DraftScenario.Corridor.Axis.PointsMeters.IsEmpty()
+		&& DraftScenario.Corridor.Segments.IsEmpty()
+		&& DraftScenario.Obstacles.Placements.IsEmpty()
 		&& DraftGroundRegions.IsEmpty()
 		&& DraftPedestrianSpecs.IsEmpty();
 }
 
 void UScenarioAuthoringSubsystem::InitializeDraftDefaults()
 {
-	DraftScenarioTemplate = FScenarioTemplateDocument();
-	DraftScenarioTemplate.TemplateId = ScenarioId;
-	DraftScenarioTemplate.Intent = TEXT("Editor authored scenario template.");
-	DraftScenarioTemplate.Corridor.Axis.Type = EScenarioCorridorAxisType::Polyline;
-	DraftScenarioTemplate.Corridor.Axis.PointsMeters =
+	DraftScenario = FScenarioDocument();
+	DraftScenario.ScenarioId = ScenarioId;
+	DraftScenario.Intent = TEXT("Editor authored scenario.");
+	DraftScenario.Corridor.Axis.Type = EScenarioCorridorAxisType::Polyline;
+	DraftScenario.Corridor.Axis.PointsMeters =
 	{
 		FVector2D(DefaultRobotStartLocationCm.X * CentimetersToMeters, DefaultRobotStartLocationCm.Y * CentimetersToMeters),
 		FVector2D(DefaultRobotGoalLocationCm.X * CentimetersToMeters, DefaultRobotGoalLocationCm.Y * CentimetersToMeters)
 	};
-	DraftScenarioTemplate.Corridor.WalkwayWidthMeters = MakeFixedTemplateNumber(3.0);
+	DraftScenario.Corridor.WalkwayWidthMeters = MakeFixedTemplateNumber(3.0);
 
 	FScenarioTemplateSegment mainSegment;
 	mainSegment.SegmentId = TEXT("main");
 	mainSegment.Type = EScenarioTemplateSegmentType::Straight;
 	mainSegment.AlongRangeMeters.StartMeters = 0.0;
 	mainSegment.AlongRangeMeters.EndMeters =
-		(DraftScenarioTemplate.Corridor.Axis.PointsMeters[1] - DraftScenarioTemplate.Corridor.Axis.PointsMeters[0]).Size();
-	DraftScenarioTemplate.Corridor.Segments.Add(mainSegment);
+		MeasureCorridorAxisLengthMeters(DraftScenario.Corridor.Axis.PointsMeters);
+	DraftScenario.Corridor.Segments.Add(mainSegment);
 
 	FScenarioTemplateLaneRule buildingLane;
 	buildingLane.SurfaceId = TEXT("building");
 	buildingLane.WidthMeters = MakeFixedTemplateNumber(1.0);
-	DraftScenarioTemplate.Corridor.BuildingSide.Add(buildingLane);
+	DraftScenario.Corridor.BuildingSide.Add(buildingLane);
 
 	FScenarioTemplateLaneRule curbLane;
 	curbLane.SurfaceId = TEXT("road");
 	curbLane.WidthMeters = MakeFixedTemplateNumber(1.0);
-	DraftScenarioTemplate.Corridor.CurbSide.Add(curbLane);
+	DraftScenario.Corridor.CurbSide.Add(curbLane);
 
-	DraftScenarioTemplate.Obstacles.MinClearWidthMeters = MakeFixedTemplateNumber(1.0);
-	DraftScenarioTemplate.Pedestrians.Background.Count = MakeFixedTemplateInteger(0);
-	DraftScenarioTemplate.Pedestrians.Background.SpeedMetersPerSecond = MakeFixedTemplateNumber(1.2);
-	DraftScenarioTemplate.Robot.Start = MakeRobotAnchorFromLocationCm(DefaultRobotStartLocationCm);
-	DraftScenarioTemplate.Robot.Goal = MakeRobotAnchorFromLocationCm(DefaultRobotGoalLocationCm);
+	DraftScenario.Obstacles.MinClearWidthMeters = MakeFixedTemplateNumber(1.0);
+	DraftScenario.Pedestrians.Background.Count = MakeFixedTemplateInteger(0);
+	DraftScenario.Pedestrians.Background.SpeedMetersPerSecond = MakeFixedTemplateNumber(1.2);
+	DraftScenario.Robot.Start = MakeRobotAnchorFromLocationCm(DefaultRobotStartLocationCm);
+	DraftScenario.Robot.Goal = MakeRobotAnchorFromLocationCm(DefaultRobotGoalLocationCm);
 }
 
 bool UScenarioAuthoringSubsystem::EnsureSingleRobotRouteSpec(
@@ -1563,28 +3153,28 @@ bool UScenarioAuthoringSubsystem::EnsureSingleRobotRouteSpec(
 {
 	bOutDraftChanged = false;
 
-	if (IsDraftScenarioTemplateEmpty())
+	if (IsDraftScenarioEmpty())
 	{
 		InitializeDraftDefaults();
 		bOutDraftChanged = true;
 		outDiagnostics.Add(TEXT("Robot route was missing; default StartPoint and GoalPoint were added."));
 	}
 
-	if (DraftScenarioTemplate.TemplateId.IsEmpty())
+	if (DraftScenario.ScenarioId.IsEmpty())
 	{
-		DraftScenarioTemplate.TemplateId = ScenarioId;
+		DraftScenario.ScenarioId = ScenarioId;
 		bOutDraftChanged = true;
 	}
 
-	if (DraftScenarioTemplate.Intent.IsEmpty())
+	if (DraftScenario.Intent.IsEmpty())
 	{
-		DraftScenarioTemplate.Intent = TEXT("Editor authored scenario template.");
+		DraftScenario.Intent = TEXT("Editor authored scenario.");
 		bOutDraftChanged = true;
 	}
 
-	if (DraftScenarioTemplate.Corridor.Axis.PointsMeters.Num() < 2)
+	if (DraftScenario.Corridor.Axis.PointsMeters.Num() < 2)
 	{
-		DraftScenarioTemplate.Corridor.Axis.PointsMeters =
+		DraftScenario.Corridor.Axis.PointsMeters =
 		{
 			FVector2D(DefaultRobotStartLocationCm.X * CentimetersToMeters, DefaultRobotStartLocationCm.Y * CentimetersToMeters),
 			FVector2D(DefaultRobotGoalLocationCm.X * CentimetersToMeters, DefaultRobotGoalLocationCm.Y * CentimetersToMeters)
@@ -1592,21 +3182,21 @@ bool UScenarioAuthoringSubsystem::EnsureSingleRobotRouteSpec(
 		bOutDraftChanged = true;
 	}
 
-	if (DraftScenarioTemplate.Corridor.Segments.IsEmpty())
+	if (DraftScenario.Corridor.Segments.IsEmpty())
 	{
 		FScenarioTemplateSegment mainSegment;
 		mainSegment.SegmentId = TEXT("main");
 		mainSegment.Type = EScenarioTemplateSegmentType::Straight;
 		mainSegment.AlongRangeMeters.StartMeters = 0.0;
 		mainSegment.AlongRangeMeters.EndMeters =
-			(DraftScenarioTemplate.Corridor.Axis.PointsMeters.Last() - DraftScenarioTemplate.Corridor.Axis.PointsMeters[0]).Size();
-		DraftScenarioTemplate.Corridor.Segments.Add(mainSegment);
+			MeasureCorridorAxisLengthMeters(DraftScenario.Corridor.Axis.PointsMeters);
+		DraftScenario.Corridor.Segments.Add(mainSegment);
 		bOutDraftChanged = true;
 	}
 
-	if (!DraftScenarioTemplate.Corridor.WalkwayWidthMeters.bIsSet)
+	if (!DraftScenario.Corridor.WalkwayWidthMeters.bIsSet)
 	{
-		DraftScenarioTemplate.Corridor.WalkwayWidthMeters = MakeFixedTemplateNumber(3.0);
+		DraftScenario.Corridor.WalkwayWidthMeters = MakeFixedTemplateNumber(3.0);
 		bOutDraftChanged = true;
 	}
 
@@ -1615,7 +3205,7 @@ bool UScenarioAuthoringSubsystem::EnsureSingleRobotRouteSpec(
 
 bool UScenarioAuthoringSubsystem::ValidateSingleRobotRouteSpecForExport(TArray<FString>& outDiagnostics) const
 {
-	if (DraftScenarioTemplate.Corridor.Axis.PointsMeters.Num() < 2)
+	if (DraftScenario.Corridor.Axis.PointsMeters.Num() < 2)
 	{
 		outDiagnostics.Add(TEXT("Robot route axis must contain at least two points."));
 		return false;
@@ -1624,12 +3214,72 @@ bool UScenarioAuthoringSubsystem::ValidateSingleRobotRouteSpecForExport(TArray<F
 	return true;
 }
 
-FScenarioWorldSpec UScenarioAuthoringSubsystem::BuildDraftWorldSpecForPreview() const
+FScenarioWorldSpec UScenarioAuthoringSubsystem::BuildDraftWorldSpecForPreview(TArray<FString>* outDiagnostics) const
 {
-	FScenarioWorldSpec worldSpec;
-	worldSpec.RunConfig.TemplateId = DraftScenarioTemplate.TemplateId.IsEmpty() ? ScenarioId : DraftScenarioTemplate.TemplateId;
-	worldSpec.RunConfig.TemplateVersion = DraftScenarioTemplate.Version > 0 ? DraftScenarioTemplate.Version : FScenarioTemplateJson::SupportedVersion;
-	worldSpec.RunConfig.GeneratorVersion = FScenarioTemplateJson::SupportedVersion;
+	FScenarioSamplerRequest sampleRequest;
+	sampleRequest.SampleId = TEXT("editor_preview");
+	sampleRequest.ScenarioId = DraftScenario.ScenarioId.IsEmpty()
+		? ScenarioId
+		: DraftScenario.ScenarioId;
+	sampleRequest.Seed = BaseSeed + IterationIndex;
+	sampleRequest.SourceScenarioRef = SourceProjectScenarioJsonPath.IsEmpty()
+		? TEXT("editor_draft.scenario.json")
+		: SourceProjectScenarioJsonPath;
+	sampleRequest.SourceScenarioHash = FString::Printf(
+		TEXT("editor_preview:%08x"),
+		FCrc::StrCrc32(*(sampleRequest.SourceScenarioRef + DraftScenario.ScenarioId)));
+	sampleRequest.ProfileRef = TEXT("editor_preview_profile");
+	sampleRequest.ProfileHash = TEXT("editor_preview_profile_hash");
+	sampleRequest.SettingRef = TEXT("editor_preview_setting");
+	sampleRequest.SettingHash = TEXT("editor_preview_setting_hash");
+	sampleRequest.GeneratorVersion = FScenarioSampler::GeneratorVersion;
+
+	const FScenarioSamplerResult sampleResult =
+		FScenarioSampler::GenerateSample(DraftScenario, sampleRequest);
+	if (!sampleResult.bSuccess)
+	{
+		if (outDiagnostics)
+		{
+			AppendSchemaDiagnostics(sampleResult.Diagnostics, *outDiagnostics);
+			outDiagnostics->Add(TEXT("Scenario sampler preview failed; editor runtime preview was not materialized."));
+		}
+		FScenarioWorldSpec emptyWorldSpec;
+		ApplyEditorPreviewRunConfig(emptyWorldSpec);
+		return emptyWorldSpec;
+	}
+
+	FScenarioCompileResult compileResult =
+		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(sampleResult.Document);
+	if (!compileResult.bSuccess)
+	{
+		if (outDiagnostics)
+		{
+			AppendCompileDiagnostics(compileResult, *outDiagnostics);
+			outDiagnostics->Add(TEXT("ScenarioSample world spec preview failed; editor runtime preview was not materialized."));
+		}
+		FScenarioWorldSpec emptyWorldSpec;
+		ApplyEditorPreviewRunConfig(emptyWorldSpec);
+		return emptyWorldSpec;
+	}
+
+	if (outDiagnostics)
+	{
+		AppendSchemaDiagnostics(sampleResult.Diagnostics, *outDiagnostics);
+		AppendCompileDiagnostics(compileResult, *outDiagnostics);
+	}
+
+	FScenarioWorldSpec worldSpec = compileResult.WorldSpec;
+	ApplyEditorPreviewRunConfig(worldSpec);
+	worldSpec.GroundRegions.Append(DraftGroundRegions);
+	worldSpec.DynamicActors.Append(DraftPedestrianSpecs);
+	return worldSpec;
+}
+
+void UScenarioAuthoringSubsystem::ApplyEditorPreviewRunConfig(FScenarioWorldSpec& worldSpec) const
+{
+	worldSpec.RunConfig.TemplateId = DraftScenario.ScenarioId.IsEmpty() ? ScenarioId : DraftScenario.ScenarioId;
+	worldSpec.RunConfig.TemplateVersion = DraftScenario.Version > 0 ? DraftScenario.Version : FScenarioDocumentJson::SupportedVersion;
+	worldSpec.RunConfig.GeneratorVersion = FScenarioDocumentJson::SupportedVersion;
 	worldSpec.RunConfig.BaseSeed = BaseSeed;
 	worldSpec.RunConfig.IterationIndex = IterationIndex;
 
@@ -1644,30 +3294,21 @@ FScenarioWorldSpec UScenarioAuthoringSubsystem::BuildDraftWorldSpecForPreview() 
 	worldSpec.Seeds.DynamicActorSeed = BaseSeed + 303;
 	worldSpec.Seeds.EventSeed = BaseSeed + 404;
 	worldSpec.Seeds.PolicySeed = BaseSeed + 505;
-
-	worldSpec.Placeables.Add(MakeDeliveryBotSpecFromTemplateRobot());
-	for (const FScenarioTemplateObstaclePlacement& placement : DraftScenarioTemplate.Obstacles.Placements)
-	{
-		if (placement.Kind != EScenarioTemplateObstaclePlacementKind::Fixed || placement.PropId.IsEmpty())
-		{
-			continue;
-		}
-		worldSpec.Placeables.Add(MakeStaticObstacleSpecFromPlacement(placement));
-	}
-	worldSpec.GroundRegions = DraftGroundRegions;
-	worldSpec.DynamicActors = DraftPedestrianSpecs;
-	return worldSpec;
 }
 
 FScenarioTemplateRobotAnchor UScenarioAuthoringSubsystem::MakeRobotAnchorFromLocationCm(const FVector& locationCm) const
 {
 	FScenarioTemplateRobotAnchor anchor;
 	anchor.Type = EScenarioTemplateRobotAnchorType::CorridorPose;
-	anchor.SegmentId = DraftScenarioTemplate.Corridor.Segments.IsEmpty()
+	double alongMeters = locationCm.X * CentimetersToMeters;
+	double offsetMeters = locationCm.Y * CentimetersToMeters;
+	FString segmentId = DraftScenario.Corridor.Segments.IsEmpty()
 		? TEXT("main")
-		: DraftScenarioTemplate.Corridor.Segments[0].SegmentId;
-	anchor.AlongMeters = MakeFixedTemplateNumber(locationCm.X * CentimetersToMeters);
-	anchor.OffsetMeters = MakeFixedTemplateNumber(locationCm.Y * CentimetersToMeters);
+		: DraftScenario.Corridor.Segments[0].SegmentId;
+	TryProjectLocationToCorridor(locationCm, alongMeters, offsetMeters, segmentId);
+	anchor.SegmentId = segmentId;
+	anchor.AlongMeters = MakeFixedTemplateNumber(alongMeters);
+	anchor.OffsetMeters = MakeFixedTemplateNumber(offsetMeters);
 	anchor.LaneId = TEXT("walkway");
 	anchor.Heading = EScenarioTemplateRobotHeading::Forward;
 	return anchor;
@@ -1679,17 +3320,28 @@ FVector UScenarioAuthoringSubsystem::ResolveRobotAnchorLocationCm(
 {
 	if (anchor.Type == EScenarioTemplateRobotAnchorType::CorridorPose)
 	{
+		FVector2D pointMeters;
+		double yawDegrees = 0.0;
+		if (TryResolveCorridorPoseMeters(
+				GetFixedTemplateNumber(anchor.AlongMeters, bGoalAnchor ? DefaultRobotGoalLocationCm.X * CentimetersToMeters : DefaultRobotStartLocationCm.X * CentimetersToMeters),
+				GetFixedTemplateNumber(anchor.OffsetMeters, bGoalAnchor ? DefaultRobotGoalLocationCm.Y * CentimetersToMeters : DefaultRobotStartLocationCm.Y * CentimetersToMeters),
+				pointMeters,
+				yawDegrees))
+		{
+			return FVector(pointMeters.X / CentimetersToMeters, pointMeters.Y / CentimetersToMeters, 0.0);
+		}
+
 		return FVector(
 			GetFixedTemplateNumber(anchor.AlongMeters, bGoalAnchor ? DefaultRobotGoalLocationCm.X * CentimetersToMeters : DefaultRobotStartLocationCm.X * CentimetersToMeters) / CentimetersToMeters,
 			GetFixedTemplateNumber(anchor.OffsetMeters, bGoalAnchor ? DefaultRobotGoalLocationCm.Y * CentimetersToMeters : DefaultRobotStartLocationCm.Y * CentimetersToMeters) / CentimetersToMeters,
 			0.0);
 	}
 
-	if (DraftScenarioTemplate.Corridor.Axis.PointsMeters.Num() >= 2)
+	if (DraftScenario.Corridor.Axis.PointsMeters.Num() >= 2)
 	{
 		const FVector2D axisPointMeters = anchor.Type == EScenarioTemplateRobotAnchorType::Exit
-			? DraftScenarioTemplate.Corridor.Axis.PointsMeters.Last()
-			: DraftScenarioTemplate.Corridor.Axis.PointsMeters[0];
+			? DraftScenario.Corridor.Axis.PointsMeters.Last()
+			: DraftScenario.Corridor.Axis.PointsMeters[0];
 		return FVector(
 			axisPointMeters.X / CentimetersToMeters,
 			axisPointMeters.Y / CentimetersToMeters,
@@ -1708,13 +3360,20 @@ FScenarioTemplateObstaclePlacement UScenarioAuthoringSubsystem::MakeStaticObstac
 	placement.PlacementId = placementId;
 	placement.Kind = EScenarioTemplateObstaclePlacementKind::Fixed;
 	placement.PropId = propId.ToString();
-	placement.At.SegmentId = DraftScenarioTemplate.Corridor.Segments.IsEmpty()
+	double alongMeters = transform.GetLocation().X * CentimetersToMeters;
+	double offsetMeters = transform.GetLocation().Y * CentimetersToMeters;
+	FString segmentId = DraftScenario.Corridor.Segments.IsEmpty()
 		? TEXT("main")
-		: DraftScenarioTemplate.Corridor.Segments[0].SegmentId;
-	placement.At.AlongMeters = MakeFixedTemplateNumber(transform.GetLocation().X * CentimetersToMeters);
-	placement.At.OffsetMeters = MakeFixedTemplateNumber(transform.GetLocation().Y * CentimetersToMeters);
+		: DraftScenario.Corridor.Segments[0].SegmentId;
+	TryProjectLocationToCorridor(transform.GetLocation(), alongMeters, offsetMeters, segmentId);
+	placement.At.SegmentId = segmentId;
+	placement.At.AlongMeters = MakeFixedTemplateNumber(alongMeters);
+	placement.At.OffsetMeters = MakeFixedTemplateNumber(offsetMeters);
 	placement.At.LaneId = TEXT("walkway");
-	placement.YawDegrees = MakeFixedTemplateNumber(transform.Rotator().Yaw);
+	FVector2D pointMeters;
+	double axisYawDegrees = 0.0;
+	TryResolveCorridorPoseMeters(alongMeters, offsetMeters, pointMeters, axisYawDegrees);
+	placement.YawDegrees = MakeFixedTemplateNumber(FRotator::ClampAxis(transform.Rotator().Yaw - axisYawDegrees));
 	return placement;
 }
 
@@ -1725,18 +3384,27 @@ FScenarioPlaceableInstanceSpec UScenarioAuthoringSubsystem::MakeStaticObstacleSp
 	spec.InstanceId = placement.PlacementId;
 	spec.AssetId = placement.PropId;
 	spec.Category = EScenarioActorCategory::StaticObstacle;
-	const FVector locationCm(
-		GetFixedTemplateNumber(placement.At.AlongMeters, 0.0) / CentimetersToMeters,
-		GetFixedTemplateNumber(placement.At.OffsetMeters, 0.0) / CentimetersToMeters,
-		0.0);
-	spec.Transform = FTransform(FRotator(0.0, GetFixedTemplateNumber(placement.YawDegrees, 0.0), 0.0), locationCm);
+	const double alongMeters = GetFixedTemplateNumber(placement.At.AlongMeters, 0.0);
+	const double offsetMeters = GetFixedTemplateNumber(placement.At.OffsetMeters, 0.0);
+	const double localYawDegrees = GetFixedTemplateNumber(placement.YawDegrees, 0.0);
+	FVector2D pointMeters;
+	double axisYawDegrees = 0.0;
+	FVector locationCm(alongMeters / CentimetersToMeters, offsetMeters / CentimetersToMeters, 0.0);
+	if (TryResolveCorridorPoseMeters(alongMeters, offsetMeters, pointMeters, axisYawDegrees))
+	{
+		locationCm = FVector(
+			pointMeters.X / CentimetersToMeters,
+			pointMeters.Y / CentimetersToMeters,
+			ResolveCorridorSurfaceZOffsetCm(offsetMeters));
+	}
+	spec.Transform = FTransform(FRotator(0.0, FRotator::ClampAxis(axisYawDegrees + localYawDegrees), 0.0), locationCm);
 	return spec;
 }
 
 FScenarioPlaceableInstanceSpec UScenarioAuthoringSubsystem::MakeDeliveryBotSpecFromTemplateRobot() const
 {
-	const FVector startLocationCm = ResolveRobotAnchorLocationCm(DraftScenarioTemplate.Robot.Start, false);
-	const FVector goalLocationCm = ResolveRobotAnchorLocationCm(DraftScenarioTemplate.Robot.Goal, true);
+	const FVector startLocationCm = ResolveRobotAnchorLocationCm(DraftScenario.Robot.Start, false);
+	const FVector goalLocationCm = ResolveRobotAnchorLocationCm(DraftScenario.Robot.Goal, true);
 
 	FScenarioPlaceableInstanceSpec robotSpec;
 	robotSpec.InstanceId = DefaultRobotInstanceId;
@@ -1755,7 +3423,7 @@ FScenarioPlaceableInstanceSpec UScenarioAuthoringSubsystem::MakeDeliveryBotSpecF
 FScenarioTemplateObstaclePlacement* UScenarioAuthoringSubsystem::FindStaticObstaclePlacementByInstanceId(
 	const FString& instanceId)
 {
-	return DraftScenarioTemplate.Obstacles.Placements.FindByPredicate(
+	return DraftScenario.Obstacles.Placements.FindByPredicate(
 		[&instanceId](const FScenarioTemplateObstaclePlacement& placement)
 		{
 			return placement.PlacementId == instanceId;
@@ -1765,19 +3433,19 @@ FScenarioTemplateObstaclePlacement* UScenarioAuthoringSubsystem::FindStaticObsta
 const FScenarioTemplateObstaclePlacement* UScenarioAuthoringSubsystem::FindStaticObstaclePlacementByInstanceId(
 	const FString& instanceId) const
 {
-	return DraftScenarioTemplate.Obstacles.Placements.FindByPredicate(
+	return DraftScenario.Obstacles.Placements.FindByPredicate(
 		[&instanceId](const FScenarioTemplateObstaclePlacement& placement)
 		{
 			return placement.PlacementId == instanceId;
 		});
 }
 
-void UScenarioAuthoringSubsystem::ImportWorldSpecAsScenarioTemplate(const FScenarioWorldSpec& worldSpec)
+void UScenarioAuthoringSubsystem::ImportWorldSpecAsScenarioDocument(const FScenarioWorldSpec& worldSpec)
 {
 	InitializeDraftDefaults();
-	DraftScenarioTemplate.TemplateId = worldSpec.RunConfig.TemplateId.IsEmpty() ? ScenarioId : worldSpec.RunConfig.TemplateId;
-	DraftScenarioTemplate.Version = worldSpec.RunConfig.TemplateVersion > 0 ? worldSpec.RunConfig.TemplateVersion : FScenarioTemplateJson::SupportedVersion;
-	DraftScenarioTemplate.Obstacles.Placements.Reset();
+	DraftScenario.ScenarioId = worldSpec.RunConfig.TemplateId.IsEmpty() ? ScenarioId : worldSpec.RunConfig.TemplateId;
+	DraftScenario.Version = worldSpec.RunConfig.TemplateVersion > 0 ? worldSpec.RunConfig.TemplateVersion : FScenarioDocumentJson::SupportedVersion;
+	DraftScenario.Obstacles.Placements.Reset();
 	DraftGroundRegions = worldSpec.GroundRegions;
 	DraftPedestrianSpecs = worldSpec.DynamicActors;
 
@@ -1785,23 +3453,23 @@ void UScenarioAuthoringSubsystem::ImportWorldSpecAsScenarioTemplate(const FScena
 	{
 		if (spec.Category == EScenarioActorCategory::DeliveryBot)
 		{
-			DraftScenarioTemplate.Robot.Start = MakeRobotAnchorFromLocationCm(spec.DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm);
+			DraftScenario.Robot.Start = MakeRobotAnchorFromLocationCm(spec.DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm);
 			if (spec.DeliveryBot.bHasGoalLocation)
 			{
-				DraftScenarioTemplate.Robot.Goal = MakeRobotAnchorFromLocationCm(spec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm);
+				DraftScenario.Robot.Goal = MakeRobotAnchorFromLocationCm(spec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm);
 			}
 			continue;
 		}
 
 		if (spec.Category == EScenarioActorCategory::StaticObstacle)
 		{
-			DraftScenarioTemplate.Obstacles.Placements.Add(
+			DraftScenario.Obstacles.Placements.Add(
 				MakeStaticObstaclePlacement(spec.InstanceId, FName(*spec.AssetId), spec.Transform));
 		}
 	}
 }
 
-void UScenarioAuthoringSubsystem::ClearEditorView()
+void UScenarioAuthoringSubsystem::ClearGeneratedEditorPreviewActors()
 {
 	for (const TObjectPtr<AActor>& markerActor : RouteMarkerActors)
 	{
@@ -1835,6 +3503,11 @@ void UScenarioAuthoringSubsystem::ClearEditorView()
 		}
 	}
 
+	if (IsValid(CorridorPreviewActor))
+	{
+		CorridorPreviewActor->Destroy();
+	}
+	CorridorPreviewActor = nullptr;
 	RouteMarkerActors.Reset();
 	RobotStartMarkerActor = nullptr;
 	RobotGoalMarkerActor = nullptr;
@@ -1847,7 +3520,43 @@ void UScenarioAuthoringSubsystem::ClearEditorView()
 	NextGroundRegionIndex = 1;
 }
 
+void UScenarioAuthoringSubsystem::ClearCorridorHandleActors()
+{
+	for (const TPair<FString, TObjectPtr<AScenarioCorridorHandleActor>>& pair : CorridorHandleActors)
+	{
+		if (IsValid(pair.Value))
+		{
+			pair.Value->Destroy();
+		}
+	}
+
+	CorridorHandleActors.Reset();
+}
+
+void UScenarioAuthoringSubsystem::ClearEditorView()
+{
+	ClearGeneratedEditorPreviewActors();
+	ClearCorridorHandleActors();
+}
+
 bool UScenarioAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& outDiagnostics)
+{
+	ClearEditorView();
+	bool bSucceeded = true;
+	if (!SpawnCorridorHandleActors(outDiagnostics))
+	{
+		bSucceeded = false;
+	}
+
+	if (!RefreshGeneratedEditorPreviewActorsFromDraft(outDiagnostics))
+	{
+		bSucceeded = false;
+	}
+
+	return bSucceeded;
+}
+
+bool UScenarioAuthoringSubsystem::RefreshGeneratedEditorPreviewActorsFromDraft(TArray<FString>& outDiagnostics)
 {
 	bool bDraftChanged = false;
 	if (!EnsureSingleRobotRouteSpec(outDiagnostics, bDraftChanged))
@@ -1859,8 +3568,9 @@ bool UScenarioAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& ou
 		bDirty = true;
 	}
 
-	ClearEditorView();
-	const FScenarioWorldSpec previewWorldSpec = BuildDraftWorldSpecForPreview();
+	ClearGeneratedEditorPreviewActors();
+	const bool bHasSplineCorridorPreview = SpawnCorridorPreviewActor(outDiagnostics);
+	const FScenarioWorldSpec previewWorldSpec = BuildDraftWorldSpecForPreview(&outDiagnostics);
 
 	bool bSucceeded = true;
 	for (const FScenarioPlaceableInstanceSpec& spec : previewWorldSpec.Placeables)
@@ -1879,9 +3589,12 @@ bool UScenarioAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& ou
 			continue;
 		}
 
+		FScenarioPlaceableInstanceSpec resolvedSpec = spec;
+		resolvedSpec.Transform = ResolveStaticObstaclePlacementTransform(spec.Transform);
+
 		AScenarioStaticObstacle* spawnedActor = nullptr;
 		FString failureReason;
-		if (!SpawnEditorStaticObstacleActor(spec, spawnedActor, failureReason))
+		if (!SpawnEditorStaticObstacleActor(resolvedSpec, spawnedActor, failureReason))
 		{
 			outDiagnostics.Add(FString::Printf(
 				TEXT("Failed to create editor view for static obstacle '%s': %s"),
@@ -1892,9 +3605,9 @@ bool UScenarioAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& ou
 		}
 
 		FScenarioStaticObstaclePropEntry propEntry;
-		if (TryFindStaticObstacleProp(FName(*spec.AssetId), propEntry))
+		if (TryFindStaticObstacleProp(FName(*resolvedSpec.AssetId), propEntry))
 		{
-			AddStaticObstacleViewRecord(spec, propEntry, spawnedActor);
+			AddStaticObstacleViewRecord(resolvedSpec, propEntry, spawnedActor);
 		}
 	}
 
@@ -1922,6 +3635,11 @@ bool UScenarioAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& ou
 
 	for (const FScenarioGroundRegionSpec& regionSpec : previewWorldSpec.GroundRegions)
 	{
+		if (bHasSplineCorridorPreview && !ContainsGroundRegionId(regionSpec.RegionId))
+		{
+			continue;
+		}
+
 		AScenarioGroundRegion* spawnedRegion = nullptr;
 		FString failureReason;
 		if (!SpawnEditorGroundRegionActor(regionSpec, spawnedRegion, failureReason))
@@ -1935,6 +3653,160 @@ bool UScenarioAuthoringSubsystem::RebuildEditorViewFromDraft(TArray<FString>& ou
 	}
 
 	return bSucceeded;
+}
+
+bool UScenarioAuthoringSubsystem::SpawnCorridorPreviewActor(TArray<FString>& outDiagnostics)
+{
+	UWorld* world = GetWorld();
+	if (!world)
+	{
+		outDiagnostics.Add(TEXT("World is unavailable; corridor spline preview was not spawned."));
+		return false;
+	}
+
+	if (DraftScenario.Corridor.Axis.PointsMeters.Num() < 2)
+	{
+		return false;
+	}
+
+	FString failureReason;
+	if (!AreCorridorAxisPointsValid(DraftScenario.Corridor.Axis.PointsMeters, failureReason))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("Corridor spline preview skipped: %s"), *failureReason));
+		return false;
+	}
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	CorridorPreviewActor = world->SpawnActor<AScenarioCorridorPreviewActor>(
+		AScenarioCorridorPreviewActor::StaticClass(),
+		FTransform::Identity,
+		spawnParams);
+	if (!CorridorPreviewActor)
+	{
+		outDiagnostics.Add(TEXT("Failed to spawn corridor spline preview actor."));
+		return false;
+	}
+
+	CorridorPreviewActor->SurfaceCatalog = CorridorSurfaceCatalog;
+	CorridorPreviewActor->ConfigureFromCorridor(DraftScenario.Corridor);
+	return CorridorPreviewActor->HasRenderableCorridor();
+}
+
+bool UScenarioAuthoringSubsystem::SpawnCorridorHandleActors(TArray<FString>& outDiagnostics)
+{
+	ClearCorridorHandleActors();
+
+	UWorld* world = GetWorld();
+	if (!world)
+	{
+		outDiagnostics.Add(TEXT("World is unavailable; corridor handles were not spawned."));
+		return false;
+	}
+
+	const TArray<FVector2D>& pointsMeters = DraftScenario.Corridor.Axis.PointsMeters;
+	if (pointsMeters.Num() < 2)
+	{
+		return true;
+	}
+
+	bool bSucceeded = true;
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	for (int32 vertexIndex = 0; vertexIndex < pointsMeters.Num(); ++vertexIndex)
+	{
+		const FString handleId = MakeCorridorVertexHandleId(vertexIndex);
+		AScenarioCorridorHandleActor* handleActor = world->SpawnActor<AScenarioCorridorHandleActor>(
+			AScenarioCorridorHandleActor::StaticClass(),
+			MakeCorridorVertexHandleTransform(pointsMeters[vertexIndex]),
+			spawnParams);
+		if (!handleActor)
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("Failed to spawn corridor vertex handle '%s'."), *handleId));
+			bSucceeded = false;
+			continue;
+		}
+
+		handleActor->ConfigureVertexHandle(vertexIndex, handleId, MakeCorridorVertexHandleTransform(pointsMeters[vertexIndex]));
+		CorridorHandleActors.Add(handleId, handleActor);
+	}
+
+	for (int32 segmentIndex = 0; segmentIndex < pointsMeters.Num() - 1; ++segmentIndex)
+	{
+		const FString handleId = MakeCorridorSegmentHandleId(segmentIndex);
+		AScenarioCorridorHandleActor* handleActor = world->SpawnActor<AScenarioCorridorHandleActor>(
+			AScenarioCorridorHandleActor::StaticClass(),
+			MakeCorridorSegmentHandleTransform(pointsMeters[segmentIndex], pointsMeters[segmentIndex + 1]),
+			spawnParams);
+		if (!handleActor)
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("Failed to spawn corridor segment handle '%s'."), *handleId));
+			bSucceeded = false;
+			continue;
+		}
+
+		handleActor->ConfigureSegmentHandle(
+			segmentIndex,
+			handleId,
+			MakeCorridorSegmentHandleTransform(pointsMeters[segmentIndex], pointsMeters[segmentIndex + 1]),
+			(pointsMeters[segmentIndex + 1] - pointsMeters[segmentIndex]).Size() / CentimetersToMeters);
+		CorridorHandleActors.Add(handleId, handleActor);
+	}
+
+	return bSucceeded;
+}
+
+void UScenarioAuthoringSubsystem::SyncCorridorHandleActors()
+{
+	const TArray<FVector2D>& pointsMeters = DraftScenario.Corridor.Axis.PointsMeters;
+	TSet<FString> expectedHandleIds;
+
+	for (int32 vertexIndex = 0; vertexIndex < pointsMeters.Num(); ++vertexIndex)
+	{
+		const FString handleId = MakeCorridorVertexHandleId(vertexIndex);
+		expectedHandleIds.Add(handleId);
+		if (TObjectPtr<AScenarioCorridorHandleActor>* handleActor = CorridorHandleActors.Find(handleId))
+		{
+			if (IsValid(*handleActor))
+			{
+				(*handleActor)->ConfigureVertexHandle(
+					vertexIndex,
+					handleId,
+					MakeCorridorVertexHandleTransform(pointsMeters[vertexIndex]));
+			}
+		}
+	}
+
+	for (int32 segmentIndex = 0; segmentIndex < pointsMeters.Num() - 1; ++segmentIndex)
+	{
+		const FString handleId = MakeCorridorSegmentHandleId(segmentIndex);
+		expectedHandleIds.Add(handleId);
+		if (TObjectPtr<AScenarioCorridorHandleActor>* handleActor = CorridorHandleActors.Find(handleId))
+		{
+			if (IsValid(*handleActor))
+			{
+				(*handleActor)->ConfigureSegmentHandle(
+					segmentIndex,
+					handleId,
+					MakeCorridorSegmentHandleTransform(pointsMeters[segmentIndex], pointsMeters[segmentIndex + 1]),
+					(pointsMeters[segmentIndex + 1] - pointsMeters[segmentIndex]).Size() / CentimetersToMeters);
+			}
+		}
+	}
+
+	for (auto iterator = CorridorHandleActors.CreateIterator(); iterator; ++iterator)
+	{
+		AScenarioCorridorHandleActor* handleActor = iterator.Value().Get();
+		if (!expectedHandleIds.Contains(iterator.Key()) || !IsValid(handleActor))
+		{
+			if (IsValid(handleActor))
+			{
+				handleActor->Destroy();
+			}
+			iterator.RemoveCurrent();
+		}
+	}
 }
 
 bool UScenarioAuthoringSubsystem::SpawnRobotRouteMarkers(

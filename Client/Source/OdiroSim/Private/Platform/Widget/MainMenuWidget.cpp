@@ -51,6 +51,7 @@ namespace
 	const TCHAR* ProjectOpenProjectNameConfigKey = TEXT("ProjectName");
 	const TCHAR* ProjectOpenTemplateIdConfigKey = TEXT("TemplateId");
 	const TCHAR* UserProjectSettingFileName = TEXT("setting.json");
+	const TCHAR* UserProjectScenarioFileName = TEXT("scenario.json");
 	const TCHAR* MainMenuRegularFontPath =
 		TEXT("/Game/Fonts/Freesentation/Freesentation-4Regular_Font.Freesentation-4Regular_Font");
 	const TCHAR* MainMenuBoldFontPath =
@@ -205,6 +206,11 @@ namespace
 	FString BuildProjectSettingPath(const FString& projectPath)
 	{
 		return NormalizeMainMenuPath(FPaths::Combine(projectPath, UserProjectSettingFileName));
+	}
+
+	FString BuildProjectScenarioPath(const FString& projectPath)
+	{
+		return NormalizeMainMenuPath(FPaths::Combine(projectPath, UserProjectScenarioFileName));
 	}
 
 	bool TryLoadJsonRootObject(const FString& jsonFilePath, TSharedPtr<FJsonObject>& outRootObject, FString& outError)
@@ -1286,10 +1292,6 @@ bool UMainMenuWidget::BuildSimulationSetupFromControls(
 		outSetup.MeasurementLog.FlushIntervalTicks =
 			FCString::Atoi(*FlushIntervalTicksTextBox->GetText().ToString().TrimStartAndEnd());
 	}
-	if (ReportOutputDirectoryTextBox)
-	{
-		outSetup.Report.OutputDirectory = ReportOutputDirectoryTextBox->GetText().ToString().TrimStartAndEnd();
-	}
 	if (StatusOutputPathTextBox)
 	{
 		outSetup.Status.OutputPath = StatusOutputPathTextBox->GetText().ToString().TrimStartAndEnd();
@@ -1366,8 +1368,8 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 	{
 		FScenarioRunInput runInput;
 		runInput.PairId = FString::Printf(TEXT("%s_%03d"), *pairIdBase, runIndex);
-		runInput.ScenarioSetupJsonPath = scenarioSetupPath;
-		runInput.DeliveryBotSetupJsonPath = deliveryBotSetupPath;
+		runInput.EpisodeScenarioJsonPath = scenarioSetupPath;
+		runInput.ProfileJsonPath = deliveryBotSetupPath;
 		runInput.PolicySpecJsonPath = policySpecPath;
 		runInputs.Add(runInput);
 	}
@@ -1401,7 +1403,7 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 
 void UMainMenuWidget::HandleOpenEditorClicked()
 {
-	OpenScenarioInEditor(GetSelectedScenarioSetupPath());
+	OpenScenarioInEditor(IsProjectModeSelected() ? GetSelectedProjectScenarioPath() : GetSelectedScenarioSetupPath());
 }
 
 void UMainMenuWidget::HandleNewScenarioClicked()
@@ -1607,7 +1609,7 @@ void UMainMenuWidget::HandleExperimentResultIterationButtonClicked(UExperimentRe
 {
 	if (!IsValid(buttonWidget)) return;
 
-	SetSelectedExperimentResultPath(buttonWidget->GetReportPath());
+	SetSelectedExperimentResultPath(buttonWidget->GetResultPath());
 	RefreshExperimentResultIterationList();
 	UpdateReportAndLogText();
 }
@@ -1751,40 +1753,11 @@ void UMainMenuWidget::HandleSendToAiClicked()
 		return;
 	}
 
-	if (CurrentPreviewReportPath.IsEmpty())
-	{
-		if (AiAnalysisTextBlock)
-		{
-			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: no evaluation report selected.")));
-		}
-		return;
-	}
-
-	if (CurrentPreviewLogPath.IsEmpty())
-	{
-		if (AiAnalysisTextBlock)
-		{
-			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: no measurement log available.")));
-		}
-		return;
-	}
-
-	UPlatformAnalysisAiSubsystem* analysisSubsystem = GetPlatformAnalysisAiSubsystem();
-	if (!analysisSubsystem)
-	{
-		if (AiAnalysisTextBlock)
-		{
-			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: subsystem not found.")));
-		}
-		return;
-	}
-
 	if (AiAnalysisTextBlock)
 	{
-		AiAnalysisTextBlock->SetText(FText::FromString(TEXT("Analyzing...")));
+		AiAnalysisTextBlock->SetText(FText::FromString(
+			TEXT("AI analysis unavailable: legacy evaluation report analysis is no longer supported. Select a project run.")));
 	}
-
-	analysisSubsystem->RequestAnalysisForReport(CurrentPreviewReportPath, CurrentPreviewLogPath);
 }
 
 void UMainMenuWidget::HandleProjectOpenInputChanged(const FText& text)
@@ -1930,20 +1903,12 @@ void UMainMenuWidget::HandleShowProjectExperimentStatusTabClicked()
 
 void UMainMenuWidget::HandleOpenProjectScenarioEditorClicked()
 {
-	UScenarioEditorLaunchSubsystem* subsystem = GetScenarioEditorLaunchSubsystem();
-	if (!subsystem)
+	if (!OpenScenarioInEditor(GetSelectedProjectScenarioPath()))
 	{
-		SetDiagnosticsText(TEXT("ScenarioEditorLaunchSubsystem을 사용할 수 없습니다."));
 		return;
 	}
 
-	if (!subsystem->OpenScenarioEditorMap())
-	{
-		SetDiagnosticsText(TEXT("ScenarioEditorMap 열기 실패."));
-		return;
-	}
-
-	SetDiagnosticsText(TEXT("ScenarioEditorMap으로 이동합니다."));
+	SetDiagnosticsText(FString::Printf(TEXT("project scenario editor로 이동합니다: %s"), *GetSelectedProjectScenarioPath()));
 }
 
 void UMainMenuWidget::HandleAddExperimentClicked()
@@ -2539,16 +2504,16 @@ void UMainMenuWidget::LoadSelectedSetup()
 		&& !loadedRunInputs.IsEmpty())
 	{
 		const FScenarioRunInput& firstRunInput = loadedRunInputs[0];
-		SetSelectedScenarioSetupPath(firstRunInput.ScenarioSetupJsonPath);
+		SetSelectedScenarioSetupPath(firstRunInput.EpisodeScenarioJsonPath);
 		if (DeliveryBotSetupComboBox)
 		{
-			DeliveryBotSetupComboBox->SetSelectedOption(firstRunInput.DeliveryBotSetupJsonPath);
+			DeliveryBotSetupComboBox->SetSelectedOption(firstRunInput.ProfileJsonPath);
 		}
 		if (PolicyDeliveryBotSetupComboBox)
 		{
-			PolicyDeliveryBotSetupComboBox->SetSelectedOption(firstRunInput.DeliveryBotSetupJsonPath);
+			PolicyDeliveryBotSetupComboBox->SetSelectedOption(firstRunInput.ProfileJsonPath);
 		}
-		SetSelectedDeliveryBotSetupPath(firstRunInput.DeliveryBotSetupJsonPath);
+		SetSelectedDeliveryBotSetupPath(firstRunInput.ProfileJsonPath);
 		SetSelectedPolicySpecPath(firstRunInput.PolicySpecJsonPath.IsEmpty()
 			? FString(MainMenuDefaultPolicySpecJsonPath)
 			: firstRunInput.PolicySpecJsonPath);
@@ -2575,7 +2540,7 @@ void UMainMenuWidget::LoadSelectedSetup()
 	}
 	if (ReportOutputDirectoryTextBox)
 	{
-		ReportOutputDirectoryTextBox->SetText(FText::FromString(parseResult.Setup.Report.OutputDirectory));
+		ReportOutputDirectoryTextBox->SetText(FText::FromString(DefaultReportOutputDirectory));
 	}
 	if (StatusOutputPathTextBox)
 	{
@@ -2587,8 +2552,8 @@ void UMainMenuWidget::LoadSelectedSetup()
 	lines.Add(FString::Printf(TEXT("RunQueue: %s"), *parseResult.Setup.RunQueueJsonPath));
 	if (!loadedRunInputs.IsEmpty())
 	{
-		lines.Add(FString::Printf(TEXT("시나리오(ScenarioSetup): %s"), *loadedRunInputs[0].ScenarioSetupJsonPath));
-		lines.Add(FString::Printf(TEXT("행동 정책(DeliveryBotSetup): %s"), *loadedRunInputs[0].DeliveryBotSetupJsonPath));
+		lines.Add(FString::Printf(TEXT("시나리오(ScenarioSetup): %s"), *loadedRunInputs[0].EpisodeScenarioJsonPath));
+		lines.Add(FString::Printf(TEXT("행동 정책(DeliveryBotSetup): %s"), *loadedRunInputs[0].ProfileJsonPath));
 		lines.Add(FString::Printf(
 			TEXT("PolicySpec: %s"),
 			loadedRunInputs[0].PolicySpecJsonPath.IsEmpty() ? MainMenuDefaultPolicySpecJsonPath : *loadedRunInputs[0].PolicySpecJsonPath));
@@ -3077,7 +3042,7 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 			if (!sizeBox || !button || !label) continue;
 
 			const bool bSelected = resultPath.Equals(SelectedExperimentResultPath, ESearchCase::IgnoreCase);
-			button->Configure(resultPath, episodeIndex);
+			button->Configure(resultPath, episodeId);
 			button->SetBackgroundColor(bSelected
 				? FLinearColor(0.16f, 0.42f, 0.78f, 1.0f)
 				: FLinearColor(0.10f, 0.11f, 0.14f, 1.0f));
@@ -3105,7 +3070,7 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
 	if (FPaths::GetPath(runInfo.StatusPath).Equals(SelectedExperimentResultRunDirectory, ESearchCase::IgnoreCase))
 	{
-		for (const FString& reportPath : runInfo.Status.ReportPaths)
+		for (const FString& reportPath : runInfo.Status.ResultPaths)
 		{
 			reportPaths.AddUnique(reportPath);
 		}
@@ -3149,7 +3114,9 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 		if (!sizeBox || !button || !label) continue;
 
 		const bool bSelected = reportItem.ReportPath.Equals(SelectedExperimentResultPath, ESearchCase::IgnoreCase);
-		button->Configure(reportItem.ReportPath, reportItem.RunIndex);
+		button->Configure(
+			reportItem.ReportPath,
+			reportItem.RunIndex == INDEX_NONE ? FString(TEXT("?")) : FString::FromInt(reportItem.RunIndex));
 		button->SetBackgroundColor(bSelected
 			? FLinearColor(0.16f, 0.42f, 0.78f, 1.0f)
 			: FLinearColor(0.10f, 0.11f, 0.14f, 1.0f));
@@ -3292,19 +3259,29 @@ bool UMainMenuWidget::OpenScenarioInEditor(const FString& scenarioSetupPath)
 		return false;
 	}
 
-	const FString normalizedScenarioSetupPath = NormalizeInputJsonPath(scenarioSetupPath);
-	if (normalizedScenarioSetupPath.TrimStartAndEnd().IsEmpty())
+	const FString trimmedScenarioPath = scenarioSetupPath.TrimStartAndEnd();
+	const FString normalizedInputScenarioPath = NormalizeInputJsonPath(trimmedScenarioPath);
+	const bool bLegacyInputScenario = IsEditableInputJsonPath(normalizedInputScenarioPath);
+	const FString normalizedScenarioPath = bLegacyInputScenario
+		? normalizedInputScenarioPath
+		: NormalizeMainMenuPath(trimmedScenarioPath);
+	if (normalizedScenarioPath.TrimStartAndEnd().IsEmpty())
 	{
-		SetDiagnosticsText(TEXT("ScenarioSetup 파일이 선택되지 않았습니다."));
+		SetDiagnosticsText(TEXT("scenario 파일이 선택되지 않았습니다."));
 		return false;
 	}
-	if (!IsEditableInputJsonPath(normalizedScenarioSetupPath))
+	if (!bLegacyInputScenario && !FPaths::GetCleanFilename(normalizedScenarioPath).Equals(UserProjectScenarioFileName, ESearchCase::IgnoreCase))
 	{
-		SetDiagnosticsText(TEXT("Json/Input 아래의 편집 가능한 ScenarioSetup JSON을 선택하세요."));
+		SetDiagnosticsText(TEXT("project scenario는 <UserProject>/scenario.json 경로여야 합니다."));
+		return false;
+	}
+	if (!bLegacyInputScenario && !FPaths::FileExists(normalizedScenarioPath))
+	{
+		SetDiagnosticsText(FString::Printf(TEXT("project scenario 파일이 없습니다: %s"), *normalizedScenarioPath));
 		return false;
 	}
 
-	if (!subsystem->OpenScenarioEditor(normalizedScenarioSetupPath))
+	if (!subsystem->OpenScenarioEditor(normalizedScenarioPath))
 	{
 		SetDiagnosticsText(TEXT("ScenarioEditorMap 열기 실패."));
 		return false;
@@ -3876,6 +3853,11 @@ FString UMainMenuWidget::GetSelectedProjectName() const
 FString UMainMenuWidget::GetSelectedProjectPath() const
 {
 	return BuildProjectPathFromInputs(GetSelectedProjectParentFolder(), GetSelectedProjectName());
+}
+
+FString UMainMenuWidget::GetSelectedProjectScenarioPath() const
+{
+	return BuildProjectScenarioPath(GetSelectedProjectPath());
 }
 
 FString UMainMenuWidget::GetSelectedProjectTemplateId() const

@@ -32,19 +32,21 @@ entry:
   - Client/Tools/Dev.ps1
   - Client/Tools/RunPreview.ps1
 keep:
-  - Platform UI reads simulator state via status/report/log files, not simulator world objects.
+  - Platform UI reads launcher process state and canonical user-project run artifacts, not simulator world objects.
   - Client/Tools use Client/Tools/Common.ps1, never root tools/common.ps1.
   - Client prerequisite checks cover Windows Unreal C++ only; Android/iOS/macOS/MAUI are not failures.
   - Legacy Client root scripts such as BuildProject.bat, RunPreview.bat, and RunPythonPolicyServer.bat stay folded into Task-* wrappers.
   - Project run launch passes `-OdiroProject`, `-RunId`, and `-PolicyPort`; Bridge assigns the port in Bridge flow, while the temporary MainMenu direct launcher uses a fixed development port.
+  - SimulatorProcessSubsystem accepts only the project-run command contract; `-Simulate` is rejected as an unsupported legacy argument.
   - Project run child process exits after terminal runner state; Bridge owns status JSON lifecycle.
   - Project run completion writes user project result artifacts through the simulator process path; episode trace starts/stops through runner lifecycle.
   - PlatformAnalysisAi has a v2 project-run request path using `project_path` + `run_id`; successful responses are saved under run `review/`.
+  - ScenarioEditorLaunchSubsystem treats the pending path as a project scenario JSON path; URL options are inspectable only and subsystem state is authoritative.
   - MainMenu project mode UI layout is owned by `WBP_MainMenu`; C++ only binds widget events and workflow logic.
   - Project template cards use `WBP_ProjectTemplateCard`; card item layout, thumbnail fallback, and shadow styling stay in UMG assets.
   - MainMenu project opening UI takes a parent folder and project name; runtime default parent folder comes from `FPlatformProcess::UserDir()` (Windows Documents).
   - UmgMcp `query_widget_properties` must not request `Slot`; use `get_widget_tree`, export JSON, or direct `set_widget_properties` slot updates instead.
-  - MainMenu project scenario tab opens ScenarioEditorMap only; it does not create/load scenario editor drafts.
+  - MainMenu project scenario tab lists, opens, and starts runs from `<UserProject>/scenario.json` project-run snapshots.
   - MainMenu project result rows use `WBP_FileListItem` primary action for completed detail view and secondary display text for run state.
   - UmgMcp widget create/delete must keep `WidgetVariableNameToGuidMap` consistent; persistent variable widgets should use GUID-safe creation paths and wait for structural edits to finish.
   - MainMenu project mode creates/validates projects and run snapshots through temporary file-based SimulatorLaunchSubsystem workspace helpers.
@@ -52,7 +54,7 @@ keep:
   - MainMenu project experiment Add opens a WBP-owned setting editor; its 실행 action saves `<UserProject>/setting.json`, creates a run snapshot, starts the simulator, and then exposes the run in the status list.
   - MainMenu project mode must not call SimulationSetup or RunQueue writer/launcher paths.
   - MainMenu project mode must not fall back to legacy Json/Input, SimulationSetup, RunQueue, Saved/SimulationRuns, or Saved/AnalysisLogs lists.
-  - Legacy report + MeasurementLog analysis must not be used by MainMenu project mode.
+  - Legacy report + MeasurementLog analysis is removed; MainMenu project mode sends v2 project-run analysis only.
   - SimulatorLaunchSubsystem workspace helpers are a UI prototype bridge; replace internals with Bridge `workspace.*` and `process.*` once a UE Bridge IPC client exists.
   - SimulatorLaunchSubsystem legacy SimulationSetup/RunQueue/report helpers are Blueprint compatibility APIs only and should stay deprecated while retained.
 verify:

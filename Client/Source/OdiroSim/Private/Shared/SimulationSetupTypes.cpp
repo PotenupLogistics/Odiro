@@ -374,23 +374,6 @@ namespace
 				result.Setup.MeasurementLog.bFlushOnEvent);
 		}
 
-		TSharedPtr<FJsonObject> reportObject;
-		if (TryGetObjectField(rootObject, TEXT("report"), TEXT("$"), result.Diagnostics, reportObject))
-		{
-			TryReadOptionalBoolField(
-				*reportObject,
-				TEXT("save_evaluation_report_json"),
-				TEXT("$.report"),
-				result.Diagnostics,
-				result.Setup.Report.bSaveEvaluationReportJson);
-			TryReadOptionalStringField(
-				*reportObject,
-				TEXT("output_directory"),
-				TEXT("$.report"),
-				result.Diagnostics,
-				result.Setup.Report.OutputDirectory);
-		}
-
 		TSharedPtr<FJsonObject> statusObject;
 		if (TryGetObjectField(rootObject, TEXT("status"), TEXT("$"), result.Diagnostics, statusObject))
 		{
@@ -681,7 +664,7 @@ namespace
 		return jsonValues;
 	}
 
-	FString MakeSimulationStatusProjectRelativeReportPath(FString filePath)
+	FString MakeSimulationStatusProjectRelativeResultPath(FString filePath)
 	{
 		if (filePath.IsEmpty())
 		{
@@ -707,13 +690,13 @@ namespace
 		return filePath;
 	}
 
-	TArray<TSharedPtr<FJsonValue>> MakeSimulationStatusReportPathArrayField(const TArray<FString>& values)
+	TArray<TSharedPtr<FJsonValue>> MakeSimulationStatusResultPathArrayField(const TArray<FString>& values)
 	{
 		TArray<TSharedPtr<FJsonValue>> jsonValues;
 		jsonValues.Reserve(values.Num());
 		for (const FString& value : values)
 		{
-			jsonValues.Add(MakeShared<FJsonValueString>(MakeSimulationStatusProjectRelativeReportPath(value)));
+			jsonValues.Add(MakeShared<FJsonValueString>(MakeSimulationStatusProjectRelativeResultPath(value)));
 		}
 
 		return jsonValues;
@@ -731,7 +714,7 @@ namespace
 		SetOptionalStringField(object, TEXT("current_pair_id"), status.CurrentPairId);
 		object->SetNumberField(TEXT("completed_runs"), status.CompletedRuns);
 		object->SetNumberField(TEXT("total_runs"), status.TotalRuns);
-		object->SetArrayField(TEXT("report_paths"), MakeSimulationStatusReportPathArrayField(status.ReportPaths));
+		object->SetArrayField(TEXT("result_paths"), MakeSimulationStatusResultPathArrayField(status.ResultPaths));
 		object->SetArrayField(TEXT("log_paths"), MakeStringArrayField(status.LogPaths));
 		SetOptionalStringField(object, TEXT("error"), status.Error);
 		return object;
@@ -756,11 +739,6 @@ namespace
 		loggingObject->SetNumberField(TEXT("flush_interval_ticks"), setup.MeasurementLog.FlushIntervalTicks);
 		loggingObject->SetBoolField(TEXT("flush_on_event"), setup.MeasurementLog.bFlushOnEvent);
 		object->SetObjectField(TEXT("logging"), loggingObject);
-
-		TSharedRef<FJsonObject> reportObject = MakeShared<FJsonObject>();
-		reportObject->SetBoolField(TEXT("save_evaluation_report_json"), setup.Report.bSaveEvaluationReportJson);
-		reportObject->SetStringField(TEXT("output_directory"), setup.Report.OutputDirectory);
-		object->SetObjectField(TEXT("report"), reportObject);
 
 		TSharedRef<FJsonObject> statusObject = MakeShared<FJsonObject>();
 		statusObject->SetStringField(TEXT("output_path"), setup.Status.OutputPath);
@@ -812,11 +790,6 @@ namespace
 		if (setup.MeasurementLog.FlushIntervalTicks <= 0)
 		{
 			outDiagnostics.Add(TEXT("SimulationSetup logging.flush_interval_ticks must be > 0."));
-		}
-
-		if (setup.Report.bSaveEvaluationReportJson && setup.Report.OutputDirectory.TrimStartAndEnd().IsEmpty())
-		{
-			outDiagnostics.Add(TEXT("SimulationSetup report.output_directory must not be empty when report saving is enabled."));
 		}
 
 		if (setup.Status.OutputPath.TrimStartAndEnd().IsEmpty())
@@ -1099,7 +1072,6 @@ void FSimulationSetupJson::ApplyRunOutputPaths(FSimulationSetup& setup, const FS
 	// A simulator run writes every generated artifact into one stable run directory.
 	const FString runOutputDirectory = BuildRunOutputDirectory(runId);
 	setup.MeasurementLog.OutputDirectory = runOutputDirectory;
-	setup.Report.OutputDirectory = runOutputDirectory;
 	setup.Status.OutputPath = NormalizeSimulationSetupPath(FPaths::Combine(runOutputDirectory, TEXT("status.json")));
 }
 
@@ -1203,18 +1175,15 @@ FUserProjectRunSnapshotParseResult FUserProjectRunSnapshot::Parse(const FString&
 FSimulationCommandLineParseResult FSimulationCommandLine::Parse(const FString& commandLine)
 {
 	FSimulationCommandLineParseResult result;
+	FString legacySimulationSetupFile;
 	bool bHasBareSimulate = false;
-	if (TryGetSwitchValue(commandLine, TEXT("Simulate"), result.Options.SimulationSetupFile, bHasBareSimulate))
-	{
-		result.Options.bSimulate = true;
-	}
-	else if (bHasBareSimulate)
+	if (TryGetSwitchValue(commandLine, TEXT("Simulate"), legacySimulationSetupFile, bHasBareSimulate) || bHasBareSimulate)
 	{
 		AddSimulationDiagnostic(
 			result.Diagnostics,
 			EScenarioCompileDiagnosticSeverity::Error,
-			TEXT("missing_simulate_value"),
-			TEXT("-Simulate requires a simulation setup file path."));
+			TEXT("unsupported_simulate_arg"),
+			TEXT("-Simulate is no longer supported. Use -OdiroProject with -RunId."));
 	}
 
 	bool bHasBareProject = false;
@@ -1270,15 +1239,6 @@ FSimulationCommandLineParseResult FSimulationCommandLine::Parse(const FString& c
 		}
 	}
 
-	if (result.Options.bSimulate && result.Options.SimulationSetupFile.IsEmpty())
-	{
-		AddSimulationDiagnostic(
-			result.Diagnostics,
-			EScenarioCompileDiagnosticSeverity::Error,
-			TEXT("empty_simulate_value"),
-			TEXT("-Simulate value must not be empty."));
-	}
-
 	if (result.Options.bProjectRun && result.Options.ProjectPath.IsEmpty())
 	{
 		AddSimulationDiagnostic(
@@ -1286,15 +1246,6 @@ FSimulationCommandLineParseResult FSimulationCommandLine::Parse(const FString& c
 			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("empty_project_value"),
 			TEXT("-OdiroProject value must not be empty."));
-	}
-
-	if (result.Options.bProjectRun && result.Options.bSimulate)
-	{
-		AddSimulationDiagnostic(
-			result.Diagnostics,
-			EScenarioCompileDiagnosticSeverity::Error,
-			TEXT("conflicting_simulator_inputs"),
-			TEXT("-OdiroProject and -Simulate cannot be used together."));
 	}
 
 	if (result.Options.bProjectRun && result.Options.RunId.IsEmpty())
@@ -1356,7 +1307,7 @@ bool FSimulationRunStatusJson::TryReadStatusJson(
 	TryReadStatusStringField(*rootObject, TEXT("current_pair_id"), outDiagnostics, outStatus.CurrentPairId, false);
 	TryReadStatusIntField(*rootObject, TEXT("completed_runs"), outDiagnostics, outStatus.CompletedRuns);
 	TryReadStatusIntField(*rootObject, TEXT("total_runs"), outDiagnostics, outStatus.TotalRuns);
-	TryReadStatusStringArrayField(*rootObject, TEXT("report_paths"), outDiagnostics, outStatus.ReportPaths);
+	TryReadStatusStringArrayField(*rootObject, TEXT("result_paths"), outDiagnostics, outStatus.ResultPaths);
 	TryReadStatusStringArrayField(*rootObject, TEXT("log_paths"), outDiagnostics, outStatus.LogPaths);
 	TryReadStatusStringField(*rootObject, TEXT("error"), outDiagnostics, outStatus.Error, false);
 

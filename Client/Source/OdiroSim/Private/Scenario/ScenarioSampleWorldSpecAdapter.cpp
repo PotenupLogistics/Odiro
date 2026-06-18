@@ -3,15 +3,10 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Misc/Crc.h"
-#include "Misc/FileHelper.h"
-#include "Misc/Paths.h"
-#include "Serialization/JsonReader.h"
-#include "Serialization/JsonSerializer.h"
 #include "Shared/ScenarioSampleJson.h"
 
 namespace
 {
-	const TCHAR* ScenarioSampleSchemaName = TEXT("scenario_sample");
 	const double MetersToCentimeters = 100.0;
 
 	struct FResolvedSamplePose
@@ -19,36 +14,6 @@ namespace
 		FVector LocationCm = FVector::ZeroVector;
 		double YawDegrees = 0.0;
 	};
-
-	FString ResolveAdapterJsonFilePath(const FString& JsonFilePath)
-	{
-		if (JsonFilePath.IsEmpty() || !FPaths::IsRelative(JsonFilePath))
-		{
-			return JsonFilePath;
-		}
-
-		return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), JsonFilePath));
-	}
-
-	bool TryReadAdapterJsonSchema(const FString& JsonFilePath, FString& OutSchema)
-	{
-		OutSchema.Reset();
-
-		FString JsonString;
-		if (!FFileHelper::LoadFileToString(JsonString, *ResolveAdapterJsonFilePath(JsonFilePath)))
-		{
-			return false;
-		}
-
-		TSharedPtr<FJsonObject> RootObject;
-		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
-		if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
-		{
-			return false;
-		}
-
-		return RootObject->TryGetStringField(TEXT("schema"), OutSchema);
-	}
 
 	void AddAdapterDiagnostic(
 		FScenarioCompileResult& Result,
@@ -534,47 +499,6 @@ namespace
 
 		return false;
 	}
-}
-
-bool FScenarioSampleWorldSpecAdapter::IsScenarioSampleFile(const FString& JsonFilePath)
-{
-	FString Schema;
-	return TryReadAdapterJsonSchema(JsonFilePath, Schema)
-		&& Schema.Equals(ScenarioSampleSchemaName, ESearchCase::CaseSensitive);
-}
-
-FScenarioCompileResult FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleFile(
-	const FString& JsonFilePath)
-{
-	FScenarioCompileResult Result;
-	const FScenarioSampleParseResult ParseResult = FScenarioSampleJson::ParseFromFile(JsonFilePath);
-	AppendSchemaDiagnostics(ParseResult.Diagnostics, Result);
-	if (!ParseResult.bSuccess)
-	{
-		Result.bSuccess = false;
-		return Result;
-	}
-
-	Result = CompileScenarioWorldSpecFromSampleDocument(ParseResult.Document);
-	AppendSchemaDiagnostics(ParseResult.Diagnostics, Result);
-	return Result;
-}
-
-FScenarioCompileResult FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleString(
-	const FString& JsonString)
-{
-	FScenarioCompileResult Result;
-	const FScenarioSampleParseResult ParseResult = FScenarioSampleJson::ParseFromString(JsonString);
-	AppendSchemaDiagnostics(ParseResult.Diagnostics, Result);
-	if (!ParseResult.bSuccess)
-	{
-		Result.bSuccess = false;
-		return Result;
-	}
-
-	Result = CompileScenarioWorldSpecFromSampleDocument(ParseResult.Document);
-	AppendSchemaDiagnostics(ParseResult.Diagnostics, Result);
-	return Result;
 }
 
 FScenarioCompileResult FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(

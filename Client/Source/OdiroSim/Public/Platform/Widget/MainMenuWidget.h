@@ -11,13 +11,14 @@ class UEditableTextBox;
 class UScenarioEditorLaunchSubsystem;
 class UExperimentResultIterationButton;
 class UFileListItemWidget;
-class UPlatformRunAnalysisSubsystem;
+class UPlatformAnalysisAiSubsystem;
 class USimulatorLaunchSubsystem;
 class UScrollBox;
 class UTextBlock;
 class UWidget;
 class UWidgetSwitcher;
-struct FPlatformRunAnalysisResponse;
+struct FPlatformAnalysisAiResponse;
+struct FSimulationSetup;
 
 // MainMenuMap에서 UMG Blueprint layout과 platform event handler를 연결하는 widget
 UCLASS(BlueprintType, Blueprintable)
@@ -140,15 +141,20 @@ private:
 	void SetSelectedDeliveryBotSetupPath(const FString& deliveryBotSetupPath);
 	void SetSelectedPolicySpecPath(const FString& policySpecPath);
 	void SetSelectedExperimentResultRunDirectory(const FString& runDirectory);
-	void SetSelectedExperimentResultPath(const FString& resultPath);
+	void SetSelectedExperimentResultPath(const FString& reportPath);
 	void ClearExperimentResultIterationWidgets();
 	bool CreateScenarioFileFromTemplate(const FString& scenarioSetupPath);
 	bool OpenScenarioInEditor(const FString& scenarioSetupPath);
+	bool BuildSimulationSetupFromControls(
+		const FSimulationSetup& baseSetup,
+		const FString& runQueuePath,
+		FSimulationSetup& outSetup,
+		TArray<FString>& outDiagnostics) const;
 	TSubclassOf<UFileListItemWidget> ResolveFileListItemWidgetClass() const;
 	void HandleRunInfoChanged(const struct FSimulatorRunInfo& runInfo);
-	void HandleAnalysisCompleted(const FPlatformRunAnalysisResponse& response);
+	void HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response);
 	void UpdateStatusText(const FString& extraMessage = FString());
-	void UpdateResultAndLogText();
+	void UpdateReportAndLogText();
 	void SetDiagnosticsText(const FString& message);
 	FString GetSelectedSetupPath() const;
 	FString GetSelectedScenarioSetupPath() const;
@@ -156,7 +162,7 @@ private:
 	FString GetSelectedPolicySpecPath() const;
 	USimulatorLaunchSubsystem* GetSimulatorLaunchSubsystem() const;
 	UScenarioEditorLaunchSubsystem* GetScenarioEditorLaunchSubsystem() const;
-	UPlatformRunAnalysisSubsystem* GetPlatformRunAnalysisSubsystem() const;
+	UPlatformAnalysisAiSubsystem* GetPlatformAnalysisAiSubsystem() const;
 
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UWidgetSwitcher> MainContentSwitcher;
@@ -332,7 +338,8 @@ private:
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> LogPreviewTextBlock;
 
-	FString CurrentPreviewResultPath;
+	FString CurrentPreviewReportPath;
+	FString CurrentPreviewLogPath;
 	FTimerHandle RefreshTimerHandle;
 
 	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|List")

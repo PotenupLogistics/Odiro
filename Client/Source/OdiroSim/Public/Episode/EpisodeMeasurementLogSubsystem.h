@@ -33,6 +33,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Episode|MeasurementLog")
 	void StopLogging(const FString& CloseReason);
 
+	/// Starts project trace logging to a concrete trace.jsonl path.
+	bool StartProjectTraceLogging(const FString& TraceJsonlPath);
+
+	/// Stops project trace logging without writing legacy footer records.
+	void StopProjectTraceLogging();
+
 	/// Appends an event record immediately.
 	UFUNCTION(BlueprintCallable, Category = "Episode|MeasurementLog")
 	bool WriteEventRecord(const FEpisodeMeasurementLogEventRecord& EventRecord);
@@ -57,6 +63,9 @@ public:
 	/// Returns true while the subsystem owns an open writer.
 	UFUNCTION(BlueprintPure, Category = "Episode|MeasurementLog")
 	bool IsLogging() const;
+
+	/// Returns true while project trace logging is active.
+	bool IsProjectTraceLogging() const { return bProjectTraceLogging; }
 
 	/// Returns the absolute path of the active log file.
 	UFUNCTION(BlueprintPure, Category = "Episode|MeasurementLog")
@@ -95,6 +104,9 @@ private:
 	/// True after the header record has been written for the active log.
 	bool bHeaderWritten = false;
 	bool bReportedMissingRobot = false;
+	bool bProjectTraceLogging = false;
+	FString CurrentProjectTracePath;
+	int32 NextProjectTraceSampleIndex = 0;
 
 	UFUNCTION()
 	void HandleEvaluationEvent(FEpisodeEvaluationEvent Event);
@@ -103,6 +115,7 @@ private:
 	bool EnsureHeaderWritten(double WorldTimeSeconds);
 	bool WriteHeader(double WorldTimeSeconds);
 	bool WriteTick(float DeltaTime);
+	bool WriteProjectTraceTick(float DeltaTime);
 	bool WriteFooter(const FString& CloseReason);
 	FEpisodeMeasurementLogTickRecord BuildTickRecord(float DeltaTime);
 	FEpisodeMeasurementLogHeaderRecord BuildHeaderRecord(double WorldTimeSeconds) const;

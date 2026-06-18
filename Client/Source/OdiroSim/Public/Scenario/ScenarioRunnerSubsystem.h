@@ -7,7 +7,7 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "ScenarioRunnerSubsystem.generated.h"
 
-struct FScenarioSimulationProfileCompileResult;
+struct FDeliveryBotSetupCompileResult;
 class UScenarioEvaluationSubsystem;
 class UScenarioSimulationSubsystem;
 
@@ -25,13 +25,18 @@ public:
 	FScenarioRunRecordCompletedNative OnRunRecordCompleted;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
-	bool StartScenarioPairFromJsonFiles(const FString& scenarioSourceJsonPath, const FString& simulationProfileJsonPath);
+	bool StartScenarioPairFromJsonFiles(const FString& scenarioSetupJsonPath, const FString& deliveryBotSetupJsonPath);
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	bool StartBatchFromRunInputs(const TArray<FScenarioRunInput>& runInputs);
 
-	// Starts direct runner inputs while preserving one externally assigned run id for result joins.
+	// Starts direct run inputs under one externally-owned run id.
 	bool StartBatchFromRunInputsForRun(const TArray<FScenarioRunInput>& runInputs, const FString& activeRunId);
+
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
+	bool StartBatchFromRunQueueJsonFile(const FString& runQueueJsonFilePath);
+
+	bool StartBatchFromRunQueueJsonFileForRun(const FString& runQueueJsonFilePath, const FString& activeRunId);
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	void CancelRun();
@@ -41,6 +46,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	bool IsBatchActive() const;
+
+	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
+	FString GetActiveRunQueueJsonFilePath() const { return ActiveRunQueueJsonFilePath; }
+
+	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
+	bool IsRunningRunQueueJsonFile(const FString& runQueueJsonFilePath) const;
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	TArray<FEpisodeRunRecord> GetRunRecords() const { return RunRecords; }
@@ -54,9 +65,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	FString GetCurrentPairId() const { return CurrentRecord.PairId; }
 
-	// Directory that owns summary.json and episodes/<SampleId>/ result artifacts.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Runner|Result")
-	FString RunOutputDirectory = TEXT("Json/Output");
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Runner|Report")
+	bool bSaveEvaluationReportJson = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Runner|Report")
+	FString EvaluationReportOutputDirectory = TEXT("Json/Output");
+
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
+	bool BuildLatestEvaluationReportJson(FString& outJson) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
+	bool BuildEvaluationReportJson(int32 runRecordIndex, FString& outJson) const;
 
 private:
 	UFUNCTION()
@@ -64,7 +83,7 @@ private:
 
 	bool StartBatchFromRunInputsInternal(
 		const TArray<FScenarioRunInput>& runInputs,
-		const FString& activeBatchSourceLabel,
+		const FString& activeRunQueueJsonFilePath,
 		const FString& activeBatchRunId);
 	void SetRunnerState(EScenarioRunnerState runnerState);
 	void StartNextScenario();
@@ -76,14 +95,11 @@ private:
 		const FEpisodeEvaluationResult* evaluationResult = nullptr);
 
 	void AppendCompileDiagnostics(const FScenarioCompileResult& compileResult);
-	void AppendSimulationProfileDiagnostics(const FScenarioSimulationProfileCompileResult& compileResult);
+	void AppendDeliveryBotSetupDiagnostics(const FDeliveryBotSetupCompileResult& compileResult);
 	double GetRunTimeLimitSeconds(const FScenarioRunConfig& runConfig) const;
 	FString BuildRunId() const;
-	bool SaveEpisodeResultFilesForRecord(FEpisodeRunRecord& runRecord) const;
-	bool SaveRunSummaryJson() const;
-	FString BuildRunSummaryJsonFilePath() const;
-	FString BuildEpisodeResultJsonFilePath(const FEpisodeRunRecord& runRecord) const;
-	FString BuildEpisodeEventsJsonlFilePath(const FEpisodeRunRecord& runRecord) const;
+	bool SaveEvaluationReportJsonForRecord(FEpisodeRunRecord& runRecord) const;
+	FString BuildEvaluationReportJsonFilePath(const FEpisodeRunRecord& runRecord) const;
 	static FString BuildPairId(const FScenarioRunInput& runInput, int32 runIndex);
 	static FString SanitizeReportFileToken(const FString& value);
 
@@ -104,7 +120,7 @@ private:
 	int32 TotalRunCount = 0;
 
 	UPROPERTY(Transient)
-	FString ActiveBatchSourceLabel;
+	FString ActiveRunQueueJsonFilePath;
 
 	UPROPERTY(Transient)
 	FString ActiveBatchRunId;

@@ -144,10 +144,10 @@ struct ODIROSIM_API FEpisodeRunRecord
 	FString SourceJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString ScenarioSourceJsonPath;
+	FString EpisodeSetupJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString SimulationProfileJsonPath;
+	FString DeliveryBotSetupJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FString PolicySpecJsonPath;
@@ -156,10 +156,10 @@ struct ODIROSIM_API FEpisodeRunRecord
 	FString SpecHash;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString ScenarioSourceHash;
+	FString EpisodeSetupHash;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString SimulationProfileHash;
+	FString DeliveryBotSetupHash;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FString PairHash;
@@ -168,10 +168,10 @@ struct ODIROSIM_API FEpisodeRunRecord
 	bool bCompileSucceeded = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	bool bScenarioSourceCompileSucceeded = false;
+	bool bEpisodeSetupCompileSucceeded = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	bool bSimulationProfileCompileSucceeded = false;
+	bool bDeliveryBotSetupCompileSucceeded = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	bool bSetupSucceeded = false;
@@ -204,11 +204,6 @@ struct ODIROSIM_API FEpisodeRunRecord
 	TArray<FString> Diagnostics;
 
 	// 저장된 evaluation report JSON path. 저장이 비활성화되었거나 실패하면 비어 있음
-	// Canonical episode result JSON path written under runs/<RunId>/episodes/<SampleId>.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString EpisodeResultJsonPath;
-
-	// Canonical episode event JSONL path written under runs/<RunId>/episodes/<SampleId>.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString EpisodeEventsJsonlPath;
+	FString EvaluationReportJsonPath;
 };

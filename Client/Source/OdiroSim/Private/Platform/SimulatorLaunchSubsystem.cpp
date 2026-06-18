@@ -1,20 +1,24 @@
 
 #include "Platform/SimulatorLaunchSubsystem.h"
+#include "DeliveryBot/DeliveryBotSetupCompiler.h"
+#include "Scenario/ScenarioCompiler.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
-#include "Scenario/ScenarioSimulationProfileAdapter.h"
-#include "Scenario/ScenarioTemplateWorldSpecAdapter.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSimulatorLaunch, Log, All);
 
 namespace
 {
-	const TCHAR* ScenarioInputDirectory = TEXT("Json/Input");
-	const TCHAR* ExperimentInputDirectory = TEXT("Json/Experiments");
+	const TCHAR* SimulationSetupInputDirectory = TEXT("Json/Input");
 	const TCHAR* SimulatorLaunchPolicySpecInputDirectory = TEXT("Json/Input/PolicySpecs");
+	const TCHAR* EvaluationReportOutputDirectory = TEXT("Json/Output");
 	const TCHAR* SimulationRunStatusDirectory = TEXT("Saved/SimulationRuns");
 	const TCHAR* PreviewLauncherFileName = TEXT("Task-RunPreview.bat");
-	const TCHAR* EpisodeResultSchema = TEXT("episode_result");
-	const TCHAR* RunSummarySchema = TEXT("run_summary");
+	const TCHAR* LaunchSimulationSetupSchema = TEXT("simulation_setup");
+	const TCHAR* LaunchScenarioSetupSchema = TEXT("scenario_actor_spawn_mvp");
+	const TCHAR* LaunchDeliveryBotSetupSchema = TEXT("delivery_bot_setup");
+	const TCHAR* LaunchScenarioRunQueueSchema = TEXT("episode_run_queue");
+	const TCHAR* LaunchEvaluationReportSchema = TEXT("episode_evaluation_report");
+	const TCHAR* LaunchDefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	const TCHAR* SimulatorProcessFlags = TEXT("-nosound -unattended -NoLoadingScreen");
 
 	FString ToProjectRelativePath(FString filePath)
@@ -33,7 +37,7 @@ namespace
 			return;
 		}
 
-		const FString searchRoot = FExperimentSettingJson::ResolveProjectPath(relativeDirectory);
+		const FString searchRoot = FSimulationSetupJson::ResolveProjectPath(relativeDirectory);
 		TArray<FString> foundFiles;
 		IFileManager::Get().FindFilesRecursive(foundFiles, *searchRoot, filePattern, true, false);
 
@@ -60,7 +64,7 @@ namespace
 		outSchema.Reset();
 
 		FString jsonString;
-		if (!FFileHelper::LoadFileToString(jsonString, *FExperimentSettingJson::ResolveProjectPath(jsonFile)))
+		if (!FFileHelper::LoadFileToString(jsonString, *FSimulationSetupJson::ResolveProjectPath(jsonFile)))
 		{
 			return false;
 		}
@@ -95,19 +99,28 @@ namespace
 		}
 	}
 
+	FString JoinDiagnostics(const TArray<FScenarioCompileDiagnostic>& diagnostics)
+	{
+		TArray<FString> lines;
+		lines.Reserve(diagnostics.Num());
+		for (const FScenarioCompileDiagnostic& diagnostic : diagnostics)
+		{
+			lines.Add(FString::Printf(TEXT("%s: %s"), *diagnostic.Code, *diagnostic.Message));
+		}
+
+		return FString::Join(lines, TEXT("\n"));
+	}
+
 	FString JoinStringDiagnostics(const TArray<FString>& diagnostics)
 	{
 		return FString::Join(diagnostics, TEXT("\n"));
 	}
 
-	void AppendExperimentSettingDiagnostics(
-		const TArray<FScenarioSchemaDiagnostic>& diagnostics,
-		TArray<FString>& outDiagnostics)
+	FString NormalizeRunQueueReferencePath(FString jsonPath)
 	{
-		for (const FScenarioSchemaDiagnostic& diagnostic : diagnostics)
-		{
-			outDiagnostics.Add(FString::Printf(TEXT("%s: %s"), *diagnostic.Code, *diagnostic.Message));
-		}
+		jsonPath = jsonPath.TrimStartAndEnd();
+		jsonPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		return jsonPath;
 	}
 
 	FString ResolvePolicySpecReferencePath(const FString& policySpecJsonPath)
@@ -148,31 +161,31 @@ namespace
 		return executableName.StartsWith(TEXT("UnrealEditor"), ESearchCase::IgnoreCase);
 	}
 
-	bool IsScenarioSourceFile(const FString& jsonFile)
+	bool IsScenarioSetupFile(const FString& jsonFile)
 	{
 		if (FScenarioSampleWorldSpecAdapter::IsScenarioSampleFile(jsonFile))
 		{
 			return FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleFile(jsonFile).bSuccess;
 		}
 
-		if (FScenarioTemplateWorldSpecAdapter::IsScenarioTemplateFile(jsonFile))
+		if (!HasJsonSchema(jsonFile, LaunchScenarioSetupSchema))
 		{
-			const FScenarioTemplateSampleRequest request =
-				FScenarioTemplateWorldSpecAdapter::MakeDefaultSampleRequest(jsonFile);
-			return FScenarioTemplateWorldSpecAdapter::CompileScenarioWorldSpecFromTemplateFile(jsonFile, request).bSuccess;
+			return false;
 		}
 
-		return false;
+		UScenarioCompiler* compiler = NewObject<UScenarioCompiler>();
+		return compiler && compiler->CompileScenarioWorldSpecFromJsonFile(jsonFile).bSuccess;
 	}
 
-	bool IsSimulationProfileFile(const FString& jsonFile)
+	bool IsDeliveryBotSetupFile(const FString& jsonFile)
 	{
-		if (FScenarioSimulationProfileAdapter::IsSimulationProfileFile(jsonFile))
+		if (!HasJsonSchema(jsonFile, LaunchDeliveryBotSetupSchema))
 		{
-			return FScenarioSimulationProfileAdapter::CompileProfileFromJsonFile(jsonFile).bSuccess;
+			return false;
 		}
 
-		return false;
+		UDeliveryBotSetupCompiler* compiler = NewObject<UDeliveryBotSetupCompiler>();
+		return compiler && compiler->CompileDeliveryBotSetupFromJsonFile(jsonFile).bSuccess;
 	}
 
 	bool IsPolicySpecFile(const FString& jsonFile)
@@ -196,6 +209,33 @@ namespace
 			&& policySpecObject->IsValid();
 	}
 
+	TSharedRef<FJsonObject> MakeScenarioRunQueueObject(const TArray<FScenarioRunInput>& runInputs)
+	{
+		TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
+		rootObject->SetStringField(TEXT("schema"), LaunchScenarioRunQueueSchema);
+		rootObject->SetNumberField(TEXT("version"), 1);
+
+		TArray<TSharedPtr<FJsonValue>> runValues;
+		runValues.Reserve(runInputs.Num());
+		for (const FScenarioRunInput& runInput : runInputs)
+		{
+			TSharedRef<FJsonObject> runObject = MakeShared<FJsonObject>();
+			if (!runInput.PairId.IsEmpty())
+			{
+				runObject->SetStringField(TEXT("pair_id"), runInput.PairId);
+			}
+			runObject->SetStringField(TEXT("scenario_setup"), runInput.ScenarioSetupJsonPath);
+			runObject->SetStringField(TEXT("delivery_bot_setup"), runInput.DeliveryBotSetupJsonPath);
+			if (!runInput.PolicySpecJsonPath.IsEmpty())
+			{
+				runObject->SetStringField(TEXT("policy_spec"), runInput.PolicySpecJsonPath);
+			}
+			runValues.Add(MakeShared<FJsonValueObject>(runObject));
+		}
+
+		rootObject->SetArrayField(TEXT("runs"), runValues);
+		return rootObject;
+	}
 }
 
 void USimulatorLaunchSubsystem::Deinitialize()
@@ -204,31 +244,10 @@ void USimulatorLaunchSubsystem::Deinitialize()
 	Super::Deinitialize();
 }
 
-TArray<FString> USimulatorLaunchSubsystem::ListExperimentRefs() const
-{
-	TArray<FString> settingFiles;
-	FindProjectFiles(ExperimentInputDirectory, TEXT("setting.json"), settingFiles);
-
-	TArray<FString> experimentRefs;
-	for (const FString& settingFile : settingFiles)
-	{
-		const FString experimentRef = FPaths::GetPath(settingFile);
-		const FExperimentSettingParseResult settingResult =
-			FExperimentSettingJson::ParseFromFile(FExperimentSettingJson::BuildExperimentSettingPath(experimentRef));
-		if (settingResult.bSuccess)
-		{
-			experimentRefs.AddUnique(experimentRef);
-		}
-	}
-
-	experimentRefs.Sort();
-	return experimentRefs;
-}
-
-TArray<FString> USimulatorLaunchSubsystem::ListScenarioSetupFiles() const
+TArray<FString> USimulatorLaunchSubsystem::ListSimulationSetupFiles() const
 {
 	TArray<FString> jsonFiles;
-	FindProjectJsonFiles(ScenarioInputDirectory, jsonFiles);
+	FindProjectJsonFiles(SimulationSetupInputDirectory, jsonFiles);
 
 	TArray<FString> setupFiles;
 	for (const FString& jsonFile : jsonFiles)
@@ -238,7 +257,29 @@ TArray<FString> USimulatorLaunchSubsystem::ListScenarioSetupFiles() const
 			continue;
 		}
 
-		if (IsScenarioSourceFile(jsonFile))
+		if (HasJsonSchema(jsonFile, LaunchSimulationSetupSchema) && FSimulationSetupJson::ParseFromFile(jsonFile).bSuccess)
+		{
+			setupFiles.Add(jsonFile);
+		}
+	}
+
+	return setupFiles;
+}
+
+TArray<FString> USimulatorLaunchSubsystem::ListScenarioSetupFiles() const
+{
+	TArray<FString> jsonFiles;
+	FindProjectJsonFiles(SimulationSetupInputDirectory, jsonFiles);
+
+	TArray<FString> setupFiles;
+	for (const FString& jsonFile : jsonFiles)
+	{
+		if (IsReferenceSampleJsonFile(jsonFile))
+		{
+			continue;
+		}
+
+		if (IsScenarioSetupFile(jsonFile))
 		{
 			setupFiles.Add(jsonFile);
 		}
@@ -250,7 +291,7 @@ TArray<FString> USimulatorLaunchSubsystem::ListScenarioSetupFiles() const
 TArray<FString> USimulatorLaunchSubsystem::ListDeliveryBotSetupFiles() const
 {
 	TArray<FString> jsonFiles;
-	FindProjectJsonFiles(ScenarioInputDirectory, jsonFiles);
+	FindProjectJsonFiles(SimulationSetupInputDirectory, jsonFiles);
 
 	TArray<FString> setupFiles;
 	for (const FString& jsonFile : jsonFiles)
@@ -260,7 +301,7 @@ TArray<FString> USimulatorLaunchSubsystem::ListDeliveryBotSetupFiles() const
 			continue;
 		}
 
-		if (IsSimulationProfileFile(jsonFile))
+		if (IsDeliveryBotSetupFile(jsonFile))
 		{
 			setupFiles.Add(jsonFile);
 		}
@@ -286,16 +327,54 @@ TArray<FString> USimulatorLaunchSubsystem::ListPolicySpecFiles() const
 	return policySpecFiles;
 }
 
+TArray<FString> USimulatorLaunchSubsystem::ListScenarioRunQueueFiles() const
+{
+	TArray<FString> jsonFiles;
+	FindProjectJsonFiles(SimulationSetupInputDirectory, jsonFiles);
+
+	TArray<FString> runQueueFiles;
+	for (const FString& jsonFile : jsonFiles)
+	{
+		if (IsReferenceSampleJsonFile(jsonFile))
+		{
+			continue;
+		}
+
+		if (!HasJsonSchema(jsonFile, LaunchScenarioRunQueueSchema))
+		{
+			continue;
+		}
+
+		FString jsonString;
+		if (!FFileHelper::LoadFileToString(jsonString, *FSimulationSetupJson::ResolveProjectPath(jsonFile)))
+		{
+			continue;
+		}
+
+		TArray<FScenarioRunInput> runInputs;
+		TArray<FString> diagnostics;
+		if (TryReadScenarioRunQueueJson(jsonString, runInputs, diagnostics))
+		{
+			runQueueFiles.Add(jsonFile);
+		}
+	}
+
+	return runQueueFiles;
+}
+
+TArray<FString> USimulatorLaunchSubsystem::ListEvaluationReportFiles() const
+{
+	TArray<FString> reportFiles;
+	FindJsonFilesWithSchema(EvaluationReportOutputDirectory, LaunchEvaluationReportSchema, reportFiles);
+	FindJsonFilesWithSchema(SimulationRunStatusDirectory, LaunchEvaluationReportSchema, reportFiles);
+	reportFiles.Sort();
+	return reportFiles;
+}
+
 TArray<FString> USimulatorLaunchSubsystem::ListSimulationRunResultDirectories() const
 {
 	TArray<FString> candidateFiles;
 	FindProjectFiles(SimulationRunStatusDirectory, TEXT("*.json"), candidateFiles);
-	TArray<FString> experimentRunFiles;
-	FindProjectFiles(ExperimentInputDirectory, TEXT("summary.json"), experimentRunFiles);
-	candidateFiles.Append(experimentRunFiles);
-	experimentRunFiles.Reset();
-	FindProjectFiles(ExperimentInputDirectory, TEXT("status.json"), experimentRunFiles);
-	candidateFiles.Append(experimentRunFiles);
 
 	TArray<FString> resultDirectories;
 	for (const FString& candidateFile : candidateFiles)
@@ -307,7 +386,7 @@ TArray<FString> USimulatorLaunchSubsystem::ListSimulationRunResultDirectories() 
 		}
 
 		if (!schema.Equals(TEXT("simulation_run_status"), ESearchCase::CaseSensitive)
-			&& !schema.Equals(RunSummarySchema, ESearchCase::CaseSensitive))
+			&& !schema.Equals(LaunchEvaluationReportSchema, ESearchCase::CaseSensitive))
 		{
 			continue;
 		}
@@ -317,6 +396,7 @@ TArray<FString> USimulatorLaunchSubsystem::ListSimulationRunResultDirectories() 
 		{
 			continue;
 		}
+
 		resultDirectories.AddUnique(resultDirectory);
 	}
 
@@ -324,22 +404,22 @@ TArray<FString> USimulatorLaunchSubsystem::ListSimulationRunResultDirectories() 
 	return resultDirectories;
 }
 
-TArray<FString> USimulatorLaunchSubsystem::ListEpisodeResultFilesInDirectory(const FString& runDirectory) const
+TArray<FString> USimulatorLaunchSubsystem::ListEvaluationReportFilesInDirectory(const FString& runDirectory) const
 {
 	TArray<FString> candidateFiles;
 	FindProjectFiles(runDirectory, TEXT("*.json"), candidateFiles);
 
-	TArray<FString> resultFiles;
+	TArray<FString> reportFiles;
 	for (const FString& candidateFile : candidateFiles)
 	{
-		if (HasJsonSchema(candidateFile, EpisodeResultSchema))
+		if (HasJsonSchema(candidateFile, LaunchEvaluationReportSchema))
 		{
-			resultFiles.Add(candidateFile);
+			reportFiles.Add(candidateFile);
 		}
 	}
 
-	resultFiles.Sort();
-	return resultFiles;
+	reportFiles.Sort();
+	return reportFiles;
 }
 
 TArray<FString> USimulatorLaunchSubsystem::ListMeasurementLogFilesInDirectory(const FString& runDirectory) const
@@ -368,12 +448,373 @@ TArray<FString> USimulatorLaunchSubsystem::ListSimulationRunStatusFiles() const
 	return statusFiles;
 }
 
-FExperimentSettingParseResult USimulatorLaunchSubsystem::LoadExperimentSettingFile(const FString& experimentRef) const
+FSimulationSetupParseResult USimulatorLaunchSubsystem::LoadSimulationSetupFile(const FString& setupPath) const
 {
-	return FExperimentSettingJson::ParseFromFile(FExperimentSettingJson::BuildExperimentSettingPath(experimentRef));
+	return FSimulationSetupJson::ParseFromFile(setupPath);
 }
 
-bool USimulatorLaunchSubsystem::StartExperimentRun(const FString& experimentRef, const FString& requestedRunId)
+bool USimulatorLaunchSubsystem::SaveFixedStepFpsToSetupFile(
+	const FString& setupPath,
+	int32 fps,
+	TArray<FString>& outDiagnostics) const
+{
+	outDiagnostics.Reset();
+
+	if (setupPath.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("SimulationSetup path must not be empty."));
+		return false;
+	}
+
+	if (fps <= 0)
+	{
+		outDiagnostics.Add(TEXT("fixed_step.fps must be > 0."));
+		return false;
+	}
+
+	const FString resolvedSetupPath = FSimulationSetupJson::ResolveProjectPath(setupPath);
+	FString jsonString;
+	if (!FFileHelper::LoadFileToString(jsonString, *resolvedSetupPath))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("SimulationSetup read failed: %s"), *resolvedSetupPath));
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> rootObject;
+	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(jsonString);
+	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+	{
+		outDiagnostics.Add(TEXT("SimulationSetup JSON parse failed."));
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> fixedStepObject;
+	const TSharedPtr<FJsonValue> fixedStepValue = rootObject->TryGetField(TEXT("fixed_step"));
+	if (fixedStepValue.IsValid() && fixedStepValue->Type == EJson::Object)
+	{
+		fixedStepObject = fixedStepValue->AsObject();
+	}
+
+	if (!fixedStepObject.IsValid())
+	{
+		// UI는 fixed_step.fps만 편집한다. 나머지 JSON 구조와 unknown field는 그대로 둔다.
+		fixedStepObject = MakeShared<FJsonObject>();
+		rootObject->SetObjectField(TEXT("fixed_step"), fixedStepObject);
+	}
+
+	fixedStepObject->SetNumberField(TEXT("fps"), fps);
+
+	FString updatedJsonString;
+	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
+		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&updatedJsonString);
+	if (!FJsonSerializer::Serialize(rootObject.ToSharedRef(), writer))
+	{
+		outDiagnostics.Add(TEXT("SimulationSetup JSON serialization failed."));
+		return false;
+	}
+
+	if (!FFileHelper::SaveStringToFile(
+			updatedJsonString,
+			*resolvedSetupPath,
+			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("SimulationSetup write failed: %s"), *resolvedSetupPath));
+		return false;
+	}
+
+	const FSimulationSetupParseResult parseResult = FSimulationSetupJson::ParseFromFile(setupPath);
+	if (!parseResult.bSuccess)
+	{
+		outDiagnostics.Add(JoinDiagnostics(parseResult.Diagnostics));
+		return false;
+	}
+
+	return true;
+}
+
+bool USimulatorLaunchSubsystem::SaveSimulationSetupFile(
+	const FString& setupPath,
+	const FSimulationSetup& setup,
+	TArray<FString>& outDiagnostics) const
+{
+	if (!FSimulationSetupJson::SaveToFile(setup, setupPath, outDiagnostics))
+	{
+		return false;
+	}
+
+	const FSimulationSetupParseResult parseResult = FSimulationSetupJson::ParseFromFile(setupPath);
+	for (const FScenarioCompileDiagnostic& diagnostic : parseResult.Diagnostics)
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("%s: %s"), *diagnostic.Code, *diagnostic.Message));
+	}
+	return parseResult.bSuccess;
+}
+
+bool USimulatorLaunchSubsystem::LoadScenarioRunQueueFile(
+	const FString& runQueuePath,
+	TArray<FScenarioRunInput>& outRunInputs,
+	TArray<FString>& outDiagnostics) const
+{
+	outRunInputs.Reset();
+	outDiagnostics.Reset();
+	if (runQueuePath.TrimStartAndEnd().IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("ScenarioRunQueue path must not be empty."));
+		return false;
+	}
+
+	FString jsonString;
+	const FString resolvedRunQueuePath = FSimulationSetupJson::ResolveProjectPath(runQueuePath);
+	if (!FFileHelper::LoadFileToString(jsonString, *resolvedRunQueuePath))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue read failed: %s"), *resolvedRunQueuePath));
+		return false;
+	}
+
+	return TryReadScenarioRunQueueJson(jsonString, outRunInputs, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::SaveScenarioRunQueueFile(
+	const FString& runQueuePath,
+	const TArray<FScenarioRunInput>& runInputs,
+	TArray<FString>& outDiagnostics) const
+{
+	outDiagnostics.Reset();
+	if (runQueuePath.TrimStartAndEnd().IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("ScenarioRunQueue path must not be empty."));
+		return false;
+	}
+
+	FString jsonString;
+	if (!TryWriteScenarioRunQueueJson(runInputs, jsonString, outDiagnostics))
+	{
+		return false;
+	}
+
+	const FString resolvedRunQueuePath = FSimulationSetupJson::ResolveProjectPath(runQueuePath);
+	const FString outputDirectory = FPaths::GetPath(resolvedRunQueuePath);
+	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue directory create failed: %s"), *outputDirectory));
+		return false;
+	}
+
+	if (!FFileHelper::SaveStringToFile(
+			jsonString,
+			*resolvedRunQueuePath,
+			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue write failed: %s"), *resolvedRunQueuePath));
+		return false;
+	}
+
+	return true;
+}
+
+bool USimulatorLaunchSubsystem::AppendRunQueuePair(
+	const FString& runQueuePath,
+	const FString& pairId,
+	const FString& scenarioSetupPath,
+	const FString& deliveryBotSetupPath,
+	TArray<FString>& outDiagnostics) const
+{
+	outDiagnostics.Reset();
+
+	TArray<FScenarioRunInput> runInputs;
+	const FString resolvedRunQueuePath = FSimulationSetupJson::ResolveProjectPath(runQueuePath);
+	if (FPaths::FileExists(resolvedRunQueuePath))
+	{
+		if (!LoadScenarioRunQueueFile(runQueuePath, runInputs, outDiagnostics))
+		{
+			return false;
+		}
+	}
+
+	FScenarioRunInput runInput;
+	runInput.PairId = pairId.TrimStartAndEnd();
+	runInput.ScenarioSetupJsonPath = scenarioSetupPath.TrimStartAndEnd();
+	runInput.DeliveryBotSetupJsonPath = deliveryBotSetupPath.TrimStartAndEnd();
+	runInput.PolicySpecJsonPath = LaunchDefaultPolicySpecJsonPath;
+	runInputs.Add(runInput);
+	return SaveScenarioRunQueueFile(runQueuePath, runInputs, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::RemoveRunQueuePair(
+	const FString& runQueuePath,
+	int32 runIndex,
+	TArray<FString>& outDiagnostics) const
+{
+	TArray<FScenarioRunInput> runInputs;
+	if (!LoadScenarioRunQueueFile(runQueuePath, runInputs, outDiagnostics))
+	{
+		return false;
+	}
+
+	if (!runInputs.IsValidIndex(runIndex))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue index is out of range: %d"), runIndex));
+		return false;
+	}
+
+	runInputs.RemoveAt(runIndex);
+	return SaveScenarioRunQueueFile(runQueuePath, runInputs, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::MoveRunQueuePair(
+	const FString& runQueuePath,
+	int32 runIndex,
+	int32 direction,
+	TArray<FString>& outDiagnostics) const
+{
+	TArray<FScenarioRunInput> runInputs;
+	if (!LoadScenarioRunQueueFile(runQueuePath, runInputs, outDiagnostics))
+	{
+		return false;
+	}
+
+	if (!runInputs.IsValidIndex(runIndex))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue index is out of range: %d"), runIndex));
+		return false;
+	}
+
+	const int32 step = direction < 0 ? -1 : 1;
+	const int32 targetIndex = runIndex + step;
+	if (!runInputs.IsValidIndex(targetIndex))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue target index is out of range: %d"), targetIndex));
+		return false;
+	}
+
+	runInputs.Swap(runIndex, targetIndex);
+	return SaveScenarioRunQueueFile(runQueuePath, runInputs, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::ReplaceScenarioSetupReferencesInRunQueues(
+	const FString& oldScenarioSetupPath,
+	const FString& newScenarioSetupPath,
+	TArray<FString>& outDiagnostics) const
+{
+	return ReplaceRunQueueReferences(oldScenarioSetupPath, newScenarioSetupPath, true, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::ReplaceDeliveryBotSetupReferencesInRunQueues(
+	const FString& oldDeliveryBotSetupPath,
+	const FString& newDeliveryBotSetupPath,
+	TArray<FString>& outDiagnostics) const
+{
+	return ReplaceRunQueueReferences(oldDeliveryBotSetupPath, newDeliveryBotSetupPath, false, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::ReplaceRunQueueReferences(
+	const FString& oldPath,
+	const FString& newPath,
+	const bool bReplaceScenarioSetupReference,
+	TArray<FString>& outDiagnostics) const
+{
+	outDiagnostics.Reset();
+
+	const FString normalizedOldPath = NormalizeRunQueueReferencePath(oldPath);
+	const FString normalizedNewPath = NormalizeRunQueueReferencePath(newPath);
+	const TCHAR* referenceFieldName = bReplaceScenarioSetupReference
+		? TEXT("scenario_setup")
+		: TEXT("delivery_bot_setup");
+
+	if (normalizedOldPath.IsEmpty() || normalizedNewPath.IsEmpty())
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue %s reference paths must not be empty."), referenceFieldName));
+		return false;
+	}
+
+	if (normalizedOldPath.Equals(normalizedNewPath, ESearchCase::IgnoreCase))
+	{
+		return true;
+	}
+
+	TArray<FString> changedRunQueueFiles;
+	TArray<FString> changedRunQueueJsonStrings;
+	int32 changedReferenceCount = 0;
+
+	for (const FString& runQueuePath : ListScenarioRunQueueFiles())
+	{
+		TArray<FScenarioRunInput> runInputs;
+		TArray<FString> loadDiagnostics;
+		if (!LoadScenarioRunQueueFile(runQueuePath, runInputs, loadDiagnostics))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue load failed before reference update: %s"), *runQueuePath));
+			outDiagnostics.Append(loadDiagnostics);
+			return false;
+		}
+
+		int32 runQueueChangedReferenceCount = 0;
+		for (FScenarioRunInput& runInput : runInputs)
+		{
+			FString& referencePath = bReplaceScenarioSetupReference
+				? runInput.ScenarioSetupJsonPath
+				: runInput.DeliveryBotSetupJsonPath;
+			if (NormalizeRunQueueReferencePath(referencePath).Equals(normalizedOldPath, ESearchCase::IgnoreCase))
+			{
+				referencePath = normalizedNewPath;
+				++runQueueChangedReferenceCount;
+			}
+		}
+
+		if (runQueueChangedReferenceCount <= 0)
+		{
+			continue;
+		}
+
+		FString jsonString;
+		TArray<FString> writeDiagnostics;
+		if (!TryWriteScenarioRunQueueJson(runInputs, jsonString, writeDiagnostics))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue reference update validation failed: %s"), *runQueuePath));
+			outDiagnostics.Append(writeDiagnostics);
+			return false;
+		}
+
+		changedRunQueueFiles.Add(runQueuePath);
+		changedRunQueueJsonStrings.Add(jsonString);
+		changedReferenceCount += runQueueChangedReferenceCount;
+	}
+
+	for (int32 index = 0; index < changedRunQueueFiles.Num(); ++index)
+	{
+		const FString& runQueuePath = changedRunQueueFiles[index];
+		const FString resolvedRunQueuePath = FSimulationSetupJson::ResolveProjectPath(runQueuePath);
+		if (!FFileHelper::SaveStringToFile(
+				changedRunQueueJsonStrings[index],
+				*resolvedRunQueuePath,
+				FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue reference update write failed: %s"), *resolvedRunQueuePath));
+			return false;
+		}
+	}
+
+	if (changedReferenceCount > 0)
+	{
+		outDiagnostics.Add(FString::Printf(
+			TEXT("Updated %d %s reference(s) in %d ScenarioRunQueue file(s)."),
+			changedReferenceCount,
+			referenceFieldName,
+			changedRunQueueFiles.Num()));
+		UE_LOG(
+			LogSimulatorLaunch,
+			Log,
+			TEXT("ScenarioRunQueue references updated | Field: %s, Old: %s, New: %s, References: %d, Files: %d"),
+			referenceFieldName,
+			*normalizedOldPath,
+			*normalizedNewPath,
+			changedReferenceCount,
+			changedRunQueueFiles.Num());
+	}
+
+	return true;
+}
+
+bool USimulatorLaunchSubsystem::StartSimulationRun(const FString& setupPath, const FString& requestedRunId)
 {
 	if (ActiveProcessHandle.IsValid() && FPlatformProcess::IsProcRunning(ActiveProcessHandle))
 	{
@@ -384,48 +825,63 @@ bool USimulatorLaunchSubsystem::StartExperimentRun(const FString& experimentRef,
 
 	CloseActiveProcessHandle();
 
-	const FString normalizedExperimentRef = experimentRef.TrimStartAndEnd().Replace(TEXT("\\"), TEXT("/"));
-	const FExperimentSettingParseResult settingResult = LoadExperimentSettingFile(normalizedExperimentRef);
-	if (!settingResult.bSuccess)
+	const FSimulationSetupParseResult setupParseResult = FSimulationSetupJson::ParseFromFile(setupPath);
+	if (!setupParseResult.bSuccess)
 	{
 		ActiveRunInfo = FSimulatorRunInfo{};
-		ActiveRunInfo.SetupPath = normalizedExperimentRef;
+		ActiveRunInfo.SetupPath = setupPath;
 		ActiveRunInfo.Status.State = ESimulationRunState::Failed;
-		AppendExperimentSettingDiagnostics(settingResult.Diagnostics, ActiveRunInfo.Diagnostics);
-		ActiveRunInfo.LastError = JoinStringDiagnostics(ActiveRunInfo.Diagnostics);
+		ActiveRunInfo.LastError = JoinDiagnostics(setupParseResult.Diagnostics);
 		BroadcastRunInfoChanged();
 		return false;
 	}
 
 	const FString runId = requestedRunId.IsEmpty() ? MakeSimulatorRunId() : requestedRunId;
-	const FString statusPath = FExperimentSettingJson::BuildExperimentRunStatusPath(normalizedExperimentRef, runId);
+	FString runtimeSetupPath;
+	FSimulationSetup runtimeSetup;
+	TArray<FString> runtimeSetupDiagnostics;
+	if (!CreateRuntimeSimulationSetupFile(
+			setupParseResult.Setup,
+			runId,
+			runtimeSetupPath,
+			runtimeSetup,
+			runtimeSetupDiagnostics))
+	{
+		ActiveRunInfo = FSimulatorRunInfo{};
+		ActiveRunInfo.RunId = runId;
+		ActiveRunInfo.SetupPath = setupPath;
+		ActiveRunInfo.StatusPath = runtimeSetup.Status.OutputPath;
+		ActiveRunInfo.Diagnostics = runtimeSetupDiagnostics;
+		MarkActiveRunFailed(JoinStringDiagnostics(runtimeSetupDiagnostics));
+		return false;
+	}
 
 	FString executable;
 	FString arguments;
 	bool bUsesPreviewLauncher = false;
-	if (!BuildLaunchCommand(normalizedExperimentRef, runId, executable, arguments, bUsesPreviewLauncher))
+	if (!BuildLaunchCommand(runtimeSetupPath, runId, executable, arguments, bUsesPreviewLauncher))
 	{
 		ActiveRunInfo = FSimulatorRunInfo{};
 		ActiveRunInfo.RunId = runId;
-		ActiveRunInfo.SetupPath = normalizedExperimentRef;
-		ActiveRunInfo.StatusPath = statusPath;
+		ActiveRunInfo.SetupPath = setupPath;
+		ActiveRunInfo.StatusPath = runtimeSetup.Status.OutputPath;
 		MarkActiveRunFailed(TEXT("Simulator launch command could not be built."));
 		return false;
 	}
 
 	ActiveRunInfo = FSimulatorRunInfo{};
 	ActiveRunInfo.RunId = runId;
-	ActiveRunInfo.SetupPath = normalizedExperimentRef;
-	ActiveRunInfo.StatusPath = statusPath;
+	ActiveRunInfo.SetupPath = setupPath;
+	ActiveRunInfo.StatusPath = runtimeSetup.Status.OutputPath;
 	ActiveRunInfo.LaunchExecutable = executable;
 	ActiveRunInfo.LaunchArguments = arguments;
 	ActiveRunInfo.bUsedPreviewLauncher = bUsesPreviewLauncher;
 	ActiveRunInfo.Status.RunId = runId;
-	ActiveRunInfo.Status.SetupPath = normalizedExperimentRef;
+	ActiveRunInfo.Status.SetupPath = runtimeSetupPath;
 	ActiveRunInfo.Status.State = ESimulationRunState::Pending;
 
 	// 동일 status path를 재사용할 수 있으므로 이전 run의 terminal status를 먼저 제거한다.
-	const FString resolvedStatusPath = FExperimentSettingJson::ResolveProjectPath(ActiveRunInfo.StatusPath);
+	const FString resolvedStatusPath = FSimulationSetupJson::ResolveProjectPath(ActiveRunInfo.StatusPath);
 	IFileManager::Get().Delete(*resolvedStatusPath, false, true);
 
 	uint32 processId = 0;
@@ -464,11 +920,152 @@ bool USimulatorLaunchSubsystem::StartExperimentRun(const FString& experimentRef,
 	return true;
 }
 
+bool USimulatorLaunchSubsystem::StartProjectRun(const FString& projectPath, const FString& runId)
+{
+	if (ActiveProcessHandle.IsValid() && FPlatformProcess::IsProcRunning(ActiveProcessHandle))
+	{
+		ActiveRunInfo.LastError = TEXT("A simulator process is already running.");
+		BroadcastRunInfoChanged();
+		return false;
+	}
+
+	CloseActiveProcessHandle();
+
+	const FUserProjectRunSnapshotParseResult snapshotParseResult =
+		FUserProjectRunSnapshot::Parse(projectPath, runId);
+	if (!snapshotParseResult.bSuccess)
+	{
+		ActiveRunInfo = FSimulatorRunInfo{};
+		ActiveRunInfo.RunId = runId;
+		ActiveRunInfo.ProjectPath = projectPath;
+		ActiveRunInfo.bProjectRun = true;
+		ActiveRunInfo.Status.State = ESimulationRunState::Failed;
+		ActiveRunInfo.LastError = JoinDiagnostics(snapshotParseResult.Diagnostics);
+		BroadcastRunInfoChanged();
+		return false;
+	}
+
+	FString executable;
+	FString arguments;
+	bool bUsesPreviewLauncher = false;
+	if (!BuildProjectRunLaunchCommand(
+			snapshotParseResult.Paths.ProjectPath,
+			snapshotParseResult.Paths.RunId,
+			executable,
+			arguments,
+			bUsesPreviewLauncher))
+	{
+		ActiveRunInfo = FSimulatorRunInfo{};
+		ActiveRunInfo.RunId = snapshotParseResult.Paths.RunId;
+		ActiveRunInfo.ProjectPath = snapshotParseResult.Paths.ProjectPath;
+		ActiveRunInfo.StatusPath = snapshotParseResult.Paths.StatusPath;
+		ActiveRunInfo.bProjectRun = true;
+		MarkActiveRunFailed(TEXT("Project run launch command could not be built."));
+		return false;
+	}
+
+	ActiveRunInfo = FSimulatorRunInfo{};
+	ActiveRunInfo.RunId = snapshotParseResult.Paths.RunId;
+	ActiveRunInfo.ProjectPath = snapshotParseResult.Paths.ProjectPath;
+	ActiveRunInfo.StatusPath = snapshotParseResult.Paths.StatusPath;
+	ActiveRunInfo.LaunchExecutable = executable;
+	ActiveRunInfo.LaunchArguments = arguments;
+	ActiveRunInfo.bUsedPreviewLauncher = bUsesPreviewLauncher;
+	ActiveRunInfo.bProjectRun = true;
+	ActiveRunInfo.Status.RunId = snapshotParseResult.Paths.RunId;
+	ActiveRunInfo.Status.SetupPath = snapshotParseResult.Paths.SnapshotPath;
+	ActiveRunInfo.Status.State = ESimulationRunState::Pending;
+
+	uint32 processId = 0;
+	const FString workingDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	ActiveProcessHandle = FPlatformProcess::CreateProc(
+		*executable,
+		*arguments,
+		false,
+		false,
+		false,
+		&processId,
+		0,
+		*workingDirectory,
+		nullptr);
+
+	if (!ActiveProcessHandle.IsValid())
+	{
+		ActiveRunInfo.bProcessStarted = false;
+		MarkActiveRunFailed(FString::Printf(TEXT("Project run process start failed: %s"), *executable));
+		return false;
+	}
+
+	ActiveRunInfo.bProcessStarted = true;
+	ActiveRunInfo.bProcessRunning = true;
+	ActiveRunInfo.Status.State = ESimulationRunState::Running;
+	StartPolling();
+	BroadcastRunInfoChanged();
+
+	UE_LOG(
+		LogSimulatorLaunch,
+		Log,
+		TEXT("Project run process started | Project: %s, RunId: %s, Executable: %s, Arguments: %s"),
+		*snapshotParseResult.Paths.ProjectPath,
+		*snapshotParseResult.Paths.RunId,
+		*executable,
+		*arguments);
+
+	return true;
+}
+
+bool USimulatorLaunchSubsystem::CreateRuntimeSimulationSetupFile(
+	const FSimulationSetup& sourceSetup,
+	const FString& runId,
+	FString& outRuntimeSetupPath,
+	FSimulationSetup& outRuntimeSetup,
+	TArray<FString>& outDiagnostics) const
+{
+	outDiagnostics.Reset();
+	outRuntimeSetup = sourceSetup;
+	FSimulationSetupJson::ApplyRunOutputPaths(outRuntimeSetup, runId);
+	outRuntimeSetupPath = FSimulationSetupJson::BuildRunSetupPath(runId);
+
+	if (!FSimulationSetupJson::SaveToFile(outRuntimeSetup, outRuntimeSetupPath, outDiagnostics))
+	{
+		return false;
+	}
+
+	return true;
+}
+
 bool USimulatorLaunchSubsystem::RefreshActiveRunStatus()
 {
 	if (ActiveRunInfo.RunId.IsEmpty() && !ActiveRunInfo.bProcessStarted)
 	{
 		return false;
+	}
+
+	if (ActiveRunInfo.bProjectRun)
+	{
+		RefreshActiveProcessState();
+
+		if (ActiveRunInfo.bProcessStarted && !ActiveRunInfo.bProcessRunning)
+		{
+			ActiveRunInfo.Status.State = ActiveRunInfo.ProcessReturnCode == 0
+				? ESimulationRunState::Completed
+				: ESimulationRunState::Failed;
+			if (ActiveRunInfo.Status.State == ESimulationRunState::Failed && ActiveRunInfo.LastError.IsEmpty())
+			{
+				ActiveRunInfo.LastError = FString::Printf(
+					TEXT("Project run process exited with code %d."),
+					ActiveRunInfo.ProcessReturnCode);
+			}
+			StopPolling();
+			CloseActiveProcessHandle();
+		}
+		else if (ActiveRunInfo.bProcessStarted)
+		{
+			ActiveRunInfo.Status.State = ESimulationRunState::Running;
+		}
+
+		BroadcastRunInfoChanged();
+		return ActiveRunInfo.Status.State != ESimulationRunState::Failed;
 	}
 
 	FSimulationRunStatus status;
@@ -565,31 +1162,189 @@ FString USimulatorLaunchSubsystem::QuoteCommandLineArgument(const FString& value
 	return FString::Printf(TEXT("\"%s\""), *escapedValue);
 }
 
-FString USimulatorLaunchSubsystem::BuildSimulatorArgumentString(const FString& experimentRef, const FString& runId)
+FString USimulatorLaunchSubsystem::BuildSimulatorArgumentString(const FString& setupPath, const FString& runId)
 {
 	return FString::Printf(
 		TEXT("%s %s %s"),
-		*QuoteCommandLineArgument(FString::Printf(TEXT("-Experiment=%s"), *experimentRef)),
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-Simulate=%s"), *setupPath)),
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
+		SimulatorProcessFlags);
+}
+
+FString USimulatorLaunchSubsystem::BuildProjectRunSimulatorArgumentString(const FString& projectPath, const FString& runId)
+{
+	return FString::Printf(
+		TEXT("%s %s %s"),
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-OdiroProject=%s"), *projectPath)),
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
 		SimulatorProcessFlags);
 }
 
 FString USimulatorLaunchSubsystem::BuildPreviewLauncherArgumentString(
 	const FString& previewBatPath,
-	const FString& experimentRef,
+	const FString& setupPath,
 	const FString& runId)
 {
 	// cmd.exe quoting is intentionally centralized here; CreateProc receives cmd.exe as executable.
 	return FString::Printf(
 		TEXT("/d /s /c \"\"%s\" %s %s %s\""),
 		*previewBatPath,
-		*QuoteCommandLineArgument(FString::Printf(TEXT("-Experiment=%s"), *experimentRef)),
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-Simulate=%s"), *setupPath)),
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
 		SimulatorProcessFlags);
 }
 
+FString USimulatorLaunchSubsystem::BuildProjectRunPreviewLauncherArgumentString(
+	const FString& previewBatPath,
+	const FString& projectPath,
+	const FString& runId)
+{
+	// cmd.exe quoting is intentionally centralized here; CreateProc receives cmd.exe as executable.
+	return FString::Printf(
+		TEXT("/d /s /c \"\"%s\" %s %s %s\""),
+		*previewBatPath,
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-OdiroProject=%s"), *projectPath)),
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
+		SimulatorProcessFlags);
+}
+
+bool USimulatorLaunchSubsystem::TryReadScenarioRunQueueJson(
+	const FString& jsonString,
+	TArray<FScenarioRunInput>& outRunInputs,
+	TArray<FString>& outDiagnostics)
+{
+	outRunInputs.Reset();
+	outDiagnostics.Reset();
+
+	TSharedPtr<FJsonObject> rootObject;
+	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(jsonString);
+	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+	{
+		outDiagnostics.Add(TEXT("ScenarioRunQueue JSON parse failed."));
+		return false;
+	}
+
+	FString schema;
+	if (!rootObject->TryGetStringField(TEXT("schema"), schema) || !schema.Equals(LaunchScenarioRunQueueSchema, ESearchCase::CaseSensitive))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue schema must be '%s'."), LaunchScenarioRunQueueSchema));
+	}
+
+	double version = 0.0;
+	if (!rootObject->TryGetNumberField(TEXT("version"), version) || version <= 0.0)
+	{
+		outDiagnostics.Add(TEXT("ScenarioRunQueue version must be > 0."));
+	}
+
+	const TSharedPtr<FJsonValue> runsValue = rootObject->TryGetField(TEXT("runs"));
+	if (!runsValue.IsValid() || runsValue->Type != EJson::Array)
+	{
+		outDiagnostics.Add(TEXT("ScenarioRunQueue runs must be an array."));
+		return false;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>> runValues = runsValue->AsArray();
+	if (runValues.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("ScenarioRunQueue runs must contain at least one pair."));
+	}
+
+	for (int32 index = 0; index < runValues.Num(); ++index)
+	{
+		const TSharedPtr<FJsonValue>& runValue = runValues[index];
+		if (!runValue.IsValid() || runValue->Type != EJson::Object)
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue runs[%d] must be an object."), index));
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject> runObject = runValue->AsObject();
+		FScenarioRunInput runInput;
+		runObject->TryGetStringField(TEXT("pair_id"), runInput.PairId);
+		runObject->TryGetStringField(TEXT("scenario_setup"), runInput.ScenarioSetupJsonPath);
+		runObject->TryGetStringField(TEXT("delivery_bot_setup"), runInput.DeliveryBotSetupJsonPath);
+		runObject->TryGetStringField(TEXT("policy_spec"), runInput.PolicySpecJsonPath);
+
+		runInput.PairId = runInput.PairId.TrimStartAndEnd();
+		runInput.ScenarioSetupJsonPath = NormalizeRunQueueReferencePath(runInput.ScenarioSetupJsonPath);
+		runInput.DeliveryBotSetupJsonPath = NormalizeRunQueueReferencePath(runInput.DeliveryBotSetupJsonPath);
+		runInput.PolicySpecJsonPath = NormalizeRunQueueReferencePath(runInput.PolicySpecJsonPath);
+
+		if (runInput.ScenarioSetupJsonPath.TrimStartAndEnd().IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue runs[%d].scenario_setup must not be empty."), index));
+		}
+
+		if (runInput.DeliveryBotSetupJsonPath.TrimStartAndEnd().IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue runs[%d].delivery_bot_setup must not be empty."), index));
+		}
+
+		outRunInputs.Add(runInput);
+	}
+
+	return outDiagnostics.IsEmpty();
+}
+
+bool USimulatorLaunchSubsystem::TryWriteScenarioRunQueueJson(
+	const TArray<FScenarioRunInput>& runInputs,
+	FString& outJson,
+	TArray<FString>& outDiagnostics)
+{
+	outJson.Reset();
+	outDiagnostics.Reset();
+
+	if (runInputs.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("ScenarioRunQueue requires at least one pair."));
+	}
+
+	for (int32 index = 0; index < runInputs.Num(); ++index)
+	{
+		const FScenarioRunInput& runInput = runInputs[index];
+		if (runInput.ScenarioSetupJsonPath.TrimStartAndEnd().IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue pair %d requires scenario_setup."), index));
+		}
+		else if (!IsScenarioSetupFile(runInput.ScenarioSetupJsonPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("Scenario source validation failed: %s"), *runInput.ScenarioSetupJsonPath));
+		}
+
+		if (runInput.DeliveryBotSetupJsonPath.TrimStartAndEnd().IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("ScenarioRunQueue pair %d requires delivery_bot_setup."), index));
+		}
+		else if (!IsDeliveryBotSetupFile(runInput.DeliveryBotSetupJsonPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("DeliveryBotSetup validation failed: %s"), *runInput.DeliveryBotSetupJsonPath));
+		}
+
+		if (!runInput.PolicySpecJsonPath.TrimStartAndEnd().IsEmpty()
+			&& !IsPolicySpecFile(runInput.PolicySpecJsonPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("PolicySpec validation failed: %s"), *runInput.PolicySpecJsonPath));
+		}
+	}
+
+	if (!outDiagnostics.IsEmpty())
+	{
+		return false;
+	}
+
+	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
+		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&outJson);
+	if (!FJsonSerializer::Serialize(MakeScenarioRunQueueObject(runInputs), writer))
+	{
+		outDiagnostics.Add(TEXT("ScenarioRunQueue JSON serialization failed."));
+		return false;
+	}
+
+	return true;
+}
+
 bool USimulatorLaunchSubsystem::BuildLaunchCommand(
-	const FString& experimentRef,
+	const FString& setupPath,
 	const FString& runId,
 	FString& outExecutable,
 	FString& outArguments,
@@ -601,13 +1356,36 @@ bool USimulatorLaunchSubsystem::BuildLaunchCommand(
 	if (ShouldUsePreviewLauncher(previewBatPath))
 	{
 		outExecutable = TEXT("cmd.exe");
-		outArguments = BuildPreviewLauncherArgumentString(previewBatPath, experimentRef, runId);
+		outArguments = BuildPreviewLauncherArgumentString(previewBatPath, setupPath, runId);
 		bOutUsesPreviewLauncher = true;
 		return true;
 	}
 
 	outExecutable = FPlatformProcess::ExecutablePath();
-	outArguments = BuildSimulatorArgumentString(experimentRef, runId);
+	outArguments = BuildSimulatorArgumentString(setupPath, runId);
+	return !outExecutable.IsEmpty();
+}
+
+bool USimulatorLaunchSubsystem::BuildProjectRunLaunchCommand(
+	const FString& projectPath,
+	const FString& runId,
+	FString& outExecutable,
+	FString& outArguments,
+	bool& bOutUsesPreviewLauncher) const
+{
+	bOutUsesPreviewLauncher = false;
+
+	FString previewBatPath;
+	if (ShouldUsePreviewLauncher(previewBatPath))
+	{
+		outExecutable = TEXT("cmd.exe");
+		outArguments = BuildProjectRunPreviewLauncherArgumentString(previewBatPath, projectPath, runId);
+		bOutUsesPreviewLauncher = true;
+		return true;
+	}
+
+	outExecutable = FPlatformProcess::ExecutablePath();
+	outArguments = BuildProjectRunSimulatorArgumentString(projectPath, runId);
 	return !outExecutable.IsEmpty();
 }
 

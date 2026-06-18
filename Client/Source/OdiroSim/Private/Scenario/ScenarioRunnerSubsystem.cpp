@@ -1,12 +1,17 @@
 
 #include "Scenario/ScenarioRunnerSubsystem.h"
 #include "DeliveryBot/Actor/DeliveryBot.h"
+#include "DeliveryBot/DeliveryBotSetupCompiler.h"
+#include "Episode/EpisodeMeasurementLogSubsystem.h"
+#include "Scenario/ScenarioCompiler.h"
 #include "Scenario/ScenarioEvaluationSubsystem.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Scenario/ScenarioSimulationSubsystem.h"
-#include "Scenario/ScenarioSimulationProfileAdapter.h"
-#include "Scenario/ScenarioTemplateWorldSpecAdapter.h"
-#include "Shared/EpisodeRunResultJson.h"
+#include "Scenario/UserProjectEpisodeScenarioWorldSpecAdapter.h"
+#include "Misc/Paths.h"
+#include "Shared/EpisodeEvaluationReportJson.h"
+#include "Shared/SimulationSetupTypes.h"
+#include "Shared/UserProjectDataTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioRunner, Log, All);
 
@@ -60,6 +65,74 @@ namespace
 			*diagnostic.Message);
 	}
 
+	FString BuildProjectTracePathForEpisode(const FString& episodeId)
+	{
+		const FSimulationCommandLineParseResult commandLineResult = FSimulationCommandLine::ParseCurrent();
+		if (!commandLineResult.bSuccess || !commandLineResult.Options.bProjectRun)
+		{
+			return FString();
+		}
+
+		if (!FUserProjectEpisodeScenarioJson::IsValidEpisodeId(episodeId))
+		{
+			return FString();
+		}
+
+		const FUserProjectRunSnapshotPaths paths = FUserProjectRunSnapshot::BuildPaths(
+			commandLineResult.Options.ProjectPath,
+			commandLineResult.Options.RunId);
+		return FPaths::Combine(
+			FUserProjectRunOutputJson::BuildEpisodeDirectory(paths, episodeId),
+			TEXT("trace.jsonl"));
+	}
+
+	void StartProjectTraceLoggingForEpisode(UWorld* world, const FString& episodeId)
+	{
+		if (!IsValid(world))
+		{
+			return;
+		}
+
+		const FString tracePath = BuildProjectTracePathForEpisode(episodeId);
+		if (tracePath.IsEmpty())
+		{
+			return;
+		}
+
+		if (UEpisodeMeasurementLogSubsystem* measurementLogSubsystem = world->GetSubsystem<UEpisodeMeasurementLogSubsystem>())
+		{
+			if (!measurementLogSubsystem->StartProjectTraceLogging(tracePath))
+			{
+				UE_LOG(LogScenarioRunner, Warning, TEXT("Project trace 시작 실패 | Episode: %s, Trace: %s"), *episodeId, *tracePath);
+			}
+		}
+	}
+
+	void StopProjectTraceLogging(UWorld* world)
+	{
+		if (!IsValid(world))
+		{
+			return;
+		}
+
+		if (UEpisodeMeasurementLogSubsystem* measurementLogSubsystem = world->GetSubsystem<UEpisodeMeasurementLogSubsystem>())
+		{
+			measurementLogSubsystem->StopProjectTraceLogging();
+		}
+	}
+
+	FString ResolveRunnerJsonFilePath(const FString& jsonFilePath)
+	{
+		if (jsonFilePath.IsEmpty()) return jsonFilePath;
+
+		if (FPaths::IsRelative(jsonFilePath))
+		{
+			return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), jsonFilePath));
+		}
+
+		return jsonFilePath;
+	}
+
 	FString MakeEpisodeRunnerProjectRelativePath(FString filePath)
 	{
 		if (filePath.IsEmpty())
@@ -81,6 +154,14 @@ namespace
 		return filePath;
 	}
 
+	FString NormalizeRunnerJsonFilePathForCompare(const FString& jsonFilePath)
+	{
+		FString normalizedJsonFilePath = ResolveRunnerJsonFilePath(jsonFilePath);
+		FPaths::NormalizeFilename(normalizedJsonFilePath);
+		FPaths::CollapseRelativeDirectories(normalizedJsonFilePath);
+		return normalizedJsonFilePath;
+	}
+
 	FScenarioSimulationSetupSpec MakeSimulationSetupSpec(const FScenarioWorldSpec& worldSpec)
 	{
 		FScenarioSimulationSetupSpec setupSpec;
@@ -96,38 +177,27 @@ namespace
 	}
 
 	FScenarioCompileResult CompileRunnerScenarioWorldSpec(
-		const FScenarioRunInput& runInput)
+		const FString& scenarioJsonPath,
+		const UScenarioCompiler* runtimeCompiler)
 	{
-		const FString& scenarioJsonPath = runInput.ScenarioSourceJsonPath;
+		if (FUserProjectEpisodeScenarioWorldSpecAdapter::IsEpisodeScenarioFile(scenarioJsonPath))
+		{
+			return FUserProjectEpisodeScenarioWorldSpecAdapter::CompileScenarioWorldSpecFromEpisodeScenarioFile(scenarioJsonPath);
+		}
+
 		if (FScenarioSampleWorldSpecAdapter::IsScenarioSampleFile(scenarioJsonPath))
 		{
 			return FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleFile(scenarioJsonPath);
 		}
 
-		if (FScenarioTemplateWorldSpecAdapter::IsScenarioTemplateFile(scenarioJsonPath))
-		{
-			FScenarioTemplateSampleRequest request =
-				FScenarioTemplateWorldSpecAdapter::MakeDefaultSampleRequest(scenarioJsonPath, runInput.PairId);
-			request.ProfileRef = runInput.SimulationProfileJsonPath;
-			request.ProfileHash = FScenarioSimulationProfileAdapter::MakeProfileFileHash(runInput.SimulationProfileJsonPath);
-			return FScenarioTemplateWorldSpecAdapter::CompileScenarioWorldSpecFromTemplateFile(scenarioJsonPath, request).CompileResult;
-		}
-
-		FScenarioCompileResult result;
-		FScenarioCompileDiagnostic diagnostic;
-		diagnostic.Severity = EScenarioCompileDiagnosticSeverity::Error;
-		diagnostic.Code = TEXT("unsupported_scenario_source_schema");
-		diagnostic.Message = FString::Printf(
-			TEXT("Scenario runner only accepts scenario_template or scenario_sample JSON sources. Source: %s"),
-			*scenarioJsonPath);
-		result.Diagnostics.Add(diagnostic);
-		result.bSuccess = false;
-		return result;
+		return runtimeCompiler
+			? runtimeCompiler->CompileScenarioWorldSpecFromJsonFile(scenarioJsonPath)
+			: FScenarioCompileResult();
 	}
 
-	bool ApplySimulationProfileToWorldSpec(
+	bool ApplyDeliveryBotSetupToWorldSpec(
 		FScenarioWorldSpec& worldSpec,
-		const FDeliveryBotSetupInfo& simulationProfileSetupInfo,
+		const FDeliveryBotSetupInfo& deliveryBotSetupInfo,
 		const FString& policySpecJsonPath,
 		bool bDeferPolicyAutoStartToRunner)
 	{
@@ -137,7 +207,7 @@ namespace
 			if (placeableSpec.Category != EScenarioActorCategory::DeliveryBot) continue;
 
 			const FDeliveryBotLocationSetupInfo locationSetupInfo = placeableSpec.DeliveryBot.SetupInfo.LocationSetupInfo;
-			FDeliveryBotSetupInfo mergedSetupInfo = simulationProfileSetupInfo;
+			FDeliveryBotSetupInfo mergedSetupInfo = deliveryBotSetupInfo;
 			if (!policySpecJsonPath.TrimStartAndEnd().IsEmpty())
 			{
 				mergedSetupInfo.StartupPolicySpecFileName = policySpecJsonPath.TrimStartAndEnd();
@@ -154,33 +224,12 @@ namespace
 		return bApplied;
 	}
 
-	FScenarioSimulationProfileCompileResult CompileRunnerSimulationProfile(
-		const FString& simulationProfileJsonPath)
-	{
-		if (FScenarioSimulationProfileAdapter::IsSimulationProfileFile(simulationProfileJsonPath))
-		{
-			return FScenarioSimulationProfileAdapter::CompileProfileFromJsonFile(simulationProfileJsonPath);
-		}
-
-		FScenarioSimulationProfileCompileResult result;
-		FScenarioCompileDiagnostic diagnostic;
-		diagnostic.Severity = EScenarioCompileDiagnosticSeverity::Error;
-		diagnostic.Code = TEXT("unsupported_simulation_profile_schema");
-		diagnostic.Message = FString::Printf(
-			TEXT("Scenario runner only accepts simulation_profile JSON for robot setup. Source: %s"),
-			*simulationProfileJsonPath);
-		result.Diagnostics.Add(diagnostic);
-		result.bSuccess = false;
-		result.ProfileHash = FScenarioSimulationProfileAdapter::MakeProfileFileHash(simulationProfileJsonPath);
-		return result;
-	}
-
 	FString BuildPairHash(
-		const FString& scenarioSourceHash,
-		const FString& simulationProfileHash,
+		const FString& episodeSetupHash,
+		const FString& deliveryBotSetupHash,
 		const FString& policySpecJsonPath)
 	{
-		FString hashSource = scenarioSourceHash + TEXT(":") + simulationProfileHash;
+		FString hashSource = episodeSetupHash + TEXT(":") + deliveryBotSetupHash;
 		const FString trimmedPolicySpecJsonPath = policySpecJsonPath.TrimStartAndEnd();
 		if (!trimmedPolicySpecJsonPath.IsEmpty())
 		{
@@ -192,14 +241,14 @@ namespace
 }
 
 bool UScenarioRunnerSubsystem::StartScenarioPairFromJsonFiles(
-	const FString& scenarioSourceJsonPath,
-	const FString& simulationProfileJsonPath)
+	const FString& scenarioSetupJsonPath,
+	const FString& deliveryBotSetupJsonPath)
 {
-	if (scenarioSourceJsonPath.IsEmpty() || simulationProfileJsonPath.IsEmpty()) return false;
+	if (scenarioSetupJsonPath.IsEmpty() || deliveryBotSetupJsonPath.IsEmpty()) return false;
 
 	FScenarioRunInput runInput;
-	runInput.ScenarioSourceJsonPath = scenarioSourceJsonPath;
-	runInput.SimulationProfileJsonPath = simulationProfileJsonPath;
+	runInput.ScenarioSetupJsonPath = scenarioSetupJsonPath;
+	runInput.DeliveryBotSetupJsonPath = deliveryBotSetupJsonPath;
 
 	TArray<FScenarioRunInput> runInputs;
 	runInputs.Add(runInput);
@@ -220,7 +269,7 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunInputsForRun(
 
 bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
 	const TArray<FScenarioRunInput>& runInputs,
-	const FString& activeBatchSourceLabel,
+	const FString& activeRunQueueJsonFilePath,
 	const FString& activeBatchRunId)
 {
 	if (IsBatchActive())
@@ -228,16 +277,16 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
 		UE_LOG(
 			LogScenarioRunner,
 			Warning,
-			TEXT("Episode batch 시작 거부: 기존 batch 실행 중 | State: %s, ActiveBatchSource: %s"),
+			TEXT("Episode batch 시작 거부: 기존 batch 실행 중 | State: %s, ActiveRunQueue: %s"),
 			*ToRunnerEnumString(RunnerState),
-			ActiveBatchSourceLabel.IsEmpty() ? TEXT("<direct>") : *ActiveBatchSourceLabel);
+			ActiveRunQueueJsonFilePath.IsEmpty() ? TEXT("<direct>") : *ActiveRunQueueJsonFilePath);
 		return false;
 	}
 
 	PendingRunInputs.Reset();
 	for (const FScenarioRunInput& runInput : runInputs)
 	{
-		if (!runInput.ScenarioSourceJsonPath.IsEmpty() && !runInput.SimulationProfileJsonPath.IsEmpty())
+		if (!runInput.ScenarioSetupJsonPath.IsEmpty() && !runInput.DeliveryBotSetupJsonPath.IsEmpty())
 		{
 			PendingRunInputs.Add(runInput);
 		}
@@ -248,8 +297,8 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
 				Warning,
 				TEXT("Scenario pair 입력 무시: ScenarioSetup 또는 DeliveryBotSetup 경로가 비어 있음 | Pair: %s, ScenarioSetup: %s, DeliveryBotSetup: %s"),
 				*runInput.PairId,
-				*runInput.ScenarioSourceJsonPath,
-				*runInput.SimulationProfileJsonPath);
+				*runInput.ScenarioSetupJsonPath,
+				*runInput.DeliveryBotSetupJsonPath);
 		}
 	}
 
@@ -269,7 +318,7 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
 	RunRecords.Reset();
 	CurrentRunIndex = INDEX_NONE;
 	TotalRunCount = PendingRunInputs.Num();
-	ActiveBatchSourceLabel = activeBatchSourceLabel;
+	ActiveRunQueueJsonFilePath = activeRunQueueJsonFilePath;
 	ActiveBatchRunId = activeBatchRunId.TrimStartAndEnd();
 	SetRunnerState(EScenarioRunnerState::Preparing);
 
@@ -279,10 +328,140 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
 	return true;
 }
 
+bool UScenarioRunnerSubsystem::StartBatchFromRunQueueJsonFile(const FString& runQueueJsonFilePath)
+{
+	return StartBatchFromRunQueueJsonFileForRun(runQueueJsonFilePath, FString());
+}
+
+bool UScenarioRunnerSubsystem::StartBatchFromRunQueueJsonFileForRun(
+	const FString& runQueueJsonFilePath,
+	const FString& activeRunId)
+{
+	if (runQueueJsonFilePath.IsEmpty()) return false;
+	const FString resolvedRunQueueJsonFilePath = ResolveRunnerJsonFilePath(runQueueJsonFilePath);
+	const FString normalizedRunQueueJsonFilePath = NormalizeRunnerJsonFilePathForCompare(runQueueJsonFilePath);
+
+	if (IsBatchActive())
+	{
+		if (IsRunningRunQueueJsonFile(runQueueJsonFilePath))
+		{
+			UE_LOG(
+				LogScenarioRunner,
+				Log,
+				TEXT("Episode run queue 이미 실행 중 | Path: %s, State: %s"),
+				*runQueueJsonFilePath,
+				*ToRunnerEnumString(RunnerState));
+			return true;
+		}
+
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Episode run queue 시작 거부: 다른 batch 실행 중 | ActiveRunQueue: %s, RequestedRunQueue: %s"),
+			ActiveRunQueueJsonFilePath.IsEmpty() ? TEXT("<direct>") : *ActiveRunQueueJsonFilePath,
+			*normalizedRunQueueJsonFilePath);
+		return false;
+	}
+
+	FString jsonString;
+	if (!FFileHelper::LoadFileToString(jsonString, *resolvedRunQueueJsonFilePath))
+	{
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Episode run queue JSON 읽기 실패 | Path: %s, ResolvedPath: %s"),
+			*runQueueJsonFilePath,
+			*resolvedRunQueueJsonFilePath);
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> rootObject;
+	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(jsonString);
+	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+	{
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Episode run queue JSON 파싱 실패 | Path: %s, ResolvedPath: %s"),
+			*runQueueJsonFilePath,
+			*resolvedRunQueueJsonFilePath);
+		return false;
+	}
+
+	const TSharedPtr<FJsonValue> runsValue = rootObject->TryGetField(TEXT("runs"));
+	if (!runsValue.IsValid() || runsValue->Type != EJson::Array)
+	{
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Episode run queue에 runs 배열이 없음 | Path: %s, ResolvedPath: %s"),
+			*runQueueJsonFilePath,
+			*resolvedRunQueueJsonFilePath);
+		return false;
+	}
+
+	TArray<FScenarioRunInput> runInputs;
+	const TArray<TSharedPtr<FJsonValue>> runValues = runsValue->AsArray();
+	for (int32 index = 0; index < runValues.Num(); ++index)
+	{
+		const TSharedPtr<FJsonValue>& runValue = runValues[index];
+		if (!runValue.IsValid() || runValue->Type != EJson::Object)
+		{
+			UE_LOG(LogScenarioRunner, Warning, TEXT("Episode run queue 항목 무시: object가 아님 | Path: %s, Index: %d"), *runQueueJsonFilePath, index);
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject> runObject = runValue->AsObject();
+		if (!runObject.IsValid())
+		{
+			UE_LOG(LogScenarioRunner, Warning, TEXT("Episode run queue 항목 무시: object 변환 실패 | Path: %s, Index: %d"), *runQueueJsonFilePath, index);
+			continue;
+		}
+
+		FScenarioRunInput runInput;
+		runObject->TryGetStringField(TEXT("pair_id"), runInput.PairId);
+		runObject->TryGetStringField(TEXT("scenario_setup"), runInput.ScenarioSetupJsonPath);
+		runObject->TryGetStringField(TEXT("delivery_bot_setup"), runInput.DeliveryBotSetupJsonPath);
+		runObject->TryGetStringField(TEXT("policy_spec"), runInput.PolicySpecJsonPath);
+
+		runInput.PairId = runInput.PairId.TrimStartAndEnd();
+		runInput.ScenarioSetupJsonPath = runInput.ScenarioSetupJsonPath.TrimStartAndEnd();
+		runInput.ScenarioSetupJsonPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		runInput.DeliveryBotSetupJsonPath = runInput.DeliveryBotSetupJsonPath.TrimStartAndEnd();
+		runInput.DeliveryBotSetupJsonPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		runInput.PolicySpecJsonPath = runInput.PolicySpecJsonPath.TrimStartAndEnd();
+		runInput.PolicySpecJsonPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+
+		if (runInput.ScenarioSetupJsonPath.IsEmpty())
+		{
+			UE_LOG(LogScenarioRunner, Warning, TEXT("Episode run queue 항목 무시: scenario_setup이 비어 있음 | Path: %s, Index: %d"), *runQueueJsonFilePath, index);
+			continue;
+		}
+
+		if (runInput.DeliveryBotSetupJsonPath.IsEmpty())
+		{
+			UE_LOG(LogScenarioRunner, Warning, TEXT("Episode run queue 항목 무시: delivery_bot_setup이 비어 있음 | Path: %s, Index: %d"), *runQueueJsonFilePath, index);
+			continue;
+		}
+
+		runInputs.Add(runInput);
+	}
+
+	if (runInputs.IsEmpty())
+	{
+		UE_LOG(LogScenarioRunner, Warning, TEXT("Episode run queue에서 실행할 pair를 찾지 못함 | Path: %s"), *runQueueJsonFilePath);
+		return false;
+	}
+
+	UE_LOG(LogScenarioRunner, Warning, TEXT("Episode run queue 로드 완료 | Path: %s, Count: %d"), *runQueueJsonFilePath, runInputs.Num());
+	return StartBatchFromRunInputsInternal(runInputs, normalizedRunQueueJsonFilePath, activeRunId);
+}
+
 void UScenarioRunnerSubsystem::CancelRun()
 {
+	StopProjectTraceLogging(ResolveWorld());
 	PendingRunInputs.Reset();
-	ActiveBatchSourceLabel.Reset();
+	ActiveRunQueueJsonFilePath.Reset();
 	ActiveBatchRunId.Reset();
 	SetRunnerState(EScenarioRunnerState::Cancelled);
 
@@ -291,6 +470,8 @@ void UScenarioRunnerSubsystem::CancelRun()
 		evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
 		evaluationSubsystem->StopEvaluation();
 	}
+
+	StopProjectTraceLogging(ResolveWorld());
 
 	if (UScenarioSimulationSubsystem* simulationSubsystem = ResolveSimulationSubsystem())
 	{
@@ -318,6 +499,56 @@ void UScenarioRunnerSubsystem::SetRunnerState(EScenarioRunnerState runnerState)
 	OnRunnerStateChanged.Broadcast(RunnerState);
 }
 
+bool UScenarioRunnerSubsystem::IsRunningRunQueueJsonFile(const FString& runQueueJsonFilePath) const
+{
+	if (!IsBatchActive() || ActiveRunQueueJsonFilePath.IsEmpty())
+	{
+		return false;
+	}
+
+	return ActiveRunQueueJsonFilePath.Equals(
+		NormalizeRunnerJsonFilePathForCompare(runQueueJsonFilePath),
+		ESearchCase::IgnoreCase);
+}
+
+bool UScenarioRunnerSubsystem::BuildLatestEvaluationReportJson(FString& outJson) const
+{
+	if (RunRecords.IsEmpty())
+	{
+		outJson.Reset();
+		UE_LOG(LogScenarioRunner, Warning, TEXT("Evaluation report JSON 생성 실패: 기록이 없음"));
+		return false;
+	}
+
+	return BuildEvaluationReportJson(RunRecords.Num() - 1, outJson);
+}
+
+bool UScenarioRunnerSubsystem::BuildEvaluationReportJson(int32 runRecordIndex, FString& outJson) const
+{
+	if (!RunRecords.IsValidIndex(runRecordIndex))
+	{
+		outJson.Reset();
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Evaluation report JSON 생성 실패: 기록 index가 유효하지 않음 | Index: %d, Records: %d"),
+			runRecordIndex,
+			RunRecords.Num());
+		return false;
+	}
+
+	TArray<FString> diagnostics;
+	const bool bSucceeded = FEpisodeEvaluationReportJson::TryWriteReportJson(
+		RunRecords[runRecordIndex],
+		outJson,
+		diagnostics);
+	for (const FString& diagnostic : diagnostics)
+	{
+		UE_LOG(LogScenarioRunner, Warning, TEXT("Evaluation report JSON 진단 | %s"), *diagnostic);
+	}
+
+	return bSucceeded;
+}
 
 void UScenarioRunnerSubsystem::HandleEpisodeEnded(FEpisodeEvaluationResult result)
 {
@@ -353,9 +584,8 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 {
 	if (PendingRunInputs.IsEmpty())
 	{
-		SaveRunSummaryJson();
 		SetRunnerState(EScenarioRunnerState::Completed);
-		ActiveBatchSourceLabel.Reset();
+		ActiveRunQueueJsonFilePath.Reset();
 		ActiveBatchRunId.Reset();
 		UE_LOG(LogScenarioRunner, Log, TEXT("Episode 배치 완료 | Records: %d"), RunRecords.Num());
 		return;
@@ -367,7 +597,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	if (!world || !simulationSubsystem || !evaluationSubsystem)
 	{
 		SetRunnerState(EScenarioRunnerState::Failed);
-		ActiveBatchSourceLabel.Reset();
+		ActiveRunQueueJsonFilePath.Reset();
 		ActiveBatchRunId.Reset();
 		UE_LOG(
 			LogScenarioRunner,
@@ -388,9 +618,9 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	CurrentRecord.RunIndex = CurrentRunIndex;
 	CurrentRecord.RunId = BuildRunId();
 	CurrentRecord.PairId = CurrentRunInput.PairId;
-	CurrentRecord.SourceJsonPath = CurrentRunInput.ScenarioSourceJsonPath;
-	CurrentRecord.ScenarioSourceJsonPath = CurrentRunInput.ScenarioSourceJsonPath;
-	CurrentRecord.SimulationProfileJsonPath = CurrentRunInput.SimulationProfileJsonPath;
+	CurrentRecord.SourceJsonPath = CurrentRunInput.ScenarioSetupJsonPath;
+	CurrentRecord.EpisodeSetupJsonPath = CurrentRunInput.ScenarioSetupJsonPath;
+	CurrentRecord.DeliveryBotSetupJsonPath = CurrentRunInput.DeliveryBotSetupJsonPath;
 	CurrentRecord.PolicySpecJsonPath = CurrentRunInput.PolicySpecJsonPath;
 	CurrentRecord.StartTimeSeconds = world->GetTimeSeconds();
 
@@ -403,16 +633,40 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		*CurrentRecord.RunId,
 		*CurrentRecord.PairId,
 		CurrentRecord.RunIndex,
-		*CurrentRunInput.ScenarioSourceJsonPath,
-		*CurrentRunInput.SimulationProfileJsonPath,
-		CurrentRunInput.PolicySpecJsonPath.IsEmpty() ? TEXT("<simulation_profile>") : *CurrentRunInput.PolicySpecJsonPath,
+		*CurrentRunInput.ScenarioSetupJsonPath,
+		*CurrentRunInput.DeliveryBotSetupJsonPath,
+		CurrentRunInput.PolicySpecJsonPath.IsEmpty() ? TEXT("<delivery_bot_setup>") : *CurrentRunInput.PolicySpecJsonPath,
 		PendingRunInputs.Num());
 
-	FScenarioCompileResult compileResult = CompileRunnerScenarioWorldSpec(CurrentRunInput);
-	CurrentRecord.bScenarioSourceCompileSucceeded = compileResult.bSuccess;
+	UScenarioCompiler* compiler = NewObject<UScenarioCompiler>(this);
+	if (!compiler)
+	{
+		UE_LOG(LogScenarioRunner, Warning, TEXT("Episode 컴파일러 생성 실패 | RunId: %s"), *CurrentRecord.RunId);
+		CompleteCurrentRecord(
+			false,
+			EEpisodeEvaluationOutcome::Failure,
+			EEpisodeEvaluationTerminalReason::CompilerCreateFailed);
+		QueueStartNextScenario();
+		return;
+	}
+
+	UDeliveryBotSetupCompiler* deliveryBotSetupCompiler = NewObject<UDeliveryBotSetupCompiler>(this);
+	if (!deliveryBotSetupCompiler)
+	{
+		UE_LOG(LogScenarioRunner, Warning, TEXT("DeliveryBotSetup 컴파일러 생성 실패 | RunId: %s"), *CurrentRecord.RunId);
+		CompleteCurrentRecord(
+			false,
+			EEpisodeEvaluationOutcome::Failure,
+			EEpisodeEvaluationTerminalReason::CompilerCreateFailed);
+		QueueStartNextScenario();
+		return;
+	}
+
+	FScenarioCompileResult compileResult = CompileRunnerScenarioWorldSpec(CurrentRunInput.ScenarioSetupJsonPath, compiler);
+	CurrentRecord.bEpisodeSetupCompileSucceeded = compileResult.bSuccess;
 	CurrentRecord.EpisodeId = compileResult.WorldSpec.RunConfig.TemplateId;
 	CurrentRecord.SpecHash = compileResult.WorldSpec.SpecHash;
-	CurrentRecord.ScenarioSourceHash = compileResult.WorldSpec.SpecHash;
+	CurrentRecord.EpisodeSetupHash = compileResult.WorldSpec.SpecHash;
 	AppendCompileDiagnostics(compileResult);
 
 	UE_LOG(
@@ -436,16 +690,16 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		return;
 	}
 
-	FScenarioSimulationProfileCompileResult profileCompileResult =
-		CompileRunnerSimulationProfile(CurrentRunInput.SimulationProfileJsonPath);
+	FDeliveryBotSetupCompileResult deliveryBotCompileResult =
+		deliveryBotSetupCompiler->CompileDeliveryBotSetupFromJsonFile(CurrentRunInput.DeliveryBotSetupJsonPath);
 
-	CurrentRecord.bSimulationProfileCompileSucceeded = profileCompileResult.bSuccess;
-	CurrentRecord.SimulationProfileHash = profileCompileResult.ProfileHash;
+	CurrentRecord.bDeliveryBotSetupCompileSucceeded = deliveryBotCompileResult.bSuccess;
+	CurrentRecord.DeliveryBotSetupHash = deliveryBotCompileResult.SpecHash;
 	CurrentRecord.PairHash = BuildPairHash(
-		CurrentRecord.ScenarioSourceHash,
-		CurrentRecord.SimulationProfileHash,
+		CurrentRecord.EpisodeSetupHash,
+		CurrentRecord.DeliveryBotSetupHash,
 		CurrentRunInput.PolicySpecJsonPath);
-	AppendSimulationProfileDiagnostics(profileCompileResult);
+	AppendDeliveryBotSetupDiagnostics(deliveryBotCompileResult);
 
 	UE_LOG(
 		LogScenarioRunner,
@@ -453,11 +707,11 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		TEXT("DeliveryBotSetup 컴파일 완료 | RunId: %s, Pair: %s, Success: %s, Diagnostics: %d, SpecHash: %s"),
 		*CurrentRecord.RunId,
 		*CurrentRecord.PairId,
-		profileCompileResult.bSuccess ? TEXT("true") : TEXT("false"),
-		profileCompileResult.Diagnostics.Num(),
-		*CurrentRecord.SimulationProfileHash);
+		deliveryBotCompileResult.bSuccess ? TEXT("true") : TEXT("false"),
+		deliveryBotCompileResult.Diagnostics.Num(),
+		*CurrentRecord.DeliveryBotSetupHash);
 
-	if (!profileCompileResult.bSuccess)
+	if (!deliveryBotCompileResult.bSuccess)
 	{
 		CurrentRecord.bCompileSucceeded = false;
 		CompleteCurrentRecord(
@@ -470,12 +724,12 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 
 	const bool bRunnerManagedPolicyStart = !CurrentRunInput.PolicySpecJsonPath.IsEmpty();
 
-	const bool bSimulationProfileApplied = ApplySimulationProfileToWorldSpec(
+	const bool bDeliveryBotSetupApplied = ApplyDeliveryBotSetupToWorldSpec(
 		compileResult.WorldSpec,
-		profileCompileResult.SetupInfo,
+		deliveryBotCompileResult.SetupInfo,
 		CurrentRunInput.PolicySpecJsonPath,
 		bRunnerManagedPolicyStart);
-	if (!bSimulationProfileApplied)
+	if (!bDeliveryBotSetupApplied)
 	{
 		UE_LOG(LogScenarioRunner, Warning, TEXT("DeliveryBotSetup 적용 대상 로봇이 없음 | RunId: %s, Pair: %s"), *CurrentRecord.RunId, *CurrentRecord.PairId);
 	}
@@ -535,7 +789,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 			UE_LOG(
 				LogScenarioRunner,
 				Warning,
-				TEXT("PolicySpec 적용 실패: runtime robot actor가 DeliveryBot이 아님 | RunId: %s, Pair: %s, PolicySpec: %s"),
+				TEXT("RunQueue PolicySpec 적용 실패: runtime robot actor가 DeliveryBot이 아님 | RunId: %s, Pair: %s, PolicySpec: %s"),
 				*CurrentRecord.RunId,
 				*CurrentRecord.PairId,
 				*CurrentRunInput.PolicySpecJsonPath);
@@ -554,7 +808,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 			UE_LOG(
 				LogScenarioRunner,
 				Warning,
-				TEXT("PolicySpec 적용 요청 시작 실패 | RunId: %s, Pair: %s, PolicySpec: %s"),
+				TEXT("RunQueue PolicySpec 적용 요청 시작 실패 | RunId: %s, Pair: %s, PolicySpec: %s"),
 				*CurrentRecord.RunId,
 				*CurrentRecord.PairId,
 				*CurrentRunInput.PolicySpecJsonPath);
@@ -570,7 +824,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		UE_LOG(
 			LogScenarioRunner,
 			Log,
-			TEXT("PolicySpec 적용 요청 시작 | RunId: %s, Pair: %s, PolicySpec: %s"),
+			TEXT("RunQueue PolicySpec 적용 요청 시작 | RunId: %s, Pair: %s, PolicySpec: %s"),
 			*CurrentRecord.RunId,
 			*CurrentRecord.PairId,
 			*CurrentRunInput.PolicySpecJsonPath);
@@ -595,8 +849,11 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
 	evaluationSubsystem->OnEpisodeEnded.AddDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
 
+	StartProjectTraceLoggingForEpisode(world, runtimeContext.EpisodeId);
+
 	if (!evaluationSubsystem->StartEvaluation(compileResult.WorldSpec.EvaluationConfig, runtimeContext, timeLimitSeconds))
 	{
+		StopProjectTraceLogging(world);
 		evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
 		UE_LOG(LogScenarioRunner, Warning, TEXT("평가 시작 실패 | RunId: %s, Episode: %s"), *CurrentRecord.RunId, *runtimeContext.EpisodeId);
 		CompleteCurrentRecord(
@@ -651,7 +908,10 @@ void UScenarioRunnerSubsystem::CompleteCurrentRecord(
 	}
 
 	RunRecords.Add(CurrentRecord);
-	SaveEpisodeResultFilesForRecord(RunRecords.Last());
+	if (bSaveEvaluationReportJson)
+	{
+		SaveEvaluationReportJsonForRecord(RunRecords.Last());
+	}
 	OnRunRecordCompleted.Broadcast(RunRecords.Last());
 
 	UE_LOG(
@@ -680,12 +940,12 @@ void UScenarioRunnerSubsystem::AppendCompileDiagnostics(const FScenarioCompileRe
 	}
 }
 
-void UScenarioRunnerSubsystem::AppendSimulationProfileDiagnostics(const FScenarioSimulationProfileCompileResult& compileResult)
+void UScenarioRunnerSubsystem::AppendDeliveryBotSetupDiagnostics(const FDeliveryBotSetupCompileResult& compileResult)
 {
 	for (const FScenarioCompileDiagnostic& diagnostic : compileResult.Diagnostics)
 	{
 		CurrentRecord.Diagnostics.Add(FString::Printf(
-			TEXT("SimulationProfile %s [%s]: %s"),
+			TEXT("DeliveryBotSetup %s [%s]: %s"),
 			ToRunnerCompileSeverityString(diagnostic.Severity),
 			*diagnostic.Code,
 			*diagnostic.Message));
@@ -730,134 +990,74 @@ FString UScenarioRunnerSubsystem::BuildRunId() const
 	return FString::Printf(TEXT("episode_run_%04d"), CurrentRunIndex);
 }
 
-bool UScenarioRunnerSubsystem::SaveEpisodeResultFilesForRecord(FEpisodeRunRecord& runRecord) const
+bool UScenarioRunnerSubsystem::SaveEvaluationReportJsonForRecord(FEpisodeRunRecord& runRecord) const
 {
-	const FString eventsFilePath = BuildEpisodeEventsJsonlFilePath(runRecord);
-	const FString resultFilePath = BuildEpisodeResultJsonFilePath(runRecord);
-	const FString outputDirectory = FPaths::GetPath(resultFilePath);
+	FString jsonString;
+	TArray<FString> diagnostics;
+	if (!FEpisodeEvaluationReportJson::TryWriteReportJson(runRecord, jsonString, diagnostics))
+	{
+		for (const FString& diagnostic : diagnostics)
+		{
+			UE_LOG(LogScenarioRunner, Warning, TEXT("Evaluation report JSON 저장 전 직렬화 진단 | %s"), *diagnostic);
+		}
+		return false;
+	}
+
+	const FString outputFilePath = BuildEvaluationReportJsonFilePath(runRecord);
+	const FString outputDirectory = FPaths::GetPath(outputFilePath);
 	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true))
 	{
 		UE_LOG(
 			LogScenarioRunner,
 			Warning,
-			TEXT("Episode result save failed: directory create failed | Path: %s"),
+			TEXT("Evaluation report JSON 저장 실패: 디렉터리 생성 실패 | Path: %s"),
 			*outputDirectory);
 		return false;
 	}
 
-	FString eventsJsonl;
-	TArray<FString> eventDiagnostics;
-	if (!FEpisodeRunResultJson::TryWriteEpisodeEventsJsonl(runRecord, eventsJsonl, eventDiagnostics))
+	if (!FFileHelper::SaveStringToFile(jsonString, *outputFilePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
-		for (const FString& diagnostic : eventDiagnostics)
-		{
-			UE_LOG(LogScenarioRunner, Warning, TEXT("Episode events JSONL diagnostic | %s"), *diagnostic);
-		}
-		return false;
-	}
-	if (!FFileHelper::SaveStringToFile(eventsJsonl, *eventsFilePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
-	{
-		UE_LOG(LogScenarioRunner, Warning, TEXT("Episode events JSONL save failed | Path: %s"), *eventsFilePath);
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Evaluation report JSON 저장 실패: 파일 쓰기 실패 | Path: %s"),
+			*outputFilePath);
 		return false;
 	}
 
-	FString resultJson;
-	TArray<FString> resultDiagnostics;
-	if (!FEpisodeRunResultJson::TryWriteEpisodeResultJson(runRecord, resultJson, resultDiagnostics))
-	{
-		for (const FString& diagnostic : resultDiagnostics)
-		{
-			UE_LOG(LogScenarioRunner, Warning, TEXT("Episode result JSON diagnostic | %s"), *diagnostic);
-		}
-		return false;
-	}
-	if (!FFileHelper::SaveStringToFile(resultJson, *resultFilePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
-	{
-		UE_LOG(LogScenarioRunner, Warning, TEXT("Episode result JSON save failed | Path: %s"), *resultFilePath);
-		return false;
-	}
-
-	runRecord.EpisodeEventsJsonlPath = MakeEpisodeRunnerProjectRelativePath(eventsFilePath);
-	runRecord.EpisodeResultJsonPath = MakeEpisodeRunnerProjectRelativePath(resultFilePath);
 	UE_LOG(
 		LogScenarioRunner,
 		Log,
-		TEXT("Episode result files saved | RunId: %s, Episode: %s, Result: %s, Events: %s"),
+		TEXT("Evaluation report JSON 저장 완료 | RunId: %s, Episode: %s, Path: %s"),
 		*runRecord.RunId,
 		*runRecord.EpisodeId,
-		*resultFilePath,
-		*eventsFilePath);
+		*outputFilePath);
+	runRecord.EvaluationReportJsonPath = MakeEpisodeRunnerProjectRelativePath(outputFilePath);
 	return true;
 }
 
-bool UScenarioRunnerSubsystem::SaveRunSummaryJson() const
+FString UScenarioRunnerSubsystem::BuildEvaluationReportJsonFilePath(const FEpisodeRunRecord& runRecord) const
 {
-	FString summaryJson;
-	TArray<FString> diagnostics;
-	if (!FEpisodeRunResultJson::TryWriteRunSummaryJson(RunRecords, summaryJson, diagnostics))
-	{
-		for (const FString& diagnostic : diagnostics)
-		{
-			UE_LOG(LogScenarioRunner, Warning, TEXT("Run summary JSON diagnostic | %s"), *diagnostic);
-		}
-		return false;
-	}
-
-	const FString outputFilePath = BuildRunSummaryJsonFilePath();
-	const FString outputDirectory = FPaths::GetPath(outputFilePath);
-	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true))
-	{
-		UE_LOG(LogScenarioRunner, Warning, TEXT("Run summary JSON save failed: directory create failed | Path: %s"), *outputDirectory);
-		return false;
-	}
-
-	if (!FFileHelper::SaveStringToFile(summaryJson, *outputFilePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
-	{
-		UE_LOG(LogScenarioRunner, Warning, TEXT("Run summary JSON save failed | Path: %s"), *outputFilePath);
-		return false;
-	}
-
-	UE_LOG(LogScenarioRunner, Log, TEXT("Run summary JSON saved | Records: %d, Path: %s"), RunRecords.Num(), *outputFilePath);
-	return true;
-}
-
-FString UScenarioRunnerSubsystem::BuildRunSummaryJsonFilePath() const
-{
-	const FString directory = RunOutputDirectory.IsEmpty()
+	const FString directory = EvaluationReportOutputDirectory.IsEmpty()
 		? TEXT("Json/Output")
-		: RunOutputDirectory;
+		: EvaluationReportOutputDirectory;
 	const FString resolvedDirectory = FPaths::IsRelative(directory)
 		? FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), directory))
 		: directory;
-	return FPaths::Combine(resolvedDirectory, TEXT("summary.json"));
-}
 
-FString UScenarioRunnerSubsystem::BuildEpisodeResultJsonFilePath(const FEpisodeRunRecord& runRecord) const
-{
-	const FString directory = RunOutputDirectory.IsEmpty()
-		? TEXT("Json/Output")
-		: RunOutputDirectory;
-	const FString resolvedDirectory = FPaths::IsRelative(directory)
-		? FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), directory))
-		: directory;
-	return FPaths::Combine(
-		resolvedDirectory,
-		TEXT("episodes"),
-		SanitizeReportFileToken(runRecord.PairId),
-		TEXT("result.json"));
+	const FString fileName = FString::Printf(
+		TEXT("%s_%s_%s_evaluation_report.json"),
+		*SanitizeReportFileToken(runRecord.RunId),
+		*SanitizeReportFileToken(runRecord.PairId),
+		*SanitizeReportFileToken(runRecord.EpisodeId));
+	return FPaths::Combine(resolvedDirectory, fileName);
 }
-
-FString UScenarioRunnerSubsystem::BuildEpisodeEventsJsonlFilePath(const FEpisodeRunRecord& runRecord) const
-{
-	return FPaths::Combine(FPaths::GetPath(BuildEpisodeResultJsonFilePath(runRecord)), TEXT("events.jsonl"));
-}
-
 
 FString UScenarioRunnerSubsystem::BuildPairId(const FScenarioRunInput& runInput, int32 runIndex)
 {
 	if (!runInput.PairId.IsEmpty()) return runInput.PairId;
 
-	FString baseName = FPaths::GetBaseFilename(runInput.ScenarioSourceJsonPath);
+	FString baseName = FPaths::GetBaseFilename(runInput.ScenarioSetupJsonPath);
 	if (baseName.IsEmpty())
 	{
 		baseName = FString::Printf(TEXT("pair_%04d"), runIndex);

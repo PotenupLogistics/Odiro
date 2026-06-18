@@ -8,7 +8,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
-#include "Shared/ExperimentSettingTypes.h"
+#include "Shared/SimulationSetupTypes.h"
 #include "Widget/WidgetTextStyleCatalog.h"
 
 namespace
@@ -35,7 +35,7 @@ namespace
 				: FString::Printf(TEXT("%s_%d.%s"), *baseName, index, *extension);
 			FString candidatePath = FPaths::Combine(directory, fileName);
 			candidatePath.ReplaceInline(TEXT("\\"), TEXT("/"));
-			if (!FPaths::FileExists(FExperimentSettingJson::ResolveProjectPath(candidatePath)))
+			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(candidatePath)))
 			{
 				return candidatePath;
 			}

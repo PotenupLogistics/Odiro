@@ -92,10 +92,18 @@ public:
 
 	// Imports a user project scenario.json draft into the editor.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
-	bool LoadScenarioSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
+	bool LoadProjectScenarioJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
 	// Imports a user project scenario JSON string into the editor.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
+	bool LoadProjectScenarioJsonString(const FString& jsonString, TArray<FString>& outDiagnostics);
+
+	// Legacy Blueprint entry point kept for assets that still call scenario setup imports.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import", meta = (DeprecatedFunction, DeprecationMessage = "Use LoadProjectScenarioJsonFile."))
+	bool LoadScenarioSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
+
+	// Legacy Blueprint entry point kept for assets that still call scenario setup imports.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import", meta = (DeprecatedFunction, DeprecationMessage = "Use LoadProjectScenarioJsonString."))
 	bool LoadScenarioSetupJsonString(const FString& jsonString, TArray<FString>& outDiagnostics);
 
 	// 이미 컴파일된 FScenarioWorldSpec 직접 import.
@@ -302,14 +310,23 @@ public:
 
 	// Replaces the draft project scenario_id metadata field.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	bool SetDraftScenarioId(const FString& newScenarioId, TArray<FString>& outDiagnostics);
+
+	// Legacy Blueprint entry point kept while internal draft types still carry template naming.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template", meta = (DeprecatedFunction, DeprecationMessage = "Use SetDraftScenarioId."))
 	bool SetDraftTemplateId(const FString& templateId, TArray<FString>& outDiagnostics);
 
 	// Replaces the draft project scenario intent metadata field.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	bool SetDraftIntent(const FString& intent, TArray<FString>& outDiagnostics);
 
+	// Returns the file path that currently owns the editor draft.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
-	FString GetSourceScenarioSetupJsonPath() const { return SourceScenarioTemplateJsonPath; }
+	FString GetSourceProjectScenarioJsonPath() const { return SourceScenarioTemplateJsonPath; }
+
+	// Legacy Blueprint entry point kept for assets that still request the setup JSON path.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring", meta = (DeprecatedFunction, DeprecationMessage = "Use GetSourceProjectScenarioJsonPath."))
+	FString GetSourceScenarioSetupJsonPath() const { return GetSourceProjectScenarioJsonPath(); }
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	bool IsDraftDirty() const { return bDirty; }
@@ -326,13 +343,26 @@ public:
 
 	// Exports the current editor draft as the user project scenario.json contract.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
+	bool ExportProjectScenarioJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
+
+	// Exports and re-validates the current editor draft as the user project scenario.json contract.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
+	bool ExportAndValidateProjectScenarioJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
+
+	// Legacy Blueprint entry point kept for assets that still export setup JSON.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export", meta = (DeprecatedFunction, DeprecationMessage = "Use ExportProjectScenarioJsonString."))
 	bool ExportScenarioSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
+	// Legacy Blueprint entry point kept for assets that still validate setup JSON.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export", meta = (DeprecatedFunction, DeprecationMessage = "Use ExportAndValidateProjectScenarioJsonString."))
 	bool ExportAndValidateScenarioSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
 
 	// Saves a validated user project scenario.json draft and clears the dirty state.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
+	bool SaveProjectScenarioJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
+
+	// Legacy Blueprint entry point kept for assets that still save setup JSON.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export", meta = (DeprecatedFunction, DeprecationMessage = "Use SaveProjectScenarioJsonFile."))
 	bool SaveScenarioSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
 private:

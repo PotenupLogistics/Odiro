@@ -695,13 +695,13 @@ UWidget* UScenarioEditorSidebarWidget::BuildGeneratedPanelContent(
 			WidgetTree,
 			panelRoot,
 			TEXT("Root"),
-			TEXT("scenario_template"),
+			TEXT("scenario"),
 			TEXT("Main"),
 			TextStyleCatalog,
 			true);
 		AddFieldRow(WidgetTree, rootBody, TEXT("schema"), scenarioTemplate.Schema, TextStyleCatalog);
 		AddFieldRow(WidgetTree, rootBody, TEXT("version"), FString::FromInt(scenarioTemplate.Version), TextStyleCatalog);
-		AddFieldRow(WidgetTree, rootBody, TEXT("template_id"), scenarioTemplate.TemplateId, TextStyleCatalog);
+		AddFieldRow(WidgetTree, rootBody, TEXT("scenario_id"), scenarioTemplate.TemplateId, TextStyleCatalog);
 		AddFieldRow(WidgetTree, rootBody, TEXT("intent"), scenarioTemplate.Intent, TextStyleCatalog);
 
 		UVerticalBox* robotBody = AddBlockWidget(
@@ -907,7 +907,7 @@ void UScenarioEditorSidebarWidget::BuildMainPanelText(
 	FString& outListText) const
 {
 	outPrimaryText = FString::Printf(
-		TEXT("schema: %s\nversion: %d\ntemplate_id: %s"),
+		TEXT("schema: %s\nversion: %d\nscenario_id: %s"),
 		*scenarioTemplate.Schema,
 		scenarioTemplate.Version,
 		scenarioTemplate.TemplateId.IsEmpty() ? TEXT("(unset)") : *scenarioTemplate.TemplateId);

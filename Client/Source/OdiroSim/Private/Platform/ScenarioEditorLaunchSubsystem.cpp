@@ -152,7 +152,7 @@ void UScenarioEditorLaunchSubsystem::TryApplyPendingEditorStartup(UWorld* loaded
 		{
 			FString resolvedPath;
 			TArray<FString> diagnostics;
-			if (!editorController->SaveScenarioSetupJsonFile(PendingScenarioSetupPath, resolvedPath, diagnostics))
+			if (!editorController->SaveProjectScenarioJsonFile(PendingScenarioSetupPath, resolvedPath, diagnostics))
 			{
 				UE_LOG(
 					LogScenarioEditorLaunch,
@@ -171,7 +171,7 @@ void UScenarioEditorLaunchSubsystem::TryApplyPendingEditorStartup(UWorld* loaded
 	{
 		FString resolvedPath;
 		TArray<FString> diagnostics;
-		if (!editorController->LoadScenarioSetupJsonFile(PendingScenarioSetupPath, resolvedPath, diagnostics))
+		if (!editorController->LoadProjectScenarioJsonFile(PendingScenarioSetupPath, resolvedPath, diagnostics))
 		{
 			UE_LOG(
 				LogScenarioEditorLaunch,

@@ -49,7 +49,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 // Broadcasts when an array-capable row requests a structural edit.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FScenarioEditorSidebarFieldRowActionRequested);
 
-// Leaf property row for Scenario Template sidebar fields such as "template_id : value".
+// Leaf property row for project scenario sidebar fields such as "scenario_id : value".
 UCLASS(BlueprintType, Blueprintable)
 class ODIROSIM_API UScenarioEditorSidebarFieldRow : public UUserWidget
 {

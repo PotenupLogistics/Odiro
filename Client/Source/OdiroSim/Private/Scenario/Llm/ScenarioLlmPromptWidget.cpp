@@ -82,7 +82,7 @@ bool UScenarioLlmPromptWidget::LoadGeneratedScenario()
 
 	FString resolvedJsonFilePath;
 	TArray<FString> diagnostics;
-	if (!editorController->LoadScenarioSetupJsonFile(
+	if (!editorController->LoadProjectScenarioJsonFile(
 			result.FirstScenarioSourceJsonPath,
 			resolvedJsonFilePath,
 			diagnostics))

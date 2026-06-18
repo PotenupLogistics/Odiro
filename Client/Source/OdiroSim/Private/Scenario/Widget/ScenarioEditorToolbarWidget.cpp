@@ -78,7 +78,7 @@ bool UScenarioEditorToolbarWidget::SaveScenario()
 	FString resolvedPath;
 	TArray<FString> diagnostics;
 	const FString savePath = ResolveSavePath();
-	if (!editorController->SaveScenarioSetupJsonFile(savePath, resolvedPath, diagnostics))
+	if (!editorController->SaveProjectScenarioJsonFile(savePath, resolvedPath, diagnostics))
 	{
 		SetStatusText(diagnostics.IsEmpty()
 			? FString::Printf(TEXT("저장 실패: %s"), *savePath)
@@ -257,7 +257,7 @@ FString UScenarioEditorToolbarWidget::ResolveSavePath() const
 {
 	if (const AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
 	{
-		const FString sourcePath = editorController->GetSourceScenarioSetupJsonPath();
+		const FString sourcePath = editorController->GetSourceProjectScenarioJsonPath();
 		if (!sourcePath.IsEmpty())
 		{
 			return sourcePath;

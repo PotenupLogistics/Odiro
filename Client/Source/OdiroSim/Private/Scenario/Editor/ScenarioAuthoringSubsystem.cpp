@@ -148,7 +148,7 @@ void UScenarioAuthoringSubsystem::NewDraft()
 	}
 }
 
-bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonFile(
+bool UScenarioAuthoringSubsystem::LoadProjectScenarioJsonFile(
 	const FString& jsonFilePath,
 	FString& outResolvedJsonFilePath,
 	TArray<FString>& outDiagnostics)
@@ -181,7 +181,15 @@ bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonFile(
 	return RebuildEditorViewFromDraft(outDiagnostics);
 }
 
-bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonString(
+bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonFile(
+	const FString& jsonFilePath,
+	FString& outResolvedJsonFilePath,
+	TArray<FString>& outDiagnostics)
+{
+	return LoadProjectScenarioJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::LoadProjectScenarioJsonString(
 	const FString& jsonString,
 	TArray<FString>& outDiagnostics)
 {
@@ -207,6 +215,13 @@ bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonString(
 	SourceScenarioTemplateJsonPath.Reset();
 	bDirty = false;
 	return RebuildEditorViewFromDraft(outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::LoadScenarioSetupJsonString(
+	const FString& jsonString,
+	TArray<FString>& outDiagnostics)
+{
+	return LoadProjectScenarioJsonString(jsonString, outDiagnostics);
 }
 
 bool UScenarioAuthoringSubsystem::ImportCompiledWorldSpec(
@@ -319,19 +334,19 @@ double UScenarioAuthoringSubsystem::GetDraftCorridorAxisLengthMeters() const
 	return MeasureCorridorAxisLengthMeters(DraftScenarioTemplate.Corridor.Axis.PointsMeters);
 }
 
-bool UScenarioAuthoringSubsystem::SetDraftTemplateId(
-	const FString& templateId,
+bool UScenarioAuthoringSubsystem::SetDraftScenarioId(
+	const FString& newScenarioId,
 	TArray<FString>& outDiagnostics)
 {
 	outDiagnostics.Reset();
-	const FString normalizedTemplateId = templateId.TrimStartAndEnd();
-	if (normalizedTemplateId.IsEmpty())
+	const FString normalizedScenarioId = newScenarioId.TrimStartAndEnd();
+	if (normalizedScenarioId.IsEmpty())
 	{
 		outDiagnostics.Add(TEXT("scenario scenario_id must not be empty."));
 		return false;
 	}
 
-	if (!IsDraftScenarioTemplateEmpty() && DraftScenarioTemplate.TemplateId == normalizedTemplateId)
+	if (!IsDraftScenarioTemplateEmpty() && DraftScenarioTemplate.TemplateId == normalizedScenarioId)
 	{
 		return true;
 	}
@@ -343,8 +358,15 @@ bool UScenarioAuthoringSubsystem::SetDraftTemplateId(
 		InitializeDraftDefaults();
 	}
 
-	DraftScenarioTemplate.TemplateId = normalizedTemplateId;
+	DraftScenarioTemplate.TemplateId = normalizedScenarioId;
 	return CommitTemplateMetadataDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::SetDraftTemplateId(
+	const FString& templateId,
+	TArray<FString>& outDiagnostics)
+{
+	return SetDraftScenarioId(templateId, outDiagnostics);
 }
 
 bool UScenarioAuthoringSubsystem::SetDraftIntent(
@@ -1535,7 +1557,7 @@ TArray<FScenarioPlaceableInstanceSpec> UScenarioAuthoringSubsystem::GetAuthoredS
 	return staticObstacleSpecs;
 }
 
-bool UScenarioAuthoringSubsystem::ExportScenarioSetupJsonString(
+bool UScenarioAuthoringSubsystem::ExportProjectScenarioJsonString(
 	FString& outJsonString,
 	TArray<FString>& outDiagnostics) const
 {
@@ -1552,11 +1574,18 @@ bool UScenarioAuthoringSubsystem::ExportScenarioSetupJsonString(
 	return bWritten;
 }
 
-bool UScenarioAuthoringSubsystem::ExportAndValidateScenarioSetupJsonString(
+bool UScenarioAuthoringSubsystem::ExportScenarioSetupJsonString(
 	FString& outJsonString,
 	TArray<FString>& outDiagnostics) const
 {
-	if (!ExportScenarioSetupJsonString(outJsonString, outDiagnostics))
+	return ExportProjectScenarioJsonString(outJsonString, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::ExportAndValidateProjectScenarioJsonString(
+	FString& outJsonString,
+	TArray<FString>& outDiagnostics) const
+{
+	if (!ExportProjectScenarioJsonString(outJsonString, outDiagnostics))
 	{
 		return false;
 	}
@@ -1571,7 +1600,14 @@ bool UScenarioAuthoringSubsystem::ExportAndValidateScenarioSetupJsonString(
 	return parseResult.bSuccess;
 }
 
-bool UScenarioAuthoringSubsystem::SaveScenarioSetupJsonFile(
+bool UScenarioAuthoringSubsystem::ExportAndValidateScenarioSetupJsonString(
+	FString& outJsonString,
+	TArray<FString>& outDiagnostics) const
+{
+	return ExportAndValidateProjectScenarioJsonString(outJsonString, outDiagnostics);
+}
+
+bool UScenarioAuthoringSubsystem::SaveProjectScenarioJsonFile(
 	const FString& jsonFilePath,
 	FString& outResolvedJsonFilePath,
 	TArray<FString>& outDiagnostics)
@@ -1587,7 +1623,7 @@ bool UScenarioAuthoringSubsystem::SaveScenarioSetupJsonFile(
 	outResolvedJsonFilePath = ResolveProjectRelativePath(jsonFilePath);
 
 	FString jsonString;
-	if (!ExportAndValidateScenarioSetupJsonString(jsonString, outDiagnostics))
+	if (!ExportAndValidateProjectScenarioJsonString(jsonString, outDiagnostics))
 	{
 		return false;
 	}
@@ -1607,6 +1643,14 @@ bool UScenarioAuthoringSubsystem::SaveScenarioSetupJsonFile(
 	SourceScenarioTemplateJsonPath = outResolvedJsonFilePath;
 	bDirty = false;
 	return true;
+}
+
+bool UScenarioAuthoringSubsystem::SaveScenarioSetupJsonFile(
+	const FString& jsonFilePath,
+	FString& outResolvedJsonFilePath,
+	TArray<FString>& outDiagnostics)
+{
+	return SaveProjectScenarioJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
 }
 
 FString UScenarioAuthoringSubsystem::ResolveProjectRelativePath(const FString& filePath)

@@ -86,7 +86,7 @@ bool UScenarioEditorEntryWidget::LoadScenarioFromPathTextBox()
 	TArray<FString> loadMessages;
 	UE_LOG(LogScenarioEditorEntryWidget, Log, TEXT("Project scenario JSON load requested | Input: %s"), *jsonFilePath);
 
-	const bool bLoaded = editorController->LoadScenarioSetupJsonFile(jsonFilePath, resolvedJsonFilePath, loadMessages);
+	const bool bLoaded = editorController->LoadProjectScenarioJsonFile(jsonFilePath, resolvedJsonFilePath, loadMessages);
 	if (loadMessages.IsEmpty())
 	{
 		loadMessages.Add(bLoaded

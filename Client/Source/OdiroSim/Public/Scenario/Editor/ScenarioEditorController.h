@@ -189,19 +189,39 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Palette")
 	void GetStaticObstaclePaletteEntries(TArray<FScenarioStaticObstaclePropEntry>& outEntries) const;
 
+	// Exports the current editor draft as a validated user project scenario JSON string.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
+	bool ExportAndValidateProjectScenarioJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
+
+	// Legacy Blueprint entry point kept for assets that still export setup JSON.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export", meta = (DeprecatedFunction, DeprecationMessage = "Use ExportAndValidateProjectScenarioJsonString."))
 	bool ExportAndValidateScenarioSetupJsonString(FString& outJsonString, TArray<FString>& outDiagnostics) const;
 
+	// Loads a user project scenario.json file into the editor draft.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import")
+	bool LoadProjectScenarioJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
+
+	// Legacy Blueprint entry point kept for assets that still import setup JSON.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Import", meta = (DeprecatedFunction, DeprecationMessage = "Use LoadProjectScenarioJsonFile."))
 	bool LoadScenarioSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Authoring")
 	void NewScenarioDraft();
 
+	// Saves the current editor draft to a user project scenario.json file.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
+	bool SaveProjectScenarioJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
+
+	// Legacy Blueprint entry point kept for assets that still save setup JSON.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export", meta = (DeprecatedFunction, DeprecationMessage = "Use SaveProjectScenarioJsonFile."))
 	bool SaveScenarioSetupJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
+	// Returns the file path that currently owns the editor draft.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
+	FString GetSourceProjectScenarioJsonPath() const;
+
+	// Legacy Blueprint entry point kept for assets that still request the setup JSON path.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring", meta = (DeprecatedFunction, DeprecationMessage = "Use GetSourceProjectScenarioJsonPath."))
 	FString GetSourceScenarioSetupJsonPath() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")

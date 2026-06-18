@@ -42,7 +42,7 @@ keep:
   - Client/Docs/plans/PLAN-260602-sim-logging.md is superseded legacy context; final log file contracts belong in contracts/specs/user-project-data.md.
   - Client/Docs/Data was removed; shared user project file contracts belong in contracts/specs/user-project-data.md.
   - Scenario setup/run queue samples in Client/Json/Input are legacy client-owned examples until the user project migration removes them.
-  - ScenarioTemplate* and ScenarioSample* are legacy compatibility surfaces unless a task explicitly targets them; ScenarioTemplateJson also owns the temporary editor-draft to project `scenario.json` adapter until internal draft types are renamed.
+  - ScenarioTemplate* and ScenarioSample* remain internal legacy compatibility surfaces unless a task explicitly targets them; public C++ editor entry points use project scenario wrappers while deprecated ScenarioSetup/Template wrappers remain for Blueprint compatibility.
   - Final user project contract uses one editable `<UserProject>/scenario.json`; do not add new user-facing template/sample split.
   - Episode scenario files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
   - Project run uses episode input arrays and `episode_scenario` adapter, not generated RunQueue files.

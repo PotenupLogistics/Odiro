@@ -33,7 +33,7 @@ enum class EScenarioEditorSidebarRobotAnchorField : uint8
 	Heading
 };
 
-// Main Scenario Template sidebar panel for template metadata and robot anchors.
+// Main project scenario sidebar panel for scenario metadata and robot anchors.
 UCLASS(BlueprintType, Blueprintable)
 class ODIROSIM_API UScenarioEditorSidebarMainPanel : public UUserWidget
 {
@@ -44,15 +44,15 @@ public:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
-	// Optional editable row for scenario_template.template_id.
+	// Optional editable row for scenario.scenario_id.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarFieldRow> TemplateIdFieldRow;
 
-	// Optional read-only row for scenario_template.version.
+	// Optional read-only row for scenario.version.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarFieldRow> VersionFieldRow;
 
-	// Optional editable row for scenario_template.intent.
+	// Optional editable row for scenario.intent.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarFieldRow> IntentFieldRow;
 
@@ -72,7 +72,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
 
-	// Optional root Scenario Template block.
+	// Optional root project scenario block.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarBlockWidget> RootBlockWidget;
 
@@ -88,7 +88,7 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarBlockWidget> RobotGoalBlockWidget;
 
-	// Optional read-only row for scenario_template.schema.
+	// Optional read-only row for scenario.schema.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarFieldRow> SchemaFieldRow;
 
@@ -96,16 +96,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
 
-	// Pulls the current draft Scenario Template and refreshes this panel.
+	// Pulls the current draft project scenario and refreshes this panel.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void RefreshFromDraft();
 
-	// Refreshes this panel from the provided Scenario Template document.
+	// Refreshes this panel from the provided draft scenario document.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void RefreshFromTemplate(const FScenarioTemplateDocument& scenarioTemplate);
 
 private:
-	// Handles template_id edits committed by the field row.
+	// Handles scenario_id edits committed by the field row.
 	UFUNCTION()
 	void HandleTemplateIdCommitted(const FText& text, ETextCommit::Type commitMethod);
 
@@ -239,7 +239,7 @@ private:
 		UScenarioEditorSidebarFieldRow* headingRow) const;
 	// Resolves the authoring subsystem that owns the draft template.
 	UScenarioAuthoringSubsystem* GetAuthoringSubsystem() const;
-	// Commits a template_id edit to the draft template.
+	// Commits a scenario_id edit to the draft scenario.
 	void CommitTemplateIdText(const FText& text);
 	// Commits an intent edit to the draft template.
 	void CommitIntentText(const FText& text);

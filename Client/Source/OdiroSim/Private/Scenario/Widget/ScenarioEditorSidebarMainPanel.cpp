@@ -525,7 +525,7 @@ void UScenarioEditorSidebarMainPanel::BuildDefaultWidgetTree()
 		RootBlockWidget,
 		TEXT("RootBlockWidget"),
 		TEXT("Root"),
-		TEXT("scenario_template"),
+		TEXT("scenario"),
 		TEXT("Main"),
 		TextStyleCatalog,
 		true);
@@ -788,7 +788,7 @@ void UScenarioEditorSidebarMainPanel::ConfigureFieldRows()
 	if (RootBlockWidget)
 	{
 		RootBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		RootBlockWidget->SetBlockMetadata(TEXT("Root"), TEXT("scenario_template"), TEXT("Main"));
+		RootBlockWidget->SetBlockMetadata(TEXT("Root"), TEXT("scenario"), TEXT("Main"));
 		RootBlockWidget->SetSelected(true);
 		RootBlockWidget->SetNested(false);
 	}
@@ -821,7 +821,7 @@ void UScenarioEditorSidebarMainPanel::ConfigureFieldRows()
 	if (TemplateIdFieldRow)
 	{
 		TemplateIdFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		TemplateIdFieldRow->SetFieldLabel(TEXT("template_id"));
+		TemplateIdFieldRow->SetFieldLabel(TEXT("scenario_id"));
 		TemplateIdFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
 		TemplateIdFieldRow->SetEditable(true);
 	}
@@ -1064,7 +1064,7 @@ void UScenarioEditorSidebarMainPanel::CommitTemplateIdText(const FText& text)
 	}
 
 	TArray<FString> diagnostics;
-	if (!authoringSubsystem->SetDraftTemplateId(text.ToString(), diagnostics))
+	if (!authoringSubsystem->SetDraftScenarioId(text.ToString(), diagnostics))
 	{
 		RefreshFromDraft();
 		SetDiagnosticsText(JoinMainPanelDiagnostics(diagnostics));

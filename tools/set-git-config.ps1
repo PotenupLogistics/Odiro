@@ -72,6 +72,102 @@ function Set-ExpectedLocalGitConfig {
     }
 }
 
+# Sets one INI key while preserving unrelated user settings.
+function Set-IniValue {
+    param(
+        [string] $File,
+        [string] $Section,
+        [string] $Name,
+        [string] $Expected
+    )
+
+    $directory = Split-Path -Parent $File
+    if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
+        New-Item -ItemType Directory -Path $directory | Out-Null
+    }
+
+    $lines = @()
+    if (Test-Path -LiteralPath $File -PathType Leaf) {
+        $lines = @(Get-Content -LiteralPath $File)
+    }
+
+    $list = [System.Collections.Generic.List[string]]::new()
+    foreach ($line in $lines) {
+        $list.Add($line)
+    }
+
+    $sectionLine = "[$Section]"
+    $sectionStart = -1
+    for ($i = 0; $i -lt $list.Count; ++$i) {
+        if ($list[$i].Trim() -eq $sectionLine) {
+            $sectionStart = $i
+            break
+        }
+    }
+
+    if ($sectionStart -lt 0) {
+        if ($list.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($list[$list.Count - 1])) {
+            $list.Add("")
+        }
+        $list.Add($sectionLine)
+        $list.Add("$Name=$Expected")
+        Set-Content -LiteralPath $File -Value $list
+        Write-Step "Configured Editor setting: $Name=$Expected"
+        return
+    }
+
+    $sectionEnd = $list.Count
+    for ($i = $sectionStart + 1; $i -lt $list.Count; ++$i) {
+        $trimmed = $list[$i].Trim()
+        if ($trimmed.StartsWith("[") -and $trimmed.EndsWith("]")) {
+            $sectionEnd = $i
+            break
+        }
+    }
+
+    $keyPattern = "^\s*" + [regex]::Escape($Name) + "\s*="
+    for ($i = $sectionStart + 1; $i -lt $sectionEnd; ++$i) {
+        if ($list[$i] -match $keyPattern) {
+            $actual = (($list[$i] -split "=", 2)[1]).Trim()
+            if ($actual -eq $Expected) {
+                return
+            }
+
+            $list[$i] = "$Name=$Expected"
+            Set-Content -LiteralPath $File -Value $list
+            Write-Step "Updated Editor setting: $Name '$actual' -> '$Expected'"
+            return
+        }
+    }
+
+    $list.Insert($sectionEnd, "$Name=$Expected")
+    Set-Content -LiteralPath $File -Value $list
+    Write-Step "Configured Editor setting: $Name=$Expected"
+}
+
+# Ensures current local Editor preferences prompt before modifying unlocked assets.
+function Set-UnrealEditorCheckoutPromptSettings {
+    $clientDir = Join-Path $repoRoot "Client"
+    if (-not (Test-Path -LiteralPath $clientDir -PathType Container)) {
+        return
+    }
+
+    $savedConfigRoot = Join-Path $clientDir "Saved\Config"
+    $editorConfigDirs = @()
+    if (Test-Path -LiteralPath $savedConfigRoot -PathType Container) {
+        $editorConfigDirs = @(Get-ChildItem -LiteralPath $savedConfigRoot -Directory -Filter "*Editor" | Select-Object -ExpandProperty FullName)
+    }
+    if ($editorConfigDirs.Count -eq 0) {
+        $editorConfigDirs = @(Join-Path $savedConfigRoot "WindowsEditor")
+    }
+
+    foreach ($editorConfigDir in $editorConfigDirs) {
+        $settingsFile = Join-Path $editorConfigDir "EditorPerProjectUserSettings.ini"
+        Set-IniValue -File $settingsFile -Section "/Script/UnrealEd.EditorLoadingSavingSettings" -Name "bAutomaticallyCheckoutOnAssetModification" -Expected "False"
+        Set-IniValue -File $settingsFile -Section "/Script/UnrealEd.EditorLoadingSavingSettings" -Name "bPromptForCheckoutOnAssetModification" -Expected "True"
+    }
+}
+
 # Checks one expected Git attribute set for Unreal binary assets.
 function Assert-UnrealAssetAttributes {
     param([string] $Path)
@@ -142,6 +238,8 @@ if ((Get-GitConfigFromFile -File $lfsConfig -Name "lfs.locksverify") -ne "true")
 
 Assert-UnrealAssetAttributes -Path "*.uasset"
 Assert-UnrealAssetAttributes -Path "*.umap"
+
+Set-UnrealEditorCheckoutPromptSettings
 
 $head = git -C $repoRoot rev-parse --verify HEAD
 if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($head)) {

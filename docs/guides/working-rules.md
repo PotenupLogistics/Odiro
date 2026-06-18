@@ -47,7 +47,7 @@ LLM API key
 ## Binary Asset lock 규칙
 
 - `.uasset`, `.umap`, `.ubulk`, `.uexp` 수정 시 lock 필요
-  - `task-setup.bat` 또는 `tools/set-git-config.ps1` 실행해야 설정 적용
+  - `task-setup.bat` 또는 `tools/set-git-config.ps1` 실행해야 read-only와 Editor checkout prompt 설정 적용
 - Unreal Editor: `Check Out`만 수행. `Submit`, `Push`, `Unlock`, repository initialize 기능 사용 금지
   - Source Control 탭에서 `Git LFS 2 provider` 설정 필요
 - Checkout 실패 시 다른 사람이 lock한 상태. 해당 asset 수정 금지

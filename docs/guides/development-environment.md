@@ -20,7 +20,7 @@
 ```
 
 Git submodule 초기화, hook 설정, LFS lock 설정 수행.
-완료 후 Unreal asset에 read-only 상태가 재적용된다.
+완료 후 Unreal asset에 read-only 상태가 재적용되고, Editor asset 수정 전 checkout prompt가 켜진다.
 
 ```powershell
 # 직접 재설정
@@ -38,6 +38,14 @@ git config --local lfs.locksverify true
 git config --local lfs.setlockablereadonly true
 ```
 
+Editor user 설정도 보정된다.
+
+```ini
+[/Script/UnrealEd.EditorLoadingSavingSettings]
+bAutomaticallyCheckoutOnAssetModification=False
+bPromptForCheckoutOnAssetModification=True
+```
+
 ### 확인
 
 ```powershell
@@ -45,7 +53,7 @@ git check-attr lockable -- Client/Content/<sample>.uasset
 .\tools\set-git-config.ps1
 ```
 
-`lockable: set`이어야 한다. `set-git-config.ps1`은 필요한 설정 변경과 완료 문구만 출력하고, setup 완료 후 lock 전 Unreal asset에 read-only 상태를 재적용한다. 이미 맞는 상태의 성공 검증은 출력하지 않는다.
+`lockable: set`이어야 한다. `set-git-config.ps1`은 필요한 설정 변경과 완료 문구만 출력하고, setup 완료 후 lock 전 Unreal asset에 read-only 상태와 Editor checkout prompt를 재적용한다. 이미 맞는 상태의 성공 검증은 출력하지 않는다.
 
 GitHub repository 설정:
 

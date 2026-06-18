@@ -1175,18 +1175,15 @@ FUserProjectRunSnapshotParseResult FUserProjectRunSnapshot::Parse(const FString&
 FSimulationCommandLineParseResult FSimulationCommandLine::Parse(const FString& commandLine)
 {
 	FSimulationCommandLineParseResult result;
+	FString legacySimulationSetupFile;
 	bool bHasBareSimulate = false;
-	if (TryGetSwitchValue(commandLine, TEXT("Simulate"), result.Options.SimulationSetupFile, bHasBareSimulate))
-	{
-		result.Options.bSimulate = true;
-	}
-	else if (bHasBareSimulate)
+	if (TryGetSwitchValue(commandLine, TEXT("Simulate"), legacySimulationSetupFile, bHasBareSimulate) || bHasBareSimulate)
 	{
 		AddSimulationDiagnostic(
 			result.Diagnostics,
 			EScenarioCompileDiagnosticSeverity::Error,
-			TEXT("missing_simulate_value"),
-			TEXT("-Simulate requires a simulation setup file path."));
+			TEXT("unsupported_simulate_arg"),
+			TEXT("-Simulate is no longer supported. Use -OdiroProject with -RunId."));
 	}
 
 	bool bHasBareProject = false;
@@ -1242,15 +1239,6 @@ FSimulationCommandLineParseResult FSimulationCommandLine::Parse(const FString& c
 		}
 	}
 
-	if (result.Options.bSimulate && result.Options.SimulationSetupFile.IsEmpty())
-	{
-		AddSimulationDiagnostic(
-			result.Diagnostics,
-			EScenarioCompileDiagnosticSeverity::Error,
-			TEXT("empty_simulate_value"),
-			TEXT("-Simulate value must not be empty."));
-	}
-
 	if (result.Options.bProjectRun && result.Options.ProjectPath.IsEmpty())
 	{
 		AddSimulationDiagnostic(
@@ -1258,15 +1246,6 @@ FSimulationCommandLineParseResult FSimulationCommandLine::Parse(const FString& c
 			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("empty_project_value"),
 			TEXT("-OdiroProject value must not be empty."));
-	}
-
-	if (result.Options.bProjectRun && result.Options.bSimulate)
-	{
-		AddSimulationDiagnostic(
-			result.Diagnostics,
-			EScenarioCompileDiagnosticSeverity::Error,
-			TEXT("conflicting_simulator_inputs"),
-			TEXT("-OdiroProject and -Simulate cannot be used together."));
 	}
 
 	if (result.Options.bProjectRun && result.Options.RunId.IsEmpty())

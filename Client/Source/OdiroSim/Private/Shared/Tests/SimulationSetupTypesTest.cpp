@@ -8,7 +8,6 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
-#include "Platform/SimulatorLaunchSubsystem.h"
 
 namespace
 {
@@ -118,26 +117,6 @@ bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters
 	TestTrue(TEXT("playable setup parses"), setupResult.bSuccess);
 	TestEqual(TEXT("playable map id"), setupResult.Setup.MapId, FString(TEXT("ScenarioSimulationMap")));
 	TestEqual(TEXT("playable run queue"), setupResult.Setup.RunQueueJsonPath, FString(TEXT("Json/Input/SimulationSetupPlayable_RunQueue.json")));
-
-	FString runQueueJson;
-	TestTrue(
-		TEXT("playable run queue loads"),
-		FFileHelper::LoadFileToString(
-			runQueueJson,
-			*FSimulationSetupJson::ResolveProjectPath(setupResult.Setup.RunQueueJsonPath)));
-
-	TArray<FScenarioRunInput> runInputs;
-	TArray<FString> runQueueDiagnostics;
-	TestTrue(
-		TEXT("playable run queue reads"),
-		USimulatorLaunchSubsystem::TryReadScenarioRunQueueJson(runQueueJson, runInputs, runQueueDiagnostics));
-	TestEqual(TEXT("playable run input count"), runInputs.Num(), 1);
-	TestEqual(TEXT("playable scenario setup path"), runInputs[0].ScenarioSetupJsonPath, FString(TEXT("Json/Input/ScenarioSetupPlayable.json")));
-	TestEqual(TEXT("playable policy path"), runInputs[0].DeliveryBotSetupJsonPath, FString(TEXT("Json/Input/DeliveryBotSetupPlayable.json")));
-	TestEqual(
-		TEXT("playable policy spec path"),
-		runInputs[0].PolicySpecJsonPath,
-		FString(TEXT("Json/Input/PolicySpecs/PolicySpec_NormalOnly.json")));
 
 	const UDeliveryBotSetupCompiler* deliveryBotCompiler = NewObject<UDeliveryBotSetupCompiler>();
 	const FDeliveryBotSetupCompileResult deliveryBotResult =
@@ -332,28 +311,24 @@ bool FSimulationSetupJsonMissingFileTest::RunTest(const FString& parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSimulationCommandLineParseTest,
-	"OdiroSim.SimulationSetup.CommandLine.Parse",
+	"OdiroSim.ProjectRun.CommandLine.Parse",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FSimulationCommandLineParseTest::RunTest(const FString& parameters)
 {
-	const FSimulationCommandLineParseResult simulatorResult =
+	const FSimulationCommandLineParseResult legacySimulateResult =
 		FSimulationCommandLine::Parse(TEXT("-unattended -Simulate=Json/Input/SimulationSetupSample.json -RunId=sample-run-001"));
 
-	TestTrue(TEXT("simulator command succeeds"), simulatorResult.bSuccess);
-	TestTrue(TEXT("simulate enabled"), simulatorResult.Options.bSimulate);
-	TestEqual(
-		TEXT("simulate setup file"),
-		simulatorResult.Options.SimulationSetupFile,
-		FString(TEXT("Json/Input/SimulationSetupSample.json")));
-	TestEqual(TEXT("run id"), simulatorResult.Options.RunId, FString(TEXT("sample-run-001")));
+	TestFalse(TEXT("legacy simulate command fails"), legacySimulateResult.bSuccess);
+	TestTrue(
+		TEXT("legacy simulate diagnostic"),
+		HasSimulationDiagnosticCode(legacySimulateResult.Diagnostics, TEXT("unsupported_simulate_arg")));
 
 	const FSimulationCommandLineParseResult projectRunResult =
 		FSimulationCommandLine::Parse(TEXT("-unattended -OdiroProject=\"X:/Projects/DeliveryBotA\" -RunId=000001 -PolicyPort=18124"));
 
 	TestTrue(TEXT("project run command succeeds"), projectRunResult.bSuccess);
 	TestTrue(TEXT("project run enabled"), projectRunResult.Options.bProjectRun);
-	TestFalse(TEXT("project run does not use legacy simulate"), projectRunResult.Options.bSimulate);
 	TestEqual(
 		TEXT("project path"),
 		projectRunResult.Options.ProjectPath,
@@ -378,14 +353,13 @@ bool FSimulationCommandLineParseTest::RunTest(const FString& parameters)
 	const FSimulationCommandLineParseResult nonSimulatorResult =
 		FSimulationCommandLine::Parse(TEXT("-unattended -NoSplash"));
 	TestTrue(TEXT("non-simulator command succeeds"), nonSimulatorResult.bSuccess);
-	TestFalse(TEXT("non-simulator command does not simulate"), nonSimulatorResult.Options.bSimulate);
 
-	const FSimulationCommandLineParseResult missingValueResult =
+	const FSimulationCommandLineParseResult bareSimulateResult =
 		FSimulationCommandLine::Parse(TEXT("-Simulate -RunId=sample-run-001"));
-	TestFalse(TEXT("missing simulate value fails"), missingValueResult.bSuccess);
+	TestFalse(TEXT("bare simulate fails"), bareSimulateResult.bSuccess);
 	TestTrue(
-		TEXT("missing simulate value diagnostic"),
-		HasSimulationDiagnosticCode(missingValueResult.Diagnostics, TEXT("missing_simulate_value")));
+		TEXT("bare simulate diagnostic"),
+		HasSimulationDiagnosticCode(bareSimulateResult.Diagnostics, TEXT("unsupported_simulate_arg")));
 
 	return true;
 }

@@ -88,14 +88,6 @@ struct ODIROSIM_API FSimulationCommandLineOptions
 {
 	GENERATED_BODY()
 
-	// legacy `-Simulate=<SimulationSetupFile>`가 있으면 SimulatorMode로 진입
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|CommandLine")
-	bool bSimulate = false;
-
-	// legacy `-Simulate`가 가리키는 SimulationSetup JSON path
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|CommandLine")
-	FString SimulationSetupFile;
-
 	// `-OdiroProject=<UserProject>`가 있으면 user project run으로 진입
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|CommandLine")
 	bool bProjectRun = false;

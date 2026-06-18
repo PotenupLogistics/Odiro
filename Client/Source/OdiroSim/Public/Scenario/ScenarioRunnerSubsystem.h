@@ -34,11 +34,6 @@ public:
 	bool StartBatchFromRunInputsForRun(const TArray<FScenarioRunInput>& runInputs, const FString& activeRunId);
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
-	bool StartBatchFromRunQueueJsonFile(const FString& runQueueJsonFilePath);
-
-	bool StartBatchFromRunQueueJsonFileForRun(const FString& runQueueJsonFilePath, const FString& activeRunId);
-
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Runner")
 	void CancelRun();
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
@@ -46,12 +41,6 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	bool IsBatchActive() const;
-
-	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
-	FString GetActiveRunQueueJsonFilePath() const { return ActiveRunQueueJsonFilePath; }
-
-	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
-	bool IsRunningRunQueueJsonFile(const FString& runQueueJsonFilePath) const;
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Runner")
 	TArray<FEpisodeRunRecord> GetRunRecords() const { return RunRecords; }
@@ -71,7 +60,6 @@ private:
 
 	bool StartBatchFromRunInputsInternal(
 		const TArray<FScenarioRunInput>& runInputs,
-		const FString& activeRunQueueJsonFilePath,
 		const FString& activeBatchRunId);
 	void SetRunnerState(EScenarioRunnerState runnerState);
 	void StartNextScenario();
@@ -103,9 +91,6 @@ private:
 
 	UPROPERTY(Transient)
 	int32 TotalRunCount = 0;
-
-	UPROPERTY(Transient)
-	FString ActiveRunQueueJsonFilePath;
 
 	UPROPERTY(Transient)
 	FString ActiveBatchRunId;

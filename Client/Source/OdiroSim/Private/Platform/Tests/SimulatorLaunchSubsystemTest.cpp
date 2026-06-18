@@ -175,49 +175,4 @@ bool FSimulatorLaunchProjectRunSnapshotPrepareTest::RunTest(const FString& param
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FSimulatorLaunchRunQueueJsonRoundTripTest,
-	"OdiroSim.SimulatorLaunch.RunQueueJson.RoundTrip",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FSimulatorLaunchRunQueueJsonRoundTripTest::RunTest(const FString& parameters)
-{
-	TArray<FScenarioRunInput> runInputs;
-	FScenarioRunInput runInput;
-	runInput.PairId = TEXT("sample_0");
-	runInput.ScenarioSetupJsonPath = TEXT("Json/Input/ScenarioSetupSample_0.json");
-	runInput.DeliveryBotSetupJsonPath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
-	runInput.PolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
-	runInputs.Add(runInput);
-
-	FString json;
-	TArray<FString> diagnostics;
-	TestTrue(TEXT("run queue writes"), USimulatorLaunchSubsystem::TryWriteScenarioRunQueueJson(runInputs, json, diagnostics));
-	TestEqual(TEXT("write diagnostics"), diagnostics.Num(), 0);
-	TestTrue(TEXT("schema field"), json.Contains(TEXT("\"schema\"")));
-	TestTrue(TEXT("scenario setup field"), json.Contains(TEXT("\"scenario_setup\"")));
-	TestTrue(TEXT("scenario setup path"), json.Contains(TEXT("ScenarioSetupSample_0.json")));
-	TestTrue(TEXT("policy spec field"), json.Contains(TEXT("\"policy_spec\"")));
-
-	TArray<FScenarioRunInput> parsedRunInputs;
-	TestTrue(TEXT("run queue reads"), USimulatorLaunchSubsystem::TryReadScenarioRunQueueJson(json, parsedRunInputs, diagnostics));
-	TestEqual(TEXT("read diagnostics"), diagnostics.Num(), 0);
-	TestEqual(TEXT("run input count"), parsedRunInputs.Num(), 1);
-	TestEqual(TEXT("pair id"), parsedRunInputs[0].PairId, FString(TEXT("sample_0")));
-	TestEqual(
-		TEXT("scenario setup"),
-		parsedRunInputs[0].ScenarioSetupJsonPath,
-		FString(TEXT("Json/Input/ScenarioSetupSample_0.json")));
-	TestEqual(
-		TEXT("delivery setup"),
-		parsedRunInputs[0].DeliveryBotSetupJsonPath,
-		FString(TEXT("Json/Input/DeliveryBotSetupSample_0.json")));
-	TestEqual(
-		TEXT("policy spec"),
-		parsedRunInputs[0].PolicySpecJsonPath,
-		FString(TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json")));
-
-	return true;
-}
-
 #endif

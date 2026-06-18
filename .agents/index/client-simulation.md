@@ -45,6 +45,7 @@ keep:
   - Final user project contract uses one editable `<UserProject>/scenario.json`; do not add new user-facing template/sample split.
   - Episode scenario files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
   - Project run uses episode input arrays and `episode_scenario` adapter, not generated RunQueue files.
+  - ScenarioRunnerSubsystem public start API accepts direct run inputs; file-based RunQueue start helpers are removed.
   - Scenario LLM authoring saves v2 `scenario` responses to user project `scenario.json`; it must not save or execute RunQueue files.
   - Project run output uses `FUserProjectRunOutputJson` for `result.json`, `events.jsonl`, `actions.jsonl`, `trace.jsonl`, and `summary.json`.
   - Scenario authoring/runtime projection stays separate from runtime WorldSpec and actor-spawn payload types.

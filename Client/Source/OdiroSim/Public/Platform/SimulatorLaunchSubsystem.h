@@ -1,7 +1,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Shared/ScenarioConfigTypes.h"
 #include "Shared/SimulationSetupTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "SimulatorLaunchSubsystem.generated.h"
@@ -14,9 +13,6 @@ struct ODIROSIM_API FSimulatorRunInfo
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	FString RunId;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
-	FString SetupPath;
 
 	// Project-run mode에서 Bridge가 만든 사용자 project root.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
@@ -34,7 +30,7 @@ struct ODIROSIM_API FSimulatorRunInfo
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	bool bUsedPreviewLauncher = false;
 
-	// true이면 legacy SimulationSetup 대신 project/run snapshot 계약으로 실행한다.
+	// True when this launch follows the user project run snapshot contract.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	bool bProjectRun = false;
 
@@ -70,10 +66,6 @@ public:
 
 	FSimulatorRunInfoChangedNative OnRunInfoChanged;
 
-	// Legacy Json/Input SimulationSetup 목록. 새 실행은 StartProjectRun을 사용한다.
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch", meta = (DeprecatedFunction, DeprecationMessage = "Legacy SimulationSetup API. Use user project run APIs."))
-	TArray<FString> ListSimulationSetupFiles() const;
-
 	// Legacy Json/Input ScenarioSetup 목록. 새 실행은 project scenario.json을 사용한다.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup", meta = (DeprecatedFunction, DeprecationMessage = "Legacy ScenarioSetup API. Use user project scenario.json."))
 	TArray<FString> ListScenarioSetupFiles() const;
@@ -85,11 +77,6 @@ public:
 	// Legacy PolicySpec 목록. 새 실행은 project policy/를 사용한다.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup", meta = (DeprecatedFunction, DeprecationMessage = "Legacy PolicySpec API. Use user project policy/."))
 	TArray<FString> ListPolicySpecFiles() const;
-
-	// Legacy RunQueue 목록. 새 실행은 RunQueue를 만들지 않는다.
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup", meta = (DeprecatedFunction, DeprecationMessage = "Legacy RunQueue API. Use user project runs."))
-	TArray<FString> ListScenarioRunQueueFiles() const;
-
 
 	// Legacy status 목록. 새 run 상태는 project run status.json을 사용한다.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch", meta = (DeprecatedFunction, DeprecationMessage = "Legacy status API. Use user project run status.json."))
@@ -103,63 +90,6 @@ public:
 	// Legacy measurement log 조회. 새 결과는 actions/events/trace JSONL을 사용한다.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch", meta = (DeprecatedFunction, DeprecationMessage = "Legacy measurement log API. Use user project actions/events/trace JSONL."))
 	TArray<FString> ListMeasurementLogFilesInDirectory(const FString& runDirectory) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch", meta = (DeprecatedFunction, DeprecationMessage = "Legacy SimulationSetup API. Use user project setting/profile/scenario files."))
-	FSimulationSetupParseResult LoadSimulationSetupFile(const FString& setupPath) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch", meta = (DeprecatedFunction, DeprecationMessage = "Legacy SimulationSetup API. Save user project setting.json instead."))
-	bool SaveFixedStepFpsToSetupFile(const FString& setupPath, int32 fps, TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup", meta = (DeprecatedFunction, DeprecationMessage = "Legacy SimulationSetup API. Save user project setting.json instead."))
-	bool SaveSimulationSetupFile(const FString& setupPath, const FSimulationSetup& setup, TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup", meta = (DeprecatedFunction, DeprecationMessage = "Legacy RunQueue API. Use user project runs."))
-	bool LoadScenarioRunQueueFile(
-		const FString& runQueuePath,
-		TArray<FScenarioRunInput>& outRunInputs,
-		TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup", meta = (DeprecatedFunction, DeprecationMessage = "Legacy RunQueue API. Do not create RunQueue files for user project runs."))
-	bool SaveScenarioRunQueueFile(
-		const FString& runQueuePath,
-		const TArray<FScenarioRunInput>& runInputs,
-		TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup", meta = (DeprecatedFunction, DeprecationMessage = "Legacy RunQueue API. Do not create RunQueue files for user project runs."))
-	bool AppendRunQueuePair(
-		const FString& runQueuePath,
-		const FString& pairId,
-		const FString& scenarioSetupPath,
-		const FString& deliveryBotSetupPath,
-		TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup", meta = (DeprecatedFunction, DeprecationMessage = "Legacy RunQueue API. Do not edit RunQueue files for user project runs."))
-	bool RemoveRunQueuePair(
-		const FString& runQueuePath,
-		int32 runIndex,
-		TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup", meta = (DeprecatedFunction, DeprecationMessage = "Legacy RunQueue API. Do not edit RunQueue files for user project runs."))
-	bool MoveRunQueuePair(
-		const FString& runQueuePath,
-		int32 runIndex,
-		int32 direction,
-		TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup", meta = (DeprecatedFunction, DeprecationMessage = "Legacy RunQueue API. Do not edit RunQueue files for user project runs."))
-	bool ReplaceScenarioSetupReferencesInRunQueues(
-		const FString& oldScenarioSetupPath,
-		const FString& newScenarioSetupPath,
-		TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Setup", meta = (DeprecatedFunction, DeprecationMessage = "Legacy RunQueue API. Do not edit RunQueue files for user project runs."))
-	bool ReplaceDeliveryBotSetupReferencesInRunQueues(
-		const FString& oldDeliveryBotSetupPath,
-		const FString& newDeliveryBotSetupPath,
-		TArray<FString>& outDiagnostics) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch", meta = (DeprecatedFunction, DeprecationMessage = "Legacy SimulationSetup launch API. Use StartProjectRun."))
-	bool StartSimulationRun(const FString& setupPath, const FString& requestedRunId);
 
 	// 사용자 project root와 run id로 simulator process를 시작한다.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
@@ -192,16 +122,7 @@ public:
 	static FString QuoteCommandLineArgument(const FString& value);
 
 	UFUNCTION(BlueprintPure, Category = "Simulator|Launch")
-	static FString BuildSimulatorArgumentString(const FString& setupPath, const FString& runId);
-
-	UFUNCTION(BlueprintPure, Category = "Simulator|Launch")
 	static FString BuildProjectRunSimulatorArgumentString(const FString& projectPath, const FString& runId);
-
-	UFUNCTION(BlueprintPure, Category = "Simulator|Launch")
-	static FString BuildPreviewLauncherArgumentString(
-		const FString& previewBatPath,
-		const FString& setupPath,
-		const FString& runId);
 
 	UFUNCTION(BlueprintPure, Category = "Simulator|Launch")
 	static FString BuildProjectRunPreviewLauncherArgumentString(
@@ -209,33 +130,9 @@ public:
 		const FString& projectPath,
 		const FString& runId);
 
-	// Legacy RunQueue parser helper. 호환 테스트와 tooling에서만 사용한다.
-	static bool TryReadScenarioRunQueueJson(
-		const FString& jsonString,
-		TArray<FScenarioRunInput>& outRunInputs,
-		TArray<FString>& outDiagnostics);
-
-	// Legacy RunQueue writer helper. 호환 테스트와 tooling에서만 사용한다.
-	static bool TryWriteScenarioRunQueueJson(
-		const TArray<FScenarioRunInput>& runInputs,
-		FString& outJson,
-		TArray<FString>& outDiagnostics);
-
 private:
-	bool ReplaceRunQueueReferences(
-		const FString& oldPath,
-		const FString& newPath,
-		bool bReplaceScenarioSetupReference,
-		TArray<FString>& outDiagnostics) const;
-	bool BuildLaunchCommand(const FString& setupPath, const FString& runId, FString& outExecutable, FString& outArguments, bool& bOutUsesPreviewLauncher) const;
 	bool BuildProjectRunLaunchCommand(const FString& projectPath, const FString& runId, FString& outExecutable, FString& outArguments, bool& bOutUsesPreviewLauncher) const;
 	bool ShouldUsePreviewLauncher(FString& outPreviewBatPath) const;
-	bool CreateRuntimeSimulationSetupFile(
-		const FSimulationSetup& sourceSetup,
-		const FString& runId,
-		FString& outRuntimeSetupPath,
-		FSimulationSetup& outRuntimeSetup,
-		TArray<FString>& outDiagnostics) const;
 	void PollActiveRunStatus();
 	void StartPolling();
 	void StopPolling();

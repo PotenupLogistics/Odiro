@@ -18,7 +18,6 @@ class UTextBlock;
 class UWidget;
 class UWidgetSwitcher;
 struct FPlatformAnalysisAiResponse;
-struct FSimulationSetup;
 
 // Connects the MainMenuMap UMG Blueprint layout to platform workflow handlers.
 UCLASS(BlueprintType, Blueprintable)
@@ -127,16 +126,13 @@ private:
 	void BindControls();
 	void ShowMainMenuSection(int32 sectionIndex);
 	void SyncComboBoxSelection(UComboBoxString* targetComboBox, const FString& selectedItem);
-	void LoadSelectedSetup();
 	void RefreshScenarioList();
 	void RefreshPolicyList();
 	void RefreshExperimentConfigList();
 	void RefreshExperimentResultList();
 	void RefreshExperimentResultIterationList();
-	void ApplyNewSetupDefaults(const FString& setupPath);
 	void SetExperimentConfigDetailVisible(bool bVisible);
 	void SetExperimentResultDetailVisible(bool bVisible);
-	void SetSelectedSetupPath(const FString& setupPath);
 	void SetSelectedScenarioSetupPath(const FString& scenarioSetupPath);
 	void SetSelectedProjectScenarioPath(const FString& scenarioJsonPath);
 	void SetSelectedDeliveryBotSetupPath(const FString& deliveryBotSetupPath);
@@ -149,18 +145,12 @@ private:
 	bool OpenNewProjectScenarioInEditor(const FString& scenarioJsonPath);
 	bool OpenScenarioInEditor(const FString& scenarioJsonPath);
 	bool StartProjectRunFromScenario(const FString& scenarioJsonPath, const FString& requestedRunId);
-	bool BuildSimulationSetupFromControls(
-		const FSimulationSetup& baseSetup,
-		const FString& runQueuePath,
-		FSimulationSetup& outSetup,
-		TArray<FString>& outDiagnostics) const;
 	TSubclassOf<UFileListItemWidget> ResolveFileListItemWidgetClass() const;
 	void HandleRunInfoChanged(const struct FSimulatorRunInfo& runInfo);
 	void HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response);
 	void UpdateStatusText(const FString& extraMessage = FString());
 	void UpdateReportAndLogText();
 	void SetDiagnosticsText(const FString& message);
-	FString GetSelectedSetupPath() const;
 	FString GetSelectedScenarioSetupPath() const;
 	FString GetSelectedProjectScenarioPath() const;
 	FString GetSelectedDeliveryBotSetupPath() const;
@@ -374,7 +364,6 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UExperimentResultIterationButton>> ExperimentResultIterationButtons;
 
-	FString SelectedSetupPath;
 	FString SelectedScenarioSetupPath;
 	FString SelectedProjectScenarioPath;
 	FString SelectedDeliveryBotSetupPath;

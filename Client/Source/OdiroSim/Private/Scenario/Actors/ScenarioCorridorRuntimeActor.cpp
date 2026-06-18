@@ -13,6 +13,7 @@ namespace
 	const double RuntimeSurfaceTopZCm = 1.0;
 	const double RuntimeSurfaceHeightCm = 20.0;
 	const double RuntimeBlockedHeightCm = 200.0;
+	const double RuntimeSurfaceQueryToleranceMeters = 0.001;
 	const FName WalkableRuntimeCollisionProfileName{ TEXT("Walkable") };
 	const FName PenaltyRuntimeCollisionProfileName{ TEXT("Penalty") };
 	const FName BlockedRuntimeCollisionProfileName{ TEXT("Blocked") };
@@ -132,6 +133,98 @@ namespace
 			worldPointMeters.Y * RuntimeMetersToCentimeters,
 			RuntimeSurfaceTopZCm);
 	}
+
+	FVector2D TransformWorldCmToAxisPointMeters(const FScenarioRuntimeCorridorSpec& corridorSpec, const FVector& worldLocation)
+	{
+		const FVector2D worldPointMeters(
+			worldLocation.X / RuntimeMetersToCentimeters,
+			worldLocation.Y / RuntimeMetersToCentimeters);
+		return RotateRuntimePoint(worldPointMeters - corridorSpec.OriginXYMeters, -corridorSpec.HeadingDegrees);
+	}
+
+	bool TryProjectPointToAxisMeters(
+		const TArray<FVector2D>& axisPointsMeters,
+		const FVector2D& localPointMeters,
+		double& outAlongMeters,
+		double& outOffsetMeters)
+	{
+		outAlongMeters = 0.0;
+		outOffsetMeters = 0.0;
+		if (axisPointsMeters.Num() < 2)
+		{
+			return false;
+		}
+
+		bool bHasProjection = false;
+		double accumulatedMeters = 0.0;
+		double bestDistanceSquared = TNumericLimits<double>::Max();
+		double bestAlongMeters = 0.0;
+		double bestOffsetMeters = 0.0;
+		for (int32 index = 0; index < axisPointsMeters.Num() - 1; ++index)
+		{
+			const FVector2D segmentStart = axisPointsMeters[index];
+			const FVector2D segmentEnd = axisPointsMeters[index + 1];
+			const FVector2D segmentVector = segmentEnd - segmentStart;
+			const double segmentLengthMeters = segmentVector.Size();
+			if (segmentLengthMeters <= KINDA_SMALL_NUMBER)
+			{
+				continue;
+			}
+
+			const FVector2D segmentDirection = segmentVector / segmentLengthMeters;
+			const double projectedDistanceMeters = FMath::Clamp(
+				FVector2D::DotProduct(localPointMeters - segmentStart, segmentDirection),
+				0.0,
+				segmentLengthMeters);
+			const FVector2D projectedPointMeters = segmentStart + (segmentDirection * projectedDistanceMeters);
+			const double distanceSquared = FVector2D::DistSquared(localPointMeters, projectedPointMeters);
+			if (distanceSquared < bestDistanceSquared)
+			{
+				const FVector2D offsetDirection(-segmentDirection.Y, segmentDirection.X);
+				bestDistanceSquared = distanceSquared;
+				bestAlongMeters = accumulatedMeters + projectedDistanceMeters;
+				bestOffsetMeters = FVector2D::DotProduct(localPointMeters - projectedPointMeters, offsetDirection);
+				bHasProjection = true;
+			}
+
+			accumulatedMeters += segmentLengthMeters;
+		}
+
+		if (!bHasProjection)
+		{
+			return false;
+		}
+
+		outAlongMeters = bestAlongMeters;
+		outOffsetMeters = bestOffsetMeters;
+		return true;
+	}
+
+	bool ContainsRangeValue(double value, double minValue, double maxValue)
+	{
+		const double safeMin = FMath::Min(minValue, maxValue) - RuntimeSurfaceQueryToleranceMeters;
+		const double safeMax = FMath::Max(minValue, maxValue) + RuntimeSurfaceQueryToleranceMeters;
+		return value >= safeMin && value <= safeMax;
+	}
+
+	FString MakeSurfaceInstanceId(
+		const FScenarioRuntimeCorridorSpec& corridorSpec,
+		const FScenarioRuntimeCorridorLayoutEntry& layoutEntry,
+		const FScenarioRuntimeCorridorLaneSpec& laneSpec,
+		int32 layoutIndex,
+		int32 laneIndex)
+	{
+		const FString segmentId = layoutEntry.SegmentId.IsEmpty()
+			? FString::Printf(TEXT("layout_%03d"), layoutIndex)
+			: layoutEntry.SegmentId;
+		const FString laneId = laneSpec.LaneId.IsEmpty()
+			? FString::Printf(TEXT("lane_%03d"), laneIndex)
+			: laneSpec.LaneId;
+		const FString corridorId = corridorSpec.CorridorId.IsEmpty()
+			? TEXT("corridor")
+			: corridorSpec.CorridorId;
+		return FString::Printf(TEXT("%s:%s:%s"), *corridorId, *segmentId, *laneId);
+	}
 }
 
 AScenarioCorridorRuntimeActor::AScenarioCorridorRuntimeActor()
@@ -209,6 +302,50 @@ void AScenarioCorridorRuntimeActor::ClearLaneMeshes()
 
 	LaneMeshComponents.Reset();
 	Tags.Reset();
+}
+
+bool AScenarioCorridorRuntimeActor::TryFindSurfaceAtWorldLocation2D(
+	const FVector& worldLocation,
+	FScenarioRuntimeCorridorSurfaceQueryResult& outSurface) const
+{
+	outSurface = FScenarioRuntimeCorridorSurfaceQueryResult();
+	const FVector2D localPointMeters = TransformWorldCmToAxisPointMeters(CorridorSpec, worldLocation);
+	double alongMeters = 0.0;
+	double offsetMeters = 0.0;
+	if (!TryProjectPointToAxisMeters(CorridorSpec.PointsMeters, localPointMeters, alongMeters, offsetMeters))
+	{
+		return false;
+	}
+
+	for (int32 layoutIndex = 0; layoutIndex < CorridorSpec.Layout.Num(); ++layoutIndex)
+	{
+		const FScenarioRuntimeCorridorLayoutEntry& layoutEntry = CorridorSpec.Layout[layoutIndex];
+		if (!ContainsRangeValue(alongMeters, layoutEntry.AlongRangeMeters.StartMeters, layoutEntry.AlongRangeMeters.EndMeters))
+		{
+			continue;
+		}
+
+		for (int32 laneIndex = 0; laneIndex < layoutEntry.Lanes.Num(); ++laneIndex)
+		{
+			const FScenarioRuntimeCorridorLaneSpec& laneSpec = layoutEntry.Lanes[laneIndex];
+			if (!ContainsRangeValue(offsetMeters, laneSpec.OffsetRangeMeters.MinMeters, laneSpec.OffsetRangeMeters.MaxMeters))
+			{
+				continue;
+			}
+
+			outSurface.SurfaceInstanceId = MakeSurfaceInstanceId(CorridorSpec, layoutEntry, laneSpec, layoutIndex, laneIndex);
+			outSurface.CorridorId = CorridorSpec.CorridorId;
+			outSurface.SegmentId = layoutEntry.SegmentId;
+			outSurface.LaneId = laneSpec.LaneId;
+			outSurface.SurfaceId = laneSpec.SurfaceId;
+			outSurface.RegionType = laneSpec.RegionType;
+			outSurface.AlongMeters = alongMeters;
+			outSurface.OffsetMeters = offsetMeters;
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void AScenarioCorridorRuntimeActor::AddLaneStrip(

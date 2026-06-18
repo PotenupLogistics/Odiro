@@ -12,6 +12,7 @@ class AActor;
 class ADeliveryBot_ChaosActor;
 class AScenarioGroundRegion;
 class UPrimitiveComponent;
+struct FScenarioRuntimeCorridorSurfaceQueryResult;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEpisodeEvaluationEndedSignature, FEpisodeEvaluationResult, result);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEpisodeEvaluationEventSignature, FEpisodeEvaluationEvent, event);
@@ -115,6 +116,19 @@ private:
 	bool CheckRobotTipOver();
 	void UpdateBlockedRegionViolations();
 	void UpdatePenaltyRegionViolations();
+	// Records a blocked sampled Corridor lane collision with surface-level identity.
+	void RecordBlockedCorridorSurfaceCollision(
+		const FScenarioRuntimeCorridorSurfaceQueryResult& surface,
+		AActor* targetActor,
+		const FVector& location,
+		const FString& message);
+	// Records a penalty sampled Corridor lane violation after its dwell condition is met.
+	void AddPenaltyCorridorSurfaceViolation(
+		const FScenarioRuntimeCorridorSurfaceQueryResult& surface,
+		const FVector& location,
+		double enterTimeSeconds,
+		double durationSeconds,
+		double requiredDurationSeconds);
 	void UpdateNearMisses();
 	void FlushActiveNearMisses();
 	void CloseNearMissInterval(

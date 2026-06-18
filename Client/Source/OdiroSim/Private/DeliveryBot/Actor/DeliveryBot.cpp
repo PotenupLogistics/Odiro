@@ -384,14 +384,6 @@ bool ADeliveryBot::StartPolicyRunWithPolicySpecFileName(const FString& policySpe
 	return true;
 }
 
-void ADeliveryBot::ConfigureProjectActionLogging(const FString& projectOutputEpisodeId)
-{
-	if (IsValid(HttpPolicyComponent))
-	{
-		HttpPolicyComponent->ConfigureProjectActionLogging(projectOutputEpisodeId);
-	}
-}
-
 FDeliveryBotObservationInfo ADeliveryBot::BuildPolicyObservation()
 {
 	FDeliveryBotObservationInfo observation;

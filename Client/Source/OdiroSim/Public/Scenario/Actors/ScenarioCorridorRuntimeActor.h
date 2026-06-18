@@ -11,6 +11,45 @@ class USceneComponent;
 class USplineMeshComponent;
 class UStaticMesh;
 
+// Deterministic lookup result for one sampled runtime Corridor lane surface.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FScenarioRuntimeCorridorSurfaceQueryResult
+{
+	GENERATED_BODY()
+
+	// Stable runtime surface id built from corridor, layout, and lane ids.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor")
+	FString SurfaceInstanceId;
+
+	// Runtime corridor id that owns the matched lane surface.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor")
+	FString CorridorId;
+
+	// Layout segment id that owns the matched lane surface.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor")
+	FString SegmentId;
+
+	// Lane id that matched the queried world location.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor")
+	FString LaneId;
+
+	// Surface catalog id assigned to the matched lane.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor")
+	FString SurfaceId;
+
+	// Runtime traversability class of the matched lane.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor")
+	EScenarioGroundRegionType RegionType = EScenarioGroundRegionType::Walkable;
+
+	// Along distance on the corridor axis in meters.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor")
+	double AlongMeters = 0.0;
+
+	// Lateral offset from the corridor axis in meters.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor")
+	double OffsetMeters = 0.0;
+};
+
 // Runtime corridor surface actor generated from scenario_sample semantic layout.
 UCLASS(BlueprintType)
 class ODIROSIM_API AScenarioCorridorRuntimeActor : public AActor
@@ -35,6 +74,12 @@ public:
 	// Returns the sampled corridor spec currently materialized by this actor.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Corridor")
 	FScenarioRuntimeCorridorSpec GetCorridorSpec() const { return CorridorSpec; }
+
+	// Resolves the runtime lane surface containing the supplied world location in XY.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Corridor")
+	bool TryFindSurfaceAtWorldLocation2D(
+		const FVector& worldLocation,
+		FScenarioRuntimeCorridorSurfaceQueryResult& outSurface) const;
 
 private:
 	// Runtime corridor data used to rebuild components and identify this actor.

@@ -1,4 +1,4 @@
-
+﻿
 #include "Scenario/ScenarioRunnerSubsystem.h"
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
@@ -196,38 +196,6 @@ namespace
 		{
 			measurementLogSubsystem->StopProjectTraceLogging();
 		}
-	}
-
-	void ConfigureProjectActionLoggingForEpisode(
-		const FScenarioRuntimeContext& runtimeContext,
-		const FString& projectOutputEpisodeId)
-	{
-		ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(runtimeContext.RobotActor);
-		if (IsValid(deliveryBot))
-		{
-			deliveryBot->ConfigureProjectActionLogging(projectOutputEpisodeId);
-		}
-	}
-
-	FString MakeEpisodeRunnerProjectRelativePath(FString filePath)
-	{
-		if (filePath.IsEmpty())
-		{
-			return filePath;
-		}
-
-		FPaths::NormalizeFilename(filePath);
-
-		const FString projectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
-		FString projectRelativePath = filePath;
-		if (!FPaths::IsRelative(projectRelativePath) && FPaths::MakePathRelativeTo(projectRelativePath, *projectDir))
-		{
-			projectRelativePath.ReplaceInline(TEXT("\\"), TEXT("/"));
-			return projectRelativePath;
-		}
-
-		filePath.ReplaceInline(TEXT("\\"), TEXT("/"));
-		return filePath;
 	}
 
 	FScenarioSimulationSetupSpec MakeSimulationSetupSpec(const FScenarioWorldSpec& worldSpec)
@@ -639,8 +607,6 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		QueueStartNextScenario();
 		return;
 	}
-
-	ConfigureProjectActionLoggingForEpisode(runtimeContext, projectOutputEpisodeId);
 
 	if (bRunnerManagedPolicyStart)
 	{

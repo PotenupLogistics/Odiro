@@ -2,6 +2,7 @@
 #include "Scenario/ScenarioEvaluationSubsystem.h"
 #include "Components/PrimitiveComponent.h"
 #include "DeliveryBot/Actor/DeliveryBot.h"
+#include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
 #include "Scenario/Actors/ScenarioGroundRegion.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
 
@@ -441,6 +442,11 @@ void UScenarioEvaluationSubsystem::BindEvaluationHitDelegates()
 	{
 		BindActorHitDelegates(groundRegionActor.Get());
 	}
+
+	for (const TObjectPtr<AActor>& corridorActor : ActiveRuntimeContext.CorridorActors)
+	{
+		BindActorHitDelegates(corridorActor.Get());
+	}
 }
 
 void UScenarioEvaluationSubsystem::BindActorHitDelegates(AActor* actor)
@@ -525,6 +531,21 @@ void UScenarioEvaluationSubsystem::HandleObservedComponentHit(
 				eventLocation,
 				ActiveEvaluationConfig.BlockedRegionCollisionEventValue,
 				TEXT("로봇이 blocked region과 충돌함."));
+		}
+		return;
+	}
+
+	if (AScenarioCorridorRuntimeActor* corridorActor = Cast<AScenarioCorridorRuntimeActor>(targetActor))
+	{
+		FScenarioRuntimeCorridorSurfaceQueryResult surface;
+		if (corridorActor->TryFindSurfaceAtWorldLocation2D(eventLocation, surface)
+			&& surface.RegionType == EScenarioGroundRegionType::Blocked)
+		{
+			RecordBlockedCorridorSurfaceCollision(
+				surface,
+				corridorActor,
+				eventLocation,
+				TEXT("Robot collided with a blocked Corridor surface."));
 		}
 		return;
 	}
@@ -649,6 +670,38 @@ void UScenarioEvaluationSubsystem::UpdateBlockedRegionViolations()
 			TEXT("로봇이 blocked region에 진입함."));
 	}
 
+	for (const TObjectPtr<AActor>& corridorActorPtr : ActiveRuntimeContext.CorridorActors)
+	{
+		AScenarioCorridorRuntimeActor* corridorActor = Cast<AScenarioCorridorRuntimeActor>(corridorActorPtr.Get());
+		if (!IsValid(corridorActor))
+		{
+			continue;
+		}
+
+		FScenarioRuntimeCorridorSurfaceQueryResult surface;
+		if (!corridorActor->TryFindSurfaceAtWorldLocation2D(robotLocation, surface)
+			|| surface.RegionType != EScenarioGroundRegionType::Blocked)
+		{
+			continue;
+		}
+
+		const FString regionId = surface.SurfaceInstanceId;
+		observedBlockedRegionIds.Add(regionId);
+
+		FBlockedRegionState& regionState = BlockedRegionStates.FindOrAdd(regionId);
+		if (regionState.bInside)
+		{
+			continue;
+		}
+
+		regionState.bInside = true;
+		RecordBlockedCorridorSurfaceCollision(
+			surface,
+			corridorActor,
+			robotLocation,
+			TEXT("Robot entered a blocked Corridor surface."));
+	}
+
 	TArray<FString> missingRegionIds;
 	for (const TPair<FString, FBlockedRegionState>& pair : BlockedRegionStates)
 	{
@@ -718,6 +771,47 @@ void UScenarioEvaluationSubsystem::UpdatePenaltyRegionViolations()
 		regionState.bEventRecorded = true;
 	}
 
+	for (const TObjectPtr<AActor>& corridorActorPtr : ActiveRuntimeContext.CorridorActors)
+	{
+		AScenarioCorridorRuntimeActor* corridorActor = Cast<AScenarioCorridorRuntimeActor>(corridorActorPtr.Get());
+		if (!IsValid(corridorActor))
+		{
+			continue;
+		}
+
+		FScenarioRuntimeCorridorSurfaceQueryResult surface;
+		if (!corridorActor->TryFindSurfaceAtWorldLocation2D(robotLocation, surface)
+			|| surface.RegionType != EScenarioGroundRegionType::Penalty)
+		{
+			continue;
+		}
+
+		const FString regionId = surface.SurfaceInstanceId;
+		observedPenaltyRegionIds.Add(regionId);
+		FPenaltyRegionState& regionState = PenaltyRegionStates.FindOrAdd(regionId);
+		if (!regionState.bInside)
+		{
+			regionState.bInside = true;
+			regionState.bEventRecorded = false;
+			regionState.EnterTimeSeconds = elapsedTimeSeconds;
+		}
+
+		constexpr double RequiredDurationSeconds = 0.0;
+		const double durationSeconds = elapsedTimeSeconds - regionState.EnterTimeSeconds;
+		if (regionState.bEventRecorded || durationSeconds < RequiredDurationSeconds)
+		{
+			continue;
+		}
+
+		AddPenaltyCorridorSurfaceViolation(
+			surface,
+			robotLocation,
+			regionState.EnterTimeSeconds,
+			durationSeconds,
+			RequiredDurationSeconds);
+		regionState.bEventRecorded = true;
+	}
+
 	TArray<FString> missingRegionIds;
 	for (const TPair<FString, FPenaltyRegionState>& pair : PenaltyRegionStates)
 	{
@@ -731,6 +825,92 @@ void UScenarioEvaluationSubsystem::UpdatePenaltyRegionViolations()
 	{
 		PenaltyRegionStates.Remove(missingRegionId);
 	}
+}
+
+void UScenarioEvaluationSubsystem::RecordBlockedCorridorSurfaceCollision(
+	const FScenarioRuntimeCorridorSurfaceQueryResult& surface,
+	AActor* targetActor,
+	const FVector& location,
+	const FString& message)
+{
+	if (!bEvaluating || surface.SurfaceInstanceId.IsEmpty())
+	{
+		return;
+	}
+
+	const FString collisionEventKey = FString::Printf(
+		TEXT("%s:%s"),
+		*ToEvaluationEnumString(EEpisodeEvaluationEventType::BlockedRegionCollision),
+		*surface.SurfaceInstanceId);
+	const double elapsedTimeSeconds = GetElapsedTimeSeconds();
+	if (const double* lastRecordedTime = LastCollisionEventTimes.Find(collisionEventKey))
+	{
+		if (elapsedTimeSeconds - *lastRecordedTime < CollisionEventCooldownSeconds)
+		{
+			return;
+		}
+	}
+
+	LastCollisionEventTimes.Add(collisionEventKey, elapsedTimeSeconds);
+
+	TMap<FString, FScenarioParamValue> properties;
+	properties.Add(TEXT("surface_instance_id"), MakeStringParam(surface.SurfaceInstanceId));
+	properties.Add(TEXT("corridor_id"), MakeStringParam(surface.CorridorId));
+	properties.Add(TEXT("segment_id"), MakeStringParam(surface.SegmentId));
+	properties.Add(TEXT("lane_id"), MakeStringParam(surface.LaneId));
+	properties.Add(TEXT("surface_id"), MakeStringParam(surface.SurfaceId));
+	properties.Add(TEXT("along_m"), MakeFloatParam(surface.AlongMeters));
+	properties.Add(TEXT("offset_m"), MakeFloatParam(surface.OffsetMeters));
+	if (targetActor)
+	{
+		properties.Add(TEXT("target_actor"), MakeStringParam(targetActor->GetName()));
+	}
+
+	AddEvaluationEventWithDetails(
+		EEpisodeEvaluationEventType::BlockedRegionCollision,
+		EEpisodeEvaluationEventSeverity::Warning,
+		message,
+		surface.SurfaceInstanceId,
+		location,
+		ActiveEvaluationConfig.BlockedRegionCollisionEventValue,
+		properties);
+	++BlockedRegionCollisionCount;
+	SetFloatMetric(TEXT("blocked_region_collision_count"), BlockedRegionCollisionCount);
+}
+
+void UScenarioEvaluationSubsystem::AddPenaltyCorridorSurfaceViolation(
+	const FScenarioRuntimeCorridorSurfaceQueryResult& surface,
+	const FVector& location,
+	double enterTimeSeconds,
+	double durationSeconds,
+	double requiredDurationSeconds)
+{
+	if (!bEvaluating || surface.SurfaceInstanceId.IsEmpty())
+	{
+		return;
+	}
+
+	TMap<FString, FScenarioParamValue> properties;
+	properties.Add(TEXT("surface_instance_id"), MakeStringParam(surface.SurfaceInstanceId));
+	properties.Add(TEXT("corridor_id"), MakeStringParam(surface.CorridorId));
+	properties.Add(TEXT("segment_id"), MakeStringParam(surface.SegmentId));
+	properties.Add(TEXT("lane_id"), MakeStringParam(surface.LaneId));
+	properties.Add(TEXT("surface_id"), MakeStringParam(surface.SurfaceId));
+	properties.Add(TEXT("along_m"), MakeFloatParam(surface.AlongMeters));
+	properties.Add(TEXT("offset_m"), MakeFloatParam(surface.OffsetMeters));
+	properties.Add(TEXT("enter_time_s"), MakeFloatParam(enterTimeSeconds));
+	properties.Add(TEXT("duration_s"), MakeFloatParam(durationSeconds));
+	properties.Add(TEXT("violation_after_s"), MakeFloatParam(requiredDurationSeconds));
+	AddEvaluationEventWithDetails(
+		EEpisodeEvaluationEventType::PenaltyRegionViolation,
+		EEpisodeEvaluationEventSeverity::Warning,
+		TEXT("Robot violated a penalty Corridor surface condition."),
+		surface.SurfaceInstanceId,
+		location,
+		ActiveEvaluationConfig.PenaltyRegionViolationEventValue,
+		properties);
+	++PenaltyRegionViolationCount;
+	SetFloatMetric(TEXT("penalty_region_violation_count"), PenaltyRegionViolationCount);
 }
 
 void UScenarioEvaluationSubsystem::UpdateNearMisses()
@@ -987,6 +1167,12 @@ FString UScenarioEvaluationSubsystem::GetActorInstanceId(const AActor* actor) co
 	if (const AScenarioGroundRegion* groundRegion = Cast<AScenarioGroundRegion>(actor))
 	{
 		if (!groundRegion->RegionSpec.RegionId.IsEmpty()) return groundRegion->RegionSpec.RegionId;
+	}
+
+	if (const AScenarioCorridorRuntimeActor* corridorActor = Cast<AScenarioCorridorRuntimeActor>(actor))
+	{
+		const FScenarioRuntimeCorridorSpec corridorSpec = corridorActor->GetCorridorSpec();
+		if (!corridorSpec.CorridorId.IsEmpty()) return corridorSpec.CorridorId;
 	}
 
 	if (const UScenarioPlaceableComponent* placeableComponent = actor->FindComponentByClass<UScenarioPlaceableComponent>())

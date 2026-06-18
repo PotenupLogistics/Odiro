@@ -609,6 +609,14 @@ FScenarioRuntimeContext UScenarioSimulationSubsystem::BuildRuntimeContext(const 
 		}
 	}
 
+	for (const TPair<FString, TObjectPtr<AScenarioCorridorRuntimeActor>>& pair : RuntimeCorridors)
+	{
+		if (AActor* corridorActor = pair.Value.Get())
+		{
+			runtimeContext.CorridorActors.Add(corridorActor);
+		}
+	}
+
 	for (const FScenarioPlaceableInstanceSpec& placeableSpec : setupSpec.Placeables)
 	{
 		AActor* runtimeActor = FindRuntimeActor(placeableSpec.InstanceId);

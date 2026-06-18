@@ -287,9 +287,18 @@ ADeliveryBot_GridBoundsActor* UScenarioSimulationSubsystem::SpawnDeliveryBotGrid
 		spawnClass = ADeliveryBot_GridBoundsActor::StaticClass();
 	}
 
+	const double safePadding = FMath::Max(static_cast<double>(DeliveryBotGridBoundsPaddingCm), 0.0);
+	const FVector2D paddedMin = xyBounds.Min - FVector2D(safePadding, safePadding);
+	const FVector2D paddedMax = xyBounds.Max + FVector2D(safePadding, safePadding);
+	const FVector2D boundsCenter = (paddedMin + paddedMax) * 0.5;
+	const FTransform spawnTransform(
+		FRotator::ZeroRotator,
+		FVector(boundsCenter.X, boundsCenter.Y, centerZ),
+		FVector::OneVector);
+
 	ADeliveryBot_GridBoundsActor* gridBoundsActor = world->SpawnActorDeferred<ADeliveryBot_GridBoundsActor>(
 		spawnClass,
-		FTransform::Identity,
+		spawnTransform,
 		nullptr,
 		nullptr,
 		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
@@ -298,9 +307,9 @@ ADeliveryBot_GridBoundsActor* UScenarioSimulationSubsystem::SpawnDeliveryBotGrid
 		return nullptr;
 
 	gridBoundsActor->SetBuildGridOnBeginPlay(false);
-	ApplyXYBoundsToGridBoundsActor(gridBoundsActor, xyBounds, centerZ);
 
-	UGameplayStatics::FinishSpawningActor(gridBoundsActor, gridBoundsActor->GetActorTransform());
+	UGameplayStatics::FinishSpawningActor(gridBoundsActor, spawnTransform);
+	ApplyXYBoundsToGridBoundsActor(gridBoundsActor, xyBounds, centerZ);
 
 	RuntimeGridBoundsActor = gridBoundsActor;
 	return gridBoundsActor;
@@ -326,10 +335,14 @@ void UScenarioSimulationSubsystem::ApplyXYBoundsToGridBoundsActor(
 	gridBoundsActor->SetActorRotation(FRotator::ZeroRotator);
 	gridBoundsActor->SetActorScale3D(FVector::OneVector);
 
-	boundsBox->SetRelativeLocation(FVector::ZeroVector);
-	boundsBox->SetRelativeRotation(FRotator::ZeroRotator);
-	boundsBox->SetRelativeScale3D(FVector::OneVector);
+	if (boundsBox != gridBoundsActor->GetRootComponent())
+	{
+		boundsBox->SetRelativeLocation(FVector::ZeroVector);
+		boundsBox->SetRelativeRotation(FRotator::ZeroRotator);
+		boundsBox->SetRelativeScale3D(FVector::OneVector);
+	}
 	boundsBox->SetBoxExtent(FVector(boundsSize.X * 0.5, boundsSize.Y * 0.5, 100.0), true);
+	boundsBox->UpdateBounds();
 }
 
 void UScenarioSimulationSubsystem::ExpandXYBoundsWithGroundRegion(

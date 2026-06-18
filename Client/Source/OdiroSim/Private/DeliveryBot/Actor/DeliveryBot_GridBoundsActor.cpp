@@ -26,6 +26,7 @@ ADeliveryBot_GridBoundsActor::ADeliveryBot_GridBoundsActor()
 	
 	BoundsBox = CreateDefaultSubobject<UBoxComponent>(TEXT("BoundsBox"));
 	SetRootComponent(BoundsBox);
+	BoundsBox->SetMobility(EComponentMobility::Movable);
 	BoundsBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	CollisionProfileRules =

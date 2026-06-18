@@ -131,6 +131,21 @@ bool FScenarioSamplerFixedObstacleTest::RunTest(const FString& Parameters)
 		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Result.Document);
 	TestTrue(TEXT("sample adapts to world spec"), CompileResult.bSuccess);
 	TestEqual(TEXT("runtime ground regions"), CompileResult.WorldSpec.GroundRegions.Num(), 3);
+	TestTrue(TEXT("runtime sidewalk surface preserved"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
+		[](const FScenarioGroundRegionSpec& Region)
+		{
+			return Region.SurfaceId == TEXT("sidewalk");
+		}));
+	TestTrue(TEXT("runtime road surface preserved"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
+		[](const FScenarioGroundRegionSpec& Region)
+		{
+			return Region.SurfaceId == TEXT("road");
+		}));
+	TestTrue(TEXT("runtime building surface preserved"), CompileResult.WorldSpec.GroundRegions.ContainsByPredicate(
+		[](const FScenarioGroundRegionSpec& Region)
+		{
+			return Region.SurfaceId == TEXT("building");
+		}));
 	TestEqual(TEXT("runtime placeables"), CompileResult.WorldSpec.Placeables.Num(), 2);
 	return true;
 }

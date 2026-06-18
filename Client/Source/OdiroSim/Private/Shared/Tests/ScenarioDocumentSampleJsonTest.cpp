@@ -4,6 +4,7 @@
 #include "Shared/ScenarioDocumentJson.h"
 
 #include "Misc/AutomationTest.h"
+#include "Misc/Paths.h"
 
 namespace
 {
@@ -165,6 +166,71 @@ bool FScenarioDocumentJsonParseValidTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("scenario id"), Result.Document.ScenarioId, FString(TEXT("pinch_oncoming_low_coop")));
 	TestEqual(TEXT("segment count"), Result.Document.Corridor.Segments.Num(), 1);
 	TestEqual(TEXT("placement prop"), Result.Document.Obstacles.Placements[0].PropId, FString(TEXT("crate")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioDocumentJsonInvalidProjectScenarioRejectedTest,
+	"OdiroSim.ScenarioDocument.Json.InvalidProjectScenarioRejected",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioDocumentJsonInvalidProjectScenarioRejectedTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	const FString Json = TEXT(R"json(
+{
+  "schema": "scenario",
+  "version": 1,
+  "scenario_id": "invalid_blank_sidewalk",
+  "intent": "Invalid project scenario.",
+  "corridor": {
+    "segments": [
+      {
+        "id": "main",
+        "along_range_m": [0.0, 12.0]
+      }
+    ],
+    "building_side": [{ "surface": "wall", "width_m": 0.5 }],
+    "curb_side": [{ "surface": "road", "width_m": 4.0 }]
+  },
+  "obstacles": { "min_clear_width_m": 0.9, "placements": [] },
+  "pedestrians": { "background": { "count": 0 }, "encounters": [] },
+  "robot": {
+    "start": { "segment": "main", "along_m": 1.0, "offset_m": 0.0 },
+    "goal": { "segment": "main", "along_m": 11.0, "offset_m": 0.0 }
+  }
+}
+)json");
+
+	const FScenarioDocumentParseResult Result = FScenarioDocumentJson::ParseProjectScenarioFromString(Json);
+	TestFalse(TEXT("invalid project scenario is rejected"), Result.bSuccess);
+	TestTrue(TEXT("missing axis diagnostic"), HasScenarioSchemaDiagnosticCode(Result.Diagnostics, TEXT("missing_axis")));
+	TestTrue(TEXT("missing walkway width diagnostic"), HasScenarioSchemaDiagnosticCode(Result.Diagnostics, TEXT("missing_walkway_width_m")));
+	TestTrue(TEXT("missing robot anchor type diagnostic"), HasScenarioSchemaDiagnosticCode(Result.Diagnostics, TEXT("missing_type")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioDocumentJsonProjectTemplateFilesParseTest,
+	"OdiroSim.ScenarioDocument.Json.ProjectTemplateFilesParse",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioDocumentJsonProjectTemplateFilesParseTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	const FString TemplateRoot = FPaths::ConvertRelativePathToFull(
+		FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("static"), TEXT("project-templates")));
+	const FString TemplateIds[] = { TEXT("blank"), TEXT("demo") };
+	for (const FString& TemplateId : TemplateIds)
+	{
+		const FString ScenarioPath = FPaths::Combine(TemplateRoot, TemplateId, TEXT("scenario.json"));
+		const FScenarioDocumentParseResult Result = FScenarioDocumentJson::ParseProjectScenarioFromFile(ScenarioPath);
+		TestTrue(FString::Printf(TEXT("%s scenario parses"), *TemplateId), Result.bSuccess);
+		TestEqual(FString::Printf(TEXT("%s diagnostics"), *TemplateId), Result.Diagnostics.Num(), 0);
+	}
+
 	return true;
 }
 

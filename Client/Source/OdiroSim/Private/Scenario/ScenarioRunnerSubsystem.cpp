@@ -4,9 +4,10 @@
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
 #include "Episode/EpisodeMeasurementLogSubsystem.h"
 #include "Scenario/ScenarioEvaluationSubsystem.h"
+#include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Scenario/ScenarioSimulationSubsystem.h"
-#include "Scenario/UserProjectEpisodeScenarioWorldSpecAdapter.h"
 #include "Misc/Paths.h"
+#include "Shared/ScenarioSampleJson.h"
 #include "Shared/UserProjectDataTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioRunner, Log, All);
@@ -25,6 +26,38 @@ namespace
 			return TEXT("오류");
 		default:
 			return TEXT("알 수 없음");
+		}
+	}
+
+	EScenarioCompileDiagnosticSeverity ToRunnerCompileSeverity(EScenarioSchemaDiagnosticSeverity severity)
+	{
+		switch (severity)
+		{
+		case EScenarioSchemaDiagnosticSeverity::Info:
+			return EScenarioCompileDiagnosticSeverity::Info;
+		case EScenarioSchemaDiagnosticSeverity::Warning:
+		case EScenarioSchemaDiagnosticSeverity::Repair:
+			return EScenarioCompileDiagnosticSeverity::Warning;
+		case EScenarioSchemaDiagnosticSeverity::Error:
+			return EScenarioCompileDiagnosticSeverity::Error;
+		default:
+			return EScenarioCompileDiagnosticSeverity::Error;
+		}
+	}
+
+	void AppendRunnerSchemaDiagnostics(
+		const TArray<FScenarioSchemaDiagnostic>& schemaDiagnostics,
+		FScenarioCompileResult& result)
+	{
+		for (const FScenarioSchemaDiagnostic& schemaDiagnostic : schemaDiagnostics)
+		{
+			FScenarioCompileDiagnostic diagnostic;
+			diagnostic.Severity = ToRunnerCompileSeverity(schemaDiagnostic.Severity);
+			diagnostic.Code = schemaDiagnostic.Code;
+			diagnostic.Message = schemaDiagnostic.Path.IsEmpty()
+				? schemaDiagnostic.Message
+				: FString::Printf(TEXT("%s | Path: %s"), *schemaDiagnostic.Message, *schemaDiagnostic.Path);
+			result.Diagnostics.Add(diagnostic);
 		}
 	}
 
@@ -152,20 +185,22 @@ namespace
 		return setupSpec;
 	}
 
-	FScenarioCompileResult CompileRunnerEpisodeScenarioWorldSpec(const FString& episodeScenarioJsonPath)
+	FScenarioCompileResult CompileRunnerScenarioSampleWorldSpec(const FString& scenarioSampleJsonPath)
 	{
-		if (FUserProjectEpisodeScenarioWorldSpecAdapter::IsEpisodeScenarioFile(episodeScenarioJsonPath))
+		const FScenarioSampleParseResult sampleParseResult = FScenarioSampleJson::ParseFromFile(scenarioSampleJsonPath);
+		if (sampleParseResult.bSuccess)
 		{
-			return FUserProjectEpisodeScenarioWorldSpecAdapter::CompileScenarioWorldSpecFromEpisodeScenarioFile(episodeScenarioJsonPath);
+			return FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(sampleParseResult.Document);
 		}
 
 		FScenarioCompileResult result;
+		AppendRunnerSchemaDiagnostics(sampleParseResult.Diagnostics, result);
 		FScenarioCompileDiagnostic diagnostic;
 		diagnostic.Severity = EScenarioCompileDiagnosticSeverity::Error;
-		diagnostic.Code = TEXT("invalid_episode_scenario_input");
+		diagnostic.Code = TEXT("invalid_scenario_sample_input");
 		diagnostic.Message = FString::Printf(
-			TEXT("Runner input must be an episode_scenario JSON file: %s"),
-			*episodeScenarioJsonPath);
+			TEXT("Runner input must be a scenario_sample JSON file: %s"),
+			*scenarioSampleJsonPath);
 		result.Diagnostics.Add(diagnostic);
 		return result;
 	}
@@ -253,7 +288,7 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
 			UE_LOG(
 				LogScenarioRunner,
 				Warning,
-				TEXT("Episode run input ignored: episode_scenario or profile path is empty | Pair: %s, EpisodeScenario: %s, Profile: %s"),
+				TEXT("Episode run input ignored: scenario_sample or profile path is empty | Pair: %s, ScenarioSample: %s, Profile: %s"),
 				*runInput.PairId,
 				*runInput.EpisodeScenarioJsonPath,
 				*runInput.ProfileJsonPath);
@@ -403,7 +438,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	UE_LOG(
 		LogScenarioRunner,
 		Log,
-		TEXT("Episode input preparing | RunId: %s, Pair: %s, Index: %d, EpisodeScenario: %s, Profile: %s, PolicySpec: %s, Remaining: %d"),
+		TEXT("Episode input preparing | RunId: %s, Pair: %s, Index: %d, ScenarioSample: %s, Profile: %s, PolicySpec: %s, Remaining: %d"),
 		*CurrentRecord.RunId,
 		*CurrentRecord.PairId,
 		CurrentRecord.RunIndex,
@@ -424,7 +459,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		return;
 	}
 
-	FScenarioCompileResult compileResult = CompileRunnerEpisodeScenarioWorldSpec(CurrentRunInput.EpisodeScenarioJsonPath);
+	FScenarioCompileResult compileResult = CompileRunnerScenarioSampleWorldSpec(CurrentRunInput.EpisodeScenarioJsonPath);
 	CurrentRecord.bEpisodeSetupCompileSucceeded = compileResult.bSuccess;
 	CurrentRecord.EpisodeId = compileResult.WorldSpec.RunConfig.TemplateId;
 	CurrentRecord.SpecHash = compileResult.WorldSpec.SpecHash;
@@ -434,7 +469,7 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	UE_LOG(
 		LogScenarioRunner,
 		Warning,
-		TEXT("episode_scenario compile completed | RunId: %s, Pair: %s, Scenario: %s, Success: %s, Diagnostics: %d, SpecHash: %s"),
+		TEXT("scenario_sample compile completed | RunId: %s, Pair: %s, Scenario: %s, Success: %s, Diagnostics: %d, SpecHash: %s"),
 		*CurrentRecord.RunId,
 		*CurrentRecord.PairId,
 		*CurrentRecord.EpisodeId,
@@ -691,7 +726,7 @@ void UScenarioRunnerSubsystem::AppendCompileDiagnostics(const FScenarioCompileRe
 	for (const FScenarioCompileDiagnostic& diagnostic : compileResult.Diagnostics)
 	{
 		CurrentRecord.Diagnostics.Add(FString::Printf(
-			TEXT("episode_scenario %s [%s]: %s"),
+			TEXT("scenario_sample %s [%s]: %s"),
 			ToRunnerCompileSeverityString(diagnostic.Severity),
 			*diagnostic.Code,
 			*diagnostic.Message));

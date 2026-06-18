@@ -8,6 +8,7 @@ paths:
   - contracts/**
   - contracts/specs/**
   - contracts/specs/bridge-ipc.md
+  - static/project-templates/**
 entry:
   - Client/Docs/README.md
   - Client/Docs/JSON_Guide
@@ -17,6 +18,7 @@ entry:
   - contracts/examples
   - contracts/specs/bridge-ipc.md
   - contracts/specs/user-project-data.md
+  - static/project-templates
 keep:
   - contracts/specs is the human-readable truth for shared payload/API/file formats.
   - User project setting/profile/scenario/policy, run artifact, project template, and run default file shapes belong in contracts/specs/user-project-data.md; Bridge IPC method shapes belong in contracts/specs/bridge-ipc.md.

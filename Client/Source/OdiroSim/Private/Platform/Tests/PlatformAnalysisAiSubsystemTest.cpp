@@ -61,7 +61,16 @@ namespace
 				TEXT("{\"schema\":\"simulation_profile\",\"version\":1,\"profile_id\":\"analysis_profile\",\"robot\":{\"body\":{},\"drive\":{},\"lidar\":{}}}"))
 			&& SaveAnalysisAiTestFile(
 				OutPaths.ScenarioPath,
-				TEXT("{\"schema\":\"scenario\",\"version\":1,\"scenario_id\":\"analysis_scenario\",\"intent\":\"analysis\"}"))
+				TEXT("{")
+				TEXT("\"schema\":\"scenario\",")
+				TEXT("\"version\":1,")
+				TEXT("\"scenario_id\":\"analysis_scenario\",")
+				TEXT("\"intent\":\"analysis\",")
+				TEXT("\"corridor\":{\"axis\":{\"type\":\"polyline\",\"points_m\":[[0.0,0.0],[10.0,0.0]]},\"walkway_width_m\":3.0,\"segments\":[{\"id\":\"main\",\"type\":\"straight\",\"along_range_m\":[0.0,10.0]}]},")
+				TEXT("\"obstacles\":{},")
+				TEXT("\"pedestrians\":{},")
+				TEXT("\"robot\":{\"start\":{\"type\":\"entry\"},\"goal\":{\"type\":\"exit\"}}")
+				TEXT("}"))
 			&& SaveAnalysisAiTestFile(
 				OutPaths.PolicyEntrypointPath,
 				TEXT("def create_policy():\n    return None\n"))

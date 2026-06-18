@@ -101,6 +101,11 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	TestEqual(TEXT("scenario id"), Result.WorldSpec.RunConfig.TemplateId, Document.Sample.ScenarioId);
 	TestEqual(TEXT("base seed"), Result.WorldSpec.RunConfig.BaseSeed, Document.Sample.Source.Seed);
 	TestEqual(TEXT("ground region count"), Result.WorldSpec.GroundRegions.Num(), 1);
+	if (Result.WorldSpec.GroundRegions.IsEmpty())
+	{
+		return false;
+	}
+	TestEqual(TEXT("ground region surface"), Result.WorldSpec.GroundRegions[0].SurfaceId, FString(TEXT("sidewalk")));
 	TestEqual(TEXT("placeable count"), Result.WorldSpec.Placeables.Num(), 2);
 	TestEqual(TEXT("static obstacle count"), Result.WorldSpec.Placeables.FilterByPredicate(
 		[](const FScenarioPlaceableInstanceSpec& Spec)

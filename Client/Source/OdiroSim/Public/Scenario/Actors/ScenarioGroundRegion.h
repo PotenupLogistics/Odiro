@@ -6,6 +6,7 @@
 
 class UDecalComponent;
 class UScenarioPlaceableComponent;
+class UScenarioCorridorSurfaceCatalog;
 class UMaterialInterface;
 class USceneComponent;
 class UStaticMeshComponent;
@@ -46,6 +47,8 @@ protected:
 private:
 	void ApplyCollisionSettings();
 	void ApplyMaterialSettings();
+	UMaterialInterface* ResolveSurfaceCatalogMaterial() const;
+	UMaterialInterface* ResolveRegionTypeMaterial() const;
 
 	UPROPERTY(EditAnywhere, Category = "Scenario|Visual")
 	TObjectPtr<UMaterialInterface> WalkableGroundMaterial;
@@ -55,6 +58,10 @@ private:
 
 	UPROPERTY(EditAnywhere, Category = "Scenario|Visual")
 	TObjectPtr<UMaterialInterface> BlockedAreaMaterial;
+
+	// Shared surface catalog for matching generated runtime ground-region visuals to editor Corridor preview.
+	UPROPERTY(EditAnywhere, Category = "Scenario|Visual")
+	TSoftObjectPtr<UScenarioCorridorSurfaceCatalog> SurfaceCatalog;
 
 	UPROPERTY(EditAnywhere, Category = "Scenario|Collision", meta = (ClampMin = "1.0"))
 	double BlockedCollisionHeightCm = 200.0;

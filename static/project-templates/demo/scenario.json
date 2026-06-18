@@ -4,12 +4,15 @@
   "scenario_id": "demo_sidewalk_obstacle",
   "intent": "Check whether the demo policy can move through a short sidewalk with one curb-side obstacle.",
   "corridor": {
+    "axis": {
+      "type": "polyline",
+      "points_m": [[0.0, 0.0], [4.0, 0.0]]
+    },
+    "walkway_width_m": { "min": 2.8, "max": 3.4 },
     "segments": [
       {
         "id": "main",
-        "kind": "sidewalk",
-        "length_m": 4.0,
-        "walkway_width_m": { "min": 2.8, "max": 3.4 },
+        "type": "straight",
         "along_range_m": [0.0, 4.0]
       }
     ],
@@ -55,15 +58,18 @@
   },
   "robot": {
     "start": {
+      "type": "corridor_pose",
       "segment": "main",
       "along_m": 1.0,
       "offset_m": 0.0,
-      "yaw_deg": 0.0
+      "heading": "forward"
     },
     "goal": {
+      "type": "corridor_pose",
       "segment": "main",
       "along_m": 2.0,
-      "offset_m": 0.0
+      "offset_m": 0.0,
+      "heading": "forward"
     }
   }
 }

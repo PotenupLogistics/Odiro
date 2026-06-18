@@ -8,7 +8,7 @@
 
 class UMaterialInterface;
 
-// Corridor surface metadata used to interpret scenario_template surface ids in editor preview and sampling paths.
+// Corridor surface metadata used to interpret scenario surface ids in editor, sampling, and runtime paths.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FScenarioCorridorSurfaceEntry
 {
@@ -46,7 +46,7 @@ struct ODIROSIM_API FScenarioCorridorSurfaceEntry
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor Surface")
 	FString CollisionTag;
 
-	// Material used by editor-only Corridor spline surface preview.
+	// Material used by Corridor spline preview and generated runtime ground-region visuals.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor Surface")
 	TSoftObjectPtr<UMaterialInterface> PreviewMaterial;
 

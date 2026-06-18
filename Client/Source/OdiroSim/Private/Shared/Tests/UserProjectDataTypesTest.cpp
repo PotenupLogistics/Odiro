@@ -76,10 +76,16 @@ namespace
 				TEXT("\"version\":1,")
 				TEXT("\"scenario_id\":\"automation_scenario\",")
 				TEXT("\"intent\":\"Automation\",")
-				TEXT("\"corridor\":{\"segments\":[{\"id\":\"main\",\"walkway_width_m\":{\"min\":2.5,\"max\":4.0}}]},")
-				TEXT("\"obstacles\":{\"placements\":[{\"id\":\"obstacle_1\",\"prop\":{\"choices\":[\"bench\",\"cone\"]}}]},")
-				TEXT("\"pedestrians\":{\"background\":{\"count\":{\"choices\":[0,1,2]}},\"encounters\":[]},")
-				TEXT("\"robot\":{\"start\":{\"segment\":\"main\"},\"goal\":{\"segment\":\"main\"}}")
+				TEXT("\"corridor\":{")
+				TEXT("\"axis\":{\"type\":\"polyline\",\"points_m\":[[0.0,0.0],[12.0,0.0]]},")
+				TEXT("\"walkway_width_m\":{\"min\":2.5,\"max\":4.0},")
+				TEXT("\"building_side\":[{\"surface\":\"wall\",\"width_m\":0.5}],")
+				TEXT("\"curb_side\":[{\"surface\":\"road\",\"width_m\":4.0}],")
+				TEXT("\"segments\":[{\"id\":\"main\",\"type\":\"straight\",\"along_range_m\":[0.0,12.0]}]")
+				TEXT("},")
+				TEXT("\"obstacles\":{\"min_clear_width_m\":0.9,\"placements\":[{\"kind\":\"fixed\",\"id\":\"obstacle_1\",\"prop\":\"obstacle.bench_01\",\"at\":{\"segment\":\"main\",\"along_m\":{\"min\":4.0,\"max\":6.0},\"offset_m\":0.25,\"lane\":\"walkway\"},\"yaw_deg\":{\"min\":0.0,\"max\":10.0},\"allow_blocking\":false}]},")
+				TEXT("\"pedestrians\":{\"background\":{\"count\":0},\"encounters\":[]},")
+				TEXT("\"robot\":{\"start\":{\"type\":\"corridor_pose\",\"segment\":\"main\",\"along_m\":1.0,\"offset_m\":0.0,\"heading\":\"forward\"},\"goal\":{\"type\":\"corridor_pose\",\"segment\":\"main\",\"along_m\":11.0,\"offset_m\":0.0,\"heading\":\"forward\"}}")
 				TEXT("}"))
 			&& SaveUserProjectTestFile(
 				outPaths.PolicyEntrypointPath,
@@ -246,37 +252,53 @@ bool FUserProjectEpisodeScenarioWriteTest::RunTest(const FString& parameters)
 
 	TArray<FUserProjectEpisodeScenarioWriteResult> writeResults;
 	TArray<FScenarioCompileDiagnostic> writeDiagnostics;
-	TestTrue(
-		TEXT("episode scenarios write"),
-		FUserProjectEpisodeScenarioJson::WriteAllEpisodeScenarios(
+	const bool bEpisodeScenariosWrite = FUserProjectEpisodeScenarioJson::WriteAllEpisodeScenarios(
 			snapshotResult.Paths,
 			snapshotResult.Setting,
 			writeResults,
-			writeDiagnostics));
+			writeDiagnostics);
+	TestTrue(TEXT("scenario samples write"), bEpisodeScenariosWrite);
 	TestEqual(TEXT("write diagnostics"), writeDiagnostics.Num(), 0);
 	TestEqual(TEXT("episode count"), writeResults.Num(), 2);
+	if (!bEpisodeScenariosWrite || writeResults.IsEmpty())
+	{
+		IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+		return false;
+	}
 	TestEqual(TEXT("first episode id"), writeResults[0].EpisodeId, FString(TEXT("000001")));
 	TestEqual(TEXT("first seed"), writeResults[0].Seed, static_cast<int64>(1234));
 	TestFalse(TEXT("scenario hash populated"), writeResults[0].ScenarioHash.IsEmpty());
 
 	const FUserProjectEpisodeScenarioParseResult parseResult =
 		FUserProjectEpisodeScenarioJson::ParseFromFile(writeResults[0].ScenarioPath);
-	TestTrue(TEXT("episode scenario parses"), parseResult.bSuccess);
+	TestTrue(TEXT("scenario sample parses"), parseResult.bSuccess);
 	TestEqual(TEXT("parsed episode id"), parseResult.EpisodeId, FString(TEXT("000001")));
 	TestEqual(TEXT("parsed seed"), parseResult.Seed, static_cast<int64>(1234));
 
 	TSharedPtr<FJsonObject> episodeObject;
 	TestTrue(TEXT("load episode json"), LoadUserProjectJsonObject(writeResults[0].ScenarioPath, episodeObject));
-	const TSharedPtr<FJsonObject> paramsObject = episodeObject->GetObjectField(TEXT("params"));
-	TestTrue(TEXT("range param recorded"), paramsObject->HasField(TEXT("$.corridor.segments[0].walkway_width_m")));
-	TestTrue(TEXT("choice param recorded"), paramsObject->HasField(TEXT("$.obstacles.placements[0].prop")));
+	if (!episodeObject.IsValid())
+	{
+		IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+		return false;
+	}
+	TestEqual(TEXT("scenario sample schema"), episodeObject->GetStringField(TEXT("schema")), FString(TEXT("scenario_sample")));
+	TestEqual(
+		TEXT("sample seed"),
+		static_cast<int64>(episodeObject->GetObjectField(TEXT("sample"))->GetObjectField(TEXT("source"))->GetNumberField(TEXT("seed"))),
+		static_cast<int64>(1234));
 
-	const TSharedPtr<FJsonObject> semanticObject = episodeObject->GetObjectField(TEXT("semantic"));
-	const TArray<TSharedPtr<FJsonValue>> segments =
-		semanticObject->GetObjectField(TEXT("corridor"))->GetArrayField(TEXT("segments"));
-	const TSharedPtr<FJsonValue> walkwayWidth =
-		segments[0]->AsObject()->TryGetField(TEXT("walkway_width_m"));
-	TestTrue(TEXT("random range materialized to number"), walkwayWidth.IsValid() && walkwayWidth->Type == EJson::Number);
+	const TSharedPtr<FJsonObject> sampledScenarioObject = episodeObject->GetObjectField(TEXT("scenario"));
+	const TSharedPtr<FJsonObject> paramsObject = sampledScenarioObject->GetObjectField(TEXT("params"));
+	TestTrue(TEXT("walkway range param recorded"), paramsObject->HasField(TEXT("corridor.walkway_width_m")));
+	TestTrue(TEXT("obstacle along range param recorded"), paramsObject->HasField(TEXT("obstacles.obstacle_1.at.along_m")));
+	TestTrue(TEXT("obstacle yaw range param recorded"), paramsObject->HasField(TEXT("obstacles.obstacle_1.yaw_deg")));
+
+	const TSharedPtr<FJsonObject> semanticObject = sampledScenarioObject->GetObjectField(TEXT("semantic"));
+	TestTrue(TEXT("route axis generated"), semanticObject->HasField(TEXT("route_axis")));
+	TestFalse(TEXT("layout generated"), semanticObject->GetArrayField(TEXT("layout")).IsEmpty());
+	TestFalse(TEXT("static obstacle generated"), semanticObject->GetArrayField(TEXT("static_obstacles")).IsEmpty());
+	TestTrue(TEXT("robot generated"), semanticObject->HasField(TEXT("robot")));
 
 	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
 	return true;
@@ -299,7 +321,7 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TArray<FUserProjectEpisodeScenarioWriteResult> writeResults;
 	TArray<FScenarioCompileDiagnostic> writeDiagnostics;
 	TestTrue(
-		TEXT("episode scenarios write"),
+		TEXT("scenario samples write"),
 		FUserProjectEpisodeScenarioJson::WriteAllEpisodeScenarios(
 			snapshotResult.Paths,
 			snapshotResult.Setting,
@@ -402,7 +424,13 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestEqual(
 		TEXT("summary scenario id"),
 		rows[0]->AsObject()->GetStringField(TEXT("scenario_id")),
-		FString(TEXT("automation_scenario")));
+		FString(TEXT("automation_scenario_000001")));
+	TestTrue(
+		TEXT("summary scenario params copied"),
+		rows[0]->AsObject()->GetObjectField(TEXT("scenario_params"))->HasField(TEXT("corridor.walkway_width_m")));
+	TestTrue(
+		TEXT("summary scenario semantic copied"),
+		rows[0]->AsObject()->GetObjectField(TEXT("scenario_semantic"))->HasField(TEXT("route_axis")));
 
 	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
 	return true;

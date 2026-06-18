@@ -65,10 +65,14 @@ namespace
 				TEXT("\"version\":1,")
 				TEXT("\"scenario_id\":\"automation_scenario\",")
 				TEXT("\"intent\":\"Automation\",")
-				TEXT("\"corridor\":{},")
+				TEXT("\"corridor\":{")
+				TEXT("\"axis\":{\"type\":\"polyline\",\"points_m\":[[0.0,0.0],[10.0,0.0]]},")
+				TEXT("\"walkway_width_m\":3.0,")
+				TEXT("\"segments\":[{\"id\":\"main\",\"type\":\"straight\",\"along_range_m\":[0.0,10.0]}]")
+				TEXT("},")
 				TEXT("\"obstacles\":{},")
 				TEXT("\"pedestrians\":{},")
-				TEXT("\"robot\":{}")
+				TEXT("\"robot\":{\"start\":{\"type\":\"entry\"},\"goal\":{\"type\":\"exit\"}}")
 				TEXT("}"))
 			&& SaveSimulationTestFile(
 				paths.PolicyEntrypointPath,

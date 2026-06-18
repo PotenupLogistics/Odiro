@@ -16,8 +16,18 @@ namespace
 		return FFileHelper::SaveStringToFile(contents, *filePath);
 	}
 
+	bool HasSimulatorLaunchDiagnosticContaining(const TArray<FString>& diagnostics, const FString& needle)
+	{
+		return diagnostics.ContainsByPredicate(
+			[&needle](const FString& diagnostic)
+			{
+				return diagnostic.Contains(needle);
+			});
+	}
+
 	bool WriteSimulatorLaunchProject(const FString& projectPath)
 	{
+		IFileManager::Get().MakeDirectory(*FPaths::Combine(projectPath, TEXT("runs")), true);
 		return SaveSimulatorLaunchTestFile(
 				FPaths::Combine(projectPath, TEXT("setting.json")),
 				TEXT("{")
@@ -45,10 +55,14 @@ namespace
 				TEXT("\"version\":1,")
 				TEXT("\"scenario_id\":\"launcher_scenario\",")
 				TEXT("\"intent\":\"Launcher\",")
-				TEXT("\"corridor\":{},")
+				TEXT("\"corridor\":{")
+				TEXT("\"axis\":{\"type\":\"polyline\",\"points_m\":[[0.0,0.0],[10.0,0.0]]},")
+				TEXT("\"walkway_width_m\":3.0,")
+				TEXT("\"segments\":[{\"id\":\"main\",\"type\":\"straight\",\"along_range_m\":[0.0,10.0]}]")
+				TEXT("},")
 				TEXT("\"obstacles\":{},")
 				TEXT("\"pedestrians\":{},")
-				TEXT("\"robot\":{}")
+				TEXT("\"robot\":{\"start\":{\"type\":\"entry\"},\"goal\":{\"type\":\"exit\"}}")
 				TEXT("}"))
 			&& SaveSimulatorLaunchTestFile(
 				FPaths::Combine(projectPath, TEXT("policy"), TEXT("__init__.py")),
@@ -82,6 +96,52 @@ bool FSimulatorLaunchCommandLineBuildTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("preview passes run id"), previewArguments.Contains(TEXT("\"-RunId=000001\"")));
 	TestFalse(TEXT("preview omits legacy simulate setup"), previewArguments.Contains(TEXT("-Simulate")));
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimulatorLaunchProjectRunRejectsInvalidScenarioTest,
+	"OdiroSim.SimulatorLaunch.ProjectRun.RejectsInvalidScenario",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimulatorLaunchProjectRunRejectsInvalidScenarioTest::RunTest(const FString& parameters)
+{
+	const FString projectPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+		FPaths::ProjectSavedDir(),
+		TEXT("Automation/SimulatorLaunchProjectRunInvalidReject"),
+		FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+	TestTrue(TEXT("write project inputs"), WriteSimulatorLaunchProject(projectPath));
+	TestTrue(
+		TEXT("overwrite invalid scenario"),
+		SaveSimulatorLaunchTestFile(
+			FPaths::Combine(projectPath, TEXT("scenario.json")),
+			TEXT("{")
+			TEXT("\"schema\":\"scenario\",")
+			TEXT("\"version\":1,")
+			TEXT("\"scenario_id\":\"invalid_launcher_scenario\",")
+			TEXT("\"intent\":\"Invalid launcher\",")
+			TEXT("\"corridor\":{\"segments\":[{\"id\":\"main\",\"along_range_m\":[0.0,10.0]}]},")
+			TEXT("\"obstacles\":{},")
+			TEXT("\"pedestrians\":{},")
+			TEXT("\"robot\":{\"start\":{\"segment\":\"main\"},\"goal\":{\"segment\":\"main\"}}")
+			TEXT("}")));
+
+	UGameInstance* gameInstance = NewObject<UGameInstance>();
+	USimulatorLaunchSubsystem* subsystem = NewObject<USimulatorLaunchSubsystem>(gameInstance);
+	TestNotNull(TEXT("subsystem created"), subsystem);
+	if (!subsystem)
+	{
+		IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+		return false;
+	}
+
+	FString runId;
+	TArray<FString> diagnostics;
+	TestFalse(TEXT("prepare rejects invalid scenario"), subsystem->PrepareProjectRunSnapshot(projectPath, FString(), runId, diagnostics));
+	TestTrue(TEXT("diagnostics include missing axis"), HasSimulatorLaunchDiagnosticContaining(diagnostics, TEXT("missing_axis")));
+	TestTrue(TEXT("diagnostics include missing robot anchor type"), HasSimulatorLaunchDiagnosticContaining(diagnostics, TEXT("missing_type")));
+
+	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
 	return true;
 }
 

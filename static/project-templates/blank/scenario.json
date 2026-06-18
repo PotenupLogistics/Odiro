@@ -4,12 +4,15 @@
   "scenario_id": "blank_sidewalk",
   "intent": "Start from a minimal editable scenario.",
   "corridor": {
+    "axis": {
+      "type": "polyline",
+      "points_m": [[0.0, 0.0], [12.0, 0.0]]
+    },
+    "walkway_width_m": 3.0,
     "segments": [
       {
         "id": "main",
-        "kind": "sidewalk",
-        "length_m": 12.0,
-        "walkway_width_m": 3.0,
+        "type": "straight",
         "along_range_m": [0.0, 12.0]
       }
     ],
@@ -38,15 +41,18 @@
   },
   "robot": {
     "start": {
+      "type": "corridor_pose",
       "segment": "main",
       "along_m": 1.0,
       "offset_m": 0.0,
-      "yaw_deg": 0.0
+      "heading": "forward"
     },
     "goal": {
+      "type": "corridor_pose",
       "segment": "main",
       "along_m": 11.0,
-      "offset_m": 0.0
+      "offset_m": 0.0,
+      "heading": "forward"
     }
   }
 }

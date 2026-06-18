@@ -299,6 +299,7 @@ namespace
 					Lane.LaneId.IsEmpty() ? TEXT("lane") : *Lane.LaneId,
 					RegionIndex++);
 				Region.RegionType = ToGroundRegionType(Lane.Type);
+				Region.SurfaceId = Lane.SurfaceId;
 				Region.ShapeType = EScenarioGroundShapeType::Rectangle;
 				Region.Center = Pose.LocationCm;
 				Region.Size = FVector2D(

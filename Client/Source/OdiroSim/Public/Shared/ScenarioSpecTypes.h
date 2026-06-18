@@ -40,6 +40,10 @@ struct ODIROSIM_API FScenarioGroundRegionSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	EScenarioGroundRegionType RegionType = EScenarioGroundRegionType::Walkable;
 
+	// Corridor surface catalog id used to keep editor preview and runtime visuals aligned.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
+	FString SurfaceId;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	EScenarioGroundShapeType ShapeType = EScenarioGroundShapeType::Rectangle;
 

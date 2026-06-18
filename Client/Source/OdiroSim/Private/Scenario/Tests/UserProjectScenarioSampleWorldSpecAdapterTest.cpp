@@ -1,38 +1,39 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
-#include "Scenario/UserProjectEpisodeScenarioWorldSpecAdapter.h"
+#include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
 #include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Shared/ScenarioSampleJson.h"
 #include "Shared/UserProjectDataTypes.h"
 
 namespace
 {
-	bool SaveProjectEpisodeAdapterTestFile(const FString& filePath, const FString& contents)
+	bool SaveProjectScenarioSampleAdapterTestFile(const FString& filePath, const FString& contents)
 	{
 		IFileManager::Get().MakeDirectory(*FPaths::GetPath(filePath), true);
 		return FFileHelper::SaveStringToFile(contents, *filePath);
 	}
 
-	FString MakeProjectEpisodeAdapterTestRoot()
+	FString MakeProjectScenarioSampleAdapterTestRoot()
 	{
 		return FPaths::Combine(
 			FPaths::ProjectSavedDir(),
-			TEXT("Automation/UserProjectEpisodeAdapter"),
+			TEXT("Automation/UserProjectScenarioSampleAdapter"),
 			FGuid::NewGuid().ToString(EGuidFormats::Digits));
 	}
 
-	bool WriteProjectEpisodeAdapterSnapshot(const FString& projectPath, FUserProjectRunSnapshotPaths& outPaths)
+	bool WriteProjectScenarioSampleAdapterSnapshot(const FString& projectPath, FUserProjectRunSnapshotPaths& outPaths)
 	{
 		outPaths = FUserProjectRunSnapshot::BuildPaths(projectPath, TEXT("000001"));
 		IFileManager::Get().MakeDirectory(*outPaths.ReviewPath, true);
 		IFileManager::Get().MakeDirectory(*outPaths.EpisodesPath, true);
 		IFileManager::Get().MakeDirectory(*outPaths.PolicyPath, true);
 
-		return SaveProjectEpisodeAdapterTestFile(
+		return SaveProjectScenarioSampleAdapterTestFile(
 				outPaths.SettingPath,
 				TEXT("{")
 				TEXT("\"schema\":\"project_setting\",")
@@ -42,7 +43,7 @@ namespace
 				TEXT("\"runtime\":{\"map_id\":\"ScenarioSimulationMap\",\"fixed_fps\":30,\"time_scale\":1.0,\"max_duration_s\":60},")
 				TEXT("\"evaluation\":{\"goal_acceptance_radius_m\":1.0,\"tip_over_angle_deg\":60,\"near_miss_distance_m\":0.5}")
 				TEXT("}"))
-			&& SaveProjectEpisodeAdapterTestFile(
+			&& SaveProjectScenarioSampleAdapterTestFile(
 				outPaths.ProfilePath,
 				TEXT("{")
 				TEXT("\"schema\":\"simulation_profile\",")
@@ -56,7 +57,7 @@ namespace
 				TEXT("\"lidar\":{\"mode\":\"front_2d\",\"range_m\":6.0,\"angle_step_degree\":5.0,\"height_m\":0.07,\"store_missed_rays\":false}")
 				TEXT("}")
 				TEXT("}"))
-			&& SaveProjectEpisodeAdapterTestFile(
+			&& SaveProjectScenarioSampleAdapterTestFile(
 				outPaths.ScenarioPath,
 				TEXT("{")
 				TEXT("\"schema\":\"scenario\",")
@@ -64,62 +65,76 @@ namespace
 				TEXT("\"scenario_id\":\"adapter_sidewalk\",")
 				TEXT("\"intent\":\"Adapter test\",")
 				TEXT("\"corridor\":{")
-				TEXT("\"segments\":[{\"id\":\"main\",\"kind\":\"sidewalk\",\"length_m\":12.0,\"walkway_width_m\":3.0,\"along_range_m\":[0.0,12.0]}],")
+				TEXT("\"axis\":{\"type\":\"polyline\",\"points_m\":[[0.0,0.0],[12.0,0.0]]},")
+				TEXT("\"walkway_width_m\":3.0,")
+				TEXT("\"segments\":[{\"id\":\"main\",\"type\":\"straight\",\"along_range_m\":[0.0,12.0]}],")
 				TEXT("\"building_side\":[{\"surface\":\"wall\",\"width_m\":0.5}],")
 				TEXT("\"curb_side\":[{\"surface\":\"road\",\"width_m\":4.0}]")
 				TEXT("},")
 				TEXT("\"obstacles\":{\"min_clear_width_m\":0.9,\"placements\":[{\"kind\":\"fixed\",\"id\":\"cone_01\",\"prop\":\"obstacle.road_cone_01\",\"at\":{\"segment\":\"main\",\"along_m\":6.0,\"offset_m\":0.75,\"lane\":\"curb_edge\"},\"yaw_deg\":10.0}]},")
-				TEXT("\"pedestrians\":{\"background\":{\"count\":0},\"encounters\":[{\"id\":\"oncoming_01\",\"type\":\"oncoming_pass\",\"at\":\"main\",\"meet_offset_m\":0.0,\"persona\":\"normal\"}]},")
-				TEXT("\"robot\":{\"start\":{\"segment\":\"main\",\"along_m\":1.0,\"offset_m\":0.0,\"yaw_deg\":0.0},\"goal\":{\"segment\":\"main\",\"along_m\":11.0,\"offset_m\":0.0}}")
+				TEXT("\"pedestrians\":{\"background\":{\"count\":0},\"encounters\":[]},")
+				TEXT("\"robot\":{\"start\":{\"type\":\"corridor_pose\",\"segment\":\"main\",\"along_m\":1.0,\"offset_m\":0.0,\"heading\":\"forward\"},\"goal\":{\"type\":\"corridor_pose\",\"segment\":\"main\",\"along_m\":11.0,\"offset_m\":0.0,\"heading\":\"forward\"}}")
 				TEXT("}"))
-			&& SaveProjectEpisodeAdapterTestFile(
+			&& SaveProjectScenarioSampleAdapterTestFile(
 				outPaths.PolicyEntrypointPath,
 				TEXT("def create_policy():\n    return None\n"));
 	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FUserProjectEpisodeScenarioWorldSpecAdapterTest,
-	"OdiroSim.UserProjectEpisodeScenario.WorldSpecAdapter.Valid",
+	FUserProjectScenarioSampleWorldSpecAdapterTest,
+	"OdiroSim.UserProjectScenarioSample.WorldSpecAdapter.Valid",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUserProjectEpisodeScenarioWorldSpecAdapterTest::RunTest(const FString& parameters)
+bool FUserProjectScenarioSampleWorldSpecAdapterTest::RunTest(const FString& parameters)
 {
-	const FString projectPath = MakeProjectEpisodeAdapterTestRoot();
+	const FString projectPath = MakeProjectScenarioSampleAdapterTestRoot();
 	FUserProjectRunSnapshotPaths paths;
-	TestTrue(TEXT("write project snapshot"), WriteProjectEpisodeAdapterSnapshot(projectPath, paths));
+	TestTrue(TEXT("write project snapshot"), WriteProjectScenarioSampleAdapterSnapshot(projectPath, paths));
 
 	const FUserProjectRunSnapshotParseResult snapshotResult = FUserProjectRunSnapshot::Parse(projectPath, TEXT("000001"));
 	TestTrue(TEXT("snapshot parses"), snapshotResult.bSuccess);
 
 	TArray<FUserProjectEpisodeScenarioWriteResult> writeResults;
 	TArray<FScenarioCompileDiagnostic> writeDiagnostics;
-	TestTrue(
-		TEXT("episode scenario writes"),
-		FUserProjectEpisodeScenarioJson::WriteAllEpisodeScenarios(
-			snapshotResult.Paths,
-			snapshotResult.Setting,
-			writeResults,
-			writeDiagnostics));
+	const bool bScenarioSampleWrites = FUserProjectEpisodeScenarioJson::WriteAllEpisodeScenarios(
+		snapshotResult.Paths,
+		snapshotResult.Setting,
+		writeResults,
+		writeDiagnostics);
+	TestTrue(TEXT("scenario sample writes"), bScenarioSampleWrites);
 	TestEqual(TEXT("episode count"), writeResults.Num(), 1);
+	if (!bScenarioSampleWrites || writeResults.IsEmpty())
+	{
+		IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+		return false;
+	}
 
-	TestTrue(
-		TEXT("episode scenario schema is detected"),
-		FUserProjectEpisodeScenarioWorldSpecAdapter::IsEpisodeScenarioFile(writeResults[0].ScenarioPath));
+	const FScenarioSampleParseResult sampleParseResult =
+		FScenarioSampleJson::ParseFromFile(writeResults[0].ScenarioPath);
+	TestTrue(TEXT("scenario sample parses"), sampleParseResult.bSuccess);
 
 	const FScenarioCompileResult compileResult =
-		FUserProjectEpisodeScenarioWorldSpecAdapter::CompileScenarioWorldSpecFromEpisodeScenarioFile(writeResults[0].ScenarioPath);
-	TestTrue(TEXT("episode scenario adapts"), compileResult.bSuccess);
-	TestEqual(TEXT("episode id"), compileResult.WorldSpec.RunConfig.TemplateId, FString(TEXT("000001")));
-	const FScenarioParamValue* scenarioIdParam = compileResult.WorldSpec.RunConfig.Parameters.Find(TEXT("scenario_id"));
-	TestNotNull(TEXT("scenario id param"), scenarioIdParam);
-	if (scenarioIdParam)
-	{
-		TestEqual(TEXT("scenario id"), scenarioIdParam->StringValue, FString(TEXT("adapter_sidewalk")));
-	}
+		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(sampleParseResult.Document);
+	TestTrue(TEXT("scenario sample adapts"), compileResult.bSuccess);
+	TestEqual(TEXT("sample scenario id"), compileResult.WorldSpec.RunConfig.TemplateId, FString(TEXT("adapter_sidewalk_000001")));
 	TestEqual(TEXT("seed"), compileResult.WorldSpec.RunConfig.BaseSeed, static_cast<int64>(2000));
 	TestTrue(TEXT("ground regions generated"), compileResult.WorldSpec.GroundRegions.Num() >= 3);
-	TestEqual(TEXT("dynamic actor count"), compileResult.WorldSpec.DynamicActors.Num(), 1);
+	TestTrue(TEXT("runtime sidewalk surface preserved"), compileResult.WorldSpec.GroundRegions.ContainsByPredicate(
+		[](const FScenarioGroundRegionSpec& region)
+		{
+			return region.SurfaceId == TEXT("sidewalk");
+		}));
+	TestTrue(TEXT("runtime wall surface preserved"), compileResult.WorldSpec.GroundRegions.ContainsByPredicate(
+		[](const FScenarioGroundRegionSpec& region)
+		{
+			return region.SurfaceId == TEXT("wall");
+		}));
+	TestTrue(TEXT("runtime road surface preserved"), compileResult.WorldSpec.GroundRegions.ContainsByPredicate(
+		[](const FScenarioGroundRegionSpec& region)
+		{
+			return region.SurfaceId == TEXT("road");
+		}));
 	TestTrue(TEXT("spec hash populated"), !compileResult.WorldSpec.SpecHash.IsEmpty());
 
 	const FScenarioPlaceableInstanceSpec* robotSpec = compileResult.WorldSpec.Placeables.FindByPredicate(

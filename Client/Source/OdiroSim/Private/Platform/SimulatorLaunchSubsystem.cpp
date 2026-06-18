@@ -1,6 +1,7 @@
 
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
+#include "Shared/ScenarioDocumentJson.h"
 #include "Shared/UserProjectDataTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSimulatorLaunch, Log, All);
@@ -33,7 +34,6 @@ namespace
 	const TCHAR* UserProjectPolicyEntrypointFileName = TEXT("__init__.py");
 	const TCHAR* UserProjectSettingSchema = TEXT("project_setting");
 	const TCHAR* UserProjectProfileSchema = TEXT("simulation_profile");
-	const TCHAR* UserProjectScenarioSchema = TEXT("scenario");
 
 	FString ToProjectRelativePath(FString filePath)
 	{
@@ -190,6 +190,22 @@ namespace
 		}
 	}
 
+	void AddScenarioDocumentDiagnostics(const FString& label, const TArray<FScenarioSchemaDiagnostic>& diagnostics, TArray<FString>& outDiagnostics)
+	{
+		for (const FScenarioSchemaDiagnostic& diagnostic : diagnostics)
+		{
+			const FString pathSuffix = diagnostic.Path.IsEmpty()
+				? FString()
+				: FString::Printf(TEXT(" | Path: %s"), *diagnostic.Path);
+			outDiagnostics.Add(FString::Printf(
+				TEXT("%s: %s: %s%s"),
+				*label,
+				*diagnostic.Code,
+				*diagnostic.Message,
+				*pathSuffix));
+		}
+	}
+
 	bool ValidateUserProjectRootJsonFile(
 		const FString& jsonPath,
 		const FString& expectedSchema,
@@ -207,6 +223,28 @@ namespace
 		if (!parseResult.bSuccess)
 		{
 			AddUserProjectJsonDiagnostics(label, parseResult.Diagnostics, outDiagnostics);
+			return false;
+		}
+
+		return true;
+	}
+
+	bool ValidateUserProjectScenarioJsonFile(
+		const FString& jsonPath,
+		const FString& label,
+		TArray<FString>& outDiagnostics)
+	{
+		if (!IsFile(jsonPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s missing: %s"), *label, *jsonPath));
+			return false;
+		}
+
+		const FScenarioDocumentParseResult parseResult =
+			FScenarioDocumentJson::ParseProjectScenarioFromFile(jsonPath);
+		if (!parseResult.bSuccess)
+		{
+			AddScenarioDocumentDiagnostics(label, parseResult.Diagnostics, outDiagnostics);
 			return false;
 		}
 
@@ -263,9 +301,8 @@ namespace
 			UserProjectProfileSchema,
 			TEXT("profile.json"),
 			outDiagnostics);
-		bValid &= ValidateUserProjectRootJsonFile(
+		bValid &= ValidateUserProjectScenarioJsonFile(
 			NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectScenarioFileName)),
-			UserProjectScenarioSchema,
 			TEXT("scenario.json"),
 			outDiagnostics);
 		bValid &= ValidateUserProjectPolicyDirectory(
@@ -604,11 +641,12 @@ namespace
 
 	bool IsScenarioSetupFile(const FString& jsonFile)
 	{
-		if (!HasJsonSchema(jsonFile, LaunchScenarioSetupSchema))
+		if (HasJsonSchema(jsonFile, LaunchScenarioSetupSchema))
 		{
-			return false;
+			return true;
 		}
-		return true;
+
+		return FUserProjectEpisodeScenarioJson::ParseFromFile(jsonFile).bSuccess;
 	}
 
 	bool IsDeliveryBotSetupFile(const FString& jsonFile)

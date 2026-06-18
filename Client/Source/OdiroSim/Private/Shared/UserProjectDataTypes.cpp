@@ -6,13 +6,16 @@
 #include "Misc/Crc.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Scenario/ScenarioSampler.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "Shared/ScenarioDocumentJson.h"
+#include "Shared/ScenarioSampleJson.h"
 
 namespace
 {
-	const TCHAR* EpisodeScenarioSchema = TEXT("episode_scenario");
+	const TCHAR* ScenarioSampleSchema = TEXT("scenario_sample");
 	const int32 UserProjectJsonVersion = 1;
 
 	void AddUserProjectDiagnostic(
@@ -39,6 +42,42 @@ namespace
 		}
 
 		return false;
+	}
+
+	EScenarioCompileDiagnosticSeverity ToUserProjectCompileSeverity(EScenarioSchemaDiagnosticSeverity severity)
+	{
+		switch (severity)
+		{
+		case EScenarioSchemaDiagnosticSeverity::Info:
+			return EScenarioCompileDiagnosticSeverity::Info;
+		case EScenarioSchemaDiagnosticSeverity::Warning:
+		case EScenarioSchemaDiagnosticSeverity::Repair:
+			return EScenarioCompileDiagnosticSeverity::Warning;
+		case EScenarioSchemaDiagnosticSeverity::Error:
+			return EScenarioCompileDiagnosticSeverity::Error;
+		default:
+			return EScenarioCompileDiagnosticSeverity::Error;
+		}
+	}
+
+	void AppendScenarioSchemaDiagnostics(
+		const TArray<FScenarioSchemaDiagnostic>& schemaDiagnostics,
+		TArray<FScenarioCompileDiagnostic>& diagnostics)
+	{
+		for (const FScenarioSchemaDiagnostic& schemaDiagnostic : schemaDiagnostics)
+		{
+			FString message = schemaDiagnostic.Message;
+			if (!schemaDiagnostic.Path.IsEmpty())
+			{
+				message = FString::Printf(TEXT("%s | Path: %s"), *message, *schemaDiagnostic.Path);
+			}
+
+			AddUserProjectDiagnostic(
+				diagnostics,
+				ToUserProjectCompileSeverity(schemaDiagnostic.Severity),
+				schemaDiagnostic.Code,
+				message);
+		}
 	}
 
 	bool TryLoadJsonStringFromFile(
@@ -154,51 +193,6 @@ namespace
 		return true;
 	}
 
-	bool TryReadInt64Field(
-		const FJsonObject& jsonObject,
-		const FString& fieldName,
-		const FString& path,
-		TArray<FScenarioCompileDiagnostic>& diagnostics,
-		int64& outValue)
-	{
-		const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
-		if (!jsonValue.IsValid() || jsonValue->Type != EJson::Number)
-		{
-			AddUserProjectDiagnostic(
-				diagnostics,
-				EScenarioCompileDiagnosticSeverity::Error,
-				FString::Printf(TEXT("invalid_%s"), *fieldName),
-				FString::Printf(TEXT("%s.%s must be a number."), *path, *fieldName));
-			return false;
-		}
-
-		outValue = static_cast<int64>(jsonValue->AsNumber());
-		return true;
-	}
-
-	bool TryReadObjectField(
-		const FJsonObject& jsonObject,
-		const FString& fieldName,
-		const FString& path,
-		TArray<FScenarioCompileDiagnostic>& diagnostics,
-		TSharedPtr<FJsonObject>& outObject)
-	{
-		outObject.Reset();
-		const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
-		if (!jsonValue.IsValid() || jsonValue->Type != EJson::Object)
-		{
-			AddUserProjectDiagnostic(
-				diagnostics,
-				EScenarioCompileDiagnosticSeverity::Error,
-				FString::Printf(TEXT("invalid_%s"), *fieldName),
-				FString::Printf(TEXT("%s.%s must be an object."), *path, *fieldName));
-			return false;
-		}
-
-		outObject = jsonValue->AsObject();
-		return outObject.IsValid();
-	}
-
 	FString MakeContentHash(const FString& content)
 	{
 		return FString::Printf(TEXT("crc32:%08x"), FCrc::StrCrc32(*content));
@@ -265,122 +259,6 @@ namespace
 		default:
 			return MakeShared<FJsonValueNull>();
 		}
-	}
-
-	TSharedPtr<FJsonValue> MaterializeJsonValue(
-		const TSharedPtr<FJsonValue>& value,
-		FRandomStream& randomStream,
-		const FString& path,
-		const TSharedPtr<FJsonObject>& paramsObject,
-		TArray<FScenarioCompileDiagnostic>& diagnostics)
-	{
-		if (!value.IsValid())
-		{
-			return MakeShared<FJsonValueNull>();
-		}
-
-		if (value->Type == EJson::Object)
-		{
-			const TSharedPtr<FJsonObject> sourceObject = value->AsObject();
-			const TSharedPtr<FJsonValue> minValue = sourceObject->TryGetField(TEXT("min"));
-			const TSharedPtr<FJsonValue> maxValue = sourceObject->TryGetField(TEXT("max"));
-			if (minValue.IsValid() && maxValue.IsValid())
-			{
-				if (minValue->Type != EJson::Number || maxValue->Type != EJson::Number)
-				{
-					AddUserProjectDiagnostic(
-						diagnostics,
-						EScenarioCompileDiagnosticSeverity::Error,
-						TEXT("invalid_random_range"),
-						FString::Printf(TEXT("%s min/max must be numbers."), *path));
-					return MakeShared<FJsonValueNull>();
-				}
-
-				const double minNumber = minValue->AsNumber();
-				const double maxNumber = maxValue->AsNumber();
-				if (maxNumber < minNumber)
-				{
-					AddUserProjectDiagnostic(
-						diagnostics,
-						EScenarioCompileDiagnosticSeverity::Error,
-						TEXT("invalid_random_range"),
-						FString::Printf(TEXT("%s max must be >= min."), *path));
-					return MakeShared<FJsonValueNull>();
-				}
-
-				const double selectedValue = minNumber + (maxNumber - minNumber) * randomStream.FRand();
-				const TSharedPtr<FJsonValue> selectedJsonValue = MakeShared<FJsonValueNumber>(selectedValue);
-				paramsObject->SetField(path, CloneJsonValue(selectedJsonValue));
-				return selectedJsonValue;
-			}
-
-			const TSharedPtr<FJsonValue> choicesValue = sourceObject->TryGetField(TEXT("choices"));
-			if (choicesValue.IsValid())
-			{
-				if (choicesValue->Type != EJson::Array || choicesValue->AsArray().IsEmpty())
-				{
-					AddUserProjectDiagnostic(
-						diagnostics,
-						EScenarioCompileDiagnosticSeverity::Error,
-						TEXT("invalid_random_choices"),
-						FString::Printf(TEXT("%s choices must be a non-empty array."), *path));
-					return MakeShared<FJsonValueNull>();
-				}
-
-				const TArray<TSharedPtr<FJsonValue>>& choices = choicesValue->AsArray();
-				const int32 choiceIndex = FMath::Clamp(
-					FMath::FloorToInt(randomStream.FRand() * choices.Num()),
-					0,
-					choices.Num() - 1);
-				const TSharedPtr<FJsonValue> selectedJsonValue = CloneJsonValue(choices[choiceIndex]);
-				paramsObject->SetField(path, CloneJsonValue(selectedJsonValue));
-				return selectedJsonValue;
-			}
-
-			const TSharedPtr<FJsonObject> materializedObject = MakeShared<FJsonObject>();
-			for (const TPair<FString, TSharedPtr<FJsonValue>>& pair : sourceObject->Values)
-			{
-				const FString childPath = path.IsEmpty()
-					? FString::Printf(TEXT("$.%s"), *pair.Key)
-					: FString::Printf(TEXT("%s.%s"), *path, *pair.Key);
-				materializedObject->SetField(
-					pair.Key,
-					MaterializeJsonValue(pair.Value, randomStream, childPath, paramsObject, diagnostics));
-			}
-			return MakeShared<FJsonValueObject>(materializedObject);
-		}
-
-		if (value->Type == EJson::Array)
-		{
-			TArray<TSharedPtr<FJsonValue>> materializedArray;
-			const TArray<TSharedPtr<FJsonValue>>& sourceArray = value->AsArray();
-			for (int32 index = 0; index < sourceArray.Num(); ++index)
-			{
-				const FString childPath = FString::Printf(TEXT("%s[%d]"), *path, index);
-				materializedArray.Add(MaterializeJsonValue(sourceArray[index], randomStream, childPath, paramsObject, diagnostics));
-			}
-			return MakeShared<FJsonValueArray>(materializedArray);
-		}
-
-		return CloneJsonValue(value);
-	}
-
-	TSharedRef<FJsonObject> MakeDiagnosticsObject(const TArray<FScenarioCompileDiagnostic>& diagnostics)
-	{
-		const TSharedRef<FJsonObject> validationObject = MakeShared<FJsonObject>();
-		validationObject->SetStringField(TEXT("status"), HasUserProjectErrors(diagnostics) ? TEXT("error") : TEXT("ok"));
-
-		TArray<TSharedPtr<FJsonValue>> diagnosticValues;
-		for (const FScenarioCompileDiagnostic& diagnostic : diagnostics)
-		{
-			const TSharedRef<FJsonObject> diagnosticObject = MakeShared<FJsonObject>();
-			diagnosticObject->SetStringField(TEXT("severity"), diagnostic.Severity == EScenarioCompileDiagnosticSeverity::Error ? TEXT("error") : TEXT("warning"));
-			diagnosticObject->SetStringField(TEXT("code"), diagnostic.Code);
-			diagnosticObject->SetStringField(TEXT("message"), diagnostic.Message);
-			diagnosticValues.Add(MakeShared<FJsonValueObject>(diagnosticObject));
-		}
-		validationObject->SetArrayField(TEXT("diagnostics"), diagnosticValues);
-		return validationObject;
 	}
 
 	bool TrySerializeJsonObject(
@@ -549,54 +427,43 @@ FUserProjectEpisodeScenarioWriteResult FUserProjectEpisodeScenarioJson::WriteEpi
 		return result;
 	}
 
-	TSharedPtr<FJsonObject> scenarioRoot;
-	if (!TryParseJsonObject(scenarioJson, scenarioRoot, diagnostics) || !scenarioRoot.IsValid())
+	const FScenarioDocumentParseResult scenarioParseResult =
+		FScenarioDocumentJson::ParseProjectScenarioFromString(scenarioJson);
+	AppendScenarioSchemaDiagnostics(scenarioParseResult.Diagnostics, diagnostics);
+	if (!scenarioParseResult.bSuccess)
 	{
 		result.bSuccess = false;
 		return result;
 	}
 
-	FRandomStream randomStream;
-	randomStream.Initialize(static_cast<int32>(result.Seed & 0x7fffffff));
+	FScenarioSamplerRequest sampleRequest;
+	sampleRequest.SampleId = result.EpisodeId;
+	sampleRequest.Seed = result.Seed;
+	sampleRequest.SourceScenarioRef = MakeRunRelativePath(paths, paths.ScenarioPath);
+	sampleRequest.SourceScenarioHash = MakeContentHash(scenarioJson);
+	sampleRequest.ProfileRef = MakeRunRelativePath(paths, paths.ProfilePath);
+	sampleRequest.ProfileHash = MakeContentHash(profileJson);
+	sampleRequest.SettingRef = MakeRunRelativePath(paths, paths.SettingPath);
+	sampleRequest.SettingHash = MakeContentHash(settingJson);
+	sampleRequest.GeneratorVersion = setting.GeneratorVersion.IsEmpty()
+		? FString(FScenarioSampler::GeneratorVersion)
+		: setting.GeneratorVersion;
 
-	const TSharedPtr<FJsonObject> paramsObject = MakeShared<FJsonObject>();
-	const TSharedPtr<FJsonValue> semanticValue = MaterializeJsonValue(
-		MakeShared<FJsonValueObject>(scenarioRoot),
-		randomStream,
-		TEXT("$"),
-		paramsObject,
-		diagnostics);
-	if (HasUserProjectErrors(diagnostics) || !semanticValue.IsValid() || semanticValue->Type != EJson::Object)
+	const FScenarioSamplerResult sampleResult =
+		FScenarioSampler::GenerateSample(scenarioParseResult.Document, sampleRequest);
+	AppendScenarioSchemaDiagnostics(sampleResult.Diagnostics, diagnostics);
+	if (!sampleResult.bSuccess || HasUserProjectErrors(diagnostics))
 	{
 		result.bSuccess = false;
 		return result;
 	}
-
-	const TSharedRef<FJsonObject> episodeObject = MakeShared<FJsonObject>();
-	episodeObject->SetStringField(TEXT("episode_id"), result.EpisodeId);
-	episodeObject->SetNumberField(TEXT("episode_index"), episodeIndex);
-	episodeObject->SetNumberField(TEXT("seed"), static_cast<double>(result.Seed));
-
-	const TSharedRef<FJsonObject> sourceObject = MakeShared<FJsonObject>();
-	sourceObject->SetStringField(TEXT("scenario_ref"), MakeRunRelativePath(paths, paths.ScenarioPath));
-	sourceObject->SetStringField(TEXT("scenario_hash"), MakeContentHash(scenarioJson));
-	sourceObject->SetStringField(TEXT("profile_ref"), MakeRunRelativePath(paths, paths.ProfilePath));
-	sourceObject->SetStringField(TEXT("profile_hash"), MakeContentHash(profileJson));
-	sourceObject->SetStringField(TEXT("setting_ref"), MakeRunRelativePath(paths, paths.SettingPath));
-	sourceObject->SetStringField(TEXT("setting_hash"), MakeContentHash(settingJson));
-	sourceObject->SetStringField(TEXT("generator_version"), setting.GeneratorVersion);
-
-	const TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
-	rootObject->SetStringField(TEXT("schema"), EpisodeScenarioSchema);
-	rootObject->SetNumberField(TEXT("version"), UserProjectJsonVersion);
-	rootObject->SetObjectField(TEXT("episode"), episodeObject);
-	rootObject->SetObjectField(TEXT("source"), sourceObject);
-	rootObject->SetObjectField(TEXT("params"), paramsObject.ToSharedRef());
-	rootObject->SetObjectField(TEXT("semantic"), semanticValue->AsObject().ToSharedRef());
-	rootObject->SetObjectField(TEXT("validation"), MakeDiagnosticsObject(diagnostics));
 
 	FString outputJson;
-	if (!TrySerializeJsonObject(rootObject, outputJson, diagnostics)
+	TArray<FScenarioSchemaDiagnostic> sampleWriteDiagnostics;
+	const bool bSampleJsonWritten =
+		FScenarioSampleJson::TryWriteJson(sampleResult.Document, outputJson, sampleWriteDiagnostics);
+	AppendScenarioSchemaDiagnostics(sampleWriteDiagnostics, diagnostics);
+	if (!bSampleJsonWritten
 		|| !TryWriteTextFile(result.ScenarioPath, outputJson, diagnostics))
 	{
 		result.bSuccess = false;
@@ -653,51 +520,30 @@ FUserProjectEpisodeScenarioParseResult FUserProjectEpisodeScenarioJson::ParseFro
 
 	FString schema;
 	TryReadStringField(*rootObject, TEXT("schema"), TEXT("$"), result.Diagnostics, schema);
-	if (!schema.Equals(EpisodeScenarioSchema, ESearchCase::CaseSensitive))
+	if (!schema.Equals(ScenarioSampleSchema, ESearchCase::CaseSensitive))
 	{
 		AddUserProjectDiagnostic(
 			result.Diagnostics,
 			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("invalid_schema"),
-			FString::Printf(TEXT("$.schema must be '%s'."), EpisodeScenarioSchema));
+			FString::Printf(TEXT("$.schema must be '%s'."), ScenarioSampleSchema));
+		result.bSuccess = false;
+		return result;
 	}
 
-	int32 version = 0;
-	TryReadInt32Field(*rootObject, TEXT("version"), TEXT("$"), result.Diagnostics, version);
-	if (version != UserProjectJsonVersion)
+	const FScenarioSampleParseResult sampleParseResult = FScenarioSampleJson::ParseFromString(jsonString);
+	AppendScenarioSchemaDiagnostics(sampleParseResult.Diagnostics, result.Diagnostics);
+	result.EpisodeId = sampleParseResult.Document.Sample.SampleId;
+	result.Seed = sampleParseResult.Document.Sample.Source.Seed;
+	if (!IsValidEpisodeId(result.EpisodeId))
 	{
 		AddUserProjectDiagnostic(
 			result.Diagnostics,
 			EScenarioCompileDiagnosticSeverity::Error,
-			TEXT("unsupported_version"),
-			FString::Printf(TEXT("$.version must be %d."), UserProjectJsonVersion));
+			TEXT("invalid_episode_id"),
+			TEXT("$.sample.sample_id must be a 6-digit decimal string for user project episodes."));
 	}
-
-	TSharedPtr<FJsonObject> episodeObject;
-	if (TryReadObjectField(*rootObject, TEXT("episode"), TEXT("$"), result.Diagnostics, episodeObject))
-	{
-		TryReadStringField(*episodeObject, TEXT("episode_id"), TEXT("$.episode"), result.Diagnostics, result.EpisodeId);
-		TryReadInt64Field(*episodeObject, TEXT("seed"), TEXT("$.episode"), result.Diagnostics, result.Seed);
-		if (!IsValidEpisodeId(result.EpisodeId))
-		{
-			AddUserProjectDiagnostic(
-				result.Diagnostics,
-				EScenarioCompileDiagnosticSeverity::Error,
-				TEXT("invalid_episode_id"),
-				TEXT("$.episode.episode_id must be a 6-digit decimal string."));
-		}
-	}
-
-	TSharedPtr<FJsonObject> sourceObject;
-	TryReadObjectField(*rootObject, TEXT("source"), TEXT("$"), result.Diagnostics, sourceObject);
-	TSharedPtr<FJsonObject> paramsObject;
-	TryReadObjectField(*rootObject, TEXT("params"), TEXT("$"), result.Diagnostics, paramsObject);
-	TSharedPtr<FJsonObject> semanticObject;
-	TryReadObjectField(*rootObject, TEXT("semantic"), TEXT("$"), result.Diagnostics, semanticObject);
-	TSharedPtr<FJsonObject> validationObject;
-	TryReadObjectField(*rootObject, TEXT("validation"), TEXT("$"), result.Diagnostics, validationObject);
-
-	result.bSuccess = !HasUserProjectErrors(result.Diagnostics);
+	result.bSuccess = sampleParseResult.bSuccess && !HasUserProjectErrors(result.Diagnostics);
 	return result;
 }
 
@@ -903,24 +749,18 @@ namespace
 
 		if (episodeScenarioObject.IsValid())
 		{
-			TSharedPtr<FJsonObject> episodeObject = TryGetObjectFieldOrNull(episodeScenarioObject, TEXT("episode"));
-			if (episodeObject.IsValid())
+			TSharedPtr<FJsonObject> sampleObject = TryGetObjectFieldOrNull(episodeScenarioObject, TEXT("sample"));
+			if (sampleObject.IsValid())
 			{
-				outSeed = static_cast<int64>(ReadNumberOrDefault(*episodeObject, TEXT("seed"), 0.0));
-			}
-
-			TSharedPtr<FJsonObject> semanticObject = TryGetObjectFieldOrNull(episodeScenarioObject, TEXT("semantic"));
-			if (semanticObject.IsValid())
-			{
-				outScenarioId = ReadStringOrDefault(*semanticObject, TEXT("scenario_id"));
-			}
-
-			TSharedPtr<FJsonObject> sourceObject = TryGetObjectFieldOrNull(episodeScenarioObject, TEXT("source"));
-			if (sourceObject.IsValid())
-			{
-				outScenarioSourceHash = ReadStringOrDefault(*sourceObject, TEXT("scenario_hash"));
-				outProfileHash = ReadStringOrDefault(*sourceObject, TEXT("profile_hash"), outProfileHash);
-				outSettingHash = ReadStringOrDefault(*sourceObject, TEXT("setting_hash"));
+				outScenarioId = ReadStringOrDefault(*sampleObject, TEXT("scenario_id"));
+				TSharedPtr<FJsonObject> sampleSourceObject = TryGetObjectFieldOrNull(sampleObject, TEXT("source"));
+				if (sampleSourceObject.IsValid())
+				{
+					outSeed = static_cast<int64>(ReadNumberOrDefault(*sampleSourceObject, TEXT("seed"), 0.0));
+					outScenarioSourceHash = ReadStringOrDefault(*sampleSourceObject, TEXT("template_hash"));
+					outProfileHash = ReadStringOrDefault(*sampleSourceObject, TEXT("profile_hash"), outProfileHash);
+					outSettingHash = ReadStringOrDefault(*sampleSourceObject, TEXT("setting_hash"));
+				}
 			}
 		}
 
@@ -1284,8 +1124,9 @@ namespace
 		object->SetNumberField(TEXT("duration_s"), runRecord.DurationSeconds);
 		object->SetBoolField(TEXT("usable_for_llm_tuning"), IsUserProjectRecordUsableForTuning(runRecord));
 		object->SetObjectField(TEXT("metrics"), MakeUserProjectParamObject(runRecord.EvaluationResult.Metrics));
-		object->SetObjectField(TEXT("scenario_params"), CloneObjectFieldOrEmpty(episodeScenarioObject, TEXT("params")));
-		object->SetObjectField(TEXT("scenario_semantic"), CloneObjectFieldOrEmpty(episodeScenarioObject, TEXT("semantic")));
+		const TSharedPtr<FJsonObject> scenarioPayloadObject = TryGetObjectFieldOrNull(episodeScenarioObject, TEXT("scenario"));
+		object->SetObjectField(TEXT("scenario_params"), CloneObjectFieldOrEmpty(scenarioPayloadObject, TEXT("params")));
+		object->SetObjectField(TEXT("scenario_semantic"), CloneObjectFieldOrEmpty(scenarioPayloadObject, TEXT("semantic")));
 		(void)paths;
 		(void)sourceObject;
 		return object;

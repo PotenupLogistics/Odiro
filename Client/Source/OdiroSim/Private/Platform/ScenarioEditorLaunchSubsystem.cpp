@@ -55,6 +55,25 @@ bool UScenarioEditorLaunchSubsystem::OpenScenarioEditor(const FString& scenarioS
 	return OpenScenarioEditorInternal(EScenarioEditorAutoStartMode::LoadFromPath, trimmedScenarioSetupPath);
 }
 
+bool UScenarioEditorLaunchSubsystem::OpenScenarioEditorMap()
+{
+	UWorld* world = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
+	if (!world)
+	{
+		UE_LOG(LogScenarioEditorLaunch, Warning, TEXT("ScenarioEditorMap 열기 실패: World 없음"));
+		return false;
+	}
+
+	ResetPendingAutoStartState();
+	bAutoStartedScenarioEditorSession = false;
+	bAutoStartedScenarioEditorSessionLoadedExistingScenario = false;
+
+	const FString openLevelName = NormalizeMapIdForOpenLevel(ScenarioEditorMapId);
+	UE_LOG(LogScenarioEditorLaunch, Log, TEXT("ScenarioEditorMap 열기 요청 | Map: %s"), *openLevelName);
+	UGameplayStatics::OpenLevel(world, FName(*openLevelName), true);
+	return true;
+}
+
 bool UScenarioEditorLaunchSubsystem::OpenNewScenarioEditor()
 {
 	return OpenScenarioEditorInternal(EScenarioEditorAutoStartMode::NewDraft, FString());

@@ -122,6 +122,21 @@ def parse_actor_tags(data: dict) -> list[str]:
     return [str(actor_tag) for actor_tag in actor_tags]
 
 
+# Unreal vector JSON을 cm 단위 dict로 변환한다.
+def parse_vector_cm(data: object) -> dict[str, float] | None:
+    if not isinstance(data, dict):
+        return None
+
+    try:
+        return {
+            "x": float(data.get("x", 0.0)),
+            "y": float(data.get("y", 0.0)),
+            "z": float(data.get("z", 0.0)),
+        }
+    except (TypeError, ValueError):
+        return None
+
+
 # legacy 2D LiDAR ray 입력을 정책용 구조체로 변환한다.
 def parse_legacy_lidar_ray(data: dict) -> LidarRay:
     return LidarRay(
@@ -167,6 +182,7 @@ def parse_lidar_ray_3d(data: dict) -> LidarRay3D:
         rayIndex=data.get("rayIndex"),
         actorName=data.get("actorName"),
         actorTags=parse_actor_tags(data),
+        hitLocationCm=parse_vector_cm(data.get("hitLocationCm")),
     )
 
 

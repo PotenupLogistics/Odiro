@@ -106,6 +106,7 @@ class LidarRay3D:
     rayIndex: int | None = None
     actorName: str | None = None
     actorTags: list[str] = field(default_factory=list)
+    hitLocationCm: dict[str, float] | None = None
 
 
 # Typed LiDAR observation grouped by scan dimension.

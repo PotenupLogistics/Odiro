@@ -350,6 +350,31 @@ void UDeliveryBot_LidarSensorComponent::DrawDebugLidarRay(
 		0.75f);
 }
 
+// Python과 point cloud로 전달되는 LiDAR hit world location을 누적 점으로 표시한다.
+void UDeliveryBot_LidarSensorComponent::DrawAccumulatedHitLocationDebug(
+	const FVector& hitLocationCm,
+	bool bObstacleHit) const
+{
+	if (!bDrawAccumulatedHitLocationDebug)
+		return;
+
+	UWorld* world = GetWorld();
+	if (world == nullptr)
+		return;
+
+	const float lifeTimeSeconds = FMath::Max(AccumulatedHitLocationDebugLifeTimeSeconds, 0.1f);
+	const float pointSize = FMath::Max(AccumulatedHitLocationDebugPointSize, 1.f);
+	const FColor pointColor = bObstacleHit ? FColor::Red : FColor(160, 160, 160);
+
+	DrawDebugPoint(
+		world,
+		hitLocationCm,
+		pointSize,
+		pointColor,
+		false,
+		lifeTimeSeconds);
+}
+
 void UDeliveryBot_LidarSensorComponent::DrawDebugObstacleWarningRange(const FVector& sensorLocationCm) const
 {
 	if (!LidarSensorConfigInfo.bDrawDebug || !LidarSensorConfigInfo.bDrawObstacleWarningDebug)
@@ -798,6 +823,8 @@ FDeliveryBotLidarRayInfo UDeliveryBot_LidarSensorComponent::MakeRayInfo(
 	rayInfo.ActorTags = hitActor->Tags;
 	rayInfo.HitLocationCm = hitResult->ImpactPoint;
 	rayInfo.DistanceM = FVector::Dist(startLocationCm, hitResult->ImpactPoint) / 100.f;
+
+	DrawAccumulatedHitLocationDebug(rayInfo.HitLocationCm, rayInfo.ActorTags.Num() > 0);
 
 	return rayInfo;
 }

@@ -502,3 +502,23 @@ FString ADeliveryBot::GetLastPythonScenarioResultJson() const
 
 	return HttpPolicyComponent->GetLastScenarioResultJson();
 }
+
+// Python policy의 마지막 decide 결과를 반환한다.
+FDeliveryBotPolicyDecisionResultInfo ADeliveryBot::GetLastPolicyDecisionResult() const
+{
+	if (!IsValid(HttpPolicyComponent))
+		return FDeliveryBotPolicyDecisionResultInfo{};
+
+	return HttpPolicyComponent->GetLastPolicyDecisionResult();
+}
+
+// Python policy가 마지막으로 반환한 capture refs를 복사한다.
+void ADeliveryBot::GetLastPythonCaptureRefs(TArray<FDeliveryBotPythonCaptureRefInfo>& outCaptureRefs) const
+{
+	outCaptureRefs.Reset();
+
+	if (!IsValid(HttpPolicyComponent))
+		return;
+
+	HttpPolicyComponent->GetLastPythonCaptureRefs(outCaptureRefs);
+}

@@ -124,6 +124,7 @@ namespace
 	{
 		TSharedRef<FJsonObject> rayObject = MakeJsonLidarRay2DObject(rayInfo);
 		rayObject->SetNumberField(TEXT("pitchDegree"), rayInfo.RayPitchDegree);
+		rayObject->SetObjectField(TEXT("hitLocationCm"), MakeJsonVectorObject(rayInfo.HitLocationCm));
 		return rayObject;
 	}
 }
@@ -245,7 +246,18 @@ bool UDeliveryBot_HttpPolicyComponent::RequestDecision(float deltaTime)
 			bDecisionRequestInFlight = false;
 
 			FDeliveryBotMoveCommandInfo moveCommand;
-			if (!bSucceeded || !TryParseMoveCommand(response, moveCommand))
+			if (!bSucceeded)
+			{
+				StorePolicyDecisionError(TEXT("PYTHON_REQUEST_FAILED"), TEXT("Python decide HTTP request failed."));
+
+				if (ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(GetOwner()))
+				{
+					deliveryBot->ApplyParkingStop();
+				}
+				return;
+			}
+
+			if (!TryParseMoveCommand(response, moveCommand))
 			{
 				if (ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(GetOwner()))
 				{
@@ -253,6 +265,7 @@ bool UDeliveryBot_HttpPolicyComponent::RequestDecision(float deltaTime)
 				}
 				return;
 			}
+				
 
 			if (ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(GetOwner()))
 			{
@@ -267,6 +280,7 @@ bool UDeliveryBot_HttpPolicyComponent::RequestDecision(float deltaTime)
 
 	return bRequestStarted;
 }
+
 
 
 // 현재 GameInstance에서 Python process subsystem을 가져온다.
@@ -454,15 +468,17 @@ TSharedRef<FJsonObject> UDeliveryBot_HttpPolicyComponent::BuildArtifactSpecObjec
 	return artifactSpecObject;
 }
 
-// Python response.captures 참조를 로그로 남긴다.
-void UDeliveryBot_HttpPolicyComponent::LogPythonCaptureRefs(const TSharedPtr<FJsonObject>& responseObject) const
+// Python response.captures를 capture ref 배열로 변환한다.
+TArray<FDeliveryBotPythonCaptureRefInfo> UDeliveryBot_HttpPolicyComponent::BuildPythonCaptureRefs(const TSharedPtr<FJsonObject>& responseObject) const
 {
+	TArray<FDeliveryBotPythonCaptureRefInfo> result;
+
 	if (!responseObject.IsValid())
-		return;
+		return result;
 
 	TArray<TSharedPtr<FJsonValue>> captureValues;
 	if (!TryGetJsonArrayField(*responseObject, TEXT("captures"), captureValues))
-		return;
+		return result;
 
 	for (const TSharedPtr<FJsonValue>& captureValue : captureValues)
 	{
@@ -473,22 +489,72 @@ void UDeliveryBot_HttpPolicyComponent::LogPythonCaptureRefs(const TSharedPtr<FJs
 		if (!captureObject.IsValid())
 			continue;
 
-		FString captureType;
-		FString path;
-		double sensorSequence = 0.0;
+		FDeliveryBotPythonCaptureRefInfo captureRef;
+		double numberValue = 0.0;
 
-		captureObject->TryGetStringField(TEXT("captureType"), captureType);
-		captureObject->TryGetStringField(TEXT("path"), path);
-		captureObject->TryGetNumberField(TEXT("sensorSequence"), sensorSequence);
+		captureObject->TryGetStringField(TEXT("captureType"), captureRef.CaptureType);
+		captureObject->TryGetStringField(TEXT("sensorId"), captureRef.SensorId);
+		captureObject->TryGetStringField(TEXT("format"), captureRef.Format);
+		captureObject->TryGetStringField(TEXT("path"), captureRef.Path);
 
+		if (captureObject->TryGetNumberField(TEXT("sensorSequence"), numberValue))
+			captureRef.SensorSequence = static_cast<int32>(numberValue);
+
+		if (captureObject->TryGetNumberField(TEXT("sensorTimeSeconds"), numberValue))
+			captureRef.SensorTimeSeconds = static_cast<float>(numberValue);
+
+		if (captureObject->TryGetNumberField(TEXT("runTimeSeconds"), numberValue))
+			captureRef.RunTimeSeconds = static_cast<float>(numberValue);
+
+		if (!captureRef.CaptureType.IsEmpty() || !captureRef.Path.IsEmpty())
+			result.Add(captureRef);
+	}
+
+	return result;
+}
+
+// Python response.decision을 policy decision metadata로 변환한다.
+FDeliveryBotPolicyDecisionInfo UDeliveryBot_HttpPolicyComponent::BuildPythonDecisionInfo(const TSharedPtr<FJsonObject>& responseObject) const
+{
+	FDeliveryBotPolicyDecisionInfo decisionInfo;
+
+	if (!responseObject.IsValid())
+		return decisionInfo;
+
+	TSharedPtr<FJsonObject> decisionObject;
+	if (!TryGetJsonObjectField(*responseObject, TEXT("decision"), decisionObject))
+		return decisionInfo;
+
+	decisionObject->TryGetStringField(TEXT("selectedPolicy"), decisionInfo.SelectedPolicy);
+	decisionObject->TryGetStringField(TEXT("reason"), decisionInfo.Reason);
+
+	return decisionInfo;
+}
+
+// Python capture refs를 로그로 남긴다.
+void UDeliveryBot_HttpPolicyComponent::LogPythonCaptureRefs(const TArray<FDeliveryBotPythonCaptureRefInfo>& captureRefs) const
+{
+	for (const FDeliveryBotPythonCaptureRefInfo& captureRef : captureRefs)
+	{
 		UE_LOG(
 			LogDeliveryBotHttpPolicy,
 			Log,
 			TEXT("Python capture ref: type=%s sensorSequence=%d path=%s"),
-			*captureType,
-			static_cast<int32>(sensorSequence),
-			*path);
+			*captureRef.CaptureType,
+			captureRef.SensorSequence,
+			*captureRef.Path);
 	}
+}
+
+// 마지막 policy decision을 error 상태로 저장한다.
+void UDeliveryBot_HttpPolicyComponent::StorePolicyDecisionError(const FString& errorCode, const FString& errorMessage)
+{
+	LastPolicyDecisionResult = FDeliveryBotPolicyDecisionResultInfo{};
+	LastPolicyDecisionResult.Sequence = LastDecisionSequence;
+	LastPolicyDecisionResult.RunTimeSeconds = LastDecisionRunTimeSeconds;
+	LastPolicyDecisionResult.Status = EDeliveryBotPolicyDecisionStatusTypes::Error;
+	LastPolicyDecisionResult.ErrorCode = errorCode;
+	LastPolicyDecisionResult.ErrorMessage = errorMessage;
 }
 
 // /scenario/start 요청 envelope body를 만든다.
@@ -583,7 +649,8 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 	const FDeliveryBotSetupInfo& setupInfo = deliveryBot->GetSetupInfo();
 	const FDeliveryBotObservationInfo observation = deliveryBot->BuildPolicyObservation();
 	LastDecisionSequence = observation.Sequence;
-
+	LastDecisionRunTimeSeconds = observation.WorldTimeSeconds;
+	
 	TSharedRef<FJsonObject> requestObject = MakeShared<FJsonObject>();
 	requestObject->SetNumberField(TEXT("sequence"), observation.Sequence);
 	requestObject->SetNumberField(TEXT("runTimeSeconds"), observation.WorldTimeSeconds);
@@ -698,27 +765,35 @@ bool UDeliveryBot_HttpPolicyComponent::IsPythonResponseOk(const FHttpResponsePtr
 		&& status.Equals(TEXT("ok"), ESearchCase::IgnoreCase);
 }
 
-// /scenario/decide envelope 응답의 response.action을 이동 명령으로 변환한다.
+// /scenario/decide envelope 응답의 response.action을 이동 명령으로 변환하고 마지막 policy decision 결과를 저장한다.
 bool UDeliveryBot_HttpPolicyComponent::TryParseMoveCommand(
 	const FHttpResponsePtr& response,
-	FDeliveryBotMoveCommandInfo& outMoveCommand) const
+	FDeliveryBotMoveCommandInfo& outMoveCommand)
 {
 	outMoveCommand = FDeliveryBotMoveCommandInfo{};
 
 	TSharedPtr<FJsonObject> responseObject;
 	if (!TryGetPythonResponseObject(response, responseObject))
+	{
+		StorePolicyDecisionError(TEXT("PYTHON_RESPONSE_INVALID"), TEXT("Python decide response envelope is invalid."));
 		return false;
+	}
 
 	FString status;
 	if (!responseObject->TryGetStringField(TEXT("status"), status) || !status.Equals(TEXT("ok"), ESearchCase::IgnoreCase))
+	{
+		StorePolicyDecisionError(TEXT("PYTHON_DECIDE_FAILED"), TEXT("Python decide response status is not ok."));
 		return false;
+	}
 
 	DrawPythonPathDebug(responseObject);
-	LogPythonCaptureRefs(responseObject);
-	
+
 	TSharedPtr<FJsonObject> actionObject;
 	if (!TryGetJsonObjectField(*responseObject, TEXT("action"), actionObject))
+	{
+		StorePolicyDecisionError(TEXT("PYTHON_ACTION_MISSING"), TEXT("Python decide response.action is missing."));
 		return false;
+	}
 
 	double steering = 0.0;
 	double targetSpeedKmh = 0.0;
@@ -738,6 +813,16 @@ bool UDeliveryBot_HttpPolicyComponent::TryParseMoveCommand(
 	outMoveCommand.MoveDirectionType = direction.Equals(TEXT("Reverse"), ESearchCase::IgnoreCase)
 		? EDeliveryBotMoveDirectionType::Reverse
 		: EDeliveryBotMoveDirectionType::Forward;
+
+	LastPolicyDecisionResult = FDeliveryBotPolicyDecisionResultInfo{};
+	LastPolicyDecisionResult.Sequence = LastDecisionSequence;
+	LastPolicyDecisionResult.RunTimeSeconds = LastDecisionRunTimeSeconds;
+	LastPolicyDecisionResult.Status = EDeliveryBotPolicyDecisionStatusTypes::Ok;
+	LastPolicyDecisionResult.MoveCommand = outMoveCommand;
+	LastPolicyDecisionResult.Decision = BuildPythonDecisionInfo(responseObject);
+	LastPolicyDecisionResult.CaptureRefs = BuildPythonCaptureRefs(responseObject);
+
+	LogPythonCaptureRefs(LastPolicyDecisionResult.CaptureRefs);
 
 	return true;
 }
@@ -902,8 +987,10 @@ void UDeliveryBot_HttpPolicyComponent::ResetScenarioState(bool bKeepLastResult)
 {
 	EpisodeId.Reset();
 	RobotInstanceId.Reset();
-
+	LastPolicyDecisionResult = FDeliveryBotPolicyDecisionResultInfo{};
+	
 	LastDecisionSequence = 0;
+	LastDecisionRunTimeSeconds = 0.f;
 	StartRetryElapsedSeconds = 0.f;
 	DecideElapsedSeconds = 0.f;
 

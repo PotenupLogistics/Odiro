@@ -7,6 +7,8 @@
 #include "Shared/Struct/DeliveryBot/Drive/DeliveryBotMovementInfo.h"
 #include "Shared/Struct/DeliveryBot/Setup/DeliveryBotSetupInfo.h"
 #include "Shared/Struct/DeliveryBot/Observation/DeliveryBotObservationInfo.h"
+#include "Shared/Struct/DeliveryBot/Result/DeliveryBotPythonCaptureRefInfo.h"
+#include "Shared/Struct/DeliveryBot/Result/DeliveryBotPolicyDecisionResultInfo.h"
 #include "DeliveryBot.generated.h"
 
 USTRUCT(BlueprintType)
@@ -95,6 +97,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
 	FString GetLastPythonScenarioResultJson() const; // Python 서버에서 받은 마지막 scenario result JSON을 반환한다
 
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
+	FDeliveryBotPolicyDecisionResultInfo GetLastPolicyDecisionResult() const; // Python policy의 마지막 decide 결과를 반환한다
+	
+	void GetLastPythonCaptureRefs(TArray<FDeliveryBotPythonCaptureRefInfo>& outCaptureRefs) const; // Python policy가 마지막으로 반환한 capture refs를 복사한다
 
 private:
 	void ApplySetupInfo();

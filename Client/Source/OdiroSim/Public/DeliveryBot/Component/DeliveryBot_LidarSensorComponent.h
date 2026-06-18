@@ -86,6 +86,9 @@ private:
 		const FVector& endLocationCm,
 		const FHitResult* hitResult,
 		const TArray<FHitResult>& rawHitResults) const;
+
+	// Python과 point cloud로 전달되는 LiDAR hit world location을 누적 점으로 표시한다.
+	void DrawAccumulatedHitLocationDebug(const FVector& hitLocationCm, bool bObstacleHit) const;
 	
 	void DrawDebugObstacleWarningRange(const FVector& sensorLocationCm) const;
 	
@@ -99,6 +102,18 @@ protected:
 	// LiDAR trace summary 로그를 Unreal 개발자 진단용으로 출력할지 결정한다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Lidar|Debug")
 	bool bLogTraceSummary{ true };
+
+	// LiDAR HitLocationCm 원본 좌표를 Unreal 월드에 장시간 누적 표시할지 결정한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Lidar|Debug")
+	bool bDrawAccumulatedHitLocationDebug{ false };
+
+	// 누적 hit location debug point가 월드에 남아 있는 시간.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Lidar|Debug", meta = (ClampMin = "0.1"))
+	float AccumulatedHitLocationDebugLifeTimeSeconds{ 60.f };
+
+	// 누적 hit location debug point의 화면 표시 크기.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Lidar|Debug", meta = (ClampMin = "1.0"))
+	float AccumulatedHitLocationDebugPointSize{ 5.f };
 
 	// 런타임 LiDAR scan과 Python observation에 사용할 센서 설정.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Lidar")

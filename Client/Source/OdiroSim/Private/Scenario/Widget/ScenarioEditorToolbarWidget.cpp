@@ -100,6 +100,11 @@ void UScenarioEditorToolbarWidget::ReturnToMainMenu()
 
 void UScenarioEditorToolbarWidget::SetActiveSidebarPanel(const EScenarioTemplateSidebarPanel panel)
 {
+	if (ActiveSidebarPanel == panel)
+	{
+		return;
+	}
+
 	ActiveSidebarPanel = panel;
 	RefreshSidebarPanelButtons();
 	OnSidebarPanelChanged.Broadcast(ActiveSidebarPanel);

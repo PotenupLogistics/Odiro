@@ -138,8 +138,10 @@ void UScenarioEditorRootWidget::SetLlmPanelVisible(const bool bVisible)
 
 void UScenarioEditorRootWidget::SetTemplateSidebarPanel(const EScenarioTemplateSidebarPanel activePanel)
 {
+	UScenarioEditorSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget();
+	SetPanelVisibility(ResolveTemplateSidebarVisibilityTarget(), true);
+	SetPanelVisibility(sidebarWidget, true);
 	ApplyTemplateSidebarPanel(activePanel);
-	RefreshTemplateSidebarWidget();
 }
 
 void UScenarioEditorRootWidget::RefreshTemplateSidebarWidget()

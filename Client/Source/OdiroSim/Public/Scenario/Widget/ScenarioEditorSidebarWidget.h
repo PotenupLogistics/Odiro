@@ -122,7 +122,7 @@ private:
 	void ConfigureScrollBox() const;
 	// Wraps a Blueprint-authored PanelSwitcher in a generated scroll area when no scroll box is bound.
 	bool EnsurePanelSwitcherIsScrollable();
-	// Rebuilds generated block content for placeholder panel widgets.
+	// Rebuilds generated block content for the active placeholder panel widget.
 	void RefreshGeneratedPanelContent(const FScenarioTemplateDocument& scenarioTemplate);
 	// Creates or returns the generated fallback widget for one panel.
 	UWidget* EnsureGeneratedPanelWidget(EScenarioTemplateSidebarPanel panel);

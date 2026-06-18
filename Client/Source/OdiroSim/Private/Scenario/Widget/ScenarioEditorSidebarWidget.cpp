@@ -289,6 +289,11 @@ void UScenarioEditorSidebarWidget::NativeConstruct()
 
 void UScenarioEditorSidebarWidget::SetActivePanel(const EScenarioTemplateSidebarPanel panel)
 {
+	if (ActivePanel == panel)
+	{
+		return;
+	}
+
 	ActivePanel = panel;
 	RefreshFromDraft();
 }
@@ -346,7 +351,7 @@ void UScenarioEditorSidebarWidget::RefreshFromTemplate(const FScenarioTemplateDo
 	}
 
 	SetSidebarText(PanelToTitle(ActivePanel), primaryText, secondaryText, listText, TEXT(""));
-	if (MainPanelWidget)
+	if (ActivePanel == EScenarioTemplateSidebarPanel::Main && MainPanelWidget)
 	{
 		MainPanelWidget->SetTextStyleCatalog(TextStyleCatalog);
 		MainPanelWidget->RefreshFromTemplate(scenarioTemplate);
@@ -515,30 +520,25 @@ void UScenarioEditorSidebarWidget::RefreshGeneratedPanelContent(
 		return;
 	}
 
-	for (const EScenarioTemplateSidebarPanel panel : {
-		EScenarioTemplateSidebarPanel::Main,
-		EScenarioTemplateSidebarPanel::Corridor,
-		EScenarioTemplateSidebarPanel::Obstacle,
-		EScenarioTemplateSidebarPanel::Pedestrian })
+	const EScenarioTemplateSidebarPanel panel = ActivePanel;
+	UWidget* panelWidget = ResolvePanelWidget(panel);
+	if (!panelWidget)
 	{
-		UWidget* panelWidget = ResolvePanelWidget(panel);
-		if (!panelWidget)
-		{
-			panelWidget = EnsureGeneratedPanelWidget(panel);
-		}
-		if (!panelWidget || (panel == EScenarioTemplateSidebarPanel::Main && MainPanelWidget))
-		{
-			continue;
-		}
+		panelWidget = EnsureGeneratedPanelWidget(panel);
+	}
+	if (!panelWidget || (panel == EScenarioTemplateSidebarPanel::Main && MainPanelWidget))
+	{
+		return;
+	}
 
-		UWidget* contentWidget = BuildGeneratedPanelContent(panel, scenarioTemplate);
-		if (!ApplyGeneratedContentToPanelWidget(panelWidget, contentWidget) && panel != EScenarioTemplateSidebarPanel::Main)
+	UWidget* contentWidget = BuildGeneratedPanelContent(panel, scenarioTemplate);
+	if (!ApplyGeneratedContentToPanelWidget(panelWidget, contentWidget)
+		&& panel != EScenarioTemplateSidebarPanel::Main)
+	{
+		UWidget* generatedWidget = EnsureGeneratedPanelWidget(panel);
+		if (generatedWidget && generatedWidget != panelWidget)
 		{
-			UWidget* generatedWidget = EnsureGeneratedPanelWidget(panel);
-			if (generatedWidget && generatedWidget != panelWidget)
-			{
-				ApplyGeneratedContentToPanelWidget(generatedWidget, contentWidget);
-			}
+			ApplyGeneratedContentToPanelWidget(generatedWidget, contentWidget);
 		}
 	}
 }

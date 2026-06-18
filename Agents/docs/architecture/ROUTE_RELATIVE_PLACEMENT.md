@@ -1,5 +1,11 @@
 # Route-relative Placement
 
+상태: legacy WorldConfig/EpisodeSpec placement note.
+
+- 현재 user project scenario 계약 아님
+- 현재 scenario 기준: `contracts/specs/user-project-data.md`
+- 이 문서는 이전 placement 보정 규칙 기록
+
 ## 1. 목적
 
 "경로 중앙", "경로 중간" 같은 상대 표현을 LLM 추론이 아니라 deterministic geometry rule로 처리한다.

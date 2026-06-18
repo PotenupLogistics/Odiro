@@ -31,7 +31,7 @@ uv run python scripts/run_ollama_world_config_smoke.py --prompt "장애물이 �
 
 OpenAI는 WorldConfig generation의 1순위 provider다. Ollama는 API key 누락, timeout, rate limit, HTTP error, invalid response, repair 이후 validation failure 같은 제한된 상황에서 fallback으로 유지한다.
 
-OpenAI-first EpisodeSpec handoff smoke는 `providerUsed=openai`, `fallbackUsed=false`, `episodeValidationPassed=true`, `episodeScenarioReflectionPassed=true`, `ueCompilerReadiness=true`로 통과했다. 최신 setup_pair smoke도 별도 문서에서 관리한다.
+OpenAI-first EpisodeSpec handoff smoke는 `providerUsed=openai`, `fallbackUsed=false`, `episodeValidationPassed=true`, `episodeScenarioReflectionPassed=true`, `ueCompilerReadiness=true`로 통과했다. Legacy setup_pair smoke도 별도 문서에서 관리한다.
 
 OpenAI 설정:
 

@@ -72,20 +72,25 @@ struct ODIROSIM_API FScenarioEvaluationConfig
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation", meta = (ClampMin = "0.0"))
 	double NearMissDistanceCm = 50.0;
 
+	// Value attached to static-obstacle collision events.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation")
-	double StaticObstacleCollisionScore = -1.0;
+	double StaticObstacleCollisionEventValue = -1.0;
 
+	// Value attached to blocked-region collision events.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation")
-	double BlockedRegionCollisionScore = -1.0;
+	double BlockedRegionCollisionEventValue = -1.0;
 
+	// Value attached to penalty-region violation events.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation")
-	double PenaltyRegionViolationScore = -3.0;
+	double PenaltyRegionViolationEventValue = -3.0;
 
+	// Value attached to pedestrian near-miss events.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation")
-	double PedestrianNearMissScore = -3.0;
+	double PedestrianNearMissEventValue = -3.0;
 
+	// Value attached to pedestrian collision events.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation")
-	double PedestrianCollisionScore = -10.0;
+	double PedestrianCollisionEventValue = -10.0;
 };
 
 UENUM(BlueprintType)
@@ -100,7 +105,7 @@ enum class EScenarioRunnerState : uint8
 	Failed
 };
 
-// Runner가 한 번의 실행으로 묶어 처리할 ScenarioSetup/DeliveryBotSetup 파일 pair.
+// Runner input resolved from one user-project scenario_sample and its profile.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FScenarioRunInput
 {
@@ -110,10 +115,10 @@ struct ODIROSIM_API FScenarioRunInput
 	FString PairId;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
-	FString ScenarioSetupJsonPath;
+	FString EpisodeScenarioJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
-	FString DeliveryBotSetupJsonPath;
+	FString ProfileJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString PolicySpecJsonPath;
@@ -158,4 +163,3 @@ struct ODIROSIM_API FScenarioRuntimeContext
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TArray<FString> PedestrianInstanceIds;
 };
-

@@ -46,7 +46,10 @@ private:  // health 는 서버가 동작중인지 혹은 어떤 상태인지 확
 	void StopPythonProcess();						// 직접 실행한 Python 서버만 종료
 
 	FString BuildHealthUrl() const;					// health check URL 생성
-	FString ResolveServerScriptPath() const;		// server.py 절대 경로 생성
+	FString ResolveServerScriptPath() const;		// policy-runtime.py 절대 경로 생성
+	FString ResolvePolicyPackagePath() const;		// 실행할 project policy package 경로 생성
+	// Python runtime process에 전달할 command line 인자를 생성
+	FString BuildPythonProcessArguments(const FString& scriptPath, const FString& policyPath) const;
 
 private:
 	FDeliveryBotPythonSettings Settings;

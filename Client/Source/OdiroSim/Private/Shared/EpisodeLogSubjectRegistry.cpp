@@ -17,6 +17,12 @@ namespace
 		const UEnum* Enum = StaticEnum<EScenarioActorCategory>();
 		return Enum && Enum->IsValidEnumValue(static_cast<int64>(Category));
 	}
+
+	bool IsMovingActorCategory(EScenarioActorCategory Category)
+	{
+		return Category == EScenarioActorCategory::DeliveryBot
+			|| Category == EScenarioActorCategory::Pedestrian;
+	}
 }
 
 void UEpisodeLogSubjectRegistry::Reset()
@@ -311,6 +317,10 @@ bool UEpisodeLogSubjectRegistry::AddCandidateToTable(
 	ActorTable.Add(ActorInfo);
 	ActorsByIndex.Add(Actor);
 	ActorIndexById.Add(ActorInfo.Id, ActorIndex);
+	if (IsMovingActorCategory(ActorInfo.ActorCategory))
+	{
+		MovingActors.Add(Actor);
+	}
 
 	return true;
 }

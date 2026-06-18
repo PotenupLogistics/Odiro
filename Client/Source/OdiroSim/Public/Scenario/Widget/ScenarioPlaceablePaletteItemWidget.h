@@ -25,6 +25,8 @@ class ODIROSIM_API UScenarioPlaceablePaletteItemWidget : public UUserWidget
 
 public:
 	virtual void NativeOnInitialized() override;
+	// Applies shared text styling after the UMG tree is constructed.
+	virtual void NativeConstruct() override;
 
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Palette")
 	FScenarioPlaceablePaletteItemSelected OnSelected;

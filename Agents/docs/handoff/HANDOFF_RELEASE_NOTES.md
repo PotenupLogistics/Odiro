@@ -1,10 +1,16 @@
 # Handoff Release Notes
 
-이 문서는 현재 AI backend handoff와 RunQueue generation 준비 상태를 정리한다. 최신 UE 실행 계약은 `EpisodeSetup`, `DeliveryBotSetup`, `RunQueue` 문서를 기준으로 한다. legacy EpisodeSpec 문서는 `docs/archive/previous_episode_spec/` 아래에 보관한다.
+상태: legacy handoff release 기록.
+
+- 현재 user project 실행 계약 아님
+- 현재 user project migration에서는 RunQueue public API를 사용하지 않음
+- legacy EpisodeSpec 문서는 `docs/archive/previous_episode_spec/` 아래에 보관
+
+이 문서는 legacy AI backend handoff와 RunQueue generation 준비 상태를 정리한다.
 
 ## 1. Release 범위
 
-이번 release 기준으로 다음 흐름이 준비되어 있다.
+해당 legacy release 기준으로 다음 흐름이 준비되어 있었다.
 
 * 자연어 기반 `WorldConfig` 생성 흐름
 * Policy RAG retrieval
@@ -16,17 +22,17 @@
 * Ollama fallback provider 경로
 * legacy UE handoff endpoint 제거
 * legacy `WorldConfig` -> `EpisodeSpec` adapter/archive tooling
-* 최신 `WorldConfig` -> `EpisodeSetup` + `DeliveryBotSetup` adapter
+* 이전 `WorldConfig` -> `EpisodeSetup` + `DeliveryBotSetup` adapter
 * setup pair service/export tooling
 * EpisodeSetup + DeliveryBotSetup pair validation
-* 사용자용 `POST /api/v1/scenarios/generate`
+* legacy `POST /api/v1/scenarios/generate`
 * UE 계약 그대로의 null-free RunQueue export
 * DeliveryBotSetup default catalog와 deterministic variation policy
 * `narrow_sidewalk_obstacle_ahead_blocked_path` policy comparison queue
 
-## 2. 현재 API 구분
+## 2. API 구분
 
-`POST /api/v1/scenarios/generate`는 사용자용 entrypoint다. 사용자는 자연어 `prompt`를 필수로 입력하고 선택적으로 `episode_count`를 지정할 수 있다. backend는 내부적으로 WorldConfig, EpisodeSetup, DeliveryBotSetup, RunQueue를 생성한다. 응답은 wrapper 없는 RunQueue JSON이다. `episode_count`가 없으면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용한다.
+`POST /api/v1/scenarios/generate`는 현재 `410 RUN_QUEUE_REMOVED` 안내만 반환한다. 이전 자연어 prompt 기반 RunQueue 응답은 legacy handoff 기록으로만 남긴다.
 
 `POST /api/v1/ue5/world-config/handoff`는 legacy endpoint이며 현재 FastAPI route와 OpenAPI에서 제거되었다. 이전 `episode_spec`, `setup_pair`, `both`, `world_config` responseFormat 설명은 archive/tooling 참고용으로만 남긴다.
 
@@ -89,7 +95,7 @@ RunQueue JSON에는 `success`, `responseFormat`, `diagnostics`, `setupPairs`, `v
 * DOE matrix generation
 * batch scenario generation
 
-## 7. 다음 확인 항목
+## 7. 남은 legacy 확인 항목
 
 * UE 팀에서 `EpisodeSetup` + `DeliveryBotSetup` pair compile 확인
 * UE 팀에서 RunQueue JSON ingestion 확인

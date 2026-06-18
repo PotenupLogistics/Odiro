@@ -19,7 +19,7 @@ struct ODIROSIM_API FDeliveryBotPythonSettings
 	FString PythonExecutablePath{ TEXT("python") };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Python")
-	FString ServerScriptRelativePath{ TEXT("Tools/PythonAgent/server.py") };
+	FString ServerScriptRelativePath{ TEXT("Resources/policy-runtime.py") };
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Python")
 	FString Host{ TEXT("127.0.0.1") };

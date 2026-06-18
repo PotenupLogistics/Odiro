@@ -1,6 +1,6 @@
 # PythonAgent 통신 JSON 형식
 
-이 문서는 Unreal DeliveryBot과 `Tools/PythonAgent/server.py`가 HTTP로 주고받는 JSON 계약을 정리한다.
+이 문서는 Unreal DeliveryBot과 `Client/Resources/policy-runtime.py`가 HTTP로 주고받는 JSON 계약을 정리한다.
 현재 Unreal은 모든 `POST` 요청을 envelope 형태로 보내고, Python은 응답 envelope의 `response` 영역에 처리 결과를 채워 반환한다.
 
 ## 핵심 규칙
@@ -881,6 +881,11 @@ request.status
 반대로 `request.robotSpec`, `request.driveSpec`, `request.lidarSpec`, `response.debug`에 새 optional 필드를 추가하는 것은 보통 `version`을 올리지 않아도 된다.
 
 ## 관련 DeliveryBotSetup JSON 메모
+
+상태: legacy local setup note.
+
+- 최종 profile 기준: `contracts/specs/user-project-data.md`의 `profile.json`
+- 새 writer는 `DeliveryBotSetup` JSON을 만들지 않음
 
 아래 값은 Python 통신 payload가 아니라 `Json/Input/DeliveryBotSetup*.json`에서 읽는 로컬 설정이다.
 obstacle warning 범위를 화면에서 보고 싶을 때 사용한다.

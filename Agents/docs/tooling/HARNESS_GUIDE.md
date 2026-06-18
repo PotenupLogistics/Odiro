@@ -67,11 +67,13 @@ manual live execution은 automated tests 밖에서만 수행한다.
 
 ## Generation Endpoint Check
 
-`harness.checks.check_generation_endpoint`는 World Config generation endpoint shell을 검증한다.
+`harness.checks.check_generation_endpoint`는 World Config generation endpoint shell과 legacy v1 제거 안내를 검증한다.
 
 검증 항목:
 
-- `/api/v1/scenarios/generate` and `/api/v1/analysis/run` are the only public `/api/v1` endpoints.
+- `/api/v1/scenarios/generate` is registered only as a RunQueue removal notice.
+- `/api/v1/analysis/run` remains legacy analysis.
+- v2 user project endpoints are covered by focused API tests.
 - WorldConfig generation, prompt package, and contract validation remain covered through service/function or CLI tests.
 - The harness does not perform a live external LLM call.
 - No hardcoded API key or secret string is present.
@@ -90,7 +92,7 @@ manual live execution은 automated tests 밖에서만 수행한다.
 - `docs/architecture/WORLD_CONFIG_GENERATION_ORCHESTRATOR.md` exists.
 - The harness does not perform a live external LLM call.
 - No hardcoded API key or secret string is present.
-- FastAPI endpoint set is limited to `/health`, `/api/v1/scenarios/generate`, and `/api/v1/analysis/run`.
+- FastAPI endpoint set includes `/health`, legacy `/api/v1` routes, and v2 user project routes.
 - Policy card count remains 9.
 - Policy RAG chunk count remains 9.
 - No sample JSON, fixture, vector DB, or embedding index artifacts are created.
@@ -108,14 +110,14 @@ manual live execution은 automated tests 밖에서만 수행한다.
 - `docs/providers/LLM_CLIENT_ABSTRACTION.md` exists.
 - Providers include `disabled`, `openai`, `gemini`, `ollama`, and `custom`.
 - The `disabled` provider returns `DisabledLlmClient`.
-- FastAPI endpoint set is limited to `/health`, `/api/v1/scenarios/generate`, and `/api/v1/analysis/run`.
+- FastAPI endpoint set includes `/health`, legacy `/api/v1` routes, and v2 user project routes.
 - The harness does not perform a live external LLM call.
 - No hardcoded API key or secret string is present.
 - No sample JSON, fixture, vector DB, or embedding index artifacts are created.
 
 ## API Shell Check
 
-`harness.checks.check_api_shell`은 FastAPI public surface가 `/api/v1/scenarios/generate`와 `/api/v1/analysis/run`만 노출하고 제거된 `/api/v1` endpoint를 등록하지 않는지 검증한다.
+`harness.checks.check_api_shell`은 FastAPI public surface가 legacy `/api/v1` route와 user project v2 route를 구분하는지 검증한다.
 
 검증 항목:
 
@@ -123,8 +125,10 @@ manual live execution은 automated tests 밖에서만 수행한다.
 - `app/api/routes.py` exists.
 - `docs/tooling/API_SHELL_GUIDE.md` exists.
 - `GET /health` is registered.
-- `POST /api/v1/scenarios/generate` is registered.
+- `POST /api/v1/scenarios/generate` is registered as a removal notice.
 - `POST /api/v1/analysis/run` is registered.
+- `POST /api/v2/scenarios/generate` is registered.
+- `POST /api/v2/analysis/run` is registered.
 - The API shell does not expose provider/contract validation routes; harness checks do not perform live OpenAI/Ollama calls.
 - No sample JSON, fixture, vector DB, or embedding index artifacts are created.
 
@@ -501,7 +505,7 @@ Run the README check directly with:
 uv run python -m harness.checks.check_root_readme
 ```
 
-The root README check verifies that `README.md` exists, is not empty, includes the project overview, mentions `WorldConfig`, `EpisodeSpec`, `UE handoff`, `responseFormat=episode_spec`, scenario generation with required `prompt` and optional `episode_count`, and includes the core harness/pytest commands. It also checks that forbidden sample, fixture, vector DB, embedding index, and UE code artifacts were not introduced.
+The root README check verifies that `README.md` exists, is not empty, includes the project overview, mentions the v2 user project API and legacy UE handoff context, and includes the core harness/pytest commands. It also checks that forbidden sample, fixture, vector DB, embedding index, and UE code artifacts were not introduced.
 
 ## Handoff Release Readiness Check
 

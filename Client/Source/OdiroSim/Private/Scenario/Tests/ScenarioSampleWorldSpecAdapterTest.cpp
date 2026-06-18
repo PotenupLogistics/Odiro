@@ -101,6 +101,11 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	TestEqual(TEXT("scenario id"), Result.WorldSpec.RunConfig.TemplateId, Document.Sample.ScenarioId);
 	TestEqual(TEXT("base seed"), Result.WorldSpec.RunConfig.BaseSeed, Document.Sample.Source.Seed);
 	TestEqual(TEXT("ground region count"), Result.WorldSpec.GroundRegions.Num(), 1);
+	if (Result.WorldSpec.GroundRegions.IsEmpty())
+	{
+		return false;
+	}
+	TestEqual(TEXT("ground region surface"), Result.WorldSpec.GroundRegions[0].SurfaceId, FString(TEXT("sidewalk")));
 	TestEqual(TEXT("placeable count"), Result.WorldSpec.Placeables.Num(), 2);
 	TestEqual(TEXT("static obstacle count"), Result.WorldSpec.Placeables.FilterByPredicate(
 		[](const FScenarioPlaceableInstanceSpec& Spec)
@@ -119,6 +124,7 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 		TestEqual(TEXT("robot start x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.X, 0.0);
 		TestEqual(TEXT("robot goal x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.X, 1000.0);
 		TestTrue(TEXT("robot has route"), RobotSpec->DeliveryBot.bHasStartLocation && RobotSpec->DeliveryBot.bHasGoalLocation);
+		TestTrue(TEXT("robot setup has goal"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bHasGoal);
 	}
 
 	TestFalse(TEXT("spec hash populated"), Result.WorldSpec.SpecHash.IsEmpty());

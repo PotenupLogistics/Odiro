@@ -8,39 +8,58 @@ paths:
   - Client/Source/OdiroSim/Private/Episode/**
   - Client/Source/OdiroSim/Public/Shared/**
   - Client/Source/OdiroSim/Private/Shared/**
-  - Client/Docs/README.md
-  - Client/Docs/Data/**
+  - Client/Docs/plans/PLAN-260602-sim-logging.md
   - Client/Json/Input/**
   - contracts/specs/**
 entry:
-  - ScenarioCompiler.h / .cpp
   - ScenarioSchemaTypes.h
-  - ScenarioTemplateTypes.h
+  - ScenarioDocumentTypes.h
   - ScenarioSampleTypes.h
-  - ScenarioTemplateJson.h / .cpp
+  - ScenarioDocumentJson.h / .cpp
   - ScenarioSampleJson.h / .cpp
   - ScenarioSampleWorldSpecAdapter.h / .cpp
   - Scenario/Editor/ScenarioAuthoringSubsystem.h / .cpp
-  - ScenarioTemplateSampleJsonTest.cpp
+  - Scenario/Llm/ScenarioLlmAuthoringSubsystem.h / .cpp
+  - Scenario/Llm/ScenarioLlmPromptWidget.h / .cpp
+  - SimulationSetupTypes.h / .cpp
+  - UserProjectDataTypes.h / .cpp
+  - SimulationSetupTypesTest.cpp
+  - UserProjectDataTypesTest.cpp
+  - ScenarioDocumentSampleJsonTest.cpp
   - ScenarioSampleWorldSpecAdapterTest.cpp
+  - UserProjectScenarioSampleWorldSpecAdapterTest.cpp
   - ScenarioSimulationSubsystem.h / .cpp
   - ScenarioRunnerSubsystem.h / .cpp
   - EpisodeMeasurementLogSubsystem.h / .cpp
-  - EpisodeEvaluationReportJson.h / .cpp
   - EpisodeResultTypes.h
+  - Client/Docs/plans/PLAN-260602-sim-logging.md
   - Client/Json/Input
   - contracts/specs
+  - contracts/specs/user-project-data.md
 keep:
   - Parser-only samples/schemas owned only by Client stay in Client.
-  - Scenario setup/run queue samples in Client/Json/Input are legacy client-owned examples until the user project migration removes them.
+  - Client/Docs/plans/PLAN-260602-sim-logging.md is superseded legacy context; final log file contracts belong in contracts/specs/user-project-data.md.
+  - Client/Docs/Data was removed; shared user project file contracts belong in contracts/specs/user-project-data.md.
+  - Scenario setup/run queue samples in Client/Json/Input are legacy client-owned examples; project run execution no longer accepts them through ScenarioRunnerSubsystem.
+  - ScenarioDocument* and ScenarioSample* remain internal editor/materialization surfaces unless a task explicitly targets them; public C++ editor entry points use project scenario naming.
   - Final user project contract uses one editable `<UserProject>/scenario.json`; do not add new user-facing template/sample split.
-  - Episode scenario files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
+  - Generated `scenario_sample` files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
+  - Project run generates `scenario_sample` episode artifacts and compiles them through `ScenarioSampleWorldSpecAdapter`; generated ground-region specs preserve lane `surface` ids so runtime visuals can use the same Corridor surface catalog as the editor preview.
+  - Project run runner owns the active output episode id for `actions.jsonl` and `trace.jsonl`; DeliveryBot policy logging must use the runner-provided output context instead of the evaluation template id.
+  - Project `trace.jsonl` sampling is timer-driven from EpisodeMeasurementLogSubsystem once the runner starts the episode trace path, so short episodes still produce samples before terminal artifact write.
+  - ScenarioRunnerSubsystem public start API accepts direct scenario_sample/profile run inputs; file-based RunQueue and ScenarioSetup start helpers are removed.
+  - Scenario LLM authoring saves v2 `scenario` responses to user project `scenario.json`; it must not save or execute RunQueue files.
+  - Scenario LLM prompt generate/load/run is scoped to the current `<UserProject>/scenario.json`; run launches create `<UserProject>/runs/<RunId>` snapshots through SimulatorLaunchSubsystem.
+  - Project run output uses `FUserProjectRunOutputJson` for `result.json`, `events.jsonl`, `actions.jsonl`, `trace.jsonl`, and `summary.json`.
   - Scenario authoring/runtime projection stays separate from runtime WorldSpec and actor-spawn payload types.
 verify:
   - contract specs vs sample JSON alignment
-  - `scenario`/`episode_scenario` docs vs Client shared schema type alignment
-  - Scenario parse, version mismatch, episode scenario generation, and round-trip automation tests
-  - Scenario-to-WorldSpec adapter automation tests and OdiroSimEditor build after adapter/editor draft changes
+  - `scenario`/`scenario_sample` docs vs Client shared schema type alignment
+  - Scenario document parse, project `scenario.json` adapter, version mismatch, scenario sample generation, and round-trip automation tests
+  - Scenario-to-WorldSpec adapter automation tests, including generated user-project scenario sample adapter coverage, and OdiroSimEditor build after adapter/editor draft changes
+  - `OdiroSim.UserProjectData.RunOutput.Write` after user project result writer changes
+  - `OdiroSim.UserProjectData.RobotAction.Write` after policy action logging changes
+  - `OdiroSim.UserProjectData.EpisodeTrace.Write` after runtime trace logging changes
   - focused automation tests for Scenario/Episode changes
   - Client/Task-RunPreview.bat smoke when wrapper supports the changed mode
 related:

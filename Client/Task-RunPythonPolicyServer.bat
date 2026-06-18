@@ -4,7 +4,7 @@ setlocal EnableExtensions
 
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%.") do set "CLIENT_ROOT=%%~fI"
-set "SERVER_SCRIPT=%CLIENT_ROOT%\Tools\PythonAgent\server.py"
+set "SERVER_SCRIPT=%CLIENT_ROOT%\Resources\policy-runtime.py"
 set "PYTHON_AGENT_HOST=127.0.0.1"
 set "PYTHON_AGENT_PORT=8000"
 
@@ -15,7 +15,7 @@ if not exist "%SERVER_SCRIPT%" (
 	exit /b 1
 )
 
-echo [run/policy] Starting Python policy server: "%SERVER_SCRIPT%"
+echo [run/policy] Starting Python policy runtime: "%SERVER_SCRIPT%"
 echo [run/policy] Host: %PYTHON_AGENT_HOST%
 echo [run/policy] Port: %PYTHON_AGENT_PORT%
 echo [run/policy] Policy mode: runtime

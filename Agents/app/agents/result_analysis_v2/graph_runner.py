@@ -64,9 +64,10 @@ class ResultAnalysisGraphRunnerV2:
         }
 
     def scan_workspace_node(self, state: ResultAnalysisGraphStateV2) -> ResultAnalysisGraphStateV2:
-        scan = self.agent.scanner.scan(Path(state["experiments_root"]))
+        scan = self.agent.scan(state.get("request"))
         return {
             **state,
+            "experiments_root": scan.root,
             "scan": scan,
             "artifacts": scan.files,
             "warnings": [*state.get("warnings", []), *scan.warnings],

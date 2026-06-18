@@ -1,5 +1,11 @@
 # UE-AI Integration Issues
 
+상태: legacy EpisodeSpec handoff issue list.
+
+- 현재 user project 실행 계약 아님
+- 현재 scenario/run 파일 기준: `contracts/specs/user-project-data.md`
+- 이 문서는 이전 UE handoff 확인 항목 기록
+
 ## 1. UE 확인 필요
 
 | Issue | Classification | Note |
@@ -29,4 +35,3 @@
 * blocker: UE controlled integration 실행 전에 반드시 해결해야 하는 항목
 * non-blocker: MVP smoke는 가능하지만 품질/표현 개선을 위해 추적할 항목
 * deferred: 다음 개발 단계에서 다룰 항목
-

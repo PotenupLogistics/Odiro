@@ -1,5 +1,11 @@
 # UE Setup Pair Handoff Package
 
+상태: legacy handoff 기록.
+
+- 현재 user project 실행 계약 아님
+- `/api/v1/scenarios/generate`는 `410 RUN_QUEUE_REMOVED` 안내만 반환
+- RunQueue package는 legacy export tooling에서만 사용
+
 ## 전달 대상
 
 * EpisodeSetup JSON
@@ -28,11 +34,11 @@
 
 ## 전달 메모
 
-Legacy `responseFormat=setup_pair` handoff smoke는 최신 UE 계약 기준의 EpisodeSetup + DeliveryBotSetup pair 생성을 검증했던 기록이다. 기존 `/api/v1/ue5/world-config/handoff` route와 `responseFormat=episode_spec` / `responseFormat=setup_pair` API 경로는 현재 FastAPI/OpenAPI에서 제거되었다.
+Legacy `responseFormat=setup_pair` handoff smoke는 이전 UE pair 계약 기준의 EpisodeSetup + DeliveryBotSetup pair 생성을 검증했던 기록이다. 기존 `/api/v1/ue5/world-config/handoff` route와 `responseFormat=episode_spec` / `responseFormat=setup_pair` API 경로는 현재 FastAPI/OpenAPI에서 제거되었다.
 
 RunQueue package는 API 응답 규격을 바꾸지 않고 `scripts/export_ue5_run_queue_package.py`로 local export한다. 기본 episode count는 5이며, 산출물은 `data/run_queue_exports/<timestamp>_<requestId>/Json/Input/` 아래에 저장한다.
 
-사용자용 `POST /api/v1/scenarios/generate`는 같은 RunQueue 계약을 API 응답으로 직접 반환한다. 입력은 자연어 `prompt`를 필수로 받고 선택적으로 `episode_count`를 허용한다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하지 않는다. `episode_count`가 없으면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용한다.
+`POST /api/v1/scenarios/generate`는 더 이상 RunQueue를 API 응답으로 반환하지 않는다. 이전 자연어 prompt 기반 RunQueue 응답은 legacy handoff 기록으로만 남긴다.
 
 UE용 `EpisodeRunQueue_<scenario>.json`은 공식 RunQueue 계약 그대로 아래 필드만 포함한다.
 

@@ -22,17 +22,16 @@ def test_v2_graph_runner_imports_without_langgraph_dependency() -> None:
 
 
 def test_graph_disabled_keeps_existing_v2_api_behavior(monkeypatch, tmp_path) -> None:
-    experiments = tmp_path / "experiments"
-    episode_dir = experiments / "Experiment1" / "runs" / "000001" / "episodes" / "000001"
+    project = tmp_path / "Project1"
+    episode_dir = project / "runs" / "000001" / "episodes" / "000001"
     episode_dir.mkdir(parents=True)
     (episode_dir / "result.json").write_text(
         json.dumps({"success": True, "goal_reached": True}),
         encoding="utf-8",
     )
     monkeypatch.setenv("V2_AGENT_GRAPH_ENABLED", "false")
-    monkeypatch.setenv("ODIROSIM_EXPERIMENTS_DIR", str(experiments))
 
-    response = TestClient(app).post("/api/v2/analysis/run", json={})
+    response = TestClient(app).post("/api/v2/analysis/run", json={"project_path": str(project), "run_id": "000001"})
 
     assert response.status_code == 200
     payload = response.json()

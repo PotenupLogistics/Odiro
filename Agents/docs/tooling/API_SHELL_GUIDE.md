@@ -26,32 +26,35 @@ http://127.0.0.1:8000/openapi.json
 GET /health
 POST /api/v1/scenarios/generate
 POST /api/v1/analysis/run
+POST /api/v2/scenarios/generate
+POST /api/v2/analysis/run
 ```
 
-사용자용 기본 `/api/v1` endpoint는 `POST /api/v1/scenarios/generate`다. 실행 결과 분석과 다음 setup 추천은 `POST /api/v1/analysis/run`을 사용한다.
+`POST /api/v1/scenarios/generate`는 현재 `410 RUN_QUEUE_REMOVED` 안내만 반환한다. User project scenario 생성은 `POST /api/v2/scenarios/generate`를 사용한다. User project run 분석은 `POST /api/v2/analysis/run`을 사용한다.
 
-## 3. 사용자용 scenario generation API
+## 3. Legacy scenario generation API
 
 ```text
 POST /api/v1/scenarios/generate
 ```
 
-이 endpoint는 새 사용자용 entrypoint다. 사용자는 자연어 `prompt`를 필수로 입력하고, 선택적으로 `episode_count`로 생성할 episode/run 개수를 지정할 수 있다.
+이 endpoint는 제거 안내만 반환한다.
 
-사용자가 `EpisodeSetup`, `DeliveryBotSetup`, `RunQueue` JSON을 직접 작성하는 구조가 아니다. JSON은 AI와 backend가 내부적으로 생성한 UE 실행 산출물이다.
+```json
+{
+  "code": "RUN_QUEUE_REMOVED"
+}
+```
 
-응답은 UE 계약 그대로의 RunQueue JSON이다. 최상위 wrapper, diagnostics, raw LLM response, rawContent, API key 값은 포함하지 않는다.
-`episode_count`가 없으면 `SCENARIO_EPISODE_DEFAULT_COUNT` 환경 변수 값을 사용한다.
+이전 RunQueue 응답은 legacy tooling 기록으로만 남긴다.
 
-핵심 검증 기준:
+## 3.1 User project scenario generation API
 
-* request body에서 `prompt`는 required이고, `episode_count`는 optional이다.
-* `episode_count`가 제공되면 1 이상 `SCENARIO_EPISODE_MAX_COUNT` 이하의 strict integer만 허용한다.
-* 최상위 필드는 `schema`, `version`, `runs`만 사용한다.
-* explicit `null`은 출력하지 않는다.
-* `0`, `false`, `""`, `[]` 같은 의미 있는 값은 삭제하지 않는다.
-* 좁은 보도 장애물 policy comparison queue는 동일 EpisodeSetup을 공유하고 DeliveryBotSetup만 policy별로 다르게 만든다.
-* 로봇 실측 크기 W/D/H `0.44m / 1.00m / 0.64m`는 request body가 아니라 서버 기본 `RobotProfile`로 주입한다. 생성/export된 `EpisodeSetup_*.json`에는 additive root field `robot_profile`이 포함되며, `min_passable_width_m`은 `0.84m`이다.
+```text
+POST /api/v2/scenarios/generate
+```
+
+이 endpoint는 자연어 `prompt`를 받고 `<UserProject>/scenario.json`에 저장 가능한 `scenario` JSON을 반환한다. 실행 개수, seed, scenario sample, RunQueue 생성은 담당하지 않는다.
 
 ## 4. WorldConfig generation service
 
@@ -76,7 +79,7 @@ POST /api/v1/ue5/world-config/handoff
 
 이 legacy endpoint는 현재 FastAPI route와 OpenAPI에서 제거되었다. 해당 URL 요청은 정상 API로 처리되지 않고 route not found로 남아야 한다.
 
-RunQueue가 필요한 사용자/UE 흐름은 `/api/v1/scenarios/generate`를 사용한다. 이전 `responseFormat=episode_spec`, `responseFormat=setup_pair`, `responseFormat=both`, `responseFormat=world_config` 설명은 archive 문서와 CLI tooling 참고용이다.
+RunQueue 생성은 사용자용 API가 아니다. 이전 `responseFormat=episode_spec`, `responseFormat=setup_pair`, `responseFormat=both`, `responseFormat=world_config` 설명은 archive 문서와 CLI tooling 참고용이다.
 
 ## 7. Prompt package service
 

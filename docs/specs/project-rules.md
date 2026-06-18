@@ -71,7 +71,8 @@ Release에서는 host 단일 바이너리로 배포됨.
 Release 배포 시 `resources` 폴더로 복사된다.
 
 - RAG 등 Agents 런타임 데이터: `static/agents/`
-- 런타임에 생성되는 파일 기본값: `static/defaults/`
+- project 생성 template: `static/project-templates/`
+- run 생성 scaffold: `static/run-defaults/`
 
 런타임에서 사용되나 배포 과정에서 변형되는 파일은 각 프로젝트 내부에서 관리한다.
 

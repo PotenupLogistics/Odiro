@@ -18,7 +18,7 @@ class AnalysisContextBuilder:
         rag_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return {
-            "analysis_goal": "전체 experiments 폴더를 분석하여 정책 또는 환경 개선 필요 여부를 판단한다.",
+            "analysis_goal": "지정된 user project run을 분석하여 정책 또는 환경 개선 필요 여부를 판단한다.",
             "workspace_summary": {
                 "experiments_count": experiments_count,
                 "runs_count": runs_count,

@@ -70,7 +70,7 @@ bool FEpisodeMeasurementLogJsonSerializationTest::RunTest(const FString& Paramet
 	FEpisodeMeasurementLogHeaderRecord Header;
 	Header.LogId = TEXT("log_01");
 	Header.MapName = TEXT("ScenarioEditorMap");
-	Header.SourceJsonPath = TEXT("Json/Input/ScenarioSetupSample.json");
+	Header.SourceJsonPath = TEXT("Json/Input/ScenarioTemplates/FeatureProbeNoPedestrians.template.json");
 	Header.SpecHash = TEXT("abc123");
 
 	FEpisodeMeasurementLogActorInfo RobotActor;

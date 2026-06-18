@@ -111,7 +111,6 @@ class Settings(BaseSettings):
     experiments_dir: str = Field(
         default="",
         validation_alias=AliasChoices(
-            "ODIROSIM_EXPERIMENTS_DIR",
             "EXPERIMENTS_DIR",
             "experiments_dir",
             "experimentsDir",

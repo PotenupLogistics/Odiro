@@ -24,6 +24,7 @@ entry:
 keep:
   - Agents/tools use Agents/tools/common.ps1, never root tools/common.ps1.
   - Agents has no build task; it is a Python server.
+  - Agents/tools/install.ps1 uses uv sync --check before uv sync so repeated setup calls are cheap when the environment is already synchronized, while still printing completion.
 verify:
   - focused pytest for touched test surface
   - harness.checks.check_all only for broad Agents readiness changes

@@ -144,10 +144,10 @@ struct ODIROSIM_API FEpisodeRunRecord
 	FString SourceJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString EpisodeSetupJsonPath;
+	FString EpisodeScenarioJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString DeliveryBotSetupJsonPath;
+	FString ProfileJsonPath;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	FString PolicySpecJsonPath;
@@ -203,7 +203,4 @@ struct ODIROSIM_API FEpisodeRunRecord
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
 	TArray<FString> Diagnostics;
 
-	// 저장된 evaluation report JSON path. 저장이 비활성화되었거나 실패하면 비어 있음
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode")
-	FString EvaluationReportJsonPath;
 };

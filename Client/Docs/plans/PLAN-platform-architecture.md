@@ -8,6 +8,14 @@ specs:
 
 # 플랫폼 설계
 
+상태: superseded legacy plan.
+
+- 최종 사용자 project 실행 계획 아님
+- 최신 기준: `docs/plans/user-project-runtime-migration.md`
+- 최종 구조: `docs/specs/project-structure.md`
+- 최종 실행 흐름: `docs/specs/simulation-interface.md`
+- 이 문서는 기존 Platform/Simulator 초안 추적용
+
 ## 목표
 
 시나리오 편집기, 시뮬레이터 실행, Python API 서버, LLM 서버를 하나의 플랫폼으로 통합하여 사용자에게 일관된 인터페이스를 제공한다.
@@ -78,7 +86,7 @@ specs:
 ## 분석
 
 > 이하 `## 분석`은 위 설계를 바탕으로 Codex가 작성한 실행 계획이다.
-> 위쪽 원문 예시와 충돌하면 본 절의 `-Simulate=<SimulationSetupFile>` 계약을 우선한다.
+> 이 legacy 분석은 `docs/plans/user-project-runtime-migration.md`보다 우선하지 않는다.
 
 ### 범위
 
@@ -153,7 +161,7 @@ MVP 범위: T01~T05 / T06: 사용성 확장 / T07~T08은 병렬 작업자의 산
 상세 작업:
 - [Docs/specs/simulation-json-files.md](x:/UE5/Proto-Unreal/Docs/specs/simulation-json-files.md)의 `SimulationSetup JSON`과 `Run Status JSON` 계약 구현 기준으로 사용
 - `SimulationSetup JSON`의 `map_id`, `run_queue`, `fixed_step.fps`, `logging`, `report`, `status.output_path` field를 C++ 타입으로 정의
-- simulator 실행 command는 `-Simulate=<SimulationSetupFile>`와 optional `-RunId=<RunId>`만 public 계약
+- simulator 실행 command는 당시 계획에서 `-Simulate=<SimulationSetupFile>`와 optional `-RunId=<RunId>`만 사용
 - `-Simulate`가 있으면 내부 SimulatorMode로 진입하고 외부 command line의 `-SimulatorMode`, `-UseFixedTimeStep`, `-FPS`는 요구 X
 - `Json/Input/SimulationSetupSample.json` 추가
 - 신규 C++ 타입과 bootstrap 파일 위치 확정

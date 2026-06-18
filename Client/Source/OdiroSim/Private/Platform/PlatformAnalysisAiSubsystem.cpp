@@ -2,6 +2,7 @@
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "HAL/FileManager.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
@@ -34,77 +35,6 @@ namespace
 		return Text.Left(CharacterLimit) + TEXT("\n...");
 	}
 
-	FString NormalizeResolvedPath(FString Path)
-	{
-		FPaths::NormalizeFilename(Path);
-		FPaths::CollapseRelativeDirectories(Path);
-		return Path;
-	}
-
-	FString TryExtractKnownProjectRelativeTail(FString Path)
-	{
-		FPaths::NormalizeFilename(Path);
-		FPaths::CollapseRelativeDirectories(Path);
-
-		static const TCHAR* KnownRoots[] = {
-			TEXT("Json/Input/"),
-			TEXT("Json/Output/"),
-			TEXT("Saved/AnalysisLogs/"),
-			TEXT("Saved/SimulationRuns/")
-		};
-
-		for (const TCHAR* KnownRoot : KnownRoots)
-		{
-			const int32 RootIndex = Path.Find(KnownRoot, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
-			if (RootIndex != INDEX_NONE)
-			{
-				return Path.Mid(RootIndex);
-			}
-		}
-
-		return FString();
-	}
-
-	FString ResolveAnalysisPath(FString Path)
-	{
-		Path = Path.TrimStartAndEnd();
-		Path.ReplaceInline(TEXT("\\"), TEXT("/"));
-
-		const FString ResolvedPath = NormalizeResolvedPath(FSimulationSetupJson::ResolveProjectPath(Path));
-		if (FPaths::FileExists(ResolvedPath))
-		{
-			return ResolvedPath;
-		}
-
-		const FString ProjectRelativeTail = TryExtractKnownProjectRelativeTail(Path);
-		if (!ProjectRelativeTail.IsEmpty())
-		{
-			return NormalizeResolvedPath(FPaths::Combine(FPaths::ProjectDir(), ProjectRelativeTail));
-		}
-
-		return ResolvedPath;
-	}
-
-	bool RequireExistingFile(
-		const FString& FieldName,
-		const FString& FilePath,
-		TArray<FString>& OutDiagnostics)
-	{
-		if (FilePath.IsEmpty())
-		{
-			OutDiagnostics.Add(FString::Printf(TEXT("%s must not be empty."), *FieldName));
-			return false;
-		}
-
-		if (!FPaths::FileExists(FilePath))
-		{
-			OutDiagnostics.Add(FString::Printf(TEXT("%s file not found: %s"), *FieldName, *FilePath));
-			return false;
-		}
-
-		return true;
-	}
-
 	bool TryGetObjectField(
 		const FJsonObject& JsonObject,
 		const FString& FieldName,
@@ -120,23 +50,6 @@ namespace
 
 		OutObject = JsonValue->AsObject();
 		return OutObject.IsValid();
-	}
-
-	bool TryGetStringFromObjectField(
-		const FJsonObject& JsonObject,
-		const FString& ObjectFieldName,
-		const FString& StringFieldName,
-		FString& OutValue)
-	{
-		OutValue.Reset();
-
-		TSharedPtr<FJsonObject> ObjectValue;
-		if (!TryGetObjectField(JsonObject, ObjectFieldName, ObjectValue))
-		{
-			return false;
-		}
-
-		return ObjectValue->TryGetStringField(StringFieldName, OutValue);
 	}
 
 	FString JsonValueToDisplayString(const TSharedPtr<FJsonValue>& Value)
@@ -311,9 +224,9 @@ void UPlatformAnalysisAiSubsystem::Deinitialize()
 	Super::Deinitialize();
 }
 
-bool UPlatformAnalysisAiSubsystem::RequestAnalysisForReport(
-	const FString& evaluationReportPath,
-	const FString& measurementLogPath)
+bool UPlatformAnalysisAiSubsystem::RequestAnalysisForProjectRun(
+	const FString& projectPath,
+	const FString& runId)
 {
 	if (PendingHttpRequest.IsValid())
 	{
@@ -321,29 +234,26 @@ bool UPlatformAnalysisAiSubsystem::RequestAnalysisForReport(
 		return false;
 	}
 
-	if (AnalysisEndpointUrl.TrimStartAndEnd().IsEmpty())
+	if (ProjectRunAnalysisEndpointUrl.TrimStartAndEnd().IsEmpty())
 	{
-		BroadcastFailure(0, TEXT("AI analysis endpoint URL is empty."));
+		BroadcastFailure(0, TEXT("Project run AI analysis endpoint URL is empty."));
 		return false;
 	}
 
 	FString RequestJson;
 	TArray<FString> Diagnostics;
-	if (!BuildAnalysisRequestJsonFromReport(
-			evaluationReportPath,
-			measurementLogPath,
-			bFallbackOnly,
-			RequestJson,
-			Diagnostics))
+	if (!BuildAnalysisRequestJsonForProjectRun(projectPath, runId, RequestJson, Diagnostics))
 	{
 		BroadcastFailure(0, JoinLines(Diagnostics));
 		return false;
 	}
 
+	const FUserProjectRunSnapshotPaths Paths = FUserProjectRunSnapshot::BuildPaths(projectPath, runId);
 	PendingRequestId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
+	PendingReviewOutputPath = FPaths::Combine(Paths.ReviewPath, TEXT("analysis_run_response_v2.json"));
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-	Request->SetURL(AnalysisEndpointUrl);
+	Request->SetURL(ProjectRunAnalysisEndpointUrl);
 	Request->SetVerb(TEXT("POST"));
 	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
 	Request->SetContentAsString(RequestJson);
@@ -367,17 +277,18 @@ bool UPlatformAnalysisAiSubsystem::RequestAnalysisForReport(
 	{
 		PendingHttpRequest.Reset();
 		PendingRequestId.Reset();
-		BroadcastFailure(0, TEXT("Failed to start AI analysis request."));
+		PendingReviewOutputPath.Reset();
+		BroadcastFailure(0, TEXT("Failed to start project run AI analysis request."));
 		return false;
 	}
 
 	UE_LOG(
 		LogPlatformAnalysisAi,
 		Log,
-		TEXT("AI analysis request started | Url: %s, Report: %s, Log: %s"),
-		*AnalysisEndpointUrl,
-		*evaluationReportPath,
-		*measurementLogPath);
+		TEXT("Project run AI analysis request started | Url: %s, Project: %s, RunId: %s"),
+		*ProjectRunAnalysisEndpointUrl,
+		*projectPath,
+		*runId);
 
 	return true;
 }
@@ -393,109 +304,42 @@ void UPlatformAnalysisAiSubsystem::CancelPendingAnalysisRequest()
 	PendingHttpRequest->CancelRequest();
 	PendingHttpRequest.Reset();
 	PendingRequestId.Reset();
+	PendingReviewOutputPath.Reset();
 }
 
-bool UPlatformAnalysisAiSubsystem::ExtractSetupPathsFromReportJson(
-	const FString& reportJson,
-	FString& outEpisodeSetupPath,
-	FString& outDeliveryBotSetupPath,
-	TArray<FString>& outDiagnostics)
-{
-	outEpisodeSetupPath.Reset();
-	outDeliveryBotSetupPath.Reset();
-	outDiagnostics.Reset();
-
-	TSharedPtr<FJsonObject> RootObject;
-	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(reportJson);
-	if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
-	{
-		outDiagnostics.Add(TEXT("Evaluation report JSON parse failed."));
-		return false;
-	}
-
-	FString Schema;
-	if (!RootObject->TryGetStringField(TEXT("schema"), Schema)
-		|| !Schema.Equals(TEXT("episode_evaluation_report"), ESearchCase::CaseSensitive))
-	{
-		outDiagnostics.Add(TEXT("Evaluation report schema must be 'episode_evaluation_report'."));
-	}
-
-	TSharedPtr<FJsonObject> RunObject;
-	if (!TryGetObjectField(*RootObject, TEXT("run"), RunObject))
-	{
-		outDiagnostics.Add(TEXT("Evaluation report field missing or invalid: run."));
-		return false;
-	}
-
-	if (!TryGetStringFromObjectField(*RunObject, TEXT("episode_setup"), TEXT("path"), outEpisodeSetupPath)
-		|| outEpisodeSetupPath.IsEmpty())
-	{
-		outDiagnostics.Add(TEXT("Evaluation report field missing or invalid: run.episode_setup.path."));
-	}
-
-	if (!TryGetStringFromObjectField(*RunObject, TEXT("delivery_bot_setup"), TEXT("path"), outDeliveryBotSetupPath)
-		|| outDeliveryBotSetupPath.IsEmpty())
-	{
-		outDiagnostics.Add(TEXT("Evaluation report field missing or invalid: run.delivery_bot_setup.path."));
-	}
-
-	return outDiagnostics.IsEmpty();
-}
-
-bool UPlatformAnalysisAiSubsystem::BuildAnalysisRequestJsonFromReport(
-	const FString& evaluationReportPath,
-	const FString& measurementLogPath,
-	bool bFallbackOnly,
+bool UPlatformAnalysisAiSubsystem::BuildAnalysisRequestJsonForProjectRun(
+	const FString& projectPath,
+	const FString& runId,
 	FString& outRequestJson,
 	TArray<FString>& outDiagnostics)
 {
 	outRequestJson.Reset();
 	outDiagnostics.Reset();
 
-	const FString ResolvedReportPath = ResolveAnalysisPath(evaluationReportPath);
-	const FString ResolvedLogPath = ResolveAnalysisPath(measurementLogPath);
-
-	RequireExistingFile(TEXT("evaluation_report_path"), ResolvedReportPath, outDiagnostics);
-	RequireExistingFile(TEXT("measurement_log_path"), ResolvedLogPath, outDiagnostics);
-	if (!outDiagnostics.IsEmpty())
+	const FUserProjectRunSnapshotParseResult SnapshotResult = FUserProjectRunSnapshot::Parse(projectPath, runId);
+	if (!SnapshotResult.bSuccess)
 	{
+		for (const FScenarioCompileDiagnostic& Diagnostic : SnapshotResult.Diagnostics)
+		{
+			outDiagnostics.Add(Diagnostic.Message);
+		}
 		return false;
 	}
 
-	FString ReportJson;
-	if (!FFileHelper::LoadFileToString(ReportJson, *ResolvedReportPath))
+	if (!FPaths::FileExists(SnapshotResult.Paths.SummaryPath))
 	{
-		outDiagnostics.Add(FString::Printf(TEXT("Evaluation report read failed: %s"), *ResolvedReportPath));
-		return false;
-	}
-
-	FString EpisodeSetupPath;
-	FString DeliveryBotSetupPath;
-	if (!ExtractSetupPathsFromReportJson(ReportJson, EpisodeSetupPath, DeliveryBotSetupPath, outDiagnostics))
-	{
-		return false;
-	}
-
-	const FString ResolvedEpisodeSetupPath = ResolveAnalysisPath(EpisodeSetupPath);
-	const FString ResolvedDeliveryBotSetupPath = ResolveAnalysisPath(DeliveryBotSetupPath);
-	RequireExistingFile(TEXT("episode_setup_path"), ResolvedEpisodeSetupPath, outDiagnostics);
-	RequireExistingFile(TEXT("bot_setup_path"), ResolvedDeliveryBotSetupPath, outDiagnostics);
-	if (!outDiagnostics.IsEmpty())
-	{
+		outDiagnostics.Add(FString::Printf(TEXT("summary.json file not found: %s"), *SnapshotResult.Paths.SummaryPath));
 		return false;
 	}
 
 	TSharedRef<FJsonObject> RequestObject = MakeShared<FJsonObject>();
-	RequestObject->SetStringField(TEXT("evaluation_report_path"), ResolvedReportPath);
-	RequestObject->SetStringField(TEXT("measurement_log_path"), ResolvedLogPath);
-	RequestObject->SetStringField(TEXT("episode_setup_path"), ResolvedEpisodeSetupPath);
-	RequestObject->SetStringField(TEXT("bot_setup_path"), ResolvedDeliveryBotSetupPath);
-	RequestObject->SetBoolField(TEXT("fallback_only"), bFallbackOnly);
+	RequestObject->SetStringField(TEXT("project_path"), SnapshotResult.Paths.ProjectPath);
+	RequestObject->SetStringField(TEXT("run_id"), SnapshotResult.Paths.RunId);
 
 	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&outRequestJson);
 	if (!FJsonSerializer::Serialize(RequestObject, Writer))
 	{
-		outDiagnostics.Add(TEXT("AI analysis request JSON serialization failed."));
+		outDiagnostics.Add(TEXT("Project run AI analysis request JSON serialization failed."));
 		return false;
 	}
 
@@ -563,6 +407,8 @@ void UPlatformAnalysisAiSubsystem::HandleAnalysisResponse(
 
 	PendingHttpRequest.Reset();
 	PendingRequestId.Reset();
+	const FString ReviewOutputPath = PendingReviewOutputPath;
+	PendingReviewOutputPath.Reset();
 
 	const int32 ResponseCode = httpResponse.IsValid() ? httpResponse->GetResponseCode() : 0;
 	const FString ResponseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString();
@@ -577,6 +423,19 @@ void UPlatformAnalysisAiSubsystem::HandleAnalysisResponse(
 		const FString Message = FString::Printf(TEXT("AI analysis HTTP error: %d"), ResponseCode);
 		BroadcastFailure(ResponseCode, Message, ResponseBody);
 		return;
+	}
+
+	if (!ReviewOutputPath.IsEmpty())
+	{
+		const FString ReviewDirectory = FPaths::GetPath(ReviewOutputPath);
+		if (!IFileManager::Get().MakeDirectory(*ReviewDirectory, true)
+			|| !FFileHelper::SaveStringToFile(
+				ResponseBody,
+				*ReviewOutputPath,
+				FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			UE_LOG(LogPlatformAnalysisAi, Warning, TEXT("AI analysis review snapshot write failed: %s"), *ReviewOutputPath);
+		}
 	}
 
 	TArray<FString> Diagnostics;

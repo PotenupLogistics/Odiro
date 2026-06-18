@@ -7,6 +7,13 @@ specs:
 
 # Simulation Measurement Logging 계획
 
+상태: superseded legacy plan.
+
+- 최종 사용자 project 로그 계약 아님
+- 최신 기준: `docs/plans/user-project-runtime-migration.md`
+- 새 로그 파일 기준: `contracts/specs/user-project-data.md`
+- 이 문서는 기존 MeasurementLog 설계 추적용
+
 ## 목표
 
 PIE에서 실행 중인 시뮬레이션의 measurement를 JSONL 로그로 저장한다.

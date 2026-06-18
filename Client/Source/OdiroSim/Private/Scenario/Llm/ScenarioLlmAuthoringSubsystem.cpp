@@ -1,24 +1,15 @@
 #include "Scenario/Llm/ScenarioLlmAuthoringSubsystem.h"
 
 #include "Dom/JsonObject.h"
-#include "Dom/JsonValue.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
-#include "HAL/FileManager.h"
-#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
-#include "Shared/SimulationSetupTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioLlmAuthoring, Log, All);
-
-namespace
-{
-	const TCHAR* ExpectedRunQueueSchema = TEXT("episode_run_queue");
-}
 
 void UScenarioLlmAuthoringSubsystem::Deinitialize()
 {
@@ -26,7 +17,10 @@ void UScenarioLlmAuthoringSubsystem::Deinitialize()
 	Super::Deinitialize();
 }
 
-bool UScenarioLlmAuthoringSubsystem::GenerateScenariosFromPrompt(const FString& prompt, const int32 scenarioCount)
+bool UScenarioLlmAuthoringSubsystem::GenerateProjectScenarioFromPrompt(
+	const FString& prompt,
+	const FString& projectScenarioJsonPath,
+	const int32 episodeCount)
 {
 	if (PendingHttpRequest.IsValid())
 	{
@@ -39,11 +33,12 @@ bool UScenarioLlmAuthoringSubsystem::GenerateScenariosFromPrompt(const FString& 
 
 	FString requestBody;
 	FScenarioLlmGenerationResult failureResult;
-	if (!TryBuildRequestBody(prompt, scenarioCount, requestBody, failureResult))
+	if (!TryBuildRequestBody(prompt, projectScenarioJsonPath, episodeCount, requestBody, failureResult))
 	{
 		CompleteRequest(failureResult);
 		return false;
 	}
+	PendingEpisodeCount = episodeCount > 0 ? episodeCount : DefaultEpisodeCount;
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request = FHttpModule::Get().CreateRequest();
 	request->SetURL(BuildUrl(BaseUrl, GenerateEndpoint));
@@ -71,6 +66,7 @@ bool UScenarioLlmAuthoringSubsystem::GenerateScenariosFromPrompt(const FString& 
 	if (!request->ProcessRequest())
 	{
 		PendingHttpRequest.Reset();
+		PendingEpisodeCount = 0;
 		FScenarioLlmGenerationResult result;
 		result.Message = TEXT("Failed to start LLM generation HTTP request.");
 		result.Diagnostics.Add(result.Message);
@@ -92,6 +88,7 @@ void UScenarioLlmAuthoringSubsystem::CancelPendingRequest()
 	PendingHttpRequest->OnProcessRequestComplete().Unbind();
 	PendingHttpRequest->CancelRequest();
 	PendingHttpRequest.Reset();
+	PendingEpisodeCount = 0;
 }
 
 void UScenarioLlmAuthoringSubsystem::HandleGenerateResponse(
@@ -119,39 +116,57 @@ void UScenarioLlmAuthoringSubsystem::HandleGenerateResponse(
 		return;
 	}
 
-	FScenarioLlmGenerationResult result;
-	if (!TryValidateAndSaveRunQueue(responseBody, responseCode, result))
+	FString scenarioJsonPath;
+	FString responseMessage;
+	FString runId;
+	if (!TryReadScenarioPathFromResponse(responseBody, scenarioJsonPath, responseMessage, runId))
 	{
+		FScenarioLlmGenerationResult result;
+		result.HttpStatusCode = responseCode;
+		result.Message = responseMessage.IsEmpty()
+			? TEXT("LLM generation response did not include a project scenario.json path.")
+			: responseMessage;
+		result.Diagnostics.Add(result.Message);
+		if (!responseBody.IsEmpty())
+		{
+			result.Diagnostics.Add(FString::Printf(TEXT("Response: %s"), *TruncateForDiagnostic(responseBody)));
+		}
 		CompleteRequest(result);
 		return;
 	}
 
+	FScenarioLlmGenerationResult result;
 	result.bSuccess = true;
 	result.HttpStatusCode = responseCode;
-	result.Message = FString::Printf(
-		TEXT("Generated RunQueue saved: %s"),
-		*result.SavedRunQueueJsonPath);
+	result.Message = responseMessage.IsEmpty()
+		? TEXT("LLM generation completed for project scenario.json.")
+		: responseMessage;
+	result.ProjectScenarioJsonPath = scenarioJsonPath;
+	result.EpisodeCount = PendingEpisodeCount;
+	result.RunId = runId;
 	CompleteRequest(result);
 }
 
 void UScenarioLlmAuthoringSubsystem::CompleteRequest(const FScenarioLlmGenerationResult& result)
 {
 	LatestResult = result;
+	PendingEpisodeCount = 0;
 	if (result.bSuccess)
 	{
 		UE_LOG(
 			LogScenarioLlmAuthoring,
 			Log,
-			TEXT("LLM generation completed | Runs: %d | RunQueue: %s"),
-			result.RunCount,
-			*result.SavedRunQueueJsonPath);
+			TEXT("LLM generation completed | Episodes: %d | Scenario: %s | RunId: %s"),
+			result.EpisodeCount,
+			*result.ProjectScenarioJsonPath,
+			*result.RunId);
 	}
 	else
 	{
 		UE_LOG(
 			LogScenarioLlmAuthoring,
 			Warning,
-			TEXT("LLM generation failed | HTTP: %d | Message: %s"),
+			TEXT("LLM generation unavailable | HTTP: %d | Message: %s"),
 			result.HttpStatusCode,
 			*result.Message);
 	}
@@ -161,7 +176,8 @@ void UScenarioLlmAuthoringSubsystem::CompleteRequest(const FScenarioLlmGeneratio
 
 bool UScenarioLlmAuthoringSubsystem::TryBuildRequestBody(
 	const FString& prompt,
-	const int32 scenarioCount,
+	const FString& projectScenarioJsonPath,
+	const int32 episodeCount,
 	FString& outBody,
 	FScenarioLlmGenerationResult& outFailure) const
 {
@@ -176,221 +192,34 @@ bool UScenarioLlmAuthoringSubsystem::TryBuildRequestBody(
 		return false;
 	}
 
-	const int32 resolvedScenarioCount = scenarioCount > 0 ? scenarioCount : DefaultScenarioCount;
-	if (resolvedScenarioCount <= 0)
+	const FString resolvedScenarioJsonPath = ResolveProjectScenarioJsonPath(projectScenarioJsonPath);
+	if (!IsProjectScenarioJsonPath(resolvedScenarioJsonPath))
 	{
-		outFailure.Message = TEXT("Scenario count must be greater than zero.");
+		outFailure.Message = TEXT("LLM generation requires a <UserProject>/scenario.json path.");
 		outFailure.Diagnostics.Add(outFailure.Message);
 		return false;
 	}
 
+	const int32 resolvedEpisodeCount = episodeCount > 0 ? episodeCount : DefaultEpisodeCount;
+	if (resolvedEpisodeCount <= 0)
+	{
+		outFailure.Message = TEXT("Episode count must be greater than zero.");
+		outFailure.Diagnostics.Add(outFailure.Message);
+		return false;
+	}
+
+	const FString projectPath = FPaths::GetPath(resolvedScenarioJsonPath);
 	TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
 	rootObject->SetStringField(TEXT("prompt"), trimmedPrompt);
-	// Proto-AI currently expects this request key; rename it with the server contract.
-	rootObject->SetNumberField(TEXT("episode_count"), resolvedScenarioCount);
+	rootObject->SetStringField(TEXT("project_path"), projectPath);
+	rootObject->SetStringField(TEXT("scenario_path"), resolvedScenarioJsonPath);
+	rootObject->SetNumberField(TEXT("episode_count"), resolvedEpisodeCount);
 
 	const TSharedRef<TJsonWriter<>> writer = TJsonWriterFactory<>::Create(&outBody);
 	if (!FJsonSerializer::Serialize(rootObject, writer))
 	{
 		outFailure.Message = TEXT("Failed to serialize LLM generation request JSON.");
 		outFailure.Diagnostics.Add(outFailure.Message);
-		return false;
-	}
-
-	return true;
-}
-
-bool UScenarioLlmAuthoringSubsystem::TryValidateAndSaveRunQueue(
-	const FString& responseBody,
-	const int32 responseCode,
-	FScenarioLlmGenerationResult& outResult) const
-{
-	outResult = FScenarioLlmGenerationResult{};
-	outResult.HttpStatusCode = responseCode;
-	outResult.SavedRunQueueJsonPath = LatestRunQueueJsonPath;
-	outResult.ResolvedSavedRunQueueJsonPath = FSimulationSetupJson::ResolveProjectPath(LatestRunQueueJsonPath);
-
-	if (responseBody.TrimStartAndEnd().IsEmpty())
-	{
-		outResult.Message = TEXT("LLM generation response body is empty.");
-		outResult.Diagnostics.Add(outResult.Message);
-		return false;
-	}
-
-	TSharedPtr<FJsonObject> rootObject;
-	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(responseBody);
-	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
-	{
-		outResult.Message = TEXT("LLM generation response is not valid RunQueue JSON.");
-		outResult.Diagnostics.Add(outResult.Message);
-		outResult.Diagnostics.Add(FString::Printf(
-			TEXT("Response: %s"),
-			*TruncateForDiagnostic(responseBody)));
-		return false;
-	}
-
-	FString schema;
-	if (!rootObject->TryGetStringField(TEXT("schema"), schema) || schema != ExpectedRunQueueSchema)
-	{
-		outResult.Diagnostics.Add(FString::Printf(
-			TEXT("RunQueue schema must be '%s'."),
-			ExpectedRunQueueSchema));
-	}
-
-	double version = 0.0;
-	if (!rootObject->TryGetNumberField(TEXT("version"), version) || version < 1.0)
-	{
-		outResult.Diagnostics.Add(TEXT("RunQueue version must be >= 1."));
-	}
-
-	const TSharedPtr<FJsonValue> runsValue = rootObject->TryGetField(TEXT("runs"));
-	if (!runsValue.IsValid() || runsValue->Type != EJson::Array)
-	{
-		outResult.Diagnostics.Add(TEXT("RunQueue runs must be an array."));
-	}
-
-	const TArray<TSharedPtr<FJsonValue>> runValues =
-		runsValue.IsValid() && runsValue->Type == EJson::Array
-			? runsValue->AsArray()
-			: TArray<TSharedPtr<FJsonValue>>();
-	outResult.RunCount = runValues.Num();
-	if (runValues.IsEmpty())
-	{
-		outResult.Diagnostics.Add(TEXT("RunQueue must contain at least one run."));
-	}
-
-	for (int32 index = 0; index < runValues.Num(); ++index)
-	{
-		const TSharedPtr<FJsonValue>& runValue = runValues[index];
-		if (!runValue.IsValid() || runValue->Type != EJson::Object)
-		{
-			outResult.Diagnostics.Add(FString::Printf(TEXT("runs[%d] must be an object."), index));
-			continue;
-		}
-
-		const TSharedPtr<FJsonObject> runObject = runValue->AsObject();
-		if (!runObject.IsValid())
-		{
-			outResult.Diagnostics.Add(FString::Printf(TEXT("runs[%d] could not be read as an object."), index));
-			continue;
-		}
-
-		FString scenarioSetupPath;
-		FString deliveryBotSetupPath;
-		FString policySpecPath;
-		runObject->TryGetStringField(TEXT("scenario_setup"), scenarioSetupPath);
-		runObject->TryGetStringField(TEXT("delivery_bot_setup"), deliveryBotSetupPath);
-		runObject->TryGetStringField(TEXT("policy_spec"), policySpecPath);
-		scenarioSetupPath = scenarioSetupPath.TrimStartAndEnd();
-		deliveryBotSetupPath = deliveryBotSetupPath.TrimStartAndEnd();
-		policySpecPath = policySpecPath.TrimStartAndEnd();
-
-		if (scenarioSetupPath.IsEmpty())
-		{
-			outResult.Diagnostics.Add(FString::Printf(TEXT("runs[%d].scenario_setup must not be empty."), index));
-		}
-		else
-		{
-			if (!scenarioSetupPath.StartsWith(TEXT("Json/Input/")))
-			{
-				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("runs[%d].scenario_setup must start with Json/Input/: %s"),
-					index,
-					*scenarioSetupPath));
-			}
-
-			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(scenarioSetupPath)))
-			{
-				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("ScenarioSetup file does not exist: %s"),
-					*scenarioSetupPath));
-			}
-		}
-
-		if (deliveryBotSetupPath.IsEmpty())
-		{
-			outResult.Diagnostics.Add(FString::Printf(TEXT("runs[%d].delivery_bot_setup must not be empty."), index));
-		}
-		else
-		{
-			if (!deliveryBotSetupPath.StartsWith(TEXT("Json/Input/")))
-			{
-				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("runs[%d].delivery_bot_setup must start with Json/Input/: %s"),
-					index,
-					*deliveryBotSetupPath));
-			}
-
-			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(deliveryBotSetupPath)))
-			{
-				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("DeliveryBotSetup file does not exist: %s"),
-					*deliveryBotSetupPath));
-			}
-		}
-
-		if (!policySpecPath.IsEmpty())
-		{
-			if (!policySpecPath.StartsWith(TEXT("Json/Input/")))
-			{
-				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("runs[%d].policy_spec must start with Json/Input/: %s"),
-					index,
-					*policySpecPath));
-			}
-
-			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(policySpecPath)))
-			{
-				outResult.Diagnostics.Add(FString::Printf(
-					TEXT("PolicySpec file does not exist: %s"),
-					*policySpecPath));
-			}
-		}
-
-		if (index == 0)
-		{
-			outResult.FirstScenarioSetupJsonPath = scenarioSetupPath;
-			outResult.FirstDeliveryBotSetupJsonPath = deliveryBotSetupPath;
-		}
-
-		if (!scenarioSetupPath.IsEmpty())
-		{
-			runObject->SetStringField(TEXT("scenario_setup"), scenarioSetupPath);
-		}
-	}
-
-	if (!outResult.Diagnostics.IsEmpty())
-	{
-		outResult.Message = TEXT("Generated RunQueue validation failed.");
-		return false;
-	}
-
-	const FString outputFilePath = outResult.ResolvedSavedRunQueueJsonPath;
-	const FString outputDirectory = FPaths::GetPath(outputFilePath);
-	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true))
-	{
-		outResult.Message = FString::Printf(TEXT("Failed to create RunQueue output directory: %s"), *outputDirectory);
-		outResult.Diagnostics.Add(outResult.Message);
-		return false;
-	}
-
-	FString normalizedRunQueueJson;
-	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
-		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&normalizedRunQueueJson);
-	if (!FJsonSerializer::Serialize(rootObject.ToSharedRef(), writer))
-	{
-		outResult.Message = TEXT("Failed to serialize normalized RunQueue JSON.");
-		outResult.Diagnostics.Add(outResult.Message);
-		return false;
-	}
-
-	if (!FFileHelper::SaveStringToFile(
-			normalizedRunQueueJson,
-			*outputFilePath,
-			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
-	{
-		outResult.Message = FString::Printf(TEXT("Failed to save generated RunQueue: %s"), *outputFilePath);
-		outResult.Diagnostics.Add(outResult.Message);
 		return false;
 	}
 
@@ -412,6 +241,74 @@ FString UScenarioLlmAuthoringSubsystem::BuildUrl(const FString& baseUrl, const F
 	}
 
 	return trimmedBaseUrl + trimmedEndpoint;
+}
+
+bool UScenarioLlmAuthoringSubsystem::TryReadScenarioPathFromResponse(
+	const FString& responseBody,
+	FString& outScenarioJsonPath,
+	FString& outMessage,
+	FString& outRunId)
+{
+	outScenarioJsonPath.Reset();
+	outMessage.Reset();
+	outRunId.Reset();
+
+	TSharedPtr<FJsonObject> rootObject;
+	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(responseBody);
+	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+	{
+		outMessage = TEXT("LLM generation response was not valid JSON.");
+		return false;
+	}
+
+	rootObject->TryGetStringField(TEXT("message"), outMessage);
+	rootObject->TryGetStringField(TEXT("run_id"), outRunId);
+
+	FString scenarioJsonPath;
+	if (!rootObject->TryGetStringField(TEXT("scenario_path"), scenarioJsonPath))
+	{
+		rootObject->TryGetStringField(TEXT("project_scenario_path"), scenarioJsonPath);
+	}
+	if (scenarioJsonPath.IsEmpty())
+	{
+		const TSharedPtr<FJsonObject>* projectObject = nullptr;
+		if (rootObject->TryGetObjectField(TEXT("project"), projectObject) && projectObject && projectObject->IsValid())
+		{
+			(*projectObject)->TryGetStringField(TEXT("scenario_path"), scenarioJsonPath);
+		}
+	}
+
+	outScenarioJsonPath = ResolveProjectScenarioJsonPath(scenarioJsonPath);
+	if (!IsProjectScenarioJsonPath(outScenarioJsonPath))
+	{
+		outMessage = TEXT("LLM generation response scenario_path must point to <UserProject>/scenario.json.");
+		outScenarioJsonPath.Reset();
+		return false;
+	}
+
+	return true;
+}
+
+FString UScenarioLlmAuthoringSubsystem::ResolveProjectScenarioJsonPath(const FString& projectScenarioJsonPath)
+{
+	FString resolvedPath = projectScenarioJsonPath.TrimStartAndEnd();
+	resolvedPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+	if (resolvedPath.IsEmpty())
+	{
+		return FString();
+	}
+
+	if (FPaths::IsRelative(resolvedPath))
+	{
+		resolvedPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), resolvedPath);
+	}
+	FPaths::NormalizeFilename(resolvedPath);
+	return resolvedPath;
+}
+
+bool UScenarioLlmAuthoringSubsystem::IsProjectScenarioJsonPath(const FString& projectScenarioJsonPath)
+{
+	return FPaths::GetCleanFilename(projectScenarioJsonPath).Equals(TEXT("scenario.json"), ESearchCase::IgnoreCase);
 }
 
 FString UScenarioLlmAuthoringSubsystem::TruncateForDiagnostic(const FString& value)

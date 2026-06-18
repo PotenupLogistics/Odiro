@@ -1,5 +1,13 @@
 # DeliveryBotSetup JSON Guide
 
+상태: legacy Client input guide.
+
+- 최종 사용자 project 계약 아님
+- 새 profile 기준: `contracts/specs/user-project-data.md`의 `profile.json`
+- 새 policy 기준: `<UserProject>/policy/__init__.py:create_policy`
+- 새 writer는 `DeliveryBotSetup` JSON을 만들지 않음
+- 이 문서는 기존 compiler와 field 출처 확인용
+
 이 문서는 DeliveryBot의 주행/센서/정책 튜닝값을 `FDeliveryBotSetupInfo`에 채우기 위한 JSON 범위를 정리한다.
 
 DeliveryBotSetup JSON은 로봇 액터를 어디에, 어떤 ID로, 어떤 목표로 배치할지 결정하지 않는다. 그 책임은 EpisodeSetup JSON에 둔다.

@@ -1,6 +1,6 @@
 # 시뮬레이션 인터페이스
 
-제품 개념, 데이터 흐름을 정의.
+제품 개념과 실행 데이터 흐름을 정의한다.
 
 ## 핵심 용어
 
@@ -22,6 +22,12 @@
 | `Run`(`Simulation`) | 한 `Project`를 실행한 단위. policy 변경 후 같은 project에서 새 run을 만들 수 있음         |
 | `Episode`           | `Run` 내에서 episode scenario 하나가 시작부터 종료까지 실행되는 단위                      |
 
+식별자:
+
+- `RunId`는 Bridge가 할당하는 6자리 decimal string이다. 예: `000001`.
+- `EpisodeId`는 `Run` 안에서 1-based로 증가하는 6자리 decimal string이다. 예: `000001`.
+- 둘 다 path segment로 사용하므로 `..`, 경로 구분자, 임의 접두사/접미사를 허용하지 않는다.
+
 ### 로봇 구성
 
 | 용어      | 정의                                               | 모방 대상               |
@@ -39,6 +45,7 @@
 | `actions` | JSONL | 로봇의 입력·출력 데이터                | 기록 시간, 입력 데이터, 출력 행동         |
 | `events`  | JSONL | 발생한 사건 또는 변화                  | 발생 시간, 이벤트 유형, 관련 객체         |
 | `trace`   | JSONL | 로봇과 무관한 환경 정보                | 기록 시간, 환경 변경, 로봇이 못 본 데이터 |
+| `status`  | JSON  | 한 `Run`의 process 생명주기 상태       | process id, 상태, 시작/갱신/종료 시각     |
 | `result`  | JSON  | 한 `Episode`의 결과                    | 총 실행 시간, 성공/실패, 충돌 횟수 등     |
 | `summary` | JSON  | 한 `Run` 내의 모든 `Episode` 결과 요약 | 총 실행 시간, 성공률, 주요 실패 원인 등   |
 
@@ -63,13 +70,16 @@
 4. Policy 작성
    - `policy/` 디렉토리에 Python 파일로 작성, `PolicyRuntime` 인터페이스 준수
 5. Simulation 실행
-   1. Run 시작 시 `setting.json`, `profile.json`, `scenario.json`, `policy/`를 snapshot
-   2. Simulator 프로세스가 snapshot scenario와 고정 seed로 episode 수만큼 episode scenario 생성
-   3. Simulator 프로세스가 episode scenario마다 Episode 생성
+   1. Bridge가 6자리 decimal `RunId`를 할당하고 `runs/<RunId>/` 생성
+   2. Run 시작 시 `setting.json`, `profile.json`, `scenario.json`, `policy/`를 snapshot
+   3. Simulator는 실행 중 project root의 원본 입력을 다시 읽지 않고 snapshot만 사용
+   4. Simulator 프로세스가 snapshot scenario와 고정 seed로 episode 수만큼 episode scenario 생성
+   5. Simulator 프로세스가 snapshot `policy/__init__.py:create_policy`로 `PolicyRuntime`을 준비
+   6. `PolicyRuntime` 준비가 끝난 뒤 episode scenario마다 Episode 생성
       1. 로봇은 입력 데이터를 `PolicyRuntime`에 전달, 행동 판단 수신
       2. 입출력, 이벤트, 환경 데이터 `Run` 로그에 기록
-   4. 각 Episode 종료 시 결과 기록
-   5. Run 종료 시 summary 기록
+   7. 각 Episode 종료 시 결과 기록
+   8. Run 종료 시 summary 기록
 6. 시뮬레이션 결과 AI 분석
    1. Run summary를 분석하여 Run 간 차이 분석
    2. Episode result 분석하여 Episode 간 차이 분석

@@ -2,6 +2,11 @@
 #include "Scenario/Actors/ScenarioGroundRegion.h"
 
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
+#include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
+#include "Materials/MaterialInterface.h"
+#include "UObject/ConstructorHelpers.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogScenarioGroundRegion, Log, All);
 
 namespace
 {
@@ -83,6 +88,8 @@ AScenarioGroundRegion::AScenarioGroundRegion()
 		BlockedAreaMaterial = blockedAreaMaterialAsset.Object;
 	}
 
+	SurfaceCatalog = UScenarioCorridorSurfaceCatalog::MakeDefaultCatalogReference();
+
 	ApplyMaterialSettings();
 }
 
@@ -153,6 +160,80 @@ void AScenarioGroundRegion::ApplyMaterialSettings()
 {
 	if (!RegionBoundsComponent) return;
 
+	UMaterialInterface* selectedMaterial = ResolveSurfaceCatalogMaterial();
+	if (!selectedMaterial)
+	{
+		selectedMaterial = ResolveRegionTypeMaterial();
+	}
+
+	if (selectedMaterial)
+	{
+		RegionBoundsComponent->SetMaterial(0, selectedMaterial);
+	}
+}
+
+UMaterialInterface* AScenarioGroundRegion::ResolveSurfaceCatalogMaterial() const
+{
+	if (RegionSpec.SurfaceId.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	FScenarioCorridorSurfaceEntry surfaceEntry;
+	const FName surfaceName(*RegionSpec.SurfaceId);
+	bool bResolvedSurfaceEntry = false;
+	if (const UScenarioCorridorSurfaceCatalog* loadedCatalog = SurfaceCatalog.LoadSynchronous())
+	{
+		bResolvedSurfaceEntry = loadedCatalog->FindSurfaceEntryById(surfaceName, surfaceEntry);
+	}
+	else if (!SurfaceCatalog.IsNull())
+	{
+		UE_LOG(
+			LogScenarioGroundRegion,
+			Warning,
+			TEXT("Corridor surface catalog could not be loaded for runtime ground region. Region: %s | Surface: %s | Path: %s"),
+			*RegionSpec.RegionId,
+			*RegionSpec.SurfaceId,
+			*SurfaceCatalog.ToSoftObjectPath().ToString());
+	}
+
+	if (!bResolvedSurfaceEntry)
+	{
+		bResolvedSurfaceEntry = UScenarioCorridorSurfaceCatalog::FindDefaultSurfaceEntryById(surfaceName, surfaceEntry);
+	}
+
+	if (!bResolvedSurfaceEntry)
+	{
+		UE_LOG(
+			LogScenarioGroundRegion,
+			Warning,
+			TEXT("Unknown Corridor surface for runtime ground region; using region-type material. Region: %s | Surface: %s"),
+			*RegionSpec.RegionId,
+			*RegionSpec.SurfaceId);
+		return nullptr;
+	}
+
+	if (UMaterialInterface* catalogMaterial = surfaceEntry.PreviewMaterial.LoadSynchronous())
+	{
+		return catalogMaterial;
+	}
+
+	if (!surfaceEntry.PreviewMaterial.IsNull())
+	{
+		UE_LOG(
+			LogScenarioGroundRegion,
+			Warning,
+			TEXT("Corridor surface material failed to load for runtime ground region; using region-type material. Region: %s | Surface: %s | Path: %s"),
+			*RegionSpec.RegionId,
+			*RegionSpec.SurfaceId,
+			*surfaceEntry.PreviewMaterial.ToSoftObjectPath().ToString());
+	}
+
+	return nullptr;
+}
+
+UMaterialInterface* AScenarioGroundRegion::ResolveRegionTypeMaterial() const
+{
 	UMaterialInterface* selectedMaterial = nullptr;
 	switch (RegionSpec.RegionType)
 	{
@@ -169,8 +250,5 @@ void AScenarioGroundRegion::ApplyMaterialSettings()
 		break;
 	}
 
-	if (selectedMaterial)
-	{
-		RegionBoundsComponent->SetMaterial(0, selectedMaterial);
-	}
+	return selectedMaterial;
 }

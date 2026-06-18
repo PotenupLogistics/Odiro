@@ -10,6 +10,7 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Shared/SimulationSetupTypes.h"
 
 namespace
 {
@@ -37,83 +38,68 @@ namespace
 		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
 		return FJsonSerializer::Deserialize(Reader, OutObject) && OutObject.IsValid();
 	}
+
+	bool WriteAnalysisProjectRunSnapshot(const FString& ProjectPath, FUserProjectRunSnapshotPaths& OutPaths)
+	{
+		OutPaths = FUserProjectRunSnapshot::BuildPaths(ProjectPath, TEXT("000001"));
+		IFileManager::Get().MakeDirectory(*OutPaths.ReviewPath, true);
+		IFileManager::Get().MakeDirectory(*OutPaths.EpisodesPath, true);
+		IFileManager::Get().MakeDirectory(*OutPaths.PolicyPath, true);
+
+		return SaveAnalysisAiTestFile(
+				OutPaths.SettingPath,
+				TEXT("{")
+				TEXT("\"schema\":\"project_setting\",")
+				TEXT("\"version\":1,")
+				TEXT("\"project_id\":\"analysis_project\",")
+				TEXT("\"sampling\":{\"base_seed\":1,\"episode_count\":1,\"generator_version\":\"0.1.0\"},")
+				TEXT("\"runtime\":{\"map_id\":\"ScenarioSimulationMap\",\"fixed_fps\":30,\"time_scale\":1.0,\"max_duration_s\":60},")
+				TEXT("\"evaluation\":{\"goal_acceptance_radius_m\":1.0,\"tip_over_angle_deg\":60,\"near_miss_distance_m\":0.5}")
+				TEXT("}"))
+			&& SaveAnalysisAiTestFile(
+				OutPaths.ProfilePath,
+				TEXT("{\"schema\":\"simulation_profile\",\"version\":1,\"profile_id\":\"analysis_profile\",\"robot\":{\"body\":{},\"drive\":{},\"lidar\":{}}}"))
+			&& SaveAnalysisAiTestFile(
+				OutPaths.ScenarioPath,
+				TEXT("{")
+				TEXT("\"schema\":\"scenario\",")
+				TEXT("\"version\":1,")
+				TEXT("\"scenario_id\":\"analysis_scenario\",")
+				TEXT("\"intent\":\"analysis\",")
+				TEXT("\"corridor\":{\"axis\":{\"type\":\"polyline\",\"points_m\":[[0.0,0.0],[10.0,0.0]]},\"walkway_width_m\":3.0,\"segments\":[{\"id\":\"main\",\"type\":\"straight\",\"along_range_m\":[0.0,10.0]}]},")
+				TEXT("\"obstacles\":{},")
+				TEXT("\"pedestrians\":{},")
+				TEXT("\"robot\":{\"start\":{\"type\":\"entry\"},\"goal\":{\"type\":\"exit\"}}")
+				TEXT("}"))
+			&& SaveAnalysisAiTestFile(
+				OutPaths.PolicyEntrypointPath,
+				TEXT("def create_policy():\n    return None\n"))
+			&& SaveAnalysisAiTestFile(
+				OutPaths.SummaryPath,
+				TEXT("{\"schema\":\"run_summary\",\"version\":1,\"run\":{\"run_id\":\"000001\"},\"rows\":[]}"));
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FPlatformAnalysisAiReportPathExtractionTest,
-	"OdiroSim.Platform.AnalysisAi.ReportPathExtraction",
+	FPlatformAnalysisAiProjectRunRequestJsonBuildTest,
+	"OdiroSim.Platform.AnalysisAi.ProjectRunRequestJsonBuild",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FPlatformAnalysisAiReportPathExtractionTest::RunTest(const FString& Parameters)
+bool FPlatformAnalysisAiProjectRunRequestJsonBuildTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 
-	const FString ReportJson = TEXT(R"({
-		"schema": "episode_evaluation_report",
-		"version": 1,
-		"run": {
-			"episode_setup": { "path": "Json/Input/ScenarioSetupSample_1.json", "hash": "episode-hash" },
-			"delivery_bot_setup": { "path": "Json/Input/DeliveryBotSetupSample_1.json", "hash": "bot-hash" }
-		}
-	})");
-
-	FString EpisodeSetupPath;
-	FString DeliveryBotSetupPath;
-	TArray<FString> Diagnostics;
-	TestTrue(
-		TEXT("setup paths extract"),
-		UPlatformAnalysisAiSubsystem::ExtractSetupPathsFromReportJson(
-			ReportJson,
-			EpisodeSetupPath,
-			DeliveryBotSetupPath,
-			Diagnostics));
-	TestEqual(TEXT("diagnostics"), Diagnostics.Num(), 0);
-	TestEqual(TEXT("episode setup path"), EpisodeSetupPath, FString(TEXT("Json/Input/ScenarioSetupSample_1.json")));
-	TestEqual(TEXT("delivery bot setup path"), DeliveryBotSetupPath, FString(TEXT("Json/Input/DeliveryBotSetupSample_1.json")));
-
-	return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FPlatformAnalysisAiRequestJsonBuildTest,
-	"OdiroSim.Platform.AnalysisAi.RequestJsonBuild",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FPlatformAnalysisAiRequestJsonBuildTest::RunTest(const FString& Parameters)
-{
-	(void)Parameters;
-
-	const FString Directory = MakeAnalysisAiTestDirectory();
-	const FString ReportPath = FPaths::Combine(Directory, TEXT("evaluation_report.json"));
-	const FString MeasurementLogPath = FPaths::Combine(Directory, TEXT("MeasurementLog.jsonl"));
-	const FString EpisodeSetupPath = FPaths::Combine(Directory, TEXT("EpisodeSetup.json"));
-	const FString DeliveryBotSetupPath = FPaths::Combine(Directory, TEXT("DeliveryBotSetup.json"));
-
-	TestTrue(TEXT("write log"), SaveAnalysisAiTestFile(MeasurementLogPath, TEXT("{\"type\":\"header\"}\n")));
-	TestTrue(TEXT("write episode setup"), SaveAnalysisAiTestFile(EpisodeSetupPath, TEXT("{}")));
-	TestTrue(TEXT("write bot setup"), SaveAnalysisAiTestFile(DeliveryBotSetupPath, TEXT("{}")));
-
-	const FString ReportJson = FString::Printf(
-		TEXT(R"({
-			"schema": "episode_evaluation_report",
-			"version": 1,
-			"run": {
-				"episode_setup": { "path": "%s", "hash": "episode-hash" },
-				"delivery_bot_setup": { "path": "%s", "hash": "bot-hash" }
-			}
-		})"),
-		*EpisodeSetupPath.Replace(TEXT("\\"), TEXT("/")),
-		*DeliveryBotSetupPath.Replace(TEXT("\\"), TEXT("/")));
-	TestTrue(TEXT("write report"), SaveAnalysisAiTestFile(ReportPath, ReportJson));
+	const FString ProjectPath = MakeAnalysisAiTestDirectory();
+	FUserProjectRunSnapshotPaths Paths;
+	TestTrue(TEXT("write project run snapshot"), WriteAnalysisProjectRunSnapshot(ProjectPath, Paths));
 
 	FString RequestJson;
 	TArray<FString> Diagnostics;
 	TestTrue(
-		TEXT("request json builds"),
-		UPlatformAnalysisAiSubsystem::BuildAnalysisRequestJsonFromReport(
-			ReportPath,
-			MeasurementLogPath,
-			true,
+		TEXT("project run request json builds"),
+		UPlatformAnalysisAiSubsystem::BuildAnalysisRequestJsonForProjectRun(
+			ProjectPath,
+			TEXT("000001"),
 			RequestJson,
 			Diagnostics));
 	TestEqual(TEXT("diagnostics"), Diagnostics.Num(), 0);
@@ -125,88 +111,15 @@ bool FPlatformAnalysisAiRequestJsonBuildTest::RunTest(const FString& Parameters)
 		return false;
 	}
 
-	FString RequestReportPath;
-	FString RequestLogPath;
-	FString RequestEpisodeSetupPath;
-	FString RequestBotSetupPath;
-	TestTrue(TEXT("has report path"), RequestObject->TryGetStringField(TEXT("evaluation_report_path"), RequestReportPath));
-	TestTrue(TEXT("has log path"), RequestObject->TryGetStringField(TEXT("measurement_log_path"), RequestLogPath));
-	TestTrue(TEXT("has episode setup path"), RequestObject->TryGetStringField(TEXT("episode_setup_path"), RequestEpisodeSetupPath));
-	TestTrue(TEXT("has bot setup path"), RequestObject->TryGetStringField(TEXT("bot_setup_path"), RequestBotSetupPath));
-	TestTrue(TEXT("fallback only"), RequestObject->GetBoolField(TEXT("fallback_only")));
-	TestTrue(TEXT("request report path is absolute"), FPaths::IsRelative(RequestReportPath) == false);
-	TestTrue(TEXT("request log path is absolute"), FPaths::IsRelative(RequestLogPath) == false);
-	TestTrue(TEXT("request episode setup path is absolute"), FPaths::IsRelative(RequestEpisodeSetupPath) == false);
-	TestTrue(TEXT("request bot setup path is absolute"), FPaths::IsRelative(RequestBotSetupPath) == false);
+	FString RequestProjectPath;
+	FString RequestRunId;
+	TestTrue(TEXT("has project path"), RequestObject->TryGetStringField(TEXT("project_path"), RequestProjectPath));
+	TestTrue(TEXT("has run id"), RequestObject->TryGetStringField(TEXT("run_id"), RequestRunId));
+	TestEqual(TEXT("project path"), RequestProjectPath, Paths.ProjectPath);
+	TestEqual(TEXT("run id"), RequestRunId, FString(TEXT("000001")));
+	TestFalse(TEXT("no measurement log path"), RequestObject->HasField(TEXT("measurement_log_path")));
 
-	return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FPlatformAnalysisAiStaleAbsoluteSetupPathRemapTest,
-	"OdiroSim.Platform.AnalysisAi.StaleAbsoluteSetupPathRemap",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FPlatformAnalysisAiStaleAbsoluteSetupPathRemapTest::RunTest(const FString& Parameters)
-{
-	(void)Parameters;
-
-	const FString Directory = MakeAnalysisAiTestDirectory();
-	const FString ReportPath = FPaths::Combine(Directory, TEXT("evaluation_report.json"));
-	const FString MeasurementLogPath = FPaths::Combine(Directory, TEXT("MeasurementLog.jsonl"));
-
-	TestTrue(TEXT("write log"), SaveAnalysisAiTestFile(MeasurementLogPath, TEXT("{\"type\":\"header\"}\n")));
-
-	const FString ReportJson = TEXT(R"({
-		"schema": "episode_evaluation_report",
-		"version": 1,
-		"run": {
-			"episode_setup": {
-				"path": "C:/Users/old/Documents/Unreal Projects/Proto-Unreal/Json/Input/ScenarioSetupSample_1.json",
-				"hash": "episode-hash"
-			},
-			"delivery_bot_setup": {
-				"path": "C:/Users/old/Documents/Unreal Projects/Proto-Unreal/Json/Input/DeliveryBotSetupSample_1.json",
-				"hash": "bot-hash"
-			}
-		}
-	})");
-	TestTrue(TEXT("write report"), SaveAnalysisAiTestFile(ReportPath, ReportJson));
-
-	FString RequestJson;
-	TArray<FString> Diagnostics;
-	TestTrue(
-		TEXT("request json builds"),
-		UPlatformAnalysisAiSubsystem::BuildAnalysisRequestJsonFromReport(
-			ReportPath,
-			MeasurementLogPath,
-			true,
-			RequestJson,
-			Diagnostics));
-	TestEqual(TEXT("diagnostics"), Diagnostics.Num(), 0);
-
-	TSharedPtr<FJsonObject> RequestObject;
-	TestTrue(TEXT("request json parses"), ParseJsonObject(RequestJson, RequestObject));
-	if (!RequestObject.IsValid())
-	{
-		return false;
-	}
-
-	FString RequestEpisodeSetupPath;
-	FString RequestBotSetupPath;
-	TestTrue(TEXT("has episode setup path"), RequestObject->TryGetStringField(TEXT("episode_setup_path"), RequestEpisodeSetupPath));
-	TestTrue(TEXT("has bot setup path"), RequestObject->TryGetStringField(TEXT("bot_setup_path"), RequestBotSetupPath));
-
-	FString ExpectedEpisodeSetupPath = FPaths::Combine(FPaths::ProjectDir(), TEXT("Json/Input/ScenarioSetupSample_1.json"));
-	FString ExpectedBotSetupPath = FPaths::Combine(FPaths::ProjectDir(), TEXT("Json/Input/DeliveryBotSetupSample_1.json"));
-	FPaths::NormalizeFilename(ExpectedEpisodeSetupPath);
-	FPaths::NormalizeFilename(ExpectedBotSetupPath);
-	FPaths::CollapseRelativeDirectories(ExpectedEpisodeSetupPath);
-	FPaths::CollapseRelativeDirectories(ExpectedBotSetupPath);
-
-	TestEqual(TEXT("episode setup remapped"), RequestEpisodeSetupPath, ExpectedEpisodeSetupPath);
-	TestEqual(TEXT("bot setup remapped"), RequestBotSetupPath, ExpectedBotSetupPath);
-
+	IFileManager::Get().DeleteDirectory(*ProjectPath, false, true);
 	return true;
 }
 

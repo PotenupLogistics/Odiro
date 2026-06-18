@@ -4,6 +4,7 @@
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Engine/Texture2D.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
 
 void UScenarioPlaceablePaletteItemWidget::NativeOnInitialized()
 {
@@ -14,6 +15,13 @@ void UScenarioPlaceablePaletteItemWidget::NativeOnInitialized()
 		SelectButton->OnClicked.RemoveDynamic(this, &UScenarioPlaceablePaletteItemWidget::HandleSelectButtonClicked);
 		SelectButton->OnClicked.AddDynamic(this, &UScenarioPlaceablePaletteItemWidget::HandleSelectButtonClicked);
 	}
+}
+
+void UScenarioPlaceablePaletteItemWidget::NativeConstruct()
+{
+	Super::NativeConstruct();
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(DisplayNameTextBlock.Get(), EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(CategoryTextBlock.Get(), EWidgetTextStyleRole::Label);
 }
 
 void UScenarioPlaceablePaletteItemWidget::SetPropEntry(const FScenarioStaticObstaclePropEntry& propEntry)

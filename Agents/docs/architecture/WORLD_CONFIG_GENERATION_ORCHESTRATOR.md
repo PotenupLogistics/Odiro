@@ -1,5 +1,11 @@
 # World Config Generation Orchestrator
 
+상태: legacy WorldConfig generation note.
+
+- 현재 user project scenario API 기준 아님
+- 현재 scenario 기준: `contracts/specs/user-project-data.md`
+- 이 문서는 이전 WorldConfig 생성 흐름과 provider 진단 확인용
+
 이 문서는 자연어 요청에서 검증된 `WorldConfig` 생성 결과까지 이어지는 orchestration 흐름을 설명한다. 현재 orchestrator는 scenario repair prompt로 넘어가기 전에 deterministic scenario post-processing을 먼저 적용한다. 현재 순서는 다음과 같다.
 
 Natural Language Request -> Prompt Package -> LLM Client -> Raw Content -> JSON Extraction -> Contract Validation -> Scenario Reflection -> Scenario Post-Processing -> Contract Validation -> Scenario Reflection -> Repair Loop -> Generation Result
@@ -106,7 +112,7 @@ provider가 `disabled`이면 orchestrator는 `error.code = provider_disabled`인
 
 ## 6. Later Steps
 
-- UE team 검증 결과를 받아 최신 EpisodeSetup / DeliveryBotSetup / RunQueue 중심으로 handoff 흐름을 정리한다.
+- UE team 검증 결과를 받아 이전 EpisodeSetup / DeliveryBotSetup / RunQueue handoff 흐름을 정리한다.
 - provider별 live smoke는 수동 절차로만 수행하고 automated checks에서는 실제 호출을 피한다.
 - vector DB와 embedding index는 source review가 정리된 뒤 별도 단계에서 검토한다.
 

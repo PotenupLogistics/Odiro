@@ -1,5 +1,11 @@
 # UE Integration Handoff Index
 
+상태: legacy handoff index.
+
+- 현재 user project 실행 계약 아님
+- 현재 scenario/run 파일 기준: `contracts/specs/user-project-data.md`
+- 이 문서는 이전 UE handoff 문서 탐색용
+
 ## 1. 목적
 
 UE 담당자가 AI Backend handoff 관련 문서를 어떤 순서로 보면 되는지 안내한다.
@@ -27,12 +33,14 @@ UE 담당자가 AI Backend handoff 관련 문서를 어떤 순서로 보면 되�
 * `SCENARIO_REFLECTION_VALIDATION.md`
 * `WORLD_CONFIG_GENERATION_ORCHESTRATOR.md`
 
-## 5. 현재 추천 endpoint
+## 5. Legacy endpoint 기록
 
 * `POST /api/v1/scenarios/generate`
 
+이 endpoint는 현재 `410 RUN_QUEUE_REMOVED` 안내만 반환한다.
+
 Legacy `/api/v1/ue5/world-config/handoff`와 `responseFormat=episode_spec` / `responseFormat=both` 설명은 archive/tooling 참고용이며 현재 FastAPI/OpenAPI에는 노출되지 않는다.
 
-## 6. 현재 확인된 smoke 결과
+## 6. Legacy smoke 결과
 
 controlled smoke 기준으로 `handoffSuccess`, `episodeValidationPassed`, `episodeScenarioReflectionPassed`, `hasKickboardSemantic`, `hasBlockingRatio`, `hasCrossingPedestrian`, `pedestrianPathLinked`, `ueCompilerReadiness`가 모두 true로 기록됐다.

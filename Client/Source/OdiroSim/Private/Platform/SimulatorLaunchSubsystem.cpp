@@ -3,6 +3,7 @@
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
 #include "Scenario/ScenarioCompiler.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
+#include "Shared/UserProjectDataTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSimulatorLaunch, Log, All);
 
@@ -20,6 +21,21 @@ namespace
 	const TCHAR* LaunchEvaluationReportSchema = TEXT("episode_evaluation_report");
 	const TCHAR* LaunchDefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	const TCHAR* SimulatorProcessFlags = TEXT("-nosound -unattended -NoLoadingScreen");
+	const int32 ProjectRunDefaultPolicyPort = 18145;
+	const TCHAR* UserProjectStaticDirectory = TEXT("static");
+	const TCHAR* UserProjectResourcesDirectory = TEXT("resources");
+	const TCHAR* UserProjectTemplateDirectory = TEXT("project-templates");
+	const TCHAR* UserProjectRunDefaultsDirectory = TEXT("run-defaults");
+	const TCHAR* UserProjectSettingFileName = TEXT("setting.json");
+	const TCHAR* UserProjectProfileFileName = TEXT("profile.json");
+	const TCHAR* UserProjectScenarioFileName = TEXT("scenario.json");
+	const TCHAR* UserProjectPolicyDirectory = TEXT("policy");
+	const TCHAR* UserProjectRunsDirectory = TEXT("runs");
+	const TCHAR* UserProjectSnapshotDirectory = TEXT("snapshot");
+	const TCHAR* UserProjectPolicyEntrypointFileName = TEXT("__init__.py");
+	const TCHAR* UserProjectSettingSchema = TEXT("project_setting");
+	const TCHAR* UserProjectProfileSchema = TEXT("simulation_profile");
+	const TCHAR* UserProjectScenarioSchema = TEXT("scenario");
 
 	FString ToProjectRelativePath(FString filePath)
 	{
@@ -27,6 +43,433 @@ namespace
 		const FString projectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 		FPaths::MakePathRelativeTo(filePath, *projectDir);
 		return filePath.Replace(TEXT("\\"), TEXT("/"));
+	}
+
+	FString NormalizeAbsolutePath(FString path)
+	{
+		path = path.TrimStartAndEnd();
+		if (path.IsEmpty())
+		{
+			return FString();
+		}
+
+		path = FPaths::IsRelative(path)
+			? FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), path))
+			: FPaths::ConvertRelativePathToFull(path);
+		FPaths::NormalizeFilename(path);
+		return path;
+	}
+
+	bool IsDirectory(const FString& path)
+	{
+		return !path.IsEmpty() && IFileManager::Get().DirectoryExists(*path);
+	}
+
+	bool IsFile(const FString& path)
+	{
+		return !path.IsEmpty() && FPaths::FileExists(path);
+	}
+
+	bool IsSafeUserProjectSegment(const FString& value)
+	{
+		if (value.IsEmpty() || value.Equals(TEXT(".")) || value.Equals(TEXT("..")) || FPaths::IsRelative(value) == false)
+		{
+			return false;
+		}
+		if (value.Contains(TEXT("/")) || value.Contains(TEXT("\\")))
+		{
+			return false;
+		}
+		if (!FChar::IsAlnum(value[0]))
+		{
+			return false;
+		}
+
+		for (int32 characterIndex = 0; characterIndex < value.Len(); ++characterIndex)
+		{
+			const TCHAR character = value[characterIndex];
+			if (!FChar::IsAlnum(character) && character != TEXT('.') && character != TEXT('_') && character != TEXT('-'))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool TryFindUserProjectResourcesFromRoot(
+		const FString& root,
+		FString& outProjectTemplatesPath,
+		FString& outRunDefaultsPath)
+	{
+		const FString staticTemplatesPath =
+			NormalizeAbsolutePath(FPaths::Combine(root, UserProjectStaticDirectory, UserProjectTemplateDirectory));
+		const FString staticRunDefaultsPath =
+			NormalizeAbsolutePath(FPaths::Combine(root, UserProjectStaticDirectory, UserProjectRunDefaultsDirectory));
+		if (IsDirectory(staticTemplatesPath) && IsDirectory(staticRunDefaultsPath))
+		{
+			outProjectTemplatesPath = staticTemplatesPath;
+			outRunDefaultsPath = staticRunDefaultsPath;
+			return true;
+		}
+
+		const FString resourceTemplatesPath =
+			NormalizeAbsolutePath(FPaths::Combine(root, UserProjectResourcesDirectory, UserProjectTemplateDirectory));
+		const FString resourceRunDefaultsPath =
+			NormalizeAbsolutePath(FPaths::Combine(root, UserProjectResourcesDirectory, UserProjectRunDefaultsDirectory));
+		if (IsDirectory(resourceTemplatesPath) && IsDirectory(resourceRunDefaultsPath))
+		{
+			outProjectTemplatesPath = resourceTemplatesPath;
+			outRunDefaultsPath = resourceRunDefaultsPath;
+			return true;
+		}
+
+		return false;
+	}
+
+	bool SearchUserProjectResourceRoot(
+		FString startPath,
+		FString& outProjectTemplatesPath,
+		FString& outRunDefaultsPath)
+	{
+		FString current = NormalizeAbsolutePath(startPath);
+		if (IsFile(current))
+		{
+			current = FPaths::GetPath(current);
+		}
+
+		while (!current.IsEmpty())
+		{
+			if (TryFindUserProjectResourcesFromRoot(current, outProjectTemplatesPath, outRunDefaultsPath))
+			{
+				return true;
+			}
+
+			const FString parent = FPaths::GetPath(current);
+			if (parent.IsEmpty() || parent.Equals(current, ESearchCase::IgnoreCase))
+			{
+				break;
+			}
+			current = parent;
+		}
+
+		return false;
+	}
+
+	bool LocateUserProjectResourceDirectories(
+		FString& outProjectTemplatesPath,
+		FString& outRunDefaultsPath,
+		TArray<FString>* outDiagnostics)
+	{
+		TArray<FString> startPaths;
+		startPaths.Add(FPaths::ProjectDir());
+		startPaths.Add(FPlatformProcess::BaseDir());
+		startPaths.Add(FPlatformProcess::ExecutablePath());
+
+		for (const FString& startPath : startPaths)
+		{
+			if (SearchUserProjectResourceRoot(startPath, outProjectTemplatesPath, outRunDefaultsPath))
+			{
+				return true;
+			}
+		}
+
+		if (outDiagnostics)
+		{
+			outDiagnostics->Add(TEXT("Project template resources not found. Expected static/project-templates or resources/project-templates."));
+		}
+		return false;
+	}
+
+	void AddUserProjectJsonDiagnostics(const FString& label, const TArray<FScenarioCompileDiagnostic>& diagnostics, TArray<FString>& outDiagnostics)
+	{
+		for (const FScenarioCompileDiagnostic& diagnostic : diagnostics)
+		{
+			outDiagnostics.Add(FString::Printf(
+				TEXT("%s: %s: %s"),
+				*label,
+				*diagnostic.Code,
+				*diagnostic.Message));
+		}
+	}
+
+	bool ValidateUserProjectRootJsonFile(
+		const FString& jsonPath,
+		const FString& expectedSchema,
+		const FString& label,
+		TArray<FString>& outDiagnostics)
+	{
+		if (!IsFile(jsonPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s missing: %s"), *label, *jsonPath));
+			return false;
+		}
+
+		const FUserProjectJsonParseResult parseResult =
+			FUserProjectDataJson::ValidateRootJsonFile(jsonPath, expectedSchema);
+		if (!parseResult.bSuccess)
+		{
+			AddUserProjectJsonDiagnostics(label, parseResult.Diagnostics, outDiagnostics);
+			return false;
+		}
+
+		return true;
+	}
+
+	bool ValidateUserProjectPolicyDirectory(const FString& policyPath, TArray<FString>& outDiagnostics)
+	{
+		if (!IsDirectory(policyPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("policy directory missing: %s"), *policyPath));
+			return false;
+		}
+
+		const FString entrypointPath = NormalizeAbsolutePath(FPaths::Combine(policyPath, UserProjectPolicyEntrypointFileName));
+		if (!IsFile(entrypointPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("policy entrypoint missing: %s"), *entrypointPath));
+			return false;
+		}
+
+		FString entrypointSource;
+		if (!FFileHelper::LoadFileToString(entrypointSource, *entrypointPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("policy entrypoint read failed: %s"), *entrypointPath));
+			return false;
+		}
+		if (!entrypointSource.Contains(TEXT("create_policy")))
+		{
+			outDiagnostics.Add(TEXT("policy/__init__.py must expose create_policy."));
+			return false;
+		}
+
+		return true;
+	}
+
+	bool ValidateUserProjectDirectory(const FString& projectPath, const bool bRequireRunsDirectory, TArray<FString>& outDiagnostics)
+	{
+		const FString resolvedProjectPath = NormalizeAbsolutePath(projectPath);
+		if (!IsDirectory(resolvedProjectPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("project directory missing: %s"), *resolvedProjectPath));
+			return false;
+		}
+
+		bool bValid = true;
+		bValid &= ValidateUserProjectRootJsonFile(
+			NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectSettingFileName)),
+			UserProjectSettingSchema,
+			TEXT("setting.json"),
+			outDiagnostics);
+		bValid &= ValidateUserProjectRootJsonFile(
+			NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectProfileFileName)),
+			UserProjectProfileSchema,
+			TEXT("profile.json"),
+			outDiagnostics);
+		bValid &= ValidateUserProjectRootJsonFile(
+			NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectScenarioFileName)),
+			UserProjectScenarioSchema,
+			TEXT("scenario.json"),
+			outDiagnostics);
+		bValid &= ValidateUserProjectPolicyDirectory(
+			NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectPolicyDirectory)),
+			outDiagnostics);
+
+		if (bRequireRunsDirectory)
+		{
+			const FString runsPath = NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectRunsDirectory));
+			if (!IsDirectory(runsPath))
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("runs directory missing: %s"), *runsPath));
+				bValid = false;
+			}
+		}
+
+		return bValid;
+	}
+
+	bool IsGeneratedPythonCachePath(const FString& path)
+	{
+		const FString normalizedPath = path.Replace(TEXT("\\"), TEXT("/"));
+		const FString cleanName = FPaths::GetCleanFilename(normalizedPath);
+		return normalizedPath.Contains(TEXT("/__pycache__/"))
+			|| cleanName.Equals(TEXT("__pycache__"), ESearchCase::CaseSensitive)
+			|| cleanName.EndsWith(TEXT(".pyc"), ESearchCase::IgnoreCase)
+			|| cleanName.EndsWith(TEXT(".pyo"), ESearchCase::IgnoreCase);
+	}
+
+	bool MakeRelativeToDirectory(const FString& path, const FString& root, FString& outRelativePath)
+	{
+		outRelativePath = path;
+		FString normalizedRoot = root;
+		if (!normalizedRoot.EndsWith(TEXT("/")))
+		{
+			normalizedRoot += TEXT("/");
+		}
+		const bool bRelative = FPaths::MakePathRelativeTo(outRelativePath, *normalizedRoot);
+		outRelativePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		return bRelative && !outRelativePath.StartsWith(TEXT(".."));
+	}
+
+	bool CopyUserProjectFile(const FString& sourcePath, const FString& targetPath, TArray<FString>& outDiagnostics)
+	{
+		TArray<uint8> payload;
+		if (!FFileHelper::LoadFileToArray(payload, *sourcePath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("file read failed: %s"), *sourcePath));
+			return false;
+		}
+
+		const FString targetDirectory = FPaths::GetPath(targetPath);
+		if (!IFileManager::Get().MakeDirectory(*targetDirectory, true))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("directory create failed: %s"), *targetDirectory));
+			return false;
+		}
+
+		if (!FFileHelper::SaveArrayToFile(payload, *targetPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("file write failed: %s"), *targetPath));
+			return false;
+		}
+
+		return true;
+	}
+
+	bool CopyUserProjectTree(
+		const FString& sourceRoot,
+		const FString& targetRoot,
+		const bool bSkipGitKeep,
+		TArray<FString>& outDiagnostics)
+	{
+		const FString normalizedSourceRoot = NormalizeAbsolutePath(sourceRoot);
+		const FString normalizedTargetRoot = NormalizeAbsolutePath(targetRoot);
+		if (!IsDirectory(normalizedSourceRoot))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("source directory missing: %s"), *normalizedSourceRoot));
+			return false;
+		}
+
+		if (!IFileManager::Get().MakeDirectory(*normalizedTargetRoot, true))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("target directory create failed: %s"), *normalizedTargetRoot));
+			return false;
+		}
+
+		TArray<FString> directories;
+		IFileManager::Get().FindFilesRecursive(directories, *normalizedSourceRoot, TEXT("*"), false, true);
+		directories.Sort();
+		for (const FString& directory : directories)
+		{
+			if (IsGeneratedPythonCachePath(directory))
+			{
+				continue;
+			}
+
+			FString relativePath;
+			if (!MakeRelativeToDirectory(NormalizeAbsolutePath(directory), normalizedSourceRoot, relativePath))
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("relative directory resolve failed: %s"), *directory));
+				return false;
+			}
+
+			const FString targetDirectory = NormalizeAbsolutePath(FPaths::Combine(normalizedTargetRoot, relativePath));
+			if (!IFileManager::Get().MakeDirectory(*targetDirectory, true))
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("directory create failed: %s"), *targetDirectory));
+				return false;
+			}
+		}
+
+		TArray<FString> files;
+		IFileManager::Get().FindFilesRecursive(files, *normalizedSourceRoot, TEXT("*"), true, false);
+		files.Sort();
+		for (const FString& file : files)
+		{
+			const FString cleanName = FPaths::GetCleanFilename(file);
+			if (IsGeneratedPythonCachePath(file) || (bSkipGitKeep && cleanName.Equals(TEXT(".gitkeep"), ESearchCase::CaseSensitive)))
+			{
+				continue;
+			}
+
+			FString relativePath;
+			if (!MakeRelativeToDirectory(NormalizeAbsolutePath(file), normalizedSourceRoot, relativePath))
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("relative file resolve failed: %s"), *file));
+				return false;
+			}
+
+			const FString targetPath = NormalizeAbsolutePath(FPaths::Combine(normalizedTargetRoot, relativePath));
+			if (!CopyUserProjectFile(NormalizeAbsolutePath(file), targetPath, outDiagnostics))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool IsDirectoryEmptyOrMissing(const FString& directoryPath, TArray<FString>& outDiagnostics)
+	{
+		const FString resolvedDirectoryPath = NormalizeAbsolutePath(directoryPath);
+		if (resolvedDirectoryPath.IsEmpty())
+		{
+			outDiagnostics.Add(TEXT("project path must not be empty."));
+			return false;
+		}
+
+		if (FPaths::FileExists(resolvedDirectoryPath) && !IsDirectory(resolvedDirectoryPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("target project path is not a directory: %s"), *resolvedDirectoryPath));
+			return false;
+		}
+
+		if (!IsDirectory(resolvedDirectoryPath))
+		{
+			return true;
+		}
+
+		TArray<FString> children;
+		IFileManager::Get().FindFiles(children, *FPaths::Combine(resolvedDirectoryPath, TEXT("*")), true, true);
+		if (!children.IsEmpty())
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("target project directory is not empty: %s"), *resolvedDirectoryPath));
+			return false;
+		}
+
+		return true;
+	}
+
+	bool FindNextUserProjectRunId(const FString& runsPath, FString& outRunId, TArray<FString>& outDiagnostics)
+	{
+		outRunId.Reset();
+		if (!IsDirectory(runsPath))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("runs directory missing: %s"), *runsPath));
+			return false;
+		}
+
+		TArray<FString> runDirectoryNames;
+		IFileManager::Get().FindFiles(runDirectoryNames, *FPaths::Combine(runsPath, TEXT("*")), false, true);
+
+		int32 maxRunId = 0;
+		for (const FString& runDirectoryName : runDirectoryNames)
+		{
+			if (!FUserProjectRunSnapshot::IsValidRunId(runDirectoryName))
+			{
+				continue;
+			}
+
+			maxRunId = FMath::Max(maxRunId, FCString::Atoi(*runDirectoryName));
+		}
+
+		if (maxRunId >= 999999)
+		{
+			outDiagnostics.Add(TEXT("run id overflow."));
+			return false;
+		}
+
+		outRunId = FString::Printf(TEXT("%06d"), maxRunId + 1);
+		return true;
 	}
 
 	void FindProjectFiles(const FString& relativeDirectory, const TCHAR* filePattern, TArray<FString>& outFiles)
@@ -1014,6 +1457,220 @@ bool USimulatorLaunchSubsystem::StartProjectRun(const FString& projectPath, cons
 	return true;
 }
 
+TArray<FString> USimulatorLaunchSubsystem::ListProjectTemplates() const
+{
+	TArray<FString> diagnostics;
+	FString projectTemplatesPath;
+	FString runDefaultsPath;
+	if (!LocateUserProjectResourceDirectories(projectTemplatesPath, runDefaultsPath, &diagnostics))
+	{
+		return {};
+	}
+
+	TArray<FString> templateIds;
+	IFileManager::Get().FindFiles(templateIds, *FPaths::Combine(projectTemplatesPath, TEXT("*")), false, true);
+
+	TArray<FString> safeTemplateIds;
+	for (const FString& templateId : templateIds)
+	{
+		if (IsSafeUserProjectSegment(templateId))
+		{
+			safeTemplateIds.Add(templateId);
+		}
+	}
+	safeTemplateIds.Sort();
+	return safeTemplateIds;
+}
+
+bool USimulatorLaunchSubsystem::ValidateUserProject(const FString& projectPath, TArray<FString>& outDiagnostics) const
+{
+	outDiagnostics.Reset();
+	return ValidateUserProjectDirectory(projectPath, true, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::CreateProjectFromTemplate(
+	const FString& projectPath,
+	const FString& templateId,
+	TArray<FString>& outDiagnostics) const
+{
+	outDiagnostics.Reset();
+
+	const FString trimmedTemplateId = templateId.TrimStartAndEnd();
+	if (!IsSafeUserProjectSegment(trimmedTemplateId))
+	{
+		outDiagnostics.Add(TEXT("template id must be a safe path segment."));
+		return false;
+	}
+
+	FString projectTemplatesPath;
+	FString runDefaultsPath;
+	if (!LocateUserProjectResourceDirectories(projectTemplatesPath, runDefaultsPath, &outDiagnostics))
+	{
+		return false;
+	}
+
+	const FString templatePath = NormalizeAbsolutePath(FPaths::Combine(projectTemplatesPath, trimmedTemplateId));
+	if (!ValidateUserProjectDirectory(templatePath, false, outDiagnostics))
+	{
+		return false;
+	}
+
+	const FString resolvedProjectPath = NormalizeAbsolutePath(projectPath);
+	if (!IsDirectoryEmptyOrMissing(resolvedProjectPath, outDiagnostics))
+	{
+		return false;
+	}
+
+	if (!IFileManager::Get().MakeDirectory(*resolvedProjectPath, true))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("project directory create failed: %s"), *resolvedProjectPath));
+		return false;
+	}
+
+	if (!CopyUserProjectTree(templatePath, resolvedProjectPath, false, outDiagnostics))
+	{
+		return false;
+	}
+
+	const FString runsPath = NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectRunsDirectory));
+	if (!IFileManager::Get().MakeDirectory(*runsPath, true))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("runs directory create failed: %s"), *runsPath));
+		return false;
+	}
+
+	return ValidateUserProjectDirectory(resolvedProjectPath, true, outDiagnostics);
+}
+
+bool USimulatorLaunchSubsystem::CreateProjectRun(
+	const FString& projectPath,
+	FString& outRunId,
+	TArray<FString>& outDiagnostics) const
+{
+	outRunId.Reset();
+	outDiagnostics.Reset();
+
+	const FString resolvedProjectPath = NormalizeAbsolutePath(projectPath);
+	if (!ValidateUserProjectDirectory(resolvedProjectPath, true, outDiagnostics))
+	{
+		return false;
+	}
+
+	FString projectTemplatesPath;
+	FString runDefaultsPath;
+	if (!LocateUserProjectResourceDirectories(projectTemplatesPath, runDefaultsPath, &outDiagnostics))
+	{
+		return false;
+	}
+
+	const FString runsPath = NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectRunsDirectory));
+	if (!FindNextUserProjectRunId(runsPath, outRunId, outDiagnostics))
+	{
+		return false;
+	}
+
+	const FUserProjectRunSnapshotPaths paths = FUserProjectRunSnapshot::BuildPaths(resolvedProjectPath, outRunId);
+	if (IsDirectory(paths.RunPath) || FPaths::FileExists(paths.RunPath))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("run path already exists: %s"), *paths.RunPath));
+		return false;
+	}
+	if (!IFileManager::Get().MakeDirectory(*paths.RunPath, true))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("run directory create failed: %s"), *paths.RunPath));
+		return false;
+	}
+
+	if (!CopyUserProjectTree(runDefaultsPath, paths.RunPath, true, outDiagnostics))
+	{
+		return false;
+	}
+	if (!IFileManager::Get().MakeDirectory(*paths.SnapshotPath, true))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("snapshot directory create failed: %s"), *paths.SnapshotPath));
+		return false;
+	}
+
+	const TPair<FString, FString> snapshotFiles[] = {
+		TPair<FString, FString>(
+			NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectSettingFileName)),
+			paths.SettingPath),
+		TPair<FString, FString>(
+			NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectProfileFileName)),
+			paths.ProfilePath),
+		TPair<FString, FString>(
+			NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectScenarioFileName)),
+			paths.ScenarioPath),
+	};
+	for (const TPair<FString, FString>& snapshotFile : snapshotFiles)
+	{
+		if (!CopyUserProjectFile(snapshotFile.Key, snapshotFile.Value, outDiagnostics))
+		{
+			return false;
+		}
+	}
+
+	const FString projectPolicyPath = NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectPolicyDirectory));
+	if (!CopyUserProjectTree(projectPolicyPath, paths.PolicyPath, false, outDiagnostics))
+	{
+		return false;
+	}
+
+	const FUserProjectRunSnapshotParseResult snapshotParseResult =
+		FUserProjectRunSnapshot::Parse(resolvedProjectPath, outRunId);
+	if (!snapshotParseResult.bSuccess)
+	{
+		AddUserProjectJsonDiagnostics(TEXT("run snapshot"), snapshotParseResult.Diagnostics, outDiagnostics);
+		return false;
+	}
+
+	return true;
+}
+
+TArray<FString> USimulatorLaunchSubsystem::ListProjectRunDirectories(const FString& projectPath) const
+{
+	const FString runsPath = NormalizeAbsolutePath(FPaths::Combine(projectPath, UserProjectRunsDirectory));
+	TArray<FString> runDirectoryNames;
+	IFileManager::Get().FindFiles(runDirectoryNames, *FPaths::Combine(runsPath, TEXT("*")), false, true);
+
+	TArray<FString> runDirectories;
+	for (const FString& runDirectoryName : runDirectoryNames)
+	{
+		if (FUserProjectRunSnapshot::IsValidRunId(runDirectoryName))
+		{
+			runDirectories.Add(NormalizeAbsolutePath(FPaths::Combine(runsPath, runDirectoryName)));
+		}
+	}
+	runDirectories.Sort();
+	return runDirectories;
+}
+
+TArray<FString> USimulatorLaunchSubsystem::ListProjectEpisodeResultFiles(const FString& runDirectory) const
+{
+	TArray<FString> resultFiles;
+	const FString resolvedRunDirectory = NormalizeAbsolutePath(runDirectory);
+	IFileManager::Get().FindFilesRecursive(resultFiles, *resolvedRunDirectory, TEXT("result.json"), true, false);
+	for (FString& resultFile : resultFiles)
+	{
+		resultFile = NormalizeAbsolutePath(resultFile);
+	}
+	resultFiles.Sort();
+	return resultFiles;
+}
+
+TArray<FString> USimulatorLaunchSubsystem::ListProjectRunLogFiles(const FString& runDirectory) const
+{
+	TArray<FString> logFiles;
+	const FString resolvedRunDirectory = NormalizeAbsolutePath(runDirectory);
+	IFileManager::Get().FindFilesRecursive(logFiles, *resolvedRunDirectory, TEXT("*.jsonl"), true, false);
+	for (FString& logFile : logFiles)
+	{
+		logFile = NormalizeAbsolutePath(logFile);
+	}
+	logFiles.Sort();
+	return logFiles;
+}
+
 bool USimulatorLaunchSubsystem::CreateRuntimeSimulationSetupFile(
 	const FSimulationSetup& sourceSetup,
 	const FString& runId,
@@ -1174,9 +1831,10 @@ FString USimulatorLaunchSubsystem::BuildSimulatorArgumentString(const FString& s
 FString USimulatorLaunchSubsystem::BuildProjectRunSimulatorArgumentString(const FString& projectPath, const FString& runId)
 {
 	return FString::Printf(
-		TEXT("%s %s %s"),
+		TEXT("%s %s %s %s"),
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-OdiroProject=%s"), *projectPath)),
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-PolicyPort=%d"), ProjectRunDefaultPolicyPort)),
 		SimulatorProcessFlags);
 }
 
@@ -1201,10 +1859,11 @@ FString USimulatorLaunchSubsystem::BuildProjectRunPreviewLauncherArgumentString(
 {
 	// cmd.exe quoting is intentionally centralized here; CreateProc receives cmd.exe as executable.
 	return FString::Printf(
-		TEXT("/d /s /c \"\"%s\" %s %s %s\""),
+		TEXT("/d /s /c \"\"%s\" %s %s %s %s\""),
 		*previewBatPath,
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-OdiroProject=%s"), *projectPath)),
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
+		*QuoteCommandLineArgument(FString::Printf(TEXT("-PolicyPort=%d"), ProjectRunDefaultPolicyPort)),
 		SimulatorProcessFlags);
 }
 

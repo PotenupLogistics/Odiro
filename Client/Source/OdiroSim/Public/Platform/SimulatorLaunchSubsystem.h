@@ -171,6 +171,34 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	bool StartProjectRun(const FString& projectPath, const FString& runId);
 
+	// 개발/배포 resource에 포함된 project template id 목록을 반환한다.
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")
+	TArray<FString> ListProjectTemplates() const;
+
+	// 사용자 project root의 최소 계약을 검증한다.
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")
+	bool ValidateUserProject(const FString& projectPath, TArray<FString>& outDiagnostics) const;
+
+	// 선택한 template을 새 사용자 project root로 복사한다.
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")
+	bool CreateProjectFromTemplate(const FString& projectPath, const FString& templateId, TArray<FString>& outDiagnostics) const;
+
+	// 사용자 project 입력을 새 run snapshot으로 고정한다.
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")
+	bool CreateProjectRun(const FString& projectPath, FString& outRunId, TArray<FString>& outDiagnostics) const;
+
+	// 사용자 project의 run directory 목록을 반환한다.
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")
+	TArray<FString> ListProjectRunDirectories(const FString& projectPath) const;
+
+	// project run directory의 episode result.json 목록을 반환한다.
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")
+	TArray<FString> ListProjectEpisodeResultFiles(const FString& runDirectory) const;
+
+	// project run directory의 episode JSONL log 목록을 반환한다.
+	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")
+	TArray<FString> ListProjectRunLogFiles(const FString& runDirectory) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	bool RefreshActiveRunStatus();
 

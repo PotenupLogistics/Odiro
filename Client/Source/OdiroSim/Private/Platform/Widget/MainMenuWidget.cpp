@@ -14,6 +14,7 @@
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Platform/Widget/ExperimentResultIterationButton.h"
 #include "Platform/Widget/FileListItemWidget.h"
+#include "Shared/UserProjectDataTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMainMenuWidget, Log, All);
 
@@ -50,10 +51,19 @@ namespace
 		ExperimentResult,
 	};
 
-	struct FExperimentResultReportItem
+	struct FProjectRunResultItem
 	{
-		FString ReportPath;
-		int32 RunIndex = INDEX_NONE;
+		FString ProjectPath;
+		FString RunId;
+		FString RunPath;
+	};
+
+	struct FProjectRunEpisodeResultItem
+	{
+		FString EpisodeId;
+		FString ResultPath;
+		FString EventsPath;
+		FString ScenarioPath;
 	};
 
 	FName MakeUniqueWidgetName(UWidgetTree* widgetTree, UClass* widgetClass, const FName name)
@@ -134,84 +144,6 @@ namespace
 	FString JoinStringLines(const TArray<FString>& lines)
 	{
 		return FString::Join(lines, TEXT("\n"));
-	}
-
-	bool TryReadExperimentResultReportItem(const FString& reportPath, FExperimentResultReportItem& outItem)
-	{
-		outItem = FExperimentResultReportItem{};
-		outItem.ReportPath = reportPath;
-
-		FString reportJson;
-		if (!FFileHelper::LoadFileToString(reportJson, *FSimulationSetupJson::ResolveProjectPath(reportPath)))
-		{
-			return false;
-		}
-
-		TSharedPtr<FJsonObject> rootObject;
-		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(reportJson);
-		if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
-		{
-			return false;
-		}
-
-		FString schema;
-		if (!rootObject->TryGetStringField(TEXT("schema"), schema)
-			|| !schema.Equals(TEXT("episode_evaluation_report"), ESearchCase::CaseSensitive))
-		{
-			return false;
-		}
-
-		const TSharedPtr<FJsonValue> runValue = rootObject->TryGetField(TEXT("run"));
-		if (!runValue.IsValid() || runValue->Type != EJson::Object)
-		{
-			return false;
-		}
-
-		const TSharedPtr<FJsonObject> runObject = runValue->AsObject();
-		if (!runObject.IsValid())
-		{
-			return false;
-		}
-
-		double runIndex = 0.0;
-		if (runObject->TryGetNumberField(TEXT("run_index"), runIndex))
-		{
-			outItem.RunIndex = FMath::RoundToInt(runIndex);
-		}
-		return true;
-	}
-
-	TArray<FExperimentResultReportItem> BuildExperimentResultReportItems(const TArray<FString>& reportPaths)
-	{
-		TArray<FExperimentResultReportItem> items;
-		items.Reserve(reportPaths.Num());
-		for (const FString& reportPath : reportPaths)
-		{
-			FExperimentResultReportItem item;
-			if (TryReadExperimentResultReportItem(reportPath, item))
-			{
-				items.Add(item);
-			}
-		}
-
-		items.Sort([](const FExperimentResultReportItem& left, const FExperimentResultReportItem& right)
-		{
-			if (left.RunIndex != right.RunIndex)
-			{
-				if (left.RunIndex == INDEX_NONE)
-				{
-					return false;
-				}
-				if (right.RunIndex == INDEX_NONE)
-				{
-					return true;
-				}
-				return left.RunIndex < right.RunIndex;
-			}
-
-			return left.ReportPath < right.ReportPath;
-		});
-		return items;
 	}
 
 	bool IsReferenceSampleJsonPath(const FString& jsonPath)
@@ -424,6 +356,166 @@ namespace
 			outFiles.Add(ToMainMenuProjectRelativePath(filePath));
 		}
 		outFiles.Sort();
+	}
+
+	FString NormalizeMainMenuRunPath(FString rawPath)
+	{
+		rawPath.TrimStartAndEndInline();
+		rawPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (rawPath.IsEmpty())
+		{
+			return FString();
+		}
+
+		if (FPaths::IsRelative(rawPath))
+		{
+			rawPath = FSimulationSetupJson::ResolveProjectPath(rawPath);
+		}
+
+		FPaths::NormalizeFilename(rawPath);
+		FPaths::CollapseRelativeDirectories(rawPath);
+		return rawPath;
+	}
+
+	bool TryResolveProjectRunPath(
+		const FString& runPath,
+		FString& outProjectPath,
+		FString& outRunId,
+		FString& outRunPath)
+	{
+		outProjectPath.Reset();
+		outRunId.Reset();
+		outRunPath.Reset();
+
+		const FString normalizedRunPath = NormalizeMainMenuRunPath(runPath);
+		if (normalizedRunPath.IsEmpty())
+		{
+			return false;
+		}
+
+		const FString runId = FPaths::GetCleanFilename(normalizedRunPath);
+		const FString runsPath = FPaths::GetPath(normalizedRunPath);
+		if (!FUserProjectRunSnapshot::IsValidRunId(runId)
+			|| !FPaths::GetCleanFilename(runsPath).Equals(TEXT("runs"), ESearchCase::CaseSensitive))
+		{
+			return false;
+		}
+
+		const FString projectPath = FPaths::GetPath(runsPath);
+		const FUserProjectRunSnapshotPaths paths = FUserProjectRunSnapshot::BuildPaths(projectPath, runId);
+		outProjectPath = paths.ProjectPath;
+		outRunId = paths.RunId;
+		outRunPath = paths.RunPath;
+		return true;
+	}
+
+	void AddProjectRunResultItem(
+		const FString& projectPath,
+		const FString& runId,
+		TArray<FProjectRunResultItem>& outItems,
+		TSet<FString>& seenRunPaths)
+	{
+		if (projectPath.TrimStartAndEnd().IsEmpty() || !FUserProjectRunSnapshot::IsValidRunId(runId))
+		{
+			return;
+		}
+
+		const FUserProjectRunSnapshotPaths paths = FUserProjectRunSnapshot::BuildPaths(projectPath, runId);
+		if (!FPaths::DirectoryExists(paths.RunPath) || seenRunPaths.Contains(paths.RunPath))
+		{
+			return;
+		}
+
+		FProjectRunResultItem item;
+		item.ProjectPath = paths.ProjectPath;
+		item.RunId = paths.RunId;
+		item.RunPath = paths.RunPath;
+		outItems.Add(MoveTemp(item));
+		seenRunPaths.Add(paths.RunPath);
+	}
+
+	void FindProjectRunResultItems(TArray<FProjectRunResultItem>& outItems)
+	{
+		outItems.Reset();
+		TSet<FString> seenRunPaths;
+
+		TArray<FString> scenarioFiles;
+		FindUserProjectScenarioFiles(scenarioFiles);
+		for (const FString& scenarioFile : scenarioFiles)
+		{
+			const FString projectPath = ResolveUserProjectRootFromScenarioPath(scenarioFile);
+			if (projectPath.IsEmpty())
+			{
+				continue;
+			}
+
+			const FString runsPath = FPaths::Combine(projectPath, TEXT("runs"));
+			TArray<FString> runDirectoryNames;
+			IFileManager::Get().FindFiles(runDirectoryNames, *FPaths::Combine(runsPath, TEXT("*")), false, true);
+			for (const FString& runDirectoryName : runDirectoryNames)
+			{
+				AddProjectRunResultItem(projectPath, runDirectoryName, outItems, seenRunPaths);
+			}
+		}
+
+		outItems.Sort([](const FProjectRunResultItem& left, const FProjectRunResultItem& right)
+		{
+			if (!left.ProjectPath.Equals(right.ProjectPath, ESearchCase::IgnoreCase))
+			{
+				return left.ProjectPath < right.ProjectPath;
+			}
+			return left.RunId < right.RunId;
+		});
+	}
+
+	void AddProjectRunEpisodeResultItem(
+		const FString& episodeId,
+		const FString& episodeDirectory,
+		TArray<FProjectRunEpisodeResultItem>& outItems,
+		TSet<FString>& seenResultPaths)
+	{
+		if (!FUserProjectEpisodeScenarioJson::IsValidEpisodeId(episodeId))
+		{
+			return;
+		}
+
+		const FString resultPath = FPaths::Combine(episodeDirectory, TEXT("result.json"));
+		if (!FPaths::FileExists(resultPath) || seenResultPaths.Contains(resultPath))
+		{
+			return;
+		}
+
+		FProjectRunEpisodeResultItem item;
+		item.EpisodeId = episodeId;
+		item.ResultPath = resultPath;
+		item.EventsPath = FPaths::Combine(episodeDirectory, TEXT("events.jsonl"));
+		item.ScenarioPath = FPaths::Combine(episodeDirectory, TEXT("scenario.json"));
+		outItems.Add(MoveTemp(item));
+		seenResultPaths.Add(resultPath);
+	}
+
+	TArray<FProjectRunEpisodeResultItem> BuildProjectRunEpisodeResultItems(
+		const FUserProjectRunSnapshotPaths& paths)
+	{
+		TArray<FProjectRunEpisodeResultItem> items;
+		TSet<FString> seenResultPaths;
+
+		TArray<FString> episodeDirectoryNames;
+		IFileManager::Get().FindFiles(episodeDirectoryNames, *FPaths::Combine(paths.EpisodesPath, TEXT("*")), false, true);
+		for (const FString& episodeDirectoryName : episodeDirectoryNames)
+		{
+			AddProjectRunEpisodeResultItem(
+				episodeDirectoryName,
+				FPaths::Combine(paths.EpisodesPath, episodeDirectoryName),
+				items,
+				seenResultPaths);
+		}
+
+		items.Sort([](const FProjectRunEpisodeResultItem& left, const FProjectRunEpisodeResultItem& right)
+		{
+			return left.EpisodeId < right.EpisodeId;
+		});
+		return items;
 	}
 
 	FString NormalizeOutputJsonPath(const FString& rawPath)
@@ -1157,7 +1249,7 @@ void UMainMenuWidget::HandleExperimentResultIterationButtonClicked(UExperimentRe
 {
 	if (!IsValid(buttonWidget)) return;
 
-	SetSelectedExperimentResultPath(buttonWidget->GetReportPath());
+	SetSelectedExperimentResultEpisode(buttonWidget->GetResultPath(), buttonWidget->GetEpisodeId());
 	RefreshExperimentResultIterationList();
 	UpdateReportAndLogText();
 }
@@ -1240,20 +1332,20 @@ void UMainMenuWidget::HandleRefreshClicked()
 
 void UMainMenuWidget::HandleSendToAiClicked()
 {
-	if (CurrentPreviewReportPath.IsEmpty())
+	if (CurrentPreviewProjectPath.IsEmpty() || CurrentPreviewRunId.IsEmpty())
 	{
 		if (AiAnalysisTextBlock)
 		{
-			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: no evaluation report selected.")));
+			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: no project run selected.")));
 		}
 		return;
 	}
 
-	if (CurrentPreviewLogPath.IsEmpty())
+	if (CurrentPreviewSummaryPath.IsEmpty() || !FPaths::FileExists(CurrentPreviewSummaryPath))
 	{
 		if (AiAnalysisTextBlock)
 		{
-			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: no measurement log available.")));
+			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: selected run has no summary.json.")));
 		}
 		return;
 	}
@@ -1273,7 +1365,7 @@ void UMainMenuWidget::HandleSendToAiClicked()
 		AiAnalysisTextBlock->SetText(FText::FromString(TEXT("Analyzing...")));
 	}
 
-	analysisSubsystem->RequestAnalysisForReport(CurrentPreviewReportPath, CurrentPreviewLogPath);
+	analysisSubsystem->RequestAnalysisForProjectRun(CurrentPreviewProjectPath, CurrentPreviewRunId);
 }
 
 void UMainMenuWidget::HandleShowScenarioClicked()
@@ -1910,49 +2002,71 @@ void UMainMenuWidget::RefreshExperimentResultList()
 {
 	if (!ExperimentResultListScrollBox) return;
 
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem) return;
-
 	const TSubclassOf<UFileListItemWidget> itemWidgetClass = ResolveFileListItemWidgetClass();
 	if (!itemWidgetClass) return;
 
-	TArray<FString> resultDirectories = subsystem->ListSimulationRunResultDirectories();
-	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
-	if (!runInfo.StatusPath.IsEmpty())
+	TArray<FProjectRunResultItem> resultItems;
+	FindProjectRunResultItems(resultItems);
+	if (USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem())
 	{
-		const FString activeRunDirectory = FPaths::GetPath(runInfo.StatusPath);
-		if (!activeRunDirectory.Equals(TEXT("Saved/SimulationRuns"), ESearchCase::IgnoreCase))
+		const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
+		if (runInfo.bProjectRun && !runInfo.ProjectPath.IsEmpty() && !runInfo.RunId.IsEmpty())
 		{
-			resultDirectories.AddUnique(activeRunDirectory);
+			TSet<FString> seenRunPaths;
+			for (const FProjectRunResultItem& item : resultItems)
+			{
+				seenRunPaths.Add(item.RunPath);
+			}
+			AddProjectRunResultItem(runInfo.ProjectPath, runInfo.RunId, resultItems, seenRunPaths);
+			resultItems.Sort([](const FProjectRunResultItem& left, const FProjectRunResultItem& right)
+			{
+				if (!left.ProjectPath.Equals(right.ProjectPath, ESearchCase::IgnoreCase))
+				{
+					return left.ProjectPath < right.ProjectPath;
+				}
+				return left.RunId < right.RunId;
+			});
 		}
 	}
-	resultDirectories.Sort();
 
-	if (!resultDirectories.Contains(SelectedExperimentResultRunDirectory))
+	bool bSelectedRunStillExists = false;
+	for (const FProjectRunResultItem& item : resultItems)
 	{
-		SetSelectedExperimentResultRunDirectory(resultDirectories.IsEmpty() ? FString() : resultDirectories.Last());
+		if (item.RunPath.Equals(SelectedExperimentResultRunDirectory, ESearchCase::IgnoreCase))
+		{
+			bSelectedRunStillExists = true;
+			break;
+		}
+	}
+	if (!bSelectedRunStillExists)
+	{
+		SetSelectedExperimentResultRunDirectory(resultItems.IsEmpty() ? FString() : resultItems.Last().RunPath);
 	}
 
 	ExperimentResultListScrollBox->ClearChildren();
 	ExperimentResultListItems.Reset();
-	ExperimentResultListItems.Reserve(resultDirectories.Num());
+	ExperimentResultListItems.Reserve(resultItems.Num());
 
-	if (resultDirectories.IsEmpty())
+	if (resultItems.IsEmpty())
 	{
-		AddEmptyListMessage(WidgetTree, ExperimentResultListScrollBox, TEXT("실험 결과가 없습니다."));
+		AddEmptyListMessage(WidgetTree, ExperimentResultListScrollBox, TEXT("No project runs found."));
 		return;
 	}
 
-	for (const FString& resultDirectory : resultDirectories)
+	for (const FProjectRunResultItem& resultItem : resultItems)
 	{
 		UFileListItemWidget* itemWidget = CreateWidget<UFileListItemWidget>(this, itemWidgetClass);
 		if (!itemWidget) continue;
-		
+
+		const FString displayText = FString::Printf(
+			TEXT("%s / %s"),
+			*FPaths::GetCleanFilename(resultItem.ProjectPath),
+			*resultItem.RunId);
 		itemWidget->InitializeDisplayItem(
-			resultDirectory,
-			FPaths::GetBaseFilename(resultDirectory),
-			TEXT("상세 보기"),
-			TEXT("실행"),
+			resultItem.RunPath,
+			displayText,
+			TEXT("Details"),
+			TEXT("Run"),
 			false,
 			true,
 			false);
@@ -1966,8 +2080,7 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 {
 	ClearExperimentResultIterationWidgets();
 
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem || SelectedExperimentResultRunDirectory.IsEmpty())
+	if (SelectedExperimentResultProjectPath.IsEmpty() || SelectedExperimentResultRunId.IsEmpty())
 	{
 		return;
 	}
@@ -1978,38 +2091,31 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 		return;
 	}
 
-	TArray<FString> reportPaths = subsystem->ListEvaluationReportFilesInDirectory(SelectedExperimentResultRunDirectory);
-	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
-	if (FPaths::GetPath(runInfo.StatusPath).Equals(SelectedExperimentResultRunDirectory, ESearchCase::IgnoreCase))
+	const FUserProjectRunSnapshotPaths paths = FUserProjectRunSnapshot::BuildPaths(
+		SelectedExperimentResultProjectPath,
+		SelectedExperimentResultRunId);
+	const TArray<FProjectRunEpisodeResultItem> episodeItems = BuildProjectRunEpisodeResultItems(paths);
+	if (episodeItems.IsEmpty())
 	{
-		for (const FString& reportPath : runInfo.Status.ReportPaths)
-		{
-			reportPaths.AddUnique(reportPath);
-		}
-	}
-
-	const TArray<FExperimentResultReportItem> reportItems = BuildExperimentResultReportItems(reportPaths);
-	if (reportItems.IsEmpty())
-	{
-		SetSelectedExperimentResultPath(FString());
+		SetSelectedExperimentResultEpisode(FString(), FString());
 		return;
 	}
 
-	bool bSelectedReportStillExists = false;
-	for (const FExperimentResultReportItem& reportItem : reportItems)
+	bool bSelectedEpisodeStillExists = false;
+	for (const FProjectRunEpisodeResultItem& episodeItem : episodeItems)
 	{
-		if (reportItem.ReportPath.Equals(SelectedExperimentResultPath, ESearchCase::IgnoreCase))
+		if (episodeItem.ResultPath.Equals(SelectedExperimentResultPath, ESearchCase::IgnoreCase))
 		{
-			bSelectedReportStillExists = true;
+			bSelectedEpisodeStillExists = true;
 			break;
 		}
 	}
-	if (!bSelectedReportStillExists)
+	if (!bSelectedEpisodeStillExists)
 	{
-		SetSelectedExperimentResultPath(reportItems[0].ReportPath);
+		SetSelectedExperimentResultEpisode(episodeItems[0].ResultPath, episodeItems[0].EpisodeId);
 	}
 
-	for (const FExperimentResultReportItem& reportItem : reportItems)
+	for (const FProjectRunEpisodeResultItem& episodeItem : episodeItems)
 	{
 		USizeBox* sizeBox = WidgetTree->ConstructWidget<USizeBox>(
 			USizeBox::StaticClass(),
@@ -2020,13 +2126,13 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 		UTextBlock* label = MakeTextBlock(
 			WidgetTree,
 			TEXT("ExperimentResultIterationButtonLabel"),
-			reportItem.RunIndex == INDEX_NONE ? FString(TEXT("?")) : FString::FromInt(reportItem.RunIndex),
+			episodeItem.EpisodeId,
 			18);
 
 		if (!sizeBox || !button || !label) continue;
 
-		const bool bSelected = reportItem.ReportPath.Equals(SelectedExperimentResultPath, ESearchCase::IgnoreCase);
-		button->Configure(reportItem.ReportPath, reportItem.RunIndex);
+		const bool bSelected = episodeItem.ResultPath.Equals(SelectedExperimentResultPath, ESearchCase::IgnoreCase);
+		button->Configure(episodeItem.ResultPath, episodeItem.EpisodeId);
 		button->SetBackgroundColor(bSelected
 			? FLinearColor(0.16f, 0.42f, 0.78f, 1.0f)
 			: FLinearColor(0.10f, 0.11f, 0.14f, 1.0f));
@@ -2037,7 +2143,7 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 		label->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 
 		button->SetContent(label);
-		sizeBox->SetWidthOverride(44.0f);
+		sizeBox->SetWidthOverride(72.0f);
 		sizeBox->SetHeightOverride(36.0f);
 		sizeBox->SetContent(button);
 
@@ -2096,19 +2202,33 @@ void UMainMenuWidget::SetSelectedPolicySpecPath(const FString& policySpecPath)
 void UMainMenuWidget::SetSelectedExperimentResultRunDirectory(const FString& runDirectory)
 {
 	const FString previousRunDirectory = SelectedExperimentResultRunDirectory;
-	SelectedExperimentResultRunDirectory = runDirectory.TrimStartAndEnd();
-	SelectedExperimentResultRunDirectory.ReplaceInline(TEXT("\\"), TEXT("/"));
+	FString projectPath;
+	FString runId;
+	FString normalizedRunPath;
+	if (TryResolveProjectRunPath(runDirectory, projectPath, runId, normalizedRunPath))
+	{
+		SelectedExperimentResultRunDirectory = normalizedRunPath;
+		SelectedExperimentResultProjectPath = projectPath;
+		SelectedExperimentResultRunId = runId;
+	}
+	else
+	{
+		SelectedExperimentResultRunDirectory.Reset();
+		SelectedExperimentResultProjectPath.Reset();
+		SelectedExperimentResultRunId.Reset();
+	}
 
 	if (!previousRunDirectory.Equals(SelectedExperimentResultRunDirectory, ESearchCase::IgnoreCase))
 	{
-		SetSelectedExperimentResultPath(FString());
+		SetSelectedExperimentResultEpisode(FString(), FString());
 	}
 }
 
-void UMainMenuWidget::SetSelectedExperimentResultPath(const FString& reportPath)
+void UMainMenuWidget::SetSelectedExperimentResultEpisode(const FString& resultPath, const FString& episodeId)
 {
-	SelectedExperimentResultPath = reportPath.TrimStartAndEnd();
+	SelectedExperimentResultPath = resultPath.TrimStartAndEnd();
 	SelectedExperimentResultPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+	SelectedExperimentResultEpisodeId = episodeId.TrimStartAndEnd();
 }
 
 void UMainMenuWidget::ClearExperimentResultIterationWidgets()
@@ -2451,32 +2571,75 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 
 void UMainMenuWidget::UpdateReportAndLogText()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
+	CurrentPreviewProjectPath.Reset();
+	CurrentPreviewRunId.Reset();
+	CurrentPreviewSummaryPath.Reset();
+	CurrentPreviewResultPath.Reset();
+	CurrentPreviewEventsPath.Reset();
+
+	const bool bHasSelectedRun = !SelectedExperimentResultProjectPath.IsEmpty()
+		&& !SelectedExperimentResultRunId.IsEmpty();
+	FUserProjectRunSnapshotPaths paths;
+	if (bHasSelectedRun)
 	{
-		return;
+		paths = FUserProjectRunSnapshot::BuildPaths(
+			SelectedExperimentResultProjectPath,
+			SelectedExperimentResultRunId);
+		CurrentPreviewProjectPath = paths.ProjectPath;
+		CurrentPreviewRunId = paths.RunId;
+		CurrentPreviewSummaryPath = paths.SummaryPath;
+		CurrentPreviewResultPath = SelectedExperimentResultPath;
+		if (!SelectedExperimentResultEpisodeId.IsEmpty())
+		{
+			CurrentPreviewEventsPath = FPaths::Combine(
+				FUserProjectRunOutputJson::BuildEpisodeDirectory(paths, SelectedExperimentResultEpisodeId),
+				TEXT("events.jsonl"));
+		}
 	}
-
-	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
-
-	CurrentPreviewReportPath = SelectedExperimentResultPath;
-	CurrentPreviewLogPath.Reset();
 
 	if (ReportTextBlock)
 	{
 		TArray<FString> reportLines;
-		reportLines.Add(SelectedExperimentResultRunDirectory.IsEmpty()
-			? TEXT("Experiment Run: <none>")
-			: FString::Printf(TEXT("Experiment Run: %s"), *SelectedExperimentResultRunDirectory));
-
-		if (!SelectedExperimentResultPath.IsEmpty())
+		if (!bHasSelectedRun)
 		{
-			FString reportJson;
-			if (FFileHelper::LoadFileToString(reportJson, *FSimulationSetupJson::ResolveProjectPath(SelectedExperimentResultPath)))
+			reportLines.Add(TEXT("Project Run: <none>"));
+		}
+		else
+		{
+			reportLines.Add(FString::Printf(TEXT("Project: %s"), *paths.ProjectPath));
+			reportLines.Add(FString::Printf(TEXT("Run: %s"), *paths.RunId));
+			reportLines.Add(FString::Printf(TEXT("Run Directory: %s"), *paths.RunPath));
+			reportLines.Add(TEXT(""));
+
+			FString summaryJson;
+			if (FFileHelper::LoadFileToString(summaryJson, *paths.SummaryPath))
+			{
+				reportLines.Add(FString::Printf(TEXT("Summary: %s"), *paths.SummaryPath));
+				reportLines.Add(TruncatePreview(summaryJson, ReportPreviewCharacterLimit));
+			}
+			else
+			{
+				reportLines.Add(FString::Printf(TEXT("Summary missing: %s"), *paths.SummaryPath));
+			}
+
+			if (!SelectedExperimentResultPath.IsEmpty())
+			{
+				FString resultJson;
+				reportLines.Add(TEXT(""));
+				if (FFileHelper::LoadFileToString(resultJson, *SelectedExperimentResultPath))
+				{
+					reportLines.Add(FString::Printf(TEXT("Episode Result: %s"), *SelectedExperimentResultPath));
+					reportLines.Add(TruncatePreview(resultJson, ReportPreviewCharacterLimit));
+				}
+				else
+				{
+					reportLines.Add(FString::Printf(TEXT("Episode result missing: %s"), *SelectedExperimentResultPath));
+				}
+			}
+			else
 			{
 				reportLines.Add(TEXT(""));
-				reportLines.Add(FString::Printf(TEXT("Details: %s"), *SelectedExperimentResultPath));
-				reportLines.Add(TruncatePreview(reportJson, ReportPreviewCharacterLimit));
+				reportLines.Add(TEXT("Episode Result: <none>"));
 			}
 		}
 
@@ -2486,33 +2649,44 @@ void UMainMenuWidget::UpdateReportAndLogText()
 	if (LogPreviewTextBlock)
 	{
 		TArray<FString> logLines;
-		logLines.Add(TEXT("Measurement Logs"));
-		TArray<FString> logPaths;
-		if (!SelectedExperimentResultRunDirectory.IsEmpty())
+		logLines.Add(TEXT("Episode Artifacts"));
+		if (!bHasSelectedRun)
 		{
-			logPaths = subsystem->ListMeasurementLogFilesInDirectory(SelectedExperimentResultRunDirectory);
-			if (FPaths::GetPath(runInfo.StatusPath).Equals(SelectedExperimentResultRunDirectory, ESearchCase::IgnoreCase))
+			logLines.Add(TEXT("No project run selected."));
+		}
+		else if (SelectedExperimentResultEpisodeId.IsEmpty())
+		{
+			logLines.Add(TEXT("No completed episode result selected."));
+		}
+		else
+		{
+			const FString episodeDirectory = FUserProjectRunOutputJson::BuildEpisodeDirectory(paths, SelectedExperimentResultEpisodeId);
+			const FString scenarioPath = FPaths::Combine(episodeDirectory, TEXT("scenario.json"));
+			const FString resultPath = FPaths::Combine(episodeDirectory, TEXT("result.json"));
+			const FString actionsPath = FPaths::Combine(episodeDirectory, TEXT("actions.jsonl"));
+			const FString eventsPath = FPaths::Combine(episodeDirectory, TEXT("events.jsonl"));
+			const FString tracePath = FPaths::Combine(episodeDirectory, TEXT("trace.jsonl"));
+
+			logLines.Add(FString::Printf(TEXT("Episode: %s"), *SelectedExperimentResultEpisodeId));
+			logLines.Add(FString::Printf(TEXT("- scenario.json: %s"), *scenarioPath));
+			logLines.Add(FString::Printf(TEXT("- result.json: %s"), *resultPath));
+			logLines.Add(FString::Printf(TEXT("- actions.jsonl: %s"), *actionsPath));
+			logLines.Add(FString::Printf(TEXT("- events.jsonl: %s"), *eventsPath));
+			logLines.Add(FString::Printf(TEXT("- trace.jsonl: %s"), *tracePath));
+
+			if (FPaths::FileExists(eventsPath))
 			{
-				for (const FString& logPath : runInfo.Status.LogPaths)
-				{
-					logPaths.AddUnique(logPath);
-				}
+				CurrentPreviewEventsPath = eventsPath;
+				logLines.Add(TEXT(""));
+				logLines.Add(FString::Printf(TEXT("Events Preview: %s"), *eventsPath));
+				logLines.Add(BuildLogPreview(eventsPath));
 			}
-		}
-		logPaths.Sort();
-		CurrentPreviewLogPath = logPaths.IsEmpty() ? FString() : logPaths.Last();
-
-		for (const FString& logPath : logPaths)
-		{
-			logLines.Add(FString::Printf(TEXT("- %s"), *logPath));
-		}
-
-		if (!logPaths.IsEmpty())
-		{
-			const FString previewLogPath = CurrentPreviewLogPath;
-			logLines.Add(TEXT(""));
-			logLines.Add(FString::Printf(TEXT("Preview: %s"), *previewLogPath));
-			logLines.Add(BuildLogPreview(previewLogPath));
+			else
+			{
+				CurrentPreviewEventsPath.Reset();
+				logLines.Add(TEXT(""));
+				logLines.Add(FString::Printf(TEXT("events.jsonl missing: %s"), *eventsPath));
+			}
 		}
 
 		LogPreviewTextBlock->SetText(FText::FromString(JoinStringLines(logLines)));

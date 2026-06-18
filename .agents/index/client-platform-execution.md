@@ -39,10 +39,10 @@ keep:
   - ScenarioEditorLaunchSubsystem treats the pending path as a project scenario JSON path; URL options are inspectable only and subsystem state is authoritative.
   - MainMenu Scenario page lists, opens, and starts runs from `Saved/UserProjects/**/scenario.json` by preparing a user project run snapshot before `StartProjectRun`.
   - MainMenu Experiment Config remains a legacy compatibility surface for SimulationSetup/RunQueue editing, not the project-mode launch path.
-  - Future MainMenu project mode must read result runs from `<UserProject>/runs/<RunId>` and send AI analysis through the v2 project-run path.
+  - MainMenu project result mode reads result runs from `<UserProject>/runs/<RunId>` and sends AI analysis through the v2 project-run path.
   - Future MainMenu project mode must not call SimulationSetup or RunQueue writer/launcher paths.
-  - Future MainMenu project mode must not fall back to legacy Json/Input, SimulationSetup, RunQueue, Saved/SimulationRuns, or Saved/AnalysisLogs lists.
-  - Legacy report + MeasurementLog analysis must not be used by future MainMenu project mode.
+  - MainMenu project result mode does not fall back to legacy Json/Input, SimulationSetup, RunQueue, Saved/SimulationRuns, or Saved/AnalysisLogs lists.
+  - Legacy report + MeasurementLog analysis must not be used by MainMenu project mode.
   - SimulatorLaunchSubsystem legacy SimulationSetup/RunQueue/report helpers are Blueprint compatibility APIs only and should stay deprecated while retained.
 verify:
   - launcher command contract tests for launch arg changes

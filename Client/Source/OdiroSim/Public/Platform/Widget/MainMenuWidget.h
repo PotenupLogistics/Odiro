@@ -20,7 +20,7 @@ class UWidgetSwitcher;
 struct FPlatformAnalysisAiResponse;
 struct FSimulationSetup;
 
-// MainMenuMap에서 UMG Blueprint layout과 platform event handler를 연결하는 widget
+// Connects the MainMenuMap UMG Blueprint layout to platform workflow handlers.
 UCLASS(BlueprintType, Blueprintable)
 class ODIROSIM_API UMainMenuWidget : public UUserWidget
 {
@@ -142,7 +142,8 @@ private:
 	void SetSelectedDeliveryBotSetupPath(const FString& deliveryBotSetupPath);
 	void SetSelectedPolicySpecPath(const FString& policySpecPath);
 	void SetSelectedExperimentResultRunDirectory(const FString& runDirectory);
-	void SetSelectedExperimentResultPath(const FString& reportPath);
+	// Stores the selected episode result inside the currently selected project run.
+	void SetSelectedExperimentResultEpisode(const FString& resultPath, const FString& episodeId);
 	void ClearExperimentResultIterationWidgets();
 	bool EnsureProjectDefaultsForScenario(const FString& scenarioJsonPath);
 	bool OpenNewProjectScenarioInEditor(const FString& scenarioJsonPath);
@@ -342,8 +343,20 @@ private:
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> LogPreviewTextBlock;
 
-	FString CurrentPreviewReportPath;
-	FString CurrentPreviewLogPath;
+	// Project root currently used by the result preview and AI analysis request.
+	FString CurrentPreviewProjectPath;
+
+	// Run id currently used by the result preview and AI analysis request.
+	FString CurrentPreviewRunId;
+
+	// Summary JSON path for the selected project run.
+	FString CurrentPreviewSummaryPath;
+
+	// Episode result JSON path currently shown in the preview.
+	FString CurrentPreviewResultPath;
+
+	// Episode events JSONL path currently shown in the preview.
+	FString CurrentPreviewEventsPath;
 	FTimerHandle RefreshTimerHandle;
 
 	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|List")
@@ -369,7 +382,20 @@ private:
 	FString SelectedProjectScenarioPath;
 	FString SelectedDeliveryBotSetupPath;
 	FString SelectedPolicySpecJsonPath;
+
+	// `<UserProject>/runs/<RunId>` directory selected in the result page.
 	FString SelectedExperimentResultRunDirectory;
+
+	// User project root parsed from the selected run directory.
+	FString SelectedExperimentResultProjectPath;
+
+	// Six-digit run id parsed from the selected run directory.
+	FString SelectedExperimentResultRunId;
+
+	// Six-digit episode id selected in the result detail page.
+	FString SelectedExperimentResultEpisodeId;
+
+	// `result.json` path selected in the result detail page.
 	FString SelectedExperimentResultPath;
 	bool bExperimentConfigDetailVisible = false;
 	bool bExperimentResultDetailVisible = false;

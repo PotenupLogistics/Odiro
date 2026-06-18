@@ -6,6 +6,7 @@
 #include "WidgetBlueprint.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/PanelWidget.h"
+#include "Components/ContentWidget.h"
 #include "JsonObjectConverter.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
@@ -16,6 +17,106 @@
 #include "Components/CanvasPanelSlot.h"
 
 DEFINE_LOG_CATEGORY(LogUmgSet);
+
+namespace
+{
+// Collects the widget names owned by a widget subtree.
+void CollectWidgetNames(const UWidget* Widget, TSet<FName>& OutNames)
+{
+    if (!Widget)
+    {
+        return;
+    }
+
+    OutNames.Add(Widget->GetFName());
+
+    if (const UPanelWidget* PanelWidget = Cast<UPanelWidget>(Widget))
+    {
+        for (int32 ChildIndex = 0; ChildIndex < PanelWidget->GetChildrenCount(); ++ChildIndex)
+        {
+            CollectWidgetNames(PanelWidget->GetChildAt(ChildIndex), OutNames);
+        }
+    }
+    else if (const UContentWidget* ContentWidget = Cast<UContentWidget>(Widget))
+    {
+        CollectWidgetNames(ContentWidget->GetContent(), OutNames);
+    }
+}
+
+// Removes Blueprint variable GUIDs owned by a widget subtree before deletion.
+void RemoveWidgetGuidEntries(UWidgetBlueprint* WidgetBlueprint, const UWidget* Widget)
+{
+    if (!WidgetBlueprint || !Widget)
+    {
+        return;
+    }
+
+    TSet<FName> RemovedNames;
+    CollectWidgetNames(Widget, RemovedNames);
+
+    for (const FName& RemovedName : RemovedNames)
+    {
+        WidgetBlueprint->WidgetVariableNameToGuidMap.Remove(RemovedName);
+    }
+}
+
+// Removes Blueprint variable GUIDs that no longer point to a live widget.
+void RemoveStaleWidgetGuidEntries(UWidgetBlueprint* WidgetBlueprint)
+{
+    if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+    {
+        return;
+    }
+
+    TSet<FName> ExistingNames;
+    CollectWidgetNames(WidgetBlueprint->WidgetTree->RootWidget, ExistingNames);
+
+    TArray<FName> GuidNames;
+    WidgetBlueprint->WidgetVariableNameToGuidMap.GetKeys(GuidNames);
+
+    for (const FName& GuidName : GuidNames)
+    {
+        if (!ExistingNames.Contains(GuidName))
+        {
+            WidgetBlueprint->WidgetVariableNameToGuidMap.Remove(GuidName);
+            UE_LOG(LogUmgSet, Log, TEXT("Removed stale widget GUID entry: %s"), *GuidName.ToString());
+        }
+    }
+}
+
+// Removes a widget subtree from the widget tree from leaves to root.
+bool RemoveWidgetSubtree(UWidgetTree* WidgetTree, UWidget* Widget)
+{
+    if (!WidgetTree || !Widget)
+    {
+        return false;
+    }
+
+    if (UPanelWidget* PanelWidget = Cast<UPanelWidget>(Widget))
+    {
+        while (PanelWidget->GetChildrenCount() > 0)
+        {
+            UWidget* ChildWidget = PanelWidget->GetChildAt(0);
+            if (!RemoveWidgetSubtree(WidgetTree, ChildWidget))
+            {
+                return false;
+            }
+        }
+    }
+    else if (UContentWidget* ContentWidget = Cast<UContentWidget>(Widget))
+    {
+        if (UWidget* ChildWidget = ContentWidget->GetContent())
+        {
+            if (!RemoveWidgetSubtree(WidgetTree, ChildWidget))
+            {
+                return false;
+            }
+        }
+    }
+
+    return WidgetTree->RemoveWidget(Widget);
+}
+}
 
 void UUmgSetSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -265,6 +366,8 @@ FString UUmgSetSubsystem::CreateWidget(UWidgetBlueprint* WidgetBlueprint, const 
         return FString();
     }
 
+    RemoveStaleWidgetGuidEntries(WidgetBlueprint);
+
     // Load widget class first to check if it's valid
     // 1. Try finding/loading as a fully qualified path (if provided)
     UClass* WidgetClass = nullptr;
@@ -350,7 +453,7 @@ FString UUmgSetSubsystem::CreateWidget(UWidgetBlueprint* WidgetBlueprint, const 
 
     // Check if this is a request to create root widget (no existing root)
     bool bCreatingRootWidget = false;
-    UPanelWidget* ParentWidget = nullptr;
+    UWidget* ParentWidget = nullptr;
 
     // IMPLICIT PARENTING LOGIC
     FString ActualParentName = ParentName;
@@ -398,11 +501,26 @@ FString UUmgSetSubsystem::CreateWidget(UWidgetBlueprint* WidgetBlueprint, const 
     if (!bCreatingRootWidget)
     {
         // Normal case: creating a child widget, need to find parent
-        ParentWidget = Cast<UPanelWidget>(WidgetBlueprint->WidgetTree->FindWidget(FName(*ActualParentName)));
+        ParentWidget = WidgetBlueprint->WidgetTree->FindWidget(FName(*ActualParentName));
         if (!ParentWidget)
         {
             UE_LOG(LogUmgSet, Error, TEXT("CreateWidget: Failed to find ParentWidget with name '%s' in asset '%s'."), *ActualParentName, *WidgetBlueprint->GetPathName());
             return FString();
+        }
+
+        if (!ParentWidget->IsA<UPanelWidget>() && !ParentWidget->IsA<UContentWidget>())
+        {
+            UE_LOG(LogUmgSet, Error, TEXT("CreateWidget: Parent '%s' cannot contain child widgets."), *ActualParentName);
+            return FString();
+        }
+
+        if (UContentWidget* ContentParent = Cast<UContentWidget>(ParentWidget))
+        {
+            if (ContentParent->GetContent())
+            {
+                UE_LOG(LogUmgSet, Error, TEXT("CreateWidget: Content parent '%s' already has a child."), *ActualParentName);
+                return FString();
+            }
         }
     }
 
@@ -423,17 +541,22 @@ FString UUmgSetSubsystem::CreateWidget(UWidgetBlueprint* WidgetBlueprint, const 
     }
     else
     {
-        // Add as child to parent
-        ParentWidget->AddChild(NewWidget);
+        if (UPanelWidget* PanelParent = Cast<UPanelWidget>(ParentWidget))
+        {
+            PanelParent->AddChild(NewWidget);
+        }
+        else if (UContentWidget* ContentParent = Cast<UContentWidget>(ParentWidget))
+        {
+            ContentParent->SetContent(NewWidget);
+        }
+
         UE_LOG(LogUmgSet, Log, TEXT("CreateWidget: Successfully created '%s' as child of '%s'."), *WidgetName, *ActualParentName);
     }
 
-    // CRITICAL FIX: Register the new widget with a GUID in the Blueprint
-    // The UMG Compiler expects every variable widget to have a mapped GUID.
-    if (NewWidget->bIsVariable)
+    NewWidget->bIsVariable = true;
+    if (!WidgetBlueprint->WidgetVariableNameToGuidMap.Contains(NewWidget->GetFName()))
     {
-        FGuid NewGuid = FGuid::NewGuid();
-        WidgetBlueprint->WidgetVariableNameToGuidMap.Add(NewWidget->GetFName(), NewGuid);
+        WidgetBlueprint->WidgetVariableNameToGuidMap.Add(NewWidget->GetFName(), FGuid::NewGuid());
     }
 
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
@@ -462,9 +585,11 @@ bool UUmgSetSubsystem::DeleteWidget(UWidgetBlueprint* WidgetBlueprint, const FSt
     }
 
     WidgetBlueprint->Modify();
+    RemoveWidgetGuidEntries(WidgetBlueprint, FoundWidget);
 
-    if (WidgetBlueprint->WidgetTree->RemoveWidget(FoundWidget))
+    if (RemoveWidgetSubtree(WidgetBlueprint->WidgetTree, FoundWidget))
     {
+        RemoveStaleWidgetGuidEntries(WidgetBlueprint);
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
         return true;
     }

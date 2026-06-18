@@ -33,25 +33,14 @@ Project Scenario는 범위값을 포함할 수 있다.
   },
   "pedestrians": {
     "background": {
-      "count": {"min": 0, "max": 1},
-      "speed_mps": {"min": 0.8, "max": 1.2}
+      "count": 0,
+      "speed_mps": 1.0
     },
-    "encounters": [
-      {
-        "id": "main_conflict",
-        "type": "oncoming_pass",
-        "at": "conflict",
-        "meet_offset_m": 0.0,
-        "persona": "assertive",
-        "overrides": {
-          "cooperation": {"min": 0.15, "max": 0.4}
-        }
-      }
-    ]
+    "encounters": []
   },
   "robot": {
-    "start": {"type": "entry"},
-    "goal": {"type": "exit"}
+    "start": {"type": "corridor_pose", "segment": "approach", "along_m": 1.0, "offset_m": 0.0, "lane": "walkway", "heading": "forward"},
+    "goal": {"type": "corridor_pose", "segment": "exit", "along_m": 16.0, "offset_m": 0.0, "lane": "walkway", "heading": "forward"}
   }
 }
 
@@ -60,7 +49,7 @@ Project Scenario는 범위값을 포함할 수 있다.
 {
   "kind": "fixed",
   "id": "center_obstacle",
-  "prop": "traffic_cone_01",
+  "prop": "obstacle.crate_01",
   "at": {
     "segment": "conflict",
     "along_m": {"min": 6.5, "max": 8.5},
@@ -80,14 +69,13 @@ scatter placement는 zone.segments, zone.lanes, density_per_10m, palette.categor
 allow_blocking은 사용자가 통로가 막힌 상황, 지나갈 수 없을 정도로 좁은 상황, 일부러 길을 막는 장애물, 통행 불가, blocked path, intentionally blocking을 명시한 경우에만 true로 둔다.
 일반적인 게이트형 장애물이나 좁지만 통과 가능한 안내판 배치는 allow_blocking을 생략하거나 false로 둔다.
 배경 보행자 등장 구간을 제한해야 하면 pedestrians.background.spawn_zone.segments에 corridor segment id 목록을 사용한다.
-보행자 한 명, 보행자 1명, 한 명이, single pedestrian, one pedestrian처럼 핵심 보행자가 1명으로 제한된 prompt에서는 encounter는 유지하고 background.count를 {"min": 0, "max": 0}으로 둔다.
+알파 단계에서는 보행자 요청이 있어도 pedestrians.background.count는 0, pedestrians.encounters는 []로 둔다.
 보행자 이동 경로를 직접 좌표로 만들지 말고 pedestrians.encounters만 사용한다.
-대향 보행자는 type="oncoming_pass", 잘 비켜주지 않는 성향은 persona="assertive"를 우선 사용한다.
-옆에서 가로지르는 보행자는 type="cross_path"를 사용한다.
+대향 또는 횡단 보행자 요청은 내부 assumptions로만 취급하고 외부 JSON body에 warning이나 별도 field를 추가하지 않는다.
 persona가 "vulnerable"이고 사용자가 좁은 personal space나 근접 상황을 명시하지 않았다면 personal_space_m 기본값은 {"min": 0.6, "max": 0.9}를 사용한다.
 overrides는 cooperation, evasiveness, personal_space_m, awareness_horizon_s, max_yield_wait_s, sidestep_distance_m만 사용하고 각 값은 숫자 또는 min/max 범위값을 사용한다.
 문자열 choices는 corridor.segments[].replaced_by에서만 사용한다.
-robot은 기본적으로 "start": {"type": "entry"}, "goal": {"type": "exit"}만 사용한다.
+robot은 기본적으로 corridor_pose start/goal을 우선 사용한다.
 구체 anchor가 필요할 때만 type="corridor_pose"와 segment, along_m, offset_m, lane, heading을 사용한다.
 사용자가 robot start/goal anchor만 요청하고 장애물/보행자/위험요소를 요청하지 않으면 obstacles.placements와 pedestrians.encounters는 빈 배열로 최소화한다.
 이 경우 기본 위험 encounter를 임의로 추가하지 않는다.
@@ -96,7 +84,7 @@ robot.start.type 또는 robot.goal.type이 "entry" 또는 "exit"이면 {"type": 
 segment, along_m, offset_m, lane, heading이 필요하면 type을 반드시 "corridor_pose"로 설정한다.
 center_xy_m, center, radius_m, r_m, world_xy, actors.robot.xy_m, route.goal_xy_m은 만들지 않는다.
 ground_model, static_obstacles, pedestrians.path, template_id, template_path는 만들지 않는다.
-안내판 계열 prop이 catalog에 없으면 temporary_sign_01, construction_sign_01, guide_board_01 같은 새 prop id를 만들지 말고 traffic_cone_01처럼 허용된 prop을 사용한다.
+안내판 계열 prop이 catalog에 없으면 temporary_sign_01, construction_sign_01, guide_board_01 같은 새 prop id를 만들지 말고 obstacle.road_cone_01 또는 obstacle.crate_01처럼 허용된 prop을 사용한다.
 episode_scenario, episode, source, params, semantic, validation은 만들지 않는다.
 robot.start_area, robot.goal_area, seed, base_seed, episode_count, sample_count, experiment_id, run_id, scenario_path, sample_id, generated_count, scenario_sample은 만들지 않는다.
 지원하지 않는 catalog surface, prop, encounter type, persona를 임의로 만들지 않는다.

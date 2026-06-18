@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.core.settings import Settings
+from app.core.settings import Settings  # noqa: E402
 from app.models.generation import (  # noqa: E402
     WorldConfigGenerationConstraints,
     WorldConfigGenerationRequest,
@@ -401,7 +401,7 @@ def _write_report(path_text: str | None, report: dict[str, Any]) -> None:
 
 def _print_dry_run(package: WorldConfigPromptPackage, settings: Settings) -> None:
     print("DRY RUN: no Ollama call was made.")
-    print(f"Provider: ollama")
+    print("Provider: ollama")
     print(f"Model: {settings.ollamaModel}")
     print("Prompt package:")
     print(
@@ -421,7 +421,7 @@ def _print_dry_run(package: WorldConfigPromptPackage, settings: Settings) -> Non
 
 def _print_result(result: WorldConfigGenerationResult, settings: Settings, print_payload: bool) -> None:
     print("Ollama World Config smoke result:")
-    print(f"- provider: ollama")
+    print("- provider: ollama")
     print(f"- model: {settings.ollamaModel}")
     print(f"- success: {result.success}")
     print(f"- validation: {result.validation.status}")

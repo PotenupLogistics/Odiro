@@ -10,8 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.core.contract_types import ContractType
-from app.services.json_contract_validator import validate_json_file
+from app.core.contract_types import ContractType  # noqa: E402
+from app.services.json_contract_validator import validate_json_file  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:

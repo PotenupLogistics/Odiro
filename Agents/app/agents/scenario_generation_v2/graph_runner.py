@@ -126,14 +126,26 @@ class ScenarioGenerationGraphRunnerV2:
         if state.get("status") == "failed":
             return state
         normalized = self.agent.normalizer.normalize(str(state.get("prompt", "")))
-        intent = self.agent.intent_parser.parse(normalized.normalized_prompt)
         llm_update = self._llm_template_candidate_update(normalized.normalized_prompt) if self.settings.v2AgentLlmEnabled else {}
+        if self._has_valid_llm_candidate(llm_update):
+            candidate = llm_update["llm_template_candidate"]
+            return {
+                **state,
+                "prompt": normalized.normalized_prompt,
+                "interpreted_intent": None,
+                "selected_pattern": candidate.get("scenario_id"),
+                **llm_update,
+            }
+        intent = self.agent.intent_parser.parse(normalized.normalized_prompt)
         return {**state, "prompt": normalized.normalized_prompt, "interpreted_intent": intent, **llm_update}
 
     def select_scenario_pattern_node(self, state: ScenarioGenerationGraphStateV2) -> ScenarioGenerationGraphStateV2:
         """Select one supported deterministic alpha pattern."""
         if state.get("status") == "failed":
             return state
+        if self._state_has_valid_llm_candidate(state):
+            candidate = state["llm_template_candidate"]
+            return {**state, "selected_pattern": candidate.get("scenario_id") or state.get("selected_pattern")}
         intent = state.get("interpreted_intent")
         scenario_type = self.agent.type_selector.select(intent)
         return {**state, "selected_pattern": scenario_type}
@@ -201,6 +213,8 @@ class ScenarioGenerationGraphRunnerV2:
         try:
             candidate = self.agent._generate_llm_template(prompt, response_name="scenario_graph_intent")
             candidate = self.agent.repair_handler.repair(candidate)
+            intent = self.agent.intent_parser.parse(prompt)
+            candidate = self.agent._postprocess_scenario_for_intent(candidate, intent)
             validation = self.agent.validator.validate(candidate)
             if validation.valid:
                 return {
@@ -255,6 +269,8 @@ class ScenarioGenerationGraphRunnerV2:
                 response_name="scenario_graph_repair",
             )
             repaired = self.agent.repair_handler.repair(repaired)
+            intent = self.agent.intent_parser.parse(prompt)
+            repaired = self.agent._postprocess_scenario_for_intent(repaired, intent)
             repaired_validation = self.agent.validator.validate(repaired)
             repair_diagnostics = [
                 *diagnostics,
@@ -304,6 +320,16 @@ class ScenarioGenerationGraphRunnerV2:
                     {"level": "warning", "field": "llm_repair", "message": "LLM-assisted repair failed."},
                 ],
             }
+
+    def _has_valid_llm_candidate(self, update: dict[str, Any]) -> bool:
+        """Return whether a partial graph update contains a validator-approved LLM candidate."""
+        validation = update.get("llm_validation")
+        return isinstance(update.get("llm_template_candidate"), dict) and validation is not None and validation.valid
+
+    def _state_has_valid_llm_candidate(self, state: ScenarioGenerationGraphStateV2) -> bool:
+        """Return whether current graph state can skip deterministic pattern selection."""
+        validation = state.get("llm_validation")
+        return isinstance(state.get("llm_template_candidate"), dict) and validation is not None and validation.valid
 
     def route_validation_node(self, state: ScenarioGenerationGraphStateV2) -> str:
         """Route valid templates to response, invalid templates to repair or fallback."""

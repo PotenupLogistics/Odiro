@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from harness.utils.pdf_page_hint_finder import extract_pages, find_page_hints_in_pages
+from harness.utils.pdf_page_hint_finder import extract_pages, find_page_hints_in_pages  # noqa: E402
 MANUAL_CONFIRMATION_PATH = ROOT / "data" / "sources" / "review" / "confirmed" / "manual_confirmation_results.json"
 PAGE_HINTS_DIR = ROOT / "data" / "sources" / "review" / "high_priority" / "page_hints"
 PAGE_HINTS_JSON_PATH = PAGE_HINTS_DIR / "high_priority_page_hints.json"

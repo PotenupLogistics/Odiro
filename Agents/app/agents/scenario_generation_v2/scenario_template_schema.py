@@ -172,7 +172,10 @@ def project_scenario_v1_json_schema() -> dict[str, Any]:
                             "properties": {
                                 "kind": {"type": "string", "enum": ["fixed", "pattern", "scatter"]},
                                 "id": {"type": "string"},
-                                "prop": {"type": ["string", "null"], "enum": ["traffic_cone_01", None]},
+                                "prop": {
+                                    "type": ["string", "null"],
+                                    "enum": ["obstacle.crate_01", "obstacle.road_cone_01", "traffic_cone_01", None],
+                                },
                                 "pattern": {"type": ["string", "null"], "enum": ["gate", "line", "cluster", None]},
                                 "at": _nullable({
                                     "type": "object",

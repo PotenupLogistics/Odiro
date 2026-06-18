@@ -17,8 +17,12 @@ class ScenarioTypeSelector:
     def select(self, intent: ScenarioIntent) -> str:
         if intent.robot_anchor_only:
             return "corridor_pose_navigation"
+        if "static_obstacle_ahead" in intent.risk_factors and (
+            "cross_path" in intent.risk_factors or "oncoming_pass" in intent.risk_factors
+        ):
+            return "narrow_sidewalk_cross_path"
+        if "static_obstacle_ahead" in intent.risk_factors:
+            return "static_obstacle_ahead"
         if "oncoming_pass" in intent.risk_factors:
             return "pinch_oncoming_pass"
-        if "static_obstacle_ahead" in intent.risk_factors and "cross_path" not in intent.risk_factors:
-            return "static_obstacle_ahead"
         return "narrow_sidewalk_cross_path"

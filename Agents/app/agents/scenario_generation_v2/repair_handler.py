@@ -18,9 +18,30 @@ class RepairHandler:
         for legacy_field in ("template_id", "scenario_template"):
             repaired.pop(legacy_field, None)
         self._remove_null_fields(repaired)
+        self._repair_obstacle_placements(repaired)
         self._repair_robot_anchors(repaired)
         self._swap_inverted_ranges(repaired)
         return repaired
+
+    def _repair_obstacle_placements(self, template: dict[str, Any]) -> None:
+        """Move legacy direct obstacle pose fields under the contract-owned at object."""
+        obstacles = template.get("obstacles")
+        if not isinstance(obstacles, dict):
+            return
+        placements = obstacles.get("placements")
+        if not isinstance(placements, list):
+            return
+        for placement in placements:
+            if not isinstance(placement, dict):
+                continue
+            at = placement.get("at")
+            direct_pose = {
+                key: placement.pop(key)
+                for key in ("segment", "along_m", "offset_m", "lane")
+                if key in placement
+            }
+            if direct_pose and not isinstance(at, dict):
+                placement["at"] = direct_pose
 
     def _repair_robot_anchors(self, template: dict[str, Any]) -> None:
         """Normalize abstract and concrete robot anchors without inventing positions."""

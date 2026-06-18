@@ -7,7 +7,7 @@ from app.models.scenario_generation_v2 import V2ValidationIssue, V2ValidationRes
 
 
 ALLOWED_SURFACES = {"sidewalk", "crosswalk_stripe", "grass", "road", "driveway", "wall", "building"}
-ALLOWED_PROPS = {"traffic_cone_01"}
+ALLOWED_PROPS = {"obstacle.crate_01", "obstacle.road_cone_01", "traffic_cone_01"}
 ALLOWED_SEGMENT_TYPES = {"straight", "narrowing", "crosswalk", "entrance"}
 ALLOWED_PLACEMENT_KINDS = {"fixed", "pattern", "scatter"}
 ALLOWED_PATTERNS = {"gate", "line", "cluster"}
@@ -27,9 +27,13 @@ FORBIDDEN_ROOT_FIELDS = {
     "episode",
     "episode_count",
     "experiment_id",
+    "generation_mode",
     "generated_count",
+    "analysis",
+    "analysis_result",
     "params",
     "policy",
+    "project_path",
     "radius_m",
     "robot_setup",
     "route",
@@ -171,6 +175,14 @@ class TemplateValidator:
                 errors.append(V2ValidationIssue(field=f"{field}.id", message="placement id는 중복될 수 없습니다."))
             else:
                 seen.add(placement_id)
+            for direct_field in ("segment", "along_m", "offset_m", "lane"):
+                if direct_field in placement:
+                    errors.append(
+                        V2ValidationIssue(
+                            field=f"{field}.{direct_field}",
+                            message="placement pose는 at object 안에 포함해야 합니다.",
+                        )
+                    )
             if placement.get("kind") not in ALLOWED_PLACEMENT_KINDS:
                 errors.append(V2ValidationIssue(field=f"{field}.kind", message="지원하지 않는 placement kind입니다."))
                 continue

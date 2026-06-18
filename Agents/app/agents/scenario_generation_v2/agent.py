@@ -41,14 +41,16 @@ class ScenarioGenerationV2Agent:
     def generate(self, request: ScenarioGenerateV2Request) -> ScenarioGenerateV2Response:
         """Generate a project scenario JSON object from a single natural-language prompt."""
         normalized = self.normalizer.normalize(request.prompt)
+        if self.settings.v2AgentLlmEnabled:
+            response = self._generate_with_llm(normalized.normalized_prompt)
+            if response is not None:
+                return response
+
         intent = self.intent_parser.parse(normalized.normalized_prompt)
         scenario_type = self.type_selector.select(intent)
         plan = self.planner.plan(intent, scenario_type)
 
         if self.settings.v2AgentLlmEnabled:
-            response = self._generate_with_llm(normalized.normalized_prompt, intent, plan.summary, plan.assumptions)
-            if response is not None:
-                return response
             return self._generate_deterministic(
                 plan,
                 generation_mode="fallback",
@@ -57,7 +59,6 @@ class ScenarioGenerationV2Agent:
                     message="LLM output validation failed; deterministic fallback scenario was used.",
                 ),
             )
-
         return self._generate_deterministic(plan, generation_mode="deterministic")
 
     def _generate_deterministic(
@@ -91,24 +92,22 @@ class ScenarioGenerationV2Agent:
     def _generate_with_llm(
         self,
         prompt: str,
-        intent: ScenarioIntent,
-        fallback_summary: str,
-        assumptions: list[str],
     ) -> ScenarioGenerateV2Response | None:
         """Try LLM generation and at most one repair before deterministic fallback."""
         client = self.llm_client or AgentLlmJsonClient(settings=self.settings)
         try:
             scenario = self._generate_llm_template(prompt, client=client, response_name="scenario")
+            intent = self.intent_parser.parse(prompt)
             scenario = self.repair_handler.repair(scenario)
             scenario = self._postprocess_scenario_for_intent(scenario, intent)
             validation = self.validator.validate(scenario)
             if validation.valid:
                 return self.response_builder.success(
                     scenario_id=scenario["scenario_id"],
-                    summary=self._summary_from_template(scenario, fallback_summary),
+                    summary=self._summary_from_template(scenario, "LLM-assisted scenario를 생성했습니다."),
                     scenario=scenario,
                     validation=validation,
-                    assumptions=assumptions,
+                    assumptions=["LLM 후보를 먼저 생성하고 validator 통과 후 사용했습니다."],
                     generation_mode="llm",
                 )
         except Exception:
@@ -125,15 +124,16 @@ class ScenarioGenerationV2Agent:
                     response_name="project_scenario_repair",
                 )
                 repaired = self.repair_handler.repair(repaired)
+                intent = self.intent_parser.parse(prompt)
                 repaired = self._postprocess_scenario_for_intent(repaired, intent)
                 repaired_validation = self.validator.validate(repaired)
                 if repaired_validation.valid:
                     return self.response_builder.success(
                         scenario_id=repaired["scenario_id"],
-                        summary=self._summary_from_template(repaired, fallback_summary),
+                        summary=self._summary_from_template(repaired, "LLM-assisted repair가 scenario를 생성했습니다."),
                         scenario=repaired,
                         validation=repaired_validation,
-                        assumptions=assumptions,
+                        assumptions=["LLM 후보 repair 결과를 validator 통과 후 사용했습니다."],
                         generation_mode="llm_repaired",
                     )
             except Exception:
@@ -204,23 +204,60 @@ class ScenarioGenerationV2Agent:
 
     def _postprocess_scenario_for_intent(self, scenario: dict, intent: ScenarioIntent) -> dict:
         """Apply prompt-specific quality corrections after structured LLM generation."""
+        self._apply_alpha_pedestrian_policy(scenario)
+        self._prefer_corridor_pose_robot_anchors(scenario)
         if intent.robot_anchor_only:
             obstacles = scenario.setdefault("obstacles", {})
             obstacles["placements"] = []
-            pedestrians = scenario.setdefault("pedestrians", {})
-            background = pedestrians.setdefault("background", {})
-            background["count"] = {"min": 0, "max": 0}
-            pedestrians["encounters"] = []
-        if intent.single_pedestrian:
-            pedestrians = scenario.setdefault("pedestrians", {})
-            background = pedestrians.setdefault("background", {})
-            background["count"] = {"min": 0, "max": 0}
+            if intent.robot_start_anchor is not None and intent.robot_goal_anchor is not None:
+                scenario["robot"] = {"start": intent.robot_start_anchor, "goal": intent.robot_goal_anchor}
         if intent.requested_gate_obstacle_count == 2:
             obstacles = scenario.setdefault("obstacles", {})
             placements = obstacles.get("placements")
             if isinstance(placements, list) and len(placements) > 2:
                 obstacles["placements"] = self._first_gate_pair(placements)
         return scenario
+
+    def _apply_alpha_pedestrian_policy(self, scenario: dict) -> None:
+        """Keep pedestrian generation out of the external alpha scenario body."""
+        scenario["pedestrians"] = {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+
+    def _prefer_corridor_pose_robot_anchors(self, scenario: dict) -> None:
+        """Replace abstract default robot anchors with UE-friendly corridor poses when possible."""
+        corridor = scenario.get("corridor")
+        if not isinstance(corridor, dict):
+            return
+        segments = corridor.get("segments")
+        if not isinstance(segments, list) or not segments:
+            return
+        segment_ranges = {
+            segment.get("id"): segment.get("along_range_m")
+            for segment in segments
+            if isinstance(segment, dict) and isinstance(segment.get("id"), str)
+        }
+        first_segment = str(segments[0].get("id"))
+        last_segment = str(segments[-1].get("id"))
+        scenario["robot"] = {
+            "start": self._corridor_pose_anchor(first_segment, segment_ranges.get(first_segment), prefer_start=True),
+            "goal": self._corridor_pose_anchor(last_segment, segment_ranges.get(last_segment), prefer_start=False),
+        }
+
+    def _corridor_pose_anchor(self, segment_id: str, along_range: object, *, prefer_start: bool) -> dict:
+        """Build a corridor-local robot anchor inside the referenced segment range."""
+        along_m = 1.0 if prefer_start else 16.0
+        if isinstance(along_range, list) and len(along_range) == 2:
+            start, end = along_range
+            if isinstance(start, int | float) and isinstance(end, int | float):
+                span = float(end) - float(start)
+                along_m = float(start) + min(2.0, max(0.5, span * (0.25 if prefer_start else 0.75)))
+        return {
+            "type": "corridor_pose",
+            "segment": segment_id,
+            "along_m": along_m,
+            "offset_m": 0.0,
+            "lane": "walkway",
+            "heading": "forward",
+        }
 
     def _first_gate_pair(self, placements: list[object]) -> list[object]:
         """Keep the first left/right gate pair and drop duplicated gate pairs."""

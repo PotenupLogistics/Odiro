@@ -31,6 +31,11 @@ class _FakeJsonClient:
         return response
 
 
+class _ExplodingScenarioTypeSelector:
+    def select(self, intent):
+        raise AssertionError("deterministic pattern selection should not run before a valid LLM candidate is accepted")
+
+
 def _llm_scenario(scenario_id: str = "llm_narrow_sidewalk") -> dict:
     return {
         "schema": "scenario",
@@ -50,10 +55,27 @@ def _llm_scenario(scenario_id: str = "llm_narrow_sidewalk") -> dict:
         },
         "obstacles": {"min_clear_width_m": 0.9, "placements": []},
         "pedestrians": {
-            "background": {"count": {"min": 0, "max": 1}, "speed_mps": {"min": 0.8, "max": 1.2}},
+            "background": {"count": 0, "speed_mps": 1.0},
             "encounters": [],
         },
-        "robot": {"start": {"type": "entry"}, "goal": {"type": "exit"}},
+        "robot": {
+            "start": {
+                "type": "corridor_pose",
+                "segment": "approach",
+                "along_m": 1.0,
+                "offset_m": 0.0,
+                "lane": "walkway",
+                "heading": "forward",
+            },
+            "goal": {
+                "type": "corridor_pose",
+                "segment": "exit",
+                "along_m": 16.0,
+                "offset_m": 0.0,
+                "lane": "walkway",
+                "heading": "forward",
+            },
+        },
     }
 
 
@@ -71,6 +93,42 @@ def _assert_raw_scenario(payload: dict) -> None:
     legacy_fields = {"ground_model", "static_obstacles"}
     assert legacy_fields.isdisjoint(payload)
     assert "path" not in payload["pedestrians"]
+
+
+def _assert_alpha_static_scenario_contract(payload: dict) -> None:
+    """Assert the alpha scenario body favors UE-loadable static obstacle scenes."""
+    _assert_raw_scenario(payload)
+    assert payload["schema"] == "scenario"
+    assert payload["version"] == 1
+    assert "template_id" not in payload
+    assert payload["corridor"]["axis"]["type"] == "polyline"
+    assert len(payload["corridor"]["axis"]["points_m"]) >= 2
+    assert payload["corridor"]["walkway_width_m"]
+    assert payload["corridor"]["segments"]
+    assert payload["pedestrians"]["background"]["count"] == 0
+    assert payload["pedestrians"]["encounters"] == []
+    for placement in payload["obstacles"]["placements"]:
+        assert "segment" not in placement
+        assert {"segment", "along_m", "offset_m", "lane"} <= set(placement["at"])
+    assert payload["robot"]["start"]["type"] == "corridor_pose"
+    assert payload["robot"]["goal"]["type"] == "corridor_pose"
+
+
+def _add_valid_encounter(scenario: dict) -> dict:
+    """Attach one valid pedestrian encounter for validator-specific tests."""
+    encounter = {
+        "id": "main_conflict",
+        "type": "oncoming_pass",
+        "at": "conflict",
+        "meet_offset_m": 0.0,
+        "persona": "assertive",
+        "overrides": {
+            "personal_space_m": {"min": 0.6, "max": 0.9},
+            "awareness_horizon_s": {"min": 1.5, "max": 2.5},
+        },
+    }
+    scenario["pedestrians"]["encounters"] = [encounter]
+    return encounter
 
 
 def test_v2_scenario_generate_accepts_prompt_only() -> None:
@@ -120,8 +178,7 @@ def test_v2_scenario_graph_endpoint_keeps_prompt_only_contract(monkeypatch) -> N
     assert "robot_setup" not in payload
 
 
-def test_v2_scenario_endpoint_uses_langgraph_when_graph_flag_is_false(monkeypatch) -> None:
-    monkeypatch.setenv("V2_AGENT_GRAPH_ENABLED", "false")
+def test_v2_scenario_endpoint_uses_langgraph_runner(monkeypatch) -> None:
     monkeypatch.setenv("V2_AGENT_LLM_ENABLED", "false")
 
     response = TestClient(app).post(
@@ -156,6 +213,22 @@ def test_v2_scenario_graph_calls_llm_repair_and_falls_back_when_invalid() -> Non
         warning.message == "LLM-assisted repair failed; deterministic fallback scenario was used."
         for warning in response.validation.warnings
     )
+
+
+def test_v2_scenario_graph_accepts_valid_llm_before_deterministic_pattern_selection() -> None:
+    fake = _FakeJsonClient([_llm_scenario("llm_first_graph_scenario")])
+    runner = ScenarioGenerationGraphRunnerV2(
+        settings=Settings(_env_file=None, v2AgentLlmEnabled=True),
+        llm_client=fake,
+    )
+    runner.agent.type_selector = _ExplodingScenarioTypeSelector()
+
+    response = runner.run(ScenarioGenerateV2Request(prompt="좁은 보도에서 대향 보행자를 만나는 시나리오"))
+
+    assert response.status == "success"
+    assert response.scenario_id == "llm_first_graph_scenario"
+    assert len(fake.calls) == 1
+    assert fake.calls[0]["response_name"] == "scenario_graph_intent"
 
 
 def test_v2_scenario_schema_includes_validator_required_shape() -> None:
@@ -210,12 +283,13 @@ def test_v2_scenario_contract_accepts_corridor_pose_and_fixed_numbers() -> None:
         "lane": "walkway",
         "heading": "auto",
     }
-    scenario["pedestrians"]["encounters"][0]["overrides"] = {
+    encounter = _add_valid_encounter(scenario)
+    encounter["overrides"] = {
         "cooperation": {"min": 0.15, "max": 0.4},
         "personal_space_m": {"min": 0.6, "max": 0.9},
         "awareness_horizon_s": 2.0,
     }
-    scenario["pedestrians"]["encounters"][0]["meet_offset_m"] = {"min": -0.1, "max": 0.1}
+    encounter["meet_offset_m"] = {"min": -0.1, "max": 0.1}
     scenario["obstacles"]["placements"] = [
         {
             "kind": "fixed",
@@ -419,7 +493,8 @@ def test_v2_repair_handler_removes_nullable_structured_output_fields() -> None:
         "heading": None,
     }
     scenario["pedestrians"]["background"]["spawn_zone"] = None
-    scenario["pedestrians"]["encounters"][0]["overrides"]["cooperation"] = None
+    encounter = _add_valid_encounter(scenario)
+    encounter["overrides"]["cooperation"] = None
     scenario["obstacles"]["placements"] = [
         {
             "kind": "fixed",
@@ -515,12 +590,36 @@ def test_v2_scenario_contract_rejects_invalid_pattern_and_scatter_placements() -
     assert "obstacles.placements[1].zone.segments[0]" in fields
 
 
+def test_v2_scenario_contract_rejects_direct_obstacle_segment() -> None:
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+    scenario = agent.generate(ScenarioGenerateV2Request(prompt="좁은 보도에서 정적 장애물")).scenario
+    assert scenario is not None
+    scenario["obstacles"]["placements"] = [
+        {
+            "kind": "fixed",
+            "id": "legacy_direct_segment",
+            "prop": "obstacle.crate_01",
+            "segment": "conflict",
+            "along_m": 7.0,
+            "offset_m": 0.0,
+            "lane": "walkway",
+        }
+    ]
+
+    validation = agent.validator.validate(scenario)
+
+    assert validation.valid is False
+    fields = {issue.field for issue in validation.errors}
+    assert "obstacles.placements[0].segment" in fields
+    assert "obstacles.placements[0].at" in fields
+
+
 def test_v2_scenario_contract_accepts_all_unreal_override_keys_and_optional_meet_offset() -> None:
     agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
     response = agent.generate(ScenarioGenerateV2Request(prompt="좁은 보도에서 대향 보행자"))
     scenario = response.scenario
     assert scenario is not None
-    encounter = scenario["pedestrians"]["encounters"][0]
+    encounter = _add_valid_encounter(scenario)
     encounter.pop("meet_offset_m", None)
     encounter["overrides"] = {
         "cooperation": {"min": 0.15, "max": 0.4},
@@ -565,8 +664,9 @@ def test_v2_scenario_contract_rejects_choices_for_catalog_strings() -> None:
             "at": {"segment": "conflict", "along_m": 7.0, "offset_m": 0.0, "lane": {"choices": ["center"]}},
         }
     ]
-    scenario["pedestrians"]["encounters"][0]["persona"] = {"choices": ["assertive"]}
-    scenario["pedestrians"]["encounters"][0]["type"] = {"choices": ["oncoming_pass"]}
+    encounter = _add_valid_encounter(scenario)
+    encounter["persona"] = {"choices": ["assertive"]}
+    encounter["type"] = {"choices": ["oncoming_pass"]}
     scenario["robot"]["goal"] = {
         "type": "corridor_pose",
         "segment": "exit",
@@ -662,8 +762,8 @@ def test_v2_scenario_llm_prompt_includes_validator_required_template_shape() -> 
         '"pedestrians":',
         '"encounters"',
         '"robot":',
-        '"start": {"type": "entry"}',
-        '"goal": {"type": "exit"}',
+        '"type": "corridor_pose"',
+        '"segment"',
         "pedestrians.path",
         "robot.start_area",
         "robot.goal_area",
@@ -756,25 +856,26 @@ def test_v2_scenario_agent_uses_deterministic_mode_when_llm_disabled() -> None:
     assert response.scenario["scenario_id"] != "llm_narrow_sidewalk"
 
 
-def test_v2_deterministic_single_pedestrian_prompt_keeps_background_count_zero() -> None:
+def test_v2_deterministic_complex_prompt_returns_alpha_static_obstacle_contract() -> None:
     agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
 
     response = agent.generate(
         ScenarioGenerateV2Request(
             prompt=(
-                "좁은 보도 중간에 임시 안내판 두 개가 게이트처럼 놓여 있고, "
-                "보행자 한 명이 그 사이를 가로질러 지나가는 상황을 만들어줘."
+                "좁은 보도에서 로봇이 목적지로 이동하는 중, 전방에는 통로 일부를 막는 정적 장애물이 있고 "
+                "반대편에서는 보행자가 걸어오며, 동시에 다른 보행자가 로봇 진행 경로를 가로지르는 위험 상황 "
+                "시나리오를 생성해줘. 로봇은 보도를 벗어나지 않고 속도를 줄이거나 정지하면서 안전하게 회피해야 해."
             )
         )
     )
 
     assert response.scenario is not None
-    pedestrians = response.scenario["pedestrians"]
-    assert pedestrians["background"]["count"] == {"min": 0, "max": 0}
-    assert pedestrians["encounters"]
+    _assert_alpha_static_scenario_contract(response.scenario)
+    assert response.scenario["obstacles"]["placements"]
+    assert response.scenario["scenario_id"] in {"narrow_sidewalk_cross_path", "static_obstacle_ahead"}
 
 
-def test_v2_deterministic_vulnerable_persona_uses_larger_default_personal_space() -> None:
+def test_v2_deterministic_pedestrian_prompt_keeps_alpha_pedestrians_empty() -> None:
     agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
 
     response = agent.generate(
@@ -782,9 +883,7 @@ def test_v2_deterministic_vulnerable_persona_uses_larger_default_personal_space(
     )
 
     assert response.scenario is not None
-    encounter = response.scenario["pedestrians"]["encounters"][0]
-    assert encounter["persona"] == "vulnerable"
-    assert encounter["overrides"]["personal_space_m"]["min"] >= 0.6
+    assert response.scenario["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
 
 
 def test_v2_deterministic_gate_prompt_does_not_mark_obstacles_blocking_by_default() -> None:
@@ -803,7 +902,7 @@ def test_v2_deterministic_gate_prompt_does_not_mark_obstacles_blocking_by_defaul
     placements = response.scenario["obstacles"]["placements"]
     assert len(placements) == 2
     assert all(placement.get("allow_blocking") is not True for placement in placements)
-    assert {placement["prop"] for placement in placements} == {"traffic_cone_01"}
+    assert {placement["prop"] for placement in placements} == {"obstacle.road_cone_01"}
     assert {placement["id"] for placement in placements} == {"gate_panel_left", "gate_panel_right"}
 
 
@@ -850,7 +949,7 @@ def test_v2_deterministic_corridor_pose_only_prompt_minimizes_risk_elements() ->
         "heading": "forward",
     }
     assert scenario["obstacles"]["placements"] == []
-    assert scenario["pedestrians"]["background"]["count"] == {"min": 0, "max": 0}
+    assert scenario["pedestrians"]["background"]["count"] == 0
     assert scenario["pedestrians"]["encounters"] == []
     assert scenario["schema"] == "scenario"
     assert "scenario_id" in scenario
@@ -961,11 +1060,53 @@ def test_v2_llm_corridor_pose_only_prompt_removes_unrequested_encounters() -> No
     assert response.scenario is not None
     scenario = response.scenario
     assert scenario["obstacles"]["placements"] == []
-    assert scenario["pedestrians"]["background"]["count"] == {"min": 0, "max": 0}
+    assert scenario["pedestrians"]["background"]["count"] == 0
     assert scenario["pedestrians"]["encounters"] == []
     assert scenario["robot"]["start"]["type"] == "corridor_pose"
     assert scenario["robot"]["goal"]["type"] == "corridor_pose"
     _assert_raw_scenario(scenario)
+
+
+def test_v2_llm_complex_prompt_is_postprocessed_to_alpha_static_contract() -> None:
+    llm_scenario = _llm_scenario("llm_complex_pedestrian_scene")
+    llm_scenario["obstacles"]["placements"] = [
+        {
+            "kind": "fixed",
+            "id": "llm_cone",
+            "prop": "obstacle.road_cone_01",
+            "at": {"segment": "conflict", "along_m": 7.0, "offset_m": 0.25, "lane": "walkway"},
+            "yaw_deg": 0,
+            "allow_blocking": False,
+        }
+    ]
+    llm_scenario["pedestrians"] = {
+        "background": {"count": {"min": 1, "max": 3}, "speed_mps": {"min": 0.8, "max": 1.4}},
+        "encounters": [
+            {
+                "id": "llm_oncoming",
+                "type": "oncoming_pass",
+                "at": "conflict",
+                "meet_offset_m": 0.0,
+                "persona": "assertive",
+                "overrides": {"personal_space_m": 0.7},
+            }
+        ],
+    }
+    fake = _FakeJsonClient([llm_scenario])
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=True), llm_client=fake)
+
+    response = agent.generate(
+        ScenarioGenerateV2Request(
+            prompt=(
+                "좁은 보도에서 로봇이 목적지로 이동하는 중, 전방에는 통로 일부를 막는 정적 장애물이 있고 "
+                "반대편에서는 보행자가 걸어오며, 동시에 다른 보행자가 로봇 진행 경로를 가로지르는 위험 상황"
+            )
+        )
+    )
+
+    assert response.scenario is not None
+    _assert_alpha_static_scenario_contract(response.scenario)
+    assert response.generation_mode == "llm"
 
 
 def test_v2_scenario_agent_uses_llm_scenario_when_enabled() -> None:
@@ -981,6 +1122,22 @@ def test_v2_scenario_agent_uses_llm_scenario_when_enabled() -> None:
     assert response.scenario_id == "llm_narrow_sidewalk"
     assert response.scenario is not None
     assert response.scenario["intent"]
+    assert fake.calls[0]["response_name"] == "scenario"
+
+
+def test_v2_scenario_agent_accepts_valid_llm_before_deterministic_pattern_selection() -> None:
+    fake = _FakeJsonClient([_llm_scenario("llm_first_agent_scenario")])
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=True),
+        llm_client=fake,
+    )
+    agent.type_selector = _ExplodingScenarioTypeSelector()
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="좁은 보도 장애물"))
+
+    assert response.generation_mode == "llm"
+    assert response.scenario_id == "llm_first_agent_scenario"
+    assert len(fake.calls) == 1
     assert fake.calls[0]["response_name"] == "scenario"
 
 
@@ -1059,8 +1216,9 @@ def test_v2_validator_rejects_catalog_violations() -> None:
     scenario = agent.generate(ScenarioGenerateV2Request(prompt="좁은 보도에서 보행자가 가로지르는 상황")).scenario
     assert scenario is not None
     scenario["corridor"]["building_side"][0]["surface"] = "marble"
-    scenario["pedestrians"]["encounters"][0]["type"] = "teleport"
-    scenario["pedestrians"]["encounters"][0]["persona"] = "rude"
+    encounter = _add_valid_encounter(scenario)
+    encounter["type"] = "teleport"
+    encounter["persona"] = "rude"
 
     validation = agent.validator.validate(scenario)
 

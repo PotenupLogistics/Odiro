@@ -41,9 +41,9 @@ scenario_generate_v2_endpoint()
 → ProjectScenarioV1Response
 ```
 
-`/api/v2/scenarios/generate`는 v2 LangGraph workflow를 기본 실행 경로로 사용한다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2 endpoint의 일반 실행 분기에 사용하지 않는다. LangGraph import가 불가능한 환경에서는 runner 내부에서만 기존 sequential agent로 fallback한다.
+`/api/v2/scenarios/generate`는 v2 LangGraph workflow를 기본 실행 경로로 사용한다. LangGraph import가 불가능한 환경에서는 runner 내부에서만 기존 sequential agent로 fallback한다.
 
-`V2_AGENT_LLM_ENABLED=false`이면 LangGraph 내부 deterministic parser/selector/builder 경로만 사용한다. `V2_AGENT_LLM_ENABLED=true`이면 `interpret_user_prompt_node`에서 JSON Schema structured output 기반 LLM-assisted 후보 scenario 생성을 시도하고, validator를 통과한 경우에만 그 후보를 사용한다. LLM 호출 실패 또는 LLM output validation 실패 시 deterministic graph path로 fallback한다. `generation_mode`는 내부 graph response metadata로만 유지하고 외부 API response body에는 노출하지 않는다.
+`V2_AGENT_LLM_ENABLED=false`이면 LangGraph 내부 deterministic parser/selector/builder 경로만 사용한다. `V2_AGENT_LLM_ENABLED=true`이면 `interpret_user_prompt_node`에서 JSON Schema structured output 기반 LLM-assisted 후보 scenario 생성을 먼저 시도하고, validator를 통과한 경우에만 그 후보를 사용한다. 이 경우 deterministic pattern selection은 건너뛴다. LLM 호출 실패 또는 LLM output validation 실패 시 deterministic graph path로 fallback한다. `generation_mode`는 내부 graph response metadata로만 유지하고 외부 API response body에는 노출하지 않는다.
 
 LLM prompt는 validator가 요구하는 최소 `scenario` v1 구조를 직접 제시한다. 특히 `corridor.axis`, `corridor.walkway_width_m`, `corridor.segments`, object형 `obstacles`, `pedestrians.encounters`, `robot.start`, `robot.goal`을 명시해 WorldConfig-style output이 나오지 않도록 한다.
 
@@ -149,8 +149,8 @@ Excluded:
 | Node | 실제 함수/class | 유형 | 입력 State | 출력 State | 역할 |
 | --- | --- | --- | --- | --- | --- |
 | `validate_request_node` | `ScenarioGenerationGraphRunnerV2.validate_request_node` | Guardrail / validator | `request`, `prompt` | `prompt`, optional failed `validation` | prompt 존재와 문자열/blank 여부를 확인한다. |
-| `interpret_user_prompt_node` | `ScenarioGenerationGraphRunnerV2.interpret_user_prompt_node` | LLM-assisted / Deterministic parser | `prompt` | normalized `prompt`, `interpreted_intent`, optional `llm_template_candidate`, `llm_validation`, `llm_warnings` | 기존 normalizer와 `IntentParser`로 자연어 의도를 구조화한다. `V2_AGENT_LLM_ENABLED=true`이면 graph node 내부에서 OpenAI provider 호출을 시도한다. |
-| `select_scenario_pattern_node` | `ScenarioGenerationGraphRunnerV2.select_scenario_pattern_node` | Deterministic selector | `interpreted_intent` | `selected_pattern` | 기존 `ScenarioTypeSelector`로 지원 패턴 중 하나를 선택한다. |
+| `interpret_user_prompt_node` | `ScenarioGenerationGraphRunnerV2.interpret_user_prompt_node` | LLM-assisted / Deterministic parser | `prompt` | normalized `prompt`, optional `interpreted_intent`, optional `llm_template_candidate`, `llm_validation`, `llm_warnings` | `V2_AGENT_LLM_ENABLED=true`이면 prompt 정규화 직후 LLM 후보 생성을 먼저 시도한다. 유효한 후보가 없을 때만 기존 `IntentParser`로 자연어 의도를 구조화한다. |
+| `select_scenario_pattern_node` | `ScenarioGenerationGraphRunnerV2.select_scenario_pattern_node` | Deterministic selector | optional `interpreted_intent`, optional `llm_template_candidate` | `selected_pattern` | 유효한 LLM 후보가 있으면 후보 scenario id를 선택값으로 사용한다. 없으면 기존 `ScenarioTypeSelector`로 지원 패턴 중 하나를 선택한다. |
 | `build_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.build_scenario_template_node` | Scenario builder | `interpreted_intent`, `selected_pattern`, optional validated `llm_template_candidate` | `scenario`, `summary`, `assumptions` | validator를 통과한 LLM 후보가 있으면 사용하고, 없으면 기존 planner/writer로 deterministic `scenario` v1 객체를 만든다. |
 | `validate_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.validate_scenario_template_node` | Guardrail / validator | `scenario` | `validation`, `diagnostics`, `status` | 기존 `TemplateValidator`로 schema, 참조, catalog, forbidden field를 검사한다. |
 | `repair_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.repair_scenario_template_node` | Repair | invalid `scenario`, `repair_count` | repaired `scenario`, incremented `repair_count`, diagnostics | 기존 `RepairHandler`로 deterministic repair를 적용한다. 최대 2회 경로만 허용된다. |
@@ -216,7 +216,8 @@ Reproducibility:
 Latest verification commands:
 
 ```text
-uv run pytest tests/test_v2_scenario_generation_api.py -q
+uv run pytest tests/test_v2_graph_settings.py tests/test_llm_provider_settings.py tests/test_v2_scenario_generation_api.py -q
+uv run pytest tests/test_v2_analysis_run_api.py tests/test_v2_result_analysis_graph_runner.py -q
 uv run pytest tests/test_v2_graph_settings.py -q
 uv run ruff check app tests
 uv run pytest -q
@@ -225,17 +226,17 @@ uv run pytest -q
 Latest observed results:
 
 ```text
-24 passed
+56 passed, 1 warning
+24 passed, 1 warning
 3 passed
 All checks passed!
-707 passed, 1 warning
+744 passed, 1 warning
 ```
 
 Latest OpenAI smoke:
 
 ```text
 V2_AGENT_LLM_ENABLED=true
-V2_AGENT_GRAPH_ENABLED=false
 POST /api/v2/scenarios/generate
 → HTTP 200 / raw scenario v1 response
 → LLM candidate validator valid true

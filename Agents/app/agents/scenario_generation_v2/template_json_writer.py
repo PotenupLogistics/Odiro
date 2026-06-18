@@ -17,12 +17,12 @@ class TemplateJsonWriter:
             placement = {
                 "kind": "fixed",
                 "id": "center_obstacle",
-                "prop": "traffic_cone_01",
+                "prop": "obstacle.crate_01",
                 "at": {
                     "segment": "conflict",
                     "along_m": {"min": 6.5, "max": 8.5},
-                    "offset_m": {"min": -0.2, "max": 0.2},
-                    "lane": "center",
+                    "offset_m": {"min": 0.45, "max": 0.75},
+                    "lane": "walkway",
                 },
                 "yaw_deg": 0,
             }
@@ -30,33 +30,25 @@ class TemplateJsonWriter:
                 placement["allow_blocking"] = True
             placements.append(placement)
 
-        encounters = []
-        if plan.pattern in {"static_obstacle_ahead", "corridor_pose_navigation"}:
-            background_count = {"min": 0, "max": 0}
-        else:
-            background_count = {"min": 0, "max": 0} if plan.single_pedestrian else {"min": 0, "max": 1}
-            encounter = {
-                "id": "main_conflict",
-                "type": plan.encounter_type,
-                "at": "conflict",
-                "persona": plan.persona,
-                "overrides": {
-                    "personal_space_m": {"min": 0.6, "max": 0.9},
-                    "awareness_horizon_s": {"min": 1.5, "max": 2.5},
-                },
-            }
-            if plan.encounter_type == "cross_path":
-                encounter.update(
-                    {
-                        "id": "main_crossing",
-                        "trigger_distance_m": {"min": 3.0, "max": 5.0},
-                        "from": "curb_side",
-                    }
-                )
-            else:
-                encounter.update({"meet_offset_m": 0.0})
-            encounters.append(encounter)
-        robot = {"start": {"type": "entry"}, "goal": {"type": "exit"}}
+        pedestrians = {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+        robot = {
+            "start": {
+                "type": "corridor_pose",
+                "segment": "approach",
+                "along_m": 1.0,
+                "offset_m": 0.0,
+                "lane": "walkway",
+                "heading": "forward",
+            },
+            "goal": {
+                "type": "corridor_pose",
+                "segment": "exit",
+                "along_m": 16.0,
+                "offset_m": 0.0,
+                "lane": "walkway",
+                "heading": "forward",
+            },
+        }
         if plan.robot_anchor_only and plan.robot_start_anchor is not None and plan.robot_goal_anchor is not None:
             robot = {"start": plan.robot_start_anchor, "goal": plan.robot_goal_anchor}
 
@@ -77,10 +69,7 @@ class TemplateJsonWriter:
                 ],
             },
             "obstacles": {"min_clear_width_m": 0.9, "placements": placements},
-            "pedestrians": {
-                "background": {"count": background_count, "speed_mps": plan.pedestrian_speed_mps},
-                "encounters": encounters,
-            },
+            "pedestrians": pedestrians,
             "robot": robot,
         }
 
@@ -90,12 +79,12 @@ class TemplateJsonWriter:
             {
                 "kind": "fixed",
                 "id": "gate_panel_left",
-                "prop": "traffic_cone_01",
+                "prop": "obstacle.road_cone_01",
                 "at": {
                     "segment": "conflict",
                     "along_m": {"min": 6.8, "max": 7.2},
                     "offset_m": {"min": -0.35, "max": -0.25},
-                    "lane": "center",
+                    "lane": "walkway",
                 },
                 "yaw_deg": 0,
                 "allow_blocking": False,
@@ -103,12 +92,12 @@ class TemplateJsonWriter:
             {
                 "kind": "fixed",
                 "id": "gate_panel_right",
-                "prop": "traffic_cone_01",
+                "prop": "obstacle.road_cone_01",
                 "at": {
                     "segment": "conflict",
                     "along_m": {"min": 6.8, "max": 7.2},
                     "offset_m": {"min": 0.25, "max": 0.35},
-                    "lane": "center",
+                    "lane": "walkway",
                 },
                 "yaw_deg": 0,
                 "allow_blocking": False,

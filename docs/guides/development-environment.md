@@ -21,6 +21,8 @@
 
 Git submodule 초기화, hook 설정, LFS lock 설정 수행.
 완료 후 Unreal asset에 read-only 상태가 재적용되고, Editor asset 수정 전 checkout prompt가 켜진다.
+현재 Git LFS lock owner를 확인할 수 있으면 repo-local `user.name`도 자동 설정한다.
+`user.email`은 LFS lock 정보에 없으므로 값이 없으면 경고만 출력한다.
 
 ```powershell
 # 직접 재설정
@@ -36,6 +38,8 @@ git config --local rebase.autoStash true
 git config --local branch.autoSetupRebase always
 git config --local lfs.locksverify true
 git config --local lfs.setlockablereadonly true
+git config --local user.name <GitHub login>
+git config --local user.email <GitHub commit email>
 ```
 
 Editor user 설정도 보정된다.
@@ -54,6 +58,7 @@ git check-attr lockable -- Client/Content/<sample>.uasset
 ```
 
 `lockable: set`이어야 한다. `set-git-config.ps1`은 필요한 설정 변경과 완료 문구만 출력하고, setup 완료 후 lock 전 Unreal asset에 read-only 상태와 Editor checkout prompt를 재적용한다. 이미 맞는 상태의 성공 검증은 출력하지 않는다.
+Git identity가 없거나 LFS lock owner와 다르면 경고한다. Pull 후 Fork에도 같은 경고가 표시될 수 있다.
 
 GitHub repository 설정:
 

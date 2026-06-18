@@ -47,6 +47,147 @@ function Get-GitConfigFromFile {
     return (($value -join "`n").Trim())
 }
 
+# Reads an effective Git config value from local, global, or system config.
+function Get-EffectiveGitConfig {
+    param([string] $Name)
+
+    $value = @(git -C $repoRoot config --get $Name)
+    if ($LASTEXITCODE -ne 0) {
+        return ""
+    }
+    return (($value -join "`n").Trim())
+}
+
+# Reads a JSON property as an array even when Git LFS omits it.
+function Get-JsonArrayProperty {
+    param(
+        [object] $Object,
+        [string] $Name
+    )
+
+    if ($null -eq $Object) {
+        return @()
+    }
+
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) {
+        return @()
+    }
+
+    return @($property.Value)
+}
+
+# Extracts the displayed owner name from one Git LFS lock object.
+function Get-LfsLockOwnerName {
+    param([object] $Lock)
+
+    $ownerProperty = $Lock.PSObject.Properties["owner"]
+    if ($null -eq $ownerProperty -or $null -eq $ownerProperty.Value) {
+        return ""
+    }
+
+    $nameProperty = $ownerProperty.Value.PSObject.Properties["name"]
+    if ($null -eq $nameProperty -or [string]::IsNullOrWhiteSpace([string] $nameProperty.Value)) {
+        return ""
+    }
+
+    return ([string] $nameProperty.Value).Trim()
+}
+
+# Queries Git LFS for lock owners that belong to the current credentials.
+function Get-CurrentLfsLockOwnerNames {
+    $locksJson = @(git -C $repoRoot lfs locks --verify --json 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        Write-WarningMessage "Git LFS lock identity check failed. Run 'git lfs locks --verify' and check GitHub credentials."
+        return @()
+    }
+
+    if ($locksJson.Count -eq 0) {
+        return @()
+    }
+
+    try {
+        $locksPayload = ($locksJson -join "`n") | ConvertFrom-Json
+    }
+    catch {
+        Write-WarningMessage "Git LFS lock identity check returned invalid JSON."
+        return @()
+    }
+
+    $ownerNames = @()
+    foreach ($lock in Get-JsonArrayProperty -Object $locksPayload -Name "ours") {
+        $ownerName = Get-LfsLockOwnerName -Lock $lock
+        if (-not [string]::IsNullOrWhiteSpace($ownerName)) {
+            $ownerNames += $ownerName
+        }
+    }
+
+    return @($ownerNames | Sort-Object -Unique)
+}
+
+# Sets one local Git config key only when it is missing.
+function Set-MissingLocalGitConfig {
+    param(
+        [string] $Name,
+        [string] $Value,
+        [string] $Source
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace((Get-LocalGitConfig -Name $Name))) {
+        return
+    }
+
+    git -C $repoRoot config --local $Name $Value
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to configure $Name."
+    }
+
+    Write-Step "Configured: $Name=$Value ($Source)"
+}
+
+# Keeps repository-local Git identity aligned with the current LFS lock owner when possible.
+function Set-GitIdentityFromLfsLocks {
+    $localUserName = Get-LocalGitConfig -Name "user.name"
+    $localUserEmail = Get-LocalGitConfig -Name "user.email"
+    $effectiveUserName = Get-EffectiveGitConfig -Name "user.name"
+    $effectiveUserEmail = Get-EffectiveGitConfig -Name "user.email"
+    $ownerNames = @(Get-CurrentLfsLockOwnerNames)
+
+    if ($ownerNames.Count -eq 1) {
+        $lfsOwnerName = $ownerNames[0]
+        if ([string]::IsNullOrWhiteSpace($localUserName)) {
+            Set-MissingLocalGitConfig -Name "user.name" -Value $lfsOwnerName -Source "Git LFS lock owner"
+        }
+        elseif (-not [string]::Equals($localUserName, $lfsOwnerName, [System.StringComparison]::OrdinalIgnoreCase)) {
+            Write-WarningMessage "Repository-local user.name '$localUserName' differs from Git LFS lock owner '$lfsOwnerName'."
+            Write-WarningMessage "Run: git config --local user.name `"$lfsOwnerName`""
+        }
+    }
+    elseif ($ownerNames.Count -gt 1) {
+        Write-WarningMessage "Multiple Git LFS lock owners were returned for current credentials: $($ownerNames -join ', ')."
+        Write-WarningMessage "Run 'git lfs locks --verify' and check GitHub credentials."
+    }
+    elseif ([string]::IsNullOrWhiteSpace($localUserName)) {
+        if ([string]::IsNullOrWhiteSpace($effectiveUserName)) {
+            Write-WarningMessage "Repository-local user.name is not set, and no Git LFS lock owner is available."
+        }
+        else {
+            Write-WarningMessage "Repository-local user.name is not set; inherited value is '$effectiveUserName'."
+        }
+        Write-WarningMessage "Lock an Unreal asset or run: git config --local user.name <GitHub login>"
+    }
+
+    if ([string]::IsNullOrWhiteSpace($localUserEmail)) {
+        if ([string]::IsNullOrWhiteSpace($effectiveUserEmail)) {
+            Write-WarningMessage "Repository-local user.email is not set."
+        }
+        else {
+            Write-WarningMessage "Repository-local user.email is not set; inherited value is '$effectiveUserEmail'."
+        }
+        Write-WarningMessage "Git LFS lock data has no commit email. Run: git config --local user.email <GitHub commit email>"
+    }
+}
+
 # Sets one local Git config key and logs only when it changes.
 function Set-ExpectedLocalGitConfig {
     param(
@@ -235,6 +376,8 @@ if (-not (Test-Path -LiteralPath $lfsConfig -PathType Leaf)) {
 if ((Get-GitConfigFromFile -File $lfsConfig -Name "lfs.locksverify") -ne "true") {
     throw ".lfsconfig must set lfs.locksverify=true."
 }
+
+Set-GitIdentityFromLfsLocks
 
 Assert-UnrealAssetAttributes -Path "*.uasset"
 Assert-UnrealAssetAttributes -Path "*.umap"

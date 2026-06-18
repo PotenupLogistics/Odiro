@@ -43,6 +43,13 @@ LLM API key
 - main 동기화와 작업 브랜치 최신화는 rebase 우선: `git pull --rebase origin main`
 
 설정이 꼬였으면 `.\tools\set-git-config.ps1`를 다시 실행한다.
+Pull 후 Fork에 Git identity 경고가 뜨면 repo-local 값을 맞춘다.
+
+```powershell
+git lfs locks --verify
+git config --local user.name <GitHub login>
+git config --local user.email <GitHub commit email>
+```
 
 ## Binary Asset lock 규칙
 
@@ -75,6 +82,8 @@ git lfs locks --verify
 ```
 
 Lock 성공 시 해당 asset이 writable 상태가 된다. 실패 시 다른 사람이 lock한 상태.
+`set-git-config.ps1`은 현재 LFS lock owner를 알 수 있으면 `user.name`을 자동 설정한다.
+`user.email`은 직접 설정한다.
 
 #### 3. 수정 후 Pull Request
 

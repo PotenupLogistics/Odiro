@@ -2,6 +2,7 @@
 
 #include "Scenario/ScenarioEvaluationSubsystem.h"
 
+#include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "Engine/World.h"
@@ -9,6 +10,8 @@
 #include "GameFramework/Actor.h"
 #include "Misc/AutomationTest.h"
 #include "Scenario/Actors/ScenarioGroundRegion.h"
+#include "Scenario/Components/ScenarioPlaceableComponent.h"
+#include "Shared/Struct/DeliveryBot/Result/DeliveryBotSimulationFailureInfo.h"
 #include "Shared/Struct/DeliveryBot/Result/DeliveryBotPolicyEventSnapshot.h"
 #include "Shared/ScenarioSpecTypes.h"
 
@@ -89,6 +92,50 @@ namespace
 			return actor;
 		}
 
+		// Spawns an actor with a primitive root so evaluation hit delegates can be exercised.
+		AActor* SpawnPrimitiveActor(
+			const FVector& location,
+			const FString& instanceId = FString(),
+			const FRotator& rotation = FRotator::ZeroRotator) const
+		{
+			if (!World)
+			{
+				return nullptr;
+			}
+
+			FActorSpawnParameters spawnParams;
+			spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			AActor* actor = World->SpawnActor<AActor>(
+				AActor::StaticClass(),
+				FTransform(rotation, location),
+				spawnParams);
+			if (!actor)
+			{
+				return nullptr;
+			}
+
+			UBoxComponent* rootComponent = NewObject<UBoxComponent>(actor, TEXT("ScenarioEvaluationTestPrimitiveRoot"));
+			actor->AddInstanceComponent(rootComponent);
+			actor->SetRootComponent(rootComponent);
+			rootComponent->SetBoxExtent(FVector(25.0, 25.0, 25.0));
+			rootComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			rootComponent->SetCollisionObjectType(ECC_WorldDynamic);
+			rootComponent->SetCollisionResponseToAllChannels(ECR_Block);
+			rootComponent->RegisterComponent();
+			actor->SetActorLocationAndRotation(location, rotation);
+
+			if (!instanceId.IsEmpty())
+			{
+				UScenarioPlaceableComponent* placeableComponent =
+					NewObject<UScenarioPlaceableComponent>(actor, TEXT("ScenarioEvaluationTestPlaceable"));
+				placeableComponent->InstanceId = instanceId;
+				actor->AddInstanceComponent(placeableComponent);
+				placeableComponent->RegisterComponent();
+			}
+
+			return actor;
+		}
+
 		// Advances only the world clock counters used by timeout evaluation.
 		void AdvanceWorldTime(float deltaSeconds) const
 		{
@@ -160,6 +207,37 @@ namespace
 		}
 
 		return count;
+	}
+
+	// Returns the primitive root used by hit-delegate producer tests.
+	UPrimitiveComponent* GetPrimitiveRootForTest(AActor* actor)
+	{
+		return IsValid(actor)
+			? Cast<UPrimitiveComponent>(actor->GetRootComponent())
+			: nullptr;
+	}
+
+	// Broadcasts the same component-hit delegate that runtime physics invokes.
+	void BroadcastEvaluationHitForTest(
+		UPrimitiveComponent* hitComponent,
+		AActor* otherActor,
+		UPrimitiveComponent* otherComponent,
+		const FVector& impactPoint)
+	{
+		if (!IsValid(hitComponent))
+		{
+			return;
+		}
+
+		FHitResult hit;
+		hit.ImpactPoint = impactPoint;
+		hit.Location = impactPoint;
+		hitComponent->OnComponentHit.Broadcast(
+			hitComponent,
+			otherActor,
+			otherComponent,
+			FVector::ZeroVector,
+			hit);
 	}
 
 	// Verifies that an event or metric parameter exists with the expected typed value kind.
@@ -528,6 +606,141 @@ bool FScenarioEvaluationPolicyEventSnapshotRuntimeTest::RunTest(const FString& p
 	HasStringParamValue(*this, event->Properties, TEXT("last_obstacle_warning_source"), TEXT("corridor"));
 	HasIntegerParam(*this, event->Properties, TEXT("blocked_corridor_cell_count"));
 	HasIntegerParam(*this, event->Properties, TEXT("dynamic_blocked_cell_count"));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioEvaluationCollisionRuntimeTest,
+	"OdiroSim.ScenarioEvaluation.Events.Collisions",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioEvaluationCollisionRuntimeTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	FScenarioEvaluationTestWorld testWorld;
+	TestTrue(TEXT("world created"), testWorld.World != nullptr);
+	TestTrue(TEXT("evaluation subsystem created"), testWorld.EvaluationSubsystem != nullptr);
+	if (!testWorld.World || !testWorld.EvaluationSubsystem) return false;
+
+	AActor* robotActor = testWorld.SpawnPrimitiveActor(FVector::ZeroVector);
+	AActor* staticObstacleActor = testWorld.SpawnPrimitiveActor(FVector(100.0, 0.0, 0.0), TEXT("obstacle_001"));
+	AActor* pedestrianActor = testWorld.SpawnPrimitiveActor(FVector(200.0, 0.0, 0.0), TEXT("pedestrian_001"));
+	TestTrue(TEXT("robot actor spawned"), robotActor != nullptr);
+	TestTrue(TEXT("static obstacle actor spawned"), staticObstacleActor != nullptr);
+	TestTrue(TEXT("pedestrian actor spawned"), pedestrianActor != nullptr);
+	if (!robotActor || !staticObstacleActor || !pedestrianActor) return false;
+
+	FScenarioRuntimeContext context = MakeEvaluationTestContext(robotActor);
+	context.StaticObstacleActors.Add(staticObstacleActor);
+	context.PedestrianActors.Add(pedestrianActor);
+	context.PedestrianInstanceIds.Add(TEXT("pedestrian_001"));
+
+	TestTrue(
+		TEXT("evaluation started"),
+		testWorld.EvaluationSubsystem->StartEvaluation(MakeEvaluationTestConfig(), context, 0.0));
+
+	UPrimitiveComponent* robotPrimitive = GetPrimitiveRootForTest(robotActor);
+	UPrimitiveComponent* staticObstaclePrimitive = GetPrimitiveRootForTest(staticObstacleActor);
+	UPrimitiveComponent* pedestrianPrimitive = GetPrimitiveRootForTest(pedestrianActor);
+	TestTrue(TEXT("robot primitive exists"), robotPrimitive != nullptr);
+	TestTrue(TEXT("static obstacle primitive exists"), staticObstaclePrimitive != nullptr);
+	TestTrue(TEXT("pedestrian primitive exists"), pedestrianPrimitive != nullptr);
+	if (!robotPrimitive || !staticObstaclePrimitive || !pedestrianPrimitive) return false;
+
+	BroadcastEvaluationHitForTest(
+		robotPrimitive,
+		staticObstacleActor,
+		staticObstaclePrimitive,
+		staticObstacleActor->GetActorLocation());
+	BroadcastEvaluationHitForTest(
+		robotPrimitive,
+		pedestrianActor,
+		pedestrianPrimitive,
+		pedestrianActor->GetActorLocation());
+
+	const FEpisodeEvaluationResult result = testWorld.EvaluationSubsystem->GetCurrentResult();
+	TestEqual(
+		TEXT("one static collision event recorded"),
+		CountEvaluationEvents(result, EEpisodeEvaluationEventType::StaticObstacleCollision),
+		1);
+	TestEqual(
+		TEXT("one pedestrian collision event recorded"),
+		CountEvaluationEvents(result, EEpisodeEvaluationEventType::PedestrianCollision),
+		1);
+
+	const FEpisodeEvaluationEvent* staticEvent = FindEvaluationEvent(
+		result,
+		EEpisodeEvaluationEventType::StaticObstacleCollision);
+	TestTrue(TEXT("static collision event recorded"), staticEvent != nullptr);
+	if (!staticEvent) return false;
+	HasStringParamValue(*this, staticEvent->Properties, TEXT("target_id"), TEXT("obstacle_001"));
+	HasStringParam(*this, staticEvent->Properties, TEXT("target_actor"));
+
+	const FEpisodeEvaluationEvent* pedestrianEvent = FindEvaluationEvent(
+		result,
+		EEpisodeEvaluationEventType::PedestrianCollision);
+	TestTrue(TEXT("pedestrian collision event recorded"), pedestrianEvent != nullptr);
+	if (!pedestrianEvent) return false;
+	HasStringParamValue(*this, pedestrianEvent->Properties, TEXT("target_id"), TEXT("pedestrian_001"));
+	HasStringParam(*this, pedestrianEvent->Properties, TEXT("target_actor"));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioEvaluationDeliveryBotSimulationFailureRuntimeTest,
+	"OdiroSim.ScenarioEvaluation.Events.DeliveryBotSimulationFailure",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioEvaluationDeliveryBotSimulationFailureRuntimeTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	FScenarioEvaluationTestWorld testWorld;
+	TestTrue(TEXT("world created"), testWorld.World != nullptr);
+	TestTrue(TEXT("evaluation subsystem created"), testWorld.EvaluationSubsystem != nullptr);
+	if (!testWorld.World || !testWorld.EvaluationSubsystem) return false;
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ADeliveryBot* robotActor = testWorld.World->SpawnActor<ADeliveryBot>(
+		ADeliveryBot::StaticClass(),
+		FTransform::Identity,
+		spawnParams);
+	TestTrue(TEXT("delivery bot actor spawned"), robotActor != nullptr);
+	if (!robotActor) return false;
+
+	TestTrue(
+		TEXT("evaluation started"),
+		testWorld.EvaluationSubsystem->StartEvaluation(MakeEvaluationTestConfig(), MakeEvaluationTestContext(robotActor), 0.0));
+
+	FDeliveryBotSimulationFailureInfo failureInfo;
+	failureInfo.FailureType = EDeliveryBotSimulationFailureType::PathFindingFailed;
+	failureInfo.Message = TEXT("pathfinding failed");
+	failureInfo.LocationCm = robotActor->GetActorLocation();
+	failureInfo.TimeSeconds = 2.0f;
+	failureInfo.SpeedKmh = 3.5f;
+	testWorld.EvaluationSubsystem->HandleDeliveryBotSimulationFailed(robotActor, failureInfo);
+
+	const FEpisodeEvaluationResult result = testWorld.EvaluationSubsystem->GetCurrentResult();
+	TestTrue(TEXT("simulation failure completes episode"), result.bCompleted);
+	TestFalse(TEXT("simulation failure fails episode"), result.bSuccess);
+	TestEqual(
+		TEXT("simulation failure terminal reason"),
+		static_cast<int32>(result.TerminalReason),
+		static_cast<int32>(EEpisodeEvaluationTerminalReason::DeliveryBotSimulationFailed));
+
+	const FEpisodeEvaluationEvent* event = FindEvaluationEvent(
+		result,
+		EEpisodeEvaluationEventType::DeliveryBotSimulationFailure);
+	TestTrue(TEXT("simulation failure event recorded"), event != nullptr);
+	if (!event) return false;
+	TestTrue(
+		TEXT("simulation failure uses snapshot runtime"),
+		FMath::IsNearlyEqual(event->ElapsedTimeSeconds, 2.0, KINDA_SMALL_NUMBER));
+	HasStringParamValue(*this, event->Properties, TEXT("failure_type"), TEXT("PathFindingFailed"));
+	HasStringParamValue(*this, event->Properties, TEXT("delivery_bot_failure_type"), TEXT("PathFindingFailed"));
+	HasFloatParam(*this, event->Properties, TEXT("speed_kmh"));
 	return true;
 }
 

@@ -207,6 +207,41 @@ namespace
 		return count;
 	}
 
+	// Finds one serialized events.jsonl object by its external event_type.
+	TSharedPtr<FJsonObject> FindEventLineByTypeForTest(
+		const TArray<TSharedPtr<FJsonObject>>& eventLines,
+		const FString& eventType)
+	{
+		for (const TSharedPtr<FJsonObject>& eventLine : eventLines)
+		{
+			FString actualEventType;
+			if (eventLine.IsValid()
+				&& eventLine->TryGetStringField(TEXT("event_type"), actualEventType)
+				&& actualEventType == eventType)
+			{
+				return eventLine;
+			}
+		}
+
+		return nullptr;
+	}
+
+	// Builds a typed evaluation event for focused events.jsonl mapping tests.
+	FEpisodeEvaluationEvent MakeUserProjectEventTypeMatrixEvent(
+		int32 eventIndex,
+		EEpisodeEvaluationEventType eventType,
+		const FString& message)
+	{
+		FEpisodeEvaluationEvent event;
+		event.EventIndex = eventIndex;
+		event.ElapsedTimeSeconds = static_cast<double>(eventIndex) + 1.0;
+		event.EventType = eventType;
+		event.Severity = EEpisodeEvaluationEventSeverity::Warning;
+		event.SubjectInstanceId = TEXT("robot");
+		event.Message = message;
+		return event;
+	}
+
 	TSharedRef<FJsonObject> MakeActionTestRequestObject()
 	{
 		TSharedRef<FJsonObject> requestObject = MakeShared<FJsonObject>();
@@ -758,6 +793,226 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestTrue(
 		TEXT("summary scenario semantic copied"),
 		rows[0]->AsObject()->GetObjectField(TEXT("scenario_semantic"))->HasField(TEXT("route_axis")));
+
+	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUserProjectRunOutputEventTypeMatrixTest,
+	"OdiroSim.UserProjectData.RunOutput.EventTypeMatrix",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUserProjectRunOutputEventTypeMatrixTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	const FString projectPath = MakeUserProjectDataTestRoot();
+	FUserProjectRunSnapshotPaths paths;
+	TestTrue(TEXT("write snapshot"), WriteUserProjectDataSnapshot(projectPath, paths));
+
+	FEpisodeRunRecord runRecord;
+	runRecord.RunId = TEXT("000001");
+	runRecord.RunIndex = 0;
+	runRecord.EpisodeId = TEXT("000001");
+	runRecord.PairId = TEXT("000001");
+	runRecord.bCompileSucceeded = true;
+	runRecord.bEpisodeSetupCompileSucceeded = true;
+	runRecord.bDeliveryBotSetupCompileSucceeded = true;
+	runRecord.bSetupSucceeded = true;
+	runRecord.bEvaluationCompleted = true;
+	runRecord.bSuccess = true;
+	runRecord.Outcome = EEpisodeEvaluationOutcome::Success;
+	runRecord.TerminalReason = EEpisodeEvaluationTerminalReason::GoalReached;
+	runRecord.DurationSeconds = 20.0;
+	runRecord.EvaluationResult.EpisodeId = runRecord.EpisodeId;
+	runRecord.EvaluationResult.bCompleted = true;
+	runRecord.EvaluationResult.bSuccess = true;
+	runRecord.EvaluationResult.Outcome = EEpisodeEvaluationOutcome::Success;
+	runRecord.EvaluationResult.TerminalReason = EEpisodeEvaluationTerminalReason::GoalReached;
+	runRecord.EvaluationResult.DurationSeconds = runRecord.DurationSeconds;
+	runRecord.EvaluationResult.Metrics.Add(TEXT("distance_to_goal_m"), MakeUserProjectFloatParam(0.1));
+	runRecord.EvaluationResult.Metrics.Add(TEXT("goal_threshold_m"), MakeUserProjectFloatParam(0.5));
+
+	FEpisodeEvaluationEvent timeoutEvent = MakeUserProjectEventTypeMatrixEvent(
+		0,
+		EEpisodeEvaluationEventType::Timeout,
+		TEXT("timeout"));
+	timeoutEvent.Properties.Add(TEXT("duration_s"), MakeUserProjectFloatParam(20.0));
+	timeoutEvent.Properties.Add(TEXT("max_duration_s"), MakeUserProjectFloatParam(20.0));
+	runRecord.EvaluationResult.Events.Add(timeoutEvent);
+
+	FEpisodeEvaluationEvent tipOverEvent = MakeUserProjectEventTypeMatrixEvent(
+		1,
+		EEpisodeEvaluationEventType::RobotTipOver,
+		TEXT("tip over"));
+	tipOverEvent.Properties.Add(TEXT("roll_degree"), MakeUserProjectFloatParam(70.0));
+	tipOverEvent.Properties.Add(TEXT("pitch_degree"), MakeUserProjectFloatParam(0.0));
+	tipOverEvent.Properties.Add(TEXT("threshold_degree"), MakeUserProjectFloatParam(45.0));
+	runRecord.EvaluationResult.Events.Add(tipOverEvent);
+
+	FEpisodeEvaluationEvent staticCollisionEvent = MakeUserProjectEventTypeMatrixEvent(
+		2,
+		EEpisodeEvaluationEventType::StaticObstacleCollision,
+		TEXT("static collision"));
+	staticCollisionEvent.TargetInstanceId = TEXT("obstacle_001");
+	runRecord.EvaluationResult.Events.Add(staticCollisionEvent);
+
+	FEpisodeEvaluationEvent blockedRegionEvent = MakeUserProjectEventTypeMatrixEvent(
+		3,
+		EEpisodeEvaluationEventType::BlockedRegionCollision,
+		TEXT("blocked region"));
+	blockedRegionEvent.TargetInstanceId = TEXT("blocked_region_001");
+	runRecord.EvaluationResult.Events.Add(blockedRegionEvent);
+
+	FEpisodeEvaluationEvent penaltyRegionEvent = MakeUserProjectEventTypeMatrixEvent(
+		4,
+		EEpisodeEvaluationEventType::PenaltyRegionViolation,
+		TEXT("penalty region"));
+	penaltyRegionEvent.TargetInstanceId = TEXT("penalty_region_001");
+	penaltyRegionEvent.Properties.Add(TEXT("start_time_s"), MakeUserProjectFloatParam(3.0));
+	penaltyRegionEvent.Properties.Add(TEXT("duration_s"), MakeUserProjectFloatParam(1.0));
+	runRecord.EvaluationResult.Events.Add(penaltyRegionEvent);
+
+	FEpisodeEvaluationEvent nearMissEvent = MakeUserProjectEventTypeMatrixEvent(
+		5,
+		EEpisodeEvaluationEventType::PedestrianNearMiss,
+		TEXT("near miss"));
+	nearMissEvent.TargetInstanceId = TEXT("pedestrian_001");
+	nearMissEvent.Properties.Add(TEXT("min_distance_m"), MakeUserProjectFloatParam(0.4));
+	nearMissEvent.Properties.Add(TEXT("threshold_m"), MakeUserProjectFloatParam(0.5));
+	runRecord.EvaluationResult.Events.Add(nearMissEvent);
+
+	FEpisodeEvaluationEvent pedestrianCollisionEvent = MakeUserProjectEventTypeMatrixEvent(
+		6,
+		EEpisodeEvaluationEventType::PedestrianCollision,
+		TEXT("pedestrian collision"));
+	pedestrianCollisionEvent.TargetInstanceId = TEXT("pedestrian_002");
+	runRecord.EvaluationResult.Events.Add(pedestrianCollisionEvent);
+
+	FEpisodeEvaluationEvent simulationFailureEvent = MakeUserProjectEventTypeMatrixEvent(
+		7,
+		EEpisodeEvaluationEventType::DeliveryBotSimulationFailure,
+		TEXT("pathfinding failed"));
+	simulationFailureEvent.Properties.Add(TEXT("failure_type"), MakeUserProjectStringParam(TEXT("PathFindingFailed")));
+	runRecord.EvaluationResult.Events.Add(simulationFailureEvent);
+
+	FEpisodeEvaluationEvent stuckEvent = MakeUserProjectEventTypeMatrixEvent(
+		8,
+		EEpisodeEvaluationEventType::DeliveryBotSimulationFailure,
+		TEXT("stuck"));
+	stuckEvent.Properties.Add(TEXT("delivery_bot_failure_type"), MakeUserProjectStringParam(TEXT("Stuck")));
+	runRecord.EvaluationResult.Events.Add(stuckEvent);
+
+	FEpisodeEvaluationEvent repathEvent = MakeUserProjectEventTypeMatrixEvent(
+		9,
+		EEpisodeEvaluationEventType::DeliveryBotRepath,
+		TEXT("repath"));
+	repathEvent.Properties.Add(TEXT("policy_sequence"), MakeUserProjectIntegerParam(21));
+	repathEvent.Properties.Add(TEXT("policy_reason"), MakeUserProjectStringParam(TEXT("dynamic_repath_ready")));
+	runRecord.EvaluationResult.Events.Add(repathEvent);
+
+	FEpisodeEvaluationEvent pathfindFailEvent = MakeUserProjectEventTypeMatrixEvent(
+		10,
+		EEpisodeEvaluationEventType::DeliveryBotPolicyFailure,
+		TEXT("pathfind fail"));
+	pathfindFailEvent.Properties.Add(TEXT("policy_sequence"), MakeUserProjectIntegerParam(22));
+	pathfindFailEvent.Properties.Add(TEXT("error_code"), MakeUserProjectStringParam(TEXT("PATH_NOT_FOUND")));
+	runRecord.EvaluationResult.Events.Add(pathfindFailEvent);
+
+	FEpisodeEvaluationEvent policyDecisionErrorEvent = MakeUserProjectEventTypeMatrixEvent(
+		11,
+		EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure,
+		TEXT("policy decision error"));
+	policyDecisionErrorEvent.Properties.Add(TEXT("policy_sequence"), MakeUserProjectIntegerParam(23));
+	policyDecisionErrorEvent.Properties.Add(TEXT("error_code"), MakeUserProjectStringParam(TEXT("PYTHON_REQUEST_FAILED")));
+	runRecord.EvaluationResult.Events.Add(policyDecisionErrorEvent);
+
+	TArray<FString> diagnostics;
+	TestTrue(TEXT("episode artifacts write"), FUserProjectRunOutputJson::SaveEpisodeArtifacts(paths, runRecord, diagnostics));
+	TestEqual(TEXT("artifact diagnostics"), diagnostics.Num(), 0);
+
+	const FString eventsPath = FPaths::Combine(
+		FUserProjectRunOutputJson::BuildEpisodeDirectory(paths, runRecord.EpisodeId),
+		TEXT("events.jsonl"));
+	TArray<TSharedPtr<FJsonObject>> eventLines;
+	TestTrue(TEXT("parse event type matrix jsonl"), LoadUserProjectJsonlObjects(eventsPath, eventLines));
+	TestEqual(TEXT("event type matrix line count"), eventLines.Num(), 13);
+
+	const TArray<FString> expectedEventTypes = {
+		TEXT("Timeout"),
+		TEXT("RobotTipOver"),
+		TEXT("StaticObstacleCollision"),
+		TEXT("BlockedRegionCollision"),
+		TEXT("PenaltyRegionViolation"),
+		TEXT("PedestrianNearMiss"),
+		TEXT("PedestrianCollision"),
+		TEXT("DeliveryBotSimulationFailure"),
+		TEXT("GoalReached"),
+		TEXT("Stuck"),
+		TEXT("Repath"),
+		TEXT("PathfindFail"),
+		TEXT("PolicyDecisionError")
+	};
+	for (const FString& expectedEventType : expectedEventTypes)
+	{
+		TestEqual(
+			FString::Printf(TEXT("single event type: %s"), *expectedEventType),
+			CountEventTypeForTest(eventLines, expectedEventType),
+			1);
+	}
+
+	const auto expectedSourceForEventType = [](const FString& eventType)
+	{
+		if (eventType == TEXT("Repath") || eventType == TEXT("PathfindFail"))
+		{
+			return FString(TEXT("PythonPolicy"));
+		}
+		if (eventType == TEXT("PolicyDecisionError"))
+		{
+			return FString(TEXT("PolicyRuntime"));
+		}
+		return FString(TEXT("EvaluationSubsystem"));
+	};
+	const TMap<FString, int32> expectedActionSequences = {
+		{ TEXT("Repath"), 21 },
+		{ TEXT("PathfindFail"), 22 },
+		{ TEXT("PolicyDecisionError"), 23 }
+	};
+	for (const FString& expectedEventType : expectedEventTypes)
+	{
+		const TSharedPtr<FJsonObject> eventLine = FindEventLineByTypeForTest(eventLines, expectedEventType);
+		TestTrue(FString::Printf(TEXT("event line exists: %s"), *expectedEventType), eventLine.IsValid());
+		if (!eventLine.IsValid())
+		{
+			continue;
+		}
+
+		TestEqual(
+			FString::Printf(TEXT("event source: %s"), *expectedEventType),
+			eventLine->GetStringField(TEXT("source")),
+			expectedSourceForEventType(expectedEventType));
+		const TSharedPtr<FJsonValue> actionSequence = eventLine->TryGetField(TEXT("action_sequence"));
+		if (const int32* expectedActionSequence = expectedActionSequences.Find(expectedEventType))
+		{
+			TestTrue(
+				FString::Printf(TEXT("action sequence is number: %s"), *expectedEventType),
+				actionSequence.IsValid() && actionSequence->Type == EJson::Number);
+			if (actionSequence.IsValid() && actionSequence->Type == EJson::Number)
+			{
+				TestEqual(
+					FString::Printf(TEXT("action sequence: %s"), *expectedEventType),
+					static_cast<int32>(actionSequence->AsNumber()),
+					*expectedActionSequence);
+			}
+		}
+		else
+		{
+			TestTrue(
+				FString::Printf(TEXT("action sequence is null: %s"), *expectedEventType),
+				actionSequence.IsValid() && actionSequence->Type == EJson::Null);
+		}
+	}
 
 	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
 	return true;

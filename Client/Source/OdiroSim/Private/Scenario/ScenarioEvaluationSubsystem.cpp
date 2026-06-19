@@ -363,14 +363,19 @@ void UScenarioEvaluationSubsystem::HandleDeliveryBotSimulationFailed(
 		AddTargetCorridorSnapshotProperties(properties, targetActor->GetActorLocation());
 	}
 
-	AddEvaluationEventWithDetails(
-		EEpisodeEvaluationEventType::DeliveryBotSimulationFailure,
-		EEpisodeEvaluationEventSeverity::Failure,
-		failureMessage,
-		targetInstanceId,
-		FailureInfo.LocationCm,
-		0.0,
-		properties);
+	FEpisodeEvaluationEvent event;
+	event.ElapsedTimeSeconds = FailureInfo.TimeSeconds > 0.0f
+		? static_cast<double>(FailureInfo.TimeSeconds)
+		: GetElapsedTimeSeconds();
+	event.WorldTimeSeconds = EvaluationStartTimeSeconds + event.ElapsedTimeSeconds;
+	event.EventType = EEpisodeEvaluationEventType::DeliveryBotSimulationFailure;
+	event.Severity = EEpisodeEvaluationEventSeverity::Failure;
+	event.Message = failureMessage;
+	event.SubjectInstanceId = ActiveRuntimeContext.RobotInstanceId;
+	event.TargetInstanceId = targetInstanceId;
+	event.Location = FailureInfo.LocationCm;
+	event.Properties = properties;
+	PublishEvaluationEvent(event);
 
 	UE_LOG(
 		LogScenarioEvaluation,

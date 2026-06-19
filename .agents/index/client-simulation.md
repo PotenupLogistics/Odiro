@@ -70,6 +70,7 @@ keep:
   - `FUserProjectRunOutputJson` preserves typed evaluation `TargetInstanceId` as `events.jsonl` `target_id` or `region_id` properties when runtime detectors have not already supplied those fields.
   - `FUserProjectRunOutputJson` reuses an existing terminal-cause evaluation event for `result.json.summary.terminal_event_index`; it only writes a synthetic terminal `events.jsonl` line when no matching terminal event exists.
   - ScenarioEvaluationSubsystem policy-event snapshots use the Python policy snapshot runtime and sequence as the `events.jsonl` run time and action-sequence join source.
+  - ScenarioEvaluationSubsystem DeliveryBot simulation-failure snapshots use `FDeliveryBotSimulationFailureInfo.TimeSeconds` as the `events.jsonl` run time when the producer supplies it.
   - ScenarioEvaluationSubsystem owns non-terminal Stuck detection from goal-progress and observed-speed windows; project run output exposes it as `Stuck` through `DeliveryBotSimulationFailure` snapshot properties while `Timeout` remains the terminal reason.
   - Project `setting.json` runtime/evaluation fields are simulator-run inputs: `time_scale` applies to world time dilation, evaluation distances convert from meters to runtime centimeters, and Stuck speed thresholds convert from km/h to cm/s.
   - Client/Json/Schema and Client/Json/environment-catalog.md are LLM prompt-facing docs for one user project simulation set; keep them aligned with contracts/specs/user-project-data.md and the Client scenario catalog assets.

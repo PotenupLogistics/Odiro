@@ -510,6 +510,8 @@ bool FUserProjectEpisodeScenarioWriteTest::RunTest(const FString& parameters)
 
 	const TSharedPtr<FJsonObject> sampledScenarioObject = episodeObject->GetObjectField(TEXT("scenario"));
 	const TSharedPtr<FJsonObject> paramsObject = sampledScenarioObject->GetObjectField(TEXT("params"));
+	TestTrue(TEXT("max duration param recorded"), paramsObject->HasField(TEXT("max_duration_s")));
+	TestFalse(TEXT("legacy time limit param omitted"), paramsObject->HasField(TEXT("time_limit_s")));
 	TestTrue(TEXT("walkway range param recorded"), paramsObject->HasField(TEXT("corridor.walkway_width_m")));
 	TestTrue(TEXT("obstacle along range param recorded"), paramsObject->HasField(TEXT("obstacles.obstacle_1.at.along_m")));
 	TestTrue(TEXT("obstacle yaw range param recorded"), paramsObject->HasField(TEXT("obstacles.obstacle_1.yaw_deg")));

@@ -137,13 +137,21 @@ bool FUserProjectScenarioSampleWorldSpecAdapterTest::RunTest(const FString& para
 	TestTrue(TEXT("scenario sample adapts"), compileResult.bSuccess);
 	TestEqual(TEXT("sample scenario id"), compileResult.WorldSpec.RunConfig.TemplateId, FString(TEXT("adapter_sidewalk_000001")));
 	TestEqual(TEXT("seed"), compileResult.WorldSpec.RunConfig.BaseSeed, static_cast<int64>(2000));
-	const FScenarioParamValue* timeLimitParam = compileResult.WorldSpec.RunConfig.Parameters.Find(TEXT("time_limit_s"));
-	TestNotNull(TEXT("time limit param exists"), timeLimitParam);
-	if (timeLimitParam != nullptr)
+	TestEqual(TEXT("max duration seconds"), compileResult.WorldSpec.RunConfig.MaxDurationSeconds, 60.0);
+	const FScenarioParamValue* maxDurationParam = compileResult.WorldSpec.RunConfig.Parameters.Find(TEXT("max_duration_s"));
+	TestNotNull(TEXT("max duration param exists"), maxDurationParam);
+	if (maxDurationParam != nullptr)
 	{
-		TestEqual(TEXT("time limit param type"), timeLimitParam->Type, EScenarioParamValueType::Float);
-		TestEqual(TEXT("time limit value"), timeLimitParam->FloatValue, 60.0);
+		TestTrue(
+			TEXT("max duration param numeric"),
+			maxDurationParam->Type == EScenarioParamValueType::Float
+			|| maxDurationParam->Type == EScenarioParamValueType::Integer);
+		const double maxDurationValue = maxDurationParam->Type == EScenarioParamValueType::Integer
+			? static_cast<double>(maxDurationParam->IntegerValue)
+			: maxDurationParam->FloatValue;
+		TestEqual(TEXT("max duration value"), maxDurationValue, 60.0);
 	}
+	TestNull(TEXT("legacy time limit param omitted"), compileResult.WorldSpec.RunConfig.Parameters.Find(TEXT("time_limit_s")));
 	TestEqual(TEXT("runtime corridor count"), compileResult.WorldSpec.Corridors.Num(), 1);
 	if (compileResult.WorldSpec.Corridors.IsEmpty())
 	{

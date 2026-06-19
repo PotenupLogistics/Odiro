@@ -24,7 +24,7 @@ namespace
 		FScenarioSampleParamValue TimeLimit;
 		TimeLimit.Type = EScenarioSampleParamValueType::Float;
 		TimeLimit.FloatValue = 45.0;
-		Document.Scenario.Params.Add(TEXT("time_limit_s"), TimeLimit);
+		Document.Scenario.Params.Add(TEXT("max_duration_s"), TimeLimit);
 
 		FScenarioSampleSemantic& Semantic = Document.Scenario.Semantic;
 		Semantic.RouteAxis.OriginXYMeters = FVector2D::ZeroVector;
@@ -121,6 +121,7 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	TestTrue(TEXT("sample adapts"), Result.bSuccess);
 	TestEqual(TEXT("scenario id"), Result.WorldSpec.RunConfig.TemplateId, Document.Sample.ScenarioId);
 	TestEqual(TEXT("base seed"), Result.WorldSpec.RunConfig.BaseSeed, Document.Sample.Source.Seed);
+	TestEqual(TEXT("max duration seconds"), Result.WorldSpec.RunConfig.MaxDurationSeconds, 45.0);
 	TestEqual(TEXT("runtime corridor count"), Result.WorldSpec.Corridors.Num(), 1);
 	if (Result.WorldSpec.Corridors.IsEmpty())
 	{

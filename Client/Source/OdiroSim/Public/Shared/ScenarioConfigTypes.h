@@ -29,6 +29,10 @@ struct ODIROSIM_API FScenarioRunConfig
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	int32 IterationIndex = 0;
 
+	// Episode timeout seconds resolved from setting.runtime.max_duration_s; 0 disables timeout.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario", meta = (ClampMin = "0.0"))
+	double MaxDurationSeconds = 0.0;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TMap<FString, FScenarioParamValue> Parameters;
 };

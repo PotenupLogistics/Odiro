@@ -467,7 +467,7 @@ FUserProjectEpisodeScenarioWriteResult FUserProjectEpisodeScenarioJson::WriteEpi
 	}
 
 	FScenarioSampleDocument sampleDocument = sampleResult.Document;
-	sampleDocument.Scenario.Params.Add(TEXT("time_limit_s"), MakeScenarioSampleFloatParam(setting.MaxDurationSeconds));
+	sampleDocument.Scenario.Params.Add(TEXT("max_duration_s"), MakeScenarioSampleFloatParam(setting.MaxDurationSeconds));
 
 	FString outputJson;
 	TArray<FScenarioSchemaDiagnostic> sampleWriteDiagnostics;

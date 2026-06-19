@@ -160,11 +160,15 @@ namespace
 		robotStateObject->SetNumberField(TEXT("z"), 50.0);
 		robotStateObject->SetNumberField(TEXT("yawDegree"), 90.0);
 		robotStateObject->SetNumberField(TEXT("speedKmh"), 4.0);
-		robotStateObject->SetBoolField(TEXT("bColliding"), false);
+		robotStateObject->SetBoolField(TEXT("bColliding"), true);
 		robotStateObject->SetStringField(TEXT("collisionActorName"), TEXT("runtime_collision_actor"));
 		robotStateObject->SetArrayField(
 			TEXT("collisionActorTags"),
-			{ MakeShared<FJsonValueString>(TEXT("StaticObstacle")) });
+			{ MakeShared<FJsonValueString>(TEXT("RuntimeCollisionTag")) });
+		robotStateObject->SetStringField(TEXT("collisionTargetId"), TEXT("obstacle_01"));
+		robotStateObject->SetArrayField(
+			TEXT("collisionTargetTags"),
+			{ MakeShared<FJsonValueString>(TEXT("ScenarioObstacleTag")) });
 		requestObject->SetObjectField(TEXT("robotState"), robotStateObject);
 
 		TArray<TSharedPtr<FJsonValue>> lidarRayValues;
@@ -202,7 +206,10 @@ namespace
 		ray2DObject->SetStringField(TEXT("targetId"), TEXT("obstacle_01"));
 		ray2DObject->SetArrayField(
 			TEXT("actorTags"),
-			{ MakeShared<FJsonValueString>(TEXT("StaticObstacle")) });
+			{ MakeShared<FJsonValueString>(TEXT("RuntimeObstacleTag")) });
+		ray2DObject->SetArrayField(
+			TEXT("targetTags"),
+			{ MakeShared<FJsonValueString>(TEXT("ScenarioObstacleTag")) });
 		lidarRay2DValues.Add(MakeShared<FJsonValueObject>(ray2DObject));
 		lidarObject->SetArrayField(TEXT("rays2d"), lidarRay2DValues);
 
@@ -222,7 +229,10 @@ namespace
 		ray3DObject->SetStringField(TEXT("targetId"), TEXT("obstacle_01"));
 		ray3DObject->SetArrayField(
 			TEXT("actorTags"),
-			{ MakeShared<FJsonValueString>(TEXT("StaticObstacle")) });
+			{ MakeShared<FJsonValueString>(TEXT("RuntimeObstacleTag")) });
+		ray3DObject->SetArrayField(
+			TEXT("targetTags"),
+			{ MakeShared<FJsonValueString>(TEXT("ScenarioObstacleTag")) });
 		lidarRay3DValues.Add(MakeShared<FJsonValueObject>(ray3DObject));
 		lidarObject->SetArrayField(TEXT("rays3d"), lidarRay3DValues);
 		requestObject->SetObjectField(TEXT("lidar"), lidarObject);
@@ -233,7 +243,10 @@ namespace
 		observedObject->SetStringField(TEXT("targetId"), TEXT("pedestrian_01"));
 		observedObject->SetArrayField(
 			TEXT("actorTags"),
-			{ MakeShared<FJsonValueString>(TEXT("Pedestrian")) });
+			{ MakeShared<FJsonValueString>(TEXT("RuntimePedestrianTag")) });
+		observedObject->SetArrayField(
+			TEXT("targetTags"),
+			{ MakeShared<FJsonValueString>(TEXT("ScenarioPedestrianTag")) });
 		observedObject->SetBoolField(TEXT("hasBounds"), true);
 		TSharedRef<FJsonObject> boundsOriginObject = MakeShared<FJsonObject>();
 		boundsOriginObject->SetNumberField(TEXT("x"), 380.0);
@@ -619,10 +632,16 @@ bool FUserProjectRobotActionWriteTest::RunTest(const FString& parameters)
 			if (rayValues && rayValues->Num() == 1 && (*rayValues)[0].IsValid() && (*rayValues)[0]->Type == EJson::Object)
 			{
 				const TSharedPtr<FJsonObject> rayObject = (*rayValues)[0]->AsObject();
-				TestTrue(TEXT("ray target id field"), rayObject->TryGetStringField(TEXT("target_id"), stringValue));
-				TestEqual(TEXT("ray target id"), stringValue, FString(TEXT("obstacle_01")));
-				TestTrue(TEXT("ray yaw field"), rayObject->TryGetNumberField(TEXT("yaw_degree"), numberValue));
-				TestEqual(TEXT("ray yaw"), static_cast<int32>(numberValue), 45);
+			TestTrue(TEXT("ray target id field"), rayObject->TryGetStringField(TEXT("target_id"), stringValue));
+			TestEqual(TEXT("ray target id"), stringValue, FString(TEXT("obstacle_01")));
+			const TArray<TSharedPtr<FJsonValue>>* targetTags = nullptr;
+			TestTrue(TEXT("ray target tags field"), rayObject->TryGetArrayField(TEXT("target_tags"), targetTags));
+			TestTrue(
+				TEXT("ray target tag value"),
+				targetTags && targetTags->Num() == 1 && (*targetTags)[0].IsValid()
+					&& (*targetTags)[0]->AsString() == TEXT("ScenarioObstacleTag"));
+			TestTrue(TEXT("ray yaw field"), rayObject->TryGetNumberField(TEXT("yaw_degree"), numberValue));
+			TestEqual(TEXT("ray yaw"), static_cast<int32>(numberValue), 45);
 			}
 
 			TSharedPtr<FJsonObject> selectionObject;
@@ -641,7 +660,15 @@ bool FUserProjectRobotActionWriteTest::RunTest(const FString& parameters)
 			TestTrue(TEXT("robot state x field"), robotStateObject->TryGetNumberField(TEXT("x"), numberValue));
 			TestEqual(TEXT("robot state x meters"), numberValue, 10.0);
 			TestTrue(TEXT("robot state colliding field"), robotStateObject->TryGetBoolField(TEXT("colliding"), boolValue));
-			TestFalse(TEXT("robot state colliding"), boolValue);
+			TestTrue(TEXT("robot state colliding"), boolValue);
+			TestTrue(TEXT("collision target id field"), robotStateObject->TryGetStringField(TEXT("collision_target_id"), stringValue));
+			TestEqual(TEXT("collision target id"), stringValue, FString(TEXT("obstacle_01")));
+			const TArray<TSharedPtr<FJsonValue>>* collisionTargetTags = nullptr;
+			TestTrue(TEXT("collision target tags field"), robotStateObject->TryGetArrayField(TEXT("collision_target_tags"), collisionTargetTags));
+			TestTrue(
+				TEXT("collision target tag value"),
+				collisionTargetTags && collisionTargetTags->Num() == 1 && (*collisionTargetTags)[0].IsValid()
+					&& (*collisionTargetTags)[0]->AsString() == TEXT("ScenarioObstacleTag"));
 		}
 
 		TSharedPtr<FJsonObject> actionObject;
@@ -685,6 +712,12 @@ bool FUserProjectRobotActionWriteTest::RunTest(const FString& parameters)
 			const TSharedPtr<FJsonObject> observedObject = (*observedValues)[0]->AsObject();
 			TestTrue(TEXT("observed target id field"), observedObject->TryGetStringField(TEXT("target_id"), stringValue));
 			TestEqual(TEXT("observed target id"), stringValue, FString(TEXT("pedestrian_01")));
+			const TArray<TSharedPtr<FJsonValue>>* observedTargetTags = nullptr;
+			TestTrue(TEXT("observed target tags field"), observedObject->TryGetArrayField(TEXT("target_tags"), observedTargetTags));
+			TestTrue(
+				TEXT("observed target tag value"),
+				observedTargetTags && observedTargetTags->Num() == 1 && (*observedTargetTags)[0].IsValid()
+					&& (*observedTargetTags)[0]->AsString() == TEXT("ScenarioPedestrianTag"));
 		}
 	}
 

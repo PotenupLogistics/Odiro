@@ -1,8 +1,24 @@
 #include "DeliveryBot/Component/DeliveryBot_LidarSensorComponent.h"
 
 #include "DrawDebugHelpers.h"
+#include "Scenario/Components/ScenarioPlaceableComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotLidarSensor, Log, All);
+
+namespace
+{
+	// Returns the scenario-authored semantic id when the actor participates in scenario logging.
+	FString ResolveScenarioTargetId(const AActor* actor)
+	{
+		if (!IsValid(actor))
+		{
+			return FString();
+		}
+
+		const UScenarioPlaceableComponent* placeableComponent = actor->FindComponentByClass<UScenarioPlaceableComponent>();
+		return placeableComponent ? placeableComponent->InstanceId : FString();
+	}
+}
 
 UDeliveryBot_LidarSensorComponent::UDeliveryBot_LidarSensorComponent()
 {
@@ -540,6 +556,8 @@ TArray<FDeliveryBotLidarDetectedObjectInfo> UDeliveryBot_LidarSensorComponent::B
 			newObjectInfo.DetectedActor = rayInfo.HitActor;
 			newObjectInfo.ActorName = rayInfo.ActorName;
 			newObjectInfo.ActorTags = rayInfo.ActorTags;
+			newObjectInfo.TargetId = rayInfo.TargetId;
+			newObjectInfo.TargetTags = rayInfo.TargetTags;
 			rayInfo.HitActor->GetActorBounds(true, newObjectInfo.BoundsOriginCm, newObjectInfo.BoundsExtentCm);
 			newObjectInfo.bHasBounds = !newObjectInfo.BoundsExtentCm.IsNearlyZero();
 			newObjectInfo.ClosestHitLocationCm = rayInfo.HitLocationCm;
@@ -821,6 +839,8 @@ FDeliveryBotLidarRayInfo UDeliveryBot_LidarSensorComponent::MakeRayInfo(
 	rayInfo.HitActor = hitActor;
 	rayInfo.ActorName = hitActor->GetName();
 	rayInfo.ActorTags = hitActor->Tags;
+	rayInfo.TargetId = ResolveScenarioTargetId(hitActor);
+	rayInfo.TargetTags = hitActor->Tags;
 	rayInfo.HitLocationCm = hitResult->ImpactPoint;
 	rayInfo.DistanceM = FVector::Dist(startLocationCm, hitResult->ImpactPoint) / 100.f;
 

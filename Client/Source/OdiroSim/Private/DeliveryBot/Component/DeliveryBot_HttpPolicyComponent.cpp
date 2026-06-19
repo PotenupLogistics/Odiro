@@ -104,6 +104,8 @@ namespace
 		rayObject->SetNumberField(TEXT("rayYawDegree"), rayInfo.RayYawDegree);
 		rayObject->SetStringField(TEXT("actorName"), rayInfo.ActorName);
 		rayObject->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(rayInfo.ActorTags));
+		rayObject->SetStringField(TEXT("targetId"), rayInfo.TargetId);
+		rayObject->SetArrayField(TEXT("targetTags"), MakeJsonStringArrayFromNames(rayInfo.TargetTags));
 		return rayObject;
 	}
 
@@ -116,6 +118,8 @@ namespace
 		rayObject->SetNumberField(TEXT("rayIndex"), rayInfo.RayIndex);
 		rayObject->SetStringField(TEXT("actorName"), rayInfo.ActorName);
 		rayObject->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(rayInfo.ActorTags));
+		rayObject->SetStringField(TEXT("targetId"), rayInfo.TargetId);
+		rayObject->SetArrayField(TEXT("targetTags"), MakeJsonStringArrayFromNames(rayInfo.TargetTags));
 		return rayObject;
 	}
 
@@ -927,6 +931,8 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 	robotStateObject->SetBoolField(TEXT("bColliding"), observation.RobotState.bColliding);
 	robotStateObject->SetStringField(TEXT("collisionActorName"), observation.RobotState.CollisionActorName);
 	robotStateObject->SetArrayField(TEXT("collisionActorTags"), MakeJsonStringArrayFromNames(observation.RobotState.CollisionActorTags));
+	robotStateObject->SetStringField(TEXT("collisionTargetId"), observation.RobotState.CollisionTargetId);
+	robotStateObject->SetArrayField(TEXT("collisionTargetTags"), MakeJsonStringArrayFromNames(observation.RobotState.CollisionTargetTags));
 	requestObject->SetObjectField(TEXT("robotState"), robotStateObject);
 
 	TArray<TSharedPtr<FJsonValue>> legacyLidarRayValues;
@@ -980,6 +986,8 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 		TSharedRef<FJsonObject> objectJson = MakeShared<FJsonObject>();
 		objectJson->SetStringField(TEXT("actorName"), objectInfo.ActorName);
 		objectJson->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(objectInfo.ActorTags));
+		objectJson->SetStringField(TEXT("targetId"), objectInfo.TargetId);
+		objectJson->SetArrayField(TEXT("targetTags"), MakeJsonStringArrayFromNames(objectInfo.TargetTags));
 		objectJson->SetBoolField(TEXT("hasBounds"), objectInfo.bHasBounds);
 		objectJson->SetObjectField(TEXT("boundsOriginCm"), MakeJsonVectorObject(objectInfo.BoundsOriginCm));
 		objectJson->SetObjectField(TEXT("boundsExtentCm"), MakeJsonVectorObject(objectInfo.BoundsExtentCm));

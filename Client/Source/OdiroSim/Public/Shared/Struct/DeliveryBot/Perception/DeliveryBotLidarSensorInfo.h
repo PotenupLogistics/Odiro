@@ -134,6 +134,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> ActorTags{};
 
+	// Scenario semantic id resolved from the hit actor's placeable component.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString TargetId{};
+
+	// Scenario semantic tags associated with the hit target.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FName> TargetTags{};
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TObjectPtr<AActor> HitActor{ nullptr };
 };
@@ -169,6 +177,14 @@ public: // 탐지된 액터
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> ActorTags{};
+
+	// Scenario semantic id resolved from the detected actor's placeable component.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString TargetId{};
+
+	// Scenario semantic tags associated with the detected target.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FName> TargetTags{};
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bHasBounds{ false };
@@ -220,6 +236,14 @@ struct FDeliveryBotLidarObservedObjectInfo
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> ActorTags{};
+
+	// Scenario semantic id exposed to policy and action-log payloads.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString TargetId{};
+
+	// Scenario semantic tags exposed to policy and action-log payloads.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FName> TargetTags{};
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bHasBounds{ false };

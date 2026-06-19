@@ -12,6 +12,21 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBot, Log, All);
 
+namespace
+{
+	// Returns the scenario-authored semantic id when the actor participates in scenario logging.
+	FString ResolveScenarioTargetId(const AActor* actor)
+	{
+		if (!IsValid(actor))
+		{
+			return FString();
+		}
+
+		const UScenarioPlaceableComponent* placeableComponent = actor->FindComponentByClass<UScenarioPlaceableComponent>();
+		return placeableComponent ? placeableComponent->InstanceId : FString();
+	}
+}
+
 ADeliveryBot::ADeliveryBot()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -214,6 +229,8 @@ void ADeliveryBot::ResetCollisionStopState()
 	bCollisionStopActive = false;
 	CollisionStopActorName.Reset();
 	CollisionStopActorTags.Reset();
+	CollisionStopTargetId.Reset();
+	CollisionStopTargetTags.Reset();
 }
 
 void ADeliveryBot::HandleCollisionStopHit(
@@ -237,6 +254,8 @@ void ADeliveryBot::HandleCollisionStopHit(
 	{
 		CollisionStopActorName = otherActor->GetName();
 		CollisionStopActorTags = otherActor->Tags;
+		CollisionStopTargetId = ResolveScenarioTargetId(otherActor);
+		CollisionStopTargetTags = otherActor->Tags;
 		UE_LOG(LogDeliveryBot, Warning, TEXT("Collision stop locked | Actor=%s"), *CollisionStopActorName);
 	}
 
@@ -458,6 +477,8 @@ TArray<FDeliveryBotLidarObservedObjectInfo> ADeliveryBot::BuildObservedObjectsFo
 		FDeliveryBotLidarObservedObjectInfo target;
 		target.ActorName = source.ActorName;
 		target.ActorTags = source.ActorTags;
+		target.TargetId = source.TargetId;
+		target.TargetTags = source.TargetTags;
 		target.bHasBounds = source.bHasBounds;
 		target.BoundsOriginCm = source.BoundsOriginCm;
 		target.BoundsExtentCm = source.BoundsExtentCm;
@@ -502,6 +523,8 @@ void ADeliveryBot::FillObservation(FDeliveryBotObservationInfo& observation) con
 	observation.RobotState.bColliding = bCollisionStopActive;
 	observation.RobotState.CollisionActorName = CollisionStopActorName;
 	observation.RobotState.CollisionActorTags = CollisionStopActorTags;
+	observation.RobotState.CollisionTargetId = CollisionStopTargetId;
+	observation.RobotState.CollisionTargetTags = CollisionStopTargetTags;
 
 	observation.VehicleSpec.MaxSpeedKmh = SetupInfo.ChaosDriveConfigInfo.MaxSpeedKmh;
 	observation.VehicleSpec.MaxReverseSpeedKmh = SetupInfo.ChaosDriveConfigInfo.MaxReverseSpeedKmh;

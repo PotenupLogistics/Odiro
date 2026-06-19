@@ -235,4 +235,65 @@ bool FSimulatorLaunchProjectRunSnapshotPrepareTest::RunTest(const FString& param
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimulatorLaunchProjectPresetsTest,
+	"OdiroSim.SimulatorLaunch.ProjectPresets",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimulatorLaunchProjectPresetsTest::RunTest(const FString& parameters)
+{
+	UGameInstance* gameInstance = NewObject<UGameInstance>();
+	USimulatorLaunchSubsystem* subsystem = NewObject<USimulatorLaunchSubsystem>(gameInstance);
+	TestNotNull(TEXT("subsystem created"), subsystem);
+	if (!subsystem)
+	{
+		return false;
+	}
+
+	const FProjectPresetCatalog catalog = subsystem->ListProjectPresets();
+	TestTrue(TEXT("scenario presets include blank"), catalog.ScenarioPresetIds.Contains(TEXT("blank")));
+	TestTrue(TEXT("scenario presets include curved road"), catalog.ScenarioPresetIds.Contains(TEXT("curved-road")));
+	TestTrue(TEXT("scenario presets include demo"), catalog.ScenarioPresetIds.Contains(TEXT("demo")));
+	TestTrue(TEXT("profile presets include basic"), catalog.ProfilePresetIds.Contains(TEXT("basic")));
+	TestTrue(TEXT("profile presets include full"), catalog.ProfilePresetIds.Contains(TEXT("full")));
+	TestTrue(TEXT("policy presets include blank"), catalog.PolicyPresetIds.Contains(TEXT("blank")));
+	TestTrue(TEXT("policy presets include demo"), catalog.PolicyPresetIds.Contains(TEXT("demo")));
+
+	const FString projectPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+		FPaths::ProjectSavedDir(),
+		TEXT("Automation/SimulatorLaunchProjectPresets"),
+		FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+
+	FProjectPresetSelection selection;
+	selection.ScenarioPresetId = TEXT("curved-road");
+	selection.ProfilePresetId = TEXT("full");
+	selection.PolicyPresetId = TEXT("demo");
+
+	TArray<FString> diagnostics;
+	TestTrue(TEXT("create project from selected presets"), subsystem->CreateProjectFromPresets(projectPath, selection, diagnostics));
+	if (!diagnostics.IsEmpty())
+	{
+		AddInfo(FString::Printf(TEXT("preset create diagnostics: %s"), *FString::Join(diagnostics, TEXT("\n"))));
+	}
+	TestTrue(TEXT("created scenario exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("scenario.json"))));
+	TestTrue(TEXT("created profile exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("profile.json"))));
+	TestTrue(TEXT("created default setting exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("setting.json"))));
+	TestTrue(TEXT("created demo policy exists"), FPaths::FileExists(FPaths::Combine(projectPath, TEXT("policy/action.py"))));
+	TestTrue(TEXT("created runs directory exists"), IFileManager::Get().DirectoryExists(*FPaths::Combine(projectPath, TEXT("runs"))));
+
+	FProjectPresetSelection invalidSelection;
+	invalidSelection.ScenarioPresetId = TEXT("../bad");
+	diagnostics.Reset();
+	TestFalse(
+		TEXT("invalid scenario preset id rejected"),
+		subsystem->CreateProjectFromPresets(
+			FPaths::Combine(projectPath, TEXT("invalid-child")),
+			invalidSelection,
+			diagnostics));
+	TestTrue(TEXT("invalid preset diagnostic"), HasSimulatorLaunchDiagnosticContaining(diagnostics, TEXT("scenario preset id")));
+
+	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+	return true;
+}
+
 #endif

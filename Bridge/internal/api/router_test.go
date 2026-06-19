@@ -14,20 +14,20 @@ import (
 // TestRouterCreatesProjectRunAndReportsSimulatorConfigError covers T04 API flow.
 func TestRouterCreatesProjectRunAndReportsSimulatorConfigError(t *testing.T) {
 	root := t.TempDir()
-	templatesDir := filepath.Join(root, "project-templates")
+	presetsDir := filepath.Join(root, "templates")
 	runDefaultsDir := filepath.Join(root, "run-defaults")
-	writeAPITemplate(t, filepath.Join(templatesDir, "blank"))
+	writeAPIPresets(t, presetsDir)
 	writeAPIRunDefaults(t, runDefaultsDir)
 
 	router := NewRouter(
-		workspace.NewService(templatesDir, runDefaultsDir),
+		workspace.NewService(presetsDir, runDefaultsDir),
 		bridgeprocess.NewManager(""),
 	)
 
 	listResponse := dispatch(router, protocol.Request{
 		Version: protocol.Version,
 		ID:      "list",
-		Method:  "workspace.listProjectTemplates",
+		Method:  "workspace.listProjectPresets",
 	})
 	if !listResponse.OK {
 		t.Fatalf("list response error = %#v", listResponse.Error)
@@ -38,7 +38,14 @@ func TestRouterCreatesProjectRunAndReportsSimulatorConfigError(t *testing.T) {
 		Version: protocol.Version,
 		ID:      "create-project",
 		Method:  "workspace.createProject",
-		Params:  mustJSON(t, createProjectParams{ProjectPath: projectPath, TemplateID: "blank"}),
+		Params: mustJSON(t, createProjectParams{
+			ProjectPath: projectPath,
+			PresetSelection: &workspace.ProjectPresetSelection{
+				ScenarioPresetID: "blank",
+				ProfilePresetID:  "basic",
+				PolicyPresetID:   "blank",
+			},
+		}),
 	})
 	if !createResponse.OK {
 		t.Fatalf("createProject response error = %#v", createResponse.Error)
@@ -84,16 +91,16 @@ func mustJSON(t *testing.T, value any) json.RawMessage {
 	return payload
 }
 
-// writeAPITemplate creates a minimal valid project template.
-func writeAPITemplate(t *testing.T, templateDir string) {
+// writeAPIPresets creates minimal valid project presets.
+func writeAPIPresets(t *testing.T, presetsDir string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(templateDir, "policy"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(presetsDir, "policy", "blank"), 0755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
-	writeAPIFile(t, filepath.Join(templateDir, "setting.json"), `{"schema":"project_setting","version":1}`)
-	writeAPIFile(t, filepath.Join(templateDir, "profile.json"), `{"schema":"simulation_profile","version":1}`)
-	writeAPIFile(t, filepath.Join(templateDir, "scenario.json"), `{"schema":"scenario","version":1}`)
-	writeAPIFile(t, filepath.Join(templateDir, "policy", "__init__.py"), "def create_policy():\n    return None\n")
+	writeAPIFile(t, filepath.Join(presetsDir, "setting.json"), `{"schema":"project_setting","version":1}`)
+	writeAPIFile(t, filepath.Join(presetsDir, "profile", "basic.json"), `{"schema":"simulation_profile","version":1}`)
+	writeAPIFile(t, filepath.Join(presetsDir, "scenario", "blank.json"), `{"schema":"scenario","version":1}`)
+	writeAPIFile(t, filepath.Join(presetsDir, "policy", "blank", "__init__.py"), "def create_policy():\n    return None\n")
 }
 
 // writeAPIRunDefaults creates the static run default folder shape.

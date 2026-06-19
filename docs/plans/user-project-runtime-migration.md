@@ -41,7 +41,7 @@ specs:
 
 - `project-structure.md`: 최종 폴더 구조
 - `simulation-interface.md`: 용어, 실행 흐름, 입력 고정 시점
-- `user-project-data.md`: project 입력 파일, run 결과 파일, project template, run 기본 폴더
+- `user-project-data.md`: project 입력 파일, run 결과 파일, project preset, run 기본 폴더
 - `bridge-ipc.md`: IPC 요청/응답, 오류 코드, 경로 검증 규칙
 - 이 계획 문서: 전환 순서, 기존 데이터 이동 기준, 구현 책임, 위험
 
@@ -101,7 +101,7 @@ specs:
 - 오래된 용어 검색
 - `git diff --check`
 
-### T02 Project template 정리 [완료]
+### T02 Project preset 정리 [완료]
 
 목적:
 
@@ -109,13 +109,13 @@ specs:
 
 변경:
 
-- 개발 원본: `static/project-templates/<TemplateId>`
-- 배포 원본: `resources/project-templates/<TemplateId>`
-- 지원 template id: 문서 고정 목록 X
-- 지원 template id source: `static/project-templates/` 직접 하위 폴더
-- 필수 파일: `setting.json`, `profile.json`, `scenario.json`, `policy/__init__.py:create_policy`
-- `demo/policy`: 기존 `Client/Tools/PythonAgent/agent` 내용을 project policy 형태로 이전
-- `blank/policy`: 최소 유효 skeleton. demo policy 기준으로 쓰지 않음
+- 개발 원본: `static/templates/`
+- 배포 원본: `resources/templates/`
+- 지원 preset id: 문서 고정 목록 X
+- 지원 preset id source: `scenario/*.json`, `profile/*.json`, `policy/` category 직접 하위 폴더
+- 필수 파일: `setting.json`, `scenario/<id>.json`, `profile/<id>.json`, `policy/<id>/__init__.py:create_policy`
+- `policy/demo`: 기존 `Client/Tools/PythonAgent/agent` 내용을 project policy 형태로 이전
+- `policy/blank`: 최소 유효 skeleton. demo policy 기준으로 쓰지 않음
 - `Client/Tools/PythonAgent/samples`: 사용처 확인 후 fixture 유지 또는 제거
 
 검증:
@@ -203,7 +203,7 @@ specs:
 - `setting.runtime.map_id`, `setting.runtime.fixed_fps` 적용
 - `policy/__init__.py:create_policy` 확인
 - `Client/Tools/PythonAgent/server.py` → `Client/Resources/policy-runtime.py` 이전
-- project template에는 policy runtime을 복사하지 않음
+- project preset에는 policy runtime을 복사하지 않음
 - 실패 시 0이 아닌 종료 코드
 - episode scenario 생성과 실제 episode 실행 연결은 T07에서 처리
 
@@ -290,7 +290,7 @@ T10 처리:
 - 완료:
   - Bridge process lifecycle test 보강
   - fake simulator child 실행으로 `status.json` lifecycle 확인
-  - 실제 `static/project-templates` 기준 project 생성 dry-run
+  - 실제 `static/templates` 기준 project 생성 dry-run
   - 실제 `static/run-defaults` 기준 run 생성 dry-run
   - run snapshot 경로와 generated cache 제외 확인
   - 실제 simulator process smoke 확인
@@ -368,7 +368,7 @@ T10 처리:
 프로토타입 UI:
 
 - project path 입력
-- template 선택: `static/project-templates/*` 또는 `resources/project-templates/*`
+- scenario/profile/policy preset 선택: `static/templates/*` 또는 `resources/templates/*`
 - project 생성
 - project 검증
 - run 생성
@@ -380,7 +380,7 @@ T10 처리:
 구현 대상:
 
 - `SimulatorLaunchSubsystem`
-  - project template 목록 [구현]
+  - project preset 목록 [구현]
   - project 생성 [구현]
   - project 검증 [구현]
   - run snapshot 생성 [구현]

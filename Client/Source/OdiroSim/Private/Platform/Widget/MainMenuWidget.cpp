@@ -5,23 +5,23 @@
 #include "Components/CheckBox.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
-#include "Components/HorizontalBox.h"
-#include "Components/HorizontalBoxSlot.h"
 #include "Components/ScrollBox.h"
 #include "Components/ScrollBoxSlot.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
 #include "Dom/JsonObject.h"
-#include "Misc/ConfigCacheIni.h"
+#include "Engine/GameInstance.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Platform/ProjectSessionSubsystem.h"
 #include "Platform/ScenarioEditorLaunchSubsystem.h"
 #include "Platform/PlatformAnalysisAiSubsystem.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Platform/Widget/ExperimentResultIterationButton.h"
 #include "Platform/Widget/FileListItemWidget.h"
-#include "Platform/Widget/ProjectTemplateCardWidget.h"
+#include "Scenario/Editor/ScenarioEditorController.h"
+#include "Scenario/Widget/ScenarioEditorRootWidget.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -44,12 +44,6 @@ namespace
 	const TCHAR* DeliveryBotTemplatePath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
 	const TCHAR* FileListItemWidgetBlueprintClassPath =
 		TEXT("/Game/Widgets/MainMenu/WBP_FileListItem.WBP_FileListItem_C");
-	const TCHAR* ProjectTemplateCardWidgetBlueprintClassPath =
-		TEXT("/Game/Widgets/MainMenu/WBP_ProjectTemplateCard.WBP_ProjectTemplateCard_C");
-	const TCHAR* ProjectOpenOptionsConfigSection = TEXT("OdiroSim.MainMenu.ProjectOpen");
-	const TCHAR* ProjectOpenParentFolderConfigKey = TEXT("ParentFolder");
-	const TCHAR* ProjectOpenProjectNameConfigKey = TEXT("ProjectName");
-	const TCHAR* ProjectOpenTemplateIdConfigKey = TEXT("TemplateId");
 	const TCHAR* MainMenuUserProjectSettingFileName = TEXT("setting.json");
 	const TCHAR* MainMenuUserProjectScenarioFileName = TEXT("scenario.json");
 	const TCHAR* MainMenuRegularFontPath =
@@ -64,12 +58,6 @@ namespace
 		ExperimentConfig,
 		RunStatus,
 		ExperimentResult,
-	};
-
-	enum class EProjectMainScreen : int32
-	{
-		OpenProject = 0,
-		Workspace,
 	};
 
 	enum class EProjectWorkspaceTab : int32
@@ -134,14 +122,6 @@ namespace
 		return textBlock;
 	}
 
-	FString MakeProjectTemplateDisplayName(const FString& templateId)
-	{
-		FString displayName = templateId.TrimStartAndEnd();
-		displayName.ReplaceInline(TEXT("-"), TEXT(" "));
-		displayName.ReplaceInline(TEXT("_"), TEXT(" "));
-		return FName::NameToDisplayString(displayName, false);
-	}
-
 	FString NormalizeMainMenuPath(FString path)
 	{
 		path = path.TrimStartAndEnd();
@@ -155,28 +135,6 @@ namespace
 			: FPaths::ConvertRelativePathToFull(path);
 		FPaths::NormalizeFilename(path);
 		return path;
-	}
-
-	FString GetDefaultProjectParentFolder()
-	{
-		return NormalizeMainMenuPath(FPlatformProcess::UserDir());
-	}
-
-	FString NormalizeProjectDirectoryName(const FString& projectName)
-	{
-		return FPaths::GetCleanFilename(projectName.TrimStartAndEnd());
-	}
-
-	FString BuildProjectPathFromInputs(const FString& parentFolder, const FString& projectName)
-	{
-		const FString normalizedParentFolder = NormalizeMainMenuPath(parentFolder);
-		const FString normalizedProjectName = NormalizeProjectDirectoryName(projectName);
-		if (normalizedParentFolder.IsEmpty() || normalizedProjectName.IsEmpty())
-		{
-			return FString();
-		}
-
-		return NormalizeMainMenuPath(FPaths::Combine(normalizedParentFolder, normalizedProjectName));
 	}
 
 	FString ExtractProjectRunIdFromDirectory(const FString& runDirectory)
@@ -206,11 +164,6 @@ namespace
 	FString BuildProjectSettingPath(const FString& projectPath)
 	{
 		return NormalizeMainMenuPath(FPaths::Combine(projectPath, MainMenuUserProjectSettingFileName));
-	}
-
-	FString BuildProjectScenarioPath(const FString& projectPath)
-	{
-		return NormalizeMainMenuPath(FPaths::Combine(projectPath, MainMenuUserProjectScenarioFileName));
 	}
 
 	bool TryLoadJsonRootObject(const FString& jsonFilePath, TSharedPtr<FJsonObject>& outRootObject, FString& outError)
@@ -423,13 +376,20 @@ namespace
 		const FSimulatorRunInfo& runInfo,
 		const FString& selectedProjectPath)
 	{
+		const FString runId = ExtractProjectRunIdFromDirectory(resultDirectory);
 		if (IsActiveProjectRunDirectory(resultDirectory, runInfo, selectedProjectPath))
 		{
 			return true;
 		}
 
-		return FPaths::FileExists(BuildProjectRunStatusPath(resultDirectory))
-			|| FPaths::FileExists(BuildProjectRunSummaryPath(resultDirectory));
+		if (!FUserProjectRunSnapshot::IsValidRunId(runId))
+		{
+			return false;
+		}
+
+		const FString expectedRunDirectory = BuildProjectRunDirectory(selectedProjectPath, runId);
+		return !expectedRunDirectory.IsEmpty()
+			&& NormalizeMainMenuPath(resultDirectory).Equals(expectedRunDirectory, ESearchCase::IgnoreCase);
 	}
 
 	ESimulationRunState ResolveProjectRunDisplayState(
@@ -765,23 +725,31 @@ void UMainMenuWidget::NativeConstruct()
 	SetIsFocusable(true);
 	if (!ValidateRequiredBindings()) return;
 
+	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	{
+		if (ScenarioEditorRootWidget)
+		{
+			editorController->RegisterEditorRootWidget(ScenarioEditorRootWidget.Get());
+		}
+		RequestEditorWidgetInputMode();
+	}
+
 	BindControls();
 	ShowProjectExperimentConfigPanel(false);
 	SetExperimentConfigDetailVisible(false);
 	SetExperimentResultDetailVisible(false);
 	ShowMainMenuSection(static_cast<int32>(EMainMenuSection::Scenario));
-	LoadProjectOpenOptions();
-	InitializeProjectPathInputs();
-	RefreshProjectTemplateOptions();
-	RefreshProjectOpenActions();
-	RefreshSetupOptions();
 	if (IsProjectOpened())
 	{
+		RefreshProjectRunSelection();
+		RefreshExperimentResultList();
 		ShowProjectWorkspaceScreen();
+		ShowProjectWorkspaceTab(static_cast<int32>(EProjectWorkspaceTab::ScenarioEdit));
 	}
 	else
 	{
-		ShowProjectOpenScreen();
+		ShowProjectWorkspaceScreen();
+		SetDiagnosticsText(TEXT("Active project가 없습니다. StartupMap에서 프로젝트를 선택하세요."));
 	}
 
 	if (USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem())
@@ -812,6 +780,16 @@ void UMainMenuWidget::NativeConstruct()
 
 void UMainMenuWidget::NativeDestruct()
 {
+	ReleaseEditorWidgetInputMode();
+
+	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	{
+		if (ScenarioEditorRootWidget && editorController->GetEditorRootWidget() == ScenarioEditorRootWidget.Get())
+		{
+			editorController->ClearRegisteredEditorRootWidget(ScenarioEditorRootWidget.Get());
+		}
+	}
+
 	if (UWorld* world = GetWorld())
 	{
 		world->GetTimerManager().ClearTimer(RefreshTimerHandle);
@@ -887,105 +865,6 @@ void UMainMenuWidget::RefreshSetupOptions()
 
 	RefreshProjectRunSelection();
 	RefreshExperimentResultList();
-}
-
-void UMainMenuWidget::RefreshProjectTemplateOptions()
-{
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		return;
-	}
-
-	const TArray<FString> templateIds = subsystem->ListProjectTemplates();
-	const FString currentTemplateId = GetSelectedProjectTemplateId();
-	const FString selectedTemplateId = templateIds.Contains(currentTemplateId)
-		? currentTemplateId
-		: (templateIds.Contains(TEXT("blank")) ? FString(TEXT("blank")) : (templateIds.IsEmpty() ? FString() : templateIds[0]));
-	SelectedProjectTemplateId = selectedTemplateId;
-
-	ProjectTemplateCards.Reset();
-
-	if (ProjectTemplateCardBox)
-	{
-		ProjectTemplateCardBox->ClearChildren();
-		const TSubclassOf<UProjectTemplateCardWidget> cardWidgetClass = ResolveProjectTemplateCardWidgetClass();
-		if (!cardWidgetClass)
-		{
-			SetDiagnosticsText(TEXT("WBP_ProjectTemplateCard 클래스를 사용할 수 없습니다."));
-		}
-		else
-		{
-			for (const FString& templateId : templateIds)
-			{
-				UProjectTemplateCardWidget* cardWidget = CreateWidget<UProjectTemplateCardWidget>(this, cardWidgetClass);
-				if (!cardWidget)
-				{
-					continue;
-				}
-
-				cardWidget->InitializeCard(templateId, MakeProjectTemplateDisplayName(templateId));
-				cardWidget->OnSelectedRequested.AddUObject(
-					this,
-					&UMainMenuWidget::HandleProjectTemplateCardSelected);
-				ProjectTemplateCards.Add(cardWidget);
-
-				if (UHorizontalBoxSlot* cardSlot = ProjectTemplateCardBox->AddChildToHorizontalBox(cardWidget))
-				{
-					cardSlot->SetPadding(FMargin(0.0f, 0.0f, 16.0f, 0.0f));
-					cardSlot->SetHorizontalAlignment(HAlign_Left);
-					cardSlot->SetVerticalAlignment(VAlign_Top);
-				}
-			}
-		}
-	}
-
-	RefreshProjectTemplateCardStates();
-	RefreshProjectOpenActions();
-}
-
-void UMainMenuWidget::RefreshProjectOpenActions()
-{
-	const FString projectPath = GetSelectedProjectPath();
-	const bool bHasProjectPath = !projectPath.TrimStartAndEnd().IsEmpty();
-	const bool bDirectoryExists = bHasProjectPath && IFileManager::Get().DirectoryExists(*projectPath);
-	const bool bFileExists = bHasProjectPath && FPaths::FileExists(projectPath);
-
-	if (CreateProjectButton)
-	{
-		CreateProjectButton->SetIsEnabled(bHasProjectPath && !bDirectoryExists && !bFileExists);
-	}
-	if (OpenProjectButton)
-	{
-		OpenProjectButton->SetIsEnabled(bDirectoryExists);
-	}
-}
-
-void UMainMenuWidget::RefreshProjectTemplateCardStates()
-{
-	const FString selectedTemplateId = GetSelectedProjectTemplateId();
-	for (UProjectTemplateCardWidget* cardWidget : ProjectTemplateCards)
-	{
-		if (!cardWidget)
-		{
-			continue;
-		}
-
-		cardWidget->SetSelected(cardWidget->GetTemplateId().Equals(selectedTemplateId, ESearchCase::CaseSensitive));
-	}
-}
-
-void UMainMenuWidget::SetProjectOpenWarningText(const FString& message)
-{
-	if (!ProjectOpenWarningText)
-	{
-		return;
-	}
-
-	ProjectOpenWarningText->SetText(FText::FromString(message));
-	ProjectOpenWarningText->SetVisibility(message.TrimStartAndEnd().IsEmpty()
-		? ESlateVisibility::Collapsed
-		: ESlateVisibility::HitTestInvisible);
 }
 
 void UMainMenuWidget::RefreshProjectRunSelection()
@@ -1714,7 +1593,6 @@ void UMainMenuWidget::HandleStartClicked()
 
 void UMainMenuWidget::HandleRefreshClicked()
 {
-	RefreshProjectTemplateOptions();
 	RefreshSetupOptions();
 	RefreshFromSubsystem();
 }
@@ -1760,133 +1638,6 @@ void UMainMenuWidget::HandleSendToAiClicked()
 	}
 }
 
-void UMainMenuWidget::HandleProjectOpenInputChanged(const FText& text)
-{
-	(void)text;
-	CacheProjectOpenOptionsFromWidgets();
-	bProjectWorkspaceOpen = false;
-	SetProjectOpenWarningText(FString());
-	RefreshProjectOpenActions();
-	SaveProjectOpenOptions();
-}
-
-void UMainMenuWidget::SelectProjectTemplateForProjectOpen(const FString& templateId)
-{
-	const FString trimmedTemplateId = templateId.TrimStartAndEnd();
-	if (trimmedTemplateId.IsEmpty())
-	{
-		return;
-	}
-
-	SelectedProjectTemplateId = trimmedTemplateId;
-	RefreshProjectTemplateCardStates();
-	SaveProjectOpenOptions();
-}
-
-void UMainMenuWidget::HandleProjectTemplateCardSelected(UProjectTemplateCardWidget* cardWidget)
-{
-	if (!cardWidget)
-	{
-		return;
-	}
-
-	SelectProjectTemplateForProjectOpen(cardWidget->GetTemplateId());
-}
-
-void UMainMenuWidget::HandleOpenProjectClicked()
-{
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		return;
-	}
-
-	const FString projectPath = GetSelectedProjectPath();
-	if (projectPath.TrimStartAndEnd().IsEmpty())
-	{
-		SetProjectOpenWarningText(TEXT("프로젝트 이름을 입력하세요."));
-		RefreshProjectOpenActions();
-		return;
-	}
-	if (!IFileManager::Get().DirectoryExists(*projectPath))
-	{
-		SetProjectOpenWarningText(TEXT("프로젝트 폴더가 없습니다."));
-		RefreshProjectOpenActions();
-		return;
-	}
-
-	SaveProjectOpenOptions();
-
-	TArray<FString> diagnostics;
-	if (!ValidateSelectedProjectForPrototype(diagnostics, subsystem))
-	{
-		bProjectWorkspaceOpen = false;
-		ShowProjectOpenScreen();
-		SetProjectOpenWarningText(diagnostics.IsEmpty() ? TEXT("프로젝트 검증 실패") : diagnostics[0]);
-		SetDiagnosticsText(JoinStringLines(diagnostics));
-		UpdateStatusText(TEXT("Project open failed."));
-		return;
-	}
-
-	bProjectWorkspaceOpen = true;
-	SetProjectOpenWarningText(FString());
-	RefreshProjectRunSelection();
-	RefreshExperimentResultList();
-	ShowProjectWorkspaceScreen();
-	ShowProjectWorkspaceTab(static_cast<int32>(EProjectWorkspaceTab::ScenarioEdit));
-	SetDiagnosticsText(FString::Printf(TEXT("Project opened: %s"), *GetSelectedProjectPath()));
-	UpdateStatusText();
-}
-
-void UMainMenuWidget::HandleCreateProjectClicked()
-{
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		return;
-	}
-
-	const FString projectPath = GetSelectedProjectPath();
-	if (projectPath.TrimStartAndEnd().IsEmpty())
-	{
-		SetProjectOpenWarningText(TEXT("프로젝트 이름을 입력하세요."));
-		RefreshProjectOpenActions();
-		return;
-	}
-	if (IFileManager::Get().DirectoryExists(*projectPath))
-	{
-		SetProjectOpenWarningText(TEXT("이미 존재하는 프로젝트입니다."));
-		RefreshProjectOpenActions();
-		return;
-	}
-	if (FPaths::FileExists(projectPath))
-	{
-		SetProjectOpenWarningText(TEXT("같은 이름의 파일이 있습니다."));
-		RefreshProjectOpenActions();
-		return;
-	}
-
-	SaveProjectOpenOptions();
-
-	TArray<FString> diagnostics;
-	if (CreateSelectedProjectForPrototype(diagnostics, subsystem))
-	{
-		bProjectWorkspaceOpen = true;
-		SetProjectOpenWarningText(FString());
-		SetDiagnosticsText(FString::Printf(TEXT("Project created: %s"), *GetSelectedProjectPath()));
-		RefreshProjectRunSelection();
-		RefreshExperimentResultList();
-		ShowProjectWorkspaceScreen();
-		ShowProjectWorkspaceTab(static_cast<int32>(EProjectWorkspaceTab::ScenarioEdit));
-		UpdateStatusText();
-		return;
-	}
-
-	SetProjectOpenWarningText(diagnostics.IsEmpty() ? TEXT("프로젝트 생성 실패") : diagnostics[0]);
-	SetDiagnosticsText(JoinStringLines(diagnostics));
-	UpdateStatusText(TEXT("Project creation failed."));
-}
-
 void UMainMenuWidget::HandleShowProjectScenarioTabClicked()
 {
 	ShowProjectWorkspaceTab(static_cast<int32>(EProjectWorkspaceTab::ScenarioEdit));
@@ -1899,16 +1650,6 @@ void UMainMenuWidget::HandleShowProjectExperimentStatusTabClicked()
 	RefreshExperimentResultList();
 	UpdateReportAndLogText();
 	ShowProjectWorkspaceTab(static_cast<int32>(EProjectWorkspaceTab::ExperimentStatus));
-}
-
-void UMainMenuWidget::HandleOpenProjectScenarioEditorClicked()
-{
-	if (!OpenScenarioInEditor(GetSelectedProjectScenarioPath()))
-	{
-		return;
-	}
-
-	SetDiagnosticsText(FString::Printf(TEXT("project scenario editor로 이동합니다: %s"), *GetSelectedProjectScenarioPath()));
 }
 
 void UMainMenuWidget::HandleAddExperimentClicked()
@@ -2020,6 +1761,14 @@ void UMainMenuWidget::HandleShowExperimentResultClicked()
 {
 	ClearExperimentResultIterationWidgets();
 	SetExperimentResultDetailVisible(false);
+	if (IsProjectModeSelected())
+	{
+		RefreshExperimentResultList();
+		UpdateReportAndLogText();
+		ShowProjectWorkspaceTab(static_cast<int32>(EProjectWorkspaceTab::ExperimentStatus));
+		return;
+	}
+
 	ShowMainMenuSection(static_cast<int32>(EMainMenuSection::ExperimentResult));
 }
 
@@ -2090,21 +1839,8 @@ void UMainMenuWidget::ShowMainMenuSection(const int32 sectionIndex)
 	}
 }
 
-void UMainMenuWidget::ShowProjectOpenScreen()
-{
-	if (ProjectContentSwitcher)
-	{
-		ProjectContentSwitcher->SetActiveWidgetIndex(static_cast<int32>(EProjectMainScreen::OpenProject));
-	}
-}
-
 void UMainMenuWidget::ShowProjectWorkspaceScreen()
 {
-	if (ProjectContentSwitcher)
-	{
-		ProjectContentSwitcher->SetActiveWidgetIndex(static_cast<int32>(EProjectMainScreen::Workspace));
-	}
-
 	if (ProjectWorkspaceSwitcher)
 	{
 		ApplyProjectWorkspaceTabStyle(ProjectWorkspaceSwitcher->GetActiveWidgetIndex());
@@ -2183,17 +1919,11 @@ bool UMainMenuWidget::ValidateRequiredBindings() const
 		}
 	};
 
-	requireWidget(ProjectContentSwitcher, TEXT("ProjectContentSwitcher"));
+	requireWidget(ProjectWorkspaceScreen, TEXT("ProjectWorkspaceScreen"));
+	requireWidget(ScenarioEditorRootWidget, TEXT("ScenarioEditorRootWidget"));
 	requireWidget(ProjectWorkspaceSwitcher, TEXT("ProjectWorkspaceSwitcher"));
-	requireWidget(ProjectParentFolderTextBox, TEXT("ProjectParentFolderTextBox"));
-	requireWidget(ProjectNameTextBox, TEXT("ProjectNameTextBox"));
-	requireWidget(ProjectTemplateCardBox, TEXT("ProjectTemplateCardBox"));
-	requireWidget(CreateProjectButton, TEXT("CreateProjectButton"));
-	requireWidget(OpenProjectButton, TEXT("OpenProjectButton"));
-	requireWidget(ProjectOpenWarningText, TEXT("ProjectOpenWarningText"));
 	requireWidget(ScenarioEditTabButton, TEXT("ScenarioEditTabButton"));
 	requireWidget(ExperimentStatusTabButton, TEXT("ExperimentStatusTabButton"));
-	requireWidget(OpenScenarioEditorMapButton, TEXT("OpenScenarioEditorMapButton"));
 	requireWidget(AddExperimentButton, TEXT("AddExperimentButton"));
 	requireWidget(ExperimentResultDetailSectionBoxScrollBox, TEXT("ExperimentResultDetailSectionBoxScrollBox"));
 	requireWidget(ExperimentResultListScrollBox, TEXT("ExperimentResultListScrollBox"));
@@ -2385,40 +2115,9 @@ void UMainMenuWidget::BindProjectModeControls()
 		LogMainMenuWidget,
 		Log,
 		TEXT("Project mode controls bound: %s"),
-		ProjectParentFolderTextBox && ProjectNameTextBox && ProjectTemplateCardBox
-			&& CreateProjectButton && OpenProjectButton && ProjectOpenWarningText
-			&& ScenarioEditTabButton && ExperimentStatusTabButton && OpenScenarioEditorMapButton && AddExperimentButton
+		ScenarioEditTabButton && ExperimentStatusTabButton && AddExperimentButton
 			? TEXT("true")
 			: TEXT("false"));
-
-	if (ProjectParentFolderTextBox)
-	{
-		ProjectParentFolderTextBox->OnTextChanged.RemoveDynamic(this, &UMainMenuWidget::HandleProjectOpenInputChanged);
-		ProjectParentFolderTextBox->OnTextChanged.AddDynamic(this, &UMainMenuWidget::HandleProjectOpenInputChanged);
-	}
-
-	if (ProjectNameTextBox)
-	{
-		ProjectNameTextBox->OnTextChanged.RemoveDynamic(this, &UMainMenuWidget::HandleProjectOpenInputChanged);
-		ProjectNameTextBox->OnTextChanged.AddDynamic(this, &UMainMenuWidget::HandleProjectOpenInputChanged);
-	}
-
-	if (ProjectOpenWarningText)
-	{
-		SetProjectOpenWarningText(FString());
-	}
-
-	if (CreateProjectButton)
-	{
-		CreateProjectButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleCreateProjectClicked);
-		CreateProjectButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleCreateProjectClicked);
-	}
-
-	if (OpenProjectButton)
-	{
-		OpenProjectButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleOpenProjectClicked);
-		OpenProjectButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleOpenProjectClicked);
-	}
 
 	if (ScenarioEditTabButton)
 	{
@@ -2430,12 +2129,6 @@ void UMainMenuWidget::BindProjectModeControls()
 	{
 		ExperimentStatusTabButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleShowProjectExperimentStatusTabClicked);
 		ExperimentStatusTabButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleShowProjectExperimentStatusTabClicked);
-	}
-
-	if (OpenScenarioEditorMapButton)
-	{
-		OpenScenarioEditorMapButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleOpenProjectScenarioEditorClicked);
-		OpenScenarioEditorMapButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleOpenProjectScenarioEditorClicked);
 	}
 
 	if (AddExperimentButton)
@@ -2561,107 +2254,6 @@ void UMainMenuWidget::LoadSelectedSetup()
 	}
 	lines.Add(FString::Printf(TEXT("고정 스텝 FPS: %d"), parseResult.Setup.FixedStep.Fps));
 	SetDiagnosticsText(JoinStringLines(lines));
-}
-
-void UMainMenuWidget::InitializeProjectPathInputs()
-{
-	if (SelectedProjectParentFolder.IsEmpty())
-	{
-		SelectedProjectParentFolder = GetDefaultProjectParentFolder();
-	}
-
-	if (ProjectParentFolderTextBox && ProjectParentFolderTextBox->GetText().IsEmpty())
-	{
-		ProjectParentFolderTextBox->SetText(FText::FromString(SelectedProjectParentFolder));
-	}
-
-	if (ProjectNameTextBox && !SelectedProjectName.IsEmpty() && ProjectNameTextBox->GetText().IsEmpty())
-	{
-		ProjectNameTextBox->SetText(FText::FromString(SelectedProjectName));
-	}
-
-	RefreshProjectOpenActions();
-}
-
-void UMainMenuWidget::LoadProjectOpenOptions()
-{
-	if (!GConfig)
-	{
-		return;
-	}
-
-	FString parentFolder;
-	if (GConfig->GetString(
-		ProjectOpenOptionsConfigSection,
-		ProjectOpenParentFolderConfigKey,
-		parentFolder,
-		GGameUserSettingsIni)
-		&& !parentFolder.TrimStartAndEnd().IsEmpty())
-	{
-		SelectedProjectParentFolder = NormalizeMainMenuPath(parentFolder);
-	}
-
-	FString projectName;
-	if (GConfig->GetString(
-		ProjectOpenOptionsConfigSection,
-		ProjectOpenProjectNameConfigKey,
-		projectName,
-		GGameUserSettingsIni)
-		&& !projectName.TrimStartAndEnd().IsEmpty())
-	{
-		SelectedProjectName = NormalizeProjectDirectoryName(projectName);
-	}
-
-	FString templateId;
-	if (GConfig->GetString(
-		ProjectOpenOptionsConfigSection,
-		ProjectOpenTemplateIdConfigKey,
-		templateId,
-		GGameUserSettingsIni)
-		&& !templateId.TrimStartAndEnd().IsEmpty())
-	{
-		SelectedProjectTemplateId = templateId.TrimStartAndEnd();
-	}
-}
-
-void UMainMenuWidget::SaveProjectOpenOptions()
-{
-	if (!GConfig)
-	{
-		return;
-	}
-
-	CacheProjectOpenOptionsFromWidgets();
-	GConfig->SetString(
-		ProjectOpenOptionsConfigSection,
-		ProjectOpenParentFolderConfigKey,
-		*GetSelectedProjectParentFolder(),
-		GGameUserSettingsIni);
-	GConfig->SetString(
-		ProjectOpenOptionsConfigSection,
-		ProjectOpenProjectNameConfigKey,
-		*GetSelectedProjectName(),
-		GGameUserSettingsIni);
-	GConfig->SetString(
-		ProjectOpenOptionsConfigSection,
-		ProjectOpenTemplateIdConfigKey,
-		*GetSelectedProjectTemplateId(),
-		GGameUserSettingsIni);
-	GConfig->Flush(false, GGameUserSettingsIni);
-}
-
-void UMainMenuWidget::CacheProjectOpenOptionsFromWidgets()
-{
-	if (ProjectParentFolderTextBox)
-	{
-		SelectedProjectParentFolder = GetSelectedProjectParentFolder();
-	}
-
-	if (ProjectNameTextBox)
-	{
-		SelectedProjectName = GetSelectedProjectName();
-	}
-
 }
 
 void UMainMenuWidget::ApplyNewSetupDefaults(const FString& setupPath)
@@ -3312,28 +2904,6 @@ TSubclassOf<UFileListItemWidget> UMainMenuWidget::ResolveFileListItemWidgetClass
 	return TSubclassOf<UFileListItemWidget>(loadedClass);
 }
 
-TSubclassOf<UProjectTemplateCardWidget> UMainMenuWidget::ResolveProjectTemplateCardWidgetClass() const
-{
-	if (ProjectTemplateCardWidgetClass)
-	{
-		return ProjectTemplateCardWidgetClass;
-	}
-
-	UClass* loadedClass = LoadClass<UProjectTemplateCardWidget>(nullptr, ProjectTemplateCardWidgetBlueprintClassPath);
-	if (!loadedClass)
-	{
-		UE_LOG(
-			LogMainMenuWidget,
-			Error,
-			TEXT("Project template card widget class is missing: %s"),
-			ProjectTemplateCardWidgetBlueprintClassPath);
-		ensureMsgf(false, TEXT("Project template card widget class is missing."));
-		return nullptr;
-	}
-
-	return TSubclassOf<UProjectTemplateCardWidget>(loadedClass);
-}
-
 void UMainMenuWidget::HandleRunInfoChanged(const FSimulatorRunInfo& runInfo)
 {
 	(void)runInfo;
@@ -3667,76 +3237,9 @@ bool UMainMenuWidget::IsProjectRunDirectory(const FString& runDirectory) const
 		ESearchCase::IgnoreCase);
 }
 
-void UMainMenuWidget::SetProjectPathForPrototype(const FString& projectPath)
-{
-	const FString normalizedProjectPath = NormalizeMainMenuPath(projectPath);
-	SelectedProjectParentFolder = NormalizeMainMenuPath(FPaths::GetPath(normalizedProjectPath));
-	SelectedProjectName = NormalizeProjectDirectoryName(FPaths::GetCleanFilename(normalizedProjectPath));
-	if (ProjectParentFolderTextBox)
-	{
-		ProjectParentFolderTextBox->SetText(FText::FromString(SelectedProjectParentFolder));
-	}
-	if (ProjectNameTextBox)
-	{
-		ProjectNameTextBox->SetText(FText::FromString(SelectedProjectName));
-	}
-
-	bProjectWorkspaceOpen = !normalizedProjectPath.IsEmpty();
-	RefreshProjectOpenActions();
-}
-
-FString UMainMenuWidget::GetProjectPathForPrototype() const
-{
-	return GetSelectedProjectPath();
-}
-
 FString UMainMenuWidget::GetProjectRunIdForPrototype() const
 {
 	return GetSelectedProjectRunId();
-}
-
-bool UMainMenuWidget::CreateSelectedProjectForPrototype(
-	TArray<FString>& outDiagnostics,
-	USimulatorLaunchSubsystem* simulatorLaunchSubsystem)
-{
-	outDiagnostics.Reset();
-
-	USimulatorLaunchSubsystem* subsystem = simulatorLaunchSubsystem ? simulatorLaunchSubsystem : GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		outDiagnostics.Add(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
-		return false;
-	}
-
-	if (!subsystem->CreateProjectFromTemplate(GetSelectedProjectPath(), GetSelectedProjectTemplateId(), outDiagnostics))
-	{
-		return false;
-	}
-
-	bProjectWorkspaceOpen = true;
-	if (!simulatorLaunchSubsystem)
-	{
-		RefreshProjectRunSelection();
-		RefreshExperimentResultList();
-		UpdateStatusText();
-	}
-	return true;
-}
-
-bool UMainMenuWidget::ValidateSelectedProjectForPrototype(
-	TArray<FString>& outDiagnostics,
-	USimulatorLaunchSubsystem* simulatorLaunchSubsystem)
-{
-	outDiagnostics.Reset();
-
-	USimulatorLaunchSubsystem* subsystem = simulatorLaunchSubsystem ? simulatorLaunchSubsystem : GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		outDiagnostics.Add(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
-		return false;
-	}
-
-	return subsystem->ValidateUserProject(GetSelectedProjectPath(), outDiagnostics);
 }
 
 bool UMainMenuWidget::CreateProjectRunForPrototype(
@@ -3771,7 +3274,8 @@ bool UMainMenuWidget::CreateProjectRunForPrototype(
 
 bool UMainMenuWidget::IsProjectOpened() const
 {
-	return bProjectWorkspaceOpen && !GetSelectedProjectPath().IsEmpty();
+	const UProjectSessionSubsystem* projectSession = GetProjectSessionSubsystem();
+	return projectSession && projectSession->HasActiveProject();
 }
 
 FString UMainMenuWidget::GetSelectedSetupPath() const
@@ -3828,46 +3332,26 @@ FString UMainMenuWidget::GetSelectedPolicySpecPath() const
 	return MainMenuDefaultPolicySpecJsonPath;
 }
 
-FString UMainMenuWidget::GetSelectedProjectParentFolder() const
-{
-	FString parentFolder = ProjectParentFolderTextBox
-		? ProjectParentFolderTextBox->GetText().ToString()
-		: SelectedProjectParentFolder;
-
-	if (parentFolder.TrimStartAndEnd().IsEmpty())
-	{
-		parentFolder = GetDefaultProjectParentFolder();
-	}
-
-	return NormalizeMainMenuPath(parentFolder);
-}
-
-FString UMainMenuWidget::GetSelectedProjectName() const
-{
-	const FString projectName = ProjectNameTextBox
-		? ProjectNameTextBox->GetText().ToString()
-		: SelectedProjectName;
-	return NormalizeProjectDirectoryName(projectName);
-}
-
 FString UMainMenuWidget::GetSelectedProjectPath() const
 {
-	return BuildProjectPathFromInputs(GetSelectedProjectParentFolder(), GetSelectedProjectName());
+	if (const UProjectSessionSubsystem* projectSession = GetProjectSessionSubsystem();
+		projectSession && projectSession->HasActiveProject())
+	{
+		return projectSession->GetActiveProjectPath();
+	}
+
+	return FString();
 }
 
 FString UMainMenuWidget::GetSelectedProjectScenarioPath() const
 {
-	return BuildProjectScenarioPath(GetSelectedProjectPath());
-}
-
-FString UMainMenuWidget::GetSelectedProjectTemplateId() const
-{
-	if (!SelectedProjectTemplateId.TrimStartAndEnd().IsEmpty())
+	if (const UProjectSessionSubsystem* projectSession = GetProjectSessionSubsystem();
+		projectSession && projectSession->HasActiveProject())
 	{
-		return SelectedProjectTemplateId;
+		return projectSession->GetActiveProjectScenarioPath();
 	}
 
-	return FString(TEXT("blank"));
+	return FString();
 }
 
 FString UMainMenuWidget::GetSelectedProjectRunId() const
@@ -3899,6 +3383,12 @@ void UMainMenuWidget::SetSelectedProjectRunId(const FString& runId)
 	}
 }
 
+UProjectSessionSubsystem* UMainMenuWidget::GetProjectSessionSubsystem() const
+{
+	const UGameInstance* gameInstance = GetGameInstance();
+	return gameInstance ? gameInstance->GetSubsystem<UProjectSessionSubsystem>() : nullptr;
+}
+
 USimulatorLaunchSubsystem* UMainMenuWidget::GetSimulatorLaunchSubsystem() const
 {
 	const UGameInstance* gameInstance = GetGameInstance();
@@ -3915,4 +3405,43 @@ UPlatformAnalysisAiSubsystem* UMainMenuWidget::GetPlatformAnalysisAiSubsystem() 
 {
 	const UGameInstance* gameInstance = GetGameInstance();
 	return gameInstance ? gameInstance->GetSubsystem<UPlatformAnalysisAiSubsystem>() : nullptr;
+}
+
+void UMainMenuWidget::RequestEditorWidgetInputMode()
+{
+	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	{
+		UWidget* focusWidget = ResolveInputModeFocusWidget();
+		if (!focusWidget)
+		{
+			return;
+		}
+
+		RequestedInputModeFocusWidget = focusWidget;
+		editorController->RequestEditorWidgetInputMode(focusWidget);
+	}
+}
+
+void UMainMenuWidget::ReleaseEditorWidgetInputMode()
+{
+	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	{
+		UWidget* focusWidget = RequestedInputModeFocusWidget.Get();
+		if (!focusWidget)
+		{
+			focusWidget = ResolveInputModeFocusWidget();
+		}
+		if (!focusWidget)
+		{
+			return;
+		}
+
+		editorController->ReleaseEditorWidgetInputMode(focusWidget);
+		RequestedInputModeFocusWidget.Reset();
+	}
+}
+
+UWidget* UMainMenuWidget::ResolveInputModeFocusWidget() const
+{
+	return MainMenuInputModePanel ? MainMenuInputModePanel.Get() : nullptr;
 }

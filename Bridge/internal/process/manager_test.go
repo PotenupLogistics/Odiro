@@ -101,14 +101,16 @@ func TestStartSimulatorTracksProcessAndWritesExitStatus(t *testing.T) {
 func createProcessTestRun(t *testing.T) (string, string, string) {
 	t.Helper()
 	root := t.TempDir()
-	templatesDir := filepath.Join(root, "project-templates")
+	presetsDir := filepath.Join(root, "templates")
 	runDefaultsDir := filepath.Join(root, "run-defaults")
-	writeProcessTemplate(t, filepath.Join(templatesDir, "blank"))
+	writeProcessPresets(t, presetsDir)
 	writeProcessRunDefaults(t, runDefaultsDir)
 
-	service := workspace.NewService(templatesDir, runDefaultsDir)
+	service := workspace.NewService(presetsDir, runDefaultsDir)
 	projectPath := filepath.Join(root, "project")
-	if _, err := service.CreateProject(projectPath, "blank"); err != nil {
+	if _, err := service.CreateProject(
+		projectPath,
+		workspace.ProjectPresetSelection{ScenarioPresetID: "blank", ProfilePresetID: "basic", PolicyPresetID: "blank"}); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 	run, err := service.CreateRun(projectPath)
@@ -118,16 +120,16 @@ func createProcessTestRun(t *testing.T) (string, string, string) {
 	return projectPath, run.RunID, run.StatusPath
 }
 
-// writeProcessTemplate creates a minimal valid project template.
-func writeProcessTemplate(t *testing.T, templateDir string) {
+// writeProcessPresets creates minimal valid project presets.
+func writeProcessPresets(t *testing.T, presetsDir string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(templateDir, "policy"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(presetsDir, "policy", "blank"), 0755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
-	writeProcessFile(t, filepath.Join(templateDir, "setting.json"), `{"schema":"project_setting","version":1}`)
-	writeProcessFile(t, filepath.Join(templateDir, "profile.json"), `{"schema":"simulation_profile","version":1}`)
-	writeProcessFile(t, filepath.Join(templateDir, "scenario.json"), `{"schema":"scenario","version":1}`)
-	writeProcessFile(t, filepath.Join(templateDir, "policy", "__init__.py"), "def create_policy():\n    return None\n")
+	writeProcessFile(t, filepath.Join(presetsDir, "setting.json"), `{"schema":"project_setting","version":1}`)
+	writeProcessFile(t, filepath.Join(presetsDir, "profile", "basic.json"), `{"schema":"simulation_profile","version":1}`)
+	writeProcessFile(t, filepath.Join(presetsDir, "scenario", "blank.json"), `{"schema":"scenario","version":1}`)
+	writeProcessFile(t, filepath.Join(presetsDir, "policy", "blank", "__init__.py"), "def create_policy():\n    return None\n")
 }
 
 // writeProcessRunDefaults creates the static run default folder shape.

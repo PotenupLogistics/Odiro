@@ -927,30 +927,39 @@ snapshot 복사 규칙:
 - `policy/` 전체 copy
 - symlink 금지
 - `__pycache__`, `.pyc`, `.pyo` 제외
-- `Client/Resources/policy-runtime.py`는 project policy package나 project template에 포함하지 않음
+- `Client/Resources/policy-runtime.py`는 project policy package나 project preset에 포함하지 않음
 
-## Project template
+## Project presets
 
 개발 위치:
 
 ```text
-static/project-templates/<TemplateId>/
+static/templates/
 ```
 
 배포 위치:
 
 ```text
-build/Release/resources/project-templates/<TemplateId>/
+build/Release/resources/templates/
 ```
 
-TemplateId:
+구조:
 
-- 이 문서는 지원 template id 목록을 소유하지 않음
-- 개발 중 template id: `static/project-templates/` 직접 하위 폴더 이름
-- 배포 build template id: `resources/project-templates/` 직접 하위 폴더 이름
-- `TemplateId`: 안전한 단일 경로 조각
+```text
+setting.json
+scenario/<ScenarioPresetId>.json
+profile/<ProfilePresetId>.json
+policy/<PolicyPresetId>/__init__.py
+```
 
-필수 내용:
+Preset id:
+
+- 이 문서는 지원 preset id 목록을 소유하지 않음
+- scenario/profile preset id: 각 category directory의 직접 하위 `.json` 파일 basename
+- policy preset id: `policy/` 직접 하위 폴더 이름
+- `ScenarioPresetId`, `ProfilePresetId`, `PolicyPresetId`: 안전한 단일 경로 조각
+
+생성 결과:
 
 ```text
 setting.json
@@ -961,10 +970,12 @@ policy/__init__.py
 
 규칙:
 
-- 모든 project template은 필수 내용 포함
-- 빈 project용 template도 최소 유효 JSON과 기본 policy 포함
-- 실행 예시용 template의 policy는 예시 구현
-- 실행 예시용 template의 policy를 최소 골격 policy 기준으로 사용하지 않음
+- `setting.json`은 `static/templates/setting.json` 하나를 사용하며 UI preset으로 노출하지 않음
+- project 생성 시 scenario/profile/policy preset을 각각 하나씩 선택해 사용자 project root에 복사
+- scenario preset은 최소 유효 `scenario.json` 포함
+- profile preset은 최소 유효 `profile.json` 포함
+- policy preset은 `policy/__init__.py:create_policy` 포함
+- 실행 예시용 policy preset을 최소 골격 policy 기준으로 사용하지 않음
 
 금지 내용:
 

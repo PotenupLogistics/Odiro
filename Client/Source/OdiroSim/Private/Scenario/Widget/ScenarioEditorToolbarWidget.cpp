@@ -96,7 +96,7 @@ void UScenarioEditorToolbarWidget::ReturnToMainMenu()
 {
 	if (UWorld* world = GetWorld())
 	{
-		UGameplayStatics::OpenLevel(world, FName(*MainMenuMapId));
+		UGameplayStatics::OpenLevel(world, FName(*StartupMapId));
 	}
 }
 

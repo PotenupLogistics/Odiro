@@ -10,6 +10,8 @@ const TCHAR* FScenarioSampler::GeneratorVersion = TEXT("scenario_sampler_v1");
 namespace
 {
 	const double ScenarioSamplerMetersToCentimeters = 100.0;
+	// Tolerance used when matching sampled obstacle poses to resolved Corridor lane intervals.
+	const double ScenarioSamplerSurfaceToleranceMeters = 0.001;
 
 	struct FScenarioSamplerResolvedLane
 	{
@@ -283,6 +285,36 @@ namespace
 			});
 	}
 
+	// Returns true when a sampled scalar belongs to a Corridor interval after tolerance.
+	bool ScenarioSamplerContainsRangeValue(double Value, double MinValue, double MaxValue)
+	{
+		const double SafeMin = FMath::Min(MinValue, MaxValue) - ScenarioSamplerSurfaceToleranceMeters;
+		const double SafeMax = FMath::Max(MinValue, MaxValue) + ScenarioSamplerSurfaceToleranceMeters;
+		return Value >= SafeMin && Value <= SafeMax;
+	}
+
+	// Finds the concrete resolved lane that owns a sampled Corridor-local pose.
+	const FScenarioSamplerResolvedLane* ScenarioSamplerFindLaneAtPose(
+		const TArray<FScenarioSamplerResolvedLane>& Lanes,
+		const FString& SegmentId,
+		double AlongMeters,
+		double OffsetMeters)
+	{
+		return Lanes.FindByPredicate(
+			[&SegmentId, AlongMeters, OffsetMeters](const FScenarioSamplerResolvedLane& Lane)
+			{
+				return Lane.SegmentId == SegmentId
+					&& ScenarioSamplerContainsRangeValue(
+						AlongMeters,
+						Lane.AlongRangeMeters.StartMeters,
+						Lane.AlongRangeMeters.EndMeters)
+					&& ScenarioSamplerContainsRangeValue(
+						OffsetMeters,
+						Lane.OffsetRangeMeters.MinMeters,
+						Lane.OffsetRangeMeters.MaxMeters);
+			});
+	}
+
 	bool ScenarioSamplerResolveLaneOffset(
 		const TArray<FScenarioSamplerResolvedLane>& Lanes,
 		const FString& SegmentId,
@@ -526,6 +558,26 @@ namespace
 				Seed,
 				Params);
 
+			if (!ScenarioSamplerContainsRangeValue(
+					AlongMeters,
+					Segment->AlongRangeMeters.StartMeters,
+					Segment->AlongRangeMeters.EndMeters))
+			{
+				ScenarioSamplerAddDiagnostic(
+					Diagnostics,
+					EScenarioSchemaDiagnosticSeverity::Error,
+					TEXT("obstacle_along_outside_segment"),
+					FString::Printf(TEXT("%s.at.along_m"), *PlacementPath),
+					FString::Printf(
+						TEXT("Fixed obstacle placement '%s' resolved along %.2fm outside segment '%s' range %.2f..%.2fm."),
+						*Placement.PlacementId,
+						AlongMeters,
+						*Segment->SegmentId,
+						Segment->AlongRangeMeters.StartMeters,
+						Segment->AlongRangeMeters.EndMeters));
+				continue;
+			}
+
 			double AxisOffsetMeters = 0.0;
 			if (!ScenarioSamplerResolveLaneOffset(Lanes, Segment->SegmentId, Placement.At.LaneId, LocalOffsetMeters, AxisOffsetMeters))
 			{
@@ -537,6 +589,44 @@ namespace
 					FString::Printf(TEXT("Fixed obstacle placement '%s' references unknown lane '%s' in segment '%s'."), *Placement.PlacementId, *Placement.At.LaneId, *Segment->SegmentId));
 				continue;
 			}
+
+			const FScenarioSamplerResolvedLane* ResolvedLane =
+				ScenarioSamplerFindLaneAtPose(Lanes, Segment->SegmentId, AlongMeters, AxisOffsetMeters);
+			if (!ResolvedLane)
+			{
+				ScenarioSamplerAddDiagnostic(
+					Diagnostics,
+					EScenarioSchemaDiagnosticSeverity::Error,
+					TEXT("obstacle_outside_corridor_surface"),
+					FString::Printf(TEXT("%s.at.offset_m"), *PlacementPath),
+					FString::Printf(
+						TEXT("Fixed obstacle placement '%s' resolved to offset %.2fm outside Corridor surfaces in segment '%s'."),
+						*Placement.PlacementId,
+						AxisOffsetMeters,
+						*Segment->SegmentId));
+				continue;
+			}
+
+			if (ResolvedLane->Type == EScenarioSampleLaneType::Blocked)
+			{
+				ScenarioSamplerAddDiagnostic(
+					Diagnostics,
+					EScenarioSchemaDiagnosticSeverity::Error,
+					TEXT("obstacle_on_blocked_surface"),
+					FString::Printf(TEXT("%s.at.lane"), *PlacementPath),
+					FString::Printf(
+						TEXT("Fixed obstacle placement '%s' resolved onto blocked Corridor lane '%s' surface '%s'."),
+						*Placement.PlacementId,
+						*ResolvedLane->LaneId,
+						*ResolvedLane->SurfaceId));
+				continue;
+			}
+
+			const FScenarioSamplerResolvedLane* WalkwayLane =
+				ScenarioSamplerFindLane(Lanes, Segment->SegmentId, TEXT("walkway"));
+			const double WalkwayWidthMeters = WalkwayLane
+				? WalkwayLane->OffsetRangeMeters.MaxMeters - WalkwayLane->OffsetRangeMeters.MinMeters
+				: 0.0;
 
 			FVector2D PointMeters;
 			double AxisYawDegrees = 0.0;
@@ -562,12 +652,7 @@ namespace
 			Obstacle.YawDegrees = FRotator::ClampAxis(AxisYawDegrees + YawLocalDegrees);
 			Obstacle.FootprintMeters = FVector2D(0.5, 0.5);
 			Obstacle.PlacedBy = Placement.PlacementId;
-			Obstacle.ClearWidthRemainingMeters = FMath::Max(0.0, ScenarioSamplerResolveNumber(
-				ScenarioDocument.Corridor.WalkwayWidthMeters,
-				3.0,
-				TEXT("corridor.walkway_width_m"),
-				Seed,
-				Params) - Obstacle.FootprintMeters.Y);
+			Obstacle.ClearWidthRemainingMeters = FMath::Max(0.0, WalkwayWidthMeters - Obstacle.FootprintMeters.Y);
 
 			if (!Placement.bAllowBlocking
 				&& MinClearWidthMeters > KINDA_SMALL_NUMBER

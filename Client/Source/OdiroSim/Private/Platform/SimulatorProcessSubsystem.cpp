@@ -99,6 +99,8 @@ void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection
 		runInput.PairId = episodeScenarioResult.EpisodeId;
 		runInput.EpisodeScenarioJsonPath = episodeScenarioResult.ScenarioPath;
 		runInput.ProfileJsonPath = projectRunParseResult.Paths.ProfilePath;
+		runInput.bOverrideEvaluationConfig = true;
+		runInput.EvaluationConfig = projectRunParseResult.Setting.EvaluationConfig;
 		ActiveProjectRunInputs.Add(runInput);
 	}
 	if (ActiveProjectRunInputs.IsEmpty())
@@ -110,6 +112,7 @@ void USimulatorProcessSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	ActiveProjectPath = ActiveProjectRunPaths.ProjectPath;
 	ActiveMapId = projectRunParseResult.Setting.MapId;
 	ActiveFixedStepFps = projectRunParseResult.Setting.FixedFps;
+	ActiveTimeScale = projectRunParseResult.Setting.TimeScale;
 	ActiveMeasurementLogSettings = FEpisodeMeasurementLogSettings{};
 	ActiveMeasurementLogSettings.bEnabled = false;
 
@@ -155,6 +158,20 @@ void USimulatorProcessSubsystem::Deinitialize()
 	{
 		FCoreUObjectDelegates::PostLoadMapWithWorld.Remove(PostLoadMapHandle);
 		PostLoadMapHandle.Reset();
+	}
+
+	if (bSimulatorMode)
+	{
+		if (UGameInstance* gameInstance = GetGameInstance())
+		{
+			if (UWorld* world = gameInstance->GetWorld())
+			{
+				if (IsValid(world))
+				{
+					UGameplayStatics::SetGlobalTimeDilation(world, 1.0f);
+				}
+			}
+		}
 	}
 
 	Super::Deinitialize();
@@ -403,10 +420,28 @@ void USimulatorProcessSubsystem::ApplyWorldSetup(UWorld* world, bool bRestartMea
 		return;
 	}
 
+	ApplyTimeScale(world);
+
 	if (UEpisodeMeasurementLogSubsystem* measurementLogSubsystem = world->GetSubsystem<UEpisodeMeasurementLogSubsystem>())
 	{
 		measurementLogSubsystem->ApplySettings(ActiveMeasurementLogSettings, bRestartMeasurementLog);
 	}
+}
+
+void USimulatorProcessSubsystem::ApplyTimeScale(UWorld* world) const
+{
+	if (!IsValid(world))
+	{
+		return;
+	}
+
+	const float resolvedTimeScale = static_cast<float>(FMath::Max(ActiveTimeScale, 0.0001));
+	UGameplayStatics::SetGlobalTimeDilation(world, resolvedTimeScale);
+	UE_LOG(
+		LogSimulatorProcess,
+		Log,
+		TEXT("Simulator time_scale 적용 | TimeScale: %.4f"),
+		resolvedTimeScale);
 }
 
 void USimulatorProcessSubsystem::StopMeasurementLogging(UWorld* world, const FString& closeReason)

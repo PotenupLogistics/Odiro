@@ -105,6 +105,19 @@ namespace
 		Document.Obstacles.Placements[0].At.AlongMeters = MakeSamplerTestRangeNumber(3.0, 5.0);
 		return Document;
 	}
+
+	// Checks whether sampler validation emitted the expected diagnostic code.
+	bool HasSamplerDiagnostic(
+		const FScenarioSamplerResult& Result,
+		const FString& Code)
+	{
+		return Result.Diagnostics.ContainsByPredicate(
+			[&Code](const FScenarioSchemaDiagnostic& Diagnostic)
+			{
+				return Diagnostic.Code == Code
+					&& Diagnostic.Severity == EScenarioSchemaDiagnosticSeverity::Error;
+			});
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -285,6 +298,79 @@ bool FScenarioSamplerDeterministicRangeTest::RunTest(const FString& Parameters)
 	{
 		TestEqual(TEXT("walkway width matches editor projection"), WalkwayWidthParam->FloatValue, 2.5);
 	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSamplerRejectsObstacleOutsideSegmentTest,
+	"OdiroSim.Scenario.Sampler.RejectsObstacleOutsideSegment",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSamplerRejectsObstacleOutsideSegmentTest::RunTest(const FString& Parameters)
+{
+	FScenarioDocument ScenarioDocument = MakeSamplerTestScenario();
+	ScenarioDocument.Obstacles.Placements[0].At.AlongMeters = MakeSamplerTestFixedNumber(12.0);
+
+	const FScenarioSamplerResult Result =
+		FScenarioSampler::GenerateSample(ScenarioDocument, MakeSamplerTestRequest());
+
+	TestFalse(TEXT("sampler rejects outside-segment obstacle"), Result.bSuccess);
+	TestTrue(
+		TEXT("outside segment diagnostic"),
+		HasSamplerDiagnostic(Result, TEXT("obstacle_along_outside_segment")));
+	TestEqual(
+		TEXT("invalid obstacle omitted"),
+		Result.Document.Scenario.Semantic.StaticObstacles.Num(),
+		0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSamplerRejectsObstacleOutsideCorridorSurfaceTest,
+	"OdiroSim.Scenario.Sampler.RejectsObstacleOutsideCorridorSurface",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSamplerRejectsObstacleOutsideCorridorSurfaceTest::RunTest(const FString& Parameters)
+{
+	FScenarioDocument ScenarioDocument = MakeSamplerTestScenario();
+	ScenarioDocument.Obstacles.Placements[0].At.OffsetMeters = MakeSamplerTestFixedNumber(2.5);
+
+	const FScenarioSamplerResult Result =
+		FScenarioSampler::GenerateSample(ScenarioDocument, MakeSamplerTestRequest());
+
+	TestFalse(TEXT("sampler rejects outside-surface obstacle"), Result.bSuccess);
+	TestTrue(
+		TEXT("outside corridor surface diagnostic"),
+		HasSamplerDiagnostic(Result, TEXT("obstacle_outside_corridor_surface")));
+	TestEqual(
+		TEXT("invalid obstacle omitted"),
+		Result.Document.Scenario.Semantic.StaticObstacles.Num(),
+		0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSamplerRejectsObstacleOnBlockedSurfaceTest,
+	"OdiroSim.Scenario.Sampler.RejectsObstacleOnBlockedSurface",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSamplerRejectsObstacleOnBlockedSurfaceTest::RunTest(const FString& Parameters)
+{
+	FScenarioDocument ScenarioDocument = MakeSamplerTestScenario();
+	ScenarioDocument.Obstacles.Placements[0].At.LaneId = TEXT("building_edge");
+	ScenarioDocument.Obstacles.Placements[0].At.OffsetMeters = MakeSamplerTestFixedNumber(-0.25);
+
+	const FScenarioSamplerResult Result =
+		FScenarioSampler::GenerateSample(ScenarioDocument, MakeSamplerTestRequest());
+
+	TestFalse(TEXT("sampler rejects blocked-surface obstacle"), Result.bSuccess);
+	TestTrue(
+		TEXT("blocked surface diagnostic"),
+		HasSamplerDiagnostic(Result, TEXT("obstacle_on_blocked_surface")));
+	TestEqual(
+		TEXT("invalid obstacle omitted"),
+		Result.Document.Scenario.Semantic.StaticObstacles.Num(),
+		0);
 	return true;
 }
 

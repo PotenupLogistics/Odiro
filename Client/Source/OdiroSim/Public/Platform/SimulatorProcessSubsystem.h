@@ -92,6 +92,9 @@ private:
 	// Applies fixed-step timing from the project runtime setting.
 	void ApplyFixedStep() const;
 
+	// Applies project runtime time_scale to the active simulation world.
+	void ApplyTimeScale(UWorld* world) const;
+
 	// Logs project-run snapshot validation diagnostics.
 	void LogProjectRunDiagnostics(const FUserProjectRunSnapshotParseResult& parseResult) const;
 
@@ -136,6 +139,10 @@ private:
 	UPROPERTY(Transient)
 	// Fixed-step FPS resolved from project setting.json.
 	int32 ActiveFixedStepFps = 60;
+
+	UPROPERTY(Transient)
+	// World time dilation resolved from project setting.json.
+	double ActiveTimeScale = 1.0;
 
 	UPROPERTY(Transient)
 	// Measurement logging settings applied to each simulation world.

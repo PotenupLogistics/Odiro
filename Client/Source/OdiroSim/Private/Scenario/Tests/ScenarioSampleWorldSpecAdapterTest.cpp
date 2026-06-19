@@ -92,6 +92,19 @@ namespace
 		Semantic.Summary.TotalLengthMeters = 10.0;
 		return Document;
 	}
+
+	// Checks whether adapter validation emitted the expected diagnostic code.
+	bool HasAdapterDiagnostic(
+		const FScenarioCompileResult& Result,
+		const FString& Code)
+	{
+		return Result.Diagnostics.ContainsByPredicate(
+			[&Code](const FScenarioCompileDiagnostic& Diagnostic)
+			{
+				return Diagnostic.Code == Code
+					&& Diagnostic.Severity == EScenarioCompileDiagnosticSeverity::Error;
+			});
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -183,6 +196,56 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	}
 
 	TestFalse(TEXT("spec hash populated"), Result.WorldSpec.SpecHash.IsEmpty());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSampleWorldSpecAdapterRejectsObstacleOutsideSurfaceTest,
+	"OdiroSim.ScenarioSample.WorldSpecAdapter.RejectsObstacleOutsideSurface",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSampleWorldSpecAdapterRejectsObstacleOutsideSurfaceTest::RunTest(const FString& Parameters)
+{
+	FScenarioSampleDocument Document = MakeAdapterTestSampleDocument();
+	Document.Scenario.Semantic.StaticObstacles[0].OffsetMeters = 4.0;
+
+	const FScenarioCompileResult Result =
+		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Document);
+
+	TestFalse(TEXT("adapter rejects outside-surface obstacle"), Result.bSuccess);
+	TestTrue(
+		TEXT("outside surface diagnostic"),
+		HasAdapterDiagnostic(Result, TEXT("sample_obstacle_surface_missing")));
+	TestEqual(TEXT("only robot placeable remains"), Result.WorldSpec.Placeables.Num(), 1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSampleWorldSpecAdapterRejectsObstacleOnBlockedSurfaceTest,
+	"OdiroSim.ScenarioSample.WorldSpecAdapter.RejectsObstacleOnBlockedSurface",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSampleWorldSpecAdapterRejectsObstacleOnBlockedSurfaceTest::RunTest(const FString& Parameters)
+{
+	FScenarioSampleDocument Document = MakeAdapterTestSampleDocument();
+
+	FScenarioSampleLayoutLane BlockedLane;
+	BlockedLane.LaneId = TEXT("building_edge");
+	BlockedLane.OffsetRangeMeters.MinMeters = -2.0;
+	BlockedLane.OffsetRangeMeters.MaxMeters = -1.0;
+	BlockedLane.SurfaceId = TEXT("building");
+	BlockedLane.Type = EScenarioSampleLaneType::Blocked;
+	Document.Scenario.Semantic.Layout[0].Lanes.Add(BlockedLane);
+	Document.Scenario.Semantic.StaticObstacles[0].OffsetMeters = -1.5;
+
+	const FScenarioCompileResult Result =
+		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Document);
+
+	TestFalse(TEXT("adapter rejects blocked-surface obstacle"), Result.bSuccess);
+	TestTrue(
+		TEXT("blocked surface diagnostic"),
+		HasAdapterDiagnostic(Result, TEXT("sample_obstacle_on_blocked_surface")));
+	TestEqual(TEXT("only robot placeable remains"), Result.WorldSpec.Placeables.Num(), 1);
 	return true;
 }
 

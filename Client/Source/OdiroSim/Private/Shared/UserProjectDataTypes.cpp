@@ -599,7 +599,43 @@ namespace
 		return FString();
 	}
 
-	// 정책 pathfinding 실패는 policy/runtime 계층에서 여러 error code 표기로 들어온다.
+	// Event/action joins reuse typed policy sequence snapshots without leaking JSON field names to detectors.
+	bool TryReadEventSequenceProperty(const FEpisodeEvaluationEvent& event, const FString& key, int32& outSequence)
+	{
+		if (const FScenarioParamValue* value = event.Properties.Find(key))
+		{
+			if (value->Type == EScenarioParamValueType::Integer && value->IntegerValue >= 0)
+			{
+				outSequence = value->IntegerValue;
+				return true;
+			}
+			if (value->Type == EScenarioParamValueType::Float && value->FloatValue >= 0.0)
+			{
+				const double roundedValue = FMath::RoundToDouble(value->FloatValue);
+				if (FMath::IsNearlyEqual(value->FloatValue, roundedValue))
+				{
+					outSequence = static_cast<int32>(roundedValue);
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	TSharedPtr<FJsonValue> MakeEventActionSequenceValue(const FEpisodeEvaluationEvent& event)
+	{
+		int32 actionSequence = 0;
+		if (TryReadEventSequenceProperty(event, TEXT("action_sequence"), actionSequence)
+			|| TryReadEventSequenceProperty(event, TEXT("policy_sequence"), actionSequence))
+		{
+			return MakeShared<FJsonValueNumber>(actionSequence);
+		}
+
+		return MakeShared<FJsonValueNull>();
+	}
+
+	// Policy and runtime pathfinding failures arrive with several error code spellings.
 	bool IsPathfindFailureCode(const FString& value)
 	{
 		const FString normalizedValue = value.TrimStartAndEnd();
@@ -1111,7 +1147,7 @@ namespace
 		object->SetStringField(TEXT("event_type"), ResolveUserProjectEventType(event));
 		object->SetStringField(TEXT("reason"), ResolveUserProjectEventReason(event));
 		object->SetStringField(TEXT("message"), event.Message);
-		object->SetField(TEXT("action_sequence"), MakeShared<FJsonValueNull>());
+		object->SetField(TEXT("action_sequence"), MakeEventActionSequenceValue(event));
 		object->SetObjectField(TEXT("properties"), MakeUserProjectParamObject(event.Properties));
 		return object;
 	}

@@ -134,6 +134,14 @@ namespace
 	}
 
 	// events.jsonl 계약 매핑 검증에 쓰는 typed event snapshot 문자열을 만든다.
+	FScenarioParamValue MakeUserProjectIntegerParam(int32 value)
+	{
+		FScenarioParamValue paramValue;
+		paramValue.Type = EScenarioParamValueType::Integer;
+		paramValue.IntegerValue = value;
+		return paramValue;
+	}
+
 	FScenarioParamValue MakeUserProjectStringParam(const FString& value)
 	{
 		FScenarioParamValue paramValue;
@@ -556,6 +564,7 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	repathEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotRepath;
 	repathEvent.Severity = EEpisodeEvaluationEventSeverity::Info;
 	repathEvent.Message = TEXT("dynamic_repath_ready");
+	repathEvent.Properties.Add(TEXT("policy_sequence"), MakeUserProjectIntegerParam(7));
 	repathEvent.Properties.Add(TEXT("policy_event_code"), MakeUserProjectStringParam(TEXT("repath")));
 	repathEvent.Properties.Add(TEXT("policy_reason"), MakeUserProjectStringParam(TEXT("dynamic_repath_ready")));
 	runRecord.EvaluationResult.Events.Add(repathEvent);
@@ -566,6 +575,7 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	pathfindFailEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotPolicyFailure;
 	pathfindFailEvent.Severity = EEpisodeEvaluationEventSeverity::Failure;
 	pathfindFailEvent.Message = TEXT("path not found");
+	pathfindFailEvent.Properties.Add(TEXT("policy_sequence"), MakeUserProjectIntegerParam(8));
 	pathfindFailEvent.Properties.Add(TEXT("error_code"), MakeUserProjectStringParam(TEXT("PATH_NOT_FOUND")));
 	pathfindFailEvent.Properties.Add(TEXT("error_message"), MakeUserProjectStringParam(TEXT("no valid path")));
 	runRecord.EvaluationResult.Events.Add(pathfindFailEvent);
@@ -576,6 +586,7 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	policyDecisionErrorEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure;
 	policyDecisionErrorEvent.Severity = EEpisodeEvaluationEventSeverity::Failure;
 	policyDecisionErrorEvent.Message = TEXT("request failed");
+	policyDecisionErrorEvent.Properties.Add(TEXT("policy_sequence"), MakeUserProjectIntegerParam(9));
 	policyDecisionErrorEvent.Properties.Add(TEXT("error_code"), MakeUserProjectStringParam(TEXT("PYTHON_REQUEST_FAILED")));
 	policyDecisionErrorEvent.Properties.Add(TEXT("error_message"), MakeUserProjectStringParam(TEXT("Python decide HTTP request failed.")));
 	runRecord.EvaluationResult.Events.Add(policyDecisionErrorEvent);
@@ -667,6 +678,21 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestEqual(TEXT("events parsed line count"), eventLines.Num(), 6);
 	if (eventLines.Num() == 6 && eventLines[5].IsValid())
 	{
+		const TSharedPtr<FJsonValue> nearMissActionSequence = eventLines[0]->TryGetField(TEXT("action_sequence"));
+		TestTrue(
+			TEXT("near miss action sequence is null"),
+			nearMissActionSequence.IsValid() && nearMissActionSequence->Type == EJson::Null);
+		TestEqual(TEXT("repath action sequence"), static_cast<int32>(eventLines[1]->GetNumberField(TEXT("action_sequence"))), 7);
+		TestEqual(TEXT("pathfind fail action sequence"), static_cast<int32>(eventLines[2]->GetNumberField(TEXT("action_sequence"))), 8);
+		TestEqual(TEXT("policy decision error action sequence"), static_cast<int32>(eventLines[3]->GetNumberField(TEXT("action_sequence"))), 9);
+		const TSharedPtr<FJsonValue> stuckActionSequence = eventLines[4]->TryGetField(TEXT("action_sequence"));
+		TestTrue(
+			TEXT("stuck action sequence is null"),
+			stuckActionSequence.IsValid() && stuckActionSequence->Type == EJson::Null);
+		const TSharedPtr<FJsonValue> terminalActionSequence = eventLines[5]->TryGetField(TEXT("action_sequence"));
+		TestTrue(
+			TEXT("terminal action sequence is null"),
+			terminalActionSequence.IsValid() && terminalActionSequence->Type == EJson::Null);
 		TestEqual(TEXT("terminal line index"), static_cast<int32>(eventLines[5]->GetNumberField(TEXT("event_index"))), 5);
 		TestEqual(TEXT("terminal line type"), eventLines[5]->GetStringField(TEXT("event_type")), FString(TEXT("GoalReached")));
 	}

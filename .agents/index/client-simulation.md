@@ -66,6 +66,7 @@ keep:
   - Scenario LLM prompt generate/load/run is scoped to the current `<UserProject>/scenario.json`; run launches create `<UserProject>/runs/<RunId>` snapshots through SimulatorLaunchSubsystem.
   - Project run output uses `FUserProjectRunOutputJson` for `result.json`, `events.jsonl`, `actions.jsonl`, `trace.jsonl`, and `summary.json`.
   - `FUserProjectRunOutputJson` maps internal evaluation enums to the external `events.jsonl` `event_type`, `source`, and `reason` contract names; runtime detectors should provide typed snapshot fields, not JSON-specific strings.
+  - `FUserProjectRunOutputJson` writes `events.jsonl.action_sequence` from typed `action_sequence` or `policy_sequence` event properties so policy events can join back to `actions.jsonl.sequence`.
   - `FUserProjectRunOutputJson` reuses an existing terminal-cause evaluation event for `result.json.summary.terminal_event_index`; it only writes a synthetic terminal `events.jsonl` line when no matching terminal event exists.
   - ScenarioEvaluationSubsystem owns non-terminal Stuck detection from goal-progress and observed-speed windows; project run output exposes it as `Stuck` through `DeliveryBotSimulationFailure` snapshot properties while `Timeout` remains the terminal reason.
   - Project `setting.json` runtime/evaluation fields are simulator-run inputs: `time_scale` applies to world time dilation, evaluation distances convert from meters to runtime centimeters, and Stuck speed thresholds convert from km/h to cm/s.

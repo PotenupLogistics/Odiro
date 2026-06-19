@@ -1154,14 +1154,199 @@ namespace
 		return result;
 	}
 
+	FString NormalizePolicyRaySelectionMode(const FString& mode)
+	{
+		const FString normalizedMode = mode.TrimStartAndEnd().ToLower();
+		if (normalizedMode == TEXT("oned") || normalizedMode == TEXT("1d"))
+		{
+			return TEXT("1d");
+		}
+		if (normalizedMode == TEXT("twod") || normalizedMode == TEXT("2d"))
+		{
+			return TEXT("2d");
+		}
+		if (normalizedMode == TEXT("threed") || normalizedMode == TEXT("3d"))
+		{
+			return TEXT("3d");
+		}
+		if (normalizedMode == TEXT("legacy2d"))
+		{
+			return TEXT("legacy2d");
+		}
+		if (normalizedMode == TEXT("none"))
+		{
+			return TEXT("none");
+		}
+		return normalizedMode;
+	}
+
+	FString ResolvePolicyRaySelectionSource(const FString& mode)
+	{
+		if (mode == TEXT("1d"))
+		{
+			return TEXT("lidar.rays_1d");
+		}
+		if (mode == TEXT("2d"))
+		{
+			return TEXT("lidar.rays_2d");
+		}
+		if (mode == TEXT("3d"))
+		{
+			return TEXT("lidar.rays_3d.nearest_vertical_by_yaw");
+		}
+		if (mode == TEXT("legacy2d"))
+		{
+			return TEXT("legacy.lidarRays");
+		}
+		return TEXT("none");
+	}
+
+	FString NormalizePolicyRaySelectionSource(const FString& source)
+	{
+		const FString trimmedSource = source.TrimStartAndEnd();
+		if (trimmedSource == TEXT("lidar.rays1d"))
+		{
+			return TEXT("lidar.rays_1d");
+		}
+		if (trimmedSource == TEXT("lidar.rays2d"))
+		{
+			return TEXT("lidar.rays_2d");
+		}
+		if (trimmedSource == TEXT("lidar.rays3d.nearest_vertical_by_yaw"))
+		{
+			return TEXT("lidar.rays_3d.nearest_vertical_by_yaw");
+		}
+		return trimmedSource;
+	}
+
+	FString ResolvePolicyRaySelectionModeFromLidar(
+		const TSharedPtr<FJsonObject>& lidarObject,
+		int32 ray1DCount,
+		int32 ray2DCount,
+		int32 ray3DCount,
+		int32 legacyRayCount)
+	{
+		const FString lidarMode = lidarObject.IsValid()
+			? ReadStringOrDefault(*lidarObject, TEXT("mode"))
+			: FString();
+		const FString normalizedLidarMode = lidarMode.TrimStartAndEnd().ToLower();
+
+		if (normalizedLidarMode == TEXT("oned") || normalizedLidarMode == TEXT("1d"))
+		{
+			return TEXT("1d");
+		}
+		if (normalizedLidarMode == TEXT("twod")
+			|| normalizedLidarMode == TEXT("2d")
+			|| normalizedLidarMode == TEXT("onedandtwod")
+			|| normalizedLidarMode == TEXT("twodandthreed"))
+		{
+			return TEXT("2d");
+		}
+		if (normalizedLidarMode == TEXT("threed") || normalizedLidarMode == TEXT("3d"))
+		{
+			return TEXT("3d");
+		}
+		if (normalizedLidarMode == TEXT("all"))
+		{
+			if (ray2DCount > 0)
+			{
+				return TEXT("2d");
+			}
+			if (ray3DCount > 0)
+			{
+				return TEXT("3d");
+			}
+			if (ray1DCount > 0)
+			{
+				return TEXT("1d");
+			}
+			return legacyRayCount > 0 ? TEXT("legacy2d") : TEXT("2d");
+		}
+
+		if (ray2DCount > 0)
+		{
+			return TEXT("2d");
+		}
+		if (ray3DCount > 0)
+		{
+			return TEXT("3d");
+		}
+		if (ray1DCount > 0)
+		{
+			return TEXT("1d");
+		}
+		if (legacyRayCount > 0)
+		{
+			return TEXT("legacy2d");
+		}
+		return TEXT("none");
+	}
+
+	int32 CountProjected3DPolicyRays(const TArray<TSharedPtr<FJsonValue>>& ray3DValues)
+	{
+		TSet<int32> yawKeys;
+		for (const TSharedPtr<FJsonValue>& rayValue : ray3DValues)
+		{
+			if (!rayValue.IsValid() || rayValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			double yawDegree = 0.0;
+			if (rayValue->AsObject()->TryGetNumberField(TEXT("yaw_degree"), yawDegree))
+			{
+				yawKeys.Add(FMath::RoundToInt(yawDegree * 100.0));
+			}
+		}
+		return yawKeys.Num();
+	}
+
+	bool TryCalculateHorizontalPitchDegree(const TArray<TSharedPtr<FJsonValue>>& ray3DValues, double& outPitchDegree)
+	{
+		outPitchDegree = 0.0;
+		bool bFoundRay = false;
+		double bestAbsPitchDegree = TNumericLimits<double>::Max();
+
+		for (const TSharedPtr<FJsonValue>& rayValue : ray3DValues)
+		{
+			if (!rayValue.IsValid() || rayValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			double pitchDegree = 0.0;
+			if (!rayValue->AsObject()->TryGetNumberField(TEXT("pitch_degree"), pitchDegree))
+			{
+				continue;
+			}
+
+			const double absPitchDegree = FMath::Abs(pitchDegree);
+			if (!bFoundRay || absPitchDegree < bestAbsPitchDegree)
+			{
+				bFoundRay = true;
+				bestAbsPitchDegree = absPitchDegree;
+			}
+		}
+
+		if (bFoundRay)
+		{
+			outPitchDegree = bestAbsPitchDegree;
+		}
+		return bFoundRay;
+	}
+
 	TSharedRef<FJsonObject> MakePolicyRaySelectionObject(
 		const FJsonObject& requestObject,
 		const TSharedPtr<FJsonObject>& lidarObject,
 		int32 ray1DCount,
 		int32 ray2DCount,
-		int32 ray3DCount)
+		const TArray<TSharedPtr<FJsonValue>>& ray3DValues)
 	{
 		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+
+		const TArray<TSharedPtr<FJsonValue>>* legacyPolicyRays = TryGetArrayFieldByName(requestObject, TEXT("lidarRays"));
+		const int32 legacyRayCount = legacyPolicyRays ? legacyPolicyRays->Num() : 0;
+		const int32 ray3DCount = ray3DValues.Num();
 
 		TSharedPtr<FJsonObject> selectionObject;
 		if (lidarObject.IsValid())
@@ -1175,8 +1360,16 @@ namespace
 
 		if (selectionObject.IsValid())
 		{
-			object->SetStringField(TEXT("mode"), ReadStringOrDefault(*selectionObject, TEXT("mode"), TEXT("none")));
-			object->SetStringField(TEXT("source"), ReadStringOrDefault(*selectionObject, TEXT("source"), TEXT("none")));
+			const FString mode = NormalizePolicyRaySelectionMode(ReadStringOrDefault(
+				*selectionObject,
+				TEXT("mode"),
+				ReadStringOrDefault(*selectionObject, TEXT("family"), TEXT("none"))));
+			const FString source = NormalizePolicyRaySelectionSource(ReadStringOrDefault(
+				*selectionObject,
+				TEXT("source"),
+				ResolvePolicyRaySelectionSource(mode)));
+			object->SetStringField(TEXT("mode"), mode.IsEmpty() ? TEXT("none") : mode);
+			object->SetStringField(TEXT("source"), source.IsEmpty() ? ResolvePolicyRaySelectionSource(mode) : source);
 			object->SetNumberField(TEXT("ray_count"), ReadNumberOrDefault(*selectionObject, TEXT("rayCount"), ReadNumberOrDefault(*selectionObject, TEXT("ray_count"), 0.0)));
 			if (selectionObject->HasField(TEXT("horizontalPitchDegree")) || selectionObject->HasField(TEXT("horizontal_pitch_degree")))
 			{
@@ -1189,41 +1382,45 @@ namespace
 			return object;
 		}
 
-		const TArray<TSharedPtr<FJsonValue>>* legacyPolicyRays = TryGetArrayFieldByName(requestObject, TEXT("lidarRays"));
-		if (legacyPolicyRays && legacyPolicyRays->Num() > 0)
-		{
-			object->SetStringField(TEXT("mode"), TEXT("legacy2d"));
-			object->SetStringField(TEXT("source"), TEXT("lidar.rays_2d"));
-			object->SetNumberField(TEXT("ray_count"), legacyPolicyRays->Num());
-			object->SetField(TEXT("horizontal_pitch_degree"), MakeShared<FJsonValueNull>());
-			return object;
-		}
+		const FString mode = ResolvePolicyRaySelectionModeFromLidar(
+			lidarObject,
+			ray1DCount,
+			ray2DCount,
+			ray3DCount,
+			legacyRayCount);
+		object->SetStringField(TEXT("mode"), mode);
+		object->SetStringField(TEXT("source"), ResolvePolicyRaySelectionSource(mode));
 
-		if (ray2DCount > 0)
+		if (mode == TEXT("2d"))
 		{
-			object->SetStringField(TEXT("mode"), TEXT("2d"));
-			object->SetStringField(TEXT("source"), TEXT("lidar.rays_2d"));
 			object->SetNumberField(TEXT("ray_count"), ray2DCount);
 		}
-		else if (ray3DCount > 0)
+		else if (mode == TEXT("3d"))
 		{
-			object->SetStringField(TEXT("mode"), TEXT("3d"));
-			object->SetStringField(TEXT("source"), TEXT("lidar.rays_3d"));
-			object->SetNumberField(TEXT("ray_count"), ray3DCount);
+			object->SetNumberField(TEXT("ray_count"), CountProjected3DPolicyRays(ray3DValues));
 		}
-		else if (ray1DCount > 0)
+		else if (mode == TEXT("1d"))
 		{
-			object->SetStringField(TEXT("mode"), TEXT("1d"));
-			object->SetStringField(TEXT("source"), TEXT("lidar.rays_1d"));
 			object->SetNumberField(TEXT("ray_count"), ray1DCount);
+		}
+		else if (mode == TEXT("legacy2d"))
+		{
+			object->SetNumberField(TEXT("ray_count"), legacyRayCount);
 		}
 		else
 		{
-			object->SetStringField(TEXT("mode"), TEXT("none"));
-			object->SetStringField(TEXT("source"), TEXT("none"));
 			object->SetNumberField(TEXT("ray_count"), 0);
 		}
-		object->SetField(TEXT("horizontal_pitch_degree"), MakeShared<FJsonValueNull>());
+
+		double horizontalPitchDegree = 0.0;
+		if (mode == TEXT("3d") && TryCalculateHorizontalPitchDegree(ray3DValues, horizontalPitchDegree))
+		{
+			object->SetNumberField(TEXT("horizontal_pitch_degree"), horizontalPitchDegree);
+		}
+		else
+		{
+			object->SetField(TEXT("horizontal_pitch_degree"), MakeShared<FJsonValueNull>());
+		}
 		return object;
 	}
 
@@ -1254,7 +1451,7 @@ namespace
 				lidarObject,
 				ray1DValues.Num(),
 				ray2DValues.Num(),
-				ray3DValues.Num()));
+				ray3DValues));
 		return object;
 	}
 

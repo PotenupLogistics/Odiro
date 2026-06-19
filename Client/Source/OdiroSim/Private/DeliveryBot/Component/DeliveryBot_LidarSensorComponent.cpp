@@ -8,7 +8,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotLidarSensor, Log, All);
 namespace
 {
 	// Returns the scenario-authored semantic id when the actor participates in scenario logging.
-	FString ResolveScenarioTargetId(const AActor* actor)
+	FString ResolveLidarScenarioTargetId(const AActor* actor)
 	{
 		if (!IsValid(actor))
 		{
@@ -839,7 +839,7 @@ FDeliveryBotLidarRayInfo UDeliveryBot_LidarSensorComponent::MakeRayInfo(
 	rayInfo.HitActor = hitActor;
 	rayInfo.ActorName = hitActor->GetName();
 	rayInfo.ActorTags = hitActor->Tags;
-	rayInfo.TargetId = ResolveScenarioTargetId(hitActor);
+	rayInfo.TargetId = ResolveLidarScenarioTargetId(hitActor);
 	rayInfo.TargetTags = hitActor->Tags;
 	rayInfo.HitLocationCm = hitResult->ImpactPoint;
 	rayInfo.DistanceM = FVector::Dist(startLocationCm, hitResult->ImpactPoint) / 100.f;

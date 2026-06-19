@@ -15,7 +15,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBot, Log, All);
 namespace
 {
 	// Returns the scenario-authored semantic id when the actor participates in scenario logging.
-	FString ResolveScenarioTargetId(const AActor* actor)
+	FString ResolveCollisionScenarioTargetId(const AActor* actor)
 	{
 		if (!IsValid(actor))
 		{
@@ -254,7 +254,7 @@ void ADeliveryBot::HandleCollisionStopHit(
 	{
 		CollisionStopActorName = otherActor->GetName();
 		CollisionStopActorTags = otherActor->Tags;
-		CollisionStopTargetId = ResolveScenarioTargetId(otherActor);
+		CollisionStopTargetId = ResolveCollisionScenarioTargetId(otherActor);
 		CollisionStopTargetTags = otherActor->Tags;
 		UE_LOG(LogDeliveryBot, Warning, TEXT("Collision stop locked | Actor=%s"), *CollisionStopActorName);
 	}

@@ -94,6 +94,219 @@ namespace
 		}
 	}
 
+	void SetJsonTargetFields(const TSharedPtr<FJsonObject>& targetObject, const FString& targetId, const TArray<FName>& targetTags)
+	{
+		if (!targetObject.IsValid())
+		{
+			return;
+		}
+
+		targetObject->SetStringField(TEXT("targetId"), targetId);
+		targetObject->SetArrayField(TEXT("targetTags"), MakeJsonStringArrayFromNames(targetTags));
+	}
+
+	void AddJsonLidarRayTargetFields(
+		TArray<TSharedPtr<FJsonValue>>& rayValues,
+		const TArray<FDeliveryBotLidarRayInfo>& rayInfos,
+		EDeliveryBotLidarRayDimensionType rayDimensionType)
+	{
+		int32 valueIndex = 0;
+		for (const FDeliveryBotLidarRayInfo& rayInfo : rayInfos)
+		{
+			if (rayInfo.RayDimensionType != rayDimensionType)
+			{
+				continue;
+			}
+
+			if (!rayValues.IsValidIndex(valueIndex))
+			{
+				break;
+			}
+
+			const TSharedPtr<FJsonValue>& rayValue = rayValues[valueIndex];
+			++valueIndex;
+			if (!rayValue.IsValid() || rayValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			SetJsonTargetFields(rayValue->AsObject(), rayInfo.TargetId, rayInfo.TargetTags);
+		}
+	}
+
+	// Python LiDAR family 선택 규칙과 맞춰 action log에 기록할 policy 입력을 계산한다.
+	FString ResolvePolicyRaySelectionMode(
+		EDeliveryBotLidarModeType lidarModeType,
+		int32 ray1DCount,
+		int32 ray2DCount,
+		int32 ray3DCount,
+		int32 legacyRayCount)
+	{
+		switch (lidarModeType)
+		{
+		case EDeliveryBotLidarModeType::OneD:
+			return TEXT("1d");
+		case EDeliveryBotLidarModeType::TwoD:
+		case EDeliveryBotLidarModeType::OneDAndTwoD:
+		case EDeliveryBotLidarModeType::TwoDAndThreeD:
+			return TEXT("2d");
+		case EDeliveryBotLidarModeType::ThreeD:
+			return TEXT("3d");
+		case EDeliveryBotLidarModeType::All:
+			if (ray2DCount > 0)
+			{
+				return TEXT("2d");
+			}
+			if (ray3DCount > 0)
+			{
+				return TEXT("3d");
+			}
+			if (ray1DCount > 0)
+			{
+				return TEXT("1d");
+			}
+			return legacyRayCount > 0 ? TEXT("legacy2d") : TEXT("2d");
+		default:
+			break;
+		}
+
+		if (ray2DCount > 0)
+		{
+			return TEXT("2d");
+		}
+		if (ray3DCount > 0)
+		{
+			return TEXT("3d");
+		}
+		if (ray1DCount > 0)
+		{
+			return TEXT("1d");
+		}
+		if (legacyRayCount > 0)
+		{
+			return TEXT("legacy2d");
+		}
+		return TEXT("none");
+	}
+
+	// actions.jsonl policy_ray_selection 계약에 기록할 source path를 반환한다.
+	FString ResolvePolicyRaySelectionSource(const FString& mode)
+	{
+		if (mode == TEXT("1d"))
+		{
+			return TEXT("lidar.rays_1d");
+		}
+		if (mode == TEXT("2d"))
+		{
+			return TEXT("lidar.rays_2d");
+		}
+		if (mode == TEXT("3d"))
+		{
+			return TEXT("lidar.rays_3d.nearest_vertical_by_yaw");
+		}
+		if (mode == TEXT("legacy2d"))
+		{
+			return TEXT("legacy.lidarRays");
+		}
+		return TEXT("none");
+	}
+
+	// Python 3D projection이 2D policy에 노출할 yaw bucket 수를 센다.
+	int32 CountProjected3DPolicyRays(const TArray<FDeliveryBotLidarRayInfo>& rayInfos)
+	{
+		TSet<int32> yawKeys;
+		for (const FDeliveryBotLidarRayInfo& rayInfo : rayInfos)
+		{
+			if (rayInfo.RayDimensionType != EDeliveryBotLidarRayDimensionType::ThreeD)
+			{
+				continue;
+			}
+
+			yawKeys.Add(FMath::RoundToInt(rayInfo.RayYawDegree * 100.f));
+		}
+		return yawKeys.Num();
+	}
+
+	// Python이 horizontal 3D projection 기준으로 사용하는 pitch 값을 찾는다.
+	bool TryCalculateHorizontalPitchDegree(const TArray<FDeliveryBotLidarRayInfo>& rayInfos, float& outPitchDegree)
+	{
+		outPitchDegree = 0.f;
+		bool bFoundRay = false;
+		float bestAbsPitchDegree = TNumericLimits<float>::Max();
+
+		for (const FDeliveryBotLidarRayInfo& rayInfo : rayInfos)
+		{
+			if (rayInfo.RayDimensionType != EDeliveryBotLidarRayDimensionType::ThreeD)
+			{
+				continue;
+			}
+
+			const float absPitchDegree = FMath::Abs(rayInfo.RayPitchDegree);
+			if (!bFoundRay || absPitchDegree < bestAbsPitchDegree)
+			{
+				bFoundRay = true;
+				bestAbsPitchDegree = absPitchDegree;
+			}
+		}
+
+		if (bFoundRay)
+		{
+			outPitchDegree = bestAbsPitchDegree;
+		}
+		return bFoundRay;
+	}
+
+	// action log writer가 소비할 selection summary를 만든다.
+	TSharedRef<FJsonObject> MakeJsonPolicyRaySelectionObject(
+		EDeliveryBotLidarModeType lidarModeType,
+		const TArray<FDeliveryBotLidarRayInfo>& rayInfos,
+		int32 ray1DCount,
+		int32 ray2DCount,
+		int32 ray3DCount,
+		int32 legacyRayCount)
+	{
+		const FString mode = ResolvePolicyRaySelectionMode(
+			lidarModeType,
+			ray1DCount,
+			ray2DCount,
+			ray3DCount,
+			legacyRayCount);
+
+		int32 rayCount = 0;
+		if (mode == TEXT("1d"))
+		{
+			rayCount = ray1DCount;
+		}
+		else if (mode == TEXT("2d"))
+		{
+			rayCount = ray2DCount;
+		}
+		else if (mode == TEXT("3d"))
+		{
+			rayCount = CountProjected3DPolicyRays(rayInfos);
+		}
+		else if (mode == TEXT("legacy2d"))
+		{
+			rayCount = legacyRayCount;
+		}
+
+		TSharedRef<FJsonObject> selectionObject = MakeShared<FJsonObject>();
+		selectionObject->SetStringField(TEXT("mode"), mode);
+		selectionObject->SetStringField(TEXT("source"), ResolvePolicyRaySelectionSource(mode));
+		selectionObject->SetNumberField(TEXT("rayCount"), rayCount);
+
+		float horizontalPitchDegree = 0.f;
+		if (mode == TEXT("3d") && TryCalculateHorizontalPitchDegree(rayInfos, horizontalPitchDegree))
+		{
+			selectionObject->SetNumberField(TEXT("horizontalPitchDegree"), horizontalPitchDegree);
+		}
+		else
+		{
+			selectionObject->SetField(TEXT("horizontalPitchDegree"), MakeShared<FJsonValueNull>());
+		}
+		return selectionObject;
+	}
+
 	// 기존 Python 정책 호환용 2D LiDAR ray JSON을 만든다.
 	TSharedRef<FJsonObject> MakeJsonLegacyLidarRayObject(const FDeliveryBotLidarRayInfo& rayInfo)
 	{
@@ -104,8 +317,6 @@ namespace
 		rayObject->SetNumberField(TEXT("rayYawDegree"), rayInfo.RayYawDegree);
 		rayObject->SetStringField(TEXT("actorName"), rayInfo.ActorName);
 		rayObject->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(rayInfo.ActorTags));
-		rayObject->SetStringField(TEXT("targetId"), rayInfo.TargetId);
-		rayObject->SetArrayField(TEXT("targetTags"), MakeJsonStringArrayFromNames(rayInfo.TargetTags));
 		return rayObject;
 	}
 
@@ -118,8 +329,6 @@ namespace
 		rayObject->SetNumberField(TEXT("rayIndex"), rayInfo.RayIndex);
 		rayObject->SetStringField(TEXT("actorName"), rayInfo.ActorName);
 		rayObject->SetArrayField(TEXT("actorTags"), MakeJsonStringArrayFromNames(rayInfo.ActorTags));
-		rayObject->SetStringField(TEXT("targetId"), rayInfo.TargetId);
-		rayObject->SetArrayField(TEXT("targetTags"), MakeJsonStringArrayFromNames(rayInfo.TargetTags));
 		return rayObject;
 	}
 
@@ -931,8 +1140,6 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 	robotStateObject->SetBoolField(TEXT("bColliding"), observation.RobotState.bColliding);
 	robotStateObject->SetStringField(TEXT("collisionActorName"), observation.RobotState.CollisionActorName);
 	robotStateObject->SetArrayField(TEXT("collisionActorTags"), MakeJsonStringArrayFromNames(observation.RobotState.CollisionActorTags));
-	robotStateObject->SetStringField(TEXT("collisionTargetId"), observation.RobotState.CollisionTargetId);
-	robotStateObject->SetArrayField(TEXT("collisionTargetTags"), MakeJsonStringArrayFromNames(observation.RobotState.CollisionTargetTags));
 	requestObject->SetObjectField(TEXT("robotState"), robotStateObject);
 
 	TArray<TSharedPtr<FJsonValue>> legacyLidarRayValues;
@@ -1003,8 +1210,24 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 
 	requestObject->SetArrayField(TEXT("observedObjects"), observedObjectValues);
 
+	const bool bPayloadBuilt = BuildMessagePayload(TEXT("scenario_decide"), requestObject, outPayload);
+	robotStateObject->SetStringField(TEXT("collisionTargetId"), observation.RobotState.CollisionTargetId);
+	robotStateObject->SetArrayField(TEXT("collisionTargetTags"), MakeJsonStringArrayFromNames(observation.RobotState.CollisionTargetTags));
+	AddJsonLidarRayTargetFields(lidarRay1DValues, observation.LidarScanInfo.RayInfos, EDeliveryBotLidarRayDimensionType::OneD);
+	AddJsonLidarRayTargetFields(lidarRay2DValues, observation.LidarScanInfo.RayInfos, EDeliveryBotLidarRayDimensionType::TwoD);
+	AddJsonLidarRayTargetFields(lidarRay3DValues, observation.LidarScanInfo.RayInfos, EDeliveryBotLidarRayDimensionType::ThreeD);
+	AddJsonLidarRayTargetFields(legacyLidarRayValues, observation.LidarScanInfo.RayInfos, EDeliveryBotLidarRayDimensionType::TwoD);
+	lidarObject->SetObjectField(
+		TEXT("policyRaySelection"),
+		MakeJsonPolicyRaySelectionObject(
+			setupInfo.LidarSensorConfigInfo.LidarModeType,
+			observation.LidarScanInfo.RayInfos,
+			lidarRay1DValues.Num(),
+			lidarRay2DValues.Num(),
+			lidarRay3DValues.Num(),
+			legacyLidarRayValues.Num()));
 	LastDecisionRequestObject = requestObject;
-	return BuildMessagePayload(TEXT("scenario_decide"), requestObject, outPayload);
+	return bPayloadBuilt;
 }
 
 // envelope 응답에서 response 객체를 가져온다.

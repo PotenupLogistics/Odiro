@@ -649,7 +649,11 @@ bool FUserProjectRobotActionWriteTest::RunTest(const FString& parameters)
 			if (selectionObject.IsValid())
 			{
 				TestTrue(TEXT("policy ray selection mode field"), selectionObject->TryGetStringField(TEXT("mode"), stringValue));
-				TestEqual(TEXT("policy ray selection mode"), stringValue, FString(TEXT("legacy2d")));
+				TestEqual(TEXT("policy ray selection mode"), stringValue, FString(TEXT("2d")));
+				TestTrue(TEXT("policy ray selection source field"), selectionObject->TryGetStringField(TEXT("source"), stringValue));
+				TestEqual(TEXT("policy ray selection source"), stringValue, FString(TEXT("lidar.rays_2d")));
+				TestTrue(TEXT("policy ray count field"), selectionObject->TryGetNumberField(TEXT("ray_count"), numberValue));
+				TestEqual(TEXT("policy ray count"), static_cast<int32>(numberValue), 1);
 			}
 		}
 

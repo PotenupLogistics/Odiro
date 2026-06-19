@@ -1,173 +1,89 @@
-# Proto-AI 문서 인덱스
+# v2 Agent 문서 인덱스
 
-루트 [README.md](../README.md)는 프로젝트 최상위 entry point입니다. 이 문서는 정리된 `docs` 폴더 구조와 주요 문서 위치를 안내합니다.
+이 문서는 현재 v2 Agent 기준으로 먼저 읽을 문서와 LLM context에 넣을 수 있는 문서를 구분한다. 과거 UE handoff, migration, research, deprecated 문서는 현재 계약이나 current architecture 기준으로 사용하지 않는다.
 
-## 공식 계약 문서
+## 현재 기준 문서
 
-공식 계약 문서 경로는 팀 공유 경로이므로 이동하거나 rename하지 않습니다.
+* [Repository / user project 구조](../../docs/specs/project-structure.md): repository 전체 구조와 user project 폴더 배치 기준이다. 어떤 폴더와 파일이 어디에 있어야 하는지를 설명하며, 실행 순서와 파일 내부 schema의 canonical 기준은 아니다.
+* [Simulation interface](../../docs/specs/simulation-interface.md): Scenario, EpisodeScenario, Run, Episode, RunId, EpisodeId 등 실행 용어와 실행 흐름의 canonical 기준이다.
+* [User project data contract](../../contracts/specs/user-project-data.md): Bridge, Client, Agents가 함께 읽고 쓰는 `setting.json`, `profile.json`, `scenario.json`, `runs/<RunId>/**`, episode 결과 파일의 schema/field/rule 기준이다. 새 writer/API/schema는 이 문서를 우선한다.
+* [v2 Agent API](api/V2_AGENT_APIS.md): v2 Agent HTTP API 기준이다.
+* [v2 Agent Architecture](agents/V2_AGENT_ARCHITECTURE.md): v2 Agent 내부 구조 기준이다.
+* [v2 Agent LangGraph Design](agents/V2_LANGGRAPH_DESIGN.md): v2 Agent LangGraph 흐름 기준이다.
 
-현재 user project 파일 계약은 [user-project-data](../../contracts/specs/user-project-data.md)가 기준입니다.
-아래 EpisodeSetup/DeliveryBotSetup/RunQueue 문서는 legacy input/output 출처 확인용입니다.
+`project-structure.md`와 `user-project-data.md`는 중복 문서가 아니다. 전자는 repository와 user project의 배치 책임을, 후자는 Bridge/Client/Agents가 공유하는 파일 형식 계약을 소유한다.
 
-* [contracts/specs/user-project-data.md](../../contracts/specs/user-project-data.md)
-* [contracts/specs/EpisodeSetup.json.md](../../contracts/specs/EpisodeSetup.json.md)
-* [contracts/specs/DeliveryBotSetup.json.md](../../contracts/specs/DeliveryBotSetup.json.md)
-* [contracts/specs/RunQueue.json.md](../../contracts/specs/RunQueue.json.md)
-* [contracts/specs/EpisodeEvaluationReport.json.md](../../contracts/specs/EpisodeEvaluationReport.json.md)
-* [Policy Decision JSON Guide](policy_server/POLICY_DECISION_JSON_GUIDE.md)
+## v2 Scenario Generation API
 
-현재 기준 경로:
+사용자용 scenario 생성 API는 `POST /api/v2/scenarios/generate`이다. 입력은 자연어 `prompt`이며, 응답은 `<UserProject>/scenario.json`에 저장 가능한 `scenario` JSON이다. 실행 개수, seed, scenario sample, RunQueue 생성은 담당하지 않는다.
 
-* `contracts/specs/user-project-data.md`
+`POST /api/v1/scenarios/generate`는 현재 `410 RUN_QUEUE_REMOVED` 안내만 반환한다. legacy RunQueue package export는 public v2 API 경계가 아니라 과거 UE handoff tooling이다.
 
-Legacy 참고 경로:
+## 환경 문서
 
-* `contracts/specs/EpisodeSetup.json.md`
-* `contracts/specs/DeliveryBotSetup.json.md`
-* `contracts/specs/RunQueue.json.md`
-* `contracts/specs/EpisodeEvaluationReport.json.md`
-* `docs/policy_server/POLICY_DECISION_JSON_GUIDE.md`
+* [User project data contract](../../contracts/specs/user-project-data.md): 현재 user project 파일 형식 및 기본 환경 어휘 계약이다.
+* `Client/Json/environment-catalog.md`: UE/Client 쪽 원본 catalog이다.
+* [Environment catalog](environment/environment-catalog.md): `Client/Json/environment-catalog.md`를 v2 Agent LLM context에서 참고하기 위해 둔 임시 사본이다. surface id, prop id, prop category, prop class, persona id, encounter type, behavior override field를 참고한다.
 
-## 아키텍처
+`Agents/docs/environment/environment-catalog.md`만 LLM context allowlist에 넣는다. `Client/Json/environment-catalog.md`는 원본 위치이지만 Agent allowlist에 직접 넣지 않는다. 추후 `contracts/specs/environment-catalog.md` 또는 `contracts/specs/scenario-environment-catalog.md`가 canonical contract로 생기면 Agents 사본은 제거하고 contracts 쪽 문서를 참조한다.
 
-* [v2 Agent Architecture](agents/V2_AGENT_ARCHITECTURE.md)
-* [v2 Agent LangGraph 설계](agents/V2_LANGGRAPH_DESIGN.md)
-* [Scenario / Episode 용어 정리](architecture/SCENARIO_EPISODE_TERMINOLOGY.md)
-* [UE 계약 마이그레이션 계획](architecture/UE_CONTRACT_MIGRATION_PLAN.md)
-* [맵 생성 데이터 근거](architecture/MAP_GENERATION_DATA_SOURCES.md)
-* [맵 생성 trace](architecture/MAP_GENERATION_TRACE.md)
-* [Route-relative Placement](architecture/ROUTE_RELATIVE_PLACEMENT.md)
-* [Scenario Intent Extraction](architecture/SCENARIO_INTENT_EXTRACTION.md)
-* [Scenario Post-Processing](architecture/SCENARIO_POST_PROCESSING.md)
-* [Scenario Reflection Validation](architecture/SCENARIO_REFLECTION_VALIDATION.md)
-* [Scenario Repair Prompt](architecture/SCENARIO_REPAIR_PROMPT.md)
-* [LLM World Config Generation Flow](architecture/LLM_WORLD_CONFIG_GENERATION_FLOW.md)
-* [World Config Prompt Spec](architecture/WORLD_CONFIG_PROMPT_SPEC.md)
-* [World Config Prompt Hardening](architecture/WORLD_CONFIG_PROMPT_HARDENING.md)
-* [World Config Output Contract](architecture/WORLD_CONFIG_OUTPUT_CONTRACT.md)
-* [World Config Generation Orchestrator](architecture/WORLD_CONFIG_GENERATION_ORCHESTRATOR.md)
+## LLM Context Allowlist
 
-## 상태
+v2 Agent에서 markdown 문서를 LLM context로 읽는 구조를 만들 때 기본 allowlist는 current 기준 문서만 포함한다.
 
+```text
+docs/specs/simulation-interface.md
+contracts/specs/user-project-data.md
+Agents/docs/api/V2_AGENT_APIS.md
+Agents/docs/agents/V2_AGENT_ARCHITECTURE.md
+Agents/docs/agents/V2_LANGGRAPH_DESIGN.md
+Agents/docs/environment/environment-catalog.md
+```
+
+`Agents/docs/environment/environment-catalog.md`는 임시 AI-side catalog이다. contracts 하위 canonical environment catalog가 추가되면 allowlist에서 제거한다.
+
+## LLM Context Exclusions
+
+다음 문서는 현재 v2 Agent 기준 문서나 LLM context allowlist에 포함하지 않는다.
+
+```text
+Agents/docs/archive/**
+contracts/specs/EpisodeSetup.json.md
+contracts/specs/DeliveryBotSetup.json.md
+contracts/specs/RunQueue.json.md
+legacy UE handoff 문서
+migration plan 문서
+research 문서
+deprecated 문서
+```
+
+legacy UE handoff 문서는 과거 구현과 의사결정 추적용으로만 보관한다. 현재 Scenario / Episode / Run 용어 기준은 [Simulation interface](../../docs/specs/simulation-interface.md)를 따른다.
+
+## 개발/운영 참고
+
+아래 문서는 current contract나 LLM allowlist가 아니라 개발자가 필요할 때 직접 확인하는 운영 참고 문서다.
+
+* [v2 Agent 테스트/운영 가이드](development/V2_AGENT_TESTING_GUIDE.md)
+* [Environment Parameter Spec](environment/ENVIRONMENT_PARAMETER_SPEC.md)
 * [Capabilities](status/CAPABILITIES.md)
 * [Verification Status](status/VERIFICATION_STATUS.md)
 * [Next Actions](status/NEXT_ACTIONS.md)
 * [Decisions](status/DECISIONS.md)
+* [OpenAI Provider Guide](providers/OPENAI_PROVIDER_GUIDE.md)
+* [Ollama Provider Guide](providers/OLLAMA_PROVIDER_GUIDE.md)
+* [API Shell Guide](tooling/API_SHELL_GUIDE.md)
+* [Harness Guide](tooling/HARNESS_GUIDE.md)
 
-## 환경 파라미터
+통합 harness 확인은 `uv run python -m harness.checks.check_all`을 사용한다.
 
-* [환경 파라미터 명세](environment/ENVIRONMENT_PARAMETER_SPEC.md)
-* [환경 샘플러 설계](environment/ENVIRONMENT_SAMPLER_DESIGN.md)
-* [환경 샘플러 생성 연동](environment/ENVIRONMENT_SAMPLER_GENERATION_INTEGRATION.md)
+## Legacy / Archive
 
-## 실험
+아래 문서는 과거 UE handoff, migration, research, archive 추적용이다. 현재 v2 Agent 기준 문서나 LLM context allowlist에 포함하지 않는다.
 
-* [알파 단계 실험 workspace layout](experiment/EXPERIMENT_WORKSPACE_LAYOUT.md)
-
-## API
-
-* [v2 Agent API 문서](api/V2_AGENT_APIS.md)
-
-## 상태와 운영
-
-* [v2 Agent 테스트/운영 가이드](development/V2_AGENT_TESTING_GUIDE.md)
-
-Scenario generation v2는 항상 LangGraph runner를 사용합니다. `V2_AGENT_LLM_ENABLED=false`이면 deterministic graph path를 사용하고, `true`이면 graph 내부 LLM-assisted node를 시도한 뒤 validator/fallback을 거칩니다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아니며, 결과 분석 v2 graph 경로 제어를 위해 유지합니다.
-
-## 정책
-
-* [MVP 정책 범위](policy/MVP_POLICY_SCOPE.md)
-* [정책 출처 registry](policy/POLICY_SOURCE_REGISTRY.md)
-* [정책 카드 coverage](policy/POLICY_CARD_COVERAGE.md)
-* [정책 카드 생성 가이드](policy/POLICY_CARD_GENERATION_GUIDE.md)
-* [정책 추출 matrix](policy/POLICY_EXTRACTION_MATRIX.md)
-* [정책 파라미터 catalog](policy/POLICY_PARAMETER_CATALOG.md)
-* [Decision action mapping](policy/DECISION_ACTION_MAPPING.md)
-* [Decision request field mapping](policy/DECISION_REQUEST_FIELD_MAPPING.md)
-
-## RAG와 출처 처리
-
-* [RAG chunking 전략](rag/RAG_CHUNKING_STRATEGY.md)
-* [RAG retrieval 전략](rag/RAG_RETRIEVAL_STRATEGY.md)
-* [출처 처리 가이드](rag/SOURCE_PROCESSING_GUIDE.md)
-
-## 파일 기반 데이터 저장소
-
-* [File-Based RAG Data Store 설계](database/FILE_BASED_RAG_DATA_DESIGN.md)
-* [Policy chunk 후보 작성/검토/승격 workflow](database/POLICY_CHUNK_PROMOTION_WORKFLOW.md)
-* Source inventory: `data/sources/source_inventory.json`
-* 통합 readiness check: `uv run python scripts/check_file_based_rag_readiness.py`
-* 로컬 통합 하네스 포함: `uv run python -m harness.checks.check_all`
-* File-based RAG store, source inventory, runtime source status guard 검증: `uv run python scripts/validate_file_based_rag_store.py`
-* Policy chunk candidate 검증: `uv run python scripts/validate_policy_chunk_candidates.py`
-
-## Legacy UE 전달
-
-* [UE setup pair 전달 package](handoff/UE_SETUP_PAIR_HANDOFF_PACKAGE.md)
-* [UE 팀 메시지 초안](handoff/UE_TEAM_MESSAGE_DRAFT.md)
-* [UE5 팀 endpoint 사용 가이드](handoff/UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md)
-* [UE 연동 전달 인덱스](handoff/UE_INTEGRATION_HANDOFF_INDEX.md)
-* [UE 전달 manifest](handoff/UE_HANDOFF_DELIVERY_MANIFEST.md)
-* [전달 release notes](handoff/HANDOFF_RELEASE_NOTES.md)
-
-RunQueue package export는 legacy tooling입니다. `scripts/export_ue5_run_queue_package.py`를 사용합니다. 산출물은 `data/run_queue_exports/` 아래 local ignored path에 저장하며, RunQueue JSON은 `contracts/specs/RunQueue.json.md` 계약 필드만 포함합니다.
-
-사용자용 scenario 생성 API는 `POST /api/v2/scenarios/generate`입니다. 입력은 자연어 `prompt`이며, 응답은 `<UserProject>/scenario.json`에 저장 가능한 `scenario` JSON입니다. 실행 개수, seed, scenario sample, RunQueue 생성은 담당하지 않습니다. `POST /api/v1/scenarios/generate`는 현재 `410 RUN_QUEUE_REMOVED` 안내만 반환합니다.
-
-로봇 실측 크기 W/D/H `0.44m / 1.00m / 0.64m`는 API request가 아니라 서버 기본 `RobotProfile`로 주입합니다. 생성/export된 EpisodeSetup에는 additive root field `robot_profile`이 포함되며, `min_passable_width_m=0.84m` 기준으로 보도 폭, 장애물 gap, robot spawn/goal 여유 검증에 사용합니다. UE가 아직 이 field를 소비하지 않으면 무시해도 되지만 collision box와 실제 크기 일치 여부는 UE 확인 항목입니다.
-
-## Provider
-
-* [OpenAI Provider 가이드](providers/OPENAI_PROVIDER_GUIDE.md)
-* [Ollama Provider 가이드](providers/OLLAMA_PROVIDER_GUIDE.md)
-* [Ollama live smoke 가이드](providers/OLLAMA_LIVE_SMOKE_GUIDE.md)
-* [Ollama 실패 진단](providers/OLLAMA_FAILURE_DIAGNOSTICS.md)
-* [Ollama timeout tuning 가이드](providers/OLLAMA_TIMEOUT_TUNING_GUIDE.md)
-* [LLM provider 설정](providers/LLM_PROVIDER_CONFIGURATION.md)
-* [LLM client abstraction](providers/LLM_CLIENT_ABSTRACTION.md)
-
-## JSON 계약과 자연어
-
-* [JSON 계약](json_contracts/JSON_CONTRACTS.md)
-* [JSON 계약 검증 가이드](json_contracts/JSON_CONTRACT_VALIDATION_GUIDE.md)
-* [자연어 입력 계획](json_contracts/NATURAL_LANGUAGE_INPUT_PLAN.md)
-* [자연어 생성 계약](json_contracts/NATURAL_LANGUAGE_GENERATION_CONTRACT.md)
-
-## 수동 검토
-
-* [수동 확인 CLI](manual_review/MANUAL_CONFIRMATION_CLI.md)
-* [수동 확인 가이드](manual_review/MANUAL_CONFIRMATION_GUIDE.md)
-* [수동 확인 입력 가이드](manual_review/MANUAL_CONFIRMATION_INPUT_GUIDE.md)
-* [수동 검토 실행 계획](manual_review/MANUAL_REVIEW_EXECUTION_PLAN.md)
-* [수동 검토 queue](manual_review/MANUAL_REVIEW_QUEUE.md)
-
-## 도구
-
-* [API shell 가이드](tooling/API_SHELL_GUIDE.md)
-* [하네스 가이드](tooling/HARNESS_GUIDE.md)
-* [리포트 serialization 가이드](tooling/REPORT_SERIALIZATION_GUIDE.md)
-
-## 연구와 참고 자료
-
-* [연구 alignment](research/RESEARCH_ALIGNMENT.md)
-* [연구 출처 registry](research/RESEARCH_SOURCE_REGISTRY.md)
-
-Eureka / DrEureka 원문 PDF는 repository에 포함하지 않습니다. 공식 URL은 [연구 출처 registry](research/RESEARCH_SOURCE_REGISTRY.md)의 `RSR-005`, `RSR-006` 항목을 기준으로 확인하고, 필요한 경우 개인 로컬 보관 경로에만 둡니다. `docs/references/*.pdf`는 local-only 파일로 `.gitignore` 대상입니다.
-
-## Archive
-
-* [이전 EpisodeSpec archive](archive/previous_episode_spec/)
-* [이전 handoff smoke/checklist archive](archive/deprecated/)
-* [Legacy UE EpisodeSpec JSON guide](archive/previous_episode_spec/UE_EPISODE_SPEC_JSON_GUIDE.md)
-
-Archive 문서는 현재 계약 문서가 아니라 과거 구현과 의사결정을 추적하기 위한 참고 자료다.
-
-## 검증 명령
-
-```powershell
-uv run python scripts/check_file_based_rag_readiness.py
-uv run python -m harness.checks.check_all
-uv run pytest
-```
-
-현재 단계에서는 sample JSON과 fixture 파일을 의도적으로 자동 생성하지 않습니다. Fine-tuning candidate full JSON은 로컬 전달 산출물로만 보관하며 repository에 포함하지 않습니다.
+* [Handoff Release Notes](handoff/HANDOFF_RELEASE_NOTES.md)
+* [UE Integration Handoff Index](handoff/UE_INTEGRATION_HANDOFF_INDEX.md)
+* [UE Handoff Delivery Manifest](handoff/UE_HANDOFF_DELIVERY_MANIFEST.md)
+* [Map Generation Data Sources](architecture/MAP_GENERATION_DATA_SOURCES.md)
+* [Map Generation Trace](architecture/MAP_GENERATION_TRACE.md)
+* [Research Alignment](research/RESEARCH_ALIGNMENT.md)
+* [Legacy UE EpisodeSpec JSON Guide](archive/previous_episode_spec/UE_EPISODE_SPEC_JSON_GUIDE.md)

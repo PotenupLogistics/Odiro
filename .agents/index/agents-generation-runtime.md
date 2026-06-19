@@ -37,6 +37,7 @@ entry:
   - Agents/app/services/world_config_to_delivery_bot_setup_adapter.py
   - Agents/app/services/run_queue_export_service.py
   - Agents/docs/environment
+  - Agents/docs/environment/environment-catalog.md
   - Agents/docs/handoff
   - Agents/docs/providers
   - Agents/docs/research
@@ -44,6 +45,8 @@ entry:
 keep:
   - Do not re-expose legacy UE handoff routes unless intentionally restoring them.
   - Final user project contract writes project/run/episode artifacts, not wrapper-free RunQueue JSON.
+  - Current Scenario/Episode/Run terminology belongs in docs/specs/simulation-interface.md; archived terminology notes are legacy UE handoff context only.
+  - Agents/docs/environment/environment-catalog.md is a temporary AI-side LLM catalog copied from Unreal context until a contracts/specs environment catalog becomes canonical.
   - Public scenario generation must not call legacy RunQueue export tooling; `/api/v1/scenarios/generate` returns `410 RUN_QUEUE_REMOVED`.
   - Agents/app/services/scenario_generation_service.py is legacy tooling, not the active v2 scenario path.
   - RunQueue export services, models, and tests are retained only as legacy tooling, not public API or user project runtime.

@@ -11,7 +11,8 @@
 * `contracts/specs/EpisodeSetup.json.md`
 * `contracts/specs/DeliveryBotSetup.json.md`
 * `contracts/specs/RunQueue.json.md`
-* `contracts/specs/EpisodeEvaluationReport.json.md`
+
+결과 report 계약 파일은 현재 저장소에 없으므로 이전 pair 계약 목록에 포함하지 않는다.
 
 현재 사용자 project 실행 계약은 `contracts/specs/user-project-data.md`를 따른다.
 

@@ -89,7 +89,7 @@ Odiro/
     guides/                       # 개발/운영 가이드
 
   tools/                          # 프로젝트 단위 도구
-    set-git-config.ps1             # Git hook/LFS 설정
+    set-git-config.ps1             # Git/GitHub/LFS/Editor source control 설정
     manual-unlock.ps1              # human-only dangling lock 정리
   tests/                          # 통합 테스트
     integration/

@@ -11,6 +11,8 @@ DEFINE_LOG_CATEGORY_STATIC(LogScenarioEvaluation, Log, All);
 
 namespace
 {
+	constexpr double CmPerSecondToKmh = 0.036;
+
 	template <typename TEnum>
 	FString ToEvaluationEnumString(TEnum value)
 	{
@@ -67,6 +69,15 @@ bool UScenarioEvaluationSubsystem::StartEvaluation(
 	PenaltyRegionStates.Reset();
 	BlockedRegionStates.Reset();
 	LastCollisionEventTimes.Reset();
+	ClearStuckDetectionState();
+	if (ActiveRuntimeContext.bHasGoalLocation && IsValid(ActiveRuntimeContext.RobotActor))
+	{
+		const FVector robotLocation = ActiveRuntimeContext.RobotActor->GetActorLocation();
+		ResetStuckDetectionWindow(
+			0.0,
+			robotLocation,
+			FVector::Dist2D(robotLocation, ActiveRuntimeContext.GoalLocation));
+	}
 	GoalReachedCount = 0;
 	RobotTipOverCount = 0;
 	StaticObstacleCollisionCount = 0;
@@ -81,6 +92,7 @@ bool UScenarioEvaluationSubsystem::StartEvaluation(
 	SetFloatMetric(TEXT("pedestrian_collision_count"), 0.0);
 	SetFloatMetric(TEXT("near_miss_count"), 0.0);
 	SetFloatMetric(TEXT("near_miss_total_duration_s"), 0.0);
+	SetFloatMetric(TEXT("stuck_count"), 0.0);
 	BindEvaluationHitDelegates();
 	bEvaluating = true;
 
@@ -121,6 +133,7 @@ void UScenarioEvaluationSubsystem::StopEvaluation()
 	PenaltyRegionStates.Reset();
 	BlockedRegionStates.Reset();
 	LastCollisionEventTimes.Reset();
+	ClearStuckDetectionState();
 	GoalReachedCount = 0;
 	RobotTipOverCount = 0;
 	StaticObstacleCollisionCount = 0;
@@ -217,6 +230,7 @@ void UScenarioEvaluationSubsystem::Tick(float deltaTime)
 	UpdatePenaltyRegionViolations();
 
 	UpdateNearMisses();
+	UpdateStuckDetection();
 
 	if (TimeLimitSeconds > 0.0 && GetElapsedTimeSeconds() >= TimeLimitSeconds)
 	{
@@ -753,6 +767,85 @@ bool UScenarioEvaluationSubsystem::CheckRobotTipOver()
 
 	FinishEpisode(false, EEpisodeEvaluationOutcome::Failure, EEpisodeEvaluationTerminalReason::RobotTipOver);
 	return true;
+}
+
+void UScenarioEvaluationSubsystem::UpdateStuckDetection()
+{
+	if (bStuckEventRecorded
+		|| !ActiveRuntimeContext.bHasGoalLocation
+		|| !IsValid(ActiveRuntimeContext.RobotActor))
+	{
+		return;
+	}
+
+	const double detectionWindowSeconds = FMath::Max(0.0, ActiveEvaluationConfig.StuckDetectionWindowSeconds);
+	if (detectionWindowSeconds <= 0.0) return;
+
+	const double minProgressCm = FMath::Max(0.0, ActiveEvaluationConfig.StuckMinGoalProgressCm);
+	const double speedThresholdCmPerSecond = FMath::Max(0.0, ActiveEvaluationConfig.StuckSpeedThresholdCmPerSecond);
+	const double elapsedTimeSeconds = GetElapsedTimeSeconds();
+	const FVector robotLocation = ActiveRuntimeContext.RobotActor->GetActorLocation();
+	const double distanceToGoalCm = FVector::Dist2D(robotLocation, ActiveRuntimeContext.GoalLocation);
+
+	if (!bHasStuckDetectionSample)
+	{
+		ResetStuckDetectionWindow(elapsedTimeSeconds, robotLocation, distanceToGoalCm);
+		return;
+	}
+
+	const double sampleDeltaSeconds = elapsedTimeSeconds - LastStuckSampleTimeSeconds;
+	if (sampleDeltaSeconds > UE_SMALL_NUMBER)
+	{
+		LastObservedRobotSpeedCmPerSecond = FVector::Dist2D(robotLocation, LastStuckSampleLocation) / sampleDeltaSeconds;
+		LastStuckSampleLocation = robotLocation;
+		LastStuckSampleTimeSeconds = elapsedTimeSeconds;
+	}
+
+	const double goalProgressCm = StuckWindowStartDistanceToGoalCm - distanceToGoalCm;
+	const bool bHasMeaningfulProgress = minProgressCm <= 0.0
+		? goalProgressCm > 0.0
+		: goalProgressCm >= minProgressCm;
+	const bool bMovingAboveThreshold = LastObservedRobotSpeedCmPerSecond > speedThresholdCmPerSecond;
+	if (bHasMeaningfulProgress || bMovingAboveThreshold)
+	{
+		ResetStuckDetectionWindow(elapsedTimeSeconds, robotLocation, distanceToGoalCm);
+		return;
+	}
+
+	const double stuckDurationSeconds = elapsedTimeSeconds - StuckWindowStartTimeSeconds;
+	if (stuckDurationSeconds < detectionWindowSeconds) return;
+
+	const double speedKmh = LastObservedRobotSpeedCmPerSecond * CmPerSecondToKmh;
+	TMap<FString, FScenarioParamValue> properties;
+	properties.Add(TEXT("failure_type"), MakeStringParam(TEXT("Stuck")));
+	properties.Add(TEXT("delivery_bot_failure_type"), MakeStringParam(TEXT("Stuck")));
+	properties.Add(TEXT("start_time_s"), MakeFloatParam(StuckWindowStartTimeSeconds));
+	properties.Add(TEXT("end_time_s"), MakeFloatParam(elapsedTimeSeconds));
+	properties.Add(TEXT("duration_s"), MakeFloatParam(stuckDurationSeconds));
+	properties.Add(TEXT("distance_to_goal_m"), MakeFloatParam(distanceToGoalCm / 100.0));
+	properties.Add(TEXT("goal_progress_m"), MakeFloatParam(goalProgressCm / 100.0));
+	properties.Add(TEXT("min_progress_m"), MakeFloatParam(minProgressCm / 100.0));
+	properties.Add(TEXT("speed_kmh"), MakeFloatParam(speedKmh));
+	properties.Add(TEXT("speed_threshold_kmh"), MakeFloatParam(speedThresholdCmPerSecond * CmPerSecondToKmh));
+	properties.Add(TEXT("stuck_window_s"), MakeFloatParam(detectionWindowSeconds));
+	AddRobotCorridorSnapshotProperties(properties);
+
+	++StuckEventCount;
+	SetFloatMetric(TEXT("stuck_count"), StuckEventCount);
+	SetFloatMetric(TEXT("stuck_duration_s"), stuckDurationSeconds);
+	SetFloatMetric(TEXT("stuck_speed_kmh"), speedKmh);
+	SetFloatMetric(TEXT("distance_to_goal_m"), distanceToGoalCm / 100.0);
+
+	AddEvaluationEventWithDetails(
+		EEpisodeEvaluationEventType::DeliveryBotSimulationFailure,
+		EEpisodeEvaluationEventSeverity::Warning,
+		TEXT("Robot is stuck without meaningful goal progress."),
+		FString(),
+		robotLocation,
+		speedKmh,
+		properties);
+
+	bStuckEventRecorded = true;
 }
 
 void UScenarioEvaluationSubsystem::UpdateBlockedRegionViolations()
@@ -1392,6 +1485,31 @@ double UScenarioEvaluationSubsystem::GetElapsedTimeSeconds() const
 	if (!world) return 0.0;
 
 	return FMath::Max(0.0, world->GetTimeSeconds() - EvaluationStartTimeSeconds);
+}
+
+void UScenarioEvaluationSubsystem::ResetStuckDetectionWindow(
+	double elapsedTimeSeconds,
+	const FVector& robotLocation,
+	double distanceToGoalCm)
+{
+	bHasStuckDetectionSample = true;
+	StuckWindowStartTimeSeconds = elapsedTimeSeconds;
+	StuckWindowStartDistanceToGoalCm = distanceToGoalCm;
+	LastStuckSampleLocation = robotLocation;
+	LastStuckSampleTimeSeconds = elapsedTimeSeconds;
+	LastObservedRobotSpeedCmPerSecond = 0.0;
+}
+
+void UScenarioEvaluationSubsystem::ClearStuckDetectionState()
+{
+	StuckEventCount = 0;
+	bStuckEventRecorded = false;
+	bHasStuckDetectionSample = false;
+	StuckWindowStartTimeSeconds = 0.0;
+	StuckWindowStartDistanceToGoalCm = 0.0;
+	LastStuckSampleLocation = FVector::ZeroVector;
+	LastStuckSampleTimeSeconds = 0.0;
+	LastObservedRobotSpeedCmPerSecond = 0.0;
 }
 
 void UScenarioEvaluationSubsystem::EndForTimeout()

@@ -143,6 +143,23 @@ namespace
 		return nullptr;
 	}
 
+	// Counts events of a type in the current evaluation result.
+	int32 CountEvaluationEvents(
+		const FEpisodeEvaluationResult& result,
+		EEpisodeEvaluationEventType eventType)
+	{
+		int32 count = 0;
+		for (const FEpisodeEvaluationEvent& event : result.Events)
+		{
+			if (event.EventType == eventType)
+			{
+				++count;
+			}
+		}
+
+		return count;
+	}
+
 	// Verifies that an event or metric parameter exists with the expected typed value kind.
 	bool HasParamType(
 		FAutomationTestBase& test,
@@ -178,6 +195,33 @@ namespace
 		const FString& key)
 	{
 		return HasParamType(test, params, key, EScenarioParamValueType::String);
+	}
+
+	// Verifies a string snapshot field and its exact value.
+	bool HasStringParamValue(
+		FAutomationTestBase& test,
+		const TMap<FString, FScenarioParamValue>& params,
+		const FString& key,
+		const FString& expectedValue)
+	{
+		const FScenarioParamValue* value = params.Find(key);
+		if (!test.TestTrue(FString::Printf(TEXT("param exists: %s"), *key), value != nullptr))
+		{
+			return false;
+		}
+
+		if (!test.TestEqual(
+			FString::Printf(TEXT("param type: %s"), *key),
+			static_cast<int32>(value->Type),
+			static_cast<int32>(EScenarioParamValueType::String)))
+		{
+			return false;
+		}
+
+		return test.TestEqual(
+			FString::Printf(TEXT("param value: %s"), *key),
+			value->StringValue,
+			expectedValue);
 	}
 
 	// Spawns a configured rectangular region that contains the supplied center point.
@@ -321,6 +365,83 @@ bool FScenarioEvaluationTimeoutRuntimeTest::RunTest(const FString& parameters)
 
 	HasFloatParam(*this, event->Properties, TEXT("duration_s"));
 	HasFloatParam(*this, event->Properties, TEXT("max_duration_s"));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioEvaluationStuckRuntimeTest,
+	"OdiroSim.ScenarioEvaluation.Events.Stuck",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioEvaluationStuckRuntimeTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	FScenarioEvaluationTestWorld testWorld;
+	TestTrue(TEXT("world created"), testWorld.World != nullptr);
+	TestTrue(TEXT("evaluation subsystem created"), testWorld.EvaluationSubsystem != nullptr);
+	if (!testWorld.World || !testWorld.EvaluationSubsystem) return false;
+
+	AActor* robotActor = testWorld.SpawnActor(FVector::ZeroVector);
+	TestTrue(TEXT("robot actor spawned"), robotActor != nullptr);
+	if (!robotActor) return false;
+
+	FScenarioEvaluationConfig config = MakeEvaluationTestConfig();
+	config.GoalAcceptanceRadiusCm = 10.0;
+	config.StuckDetectionWindowSeconds = 1.0;
+	config.StuckMinGoalProgressCm = 25.0;
+	config.StuckSpeedThresholdCmPerSecond = 1.0;
+
+	FScenarioRuntimeContext context = MakeEvaluationTestContext(robotActor);
+	context.bHasGoalLocation = true;
+	context.GoalLocation = FVector(1000.0, 0.0, 0.0);
+
+	TestTrue(
+		TEXT("evaluation started"),
+		testWorld.EvaluationSubsystem->StartEvaluation(config, context, 2.0));
+	testWorld.EvaluationSubsystem->Tick(0.0f);
+
+	testWorld.AdvanceWorldTime(1.25f);
+	testWorld.EvaluationSubsystem->Tick(1.25f);
+
+	const FEpisodeEvaluationResult stuckResult = testWorld.EvaluationSubsystem->GetCurrentResult();
+	TestFalse(TEXT("stuck does not complete episode"), stuckResult.bCompleted);
+	TestEqual(
+		TEXT("one stuck event recorded"),
+		CountEvaluationEvents(stuckResult, EEpisodeEvaluationEventType::DeliveryBotSimulationFailure),
+		1);
+
+	const FEpisodeEvaluationEvent* stuckEvent = FindEvaluationEvent(
+		stuckResult,
+		EEpisodeEvaluationEventType::DeliveryBotSimulationFailure);
+	TestTrue(TEXT("stuck event recorded"), stuckEvent != nullptr);
+	if (!stuckEvent) return false;
+
+	HasStringParamValue(*this, stuckEvent->Properties, TEXT("failure_type"), TEXT("Stuck"));
+	HasStringParamValue(*this, stuckEvent->Properties, TEXT("delivery_bot_failure_type"), TEXT("Stuck"));
+	HasFloatParam(*this, stuckEvent->Properties, TEXT("duration_s"));
+	HasFloatParam(*this, stuckEvent->Properties, TEXT("distance_to_goal_m"));
+	HasFloatParam(*this, stuckEvent->Properties, TEXT("goal_progress_m"));
+	HasFloatParam(*this, stuckEvent->Properties, TEXT("min_progress_m"));
+	HasFloatParam(*this, stuckEvent->Properties, TEXT("speed_kmh"));
+	HasFloatParam(*this, stuckEvent->Properties, TEXT("speed_threshold_kmh"));
+
+	testWorld.AdvanceWorldTime(1.0f);
+	testWorld.EvaluationSubsystem->Tick(1.0f);
+
+	const FEpisodeEvaluationResult timeoutResult = testWorld.EvaluationSubsystem->GetCurrentResult();
+	TestTrue(TEXT("timeout completes episode after stuck"), timeoutResult.bCompleted);
+	TestEqual(
+		TEXT("terminal reason remains timeout"),
+		static_cast<int32>(timeoutResult.TerminalReason),
+		static_cast<int32>(EEpisodeEvaluationTerminalReason::Timeout));
+	TestEqual(
+		TEXT("stuck event remains single"),
+		CountEvaluationEvents(timeoutResult, EEpisodeEvaluationEventType::DeliveryBotSimulationFailure),
+		1);
+	TestTrue(
+		TEXT("timeout event recorded after stuck"),
+		FindEvaluationEvent(timeoutResult, EEpisodeEvaluationEventType::Timeout) != nullptr);
 	return true;
 }
 

@@ -72,6 +72,18 @@ struct ODIROSIM_API FScenarioEvaluationConfig
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation", meta = (ClampMin = "0.0"))
 	double NearMissDistanceCm = 50.0;
 
+	// Seconds of insufficient goal progress and low observed speed before a stuck event is recorded.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation|Stuck", meta = (ClampMin = "0.0"))
+	double StuckDetectionWindowSeconds = 5.0;
+
+	// Minimum required goal-distance improvement during the stuck detection window.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation|Stuck", meta = (ClampMin = "0.0"))
+	double StuckMinGoalProgressCm = 10.0;
+
+	// Maximum observed robot movement speed for the stuck detector to treat the robot as stationary.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation|Stuck", meta = (ClampMin = "0.0"))
+	double StuckSpeedThresholdCmPerSecond = 5.0;
+
 	// Value attached to static-obstacle collision events.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation")
 	double StaticObstacleCollisionEventValue = -1.0;

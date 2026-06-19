@@ -12,6 +12,7 @@
 class FJsonObject;
 class FJsonValue;
 class UDeliveryBotPythonProcessSubsystem;
+struct FDeliveryBotPolicyEventSnapshot;
 struct FDeliveryBotObservationInfo;
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
@@ -57,8 +58,12 @@ private:
 	FDeliveryBotPolicyDecisionInfo BuildPythonDecisionInfo(const TSharedPtr<FJsonObject>& responseObject) const; // Python response.decision을 struct로 변환한다
 	void LogPythonCaptureRefs(const TArray<FDeliveryBotPythonCaptureRefInfo>& captureRefs) const; // Python capture refs를 로그로 남긴다
 	void StorePolicyDecisionError(const FString& errorCode, const FString& errorMessage); // 마지막 policy decision을 error 상태로 저장한다
+	void EmitPolicyEventSnapshot(const FDeliveryBotPolicyEventSnapshot& snapshot) const; // Python policy event snapshot을 EvaluationSubsystem으로 전달한다
+	void EmitPolicyServerFailureEvent(const FString& endpoint, const FHttpResponsePtr& response, const FString& errorCode, const FString& errorMessage, bool bRetryable, bool bTerminalFailure) const; // Python server/HTTP 계층 실패를 평가 이벤트로 전달한다
+	void EmitPolicyFailureEvent(const FString& endpoint, const TSharedPtr<FJsonObject>& responseObject, const FString& errorCode, const FString& errorMessage, bool bRetryable, bool bTerminalFailure) const; // Python policy 계약/판단 실패를 평가 이벤트로 전달한다
+	void EmitPolicyEventsFromOkResponse(const TSharedPtr<FJsonObject>& responseObject) const; // 정상 policy 응답 안의 의미 있는 이벤트를 평가 이벤트로 전달한다
+	bool TryBuildRepathEventSnapshot(const TSharedPtr<FJsonObject>& sourceObject, const TSharedPtr<FJsonObject>& responseObject, FDeliveryBotPolicyEventSnapshot& outSnapshot) const; // RePath 이벤트 snapshot을 만든다
 
-private:
 
 private:
 	FDeliveryBotPointCloudCaptureConfigInfo BuildEffectivePointCloudCaptureConfigInfo(const FDeliveryBotPointCloudCaptureConfigInfo& setupPointCloudConfigInfo) const; // setup JSON 우선, 없으면 컴포넌트 기본값으로 Point Cloud 설정을 만든다

@@ -15,6 +15,7 @@
 #include "Serialization/JsonWriter.h"
 #include "Interfaces/IHttpResponse.h"
 #include "Shared/SimulationSetupTypes.h"
+#include "Shared/Struct/DeliveryBot/Result/DeliveryBotPolicyEventSnapshot.h"
 #include "Shared/UserProjectDataTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotHttpPolicy, Log, All);
@@ -72,6 +73,69 @@ namespace
 		return jsonObject;
 	}
 	
+	// HTTP 응답 본문은 평가 이벤트 payload에 짧은 진단 문자열로만 보관한다.
+	FString MakeResponseBodySnippet(const FHttpResponsePtr& response, int32 maxLength = 500)
+	{
+		if (!response.IsValid())
+			return FString();
+
+		FString body = response->GetContentAsString();
+		body.ReplaceInline(TEXT("\r"), TEXT(" "));
+		body.ReplaceInline(TEXT("\n"), TEXT(" "));
+
+		if (body.Len() > maxLength)
+		{
+			body = body.Left(maxLength) + TEXT("...");
+		}
+
+		return body;
+	}
+
+	// Python JSON point object를 Unreal world cm 좌표로 변환한다.
+	bool TryGetJsonVectorCm(const TSharedPtr<FJsonObject>& object, FVector& outVector)
+	{
+		outVector = FVector::ZeroVector;
+
+		if (!object.IsValid())
+			return false;
+
+		double x = 0.0;
+		double y = 0.0;
+		double z = 0.0;
+
+		if (!object->TryGetNumberField(TEXT("x"), x) || !object->TryGetNumberField(TEXT("y"), y))
+			return false;
+
+		object->TryGetNumberField(TEXT("z"), z);
+		outVector = FVector(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+		return true;
+	}
+
+	// 단순 path follow가 아니라 실제 RePath 판단으로 기록할 reason만 허용한다.
+	bool IsActualRepathReason(const FString& reason)
+	{
+		return reason.Equals(TEXT("dynamic_repath_ready"), ESearchCase::IgnoreCase)
+			|| reason.Equals(TEXT("collision_repath_ready"), ESearchCase::IgnoreCase);
+	}
+
+	// 우선순위가 높은 값이 비어 있을 때만 fallback string field를 복사한다.
+	void TryCopyStringField(const TSharedPtr<FJsonObject>& sourceObject, const FString& fieldName, FString& outValue)
+	{
+		if (sourceObject.IsValid() && outValue.IsEmpty())
+		{
+			sourceObject->TryGetStringField(fieldName, outValue);
+		}
+	}
+
+	// 우선순위가 높은 값이 없을 때만 fallback number field를 복사한다.
+	void TryCopyNumberField(const TSharedPtr<FJsonObject>& sourceObject, const FString& fieldName, double& outValue, bool& bOutHasValue)
+	{
+		if (sourceObject.IsValid() && !bOutHasValue)
+		{
+			bOutHasValue = sourceObject->TryGetNumberField(fieldName, outValue);
+		}
+	}
+
 	// LiDAR mode enum을 Python debug용 문자열로 변환한다.
 	FString ToJsonLidarModeString(EDeliveryBotLidarModeType lidarModeType)
 	{
@@ -506,6 +570,13 @@ bool UDeliveryBot_HttpPolicyComponent::RequestDecision(float deltaTime)
 			if (!bSucceeded)
 			{
 				StorePolicyDecisionError(TEXT("PYTHON_REQUEST_FAILED"), TEXT("Python decide HTTP request failed."));
+				EmitPolicyServerFailureEvent(
+					TEXT("/scenario/decide"),
+					response,
+					TEXT("PYTHON_REQUEST_FAILED"),
+					TEXT("Python decide HTTP request failed."),
+					true,
+					true);
 				WriteProjectActionRecord(projectEpisodeIdForLog, requestObjectForLog, response, false);
 
 				if (ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(GetOwner()))
@@ -537,6 +608,14 @@ bool UDeliveryBot_HttpPolicyComponent::RequestDecision(float deltaTime)
 	if (!bRequestStarted)
 	{
 		bDecisionRequestInFlight = false;
+		StorePolicyDecisionError(TEXT("PYTHON_REQUEST_NOT_STARTED"), TEXT("Python decide HTTP request could not be started."));
+		EmitPolicyServerFailureEvent(
+			TEXT("/scenario/decide"),
+			FHttpResponsePtr(),
+			TEXT("PYTHON_REQUEST_NOT_STARTED"),
+			TEXT("Python decide HTTP request could not be started."),
+			true,
+			true);
 		WriteProjectActionRecord(projectEpisodeIdForLog, requestObjectForLog, nullptr, false);
 	}
 
@@ -988,11 +1067,18 @@ FDeliveryBotPolicyDecisionInfo UDeliveryBot_HttpPolicyComponent::BuildPythonDeci
 		return decisionInfo;
 
 	TSharedPtr<FJsonObject> decisionObject;
-	if (!TryGetJsonObjectField(*responseObject, TEXT("decision"), decisionObject))
-		return decisionInfo;
+	if (TryGetJsonObjectField(*responseObject, TEXT("decision"), decisionObject))
+	{
+		decisionObject->TryGetStringField(TEXT("selectedPolicy"), decisionInfo.SelectedPolicy);
+		decisionObject->TryGetStringField(TEXT("reason"), decisionInfo.Reason);
+	}
 
-	decisionObject->TryGetStringField(TEXT("selectedPolicy"), decisionInfo.SelectedPolicy);
-	decisionObject->TryGetStringField(TEXT("reason"), decisionInfo.Reason);
+	TSharedPtr<FJsonObject> debugObject;
+	if (TryGetJsonObjectField(*responseObject, TEXT("debug"), debugObject))
+	{
+		TryCopyStringField(debugObject, TEXT("selectedPolicy"), decisionInfo.SelectedPolicy);
+		TryCopyStringField(debugObject, TEXT("reason"), decisionInfo.Reason);
+	}
 
 	return decisionInfo;
 }
@@ -1023,7 +1109,299 @@ void UDeliveryBot_HttpPolicyComponent::StorePolicyDecisionError(const FString& e
 	LastPolicyDecisionResult.ErrorMessage = errorMessage;
 }
 
-// /scenario/start 요청 envelope body를 만든다.
+// Python policy/server event snapshot을 평가 subsystem으로 전달한다.
+void UDeliveryBot_HttpPolicyComponent::EmitPolicyEventSnapshot(const FDeliveryBotPolicyEventSnapshot& snapshot) const
+{
+	if (snapshot.EventType == EEpisodeEvaluationEventType::None)
+		return;
+
+	UWorld* world = GetWorld();
+	if (!IsValid(world))
+		return;
+
+	UScenarioEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UScenarioEvaluationSubsystem>();
+	if (!IsValid(evaluationSubsystem))
+		return;
+
+	ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(GetOwner());
+	if (!IsValid(deliveryBot))
+		return;
+
+	evaluationSubsystem->ReportDeliveryBotPolicyEvent(deliveryBot, snapshot);
+}
+
+void UDeliveryBot_HttpPolicyComponent::EmitPolicyServerFailureEvent(
+	const FString& endpoint,
+	const FHttpResponsePtr& response,
+	const FString& errorCode,
+	const FString& errorMessage,
+	bool bRetryable,
+	bool bTerminalFailure) const
+{
+	FDeliveryBotPolicyEventSnapshot snapshot;
+	snapshot.EventType = EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure;
+	snapshot.Severity = EEpisodeEvaluationEventSeverity::Failure;
+	snapshot.bTerminalFailure = bTerminalFailure;
+	snapshot.Sequence = LastDecisionSequence;
+	snapshot.RunTimeSeconds = LastDecisionRunTimeSeconds;
+	snapshot.Endpoint = endpoint;
+	snapshot.EventCode = errorCode;
+	snapshot.Message = errorMessage;
+	snapshot.HttpStatusCode = response.IsValid() ? response->GetResponseCode() : 0;
+	snapshot.ErrorCode = errorCode;
+	snapshot.ErrorMessage = errorMessage;
+	snapshot.bRetryable = bRetryable;
+	snapshot.ResponseBodySnippet = MakeResponseBodySnippet(response);
+
+	if (const UDeliveryBotPythonProcessSubsystem* pythonProcessSubsystem = GetPythonProcessSubsystem())
+	{
+		snapshot.PythonProcessStatus = pythonProcessSubsystem->GetDebugStatus();
+	}
+
+	EmitPolicyEventSnapshot(snapshot);
+}
+
+void UDeliveryBot_HttpPolicyComponent::EmitPolicyFailureEvent(
+	const FString& endpoint,
+	const TSharedPtr<FJsonObject>& responseObject,
+	const FString& errorCode,
+	const FString& errorMessage,
+	bool bRetryable,
+	bool bTerminalFailure) const
+{
+	FDeliveryBotPolicyEventSnapshot snapshot;
+	snapshot.EventType = EEpisodeEvaluationEventType::DeliveryBotPolicyFailure;
+	snapshot.Severity = EEpisodeEvaluationEventSeverity::Failure;
+	snapshot.bTerminalFailure = bTerminalFailure;
+	snapshot.Sequence = LastDecisionSequence;
+	snapshot.RunTimeSeconds = LastDecisionRunTimeSeconds;
+	snapshot.Endpoint = endpoint;
+	snapshot.EventCode = errorCode;
+	snapshot.Message = errorMessage;
+	snapshot.ErrorCode = errorCode;
+	snapshot.ErrorMessage = errorMessage;
+	snapshot.bRetryable = bRetryable;
+
+	if (responseObject.IsValid())
+	{
+		TSharedPtr<FJsonObject> debugObject;
+		if (TryGetJsonObjectField(*responseObject, TEXT("debug"), debugObject))
+		{
+			TryCopyStringField(debugObject, TEXT("selectedPolicy"), snapshot.SelectedPolicy);
+			TryCopyStringField(debugObject, TEXT("reason"), snapshot.Reason);
+		}
+
+		TSharedPtr<FJsonObject> decisionObject;
+		if (TryGetJsonObjectField(*responseObject, TEXT("decision"), decisionObject))
+		{
+			TryCopyStringField(decisionObject, TEXT("selectedPolicy"), snapshot.SelectedPolicy);
+			TryCopyStringField(decisionObject, TEXT("reason"), snapshot.Reason);
+		}
+
+		TSharedPtr<FJsonObject> errorObject;
+		if (TryGetJsonObjectField(*responseObject, TEXT("error"), errorObject))
+		{
+			TSharedPtr<FJsonObject> detailsObject;
+			if (TryGetJsonObjectField(*errorObject, TEXT("details"), detailsObject))
+			{
+				TryCopyStringField(detailsObject, TEXT("selectedPolicy"), snapshot.SelectedPolicy);
+				TryCopyStringField(detailsObject, TEXT("reason"), snapshot.Reason);
+			}
+		}
+	}
+
+	EmitPolicyEventSnapshot(snapshot);
+}
+
+bool UDeliveryBot_HttpPolicyComponent::TryBuildRepathEventSnapshot(
+	const TSharedPtr<FJsonObject>& sourceObject,
+	const TSharedPtr<FJsonObject>& responseObject,
+	FDeliveryBotPolicyEventSnapshot& outSnapshot) const
+{
+	if (!sourceObject.IsValid())
+		return false;
+
+	FString eventType;
+	FString reason;
+	sourceObject->TryGetStringField(TEXT("type"), eventType);
+	sourceObject->TryGetStringField(TEXT("reason"), reason);
+
+	const bool bExplicitRepathEvent = eventType.Equals(TEXT("repath"), ESearchCase::IgnoreCase);
+	if (!bExplicitRepathEvent && !IsActualRepathReason(reason))
+		return false;
+
+	TSharedPtr<FJsonObject> debugObject;
+	TSharedPtr<FJsonObject> decisionObject;
+	TSharedPtr<FJsonObject> pathObject;
+	if (responseObject.IsValid())
+	{
+		TryGetJsonObjectField(*responseObject, TEXT("debug"), debugObject);
+		TryGetJsonObjectField(*responseObject, TEXT("decision"), decisionObject);
+		TryGetJsonObjectField(*responseObject, TEXT("path"), pathObject);
+	}
+
+	outSnapshot = FDeliveryBotPolicyEventSnapshot{};
+	outSnapshot.EventType = EEpisodeEvaluationEventType::DeliveryBotRepath;
+	outSnapshot.Severity = EEpisodeEvaluationEventSeverity::Info;
+	outSnapshot.Sequence = LastDecisionSequence;
+	outSnapshot.RunTimeSeconds = LastDecisionRunTimeSeconds;
+	outSnapshot.Endpoint = TEXT("/scenario/decide");
+	outSnapshot.EventCode = TEXT("repath");
+
+	TryCopyStringField(sourceObject, TEXT("selectedPolicy"), outSnapshot.SelectedPolicy);
+	TryCopyStringField(debugObject, TEXT("selectedPolicy"), outSnapshot.SelectedPolicy);
+	TryCopyStringField(decisionObject, TEXT("selectedPolicy"), outSnapshot.SelectedPolicy);
+
+	TryCopyStringField(sourceObject, TEXT("reason"), outSnapshot.Reason);
+	TryCopyStringField(debugObject, TEXT("reason"), outSnapshot.Reason);
+	TryCopyStringField(decisionObject, TEXT("reason"), outSnapshot.Reason);
+	if (outSnapshot.Reason.IsEmpty())
+	{
+		outSnapshot.Reason = TEXT("repath");
+	}
+	outSnapshot.Message = outSnapshot.Reason;
+
+	TryCopyStringField(sourceObject, TEXT("pathStatus"), outSnapshot.PathStatus);
+	TryCopyStringField(debugObject, TEXT("pathStatus"), outSnapshot.PathStatus);
+	TryCopyStringField(pathObject, TEXT("pathStatus"), outSnapshot.PathStatus);
+	TryCopyStringField(sourceObject, TEXT("lastObstacleWarningSource"), outSnapshot.LastObstacleWarningSource);
+	TryCopyStringField(debugObject, TEXT("lastObstacleWarningSource"), outSnapshot.LastObstacleWarningSource);
+
+	double numberValue = 0.0;
+	bool bHasNumberValue = false;
+	TryCopyNumberField(sourceObject, TEXT("pathIndex"), numberValue, bHasNumberValue);
+	TryCopyNumberField(debugObject, TEXT("pathIndex"), numberValue, bHasNumberValue);
+	TryCopyNumberField(pathObject, TEXT("pathIndex"), numberValue, bHasNumberValue);
+	if (bHasNumberValue)
+	{
+		outSnapshot.PathIndex = static_cast<int32>(numberValue);
+	}
+
+	numberValue = 0.0;
+	bHasNumberValue = false;
+	TryCopyNumberField(sourceObject, TEXT("pathLength"), numberValue, bHasNumberValue);
+	TryCopyNumberField(debugObject, TEXT("pathLength"), numberValue, bHasNumberValue);
+	TryCopyNumberField(pathObject, TEXT("pathLength"), numberValue, bHasNumberValue);
+	if (bHasNumberValue)
+	{
+		outSnapshot.PathLength = static_cast<int32>(numberValue);
+	}
+
+	numberValue = 0.0;
+	bHasNumberValue = false;
+	TryCopyNumberField(sourceObject, TEXT("targetPathIndex"), numberValue, bHasNumberValue);
+	TryCopyNumberField(debugObject, TEXT("targetPathIndex"), numberValue, bHasNumberValue);
+	TryCopyNumberField(pathObject, TEXT("targetPathIndex"), numberValue, bHasNumberValue);
+	if (bHasNumberValue)
+	{
+		outSnapshot.TargetPathIndex = static_cast<int32>(numberValue);
+	}
+
+	numberValue = 0.0;
+	bHasNumberValue = false;
+	TryCopyNumberField(sourceObject, TEXT("closestPathDistanceCm"), numberValue, bHasNumberValue);
+	TryCopyNumberField(debugObject, TEXT("closestPathDistanceCm"), numberValue, bHasNumberValue);
+	if (bHasNumberValue)
+	{
+		outSnapshot.ClosestPathDistanceCm = static_cast<float>(numberValue);
+	}
+
+	numberValue = 0.0;
+	bHasNumberValue = false;
+	TryCopyNumberField(sourceObject, TEXT("maxPathErrorCm"), numberValue, bHasNumberValue);
+	TryCopyNumberField(debugObject, TEXT("maxPathErrorCm"), numberValue, bHasNumberValue);
+	if (bHasNumberValue)
+	{
+		outSnapshot.MaxPathErrorCm = static_cast<float>(numberValue);
+	}
+
+	numberValue = 0.0;
+	bHasNumberValue = false;
+	TryCopyNumberField(sourceObject, TEXT("obstacleWarningCount"), numberValue, bHasNumberValue);
+	TryCopyNumberField(debugObject, TEXT("obstacleWarningCount"), numberValue, bHasNumberValue);
+	if (bHasNumberValue)
+	{
+		outSnapshot.ObstacleWarningCount = static_cast<int32>(numberValue);
+	}
+
+	numberValue = 0.0;
+	bHasNumberValue = false;
+	TryCopyNumberField(sourceObject, TEXT("blockedCorridorCellCount"), numberValue, bHasNumberValue);
+	TryCopyNumberField(debugObject, TEXT("blockedCorridorCellCount"), numberValue, bHasNumberValue);
+	if (bHasNumberValue)
+	{
+		outSnapshot.BlockedCorridorCellCount = static_cast<int32>(numberValue);
+	}
+
+	numberValue = 0.0;
+	bHasNumberValue = false;
+	TryCopyNumberField(sourceObject, TEXT("dynamicBlockedCellCount"), numberValue, bHasNumberValue);
+	TryCopyNumberField(debugObject, TEXT("dynamicBlockedCellCount"), numberValue, bHasNumberValue);
+	if (bHasNumberValue)
+	{
+		outSnapshot.DynamicBlockedCellCount = static_cast<int32>(numberValue);
+	}
+
+	TSharedPtr<FJsonObject> targetWorldPointObject;
+	if (!TryGetJsonObjectField(*sourceObject, TEXT("targetWorldPoint"), targetWorldPointObject)
+		&& (!debugObject.IsValid() || !TryGetJsonObjectField(*debugObject, TEXT("targetWorldPoint"), targetWorldPointObject))
+		&& (!pathObject.IsValid() || !TryGetJsonObjectField(*pathObject, TEXT("targetWorldPoint"), targetWorldPointObject)))
+	{
+		return true;
+	}
+
+	outSnapshot.bHasTargetWorldPoint = TryGetJsonVectorCm(targetWorldPointObject, outSnapshot.TargetWorldPointCm);
+	return true;
+}
+
+void UDeliveryBot_HttpPolicyComponent::EmitPolicyEventsFromOkResponse(const TSharedPtr<FJsonObject>& responseObject) const
+{
+	if (!responseObject.IsValid())
+		return;
+
+	bool bEmittedRepath = false;
+	TArray<TSharedPtr<FJsonValue>> eventValues;
+	if (TryGetJsonArrayField(*responseObject, TEXT("events"), eventValues))
+	{
+		for (const TSharedPtr<FJsonValue>& eventValue : eventValues)
+		{
+			if (!eventValue.IsValid() || eventValue->Type != EJson::Object)
+				continue;
+
+			FDeliveryBotPolicyEventSnapshot snapshot;
+			if (TryBuildRepathEventSnapshot(eventValue->AsObject(), responseObject, snapshot))
+			{
+				EmitPolicyEventSnapshot(snapshot);
+				bEmittedRepath = true;
+			}
+		}
+	}
+
+	if (bEmittedRepath)
+		return;
+
+	TSharedPtr<FJsonObject> debugObject;
+	if (TryGetJsonObjectField(*responseObject, TEXT("debug"), debugObject))
+	{
+		FDeliveryBotPolicyEventSnapshot snapshot;
+		if (TryBuildRepathEventSnapshot(debugObject, responseObject, snapshot))
+		{
+			EmitPolicyEventSnapshot(snapshot);
+			return;
+		}
+	}
+
+	TSharedPtr<FJsonObject> decisionObject;
+	if (TryGetJsonObjectField(*responseObject, TEXT("decision"), decisionObject))
+	{
+		FDeliveryBotPolicyEventSnapshot snapshot;
+		if (TryBuildRepathEventSnapshot(decisionObject, responseObject, snapshot))
+		{
+			EmitPolicyEventSnapshot(snapshot);
+		}
+	}
+}
+
 bool UDeliveryBot_HttpPolicyComponent::BuildStartPayload(FString& outPayload)
 {
 	outPayload.Reset();
@@ -1269,13 +1647,39 @@ bool UDeliveryBot_HttpPolicyComponent::TryParseMoveCommand(
 	if (!TryGetPythonResponseObject(response, responseObject))
 	{
 		StorePolicyDecisionError(TEXT("PYTHON_RESPONSE_INVALID"), TEXT("Python decide response envelope is invalid."));
+		EmitPolicyServerFailureEvent(
+			TEXT("/scenario/decide"),
+			response,
+			TEXT("PYTHON_RESPONSE_INVALID"),
+			TEXT("Python decide response envelope is invalid."),
+			false,
+			true);
 		return false;
 	}
 
 	FString status;
 	if (!responseObject->TryGetStringField(TEXT("status"), status) || !status.Equals(TEXT("ok"), ESearchCase::IgnoreCase))
 	{
-		StorePolicyDecisionError(TEXT("PYTHON_DECIDE_FAILED"), TEXT("Python decide response status is not ok."));
+		FString errorCode = TEXT("PYTHON_DECIDE_FAILED");
+		FString errorMessage = TEXT("Python decide response status is not ok.");
+		bool bRetryable = false;
+
+		TSharedPtr<FJsonObject> errorObject;
+		if (TryGetJsonObjectField(*responseObject, TEXT("error"), errorObject))
+		{
+			errorObject->TryGetStringField(TEXT("code"), errorCode);
+			errorObject->TryGetStringField(TEXT("message"), errorMessage);
+			errorObject->TryGetBoolField(TEXT("retryable"), bRetryable);
+		}
+
+		StorePolicyDecisionError(errorCode, errorMessage);
+		EmitPolicyFailureEvent(
+			TEXT("/scenario/decide"),
+			responseObject,
+			errorCode,
+			errorMessage,
+			bRetryable,
+			true);
 		return false;
 	}
 
@@ -1285,6 +1689,13 @@ bool UDeliveryBot_HttpPolicyComponent::TryParseMoveCommand(
 	if (!TryGetJsonObjectField(*responseObject, TEXT("action"), actionObject))
 	{
 		StorePolicyDecisionError(TEXT("PYTHON_ACTION_MISSING"), TEXT("Python decide response.action is missing."));
+		EmitPolicyFailureEvent(
+			TEXT("/scenario/decide"),
+			responseObject,
+			TEXT("PYTHON_ACTION_MISSING"),
+			TEXT("Python decide response.action is missing."),
+			false,
+			true);
 		return false;
 	}
 
@@ -1315,6 +1726,7 @@ bool UDeliveryBot_HttpPolicyComponent::TryParseMoveCommand(
 	LastPolicyDecisionResult.Decision = BuildPythonDecisionInfo(responseObject);
 	LastPolicyDecisionResult.CaptureRefs = BuildPythonCaptureRefs(responseObject);
 
+	EmitPolicyEventsFromOkResponse(responseObject);
 	LogPythonCaptureRefs(LastPolicyDecisionResult.CaptureRefs);
 
 	return true;

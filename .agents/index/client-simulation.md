@@ -64,6 +64,7 @@ keep:
   - Scenario LLM authoring saves v2 `scenario` responses to user project `scenario.json`; it must not save or execute RunQueue files.
   - Scenario LLM prompt generate/load/run is scoped to the current `<UserProject>/scenario.json`; run launches create `<UserProject>/runs/<RunId>` snapshots through SimulatorLaunchSubsystem.
   - Project run output uses `FUserProjectRunOutputJson` for `result.json`, `events.jsonl`, `actions.jsonl`, `trace.jsonl`, and `summary.json`.
+  - DeliveryBot policy server failure, policy failure, and RePath notifications are recorded as `EEpisodeEvaluationEventType` events through ScenarioEvaluationSubsystem; keep Python response parsing outside ScenarioEvaluationSubsystem.
   - Client/Json/Schema and Client/Json/environment-catalog.md are LLM prompt-facing docs for one user project simulation set; keep them aligned with contracts/specs/user-project-data.md and the Client scenario catalog assets.
   - Scenario authoring/runtime projection stays separate from runtime WorldSpec and actor-spawn payload types.
 verify:
@@ -75,6 +76,7 @@ verify:
   - `OdiroSim.UserProjectData.RunOutput.Write` after user project result writer changes
   - `OdiroSim.UserProjectData.RobotAction.Write` after policy action logging changes
   - `OdiroSim.UserProjectData.EpisodeTrace.Write` after runtime trace logging changes
+  - policy event JSONL/log mapping after adding new `EEpisodeEvaluationEventType` values
   - focused automation tests for Scenario/Episode changes
   - Client/Task-RunPreview.bat smoke when wrapper supports the changed mode
 related:

@@ -5,6 +5,7 @@
 #include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
 #include "Scenario/Actors/ScenarioGroundRegion.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
+#include "Shared/Struct/DeliveryBot/Result/DeliveryBotPolicyEventSnapshot.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioEvaluation, Log, All);
 
@@ -351,6 +352,91 @@ void UScenarioEvaluationSubsystem::HandleDeliveryBotSimulationFailed(
 		false,
 		EEpisodeEvaluationOutcome::Failure,
 		EEpisodeEvaluationTerminalReason::DeliveryBotSimulationFailed);
+}
+
+void UScenarioEvaluationSubsystem::ReportDeliveryBotPolicyEvent(
+	ADeliveryBot* DeliveryBotActor,
+	const FDeliveryBotPolicyEventSnapshot& Snapshot)
+{
+	if (!bEvaluating) return;
+
+	if (!IsValid(DeliveryBotActor) || DeliveryBotActor != ActiveRuntimeContext.RobotActor.Get())
+	{
+		return;
+	}
+
+	TMap<FString, FScenarioParamValue> properties;
+	properties.Add(TEXT("policy_sequence"), MakeIntegerParam(Snapshot.Sequence));
+	properties.Add(TEXT("policy_run_time_seconds"), MakeFloatParam(Snapshot.RunTimeSeconds));
+	properties.Add(TEXT("policy_event_code"), MakeStringParam(Snapshot.EventCode));
+	properties.Add(TEXT("policy_endpoint"), MakeStringParam(Snapshot.Endpoint));
+	properties.Add(TEXT("policy_selected"), MakeStringParam(Snapshot.SelectedPolicy));
+	properties.Add(TEXT("policy_reason"), MakeStringParam(Snapshot.Reason));
+
+	if (Snapshot.EventType == EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure)
+	{
+		properties.Add(TEXT("http_status_code"), MakeIntegerParam(Snapshot.HttpStatusCode));
+		properties.Add(TEXT("error_code"), MakeStringParam(Snapshot.ErrorCode));
+		properties.Add(TEXT("error_message"), MakeStringParam(Snapshot.ErrorMessage));
+		properties.Add(TEXT("retryable"), MakeBoolParam(Snapshot.bRetryable));
+		properties.Add(TEXT("python_process_status"), MakeStringParam(Snapshot.PythonProcessStatus));
+		properties.Add(TEXT("response_body_snippet"), MakeStringParam(Snapshot.ResponseBodySnippet));
+	}
+
+	if (Snapshot.EventType == EEpisodeEvaluationEventType::DeliveryBotPolicyFailure)
+	{
+		properties.Add(TEXT("error_code"), MakeStringParam(Snapshot.ErrorCode));
+		properties.Add(TEXT("error_message"), MakeStringParam(Snapshot.ErrorMessage));
+		properties.Add(TEXT("retryable"), MakeBoolParam(Snapshot.bRetryable));
+	}
+
+	if (Snapshot.EventType == EEpisodeEvaluationEventType::DeliveryBotRepath)
+	{
+		properties.Add(TEXT("path_status"), MakeStringParam(Snapshot.PathStatus));
+		properties.Add(TEXT("path_index"), MakeIntegerParam(Snapshot.PathIndex));
+		properties.Add(TEXT("path_length"), MakeIntegerParam(Snapshot.PathLength));
+		properties.Add(TEXT("target_path_index"), MakeIntegerParam(Snapshot.TargetPathIndex));
+		properties.Add(TEXT("closest_path_distance_cm"), MakeFloatParam(Snapshot.ClosestPathDistanceCm));
+		properties.Add(TEXT("max_path_error_cm"), MakeFloatParam(Snapshot.MaxPathErrorCm));
+		properties.Add(TEXT("obstacle_warning_count"), MakeIntegerParam(Snapshot.ObstacleWarningCount));
+		properties.Add(TEXT("last_obstacle_warning_source"), MakeStringParam(Snapshot.LastObstacleWarningSource));
+		properties.Add(TEXT("blocked_corridor_cell_count"), MakeIntegerParam(Snapshot.BlockedCorridorCellCount));
+		properties.Add(TEXT("dynamic_blocked_cell_count"), MakeIntegerParam(Snapshot.DynamicBlockedCellCount));
+
+		if (Snapshot.bHasTargetWorldPoint)
+		{
+			properties.Add(TEXT("target_world_point_cm"), MakeVectorParam(Snapshot.TargetWorldPointCm));
+		}
+	}
+
+	FString message = Snapshot.Message;
+	if (message.IsEmpty())
+	{
+		message = Snapshot.ErrorMessage.IsEmpty()
+			? Snapshot.Reason
+			: Snapshot.ErrorMessage;
+	}
+	if (message.IsEmpty())
+	{
+		message = TEXT("DeliveryBot policy event.");
+	}
+
+	AddEvaluationEventWithDetails(
+		Snapshot.EventType,
+		Snapshot.Severity,
+		message,
+		FString(),
+		DeliveryBotActor->GetActorLocation(),
+		0.0,
+		properties);
+
+	if (Snapshot.bTerminalFailure)
+	{
+		FinishEpisode(
+			false,
+			EEpisodeEvaluationOutcome::Failure,
+			EEpisodeEvaluationTerminalReason::DeliveryBotSimulationFailed);
+	}
 }
 
 void UScenarioEvaluationSubsystem::AddEvaluationEvent(

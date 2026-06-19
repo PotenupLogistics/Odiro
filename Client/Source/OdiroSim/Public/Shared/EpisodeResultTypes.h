@@ -40,7 +40,10 @@ enum class EEpisodeEvaluationEventType : uint8
 	PenaltyRegionViolation = 6,
 	PedestrianNearMiss = 7,
 	PedestrianCollision = 8,
-	DeliveryBotSimulationFailure = 9
+	DeliveryBotSimulationFailure = 9,
+	DeliveryBotPolicyServerFailure = 10,
+	DeliveryBotPolicyFailure = 11,
+	DeliveryBotRepath = 12
 };
 
 UENUM(BlueprintType)

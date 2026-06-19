@@ -24,6 +24,9 @@ namespace
 			|| Kind == TEXT("penalty_region_violation")
 			|| Kind == TEXT("robot_tip_over")
 			|| Kind == TEXT("delivery_bot_simulation_failure")
+			|| Kind == TEXT("delivery_bot_policy_server_failure")
+			|| Kind == TEXT("delivery_bot_policy_failure")
+			|| Kind == TEXT("delivery_bot_repath")
 			|| Kind == TEXT("collision")
 			|| Kind == TEXT("emergency_stop")
 			|| Kind == TEXT("timeout");
@@ -64,6 +67,12 @@ namespace
 			return TEXT("pedestrian_collision");
 		case EEpisodeEvaluationEventType::DeliveryBotSimulationFailure:
 			return TEXT("delivery_bot_simulation_failure");
+		case EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure:
+			return TEXT("delivery_bot_policy_server_failure");
+		case EEpisodeEvaluationEventType::DeliveryBotPolicyFailure:
+			return TEXT("delivery_bot_policy_failure");
+		case EEpisodeEvaluationEventType::DeliveryBotRepath:
+			return TEXT("delivery_bot_repath");
 		case EEpisodeEvaluationEventType::None:
 		default:
 			return TEXT("unknown");

@@ -192,7 +192,13 @@ class StopPolicy:
     def is_ignored_lidar_policy_ray(self, ray) -> bool:
         actor_name = ray.actorName or ""
         actor_tags = ray.actorTags or []
-        return actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0
+        normalized_tags = {str(tag).strip().lower() for tag in actor_tags}
+        return (
+            (actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0)
+            or actor_name.startswith("ScenarioCorridorRuntimeActor")
+            or "wall" in normalized_tags
+            or any(tag.endswith(".wall") for tag in normalized_tags)
+        )
 
     def mark_blocked_forward_corridor(self, request: ScenarioDecideRequest, state: AgentState, ray) -> None:
         if state.grid is None or state.goal is None:

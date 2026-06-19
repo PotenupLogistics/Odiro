@@ -2,6 +2,7 @@
 #include "Scenario/Actors/ScenarioStaticObstacle.h"
 #include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Scenario/Components/ScenarioObstacleCollisionComponent.h"
@@ -69,14 +70,17 @@ AScenarioStaticObstacle::AScenarioStaticObstacle()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SetRootComponent(SceneRoot);
+
 	MeshRoot = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshRoot"));
-	SetRootComponent(MeshRoot);
+	MeshRoot->SetupAttachment(SceneRoot);
 	MeshRoot->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	MeshRoot->SetCollisionResponseToAllChannels(ECR_Ignore);
 	MeshRoot->SetGenerateOverlapEvents(false);
 
 	CollisionBoundsComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBoundsComponent"));
-	CollisionBoundsComponent->SetupAttachment(MeshRoot);
+	CollisionBoundsComponent->SetupAttachment(SceneRoot);
 	CollisionBoundsComponent->SetHiddenInGame(true);
 	CollisionBoundsComponent->SetVisibility(false);
 	CollisionBoundsComponent->SetGenerateOverlapEvents(false);
@@ -112,6 +116,7 @@ void AScenarioStaticObstacle::SetStaticMesh(UStaticMesh* inStaticMesh)
 	{
 		MeshRoot->SetStaticMesh(inStaticMesh);
 	}
+	ApplyMeshGroundAlignment();
 	ApplyCollisionSettings();
 }
 
@@ -121,6 +126,7 @@ bool AScenarioStaticObstacle::ApplyConfiguredStaticMesh()
 
 	if (StaticMeshAsset.IsNull())
 	{
+		ApplyMeshGroundAlignment();
 		ApplyCollisionSettings();
 		return MeshRoot->GetStaticMesh() != nullptr;
 	}
@@ -129,6 +135,7 @@ bool AScenarioStaticObstacle::ApplyConfiguredStaticMesh()
 	if (!loadedMesh) return false;
 
 	MeshRoot->SetStaticMesh(loadedMesh);
+	ApplyMeshGroundAlignment();
 	ApplyCollisionSettings();
 	return true;
 }
@@ -235,6 +242,25 @@ bool AScenarioStaticObstacle::TryFindConfiguredPropEntry(
 	}
 
 	return propCatalog->FindPropEntryById(inPropId, outPropEntry);
+}
+
+void AScenarioStaticObstacle::ApplyMeshGroundAlignment()
+{
+	if (!MeshRoot)
+	{
+		return;
+	}
+
+	UStaticMesh* staticMesh = MeshRoot->GetStaticMesh();
+	if (!staticMesh)
+	{
+		MeshRoot->SetRelativeLocation(FVector::ZeroVector);
+		return;
+	}
+
+	const FBox localBounds = staticMesh->GetBoundingBox();
+	const double relativeScaleZ = MeshRoot->GetRelativeScale3D().Z;
+	MeshRoot->SetRelativeLocation(FVector(0.0, 0.0, -localBounds.Min.Z * relativeScaleZ));
 }
 
 bool AScenarioStaticObstacle::GetPlacementBounds(

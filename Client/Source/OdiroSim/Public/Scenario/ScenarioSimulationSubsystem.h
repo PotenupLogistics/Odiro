@@ -20,7 +20,6 @@ struct FScenarioPedestrianPlan;
 struct FScenarioPedestrianPlanBuildContext;
 struct FDeliveryBotSetupInfo;
 
-// 컴파일된 Episode simulation setup spec을 현재 월드에 스폰하고, 런타임 actor 생명주기를 관리하는 subsystem.
 UCLASS(BlueprintType)
 class ODIROSIM_API UScenarioSimulationSubsystem : public UWorldSubsystem
 {

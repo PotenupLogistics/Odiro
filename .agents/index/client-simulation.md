@@ -49,6 +49,7 @@ keep:
   - Runtime Corridor visual meshes mirror the editor full-axis lane-strip drawing path, while sampled layout intervals remain the query/cost source for grid and evaluation.
   - ScenarioStaticObstacle actor origin represents the semantic ground-contact point; mesh and preview components own local bounds-based Z alignment so editor and simulation placements share the same snap semantics.
   - ScenarioStaticObstacle owns configured actor spawn plus prop application; editor and simulation only resolve catalogs and attach authoring/runtime registration after spawn.
+  - ScenarioGroundRegion owns configured actor spawn plus region spec application; editor and simulation only attach authoring/runtime registration after spawn.
   - ScenarioSampleWorldSpecAdapter keeps sampled Entry/Exit robot anchors in `scenario_sample` and deterministically insets their runtime WorldSpec poses before spawning.
   - ScenarioSimulationSubsystem owns runtime DeliveryBot grid rebuild after scenario surfaces spawn; runtime GridBoundsActor BeginPlay auto-build is disabled for that path.
   - Project run runner owns the active output episode id for `actions.jsonl` and `trace.jsonl`; DeliveryBot policy logging must use the runner-provided output context instead of the evaluation template id.

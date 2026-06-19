@@ -746,19 +746,23 @@ AScenarioCorridorRuntimeActor* UScenarioSimulationSubsystem::SpawnCorridor(const
 
 AScenarioGroundRegion* UScenarioSimulationSubsystem::SpawnGroundRegion(const FScenarioGroundRegionSpec& regionSpec)
 {
-	UWorld* world = GetWorld();
-	if (!world || regionSpec.RegionId.IsEmpty() || regionSpec.ShapeType != EScenarioGroundShapeType::Rectangle) return nullptr;
-
-	FActorSpawnParameters spawnParams;
-	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	AScenarioGroundRegion* groundRegion = world->SpawnActor<AScenarioGroundRegion>(
+	FString failureReason;
+	AScenarioGroundRegion* groundRegion = AScenarioGroundRegion::SpawnConfigured(
+		GetWorld(),
 		AScenarioGroundRegion::StaticClass(),
-		FTransform::Identity,
-		spawnParams);
-	if (!groundRegion) return nullptr;
+		regionSpec,
+		failureReason);
+	if (!groundRegion)
+	{
+		UE_LOG(
+			LogScenarioSimulation,
+			Warning,
+			TEXT("Ground region '%s' spawn failed: %s"),
+			*regionSpec.RegionId,
+			*failureReason);
+		return nullptr;
+	}
 
-	groundRegion->ConfigureRegion(regionSpec);
 	RuntimeActors.Add(groundRegion);
 	RuntimeGroundRegions.Add(regionSpec.RegionId, groundRegion);
 	return groundRegion;

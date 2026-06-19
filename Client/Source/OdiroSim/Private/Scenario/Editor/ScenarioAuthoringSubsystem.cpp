@@ -1443,39 +1443,16 @@ bool UScenarioAuthoringSubsystem::SpawnEditorGroundRegionActor(
 	outActor = nullptr;
 	outFailureReason.Reset();
 
-	UWorld* world = GetWorld();
-	if (!world)
-	{
-		outFailureReason = TEXT("World is unavailable.");
-		return false;
-	}
-
-	if (spec.RegionId.IsEmpty())
-	{
-		outFailureReason = TEXT("RegionId is empty.");
-		return false;
-	}
-
-	TSubclassOf<AScenarioGroundRegion> spawnClass = GroundRegionClass;
-	if (!spawnClass)
-	{
-		spawnClass = AScenarioGroundRegion::StaticClass();
-	}
-
-	FActorSpawnParameters spawnParams;
-	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	AScenarioGroundRegion* regionActor = world->SpawnActor<AScenarioGroundRegion>(
-		spawnClass,
-		FTransform::Identity,
-		spawnParams);
+	AScenarioGroundRegion* regionActor = AScenarioGroundRegion::SpawnConfigured(
+		GetWorld(),
+		GroundRegionClass,
+		spec,
+		outFailureReason);
 	if (!regionActor)
 	{
-		outFailureReason = TEXT("SpawnActor failed.");
 		return false;
 	}
 
-	regionActor->ConfigureRegion(spec);
 	GroundRegionActors.Add(spec.RegionId, regionActor);
 	outActor = regionActor;
 	return true;

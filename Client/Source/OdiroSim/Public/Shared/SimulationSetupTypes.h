@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Shared/ScenarioCompileTypes.h"
+#include "Shared/ScenarioConfigTypes.h"
 #include "Shared/EpisodeMeasurementLogTypes.h"
 #include "SimulationSetupTypes.generated.h"
 
@@ -289,6 +290,10 @@ struct ODIROSIM_API FUserProjectRunSetting
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun", meta = (ClampMin = "1"))
 	int32 FixedFps = 60;
 
+	// runtime.time_scale에서 읽은 world time dilation 배율
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun", meta = (ClampMin = "0.0001"))
+	double TimeScale = 1.0;
+
 	// run 안에서 생성할 episode 수
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun", meta = (ClampMin = "1"))
 	int32 EpisodeCount = 1;
@@ -304,6 +309,10 @@ struct ODIROSIM_API FUserProjectRunSetting
 	// Episode timeout seconds from setting.runtime.max_duration_s. 0 disables timeout.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun", meta = (ClampMin = "0"))
 	double MaxDurationSeconds = 0.0;
+
+	// setting.evaluation에서 읽은 episode 판정 기준
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation|ProjectRun")
+	FScenarioEvaluationConfig EvaluationConfig;
 };
 
 // user project run snapshot 검증과 bootstrap parse 결과

@@ -122,6 +122,14 @@ struct ODIROSIM_API FScenarioRunInput
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FString PolicySpecJsonPath;
+
+	// Project setting이 scenario_sample 기본 evaluation config를 덮어쓸지 여부
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
+	bool bOverrideEvaluationConfig = false;
+
+	// Project setting.evaluation에서 전달된 episode 판정 기준
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
+	FScenarioEvaluationConfig EvaluationConfig;
 };
 
 // SimulationSubsystem이 생성한 월드 객체들을 EvaluationSubsystem이 관찰할 수 있도록 전달하는 런타임 컨텍스트.

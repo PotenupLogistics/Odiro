@@ -560,6 +560,11 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		return;
 	}
 
+	if (CurrentRunInput.bOverrideEvaluationConfig)
+	{
+		compileResult.WorldSpec.EvaluationConfig = CurrentRunInput.EvaluationConfig;
+	}
+
 	const bool bRunnerManagedPolicyStart = !CurrentRunInput.PolicySpecJsonPath.IsEmpty();
 
 	const bool bDeliveryBotSetupApplied = ApplyDeliveryBotSetupToWorldSpec(
@@ -676,10 +681,13 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	UE_LOG(
 		LogScenarioRunner,
 		Log,
-		TEXT("평가 전달 | RunId: %s, Episode: %s, TimeLimit: %.2fs, Robot: %s, HasGoal: %s, RuntimeActors: %d, GroundRegions: %d, StaticObstacles: %d, Pedestrians: %d"),
+		TEXT("평가 전달 | RunId: %s, Episode: %s, TimeLimit: %.2fs, GoalRadius: %.1fcm, TipOver: %.1fdeg, NearMiss: %.1fcm, Robot: %s, HasGoal: %s, RuntimeActors: %d, GroundRegions: %d, StaticObstacles: %d, Pedestrians: %d"),
 		*CurrentRecord.RunId,
 		*runtimeContext.EpisodeId,
 		timeLimitSeconds,
+		compileResult.WorldSpec.EvaluationConfig.GoalAcceptanceRadiusCm,
+		compileResult.WorldSpec.EvaluationConfig.TipOverAngleDegrees,
+		compileResult.WorldSpec.EvaluationConfig.NearMissDistanceCm,
 		*runtimeContext.RobotInstanceId,
 		runtimeContext.bHasGoalLocation ? TEXT("true") : TEXT("false"),
 		runtimeContext.RuntimeActors.Num(),

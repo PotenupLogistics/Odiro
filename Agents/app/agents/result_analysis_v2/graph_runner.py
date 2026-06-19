@@ -236,6 +236,7 @@ class ResultAnalysisGraphRunnerV2:
             warnings=state.get("warnings", []),
             analysis_mode=state.get("analysis_mode", "rule_based"),
         )
+        response = self.agent._with_prompt_focus(response, state.get("request"))
         return {
             **state,
             "response": response,

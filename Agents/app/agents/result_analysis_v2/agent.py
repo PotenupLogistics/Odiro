@@ -105,7 +105,7 @@ class ResultAnalysisV2Agent:
         )
         warnings.extend(llm_warnings)
 
-        return self.response_builder.build(
+        response = self.response_builder.build(
             experiments_count=experiments_count,
             runs_count=runs_count,
             episodes_count=episodes_count,
@@ -115,6 +115,7 @@ class ResultAnalysisV2Agent:
             warnings=warnings,
             analysis_mode=analysis_mode,
         )
+        return self._with_prompt_focus(response, request)
 
     def _default_root(self) -> Path:
         configured_root = self.settings.experiments_dir
@@ -287,6 +288,38 @@ class ResultAnalysisV2Agent:
             if isinstance(value, int | float):
                 return max(0, int(value))
         return 0
+
+    def _prompt_focus(self, request: AnalysisRunV2Request | None) -> list[str]:
+        """Extract lightweight analysis focus labels from the optional user prompt."""
+        prompt = request.prompt if request else None
+        if not prompt:
+            return []
+
+        focus_terms = (
+            ("obstacle", ("obstacle", "장애물", "정적 장애물", "static obstacle")),
+            ("collision", ("collision", "collide", "crash", "충돌", "부딪")),
+            ("stop", ("stop", "stopped", "정지", "멈춤", "멈추", "감속", "속도")),
+            ("timeout", ("timeout", "time out", "시간초과", "시간 초과", "지연")),
+            ("blocked", ("blocked", "block", "막힘", "통로", "차단")),
+            ("penalty", ("penalty", "페널티", "벌점")),
+            ("near_miss", ("near miss", "near_miss", "아슬", "근접", "위험")),
+            ("route_deviation", ("route deviation", "deviation", "보도이탈", "보도 이탈", "경로 이탈", "이탈")),
+        )
+        lowered = prompt.casefold()
+        return [label for label, terms in focus_terms if any(term.casefold() in lowered for term in terms)]
+
+    def _with_prompt_focus(
+        self,
+        response: AnalysisRunV2Response,
+        request: AnalysisRunV2Request | None,
+    ) -> AnalysisRunV2Response:
+        """Reflect prompt focus in the existing summary message without changing metrics."""
+        focus = self._prompt_focus(request)
+        if not focus:
+            return response
+        suffix = f" 사용자 요청 관점: {', '.join(focus)} 중심으로 확인했습니다."
+        response.summary.message = f"{response.summary.message}{suffix}"
+        return response
 
     def _recommendations(
         self,

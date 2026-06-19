@@ -113,7 +113,8 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 ```json
 {
   "project_path": "X:/Projects/DeliveryBotA",
-  "run_id": "000001"
+  "run_id": "000001",
+  "prompt": "장애물 때문에 실패했는지 중심으로 다시 분석해줘"
 }
 ```
 
@@ -121,6 +122,10 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 
 * `project_path`: 사용자 project root
 * `run_id`: 6자리 decimal string
+
+옵션:
+
+* `prompt`: 사용자 자연어 재분석 요청입니다. 현재는 LLM 호출 없이 rule-based keyword focus만 summary message에 보조 반영하며, metrics나 recommendation을 조작하지 않습니다.
 
 아래 값은 받지 않습니다.
 

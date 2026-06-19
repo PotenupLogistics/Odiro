@@ -129,3 +129,28 @@ def test_graph_mode_true_uses_summary_without_episode_results(monkeypatch, tmp_p
     assert payload["analysis_scope"] == {"experiments_count": 1, "runs_count": 1, "episodes_count": 2}
     assert payload["metrics"]["success_count"] == 1
     assert payload["metrics"]["failure_count"] == 1
+
+
+def test_graph_mode_true_accepts_prompt_without_schema_changes(monkeypatch, tmp_path) -> None:
+    project = tmp_path / "Project1"
+    _write_project_blocked_episode(project, "000001")
+    _write_project_blocked_episode(project, "000002")
+    monkeypatch.setenv("V2_AGENT_GRAPH_ENABLED", "true")
+
+    response = TestClient(app).post(
+        "/api/v2/analysis/run",
+        json={
+            "project_path": str(project),
+            "run_id": "000001",
+            "prompt": "보도이탈과 페널티 중심으로 다시 분석해줘",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema"] == "analysis_run_response_v2"
+    assert payload["summary"]["overall_judgement"] == "change_recommended"
+    assert "사용자 요청 관점" in payload["summary"]["message"]
+    assert "route_deviation" in payload["summary"]["message"]
+    assert "penalty" in payload["summary"]["message"]
+    assert "prompt_focus" not in payload

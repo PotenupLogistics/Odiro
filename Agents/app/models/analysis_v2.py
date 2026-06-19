@@ -10,6 +10,7 @@ class AnalysisRunV2Request(BaseModel):
 
     project_path: str = Field(min_length=1)
     run_id: str = Field(pattern=r"^\d{6}$")
+    prompt: str | None = Field(default=None, max_length=2_000)
 
     @field_validator("project_path")
     @classmethod
@@ -17,6 +18,15 @@ class AnalysisRunV2Request(BaseModel):
         if not value.strip():
             raise ValueError("project_path must not be empty.")
         return value
+
+    @field_validator("prompt")
+    @classmethod
+    def normalize_prompt(cls, value: str | None) -> str | None:
+        """Treat blank prompt text as an absent optional analysis focus."""
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
 
 class AnalysisScopeV2(BaseModel):

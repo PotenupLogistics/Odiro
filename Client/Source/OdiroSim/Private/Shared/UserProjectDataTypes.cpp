@@ -721,6 +721,69 @@ namespace
 		}
 	}
 
+	struct FTerminalEventWritePlan
+	{
+		int32 EventIndex = 0;
+		bool bAppendSyntheticEvent = true;
+	};
+
+	int32 GetNextEventIndex(const FEpisodeRunRecord& runRecord)
+	{
+		int32 nextEventIndex = 0;
+		for (const FEpisodeEvaluationEvent& event : runRecord.EvaluationResult.Events)
+		{
+			nextEventIndex = FMath::Max(nextEventIndex, event.EventIndex + 1);
+		}
+		return nextEventIndex;
+	}
+
+	bool IsDeliveryBotTerminalEventType(const FString& eventType)
+	{
+		return eventType == TEXT("DeliveryBotSimulationFailure")
+			|| eventType == TEXT("Stuck")
+			|| eventType == TEXT("PathfindFail")
+			|| eventType == TEXT("PolicyDecisionError");
+	}
+
+	bool IsExistingEventTerminalForReason(
+		const FEpisodeEvaluationEvent& event,
+		EEpisodeEvaluationTerminalReason terminalReason)
+	{
+		const FString eventType = ResolveUserProjectEventType(event);
+		switch (terminalReason)
+		{
+		case EEpisodeEvaluationTerminalReason::GoalReached:
+			return eventType == TEXT("GoalReached");
+		case EEpisodeEvaluationTerminalReason::Timeout:
+			return eventType == TEXT("Timeout");
+		case EEpisodeEvaluationTerminalReason::RobotTipOver:
+			return eventType == TEXT("RobotTipOver");
+		case EEpisodeEvaluationTerminalReason::DeliveryBotSimulationFailed:
+			return IsDeliveryBotTerminalEventType(eventType);
+		default:
+			return false;
+		}
+	}
+
+	FTerminalEventWritePlan MakeTerminalEventWritePlan(const FEpisodeRunRecord& runRecord)
+	{
+		FTerminalEventWritePlan plan;
+		plan.EventIndex = GetNextEventIndex(runRecord);
+
+		for (int32 index = runRecord.EvaluationResult.Events.Num() - 1; index >= 0; --index)
+		{
+			const FEpisodeEvaluationEvent& event = runRecord.EvaluationResult.Events[index];
+			if (IsExistingEventTerminalForReason(event, runRecord.TerminalReason))
+			{
+				plan.EventIndex = event.EventIndex;
+				plan.bAppendSyntheticEvent = false;
+				return plan;
+			}
+		}
+
+		return plan;
+	}
+
 	TSharedPtr<FJsonValue> MakeUserProjectParamJsonValue(const FScenarioParamValue& paramValue)
 	{
 		switch (paramValue.Type)
@@ -971,10 +1034,14 @@ namespace
 
 	TSharedRef<FJsonObject> MakeEpisodeSummaryObject(const FEpisodeRunRecord& runRecord)
 	{
+		const FTerminalEventWritePlan terminalPlan = MakeTerminalEventWritePlan(runRecord);
+
 		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		object->SetBoolField(TEXT("completed"), runRecord.bEvaluationCompleted);
 		object->SetBoolField(TEXT("success"), runRecord.bSuccess);
 		object->SetStringField(TEXT("outcome"), ToUserProjectEnumString(runRecord.Outcome));
 		object->SetStringField(TEXT("terminal_reason"), ToUserProjectEnumString(runRecord.TerminalReason));
+		object->SetNumberField(TEXT("terminal_event_index"), terminalPlan.EventIndex);
 		object->SetNumberField(TEXT("duration_s"), runRecord.DurationSeconds);
 		object->SetBoolField(TEXT("evaluation_completed"), runRecord.bEvaluationCompleted);
 		return object;
@@ -982,13 +1049,20 @@ namespace
 
 	TSharedRef<FJsonObject> MakeEventSummaryObject(const FEpisodeRunRecord& runRecord)
 	{
+		const FTerminalEventWritePlan terminalPlan = MakeTerminalEventWritePlan(runRecord);
 		TMap<FString, int32> eventCounts;
+		TMap<FString, int32> sourceCounts;
 		for (const FEpisodeEvaluationEvent& event : runRecord.EvaluationResult.Events)
 		{
 			const FString eventType = ResolveUserProjectEventType(event);
 			eventCounts.FindOrAdd(eventType) += 1;
+			sourceCounts.FindOrAdd(ResolveUserProjectEventSource(event)) += 1;
 		}
-		eventCounts.FindOrAdd(ResolveUserProjectTerminalEventType(runRecord.TerminalReason)) += 1;
+		if (terminalPlan.bAppendSyntheticEvent)
+		{
+			eventCounts.FindOrAdd(ResolveUserProjectTerminalEventType(runRecord.TerminalReason)) += 1;
+			sourceCounts.FindOrAdd(TEXT("EvaluationSubsystem")) += 1;
+		}
 
 		TSharedRef<FJsonObject> countsObject = MakeShared<FJsonObject>();
 		TArray<FString> eventTypes;
@@ -1002,9 +1076,27 @@ namespace
 			}
 		}
 
+		TSharedRef<FJsonObject> sourcesObject = MakeShared<FJsonObject>();
+		TArray<FString> sources;
+		sourceCounts.GetKeys(sources);
+		sources.Sort();
+		for (const FString& source : sources)
+		{
+			if (const int32* sourceCount = sourceCounts.Find(source))
+			{
+				sourcesObject->SetNumberField(source, *sourceCount);
+			}
+		}
+
+		const int32 eventCount = runRecord.EvaluationResult.Events.Num()
+			+ (terminalPlan.bAppendSyntheticEvent ? 1 : 0);
+
 		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
-		object->SetNumberField(TEXT("event_count"), runRecord.EvaluationResult.Events.Num() + 1);
+		object->SetNumberField(TEXT("total"), eventCount);
+		object->SetNumberField(TEXT("event_count"), eventCount);
 		object->SetObjectField(TEXT("by_type"), countsObject);
+		object->SetObjectField(TEXT("by_source"), sourcesObject);
+		object->SetNumberField(TEXT("terminal_event_index"), terminalPlan.EventIndex);
 		return object;
 	}
 
@@ -1080,6 +1172,7 @@ namespace
 		const FEpisodeRunRecord& runRecord,
 		TArray<FString>& outDiagnostics)
 	{
+		const FTerminalEventWritePlan terminalPlan = MakeTerminalEventWritePlan(runRecord);
 		TArray<FString> lines;
 		for (const FEpisodeEvaluationEvent& event : runRecord.EvaluationResult.Events)
 		{
@@ -1092,15 +1185,18 @@ namespace
 			lines.Add(line);
 		}
 
-		FString terminalLine;
-		if (!TrySerializeCondensedJsonLine(
-			MakeTerminalEventLineObject(runRecord, runRecord.EvaluationResult.Events.Num()),
-			terminalLine))
+		if (terminalPlan.bAppendSyntheticEvent)
 		{
-			outDiagnostics.Add(TEXT("Terminal episode event JSONL serialization failed."));
-			return false;
+			FString terminalLine;
+			if (!TrySerializeCondensedJsonLine(
+				MakeTerminalEventLineObject(runRecord, terminalPlan.EventIndex),
+				terminalLine))
+			{
+				outDiagnostics.Add(TEXT("Terminal episode event JSONL serialization failed."));
+				return false;
+			}
+			lines.Add(terminalLine);
 		}
-		lines.Add(terminalLine);
 
 		return TryWriteUtf8File(eventsPath, FString::Join(lines, TEXT("\n")) + TEXT("\n"), outDiagnostics);
 	}

@@ -155,6 +155,50 @@ namespace
 		return lines.Num();
 	}
 
+	bool LoadUserProjectJsonlObjects(const FString& filePath, TArray<TSharedPtr<FJsonObject>>& outObjects)
+	{
+		outObjects.Reset();
+
+		FString contents;
+		if (!FFileHelper::LoadFileToString(contents, *filePath))
+		{
+			return false;
+		}
+
+		TArray<FString> lines;
+		contents.ParseIntoArrayLines(lines, true);
+		for (const FString& line : lines)
+		{
+			TSharedPtr<FJsonObject> object;
+			const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(line);
+			if (!FJsonSerializer::Deserialize(reader, object) || !object.IsValid())
+			{
+				return false;
+			}
+			outObjects.Add(object);
+		}
+
+		return true;
+	}
+
+	int32 CountEventTypeForTest(
+		const TArray<TSharedPtr<FJsonObject>>& eventLines,
+		const FString& eventType)
+	{
+		int32 count = 0;
+		for (const TSharedPtr<FJsonObject>& eventLine : eventLines)
+		{
+			FString actualEventType;
+			if (eventLine.IsValid()
+				&& eventLine->TryGetStringField(TEXT("event_type"), actualEventType)
+				&& actualEventType == eventType)
+			{
+				++count;
+			}
+		}
+		return count;
+	}
+
 	TSharedRef<FJsonObject> MakeActionTestRequestObject()
 	{
 		TSharedRef<FJsonObject> requestObject = MakeShared<FJsonObject>();
@@ -580,6 +624,18 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 		TEXT("event summary count"),
 		static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("event_count")))),
 		6);
+	TestEqual(
+		TEXT("event summary total"),
+		static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("total")))),
+		6);
+	TestEqual(
+		TEXT("summary terminal event index"),
+		static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("summary"))->GetNumberField(TEXT("terminal_event_index")))),
+		5);
+	TestEqual(
+		TEXT("event summary terminal event index"),
+		static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("terminal_event_index")))),
+		5);
 	const TSharedPtr<FJsonObject> eventSummaryByType = resultObject->GetObjectField(TEXT("event_summary"))->GetObjectField(TEXT("by_type"));
 	TestEqual(TEXT("near miss event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("PedestrianNearMiss")))), 1);
 	TestEqual(TEXT("repath event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("Repath")))), 1);
@@ -587,6 +643,10 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestEqual(TEXT("policy decision error event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("PolicyDecisionError")))), 1);
 	TestEqual(TEXT("stuck event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("Stuck")))), 1);
 	TestEqual(TEXT("goal reached event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("GoalReached")))), 1);
+	const TSharedPtr<FJsonObject> eventSummaryBySource = resultObject->GetObjectField(TEXT("event_summary"))->GetObjectField(TEXT("by_source"));
+	TestEqual(TEXT("evaluation source event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryBySource->GetNumberField(TEXT("EvaluationSubsystem")))), 3);
+	TestEqual(TEXT("python source event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryBySource->GetNumberField(TEXT("PythonPolicy")))), 2);
+	TestEqual(TEXT("policy runtime source event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryBySource->GetNumberField(TEXT("PolicyRuntime")))), 1);
 
 	FString eventsJson;
 	TestTrue(TEXT("load events jsonl"), FFileHelper::LoadFileToString(eventsJson, *eventsPath));
@@ -602,6 +662,14 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("events include policy runtime source"), eventsJson.Contains(TEXT("\"source\":\"PolicyRuntime\"")));
 	TestTrue(TEXT("events include stuck"), eventsJson.Contains(TEXT("\"event_type\":\"Stuck\"")));
 	TestFalse(TEXT("events omit internal repath type"), eventsJson.Contains(TEXT("\"event_type\":\"DeliveryBotRepath\"")));
+	TArray<TSharedPtr<FJsonObject>> eventLines;
+	TestTrue(TEXT("parse events jsonl"), LoadUserProjectJsonlObjects(eventsPath, eventLines));
+	TestEqual(TEXT("events parsed line count"), eventLines.Num(), 6);
+	if (eventLines.Num() == 6 && eventLines[5].IsValid())
+	{
+		TestEqual(TEXT("terminal line index"), static_cast<int32>(eventLines[5]->GetNumberField(TEXT("event_index"))), 5);
+		TestEqual(TEXT("terminal line type"), eventLines[5]->GetStringField(TEXT("event_type")), FString(TEXT("GoalReached")));
+	}
 
 	TSharedPtr<FJsonObject> summaryObject;
 	TestTrue(TEXT("load summary json"), LoadUserProjectJsonObject(snapshotResult.Paths.SummaryPath, summaryObject));
@@ -622,6 +690,146 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestTrue(
 		TEXT("summary scenario semantic copied"),
 		rows[0]->AsObject()->GetObjectField(TEXT("scenario_semantic"))->HasField(TEXT("route_axis")));
+
+	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUserProjectRunOutputTerminalEventReuseTest,
+	"OdiroSim.UserProjectData.RunOutput.TerminalEventReuse",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUserProjectRunOutputTerminalEventReuseTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	const FString projectPath = MakeUserProjectDataTestRoot();
+	FUserProjectRunSnapshotPaths paths;
+	TestTrue(TEXT("write snapshot"), WriteUserProjectDataSnapshot(projectPath, paths));
+
+	const FUserProjectRunSnapshotParseResult snapshotResult = FUserProjectRunSnapshot::Parse(projectPath, TEXT("000001"));
+	TestTrue(TEXT("snapshot parses"), snapshotResult.bSuccess);
+
+	TArray<FUserProjectEpisodeScenarioWriteResult> writeResults;
+	TArray<FScenarioCompileDiagnostic> writeDiagnostics;
+	TestTrue(
+		TEXT("scenario samples write"),
+		FUserProjectEpisodeScenarioJson::WriteAllEpisodeScenarios(
+			snapshotResult.Paths,
+			snapshotResult.Setting,
+			writeResults,
+			writeDiagnostics));
+	if (writeResults.IsEmpty())
+	{
+		IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+		return false;
+	}
+
+	FEpisodeRunRecord runRecord;
+	runRecord.RunId = TEXT("000001");
+	runRecord.RunIndex = 0;
+	runRecord.EpisodeId = writeResults[0].EpisodeId;
+	runRecord.PairId = writeResults[0].EpisodeId;
+	runRecord.EpisodeScenarioJsonPath = writeResults[0].ScenarioPath;
+	runRecord.ProfileJsonPath = snapshotResult.Paths.ProfilePath;
+	runRecord.PolicySpecJsonPath = snapshotResult.Paths.PolicyEntrypointPath;
+	runRecord.EpisodeSetupHash = writeResults[0].ScenarioHash;
+	runRecord.DeliveryBotSetupHash = TEXT("crc32:profile");
+	runRecord.PairHash = TEXT("crc32:policy");
+	runRecord.bCompileSucceeded = true;
+	runRecord.bEpisodeSetupCompileSucceeded = true;
+	runRecord.bDeliveryBotSetupCompileSucceeded = true;
+	runRecord.bSetupSucceeded = true;
+	runRecord.bEvaluationCompleted = true;
+	runRecord.bSuccess = false;
+	runRecord.Outcome = EEpisodeEvaluationOutcome::Failure;
+	runRecord.TerminalReason = EEpisodeEvaluationTerminalReason::Timeout;
+	runRecord.DurationSeconds = 10.0;
+	runRecord.EvaluationResult.EpisodeId = writeResults[0].EpisodeId;
+	runRecord.EvaluationResult.bCompleted = true;
+	runRecord.EvaluationResult.bSuccess = false;
+	runRecord.EvaluationResult.Outcome = EEpisodeEvaluationOutcome::Failure;
+	runRecord.EvaluationResult.TerminalReason = EEpisodeEvaluationTerminalReason::Timeout;
+	runRecord.EvaluationResult.DurationSeconds = 10.0;
+	runRecord.EvaluationResult.Metrics.Add(TEXT("duration_s"), MakeUserProjectFloatParam(10.0));
+	runRecord.EvaluationResult.Metrics.Add(TEXT("max_duration_s"), MakeUserProjectFloatParam(10.0));
+	runRecord.EvaluationResult.Metrics.Add(TEXT("distance_to_goal_m"), MakeUserProjectFloatParam(2.5));
+
+	FEpisodeEvaluationEvent stuckEvent;
+	stuckEvent.EventIndex = 0;
+	stuckEvent.ElapsedTimeSeconds = 5.0;
+	stuckEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotSimulationFailure;
+	stuckEvent.Severity = EEpisodeEvaluationEventSeverity::Warning;
+	stuckEvent.Message = TEXT("robot stuck");
+	stuckEvent.Properties.Add(TEXT("delivery_bot_failure_type"), MakeUserProjectStringParam(TEXT("Stuck")));
+	stuckEvent.Properties.Add(TEXT("duration_s"), MakeUserProjectFloatParam(5.0));
+	stuckEvent.Properties.Add(TEXT("distance_to_goal_m"), MakeUserProjectFloatParam(2.5));
+	runRecord.EvaluationResult.Events.Add(stuckEvent);
+
+	FEpisodeEvaluationEvent timeoutEvent;
+	timeoutEvent.EventIndex = 1;
+	timeoutEvent.ElapsedTimeSeconds = 10.0;
+	timeoutEvent.EventType = EEpisodeEvaluationEventType::Timeout;
+	timeoutEvent.Severity = EEpisodeEvaluationEventSeverity::Failure;
+	timeoutEvent.Message = TEXT("time limit exceeded");
+	timeoutEvent.Properties.Add(TEXT("duration_s"), MakeUserProjectFloatParam(10.0));
+	timeoutEvent.Properties.Add(TEXT("max_duration_s"), MakeUserProjectFloatParam(10.0));
+	timeoutEvent.Properties.Add(TEXT("distance_to_goal_m"), MakeUserProjectFloatParam(2.5));
+	runRecord.EvaluationResult.Events.Add(timeoutEvent);
+
+	TArray<FString> artifactDiagnostics;
+	TestTrue(
+		TEXT("episode artifacts write"),
+		FUserProjectRunOutputJson::SaveEpisodeArtifacts(snapshotResult.Paths, runRecord, artifactDiagnostics));
+	TestEqual(TEXT("artifact diagnostics"), artifactDiagnostics.Num(), 0);
+
+	const FString episodeDirectory = FUserProjectRunOutputJson::BuildEpisodeDirectory(snapshotResult.Paths, TEXT("000001"));
+	const FString resultPath = FPaths::Combine(episodeDirectory, TEXT("result.json"));
+	const FString eventsPath = FPaths::Combine(episodeDirectory, TEXT("events.jsonl"));
+
+	TestEqual(TEXT("events reuse existing terminal line"), CountJsonlLines(eventsPath), 2);
+
+	TSharedPtr<FJsonObject> resultObject;
+	TestTrue(TEXT("load result json"), LoadUserProjectJsonObject(resultPath, resultObject));
+	if (resultObject.IsValid())
+	{
+		TestEqual(
+			TEXT("summary terminal event index reuses timeout"),
+			static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("summary"))->GetNumberField(TEXT("terminal_event_index")))),
+			1);
+		TestEqual(
+			TEXT("event summary count reuses timeout"),
+			static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("event_count")))),
+			2);
+		TestEqual(
+			TEXT("event summary total reuses timeout"),
+			static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("total")))),
+			2);
+		TestEqual(
+			TEXT("event summary terminal event index reuses timeout"),
+			static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("terminal_event_index")))),
+			1);
+
+		const TSharedPtr<FJsonObject> eventSummaryByType = resultObject->GetObjectField(TEXT("event_summary"))->GetObjectField(TEXT("by_type"));
+		TestEqual(TEXT("stuck count"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("Stuck")))), 1);
+		TestEqual(TEXT("timeout count"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("Timeout")))), 1);
+
+		const TSharedPtr<FJsonObject> eventSummaryBySource = resultObject->GetObjectField(TEXT("event_summary"))->GetObjectField(TEXT("by_source"));
+		TestEqual(TEXT("evaluation source count"), static_cast<int32>(FMath::RoundToInt(eventSummaryBySource->GetNumberField(TEXT("EvaluationSubsystem")))), 2);
+	}
+
+	TArray<TSharedPtr<FJsonObject>> eventLines;
+	TestTrue(TEXT("parse events jsonl"), LoadUserProjectJsonlObjects(eventsPath, eventLines));
+	TestEqual(TEXT("events parsed line count"), eventLines.Num(), 2);
+	TestEqual(TEXT("one stuck event"), CountEventTypeForTest(eventLines, TEXT("Stuck")), 1);
+	TestEqual(TEXT("one timeout event"), CountEventTypeForTest(eventLines, TEXT("Timeout")), 1);
+	if (eventLines.Num() == 2 && eventLines[1].IsValid())
+	{
+		TestEqual(TEXT("terminal timeout event index"), static_cast<int32>(eventLines[1]->GetNumberField(TEXT("event_index"))), 1);
+		TestEqual(TEXT("terminal timeout event type"), eventLines[1]->GetStringField(TEXT("event_type")), FString(TEXT("Timeout")));
+		TestEqual(TEXT("terminal timeout reason"), eventLines[1]->GetStringField(TEXT("reason")), FString(TEXT("Timeout")));
+	}
 
 	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
 	return true;

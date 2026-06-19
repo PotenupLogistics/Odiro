@@ -882,7 +882,13 @@ class PathFollower:
     def is_ignored_lidar_policy_ray(self, ray) -> bool:
         actor_name = ray.actorName or ""
         actor_tags = ray.actorTags or []
-        return actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0
+        normalized_tags = {str(tag).strip().lower() for tag in actor_tags}
+        return (
+            (actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0)
+            or actor_name.startswith("ScenarioCorridorRuntimeActor")
+            or "wall" in normalized_tags
+            or any(tag.endswith(".wall") for tag in normalized_tags)
+        )
 
     # 로봇과 전체 경로 선분 사이의 최소 거리를 계산한다.
     def get_closest_path_distance_cm(

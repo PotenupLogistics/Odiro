@@ -32,7 +32,13 @@ def get_front_lidar_min_distance_text(request: ScenarioDecideRequest, front_angl
 def is_ignored_lidar_policy_ray(ray) -> bool:
     actor_name = ray.actorName or ""
     actor_tags = ray.actorTags or []
-    return actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0
+    normalized_tags = {str(tag).strip().lower() for tag in actor_tags}
+    return (
+        (actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0)
+        or actor_name.startswith("ScenarioCorridorRuntimeActor")
+        or "wall" in normalized_tags
+        or any(tag.endswith(".wall") for tag in normalized_tags)
+    )
 
 
 # 각도를 -180도부터 180도 범위로 정규화한다.

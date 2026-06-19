@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import importlib.util
+import inspect
 import json
 import os
 import sys
@@ -29,7 +30,16 @@ class PolicyRuntimeContext:
     policy: object
 
 
-# 실행 중인 policy package와 episode 상태
+class AttributeDict(dict):
+    """Dict fallback that also supports the attribute access used by policy code."""
+
+    def __getattr__(self, name: str):
+        try:
+            return self[name]
+        except KeyError as error:
+            raise AttributeError(name) from error
+
+
 runtime: PolicyRuntimeContext | None = None
 
 
@@ -107,35 +117,149 @@ def contract_type(type_name: str):
     """Return a callable contract type from the policy package when available."""
     if runtime is None or runtime.contract_module is None:
         return None
+
     value = getattr(runtime.contract_module, type_name, None)
     return value if callable(value) else None
 
 
+def filter_contract_payload(value_type, data: dict) -> dict:
+    """Drop optional fields that older project contracts do not accept."""
+    try:
+        signature = inspect.signature(value_type)
+    except (TypeError, ValueError):
+        return data
+
+    parameters = signature.parameters
+    if any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()):
+        return data
+
+    allowed_names = {
+        name
+        for name, parameter in parameters.items()
+        if parameter.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
+    return {name: value for name, value in data.items() if name in allowed_names}
+
+
 def construct_contract(type_name: str, data: dict):
-    """Construct a policy contract object, or keep raw dict input for skeleton policies."""
+    """Construct a policy contract object, or keep a dict-like fallback."""
     value_type = contract_type(type_name)
-    return value_type(**data) if value_type else data
+    if value_type is None:
+        return AttributeDict(data)
+
+    try:
+        return value_type(**data)
+    except TypeError:
+        filtered_data = filter_contract_payload(value_type, data)
+        if filtered_data != data:
+            return value_type(**filtered_data)
+        raise
 
 
-# dict 데이터를 PolicyError 객체로 변환
-def parse_policy_error(data: dict | None) -> PolicyError | None:
+def read_object_value(value: object, name: str, default=None):
+    """Read a field from either a contract object or dict fallback."""
+    if isinstance(value, dict):
+        return value.get(name, default)
+
+    return getattr(value, name, default)
+
+
+def safe_float(value: object, default: float = 0.0) -> float:
+    """Convert JSON scalar values to float while keeping parser errors local."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_int(value: object, default: int = 0) -> int:
+    """Convert JSON scalar values to int while keeping parser errors local."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def parse_actor_tags(data: dict) -> list[str]:
+    """Return actorTags as a stable string list."""
+    actor_tags = data.get("actorTags", [])
+    if not isinstance(actor_tags, list):
+        return []
+
+    return [str(actor_tag) for actor_tag in actor_tags]
+
+
+def parse_vector_cm(data: object) -> dict[str, float] | None:
+    """Parse an Unreal vector object into a cm-unit dict."""
+    if not isinstance(data, dict):
+        return None
+
+    return {
+        "x": safe_float(data.get("x", 0.0)),
+        "y": safe_float(data.get("y", 0.0)),
+        "z": safe_float(data.get("z", 0.0)),
+    }
+
+
+def parse_policy_error(data: dict | None):
+    """Parse an optional policy error payload."""
     if not data:
         return None
 
-    policy_error_type = contract_type("PolicyError")
-    if policy_error_type is None:
-        return data
-
-    return policy_error_type(
-        code=data.get("code", "UNKNOWN_ERROR"),
-        message=data.get("message", ""),
-        retryable=data.get("retryable", False),
-        details=data.get("details", {}),
+    return construct_contract(
+        "PolicyError",
+        {
+            "code": str(data.get("code", "UNKNOWN_ERROR")),
+            "message": str(data.get("message", "")),
+            "retryable": bool(data.get("retryable", False)),
+            "details": data.get("details", {}),
+        },
     )
 
 
-# /scenario/start 요청 JSON을 ScenarioStartRequest로 변환
-def parse_start(data: dict) -> ScenarioStartRequest:
+def parse_start_location(data: dict):
+    """Parse an Unreal world location and yaw."""
+    return construct_contract(
+        "StartLocation",
+        {
+            "x": safe_float(data.get("x", 0.0)),
+            "y": safe_float(data.get("y", 0.0)),
+            "z": safe_float(data.get("z", 0.0)),
+            "yawDegree": safe_float(data.get("yawDegree", 0.0)),
+        },
+    )
+
+
+def parse_goal_location(data: dict):
+    """Parse a goal location."""
+    return construct_contract(
+        "GoalLocation",
+        {
+            "hasGoal": bool(data.get("hasGoal", False)),
+            "x": safe_float(data.get("x", 0.0)),
+            "y": safe_float(data.get("y", 0.0)),
+            "z": safe_float(data.get("z", 0.0)),
+        },
+    )
+
+
+def parse_grid_cell(data: dict):
+    """Parse one navigation grid cell."""
+    return construct_contract(
+        "GridCell",
+        {
+            "x": safe_int(data.get("x", 0)),
+            "y": safe_int(data.get("y", 0)),
+            "areaType": str(data.get("areaType", "Walkable")),
+            "cost": safe_float(data.get("cost", 1.0), 1.0),
+            "blocked": bool(data.get("blocked", False)),
+            "sourceCollisionProfile": str(data.get("sourceCollisionProfile", "")),
+        },
+    )
+
+
+def parse_start(data: dict):
+    """Parse /scenario/start JSON into the loaded policy contract."""
     if contract_type("ScenarioStartRequest") is None:
         return data
 
@@ -143,73 +267,200 @@ def parse_start(data: dict) -> ScenarioStartRequest:
     goal_data = data["goal"]
     robot_spec = data.get("robotSpec") or data.get("vehicleSpec", {})
 
-    return contract_type("ScenarioStartRequest")(
-        robotInstanceId=data["robotInstanceId"],
-        start=construct_contract("StartLocation", data["start"]),
-        goal=contract_type("GoalLocation")(
-            hasGoal=goal_data["hasGoal"],
-            x=goal_data["x"],
-            y=goal_data["y"],
-            z=goal_data.get("z", 0.0),
-        ),
-        grid=contract_type("GridMap")(
-            gridSizeX=grid_data["gridSizeX"],
-            gridSizeY=grid_data["gridSizeY"],
-            cellSizeCm=grid_data["cellSizeCm"],
-            cellCount=grid_data["cellCount"],
-            originCm=construct_contract("StartLocation", grid_data["originCm"]),
-            cells=[
-                construct_contract("GridCell", cell_data)
+    grid = construct_contract(
+        "GridMap",
+        {
+            "gridSizeX": safe_int(grid_data["gridSizeX"]),
+            "gridSizeY": safe_int(grid_data["gridSizeY"]),
+            "cellSizeCm": safe_float(grid_data["cellSizeCm"]),
+            "cellCount": safe_int(grid_data["cellCount"]),
+            "originCm": parse_start_location(grid_data["originCm"]),
+            "cells": [
+                parse_grid_cell(cell_data)
                 for cell_data in grid_data.get("cells", [])
+                if isinstance(cell_data, dict)
             ],
-        ),
-        robotSpec=robot_spec,
-        driveSpec=data.get("driveSpec", {}),
-        lidarSpec=data.get("lidarSpec", {}),
-        vehicleSpec=data.get("vehicleSpec", robot_spec),
-        controlSpec=data.get("controlSpec", {}),
+        },
+    )
+
+    return construct_contract(
+        "ScenarioStartRequest",
+        {
+            "robotInstanceId": str(data["robotInstanceId"]),
+            "start": parse_start_location(data["start"]),
+            "goal": parse_goal_location(goal_data),
+            "grid": grid,
+            "robotSpec": robot_spec,
+            "driveSpec": data.get("driveSpec", {}),
+            "lidarSpec": data.get("lidarSpec", {}),
+            "artifactSpec": data.get("artifactSpec", {}),
+            "vehicleSpec": data.get("vehicleSpec", robot_spec),
+            "controlSpec": data.get("controlSpec", {}),
+        },
     )
 
 
-# /scenario/decide 요청 JSON을 ScenarioDecideRequest로 변환
-def parse_decide(data: dict) -> ScenarioDecideRequest:
+def parse_legacy_lidar_ray(data: dict):
+    """Parse a legacy 2D LiDAR ray."""
+    return construct_contract(
+        "LidarRay",
+        {
+            "hit": bool(data.get("hit", False)),
+            "distanceM": safe_float(data.get("distanceM", 0.0)),
+            "rayIndex": data.get("rayIndex"),
+            "rayYawDegree": safe_float(data.get("rayYawDegree", data.get("yawDegree", 0.0))),
+            "actorName": data.get("actorName"),
+            "actorTags": parse_actor_tags(data),
+        },
+    )
+
+
+def parse_lidar_ray_1d(data: dict):
+    """Parse a typed 1D LiDAR ray."""
+    return construct_contract(
+        "LidarRay1D",
+        {
+            "hit": bool(data.get("hit", False)),
+            "distanceM": safe_float(data.get("distanceM", 0.0)),
+            "rayIndex": data.get("rayIndex"),
+            "actorName": data.get("actorName"),
+            "actorTags": parse_actor_tags(data),
+        },
+    )
+
+
+def parse_lidar_ray_2d(data: dict):
+    """Parse a typed 2D LiDAR ray."""
+    return construct_contract(
+        "LidarRay2D",
+        {
+            "hit": bool(data.get("hit", False)),
+            "distanceM": safe_float(data.get("distanceM", 0.0)),
+            "yawDegree": safe_float(data.get("yawDegree", data.get("rayYawDegree", 0.0))),
+            "rayIndex": data.get("rayIndex"),
+            "actorName": data.get("actorName"),
+            "actorTags": parse_actor_tags(data),
+        },
+    )
+
+
+def parse_lidar_ray_3d(data: dict):
+    """Parse a typed 3D LiDAR ray."""
+    return construct_contract(
+        "LidarRay3D",
+        {
+            "hit": bool(data.get("hit", False)),
+            "distanceM": safe_float(data.get("distanceM", 0.0)),
+            "yawDegree": safe_float(data.get("yawDegree", data.get("rayYawDegree", 0.0))),
+            "pitchDegree": safe_float(data.get("pitchDegree", data.get("rayPitchDegree", 0.0))),
+            "rayIndex": data.get("rayIndex"),
+            "actorName": data.get("actorName"),
+            "actorTags": parse_actor_tags(data),
+            "hitLocationCm": parse_vector_cm(data.get("hitLocationCm")),
+        },
+    )
+
+
+def parse_lidar_ray_array(values: object, parse_ray) -> list:
+    """Parse a JSON LiDAR ray array while ignoring malformed entries."""
+    if not isinstance(values, list):
+        return []
+
+    return [
+        parse_ray(ray_data)
+        for ray_data in values
+        if isinstance(ray_data, dict)
+    ]
+
+
+def parse_lidar_observation(data: dict):
+    """Parse typed LiDAR observations grouped by scan dimension."""
+    lidar_data = data.get("lidar", {})
+    if not isinstance(lidar_data, dict):
+        lidar_data = {}
+
+    return construct_contract(
+        "LidarObservation",
+        {
+            "mode": str(lidar_data.get("mode", "")),
+            "sensorSequence": safe_int(lidar_data.get("sensorSequence", data.get("sensorSequence", 0))),
+            "sensorTimeSeconds": safe_float(
+                lidar_data.get(
+                    "sensorTimeSeconds",
+                    data.get("sensorTimeSeconds", data.get("runTimeSeconds", 0.0)),
+                )
+            ),
+            "rays1d": parse_lidar_ray_array(lidar_data.get("rays1d", []), parse_lidar_ray_1d),
+            "rays2d": parse_lidar_ray_array(lidar_data.get("rays2d", []), parse_lidar_ray_2d),
+            "rays3d": parse_lidar_ray_array(lidar_data.get("rays3d", []), parse_lidar_ray_3d),
+        },
+    )
+
+
+def parse_robot_state(data: dict):
+    """Parse robot state from a decide request."""
+    return construct_contract(
+        "RobotState",
+        {
+            "x": safe_float(data.get("x", 0.0)),
+            "y": safe_float(data.get("y", 0.0)),
+            "z": safe_float(data.get("z", 0.0)),
+            "yawDegree": safe_float(data.get("yawDegree", 0.0)),
+            "speedKmh": safe_float(data.get("speedKmh", 0.0)),
+            "bColliding": bool(data.get("bColliding", False)),
+            "collisionActorName": str(data.get("collisionActorName", "")),
+            "collisionActorTags": parse_actor_tags({"actorTags": data.get("collisionActorTags", [])}),
+        },
+    )
+
+
+def parse_decide(data: dict):
+    """Parse /scenario/decide JSON into the loaded policy contract."""
     if contract_type("ScenarioDecideRequest") is None:
         return data
 
-    return contract_type("ScenarioDecideRequest")(
-        sequence=data["sequence"],
-        runTimeSeconds=data["runTimeSeconds"],
-        robotState=construct_contract("RobotState", data["robotState"]),
-        lidarRays=[
-            construct_contract("LidarRay", ray_data)
-            for ray_data in data.get("lidarRays", [])
-        ],
-        observedObjects=data.get("observedObjects", []),
+    lidar = parse_lidar_observation(data)
+
+    return construct_contract(
+        "ScenarioDecideRequest",
+        {
+            "sequence": safe_int(data["sequence"]),
+            "runTimeSeconds": safe_float(data["runTimeSeconds"]),
+            "sensorSequence": safe_int(data.get("sensorSequence", read_object_value(lidar, "sensorSequence", 0))),
+            "sensorTimeSeconds": safe_float(data.get("sensorTimeSeconds", read_object_value(lidar, "sensorTimeSeconds", 0.0))),
+            "robotState": parse_robot_state(data["robotState"]),
+            "lidar": lidar,
+            "lidarRays": parse_lidar_ray_array(data.get("lidarRays", []), parse_legacy_lidar_ray),
+            "observedObjects": data.get("observedObjects", []),
+        },
     )
 
 
-# /scenario/end 요청 JSON을 ScenarioEndRequest로 변환
-def parse_end(data: dict) -> ScenarioEndRequest:
+def parse_end(data: dict):
+    """Parse /scenario/end JSON into the loaded policy contract."""
     if contract_type("ScenarioEndRequest") is None:
         return data
 
-    return contract_type("ScenarioEndRequest")(
-        robotInstanceId=data["robotInstanceId"],
-        sequence=data["sequence"],
-        status=data["status"],
-        error=parse_policy_error(data.get("error")),
-        metrics=data.get("metrics", {}),
-        debug=data.get("debug", {}),
+    return construct_contract(
+        "ScenarioEndRequest",
+        {
+            "robotInstanceId": str(data["robotInstanceId"]),
+            "sequence": safe_int(data["sequence"]),
+            "status": str(data["status"]),
+            "error": parse_policy_error(data.get("error")),
+            "metrics": data.get("metrics", {}),
+            "debug": data.get("debug", {}),
+        },
     )
 
 
-# dict를 JSON bytes로 변환
 def to_json_bytes(data: dict) -> bytes:
+    """Serialize a response dict to UTF-8 JSON bytes."""
     return json.dumps(data, ensure_ascii=False).encode("utf-8")
 
 
-# Unreal이 PythonAgent 실행/재사용 여부를 확인할 때 쓰는 가장 가벼운 응답
 def build_health_response() -> dict:
+    """Return a lightweight readiness response for Unreal health checks."""
     response = {
         "status": "ok",
         "server": SERVER_NAME,
@@ -220,8 +471,8 @@ def build_health_response() -> dict:
     return response
 
 
-# Unreal이 보낸 envelope에서 request 영역만 꺼낸다.
 def get_request_data(message: dict) -> dict:
+    """Extract the request payload from the Unreal envelope."""
     request_data = message.get("request")
     if isinstance(request_data, dict):
         return request_data
@@ -229,15 +480,15 @@ def get_request_data(message: dict) -> dict:
     return message
 
 
-# Python 처리 결과를 envelope의 response 영역에 채워 반환한다.
 def build_response_message(message: dict, response: dict) -> dict:
+    """Fill the response section while preserving the Unreal request envelope."""
     result = dict(message)
     result["response"] = response
     return result
 
 
-# 에러 응답을 envelope 형식으로 만든다.
 def build_error_message(message: dict, code: str, error_message: str, reason: str) -> dict:
+    """Build a stable error response envelope."""
     return build_response_message(
         message,
         {
@@ -253,13 +504,12 @@ def build_error_message(message: dict, code: str, error_message: str, reason: st
     )
 
 
-# HTTP 요청을 처리하는 handler
 class PythonAgentHandler(BaseHTTPRequestHandler):
+    """HTTP adapter for the loaded project policy."""
 
     def log_message(self, format: str, *args) -> None:
         return
 
-    # GET 요청 처리
     def do_GET(self) -> None:
         request_path = self.get_request_path()
 
@@ -281,8 +531,6 @@ class PythonAgentHandler(BaseHTTPRequestHandler):
             },
         )
 
-
-    # POST 요청 처리
     def do_POST(self) -> None:
         request_json = {}
 
@@ -302,13 +550,9 @@ class PythonAgentHandler(BaseHTTPRequestHandler):
                 ),
             )
 
-
-    # query string을 제외하고 endpoint path만 가져온다.
     def get_request_path(self) -> str:
         return urlparse(self.path).path
 
-
-    # HTTP body에서 JSON 읽기
     def read_json_body(self) -> dict:
         content_length = int(self.headers.get("Content-Length", "0"))
         raw_body = self.rfile.read(content_length)
@@ -318,8 +562,6 @@ class PythonAgentHandler(BaseHTTPRequestHandler):
 
         return json.loads(raw_body.decode("utf-8"))
 
-
-    # 요청 path에 따라 request를 처리하고 response를 envelope에 채운다.
     def route_request(self, request_json: dict) -> dict:
         if runtime is None:
             return build_error_message(
@@ -351,8 +593,6 @@ class PythonAgentHandler(BaseHTTPRequestHandler):
             "unknown_endpoint",
         )
 
-
-    # JSON 응답 쓰기
     def write_json_response(self, status_code: int, data: dict) -> None:
         body = to_json_bytes(data)
 
@@ -367,8 +607,8 @@ class PythonAgentServer(HTTPServer):
     allow_reuse_address = True
 
 
-# 명령줄 인자를 읽어 서버 실행 옵션으로 변환
 def parse_arguments() -> argparse.Namespace:
+    """Parse command line options for the policy runtime server."""
     parser = argparse.ArgumentParser(description="Run the DeliveryBot Python Agent HTTP server.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
@@ -378,7 +618,6 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# HTTP 서버 실행
 def run_server(
     host: str = "127.0.0.1",
     port: int = 8000,
@@ -386,6 +625,7 @@ def run_server(
     policy_mode: str = "runtime",
     verbose_runtime_log: bool = False,
 ) -> None:
+    """Load the project policy package and serve Unreal policy requests."""
     global runtime
     runtime = create_runtime_context(policy_path)
     server = PythonAgentServer((host, port), PythonAgentHandler)
@@ -398,7 +638,6 @@ def run_server(
     server.serve_forever()
 
 
-# python server.py로 실행했을 때 서버 시작
 if __name__ == "__main__":
     arguments = parse_arguments()
     run_server(

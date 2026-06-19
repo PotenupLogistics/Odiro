@@ -128,6 +128,30 @@ def build_path_contract(state: AgentState) -> dict:
         "pathWorldPoints": build_path_world_points(state),
     }
 
+REPATH_EVENT_REASONS = {"dynamic_repath_ready", "collision_repath_ready"}
+
+
+def build_policy_events(state: AgentState, policy_name: str, reason: str) -> list[dict]:
+    if reason not in REPATH_EVENT_REASONS:
+        return []
+
+    return [
+        {
+            "type": "repath",
+            "selectedPolicy": policy_name,
+            "reason": reason,
+            **build_path_contract(state),
+            "closestPathDistanceCm": state.closestPathDistanceCm,
+            "maxPathErrorCm": state.maxPathErrorCm,
+            "obstacleWarningCount": state.obstacleWarningCount,
+            "lastObstacleWarningSource": state.lastObstacleWarningSource,
+            "blockedCorridorCellCount": len(state.lastBlockedCorridorCells),
+            "dynamicBlockedCellCount": len(state.dynamicBlockedCells),
+            **build_repath_debug(state),
+        }
+    ]
+
+
 # decision watcher가 출력할 snapshot dict를 만든다.
 def build_decision_log_snapshot(
     request: ScenarioDecideRequest,
@@ -260,12 +284,14 @@ class BotPolicy:
 
         capture_refs = self.pointCloudRecorder.capture_decide(request)
         last_reason = ""
+        policy_events: list[dict] = []
 
         for policy in self.policies:
             action, reason = policy.decide(request, state)
 
             if reason:
                 last_reason = reason
+                policy_events.extend(build_policy_events(state, policy.name, reason))
 
             if action is None:
                 continue
@@ -289,7 +315,7 @@ class BotPolicy:
                 "action": action_dict,
                 "decision": build_decision_contract(policy.name, reason),
                 "path": build_path_contract(state),
-                "events": [],
+                "events": policy_events,
                 "captures": capture_refs,
             }
 
@@ -313,7 +339,7 @@ class BotPolicy:
             },
             "decision": build_decision_contract("None", last_reason or "no_action"),
             "path": build_path_contract(state),
-            "events": [],
+            "events": policy_events,
             "captures": capture_refs,
         }
 

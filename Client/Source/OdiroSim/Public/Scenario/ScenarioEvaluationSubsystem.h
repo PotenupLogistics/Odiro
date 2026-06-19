@@ -8,6 +8,7 @@
 #include "ScenarioEvaluationSubsystem.generated.h"
 
 class ADeliveryBot;
+struct FDeliveryBotPolicyEventSnapshot;
 class AActor;
 class ADeliveryBot_ChaosActor;
 class AScenarioGroundRegion;
@@ -52,6 +53,10 @@ public:
 	void HandleDeliveryBotSimulationFailed(
 		ADeliveryBot* DeliveryBotActor,
 		const FDeliveryBotSimulationFailureInfo& FailureInfo);
+
+	void ReportDeliveryBotPolicyEvent(
+		ADeliveryBot* DeliveryBotActor,
+		const FDeliveryBotPolicyEventSnapshot& Snapshot); // Python policy/server event snapshot을 episode event로 기록한다
 
 	virtual void Tick(float deltaTime) override;
 	virtual bool IsTickable() const override;

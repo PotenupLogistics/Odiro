@@ -1,8 +1,8 @@
 #include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
 
 #include "Components/SceneComponent.h"
+#include "Components/SplineMeshComponent.h"
 #include "Materials/MaterialInterface.h"
-#include "ProceduralMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioCorridorRuntime, Log, All);
@@ -142,6 +142,37 @@ namespace
 		return RotateRuntimePoint(worldPointMeters - corridorSpec.OriginXYMeters, -corridorSpec.HeadingDegrees);
 	}
 
+	// Approximates editor preview spline tangents so runtime lane strips bend through corridor vertices.
+	FVector ResolveRuntimeCurveTangentCm(const TArray<FVector>& axisLocationsCm, int32 pointIndex)
+	{
+		if (axisLocationsCm.Num() < 2 || !axisLocationsCm.IsValidIndex(pointIndex))
+		{
+			return FVector::ZeroVector;
+		}
+
+		if (pointIndex == 0)
+		{
+			return axisLocationsCm[1] - axisLocationsCm[0];
+		}
+
+		const int32 lastPointIndex = axisLocationsCm.Num() - 1;
+		if (pointIndex == lastPointIndex)
+		{
+			return axisLocationsCm[lastPointIndex] - axisLocationsCm[lastPointIndex - 1];
+		}
+
+		const FVector previousSegment = axisLocationsCm[pointIndex] - axisLocationsCm[pointIndex - 1];
+		const FVector nextSegment = axisLocationsCm[pointIndex + 1] - axisLocationsCm[pointIndex];
+		const FVector blendedDirection = (previousSegment.GetSafeNormal() + nextSegment.GetSafeNormal()).GetSafeNormal();
+		if (blendedDirection.IsNearlyZero())
+		{
+			return nextSegment;
+		}
+
+		const double tangentLengthCm = (previousSegment.Size() + nextSegment.Size()) * 0.5;
+		return blendedDirection * tangentLengthCm;
+	}
+
 	bool TryProjectPointToAxisMeters(
 		const TArray<FVector2D>& axisPointsMeters,
 		const FVector2D& localPointMeters,
@@ -226,254 +257,6 @@ namespace
 		return FString::Printf(TEXT("%s:%s:%s"), *corridorId, *segmentId, *laneId);
 	}
 
-	// Mesh buffers for one runtime corridor lane prism.
-	struct FRuntimeLanePrismMesh
-	{
-		// Component-local prism vertices in Unreal centimeters.
-		TArray<FVector> Vertices;
-
-		// Triangle index buffer for visible and collision geometry.
-		TArray<int32> Triangles;
-
-		// Per-vertex normals used by runtime ground materials.
-		TArray<FVector> Normals;
-
-		// Simple generated UVs for material sampling.
-		TArray<FVector2D> UV0;
-
-		// Per-vertex tangents aligned to the nearest corridor segment.
-		TArray<FProcMeshTangent> Tangents;
-	};
-
-	double CrossRuntime2D(const FVector2D& lhs, const FVector2D& rhs)
-	{
-		return (lhs.X * rhs.Y) - (lhs.Y * rhs.X);
-	}
-
-	FVector2D GetRuntimeLeftNormal2D(const FVector2D& direction)
-	{
-		return FVector2D(-direction.Y, direction.X).GetSafeNormal();
-	}
-
-	bool TryIntersectRuntimeLines2D(
-		const FVector2D& firstPoint,
-		const FVector2D& firstDirection,
-		const FVector2D& secondPoint,
-		const FVector2D& secondDirection,
-		FVector2D& outIntersection)
-	{
-		const double determinant = CrossRuntime2D(firstDirection, secondDirection);
-		if (FMath::Abs(determinant) <= KINDA_SMALL_NUMBER)
-		{
-			return false;
-		}
-
-		const double firstDistance = CrossRuntime2D(secondPoint - firstPoint, secondDirection) / determinant;
-		outIntersection = firstPoint + (firstDirection * firstDistance);
-		return true;
-	}
-
-	TArray<FVector2D> BuildOffsetAxisPointsMeters(const TArray<FVector2D>& axisPointsMeters, double offsetMeters)
-	{
-		TArray<FVector2D> offsetPointsMeters;
-		offsetPointsMeters.Reserve(axisPointsMeters.Num());
-		if (axisPointsMeters.Num() < 2)
-		{
-			return offsetPointsMeters;
-		}
-
-		for (int32 pointIndex = 0; pointIndex < axisPointsMeters.Num(); ++pointIndex)
-		{
-			if (pointIndex == 0)
-			{
-				const FVector2D firstDirection = (axisPointsMeters[1] - axisPointsMeters[0]).GetSafeNormal();
-				offsetPointsMeters.Add(axisPointsMeters[0] + (GetRuntimeLeftNormal2D(firstDirection) * offsetMeters));
-				continue;
-			}
-
-			if (pointIndex == axisPointsMeters.Num() - 1)
-			{
-				const FVector2D lastDirection = (axisPointsMeters[pointIndex] - axisPointsMeters[pointIndex - 1]).GetSafeNormal();
-				offsetPointsMeters.Add(axisPointsMeters[pointIndex] + (GetRuntimeLeftNormal2D(lastDirection) * offsetMeters));
-				continue;
-			}
-
-			const FVector2D previousDirection = (axisPointsMeters[pointIndex] - axisPointsMeters[pointIndex - 1]).GetSafeNormal();
-			const FVector2D nextDirection = (axisPointsMeters[pointIndex + 1] - axisPointsMeters[pointIndex]).GetSafeNormal();
-			const FVector2D previousNormal = GetRuntimeLeftNormal2D(previousDirection);
-			const FVector2D nextNormal = GetRuntimeLeftNormal2D(nextDirection);
-			const FVector2D previousOffsetPoint = axisPointsMeters[pointIndex] + (previousNormal * offsetMeters);
-			const FVector2D nextOffsetPoint = axisPointsMeters[pointIndex] + (nextNormal * offsetMeters);
-			FVector2D intersectionPoint;
-			if (TryIntersectRuntimeLines2D(previousOffsetPoint, previousDirection, nextOffsetPoint, nextDirection, intersectionPoint))
-			{
-				offsetPointsMeters.Add(intersectionPoint);
-				continue;
-			}
-
-			const FVector2D averagedNormal = (previousNormal + nextNormal).GetSafeNormal();
-			offsetPointsMeters.Add(axisPointsMeters[pointIndex] + ((averagedNormal.IsNearlyZero() ? previousNormal : averagedNormal) * offsetMeters));
-		}
-
-		return offsetPointsMeters;
-	}
-
-	FVector TransformAxisOffsetPointMetersToWorldCm(
-		const FScenarioRuntimeCorridorSpec& corridorSpec,
-		const FVector2D& pointMeters,
-		double zCm)
-	{
-		FVector worldPoint = TransformAxisPointMetersToWorldCm(corridorSpec, pointMeters);
-		worldPoint.Z = zCm;
-		return worldPoint;
-	}
-
-	void AppendRuntimePrismQuad(
-		FRuntimeLanePrismMesh& mesh,
-		const FVector& first,
-		const FVector& second,
-		const FVector& third,
-		const FVector& fourth,
-		const FVector& normal,
-		const FVector& tangent)
-	{
-		const int32 baseIndex = mesh.Vertices.Num();
-		const FVector safeNormal = normal.GetSafeNormal().IsNearlyZero() ? FVector::UpVector : normal.GetSafeNormal();
-		const FVector safeTangent = tangent.GetSafeNormal().IsNearlyZero() ? FVector::ForwardVector : tangent.GetSafeNormal();
-		mesh.Vertices.Add(first);
-		mesh.Vertices.Add(second);
-		mesh.Vertices.Add(third);
-		mesh.Vertices.Add(fourth);
-		for (int32 vertexIndex = 0; vertexIndex < 4; ++vertexIndex)
-		{
-			mesh.Normals.Add(safeNormal);
-			mesh.Tangents.Add(FProcMeshTangent(safeTangent, false));
-		}
-		mesh.UV0.Add(FVector2D(0.0, 0.0));
-		mesh.UV0.Add(FVector2D(1.0, 0.0));
-		mesh.UV0.Add(FVector2D(1.0, 1.0));
-		mesh.UV0.Add(FVector2D(0.0, 1.0));
-
-		mesh.Triangles.Add(baseIndex);
-		mesh.Triangles.Add(baseIndex + 1);
-		mesh.Triangles.Add(baseIndex + 2);
-		mesh.Triangles.Add(baseIndex);
-		mesh.Triangles.Add(baseIndex + 2);
-		mesh.Triangles.Add(baseIndex + 3);
-		mesh.Triangles.Add(baseIndex + 2);
-		mesh.Triangles.Add(baseIndex + 1);
-		mesh.Triangles.Add(baseIndex);
-		mesh.Triangles.Add(baseIndex + 3);
-		mesh.Triangles.Add(baseIndex + 2);
-		mesh.Triangles.Add(baseIndex);
-	}
-
-	bool BuildRuntimeLanePrismMeshCm(
-		const FScenarioRuntimeCorridorSpec& corridorSpec,
-		const TArray<FVector2D>& axisPointsMeters,
-		double minOffsetMeters,
-		double maxOffsetMeters,
-		double bottomZCm,
-		double topZCm,
-		FRuntimeLanePrismMesh& outMesh)
-	{
-		outMesh = FRuntimeLanePrismMesh();
-		if (axisPointsMeters.Num() < 2)
-		{
-			return false;
-		}
-
-		const TArray<FVector2D> minEdgePointsMeters = BuildOffsetAxisPointsMeters(axisPointsMeters, minOffsetMeters);
-		const TArray<FVector2D> maxEdgePointsMeters = BuildOffsetAxisPointsMeters(axisPointsMeters, maxOffsetMeters);
-		if (minEdgePointsMeters.Num() != axisPointsMeters.Num() || maxEdgePointsMeters.Num() != axisPointsMeters.Num())
-		{
-			return false;
-		}
-
-		const double lowerZCm = FMath::Min(bottomZCm, topZCm);
-		const double upperZCm = FMath::Max(bottomZCm, topZCm);
-		TArray<FVector> topMinPoints;
-		TArray<FVector> topMaxPoints;
-		TArray<FVector> bottomMinPoints;
-		TArray<FVector> bottomMaxPoints;
-		topMinPoints.Reserve(axisPointsMeters.Num());
-		topMaxPoints.Reserve(axisPointsMeters.Num());
-		bottomMinPoints.Reserve(axisPointsMeters.Num());
-		bottomMaxPoints.Reserve(axisPointsMeters.Num());
-		for (int32 pointIndex = 0; pointIndex < axisPointsMeters.Num(); ++pointIndex)
-		{
-			topMinPoints.Add(TransformAxisOffsetPointMetersToWorldCm(corridorSpec, minEdgePointsMeters[pointIndex], upperZCm));
-			topMaxPoints.Add(TransformAxisOffsetPointMetersToWorldCm(corridorSpec, maxEdgePointsMeters[pointIndex], upperZCm));
-			bottomMinPoints.Add(TransformAxisOffsetPointMetersToWorldCm(corridorSpec, minEdgePointsMeters[pointIndex], lowerZCm));
-			bottomMaxPoints.Add(TransformAxisOffsetPointMetersToWorldCm(corridorSpec, maxEdgePointsMeters[pointIndex], lowerZCm));
-		}
-
-		for (int32 pointIndex = 0; pointIndex < axisPointsMeters.Num() - 1; ++pointIndex)
-		{
-			const FVector segmentTangent = (topMinPoints[pointIndex + 1] - topMinPoints[pointIndex]).GetSafeNormal();
-			if (segmentTangent.IsNearlyZero())
-			{
-				continue;
-			}
-
-			const FVector minSideNormal = FVector::CrossProduct(segmentTangent, FVector::UpVector).GetSafeNormal();
-			const FVector maxSideNormal = FVector::CrossProduct(FVector::UpVector, segmentTangent).GetSafeNormal();
-			AppendRuntimePrismQuad(
-				outMesh,
-				topMinPoints[pointIndex],
-				topMinPoints[pointIndex + 1],
-				topMaxPoints[pointIndex + 1],
-				topMaxPoints[pointIndex],
-				FVector::UpVector,
-				segmentTangent);
-			AppendRuntimePrismQuad(
-				outMesh,
-				bottomMinPoints[pointIndex],
-				bottomMaxPoints[pointIndex],
-				bottomMaxPoints[pointIndex + 1],
-				bottomMinPoints[pointIndex + 1],
-				-FVector::UpVector,
-				segmentTangent);
-			AppendRuntimePrismQuad(
-				outMesh,
-				topMinPoints[pointIndex],
-				bottomMinPoints[pointIndex],
-				bottomMinPoints[pointIndex + 1],
-				topMinPoints[pointIndex + 1],
-				minSideNormal,
-				segmentTangent);
-			AppendRuntimePrismQuad(
-				outMesh,
-				topMaxPoints[pointIndex],
-				topMaxPoints[pointIndex + 1],
-				bottomMaxPoints[pointIndex + 1],
-				bottomMaxPoints[pointIndex],
-				maxSideNormal,
-				segmentTangent);
-		}
-
-		const FVector startTangent = (topMinPoints[1] - topMinPoints[0]).GetSafeNormal();
-		const int32 lastPointIndex = topMinPoints.Num() - 1;
-		const FVector endTangent = (topMinPoints[lastPointIndex] - topMinPoints[lastPointIndex - 1]).GetSafeNormal();
-		AppendRuntimePrismQuad(
-			outMesh,
-			topMinPoints[0],
-			topMaxPoints[0],
-			bottomMaxPoints[0],
-			bottomMinPoints[0],
-			-startTangent,
-			FVector::CrossProduct(FVector::UpVector, startTangent).GetSafeNormal());
-		AppendRuntimePrismQuad(
-			outMesh,
-			topMinPoints[lastPointIndex],
-			bottomMinPoints[lastPointIndex],
-			bottomMaxPoints[lastPointIndex],
-			topMaxPoints[lastPointIndex],
-			endTangent,
-			FVector::CrossProduct(FVector::UpVector, endTangent).GetSafeNormal());
-
-		return !outMesh.Vertices.IsEmpty() && !outMesh.Triangles.IsEmpty();
-	}
 }
 
 AScenarioCorridorRuntimeActor::AScenarioCorridorRuntimeActor()
@@ -484,6 +267,12 @@ AScenarioCorridorRuntimeActor::AScenarioCorridorRuntimeActor()
 	RootComponent = SceneRoot;
 
 	SurfaceCatalog = UScenarioCorridorSurfaceCatalog::MakeDefaultCatalogReference();
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> laneStripMeshAsset(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (laneStripMeshAsset.Succeeded())
+	{
+		LaneStripMesh = laneStripMeshAsset.Object;
+	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> walkableGroundMaterialAsset(
 		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorSidewalk.M_ScenarioCorridorSidewalk"));
@@ -512,14 +301,15 @@ void AScenarioCorridorRuntimeActor::ConfigureCorridor(const FScenarioRuntimeCorr
 	CorridorSpec = inCorridorSpec;
 	ClearLaneMeshes();
 
-	if (CorridorSpec.PointsMeters.Num() < 2)
+	if (!LaneStripMesh || CorridorSpec.PointsMeters.Num() < 2)
 	{
 		UE_LOG(
 			LogScenarioCorridorRuntime,
 			Warning,
-			TEXT("Runtime corridor cannot render. CorridorId: %s | Points: %d"),
+			TEXT("Runtime corridor cannot render. CorridorId: %s | Points: %d | HasMesh: %s"),
 			*CorridorSpec.CorridorId,
-			CorridorSpec.PointsMeters.Num());
+			CorridorSpec.PointsMeters.Num(),
+			LaneStripMesh ? TEXT("true") : TEXT("false"));
 		return;
 	}
 
@@ -534,7 +324,7 @@ void AScenarioCorridorRuntimeActor::ConfigureCorridor(const FScenarioRuntimeCorr
 
 void AScenarioCorridorRuntimeActor::ClearLaneMeshes()
 {
-	for (const TObjectPtr<UProceduralMeshComponent>& meshComponent : LaneMeshComponents)
+	for (const TObjectPtr<USplineMeshComponent>& meshComponent : LaneMeshComponents)
 	{
 		if (IsValid(meshComponent))
 		{
@@ -621,72 +411,81 @@ void AScenarioCorridorRuntimeActor::AddLaneStrip(
 	ResolveSurfaceEntry(laneSpec.SurfaceId, surfaceEntry);
 	UMaterialInterface* material = ResolveSurfaceMaterial(surfaceEntry);
 
+	const double centerOffsetCm =
+		((laneSpec.OffsetRangeMeters.MinMeters + laneSpec.OffsetRangeMeters.MaxMeters) * 0.5) * RuntimeMetersToCentimeters;
+	const double laneWidthCm = laneWidthMeters * RuntimeMetersToCentimeters;
 	const bool bBlockedSurface = laneSpec.RegionType == EScenarioGroundRegionType::Blocked;
 	const double laneHeightCm = bBlockedSurface ? RuntimeBlockedHeightCm : RuntimeSurfaceHeightCm;
 	const double laneSurfaceZCm = RuntimeSurfaceTopZCm + laneSpec.SurfaceZOffsetCm;
-	const double laneBottomZCm = bBlockedSurface ? laneSurfaceZCm : laneSurfaceZCm - laneHeightCm;
-	const double laneTopZCm = bBlockedSurface ? laneSurfaceZCm + laneHeightCm : laneSurfaceZCm;
+	const double laneCenterZCm = bBlockedSurface
+		? laneSurfaceZCm + (laneHeightCm * 0.5)
+		: laneSurfaceZCm - (laneHeightCm * 0.5);
+	const double laneHeightScale = laneHeightCm / 100.0;
 	const FName collisionProfileName = GetRuntimeCollisionProfileName(laneSpec.RegionType);
 
-	FRuntimeLanePrismMesh prismMesh;
-	if (!BuildRuntimeLanePrismMeshCm(
-			CorridorSpec,
-			clippedAxisPointsMeters,
-			laneSpec.OffsetRangeMeters.MinMeters,
-			laneSpec.OffsetRangeMeters.MaxMeters,
-			laneBottomZCm,
-			laneTopZCm,
-			prismMesh))
+	TArray<FVector> axisLocationsCm;
+	axisLocationsCm.Reserve(clippedAxisPointsMeters.Num());
+	for (const FVector2D& clippedPointMeters : clippedAxisPointsMeters)
 	{
-		UE_LOG(
-			LogScenarioCorridorRuntime,
-			Warning,
-			TEXT("Runtime corridor lane prism mesh failed. CorridorId: %s | Segment: %s | Lane: %s"),
-			*CorridorSpec.CorridorId,
-			*layoutEntry.SegmentId,
-			*laneSpec.LaneId);
-		return;
+		axisLocationsCm.Add(TransformAxisPointMetersToWorldCm(CorridorSpec, clippedPointMeters));
 	}
 
-	const FName componentName = MakeUniqueObjectName(
-		this,
-		UProceduralMeshComponent::StaticClass(),
-		FName(*FString::Printf(TEXT("RuntimeCorridor_%s"), *laneSpec.LaneId)));
-	UProceduralMeshComponent* meshComponent = NewObject<UProceduralMeshComponent>(this, componentName);
-	if (!meshComponent)
+	for (int32 pointIndex = 0; pointIndex < clippedAxisPointsMeters.Num() - 1; ++pointIndex)
 	{
-		return;
-	}
+		const FVector startLocation = axisLocationsCm[pointIndex];
+		const FVector endLocation = axisLocationsCm[pointIndex + 1];
+		const FVector startTangent = ResolveRuntimeCurveTangentCm(axisLocationsCm, pointIndex);
+		const FVector endTangent = ResolveRuntimeCurveTangentCm(axisLocationsCm, pointIndex + 1);
+		const FVector startDirection = startTangent.GetSafeNormal();
+		const FVector endDirection = endTangent.GetSafeNormal();
+		if (startDirection.IsNearlyZero() || endDirection.IsNearlyZero())
+		{
+			continue;
+		}
 
-	meshComponent->SetMobility(EComponentMobility::Movable);
-	meshComponent->SetupAttachment(SceneRoot);
-	meshComponent->SetCollisionProfileName(collisionProfileName);
-	meshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-	meshComponent->SetGenerateOverlapEvents(false);
-	meshComponent->SetCastShadow(false);
-	meshComponent->bUseComplexAsSimpleCollision = true;
-	meshComponent->bUseAsyncCooking = false;
-	if (!laneSpec.CollisionTag.IsEmpty())
-	{
-		const FName collisionTag(*laneSpec.CollisionTag);
-		meshComponent->ComponentTags.AddUnique(collisionTag);
-		Tags.AddUnique(collisionTag);
+		const FVector startRight = FVector::CrossProduct(FVector::UpVector, startDirection).GetSafeNormal();
+		const FVector endRight = FVector::CrossProduct(FVector::UpVector, endDirection).GetSafeNormal();
+		const FVector laneHeightOffset(0.0, 0.0, laneCenterZCm - RuntimeSurfaceTopZCm);
+		const FName componentName = MakeUniqueObjectName(
+			this,
+			USplineMeshComponent::StaticClass(),
+			FName(*FString::Printf(TEXT("RuntimeCorridor_%s_%02d"), *laneSpec.LaneId, pointIndex)));
+		USplineMeshComponent* meshComponent = NewObject<USplineMeshComponent>(this, componentName);
+		if (!meshComponent)
+		{
+			continue;
+		}
+
+		meshComponent->SetMobility(EComponentMobility::Movable);
+		meshComponent->SetupAttachment(SceneRoot);
+		meshComponent->SetStaticMesh(LaneStripMesh);
+		meshComponent->SetForwardAxis(ESplineMeshAxis::X, false);
+		meshComponent->SetStartAndEnd(
+			startLocation + startRight * centerOffsetCm + laneHeightOffset,
+			startTangent,
+			endLocation + endRight * centerOffsetCm + laneHeightOffset,
+			endTangent,
+			false);
+		meshComponent->SetStartScale(FVector2D(laneWidthCm / 100.0, laneHeightScale), false);
+		meshComponent->SetEndScale(FVector2D(laneWidthCm / 100.0, laneHeightScale), false);
+		meshComponent->SetCollisionProfileName(collisionProfileName);
+		meshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		meshComponent->SetGenerateOverlapEvents(false);
+		meshComponent->SetCastShadow(false);
+		if (!laneSpec.CollisionTag.IsEmpty())
+		{
+			const FName collisionTag(*laneSpec.CollisionTag);
+			meshComponent->ComponentTags.AddUnique(collisionTag);
+			Tags.AddUnique(collisionTag);
+		}
+		meshComponent->RegisterComponent();
+		if (material)
+		{
+			meshComponent->SetMaterial(0, material);
+		}
+		meshComponent->UpdateMesh();
+		LaneMeshComponents.Add(meshComponent);
 	}
-	meshComponent->RegisterComponent();
-	meshComponent->CreateMeshSection_LinearColor(
-		0,
-		prismMesh.Vertices,
-		prismMesh.Triangles,
-		prismMesh.Normals,
-		prismMesh.UV0,
-		TArray<FLinearColor>(),
-		prismMesh.Tangents,
-		true);
-	if (material)
-	{
-		meshComponent->SetMaterial(0, material);
-	}
-	LaneMeshComponents.Add(meshComponent);
 }
 
 bool AScenarioCorridorRuntimeActor::ResolveSurfaceEntry(

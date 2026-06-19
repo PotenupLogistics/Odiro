@@ -7,8 +7,9 @@
 #include "ScenarioCorridorRuntimeActor.generated.h"
 
 class UMaterialInterface;
-class UProceduralMeshComponent;
 class USceneComponent;
+class USplineMeshComponent;
+class UStaticMesh;
 
 // Deterministic lookup result for one sampled runtime Corridor lane surface.
 USTRUCT(BlueprintType)
@@ -91,7 +92,11 @@ private:
 
 	// Generated lane surface mesh components owned by this actor.
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<UProceduralMeshComponent>> LaneMeshComponents;
+	TArray<TObjectPtr<USplineMeshComponent>> LaneMeshComponents;
+
+	// Cube mesh deformed along sampled axis sections for each lane strip.
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMesh> LaneStripMesh;
 
 	// Material used for walkable lane strips when the catalog has no material.
 	UPROPERTY(Transient)
@@ -108,7 +113,7 @@ private:
 	// Removes generated lane mesh components before rebuilding the corridor.
 	void ClearLaneMeshes();
 
-	// Creates a deterministic prism mesh over one layout interval.
+	// Creates spline-deformed cube mesh sections over one layout interval.
 	void AddLaneStrip(const FScenarioRuntimeCorridorLayoutEntry& layoutEntry, const FScenarioRuntimeCorridorLaneSpec& laneSpec);
 
 	// Resolves a Corridor surface id from the configured catalog or built-in defaults.

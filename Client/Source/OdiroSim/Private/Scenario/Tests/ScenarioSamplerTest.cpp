@@ -202,6 +202,13 @@ bool FScenarioSamplerDeterministicRangeTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("same seed produces same sample JSON"), FirstJson, SecondJson);
 	TestTrue(TEXT("range param captured"), FirstResult.Document.Scenario.Params.Contains(TEXT("corridor.walkway_width_m")));
 	TestTrue(TEXT("obstacle range param captured"), FirstResult.Document.Scenario.Params.Contains(TEXT("obstacles.crate_curb.at.along_m")));
+	const FScenarioSampleParamValue* WalkwayWidthParam =
+		FirstResult.Document.Scenario.Params.Find(TEXT("corridor.walkway_width_m"));
+	TestNotNull(TEXT("walkway width param"), WalkwayWidthParam);
+	if (WalkwayWidthParam)
+	{
+		TestEqual(TEXT("walkway width matches editor projection"), WalkwayWidthParam->FloatValue, 2.5);
+	}
 	return true;
 }
 

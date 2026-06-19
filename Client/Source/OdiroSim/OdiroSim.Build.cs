@@ -11,7 +11,7 @@ public class OdiroSim : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "SlateCore",
 			"ChaosVehicles", "Json", "JsonUtilities", "HTTP", "DeveloperSettings" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "ProceduralMeshComponent" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Slate" });
 		
 		// Uncomment if you are using online features
 		// PrivateDependencyModuleNames.Add("OnlineSubsystem");

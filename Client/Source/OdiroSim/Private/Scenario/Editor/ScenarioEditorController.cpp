@@ -15,6 +15,7 @@
 #include "InputMappingContext.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Platform/Widget/MainMenuWidget.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorController, Log, All);
 
@@ -169,12 +170,11 @@ AScenarioEditorController::AScenarioEditorController()
 	bEnableMouseOverEvents = false;
 	PlacementPreviewActorClass = AScenarioPlacementPreviewActor::StaticClass();
 	TransformGizmoActorClass = AScenarioTransformGizmoActor::StaticClass();
-	EditorRootWidgetClass = UScenarioEditorRootWidget::StaticClass();
-	static ConstructorHelpers::FClassFinder<UScenarioEditorRootWidget> editorRootWidgetFinder(
-		TEXT("/Game/Widgets/Editor/WBP_ScenarioEditorRootWidget"));
-	if (editorRootWidgetFinder.Succeeded())
+	static ConstructorHelpers::FClassFinder<UMainMenuWidget> mainMenuWidgetFinder(
+		TEXT("/Game/Widgets/MainMenu/WBP_MainMenu"));
+	if (mainMenuWidgetFinder.Succeeded())
 	{
-		EditorRootWidgetClass = editorRootWidgetFinder.Class;
+		MainMenuWidgetClass = mainMenuWidgetFinder.Class;
 	}
 	EditorInputMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Editor.IMC_Editor")));
 	EditorMoveAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorMove.IA_EditorMove")));
@@ -194,12 +194,14 @@ void AScenarioEditorController::BeginPlay()
 	AddEditorInputMappingContext();
 	EnsureAuthoringOutlineCustomDepthEnabled();
 	SetObserverMode();
+	ShowMainMenuWidget();
 	ShowEditorRootWidget();
 }
 
 void AScenarioEditorController::EndPlay(const EEndPlayReason::Type endPlayReason)
 {
 	RemoveEditorRootWidget();
+	RemoveMainMenuWidget();
 	Super::EndPlay(endPlayReason);
 }
 
@@ -783,37 +785,103 @@ UScenarioEditorRootWidget* AScenarioEditorController::ShowEditorRootWidget()
 {
 	if (IsValid(EditorRootWidget))
 	{
-		if (!EditorRootWidget->IsInViewport())
+		if (IsValid(MainMenuWidget))
 		{
-			EditorRootWidget->AddToViewport(EditorRootWidgetViewportZOrder);
+			if (!MainMenuWidget->IsInViewport())
+			{
+				MainMenuWidget->AddToViewport(MainMenuWidgetViewportZOrder);
+			}
+			return EditorRootWidget.Get();
 		}
-		return EditorRootWidget.Get();
+
+		EditorRootWidget = nullptr;
 	}
 
-	if (!ensureMsgf(
-			EditorRootWidgetClass,
-			TEXT("ScenarioEditorController requires EditorRootWidgetClass to point to WBP_EditorRootWidget.")))
+	if (UMainMenuWidget* mainMenuWidget = ShowMainMenuWidget())
 	{
-		UE_LOG(LogScenarioEditorController, Error, TEXT("EditorRootWidgetClass is not set."));
-		return nullptr;
+		if (UScenarioEditorRootWidget* mainMenuRootWidget = mainMenuWidget->GetScenarioEditorRootWidget())
+		{
+			RegisterEditorRootWidget(mainMenuRootWidget);
+			return mainMenuRootWidget;
+		}
 	}
 
-	EditorRootWidget = CreateWidget<UScenarioEditorRootWidget>(this, EditorRootWidgetClass);
-	if (!EditorRootWidget)
-	{
-		UE_LOG(LogScenarioEditorController, Error, TEXT("Failed to create editor root widget."));
-		return nullptr;
-	}
-
-	EditorRootWidget->AddToViewport(EditorRootWidgetViewportZOrder);
-	return EditorRootWidget.Get();
+	UE_LOG(
+		LogScenarioEditorController,
+		Error,
+		TEXT("WBP_MainMenu did not provide ScenarioEditorRootWidget."));
+	return nullptr;
 }
 
 void AScenarioEditorController::RemoveEditorRootWidget()
 {
-	if (IsValid(EditorRootWidget))
+	EditorRootWidget = nullptr;
+}
+
+UMainMenuWidget* AScenarioEditorController::ShowMainMenuWidget()
+{
+	if (IsValid(MainMenuWidget))
 	{
-		EditorRootWidget->RemoveFromParent();
+		if (!MainMenuWidget->IsInViewport())
+		{
+			MainMenuWidget->AddToViewport(MainMenuWidgetViewportZOrder);
+		}
+		return MainMenuWidget.Get();
+	}
+
+	if (!MainMenuWidgetClass)
+	{
+		UE_LOG(LogScenarioEditorController, Error, TEXT("MainMenuWidgetClass is not set."));
+		return nullptr;
+	}
+
+	MainMenuWidget = CreateWidget<UMainMenuWidget>(this, MainMenuWidgetClass);
+	if (!MainMenuWidget)
+	{
+		UE_LOG(LogScenarioEditorController, Error, TEXT("Failed to create main menu widget."));
+		return nullptr;
+	}
+
+	MainMenuWidget->AddToViewport(MainMenuWidgetViewportZOrder);
+	return MainMenuWidget.Get();
+}
+
+void AScenarioEditorController::RemoveMainMenuWidget()
+{
+	RemoveEditorRootWidget();
+
+	if (IsValid(MainMenuWidget))
+	{
+		MainMenuWidget->RemoveFromParent();
+	}
+
+	MainMenuWidget = nullptr;
+}
+
+void AScenarioEditorController::RegisterEditorRootWidget(UScenarioEditorRootWidget* rootWidget)
+{
+	if (!IsValid(rootWidget))
+	{
+		return;
+	}
+
+	if (!IsValid(MainMenuWidget) || MainMenuWidget->GetScenarioEditorRootWidget() != rootWidget)
+	{
+		UE_LOG(
+			LogScenarioEditorController,
+			Error,
+			TEXT("ScenarioEditorRootWidget registration rejected because it is not owned by WBP_MainMenu."));
+		return;
+	}
+
+	EditorRootWidget = rootWidget;
+}
+
+void AScenarioEditorController::ClearRegisteredEditorRootWidget(UScenarioEditorRootWidget* rootWidget)
+{
+	if (!rootWidget || EditorRootWidget.Get() != rootWidget)
+	{
+		return;
 	}
 
 	EditorRootWidget = nullptr;

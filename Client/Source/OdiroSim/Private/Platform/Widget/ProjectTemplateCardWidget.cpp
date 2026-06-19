@@ -2,6 +2,8 @@
 #include "Platform/Widget/ProjectTemplateCardWidget.h"
 
 #include "Components/Button.h"
+#include "Input/Events.h"
+#include "InputCoreTypes.h"
 #include "Components/TextBlock.h"
 #include "Styling/SlateBrush.h"
 
@@ -56,12 +58,25 @@ void UProjectTemplateCardWidget::NativeConstruct()
 	RefreshVisualState();
 }
 
-void UProjectTemplateCardWidget::InitializeCard(const FString& templateId, const FString& displayName)
+FReply UProjectTemplateCardWidget::NativeOnPreviewMouseButtonDown(
+	const FGeometry& inGeometry,
+	const FPointerEvent& inMouseEvent)
 {
-	TemplateId = templateId.TrimStartAndEnd();
+	if (inMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
+	{
+		OnContextRequested.Broadcast(this);
+		return FReply::Handled();
+	}
+
+	return Super::NativeOnPreviewMouseButtonDown(inGeometry, inMouseEvent);
+}
+
+void UProjectTemplateCardWidget::InitializeCard(const FString& itemId, const FString& displayName)
+{
+	ItemId = itemId.TrimStartAndEnd();
 
 	const FString visibleName = displayName.TrimStartAndEnd().IsEmpty()
-		? TemplateId
+		? ItemId
 		: displayName.TrimStartAndEnd();
 	if (CardNameLabel)
 	{

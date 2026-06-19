@@ -16,6 +16,21 @@ specs:
 - 최종 실행 흐름: `docs/specs/simulation-interface.md`
 - 이 문서는 기존 Platform/Simulator 초안 추적용
 
+## 현재 UI 구조
+
+2026-06 기준 UI 진입 구조:
+
+- `StartupMap`: 기본 시작 map. `WBP_StartupMenu`로 project 선택/생성만 처리
+- `UProjectSessionSubsystem`: 선택된 user project root의 단일 source of truth
+- `ScenarioEditorMap`: `AScenarioEditorController`가 `WBP_MainMenu`를 생성하고 ScenarioEditor 기능을 소유
+- `WBP_StartupMenu`: recent project card list를 첫 화면으로 제공하고, `Create New` 뒤에서 parent/name + scenario/profile/policy preset 조합 기반 새 project 생성 UI 소유
+- `WBP_MainMenu`: `ProjectWorkspaceScreen`을 root surface로 사용하고 control/workspace UI와 `ProjectScenarioEditPanel` 아래의 `WBP_ScenarioEditorRootWidget` 자식을 포함
+- Project 선택/생성 성공 흐름: Startup UI → active project 저장 → `ScenarioEditorMap` OpenLevel → `<UserProject>/scenario.json` 자동 로드
+- MainMenu는 project 선택/생성, project path 입력, preset card를 소유하지 않음
+- UMG asset 구조 변경은 `UmgMcp`로 수정/검증한다. `WBP_MainMenu`에 Startup 전용 widget이 남거나 `ScenarioEditorRootWidget`이 `ProjectScenarioEditPanel` 밖에 있으면 실패로 본다
+- Startup UI는 custom GameMode/PlayerController 없이 StartupMap에 배치된 bootstrap actor가 `WBP_StartupMenu`를 viewport에 붙인다
+- Level 전환은 OpenLevel 기반. Level Streaming 기반 background loading은 현 범위 제외
+
 ## 목표
 
 시나리오 편집기, 시뮬레이터 실행, Python API 서버, LLM 서버를 하나의 플랫폼으로 통합하여 사용자에게 일관된 인터페이스를 제공한다.
@@ -39,8 +54,9 @@ specs:
 ## 설계
 
 하나의 프로젝트로 Unreal Engine 클라이언트를 모두 개발한다.
-그냥 켜면 플랫폼 MainMenu가 실행되고, 시뮬레이터는 Commandline Parameter와 함께 별도의 프로세스로 실행된다.
-시나리오 편집기는 `ScenarioEditorMap`에서 제공하며, MainMenu는 에디터 내부 기능을 구현하지 않고 에디터 map으로 진입하는 역할만 맡는다.
+그냥 켜면 `StartupMap`에서 project 선택/생성 UI가 실행되고, project 선택 후 `ScenarioEditorMap`으로 전환된다.
+시뮬레이터는 Commandline Parameter와 함께 별도의 프로세스로 실행된다.
+시나리오 편집기는 `ScenarioEditorMap`에서 제공하며, `WBP_MainMenu`는 해당 map 안에서 control/workspace UI와 ScenarioEditor root widget을 함께 표시한다.
 
 ### Main Window
 
@@ -57,7 +73,8 @@ specs:
 ### 시나리오 편집기
 
 - 특정 시나리오 구성 JSON 파일을 열어 시각적으로 표현. Editor Level은 `ScenarioEditorMap`에서 실행
-- 에디터 UI와 authoring 기능은 에디터 담당 작업자의 소유로 두고, Platform 작업은 MainMenu에서 `ScenarioEditorMap`으로 진입하는 Level 전환만 담당
+- 에디터 UI와 authoring 기능은 `ScenarioEditorMap`과 `AScenarioEditorController`가 소유한다
+- Platform 작업은 Startup UI에서 active project를 설정하고 `ScenarioEditorMap`으로 진입하는 Level 전환을 담당
 - MVP에서는 MainMenu와 ScenarioEditorMap을 같은 Unreal process의 별도 map으로 취급한다. 같은 process 안에서 두 map을 각각 독립 창으로 동시에 실행하는 구조는 구현하지 않는다
 - 월드 뷰: 액터 배치 및 시뮬레이션 환경 시각화. 액터를 클릭하여 속성 패널에서 편집 가능
 - 시나리오 구성 트리: 시나리오 구성 요소를 트리 형태로 표시, 각 요소 클릭 시 속성 패널에 상세 정보 표시
@@ -112,7 +129,7 @@ specs:
 | Measurement log           | 구현    | `UEpisodeMeasurementLogSubsystem`                                       | 결과 분석 Agent와 결과 상세 화면의 raw log 기반                        |
 | Map 분리                  | 구현    | `ScenarioSimulationMap`, `ScenarioEditorMap`                              | 시뮬레이션 실행과 시나리오 편집 map을 분리                             |
 | Remote policy API         | 범위 밖 | `UDeliveryBot_PolicyJudgmentComponent`                                  | 로봇 담당 작업자의 구현 범위                                           |
-| Platform UI               | 구현    | `AMainMenuPlayerController`, `UMainMenuWidget`                          | MainMenu에서 simulation 실행과 status/report/log 조회 가능             |
+| Platform UI               | 구현    | `UStartupMenuWidget`, `UMainMenuWidget`, `AScenarioEditorController`     | Startup project 선택 후 ScenarioEditorMap workspace에서 실행/status/result 조회 가능 |
 | Simulator CLI bootstrap   | 구현    | `USimulatorProcessSubsystem`, `FSimulationCommandLine`                 | `-Simulate=<SimulationSetupFile>` 감지, fixed-step 적용, map load, runner 시작, status 기록 |
 | LLM 연동                  | 미구현  | 관련 source 없음                                                        | 후순위 구현 대상                                                       |
 
@@ -136,7 +153,7 @@ specs:
 - `ScenarioSimulationMap`의 spawn 실행을 먼저 연결
 - `ScenarioEditorMap` 내부 authoring, spawn/preview, 저장 흐름은 에디터 담당 작업자 소유로 두고 Platform에서는 직접 구현하지 않음
 - MainMenu에서 `ScenarioEditorMap`을 열 때는 같은 process 안의 `OpenLevel` 기반 전환을 MVP 기본값으로 둠
-- 같은 Unreal process 안에서 MainMenuMap과 ScenarioEditorMap을 각각 별도 runtime window로 동시에 띄우는 구조는 `SWindow`만으로 해결되지 않고 별도 `UWorld`/viewport lifecycle 관리가 필요하므로 MVP 범위에서 제외
+- 같은 Unreal process 안에서 StartupMap과 ScenarioEditorMap을 각각 별도 runtime window로 동시에 띄우는 구조는 `SWindow`만으로 해결되지 않고 별도 `UWorld`/viewport lifecycle 관리가 필요하므로 MVP 범위에서 제외
 - 에디터를 MainMenu와 동시에 유지해야 하는 요구가 생기면, 별도 Unreal process를 실행하는 launcher 방식으로 확장한다
 - LLM 서버는 runtime 필수 의존성이 아니라 파일 생성, 분석, 수정 제안 도구로 둔다
 
@@ -276,7 +293,7 @@ T04로 남긴 범위:
 수동/후속 확인:
 - Platform UI에서 Start Run 버튼으로 실제 simulator window가 뜨고 terminal status에서 종료되는지 화면 확인
 - packaged exe가 생기면 같은 executable self-launch 경로로 `-Simulate=<SimulationSetupFile>`, `-RunId=<RunId>`가 전달되는지 확인
-- packaged build에서 `MainMenuMap`, `ScenarioSimulationMap`, `Json/Input`, `Json/Output` staging/cook 설정 확인
+- packaged build에서 `StartupMap`, `ScenarioEditorMap`, `ScenarioSimulationMap`, `Json/Input`, `Json/Output` staging/cook 설정 확인
 
 ### T05 Platform 최소 실행 화면 구현 [x]
 
@@ -301,19 +318,15 @@ T04로 남긴 범위:
 - UI는 simulator world object를 직접 참조하지 않음
 
 구현 위치:
-- [MainMenuPlayerController.h](x:/UE5/Proto-Unreal/Source/OdiroSim/Public/Platform/MainMenuPlayerController.h): MainMenu widget 생성, viewport 부착, menu input mode 적용
-- [MainMenuPlayerController.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Platform/MainMenuPlayerController.cpp): `WBP_MainMenu` class resolution, widget lifecycle, cursor/input mode 관리
-- [BP_MainMenuGameMode.uasset](x:/UE5/Proto-Unreal/Content/Blueprints/MainMenu/BP_MainMenuGameMode.uasset): MainMenuMap이 `AMainMenuPlayerController`를 사용하도록 연결하는 Blueprint GameMode
-- [MainMenuWidget.h](x:/UE5/Proto-Unreal/Source/OdiroSim/Public/Platform/Widget/MainMenuWidget.h): `WBP_MainMenu` binding 계약과 platform event handler
-- [MainMenuWidget.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Platform/Widget/MainMenuWidget.cpp): `BindWidget` control wiring, `Json/Input` setup 목록, fixed-step FPS 저장, run 시작, status/report/log preview 표시
+- [StartupMenuWidget.h](x:/UE5/Proto-Unreal/Source/OdiroSim/Public/Platform/Widget/StartupMenuWidget.h): StartupMap project 선택/생성 UI와 viewport bootstrap helper
+- [StartupMenuWidget.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Platform/Widget/StartupMenuWidget.cpp): project 선택/생성, active project 저장, Startup menu input mode 적용
+- [MainMenuWidget.h](x:/UE5/Proto-Unreal/Source/OdiroSim/Public/Platform/Widget/MainMenuWidget.h): `WBP_MainMenu` workspace binding 계약과 platform event handler
+- [MainMenuWidget.cpp](x:/UE5/Proto-Unreal/Source/OdiroSim/Private/Platform/Widget/MainMenuWidget.cpp): active project 기반 run 시작, status/result/log preview 표시
 
 수동/후속 확인:
-- `MainMenuMap`의 World Settings에서 GameMode Override를 `BP_MainMenuGameMode`로 지정한다
-- `WBP_MainMenu`를 직접 지정하려면 `MainMenuPlayerController`를 상속한 Blueprint에서 `MainWidgetClass`를 설정하고, GameMode의 Player Controller Class를 그 Blueprint로 지정한다
 - `WBP_MainMenu`가 정식 MainMenu layout이다. `BindWidget` 이름/타입 불일치는 C++ fallback 없이 버그로 보고 수정한다
-- 실제 MainMenuMap 화면 표시와 버튼 클릭은 visible run 또는 PIE에서 확인해야 한다
+- 실제 StartupMap → ScenarioEditorMap 흐름과 버튼 클릭은 visible run 또는 PIE에서 확인해야 한다
 - measurement JSONL preview는 전체 tick load 대신 앞/뒤 일부 line preview만 표시한다. event 중심 필터링 UI는 T06 이후 사용성 확장에서 보강한다
-- `MainMenuMap`은 Platform 메뉴와 3D 배경을 둘 수 있는 user-facing world로 유지한다. Platform UI는 이 world 위에 overlay로 표시하며, map이 비어 있거나 배경 actor가 있어도 같은 경로로 동작해야 한다
 
 ### T06 실험 설정 편집 구현 [x]
 
@@ -336,7 +349,7 @@ T04로 남긴 범위:
 - `OdiroSim.SimulationSetup` automation과 `OdiroSim.SimulatorLaunch` automation 통과
 
 수동/후속 확인:
-- 실제 `MainMenuMap` visible run 또는 PIE에서 `WBP_MainMenu`가 화면에 표시되고 버튼 클릭이 가능한지 확인
+- 실제 `StartupMap` visible run 또는 PIE에서 `WBP_StartupMenu`가 표시되고, project 선택 후 `ScenarioEditorMap`의 `WBP_MainMenu` 버튼 클릭이 가능한지 확인
 - `WBP_MainMenu` layout 변경 시 `UMainMenuWidget`의 `BindWidget` 이름과 타입을 맞춘다
 - 새 SimulationSetup 파일 생성은 path 입력 후 `Save Setup`으로 가능하지만, MVP UI에는 별도 "Create Setup" 버튼을 두지 않음
 
@@ -353,7 +366,6 @@ T04로 남긴 범위:
 - MainMenu에서 선택한 ScenarioSetup 파일을 기준으로 `ScenarioEditorMap`을 연다
 - MVP에서는 같은 process 안에서 `OpenLevel`로 전환한다
 - `UScenarioEditorLaunchSubsystem`이 선택한 ScenarioSetup path를 보관하고 `ScenarioEditorMap` load 후 `AScenarioEditorController::LoadScenarioSetupJsonFile` 자동 호출을 시도한다
-- MainMenuMap과 ScenarioEditorMap을 동시에 유지하는 별도 runtime window 구조는 MVP 범위에서 제외한다
 - 후속으로 에디터를 별도 프로세스로 열 필요가 생기면 `-EditScenario=<ScenarioSetupFile>` 같은 명시적 command line 계약을 추가한다
 
 검증:
@@ -440,9 +452,9 @@ T04로 남긴 범위:
 
 ### T05 완료
 
-- `AMainMenuPlayerController`가 MainMenu widget을 viewport에 붙이고 menu input mode를 관리
-- `UMainMenuWidget`이 setup 목록, fixed-step FPS 저장, run 시작, status/report/log preview를 제공
-- `BP_MainMenuGameMode`와 `WBP_MainMenu`를 추가하고 `MainMenuMap`에 연결
+- `UStartupMenuWidget`이 StartupMap project 선택/생성을 담당하고 active project 저장 후 ScenarioEditorMap으로 전환
+- `UMainMenuWidget`이 active project 기반 run 시작, status/result/log preview를 제공
+- `AScenarioEditorController`가 `WBP_MainMenu`를 ScenarioEditorMap viewport에 붙이고 editor root child를 등록
 - Platform UI는 simulator world object를 직접 참조하지 않고 status/report/log 파일만 읽음
 
 ### T06 완료

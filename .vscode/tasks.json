@@ -1,0 +1,136 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build",
+      "type": "shell",
+      "command": "cmd.exe /d /c call \"${workspaceFolder}\\task-build.bat\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "silent",
+        "focus": false,
+        "panel": "dedicated",
+        "clear": true,
+        "showReuseMessage": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Setup",
+      "type": "shell",
+      "command": "cmd.exe /d /c call \"${workspaceFolder}\\task-setup.bat\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Push & Open Pull Request",
+      "type": "shell",
+      "command": "cmd.exe /d /c call \"${workspaceFolder}\\task-push.bat\" ${input:pushArgs}",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Force Unlock",
+      "type": "shell",
+      "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}\\tools\\manual-unlock.ps1\" -Path \"${input:manualUnlockPath}\" -Unlock -ConfirmPath \"${input:manualUnlockConfirmPath}\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Git LFS Locks: Watch Status",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\tools\\list-lfs-locks.ps1",
+        "-ProblemMatcher",
+        "-Watch",
+        "-OnlyWhenVSCodeActive",
+        "-IntervalSeconds",
+        "60"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
+      "presentation": {
+        "reveal": "never",
+        "revealProblems": "always",
+        "focus": false,
+        "panel": "dedicated",
+        "clear": true,
+        "showReuseMessage": false
+      },
+      "problemMatcher": {
+        "owner": "git-lfs-locks",
+        "source": "Git LFS Locks",
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^(.+)\\((\\d+),(\\d+)\\):\\s+(warning|error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^Git LFS Locks refresh started$",
+          "endsPattern": "^Git LFS Locks refresh completed$"
+        }
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "pushArgs",
+      "type": "promptString",
+      "description": "Optional arguments for task-push.bat, e.g. -Draft, -DryRun, -AllowDirty",
+      "default": ""
+    },
+    {
+      "id": "manualUnlockPath",
+      "type": "promptString",
+      "description": "Repository-relative Git LFS lock path",
+      "default": "Client/Content/"
+    },
+    {
+      "id": "manualUnlockConfirmPath",
+      "type": "promptString",
+      "description": "Type the same repository-relative path again to force unlock"
+    }
+  ]
+}

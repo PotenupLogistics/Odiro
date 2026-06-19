@@ -3,7 +3,7 @@ id: bridge-host
 owner: Bridge
 paths:
   - Bridge/**
-  - static/project-templates/**
+  - static/templates/**
   - static/run-defaults/**
   - contracts/specs/bridge-ipc.md
 entry:
@@ -14,7 +14,7 @@ entry:
   - Bridge/internal/process
   - Bridge/internal/protocol
   - Bridge/internal/workspace
-  - static/project-templates
+  - static/templates
   - static/run-defaults
   - Bridge/internal/tooling
   - Bridge/tools/common.ps1
@@ -28,8 +28,8 @@ keep:
   - Bridge exposes local IPC only; do not introduce HTTP ports for Controller communication without a contract update.
   - IPC transport is selected by Go build tags: Windows named pipe, Unix domain socket.
   - Shared observable IPC messages are documented in contracts/specs/bridge-ipc.md.
-  - static/project-templates and static/run-defaults are the user project migration resource sources.
-  - Workspace template validation rejects generated Python cache; run creation copies snapshots and excludes source-only `.gitkeep` markers.
+  - static/templates and static/run-defaults are the user project migration resource sources.
+  - Workspace preset validation rejects generated Python cache; run creation copies snapshots and excludes source-only `.gitkeep` markers.
   - Process manager validates existing run snapshots, starts simulator children, and persists `run_status` lifecycle JSON.
   - Bridge tools must not dot-source root tools/common.ps1; go test enforces this ownership boundary.
 verify:

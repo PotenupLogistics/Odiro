@@ -212,23 +212,23 @@ bool FScenarioDocumentJsonInvalidProjectScenarioRejectedTest::RunTest(const FStr
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FScenarioDocumentJsonProjectTemplateFilesParseTest,
-	"OdiroSim.ScenarioDocument.Json.ProjectTemplateFilesParse",
+	FScenarioDocumentJsonProjectPresetFilesParseTest,
+	"OdiroSim.ScenarioDocument.Json.ProjectPresetFilesParse",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FScenarioDocumentJsonProjectTemplateFilesParseTest::RunTest(const FString& Parameters)
+bool FScenarioDocumentJsonProjectPresetFilesParseTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 
-	const FString TemplateRoot = FPaths::ConvertRelativePathToFull(
-		FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("static"), TEXT("project-templates")));
-	const FString TemplateIds[] = { TEXT("blank"), TEXT("demo") };
-	for (const FString& TemplateId : TemplateIds)
+	const FString presetRoot = FPaths::ConvertRelativePathToFull(
+		FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("static"), TEXT("templates"), TEXT("scenario")));
+	const FString presetIds[] = { TEXT("blank"), TEXT("curved-road"), TEXT("demo") };
+	for (const FString& presetId : presetIds)
 	{
-		const FString ScenarioPath = FPaths::Combine(TemplateRoot, TemplateId, TEXT("scenario.json"));
-		const FScenarioDocumentParseResult Result = FScenarioDocumentJson::ParseProjectScenarioFromFile(ScenarioPath);
-		TestTrue(FString::Printf(TEXT("%s scenario parses"), *TemplateId), Result.bSuccess);
-		TestEqual(FString::Printf(TEXT("%s diagnostics"), *TemplateId), Result.Diagnostics.Num(), 0);
+		const FString scenarioPath = FPaths::Combine(presetRoot, FString::Printf(TEXT("%s.json"), *presetId));
+		const FScenarioDocumentParseResult result = FScenarioDocumentJson::ParseProjectScenarioFromFile(scenarioPath);
+		TestTrue(FString::Printf(TEXT("%s scenario parses"), *presetId), result.bSuccess);
+		TestEqual(FString::Printf(TEXT("%s diagnostics"), *presetId), result.Diagnostics.Num(), 0);
 	}
 
 	return true;

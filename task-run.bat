@@ -1,4 +1,4 @@
-@rem Entry point for product-like local run; runs Agents API and Client preview.
+@rem Entry point for product-like local run; runs Agents API, Bridge service, and Client preview.
 @echo off
 setlocal EnableExtensions
 

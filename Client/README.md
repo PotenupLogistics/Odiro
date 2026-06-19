@@ -18,7 +18,7 @@
 - `Task-RunPreview.bat`: Standalone PIE 실행 (`UnrealEditor.exe <uproject> -game -NoSplash`)
   - user project run: `-OdiroProject=<UserProject> -RunId=<RunId> [-PolicyPort=<Port>]`
 - `Task-RunPythonPolicyServer.bat`: `Resources\policy-runtime.py` 실행
-- `.run/GeneratePreviewConfigs.ps1`: Rider 시작 시 `.run/*.local.run.xml` Preview 실행 설정 생성
-  - `OdiroSim.uproject`의 `EngineAssociation` 기반으로 로컬 Unreal Editor 경로 탐색
-  - 생성된 `*.local.run.xml`은 사용자별 절대 경로를 담으므로 git에서 제외
-- `.run/SetEnginePath.ps1`: `UE_INSTALL_DIR` Path Variable 수동 설정용 보조 스크립트
+- Rider `.run/*.run.xml`: `task-setup.bat` 실행 시 `tools/sync-ide-run-configs.ps1`가 루트 VSCode 실행/태스크 흐름과 맞춰 생성
+  - `Preview Services`: `Preview Mode` 디버깅 전 Agents API와 Bridge service 실행
+  - `Preview Mode`: Rider Unreal 실행 설정으로 Client preview mode 실행. C++ 디버깅 가능
+  - `Preview Mode With Flags`: preview flag 입력 후 Client preview mode 실행. C++ 디버깅 가능

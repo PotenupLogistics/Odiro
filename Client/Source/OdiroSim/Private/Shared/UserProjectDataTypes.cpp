@@ -728,6 +728,12 @@ namespace
 		return object.TryGetNumberField(fieldName, value) ? value : defaultValue;
 	}
 
+	bool ReadBoolOrDefault(const FJsonObject& object, const FString& fieldName, bool defaultValue)
+	{
+		bool value = defaultValue;
+		return object.TryGetBoolField(fieldName, value) ? value : defaultValue;
+	}
+
 	FString GetEpisodeIdForOutput(const FEpisodeRunRecord& runRecord)
 	{
 		if (FUserProjectEpisodeScenarioJson::IsValidEpisodeId(runRecord.EpisodeId))
@@ -949,8 +955,670 @@ namespace
 		return CloneJsonValue(rootObject.TryGetField(fieldName));
 	}
 
+	TSharedPtr<FJsonObject> TryGetObjectFieldOrNull(
+		const FJsonObject& rootObject,
+		const FString& fieldName)
+	{
+		const TSharedPtr<FJsonValue> fieldValue = rootObject.TryGetField(fieldName);
+		if (!fieldValue.IsValid() || fieldValue->Type != EJson::Object)
+		{
+			return nullptr;
+		}
+
+		return fieldValue->AsObject();
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* TryGetArrayFieldByName(
+		const FJsonObject& rootObject,
+		const FString& fieldName)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* values = nullptr;
+		return rootObject.TryGetArrayField(fieldName, values) ? values : nullptr;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* TryGetArrayFieldByNames(
+		const FJsonObject& rootObject,
+		const FString& firstFieldName,
+		const FString& secondFieldName)
+	{
+		if (const TArray<TSharedPtr<FJsonValue>>* values = TryGetArrayFieldByName(rootObject, firstFieldName))
+		{
+			return values;
+		}
+
+		return TryGetArrayFieldByName(rootObject, secondFieldName);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> CloneArrayFieldOrEmpty(
+		const FJsonObject& rootObject,
+		const FString& firstFieldName,
+		const FString& secondFieldName = FString())
+	{
+		const TArray<TSharedPtr<FJsonValue>>* values = secondFieldName.IsEmpty()
+			? TryGetArrayFieldByName(rootObject, firstFieldName)
+			: TryGetArrayFieldByNames(rootObject, firstFieldName, secondFieldName);
+		if (!values)
+		{
+			return {};
+		}
+
+		TArray<TSharedPtr<FJsonValue>> clonedValues;
+		clonedValues.Reserve(values->Num());
+		for (const TSharedPtr<FJsonValue>& value : *values)
+		{
+			clonedValues.Add(CloneJsonValue(value));
+		}
+		return clonedValues;
+	}
+
+	TSharedRef<FJsonObject> MakePointObjectFromCm(const TSharedPtr<FJsonObject>& pointObject)
+	{
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		if (!pointObject.IsValid())
+		{
+			return object;
+		}
+
+		object->SetNumberField(TEXT("x"), ReadNumberOrDefault(*pointObject, TEXT("x"), 0.0) / 100.0);
+		object->SetNumberField(TEXT("y"), ReadNumberOrDefault(*pointObject, TEXT("y"), 0.0) / 100.0);
+		object->SetNumberField(TEXT("z"), ReadNumberOrDefault(*pointObject, TEXT("z"), 0.0) / 100.0);
+		return object;
+	}
+
+	TSharedPtr<FJsonValue> MakePointFieldValueFromCmOrNull(
+		const FJsonObject& rootObject,
+		const FString& fieldName)
+	{
+		if (const TSharedPtr<FJsonObject> pointObject = TryGetObjectFieldOrNull(rootObject, fieldName))
+		{
+			return MakeShared<FJsonValueObject>(MakePointObjectFromCm(pointObject));
+		}
+
+		return MakeShared<FJsonValueNull>();
+	}
+
+	TArray<TSharedPtr<FJsonValue>> MakePointArrayFromCm(
+		const FJsonObject& rootObject,
+		const FString& fieldName)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* sourceValues = TryGetArrayFieldByName(rootObject, fieldName);
+		if (!sourceValues)
+		{
+			return {};
+		}
+
+		TArray<TSharedPtr<FJsonValue>> result;
+		result.Reserve(sourceValues->Num());
+		for (const TSharedPtr<FJsonValue>& sourceValue : *sourceValues)
+		{
+			if (!sourceValue.IsValid() || sourceValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			result.Add(MakeShared<FJsonValueObject>(MakePointObjectFromCm(sourceValue->AsObject())));
+		}
+		return result;
+	}
+
+	void SetTargetIdField(TSharedRef<FJsonObject> targetObject, const FJsonObject& sourceObject, const FString& fieldName)
+	{
+		const FString targetId = ReadStringOrDefault(sourceObject, fieldName).TrimStartAndEnd();
+		if (targetId.IsEmpty())
+		{
+			targetObject->SetField(TEXT("target_id"), MakeShared<FJsonValueNull>());
+			return;
+		}
+
+		targetObject->SetStringField(TEXT("target_id"), targetId);
+	}
+
+	void SetTargetIdField(TSharedRef<FJsonObject> targetObject, const FJsonObject& sourceObject)
+	{
+		SetTargetIdField(targetObject, sourceObject, TEXT("targetId"));
+	}
+
+	void SetTargetTagsField(TSharedRef<FJsonObject> targetObject, const FJsonObject& sourceObject)
+	{
+		TArray<TSharedPtr<FJsonValue>> tags = CloneArrayFieldOrEmpty(sourceObject, TEXT("targetTags"), TEXT("actorTags"));
+		targetObject->SetArrayField(TEXT("target_tags"), tags);
+	}
+
+	TSharedRef<FJsonObject> MakeRobotActionRayObject(
+		const FJsonObject& sourceObject,
+		bool bIncludeYaw,
+		bool bIncludePitch,
+		bool bIncludeHitLocation)
+	{
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		object->SetBoolField(TEXT("hit"), ReadBoolOrDefault(sourceObject, TEXT("hit"), false));
+		object->SetNumberField(TEXT("distance_m"), ReadNumberOrDefault(sourceObject, TEXT("distanceM"), 0.0));
+
+		double rayIndex = 0.0;
+		if (sourceObject.TryGetNumberField(TEXT("rayIndex"), rayIndex))
+		{
+			object->SetNumberField(TEXT("ray_index"), rayIndex);
+		}
+		else
+		{
+			object->SetField(TEXT("ray_index"), MakeShared<FJsonValueNull>());
+		}
+
+		if (bIncludeYaw)
+		{
+			object->SetNumberField(TEXT("yaw_degree"), ReadNumberOrDefault(sourceObject, TEXT("yawDegree"), 0.0));
+		}
+		if (bIncludePitch)
+		{
+			object->SetNumberField(TEXT("pitch_degree"), ReadNumberOrDefault(sourceObject, TEXT("pitchDegree"), 0.0));
+		}
+		if (bIncludeHitLocation)
+		{
+			object->SetField(TEXT("hit_location_cm"), CloneFieldOrNull(sourceObject, TEXT("hitLocationCm")));
+		}
+
+		SetTargetIdField(object, sourceObject);
+		SetTargetTagsField(object, sourceObject);
+		return object;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> MakeRobotActionRayArray(
+		const FJsonObject& lidarObject,
+		const FString& camelCaseFieldName,
+		const FString& snakeCaseFieldName,
+		bool bIncludeYaw,
+		bool bIncludePitch,
+		bool bIncludeHitLocation)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* sourceValues = TryGetArrayFieldByNames(lidarObject, camelCaseFieldName, snakeCaseFieldName);
+		if (!sourceValues)
+		{
+			return {};
+		}
+
+		TArray<TSharedPtr<FJsonValue>> result;
+		result.Reserve(sourceValues->Num());
+		for (const TSharedPtr<FJsonValue>& sourceValue : *sourceValues)
+		{
+			if (!sourceValue.IsValid() || sourceValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			result.Add(MakeShared<FJsonValueObject>(MakeRobotActionRayObject(
+				*sourceValue->AsObject(),
+				bIncludeYaw,
+				bIncludePitch,
+				bIncludeHitLocation)));
+		}
+		return result;
+	}
+
+	FString NormalizePolicyRaySelectionMode(const FString& mode)
+	{
+		const FString normalizedMode = mode.TrimStartAndEnd().ToLower();
+		if (normalizedMode == TEXT("oned") || normalizedMode == TEXT("1d"))
+		{
+			return TEXT("1d");
+		}
+		if (normalizedMode == TEXT("twod") || normalizedMode == TEXT("2d"))
+		{
+			return TEXT("2d");
+		}
+		if (normalizedMode == TEXT("threed") || normalizedMode == TEXT("3d"))
+		{
+			return TEXT("3d");
+		}
+		if (normalizedMode == TEXT("legacy2d"))
+		{
+			return TEXT("legacy2d");
+		}
+		if (normalizedMode == TEXT("none"))
+		{
+			return TEXT("none");
+		}
+		return normalizedMode;
+	}
+
+	FString ResolvePolicyRaySelectionSource(const FString& mode)
+	{
+		if (mode == TEXT("1d"))
+		{
+			return TEXT("lidar.rays_1d");
+		}
+		if (mode == TEXT("2d"))
+		{
+			return TEXT("lidar.rays_2d");
+		}
+		if (mode == TEXT("3d"))
+		{
+			return TEXT("lidar.rays_3d.nearest_vertical_by_yaw");
+		}
+		if (mode == TEXT("legacy2d"))
+		{
+			return TEXT("legacy.lidarRays");
+		}
+		return TEXT("none");
+	}
+
+	FString NormalizePolicyRaySelectionSource(const FString& source)
+	{
+		const FString trimmedSource = source.TrimStartAndEnd();
+		if (trimmedSource == TEXT("lidar.rays1d"))
+		{
+			return TEXT("lidar.rays_1d");
+		}
+		if (trimmedSource == TEXT("lidar.rays2d"))
+		{
+			return TEXT("lidar.rays_2d");
+		}
+		if (trimmedSource == TEXT("lidar.rays3d.nearest_vertical_by_yaw"))
+		{
+			return TEXT("lidar.rays_3d.nearest_vertical_by_yaw");
+		}
+		return trimmedSource;
+	}
+
+	FString ResolvePolicyRaySelectionModeFromLidar(
+		const TSharedPtr<FJsonObject>& lidarObject,
+		int32 ray1DCount,
+		int32 ray2DCount,
+		int32 ray3DCount,
+		int32 legacyRayCount)
+	{
+		const FString lidarMode = lidarObject.IsValid()
+			? ReadStringOrDefault(*lidarObject, TEXT("mode"))
+			: FString();
+		const FString normalizedLidarMode = lidarMode.TrimStartAndEnd().ToLower();
+
+		if (normalizedLidarMode == TEXT("oned") || normalizedLidarMode == TEXT("1d"))
+		{
+			return TEXT("1d");
+		}
+		if (normalizedLidarMode == TEXT("twod")
+			|| normalizedLidarMode == TEXT("2d")
+			|| normalizedLidarMode == TEXT("onedandtwod")
+			|| normalizedLidarMode == TEXT("twodandthreed"))
+		{
+			return TEXT("2d");
+		}
+		if (normalizedLidarMode == TEXT("threed") || normalizedLidarMode == TEXT("3d"))
+		{
+			return TEXT("3d");
+		}
+		if (normalizedLidarMode == TEXT("all"))
+		{
+			if (ray2DCount > 0)
+			{
+				return TEXT("2d");
+			}
+			if (ray3DCount > 0)
+			{
+				return TEXT("3d");
+			}
+			if (ray1DCount > 0)
+			{
+				return TEXT("1d");
+			}
+			return legacyRayCount > 0 ? TEXT("legacy2d") : TEXT("2d");
+		}
+
+		if (ray2DCount > 0)
+		{
+			return TEXT("2d");
+		}
+		if (ray3DCount > 0)
+		{
+			return TEXT("3d");
+		}
+		if (ray1DCount > 0)
+		{
+			return TEXT("1d");
+		}
+		if (legacyRayCount > 0)
+		{
+			return TEXT("legacy2d");
+		}
+		return TEXT("none");
+	}
+
+	int32 CountProjected3DPolicyRays(const TArray<TSharedPtr<FJsonValue>>& ray3DValues)
+	{
+		TSet<int32> yawKeys;
+		for (const TSharedPtr<FJsonValue>& rayValue : ray3DValues)
+		{
+			if (!rayValue.IsValid() || rayValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			double yawDegree = 0.0;
+			if (rayValue->AsObject()->TryGetNumberField(TEXT("yaw_degree"), yawDegree))
+			{
+				yawKeys.Add(FMath::RoundToInt(yawDegree * 100.0));
+			}
+		}
+		return yawKeys.Num();
+	}
+
+	bool TryCalculateHorizontalPitchDegree(const TArray<TSharedPtr<FJsonValue>>& ray3DValues, double& outPitchDegree)
+	{
+		outPitchDegree = 0.0;
+		bool bFoundRay = false;
+		double bestAbsPitchDegree = TNumericLimits<double>::Max();
+
+		for (const TSharedPtr<FJsonValue>& rayValue : ray3DValues)
+		{
+			if (!rayValue.IsValid() || rayValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			double pitchDegree = 0.0;
+			if (!rayValue->AsObject()->TryGetNumberField(TEXT("pitch_degree"), pitchDegree))
+			{
+				continue;
+			}
+
+			const double absPitchDegree = FMath::Abs(pitchDegree);
+			if (!bFoundRay || absPitchDegree < bestAbsPitchDegree)
+			{
+				bFoundRay = true;
+				bestAbsPitchDegree = absPitchDegree;
+			}
+		}
+
+		if (bFoundRay)
+		{
+			outPitchDegree = bestAbsPitchDegree;
+		}
+		return bFoundRay;
+	}
+
+	TSharedRef<FJsonObject> MakePolicyRaySelectionObject(
+		const FJsonObject& requestObject,
+		const TSharedPtr<FJsonObject>& lidarObject,
+		int32 ray1DCount,
+		int32 ray2DCount,
+		const TArray<TSharedPtr<FJsonValue>>& ray3DValues)
+	{
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+
+		const TArray<TSharedPtr<FJsonValue>>* legacyPolicyRays = TryGetArrayFieldByName(requestObject, TEXT("lidarRays"));
+		const int32 legacyRayCount = legacyPolicyRays ? legacyPolicyRays->Num() : 0;
+		const int32 ray3DCount = ray3DValues.Num();
+
+		TSharedPtr<FJsonObject> selectionObject;
+		if (lidarObject.IsValid())
+		{
+			selectionObject = TryGetObjectFieldOrNull(*lidarObject, TEXT("policyRaySelection"));
+			if (!selectionObject.IsValid())
+			{
+				selectionObject = TryGetObjectFieldOrNull(*lidarObject, TEXT("policy_ray_selection"));
+			}
+		}
+
+		if (selectionObject.IsValid())
+		{
+			const FString mode = NormalizePolicyRaySelectionMode(ReadStringOrDefault(
+				*selectionObject,
+				TEXT("mode"),
+				ReadStringOrDefault(*selectionObject, TEXT("family"), TEXT("none"))));
+			const FString source = NormalizePolicyRaySelectionSource(ReadStringOrDefault(
+				*selectionObject,
+				TEXT("source"),
+				ResolvePolicyRaySelectionSource(mode)));
+			object->SetStringField(TEXT("mode"), mode.IsEmpty() ? TEXT("none") : mode);
+			object->SetStringField(TEXT("source"), source.IsEmpty() ? ResolvePolicyRaySelectionSource(mode) : source);
+			object->SetNumberField(TEXT("ray_count"), ReadNumberOrDefault(*selectionObject, TEXT("rayCount"), ReadNumberOrDefault(*selectionObject, TEXT("ray_count"), 0.0)));
+			if (selectionObject->HasField(TEXT("horizontalPitchDegree")) || selectionObject->HasField(TEXT("horizontal_pitch_degree")))
+			{
+				object->SetNumberField(TEXT("horizontal_pitch_degree"), ReadNumberOrDefault(*selectionObject, TEXT("horizontalPitchDegree"), ReadNumberOrDefault(*selectionObject, TEXT("horizontal_pitch_degree"), 0.0)));
+			}
+			else
+			{
+				object->SetField(TEXT("horizontal_pitch_degree"), MakeShared<FJsonValueNull>());
+			}
+			return object;
+		}
+
+		const FString mode = ResolvePolicyRaySelectionModeFromLidar(
+			lidarObject,
+			ray1DCount,
+			ray2DCount,
+			ray3DCount,
+			legacyRayCount);
+		object->SetStringField(TEXT("mode"), mode);
+		object->SetStringField(TEXT("source"), ResolvePolicyRaySelectionSource(mode));
+
+		if (mode == TEXT("2d"))
+		{
+			object->SetNumberField(TEXT("ray_count"), ray2DCount);
+		}
+		else if (mode == TEXT("3d"))
+		{
+			object->SetNumberField(TEXT("ray_count"), CountProjected3DPolicyRays(ray3DValues));
+		}
+		else if (mode == TEXT("1d"))
+		{
+			object->SetNumberField(TEXT("ray_count"), ray1DCount);
+		}
+		else if (mode == TEXT("legacy2d"))
+		{
+			object->SetNumberField(TEXT("ray_count"), legacyRayCount);
+		}
+		else
+		{
+			object->SetNumberField(TEXT("ray_count"), 0);
+		}
+
+		double horizontalPitchDegree = 0.0;
+		if (mode == TEXT("3d") && TryCalculateHorizontalPitchDegree(ray3DValues, horizontalPitchDegree))
+		{
+			object->SetNumberField(TEXT("horizontal_pitch_degree"), horizontalPitchDegree);
+		}
+		else
+		{
+			object->SetField(TEXT("horizontal_pitch_degree"), MakeShared<FJsonValueNull>());
+		}
+		return object;
+	}
+
+	TSharedRef<FJsonObject> MakeRobotActionLidarObject(const FJsonObject& requestObject)
+	{
+		const TSharedPtr<FJsonObject> lidarObject = TryGetObjectFieldOrNull(requestObject, TEXT("lidar"));
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+
+		object->SetStringField(TEXT("mode"), lidarObject.IsValid() ? ReadStringOrDefault(*lidarObject, TEXT("mode")) : FString());
+
+		TArray<TSharedPtr<FJsonValue>> ray1DValues;
+		TArray<TSharedPtr<FJsonValue>> ray2DValues;
+		TArray<TSharedPtr<FJsonValue>> ray3DValues;
+		if (lidarObject.IsValid())
+		{
+			ray1DValues = MakeRobotActionRayArray(*lidarObject, TEXT("rays1d"), TEXT("rays_1d"), false, false, false);
+			ray2DValues = MakeRobotActionRayArray(*lidarObject, TEXT("rays2d"), TEXT("rays_2d"), true, false, false);
+			ray3DValues = MakeRobotActionRayArray(*lidarObject, TEXT("rays3d"), TEXT("rays_3d"), true, true, true);
+		}
+
+		object->SetArrayField(TEXT("rays_1d"), ray1DValues);
+		object->SetArrayField(TEXT("rays_2d"), ray2DValues);
+		object->SetArrayField(TEXT("rays_3d"), ray3DValues);
+		object->SetObjectField(
+			TEXT("policy_ray_selection"),
+			MakePolicyRaySelectionObject(
+				requestObject,
+				lidarObject,
+				ray1DValues.Num(),
+				ray2DValues.Num(),
+				ray3DValues));
+		return object;
+	}
+
+	TSharedRef<FJsonObject> MakeRobotActionObservedObject(const FJsonObject& sourceObject)
+	{
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		SetTargetIdField(object, sourceObject);
+		SetTargetTagsField(object, sourceObject);
+		object->SetBoolField(TEXT("has_bounds"), ReadBoolOrDefault(sourceObject, TEXT("hasBounds"), false));
+		object->SetField(TEXT("bounds_origin_cm"), CloneFieldOrNull(sourceObject, TEXT("boundsOriginCm")));
+		object->SetField(TEXT("bounds_extent_cm"), CloneFieldOrNull(sourceObject, TEXT("boundsExtentCm")));
+		object->SetField(TEXT("closest_hit_location_cm"), CloneFieldOrNull(sourceObject, TEXT("closestHitLocationCm")));
+		object->SetNumberField(TEXT("closest_distance_m"), ReadNumberOrDefault(sourceObject, TEXT("closestDistanceM"), 0.0));
+		object->SetNumberField(TEXT("closest_ray_yaw_degree"), ReadNumberOrDefault(sourceObject, TEXT("closestRayYawDegree"), 0.0));
+		object->SetNumberField(TEXT("total_hit_ray_count"), ReadNumberOrDefault(sourceObject, TEXT("totalHitRayCount"), 0.0));
+		object->SetNumberField(TEXT("front_hit_ray_count"), ReadNumberOrDefault(sourceObject, TEXT("frontHitRayCount"), 0.0));
+		object->SetBoolField(TEXT("in_front"), ReadBoolOrDefault(sourceObject, TEXT("inFront"), false));
+		return object;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> MakeRobotActionObservedObjects(const FJsonObject& requestObject)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* sourceValues = TryGetArrayFieldByName(requestObject, TEXT("observedObjects"));
+		if (!sourceValues)
+		{
+			return {};
+		}
+
+		TArray<TSharedPtr<FJsonValue>> result;
+		result.Reserve(sourceValues->Num());
+		for (const TSharedPtr<FJsonValue>& sourceValue : *sourceValues)
+		{
+			if (!sourceValue.IsValid() || sourceValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			result.Add(MakeShared<FJsonValueObject>(MakeRobotActionObservedObject(*sourceValue->AsObject())));
+		}
+		return result;
+	}
+
+	TSharedRef<FJsonObject> MakeRobotActionRobotStateObject(const FJsonObject& requestObject)
+	{
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		const TSharedPtr<FJsonObject> robotStateObject = TryGetObjectFieldOrNull(requestObject, TEXT("robotState"));
+		if (!robotStateObject.IsValid())
+		{
+			object->SetNumberField(TEXT("x"), 0.0);
+			object->SetNumberField(TEXT("y"), 0.0);
+			object->SetNumberField(TEXT("z"), 0.0);
+			object->SetNumberField(TEXT("yaw_degree"), 0.0);
+			object->SetNumberField(TEXT("speed_kmh"), 0.0);
+			object->SetBoolField(TEXT("colliding"), false);
+			object->SetField(TEXT("collision_target_id"), MakeShared<FJsonValueNull>());
+			object->SetArrayField(TEXT("collision_target_tags"), {});
+			return object;
+		}
+
+		object->SetNumberField(TEXT("x"), ReadNumberOrDefault(*robotStateObject, TEXT("x"), 0.0) / 100.0);
+		object->SetNumberField(TEXT("y"), ReadNumberOrDefault(*robotStateObject, TEXT("y"), 0.0) / 100.0);
+		object->SetNumberField(TEXT("z"), ReadNumberOrDefault(*robotStateObject, TEXT("z"), 0.0) / 100.0);
+		object->SetNumberField(TEXT("yaw_degree"), ReadNumberOrDefault(*robotStateObject, TEXT("yawDegree"), 0.0));
+		object->SetNumberField(TEXT("speed_kmh"), ReadNumberOrDefault(*robotStateObject, TEXT("speedKmh"), 0.0));
+		object->SetBoolField(TEXT("colliding"), ReadBoolOrDefault(*robotStateObject, TEXT("colliding"), ReadBoolOrDefault(*robotStateObject, TEXT("bColliding"), false)));
+
+		const FString collisionTargetId = ReadStringOrDefault(*robotStateObject, TEXT("collisionTargetId")).TrimStartAndEnd();
+		if (collisionTargetId.IsEmpty())
+		{
+			object->SetField(TEXT("collision_target_id"), MakeShared<FJsonValueNull>());
+		}
+		else
+		{
+			object->SetStringField(TEXT("collision_target_id"), collisionTargetId);
+		}
+		object->SetArrayField(TEXT("collision_target_tags"), CloneArrayFieldOrEmpty(*robotStateObject, TEXT("collisionTargetTags"), TEXT("collisionActorTags")));
+		return object;
+	}
+
+	TSharedPtr<FJsonValue> MakeRobotActionActionValue(const TSharedPtr<FJsonObject>& responseObject)
+	{
+		const TSharedPtr<FJsonObject> actionObject = TryGetObjectFieldOrNull(responseObject, TEXT("action"));
+		if (!actionObject.IsValid())
+		{
+			return MakeShared<FJsonValueNull>();
+		}
+
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		object->SetNumberField(TEXT("steering"), ReadNumberOrDefault(*actionObject, TEXT("steering"), 0.0));
+		object->SetNumberField(TEXT("target_speed_kmh"), ReadNumberOrDefault(*actionObject, TEXT("targetSpeedKmh"), ReadNumberOrDefault(*actionObject, TEXT("target_speed_kmh"), 0.0)));
+		object->SetNumberField(TEXT("brake"), ReadNumberOrDefault(*actionObject, TEXT("brake"), 0.0));
+		object->SetStringField(TEXT("direction"), ReadStringOrDefault(*actionObject, TEXT("direction"), TEXT("Forward")));
+		return MakeShared<FJsonValueObject>(object);
+	}
+
+	TSharedPtr<FJsonValue> MakeRobotActionDecisionValue(const TSharedPtr<FJsonObject>& responseObject)
+	{
+		if (!responseObject.IsValid())
+		{
+			return MakeShared<FJsonValueNull>();
+		}
+
+		TSharedPtr<FJsonObject> decisionObject = TryGetObjectFieldOrNull(*responseObject, TEXT("decision"));
+		if (!decisionObject.IsValid())
+		{
+			decisionObject = TryGetObjectFieldOrNull(*responseObject, TEXT("debug"));
+		}
+
+		if (!decisionObject.IsValid())
+		{
+			return MakeShared<FJsonValueNull>();
+		}
+
+		const FString selectedPolicy = ReadStringOrDefault(*decisionObject, TEXT("selectedPolicy"), ReadStringOrDefault(*decisionObject, TEXT("selected_policy"))).TrimStartAndEnd();
+		const FString reason = ReadStringOrDefault(*decisionObject, TEXT("reason")).TrimStartAndEnd();
+		if (selectedPolicy.IsEmpty() && reason.IsEmpty())
+		{
+			return MakeShared<FJsonValueNull>();
+		}
+
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		object->SetStringField(TEXT("selected_policy"), selectedPolicy);
+		object->SetStringField(TEXT("reason"), reason);
+		return MakeShared<FJsonValueObject>(object);
+	}
+
+	TSharedRef<FJsonObject> MakeRobotActionPathObject(const TSharedPtr<FJsonObject>& responseObject)
+	{
+		TSharedPtr<FJsonObject> pathObject;
+		if (responseObject.IsValid())
+		{
+			pathObject = TryGetObjectFieldOrNull(*responseObject, TEXT("path"));
+			if (!pathObject.IsValid())
+			{
+				pathObject = TryGetObjectFieldOrNull(*responseObject, TEXT("debug"));
+			}
+		}
+
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		if (!pathObject.IsValid())
+		{
+			object->SetStringField(TEXT("path_status"), TEXT("empty"));
+			object->SetNumberField(TEXT("path_index"), 0);
+			object->SetNumberField(TEXT("path_length"), 0);
+			object->SetNumberField(TEXT("target_path_index"), 0);
+			object->SetField(TEXT("target_world_point"), MakeShared<FJsonValueNull>());
+			object->SetArrayField(TEXT("path_world_points"), {});
+			return object;
+		}
+
+		object->SetStringField(TEXT("path_status"), ReadStringOrDefault(*pathObject, TEXT("pathStatus"), ReadStringOrDefault(*pathObject, TEXT("path_status"), TEXT("empty"))));
+		object->SetNumberField(TEXT("path_index"), ReadNumberOrDefault(*pathObject, TEXT("pathIndex"), ReadNumberOrDefault(*pathObject, TEXT("path_index"), 0.0)));
+		object->SetNumberField(TEXT("path_length"), ReadNumberOrDefault(*pathObject, TEXT("pathLength"), ReadNumberOrDefault(*pathObject, TEXT("path_length"), 0.0)));
+		object->SetNumberField(TEXT("target_path_index"), ReadNumberOrDefault(*pathObject, TEXT("targetPathIndex"), ReadNumberOrDefault(*pathObject, TEXT("target_path_index"), 0.0)));
+		object->SetField(TEXT("target_world_point"), MakePointFieldValueFromCmOrNull(*pathObject, TEXT("targetWorldPoint")));
+		object->SetArrayField(TEXT("path_world_points"), MakePointArrayFromCm(*pathObject, TEXT("pathWorldPoints")));
+		return object;
+	}
+
 	double CalculateFrontHalfAngleDegree(const FJsonObject& requestObject)
 	{
+		double frontHalfAngleDegree = 0.0;
+		if (requestObject.TryGetNumberField(TEXT("frontHalfAngleDegree"), frontHalfAngleDegree))
+		{
+			return frontHalfAngleDegree;
+		}
+
 		const TArray<TSharedPtr<FJsonValue>>* lidarRayValues = nullptr;
 		if (!requestObject.TryGetArrayField(TEXT("lidarRays"), lidarRayValues) || !lidarRayValues)
 		{
@@ -1011,21 +1679,25 @@ namespace
 		object->SetNumberField(TEXT("version"), 1);
 		object->SetNumberField(TEXT("sequence"), ReadNumberOrDefault(requestObject, TEXT("sequence"), 0.0));
 		object->SetNumberField(TEXT("run_time_seconds"), ReadNumberOrDefault(requestObject, TEXT("runTimeSeconds"), 0.0));
+		object->SetNumberField(TEXT("sensor_sequence"), ReadNumberOrDefault(requestObject, TEXT("sensorSequence"), 0.0));
+		object->SetNumberField(TEXT("sensor_time_seconds"), ReadNumberOrDefault(requestObject, TEXT("sensorTimeSeconds"), 0.0));
 		object->SetStringField(TEXT("status"), bActionSucceeded ? TEXT("ok") : TEXT("error"));
 		object->SetNumberField(TEXT("front_half_angle_degree"), CalculateFrontHalfAngleDegree(requestObject));
-		object->SetField(TEXT("lidar_rays"), CloneFieldOrNull(requestObject, TEXT("lidarRays")));
-		object->SetField(TEXT("observed_objects"), CloneFieldOrNull(requestObject, TEXT("observedObjects")));
-		object->SetField(TEXT("robot_state"), CloneFieldOrNull(requestObject, TEXT("robotState")));
+		object->SetObjectField(TEXT("lidar"), MakeRobotActionLidarObject(requestObject));
+		object->SetArrayField(TEXT("observed_objects"), MakeRobotActionObservedObjects(requestObject));
+		object->SetObjectField(TEXT("robot_state"), MakeRobotActionRobotStateObject(requestObject));
 
 		if (responseObject.IsValid())
 		{
-			object->SetField(TEXT("action"), CloneFieldOrNull(*responseObject, TEXT("action")));
-			object->SetField(TEXT("path"), CloneFieldOrNull(*responseObject, TEXT("debug")));
+			object->SetField(TEXT("action"), MakeRobotActionActionValue(responseObject));
+			object->SetField(TEXT("decision"), MakeRobotActionDecisionValue(responseObject));
+			object->SetObjectField(TEXT("path"), MakeRobotActionPathObject(responseObject));
 		}
 		else
 		{
 			object->SetField(TEXT("action"), MakeShared<FJsonValueNull>());
-			object->SetObjectField(TEXT("path"), MakeShared<FJsonObject>());
+			object->SetField(TEXT("decision"), MakeShared<FJsonValueNull>());
+			object->SetObjectField(TEXT("path"), MakeRobotActionPathObject(nullptr));
 		}
 
 		if (!bActionSucceeded)

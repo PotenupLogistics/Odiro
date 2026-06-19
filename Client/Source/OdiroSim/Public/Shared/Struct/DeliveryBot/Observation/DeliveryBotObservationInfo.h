@@ -29,6 +29,14 @@ struct FDeliveryBotRobotStateInfo
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<FName> CollisionActorTags{};
+
+	// Scenario semantic id for the actor that triggered collision stop.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString CollisionTargetId{};
+
+	// Scenario semantic tags for the actor that triggered collision stop.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<FName> CollisionTargetTags{};
 };
 
 // Python이 로봇의 물리/센서 한계를 알기 위해 사용하는 정적 스펙 정보.

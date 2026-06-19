@@ -175,12 +175,16 @@ private:
 	FDeliveryBotMoveCommandInfo LastMoveCommandInfo{};
 
 	FString CollisionStopActorName{};
+	// Scenario semantic id for the current collision stop target.
+	FString CollisionStopTargetId{};
 	FString LastActionReason{ TEXT("unknown") };
 
 	bool bHasLastMoveCommand{ false };
 	bool bCollisionStopActive{ false };
 
 	TArray<FName> CollisionStopActorTags{};
+	// Scenario semantic tags for the current collision stop target.
+	TArray<FName> CollisionStopTargetTags{};
 
 
 protected:   // tick/Hz 관련 변수

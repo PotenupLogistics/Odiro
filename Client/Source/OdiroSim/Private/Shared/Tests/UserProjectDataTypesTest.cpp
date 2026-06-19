@@ -104,6 +104,27 @@ namespace
 		return FJsonSerializer::Deserialize(reader, outObject) && outObject.IsValid();
 	}
 
+	bool TryGetJsonObjectFieldForTest(
+		const TSharedPtr<FJsonObject>& object,
+		const TCHAR* fieldName,
+		TSharedPtr<FJsonObject>& outObject)
+	{
+		outObject.Reset();
+		if (!object.IsValid())
+		{
+			return false;
+		}
+
+		const TSharedPtr<FJsonValue> value = object->TryGetField(fieldName);
+		if (!value.IsValid() || value->Type != EJson::Object)
+		{
+			return false;
+		}
+
+		outObject = value->AsObject();
+		return outObject.IsValid();
+	}
+
 	FScenarioParamValue MakeUserProjectFloatParam(double value)
 	{
 		FScenarioParamValue paramValue;
@@ -130,13 +151,24 @@ namespace
 		TSharedRef<FJsonObject> requestObject = MakeShared<FJsonObject>();
 		requestObject->SetNumberField(TEXT("sequence"), 7);
 		requestObject->SetNumberField(TEXT("runTimeSeconds"), 3.5);
+		requestObject->SetNumberField(TEXT("sensorSequence"), 11);
+		requestObject->SetNumberField(TEXT("sensorTimeSeconds"), 3.45);
 
 		TSharedRef<FJsonObject> robotStateObject = MakeShared<FJsonObject>();
-		robotStateObject->SetNumberField(TEXT("x"), 10.0);
-		robotStateObject->SetNumberField(TEXT("y"), 20.0);
-		robotStateObject->SetNumberField(TEXT("z"), 0.0);
+		robotStateObject->SetNumberField(TEXT("x"), 1000.0);
+		robotStateObject->SetNumberField(TEXT("y"), 2000.0);
+		robotStateObject->SetNumberField(TEXT("z"), 50.0);
 		robotStateObject->SetNumberField(TEXT("yawDegree"), 90.0);
 		robotStateObject->SetNumberField(TEXT("speedKmh"), 4.0);
+		robotStateObject->SetBoolField(TEXT("bColliding"), true);
+		robotStateObject->SetStringField(TEXT("collisionActorName"), TEXT("runtime_collision_actor"));
+		robotStateObject->SetArrayField(
+			TEXT("collisionActorTags"),
+			{ MakeShared<FJsonValueString>(TEXT("RuntimeCollisionTag")) });
+		robotStateObject->SetStringField(TEXT("collisionTargetId"), TEXT("obstacle_01"));
+		robotStateObject->SetArrayField(
+			TEXT("collisionTargetTags"),
+			{ MakeShared<FJsonValueString>(TEXT("ScenarioObstacleTag")) });
 		requestObject->SetObjectField(TEXT("robotState"), robotStateObject);
 
 		TArray<TSharedPtr<FJsonValue>> lidarRayValues;
@@ -154,10 +186,84 @@ namespace
 		lidarRayValues.Add(MakeShared<FJsonValueObject>(rightRayObject));
 		requestObject->SetArrayField(TEXT("lidarRays"), lidarRayValues);
 
+		TSharedRef<FJsonObject> lidarObject = MakeShared<FJsonObject>();
+		lidarObject->SetStringField(TEXT("mode"), TEXT("TwoDAndThreeD"));
+		TArray<TSharedPtr<FJsonValue>> lidarRay1DValues;
+		TSharedRef<FJsonObject> ray1DObject = MakeShared<FJsonObject>();
+		ray1DObject->SetBoolField(TEXT("hit"), false);
+		ray1DObject->SetNumberField(TEXT("distanceM"), 10.0);
+		ray1DObject->SetNumberField(TEXT("rayIndex"), 0);
+		lidarRay1DValues.Add(MakeShared<FJsonValueObject>(ray1DObject));
+		lidarObject->SetArrayField(TEXT("rays1d"), lidarRay1DValues);
+
+		TArray<TSharedPtr<FJsonValue>> lidarRay2DValues;
+		TSharedRef<FJsonObject> ray2DObject = MakeShared<FJsonObject>();
+		ray2DObject->SetBoolField(TEXT("hit"), true);
+		ray2DObject->SetNumberField(TEXT("distanceM"), 4.0);
+		ray2DObject->SetNumberField(TEXT("rayIndex"), 1);
+		ray2DObject->SetNumberField(TEXT("yawDegree"), 45.0);
+		ray2DObject->SetStringField(TEXT("actorName"), TEXT("RuntimeObstacleActor"));
+		ray2DObject->SetStringField(TEXT("targetId"), TEXT("obstacle_01"));
+		ray2DObject->SetArrayField(
+			TEXT("actorTags"),
+			{ MakeShared<FJsonValueString>(TEXT("RuntimeObstacleTag")) });
+		ray2DObject->SetArrayField(
+			TEXT("targetTags"),
+			{ MakeShared<FJsonValueString>(TEXT("ScenarioObstacleTag")) });
+		lidarRay2DValues.Add(MakeShared<FJsonValueObject>(ray2DObject));
+		lidarObject->SetArrayField(TEXT("rays2d"), lidarRay2DValues);
+
+		TArray<TSharedPtr<FJsonValue>> lidarRay3DValues;
+		TSharedRef<FJsonObject> ray3DObject = MakeShared<FJsonObject>();
+		ray3DObject->SetBoolField(TEXT("hit"), true);
+		ray3DObject->SetNumberField(TEXT("distanceM"), 4.2);
+		ray3DObject->SetNumberField(TEXT("rayIndex"), 2);
+		ray3DObject->SetNumberField(TEXT("yawDegree"), 45.0);
+		ray3DObject->SetNumberField(TEXT("pitchDegree"), -5.0);
+		TSharedRef<FJsonObject> hitLocationObject = MakeShared<FJsonObject>();
+		hitLocationObject->SetNumberField(TEXT("x"), 400.0);
+		hitLocationObject->SetNumberField(TEXT("y"), 0.0);
+		hitLocationObject->SetNumberField(TEXT("z"), 50.0);
+		ray3DObject->SetObjectField(TEXT("hitLocationCm"), hitLocationObject);
+		ray3DObject->SetStringField(TEXT("actorName"), TEXT("RuntimeObstacleActor"));
+		ray3DObject->SetStringField(TEXT("targetId"), TEXT("obstacle_01"));
+		ray3DObject->SetArrayField(
+			TEXT("actorTags"),
+			{ MakeShared<FJsonValueString>(TEXT("RuntimeObstacleTag")) });
+		ray3DObject->SetArrayField(
+			TEXT("targetTags"),
+			{ MakeShared<FJsonValueString>(TEXT("ScenarioObstacleTag")) });
+		lidarRay3DValues.Add(MakeShared<FJsonValueObject>(ray3DObject));
+		lidarObject->SetArrayField(TEXT("rays3d"), lidarRay3DValues);
+		requestObject->SetObjectField(TEXT("lidar"), lidarObject);
+
 		TArray<TSharedPtr<FJsonValue>> observedObjectValues;
 		TSharedRef<FJsonObject> observedObject = MakeShared<FJsonObject>();
 		observedObject->SetStringField(TEXT("actorName"), TEXT("pedestrian_01"));
+		observedObject->SetStringField(TEXT("targetId"), TEXT("pedestrian_01"));
+		observedObject->SetArrayField(
+			TEXT("actorTags"),
+			{ MakeShared<FJsonValueString>(TEXT("RuntimePedestrianTag")) });
+		observedObject->SetArrayField(
+			TEXT("targetTags"),
+			{ MakeShared<FJsonValueString>(TEXT("ScenarioPedestrianTag")) });
+		observedObject->SetBoolField(TEXT("hasBounds"), true);
+		TSharedRef<FJsonObject> boundsOriginObject = MakeShared<FJsonObject>();
+		boundsOriginObject->SetNumberField(TEXT("x"), 380.0);
+		boundsOriginObject->SetNumberField(TEXT("y"), 0.0);
+		boundsOriginObject->SetNumberField(TEXT("z"), 50.0);
+		observedObject->SetObjectField(TEXT("boundsOriginCm"), boundsOriginObject);
+		TSharedRef<FJsonObject> boundsExtentObject = MakeShared<FJsonObject>();
+		boundsExtentObject->SetNumberField(TEXT("x"), 30.0);
+		boundsExtentObject->SetNumberField(TEXT("y"), 20.0);
+		boundsExtentObject->SetNumberField(TEXT("z"), 40.0);
+		observedObject->SetObjectField(TEXT("boundsExtentCm"), boundsExtentObject);
+		observedObject->SetObjectField(TEXT("closestHitLocationCm"), hitLocationObject);
 		observedObject->SetNumberField(TEXT("closestDistanceM"), 4.0);
+		observedObject->SetNumberField(TEXT("closestRayYawDegree"), 45.0);
+		observedObject->SetNumberField(TEXT("totalHitRayCount"), 2);
+		observedObject->SetNumberField(TEXT("frontHitRayCount"), 1);
+		observedObject->SetBoolField(TEXT("inFront"), true);
 		observedObjectValues.Add(MakeShared<FJsonValueObject>(observedObject));
 		requestObject->SetArrayField(TEXT("observedObjects"), observedObjectValues);
 
@@ -178,6 +284,24 @@ namespace
 
 		TSharedRef<FJsonObject> debugObject = MakeShared<FJsonObject>();
 		debugObject->SetNumberField(TEXT("pathIndex"), 3);
+		debugObject->SetStringField(TEXT("selectedPolicy"), TEXT("PathFollower"));
+		debugObject->SetStringField(TEXT("reason"), TEXT("follow_path"));
+		debugObject->SetStringField(TEXT("pathStatus"), TEXT("valid"));
+		debugObject->SetNumberField(TEXT("pathLength"), 2);
+		debugObject->SetNumberField(TEXT("targetPathIndex"), 1);
+		TSharedRef<FJsonObject> targetWorldPointObject = MakeShared<FJsonObject>();
+		targetWorldPointObject->SetNumberField(TEXT("x"), 400.0);
+		targetWorldPointObject->SetNumberField(TEXT("y"), 0.0);
+		targetWorldPointObject->SetNumberField(TEXT("z"), 50.0);
+		debugObject->SetObjectField(TEXT("targetWorldPoint"), targetWorldPointObject);
+		TArray<TSharedPtr<FJsonValue>> pathWorldPointValues;
+		TSharedRef<FJsonObject> firstPathPointObject = MakeShared<FJsonObject>();
+		firstPathPointObject->SetNumberField(TEXT("x"), 300.0);
+		firstPathPointObject->SetNumberField(TEXT("y"), 0.0);
+		firstPathPointObject->SetNumberField(TEXT("z"), 50.0);
+		pathWorldPointValues.Add(MakeShared<FJsonValueObject>(firstPathPointObject));
+		pathWorldPointValues.Add(MakeShared<FJsonValueObject>(targetWorldPointObject));
+		debugObject->SetArrayField(TEXT("pathWorldPoints"), pathWorldPointValues);
 		responseObject->SetObjectField(TEXT("debug"), debugObject);
 		return responseObject;
 	}
@@ -469,10 +593,137 @@ bool FUserProjectRobotActionWriteTest::RunTest(const FString& parameters)
 
 	FString actionJsonl;
 	TestTrue(TEXT("load action jsonl"), FFileHelper::LoadFileToString(actionJsonl, *actionPath));
-	TestTrue(TEXT("action schema"), actionJsonl.Contains(TEXT("\"schema\":\"robot_action\"")));
-	TestTrue(TEXT("action status"), actionJsonl.Contains(TEXT("\"status\":\"ok\"")));
-	TestTrue(TEXT("action sequence"), actionJsonl.Contains(TEXT("\"sequence\":7")));
-	TestTrue(TEXT("action angle"), actionJsonl.Contains(TEXT("\"front_half_angle_degree\":45")));
+	TestFalse(TEXT("no legacy lidar_rays"), actionJsonl.Contains(TEXT("lidar_rays")));
+	TestFalse(TEXT("no runtime actorName"), actionJsonl.Contains(TEXT("actorName")));
+	TestFalse(TEXT("no runtime actorTags"), actionJsonl.Contains(TEXT("actorTags")));
+	TestFalse(TEXT("no camel targetSpeedKmh"), actionJsonl.Contains(TEXT("targetSpeedKmh")));
+	TestFalse(TEXT("no camel selectedPolicy"), actionJsonl.Contains(TEXT("selectedPolicy")));
+
+	TSharedPtr<FJsonObject> actionLineObject;
+	TestTrue(TEXT("parse action jsonl"), LoadUserProjectJsonObject(actionPath, actionLineObject));
+	TestTrue(TEXT("action line object valid"), actionLineObject.IsValid());
+	if (actionLineObject.IsValid())
+	{
+		FString stringValue;
+		double numberValue = 0.0;
+		bool boolValue = false;
+
+		TestTrue(TEXT("action schema field"), actionLineObject->TryGetStringField(TEXT("schema"), stringValue));
+		TestEqual(TEXT("action schema"), stringValue, FString(TEXT("robot_action")));
+		TestTrue(TEXT("action status field"), actionLineObject->TryGetStringField(TEXT("status"), stringValue));
+		TestEqual(TEXT("action status"), stringValue, FString(TEXT("ok")));
+		TestTrue(TEXT("action sequence field"), actionLineObject->TryGetNumberField(TEXT("sequence"), numberValue));
+		TestEqual(TEXT("action sequence"), static_cast<int32>(numberValue), 7);
+		TestTrue(TEXT("action sensor sequence field"), actionLineObject->TryGetNumberField(TEXT("sensor_sequence"), numberValue));
+		TestEqual(TEXT("action sensor sequence"), static_cast<int32>(numberValue), 11);
+		TestTrue(TEXT("action angle field"), actionLineObject->TryGetNumberField(TEXT("front_half_angle_degree"), numberValue));
+		TestEqual(TEXT("action angle"), static_cast<int32>(numberValue), 45);
+
+		TSharedPtr<FJsonObject> lidarObject;
+		TestTrue(TEXT("action lidar object"), TryGetJsonObjectFieldForTest(actionLineObject, TEXT("lidar"), lidarObject));
+		if (lidarObject.IsValid())
+		{
+			TestTrue(TEXT("action lidar mode field"), lidarObject->TryGetStringField(TEXT("mode"), stringValue));
+			TestEqual(TEXT("action lidar mode"), stringValue, FString(TEXT("TwoDAndThreeD")));
+
+			const TArray<TSharedPtr<FJsonValue>>* rayValues = nullptr;
+			TestTrue(TEXT("action lidar rays_2d field"), lidarObject->TryGetArrayField(TEXT("rays_2d"), rayValues));
+			TestTrue(TEXT("action lidar rays_2d nonempty"), rayValues && rayValues->Num() == 1);
+			if (rayValues && rayValues->Num() == 1 && (*rayValues)[0].IsValid() && (*rayValues)[0]->Type == EJson::Object)
+			{
+				const TSharedPtr<FJsonObject> rayObject = (*rayValues)[0]->AsObject();
+			TestTrue(TEXT("ray target id field"), rayObject->TryGetStringField(TEXT("target_id"), stringValue));
+			TestEqual(TEXT("ray target id"), stringValue, FString(TEXT("obstacle_01")));
+			const TArray<TSharedPtr<FJsonValue>>* targetTags = nullptr;
+			TestTrue(TEXT("ray target tags field"), rayObject->TryGetArrayField(TEXT("target_tags"), targetTags));
+			TestTrue(
+				TEXT("ray target tag value"),
+				targetTags && targetTags->Num() == 1 && (*targetTags)[0].IsValid()
+					&& (*targetTags)[0]->AsString() == TEXT("ScenarioObstacleTag"));
+			TestTrue(TEXT("ray yaw field"), rayObject->TryGetNumberField(TEXT("yaw_degree"), numberValue));
+			TestEqual(TEXT("ray yaw"), static_cast<int32>(numberValue), 45);
+			}
+
+			TSharedPtr<FJsonObject> selectionObject;
+			TestTrue(TEXT("policy ray selection object"), TryGetJsonObjectFieldForTest(lidarObject, TEXT("policy_ray_selection"), selectionObject));
+			if (selectionObject.IsValid())
+			{
+				TestTrue(TEXT("policy ray selection mode field"), selectionObject->TryGetStringField(TEXT("mode"), stringValue));
+				TestEqual(TEXT("policy ray selection mode"), stringValue, FString(TEXT("2d")));
+				TestTrue(TEXT("policy ray selection source field"), selectionObject->TryGetStringField(TEXT("source"), stringValue));
+				TestEqual(TEXT("policy ray selection source"), stringValue, FString(TEXT("lidar.rays_2d")));
+				TestTrue(TEXT("policy ray count field"), selectionObject->TryGetNumberField(TEXT("ray_count"), numberValue));
+				TestEqual(TEXT("policy ray count"), static_cast<int32>(numberValue), 1);
+			}
+		}
+
+		TSharedPtr<FJsonObject> robotStateObject;
+		TestTrue(TEXT("action robot state object"), TryGetJsonObjectFieldForTest(actionLineObject, TEXT("robot_state"), robotStateObject));
+		if (robotStateObject.IsValid())
+		{
+			TestTrue(TEXT("robot state x field"), robotStateObject->TryGetNumberField(TEXT("x"), numberValue));
+			TestEqual(TEXT("robot state x meters"), numberValue, 10.0);
+			TestTrue(TEXT("robot state colliding field"), robotStateObject->TryGetBoolField(TEXT("colliding"), boolValue));
+			TestTrue(TEXT("robot state colliding"), boolValue);
+			TestTrue(TEXT("collision target id field"), robotStateObject->TryGetStringField(TEXT("collision_target_id"), stringValue));
+			TestEqual(TEXT("collision target id"), stringValue, FString(TEXT("obstacle_01")));
+			const TArray<TSharedPtr<FJsonValue>>* collisionTargetTags = nullptr;
+			TestTrue(TEXT("collision target tags field"), robotStateObject->TryGetArrayField(TEXT("collision_target_tags"), collisionTargetTags));
+			TestTrue(
+				TEXT("collision target tag value"),
+				collisionTargetTags && collisionTargetTags->Num() == 1 && (*collisionTargetTags)[0].IsValid()
+					&& (*collisionTargetTags)[0]->AsString() == TEXT("ScenarioObstacleTag"));
+		}
+
+		TSharedPtr<FJsonObject> actionObject;
+		TestTrue(TEXT("action command object"), TryGetJsonObjectFieldForTest(actionLineObject, TEXT("action"), actionObject));
+		if (actionObject.IsValid())
+		{
+			TestTrue(TEXT("target speed field"), actionObject->TryGetNumberField(TEXT("target_speed_kmh"), numberValue));
+			TestEqual(TEXT("target speed"), numberValue, 6.0);
+		}
+
+		TSharedPtr<FJsonObject> decisionObject;
+		TestTrue(TEXT("decision object"), TryGetJsonObjectFieldForTest(actionLineObject, TEXT("decision"), decisionObject));
+		if (decisionObject.IsValid())
+		{
+			TestTrue(TEXT("decision selected policy field"), decisionObject->TryGetStringField(TEXT("selected_policy"), stringValue));
+			TestEqual(TEXT("decision selected policy"), stringValue, FString(TEXT("PathFollower")));
+			TestTrue(TEXT("decision reason field"), decisionObject->TryGetStringField(TEXT("reason"), stringValue));
+			TestEqual(TEXT("decision reason"), stringValue, FString(TEXT("follow_path")));
+		}
+
+		TSharedPtr<FJsonObject> pathObject;
+		TestTrue(TEXT("path object"), TryGetJsonObjectFieldForTest(actionLineObject, TEXT("path"), pathObject));
+		if (pathObject.IsValid())
+		{
+			TestTrue(TEXT("path status field"), pathObject->TryGetStringField(TEXT("path_status"), stringValue));
+			TestEqual(TEXT("path status"), stringValue, FString(TEXT("valid")));
+			TSharedPtr<FJsonObject> targetPointObject;
+			TestTrue(TEXT("path target point object"), TryGetJsonObjectFieldForTest(pathObject, TEXT("target_world_point"), targetPointObject));
+			if (targetPointObject.IsValid())
+			{
+				TestTrue(TEXT("path target point x field"), targetPointObject->TryGetNumberField(TEXT("x"), numberValue));
+				TestEqual(TEXT("path target point x meters"), numberValue, 4.0);
+			}
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* observedValues = nullptr;
+		TestTrue(TEXT("observed objects field"), actionLineObject->TryGetArrayField(TEXT("observed_objects"), observedValues));
+		TestTrue(TEXT("observed objects nonempty"), observedValues && observedValues->Num() == 1);
+		if (observedValues && observedValues->Num() == 1 && (*observedValues)[0].IsValid() && (*observedValues)[0]->Type == EJson::Object)
+		{
+			const TSharedPtr<FJsonObject> observedObject = (*observedValues)[0]->AsObject();
+			TestTrue(TEXT("observed target id field"), observedObject->TryGetStringField(TEXT("target_id"), stringValue));
+			TestEqual(TEXT("observed target id"), stringValue, FString(TEXT("pedestrian_01")));
+			const TArray<TSharedPtr<FJsonValue>>* observedTargetTags = nullptr;
+			TestTrue(TEXT("observed target tags field"), observedObject->TryGetArrayField(TEXT("target_tags"), observedTargetTags));
+			TestTrue(
+				TEXT("observed target tag value"),
+				observedTargetTags && observedTargetTags->Num() == 1 && (*observedTargetTags)[0].IsValid()
+					&& (*observedTargetTags)[0]->AsString() == TEXT("ScenarioPedestrianTag"));
+		}
+	}
 
 	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
 	return true;

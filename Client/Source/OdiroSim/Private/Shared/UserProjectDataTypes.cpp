@@ -1024,6 +1024,41 @@ namespace
 		return object;
 	}
 
+	// Terminal event properties reuse evaluation metrics so the final line carries the same snapshot context.
+	void SetMetricPropertyIfPresent(
+		const TSharedRef<FJsonObject>& object,
+		const TMap<FString, FScenarioParamValue>& metrics,
+		const FString& metricKey,
+		const FString& propertyKey)
+	{
+		if (const FScenarioParamValue* metricValue = metrics.Find(metricKey))
+		{
+			object->SetField(propertyKey, MakeUserProjectParamJsonValue(*metricValue));
+		}
+	}
+
+	// Keeps terminal event details within the documented scalar events.jsonl property names.
+	TSharedRef<FJsonObject> MakeTerminalEventPropertiesObject(const FEpisodeRunRecord& runRecord)
+	{
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		const TMap<FString, FScenarioParamValue>& metrics = runRecord.EvaluationResult.Metrics;
+
+		object->SetNumberField(TEXT("duration_s"), runRecord.DurationSeconds);
+		SetMetricPropertyIfPresent(object, metrics, TEXT("distance_to_goal_m"), TEXT("distance_to_goal_m"));
+		if (!object->HasField(TEXT("distance_to_goal_m")))
+		{
+			SetMetricPropertyIfPresent(object, metrics, TEXT("goal_distance_m"), TEXT("distance_to_goal_m"));
+		}
+		SetMetricPropertyIfPresent(object, metrics, TEXT("goal_threshold_m"), TEXT("goal_threshold_m"));
+		SetMetricPropertyIfPresent(object, metrics, TEXT("max_duration_s"), TEXT("max_duration_s"));
+		SetMetricPropertyIfPresent(object, metrics, TEXT("failure_type"), TEXT("failure_type"));
+		SetMetricPropertyIfPresent(object, metrics, TEXT("speed_kmh"), TEXT("speed_kmh"));
+		SetMetricPropertyIfPresent(object, metrics, TEXT("roll_degree"), TEXT("roll_degree"));
+		SetMetricPropertyIfPresent(object, metrics, TEXT("pitch_degree"), TEXT("pitch_degree"));
+		SetMetricPropertyIfPresent(object, metrics, TEXT("threshold_degree"), TEXT("threshold_degree"));
+		return object;
+	}
+
 	TSharedRef<FJsonObject> MakeTerminalEventLineObject(const FEpisodeRunRecord& runRecord, int32 eventIndex)
 	{
 		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
@@ -1036,7 +1071,7 @@ namespace
 		object->SetStringField(TEXT("reason"), ToUserProjectEnumString(runRecord.TerminalReason));
 		object->SetStringField(TEXT("message"), FString::Printf(TEXT("Episode finished: %s"), *ToUserProjectEnumString(runRecord.TerminalReason)));
 		object->SetField(TEXT("action_sequence"), MakeShared<FJsonValueNull>());
-		object->SetObjectField(TEXT("properties"), MakeShared<FJsonObject>());
+		object->SetObjectField(TEXT("properties"), MakeTerminalEventPropertiesObject(runRecord));
 		return object;
 	}
 

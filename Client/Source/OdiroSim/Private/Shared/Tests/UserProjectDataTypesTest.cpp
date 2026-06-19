@@ -494,6 +494,8 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	runRecord.EvaluationResult.DurationSeconds = 12.5;
 	runRecord.EvaluationResult.Metrics.Add(TEXT("score"), MakeUserProjectFloatParam(98.0));
 	runRecord.EvaluationResult.Metrics.Add(TEXT("near_miss_count"), MakeUserProjectFloatParam(0.0));
+	runRecord.EvaluationResult.Metrics.Add(TEXT("distance_to_goal_m"), MakeUserProjectFloatParam(0.25));
+	runRecord.EvaluationResult.Metrics.Add(TEXT("goal_threshold_m"), MakeUserProjectFloatParam(0.5));
 
 	FEpisodeEvaluationEvent nearMissEvent;
 	nearMissEvent.EventIndex = 0;
@@ -590,6 +592,9 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("load events jsonl"), FFileHelper::LoadFileToString(eventsJson, *eventsPath));
 	TestTrue(TEXT("events include goal reached terminal"), eventsJson.Contains(TEXT("\"event_type\":\"GoalReached\"")));
 	TestTrue(TEXT("events include terminal reason"), eventsJson.Contains(TEXT("\"reason\":\"GoalReached\"")));
+	TestTrue(TEXT("events include terminal duration snapshot"), eventsJson.Contains(TEXT("\"duration_s\":12.5")));
+	TestTrue(TEXT("events include goal distance snapshot"), eventsJson.Contains(TEXT("\"distance_to_goal_m\":0.25")));
+	TestTrue(TEXT("events include goal threshold snapshot"), eventsJson.Contains(TEXT("\"goal_threshold_m\":0.5")));
 	TestTrue(TEXT("events include repath"), eventsJson.Contains(TEXT("\"event_type\":\"Repath\"")));
 	TestTrue(TEXT("events include python policy source"), eventsJson.Contains(TEXT("\"source\":\"PythonPolicy\"")));
 	TestTrue(TEXT("events include pathfind fail"), eventsJson.Contains(TEXT("\"event_type\":\"PathfindFail\"")));

@@ -121,6 +121,21 @@ private:
 	bool CheckRobotTipOver();
 	void UpdateBlockedRegionViolations();
 	void UpdatePenaltyRegionViolations();
+	// Adds Corridor-relative position fields for an event actor or impact point when sampled Corridor data is available.
+	bool TryFindCorridorSurfaceAtWorldLocation(
+		const FVector& location,
+		FScenarioRuntimeCorridorSurfaceQueryResult& outSurface) const;
+	// Writes event snapshot aliases that match the external events.jsonl property contract.
+	void AddCorridorSnapshotProperties(
+		TMap<FString, FScenarioParamValue>& properties,
+		const FScenarioRuntimeCorridorSurfaceQueryResult& surface,
+		const FString& prefix) const;
+	// Adds robot Corridor-relative fields for runtime detector snapshots.
+	void AddRobotCorridorSnapshotProperties(TMap<FString, FScenarioParamValue>& properties) const;
+	// Adds target Corridor-relative fields for collision and near-miss snapshots.
+	void AddTargetCorridorSnapshotProperties(
+		TMap<FString, FScenarioParamValue>& properties,
+		const FVector& targetLocation) const;
 	// Records a blocked sampled Corridor lane collision with surface-level identity.
 	void RecordBlockedCorridorSurfaceCollision(
 		const FScenarioRuntimeCorridorSurfaceQueryResult& surface,

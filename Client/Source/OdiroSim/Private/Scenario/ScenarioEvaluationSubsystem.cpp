@@ -329,6 +329,25 @@ void UScenarioEvaluationSubsystem::HandleDeliveryBotSimulationFailed(
 	addMetricAndProperty(TEXT("delivery_bot_failure_time_seconds"), MakeFloatParam(FailureInfo.TimeSeconds));
 	addMetricAndProperty(TEXT("delivery_bot_failure_speed_kmh"), MakeFloatParam(FailureInfo.SpeedKmh));
 	addMetricAndProperty(TEXT("delivery_bot_failure_target_actor_name"), MakeStringParam(targetActorName));
+	addMetricAndProperty(TEXT("failure_type"), MakeStringParam(failureTypeName));
+	addMetricAndProperty(TEXT("speed_kmh"), MakeFloatParam(FailureInfo.SpeedKmh));
+	if (!targetInstanceId.IsEmpty())
+	{
+		properties.Add(TEXT("target_id"), MakeStringParam(targetInstanceId));
+	}
+	if (!targetActorName.IsEmpty())
+	{
+		properties.Add(TEXT("target_actor"), MakeStringParam(targetActorName));
+	}
+	FScenarioRuntimeCorridorSurfaceQueryResult robotSurface;
+	if (TryFindCorridorSurfaceAtWorldLocation(FailureInfo.LocationCm, robotSurface))
+	{
+		AddCorridorSnapshotProperties(properties, robotSurface, TEXT("robot"));
+	}
+	if (IsValid(targetActor))
+	{
+		AddTargetCorridorSnapshotProperties(properties, targetActor->GetActorLocation());
+	}
 
 	AddEvaluationEventWithDetails(
 		EEpisodeEvaluationEventType::DeliveryBotSimulationFailure,
@@ -388,6 +407,13 @@ void UScenarioEvaluationSubsystem::ReportDeliveryBotPolicyEvent(
 		properties.Add(TEXT("error_code"), MakeStringParam(Snapshot.ErrorCode));
 		properties.Add(TEXT("error_message"), MakeStringParam(Snapshot.ErrorMessage));
 		properties.Add(TEXT("retryable"), MakeBoolParam(Snapshot.bRetryable));
+		const FString failureType = Snapshot.ErrorCode.IsEmpty()
+			? Snapshot.Reason
+			: Snapshot.ErrorCode;
+		if (!failureType.IsEmpty())
+		{
+			properties.Add(TEXT("failure_type"), MakeStringParam(failureType));
+		}
 	}
 
 	if (Snapshot.EventType == EEpisodeEvaluationEventType::DeliveryBotRepath)
@@ -677,6 +703,8 @@ bool UScenarioEvaluationSubsystem::CheckGoalReached()
 	++GoalReachedCount;
 	SetFloatMetric(TEXT("goal_reached"), GoalReachedCount);
 	SetFloatMetric(TEXT("goal_distance_m"), goalDistanceCm / 100.0);
+	SetFloatMetric(TEXT("distance_to_goal_m"), goalDistanceCm / 100.0);
+	SetFloatMetric(TEXT("goal_threshold_m"), acceptanceRadiusCm / 100.0);
 
 	FinishEpisode(
 		true,
@@ -697,13 +725,23 @@ bool UScenarioEvaluationSubsystem::CheckRobotTipOver()
 	const double tiltAngleDegrees = FMath::RadiansToDegrees(FMath::Acos(upDot));
 	if (tiltAngleDegrees < tipOverAngleDegrees) return false;
 
+	const FRotator robotRotation = ActiveRuntimeContext.RobotActor->GetActorRotation();
+	const double rollDegrees = FMath::Abs(FRotator::NormalizeAxis(robotRotation.Roll));
+	const double pitchDegrees = FMath::Abs(FRotator::NormalizeAxis(robotRotation.Pitch));
 	++RobotTipOverCount;
 	SetFloatMetric(TEXT("robot_tip_over_count"), RobotTipOverCount);
 	SetFloatMetric(TEXT("robot_tip_over_angle_deg"), tiltAngleDegrees);
+	SetFloatMetric(TEXT("roll_degree"), rollDegrees);
+	SetFloatMetric(TEXT("pitch_degree"), pitchDegrees);
+	SetFloatMetric(TEXT("threshold_degree"), tipOverAngleDegrees);
 
 	TMap<FString, FScenarioParamValue> properties;
 	properties.Add(TEXT("tilt_angle_deg"), MakeFloatParam(tiltAngleDegrees));
 	properties.Add(TEXT("tip_over_angle_threshold_deg"), MakeFloatParam(tipOverAngleDegrees));
+	properties.Add(TEXT("roll_degree"), MakeFloatParam(rollDegrees));
+	properties.Add(TEXT("pitch_degree"), MakeFloatParam(pitchDegrees));
+	properties.Add(TEXT("threshold_degree"), MakeFloatParam(tipOverAngleDegrees));
+	AddRobotCorridorSnapshotProperties(properties);
 	AddEvaluationEventWithDetails(
 		EEpisodeEvaluationEventType::RobotTipOver,
 		EEpisodeEvaluationEventSeverity::Failure,
@@ -839,11 +877,15 @@ void UScenarioEvaluationSubsystem::UpdatePenaltyRegionViolations()
 		if (regionState.bEventRecorded || elapsedTimeSeconds - regionState.EnterTimeSeconds < requiredDurationSeconds) continue;
 
 		const double eventValue = ActiveEvaluationConfig.PenaltyRegionViolationEventValue;
+		const double durationSeconds = elapsedTimeSeconds - regionState.EnterTimeSeconds;
 		TMap<FString, FScenarioParamValue> properties;
 		properties.Add(TEXT("region_id"), MakeStringParam(regionId));
 		properties.Add(TEXT("enter_time_s"), MakeFloatParam(regionState.EnterTimeSeconds));
-		properties.Add(TEXT("duration_s"), MakeFloatParam(elapsedTimeSeconds - regionState.EnterTimeSeconds));
+		properties.Add(TEXT("start_time_s"), MakeFloatParam(regionState.EnterTimeSeconds));
+		properties.Add(TEXT("end_time_s"), MakeFloatParam(elapsedTimeSeconds));
+		properties.Add(TEXT("duration_s"), MakeFloatParam(durationSeconds));
 		properties.Add(TEXT("violation_after_s"), MakeFloatParam(requiredDurationSeconds));
+		AddRobotCorridorSnapshotProperties(properties);
 		AddEvaluationEventWithDetails(
 			EEpisodeEvaluationEventType::PenaltyRegionViolation,
 			EEpisodeEvaluationEventSeverity::Warning,
@@ -913,6 +955,65 @@ void UScenarioEvaluationSubsystem::UpdatePenaltyRegionViolations()
 	}
 }
 
+bool UScenarioEvaluationSubsystem::TryFindCorridorSurfaceAtWorldLocation(
+	const FVector& location,
+	FScenarioRuntimeCorridorSurfaceQueryResult& outSurface) const
+{
+	outSurface = FScenarioRuntimeCorridorSurfaceQueryResult{};
+	for (const TObjectPtr<AActor>& corridorActorPtr : ActiveRuntimeContext.CorridorActors)
+	{
+		const AScenarioCorridorRuntimeActor* corridorActor = Cast<AScenarioCorridorRuntimeActor>(corridorActorPtr.Get());
+		if (IsValid(corridorActor) && corridorActor->TryFindSurfaceAtWorldLocation2D(location, outSurface))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void UScenarioEvaluationSubsystem::AddCorridorSnapshotProperties(
+	TMap<FString, FScenarioParamValue>& properties,
+	const FScenarioRuntimeCorridorSurfaceQueryResult& surface,
+	const FString& prefix) const
+{
+	if (prefix.IsEmpty())
+	{
+		properties.Add(TEXT("along_m"), MakeFloatParam(surface.AlongMeters));
+		properties.Add(TEXT("offset_m"), MakeFloatParam(surface.OffsetMeters));
+		return;
+	}
+
+	properties.Add(FString::Printf(TEXT("%s_along_m"), *prefix), MakeFloatParam(surface.AlongMeters));
+	properties.Add(FString::Printf(TEXT("%s_offset_m"), *prefix), MakeFloatParam(surface.OffsetMeters));
+}
+
+void UScenarioEvaluationSubsystem::AddRobotCorridorSnapshotProperties(
+	TMap<FString, FScenarioParamValue>& properties) const
+{
+	if (!IsValid(ActiveRuntimeContext.RobotActor))
+	{
+		return;
+	}
+
+	FScenarioRuntimeCorridorSurfaceQueryResult robotSurface;
+	if (TryFindCorridorSurfaceAtWorldLocation(ActiveRuntimeContext.RobotActor->GetActorLocation(), robotSurface))
+	{
+		AddCorridorSnapshotProperties(properties, robotSurface, TEXT("robot"));
+	}
+}
+
+void UScenarioEvaluationSubsystem::AddTargetCorridorSnapshotProperties(
+	TMap<FString, FScenarioParamValue>& properties,
+	const FVector& targetLocation) const
+{
+	FScenarioRuntimeCorridorSurfaceQueryResult targetSurface;
+	if (TryFindCorridorSurfaceAtWorldLocation(targetLocation, targetSurface))
+	{
+		AddCorridorSnapshotProperties(properties, targetSurface, TEXT("target"));
+	}
+}
+
 void UScenarioEvaluationSubsystem::RecordBlockedCorridorSurfaceCollision(
 	const FScenarioRuntimeCorridorSurfaceQueryResult& surface,
 	AActor* targetActor,
@@ -941,12 +1042,14 @@ void UScenarioEvaluationSubsystem::RecordBlockedCorridorSurfaceCollision(
 
 	TMap<FString, FScenarioParamValue> properties;
 	properties.Add(TEXT("surface_instance_id"), MakeStringParam(surface.SurfaceInstanceId));
+	properties.Add(TEXT("region_id"), MakeStringParam(surface.SurfaceInstanceId));
 	properties.Add(TEXT("corridor_id"), MakeStringParam(surface.CorridorId));
 	properties.Add(TEXT("segment_id"), MakeStringParam(surface.SegmentId));
 	properties.Add(TEXT("lane_id"), MakeStringParam(surface.LaneId));
 	properties.Add(TEXT("surface_id"), MakeStringParam(surface.SurfaceId));
 	properties.Add(TEXT("along_m"), MakeFloatParam(surface.AlongMeters));
 	properties.Add(TEXT("offset_m"), MakeFloatParam(surface.OffsetMeters));
+	AddCorridorSnapshotProperties(properties, surface, TEXT("robot"));
 	if (targetActor)
 	{
 		properties.Add(TEXT("target_actor"), MakeStringParam(targetActor->GetName()));
@@ -978,6 +1081,7 @@ void UScenarioEvaluationSubsystem::AddPenaltyCorridorSurfaceViolation(
 
 	TMap<FString, FScenarioParamValue> properties;
 	properties.Add(TEXT("surface_instance_id"), MakeStringParam(surface.SurfaceInstanceId));
+	properties.Add(TEXT("region_id"), MakeStringParam(surface.SurfaceInstanceId));
 	properties.Add(TEXT("corridor_id"), MakeStringParam(surface.CorridorId));
 	properties.Add(TEXT("segment_id"), MakeStringParam(surface.SegmentId));
 	properties.Add(TEXT("lane_id"), MakeStringParam(surface.LaneId));
@@ -985,8 +1089,11 @@ void UScenarioEvaluationSubsystem::AddPenaltyCorridorSurfaceViolation(
 	properties.Add(TEXT("along_m"), MakeFloatParam(surface.AlongMeters));
 	properties.Add(TEXT("offset_m"), MakeFloatParam(surface.OffsetMeters));
 	properties.Add(TEXT("enter_time_s"), MakeFloatParam(enterTimeSeconds));
+	properties.Add(TEXT("start_time_s"), MakeFloatParam(enterTimeSeconds));
+	properties.Add(TEXT("end_time_s"), MakeFloatParam(enterTimeSeconds + durationSeconds));
 	properties.Add(TEXT("duration_s"), MakeFloatParam(durationSeconds));
 	properties.Add(TEXT("violation_after_s"), MakeFloatParam(requiredDurationSeconds));
+	AddCorridorSnapshotProperties(properties, surface, TEXT("robot"));
 	AddEvaluationEventWithDetails(
 		EEpisodeEvaluationEventType::PenaltyRegionViolation,
 		EEpisodeEvaluationEventSeverity::Warning,
@@ -1110,6 +1217,14 @@ void UScenarioEvaluationSubsystem::CloseNearMissInterval(
 	event.Properties.Add(TEXT("duration_s"), MakeFloatParam(durationSeconds));
 	event.Properties.Add(TEXT("min_distance_m"), MakeFloatParam(state.MinDistanceCm / 100.0));
 	event.Properties.Add(TEXT("pedestrian_id"), MakeStringParam(pedestrianInstanceId));
+	event.Properties.Add(TEXT("target_id"), MakeStringParam(pedestrianInstanceId));
+	event.Properties.Add(TEXT("threshold_m"), MakeFloatParam(ActiveEvaluationConfig.NearMissDistanceCm / 100.0));
+	FScenarioRuntimeCorridorSurfaceQueryResult robotSurface;
+	if (TryFindCorridorSurfaceAtWorldLocation(state.ClosestRobotLocation, robotSurface))
+	{
+		AddCorridorSnapshotProperties(event.Properties, robotSurface, TEXT("robot"));
+	}
+	AddTargetCorridorSnapshotProperties(event.Properties, state.ClosestPedestrianLocation);
 	PublishEvaluationEvent(event);
 
 	UE_LOG(
@@ -1183,11 +1298,13 @@ void UScenarioEvaluationSubsystem::RecordCollisionEvent(
 	if (targetActor)
 	{
 		properties.Add(TEXT("target_actor"), MakeStringParam(targetActor->GetName()));
+		AddTargetCorridorSnapshotProperties(properties, targetActor->GetActorLocation());
 	}
 	if (const AScenarioGroundRegion* groundRegion = Cast<AScenarioGroundRegion>(targetActor))
 	{
 		properties.Add(TEXT("region_id"), MakeStringParam(GetActorInstanceId(groundRegion)));
 	}
+	AddRobotCorridorSnapshotProperties(properties);
 
 	AddEvaluationEventWithDetails(
 		eventType,
@@ -1280,19 +1397,43 @@ double UScenarioEvaluationSubsystem::GetElapsedTimeSeconds() const
 void UScenarioEvaluationSubsystem::EndForTimeout()
 {
 	FlushActiveNearMisses();
+	const double elapsedTimeSeconds = GetElapsedTimeSeconds();
 
 	UE_LOG(
 		LogScenarioEvaluation,
 		Log,
 		TEXT("평가 제한 시간 도달 | Episode: %s, Elapsed: %.2fs, Limit: %.2fs"),
 		*ActiveRuntimeContext.EpisodeId,
-		GetElapsedTimeSeconds(),
+		elapsedTimeSeconds,
 		TimeLimitSeconds);
 
-	AddEvaluationEvent(
+	TMap<FString, FScenarioParamValue> properties;
+	properties.Add(TEXT("start_time_s"), MakeFloatParam(0.0));
+	properties.Add(TEXT("end_time_s"), MakeFloatParam(elapsedTimeSeconds));
+	properties.Add(TEXT("duration_s"), MakeFloatParam(elapsedTimeSeconds));
+	properties.Add(TEXT("max_duration_s"), MakeFloatParam(TimeLimitSeconds));
+	if (ActiveRuntimeContext.bHasGoalLocation && IsValid(ActiveRuntimeContext.RobotActor))
+	{
+		const double distanceToGoalMeters = FVector::Dist2D(
+			ActiveRuntimeContext.RobotActor->GetActorLocation(),
+			ActiveRuntimeContext.GoalLocation) / 100.0;
+		properties.Add(TEXT("distance_to_goal_m"), MakeFloatParam(distanceToGoalMeters));
+		SetFloatMetric(TEXT("distance_to_goal_m"), distanceToGoalMeters);
+	}
+	SetFloatMetric(TEXT("duration_s"), elapsedTimeSeconds);
+	SetFloatMetric(TEXT("max_duration_s"), TimeLimitSeconds);
+	AddRobotCorridorSnapshotProperties(properties);
+
+	AddEvaluationEventWithDetails(
 		EEpisodeEvaluationEventType::Timeout,
 		EEpisodeEvaluationEventSeverity::Failure,
-		TEXT("제한 시간을 초과함."));
+		TEXT("제한 시간을 초과함."),
+		FString(),
+		IsValid(ActiveRuntimeContext.RobotActor)
+			? ActiveRuntimeContext.RobotActor->GetActorLocation()
+			: FVector::ZeroVector,
+		TimeLimitSeconds,
+		properties);
 
 	FinishEpisode(false, EEpisodeEvaluationOutcome::Failure, EEpisodeEvaluationTerminalReason::Timeout);
 }

@@ -226,7 +226,7 @@ private:
 	FString GetSelectedProjectRunDirectory() const;
 	// 선택된 project run id와 결과 preview root를 동기화한다.
 	void SetSelectedProjectRunId(const FString& runId);
-	// 입력 경로의 project가 workspace로 열린 상태인지 반환한다.
+	// Active project session이 있어 workspace가 project mode로 동작할 수 있는지 반환한다.
 	bool IsProjectOpened() const;
 	UProjectSessionSubsystem* GetProjectSessionSubsystem() const;
 	USimulatorLaunchSubsystem* GetSimulatorLaunchSubsystem() const;
@@ -504,8 +504,6 @@ private:
 	FString SelectedExperimentResultPath;
 	// 선택된 user project run id cache.
 	FString SelectedProjectRunId;
-	// Project path 검증 또는 생성이 끝나 workspace 화면을 표시할 수 있는 상태.
-	bool bProjectWorkspaceOpen = false;
 	bool bExperimentConfigDetailVisible = false;
 	bool bExperimentResultDetailVisible = false;
 };

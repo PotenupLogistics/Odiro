@@ -376,13 +376,20 @@ namespace
 		const FSimulatorRunInfo& runInfo,
 		const FString& selectedProjectPath)
 	{
+		const FString runId = ExtractProjectRunIdFromDirectory(resultDirectory);
 		if (IsActiveProjectRunDirectory(resultDirectory, runInfo, selectedProjectPath))
 		{
 			return true;
 		}
 
-		return FPaths::FileExists(BuildProjectRunStatusPath(resultDirectory))
-			|| FPaths::FileExists(BuildProjectRunSummaryPath(resultDirectory));
+		if (!FUserProjectRunSnapshot::IsValidRunId(runId))
+		{
+			return false;
+		}
+
+		const FString expectedRunDirectory = BuildProjectRunDirectory(selectedProjectPath, runId);
+		return !expectedRunDirectory.IsEmpty()
+			&& NormalizeMainMenuPath(resultDirectory).Equals(expectedRunDirectory, ESearchCase::IgnoreCase);
 	}
 
 	ESimulationRunState ResolveProjectRunDisplayState(
@@ -734,7 +741,6 @@ void UMainMenuWidget::NativeConstruct()
 	ShowMainMenuSection(static_cast<int32>(EMainMenuSection::Scenario));
 	if (IsProjectOpened())
 	{
-		bProjectWorkspaceOpen = true;
 		RefreshProjectRunSelection();
 		RefreshExperimentResultList();
 		ShowProjectWorkspaceScreen();
@@ -742,7 +748,6 @@ void UMainMenuWidget::NativeConstruct()
 	}
 	else
 	{
-		bProjectWorkspaceOpen = false;
 		ShowProjectWorkspaceScreen();
 		SetDiagnosticsText(TEXT("Active project가 없습니다. StartupMap에서 프로젝트를 선택하세요."));
 	}
@@ -1756,6 +1761,14 @@ void UMainMenuWidget::HandleShowExperimentResultClicked()
 {
 	ClearExperimentResultIterationWidgets();
 	SetExperimentResultDetailVisible(false);
+	if (IsProjectModeSelected())
+	{
+		RefreshExperimentResultList();
+		UpdateReportAndLogText();
+		ShowProjectWorkspaceTab(static_cast<int32>(EProjectWorkspaceTab::ExperimentStatus));
+		return;
+	}
+
 	ShowMainMenuSection(static_cast<int32>(EMainMenuSection::ExperimentResult));
 }
 
@@ -3262,7 +3275,7 @@ bool UMainMenuWidget::CreateProjectRunForPrototype(
 bool UMainMenuWidget::IsProjectOpened() const
 {
 	const UProjectSessionSubsystem* projectSession = GetProjectSessionSubsystem();
-	return bProjectWorkspaceOpen && projectSession && projectSession->HasActiveProject();
+	return projectSession && projectSession->HasActiveProject();
 }
 
 FString UMainMenuWidget::GetSelectedSetupPath() const

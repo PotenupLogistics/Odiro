@@ -36,11 +36,26 @@
       "rev_down_rate": 600.0
     },
     "lidar": {
-      "mode": "front_2d",
-      "range_m": 6.0,
-      "angle_step_degree": 5.0,
-      "height_m": 0.07,
-      "store_missed_rays": false
-    }
+      "lidar_mode": "3d",
+      "draw_debug": false,
+      "angle_step_degree": 3.0,
+      "vertical_min_degree": -25.0,
+      "vertical_max_degree": 25.0,
+      "vertical_step_degree": 5,
+      "scan_rate_hz": 5.0,
+      "scan_range_m": 15.0,
+      "front_half_angle_degree": 50.0,
+      "stop_distance_m": 2.0,
+      "obstacle_warning_distance_m": 5.2,
+      "slow_down_distance_m": 8.0,
+      "observation_profile": "realtime_point_cloud",
+      "point_cloud": {
+         "capture_enabled": true,
+         "capture_every_n_sensor_frames": 10,
+         "range_limit_m": 15.0,
+         "include_ground_points": true,
+         "max_points": 4096
+       }
+     }
   }
 }

@@ -53,6 +53,7 @@ private:
 	static bool ReadOptionalLidarModeField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, EDeliveryBotLidarModeType& targetValue);
 	
 	static void CompileRobotObject(const FJsonObject& rootObject, FDeliveryBotSetupCompileResult& result);
+	static void CompileBody(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotBodyConfigInfo& bodyConfigInfo); // profile robot.body를 typed body config로 변환한다.
 	static void CompileDrive(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotDriveConfigInfo& driveConfigInfo);
 	static void WarnDeprecatedPathFollow(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result);
 	static void CompileLidar(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo, FDeliveryBotPointCloudCaptureConfigInfo& pointCloudCaptureConfigInfo);

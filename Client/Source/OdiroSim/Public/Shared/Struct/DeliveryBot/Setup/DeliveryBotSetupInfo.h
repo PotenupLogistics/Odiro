@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Shared/Struct/DeliveryBot/Setup/DeliveryBotBodyConfigInfo.h"
 #include "Shared/Struct/DeliveryBot/Setup/DeliveryBotLocationSetupInfo.h"
 #include "Shared/Struct/DeliveryBot/Drive/DeliveryBotDriveConfigInfo.h"
 #include "Shared/Struct/DeliveryBot/Perception/DeliveryBotLidarSensorInfo.h"
@@ -15,6 +16,9 @@ struct FDeliveryBotSetupInfo
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FDeliveryBotLocationSetupInfo LocationSetupInfo{}; // 출발 도착 위치
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FDeliveryBotBodyConfigInfo BodyConfigInfo{}; // 로봇 크기와 vehicle spec에 노출되는 물리 치수
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FDeliveryBotDriveConfigInfo ChaosDriveConfigInfo{}; // Chaos Vehicle의 속도 제한, 가속/감속 같은 실제 주행 값

@@ -1,40 +1,51 @@
-# Episode Trace
+# trace.jsonl
 
-경로:
+Robot이 직접 관측하거나 결정한 정보가 아닌 runtime world state를 replay, debugging, post-run analysis용으로 기록하는 JSON Lines 파일이다.
+
+## 경로
 
 ```text
-experiments/<Experiment>/runs/<RunId>/episodes/<SampleId>/trace.jsonl
+runs/<RunId>/episodes/<EpisodeId>/trace.jsonl
 ```
 
-schema:
+## line schema
 
 ```json
-"논의중"
+"episode_trace"
 ```
 
-상태: `run_time_seconds` 조인 계약만 확정. line schema는 논의중이다.
+## Line Root Fields
 
-## 합의
+| 필드 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `schema` | string | 예 | 고정값 `episode_trace`. |
+| `version` | number | 예 | 고정값 `1`. |
+| `sample_index` | number | 예 | 0-based trace sample index. |
+| `run_time_seconds` | number | 예 | Episode 실행 timestamp. |
+| `delta_seconds` | number | 예 | Previous sample과의 frame delta. |
+| `robot` | object | 예 | Robot ground-truth state. |
+| `actors` | array | 예 | Robot 외 actor ground-truth state 목록. |
 
-- JSON Lines 형식이다.
-- robot이 직접 보지 못한 환경 정보를 분석/리플레이용으로 기록한다.
-- `actions.jsonl`과 `events.jsonl`은 `run_time_seconds`로 이 로그와 조인한다.
-- `sequence`는 action/event 조인 전용이며, trace join의 기본 key로 사용하지 않는다.
-- 전역 위치/거리 단위는 meter다.
+## robot
 
-## 현재 확정된 Schema
+| 필드 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `id` | string | 예 | Robot id. |
+| `position_cm` | array | 예 | World position `[x,y,z]` in centimeters. |
+| `rotation_quat_xyzw` | array | 예 | World rotation quaternion `[x,y,z,w]`. |
+| `velocity_cm_per_s` | array | 예 | World velocity `[x,y,z]` in centimeters per second. |
 
-| 항목 | 합의 |
-| --- | --- |
-| format | JSON Lines |
-| purpose | replay, debugging, post-run analysis |
-| time key | `run_time_seconds` |
-| join source | `actions.jsonl.run_time_seconds`, `events.jsonl.run_time_seconds` |
+## actors[]
 
-## 추후 확정
+| 필드 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `actor_index` | number | 예 | Trace line 안의 actor index. |
+| `position_cm` | array | 예 | World position `[x,y,z]` in centimeters. |
+| `rotation_quat_xyzw` | array | 예 | World rotation quaternion `[x,y,z,w]`. |
+| `velocity_cm_per_s` | array | 예 | World velocity `[x,y,z]` in centimeters per second. |
 
-| 항목 | 메모 |
-| --- | --- |
-| line schema | robot/world/pedestrian/obstacle 상태 표현 |
-| capture scope | 모든 frame 기록 여부와 downsample 규칙 |
-| privacy/filtering | robot observation과 환경 상태 trace 분리 기준 |
+## Join Rules
+
+- `actions.jsonl`과 `events.jsonl`은 `run_time_seconds`로 trace와 조인한다.
+- `sequence`는 action/event 조인 전용이며 trace join key가 아니다.
+- Robot observation 원본은 `actions.jsonl`에 있다.

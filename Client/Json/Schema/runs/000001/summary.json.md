@@ -1,61 +1,59 @@
-# Run Summary
+# summary.json
 
-경로:
+Run 전체 episode 결과를 빠르게 필터링하고 비교하기 위한 집계 파일이다. 원본 증거는 각 episode의 `scenario.json`, `result.json`, `events.jsonl`이다.
+
+## 경로
 
 ```text
-experiments/<Experiment>/runs/<RunId>/summary.json
+runs/<RunId>/summary.json
 ```
 
-schema:
+## schema
 
 ```json
 "run_summary"
 ```
 
-## 합의
+## Root Fields
 
-- run 전체의 Level 1 table이다.
-- 각 row는 sample 하나의 episode 결과 요약이다.
-- 원본 데이터가 아니라 빠른 분석/필터링용 집계다.
-- 원본은 scenario sample, episode `result.json`, `events.jsonl`이다.
-
-## Root
-
-```json
-{
-  "schema": "run_summary",
-  "version": 1,
-  "run": {},
-  "rows": []
-}
-```
+| 필드 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `schema` | string | 예 | 고정값 `run_summary`. |
+| `version` | number | 예 | 고정값 `1`. |
+| `run` | object | 예 | Run 메타데이터. |
+| `rows` | array | 예 | Episode별 결과 요약 row. |
 
 ## run
 
-| 필드 | 합의 |
-| --- | --- |
-| `run_id` | run 식별자 |
-| `experiment_id` | experiment 식별자 |
-| `started_at` | 실행 시작 시각 |
-| `ended_at` | 실행 종료 시각 |
-| `policy_snapshot_hash` | opaque policy snapshot hash |
+| 필드 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `run_id` | string | 예 | 6자리 decimal run id. |
+| `project_id` | string | 예 | Project 식별자. |
+| `started_at` | string | 예 | UTC 실행 시작 시각. |
+| `ended_at` | string | 예 | UTC 실행 종료 시각. |
+| `policy_snapshot_hash` | string | 예 | 실행 시점 policy snapshot hash. |
 
 ## rows[]
 
-| 필드 | 합의 |
-| --- | --- |
-| `episode_id` | episode 식별자 |
-| `sample_id` | sample 식별자 |
-| `scenario_id` | scenario 표시 식별자 |
-| `template_id` | 원본 template id |
-| `template_hash` | 원본 template hash |
-| `profile_hash` | profile hash |
-| `setting_hash` | setting hash |
-| `seed` | sample seed |
-| `outcome` | `Success`, `Failure`, `Cancelled` 등 최종 결과 분류 |
-| `terminal_reason` | episode 종료 원인 |
-| `duration_s` | 실행 시간 |
-| `usable_for_llm_tuning` | 분석/튜닝 근거 사용 가능 여부 |
-| `metrics` | 주요 count/distance metric subset |
-| `scenario_params` | 핵심 `scenario.params` subset |
-| `scenario_semantic` | 핵심 `scenario.semantic.summary` subset |
+| 필드 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `episode_id` | string | 예 | 6자리 decimal episode id. |
+| `scenario_id` | string | 예 | Scenario 표시/조인 식별자. |
+| `scenario_hash` | string | 예 | Episode `scenario_sample` content hash. |
+| `scenario_source_hash` | string | 예 | Run snapshot `scenario.json` hash. |
+| `profile_hash` | string | 예 | Run snapshot `profile.json` hash. |
+| `setting_hash` | string | 예 | Run snapshot `setting.json` hash. |
+| `seed` | number | 예 | Episode seed. |
+| `outcome` | string | 예 | `Success`, `Failure`, `Cancelled` 등 최종 결과 분류. |
+| `terminal_reason` | string | 예 | Episode 종료 원인. |
+| `duration_s` | number | 예 | Episode 실행 시간. |
+| `usable_for_llm_tuning` | boolean | 예 | 분석/튜닝 근거로 사용할 수 있는지 여부. |
+| `metrics` | object | 예 | 주요 count/distance metric subset. |
+| `scenario_params` | object | 예 | 핵심 `scenario_sample.scenario.params` subset. |
+| `scenario_semantic` | object | 예 | 핵심 `scenario_sample.scenario.semantic` subset. |
+
+## 사용 규칙
+
+- `summary.json`은 빠른 검토용 집계이며 source of truth가 아니다.
+- Episode 원본은 같은 run 아래 `episodes/<EpisodeId>/scenario.json`, `result.json`, `events.jsonl`에서 확인한다.
+- LLM은 summary row로 후보 episode를 좁힌 뒤 원본 파일을 읽고 판단한다.

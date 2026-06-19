@@ -1,37 +1,34 @@
-# Run Policy Snapshot
+# policy/
 
-경로:
+Project policy package와 run snapshot policy package의 계약이다.
 
-```text
-experiments/<Experiment>/runs/<RunId>/policy/
-```
-
-형식:
+## 경로
 
 ```text
-copied policy package
+<UserProject>/policy/
+runs/<RunId>/snapshot/policy/
 ```
 
-상태: snapshot 원칙만 확정. include/exclude와 hash 산정 규칙은 별도 담당 범위에서 확정한다.
+## 필수 진입점
 
-## 합의
+```text
+policy/__init__.py:create_policy
+```
 
-- run 시작 시 `experiments/<Experiment>/policy/`를 복사한 snapshot이다.
-- run 결과 해석과 재현성을 위해 실행 시점의 policy 상태를 보존한다.
-- `summary.json`과 `result.json`의 `policy_snapshot_hash`가 이 snapshot을 참조한다.
+## 진입점 규칙
 
-## 현재 확정된 Schema
-
-| 항목 | 합의 |
+| 항목 | 설명 |
 | --- | --- |
-| source | `experiments/<Experiment>/policy/` |
-| destination | `runs/<RunId>/policy/` |
-| immutability | run 생성 후 수정하지 않는 결과물 |
+| `create_policy()` | 인자 없이 호출 가능해야 한다. |
+| 반환값 | `Client/Resources/policy-runtime.py`가 호출하는 policy object. |
+| `start` | Scenario 시작 입력을 JSON 직렬화 가능한 dict로 받는다. |
+| `decide` | Observation 입력을 JSON 직렬화 가능한 dict로 받고 action dict를 반환한다. |
+| `end` | Episode 종료 입력을 JSON 직렬화 가능한 dict로 받는다. |
 
-## 추후 확정
+## Snapshot 규칙
 
-| 항목 | 메모 |
-| --- | --- |
-| include/exclude rule | snapshot에 포함할 파일 규칙 |
-| hash 산정 규칙 | canonical hash 규칙 |
-| metadata | snapshot 생성 시각, source hash 등 기록 위치 |
+- Run 시작 시 `<UserProject>/policy/` 전체를 `runs/<RunId>/snapshot/policy/`로 복사한다.
+- Symlink는 금지한다.
+- `__pycache__`, `.pyc`, `.pyo`는 snapshot에서 제외한다.
+- `Client/Resources/policy-runtime.py`는 사용자 policy package에 포함하지 않는다.
+- `summary.json`과 episode `result.json`의 `policy_snapshot_hash`가 실행 시점 policy 상태를 참조한다.

@@ -40,6 +40,10 @@ if (Test-Path -LiteralPath (Join-Path $repoRoot ".gitmodules") -PathType Leaf) {
     }
 }
 
+Invoke-InstallPhaseScript `
+    -Path "$PSScriptRoot\sync-ide-run-configs.ps1" `
+    -FailureMessage "IDE run config setup failed."
+
 if (-not $SkipGitHooks) {
     Invoke-InstallPhaseScript `
         -Path "$PSScriptRoot\set-git-config.ps1" `

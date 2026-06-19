@@ -27,6 +27,7 @@ entry:
   - UserProjectDataTypes.h / .cpp
   - SimulationSetupTypesTest.cpp
   - UserProjectDataTypesTest.cpp
+  - ScenarioEvaluationSubsystemTest.cpp
   - ScenarioDocumentSampleJsonTest.cpp
   - ScenarioSampleWorldSpecAdapterTest.cpp
   - UserProjectScenarioSampleWorldSpecAdapterTest.cpp
@@ -75,6 +76,7 @@ verify:
   - Scenario document parse, project `scenario.json` adapter, version mismatch, scenario sample generation, and round-trip automation tests
   - Scenario-to-WorldSpec adapter automation tests, including generated user-project scenario sample adapter coverage, and OdiroSimEditor build after adapter/editor draft changes
   - `OdiroSim.UserProjectData.RunOutput.Write` after user project result writer changes
+  - `OdiroSim.ScenarioEvaluation.Events` after runtime evaluation event detector or snapshot changes
   - `OdiroSim.UserProjectData.RobotAction.Write` after policy action logging changes
   - `OdiroSim.UserProjectData.EpisodeTrace.Write` after runtime trace logging changes
   - policy event JSONL/log mapping after adding new `EEpisodeEvaluationEventType` values

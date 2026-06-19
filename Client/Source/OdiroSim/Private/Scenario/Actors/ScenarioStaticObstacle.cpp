@@ -5,6 +5,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "Scenario/Components/ScenarioObstacleCollisionComponent.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
 #include "Scenario/Data/ScenarioStaticObstaclePropCatalog.h"
@@ -64,6 +65,53 @@ namespace
 		return FName(*(ObjectTypeActorTagPrefix + semanticTypeId.ToString()));
 	}
 
+}
+
+AScenarioStaticObstacle* AScenarioStaticObstacle::SpawnConfigured(
+	UWorld* world,
+	TSubclassOf<AScenarioStaticObstacle> obstacleClass,
+	const FTransform& transform,
+	const FScenarioStaticObstaclePropEntry& propEntry,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+	if (!world)
+	{
+		outFailureReason = TEXT("World is unavailable.");
+		return nullptr;
+	}
+	if (propEntry.PropId.IsNone())
+	{
+		outFailureReason = TEXT("Static obstacle prop entry is invalid.");
+		return nullptr;
+	}
+
+	TSubclassOf<AScenarioStaticObstacle> spawnClass = obstacleClass;
+	if (!spawnClass)
+	{
+		spawnClass = AScenarioStaticObstacle::StaticClass();
+	}
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AScenarioStaticObstacle* staticObstacle = world->SpawnActor<AScenarioStaticObstacle>(
+		spawnClass,
+		transform,
+		spawnParams);
+	if (!staticObstacle)
+	{
+		outFailureReason = TEXT("SpawnActor failed.");
+		return nullptr;
+	}
+
+	if (!staticObstacle->ApplyPropEntry(propEntry))
+	{
+		outFailureReason = FString::Printf(TEXT("Failed to apply prop '%s'."), *propEntry.PropId.ToString());
+		staticObstacle->Destroy();
+		return nullptr;
+	}
+
+	return staticObstacle;
 }
 
 AScenarioStaticObstacle::AScenarioStaticObstacle()

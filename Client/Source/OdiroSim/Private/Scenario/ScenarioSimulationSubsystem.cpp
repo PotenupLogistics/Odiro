@@ -851,22 +851,7 @@ AActor* UScenarioSimulationSubsystem::SpawnPlaceable(const FScenarioPlaceableIns
 
 AScenarioStaticObstacle* UScenarioSimulationSubsystem::SpawnStaticObstacle(const FScenarioPlaceableInstanceSpec& placeableSpec)
 {
-	UWorld* world = GetWorld();
-	TSubclassOf<AScenarioStaticObstacle> spawnClass = StaticObstacleClass;
-	if (!spawnClass)
-	{
-		spawnClass = AScenarioStaticObstacle::StaticClass();
-	}
-	if (!world || placeableSpec.InstanceId.IsEmpty() || placeableSpec.AssetId.IsEmpty() || !spawnClass) return nullptr;
-
-	FActorSpawnParameters spawnParams;
-	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	AScenarioStaticObstacle* staticObstacle = world->SpawnActor<AScenarioStaticObstacle>(
-		spawnClass,
-		placeableSpec.Transform,
-		spawnParams);
-	if (!staticObstacle) return nullptr;
+	if (placeableSpec.InstanceId.IsEmpty() || placeableSpec.AssetId.IsEmpty()) return nullptr;
 
 	FScenarioStaticObstaclePropEntry propEntry;
 	if (!TryFindStaticObstacleProp(FName(*placeableSpec.AssetId), propEntry))
@@ -874,22 +859,28 @@ AScenarioStaticObstacle* UScenarioSimulationSubsystem::SpawnStaticObstacle(const
 		UE_LOG(
 			LogScenarioSimulation,
 			Warning,
-			TEXT("정적 장애물 '%s'에 prop '%s' 적용 실패."),
+			TEXT("Static obstacle '%s' references unknown prop '%s'."),
 			*placeableSpec.InstanceId,
 			*placeableSpec.AssetId);
-		staticObstacle->Destroy();
 		return nullptr;
 	}
 
-	if (!staticObstacle->ApplyPropEntry(propEntry))
+	FString failureReason;
+	AScenarioStaticObstacle* staticObstacle = AScenarioStaticObstacle::SpawnConfigured(
+		GetWorld(),
+		StaticObstacleClass,
+		placeableSpec.Transform,
+		propEntry,
+		failureReason);
+	if (!staticObstacle)
 	{
 		UE_LOG(
 			LogScenarioSimulation,
 			Warning,
-			TEXT("Static obstacle '%s' failed to apply prop '%s'."),
+			TEXT("Static obstacle '%s' spawn failed for prop '%s': %s"),
 			*placeableSpec.InstanceId,
-			*placeableSpec.AssetId);
-		staticObstacle->Destroy();
+			*placeableSpec.AssetId,
+			*failureReason);
 		return nullptr;
 	}
 

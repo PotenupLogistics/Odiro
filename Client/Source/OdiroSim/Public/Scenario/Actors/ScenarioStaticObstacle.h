@@ -12,6 +12,7 @@ class UBoxComponent;
 class USceneComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
+class UWorld;
 
 // Runtime and editor actor for static scenario obstacles.
 UCLASS(BlueprintType)
@@ -22,6 +23,14 @@ class ODIROSIM_API AScenarioStaticObstacle : public AActor
 public:
 	// Creates the obstacle components used by authored and runtime placements.
 	AScenarioStaticObstacle();
+
+	// Spawns an obstacle actor and applies resolved catalog metadata before returning it to the caller.
+	static AScenarioStaticObstacle* SpawnConfigured(
+		UWorld* world,
+		TSubclassOf<AScenarioStaticObstacle> obstacleClass,
+		const FTransform& transform,
+		const FScenarioStaticObstaclePropEntry& propEntry,
+		FString& outFailureReason);
 
 	// Stable actor transform root; its origin is the semantic ground-contact point.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")

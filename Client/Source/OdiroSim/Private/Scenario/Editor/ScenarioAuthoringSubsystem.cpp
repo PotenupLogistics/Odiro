@@ -4059,13 +4059,6 @@ bool UScenarioAuthoringSubsystem::SpawnEditorStaticObstacleActor(
 	outActor = nullptr;
 	outFailureReason.Reset();
 
-	UWorld* world = GetWorld();
-	if (!world)
-	{
-		outFailureReason = TEXT("World is unavailable.");
-		return false;
-	}
-
 	if (spec.InstanceId.IsEmpty())
 	{
 		outFailureReason = TEXT("InstanceId is empty.");
@@ -4078,37 +4071,21 @@ bool UScenarioAuthoringSubsystem::SpawnEditorStaticObstacleActor(
 		return false;
 	}
 
-	TSubclassOf<AScenarioStaticObstacle> spawnClass = StaticObstacleClass;
-	if (!spawnClass)
-	{
-		spawnClass = AScenarioStaticObstacle::StaticClass();
-	}
-
-	FActorSpawnParameters spawnParams;
-	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	AScenarioStaticObstacle* staticObstacle = world->SpawnActor<AScenarioStaticObstacle>(
-		spawnClass,
-		spec.Transform,
-		spawnParams);
-	if (!staticObstacle)
-	{
-		outFailureReason = TEXT("SpawnActor failed.");
-		return false;
-	}
-
 	FScenarioStaticObstaclePropEntry propEntry;
 	if (!TryFindStaticObstacleProp(FName(*spec.AssetId), propEntry))
 	{
 		outFailureReason = FString::Printf(TEXT("Unknown prop '%s'."), *spec.AssetId);
-		staticObstacle->Destroy();
 		return false;
 	}
 
-	if (!staticObstacle->ApplyPropEntry(propEntry))
+	AScenarioStaticObstacle* staticObstacle = AScenarioStaticObstacle::SpawnConfigured(
+		GetWorld(),
+		StaticObstacleClass,
+		spec.Transform,
+		propEntry,
+		outFailureReason);
+	if (!staticObstacle)
 	{
-		outFailureReason = FString::Printf(TEXT("Failed to apply prop '%s'."), *spec.AssetId);
-		staticObstacle->Destroy();
 		return false;
 	}
 

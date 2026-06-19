@@ -1,5 +1,6 @@
 from ..action import BotAction, drive_action
 from ..contract import ScenarioDecideRequest
+from ..lidar_selector import select_policy_lidar_rays_2d
 from ..state import AgentState
 
 
@@ -24,7 +25,9 @@ class SlowDownPolicy:
         request: ScenarioDecideRequest,
         state: AgentState,
     ) -> tuple[BotAction | None, str]:
-        for ray in request.lidarRays:
+        lidar_rays = select_policy_lidar_rays_2d(request)
+
+        for ray in lidar_rays:
             if not ray.hit:
                 continue
 

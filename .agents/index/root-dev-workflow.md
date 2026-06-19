@@ -35,8 +35,10 @@ keep:
   - Main branch direct commits, local merges, and fast-forward pushes are blocked by hooks; local main deletion and intentional non-fast-forward force push are allowed.
   - Local pulls prefer rebase via pull.rebase=true, rebase.autoStash=true, branch.autoSetupRebase=always, and pull.ff=true so main sync and subbranch updates avoid merge commits without ff-only rejection.
   - post-merge and rebase post-rewrite hooks call tools/install.ps1 through .githooks/helpers/run-install after pulls update the worktree.
-  - tools/set-git-config.ps1 stays idempotent and reports changed Git config, Editor checkout preference values, Git identity warnings, and completion, not already-correct keys or routine successful checks.
-  - tools/set-git-config.ps1 sets missing repo-local user.name from the current Git LFS lock owner when available; user.email is warned, not inferred, because LFS lock data has no commit email.
+  - tools/install.ps1 calls tools/set-git-config.ps1, so setup and pull/rebase install hooks require GitHub CLI authentication when Git hook setup is enabled.
+  - git fetch is not wrapped because standard Git hooks do not cover no-op fetches consistently; use setup/pull hooks and explicit config checks instead.
+  - tools/set-git-config.ps1 is the single setup entry point for Git hooks, GitHub CLI auth, repo-local user.name/user.email, Git LFS locking config, local Unreal SourceControlSettings.ini, Editor checkout preferences, and read-only refresh.
+  - GitHub login, not display name, is the canonical value for repo-local user.name and Unreal Editor LfsUserName because Git LFS lock owners are compared by login.
   - Unreal binary assets stay Git blobs; Git LFS is used for lock/read-only/push verification only.
   - post-commit skips Git LFS read-only refresh when HEAD has no Unreal binary asset changes.
   - Feature branch commit and merge hooks return without source sanity checks; PR source sanity check runs tools/check-source-sanity.ps1 on a shallow merge-ref soft-reset staged diff and narrows UnityBuild helper scans from changed definitions.
@@ -46,9 +48,9 @@ keep:
 verify:
   - PowerShell parse check for script edits
   - hook syntax plus run-install smoke and staged main-delete smoke for .githooks changes
+  - tools/set-git-config.ps1 PowerShell parse check, missing-gh guidance smoke, gh auth failure smoke, and mocked gh dry-run smoke
   - git check-attr lockable for sample Unreal asset
-  - tools/set-git-config.ps1 local config smoke
-  - tools/set-git-config.ps1 Git identity warning smoke with missing repo-local user.email
+  - tools/set-git-config.ps1 local config and GitHub identity smoke
   - Client/Saved/Config/*Editor/EditorPerProjectUserSettings.ini checkout prompt smoke after tools/set-git-config.ps1
   - git config --local --get pull.ff returns true; pull.rebase returns true; rebase.autoStash returns true; branch.autoSetupRebase returns always
   - pre-push dry-run with empty updates and main fast-forward rejection
@@ -57,7 +59,7 @@ verify:
   - GitHub Merge Checks workflow runs Source Sanity from the PR merge ref, conditionally sets up Go for Bridge changes, and runs Asset Lock Ownership for Unreal binary assets
   - GitHub Post-Merge Tasks workflow shallow-checks out main, queues lock-mutating runs, fetches the before commit for automatic push diffs, rechecks lock id/time before unlock, and preserves manual exact-path unlock handling
   - GitHub asset lock workflows fail closed when Git LFS lock queries fail or return empty JSON
-  - task-setup.bat -AllowMissingPrerequisites -SkipAgents
+  - task-setup.bat -AllowMissingPrerequisites -SkipAgents -SkipGitHooks for non-auth setup smoke
   - tools/check-prerequisites.ps1 -AllowMissing
   - tools/build.ps1 -Target bridge
 related:

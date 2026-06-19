@@ -8,6 +8,7 @@ paths:
   - contracts/**
   - contracts/specs/**
   - contracts/specs/bridge-ipc.md
+  - docs/specs/**
   - static/project-templates/**
 entry:
   - Client/Docs/README.md
@@ -18,6 +19,7 @@ entry:
   - contracts/examples
   - contracts/specs/bridge-ipc.md
   - contracts/specs/user-project-data.md
+  - docs/specs
   - static/project-templates
 keep:
   - contracts/specs is the human-readable truth for shared payload/API/file formats.

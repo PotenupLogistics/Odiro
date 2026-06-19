@@ -5,27 +5,43 @@
 
 ## 대상
 
-| 영역     | 필요 도구                                                   |
-| -------- | ----------------------------------------------------------- |
-| `Agents` | `uv`                                                        |
-| `Client` | Unreal Engine 5.7, Visual Studio 2022, Windows SDK, Git LFS |
-| `Bridge` | Go                                                          |
+| 영역        | 필요 도구                                                   |
+| ----------- | ----------------------------------------------------------- |
+| `Agents`    | `uv`                                                        |
+| `Client`    | Unreal Engine 5.7, Visual Studio 2022, Windows SDK, Git LFS |
+| `Bridge`    | Go                                                          |
+| Git 계정/PR | GitHub CLI                                                  |
 
 ## Git setup
 
 처음 clone 후 실행:
 
 ```powershell
+winget install --id GitHub.cli -e
+gh auth login -h github.com
 .\task-setup.bat
 ```
 
-Git submodule 초기화, hook 설정, LFS lock 설정 수행.
+이미 `gh`가 설치되어 있으면 설치 명령은 생략한다. `winget`을 사용할 수 없으면 [GitHub CLI](https://cli.github.com/)에서 설치한다.
+
+Git submodule 초기화, hook 설정, GitHub 계정, Git commit identity, LFS 인증, Unreal Editor LFS user 설정을 수행한다.
 완료 후 Unreal asset에 read-only 상태가 재적용되고, Editor asset 수정 전 checkout prompt가 켜진다.
-현재 Git LFS lock owner를 확인할 수 있으면 repo-local `user.name`도 자동 설정한다.
-`user.email`은 LFS lock 정보에 없으므로 값이 없으면 경고만 출력한다.
+
+직접 재설정:
 
 ```powershell
-# 직접 재설정
+gh auth login -h github.com
+.\tools\set-git-config.ps1
+```
+
+`set-git-config.ps1`은 `gh api user`의 GitHub login을 기준으로 repo-local `user.name`과 Unreal Editor `LfsUserName`을 맞춘다. `gh auth setup-git --hostname github.com`으로 Git/LFS HTTPS credential helper도 `gh` 인증에 맞춘다. GitHub 공개 email이 없으면 `<id>+<login>@users.noreply.github.com`을 `user.email`로 사용한다.
+
+```powershell
+# commit email을 직접 지정
+.\tools\set-git-config.ps1 -Email <GitHub commit email>
+```
+
+```powershell
 git submodule update --init --recursive
 .\tools\set-git-config.ps1
 
@@ -42,7 +58,8 @@ git config --local user.name <GitHub login>
 git config --local user.email <GitHub commit email>
 ```
 
-Editor user 설정도 보정된다.
+Editor user 설정도 보정된다. Unreal Editor `LfsUserName`이 GitHub login 또는 LFS lock owner와 다르면 경고한다.
+계정 경고가 뜨면 수동 수정 대신 `.\tools\set-git-config.ps1`를 다시 실행한다.
 
 ```ini
 [/Script/UnrealEd.EditorLoadingSavingSettings]
@@ -58,7 +75,8 @@ git check-attr lockable -- Client/Content/<sample>.uasset
 ```
 
 `lockable: set`이어야 한다. `set-git-config.ps1`은 필요한 설정 변경과 완료 문구만 출력하고, setup 완료 후 lock 전 Unreal asset에 read-only 상태와 Editor checkout prompt를 재적용한다. 이미 맞는 상태의 성공 검증은 출력하지 않는다.
-Git identity가 없거나 LFS lock owner와 다르면 경고한다. Pull 후 Fork에도 같은 경고가 표시될 수 있다.
+GitHub CLI 인증이 없으면 실패한다. LFS lock owner가 GitHub login과 다르면 경고한다. Pull 후 hook에도 같은 실패 또는 경고가 표시될 수 있다.
+`git fetch`에는 no-op fetch까지 항상 실행되는 표준 hook이 없으므로 fetch 시점 강제 검사는 사용하지 않는다.
 
 GitHub repository 설정:
 

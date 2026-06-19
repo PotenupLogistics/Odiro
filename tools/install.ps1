@@ -17,6 +17,22 @@ trap {
 
 $repoRoot = Get-RepoRoot
 
+# Runs a project PowerShell script and fails this install phase on non-zero exit.
+function Invoke-InstallPhaseScript {
+    param(
+        [string] $Path,
+        [string] $FailureMessage
+    )
+
+    $global:LASTEXITCODE = 0
+    & $Path
+    $scriptSucceeded = $?
+    $scriptExitCode = $LASTEXITCODE
+    if (-not $scriptSucceeded -or $scriptExitCode -ne 0) {
+        throw $FailureMessage
+    }
+}
+
 if (Test-Path -LiteralPath (Join-Path $repoRoot ".gitmodules") -PathType Leaf) {
     git -C $repoRoot submodule update --init --recursive
     if ($LASTEXITCODE -ne 0) {
@@ -25,11 +41,15 @@ if (Test-Path -LiteralPath (Join-Path $repoRoot ".gitmodules") -PathType Leaf) {
 }
 
 if (-not $SkipGitHooks) {
-    & "$PSScriptRoot\set-git-config.ps1"
+    Invoke-InstallPhaseScript `
+        -Path "$PSScriptRoot\set-git-config.ps1" `
+        -FailureMessage "Git config setup failed."
 }
 
 if (-not $SkipAgents) {
-    & (Join-Path $repoRoot "Agents\tools\install.ps1")
+    Invoke-InstallPhaseScript `
+        -Path (Join-Path $repoRoot "Agents\tools\install.ps1") `
+        -FailureMessage "Agents install phase failed."
 }
 
 Write-Success "Install phase complete."

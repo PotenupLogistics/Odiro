@@ -52,9 +52,56 @@ function Test-GitLfsPrerequisite {
     )
 }
 
+# Verifies GitHub CLI availability and authentication for Git/LFS identity setup.
+function Test-GitHubCliPrerequisite {
+    $ghCommand = Get-Command "gh" -ErrorAction SilentlyContinue
+    if (-not $ghCommand) {
+        return @(
+            New-PrerequisiteIssue `
+                -Name "GitHub CLI" `
+                -Detail "gh was not found on PATH." `
+                -Reason "Repository setup aligns Git identity, GitHub credentials, Git LFS locking, and Unreal Editor LFS user through GitHub CLI." `
+                -Install "winget install --id GitHub.cli -e" `
+                -Verify "Open a new shell, then run: gh auth login -h github.com" `
+                -Docs @("docs/guides/development-environment.md#git-setup")
+        )
+    }
+
+    $ghVersion = (& gh --version 2>$null | Select-Object -First 1) -join " "
+    if (-not [string]::IsNullOrWhiteSpace($ghVersion)) {
+        Write-Step "gh: $ghVersion"
+    }
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $authStatus = @(gh auth status -h github.com 2>&1)
+        $authExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($authExitCode -eq 0) {
+        Write-Step "gh auth: github.com OK"
+        return @()
+    }
+
+    return @(
+        New-PrerequisiteIssue `
+            -Name "GitHub CLI auth" `
+            -Detail (($authStatus | Select-Object -First 3) -join " ") `
+            -Reason "Repository setup must read the GitHub login and configure Git/LFS credentials from gh auth." `
+            -Install "gh auth login -h github.com" `
+            -Verify "gh auth status -h github.com" `
+            -Docs @("docs/guides/development-environment.md#git-setup")
+    )
+}
+
 $repoRoot = Get-RepoRoot
 $issues = @()
 $issues += @(Test-GitLfsPrerequisite)
+$issues += @(Test-GitHubCliPrerequisite)
 $issues += @(& (Join-Path $repoRoot "Agents\tools\check-prerequisites.ps1") -PassThru)
 $issues += @(& (Join-Path $repoRoot "Bridge\tools\check-prerequisites.ps1") -PassThru)
 $issues += @(& (Join-Path $repoRoot "Client\Tools\CheckPrerequisites.ps1") -PassThru)

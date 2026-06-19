@@ -26,7 +26,15 @@
       "front_half_angle_degree": 50.0,
       "stop_distance_m": 2.0,
       "obstacle_warning_distance_m": 5.2,
-      "slow_down_distance_m": 8.0
+      "slow_down_distance_m": 8.0,
+      "observation_profile": "basic",
+      "point_cloud": {
+        "capture_enabled": false,
+        "capture_every_n_sensor_frames": 10,
+        "range_limit_m": 15.0,
+        "include_ground_points": true,
+        "max_points": 4096
+      }
     }
   }
 }

@@ -10,6 +10,8 @@ paths:
   - Client/Source/OdiroSim/Private/Shared/**
   - Client/Docs/plans/PLAN-260602-sim-logging.md
   - Client/Json/Input/**
+  - Client/Json/Schema/**
+  - Client/Json/environment-catalog.md
   - contracts/specs/**
 entry:
   - ScenarioSchemaTypes.h
@@ -34,6 +36,8 @@ entry:
   - EpisodeResultTypes.h
   - Client/Docs/plans/PLAN-260602-sim-logging.md
   - Client/Json/Input
+  - Client/Json/Schema
+  - Client/Json/environment-catalog.md
   - contracts/specs
   - contracts/specs/user-project-data.md
 keep:
@@ -60,10 +64,12 @@ keep:
   - Scenario LLM authoring saves v2 `scenario` responses to user project `scenario.json`; it must not save or execute RunQueue files.
   - Scenario LLM prompt generate/load/run is scoped to the current `<UserProject>/scenario.json`; run launches create `<UserProject>/runs/<RunId>` snapshots through SimulatorLaunchSubsystem.
   - Project run output uses `FUserProjectRunOutputJson` for `result.json`, `events.jsonl`, `actions.jsonl`, `trace.jsonl`, and `summary.json`.
+  - Client/Json/Schema and Client/Json/environment-catalog.md are LLM prompt-facing docs for one user project simulation set; keep them aligned with contracts/specs/user-project-data.md and the Client scenario catalog assets.
   - Scenario authoring/runtime projection stays separate from runtime WorldSpec and actor-spawn payload types.
 verify:
   - contract specs vs sample JSON alignment
   - `scenario`/`scenario_sample` docs vs Client shared schema type alignment
+  - Client/Json/Schema and environment catalog docs against contracts/specs/user-project-data.md before prompt-facing doc changes
   - Scenario document parse, project `scenario.json` adapter, version mismatch, scenario sample generation, and round-trip automation tests
   - Scenario-to-WorldSpec adapter automation tests, including generated user-project scenario sample adapter coverage, and OdiroSimEditor build after adapter/editor draft changes
   - `OdiroSim.UserProjectData.RunOutput.Write` after user project result writer changes

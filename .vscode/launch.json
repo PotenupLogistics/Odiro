@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Preview Mode",
+      "type": "node-terminal",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build",
+      "command": "cmd.exe /d /c call \"${workspaceFolder}\\task-run.bat\""
+    },
+    {
+      "name": "Development",
+      "type": "node-terminal",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build",
+      "command": "cmd.exe /d /c call \"${workspaceFolder}\\task-dev.bat\""
+    }
+  ]
+}

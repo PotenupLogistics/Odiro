@@ -2,8 +2,6 @@
 
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
-#include "Components/HorizontalBox.h"
-#include "Components/HorizontalBoxSlot.h"
 #include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
 #include "Components/WrapBox.h"
@@ -26,8 +24,13 @@ namespace
 	const TCHAR* ProjectOpenOptionsConfigSection = TEXT("OdiroSim.StartupMenu.ProjectOpen");
 	const TCHAR* ProjectOpenParentFolderConfigKey = TEXT("ParentFolder");
 	const TCHAR* ProjectOpenProjectNameConfigKey = TEXT("ProjectName");
-	const TCHAR* ProjectOpenTemplateIdConfigKey = TEXT("TemplateId");
+	const TCHAR* ProjectOpenScenarioPresetIdConfigKey = TEXT("ScenarioPresetId");
+	const TCHAR* ProjectOpenProfilePresetIdConfigKey = TEXT("ProfilePresetId");
+	const TCHAR* ProjectOpenPolicyPresetIdConfigKey = TEXT("PolicyPresetId");
 	const TCHAR* RecentProjectPathsConfigKey = TEXT("RecentProjectPaths");
+	const TCHAR* DefaultScenarioPresetId = TEXT("blank");
+	const TCHAR* DefaultProfilePresetId = TEXT("basic");
+	const TCHAR* DefaultPolicyPresetId = TEXT("blank");
 	const TCHAR* StartupMenuDefaultWidgetBlueprintClassPath =
 		TEXT("/Game/Widgets/MainMenu/WBP_StartupMenu.WBP_StartupMenu_C");
 	const TCHAR* ProjectTemplateCardWidgetBlueprintClassPath =
@@ -70,9 +73,9 @@ namespace
 		return NormalizeStartupMenuPath(FPaths::Combine(normalizedParentFolder, normalizedProjectName));
 	}
 
-	FString MakeProjectTemplateDisplayName(const FString& templateId)
+	FString MakeProjectPresetDisplayName(const FString& presetId)
 	{
-		FString displayName = templateId.TrimStartAndEnd();
+		FString displayName = presetId.TrimStartAndEnd();
 		displayName.ReplaceInline(TEXT("-"), TEXT(" "));
 		displayName.ReplaceInline(TEXT("_"), TEXT(" "));
 		return FName::NameToDisplayString(displayName, false);
@@ -159,7 +162,7 @@ void UStartupMenuWidget::NativeConstruct()
 	HideRecentProjectDeleteDialog();
 	LoadProjectOpenOptions();
 	InitializeProjectPathInputs();
-	RefreshProjectTemplateOptions();
+	RefreshProjectPresetOptions();
 	RefreshRecentProjectCards();
 	ShowRecentProjectsScreen();
 	RefreshProjectOpenActions();
@@ -179,14 +182,21 @@ void UStartupMenuWidget::NativeDestruct()
 	}
 	RecentProjectCards.Reset();
 
-	for (UProjectTemplateCardWidget* cardWidget : ProjectTemplateCards)
-	{
-		if (cardWidget)
+	const auto clearPresetCards =
+		[this](TArray<TObjectPtr<UProjectTemplateCardWidget>>& cards)
 		{
-			cardWidget->OnSelectedRequested.RemoveAll(this);
-		}
-	}
-	ProjectTemplateCards.Reset();
+			for (UProjectTemplateCardWidget* cardWidget : cards)
+			{
+				if (cardWidget)
+				{
+					cardWidget->OnSelectedRequested.RemoveAll(this);
+				}
+			}
+			cards.Reset();
+		};
+	clearPresetCards(ScenarioPresetCards);
+	clearPresetCards(ProfilePresetCards);
+	clearPresetCards(PolicyPresetCards);
 
 	Super::NativeDestruct();
 }
@@ -213,12 +223,21 @@ FString UStartupMenuWidget::GetProjectPathForPrototype() const
 	return GetSelectedProjectPath();
 }
 
-void UStartupMenuWidget::SelectProjectTemplate(const FString& templateId)
+void UStartupMenuWidget::SelectProjectPresets(
+	const FString& scenarioPresetId,
+	const FString& profilePresetId,
+	const FString& policyPresetId)
 {
-	const FString trimmedTemplateId = templateId.TrimStartAndEnd();
-	SelectedProjectTemplateId = trimmedTemplateId.IsEmpty() ? FString(TEXT("blank")) : trimmedTemplateId;
-	RefreshProjectTemplateCardStates();
-	RefreshProjectOpenActions();
+	SelectedScenarioPresetId = scenarioPresetId.TrimStartAndEnd().IsEmpty()
+		? FString(DefaultScenarioPresetId)
+		: scenarioPresetId.TrimStartAndEnd();
+	SelectedProfilePresetId = profilePresetId.TrimStartAndEnd().IsEmpty()
+		? FString(DefaultProfilePresetId)
+		: profilePresetId.TrimStartAndEnd();
+	SelectedPolicyPresetId = policyPresetId.TrimStartAndEnd().IsEmpty()
+		? FString(DefaultPolicyPresetId)
+		: policyPresetId.TrimStartAndEnd();
+	RefreshProjectPresetCardStates();
 }
 
 bool UStartupMenuWidget::CreateSelectedProject(
@@ -234,7 +253,7 @@ bool UStartupMenuWidget::CreateSelectedProject(
 		return false;
 	}
 
-	if (!subsystem->CreateProjectFromTemplate(GetSelectedProjectPath(), GetSelectedProjectTemplateId(), outDiagnostics))
+	if (!subsystem->CreateProjectFromPresets(GetSelectedProjectPath(), GetSelectedProjectPresetSelection(), outDiagnostics))
 	{
 		return false;
 	}
@@ -401,7 +420,9 @@ bool UStartupMenuWidget::ValidateRequiredBindings() const
 	requireWidget(BackToRecentProjectsButton, TEXT("BackToRecentProjectsButton"));
 	requireWidget(ProjectParentFolderTextBox, TEXT("ProjectParentFolderTextBox"));
 	requireWidget(ProjectNameTextBox, TEXT("ProjectNameTextBox"));
-	requireWidget(ProjectTemplateCardBox, TEXT("ProjectTemplateCardBox"));
+	requireWidget(ScenarioPresetCardWrapBox, TEXT("ScenarioPresetCardWrapBox"));
+	requireWidget(ProfilePresetCardWrapBox, TEXT("ProfilePresetCardWrapBox"));
+	requireWidget(PolicyPresetCardWrapBox, TEXT("PolicyPresetCardWrapBox"));
 	requireWidget(CreateProjectButton, TEXT("CreateProjectButton"));
 	requireWidget(ProjectOpenWarningText, TEXT("ProjectOpenWarningText"));
 
@@ -443,12 +464,16 @@ void UStartupMenuWidget::LoadProjectOpenOptions()
 {
 	FString parentFolder;
 	FString projectName;
-	FString templateId;
+	FString scenarioPresetId;
+	FString profilePresetId;
+	FString policyPresetId;
 	if (GConfig)
 	{
 		GConfig->GetString(ProjectOpenOptionsConfigSection, ProjectOpenParentFolderConfigKey, parentFolder, GGameUserSettingsIni);
 		GConfig->GetString(ProjectOpenOptionsConfigSection, ProjectOpenProjectNameConfigKey, projectName, GGameUserSettingsIni);
-		GConfig->GetString(ProjectOpenOptionsConfigSection, ProjectOpenTemplateIdConfigKey, templateId, GGameUserSettingsIni);
+		GConfig->GetString(ProjectOpenOptionsConfigSection, ProjectOpenScenarioPresetIdConfigKey, scenarioPresetId, GGameUserSettingsIni);
+		GConfig->GetString(ProjectOpenOptionsConfigSection, ProjectOpenProfilePresetIdConfigKey, profilePresetId, GGameUserSettingsIni);
+		GConfig->GetString(ProjectOpenOptionsConfigSection, ProjectOpenPolicyPresetIdConfigKey, policyPresetId, GGameUserSettingsIni);
 	}
 
 	SelectedProjectParentFolder = parentFolder.TrimStartAndEnd().IsEmpty()
@@ -457,7 +482,15 @@ void UStartupMenuWidget::LoadProjectOpenOptions()
 	SelectedProjectName = projectName.TrimStartAndEnd().IsEmpty()
 		? FString(TEXT("OdiroProject"))
 		: NormalizeProjectDirectoryName(projectName);
-	SelectedProjectTemplateId = templateId.TrimStartAndEnd().IsEmpty() ? FString(TEXT("blank")) : templateId.TrimStartAndEnd();
+	SelectedScenarioPresetId = scenarioPresetId.TrimStartAndEnd().IsEmpty()
+		? FString(DefaultScenarioPresetId)
+		: scenarioPresetId.TrimStartAndEnd();
+	SelectedProfilePresetId = profilePresetId.TrimStartAndEnd().IsEmpty()
+		? FString(DefaultProfilePresetId)
+		: profilePresetId.TrimStartAndEnd();
+	SelectedPolicyPresetId = policyPresetId.TrimStartAndEnd().IsEmpty()
+		? FString(DefaultPolicyPresetId)
+		: policyPresetId.TrimStartAndEnd();
 	LoadRecentProjectPaths();
 }
 
@@ -471,7 +504,10 @@ void UStartupMenuWidget::SaveProjectOpenOptions()
 
 	GConfig->SetString(ProjectOpenOptionsConfigSection, ProjectOpenParentFolderConfigKey, *SelectedProjectParentFolder, GGameUserSettingsIni);
 	GConfig->SetString(ProjectOpenOptionsConfigSection, ProjectOpenProjectNameConfigKey, *SelectedProjectName, GGameUserSettingsIni);
-	GConfig->SetString(ProjectOpenOptionsConfigSection, ProjectOpenTemplateIdConfigKey, *GetSelectedProjectTemplateId(), GGameUserSettingsIni);
+	const FProjectPresetSelection selection = GetSelectedProjectPresetSelection();
+	GConfig->SetString(ProjectOpenOptionsConfigSection, ProjectOpenScenarioPresetIdConfigKey, *selection.ScenarioPresetId, GGameUserSettingsIni);
+	GConfig->SetString(ProjectOpenOptionsConfigSection, ProjectOpenProfilePresetIdConfigKey, *selection.ProfilePresetId, GGameUserSettingsIni);
+	GConfig->SetString(ProjectOpenOptionsConfigSection, ProjectOpenPolicyPresetIdConfigKey, *selection.PolicyPresetId, GGameUserSettingsIni);
 	GConfig->SetArray(ProjectOpenOptionsConfigSection, RecentProjectPathsConfigKey, RecentProjectPaths, GGameUserSettingsIni);
 	GConfig->Flush(false, GGameUserSettingsIni);
 }
@@ -666,64 +702,121 @@ void UStartupMenuWidget::RefreshRecentProjectCards()
 	}
 }
 
-void UStartupMenuWidget::RefreshProjectTemplateOptions()
+void UStartupMenuWidget::RefreshProjectPresetOptions()
 {
-	if (!ProjectTemplateCardBox)
+	if (!ScenarioPresetCardWrapBox || !ProfilePresetCardWrapBox || !PolicyPresetCardWrapBox)
 	{
 		return;
 	}
 
-	for (UProjectTemplateCardWidget* cardWidget : ProjectTemplateCards)
-	{
-		if (cardWidget)
+	const auto resetCards =
+		[this](UWrapBox* container, TArray<TObjectPtr<UProjectTemplateCardWidget>>& cards)
 		{
-			cardWidget->OnSelectedRequested.RemoveAll(this);
-		}
-	}
-	ProjectTemplateCards.Reset();
-	ProjectTemplateCardBox->ClearChildren();
+			for (UProjectTemplateCardWidget* cardWidget : cards)
+			{
+				if (cardWidget)
+				{
+					cardWidget->OnSelectedRequested.RemoveAll(this);
+				}
+			}
+			cards.Reset();
+			container->ClearChildren();
+		};
+	resetCards(ScenarioPresetCardWrapBox, ScenarioPresetCards);
+	resetCards(ProfilePresetCardWrapBox, ProfilePresetCards);
+	resetCards(PolicyPresetCardWrapBox, PolicyPresetCards);
 
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
+	FProjectPresetCatalog catalog;
 	if (!subsystem)
 	{
-		SelectProjectTemplate(TEXT("blank"));
-		return;
+		catalog.ScenarioPresetIds.Add(DefaultScenarioPresetId);
+		catalog.ProfilePresetIds.Add(DefaultProfilePresetId);
+		catalog.PolicyPresetIds.Add(DefaultPolicyPresetId);
+	}
+	else
+	{
+		catalog = subsystem->ListProjectPresets();
 	}
 
-	TArray<FString> templateIds = subsystem->ListProjectTemplates();
-	if (templateIds.IsEmpty())
+	if (catalog.ScenarioPresetIds.IsEmpty())
 	{
-		templateIds.Add(TEXT("blank"));
+		catalog.ScenarioPresetIds.Add(DefaultScenarioPresetId);
+	}
+	if (catalog.ProfilePresetIds.IsEmpty())
+	{
+		catalog.ProfilePresetIds.Add(DefaultProfilePresetId);
+	}
+	if (catalog.PolicyPresetIds.IsEmpty())
+	{
+		catalog.PolicyPresetIds.Add(DefaultPolicyPresetId);
 	}
 
 	TSubclassOf<UProjectTemplateCardWidget> cardClass = ResolveProjectTemplateCardWidgetClass();
-	for (const FString& templateId : templateIds)
+	const auto populateCards =
+		[this, cardClass](
+			UWrapBox* container,
+			TArray<TObjectPtr<UProjectTemplateCardWidget>>& cards,
+			const TArray<FString>& presetIds,
+			void (UStartupMenuWidget::*selectionHandler)(UProjectTemplateCardWidget*))
+		{
+			if (!cardClass)
+			{
+				return;
+			}
+
+			for (const FString& presetId : presetIds)
+			{
+				UProjectTemplateCardWidget* cardWidget = CreateWidget<UProjectTemplateCardWidget>(GetOwningPlayer(), cardClass);
+				if (!cardWidget)
+				{
+					continue;
+				}
+
+				cardWidget->InitializeCard(presetId, MakeProjectPresetDisplayName(presetId));
+				cardWidget->OnSelectedRequested.AddUObject(this, selectionHandler);
+				cards.Add(cardWidget);
+				container->AddChildToWrapBox(cardWidget);
+			}
+		};
+	populateCards(
+		ScenarioPresetCardWrapBox,
+		ScenarioPresetCards,
+		catalog.ScenarioPresetIds,
+		&UStartupMenuWidget::HandleScenarioPresetCardSelected);
+	populateCards(
+		ProfilePresetCardWrapBox,
+		ProfilePresetCards,
+		catalog.ProfilePresetIds,
+		&UStartupMenuWidget::HandleProfilePresetCardSelected);
+	populateCards(
+		PolicyPresetCardWrapBox,
+		PolicyPresetCards,
+		catalog.PolicyPresetIds,
+		&UStartupMenuWidget::HandlePolicyPresetCardSelected);
+
+	const auto containsPreset =
+		[](const TArray<FString>& presetIds, const FString& selectedPresetId)
+		{
+			return presetIds.ContainsByPredicate(
+				[&selectedPresetId](const FString& presetId)
+				{
+					return presetId.Equals(selectedPresetId, ESearchCase::IgnoreCase);
+				});
+		};
+	if (!containsPreset(catalog.ScenarioPresetIds, SelectedScenarioPresetId))
 	{
-		if (!cardClass)
-		{
-			break;
-		}
-
-		UProjectTemplateCardWidget* cardWidget = CreateWidget<UProjectTemplateCardWidget>(GetOwningPlayer(), cardClass);
-		if (!cardWidget)
-		{
-			continue;
-		}
-
-		cardWidget->InitializeCard(templateId, MakeProjectTemplateDisplayName(templateId));
-		cardWidget->OnSelectedRequested.AddUObject(this, &UStartupMenuWidget::HandleProjectTemplateCardSelected);
-		ProjectTemplateCards.Add(cardWidget);
-		if (UHorizontalBoxSlot* cardSlot = ProjectTemplateCardBox->AddChildToHorizontalBox(cardWidget))
-		{
-			cardSlot->SetPadding(FMargin(0.0f, 0.0f, 8.0f, 0.0f));
-		}
+		SelectedScenarioPresetId = catalog.ScenarioPresetIds[0];
 	}
-
-	if (GetSelectedProjectTemplateId().IsEmpty() && !templateIds.IsEmpty())
+	if (!containsPreset(catalog.ProfilePresetIds, SelectedProfilePresetId))
 	{
-		SelectProjectTemplate(templateIds[0]);
+		SelectedProfilePresetId = catalog.ProfilePresetIds[0];
 	}
-	RefreshProjectTemplateCardStates();
+	if (!containsPreset(catalog.PolicyPresetIds, SelectedPolicyPresetId))
+	{
+		SelectedPolicyPresetId = catalog.PolicyPresetIds[0];
+	}
+	RefreshProjectPresetCardStates();
 }
 
 void UStartupMenuWidget::RefreshProjectOpenActions()
@@ -739,16 +832,23 @@ void UStartupMenuWidget::RefreshProjectOpenActions()
 	}
 }
 
-void UStartupMenuWidget::RefreshProjectTemplateCardStates()
+void UStartupMenuWidget::RefreshProjectPresetCardStates()
 {
-	const FString selectedTemplateId = GetSelectedProjectTemplateId();
-	for (UProjectTemplateCardWidget* cardWidget : ProjectTemplateCards)
-	{
-		if (cardWidget)
+	const FProjectPresetSelection selection = GetSelectedProjectPresetSelection();
+	const auto refreshCards =
+		[](const TArray<TObjectPtr<UProjectTemplateCardWidget>>& cards, const FString& selectedPresetId)
 		{
-			cardWidget->SetSelected(cardWidget->GetTemplateId().Equals(selectedTemplateId, ESearchCase::IgnoreCase));
-		}
-	}
+			for (UProjectTemplateCardWidget* cardWidget : cards)
+			{
+				if (cardWidget)
+				{
+					cardWidget->SetSelected(cardWidget->GetItemId().Equals(selectedPresetId, ESearchCase::IgnoreCase));
+				}
+			}
+		};
+	refreshCards(ScenarioPresetCards, selection.ScenarioPresetId);
+	refreshCards(ProfilePresetCards, selection.ProfilePresetId);
+	refreshCards(PolicyPresetCards, selection.PolicyPresetId);
 }
 
 void UStartupMenuWidget::SetProjectOpenWarningText(const FString& message)
@@ -862,7 +962,7 @@ void UStartupMenuWidget::HandleRecentProjectCardSelected(UProjectTemplateCardWid
 		return;
 	}
 
-	OpenExistingProject(cardWidget->GetTemplateId());
+	OpenExistingProject(cardWidget->GetItemId());
 }
 
 void UStartupMenuWidget::HandleRecentProjectCardContextRequested(UProjectTemplateCardWidget* cardWidget)
@@ -872,17 +972,40 @@ void UStartupMenuWidget::HandleRecentProjectCardContextRequested(UProjectTemplat
 		return;
 	}
 
-	ShowRecentProjectDeleteDialog(cardWidget->GetTemplateId());
+	ShowRecentProjectDeleteDialog(cardWidget->GetItemId());
 }
 
-void UStartupMenuWidget::HandleProjectTemplateCardSelected(UProjectTemplateCardWidget* cardWidget)
+void UStartupMenuWidget::HandleScenarioPresetCardSelected(UProjectTemplateCardWidget* cardWidget)
 {
 	if (!cardWidget)
 	{
 		return;
 	}
 
-	SelectProjectTemplate(cardWidget->GetTemplateId());
+	SelectedScenarioPresetId = cardWidget->GetItemId();
+	RefreshProjectPresetCardStates();
+}
+
+void UStartupMenuWidget::HandleProfilePresetCardSelected(UProjectTemplateCardWidget* cardWidget)
+{
+	if (!cardWidget)
+	{
+		return;
+	}
+
+	SelectedProfilePresetId = cardWidget->GetItemId();
+	RefreshProjectPresetCardStates();
+}
+
+void UStartupMenuWidget::HandlePolicyPresetCardSelected(UProjectTemplateCardWidget* cardWidget)
+{
+	if (!cardWidget)
+	{
+		return;
+	}
+
+	SelectedPolicyPresetId = cardWidget->GetItemId();
+	RefreshProjectPresetCardStates();
 }
 
 void UStartupMenuWidget::ShowRecentProjectDeleteDialog(const FString& projectPath)
@@ -960,14 +1083,19 @@ FString UStartupMenuWidget::GetSelectedProjectPath() const
 	return BuildProjectPathFromInputs(GetSelectedProjectParentFolder(), GetSelectedProjectName());
 }
 
-FString UStartupMenuWidget::GetSelectedProjectTemplateId() const
+FProjectPresetSelection UStartupMenuWidget::GetSelectedProjectPresetSelection() const
 {
-	if (!SelectedProjectTemplateId.TrimStartAndEnd().IsEmpty())
-	{
-		return SelectedProjectTemplateId;
-	}
-
-	return FString(TEXT("blank"));
+	FProjectPresetSelection selection;
+	selection.ScenarioPresetId = SelectedScenarioPresetId.TrimStartAndEnd().IsEmpty()
+		? FString(DefaultScenarioPresetId)
+		: SelectedScenarioPresetId.TrimStartAndEnd();
+	selection.ProfilePresetId = SelectedProfilePresetId.TrimStartAndEnd().IsEmpty()
+		? FString(DefaultProfilePresetId)
+		: SelectedProfilePresetId.TrimStartAndEnd();
+	selection.PolicyPresetId = SelectedPolicyPresetId.TrimStartAndEnd().IsEmpty()
+		? FString(DefaultPolicyPresetId)
+		: SelectedPolicyPresetId.TrimStartAndEnd();
+	return selection;
 }
 
 TSubclassOf<UProjectTemplateCardWidget> UStartupMenuWidget::ResolveProjectTemplateCardWidgetClass() const
@@ -983,7 +1111,7 @@ TSubclassOf<UProjectTemplateCardWidget> UStartupMenuWidget::ResolveProjectTempla
 		UE_LOG(
 			LogStartupMenuWidget,
 			Warning,
-			TEXT("Project template card widget class load failed | Path: %s"),
+			TEXT("Project preset card widget class load failed | Path: %s"),
 			ProjectTemplateCardWidgetBlueprintClassPath);
 		return nullptr;
 	}

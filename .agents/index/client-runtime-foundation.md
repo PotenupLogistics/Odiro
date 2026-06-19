@@ -29,7 +29,7 @@ keep:
   - Add module dependencies only at the public/private boundary that needs them.
   - DefaultEngine.ini starts in `/Game/Maps/StartupMap.StartupMap` with Engine GameModeBase; Startup UI is attached by the map-owned startup bootstrap actor.
   - StartupMap is a project selection/creation shell; ScenarioEditorMap owns WBP_MainMenu and editor workspace UI.
-  - WBP_MainMenu must expose ProjectWorkspaceScreen as its root surface and include ScenarioEditorRootWidget under ProjectScenarioEditPanel; recent project selection, recent-list removal dialog, and project creation widgets belong to WBP_StartupMenu.
+  - WBP_MainMenu must expose ProjectWorkspaceScreen as its root surface and include ScenarioEditorRootWidget under ProjectScenarioEditPanel; recent project selection, recent-list removal dialog, and preset-composition project creation widgets belong to WBP_StartupMenu.
   - StartupMenu/MainMenu asset edits are made and verified through UmgMcp; do not rely on runtime fallback to move ProjectOpenScreen or ScenarioEditorRootWidget.
   - ProjectBorealis UEGitPlugin is used for Editor checkout only; do not initialize `filter=lfs` attributes from the plugin UI.
   - DefaultEditorPerProjectUserSettings.ini defaults asset-modification checkout prompts; tools/set-git-config.ps1 corrects existing local Saved settings.

@@ -40,8 +40,8 @@ func (router *Router) Handle(request protocol.Request) protocol.Response {
 		return protocol.SuccessResponse(request.ID, protocol.PingResult{Status: "ok"})
 	case "workspace.validateProject":
 		return router.handleValidateProject(request)
-	case "workspace.listProjectTemplates":
-		return router.handleListProjectTemplates(request)
+	case "workspace.listProjectPresets":
+		return router.handleListProjectPresets(request)
 	case "workspace.createProject":
 		return router.handleCreateProject(request)
 	case "workspace.createRun":
@@ -64,8 +64,8 @@ type validateProjectParams struct {
 
 // createProjectParams is the request payload for workspace.createProject.
 type createProjectParams struct {
-	ProjectPath string `json:"projectPath"`
-	TemplateID  string `json:"templateId"`
+	ProjectPath     string                            `json:"projectPath"`
+	PresetSelection *workspace.ProjectPresetSelection `json:"presetSelection"`
 }
 
 // createRunParams is the request payload for workspace.createRun.
@@ -102,16 +102,16 @@ func (router *Router) handleValidateProject(request protocol.Request) protocol.R
 	return protocol.SuccessResponse(request.ID, result)
 }
 
-// handleListProjectTemplates returns available template IDs.
-func (router *Router) handleListProjectTemplates(request protocol.Request) protocol.Response {
-	result, err := router.Workspace.ListProjectTemplates()
+// handleListProjectPresets returns available preset IDs.
+func (router *Router) handleListProjectPresets(request protocol.Request) protocol.Response {
+	result, err := router.Workspace.ListProjectPresets()
 	if err != nil {
 		return errorResponse(request.ID, err)
 	}
 	return protocol.SuccessResponse(request.ID, result)
 }
 
-// handleCreateProject copies a selected template to a project root.
+// handleCreateProject copies selected presets to a project root.
 func (router *Router) handleCreateProject(request protocol.Request) protocol.Response {
 	params, err := decodeParams[createProjectParams](request.Params)
 	if err != nil {
@@ -120,10 +120,19 @@ func (router *Router) handleCreateProject(request protocol.Request) protocol.Res
 	if err := requireString("projectPath", params.ProjectPath); err != nil {
 		return errorResponse(request.ID, err)
 	}
-	if err := requireString("templateId", params.TemplateID); err != nil {
+	if params.PresetSelection == nil {
+		return errorResponse(request.ID, workspace.NewError("INVALID_REQUEST", "presetSelection is required"))
+	}
+	if err := requireString("presetSelection.scenarioPresetId", params.PresetSelection.ScenarioPresetID); err != nil {
 		return errorResponse(request.ID, err)
 	}
-	result, err := router.Workspace.CreateProject(params.ProjectPath, params.TemplateID)
+	if err := requireString("presetSelection.profilePresetId", params.PresetSelection.ProfilePresetID); err != nil {
+		return errorResponse(request.ID, err)
+	}
+	if err := requireString("presetSelection.policyPresetId", params.PresetSelection.PolicyPresetID); err != nil {
+		return errorResponse(request.ID, err)
+	}
+	result, err := router.Workspace.CreateProject(params.ProjectPath, *params.PresetSelection)
 	if err != nil {
 		return errorResponse(request.ID, err)
 	}

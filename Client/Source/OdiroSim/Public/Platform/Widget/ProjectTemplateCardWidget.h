@@ -10,7 +10,7 @@ class UTextBlock;
 DECLARE_MULTICAST_DELEGATE_OneParam(FProjectTemplateCardSelectedNative, class UProjectTemplateCardWidget*);
 DECLARE_MULTICAST_DELEGATE_OneParam(FProjectTemplateCardContextNative, class UProjectTemplateCardWidget*);
 
-// ProjectOpenScreen의 template card item layout과 interaction binding을 담당하는 widget.
+// StartupMenu card item layout과 interaction binding을 담당하는 widget.
 UCLASS(BlueprintType, Blueprintable)
 class ODIROSIM_API UProjectTemplateCardWidget : public UUserWidget
 {
@@ -23,14 +23,14 @@ public:
 	virtual void NativeConstruct() override;
 	virtual FReply NativeOnPreviewMouseButtonDown(const FGeometry& inGeometry, const FPointerEvent& inMouseEvent) override;
 
-	// Template id와 표시 이름을 card UI에 반영한다.
-	void InitializeCard(const FString& templateId, const FString& displayName);
+	// Item id와 표시 이름을 card UI에 반영한다.
+	void InitializeCard(const FString& itemId, const FString& displayName);
 
 	// 선택 상태를 card UI state에 반영한다.
 	void SetSelected(bool bInSelected);
 
-	// 이 card가 대표하는 project template id를 반환한다.
-	FString GetTemplateId() const { return TemplateId; }
+	// 이 card가 대표하는 item id를 반환한다.
+	FString GetItemId() const { return ItemId; }
 
 	// Card 선택 요청을 parent widget에 알린다.
 	FProjectTemplateCardSelectedNative OnSelectedRequested;
@@ -71,7 +71,7 @@ private:
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UButton> CardButton;
 
-	// Template 표시 이름 text. Visual layout은 WBP가 소유한다.
+	// Item 표시 이름 text. Visual layout은 WBP가 소유한다.
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> CardNameLabel;
 
@@ -107,8 +107,8 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "ProjectTemplateCard|Style")
 	FLinearColor ActiveTextColor;
 
-	// 이 card가 대표하는 static project template id.
-	FString TemplateId;
+	// 이 card가 대표하는 item id.
+	FString ItemId;
 
 	// 이 card의 현재 선택 상태.
 	bool bSelected = false;

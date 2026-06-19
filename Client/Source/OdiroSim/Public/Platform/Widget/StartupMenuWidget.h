@@ -2,15 +2,14 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Platform/SimulatorLaunchSubsystem.h"
 #include "StartupMenuWidget.generated.h"
 
 class UButton;
 class UEditableTextBox;
-class UHorizontalBox;
 class UProjectSessionSubsystem;
 class UProjectTemplateCardWidget;
 class UScenarioEditorLaunchSubsystem;
-class USimulatorLaunchSubsystem;
 class UTextBlock;
 class UWidget;
 class UWidgetSwitcher;
@@ -36,8 +35,11 @@ public:
 	// Returns the currently selected normalized project path.
 	FString GetProjectPathForPrototype() const;
 
-	// Selects a static project template id for the next create action.
-	void SelectProjectTemplate(const FString& templateId);
+	// Selects static project preset ids for the next create action.
+	void SelectProjectPresets(
+		const FString& scenarioPresetId,
+		const FString& profilePresetId,
+		const FString& policyPresetId);
 
 	// Creates the selected project through the simulator launch subsystem.
 	bool CreateSelectedProject(TArray<FString>& outDiagnostics, USimulatorLaunchSubsystem* simulatorLaunchSubsystem = nullptr);
@@ -72,16 +74,18 @@ private:
 	void ShowRecentProjectsScreen();
 	void ShowCreateProjectScreen();
 	void RefreshRecentProjectCards();
-	void RefreshProjectTemplateOptions();
+	void RefreshProjectPresetOptions();
 	void RefreshProjectOpenActions();
-	void RefreshProjectTemplateCardStates();
+	void RefreshProjectPresetCardStates();
 	void SetProjectOpenWarningText(const FString& message);
 	void SetDiagnosticsText(const FString& message);
 	bool OpenExistingProject(const FString& projectPath);
 	bool CommitActiveProjectAndOpenEditor();
 	void HandleRecentProjectCardSelected(UProjectTemplateCardWidget* cardWidget);
 	void HandleRecentProjectCardContextRequested(UProjectTemplateCardWidget* cardWidget);
-	void HandleProjectTemplateCardSelected(UProjectTemplateCardWidget* cardWidget);
+	void HandleScenarioPresetCardSelected(UProjectTemplateCardWidget* cardWidget);
+	void HandleProfilePresetCardSelected(UProjectTemplateCardWidget* cardWidget);
+	void HandlePolicyPresetCardSelected(UProjectTemplateCardWidget* cardWidget);
 	void ShowRecentProjectDeleteDialog(const FString& projectPath);
 	void HideRecentProjectDeleteDialog();
 
@@ -94,7 +98,7 @@ private:
 	FString GetSelectedProjectParentFolder() const;
 	FString GetSelectedProjectName() const;
 	FString GetSelectedProjectPath() const;
-	FString GetSelectedProjectTemplateId() const;
+	FProjectPresetSelection GetSelectedProjectPresetSelection() const;
 
 	TSubclassOf<UProjectTemplateCardWidget> ResolveProjectTemplateCardWidgetClass() const;
 	USimulatorLaunchSubsystem* GetSimulatorLaunchSubsystem() const;
@@ -161,9 +165,17 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableTextBox> ProjectNameTextBox;
 
-	// Static project template card container.
+	// Scenario preset card container.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UHorizontalBox> ProjectTemplateCardBox;
+	TObjectPtr<UWrapBox> ScenarioPresetCardWrapBox;
+
+	// Profile preset card container.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWrapBox> ProfilePresetCardWrapBox;
+
+	// Policy preset card container.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWrapBox> PolicyPresetCardWrapBox;
 
 	// User project create action.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -177,7 +189,7 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> DiagnosticsTextBlock;
 
-	// Project template card Widget Blueprint class.
+	// Project preset card Widget Blueprint class.
 	UPROPERTY(EditDefaultsOnly, Category = "StartupMenu|Project")
 	TSubclassOf<UProjectTemplateCardWidget> ProjectTemplateCardWidgetClass;
 
@@ -189,9 +201,17 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProjectTemplateCardWidget>> RecentProjectCards;
 
-	// Template selection cards currently owned by the create screen.
+	// Scenario preset cards currently owned by the create screen.
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<UProjectTemplateCardWidget>> ProjectTemplateCards;
+	TArray<TObjectPtr<UProjectTemplateCardWidget>> ScenarioPresetCards;
+
+	// Profile preset cards currently owned by the create screen.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProjectTemplateCardWidget>> ProfilePresetCards;
+
+	// Policy preset cards currently owned by the create screen.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProjectTemplateCardWidget>> PolicyPresetCards;
 
 	// Normalized recent project paths ordered newest-first.
 	TArray<FString> RecentProjectPaths;
@@ -205,6 +225,12 @@ private:
 	// Cached create form project directory name.
 	FString SelectedProjectName;
 
-	// Cached template id for the next project create action.
-	FString SelectedProjectTemplateId;
+	// Cached scenario preset id for the next project create action.
+	FString SelectedScenarioPresetId;
+
+	// Cached profile preset id for the next project create action.
+	FString SelectedProfilePresetId;
+
+	// Cached policy preset id for the next project create action.
+	FString SelectedPolicyPresetId;
 };

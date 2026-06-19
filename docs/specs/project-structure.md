@@ -77,9 +77,11 @@ Odiro/
 
   static/                         # --- 배포/초기화용 기본 리소스 ---
     agents/                       # Agents 런타임 데이터
-    project-templates/            # project 생성용 template set
-      blank/                      # 최소 유효 skeleton project
-      demo/                       # 예시 scenario/profile/policy 포함 project
+    templates/                    # project 생성용 scenario/profile/policy preset source
+      setting.json                # setting.json 기본값
+      scenario/                   # <preset-id>.json scenario preset
+      profile/                    # <preset-id>.json profile preset
+      policy/                     # <preset-id>/ policy package preset
     run-defaults/                 # run 생성 시 복사할 기본 폴더
 
   docs/                           # --- 리포지토리 전체 개발 문서 ---
@@ -114,9 +116,11 @@ build/Release/
   OdiroHost.exe                   # 백그라운드 서비스
   resources/
     agents/                       # Agents 런타임 데이터
-    project-templates/            # project 생성용 template set
-      blank/
-      demo/
+    templates/                    # project 생성용 scenario/profile/policy preset source
+      setting.json
+      scenario/
+      profile/
+      policy/
     run-defaults/                 # run 생성 시 복사할 기본 폴더
     policy-runtime.pyz             # 패키징된 Python 런타임
 

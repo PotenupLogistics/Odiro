@@ -126,9 +126,9 @@ Client, Agents, Simulator 간 JSON-lines IPC 송수신 규약.
 - 필수 policy 진입점: `policy/__init__.py:create_policy`
 - 필수 path: symlink 불가
 
-### `workspace.listProjectTemplates`
+### `workspace.listProjectPresets`
 
-사용 가능한 project template id 목록 조회.
+사용 가능한 project preset id 목록 조회.
 
 요청:
 
@@ -136,7 +136,7 @@ Client, Agents, Simulator 간 JSON-lines IPC 송수신 규약.
 {
   "version": 1,
   "id": "request-1",
-  "method": "workspace.listProjectTemplates"
+  "method": "workspace.listProjectPresets"
 }
 ```
 
@@ -144,26 +144,26 @@ Client, Agents, Simulator 간 JSON-lines IPC 송수신 규약.
 
 ```json
 {
-  "templates": [
-    {
-      "templateId": "template-id"
-    }
-  ]
+  "scenarioPresetIds": ["blank", "curved-road", "demo"],
+  "profilePresetIds": ["basic", "full"],
+  "policyPresetIds": ["blank", "demo"]
 }
 ```
 
 규칙:
 
-- template id source: 실행 resource의 `project-templates/` 직접 하위 폴더
-- 개발 source: `static/project-templates/<TemplateId>/`
-- release resource: `resources/project-templates/<TemplateId>/`
-- `templateId`: 안전한 단일 경로 조각
-- `templateId` 금지값: 경로 구분자, `..`, 절대 경로
-- `workspace.createProject`: 선택 template 전체 계약 검증
+- preset id source: 실행 resource의 `templates/` category
+- 개발 source: `static/templates/{scenario/*.json,profile/*.json,policy/<PresetId>/}`
+- release resource: `resources/templates/{scenario/*.json,profile/*.json,policy/<PresetId>/}`
+- scenario/profile preset id: `.json` 파일 basename
+- policy preset id: `policy/` 직접 하위 폴더 이름
+- preset id: 안전한 단일 경로 조각
+- preset id 금지값: 경로 구분자, `..`, 절대 경로
+- `workspace.createProject`: 선택 preset 조합 계약 검증
 
 ### `workspace.createProject`
 
-새 project root 또는 빈 directory에 선택한 project template 복사.
+새 project root 또는 빈 directory에 선택한 project preset 조합 복사.
 
 요청:
 
@@ -174,7 +174,11 @@ Client, Agents, Simulator 간 JSON-lines IPC 송수신 규약.
   "method": "workspace.createProject",
   "params": {
     "projectPath": "X:/Projects/DeliveryBotA",
-    "templateId": "template-id"
+    "presetSelection": {
+      "scenarioPresetId": "blank",
+      "profilePresetId": "basic",
+      "policyPresetId": "blank"
+    }
   }
 }
 ```
@@ -184,7 +188,11 @@ Client, Agents, Simulator 간 JSON-lines IPC 송수신 규약.
 ```json
 {
   "project": {
-    "templateId": "template-id",
+    "presetSelection": {
+      "scenarioPresetId": "blank",
+      "profilePresetId": "basic",
+      "policyPresetId": "blank"
+    },
     "projectPath": "X:/Projects/DeliveryBotA",
     "settingPath": "X:/Projects/DeliveryBotA/setting.json",
     "profilePath": "X:/Projects/DeliveryBotA/profile.json",
@@ -206,16 +214,15 @@ Client, Agents, Simulator 간 JSON-lines IPC 송수신 규약.
 규칙:
 
 - target directory: 비어 있지 않으면 거부
-- `templateId` 필수
-- 지원 template id 목록: `workspace.listProjectTemplates`
-- target project root: template source와 같거나 서로의 하위 경로이면 `INVALID_REQUEST`
-- template source: `static/project-templates/<TemplateId>/`
-- template 검증: 복사 전 [User Project Data Contract](./user-project-data.md)의 project template contract
-- template 누락/불완전: `PROJECT_TEMPLATE_INVALID`, target project 미생성
-- template 금지 root directory: `runs/`, `review/`, `episodes/`, `snapshot/`
-- template 금지 file: `Client/Resources/policy-runtime.py` 같은 runtime file 또는 tool 문서
-- template 금지 항목 위반: `PROJECT_TEMPLATE_INVALID`, target project 미생성
-- `runs/`: template 복사 제외, project 생성 시 빈 directory 생성
+- `presetSelection.scenarioPresetId`, `profilePresetId`, `policyPresetId` 필수
+- 지원 preset id 목록: `workspace.listProjectPresets`
+- target project root: preset source와 같거나 서로의 하위 경로이면 `INVALID_REQUEST`
+- preset source: `static/templates/` 또는 `resources/templates/`
+- preset 검증: 복사 전 [User Project Data Contract](./user-project-data.md)의 project preset contract
+- preset 누락/불완전: `PROJECT_PRESET_INVALID`, target project 미생성
+- preset 금지 file: `Client/Resources/policy-runtime.py` 같은 runtime file 또는 tool 문서
+- preset 금지 항목 위반: `PROJECT_PRESET_INVALID`, target project 미생성
+- `runs/`: project 생성 시 빈 directory 생성
 - copy 제외: `__pycache__`, `.pyc`, `.pyo`
 
 ### `workspace.createRun`
@@ -375,7 +382,7 @@ Bridge 추적 중 simulator process 종료 요청.
 | `UNKNOWN_METHOD`                | 알 수 없는 method                          |
 | `PROJECT_INVALID`               | project 구조 검증 실패                     |
 | `PROJECT_EXISTS`                | project 생성 target이 비어 있지 않음       |
-| `PROJECT_TEMPLATE_INVALID`      | project template 사용 불가                 |
+| `PROJECT_PRESET_INVALID`        | project preset 사용 불가                   |
 | `SIMULATOR_EXECUTABLE_REQUIRED` | simulator executable 미설정 또는 접근 불가 |
 | `PROCESS_START_FAILED`          | simulator 자식 process 시작 실패           |
 | `RUN_ALREADY_TRACKED`           | 같은 run id process가 이미 추적 중         |

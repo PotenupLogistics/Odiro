@@ -42,6 +42,7 @@ bool FStartupMenuProjectModeSmokeTest::RunTest(const FString& parameters)
 	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
 
 	widget->SetProjectPathForPrototype(projectPath);
+	widget->SelectProjectPresets(TEXT("demo"), TEXT("full"), TEXT("demo"));
 	TestEqual(TEXT("project path selected"), widget->GetProjectPathForPrototype(), projectPath);
 
 	TArray<FString> diagnostics;
@@ -74,6 +75,7 @@ bool FStartupMenuProjectModeSmokeTest::RunTest(const FString& parameters)
 	const FString runPath = FPaths::Combine(projectPath, TEXT("runs"), runId);
 	TestTrue(TEXT("run snapshot setting exists"), FPaths::FileExists(FPaths::Combine(runPath, TEXT("snapshot/setting.json"))));
 	TestTrue(TEXT("run snapshot policy exists"), FPaths::FileExists(FPaths::Combine(runPath, TEXT("snapshot/policy/__init__.py"))));
+	TestTrue(TEXT("demo policy snapshot exists"), FPaths::FileExists(FPaths::Combine(runPath, TEXT("snapshot/policy/action.py"))));
 
 	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
 	return true;

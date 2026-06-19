@@ -6,6 +6,44 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "SimulatorLaunchSubsystem.generated.h"
 
+// 새 사용자 project를 만들 때 선택한 파일별 preset id 묶음.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FProjectPresetSelection
+{
+	GENERATED_BODY()
+
+	// scenario.json에 복사할 scenario preset id.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulator|Project")
+	FString ScenarioPresetId = TEXT("blank");
+
+	// profile.json에 복사할 profile preset id.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulator|Project")
+	FString ProfilePresetId = TEXT("basic");
+
+	// policy/에 복사할 policy preset id.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulator|Project")
+	FString PolicyPresetId = TEXT("blank");
+};
+
+// 사용 가능한 project preset id 목록.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FProjectPresetCatalog
+{
+	GENERATED_BODY()
+
+	// scenario.json preset id 목록.
+	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
+	TArray<FString> ScenarioPresetIds;
+
+	// profile.json preset id 목록.
+	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
+	TArray<FString> ProfilePresetIds;
+
+	// policy/ preset id 목록.
+	UPROPERTY(BlueprintReadOnly, Category = "Simulator|Project")
+	TArray<FString> PolicyPresetIds;
+};
+
 // Main menu process가 별도 simulator process 하나를 실행하고 status file로 추적한 결과
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FSimulatorRunInfo
@@ -171,17 +209,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Launch")
 	bool StartProjectRun(const FString& projectPath, const FString& runId);
 
-	// 개발/배포 resource에 포함된 project template id 목록을 반환한다.
+	// 개발/배포 resource에 포함된 project preset id 목록을 반환한다.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")
-	TArray<FString> ListProjectTemplates() const;
+	FProjectPresetCatalog ListProjectPresets() const;
 
 	// 사용자 project root의 최소 계약을 검증한다.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")
 	bool ValidateUserProject(const FString& projectPath, TArray<FString>& outDiagnostics) const;
 
-	// 선택한 template을 새 사용자 project root로 복사한다.
+	// 선택한 파일별 preset을 새 사용자 project root로 복사한다.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")
-	bool CreateProjectFromTemplate(const FString& projectPath, const FString& templateId, TArray<FString>& outDiagnostics) const;
+	bool CreateProjectFromPresets(
+		const FString& projectPath,
+		const FProjectPresetSelection& presetSelection,
+		TArray<FString>& outDiagnostics) const;
 
 	// 사용자 project 입력을 새 run snapshot으로 고정한다.
 	UFUNCTION(BlueprintCallable, Category = "Simulator|Project")

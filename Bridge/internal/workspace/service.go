@@ -23,29 +23,33 @@ var runIDPattern = regexp.MustCompile(`^\d{6}$`)
 
 // Service owns user project file and static resource operations.
 type Service struct {
-	ProjectTemplatesDir string
-	RunDefaultsDir      string
+	ProjectPresetsDir string
+	RunDefaultsDir    string
 }
 
-// ProjectTemplateInfo describes one available project template.
-type ProjectTemplateInfo struct {
-	TemplateID string `json:"templateId"`
+// ProjectPresetSelection describes selected file-level presets.
+type ProjectPresetSelection struct {
+	ScenarioPresetID string `json:"scenarioPresetId"`
+	ProfilePresetID  string `json:"profilePresetId"`
+	PolicyPresetID   string `json:"policyPresetId"`
 }
 
-// ListProjectTemplatesResult is the IPC result for template discovery.
-type ListProjectTemplatesResult struct {
-	Templates []ProjectTemplateInfo `json:"templates"`
+// ProjectPresetCatalog is the IPC result for preset discovery.
+type ProjectPresetCatalog struct {
+	ScenarioPresetIDs []string `json:"scenarioPresetIds"`
+	ProfilePresetIDs  []string `json:"profilePresetIds"`
+	PolicyPresetIDs   []string `json:"policyPresetIds"`
 }
 
 // ProjectInfo describes validated project paths.
 type ProjectInfo struct {
-	TemplateID   string `json:"templateId,omitempty"`
-	ProjectPath  string `json:"projectPath"`
-	SettingPath  string `json:"settingPath"`
-	ProfilePath  string `json:"profilePath"`
-	ScenarioPath string `json:"scenarioPath"`
-	PolicyPath   string `json:"policyPath"`
-	RunsPath     string `json:"runsPath"`
+	PresetSelection *ProjectPresetSelection `json:"presetSelection,omitempty"`
+	ProjectPath     string                  `json:"projectPath"`
+	SettingPath     string                  `json:"settingPath"`
+	ProfilePath     string                  `json:"profilePath"`
+	ScenarioPath    string                  `json:"scenarioPath"`
+	PolicyPath      string                  `json:"policyPath"`
+	RunsPath        string                  `json:"runsPath"`
 }
 
 // ValidateProjectResult is the IPC result for project validation.
@@ -90,10 +94,10 @@ type RunSnapshotInfo struct {
 }
 
 // NewService creates a workspace service from explicit resource directories.
-func NewService(projectTemplatesDir string, runDefaultsDir string) *Service {
+func NewService(projectPresetsDir string, runDefaultsDir string) *Service {
 	return &Service{
-		ProjectTemplatesDir: filepath.Clean(projectTemplatesDir),
-		RunDefaultsDir:      filepath.Clean(runDefaultsDir),
+		ProjectPresetsDir: filepath.Clean(projectPresetsDir),
+		RunDefaultsDir:    filepath.Clean(runDefaultsDir),
 	}
 }
 
@@ -106,38 +110,78 @@ func NewDefaultService() (*Service, error) {
 	switch mode {
 	case "static":
 		return NewService(
-			filepath.Join(root, "static", "project-templates"),
+			filepath.Join(root, "static", "templates"),
 			filepath.Join(root, "static", "run-defaults"),
 		), nil
 	default:
 		return NewService(
-			filepath.Join(root, "resources", "project-templates"),
+			filepath.Join(root, "resources", "templates"),
 			filepath.Join(root, "resources", "run-defaults"),
 		), nil
 	}
 }
 
-// ListProjectTemplates returns direct child directory names as template IDs.
-func (service *Service) ListProjectTemplates() (ListProjectTemplatesResult, error) {
-	entries, err := os.ReadDir(service.ProjectTemplatesDir)
+// ListProjectPresets returns safe preset IDs from the resource template folders.
+func (service *Service) ListProjectPresets() (ProjectPresetCatalog, error) {
+	scenarioPresetIDs, err := listPresetJSONIDs(filepath.Join(service.ProjectPresetsDir, "scenario"))
 	if err != nil {
-		return ListProjectTemplatesResult{}, NewError("PROJECT_TEMPLATE_INVALID", err.Error())
+		return ProjectPresetCatalog{}, err
 	}
-	result := ListProjectTemplatesResult{Templates: []ProjectTemplateInfo{}}
+	profilePresetIDs, err := listPresetJSONIDs(filepath.Join(service.ProjectPresetsDir, "profile"))
+	if err != nil {
+		return ProjectPresetCatalog{}, err
+	}
+	policyPresetIDs, err := listPresetIDs(filepath.Join(service.ProjectPresetsDir, "policy"))
+	if err != nil {
+		return ProjectPresetCatalog{}, err
+	}
+	return ProjectPresetCatalog{
+		ScenarioPresetIDs: scenarioPresetIDs,
+		ProfilePresetIDs:  profilePresetIDs,
+		PolicyPresetIDs:   policyPresetIDs,
+	}, nil
+}
+
+// listPresetIDs returns safe direct child directory names.
+func listPresetIDs(categoryDir string) ([]string, error) {
+	entries, err := os.ReadDir(categoryDir)
+	if err != nil {
+		return nil, NewError("PROJECT_PRESET_INVALID", err.Error())
+	}
+	presetIDs := []string{}
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-		templateID := entry.Name()
-		if !isSafeSegment(templateID) {
+		presetID := entry.Name()
+		if !isSafeSegment(presetID) {
 			continue
 		}
-		result.Templates = append(result.Templates, ProjectTemplateInfo{TemplateID: templateID})
+		presetIDs = append(presetIDs, presetID)
 	}
-	sort.Slice(result.Templates, func(left int, right int) bool {
-		return result.Templates[left].TemplateID < result.Templates[right].TemplateID
-	})
-	return result, nil
+	sort.Strings(presetIDs)
+	return presetIDs, nil
+}
+
+// listPresetJSONIDs returns safe direct child JSON file base names.
+func listPresetJSONIDs(categoryDir string) ([]string, error) {
+	entries, err := os.ReadDir(categoryDir)
+	if err != nil {
+		return nil, NewError("PROJECT_PRESET_INVALID", err.Error())
+	}
+	presetIDs := []string{}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".json") {
+			continue
+		}
+		presetID := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		if !isSafeSegment(presetID) {
+			continue
+		}
+		presetIDs = append(presetIDs, presetID)
+	}
+	sort.Strings(presetIDs)
+	return presetIDs, nil
 }
 
 // ValidateProject validates a user project root without mutating it.
@@ -156,20 +200,33 @@ func (service *Service) ValidateProject(projectPath string) (ValidateProjectResu
 	}, nil
 }
 
-// CreateProject copies a template into a new or empty project root.
-func (service *Service) CreateProject(projectPath string, templateID string) (CreateProjectResult, error) {
-	if !isSafeSegment(templateID) {
-		return CreateProjectResult{}, NewError("INVALID_REQUEST", "templateId must be a safe path segment")
+// CreateProject copies selected presets into a new or empty project root.
+func (service *Service) CreateProject(projectPath string, selection ProjectPresetSelection) (CreateProjectResult, error) {
+	selection = normalizePresetSelection(selection)
+	if !isSafeSegment(selection.ScenarioPresetID) {
+		return CreateProjectResult{}, NewError("INVALID_REQUEST", "scenarioPresetId must be a safe path segment")
 	}
-	templatePath := filepath.Join(service.ProjectTemplatesDir, templateID)
-	if err := service.validateProjectTemplate(templatePath); err != nil {
+	if !isSafeSegment(selection.ProfilePresetID) {
+		return CreateProjectResult{}, NewError("INVALID_REQUEST", "profilePresetId must be a safe path segment")
+	}
+	if !isSafeSegment(selection.PolicyPresetID) {
+		return CreateProjectResult{}, NewError("INVALID_REQUEST", "policyPresetId must be a safe path segment")
+	}
+
+	sources := projectPresetSourcePaths{
+		SettingPath:  filepath.Join(service.ProjectPresetsDir, "setting.json"),
+		ScenarioPath: filepath.Join(service.ProjectPresetsDir, "scenario", selection.ScenarioPresetID+".json"),
+		ProfilePath:  filepath.Join(service.ProjectPresetsDir, "profile", selection.ProfilePresetID+".json"),
+		PolicyPath:   filepath.Join(service.ProjectPresetsDir, "policy", selection.PolicyPresetID),
+	}
+	if err := service.validateProjectPresets(sources); err != nil {
 		return CreateProjectResult{}, err
 	}
 	projectAbs, err := filepath.Abs(projectPath)
 	if err != nil {
 		return CreateProjectResult{}, NewError("INVALID_REQUEST", err.Error())
 	}
-	if err := ensureNotRelatedPath(projectAbs, templatePath); err != nil {
+	if err := ensureNotRelatedPath(projectAbs, service.ProjectPresetsDir); err != nil {
 		return CreateProjectResult{}, err
 	}
 	if err := ensureEmptyOrMissingDirectory(projectAbs); err != nil {
@@ -178,11 +235,26 @@ func (service *Service) CreateProject(projectPath string, templateID string) (Cr
 	if err := os.MkdirAll(projectAbs, 0755); err != nil {
 		return CreateProjectResult{}, NewError("PROJECT_INVALID", err.Error())
 	}
-	createdPaths, err := copyTree(templatePath, projectAbs, copyOptions{
-		SkipGitKeep: false,
-	})
+	createdPaths := []string{}
+	for _, item := range []struct {
+		Source string
+		Target string
+	}{
+		{Source: sources.SettingPath, Target: filepath.Join(projectAbs, "setting.json")},
+		{Source: sources.ProfilePath, Target: filepath.Join(projectAbs, "profile.json")},
+		{Source: sources.ScenarioPath, Target: filepath.Join(projectAbs, "scenario.json")},
+	} {
+		if err := copyFile(item.Source, item.Target); err != nil {
+			return CreateProjectResult{}, err
+		}
+		createdPaths = append(createdPaths, filepath.ToSlash(strings.TrimPrefix(item.Target, projectAbs+string(filepath.Separator))))
+	}
+	policyPaths, err := copyTree(sources.PolicyPath, filepath.Join(projectAbs, "policy"), copyOptions{SkipGitKeep: false})
 	if err != nil {
 		return CreateProjectResult{}, err
+	}
+	for _, relativePath := range policyPaths {
+		createdPaths = append(createdPaths, filepath.ToSlash(filepath.Join("policy", relativePath)))
 	}
 	if err := os.MkdirAll(filepath.Join(projectAbs, "runs"), 0755); err != nil {
 		return CreateProjectResult{}, NewError("PROJECT_INVALID", err.Error())
@@ -193,7 +265,7 @@ func (service *Service) CreateProject(projectPath string, templateID string) (Cr
 	if err != nil {
 		return CreateProjectResult{}, err
 	}
-	info.TemplateID = templateID
+	info.PresetSelection = &selection
 	return CreateProjectResult{
 		Project:      info,
 		CreatedPaths: createdPaths,
@@ -309,6 +381,28 @@ func ValidateRunSnapshot(projectPath string, runID string) (RunSnapshotInfo, err
 	}, nil
 }
 
+// projectPresetSourcePaths contains resolved source paths for project creation.
+type projectPresetSourcePaths struct {
+	SettingPath  string
+	ProfilePath  string
+	ScenarioPath string
+	PolicyPath   string
+}
+
+// normalizePresetSelection applies the default create-project preset choices.
+func normalizePresetSelection(selection ProjectPresetSelection) ProjectPresetSelection {
+	if strings.TrimSpace(selection.ScenarioPresetID) == "" {
+		selection.ScenarioPresetID = "blank"
+	}
+	if strings.TrimSpace(selection.ProfilePresetID) == "" {
+		selection.ProfilePresetID = "basic"
+	}
+	if strings.TrimSpace(selection.PolicyPresetID) == "" {
+		selection.PolicyPresetID = "blank"
+	}
+	return selection
+}
+
 // validateProjectInfo returns canonical paths after contract validation.
 func (service *Service) validateProjectInfo(projectPath string) (ProjectInfo, error) {
 	projectAbs, err := filepath.Abs(projectPath)
@@ -355,48 +449,39 @@ func (service *Service) validateProjectInfo(projectPath string) (ProjectInfo, er
 	}, nil
 }
 
-// validateProjectTemplate checks template content before it is copied.
-func (service *Service) validateProjectTemplate(templatePath string) error {
-	if err := requireDir(templatePath, "PROJECT_TEMPLATE_INVALID"); err != nil {
-		return err
-	}
+// validateProjectPresets checks selected preset content before it is copied.
+func (service *Service) validateProjectPresets(sources projectPresetSourcePaths) error {
 	for _, item := range []struct {
 		Path   string
 		Schema string
 	}{
-		{Path: filepath.Join(templatePath, "setting.json"), Schema: schemaProjectSetting},
-		{Path: filepath.Join(templatePath, "profile.json"), Schema: schemaSimulationProfile},
-		{Path: filepath.Join(templatePath, "scenario.json"), Schema: schemaScenario},
+		{Path: sources.SettingPath, Schema: schemaProjectSetting},
+		{Path: sources.ProfilePath, Schema: schemaSimulationProfile},
+		{Path: sources.ScenarioPath, Schema: schemaScenario},
 	} {
-		if err := validateJSONSchema(item.Path, item.Schema, "PROJECT_TEMPLATE_INVALID"); err != nil {
+		if err := validateJSONSchema(item.Path, item.Schema, "PROJECT_PRESET_INVALID"); err != nil {
 			return err
 		}
 	}
-	if err := validatePolicyPackage(filepath.Join(templatePath, "policy"), "PROJECT_TEMPLATE_INVALID"); err != nil {
+	if err := validatePolicyPackage(sources.PolicyPath, "PROJECT_PRESET_INVALID"); err != nil {
 		return err
 	}
-	return filepath.WalkDir(templatePath, func(path string, entry fs.DirEntry, walkErr error) error {
+	return filepath.WalkDir(sources.PolicyPath, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return NewError("PROJECT_TEMPLATE_INVALID", walkErr.Error())
+			return NewError("PROJECT_PRESET_INVALID", walkErr.Error())
 		}
 		name := entry.Name()
 		if name == "." {
 			return nil
 		}
 		if entry.Type()&fs.ModeSymlink != 0 {
-			return NewError("PROJECT_TEMPLATE_INVALID", fmt.Sprintf("symlink is not allowed: %s", path))
-		}
-		if entry.IsDir() && (name == "runs" || name == "review" || name == "episodes" || name == "snapshot") {
-			relative, _ := filepath.Rel(templatePath, path)
-			if relative == name {
-				return NewError("PROJECT_TEMPLATE_INVALID", fmt.Sprintf("forbidden template directory: %s", name))
-			}
+			return NewError("PROJECT_PRESET_INVALID", fmt.Sprintf("symlink is not allowed: %s", path))
 		}
 		if isGeneratedPythonCache(entry) {
-			return NewError("PROJECT_TEMPLATE_INVALID", fmt.Sprintf("generated Python cache is not allowed: %s", path))
+			return NewError("PROJECT_PRESET_INVALID", fmt.Sprintf("generated Python cache is not allowed: %s", path))
 		}
 		if name == "policy-runtime.py" || name == "server.py" {
-			return NewError("PROJECT_TEMPLATE_INVALID", fmt.Sprintf("forbidden template file: %s", name))
+			return NewError("PROJECT_PRESET_INVALID", fmt.Sprintf("forbidden preset file: %s", name))
 		}
 		return nil
 	})
@@ -417,17 +502,17 @@ func findResourceRoot() (string, string, error) {
 			return root, mode, nil
 		}
 	}
-	return "", "", NewError("PROJECT_TEMPLATE_INVALID", "project templates resource not found")
+	return "", "", NewError("PROJECT_PRESET_INVALID", "project presets resource not found")
 }
 
 // searchResourceRoot searches upward from one starting directory.
 func searchResourceRoot(start string) (string, string, bool) {
 	current := filepath.Clean(start)
 	for {
-		if dirExists(filepath.Join(current, "static", "project-templates")) {
+		if dirExists(filepath.Join(current, "static", "templates")) {
 			return current, "static", true
 		}
-		if dirExists(filepath.Join(current, "resources", "project-templates")) {
+		if dirExists(filepath.Join(current, "resources", "templates")) {
 			return current, "resources", true
 		}
 		parent := filepath.Dir(current)
@@ -606,12 +691,12 @@ func ensureEmptyOrMissingDirectory(path string) error {
 	return nil
 }
 
-// ensureNotRelatedPath rejects copying a template into itself.
-func ensureNotRelatedPath(projectPath string, templatePath string) error {
+// ensureNotRelatedPath rejects copying preset resources into themselves.
+func ensureNotRelatedPath(projectPath string, presetPath string) error {
 	projectAbs, _ := filepath.Abs(projectPath)
-	templateAbs, _ := filepath.Abs(templatePath)
-	if sameOrChild(projectAbs, templateAbs) || sameOrChild(templateAbs, projectAbs) {
-		return NewError("INVALID_REQUEST", "projectPath and template source must not overlap")
+	presetAbs, _ := filepath.Abs(presetPath)
+	if sameOrChild(projectAbs, presetAbs) || sameOrChild(presetAbs, projectAbs) {
+		return NewError("INVALID_REQUEST", "projectPath and preset source must not overlap")
 	}
 	return nil
 }

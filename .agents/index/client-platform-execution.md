@@ -54,13 +54,13 @@ keep:
   - WBP_MainMenu owns control/workspace UI plus the ScenarioEditor root child; C++ requires the asset root to be ProjectWorkspaceScreen and does not create or promote the workspace at runtime.
   - WBP_MainMenu must place ScenarioEditorRootWidget under ProjectScenarioEditPanel, not directly under ProjectWorkspaceScreen.
   - StartupMenu/MainMenu UMG structure changes use UmgMcp asset edits and widget tree verification, not runtime fallback repair.
-  - Project template cards use `WBP_ProjectTemplateCard`; card item layout, thumbnail fallback, and shadow styling stay in UMG assets.
+  - Project preset and recent project cards reuse `WBP_ProjectTemplateCard`; card item layout, thumbnail fallback, and shadow styling stay in UMG assets.
   - StartupMenu opens existing projects from a newest-first recent project card WrapBox; card size, spacing, and wrap behavior are WBP-owned, and anchored available width determines the natural card count per row. Recent cards support a right-click confirmation dialog that removes only the recent-list entry.
   - UmgMcp `query_widget_properties` must not request `Slot`; use `get_widget_tree`, export JSON, or direct `set_widget_properties` slot updates instead.
   - MainMenu project scenario tab lists, opens, and starts runs from the active project session's `<UserProject>/scenario.json` project-run snapshots.
   - MainMenu project result rows use `WBP_FileListItem` primary action for completed detail view and secondary display text for run state.
   - UmgMcp widget create/delete must keep `WidgetVariableNameToGuidMap` consistent; persistent variable widgets should use GUID-safe creation paths and wait for structural edits to finish.
-  - StartupMenu creates/validates projects through temporary file-based SimulatorLaunchSubsystem workspace helpers, then stores the active project in ProjectSessionSubsystem.
+  - StartupMenu creates/validates projects through temporary file-based SimulatorLaunchSubsystem preset-composition helpers, then stores the active project in ProjectSessionSubsystem.
   - MainMenu creates run snapshots through temporary file-based SimulatorLaunchSubsystem workspace helpers using the active project session.
   - MainMenu project mode reads result runs from `<UserProject>/runs/<RunId>` and sends AI analysis through the v2 project-run path.
   - MainMenu project experiment Add opens a WBP-owned setting editor; its 실행 action saves `<UserProject>/setting.json`, creates a run snapshot, starts the simulator, and then exposes the run in the status list.

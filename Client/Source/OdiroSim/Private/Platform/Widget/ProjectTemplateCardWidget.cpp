@@ -71,12 +71,12 @@ FReply UProjectTemplateCardWidget::NativeOnPreviewMouseButtonDown(
 	return Super::NativeOnPreviewMouseButtonDown(inGeometry, inMouseEvent);
 }
 
-void UProjectTemplateCardWidget::InitializeCard(const FString& templateId, const FString& displayName)
+void UProjectTemplateCardWidget::InitializeCard(const FString& itemId, const FString& displayName)
 {
-	TemplateId = templateId.TrimStartAndEnd();
+	ItemId = itemId.TrimStartAndEnd();
 
 	const FString visibleName = displayName.TrimStartAndEnd().IsEmpty()
-		? TemplateId
+		? ItemId
 		: displayName.TrimStartAndEnd();
 	if (CardNameLabel)
 	{

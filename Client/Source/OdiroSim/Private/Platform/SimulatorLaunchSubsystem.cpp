@@ -23,7 +23,10 @@ namespace
 	const int32 ProjectRunDefaultPolicyPort = 18145;
 	const TCHAR* UserProjectStaticDirectory = TEXT("static");
 	const TCHAR* UserProjectResourcesDirectory = TEXT("resources");
-	const TCHAR* UserProjectTemplateDirectory = TEXT("project-templates");
+	const TCHAR* UserProjectPresetDirectory = TEXT("templates");
+	const TCHAR* UserProjectScenarioPresetsDirectory = TEXT("scenario");
+	const TCHAR* UserProjectProfilePresetsDirectory = TEXT("profile");
+	const TCHAR* UserProjectPolicyPresetsDirectory = TEXT("policy");
 	const TCHAR* UserProjectRunDefaultsDirectory = TEXT("run-defaults");
 	const TCHAR* UserProjectSettingFileName = TEXT("setting.json");
 	const TCHAR* UserProjectProfileFileName = TEXT("profile.json");
@@ -34,6 +37,9 @@ namespace
 	const TCHAR* UserProjectPolicyEntrypointFileName = TEXT("__init__.py");
 	const TCHAR* UserProjectSettingSchema = TEXT("project_setting");
 	const TCHAR* UserProjectProfileSchema = TEXT("simulation_profile");
+	const TCHAR* ProjectPresetDefaultScenarioId = TEXT("blank");
+	const TCHAR* ProjectPresetDefaultProfileId = TEXT("basic");
+	const TCHAR* ProjectPresetDefaultPolicyId = TEXT("blank");
 
 	FString ToProjectRelativePath(FString filePath)
 	{
@@ -94,29 +100,106 @@ namespace
 		return true;
 	}
 
+	FProjectPresetSelection NormalizeProjectPresetSelection(const FProjectPresetSelection& selection)
+	{
+		FProjectPresetSelection normalizedSelection;
+		normalizedSelection.ScenarioPresetId = selection.ScenarioPresetId.TrimStartAndEnd().IsEmpty()
+			? FString(ProjectPresetDefaultScenarioId)
+			: selection.ScenarioPresetId.TrimStartAndEnd();
+		normalizedSelection.ProfilePresetId = selection.ProfilePresetId.TrimStartAndEnd().IsEmpty()
+			? FString(ProjectPresetDefaultProfileId)
+			: selection.ProfilePresetId.TrimStartAndEnd();
+		normalizedSelection.PolicyPresetId = selection.PolicyPresetId.TrimStartAndEnd().IsEmpty()
+			? FString(ProjectPresetDefaultPolicyId)
+			: selection.PolicyPresetId.TrimStartAndEnd();
+		return normalizedSelection;
+	}
+
+	bool IsSameOrChildPath(FString childPath, FString basePath)
+	{
+		childPath = NormalizeAbsolutePath(childPath);
+		basePath = NormalizeAbsolutePath(basePath);
+		if (childPath.IsEmpty() || basePath.IsEmpty())
+		{
+			return false;
+		}
+		FString relativePath = childPath;
+		if (!basePath.EndsWith(TEXT("/")))
+		{
+			basePath += TEXT("/");
+		}
+		const bool bRelative = FPaths::MakePathRelativeTo(relativePath, *basePath);
+		relativePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (childPath.Equals(basePath.LeftChop(1), ESearchCase::IgnoreCase))
+		{
+			return true;
+		}
+		return bRelative && !relativePath.StartsWith(TEXT("..")) && FPaths::IsRelative(relativePath);
+	}
+
+	bool IsOverlappingPath(const FString& leftPath, const FString& rightPath)
+	{
+		return IsSameOrChildPath(leftPath, rightPath) || IsSameOrChildPath(rightPath, leftPath);
+	}
+
+	TArray<FString> ListSafePresetIds(const FString& presetCategoryPath)
+	{
+		TArray<FString> presetIds;
+		IFileManager::Get().FindFiles(presetIds, *FPaths::Combine(presetCategoryPath, TEXT("*")), false, true);
+
+		TArray<FString> safePresetIds;
+		for (const FString& presetId : presetIds)
+		{
+			if (IsSafeUserProjectSegment(presetId))
+			{
+				safePresetIds.Add(presetId);
+			}
+		}
+		safePresetIds.Sort();
+		return safePresetIds;
+	}
+
+	TArray<FString> ListSafePresetJsonIds(const FString& presetCategoryPath)
+	{
+		TArray<FString> presetFiles;
+		IFileManager::Get().FindFiles(presetFiles, *FPaths::Combine(presetCategoryPath, TEXT("*.json")), true, false);
+
+		TArray<FString> safePresetIds;
+		for (const FString& presetFile : presetFiles)
+		{
+			const FString presetId = FPaths::GetBaseFilename(presetFile);
+			if (IsSafeUserProjectSegment(presetId))
+			{
+				safePresetIds.Add(presetId);
+			}
+		}
+		safePresetIds.Sort();
+		return safePresetIds;
+	}
+
 	bool TryFindUserProjectResourcesFromRoot(
 		const FString& root,
-		FString& outProjectTemplatesPath,
+		FString& outProjectPresetsPath,
 		FString& outRunDefaultsPath)
 	{
-		const FString staticTemplatesPath =
-			NormalizeAbsolutePath(FPaths::Combine(root, UserProjectStaticDirectory, UserProjectTemplateDirectory));
+		const FString staticPresetsPath =
+			NormalizeAbsolutePath(FPaths::Combine(root, UserProjectStaticDirectory, UserProjectPresetDirectory));
 		const FString staticRunDefaultsPath =
 			NormalizeAbsolutePath(FPaths::Combine(root, UserProjectStaticDirectory, UserProjectRunDefaultsDirectory));
-		if (IsDirectory(staticTemplatesPath) && IsDirectory(staticRunDefaultsPath))
+		if (IsDirectory(staticPresetsPath) && IsDirectory(staticRunDefaultsPath))
 		{
-			outProjectTemplatesPath = staticTemplatesPath;
+			outProjectPresetsPath = staticPresetsPath;
 			outRunDefaultsPath = staticRunDefaultsPath;
 			return true;
 		}
 
-		const FString resourceTemplatesPath =
-			NormalizeAbsolutePath(FPaths::Combine(root, UserProjectResourcesDirectory, UserProjectTemplateDirectory));
+		const FString resourcePresetsPath =
+			NormalizeAbsolutePath(FPaths::Combine(root, UserProjectResourcesDirectory, UserProjectPresetDirectory));
 		const FString resourceRunDefaultsPath =
 			NormalizeAbsolutePath(FPaths::Combine(root, UserProjectResourcesDirectory, UserProjectRunDefaultsDirectory));
-		if (IsDirectory(resourceTemplatesPath) && IsDirectory(resourceRunDefaultsPath))
+		if (IsDirectory(resourcePresetsPath) && IsDirectory(resourceRunDefaultsPath))
 		{
-			outProjectTemplatesPath = resourceTemplatesPath;
+			outProjectPresetsPath = resourcePresetsPath;
 			outRunDefaultsPath = resourceRunDefaultsPath;
 			return true;
 		}
@@ -126,7 +209,7 @@ namespace
 
 	bool SearchUserProjectResourceRoot(
 		FString startPath,
-		FString& outProjectTemplatesPath,
+		FString& outProjectPresetsPath,
 		FString& outRunDefaultsPath)
 	{
 		FString current = NormalizeAbsolutePath(startPath);
@@ -137,7 +220,7 @@ namespace
 
 		while (!current.IsEmpty())
 		{
-			if (TryFindUserProjectResourcesFromRoot(current, outProjectTemplatesPath, outRunDefaultsPath))
+			if (TryFindUserProjectResourcesFromRoot(current, outProjectPresetsPath, outRunDefaultsPath))
 			{
 				return true;
 			}
@@ -154,7 +237,7 @@ namespace
 	}
 
 	bool LocateUserProjectResourceDirectories(
-		FString& outProjectTemplatesPath,
+		FString& outProjectPresetsPath,
 		FString& outRunDefaultsPath,
 		TArray<FString>* outDiagnostics)
 	{
@@ -165,7 +248,7 @@ namespace
 
 		for (const FString& startPath : startPaths)
 		{
-			if (SearchUserProjectResourceRoot(startPath, outProjectTemplatesPath, outRunDefaultsPath))
+			if (SearchUserProjectResourceRoot(startPath, outProjectPresetsPath, outRunDefaultsPath))
 			{
 				return true;
 			}
@@ -173,7 +256,7 @@ namespace
 
 		if (outDiagnostics)
 		{
-			outDiagnostics->Add(TEXT("Project template resources not found. Expected static/project-templates or resources/project-templates."));
+			outDiagnostics->Add(TEXT("Project preset resources not found. Expected static/templates or resources/templates."));
 		}
 		return false;
 	}
@@ -330,6 +413,47 @@ namespace
 			|| cleanName.Equals(TEXT("__pycache__"), ESearchCase::CaseSensitive)
 			|| cleanName.EndsWith(TEXT(".pyc"), ESearchCase::IgnoreCase)
 			|| cleanName.EndsWith(TEXT(".pyo"), ESearchCase::IgnoreCase);
+	}
+
+	bool ValidatePresetTreeHygiene(const FString& presetRoot, const FString& label, TArray<FString>& outDiagnostics)
+	{
+		const FString normalizedPresetRoot = NormalizeAbsolutePath(presetRoot);
+		if (!IsDirectory(normalizedPresetRoot))
+		{
+			outDiagnostics.Add(FString::Printf(TEXT("%s preset directory missing: %s"), *label, *normalizedPresetRoot));
+			return false;
+		}
+
+		TArray<FString> directories;
+		IFileManager::Get().FindFilesRecursive(directories, *normalizedPresetRoot, TEXT("*"), false, true);
+		for (const FString& directory : directories)
+		{
+			if (IsGeneratedPythonCachePath(directory))
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s preset generated Python cache is not allowed: %s"), *label, *directory));
+				return false;
+			}
+		}
+
+		TArray<FString> files;
+		IFileManager::Get().FindFilesRecursive(files, *normalizedPresetRoot, TEXT("*"), true, false);
+		for (const FString& file : files)
+		{
+			const FString fileName = FPaths::GetCleanFilename(file);
+			if (IsGeneratedPythonCachePath(file))
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s preset generated Python cache is not allowed: %s"), *label, *file));
+				return false;
+			}
+			if (fileName.Equals(TEXT("policy-runtime.py"), ESearchCase::IgnoreCase)
+				|| fileName.Equals(TEXT("server.py"), ESearchCase::IgnoreCase))
+			{
+				outDiagnostics.Add(FString::Printf(TEXT("%s preset forbidden file: %s"), *label, *fileName));
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	bool MakeRelativeToDirectory(const FString& path, const FString& root, FString& outRelativePath)
@@ -1486,29 +1610,20 @@ bool USimulatorLaunchSubsystem::StartProjectRun(const FString& projectPath, cons
 	return true;
 }
 
-TArray<FString> USimulatorLaunchSubsystem::ListProjectTemplates() const
+FProjectPresetCatalog USimulatorLaunchSubsystem::ListProjectPresets() const
 {
-	TArray<FString> diagnostics;
-	FString projectTemplatesPath;
+	FString projectPresetsPath;
 	FString runDefaultsPath;
-	if (!LocateUserProjectResourceDirectories(projectTemplatesPath, runDefaultsPath, &diagnostics))
+	if (!LocateUserProjectResourceDirectories(projectPresetsPath, runDefaultsPath, nullptr))
 	{
 		return {};
 	}
 
-	TArray<FString> templateIds;
-	IFileManager::Get().FindFiles(templateIds, *FPaths::Combine(projectTemplatesPath, TEXT("*")), false, true);
-
-	TArray<FString> safeTemplateIds;
-	for (const FString& templateId : templateIds)
-	{
-		if (IsSafeUserProjectSegment(templateId))
-		{
-			safeTemplateIds.Add(templateId);
-		}
-	}
-	safeTemplateIds.Sort();
-	return safeTemplateIds;
+	FProjectPresetCatalog catalog;
+	catalog.ScenarioPresetIds = ListSafePresetJsonIds(FPaths::Combine(projectPresetsPath, UserProjectScenarioPresetsDirectory));
+	catalog.ProfilePresetIds = ListSafePresetJsonIds(FPaths::Combine(projectPresetsPath, UserProjectProfilePresetsDirectory));
+	catalog.PolicyPresetIds = ListSafePresetIds(FPaths::Combine(projectPresetsPath, UserProjectPolicyPresetsDirectory));
+	return catalog;
 }
 
 bool USimulatorLaunchSubsystem::ValidateUserProject(const FString& projectPath, TArray<FString>& outDiagnostics) const
@@ -1517,34 +1632,82 @@ bool USimulatorLaunchSubsystem::ValidateUserProject(const FString& projectPath, 
 	return ValidateUserProjectDirectory(projectPath, true, outDiagnostics);
 }
 
-bool USimulatorLaunchSubsystem::CreateProjectFromTemplate(
+bool USimulatorLaunchSubsystem::CreateProjectFromPresets(
 	const FString& projectPath,
-	const FString& templateId,
+	const FProjectPresetSelection& presetSelection,
 	TArray<FString>& outDiagnostics) const
 {
 	outDiagnostics.Reset();
 
-	const FString trimmedTemplateId = templateId.TrimStartAndEnd();
-	if (!IsSafeUserProjectSegment(trimmedTemplateId))
+	const FProjectPresetSelection normalizedSelection = NormalizeProjectPresetSelection(presetSelection);
+	if (!IsSafeUserProjectSegment(normalizedSelection.ScenarioPresetId))
 	{
-		outDiagnostics.Add(TEXT("template id must be a safe path segment."));
+		outDiagnostics.Add(TEXT("scenario preset id must be a safe path segment."));
+		return false;
+	}
+	if (!IsSafeUserProjectSegment(normalizedSelection.ProfilePresetId))
+	{
+		outDiagnostics.Add(TEXT("profile preset id must be a safe path segment."));
+		return false;
+	}
+	if (!IsSafeUserProjectSegment(normalizedSelection.PolicyPresetId))
+	{
+		outDiagnostics.Add(TEXT("policy preset id must be a safe path segment."));
 		return false;
 	}
 
-	FString projectTemplatesPath;
+	FString projectPresetsPath;
 	FString runDefaultsPath;
-	if (!LocateUserProjectResourceDirectories(projectTemplatesPath, runDefaultsPath, &outDiagnostics))
+	if (!LocateUserProjectResourceDirectories(projectPresetsPath, runDefaultsPath, &outDiagnostics))
 	{
 		return false;
 	}
 
-	const FString templatePath = NormalizeAbsolutePath(FPaths::Combine(projectTemplatesPath, trimmedTemplateId));
-	if (!ValidateUserProjectDirectory(templatePath, false, outDiagnostics))
+	const FString settingPresetPath = NormalizeAbsolutePath(FPaths::Combine(
+		projectPresetsPath,
+		UserProjectSettingFileName));
+	const FString scenarioPresetPath = NormalizeAbsolutePath(FPaths::Combine(
+		projectPresetsPath,
+		UserProjectScenarioPresetsDirectory,
+		normalizedSelection.ScenarioPresetId + TEXT(".json")));
+	const FString profilePresetPath = NormalizeAbsolutePath(FPaths::Combine(
+		projectPresetsPath,
+		UserProjectProfilePresetsDirectory,
+		normalizedSelection.ProfilePresetId + TEXT(".json")));
+	const FString policyPresetPath = NormalizeAbsolutePath(FPaths::Combine(
+		projectPresetsPath,
+		UserProjectPolicyPresetsDirectory,
+		normalizedSelection.PolicyPresetId));
+
+	bool bValidPreset = true;
+	bValidPreset &= ValidateUserProjectRootJsonFile(
+		settingPresetPath,
+		UserProjectSettingSchema,
+		TEXT("setting preset"),
+		outDiagnostics);
+	bValidPreset &= ValidateUserProjectScenarioJsonFile(
+		scenarioPresetPath,
+		TEXT("scenario preset"),
+		outDiagnostics);
+	bValidPreset &= ValidateUserProjectRootJsonFile(
+		profilePresetPath,
+		UserProjectProfileSchema,
+		TEXT("profile preset"),
+		outDiagnostics);
+	bValidPreset &= ValidateUserProjectPolicyDirectory(policyPresetPath, outDiagnostics);
+	bValidPreset &= ValidatePresetTreeHygiene(policyPresetPath, TEXT("policy"), outDiagnostics);
+	if (!bValidPreset)
 	{
 		return false;
 	}
 
 	const FString resolvedProjectPath = NormalizeAbsolutePath(projectPath);
+	if (IsOverlappingPath(resolvedProjectPath, projectPresetsPath))
+	{
+		outDiagnostics.Add(TEXT("project path must not overlap project preset resources."));
+		return false;
+	}
+
 	if (!IsDirectoryEmptyOrMissing(resolvedProjectPath, outDiagnostics))
 	{
 		return false;
@@ -1556,7 +1719,24 @@ bool USimulatorLaunchSubsystem::CreateProjectFromTemplate(
 		return false;
 	}
 
-	if (!CopyUserProjectTree(templatePath, resolvedProjectPath, false, outDiagnostics))
+	const TPair<FString, FString> projectFiles[] = {
+		TPair<FString, FString>(settingPresetPath, NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectSettingFileName))),
+		TPair<FString, FString>(profilePresetPath, NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectProfileFileName))),
+		TPair<FString, FString>(scenarioPresetPath, NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectScenarioFileName))),
+	};
+	for (const TPair<FString, FString>& projectFile : projectFiles)
+	{
+		if (!CopyUserProjectFile(projectFile.Key, projectFile.Value, outDiagnostics))
+		{
+			return false;
+		}
+	}
+
+	if (!CopyUserProjectTree(
+			policyPresetPath,
+			NormalizeAbsolutePath(FPaths::Combine(resolvedProjectPath, UserProjectPolicyDirectory)),
+			false,
+			outDiagnostics))
 	{
 		return false;
 	}
@@ -1603,9 +1783,9 @@ bool USimulatorLaunchSubsystem::CreateProjectRunSnapshot(
 		return false;
 	}
 
-	FString projectTemplatesPath;
+	FString projectPresetsPath;
 	FString runDefaultsPath;
-	if (!LocateUserProjectResourceDirectories(projectTemplatesPath, runDefaultsPath, &outDiagnostics))
+	if (!LocateUserProjectResourceDirectories(projectPresetsPath, runDefaultsPath, &outDiagnostics))
 	{
 		return false;
 	}

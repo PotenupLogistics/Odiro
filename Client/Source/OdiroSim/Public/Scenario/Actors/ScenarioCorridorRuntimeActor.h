@@ -115,13 +115,4 @@ private:
 
 	// Creates spline-deformed cube mesh sections over the full corridor axis for one visual lane.
 	void AddLaneStrip(const FScenarioRuntimeCorridorLaneSpec& laneSpec);
-
-	// Resolves a Corridor surface id from the configured catalog or built-in defaults.
-	bool ResolveSurfaceEntry(const FString& surfaceId, FScenarioCorridorSurfaceEntry& outSurfaceEntry) const;
-
-	// Selects a runtime material from resolved Corridor surface metadata.
-	UMaterialInterface* ResolveSurfaceMaterial(const FScenarioCorridorSurfaceEntry& surfaceEntry) const;
-
-	// Selects a fallback material when a catalog entry has no preview material assigned.
-	UMaterialInterface* ResolveFallbackSurfaceMaterial(EScenarioGroundRegionType regionType) const;
 };

@@ -4,10 +4,8 @@
 #include "Components/SplineComponent.h"
 #include "Components/SplineMeshComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Scenario/Data/ScenarioCorridorSurfaceResolver.h"
 #include "UObject/ConstructorHelpers.h"
-
-// Log category for corridor preview surface and material resolution.
-DEFINE_LOG_CATEGORY_STATIC(LogScenarioCorridorPreview, Log, All);
 
 namespace
 {
@@ -24,12 +22,6 @@ namespace
 	// Blocked corridor surfaces use the same collision profile as blocked ground regions.
 	const FName BlockedPreviewCollisionProfileName{ TEXT("Blocked") };
 
-	// Returns true when a resolved surface should behave like a physical blocked volume.
-	bool IsBlockedCorridorSurface(const FScenarioCorridorSurfaceEntry& surfaceEntry)
-	{
-		return surfaceEntry.GroundRegionType == EScenarioGroundRegionType::Blocked
-			|| surfaceEntry.LaneType == EScenarioSampleLaneType::Blocked;
-	}
 }
 
 AScenarioCorridorPreviewActor::AScenarioCorridorPreviewActor()
@@ -187,9 +179,16 @@ void AScenarioCorridorPreviewActor::AddLaneStrip(
 	const double centerOffsetCm = ((minOffsetMeters + maxOffsetMeters) * 0.5) * CorridorPreviewMetersToCentimeters;
 	const double laneWidthCm = laneWidthMeters * CorridorPreviewMetersToCentimeters;
 	FScenarioCorridorSurfaceEntry surfaceEntry;
-	ResolveSurfaceEntry(surfaceId, surfaceEntry);
-	UMaterialInterface* material = ResolveSurfaceMaterial(surfaceEntry);
-	const bool bBlockedSurface = IsBlockedCorridorSurface(surfaceEntry);
+	FScenarioCorridorSurfaceResolver::ResolveSurfaceEntry(surfaceId, SurfaceCatalog, surfaceEntry);
+	const EScenarioGroundRegionType fallbackRegionType =
+		FScenarioCorridorSurfaceResolver::ResolveFallbackRegionType(surfaceEntry.LaneType);
+	UMaterialInterface* material = FScenarioCorridorSurfaceResolver::ResolveSurfaceMaterial(
+		surfaceEntry,
+		fallbackRegionType,
+		WalkableGroundMaterial.Get(),
+		PenaltyGroundMaterial.Get(),
+		BlockedGroundMaterial.Get());
+	const bool bBlockedSurface = FScenarioCorridorSurfaceResolver::IsBlockedSurface(surfaceEntry);
 	const double laneTopZCm = PreviewSurfaceTopZCm + surfaceZOffsetCm;
 	const double laneHeightCm = bBlockedSurface ? BlockedPreviewHeightCm : MinimumSurfacePreviewHeightCm;
 	const double laneCenterZCm = bBlockedSurface
@@ -279,104 +278,4 @@ double AScenarioCorridorPreviewActor::ResolvePreviewNumber(
 	}
 
 	return value.FixedValue;
-}
-
-bool AScenarioCorridorPreviewActor::ResolveSurfaceEntry(
-	const FString& surfaceId,
-	FScenarioCorridorSurfaceEntry& outSurfaceEntry) const
-{
-	outSurfaceEntry = FScenarioCorridorSurfaceEntry();
-	const FName surfaceName(*surfaceId);
-	if (const UScenarioCorridorSurfaceCatalog* loadedCatalog = SurfaceCatalog.LoadSynchronous())
-	{
-		if (loadedCatalog->FindSurfaceEntryById(surfaceName, outSurfaceEntry))
-		{
-			UE_LOG(
-				LogScenarioCorridorPreview,
-				Log,
-				TEXT("Resolved Corridor surface '%s' from catalog/defaults. Catalog: %s"),
-				*surfaceName.ToString(),
-				*loadedCatalog->GetPathName());
-			return true;
-		}
-	}
-	else if (!SurfaceCatalog.IsNull())
-	{
-		UE_LOG(
-			LogScenarioCorridorPreview,
-			Warning,
-			TEXT("Corridor surface catalog could not be loaded. Path: %s"),
-			*SurfaceCatalog.ToSoftObjectPath().ToString());
-	}
-
-	if (UScenarioCorridorSurfaceCatalog::FindDefaultSurfaceEntryById(surfaceName, outSurfaceEntry))
-	{
-		UE_LOG(
-			LogScenarioCorridorPreview,
-			Log,
-			TEXT("Resolved Corridor surface '%s' from built-in defaults."),
-			*surfaceName.ToString());
-		return true;
-	}
-
-	UE_LOG(
-		LogScenarioCorridorPreview,
-		Warning,
-		TEXT("Unknown Corridor surface '%s'; using walkable fallback metadata."),
-		surfaceId.IsEmpty() ? TEXT("<empty>") : *surfaceId);
-	outSurfaceEntry.SurfaceId = surfaceName;
-	outSurfaceEntry.DisplayName = FText::FromString(surfaceId.IsEmpty() ? TEXT("Unknown Surface") : surfaceId);
-	outSurfaceEntry.LaneType = EScenarioSampleLaneType::Walkable;
-	outSurfaceEntry.GroundRegionType = EScenarioGroundRegionType::Walkable;
-	outSurfaceEntry.TraversabilityScore = 1.0;
-	return false;
-}
-
-UMaterialInterface* AScenarioCorridorPreviewActor::ResolveSurfaceMaterial(
-	const FScenarioCorridorSurfaceEntry& surfaceEntry) const
-{
-	if (UMaterialInterface* catalogMaterial = surfaceEntry.PreviewMaterial.LoadSynchronous())
-	{
-		UE_LOG(
-			LogScenarioCorridorPreview,
-			Log,
-			TEXT("Using Corridor surface preview material. Surface: %s | Material: %s"),
-			*surfaceEntry.SurfaceId.ToString(),
-			*catalogMaterial->GetPathName());
-		return catalogMaterial;
-	}
-
-	if (!surfaceEntry.PreviewMaterial.IsNull())
-	{
-		UE_LOG(
-			LogScenarioCorridorPreview,
-			Warning,
-			TEXT("Corridor surface preview material failed to load. Surface: %s | Path: %s"),
-			*surfaceEntry.SurfaceId.ToString(),
-			*surfaceEntry.PreviewMaterial.ToSoftObjectPath().ToString());
-	}
-
-	UMaterialInterface* fallbackMaterial = ResolveFallbackSurfaceMaterial(surfaceEntry.LaneType);
-	UE_LOG(
-		LogScenarioCorridorPreview,
-		Log,
-		TEXT("Using Corridor surface fallback material. Surface: %s | Material: %s"),
-		*surfaceEntry.SurfaceId.ToString(),
-		fallbackMaterial ? *fallbackMaterial->GetPathName() : TEXT("<null>"));
-	return fallbackMaterial;
-}
-
-UMaterialInterface* AScenarioCorridorPreviewActor::ResolveFallbackSurfaceMaterial(EScenarioSampleLaneType laneType) const
-{
-	if (laneType == EScenarioSampleLaneType::Blocked)
-	{
-		return BlockedGroundMaterial ? BlockedGroundMaterial.Get() : WalkableGroundMaterial.Get();
-	}
-
-	if (laneType == EScenarioSampleLaneType::Penalty)
-	{
-		return PenaltyGroundMaterial ? PenaltyGroundMaterial.Get() : WalkableGroundMaterial.Get();
-	}
-
-	return WalkableGroundMaterial.Get();
 }

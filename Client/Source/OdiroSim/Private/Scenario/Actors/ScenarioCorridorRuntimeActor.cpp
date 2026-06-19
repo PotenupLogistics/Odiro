@@ -3,6 +3,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/SplineMeshComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Scenario/Data/ScenarioCorridorSurfaceResolver.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioCorridorRuntime, Log, All);
@@ -329,8 +330,13 @@ void AScenarioCorridorRuntimeActor::AddLaneStrip(const FScenarioRuntimeCorridorL
 	}
 
 	FScenarioCorridorSurfaceEntry surfaceEntry;
-	ResolveSurfaceEntry(laneSpec.SurfaceId, surfaceEntry);
-	UMaterialInterface* material = ResolveSurfaceMaterial(surfaceEntry);
+	FScenarioCorridorSurfaceResolver::ResolveSurfaceEntry(laneSpec.SurfaceId, SurfaceCatalog, surfaceEntry);
+	UMaterialInterface* material = FScenarioCorridorSurfaceResolver::ResolveSurfaceMaterial(
+		surfaceEntry,
+		surfaceEntry.GroundRegionType,
+		WalkableGroundMaterial.Get(),
+		PenaltyGroundMaterial.Get(),
+		BlockedGroundMaterial.Get());
 
 	const double centerOffsetCm =
 		((laneSpec.OffsetRangeMeters.MinMeters + laneSpec.OffsetRangeMeters.MaxMeters) * 0.5) * RuntimeMetersToCentimeters;
@@ -407,94 +413,4 @@ void AScenarioCorridorRuntimeActor::AddLaneStrip(const FScenarioRuntimeCorridorL
 		meshComponent->UpdateMesh();
 		LaneMeshComponents.Add(meshComponent);
 	}
-}
-
-bool AScenarioCorridorRuntimeActor::ResolveSurfaceEntry(
-	const FString& surfaceId,
-	FScenarioCorridorSurfaceEntry& outSurfaceEntry) const
-{
-	outSurfaceEntry = FScenarioCorridorSurfaceEntry();
-	const FName surfaceName(*surfaceId);
-	if (const UScenarioCorridorSurfaceCatalog* loadedCatalog = SurfaceCatalog.LoadSynchronous())
-	{
-		if (loadedCatalog->FindSurfaceEntryById(surfaceName, outSurfaceEntry))
-		{
-			return true;
-		}
-	}
-	else if (!SurfaceCatalog.IsNull())
-	{
-		UE_LOG(
-			LogScenarioCorridorRuntime,
-			Warning,
-			TEXT("Corridor surface catalog could not be loaded. Path: %s"),
-			*SurfaceCatalog.ToSoftObjectPath().ToString());
-	}
-
-	if (UScenarioCorridorSurfaceCatalog::FindDefaultSurfaceEntryById(surfaceName, outSurfaceEntry))
-	{
-		return true;
-	}
-
-	UE_LOG(
-		LogScenarioCorridorRuntime,
-		Warning,
-		TEXT("Unknown runtime Corridor surface '%s'; using walkable fallback metadata."),
-		surfaceId.IsEmpty() ? TEXT("<empty>") : *surfaceId);
-	outSurfaceEntry.SurfaceId = surfaceName;
-	outSurfaceEntry.DisplayName = FText::FromString(surfaceId.IsEmpty() ? TEXT("Unknown Surface") : surfaceId);
-	outSurfaceEntry.LaneType = EScenarioSampleLaneType::Walkable;
-	outSurfaceEntry.GroundRegionType = EScenarioGroundRegionType::Walkable;
-	outSurfaceEntry.TraversabilityScore = 1.0;
-	return false;
-}
-
-UMaterialInterface* AScenarioCorridorRuntimeActor::ResolveSurfaceMaterial(
-	const FScenarioCorridorSurfaceEntry& surfaceEntry) const
-{
-	if (UMaterialInterface* catalogMaterial = surfaceEntry.PreviewMaterial.LoadSynchronous())
-	{
-		UE_LOG(
-			LogScenarioCorridorRuntime,
-			Log,
-			TEXT("Using runtime Corridor surface material. Surface: %s | Material: %s"),
-			*surfaceEntry.SurfaceId.ToString(),
-			*catalogMaterial->GetPathName());
-		return catalogMaterial;
-	}
-
-	if (!surfaceEntry.PreviewMaterial.IsNull())
-	{
-		UE_LOG(
-			LogScenarioCorridorRuntime,
-			Warning,
-			TEXT("Corridor surface material failed to load. Surface: %s | Path: %s"),
-			*surfaceEntry.SurfaceId.ToString(),
-			*surfaceEntry.PreviewMaterial.ToSoftObjectPath().ToString());
-	}
-
-	UMaterialInterface* fallbackMaterial = ResolveFallbackSurfaceMaterial(surfaceEntry.GroundRegionType);
-	UE_LOG(
-		LogScenarioCorridorRuntime,
-		Log,
-		TEXT("Using runtime Corridor fallback material. Surface: %s | RegionType: %d | Material: %s"),
-		*surfaceEntry.SurfaceId.ToString(),
-		static_cast<int32>(surfaceEntry.GroundRegionType),
-		fallbackMaterial ? *fallbackMaterial->GetPathName() : TEXT("<null>"));
-	return fallbackMaterial;
-}
-
-UMaterialInterface* AScenarioCorridorRuntimeActor::ResolveFallbackSurfaceMaterial(EScenarioGroundRegionType regionType) const
-{
-	if (regionType == EScenarioGroundRegionType::Blocked)
-	{
-		return BlockedGroundMaterial ? BlockedGroundMaterial.Get() : WalkableGroundMaterial.Get();
-	}
-
-	if (regionType == EScenarioGroundRegionType::Penalty)
-	{
-		return PenaltyGroundMaterial ? PenaltyGroundMaterial.Get() : WalkableGroundMaterial.Get();
-	}
-
-	return WalkableGroundMaterial.Get();
 }

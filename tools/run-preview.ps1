@@ -1,4 +1,4 @@
-# Runs product-like local preview: Agents API plus Client preview, without packaging.
+# Runs product-like local preview: Agents API, Bridge service, and Client preview mode.
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
@@ -13,6 +13,7 @@ trap {
 function Parse-RunArguments {
     $result = [ordered]@{
         SkipAgents = $false
+        SkipBridge = $false
         SkipClient = $false
         AgentsPort = 8711
         PreviewArgs = @()
@@ -23,6 +24,10 @@ function Parse-RunArguments {
         switch -Regex ($argument) {
             "^-SkipAgents$" {
                 $result.SkipAgents = $true
+                continue
+            }
+            "^-SkipBridge$" {
+                $result.SkipBridge = $true
                 continue
             }
             "^-SkipClient$" {
@@ -55,21 +60,93 @@ function Parse-RunArguments {
 $options = Parse-RunArguments @args
 $repoRoot = Get-RepoRoot
 $agentsRunScript = Join-Path $repoRoot "Agents\tools\run.ps1"
+$bridgeRunScript = Join-Path $repoRoot "Bridge\tools\run.ps1"
 $clientPreview = Join-Path $repoRoot "Client\Task-RunPreview.bat"
 
-if ($options.SkipAgents -and $options.SkipClient) {
-    throw "Nothing to run. Remove -SkipAgents or -SkipClient."
+# Waits until the Bridge host reports its listening endpoint.
+function Wait-BridgeService {
+    param(
+        [System.Diagnostics.Process] $Process,
+        [string] $StdoutLog,
+        [string] $StderrLog,
+        [int] $TimeoutSeconds = 30
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if ($Process.HasExited) {
+            throw "Bridge service exited early with code $($Process.ExitCode). Check $StderrLog."
+        }
+
+        if (Test-Path -LiteralPath $StdoutLog -PathType Leaf) {
+            $stdoutText = Get-Content -LiteralPath $StdoutLog -Raw -ErrorAction SilentlyContinue
+            if ($stdoutText -match '(?m)^listening transport=') {
+                return
+            }
+        }
+
+        Start-Sleep -Milliseconds 500
+    }
+
+    throw "Timed out waiting for Bridge service. Check $StdoutLog and $StderrLog."
+}
+
+if ($options.SkipAgents -and $options.SkipBridge -and $options.SkipClient) {
+    throw "Nothing to run. Remove -SkipAgents, -SkipBridge, or -SkipClient."
 }
 
 if ($options.SkipClient) {
-    & $agentsRunScript -Port $options.AgentsPort
+    if (-not $options.SkipAgents -and -not $options.SkipBridge) {
+        $agentsProcess = $null
+        try {
+            $agentsProcess = & $agentsRunScript -Port $options.AgentsPort -Background -LogPrefix "run"
+            & $bridgeRunScript
+        }
+        finally {
+            if ($agentsProcess -and -not $agentsProcess.HasExited) {
+                Write-Step "Stop Agents API pid $($agentsProcess.Id)"
+                Stop-ProcessTree -ProcessId $agentsProcess.Id
+            }
+        }
+    }
+    elseif (-not $options.SkipAgents) {
+        & $agentsRunScript -Port $options.AgentsPort
+    }
+    elseif (-not $options.SkipBridge) {
+        & $bridgeRunScript
+    }
     exit 0
 }
 
 $agentsProcess = $null
+$bridgeProcess = $null
 try {
     if (-not $options.SkipAgents) {
         $agentsProcess = & $agentsRunScript -Port $options.AgentsPort -Background -LogPrefix "run"
+    }
+
+    if (-not $options.SkipBridge) {
+        if (-not (Test-Path -LiteralPath $bridgeRunScript -PathType Leaf)) {
+            throw "Bridge run script not found: $bridgeRunScript"
+        }
+
+        $logsDir = Join-Path $repoRoot "logs"
+        New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
+        $bridgeStdoutLog = Join-Path $logsDir "run-bridge.out.log"
+        $bridgeStderrLog = Join-Path $logsDir "run-bridge.err.log"
+
+        Write-Step "Start Bridge service"
+        $bridgeProcess = Start-Process `
+            -FilePath "powershell.exe" `
+            -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $bridgeRunScript) `
+            -WorkingDirectory $repoRoot `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput $bridgeStdoutLog `
+            -RedirectStandardError $bridgeStderrLog `
+            -PassThru
+
+        Wait-BridgeService -Process $bridgeProcess -StdoutLog $bridgeStdoutLog -StderrLog $bridgeStderrLog
+        Write-Step "Bridge logs: $bridgeStdoutLog, $bridgeStderrLog"
     }
 
     if (-not (Test-Path -LiteralPath $clientPreview -PathType Leaf)) {
@@ -83,6 +160,11 @@ try {
     }
 }
 finally {
+    if ($bridgeProcess -and -not $bridgeProcess.HasExited) {
+        Write-Step "Stop Bridge service pid $($bridgeProcess.Id)"
+        Stop-ProcessTree -ProcessId $bridgeProcess.Id
+    }
+
     if ($agentsProcess -and -not $agentsProcess.HasExited) {
         Write-Step "Stop Agents API pid $($agentsProcess.Id)"
         Stop-ProcessTree -ProcessId $agentsProcess.Id

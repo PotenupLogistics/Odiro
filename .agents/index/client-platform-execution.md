@@ -50,12 +50,12 @@ keep:
   - ProjectSessionSubsystem is the single runtime source of truth for the active user project root after Startup UI selection.
   - StartupMap is the default entry map and only owns project selection/creation UI through WBP_StartupMenu plus a map-owned startup bootstrap actor; it does not use a custom Startup GameMode or PlayerController.
   - ScenarioEditorMap owns the workspace surface; AScenarioEditorController creates WBP_MainMenu and receives the ScenarioEditor root registered by that MainMenu child.
-  - WBP_MainMenu root is the project workspace surface; ProjectOpenScreen, project parent/name inputs, template cards, open, and create controls belong only to WBP_StartupMenu.
+  - WBP_MainMenu root is the project workspace surface; project selection, recent project cards, and create controls belong only to WBP_StartupMenu.
   - WBP_MainMenu owns control/workspace UI plus the ScenarioEditor root child; C++ requires the asset root to be ProjectWorkspaceScreen and does not create or promote the workspace at runtime.
   - WBP_MainMenu must place ScenarioEditorRootWidget under ProjectScenarioEditPanel, not directly under ProjectWorkspaceScreen.
   - StartupMenu/MainMenu UMG structure changes use UmgMcp asset edits and widget tree verification, not runtime fallback repair.
   - Project template cards use `WBP_ProjectTemplateCard`; card item layout, thumbnail fallback, and shadow styling stay in UMG assets.
-  - StartupMenu project opening UI takes a parent folder and project name; runtime default parent folder comes from `FPlatformProcess::UserDir()` (Windows Documents).
+  - StartupMenu opens existing projects from a newest-first recent project card WrapBox; card size, spacing, and wrap behavior are WBP-owned, and anchored available width determines the natural card count per row. Recent cards support a right-click confirmation dialog that removes only the recent-list entry.
   - UmgMcp `query_widget_properties` must not request `Slot`; use `get_widget_tree`, export JSON, or direct `set_widget_properties` slot updates instead.
   - MainMenu project scenario tab lists, opens, and starts runs from the active project session's `<UserProject>/scenario.json` project-run snapshots.
   - MainMenu project result rows use `WBP_FileListItem` primary action for completed detail view and secondary display text for run state.

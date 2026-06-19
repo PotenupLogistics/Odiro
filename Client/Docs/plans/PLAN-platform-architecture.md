@@ -23,7 +23,7 @@ specs:
 - `StartupMap`: 기본 시작 map. `WBP_StartupMenu`로 project 선택/생성만 처리
 - `UProjectSessionSubsystem`: 선택된 user project root의 단일 source of truth
 - `ScenarioEditorMap`: `AScenarioEditorController`가 `WBP_MainMenu`를 생성하고 ScenarioEditor 기능을 소유
-- `WBP_StartupMenu`: 기존 `ProjectOpenScreen` 책임인 parent/name/template/open/create UI 소유
+- `WBP_StartupMenu`: recent project card list를 첫 화면으로 제공하고, `Create New` 뒤에서 parent/name/template 기반 새 project 생성 UI 소유
 - `WBP_MainMenu`: `ProjectWorkspaceScreen`을 root surface로 사용하고 control/workspace UI와 `ProjectScenarioEditPanel` 아래의 `WBP_ScenarioEditorRootWidget` 자식을 포함
 - Project 선택/생성 성공 흐름: Startup UI → active project 저장 → `ScenarioEditorMap` OpenLevel → `<UserProject>/scenario.json` 자동 로드
 - MainMenu는 project 선택/생성, project path 입력, template card를 소유하지 않음

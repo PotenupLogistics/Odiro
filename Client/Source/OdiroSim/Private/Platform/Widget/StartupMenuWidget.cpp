@@ -5,6 +5,8 @@
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/TextBlock.h"
+#include "Components/WidgetSwitcher.h"
+#include "Components/WrapBox.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "GameFramework/PlayerController.h"
@@ -25,6 +27,7 @@ namespace
 	const TCHAR* ProjectOpenParentFolderConfigKey = TEXT("ParentFolder");
 	const TCHAR* ProjectOpenProjectNameConfigKey = TEXT("ProjectName");
 	const TCHAR* ProjectOpenTemplateIdConfigKey = TEXT("TemplateId");
+	const TCHAR* RecentProjectPathsConfigKey = TEXT("RecentProjectPaths");
 	const TCHAR* StartupMenuDefaultWidgetBlueprintClassPath =
 		TEXT("/Game/Widgets/MainMenu/WBP_StartupMenu.WBP_StartupMenu_C");
 	const TCHAR* ProjectTemplateCardWidgetBlueprintClassPath =
@@ -73,6 +76,17 @@ namespace
 		displayName.ReplaceInline(TEXT("-"), TEXT(" "));
 		displayName.ReplaceInline(TEXT("_"), TEXT(" "));
 		return FName::NameToDisplayString(displayName, false);
+	}
+
+	FString MakeRecentProjectDisplayName(const FString& projectPath)
+	{
+		const FString projectName = FPaths::GetCleanFilename(projectPath);
+		return FString::Printf(TEXT("%s\n%s"), *projectName, *projectPath);
+	}
+
+	bool IsSameStartupMenuPath(const FString& left, const FString& right)
+	{
+		return NormalizeStartupMenuPath(left).Equals(NormalizeStartupMenuPath(right), ESearchCase::IgnoreCase);
 	}
 }
 
@@ -142,9 +156,12 @@ void UStartupMenuWidget::NativeConstruct()
 	}
 
 	BindControls();
+	HideRecentProjectDeleteDialog();
 	LoadProjectOpenOptions();
 	InitializeProjectPathInputs();
 	RefreshProjectTemplateOptions();
+	RefreshRecentProjectCards();
+	ShowRecentProjectsScreen();
 	RefreshProjectOpenActions();
 	SetProjectOpenWarningText(FString());
 	SetDiagnosticsText(FString());
@@ -152,6 +169,16 @@ void UStartupMenuWidget::NativeConstruct()
 
 void UStartupMenuWidget::NativeDestruct()
 {
+	for (UProjectTemplateCardWidget* cardWidget : RecentProjectCards)
+	{
+		if (cardWidget)
+		{
+			cardWidget->OnSelectedRequested.RemoveAll(this);
+			cardWidget->OnContextRequested.RemoveAll(this);
+		}
+	}
+	RecentProjectCards.Reset();
+
 	for (UProjectTemplateCardWidget* cardWidget : ProjectTemplateCards)
 	{
 		if (cardWidget)
@@ -237,46 +264,19 @@ void UStartupMenuWidget::HandleProjectOpenInputChanged(const FText&)
 	RefreshProjectOpenActions();
 }
 
-void UStartupMenuWidget::HandleOpenProjectClicked()
+void UStartupMenuWidget::HandleCreateNewProjectClicked()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		SetProjectOpenWarningText(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
-		return;
-	}
-
-	const FString projectPath = GetSelectedProjectPath();
-	if (projectPath.TrimStartAndEnd().IsEmpty())
-	{
-		SetProjectOpenWarningText(TEXT("프로젝트 이름을 입력하세요."));
-		RefreshProjectOpenActions();
-		return;
-	}
-	if (!IFileManager::Get().DirectoryExists(*projectPath))
-	{
-		SetProjectOpenWarningText(TEXT("프로젝트 폴더가 없습니다."));
-		RefreshProjectOpenActions();
-		return;
-	}
-
-	SaveProjectOpenOptions();
-
-	TArray<FString> diagnostics;
-	if (!ValidateSelectedProject(diagnostics, subsystem))
-	{
-		SetProjectOpenWarningText(diagnostics.IsEmpty() ? TEXT("프로젝트 검증 실패") : diagnostics[0]);
-		SetDiagnosticsText(FString::Join(diagnostics, TEXT("\n")));
-		return;
-	}
-
-	if (!CommitActiveProjectAndOpenEditor())
-	{
-		return;
-	}
-
+	ShowCreateProjectScreen();
 	SetProjectOpenWarningText(FString());
-	SetDiagnosticsText(FString::Printf(TEXT("Project opened: %s"), *projectPath));
+	SetDiagnosticsText(FString());
+	RefreshProjectOpenActions();
+}
+
+void UStartupMenuWidget::HandleBackToRecentProjectsClicked()
+{
+	ShowRecentProjectsScreen();
+	SetProjectOpenWarningText(FString());
+	SetDiagnosticsText(FString());
 }
 
 void UStartupMenuWidget::HandleCreateProjectClicked()
@@ -318,6 +318,7 @@ void UStartupMenuWidget::HandleCreateProjectClicked()
 		return;
 	}
 
+	RememberRecentProject(projectPath);
 	if (!CommitActiveProjectAndOpenEditor())
 	{
 		return;
@@ -344,10 +345,33 @@ void UStartupMenuWidget::BindControls()
 		CreateProjectButton->OnClicked.RemoveDynamic(this, &UStartupMenuWidget::HandleCreateProjectClicked);
 		CreateProjectButton->OnClicked.AddDynamic(this, &UStartupMenuWidget::HandleCreateProjectClicked);
 	}
-	if (OpenProjectButton)
+	if (CreateNewProjectButton)
 	{
-		OpenProjectButton->OnClicked.RemoveDynamic(this, &UStartupMenuWidget::HandleOpenProjectClicked);
-		OpenProjectButton->OnClicked.AddDynamic(this, &UStartupMenuWidget::HandleOpenProjectClicked);
+		CreateNewProjectButton->OnClicked.RemoveDynamic(this, &UStartupMenuWidget::HandleCreateNewProjectClicked);
+		CreateNewProjectButton->OnClicked.AddDynamic(this, &UStartupMenuWidget::HandleCreateNewProjectClicked);
+	}
+	if (BackToRecentProjectsButton)
+	{
+		BackToRecentProjectsButton->OnClicked.RemoveDynamic(this, &UStartupMenuWidget::HandleBackToRecentProjectsClicked);
+		BackToRecentProjectsButton->OnClicked.AddDynamic(this, &UStartupMenuWidget::HandleBackToRecentProjectsClicked);
+	}
+	if (RecentProjectDeleteConfirmButton)
+	{
+		RecentProjectDeleteConfirmButton->OnClicked.RemoveDynamic(
+			this,
+			&UStartupMenuWidget::HandleConfirmRecentProjectDeleteClicked);
+		RecentProjectDeleteConfirmButton->OnClicked.AddDynamic(
+			this,
+			&UStartupMenuWidget::HandleConfirmRecentProjectDeleteClicked);
+	}
+	if (RecentProjectDeleteCancelButton)
+	{
+		RecentProjectDeleteCancelButton->OnClicked.RemoveDynamic(
+			this,
+			&UStartupMenuWidget::HandleCancelRecentProjectDeleteClicked);
+		RecentProjectDeleteCancelButton->OnClicked.AddDynamic(
+			this,
+			&UStartupMenuWidget::HandleCancelRecentProjectDeleteClicked);
 	}
 }
 
@@ -362,11 +386,23 @@ bool UStartupMenuWidget::ValidateRequiredBindings() const
 		}
 	};
 
+	requireWidget(StartupScreenSwitcher, TEXT("StartupScreenSwitcher"));
+	requireWidget(RecentProjectsScreen, TEXT("RecentProjectsScreen"));
+	requireWidget(ProjectCreateScreen, TEXT("ProjectCreateScreen"));
+	requireWidget(RecentProjectCardWrapBox, TEXT("RecentProjectCardWrapBox"));
+	requireWidget(RecentProjectsEmptyText, TEXT("RecentProjectsEmptyText"));
+	requireWidget(RecentProjectOpenWarningText, TEXT("RecentProjectOpenWarningText"));
+	requireWidget(RecentDiagnosticsTextBlock, TEXT("RecentDiagnosticsTextBlock"));
+	requireWidget(RecentProjectDeleteDialog, TEXT("RecentProjectDeleteDialog"));
+	requireWidget(RecentProjectDeleteDialogMessageText, TEXT("RecentProjectDeleteDialogMessageText"));
+	requireWidget(RecentProjectDeleteConfirmButton, TEXT("RecentProjectDeleteConfirmButton"));
+	requireWidget(RecentProjectDeleteCancelButton, TEXT("RecentProjectDeleteCancelButton"));
+	requireWidget(CreateNewProjectButton, TEXT("CreateNewProjectButton"));
+	requireWidget(BackToRecentProjectsButton, TEXT("BackToRecentProjectsButton"));
 	requireWidget(ProjectParentFolderTextBox, TEXT("ProjectParentFolderTextBox"));
 	requireWidget(ProjectNameTextBox, TEXT("ProjectNameTextBox"));
 	requireWidget(ProjectTemplateCardBox, TEXT("ProjectTemplateCardBox"));
 	requireWidget(CreateProjectButton, TEXT("CreateProjectButton"));
-	requireWidget(OpenProjectButton, TEXT("OpenProjectButton"));
 	requireWidget(ProjectOpenWarningText, TEXT("ProjectOpenWarningText"));
 
 	if (missingWidgetNames.IsEmpty())
@@ -422,6 +458,7 @@ void UStartupMenuWidget::LoadProjectOpenOptions()
 		? FString(TEXT("OdiroProject"))
 		: NormalizeProjectDirectoryName(projectName);
 	SelectedProjectTemplateId = templateId.TrimStartAndEnd().IsEmpty() ? FString(TEXT("blank")) : templateId.TrimStartAndEnd();
+	LoadRecentProjectPaths();
 }
 
 void UStartupMenuWidget::SaveProjectOpenOptions()
@@ -435,7 +472,103 @@ void UStartupMenuWidget::SaveProjectOpenOptions()
 	GConfig->SetString(ProjectOpenOptionsConfigSection, ProjectOpenParentFolderConfigKey, *SelectedProjectParentFolder, GGameUserSettingsIni);
 	GConfig->SetString(ProjectOpenOptionsConfigSection, ProjectOpenProjectNameConfigKey, *SelectedProjectName, GGameUserSettingsIni);
 	GConfig->SetString(ProjectOpenOptionsConfigSection, ProjectOpenTemplateIdConfigKey, *GetSelectedProjectTemplateId(), GGameUserSettingsIni);
+	GConfig->SetArray(ProjectOpenOptionsConfigSection, RecentProjectPathsConfigKey, RecentProjectPaths, GGameUserSettingsIni);
 	GConfig->Flush(false, GGameUserSettingsIni);
+}
+
+void UStartupMenuWidget::LoadRecentProjectPaths()
+{
+	RecentProjectPaths.Reset();
+
+	TArray<FString> storedPaths;
+	if (GConfig)
+	{
+		GConfig->GetArray(ProjectOpenOptionsConfigSection, RecentProjectPathsConfigKey, storedPaths, GGameUserSettingsIni);
+	}
+
+	for (const FString& storedPath : storedPaths)
+	{
+		const FString normalizedPath = NormalizeStartupMenuPath(storedPath);
+		if (normalizedPath.IsEmpty())
+		{
+			continue;
+		}
+
+		const bool bAlreadyPresent = RecentProjectPaths.ContainsByPredicate(
+			[&normalizedPath](const FString& existingPath)
+			{
+				return IsSameStartupMenuPath(existingPath, normalizedPath);
+			});
+		if (!bAlreadyPresent)
+		{
+			RecentProjectPaths.Add(normalizedPath);
+		}
+	}
+
+	if (RecentProjectPaths.IsEmpty())
+	{
+		const FString lastProjectPath = BuildProjectPathFromInputs(SelectedProjectParentFolder, SelectedProjectName);
+		if (!lastProjectPath.IsEmpty() && IFileManager::Get().DirectoryExists(*lastProjectPath))
+		{
+			RecentProjectPaths.Add(lastProjectPath);
+		}
+	}
+}
+
+void UStartupMenuWidget::SaveRecentProjectPaths() const
+{
+	if (!GConfig)
+	{
+		return;
+	}
+
+	GConfig->SetArray(ProjectOpenOptionsConfigSection, RecentProjectPathsConfigKey, RecentProjectPaths, GGameUserSettingsIni);
+	GConfig->Flush(false, GGameUserSettingsIni);
+}
+
+void UStartupMenuWidget::RememberRecentProject(const FString& projectPath)
+{
+	const FString normalizedPath = NormalizeStartupMenuPath(projectPath);
+	if (normalizedPath.IsEmpty())
+	{
+		return;
+	}
+
+	RecentProjectPaths.RemoveAll(
+		[&normalizedPath](const FString& existingPath)
+		{
+			return IsSameStartupMenuPath(existingPath, normalizedPath);
+		});
+	RecentProjectPaths.Insert(normalizedPath, 0);
+
+	while (RecentProjectPaths.Num() > MaxRecentProjectCount)
+	{
+		RecentProjectPaths.RemoveAt(RecentProjectPaths.Num() - 1);
+	}
+
+	SaveRecentProjectPaths();
+}
+
+bool UStartupMenuWidget::RemoveRecentProject(const FString& projectPath)
+{
+	const FString normalizedPath = NormalizeStartupMenuPath(projectPath);
+	if (normalizedPath.IsEmpty())
+	{
+		return false;
+	}
+
+	const int32 removedCount = RecentProjectPaths.RemoveAll(
+		[&normalizedPath](const FString& existingPath)
+		{
+			return IsSameStartupMenuPath(existingPath, normalizedPath);
+		});
+	if (removedCount <= 0)
+	{
+		return false;
+	}
+
+	SaveRecentProjectPaths();
+	return true;
 }
 
 void UStartupMenuWidget::CacheProjectOpenOptionsFromWidgets()
@@ -447,6 +580,89 @@ void UStartupMenuWidget::CacheProjectOpenOptionsFromWidgets()
 	if (ProjectNameTextBox)
 	{
 		SelectedProjectName = NormalizeProjectDirectoryName(ProjectNameTextBox->GetText().ToString());
+	}
+}
+
+void UStartupMenuWidget::ShowRecentProjectsScreen()
+{
+	if (StartupScreenSwitcher && RecentProjectsScreen)
+	{
+		StartupScreenSwitcher->SetActiveWidget(RecentProjectsScreen);
+	}
+	RefreshRecentProjectCards();
+}
+
+void UStartupMenuWidget::ShowCreateProjectScreen()
+{
+	if (StartupScreenSwitcher && ProjectCreateScreen)
+	{
+		StartupScreenSwitcher->SetActiveWidget(ProjectCreateScreen);
+	}
+	RefreshProjectOpenActions();
+}
+
+void UStartupMenuWidget::RefreshRecentProjectCards()
+{
+	if (!RecentProjectCardWrapBox)
+	{
+		return;
+	}
+
+	for (UProjectTemplateCardWidget* cardWidget : RecentProjectCards)
+	{
+		if (cardWidget)
+		{
+			cardWidget->OnSelectedRequested.RemoveAll(this);
+			cardWidget->OnContextRequested.RemoveAll(this);
+		}
+	}
+	RecentProjectCards.Reset();
+	RecentProjectCardWrapBox->ClearChildren();
+
+	TSubclassOf<UProjectTemplateCardWidget> cardClass = ResolveProjectTemplateCardWidgetClass();
+	TArray<FString> visibleProjectPaths;
+	for (const FString& recentProjectPath : RecentProjectPaths)
+	{
+		const FString normalizedProjectPath = NormalizeStartupMenuPath(recentProjectPath);
+		if (!normalizedProjectPath.IsEmpty() && IFileManager::Get().DirectoryExists(*normalizedProjectPath))
+		{
+			visibleProjectPaths.Add(normalizedProjectPath);
+		}
+	}
+
+	const bool bPrunedMissingProjects = visibleProjectPaths.Num() != RecentProjectPaths.Num();
+	RecentProjectPaths = visibleProjectPaths;
+	if (bPrunedMissingProjects)
+	{
+		SaveRecentProjectPaths();
+	}
+
+	if (RecentProjectsEmptyText)
+	{
+		RecentProjectsEmptyText->SetVisibility(visibleProjectPaths.IsEmpty()
+			? ESlateVisibility::SelfHitTestInvisible
+			: ESlateVisibility::Collapsed);
+	}
+
+	if (!cardClass)
+	{
+		return;
+	}
+
+	for (int32 cardIndex = 0; cardIndex < visibleProjectPaths.Num(); ++cardIndex)
+	{
+		const FString& recentProjectPath = visibleProjectPaths[cardIndex];
+		UProjectTemplateCardWidget* cardWidget = CreateWidget<UProjectTemplateCardWidget>(GetOwningPlayer(), cardClass);
+		if (!cardWidget)
+		{
+			continue;
+		}
+
+		cardWidget->InitializeCard(recentProjectPath, MakeRecentProjectDisplayName(recentProjectPath));
+		cardWidget->OnSelectedRequested.AddUObject(this, &UStartupMenuWidget::HandleRecentProjectCardSelected);
+		cardWidget->OnContextRequested.AddUObject(this, &UStartupMenuWidget::HandleRecentProjectCardContextRequested);
+		RecentProjectCards.Add(cardWidget);
+		RecentProjectCardWrapBox->AddChildToWrapBox(cardWidget);
 	}
 }
 
@@ -517,10 +733,6 @@ void UStartupMenuWidget::RefreshProjectOpenActions()
 	const bool bProjectDirectoryExists = IFileManager::Get().DirectoryExists(*selectedProjectPath);
 	const bool bProjectFileExists = FPaths::FileExists(selectedProjectPath);
 
-	if (OpenProjectButton)
-	{
-		OpenProjectButton->SetIsEnabled(bHasProjectPath && bProjectDirectoryExists);
-	}
 	if (CreateProjectButton)
 	{
 		CreateProjectButton->SetIsEnabled(bHasProjectPath && !bProjectDirectoryExists && !bProjectFileExists);
@@ -541,15 +753,21 @@ void UStartupMenuWidget::RefreshProjectTemplateCardStates()
 
 void UStartupMenuWidget::SetProjectOpenWarningText(const FString& message)
 {
-	if (!ProjectOpenWarningText)
+	auto applyWarningText = [&message](UTextBlock* textBlock)
 	{
-		return;
-	}
+		if (!textBlock)
+		{
+			return;
+		}
 
-	ProjectOpenWarningText->SetText(FText::FromString(message));
-	ProjectOpenWarningText->SetVisibility(message.TrimStartAndEnd().IsEmpty()
-		? ESlateVisibility::Collapsed
-		: ESlateVisibility::SelfHitTestInvisible);
+		textBlock->SetText(FText::FromString(message));
+		textBlock->SetVisibility(message.TrimStartAndEnd().IsEmpty()
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
+	};
+
+	applyWarningText(ProjectOpenWarningText);
+	applyWarningText(RecentProjectOpenWarningText);
 }
 
 void UStartupMenuWidget::SetDiagnosticsText(const FString& message)
@@ -558,6 +776,54 @@ void UStartupMenuWidget::SetDiagnosticsText(const FString& message)
 	{
 		DiagnosticsTextBlock->SetText(FText::FromString(message));
 	}
+	if (RecentDiagnosticsTextBlock)
+	{
+		RecentDiagnosticsTextBlock->SetText(FText::FromString(message));
+	}
+}
+
+bool UStartupMenuWidget::OpenExistingProject(const FString& projectPath)
+{
+	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
+	if (!subsystem)
+	{
+		SetProjectOpenWarningText(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
+		return false;
+	}
+
+	const FString normalizedProjectPath = NormalizeStartupMenuPath(projectPath);
+	if (normalizedProjectPath.IsEmpty())
+	{
+		SetProjectOpenWarningText(TEXT("프로젝트를 선택하세요."));
+		return false;
+	}
+	if (!IFileManager::Get().DirectoryExists(*normalizedProjectPath))
+	{
+		SetProjectOpenWarningText(TEXT("프로젝트 폴더가 없습니다."));
+		RefreshRecentProjectCards();
+		return false;
+	}
+
+	SetProjectPathForPrototype(normalizedProjectPath);
+
+	TArray<FString> diagnostics;
+	if (!ValidateSelectedProject(diagnostics, subsystem))
+	{
+		SetProjectOpenWarningText(diagnostics.IsEmpty() ? TEXT("프로젝트 검증 실패") : diagnostics[0]);
+		SetDiagnosticsText(FString::Join(diagnostics, TEXT("\n")));
+		return false;
+	}
+
+	RememberRecentProject(normalizedProjectPath);
+	SaveProjectOpenOptions();
+	if (!CommitActiveProjectAndOpenEditor())
+	{
+		return false;
+	}
+
+	SetProjectOpenWarningText(FString());
+	SetDiagnosticsText(FString::Printf(TEXT("Project opened: %s"), *normalizedProjectPath));
+	return true;
 }
 
 bool UStartupMenuWidget::CommitActiveProjectAndOpenEditor()
@@ -589,6 +855,26 @@ bool UStartupMenuWidget::CommitActiveProjectAndOpenEditor()
 	return true;
 }
 
+void UStartupMenuWidget::HandleRecentProjectCardSelected(UProjectTemplateCardWidget* cardWidget)
+{
+	if (!cardWidget)
+	{
+		return;
+	}
+
+	OpenExistingProject(cardWidget->GetTemplateId());
+}
+
+void UStartupMenuWidget::HandleRecentProjectCardContextRequested(UProjectTemplateCardWidget* cardWidget)
+{
+	if (!cardWidget)
+	{
+		return;
+	}
+
+	ShowRecentProjectDeleteDialog(cardWidget->GetTemplateId());
+}
+
 void UStartupMenuWidget::HandleProjectTemplateCardSelected(UProjectTemplateCardWidget* cardWidget)
 {
 	if (!cardWidget)
@@ -597,6 +883,54 @@ void UStartupMenuWidget::HandleProjectTemplateCardSelected(UProjectTemplateCardW
 	}
 
 	SelectProjectTemplate(cardWidget->GetTemplateId());
+}
+
+void UStartupMenuWidget::ShowRecentProjectDeleteDialog(const FString& projectPath)
+{
+	PendingRecentProjectDeletePath = NormalizeStartupMenuPath(projectPath);
+	if (PendingRecentProjectDeletePath.IsEmpty())
+	{
+		HideRecentProjectDeleteDialog();
+		return;
+	}
+
+	if (RecentProjectDeleteDialogMessageText)
+	{
+		const FString projectName = FPaths::GetCleanFilename(PendingRecentProjectDeletePath);
+		RecentProjectDeleteDialogMessageText->SetText(FText::FromString(FString::Printf(
+			TEXT("Remove \"%s\" from recent projects?\n%s\n\nThe project folder will not be deleted."),
+			*projectName,
+			*PendingRecentProjectDeletePath)));
+	}
+	if (RecentProjectDeleteDialog)
+	{
+		RecentProjectDeleteDialog->SetVisibility(ESlateVisibility::Visible);
+	}
+}
+
+void UStartupMenuWidget::HideRecentProjectDeleteDialog()
+{
+	PendingRecentProjectDeletePath.Reset();
+	if (RecentProjectDeleteDialog)
+	{
+		RecentProjectDeleteDialog->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void UStartupMenuWidget::HandleConfirmRecentProjectDeleteClicked()
+{
+	const FString projectPath = PendingRecentProjectDeletePath;
+	HideRecentProjectDeleteDialog();
+	if (RemoveRecentProject(projectPath))
+	{
+		RefreshRecentProjectCards();
+		SetDiagnosticsText(FString::Printf(TEXT("Recent project removed: %s"), *projectPath));
+	}
+}
+
+void UStartupMenuWidget::HandleCancelRecentProjectDeleteClicked()
+{
+	HideRecentProjectDeleteDialog();
 }
 
 FString UStartupMenuWidget::GetSelectedProjectParentFolder() const

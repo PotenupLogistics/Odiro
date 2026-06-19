@@ -12,6 +12,9 @@ class UProjectTemplateCardWidget;
 class UScenarioEditorLaunchSubsystem;
 class USimulatorLaunchSubsystem;
 class UTextBlock;
+class UWidget;
+class UWidgetSwitcher;
+class UWrapBox;
 
 // StartupMap project picker that selects or creates a user project before loading ScenarioEditorMap.
 UCLASS(BlueprintType, Blueprintable)
@@ -47,7 +50,10 @@ protected:
 	void HandleProjectOpenInputChanged(const FText& text);
 
 	UFUNCTION()
-	void HandleOpenProjectClicked();
+	void HandleCreateNewProjectClicked();
+
+	UFUNCTION()
+	void HandleBackToRecentProjectsClicked();
 
 	UFUNCTION()
 	void HandleCreateProjectClicked();
@@ -58,14 +64,32 @@ private:
 	void InitializeProjectPathInputs();
 	void LoadProjectOpenOptions();
 	void SaveProjectOpenOptions();
+	void LoadRecentProjectPaths();
+	void SaveRecentProjectPaths() const;
+	void RememberRecentProject(const FString& projectPath);
+	bool RemoveRecentProject(const FString& projectPath);
 	void CacheProjectOpenOptionsFromWidgets();
+	void ShowRecentProjectsScreen();
+	void ShowCreateProjectScreen();
+	void RefreshRecentProjectCards();
 	void RefreshProjectTemplateOptions();
 	void RefreshProjectOpenActions();
 	void RefreshProjectTemplateCardStates();
 	void SetProjectOpenWarningText(const FString& message);
 	void SetDiagnosticsText(const FString& message);
+	bool OpenExistingProject(const FString& projectPath);
 	bool CommitActiveProjectAndOpenEditor();
+	void HandleRecentProjectCardSelected(UProjectTemplateCardWidget* cardWidget);
+	void HandleRecentProjectCardContextRequested(UProjectTemplateCardWidget* cardWidget);
 	void HandleProjectTemplateCardSelected(UProjectTemplateCardWidget* cardWidget);
+	void ShowRecentProjectDeleteDialog(const FString& projectPath);
+	void HideRecentProjectDeleteDialog();
+
+	UFUNCTION()
+	void HandleConfirmRecentProjectDeleteClicked();
+
+	UFUNCTION()
+	void HandleCancelRecentProjectDeleteClicked();
 
 	FString GetSelectedProjectParentFolder() const;
 	FString GetSelectedProjectName() const;
@@ -76,6 +100,58 @@ private:
 	USimulatorLaunchSubsystem* GetSimulatorLaunchSubsystem() const;
 	UScenarioEditorLaunchSubsystem* GetScenarioEditorLaunchSubsystem() const;
 	UProjectSessionSubsystem* GetProjectSessionSubsystem() const;
+
+	// Startup flow screen switcher owned by WBP_StartupMenu.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidgetSwitcher> StartupScreenSwitcher;
+
+	// Recent project card screen owned by WBP_StartupMenu.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> RecentProjectsScreen;
+
+	// Project creation screen owned by WBP_StartupMenu.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ProjectCreateScreen;
+
+	// Recent project card wrap container.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWrapBox> RecentProjectCardWrapBox;
+
+	// Empty recent project list text.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> RecentProjectsEmptyText;
+
+	// Recent project open validation text.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> RecentProjectOpenWarningText;
+
+	// Recent project diagnostics text.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> RecentDiagnosticsTextBlock;
+
+	// Recent project removal confirmation dialog root.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> RecentProjectDeleteDialog;
+
+	// Recent project removal confirmation message.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> RecentProjectDeleteDialogMessageText;
+
+	// Confirms removal from the recent project list.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> RecentProjectDeleteConfirmButton;
+
+	// Cancels recent project removal.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> RecentProjectDeleteCancelButton;
+
+	// Navigates from recent projects to the creation form.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> CreateNewProjectButton;
+
+	// Navigates from the creation form back to recent projects.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BackToRecentProjectsButton;
 
 	// User project parent directory input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -93,10 +169,6 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> CreateProjectButton;
 
-	// Existing user project open action.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> OpenProjectButton;
-
 	// Project open/create validation text.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ProjectOpenWarningText;
@@ -109,10 +181,30 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "StartupMenu|Project")
 	TSubclassOf<UProjectTemplateCardWidget> ProjectTemplateCardWidgetClass;
 
+	// Maximum recent projects retained by WBP_StartupMenu.
+	UPROPERTY(EditDefaultsOnly, Category = "StartupMenu|Recent Projects", meta = (ClampMin = "1"))
+	int32 MaxRecentProjectCount = 8;
+
+	// Recent project cards currently owned by the recent list container.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProjectTemplateCardWidget>> RecentProjectCards;
+
+	// Template selection cards currently owned by the create screen.
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProjectTemplateCardWidget>> ProjectTemplateCards;
 
+	// Normalized recent project paths ordered newest-first.
+	TArray<FString> RecentProjectPaths;
+
+	// Normalized project path awaiting recent-list removal confirmation.
+	FString PendingRecentProjectDeletePath;
+
+	// Cached create form parent folder.
 	FString SelectedProjectParentFolder;
+
+	// Cached create form project directory name.
 	FString SelectedProjectName;
+
+	// Cached template id for the next project create action.
 	FString SelectedProjectTemplateId;
 };

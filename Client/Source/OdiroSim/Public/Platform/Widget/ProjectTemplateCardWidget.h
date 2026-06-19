@@ -8,6 +8,7 @@ class UButton;
 class UTextBlock;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FProjectTemplateCardSelectedNative, class UProjectTemplateCardWidget*);
+DECLARE_MULTICAST_DELEGATE_OneParam(FProjectTemplateCardContextNative, class UProjectTemplateCardWidget*);
 
 // ProjectOpenScreen의 template card item layout과 interaction binding을 담당하는 widget.
 UCLASS(BlueprintType, Blueprintable)
@@ -20,6 +21,7 @@ public:
 	UProjectTemplateCardWidget(const FObjectInitializer& objectInitializer);
 
 	virtual void NativeConstruct() override;
+	virtual FReply NativeOnPreviewMouseButtonDown(const FGeometry& inGeometry, const FPointerEvent& inMouseEvent) override;
 
 	// Template id와 표시 이름을 card UI에 반영한다.
 	void InitializeCard(const FString& templateId, const FString& displayName);
@@ -32,6 +34,9 @@ public:
 
 	// Card 선택 요청을 parent widget에 알린다.
 	FProjectTemplateCardSelectedNative OnSelectedRequested;
+
+	// Card context action 요청을 parent widget에 알린다.
+	FProjectTemplateCardContextNative OnContextRequested;
 
 protected:
 	// Card button click을 선택 요청으로 변환한다.

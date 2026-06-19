@@ -1,6 +1,7 @@
 #include "Scenario/ScenarioSampler.h"
 
 #include "Misc/Crc.h"
+#include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
 #include "Shared/ScenarioSampleJson.h"
 #include "Shared/ScenarioDocumentJson.h"
 
@@ -113,6 +114,28 @@ namespace
 		return Value.FixedValue;
 	}
 
+	// Matches editor preview projection for corridor geometry so simulation surfaces use the same lane widths.
+	double ScenarioSamplerResolveGeometryNumber(
+		const FScenarioTemplateNumberValue& Value,
+		double DefaultValue,
+		const FString& ParamKey,
+		TMap<FString, FScenarioSampleParamValue>& Params)
+	{
+		if (!Value.bIsSet)
+		{
+			return DefaultValue;
+		}
+
+		if (Value.Mode == EScenarioTemplateNumberValueMode::Range)
+		{
+			const double ResolvedValue = (Value.MinValue + Value.MaxValue) * 0.5;
+			Params.Add(ParamKey, ScenarioSamplerMakeFloatParam(ResolvedValue));
+			return ResolvedValue;
+		}
+
+		return Value.FixedValue;
+	}
+
 	int32 ScenarioSamplerResolveInteger(
 		const FScenarioTemplateIntegerValue& Value,
 		int32 DefaultValue,
@@ -218,6 +241,12 @@ namespace
 
 	EScenarioSampleLaneType ScenarioSamplerSurfaceToLaneType(const FString& SurfaceId)
 	{
+		FScenarioCorridorSurfaceEntry SurfaceEntry;
+		if (UScenarioCorridorSurfaceCatalog::FindDefaultSurfaceEntryById(FName(*SurfaceId), SurfaceEntry))
+		{
+			return SurfaceEntry.LaneType;
+		}
+
 		const FString Normalized = SurfaceId.ToLower();
 		if (Normalized.Contains(TEXT("building")) || Normalized.Contains(TEXT("wall")) || Normalized.Contains(TEXT("block")))
 		{
@@ -305,11 +334,10 @@ namespace
 		OutLayout.Reset();
 		OutLanes.Reset();
 
-		const double WalkwayWidthMeters = ScenarioSamplerResolveNumber(
+		const double WalkwayWidthMeters = ScenarioSamplerResolveGeometryNumber(
 			ScenarioDocument.Corridor.WalkwayWidthMeters,
 			3.0,
 			TEXT("corridor.walkway_width_m"),
-			Seed,
 			Params);
 		const double HalfWalkwayWidthMeters = WalkwayWidthMeters * 0.5;
 
@@ -329,7 +357,7 @@ namespace
 				FString::Printf(TEXT("corridor.segments.%s.replaced_by"), *Segment.SegmentId),
 				Seed,
 				Params);
-			WalkwayLane.Type = EScenarioSampleLaneType::Walkable;
+			WalkwayLane.Type = ScenarioSamplerSurfaceToLaneType(WalkwayLane.SurfaceId);
 			LayoutEntry.Lanes.Add(WalkwayLane);
 
 			FScenarioSamplerResolvedLane WalkwayRegion;
@@ -346,7 +374,7 @@ namespace
 			{
 				const FScenarioTemplateLaneRule& LaneRule = ScenarioDocument.Corridor.BuildingSide[Index];
 				const FString ParamKey = FString::Printf(TEXT("corridor.building_side[%d].width_m"), Index);
-				const double WidthMeters = ScenarioSamplerResolveNumber(LaneRule.WidthMeters, 0.0, ParamKey, Seed, Params);
+				const double WidthMeters = ScenarioSamplerResolveGeometryNumber(LaneRule.WidthMeters, 0.0, ParamKey, Params);
 				if (WidthMeters <= KINDA_SMALL_NUMBER)
 				{
 					continue;
@@ -376,7 +404,7 @@ namespace
 			{
 				const FScenarioTemplateLaneRule& LaneRule = ScenarioDocument.Corridor.CurbSide[Index];
 				const FString ParamKey = FString::Printf(TEXT("corridor.curb_side[%d].width_m"), Index);
-				const double WidthMeters = ScenarioSamplerResolveNumber(LaneRule.WidthMeters, 0.0, ParamKey, Seed, Params);
+				const double WidthMeters = ScenarioSamplerResolveGeometryNumber(LaneRule.WidthMeters, 0.0, ParamKey, Params);
 				if (WidthMeters <= KINDA_SMALL_NUMBER)
 				{
 					continue;

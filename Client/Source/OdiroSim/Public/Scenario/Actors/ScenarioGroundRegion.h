@@ -10,7 +10,9 @@ class UScenarioCorridorSurfaceCatalog;
 class UMaterialInterface;
 class USceneComponent;
 class UStaticMeshComponent;
+class UWorld;
 
+// Runtime and editor actor for configured ground-region surfaces.
 UCLASS(BlueprintType)
 class ODIROSIM_API AScenarioGroundRegion : public AActor
 {
@@ -18,6 +20,13 @@ class ODIROSIM_API AScenarioGroundRegion : public AActor
 
 public:
 	AScenarioGroundRegion();
+
+	// Spawns a region actor and applies the supplied region spec before returning it to the caller.
+	static AScenarioGroundRegion* SpawnConfigured(
+		UWorld* world,
+		TSubclassOf<AScenarioGroundRegion> regionClass,
+		const FScenarioGroundRegionSpec& regionSpec,
+		FString& outFailureReason);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario")
 	TObjectPtr<USceneComponent> SceneRoot;

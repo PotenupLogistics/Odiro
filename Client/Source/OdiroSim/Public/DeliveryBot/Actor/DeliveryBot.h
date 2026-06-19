@@ -7,6 +7,8 @@
 #include "Shared/Struct/DeliveryBot/Drive/DeliveryBotMovementInfo.h"
 #include "Shared/Struct/DeliveryBot/Setup/DeliveryBotSetupInfo.h"
 #include "Shared/Struct/DeliveryBot/Observation/DeliveryBotObservationInfo.h"
+#include "Shared/Struct/DeliveryBot/Result/DeliveryBotPythonCaptureRefInfo.h"
+#include "Shared/Struct/DeliveryBot/Result/DeliveryBotPolicyDecisionResultInfo.h"
 #include "DeliveryBot.generated.h"
 
 USTRUCT(BlueprintType)
@@ -25,6 +27,10 @@ struct FDeliveryBotSensorSnapshot
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bHasFrontObject{ false };
+
+	// 이 센서 snapshot이 만들어진 고정 시뮬레이션 시간
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SimulationTimeSeconds{ 0.f };
 };
 
 class UDeliveryBot_HttpPolicyComponent;
@@ -68,8 +74,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Policy")
 	bool StartPolicyRunWithPolicySpecFileName(const FString& policySpecFileName);
 
-	void ConfigureProjectActionLogging(const FString& projectOutputEpisodeId); // project actions.jsonl 기록 대상 output episode를 전달한다
-
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Observation")
 	FDeliveryBotObservationInfo BuildPolicyObservation();
 
@@ -93,6 +97,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
 	FString GetLastPythonScenarioResultJson() const; // Python 서버에서 받은 마지막 scenario result JSON을 반환한다
 
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
+	FDeliveryBotPolicyDecisionResultInfo GetLastPolicyDecisionResult() const; // Python policy의 마지막 decide 결과를 반환한다
+	
+	void GetLastPythonCaptureRefs(TArray<FDeliveryBotPythonCaptureRefInfo>& outCaptureRefs) const; // Python policy가 마지막으로 반환한 capture refs를 복사한다
 
 private:
 	void ApplySetupInfo();
@@ -112,6 +120,17 @@ private:
 		UPrimitiveComponent* otherComp,
 		FVector normalImpulse,
 		const FHitResult& hit);
+
+
+private:  // tick/Hz 관련 함수
+	void UpdateFixedSimulation(float deltaTime);
+	void StepFixedSimulation(float fixedDeltaSeconds);
+	void UpdateFixedSensor(float fixedDeltaSeconds);
+	void UpdateFixedPolicy(float fixedDeltaSeconds);
+	void ApplyLatestMoveCommand(float fixedDeltaSeconds);
+	float GetFixedTickIntervalSeconds() const;
+
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Component")
 	TObjectPtr<UDeliveryBot_DriveComponent> DriveComponent;
@@ -152,10 +171,25 @@ protected:
 private:
 	FDeliveryBotSensorSnapshot LastSensorSnapshot{};
 	FDeliveryBotMoveCommandInfo LastMoveCommandInfo{};
+
+	FString CollisionStopActorName{};
 	FString LastActionReason{ TEXT("unknown") };
+
 	bool bHasLastMoveCommand{ false };
 	bool bCollisionStopActive{ false };
-	FString CollisionStopActorName{};
+
 	TArray<FName> CollisionStopActorTags{};
 
+
+protected:   // tick/Hz 관련 변수
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|FixedTick", meta = (AllowPrivateAccess = "true"))
+	float FixedTickRateHz{ 30.f };
+
+private:
+	// 고정 시뮬레이션 틱 누적 시간.
+	float FixedTickElapsedSeconds{ 0.f };
+	// 고정 시뮬레이션이 진행한 총 시간.
+	float FixedSimulationTimeSeconds{ 0.f };
+	// LiDAR scan rate를 맞추기 위한 누적 시간.
+	float SensorElapsedSeconds{ 0.f };
 };

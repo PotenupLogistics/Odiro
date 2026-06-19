@@ -2,8 +2,10 @@
 #include "Scenario/Actors/ScenarioStaticObstacle.h"
 #include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "Scenario/Components/ScenarioObstacleCollisionComponent.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
 #include "Scenario/Data/ScenarioStaticObstaclePropCatalog.h"
@@ -65,18 +67,68 @@ namespace
 
 }
 
+AScenarioStaticObstacle* AScenarioStaticObstacle::SpawnConfigured(
+	UWorld* world,
+	TSubclassOf<AScenarioStaticObstacle> obstacleClass,
+	const FTransform& transform,
+	const FScenarioStaticObstaclePropEntry& propEntry,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+	if (!world)
+	{
+		outFailureReason = TEXT("World is unavailable.");
+		return nullptr;
+	}
+	if (propEntry.PropId.IsNone())
+	{
+		outFailureReason = TEXT("Static obstacle prop entry is invalid.");
+		return nullptr;
+	}
+
+	TSubclassOf<AScenarioStaticObstacle> spawnClass = obstacleClass;
+	if (!spawnClass)
+	{
+		spawnClass = AScenarioStaticObstacle::StaticClass();
+	}
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AScenarioStaticObstacle* staticObstacle = world->SpawnActor<AScenarioStaticObstacle>(
+		spawnClass,
+		transform,
+		spawnParams);
+	if (!staticObstacle)
+	{
+		outFailureReason = TEXT("SpawnActor failed.");
+		return nullptr;
+	}
+
+	if (!staticObstacle->ApplyPropEntry(propEntry))
+	{
+		outFailureReason = FString::Printf(TEXT("Failed to apply prop '%s'."), *propEntry.PropId.ToString());
+		staticObstacle->Destroy();
+		return nullptr;
+	}
+
+	return staticObstacle;
+}
+
 AScenarioStaticObstacle::AScenarioStaticObstacle()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SetRootComponent(SceneRoot);
+
 	MeshRoot = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshRoot"));
-	SetRootComponent(MeshRoot);
+	MeshRoot->SetupAttachment(SceneRoot);
 	MeshRoot->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	MeshRoot->SetCollisionResponseToAllChannels(ECR_Ignore);
 	MeshRoot->SetGenerateOverlapEvents(false);
 
 	CollisionBoundsComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBoundsComponent"));
-	CollisionBoundsComponent->SetupAttachment(MeshRoot);
+	CollisionBoundsComponent->SetupAttachment(SceneRoot);
 	CollisionBoundsComponent->SetHiddenInGame(true);
 	CollisionBoundsComponent->SetVisibility(false);
 	CollisionBoundsComponent->SetGenerateOverlapEvents(false);
@@ -112,6 +164,7 @@ void AScenarioStaticObstacle::SetStaticMesh(UStaticMesh* inStaticMesh)
 	{
 		MeshRoot->SetStaticMesh(inStaticMesh);
 	}
+	ApplyMeshGroundAlignment();
 	ApplyCollisionSettings();
 }
 
@@ -121,6 +174,7 @@ bool AScenarioStaticObstacle::ApplyConfiguredStaticMesh()
 
 	if (StaticMeshAsset.IsNull())
 	{
+		ApplyMeshGroundAlignment();
 		ApplyCollisionSettings();
 		return MeshRoot->GetStaticMesh() != nullptr;
 	}
@@ -129,6 +183,7 @@ bool AScenarioStaticObstacle::ApplyConfiguredStaticMesh()
 	if (!loadedMesh) return false;
 
 	MeshRoot->SetStaticMesh(loadedMesh);
+	ApplyMeshGroundAlignment();
 	ApplyCollisionSettings();
 	return true;
 }
@@ -235,6 +290,25 @@ bool AScenarioStaticObstacle::TryFindConfiguredPropEntry(
 	}
 
 	return propCatalog->FindPropEntryById(inPropId, outPropEntry);
+}
+
+void AScenarioStaticObstacle::ApplyMeshGroundAlignment()
+{
+	if (!MeshRoot)
+	{
+		return;
+	}
+
+	UStaticMesh* staticMesh = MeshRoot->GetStaticMesh();
+	if (!staticMesh)
+	{
+		MeshRoot->SetRelativeLocation(FVector::ZeroVector);
+		return;
+	}
+
+	const FBox localBounds = staticMesh->GetBoundingBox();
+	const double relativeScaleZ = MeshRoot->GetRelativeScale3D().Z;
+	MeshRoot->SetRelativeLocation(FVector(0.0, 0.0, -localBounds.Min.Z * relativeScaleZ));
 }
 
 bool AScenarioStaticObstacle::GetPlacementBounds(

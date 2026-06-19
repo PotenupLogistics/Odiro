@@ -21,6 +21,9 @@ protected:
 	
 
 public:
+	// Controls legacy level-placed grid actors; scenario runtime builds the grid after surfaces are spawned.
+	void SetBuildGridOnBeginPlay(bool bEnabled);
+
 	UBoxComponent* GetBoundsBox() const
 	{
 		return BoundsBox;
@@ -66,4 +69,8 @@ private:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
 	TArray<FDeliveryBotGridCollisionRuleInfo> CollisionProfileRules;
+
+	// Whether this actor owns grid construction from BeginPlay instead of an external scenario subsystem.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
+	bool bBuildGridOnBeginPlay{ true };
 };

@@ -39,4 +39,3 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	EDeliveryBotMoveDirectionType MoveDirectionType{ EDeliveryBotMoveDirectionType::Forward };
 };
-

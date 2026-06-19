@@ -15,7 +15,7 @@
 
 namespace
 {
-	const TCHAR* ScenarioSampleSchema = TEXT("scenario_sample");
+	const TCHAR* UserProjectScenarioSampleSchema = TEXT("scenario_sample");
 	const int32 UserProjectJsonVersion = 1;
 
 	void AddUserProjectDiagnostic(
@@ -310,6 +310,14 @@ namespace
 
 		return true;
 	}
+
+	FScenarioSampleParamValue MakeScenarioSampleFloatParam(double value)
+	{
+		FScenarioSampleParamValue paramValue;
+		paramValue.Type = EScenarioSampleParamValueType::Float;
+		paramValue.FloatValue = value;
+		return paramValue;
+	}
 }
 
 FUserProjectJsonParseResult FUserProjectDataJson::ValidateRootJsonString(
@@ -458,10 +466,13 @@ FUserProjectEpisodeScenarioWriteResult FUserProjectEpisodeScenarioJson::WriteEpi
 		return result;
 	}
 
+	FScenarioSampleDocument sampleDocument = sampleResult.Document;
+	sampleDocument.Scenario.Params.Add(TEXT("time_limit_s"), MakeScenarioSampleFloatParam(setting.MaxDurationSeconds));
+
 	FString outputJson;
 	TArray<FScenarioSchemaDiagnostic> sampleWriteDiagnostics;
 	const bool bSampleJsonWritten =
-		FScenarioSampleJson::TryWriteJson(sampleResult.Document, outputJson, sampleWriteDiagnostics);
+		FScenarioSampleJson::TryWriteJson(sampleDocument, outputJson, sampleWriteDiagnostics);
 	AppendScenarioSchemaDiagnostics(sampleWriteDiagnostics, diagnostics);
 	if (!bSampleJsonWritten
 		|| !TryWriteTextFile(result.ScenarioPath, outputJson, diagnostics))
@@ -520,13 +531,13 @@ FUserProjectEpisodeScenarioParseResult FUserProjectEpisodeScenarioJson::ParseFro
 
 	FString schema;
 	TryReadStringField(*rootObject, TEXT("schema"), TEXT("$"), result.Diagnostics, schema);
-	if (!schema.Equals(ScenarioSampleSchema, ESearchCase::CaseSensitive))
+	if (!schema.Equals(UserProjectScenarioSampleSchema, ESearchCase::CaseSensitive))
 	{
 		AddUserProjectDiagnostic(
 			result.Diagnostics,
 			EScenarioCompileDiagnosticSeverity::Error,
 			TEXT("invalid_schema"),
-			FString::Printf(TEXT("$.schema must be '%s'."), ScenarioSampleSchema));
+			FString::Printf(TEXT("$.schema must be '%s'."), UserProjectScenarioSampleSchema));
 		result.bSuccess = false;
 		return result;
 	}

@@ -3,11 +3,13 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Misc/Crc.h"
+#include "Scenario/ScenarioCorridorGeometry.h"
 #include "Shared/ScenarioSampleJson.h"
 
 namespace
 {
 	const double MetersToCentimeters = 100.0;
+	const double RobotEndpointInsetMeters = 1.0;
 
 	struct FResolvedSamplePose
 	{
@@ -134,6 +136,37 @@ namespace
 			(Point.X * SinHeading) + (Point.Y * CosHeading));
 	}
 
+	// Resolves the surface height at a sampled pose so actors spawn on the matching lane surface.
+	double ResolveRuntimeSurfaceZOffsetCm(
+		const FScenarioSampleSemantic& Semantic,
+		double AlongMeters,
+		double OffsetMeters)
+	{
+		for (const FScenarioSampleLayoutEntry& LayoutEntry : Semantic.Layout)
+		{
+			if (!FScenarioCorridorGeometry::ContainsRangeValue(
+					AlongMeters,
+					LayoutEntry.AlongRangeMeters.StartMeters,
+					LayoutEntry.AlongRangeMeters.EndMeters))
+			{
+				continue;
+			}
+
+			for (const FScenarioSampleLayoutLane& Lane : LayoutEntry.Lanes)
+			{
+				if (FScenarioCorridorGeometry::ContainsRangeValue(
+						OffsetMeters,
+						Lane.OffsetRangeMeters.MinMeters,
+						Lane.OffsetRangeMeters.MaxMeters))
+				{
+					return FScenarioCorridorGeometry::ResolveLaneSurfaceZOffsetCm(Lane.LaneId);
+				}
+			}
+		}
+
+		return 0.0;
+	}
+
 	bool ResolveSampleAxisPose(
 		const FScenarioSampleRouteAxis& Axis,
 		double AlongMeters,
@@ -183,6 +216,42 @@ namespace
 			0.0);
 		OutPose.YawDegrees = FMath::RadiansToDegrees(FMath::Atan2(WorldDirection.Y, WorldDirection.X));
 		return true;
+	}
+
+	double CalculateSampleAxisLengthMeters(const FScenarioSampleRouteAxis& Axis)
+	{
+		double PolylineLengthMeters = 0.0;
+		for (int32 Index = 0; Index < Axis.PointsMeters.Num() - 1; ++Index)
+		{
+			PolylineLengthMeters += (Axis.PointsMeters[Index + 1] - Axis.PointsMeters[Index]).Size();
+		}
+
+		return PolylineLengthMeters > KINDA_SMALL_NUMBER
+			? PolylineLengthMeters
+			: FMath::Max(Axis.LengthMeters, 0.0);
+	}
+
+	double ResolveRuntimeRobotAlongMeters(
+		const FScenarioSampleRouteAxis& Axis,
+		const FScenarioSampleRobotPose& Pose)
+	{
+		const double AxisLengthMeters = CalculateSampleAxisLengthMeters(Axis);
+		if (AxisLengthMeters <= KINDA_SMALL_NUMBER)
+		{
+			return FMath::Max(Pose.AlongMeters, 0.0);
+		}
+
+		const double SafeInsetMeters = FMath::Min(RobotEndpointInsetMeters, AxisLengthMeters * 0.5);
+		switch (Pose.SourceAnchorType)
+		{
+		case EScenarioTemplateRobotAnchorType::Entry:
+			return FMath::Clamp(FMath::Max(Pose.AlongMeters, SafeInsetMeters), 0.0, AxisLengthMeters);
+		case EScenarioTemplateRobotAnchorType::Exit:
+			return FMath::Clamp(FMath::Min(Pose.AlongMeters, AxisLengthMeters - SafeInsetMeters), 0.0, AxisLengthMeters);
+		case EScenarioTemplateRobotAnchorType::CorridorPose:
+		default:
+			return FMath::Clamp(Pose.AlongMeters, 0.0, AxisLengthMeters);
+		}
 	}
 
 	EScenarioGroundRegionType ToGroundRegionType(EScenarioSampleLaneType LaneType)
@@ -266,59 +335,70 @@ namespace
 		WorldSpec.Seeds.PolicySeed = Document.Sample.Source.Seed + 505;
 	}
 
-	void AddGroundRegionsFromSample(
+	void AddCorridorsFromSample(
 		const FScenarioSampleSemantic& Semantic,
 		FScenarioCompileResult& Result,
 		FScenarioWorldSpec& WorldSpec)
 	{
-		int32 RegionIndex = 1;
+		if (Semantic.Layout.IsEmpty())
+		{
+			AddAdapterDiagnostic(
+				Result,
+				EScenarioCompileDiagnosticSeverity::Warning,
+				TEXT("sample_layout_empty"),
+				TEXT("scenario_sample semantic layout is empty; no runtime Corridor surfaces were generated."));
+			return;
+		}
+
+		if (Semantic.RouteAxis.PointsMeters.Num() < 2)
+		{
+			AddAdapterDiagnostic(
+				Result,
+				EScenarioCompileDiagnosticSeverity::Error,
+				TEXT("sample_corridor_axis_invalid"),
+				TEXT("scenario_sample route_axis requires at least two points to generate runtime Corridor surfaces."));
+			return;
+		}
+
+		FScenarioRuntimeCorridorSpec Corridor;
+		Corridor.CorridorId = TEXT("corridor_01");
+		Corridor.AxisType = Semantic.RouteAxis.Type;
+		Corridor.OriginXYMeters = Semantic.RouteAxis.OriginXYMeters;
+		Corridor.HeadingDegrees = Semantic.RouteAxis.HeadingDegrees;
+		Corridor.PointsMeters = Semantic.RouteAxis.PointsMeters;
+		Corridor.LengthMeters = Semantic.RouteAxis.LengthMeters;
+
 		for (const FScenarioSampleLayoutEntry& LayoutEntry : Semantic.Layout)
 		{
+			FScenarioRuntimeCorridorLayoutEntry RuntimeLayoutEntry;
+			RuntimeLayoutEntry.SegmentId = LayoutEntry.SegmentId;
+			RuntimeLayoutEntry.AlongRangeMeters = LayoutEntry.AlongRangeMeters;
+
 			for (const FScenarioSampleLayoutLane& Lane : LayoutEntry.Lanes)
 			{
-				const double StartMeters = LayoutEntry.AlongRangeMeters.StartMeters;
-				const double EndMeters = LayoutEntry.AlongRangeMeters.EndMeters;
-				const double MidAlongMeters = (StartMeters + EndMeters) * 0.5;
-				const double MidOffsetMeters = (Lane.OffsetRangeMeters.MinMeters + Lane.OffsetRangeMeters.MaxMeters) * 0.5;
-
-				FResolvedSamplePose Pose;
-				if (!ResolveSampleAxisPose(Semantic.RouteAxis, MidAlongMeters, MidOffsetMeters, Pose))
-				{
-					AddAdapterDiagnostic(
-						Result,
-						EScenarioCompileDiagnosticSeverity::Error,
-						TEXT("sample_layout_pose_failed"),
-						FString::Printf(TEXT("Failed to resolve layout lane '%s' on segment '%s'."), *Lane.LaneId, *LayoutEntry.SegmentId));
-					continue;
-				}
-
-				FScenarioGroundRegionSpec Region;
-				Region.RegionId = FString::Printf(
-					TEXT("%s_%s_%03d"),
-					LayoutEntry.SegmentId.IsEmpty() ? TEXT("segment") : *LayoutEntry.SegmentId,
-					Lane.LaneId.IsEmpty() ? TEXT("lane") : *Lane.LaneId,
-					RegionIndex++);
-				Region.RegionType = ToGroundRegionType(Lane.Type);
-				Region.SurfaceId = Lane.SurfaceId;
-				Region.ShapeType = EScenarioGroundShapeType::Rectangle;
-				Region.Center = Pose.LocationCm;
-				Region.Size = FVector2D(
-					FMath::Max((EndMeters - StartMeters) * MetersToCentimeters, 1.0),
-					FMath::Max((Lane.OffsetRangeMeters.MaxMeters - Lane.OffsetRangeMeters.MinMeters) * MetersToCentimeters, 1.0));
-				Region.YawDegrees = Pose.YawDegrees;
-				Region.TraversabilityScore = ToTraversabilityScore(Lane.Type);
+				FScenarioRuntimeCorridorLaneSpec RuntimeLane;
+				RuntimeLane.LaneId = Lane.LaneId;
+				RuntimeLane.OffsetRangeMeters = Lane.OffsetRangeMeters;
+				RuntimeLane.SurfaceId = Lane.SurfaceId;
+				RuntimeLane.RegionType = ToGroundRegionType(Lane.Type);
+				RuntimeLane.SurfaceZOffsetCm = FScenarioCorridorGeometry::ResolveLaneSurfaceZOffsetCm(Lane.LaneId);
+				RuntimeLane.TraversabilityScore = ToTraversabilityScore(Lane.Type);
 				if (Lane.Type == EScenarioSampleLaneType::Blocked)
 				{
-					Region.CollisionTag = Lane.SurfaceId.IsEmpty() ? TEXT("blocked") : Lane.SurfaceId;
+					RuntimeLane.CollisionTag = Lane.SurfaceId.IsEmpty() ? TEXT("blocked") : Lane.SurfaceId;
 				}
 				if (Lane.Type == EScenarioSampleLaneType::Penalty)
 				{
-					Region.PenaltyKind = Lane.SurfaceId.IsEmpty() ? TEXT("penalty") : Lane.SurfaceId;
-					Region.PenaltyCost = 1.0;
+					RuntimeLane.PenaltyKind = Lane.SurfaceId.IsEmpty() ? TEXT("penalty") : Lane.SurfaceId;
+					RuntimeLane.PenaltyCost = 1.0;
 				}
-				WorldSpec.GroundRegions.Add(Region);
+				RuntimeLayoutEntry.Lanes.Add(RuntimeLane);
 			}
+
+			Corridor.Layout.Add(RuntimeLayoutEntry);
 		}
+
+		WorldSpec.Corridors.Add(Corridor);
 	}
 
 	void AddRobotFromSample(
@@ -328,14 +408,20 @@ namespace
 	{
 		FResolvedSamplePose StartPose;
 		FResolvedSamplePose GoalPose;
+		const double RuntimeStartAlongMeters = ResolveRuntimeRobotAlongMeters(
+			Semantic.RouteAxis,
+			Semantic.Robot.Start);
+		const double RuntimeGoalAlongMeters = ResolveRuntimeRobotAlongMeters(
+			Semantic.RouteAxis,
+			Semantic.Robot.Goal);
 		const bool bResolvedStart = ResolveSampleAxisPose(
 			Semantic.RouteAxis,
-			Semantic.Robot.Start.AlongMeters,
+			RuntimeStartAlongMeters,
 			Semantic.Robot.Start.OffsetMeters,
 			StartPose);
 		const bool bResolvedGoal = ResolveSampleAxisPose(
 			Semantic.RouteAxis,
-			Semantic.Robot.Goal.AlongMeters,
+			RuntimeGoalAlongMeters,
 			Semantic.Robot.Goal.OffsetMeters,
 			GoalPose);
 
@@ -349,6 +435,15 @@ namespace
 			return;
 		}
 
+		StartPose.LocationCm.Z = ResolveRuntimeSurfaceZOffsetCm(
+			Semantic,
+			RuntimeStartAlongMeters,
+			Semantic.Robot.Start.OffsetMeters);
+		GoalPose.LocationCm.Z = ResolveRuntimeSurfaceZOffsetCm(
+			Semantic,
+			RuntimeGoalAlongMeters,
+			Semantic.Robot.Goal.OffsetMeters);
+
 		FScenarioPlaceableInstanceSpec RobotSpec;
 		RobotSpec.InstanceId = TEXT("robot_01");
 		RobotSpec.AssetId = TEXT("delivery_bot");
@@ -361,6 +456,10 @@ namespace
 		RobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = GoalPose.LocationCm;
 		RobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.bHasGoal = true;
 		RobotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
+		RobotSpec.Properties.Add(TEXT("sample_start_along_m"), MakeRuntimeFloatParam(Semantic.Robot.Start.AlongMeters));
+		RobotSpec.Properties.Add(TEXT("sample_goal_along_m"), MakeRuntimeFloatParam(Semantic.Robot.Goal.AlongMeters));
+		RobotSpec.Properties.Add(TEXT("runtime_start_along_m"), MakeRuntimeFloatParam(RuntimeStartAlongMeters));
+		RobotSpec.Properties.Add(TEXT("runtime_goal_along_m"), MakeRuntimeFloatParam(RuntimeGoalAlongMeters));
 		RobotSpec.Properties.Add(TEXT("sample_start_segment"), MakeRuntimeStringParam(Semantic.Robot.Start.SegmentId));
 		RobotSpec.Properties.Add(TEXT("sample_goal_segment"), MakeRuntimeStringParam(Semantic.Robot.Goal.SegmentId));
 		WorldSpec.Placeables.Add(RobotSpec);
@@ -383,6 +482,8 @@ namespace
 					FString::Printf(TEXT("Failed to resolve static obstacle '%s' pose."), *Obstacle.ObstacleId));
 				continue;
 			}
+
+			Pose.LocationCm.Z = ResolveRuntimeSurfaceZOffsetCm(Semantic, Obstacle.AlongMeters, Obstacle.OffsetMeters);
 
 			FScenarioPlaceableInstanceSpec ObstacleSpec;
 			ObstacleSpec.InstanceId = Obstacle.ObstacleId;
@@ -518,7 +619,7 @@ FScenarioCompileResult FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpec
 
 	FScenarioWorldSpec WorldSpec;
 	PopulateRunConfig(Document, Result, WorldSpec);
-	AddGroundRegionsFromSample(Document.Scenario.Semantic, Result, WorldSpec);
+	AddCorridorsFromSample(Document.Scenario.Semantic, Result, WorldSpec);
 	AddRobotFromSample(Document.Scenario.Semantic, Result, WorldSpec);
 	AddStaticObstaclesFromSample(Document.Scenario.Semantic, Result, WorldSpec);
 	AddPedestriansFromSample(Document.Scenario.Semantic, Result, WorldSpec);

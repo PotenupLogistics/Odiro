@@ -4,31 +4,79 @@
 #include "Components/SplineComponent.h"
 #include "Components/SplineMeshComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Scenario/ScenarioCorridorGeometry.h"
+#include "Scenario/Data/ScenarioCorridorSurfaceResolver.h"
 #include "UObject/ConstructorHelpers.h"
-
-// Corridor preview surface/material 해석 상태를 추적하는 로그 카테고리.
-DEFINE_LOG_CATEGORY_STATIC(LogScenarioCorridorPreview, Log, All);
 
 namespace
 {
-	// Template coordinates are stored in meters while Unreal actors use centimeters.
-	const double CorridorPreviewMetersToCentimeters = 100.0;
 	// Thin surface tops stay slightly above the ground to avoid z-fighting.
 	const double PreviewSurfaceTopZCm = 1.0;
 	// Non-blocking surfaces are thick enough to overlap 15cm side offsets without vertical holes.
 	const double MinimumSurfacePreviewHeightCm = 20.0;
 	// Blocked corridor surfaces match the legacy blocked ground-region collision height.
 	const double BlockedPreviewHeightCm = 200.0;
-	// curb_side lane은 walkway보다 낮은 노면으로 보여 계단식 경계가 드러나게 한다.
-	const double CurbSidePreviewDropCm = 15.0;
 	// Blocked corridor surfaces use the same collision profile as blocked ground regions.
 	const FName BlockedPreviewCollisionProfileName{ TEXT("Blocked") };
 
-	// Returns true when a resolved surface should behave like a physical blocked volume.
-	bool IsBlockedCorridorSurface(const FScenarioCorridorSurfaceEntry& surfaceEntry)
+	struct FPreviewCorridorVisualLaneSpec
 	{
-		return surfaceEntry.GroundRegionType == EScenarioGroundRegionType::Blocked
-			|| surfaceEntry.LaneType == EScenarioSampleLaneType::Blocked;
+		FScenarioAlongRangeMeters AlongRangeMeters;
+		FString LaneId;
+		FString SurfaceId;
+		double MinOffsetMeters = 0.0;
+		double MaxOffsetMeters = 0.0;
+		double SurfaceZOffsetCm = 0.0;
+	};
+
+	double MeasurePreviewAxisLengthMeters(const TArray<FVector2D>& pointsMeters)
+	{
+		double lengthMeters = 0.0;
+		for (int32 index = 0; index < pointsMeters.Num() - 1; ++index)
+		{
+			lengthMeters += FVector2D::Distance(pointsMeters[index], pointsMeters[index + 1]);
+		}
+		return lengthMeters;
+	}
+
+	bool ArePreviewVisualLanesEquivalent(
+		const FPreviewCorridorVisualLaneSpec& left,
+		const FPreviewCorridorVisualLaneSpec& right)
+	{
+		return left.LaneId == right.LaneId
+			&& left.SurfaceId == right.SurfaceId
+			&& FMath::IsNearlyEqual(
+				left.MinOffsetMeters,
+				right.MinOffsetMeters,
+				FScenarioCorridorGeometry::SurfaceQueryToleranceMeters)
+			&& FMath::IsNearlyEqual(
+				left.MaxOffsetMeters,
+				right.MaxOffsetMeters,
+				FScenarioCorridorGeometry::SurfaceQueryToleranceMeters)
+			&& FMath::IsNearlyEqual(
+				left.SurfaceZOffsetCm,
+				right.SurfaceZOffsetCm,
+				KINDA_SMALL_NUMBER);
+	}
+
+	void AddOrMergePreviewVisualLane(
+		TArray<FPreviewCorridorVisualLaneSpec>& visualLaneSpecs,
+		const FPreviewCorridorVisualLaneSpec& candidate)
+	{
+		for (FPreviewCorridorVisualLaneSpec& visualLaneSpec : visualLaneSpecs)
+		{
+			if (ArePreviewVisualLanesEquivalent(visualLaneSpec, candidate)
+				&& FMath::IsNearlyEqual(
+					visualLaneSpec.AlongRangeMeters.EndMeters,
+					candidate.AlongRangeMeters.StartMeters,
+					FScenarioCorridorGeometry::SurfaceQueryToleranceMeters))
+			{
+				visualLaneSpec.AlongRangeMeters.EndMeters = candidate.AlongRangeMeters.EndMeters;
+				return;
+			}
+		}
+
+		visualLaneSpecs.Add(candidate);
 	}
 }
 
@@ -52,21 +100,21 @@ AScenarioCorridorPreviewActor::AScenarioCorridorPreviewActor()
 	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> walkableGroundMaterialAsset(
-		TEXT("/Game/Materials/M_ScenarioGroundWalkable.M_ScenarioGroundWalkable"));
+		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorSidewalk.M_ScenarioCorridorSidewalk"));
 	if (walkableGroundMaterialAsset.Succeeded())
 	{
 		WalkableGroundMaterial = walkableGroundMaterialAsset.Object;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> penaltyGroundMaterialAsset(
-		TEXT("/Game/Materials/M_ScenarioGroundPenalty.M_ScenarioGroundPenalty"));
+		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorRoad.M_ScenarioCorridorRoad"));
 	if (penaltyGroundMaterialAsset.Succeeded())
 	{
 		PenaltyGroundMaterial = penaltyGroundMaterialAsset.Object;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> blockedGroundMaterialAsset(
-		TEXT("/Game/Materials/M_ScenarioGroundBlock.M_ScenarioGroundBlock"));
+		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorBuilding.M_ScenarioCorridorBuilding"));
 	if (blockedGroundMaterialAsset.Succeeded())
 	{
 		BlockedGroundMaterial = blockedGroundMaterialAsset.Object;
@@ -85,44 +133,87 @@ void AScenarioCorridorPreviewActor::ConfigureFromCorridor(const FScenarioTemplat
 
 	const double walkwayWidthMeters = ResolvePreviewNumber(corridor.WalkwayWidthMeters, 3.0);
 	const double halfWalkwayWidthMeters = FMath::Max(walkwayWidthMeters, 0.0) * 0.5;
-	AddLaneStrip(TEXT("walkway"), TEXT("sidewalk"), -halfWalkwayWidthMeters, halfWalkwayWidthMeters, 0.0);
 
-	double buildingMaxOffsetMeters = -halfWalkwayWidthMeters;
-	for (int32 index = 0; index < corridor.BuildingSide.Num(); ++index)
+	TArray<FScenarioTemplateSegment> renderSegments = corridor.Segments;
+	if (renderSegments.IsEmpty())
 	{
-		const FScenarioTemplateLaneRule& laneRule = corridor.BuildingSide[index];
-		const double widthMeters = ResolvePreviewNumber(laneRule.WidthMeters, 0.0);
-		if (widthMeters <= KINDA_SMALL_NUMBER)
-		{
-			continue;
-		}
-
-		AddLaneStrip(
-			index == 0 ? TEXT("building_edge") : FString::Printf(TEXT("building_%d"), index),
-			laneRule.SurfaceId,
-			buildingMaxOffsetMeters - widthMeters,
-			buildingMaxOffsetMeters,
-			0.0);
-		buildingMaxOffsetMeters -= widthMeters;
+		FScenarioTemplateSegment fullAxisSegment;
+		fullAxisSegment.SegmentId = TEXT("segment_000");
+		fullAxisSegment.AlongRangeMeters.StartMeters = 0.0;
+		fullAxisSegment.AlongRangeMeters.EndMeters = MeasurePreviewAxisLengthMeters(corridor.Axis.PointsMeters);
+		renderSegments.Add(fullAxisSegment);
 	}
 
-	double curbMinOffsetMeters = halfWalkwayWidthMeters;
-	for (int32 index = 0; index < corridor.CurbSide.Num(); ++index)
+	TArray<FPreviewCorridorVisualLaneSpec> visualLaneSpecs;
+	for (int32 segmentIndex = 0; segmentIndex < renderSegments.Num(); ++segmentIndex)
 	{
-		const FScenarioTemplateLaneRule& laneRule = corridor.CurbSide[index];
-		const double widthMeters = ResolvePreviewNumber(laneRule.WidthMeters, 0.0);
-		if (widthMeters <= KINDA_SMALL_NUMBER)
+		const FScenarioTemplateSegment& segment = renderSegments[segmentIndex];
+		const FString walkwaySurfaceId = ResolvePreviewString(segment.ReplacedBySurfaceId, TEXT("sidewalk"));
+		AddOrMergePreviewVisualLane(
+			visualLaneSpecs,
+			FPreviewCorridorVisualLaneSpec{
+				segment.AlongRangeMeters,
+				TEXT("walkway"),
+				walkwaySurfaceId,
+				-halfWalkwayWidthMeters,
+				halfWalkwayWidthMeters,
+				0.0 });
+
+		double buildingMaxOffsetMeters = -halfWalkwayWidthMeters;
+		for (int32 index = 0; index < corridor.BuildingSide.Num(); ++index)
 		{
-			continue;
+			const FScenarioTemplateLaneRule& laneRule = corridor.BuildingSide[index];
+			const double widthMeters = ResolvePreviewNumber(laneRule.WidthMeters, 0.0);
+			if (widthMeters <= KINDA_SMALL_NUMBER)
+			{
+				continue;
+			}
+
+			AddOrMergePreviewVisualLane(
+				visualLaneSpecs,
+				FPreviewCorridorVisualLaneSpec{
+					segment.AlongRangeMeters,
+					index == 0 ? FString(TEXT("building_edge")) : FString::Printf(TEXT("building_%d"), index),
+					laneRule.SurfaceId,
+					buildingMaxOffsetMeters - widthMeters,
+					buildingMaxOffsetMeters,
+					0.0 });
+			buildingMaxOffsetMeters -= widthMeters;
 		}
 
+		double curbMinOffsetMeters = halfWalkwayWidthMeters;
+		for (int32 index = 0; index < corridor.CurbSide.Num(); ++index)
+		{
+			const FScenarioTemplateLaneRule& laneRule = corridor.CurbSide[index];
+			const double widthMeters = ResolvePreviewNumber(laneRule.WidthMeters, 0.0);
+			if (widthMeters <= KINDA_SMALL_NUMBER)
+			{
+				continue;
+			}
+
+			AddOrMergePreviewVisualLane(
+				visualLaneSpecs,
+				FPreviewCorridorVisualLaneSpec{
+					segment.AlongRangeMeters,
+					index == 0 ? FString(TEXT("curb_edge")) : FString::Printf(TEXT("curb_%d"), index),
+					laneRule.SurfaceId,
+					curbMinOffsetMeters,
+					curbMinOffsetMeters + widthMeters,
+					FScenarioCorridorGeometry::DefaultCurbSideSurfaceZOffsetCm });
+			curbMinOffsetMeters += widthMeters;
+		}
+	}
+
+	for (const FPreviewCorridorVisualLaneSpec& visualLaneSpec : visualLaneSpecs)
+	{
 		AddLaneStrip(
-			index == 0 ? TEXT("curb_edge") : FString::Printf(TEXT("curb_%d"), index),
-			laneRule.SurfaceId,
-			curbMinOffsetMeters,
-			curbMinOffsetMeters + widthMeters,
-			-CurbSidePreviewDropCm);
-		curbMinOffsetMeters += widthMeters;
+			corridor.Axis.PointsMeters,
+			visualLaneSpec.AlongRangeMeters,
+			visualLaneSpec.LaneId,
+			visualLaneSpec.SurfaceId,
+			visualLaneSpec.MinOffsetMeters,
+			visualLaneSpec.MaxOffsetMeters,
+			visualLaneSpec.SurfaceZOffsetCm);
 	}
 }
 
@@ -156,8 +247,8 @@ void AScenarioCorridorPreviewActor::RebuildAxisSpline(const TArray<FVector2D>& p
 	{
 		const FVector2D& pointMeters = pointsMeters[index];
 		const FVector pointCm(
-			pointMeters.X * CorridorPreviewMetersToCentimeters,
-			pointMeters.Y * CorridorPreviewMetersToCentimeters,
+			pointMeters.X * FScenarioCorridorGeometry::MetersToCentimeters,
+			pointMeters.Y * FScenarioCorridorGeometry::MetersToCentimeters,
 			PreviewSurfaceTopZCm);
 		AxisSplineComponent->AddSplinePoint(pointCm, ESplineCoordinateSpace::Local, false);
 		AxisSplineComponent->SetSplinePointType(index, ESplinePointType::Curve, false);
@@ -167,6 +258,8 @@ void AScenarioCorridorPreviewActor::RebuildAxisSpline(const TArray<FVector2D>& p
 }
 
 void AScenarioCorridorPreviewActor::AddLaneStrip(
+	const TArray<FVector2D>& axisPointsMeters,
+	const FScenarioAlongRangeMeters& alongRangeMeters,
 	const FString& laneId,
 	const FString& surfaceId,
 	double minOffsetMeters,
@@ -184,84 +277,62 @@ void AScenarioCorridorPreviewActor::AddLaneStrip(
 		return;
 	}
 
-	const double centerOffsetCm = ((minOffsetMeters + maxOffsetMeters) * 0.5) * CorridorPreviewMetersToCentimeters;
-	const double laneWidthCm = laneWidthMeters * CorridorPreviewMetersToCentimeters;
+	const double centerOffsetCm =
+		((minOffsetMeters + maxOffsetMeters) * 0.5) * FScenarioCorridorGeometry::MetersToCentimeters;
+	const double laneWidthCm = laneWidthMeters * FScenarioCorridorGeometry::MetersToCentimeters;
 	FScenarioCorridorSurfaceEntry surfaceEntry;
-	ResolveSurfaceEntry(surfaceId, surfaceEntry);
-	UMaterialInterface* material = ResolveSurfaceMaterial(surfaceEntry);
-	const bool bBlockedSurface = IsBlockedCorridorSurface(surfaceEntry);
+	FScenarioCorridorSurfaceResolver::ResolveSurfaceEntry(surfaceId, SurfaceCatalog, surfaceEntry);
+	const EScenarioGroundRegionType fallbackRegionType =
+		FScenarioCorridorSurfaceResolver::ResolveFallbackRegionType(surfaceEntry.LaneType);
+	UMaterialInterface* material = FScenarioCorridorSurfaceResolver::ResolveSurfaceMaterial(
+		surfaceEntry,
+		fallbackRegionType,
+		WalkableGroundMaterial.Get(),
+		PenaltyGroundMaterial.Get(),
+		BlockedGroundMaterial.Get());
+	const bool bBlockedSurface = FScenarioCorridorSurfaceResolver::IsBlockedSurface(surfaceEntry);
 	const double laneTopZCm = PreviewSurfaceTopZCm + surfaceZOffsetCm;
 	const double laneHeightCm = bBlockedSurface ? BlockedPreviewHeightCm : MinimumSurfacePreviewHeightCm;
 	const double laneCenterZCm = bBlockedSurface
 		? laneTopZCm + (laneHeightCm * 0.5)
 		: laneTopZCm - (laneHeightCm * 0.5);
 	const double laneHeightScale = laneHeightCm / 100.0;
-	const int32 lastPointIndex = AxisSplineComponent->GetNumberOfSplinePoints() - 1;
-	for (int32 pointIndex = 0; pointIndex < lastPointIndex; ++pointIndex)
+
+	FScenarioRuntimeCorridorSpec previewCorridorSpec;
+	previewCorridorSpec.PointsMeters = axisPointsMeters;
+	TArray<FVector> axisLocationsCm;
+	if (!FScenarioCorridorGeometry::BuildRuntimeAxisLocationsForAlongRangeCm(
+		previewCorridorSpec,
+		alongRangeMeters,
+		PreviewSurfaceTopZCm,
+		axisLocationsCm))
 	{
-		const FVector startLocation = AxisSplineComponent->GetLocationAtSplinePoint(
-			pointIndex,
-			ESplineCoordinateSpace::Local);
-		const FVector endLocation = AxisSplineComponent->GetLocationAtSplinePoint(
-			pointIndex + 1,
-			ESplineCoordinateSpace::Local);
-		const FVector startTangent = AxisSplineComponent->GetTangentAtSplinePoint(
-			pointIndex,
-			ESplineCoordinateSpace::Local);
-		const FVector endTangent = AxisSplineComponent->GetTangentAtSplinePoint(
-			pointIndex + 1,
-			ESplineCoordinateSpace::Local);
-		const FVector startDirection = startTangent.GetSafeNormal();
-		const FVector endDirection = endTangent.GetSafeNormal();
-		if (startDirection.IsNearlyZero() || endDirection.IsNearlyZero())
-		{
-			continue;
-		}
-
-		const FVector startRight = FVector::CrossProduct(FVector::UpVector, startDirection).GetSafeNormal();
-		const FVector endRight = FVector::CrossProduct(FVector::UpVector, endDirection).GetSafeNormal();
-		const FVector laneHeightOffset(0.0, 0.0, laneCenterZCm - PreviewSurfaceTopZCm);
-		const FName componentName = MakeUniqueObjectName(
-			this,
-			USplineMeshComponent::StaticClass(),
-			FName(*FString::Printf(TEXT("Corridor_%s_%02d"), *laneId, pointIndex)));
-		USplineMeshComponent* meshComponent = NewObject<USplineMeshComponent>(this, componentName);
-		if (!meshComponent)
-		{
-			continue;
-		}
-
-		meshComponent->SetMobility(EComponentMobility::Movable);
-		meshComponent->SetupAttachment(SceneRoot);
-		meshComponent->SetStaticMesh(LaneStripMesh);
-		meshComponent->SetForwardAxis(ESplineMeshAxis::X, false);
-		meshComponent->SetStartAndEnd(
-			startLocation + startRight * centerOffsetCm + laneHeightOffset,
-			startTangent,
-			endLocation + endRight * centerOffsetCm + laneHeightOffset,
-			endTangent,
-			false);
-		meshComponent->SetStartScale(FVector2D(laneWidthCm / 100.0, laneHeightScale), false);
-		meshComponent->SetEndScale(FVector2D(laneWidthCm / 100.0, laneHeightScale), false);
-		if (bBlockedSurface)
-		{
-			meshComponent->SetCollisionProfileName(BlockedPreviewCollisionProfileName);
-			meshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		}
-		else
-		{
-			meshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		}
-		meshComponent->SetGenerateOverlapEvents(false);
-		meshComponent->SetCastShadow(false);
-		if (material)
-		{
-			meshComponent->SetMaterial(0, material);
-		}
-		meshComponent->RegisterComponent();
-		meshComponent->UpdateMesh();
-		LaneMeshComponents.Add(meshComponent);
+		return;
 	}
+
+	TArray<FVector> axisTangentsCm;
+	axisTangentsCm.Reserve(axisLocationsCm.Num());
+	for (int32 pointIndex = 0; pointIndex < axisLocationsCm.Num(); ++pointIndex)
+	{
+		axisTangentsCm.Add(FScenarioCorridorGeometry::ResolveCurveTangentCm(axisLocationsCm, pointIndex));
+	}
+
+	FScenarioCorridorLaneMeshBuildSpec meshSpec;
+	meshSpec.Owner = this;
+	meshSpec.AttachParent = SceneRoot;
+	meshSpec.LaneStripMesh = LaneStripMesh.Get();
+	meshSpec.Material = material;
+	meshSpec.ComponentNameBase = FName(*FString::Printf(TEXT("Corridor_%s"), *laneId));
+	meshSpec.AxisLocationsCm = MoveTemp(axisLocationsCm);
+	meshSpec.AxisTangentsCm = MoveTemp(axisTangentsCm);
+	meshSpec.CenterOffsetCm = centerOffsetCm;
+	meshSpec.LaneWidthCm = laneWidthCm;
+	meshSpec.LaneHeightScale = laneHeightScale;
+	meshSpec.LaneCenterZCm = laneCenterZCm;
+	meshSpec.SurfaceTopZCm = PreviewSurfaceTopZCm;
+	meshSpec.CollisionEnabled = bBlockedSurface ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision;
+	meshSpec.CollisionProfileName = bBlockedSurface ? BlockedPreviewCollisionProfileName : NAME_None;
+	FScenarioCorridorGeometry::AddLaneStripMeshes(meshSpec, LaneMeshComponents);
 }
 
 double AScenarioCorridorPreviewActor::ResolvePreviewNumber(
@@ -281,102 +352,19 @@ double AScenarioCorridorPreviewActor::ResolvePreviewNumber(
 	return value.FixedValue;
 }
 
-bool AScenarioCorridorPreviewActor::ResolveSurfaceEntry(
-	const FString& surfaceId,
-	FScenarioCorridorSurfaceEntry& outSurfaceEntry) const
+FString AScenarioCorridorPreviewActor::ResolvePreviewString(
+	const FScenarioTemplateStringValue& value,
+	const FString& defaultValue)
 {
-	outSurfaceEntry = FScenarioCorridorSurfaceEntry();
-	const FName surfaceName(*surfaceId);
-	if (const UScenarioCorridorSurfaceCatalog* loadedCatalog = SurfaceCatalog.LoadSynchronous())
+	if (!value.bIsSet)
 	{
-		if (loadedCatalog->FindSurfaceEntryById(surfaceName, outSurfaceEntry))
-		{
-			UE_LOG(
-				LogScenarioCorridorPreview,
-				Log,
-				TEXT("Resolved Corridor surface '%s' from catalog/defaults. Catalog: %s"),
-				*surfaceName.ToString(),
-				*loadedCatalog->GetPathName());
-			return true;
-		}
-	}
-	else if (!SurfaceCatalog.IsNull())
-	{
-		UE_LOG(
-			LogScenarioCorridorPreview,
-			Warning,
-			TEXT("Corridor surface catalog could not be loaded. Path: %s"),
-			*SurfaceCatalog.ToSoftObjectPath().ToString());
+		return defaultValue;
 	}
 
-	if (UScenarioCorridorSurfaceCatalog::FindDefaultSurfaceEntryById(surfaceName, outSurfaceEntry))
+	if (value.Mode == EScenarioTemplateStringValueMode::Choices && !value.Choices.IsEmpty())
 	{
-		UE_LOG(
-			LogScenarioCorridorPreview,
-			Log,
-			TEXT("Resolved Corridor surface '%s' from built-in defaults."),
-			*surfaceName.ToString());
-		return true;
+		return value.Choices[0];
 	}
 
-	UE_LOG(
-		LogScenarioCorridorPreview,
-		Warning,
-		TEXT("Unknown Corridor surface '%s'; using walkable fallback metadata."),
-		surfaceId.IsEmpty() ? TEXT("<empty>") : *surfaceId);
-	outSurfaceEntry.SurfaceId = surfaceName;
-	outSurfaceEntry.DisplayName = FText::FromString(surfaceId.IsEmpty() ? TEXT("Unknown Surface") : surfaceId);
-	outSurfaceEntry.LaneType = EScenarioSampleLaneType::Walkable;
-	outSurfaceEntry.GroundRegionType = EScenarioGroundRegionType::Walkable;
-	outSurfaceEntry.TraversabilityScore = 1.0;
-	return false;
-}
-
-UMaterialInterface* AScenarioCorridorPreviewActor::ResolveSurfaceMaterial(
-	const FScenarioCorridorSurfaceEntry& surfaceEntry) const
-{
-	if (UMaterialInterface* catalogMaterial = surfaceEntry.PreviewMaterial.LoadSynchronous())
-	{
-		UE_LOG(
-			LogScenarioCorridorPreview,
-			Log,
-			TEXT("Using Corridor surface preview material. Surface: %s | Material: %s"),
-			*surfaceEntry.SurfaceId.ToString(),
-			*catalogMaterial->GetPathName());
-		return catalogMaterial;
-	}
-
-	if (!surfaceEntry.PreviewMaterial.IsNull())
-	{
-		UE_LOG(
-			LogScenarioCorridorPreview,
-			Warning,
-			TEXT("Corridor surface preview material failed to load. Surface: %s | Path: %s"),
-			*surfaceEntry.SurfaceId.ToString(),
-			*surfaceEntry.PreviewMaterial.ToSoftObjectPath().ToString());
-	}
-
-	UMaterialInterface* fallbackMaterial = ResolveFallbackSurfaceMaterial(surfaceEntry.LaneType);
-	UE_LOG(
-		LogScenarioCorridorPreview,
-		Log,
-		TEXT("Using Corridor surface fallback material. Surface: %s | Material: %s"),
-		*surfaceEntry.SurfaceId.ToString(),
-		fallbackMaterial ? *fallbackMaterial->GetPathName() : TEXT("<null>"));
-	return fallbackMaterial;
-}
-
-UMaterialInterface* AScenarioCorridorPreviewActor::ResolveFallbackSurfaceMaterial(EScenarioSampleLaneType laneType) const
-{
-	if (laneType == EScenarioSampleLaneType::Blocked)
-	{
-		return BlockedGroundMaterial ? BlockedGroundMaterial.Get() : WalkableGroundMaterial.Get();
-	}
-
-	if (laneType == EScenarioSampleLaneType::Penalty)
-	{
-		return PenaltyGroundMaterial ? PenaltyGroundMaterial.Get() : WalkableGroundMaterial.Get();
-	}
-
-	return WalkableGroundMaterial.Get();
+	return value.FixedValue.IsEmpty() ? defaultValue : value.FixedValue;
 }

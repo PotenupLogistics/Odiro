@@ -154,6 +154,10 @@ struct ODIROSIM_API FScenarioRuntimeContext
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TArray<TObjectPtr<AActor>> GroundRegionActors;
 
+	// Runtime Corridor actors generated from sampled semantic layout.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
+	TArray<TObjectPtr<AActor>> CorridorActors;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TArray<TObjectPtr<AActor>> StaticObstacleActors;
 

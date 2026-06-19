@@ -9,6 +9,7 @@
 
 class ADeliveryBot;
 class ADeliveryBot_GridBoundsActor;
+class AScenarioCorridorRuntimeActor;
 class AScenarioGroundRegion;
 class AScenarioPedestrian;
 class AScenarioSplinePath;
@@ -19,7 +20,6 @@ struct FScenarioPedestrianPlan;
 struct FScenarioPedestrianPlanBuildContext;
 struct FDeliveryBotSetupInfo;
 
-// 컴파일된 Episode simulation setup spec을 현재 월드에 스폰하고, 런타임 actor 생명주기를 관리하는 subsystem.
 UCLASS(BlueprintType)
 class ODIROSIM_API UScenarioSimulationSubsystem : public UWorldSubsystem
 {
@@ -67,11 +67,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	AScenarioSplinePath* FindSplinePath(const FString& pathId) const;
 
+	// Spawns one sampled runtime Corridor surface actor.
 	UFUNCTION(BlueprintCallable, Category = "Scenario")
-	AScenarioGroundRegion* SpawnGroundRegion(const FScenarioGroundRegionSpec& regionSpec);
+	AScenarioCorridorRuntimeActor* SpawnCorridor(const FScenarioRuntimeCorridorSpec& corridorSpec);
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario")
-	void SpawnGroundRegions(const TArray<FScenarioGroundRegionSpec>& regionSpecs);
+	AScenarioGroundRegion* SpawnGroundRegion(const FScenarioGroundRegionSpec& regionSpec);
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	AScenarioGroundRegion* FindGroundRegion(const FString& regionId) const;
@@ -101,6 +102,10 @@ private:
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<AScenarioGroundRegion>> RuntimeGroundRegions;
 
+	// Runtime Corridor actors keyed by sampled corridor id.
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<AScenarioCorridorRuntimeActor>> RuntimeCorridors;
+
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<AScenarioSplinePath>> RuntimePaths;
 
@@ -124,13 +129,13 @@ private:
 	AScenarioPedestrian* SpawnPedestrian(const FScenarioDynamicActorSpec& dynamicActorSpec);
 	AScenarioPedestrian* SpawnPlannedPedestrian(const FScenarioDynamicActorSpec& dynamicActorSpec);
 
-	bool RebuildDeliveryBotGridFromScenarioGroundRegions(const FScenarioSimulationSetupSpec& setupSpec);
+	bool RebuildDeliveryBotGridFromScenarioSurfaces(const FScenarioSimulationSetupSpec& setupSpec);
 	bool TryBuildGroundRegionXYBounds(
 		const TArray<FScenarioGroundRegionSpec>& groundRegionSpecs,
 		FBox2D& outXYBounds,
 		double& outCenterZ) const;
-	// Builds grid bounds from the spawned ground-region actors that the user actually sees in the world.
-	bool TryBuildRuntimeGroundRegionXYBounds(
+	// Builds grid bounds from spawned runtime surfaces that the user actually sees in the world.
+	bool TryBuildRuntimeSurfaceXYBounds(
 		FBox2D& outXYBounds,
 		double& outCenterZ) const;
 	ADeliveryBot_GridBoundsActor* SpawnDeliveryBotGridBoundsActor(const FBox2D& xyBounds, double centerZ);
@@ -141,6 +146,12 @@ private:
 	static void ExpandXYBoundsWithGroundRegion(
 		const FScenarioGroundRegionSpec& regionSpec,
 		FBox2D& inOutXYBounds);
+	// Expands XY bounds from a spawned actor's component bounds.
+	static void ExpandXYBoundsWithActor(
+		const AActor* actor,
+		FBox2D& inOutXYBounds,
+		double& inOutZSum,
+		int32& inOutValidActorCount);
 	// Ensures DeliveryBot start and goal anchors are inside the generated navigation grid bounds.
 	static void ExpandXYBoundsWithDeliveryBotRoute(
 		const FScenarioPlaceableInstanceSpec& placeableSpec,

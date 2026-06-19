@@ -136,7 +136,6 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
     },
     "robotSpec": {
       "maxSpeedKmh": 7.0,
-      "maxReverseSpeedKmh": 3.0,
       "bodyLengthCm": 72.0,
       "bodyWidthCm": 48.0,
       "bodyHeightCm": 55.0,
@@ -170,7 +169,6 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
 | `request.grid` | 고정 | Python A* 경로 탐색에 사용하는 grid |
 | `request.grid.cells[]` | 고정 | 각 cell의 좌표, area, cost, blocked 여부 |
 | `request.robotSpec.maxSpeedKmh` | 확장 가능 | 로봇 최대 전진 속도 |
-| `request.robotSpec.maxReverseSpeedKmh` | 확장 가능 | 로봇 최대 후진 속도 |
 | `request.robotSpec.bodyLengthCm` | 확장 가능 | 로봇 본체 길이. Unreal의 로봇 충돌 박스 크기에서 가져온다. |
 | `request.robotSpec.bodyWidthCm` | 확장 가능 | 로봇 본체 폭. Unreal의 로봇 충돌 박스 크기에서 가져온다. |
 | `request.robotSpec.bodyHeightCm` | 확장 가능 | 로봇 본체 높이. Unreal의 로봇 충돌 박스 크기에서 가져온다. |
@@ -202,7 +200,6 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
 | 값 | 위치 | 의미 |
 | --- | --- | --- |
 | `robotSpec.maxSpeedKmh` | `robotSpec` | 로봇의 실제 최고 전진 속도 |
-| `robotSpec.maxReverseSpeedKmh` | `robotSpec` | 로봇의 실제 최고 후진 속도 |
 | `robotSpec.bodyLengthCm` | `robotSpec` | 로봇 본체 길이 |
 | `robotSpec.bodyWidthCm` | `robotSpec` | 로봇 본체 폭 |
 | `robotSpec.bodyHeightCm` | `robotSpec` | 로봇 본체 높이 |
@@ -230,12 +227,13 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
 | `steeringSensitivity`, `steeringFullScaleDegree`, `maxSteering`, `maxSteeringDelta`, `minTurnSpeedKmh` | 조향 출력과 회전 시 속도 제한 튜닝값이다. |
 | `frontHalfAngleDegree`, `stopDistanceM`, `obstacleWarningDistanceM`, `slowDownDistanceM` | 라이다 hit를 전방 장애물, obstacle warning, 감속 구간으로 해석하는 정책 판정값이다. |
 | `collisionStopHalfAngleDegree`, `collisionStopDistanceM` | 충돌 위험 중앙 코리더와 즉시 정지 기준이다. |
-| `repathDistanceM`, `repathDebounceSeconds`, `pathCorridorHalfWidthM` | RePathPolicy가 재탐색을 시작하는 거리, 같은 actor/cell 재탐색 억제 시간, 현재 path corridor 판정 폭이다. |
+| `obstacleWarningDistanceM`, `repathDebounceSeconds`, `blockRadiusCells` | RePathPolicy가 위험 장애물로 보고 재탐색을 시작하는 거리, 같은 actor/cell 재탐색 억제 시간, 동적 장애물 확장 cell 반경이다. `blockRadiusCells` 기본값은 1이다. |
+| `pathCorridorHalfWidthM` | PathFollower가 현재 경로 위 장애물만 감속/정지 판단에 사용하기 위한 corridor 판정 폭이다. |
 | `obstacleSlowSpeedKmh` | 장애물 감속 구간의 정책 속도 기준이다. |
 | `obstacleSoftCostRadiusM`, `obstacleSoftCostMaxPenalty`, `obstacleSoftCostPower` | 장애물 주변을 미리 피하도록 만드는 A* soft cost 튜닝값이다. |
 | `pathTurnCostPenalty` | A* 회전 비용이다. 값이 클수록 직각/지그재그 경로를 덜 선택한다. |
 | `allowDiagonalPathfinding`, `smoothPathWithLineOfSight`, `useExactGoalAsFinalPoint` | 대각선 이동, line-of-sight shortcut, 실제 goal 좌표 사용 여부다. |
-| `emergencyBrakeInput`, `recoverySpeedKmh` | 예시 정책의 비상 정지/후진 회복 기준이다. `softStopBrakeInput`은 새 구조에서 `driveSpec.stopBrakeInput`을 기본으로 참고한다. |
+| `emergencyBrakeInput` | 예시 정책의 비상 정지 기준이다. `softStopBrakeInput`은 새 구조에서 `driveSpec.stopBrakeInput`을 기본으로 참고한다. |
 
 ### 정상 응답 예시
 
@@ -351,7 +349,33 @@ decision tick마다 호출한다. Unreal은 현재 로봇 상태, 라이다 ray,
 | `request.lidarRays[].rayYawDegree` | 고정 | 로봇 기준 signed local yaw. 왼쪽/오른쪽 판단에 사용 |
 | `request.lidarRays[].actorName` | 확장 가능 | hit actor 이름. miss면 빈 문자열 가능 |
 | `request.lidarRays[].actorTags` | 확장 가능 | hit actor tag 목록 |
+| `request.lidar.mode` | 확장 가능 | typed LiDAR 모드. 예: `OneD`, `TwoD`, `ThreeD`, `OneDAndTwoD`, `TwoDAndThreeD`, `All` |
+| `request.lidar.rays1d[]` | 확장 가능 | 1D 전방 ray 목록. 정책에서는 yaw 0도 전방 장애물 판단으로만 사용 |
+| `request.lidar.rays2d[]` | 확장 가능 | 2D 수평 ray 목록. 2D 사용 모드에서는 정책 판단과 재경로의 기준 입력 |
+| `request.lidar.rays3d[]` | 확장 가능 | 3D ray 목록. 3D 단독 모드에서는 같은 yaw의 vertical ray 중 가장 가까운 hit를 2D 정책 ray로 투영해 사용 |
+| `request.lidar.rays3d[].hitLocationCm` | 확장 가능 | Unreal raycast가 실제로 맞춘 world hit 위치. Point Cloud export는 이 값이 있으면 거리/각도 재계산보다 우선 사용한다. |
 | `request.observedObjects[]` | 확장 가능 | ray를 actor 단위로 묶은 관측 요약 |
+
+### LiDAR 정책 입력 선택 규칙
+
+Python 예시 정책은 사용자가 선택한 LiDAR 모드를 기준으로 정책 입력을 엄격하게 고른다.
+정책 판단에 쓰는 ray는 `Tools/PythonAgent/agent/lidar_selector.py`에서만 선택한다.
+
+| 선택 모드 | Python 정책 입력 |
+| --- | --- |
+| `OneD` | `lidar.rays1d`만 사용한다. yaw는 0도 전방으로 변환해서 앞 장애물 거리 판단과 재경로 시작 판단에 사용한다. |
+| `TwoD`, `OneDAndTwoD`, `TwoDAndThreeD` | `lidar.rays2d`만 사용한다. 2D가 있으면 3D나 legacy ray로 fallback하지 않는다. |
+| `ThreeD` | `lidar.rays3d`를 같은 yaw별로 묶고, vertical 전체 중 가장 가까운 hit를 2D 정책 ray로 투영한다. 같은 yaw에 hit가 없으면 수평 row에 가장 가까운 miss를 대표 ray로 둔다. |
+| `All` | `rays2d`가 있으면 2D를 우선 사용하고, 없으면 3D yaw별 최단 hit projection, 그 다음 1D 순서로 선택한다. |
+| legacy | typed `lidar`가 비어 있고 `lidarRays`만 있으면 기존 2D legacy ray로 처리한다. |
+
+RePathPolicy는 `obstacleWarningDistanceM`을 재탐색 시작 거리로 사용한다.
+공식 평가나 결과 분석에서 쓰는 `NearMiss`와 다르며, 현재 RePathPolicy는 obstacle warning 거리 안의 전방 장애물이 있으면 재경로를 요청한다.
+1D는 좌우 위치를 알 수 없으므로 obstacle warning 거리 안의 전방 hit를 path 차단 후보로 본다.
+RePathPolicy는 재탐색 트리거를 단순하게 유지하기 위해 선택된 LiDAR 차원의 raw hit ray를 직접 검사한다. 3D 모드에서는 같은 yaw projection 결과가 아니라 `lidar.rays3d` 전체에서 전방 각도 안의 hit actor를 찾는다.
+2D와 3D projection에서 PathFollower는 현재 추종 path corridor 밖의 hit를 감속/정지 판단에서 제외해 새 경로를 계속 따라갈 수 있게 한다.
+RePathPolicy는 obstacle warning 거리 안의 front ray를 봤지만 cooldown 때문에 즉시 재탐색할 수 없으면 `front_obstacle_repath_cooldown_stop`으로 정지해 PathFollower가 같은 tick에서 다시 전진하지 못하게 한다.
+PathFollower가 soft stop으로 강제 재탐색을 요청한 경우에는 같은 actor debounce 중이어도 동적 장애물 cell을 다시 갱신한다.
 
 ### 정상 응답 예시
 
@@ -529,7 +553,7 @@ OR distanceM <= collisionStopDistanceM
 }
 ```
 
-### 감속/정지/후진 응답 예시
+### 감속/정지 응답 예시
 
 아래 짧은 예시는 `response` 영역만 발췌한 것이다.
 실제 HTTP 응답은 원 요청 envelope를 유지한 채 이 `response`가 추가된 형태다.
@@ -576,27 +600,6 @@ OR distanceM <= collisionStopDistanceM
 }
 ```
 
-repath recovery 후진:
-
-```json
-{
-  "response": {
-    "sequence": 79,
-    "status": "ok",
-    "action": {
-      "steering": 0.0,
-      "targetSpeedKmh": 1.2,
-      "brake": 0.0,
-      "direction": "Reverse"
-    },
-    "debug": {
-      "selectedPolicy": "RePathPolicy",
-      "reason": "recovery_reverse"
-    }
-  }
-}
-```
-
 ### 응답 필드
 
 | 필드 | 구분 | 설명 |
@@ -606,7 +609,7 @@ repath recovery 후진:
 | `response.action.steering` | 고정 | 조향 입력. Unreal에서 `-1.0`부터 `1.0`으로 clamp |
 | `response.action.targetSpeedKmh` | 고정 | 목표 속도. 단위는 km/h |
 | `response.action.brake` | 고정 | brake 입력. Unreal에서 `0.0`부터 `1.0`으로 clamp |
-| `response.action.direction` | 고정 | `Forward` 또는 `Reverse` |
+| `response.action.direction` | 고정 | 현재 Python 예시 정책은 `Forward`만 반환한다. |
 | `response.debug.selectedPolicy` | 확장 가능 | action을 반환한 Python policy 이름 |
 | `response.debug.reason` | 확장 가능 | policy가 선택한 이유 |
 | `response.debug.pathStatus` | 확장 가능 | `valid` 또는 `empty` |
@@ -622,7 +625,10 @@ repath recovery 후진:
 | `response.debug.lastObstacleWarningCell` | 확장 가능 | grid cell 기반 warning일 때 마지막 cell. 라이다 기반이면 `null` |
 | `response.debug.lastObstacleWarningSource` | 확장 가능 | 마지막 warning 원인 actor 또는 source 이름 |
 | `response.debug.blockedCorridorCellCount` | 확장 가능 | 최근 blocked corridor cell 개수 |
-| `response.debug.recoveryUntilSeconds` | 확장 가능 | recovery reverse가 유지되는 Unreal time |
+| `response.debug.recoveryUntilSeconds` | 확장 가능 | 현재 예시 정책에서는 호환용으로 유지하며 기본값은 `0.0`이다. |
+| `response.debug.selectedLidarPolicyMode` | 확장 가능 | Python 정책이 선택한 LiDAR 입력 차원. 예: `1d`, `2d`, `3d`, `legacy2d` |
+| `response.debug.selectedLidarRaySource` | 확장 가능 | 실제 정책 입력으로 선택한 ray 출처 |
+| `response.debug.selectedLidarHorizontalPitchDegree` | 확장 가능 | 3D projection에서 miss 대표 ray를 고를 때 기준이 되는 수평 row pitch 절대값. 2D/1D에서는 `null` |
 
 현재 자주 쓰는 `reason` 값:
 
@@ -633,8 +639,10 @@ front_obstacle_slowdown
 front_obstacle_soft_stop
 path_deviation_repath_required
 dynamic_repath_ready
-dynamic_repath_near_obstacle
-recovery_reverse
+collision_stop
+collision_repath_cooldown
+front_obstacle_repath_cooldown_stop
+collision_repath_ready
 goal_reached
 path_finished
 no_path
@@ -805,7 +813,6 @@ request.grid.cells[].cost
 request.grid.cells[].blocked
 request.grid.cells[].sourceCollisionProfile
 request.robotSpec.maxSpeedKmh
-request.robotSpec.maxReverseSpeedKmh
 request.robotSpec.bodyLengthCm
 request.robotSpec.bodyWidthCm
 request.robotSpec.bodyHeightCm
@@ -897,7 +904,7 @@ obstacle warning 범위를 화면에서 보고 싶을 때 사용한다.
       "draw_debug": true,
       "draw_obstacle_warning_debug": true,
       "front_half_angle_degree": 25.0,
-      "obstacle_warning_distance_m": 2.0,
+      "obstacle_warning_distance_m": 2.5,
       "collision_stop_half_angle_degree": 8.0,
       "collision_stop_distance_m": 0.45,
       "slow_down_distance_m": 4.8

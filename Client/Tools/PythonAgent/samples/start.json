@@ -128,7 +128,6 @@
     },
     "robotSpec": {
       "maxSpeedKmh": 7.0,
-      "maxReverseSpeedKmh": 3.0,
       "bodyLengthCm": 72.0,
       "bodyWidthCm": 48.0,
       "bodyHeightCm": 55.0,

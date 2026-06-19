@@ -67,8 +67,10 @@ private:
 	// Rebuilds the preview spline points from template-local meters.
 	void RebuildAxisSpline(const TArray<FVector2D>& pointsMeters);
 
-	// 현재 axis 전체에 하나의 lane strip을 추가하고 필요하면 중심 Z offset을 적용.
+	// Adds one lane strip over a Corridor segment interval and applies an optional center Z offset.
 	void AddLaneStrip(
+		const TArray<FVector2D>& axisPointsMeters,
+		const FScenarioAlongRangeMeters& alongRangeMeters,
 		const FString& laneId,
 		const FString& surfaceId,
 		double minOffsetMeters,
@@ -78,12 +80,6 @@ private:
 	// Resolves fixed/range template numbers to a deterministic editor-preview value.
 	static double ResolvePreviewNumber(const FScenarioTemplateNumberValue& value, double defaultValue);
 
-	// Resolves a Corridor surface id from the configured catalog or built-in defaults.
-	bool ResolveSurfaceEntry(const FString& surfaceId, FScenarioCorridorSurfaceEntry& outSurfaceEntry) const;
-
-	// Selects a preview material from the resolved Corridor surface metadata.
-	UMaterialInterface* ResolveSurfaceMaterial(const FScenarioCorridorSurfaceEntry& surfaceEntry) const;
-
-	// Selects a fallback material when a catalog entry has no preview material assigned.
-	UMaterialInterface* ResolveFallbackSurfaceMaterial(EScenarioSampleLaneType laneType) const;
+	// Resolves fixed/choice template strings to a deterministic editor-preview value.
+	static FString ResolvePreviewString(const FScenarioTemplateStringValue& value, const FString& defaultValue);
 };

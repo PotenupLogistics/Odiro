@@ -15,12 +15,18 @@
       "use_handbrake_when_brake": false
     },
     "lidar": {
-      "scan_range_m": 6.0,
-      "angle_step_degree": 5.0,
-      "front_half_angle_degree": 25.0,
-      "stop_distance_m": 1.4,
-      "obstacle_warning_distance_m": 2.0,
-      "slow_down_distance_m": 4.8
+      "lidar_mode": "3d",
+      "draw_debug": false,
+      "angle_step_degree": 3.0,
+      "vertical_min_degree": -25.0,
+      "vertical_max_degree": 25.0,
+      "vertical_step_degree": 5,
+      "scan_rate_hz": 5.0,
+      "scan_range_m": 15.0,
+      "front_half_angle_degree": 50.0,
+      "stop_distance_m": 2.0,
+      "obstacle_warning_distance_m": 5.2,
+      "slow_down_distance_m": 8.0
     }
   }
 }

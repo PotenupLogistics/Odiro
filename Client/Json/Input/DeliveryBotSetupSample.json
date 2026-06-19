@@ -9,8 +9,13 @@
     "lidar": {
       "scan_range_m": 5.0,
       "angle_step_degree": 5.0,
+      "scan_rate_hz": 2.0,
       "stop_distance_m": 1.5,
-      "slow_down_distance_m": 3.5
+      "slow_down_distance_m": 3.5,
+      "lidar_mode": "2d",
+      "vertical_min_degree": -10.0,
+      "vertical_max_degree": 10.0,
+      "vertical_step_degree": 5.0
     }
   }
 }

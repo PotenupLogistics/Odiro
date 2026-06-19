@@ -52,11 +52,19 @@ namespace
 		WalkwayLane.SurfaceId = TEXT("sidewalk");
 		WalkwayLane.Type = EScenarioSampleLaneType::Walkable;
 
+		FScenarioSampleLayoutLane CurbLane;
+		CurbLane.LaneId = TEXT("curb_edge");
+		CurbLane.OffsetRangeMeters.MinMeters = 1.0;
+		CurbLane.OffsetRangeMeters.MaxMeters = 2.0;
+		CurbLane.SurfaceId = TEXT("road");
+		CurbLane.Type = EScenarioSampleLaneType::Penalty;
+
 		FScenarioSampleLayoutEntry LayoutEntry;
 		LayoutEntry.AlongRangeMeters.StartMeters = 0.0;
 		LayoutEntry.AlongRangeMeters.EndMeters = 10.0;
 		LayoutEntry.SegmentId = TEXT("main");
 		LayoutEntry.Lanes.Add(WalkwayLane);
+		LayoutEntry.Lanes.Add(CurbLane);
 		Semantic.Layout.Add(LayoutEntry);
 
 		FScenarioSampleStaticObstacle Obstacle;
@@ -66,7 +74,7 @@ namespace
 		Obstacle.ObstacleClass = EScenarioSampleObstacleClass::Blocking;
 		Obstacle.SensorProfile = TEXT("solid");
 		Obstacle.AlongMeters = 4.0;
-		Obstacle.OffsetMeters = 0.5;
+		Obstacle.OffsetMeters = 1.5;
 		Obstacle.YawDegrees = 15.0;
 		Obstacle.FootprintMeters = FVector2D(0.5, 0.5);
 		Obstacle.PlacedBy = TEXT("crate_fixed");
@@ -100,18 +108,49 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	TestTrue(TEXT("sample adapts"), Result.bSuccess);
 	TestEqual(TEXT("scenario id"), Result.WorldSpec.RunConfig.TemplateId, Document.Sample.ScenarioId);
 	TestEqual(TEXT("base seed"), Result.WorldSpec.RunConfig.BaseSeed, Document.Sample.Source.Seed);
-	TestEqual(TEXT("ground region count"), Result.WorldSpec.GroundRegions.Num(), 1);
-	if (Result.WorldSpec.GroundRegions.IsEmpty())
+	TestEqual(TEXT("runtime corridor count"), Result.WorldSpec.Corridors.Num(), 1);
+	if (Result.WorldSpec.Corridors.IsEmpty())
 	{
 		return false;
 	}
-	TestEqual(TEXT("ground region surface"), Result.WorldSpec.GroundRegions[0].SurfaceId, FString(TEXT("sidewalk")));
+	TestEqual(TEXT("generated ground region count"), Result.WorldSpec.GroundRegions.Num(), 0);
+	const FScenarioRuntimeCorridorSpec& RuntimeCorridor = Result.WorldSpec.Corridors[0];
+	TestEqual(TEXT("runtime corridor layout count"), RuntimeCorridor.Layout.Num(), 1);
+	if (RuntimeCorridor.Layout.IsEmpty() || RuntimeCorridor.Layout[0].Lanes.IsEmpty())
+	{
+		return false;
+	}
+	TestEqual(TEXT("runtime corridor lane surface"), RuntimeCorridor.Layout[0].Lanes[0].SurfaceId, FString(TEXT("sidewalk")));
+	const FScenarioRuntimeCorridorLaneSpec* CurbRuntimeLane = RuntimeCorridor.Layout[0].Lanes.FindByPredicate(
+		[](const FScenarioRuntimeCorridorLaneSpec& Lane)
+		{
+			return Lane.LaneId == TEXT("curb_edge");
+		});
+	TestNotNull(TEXT("runtime curb lane"), CurbRuntimeLane);
+	if (CurbRuntimeLane)
+	{
+		TestEqual(TEXT("runtime curb lane z offset"), CurbRuntimeLane->SurfaceZOffsetCm, -15.0);
+		TestEqual(
+			TEXT("runtime curb lane region type"),
+			static_cast<int32>(CurbRuntimeLane->RegionType),
+			static_cast<int32>(EScenarioGroundRegionType::Penalty));
+	}
 	TestEqual(TEXT("placeable count"), Result.WorldSpec.Placeables.Num(), 2);
 	TestEqual(TEXT("static obstacle count"), Result.WorldSpec.Placeables.FilterByPredicate(
 		[](const FScenarioPlaceableInstanceSpec& Spec)
 		{
 			return Spec.Category == EScenarioActorCategory::StaticObstacle;
 		}).Num(), 1);
+	const FScenarioPlaceableInstanceSpec* StaticObstacleSpec = Result.WorldSpec.Placeables.FindByPredicate(
+		[](const FScenarioPlaceableInstanceSpec& Spec)
+		{
+			return Spec.Category == EScenarioActorCategory::StaticObstacle;
+		});
+	TestNotNull(TEXT("static obstacle spec"), StaticObstacleSpec);
+	if (StaticObstacleSpec)
+	{
+		TestEqual(TEXT("static obstacle surface z"), StaticObstacleSpec->Transform.GetLocation().Z, -15.0);
+	}
 
 	const FScenarioPlaceableInstanceSpec* RobotSpec = Result.WorldSpec.Placeables.FindByPredicate(
 		[](const FScenarioPlaceableInstanceSpec& Spec)
@@ -121,10 +160,26 @@ bool FScenarioSampleWorldSpecAdapterValidTest::RunTest(const FString& Parameters
 	TestNotNull(TEXT("robot spec"), RobotSpec);
 	if (RobotSpec)
 	{
-		TestEqual(TEXT("robot start x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.X, 0.0);
-		TestEqual(TEXT("robot goal x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.X, 1000.0);
+		TestEqual(TEXT("robot start x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.X, 100.0);
+		TestEqual(TEXT("robot goal x"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.X, 900.0);
 		TestTrue(TEXT("robot has route"), RobotSpec->DeliveryBot.bHasStartLocation && RobotSpec->DeliveryBot.bHasGoalLocation);
 		TestTrue(TEXT("robot setup has goal"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.bHasGoal);
+
+		const FScenarioParamValue* SampleStartAlong = RobotSpec->Properties.Find(TEXT("sample_start_along_m"));
+		const FScenarioParamValue* SampleGoalAlong = RobotSpec->Properties.Find(TEXT("sample_goal_along_m"));
+		const FScenarioParamValue* RuntimeStartAlong = RobotSpec->Properties.Find(TEXT("runtime_start_along_m"));
+		const FScenarioParamValue* RuntimeGoalAlong = RobotSpec->Properties.Find(TEXT("runtime_goal_along_m"));
+		TestNotNull(TEXT("sample start along property"), SampleStartAlong);
+		TestNotNull(TEXT("sample goal along property"), SampleGoalAlong);
+		TestNotNull(TEXT("runtime start along property"), RuntimeStartAlong);
+		TestNotNull(TEXT("runtime goal along property"), RuntimeGoalAlong);
+		if (SampleStartAlong && SampleGoalAlong && RuntimeStartAlong && RuntimeGoalAlong)
+		{
+			TestEqual(TEXT("sample start along"), SampleStartAlong->FloatValue, 0.0);
+			TestEqual(TEXT("sample goal along"), SampleGoalAlong->FloatValue, 10.0);
+			TestEqual(TEXT("runtime start along"), RuntimeStartAlong->FloatValue, 1.0);
+			TestEqual(TEXT("runtime goal along"), RuntimeGoalAlong->FloatValue, 9.0);
+		}
 	}
 
 	TestFalse(TEXT("spec hash populated"), Result.WorldSpec.SpecHash.IsEmpty());

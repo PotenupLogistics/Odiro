@@ -11,6 +11,7 @@
     "lidar": {
       "scan_range_m": 7.0,
       "angle_step_degree": 3.0,
+      "scan_rate_hz": 2.0,
       "front_half_angle_degree": 25.0,
       "stop_distance_m": 1.6,
       "slow_down_distance_m": 4.5

@@ -44,7 +44,16 @@ keep:
   - ScenarioDocument* and ScenarioSample* remain internal editor/materialization surfaces unless a task explicitly targets them; public C++ editor entry points use project scenario naming.
   - Final user project contract uses one editable `<UserProject>/scenario.json`; do not add new user-facing template/sample split.
   - Generated `scenario_sample` files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
-  - Project run generates `scenario_sample` episode artifacts and compiles them through `ScenarioSampleWorldSpecAdapter`; generated ground-region specs preserve lane `surface` ids so runtime visuals can use the same Corridor surface catalog as the editor preview.
+  - Project run generates `scenario_sample` episode artifacts and compiles them through `ScenarioSampleWorldSpecAdapter`; sampled layout lanes become runtime Corridor specs/actors used by grid and evaluation, while manual GroundRegions remain a separate compatibility surface.
+  - Runtime corridor surfaces are materialized as spline-deformed LaneStripMesh cube sections from sampled axis points, lane offset ranges, and lane surface height offsets; keep visual/collision footprint deterministic and aligned with the analytic surface query.
+  - Runtime Corridor visual meshes mirror the editor lane-strip drawing path and coalesce adjacent equivalent lane segments; sampled layout intervals remain the query/cost source for grid and evaluation.
+  - ScenarioCorridorSurfaceResolver owns shared Corridor surface metadata and material fallback resolution; editor/runtime actors keep their own mesh construction and query semantics.
+  - ScenarioCorridorGeometry owns shared Corridor spline mesh component creation, analytic surface query helpers, lane surface Z offset rules, and runtime lane collision profile mapping.
+  - ScenarioStaticObstacle actor origin represents the semantic ground-contact point; mesh and preview components own local bounds-based Z alignment so editor and simulation placements share the same snap semantics.
+  - ScenarioStaticObstacle owns configured actor spawn plus prop application; editor and simulation only resolve catalogs and attach authoring/runtime registration after spawn.
+  - ScenarioGroundRegion owns configured actor spawn plus region spec application; editor and simulation only attach authoring/runtime registration after spawn.
+  - ScenarioSampleWorldSpecAdapter keeps sampled Entry/Exit robot anchors in `scenario_sample` and deterministically insets their runtime WorldSpec poses before spawning.
+  - ScenarioSimulationSubsystem owns runtime DeliveryBot grid rebuild after scenario surfaces spawn; runtime GridBoundsActor BeginPlay auto-build is disabled for that path.
   - Project run runner owns the active output episode id for `actions.jsonl` and `trace.jsonl`; DeliveryBot policy logging must use the runner-provided output context instead of the evaluation template id.
   - Project `trace.jsonl` sampling is timer-driven from EpisodeMeasurementLogSubsystem once the runner starts the episode trace path, so short episodes still produce samples before terminal artifact write.
   - ScenarioRunnerSubsystem public start API accepts direct scenario_sample/profile run inputs; file-based RunQueue and ScenarioSetup start helpers are removed.

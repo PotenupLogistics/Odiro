@@ -14,7 +14,6 @@ class UScenarioSimulationSubsystem;
 DECLARE_MULTICAST_DELEGATE_OneParam(FScenarioRunnerStateChangedNative, EScenarioRunnerState);
 DECLARE_MULTICAST_DELEGATE_OneParam(FScenarioRunRecordCompletedNative, const FEpisodeRunRecord&);
 
-// Episode compile, setup, evaluation을 순차 실행하고 최종 FEpisodeRunRecord를 수집하는 subsystem.
 UCLASS(BlueprintType)
 class ODIROSIM_API UScenarioRunnerSubsystem : public UGameInstanceSubsystem
 {

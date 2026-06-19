@@ -30,7 +30,7 @@ struct ODIROSIM_API FScenarioCorridorSurfaceEntry
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor Surface")
 	EScenarioGroundRegionType GroundRegionType = EScenarioGroundRegionType::Walkable;
 
-	// Score reported on generated ground-region specs for this surface.
+	// Score reported on generated runtime surfaces for this surface.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Corridor Surface")
 	double TraversabilityScore = 1.0;
 

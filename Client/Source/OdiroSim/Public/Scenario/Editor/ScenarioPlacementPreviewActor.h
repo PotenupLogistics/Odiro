@@ -63,6 +63,8 @@ private:
 	void SetStaticMeshPreview(UStaticMesh* staticMesh);
 	void SetSkeletalMeshPreview(USkeletalMesh* skeletalMesh);
 	void ApplyPreviewMaterial(UMaterialInterface* material);
+	// Offsets static preview meshes so the actor origin remains the ground-contact point.
+	void ApplyStaticMeshGroundAlignment();
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor")
 	FName PreviewPropId;

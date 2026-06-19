@@ -14,9 +14,9 @@ class AStarResult:
 class AStarPathfinder:
     def __init__(
         self,
-        obstacle_soft_cost_radius_m: float = 2.0,
+        obstacle_soft_cost_radius_m: float = 0.4,
         obstacle_soft_cost_max_penalty: float = 8.0,
-        obstacle_soft_cost_power: float = 2.0,
+        obstacle_soft_cost_power: float = 5.0,
         path_turn_cost_penalty: float = 1.5,
         allow_diagonal_pathfinding: bool = True,
         smooth_path_with_line_of_sight: bool = True,

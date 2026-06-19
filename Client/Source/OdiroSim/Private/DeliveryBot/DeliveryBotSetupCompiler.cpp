@@ -196,6 +196,69 @@ bool UDeliveryBotSetupCompiler::ReadOptionalCollisionChannelField(const FJsonObj
 	return false;
 }
 
+bool UDeliveryBotSetupCompiler::ReadOptionalLidarModeField(const FJsonObject& jsonObject, const FString& fieldName,
+	const FString& path, FDeliveryBotSetupCompileResult& result, EDeliveryBotLidarModeType& targetValue)
+{
+	const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
+	if (!jsonValue.IsValid())
+		return false;
+
+	if (jsonValue->Type != EJson::String)
+	{
+		AddDiagnostic(
+			result,
+			EScenarioCompileDiagnosticSeverity::Error,
+			TEXT("invalid_lidar_mode"),
+			FString::Printf(TEXT("%s.%s 필드는 string이어야 함."), *path, *fieldName));
+		return false;
+	}
+
+	const FString normalized = jsonValue->AsString().ToLower().Replace(TEXT("_"), TEXT(""));
+
+	if (normalized == TEXT("1d") || normalized == TEXT("oned"))
+	{
+		targetValue = EDeliveryBotLidarModeType::OneD;
+		return true;
+	}
+
+	if (normalized == TEXT("2d") || normalized == TEXT("twod"))
+	{
+		targetValue = EDeliveryBotLidarModeType::TwoD;
+		return true;
+	}
+
+	if (normalized == TEXT("3d") || normalized == TEXT("threed"))
+	{
+		targetValue = EDeliveryBotLidarModeType::ThreeD;
+		return true;
+	}
+
+	if (normalized == TEXT("1dand2d") || normalized == TEXT("onedandtwod"))
+	{
+		targetValue = EDeliveryBotLidarModeType::OneDAndTwoD;
+		return true;
+	}
+
+	if (normalized == TEXT("2dand3d") || normalized == TEXT("twodandthreed"))
+	{
+		targetValue = EDeliveryBotLidarModeType::TwoDAndThreeD;
+		return true;
+	}
+
+	if (normalized == TEXT("all"))
+	{
+		targetValue = EDeliveryBotLidarModeType::All;
+		return true;
+	}
+
+	AddDiagnostic(
+		result,
+		EScenarioCompileDiagnosticSeverity::Error,
+		TEXT("invalid_lidar_mode"),
+		FString::Printf(TEXT("%s.%s '%s' 값은 지원하지 않음."), *path, *fieldName, *jsonValue->AsString()));
+	return false;
+}
+
 void UDeliveryBotSetupCompiler::CompileDrive( const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotDriveConfigInfo& driveConfigInfo)
 {
 	const TSharedPtr<FJsonValue> driveValue = robotObject.TryGetField(TEXT("drive"));
@@ -344,7 +407,6 @@ void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDe
 	ReadOptionalFloatField(*lidarObject, TEXT("sensor_height_m"), path, result, lidarSensorConfigInfo.SensorHeightM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("height_m"), path, result, lidarSensorConfigInfo.SensorHeightM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("front_half_angle_degree"), path, result, lidarSensorConfigInfo.FrontHalfAngleDegree, 0.0f, 180.0f);
-	ReadOptionalBoolField(*lidarObject, TEXT("store_missed_rays"), path, result, lidarSensorConfigInfo.bStoreMissedRays);
 	ReadOptionalFloatField(*lidarObject, TEXT("stop_distance_m"), path, result, lidarSensorConfigInfo.StopDistanceM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("near_miss_distance_m"), path, result, lidarSensorConfigInfo.ObstacleWarningDistanceM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("near_obstacle_warning_distance_m"), path, result, lidarSensorConfigInfo.ObstacleWarningDistanceM, 0.0f);
@@ -354,7 +416,12 @@ void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDe
 	ReadOptionalFloatField(*lidarObject, TEXT("collision_stop_distance_m"), path, result, lidarSensorConfigInfo.CollisionStopDistanceM, 0.0f);
 	ReadOptionalCollisionChannelField(*lidarObject, TEXT("trace_channel"), path, result, lidarSensorConfigInfo.TraceChannel);
 	ReadOptionalNameArrayField(*lidarObject, TEXT("ignore_tags"), path, result, lidarSensorConfigInfo.IgnoreTags);
-
+	ReadOptionalFloatField(*lidarObject, TEXT("scan_rate_hz"), path, result, lidarSensorConfigInfo.ScanRateHz, 0.1f);
+	ReadOptionalLidarModeField(*lidarObject, TEXT("lidar_mode"), path, result, lidarSensorConfigInfo.LidarModeType);
+	ReadOptionalFloatField(*lidarObject, TEXT("vertical_min_degree"), path, result, lidarSensorConfigInfo.VerticalMinDegree, -89.0f, 89.0f);
+	ReadOptionalFloatField(*lidarObject, TEXT("vertical_max_degree"), path, result, lidarSensorConfigInfo.VerticalMaxDegree, -89.0f, 89.0f);
+	ReadOptionalFloatField(*lidarObject, TEXT("vertical_step_degree"), path, result, lidarSensorConfigInfo.VerticalStepDegree, 1.0f);
+	
 	lidarSensorConfigInfo.ObstacleWarningDistanceM = FMath::Max(
 		lidarSensorConfigInfo.ObstacleWarningDistanceM,
 		lidarSensorConfigInfo.StopDistanceM + 0.1f);

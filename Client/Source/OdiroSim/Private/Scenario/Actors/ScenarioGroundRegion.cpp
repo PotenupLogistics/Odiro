@@ -4,6 +4,7 @@
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
 #include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
 #include "Materials/MaterialInterface.h"
+#include "Engine/World.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioGroundRegion, Log, All);
@@ -37,6 +38,51 @@ namespace
 
 		return -collisionHeightCm * 0.5;
 	}
+}
+
+AScenarioGroundRegion* AScenarioGroundRegion::SpawnConfigured(
+	UWorld* world,
+	TSubclassOf<AScenarioGroundRegion> regionClass,
+	const FScenarioGroundRegionSpec& regionSpec,
+	FString& outFailureReason)
+{
+	outFailureReason.Reset();
+	if (!world)
+	{
+		outFailureReason = TEXT("World is unavailable.");
+		return nullptr;
+	}
+	if (regionSpec.RegionId.IsEmpty())
+	{
+		outFailureReason = TEXT("RegionId is empty.");
+		return nullptr;
+	}
+	if (regionSpec.ShapeType != EScenarioGroundShapeType::Rectangle)
+	{
+		outFailureReason = TEXT("Ground region shape is not supported.");
+		return nullptr;
+	}
+
+	TSubclassOf<AScenarioGroundRegion> spawnClass = regionClass;
+	if (!spawnClass)
+	{
+		spawnClass = AScenarioGroundRegion::StaticClass();
+	}
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AScenarioGroundRegion* regionActor = world->SpawnActor<AScenarioGroundRegion>(
+		spawnClass,
+		FTransform::Identity,
+		spawnParams);
+	if (!regionActor)
+	{
+		outFailureReason = TEXT("SpawnActor failed.");
+		return nullptr;
+	}
+
+	regionActor->ConfigureRegion(regionSpec);
+	return regionActor;
 }
 
 AScenarioGroundRegion::AScenarioGroundRegion()

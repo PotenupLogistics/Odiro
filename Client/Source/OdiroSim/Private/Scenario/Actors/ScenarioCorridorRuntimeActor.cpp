@@ -73,19 +73,11 @@ void AScenarioCorridorRuntimeActor::ConfigureCorridor(const FScenarioRuntimeCorr
 		return;
 	}
 
-	TSet<FString> renderedLaneKeys;
 	for (const FScenarioRuntimeCorridorLayoutEntry& layoutEntry : CorridorSpec.Layout)
 	{
 		for (const FScenarioRuntimeCorridorLaneSpec& laneSpec : layoutEntry.Lanes)
 		{
-			const FString visualLaneKey = FScenarioCorridorGeometry::MakeVisualLaneKey(laneSpec);
-			if (renderedLaneKeys.Contains(visualLaneKey))
-			{
-				continue;
-			}
-
-			renderedLaneKeys.Add(visualLaneKey);
-			AddLaneStrip(laneSpec);
+			AddLaneStrip(layoutEntry, laneSpec);
 		}
 	}
 }
@@ -167,7 +159,9 @@ bool AScenarioCorridorRuntimeActor::TryFindSurfaceAtWorldLocation2D(
 	return false;
 }
 
-void AScenarioCorridorRuntimeActor::AddLaneStrip(const FScenarioRuntimeCorridorLaneSpec& laneSpec)
+void AScenarioCorridorRuntimeActor::AddLaneStrip(
+	const FScenarioRuntimeCorridorLayoutEntry& layoutEntry,
+	const FScenarioRuntimeCorridorLaneSpec& laneSpec)
 {
 	const double laneWidthMeters = laneSpec.OffsetRangeMeters.MaxMeters - laneSpec.OffsetRangeMeters.MinMeters;
 	if (laneWidthMeters <= KINDA_SMALL_NUMBER)
@@ -198,13 +192,13 @@ void AScenarioCorridorRuntimeActor::AddLaneStrip(const FScenarioRuntimeCorridorL
 	const FName collisionProfileName = FScenarioCorridorGeometry::ResolveRuntimeCollisionProfileName(laneSpec.RegionType);
 
 	TArray<FVector> axisLocationsCm;
-	axisLocationsCm.Reserve(CorridorSpec.PointsMeters.Num());
-	for (const FVector2D& pointMeters : CorridorSpec.PointsMeters)
+	if (!FScenarioCorridorGeometry::BuildRuntimeAxisLocationsForAlongRangeCm(
+		CorridorSpec,
+		layoutEntry.AlongRangeMeters,
+		RuntimeSurfaceTopZCm,
+		axisLocationsCm))
 	{
-		axisLocationsCm.Add(FScenarioCorridorGeometry::TransformRuntimeAxisPointMetersToWorldCm(
-			CorridorSpec,
-			pointMeters,
-			RuntimeSurfaceTopZCm));
+		return;
 	}
 
 	TArray<FVector> axisTangentsCm;
@@ -220,7 +214,10 @@ void AScenarioCorridorRuntimeActor::AddLaneStrip(const FScenarioRuntimeCorridorL
 	meshSpec.AttachParent = SceneRoot;
 	meshSpec.LaneStripMesh = LaneStripMesh.Get();
 	meshSpec.Material = material;
-	meshSpec.ComponentNameBase = FName(*FString::Printf(TEXT("RuntimeCorridor_%s"), *laneSpec.LaneId));
+	meshSpec.ComponentNameBase = FName(*FString::Printf(
+		TEXT("RuntimeCorridor_%s_%s"),
+		*layoutEntry.SegmentId,
+		*laneSpec.LaneId));
 	meshSpec.AxisLocationsCm = MoveTemp(axisLocationsCm);
 	meshSpec.AxisTangentsCm = MoveTemp(axisTangentsCm);
 	meshSpec.CenterOffsetCm = centerOffsetCm;

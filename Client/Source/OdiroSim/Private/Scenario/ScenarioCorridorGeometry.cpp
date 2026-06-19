@@ -37,6 +37,76 @@ FVector FScenarioCorridorGeometry::TransformRuntimeAxisPointMetersToWorldCm(
 		surfaceTopZCm);
 }
 
+bool FScenarioCorridorGeometry::BuildRuntimeAxisLocationsForAlongRangeCm(
+	const FScenarioRuntimeCorridorSpec& corridorSpec,
+	const FScenarioAlongRangeMeters& alongRangeMeters,
+	double surfaceTopZCm,
+	TArray<FVector>& outAxisLocationsCm)
+{
+	outAxisLocationsCm.Reset();
+	if (corridorSpec.PointsMeters.Num() < 2)
+	{
+		return false;
+	}
+
+	const double requestedStartMeters = FMath::Min(alongRangeMeters.StartMeters, alongRangeMeters.EndMeters);
+	const double requestedEndMeters = FMath::Max(alongRangeMeters.StartMeters, alongRangeMeters.EndMeters);
+	if (requestedEndMeters - requestedStartMeters <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	auto addAxisPoint = [&outAxisLocationsCm, &corridorSpec, surfaceTopZCm](const FVector2D& pointMeters)
+	{
+		const FVector worldPointCm = TransformRuntimeAxisPointMetersToWorldCm(corridorSpec, pointMeters, surfaceTopZCm);
+		if (outAxisLocationsCm.IsEmpty() || !outAxisLocationsCm.Last().Equals(worldPointCm, KINDA_SMALL_NUMBER))
+		{
+			outAxisLocationsCm.Add(worldPointCm);
+		}
+	};
+
+	double accumulatedMeters = 0.0;
+	for (int32 index = 0; index < corridorSpec.PointsMeters.Num() - 1; ++index)
+	{
+		const FVector2D segmentStart = corridorSpec.PointsMeters[index];
+		const FVector2D segmentEnd = corridorSpec.PointsMeters[index + 1];
+		const FVector2D segmentVector = segmentEnd - segmentStart;
+		const double segmentLengthMeters = segmentVector.Size();
+		if (segmentLengthMeters <= KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+
+		const double segmentStartAlongMeters = accumulatedMeters;
+		const double segmentEndAlongMeters = accumulatedMeters + segmentLengthMeters;
+		accumulatedMeters = segmentEndAlongMeters;
+		if (requestedEndMeters < segmentStartAlongMeters - SurfaceQueryToleranceMeters
+			|| requestedStartMeters > segmentEndAlongMeters + SurfaceQueryToleranceMeters)
+		{
+			continue;
+		}
+
+		const double overlapStartMeters =
+			FMath::Clamp(requestedStartMeters, segmentStartAlongMeters, segmentEndAlongMeters);
+		const double overlapEndMeters =
+			FMath::Clamp(requestedEndMeters, segmentStartAlongMeters, segmentEndAlongMeters);
+		if (overlapEndMeters - overlapStartMeters <= KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+
+		const FVector2D segmentDirection = segmentVector / segmentLengthMeters;
+		const FVector2D overlapStartPoint =
+			segmentStart + segmentDirection * (overlapStartMeters - segmentStartAlongMeters);
+		const FVector2D overlapEndPoint =
+			segmentStart + segmentDirection * (overlapEndMeters - segmentStartAlongMeters);
+		addAxisPoint(overlapStartPoint);
+		addAxisPoint(overlapEndPoint);
+	}
+
+	return outAxisLocationsCm.Num() >= 2;
+}
+
 FVector2D FScenarioCorridorGeometry::TransformRuntimeWorldCmToAxisPointMeters(
 	const FScenarioRuntimeCorridorSpec& corridorSpec,
 	const FVector& worldLocation)
@@ -173,20 +243,6 @@ FString FScenarioCorridorGeometry::MakeSurfaceInstanceId(
 		? TEXT("corridor")
 		: corridorSpec.CorridorId;
 	return FString::Printf(TEXT("%s:%s:%s"), *corridorId, *segmentId, *laneId);
-}
-
-FString FScenarioCorridorGeometry::MakeVisualLaneKey(const FScenarioRuntimeCorridorLaneSpec& laneSpec)
-{
-	if (!laneSpec.LaneId.IsEmpty())
-	{
-		return laneSpec.LaneId;
-	}
-
-	return FString::Printf(
-		TEXT("lane:%0.3f:%0.3f:%d"),
-		laneSpec.OffsetRangeMeters.MinMeters,
-		laneSpec.OffsetRangeMeters.MaxMeters,
-		static_cast<int32>(laneSpec.RegionType));
 }
 
 int32 FScenarioCorridorGeometry::AddLaneStripMeshes(

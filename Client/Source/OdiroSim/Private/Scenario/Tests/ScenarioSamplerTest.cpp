@@ -28,6 +28,15 @@ namespace
 		return NumberValue;
 	}
 
+	FScenarioTemplateStringValue MakeSamplerTestFixedString(const FString& Value)
+	{
+		FScenarioTemplateStringValue StringValue;
+		StringValue.bIsSet = true;
+		StringValue.Mode = EScenarioTemplateStringValueMode::Fixed;
+		StringValue.FixedValue = Value;
+		return StringValue;
+	}
+
 	FScenarioSamplerRequest MakeSamplerTestRequest()
 	{
 		FScenarioSamplerRequest Request;
@@ -172,6 +181,73 @@ bool FScenarioSamplerFixedObstacleTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("runtime entry anchor inset"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm.X, 100.0);
 		TestEqual(TEXT("runtime exit anchor inset"), RobotSpec->DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm.X, 900.0);
 	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioSamplerSegmentReplacementSurfaceTypeTest,
+	"OdiroSim.Scenario.Sampler.SegmentReplacementSurfaceType",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioSamplerSegmentReplacementSurfaceTypeTest::RunTest(const FString& Parameters)
+{
+	FScenarioDocument ScenarioDocument = MakeSamplerTestScenario();
+	ScenarioDocument.Corridor.Segments[0].ReplacedBySurfaceId = MakeSamplerTestFixedString(TEXT("building"));
+
+	const FScenarioSamplerResult Result =
+		FScenarioSampler::GenerateSample(ScenarioDocument, MakeSamplerTestRequest());
+
+	TestTrue(TEXT("sampler succeeds"), Result.bSuccess);
+	TestEqual(TEXT("layout count"), Result.Document.Scenario.Semantic.Layout.Num(), 1);
+	if (Result.Document.Scenario.Semantic.Layout.IsEmpty())
+	{
+		return false;
+	}
+
+	const FScenarioSampleLayoutLane* SampleWalkwayLane =
+		Result.Document.Scenario.Semantic.Layout[0].Lanes.FindByPredicate(
+			[](const FScenarioSampleLayoutLane& Lane)
+			{
+				return Lane.LaneId == TEXT("walkway");
+			});
+	TestNotNull(TEXT("sample walkway lane"), SampleWalkwayLane);
+	if (!SampleWalkwayLane)
+	{
+		return false;
+	}
+
+	TestEqual(TEXT("sample replacement surface"), SampleWalkwayLane->SurfaceId, FString(TEXT("building")));
+	TestEqual(
+		TEXT("sample replacement traversability"),
+		static_cast<int32>(SampleWalkwayLane->Type),
+		static_cast<int32>(EScenarioSampleLaneType::Blocked));
+
+	const FScenarioCompileResult CompileResult =
+		FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpecFromSampleDocument(Result.Document);
+	TestTrue(TEXT("sample adapts to world spec"), CompileResult.bSuccess);
+	TestEqual(TEXT("runtime corridor count"), CompileResult.WorldSpec.Corridors.Num(), 1);
+	if (CompileResult.WorldSpec.Corridors.IsEmpty() || CompileResult.WorldSpec.Corridors[0].Layout.IsEmpty())
+	{
+		return false;
+	}
+
+	const FScenarioRuntimeCorridorLaneSpec* RuntimeWalkwayLane =
+		CompileResult.WorldSpec.Corridors[0].Layout[0].Lanes.FindByPredicate(
+			[](const FScenarioRuntimeCorridorLaneSpec& Lane)
+			{
+				return Lane.LaneId == TEXT("walkway");
+			});
+	TestNotNull(TEXT("runtime walkway lane"), RuntimeWalkwayLane);
+	if (!RuntimeWalkwayLane)
+	{
+		return false;
+	}
+
+	TestEqual(TEXT("runtime replacement surface"), RuntimeWalkwayLane->SurfaceId, FString(TEXT("building")));
+	TestEqual(
+		TEXT("runtime replacement region type"),
+		static_cast<int32>(RuntimeWalkwayLane->RegionType),
+		static_cast<int32>(EScenarioGroundRegionType::Blocked));
 	return true;
 }
 

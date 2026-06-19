@@ -1,6 +1,7 @@
 #include "Scenario/ScenarioSampler.h"
 
 #include "Misc/Crc.h"
+#include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
 #include "Shared/ScenarioSampleJson.h"
 #include "Shared/ScenarioDocumentJson.h"
 
@@ -240,6 +241,12 @@ namespace
 
 	EScenarioSampleLaneType ScenarioSamplerSurfaceToLaneType(const FString& SurfaceId)
 	{
+		FScenarioCorridorSurfaceEntry SurfaceEntry;
+		if (UScenarioCorridorSurfaceCatalog::FindDefaultSurfaceEntryById(FName(*SurfaceId), SurfaceEntry))
+		{
+			return SurfaceEntry.LaneType;
+		}
+
 		const FString Normalized = SurfaceId.ToLower();
 		if (Normalized.Contains(TEXT("building")) || Normalized.Contains(TEXT("wall")) || Normalized.Contains(TEXT("block")))
 		{
@@ -350,7 +357,7 @@ namespace
 				FString::Printf(TEXT("corridor.segments.%s.replaced_by"), *Segment.SegmentId),
 				Seed,
 				Params);
-			WalkwayLane.Type = EScenarioSampleLaneType::Walkable;
+			WalkwayLane.Type = ScenarioSamplerSurfaceToLaneType(WalkwayLane.SurfaceId);
 			LayoutEntry.Lanes.Add(WalkwayLane);
 
 			FScenarioSamplerResolvedLane WalkwayRegion;

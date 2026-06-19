@@ -21,6 +21,15 @@ namespace
 	// Blocked corridor surfaces use the same collision profile as blocked ground regions.
 	const FName BlockedPreviewCollisionProfileName{ TEXT("Blocked") };
 
+	double MeasurePreviewAxisLengthMeters(const TArray<FVector2D>& pointsMeters)
+	{
+		double lengthMeters = 0.0;
+		for (int32 index = 0; index < pointsMeters.Num() - 1; ++index)
+		{
+			lengthMeters += FVector2D::Distance(pointsMeters[index], pointsMeters[index + 1]);
+		}
+		return lengthMeters;
+	}
 }
 
 AScenarioCorridorPreviewActor::AScenarioCorridorPreviewActor()
@@ -76,44 +85,78 @@ void AScenarioCorridorPreviewActor::ConfigureFromCorridor(const FScenarioTemplat
 
 	const double walkwayWidthMeters = ResolvePreviewNumber(corridor.WalkwayWidthMeters, 3.0);
 	const double halfWalkwayWidthMeters = FMath::Max(walkwayWidthMeters, 0.0) * 0.5;
-	AddLaneStrip(TEXT("walkway"), TEXT("sidewalk"), -halfWalkwayWidthMeters, halfWalkwayWidthMeters, 0.0);
 
-	double buildingMaxOffsetMeters = -halfWalkwayWidthMeters;
-	for (int32 index = 0; index < corridor.BuildingSide.Num(); ++index)
+	TArray<FScenarioTemplateSegment> renderSegments = corridor.Segments;
+	if (renderSegments.IsEmpty())
 	{
-		const FScenarioTemplateLaneRule& laneRule = corridor.BuildingSide[index];
-		const double widthMeters = ResolvePreviewNumber(laneRule.WidthMeters, 0.0);
-		if (widthMeters <= KINDA_SMALL_NUMBER)
-		{
-			continue;
-		}
-
-		AddLaneStrip(
-			index == 0 ? TEXT("building_edge") : FString::Printf(TEXT("building_%d"), index),
-			laneRule.SurfaceId,
-			buildingMaxOffsetMeters - widthMeters,
-			buildingMaxOffsetMeters,
-			0.0);
-		buildingMaxOffsetMeters -= widthMeters;
+		FScenarioTemplateSegment fullAxisSegment;
+		fullAxisSegment.SegmentId = TEXT("segment_000");
+		fullAxisSegment.AlongRangeMeters.StartMeters = 0.0;
+		fullAxisSegment.AlongRangeMeters.EndMeters = MeasurePreviewAxisLengthMeters(corridor.Axis.PointsMeters);
+		renderSegments.Add(fullAxisSegment);
 	}
 
-	double curbMinOffsetMeters = halfWalkwayWidthMeters;
-	for (int32 index = 0; index < corridor.CurbSide.Num(); ++index)
+	for (int32 segmentIndex = 0; segmentIndex < renderSegments.Num(); ++segmentIndex)
 	{
-		const FScenarioTemplateLaneRule& laneRule = corridor.CurbSide[index];
-		const double widthMeters = ResolvePreviewNumber(laneRule.WidthMeters, 0.0);
-		if (widthMeters <= KINDA_SMALL_NUMBER)
+		const FScenarioTemplateSegment& segment = renderSegments[segmentIndex];
+		const FString segmentId = segment.SegmentId.IsEmpty()
+			? FString::Printf(TEXT("segment_%03d"), segmentIndex)
+			: segment.SegmentId;
+		const FString walkwaySurfaceId = ResolvePreviewString(segment.ReplacedBySurfaceId, TEXT("sidewalk"));
+		AddLaneStrip(
+			corridor.Axis.PointsMeters,
+			segment.AlongRangeMeters,
+			FString::Printf(TEXT("%s_walkway"), *segmentId),
+			walkwaySurfaceId,
+			-halfWalkwayWidthMeters,
+			halfWalkwayWidthMeters,
+			0.0);
+
+		double buildingMaxOffsetMeters = -halfWalkwayWidthMeters;
+		for (int32 index = 0; index < corridor.BuildingSide.Num(); ++index)
 		{
-			continue;
+			const FScenarioTemplateLaneRule& laneRule = corridor.BuildingSide[index];
+			const double widthMeters = ResolvePreviewNumber(laneRule.WidthMeters, 0.0);
+			if (widthMeters <= KINDA_SMALL_NUMBER)
+			{
+				continue;
+			}
+
+			AddLaneStrip(
+				corridor.Axis.PointsMeters,
+				segment.AlongRangeMeters,
+				index == 0
+					? FString::Printf(TEXT("%s_building_edge"), *segmentId)
+					: FString::Printf(TEXT("%s_building_%d"), *segmentId, index),
+				laneRule.SurfaceId,
+				buildingMaxOffsetMeters - widthMeters,
+				buildingMaxOffsetMeters,
+				0.0);
+			buildingMaxOffsetMeters -= widthMeters;
 		}
 
-		AddLaneStrip(
-			index == 0 ? TEXT("curb_edge") : FString::Printf(TEXT("curb_%d"), index),
-			laneRule.SurfaceId,
-			curbMinOffsetMeters,
-			curbMinOffsetMeters + widthMeters,
-			-CurbSidePreviewDropCm);
-		curbMinOffsetMeters += widthMeters;
+		double curbMinOffsetMeters = halfWalkwayWidthMeters;
+		for (int32 index = 0; index < corridor.CurbSide.Num(); ++index)
+		{
+			const FScenarioTemplateLaneRule& laneRule = corridor.CurbSide[index];
+			const double widthMeters = ResolvePreviewNumber(laneRule.WidthMeters, 0.0);
+			if (widthMeters <= KINDA_SMALL_NUMBER)
+			{
+				continue;
+			}
+
+			AddLaneStrip(
+				corridor.Axis.PointsMeters,
+				segment.AlongRangeMeters,
+				index == 0
+					? FString::Printf(TEXT("%s_curb_edge"), *segmentId)
+					: FString::Printf(TEXT("%s_curb_%d"), *segmentId, index),
+				laneRule.SurfaceId,
+				curbMinOffsetMeters,
+				curbMinOffsetMeters + widthMeters,
+				-CurbSidePreviewDropCm);
+			curbMinOffsetMeters += widthMeters;
+		}
 	}
 }
 
@@ -158,6 +201,8 @@ void AScenarioCorridorPreviewActor::RebuildAxisSpline(const TArray<FVector2D>& p
 }
 
 void AScenarioCorridorPreviewActor::AddLaneStrip(
+	const TArray<FVector2D>& axisPointsMeters,
+	const FScenarioAlongRangeMeters& alongRangeMeters,
 	const FString& laneId,
 	const FString& surfaceId,
 	double minOffsetMeters,
@@ -195,19 +240,24 @@ void AScenarioCorridorPreviewActor::AddLaneStrip(
 		? laneTopZCm + (laneHeightCm * 0.5)
 		: laneTopZCm - (laneHeightCm * 0.5);
 	const double laneHeightScale = laneHeightCm / 100.0;
-	const int32 pointCount = AxisSplineComponent->GetNumberOfSplinePoints();
+
+	FScenarioRuntimeCorridorSpec previewCorridorSpec;
+	previewCorridorSpec.PointsMeters = axisPointsMeters;
 	TArray<FVector> axisLocationsCm;
-	TArray<FVector> axisTangentsCm;
-	axisLocationsCm.Reserve(pointCount);
-	axisTangentsCm.Reserve(pointCount);
-	for (int32 pointIndex = 0; pointIndex < pointCount; ++pointIndex)
+	if (!FScenarioCorridorGeometry::BuildRuntimeAxisLocationsForAlongRangeCm(
+		previewCorridorSpec,
+		alongRangeMeters,
+		PreviewSurfaceTopZCm,
+		axisLocationsCm))
 	{
-		axisLocationsCm.Add(AxisSplineComponent->GetLocationAtSplinePoint(
-			pointIndex,
-			ESplineCoordinateSpace::Local));
-		axisTangentsCm.Add(AxisSplineComponent->GetTangentAtSplinePoint(
-			pointIndex,
-			ESplineCoordinateSpace::Local));
+		return;
+	}
+
+	TArray<FVector> axisTangentsCm;
+	axisTangentsCm.Reserve(axisLocationsCm.Num());
+	for (int32 pointIndex = 0; pointIndex < axisLocationsCm.Num(); ++pointIndex)
+	{
+		axisTangentsCm.Add(FScenarioCorridorGeometry::ResolveCurveTangentCm(axisLocationsCm, pointIndex));
 	}
 
 	FScenarioCorridorLaneMeshBuildSpec meshSpec;
@@ -243,4 +293,21 @@ double AScenarioCorridorPreviewActor::ResolvePreviewNumber(
 	}
 
 	return value.FixedValue;
+}
+
+FString AScenarioCorridorPreviewActor::ResolvePreviewString(
+	const FScenarioTemplateStringValue& value,
+	const FString& defaultValue)
+{
+	if (!value.bIsSet)
+	{
+		return defaultValue;
+	}
+
+	if (value.Mode == EScenarioTemplateStringValueMode::Choices && !value.Choices.IsEmpty())
+	{
+		return value.Choices[0];
+	}
+
+	return value.FixedValue.IsEmpty() ? defaultValue : value.FixedValue;
 }

@@ -77,6 +77,13 @@ public:
 		const FVector2D& pointMeters,
 		double surfaceTopZCm);
 
+	// Builds world-centimeter axis locations for the requested runtime layout interval.
+	static bool BuildRuntimeAxisLocationsForAlongRangeCm(
+		const FScenarioRuntimeCorridorSpec& corridorSpec,
+		const FScenarioAlongRangeMeters& alongRangeMeters,
+		double surfaceTopZCm,
+		TArray<FVector>& outAxisLocationsCm);
+
 	// Converts a world-centimeter location into runtime corridor-local meters.
 	static FVector2D TransformRuntimeWorldCmToAxisPointMeters(
 		const FScenarioRuntimeCorridorSpec& corridorSpec,
@@ -105,9 +112,6 @@ public:
 		const FScenarioRuntimeCorridorLaneSpec& laneSpec,
 		int32 layoutIndex,
 		int32 laneIndex);
-
-	// Builds a stable key for deduplicating full-axis visual lanes from sampled layout lanes.
-	static FString MakeVisualLaneKey(const FScenarioRuntimeCorridorLaneSpec& laneSpec);
 
 	// Creates spline-deformed lane mesh components and appends them to the caller-owned component list.
 	static int32 AddLaneStripMeshes(

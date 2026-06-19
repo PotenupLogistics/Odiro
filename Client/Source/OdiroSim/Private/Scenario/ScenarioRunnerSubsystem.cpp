@@ -198,6 +198,17 @@ namespace
 		}
 	}
 
+	void ConfigureProjectActionLoggingForEpisode(
+		const FScenarioRuntimeContext& runtimeContext,
+		const FString& projectOutputEpisodeId)
+	{
+		ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(runtimeContext.RobotActor);
+		if (IsValid(deliveryBot))
+		{
+			deliveryBot->ConfigureProjectActionLogging(projectOutputEpisodeId);
+		}
+	}
+
 	FScenarioSimulationSetupSpec MakeSimulationSetupSpec(const FScenarioWorldSpec& worldSpec)
 	{
 		FScenarioSimulationSetupSpec setupSpec;
@@ -607,6 +618,8 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		QueueStartNextScenario();
 		return;
 	}
+
+	ConfigureProjectActionLoggingForEpisode(runtimeContext, projectOutputEpisodeId);
 
 	if (bRunnerManagedPolicyStart)
 	{

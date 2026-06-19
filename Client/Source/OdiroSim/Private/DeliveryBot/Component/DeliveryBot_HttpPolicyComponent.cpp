@@ -9,10 +9,13 @@
 #include "Interfaces/IHttpRequest.h"
 #include "Misc/DateTime.h"
 #include "Misc/Paths.h"
+#include "Scenario/ScenarioEvaluationSubsystem.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Interfaces/IHttpResponse.h"
+#include "Shared/SimulationSetupTypes.h"
+#include "Shared/UserProjectDataTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotHttpPolicy, Log, All);
 
@@ -157,6 +160,12 @@ void UDeliveryBot_HttpPolicyComponent::RequestStartScenario()
 	TryStartScenario();
 }
 
+// Runner가 지정한 project output episode id를 이후 decide 기록에 사용한다.
+void UDeliveryBot_HttpPolicyComponent::ConfigureProjectActionLogging(const FString& projectOutputEpisodeId)
+{
+	ProjectActionEpisodeId = projectOutputEpisodeId.TrimStartAndEnd();
+}
+
 // start 전에는 재시도하고 start 후에는 decide를 반복 호출한다.
 void UDeliveryBot_HttpPolicyComponent::UpdatePolicy(float deltaTime)
 {
@@ -270,11 +279,13 @@ bool UDeliveryBot_HttpPolicyComponent::RequestDecision(float deltaTime)
 		return false;
 
 	bDecisionRequestInFlight = true;
+	const TSharedPtr<FJsonObject> requestObjectForLog = LastDecisionRequestObject;
+	const FString projectEpisodeIdForLog = ResolveProjectEpisodeId();
 
 	const bool bRequestStarted = SendPostRequest(
 		TEXT("/scenario/decide"),
 		payload,
-		[this, deltaTime](FHttpResponsePtr response, bool bSucceeded)
+		[this, deltaTime, requestObjectForLog, projectEpisodeIdForLog](FHttpResponsePtr response, bool bSucceeded)
 		{
 			bDecisionRequestInFlight = false;
 
@@ -282,6 +293,7 @@ bool UDeliveryBot_HttpPolicyComponent::RequestDecision(float deltaTime)
 			if (!bSucceeded)
 			{
 				StorePolicyDecisionError(TEXT("PYTHON_REQUEST_FAILED"), TEXT("Python decide HTTP request failed."));
+				WriteProjectActionRecord(projectEpisodeIdForLog, requestObjectForLog, response, false);
 
 				if (ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(GetOwner()))
 				{
@@ -292,6 +304,8 @@ bool UDeliveryBot_HttpPolicyComponent::RequestDecision(float deltaTime)
 
 			if (!TryParseMoveCommand(response, moveCommand))
 			{
+				WriteProjectActionRecord(projectEpisodeIdForLog, requestObjectForLog, response, false);
+
 				if (ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(GetOwner()))
 				{
 					deliveryBot->ApplyParkingStop();
@@ -299,6 +313,7 @@ bool UDeliveryBot_HttpPolicyComponent::RequestDecision(float deltaTime)
 				return;
 			}
 				
+			WriteProjectActionRecord(projectEpisodeIdForLog, requestObjectForLog, response, true);
 
 			if (ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(GetOwner()))
 			{
@@ -309,6 +324,7 @@ bool UDeliveryBot_HttpPolicyComponent::RequestDecision(float deltaTime)
 	if (!bRequestStarted)
 	{
 		bDecisionRequestInFlight = false;
+		WriteProjectActionRecord(projectEpisodeIdForLog, requestObjectForLog, nullptr, false);
 	}
 
 	return bRequestStarted;
@@ -350,6 +366,96 @@ bool UDeliveryBot_HttpPolicyComponent::SendPostRequest(const FString& endpoint, 
 				bool bWasSuccessful) mutable{onComplete(response, bWasSuccessful);});
 
 	return request->ProcessRequest();
+}
+
+// Project run이면 runner가 지정한 output episode id를 우선 사용한다.
+FString UDeliveryBot_HttpPolicyComponent::ResolveProjectEpisodeId() const
+{
+	const FSimulationCommandLineParseResult commandLineResult = FSimulationCommandLine::ParseCurrent();
+	if (!commandLineResult.bSuccess || !commandLineResult.Options.bProjectRun)
+	{
+		return FString();
+	}
+
+	if (FUserProjectEpisodeScenarioJson::IsValidEpisodeId(ProjectActionEpisodeId))
+	{
+		return ProjectActionEpisodeId;
+	}
+
+	UWorld* world = GetWorld();
+	if (!IsValid(world))
+	{
+		return FString();
+	}
+
+	const UScenarioEvaluationSubsystem* evaluationSubsystem = world->GetSubsystem<UScenarioEvaluationSubsystem>();
+	if (!IsValid(evaluationSubsystem))
+	{
+		return FString();
+	}
+
+	return evaluationSubsystem->GetCurrentResult().EpisodeId;
+}
+
+// Python decide request/response를 project actions.jsonl에 한 줄로 추가한다.
+void UDeliveryBot_HttpPolicyComponent::WriteProjectActionRecord(
+	const FString& projectEpisodeId,
+	const TSharedPtr<FJsonObject>& requestObject,
+	const FHttpResponsePtr& response,
+	bool bActionSucceeded) const
+{
+	if (!requestObject.IsValid())
+	{
+		return;
+	}
+
+	const FSimulationCommandLineParseResult commandLineResult = FSimulationCommandLine::ParseCurrent();
+	if (!commandLineResult.bSuccess || !commandLineResult.Options.bProjectRun)
+	{
+		return;
+	}
+
+	FString episodeId = projectEpisodeId.TrimStartAndEnd();
+	if (!FUserProjectEpisodeScenarioJson::IsValidEpisodeId(episodeId))
+	{
+		episodeId = ResolveProjectEpisodeId();
+	}
+
+	if (!FUserProjectEpisodeScenarioJson::IsValidEpisodeId(episodeId))
+	{
+		UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Project action record skipped: invalid episode id '%s'."), *episodeId);
+		return;
+	}
+
+	TSharedPtr<FJsonObject> responseObject;
+	TryGetPythonResponseObject(response, responseObject);
+
+	const int32 httpStatusCode = response.IsValid() ? response->GetResponseCode() : 0;
+	const FString errorMessage = bActionSucceeded
+		? FString()
+		: FString::Printf(
+			TEXT("Python policy decide failed. ResponseValid=%s, HttpStatus=%d"),
+			response.IsValid() ? TEXT("true") : TEXT("false"),
+			httpStatusCode);
+
+	TArray<FString> diagnostics;
+	if (!FUserProjectRunOutputJson::AppendRobotActionRecord(
+			FUserProjectRunSnapshot::BuildPaths(
+				commandLineResult.Options.ProjectPath,
+				commandLineResult.Options.RunId),
+			episodeId,
+			requestObject.ToSharedRef(),
+			responseObject,
+			bActionSucceeded,
+			httpStatusCode,
+			errorMessage,
+			diagnostics))
+	{
+		for (const FString& diagnostic : diagnostics)
+		{
+			UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Project action record write failed: %s"), *diagnostic);
+		}
+	}
 }
 
 // request 객체를 Python message envelope으로 감싼다.
@@ -889,6 +995,7 @@ bool UDeliveryBot_HttpPolicyComponent::BuildDecidePayload(FString& outPayload)
 
 	requestObject->SetArrayField(TEXT("observedObjects"), observedObjectValues);
 
+	LastDecisionRequestObject = requestObject;
 	return BuildMessagePayload(TEXT("scenario_decide"), requestObject, outPayload);
 }
 
@@ -1145,6 +1252,7 @@ void UDeliveryBot_HttpPolicyComponent::ResetScenarioState(bool bKeepLastResult)
 	LastPolicyDecisionResult = FDeliveryBotPolicyDecisionResultInfo{};
 	
 	LastDecisionSequence = 0;
+	LastDecisionRequestObject.Reset();
 	LastDecisionRunTimeSeconds = 0.f;
 	StartRetryElapsedSeconds = 0.f;
 	DecideElapsedSeconds = 0.f;

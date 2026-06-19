@@ -862,6 +862,46 @@ namespace
 		return object;
 	}
 
+	// Adds an event snapshot field without overriding a detector-supplied contract property.
+	void AddStringParamIfMissing(
+		TMap<FString, FScenarioParamValue>& params,
+		const FString& key,
+		const FString& value)
+	{
+		if (value.IsEmpty() || params.Contains(key))
+		{
+			return;
+		}
+
+		FScenarioParamValue paramValue;
+		paramValue.Type = EScenarioParamValueType::String;
+		paramValue.StringValue = value;
+		params.Add(key, paramValue);
+	}
+
+	// Bridges typed evaluation target identifiers into the external events.jsonl properties object.
+	TSharedRef<FJsonObject> MakeEventPropertiesObject(const FEpisodeEvaluationEvent& event)
+	{
+		TMap<FString, FScenarioParamValue> properties = event.Properties;
+		switch (event.EventType)
+		{
+		case EEpisodeEvaluationEventType::StaticObstacleCollision:
+		case EEpisodeEvaluationEventType::PedestrianCollision:
+		case EEpisodeEvaluationEventType::PedestrianNearMiss:
+		case EEpisodeEvaluationEventType::DeliveryBotSimulationFailure:
+			AddStringParamIfMissing(properties, TEXT("target_id"), event.TargetInstanceId);
+			break;
+		case EEpisodeEvaluationEventType::BlockedRegionCollision:
+		case EEpisodeEvaluationEventType::PenaltyRegionViolation:
+			AddStringParamIfMissing(properties, TEXT("region_id"), event.TargetInstanceId);
+			break;
+		default:
+			break;
+		}
+
+		return MakeUserProjectParamObject(properties);
+	}
+
 	bool TrySerializeCondensedJsonLine(const TSharedRef<FJsonObject>& object, FString& outLine)
 	{
 		outLine.Reset();
@@ -1148,7 +1188,7 @@ namespace
 		object->SetStringField(TEXT("reason"), ResolveUserProjectEventReason(event));
 		object->SetStringField(TEXT("message"), event.Message);
 		object->SetField(TEXT("action_sequence"), MakeEventActionSequenceValue(event));
-		object->SetObjectField(TEXT("properties"), MakeUserProjectParamObject(event.Properties));
+		object->SetObjectField(TEXT("properties"), MakeEventPropertiesObject(event));
 		return object;
 	}
 

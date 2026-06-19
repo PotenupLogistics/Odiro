@@ -554,12 +554,34 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	nearMissEvent.ElapsedTimeSeconds = 4.25;
 	nearMissEvent.EventType = EEpisodeEvaluationEventType::PedestrianNearMiss;
 	nearMissEvent.Severity = EEpisodeEvaluationEventSeverity::Warning;
+	nearMissEvent.TargetInstanceId = TEXT("pedestrian_001");
 	nearMissEvent.Message = TEXT("near miss");
 	nearMissEvent.Properties.Add(TEXT("distance_m"), MakeUserProjectFloatParam(0.45));
 	runRecord.EvaluationResult.Events.Add(nearMissEvent);
 
+	FEpisodeEvaluationEvent staticCollisionEvent;
+	staticCollisionEvent.EventIndex = 1;
+	staticCollisionEvent.ElapsedTimeSeconds = 4.75;
+	staticCollisionEvent.EventType = EEpisodeEvaluationEventType::StaticObstacleCollision;
+	staticCollisionEvent.Severity = EEpisodeEvaluationEventSeverity::Warning;
+	staticCollisionEvent.TargetInstanceId = TEXT("obstacle_001");
+	staticCollisionEvent.Message = TEXT("static collision");
+	staticCollisionEvent.Properties.Add(TEXT("target_actor"), MakeUserProjectStringParam(TEXT("BenchActor_001")));
+	runRecord.EvaluationResult.Events.Add(staticCollisionEvent);
+
+	FEpisodeEvaluationEvent penaltyRegionEvent;
+	penaltyRegionEvent.EventIndex = 2;
+	penaltyRegionEvent.ElapsedTimeSeconds = 4.9;
+	penaltyRegionEvent.EventType = EEpisodeEvaluationEventType::PenaltyRegionViolation;
+	penaltyRegionEvent.Severity = EEpisodeEvaluationEventSeverity::Warning;
+	penaltyRegionEvent.TargetInstanceId = TEXT("penalty_region_001");
+	penaltyRegionEvent.Message = TEXT("penalty region violation");
+	penaltyRegionEvent.Properties.Add(TEXT("start_time_s"), MakeUserProjectFloatParam(4.0));
+	penaltyRegionEvent.Properties.Add(TEXT("duration_s"), MakeUserProjectFloatParam(0.9));
+	runRecord.EvaluationResult.Events.Add(penaltyRegionEvent);
+
 	FEpisodeEvaluationEvent repathEvent;
-	repathEvent.EventIndex = 1;
+	repathEvent.EventIndex = 3;
 	repathEvent.ElapsedTimeSeconds = 5.0;
 	repathEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotRepath;
 	repathEvent.Severity = EEpisodeEvaluationEventSeverity::Info;
@@ -570,7 +592,7 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	runRecord.EvaluationResult.Events.Add(repathEvent);
 
 	FEpisodeEvaluationEvent pathfindFailEvent;
-	pathfindFailEvent.EventIndex = 2;
+	pathfindFailEvent.EventIndex = 4;
 	pathfindFailEvent.ElapsedTimeSeconds = 6.0;
 	pathfindFailEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotPolicyFailure;
 	pathfindFailEvent.Severity = EEpisodeEvaluationEventSeverity::Failure;
@@ -581,7 +603,7 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	runRecord.EvaluationResult.Events.Add(pathfindFailEvent);
 
 	FEpisodeEvaluationEvent policyDecisionErrorEvent;
-	policyDecisionErrorEvent.EventIndex = 3;
+	policyDecisionErrorEvent.EventIndex = 5;
 	policyDecisionErrorEvent.ElapsedTimeSeconds = 7.0;
 	policyDecisionErrorEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure;
 	policyDecisionErrorEvent.Severity = EEpisodeEvaluationEventSeverity::Failure;
@@ -592,7 +614,7 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	runRecord.EvaluationResult.Events.Add(policyDecisionErrorEvent);
 
 	FEpisodeEvaluationEvent stuckEvent;
-	stuckEvent.EventIndex = 4;
+	stuckEvent.EventIndex = 6;
 	stuckEvent.ElapsedTimeSeconds = 8.0;
 	stuckEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotSimulationFailure;
 	stuckEvent.Severity = EEpisodeEvaluationEventSeverity::Failure;
@@ -622,7 +644,7 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("actions exists"), FPaths::FileExists(FPaths::Combine(episodeDirectory, TEXT("actions.jsonl"))));
 	TestTrue(TEXT("trace exists"), FPaths::FileExists(FPaths::Combine(episodeDirectory, TEXT("trace.jsonl"))));
 	TestTrue(TEXT("summary exists"), FPaths::FileExists(snapshotResult.Paths.SummaryPath));
-	TestEqual(TEXT("events include evaluation and terminal lines"), CountJsonlLines(eventsPath), 6);
+	TestEqual(TEXT("events include evaluation and terminal lines"), CountJsonlLines(eventsPath), 8);
 
 	TSharedPtr<FJsonObject> resultObject;
 	TestTrue(TEXT("load result json"), LoadUserProjectJsonObject(resultPath, resultObject));
@@ -634,28 +656,30 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestEqual(
 		TEXT("event summary count"),
 		static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("event_count")))),
-		6);
+		8);
 	TestEqual(
 		TEXT("event summary total"),
 		static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("total")))),
-		6);
+		8);
 	TestEqual(
 		TEXT("summary terminal event index"),
 		static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("summary"))->GetNumberField(TEXT("terminal_event_index")))),
-		5);
+		7);
 	TestEqual(
 		TEXT("event summary terminal event index"),
 		static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("terminal_event_index")))),
-		5);
+		7);
 	const TSharedPtr<FJsonObject> eventSummaryByType = resultObject->GetObjectField(TEXT("event_summary"))->GetObjectField(TEXT("by_type"));
 	TestEqual(TEXT("near miss event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("PedestrianNearMiss")))), 1);
+	TestEqual(TEXT("static collision event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("StaticObstacleCollision")))), 1);
+	TestEqual(TEXT("penalty region event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("PenaltyRegionViolation")))), 1);
 	TestEqual(TEXT("repath event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("Repath")))), 1);
 	TestEqual(TEXT("pathfind fail event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("PathfindFail")))), 1);
 	TestEqual(TEXT("policy decision error event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("PolicyDecisionError")))), 1);
 	TestEqual(TEXT("stuck event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("Stuck")))), 1);
 	TestEqual(TEXT("goal reached event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("GoalReached")))), 1);
 	const TSharedPtr<FJsonObject> eventSummaryBySource = resultObject->GetObjectField(TEXT("event_summary"))->GetObjectField(TEXT("by_source"));
-	TestEqual(TEXT("evaluation source event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryBySource->GetNumberField(TEXT("EvaluationSubsystem")))), 3);
+	TestEqual(TEXT("evaluation source event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryBySource->GetNumberField(TEXT("EvaluationSubsystem")))), 5);
 	TestEqual(TEXT("python source event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryBySource->GetNumberField(TEXT("PythonPolicy")))), 2);
 	TestEqual(TEXT("policy runtime source event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryBySource->GetNumberField(TEXT("PolicyRuntime")))), 1);
 
@@ -675,26 +699,44 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestFalse(TEXT("events omit internal repath type"), eventsJson.Contains(TEXT("\"event_type\":\"DeliveryBotRepath\"")));
 	TArray<TSharedPtr<FJsonObject>> eventLines;
 	TestTrue(TEXT("parse events jsonl"), LoadUserProjectJsonlObjects(eventsPath, eventLines));
-	TestEqual(TEXT("events parsed line count"), eventLines.Num(), 6);
-	if (eventLines.Num() == 6 && eventLines[5].IsValid())
+	TestEqual(TEXT("events parsed line count"), eventLines.Num(), 8);
+	if (eventLines.Num() == 8 && eventLines[7].IsValid())
 	{
 		const TSharedPtr<FJsonValue> nearMissActionSequence = eventLines[0]->TryGetField(TEXT("action_sequence"));
 		TestTrue(
 			TEXT("near miss action sequence is null"),
 			nearMissActionSequence.IsValid() && nearMissActionSequence->Type == EJson::Null);
-		TestEqual(TEXT("repath action sequence"), static_cast<int32>(eventLines[1]->GetNumberField(TEXT("action_sequence"))), 7);
-		TestEqual(TEXT("pathfind fail action sequence"), static_cast<int32>(eventLines[2]->GetNumberField(TEXT("action_sequence"))), 8);
-		TestEqual(TEXT("policy decision error action sequence"), static_cast<int32>(eventLines[3]->GetNumberField(TEXT("action_sequence"))), 9);
-		const TSharedPtr<FJsonValue> stuckActionSequence = eventLines[4]->TryGetField(TEXT("action_sequence"));
+		TSharedPtr<FJsonObject> nearMissProperties;
+		TestTrue(TEXT("near miss properties object"), TryGetJsonObjectFieldForTest(eventLines[0], TEXT("properties"), nearMissProperties));
+		if (nearMissProperties.IsValid())
+		{
+			TestEqual(TEXT("near miss target id fallback"), nearMissProperties->GetStringField(TEXT("target_id")), FString(TEXT("pedestrian_001")));
+		}
+		TSharedPtr<FJsonObject> staticCollisionProperties;
+		TestTrue(TEXT("static collision properties object"), TryGetJsonObjectFieldForTest(eventLines[1], TEXT("properties"), staticCollisionProperties));
+		if (staticCollisionProperties.IsValid())
+		{
+			TestEqual(TEXT("static collision target id fallback"), staticCollisionProperties->GetStringField(TEXT("target_id")), FString(TEXT("obstacle_001")));
+		}
+		TSharedPtr<FJsonObject> penaltyRegionProperties;
+		TestTrue(TEXT("penalty region properties object"), TryGetJsonObjectFieldForTest(eventLines[2], TEXT("properties"), penaltyRegionProperties));
+		if (penaltyRegionProperties.IsValid())
+		{
+			TestEqual(TEXT("penalty region id fallback"), penaltyRegionProperties->GetStringField(TEXT("region_id")), FString(TEXT("penalty_region_001")));
+		}
+		TestEqual(TEXT("repath action sequence"), static_cast<int32>(eventLines[3]->GetNumberField(TEXT("action_sequence"))), 7);
+		TestEqual(TEXT("pathfind fail action sequence"), static_cast<int32>(eventLines[4]->GetNumberField(TEXT("action_sequence"))), 8);
+		TestEqual(TEXT("policy decision error action sequence"), static_cast<int32>(eventLines[5]->GetNumberField(TEXT("action_sequence"))), 9);
+		const TSharedPtr<FJsonValue> stuckActionSequence = eventLines[6]->TryGetField(TEXT("action_sequence"));
 		TestTrue(
 			TEXT("stuck action sequence is null"),
 			stuckActionSequence.IsValid() && stuckActionSequence->Type == EJson::Null);
-		const TSharedPtr<FJsonValue> terminalActionSequence = eventLines[5]->TryGetField(TEXT("action_sequence"));
+		const TSharedPtr<FJsonValue> terminalActionSequence = eventLines[7]->TryGetField(TEXT("action_sequence"));
 		TestTrue(
 			TEXT("terminal action sequence is null"),
 			terminalActionSequence.IsValid() && terminalActionSequence->Type == EJson::Null);
-		TestEqual(TEXT("terminal line index"), static_cast<int32>(eventLines[5]->GetNumberField(TEXT("event_index"))), 5);
-		TestEqual(TEXT("terminal line type"), eventLines[5]->GetStringField(TEXT("event_type")), FString(TEXT("GoalReached")));
+		TestEqual(TEXT("terminal line index"), static_cast<int32>(eventLines[7]->GetNumberField(TEXT("event_index"))), 7);
+		TestEqual(TEXT("terminal line type"), eventLines[7]->GetStringField(TEXT("event_type")), FString(TEXT("GoalReached")));
 	}
 
 	TSharedPtr<FJsonObject> summaryObject;

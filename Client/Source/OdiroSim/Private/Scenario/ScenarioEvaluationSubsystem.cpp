@@ -461,14 +461,16 @@ void UScenarioEvaluationSubsystem::ReportDeliveryBotPolicyEvent(
 		message = TEXT("DeliveryBot policy event.");
 	}
 
-	AddEvaluationEventWithDetails(
-		Snapshot.EventType,
-		Snapshot.Severity,
-		message,
-		FString(),
-		DeliveryBotActor->GetActorLocation(),
-		0.0,
-		properties);
+	FEpisodeEvaluationEvent event;
+	event.ElapsedTimeSeconds = FMath::Max(0.0f, Snapshot.RunTimeSeconds);
+	event.WorldTimeSeconds = EvaluationStartTimeSeconds + event.ElapsedTimeSeconds;
+	event.EventType = Snapshot.EventType;
+	event.Severity = Snapshot.Severity;
+	event.Message = message;
+	event.SubjectInstanceId = ActiveRuntimeContext.RobotInstanceId;
+	event.Location = DeliveryBotActor->GetActorLocation();
+	event.Properties = properties;
+	PublishEvaluationEvent(event);
 
 	if (Snapshot.bTerminalFailure)
 	{

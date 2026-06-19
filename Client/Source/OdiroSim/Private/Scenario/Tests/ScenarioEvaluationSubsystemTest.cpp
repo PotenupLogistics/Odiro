@@ -3,11 +3,13 @@
 #include "Scenario/ScenarioEvaluationSubsystem.h"
 
 #include "Components/SceneComponent.h"
+#include "DeliveryBot/Actor/DeliveryBot.h"
 #include "Engine/World.h"
 #include "Engine/WorldInitializationValues.h"
 #include "GameFramework/Actor.h"
 #include "Misc/AutomationTest.h"
 #include "Scenario/Actors/ScenarioGroundRegion.h"
+#include "Shared/Struct/DeliveryBot/Result/DeliveryBotPolicyEventSnapshot.h"
 #include "Shared/ScenarioSpecTypes.h"
 
 namespace
@@ -186,6 +188,15 @@ namespace
 		const FString& key)
 	{
 		return HasParamType(test, params, key, EScenarioParamValueType::Float);
+	}
+
+	// Verifies an integer snapshot field.
+	bool HasIntegerParam(
+		FAutomationTestBase& test,
+		const TMap<FString, FScenarioParamValue>& params,
+		const FString& key)
+	{
+		return HasParamType(test, params, key, EScenarioParamValueType::Integer);
 	}
 
 	// Verifies a string snapshot field.
@@ -442,6 +453,81 @@ bool FScenarioEvaluationStuckRuntimeTest::RunTest(const FString& parameters)
 	TestTrue(
 		TEXT("timeout event recorded after stuck"),
 		FindEvaluationEvent(timeoutResult, EEpisodeEvaluationEventType::Timeout) != nullptr);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioEvaluationPolicyEventSnapshotRuntimeTest,
+	"OdiroSim.ScenarioEvaluation.Events.PolicyEventSnapshot",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioEvaluationPolicyEventSnapshotRuntimeTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	FScenarioEvaluationTestWorld testWorld;
+	TestTrue(TEXT("world created"), testWorld.World != nullptr);
+	TestTrue(TEXT("evaluation subsystem created"), testWorld.EvaluationSubsystem != nullptr);
+	if (!testWorld.World || !testWorld.EvaluationSubsystem) return false;
+
+	FActorSpawnParameters spawnParams;
+	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ADeliveryBot* robotActor = testWorld.World->SpawnActor<ADeliveryBot>(
+		ADeliveryBot::StaticClass(),
+		FTransform::Identity,
+		spawnParams);
+	TestTrue(TEXT("delivery bot actor spawned"), robotActor != nullptr);
+	if (!robotActor) return false;
+
+	TestTrue(
+		TEXT("evaluation started"),
+		testWorld.EvaluationSubsystem->StartEvaluation(MakeEvaluationTestConfig(), MakeEvaluationTestContext(robotActor), 0.0));
+
+	FDeliveryBotPolicyEventSnapshot snapshot;
+	snapshot.EventType = EEpisodeEvaluationEventType::DeliveryBotRepath;
+	snapshot.Severity = EEpisodeEvaluationEventSeverity::Info;
+	snapshot.Sequence = 42;
+	snapshot.RunTimeSeconds = 3.5f;
+	snapshot.EventCode = TEXT("repath");
+	snapshot.Endpoint = TEXT("/policy/decide");
+	snapshot.SelectedPolicy = TEXT("python");
+	snapshot.Reason = TEXT("dynamic_repath_ready");
+	snapshot.Message = TEXT("dynamic repath");
+	snapshot.PathStatus = TEXT("ok");
+	snapshot.PathIndex = 2;
+	snapshot.PathLength = 12;
+	snapshot.TargetPathIndex = 5;
+	snapshot.ClosestPathDistanceCm = 125.0f;
+	snapshot.MaxPathErrorCm = 200.0f;
+	snapshot.ObstacleWarningCount = 1;
+	snapshot.LastObstacleWarningSource = TEXT("corridor");
+	snapshot.BlockedCorridorCellCount = 3;
+	snapshot.DynamicBlockedCellCount = 4;
+
+	testWorld.EvaluationSubsystem->ReportDeliveryBotPolicyEvent(robotActor, snapshot);
+
+	const FEpisodeEvaluationResult result = testWorld.EvaluationSubsystem->GetCurrentResult();
+	const FEpisodeEvaluationEvent* event = FindEvaluationEvent(result, EEpisodeEvaluationEventType::DeliveryBotRepath);
+	TestTrue(TEXT("policy event recorded"), event != nullptr);
+	if (!event) return false;
+
+	TestTrue(
+		TEXT("policy event uses snapshot runtime"),
+		FMath::IsNearlyEqual(event->ElapsedTimeSeconds, 3.5f, KINDA_SMALL_NUMBER));
+	HasIntegerParam(*this, event->Properties, TEXT("policy_sequence"));
+	HasFloatParam(*this, event->Properties, TEXT("policy_run_time_seconds"));
+	HasStringParamValue(*this, event->Properties, TEXT("policy_event_code"), TEXT("repath"));
+	HasStringParamValue(*this, event->Properties, TEXT("policy_reason"), TEXT("dynamic_repath_ready"));
+	HasStringParamValue(*this, event->Properties, TEXT("path_status"), TEXT("ok"));
+	HasIntegerParam(*this, event->Properties, TEXT("path_index"));
+	HasIntegerParam(*this, event->Properties, TEXT("path_length"));
+	HasIntegerParam(*this, event->Properties, TEXT("target_path_index"));
+	HasFloatParam(*this, event->Properties, TEXT("closest_path_distance_cm"));
+	HasFloatParam(*this, event->Properties, TEXT("max_path_error_cm"));
+	HasIntegerParam(*this, event->Properties, TEXT("obstacle_warning_count"));
+	HasStringParamValue(*this, event->Properties, TEXT("last_obstacle_warning_source"), TEXT("corridor"));
+	HasIntegerParam(*this, event->Properties, TEXT("blocked_corridor_cell_count"));
+	HasIntegerParam(*this, event->Properties, TEXT("dynamic_blocked_cell_count"));
 	return true;
 }
 

@@ -46,6 +46,7 @@ private:
 	static bool HasErrors(const FDeliveryBotSetupCompileResult& result);
 
 	static bool ReadOptionalFloatField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, float& targetValue, float minValue, float maxValue = TNumericLimits<float>::Max());
+	static bool ReadOptionalIntField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, int32& targetValue, int32 minValue, int32 maxValue = TNumericLimits<int32>::Max());
 	static bool ReadOptionalBoolField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, bool& targetValue);
 	static bool ReadOptionalNameArrayField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, TArray<FName>& targetValue);
 	static bool ReadOptionalCollisionChannelField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, TEnumAsByte<ECollisionChannel>& targetValue);
@@ -54,7 +55,8 @@ private:
 	static void CompileRobotObject(const FJsonObject& rootObject, FDeliveryBotSetupCompileResult& result);
 	static void CompileDrive(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotDriveConfigInfo& driveConfigInfo);
 	static void WarnDeprecatedPathFollow(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result);
-	static void CompileLidar(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo);
+	static void CompileLidar(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo, FDeliveryBotPointCloudCaptureConfigInfo& pointCloudCaptureConfigInfo);
+	static void CompilePointCloudCapture(const FJsonObject& lidarObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotPointCloudCaptureConfigInfo& pointCloudCaptureConfigInfo);
 	static bool ReadOptionalStringField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, FString& targetValue);
 	
 	static void CompilePolicy(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FString& startupPolicySpecFileName);

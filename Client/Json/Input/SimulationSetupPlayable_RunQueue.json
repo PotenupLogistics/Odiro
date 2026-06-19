@@ -5,7 +5,7 @@
 		{
 			"pair_id": "SimulationSetupPlayable_000",
 			"scenario_setup": "Json/Input/ScenarioSetupPlayable.json",
-			"delivery_bot_setup": "Json/Input/DeliveryBotSetupPlayable.json",
+			"delivery_bot_setup": "Json/Input/DeliveryBotSetupPlayable_QualityPointCloud.json",
 			"policy_spec": "Json/Input/PolicySpecs/PolicySpec_NormalOnly.json"
 		}
 	]

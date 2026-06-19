@@ -4,6 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "HttpFwd.h"
 #include "Shared/Struct/DeliveryBot/Drive/DeliveryBotMovementInfo.h"
+#include "Shared/Struct/DeliveryBot/Perception/DeliveryBotPointCloudCaptureConfigInfo.h"
 #include "Shared/Struct/DeliveryBot/Result/DeliveryBotPythonCaptureRefInfo.h"
 #include "Shared/Struct/DeliveryBot/Result/DeliveryBotPolicyDecisionResultInfo.h"
 #include "DeliveryBot_HttpPolicyComponent.generated.h"
@@ -11,6 +12,8 @@
 class FJsonObject;
 class FJsonValue;
 class UDeliveryBotPythonProcessSubsystem;
+struct FDeliveryBotObservationInfo;
+
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class ODIROSIM_API UDeliveryBot_HttpPolicyComponent : public UActorComponent
 {
@@ -29,39 +32,41 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
 	FString GetLastScenarioResultJson() const { return LastScenarioResultJson; } // 마지막 scenario result JSON을 반환한다
-	
-	// 마지막 Python policy decision 결과를 반환한다
-	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python") 
-	FDeliveryBotPolicyDecisionResultInfo GetLastPolicyDecisionResult() const 
+
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
+	FDeliveryBotPolicyDecisionResultInfo GetLastPolicyDecisionResult() const // 마지막 Python policy decision 결과를 반환한다
 	{
 		return LastPolicyDecisionResult;
-	} 
+	}
 
 	void GetLastPythonCaptureRefs(TArray<FDeliveryBotPythonCaptureRefInfo>& outCaptureRefs) const // 최근 Python capture refs를 복사한다
-	{	
+	{
 		outCaptureRefs = LastPolicyDecisionResult.CaptureRefs;
 	}
-	
-	
-private:
-	bool TryStartScenario();							// Python 서버에 /scenario/start 요청을 보낸다
-	bool BuildStartPayload(FString& outPayload);		// /scenario/start 요청 body를 만든다
 
 private:
-	void DrawPythonPathDebug(const TSharedPtr<FJsonObject>& responseObject) const; // Python response.path 좌표를 월드에 그린다.
+	bool TryStartScenario(); // Python 서버에 /scenario/start 요청을 보낸다
+	bool BuildStartPayload(FString& outPayload); // /scenario/start 요청 body를 만든다
+	void DrawPythonPathDebug(const TSharedPtr<FJsonObject>& responseObject) const; // Python response.path 좌표를 월드에 그린다
 	bool TryParsePythonPathDebugPoint(const TSharedPtr<FJsonValue>& pointValue, FVector& outLocationCm) const; // path debug point JSON을 FVector로 변환한다
-	bool BuildDecidePayload(FString& outPayload);		// /scenario/decide 요청 body를 만든다
-	bool RequestDecision(float deltaTime);				// Python 서버에 /scenario/decide 요청을 보낸다
-	// decide 응답을 이동 명령으로 변환한다
-	bool TryParseMoveCommand(const FHttpResponsePtr& response, FDeliveryBotMoveCommandInfo& outMoveCommand);
+	bool BuildDecidePayload(FString& outPayload); // /scenario/decide 요청 body를 만든다
+	bool RequestDecision(float deltaTime); // Python 서버에 /scenario/decide 요청을 보낸다
+	bool TryParseMoveCommand(const FHttpResponsePtr& response, FDeliveryBotMoveCommandInfo& outMoveCommand); // decide 응답을 이동 명령으로 변환한다
 	TArray<FDeliveryBotPythonCaptureRefInfo> BuildPythonCaptureRefs(const TSharedPtr<FJsonObject>& responseObject) const; // Python response.captures를 struct 배열로 변환한다
 	FDeliveryBotPolicyDecisionInfo BuildPythonDecisionInfo(const TSharedPtr<FJsonObject>& responseObject) const; // Python response.decision을 struct로 변환한다
 	void LogPythonCaptureRefs(const TArray<FDeliveryBotPythonCaptureRefInfo>& captureRefs) const; // Python capture refs를 로그로 남긴다
 	void StorePolicyDecisionError(const FString& errorCode, const FString& errorMessage); // 마지막 policy decision을 error 상태로 저장한다
 
 private:
-	TSharedRef<FJsonObject> BuildPointCloudOptionsObject() const; // Python point cloud capture 옵션 JSON을 만든다
+
+private:
+	FDeliveryBotPointCloudCaptureConfigInfo BuildEffectivePointCloudCaptureConfigInfo(const FDeliveryBotPointCloudCaptureConfigInfo& setupPointCloudConfigInfo) const; // setup JSON 우선, 없으면 컴포넌트 기본값으로 Point Cloud 설정을 만든다
+	FDeliveryBotPointCloudCaptureConfigInfo SanitizePointCloudCaptureConfigInfo(const FDeliveryBotPointCloudCaptureConfigInfo& pointCloudConfigInfo) const; // Python으로 보내기 전 Point Cloud 설정값을 안전한 값으로 보정한다
+	TSharedRef<FJsonObject> BuildPointCloudOptionsObject(const FDeliveryBotPointCloudCaptureConfigInfo& pointCloudConfigInfo) const; // Python point cloud capture 옵션 JSON을 만든다
+	void LogPointCloudStartConfig(const FDeliveryBotPointCloudCaptureConfigInfo& pointCloudConfigInfo) const; // /scenario/start에 전달되는 Point Cloud 설정을 로그로 남긴다
 	TSharedRef<FJsonObject> BuildArtifactSpecObject() const; // Python capture artifact 저장 경로 JSON을 만든다
+	FString BuildPointCloudCaptureRootDirectory() const; // Point Cloud capture 저장 루트 경로를 만든다
+	FString BuildPointCloudCaptureRunId(const FDeliveryBotObservationInfo& observation) const; // 사람이 읽기 쉬운 point cloud capture run id를 만든다
 	bool BuildEndPayload(const FString& status, FString& outPayload) const; // /scenario/end 요청 body를 만든다
 
 private:
@@ -76,64 +81,68 @@ private:
 
 	TSharedRef<FJsonObject> BuildLocationObject(const FVector& location, float yawDegree = 0.f) const; // 위치 JSON 객체를 만든다
 	bool BuildPythonGridObject(TSharedPtr<FJsonObject>& outGridObject) const; // Python 서버용 grid JSON 객체를 만든다
-	bool BuildMessagePayload(const FString& messageType, const TSharedRef<FJsonObject>& requestObject, FString& outPayload) const; // request 객체를 Python message envelope으로 감싼다
+	bool BuildMessagePayload(const FString& messageType, const TSharedRef<FJsonObject>& requestObject, FString& outPayload) const; // request 객체를 Python message envelope로 감싼다
 	void ResetScenarioState(bool bKeepLastResult); // scenario 진행 상태를 초기화한다
 	bool TryGetPythonResponseObject(const FHttpResponsePtr& response, TSharedPtr<FJsonObject>& outResponseObject) const; // envelope 응답에서 response 객체를 가져온다
 	bool IsPythonResponseOk(const FHttpResponsePtr& response) const; // envelope 응답의 response.status가 ok인지 확인한다
-
 	UDeliveryBotPythonProcessSubsystem* GetPythonProcessSubsystem() const; // Python process subsystem을 가져온다
 
-
 private:
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python")
-	float StartRetryIntervalSeconds{ 0.5f };
+	float StartRetryIntervalSeconds{ 0.5f }; // Python start 재시도 간격
 
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python")
-	float DecideIntervalSeconds{ 0.1f };
+	float DecideIntervalSeconds{ 0.1f }; // Python decide 요청 간격
 
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Debug")
-	bool bDrawPythonPathDebug{ true };
+	bool bDrawPythonPathDebug{ true }; // Python path debug draw 표시 여부
 
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Debug")
-	float PythonPathDebugHeightCm{ 40.f };
+	float PythonPathDebugHeightCm{ 40.f }; // Python path debug draw 높이 보정
 
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Debug")
-	float PythonPathDebugLineThickness{ 5.f };
+	float PythonPathDebugLineThickness{ 5.f }; // Python path debug draw 선 두께
 
-	
 private:
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture")
-	FString PythonObservationProfile{ TEXT("point_cloud_capture") }; // Python LiDAR observation profile 이름
+	FString PythonObservationProfile{ TEXT("point_cloud_capture") }; // setup JSON에 Point Cloud 설정이 없을 때 사용할 legacy observation profile
 
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture")
-	bool bEnablePythonPointCloudCapture{ true }; // Python point cloud capture 저장 여부
+	bool bEnablePythonPointCloudCapture{ true }; // setup JSON에 Point Cloud 설정이 없을 때 사용할 legacy capture 저장 여부
 
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture")
-	int32 PythonPointCloudCaptureEveryNSensorFrames{ 10 }; // point cloud capture 저장 sensor frame 간격
+	bool bLogPythonPointCloudStartConfig{ false }; // /scenario/start에 전달되는 최종 Point Cloud 설정 로그 출력 여부
+
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture", meta = (ClampMin = "0"))
+	int32 PythonPointCloudScenarioNumber{ 1 }; // point cloud capture 폴더에 사용할 시나리오 번호
+
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture", meta = (ClampMin = "1", UIMin = "1"))
+	int32 PythonPointCloudCaptureEveryNSensorFrames{ 10 }; // setup JSON에 Point Cloud 설정이 없을 때 사용할 legacy 저장 간격
+
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture", meta = (ClampMin = "1", UIMin = "1"))
+	int32 PythonPointCloudMaxPoints{ 4096 }; // setup JSON에 Point Cloud 설정이 없을 때 사용할 legacy frame당 최대 point 수
+
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture", meta = (ClampMin = "0", UIMin = "0"))
+	float PythonPointCloudRangeLimitM{ 0.f }; // setup JSON에 Point Cloud 설정이 없을 때 사용할 legacy 거리 제한
 
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture")
-	int32 PythonPointCloudMaxPoints{ 4096 }; // point cloud frame당 최대 저장 point 수
+	bool bPythonPointCloudIncludeGroundPoints{ true }; // setup JSON에 Point Cloud 설정이 없을 때 사용할 legacy ground 저장 여부
 
-	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture")
-	bool bPythonPointCloudIncludeGroundPoints{ true }; // tag 없는 ground point 저장 여부
-
-	UPROPERTY(EditAnywhere, Category = "DeliveryBot|Python|Capture")
-	float PythonPointCloudRangeLimitM{ 0.f }; // 0보다 크면 point cloud 저장 거리 제한으로 사용
 
 private:
 	FDeliveryBotPolicyDecisionResultInfo LastPolicyDecisionResult; // 마지막 Python decide 결과와 capture refs
-	
-private:
-	FString EpisodeId;
-	FString ProjectActionEpisodeId; // runner가 지정한 user project output episode id
-	FString RobotInstanceId;
-	FString LastScenarioResultJson;
 
-	int32 LastDecisionSequence{ 0 };
+private:
+	FString EpisodeId; // 현재 Python scenario/capture run id
+	FString ProjectActionEpisodeId; // runner가 지정한 user project output episode id
+	FString RobotInstanceId; // Python payload에 사용하는 robot instance id
+	FString LastScenarioResultJson; // 마지막 scenario result JSON 문자열
+
+	int32 LastDecisionSequence{ 0 }; // 마지막 decide 요청 sequence
 	TSharedPtr<FJsonObject> LastDecisionRequestObject;
 
-	float StartRetryElapsedSeconds{ 0.f };
-	float DecideElapsedSeconds{ 0.f };
+	float StartRetryElapsedSeconds{ 0.f }; // start 재시도 누적 시간
+	float DecideElapsedSeconds{ 0.f }; // decide 요청 누적 시간
 	float LastDecisionRunTimeSeconds{ 0.f }; // 마지막 decide 요청 runtime
 	
 	bool bStartRequested{ false };

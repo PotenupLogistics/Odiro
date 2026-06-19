@@ -4,6 +4,7 @@
 #include "Shared/Struct/DeliveryBot/Setup/DeliveryBotLocationSetupInfo.h"
 #include "Shared/Struct/DeliveryBot/Drive/DeliveryBotDriveConfigInfo.h"
 #include "Shared/Struct/DeliveryBot/Perception/DeliveryBotLidarSensorInfo.h"
+#include "Shared/Struct/DeliveryBot/Perception/DeliveryBotPointCloudCaptureConfigInfo.h"
 #include "DeliveryBotSetupInfo.generated.h"
 
 USTRUCT(BlueprintType)
@@ -20,6 +21,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FDeliveryBotLidarSensorConfigInfo LidarSensorConfigInfo{}; // 라이다 센서의 탐지 거리, 레이 간격, 센서 높이 등
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FDeliveryBotPointCloudCaptureConfigInfo PointCloudCaptureConfigInfo{}; // Python Point Cloud capture profile과 저장 옵션
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FString StartupPolicySpecFileName{ TEXT("PolicySpec_DefaultDelivery") }; // 정책 JSON 파일 명

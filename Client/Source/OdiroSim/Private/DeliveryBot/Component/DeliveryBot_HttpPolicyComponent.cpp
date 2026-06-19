@@ -7,7 +7,7 @@
 #include "Dom/JsonValue.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
-#include "Misc/Guid.h"
+#include "Misc/DateTime.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -18,6 +18,11 @@ DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotHttpPolicy, Log, All);
 
 namespace
 {
+	// Point Cloud 저장 간격이 잘못 들어왔을 때 사용할 기본 sensor frame 간격.
+	constexpr int32 DefaultCaptureEveryNSensorFrames = 10;
+
+	// Point Cloud frame당 최대 point 수가 잘못 들어왔을 때 사용할 기본값.
+	constexpr int32 DefaultMaxPoints = 4096;
 
 	// JSON object field를 안전하게 가져온다.
 	bool TryGetJsonObjectField(const FJsonObject& jsonObject, const FString& fieldName, TSharedPtr<FJsonObject>& outObject)
@@ -462,38 +467,152 @@ bool UDeliveryBot_HttpPolicyComponent::BuildPythonGridObject(TSharedPtr<FJsonObj
 	return true;
 }
 
-// Python point cloud capture 옵션 JSON을 만든다.
-TSharedRef<FJsonObject> UDeliveryBot_HttpPolicyComponent::BuildPointCloudOptionsObject() const
+// setup JSON 우선, 없으면 컴포넌트 기본값으로 Point Cloud 설정을 만든다
+FDeliveryBotPointCloudCaptureConfigInfo UDeliveryBot_HttpPolicyComponent::BuildEffectivePointCloudCaptureConfigInfo(const FDeliveryBotPointCloudCaptureConfigInfo& setupPointCloudConfigInfo) const
 {
-	TSharedRef<FJsonObject> optionsObject = MakeShared<FJsonObject>();
+	if (setupPointCloudConfigInfo.bHasSetupPointCloudConfig)
+		return SanitizePointCloudCaptureConfigInfo(setupPointCloudConfigInfo);
 
-	optionsObject->SetBoolField(TEXT("captureEnabled"), bEnablePythonPointCloudCapture);
-	optionsObject->SetNumberField(TEXT("captureEveryNSensorFrames"), FMath::Max(1, PythonPointCloudCaptureEveryNSensorFrames));
-	optionsObject->SetNumberField(TEXT("maxPoints"), FMath::Max(1, PythonPointCloudMaxPoints));
-	optionsObject->SetBoolField(TEXT("includeGroundPoints"), bPythonPointCloudIncludeGroundPoints);
+	FDeliveryBotPointCloudCaptureConfigInfo effectiveConfigInfo;
+	effectiveConfigInfo.ObservationProfile = PythonObservationProfile;
+	effectiveConfigInfo.bCaptureEnabled = bEnablePythonPointCloudCapture;
+	effectiveConfigInfo.CaptureEveryNSensorFrames = PythonPointCloudCaptureEveryNSensorFrames;
+	effectiveConfigInfo.MaxPoints = PythonPointCloudMaxPoints;
+	effectiveConfigInfo.bIncludeGroundPoints = bPythonPointCloudIncludeGroundPoints;
+	effectiveConfigInfo.RangeLimitM = PythonPointCloudRangeLimitM;
 
-	if (PythonPointCloudRangeLimitM > 0.f)
+	return SanitizePointCloudCaptureConfigInfo(effectiveConfigInfo);
+}
+
+// Python으로 보내기 전 Point Cloud 설정값을 안전한 값으로 보정한다
+FDeliveryBotPointCloudCaptureConfigInfo UDeliveryBot_HttpPolicyComponent::SanitizePointCloudCaptureConfigInfo(const FDeliveryBotPointCloudCaptureConfigInfo& pointCloudConfigInfo) const
+{
+	FDeliveryBotPointCloudCaptureConfigInfo sanitizedConfigInfo = pointCloudConfigInfo;
+	sanitizedConfigInfo.ObservationProfile = sanitizedConfigInfo.ObservationProfile.TrimStartAndEnd();
+
+	if (sanitizedConfigInfo.ObservationProfile.IsEmpty())
 	{
-		optionsObject->SetNumberField(TEXT("rangeLimitM"), PythonPointCloudRangeLimitM);
+		sanitizedConfigInfo.ObservationProfile = sanitizedConfigInfo.bCaptureEnabled ? TEXT("point_cloud_capture") : TEXT("basic");
+
+		UE_LOG(
+			LogDeliveryBotHttpPolicy,
+			Warning,
+			TEXT("Point Cloud observation profile was empty. Using profile=%s."),
+			*sanitizedConfigInfo.ObservationProfile);
 	}
 
+	if (sanitizedConfigInfo.CaptureEveryNSensorFrames <= 0)
+	{
+		UE_LOG(
+			LogDeliveryBotHttpPolicy,
+			Warning,
+			TEXT("Invalid Point Cloud captureEveryNSensorFrames=%d. Using default=%d."),
+			sanitizedConfigInfo.CaptureEveryNSensorFrames,
+			DefaultCaptureEveryNSensorFrames);
+
+		sanitizedConfigInfo.CaptureEveryNSensorFrames = DefaultCaptureEveryNSensorFrames;
+	}
+
+	if (sanitizedConfigInfo.MaxPoints <= 0)
+	{
+		UE_LOG(
+			LogDeliveryBotHttpPolicy,
+			Warning,
+			TEXT("Invalid Point Cloud maxPoints=%d. Using default=%d."),
+			sanitizedConfigInfo.MaxPoints,
+			DefaultMaxPoints);
+
+		sanitizedConfigInfo.MaxPoints = DefaultMaxPoints;
+	}
+
+	if (sanitizedConfigInfo.RangeLimitM < 0.f)
+	{
+		UE_LOG(
+			LogDeliveryBotHttpPolicy,
+			Warning,
+			TEXT("Invalid Point Cloud rangeLimitM=%f. Using unlimited range."),
+			sanitizedConfigInfo.RangeLimitM);
+
+		sanitizedConfigInfo.RangeLimitM = 0.f;
+	}
+
+	return sanitizedConfigInfo;
+}
+
+// Python point cloud capture 옵션 JSON을 만든다
+TSharedRef<FJsonObject> UDeliveryBot_HttpPolicyComponent::BuildPointCloudOptionsObject(const FDeliveryBotPointCloudCaptureConfigInfo& pointCloudConfigInfo) const
+{
+	const FDeliveryBotPointCloudCaptureConfigInfo sanitizedConfigInfo = SanitizePointCloudCaptureConfigInfo(pointCloudConfigInfo);
+
+	TSharedRef<FJsonObject> optionsObject = MakeShared<FJsonObject>();
+	optionsObject->SetBoolField(TEXT("captureEnabled"), sanitizedConfigInfo.bCaptureEnabled);
+	optionsObject->SetNumberField(TEXT("captureEveryNSensorFrames"), sanitizedConfigInfo.CaptureEveryNSensorFrames);
+	optionsObject->SetNumberField(TEXT("maxPoints"), sanitizedConfigInfo.MaxPoints);
+	optionsObject->SetBoolField(TEXT("includeGroundPoints"), sanitizedConfigInfo.bIncludeGroundPoints);
+
+	if (sanitizedConfigInfo.RangeLimitM > 0.f)
+	{
+		optionsObject->SetNumberField(TEXT("rangeLimitM"), sanitizedConfigInfo.RangeLimitM);
+	}
 	return optionsObject;
+}
+
+// /scenario/start에 전달되는 Point Cloud 설정을 로그로 남긴다
+void UDeliveryBot_HttpPolicyComponent::LogPointCloudStartConfig(const FDeliveryBotPointCloudCaptureConfigInfo& pointCloudConfigInfo) const
+{
+	if (!bLogPythonPointCloudStartConfig)
+		return;
+
+	UE_LOG(
+		LogDeliveryBotHttpPolicy,
+		Log,
+		TEXT("PointCloud start config: profile=%s enabled=%s every=%d maxPoints=%d rangeLimitM=%.3f includeGround=%s runId=%s root=%s"),
+		*pointCloudConfigInfo.ObservationProfile,
+		pointCloudConfigInfo.bCaptureEnabled ? TEXT("true") : TEXT("false"),
+		pointCloudConfigInfo.CaptureEveryNSensorFrames,
+		pointCloudConfigInfo.MaxPoints,
+		pointCloudConfigInfo.RangeLimitM,
+		pointCloudConfigInfo.bIncludeGroundPoints ? TEXT("true") : TEXT("false"),
+		*EpisodeId,
+		*BuildPointCloudCaptureRootDirectory());
 }
 
 // Python capture artifact 저장 경로 JSON을 만든다.
 TSharedRef<FJsonObject> UDeliveryBot_HttpPolicyComponent::BuildArtifactSpecObject() const
 {
-	const FString captureRoot = FPaths::Combine(
-		FPaths::ProjectSavedDir(),
-		TEXT("LidarPointCloudCaptures"),
-		EpisodeId,
-		TEXT("captures"));
+	const FString captureRoot = BuildPointCloudCaptureRootDirectory();
 
 	TSharedRef<FJsonObject> artifactSpecObject = MakeShared<FJsonObject>();
 	artifactSpecObject->SetStringField(TEXT("capturesRoot"), captureRoot);
 	artifactSpecObject->SetStringField(TEXT("capturesRootRelative"), TEXT("captures"));
 
 	return artifactSpecObject;
+}
+
+// Point Cloud capture 저장 루트 경로를 만든다.
+FString UDeliveryBot_HttpPolicyComponent::BuildPointCloudCaptureRootDirectory() const
+{
+	const FString scenarioFolderName = FString::Printf(
+		TEXT("scenario_%03d"),
+		FMath::Max(0, PythonPointCloudScenarioNumber));
+
+	return FPaths::Combine(
+		FPaths::ProjectSavedDir(),
+		TEXT("LidarPointCloudCaptures"),
+		scenarioFolderName,
+		EpisodeId,
+		TEXT("captures"));
+}
+
+// 사람이 읽기 쉬운 point cloud capture run id를 만든다.
+FString UDeliveryBot_HttpPolicyComponent::BuildPointCloudCaptureRunId(const FDeliveryBotObservationInfo& observation) const
+{
+	const FString timestampText = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"));
+	return FString::Printf(
+		TEXT("seq_%06d_sensor_%06d_%s"),
+		FMath::Max(0, observation.Sequence),
+		FMath::Max(0, observation.SensorSequence),
+		*timestampText);
 }
 
 // Python response.captures를 capture ref 배열로 변환한다.
@@ -604,15 +723,15 @@ bool UDeliveryBot_HttpPolicyComponent::BuildStartPayload(FString& outPayload)
 		return false;
 	}
 
-	if (EpisodeId.IsEmpty())
-	{
-		EpisodeId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
-	}
-
 	RobotInstanceId = deliveryBot->GetName();
 
 	const FDeliveryBotSetupInfo& setupInfo = deliveryBot->GetSetupInfo();
 	const FDeliveryBotObservationInfo observation = deliveryBot->BuildObservation();
+
+	if (EpisodeId.IsEmpty())
+	{
+		EpisodeId = BuildPointCloudCaptureRunId(observation);
+	}
 
 	TSharedRef<FJsonObject> requestObject = MakeShared<FJsonObject>();
 	requestObject->SetStringField(TEXT("robotInstanceId"), RobotInstanceId);
@@ -662,8 +781,10 @@ bool UDeliveryBot_HttpPolicyComponent::BuildStartPayload(FString& outPayload)
 	lidarSpecObject->SetNumberField(TEXT("collisionStopHalfAngleDegree"), setupInfo.LidarSensorConfigInfo.CollisionStopHalfAngleDegree);
 	lidarSpecObject->SetNumberField(TEXT("collisionStopDistanceM"), setupInfo.LidarSensorConfigInfo.CollisionStopDistanceM);
 	lidarSpecObject->SetNumberField(TEXT("scanRateHz"), setupInfo.LidarSensorConfigInfo.ScanRateHz);
-	lidarSpecObject->SetStringField(TEXT("observationProfile"), PythonObservationProfile);
-	lidarSpecObject->SetObjectField(TEXT("pointCloudOptions"), BuildPointCloudOptionsObject());
+	const FDeliveryBotPointCloudCaptureConfigInfo pointCloudConfigInfo = BuildEffectivePointCloudCaptureConfigInfo(setupInfo.PointCloudCaptureConfigInfo);
+	LogPointCloudStartConfig(pointCloudConfigInfo);
+	lidarSpecObject->SetStringField(TEXT("observationProfile"), pointCloudConfigInfo.ObservationProfile);
+	lidarSpecObject->SetObjectField(TEXT("pointCloudOptions"), BuildPointCloudOptionsObject(pointCloudConfigInfo));
 	
 	requestObject->SetObjectField(TEXT("lidarSpec"), lidarSpecObject);
 	requestObject->SetObjectField(TEXT("artifactSpec"), BuildArtifactSpecObject());

@@ -42,6 +42,12 @@ POINT_CLOUD_ACCUMULATED_FILE_NAME = "map_accumulated.xyz"
 # Unreal world에 그대로 겹쳐 확인하기 위한 누적 point cloud 파일명.
 POINT_CLOUD_WORLD_ACCUMULATED_FILE_NAME = "world_accumulated.xyz"
 
+# capture 결과를 사람이 빠르게 검증하기 위한 summary 파일명.
+POINT_CLOUD_SUMMARY_FILE_NAME = "capture_summary.json"
+
+# 개별 sensor frame debug 파일을 root import 파일과 분리해 저장하는 폴더명.
+POINT_CLOUD_FRAME_DIRECTORY_NAME = "frames"
+
 # Point classification별 표시 색상.
 POINT_CLOUD_CLASSIFICATION_COLORS = {
     "ground": (120, 120, 120),
@@ -69,6 +75,7 @@ class LidarPointCloudRecorder:
     capturesRootRelative: str = "captures"                                          # response에 남길 상대 capture 루트
     lastCapturedSensorSequence: int = -1                                             # 마지막으로 저장한 sensor sequence
     captureOriginCm: dict[str, float] = field(default_factory=dict)                  # import review용 map-local 원점
+    captureSummary: dict[str, Any] = field(default_factory=dict)                      # capture 검증용 누적 summary 상태
 
     # /scenario/start 설정으로 point cloud capture 상태를 초기화한다.
     def configure_from_start(self, request: ScenarioStartRequest) -> None:
@@ -76,6 +83,7 @@ class LidarPointCloudRecorder:
         self.lastCapturedSensorSequence = -1
         self.capturesRoot = None
         self.captureOriginCm = _get_capture_origin_cm(request)
+        self.captureSummary = {}
 
         artifact_spec = request.artifactSpec or {}
         captures_root = str(artifact_spec.get("capturesRoot") or "")
@@ -87,8 +95,10 @@ class LidarPointCloudRecorder:
         try:
             self.capturesRoot = Path(captures_root) / "lidar_point_cloud"
             self.capturesRoot.mkdir(parents=True, exist_ok=True)
+            self._reset_capture_summary()
             self._reset_accumulated_map()
             self._write_manifest()
+            self._write_capture_summary()
         except OSError:
             self.capturesRoot = None
 
@@ -104,6 +114,9 @@ class LidarPointCloudRecorder:
         try:
             file_path = self._write_xyzrgb_frame(frame)
             self._append_frame_index(frame, file_path)
+            self._update_capture_summary(frame, file_path)
+            self._write_capture_summary()
+            capture_path = self._build_capture_reference_path(file_path)
         except OSError:
             return []
 
@@ -117,7 +130,7 @@ class LidarPointCloudRecorder:
                 "sensorTimeSeconds": request.sensorTimeSeconds,
                 "runTimeSeconds": request.runTimeSeconds,
                 "format": "xyzrgb_ascii",
-                "path": f"{self.capturesRootRelative}/lidar_point_cloud/{file_path.name}",
+                "path": capture_path,
             }
         ]
 
@@ -140,7 +153,10 @@ class LidarPointCloudRecorder:
         if self.capturesRoot is None:
             raise OSError("captures root is not configured")
 
-        file_path = self.capturesRoot / f"frame_{frame['sensorSequence']:06d}.xyz"
+        frame_directory = self.capturesRoot / POINT_CLOUD_FRAME_DIRECTORY_NAME
+        frame_directory.mkdir(parents=True, exist_ok=True)
+
+        file_path = frame_directory / f"frame_{frame['sensorSequence']:06d}.xyz"
         lines = _build_xyzrgb_lines(frame["points"])
         world_lines = _build_world_xyzrgb_lines(frame["points"])
 
@@ -156,8 +172,43 @@ class LidarPointCloudRecorder:
 
         accumulated_path = self.capturesRoot / POINT_CLOUD_ACCUMULATED_FILE_NAME
         world_accumulated_path = self.capturesRoot / POINT_CLOUD_WORLD_ACCUMULATED_FILE_NAME
+        frame_index_path = self.capturesRoot / "frames.jsonl"
         accumulated_path.write_text("", encoding="utf-8")
         world_accumulated_path.write_text("", encoding="utf-8")
+        frame_index_path.write_text("", encoding="utf-8")
+
+    # capture summary 상태를 빈 capture 기준으로 초기화한다.
+    def _reset_capture_summary(self) -> None:
+        self.captureSummary = {
+            "schema": "lidar_point_cloud_capture_summary",
+            "version": POINT_CLOUD_SCHEMA_VERSION,
+            "captureType": "lidar_point_cloud",
+            "coordinateFrame": POINT_CLOUD_COORDINATE_FRAME,
+            "sourceCoordinateFrame": POINT_CLOUD_SOURCE_COORDINATE_FRAME,
+            "pointUnit": POINT_CLOUD_UNIT,
+            "pointFormat": POINT_CLOUD_POINT_FORMAT,
+            "mainReviewFile": POINT_CLOUD_ACCUMULATED_FILE_NAME,
+            "debugWorldFile": POINT_CLOUD_WORLD_ACCUMULATED_FILE_NAME,
+            "summaryFile": POINT_CLOUD_SUMMARY_FILE_NAME,
+            "frameDirectory": POINT_CLOUD_FRAME_DIRECTORY_NAME,
+            "frameFilesAreDebugOnly": True,
+            "captureOriginCm": self.captureOriginCm,
+            "importYAxisSign": POINT_CLOUD_IMPORT_Y_SIGN,
+            "frameCount": 0,
+            "totalPointCount": 0,
+            "groundPointCount": 0,
+            "obstaclePointCount": 0,
+            "unknownPointCount": 0,
+            "firstSensorSequence": None,
+            "lastSensorSequence": None,
+            "firstSensorTimeSeconds": None,
+            "lastSensorTimeSeconds": None,
+            "firstRunTimeSeconds": None,
+            "lastRunTimeSeconds": None,
+            "boundsCm": None,
+            "worldBoundsCm": None,
+            "latestFramePath": "",
+        }
 
     # 현재 frame point를 누적 point cloud 파일에 추가한다.
     def _append_accumulated_map(self, lines: list[str]) -> None:
@@ -199,14 +250,75 @@ class LidarPointCloudRecorder:
             "captureOriginCm": self.captureOriginCm,
             "importYAxisSign": POINT_CLOUD_IMPORT_Y_SIGN,
             "robotPoseCm": frame["robotPoseCm"],
-            "path": f"{self.capturesRootRelative}/lidar_point_cloud/{file_path.name}",
+            "path": self._build_capture_reference_path(file_path),
             "accumulatedPath": f"{self.capturesRootRelative}/lidar_point_cloud/{POINT_CLOUD_ACCUMULATED_FILE_NAME}",
             "worldAccumulatedPath": f"{self.capturesRootRelative}/lidar_point_cloud/{POINT_CLOUD_WORLD_ACCUMULATED_FILE_NAME}",
+            "summaryPath": f"{self.capturesRootRelative}/lidar_point_cloud/{POINT_CLOUD_SUMMARY_FILE_NAME}",
         }
 
         index_path = self.capturesRoot / "frames.jsonl"
         with index_path.open("a", encoding="utf-8") as index_file:
             index_file.write(json.dumps(frame_record, ensure_ascii=False) + "\n")
+
+    # capture root 기준 파일 경로를 Python response와 metadata용 참조 문자열로 변환한다.
+    def _build_capture_reference_path(self, file_path: Path) -> str:
+        if self.capturesRoot is None:
+            relative_path = file_path.name
+        else:
+            try:
+                relative_path = file_path.relative_to(self.capturesRoot).as_posix()
+            except ValueError:
+                relative_path = file_path.name
+
+        return f"{self.capturesRootRelative}/lidar_point_cloud/{relative_path}"
+
+    # 저장된 frame 정보를 capture summary 상태에 누적한다.
+    def _update_capture_summary(self, frame: dict[str, Any], file_path: Path) -> None:
+        if not self.captureSummary:
+            self._reset_capture_summary()
+
+        points = frame["points"]
+        frame_count = int(self.captureSummary["frameCount"]) + 1
+
+        if self.captureSummary["firstSensorSequence"] is None:
+            self.captureSummary["firstSensorSequence"] = frame["sensorSequence"]
+            self.captureSummary["firstSensorTimeSeconds"] = frame["sensorTimeSeconds"]
+            self.captureSummary["firstRunTimeSeconds"] = frame["runTimeSeconds"]
+
+        self.captureSummary["frameCount"] = frame_count
+        self.captureSummary["totalPointCount"] = int(self.captureSummary["totalPointCount"]) + len(points)
+        self.captureSummary["groundPointCount"] = int(self.captureSummary["groundPointCount"]) + sum(
+            1 for point in points if point["classification"] == "ground"
+        )
+        self.captureSummary["obstaclePointCount"] = int(self.captureSummary["obstaclePointCount"]) + sum(
+            1 for point in points if point["classification"] == "obstacle"
+        )
+        self.captureSummary["unknownPointCount"] = int(self.captureSummary["unknownPointCount"]) + sum(
+            1 for point in points if point["classification"] not in ("ground", "obstacle")
+        )
+        self.captureSummary["lastSensorSequence"] = frame["sensorSequence"]
+        self.captureSummary["lastSensorTimeSeconds"] = frame["sensorTimeSeconds"]
+        self.captureSummary["lastRunTimeSeconds"] = frame["runTimeSeconds"]
+        self.captureSummary["latestFramePath"] = self._build_capture_reference_path(file_path)
+        self.captureSummary["boundsCm"] = _merge_point_bounds_cm(
+            self.captureSummary["boundsCm"],
+            _get_point_bounds_cm(points, "xCm", "yCm", "zCm"),
+        )
+        self.captureSummary["worldBoundsCm"] = _merge_point_bounds_cm(
+            self.captureSummary["worldBoundsCm"],
+            _get_point_bounds_cm(points, "worldXCm", "worldYCm", "worldZCm"),
+        )
+
+    # capture summary 상태를 JSON 파일로 저장한다.
+    def _write_capture_summary(self) -> None:
+        if self.capturesRoot is None:
+            return
+
+        summary_path = self.capturesRoot / POINT_CLOUD_SUMMARY_FILE_NAME
+        summary_path.write_text(
+            json.dumps(self.captureSummary, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
     # capture 폴더에 사람이 확인할 수 있는 manifest를 저장한다.
     def _write_manifest(self) -> None:
@@ -229,18 +341,27 @@ class LidarPointCloudRecorder:
             "pointColumns": POINT_CLOUD_POINT_COLUMNS,
             "colorMode": "classification_rgb",
             "classificationColors": _get_classification_color_manifest(),
+            "summaryFile": POINT_CLOUD_SUMMARY_FILE_NAME,
             "captureEveryNSensorFrames": self.options.captureEveryNSensorFrames,
             "rangeLimitM": self.options.rangeLimitM,
             "includeGroundPoints": self.options.bIncludeGroundPoints,
             "maxPoints": self.options.maxPoints,
+            "frameDirectory": POINT_CLOUD_FRAME_DIRECTORY_NAME,
+            "frameFilesAreDebugOnly": True,
             "unrealImport": {
                 "plugin": "LiDAR Point Cloud Support",
+                "viewerRole": "official_review",
                 "unrealUnit": "centimeter",
                 "recommendedImportScale": 1,
                 "recommendedActorLocation": {"x": 0, "y": 0, "z": 0},
+                "mainReviewFile": POINT_CLOUD_ACCUMULATED_FILE_NAME,
+                "debugWorldFile": POINT_CLOUD_WORLD_ACCUMULATED_FILE_NAME,
+                "summaryFile": POINT_CLOUD_SUMMARY_FILE_NAME,
                 "accumulatedFile": POINT_CLOUD_ACCUMULATED_FILE_NAME,
                 "worldAccumulatedFile": POINT_CLOUD_WORLD_ACCUMULATED_FILE_NAME,
-                "note": "map_accumulated.xyz is stored as map-local centimeters with Unreal Y flipped for review. world_accumulated.xyz stores raw Unreal world hit locations for world overlay.",
+                "frameDirectory": POINT_CLOUD_FRAME_DIRECTORY_NAME,
+                "frameFilesAreDebugOnly": True,
+                "note": "map_accumulated.xyz is the official plugin review file. Per-frame files under frames/ are debug-only and should not be imported together for map review. world_accumulated.xyz is for raw Unreal world-coordinate validation.",
             },
         }
 
@@ -311,6 +432,65 @@ def _build_world_xyzrgb_lines(points: list[dict[str, Any]]) -> list[str]:
         )
 
     return lines
+
+
+# point 목록에서 지정 좌표 key 기준 bounds를 계산한다.
+def _get_point_bounds_cm(
+    points: list[dict[str, Any]],
+    x_key: str,
+    y_key: str,
+    z_key: str,
+) -> dict[str, float] | None:
+    bounds = None
+
+    for point in points:
+        try:
+            x = float(point[x_key])
+            y = float(point[y_key])
+            z = float(point[z_key])
+        except (KeyError, TypeError, ValueError):
+            continue
+
+        if bounds is None:
+            bounds = {
+                "minX": x,
+                "maxX": x,
+                "minY": y,
+                "maxY": y,
+                "minZ": z,
+                "maxZ": z,
+            }
+            continue
+
+        bounds["minX"] = min(bounds["minX"], x)
+        bounds["maxX"] = max(bounds["maxX"], x)
+        bounds["minY"] = min(bounds["minY"], y)
+        bounds["maxY"] = max(bounds["maxY"], y)
+        bounds["minZ"] = min(bounds["minZ"], z)
+        bounds["maxZ"] = max(bounds["maxZ"], z)
+
+    return bounds
+
+
+# 기존 bounds와 새 frame bounds를 합쳐 episode 전체 bounds를 만든다.
+def _merge_point_bounds_cm(
+    current_bounds: dict[str, float] | None,
+    new_bounds: dict[str, float] | None,
+) -> dict[str, float] | None:
+    if current_bounds is None:
+        return new_bounds
+
+    if new_bounds is None:
+        return current_bounds
+
+    return {
+        "minX": min(current_bounds["minX"], new_bounds["minX"]),
+        "maxX": max(current_bounds["maxX"], new_bounds["maxX"]),
+        "minY": min(current_bounds["minY"], new_bounds["minY"]),
+        "maxY": max(current_bounds["maxY"], new_bounds["maxY"]),
+        "minZ": min(current_bounds["minZ"], new_bounds["minZ"]),
+        "maxZ": max(current_bounds["maxZ"], new_bounds["maxZ"]),
+    }
 
 
 # lidar.rays3d를 import review용 map-local point cloud frame으로 변환한다.

@@ -60,6 +60,25 @@ bool UDeliveryBotSetupCompiler::ReadOptionalFloatField(const FJsonObject& jsonOb
 	return true;
 }
 
+bool UDeliveryBotSetupCompiler::ReadOptionalIntField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, int32& targetValue, int32 minValue, int32 maxValue)
+{
+	if (!jsonObject.HasField(fieldName)) return false;
+
+	double parsedValue = static_cast<double>(targetValue);
+	if (!jsonObject.TryGetNumberField(fieldName, parsedValue))
+	{
+		AddDiagnostic(
+			result,
+			EScenarioCompileDiagnosticSeverity::Error,
+			TEXT("invalid_number"),
+			FString::Printf(TEXT("%s.%s must be a number."), *path, *fieldName));
+		return false;
+	}
+
+	targetValue = FMath::Clamp(FMath::RoundToInt(parsedValue), minValue, maxValue);
+	return true;
+}
+
 bool UDeliveryBotSetupCompiler::ReadOptionalBoolField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, bool& targetValue)
 {
 	if (!jsonObject.HasField(fieldName)) return false;
@@ -378,7 +397,7 @@ void UDeliveryBotSetupCompiler::WarnDeprecatedPathFollow(const FJsonObject& robo
 	}
 }
 
-void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo)
+void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotLidarSensorConfigInfo& lidarSensorConfigInfo, FDeliveryBotPointCloudCaptureConfigInfo& pointCloudCaptureConfigInfo)
 {
 	const TSharedPtr<FJsonValue> lidarValue = robotObject.TryGetField(TEXT("lidar"));
 	if (!lidarValue.IsValid()) return;
@@ -421,6 +440,7 @@ void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDe
 	ReadOptionalFloatField(*lidarObject, TEXT("vertical_min_degree"), path, result, lidarSensorConfigInfo.VerticalMinDegree, -89.0f, 89.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("vertical_max_degree"), path, result, lidarSensorConfigInfo.VerticalMaxDegree, -89.0f, 89.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("vertical_step_degree"), path, result, lidarSensorConfigInfo.VerticalStepDegree, 1.0f);
+	CompilePointCloudCapture(*lidarObject, result, pointCloudCaptureConfigInfo);
 	
 	lidarSensorConfigInfo.ObstacleWarningDistanceM = FMath::Max(
 		lidarSensorConfigInfo.ObstacleWarningDistanceM,
@@ -436,6 +456,46 @@ void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDe
 		lidarSensorConfigInfo.CollisionStopDistanceM,
 		0.0f,
 		lidarSensorConfigInfo.SlowDownDistanceM);
+}
+
+void UDeliveryBotSetupCompiler::CompilePointCloudCapture(const FJsonObject& lidarObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotPointCloudCaptureConfigInfo& pointCloudCaptureConfigInfo)
+{
+	const FString lidarPath = TEXT("robot.lidar");
+	if (lidarObject.HasField(TEXT("observation_profile")))
+	{
+		pointCloudCaptureConfigInfo.bHasSetupPointCloudConfig = true;
+		ReadOptionalStringField(lidarObject, TEXT("observation_profile"), lidarPath, result, pointCloudCaptureConfigInfo.ObservationProfile);
+	}
+
+	const TSharedPtr<FJsonValue> pointCloudValue = lidarObject.TryGetField(TEXT("point_cloud"));
+	if (!pointCloudValue.IsValid())
+	{
+		return;
+	}
+
+	pointCloudCaptureConfigInfo.bHasSetupPointCloudConfig = true;
+	if (pointCloudValue->Type != EJson::Object)
+	{
+		AddDiagnostic(
+			result,
+			EScenarioCompileDiagnosticSeverity::Error,
+			TEXT("invalid_object"),
+			TEXT("robot.lidar.point_cloud must be an object."));
+		return;
+	}
+
+	const TSharedPtr<FJsonObject> pointCloudObject = pointCloudValue->AsObject();
+	if (!pointCloudObject.IsValid())
+	{
+		return;
+	}
+
+	const FString pointCloudPath = TEXT("robot.lidar.point_cloud");
+	ReadOptionalBoolField(*pointCloudObject, TEXT("capture_enabled"), pointCloudPath, result, pointCloudCaptureConfigInfo.bCaptureEnabled);
+	ReadOptionalIntField(*pointCloudObject, TEXT("capture_every_n_sensor_frames"), pointCloudPath, result, pointCloudCaptureConfigInfo.CaptureEveryNSensorFrames, 1);
+	ReadOptionalFloatField(*pointCloudObject, TEXT("range_limit_m"), pointCloudPath, result, pointCloudCaptureConfigInfo.RangeLimitM, 0.0f);
+	ReadOptionalBoolField(*pointCloudObject, TEXT("include_ground_points"), pointCloudPath, result, pointCloudCaptureConfigInfo.bIncludeGroundPoints);
+	ReadOptionalIntField(*pointCloudObject, TEXT("max_points"), pointCloudPath, result, pointCloudCaptureConfigInfo.MaxPoints, 1);
 }
 
 bool UDeliveryBotSetupCompiler::ReadOptionalStringField(const FJsonObject& jsonObject, const FString& fieldName, const FString& path, FDeliveryBotSetupCompileResult& result, FString& targetValue)
@@ -518,7 +578,7 @@ void UDeliveryBotSetupCompiler::CompileRobotObject(const FJsonObject& rootObject
 
 	CompileDrive(*robotObject, result, result.SetupInfo.ChaosDriveConfigInfo);
 	WarnDeprecatedPathFollow(*robotObject, result);
-	CompileLidar(*robotObject, result, result.SetupInfo.LidarSensorConfigInfo);
+	CompileLidar(*robotObject, result, result.SetupInfo.LidarSensorConfigInfo, result.SetupInfo.PointCloudCaptureConfigInfo);
 	CompilePolicy(*robotObject, result, result.SetupInfo.StartupPolicySpecFileName);
 }
 

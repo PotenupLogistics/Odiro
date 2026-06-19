@@ -9,17 +9,23 @@ from app.agents.common.llm_json_client import AgentLlmClient, AgentLlmJsonClient
 from app.agents.result_analysis_v2.analysis_context_builder import AnalysisContextBuilder
 from app.agents.result_analysis_v2.artifact_classifier import ArtifactClassifier
 from app.agents.result_analysis_v2.artifact_parser import ArtifactParser, ParsedArtifact
+from app.agents.result_analysis_v2.data_coverage import DataCoverageBuilder
 from app.agents.result_analysis_v2.episode_metric_extractor import EpisodeMetricExtractor, EpisodeMetrics
 from app.agents.result_analysis_v2.experiment_aggregator import ExperimentAggregator
 from app.agents.result_analysis_v2.failure_pattern_detector import FailurePatternDetector
+from app.agents.result_analysis_v2.finding_builder import FindingBuilder
 from app.agents.result_analysis_v2.llm_failure_analyzer import LlmFailureAnalyzer
 from app.agents.result_analysis_v2.rag_context_builder import FileBasedRagRetrieverAdapterV2, RagContextBuilderV2
 from app.agents.result_analysis_v2.rag_query_builder import RagQueryBuilderV2
 from app.agents.result_analysis_v2.recommendation_generator import RecommendationGenerator
+from app.agents.result_analysis_v2.recommendation_type_decider import RecommendationTypeDecider
 from app.agents.result_analysis_v2.recommendation_validator import RecommendationValidator
 from app.agents.result_analysis_v2.representative_selector import RepresentativeFailedEpisodeSelectorV2
 from app.agents.result_analysis_v2.response_builder import ResponseBuilder
+from app.agents.result_analysis_v2.review_lifecycle import ReviewLifecycleManager, ReviewSession
 from app.agents.result_analysis_v2.run_aggregator import RunAggregator
+from app.agents.result_analysis_v2.run_comparison import PreviousRunComparator
+from app.agents.result_analysis_v2.snapshot_hash import SnapshotHashBuilder
 from app.agents.result_analysis_v2.timeline_builder import EventTimelineBuilderV2
 from app.agents.result_analysis_v2.workspace_scanner import WorkspaceScan, WorkspaceScanner
 from app.core.settings import Settings
@@ -54,68 +60,89 @@ class ResultAnalysisV2Agent:
         self.recommendation_generator = RecommendationGenerator()
         self.recommendation_validator = RecommendationValidator()
         self.response_builder = ResponseBuilder()
+        self.data_coverage_builder = DataCoverageBuilder()
+        self.finding_builder = FindingBuilder()
+        self.recommendation_type_decider = RecommendationTypeDecider()
+        self.snapshot_hash_builder = SnapshotHashBuilder()
+        self.previous_run_comparator = PreviousRunComparator()
+        self.review_lifecycle = ReviewLifecycleManager()
 
     def run(self, request: AnalysisRunV2Request | None = None) -> AnalysisRunV2Response:
-        scan = self.scan(request)
-        root = scan.root
-        parsed = [self.parser.parse(self.classifier.classify(root, path)) for path in scan.files]
-        warnings = [*scan.warnings]
-        for artifact in parsed:
-            warnings.extend(artifact.warnings)
+        review_session = self.review_lifecycle.start(request)
+        try:
+            scan = self.scan(request)
+            root = scan.root
+            parsed = [self.parser.parse(self.classifier.classify(root, path)) for path in scan.files]
+            warnings = [*scan.warnings]
+            for artifact in parsed:
+                warnings.extend(artifact.warnings)
 
-        episodes = self._extract_episodes(parsed)
-        experiments_count, runs_count, episodes_count = self._scope_counts(parsed, episodes)
-        run_summaries = self.run_aggregator.aggregate(episodes)
-        experiment_summaries = self.experiment_aggregator.aggregate(run_summaries)
-        patterns = self.pattern_detector.detect(episodes)
-        episode_metric_dicts = [asdict(episode) for episode in episodes]
-        episode_timelines = self.timeline_builder.build_episode_timelines(
-            parsed_artifacts=self._timeline_inputs(parsed),
-            episode_metrics=episode_metric_dicts,
-        )
-        representative_episodes = self.representative_selector.select(
-            episode_metrics=episode_metric_dicts,
-            episode_timelines=episode_timelines,
-        )
-        rag_queries = self.rag_query_builder.build_queries(
-            failure_patterns=patterns,
-            experiment_aggregates=experiment_summaries,
-            representative_failed_episodes=representative_episodes,
-        )
-        rag_context = self.rag_context_builder.build_context(
-            queries=rag_queries,
-            retrieved_contexts=self.rag_retriever.retrieve(rag_queries),
-        )
-        context = self.context_builder.build(
-            experiments_count=experiments_count,
-            runs_count=runs_count,
-            episodes_count=episodes_count,
-            experiment_summaries=experiment_summaries,
-            run_summaries=run_summaries,
-            failure_patterns=patterns,
-            episode_timelines=episode_timelines,
-            representative_failed_episodes=representative_episodes,
-            rag_context=rag_context,
-        )
-        refs = {(episode.experiment_id, episode.run_id, episode.episode_id) for episode in episodes}
-        recommendations, analysis_mode, llm_warnings = self._recommendations(
-            context=context,
-            patterns=patterns,
-            refs=refs,
-        )
-        warnings.extend(llm_warnings)
+            episodes = self._extract_episodes(parsed)
+            experiments_count, runs_count, episodes_count = self._scope_counts(parsed, episodes)
+            run_summaries = self.run_aggregator.aggregate(episodes)
+            experiment_summaries = self.experiment_aggregator.aggregate(run_summaries)
+            patterns = self.pattern_detector.detect(episodes)
+            episode_metric_dicts = [asdict(episode) for episode in episodes]
+            episode_timelines = self.timeline_builder.build_episode_timelines(
+                parsed_artifacts=self._timeline_inputs(parsed),
+                episode_metrics=episode_metric_dicts,
+            )
+            representative_episodes = self.representative_selector.select(
+                episode_metrics=episode_metric_dicts,
+                episode_timelines=episode_timelines,
+            )
+            rag_queries = self.rag_query_builder.build_queries(
+                failure_patterns=patterns,
+                experiment_aggregates=experiment_summaries,
+                representative_failed_episodes=representative_episodes,
+            )
+            rag_context = self.rag_context_builder.build_context(
+                queries=rag_queries,
+                retrieved_contexts=self.rag_retriever.retrieve(rag_queries),
+            )
+            context = self.context_builder.build(
+                experiments_count=experiments_count,
+                runs_count=runs_count,
+                episodes_count=episodes_count,
+                experiment_summaries=experiment_summaries,
+                run_summaries=run_summaries,
+                failure_patterns=patterns,
+                episode_timelines=episode_timelines,
+                representative_failed_episodes=representative_episodes,
+                rag_context=rag_context,
+            )
+            refs = {(episode.experiment_id, episode.run_id, episode.episode_id) for episode in episodes}
+            recommendations, analysis_mode, llm_warnings = self._recommendations(
+                context=context,
+                patterns=patterns,
+                refs=refs,
+            )
+            warnings.extend(llm_warnings)
 
-        response = self.response_builder.build(
-            experiments_count=experiments_count,
-            runs_count=runs_count,
-            episodes_count=episodes_count,
-            metrics=self._response_metrics(episodes, parsed),
-            patterns=patterns,
-            recommendations=recommendations,
-            warnings=warnings,
-            analysis_mode=analysis_mode,
-        )
-        return self._with_prompt_focus(response, request)
+            response = self.response_builder.build(
+                experiments_count=experiments_count,
+                runs_count=runs_count,
+                episodes_count=episodes_count,
+                metrics=self._response_metrics(episodes, parsed),
+                patterns=patterns,
+                recommendations=recommendations,
+                warnings=warnings,
+                analysis_mode=analysis_mode,
+            )
+            response = self._with_prompt_focus(response, request)
+            self._complete_review_if_started(
+                session=review_session,
+                request=request,
+                response=response,
+                parsed=parsed,
+                episodes=episodes,
+                warnings=warnings,
+            )
+            return response
+        except Exception as exc:
+            if review_session is not None:
+                self.review_lifecycle.fail(session=review_session, code=exc.__class__.__name__, message=str(exc))
+            raise
 
     def _default_root(self) -> Path:
         configured_root = self.settings.experiments_dir
@@ -148,7 +175,7 @@ class ResultAnalysisV2Agent:
             parts = path.relative_to(project_root).parts
         except ValueError:
             return False
-        return len(parts) >= 2 and parts[0] == "runs" and parts[1] == run_id
+        return len(parts) >= 2 and parts[0] == "runs" and parts[1] == run_id and (len(parts) < 3 or parts[2] != "review")
 
     def _missing_episode_artifact_warnings(self, run_path: Path) -> list[str]:
         """Report absent optional episode artifacts without failing alpha analysis."""
@@ -320,6 +347,131 @@ class ResultAnalysisV2Agent:
         suffix = f" 사용자 요청 관점: {', '.join(focus)} 중심으로 확인했습니다."
         response.summary.message = f"{response.summary.message}{suffix}"
         return response
+
+    def _complete_review_if_started(
+        self,
+        *,
+        session: ReviewSession | None,
+        request: AnalysisRunV2Request | None,
+        response: AnalysisRunV2Response,
+        parsed: list[ParsedArtifact],
+        episodes: list[EpisodeMetrics],
+        warnings: list[str],
+    ) -> None:
+        """Finalize review artifacts when this request has a valid run directory."""
+        if session is None or request is None:
+            return
+        try:
+            run_path = Path(request.project_path) / "runs" / request.run_id
+            data_coverage = self.data_coverage_builder.build(
+                run_path=run_path,
+                parsed_artifacts=parsed,
+                warnings=warnings,
+            )
+            findings, evidence = self.finding_builder.build(
+                episodes=episodes,
+                parsed_artifacts=parsed,
+                prompt_focus=self._prompt_focus(request),
+            )
+            decision = self.recommendation_type_decider.decide(
+                summary_judgement=response.summary.overall_judgement,
+                findings=findings,
+                data_coverage=data_coverage,
+            )
+            self._align_response_summary_with_review_decision(
+                response=response,
+                recommendation_type=decision.recommendation_type,
+                findings=findings,
+                prompt_focus=self._prompt_focus(request),
+            )
+            snapshot_hashes = self.snapshot_hash_builder.build(project_path=Path(request.project_path), run_id=request.run_id)
+            comparison = self.previous_run_comparator.compare(
+                project_path=Path(request.project_path),
+                run_id=request.run_id,
+                current_snapshot_hashes=snapshot_hashes,
+            )
+            report = {
+                "summary": response.summary.model_dump(),
+                "metrics": response.metrics.model_dump(),
+                "data_coverage": data_coverage,
+                "findings": findings,
+                "evidence": evidence,
+            }
+            recommendation_artifact = {
+                "recommendation_type": decision.recommendation_type,
+                "recommendations": response.recommendations,
+                "reason": decision.reason,
+                "evidence_ids": decision.evidence_ids,
+            }
+            manifest = {
+                "snapshot_hashes": snapshot_hashes,
+                "comparison": comparison,
+            }
+            self.review_lifecycle.complete(
+                session=session,
+                response=response,
+                report=report,
+                recommendations=recommendation_artifact,
+                manifest=manifest,
+                source_run_files=self._source_run_files(parsed),
+            )
+        except Exception as exc:
+            self.review_lifecycle.fail(session=session, code=exc.__class__.__name__, message=str(exc))
+            response.warnings.append(f"review artifact write failed: {exc}")
+
+    def _source_run_files(self, parsed: list[ParsedArtifact]) -> list[str]:
+        """Return source run files used by analysis, excluding generated review artifacts."""
+        return sorted(
+            artifact.info.relative_path
+            for artifact in parsed
+            if not artifact.info.relative_path.startswith("runs/")
+            or "/review/" not in artifact.info.relative_path
+        )
+
+    def _align_response_summary_with_review_decision(
+        self,
+        *,
+        response: AnalysisRunV2Response,
+        recommendation_type: str,
+        findings: list[dict[str, Any]],
+        prompt_focus: list[str],
+    ) -> None:
+        """Keep user-facing summary consistent with review artifact recommendation type."""
+        if recommendation_type == "none":
+            response.summary.overall_judgement = "no_change_needed"
+            return
+        if recommendation_type == "insufficient_data":
+            response.summary.overall_judgement = "insufficient_data"
+            return
+
+        response.summary.overall_judgement = "change_recommended"
+        finding_types = {str(finding.get("type")) for finding in findings}
+        if "penalty_region_violation" in finding_types:
+            if (
+                ("obstacle" in prompt_focus or "collision" in prompt_focus)
+                and not {"static_obstacle_collision", "blocked_region_collision"} & finding_types
+            ):
+                response.summary.message = (
+                    "사용자 요청 관점: 요청한 장애물/충돌 근거는 확인되지 않았고, "
+                    "penalty region violation 근거가 확인되어 정책 검토가 필요합니다."
+                )
+            else:
+                response.summary.message = "Penalty region violation이 반복되어 정책 검토가 필요합니다."
+                self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
+            return
+        if recommendation_type == "environment_review":
+            response.summary.message = "환경 또는 장애물 관련 충돌 근거가 확인되어 환경 검토가 필요합니다."
+            self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
+            return
+        response.summary.message = "로그 근거가 있는 실패 징후가 확인되어 정책 검토가 필요합니다."
+        self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
+
+    def _append_prompt_focus_message(self, *, response: AnalysisRunV2Response, prompt_focus: list[str]) -> None:
+        """Append prompt focus text when summary alignment replaced the original message."""
+        if prompt_focus and "사용자 요청 관점" not in response.summary.message:
+            response.summary.message = (
+                f"{response.summary.message} 사용자 요청 관점: {', '.join(prompt_focus)} 중심으로 확인했습니다."
+            )
 
     def _recommendations(
         self,

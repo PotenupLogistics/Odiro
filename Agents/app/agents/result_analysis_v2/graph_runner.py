@@ -27,30 +27,48 @@ class ResultAnalysisGraphRunnerV2:
         self.last_state: ResultAnalysisGraphStateV2 = {}
 
     def run(self, request=None):
-        state = self._init_state(request)
-        for node in (
-            self.scan_workspace_node,
-            self.classify_artifacts_node,
-            self.parse_artifacts_node,
-            self.extract_episode_metrics_node,
-            self.build_event_timelines_node,
-            self.select_representative_failed_episodes_node,
-            self.aggregate_runs_node,
-            self.aggregate_experiments_node,
-            self.detect_failure_patterns_node,
-            self.route_analysis_need_node,
-            self.build_rag_queries_node,
-            self.retrieve_rag_context_node,
-            self.build_analysis_context_node,
-            self.analyze_failure_node,
-            self.generate_recommendations_node,
-            self.validate_recommendations_node,
-            self.route_recommendation_validation_node,
-            self.build_response_node,
-        ):
-            state = node(state)
-        self.last_state = state
-        return state["response"]
+        review_session = self.agent.review_lifecycle.start(request)
+        try:
+            state = self._init_state(request)
+            for node in (
+                self.scan_workspace_node,
+                self.classify_artifacts_node,
+                self.parse_artifacts_node,
+                self.extract_episode_metrics_node,
+                self.build_event_timelines_node,
+                self.select_representative_failed_episodes_node,
+                self.aggregate_runs_node,
+                self.aggregate_experiments_node,
+                self.detect_failure_patterns_node,
+                self.route_analysis_need_node,
+                self.build_rag_queries_node,
+                self.retrieve_rag_context_node,
+                self.build_analysis_context_node,
+                self.analyze_failure_node,
+                self.generate_recommendations_node,
+                self.validate_recommendations_node,
+                self.route_recommendation_validation_node,
+                self.build_response_node,
+            ):
+                state = node(state)
+            self.agent._complete_review_if_started(
+                session=review_session,
+                request=request,
+                response=state["response"],
+                parsed=state.get("parsed_artifacts", []),
+                episodes=state.get("episode_metrics", []),
+                warnings=state.get("warnings", []),
+            )
+            self.last_state = state
+            return state["response"]
+        except Exception as exc:
+            if review_session is not None:
+                self.agent.review_lifecycle.fail(
+                    session=review_session,
+                    code=exc.__class__.__name__,
+                    message=str(exc),
+                )
+            raise
 
     def _init_state(self, request=None) -> ResultAnalysisGraphStateV2:
         return {

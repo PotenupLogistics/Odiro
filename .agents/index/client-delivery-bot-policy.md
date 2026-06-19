@@ -17,6 +17,7 @@ entry:
   - DeliveryBotPointCloudReviewActor.h / .cpp
   - DeliveryBotBodyConfigInfo.h
   - DeliveryBotPointCloudCaptureConfigInfo.h
+  - DeliveryBotPolicyEventSnapshot.h
   - DeliveryBotSetupCompiler.h / .cpp
   - DeliveryBotPythonDeveloperSettings.h / .cpp
   - DeliveryBotPythonProcessSubsystem.h / .cpp
@@ -49,9 +50,13 @@ keep:
   - Keep point cloud capture folders readable with scenario/run ids rather than opaque GUID-only names.
   - Keep DeliveryBotPointCloudReviewActor as a path lookup and small-point debug helper, not the primary point cloud renderer.
   - Keep Python reset tools template-based with backups; do not use git history operations for user-code restore.
+  - Keep Python policy event classification in DeliveryBot_HttpPolicyComponent; ScenarioEvaluationSubsystem receives normalized FDeliveryBotPolicyEventSnapshot values and owns episode event publication.
+  - Keep Python user_agent.py emitting actual RePath decisions through response.events; C++ should not infer RePath from generic slowdown/path-follow reasons.
 verify:
   - DeliveryBot automation tests for component changes
   - policy request/response contract for HTTP policy fields
+  - policy server failure, policy failure, and RePath event routing through ScenarioEvaluationSubsystem.OnEvaluationEvent
+  - PythonAgent py_compile after changing response.events emission
   - runtime movement/pathing smoke for behavior changes
   - PythonAgent py_compile for Python policy/observer changes
   - validate_lidar_capture for saved LiDAR Point Cloud capture folders

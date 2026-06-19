@@ -76,6 +76,7 @@ verify:
   - `OdiroSim.UserProjectData.RunOutput.Write` after user project result writer changes
   - `OdiroSim.UserProjectData.RobotAction.Write` after policy action logging changes
   - `OdiroSim.UserProjectData.EpisodeTrace.Write` after runtime trace logging changes
+  - policy event JSONL/log mapping after adding new `EEpisodeEvaluationEventType` values
   - focused automation tests for Scenario/Episode changes
   - Client/Task-RunPreview.bat smoke when wrapper supports the changed mode
 related:

@@ -67,6 +67,14 @@ schema:
 | `tip_over_angle_deg`       | number | 전복 판정 각도        |
 | `near_miss_distance_m`     | number | 보행자 near-miss 거리 |
 
+`evaluation` optional field:
+
+| Field                        | Type   | 의미                                                   |
+| ---------------------------- | ------ | ------------------------------------------------------ |
+| `stuck_detection_window_s`   | number | Stuck 이벤트를 기록하기 전 goal progress 관찰 시간     |
+| `stuck_min_goal_progress_m`  | number | 유의미한 goal distance 개선으로 인정할 최소 거리       |
+| `stuck_speed_threshold_kmh`  | number | 정체 상태로 간주하는 robot 관측 속도 상한              |
+
 Seed:
 
 ```text

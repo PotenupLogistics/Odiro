@@ -299,21 +299,34 @@ void UDeliveryBotSetupCompiler::CompileDrive( const FJsonObject& robotObject, FD
 	const FString path = TEXT("robot.drive");
 	ReadOptionalFloatField(*driveObject, TEXT("max_speed_kmh"), path, result, driveConfigInfo.MaxSpeedKmh, 0.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("slowdown_speed_range_kmh"), path, result, driveConfigInfo.SlowdownSpeedRangeKmh, 0.1f);
+	ReadOptionalFloatField(*driveObject, TEXT("slowdown_range_kmh"), path, result, driveConfigInfo.SlowdownSpeedRangeKmh, 0.1f);
 	ReadOptionalFloatField(*driveObject, TEXT("speed_limit_tolerance_kmh"), path, result, driveConfigInfo.SpeedLimitToleranceKmh, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("speed_tolerance_kmh"), path, result, driveConfigInfo.SpeedLimitToleranceKmh, 0.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("speed_limit_brake"), path, result, driveConfigInfo.SpeedLimitBrake, 0.0f, 1.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("stop_brake_input"), path, result, driveConfigInfo.StopBrakeInput, 0.0f, 1.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("stop_brake"), path, result, driveConfigInfo.StopBrakeInput, 0.0f, 1.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("throttle_input_rate_per_second"), path, result, driveConfigInfo.ThrottleInputRatePerSecond, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("throttle_rate_per_s"), path, result, driveConfigInfo.ThrottleInputRatePerSecond, 0.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("brake_input_rate_per_second"), path, result, driveConfigInfo.BrakeInputRatePerSecond, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("brake_rate_per_s"), path, result, driveConfigInfo.BrakeInputRatePerSecond, 0.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("steering_input_rate_per_second"), path, result, driveConfigInfo.SteeringInputRatePerSecond, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("steering_rate_per_s"), path, result, driveConfigInfo.SteeringInputRatePerSecond, 0.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("acceleration_rate_kmh_per_second"), path, result, driveConfigInfo.AccelerationRateKmhPerSecond, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("accel_kmh_per_s"), path, result, driveConfigInfo.AccelerationRateKmhPerSecond, 0.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("deceleration_rate_kmh_per_second"), path, result, driveConfigInfo.DecelerationRateKmhPerSecond, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("decel_kmh_per_s"), path, result, driveConfigInfo.DecelerationRateKmhPerSecond, 0.0f);
 	ReadOptionalBoolField(*driveObject, TEXT("use_handbrake_when_brake"), path, result, driveConfigInfo.bUseHandbrakeWhenBrake);
+	ReadOptionalBoolField(*driveObject, TEXT("use_handbrake"), path, result, driveConfigInfo.bUseHandbrakeWhenBrake);
 	ReadOptionalFloatField(*driveObject, TEXT("max_torque"), path, result, driveConfigInfo.MaxTorque, 0.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("max_rpm"), path, result, driveConfigInfo.MaxRPM, 1.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("engine_idle_rpm"), path, result, driveConfigInfo.EngineIdleRPM, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("idle_rpm"), path, result, driveConfigInfo.EngineIdleRPM, 0.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("engine_brake_effect"), path, result, driveConfigInfo.EngineBrakeEffect, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("engine_brake"), path, result, driveConfigInfo.EngineBrakeEffect, 0.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("engine_rev_up_moi"), path, result, driveConfigInfo.EngineRevUpMOI, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("rev_up_moi"), path, result, driveConfigInfo.EngineRevUpMOI, 0.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("engine_rev_down_rate"), path, result, driveConfigInfo.EngineRevDownRate, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("rev_down_rate"), path, result, driveConfigInfo.EngineRevDownRate, 0.0f);
 }
 
 void UDeliveryBotSetupCompiler::WarnDeprecatedPathFollow(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result)
@@ -408,8 +421,10 @@ void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDe
 	ReadOptionalBoolField(*lidarObject, TEXT("draw_near_obstacle_warning_debug"), path, result, lidarSensorConfigInfo.bDrawObstacleWarningDebug);
 	ReadOptionalBoolField(*lidarObject, TEXT("draw_obstacle_warning_debug"), path, result, lidarSensorConfigInfo.bDrawObstacleWarningDebug);
 	ReadOptionalFloatField(*lidarObject, TEXT("scan_range_m"), path, result, lidarSensorConfigInfo.ScanRangeM, 0.0f);
+	ReadOptionalFloatField(*lidarObject, TEXT("range_m"), path, result, lidarSensorConfigInfo.ScanRangeM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("angle_step_degree"), path, result, lidarSensorConfigInfo.AngleStepDegree, 1.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("sensor_height_m"), path, result, lidarSensorConfigInfo.SensorHeightM, 0.0f);
+	ReadOptionalFloatField(*lidarObject, TEXT("height_m"), path, result, lidarSensorConfigInfo.SensorHeightM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("front_half_angle_degree"), path, result, lidarSensorConfigInfo.FrontHalfAngleDegree, 0.0f, 180.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("stop_distance_m"), path, result, lidarSensorConfigInfo.StopDistanceM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("near_miss_distance_m"), path, result, lidarSensorConfigInfo.ObstacleWarningDistanceM, 0.0f);

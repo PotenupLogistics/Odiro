@@ -1,5 +1,12 @@
 # Research Alignment
 
+상태: legacy Proto-AI research alignment note.
+
+- 현재 user project scenario 계약 기준 아님
+- 현재 scenario 기준: `contracts/specs/user-project-data.md`
+- WorldConfig/EpisodeSpec 언급은 이전 generation flow 설명
+- 본문에서 "현재 프로젝트"는 이 문서 작성 당시 Proto-AI 적용 범위를 뜻함
+
 ## 1. 목적
 
 이 문서는 Eureka / DrEureka / Scenic 원 개념과 현재 Proto-AI 프로젝트의 적용 범위를 비교해 정리한다.
@@ -78,7 +85,7 @@ Scenic은 probabilistic scenario specification language다.
 현재 프로젝트와의 관계:
 
 * 현재 프로젝트는 Scenic 전체 구현이 아니다.
-* 현재 프로젝트는 Scenic DSL을 사용하고 있지 않다.
+* 이 문서 작성 당시 프로젝트는 Scenic DSL을 사용하고 있지 않았다.
 * 현재 프로젝트에 Scenic runtime dependency를 추가하지 않았다.
 * 현재 프로젝트는 Scenic-inspired placement and scenario sampling direction을 일부 참고한다.
 * 현재 구현은 자연어 -> WorldConfig -> EpisodeSpec 변환 구조다.
@@ -197,8 +204,8 @@ Scenic-inspired placement and scenario sampling direction:
 * Eureka는 향후 Result Analysis Agent와 policy recommendation 구조의 아이디어 근거다.
 * DrEureka는 environmentSampling과 향후 환경 변수 범위 추천의 연구적 근거다.
 * Scenic은 향후 Scenic-inspired placement and scenario sampling direction의 연구적 근거다.
-* 현재는 Scenic DSL이 아니라 WorldConfig/EpisodeSpec 기반이다.
-* 현재 구현은 UE EpisodeSpec scenario generation과 handoff까지다.
+* 이전 generation flow는 Scenic DSL이 아니라 WorldConfig/EpisodeSpec 기반이었다.
+* 이전 구현 범위는 UE EpisodeSpec scenario generation과 handoff까지였다.
 
 피해야 할 표현:
 

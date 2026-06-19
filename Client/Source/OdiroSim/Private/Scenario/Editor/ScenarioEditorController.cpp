@@ -28,11 +28,42 @@ namespace
 			|| placeableComponent->AuthoringRole == EScenarioPlaceableAuthoringRole::RobotGoalMarker;
 	}
 
+	// Identifies vertex handles so transform editing can update corridor axis points.
+	bool IsCorridorVertexHandlePlaceable(const UScenarioPlaceableComponent* placeableComponent)
+	{
+		return placeableComponent
+			&& placeableComponent->AuthoringRole == EScenarioPlaceableAuthoringRole::CorridorVertexHandle;
+	}
+
+	// Identifies segment handles so transform editing can update a corridor polyline edge.
+	bool IsCorridorSegmentHandlePlaceable(const UScenarioPlaceableComponent* placeableComponent)
+	{
+		return placeableComponent
+			&& placeableComponent->AuthoringRole == EScenarioPlaceableAuthoringRole::CorridorSegmentHandle;
+	}
+
+	// Groups all Corridor axis handles behind one editor-only placeable predicate.
+	bool IsCorridorHandlePlaceable(const UScenarioPlaceableComponent* placeableComponent)
+	{
+		return IsCorridorVertexHandlePlaceable(placeableComponent)
+			|| IsCorridorSegmentHandlePlaceable(placeableComponent);
+	}
+
 	bool IsTransformModeAllowedForPlaceable(
 		const UScenarioPlaceableComponent* placeableComponent,
 		EScenarioTransformGizmoMode mode)
 	{
 		if (!placeableComponent) return false;
+
+		if (IsCorridorVertexHandlePlaceable(placeableComponent))
+		{
+			return mode == EScenarioTransformGizmoMode::Translate;
+		}
+		if (IsCorridorSegmentHandlePlaceable(placeableComponent))
+		{
+			return mode == EScenarioTransformGizmoMode::Translate
+				|| mode == EScenarioTransformGizmoMode::Rotate;
+		}
 
 		switch (mode)
 		{
@@ -41,7 +72,7 @@ namespace
 		case EScenarioTransformGizmoMode::Rotate:
 			return placeableComponent->bAuthoringAllowRotationEdit;
 		case EScenarioTransformGizmoMode::Scale:
-			// scale은 gizmo로 동작하는 핸들이 없으므로 모드 진입 자체를 막음(빈 gizmo 방지).
+			// Scale has no dedicated gizmo handle, so block entering scale mode.
 			return false;
 		default:
 			return false;
@@ -53,6 +84,20 @@ namespace
 		EScenarioTransformGizmoHandle handle)
 	{
 		if (!placeableComponent) return false;
+
+		if (IsCorridorVertexHandlePlaceable(placeableComponent))
+		{
+			return handle == EScenarioTransformGizmoHandle::TranslateX
+				|| handle == EScenarioTransformGizmoHandle::TranslateY
+				|| handle == EScenarioTransformGizmoHandle::TranslateXY;
+		}
+		if (IsCorridorSegmentHandlePlaceable(placeableComponent))
+		{
+			return handle == EScenarioTransformGizmoHandle::TranslateX
+				|| handle == EScenarioTransformGizmoHandle::TranslateY
+				|| handle == EScenarioTransformGizmoHandle::TranslateXY
+				|| handle == EScenarioTransformGizmoHandle::RotateZ;
+		}
 
 		switch (handle)
 		{
@@ -459,7 +504,7 @@ bool AScenarioEditorController::BeginGroundRegionDraw(EScenarioGroundRegionType 
 
 	PendingGroundRegionType = regionType;
 
-	// 프리뷰 actor를 미리 준비하되 드래그 시작 전까지는 숨김.
+	// Prepare the preview actor before the drag interaction starts.
 	if (AScenarioGroundRegion* previewActor = EnsureRegionDrawPreviewActor())
 	{
 		previewActor->SetActorHiddenInGame(true);
@@ -521,7 +566,7 @@ void AScenarioEditorController::FinalizeRegionDrag()
 		previewActor->SetActorHiddenInGame(true);
 	}
 
-	// 너무 작은 사각형은 stray click으로 보고 커밋하지 않음.
+	// Treat rectangles below the minimum size as stray clicks and skip committing them.
 	if (size.X < RegionDrawMinSizeCm || size.Y < RegionDrawMinSizeCm)
 	{
 		return;
@@ -550,7 +595,7 @@ void AScenarioEditorController::FinalizeRegionDrag()
 			*failureReason);
 	}
 
-	// 연속 그리기: EditRegionDraw 모드를 유지함.
+	// Keep EditRegionDraw mode active for continuous drawing.
 }
 
 bool AScenarioEditorController::TraceMouseToGroundRegionPlane(FVector& outPoint) const
@@ -648,7 +693,7 @@ void AScenarioEditorController::GetStaticObstaclePaletteEntries(TArray<FScenario
 	}
 }
 
-bool AScenarioEditorController::ExportAndValidateScenarioSetupJsonString(
+bool AScenarioEditorController::ExportAndValidateProjectScenarioJsonString(
 	FString& outJsonString,
 	TArray<FString>& outDiagnostics) const
 {
@@ -662,10 +707,10 @@ bool AScenarioEditorController::ExportAndValidateScenarioSetupJsonString(
 		return false;
 	}
 
-	return authoringSubsystem->ExportAndValidateScenarioSetupJsonString(outJsonString, outDiagnostics);
+	return authoringSubsystem->ExportAndValidateProjectScenarioJsonString(outJsonString, outDiagnostics);
 }
 
-bool AScenarioEditorController::LoadScenarioSetupJsonFile(
+bool AScenarioEditorController::LoadProjectScenarioJsonFile(
 	const FString& jsonFilePath,
 	FString& outResolvedJsonFilePath,
 	TArray<FString>& outDiagnostics)
@@ -681,7 +726,7 @@ bool AScenarioEditorController::LoadScenarioSetupJsonFile(
 	}
 
 	CancelPlacement();
-	return authoringSubsystem->LoadScenarioSetupJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
+	return authoringSubsystem->LoadProjectScenarioJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
 }
 
 void AScenarioEditorController::NewScenarioDraft()
@@ -693,7 +738,7 @@ void AScenarioEditorController::NewScenarioDraft()
 	}
 }
 
-bool AScenarioEditorController::SaveScenarioSetupJsonFile(
+bool AScenarioEditorController::SaveProjectScenarioJsonFile(
 	const FString& jsonFilePath,
 	FString& outResolvedJsonFilePath,
 	TArray<FString>& outDiagnostics)
@@ -708,13 +753,13 @@ bool AScenarioEditorController::SaveScenarioSetupJsonFile(
 		return false;
 	}
 
-	return authoringSubsystem->SaveScenarioSetupJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
+	return authoringSubsystem->SaveProjectScenarioJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
 }
 
-FString AScenarioEditorController::GetSourceScenarioSetupJsonPath() const
+FString AScenarioEditorController::GetSourceProjectScenarioJsonPath() const
 {
 	const UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
-	return authoringSubsystem ? authoringSubsystem->GetSourceScenarioSetupJsonPath() : FString();
+	return authoringSubsystem ? authoringSubsystem->GetSourceProjectScenarioJsonPath() : FString();
 }
 
 UScenarioEditorToolbarWidget* AScenarioEditorController::ShowToolbarWidget()
@@ -783,7 +828,8 @@ bool AScenarioEditorController::CanEditTransformGizmoOrientationForSelection() c
 {
 	const UScenarioPlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
 	return IsEditorSelectablePlaceable(selectedPlaceable)
-		&& !IsRobotRouteMarkerPlaceable(selectedPlaceable);
+		&& !IsRobotRouteMarkerPlaceable(selectedPlaceable)
+		&& !IsCorridorHandlePlaceable(selectedPlaceable);
 }
 
 void AScenarioEditorController::SetTransformGizmoOrientationMode(
@@ -801,7 +847,7 @@ void AScenarioEditorController::SetTransformGizmoOrientationMode(
 
 	TransformGizmoOrientationMode = orientationMode;
 	UpdateTransformGizmoForSelection();
-	UpdatePlaceableContextMenuForSelection(false);
+	UpdatePlaceableDetailsForSelection(false);
 }
 
 bool AScenarioEditorController::TryUpdateSelectedPlaceableTransform(
@@ -848,7 +894,21 @@ bool AScenarioEditorController::TryUpdateSelectedPlaceableTransform(
 	}
 
 	bool bUpdated = false;
-	if (selectedPlaceable->Category == EScenarioActorCategory::StaticObstacle)
+	if (selectedPlaceable->AuthoringRole == EScenarioPlaceableAuthoringRole::CorridorVertexHandle)
+	{
+		bUpdated = authoringSubsystem->UpdateCorridorVertexHandleTransform(
+			selectedPlaceable->InstanceId,
+			requestedTransform,
+			outFailureReason);
+	}
+	else if (selectedPlaceable->AuthoringRole == EScenarioPlaceableAuthoringRole::CorridorSegmentHandle)
+	{
+		bUpdated = authoringSubsystem->UpdateCorridorSegmentHandleTransform(
+			selectedPlaceable->InstanceId,
+			requestedTransform,
+			outFailureReason);
+	}
+	else if (selectedPlaceable->Category == EScenarioActorCategory::StaticObstacle)
 	{
 		bUpdated = authoringSubsystem->UpdateStaticObstacleTransform(
 			selectedPlaceable->InstanceId,
@@ -881,7 +941,11 @@ bool AScenarioEditorController::TryUpdateSelectedPlaceableTransform(
 	}
 
 	UpdateTransformGizmoForSelection();
-	UpdatePlaceableContextMenuForSelection(false);
+	UpdatePlaceableDetailsForSelection(false);
+	if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
+	{
+		rootWidget->RefreshTemplateSidebarWidget();
+	}
 	return true;
 }
 
@@ -922,7 +986,7 @@ bool AScenarioEditorController::TryRenameSelectedPlaceableInstanceId(
 	}
 
 	UpdateTransformGizmoForSelection();
-	UpdatePlaceableContextMenuForSelection(false);
+	UpdatePlaceableDetailsForSelection(false);
 	return true;
 }
 
@@ -976,7 +1040,7 @@ bool AScenarioEditorController::DeleteSelectedPlaceable(FString& outFailureReaso
 
 	SelectedPlaceableComponent.Reset();
 	HideTransformGizmo();
-	HidePlaceableContextMenu();
+	HidePlaceableDetails();
 	ApplyInputMode();
 	return true;
 }
@@ -1136,7 +1200,7 @@ void AScenarioEditorController::HandleEditorMoveAction(const FInputActionValue& 
 
 	if (EditorViewMode == EScenarioEditorViewMode::TopDownOrtho)
 	{
-		// top-down에서는 zoom을 마우스 휠(EditorZoomAction)으로만 처리하고 Z축 입력은 무시함.
+		// In top-down view, zoom is handled by mouse-wheel input, so ignore Z-axis movement here.
 		editorPawn->ApplyTopDownPanInput(forwardValue, rightValue);
 		return;
 	}
@@ -1178,8 +1242,8 @@ void AScenarioEditorController::HandleEditorLookAction(const FInputActionValue& 
 
 	LookCaptureAccumulatedDelta += FVector2D(yawValue, pitchValue).Size();
 
-	// top-down에서는 회전 대신 drag pan으로 라우팅함.
-	// 클릭 선택이 look capture의 누적 delta에 의존하므로 capture 자체는 유지함.
+	// In top-down view, route look input to drag panning instead of rotation.
+	// Selection clicks depend on accumulated look-capture delta, so capture state remains active.
 	if (EditorViewMode == EScenarioEditorViewMode::TopDownOrtho)
 	{
 		editorPawn->ApplyTopDownDragPanInput(yawValue, pitchValue);
@@ -1506,6 +1570,10 @@ void AScenarioEditorController::EndTransformGizmoDrag()
 
 	ResetTransformGizmoDrag();
 	UpdateTransformGizmoForSelection();
+	if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
+	{
+		rootWidget->RefreshTemplateSidebarWidget();
+	}
 	ApplyInputMode();
 }
 
@@ -1699,6 +1767,20 @@ bool AScenarioEditorController::ApplyTransformGizmoDragTransform(const FTransfor
 	{
 		bUpdated = false;
 	}
+	else if (draggedPlaceable->AuthoringRole == EScenarioPlaceableAuthoringRole::CorridorVertexHandle)
+	{
+		bUpdated = authoringSubsystem->UpdateCorridorVertexHandleTransform(
+			ActiveTransformGizmoInstanceId,
+			requestedTransform,
+			failureReason);
+	}
+	else if (draggedPlaceable->AuthoringRole == EScenarioPlaceableAuthoringRole::CorridorSegmentHandle)
+	{
+		bUpdated = authoringSubsystem->UpdateCorridorSegmentHandleTransform(
+			ActiveTransformGizmoInstanceId,
+			requestedTransform,
+			failureReason);
+	}
 	else if (draggedPlaceable->Category == EScenarioActorCategory::StaticObstacle)
 	{
 		bUpdated = authoringSubsystem->UpdateStaticObstacleTransform(
@@ -1729,7 +1811,7 @@ bool AScenarioEditorController::ApplyTransformGizmoDragTransform(const FTransfor
 	if (bUpdated)
 	{
 		LastTransformGizmoDragFailureReason.Reset();
-		UpdatePlaceableContextMenuForSelection(false);
+		UpdatePlaceableDetailsForSelection(false);
 		return true;
 	}
 
@@ -1805,10 +1887,15 @@ bool AScenarioEditorController::TraceMouseSelectablePlaceable(
 	{
 		queryParams.AddIgnoredActor(pawn);
 	}
+	if (IsValid(TransformGizmoActor))
+	{
+		queryParams.AddIgnoredActor(TransformGizmoActor);
+	}
 
 	const FVector traceEnd = worldOrigin + worldDirection.GetSafeNormal() * PlacementTraceDistanceCm;
-	if (!world->LineTraceSingleByChannel(
-		outHit,
+	TArray<FHitResult> hits;
+	if (!world->LineTraceMultiByChannel(
+		hits,
 		worldOrigin,
 		traceEnd,
 		PlacementTraceChannel,
@@ -1817,20 +1904,26 @@ bool AScenarioEditorController::TraceMouseSelectablePlaceable(
 		return false;
 	}
 
-	AActor* hitActor = outHit.GetActor();
-	if (!hitActor)
+	for (const FHitResult& hit : hits)
 	{
-		return false;
+		AActor* hitActor = hit.GetActor();
+		if (!hitActor)
+		{
+			continue;
+		}
+
+		UScenarioPlaceableComponent* placeableComponent = hitActor->FindComponentByClass<UScenarioPlaceableComponent>();
+		if (!IsEditorSelectablePlaceable(placeableComponent))
+		{
+			continue;
+		}
+
+		outHit = hit;
+		outPlaceableComponent = placeableComponent;
+		return true;
 	}
 
-	UScenarioPlaceableComponent* placeableComponent = hitActor->FindComponentByClass<UScenarioPlaceableComponent>();
-	if (!IsEditorSelectablePlaceable(placeableComponent))
-	{
-		return false;
-	}
-
-	outPlaceableComponent = placeableComponent;
-	return true;
+	return false;
 }
 
 bool AScenarioEditorController::IsEditorSelectablePlaceable(const UScenarioPlaceableComponent* placeableComponent) const
@@ -1839,6 +1932,7 @@ bool AScenarioEditorController::IsEditorSelectablePlaceable(const UScenarioPlace
 		&& placeableComponent->bAuthoringSelectable
 		&& (placeableComponent->Category == EScenarioActorCategory::StaticObstacle
 			|| placeableComponent->Category == EScenarioActorCategory::GroundRegion
+			|| IsCorridorHandlePlaceable(placeableComponent)
 			|| IsRobotRouteMarkerPlaceable(placeableComponent));
 }
 
@@ -1887,7 +1981,7 @@ void AScenarioEditorController::SetSelectedPlaceable(UScenarioPlaceableComponent
 	if (SelectedPlaceableComponent.Get() == placeableComponent)
 	{
 		UpdateTransformGizmoForSelection();
-		UpdatePlaceableContextMenuForSelection();
+		UpdatePlaceableDetailsForSelection();
 		return;
 	}
 
@@ -1903,7 +1997,7 @@ void AScenarioEditorController::SetSelectedPlaceable(UScenarioPlaceableComponent
 	}
 
 	UpdateTransformGizmoForSelection();
-	UpdatePlaceableContextMenuForSelection();
+	UpdatePlaceableDetailsForSelection();
 }
 
 void AScenarioEditorController::ApplyAuthoringOutlinePostProcessMaterial(
@@ -2071,6 +2165,11 @@ void AScenarioEditorController::UpdatePlacementPreview()
 	CurrentPlacementTransform = BuildPlacementTransform(hit.ImpactPoint);
 
 	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (SelectedPlacementItemType == EScenarioPaletteItemType::StaticObstacle && authoringSubsystem)
+	{
+		CurrentPlacementTransform =
+			authoringSubsystem->ResolveStaticObstaclePlacementTransform(CurrentPlacementTransform);
+	}
 	if (!authoringSubsystem)
 	{
 		bCurrentPlacementValid = false;
@@ -2469,7 +2568,7 @@ void AScenarioEditorController::SetTransformGizmoMode(EScenarioTransformGizmoMod
 EScenarioTransformGizmoOrientationMode AScenarioEditorController::GetEffectiveTransformGizmoOrientationModeForPlaceable(
 	const UScenarioPlaceableComponent* placeableComponent) const
 {
-	return IsRobotRouteMarkerPlaceable(placeableComponent)
+	return IsRobotRouteMarkerPlaceable(placeableComponent) || IsCorridorHandlePlaceable(placeableComponent)
 		? EScenarioTransformGizmoOrientationMode::World
 		: TransformGizmoOrientationMode;
 }
@@ -2497,35 +2596,35 @@ void AScenarioEditorController::GetTransformGizmoBasis(
 	if (outZAxis.IsNearlyZero()) outZAxis = FVector::UpVector;
 }
 
-UScenarioPlaceableContextMenuWidget* AScenarioEditorController::EnsurePlaceableContextMenuWidget()
+UScenarioPlaceableDetailsWidget* AScenarioEditorController::EnsurePlaceableDetailsWidget()
 {
 	UScenarioEditorRootWidget* rootWidget = ShowEditorRootWidget();
-	return rootWidget ? rootWidget->GetPlaceableContextMenuWidget() : nullptr;
+	return rootWidget ? rootWidget->GetPlaceableDetailsWidget() : nullptr;
 }
 
-void AScenarioEditorController::UpdatePlaceableContextMenuForSelection(bool bRepositionToMouse)
+void AScenarioEditorController::UpdatePlaceableDetailsForSelection(bool bRepositionToMouse)
 {
 	(void)bRepositionToMouse;
 
 	UScenarioPlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
 	if (!IsEditorSelectablePlaceable(selectedPlaceable))
 	{
-		HidePlaceableContextMenu();
+		HidePlaceableDetails();
 		return;
 	}
 
 	UScenarioEditorRootWidget* rootWidget = ShowEditorRootWidget();
-	if (!rootWidget || !rootWidget->ShowPlaceableContextMenu(selectedPlaceable))
+	if (!rootWidget || !rootWidget->ShowPlaceableDetails(selectedPlaceable))
 	{
 		return;
 	}
 }
 
-void AScenarioEditorController::HidePlaceableContextMenu()
+void AScenarioEditorController::HidePlaceableDetails()
 {
 	if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
 	{
-		rootWidget->HidePlaceableContextMenu();
+		rootWidget->HidePlaceableDetails();
 	}
 }
 

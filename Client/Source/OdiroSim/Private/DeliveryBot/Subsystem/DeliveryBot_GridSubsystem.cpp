@@ -49,6 +49,11 @@ void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoun
 	if (!IsValid(boundsBox))
 		return;
 
+	if (bDrawDebug)
+	{
+		FlushPersistentDebugLines(GetWorld());
+	}
+
 	CellSize = FMath::Max(gridBoundsActor->GetCellSize(), 1.f);
 
 	const FVector boxExtent = boundsBox->GetScaledBoxExtent();
@@ -784,5 +789,3 @@ bool UDeliveryBot_GridSubsystem::BuildGridJson(FString& outJson) const
 
 	return FJsonSerializer::Serialize(rootObject, writer);
 }
-
-

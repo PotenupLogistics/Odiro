@@ -8,13 +8,44 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Shared/SimulationSetupTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotPython, Log, All);
 
 namespace
 {
-	// /health 응답이 Python 서버 준비 완료인지 확인한다.
-	bool IsHealthResponseOk(const FHttpResponsePtr& response)
+	const TCHAR* ToPythonProcessStateString(EDeliveryBotPythonProcessState state)
+	{
+		switch (state)
+		{
+		case EDeliveryBotPythonProcessState::NotStarted:
+			return TEXT("NotStarted");
+		case EDeliveryBotPythonProcessState::CheckingExistingServer:
+			return TEXT("CheckingExistingServer");
+		case EDeliveryBotPythonProcessState::Launching:
+			return TEXT("Launching");
+		case EDeliveryBotPythonProcessState::WaitingForHealth:
+			return TEXT("WaitingForHealth");
+		case EDeliveryBotPythonProcessState::Ready:
+			return TEXT("Ready");
+		case EDeliveryBotPythonProcessState::Failed:
+			return TEXT("Failed");
+		case EDeliveryBotPythonProcessState::Stopped:
+			return TEXT("Stopped");
+		default:
+			return TEXT("Unknown");
+		}
+	}
+
+	// health 응답과 요청 경로를 같은 비교 형식으로 맞춘다.
+	FString NormalizePolicyRuntimePath(FString path)
+	{
+		FPaths::NormalizeFilename(path);
+		return FPaths::ConvertRelativePathToFull(path);
+	}
+
+	// /health 응답이 같은 policy package를 사용하는 서버인지 확인한다.
+	bool IsHealthResponseOk(const FHttpResponsePtr& response, const FString& expectedPolicyPath)
 	{
 		if (!response.IsValid() || response->GetResponseCode() < 200 || response->GetResponseCode() >= 300)
 			return false;
@@ -23,10 +54,51 @@ namespace
 		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(response->GetContentAsString());
 
 		FString status;
-		return FJsonSerializer::Deserialize(reader, rootObject)
+		FString policyPath;
+		const bool bOk = FJsonSerializer::Deserialize(reader, rootObject)
 			&& rootObject.IsValid()
 			&& rootObject->TryGetStringField(TEXT("status"), status)
 			&& status.Equals(TEXT("ok"), ESearchCase::IgnoreCase);
+		if (!bOk)
+		{
+			return false;
+		}
+
+		if (!rootObject->TryGetStringField(TEXT("policyPath"), policyPath))
+		{
+			return false;
+		}
+
+		return NormalizePolicyRuntimePath(policyPath).Equals(
+			NormalizePolicyRuntimePath(expectedPolicyPath),
+			ESearchCase::IgnoreCase);
+	}
+
+	// Python process argument를 공백이 있는 path에도 안전하게 전달한다.
+	FString QuotePythonArgument(FString value)
+	{
+		value.ReplaceInline(TEXT("\""), TEXT("\\\""));
+		return FString::Printf(TEXT("\"%s\""), *value);
+	}
+
+	// Windows Python launcher는 명시적인 Python 3 선택 인자를 함께 전달한다.
+	bool IsPythonLauncherExecutable(const FString& executablePath)
+	{
+		return FPaths::GetBaseFilename(executablePath).Equals(TEXT("py"), ESearchCase::IgnoreCase);
+	}
+
+	FString BuildHealthFailureSummary(const FHttpResponsePtr& response, bool bSucceeded, const FString& expectedPolicyPath)
+	{
+		const int32 responseCode = response.IsValid() ? response->GetResponseCode() : 0;
+		FString responseBody = response.IsValid() ? response->GetContentAsString() : FString();
+		responseBody = responseBody.Left(512);
+
+		return FString::Printf(
+			TEXT("Succeeded=%s Code=%d ExpectedPolicy=%s Body=%s"),
+			bSucceeded ? TEXT("true") : TEXT("false"),
+			responseCode,
+			*expectedPolicyPath,
+			*responseBody);
 	}
 }
 
@@ -38,6 +110,12 @@ void UDeliveryBotPythonProcessSubsystem::Initialize(FSubsystemCollectionBase& co
 	if (const UDeliveryBotPythonDeveloperSettings* developerSettings = GetDefault<UDeliveryBotPythonDeveloperSettings>())
 	{
 		Settings = developerSettings->PythonSettings;
+	}
+
+	const FSimulationCommandLineParseResult commandLineResult = FSimulationCommandLine::ParseCurrent();
+	if (commandLineResult.bSuccess && commandLineResult.Options.PolicyPort > 0)
+	{
+		Settings.Port = commandLineResult.Options.PolicyPort;
 	}
 
 	if (Settings.bAutoLaunchPythonServer)
@@ -62,6 +140,7 @@ void UDeliveryBotPythonProcessSubsystem::Deinitialize()
 void UDeliveryBotPythonProcessSubsystem::StartPythonServerLifecycle()
 {
 	LastErrorMessage.Reset();
+	LastHealthCheckFailureSummary.Reset();
 	PythonState = EDeliveryBotPythonProcessState::CheckingExistingServer;
 	HealthCheckStartTimeSeconds = FPlatformTime::Seconds();
 
@@ -75,39 +154,58 @@ void UDeliveryBotPythonProcessSubsystem::CheckExistingServerHealth()
 		return;
 
 	bHealthRequestInFlight = true;
+	const FString expectedPolicyPath = ResolvePolicyPackagePath();
 
 	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request = FHttpModule::Get().CreateRequest();
 	request->SetURL(BuildHealthUrl());
 	request->SetVerb(TEXT("GET"));
 
-	request->OnProcessRequestComplete().BindWeakLambda(this, [this](FHttpRequestPtr, FHttpResponsePtr response, bool)
+	request->OnProcessRequestComplete().BindWeakLambda(this, [this, expectedPolicyPath](FHttpRequestPtr, FHttpResponsePtr response, bool bSucceeded)
 		{
 			bHealthRequestInFlight = false;
-			if (IsHealthResponseOk(response))
+			if (IsHealthResponseOk(response, expectedPolicyPath))
 			{
 				RecordReady(true);
 				return;
 			}
+
+			LastHealthCheckFailureSummary = BuildHealthFailureSummary(response, bSucceeded, expectedPolicyPath);
 			LaunchPythonProcess();
 		});
 
 	request->ProcessRequest();
 }
 
-// Tools/PythonAgent/server.py 프로세스를 실행한다.
+// Python policy runtime 프로세스를 실행한다.
 bool UDeliveryBotPythonProcessSubsystem::LaunchPythonProcess()
 {
 	const FString scriptPath = ResolveServerScriptPath();
+	const FString policyPath = ResolvePolicyPackagePath();
 
 	if (!FPaths::FileExists(scriptPath))
 	{
 		RecordFailed(FString::Printf(TEXT("Python server script not found: %s"), *scriptPath));
 		return false;
 	}
+	if (!FPaths::DirectoryExists(policyPath))
+	{
+		RecordFailed(FString::Printf(TEXT("Python policy package not found: %s"), *policyPath));
+		return false;
+	}
 
-	const FString arguments = FString::Printf(TEXT("-u \"%s\""), *scriptPath);
+	const FString arguments = BuildPythonProcessArguments(scriptPath, policyPath);
 
 	PythonState = EDeliveryBotPythonProcessState::Launching;
+	LastHealthCheckFailureSummary.Reset();
+
+	UE_LOG(
+		LogDeliveryBotPython,
+		Log,
+		TEXT("Launching Python policy server | Exe=%s Script=%s Policy=%s HealthUrl=%s"),
+		*Settings.PythonExecutablePath,
+		*scriptPath,
+		*policyPath,
+		*BuildHealthUrl());
 
 	PythonProcessHandle = FPlatformProcess::CreateProc(
 		*Settings.PythonExecutablePath,
@@ -122,7 +220,7 @@ bool UDeliveryBotPythonProcessSubsystem::LaunchPythonProcess()
 
 	if (!PythonProcessHandle.IsValid())
 	{
-		RecordFailed(TEXT("Python server process launch failed."));
+		RecordFailed(FString::Printf(TEXT("Python server process launch failed. Exe=%s"), *Settings.PythonExecutablePath));
 		return false;
 	}
 
@@ -160,9 +258,23 @@ void UDeliveryBotPythonProcessSubsystem::SendHealthCheckRequest()
 	if (bHealthRequestInFlight)
 		return;
 
+	if (bLaunchedByThisProcess
+		&& PythonProcessHandle.IsValid()
+		&& !FPlatformProcess::IsProcRunning(PythonProcessHandle))
+	{
+		const FString exitMessage = LastHealthCheckFailureSummary.IsEmpty()
+			? TEXT("Python server process exited before health became ready.")
+			: FString::Printf(TEXT("Python server process exited before health became ready. LastHealth=%s"), *LastHealthCheckFailureSummary);
+		RecordFailed(exitMessage);
+		return;
+	}
+
 	if (FPlatformTime::Seconds() - HealthCheckStartTimeSeconds > Settings.StartupTimeoutSeconds)
 	{
-		RecordFailed(TEXT("Python health check timed out."));
+		const FString timeoutMessage = LastHealthCheckFailureSummary.IsEmpty()
+			? TEXT("Python health check timed out.")
+			: FString::Printf(TEXT("Python health check timed out. LastHealth=%s"), *LastHealthCheckFailureSummary);
+		RecordFailed(timeoutMessage);
 		return;
 	}
 
@@ -174,14 +286,17 @@ void UDeliveryBotPythonProcessSubsystem::SendHealthCheckRequest()
 
 	request->OnProcessRequestComplete().BindWeakLambda(
 		this,
-		[this](FHttpRequestPtr, FHttpResponsePtr response, bool)
+		[this](FHttpRequestPtr, FHttpResponsePtr response, bool bSucceeded)
 		{
 			bHealthRequestInFlight = false;
 
-			if (IsHealthResponseOk(response))
+			if (IsHealthResponseOk(response, ResolvePolicyPackagePath()))
 			{
 				RecordReady(false);
+				return;
 			}
+
+			LastHealthCheckFailureSummary = BuildHealthFailureSummary(response, bSucceeded, ResolvePolicyPackagePath());
 		});
 
 	request->ProcessRequest();
@@ -248,6 +363,16 @@ FString UDeliveryBotPythonProcessSubsystem::GetBaseUrl() const
 	return FString::Printf(TEXT("http://%s:%d"), *Settings.Host, Settings.Port);
 }
 
+FString UDeliveryBotPythonProcessSubsystem::GetDebugStatus() const
+{
+	return FString::Printf(
+		TEXT("State=%s BaseUrl=%s LastError=%s LastHealth=%s"),
+		ToPythonProcessStateString(PythonState),
+		*GetBaseUrl(),
+		LastErrorMessage.IsEmpty() ? TEXT("<none>") : *LastErrorMessage,
+		LastHealthCheckFailureSummary.IsEmpty() ? TEXT("<none>") : *LastHealthCheckFailureSummary);
+}
+
 // /health URL을 만든다.
 FString UDeliveryBotPythonProcessSubsystem::BuildHealthUrl() const
 {
@@ -260,7 +385,7 @@ FString UDeliveryBotPythonProcessSubsystem::BuildHealthUrl() const
 	return GetBaseUrl() + endpoint;
 }
 
-// server.py 절대 경로를 만든다.
+// policy-runtime.py 절대 경로를 만든다.
 FString UDeliveryBotPythonProcessSubsystem::ResolveServerScriptPath() const
 {
 	FString scriptPath = Settings.ServerScriptRelativePath;
@@ -272,4 +397,42 @@ FString UDeliveryBotPythonProcessSubsystem::ResolveServerScriptPath() const
 
 	FPaths::NormalizeFilename(scriptPath);
 	return FPaths::ConvertRelativePathToFull(scriptPath);
+}
+
+// ProjectRun이면 snapshot policy, 아니면 legacy 개발 policy를 사용한다.
+FString UDeliveryBotPythonProcessSubsystem::ResolvePolicyPackagePath() const
+{
+	const FSimulationCommandLineParseResult commandLineResult = FSimulationCommandLine::ParseCurrent();
+	if (commandLineResult.bSuccess && commandLineResult.Options.bProjectRun)
+	{
+		return FUserProjectRunSnapshot::BuildPaths(
+			commandLineResult.Options.ProjectPath,
+			commandLineResult.Options.RunId).PolicyPath;
+	}
+
+	FString policyPath = TEXT("Tools/PythonAgent/agent");
+	if (FPaths::IsRelative(policyPath))
+	{
+		policyPath = FPaths::Combine(FPaths::ProjectDir(), policyPath);
+	}
+
+	FPaths::NormalizeFilename(policyPath);
+	return FPaths::ConvertRelativePathToFull(policyPath);
+}
+
+FString UDeliveryBotPythonProcessSubsystem::BuildPythonProcessArguments(
+	const FString& scriptPath,
+	const FString& policyPath) const
+{
+	const FString launcherVersionArgument = IsPythonLauncherExecutable(Settings.PythonExecutablePath)
+		? TEXT("-3 ")
+		: FString();
+
+	return FString::Printf(
+		TEXT("%s-u %s --host %s --port %d --policy-mode runtime --policy-path %s"),
+		*launcherVersionArgument,
+		*QuotePythonArgument(scriptPath),
+		*QuotePythonArgument(Settings.Host),
+		Settings.Port,
+		*QuotePythonArgument(policyPath));
 }

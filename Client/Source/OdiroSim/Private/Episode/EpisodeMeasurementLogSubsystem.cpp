@@ -3,12 +3,15 @@
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "HAL/FileManager.h"
 #include "Scenario/ScenarioEvaluationSubsystem.h"
 #include "Episode/EpisodeRobotMeasurementAdapter.h"
 #include "Misc/Guid.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Shared/EpisodeJsonlMeasurementWriter.h"
 #include "Shared/EpisodeLogSubjectRegistry.h"
+#include "Shared/UserProjectDataTypes.h"
 
 namespace
 {
@@ -287,12 +290,14 @@ void UEpisodeMeasurementLogSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 void UEpisodeMeasurementLogSubsystem::OnWorldEndPlay(UWorld& InWorld)
 {
 	StopLogging(TEXT("world_end_play"));
+	StopProjectTraceLogging();
 	Super::OnWorldEndPlay(InWorld);
 }
 
 void UEpisodeMeasurementLogSubsystem::Deinitialize()
 {
 	StopLogging(TEXT("deinitialize"));
+	StopProjectTraceLogging();
 	Super::Deinitialize();
 }
 
@@ -303,6 +308,11 @@ bool UEpisodeMeasurementLogSubsystem::DoesSupportWorldType(const EWorldType::Typ
 
 void UEpisodeMeasurementLogSubsystem::Tick(float DeltaTime)
 {
+	if (IsProjectTraceLogging())
+	{
+		return;
+	}
+
 	if (!IsLogging())
 	{
 		return;
@@ -347,6 +357,104 @@ bool UEpisodeMeasurementLogSubsystem::OpenWriter(double WorldTimeSeconds)
 	Writer = MakeUnique<FEpisodeJsonlMeasurementWriter>();
 	CurrentLogPath = BuildOutputPath();
 	return Writer->Open(CurrentLogPath, Diagnostics, WorldTimeSeconds);
+}
+
+bool UEpisodeMeasurementLogSubsystem::StartProjectTraceLogging(const FString& TraceJsonlPath)
+{
+	if (TraceJsonlPath.TrimStartAndEnd().IsEmpty())
+	{
+		AddDiagnostic(
+			EEpisodeMeasurementLogSeverity::Error,
+			TEXT("empty_project_trace_path"),
+			TEXT("Project trace path must not be empty."));
+		return false;
+	}
+
+	if (IsLogging())
+	{
+		StopLogging(TEXT("project_trace_started"));
+	}
+
+	StopProjectTraceLogging();
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		AddDiagnostic(
+			EEpisodeMeasurementLogSeverity::Error,
+			TEXT("missing_world"),
+			TEXT("Project trace logging requires a valid world."));
+		return false;
+	}
+
+	const FString TraceDirectory = FPaths::GetPath(TraceJsonlPath);
+	if (!IFileManager::Get().MakeDirectory(*TraceDirectory, true))
+	{
+		AddDiagnostic(
+			EEpisodeMeasurementLogSeverity::Error,
+			TEXT("project_trace_directory_create_failed"),
+			FString::Printf(TEXT("Project trace directory create failed: %s"), *TraceDirectory));
+		return false;
+	}
+
+	if (!FFileHelper::SaveStringToFile(FString(), *TraceJsonlPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		AddDiagnostic(
+			EEpisodeMeasurementLogSeverity::Error,
+			TEXT("project_trace_file_create_failed"),
+			FString::Printf(TEXT("Project trace file create failed: %s"), *TraceJsonlPath));
+		return false;
+	}
+
+	Diagnostics.Reset();
+	ReportedInvalidMovingActorIndexes.Reset();
+	ReportedUnknownEventKinds.Reset();
+	AppendedRegistryDiagnosticCount = 0;
+	bReportedMissingRobot = false;
+	NextProjectTraceSampleIndex = 0;
+	CurrentProjectTracePath = TraceJsonlPath;
+	SubjectRegistry = NewObject<UEpisodeLogSubjectRegistry>(this);
+	if (!IsValid(SubjectRegistry))
+	{
+		AddDiagnostic(
+			EEpisodeMeasurementLogSeverity::Error,
+			TEXT("subject_registry_create_failed"),
+			TEXT("Failed to create project trace subject registry."));
+		CurrentProjectTracePath.Reset();
+		return false;
+	}
+
+	SubjectRegistry->BuildFromWorld(World, World->GetTimeSeconds());
+	AppendRegistryDiagnostics();
+	bProjectTraceLogging = true;
+	WriteProjectTraceTick(0.0f);
+
+	World->GetTimerManager().SetTimer(
+		ProjectTraceTimerHandle,
+		this,
+		&UEpisodeMeasurementLogSubsystem::HandleProjectTraceTimerTick,
+		FMath::Max(ProjectTraceIntervalSeconds, 0.001f),
+		true,
+		FMath::Max(ProjectTraceIntervalSeconds, 0.001f));
+	return true;
+}
+
+void UEpisodeMeasurementLogSubsystem::StopProjectTraceLogging()
+{
+	if (!bProjectTraceLogging)
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ProjectTraceTimerHandle);
+	}
+
+	bProjectTraceLogging = false;
+	CurrentProjectTracePath.Reset();
+	NextProjectTraceSampleIndex = 0;
+	SubjectRegistry = nullptr;
 }
 
 bool UEpisodeMeasurementLogSubsystem::EnsureHeaderWritten(double WorldTimeSeconds)
@@ -414,6 +522,44 @@ bool UEpisodeMeasurementLogSubsystem::WriteTick(float DeltaTime)
 	}
 
 	return bWrote;
+}
+
+bool UEpisodeMeasurementLogSubsystem::WriteProjectTraceTick(float DeltaTime)
+{
+	if (!bProjectTraceLogging || CurrentProjectTracePath.IsEmpty())
+	{
+		return false;
+	}
+
+	const FEpisodeMeasurementLogTickRecord TickRecord = BuildTickRecord(DeltaTime);
+	TArray<FString> TraceDiagnostics;
+	const bool bWrote = FUserProjectRunOutputJson::AppendEpisodeTraceRecordToFile(
+		CurrentProjectTracePath,
+		TickRecord,
+		NextProjectTraceSampleIndex,
+		TraceDiagnostics);
+
+	for (const FString& Diagnostic : TraceDiagnostics)
+	{
+		AddDiagnostic(
+			EEpisodeMeasurementLogSeverity::Warning,
+			TEXT("project_trace_write_warning"),
+			Diagnostic,
+			TickRecord.WorldTimeSeconds);
+	}
+
+	if (bWrote)
+	{
+		++NextProjectTraceSampleIndex;
+	}
+
+	return bWrote;
+}
+
+void UEpisodeMeasurementLogSubsystem::HandleProjectTraceTimerTick()
+{
+	const UWorld* World = GetWorld();
+	WriteProjectTraceTick(World ? World->GetDeltaSeconds() : ProjectTraceIntervalSeconds);
 }
 
 bool UEpisodeMeasurementLogSubsystem::WriteFooter(const FString& CloseReason)

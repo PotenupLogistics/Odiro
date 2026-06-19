@@ -20,7 +20,7 @@ class ResponseBuilder:
     ) -> AnalysisRunV2Response:
         if episodes_count == 0:
             judgement = "insufficient_data"
-            message = "분석 가능한 experiment 실행 결과를 찾지 못했습니다."
+            message = "분석 가능한 run 실행 결과를 찾지 못했습니다."
             if message not in warnings:
                 warnings = [*warnings, message]
         elif recommendations or patterns:

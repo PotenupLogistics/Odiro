@@ -30,7 +30,7 @@ struct ODIROSIM_API FPlatformAnalysisAiResponse
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlatformAnalysisAiCompletedNative, const FPlatformAnalysisAiResponse&);
 
-// Platform UI에서 evaluation report와 measurement log를 결과 분석 AI 서버로 보내는 클라이언트.
+// Platform UI에서 user project run을 결과 분석 AI 서버로 보내는 클라이언트.
 UCLASS(BlueprintType, Config = Game)
 class ODIROSIM_API UPlatformAnalysisAiSubsystem : public UGameInstanceSubsystem
 {
@@ -41,8 +41,9 @@ public:
 
 	FPlatformAnalysisAiCompletedNative OnAnalysisCompleted;
 
+
 	UFUNCTION(BlueprintCallable, Category = "Platform|AI")
-	bool RequestAnalysisForReport(const FString& evaluationReportPath, const FString& measurementLogPath);
+	bool RequestAnalysisForProjectRun(const FString& projectPath, const FString& runId);
 
 	UFUNCTION(BlueprintCallable, Category = "Platform|AI")
 	void CancelPendingAnalysisRequest();
@@ -50,16 +51,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Platform|AI")
 	bool IsAnalysisRequestPending() const { return PendingHttpRequest.IsValid(); }
 
-	static bool ExtractSetupPathsFromReportJson(
-		const FString& reportJson,
-		FString& outEpisodeSetupPath,
-		FString& outDeliveryBotSetupPath,
-		TArray<FString>& outDiagnostics);
-
-	static bool BuildAnalysisRequestJsonFromReport(
-		const FString& evaluationReportPath,
-		const FString& measurementLogPath,
-		bool bFallbackOnly,
+	static bool BuildAnalysisRequestJsonForProjectRun(
+		const FString& projectPath,
+		const FString& runId,
 		FString& outRequestJson,
 		TArray<FString>& outDiagnostics);
 
@@ -68,13 +62,10 @@ public:
 		TArray<FString>& outDiagnostics);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Config, Category = "Platform|AI")
-	FString AnalysisEndpointUrl = TEXT("http://127.0.0.1:8711/api/v1/analysis/run");
+	FString ProjectRunAnalysisEndpointUrl = TEXT("http://127.0.0.1:8711/api/v2/analysis/run");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Config, Category = "Platform|AI", meta = (ClampMin = "1.0"))
 	float RequestTimeoutSeconds = 60.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Config, Category = "Platform|AI")
-	bool bFallbackOnly = false;
 
 private:
 	void HandleAnalysisResponse(
@@ -86,5 +77,6 @@ private:
 	void BroadcastFailure(int32 responseCode, const FString& message, const FString& responseBody = FString());
 
 	FString PendingRequestId;
+	FString PendingReviewOutputPath;
 	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> PendingHttpRequest;
 };

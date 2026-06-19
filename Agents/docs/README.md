@@ -6,13 +6,21 @@
 
 공식 계약 문서 경로는 팀 공유 경로이므로 이동하거나 rename하지 않습니다.
 
+현재 user project 파일 계약은 [user-project-data](../../contracts/specs/user-project-data.md)가 기준입니다.
+아래 EpisodeSetup/DeliveryBotSetup/RunQueue 문서는 legacy input/output 출처 확인용입니다.
+
+* [contracts/specs/user-project-data.md](../../contracts/specs/user-project-data.md)
 * [contracts/specs/EpisodeSetup.json.md](../../contracts/specs/EpisodeSetup.json.md)
 * [contracts/specs/DeliveryBotSetup.json.md](../../contracts/specs/DeliveryBotSetup.json.md)
 * [contracts/specs/RunQueue.json.md](../../contracts/specs/RunQueue.json.md)
 * [contracts/specs/EpisodeEvaluationReport.json.md](../../contracts/specs/EpisodeEvaluationReport.json.md)
 * [Policy Decision JSON Guide](policy_server/POLICY_DECISION_JSON_GUIDE.md)
 
-기준 경로:
+현재 기준 경로:
+
+* `contracts/specs/user-project-data.md`
+
+Legacy 참고 경로:
 
 * `contracts/specs/EpisodeSetup.json.md`
 * `contracts/specs/DeliveryBotSetup.json.md`
@@ -23,6 +31,7 @@
 ## 아키텍처
 
 * [v2 Agent Architecture](agents/V2_AGENT_ARCHITECTURE.md)
+* [v2 Agent LangGraph 설계](agents/V2_LANGGRAPH_DESIGN.md)
 * [Scenario / Episode 용어 정리](architecture/SCENARIO_EPISODE_TERMINOLOGY.md)
 * [UE 계약 마이그레이션 계획](architecture/UE_CONTRACT_MIGRATION_PLAN.md)
 * [맵 생성 데이터 근거](architecture/MAP_GENERATION_DATA_SOURCES.md)
@@ -63,6 +72,8 @@
 
 * [v2 Agent 테스트/운영 가이드](development/V2_AGENT_TESTING_GUIDE.md)
 
+Scenario generation v2는 항상 LangGraph runner를 사용합니다. `V2_AGENT_LLM_ENABLED=false`이면 deterministic graph path를 사용하고, `true`이면 graph 내부 LLM-assisted node를 시도한 뒤 validator/fallback을 거칩니다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아니며, 결과 분석 v2 graph 경로 제어를 위해 유지합니다.
+
 ## 정책
 
 * [MVP 정책 범위](policy/MVP_POLICY_SCOPE.md)
@@ -90,7 +101,7 @@
 * File-based RAG store, source inventory, runtime source status guard 검증: `uv run python scripts/validate_file_based_rag_store.py`
 * Policy chunk candidate 검증: `uv run python scripts/validate_policy_chunk_candidates.py`
 
-## UE 전달
+## Legacy UE 전달
 
 * [UE setup pair 전달 package](handoff/UE_SETUP_PAIR_HANDOFF_PACKAGE.md)
 * [UE 팀 메시지 초안](handoff/UE_TEAM_MESSAGE_DRAFT.md)
@@ -99,9 +110,9 @@
 * [UE 전달 manifest](handoff/UE_HANDOFF_DELIVERY_MANIFEST.md)
 * [전달 release notes](handoff/HANDOFF_RELEASE_NOTES.md)
 
-RunQueue package export는 `scripts/export_ue5_run_queue_package.py`를 사용합니다. 산출물은 `data/run_queue_exports/` 아래 local ignored path에 저장하며, RunQueue JSON은 `contracts/specs/RunQueue.json.md` 계약 필드만 포함합니다.
+RunQueue package export는 legacy tooling입니다. `scripts/export_ue5_run_queue_package.py`를 사용합니다. 산출물은 `data/run_queue_exports/` 아래 local ignored path에 저장하며, RunQueue JSON은 `contracts/specs/RunQueue.json.md` 계약 필드만 포함합니다.
 
-사용자용 scenario 생성 API는 `POST /api/v1/scenarios/generate`입니다. 입력은 자연어 `prompt`를 필수로 받고, 선택적으로 `episode_count`를 허용합니다. 성공 응답은 wrapper field 없는 RunQueue JSON입니다. `episode_count`를 생략하면 `SCENARIO_EPISODE_DEFAULT_COUNT`를 사용하고, 요청값은 1 이상 `SCENARIO_EPISODE_MAX_COUNT` 이하의 strict integer여야 합니다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하는 구조는 아닙니다. EpisodeSetup / DeliveryBotSetup / RunQueue JSON은 null-free 정책을 따르고 optional field는 값이 없으면 생략합니다.
+사용자용 scenario 생성 API는 `POST /api/v2/scenarios/generate`입니다. 입력은 자연어 `prompt`이며, 응답은 `<UserProject>/scenario.json`에 저장 가능한 `scenario` JSON입니다. 실행 개수, seed, scenario sample, RunQueue 생성은 담당하지 않습니다. `POST /api/v1/scenarios/generate`는 현재 `410 RUN_QUEUE_REMOVED` 안내만 반환합니다.
 
 로봇 실측 크기 W/D/H `0.44m / 1.00m / 0.64m`는 API request가 아니라 서버 기본 `RobotProfile`로 주입합니다. 생성/export된 EpisodeSetup에는 additive root field `robot_profile`이 포함되며, `min_passable_width_m=0.84m` 기준으로 보도 폭, 장애물 gap, robot spawn/goal 여유 검증에 사용합니다. UE가 아직 이 field를 소비하지 않으면 무시해도 되지만 collision box와 실제 크기 일치 여부는 UE 확인 항목입니다.
 

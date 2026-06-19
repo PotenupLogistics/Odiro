@@ -66,6 +66,7 @@ void UFileListItemWidget::InitializeDisplayItem(
 	bAllowRename = bInAllowRename;
 	bAllowPrimaryAction = bInAllowPrimaryAction;
 	bAllowSecondaryAction = bInAllowSecondaryAction;
+	bSecondaryActionClickable = bInAllowSecondaryAction;
 
 	if (PathTextBox)
 	{
@@ -74,6 +75,8 @@ void UFileListItemWidget::InitializeDisplayItem(
 			? OriginalPath
 			: trimmedDisplayText;
 		PathTextBox->SetText(FText::FromString(visibleText));
+		PathTextBox->SetIsReadOnly(!bAllowRename);
+		PathTextBox->SetVisibility(bAllowRename ? ESlateVisibility::Visible : ESlateVisibility::HitTestInvisible);
 	}
 
 	if (RenameButtonLabel)
@@ -89,6 +92,19 @@ void UFileListItemWidget::InitializeDisplayItem(
 	if (SecondaryActionLabel)
 	{
 		SecondaryActionLabel->SetText(FText::FromString(secondaryActionLabel));
+	}
+
+	RefreshButtonState();
+}
+
+void UFileListItemWidget::SetSecondaryActionDisplayOnly(const FString& displayText)
+{
+	bAllowSecondaryAction = true;
+	bSecondaryActionClickable = false;
+
+	if (SecondaryActionLabel)
+	{
+		SecondaryActionLabel->SetText(FText::FromString(displayText));
 	}
 
 	RefreshButtonState();
@@ -120,7 +136,7 @@ void UFileListItemWidget::HandlePrimaryActionClicked()
 
 void UFileListItemWidget::HandleSecondaryActionClicked()
 {
-	if (bAllowSecondaryAction)
+	if (bAllowSecondaryAction && bSecondaryActionClickable)
 	{
 		OnSecondaryActionRequested.Broadcast(this);
 	}
@@ -147,6 +163,6 @@ void UFileListItemWidget::RefreshButtonState()
 	if (SecondaryActionButton)
 	{
 		SecondaryActionButton->SetVisibility(bAllowSecondaryAction ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-		SecondaryActionButton->SetIsEnabled(bAllowSecondaryAction);
+		SecondaryActionButton->SetIsEnabled(bAllowSecondaryAction && bSecondaryActionClickable);
 	}
 }

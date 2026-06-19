@@ -1,4 +1,5 @@
 #include "Scenario/ScenarioSimulationSubsystem.h"
+#include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
 #include "Scenario/Actors/ScenarioGroundRegion.h"
 #include "Scenario/Actors/ScenarioPedestrian.h"
 #include "Scenario/Actors/ScenarioSplinePath.h"
@@ -61,6 +62,7 @@ void UScenarioSimulationSubsystem::ClearScenario()
 	const int32 actorCount = RuntimeActors.Num();
 	const int32 actorIdCount = RuntimeActorsById.Num();
 	const int32 groundRegionCount = RuntimeGroundRegions.Num();
+	const int32 corridorCount = RuntimeCorridors.Num();
 	const int32 pathCount = RuntimePaths.Num();
 
 	if (IsValid(RuntimeGridBoundsActor))
@@ -79,6 +81,7 @@ void UScenarioSimulationSubsystem::ClearScenario()
 
 	RuntimeActors.Reset();
 	RuntimeGroundRegions.Reset();
+	RuntimeCorridors.Reset();
 	RuntimePaths.Reset();
 	RuntimeActorsById.Reset();
 	FlushPersistentDebugLines(GetWorld());
@@ -91,20 +94,21 @@ void UScenarioSimulationSubsystem::ClearScenario()
 		}
 	}
 
-	if (actorCount > 0 || actorIdCount > 0 || groundRegionCount > 0 || pathCount > 0)
+	if (actorCount > 0 || actorIdCount > 0 || groundRegionCount > 0 || corridorCount > 0 || pathCount > 0)
 	{
 		UE_LOG(
 			LogScenarioSimulation,
 			 Warning,
-			TEXT("Scenario 런타임 정리 완료 | Actors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
+			TEXT("Scenario runtime cleanup complete | Actors: %d, ActorIds: %d, GroundRegions: %d, Corridors: %d, Paths: %d"),
 		actorCount,
 		actorIdCount,
 		groundRegionCount,
+		corridorCount,
 		pathCount);
 	}
 }
 
-bool UScenarioSimulationSubsystem::RebuildDeliveryBotGridFromScenarioGroundRegions(const FScenarioSimulationSetupSpec& setupSpec)
+bool UScenarioSimulationSubsystem::RebuildDeliveryBotGridFromScenarioSurfaces(const FScenarioSimulationSetupSpec& setupSpec)
 {
 	UWorld* world = GetWorld();
 	if (!IsValid(world))
@@ -119,11 +123,24 @@ bool UScenarioSimulationSubsystem::RebuildDeliveryBotGridFromScenarioGroundRegio
 
 	FBox2D xyBounds(ForceInit);
 	double centerZ = 0.0;
-	if (!TryBuildGroundRegionXYBounds(setupSpec.GroundRegions, xyBounds, centerZ))
+	if (!TryBuildRuntimeSurfaceXYBounds(xyBounds, centerZ)
+		&& !TryBuildGroundRegionXYBounds(setupSpec.GroundRegions, xyBounds, centerZ))
 	{
-		UE_LOG(LogScenarioSimulation, Warning, TEXT("DeliveryBot grid bounds build failed. No valid ground regions."));
+		UE_LOG(LogScenarioSimulation, Warning, TEXT("DeliveryBot grid bounds build failed. No valid scenario surfaces."));
 		return false;
 	}
+
+	for (const FScenarioPlaceableInstanceSpec& placeableSpec : setupSpec.Placeables)
+	{
+		ExpandXYBoundsWithDeliveryBotRoute(placeableSpec, xyBounds);
+	}
+
+	UE_LOG(
+		LogScenarioSimulation,
+		Log,
+		TEXT("DeliveryBot grid bounds resolved from scenario surfaces and robot route anchors. Min: %s, Max: %s"),
+		*xyBounds.Min.ToString(),
+		*xyBounds.Max.ToString());
 
 	if (IsValid(RuntimeGridBoundsActor))
 	{
@@ -143,7 +160,7 @@ bool UScenarioSimulationSubsystem::RebuildDeliveryBotGridFromScenarioGroundRegio
 	UE_LOG(
 		LogScenarioSimulation,
 		Log,
-		TEXT("DeliveryBot grid rebuilt from episode ground regions. BoundsActor: %s, HasGrid: %s, Cells: %d"),
+		TEXT("DeliveryBot grid rebuilt from episode scenario surfaces. BoundsActor: %s, HasGrid: %s, Cells: %d"),
 		*gridBoundsActor->GetName(),
 		gridSubsystem->HasBuiltGrid() ? TEXT("true") : TEXT("false"),
 		gridSubsystem->GetGridCellCount()
@@ -179,6 +196,83 @@ bool UScenarioSimulationSubsystem::TryBuildGroundRegionXYBounds(
 	return true;
 }
 
+bool UScenarioSimulationSubsystem::TryBuildRuntimeSurfaceXYBounds(
+	FBox2D& outXYBounds,
+	double& outCenterZ) const
+{
+	outXYBounds = FBox2D(ForceInit);
+
+	double zSum = 0.0;
+	int32 validActorCount = 0;
+
+	for (const TPair<FString, TObjectPtr<AScenarioCorridorRuntimeActor>>& pair : RuntimeCorridors)
+	{
+		ExpandXYBoundsWithActor(pair.Value.Get(), outXYBounds, zSum, validActorCount);
+	}
+
+	for (const TPair<FString, TObjectPtr<AScenarioGroundRegion>>& pair : RuntimeGroundRegions)
+	{
+		ExpandXYBoundsWithActor(pair.Value.Get(), outXYBounds, zSum, validActorCount);
+	}
+
+	if (!outXYBounds.bIsValid || validActorCount <= 0)
+	{
+		return false;
+	}
+
+	outCenterZ = zSum / static_cast<double>(validActorCount);
+	return true;
+}
+
+void UScenarioSimulationSubsystem::ExpandXYBoundsWithActor(
+	const AActor* actor,
+	FBox2D& inOutXYBounds,
+	double& inOutZSum,
+	int32& inOutValidActorCount)
+{
+	if (!IsValid(actor))
+	{
+		return;
+	}
+
+	const FBox componentBounds = actor->GetComponentsBoundingBox(true);
+	if (!componentBounds.IsValid)
+	{
+		return;
+	}
+
+	inOutXYBounds += FVector2D(componentBounds.Min.X, componentBounds.Min.Y);
+	inOutXYBounds += FVector2D(componentBounds.Max.X, componentBounds.Max.Y);
+	inOutZSum += componentBounds.GetCenter().Z;
+	++inOutValidActorCount;
+}
+
+void UScenarioSimulationSubsystem::ExpandXYBoundsWithDeliveryBotRoute(
+	const FScenarioPlaceableInstanceSpec& placeableSpec,
+	FBox2D& inOutXYBounds)
+{
+	if (placeableSpec.Category != EScenarioActorCategory::DeliveryBot)
+	{
+		return;
+	}
+
+	if (placeableSpec.DeliveryBot.bHasStartLocation)
+	{
+		const FVector& startLocation = placeableSpec.DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm;
+		inOutXYBounds += FVector2D(startLocation.X, startLocation.Y);
+	}
+	else
+	{
+		const FVector startLocation = placeableSpec.Transform.GetLocation();
+		inOutXYBounds += FVector2D(startLocation.X, startLocation.Y);
+	}
+
+	if (placeableSpec.DeliveryBot.bHasGoalLocation)
+	{
+		const FVector& goalLocation = placeableSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm;
+		inOutXYBounds += FVector2D(goalLocation.X, goalLocation.Y);
+	}
+}
 ADeliveryBot_GridBoundsActor* UScenarioSimulationSubsystem::SpawnDeliveryBotGridBoundsActor(
 	const FBox2D& xyBounds,
 	double centerZ)
@@ -187,11 +281,24 @@ ADeliveryBot_GridBoundsActor* UScenarioSimulationSubsystem::SpawnDeliveryBotGrid
 	if (!IsValid(world))
 		return nullptr;
 
-	TSubclassOf<ADeliveryBot_GridBoundsActor> spawnClass = ADeliveryBot_GridBoundsActor::StaticClass();
+	TSubclassOf<ADeliveryBot_GridBoundsActor> spawnClass = GridBoundsActorClass;
+	if (!spawnClass)
+	{
+		spawnClass = ADeliveryBot_GridBoundsActor::StaticClass();
+	}
+
+	const double safePadding = FMath::Max(static_cast<double>(DeliveryBotGridBoundsPaddingCm), 0.0);
+	const FVector2D paddedMin = xyBounds.Min - FVector2D(safePadding, safePadding);
+	const FVector2D paddedMax = xyBounds.Max + FVector2D(safePadding, safePadding);
+	const FVector2D boundsCenter = (paddedMin + paddedMax) * 0.5;
+	const FTransform spawnTransform(
+		FRotator::ZeroRotator,
+		FVector(boundsCenter.X, boundsCenter.Y, centerZ),
+		FVector::OneVector);
 
 	ADeliveryBot_GridBoundsActor* gridBoundsActor = world->SpawnActorDeferred<ADeliveryBot_GridBoundsActor>(
 		spawnClass,
-		FTransform::Identity,
+		spawnTransform,
 		nullptr,
 		nullptr,
 		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
@@ -199,9 +306,10 @@ ADeliveryBot_GridBoundsActor* UScenarioSimulationSubsystem::SpawnDeliveryBotGrid
 	if (!IsValid(gridBoundsActor))
 		return nullptr;
 
-	ApplyXYBoundsToGridBoundsActor(gridBoundsActor, xyBounds, centerZ);
+	gridBoundsActor->SetBuildGridOnBeginPlay(false);
 
-	UGameplayStatics::FinishSpawningActor(gridBoundsActor, gridBoundsActor->GetActorTransform());
+	UGameplayStatics::FinishSpawningActor(gridBoundsActor, spawnTransform);
+	ApplyXYBoundsToGridBoundsActor(gridBoundsActor, xyBounds, centerZ);
 
 	RuntimeGridBoundsActor = gridBoundsActor;
 	return gridBoundsActor;
@@ -227,10 +335,14 @@ void UScenarioSimulationSubsystem::ApplyXYBoundsToGridBoundsActor(
 	gridBoundsActor->SetActorRotation(FRotator::ZeroRotator);
 	gridBoundsActor->SetActorScale3D(FVector::OneVector);
 
-	boundsBox->SetRelativeLocation(FVector::ZeroVector);
-	boundsBox->SetRelativeRotation(FRotator::ZeroRotator);
-	boundsBox->SetRelativeScale3D(FVector::OneVector);
+	if (boundsBox != gridBoundsActor->GetRootComponent())
+	{
+		boundsBox->SetRelativeLocation(FVector::ZeroVector);
+		boundsBox->SetRelativeRotation(FRotator::ZeroRotator);
+		boundsBox->SetRelativeScale3D(FVector::OneVector);
+	}
 	boundsBox->SetBoxExtent(FVector(boundsSize.X * 0.5, boundsSize.Y * 0.5, 100.0), true);
+	boundsBox->UpdateBounds();
 }
 
 void UScenarioSimulationSubsystem::ExpandXYBoundsWithGroundRegion(
@@ -258,10 +370,10 @@ void UScenarioSimulationSubsystem::ExpandXYBoundsWithGroundRegion(
 	}
 }
 
-bool UScenarioSimulationSubsystem::ValidateDeliveryBotGridLocation(
+bool UScenarioSimulationSubsystem::ResolveDeliveryBotGridLocation(
 	const FString& robotInstanceId,
 	const FString& locationLabel,
-	const FVector& worldLocation) const
+	FVector& inOutWorldLocation) const
 {
 	UWorld* world = GetWorld();
 	if (!IsValid(world)) return false;
@@ -269,12 +381,33 @@ bool UScenarioSimulationSubsystem::ValidateDeliveryBotGridLocation(
 	const UDeliveryBot_GridSubsystem* gridSubsystem = world->GetSubsystem<UDeliveryBot_GridSubsystem>();
 	if (!IsValid(gridSubsystem) || !gridSubsystem->HasBuiltGrid()) return false;
 
-	const FIntPoint gridIndex = gridSubsystem->GetGridIndexByWorldLocation(worldLocation);
+	const FIntPoint gridIndex = gridSubsystem->GetGridIndexByWorldLocation(inOutWorldLocation);
 	const FDeliveryBotGridCellInfo* cellInfo = gridSubsystem->FindCellInfoByGridIndex(gridIndex);
 
-	if (!cellInfo || !gridSubsystem->IsWalkableGridIndex(gridIndex))
+	if (cellInfo && gridSubsystem->IsWalkableGridIndex(gridIndex))
 	{
-		const FString worldLocationString = worldLocation.ToString();
+		inOutWorldLocation = gridSubsystem->GetWorldLocationByGridIndex(gridIndex);
+		return true;
+	}
+
+	FVector snappedLocation = FVector::ZeroVector;
+	if (gridSubsystem->GetNearestWalkableWorldLocation(inOutWorldLocation, 96, snappedLocation))
+	{
+		UE_LOG(
+			LogScenarioSimulation,
+			Warning,
+			TEXT("DeliveryBot %s location snapped to nearest walkable grid cell. Robot: %s, From: %s, To: %s, OriginalGrid: %s"),
+			*locationLabel,
+			*robotInstanceId,
+			*inOutWorldLocation.ToString(),
+			*snappedLocation.ToString(),
+			*gridIndex.ToString());
+		inOutWorldLocation = snappedLocation;
+		return true;
+	}
+
+	{
+		const FString worldLocationString = inOutWorldLocation.ToString();
 		const FString gridIndexString = gridIndex.ToString();
 		const FString sourceProfileName = cellInfo
 			? cellInfo->SourceCollisionProfileName.ToString()
@@ -291,29 +424,37 @@ bool UScenarioSimulationSubsystem::ValidateDeliveryBotGridLocation(
 			*sourceProfileName
 		);
 
-		return false;
 	}
 
-	return true;
+	return false;
 }
 
 bool UScenarioSimulationSubsystem::ValidateDeliveryBotRouteOnGrid(
 	const FScenarioPlaceableInstanceSpec& placeableSpec,
-	const FDeliveryBotSetupInfo& setupInfo,
+	FDeliveryBotSetupInfo& setupInfo,
 	bool bHasGoal,
-	const FVector& goalLocation) const
+	FVector& inOutGoalLocation) const
 {
-	const bool bStartValid = ValidateDeliveryBotGridLocation(
+	FVector startLocation = setupInfo.LocationSetupInfo.StartLocationCm;
+	const bool bStartValid = ResolveDeliveryBotGridLocation(
 		placeableSpec.InstanceId,
 		TEXT("start"),
-		setupInfo.LocationSetupInfo.StartLocationCm
+		startLocation
 	);
+	if (bStartValid)
+	{
+		setupInfo.LocationSetupInfo.StartLocationCm = startLocation;
+	}
 
-	const bool bGoalValid = !bHasGoal || ValidateDeliveryBotGridLocation(
+	const bool bGoalValid = !bHasGoal || ResolveDeliveryBotGridLocation(
 		placeableSpec.InstanceId,
 		TEXT("goal"),
-		goalLocation
+		inOutGoalLocation
 	);
+	if (bGoalValid && bHasGoal)
+	{
+		setupInfo.LocationSetupInfo.GoalLocationCm = inOutGoalLocation;
+	}
 
 	return bStartValid && bGoalValid;
 }
@@ -325,8 +466,9 @@ bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationS
 	UE_LOG(
 		LogScenarioSimulation,
 		Log,
-		TEXT("Scenario 월드 설정 시작 | Scenario: %s, GroundRegions: %d, Paths: %d, Placeables: %d, DynamicActors: %d, Events: %d"),
+		TEXT("Scenario world setup started | Scenario: %s, Corridors: %d, GroundRegions: %d, Paths: %d, Placeables: %d, DynamicActors: %d, Events: %d"),
 		*setupSpec.EpisodeId,
+		setupSpec.Corridors.Num(),
 		setupSpec.GroundRegions.Num(),
 		setupSpec.Paths.Num(),
 		setupSpec.Placeables.Num(),
@@ -334,6 +476,15 @@ bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationS
 		setupSpec.Events.Num());
 
 	bool bAllSpawned{ true };
+
+	for (const FScenarioRuntimeCorridorSpec& corridorSpec : setupSpec.Corridors)
+	{
+		if (!SpawnCorridor(corridorSpec))
+		{
+			UE_LOG(LogScenarioSimulation, Warning, TEXT("Runtime corridor spawn failed. CorridorId: %s"), *corridorSpec.CorridorId);
+			bAllSpawned = false;
+		}
+	}
 
 	for (const FScenarioGroundRegionSpec& regionSpec : setupSpec.GroundRegions)
 	{
@@ -368,9 +519,9 @@ bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationS
 			return placeableSpec.Category == EScenarioActorCategory::DeliveryBot;
 		});
 
-	if (bHasDeliveryBotPlaceable && !RebuildDeliveryBotGridFromScenarioGroundRegions(setupSpec))
+	if (bHasDeliveryBotPlaceable && !RebuildDeliveryBotGridFromScenarioSurfaces(setupSpec))
 	{
-		UE_LOG(LogScenarioSimulation, Warning, TEXT("DeliveryBot grid rebuild failed after ground regions were spawned."));
+		UE_LOG(LogScenarioSimulation, Warning, TEXT("DeliveryBot grid rebuild failed after scenario surfaces were spawned."));
 		bAllSpawned = false;
 	}
 
@@ -435,12 +586,13 @@ bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationS
 	UE_LOG(
 		LogScenarioSimulation,
 		Log,
-		TEXT("Scenario 월드 설정 완료 | Scenario: %s, Success: %s, RuntimeActors: %d, ActorIds: %d, GroundRegions: %d, Paths: %d"),
+		TEXT("Scenario world setup complete | Scenario: %s, Success: %s, RuntimeActors: %d, ActorIds: %d, GroundRegions: %d, Corridors: %d, Paths: %d"),
 		*setupSpec.EpisodeId,
 		bAllSpawned ? TEXT("true") : TEXT("false"),
 		RuntimeActors.Num(),
 		RuntimeActorsById.Num(),
 		RuntimeGroundRegions.Num(),
+		RuntimeCorridors.Num(),
 		RuntimePaths.Num());
 
 	return bAllSpawned;
@@ -475,6 +627,14 @@ FScenarioRuntimeContext UScenarioSimulationSubsystem::BuildRuntimeContext(const 
 		}
 	}
 
+	for (const TPair<FString, TObjectPtr<AScenarioCorridorRuntimeActor>>& pair : RuntimeCorridors)
+	{
+		if (AActor* corridorActor = pair.Value.Get())
+		{
+			runtimeContext.CorridorActors.Add(corridorActor);
+		}
+	}
+
 	for (const FScenarioPlaceableInstanceSpec& placeableSpec : setupSpec.Placeables)
 	{
 		AActor* runtimeActor = FindRuntimeActor(placeableSpec.InstanceId);
@@ -488,13 +648,6 @@ FScenarioRuntimeContext UScenarioSimulationSubsystem::BuildRuntimeContext(const 
 			{
 				runtimeContext.GoalLocation = placeableSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm;
 				runtimeContext.bHasGoalLocation = true;
-			}
-			else if (!placeableSpec.DeliveryBot.bHasStartLocation)
-			{
-				runtimeContext.bHasGoalLocation = GetVectorProperty(
-					placeableSpec.Properties,
-					TEXT("goal_cm"),
-					runtimeContext.GoalLocation);
 			}
 			continue;
 		}
@@ -565,32 +718,54 @@ AScenarioSplinePath* UScenarioSimulationSubsystem::FindSplinePath(const FString&
 	return nullptr;
 }
 
-AScenarioGroundRegion* UScenarioSimulationSubsystem::SpawnGroundRegion(const FScenarioGroundRegionSpec& regionSpec)
+AScenarioCorridorRuntimeActor* UScenarioSimulationSubsystem::SpawnCorridor(const FScenarioRuntimeCorridorSpec& corridorSpec)
 {
 	UWorld* world = GetWorld();
-	if (!world || regionSpec.RegionId.IsEmpty() || regionSpec.ShapeType != EScenarioGroundShapeType::Rectangle) return nullptr;
+	if (!world || corridorSpec.CorridorId.IsEmpty() || corridorSpec.PointsMeters.Num() < 2)
+	{
+		return nullptr;
+	}
 
 	FActorSpawnParameters spawnParams;
 	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	AScenarioGroundRegion* groundRegion = world->SpawnActor<AScenarioGroundRegion>(
-		AScenarioGroundRegion::StaticClass(),
+	AScenarioCorridorRuntimeActor* corridorActor = world->SpawnActor<AScenarioCorridorRuntimeActor>(
+		AScenarioCorridorRuntimeActor::StaticClass(),
 		FTransform::Identity,
 		spawnParams);
-	if (!groundRegion) return nullptr;
+	if (!corridorActor)
+	{
+		return nullptr;
+	}
 
-	groundRegion->ConfigureRegion(regionSpec);
+	corridorActor->ConfigureCorridor(corridorSpec);
+	RuntimeActors.Add(corridorActor);
+	RuntimeCorridors.Add(corridorSpec.CorridorId, corridorActor);
+	return corridorActor;
+}
+
+AScenarioGroundRegion* UScenarioSimulationSubsystem::SpawnGroundRegion(const FScenarioGroundRegionSpec& regionSpec)
+{
+	FString failureReason;
+	AScenarioGroundRegion* groundRegion = AScenarioGroundRegion::SpawnConfigured(
+		GetWorld(),
+		AScenarioGroundRegion::StaticClass(),
+		regionSpec,
+		failureReason);
+	if (!groundRegion)
+	{
+		UE_LOG(
+			LogScenarioSimulation,
+			Warning,
+			TEXT("Ground region '%s' spawn failed: %s"),
+			*regionSpec.RegionId,
+			*failureReason);
+		return nullptr;
+	}
+
 	RuntimeActors.Add(groundRegion);
 	RuntimeGroundRegions.Add(regionSpec.RegionId, groundRegion);
 	return groundRegion;
-}
-
-void UScenarioSimulationSubsystem::SpawnGroundRegions(const TArray<FScenarioGroundRegionSpec>& regionSpecs)
-{
-	for (const FScenarioGroundRegionSpec& regionSpec : regionSpecs)
-	{
-		SpawnGroundRegion(regionSpec);
-	}
 }
 
 AScenarioGroundRegion* UScenarioSimulationSubsystem::FindGroundRegion(const FString& regionId) const
@@ -680,22 +855,7 @@ AActor* UScenarioSimulationSubsystem::SpawnPlaceable(const FScenarioPlaceableIns
 
 AScenarioStaticObstacle* UScenarioSimulationSubsystem::SpawnStaticObstacle(const FScenarioPlaceableInstanceSpec& placeableSpec)
 {
-	UWorld* world = GetWorld();
-	TSubclassOf<AScenarioStaticObstacle> spawnClass = StaticObstacleClass;
-	if (!spawnClass)
-	{
-		spawnClass = AScenarioStaticObstacle::StaticClass();
-	}
-	if (!world || placeableSpec.InstanceId.IsEmpty() || placeableSpec.AssetId.IsEmpty() || !spawnClass) return nullptr;
-
-	FActorSpawnParameters spawnParams;
-	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	AScenarioStaticObstacle* staticObstacle = world->SpawnActor<AScenarioStaticObstacle>(
-		spawnClass,
-		placeableSpec.Transform,
-		spawnParams);
-	if (!staticObstacle) return nullptr;
+	if (placeableSpec.InstanceId.IsEmpty() || placeableSpec.AssetId.IsEmpty()) return nullptr;
 
 	FScenarioStaticObstaclePropEntry propEntry;
 	if (!TryFindStaticObstacleProp(FName(*placeableSpec.AssetId), propEntry))
@@ -703,22 +863,28 @@ AScenarioStaticObstacle* UScenarioSimulationSubsystem::SpawnStaticObstacle(const
 		UE_LOG(
 			LogScenarioSimulation,
 			Warning,
-			TEXT("정적 장애물 '%s'에 prop '%s' 적용 실패."),
+			TEXT("Static obstacle '%s' references unknown prop '%s'."),
 			*placeableSpec.InstanceId,
 			*placeableSpec.AssetId);
-		staticObstacle->Destroy();
 		return nullptr;
 	}
 
-	if (!staticObstacle->ApplyPropEntry(propEntry))
+	FString failureReason;
+	AScenarioStaticObstacle* staticObstacle = AScenarioStaticObstacle::SpawnConfigured(
+		GetWorld(),
+		StaticObstacleClass,
+		placeableSpec.Transform,
+		propEntry,
+		failureReason);
+	if (!staticObstacle)
 	{
 		UE_LOG(
 			LogScenarioSimulation,
 			Warning,
-			TEXT("?뺤쟻 ?μ븷臾?'%s'??prop '%s' entry ?곸슜 ?ㅽ뙣."),
+			TEXT("Static obstacle '%s' spawn failed for prop '%s': %s"),
 			*placeableSpec.InstanceId,
-			*placeableSpec.AssetId);
-		staticObstacle->Destroy();
+			*placeableSpec.AssetId,
+			*failureReason);
 		return nullptr;
 	}
 
@@ -757,10 +923,7 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 	if (!world || placeableSpec.InstanceId.IsEmpty() || !RobotActorClass) return nullptr;
 
 	const FScenarioDeliveryBotSpawnSpec& deliveryBotSpec = placeableSpec.DeliveryBot;
-	const bool bUseLegacyPropertyFallback = !deliveryBotSpec.bHasStartLocation;
-	const bool bSpawnOnly = bUseLegacyPropertyFallback
-		? GetBoolProperty(placeableSpec.Properties, TEXT("spawn_only"), deliveryBotSpec.bSpawnOnly)
-		: deliveryBotSpec.bSpawnOnly;
+	const bool bSpawnOnly = deliveryBotSpec.bSpawnOnly;
 
 	FDeliveryBotSetupInfo setupInfo = deliveryBotSpec.SetupInfo;
 	if (!deliveryBotSpec.bHasStartLocation)
@@ -769,28 +932,15 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 		setupInfo.LocationSetupInfo.GoalLocationCm = setupInfo.LocationSetupInfo.StartLocationCm;
 	}
 
-	bool bRouteAutoStart = setupInfo.LocationSetupInfo.bAutoStartRoute;
-	if (bUseLegacyPropertyFallback)
-	{
-		bRouteAutoStart = GetBoolProperty(placeableSpec.Properties, TEXT("route_auto_start"), bRouteAutoStart);
-	}
-
+	const bool bRouteAutoStart = setupInfo.LocationSetupInfo.bAutoStartRoute;
 	FVector goalLocation = setupInfo.LocationSetupInfo.GoalLocationCm;
-	bool bHasGoal = deliveryBotSpec.bHasGoalLocation;
-	if (!bHasGoal && bUseLegacyPropertyFallback)
-	{
-		bHasGoal = GetVectorProperty(placeableSpec.Properties, TEXT("goal_cm"), goalLocation);
-		if (bHasGoal)
-		{
-			setupInfo.LocationSetupInfo.GoalLocationCm = goalLocation;
-		}
-	}
+	const bool bHasGoal = deliveryBotSpec.bHasGoalLocation;
 
+	setupInfo.LocationSetupInfo.bHasGoal = bHasGoal;
 	if (!bHasGoal)
 	{
 		goalLocation = setupInfo.LocationSetupInfo.StartLocationCm;
 		setupInfo.LocationSetupInfo.GoalLocationCm = goalLocation;
-		setupInfo.LocationSetupInfo.bHasGoal = bHasGoal;
 	}
 
 	const bool bRouteGridValid = ValidateDeliveryBotRouteOnGrid(
@@ -812,11 +962,13 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 	}
 
 	setupInfo.LocationSetupInfo.bAutoStartRoute = !bSpawnOnly && bRouteAutoStart && bHasGoal;
+	FTransform robotSpawnTransform = placeableSpec.Transform;
+	robotSpawnTransform.SetLocation(setupInfo.LocationSetupInfo.StartLocationCm);
 
 	ADeliveryBot* robotActor{
 		world->SpawnActorDeferred<ADeliveryBot>(
 			RobotActorClass,
-			placeableSpec.Transform,
+			robotSpawnTransform,
 			nullptr,
 			nullptr,
 			ESpawnActorCollisionHandlingMethod::AlwaysSpawn
@@ -829,7 +981,7 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 
 	UGameplayStatics::FinishSpawningActor(
 		robotActor,
-		placeableSpec.Transform
+		robotSpawnTransform
 	);
 
 	RegisterRuntimeActor(
@@ -862,7 +1014,7 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 			FActorSpawnParameters spawnParams;
 			spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-			if (AActor* startPointActor = world->SpawnActor<AActor>(StartPointClass, FTransform(placeableSpec.Transform), spawnParams))
+			if (AActor* startPointActor = world->SpawnActor<AActor>(StartPointClass, robotSpawnTransform, spawnParams))
 			{
 				RuntimeActors.Add(startPointActor);
 			}

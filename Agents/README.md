@@ -5,8 +5,8 @@
 ## 역할
 
 - Natural language prompt를 받아 policy RAG context를 구성합니다.
-- `WorldConfig`를 생성/검증한 뒤 EpisodeSetup + DeliveryBotSetup pair와 RunQueue로 변환합니다.
-- 사용자용 scenario generation API와 result analysis API를 제공합니다.
+- `WorldConfig` 기반 legacy export tooling과 user project용 scenario generation API를 제공합니다.
+- 특정 user project run을 분석하는 result analysis API를 제공합니다.
 - Legacy `EpisodeSpec` / UE5 Handoff Archive 문서는 과거 구현 추적용 archive로 유지합니다.
 
 상세 기능과 상태:
@@ -24,8 +24,8 @@ Natural Language Prompt
 -> Policy RAG Retrieval
 -> WorldConfig Generation
 -> Validation / Reflection / Post-Processing
--> EpisodeSetup + DeliveryBotSetup
--> RunQueue Generation / Export
+-> Project Scenario JSON
+-> User Project Run Analysis
 ```
 
 Scenario/Episode 용어 기준은 [Scenario / Episode Terminology](docs/architecture/SCENARIO_EPISODE_TERMINOLOGY.md)를 따릅니다. 공유 실행 계약 spec은 [contracts/specs](../contracts/specs/) 아래에 있습니다.
@@ -38,10 +38,9 @@ Scenario/Episode 용어 기준은 [Scenario / Episode Terminology](docs/architec
 - `POST /api/v2/scenarios/generate`
 - `POST /api/v2/analysis/run`
 
-`POST /api/v1/scenarios/generate`는 자연어 `prompt`를 필수로 받고 선택적으로 `episode_count`를 허용합니다. 성공 응답은 wrapper field 없는 RunQueue JSON입니다.
-`POST /api/v1/scenarios/generate`는 자연어 `prompt`를 필수로 받고 선택적으로 `episode_count`를 허용합니다. 성공 응답은 wrapper field 없는 RunQueue JSON입니다. UE 연동 기본 권장 endpoint입니다.
+`POST /api/v1/scenarios/generate`는 현재 `410 RUN_QUEUE_REMOVED` 안내만 반환합니다.
 
-v2 Agent API는 v1 실행 계약을 변경하지 않는 신규 경로입니다. `/api/v2/scenarios/generate`는 prompt만 받아 `scenario.template.json` 형태의 템플릿을 반환하고, 실행 개수, seed, scenario sample, RunQueue 생성은 담당하지 않습니다. `/api/v2/analysis/run`은 body 없음 또는 `{}`로 experiments root 전체를 분석합니다. 기본값은 deterministic/rule-based이며, `V2_AGENT_LLM_ENABLED=true`일 때만 optional LLM JSON mode를 사용합니다. 자세한 내용은 [v2 Agent API 문서](docs/api/V2_AGENT_APIS.md), [v2 Agent Architecture](docs/agents/V2_AGENT_ARCHITECTURE.md)를 참고합니다.
+v2 Agent API는 user project 전환 기준 API입니다. `/api/v2/scenarios/generate`는 prompt만 받아 `<UserProject>/scenario.json`에 저장 가능한 `scenario` JSON을 반환합니다. 실행 개수, seed, scenario sample, RunQueue 생성은 담당하지 않습니다. `/api/v2/analysis/run`은 `project_path`, `run_id`로 특정 run을 분석합니다. 기본값은 deterministic/rule-based이며, `V2_AGENT_LLM_ENABLED=true`일 때만 optional LLM JSON mode를 사용합니다. 자세한 내용은 [v2 Agent API 문서](docs/api/V2_AGENT_APIS.md), [v2 Agent Architecture](docs/agents/V2_AGENT_ARCHITECTURE.md)를 참고합니다.
 
 Legacy `/api/v1/ue5/world-config/handoff` endpoint는 현재 FastAPI/OpenAPI에서 제거되었습니다. 이전 `responseFormat=episode_spec`, `responseFormat=setup_pair`, `responseFormat=both` 기반 handoff 설명은 archive 문서와 CLI tooling 참고용입니다.
 
@@ -79,6 +78,7 @@ ollama pull llama3.1:8b
 - [UE Handoff Delivery Manifest](docs/handoff/UE_HANDOFF_DELIVERY_MANIFEST.md)
 - [UE5 Endpoint Usage For UE Team](docs/handoff/UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md)
 - [Legacy EpisodeSpec Archive](docs/archive/previous_episode_spec/)
+- [UE EpisodeSpec JSON Guide](docs/archive/previous_episode_spec/UE_EPISODE_SPEC_JSON_GUIDE.md)
 - [OpenAI Provider Guide](docs/providers/OPENAI_PROVIDER_GUIDE.md)
 - [v2 Agent API 문서](docs/api/V2_AGENT_APIS.md)
 - [v2 Agent Architecture](docs/agents/V2_AGENT_ARCHITECTURE.md)

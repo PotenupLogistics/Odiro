@@ -12,6 +12,7 @@ class AActor;
 class ADeliveryBot_ChaosActor;
 class AScenarioGroundRegion;
 class UPrimitiveComponent;
+struct FScenarioRuntimeCorridorSurfaceQueryResult;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEpisodeEvaluationEndedSignature, FEpisodeEvaluationResult, result);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEpisodeEvaluationEventSignature, FEpisodeEvaluationEvent, event);
@@ -115,6 +116,19 @@ private:
 	bool CheckRobotTipOver();
 	void UpdateBlockedRegionViolations();
 	void UpdatePenaltyRegionViolations();
+	// Records a blocked sampled Corridor lane collision with surface-level identity.
+	void RecordBlockedCorridorSurfaceCollision(
+		const FScenarioRuntimeCorridorSurfaceQueryResult& surface,
+		AActor* targetActor,
+		const FVector& location,
+		const FString& message);
+	// Records a penalty sampled Corridor lane violation after its dwell condition is met.
+	void AddPenaltyCorridorSurfaceViolation(
+		const FScenarioRuntimeCorridorSurfaceQueryResult& surface,
+		const FVector& location,
+		double enterTimeSeconds,
+		double durationSeconds,
+		double requiredDurationSeconds);
 	void UpdateNearMisses();
 	void FlushActiveNearMisses();
 	void CloseNearMissInterval(
@@ -122,7 +136,6 @@ private:
 		const FNearMissIntervalState& state,
 		double endTimeSeconds);
 	void SetFloatMetric(const FString& key, double value);
-	void AddScore(double scoreDelta);
 	void FinishEpisode(
 		bool bSuccess,
 		EEpisodeEvaluationOutcome outcome,
@@ -131,9 +144,9 @@ private:
 		EEpisodeEvaluationEventType eventType,
 		AActor* targetActor,
 		const FVector& location,
-		double scoreDelta,
+		double eventValue,
 		const FString& message);
-	bool HasWarningEventsOrScore() const;
+	bool HasWarningEvents() const;
 	bool IsRobotActor(const AActor* actor) const;
 	bool ContainsRuntimeActor(const TArray<TObjectPtr<AActor>>& actors, const AActor* actor) const;
 	FString GetActorInstanceId(const AActor* actor) const;
@@ -153,7 +166,6 @@ private:
 	bool bEvaluating = false;
 	double EvaluationStartTimeSeconds = 0.0;
 	double TimeLimitSeconds = 0.0;
-	double CurrentScore = 0.0;
 	int32 NearMissCount = 0;
 	double NearMissTotalDurationSeconds = 0.0;
 	double NearMissMinDistanceCm = TNumericLimits<double>::Max();

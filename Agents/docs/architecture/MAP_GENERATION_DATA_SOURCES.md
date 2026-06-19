@@ -1,5 +1,11 @@
 # Map Generation Data Sources
 
+상태: legacy WorldConfig/EpisodeSpec generation note.
+
+- 최종 user project scenario 계약 아님
+- 현재 scenario 기준: `contracts/specs/user-project-data.md`
+- 이 문서는 이전 좌표 생성 근거와 trace 설계 확인용
+
 ## 1. 목적
 
 사용자 자연어 기반 맵 생성 시 어떤 데이터를 근거로 JSON을 생성하는지 설명한다.
@@ -34,9 +40,9 @@
 * environmentSampling 수치
 * placement validation rule
 
-## 5. EpisodeSpec 변환 근거
+## 5. Legacy EpisodeSpec 변환 근거
 
-UE EpisodeSpec JSON Guide를 기준으로 변환한다.
+이전 UE EpisodeSpec JSON Guide 기준 변환 기록이다.
 
 * WorldConfig cm -> EpisodeSpec m
 * map -> ground_model.regions
@@ -51,7 +57,7 @@ LLM이 법령 RAG를 보고 좌표를 계산하는 것이 아니다.
 
 ## 7. Trace 제공
 
-시나리오 생성 API는 `includeDiagnostics=true`일 때 `diagnostics.generationTrace`로 맵 생성 근거를 제공한다.
+이전 시나리오 생성 API는 `includeDiagnostics=true`일 때 `diagnostics.generationTrace`로 맵 생성 근거를 제공했다.
 
 Trace는 아래 근거를 summary evidence로 남긴다.
 
@@ -71,4 +77,4 @@ Trace에는 API key, rawContent, full WorldConfig, full EpisodeSpec을 저장하
 
 * DrEureka는 현재 `environmentSampling`과 향후 환경 변수 범위 추천의 연구적 근거다.
 * Scenic은 현재 runtime dependency가 아니라 Scenic-inspired placement and scenario sampling direction의 연구적 근거다.
-* 현재 프로젝트는 Scenic DSL이 아니라 WorldConfig/EpisodeSpec 기반이다.
+* 이전 generation flow는 Scenic DSL이 아니라 WorldConfig/EpisodeSpec 기반이었다.

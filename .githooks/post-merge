@@ -5,4 +5,6 @@ command -v git-lfs >/dev/null 2>&1 || {
   exit 2
 }
 
-git-lfs post-merge "$@"
+git-lfs post-merge "$@" || exit $?
+
+sh "$(dirname "$0")/helpers/run-install"

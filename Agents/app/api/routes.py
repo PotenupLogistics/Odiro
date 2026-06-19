@@ -5,18 +5,13 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from app.agents.result_analysis_v2 import ResultAnalysisV2Agent
-from app.agents.scenario_generation_v2 import ScenarioGenerationV2Agent
+from app.agents.result_analysis_v2.graph_runner import ResultAnalysisGraphRunnerV2
+from app.agents.scenario_generation_v2.graph_runner import ScenarioGenerationGraphRunnerV2
+from app.core.settings import Settings
 from app.models.analysis_v2 import AnalysisRunV2Request, AnalysisRunV2Response
 from app.models.recommendation import EpisodeAnalysisRequest, IntegratedRecommendationResult
-from app.models.run_queue import EpisodeRunQueue
-from app.models.scenario_generation import ScenarioGenerateRequest
-from app.models.scenario_generation_v2 import ScenarioGenerateV2Request, ScenarioGenerateV2Response
+from app.models.scenario_generation_v2 import ProjectScenarioV1Response, ScenarioGenerateV2Request
 from app.services.policy_recommendation_orchestrator import analyze_full_setup_and_recommend
-from app.services.scenario_generation_service import (
-    ScenarioArtifactStorageError,
-    generate_scenario_artifacts,
-    write_scenario_artifacts_to_local_dir,
-)
 
 
 router = APIRouter()
@@ -60,33 +55,30 @@ def health() -> dict[str, str]:
 
 @router.post(
     "/api/v1/scenarios/generate",
-    response_model=EpisodeRunQueue,
 )
 def scenario_generate_endpoint(
-    request: ScenarioGenerateRequest,
-) -> EpisodeRunQueue:
-    try:
-        artifacts = generate_scenario_artifacts(request, write_export=False)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=_scenario_generation_error_detail(exc)) from exc
-    try:
-        write_scenario_artifacts_to_local_dir(artifacts)
-    except ScenarioArtifactStorageError as exc:
-        detail = {"code": exc.code, "message": exc.message}
-        if exc.filename:
-            detail["filename"] = exc.filename
-        raise HTTPException(status_code=500, detail=detail) from exc
-    return artifacts.queue.run_queue
+) -> None:
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "code": "RUN_QUEUE_REMOVED",
+            "message": "RunQueue scenario generation was removed. Use /api/v2/scenarios/generate and user project runs.",
+        },
+    )
 
 
 @router.post(
     "/api/v2/scenarios/generate",
-    response_model=ScenarioGenerateV2Response,
+    response_model=ProjectScenarioV1Response,
 )
 def scenario_generate_v2_endpoint(
     request: ScenarioGenerateV2Request,
-) -> ScenarioGenerateV2Response:
-    return ScenarioGenerationV2Agent().generate(request)
+) -> ProjectScenarioV1Response:
+    settings = Settings()
+    response = ScenarioGenerationGraphRunnerV2(settings=settings).run(request)
+    if response.scenario is None or not response.validation.valid:
+        raise HTTPException(status_code=500, detail=_scenario_generation_error_detail(Exception(response.summary)))
+    return ProjectScenarioV1Response.model_validate(response.scenario)
 
 
 @router.post(
@@ -146,6 +138,9 @@ def analysis_run_endpoint(
     response_model=AnalysisRunV2Response,
 )
 def analysis_run_v2_endpoint(
-    request: AnalysisRunV2Request | None = None,
+    request: AnalysisRunV2Request,
 ) -> AnalysisRunV2Response:
-    return ResultAnalysisV2Agent().run()
+    settings = Settings()
+    if settings.v2AgentGraphEnabled:
+        return ResultAnalysisGraphRunnerV2(settings=settings).run(request)
+    return ResultAnalysisV2Agent(settings=settings).run(request)

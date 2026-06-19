@@ -195,6 +195,7 @@ void AScenarioPlacementPreviewActor::ClearPreviewMeshes()
 	{
 		PreviewMeshComponent->SetStaticMesh(nullptr);
 		PreviewMeshComponent->SetVisibility(false);
+		PreviewMeshComponent->SetRelativeLocation(FVector::ZeroVector);
 	}
 	if (PreviewSkeletalMeshComponent)
 	{
@@ -209,6 +210,7 @@ void AScenarioPlacementPreviewActor::SetStaticMeshPreview(UStaticMesh* staticMes
 	{
 		PreviewMeshComponent->SetStaticMesh(staticMesh);
 		PreviewMeshComponent->SetVisibility(staticMesh != nullptr);
+		ApplyStaticMeshGroundAlignment();
 	}
 	if (PreviewSkeletalMeshComponent)
 	{
@@ -228,6 +230,7 @@ void AScenarioPlacementPreviewActor::SetSkeletalMeshPreview(USkeletalMesh* skele
 	{
 		PreviewMeshComponent->SetStaticMesh(nullptr);
 		PreviewMeshComponent->SetVisibility(false);
+		PreviewMeshComponent->SetRelativeLocation(FVector::ZeroVector);
 	}
 }
 
@@ -242,6 +245,25 @@ void AScenarioPlacementPreviewActor::SetPlacementValid(bool bCanPlace)
 	{
 		PreviewSkeletalMeshComponent->SetRenderCustomDepth(!bCanPlace);
 	}
+}
+
+void AScenarioPlacementPreviewActor::ApplyStaticMeshGroundAlignment()
+{
+	if (!PreviewMeshComponent)
+	{
+		return;
+	}
+
+	UStaticMesh* staticMesh = PreviewMeshComponent->GetStaticMesh();
+	if (!staticMesh)
+	{
+		PreviewMeshComponent->SetRelativeLocation(FVector::ZeroVector);
+		return;
+	}
+
+	const FBox localBounds = staticMesh->GetBoundingBox();
+	const double relativeScaleZ = PreviewMeshComponent->GetRelativeScale3D().Z;
+	PreviewMeshComponent->SetRelativeLocation(FVector(0.0, 0.0, -localBounds.Min.Z * relativeScaleZ));
 }
 
 void AScenarioPlacementPreviewActor::ApplyPreviewMaterial(UMaterialInterface* material)

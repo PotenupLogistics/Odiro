@@ -35,6 +35,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
 	FString GetBaseUrl() const; // Python 서버 기본 URL 반환
 
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
+	FString GetDebugStatus() const; // Policy start 진단을 위한 Python 서버 lifecycle 상태 반환
+
 private:  // health 는 서버가 동작중인지 혹은 어떤 상태인지 확인
 	void StartPythonServerLifecycle();				// Python 서버 실행 흐름 시작
 	void CheckExistingServerHealth();				// 기존 Python 서버 health 확인
@@ -46,7 +49,10 @@ private:  // health 는 서버가 동작중인지 혹은 어떤 상태인지 확
 	void StopPythonProcess();						// 직접 실행한 Python 서버만 종료
 
 	FString BuildHealthUrl() const;					// health check URL 생성
-	FString ResolveServerScriptPath() const;		// server.py 절대 경로 생성
+	FString ResolveServerScriptPath() const;		// policy-runtime.py 절대 경로 생성
+	FString ResolvePolicyPackagePath() const;		// 실행할 project policy package 경로 생성
+	// Python runtime process에 전달할 command line 인자를 생성
+	FString BuildPythonProcessArguments(const FString& scriptPath, const FString& policyPath) const;
 
 private:
 	FDeliveryBotPythonSettings Settings;
@@ -57,6 +63,7 @@ private:
 
 private:
 	FString LastErrorMessage;
+	FString LastHealthCheckFailureSummary; // 최근 /health 실패 응답 요약
 
 	bool bLaunchedByThisProcess{ false };
 	bool bHealthRequestInFlight{ false };

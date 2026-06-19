@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import uuid4
 
 from app.agents.common.json_response_parser import parse_json_response
@@ -17,6 +17,7 @@ class AgentLlmClient(Protocol):
         system_prompt: str,
         user_prompt: str,
         response_name: str,
+        response_schema: dict[str, Any] | None = None,
     ) -> dict:
         ...
 
@@ -38,7 +39,9 @@ class AgentLlmJsonClient:
         system_prompt: str,
         user_prompt: str,
         response_name: str,
+        response_schema: dict[str, Any] | None = None,
     ) -> dict:
+        schema = response_schema or {}
         response = self.client.generate(
             LlmGenerationRequest(
                 provider=self.provider,
@@ -48,6 +51,9 @@ class AgentLlmJsonClient:
                 temperature=self.settings.openaiTemperature,
                 maxTokens=self.settings.openaiMaxTokens,
                 responseFormat="json_object",
+                responseJsonSchema=schema.get("schema") if isinstance(schema.get("schema"), dict) else None,
+                responseSchemaName=schema.get("name") if isinstance(schema.get("name"), str) else None,
+                responseSchemaStrict=bool(schema.get("strict", False)),
                 requestId=f"{response_name}-{uuid4().hex}",
                 timeoutSec=self.settings.openaiTimeoutSec,
             )

@@ -199,15 +199,15 @@ Candidate chunk 작성, 검토, 수동 승격 절차는 [Policy Chunk Candidate 
 4. PDF 원문과 processed MD를 바로 runtime 검색 대상으로 넣지 않는다.
 5. Review 확정 전 후보 데이터는 runtime chunk로 승격하지 않는다.
 6. Runtime chunk 변경은 chunk count, required fields, source/category/filter 검색 테스트를 통과해야 한다.
-7. 생성 산출물은 `data/run_queue_exports`에 유지한다.
-8. UE 전달에 필요한 EpisodeSetup, DeliveryBotSetup, RunQueue JSON 파일 산출 구조는 유지한다.
+7. legacy RunQueue export 산출물은 `data/run_queue_exports`에 유지한다.
+8. UE legacy 전달에 필요한 EpisodeSetup, DeliveryBotSetup, RunQueue JSON 파일 산출 구조는 tooling 범위에서만 유지한다.
 9. 생성/검증 리포트, run output, local sample, API key, token, `.env`는 repository 관리 대상으로 승격하지 않는다.
 
 ## 지켜야 할 기존 동작
 
 아래 동작은 file-based data store 설계의 호환성 기준이다.
 
-- `POST /api/v1/scenarios/generate`는 기존 응답 계약을 유지한다.
+- `POST /api/v1/scenarios/generate`는 현재 `410 RUN_QUEUE_REMOVED` 안내만 반환한다.
 - `app/services/policy_rag_retriever.py`는 계속 `data/rag/policy_rag_chunks.jsonl`을 읽는다.
 - `scripts/search_policy_rag.py`는 기존 JSONL retriever를 사용한다.
 - `data/run_queue_exports`는 UE 전달용 산출물 저장소로 유지한다.

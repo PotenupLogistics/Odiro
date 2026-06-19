@@ -1,10 +1,10 @@
 # LLM World Config Generation Flow
 
-이 문서는 자연어 입력이 `WorldConfig` draft, validation, scenario reflection, RunQueue generation/export로 이어지는 흐름을 설명한다. 기술 식별자와 API path는 영어 원문을 유지한다.
+이 문서는 legacy `WorldConfig` draft, validation, scenario reflection, RunQueue generation/export 흐름을 설명한다. 기술 식별자와 API path는 영어 원문을 유지한다.
 
 schema validation을 통과한 뒤에는 scenario reflection validation을 수행한다. reflection이 실패하면 LLM에 scenario repair prompt를 다시 보내기 전에 deterministic scenario post-processing을 먼저 시도한다. Kickboard obstacle 삽입이나 pedestrian crossing behavior처럼 명확한 scenario 보강은 local rule과 schema 범위 안에서 처리한다.
 
-검증된 generation result는 내부 변환 경로에서 EpisodeSetup + DeliveryBotSetup pair와 RunQueue로 변환된다. legacy UE5 handoff endpoint는 FastAPI/OpenAPI에서 제거되었다.
+검증된 generation result를 EpisodeSetup + DeliveryBotSetup pair와 RunQueue로 변환하던 경로는 legacy tooling이다. legacy UE5 handoff endpoint와 RunQueue 생성 API는 FastAPI/OpenAPI의 신규 실행 경계가 아니다.
 
 ## FastAPI Generation Endpoint
 
@@ -16,7 +16,8 @@ schema validation을 통과한 뒤에는 scenario reflection validation을 수�
 - `disabled` provider는 `success=false`를 반환한다.
 - OpenAI/Ollama provider client는 구현되어 있지만 automated tests와 harness에서는 실제 호출하지 않는다.
 - `generatedPayload`를 사용하려면 validation이 필수다.
-- UE 실행용 사용자 흐름은 `/api/v1/scenarios/generate`에서 RunQueue JSON으로 제공한다.
+- 현재 사용자 project 흐름은 `/api/v2/scenarios/generate`의 Project Scenario 생성과 `/api/v2/analysis/run`의 project/run 분석을 사용한다.
+- `/api/v1/scenarios/generate`는 `410 RUN_QUEUE_REMOVED` 안내만 반환한다.
 
 ## Generation Orchestrator Status
 
@@ -58,7 +59,7 @@ Natural Language Prompt
 -> deterministic RAG context
 -> prompt package response
 
-외부 LLM 실행과 generated World Config payload 반환은 service layer에서 처리한다. UE 실행용 RunQueue 흐름은 `/api/v1/scenarios/generate`를 사용한다.
+외부 LLM 실행과 generated World Config payload 반환은 service layer에서 처리한다. RunQueue 흐름은 legacy tooling으로만 남는다.
 
 ## Current Implementation Scope
 
@@ -96,7 +97,7 @@ Natural Language Prompt
 -> Contract Validation
 -> Repair Loop
 -> Validated World Config
--> RunQueue Generation / Export
+-> Legacy RunQueue Generation / Export Tooling
 
 ## 2. 단계별 설명
 
@@ -110,7 +111,7 @@ Natural Language Prompt
 | Contract Validation | JSON object 후보 | validation layer 결과 | schema/Pydantic 오류를 수집 |
 | Repair Loop | validation error | 수정된 JSON object 후보 | 최대 2회까지 repair |
 | Validated World Config | 검증 통과 payload | UE 실행 계약 변환 가능 payload | 검증 전에는 UE 전달 금지 |
-| RunQueue Generation / Export | Validated World Config | EpisodeSetup + DeliveryBotSetup pair와 RunQueue | 생성 실패 시 로그와 payload id 기록 |
+| Legacy RunQueue Generation / Export Tooling | Validated World Config | EpisodeSetup + DeliveryBotSetup pair와 RunQueue | 신규 user project 실행 API 아님 |
 
 ## 3. Validation 원칙
 

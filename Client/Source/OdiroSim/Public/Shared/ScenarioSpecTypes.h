@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "ScenarioCoreTypes.h"
 #include "ScenarioConfigTypes.h"
+#include "ScenarioSchemaTypes.h"
 #include "Struct/DeliveryBot/Setup/DeliveryBotSetupInfo.h"
 #include "ScenarioSpecTypes.generated.h"
 
@@ -28,7 +29,104 @@ enum class EScenarioGroundShapeType : uint8
 	ConvexPolygon
 };
 
-// 런타임 지면 영역 명세. 단위는 centimeter.
+// Runtime lane strip resolved from scenario_sample semantic layout.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FScenarioRuntimeCorridorLaneSpec
+{
+	GENERATED_BODY()
+
+	// Semantic lane id such as walkway, building_edge, or curb_edge.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	FString LaneId;
+
+	// Lateral interval occupied by the lane in corridor-local meters.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	FScenarioOffsetRangeMeters OffsetRangeMeters;
+
+	// Corridor surface catalog id used for material and traversability lookup.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	FString SurfaceId;
+
+	// Runtime traversability class used for collision profile and grid cost.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	EScenarioGroundRegionType RegionType = EScenarioGroundRegionType::Walkable;
+
+	// Surface height offset relative to the scenario base plane in centimeters.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	double SurfaceZOffsetCm = 0.0;
+
+	// Normalized traversability score copied from the sampled lane type.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	double TraversabilityScore = 1.0;
+
+	// Penalty label applied when RegionType is Penalty.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	FString PenaltyKind;
+
+	// Penalty cost applied when RegionType is Penalty.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	double PenaltyCost = 0.0;
+
+	// Collision tag applied when RegionType is Blocked.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	FString CollisionTag;
+};
+
+// Runtime corridor layout interval resolved from one scenario_sample layout entry.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FScenarioRuntimeCorridorLayoutEntry
+{
+	GENERATED_BODY()
+
+	// Template segment id represented by this interval.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	FString SegmentId;
+
+	// Distance interval along the route axis where the lane set applies.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	FScenarioAlongRangeMeters AlongRangeMeters;
+
+	// Lane strips visible and queryable inside this interval.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	TArray<FScenarioRuntimeCorridorLaneSpec> Lanes;
+};
+
+// Runtime corridor surface geometry resolved from scenario_sample route_axis and layout.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FScenarioRuntimeCorridorSpec
+{
+	GENERATED_BODY()
+
+	// Runtime corridor instance id.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	FString CorridorId;
+
+	// Axis representation used by this corridor.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	EScenarioCorridorAxisType AxisType = EScenarioCorridorAxisType::Polyline;
+
+	// World or sample-local origin in meters.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	FVector2D OriginXYMeters = FVector2D::ZeroVector;
+
+	// Heading of the corridor local frame in degrees.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	double HeadingDegrees = 0.0;
+
+	// Concrete route axis points in meters before origin and heading are applied.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	TArray<FVector2D> PointsMeters;
+
+	// Total route axis length in meters.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	double LengthMeters = 0.0;
+
+	// Segment and lane layout used to materialize runtime surfaces.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Corridor")
+	TArray<FScenarioRuntimeCorridorLayoutEntry> Layout;
+};
+
+// Runtime ground-region spec. Dimensions are in centimeters.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FScenarioGroundRegionSpec
 {
@@ -39,6 +137,10 @@ struct ODIROSIM_API FScenarioGroundRegionSpec
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	EScenarioGroundRegionType RegionType = EScenarioGroundRegionType::Walkable;
+
+	// Corridor surface catalog id used to keep editor preview and runtime visuals aligned.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
+	FString SurfaceId;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	EScenarioGroundShapeType ShapeType = EScenarioGroundShapeType::Rectangle;
@@ -194,6 +296,9 @@ struct ODIROSIM_API FScenarioSimulationSetupSpec
 	FScenarioSeedLedger Seeds;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
+	TArray<FScenarioRuntimeCorridorSpec> Corridors;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TArray<FScenarioGroundRegionSpec> GroundRegions;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
@@ -223,6 +328,9 @@ struct ODIROSIM_API FScenarioWorldSpec
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	FScenarioSeedLedger Seeds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
+	TArray<FScenarioRuntimeCorridorSpec> Corridors;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TArray<FScenarioGroundRegionSpec> GroundRegions;

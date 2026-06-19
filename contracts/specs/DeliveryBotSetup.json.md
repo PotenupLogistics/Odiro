@@ -1,5 +1,13 @@
 # DeliveryBotSetup JSON Guide
 
+상태: legacy Client input guide.
+
+- 최종 사용자 project 계약 아님
+- 새 profile 기준: `contracts/specs/user-project-data.md`의 `profile.json`
+- 새 policy 기준: `<UserProject>/policy/__init__.py:create_policy`
+- 새 writer는 `DeliveryBotSetup` JSON을 만들지 않음
+- 이 문서는 기존 compiler와 field 출처 확인용
+
 이 문서는 DeliveryBot의 주행/센서/정책 튜닝값을 `FDeliveryBotSetupInfo`에 채우기 위한 JSON 범위를 정리한다.
 
 DeliveryBotSetup JSON은 로봇 액터를 어디에, 어떤 ID로, 어떤 목표로 배치할지 결정하지 않는다. 그 책임은 EpisodeSetup JSON에 둔다.
@@ -144,7 +152,7 @@ JSON에서 값이 빠지면 C++ 구조체 기본값을 그대로 사용한다.
 }
 ```
 
-여러 pair를 순서대로 실행할 때는 `Json/Input/EpisodeRunQueueSample.json`처럼 `runs` 배열로 묶고 `UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile()`에 큐 파일 경로를 전달한다.
+legacy 실행에서는 여러 pair를 `Json/Input/EpisodeRunQueueSample.json`처럼 `runs` 배열로 묶고 `UEpisodeRunnerSubsystem::StartBatchFromRunQueueJsonFile()`에 큐 파일 경로를 전달했다. 최종 user project 계약에서는 RunQueue를 새 adapter로 연장하지 않고 `<UserProject>/scenario.json`, `<UserProject>/setting.json`, `<UserProject>/profile.json`, `<UserProject>/policy/`에서 runner 입력을 만든다.
 `episode_setup`과 `delivery_bot_setup`은 둘 다 필수이며, Runner는 더 이상 기본 DeliveryBotSetup 파일로 fallback하지 않는다.
 
 ```json

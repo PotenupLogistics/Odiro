@@ -4,22 +4,25 @@ from app.agents.scenario_generation_v2.intent_parser import ScenarioIntent
 
 
 SUPPORTED_SCENARIO_TYPES = {
-    "straight_sidewalk",
-    "narrow_sidewalk",
-    "crosswalk",
-    "t_junction",
-    "obstacle_corridor",
+    "corridor_pose_navigation",
+    "narrow_sidewalk_cross_path",
+    "pinch_oncoming_pass",
+    "static_obstacle_ahead",
 }
 
 
 class ScenarioTypeSelector:
+    """Selects one alpha scenario pattern from parsed natural-language intent."""
+
     def select(self, intent: ScenarioIntent) -> str:
-        if intent.environment_type == "crosswalk":
-            return "crosswalk"
-        if intent.environment_type == "t_junction":
-            return "t_junction"
-        if "narrow_sidewalk" in intent.risk_factors:
-            return "narrow_sidewalk"
+        if intent.robot_anchor_only:
+            return "corridor_pose_navigation"
+        if "static_obstacle_ahead" in intent.risk_factors and (
+            "cross_path" in intent.risk_factors or "oncoming_pass" in intent.risk_factors
+        ):
+            return "narrow_sidewalk_cross_path"
         if "static_obstacle_ahead" in intent.risk_factors:
-            return "obstacle_corridor"
-        return "straight_sidewalk"
+            return "static_obstacle_ahead"
+        if "oncoming_pass" in intent.risk_factors:
+            return "pinch_oncoming_pass"
+        return "narrow_sidewalk_cross_path"

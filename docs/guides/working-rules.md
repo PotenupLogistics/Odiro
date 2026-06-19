@@ -43,11 +43,18 @@ LLM API key
 - main 동기화와 작업 브랜치 최신화는 rebase 우선: `git pull --rebase origin main`
 
 설정이 꼬였으면 `.\tools\set-git-config.ps1`를 다시 실행한다.
+Pull 후 Fork에 Git identity 경고가 뜨면 repo-local 값을 맞춘다.
+
+```powershell
+git lfs locks --verify
+git config --local user.name <GitHub login>
+git config --local user.email <GitHub commit email>
+```
 
 ## Binary Asset lock 규칙
 
 - `.uasset`, `.umap`, `.ubulk`, `.uexp` 수정 시 lock 필요
-  - `task-setup.bat` 또는 `tools/set-git-config.ps1` 실행해야 설정 적용
+  - `task-setup.bat` 또는 `tools/set-git-config.ps1` 실행해야 read-only와 Editor checkout prompt 설정 적용
 - Unreal Editor: `Check Out`만 수행. `Submit`, `Push`, `Unlock`, repository initialize 기능 사용 금지
   - Source Control 탭에서 `Git LFS 2 provider` 설정 필요
 - Checkout 실패 시 다른 사람이 lock한 상태. 해당 asset 수정 금지
@@ -75,6 +82,8 @@ git lfs locks --verify
 ```
 
 Lock 성공 시 해당 asset이 writable 상태가 된다. 실패 시 다른 사람이 lock한 상태.
+`set-git-config.ps1`은 현재 LFS lock owner를 알 수 있으면 `user.name`을 자동 설정한다.
+`user.email`은 직접 설정한다.
 
 #### 3. 수정 후 Pull Request
 

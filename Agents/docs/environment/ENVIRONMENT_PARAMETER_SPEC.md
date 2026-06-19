@@ -1,5 +1,11 @@
 # Environment Parameter Spec
 
+상태: legacy WorldConfig/EpisodeSpec parameter note.
+
+- 최종 user project scenario 계약 아님
+- 현재 scenario 기준: `contracts/specs/user-project-data.md`
+- 이 문서는 기존 numeric parameter 출처 확인용
+
 ## 1. 목적
 
 환경 시나리오는 low / middle / high 같은 모호한 label이 아니라 구체적인 수치 값으로 정의합니다.

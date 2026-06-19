@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from app.agents.result_analysis_v2 import ResultAnalysisV2Agent
 from app.core.settings import Settings
 from app.main import app
+from app.models.analysis_v2 import AnalysisRunV2Request
 
 
 class _FakeJsonClient:
@@ -28,20 +30,32 @@ class _FakeJsonClient:
         return response
 
 
-def _write_blocked_episode(experiments, episode_id: str) -> None:
-    episode_dir = experiments / "Experiment1" / "runs" / "000001" / "episodes" / episode_id
+def _request(project: Path, run_id: str = "000001") -> dict:
+    return {"project_path": str(project), "run_id": run_id}
+
+
+def _request_model(project: Path, run_id: str = "000001") -> AnalysisRunV2Request:
+    return AnalysisRunV2Request(project_path=str(project), run_id=run_id)
+
+
+def _write_episode(project: Path, episode_id: str, result: dict, events: str = "") -> None:
+    episode_dir = project / "runs" / "000001" / "episodes" / episode_id
     episode_dir.mkdir(parents=True)
-    (episode_dir / "result.json").write_text(
-        json.dumps({"success": False, "failure_type": "blocked_region_violation"}),
-        encoding="utf-8",
-    )
-    (episode_dir / "events.jsonl").write_text(
+    (episode_dir / "result.json").write_text(json.dumps(result), encoding="utf-8")
+    if events:
+        (episode_dir / "events.jsonl").write_text(events, encoding="utf-8")
+
+
+def _write_blocked_episode(project: Path, episode_id: str) -> None:
+    _write_episode(
+        project,
+        episode_id,
+        {"success": False, "failure_type": "blocked_region_violation"},
         '{"event_type": "blocked_region_violation"}\n',
-        encoding="utf-8",
     )
 
 
-def _llm_analysis(evidence_episode_id: str = "000001") -> dict:
+def _llm_analysis(project_id: str, evidence_episode_id: str = "000001") -> dict:
     return {
         "summary_message": "LLM recommends policy change.",
         "overall_judgement": "change_recommended",
@@ -54,7 +68,7 @@ def _llm_analysis(evidence_episode_id: str = "000001") -> dict:
                 "reason": "Repeated blocked region violation evidence exists.",
                 "evidence": [
                     {
-                        "experiment_id": "Experiment1",
+                        "experiment_id": project_id,
                         "run_id": "000001",
                         "episode_id": evidence_episode_id,
                     }
@@ -74,83 +88,58 @@ def _llm_analysis(evidence_episode_id: str = "000001") -> dict:
     }
 
 
-def test_v2_analysis_run_empty_body_returns_insufficient_data(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("ODIROSIM_EXPERIMENTS_DIR", str(tmp_path / "experiments"))
+def test_v2_analysis_run_requires_project_path_and_run_id() -> None:
+    client = TestClient(app)
 
-    response = TestClient(app).post("/api/v2/analysis/run", json={})
+    empty_response = client.post("/api/v2/analysis/run", json={})
+    missing_body_response = client.post("/api/v2/analysis/run")
+    invalid_run_response = client.post(
+        "/api/v2/analysis/run",
+        json={"project_path": "X:/missing", "run_id": "latest"},
+    )
+
+    assert empty_response.status_code == 422
+    assert missing_body_response.status_code == 422
+    assert invalid_run_response.status_code == 422
+
+
+def test_v2_analysis_run_missing_requested_run_returns_insufficient_data(tmp_path) -> None:
+    project = tmp_path / "Project1"
+    project.mkdir()
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
 
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["schema"] == "analysis_run_response_v2"
-    assert payload["version"] == 2
-    assert payload["status"] == "success"
     assert payload["summary"]["overall_judgement"] == "insufficient_data"
-    assert payload["recommendations"] == []
-    assert payload["modified_policy_json"] == []
-    assert payload["modified_environment_json"] == []
-    assert "분석 가능한 experiment 실행 결과를 찾지 못했습니다." in payload["warnings"]
+    assert any("run directory does not exist" in warning for warning in payload["warnings"])
 
 
-def test_v2_analysis_run_empty_experiments_root_returns_insufficient_data(monkeypatch, tmp_path) -> None:
-    experiments = tmp_path / "experiments"
-    experiments.mkdir()
-    monkeypatch.setenv("ODIROSIM_EXPERIMENTS_DIR", str(experiments))
-
-    response = TestClient(app).post("/api/v2/analysis/run", json={})
-
-    assert response.status_code == 200, response.text
-    payload = response.json()
-    assert payload["analysis_scope"] == {"experiments_count": 0, "runs_count": 0, "episodes_count": 0}
-    assert payload["summary"]["overall_judgement"] == "insufficient_data"
-    assert payload["recommendations"] == []
-
-
-def test_v2_analysis_run_accepts_missing_body(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("ODIROSIM_EXPERIMENTS_DIR", str(tmp_path / "experiments"))
-
-    response = TestClient(app).post("/api/v2/analysis/run")
-
-    assert response.status_code == 200, response.text
-    assert response.json()["schema"] == "analysis_run_response_v2"
-
-
-def test_v2_analysis_run_records_broken_jsonl_warning(monkeypatch, tmp_path) -> None:
-    experiments = tmp_path / "experiments"
-    episode_dir = experiments / "Experiment1" / "runs" / "000001" / "episodes" / "000003"
-    episode_dir.mkdir(parents=True)
-    (episode_dir / "result.json").write_text(
-        json.dumps({"success": False, "failure_type": "timeout", "near_miss_count": 1}),
-        encoding="utf-8",
-    )
-    (episode_dir / "events.jsonl").write_text(
+def test_v2_analysis_run_records_broken_jsonl_warning(tmp_path) -> None:
+    project = tmp_path / "Project1"
+    _write_episode(
+        project,
+        "000003",
+        {"success": False, "failure_type": "timeout", "near_miss_count": 1},
         '{"event": "near_miss", "distance_m": 0.4}\n{broken json}\n',
-        encoding="utf-8",
     )
-    monkeypatch.setenv("ODIROSIM_EXPERIMENTS_DIR", str(experiments))
 
-    response = TestClient(app).post("/api/v2/analysis/run", json={})
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["analysis_scope"]["experiments_count"] == 1
-    assert payload["analysis_scope"]["runs_count"] == 1
-    assert payload["analysis_scope"]["episodes_count"] == 1
+    assert payload["analysis_scope"] == {"experiments_count": 1, "runs_count": 1, "episodes_count": 1}
     assert payload["recommendations"] == []
     assert any("events.jsonl" in warning for warning in payload["warnings"])
 
 
-def test_v2_analysis_run_successful_episodes_do_not_generate_recommendations(monkeypatch, tmp_path) -> None:
-    experiments = tmp_path / "experiments"
+def test_v2_analysis_run_successful_episodes_do_not_generate_recommendations(tmp_path) -> None:
+    project = tmp_path / "Project1"
     for episode_id in ("000001", "000002"):
-        episode_dir = experiments / "Experiment1" / "runs" / "000001" / "episodes" / episode_id
-        episode_dir.mkdir(parents=True)
-        (episode_dir / "result.json").write_text(
-            json.dumps({"success": True, "goal_reached": True, "duration_s": 12.0}),
-            encoding="utf-8",
-        )
-    monkeypatch.setenv("ODIROSIM_EXPERIMENTS_DIR", str(experiments))
+        _write_episode(project, episode_id, {"success": True, "goal_reached": True, "duration_s": 12.0})
 
-    response = TestClient(app).post("/api/v2/analysis/run", json={})
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
 
     assert response.status_code == 200, response.text
     payload = response.json()
@@ -163,22 +152,17 @@ def test_v2_analysis_run_successful_episodes_do_not_generate_recommendations(mon
     assert payload["modified_environment_json"] == []
 
 
-def test_v2_analysis_run_repeated_blocked_region_generates_policy_recommendation(monkeypatch, tmp_path) -> None:
-    experiments = tmp_path / "experiments"
+def test_v2_analysis_run_repeated_blocked_region_generates_policy_recommendation(tmp_path) -> None:
+    project = tmp_path / "Project1"
     for episode_id in ("000001", "000002"):
-        episode_dir = experiments / "Experiment1" / "runs" / "000001" / "episodes" / episode_id
-        episode_dir.mkdir(parents=True)
-        (episode_dir / "result.json").write_text(
-            json.dumps({"success": False, "failure_type": "blocked_region_violation"}),
-            encoding="utf-8",
-        )
-        (episode_dir / "events.jsonl").write_text(
+        _write_episode(
+            project,
+            episode_id,
+            {"success": False, "failure_type": "blocked_region_violation"},
             '{"event_type": "blocked_region_violation"}\n{"type": "penalty_region_violation"}\n',
-            encoding="utf-8",
         )
-    monkeypatch.setenv("ODIROSIM_EXPERIMENTS_DIR", str(experiments))
 
-    response = TestClient(app).post("/api/v2/analysis/run", json={})
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
 
     assert response.status_code == 200, response.text
     payload = response.json()
@@ -194,17 +178,16 @@ def test_v2_analysis_run_repeated_blocked_region_generates_policy_recommendation
 
 
 def test_v2_analysis_agent_keeps_rule_based_mode_when_llm_disabled(tmp_path) -> None:
-    experiments = tmp_path / "experiments"
-    _write_blocked_episode(experiments, "000001")
-    _write_blocked_episode(experiments, "000002")
-    fake = _FakeJsonClient([_llm_analysis()])
+    project = tmp_path / "Project1"
+    _write_blocked_episode(project, "000001")
+    _write_blocked_episode(project, "000002")
+    fake = _FakeJsonClient([_llm_analysis(project.name)])
     agent = ResultAnalysisV2Agent(
-        experiments_root=experiments,
         settings=Settings(v2AgentLlmEnabled=False),
         llm_client=fake,
     )
 
-    response = agent.run()
+    response = agent.run(_request_model(project))
 
     assert response.analysis_mode == "rule_based"
     assert fake.calls == []
@@ -212,17 +195,16 @@ def test_v2_analysis_agent_keeps_rule_based_mode_when_llm_disabled(tmp_path) -> 
 
 
 def test_v2_analysis_agent_uses_valid_llm_recommendation(tmp_path) -> None:
-    experiments = tmp_path / "experiments"
-    _write_blocked_episode(experiments, "000001")
-    _write_blocked_episode(experiments, "000002")
-    fake = _FakeJsonClient([_llm_analysis("000001")])
+    project = tmp_path / "Project1"
+    _write_blocked_episode(project, "000001")
+    _write_blocked_episode(project, "000002")
+    fake = _FakeJsonClient([_llm_analysis(project.name, "000001")])
     agent = ResultAnalysisV2Agent(
-        experiments_root=experiments,
         settings=Settings(v2AgentLlmEnabled=True),
         llm_client=fake,
     )
 
-    response = agent.run()
+    response = agent.run(_request_model(project))
 
     assert response.analysis_mode == "llm"
     assert response.recommendations[0]["id"] == "REC-LLM-001"
@@ -231,17 +213,16 @@ def test_v2_analysis_agent_uses_valid_llm_recommendation(tmp_path) -> None:
 
 
 def test_v2_analysis_agent_falls_back_when_llm_evidence_is_invalid(tmp_path) -> None:
-    experiments = tmp_path / "experiments"
-    _write_blocked_episode(experiments, "000001")
-    _write_blocked_episode(experiments, "000002")
-    fake = _FakeJsonClient([_llm_analysis("999999")])
+    project = tmp_path / "Project1"
+    _write_blocked_episode(project, "000001")
+    _write_blocked_episode(project, "000002")
+    fake = _FakeJsonClient([_llm_analysis(project.name, "999999")])
     agent = ResultAnalysisV2Agent(
-        experiments_root=experiments,
         settings=Settings(v2AgentLlmEnabled=True),
         llm_client=fake,
     )
 
-    response = agent.run()
+    response = agent.run(_request_model(project))
 
     assert response.analysis_mode == "fallback"
     assert response.recommendations[0]["id"] == "REC-001"
@@ -249,17 +230,16 @@ def test_v2_analysis_agent_falls_back_when_llm_evidence_is_invalid(tmp_path) -> 
 
 
 def test_v2_analysis_agent_falls_back_when_llm_json_fails(tmp_path) -> None:
-    experiments = tmp_path / "experiments"
-    _write_blocked_episode(experiments, "000001")
-    _write_blocked_episode(experiments, "000002")
+    project = tmp_path / "Project1"
+    _write_blocked_episode(project, "000001")
+    _write_blocked_episode(project, "000002")
     fake = _FakeJsonClient([ValueError("invalid json")])
     agent = ResultAnalysisV2Agent(
-        experiments_root=experiments,
         settings=Settings(v2AgentLlmEnabled=True),
         llm_client=fake,
     )
 
-    response = agent.run()
+    response = agent.run(_request_model(project))
 
     assert response.analysis_mode == "fallback"
     assert response.recommendations[0]["id"] == "REC-001"
@@ -267,8 +247,14 @@ def test_v2_analysis_agent_falls_back_when_llm_json_fails(tmp_path) -> None:
     assert any("LLM recommendation failed; rule-based recommendation fallback was used." in warning for warning in response.warnings)
 
 
-def test_v2_analysis_run_openapi_exposes_empty_schema() -> None:
+def test_v2_analysis_run_openapi_requires_project_path_and_run_id() -> None:
     schema = TestClient(app).get("/openapi.json").json()
 
-    assert "/api/v2/analysis/run" in schema["paths"]
+    operation = schema["paths"]["/api/v2/analysis/run"]["post"]
+    request_ref = operation["requestBody"]["content"]["application/json"]["schema"]["$ref"]
+    component_name = request_ref.rsplit("/", 1)[-1]
+    request_schema = schema["components"]["schemas"][component_name]
+
     assert "/api/v1/analysis/run" in schema["paths"]
+    assert request_schema["required"] == ["project_path", "run_id"]
+    assert set(request_schema["properties"]) == {"project_path", "run_id"}

@@ -1,0 +1,5 @@
+#!/bin/sh
+
+[ "$1" = "rebase" ] || exit 0
+
+sh "$(dirname "$0")/helpers/run-install"

@@ -41,12 +41,11 @@
 
 ## 사용자용 Scenario Generation API 결정
 
-- 사용자용 API는 `POST /api/v1/scenarios/generate`다.
-- 입력은 자연어 `prompt` 하나만 허용한다.
-- 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하는 구조가 아니다.
-- AI와 backend가 내부적으로 `WorldConfig`를 만들고, deterministic variation/export 경로를 거쳐 UE 실행용 RunQueue JSON을 반환한다.
-- 성공 응답은 wrapper field 없는 RunQueue JSON이며 최상위 필드는 `schema`, `version`, `runs`만 포함한다.
-- EpisodeSetup / DeliveryBotSetup / RunQueue export는 null-free 정책을 따른다.
+- `POST /api/v1/scenarios/generate`는 제거 안내만 반환한다.
+- 오류 code는 `RUN_QUEUE_REMOVED`, HTTP status는 `410`이다.
+- 신규 scenario 생성 API는 `POST /api/v2/scenarios/generate`다.
+- v2 응답은 wrapper 없는 `scenario` JSON이다.
+- EpisodeSetup / DeliveryBotSetup / RunQueue export는 legacy tooling이다.
 - 기존 `/api/v1/ue5/world-config/handoff` route는 FastAPI/OpenAPI에서 제거한다. `responseFormat=setup_pair` 기반 내부 service/export tooling은 archive와 CLI 검증 맥락에서만 유지한다.
 
 ## Policy Comparison 결정
@@ -74,7 +73,7 @@
 
 ## API Shell 결정
 
-- 사용자용 기본 FastAPI `/api/v1` surface는 `POST /api/v1/scenarios/generate`다.
+- legacy FastAPI `/api/v1` surface의 `POST /api/v1/scenarios/generate`는 제거 안내만 반환한다.
 - `POST /api/v1/scenarios/generate-artifacts`와 `POST /api/v1/scenarios/generate-drive`는 public API에서 제거한다.
 - prompt package 생성과 JSON contract validation은 service/helper 함수와 CLI로 검증한다.
 - sample JSON과 fixture 파일은 이 단계에서 생성하지 않는다.
@@ -221,7 +220,7 @@
 
 * 이전 UE 실행용 handoff smoke는 `EpisodeSpec` format을 우선 지원했다.
 * `WorldConfig`는 AI 내부 검증/추론용 계약으로 유지한다.
-* 현재 public UE 연동 API는 `/api/v1/scenarios/generate`다.
+* 현재 `/api/v1/scenarios/generate`는 제거 안내만 반환한다.
 * `responseFormat=episode_spec`과 `responseFormat=both`는 archive/tooling 참고용으로만 남긴다.
 * Kickboard는 임시 prop mapping을 사용하며 UE 쪽 catalog 추가를 요청한다.
 
@@ -243,7 +242,7 @@
 
 * Final UE delivery state is documented through a manifest, release notes, readiness checklist, and warning explanation.
 * `PASS_WITH_WARNING` is acceptable when scenario generation/RunQueue checks pass and the remaining warnings are manual review workflow state.
-* UE delivery uses `/api/v1/scenarios/generate` and RunQueue export as the recommended path.
+* UE delivery is moving to user project run snapshots; RunQueue export remains legacy tooling.
 * Legacy `responseFormat=episode_spec` and `responseFormat=both` are archive/tooling references only.
 * `obstacle.kickboard` must still be confirmed by the UE team; temporary `obstacle.road_barrier_01` mapping remains documented.
 * This release documentation does not introduce OpenAI calls, schema changes, sample JSON, fixtures, vector DB, embedding index, or UE code.
@@ -356,16 +355,16 @@
 
 ## UE Contract Migration 결정
 
-* 최신 UE 계약 문서는 `contracts/specs/` 아래 문서를 기준으로 한다.
+* 이전 UE pair 계약 문서는 `contracts/specs/` 아래 legacy 문서를 기준으로 했다.
 * Scenario는 추상적인 상황 유형이고 Episode는 실제 한 번 실행되는 구체 시뮬레이션 인스턴스다.
 * `scenario_id`는 생성 의도/유형 식별자로 사용하고 실제 실행 단위는 `pair_id`, `run_id`, `requestId` 등으로 추적한다.
 * 현재 구현된 EpisodeSpec handoff service/model은 legacy archive/tooling 목적으로 유지하되 public route는 제거한다.
-* 향후 UE 입력 계약은 EpisodeSetup + DeliveryBotSetup pair로 전환한다.
+* 이후 legacy UE handoff 입력은 EpisodeSetup + DeliveryBotSetup pair로 전환했다.
 * EpisodeSetup은 맵/액터/경로/로봇 배치/로봇 목적지를 담당한다.
 * DeliveryBotSetup은 `drive`, `path_follow`, `lidar` 튜닝값을 담당하고 로봇 배치/route/run 정보는 포함하지 않는다.
 * EpisodeSetup / DeliveryBotSetup 모델, validator, WorldConfig 변환 adapter는 API 통합 전 내부 구현으로 먼저 추가한다.
 * setup pair trace helper는 diagnostics의 `setupPairTrace`로 연결하고 full WorldConfig/EpisodeSetup/DeliveryBotSetup은 저장하지 않는다.
-* 이전 `responseFormat=setup_pair` smoke는 EpisodeSetup + DeliveryBotSetup pair 생성을 검증했다. 현재 public route는 `/api/v1/scenarios/generate`다.
+* 이전 `responseFormat=setup_pair` smoke는 EpisodeSetup + DeliveryBotSetup pair 생성을 검증했다. 현재 `/api/v1/scenarios/generate`는 제거 안내만 반환한다.
 * EvaluationReport 기반 결과 분석과 Result Analysis Agent 구현은 이번 문서 정리 범위가 아니며 별도 담당 범위로 분리한다.
 * setup pair live smoke는 OpenAI provider로 성공했으며 EpisodeSetup/DeliveryBotSetup validation을 모두 통과했다.
 * setup pair fine-tuning candidate full JSON은 `data/fine_tuning_candidates/`에 로컬 보관하며 git commit 대상이 아니다.
@@ -387,9 +386,9 @@
 * RunQueue JSON은 `contracts/specs/RunQueue.json.md` 계약 그대로 `schema`, `version`, `runs`만 포함한다.
 * RunQueue JSON에는 `success`, `responseFormat`, `diagnostics`, `setupPairs`, `episodeSetup`, `deliveryBotSetup`, `validation`, `trace`를 넣지 않는다.
 * diagnostics, validation, trace summary는 UE용 RunQueue JSON과 분리해 local ignored report로만 저장한다.
-* RunQueue export는 `scripts/export_ue5_run_queue_package.py`와 사용자용 `POST /api/v1/scenarios/generate` 경로에서 제공한다.
-* `/api/v1/scenarios/generate`는 자연어 prompt만 입력받고, 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하지 않는다.
-* API 응답 RunQueue JSON은 AI와 backend가 내부 생성한 UE 실행 결과물이다.
+* RunQueue export는 `scripts/export_ue5_run_queue_package.py` legacy tooling에서만 제공한다.
+* `/api/v1/scenarios/generate`는 RunQueue 제거 안내만 반환한다.
+* API 응답 RunQueue JSON은 더 이상 public API 계약이 아니다.
 * export 산출물은 `data/run_queue_exports/` 아래에 저장하고 repository에 포함하지 않는다.
 * 기존 export target에 `Json/Input/*.json`이 있으면 삭제하거나 덮어쓰지 않고 `_backup`으로 이동한다.
 
@@ -401,15 +400,15 @@
 * 생략된 DeliveryBotSetup field는 UE C++ 구조체 기본값 fallback에 맡긴다.
 * DeliveryBotSetup tuning 값은 LLM이 직접 임의 수치로 생성하지 않는다.
 * DeliveryBotSetup tuning 값은 `contracts/specs/DeliveryBotSetup.json.md` default catalog와 deterministic variation policy 기준으로 생성한다.
-* 사용자용 `POST /api/v1/scenarios/generate`는 prompt 하나만 받고 RunQueue JSON 계약 그대로 반환한다.
+* 사용자용 scenario 생성은 `POST /api/v2/scenarios/generate`에서 `scenario` JSON을 반환한다.
 
 ## v2 Agent API 결정
 
-* v2 Agent API는 v1 API 계약을 변경하지 않는 신규 경로로 유지한다.
-* `/api/v2/scenarios/generate`는 prompt만 받고 `scenario.template.json` 형태의 template을 반환한다.
+* v2 Agent API는 user project 전환 기준 API다.
+* `/api/v2/scenarios/generate`는 prompt만 받고 `<UserProject>/scenario.json`에 저장 가능한 `scenario` JSON을 반환한다.
 * v2 scenario generation은 `episode_count`, `count`, `iterations`, `run_count`, seed, RunQueue 생성을 담당하지 않는다.
-* `scenario.template.json`은 range/choice/random 요소를 가질 수 있는 원본 template이고, `scenario.json`은 template sampling 결과로 확정값을 가진 실행 sample이다.
-* `/api/v2/analysis/run`은 현재 파라미터 없이 experiments root 전체를 분석한다.
+* `scenario.json`은 range/choice/random 요소를 가질 수 있는 project-local 입력이다.
+* `/api/v2/analysis/run`은 `project_path`, `run_id`로 특정 user project run을 분석한다.
 * v2 Agent 기본값은 deterministic/rule-based mode이며 외부 API key 없이 테스트가 통과해야 한다.
 * `V2_AGENT_LLM_ENABLED=true`일 때만 optional LLM JSON 경로를 사용한다.
 * LLM 호출 실패, JSON 파싱 실패, validator 실패, 잘못된 evidence는 API 500이 아니라 fallback response와 warning으로 처리한다.

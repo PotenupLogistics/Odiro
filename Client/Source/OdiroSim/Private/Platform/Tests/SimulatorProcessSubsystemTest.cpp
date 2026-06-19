@@ -51,27 +51,4 @@ bool FSimulatorProcessFixedStepTest::RunTest(const FString& parameters)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FSimulatorProcessRunnerStateTest,
-	"OdiroSim.SimulatorProcess.RunnerState",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FSimulatorProcessRunnerStateTest::RunTest(const FString& parameters)
-{
-	TestEqual(
-		TEXT("preparing maps to running"),
-		USimulatorProcessSubsystem::ConvertRunnerStateToRunState(EScenarioRunnerState::Preparing),
-		ESimulationRunState::Running);
-	TestEqual(
-		TEXT("completed maps to completed"),
-		USimulatorProcessSubsystem::ConvertRunnerStateToRunState(EScenarioRunnerState::Completed),
-		ESimulationRunState::Completed);
-	TestEqual(
-		TEXT("cancelled maps to canceled"),
-		USimulatorProcessSubsystem::ConvertRunnerStateToRunState(EScenarioRunnerState::Cancelled),
-		ESimulationRunState::Canceled);
-
-	return true;
-}
-
 #endif

@@ -55,9 +55,33 @@ bool UScenarioEditorLaunchSubsystem::OpenScenarioEditor(const FString& scenarioS
 	return OpenScenarioEditorInternal(EScenarioEditorAutoStartMode::LoadFromPath, trimmedScenarioSetupPath);
 }
 
+bool UScenarioEditorLaunchSubsystem::OpenScenarioEditorMap()
+{
+	UWorld* world = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
+	if (!world)
+	{
+		UE_LOG(LogScenarioEditorLaunch, Warning, TEXT("ScenarioEditorMap 열기 실패: World 없음"));
+		return false;
+	}
+
+	ResetPendingAutoStartState();
+	bAutoStartedScenarioEditorSession = false;
+	bAutoStartedScenarioEditorSessionLoadedExistingScenario = false;
+
+	const FString openLevelName = NormalizeMapIdForOpenLevel(ScenarioEditorMapId);
+	UE_LOG(LogScenarioEditorLaunch, Log, TEXT("ScenarioEditorMap 열기 요청 | Map: %s"), *openLevelName);
+	UGameplayStatics::OpenLevel(world, FName(*openLevelName), true);
+	return true;
+}
+
 bool UScenarioEditorLaunchSubsystem::OpenNewScenarioEditor()
 {
 	return OpenScenarioEditorInternal(EScenarioEditorAutoStartMode::NewDraft, FString());
+}
+
+bool UScenarioEditorLaunchSubsystem::OpenNewScenarioEditorAtPath(const FString& scenarioJsonPath)
+{
+	return OpenScenarioEditorInternal(EScenarioEditorAutoStartMode::NewDraft, scenarioJsonPath.TrimStartAndEnd());
 }
 
 bool UScenarioEditorLaunchSubsystem::OpenScenarioEditorInternal(
@@ -78,7 +102,7 @@ bool UScenarioEditorLaunchSubsystem::OpenScenarioEditorInternal(
 
 	const FString openLevelName = NormalizeMapIdForOpenLevel(ScenarioEditorMapId);
 	const FString openLevelOptions = launchMode == EScenarioEditorAutoStartMode::LoadFromPath
-		? FString::Printf(TEXT("ScenarioSetup=%s"), *PendingScenarioSetupPath)
+		? FString::Printf(TEXT("Scenario=%s"), *PendingScenarioSetupPath)
 		: TEXT("NewScenario=1");
 
 	// The URL options keep the transition inspectable in logs/console, while the subsystem state is the authoritative
@@ -143,18 +167,35 @@ void UScenarioEditorLaunchSubsystem::TryApplyPendingEditorStartup(UWorld* loaded
 	if (PendingAutoStartMode == EScenarioEditorAutoStartMode::NewDraft)
 	{
 		editorController->NewScenarioDraft();
+		if (!PendingScenarioSetupPath.IsEmpty())
+		{
+			FString resolvedPath;
+			TArray<FString> diagnostics;
+			if (!editorController->SaveProjectScenarioJsonFile(PendingScenarioSetupPath, resolvedPath, diagnostics))
+			{
+				UE_LOG(
+					LogScenarioEditorLaunch,
+					Warning,
+					TEXT("Project scenario 새 draft 저장 실패 | Path: %s, Diagnostics: %s"),
+					*PendingScenarioSetupPath,
+					*FString::Join(diagnostics, TEXT(" | ")));
+				return;
+			}
+
+			UE_LOG(LogScenarioEditorLaunch, Log, TEXT("Project scenario 새 draft 저장 완료 | Path: %s"), *resolvedPath);
+		}
 		UE_LOG(LogScenarioEditorLaunch, Log, TEXT("ScenarioEditor 새 draft 자동 시작 완료"));
 	}
 	else
 	{
 		FString resolvedPath;
 		TArray<FString> diagnostics;
-		if (!editorController->LoadScenarioSetupJsonFile(PendingScenarioSetupPath, resolvedPath, diagnostics))
+		if (!editorController->LoadProjectScenarioJsonFile(PendingScenarioSetupPath, resolvedPath, diagnostics))
 		{
 			UE_LOG(
 				LogScenarioEditorLaunch,
 				Warning,
-				TEXT("ScenarioSetup 자동 로드 실패 | Path: %s, Diagnostics: %s"),
+				TEXT("Project scenario 자동 로드 실패 | Path: %s, Diagnostics: %s"),
 				*PendingScenarioSetupPath,
 				*FString::Join(diagnostics, TEXT(" | ")));
 			return;
@@ -164,7 +205,7 @@ void UScenarioEditorLaunchSubsystem::TryApplyPendingEditorStartup(UWorld* loaded
 		UE_LOG(
 			LogScenarioEditorLaunch,
 			Log,
-			TEXT("ScenarioSetup 자동 로드 완료 | Path: %s"),
+			TEXT("Project scenario 자동 로드 완료 | Path: %s"),
 			*resolvedPath);
 	}
 

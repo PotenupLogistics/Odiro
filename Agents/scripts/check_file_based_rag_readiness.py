@@ -9,8 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.validate_file_based_rag_store import validate_file_based_rag_store
-from scripts.validate_policy_chunk_candidates import validate_policy_chunk_candidates
+from scripts.validate_file_based_rag_store import validate_file_based_rag_store  # noqa: E402
+from scripts.validate_policy_chunk_candidates import validate_policy_chunk_candidates  # noqa: E402
 
 
 @dataclass(frozen=True)

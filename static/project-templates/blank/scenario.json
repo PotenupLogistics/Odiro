@@ -1,0 +1,58 @@
+{
+  "schema": "scenario",
+  "version": 1,
+  "scenario_id": "blank_sidewalk",
+  "intent": "Start from a minimal editable scenario.",
+  "corridor": {
+    "axis": {
+      "type": "polyline",
+      "points_m": [[0.0, 0.0], [12.0, 0.0]]
+    },
+    "walkway_width_m": 3.0,
+    "segments": [
+      {
+        "id": "main",
+        "type": "straight",
+        "along_range_m": [0.0, 12.0]
+      }
+    ],
+    "building_side": [
+      {
+        "surface": "wall",
+        "width_m": 0.5
+      }
+    ],
+    "curb_side": [
+      {
+        "surface": "road",
+        "width_m": 4.0
+      }
+    ]
+  },
+  "obstacles": {
+    "min_clear_width_m": 0.9,
+    "placements": []
+  },
+  "pedestrians": {
+    "background": {
+      "count": 0
+    },
+    "encounters": []
+  },
+  "robot": {
+    "start": {
+      "type": "corridor_pose",
+      "segment": "main",
+      "along_m": 1.0,
+      "offset_m": 0.0,
+      "heading": "forward"
+    },
+    "goal": {
+      "type": "corridor_pose",
+      "segment": "main",
+      "along_m": 11.0,
+      "offset_m": 0.0,
+      "heading": "forward"
+    }
+  }
+}

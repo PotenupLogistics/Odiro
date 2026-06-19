@@ -28,8 +28,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Platform|ScenarioEditor")
 	bool OpenScenarioEditor(const FString& scenarioSetupPath);
 
+	// Scenario editor map으로만 전환한다. 자동 draft/load 시작은 요청하지 않는다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|ScenarioEditor")
+	bool OpenScenarioEditorMap();
+
 	UFUNCTION(BlueprintCallable, Category = "Platform|ScenarioEditor")
 	bool OpenNewScenarioEditor();
+
+	// Opens a new draft and saves its initial project scenario.json to the requested path.
+	UFUNCTION(BlueprintCallable, Category = "Platform|ScenarioEditor")
+	bool OpenNewScenarioEditorAtPath(const FString& scenarioJsonPath);
 
 	UFUNCTION(BlueprintPure, Category = "Platform|ScenarioEditor")
 	FString GetPendingScenarioSetupPath() const { return PendingScenarioSetupPath; }

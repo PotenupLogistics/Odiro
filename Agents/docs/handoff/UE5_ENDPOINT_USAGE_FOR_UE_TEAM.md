@@ -10,15 +10,13 @@ uv run uvicorn app.main:app --reload
 
 * `GET /health`
 
-## 3. 권장 API: scenario generation
+## 3. Legacy API: scenario generation
 
 Endpoint:
 
 * `POST /api/v1/scenarios/generate`
 
-이 endpoint는 사용자의 자연어 `prompt`를 필수로 받고, 선택적으로 `episode_count`를 허용한다. 사용자가 EpisodeSetup / DeliveryBotSetup / RunQueue JSON을 직접 작성하는 구조가 아니다. AI와 backend가 내부적으로 EpisodeSetup + DeliveryBotSetup pair와 RunQueue JSON을 생성한다.
-
-성공 응답은 wrapper 없는 RunQueue JSON이며 최상위 필드는 `schema`, `version`, `runs`만 포함한다. EpisodeSetup / DeliveryBotSetup / RunQueue export는 null-free 정책을 따른다.
+이 endpoint는 현재 `410 RUN_QUEUE_REMOVED` 안내만 반환한다. 이전 RunQueue 응답 설명은 legacy handoff 기록으로만 남긴다.
 
 ## 3.1 Removed legacy handoff endpoints
 
@@ -33,13 +31,15 @@ POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=setup_pair
 
 EpisodeSpec JSON 계약의 기준 문서는 `docs/archive/previous_episode_spec/UE_EPISODE_SPEC_JSON_GUIDE.md`이다.
 
-## 4. 최신 EpisodeSetup + DeliveryBotSetup pair 생성 기준
+## 4. Legacy EpisodeSetup + DeliveryBotSetup pair 기록
 
-공유 실행 계약 기준 문서는 `contracts/specs/` 아래 문서다.
+이 섹션은 이전 UE handoff 기준 기록이다. 현재 사용자 project 실행 계약은 `contracts/specs/user-project-data.md`를 따른다.
 
-최신 setup pair 생성은 `/api/v1/scenarios/generate`와 RunQueue export 경로를 기준으로 한다.
+이전 pair 계약 문서는 `contracts/specs/` 아래 legacy 문서다.
 
-UE가 직접 요청에서 EpisodeSetup / DeliveryBotSetup JSON을 작성하지 않는다. Backend가 자연어 prompt와 선택적 `episode_count`를 받아 EpisodeSetup + DeliveryBotSetup pair들을 만들고, RunQueue의 `runs` 배열에서 각 pair의 export 경로를 반환한다.
+setup pair 생성은 legacy RunQueue export tooling 기준으로만 남긴다.
+
+UE가 직접 요청에서 EpisodeSetup / DeliveryBotSetup JSON을 작성하지 않는다. Legacy tooling이 EpisodeSetup + DeliveryBotSetup pair들을 만들고, RunQueue의 `runs` 배열에서 각 pair의 export 경로를 반환한다.
 
 RunQueue에서 UE가 읽어야 하는 필드:
 
@@ -49,7 +49,7 @@ RunQueue에서 UE가 읽어야 하는 필드:
 * `runs[].episode_setup`
 * `runs[].delivery_bot_setup`
 
-응답은 wrapper 없는 RunQueue JSON이다. `success`, `diagnostics`, raw LLM response, rawContent, API key 값은 포함하지 않는다.
+Legacy RunQueue JSON에는 `success`, `diagnostics`, raw LLM response, rawContent, API key 값은 포함하지 않는다.
 
 ## 5. Export CLI 사용법
 

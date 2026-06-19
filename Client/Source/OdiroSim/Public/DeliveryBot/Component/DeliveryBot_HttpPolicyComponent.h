@@ -22,9 +22,9 @@ class ODIROSIM_API UDeliveryBot_HttpPolicyComponent : public UActorComponent
 public:
 	UDeliveryBot_HttpPolicyComponent();
 
-	void RequestStartScenario(); // Python 서버에 scenario start 요청을 예약한다
-	void UpdatePolicy(float deltaTime); // start 이후 decide 반복 요청을 갱신한다
-	void EndScenario(const FString& status); // Python 서버에 scenario end 요청을 보낸다
+	void RequestStartScenario();				// Python 서버에 scenario start 요청을 예약한다
+	void UpdatePolicy(float deltaTime);			// start 재시도와 decide 반복 요청을 갱신한다
+	void EndScenario(const FString& status);	// Python 서버에 scenario end 요청을 보낸다
 
 public:
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
@@ -70,7 +70,15 @@ private:
 	bool BuildEndPayload(const FString& status, FString& outPayload) const; // /scenario/end 요청 body를 만든다
 
 private:
-	bool SendPostRequest(const FString& endpoint, const FString& payload, TFunction<void(FHttpResponsePtr, bool)> onComplete); // Python 서버에 POST 요청을 보낸다
+	// Python 서버에 POST 요청을 보낸다
+	bool SendPostRequest(const FString& endpoint, const FString& payload, TFunction<void(FHttpResponsePtr, bool)> onComplete);
+	FString ResolveProjectEpisodeId() const; // project run의 현재 output episode id를 가져온다
+	void WriteProjectActionRecord(
+		const FString& projectEpisodeId,
+		const TSharedPtr<FJsonObject>& requestObject,
+		const FHttpResponsePtr& response,
+		bool bActionSucceeded) const; // project actions.jsonl에 decide 결과를 기록한다
+
 	TSharedRef<FJsonObject> BuildLocationObject(const FVector& location, float yawDegree = 0.f) const; // 위치 JSON 객체를 만든다
 	bool BuildPythonGridObject(TSharedPtr<FJsonObject>& outGridObject) const; // Python 서버용 grid JSON 객체를 만든다
 	bool BuildMessagePayload(const FString& messageType, const TSharedRef<FJsonObject>& requestObject, FString& outPayload) const; // request 객체를 Python message envelope로 감싼다
@@ -126,17 +134,21 @@ private:
 
 private:
 	FString EpisodeId; // 현재 Python scenario/capture run id
+	FString ProjectActionEpisodeId; // runner가 지정한 user project output episode id
 	FString RobotInstanceId; // Python payload에 사용하는 robot instance id
 	FString LastScenarioResultJson; // 마지막 scenario result JSON 문자열
 
 	int32 LastDecisionSequence{ 0 }; // 마지막 decide 요청 sequence
+	TSharedPtr<FJsonObject> LastDecisionRequestObject;
+
 	float StartRetryElapsedSeconds{ 0.f }; // start 재시도 누적 시간
 	float DecideElapsedSeconds{ 0.f }; // decide 요청 누적 시간
 	float LastDecisionRunTimeSeconds{ 0.f }; // 마지막 decide 요청 runtime
-
-	bool bStartRequested{ false }; // start 요청이 예약되었는지 여부
-	bool bScenarioStarted{ false }; // Python scenario가 시작되었는지 여부
-	bool bStartRequestInFlight{ false }; // start HTTP 요청 진행 중 여부
-	bool bDecisionRequestInFlight{ false }; // decide HTTP 요청 진행 중 여부
-	bool bEndRequestInFlight{ false }; // end HTTP 요청 진행 중 여부
+	
+	bool bStartRequested{ false };
+	bool bScenarioStarted{ false };
+	bool bStartRequestInFlight{ false };
+	bool bDecisionRequestInFlight{ false };
+	bool bEndRequestInFlight{ false };
+	bool bLoggedStartWaitingForPython{ false }; // Python 서버 준비 대기 로그 중복 방지
 };

@@ -15,11 +15,6 @@
 		"flush_interval_ticks": 60,
 		"flush_on_event": true
 	},
-	"report":
-	{
-		"save_evaluation_report_json": true,
-		"output_directory": "Json/Output"
-	},
 	"status":
 	{
 		"output_path": "Saved/SimulationRuns/latest_status.json"

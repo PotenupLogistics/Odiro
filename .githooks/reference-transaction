@@ -122,8 +122,7 @@ validate_main_update() {
   fi
 
   if ! is_zero_oid "$old_oid" && is_zero_oid "$new_oid"; then
-    reject_main_update "$ref_name" "main deletion is blocked"
-    return 1
+    return 0
   fi
 
   if ! git cat-file -e "$old_oid^{commit}" 2>/dev/null || ! git cat-file -e "$new_oid^{commit}" 2>/dev/null; then

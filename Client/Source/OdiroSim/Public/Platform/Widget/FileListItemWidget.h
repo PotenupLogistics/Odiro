@@ -37,6 +37,8 @@ public:
 		bool bInAllowRename = true,
 		bool bInAllowPrimaryAction = true,
 		bool bInAllowSecondaryAction = false);
+	// 오른쪽 보조 버튼 자리에 클릭되지 않는 상태 text를 표시한다.
+	void SetSecondaryActionDisplayOnly(const FString& displayText);
 	FString GetOriginalPath() const { return OriginalPath; }
 	FString GetEditedPath() const;
 
@@ -85,4 +87,5 @@ private:
 	bool bAllowRename = true;
 	bool bAllowPrimaryAction = true;
 	bool bAllowSecondaryAction = false;
+	bool bSecondaryActionClickable = false;
 };

@@ -10,9 +10,17 @@ paths:
   - Agents/app/services/*episode*
   - Agents/app/services/*run_queue*
   - Agents/docs/README.md
+  - Agents/docs/agents/**
   - Agents/docs/architecture/**
+  - Agents/docs/development/**
+  - Agents/docs/environment/**
+  - Agents/docs/experiment/**
+  - Agents/docs/handoff/**
   - Agents/docs/json_contracts/**
+  - Agents/docs/providers/**
+  - Agents/docs/research/**
   - Agents/docs/status/**
+  - contracts/specs/user-project-data.md
 entry:
   - Agents/README.md
   - Agents/app/api/routes.py
@@ -24,8 +32,17 @@ entry:
   - Agents/app/services/world_config_to_episode_setup_adapter.py
   - Agents/app/services/world_config_to_delivery_bot_setup_adapter.py
   - Agents/app/services/run_queue_export_service.py
+  - Agents/docs/environment
+  - Agents/docs/handoff
+  - Agents/docs/providers
+  - Agents/docs/research
+  - contracts/specs/user-project-data.md
 keep:
   - Do not re-expose legacy UE handoff routes unless intentionally restoring them.
+  - Final user project contract writes project/run/episode artifacts, not wrapper-free RunQueue JSON.
+  - Public scenario generation must not call legacy RunQueue export tooling; `/api/v1/scenarios/generate` returns `410 RUN_QUEUE_REMOVED`.
+  - Agents/app/services/scenario_generation_service.py is legacy tooling, not the active v2 scenario path.
+  - RunQueue export services, models, and tests are retained only as legacy tooling, not public API or user project runtime.
 verify:
   - focused pytest for touched route/model/service
   - contract validation when payload fields change

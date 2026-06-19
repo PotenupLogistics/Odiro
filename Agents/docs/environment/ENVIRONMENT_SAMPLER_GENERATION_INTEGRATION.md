@@ -1,5 +1,11 @@
 # Environment Sampler Generation Integration
 
+상태: legacy WorldConfig/EpisodeSpec sampler note.
+
+- 최종 user project scenario 계약 아님
+- `/api/v2/scenarios/generate`는 seed/sample/RunQueue 생성을 담당하지 않음
+- 이 문서는 기존 environmentSampling 검증 흐름 추적용
+
 ## 1. 목적
 
 seed 기반 numeric environment parameters를 WorldConfig generation constraints에 연결한다.

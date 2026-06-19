@@ -10,8 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.models.rag import RagSearchQuery
-from app.services.policy_rag_retriever import search_policy_chunks
+from app.models.rag import RagSearchQuery  # noqa: E402
+from app.services.policy_rag_retriever import search_policy_chunks  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:

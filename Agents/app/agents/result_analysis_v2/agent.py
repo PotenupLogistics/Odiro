@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 from collections import defaultdict
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -13,13 +13,17 @@ from app.agents.result_analysis_v2.episode_metric_extractor import EpisodeMetric
 from app.agents.result_analysis_v2.experiment_aggregator import ExperimentAggregator
 from app.agents.result_analysis_v2.failure_pattern_detector import FailurePatternDetector
 from app.agents.result_analysis_v2.llm_failure_analyzer import LlmFailureAnalyzer
+from app.agents.result_analysis_v2.rag_context_builder import FileBasedRagRetrieverAdapterV2, RagContextBuilderV2
+from app.agents.result_analysis_v2.rag_query_builder import RagQueryBuilderV2
 from app.agents.result_analysis_v2.recommendation_generator import RecommendationGenerator
 from app.agents.result_analysis_v2.recommendation_validator import RecommendationValidator
+from app.agents.result_analysis_v2.representative_selector import RepresentativeFailedEpisodeSelectorV2
 from app.agents.result_analysis_v2.response_builder import ResponseBuilder
 from app.agents.result_analysis_v2.run_aggregator import RunAggregator
-from app.agents.result_analysis_v2.workspace_scanner import WorkspaceScanner
+from app.agents.result_analysis_v2.timeline_builder import EventTimelineBuilderV2
+from app.agents.result_analysis_v2.workspace_scanner import WorkspaceScan, WorkspaceScanner
 from app.core.settings import Settings
-from app.models.analysis_v2 import AnalysisMetricsV2, AnalysisRunV2Response
+from app.models.analysis_v2 import AnalysisMetricsV2, AnalysisRunV2Request, AnalysisRunV2Response
 
 
 class ResultAnalysisV2Agent:
@@ -40,15 +44,20 @@ class ResultAnalysisV2Agent:
         self.run_aggregator = RunAggregator()
         self.experiment_aggregator = ExperimentAggregator()
         self.pattern_detector = FailurePatternDetector()
+        self.timeline_builder = EventTimelineBuilderV2()
+        self.representative_selector = RepresentativeFailedEpisodeSelectorV2()
+        self.rag_query_builder = RagQueryBuilderV2()
+        self.rag_retriever = FileBasedRagRetrieverAdapterV2()
+        self.rag_context_builder = RagContextBuilderV2()
         self.context_builder = AnalysisContextBuilder()
         self.llm_analyzer = LlmFailureAnalyzer()
         self.recommendation_generator = RecommendationGenerator()
         self.recommendation_validator = RecommendationValidator()
         self.response_builder = ResponseBuilder()
 
-    def run(self) -> AnalysisRunV2Response:
-        root = self.experiments_root or self._default_root()
-        scan = self.scanner.scan(root)
+    def run(self, request: AnalysisRunV2Request | None = None) -> AnalysisRunV2Response:
+        scan = self.scan(request)
+        root = scan.root
         parsed = [self.parser.parse(self.classifier.classify(root, path)) for path in scan.files]
         warnings = [*scan.warnings]
         for artifact in parsed:
@@ -60,6 +69,24 @@ class ResultAnalysisV2Agent:
         run_summaries = self.run_aggregator.aggregate(episodes)
         experiment_summaries = self.experiment_aggregator.aggregate(run_summaries)
         patterns = self.pattern_detector.detect(episodes)
+        episode_metric_dicts = [asdict(episode) for episode in episodes]
+        episode_timelines = self.timeline_builder.build_episode_timelines(
+            parsed_artifacts=self._timeline_inputs(parsed),
+            episode_metrics=episode_metric_dicts,
+        )
+        representative_episodes = self.representative_selector.select(
+            episode_metrics=episode_metric_dicts,
+            episode_timelines=episode_timelines,
+        )
+        rag_queries = self.rag_query_builder.build_queries(
+            failure_patterns=patterns,
+            experiment_aggregates=experiment_summaries,
+            representative_failed_episodes=representative_episodes,
+        )
+        rag_context = self.rag_context_builder.build_context(
+            queries=rag_queries,
+            retrieved_contexts=self.rag_retriever.retrieve(rag_queries),
+        )
         context = self.context_builder.build(
             experiments_count=len(experiment_ids),
             runs_count=len(run_ids),
@@ -67,6 +94,9 @@ class ResultAnalysisV2Agent:
             experiment_summaries=experiment_summaries,
             run_summaries=run_summaries,
             failure_patterns=patterns,
+            episode_timelines=episode_timelines,
+            representative_failed_episodes=representative_episodes,
+            rag_context=rag_context,
         )
         refs = {(episode.experiment_id, episode.run_id, episode.episode_id) for episode in episodes}
         recommendations, analysis_mode, llm_warnings = self._recommendations(
@@ -91,10 +121,32 @@ class ResultAnalysisV2Agent:
         configured_root = self.settings.experiments_dir
         if configured_root:
             return Path(configured_root)
-        appdata = os.getenv("APPDATA")
-        if appdata:
-            return Path(appdata) / "OdiroSim" / "experiments"
         return Path("data") / "experiments"
+
+    def scan(self, request: AnalysisRunV2Request | None = None) -> WorkspaceScan:
+        if request is None:
+            root = self.experiments_root or self._default_root()
+            return self.scanner.scan(root)
+
+        project_root = Path(request.project_path)
+        scan = self.scanner.scan(project_root)
+        run_path = project_root / "runs" / request.run_id
+        warnings = [*scan.warnings]
+        if project_root.exists() and not run_path.is_dir():
+            warnings.append(f"run directory does not exist: {run_path}")
+        files = [
+            path
+            for path in scan.files
+            if self._is_requested_run_file(project_root=project_root, path=path, run_id=request.run_id)
+        ]
+        return WorkspaceScan(root=project_root, files=files, warnings=warnings)
+
+    def _is_requested_run_file(self, *, project_root: Path, path: Path, run_id: str) -> bool:
+        try:
+            parts = path.relative_to(project_root).parts
+        except ValueError:
+            return False
+        return len(parts) >= 2 and parts[0] == "runs" and parts[1] == run_id
 
     def _extract_episodes(self, artifacts: list[ParsedArtifact]) -> list[EpisodeMetrics]:
         results: dict[tuple[str, str, str], dict[str, Any]] = {}
@@ -120,6 +172,35 @@ class ResultAnalysisV2Agent:
             )
             for experiment_id, run_id, episode_id in episode_keys
         ]
+
+    def _timeline_inputs(self, artifacts: list[ParsedArtifact]) -> dict[str, list[dict[str, Any]]]:
+        episodes: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for artifact in artifacts:
+            info = artifact.info
+            if not (info.experiment_id and info.run_id and info.episode_id):
+                continue
+            key = (info.experiment_id, info.run_id, info.episode_id)
+            item = episodes.setdefault(
+                key,
+                {
+                    "experiment_id": info.experiment_id,
+                    "run_id": info.run_id,
+                    "episode_id": info.episode_id,
+                    "events": [],
+                    "actions": [],
+                    "source_path": info.relative_path,
+                },
+            )
+            if info.artifact_type in {"episode_events", "episode_trace"} and isinstance(artifact.data, list):
+                item["events"].extend(
+                    {**event, "_source_path": info.relative_path} for event in artifact.data if isinstance(event, dict)
+                )
+            elif info.artifact_type == "episode_actions" and isinstance(artifact.data, list):
+                item["actions"].extend(action for action in artifact.data if isinstance(action, dict))
+        return {"episodes": list(episodes.values())}
+
+    def _episode_as_dict(self, episode: EpisodeMetrics) -> dict[str, Any]:
+        return asdict(episode)
 
     def _totals(self, episodes: list[EpisodeMetrics]) -> AnalysisMetricsV2:
         return AnalysisMetricsV2(
@@ -181,3 +262,6 @@ class ResultAnalysisV2Agent:
 
     def _read_prompt(self, filename: str) -> str:
         return (Path(__file__).parent / "prompts" / filename).read_text(encoding="utf-8")
+
+    def _llm_client(self) -> AgentLlmClient:
+        return AgentLlmJsonClient(settings=self.settings)

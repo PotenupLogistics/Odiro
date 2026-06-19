@@ -4,13 +4,12 @@
 #include "Components/SplineComponent.h"
 #include "Components/SplineMeshComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Scenario/ScenarioCorridorGeometry.h"
 #include "Scenario/Data/ScenarioCorridorSurfaceResolver.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
 {
-	// Template coordinates are stored in meters while Unreal actors use centimeters.
-	const double CorridorPreviewMetersToCentimeters = 100.0;
 	// Thin surface tops stay slightly above the ground to avoid z-fighting.
 	const double PreviewSurfaceTopZCm = 1.0;
 	// Non-blocking surfaces are thick enough to overlap 15cm side offsets without vertical holes.
@@ -148,8 +147,8 @@ void AScenarioCorridorPreviewActor::RebuildAxisSpline(const TArray<FVector2D>& p
 	{
 		const FVector2D& pointMeters = pointsMeters[index];
 		const FVector pointCm(
-			pointMeters.X * CorridorPreviewMetersToCentimeters,
-			pointMeters.Y * CorridorPreviewMetersToCentimeters,
+			pointMeters.X * FScenarioCorridorGeometry::MetersToCentimeters,
+			pointMeters.Y * FScenarioCorridorGeometry::MetersToCentimeters,
 			PreviewSurfaceTopZCm);
 		AxisSplineComponent->AddSplinePoint(pointCm, ESplineCoordinateSpace::Local, false);
 		AxisSplineComponent->SetSplinePointType(index, ESplinePointType::Curve, false);
@@ -176,8 +175,9 @@ void AScenarioCorridorPreviewActor::AddLaneStrip(
 		return;
 	}
 
-	const double centerOffsetCm = ((minOffsetMeters + maxOffsetMeters) * 0.5) * CorridorPreviewMetersToCentimeters;
-	const double laneWidthCm = laneWidthMeters * CorridorPreviewMetersToCentimeters;
+	const double centerOffsetCm =
+		((minOffsetMeters + maxOffsetMeters) * 0.5) * FScenarioCorridorGeometry::MetersToCentimeters;
+	const double laneWidthCm = laneWidthMeters * FScenarioCorridorGeometry::MetersToCentimeters;
 	FScenarioCorridorSurfaceEntry surfaceEntry;
 	FScenarioCorridorSurfaceResolver::ResolveSurfaceEntry(surfaceId, SurfaceCatalog, surfaceEntry);
 	const EScenarioGroundRegionType fallbackRegionType =
@@ -195,72 +195,37 @@ void AScenarioCorridorPreviewActor::AddLaneStrip(
 		? laneTopZCm + (laneHeightCm * 0.5)
 		: laneTopZCm - (laneHeightCm * 0.5);
 	const double laneHeightScale = laneHeightCm / 100.0;
-	const int32 lastPointIndex = AxisSplineComponent->GetNumberOfSplinePoints() - 1;
-	for (int32 pointIndex = 0; pointIndex < lastPointIndex; ++pointIndex)
+	const int32 pointCount = AxisSplineComponent->GetNumberOfSplinePoints();
+	TArray<FVector> axisLocationsCm;
+	TArray<FVector> axisTangentsCm;
+	axisLocationsCm.Reserve(pointCount);
+	axisTangentsCm.Reserve(pointCount);
+	for (int32 pointIndex = 0; pointIndex < pointCount; ++pointIndex)
 	{
-		const FVector startLocation = AxisSplineComponent->GetLocationAtSplinePoint(
+		axisLocationsCm.Add(AxisSplineComponent->GetLocationAtSplinePoint(
 			pointIndex,
-			ESplineCoordinateSpace::Local);
-		const FVector endLocation = AxisSplineComponent->GetLocationAtSplinePoint(
-			pointIndex + 1,
-			ESplineCoordinateSpace::Local);
-		const FVector startTangent = AxisSplineComponent->GetTangentAtSplinePoint(
+			ESplineCoordinateSpace::Local));
+		axisTangentsCm.Add(AxisSplineComponent->GetTangentAtSplinePoint(
 			pointIndex,
-			ESplineCoordinateSpace::Local);
-		const FVector endTangent = AxisSplineComponent->GetTangentAtSplinePoint(
-			pointIndex + 1,
-			ESplineCoordinateSpace::Local);
-		const FVector startDirection = startTangent.GetSafeNormal();
-		const FVector endDirection = endTangent.GetSafeNormal();
-		if (startDirection.IsNearlyZero() || endDirection.IsNearlyZero())
-		{
-			continue;
-		}
-
-		const FVector startRight = FVector::CrossProduct(FVector::UpVector, startDirection).GetSafeNormal();
-		const FVector endRight = FVector::CrossProduct(FVector::UpVector, endDirection).GetSafeNormal();
-		const FVector laneHeightOffset(0.0, 0.0, laneCenterZCm - PreviewSurfaceTopZCm);
-		const FName componentName = MakeUniqueObjectName(
-			this,
-			USplineMeshComponent::StaticClass(),
-			FName(*FString::Printf(TEXT("Corridor_%s_%02d"), *laneId, pointIndex)));
-		USplineMeshComponent* meshComponent = NewObject<USplineMeshComponent>(this, componentName);
-		if (!meshComponent)
-		{
-			continue;
-		}
-
-		meshComponent->SetMobility(EComponentMobility::Movable);
-		meshComponent->SetupAttachment(SceneRoot);
-		meshComponent->SetStaticMesh(LaneStripMesh);
-		meshComponent->SetForwardAxis(ESplineMeshAxis::X, false);
-		meshComponent->SetStartAndEnd(
-			startLocation + startRight * centerOffsetCm + laneHeightOffset,
-			startTangent,
-			endLocation + endRight * centerOffsetCm + laneHeightOffset,
-			endTangent,
-			false);
-		meshComponent->SetStartScale(FVector2D(laneWidthCm / 100.0, laneHeightScale), false);
-		meshComponent->SetEndScale(FVector2D(laneWidthCm / 100.0, laneHeightScale), false);
-		if (bBlockedSurface)
-		{
-			meshComponent->SetCollisionProfileName(BlockedPreviewCollisionProfileName);
-			meshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		}
-		else
-		{
-			meshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		}
-		meshComponent->SetGenerateOverlapEvents(false);
-		meshComponent->SetCastShadow(false);
-		if (material)
-		{
-			meshComponent->SetMaterial(0, material);
-		}
-		meshComponent->RegisterComponent();
-		meshComponent->UpdateMesh();
-		LaneMeshComponents.Add(meshComponent);
+			ESplineCoordinateSpace::Local));
 	}
+
+	FScenarioCorridorLaneMeshBuildSpec meshSpec;
+	meshSpec.Owner = this;
+	meshSpec.AttachParent = SceneRoot;
+	meshSpec.LaneStripMesh = LaneStripMesh.Get();
+	meshSpec.Material = material;
+	meshSpec.ComponentNameBase = FName(*FString::Printf(TEXT("Corridor_%s"), *laneId));
+	meshSpec.AxisLocationsCm = MoveTemp(axisLocationsCm);
+	meshSpec.AxisTangentsCm = MoveTemp(axisTangentsCm);
+	meshSpec.CenterOffsetCm = centerOffsetCm;
+	meshSpec.LaneWidthCm = laneWidthCm;
+	meshSpec.LaneHeightScale = laneHeightScale;
+	meshSpec.LaneCenterZCm = laneCenterZCm;
+	meshSpec.SurfaceTopZCm = PreviewSurfaceTopZCm;
+	meshSpec.CollisionEnabled = bBlockedSurface ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision;
+	meshSpec.CollisionProfileName = bBlockedSurface ? BlockedPreviewCollisionProfileName : NAME_None;
+	FScenarioCorridorGeometry::AddLaneStripMeshes(meshSpec, LaneMeshComponents);
 }
 
 double AScenarioCorridorPreviewActor::ResolvePreviewNumber(

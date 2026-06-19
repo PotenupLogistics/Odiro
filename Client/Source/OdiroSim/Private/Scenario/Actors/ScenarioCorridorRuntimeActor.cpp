@@ -3,6 +3,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/SplineMeshComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Scenario/ScenarioCorridorGeometry.h"
 #include "Scenario/Data/ScenarioCorridorSurfaceResolver.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -10,185 +11,12 @@ DEFINE_LOG_CATEGORY_STATIC(LogScenarioCorridorRuntime, Log, All);
 
 namespace
 {
-	const double RuntimeMetersToCentimeters = 100.0;
+	// Thin surface tops stay slightly above the ground to avoid z-fighting.
 	const double RuntimeSurfaceTopZCm = 1.0;
+	// Non-blocking surfaces are thick enough to overlap 15cm side offsets without vertical holes.
 	const double RuntimeSurfaceHeightCm = 20.0;
+	// Blocked corridor surfaces match the blocked ground-region collision height.
 	const double RuntimeBlockedHeightCm = 200.0;
-	const double RuntimeSurfaceQueryToleranceMeters = 0.001;
-	const FName WalkableRuntimeCollisionProfileName{ TEXT("Walkable") };
-	const FName PenaltyRuntimeCollisionProfileName{ TEXT("Penalty") };
-	const FName BlockedRuntimeCollisionProfileName{ TEXT("Blocked") };
-
-	FName GetRuntimeCollisionProfileName(EScenarioGroundRegionType regionType)
-	{
-		switch (regionType)
-		{
-		case EScenarioGroundRegionType::Penalty:
-			return PenaltyRuntimeCollisionProfileName;
-		case EScenarioGroundRegionType::Blocked:
-			return BlockedRuntimeCollisionProfileName;
-		case EScenarioGroundRegionType::Walkable:
-		default:
-			return WalkableRuntimeCollisionProfileName;
-		}
-	}
-
-	FVector2D RotateRuntimePoint(const FVector2D& point, double headingDegrees)
-	{
-		const double headingRadians = FMath::DegreesToRadians(headingDegrees);
-		const double cosHeading = FMath::Cos(headingRadians);
-		const double sinHeading = FMath::Sin(headingRadians);
-		return FVector2D(
-			(point.X * cosHeading) - (point.Y * sinHeading),
-			(point.X * sinHeading) + (point.Y * cosHeading));
-	}
-
-	FVector TransformAxisPointMetersToWorldCm(const FScenarioRuntimeCorridorSpec& corridorSpec, const FVector2D& pointMeters)
-	{
-		const FVector2D worldPointMeters = corridorSpec.OriginXYMeters + RotateRuntimePoint(pointMeters, corridorSpec.HeadingDegrees);
-		return FVector(
-			worldPointMeters.X * RuntimeMetersToCentimeters,
-			worldPointMeters.Y * RuntimeMetersToCentimeters,
-			RuntimeSurfaceTopZCm);
-	}
-
-	FVector2D TransformWorldCmToAxisPointMeters(const FScenarioRuntimeCorridorSpec& corridorSpec, const FVector& worldLocation)
-	{
-		const FVector2D worldPointMeters(
-			worldLocation.X / RuntimeMetersToCentimeters,
-			worldLocation.Y / RuntimeMetersToCentimeters);
-		return RotateRuntimePoint(worldPointMeters - corridorSpec.OriginXYMeters, -corridorSpec.HeadingDegrees);
-	}
-
-	// Approximates editor preview spline tangents so runtime lane strips bend through corridor vertices.
-	FVector ResolveRuntimeCurveTangentCm(const TArray<FVector>& axisLocationsCm, int32 pointIndex)
-	{
-		if (axisLocationsCm.Num() < 2 || !axisLocationsCm.IsValidIndex(pointIndex))
-		{
-			return FVector::ZeroVector;
-		}
-
-		if (pointIndex == 0)
-		{
-			return axisLocationsCm[1] - axisLocationsCm[0];
-		}
-
-		const int32 lastPointIndex = axisLocationsCm.Num() - 1;
-		if (pointIndex == lastPointIndex)
-		{
-			return axisLocationsCm[lastPointIndex] - axisLocationsCm[lastPointIndex - 1];
-		}
-
-		const FVector previousSegment = axisLocationsCm[pointIndex] - axisLocationsCm[pointIndex - 1];
-		const FVector nextSegment = axisLocationsCm[pointIndex + 1] - axisLocationsCm[pointIndex];
-		const FVector blendedDirection = (previousSegment.GetSafeNormal() + nextSegment.GetSafeNormal()).GetSafeNormal();
-		if (blendedDirection.IsNearlyZero())
-		{
-			return nextSegment;
-		}
-
-		const double tangentLengthCm = (previousSegment.Size() + nextSegment.Size()) * 0.5;
-		return blendedDirection * tangentLengthCm;
-	}
-
-	bool TryProjectPointToAxisMeters(
-		const TArray<FVector2D>& axisPointsMeters,
-		const FVector2D& localPointMeters,
-		double& outAlongMeters,
-		double& outOffsetMeters)
-	{
-		outAlongMeters = 0.0;
-		outOffsetMeters = 0.0;
-		if (axisPointsMeters.Num() < 2)
-		{
-			return false;
-		}
-
-		bool bHasProjection = false;
-		double accumulatedMeters = 0.0;
-		double bestDistanceSquared = TNumericLimits<double>::Max();
-		double bestAlongMeters = 0.0;
-		double bestOffsetMeters = 0.0;
-		for (int32 index = 0; index < axisPointsMeters.Num() - 1; ++index)
-		{
-			const FVector2D segmentStart = axisPointsMeters[index];
-			const FVector2D segmentEnd = axisPointsMeters[index + 1];
-			const FVector2D segmentVector = segmentEnd - segmentStart;
-			const double segmentLengthMeters = segmentVector.Size();
-			if (segmentLengthMeters <= KINDA_SMALL_NUMBER)
-			{
-				continue;
-			}
-
-			const FVector2D segmentDirection = segmentVector / segmentLengthMeters;
-			const double projectedDistanceMeters = FMath::Clamp(
-				FVector2D::DotProduct(localPointMeters - segmentStart, segmentDirection),
-				0.0,
-				segmentLengthMeters);
-			const FVector2D projectedPointMeters = segmentStart + (segmentDirection * projectedDistanceMeters);
-			const double distanceSquared = FVector2D::DistSquared(localPointMeters, projectedPointMeters);
-			if (distanceSquared < bestDistanceSquared)
-			{
-				const FVector2D offsetDirection(-segmentDirection.Y, segmentDirection.X);
-				bestDistanceSquared = distanceSquared;
-				bestAlongMeters = accumulatedMeters + projectedDistanceMeters;
-				bestOffsetMeters = FVector2D::DotProduct(localPointMeters - projectedPointMeters, offsetDirection);
-				bHasProjection = true;
-			}
-
-			accumulatedMeters += segmentLengthMeters;
-		}
-
-		if (!bHasProjection)
-		{
-			return false;
-		}
-
-		outAlongMeters = bestAlongMeters;
-		outOffsetMeters = bestOffsetMeters;
-		return true;
-	}
-
-	bool ContainsRangeValue(double value, double minValue, double maxValue)
-	{
-		const double safeMin = FMath::Min(minValue, maxValue) - RuntimeSurfaceQueryToleranceMeters;
-		const double safeMax = FMath::Max(minValue, maxValue) + RuntimeSurfaceQueryToleranceMeters;
-		return value >= safeMin && value <= safeMax;
-	}
-
-	FString MakeSurfaceInstanceId(
-		const FScenarioRuntimeCorridorSpec& corridorSpec,
-		const FScenarioRuntimeCorridorLayoutEntry& layoutEntry,
-		const FScenarioRuntimeCorridorLaneSpec& laneSpec,
-		int32 layoutIndex,
-		int32 laneIndex)
-	{
-		const FString segmentId = layoutEntry.SegmentId.IsEmpty()
-			? FString::Printf(TEXT("layout_%03d"), layoutIndex)
-			: layoutEntry.SegmentId;
-		const FString laneId = laneSpec.LaneId.IsEmpty()
-			? FString::Printf(TEXT("lane_%03d"), laneIndex)
-			: laneSpec.LaneId;
-		const FString corridorId = corridorSpec.CorridorId.IsEmpty()
-			? TEXT("corridor")
-			: corridorSpec.CorridorId;
-		return FString::Printf(TEXT("%s:%s:%s"), *corridorId, *segmentId, *laneId);
-	}
-
-	FString MakeVisualLaneKey(const FScenarioRuntimeCorridorLaneSpec& laneSpec)
-	{
-		if (!laneSpec.LaneId.IsEmpty())
-		{
-			return laneSpec.LaneId;
-		}
-
-		return FString::Printf(
-			TEXT("lane:%0.3f:%0.3f:%d"),
-			laneSpec.OffsetRangeMeters.MinMeters,
-			laneSpec.OffsetRangeMeters.MaxMeters,
-			static_cast<int32>(laneSpec.RegionType));
-	}
-
 }
 
 AScenarioCorridorRuntimeActor::AScenarioCorridorRuntimeActor()
@@ -250,7 +78,7 @@ void AScenarioCorridorRuntimeActor::ConfigureCorridor(const FScenarioRuntimeCorr
 	{
 		for (const FScenarioRuntimeCorridorLaneSpec& laneSpec : layoutEntry.Lanes)
 		{
-			const FString visualLaneKey = MakeVisualLaneKey(laneSpec);
+			const FString visualLaneKey = FScenarioCorridorGeometry::MakeVisualLaneKey(laneSpec);
 			if (renderedLaneKeys.Contains(visualLaneKey))
 			{
 				continue;
@@ -281,10 +109,15 @@ bool AScenarioCorridorRuntimeActor::TryFindSurfaceAtWorldLocation2D(
 	FScenarioRuntimeCorridorSurfaceQueryResult& outSurface) const
 {
 	outSurface = FScenarioRuntimeCorridorSurfaceQueryResult();
-	const FVector2D localPointMeters = TransformWorldCmToAxisPointMeters(CorridorSpec, worldLocation);
+	const FVector2D localPointMeters =
+		FScenarioCorridorGeometry::TransformRuntimeWorldCmToAxisPointMeters(CorridorSpec, worldLocation);
 	double alongMeters = 0.0;
 	double offsetMeters = 0.0;
-	if (!TryProjectPointToAxisMeters(CorridorSpec.PointsMeters, localPointMeters, alongMeters, offsetMeters))
+	if (!FScenarioCorridorGeometry::TryProjectPointToAxisMeters(
+		CorridorSpec.PointsMeters,
+		localPointMeters,
+		alongMeters,
+		offsetMeters))
 	{
 		return false;
 	}
@@ -292,7 +125,11 @@ bool AScenarioCorridorRuntimeActor::TryFindSurfaceAtWorldLocation2D(
 	for (int32 layoutIndex = 0; layoutIndex < CorridorSpec.Layout.Num(); ++layoutIndex)
 	{
 		const FScenarioRuntimeCorridorLayoutEntry& layoutEntry = CorridorSpec.Layout[layoutIndex];
-		if (!ContainsRangeValue(alongMeters, layoutEntry.AlongRangeMeters.StartMeters, layoutEntry.AlongRangeMeters.EndMeters))
+		if (!FScenarioCorridorGeometry::ContainsRangeValue(
+			alongMeters,
+			layoutEntry.AlongRangeMeters.StartMeters,
+			layoutEntry.AlongRangeMeters.EndMeters,
+			FScenarioCorridorGeometry::SurfaceQueryToleranceMeters))
 		{
 			continue;
 		}
@@ -300,12 +137,21 @@ bool AScenarioCorridorRuntimeActor::TryFindSurfaceAtWorldLocation2D(
 		for (int32 laneIndex = 0; laneIndex < layoutEntry.Lanes.Num(); ++laneIndex)
 		{
 			const FScenarioRuntimeCorridorLaneSpec& laneSpec = layoutEntry.Lanes[laneIndex];
-			if (!ContainsRangeValue(offsetMeters, laneSpec.OffsetRangeMeters.MinMeters, laneSpec.OffsetRangeMeters.MaxMeters))
+			if (!FScenarioCorridorGeometry::ContainsRangeValue(
+				offsetMeters,
+				laneSpec.OffsetRangeMeters.MinMeters,
+				laneSpec.OffsetRangeMeters.MaxMeters,
+				FScenarioCorridorGeometry::SurfaceQueryToleranceMeters))
 			{
 				continue;
 			}
 
-			outSurface.SurfaceInstanceId = MakeSurfaceInstanceId(CorridorSpec, layoutEntry, laneSpec, layoutIndex, laneIndex);
+			outSurface.SurfaceInstanceId = FScenarioCorridorGeometry::MakeSurfaceInstanceId(
+				CorridorSpec,
+				layoutEntry,
+				laneSpec,
+				layoutIndex,
+				laneIndex);
 			outSurface.CorridorId = CorridorSpec.CorridorId;
 			outSurface.SegmentId = layoutEntry.SegmentId;
 			outSurface.LaneId = laneSpec.LaneId;
@@ -339,8 +185,9 @@ void AScenarioCorridorRuntimeActor::AddLaneStrip(const FScenarioRuntimeCorridorL
 		BlockedGroundMaterial.Get());
 
 	const double centerOffsetCm =
-		((laneSpec.OffsetRangeMeters.MinMeters + laneSpec.OffsetRangeMeters.MaxMeters) * 0.5) * RuntimeMetersToCentimeters;
-	const double laneWidthCm = laneWidthMeters * RuntimeMetersToCentimeters;
+		((laneSpec.OffsetRangeMeters.MinMeters + laneSpec.OffsetRangeMeters.MaxMeters) * 0.5)
+		* FScenarioCorridorGeometry::MetersToCentimeters;
+	const double laneWidthCm = laneWidthMeters * FScenarioCorridorGeometry::MetersToCentimeters;
 	const bool bBlockedSurface = laneSpec.RegionType == EScenarioGroundRegionType::Blocked;
 	const double laneHeightCm = bBlockedSurface ? RuntimeBlockedHeightCm : RuntimeSurfaceHeightCm;
 	const double laneSurfaceZCm = RuntimeSurfaceTopZCm + laneSpec.SurfaceZOffsetCm;
@@ -348,69 +195,45 @@ void AScenarioCorridorRuntimeActor::AddLaneStrip(const FScenarioRuntimeCorridorL
 		? laneSurfaceZCm + (laneHeightCm * 0.5)
 		: laneSurfaceZCm - (laneHeightCm * 0.5);
 	const double laneHeightScale = laneHeightCm / 100.0;
-	const FName collisionProfileName = GetRuntimeCollisionProfileName(laneSpec.RegionType);
+	const FName collisionProfileName = FScenarioCorridorGeometry::ResolveRuntimeCollisionProfileName(laneSpec.RegionType);
 
 	TArray<FVector> axisLocationsCm;
 	axisLocationsCm.Reserve(CorridorSpec.PointsMeters.Num());
 	for (const FVector2D& pointMeters : CorridorSpec.PointsMeters)
 	{
-		axisLocationsCm.Add(TransformAxisPointMetersToWorldCm(CorridorSpec, pointMeters));
+		axisLocationsCm.Add(FScenarioCorridorGeometry::TransformRuntimeAxisPointMetersToWorldCm(
+			CorridorSpec,
+			pointMeters,
+			RuntimeSurfaceTopZCm));
 	}
 
-	for (int32 pointIndex = 0; pointIndex < axisLocationsCm.Num() - 1; ++pointIndex)
+	TArray<FVector> axisTangentsCm;
+	axisTangentsCm.Reserve(axisLocationsCm.Num());
+	for (int32 pointIndex = 0; pointIndex < axisLocationsCm.Num(); ++pointIndex)
 	{
-		const FVector startLocation = axisLocationsCm[pointIndex];
-		const FVector endLocation = axisLocationsCm[pointIndex + 1];
-		const FVector startTangent = ResolveRuntimeCurveTangentCm(axisLocationsCm, pointIndex);
-		const FVector endTangent = ResolveRuntimeCurveTangentCm(axisLocationsCm, pointIndex + 1);
-		const FVector startDirection = startTangent.GetSafeNormal();
-		const FVector endDirection = endTangent.GetSafeNormal();
-		if (startDirection.IsNearlyZero() || endDirection.IsNearlyZero())
-		{
-			continue;
-		}
+		axisTangentsCm.Add(FScenarioCorridorGeometry::ResolveCurveTangentCm(axisLocationsCm, pointIndex));
+	}
 
-		const FVector startRight = FVector::CrossProduct(FVector::UpVector, startDirection).GetSafeNormal();
-		const FVector endRight = FVector::CrossProduct(FVector::UpVector, endDirection).GetSafeNormal();
-		const FVector laneHeightOffset(0.0, 0.0, laneCenterZCm - RuntimeSurfaceTopZCm);
-		const FName componentName = MakeUniqueObjectName(
-			this,
-			USplineMeshComponent::StaticClass(),
-			FName(*FString::Printf(TEXT("RuntimeCorridor_%s_%02d"), *laneSpec.LaneId, pointIndex)));
-		USplineMeshComponent* meshComponent = NewObject<USplineMeshComponent>(this, componentName);
-		if (!meshComponent)
-		{
-			continue;
-		}
-
-		meshComponent->SetMobility(EComponentMobility::Movable);
-		meshComponent->SetupAttachment(SceneRoot);
-		meshComponent->SetStaticMesh(LaneStripMesh);
-		meshComponent->SetForwardAxis(ESplineMeshAxis::X, false);
-		meshComponent->SetStartAndEnd(
-			startLocation + startRight * centerOffsetCm + laneHeightOffset,
-			startTangent,
-			endLocation + endRight * centerOffsetCm + laneHeightOffset,
-			endTangent,
-			false);
-		meshComponent->SetStartScale(FVector2D(laneWidthCm / 100.0, laneHeightScale), false);
-		meshComponent->SetEndScale(FVector2D(laneWidthCm / 100.0, laneHeightScale), false);
-		meshComponent->SetCollisionProfileName(collisionProfileName);
-		meshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		meshComponent->SetGenerateOverlapEvents(false);
-		meshComponent->SetCastShadow(false);
-		if (!laneSpec.CollisionTag.IsEmpty())
-		{
-			const FName collisionTag(*laneSpec.CollisionTag);
-			meshComponent->ComponentTags.AddUnique(collisionTag);
-			Tags.AddUnique(collisionTag);
-		}
-		meshComponent->RegisterComponent();
-		if (material)
-		{
-			meshComponent->SetMaterial(0, material);
-		}
-		meshComponent->UpdateMesh();
-		LaneMeshComponents.Add(meshComponent);
+	const FName collisionTag = laneSpec.CollisionTag.IsEmpty() ? NAME_None : FName(*laneSpec.CollisionTag);
+	FScenarioCorridorLaneMeshBuildSpec meshSpec;
+	meshSpec.Owner = this;
+	meshSpec.AttachParent = SceneRoot;
+	meshSpec.LaneStripMesh = LaneStripMesh.Get();
+	meshSpec.Material = material;
+	meshSpec.ComponentNameBase = FName(*FString::Printf(TEXT("RuntimeCorridor_%s"), *laneSpec.LaneId));
+	meshSpec.AxisLocationsCm = MoveTemp(axisLocationsCm);
+	meshSpec.AxisTangentsCm = MoveTemp(axisTangentsCm);
+	meshSpec.CenterOffsetCm = centerOffsetCm;
+	meshSpec.LaneWidthCm = laneWidthCm;
+	meshSpec.LaneHeightScale = laneHeightScale;
+	meshSpec.LaneCenterZCm = laneCenterZCm;
+	meshSpec.SurfaceTopZCm = RuntimeSurfaceTopZCm;
+	meshSpec.CollisionEnabled = ECollisionEnabled::QueryAndPhysics;
+	meshSpec.CollisionProfileName = collisionProfileName;
+	meshSpec.ComponentTag = collisionTag;
+	const int32 createdMeshCount = FScenarioCorridorGeometry::AddLaneStripMeshes(meshSpec, LaneMeshComponents);
+	if (createdMeshCount > 0 && !collisionTag.IsNone())
+	{
+		Tags.AddUnique(collisionTag);
 	}
 }

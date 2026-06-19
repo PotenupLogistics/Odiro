@@ -503,10 +503,14 @@ bool FUserProjectEpisodeScenarioWriteTest::RunTest(const FString& parameters)
 		return false;
 	}
 	TestEqual(TEXT("scenario sample schema"), episodeObject->GetStringField(TEXT("schema")), FString(TEXT("scenario_sample")));
+	const TSharedPtr<FJsonObject> sampleSourceObject = episodeObject->GetObjectField(TEXT("sample"))->GetObjectField(TEXT("source"));
 	TestEqual(
 		TEXT("sample seed"),
-		static_cast<int64>(episodeObject->GetObjectField(TEXT("sample"))->GetObjectField(TEXT("source"))->GetNumberField(TEXT("seed"))),
+		static_cast<int64>(sampleSourceObject->GetNumberField(TEXT("seed"))),
 		static_cast<int64>(1234));
+	TestEqual(TEXT("sample template ref"), sampleSourceObject->GetStringField(TEXT("template_ref")), FString(TEXT("snapshot/scenario.json")));
+	TestEqual(TEXT("sample profile ref"), sampleSourceObject->GetStringField(TEXT("profile_ref")), FString(TEXT("snapshot/profile.json")));
+	TestEqual(TEXT("sample setting ref"), sampleSourceObject->GetStringField(TEXT("setting_ref")), FString(TEXT("snapshot/setting.json")));
 
 	const TSharedPtr<FJsonObject> sampledScenarioObject = episodeObject->GetObjectField(TEXT("scenario"));
 	const TSharedPtr<FJsonObject> paramsObject = sampledScenarioObject->GetObjectField(TEXT("params"));
@@ -691,6 +695,23 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 		resultObject->GetObjectField(TEXT("episode"))->GetStringField(TEXT("episode_id")),
 		FString(TEXT("000001")));
 	TestEqual(
+		TEXT("result scenario id"),
+		resultObject->GetObjectField(TEXT("episode"))->GetStringField(TEXT("scenario_id")),
+		FString(TEXT("automation_scenario_000001")));
+	const TSharedPtr<FJsonObject> resultArtifacts = resultObject->GetObjectField(TEXT("artifacts"));
+	TestEqual(
+		TEXT("result scenario path"),
+		resultArtifacts->GetStringField(TEXT("scenario_path")),
+		FString(TEXT("episodes/000001/scenario.json")));
+	TestEqual(
+		TEXT("result result path"),
+		resultArtifacts->GetStringField(TEXT("result_path")),
+		FString(TEXT("episodes/000001/result.json")));
+	TestEqual(
+		TEXT("result events path"),
+		resultArtifacts->GetStringField(TEXT("events_path")),
+		FString(TEXT("episodes/000001/events.jsonl")));
+	TestEqual(
 		TEXT("event summary count"),
 		static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("event_count")))),
 		8);
@@ -785,16 +806,40 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 		summaryObject->GetObjectField(TEXT("run"))->GetStringField(TEXT("policy_snapshot_hash")));
 	const TArray<TSharedPtr<FJsonValue>> rows = summaryObject->GetArrayField(TEXT("rows"));
 	TestEqual(TEXT("summary row count"), rows.Num(), 1);
+	const TSharedPtr<FJsonObject> summaryRow = rows[0]->AsObject();
 	TestEqual(
 		TEXT("summary scenario id"),
-		rows[0]->AsObject()->GetStringField(TEXT("scenario_id")),
+		summaryRow->GetStringField(TEXT("scenario_id")),
 		FString(TEXT("automation_scenario_000001")));
+	TestTrue(TEXT("summary completed"), summaryRow->GetBoolField(TEXT("completed")));
+	TestTrue(TEXT("summary success"), summaryRow->GetBoolField(TEXT("success")));
+	TestEqual(
+		TEXT("summary row terminal event index"),
+		static_cast<int32>(FMath::RoundToInt(summaryRow->GetNumberField(TEXT("terminal_event_index")))),
+		7);
+	const TSharedPtr<FJsonObject> summaryRowArtifacts = summaryRow->GetObjectField(TEXT("artifacts"));
+	TestEqual(
+		TEXT("summary scenario path"),
+		summaryRowArtifacts->GetStringField(TEXT("scenario_path")),
+		FString(TEXT("episodes/000001/scenario.json")));
+	TestEqual(
+		TEXT("summary result path"),
+		summaryRowArtifacts->GetStringField(TEXT("result_path")),
+		FString(TEXT("episodes/000001/result.json")));
+	TestEqual(
+		TEXT("summary events path"),
+		summaryRowArtifacts->GetStringField(TEXT("events_path")),
+		FString(TEXT("episodes/000001/events.jsonl")));
+	TestEqual(
+		TEXT("summary row event total"),
+		static_cast<int32>(FMath::RoundToInt(summaryRow->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("total")))),
+		8);
 	TestTrue(
 		TEXT("summary scenario params copied"),
-		rows[0]->AsObject()->GetObjectField(TEXT("scenario_params"))->HasField(TEXT("corridor.walkway_width_m")));
+		summaryRow->GetObjectField(TEXT("scenario_params"))->HasField(TEXT("corridor.walkway_width_m")));
 	TestTrue(
 		TEXT("summary scenario semantic copied"),
-		rows[0]->AsObject()->GetObjectField(TEXT("scenario_semantic"))->HasField(TEXT("route_axis")));
+		summaryRow->GetObjectField(TEXT("scenario_semantic"))->HasField(TEXT("route_axis")));
 
 	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
 	return true;

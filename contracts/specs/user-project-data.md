@@ -494,6 +494,8 @@ schema:
 
 `sample.source` 최소 field:
 
+`*_ref` 경로는 run directory 기준 상대 경로다.
+
 | Field               | Type   | 의미                         |
 | ------------------- | ------ | ---------------------------- |
 | `template_ref`      | string | run snapshot scenario 경로   |
@@ -598,19 +600,43 @@ schema:
 | `profile_hash`          | string  | snapshot profile hash                   |
 | `setting_hash`          | string  | snapshot setting hash                   |
 | `seed`                  | number  | episode seed                            |
+| `completed`             | boolean | evaluation 종료 여부                    |
+| `success`               | boolean | 목표 달성 여부                          |
 | `outcome`               | string  | `Success`, `Failure`, `Cancelled` 등    |
 | `terminal_reason`       | string  | episode 종료 원인                       |
+| `terminal_event_index`  | number or null | 종료 원인 event index           |
 | `duration_s`            | number  | episode 실행 시간                       |
 | `usable_for_llm_tuning` | boolean | 분석/튜닝 근거 사용 가능 여부           |
+| `artifacts`             | object  | episode 주요 근거 파일 경로             |
 | `metrics`               | object  | 주요 count/distance metric subset       |
+| `event_summary`         | object  | `events.jsonl` count 집계               |
 | `scenario_params`       | object  | 핵심 `scenario_sample.scenario.params` subset   |
 | `scenario_semantic`     | object  | 핵심 `scenario_sample.scenario.semantic` subset |
+
+`rows[].artifacts` field:
+
+| Field           | Type   | 의미                                      |
+| --------------- | ------ | ----------------------------------------- |
+| `scenario_path` | string | run directory 기준 episode `scenario.json` |
+| `result_path`   | string | run directory 기준 episode `result.json`   |
+| `events_path`   | string | run directory 기준 episode `events.jsonl`  |
+
+`rows[].event_summary` field:
+
+| Field                  | Type   | 의미                         |
+| ---------------------- | ------ | ---------------------------- |
+| `total`                | number | event 총수                   |
+| `event_count`          | number | runtime writer 호환 event 총수 |
+| `by_type`              | object | `event_type`별 count         |
+| `by_source`            | object | `source`별 count             |
+| `terminal_event_index` | number or null | 종료 원인 event index |
 
 규칙:
 
 - 빠른 분석/필터링용 집계 파일
 - 원본 아님
 - 원본: episode `scenario.json`, `result.json`, `events.jsonl`
+- `preview.png`, `captures/`는 `artifacts` field에 포함하지 않음
 
 ### Episode Result
 
@@ -635,14 +661,65 @@ schema:
 | `episode`       | object | episode id, hashes, seed     |
 | `run`           | object | run id, policy snapshot hash |
 | `summary`       | object | 최종 결과 기준               |
+| `artifacts`     | object | episode 주요 근거 파일 경로  |
 | `metrics`       | object | evaluation metrics           |
 | `event_summary` | object | `events.jsonl` 집계          |
+
+`episode` 최소 field:
+
+| Field                  | Type   | 의미                       |
+| ---------------------- | ------ | -------------------------- |
+| `episode_id`           | string | 6자리 decimal string       |
+| `scenario_id`          | string | scenario 표시/조인 식별자  |
+| `scenario_hash`        | string | episode `scenario_sample` hash |
+| `scenario_source_hash` | string | snapshot scenario hash     |
+| `profile_hash`         | string | snapshot profile hash      |
+| `setting_hash`         | string | snapshot setting hash      |
+| `seed`                 | number | episode seed               |
+
+`run` 최소 field:
+
+| Field                  | Type   | 의미                        |
+| ---------------------- | ------ | --------------------------- |
+| `run_id`               | string | 6자리 decimal string        |
+| `policy_snapshot_hash` | string | opaque policy snapshot hash |
+
+`summary` 최소 field:
+
+| Field                  | Type   | 의미                        |
+| ---------------------- | ------ | --------------------------- |
+| `completed`            | boolean | evaluation 종료 여부       |
+| `evaluation_completed` | boolean | runtime writer 호환 field  |
+| `success`              | boolean | 목표 달성 여부             |
+| `outcome`              | string | 최종 결과 분류             |
+| `terminal_reason`      | string | episode 종료 원인          |
+| `terminal_event_index` | number or null | 종료 원인 event index |
+| `duration_s`           | number | episode 실행 시간          |
+
+`artifacts` field:
+
+| Field           | Type   | 의미                                      |
+| --------------- | ------ | ----------------------------------------- |
+| `scenario_path` | string | run directory 기준 episode `scenario.json` |
+| `result_path`   | string | run directory 기준 episode `result.json`   |
+| `events_path`   | string | run directory 기준 episode `events.jsonl`  |
+
+`event_summary` 최소 field:
+
+| Field                  | Type   | 의미                         |
+| ---------------------- | ------ | ---------------------------- |
+| `total`                | number | event 총수                   |
+| `event_count`          | number | runtime writer 호환 event 총수 |
+| `by_type`              | object | `event_type`별 count         |
+| `by_source`            | object | `source`별 count             |
+| `terminal_event_index` | number or null | 종료 원인 event index |
 
 규칙:
 
 - `summary.terminal_reason`: episode 종료 원인 기준
 - 종료 원인 event는 `events.jsonl`에 기록
 - 가능하면 `summary.terminal_event_index`로 종료 원인 event 참조
+- `preview.png`, `captures/`는 `artifacts` field에 포함하지 않음
 
 ### Robot Actions
 

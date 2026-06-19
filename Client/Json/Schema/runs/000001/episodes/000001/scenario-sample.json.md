@@ -34,6 +34,8 @@ runs/<RunId>/episodes/<EpisodeId>/scenario.json
 
 ## sample.source
 
+`*_ref` 경로는 run directory 기준 상대 경로다.
+
 | 필드 | 타입 | 필수 | 설명 |
 | --- | --- | --- | --- |
 | `template_ref` | string | 예 | Run snapshot `scenario.json` 경로. v1 필드명은 호환성 때문에 `template_ref`를 유지한다. |

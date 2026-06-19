@@ -23,6 +23,7 @@ runs/<RunId>/episodes/<EpisodeId>/result.json
 | `episode` | object | 예 | Episode id, hashes, seed. |
 | `run` | object | 예 | Run id와 policy snapshot hash. |
 | `summary` | object | 예 | 최종 결과 기준. |
+| `artifacts` | object | 예 | 같은 episode의 주요 근거 파일 경로. |
 | `metrics` | object | 예 | Evaluation metrics. |
 | `event_summary` | object | 예 | `events.jsonl` 집계. |
 
@@ -45,11 +46,21 @@ runs/<RunId>/episodes/<EpisodeId>/result.json
 | `run_id` | string | 예 | 6자리 decimal run id. |
 | `policy_snapshot_hash` | string | 예 | 실행 시점 policy snapshot hash. |
 
+## artifacts
+
+경로는 run directory 기준 상대 경로다.
+
+| 필드 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `scenario_path` | string | 예 | Episode `scenario.json` 경로. |
+| `result_path` | string | 예 | 이 `result.json` 경로. |
+| `events_path` | string | 예 | Episode `events.jsonl` 경로. |
+
 ## summary
 
 | 필드 | 타입 | 필수 | 설명 |
 | --- | --- | --- | --- |
-| `completed` | boolean | 권장 | Evaluation 종료 여부. |
+| `completed` | boolean | 예 | Evaluation 종료 여부. |
 | `evaluation_completed` | boolean | 호환 | Evaluation 종료 여부를 나타내는 runtime writer field. |
 | `success` | boolean | 예 | 목표 달성 여부. |
 | `outcome` | string | 예 | `Success`, `Failure`, `Cancelled` 등 최종 결과 분류. |
@@ -94,3 +105,4 @@ runs/<RunId>/episodes/<EpisodeId>/result.json
 - Terminal result 판단은 `result.json.summary`를 기준으로 한다.
 - 종료 원인 event는 `events.jsonl`에도 기록한다.
 - Event 원본 배열은 `result.json`에 복사하지 않는다.
+- `preview.png`와 `captures/`는 이 result artifact 계약에 포함하지 않는다.

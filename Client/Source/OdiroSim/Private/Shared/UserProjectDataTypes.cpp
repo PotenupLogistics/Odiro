@@ -585,6 +585,142 @@ namespace
 		return TEXT("Unknown");
 	}
 
+	// events.jsonl 매핑은 런타임 detector가 JSON 이름을 알지 않도록 typed snapshot 필드만 읽는다.
+	FString ReadEventStringProperty(const FEpisodeEvaluationEvent& event, const FString& key)
+	{
+		if (const FScenarioParamValue* value = event.Properties.Find(key))
+		{
+			if (value->Type == EScenarioParamValueType::String)
+			{
+				return value->StringValue.TrimStartAndEnd();
+			}
+		}
+
+		return FString();
+	}
+
+	// 정책 pathfinding 실패는 policy/runtime 계층에서 여러 error code 표기로 들어온다.
+	bool IsPathfindFailureCode(const FString& value)
+	{
+		const FString normalizedValue = value.TrimStartAndEnd();
+		return normalizedValue.Equals(TEXT("PathfindFail"), ESearchCase::IgnoreCase)
+			|| normalizedValue.Equals(TEXT("PathFindingFailed"), ESearchCase::IgnoreCase)
+			|| normalizedValue.Equals(TEXT("PATH_NOT_FOUND"), ESearchCase::IgnoreCase)
+			|| normalizedValue.Equals(TEXT("path_not_found"), ESearchCase::IgnoreCase)
+			|| normalizedValue.Equals(TEXT("start_cell_blocked"), ESearchCase::IgnoreCase)
+			|| normalizedValue.Equals(TEXT("goal_cell_blocked"), ESearchCase::IgnoreCase);
+	}
+
+	// DeliveryBotPolicyFailure는 외부 계약의 PathfindFail과 PolicyDecisionError로 나뉜다.
+	bool IsPolicyPathfindFailureEvent(const FEpisodeEvaluationEvent& event)
+	{
+		return IsPathfindFailureCode(ReadEventStringProperty(event, TEXT("error_code")))
+			|| IsPathfindFailureCode(ReadEventStringProperty(event, TEXT("policy_event_code")))
+			|| IsPathfindFailureCode(ReadEventStringProperty(event, TEXT("policy_reason")));
+	}
+
+	// Stuck은 generic DeliveryBotSimulationFailure snapshot의 외부 event_type 세분화다.
+	bool IsStuckSimulationFailureEvent(const FEpisodeEvaluationEvent& event)
+	{
+		return ReadEventStringProperty(event, TEXT("delivery_bot_failure_type")).Equals(TEXT("Stuck"), ESearchCase::IgnoreCase)
+			|| ReadEventStringProperty(event, TEXT("failure_type")).Equals(TEXT("Stuck"), ESearchCase::IgnoreCase);
+	}
+
+	// 내부 evaluation enum을 문서화된 외부 events.jsonl event_type 값으로 변환한다.
+	FString ResolveUserProjectEventType(const FEpisodeEvaluationEvent& event)
+	{
+		switch (event.EventType)
+		{
+		case EEpisodeEvaluationEventType::DeliveryBotRepath:
+			return TEXT("Repath");
+		case EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure:
+			return TEXT("PolicyDecisionError");
+		case EEpisodeEvaluationEventType::DeliveryBotPolicyFailure:
+			return IsPolicyPathfindFailureEvent(event)
+				? TEXT("PathfindFail")
+				: TEXT("PolicyDecisionError");
+		case EEpisodeEvaluationEventType::DeliveryBotSimulationFailure:
+			return IsStuckSimulationFailureEvent(event)
+				? TEXT("Stuck")
+				: TEXT("DeliveryBotSimulationFailure");
+		default:
+			return ToUserProjectEnumString(event.EventType);
+		}
+	}
+
+	// source 이름은 downstream 분석에서 책임 subsystem 경계를 설명한다.
+	FString ResolveUserProjectEventSource(const FEpisodeEvaluationEvent& event)
+	{
+		switch (event.EventType)
+		{
+		case EEpisodeEvaluationEventType::DeliveryBotRepath:
+			return TEXT("PythonPolicy");
+		case EEpisodeEvaluationEventType::DeliveryBotPolicyFailure:
+			return IsPolicyPathfindFailureEvent(event)
+				? TEXT("PythonPolicy")
+				: TEXT("PolicyRuntime");
+		case EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure:
+			return TEXT("PolicyRuntime");
+		default:
+			return TEXT("EvaluationSubsystem");
+		}
+	}
+
+	// reason은 event snapshot에서 얻을 수 있는 가장 구체적인 detector 또는 policy code를 유지한다.
+	FString ResolveUserProjectEventReason(const FEpisodeEvaluationEvent& event)
+	{
+		if (event.EventType == EEpisodeEvaluationEventType::DeliveryBotRepath)
+		{
+			const FString policyReason = ReadEventStringProperty(event, TEXT("policy_reason"));
+			if (!policyReason.IsEmpty()) return policyReason;
+
+			const FString policyEventCode = ReadEventStringProperty(event, TEXT("policy_event_code"));
+			if (!policyEventCode.IsEmpty()) return policyEventCode;
+		}
+
+		if (event.EventType == EEpisodeEvaluationEventType::DeliveryBotPolicyFailure
+			|| event.EventType == EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure)
+		{
+			const FString errorCode = ReadEventStringProperty(event, TEXT("error_code"));
+			if (!errorCode.IsEmpty()) return errorCode;
+
+			const FString policyReason = ReadEventStringProperty(event, TEXT("policy_reason"));
+			if (!policyReason.IsEmpty()) return policyReason;
+
+			const FString policyEventCode = ReadEventStringProperty(event, TEXT("policy_event_code"));
+			if (!policyEventCode.IsEmpty()) return policyEventCode;
+		}
+
+		if (event.EventType == EEpisodeEvaluationEventType::DeliveryBotSimulationFailure)
+		{
+			const FString failureType = ReadEventStringProperty(event, TEXT("failure_type"));
+			if (!failureType.IsEmpty()) return failureType;
+
+			const FString deliveryBotFailureType = ReadEventStringProperty(event, TEXT("delivery_bot_failure_type"));
+			if (!deliveryBotFailureType.IsEmpty()) return deliveryBotFailureType;
+		}
+
+		return ResolveUserProjectEventType(event);
+	}
+
+	// 계약에 대응되는 terminal reason은 Terminal 대신 같은 event_type 이름으로 기록한다.
+	FString ResolveUserProjectTerminalEventType(EEpisodeEvaluationTerminalReason terminalReason)
+	{
+		switch (terminalReason)
+		{
+		case EEpisodeEvaluationTerminalReason::GoalReached:
+			return TEXT("GoalReached");
+		case EEpisodeEvaluationTerminalReason::Timeout:
+			return TEXT("Timeout");
+		case EEpisodeEvaluationTerminalReason::RobotTipOver:
+			return TEXT("RobotTipOver");
+		case EEpisodeEvaluationTerminalReason::DeliveryBotSimulationFailed:
+			return TEXT("DeliveryBotSimulationFailure");
+		default:
+			return TEXT("Terminal");
+		}
+	}
+
 	TSharedPtr<FJsonValue> MakeUserProjectParamJsonValue(const FScenarioParamValue& paramValue)
 	{
 		switch (paramValue.Type)
@@ -849,10 +985,10 @@ namespace
 		TMap<FString, int32> eventCounts;
 		for (const FEpisodeEvaluationEvent& event : runRecord.EvaluationResult.Events)
 		{
-			const FString eventType = ToUserProjectEnumString(event.EventType);
+			const FString eventType = ResolveUserProjectEventType(event);
 			eventCounts.FindOrAdd(eventType) += 1;
 		}
-		eventCounts.FindOrAdd(TEXT("Terminal")) += 1;
+		eventCounts.FindOrAdd(ResolveUserProjectTerminalEventType(runRecord.TerminalReason)) += 1;
 
 		TSharedRef<FJsonObject> countsObject = MakeShared<FJsonObject>();
 		TArray<FString> eventTypes;
@@ -879,9 +1015,9 @@ namespace
 		object->SetNumberField(TEXT("version"), 1);
 		object->SetNumberField(TEXT("event_index"), event.EventIndex);
 		object->SetNumberField(TEXT("run_time_seconds"), event.ElapsedTimeSeconds);
-		object->SetStringField(TEXT("source"), TEXT("EvaluationSubsystem"));
-		object->SetStringField(TEXT("event_type"), ToUserProjectEnumString(event.EventType));
-		object->SetStringField(TEXT("reason"), ToUserProjectEnumString(event.EventType));
+		object->SetStringField(TEXT("source"), ResolveUserProjectEventSource(event));
+		object->SetStringField(TEXT("event_type"), ResolveUserProjectEventType(event));
+		object->SetStringField(TEXT("reason"), ResolveUserProjectEventReason(event));
 		object->SetStringField(TEXT("message"), event.Message);
 		object->SetField(TEXT("action_sequence"), MakeShared<FJsonValueNull>());
 		object->SetObjectField(TEXT("properties"), MakeUserProjectParamObject(event.Properties));
@@ -896,7 +1032,7 @@ namespace
 		object->SetNumberField(TEXT("event_index"), eventIndex);
 		object->SetNumberField(TEXT("run_time_seconds"), runRecord.DurationSeconds);
 		object->SetStringField(TEXT("source"), TEXT("EvaluationSubsystem"));
-		object->SetStringField(TEXT("event_type"), TEXT("Terminal"));
+		object->SetStringField(TEXT("event_type"), ResolveUserProjectTerminalEventType(runRecord.TerminalReason));
 		object->SetStringField(TEXT("reason"), ToUserProjectEnumString(runRecord.TerminalReason));
 		object->SetStringField(TEXT("message"), FString::Printf(TEXT("Episode finished: %s"), *ToUserProjectEnumString(runRecord.TerminalReason)));
 		object->SetField(TEXT("action_sequence"), MakeShared<FJsonValueNull>());

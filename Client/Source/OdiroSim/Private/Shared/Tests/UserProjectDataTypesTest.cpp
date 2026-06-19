@@ -133,6 +133,15 @@ namespace
 		return paramValue;
 	}
 
+	// events.jsonl 계약 매핑 검증에 쓰는 typed event snapshot 문자열을 만든다.
+	FScenarioParamValue MakeUserProjectStringParam(const FString& value)
+	{
+		FScenarioParamValue paramValue;
+		paramValue.Type = EScenarioParamValueType::String;
+		paramValue.StringValue = value;
+		return paramValue;
+	}
+
 	int32 CountJsonlLines(const FString& filePath)
 	{
 		FString contents;
@@ -495,6 +504,45 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	nearMissEvent.Properties.Add(TEXT("distance_m"), MakeUserProjectFloatParam(0.45));
 	runRecord.EvaluationResult.Events.Add(nearMissEvent);
 
+	FEpisodeEvaluationEvent repathEvent;
+	repathEvent.EventIndex = 1;
+	repathEvent.ElapsedTimeSeconds = 5.0;
+	repathEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotRepath;
+	repathEvent.Severity = EEpisodeEvaluationEventSeverity::Info;
+	repathEvent.Message = TEXT("dynamic_repath_ready");
+	repathEvent.Properties.Add(TEXT("policy_event_code"), MakeUserProjectStringParam(TEXT("repath")));
+	repathEvent.Properties.Add(TEXT("policy_reason"), MakeUserProjectStringParam(TEXT("dynamic_repath_ready")));
+	runRecord.EvaluationResult.Events.Add(repathEvent);
+
+	FEpisodeEvaluationEvent pathfindFailEvent;
+	pathfindFailEvent.EventIndex = 2;
+	pathfindFailEvent.ElapsedTimeSeconds = 6.0;
+	pathfindFailEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotPolicyFailure;
+	pathfindFailEvent.Severity = EEpisodeEvaluationEventSeverity::Failure;
+	pathfindFailEvent.Message = TEXT("path not found");
+	pathfindFailEvent.Properties.Add(TEXT("error_code"), MakeUserProjectStringParam(TEXT("PATH_NOT_FOUND")));
+	pathfindFailEvent.Properties.Add(TEXT("error_message"), MakeUserProjectStringParam(TEXT("no valid path")));
+	runRecord.EvaluationResult.Events.Add(pathfindFailEvent);
+
+	FEpisodeEvaluationEvent policyDecisionErrorEvent;
+	policyDecisionErrorEvent.EventIndex = 3;
+	policyDecisionErrorEvent.ElapsedTimeSeconds = 7.0;
+	policyDecisionErrorEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure;
+	policyDecisionErrorEvent.Severity = EEpisodeEvaluationEventSeverity::Failure;
+	policyDecisionErrorEvent.Message = TEXT("request failed");
+	policyDecisionErrorEvent.Properties.Add(TEXT("error_code"), MakeUserProjectStringParam(TEXT("PYTHON_REQUEST_FAILED")));
+	policyDecisionErrorEvent.Properties.Add(TEXT("error_message"), MakeUserProjectStringParam(TEXT("Python decide HTTP request failed.")));
+	runRecord.EvaluationResult.Events.Add(policyDecisionErrorEvent);
+
+	FEpisodeEvaluationEvent stuckEvent;
+	stuckEvent.EventIndex = 4;
+	stuckEvent.ElapsedTimeSeconds = 8.0;
+	stuckEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotSimulationFailure;
+	stuckEvent.Severity = EEpisodeEvaluationEventSeverity::Failure;
+	stuckEvent.Message = TEXT("robot stuck");
+	stuckEvent.Properties.Add(TEXT("delivery_bot_failure_type"), MakeUserProjectStringParam(TEXT("Stuck")));
+	runRecord.EvaluationResult.Events.Add(stuckEvent);
+
 	TArray<FString> artifactDiagnostics;
 	TestTrue(
 		TEXT("episode artifacts write"),
@@ -517,7 +565,7 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("actions exists"), FPaths::FileExists(FPaths::Combine(episodeDirectory, TEXT("actions.jsonl"))));
 	TestTrue(TEXT("trace exists"), FPaths::FileExists(FPaths::Combine(episodeDirectory, TEXT("trace.jsonl"))));
 	TestTrue(TEXT("summary exists"), FPaths::FileExists(snapshotResult.Paths.SummaryPath));
-	TestEqual(TEXT("events include evaluation and terminal lines"), CountJsonlLines(eventsPath), 2);
+	TestEqual(TEXT("events include evaluation and terminal lines"), CountJsonlLines(eventsPath), 6);
 
 	TSharedPtr<FJsonObject> resultObject;
 	TestTrue(TEXT("load result json"), LoadUserProjectJsonObject(resultPath, resultObject));
@@ -529,12 +577,26 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestEqual(
 		TEXT("event summary count"),
 		static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("event_count")))),
-		2);
+		6);
+	const TSharedPtr<FJsonObject> eventSummaryByType = resultObject->GetObjectField(TEXT("event_summary"))->GetObjectField(TEXT("by_type"));
+	TestEqual(TEXT("near miss event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("PedestrianNearMiss")))), 1);
+	TestEqual(TEXT("repath event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("Repath")))), 1);
+	TestEqual(TEXT("pathfind fail event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("PathfindFail")))), 1);
+	TestEqual(TEXT("policy decision error event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("PolicyDecisionError")))), 1);
+	TestEqual(TEXT("stuck event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("Stuck")))), 1);
+	TestEqual(TEXT("goal reached event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("GoalReached")))), 1);
 
 	FString eventsJson;
 	TestTrue(TEXT("load events jsonl"), FFileHelper::LoadFileToString(eventsJson, *eventsPath));
-	TestTrue(TEXT("events include terminal"), eventsJson.Contains(TEXT("\"event_type\":\"Terminal\"")));
+	TestTrue(TEXT("events include goal reached terminal"), eventsJson.Contains(TEXT("\"event_type\":\"GoalReached\"")));
 	TestTrue(TEXT("events include terminal reason"), eventsJson.Contains(TEXT("\"reason\":\"GoalReached\"")));
+	TestTrue(TEXT("events include repath"), eventsJson.Contains(TEXT("\"event_type\":\"Repath\"")));
+	TestTrue(TEXT("events include python policy source"), eventsJson.Contains(TEXT("\"source\":\"PythonPolicy\"")));
+	TestTrue(TEXT("events include pathfind fail"), eventsJson.Contains(TEXT("\"event_type\":\"PathfindFail\"")));
+	TestTrue(TEXT("events include policy decision error"), eventsJson.Contains(TEXT("\"event_type\":\"PolicyDecisionError\"")));
+	TestTrue(TEXT("events include policy runtime source"), eventsJson.Contains(TEXT("\"source\":\"PolicyRuntime\"")));
+	TestTrue(TEXT("events include stuck"), eventsJson.Contains(TEXT("\"event_type\":\"Stuck\"")));
+	TestFalse(TEXT("events omit internal repath type"), eventsJson.Contains(TEXT("\"event_type\":\"DeliveryBotRepath\"")));
 
 	TSharedPtr<FJsonObject> summaryObject;
 	TestTrue(TEXT("load summary json"), LoadUserProjectJsonObject(snapshotResult.Paths.SummaryPath, summaryObject));

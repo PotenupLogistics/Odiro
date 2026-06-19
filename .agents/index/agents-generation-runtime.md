@@ -5,6 +5,7 @@ paths:
   - Agents/README.md
   - Agents/app/api/**
   - Agents/app/models/**
+  - Agents/app/agents/result_analysis_v2/**
   - Agents/app/services/*generation*
   - Agents/app/services/*world_config*
   - Agents/app/services/*episode*
@@ -17,6 +18,7 @@ paths:
   - Agents/docs/experiment/**
   - Agents/docs/handoff/**
   - Agents/docs/json_contracts/**
+  - Agents/docs/api/V2_AGENT_APIS.md
   - Agents/docs/providers/**
   - Agents/docs/research/**
   - Agents/docs/status/**
@@ -28,6 +30,8 @@ entry:
   - Agents/app/models/episode_setup.py
   - Agents/app/models/delivery_bot_setup.py
   - Agents/app/models/run_queue.py
+  - Agents/app/agents/result_analysis_v2/agent.py
+  - Agents/app/agents/result_analysis_v2/graph_runner.py
   - Agents/app/services/world_config_generation_orchestrator.py
   - Agents/app/services/world_config_to_episode_setup_adapter.py
   - Agents/app/services/world_config_to_delivery_bot_setup_adapter.py
@@ -46,6 +50,7 @@ keep:
 verify:
   - focused pytest for touched route/model/service
   - contract validation when payload fields change
+  - result analysis review artifact tests when `/api/v2/analysis/run` storage behavior changes
 related:
   - agents-policy-rag-data
   - contracts-shared-data

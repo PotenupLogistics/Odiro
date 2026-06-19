@@ -35,6 +35,12 @@ def _write_project_blocked_episode(project, episode_id: str) -> None:
     )
 
 
+def _write_project_summary(project, summary: dict) -> None:
+    run_dir = project / "runs" / "000001"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+
+
 def test_result_analysis_graph_runner_imports_without_langgraph_dependency() -> None:
     assert ResultAnalysisGraphRunnerV2
 
@@ -108,3 +114,43 @@ def test_graph_mode_true_uses_graph_runner_path(monkeypatch, tmp_path) -> None:
     assert payload["schema"] == "analysis_run_response_v2"
     assert payload["summary"]["overall_judgement"] == "change_recommended"
     assert payload["analysis_mode"] == "rule_based"
+
+
+def test_graph_mode_true_uses_summary_without_episode_results(monkeypatch, tmp_path) -> None:
+    project = tmp_path / "Project1"
+    _write_project_summary(project, {"episode_count": 2, "success_count": 1, "failure_count": 1})
+    monkeypatch.setenv("V2_AGENT_GRAPH_ENABLED", "true")
+
+    response = TestClient(app).post("/api/v2/analysis/run", json={"project_path": str(project), "run_id": "000001"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema"] == "analysis_run_response_v2"
+    assert payload["analysis_scope"] == {"experiments_count": 1, "runs_count": 1, "episodes_count": 2}
+    assert payload["metrics"]["success_count"] == 1
+    assert payload["metrics"]["failure_count"] == 1
+
+
+def test_graph_mode_true_accepts_prompt_without_schema_changes(monkeypatch, tmp_path) -> None:
+    project = tmp_path / "Project1"
+    _write_project_blocked_episode(project, "000001")
+    _write_project_blocked_episode(project, "000002")
+    monkeypatch.setenv("V2_AGENT_GRAPH_ENABLED", "true")
+
+    response = TestClient(app).post(
+        "/api/v2/analysis/run",
+        json={
+            "project_path": str(project),
+            "run_id": "000001",
+            "prompt": "보도이탈과 페널티 중심으로 다시 분석해줘",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema"] == "analysis_run_response_v2"
+    assert payload["summary"]["overall_judgement"] == "change_recommended"
+    assert "사용자 요청 관점" in payload["summary"]["message"]
+    assert "route_deviation" in payload["summary"]["message"]
+    assert "penalty" in payload["summary"]["message"]
+    assert "prompt_focus" not in payload

@@ -27,30 +27,48 @@ class ResultAnalysisGraphRunnerV2:
         self.last_state: ResultAnalysisGraphStateV2 = {}
 
     def run(self, request=None):
-        state = self._init_state(request)
-        for node in (
-            self.scan_workspace_node,
-            self.classify_artifacts_node,
-            self.parse_artifacts_node,
-            self.extract_episode_metrics_node,
-            self.build_event_timelines_node,
-            self.select_representative_failed_episodes_node,
-            self.aggregate_runs_node,
-            self.aggregate_experiments_node,
-            self.detect_failure_patterns_node,
-            self.route_analysis_need_node,
-            self.build_rag_queries_node,
-            self.retrieve_rag_context_node,
-            self.build_analysis_context_node,
-            self.analyze_failure_node,
-            self.generate_recommendations_node,
-            self.validate_recommendations_node,
-            self.route_recommendation_validation_node,
-            self.build_response_node,
-        ):
-            state = node(state)
-        self.last_state = state
-        return state["response"]
+        review_session = self.agent.review_lifecycle.start(request)
+        try:
+            state = self._init_state(request)
+            for node in (
+                self.scan_workspace_node,
+                self.classify_artifacts_node,
+                self.parse_artifacts_node,
+                self.extract_episode_metrics_node,
+                self.build_event_timelines_node,
+                self.select_representative_failed_episodes_node,
+                self.aggregate_runs_node,
+                self.aggregate_experiments_node,
+                self.detect_failure_patterns_node,
+                self.route_analysis_need_node,
+                self.build_rag_queries_node,
+                self.retrieve_rag_context_node,
+                self.build_analysis_context_node,
+                self.analyze_failure_node,
+                self.generate_recommendations_node,
+                self.validate_recommendations_node,
+                self.route_recommendation_validation_node,
+                self.build_response_node,
+            ):
+                state = node(state)
+            self.agent._complete_review_if_started(
+                session=review_session,
+                request=request,
+                response=state["response"],
+                parsed=state.get("parsed_artifacts", []),
+                episodes=state.get("episode_metrics", []),
+                warnings=state.get("warnings", []),
+            )
+            self.last_state = state
+            return state["response"]
+        except Exception as exc:
+            if review_session is not None:
+                self.agent.review_lifecycle.fail(
+                    session=review_session,
+                    code=exc.__class__.__name__,
+                    message=str(exc),
+                )
+            raise
 
     def _init_state(self, request=None) -> ResultAnalysisGraphStateV2:
         return {
@@ -147,12 +165,11 @@ class ResultAnalysisGraphRunnerV2:
     def build_analysis_context_node(self, state: ResultAnalysisGraphStateV2) -> ResultAnalysisGraphStateV2:
         parsed = state.get("parsed_artifacts", [])
         episodes = state.get("episode_metrics", [])
-        experiment_ids = {artifact.info.experiment_id for artifact in parsed if artifact.info.experiment_id}
-        run_ids = {(episode.experiment_id, episode.run_id) for episode in episodes}
+        experiments_count, runs_count, episodes_count = self.agent._scope_counts(parsed, episodes)
         context = self.agent.context_builder.build(
-            experiments_count=len(experiment_ids),
-            runs_count=len(run_ids),
-            episodes_count=len(episodes),
+            experiments_count=experiments_count,
+            runs_count=runs_count,
+            episodes_count=episodes_count,
             experiment_summaries=state.get("experiment_aggregates", []),
             run_summaries=state.get("run_aggregates", []),
             failure_patterns=state.get("failure_patterns", []),
@@ -226,18 +243,18 @@ class ResultAnalysisGraphRunnerV2:
     def build_response_node(self, state: ResultAnalysisGraphStateV2) -> ResultAnalysisGraphStateV2:
         parsed = state.get("parsed_artifacts", [])
         episodes = state.get("episode_metrics", [])
-        experiment_ids = {artifact.info.experiment_id for artifact in parsed if artifact.info.experiment_id}
-        run_ids = {(episode.experiment_id, episode.run_id) for episode in episodes}
+        experiments_count, runs_count, episodes_count = self.agent._scope_counts(parsed, episodes)
         response = self.agent.response_builder.build(
-            experiments_count=len(experiment_ids),
-            runs_count=len(run_ids),
-            episodes_count=len(episodes),
-            metrics=self.agent._totals(episodes),
+            experiments_count=experiments_count,
+            runs_count=runs_count,
+            episodes_count=episodes_count,
+            metrics=self.agent._response_metrics(episodes, parsed),
             patterns=state.get("failure_patterns", []),
             recommendations=state.get("recommendations", []),
             warnings=state.get("warnings", []),
             analysis_mode=state.get("analysis_mode", "rule_based"),
         )
+        response = self.agent._with_prompt_focus(response, state.get("request"))
         return {
             **state,
             "response": response,

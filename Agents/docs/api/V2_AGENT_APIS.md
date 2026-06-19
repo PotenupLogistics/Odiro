@@ -106,14 +106,15 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 
 ### 목적
 
-사용자 project의 특정 run 결과를 분석하여 정책 또는 환경 개선 필요 여부를 판단합니다.
+사용자 project의 특정 run 결과를 분석하여 정책 또는 환경 개선 필요 여부를 판단합니다. 분석 결과는 기존 response schema로 반환하며, 동시에 review artifact를 사용자 project 내부에 저장합니다.
 
 ### Request
 
 ```json
 {
   "project_path": "X:/Projects/DeliveryBotA",
-  "run_id": "000001"
+  "run_id": "000001",
+  "prompt": "장애물 때문에 실패했는지 중심으로 다시 분석해줘"
 }
 ```
 
@@ -121,6 +122,10 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 
 * `project_path`: 사용자 project root
 * `run_id`: 6자리 decimal string
+
+옵션:
+
+* `prompt`: 사용자 자연어 재분석 요청입니다. 현재는 LLM 호출 없이 rule-based keyword focus만 summary message에 보조 반영하며, metrics나 recommendation을 조작하지 않습니다.
 
 아래 값은 받지 않습니다.
 
@@ -160,6 +165,26 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
   "analysis_mode": "rule_based"
 }
 ```
+
+### Review artifact
+
+요청한 run directory가 존재하면 review artifact를 아래 위치에 저장합니다.
+
+```text
+<project_path>/runs/<run_id>/review/<review_id>/
+```
+
+생성 파일:
+
+* `status.json`
+* `request.json`
+* `report.json`
+* `recommendations.json`
+* `manifest.json`
+
+`review_id`는 `0001`, `0002`처럼 증가합니다. API는 `review_id`만 생성하며, `run_id`와 `episode_id`는 request와 run artifact에서 읽은 값을 사용합니다. `<project_path>/runs/<run_id>`가 없으면 기존처럼 `insufficient_data` response를 반환하고 review directory를 만들지 않습니다.
+
+project-level index는 `<project_path>/analysis_index.json`에 갱신합니다.
 
 ### `overall_judgement`
 

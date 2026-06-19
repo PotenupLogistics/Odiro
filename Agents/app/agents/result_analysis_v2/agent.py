@@ -64,8 +64,7 @@ class ResultAnalysisV2Agent:
             warnings.extend(artifact.warnings)
 
         episodes = self._extract_episodes(parsed)
-        experiment_ids = {artifact.info.experiment_id for artifact in parsed if artifact.info.experiment_id}
-        run_ids = {(episode.experiment_id, episode.run_id) for episode in episodes}
+        experiments_count, runs_count, episodes_count = self._scope_counts(parsed, episodes)
         run_summaries = self.run_aggregator.aggregate(episodes)
         experiment_summaries = self.experiment_aggregator.aggregate(run_summaries)
         patterns = self.pattern_detector.detect(episodes)
@@ -88,9 +87,9 @@ class ResultAnalysisV2Agent:
             retrieved_contexts=self.rag_retriever.retrieve(rag_queries),
         )
         context = self.context_builder.build(
-            experiments_count=len(experiment_ids),
-            runs_count=len(run_ids),
-            episodes_count=len(episodes),
+            experiments_count=experiments_count,
+            runs_count=runs_count,
+            episodes_count=episodes_count,
             experiment_summaries=experiment_summaries,
             run_summaries=run_summaries,
             failure_patterns=patterns,
@@ -107,10 +106,10 @@ class ResultAnalysisV2Agent:
         warnings.extend(llm_warnings)
 
         return self.response_builder.build(
-            experiments_count=len(experiment_ids),
-            runs_count=len(run_ids),
-            episodes_count=len(episodes),
-            metrics=self._totals(episodes),
+            experiments_count=experiments_count,
+            runs_count=runs_count,
+            episodes_count=episodes_count,
+            metrics=self._response_metrics(episodes, parsed),
             patterns=patterns,
             recommendations=recommendations,
             warnings=warnings,
@@ -134,6 +133,8 @@ class ResultAnalysisV2Agent:
         warnings = [*scan.warnings]
         if project_root.exists() and not run_path.is_dir():
             warnings.append(f"run directory does not exist: {run_path}")
+        if run_path.is_dir():
+            warnings.extend(self._missing_episode_artifact_warnings(run_path))
         files = [
             path
             for path in scan.files
@@ -147,6 +148,21 @@ class ResultAnalysisV2Agent:
         except ValueError:
             return False
         return len(parts) >= 2 and parts[0] == "runs" and parts[1] == run_id
+
+    def _missing_episode_artifact_warnings(self, run_path: Path) -> list[str]:
+        """Report absent optional episode artifacts without failing alpha analysis."""
+        episodes_path = run_path / "episodes"
+        if not episodes_path.is_dir():
+            return []
+
+        expected_files = ("result.json", "events.jsonl", "actions.jsonl", "trace.jsonl")
+        warnings: list[str] = []
+        for episode_path in sorted(path for path in episodes_path.iterdir() if path.is_dir()):
+            relative_episode = episode_path.relative_to(run_path.parent.parent).as_posix()
+            for filename in expected_files:
+                if not (episode_path / filename).is_file():
+                    warnings.append(f"{relative_episode}/{filename} is missing.")
+        return warnings
 
     def _extract_episodes(self, artifacts: list[ParsedArtifact]) -> list[EpisodeMetrics]:
         results: dict[tuple[str, str, str], dict[str, Any]] = {}
@@ -202,6 +218,24 @@ class ResultAnalysisV2Agent:
     def _episode_as_dict(self, episode: EpisodeMetrics) -> dict[str, Any]:
         return asdict(episode)
 
+    def _scope_counts(self, artifacts: list[ParsedArtifact], episodes: list[EpisodeMetrics]) -> tuple[int, int, int]:
+        """Prefer episode-derived scope, falling back to tolerant run summary counts."""
+        experiment_ids = {artifact.info.experiment_id for artifact in artifacts if artifact.info.experiment_id}
+        run_ids = {(episode.experiment_id, episode.run_id) for episode in episodes}
+        summary_run_ids = {
+            (artifact.info.experiment_id, artifact.info.run_id)
+            for artifact in artifacts
+            if artifact.info.artifact_type == "run_summary" and artifact.info.experiment_id and artifact.info.run_id
+        }
+        episode_count = len(episodes) if episodes else self._summary_episode_count(artifacts)
+        return len(experiment_ids), len(run_ids | summary_run_ids), episode_count
+
+    def _response_metrics(self, episodes: list[EpisodeMetrics], artifacts: list[ParsedArtifact]) -> AnalysisMetricsV2:
+        """Use summary metrics only when episode-level metrics are unavailable."""
+        if episodes:
+            return self._totals(episodes)
+        return self._summary_metrics(artifacts) or self._totals(episodes)
+
     def _totals(self, episodes: list[EpisodeMetrics]) -> AnalysisMetricsV2:
         return AnalysisMetricsV2(
             success_count=sum(1 for episode in episodes if episode.success is True),
@@ -211,6 +245,48 @@ class ResultAnalysisV2Agent:
             blocked_region_violation_count=sum(episode.blocked_region_violation_count for episode in episodes),
             penalty_region_violation_count=sum(episode.penalty_region_violation_count for episode in episodes),
         )
+
+    def _summary_metrics(self, artifacts: list[ParsedArtifact]) -> AnalysisMetricsV2 | None:
+        """Extract conservative run-level metrics from summary.json when no episodes parse."""
+        summary = self._first_run_summary(artifacts)
+        if summary is None:
+            return None
+        metrics = summary.get("metrics") if isinstance(summary.get("metrics"), dict) else {}
+        return AnalysisMetricsV2(
+            success_count=self._summary_int(summary, metrics, "success_count"),
+            failure_count=self._summary_int(summary, metrics, "failure_count"),
+            collision_count=self._summary_int(summary, metrics, "collision_count"),
+            near_miss_count=self._summary_int(summary, metrics, "near_miss_count"),
+            blocked_region_violation_count=self._summary_int(summary, metrics, "blocked_region_violation_count"),
+            penalty_region_violation_count=self._summary_int(summary, metrics, "penalty_region_violation_count"),
+        )
+
+    def _summary_episode_count(self, artifacts: list[ParsedArtifact]) -> int:
+        """Read common episode count field names from summary.json without assuming one schema."""
+        summary = self._first_run_summary(artifacts)
+        if summary is None:
+            return 0
+        for key in ("episode_count", "episodes_count", "total_episodes"):
+            value = summary.get(key)
+            if isinstance(value, int | float):
+                return max(0, int(value))
+        episodes = summary.get("episodes")
+        return len(episodes) if isinstance(episodes, list) else 0
+
+    def _first_run_summary(self, artifacts: list[ParsedArtifact]) -> dict[str, Any] | None:
+        """Return the first parsed run summary object, ignoring malformed summaries."""
+        for artifact in artifacts:
+            if artifact.info.artifact_type == "run_summary" and isinstance(artifact.data, dict):
+                return artifact.data
+        return None
+
+    def _summary_int(self, summary: dict[str, Any], metrics: dict[str, Any], key: str) -> int:
+        """Read a non-negative integer metric from summary root or nested metrics."""
+        for source in (summary, metrics):
+            value = source.get(key)
+            if isinstance(value, int | float):
+                return max(0, int(value))
+        return 0
 
     def _recommendations(
         self,

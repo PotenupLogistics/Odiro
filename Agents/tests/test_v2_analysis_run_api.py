@@ -46,6 +46,12 @@ def _write_episode(project: Path, episode_id: str, result: dict, events: str = "
         (episode_dir / "events.jsonl").write_text(events, encoding="utf-8")
 
 
+def _write_summary(project: Path, summary: dict) -> None:
+    run_dir = project / "runs" / "000001"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+
+
 def _write_blocked_episode(project: Path, episode_id: str) -> None:
     _write_episode(
         project,
@@ -132,6 +138,60 @@ def test_v2_analysis_run_records_broken_jsonl_warning(tmp_path) -> None:
     assert payload["analysis_scope"] == {"experiments_count": 1, "runs_count": 1, "episodes_count": 1}
     assert payload["recommendations"] == []
     assert any("events.jsonl" in warning for warning in payload["warnings"])
+
+
+def test_v2_analysis_run_uses_summary_when_episode_results_are_missing(tmp_path) -> None:
+    project = tmp_path / "Project1"
+    _write_summary(
+        project,
+        {
+            "episode_count": 3,
+            "success_count": 2,
+            "failure_count": 1,
+            "collision_count": 1,
+            "near_miss_count": 4,
+        },
+    )
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["analysis_scope"] == {"experiments_count": 1, "runs_count": 1, "episodes_count": 3}
+    assert payload["metrics"]["success_count"] == 2
+    assert payload["metrics"]["failure_count"] == 1
+    assert payload["metrics"]["collision_count"] == 1
+    assert payload["metrics"]["near_miss_count"] == 4
+    assert payload["recommendations"] == []
+
+
+def test_v2_analysis_run_warns_for_broken_summary_without_500(tmp_path) -> None:
+    project = tmp_path / "Project1"
+    run_dir = project / "runs" / "000001"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text("{broken json}", encoding="utf-8")
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["schema"] == "analysis_run_response_v2"
+    assert payload["summary"]["overall_judgement"] == "insufficient_data"
+    assert any("summary.json" in warning and "JSON parse failed" in warning for warning in payload["warnings"])
+
+
+def test_v2_analysis_run_warns_for_missing_episode_artifacts(tmp_path) -> None:
+    project = tmp_path / "Project1"
+    _write_episode(project, "000001", {"success": True, "goal_reached": True})
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert not any("result.json is missing" in warning for warning in payload["warnings"])
+    assert any("events.jsonl is missing" in warning for warning in payload["warnings"])
+    assert any("actions.jsonl is missing" in warning for warning in payload["warnings"])
+    assert any("trace.jsonl is missing" in warning for warning in payload["warnings"])
 
 
 def test_v2_analysis_run_successful_episodes_do_not_generate_recommendations(tmp_path) -> None:

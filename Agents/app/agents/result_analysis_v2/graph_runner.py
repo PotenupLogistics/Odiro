@@ -147,12 +147,11 @@ class ResultAnalysisGraphRunnerV2:
     def build_analysis_context_node(self, state: ResultAnalysisGraphStateV2) -> ResultAnalysisGraphStateV2:
         parsed = state.get("parsed_artifacts", [])
         episodes = state.get("episode_metrics", [])
-        experiment_ids = {artifact.info.experiment_id for artifact in parsed if artifact.info.experiment_id}
-        run_ids = {(episode.experiment_id, episode.run_id) for episode in episodes}
+        experiments_count, runs_count, episodes_count = self.agent._scope_counts(parsed, episodes)
         context = self.agent.context_builder.build(
-            experiments_count=len(experiment_ids),
-            runs_count=len(run_ids),
-            episodes_count=len(episodes),
+            experiments_count=experiments_count,
+            runs_count=runs_count,
+            episodes_count=episodes_count,
             experiment_summaries=state.get("experiment_aggregates", []),
             run_summaries=state.get("run_aggregates", []),
             failure_patterns=state.get("failure_patterns", []),
@@ -226,13 +225,12 @@ class ResultAnalysisGraphRunnerV2:
     def build_response_node(self, state: ResultAnalysisGraphStateV2) -> ResultAnalysisGraphStateV2:
         parsed = state.get("parsed_artifacts", [])
         episodes = state.get("episode_metrics", [])
-        experiment_ids = {artifact.info.experiment_id for artifact in parsed if artifact.info.experiment_id}
-        run_ids = {(episode.experiment_id, episode.run_id) for episode in episodes}
+        experiments_count, runs_count, episodes_count = self.agent._scope_counts(parsed, episodes)
         response = self.agent.response_builder.build(
-            experiments_count=len(experiment_ids),
-            runs_count=len(run_ids),
-            episodes_count=len(episodes),
-            metrics=self.agent._totals(episodes),
+            experiments_count=experiments_count,
+            runs_count=runs_count,
+            episodes_count=episodes_count,
+            metrics=self.agent._response_metrics(episodes, parsed),
             patterns=state.get("failure_patterns", []),
             recommendations=state.get("recommendations", []),
             warnings=state.get("warnings", []),

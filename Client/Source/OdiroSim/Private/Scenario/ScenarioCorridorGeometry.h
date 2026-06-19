@@ -68,6 +68,9 @@ public:
 	// Surface query tolerance in meters, matching scenario_sample precision.
 	static constexpr double SurfaceQueryToleranceMeters = 0.001;
 
+	// Shared vertical offset for curb-side Corridor lane surfaces.
+	static constexpr double DefaultCurbSideSurfaceZOffsetCm = -15.0;
+
 	// Rotates a 2D point around the origin by a scenario heading in degrees.
 	static FVector2D RotatePointMeters(const FVector2D& pointMeters, double headingDegrees);
 
@@ -92,6 +95,18 @@ public:
 	// Approximates editor spline tangents from axis vertices so runtime visuals bend through the same points.
 	static FVector ResolveCurveTangentCm(const TArray<FVector>& axisLocationsCm, int32 pointIndex);
 
+	// Identifies sampler/editor lane ids that represent the curb-side surface band.
+	static bool IsCurbSideLaneId(const FString& laneId);
+
+	// Maps a semantic lane id to the shared Corridor surface height offset.
+	static double ResolveLaneSurfaceZOffsetCm(const FString& laneId);
+
+	// Resolves a Corridor offset position to the shared editor/runtime surface height offset.
+	static double ResolveSurfaceZOffsetForOffsetMeters(
+		double offsetMeters,
+		double halfWalkwayWidthMeters,
+		double curbSideWidthMeters);
+
 	// Projects a local point onto the corridor axis and returns along/offset distances in meters.
 	static bool TryProjectPointToAxisMeters(
 		const TArray<FVector2D>& axisPointsMeters,
@@ -100,7 +115,11 @@ public:
 		double& outOffsetMeters);
 
 	// Checks a scalar against an inclusive range with deterministic tolerance.
-	static bool ContainsRangeValue(double value, double minValue, double maxValue, double toleranceMeters);
+	static bool ContainsRangeValue(
+		double value,
+		double minValue,
+		double maxValue,
+		double toleranceMeters = SurfaceQueryToleranceMeters);
 
 	// Maps runtime region semantics to the collision profile used by generated lane components.
 	static FName ResolveRuntimeCollisionProfileName(EScenarioGroundRegionType regionType);

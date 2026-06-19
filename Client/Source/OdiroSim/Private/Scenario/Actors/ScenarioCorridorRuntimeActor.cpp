@@ -17,6 +17,74 @@ namespace
 	const double RuntimeSurfaceHeightCm = 20.0;
 	// Blocked corridor surfaces match the blocked ground-region collision height.
 	const double RuntimeBlockedHeightCm = 200.0;
+
+	struct FRuntimeCorridorVisualLaneSpec
+	{
+		FScenarioRuntimeCorridorLayoutEntry LayoutEntry;
+		FScenarioRuntimeCorridorLaneSpec LaneSpec;
+	};
+
+	bool AreOffsetRangesEquivalent(
+		const FScenarioOffsetRangeMeters& left,
+		const FScenarioOffsetRangeMeters& right)
+	{
+		return FMath::IsNearlyEqual(
+				left.MinMeters,
+				right.MinMeters,
+				FScenarioCorridorGeometry::SurfaceQueryToleranceMeters)
+			&& FMath::IsNearlyEqual(
+				left.MaxMeters,
+				right.MaxMeters,
+				FScenarioCorridorGeometry::SurfaceQueryToleranceMeters);
+	}
+
+	bool AreRuntimeVisualLanesEquivalent(
+		const FScenarioRuntimeCorridorLaneSpec& left,
+		const FScenarioRuntimeCorridorLaneSpec& right)
+	{
+		return left.LaneId == right.LaneId
+			&& left.SurfaceId == right.SurfaceId
+			&& left.RegionType == right.RegionType
+			&& left.CollisionTag == right.CollisionTag
+			&& left.PenaltyKind == right.PenaltyKind
+			&& FMath::IsNearlyEqual(
+				left.PenaltyCost,
+				right.PenaltyCost,
+				FScenarioCorridorGeometry::SurfaceQueryToleranceMeters)
+			&& FMath::IsNearlyEqual(
+				left.TraversabilityScore,
+				right.TraversabilityScore,
+				FScenarioCorridorGeometry::SurfaceQueryToleranceMeters)
+			&& FMath::IsNearlyEqual(
+				left.SurfaceZOffsetCm,
+				right.SurfaceZOffsetCm,
+				KINDA_SMALL_NUMBER)
+			&& AreOffsetRangesEquivalent(left.OffsetRangeMeters, right.OffsetRangeMeters);
+	}
+
+	void AddOrMergeRuntimeVisualLane(
+		TArray<FRuntimeCorridorVisualLaneSpec>& visualLaneSpecs,
+		const FScenarioRuntimeCorridorLayoutEntry& layoutEntry,
+		const FScenarioRuntimeCorridorLaneSpec& laneSpec)
+	{
+		for (FRuntimeCorridorVisualLaneSpec& visualLaneSpec : visualLaneSpecs)
+		{
+			if (AreRuntimeVisualLanesEquivalent(visualLaneSpec.LaneSpec, laneSpec)
+				&& FMath::IsNearlyEqual(
+					visualLaneSpec.LayoutEntry.AlongRangeMeters.EndMeters,
+					layoutEntry.AlongRangeMeters.StartMeters,
+					FScenarioCorridorGeometry::SurfaceQueryToleranceMeters))
+			{
+				visualLaneSpec.LayoutEntry.AlongRangeMeters.EndMeters = layoutEntry.AlongRangeMeters.EndMeters;
+				return;
+			}
+		}
+
+		FRuntimeCorridorVisualLaneSpec visualLaneSpec;
+		visualLaneSpec.LayoutEntry = layoutEntry;
+		visualLaneSpec.LaneSpec = laneSpec;
+		visualLaneSpecs.Add(visualLaneSpec);
+	}
 }
 
 AScenarioCorridorRuntimeActor::AScenarioCorridorRuntimeActor()
@@ -73,12 +141,18 @@ void AScenarioCorridorRuntimeActor::ConfigureCorridor(const FScenarioRuntimeCorr
 		return;
 	}
 
+	TArray<FRuntimeCorridorVisualLaneSpec> visualLaneSpecs;
 	for (const FScenarioRuntimeCorridorLayoutEntry& layoutEntry : CorridorSpec.Layout)
 	{
 		for (const FScenarioRuntimeCorridorLaneSpec& laneSpec : layoutEntry.Lanes)
 		{
-			AddLaneStrip(layoutEntry, laneSpec);
+			AddOrMergeRuntimeVisualLane(visualLaneSpecs, layoutEntry, laneSpec);
 		}
+	}
+
+	for (const FRuntimeCorridorVisualLaneSpec& visualLaneSpec : visualLaneSpecs)
+	{
+		AddLaneStrip(visualLaneSpec.LayoutEntry, visualLaneSpec.LaneSpec);
 	}
 }
 
@@ -120,8 +194,7 @@ bool AScenarioCorridorRuntimeActor::TryFindSurfaceAtWorldLocation2D(
 		if (!FScenarioCorridorGeometry::ContainsRangeValue(
 			alongMeters,
 			layoutEntry.AlongRangeMeters.StartMeters,
-			layoutEntry.AlongRangeMeters.EndMeters,
-			FScenarioCorridorGeometry::SurfaceQueryToleranceMeters))
+			layoutEntry.AlongRangeMeters.EndMeters))
 		{
 			continue;
 		}
@@ -132,8 +205,7 @@ bool AScenarioCorridorRuntimeActor::TryFindSurfaceAtWorldLocation2D(
 			if (!FScenarioCorridorGeometry::ContainsRangeValue(
 				offsetMeters,
 				laneSpec.OffsetRangeMeters.MinMeters,
-				laneSpec.OffsetRangeMeters.MaxMeters,
-				FScenarioCorridorGeometry::SurfaceQueryToleranceMeters))
+				laneSpec.OffsetRangeMeters.MaxMeters))
 			{
 				continue;
 			}

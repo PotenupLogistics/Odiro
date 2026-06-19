@@ -46,9 +46,9 @@ keep:
   - Generated `scenario_sample` files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
   - Project run generates `scenario_sample` episode artifacts and compiles them through `ScenarioSampleWorldSpecAdapter`; sampled layout lanes become runtime Corridor specs/actors used by grid and evaluation, while manual GroundRegions remain a separate compatibility surface.
   - Runtime corridor surfaces are materialized as spline-deformed LaneStripMesh cube sections from sampled axis points, lane offset ranges, and lane surface height offsets; keep visual/collision footprint deterministic and aligned with the analytic surface query.
-  - Runtime Corridor visual meshes mirror the editor segment-interval lane-strip drawing path; sampled layout intervals are also the query/cost source for grid and evaluation.
+  - Runtime Corridor visual meshes mirror the editor lane-strip drawing path and coalesce adjacent equivalent lane segments; sampled layout intervals remain the query/cost source for grid and evaluation.
   - ScenarioCorridorSurfaceResolver owns shared Corridor surface metadata and material fallback resolution; editor/runtime actors keep their own mesh construction and query semantics.
-  - ScenarioCorridorGeometry owns shared Corridor spline mesh component creation, runtime analytic surface query helpers, and runtime lane collision profile mapping.
+  - ScenarioCorridorGeometry owns shared Corridor spline mesh component creation, analytic surface query helpers, lane surface Z offset rules, and runtime lane collision profile mapping.
   - ScenarioStaticObstacle actor origin represents the semantic ground-contact point; mesh and preview components own local bounds-based Z alignment so editor and simulation placements share the same snap semantics.
   - ScenarioStaticObstacle owns configured actor spawn plus prop application; editor and simulation only resolve catalogs and attach authoring/runtime registration after spawn.
   - ScenarioGroundRegion owns configured actor spawn plus region spec application; editor and simulation only attach authoring/runtime registration after spawn.

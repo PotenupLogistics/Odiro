@@ -16,10 +16,18 @@ namespace
 	const double MinimumSurfacePreviewHeightCm = 20.0;
 	// Blocked corridor surfaces match the legacy blocked ground-region collision height.
 	const double BlockedPreviewHeightCm = 200.0;
-	// Curb-side lanes render lower than the walkway so the step boundary is visible.
-	const double CurbSidePreviewDropCm = 15.0;
 	// Blocked corridor surfaces use the same collision profile as blocked ground regions.
 	const FName BlockedPreviewCollisionProfileName{ TEXT("Blocked") };
+
+	struct FPreviewCorridorVisualLaneSpec
+	{
+		FScenarioAlongRangeMeters AlongRangeMeters;
+		FString LaneId;
+		FString SurfaceId;
+		double MinOffsetMeters = 0.0;
+		double MaxOffsetMeters = 0.0;
+		double SurfaceZOffsetCm = 0.0;
+	};
 
 	double MeasurePreviewAxisLengthMeters(const TArray<FVector2D>& pointsMeters)
 	{
@@ -29,6 +37,46 @@ namespace
 			lengthMeters += FVector2D::Distance(pointsMeters[index], pointsMeters[index + 1]);
 		}
 		return lengthMeters;
+	}
+
+	bool ArePreviewVisualLanesEquivalent(
+		const FPreviewCorridorVisualLaneSpec& left,
+		const FPreviewCorridorVisualLaneSpec& right)
+	{
+		return left.LaneId == right.LaneId
+			&& left.SurfaceId == right.SurfaceId
+			&& FMath::IsNearlyEqual(
+				left.MinOffsetMeters,
+				right.MinOffsetMeters,
+				FScenarioCorridorGeometry::SurfaceQueryToleranceMeters)
+			&& FMath::IsNearlyEqual(
+				left.MaxOffsetMeters,
+				right.MaxOffsetMeters,
+				FScenarioCorridorGeometry::SurfaceQueryToleranceMeters)
+			&& FMath::IsNearlyEqual(
+				left.SurfaceZOffsetCm,
+				right.SurfaceZOffsetCm,
+				KINDA_SMALL_NUMBER);
+	}
+
+	void AddOrMergePreviewVisualLane(
+		TArray<FPreviewCorridorVisualLaneSpec>& visualLaneSpecs,
+		const FPreviewCorridorVisualLaneSpec& candidate)
+	{
+		for (FPreviewCorridorVisualLaneSpec& visualLaneSpec : visualLaneSpecs)
+		{
+			if (ArePreviewVisualLanesEquivalent(visualLaneSpec, candidate)
+				&& FMath::IsNearlyEqual(
+					visualLaneSpec.AlongRangeMeters.EndMeters,
+					candidate.AlongRangeMeters.StartMeters,
+					FScenarioCorridorGeometry::SurfaceQueryToleranceMeters))
+			{
+				visualLaneSpec.AlongRangeMeters.EndMeters = candidate.AlongRangeMeters.EndMeters;
+				return;
+			}
+		}
+
+		visualLaneSpecs.Add(candidate);
 	}
 }
 
@@ -96,21 +144,20 @@ void AScenarioCorridorPreviewActor::ConfigureFromCorridor(const FScenarioTemplat
 		renderSegments.Add(fullAxisSegment);
 	}
 
+	TArray<FPreviewCorridorVisualLaneSpec> visualLaneSpecs;
 	for (int32 segmentIndex = 0; segmentIndex < renderSegments.Num(); ++segmentIndex)
 	{
 		const FScenarioTemplateSegment& segment = renderSegments[segmentIndex];
-		const FString segmentId = segment.SegmentId.IsEmpty()
-			? FString::Printf(TEXT("segment_%03d"), segmentIndex)
-			: segment.SegmentId;
 		const FString walkwaySurfaceId = ResolvePreviewString(segment.ReplacedBySurfaceId, TEXT("sidewalk"));
-		AddLaneStrip(
-			corridor.Axis.PointsMeters,
-			segment.AlongRangeMeters,
-			FString::Printf(TEXT("%s_walkway"), *segmentId),
-			walkwaySurfaceId,
-			-halfWalkwayWidthMeters,
-			halfWalkwayWidthMeters,
-			0.0);
+		AddOrMergePreviewVisualLane(
+			visualLaneSpecs,
+			FPreviewCorridorVisualLaneSpec{
+				segment.AlongRangeMeters,
+				TEXT("walkway"),
+				walkwaySurfaceId,
+				-halfWalkwayWidthMeters,
+				halfWalkwayWidthMeters,
+				0.0 });
 
 		double buildingMaxOffsetMeters = -halfWalkwayWidthMeters;
 		for (int32 index = 0; index < corridor.BuildingSide.Num(); ++index)
@@ -122,16 +169,15 @@ void AScenarioCorridorPreviewActor::ConfigureFromCorridor(const FScenarioTemplat
 				continue;
 			}
 
-			AddLaneStrip(
-				corridor.Axis.PointsMeters,
-				segment.AlongRangeMeters,
-				index == 0
-					? FString::Printf(TEXT("%s_building_edge"), *segmentId)
-					: FString::Printf(TEXT("%s_building_%d"), *segmentId, index),
-				laneRule.SurfaceId,
-				buildingMaxOffsetMeters - widthMeters,
-				buildingMaxOffsetMeters,
-				0.0);
+			AddOrMergePreviewVisualLane(
+				visualLaneSpecs,
+				FPreviewCorridorVisualLaneSpec{
+					segment.AlongRangeMeters,
+					index == 0 ? FString(TEXT("building_edge")) : FString::Printf(TEXT("building_%d"), index),
+					laneRule.SurfaceId,
+					buildingMaxOffsetMeters - widthMeters,
+					buildingMaxOffsetMeters,
+					0.0 });
 			buildingMaxOffsetMeters -= widthMeters;
 		}
 
@@ -145,18 +191,29 @@ void AScenarioCorridorPreviewActor::ConfigureFromCorridor(const FScenarioTemplat
 				continue;
 			}
 
-			AddLaneStrip(
-				corridor.Axis.PointsMeters,
-				segment.AlongRangeMeters,
-				index == 0
-					? FString::Printf(TEXT("%s_curb_edge"), *segmentId)
-					: FString::Printf(TEXT("%s_curb_%d"), *segmentId, index),
-				laneRule.SurfaceId,
-				curbMinOffsetMeters,
-				curbMinOffsetMeters + widthMeters,
-				-CurbSidePreviewDropCm);
+			AddOrMergePreviewVisualLane(
+				visualLaneSpecs,
+				FPreviewCorridorVisualLaneSpec{
+					segment.AlongRangeMeters,
+					index == 0 ? FString(TEXT("curb_edge")) : FString::Printf(TEXT("curb_%d"), index),
+					laneRule.SurfaceId,
+					curbMinOffsetMeters,
+					curbMinOffsetMeters + widthMeters,
+					FScenarioCorridorGeometry::DefaultCurbSideSurfaceZOffsetCm });
 			curbMinOffsetMeters += widthMeters;
 		}
+	}
+
+	for (const FPreviewCorridorVisualLaneSpec& visualLaneSpec : visualLaneSpecs)
+	{
+		AddLaneStrip(
+			corridor.Axis.PointsMeters,
+			visualLaneSpec.AlongRangeMeters,
+			visualLaneSpec.LaneId,
+			visualLaneSpec.SurfaceId,
+			visualLaneSpec.MinOffsetMeters,
+			visualLaneSpec.MaxOffsetMeters,
+			visualLaneSpec.SurfaceZOffsetCm);
 	}
 }
 

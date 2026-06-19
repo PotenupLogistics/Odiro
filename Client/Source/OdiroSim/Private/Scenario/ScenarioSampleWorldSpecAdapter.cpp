@@ -3,16 +3,13 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Misc/Crc.h"
+#include "Scenario/ScenarioCorridorGeometry.h"
 #include "Shared/ScenarioSampleJson.h"
 
 namespace
 {
 	const double MetersToCentimeters = 100.0;
 	const double RobotEndpointInsetMeters = 1.0;
-	// Mirrors the editor preview curb-side drop for sampled runtime surfaces.
-	const double RuntimeCurbSideSurfaceZOffsetCm = -15.0;
-	// Keeps pose-to-lane lookup stable on exact layout boundaries.
-	const double RuntimeSurfaceQueryToleranceMeters = 0.001;
 
 	struct FResolvedSamplePose
 	{
@@ -139,29 +136,6 @@ namespace
 			(Point.X * SinHeading) + (Point.Y * CosHeading));
 	}
 
-	// Handles inclusive sampled layout intervals with a small deterministic tolerance.
-	bool ContainsRuntimeRangeValue(double Value, double MinValue, double MaxValue)
-	{
-		const double SafeMin = FMath::Min(MinValue, MaxValue) - RuntimeSurfaceQueryToleranceMeters;
-		const double SafeMax = FMath::Max(MinValue, MaxValue) + RuntimeSurfaceQueryToleranceMeters;
-		return Value >= SafeMin && Value <= SafeMax;
-	}
-
-	// Identifies sampler-owned curb-side lane ids that should share editor surface height.
-	bool IsRuntimeCurbSideLane(const FString& LaneId)
-	{
-		const FString NormalizedLaneId = LaneId.ToLower();
-		return NormalizedLaneId == TEXT("curb_edge")
-			|| NormalizedLaneId.StartsWith(TEXT("curb_"))
-			|| NormalizedLaneId.StartsWith(TEXT("curbside"));
-	}
-
-	// Maps sampled lane identity to runtime surface height without changing public JSON.
-	double ResolveRuntimeLaneSurfaceZOffsetCm(const FString& LaneId)
-	{
-		return IsRuntimeCurbSideLane(LaneId) ? RuntimeCurbSideSurfaceZOffsetCm : 0.0;
-	}
-
 	// Resolves the surface height at a sampled pose so actors spawn on the matching lane surface.
 	double ResolveRuntimeSurfaceZOffsetCm(
 		const FScenarioSampleSemantic& Semantic,
@@ -170,7 +144,7 @@ namespace
 	{
 		for (const FScenarioSampleLayoutEntry& LayoutEntry : Semantic.Layout)
 		{
-			if (!ContainsRuntimeRangeValue(
+			if (!FScenarioCorridorGeometry::ContainsRangeValue(
 					AlongMeters,
 					LayoutEntry.AlongRangeMeters.StartMeters,
 					LayoutEntry.AlongRangeMeters.EndMeters))
@@ -180,12 +154,12 @@ namespace
 
 			for (const FScenarioSampleLayoutLane& Lane : LayoutEntry.Lanes)
 			{
-				if (ContainsRuntimeRangeValue(
+				if (FScenarioCorridorGeometry::ContainsRangeValue(
 						OffsetMeters,
 						Lane.OffsetRangeMeters.MinMeters,
 						Lane.OffsetRangeMeters.MaxMeters))
 				{
-					return ResolveRuntimeLaneSurfaceZOffsetCm(Lane.LaneId);
+					return FScenarioCorridorGeometry::ResolveLaneSurfaceZOffsetCm(Lane.LaneId);
 				}
 			}
 		}
@@ -407,7 +381,7 @@ namespace
 				RuntimeLane.OffsetRangeMeters = Lane.OffsetRangeMeters;
 				RuntimeLane.SurfaceId = Lane.SurfaceId;
 				RuntimeLane.RegionType = ToGroundRegionType(Lane.Type);
-				RuntimeLane.SurfaceZOffsetCm = ResolveRuntimeLaneSurfaceZOffsetCm(Lane.LaneId);
+				RuntimeLane.SurfaceZOffsetCm = FScenarioCorridorGeometry::ResolveLaneSurfaceZOffsetCm(Lane.LaneId);
 				RuntimeLane.TraversabilityScore = ToTraversabilityScore(Lane.Type);
 				if (Lane.Type == EScenarioSampleLaneType::Blocked)
 				{

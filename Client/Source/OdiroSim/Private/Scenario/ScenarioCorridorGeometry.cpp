@@ -147,6 +147,32 @@ FVector FScenarioCorridorGeometry::ResolveCurveTangentCm(const TArray<FVector>& 
 	return blendedDirection * tangentLengthCm;
 }
 
+bool FScenarioCorridorGeometry::IsCurbSideLaneId(const FString& laneId)
+{
+	const FString normalizedLaneId = laneId.ToLower();
+	return normalizedLaneId == TEXT("curb_edge")
+		|| normalizedLaneId.StartsWith(TEXT("curb_"))
+		|| normalizedLaneId.StartsWith(TEXT("curbside"));
+}
+
+double FScenarioCorridorGeometry::ResolveLaneSurfaceZOffsetCm(const FString& laneId)
+{
+	return IsCurbSideLaneId(laneId) ? DefaultCurbSideSurfaceZOffsetCm : 0.0;
+}
+
+double FScenarioCorridorGeometry::ResolveSurfaceZOffsetForOffsetMeters(
+	double offsetMeters,
+	double halfWalkwayWidthMeters,
+	double curbSideWidthMeters)
+{
+	if (offsetMeters <= halfWalkwayWidthMeters + KINDA_SMALL_NUMBER)
+	{
+		return 0.0;
+	}
+
+	return curbSideWidthMeters > KINDA_SMALL_NUMBER ? DefaultCurbSideSurfaceZOffsetCm : 0.0;
+}
+
 bool FScenarioCorridorGeometry::TryProjectPointToAxisMeters(
 	const TArray<FVector2D>& axisPointsMeters,
 	const FVector2D& localPointMeters,

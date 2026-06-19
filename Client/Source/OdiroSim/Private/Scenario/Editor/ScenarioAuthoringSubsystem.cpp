@@ -13,6 +13,7 @@
 #include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
 #include "Scenario/Editor/ScenarioCorridorHandleActor.h"
 #include "Scenario/Editor/ScenarioCorridorPreviewActor.h"
+#include "Scenario/ScenarioCorridorGeometry.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Scenario/ScenarioSampler.h"
 #include "Shared/ScenarioDocumentJson.h"
@@ -49,8 +50,6 @@ namespace
 	const double CorridorVertexHandleHeightCm = 32.0;
 	const double CorridorSegmentHandleHeightCm = 18.0;
 	const double CorridorVertexHandleScale = 0.28;
-	// Static obstacle 배치는 Corridor preview surface와 같은 curb-side 하강값을 사용.
-	const double CurbSideSurfaceZOffsetCm = -15.0;
 
 	FScenarioParamValue MakeStringParamValue(const FString& value)
 	{
@@ -2895,7 +2894,10 @@ double UScenarioAuthoringSubsystem::ResolveCorridorSurfaceZOffsetCm(double offse
 		curbSideWidthMeters += FMath::Max(GetFixedTemplateNumber(laneRule.WidthMeters, 0.0), 0.0);
 	}
 
-	return curbSideWidthMeters > KINDA_SMALL_NUMBER ? CurbSideSurfaceZOffsetCm : 0.0;
+	return FScenarioCorridorGeometry::ResolveSurfaceZOffsetForOffsetMeters(
+		offsetMeters,
+		halfWalkwayWidthMeters,
+		curbSideWidthMeters);
 }
 
 bool UScenarioAuthoringSubsystem::TryResolveCorridorSurfaceZOffsetCm(

@@ -744,14 +744,6 @@ AScenarioCorridorRuntimeActor* UScenarioSimulationSubsystem::SpawnCorridor(const
 	return corridorActor;
 }
 
-void UScenarioSimulationSubsystem::SpawnCorridors(const TArray<FScenarioRuntimeCorridorSpec>& corridorSpecs)
-{
-	for (const FScenarioRuntimeCorridorSpec& corridorSpec : corridorSpecs)
-	{
-		SpawnCorridor(corridorSpec);
-	}
-}
-
 AScenarioGroundRegion* UScenarioSimulationSubsystem::SpawnGroundRegion(const FScenarioGroundRegionSpec& regionSpec)
 {
 	UWorld* world = GetWorld();
@@ -770,14 +762,6 @@ AScenarioGroundRegion* UScenarioSimulationSubsystem::SpawnGroundRegion(const FSc
 	RuntimeActors.Add(groundRegion);
 	RuntimeGroundRegions.Add(regionSpec.RegionId, groundRegion);
 	return groundRegion;
-}
-
-void UScenarioSimulationSubsystem::SpawnGroundRegions(const TArray<FScenarioGroundRegionSpec>& regionSpecs)
-{
-	for (const FScenarioGroundRegionSpec& regionSpec : regionSpecs)
-	{
-		SpawnGroundRegion(regionSpec);
-	}
 }
 
 AScenarioGroundRegion* UScenarioSimulationSubsystem::FindGroundRegion(const FString& regionId) const

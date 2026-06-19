@@ -42,89 +42,6 @@ namespace
 			(point.X * sinHeading) + (point.Y * cosHeading));
 	}
 
-	double GetAxisLengthMeters(const TArray<FVector2D>& pointsMeters)
-	{
-		double totalMeters = 0.0;
-		for (int32 index = 0; index < pointsMeters.Num() - 1; ++index)
-		{
-			totalMeters += FVector2D::Distance(pointsMeters[index], pointsMeters[index + 1]);
-		}
-		return totalMeters;
-	}
-
-	void AddClippedAxisPoint(TArray<FVector2D>& points, const FVector2D& point)
-	{
-		if (!points.IsEmpty() && FVector2D::Distance(points.Last(), point) <= KINDA_SMALL_NUMBER)
-		{
-			return;
-		}
-		points.Add(point);
-	}
-
-	TArray<FVector2D> BuildClippedAxisPointsMeters(
-		const TArray<FVector2D>& axisPointsMeters,
-		double startAlongMeters,
-		double endAlongMeters)
-	{
-		TArray<FVector2D> clippedPoints;
-		if (axisPointsMeters.Num() < 2)
-		{
-			return clippedPoints;
-		}
-
-		const double axisLengthMeters = GetAxisLengthMeters(axisPointsMeters);
-		if (axisLengthMeters <= KINDA_SMALL_NUMBER)
-		{
-			return clippedPoints;
-		}
-
-		const double clippedStartMeters = FMath::Clamp(startAlongMeters, 0.0, axisLengthMeters);
-		const double clippedEndMeters = FMath::Clamp(endAlongMeters, clippedStartMeters, axisLengthMeters);
-		if (clippedEndMeters - clippedStartMeters <= KINDA_SMALL_NUMBER)
-		{
-			return clippedPoints;
-		}
-
-		double accumulatedMeters = 0.0;
-		for (int32 index = 0; index < axisPointsMeters.Num() - 1; ++index)
-		{
-			const FVector2D segmentStart = axisPointsMeters[index];
-			const FVector2D segmentEnd = axisPointsMeters[index + 1];
-			const FVector2D segmentVector = segmentEnd - segmentStart;
-			const double segmentLengthMeters = segmentVector.Size();
-			if (segmentLengthMeters <= KINDA_SMALL_NUMBER)
-			{
-				continue;
-			}
-
-			const double segmentStartAlongMeters = accumulatedMeters;
-			const double segmentEndAlongMeters = accumulatedMeters + segmentLengthMeters;
-			accumulatedMeters = segmentEndAlongMeters;
-
-			if (segmentEndAlongMeters < clippedStartMeters)
-			{
-				continue;
-			}
-			if (segmentStartAlongMeters > clippedEndMeters)
-			{
-				break;
-			}
-
-			const double localStartMeters = FMath::Clamp(clippedStartMeters - segmentStartAlongMeters, 0.0, segmentLengthMeters);
-			const double localEndMeters = FMath::Clamp(clippedEndMeters - segmentStartAlongMeters, 0.0, segmentLengthMeters);
-			if (localEndMeters - localStartMeters <= KINDA_SMALL_NUMBER)
-			{
-				continue;
-			}
-
-			const FVector2D segmentDirection = segmentVector / segmentLengthMeters;
-			AddClippedAxisPoint(clippedPoints, segmentStart + (segmentDirection * localStartMeters));
-			AddClippedAxisPoint(clippedPoints, segmentStart + (segmentDirection * localEndMeters));
-		}
-
-		return clippedPoints;
-	}
-
 	FVector TransformAxisPointMetersToWorldCm(const FScenarioRuntimeCorridorSpec& corridorSpec, const FVector2D& pointMeters)
 	{
 		const FVector2D worldPointMeters = corridorSpec.OriginXYMeters + RotateRuntimePoint(pointMeters, corridorSpec.HeadingDegrees);
@@ -257,6 +174,20 @@ namespace
 		return FString::Printf(TEXT("%s:%s:%s"), *corridorId, *segmentId, *laneId);
 	}
 
+	FString MakeVisualLaneKey(const FScenarioRuntimeCorridorLaneSpec& laneSpec)
+	{
+		if (!laneSpec.LaneId.IsEmpty())
+		{
+			return laneSpec.LaneId;
+		}
+
+		return FString::Printf(
+			TEXT("lane:%0.3f:%0.3f:%d"),
+			laneSpec.OffsetRangeMeters.MinMeters,
+			laneSpec.OffsetRangeMeters.MaxMeters,
+			static_cast<int32>(laneSpec.RegionType));
+	}
+
 }
 
 AScenarioCorridorRuntimeActor::AScenarioCorridorRuntimeActor()
@@ -313,11 +244,19 @@ void AScenarioCorridorRuntimeActor::ConfigureCorridor(const FScenarioRuntimeCorr
 		return;
 	}
 
+	TSet<FString> renderedLaneKeys;
 	for (const FScenarioRuntimeCorridorLayoutEntry& layoutEntry : CorridorSpec.Layout)
 	{
 		for (const FScenarioRuntimeCorridorLaneSpec& laneSpec : layoutEntry.Lanes)
 		{
-			AddLaneStrip(layoutEntry, laneSpec);
+			const FString visualLaneKey = MakeVisualLaneKey(laneSpec);
+			if (renderedLaneKeys.Contains(visualLaneKey))
+			{
+				continue;
+			}
+
+			renderedLaneKeys.Add(visualLaneKey);
+			AddLaneStrip(laneSpec);
 		}
 	}
 }
@@ -381,29 +320,11 @@ bool AScenarioCorridorRuntimeActor::TryFindSurfaceAtWorldLocation2D(
 	return false;
 }
 
-void AScenarioCorridorRuntimeActor::AddLaneStrip(
-	const FScenarioRuntimeCorridorLayoutEntry& layoutEntry,
-	const FScenarioRuntimeCorridorLaneSpec& laneSpec)
+void AScenarioCorridorRuntimeActor::AddLaneStrip(const FScenarioRuntimeCorridorLaneSpec& laneSpec)
 {
 	const double laneWidthMeters = laneSpec.OffsetRangeMeters.MaxMeters - laneSpec.OffsetRangeMeters.MinMeters;
 	if (laneWidthMeters <= KINDA_SMALL_NUMBER)
 	{
-		return;
-	}
-
-	const TArray<FVector2D> clippedAxisPointsMeters = BuildClippedAxisPointsMeters(
-		CorridorSpec.PointsMeters,
-		layoutEntry.AlongRangeMeters.StartMeters,
-		layoutEntry.AlongRangeMeters.EndMeters);
-	if (clippedAxisPointsMeters.Num() < 2)
-	{
-		UE_LOG(
-			LogScenarioCorridorRuntime,
-			Warning,
-			TEXT("Runtime corridor lane interval has no renderable axis span. CorridorId: %s | Segment: %s | Lane: %s"),
-			*CorridorSpec.CorridorId,
-			*layoutEntry.SegmentId,
-			*laneSpec.LaneId);
 		return;
 	}
 
@@ -424,13 +345,13 @@ void AScenarioCorridorRuntimeActor::AddLaneStrip(
 	const FName collisionProfileName = GetRuntimeCollisionProfileName(laneSpec.RegionType);
 
 	TArray<FVector> axisLocationsCm;
-	axisLocationsCm.Reserve(clippedAxisPointsMeters.Num());
-	for (const FVector2D& clippedPointMeters : clippedAxisPointsMeters)
+	axisLocationsCm.Reserve(CorridorSpec.PointsMeters.Num());
+	for (const FVector2D& pointMeters : CorridorSpec.PointsMeters)
 	{
-		axisLocationsCm.Add(TransformAxisPointMetersToWorldCm(CorridorSpec, clippedPointMeters));
+		axisLocationsCm.Add(TransformAxisPointMetersToWorldCm(CorridorSpec, pointMeters));
 	}
 
-	for (int32 pointIndex = 0; pointIndex < clippedAxisPointsMeters.Num() - 1; ++pointIndex)
+	for (int32 pointIndex = 0; pointIndex < axisLocationsCm.Num() - 1; ++pointIndex)
 	{
 		const FVector startLocation = axisLocationsCm[pointIndex];
 		const FVector endLocation = axisLocationsCm[pointIndex + 1];

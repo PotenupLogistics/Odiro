@@ -113,8 +113,8 @@ private:
 	// Removes generated lane mesh components before rebuilding the corridor.
 	void ClearLaneMeshes();
 
-	// Creates spline-deformed cube mesh sections over one layout interval.
-	void AddLaneStrip(const FScenarioRuntimeCorridorLayoutEntry& layoutEntry, const FScenarioRuntimeCorridorLaneSpec& laneSpec);
+	// Creates spline-deformed cube mesh sections over the full corridor axis for one visual lane.
+	void AddLaneStrip(const FScenarioRuntimeCorridorLaneSpec& laneSpec);
 
 	// Resolves a Corridor surface id from the configured catalog or built-in defaults.
 	bool ResolveSurfaceEntry(const FString& surfaceId, FScenarioCorridorSurfaceEntry& outSurfaceEntry) const;

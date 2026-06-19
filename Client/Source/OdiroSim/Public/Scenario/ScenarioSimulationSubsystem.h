@@ -71,15 +71,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	AScenarioCorridorRuntimeActor* SpawnCorridor(const FScenarioRuntimeCorridorSpec& corridorSpec);
 
-	// Spawns all sampled runtime Corridor surface actors for a setup.
-	UFUNCTION(BlueprintCallable, Category = "Scenario")
-	void SpawnCorridors(const TArray<FScenarioRuntimeCorridorSpec>& corridorSpecs);
-
 	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	AScenarioGroundRegion* SpawnGroundRegion(const FScenarioGroundRegionSpec& regionSpec);
-
-	UFUNCTION(BlueprintCallable, Category = "Scenario")
-	void SpawnGroundRegions(const TArray<FScenarioGroundRegionSpec>& regionSpecs);
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	AScenarioGroundRegion* FindGroundRegion(const FString& regionId) const;

@@ -59,7 +59,7 @@ struct ODIROSIM_API FSimulatorRunInfo
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FSimulatorRunInfoChangedNative, const FSimulatorRunInfo&);
 
-// MainMenuMap에서 simulation setup을 골라 별도 simulator process를 실행하는 launcher
+// Platform UI에서 simulation setup을 골라 별도 simulator process를 실행하는 launcher
 UCLASS(BlueprintType)
 class ODIROSIM_API USimulatorLaunchSubsystem : public UGameInstanceSubsystem
 {

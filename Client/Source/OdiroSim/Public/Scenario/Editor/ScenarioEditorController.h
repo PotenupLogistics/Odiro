@@ -15,6 +15,7 @@ class AScenarioTransformGizmoActor;
 class UScenarioAuthoringSubsystem;
 class UScenarioEditorRootWidget;
 class UScenarioEditorToolbarWidget;
+class UMainMenuWidget;
 class UScenarioPlaceableComponent;
 class UScenarioPlaceableDetailsWidget;
 class UInputAction;
@@ -104,11 +105,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Classes")
 	TSubclassOf<AScenarioTransformGizmoActor> TransformGizmoActorClass;
 
+	// Main control UI shown by ScenarioEditorMap.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Classes")
-	TSubclassOf<UScenarioEditorRootWidget> EditorRootWidgetClass;
+	TSubclassOf<UMainMenuWidget> MainMenuWidgetClass;
 
+	// Viewport z-order used when ScenarioEditorMap attaches WBP_MainMenu.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
-	int32 EditorRootWidgetViewportZOrder = 2;
+	int32 MainMenuWidgetViewportZOrder = 10;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor")
 	void SetObserverMode();
@@ -220,8 +223,28 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
 	void RemoveEditorRootWidget();
 
+	// Shows the main control UI that wraps project controls and scenario editor UI.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
+	UMainMenuWidget* ShowMainMenuWidget();
+
+	// Removes the main control UI from the viewport.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
+	void RemoveMainMenuWidget();
+
+	// Registers the editor root child owned by WBP_MainMenu.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
+	void RegisterEditorRootWidget(UScenarioEditorRootWidget* rootWidget);
+
+	// Clears the registered editor root child if it matches the widget being destroyed.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
+	void ClearRegisteredEditorRootWidget(UScenarioEditorRootWidget* rootWidget);
+
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|UI")
 	UScenarioEditorRootWidget* GetEditorRootWidget() const { return EditorRootWidget.Get(); }
+
+	// Returns the main control UI currently owned by this controller.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|UI")
+	UMainMenuWidget* GetMainMenuWidget() const { return MainMenuWidget.Get(); }
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Selection")
 	UScenarioPlaceableComponent* GetSelectedPlaceableComponent() const { return SelectedPlaceableComponent.Get(); }
@@ -346,6 +369,10 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UScenarioEditorRootWidget> EditorRootWidget;
+
+	// MainMenu widget created by ScenarioEditorMap controller.
+	UPROPERTY(Transient)
+	TObjectPtr<UMainMenuWidget> MainMenuWidget;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "Scenario|Editor|Placement")
 	FTransform CurrentPlacementTransform = FTransform::Identity;

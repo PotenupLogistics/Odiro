@@ -18,10 +18,15 @@ entry:
   - SimulatorLaunchSubsystem.h / .cpp
   - SimulatorProcessSubsystem.h / .cpp
   - ScenarioEditorLaunchSubsystem.h / .cpp
+  - ProjectSessionSubsystem.h / .cpp
   - PlatformAnalysisAiSubsystem.h / .cpp
-  - MainMenuPlayerController.h / .cpp
+  - Widget/StartupMenuWidget.h / .cpp
   - Widget/MainMenuWidget.h / .cpp
   - Widget/ProjectTemplateCardWidget.h / .cpp
+  - WBP_StartupMenu
+  - StartupMap
+  - BP_StartupMenuBootstrap
+  - WBP_MainMenu
   - WBP_ProjectTemplateCard
   - UmgMcp Widget/UmgSetSubsystem.cpp
   - Client/Docs/plans/PLAN-platform-architecture.md
@@ -42,31 +47,41 @@ keep:
   - Project run completion writes user project result artifacts through the simulator process path; episode trace starts/stops through runner lifecycle.
   - PlatformAnalysisAi has a v2 project-run request path using `project_path` + `run_id`; successful responses are saved under run `review/`.
   - ScenarioEditorLaunchSubsystem treats the pending path as a project scenario JSON path; URL options are inspectable only and subsystem state is authoritative.
-  - MainMenu project mode UI layout is owned by `WBP_MainMenu`; C++ only binds widget events and workflow logic.
+  - ProjectSessionSubsystem is the single runtime source of truth for the active user project root after Startup UI selection.
+  - StartupMap is the default entry map and only owns project selection/creation UI through WBP_StartupMenu plus a map-owned startup bootstrap actor; it does not use a custom Startup GameMode or PlayerController.
+  - ScenarioEditorMap owns the workspace surface; AScenarioEditorController creates WBP_MainMenu and receives the ScenarioEditor root registered by that MainMenu child.
+  - WBP_MainMenu root is the project workspace surface; ProjectOpenScreen, project parent/name inputs, template cards, open, and create controls belong only to WBP_StartupMenu.
+  - WBP_MainMenu owns control/workspace UI plus the ScenarioEditor root child; C++ requires the asset root to be ProjectWorkspaceScreen and does not create or promote the workspace at runtime.
+  - WBP_MainMenu must place ScenarioEditorRootWidget under ProjectScenarioEditPanel, not directly under ProjectWorkspaceScreen.
+  - StartupMenu/MainMenu UMG structure changes use UmgMcp asset edits and widget tree verification, not runtime fallback repair.
   - Project template cards use `WBP_ProjectTemplateCard`; card item layout, thumbnail fallback, and shadow styling stay in UMG assets.
-  - MainMenu project opening UI takes a parent folder and project name; runtime default parent folder comes from `FPlatformProcess::UserDir()` (Windows Documents).
+  - StartupMenu project opening UI takes a parent folder and project name; runtime default parent folder comes from `FPlatformProcess::UserDir()` (Windows Documents).
   - UmgMcp `query_widget_properties` must not request `Slot`; use `get_widget_tree`, export JSON, or direct `set_widget_properties` slot updates instead.
-  - MainMenu project scenario tab lists, opens, and starts runs from `<UserProject>/scenario.json` project-run snapshots.
+  - MainMenu project scenario tab lists, opens, and starts runs from the active project session's `<UserProject>/scenario.json` project-run snapshots.
   - MainMenu project result rows use `WBP_FileListItem` primary action for completed detail view and secondary display text for run state.
   - UmgMcp widget create/delete must keep `WidgetVariableNameToGuidMap` consistent; persistent variable widgets should use GUID-safe creation paths and wait for structural edits to finish.
-  - MainMenu project mode creates/validates projects and run snapshots through temporary file-based SimulatorLaunchSubsystem workspace helpers.
+  - StartupMenu creates/validates projects through temporary file-based SimulatorLaunchSubsystem workspace helpers, then stores the active project in ProjectSessionSubsystem.
+  - MainMenu creates run snapshots through temporary file-based SimulatorLaunchSubsystem workspace helpers using the active project session.
   - MainMenu project mode reads result runs from `<UserProject>/runs/<RunId>` and sends AI analysis through the v2 project-run path.
   - MainMenu project experiment Add opens a WBP-owned setting editor; its 실행 action saves `<UserProject>/setting.json`, creates a run snapshot, starts the simulator, and then exposes the run in the status list.
   - MainMenu project mode must not call SimulationSetup or RunQueue writer/launcher paths.
-  - MainMenu project mode must not fall back to legacy Json/Input, SimulationSetup, RunQueue, Saved/SimulationRuns, or Saved/AnalysisLogs lists.
+  - MainMenu project mode must not create/select projects and must not fall back to legacy Json/Input, SimulationSetup, RunQueue, Saved/SimulationRuns, Saved/AnalysisLogs, or text input project paths when no active project session exists.
   - Legacy report + MeasurementLog analysis is removed; MainMenu project mode sends v2 project-run analysis only.
   - SimulatorLaunchSubsystem workspace helpers are a UI prototype bridge; replace internals with Bridge `workspace.*` and `process.*` once a UE Bridge IPC client exists.
   - SimulatorLaunchSubsystem legacy SimulationSetup/RunQueue/report helpers are Blueprint compatibility APIs only and should stay deprecated while retained.
 verify:
   - launcher command contract tests for launch arg changes
   - runtime log plus status JSON for process changes
-  - `OdiroSim.MainMenu.ProjectMode.Smoke` for MainMenu project create/validate/run snapshot path changes
+  - `OdiroSim.StartupMenu.ProjectMode.Smoke` for Startup project create/validate/run snapshot path changes
+  - `OdiroSim.ProjectSession.Paths` for active project path helpers
+  - `OdiroSim.MainMenu.ProjectSession.NoLegacyPathFallback` for MainMenu active-session-only project path behavior
   - `OdiroSim.SimulatorLaunch.ProjectWorkspace` for temporary workspace helper changes
   - `OdiroSim.SimulatorLaunch.ProjectRun.Validation` for project launch validation changes
   - `OdiroSim.Platform.AnalysisAi.ProjectRunRequestJsonBuild` for v2 analysis request changes
   - OdiroSimEditor build after runner/trace lifecycle changes
-  - Blueprint compile/save plus latest log scan for `WidgetVariableNameToGuidMap` after UMG MCP asset edits
-  - UI smoke only after MainMenu workflow changes
+  - UmgMcp `get_widget_tree` after StartupMenu/MainMenu UMG edits: WBP_StartupMenu owns project selection; WBP_MainMenu root is ProjectWorkspaceScreen; ScenarioEditorRootWidget is under ProjectScenarioEditPanel.
+  - Blueprint compile/save plus latest log scan for `WidgetVariableNameToGuidMap` after UmgMcp asset edits
+  - UI smoke only after StartupMenu/MainMenu workflow changes
 related:
   - client-runtime-foundation
   - client-simulation

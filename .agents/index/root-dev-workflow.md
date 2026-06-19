@@ -2,6 +2,11 @@
 id: root-dev-workflow
 owner: Root
 paths:
+  - .vscode/launch.json
+  - .vscode/tasks.json
+  - Client/.idea/startup.xml
+  - Client/.run/*.cmd
+  - Client/.run/*.run.xml
   - .github/workflows/**
   - .githooks/**
   - .lfsconfig
@@ -14,6 +19,8 @@ paths:
   - task-push.bat
   - tools/**
 entry:
+  - .vscode/launch.json
+  - .vscode/tasks.json
   - task-setup.bat
   - task-build.bat
   - task-run.bat
@@ -26,9 +33,16 @@ entry:
   - tools/set-git-config.ps1
   - tools/check-source-sanity.ps1
   - tools/pre-push-policy.ps1
+  - tools/sync-ide-run-configs.ps1
+  - tools/list-lfs-locks.ps1
   - tools/open-pull-request.ps1
   - tools/manual-unlock.ps1
 keep:
+  - VSCode Run and Debug launch configurations expose only build-plus-runtime sessions; VSCode tasks keep setup plus background Git LFS lock status without replacing root script entry points.
+  - VSCode tasks start a background Git LFS lock polling task on folder open, refresh immediately when VSCode regains focus, poll only while VSCode is foreground, and use a separate Git LFS Locks source for clickable file-owner inspection.
+  - VSCode task output remains Terminal-backed by VSCode design; Build and Git LFS status tasks avoid stealing focus and rely on Problems where possible.
+  - tools/run-preview.ps1 starts Agents API, Bridge service, and Client preview mode for terminal and VSCode preview sessions; preview flags pass through to Client/Task-RunPreview.bat after `--`.
+  - tools/sync-ide-run-configs.ps1 keeps Rider shared run configs focused on Preview Services plus debug-capable Uproject Preview Mode entries during task-setup.bat install; Preview Services runs separately so Preview Mode can stay a Rider Unreal debug configuration.
   - Root scripts orchestrate project-owned task scripts; they do not implement Unreal or Agents startup details.
   - Root setup calls project task scripts directly, not project public .bat wrappers, to avoid duplicate phases.
   - Root build includes Bridge and Client; Agents has no build phase.
@@ -46,7 +60,10 @@ keep:
   - Post-Merge Tasks asset unlock queues lock-mutating runs, uses shallow checkout, path-limits auto unlocks to pushed Unreal assets, and rechecks lock id plus trusted push cutoff before unlock.
   - Manual LFS unlock is human-only exact-path recovery.
 verify:
+  - .vscode/launch.json parses as JSON
+  - .vscode/tasks.json parses as JSON
   - PowerShell parse check for script edits
+  - tools/sync-ide-run-configs.ps1 dry-run and generated Rider XML parse checks
   - hook syntax plus run-install smoke and staged main-delete smoke for .githooks changes
   - tools/set-git-config.ps1 PowerShell parse check, missing-gh guidance smoke, gh auth failure smoke, and mocked gh dry-run smoke
   - git check-attr lockable for sample Unreal asset
@@ -59,6 +76,7 @@ verify:
   - GitHub Merge Checks workflow runs Source Sanity from the PR merge ref, conditionally sets up Go for Bridge changes, and runs Asset Lock Ownership for Unreal binary assets
   - GitHub Post-Merge Tasks workflow shallow-checks out main, queues lock-mutating runs, fetches the before commit for automatic push diffs, rechecks lock id/time before unlock, and preserves manual exact-path unlock handling
   - GitHub asset lock workflows fail closed when Git LFS lock queries fail or return empty JSON
+  - tools/list-lfs-locks.ps1 prints active Git LFS lock paths with owner, lock time, and lock id for terminal inspection, one-shot Problems ingestion, and VSCode foreground-aware background Problems polling.
   - task-setup.bat -AllowMissingPrerequisites -SkipAgents -SkipGitHooks for non-auth setup smoke
   - tools/check-prerequisites.ps1 -AllowMissing
   - tools/build.ps1 -Target bridge

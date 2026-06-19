@@ -407,6 +407,15 @@ bool ADeliveryBot::StartPolicyRunWithPolicySpecFileName(const FString& policySpe
 	return true;
 }
 
+// Runner가 정한 user project output episode id를 HTTP policy component에 전달한다.
+void ADeliveryBot::ConfigureProjectActionLogging(const FString& projectOutputEpisodeId)
+{
+	if (IsValid(HttpPolicyComponent))
+	{
+		HttpPolicyComponent->ConfigureProjectActionLogging(projectOutputEpisodeId);
+	}
+}
+
 FDeliveryBotObservationInfo ADeliveryBot::BuildPolicyObservation()
 {
 	FDeliveryBotObservationInfo observation;

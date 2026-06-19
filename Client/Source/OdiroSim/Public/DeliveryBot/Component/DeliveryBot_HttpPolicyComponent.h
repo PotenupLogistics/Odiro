@@ -25,6 +25,7 @@ public:
 	void RequestStartScenario();				// Python 서버에 scenario start 요청을 예약한다
 	void UpdatePolicy(float deltaTime);			// start 재시도와 decide 반복 요청을 갱신한다
 	void EndScenario(const FString& status);	// Python 서버에 scenario end 요청을 보낸다
+	void ConfigureProjectActionLogging(const FString& projectOutputEpisodeId); // project actions.jsonl 기록 대상 output episode를 고정한다
 
 public:
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")

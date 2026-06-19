@@ -74,6 +74,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Policy")
 	bool StartPolicyRunWithPolicySpecFileName(const FString& policySpecFileName);
 
+	void ConfigureProjectActionLogging(const FString& projectOutputEpisodeId); // project actions.jsonl 기록 대상 output episode를 전달한다
+
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Observation")
 	FDeliveryBotObservationInfo BuildPolicyObservation();
 

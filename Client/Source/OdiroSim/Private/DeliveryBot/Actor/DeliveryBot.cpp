@@ -359,6 +359,21 @@ void ADeliveryBot::ApplyParkingStop()
 	bHasLastMoveCommand = true;
 }
 
+void ADeliveryBot::ApplyBodyConfigInfo(const FDeliveryBotBodyConfigInfo& bodyConfigInfo)
+{
+	if (!bodyConfigInfo.bHasSetupBodyConfig)
+	{
+		return;
+	}
+
+	RobotBoxExtentCm = FVector(
+		FMath::Max(bodyConfigInfo.LengthM, 0.01f),
+		FMath::Max(bodyConfigInfo.WidthM, 0.01f),
+		FMath::Max(bodyConfigInfo.HeightM, 0.01f)) * 50.0f;
+	WheelBaseCm = FMath::Max(bodyConfigInfo.WheelBaseM, 0.0f) * 100.0f;
+	MinTurningRadiusCm = FMath::Max(bodyConfigInfo.TurningRadiusM, 0.0f) * 100.0f;
+}
+
 void ADeliveryBot::ApplyRuntimeDriveConfigInfo(const FDeliveryBotDriveConfigInfo& driveConfigInfo)
 {
 	UE_LOG(
@@ -396,6 +411,7 @@ void ADeliveryBot::ApplyRuntimeDriveConfigInfo(const FDeliveryBotDriveConfigInfo
 
 void ADeliveryBot::ApplyCurrentSetupInfoToRuntimeComponents()
 {
+	ApplyBodyConfigInfo(SetupInfo.BodyConfigInfo);
 	ApplyRuntimeDriveConfigInfo(SetupInfo.ChaosDriveConfigInfo);
 
 	if (IsValid(LidarSensorComponent))
@@ -498,6 +514,8 @@ TArray<FDeliveryBotLidarObservedObjectInfo> ADeliveryBot::BuildObservedObjectsFo
 void ADeliveryBot::ApplySetupInfo()
 {
 	UChaosWheeledVehicleMovementComponent* wheeledMovement = Cast<UChaosWheeledVehicleMovementComponent>(GetVehicleMovementComponent());
+
+	ApplyBodyConfigInfo(SetupInfo.BodyConfigInfo);
 
 	if (IsValid(DriveComponent))
 		DriveComponent->InitializeChaosDrive(wheeledMovement, SetupInfo.ChaosDriveConfigInfo);

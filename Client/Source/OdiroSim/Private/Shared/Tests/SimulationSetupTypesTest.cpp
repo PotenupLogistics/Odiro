@@ -130,6 +130,73 @@ bool FSimulationSetupJsonPlayableContractTest::RunTest(const FString& parameters
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDeliveryBotProfileJsonCompileContractTest,
+	"OdiroSim.DeliveryBot.Profile.Json.CompileContract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDeliveryBotProfileJsonCompileContractTest::RunTest(const FString& parameters)
+{
+	const FString profileJson =
+		TEXT("{")
+		TEXT("\"schema\":\"simulation_profile\",")
+		TEXT("\"version\":1,")
+		TEXT("\"profile_id\":\"profile_contract\",")
+		TEXT("\"display_name\":\"Profile Contract\",")
+		TEXT("\"description\":\"Profile compiler contract\",")
+		TEXT("\"robot\":{")
+		TEXT("\"body\":{\"length_m\":1.0,\"width_m\":0.44,\"height_m\":0.64,\"wheel_base_m\":0.7,\"turning_radius_m\":1.2},")
+		TEXT("\"drive\":{\"max_speed_kmh\":7.0,\"max_reverse_kmh\":2.0,\"accel_kmh_per_s\":1.2,\"decel_kmh_per_s\":0.9,\"reverse_accel_kmh_per_s\":0.8,\"steering_rate_per_s\":3.2,\"throttle_rate_per_s\":0.28,\"brake_rate_per_s\":0.35,\"stop_brake\":0.18,\"gear_switch_stop_kmh\":0.1,\"gear_switch_brake\":0.2,\"slowdown_range_kmh\":5.0,\"speed_tolerance_kmh\":0.5,\"speed_limit_brake\":0.06,\"use_handbrake\":false,\"max_torque\":220.0,\"max_rpm\":4000.0,\"idle_rpm\":600.0,\"engine_brake\":0.04,\"rev_up_moi\":5.0,\"rev_down_rate\":600.0},")
+		TEXT("\"lidar\":{\"lidar_mode\":\"TwoD\",\"mode\":\"ThreeD\",\"draw_debug\":true,\"angle_step_degree\":3.0,\"height_m\":0.07,\"vertical_min_degree\":-25.0,\"vertical_max_degree\":25.0,\"vertical_step_degree\":5.0,\"scan_rate_hz\":5.0,\"range_m\":15.0,\"front_half_angle_degree\":50.0,\"stop_distance_m\":2.0,\"obstacle_warning_distance_m\":5.2,\"slow_down_distance_m\":8.0,\"store_missed_rays\":false,\"trace_channel\":\"world_dynamic\",\"ignore_tags\":[\"ShouldNotApply\"],\"observation_profile\":\"realtime_point_cloud\",\"point_cloud\":{\"capture_enabled\":true,\"capture_every_n_sensor_frames\":10,\"range_limit_m\":15.0,\"include_ground_points\":true,\"max_points\":4096}}")
+		TEXT("}")
+		TEXT("}");
+
+	const UDeliveryBotSetupCompiler* deliveryBotCompiler = NewObject<UDeliveryBotSetupCompiler>();
+	const FDeliveryBotSetupCompileResult result =
+		deliveryBotCompiler->CompileDeliveryBotSetupFromJsonString(profileJson);
+
+	TestTrue(TEXT("profile compiles"), result.bSuccess);
+	TestEqual(TEXT("profile diagnostics"), result.Diagnostics.Num(), 0);
+
+	const FDeliveryBotBodyConfigInfo& body = result.SetupInfo.BodyConfigInfo;
+	TestTrue(TEXT("body config present"), body.bHasSetupBodyConfig);
+	TestEqual(TEXT("body length"), body.LengthM, 1.0f);
+	TestEqual(TEXT("body width"), body.WidthM, 0.44f);
+	TestEqual(TEXT("body height"), body.HeightM, 0.64f);
+	TestEqual(TEXT("wheel base"), body.WheelBaseM, 0.7f);
+	TestEqual(TEXT("turning radius"), body.TurningRadiusM, 1.2f);
+
+	const FDeliveryBotDriveConfigInfo& drive = result.SetupInfo.ChaosDriveConfigInfo;
+	TestEqual(TEXT("drive max speed"), drive.MaxSpeedKmh, 7.0f);
+	TestEqual(TEXT("drive max reverse speed"), drive.MaxReverseSpeedKmh, 2.0f);
+	TestEqual(TEXT("drive acceleration"), drive.AccelerationRateKmhPerSecond, 1.2f);
+	TestEqual(TEXT("drive deceleration"), drive.DecelerationRateKmhPerSecond, 0.9f);
+	TestEqual(TEXT("drive reverse acceleration"), drive.ReverseAccelerationRateKmhPerSecond, 0.8f);
+	TestEqual(TEXT("drive gear switch stop"), drive.GearSwitchStopSpeedKmh, 0.1f);
+	TestEqual(TEXT("drive gear switch brake"), drive.GearSwitchBrakeInput, 0.2f);
+	TestEqual(TEXT("drive max rpm"), drive.MaxRPM, 4000.0f);
+
+	const FDeliveryBotLidarSensorConfigInfo& lidar = result.SetupInfo.LidarSensorConfigInfo;
+	TestEqual(TEXT("lidar mode canonical wins"), lidar.LidarModeType, EDeliveryBotLidarModeType::ThreeD);
+	TestEqual(TEXT("lidar range"), lidar.ScanRangeM, 15.0f);
+	TestEqual(TEXT("lidar angle step"), lidar.AngleStepDegree, 3.0f);
+	TestFalse(TEXT("lidar store missed rays"), lidar.bStoreMissedRays);
+	TestEqual(TEXT("lidar trace channel remains default"), static_cast<int32>(lidar.TraceChannel.GetValue()), static_cast<int32>(ECC_Visibility));
+	TestEqual(TEXT("lidar ignore tag count remains default"), lidar.IgnoreTags.Num(), 1);
+	if (!lidar.IgnoreTags.IsEmpty())
+	{
+		TestEqual(TEXT("lidar ignore tag remains default"), lidar.IgnoreTags[0], FName(TEXT("NoCollision")));
+	}
+
+	const FDeliveryBotPointCloudCaptureConfigInfo& pointCloud = result.SetupInfo.PointCloudCaptureConfigInfo;
+	TestTrue(TEXT("point cloud config present"), pointCloud.bHasSetupPointCloudConfig);
+	TestEqual(TEXT("point cloud profile"), pointCloud.ObservationProfile, FString(TEXT("realtime_point_cloud")));
+	TestEqual(TEXT("point cloud range"), pointCloud.RangeLimitM, 15.0f);
+	TestEqual(TEXT("point cloud max points"), pointCloud.MaxPoints, 4096);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSimulationSetupJsonValidationTest,
 	"OdiroSim.SimulationSetup.Json.Validation",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

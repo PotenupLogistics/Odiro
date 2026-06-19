@@ -246,6 +246,12 @@ bool UDeliveryBotSetupCompiler::ReadOptionalLidarModeField(const FJsonObject& js
 		return true;
 	}
 
+	if (normalized == TEXT("front2d"))
+	{
+		targetValue = EDeliveryBotLidarModeType::TwoD;
+		return true;
+	}
+
 	if (normalized == TEXT("3d") || normalized == TEXT("threed"))
 	{
 		targetValue = EDeliveryBotLidarModeType::ThreeD;
@@ -278,6 +284,33 @@ bool UDeliveryBotSetupCompiler::ReadOptionalLidarModeField(const FJsonObject& js
 	return false;
 }
 
+void UDeliveryBotSetupCompiler::CompileBody(const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotBodyConfigInfo& bodyConfigInfo)
+{
+	const TSharedPtr<FJsonValue> bodyValue = robotObject.TryGetField(TEXT("body"));
+	if (!bodyValue.IsValid()) return;
+
+	if (bodyValue->Type != EJson::Object)
+	{
+		AddDiagnostic(
+			result,
+			EScenarioCompileDiagnosticSeverity::Error,
+			TEXT("invalid_object"),
+			TEXT("robot.body 필드는 object여야 함."));
+		return;
+	}
+
+	const TSharedPtr<FJsonObject> bodyObject = bodyValue->AsObject();
+	if (!bodyObject.IsValid()) return;
+
+	const FString path = TEXT("robot.body");
+	bodyConfigInfo.bHasSetupBodyConfig = true;
+	ReadOptionalFloatField(*bodyObject, TEXT("length_m"), path, result, bodyConfigInfo.LengthM, 0.01f);
+	ReadOptionalFloatField(*bodyObject, TEXT("width_m"), path, result, bodyConfigInfo.WidthM, 0.01f);
+	ReadOptionalFloatField(*bodyObject, TEXT("height_m"), path, result, bodyConfigInfo.HeightM, 0.01f);
+	ReadOptionalFloatField(*bodyObject, TEXT("wheel_base_m"), path, result, bodyConfigInfo.WheelBaseM, 0.0f);
+	ReadOptionalFloatField(*bodyObject, TEXT("turning_radius_m"), path, result, bodyConfigInfo.TurningRadiusM, 0.0f);
+}
+
 void UDeliveryBotSetupCompiler::CompileDrive( const FJsonObject& robotObject, FDeliveryBotSetupCompileResult& result, FDeliveryBotDriveConfigInfo& driveConfigInfo)
 {
 	const TSharedPtr<FJsonValue> driveValue = robotObject.TryGetField(TEXT("drive"));
@@ -298,6 +331,14 @@ void UDeliveryBotSetupCompiler::CompileDrive( const FJsonObject& robotObject, FD
 
 	const FString path = TEXT("robot.drive");
 	ReadOptionalFloatField(*driveObject, TEXT("max_speed_kmh"), path, result, driveConfigInfo.MaxSpeedKmh, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("max_reverse_speed_kmh"), path, result, driveConfigInfo.MaxReverseSpeedKmh, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("max_reverse_kmh"), path, result, driveConfigInfo.MaxReverseSpeedKmh, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("reverse_acceleration_rate_kmh_per_second"), path, result, driveConfigInfo.ReverseAccelerationRateKmhPerSecond, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("reverse_accel_kmh_per_s"), path, result, driveConfigInfo.ReverseAccelerationRateKmhPerSecond, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("gear_switch_stop_speed_kmh"), path, result, driveConfigInfo.GearSwitchStopSpeedKmh, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("gear_switch_stop_kmh"), path, result, driveConfigInfo.GearSwitchStopSpeedKmh, 0.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("gear_switch_brake_input"), path, result, driveConfigInfo.GearSwitchBrakeInput, 0.0f, 1.0f);
+	ReadOptionalFloatField(*driveObject, TEXT("gear_switch_brake"), path, result, driveConfigInfo.GearSwitchBrakeInput, 0.0f, 1.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("slowdown_speed_range_kmh"), path, result, driveConfigInfo.SlowdownSpeedRangeKmh, 0.1f);
 	ReadOptionalFloatField(*driveObject, TEXT("slowdown_range_kmh"), path, result, driveConfigInfo.SlowdownSpeedRangeKmh, 0.1f);
 	ReadOptionalFloatField(*driveObject, TEXT("speed_limit_tolerance_kmh"), path, result, driveConfigInfo.SpeedLimitToleranceKmh, 0.0f);
@@ -433,10 +474,10 @@ void UDeliveryBotSetupCompiler::CompileLidar(const FJsonObject& robotObject, FDe
 	ReadOptionalFloatField(*lidarObject, TEXT("slow_down_distance_m"), path, result, lidarSensorConfigInfo.SlowDownDistanceM, 0.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("collision_stop_half_angle_degree"), path, result, lidarSensorConfigInfo.CollisionStopHalfAngleDegree, 0.0f, 180.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("collision_stop_distance_m"), path, result, lidarSensorConfigInfo.CollisionStopDistanceM, 0.0f);
-	ReadOptionalCollisionChannelField(*lidarObject, TEXT("trace_channel"), path, result, lidarSensorConfigInfo.TraceChannel);
-	ReadOptionalNameArrayField(*lidarObject, TEXT("ignore_tags"), path, result, lidarSensorConfigInfo.IgnoreTags);
 	ReadOptionalFloatField(*lidarObject, TEXT("scan_rate_hz"), path, result, lidarSensorConfigInfo.ScanRateHz, 0.1f);
 	ReadOptionalLidarModeField(*lidarObject, TEXT("lidar_mode"), path, result, lidarSensorConfigInfo.LidarModeType);
+	ReadOptionalLidarModeField(*lidarObject, TEXT("mode"), path, result, lidarSensorConfigInfo.LidarModeType);
+	ReadOptionalBoolField(*lidarObject, TEXT("store_missed_rays"), path, result, lidarSensorConfigInfo.bStoreMissedRays);
 	ReadOptionalFloatField(*lidarObject, TEXT("vertical_min_degree"), path, result, lidarSensorConfigInfo.VerticalMinDegree, -89.0f, 89.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("vertical_max_degree"), path, result, lidarSensorConfigInfo.VerticalMaxDegree, -89.0f, 89.0f);
 	ReadOptionalFloatField(*lidarObject, TEXT("vertical_step_degree"), path, result, lidarSensorConfigInfo.VerticalStepDegree, 1.0f);
@@ -576,6 +617,7 @@ void UDeliveryBotSetupCompiler::CompileRobotObject(const FJsonObject& rootObject
 			TEXT("DeliveryBotSetup.robot에는 location/route/instance_id/asset_id/spawn_only를 넣지 않음. 로봇 배치와 목적지는 ScenarioSetup JSON이 담당함."));
 	}
 
+	CompileBody(*robotObject, result, result.SetupInfo.BodyConfigInfo);
 	CompileDrive(*robotObject, result, result.SetupInfo.ChaosDriveConfigInfo);
 	WarnDeprecatedPathFollow(*robotObject, result);
 	CompileLidar(*robotObject, result, result.SetupInfo.LidarSensorConfigInfo, result.SetupInfo.PointCloudCaptureConfigInfo);

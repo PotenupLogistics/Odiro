@@ -106,6 +106,7 @@ public:
 
 private:
 	void ApplySetupInfo();
+	void ApplyBodyConfigInfo(const FDeliveryBotBodyConfigInfo& bodyConfigInfo); // profile robot.body를 actor vehicle spec 값으로 적용한다.
 
 	void FillObservation(FDeliveryBotObservationInfo& observation) const;
 	void DebugLogObservation(float deltaTime);

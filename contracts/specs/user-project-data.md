@@ -111,7 +111,7 @@ schema:
 | ------- | ------ | ---------------------------------------- |
 | `body`  | object | 길이, 폭, 높이, wheel base 등 물리 크기  |
 | `drive` | object | 속도, 가속, 조향, engine/drive 설정      |
-| `lidar` | object | LiDAR mode, range, angle step, height 등 |
+| `lidar` | object | LiDAR mode, ray, scan, point cloud 설정 |
 
 규칙:
 
@@ -164,13 +164,41 @@ schema:
 
 `robot.lidar` 최소 field:
 
-| Field               | Type    | 의미                     |
-| ------------------- | ------- | ------------------------ |
-| `mode`              | string  | LiDAR mode               |
-| `range_m`           | number  | LiDAR 감지 거리          |
-| `angle_step_degree` | number  | ray 간 yaw 간격          |
-| `height_m`          | number  | ray 시작 높이            |
-| `store_missed_rays` | boolean | miss ray도 저장할지 여부 |
+| Field                       | Type    | 의미                                                                        |
+| --------------------------- | ------- | --------------------------------------------------------------------------- |
+| `mode`                      | string  | LiDAR mode. `OneD`, `TwoD`, `ThreeD`, `OneDAndTwoD`, `TwoDAndThreeD`, `All` |
+| `range_m`                   | number  | LiDAR 감지 거리                                                             |
+| `angle_step_degree`         | number  | ray 간 yaw 간격                                                             |
+| `height_m`                  | number  | ray 시작 높이                                                               |
+| `front_half_angle_degree`   | number  | 전방 장애물 판정 half angle                                                 |
+| `vertical_min_degree`       | number  | 3D LiDAR 최소 pitch                                                         |
+| `vertical_max_degree`       | number  | 3D LiDAR 최대 pitch                                                         |
+| `vertical_step_degree`      | number  | 3D LiDAR pitch 간격                                                         |
+| `scan_rate_hz`              | number  | LiDAR scan rate                                                             |
+| `store_missed_rays`         | boolean | miss ray도 저장할지 여부                                                    |
+| `observation_profile`       | string  | Python observation profile. 예: `basic`, `realtime_point_cloud`, `quality_point_cloud` |
+| `point_cloud`               | object  | 3D LiDAR point cloud capture 설정                                           |
+
+`robot.lidar.mode` 값:
+
+| 값 | 의미 |
+| --- | --- |
+| `OneD` | 정면 1개 ray |
+| `TwoD` | 수평 yaw scan |
+| `ThreeD` | yaw/pitch 격자 scan |
+| `OneDAndTwoD` | 1D와 2D scan 함께 사용 |
+| `TwoDAndThreeD` | 2D와 3D scan 함께 사용 |
+| `All` | 1D, 2D, 3D scan 함께 사용 |
+
+`robot.lidar.point_cloud` field:
+
+| Field | Type | 의미 |
+| --- | --- | --- |
+| `capture_enabled` | boolean | point cloud 파일 저장 여부 |
+| `capture_every_n_sensor_frames` | number | 몇 번째 sensor frame마다 저장할지 |
+| `range_limit_m` | number | point cloud 저장 거리 제한 |
+| `include_ground_points` | boolean | ground point 포함 여부 |
+| `max_points` | number | frame당 최대 point 수 |
 
 생성된 `scenario_sample` 참조:
 
@@ -624,24 +652,115 @@ line schema:
 
 필수 line root:
 
-| Field                     | Type           | 의미                                    |
-| ------------------------- | -------------- | --------------------------------------- |
-| `schema`                  | string         | 고정값 `robot_action`                   |
-| `version`                 | number         | 고정값 `1`                              |
-| `sequence`                | number         | episode 내 policy 판단 순번             |
-| `run_time_seconds`        | number         | episode 실행 시간. 단위 s               |
-| `status`                  | string         | `ok` 또는 `error`                       |
-| `front_half_angle_degree` | number         | 전방 관측 영역 half angle               |
-| `lidar_rays`              | array          | 해당 decide 시점의 LiDAR ray 목록       |
-| `observed_objects`        | array          | LiDAR ray를 actor 단위로 묶은 관측 요약 |
-| `robot_state`             | object         | decide 시점의 robot state               |
-| `action`                  | object or null | policy 반환 action. 실패 시 `null`      |
-| `error`                   | object         | `status: "error"`일 때 실패 정보        |
-| `path`                    | object         | decide 시점의 path 추적 상태            |
+| Field                     | Type           | 의미                                                            |
+| ------------------------- | -------------- | --------------------------------------------------------------- |
+| `schema`                  | string         | 고정값 `robot_action`                                           |
+| `version`                 | number         | 고정값 `1`                                                      |
+| `sequence`                | number         | episode 내 policy 판단 순번. 실패 line도 같은 sequence를 유지   |
+| `run_time_seconds`        | number         | episode 실행 시간. 단위 s                                       |
+| `sensor_sequence`         | number         | LiDAR snapshot 순번                                             |
+| `sensor_time_seconds`     | number         | LiDAR snapshot 생성 시간. 단위 s                                |
+| `status`                  | string         | `ok` 또는 `error`                                               |
+| `front_half_angle_degree` | number         | 전방 관측 영역 판정 half angle. `front_hit_ray_count`, `in_front` 계산 기준 |
+| `lidar`                   | object         | 1D/2D/3D로 분리된 LiDAR 입력                                    |
+| `observed_objects`        | array          | LiDAR ray를 target 단위로 묶은 관측 요약                        |
+| `robot_state`             | object         | decide 시점의 robot state                                       |
+| `action`                  | object or null | policy가 반환하고 Unreal이 적용할 action. 실패 시 `null`        |
+| `decision`                | object or null | action을 선택한 policy metadata. 실패 시 `null`                 |
+| `error`                   | object         | `status: "error"`일 때 실패 정보                                |
+| `path`                    | object         | decide 시점의 path 추적 상태                                    |
+
+`lidar` field:
+
+| Field | Type | 의미 |
+| --- | --- | --- |
+| `mode` | string | LiDAR mode. `OneD`, `TwoD`, `ThreeD`, `OneDAndTwoD`, `TwoDAndThreeD`, `All` |
+| `rays_1d` | array | 정면 1개 ray 기반 입력 |
+| `rays_2d` | array | 수평 scan 입력 |
+| `rays_3d` | array | yaw/pitch 격자 scan 입력 |
+| `policy_ray_selection` | object | Python policy가 실제로 사용한 LiDAR 입력 요약 |
+
+`rays_1d[]` field:
+
+| Field | Type | 의미 |
+| --- | --- | --- |
+| `hit` | boolean | ray가 target을 감지했는지 여부 |
+| `distance_m` | number | hit 지점 또는 ray 끝까지의 거리 |
+| `ray_index` | number or null | ray index. 단일 ray에 index가 없으면 `null` |
+| `target_id` | string or null | 감지된 semantic target id. miss 또는 조인 실패면 `null` |
+| `target_tags` | string[] | 감지된 target tag 목록 |
+
+`rays_2d[]` field:
+
+| Field | Type | 의미 |
+| --- | --- | --- |
+| `hit` | boolean | ray가 target을 감지했는지 여부 |
+| `distance_m` | number | hit 지점 또는 ray 끝까지의 거리 |
+| `ray_index` | number or null | ray index |
+| `yaw_degree` | number | robot 기준 signed local yaw |
+| `target_id` | string or null | 감지된 semantic target id. miss 또는 조인 실패면 `null` |
+| `target_tags` | string[] | 감지된 target tag 목록 |
+
+`rays_3d[]` field:
+
+| Field | Type | 의미 |
+| --- | --- | --- |
+| `hit` | boolean | ray가 target을 감지했는지 여부 |
+| `distance_m` | number | hit 지점 또는 ray 끝까지의 거리 |
+| `ray_index` | number or null | ray index |
+| `yaw_degree` | number | robot 기준 signed local yaw |
+| `pitch_degree` | number | robot 기준 local pitch |
+| `hit_location_cm` | object or null | Unreal world hit 위치. miss면 `null` |
+| `target_id` | string or null | 감지된 semantic target id. miss 또는 조인 실패면 `null` |
+| `target_tags` | string[] | 감지된 target tag 목록 |
+
+`policy_ray_selection` field:
+
+| Field | Type | 의미 |
+| --- | --- | --- |
+| `mode` | string | policy 입력으로 선택된 family. `1d`, `2d`, `3d`, `legacy2d`, `none` |
+| `source` | string | 선택 source. 예: `lidar.rays_2d`, `lidar.rays_3d.nearest_vertical_by_yaw` |
+| `ray_count` | number | policy에 전달된 ray 개수 |
+| `horizontal_pitch_degree` | number or null | 3D를 2D policy ray로 투영할 때 기준이 된 pitch. 해당 없으면 `null` |
+
+`observed_objects[]` field:
+
+| Field | Type | 의미 |
+| --- | --- | --- |
+| `target_id` | string or null | 관측된 semantic target id. 조인할 수 없으면 `null` |
+| `target_tags` | string[] | 관측된 target tag 목록 |
+| `has_bounds` | boolean | target bounds가 유효한지 여부 |
+| `bounds_origin_cm` | object or null | target bounds origin. 유효하지 않으면 `null` |
+| `bounds_extent_cm` | object or null | target bounds extent. 유효하지 않으면 `null` |
+| `closest_hit_location_cm` | object or null | 해당 target과 가장 가까운 hit 위치. 없으면 `null` |
+| `closest_distance_m` | number | 해당 target과의 최단 hit 거리 |
+| `closest_ray_yaw_degree` | number | 가장 가까운 hit ray yaw |
+| `total_hit_ray_count` | number | 해당 target을 맞춘 전체 ray 수 |
+| `front_hit_ray_count` | number | 전방 영역에서 해당 target을 맞춘 ray 수 |
+| `in_front` | boolean | 해당 target이 전방 관측 영역에 있는지 여부 |
+
+`robot_state` 추가 field:
+
+| Field | Type | 의미 |
+| --- | --- | --- |
+| `colliding` | boolean | collision stop 상태 여부 |
+| `collision_target_id` | string or null | collision stop을 만든 semantic target id. 없으면 `null` |
+| `collision_target_tags` | string[] | collision target tag 목록 |
+
+`decision` field:
+
+| Field | Type | 의미 |
+| --- | --- | --- |
+| `selected_policy` | string | action을 선택한 Python policy 이름 |
+| `reason` | string | policy가 action을 선택한 이유 코드 |
 
 규칙:
 
 - `sequence`: `events.jsonl.action_sequence`와 action/event 조인 key
+- `run_time_seconds`: `trace.jsonl`과의 시간 조인 key
+- `target_id`: `scenario.semantic.static_obstacles[].id` 또는 `scenario.semantic.pedestrians[].id`와 조인되는 semantic id
+- `lidar`의 `_cm` suffix field만 centimeter 단위이고, 나머지 위치/거리 단위는 meter
+- `action.selected_policy`, `action.reason`은 사용하지 않고 `decision.selected_policy`, `decision.reason`에 기록
 - policy 호출 실패도 같은 `sequence`로 error line 기록
 
 ### Episode Events

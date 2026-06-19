@@ -32,7 +32,7 @@ runs/<RunId>/snapshot/profile.json
 | --- | --- | --- | --- |
 | `body` | object | 예 | Robot 물리 크기. |
 | `drive` | object | 예 | 속도, 가속, 조향, brake, engine 설정. |
-| `lidar` | object | 예 | LiDAR 관측 mode와 ray 설정. |
+| `lidar` | object | 예 | LiDAR 관측 mode, ray, scan, point cloud 설정. |
 
 ## robot.body
 
@@ -76,11 +76,39 @@ runs/<RunId>/snapshot/profile.json
 
 | 필드 | 타입 | 필수 | 설명 |
 | --- | --- | --- | --- |
-| `mode` | string | 예 | LiDAR mode. |
+| `mode` | string | 예 | LiDAR mode. `OneD`, `TwoD`, `ThreeD`, `OneDAndTwoD`, `TwoDAndThreeD`, `All`. |
 | `range_m` | number | 예 | LiDAR 감지 거리. 단위 m. |
 | `angle_step_degree` | number | 예 | Ray 간 yaw 간격. 단위 degree. |
 | `height_m` | number | 예 | Ray 시작 높이. 단위 m. |
+| `front_half_angle_degree` | number | 예 | 전방 장애물 판정 half angle. 단위 degree. |
+| `vertical_min_degree` | number | 3D mode면 예 | 3D LiDAR 최소 pitch. 단위 degree. |
+| `vertical_max_degree` | number | 3D mode면 예 | 3D LiDAR 최대 pitch. 단위 degree. |
+| `vertical_step_degree` | number | 3D mode면 예 | 3D LiDAR pitch 간격. 단위 degree. |
+| `scan_rate_hz` | number | 예 | LiDAR scan rate. 단위 Hz. |
 | `store_missed_rays` | boolean | 예 | Miss ray 저장 여부. |
+| `observation_profile` | string | 예 | Python observation profile. 예: `basic`, `realtime_point_cloud`, `quality_point_cloud`. |
+| `point_cloud` | object | 예 | 3D LiDAR point cloud capture 설정. |
+
+## robot.lidar.mode
+
+| 값 | 설명 |
+| --- | --- |
+| `OneD` | 정면 1개 ray. |
+| `TwoD` | 수평 yaw scan. |
+| `ThreeD` | Yaw/pitch 격자 scan. |
+| `OneDAndTwoD` | 1D와 2D scan 함께 사용. |
+| `TwoDAndThreeD` | 2D와 3D scan 함께 사용. |
+| `All` | 1D, 2D, 3D scan 함께 사용. |
+
+## robot.lidar.point_cloud
+
+| 필드 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `capture_enabled` | boolean | 예 | Point cloud 파일 저장 여부. |
+| `capture_every_n_sensor_frames` | number | `capture_enabled: true`면 예 | 몇 번째 sensor frame마다 저장할지. |
+| `range_limit_m` | number | `capture_enabled: true`면 예 | Point cloud 저장 거리 제한. 단위 m. |
+| `include_ground_points` | boolean | `capture_enabled: true`면 예 | Ground point 포함 여부. |
+| `max_points` | number | `capture_enabled: true`면 예 | Frame당 최대 point 수. |
 
 ## 소유 경계
 

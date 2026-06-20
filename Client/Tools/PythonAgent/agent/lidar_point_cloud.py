@@ -77,8 +77,8 @@ class LidarPointCloudRecorder:
     captureOriginCm: dict[str, float] = field(default_factory=dict)                  # import review용 map-local 원점
     captureSummary: dict[str, Any] = field(default_factory=dict)                      # capture 검증용 누적 summary 상태
 
-    # /scenario/start 설정으로 point cloud capture 상태를 초기화한다.
-    def configure_from_start(self, request: ScenarioStartRequest) -> None:
+    # /scenario/start 설정으로 point cloud capture 상태를 초기화하고 저장 경로 오류를 반환한다.
+    def configure_from_start(self, request: ScenarioStartRequest) -> dict[str, Any] | None:
         self.options = build_lidar_point_cloud_options(request.lidarSpec)
         self.lastCapturedSensorSequence = -1
         self.capturesRoot = None
@@ -88,9 +88,30 @@ class LidarPointCloudRecorder:
         artifact_spec = request.artifactSpec or {}
         captures_root = str(artifact_spec.get("capturesRoot") or "")
         self.capturesRootRelative = str(artifact_spec.get("capturesRootRelative") or "captures")
+        b_output_required = bool(artifact_spec.get("required", False))
 
-        if not captures_root or not self.options.bCaptureEnabled:
-            return
+        if not self.options.bCaptureEnabled:
+            return None
+
+        configuration_error_code = str(artifact_spec.get("configurationErrorCode") or "")
+        if b_output_required and configuration_error_code:
+            return {
+                "code": configuration_error_code,
+                "message": str(
+                    artifact_spec.get("configurationErrorMessage")
+                    or "Project episode output configuration is invalid."
+                ),
+                "retryable": False,
+            }
+
+        if not captures_root:
+            if b_output_required:
+                return {
+                    "code": "POINT_CLOUD_OUTPUT_PATH_MISSING",
+                    "message": "Required project episode output path is missing.",
+                    "retryable": False,
+                }
+            return None
 
         try:
             self.capturesRoot = Path(captures_root) / "lidar_point_cloud"
@@ -99,8 +120,16 @@ class LidarPointCloudRecorder:
             self._reset_accumulated_map()
             self._write_manifest()
             self._write_capture_summary()
-        except OSError:
+        except OSError as error:
             self.capturesRoot = None
+            if b_output_required:
+                return {
+                    "code": "POINT_CLOUD_OUTPUT_UNAVAILABLE",
+                    "message": f"Cannot initialize point cloud output at {captures_root}: {error}",
+                    "retryable": False,
+                }
+
+        return None
 
     # 현재 decide frame을 point cloud capture 파일로 저장하고 stable response 참조를 반환한다.
     def capture_decide(self, request: ScenarioDecideRequest) -> list[dict[str, Any]]:

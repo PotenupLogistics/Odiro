@@ -42,7 +42,11 @@ keep:
   - Keep Python-side LiDAR Point Cloud support user-selectable through observation profiles, not mandatory policy behavior.
   - Prefer Unreal raycast hit locations for Point Cloud export when the request payload provides them.
   - Use the Unreal LiDAR Point Cloud plugin as the primary viewer for saved `map_accumulated.xyz` captures.
-  - Keep per-frame point cloud debug files under `captures/lidar_point_cloud/frames/`; do not mix them with official root import files.
+  - ScenarioRunner owns project episode output paths and injects them before Python `/scenario/start`; DeliveryBot and Python must not reconstruct the current run/episode path independently.
+  - Keep project-run point cloud artifacts under `episodes/<EpisodeId>/lidar_point_cloud/`; standalone runs may use the legacy Saved capture root.
+  - Return required project-run Point Cloud output initialization errors through `/scenario/start`; do not silently fall back to Saved or terminate before the policy response contract is produced.
+  - Keep required project-run artifact path validation in `Resources/policy-runtime.py` so existing user policy snapshots receive the same start failure behavior.
+  - Keep per-frame point cloud debug files under `lidar_point_cloud/frames/`; do not mix them with official root import files.
   - Keep `capture_summary.json` as saved artifact validation metadata; do not add point-cloud summaries to policy response payloads.
   - Route DeliveryBotSetup `robot.lidar.observation_profile` and `robot.lidar.point_cloud` through `FDeliveryBotPointCloudCaptureConfigInfo` into Python `lidarSpec`.
   - Treat NoPointCloud/basic runs with `capture_enabled=false` as valid when no LiDAR Point Cloud capture folder is created.

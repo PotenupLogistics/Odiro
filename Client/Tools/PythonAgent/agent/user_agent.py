@@ -223,7 +223,19 @@ class BotPolicy:
 
         self.decisionLogWatcher.reset()
         self.configure_policies_from_start(request)
-        self.pointCloudRecorder.configure_from_start(request)
+        point_cloud_error = self.pointCloudRecorder.configure_from_start(request)
+        if point_cloud_error is not None:
+            return {
+                "status": "error",
+                "accepted": False,
+                "pathStatus": "empty",
+                "error": point_cloud_error,
+                "decision": build_decision_contract("LidarPointCloudRecorder", "output_initialization_failed"),
+                "path": build_path_contract(state),
+                "events": [],
+                "captures": [],
+            }
+
         self.pathfinder.configure_from_control_spec(request.controlSpec)
 
         result = self.pathfinder.find_path(

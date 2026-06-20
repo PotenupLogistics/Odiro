@@ -451,6 +451,23 @@ void ADeliveryBot::ConfigureProjectActionLogging(const FString& projectOutputEpi
 	}
 }
 
+// Runner가 만든 project episode 출력 경로를 HTTP policy component에 전달한다.
+bool ADeliveryBot::ConfigureProjectEpisodeOutput(
+	const FString& projectOutputEpisodeId,
+	const FString& projectEpisodeOutputDirectory,
+	const FString& projectEpisodeOutputRelativeDirectory)
+{
+	if (!IsValid(HttpPolicyComponent))
+	{
+		return false;
+	}
+
+	return HttpPolicyComponent->ConfigureProjectEpisodeOutput(
+		projectOutputEpisodeId,
+		projectEpisodeOutputDirectory,
+		projectEpisodeOutputRelativeDirectory);
+}
+
 FDeliveryBotObservationInfo ADeliveryBot::BuildPolicyObservation()
 {
 	FDeliveryBotObservationInfo observation;
@@ -565,6 +582,23 @@ void ADeliveryBot::NotifyGoalReachedByEvaluation()
 		return;
 
 	HttpPolicyComponent->EndScenario(TEXT("goal_reached"));
+}
+
+// 평가 종료 단계에서 로봇을 멈추고 Python /scenario/end를 요청한다.
+void ADeliveryBot::NotifyEpisodeFinalizingByEvaluation(const FString& status, FDeliveryBotPythonScenarioEndCallback onComplete)
+{
+	ApplyParkingStop();
+
+	if (!IsValid(HttpPolicyComponent))
+	{
+		FDeliveryBotPythonScenarioEndResult result;
+		result.Status = status;
+		result.ErrorMessage = TEXT("HttpPolicyComponent is invalid.");
+		if (onComplete) onComplete(result);
+		return;
+	}
+
+	HttpPolicyComponent->EndScenario(status, MoveTemp(onComplete));
 }
 
 // Python 서버에서 받은 마지막 scenario result JSON을 반환한다.

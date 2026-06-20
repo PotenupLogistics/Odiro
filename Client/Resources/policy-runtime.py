@@ -7,6 +7,7 @@ import inspect
 import json
 import os
 import sys
+import tempfile
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -504,6 +505,121 @@ def build_error_message(message: dict, code: str, error_message: str, reason: st
     )
 
 
+def build_start_artifact_error(code: str, message: str) -> dict:
+    """Build a non-retryable /scenario/start artifact initialization error."""
+    return {
+        "status": "error",
+        "accepted": False,
+        "pathStatus": "empty",
+        "error": {
+            "code": code,
+            "message": message,
+            "retryable": False,
+        },
+        "decision": {
+            "selectedPolicy": "PolicyRuntime",
+            "reason": "artifact_output_initialization_failed",
+        },
+        "path": {
+            "pathStatus": "empty",
+            "pathIndex": 0,
+            "pathLength": 0,
+            "targetPathIndex": 0,
+            "targetWorldPoint": None,
+            "pathWorldPoints": [],
+        },
+        "events": [],
+        "captures": [],
+    }
+
+
+def prepare_required_point_cloud_output(request_data: dict) -> dict | None:
+    """Validate and probe the required project-run Point Cloud output directory."""
+    if runtime is None:
+        return build_start_artifact_error(
+            "POLICY_RUNTIME_NOT_READY",
+            "Policy runtime is not initialized.",
+        )
+
+    lidar_spec = request_data.get("lidarSpec", {})
+    if not isinstance(lidar_spec, dict):
+        lidar_spec = {}
+    point_cloud_options = lidar_spec.get("pointCloudOptions", {})
+    if not isinstance(point_cloud_options, dict) or not bool(point_cloud_options.get("captureEnabled", False)):
+        return None
+
+    artifact_spec = request_data.get("artifactSpec", {})
+    if not isinstance(artifact_spec, dict) or not bool(artifact_spec.get("required", False)):
+        return None
+
+    configuration_error_code = str(artifact_spec.get("configurationErrorCode") or "")
+    if configuration_error_code:
+        return build_start_artifact_error(
+            configuration_error_code,
+            str(
+                artifact_spec.get("configurationErrorMessage")
+                or "Project episode output configuration is invalid."
+            ),
+        )
+
+    captures_root_text = str(artifact_spec.get("capturesRoot") or "")
+    if not captures_root_text:
+        return build_start_artifact_error(
+            "POINT_CLOUD_OUTPUT_PATH_MISSING",
+            "Required project episode output path is missing.",
+        )
+
+    captures_root = Path(captures_root_text).expanduser()
+    if not captures_root.is_absolute():
+        return build_start_artifact_error(
+            "INVALID_EPISODE_OUTPUT_PATH",
+            f"Required project episode output path must be absolute: {captures_root_text}",
+        )
+
+    resolved_captures_root = captures_root.resolve()
+    expected_episodes_root = (runtime.policy_path.parent.parent / "episodes").resolve()
+    try:
+        episode_relative_path = resolved_captures_root.relative_to(expected_episodes_root)
+    except ValueError:
+        return build_start_artifact_error(
+            "EPISODE_OUTPUT_OUTSIDE_RUN",
+            f"Project episode output must be under {expected_episodes_root}: {resolved_captures_root}",
+        )
+
+    if len(episode_relative_path.parts) != 1:
+        return build_start_artifact_error(
+            "INVALID_EPISODE_OUTPUT_PATH",
+            f"Project episode output must identify one episode directory: {resolved_captures_root}",
+        )
+
+    point_cloud_directory = resolved_captures_root / "lidar_point_cloud"
+    probe_path: Path | None = None
+    try:
+        point_cloud_directory.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            prefix=".odiro-write-probe-",
+            dir=point_cloud_directory,
+            delete=False,
+        ) as probe_file:
+            probe_file.write("ok\n")
+            probe_path = Path(probe_file.name)
+        probe_path.unlink()
+    except OSError as error:
+        try:
+            if probe_path is not None:
+                probe_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return build_start_artifact_error(
+            "POINT_CLOUD_OUTPUT_UNAVAILABLE",
+            f"Cannot initialize point cloud output at {resolved_captures_root}: {error}",
+        )
+
+    return None
+
+
 class PythonAgentHandler(BaseHTTPRequestHandler):
     """HTTP adapter for the loaded project policy."""
 
@@ -575,6 +691,9 @@ class PythonAgentHandler(BaseHTTPRequestHandler):
         request_data = get_request_data(request_json)
 
         if request_path == "/scenario/start":
+            artifact_error = prepare_required_point_cloud_output(request_data)
+            if artifact_error is not None:
+                return build_response_message(request_json, artifact_error)
             response = runtime.policy.start(parse_start(request_data), runtime.state)
             return build_response_message(request_json, response)
 

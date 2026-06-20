@@ -111,25 +111,71 @@ namespace
 		return FUserProjectEpisodeScenarioJson::BuildEpisodeId(FMath::Max(0, runRecord.RunIndex));
 	}
 
-	FString BuildProjectOutputPathForEpisode(const FString& projectOutputEpisodeId, const TCHAR* fileName)
+	// 현재 project run의 episode 절대 경로와 run 기준 상대 경로를 함께 만든다.
+	bool TryBuildProjectEpisodeOutputDirectories(
+		const FString& projectOutputEpisodeId,
+		FString& outAbsoluteDirectory,
+		FString& outRunRelativeDirectory)
 	{
+		outAbsoluteDirectory.Reset();
+		outRunRelativeDirectory.Reset();
+
 		const FSimulationCommandLineParseResult commandLineResult = FSimulationCommandLine::ParseCurrent();
 		if (!commandLineResult.bSuccess || !commandLineResult.Options.bProjectRun)
 		{
-			return FString();
+			return false;
 		}
 
 		if (!FUserProjectEpisodeScenarioJson::IsValidEpisodeId(projectOutputEpisodeId))
 		{
-			return FString();
+			return false;
 		}
 
 		const FUserProjectRunSnapshotPaths paths = FUserProjectRunSnapshot::BuildPaths(
 			commandLineResult.Options.ProjectPath,
 			commandLineResult.Options.RunId);
-		return FPaths::Combine(
-			FUserProjectRunOutputJson::BuildEpisodeDirectory(paths, projectOutputEpisodeId),
-			fileName);
+		outAbsoluteDirectory = FUserProjectRunOutputJson::BuildEpisodeDirectory(paths, projectOutputEpisodeId);
+		outRunRelativeDirectory = outAbsoluteDirectory;
+
+		FString runDirectory = paths.RunPath;
+		FPaths::NormalizeDirectoryName(runDirectory);
+		if (!runDirectory.EndsWith(TEXT("/")))
+		{
+			runDirectory += TEXT("/");
+		}
+
+		if (!FPaths::MakePathRelativeTo(outRunRelativeDirectory, *runDirectory))
+		{
+			outAbsoluteDirectory.Reset();
+			outRunRelativeDirectory.Reset();
+			return false;
+		}
+
+		FPaths::NormalizeDirectoryName(outAbsoluteDirectory);
+		FPaths::NormalizeFilename(outRunRelativeDirectory);
+		if (outRunRelativeDirectory.Equals(TEXT("..")) || outRunRelativeDirectory.StartsWith(TEXT("../")))
+		{
+			outAbsoluteDirectory.Reset();
+			outRunRelativeDirectory.Reset();
+			return false;
+		}
+
+		return true;
+	}
+
+	FString BuildProjectOutputPathForEpisode(const FString& projectOutputEpisodeId, const TCHAR* fileName)
+	{
+		FString absoluteDirectory;
+		FString runRelativeDirectory;
+		if (!TryBuildProjectEpisodeOutputDirectories(
+				projectOutputEpisodeId,
+				absoluteDirectory,
+				runRelativeDirectory))
+		{
+			return FString();
+		}
+
+		return FPaths::Combine(absoluteDirectory, fileName);
 	}
 
 	bool EnsureProjectJsonlFileExists(const FString& jsonlPath)
@@ -198,15 +244,38 @@ namespace
 		}
 	}
 
-	void ConfigureProjectActionLoggingForEpisode(
+	bool ConfigureProjectEpisodeOutputForEpisode(
 		const FScenarioRuntimeContext& runtimeContext,
 		const FString& projectOutputEpisodeId)
 	{
 		ADeliveryBot* deliveryBot = Cast<ADeliveryBot>(runtimeContext.RobotActor);
-		if (IsValid(deliveryBot))
+		if (!IsValid(deliveryBot))
 		{
-			deliveryBot->ConfigureProjectActionLogging(projectOutputEpisodeId);
+			return false;
 		}
+
+		FString absoluteDirectory;
+		FString runRelativeDirectory;
+		if (!TryBuildProjectEpisodeOutputDirectories(
+				projectOutputEpisodeId,
+				absoluteDirectory,
+				runRelativeDirectory))
+		{
+			UE_LOG(
+				LogScenarioRunner,
+				Warning,
+				TEXT("Project episode output configuration failed | Episode: %s"),
+				*projectOutputEpisodeId);
+			return deliveryBot->ConfigureProjectEpisodeOutput(
+				projectOutputEpisodeId,
+				FString(),
+				FString());
+		}
+
+		return deliveryBot->ConfigureProjectEpisodeOutput(
+			projectOutputEpisodeId,
+			absoluteDirectory,
+			runRelativeDirectory);
 	}
 
 	FScenarioSimulationSetupSpec MakeSimulationSetupSpec(const FScenarioWorldSpec& worldSpec)
@@ -560,7 +629,10 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		return;
 	}
 
-	const bool bRunnerManagedPolicyStart = !CurrentRunInput.PolicySpecJsonPath.IsEmpty();
+	const FSimulationCommandLineParseResult commandLineResult = FSimulationCommandLine::ParseCurrent();
+	const bool bProjectRun = commandLineResult.bSuccess && commandLineResult.Options.bProjectRun;
+	// Project run은 episode 출력 경로를 /scenario/start보다 먼저 주입해야 하므로 runner가 policy 시작을 소유한다.
+	const bool bRunnerManagedPolicyStart = bProjectRun || !CurrentRunInput.PolicySpecJsonPath.IsEmpty();
 
 	const bool bDeliveryBotSetupApplied = ApplyDeliveryBotSetupToWorldSpec(
 		compileResult.WorldSpec,
@@ -619,7 +691,15 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		return;
 	}
 
-	ConfigureProjectActionLoggingForEpisode(runtimeContext, projectOutputEpisodeId);
+	if (bProjectRun && !ConfigureProjectEpisodeOutputForEpisode(runtimeContext, projectOutputEpisodeId))
+	{
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Project episode output 설정 오류를 /scenario/start로 전달 | RunId: %s, Episode: %s"),
+			*CurrentRecord.RunId,
+			*projectOutputEpisodeId);
+	}
 
 	if (bRunnerManagedPolicyStart)
 	{

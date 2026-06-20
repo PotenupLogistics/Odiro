@@ -27,8 +27,12 @@ FRAME_DIRECTORY_NAME = "frames"
 FRAME_INDEX_FILE_NAME = "frames.jsonl"
 
 
-# CLI input path to the actual captures/lidar_point_cloud directory.
+# Resolve an episode, legacy capture run, or direct lidar_point_cloud input path.
 def _resolve_lidar_capture_directory(input_path: Path) -> Path:
+    project_episode_capture_path = input_path / "lidar_point_cloud"
+    if project_episode_capture_path.exists():
+        return project_episode_capture_path
+
     nested_capture_path = input_path / "captures" / "lidar_point_cloud"
     if nested_capture_path.exists():
         return nested_capture_path
@@ -299,7 +303,7 @@ def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate a DeliveryBot LiDAR Point Cloud capture folder.")
     parser.add_argument(
         "capture_path",
-        help="Path to a seq_* run folder or its captures/lidar_point_cloud folder.",
+        help="Path to an episode folder, legacy seq_* folder, or lidar_point_cloud folder.",
     )
     parser.add_argument(
         "--expected-profile",

@@ -7,6 +7,7 @@
 #include "Shared/Struct/DeliveryBot/Perception/DeliveryBotPointCloudCaptureConfigInfo.h"
 #include "Shared/Struct/DeliveryBot/Result/DeliveryBotPythonCaptureRefInfo.h"
 #include "Shared/Struct/DeliveryBot/Result/DeliveryBotPolicyDecisionResultInfo.h"
+#include "Shared/Struct/DeliveryBot/Result/DeliveryBotPythonScenarioEndInfo.h"
 #include "DeliveryBot_HttpPolicyComponent.generated.h"
 
 class FJsonObject;
@@ -27,6 +28,13 @@ public:
 	void UpdatePolicy(float deltaTime);			// start 재시도와 decide 반복 요청을 갱신한다
 	void EndScenario(const FString& status);	// Python 서버에 scenario end 요청을 보낸다
 	void ConfigureProjectActionLogging(const FString& projectOutputEpisodeId); // project actions.jsonl 기록 대상 output episode를 고정한다
+	bool ConfigureProjectEpisodeOutput(
+		const FString& projectOutputEpisodeId,
+		const FString& projectEpisodeOutputDirectory,
+		const FString& projectEpisodeOutputRelativeDirectory); // project episode artifact의 절대/상대 출력 루트를 고정한다
+
+	// Python /scenario/end 요청을 보내고 완료 결과를 callback으로 돌려준다.
+	void EndScenario(const FString& status, FDeliveryBotPythonScenarioEndCallback onComplete);
 
 public:
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
@@ -141,6 +149,11 @@ private:
 private:
 	FString EpisodeId; // 현재 Python scenario/capture run id
 	FString ProjectActionEpisodeId; // runner가 지정한 user project output episode id
+	bool bProjectEpisodeOutputRequired{ false }; // project run에서 Python artifact 출력 경로가 필수인지 여부
+	FString ProjectEpisodeOutputDirectory; // Python artifact를 저장할 project episode 절대 경로
+	FString ProjectEpisodeOutputRelativeDirectory; // run 폴더 기준 project episode 상대 경로
+	FString ProjectEpisodeOutputErrorCode; // /scenario/start로 전달할 project episode 경로 설정 오류 코드
+	FString ProjectEpisodeOutputErrorMessage; // /scenario/start로 전달할 project episode 경로 설정 오류 설명
 	FString RobotInstanceId; // Python payload에 사용하는 robot instance id
 	FString LastScenarioResultJson; // 마지막 scenario result JSON 문자열
 

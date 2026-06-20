@@ -9,6 +9,7 @@
 #include "Shared/Struct/DeliveryBot/Observation/DeliveryBotObservationInfo.h"
 #include "Shared/Struct/DeliveryBot/Result/DeliveryBotPythonCaptureRefInfo.h"
 #include "Shared/Struct/DeliveryBot/Result/DeliveryBotPolicyDecisionResultInfo.h"
+#include "Shared/Struct/DeliveryBot/Result/DeliveryBotPythonScenarioEndInfo.h"
 #include "DeliveryBot.generated.h"
 
 USTRUCT(BlueprintType)
@@ -75,6 +76,10 @@ public:
 	bool StartPolicyRunWithPolicySpecFileName(const FString& policySpecFileName);
 
 	void ConfigureProjectActionLogging(const FString& projectOutputEpisodeId); // project actions.jsonl 기록 대상 output episode를 전달한다
+	bool ConfigureProjectEpisodeOutput(
+		const FString& projectOutputEpisodeId,
+		const FString& projectEpisodeOutputDirectory,
+		const FString& projectEpisodeOutputRelativeDirectory); // project episode artifact 출력 루트를 HTTP policy component에 전달한다
 
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Observation")
 	FDeliveryBotObservationInfo BuildPolicyObservation();
@@ -95,6 +100,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Python")
 	void NotifyGoalReachedByEvaluation(); // 평가 시스템이 목표 도착을 알렸을 때 Python 서버에 종료를 요청한다
+
+	// 평가 종료 단계에서 로봇을 멈추고 Python /scenario/end를 요청한다.
+	void NotifyEpisodeFinalizingByEvaluation(const FString& status, FDeliveryBotPythonScenarioEndCallback onComplete);
 
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
 	FString GetLastPythonScenarioResultJson() const; // Python 서버에서 받은 마지막 scenario result JSON을 반환한다

@@ -104,103 +104,37 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 
 ## `POST /api/v2/analysis/run`
 
-### 목적
+특정 `<project_path>/runs/<run_id>` 결과를 분석하고 API response와 review artifact를 생성합니다.
 
-사용자 project의 특정 run 결과를 분석하여 정책 또는 환경 개선 필요 여부를 판단합니다. 분석 결과는 기존 response schema로 반환하며, 동시에 review artifact를 사용자 project 내부에 저장합니다.
+상세 규격은 [result-analysis-v2-api.md](result-analysis-v2-api.md)를 참고합니다.
 
-### Request
+### Endpoint
 
-```json
-{
-  "project_path": "X:/Projects/DeliveryBotA",
-  "run_id": "000001",
-  "prompt": "장애물 때문에 실패했는지 중심으로 다시 분석해줘"
-}
-```
+`POST /api/v2/analysis/run`
 
-필수:
+### Request 핵심 필드
 
 * `project_path`: 사용자 project root
-* `run_id`: 6자리 decimal string
+* `run_id`: 6자리 run id
+* `prompt`: 선택 입력인 자연어 재분석 요청
 
-옵션:
+### Response 핵심 필드
 
-* `prompt`: 사용자 자연어 재분석 요청입니다. 현재는 LLM 호출 없이 rule-based keyword focus만 summary message에 보조 반영하며, metrics나 recommendation을 조작하지 않습니다.
+* `review_id`
+* `run_id`
+* `analysis_mode`
+* `summary`
+* `metrics`
+* `recommendation_type`
+* `recommendations`
+* `analysis_text`
+* `warnings`
 
-아래 값은 받지 않습니다.
-
-* `experiment_id`
-* `path`
-* `analysis_option`
-
-### Response
-
-```json
-{
-  "schema": "analysis_run_response_v2",
-  "version": 2,
-  "status": "success",
-  "analysis_scope": {
-    "experiments_count": 1,
-    "runs_count": 1,
-    "episodes_count": 20
-  },
-  "summary": {
-    "overall_judgement": "change_recommended",
-    "message": "반복 실패 패턴이 확인되어 정책 또는 환경 개선 검토가 필요합니다."
-  },
-  "metrics": {
-    "success_count": 12,
-    "failure_count": 8,
-    "collision_count": 1,
-    "near_miss_count": 4,
-    "blocked_region_violation_count": 5,
-    "penalty_region_violation_count": 0
-  },
-  "patterns": [],
-  "recommendations": [],
-  "modified_policy_json": [],
-  "modified_environment_json": [],
-  "warnings": [],
-  "analysis_mode": "rule_based"
-}
-```
-
-### Review artifact
-
-요청한 run directory가 존재하면 review artifact를 아래 위치에 저장합니다.
+### Review 저장 위치
 
 ```text
 <project_path>/runs/<run_id>/review/<review_id>/
 ```
-
-생성 파일:
-
-* `status.json`
-* `request.json`
-* `report.json`
-* `recommendations.json`
-* `manifest.json`
-
-`review_id`는 `0001`, `0002`처럼 증가합니다. API는 `review_id`만 생성하며, `run_id`와 `episode_id`는 request와 run artifact에서 읽은 값을 사용합니다. `<project_path>/runs/<run_id>`가 없으면 기존처럼 `insufficient_data` response를 반환하고 review directory를 만들지 않습니다.
-
-project-level index는 `<project_path>/analysis_index.json`에 갱신합니다.
-
-### `overall_judgement`
-
-| 값 | 의미 |
-| --- | --- |
-| `change_recommended` | 반복 실패 패턴 또는 개선 필요성이 확인됨 |
-| `no_change_needed` | 반복 실패 패턴이 없고 추천할 수정 사항이 없음 |
-| `insufficient_data` | 분석 가능한 실행 결과가 부족함 |
-
-### `analysis_mode`
-
-| 값 | 의미 |
-| --- | --- |
-| `rule_based` | LLM 비활성 상태에서 rule-based 분석/추천 사용 |
-| `llm` | LLM 추천이 검증을 통과하여 반영됨 |
-| `fallback` | LLM 실패 또는 검증 실패 후 rule-based fallback 사용 |
 
 ## LLM mode 설정
 

@@ -4,12 +4,18 @@ from typing import Any
 
 
 class RecommendationValidator:
+    """Validates and normalizes recommendation items before response persistence."""
+
     def validate(self, recommendations: list[dict[str, Any]], known_episode_refs: set[tuple[str, str, str]]) -> list[dict[str, Any]]:
+        """Keep only supported recommendations and normalize legacy text fields."""
         valid: list[dict[str, Any]] = []
         for recommendation in recommendations:
+            recommendation = self._normalize_recommendation(recommendation)
             if not recommendation.get("id"):
                 continue
             if recommendation.get("target") not in {"policy", "environment"}:
+                continue
+            if not isinstance(recommendation.get("recommendation"), str) or not recommendation["recommendation"]:
                 continue
             proposed_change = recommendation.get("proposed_change")
             if not isinstance(proposed_change, dict) or not isinstance(proposed_change.get("content"), dict):
@@ -21,6 +27,7 @@ class RecommendationValidator:
         return valid
 
     def _evidence_exists(self, evidence: list[Any], refs: set[tuple[str, str, str]]) -> bool:
+        """Return whether every referenced episode exists in the analysis input."""
         for item in evidence:
             if not isinstance(item, dict):
                 return False
@@ -28,3 +35,11 @@ class RecommendationValidator:
             if ref not in refs:
                 return False
         return True
+
+    def _normalize_recommendation(self, recommendation: dict[str, Any]) -> dict[str, Any]:
+        """Convert legacy llm_recommendation text into the public recommendation field."""
+        normalized = {key: value for key, value in recommendation.items() if key != "llm_recommendation"}
+        recommendation_text = recommendation.get("recommendation") or recommendation.get("llm_recommendation")
+        if isinstance(recommendation_text, str):
+            normalized["recommendation"] = recommendation_text
+        return normalized

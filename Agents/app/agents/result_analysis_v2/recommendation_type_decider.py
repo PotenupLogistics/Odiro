@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from app.agents.result_analysis_v2.review_text import recommendation_type_reason
+
 
 @dataclass(frozen=True)
 class RecommendationTypeDecision:
@@ -28,14 +30,14 @@ class RecommendationTypeDecider:
         if summary_judgement == "insufficient_data" or self._has_no_result_basis(data_coverage):
             return RecommendationTypeDecision(
                 recommendation_type="insufficient_data",
-                reason="Analysis did not have enough run result data.",
+                reason=recommendation_type_reason("insufficient_data"),
                 evidence_ids=[],
             )
 
         if not findings:
             return RecommendationTypeDecision(
                 recommendation_type="none",
-                reason="No evidence-backed findings require policy or environment review.",
+                reason=recommendation_type_reason("none"),
                 evidence_ids=[],
             )
 
@@ -43,14 +45,23 @@ class RecommendationTypeDecider:
         if any(finding.get("type") in environment_types for finding in findings):
             return RecommendationTypeDecision(
                 recommendation_type="environment_review",
-                reason="Environment-related collision or blocked-region evidence was found.",
+                reason=recommendation_type_reason("environment_review"),
                 evidence_ids=self._evidence_ids(findings, environment_types),
             )
 
-        policy_types = {"penalty_region_violation", "timeout", "goal_not_reached", "near_miss"}
+        policy_types = {
+            "penalty_region_violation",
+            "pedestrian_collision",
+            "timeout",
+            "goal_not_reached",
+            "near_miss",
+            "policy_decision_error",
+            "stuck",
+            "robot_tip_over",
+        }
         return RecommendationTypeDecision(
             recommendation_type="policy_review",
-            reason="Policy-related failure evidence was found.",
+            reason=recommendation_type_reason("policy_review"),
             evidence_ids=self._evidence_ids(findings, policy_types),
         )
 

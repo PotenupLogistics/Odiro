@@ -5,6 +5,7 @@ from typing import Any
 
 from app.agents.result_analysis_v2.artifact_parser import ParsedArtifact
 from app.agents.result_analysis_v2.episode_metric_extractor import EpisodeMetrics
+from app.agents.result_analysis_v2.review_text import evidence_message, finding_summary, finding_title
 
 
 @dataclass(frozen=True)
@@ -60,27 +61,53 @@ class FindingBuilder:
                 "penalty_region_violation",
                 "penalty_region_violation_count",
                 episode.penalty_region_violation_count,
-                f"Penalty region violation count is {episode.penalty_region_violation_count}.",
+                evidence_message("penalty_region_violation", episode.penalty_region_violation_count),
             ),
             (
                 "static_obstacle_collision",
                 "static_obstacle_collision_count",
                 episode.static_obstacle_collision_count,
-                f"Static obstacle collision count is {episode.static_obstacle_collision_count}.",
+                evidence_message("static_obstacle_collision", episode.static_obstacle_collision_count),
+            ),
+            (
+                "pedestrian_collision",
+                "pedestrian_collision_count",
+                episode.pedestrian_collision_count,
+                evidence_message("pedestrian_collision", episode.pedestrian_collision_count),
             ),
             (
                 "blocked_region_collision",
                 "blocked_region_violation_count",
                 episode.blocked_region_violation_count,
-                f"Blocked region violation count is {episode.blocked_region_violation_count}.",
+                evidence_message("blocked_region_collision", episode.blocked_region_violation_count),
             ),
-            ("near_miss", "near_miss_count", episode.near_miss_count, f"Near miss count is {episode.near_miss_count}."),
-            ("timeout", "timeout", 1 if episode.timeout else 0, "Episode timed out."),
+            ("near_miss", "near_miss_count", episode.near_miss_count, evidence_message("near_miss", episode.near_miss_count)),
+            ("timeout", "timeout", 1 if episode.timeout else 0, evidence_message("timeout", 1)),
+            (
+                "policy_decision_error",
+                "policy_decision_error_count",
+                episode.policy_decision_error_count,
+                evidence_message("policy_decision_error", episode.policy_decision_error_count),
+            ),
+            (
+                "stuck",
+                "stuck_count",
+                episode.stuck_count
+                or (1 if episode.failure_type == "stuck" else 0)
+                or (1 if episode.stuck_duration_s and episode.stuck_duration_s > 0 else 0),
+                evidence_message("stuck", 1),
+            ),
+            (
+                "robot_tip_over",
+                "robot_tip_over_count",
+                episode.robot_tip_over_count,
+                evidence_message("robot_tip_over", episode.robot_tip_over_count),
+            ),
             (
                 "goal_not_reached",
                 "goal_reached",
                 1 if episode.goal_reached is False or (episode.success is False and episode.failure_type != "timeout") else 0,
-                "Episode did not reach the goal.",
+                evidence_message("goal_not_reached", 1),
             ),
         ]
         return signals
@@ -94,20 +121,12 @@ class FindingBuilder:
         index: int,
     ) -> dict[str, Any]:
         """Create a stable finding record for report.json."""
-        titles = {
-            "penalty_region_violation": "Penalty region violation repeated across episodes",
-            "static_obstacle_collision": "Static obstacle collision evidence found",
-            "blocked_region_collision": "Blocked region collision or violation evidence found",
-            "near_miss": "Near miss evidence found",
-            "goal_not_reached": "Goal was not reached",
-            "timeout": "Timeout evidence found",
-        }
         return {
             "finding_id": f"F-{index:04d}",
             "type": finding_type,
             "severity": "medium",
-            "title": titles.get(finding_type, finding_type),
-            "summary": f"{finding_type} is supported by {len(evidence_ids)} evidence item(s).",
+            "title": finding_title(finding_type),
+            "summary": finding_summary(finding_type, len(evidence_ids)),
             "evidence_ids": evidence_ids,
             "prompt_focus": prompt_focus,
         }

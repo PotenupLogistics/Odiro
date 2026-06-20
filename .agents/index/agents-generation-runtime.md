@@ -38,6 +38,11 @@ entry:
   - Agents/app/agents/scenario_generation_v2/graph_runner.py
   - Agents/app/agents/result_analysis_v2/agent.py
   - Agents/app/agents/result_analysis_v2/graph_runner.py
+  - Agents/app/agents/result_analysis_v2/recommendation_generator.py
+  - Agents/app/agents/result_analysis_v2/recommendation_validator.py
+  - Agents/app/agents/result_analysis_v2/recommendation_artifact_writer.py
+  - Agents/app/agents/result_analysis_v2/analysis_text_builder.py
+  - Agents/app/agents/result_analysis_v2/review_text.py
   - Agents/app/services/world_config_generation_orchestrator.py
   - Agents/app/services/world_config_to_episode_setup_adapter.py
   - Agents/app/services/world_config_to_delivery_bot_setup_adapter.py
@@ -57,10 +62,18 @@ keep:
   - Public scenario generation must not call legacy RunQueue export tooling; `/api/v1/scenarios/generate` returns `410 RUN_QUEUE_REMOVED`.
   - Agents/app/services/scenario_generation_service.py is legacy tooling, not the active v2 scenario path.
   - RunQueue export services, models, and tests are retained only as legacy tooling, not public API or user project runtime.
+  - `/api/v2/analysis/run` writes review artifacts under `<project_path>/runs/<run_id>/review/<review_id>/`; root `policy/` and `scenario.json` are read-only candidate sources.
+  - `analysis_text` is API response display text only; do not persist it into review JSON artifacts.
+  - Result analysis recommendation items use the public `recommendation` field; normalize legacy `llm_recommendation` before API or artifact output.
+  - Result analysis summary messages follow the final `recommendation_type`; UI-facing finding and evidence text is Korean while stable metric/type codes remain English.
+  - Policy review candidates must modify only the review-copy policy or emit an artifact warning when no supported policy parameter can be changed.
+  - Result analysis `data_coverage` separates existing action logs, parsed action logs, large-file skips, and broken JSON paths for run-local diagnostics.
 verify:
   - focused pytest for touched route/model/service
   - contract validation when payload fields change
   - result analysis review artifact tests when `/api/v2/analysis/run` storage behavior changes
+  - `uv run pytest tests/test_v2_analysis_recommendation_artifacts.py tests/test_v2_analysis_text.py tests/test_v2_result_schema_parsing.py -q` when analysis recommendation artifacts or parsing change
+  - `uv run pytest tests/test_v2_analysis_run_api.py tests/test_v2_analysis_review_lifecycle.py -q` when recommendation response fields or review lifecycle output changes
   - v2 spec context prompt tests when LLM prompt context allowlist or injection changes
 related:
   - agents-policy-rag-data

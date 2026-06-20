@@ -86,6 +86,7 @@ Scenic은 probabilistic scenario specification language다.
 
 * 현재 프로젝트는 Scenic 전체 구현이 아니다.
 * 이 문서 작성 당시 프로젝트는 Scenic DSL을 사용하고 있지 않았다.
+* 현재 v2 기준에서도 Scenic DSL을 사용하고 있지 않다.
 * 현재 프로젝트에 Scenic runtime dependency를 추가하지 않았다.
 * 현재 프로젝트는 Scenic-inspired placement and scenario sampling direction을 일부 참고한다.
 * 현재 구현은 자연어 -> WorldConfig -> EpisodeSpec 변환 구조다.

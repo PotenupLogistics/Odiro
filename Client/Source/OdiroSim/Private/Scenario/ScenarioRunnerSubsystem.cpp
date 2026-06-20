@@ -1,4 +1,4 @@
-﻿
+
 #include "Scenario/ScenarioRunnerSubsystem.h"
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
@@ -629,6 +629,11 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		return;
 	}
 
+	if (CurrentRunInput.bOverrideEvaluationConfig)
+	{
+		compileResult.WorldSpec.EvaluationConfig = CurrentRunInput.EvaluationConfig;
+	}
+
 	const FSimulationCommandLineParseResult commandLineResult = FSimulationCommandLine::ParseCurrent();
 	const bool bProjectRun = commandLineResult.bSuccess && commandLineResult.Options.bProjectRun;
 	// Project run은 episode 출력 경로를 /scenario/start보다 먼저 주입해야 하므로 runner가 policy 시작을 소유한다.
@@ -756,10 +761,13 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	UE_LOG(
 		LogScenarioRunner,
 		Log,
-		TEXT("평가 전달 | RunId: %s, Episode: %s, TimeLimit: %.2fs, Robot: %s, HasGoal: %s, RuntimeActors: %d, GroundRegions: %d, StaticObstacles: %d, Pedestrians: %d"),
+		TEXT("평가 전달 | RunId: %s, Episode: %s, TimeLimit: %.2fs, GoalRadius: %.1fcm, TipOver: %.1fdeg, NearMiss: %.1fcm, Robot: %s, HasGoal: %s, RuntimeActors: %d, GroundRegions: %d, StaticObstacles: %d, Pedestrians: %d"),
 		*CurrentRecord.RunId,
 		*runtimeContext.EpisodeId,
 		timeLimitSeconds,
+		compileResult.WorldSpec.EvaluationConfig.GoalAcceptanceRadiusCm,
+		compileResult.WorldSpec.EvaluationConfig.TipOverAngleDegrees,
+		compileResult.WorldSpec.EvaluationConfig.NearMissDistanceCm,
 		*runtimeContext.RobotInstanceId,
 		runtimeContext.bHasGoalLocation ? TEXT("true") : TEXT("false"),
 		runtimeContext.RuntimeActors.Num(),
@@ -871,30 +879,12 @@ void UScenarioRunnerSubsystem::AppendDeliveryBotSetupDiagnostics(const FDelivery
 
 double UScenarioRunnerSubsystem::GetRunTimeLimitSeconds(const FScenarioRunConfig& runConfig) const
 {
-	const FScenarioParamValue* timeLimitParam = runConfig.Parameters.Find(TEXT("time_limit_s"));
-	if (!timeLimitParam) return 0.0;
-
-	double timeLimitSeconds = 0.0;
-	if (timeLimitParam->Type == EScenarioParamValueType::Float)
+	if (runConfig.MaxDurationSeconds < 0.0)
 	{
-		timeLimitSeconds = timeLimitParam->FloatValue;
-	}
-	else if (timeLimitParam->Type == EScenarioParamValueType::Integer)
-	{
-		timeLimitSeconds = static_cast<double>(timeLimitParam->IntegerValue);
-	}
-	else
-	{
-		UE_LOG(LogScenarioRunner, Warning, TEXT("숫자가 아닌 run parameter 'time_limit_s' 무시 | Template: %s"), *runConfig.TemplateId);
-		return 0.0;
+		UE_LOG(LogScenarioRunner, Warning, TEXT("음수 RunConfig.MaxDurationSeconds 클램프 | Template: %s, Value: %.2f"), *runConfig.TemplateId, runConfig.MaxDurationSeconds);
 	}
 
-	if (timeLimitSeconds < 0.0)
-	{
-		UE_LOG(LogScenarioRunner, Warning, TEXT("음수 run parameter 'time_limit_s' 클램프 | Template: %s, Value: %.2f"), *runConfig.TemplateId, timeLimitSeconds);
-	}
-
-	return FMath::Max(0.0, timeLimitSeconds);
+	return FMath::Max(0.0, runConfig.MaxDurationSeconds);
 }
 
 FString UScenarioRunnerSubsystem::BuildRunId() const

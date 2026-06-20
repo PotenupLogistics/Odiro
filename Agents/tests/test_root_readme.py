@@ -14,7 +14,7 @@ def test_root_readme_exists_and_is_not_empty() -> None:
 
 def test_root_readme_contains_project_entrypoint_sections() -> None:
     text = README.read_text(encoding="utf-8-sig")
-    assert "# Proto-AI" in text
+    assert "# Odiro Agents" in text
     assert "WorldConfig" in text
     assert "EpisodeSpec" in text
     assert "UE5 Handoff Archive" in text

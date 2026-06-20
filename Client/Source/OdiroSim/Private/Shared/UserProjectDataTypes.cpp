@@ -467,7 +467,7 @@ FUserProjectEpisodeScenarioWriteResult FUserProjectEpisodeScenarioJson::WriteEpi
 	}
 
 	FScenarioSampleDocument sampleDocument = sampleResult.Document;
-	sampleDocument.Scenario.Params.Add(TEXT("time_limit_s"), MakeScenarioSampleFloatParam(setting.MaxDurationSeconds));
+	sampleDocument.Scenario.Params.Add(TEXT("max_duration_s"), MakeScenarioSampleFloatParam(setting.MaxDurationSeconds));
 
 	FString outputJson;
 	TArray<FScenarioSchemaDiagnostic> sampleWriteDiagnostics;
@@ -585,6 +585,241 @@ namespace
 		return TEXT("Unknown");
 	}
 
+	// events.jsonl 매핑은 런타임 detector가 JSON 이름을 알지 않도록 typed snapshot 필드만 읽는다.
+	FString ReadEventStringProperty(const FEpisodeEvaluationEvent& event, const FString& key)
+	{
+		if (const FScenarioParamValue* value = event.Properties.Find(key))
+		{
+			if (value->Type == EScenarioParamValueType::String)
+			{
+				return value->StringValue.TrimStartAndEnd();
+			}
+		}
+
+		return FString();
+	}
+
+	// Event/action joins reuse typed policy sequence snapshots without leaking JSON field names to detectors.
+	bool TryReadEventSequenceProperty(const FEpisodeEvaluationEvent& event, const FString& key, int32& outSequence)
+	{
+		if (const FScenarioParamValue* value = event.Properties.Find(key))
+		{
+			if (value->Type == EScenarioParamValueType::Integer && value->IntegerValue >= 0)
+			{
+				outSequence = value->IntegerValue;
+				return true;
+			}
+			if (value->Type == EScenarioParamValueType::Float && value->FloatValue >= 0.0)
+			{
+				const double roundedValue = FMath::RoundToDouble(value->FloatValue);
+				if (FMath::IsNearlyEqual(value->FloatValue, roundedValue))
+				{
+					outSequence = static_cast<int32>(roundedValue);
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	TSharedPtr<FJsonValue> MakeEventActionSequenceValue(const FEpisodeEvaluationEvent& event)
+	{
+		int32 actionSequence = 0;
+		if (TryReadEventSequenceProperty(event, TEXT("action_sequence"), actionSequence)
+			|| TryReadEventSequenceProperty(event, TEXT("policy_sequence"), actionSequence))
+		{
+			return MakeShared<FJsonValueNumber>(actionSequence);
+		}
+
+		return MakeShared<FJsonValueNull>();
+	}
+
+	// Policy and runtime pathfinding failures arrive with several error code spellings.
+	bool IsPathfindFailureCode(const FString& value)
+	{
+		const FString normalizedValue = value.TrimStartAndEnd();
+		return normalizedValue.Equals(TEXT("PathfindFail"), ESearchCase::IgnoreCase)
+			|| normalizedValue.Equals(TEXT("PathFindingFailed"), ESearchCase::IgnoreCase)
+			|| normalizedValue.Equals(TEXT("PATH_NOT_FOUND"), ESearchCase::IgnoreCase)
+			|| normalizedValue.Equals(TEXT("path_not_found"), ESearchCase::IgnoreCase)
+			|| normalizedValue.Equals(TEXT("start_cell_blocked"), ESearchCase::IgnoreCase)
+			|| normalizedValue.Equals(TEXT("goal_cell_blocked"), ESearchCase::IgnoreCase);
+	}
+
+	// DeliveryBotPolicyFailure는 외부 계약의 PathfindFail과 PolicyDecisionError로 나뉜다.
+	bool IsPolicyPathfindFailureEvent(const FEpisodeEvaluationEvent& event)
+	{
+		return IsPathfindFailureCode(ReadEventStringProperty(event, TEXT("error_code")))
+			|| IsPathfindFailureCode(ReadEventStringProperty(event, TEXT("policy_event_code")))
+			|| IsPathfindFailureCode(ReadEventStringProperty(event, TEXT("policy_reason")));
+	}
+
+	// Stuck은 generic DeliveryBotSimulationFailure snapshot의 외부 event_type 세분화다.
+	bool IsStuckSimulationFailureEvent(const FEpisodeEvaluationEvent& event)
+	{
+		return ReadEventStringProperty(event, TEXT("delivery_bot_failure_type")).Equals(TEXT("Stuck"), ESearchCase::IgnoreCase)
+			|| ReadEventStringProperty(event, TEXT("failure_type")).Equals(TEXT("Stuck"), ESearchCase::IgnoreCase);
+	}
+
+	// 내부 evaluation enum을 문서화된 외부 events.jsonl event_type 값으로 변환한다.
+	FString ResolveUserProjectEventType(const FEpisodeEvaluationEvent& event)
+	{
+		switch (event.EventType)
+		{
+		case EEpisodeEvaluationEventType::DeliveryBotRepath:
+			return TEXT("Repath");
+		case EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure:
+			return TEXT("PolicyDecisionError");
+		case EEpisodeEvaluationEventType::DeliveryBotPolicyFailure:
+			return IsPolicyPathfindFailureEvent(event)
+				? TEXT("PathfindFail")
+				: TEXT("PolicyDecisionError");
+		case EEpisodeEvaluationEventType::DeliveryBotSimulationFailure:
+			return IsStuckSimulationFailureEvent(event)
+				? TEXT("Stuck")
+				: TEXT("DeliveryBotSimulationFailure");
+		default:
+			return ToUserProjectEnumString(event.EventType);
+		}
+	}
+
+	// source 이름은 downstream 분석에서 책임 subsystem 경계를 설명한다.
+	FString ResolveUserProjectEventSource(const FEpisodeEvaluationEvent& event)
+	{
+		switch (event.EventType)
+		{
+		case EEpisodeEvaluationEventType::DeliveryBotRepath:
+			return TEXT("PythonPolicy");
+		case EEpisodeEvaluationEventType::DeliveryBotPolicyFailure:
+			return IsPolicyPathfindFailureEvent(event)
+				? TEXT("PythonPolicy")
+				: TEXT("PolicyRuntime");
+		case EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure:
+			return TEXT("PolicyRuntime");
+		default:
+			return TEXT("EvaluationSubsystem");
+		}
+	}
+
+	// reason은 event snapshot에서 얻을 수 있는 가장 구체적인 detector 또는 policy code를 유지한다.
+	FString ResolveUserProjectEventReason(const FEpisodeEvaluationEvent& event)
+	{
+		if (event.EventType == EEpisodeEvaluationEventType::DeliveryBotRepath)
+		{
+			const FString policyReason = ReadEventStringProperty(event, TEXT("policy_reason"));
+			if (!policyReason.IsEmpty()) return policyReason;
+
+			const FString policyEventCode = ReadEventStringProperty(event, TEXT("policy_event_code"));
+			if (!policyEventCode.IsEmpty()) return policyEventCode;
+		}
+
+		if (event.EventType == EEpisodeEvaluationEventType::DeliveryBotPolicyFailure
+			|| event.EventType == EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure)
+		{
+			const FString errorCode = ReadEventStringProperty(event, TEXT("error_code"));
+			if (!errorCode.IsEmpty()) return errorCode;
+
+			const FString policyReason = ReadEventStringProperty(event, TEXT("policy_reason"));
+			if (!policyReason.IsEmpty()) return policyReason;
+
+			const FString policyEventCode = ReadEventStringProperty(event, TEXT("policy_event_code"));
+			if (!policyEventCode.IsEmpty()) return policyEventCode;
+		}
+
+		if (event.EventType == EEpisodeEvaluationEventType::DeliveryBotSimulationFailure)
+		{
+			const FString failureType = ReadEventStringProperty(event, TEXT("failure_type"));
+			if (!failureType.IsEmpty()) return failureType;
+
+			const FString deliveryBotFailureType = ReadEventStringProperty(event, TEXT("delivery_bot_failure_type"));
+			if (!deliveryBotFailureType.IsEmpty()) return deliveryBotFailureType;
+		}
+
+		return ResolveUserProjectEventType(event);
+	}
+
+	// 계약에 대응되는 terminal reason은 Terminal 대신 같은 event_type 이름으로 기록한다.
+	FString ResolveUserProjectTerminalEventType(EEpisodeEvaluationTerminalReason terminalReason)
+	{
+		switch (terminalReason)
+		{
+		case EEpisodeEvaluationTerminalReason::GoalReached:
+			return TEXT("GoalReached");
+		case EEpisodeEvaluationTerminalReason::Timeout:
+			return TEXT("Timeout");
+		case EEpisodeEvaluationTerminalReason::RobotTipOver:
+			return TEXT("RobotTipOver");
+		case EEpisodeEvaluationTerminalReason::DeliveryBotSimulationFailed:
+			return TEXT("DeliveryBotSimulationFailure");
+		default:
+			return TEXT("Terminal");
+		}
+	}
+
+	struct FTerminalEventWritePlan
+	{
+		int32 EventIndex = 0;
+		bool bAppendSyntheticEvent = true;
+	};
+
+	int32 GetNextEventIndex(const FEpisodeRunRecord& runRecord)
+	{
+		int32 nextEventIndex = 0;
+		for (const FEpisodeEvaluationEvent& event : runRecord.EvaluationResult.Events)
+		{
+			nextEventIndex = FMath::Max(nextEventIndex, event.EventIndex + 1);
+		}
+		return nextEventIndex;
+	}
+
+	bool IsDeliveryBotTerminalEventType(const FString& eventType)
+	{
+		return eventType == TEXT("DeliveryBotSimulationFailure")
+			|| eventType == TEXT("Stuck")
+			|| eventType == TEXT("PathfindFail")
+			|| eventType == TEXT("PolicyDecisionError");
+	}
+
+	bool IsExistingEventTerminalForReason(
+		const FEpisodeEvaluationEvent& event,
+		EEpisodeEvaluationTerminalReason terminalReason)
+	{
+		const FString eventType = ResolveUserProjectEventType(event);
+		switch (terminalReason)
+		{
+		case EEpisodeEvaluationTerminalReason::GoalReached:
+			return eventType == TEXT("GoalReached");
+		case EEpisodeEvaluationTerminalReason::Timeout:
+			return eventType == TEXT("Timeout");
+		case EEpisodeEvaluationTerminalReason::RobotTipOver:
+			return eventType == TEXT("RobotTipOver");
+		case EEpisodeEvaluationTerminalReason::DeliveryBotSimulationFailed:
+			return IsDeliveryBotTerminalEventType(eventType);
+		default:
+			return false;
+		}
+	}
+
+	FTerminalEventWritePlan MakeTerminalEventWritePlan(const FEpisodeRunRecord& runRecord)
+	{
+		FTerminalEventWritePlan plan;
+		plan.EventIndex = GetNextEventIndex(runRecord);
+
+		for (int32 index = runRecord.EvaluationResult.Events.Num() - 1; index >= 0; --index)
+		{
+			const FEpisodeEvaluationEvent& event = runRecord.EvaluationResult.Events[index];
+			if (IsExistingEventTerminalForReason(event, runRecord.TerminalReason))
+			{
+				plan.EventIndex = event.EventIndex;
+				plan.bAppendSyntheticEvent = false;
+				return plan;
+			}
+		}
+
+		return plan;
+	}
+
 	TSharedPtr<FJsonValue> MakeUserProjectParamJsonValue(const FScenarioParamValue& paramValue)
 	{
 		switch (paramValue.Type)
@@ -625,6 +860,46 @@ namespace
 			}
 		}
 		return object;
+	}
+
+	// Adds an event snapshot field without overriding a detector-supplied contract property.
+	void AddStringParamIfMissing(
+		TMap<FString, FScenarioParamValue>& params,
+		const FString& key,
+		const FString& value)
+	{
+		if (value.IsEmpty() || params.Contains(key))
+		{
+			return;
+		}
+
+		FScenarioParamValue paramValue;
+		paramValue.Type = EScenarioParamValueType::String;
+		paramValue.StringValue = value;
+		params.Add(key, paramValue);
+	}
+
+	// Bridges typed evaluation target identifiers into the external events.jsonl properties object.
+	TSharedRef<FJsonObject> MakeEventPropertiesObject(const FEpisodeEvaluationEvent& event)
+	{
+		TMap<FString, FScenarioParamValue> properties = event.Properties;
+		switch (event.EventType)
+		{
+		case EEpisodeEvaluationEventType::StaticObstacleCollision:
+		case EEpisodeEvaluationEventType::PedestrianCollision:
+		case EEpisodeEvaluationEventType::PedestrianNearMiss:
+		case EEpisodeEvaluationEventType::DeliveryBotSimulationFailure:
+			AddStringParamIfMissing(properties, TEXT("target_id"), event.TargetInstanceId);
+			break;
+		case EEpisodeEvaluationEventType::BlockedRegionCollision:
+		case EEpisodeEvaluationEventType::PenaltyRegionViolation:
+			AddStringParamIfMissing(properties, TEXT("region_id"), event.TargetInstanceId);
+			break;
+		default:
+			break;
+		}
+
+		return MakeUserProjectParamObject(properties);
 	}
 
 	bool TrySerializeCondensedJsonLine(const TSharedRef<FJsonObject>& object, FString& outLine)
@@ -835,10 +1110,14 @@ namespace
 
 	TSharedRef<FJsonObject> MakeEpisodeSummaryObject(const FEpisodeRunRecord& runRecord)
 	{
+		const FTerminalEventWritePlan terminalPlan = MakeTerminalEventWritePlan(runRecord);
+
 		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		object->SetBoolField(TEXT("completed"), runRecord.bEvaluationCompleted);
 		object->SetBoolField(TEXT("success"), runRecord.bSuccess);
 		object->SetStringField(TEXT("outcome"), ToUserProjectEnumString(runRecord.Outcome));
 		object->SetStringField(TEXT("terminal_reason"), ToUserProjectEnumString(runRecord.TerminalReason));
+		object->SetNumberField(TEXT("terminal_event_index"), terminalPlan.EventIndex);
 		object->SetNumberField(TEXT("duration_s"), runRecord.DurationSeconds);
 		object->SetBoolField(TEXT("evaluation_completed"), runRecord.bEvaluationCompleted);
 		return object;
@@ -846,13 +1125,20 @@ namespace
 
 	TSharedRef<FJsonObject> MakeEventSummaryObject(const FEpisodeRunRecord& runRecord)
 	{
+		const FTerminalEventWritePlan terminalPlan = MakeTerminalEventWritePlan(runRecord);
 		TMap<FString, int32> eventCounts;
+		TMap<FString, int32> sourceCounts;
 		for (const FEpisodeEvaluationEvent& event : runRecord.EvaluationResult.Events)
 		{
-			const FString eventType = ToUserProjectEnumString(event.EventType);
+			const FString eventType = ResolveUserProjectEventType(event);
 			eventCounts.FindOrAdd(eventType) += 1;
+			sourceCounts.FindOrAdd(ResolveUserProjectEventSource(event)) += 1;
 		}
-		eventCounts.FindOrAdd(TEXT("Terminal")) += 1;
+		if (terminalPlan.bAppendSyntheticEvent)
+		{
+			eventCounts.FindOrAdd(ResolveUserProjectTerminalEventType(runRecord.TerminalReason)) += 1;
+			sourceCounts.FindOrAdd(TEXT("EvaluationSubsystem")) += 1;
+		}
 
 		TSharedRef<FJsonObject> countsObject = MakeShared<FJsonObject>();
 		TArray<FString> eventTypes;
@@ -866,9 +1152,27 @@ namespace
 			}
 		}
 
+		TSharedRef<FJsonObject> sourcesObject = MakeShared<FJsonObject>();
+		TArray<FString> sources;
+		sourceCounts.GetKeys(sources);
+		sources.Sort();
+		for (const FString& source : sources)
+		{
+			if (const int32* sourceCount = sourceCounts.Find(source))
+			{
+				sourcesObject->SetNumberField(source, *sourceCount);
+			}
+		}
+
+		const int32 eventCount = runRecord.EvaluationResult.Events.Num()
+			+ (terminalPlan.bAppendSyntheticEvent ? 1 : 0);
+
 		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
-		object->SetNumberField(TEXT("event_count"), runRecord.EvaluationResult.Events.Num() + 1);
+		object->SetNumberField(TEXT("total"), eventCount);
+		object->SetNumberField(TEXT("event_count"), eventCount);
 		object->SetObjectField(TEXT("by_type"), countsObject);
+		object->SetObjectField(TEXT("by_source"), sourcesObject);
+		object->SetNumberField(TEXT("terminal_event_index"), terminalPlan.EventIndex);
 		return object;
 	}
 
@@ -879,12 +1183,47 @@ namespace
 		object->SetNumberField(TEXT("version"), 1);
 		object->SetNumberField(TEXT("event_index"), event.EventIndex);
 		object->SetNumberField(TEXT("run_time_seconds"), event.ElapsedTimeSeconds);
-		object->SetStringField(TEXT("source"), TEXT("EvaluationSubsystem"));
-		object->SetStringField(TEXT("event_type"), ToUserProjectEnumString(event.EventType));
-		object->SetStringField(TEXT("reason"), ToUserProjectEnumString(event.EventType));
+		object->SetStringField(TEXT("source"), ResolveUserProjectEventSource(event));
+		object->SetStringField(TEXT("event_type"), ResolveUserProjectEventType(event));
+		object->SetStringField(TEXT("reason"), ResolveUserProjectEventReason(event));
 		object->SetStringField(TEXT("message"), event.Message);
-		object->SetField(TEXT("action_sequence"), MakeShared<FJsonValueNull>());
-		object->SetObjectField(TEXT("properties"), MakeUserProjectParamObject(event.Properties));
+		object->SetField(TEXT("action_sequence"), MakeEventActionSequenceValue(event));
+		object->SetObjectField(TEXT("properties"), MakeEventPropertiesObject(event));
+		return object;
+	}
+
+	// Terminal event properties reuse evaluation metrics so the final line carries the same snapshot context.
+	void SetMetricPropertyIfPresent(
+		const TSharedRef<FJsonObject>& object,
+		const TMap<FString, FScenarioParamValue>& metrics,
+		const FString& metricKey,
+		const FString& propertyKey)
+	{
+		if (const FScenarioParamValue* metricValue = metrics.Find(metricKey))
+		{
+			object->SetField(propertyKey, MakeUserProjectParamJsonValue(*metricValue));
+		}
+	}
+
+	// Keeps terminal event details within the documented scalar events.jsonl property names.
+	TSharedRef<FJsonObject> MakeTerminalEventPropertiesObject(const FEpisodeRunRecord& runRecord)
+	{
+		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
+		const TMap<FString, FScenarioParamValue>& metrics = runRecord.EvaluationResult.Metrics;
+
+		object->SetNumberField(TEXT("duration_s"), runRecord.DurationSeconds);
+		SetMetricPropertyIfPresent(object, metrics, TEXT("distance_to_goal_m"), TEXT("distance_to_goal_m"));
+		if (!object->HasField(TEXT("distance_to_goal_m")))
+		{
+			SetMetricPropertyIfPresent(object, metrics, TEXT("goal_distance_m"), TEXT("distance_to_goal_m"));
+		}
+		SetMetricPropertyIfPresent(object, metrics, TEXT("goal_threshold_m"), TEXT("goal_threshold_m"));
+		SetMetricPropertyIfPresent(object, metrics, TEXT("max_duration_s"), TEXT("max_duration_s"));
+		SetMetricPropertyIfPresent(object, metrics, TEXT("failure_type"), TEXT("failure_type"));
+		SetMetricPropertyIfPresent(object, metrics, TEXT("speed_kmh"), TEXT("speed_kmh"));
+		SetMetricPropertyIfPresent(object, metrics, TEXT("roll_degree"), TEXT("roll_degree"));
+		SetMetricPropertyIfPresent(object, metrics, TEXT("pitch_degree"), TEXT("pitch_degree"));
+		SetMetricPropertyIfPresent(object, metrics, TEXT("threshold_degree"), TEXT("threshold_degree"));
 		return object;
 	}
 
@@ -896,11 +1235,11 @@ namespace
 		object->SetNumberField(TEXT("event_index"), eventIndex);
 		object->SetNumberField(TEXT("run_time_seconds"), runRecord.DurationSeconds);
 		object->SetStringField(TEXT("source"), TEXT("EvaluationSubsystem"));
-		object->SetStringField(TEXT("event_type"), TEXT("Terminal"));
+		object->SetStringField(TEXT("event_type"), ResolveUserProjectTerminalEventType(runRecord.TerminalReason));
 		object->SetStringField(TEXT("reason"), ToUserProjectEnumString(runRecord.TerminalReason));
 		object->SetStringField(TEXT("message"), FString::Printf(TEXT("Episode finished: %s"), *ToUserProjectEnumString(runRecord.TerminalReason)));
 		object->SetField(TEXT("action_sequence"), MakeShared<FJsonValueNull>());
-		object->SetObjectField(TEXT("properties"), MakeShared<FJsonObject>());
+		object->SetObjectField(TEXT("properties"), MakeTerminalEventPropertiesObject(runRecord));
 		return object;
 	}
 
@@ -909,6 +1248,7 @@ namespace
 		const FEpisodeRunRecord& runRecord,
 		TArray<FString>& outDiagnostics)
 	{
+		const FTerminalEventWritePlan terminalPlan = MakeTerminalEventWritePlan(runRecord);
 		TArray<FString> lines;
 		for (const FEpisodeEvaluationEvent& event : runRecord.EvaluationResult.Events)
 		{
@@ -921,15 +1261,18 @@ namespace
 			lines.Add(line);
 		}
 
-		FString terminalLine;
-		if (!TrySerializeCondensedJsonLine(
-			MakeTerminalEventLineObject(runRecord, runRecord.EvaluationResult.Events.Num()),
-			terminalLine))
+		if (terminalPlan.bAppendSyntheticEvent)
 		{
-			outDiagnostics.Add(TEXT("Terminal episode event JSONL serialization failed."));
-			return false;
+			FString terminalLine;
+			if (!TrySerializeCondensedJsonLine(
+				MakeTerminalEventLineObject(runRecord, terminalPlan.EventIndex),
+				terminalLine))
+			{
+				outDiagnostics.Add(TEXT("Terminal episode event JSONL serialization failed."));
+				return false;
+			}
+			lines.Add(terminalLine);
 		}
-		lines.Add(terminalLine);
 
 		return TryWriteUtf8File(eventsPath, FString::Join(lines, TEXT("\n")) + TEXT("\n"), outDiagnostics);
 	}

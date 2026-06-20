@@ -17,13 +17,15 @@ CONTRACT_DOCS = [
     CONTRACT_SPECS / "EpisodeSetup.json.md",
     CONTRACT_SPECS / "DeliveryBotSetup.json.md",
     CONTRACT_SPECS / "RunQueue.json.md",
-    CONTRACT_SPECS / "EpisodeEvaluationReport.json.md",
 ]
 
 PLAN_DOCS = [
-    DOCS / "architecture" / "SCENARIO_EPISODE_TERMINOLOGY.md",
+    REPO_ROOT / "docs" / "specs" / "simulation-interface.md",
+    DOCS / "archive" / "deprecated" / ("SCENARIO_" + "EPISODE_TERMINOLOGY.md"),
     DOCS / "architecture" / "UE_CONTRACT_MIGRATION_PLAN.md",
 ]
+
+MISSING_EVALUATION_REPORT_CONTRACT = CONTRACT_SPECS / ("EpisodeEvaluationReport" + ".json.md")
 
 FORBIDDEN_ARTIFACTS = [
     ROOT / "samples",
@@ -54,8 +56,7 @@ def run_check() -> dict[str, Any]:
     episode_setup = _read(CONTRACT_SPECS / "EpisodeSetup.json.md")
     delivery_bot_setup = _read(CONTRACT_SPECS / "DeliveryBotSetup.json.md")
     run_queue = _read(CONTRACT_SPECS / "RunQueue.json.md")
-    evaluation_report = _read(CONTRACT_SPECS / "EpisodeEvaluationReport.json.md")
-    terminology = _read(DOCS / "architecture" / "SCENARIO_EPISODE_TERMINOLOGY.md")
+    terminology = _read(REPO_ROOT / "docs" / "specs" / "simulation-interface.md")
     migration_plan = _read(DOCS / "architecture" / "UE_CONTRACT_MIGRATION_PLAN.md")
     readme_text = _read(README) + "\n" + _read(DOCS_README)
     forbidden_artifacts = [
@@ -86,13 +87,12 @@ def run_check() -> dict[str, Any]:
             term in run_queue for term in ["pair_id", "episode_setup", "delivery_bot_setup", "순서대로 실행"]
         ),
         "evaluationReportLinkedOnly": all(
-            term in evaluation_report
-            for term in ["episode_evaluation_report", "summary", "metrics", "event_summary", "events", "usable_for_llm_tuning"]
+            term not in readme_text for term in [MISSING_EVALUATION_REPORT_CONTRACT.name]
         )
-        and "다른 담당자 범위" in migration_plan,
+        and not MISSING_EVALUATION_REPORT_CONTRACT.exists(),
         "terminologyDistinguishesScenarioEpisode": all(
             term in terminology
-            for term in ["Scenario", "추상적인 상황 유형", "Episode", "구체 시뮬레이션 인스턴스", "EpisodeSetup + DeliveryBotSetup", "scenario_id", "pair_id"]
+            for term in ["Scenario", "EpisodeScenario", "Run", "Episode", "RunId", "EpisodeId", "Project"]
         ),
         "migrationPlanDescribesPairMigration": all(
             term in migration_plan
@@ -107,7 +107,7 @@ def run_check() -> dict[str, Any]:
         "legacyDocsArchived": (DOCS / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_ADAPTER.md").exists(),
         "readmesLinkPlans": all(
             term in readme_text
-            for term in ["UE_CONTRACT_MIGRATION_PLAN.md", "SCENARIO_EPISODE_TERMINOLOGY.md", "contracts/specs", "archive/previous_episode_spec"]
+            for term in ["simulation-interface.md", "user-project-data.md", "environment/environment-catalog.md"]
         ),
         "noLiveProviderCallsInHarness": not _imports_live_http_client(Path(__file__)),
         "forbiddenArtifacts": forbidden_artifacts,
@@ -124,8 +124,8 @@ def run_check() -> dict[str, Any]:
         ("deliveryBotSetupHasTuningFields", "DeliveryBotSetup doc must include drive/path_follow/lidar."),
         ("deliveryBotSetupForbidsPlacementFields", "DeliveryBotSetup doc must exclude placement/run/route fields."),
         ("runQueueHasPairTerms", "RunQueue doc must describe ordered EpisodeSetup/DeliveryBotSetup pairs."),
-        ("evaluationReportLinkedOnly", "EvaluationReport doc must be present while analysis implementation remains out of scope."),
-        ("terminologyDistinguishesScenarioEpisode", "Scenario/Episode terminology doc must distinguish core terms."),
+        ("evaluationReportLinkedOnly", "Missing EvaluationReport contract must not be indexed."),
+        ("terminologyDistinguishesScenarioEpisode", "Simulation interface must distinguish current Scenario/Episode/Run terms."),
         ("migrationPlanDescribesPairMigration", "Migration plan must describe EpisodeSetup/DeliveryBotSetup pair migration."),
         ("legacyDocsArchived", "Legacy EpisodeSpec docs must be archived."),
         ("readmesLinkPlans", "README docs must link UE contract migration, terminology, and cleanup docs."),

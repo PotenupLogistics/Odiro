@@ -3261,11 +3261,7 @@ void UScenarioAuthoringSubsystem::ApplyEditorPreviewRunConfig(FScenarioWorldSpec
 	worldSpec.RunConfig.GeneratorVersion = FScenarioDocumentJson::SupportedVersion;
 	worldSpec.RunConfig.BaseSeed = BaseSeed;
 	worldSpec.RunConfig.IterationIndex = IterationIndex;
-
-	FScenarioParamValue timeLimitParam;
-	timeLimitParam.Type = EScenarioParamValueType::Float;
-	timeLimitParam.FloatValue = TimeLimitSeconds;
-	worldSpec.RunConfig.Parameters.Add(TEXT("time_limit_s"), timeLimitParam);
+	worldSpec.RunConfig.MaxDurationSeconds = FMath::Max(0.0, TimeLimitSeconds);
 
 	worldSpec.Seeds.WorldSeed = BaseSeed;
 	worldSpec.Seeds.LayoutSeed = BaseSeed + 101;

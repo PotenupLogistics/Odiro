@@ -17,6 +17,8 @@ namespace
 	const TCHAR* UserProjectSettingSchema = TEXT("project_setting");
 	const TCHAR* UserProjectProfileSchema = TEXT("simulation_profile");
 	const TCHAR* UserProjectScenarioSchema = TEXT("scenario");
+	constexpr double KmhToCmPerSecond = 100000.0 / 3600.0;
+	constexpr double CmPerSecondToKmh = 1.0 / KmhToCmPerSecond;
 
 	void AddSimulationDiagnostic(
 		TArray<FScenarioCompileDiagnostic>& diagnostics,
@@ -300,6 +302,87 @@ namespace
 				EScenarioCompileDiagnosticSeverity::Error,
 				FString::Printf(TEXT("invalid_%s"), *fieldName),
 				FString::Printf(TEXT("%s.%s must be >= 0."), *path, *fieldName));
+			return false;
+		}
+
+		outValue = numberValue;
+		return true;
+	}
+
+	bool TryReadOptionalNonNegativeDoubleField(
+		const FJsonObject& jsonObject,
+		const FString& fieldName,
+		const FString& path,
+		TArray<FScenarioCompileDiagnostic>& diagnostics,
+		double& targetValue)
+	{
+		const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
+		if (!jsonValue.IsValid())
+		{
+			return true;
+		}
+
+		if (jsonValue->Type != EJson::Number)
+		{
+			AddSimulationDiagnostic(
+				diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				FString::Printf(TEXT("invalid_%s"), *fieldName),
+				FString::Printf(TEXT("%s.%s must be a number."), *path, *fieldName));
+			return false;
+		}
+
+		const double numberValue = jsonValue->AsNumber();
+		if (numberValue < 0.0)
+		{
+			AddSimulationDiagnostic(
+				diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				FString::Printf(TEXT("invalid_%s"), *fieldName),
+				FString::Printf(TEXT("%s.%s must be >= 0."), *path, *fieldName));
+			return false;
+		}
+
+		targetValue = numberValue;
+		return true;
+	}
+
+	bool TryReadRequiredPositiveDoubleField(
+		const FJsonObject& jsonObject,
+		const FString& fieldName,
+		const FString& path,
+		TArray<FScenarioCompileDiagnostic>& diagnostics,
+		double& outValue)
+	{
+		const TSharedPtr<FJsonValue> jsonValue = jsonObject.TryGetField(fieldName);
+		if (!jsonValue.IsValid())
+		{
+			AddSimulationDiagnostic(
+				diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				FString::Printf(TEXT("missing_%s"), *fieldName),
+				FString::Printf(TEXT("%s.%s field is required."), *path, *fieldName));
+			return false;
+		}
+
+		if (jsonValue->Type != EJson::Number)
+		{
+			AddSimulationDiagnostic(
+				diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				FString::Printf(TEXT("invalid_%s"), *fieldName),
+				FString::Printf(TEXT("%s.%s must be a number."), *path, *fieldName));
+			return false;
+		}
+
+		const double numberValue = jsonValue->AsNumber();
+		if (numberValue <= 0.0)
+		{
+			AddSimulationDiagnostic(
+				diagnostics,
+				EScenarioCompileDiagnosticSeverity::Error,
+				FString::Printf(TEXT("invalid_%s"), *fieldName),
+				FString::Printf(TEXT("%s.%s must be > 0."), *path, *fieldName));
 			return false;
 		}
 
@@ -595,6 +678,12 @@ namespace
 				TEXT("$.runtime"),
 				diagnostics,
 				outSetting.FixedFps);
+			TryReadRequiredPositiveDoubleField(
+				*runtimeObject,
+				TEXT("time_scale"),
+				TEXT("$.runtime"),
+				diagnostics,
+				outSetting.TimeScale);
 			TryReadRequiredNonNegativeDoubleField(
 				*runtimeObject,
 				TEXT("max_duration_s"),
@@ -625,6 +714,56 @@ namespace
 				TEXT("$.sampling"),
 				diagnostics,
 				outSetting.GeneratorVersion);
+		}
+
+		TSharedPtr<FJsonObject> evaluationObject;
+		if (TryGetObjectField(rootObject, TEXT("evaluation"), TEXT("$"), diagnostics, evaluationObject))
+		{
+			double goalAcceptanceRadiusM = outSetting.EvaluationConfig.GoalAcceptanceRadiusCm / 100.0;
+			double nearMissDistanceM = outSetting.EvaluationConfig.NearMissDistanceCm / 100.0;
+			double stuckMinGoalProgressM = outSetting.EvaluationConfig.StuckMinGoalProgressCm / 100.0;
+			double stuckSpeedThresholdKmh = outSetting.EvaluationConfig.StuckSpeedThresholdCmPerSecond * CmPerSecondToKmh;
+			TryReadRequiredNonNegativeDoubleField(
+				*evaluationObject,
+				TEXT("goal_acceptance_radius_m"),
+				TEXT("$.evaluation"),
+				diagnostics,
+				goalAcceptanceRadiusM);
+			TryReadRequiredNonNegativeDoubleField(
+				*evaluationObject,
+				TEXT("tip_over_angle_deg"),
+				TEXT("$.evaluation"),
+				diagnostics,
+				outSetting.EvaluationConfig.TipOverAngleDegrees);
+			TryReadRequiredNonNegativeDoubleField(
+				*evaluationObject,
+				TEXT("near_miss_distance_m"),
+				TEXT("$.evaluation"),
+				diagnostics,
+				nearMissDistanceM);
+			TryReadOptionalNonNegativeDoubleField(
+				*evaluationObject,
+				TEXT("stuck_detection_window_s"),
+				TEXT("$.evaluation"),
+				diagnostics,
+				outSetting.EvaluationConfig.StuckDetectionWindowSeconds);
+			TryReadOptionalNonNegativeDoubleField(
+				*evaluationObject,
+				TEXT("stuck_min_goal_progress_m"),
+				TEXT("$.evaluation"),
+				diagnostics,
+				stuckMinGoalProgressM);
+			TryReadOptionalNonNegativeDoubleField(
+				*evaluationObject,
+				TEXT("stuck_speed_threshold_kmh"),
+				TEXT("$.evaluation"),
+				diagnostics,
+				stuckSpeedThresholdKmh);
+
+			outSetting.EvaluationConfig.GoalAcceptanceRadiusCm = goalAcceptanceRadiusM * 100.0;
+			outSetting.EvaluationConfig.NearMissDistanceCm = nearMissDistanceM * 100.0;
+			outSetting.EvaluationConfig.StuckMinGoalProgressCm = stuckMinGoalProgressM * 100.0;
+			outSetting.EvaluationConfig.StuckSpeedThresholdCmPerSecond = stuckSpeedThresholdKmh * KmhToCmPerSecond;
 		}
 	}
 

@@ -136,12 +136,20 @@ namespace
 			(Point.X * SinHeading) + (Point.Y * CosHeading));
 	}
 
-	// Resolves the surface height at a sampled pose so actors spawn on the matching lane surface.
-	double ResolveRuntimeSurfaceZOffsetCm(
+	// Resolves the Corridor lane at a sampled pose before adapting it to runtime actors.
+	bool TryResolveRuntimeSurfaceAtSamplePose(
 		const FScenarioSampleSemantic& Semantic,
 		double AlongMeters,
-		double OffsetMeters)
+		double OffsetMeters,
+		double& OutSurfaceZOffsetCm,
+		EScenarioSampleLaneType& OutLaneType,
+		FString& OutLaneId,
+		FString& OutSurfaceId)
 	{
+		OutSurfaceZOffsetCm = 0.0;
+		OutLaneType = EScenarioSampleLaneType::Walkable;
+		OutLaneId.Reset();
+		OutSurfaceId.Reset();
 		for (const FScenarioSampleLayoutEntry& LayoutEntry : Semantic.Layout)
 		{
 			if (!FScenarioCorridorGeometry::ContainsRangeValue(
@@ -159,12 +167,38 @@ namespace
 						Lane.OffsetRangeMeters.MinMeters,
 						Lane.OffsetRangeMeters.MaxMeters))
 				{
-					return FScenarioCorridorGeometry::ResolveLaneSurfaceZOffsetCm(Lane.LaneId);
+					OutSurfaceZOffsetCm = FScenarioCorridorGeometry::ResolveLaneSurfaceZOffsetCm(Lane.LaneId);
+					OutLaneType = Lane.Type;
+					OutLaneId = Lane.LaneId;
+					OutSurfaceId = Lane.SurfaceId;
+					return true;
 				}
 			}
 		}
 
-		return 0.0;
+		return false;
+	}
+
+	// Resolves the surface height at a sampled pose so actors spawn on the matching lane surface.
+	double ResolveRuntimeSurfaceZOffsetCm(
+		const FScenarioSampleSemantic& Semantic,
+		double AlongMeters,
+		double OffsetMeters)
+	{
+		double SurfaceZOffsetCm = 0.0;
+		EScenarioSampleLaneType LaneType = EScenarioSampleLaneType::Walkable;
+		FString LaneId;
+		FString SurfaceId;
+		return TryResolveRuntimeSurfaceAtSamplePose(
+				Semantic,
+				AlongMeters,
+				OffsetMeters,
+				SurfaceZOffsetCm,
+				LaneType,
+				LaneId,
+				SurfaceId)
+			? SurfaceZOffsetCm
+			: 0.0;
 	}
 
 	bool ResolveSampleAxisPose(
@@ -298,6 +332,56 @@ namespace
 		return FString::Printf(TEXT("%08x"), FCrc::StrCrc32(*HashSource));
 	}
 
+	bool TryReadSampleNumber(const FScenarioSampleParamValue& ParamValue, double& OutValue)
+	{
+		if (ParamValue.Type == EScenarioSampleParamValueType::Float)
+		{
+			OutValue = ParamValue.FloatValue;
+			return true;
+		}
+
+		if (ParamValue.Type == EScenarioSampleParamValueType::Integer)
+		{
+			OutValue = static_cast<double>(ParamValue.IntegerValue);
+			return true;
+		}
+
+		return false;
+	}
+
+	double ResolveSampleMaxDurationSeconds(
+		const FScenarioSampleDocument& Document,
+		FScenarioCompileResult& Result)
+	{
+		const FScenarioSampleParamValue* MaxDurationParam = Document.Scenario.Params.Find(TEXT("max_duration_s"));
+		if (!MaxDurationParam)
+		{
+			return 0.0;
+		}
+
+		double MaxDurationSeconds = 0.0;
+		if (!TryReadSampleNumber(*MaxDurationParam, MaxDurationSeconds))
+		{
+			AddAdapterDiagnostic(
+				Result,
+				EScenarioCompileDiagnosticSeverity::Warning,
+				TEXT("invalid_max_duration_s"),
+				TEXT("scenario_sample param 'max_duration_s' must be numeric to populate runtime MaxDurationSeconds."));
+			return 0.0;
+		}
+
+		if (MaxDurationSeconds < 0.0)
+		{
+			AddAdapterDiagnostic(
+				Result,
+				EScenarioCompileDiagnosticSeverity::Warning,
+				TEXT("negative_max_duration_s"),
+				FString::Printf(TEXT("scenario_sample param 'max_duration_s' was clamped to 0.0 from %.2f."), MaxDurationSeconds));
+		}
+
+		return FMath::Max(0.0, MaxDurationSeconds);
+	}
+
 	void PopulateRunConfig(
 		const FScenarioSampleDocument& Document,
 		FScenarioCompileResult& Result,
@@ -310,6 +394,7 @@ namespace
 		WorldSpec.RunConfig.GeneratorVersion = FScenarioSampleJson::SupportedVersion;
 		WorldSpec.RunConfig.BaseSeed = Document.Sample.Source.Seed;
 		WorldSpec.RunConfig.IterationIndex = 0;
+		WorldSpec.RunConfig.MaxDurationSeconds = ResolveSampleMaxDurationSeconds(Document, Result);
 
 		for (const TPair<FString, FScenarioSampleParamValue>& Pair : Document.Scenario.Params)
 		{
@@ -483,7 +568,44 @@ namespace
 				continue;
 			}
 
-			Pose.LocationCm.Z = ResolveRuntimeSurfaceZOffsetCm(Semantic, Obstacle.AlongMeters, Obstacle.OffsetMeters);
+			double SurfaceZOffsetCm = 0.0;
+			EScenarioSampleLaneType LaneType = EScenarioSampleLaneType::Walkable;
+			FString LaneId;
+			FString SurfaceId;
+			if (!TryResolveRuntimeSurfaceAtSamplePose(
+					Semantic,
+					Obstacle.AlongMeters,
+					Obstacle.OffsetMeters,
+					SurfaceZOffsetCm,
+					LaneType,
+					LaneId,
+					SurfaceId))
+			{
+				AddAdapterDiagnostic(
+					Result,
+					EScenarioCompileDiagnosticSeverity::Error,
+					TEXT("sample_obstacle_surface_missing"),
+					FString::Printf(
+						TEXT("Static obstacle '%s' is outside scenario_sample Corridor surfaces."),
+						*Obstacle.ObstacleId));
+				continue;
+			}
+
+			if (LaneType == EScenarioSampleLaneType::Blocked)
+			{
+				AddAdapterDiagnostic(
+					Result,
+					EScenarioCompileDiagnosticSeverity::Error,
+					TEXT("sample_obstacle_on_blocked_surface"),
+					FString::Printf(
+						TEXT("Static obstacle '%s' resolves onto blocked Corridor lane '%s' surface '%s'."),
+						*Obstacle.ObstacleId,
+						*LaneId,
+						*SurfaceId));
+				continue;
+			}
+
+			Pose.LocationCm.Z = SurfaceZOffsetCm;
 
 			FScenarioPlaceableInstanceSpec ObstacleSpec;
 			ObstacleSpec.InstanceId = Obstacle.ObstacleId;

@@ -8,6 +8,7 @@ from typing import Any
 from app.agents.common.llm_json_client import AgentLlmClient, AgentLlmJsonClient
 from app.agents.common.spec_context_loader import SpecContextLoader
 from app.agents.result_analysis_v2.analysis_context_builder import AnalysisContextBuilder
+from app.agents.result_analysis_v2.analysis_text_builder import AnalysisTextBuilder
 from app.agents.result_analysis_v2.artifact_classifier import ArtifactClassifier
 from app.agents.result_analysis_v2.artifact_parser import ArtifactParser, ParsedArtifact
 from app.agents.result_analysis_v2.data_coverage import DataCoverageBuilder
@@ -18,12 +19,14 @@ from app.agents.result_analysis_v2.finding_builder import FindingBuilder
 from app.agents.result_analysis_v2.llm_failure_analyzer import LlmFailureAnalyzer
 from app.agents.result_analysis_v2.rag_context_builder import FileBasedRagRetrieverAdapterV2, RagContextBuilderV2
 from app.agents.result_analysis_v2.rag_query_builder import RagQueryBuilderV2
+from app.agents.result_analysis_v2.recommendation_artifact_writer import RecommendationArtifactWriter
 from app.agents.result_analysis_v2.recommendation_generator import RecommendationGenerator
 from app.agents.result_analysis_v2.recommendation_type_decider import RecommendationTypeDecider
 from app.agents.result_analysis_v2.recommendation_validator import RecommendationValidator
 from app.agents.result_analysis_v2.representative_selector import RepresentativeFailedEpisodeSelectorV2
 from app.agents.result_analysis_v2.response_builder import ResponseBuilder
 from app.agents.result_analysis_v2.review_lifecycle import ReviewLifecycleManager, ReviewSession
+from app.agents.result_analysis_v2.review_text import INSUFFICIENT_DATA_SUMMARY_MESSAGE, default_artifacts
 from app.agents.result_analysis_v2.run_aggregator import RunAggregator
 from app.agents.result_analysis_v2.run_comparison import PreviousRunComparator
 from app.agents.result_analysis_v2.snapshot_hash import SnapshotHashBuilder
@@ -69,6 +72,8 @@ class ResultAnalysisV2Agent:
         self.snapshot_hash_builder = SnapshotHashBuilder()
         self.previous_run_comparator = PreviousRunComparator()
         self.review_lifecycle = ReviewLifecycleManager()
+        self.recommendation_artifact_writer = RecommendationArtifactWriter()
+        self.analysis_text_builder = AnalysisTextBuilder()
 
     def run(self, request: AnalysisRunV2Request | None = None) -> AnalysisRunV2Response:
         review_session = self.review_lifecycle.start(request)
@@ -131,6 +136,8 @@ class ResultAnalysisV2Agent:
                 recommendations=recommendations,
                 warnings=warnings,
                 analysis_mode=analysis_mode,
+                run_id=request.run_id if request is not None else None,
+                review_id=review_session.review_id if review_session is not None else None,
             )
             response = self._with_prompt_focus(response, request)
             self._complete_review_if_started(
@@ -161,7 +168,7 @@ class ResultAnalysisV2Agent:
         project_root = Path(request.project_path)
         scan = self.scanner.scan(project_root)
         run_path = project_root / "runs" / request.run_id
-        warnings = [*scan.warnings]
+        warnings = self._requested_run_warnings(project_root=project_root, warnings=scan.warnings, run_id=request.run_id)
         if project_root.exists() and not run_path.is_dir():
             warnings.append(f"run directory does not exist: {run_path}")
         if run_path.is_dir():
@@ -172,6 +179,16 @@ class ResultAnalysisV2Agent:
             if self._is_requested_run_file(project_root=project_root, path=path, run_id=request.run_id)
         ]
         return WorkspaceScan(root=project_root, files=files, warnings=warnings)
+
+    def _requested_run_warnings(self, *, project_root: Path, warnings: list[str], run_id: str) -> list[str]:
+        """Keep scan warnings scoped to the requested run while preserving root-level failures."""
+        run_prefix = f"runs/{run_id}/"
+        scoped: list[str] = []
+        for warning in warnings:
+            normalized = warning.replace("\\", "/")
+            if "runs/" not in normalized or run_prefix in normalized:
+                scoped.append(warning)
+        return scoped
 
     def _is_requested_run_file(self, *, project_root: Path, path: Path, run_id: str) -> bool:
         try:
@@ -272,6 +289,8 @@ class ResultAnalysisV2Agent:
             success_count=sum(1 for episode in episodes if episode.success is True),
             failure_count=sum(1 for episode in episodes if episode.success is False),
             collision_count=sum(episode.collision_count for episode in episodes),
+            static_obstacle_collision_count=sum(episode.static_obstacle_collision_count for episode in episodes),
+            pedestrian_collision_count=sum(episode.pedestrian_collision_count for episode in episodes),
             near_miss_count=sum(episode.near_miss_count for episode in episodes),
             blocked_region_violation_count=sum(episode.blocked_region_violation_count for episode in episodes),
             penalty_region_violation_count=sum(episode.penalty_region_violation_count for episode in episodes),
@@ -283,13 +302,52 @@ class ResultAnalysisV2Agent:
         if summary is None:
             return None
         metrics = summary.get("metrics") if isinstance(summary.get("metrics"), dict) else {}
+        event_summary = summary.get("event_summary") if isinstance(summary.get("event_summary"), dict) else {}
         return AnalysisMetricsV2(
-            success_count=self._summary_int(summary, metrics, "success_count"),
-            failure_count=self._summary_int(summary, metrics, "failure_count"),
-            collision_count=self._summary_int(summary, metrics, "collision_count"),
-            near_miss_count=self._summary_int(summary, metrics, "near_miss_count"),
-            blocked_region_violation_count=self._summary_int(summary, metrics, "blocked_region_violation_count"),
-            penalty_region_violation_count=self._summary_int(summary, metrics, "penalty_region_violation_count"),
+            success_count=self._summary_int(summary, metrics, event_summary, "success_count", set()),
+            failure_count=self._summary_int(summary, metrics, event_summary, "failure_count", set()),
+            collision_count=self._summary_int(
+                summary,
+                metrics,
+                event_summary,
+                "collision_count",
+                {"collision", "static_obstacle_collision", "pedestrian_collision"},
+            ),
+            static_obstacle_collision_count=self._summary_int(
+                summary,
+                metrics,
+                event_summary,
+                "static_obstacle_collision_count",
+                {"static_obstacle_collision"},
+            ),
+            pedestrian_collision_count=self._summary_int(
+                summary,
+                metrics,
+                event_summary,
+                "pedestrian_collision_count",
+                {"pedestrian_collision"},
+            ),
+            near_miss_count=self._summary_int(
+                summary,
+                metrics,
+                event_summary,
+                "near_miss_count",
+                {"near_miss", "pedestrian_near_miss"},
+            ),
+            blocked_region_violation_count=self._summary_int(
+                summary,
+                metrics,
+                event_summary,
+                "blocked_region_violation_count",
+                {"blocked_region_violation", "blocked_region_collision"},
+            ),
+            penalty_region_violation_count=self._summary_int(
+                summary,
+                metrics,
+                event_summary,
+                "penalty_region_violation_count",
+                {"penalty_region_violation"},
+            ),
         )
 
     def _summary_episode_count(self, artifacts: list[ParsedArtifact]) -> int:
@@ -311,12 +369,21 @@ class ResultAnalysisV2Agent:
                 return artifact.data
         return None
 
-    def _summary_int(self, summary: dict[str, Any], metrics: dict[str, Any], key: str) -> int:
-        """Read a non-negative integer metric from summary root or nested metrics."""
+    def _summary_int(
+        self,
+        summary: dict[str, Any],
+        metrics: dict[str, Any],
+        event_summary: dict[str, Any],
+        key: str,
+        event_names: set[str],
+    ) -> int:
+        """Read a non-negative integer metric from summary root, metrics, or events."""
         for source in (summary, metrics):
             value = source.get(key)
             if isinstance(value, int | float):
                 return max(0, int(value))
+        if event_names:
+            return self.metric_extractor._event_summary_count(event_summary, event_names)
         return 0
 
     def _prompt_focus(self, request: AnalysisRunV2Request | None) -> list[str]:
@@ -381,11 +448,39 @@ class ResultAnalysisV2Agent:
                 findings=findings,
                 data_coverage=data_coverage,
             )
+            response.recommendation_type = decision.recommendation_type
+            response.run_id = request.run_id
+            response.review_id = session.review_id
             self._align_response_summary_with_review_decision(
                 response=response,
                 recommendation_type=decision.recommendation_type,
                 findings=findings,
                 prompt_focus=self._prompt_focus(request),
+            )
+            response.recommendations = self.recommendation_generator.ensure_for_review(
+                recommendations=response.recommendations,
+                recommendation_type=decision.recommendation_type,
+                findings=findings,
+            )
+            self._sync_modified_candidate_payloads(response)
+            artifact_write = self.recommendation_artifact_writer.write(
+                session=session,
+                recommendation_type=decision.recommendation_type,
+            )
+            if artifact_write.warnings:
+                warnings.extend(artifact_write.warnings)
+                response.warnings.extend(
+                    warning for warning in artifact_write.warnings if warning not in response.warnings
+                )
+            response.analysis_text = self.analysis_text_builder.build(
+                recommendation_type=decision.recommendation_type,
+                artifacts=artifact_write.artifacts,
+                artifact_warnings=artifact_write.warnings,
+                metrics=response.metrics,
+                episodes_count=response.analysis_scope.episodes_count,
+                patterns=response.patterns,
+                findings=findings,
+                evidence=evidence,
             )
             snapshot_hashes = self.snapshot_hash_builder.build(project_path=Path(request.project_path), run_id=request.run_id)
             comparison = self.previous_run_comparator.compare(
@@ -405,10 +500,13 @@ class ResultAnalysisV2Agent:
                 "recommendations": response.recommendations,
                 "reason": decision.reason,
                 "evidence_ids": decision.evidence_ids,
+                "artifacts": artifact_write.artifacts,
+                "artifact_warnings": artifact_write.warnings,
             }
             manifest = {
                 "snapshot_hashes": snapshot_hashes,
                 "comparison": comparison,
+                "artifacts": artifact_write.artifacts,
             }
             self.review_lifecycle.complete(
                 session=session,
@@ -421,14 +519,43 @@ class ResultAnalysisV2Agent:
         except Exception as exc:
             self.review_lifecycle.fail(session=session, code=exc.__class__.__name__, message=str(exc))
             response.warnings.append(f"review artifact write failed: {exc}")
+            response.recommendation_type = (
+                "insufficient_data" if response.summary.overall_judgement == "insufficient_data" else "none"
+            )
+            response.analysis_text = self.analysis_text_builder.build(
+                recommendation_type="insufficient_data"
+                if response.summary.overall_judgement == "insufficient_data"
+                else "none",
+                artifacts=default_artifacts(),
+                metrics=response.metrics,
+                episodes_count=response.analysis_scope.episodes_count,
+                patterns=response.patterns,
+            )
 
     def _source_run_files(self, parsed: list[ParsedArtifact]) -> list[str]:
         """Return source run files used by analysis, excluding generated review artifacts."""
         return sorted(
             artifact.info.relative_path
             for artifact in parsed
-            if not artifact.info.relative_path.startswith("runs/")
-            or "/review/" not in artifact.info.relative_path
+            if self._is_source_run_file(artifact.info.relative_path)
+        )
+
+    def _is_source_run_file(self, relative_path: str) -> bool:
+        """Exclude review outputs and runtime/cache files from manifest source inputs."""
+        parts = relative_path.split("/")
+        if "__pycache__" in parts or relative_path.endswith(".pyc") or parts[-1] == ".DS_Store":
+            return False
+        return not relative_path.startswith("runs/") or "/review/" not in relative_path
+
+    def _sync_modified_candidate_payloads(self, response: AnalysisRunV2Response) -> None:
+        """Refresh modified_*_json arrays after review-level recommendation changes."""
+        response.modified_policy_json = self.response_builder.modified_candidate_payloads(
+            recommendations=response.recommendations,
+            target="policy",
+        )
+        response.modified_environment_json = self.response_builder.modified_candidate_payloads(
+            recommendations=response.recommendations,
+            target="environment",
         )
 
     def _align_response_summary_with_review_decision(
@@ -445,28 +572,26 @@ class ResultAnalysisV2Agent:
             return
         if recommendation_type == "insufficient_data":
             response.summary.overall_judgement = "insufficient_data"
+            response.summary.message = INSUFFICIENT_DATA_SUMMARY_MESSAGE
             return
 
         response.summary.overall_judgement = "change_recommended"
         finding_types = {str(finding.get("type")) for finding in findings}
-        if "penalty_region_violation" in finding_types:
-            if (
-                ("obstacle" in prompt_focus or "collision" in prompt_focus)
-                and not {"static_obstacle_collision", "blocked_region_collision"} & finding_types
-            ):
-                response.summary.message = (
-                    "사용자 요청 관점: 요청한 장애물/충돌 근거는 확인되지 않았고, "
-                    "penalty region violation 근거가 확인되어 정책 검토가 필요합니다."
-                )
-            else:
-                response.summary.message = "Penalty region violation이 반복되어 정책 검토가 필요합니다."
-                self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
-            return
         if recommendation_type == "environment_review":
             response.summary.message = "환경 또는 장애물 관련 충돌 근거가 확인되어 환경 검토가 필요합니다."
             self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
             return
-        response.summary.message = "로그 근거가 있는 실패 징후가 확인되어 정책 검토가 필요합니다."
+        if (
+            "penalty_region_violation" in finding_types
+            and ("obstacle" in prompt_focus or "collision" in prompt_focus)
+            and not {"static_obstacle_collision", "blocked_region_collision"} & finding_types
+        ):
+            response.summary.message = (
+                "사용자 요청 관점에서 요청한 장애물/충돌 근거는 확인되지 않았고, "
+                "패널티 구역 침범 근거가 확인되어 주행 정책 검토가 필요합니다."
+            )
+        else:
+            response.summary.message = "주행 정책 검토가 필요한 실패 근거가 확인되었습니다."
         self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
 
     def _append_prompt_focus_message(self, *, response: AnalysisRunV2Response, prompt_focus: list[str]) -> None:

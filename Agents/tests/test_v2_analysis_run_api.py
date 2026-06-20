@@ -61,6 +61,16 @@ def _write_blocked_episode(project: Path, episode_id: str) -> None:
     )
 
 
+def _write_penalty_episode(project: Path, episode_id: str) -> None:
+    """Create a policy-review episode with penalty-region evidence."""
+    _write_episode(
+        project,
+        episode_id,
+        {"success": False, "goal_reached": False, "penalty_region_violation_count": 1},
+        '{"event_type": "PenaltyRegionViolation"}\n',
+    )
+
+
 def _llm_analysis(project_id: str, evidence_episode_id: str = "000001") -> dict:
     return {
         "summary_message": "LLM recommends policy change.",
@@ -127,6 +137,9 @@ def test_v2_analysis_run_missing_requested_run_returns_insufficient_data(tmp_pat
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["schema"] == "analysis_run_response_v2"
+    assert payload["run_id"] == "000001"
+    assert payload["review_id"] is None
+    assert payload["recommendation_type"] == "insufficient_data"
     assert payload["summary"]["overall_judgement"] == "insufficient_data"
     assert any("run directory does not exist" in warning for warning in payload["warnings"])
 
@@ -145,7 +158,8 @@ def test_v2_analysis_run_records_broken_jsonl_warning(tmp_path) -> None:
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["analysis_scope"] == {"experiments_count": 1, "runs_count": 1, "episodes_count": 1}
-    assert payload["recommendations"] == []
+    assert payload["recommendations"][0]["target"] == "policy"
+    assert payload["recommendations"][0]["recommendation"]
     assert any("events.jsonl" in warning for warning in payload["warnings"])
 
 
@@ -158,6 +172,7 @@ def test_v2_analysis_run_uses_summary_when_episode_results_are_missing(tmp_path)
             "success_count": 2,
             "failure_count": 1,
             "collision_count": 1,
+            "static_obstacle_collision_count": 2,
             "near_miss_count": 4,
         },
     )
@@ -170,7 +185,9 @@ def test_v2_analysis_run_uses_summary_when_episode_results_are_missing(tmp_path)
     assert payload["metrics"]["success_count"] == 2
     assert payload["metrics"]["failure_count"] == 1
     assert payload["metrics"]["collision_count"] == 1
+    assert payload["metrics"]["static_obstacle_collision_count"] == 2
     assert payload["metrics"]["near_miss_count"] == 4
+    assert payload["recommendation_type"] == "none"
     assert payload["recommendations"] == []
 
 
@@ -220,7 +237,32 @@ def test_v2_analysis_run_warns_for_broken_summary_without_500(tmp_path) -> None:
     payload = response.json()
     assert payload["schema"] == "analysis_run_response_v2"
     assert payload["summary"]["overall_judgement"] == "insufficient_data"
+    assert "로그" in payload["summary"]["message"]
+    assert "부족" in payload["summary"]["message"]
+    assert "판단하기 어렵" in payload["summary"]["message"]
+    assert "반복적인 실패 패턴이 확인되지 않아" not in payload["summary"]["message"]
     assert any("summary.json" in warning and "JSON parse failed" in warning for warning in payload["warnings"])
+
+
+def test_v2_analysis_run_missing_result_basis_uses_insufficient_data_message(tmp_path) -> None:
+    """Existing run folders without result or summary basis use a log-shortage message."""
+    project = tmp_path / "Project1"
+    for episode_id in ("000001", "000002"):
+        episode_dir = project / "runs" / "000001" / "episodes" / episode_id
+        episode_dir.mkdir(parents=True)
+        (episode_dir / "actions.jsonl").write_text('{"action": "noop"}\n', encoding="utf-8")
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["recommendation_type"] == "insufficient_data"
+    assert payload["summary"]["overall_judgement"] == "insufficient_data"
+    assert "로그" in payload["summary"]["message"]
+    assert "부족" in payload["summary"]["message"]
+    assert "판단하기 어렵" in payload["summary"]["message"]
+    assert "result/events" in payload["summary"]["message"]
+    assert "반복적인 실패 패턴이 확인되지 않아" not in payload["summary"]["message"]
 
 
 def test_v2_analysis_run_warns_for_missing_episode_artifacts(tmp_path) -> None:
@@ -248,6 +290,12 @@ def test_v2_analysis_run_successful_episodes_do_not_generate_recommendations(tmp
     payload = response.json()
     assert payload["analysis_scope"] == {"experiments_count": 1, "runs_count": 1, "episodes_count": 2}
     assert payload["summary"]["overall_judgement"] == "no_change_needed"
+    assert "반복적인 실패 패턴이 확인되지 않아" in payload["summary"]["message"]
+    assert "로그가 부족" not in payload["summary"]["message"]
+    assert "판단하기 어렵" not in payload["summary"]["message"]
+    assert payload["run_id"] == "000001"
+    assert payload["review_id"] == "0001"
+    assert payload["recommendation_type"] == "none"
     assert payload["metrics"]["success_count"] == 2
     assert payload["metrics"]["failure_count"] == 0
     assert payload["recommendations"] == []
@@ -255,7 +303,7 @@ def test_v2_analysis_run_successful_episodes_do_not_generate_recommendations(tmp
     assert payload["modified_environment_json"] == []
 
 
-def test_v2_analysis_run_repeated_blocked_region_generates_policy_recommendation(tmp_path) -> None:
+def test_v2_analysis_run_repeated_blocked_region_generates_environment_recommendation(tmp_path) -> None:
     project = tmp_path / "Project1"
     for episode_id in ("000001", "000002"):
         _write_episode(
@@ -272,12 +320,17 @@ def test_v2_analysis_run_repeated_blocked_region_generates_policy_recommendation
     assert payload["summary"]["overall_judgement"] == "change_recommended"
     assert payload["metrics"]["blocked_region_violation_count"] == 2
     assert payload["metrics"]["penalty_region_violation_count"] == 2
+    assert payload["metrics"]["static_obstacle_collision_count"] == 0
+    assert payload["run_id"] == "000001"
+    assert payload["review_id"] == "0001"
+    assert payload["recommendation_type"] == "environment_review"
     assert payload["patterns"][0]["type"] == "blocked_region_violation_repeated"
-    assert payload["recommendations"][0]["target"] == "policy"
-    assert payload["recommendations"][0]["llm_recommendation"]
-    assert payload["modified_policy_json"][0]["source_recommendation_id"] == payload["recommendations"][0]["id"]
-    assert payload["modified_policy_json"][0]["target"] == "policy"
-    assert payload["modified_environment_json"] == []
+    assert payload["recommendations"][0]["target"] == "environment"
+    assert payload["recommendations"][0]["recommendation"]
+    assert "llm_recommendation" not in payload["recommendations"][0]
+    assert payload["modified_environment_json"][0]["source_recommendation_id"] == payload["recommendations"][0]["id"]
+    assert payload["modified_environment_json"][0]["target"] == "environment"
+    assert payload["modified_policy_json"] == []
 
 
 def test_v2_analysis_agent_keeps_rule_based_mode_when_llm_disabled(tmp_path) -> None:
@@ -299,8 +352,7 @@ def test_v2_analysis_agent_keeps_rule_based_mode_when_llm_disabled(tmp_path) -> 
 
 def test_v2_analysis_agent_uses_valid_llm_recommendation(tmp_path) -> None:
     project = tmp_path / "Project1"
-    _write_blocked_episode(project, "000001")
-    _write_blocked_episode(project, "000002")
+    _write_penalty_episode(project, "000001")
     fake = _FakeJsonClient([_llm_analysis(project.name, "000001")])
     agent = ResultAnalysisV2Agent(
         settings=Settings(v2AgentLlmEnabled=True),
@@ -311,14 +363,15 @@ def test_v2_analysis_agent_uses_valid_llm_recommendation(tmp_path) -> None:
 
     assert response.analysis_mode == "llm"
     assert response.recommendations[0]["id"] == "REC-LLM-001"
+    assert response.recommendations[0]["recommendation"] == "Prefer slow down or stop before leaving the walkable region."
+    assert "llm_recommendation" not in response.recommendations[0]
     assert response.modified_policy_json[0]["source_recommendation_id"] == "REC-LLM-001"
     assert fake.calls[0]["response_name"] == "analysis_recommendations_v2"
 
 
 def test_v2_analysis_agent_falls_back_when_llm_evidence_is_invalid(tmp_path) -> None:
     project = tmp_path / "Project1"
-    _write_blocked_episode(project, "000001")
-    _write_blocked_episode(project, "000002")
+    _write_penalty_episode(project, "000001")
     fake = _FakeJsonClient([_llm_analysis(project.name, "999999")])
     agent = ResultAnalysisV2Agent(
         settings=Settings(v2AgentLlmEnabled=True),
@@ -334,8 +387,7 @@ def test_v2_analysis_agent_falls_back_when_llm_evidence_is_invalid(tmp_path) -> 
 
 def test_v2_analysis_agent_falls_back_when_llm_json_fails(tmp_path) -> None:
     project = tmp_path / "Project1"
-    _write_blocked_episode(project, "000001")
-    _write_blocked_episode(project, "000002")
+    _write_penalty_episode(project, "000001")
     fake = _FakeJsonClient([ValueError("invalid json")])
     agent = ResultAnalysisV2Agent(
         settings=Settings(v2AgentLlmEnabled=True),
@@ -357,7 +409,14 @@ def test_v2_analysis_run_openapi_requires_project_path_and_run_id() -> None:
     request_ref = operation["requestBody"]["content"]["application/json"]["schema"]["$ref"]
     component_name = request_ref.rsplit("/", 1)[-1]
     request_schema = schema["components"]["schemas"][component_name]
+    response_ref = operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+    response_component_name = response_ref.rsplit("/", 1)[-1]
+    response_schema = schema["components"]["schemas"][response_component_name]
 
     assert "/api/v1/analysis/run" in schema["paths"]
     assert request_schema["required"] == ["project_path", "run_id"]
     assert set(request_schema["properties"]) == {"project_path", "run_id", "prompt"}
+    assert "review_id" in response_schema["properties"]
+    assert "run_id" in response_schema["properties"]
+    assert "recommendation_type" in response_schema["properties"]
+    assert "static_obstacle_collision_count" in schema["components"]["schemas"]["AnalysisMetricsV2"]["properties"]

@@ -29,7 +29,7 @@ class ArtifactParser:
 
     def _parse_json(self, info: ArtifactInfo) -> ParsedArtifact:
         try:
-            return ParsedArtifact(info=info, data=json.loads(info.path.read_text(encoding="utf-8")), warnings=[])
+            return ParsedArtifact(info=info, data=json.loads(info.path.read_text(encoding="utf-8-sig")), warnings=[])
         except Exception as exc:
             return ParsedArtifact(info=info, data=None, warnings=[f"{info.relative_path}: JSON parse failed: {exc}"])
 
@@ -37,7 +37,7 @@ class ArtifactParser:
         rows: list[Any] = []
         warnings: list[str] = []
         try:
-            lines = info.path.read_text(encoding="utf-8").splitlines()
+            lines = info.path.read_text(encoding="utf-8-sig").splitlines()
         except Exception as exc:
             return ParsedArtifact(info=info, data=[], warnings=[f"{info.relative_path}: read failed: {exc}"])
 

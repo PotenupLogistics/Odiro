@@ -32,6 +32,13 @@ def _write_snapshot_policy_file(project: Path, run_id: str, relative_path: str, 
     path.write_bytes(body)
 
 
+def _write_large_actions_file(project: Path, run_id: str, episode_id: str) -> None:
+    """Create an actions.jsonl file that the scanner will skip as too large."""
+    actions_path = project / "runs" / run_id / "episodes" / episode_id / "actions.jsonl"
+    actions_path.parent.mkdir(parents=True, exist_ok=True)
+    actions_path.write_bytes(b"{\"action\":\"noop\"}\n" + b" " * 5_000_001)
+
+
 def test_v2_analysis_run_writes_review_artifacts_and_index(tmp_path) -> None:
     project = tmp_path / "Project1"
     _write_snapshot(project, "000001", {"scenario_id": "baseline"})
@@ -55,7 +62,7 @@ def test_v2_analysis_run_writes_review_artifacts_and_index(tmp_path) -> None:
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["summary"]["overall_judgement"] == "change_recommended"
-    assert "penalty region violation" in payload["summary"]["message"]
+    assert "패널티 구역 침범" in payload["summary"]["message"]
     review_dir = project / "runs" / "000001" / "review" / "0001"
     assert review_dir.is_dir()
     status = _read_json(review_dir / "status.json")
@@ -65,6 +72,9 @@ def test_v2_analysis_run_writes_review_artifacts_and_index(tmp_path) -> None:
     manifest = _read_json(review_dir / "manifest.json")
     index = _read_json(project / "analysis_index.json")
 
+    assert payload["review_id"] == "0001"
+    assert payload["run_id"] == "000001"
+    assert payload["recommendation_type"] == "policy_review"
     assert status["status"] == "completed"
     assert status["review_id"] == "0001"
     assert status["run_id"] == "000001"
@@ -81,6 +91,7 @@ def test_v2_analysis_run_writes_review_artifacts_and_index(tmp_path) -> None:
     assert "obstacle" not in {finding["type"] for finding in report["findings"]}
     assert report["evidence"][0]["run_id"] == "000001"
     assert recommendations["recommendation_type"] == "policy_review"
+    assert recommendations["recommendation_type"] == payload["recommendation_type"]
     assert recommendations["evidence_ids"] == report["findings"][0]["evidence_ids"]
     assert manifest["snapshot_hashes"]["overall_hash"]
     assert manifest["comparison"]["comparison_status"] == "no_baseline"
@@ -111,6 +122,7 @@ def test_v2_analysis_run_allocates_next_review_and_compares_previous_snapshot(tm
     )
 
     assert response.status_code == 200, response.text
+    payload = response.json()
     review_dir = project / "runs" / "000002" / "review" / "0002"
     request = _read_json(review_dir / "request.json")
     manifest = _read_json(review_dir / "manifest.json")
@@ -124,6 +136,9 @@ def test_v2_analysis_run_allocates_next_review_and_compares_previous_snapshot(tm
     assert manifest["comparison"]["comparison_status"] == "changed"
     assert manifest["comparison"]["changed_artifacts"] == ["scenario.json"]
     assert recommendations["recommendation_type"] == "policy_review"
+    assert payload["review_id"] == "0002"
+    assert payload["run_id"] == "000002"
+    assert payload["recommendation_type"] == recommendations["recommendation_type"]
     assert index["latest_review_id"] == "0002"
     assert index["reviews"][0]["based_on_review_id"] == "0001"
     assert [entry["review_id"] for entry in index["runs"]["000002"]["reviews"]] == ["0002"]
@@ -149,6 +164,39 @@ def test_v2_analysis_run_snapshot_hash_excludes_policy_runtime_cache_files(tmp_p
     assert "policy/rules.json" in snapshot_files
     assert "policy/__pycache__/rules.cpython-312.pyc" not in snapshot_files
     assert "policy/.DS_Store" not in snapshot_files
+    assert "runs/000001/snapshot/policy/rules.json" in manifest["source_run_files"]
+    assert "runs/000001/snapshot/policy/__pycache__/rules.cpython-312.pyc" not in manifest["source_run_files"]
+    assert "runs/000001/snapshot/policy/.DS_Store" not in manifest["source_run_files"]
+
+
+def test_v2_analysis_run_data_coverage_lists_broken_json_and_large_actions_by_requested_run(tmp_path) -> None:
+    """Data coverage distinguishes skipped actions and run-local broken JSON paths."""
+    project = tmp_path / "Project1"
+    _write_episode(project, "000001", "000001", {"success": True, "goal_reached": True})
+    _write_large_actions_file(project, "000001", "000001")
+    _write_episode(project, "000002", "000001", {"success": True, "goal_reached": True})
+    _write_large_actions_file(project, "000002", "000001")
+    broken_snapshot = project / "runs" / "000002" / "snapshot" / "scenario.json"
+    broken_snapshot.parent.mkdir(parents=True)
+    broken_snapshot.write_text("{broken json}", encoding="utf-8")
+
+    response = TestClient(app).post(
+        "/api/v2/analysis/run",
+        json={"project_path": str(project), "run_id": "000002"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    review_dir = project / "runs" / "000002" / "review" / "0001"
+    report = _read_json(review_dir / "report.json")
+    coverage = report["data_coverage"]
+    assert coverage["actions_file_count"] == 1
+    assert coverage["parsed_actions_file_count"] == 0
+    assert coverage["skipped_large_actions_file_count"] == 1
+    assert coverage["broken_json_count"] == 1
+    assert coverage["broken_json_paths"] == ["runs/000002/snapshot/scenario.json"]
+    assert any("runs\\000002\\episodes\\000001\\actions.jsonl" in warning for warning in payload["warnings"])
+    assert not any("runs\\000001\\episodes\\000001\\actions.jsonl" in warning for warning in payload["warnings"])
 
 
 def test_v2_analysis_run_missing_run_does_not_create_review_directory(tmp_path) -> None:
@@ -161,7 +209,11 @@ def test_v2_analysis_run_missing_run_does_not_create_review_directory(tmp_path) 
     )
 
     assert response.status_code == 200, response.text
-    assert response.json()["summary"]["overall_judgement"] == "insufficient_data"
+    payload = response.json()
+    assert payload["summary"]["overall_judgement"] == "insufficient_data"
+    assert payload["review_id"] is None
+    assert payload["run_id"] == "000001"
+    assert payload["recommendation_type"] == "insufficient_data"
     assert not (project / "runs" / "000001").exists()
     assert not (project / "analysis_index.json").exists()
 
@@ -176,9 +228,14 @@ def test_v2_analysis_run_existing_empty_run_keeps_insufficient_data_summary(tmp_
     )
 
     assert response.status_code == 200, response.text
-    assert response.json()["summary"]["overall_judgement"] == "insufficient_data"
+    payload = response.json()
+    assert payload["summary"]["overall_judgement"] == "insufficient_data"
+    assert payload["review_id"] == "0001"
+    assert payload["run_id"] == "000001"
+    assert payload["recommendation_type"] == "insufficient_data"
     recommendations = _read_json(project / "runs" / "000001" / "review" / "0001" / "recommendations.json")
     assert recommendations["recommendation_type"] == "insufficient_data"
+    assert recommendations["recommendation_type"] == payload["recommendation_type"]
 
 
 def test_v2_analysis_graph_mode_writes_review_artifacts(monkeypatch, tmp_path) -> None:
@@ -193,7 +250,11 @@ def test_v2_analysis_graph_mode_writes_review_artifacts(monkeypatch, tmp_path) -
     )
 
     assert response.status_code == 200, response.text
-    assert response.json()["summary"]["overall_judgement"] == "change_recommended"
+    payload = response.json()
+    assert payload["summary"]["overall_judgement"] == "change_recommended"
+    assert payload["review_id"] == "0001"
+    assert payload["run_id"] == "000001"
+    assert payload["recommendation_type"] == "policy_review"
     review_dir = project / "runs" / "000001" / "review" / "0001"
     assert _read_json(review_dir / "status.json")["status"] == "completed"
     assert _read_json(review_dir / "recommendations.json")["recommendation_type"] == "policy_review"

@@ -5,6 +5,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+RecommendationTypeV2 = Literal["environment_review", "policy_review", "none", "insufficient_data"]
+
+
 class AnalysisRunV2Request(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -50,6 +53,8 @@ class AnalysisMetricsV2(BaseModel):
     success_count: int = Field(ge=0)
     failure_count: int = Field(ge=0)
     collision_count: int = Field(ge=0)
+    static_obstacle_collision_count: int = Field(default=0, ge=0)
+    pedestrian_collision_count: int = Field(default=0, ge=0)
     near_miss_count: int = Field(ge=0)
     blocked_region_violation_count: int = Field(ge=0)
     penalty_region_violation_count: int = Field(ge=0)
@@ -61,12 +66,16 @@ class AnalysisRunV2Response(BaseModel):
     schema_: Literal["analysis_run_response_v2"] = Field(default="analysis_run_response_v2", alias="schema")
     version: Literal[2] = 2
     status: Literal["success", "failed"] = "success"
+    run_id: str | None = Field(default=None, description="Requested run id when the response is scoped to one user project run.")
+    review_id: str | None = Field(default=None, description="Generated review id, or null when no review directory was created.")
     analysis_scope: AnalysisScopeV2
     summary: AnalysisSummaryV2
     metrics: AnalysisMetricsV2
+    recommendation_type: RecommendationTypeV2 = "insufficient_data"
     patterns: list[dict[str, Any]] = Field(default_factory=list)
     recommendations: list[dict[str, Any]] = Field(default_factory=list)
     modified_policy_json: list[dict[str, Any]] = Field(default_factory=list)
     modified_environment_json: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     analysis_mode: Literal["rule_based", "llm", "fallback"] = "rule_based"
+    analysis_text: str = Field(description="API-only natural-language display summary; review artifacts do not persist it.")

@@ -7,24 +7,34 @@ from app.agents.result_analysis_v2.episode_metric_extractor import EpisodeMetric
 
 
 class FailurePatternDetector:
+    """Detects repeated failure patterns across normalized episode metrics."""
+
     def detect(self, episodes: list[EpisodeMetrics]) -> list[dict[str, Any]]:
-        by_type: dict[str, list[EpisodeMetrics]] = defaultdict(list)
+        """Return repeated pattern records using unique episode evidence per pattern."""
+        by_type: dict[str, dict[tuple[str, str], EpisodeMetrics]] = defaultdict(dict)
         for episode in episodes:
             if episode.failure_type:
-                by_type[episode.failure_type].append(episode)
+                self._add_episode(by_type, episode.failure_type, episode)
             if episode.blocked_region_violation_count:
-                by_type["blocked_region_violation"].append(episode)
+                self._add_episode(by_type, "blocked_region_violation", episode)
             if episode.near_miss_count:
-                by_type["near_miss"].append(episode)
+                self._add_episode(by_type, "near_miss", episode)
             if episode.collision_count:
-                by_type["collision"].append(episode)
+                self._add_episode(by_type, "collision", episode)
+            if episode.pedestrian_collision_count:
+                self._add_episode(by_type, "pedestrian_collision", episode)
             if episode.timeout:
-                by_type["timeout"].append(episode)
+                self._add_episode(by_type, "timeout", episode)
             if episode.goal_reached is False:
-                by_type["goal_not_reached"].append(episode)
+                self._add_episode(by_type, "goal_not_reached", episode)
+            if episode.policy_decision_error_count:
+                self._add_episode(by_type, "policy_decision_error", episode)
+            if episode.stuck_count:
+                self._add_episode(by_type, "stuck", episode)
 
         patterns: list[dict[str, Any]] = []
-        for index, (pattern_type, items) in enumerate(sorted(by_type.items()), start=1):
+        for index, (pattern_type, item_by_episode) in enumerate(sorted(by_type.items()), start=1):
+            items = list(item_by_episode.values())
             if len(items) < 2:
                 continue
             patterns.append(
@@ -43,3 +53,12 @@ class FailurePatternDetector:
                 }
             )
         return patterns
+
+    def _add_episode(
+        self,
+        by_type: dict[str, dict[tuple[str, str], EpisodeMetrics]],
+        pattern_type: str,
+        episode: EpisodeMetrics,
+    ) -> None:
+        """Keep one evidence entry per run/episode for each pattern type."""
+        by_type[pattern_type].setdefault((episode.run_id, episode.episode_id), episode)

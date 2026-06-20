@@ -69,7 +69,6 @@ keep:
   - `FUserProjectRunOutputJson` writes `events.jsonl.action_sequence` from typed `action_sequence` or `policy_sequence` event properties so policy events can join back to `actions.jsonl.sequence`.
   - `FUserProjectRunOutputJson` preserves typed evaluation `TargetInstanceId` as `events.jsonl` `target_id` or `region_id` properties when runtime detectors have not already supplied those fields.
   - `FUserProjectRunOutputJson` reuses an existing terminal-cause evaluation event for `result.json.summary.terminal_event_index`; it only writes a synthetic terminal `events.jsonl` line when no matching terminal event exists.
-  - `FUserProjectRunOutputJson` writes run-relative `scenario_path`, `result_path`, and `events_path` artifact links in `result.json` and each `summary.json` row; preview images and captures stay outside that field contract.
   - ScenarioEvaluationSubsystem policy-event snapshots use the Python policy snapshot runtime and sequence as the `events.jsonl` run time and action-sequence join source.
   - ScenarioEvaluationSubsystem DeliveryBot simulation-failure snapshots use `FDeliveryBotSimulationFailureInfo.TimeSeconds` as the `events.jsonl` run time when the producer supplies it.
   - ScenarioEvaluationSubsystem owns non-terminal Stuck detection from goal-progress and observed-speed windows; project run output exposes it as `Stuck` through `DeliveryBotSimulationFailure` snapshot properties while `Timeout` remains the terminal reason.

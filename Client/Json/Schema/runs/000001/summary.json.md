@@ -44,44 +44,16 @@ runs/<RunId>/summary.json
 | `profile_hash` | string | 예 | Run snapshot `profile.json` hash. |
 | `setting_hash` | string | 예 | Run snapshot `setting.json` hash. |
 | `seed` | number | 예 | Episode seed. |
-| `completed` | boolean | 예 | Evaluation 종료 여부. |
-| `success` | boolean | 예 | 목표 달성 여부. |
 | `outcome` | string | 예 | `Success`, `Failure`, `Cancelled` 등 최종 결과 분류. |
 | `terminal_reason` | string | 예 | Episode 종료 원인. |
-| `terminal_event_index` | number or null | 권장 | 종료 원인 event의 `events.jsonl.event_index`. |
 | `duration_s` | number | 예 | Episode 실행 시간. |
 | `usable_for_llm_tuning` | boolean | 예 | 분석/튜닝 근거로 사용할 수 있는지 여부. |
-| `artifacts` | object | 예 | 같은 episode의 주요 근거 파일 경로. |
 | `metrics` | object | 예 | 주요 count/distance metric subset. |
-| `event_summary` | object | 예 | `events.jsonl` count 집계. |
 | `scenario_params` | object | 예 | 핵심 `scenario_sample.scenario.params` subset. |
 | `scenario_semantic` | object | 예 | 핵심 `scenario_sample.scenario.semantic` subset. |
-
-## rows[].artifacts
-
-경로는 run directory 기준 상대 경로다.
-
-| 필드 | 타입 | 필수 | 설명 |
-| --- | --- | --- | --- |
-| `scenario_path` | string | 예 | Episode `scenario.json` 경로. |
-| `result_path` | string | 예 | Episode `result.json` 경로. |
-| `events_path` | string | 예 | Episode `events.jsonl` 경로. |
-
-## rows[].event_summary
-
-`result.json.event_summary`와 같은 구조다.
-
-| 필드 | 타입 | 필수 | 설명 |
-| --- | --- | --- | --- |
-| `total` | number | 예 | Event 수. |
-| `event_count` | number | 호환 | Event 수를 나타내는 runtime writer field. |
-| `by_type` | object | 예 | `event_type`별 count. |
-| `by_source` | object | 권장 | `source`별 count. |
-| `terminal_event_index` | number or null | 권장 | 종료 원인 event index. |
 
 ## 사용 규칙
 
 - `summary.json`은 빠른 검토용 집계이며 source of truth가 아니다.
 - Episode 원본은 같은 run 아래 `episodes/<EpisodeId>/scenario.json`, `result.json`, `events.jsonl`에서 확인한다.
 - LLM은 summary row로 후보 episode를 좁힌 뒤 원본 파일을 읽고 판단한다.
-- `preview.png`와 `captures/`는 이 summary row artifact 계약에 포함하지 않는다.

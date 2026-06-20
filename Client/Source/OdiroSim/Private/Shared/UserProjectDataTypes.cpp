@@ -212,10 +212,6 @@ namespace
 		filePath.ReplaceInline(TEXT("\\"), TEXT("/"));
 		FString runPath = paths.RunPath;
 		runPath.ReplaceInline(TEXT("\\"), TEXT("/"));
-		if (!runPath.EndsWith(TEXT("/")))
-		{
-			runPath += TEXT("/");
-		}
 		if (FPaths::MakePathRelativeTo(filePath, *runPath))
 		{
 			filePath.ReplaceInline(TEXT("\\"), TEXT("/"));
@@ -1096,7 +1092,6 @@ namespace
 	{
 		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
 		object->SetStringField(TEXT("episode_id"), episodeId);
-		object->SetStringField(TEXT("scenario_id"), sourceObject->GetStringField(TEXT("scenario_id")));
 		object->SetStringField(TEXT("scenario_hash"), sourceObject->GetStringField(TEXT("scenario_hash")));
 		object->SetStringField(TEXT("scenario_source_hash"), sourceObject->GetStringField(TEXT("scenario_source_hash")));
 		object->SetStringField(TEXT("profile_hash"), sourceObject->GetStringField(TEXT("profile_hash")));
@@ -1178,18 +1173,6 @@ namespace
 		object->SetObjectField(TEXT("by_type"), countsObject);
 		object->SetObjectField(TEXT("by_source"), sourcesObject);
 		object->SetNumberField(TEXT("terminal_event_index"), terminalPlan.EventIndex);
-		return object;
-	}
-
-	TSharedRef<FJsonObject> MakeEpisodeArtifactPathsObject(
-		const FUserProjectRunSnapshotPaths& paths,
-		const FString& episodeId)
-	{
-		const FString episodeDirectory = FPaths::Combine(paths.EpisodesPath, episodeId);
-		TSharedRef<FJsonObject> object = MakeShared<FJsonObject>();
-		object->SetStringField(TEXT("scenario_path"), MakeRunRelativePath(paths, FPaths::Combine(episodeDirectory, TEXT("scenario.json"))));
-		object->SetStringField(TEXT("result_path"), MakeRunRelativePath(paths, FPaths::Combine(episodeDirectory, TEXT("result.json"))));
-		object->SetStringField(TEXT("events_path"), MakeRunRelativePath(paths, FPaths::Combine(episodeDirectory, TEXT("events.jsonl"))));
 		return object;
 	}
 
@@ -2162,19 +2145,15 @@ namespace
 		object->SetStringField(TEXT("profile_hash"), profileHash);
 		object->SetStringField(TEXT("setting_hash"), settingHash);
 		object->SetNumberField(TEXT("seed"), static_cast<double>(seed));
-		object->SetBoolField(TEXT("completed"), runRecord.bEvaluationCompleted);
-		object->SetBoolField(TEXT("success"), runRecord.bSuccess);
 		object->SetStringField(TEXT("outcome"), ToUserProjectEnumString(runRecord.Outcome));
 		object->SetStringField(TEXT("terminal_reason"), ToUserProjectEnumString(runRecord.TerminalReason));
-		object->SetNumberField(TEXT("terminal_event_index"), MakeTerminalEventWritePlan(runRecord).EventIndex);
 		object->SetNumberField(TEXT("duration_s"), runRecord.DurationSeconds);
 		object->SetBoolField(TEXT("usable_for_llm_tuning"), IsUserProjectRecordUsableForTuning(runRecord));
-		object->SetObjectField(TEXT("artifacts"), MakeEpisodeArtifactPathsObject(paths, episodeId));
 		object->SetObjectField(TEXT("metrics"), MakeUserProjectParamObject(runRecord.EvaluationResult.Metrics));
-		object->SetObjectField(TEXT("event_summary"), MakeEventSummaryObject(runRecord));
 		const TSharedPtr<FJsonObject> scenarioPayloadObject = TryGetObjectFieldOrNull(episodeScenarioObject, TEXT("scenario"));
 		object->SetObjectField(TEXT("scenario_params"), CloneObjectFieldOrEmpty(scenarioPayloadObject, TEXT("params")));
 		object->SetObjectField(TEXT("scenario_semantic"), CloneObjectFieldOrEmpty(scenarioPayloadObject, TEXT("semantic")));
+		(void)paths;
 		(void)sourceObject;
 		return object;
 	}
@@ -2223,7 +2202,6 @@ bool FUserProjectRunOutputJson::SaveEpisodeArtifacts(
 	rootObject->SetObjectField(TEXT("episode"), MakeEpisodeObject(episodeId, sourceObject));
 	rootObject->SetObjectField(TEXT("run"), MakeRunObject(paths, runRecord));
 	rootObject->SetObjectField(TEXT("summary"), MakeEpisodeSummaryObject(runRecord));
-	rootObject->SetObjectField(TEXT("artifacts"), MakeEpisodeArtifactPathsObject(paths, episodeId));
 	rootObject->SetObjectField(TEXT("metrics"), MakeUserProjectParamObject(runRecord.EvaluationResult.Metrics));
 	rootObject->SetObjectField(TEXT("event_summary"), MakeEventSummaryObject(runRecord));
 

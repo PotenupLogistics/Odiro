@@ -65,7 +65,7 @@ keep:
   - Scenario LLM prompt generate/load/run is scoped to the current `<UserProject>/scenario.json`; run launches create `<UserProject>/runs/<RunId>` snapshots through SimulatorLaunchSubsystem.
   - Project run output uses `FUserProjectRunOutputJson` for `result.json`, `events.jsonl`, `actions.jsonl`, `trace.jsonl`, and `summary.json`.
   - Project `setting.json` runtime/evaluation fields are simulator-run inputs: `time_scale` applies to world time dilation, and evaluation distances convert from meters to runtime centimeters.
-  - Client/Json/Schema and Client/Json/environment-catalog.md are LLM prompt-facing docs for one user project simulation set; keep them aligned with contracts/specs/user-project-data.md and the Client scenario catalog assets.
+  - Client/Json/Schema and Client/Json/environment-catalog.md describe the Client-owned scenario catalog surface; keep them aligned with contracts/specs/user-project-data.md, the Client scenario catalog assets, and the temporary AI-side copy at Agents/docs/environment/environment-catalog.md.
   - Scenario authoring/runtime projection stays separate from runtime WorldSpec and actor-spawn payload types.
 verify:
   - contract specs vs sample JSON alignment

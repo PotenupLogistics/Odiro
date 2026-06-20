@@ -7,36 +7,44 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = ROOT.parent
 DOCS = ROOT / "docs"
 CONTRACT_SPECS = REPO_ROOT / "contracts" / "specs"
+ROOT_SPECS = REPO_ROOT / "docs" / "specs"
+
+LEGACY_TERMINOLOGY_NAME = "SCENARIO_" + "EPISODE_TERMINOLOGY.md"
+MISSING_EVALUATION_REPORT_NAME = "EpisodeEvaluationReport" + ".json.md"
 
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
 
 
-def test_ue_contract_docs_and_plans_exist() -> None:
+def test_legacy_ue_contract_docs_are_retained_but_not_current_contract_set() -> None:
     for name in [
         "EpisodeSetup.json.md",
         "DeliveryBotSetup.json.md",
         "RunQueue.json.md",
-        "EpisodeEvaluationReport.json.md",
     ]:
         assert (CONTRACT_SPECS / name).exists()
 
-    assert (DOCS / "architecture" / "SCENARIO_EPISODE_TERMINOLOGY.md").exists()
+    assert not (CONTRACT_SPECS / MISSING_EVALUATION_REPORT_NAME).exists()
+    assert (ROOT_SPECS / "simulation-interface.md").exists()
+    assert (DOCS / "archive" / "deprecated" / LEGACY_TERMINOLOGY_NAME).exists()
     assert (DOCS / "architecture" / "UE_CONTRACT_MIGRATION_PLAN.md").exists()
     assert (DOCS / "archive" / "previous_episode_spec" / "UE5_EPISODE_SPEC_ADAPTER.md").exists()
 
 
-def test_scenario_episode_terminology_distinguishes_core_terms() -> None:
-    text = _read(DOCS / "architecture" / "SCENARIO_EPISODE_TERMINOLOGY.md")
+def test_simulation_interface_distinguishes_current_execution_terms() -> None:
+    text = _read(ROOT_SPECS / "simulation-interface.md")
 
-    assert "Scenario" in text
-    assert "추상적인 상황 유형" in text
-    assert "Episode" in text
-    assert "구체 시뮬레이션 인스턴스" in text
-    assert "EpisodeSetup + DeliveryBotSetup" in text
-    assert "scenario_id" in text
-    assert "pair_id" in text
+    for term in [
+        "Scenario",
+        "EpisodeScenario",
+        "Run",
+        "Episode",
+        "RunId",
+        "EpisodeId",
+        "Project",
+    ]:
+        assert term in text
 
 
 def test_episode_setup_contract_uses_new_coordinate_fields_and_forbids_legacy_transform_fields() -> None:
@@ -82,28 +90,24 @@ def test_delivery_bot_setup_contract_keeps_tuning_separate_from_episode_placemen
     assert "라이다 반응 튜닝" in text
 
 
-def test_run_queue_and_evaluation_report_contracts_are_indexed_without_implementation_scope() -> None:
+def test_run_queue_contract_is_legacy_and_evaluation_report_link_is_absent() -> None:
     run_queue_text = _read(CONTRACT_SPECS / "RunQueue.json.md")
-    evaluation_text = _read(CONTRACT_SPECS / "EpisodeEvaluationReport.json.md")
-    migration_text = _read(DOCS / "architecture" / "UE_CONTRACT_MIGRATION_PLAN.md")
+    docs_readme = _read(DOCS / "README.md")
 
     for term in ["pair_id", "episode_setup", "delivery_bot_setup"]:
         assert term in run_queue_text
     assert "순서대로 실행" in run_queue_text
-
-    for term in ["episode_evaluation_report", "summary", "metrics", "event_summary", "events", "usable_for_llm_tuning"]:
-        assert term in evaluation_text
-    assert "결과 분석" in migration_text
-    assert "다른 담당자 범위" in migration_text
+    assert MISSING_EVALUATION_REPORT_NAME not in docs_readme
 
 
-def test_readmes_link_ue_contract_migration_and_cleanup_docs() -> None:
+def test_readmes_link_current_simulation_and_user_project_contracts() -> None:
     text = _read(ROOT / "README.md") + "\n" + _read(DOCS / "README.md")
 
-    assert "UE_CONTRACT_MIGRATION_PLAN.md" in text
-    assert "SCENARIO_EPISODE_TERMINOLOGY.md" in text
-    assert "archive/previous_episode_spec" in text
-    assert "contracts/specs" in text
+    assert "simulation-interface.md" in text
+    assert "user-project-data.md" in text
+    assert "environment/environment-catalog.md" in text
+    assert LEGACY_TERMINOLOGY_NAME not in text
+    assert MISSING_EVALUATION_REPORT_NAME not in text
 
 
 def test_ue_contract_doc_tests_do_not_import_live_provider_sdks() -> None:

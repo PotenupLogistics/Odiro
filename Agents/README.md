@@ -1,6 +1,6 @@
-# Proto-AI / Odiro AI Services
+# Odiro Agents
 
-주행 로봇 시뮬레이션을 위한 AI 백엔드입니다. 프로젝트 내부 시뮬레이션 검증용이며 실제 운영 안전성이나 출시 기준을 충족하지 않습니다.
+Odiro monorepo의 AI 백엔드입니다. 주행 로봇 시뮬레이션 검증용이며 실제 운영 안전성이나 출시 기준을 충족하지 않습니다.
 
 ## 역할
 
@@ -28,7 +28,7 @@ Natural Language Prompt
 -> User Project Run Analysis
 ```
 
-Scenario/Episode 용어 기준은 [Scenario / Episode Terminology](docs/architecture/SCENARIO_EPISODE_TERMINOLOGY.md)를 따릅니다. 공유 실행 계약 spec은 [contracts/specs](../contracts/specs/) 아래에 있습니다.
+Scenario/Episode/Run 용어 기준은 [Simulation interface](../docs/specs/simulation-interface.md)를 따릅니다. 공유 실행 파일 계약은 [user project data contract](../contracts/specs/user-project-data.md)를 따릅니다.
 
 ## Public API
 
@@ -73,10 +73,8 @@ ollama pull llama3.1:8b
 - [JSON Contracts](docs/json_contracts/JSON_CONTRACTS.md)
 - [Policy Decision Contract](docs/policy_server/POLICY_DECISION_JSON_GUIDE.md)
 - [Environment Parameter Spec](docs/environment/ENVIRONMENT_PARAMETER_SPEC.md)
-- [UE Contract Migration Plan](docs/architecture/UE_CONTRACT_MIGRATION_PLAN.md)
-- [Handoff Release Notes](docs/handoff/HANDOFF_RELEASE_NOTES.md)
+- [Environment Catalog](docs/environment/environment-catalog.md)
 - [UE Handoff Delivery Manifest](docs/handoff/UE_HANDOFF_DELIVERY_MANIFEST.md)
-- [UE5 Endpoint Usage For UE Team](docs/handoff/UE5_ENDPOINT_USAGE_FOR_UE_TEAM.md)
 - [Legacy EpisodeSpec Archive](docs/archive/previous_episode_spec/)
 - [UE EpisodeSpec JSON Guide](docs/archive/previous_episode_spec/UE_EPISODE_SPEC_JSON_GUIDE.md)
 - [OpenAI Provider Guide](docs/providers/OPENAI_PROVIDER_GUIDE.md)

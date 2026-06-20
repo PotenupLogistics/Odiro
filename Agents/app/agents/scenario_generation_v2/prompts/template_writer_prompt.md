@@ -49,7 +49,7 @@ Project Scenario는 범위값을 포함할 수 있다.
 {
   "kind": "fixed",
   "id": "center_obstacle",
-  "prop": "obstacle.crate_01",
+  "prop": "obstacle.road_cone_01",
   "at": {
     "segment": "conflict",
     "along_m": {"min": 6.5, "max": 8.5},
@@ -84,7 +84,7 @@ robot.start.type 또는 robot.goal.type이 "entry" 또는 "exit"이면 {"type": 
 segment, along_m, offset_m, lane, heading이 필요하면 type을 반드시 "corridor_pose"로 설정한다.
 center_xy_m, center, radius_m, r_m, world_xy, actors.robot.xy_m, route.goal_xy_m은 만들지 않는다.
 ground_model, static_obstacles, pedestrians.path, template_id, template_path는 만들지 않는다.
-안내판 계열 prop이 catalog에 없으면 temporary_sign_01, construction_sign_01, guide_board_01 같은 새 prop id를 만들지 말고 obstacle.road_cone_01 또는 obstacle.crate_01처럼 허용된 prop을 사용한다.
+안내판 계열 prop이 catalog에 없으면 temporary_sign_01, construction_sign_01, guide_board_01 같은 새 prop id를 만들지 말고 obstacle.road_cone_01처럼 허용된 prop을 사용한다.
 episode_scenario, episode, source, params, semantic, validation은 만들지 않는다.
 robot.start_area, robot.goal_area, seed, base_seed, episode_count, sample_count, experiment_id, run_id, scenario_path, sample_id, generated_count, scenario_sample은 만들지 않는다.
 지원하지 않는 catalog surface, prop, encounter type, persona를 임의로 만들지 않는다.

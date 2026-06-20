@@ -5,6 +5,8 @@ paths:
   - Agents/README.md
   - Agents/app/api/**
   - Agents/app/models/**
+  - Agents/app/agents/common/**
+  - Agents/app/agents/scenario_generation_v2/**
   - Agents/app/agents/result_analysis_v2/**
   - Agents/app/services/*generation*
   - Agents/app/services/*world_config*
@@ -22,6 +24,7 @@ paths:
   - Agents/docs/providers/**
   - Agents/docs/research/**
   - Agents/docs/status/**
+  - docs/specs/simulation-interface.md
   - contracts/specs/user-project-data.md
 entry:
   - Agents/README.md
@@ -30,6 +33,9 @@ entry:
   - Agents/app/models/episode_setup.py
   - Agents/app/models/delivery_bot_setup.py
   - Agents/app/models/run_queue.py
+  - Agents/app/agents/common/spec_context_loader.py
+  - Agents/app/agents/scenario_generation_v2/agent.py
+  - Agents/app/agents/scenario_generation_v2/graph_runner.py
   - Agents/app/agents/result_analysis_v2/agent.py
   - Agents/app/agents/result_analysis_v2/graph_runner.py
   - Agents/app/services/world_config_generation_orchestrator.py
@@ -47,6 +53,7 @@ keep:
   - Final user project contract writes project/run/episode artifacts, not wrapper-free RunQueue JSON.
   - Current Scenario/Episode/Run terminology belongs in docs/specs/simulation-interface.md; archived terminology notes are legacy UE handoff context only.
   - Agents/docs/environment/environment-catalog.md is a temporary AI-side LLM catalog copied from Unreal context until a contracts/specs environment catalog becomes canonical.
+  - V2 Agent LLM spec context is loaded only from the SpecContextLoader allowlist; do not add Client/Json/environment-catalog.md or archive paths to runtime prompts.
   - Public scenario generation must not call legacy RunQueue export tooling; `/api/v1/scenarios/generate` returns `410 RUN_QUEUE_REMOVED`.
   - Agents/app/services/scenario_generation_service.py is legacy tooling, not the active v2 scenario path.
   - RunQueue export services, models, and tests are retained only as legacy tooling, not public API or user project runtime.
@@ -54,6 +61,7 @@ verify:
   - focused pytest for touched route/model/service
   - contract validation when payload fields change
   - result analysis review artifact tests when `/api/v2/analysis/run` storage behavior changes
+  - v2 spec context prompt tests when LLM prompt context allowlist or injection changes
 related:
   - agents-policy-rag-data
   - contracts-shared-data

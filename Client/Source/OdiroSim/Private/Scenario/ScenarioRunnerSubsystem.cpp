@@ -11,6 +11,7 @@
 #include "Misc/Paths.h"
 #include "Shared/ScenarioSampleJson.h"
 #include "Shared/UserProjectDataTypes.h"
+#include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioRunner, Log, All);
 
@@ -405,9 +406,12 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
 
 	if (PendingRunInputs.IsEmpty()) return false;
 
+	bCancelRequested = false;
+	UnbindEvaluationDelegates();
+	ResetEpisodeFinalizationState();
+
 	if (UScenarioEvaluationSubsystem* evaluationSubsystem = ResolveEvaluationSubsystem())
 	{
-		evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
 		evaluationSubsystem->StopEvaluation();
 	}
 
@@ -428,25 +432,55 @@ bool UScenarioRunnerSubsystem::StartBatchFromRunInputsInternal(
 	return true;
 }
 
+// 실행 중인 Episode는 Python end 처리 후 취소하고 준비 단계는 즉시 정리한다.
 void UScenarioRunnerSubsystem::CancelRun()
 {
-	StopProjectTraceLogging(ResolveWorld());
 	PendingRunInputs.Reset();
-	ActiveBatchRunId.Reset();
-	SetRunnerState(EScenarioRunnerState::Cancelled);
+	bCancelRequested = true;
 
-	if (UScenarioEvaluationSubsystem* evaluationSubsystem = ResolveEvaluationSubsystem())
+	UScenarioEvaluationSubsystem* evaluationSubsystem =
+		ResolveEvaluationSubsystem();
+
+	if (bEpisodeFinalizationInFlight
+		|| (IsValid(evaluationSubsystem)
+			&& evaluationSubsystem->IsAwaitingEndFinalization()))
 	{
-		evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
-		evaluationSubsystem->StopEvaluation();
+		SetRunnerState(EScenarioRunnerState::Ending);
+		return;
+	}
+
+	if (IsValid(evaluationSubsystem)
+		&& evaluationSubsystem->IsEvaluating())
+	{
+		FEpisodeEvaluationResult cancelledResult =
+			evaluationSubsystem->GetCurrentResult();
+
+		cancelledResult.bCompleted = false;
+		cancelledResult.bSuccess = false;
+		cancelledResult.Outcome = EEpisodeEvaluationOutcome::Cancelled;
+		cancelledResult.TerminalReason = EEpisodeEvaluationTerminalReason::Cancelled;
+
+		evaluationSubsystem->RequestEndEpisode(cancelledResult);
+		return;
 	}
 
 	StopProjectTraceLogging(ResolveWorld());
+	UnbindEvaluationDelegates();
+
+	if (IsValid(evaluationSubsystem))
+	{
+		evaluationSubsystem->StopEvaluation();
+	}
 
 	if (UScenarioSimulationSubsystem* simulationSubsystem = ResolveSimulationSubsystem())
 	{
 		simulationSubsystem->ClearScenario();
 	}
+
+	ResetEpisodeFinalizationState();
+	ActiveBatchRunId.Reset();
+	bCancelRequested = false;
+	SetRunnerState(EScenarioRunnerState::Cancelled);
 
 	UE_LOG(LogScenarioRunner, Warning, TEXT("Episode 실행 취소됨."));
 }
@@ -469,8 +503,16 @@ void UScenarioRunnerSubsystem::SetRunnerState(EScenarioRunnerState runnerState)
 	OnRunnerStateChanged.Broadcast(RunnerState);
 }
 
+// 최종 결과를 저장하고 world를 정리한 뒤 다음 Scenario를 예약한다.
 void UScenarioRunnerSubsystem::HandleEpisodeEnded(FEpisodeEvaluationResult result)
 {
+	if (bCancelRequested)
+	{
+		result.bSuccess = false;
+		result.Outcome = EEpisodeEvaluationOutcome::Cancelled;
+		result.TerminalReason = EEpisodeEvaluationTerminalReason::Cancelled;
+	}
+
 	UE_LOG(
 		LogScenarioRunner,
 		Log,
@@ -482,18 +524,28 @@ void UScenarioRunnerSubsystem::HandleEpisodeEnded(FEpisodeEvaluationResult resul
 		result.DurationSeconds,
 		result.Events.Num());
 
-	StopProjectTraceLogging(ResolveWorld());
 	CompleteCurrentRecord(result.bSuccess, result.Outcome, result.TerminalReason, &result);
+	UnbindEvaluationDelegates();
 
 	if (UScenarioEvaluationSubsystem* evaluationSubsystem = ResolveEvaluationSubsystem())
 	{
-		evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
 		evaluationSubsystem->StopEvaluation();
 	}
 
 	if (UScenarioSimulationSubsystem* simulationSubsystem = ResolveSimulationSubsystem())
 	{
 		simulationSubsystem->ClearScenario();
+	}
+
+	const bool bWasCancelled = bCancelRequested;
+	ResetEpisodeFinalizationState();
+
+	if (bWasCancelled)
+	{
+		bCancelRequested = false;
+		ActiveBatchRunId.Reset();
+		SetRunnerState(EScenarioRunnerState::Cancelled);
+		return;
 	}
 
 	SetRunnerState(EScenarioRunnerState::Ending);
@@ -775,13 +827,21 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 		runtimeContext.StaticObstacleActors.Num(),
 		runtimeContext.PedestrianActors.Num());
 
-	evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
+	// 현재 Episode의 DeliveryBot을 종료 요청 동안만 약하게 참조한다.
+	CurrentDeliveryBotActor = Cast<ADeliveryBot>(runtimeContext.RobotActor);
+
+	// Evaluation의 종료 요청과 최종 종료를 Runner에 연결한다.
+	UnbindEvaluationDelegates();
+	EpisodeEndRequestedHandle = evaluationSubsystem->OnEpisodeEndRequested.AddUObject(
+		this,
+		&UScenarioRunnerSubsystem::HandleEpisodeEndRequested);
 	evaluationSubsystem->OnEpisodeEnded.AddDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
 
 	if (!evaluationSubsystem->StartEvaluation(compileResult.WorldSpec.EvaluationConfig, runtimeContext, timeLimitSeconds))
 	{
 		StopProjectTraceLogging(world);
-		evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(this, &UScenarioRunnerSubsystem::HandleEpisodeEnded);
+		UnbindEvaluationDelegates();
+		ResetEpisodeFinalizationState();
 		UE_LOG(LogScenarioRunner, Warning, TEXT("평가 시작 실패 | RunId: %s, Episode: %s"), *CurrentRecord.RunId, *runtimeContext.EpisodeId);
 		CompleteCurrentRecord(
 			false,
@@ -926,4 +986,201 @@ UScenarioEvaluationSubsystem* UScenarioRunnerSubsystem::ResolveEvaluationSubsyst
 {
 	UWorld* world = ResolveWorld();
 	return world ? world->GetSubsystem<UScenarioEvaluationSubsystem>() : nullptr;
+}
+
+// Evaluation 종료 요청을 받아 DeliveryBot end 통신과 watchdog을 시작한다.
+void UScenarioRunnerSubsystem::HandleEpisodeEndRequested(
+	const FEpisodeEvaluationResult& result)
+{
+	if (bEpisodeFinalizationInFlight)
+	{
+		return;
+	}
+
+	SetRunnerState(EScenarioRunnerState::Ending);
+	StopProjectTraceLogging(ResolveWorld());
+
+	bEpisodeFinalizationInFlight = true;
+	const uint64 generation = ++EpisodeFinalizationGeneration;
+	const FString status =
+		BuildExternalEndStatus(result.TerminalReason);
+
+	UWorld* world = ResolveWorld();
+	if (!IsValid(world))
+	{
+		CompleteEpisodeFinalization(
+			generation,
+			false,
+			false,
+			TEXT("Runner world is invalid."));
+		return;
+	}
+
+	FTimerDelegate timeoutDelegate;
+	timeoutDelegate.BindUObject(
+		this,
+		&UScenarioRunnerSubsystem::HandleEpisodeFinalizationTimeout,
+		generation);
+
+	world->GetTimerManager().SetTimer(
+		EpisodeFinalizationTimeoutHandle,
+		timeoutDelegate,
+		EpisodeFinalizationTimeoutSeconds,
+		false);
+
+	ADeliveryBot* deliveryBot = CurrentDeliveryBotActor.Get();
+	if (!IsValid(deliveryBot))
+	{
+		CompleteEpisodeFinalization(
+			generation,
+			false,
+			false,
+			TEXT("Current DeliveryBot is invalid."));
+		return;
+	}
+
+	TWeakObjectPtr<UScenarioRunnerSubsystem> weakThis(this);
+
+	deliveryBot->NotifyEpisodeFinalizingByEvaluation(
+		status,
+		[weakThis, generation](
+			bool bSucceeded,
+			const FString& errorMessage)
+		{
+			UScenarioRunnerSubsystem* runner = weakThis.Get();
+			if (!IsValid(runner))
+			{
+				return;
+			}
+
+			runner->CompleteEpisodeFinalization(
+				generation,
+				bSucceeded,
+				false,
+				errorMessage);
+		});
+}
+
+// 먼저 도착한 callback 또는 watchdog 하나만 처리한다.
+void UScenarioRunnerSubsystem::CompleteEpisodeFinalization(
+	uint64 finalizationGeneration,
+	bool bSucceeded,
+	bool bTimedOut,
+	const FString& errorMessage)
+{
+	if (!bEpisodeFinalizationInFlight
+		|| finalizationGeneration != EpisodeFinalizationGeneration)
+	{
+		return;
+	}
+
+	bEpisodeFinalizationInFlight = false;
+
+	if (UWorld* world = ResolveWorld())
+	{
+		world->GetTimerManager().ClearTimer(
+			EpisodeFinalizationTimeoutHandle);
+	}
+
+	if (!bSucceeded)
+	{
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Python end 실패 후 Episode 종료 계속 | TimedOut: %s, Error: %s"),
+			bTimedOut ? TEXT("true") : TEXT("false"),
+			*errorMessage);
+	}
+
+	UScenarioEvaluationSubsystem* evaluationSubsystem =
+		ResolveEvaluationSubsystem();
+
+	if (!IsValid(evaluationSubsystem)
+		|| !evaluationSubsystem->IsAwaitingEndFinalization())
+	{
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Episode finalization 실패: Evaluation 상태 불일치"));
+		return;
+	}
+
+	evaluationSubsystem->CompleteEndEpisode();
+}
+
+// HTTP callback이 오지 않으면 3초 후 Episode 종료를 계속한다.
+void UScenarioRunnerSubsystem::HandleEpisodeFinalizationTimeout(
+	uint64 finalizationGeneration)
+{
+	CompleteEpisodeFinalization(
+		finalizationGeneration,
+		false,
+		true,
+		TEXT("Python /scenario/end completion callback timed out."));
+}
+
+// Episode 종료 이유를 Python status 문자열로 변환한다.
+FString UScenarioRunnerSubsystem::BuildExternalEndStatus(EEpisodeEvaluationTerminalReason terminalReason)
+{
+	switch (terminalReason)
+	{
+	case EEpisodeEvaluationTerminalReason::GoalReached:
+		return TEXT("goal_reached");
+	case EEpisodeEvaluationTerminalReason::Timeout:
+		return TEXT("timeout");
+	case EEpisodeEvaluationTerminalReason::RobotTipOver:
+		return TEXT("robot_tip_over");
+	case EEpisodeEvaluationTerminalReason::Cancelled:
+		return TEXT("cancelled");
+	case EEpisodeEvaluationTerminalReason::DeliveryBotSimulationFailed:
+		return TEXT("delivery_bot_simulation_failed");
+	default:
+		return TEXT("failed");
+	}
+}
+// EvaluationSubsystem에 연결된 종료 delegate를 해제한다.
+void UScenarioRunnerSubsystem::UnbindEvaluationDelegates()
+{
+	UScenarioEvaluationSubsystem* evaluationSubsystem =
+		ResolveEvaluationSubsystem();
+
+	if (!IsValid(evaluationSubsystem))
+	{
+		EpisodeEndRequestedHandle.Reset();
+		return;
+	}
+
+	if (EpisodeEndRequestedHandle.IsValid())
+	{
+		evaluationSubsystem->OnEpisodeEndRequested.Remove(
+			EpisodeEndRequestedHandle);
+		EpisodeEndRequestedHandle.Reset();
+	}
+
+	evaluationSubsystem->OnEpisodeEnded.RemoveDynamic(
+		this,
+		&UScenarioRunnerSubsystem::HandleEpisodeEnded);
+}
+
+
+// timer를 해제하고 이전 Episode callback을 무효화한다.
+void UScenarioRunnerSubsystem::ResetEpisodeFinalizationState()
+{
+	if (UWorld* world = ResolveWorld())
+	{
+		world->GetTimerManager().ClearTimer(
+			EpisodeFinalizationTimeoutHandle);
+	}
+
+	bEpisodeFinalizationInFlight = false;
+	++EpisodeFinalizationGeneration;
+	CurrentDeliveryBotActor.Reset();
+}
+
+// Subsystem 종료 전에 delegate와 timer를 정리한다.
+void UScenarioRunnerSubsystem::Deinitialize()
+{
+	UnbindEvaluationDelegates();
+	ResetEpisodeFinalizationState();
+	Super::Deinitialize();
 }

@@ -55,6 +55,7 @@ keep:
   - Keep DeliveryBotPointCloudReviewActor as a path lookup and small-point debug helper, not the primary point cloud renderer.
   - Keep Python reset tools template-based with backups; do not use git history operations for user-code restore.
   - Keep Python policy event classification in DeliveryBot_HttpPolicyComponent; ScenarioEvaluationSubsystem receives normalized FDeliveryBotPolicyEventSnapshot values and owns episode event publication.
+  - Keep `/scenario/end` response minimal (`status`, `accepted`); DeliveryBot owns the 2-second HTTP timeout and reports success/error through the Runner callback, while ScenarioRunnerSubsystem owns the longer lifecycle watchdog.
   - Keep Python user_agent.py emitting actual RePath decisions through response.events; C++ should not infer RePath from generic slowdown/path-follow reasons.
 verify:
   - DeliveryBot automation tests for component changes
@@ -63,6 +64,7 @@ verify:
   - PythonAgent py_compile after changing response.events emission
   - runtime movement/pathing smoke for behavior changes
   - PythonAgent py_compile for Python policy/observer changes
+  - `/scenario/end` success, rejection, HTTP timeout, missing callback, and exactly-once completion behavior
   - validate_lidar_capture for saved LiDAR Point Cloud capture folders
   - reset_user_code dry-run before template restore changes
 related:

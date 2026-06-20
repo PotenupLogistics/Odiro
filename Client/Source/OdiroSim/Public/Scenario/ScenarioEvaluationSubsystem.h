@@ -17,6 +17,7 @@ struct FScenarioRuntimeCorridorSurfaceQueryResult;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEpisodeEvaluationEndedSignature, FEpisodeEvaluationResult, result);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEpisodeEvaluationEventSignature, FEpisodeEvaluationEvent, event);
+DECLARE_MULTICAST_DELEGATE_OneParam(FEpisodeEvaluationEndRequestedNative, const FEpisodeEvaluationResult&);
 
 // 현재 월드의 episode runtime을 관찰하고 평가 결과와 종료 결정을 생성하는 subsystem.
 UCLASS(BlueprintType)
@@ -31,11 +32,22 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Evaluation")
 	FEpisodeEvaluationEventSignature OnEvaluationEvent;
 
+	FEpisodeEvaluationEndRequestedNative OnEpisodeEndRequested;	// Runner가 구독하는 Episode 종료 요청 이벤트다.
+
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Evaluation")
 	bool StartEvaluation(
 		const FScenarioEvaluationConfig& evaluationConfig,
 		const FScenarioRuntimeContext& runtimeContext,
 		double inTimeLimitSeconds);
+
+	// 외부 종료 절차가 끝난 뒤 Episode를 최종 완료한다.
+	void CompleteEndEpisode();
+
+	// 외부 종료 완료를 기다리는지 반환한다.
+	bool IsAwaitingEndFinalization() const
+	{
+		return bAwaitingEndFinalization;
+	}
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Evaluation")
 	void StopEvaluation();
@@ -193,6 +205,7 @@ private:
 	FEpisodeEvaluationResult CurrentResult;
 
 	bool bEvaluating = false;
+	bool bAwaitingEndFinalization = false;	// 평가 결과를 동결하고 외부 종료 완료를 기다리는 상태다.
 	double EvaluationStartTimeSeconds = 0.0;
 	double TimeLimitSeconds = 0.0;
 	int32 NearMissCount = 0;

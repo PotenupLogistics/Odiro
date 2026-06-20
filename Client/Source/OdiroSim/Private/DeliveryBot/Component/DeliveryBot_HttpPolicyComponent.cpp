@@ -426,7 +426,7 @@ void UDeliveryBot_HttpPolicyComponent::RequestStartScenario()
 	if (bScenarioStarted || bStartRequestInFlight)
 		return;
 
-	ResetScenarioState(false);
+	ResetScenarioState();
 
 	bStartRequested = true;
 	UE_LOG(
@@ -543,6 +543,99 @@ void UDeliveryBot_HttpPolicyComponent::UpdatePolicy(float deltaTime)
 		const float decisionDeltaTime = DecideElapsedSeconds;
 		DecideElapsedSeconds = 0.f;
 		RequestDecision(decisionDeltaTime);
+	}
+}
+
+// Python /scenario/end를 제한 시간 안에 요청하고 결과를 정확히 한 번 반환한다.
+void UDeliveryBot_HttpPolicyComponent::EndScenario(
+	const FString& status,
+	TFunction<void(bool, const FString&)> onComplete)
+{
+	if (!bScenarioStarted || bEndRequestInFlight)
+	{
+		if (onComplete)
+		{
+			onComplete(
+				false,
+				TEXT("Scenario is not started or end request is already in flight."));
+		}
+		return;
+	}
+
+	FString payload;
+	if (!BuildEndPayload(status, payload))
+	{
+		if (onComplete)
+		{
+			onComplete(false, TEXT("Failed to build /scenario/end payload."));
+		}
+		return;
+	}
+
+	bEndRequestInFlight = true;
+	TWeakObjectPtr<UDeliveryBot_HttpPolicyComponent> weakThis(this);
+	const TSharedRef<bool, ESPMode::ThreadSafe> bCompletionReported =
+		MakeShared<bool, ESPMode::ThreadSafe>(false);
+
+	const auto completeOnce =
+		[bCompletionReported, onComplete](
+			bool bSucceeded,
+			const FString& errorMessage)
+		{
+			if (*bCompletionReported)
+			{
+				return;
+			}
+
+			*bCompletionReported = true;
+			if (onComplete)
+			{
+				onComplete(bSucceeded, errorMessage);
+			}
+		};
+
+	const bool bRequestStarted = SendPostRequest(
+		TEXT("/scenario/end"),
+		payload,
+		[weakThis, completeOnce](
+			FHttpResponsePtr response,
+			bool bHttpSucceeded) mutable
+		{
+			UDeliveryBot_HttpPolicyComponent* component = weakThis.Get();
+			if (!IsValid(component))
+			{
+				return;
+			}
+
+			component->bEndRequestInFlight = false;
+
+			TSharedPtr<FJsonObject> responseObject;
+			bool bAccepted = false;
+			const bool bEndSucceeded =
+				bHttpSucceeded
+				&& component->IsPythonResponseOk(response)
+				&& component->TryGetPythonResponseObject(response, responseObject)
+				&& responseObject.IsValid()
+				&& responseObject->TryGetBoolField(TEXT("accepted"), bAccepted)
+				&& bAccepted;
+
+			component->ResetScenarioState();
+
+			completeOnce(
+				bEndSucceeded,
+				bEndSucceeded
+					? FString()
+					: TEXT("Python /scenario/end timed out, failed, or was rejected."));
+		},
+		EndRequestTimeoutSeconds);
+
+	if (!bRequestStarted)
+	{
+		bEndRequestInFlight = false;
+
+		completeOnce(
+			false,
+			TEXT("Python /scenario/end HTTP request could not be started."));
 	}
 }
 
@@ -736,7 +829,11 @@ UDeliveryBotPythonProcessSubsystem* UDeliveryBot_HttpPolicyComponent::GetPythonP
 }
 
 // Python 서버에 POST 요청을 보낸다.
-bool UDeliveryBot_HttpPolicyComponent::SendPostRequest(const FString& endpoint, const FString& payload, TFunction<void(FHttpResponsePtr, bool)> onComplete)
+bool UDeliveryBot_HttpPolicyComponent::SendPostRequest(
+	const FString& endpoint,
+	const FString& payload,
+	TFunction<void(FHttpResponsePtr, bool)> onComplete,
+	float timeoutSeconds)
 {
 	const UDeliveryBotPythonProcessSubsystem* pythonProcessSubsystem = GetPythonProcessSubsystem();
 	if (!IsValid(pythonProcessSubsystem) || !pythonProcessSubsystem->IsReady())
@@ -750,9 +847,23 @@ bool UDeliveryBot_HttpPolicyComponent::SendPostRequest(const FString& endpoint, 
 	request->SetVerb(TEXT("POST"));
 	request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
 	request->SetContentAsString(payload);
+	if (timeoutSeconds > 0.f)
+	{
+		request->SetTimeout(timeoutSeconds);
+	}
 
-	request->OnProcessRequestComplete().BindWeakLambda(this, [onComplete = MoveTemp(onComplete)](FHttpRequestPtr, FHttpResponsePtr response,
-				bool bWasSuccessful) mutable{onComplete(response, bWasSuccessful);});
+	request->OnProcessRequestComplete().BindWeakLambda(
+		this,
+		[onComplete = MoveTemp(onComplete)](
+			FHttpRequestPtr,
+			FHttpResponsePtr response,
+			bool bWasSuccessful) mutable
+		{
+			if (onComplete)
+			{
+				onComplete(response, bWasSuccessful);
+			}
+		});
 
 	return request->ProcessRequest();
 }
@@ -1980,7 +2091,9 @@ bool UDeliveryBot_HttpPolicyComponent::BuildEndPayload(const FString& status, FS
 	outPayload.Reset();
 
 	if (EpisodeId.IsEmpty() || RobotInstanceId.IsEmpty())
+	{
 		return false;
+	}
 
 	TSharedRef<FJsonObject> requestObject = MakeShared<FJsonObject>();
 
@@ -1988,18 +2101,11 @@ bool UDeliveryBot_HttpPolicyComponent::BuildEndPayload(const FString& status, FS
 	requestObject->SetNumberField(TEXT("sequence"), LastDecisionSequence);
 	requestObject->SetStringField(TEXT("status"), status);
 
-	TSharedRef<FJsonObject> metricsObject = MakeShared<FJsonObject>();
-	requestObject->SetObjectField(TEXT("metrics"), metricsObject);
-
-	TSharedRef<FJsonObject> debugObject = MakeShared<FJsonObject>();
-	debugObject->SetStringField(TEXT("endSource"), TEXT("UScenarioEvaluationSubsystem"));
-	requestObject->SetObjectField(TEXT("debug"), debugObject);
-
 	return BuildMessagePayload(TEXT("scenario_end"), requestObject, outPayload);
 }
 
 // scenario 진행 상태를 초기화한다.
-void UDeliveryBot_HttpPolicyComponent::ResetScenarioState(bool bKeepLastResult)
+void UDeliveryBot_HttpPolicyComponent::ResetScenarioState()
 {
 	EpisodeId.Reset();
 	RobotInstanceId.Reset();
@@ -2017,70 +2123,4 @@ void UDeliveryBot_HttpPolicyComponent::ResetScenarioState(bool bKeepLastResult)
 	bDecisionRequestInFlight = false;
 	bEndRequestInFlight = false;
 	bLoggedStartWaitingForPython = false;
-
-	if (!bKeepLastResult)
-	{
-		LastScenarioResultJson.Reset();
-	}
-}
-
-// 목표 도착 시 Python 서버에 /scenario/end 요청을 보내고 결과 JSON을 저장한다.
-void UDeliveryBot_HttpPolicyComponent::EndScenario(const FString& status)
-{
-	EndScenario(status, FDeliveryBotPythonScenarioEndCallback{});
-}
-
-// Python /scenario/end 요청을 보내고 HTTP 결과를 callback으로 반환한다.
-void UDeliveryBot_HttpPolicyComponent::EndScenario(
-	const FString& status,
-	FDeliveryBotPythonScenarioEndCallback onComplete)
-{
-	FDeliveryBotPythonScenarioEndResult result;
-	result.Status = status;
-
-	if (!bScenarioStarted || bEndRequestInFlight)
-	{
-		result.ErrorMessage = TEXT("Scenario is not started or end request is already in flight.");
-		if (onComplete) onComplete(result);
-		return;
-	}
-
-	FString payload;
-	if (!BuildEndPayload(status, payload))
-	{
-		result.ErrorMessage = TEXT("Failed to build /scenario/end payload.");
-		if (onComplete) onComplete(result);
-		return;
-	}
-
-	bEndRequestInFlight = true;
-
-	const bool bRequestStarted = SendPostRequest(
-		TEXT("/scenario/end"),
-		payload,
-		[this, status, onComplete = MoveTemp(onComplete)](FHttpResponsePtr response, bool bSucceeded) mutable
-		{
-			bEndRequestInFlight = false;
-
-			FDeliveryBotPythonScenarioEndResult callbackResult;
-			callbackResult.bRequested = true;
-			callbackResult.Status = status;
-			callbackResult.ResponseJson = response.IsValid() ? response->GetContentAsString() : FString();
-			callbackResult.bSucceeded = bSucceeded && IsPythonResponseOk(response);
-			callbackResult.ErrorMessage = callbackResult.bSucceeded ? FString() : TEXT("Python /scenario/end failed.");
-
-			LastScenarioResultJson = callbackResult.ResponseJson;
-			ResetScenarioState(true);
-
-			if (onComplete) onComplete(callbackResult);
-		});
-
-	if (!bRequestStarted)
-	{
-		bEndRequestInFlight = false;
-
-		result.bRequested = false;
-		result.ErrorMessage = TEXT("Python /scenario/end HTTP request could not be started.");
-		if (onComplete) onComplete(result);
-	}
 }

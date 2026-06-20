@@ -40,10 +40,16 @@ bool UScenarioEvaluationSubsystem::StartEvaluation(
 	const FScenarioRuntimeContext& runtimeContext,
 	double inTimeLimitSeconds)
 {
+	// 이전 Episode 종료가 끝나기 전에는 새 평가를 시작하지 않는다.
+	if (bAwaitingEndFinalization)
+		return false;
+
 	if (bEvaluating)
 	{
 		StopEvaluation();
 	}
+
+	bAwaitingEndFinalization = false;
 
 	if (!IsValid(runtimeContext.RobotActor))
 	{
@@ -140,10 +146,13 @@ void UScenarioEvaluationSubsystem::StopEvaluation()
 	BlockedRegionCollisionCount = 0;
 	PenaltyRegionViolationCount = 0;
 	PedestrianCollisionCount = 0;
+	bAwaitingEndFinalization = false;
 }
 
 void UScenarioEvaluationSubsystem::RequestEndEpisode(const FEpisodeEvaluationResult& result)
 {
+	if (!bEvaluating || bAwaitingEndFinalization)
+		return;
 	if (ActiveNearMisses.Num() > 0)
 	{
 		FlushActiveNearMisses();
@@ -192,8 +201,7 @@ void UScenarioEvaluationSubsystem::RequestEndEpisode(const FEpisodeEvaluationRes
 			CurrentResult.Metrics.Add(pair.Key, pair.Value);
 		}
 	}
-
-	CurrentResult.bCompleted = true;
+	CurrentResult.bCompleted = false;
 
 	if (CurrentResult.DurationSeconds <= 0.0)
 	{
@@ -202,21 +210,24 @@ void UScenarioEvaluationSubsystem::RequestEndEpisode(const FEpisodeEvaluationRes
 
 	SetFloatMetric(TEXT("duration_s"), CurrentResult.DurationSeconds);
 	UnbindEvaluationHitDelegates();
+
 	bEvaluating = false;
+	bAwaitingEndFinalization = true;
 
 	UE_LOG(
 		LogScenarioEvaluation,
-		Warning,
-		TEXT("평가 종료 | Episode: %s, Success: %s, Outcome: %s, TerminalReason: %s, Duration: %.2fs, Events: %d, Metrics: %d"),
+		Log,
+		TEXT("평가 종료 요청 | Episode: %s, TerminalReason: %s"),
 		*CurrentResult.EpisodeId,
-		CurrentResult.bSuccess ? TEXT("true") : TEXT("false"),
-		*ToEvaluationEnumString(CurrentResult.Outcome),
-		*ToEvaluationEnumString(CurrentResult.TerminalReason),
-		CurrentResult.DurationSeconds,
-		CurrentResult.Events.Num(),
-		CurrentResult.Metrics.Num());
+		*ToEvaluationEnumString(CurrentResult.TerminalReason));
 
-	OnEpisodeEnded.Broadcast(CurrentResult);
+	if (OnEpisodeEndRequested.IsBound())
+	{
+		OnEpisodeEndRequested.Broadcast(CurrentResult);
+		return;
+	}
+
+	CompleteEndEpisode();
 }
 
 
@@ -1561,4 +1572,25 @@ void UScenarioEvaluationSubsystem::EndForTimeout()
 		properties);
 
 	FinishEpisode(false, EEpisodeEvaluationOutcome::Failure, EEpisodeEvaluationTerminalReason::Timeout);
+}
+// 외부 종료 대기를 끝내고 Episode 결과를 정확히 한 번 방송한다.
+void UScenarioEvaluationSubsystem::CompleteEndEpisode()
+{
+	if (!bAwaitingEndFinalization)
+	{
+		return;
+	}
+
+	CurrentResult.bCompleted = true;
+	bAwaitingEndFinalization = false;
+
+	UE_LOG(
+		LogScenarioEvaluation,
+		Log,
+		TEXT("평가 최종 종료 | Episode: %s, Success: %s, TerminalReason: %s"),
+		*CurrentResult.EpisodeId,
+		CurrentResult.bSuccess ? TEXT("true") : TEXT("false"),
+		*ToEvaluationEnumString(CurrentResult.TerminalReason));
+
+	OnEpisodeEnded.Broadcast(CurrentResult);
 }

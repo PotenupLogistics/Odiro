@@ -7,7 +7,6 @@
 #include "Shared/Struct/DeliveryBot/Perception/DeliveryBotPointCloudCaptureConfigInfo.h"
 #include "Shared/Struct/DeliveryBot/Result/DeliveryBotPythonCaptureRefInfo.h"
 #include "Shared/Struct/DeliveryBot/Result/DeliveryBotPolicyDecisionResultInfo.h"
-#include "Shared/Struct/DeliveryBot/Result/DeliveryBotPythonScenarioEndInfo.h"
 #include "DeliveryBot_HttpPolicyComponent.generated.h"
 
 class FJsonObject;
@@ -26,22 +25,19 @@ public:
 
 	void RequestStartScenario();				// Python 서버에 scenario start 요청을 예약한다
 	void UpdatePolicy(float deltaTime);			// start 재시도와 decide 반복 요청을 갱신한다
-	void EndScenario(const FString& status);	// Python 서버에 scenario end 요청을 보낸다
+	void EndScenario(
+		const FString& status,
+		TFunction<void(bool, const FString&)> onComplete); // Python /scenario/end 완료 여부를 반환한다
+
 	void ConfigureProjectActionLogging(const FString& projectOutputEpisodeId); // project actions.jsonl 기록 대상 output episode를 고정한다
 	bool ConfigureProjectEpisodeOutput(
 		const FString& projectOutputEpisodeId,
 		const FString& projectEpisodeOutputDirectory,
 		const FString& projectEpisodeOutputRelativeDirectory); // project episode artifact의 절대/상대 출력 루트를 고정한다
 
-	// Python /scenario/end 요청을 보내고 완료 결과를 callback으로 돌려준다.
-	void EndScenario(const FString& status, FDeliveryBotPythonScenarioEndCallback onComplete);
-
 public:
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
 	bool IsScenarioStarted() const { return bScenarioStarted; } // Python scenario 시작 여부를 반환한다
-
-	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
-	FString GetLastScenarioResultJson() const { return LastScenarioResultJson; } // 마지막 scenario result JSON을 반환한다
 
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
 	FDeliveryBotPolicyDecisionResultInfo GetLastPolicyDecisionResult() const // 마지막 Python policy decision 결과를 반환한다
@@ -84,8 +80,12 @@ private:
 	bool BuildEndPayload(const FString& status, FString& outPayload) const; // /scenario/end 요청 body를 만든다
 
 private:
-	// Python 서버에 POST 요청을 보낸다
-	bool SendPostRequest(const FString& endpoint, const FString& payload, TFunction<void(FHttpResponsePtr, bool)> onComplete);
+	// Python 서버에 POST 요청을 보내고 선택적으로 timeout을 적용한다.
+	bool SendPostRequest(
+		const FString& endpoint,
+		const FString& payload,
+		TFunction<void(FHttpResponsePtr, bool)> onComplete,
+		float timeoutSeconds = 0.f);
 	FString ResolveProjectEpisodeId() const; // project run의 현재 output episode id를 가져온다
 	void WriteProjectActionRecord(
 		const FString& projectEpisodeId,
@@ -96,7 +96,7 @@ private:
 	TSharedRef<FJsonObject> BuildLocationObject(const FVector& location, float yawDegree = 0.f) const; // 위치 JSON 객체를 만든다
 	bool BuildPythonGridObject(TSharedPtr<FJsonObject>& outGridObject) const; // Python 서버용 grid JSON 객체를 만든다
 	bool BuildMessagePayload(const FString& messageType, const TSharedRef<FJsonObject>& requestObject, FString& outPayload) const; // request 객체를 Python message envelope로 감싼다
-	void ResetScenarioState(bool bKeepLastResult); // scenario 진행 상태를 초기화한다
+	void ResetScenarioState(); // scenario 진행 상태를 초기화한다
 	bool TryGetPythonResponseObject(const FHttpResponsePtr& response, TSharedPtr<FJsonObject>& outResponseObject) const; // envelope 응답에서 response 객체를 가져온다
 	bool IsPythonResponseOk(const FHttpResponsePtr& response) const; // envelope 응답의 response.status가 ok인지 확인한다
 	UDeliveryBotPythonProcessSubsystem* GetPythonProcessSubsystem() const; // Python process subsystem을 가져온다
@@ -155,8 +155,6 @@ private:
 	FString ProjectEpisodeOutputErrorCode; // /scenario/start로 전달할 project episode 경로 설정 오류 코드
 	FString ProjectEpisodeOutputErrorMessage; // /scenario/start로 전달할 project episode 경로 설정 오류 설명
 	FString RobotInstanceId; // Python payload에 사용하는 robot instance id
-	FString LastScenarioResultJson; // 마지막 scenario result JSON 문자열
-
 	int32 LastDecisionSequence{ 0 }; // 마지막 decide 요청 sequence
 	TSharedPtr<FJsonObject> LastDecisionRequestObject;
 
@@ -170,4 +168,7 @@ private:
 	bool bDecisionRequestInFlight{ false };
 	bool bEndRequestInFlight{ false };
 	bool bLoggedStartWaitingForPython{ false }; // Python 서버 준비 대기 로그 중복 방지
+
+	// Python /scenario/end 요청 자체의 최대 대기 시간이다.
+	static constexpr float EndRequestTimeoutSeconds = 2.f;
 };

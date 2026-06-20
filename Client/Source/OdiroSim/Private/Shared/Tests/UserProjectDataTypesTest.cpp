@@ -133,6 +133,23 @@ namespace
 		return paramValue;
 	}
 
+	// events.jsonl 계약 매핑 검증에 쓰는 typed event snapshot 문자열을 만든다.
+	FScenarioParamValue MakeUserProjectIntegerParam(int32 value)
+	{
+		FScenarioParamValue paramValue;
+		paramValue.Type = EScenarioParamValueType::Integer;
+		paramValue.IntegerValue = value;
+		return paramValue;
+	}
+
+	FScenarioParamValue MakeUserProjectStringParam(const FString& value)
+	{
+		FScenarioParamValue paramValue;
+		paramValue.Type = EScenarioParamValueType::String;
+		paramValue.StringValue = value;
+		return paramValue;
+	}
+
 	int32 CountJsonlLines(const FString& filePath)
 	{
 		FString contents;
@@ -144,6 +161,85 @@ namespace
 		TArray<FString> lines;
 		contents.ParseIntoArrayLines(lines, true);
 		return lines.Num();
+	}
+
+	bool LoadUserProjectJsonlObjects(const FString& filePath, TArray<TSharedPtr<FJsonObject>>& outObjects)
+	{
+		outObjects.Reset();
+
+		FString contents;
+		if (!FFileHelper::LoadFileToString(contents, *filePath))
+		{
+			return false;
+		}
+
+		TArray<FString> lines;
+		contents.ParseIntoArrayLines(lines, true);
+		for (const FString& line : lines)
+		{
+			TSharedPtr<FJsonObject> object;
+			const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(line);
+			if (!FJsonSerializer::Deserialize(reader, object) || !object.IsValid())
+			{
+				return false;
+			}
+			outObjects.Add(object);
+		}
+
+		return true;
+	}
+
+	int32 CountEventTypeForTest(
+		const TArray<TSharedPtr<FJsonObject>>& eventLines,
+		const FString& eventType)
+	{
+		int32 count = 0;
+		for (const TSharedPtr<FJsonObject>& eventLine : eventLines)
+		{
+			FString actualEventType;
+			if (eventLine.IsValid()
+				&& eventLine->TryGetStringField(TEXT("event_type"), actualEventType)
+				&& actualEventType == eventType)
+			{
+				++count;
+			}
+		}
+		return count;
+	}
+
+	// Finds one serialized events.jsonl object by its external event_type.
+	TSharedPtr<FJsonObject> FindEventLineByTypeForTest(
+		const TArray<TSharedPtr<FJsonObject>>& eventLines,
+		const FString& eventType)
+	{
+		for (const TSharedPtr<FJsonObject>& eventLine : eventLines)
+		{
+			FString actualEventType;
+			if (eventLine.IsValid()
+				&& eventLine->TryGetStringField(TEXT("event_type"), actualEventType)
+				&& actualEventType == eventType)
+			{
+				return eventLine;
+			}
+		}
+
+		return nullptr;
+	}
+
+	// Builds a typed evaluation event for focused events.jsonl mapping tests.
+	FEpisodeEvaluationEvent MakeUserProjectEventTypeMatrixEvent(
+		int32 eventIndex,
+		EEpisodeEvaluationEventType eventType,
+		const FString& message)
+	{
+		FEpisodeEvaluationEvent event;
+		event.EventIndex = eventIndex;
+		event.ElapsedTimeSeconds = static_cast<double>(eventIndex) + 1.0;
+		event.EventType = eventType;
+		event.Severity = EEpisodeEvaluationEventSeverity::Warning;
+		event.SubjectInstanceId = TEXT("robot");
+		event.Message = message;
+		return event;
 	}
 
 	TSharedRef<FJsonObject> MakeActionTestRequestObject()
@@ -414,6 +510,8 @@ bool FUserProjectEpisodeScenarioWriteTest::RunTest(const FString& parameters)
 
 	const TSharedPtr<FJsonObject> sampledScenarioObject = episodeObject->GetObjectField(TEXT("scenario"));
 	const TSharedPtr<FJsonObject> paramsObject = sampledScenarioObject->GetObjectField(TEXT("params"));
+	TestTrue(TEXT("max duration param recorded"), paramsObject->HasField(TEXT("max_duration_s")));
+	TestFalse(TEXT("legacy time limit param omitted"), paramsObject->HasField(TEXT("time_limit_s")));
 	TestTrue(TEXT("walkway range param recorded"), paramsObject->HasField(TEXT("corridor.walkway_width_m")));
 	TestTrue(TEXT("obstacle along range param recorded"), paramsObject->HasField(TEXT("obstacles.obstacle_1.at.along_m")));
 	TestTrue(TEXT("obstacle yaw range param recorded"), paramsObject->HasField(TEXT("obstacles.obstacle_1.yaw_deg")));
@@ -485,15 +583,81 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	runRecord.EvaluationResult.DurationSeconds = 12.5;
 	runRecord.EvaluationResult.Metrics.Add(TEXT("score"), MakeUserProjectFloatParam(98.0));
 	runRecord.EvaluationResult.Metrics.Add(TEXT("near_miss_count"), MakeUserProjectFloatParam(0.0));
+	runRecord.EvaluationResult.Metrics.Add(TEXT("distance_to_goal_m"), MakeUserProjectFloatParam(0.25));
+	runRecord.EvaluationResult.Metrics.Add(TEXT("goal_threshold_m"), MakeUserProjectFloatParam(0.5));
 
 	FEpisodeEvaluationEvent nearMissEvent;
 	nearMissEvent.EventIndex = 0;
 	nearMissEvent.ElapsedTimeSeconds = 4.25;
 	nearMissEvent.EventType = EEpisodeEvaluationEventType::PedestrianNearMiss;
 	nearMissEvent.Severity = EEpisodeEvaluationEventSeverity::Warning;
+	nearMissEvent.TargetInstanceId = TEXT("pedestrian_001");
 	nearMissEvent.Message = TEXT("near miss");
 	nearMissEvent.Properties.Add(TEXT("distance_m"), MakeUserProjectFloatParam(0.45));
 	runRecord.EvaluationResult.Events.Add(nearMissEvent);
+
+	FEpisodeEvaluationEvent staticCollisionEvent;
+	staticCollisionEvent.EventIndex = 1;
+	staticCollisionEvent.ElapsedTimeSeconds = 4.75;
+	staticCollisionEvent.EventType = EEpisodeEvaluationEventType::StaticObstacleCollision;
+	staticCollisionEvent.Severity = EEpisodeEvaluationEventSeverity::Warning;
+	staticCollisionEvent.TargetInstanceId = TEXT("obstacle_001");
+	staticCollisionEvent.Message = TEXT("static collision");
+	staticCollisionEvent.Properties.Add(TEXT("target_actor"), MakeUserProjectStringParam(TEXT("BenchActor_001")));
+	runRecord.EvaluationResult.Events.Add(staticCollisionEvent);
+
+	FEpisodeEvaluationEvent penaltyRegionEvent;
+	penaltyRegionEvent.EventIndex = 2;
+	penaltyRegionEvent.ElapsedTimeSeconds = 4.9;
+	penaltyRegionEvent.EventType = EEpisodeEvaluationEventType::PenaltyRegionViolation;
+	penaltyRegionEvent.Severity = EEpisodeEvaluationEventSeverity::Warning;
+	penaltyRegionEvent.TargetInstanceId = TEXT("penalty_region_001");
+	penaltyRegionEvent.Message = TEXT("penalty region violation");
+	penaltyRegionEvent.Properties.Add(TEXT("start_time_s"), MakeUserProjectFloatParam(4.0));
+	penaltyRegionEvent.Properties.Add(TEXT("duration_s"), MakeUserProjectFloatParam(0.9));
+	runRecord.EvaluationResult.Events.Add(penaltyRegionEvent);
+
+	FEpisodeEvaluationEvent repathEvent;
+	repathEvent.EventIndex = 3;
+	repathEvent.ElapsedTimeSeconds = 5.0;
+	repathEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotRepath;
+	repathEvent.Severity = EEpisodeEvaluationEventSeverity::Info;
+	repathEvent.Message = TEXT("dynamic_repath_ready");
+	repathEvent.Properties.Add(TEXT("policy_sequence"), MakeUserProjectIntegerParam(7));
+	repathEvent.Properties.Add(TEXT("policy_event_code"), MakeUserProjectStringParam(TEXT("repath")));
+	repathEvent.Properties.Add(TEXT("policy_reason"), MakeUserProjectStringParam(TEXT("dynamic_repath_ready")));
+	runRecord.EvaluationResult.Events.Add(repathEvent);
+
+	FEpisodeEvaluationEvent pathfindFailEvent;
+	pathfindFailEvent.EventIndex = 4;
+	pathfindFailEvent.ElapsedTimeSeconds = 6.0;
+	pathfindFailEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotPolicyFailure;
+	pathfindFailEvent.Severity = EEpisodeEvaluationEventSeverity::Failure;
+	pathfindFailEvent.Message = TEXT("path not found");
+	pathfindFailEvent.Properties.Add(TEXT("policy_sequence"), MakeUserProjectIntegerParam(8));
+	pathfindFailEvent.Properties.Add(TEXT("error_code"), MakeUserProjectStringParam(TEXT("PATH_NOT_FOUND")));
+	pathfindFailEvent.Properties.Add(TEXT("error_message"), MakeUserProjectStringParam(TEXT("no valid path")));
+	runRecord.EvaluationResult.Events.Add(pathfindFailEvent);
+
+	FEpisodeEvaluationEvent policyDecisionErrorEvent;
+	policyDecisionErrorEvent.EventIndex = 5;
+	policyDecisionErrorEvent.ElapsedTimeSeconds = 7.0;
+	policyDecisionErrorEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure;
+	policyDecisionErrorEvent.Severity = EEpisodeEvaluationEventSeverity::Failure;
+	policyDecisionErrorEvent.Message = TEXT("request failed");
+	policyDecisionErrorEvent.Properties.Add(TEXT("policy_sequence"), MakeUserProjectIntegerParam(9));
+	policyDecisionErrorEvent.Properties.Add(TEXT("error_code"), MakeUserProjectStringParam(TEXT("PYTHON_REQUEST_FAILED")));
+	policyDecisionErrorEvent.Properties.Add(TEXT("error_message"), MakeUserProjectStringParam(TEXT("Python decide HTTP request failed.")));
+	runRecord.EvaluationResult.Events.Add(policyDecisionErrorEvent);
+
+	FEpisodeEvaluationEvent stuckEvent;
+	stuckEvent.EventIndex = 6;
+	stuckEvent.ElapsedTimeSeconds = 8.0;
+	stuckEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotSimulationFailure;
+	stuckEvent.Severity = EEpisodeEvaluationEventSeverity::Failure;
+	stuckEvent.Message = TEXT("robot stuck");
+	stuckEvent.Properties.Add(TEXT("delivery_bot_failure_type"), MakeUserProjectStringParam(TEXT("Stuck")));
+	runRecord.EvaluationResult.Events.Add(stuckEvent);
 
 	TArray<FString> artifactDiagnostics;
 	TestTrue(
@@ -517,7 +681,7 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("actions exists"), FPaths::FileExists(FPaths::Combine(episodeDirectory, TEXT("actions.jsonl"))));
 	TestTrue(TEXT("trace exists"), FPaths::FileExists(FPaths::Combine(episodeDirectory, TEXT("trace.jsonl"))));
 	TestTrue(TEXT("summary exists"), FPaths::FileExists(snapshotResult.Paths.SummaryPath));
-	TestEqual(TEXT("events include evaluation and terminal lines"), CountJsonlLines(eventsPath), 2);
+	TestEqual(TEXT("events include evaluation and terminal lines"), CountJsonlLines(eventsPath), 8);
 
 	TSharedPtr<FJsonObject> resultObject;
 	TestTrue(TEXT("load result json"), LoadUserProjectJsonObject(resultPath, resultObject));
@@ -529,12 +693,88 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestEqual(
 		TEXT("event summary count"),
 		static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("event_count")))),
-		2);
+		8);
+	TestEqual(
+		TEXT("event summary total"),
+		static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("total")))),
+		8);
+	TestEqual(
+		TEXT("summary terminal event index"),
+		static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("summary"))->GetNumberField(TEXT("terminal_event_index")))),
+		7);
+	TestEqual(
+		TEXT("event summary terminal event index"),
+		static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("terminal_event_index")))),
+		7);
+	const TSharedPtr<FJsonObject> eventSummaryByType = resultObject->GetObjectField(TEXT("event_summary"))->GetObjectField(TEXT("by_type"));
+	TestEqual(TEXT("near miss event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("PedestrianNearMiss")))), 1);
+	TestEqual(TEXT("static collision event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("StaticObstacleCollision")))), 1);
+	TestEqual(TEXT("penalty region event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("PenaltyRegionViolation")))), 1);
+	TestEqual(TEXT("repath event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("Repath")))), 1);
+	TestEqual(TEXT("pathfind fail event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("PathfindFail")))), 1);
+	TestEqual(TEXT("policy decision error event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("PolicyDecisionError")))), 1);
+	TestEqual(TEXT("stuck event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("Stuck")))), 1);
+	TestEqual(TEXT("goal reached event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("GoalReached")))), 1);
+	const TSharedPtr<FJsonObject> eventSummaryBySource = resultObject->GetObjectField(TEXT("event_summary"))->GetObjectField(TEXT("by_source"));
+	TestEqual(TEXT("evaluation source event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryBySource->GetNumberField(TEXT("EvaluationSubsystem")))), 5);
+	TestEqual(TEXT("python source event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryBySource->GetNumberField(TEXT("PythonPolicy")))), 2);
+	TestEqual(TEXT("policy runtime source event summary"), static_cast<int32>(FMath::RoundToInt(eventSummaryBySource->GetNumberField(TEXT("PolicyRuntime")))), 1);
 
 	FString eventsJson;
 	TestTrue(TEXT("load events jsonl"), FFileHelper::LoadFileToString(eventsJson, *eventsPath));
-	TestTrue(TEXT("events include terminal"), eventsJson.Contains(TEXT("\"event_type\":\"Terminal\"")));
+	TestTrue(TEXT("events include goal reached terminal"), eventsJson.Contains(TEXT("\"event_type\":\"GoalReached\"")));
 	TestTrue(TEXT("events include terminal reason"), eventsJson.Contains(TEXT("\"reason\":\"GoalReached\"")));
+	TestTrue(TEXT("events include terminal duration snapshot"), eventsJson.Contains(TEXT("\"duration_s\":12.5")));
+	TestTrue(TEXT("events include goal distance snapshot"), eventsJson.Contains(TEXT("\"distance_to_goal_m\":0.25")));
+	TestTrue(TEXT("events include goal threshold snapshot"), eventsJson.Contains(TEXT("\"goal_threshold_m\":0.5")));
+	TestTrue(TEXT("events include repath"), eventsJson.Contains(TEXT("\"event_type\":\"Repath\"")));
+	TestTrue(TEXT("events include python policy source"), eventsJson.Contains(TEXT("\"source\":\"PythonPolicy\"")));
+	TestTrue(TEXT("events include pathfind fail"), eventsJson.Contains(TEXT("\"event_type\":\"PathfindFail\"")));
+	TestTrue(TEXT("events include policy decision error"), eventsJson.Contains(TEXT("\"event_type\":\"PolicyDecisionError\"")));
+	TestTrue(TEXT("events include policy runtime source"), eventsJson.Contains(TEXT("\"source\":\"PolicyRuntime\"")));
+	TestTrue(TEXT("events include stuck"), eventsJson.Contains(TEXT("\"event_type\":\"Stuck\"")));
+	TestFalse(TEXT("events omit internal repath type"), eventsJson.Contains(TEXT("\"event_type\":\"DeliveryBotRepath\"")));
+	TArray<TSharedPtr<FJsonObject>> eventLines;
+	TestTrue(TEXT("parse events jsonl"), LoadUserProjectJsonlObjects(eventsPath, eventLines));
+	TestEqual(TEXT("events parsed line count"), eventLines.Num(), 8);
+	if (eventLines.Num() == 8 && eventLines[7].IsValid())
+	{
+		const TSharedPtr<FJsonValue> nearMissActionSequence = eventLines[0]->TryGetField(TEXT("action_sequence"));
+		TestTrue(
+			TEXT("near miss action sequence is null"),
+			nearMissActionSequence.IsValid() && nearMissActionSequence->Type == EJson::Null);
+		TSharedPtr<FJsonObject> nearMissProperties;
+		TestTrue(TEXT("near miss properties object"), TryGetJsonObjectFieldForTest(eventLines[0], TEXT("properties"), nearMissProperties));
+		if (nearMissProperties.IsValid())
+		{
+			TestEqual(TEXT("near miss target id fallback"), nearMissProperties->GetStringField(TEXT("target_id")), FString(TEXT("pedestrian_001")));
+		}
+		TSharedPtr<FJsonObject> staticCollisionProperties;
+		TestTrue(TEXT("static collision properties object"), TryGetJsonObjectFieldForTest(eventLines[1], TEXT("properties"), staticCollisionProperties));
+		if (staticCollisionProperties.IsValid())
+		{
+			TestEqual(TEXT("static collision target id fallback"), staticCollisionProperties->GetStringField(TEXT("target_id")), FString(TEXT("obstacle_001")));
+		}
+		TSharedPtr<FJsonObject> penaltyRegionProperties;
+		TestTrue(TEXT("penalty region properties object"), TryGetJsonObjectFieldForTest(eventLines[2], TEXT("properties"), penaltyRegionProperties));
+		if (penaltyRegionProperties.IsValid())
+		{
+			TestEqual(TEXT("penalty region id fallback"), penaltyRegionProperties->GetStringField(TEXT("region_id")), FString(TEXT("penalty_region_001")));
+		}
+		TestEqual(TEXT("repath action sequence"), static_cast<int32>(eventLines[3]->GetNumberField(TEXT("action_sequence"))), 7);
+		TestEqual(TEXT("pathfind fail action sequence"), static_cast<int32>(eventLines[4]->GetNumberField(TEXT("action_sequence"))), 8);
+		TestEqual(TEXT("policy decision error action sequence"), static_cast<int32>(eventLines[5]->GetNumberField(TEXT("action_sequence"))), 9);
+		const TSharedPtr<FJsonValue> stuckActionSequence = eventLines[6]->TryGetField(TEXT("action_sequence"));
+		TestTrue(
+			TEXT("stuck action sequence is null"),
+			stuckActionSequence.IsValid() && stuckActionSequence->Type == EJson::Null);
+		const TSharedPtr<FJsonValue> terminalActionSequence = eventLines[7]->TryGetField(TEXT("action_sequence"));
+		TestTrue(
+			TEXT("terminal action sequence is null"),
+			terminalActionSequence.IsValid() && terminalActionSequence->Type == EJson::Null);
+		TestEqual(TEXT("terminal line index"), static_cast<int32>(eventLines[7]->GetNumberField(TEXT("event_index"))), 7);
+		TestEqual(TEXT("terminal line type"), eventLines[7]->GetStringField(TEXT("event_type")), FString(TEXT("GoalReached")));
+	}
 
 	TSharedPtr<FJsonObject> summaryObject;
 	TestTrue(TEXT("load summary json"), LoadUserProjectJsonObject(snapshotResult.Paths.SummaryPath, summaryObject));
@@ -555,6 +795,366 @@ bool FUserProjectRunOutputWriteTest::RunTest(const FString& parameters)
 	TestTrue(
 		TEXT("summary scenario semantic copied"),
 		rows[0]->AsObject()->GetObjectField(TEXT("scenario_semantic"))->HasField(TEXT("route_axis")));
+
+	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUserProjectRunOutputEventTypeMatrixTest,
+	"OdiroSim.UserProjectData.RunOutput.EventTypeMatrix",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUserProjectRunOutputEventTypeMatrixTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	const FString projectPath = MakeUserProjectDataTestRoot();
+	FUserProjectRunSnapshotPaths paths;
+	TestTrue(TEXT("write snapshot"), WriteUserProjectDataSnapshot(projectPath, paths));
+
+	FEpisodeRunRecord runRecord;
+	runRecord.RunId = TEXT("000001");
+	runRecord.RunIndex = 0;
+	runRecord.EpisodeId = TEXT("000001");
+	runRecord.PairId = TEXT("000001");
+	runRecord.bCompileSucceeded = true;
+	runRecord.bEpisodeSetupCompileSucceeded = true;
+	runRecord.bDeliveryBotSetupCompileSucceeded = true;
+	runRecord.bSetupSucceeded = true;
+	runRecord.bEvaluationCompleted = true;
+	runRecord.bSuccess = true;
+	runRecord.Outcome = EEpisodeEvaluationOutcome::Success;
+	runRecord.TerminalReason = EEpisodeEvaluationTerminalReason::GoalReached;
+	runRecord.DurationSeconds = 20.0;
+	runRecord.EvaluationResult.EpisodeId = runRecord.EpisodeId;
+	runRecord.EvaluationResult.bCompleted = true;
+	runRecord.EvaluationResult.bSuccess = true;
+	runRecord.EvaluationResult.Outcome = EEpisodeEvaluationOutcome::Success;
+	runRecord.EvaluationResult.TerminalReason = EEpisodeEvaluationTerminalReason::GoalReached;
+	runRecord.EvaluationResult.DurationSeconds = runRecord.DurationSeconds;
+	runRecord.EvaluationResult.Metrics.Add(TEXT("distance_to_goal_m"), MakeUserProjectFloatParam(0.1));
+	runRecord.EvaluationResult.Metrics.Add(TEXT("goal_threshold_m"), MakeUserProjectFloatParam(0.5));
+
+	FEpisodeEvaluationEvent timeoutEvent = MakeUserProjectEventTypeMatrixEvent(
+		0,
+		EEpisodeEvaluationEventType::Timeout,
+		TEXT("timeout"));
+	timeoutEvent.Properties.Add(TEXT("duration_s"), MakeUserProjectFloatParam(20.0));
+	timeoutEvent.Properties.Add(TEXT("max_duration_s"), MakeUserProjectFloatParam(20.0));
+	runRecord.EvaluationResult.Events.Add(timeoutEvent);
+
+	FEpisodeEvaluationEvent tipOverEvent = MakeUserProjectEventTypeMatrixEvent(
+		1,
+		EEpisodeEvaluationEventType::RobotTipOver,
+		TEXT("tip over"));
+	tipOverEvent.Properties.Add(TEXT("roll_degree"), MakeUserProjectFloatParam(70.0));
+	tipOverEvent.Properties.Add(TEXT("pitch_degree"), MakeUserProjectFloatParam(0.0));
+	tipOverEvent.Properties.Add(TEXT("threshold_degree"), MakeUserProjectFloatParam(45.0));
+	runRecord.EvaluationResult.Events.Add(tipOverEvent);
+
+	FEpisodeEvaluationEvent staticCollisionEvent = MakeUserProjectEventTypeMatrixEvent(
+		2,
+		EEpisodeEvaluationEventType::StaticObstacleCollision,
+		TEXT("static collision"));
+	staticCollisionEvent.TargetInstanceId = TEXT("obstacle_001");
+	runRecord.EvaluationResult.Events.Add(staticCollisionEvent);
+
+	FEpisodeEvaluationEvent blockedRegionEvent = MakeUserProjectEventTypeMatrixEvent(
+		3,
+		EEpisodeEvaluationEventType::BlockedRegionCollision,
+		TEXT("blocked region"));
+	blockedRegionEvent.TargetInstanceId = TEXT("blocked_region_001");
+	runRecord.EvaluationResult.Events.Add(blockedRegionEvent);
+
+	FEpisodeEvaluationEvent penaltyRegionEvent = MakeUserProjectEventTypeMatrixEvent(
+		4,
+		EEpisodeEvaluationEventType::PenaltyRegionViolation,
+		TEXT("penalty region"));
+	penaltyRegionEvent.TargetInstanceId = TEXT("penalty_region_001");
+	penaltyRegionEvent.Properties.Add(TEXT("start_time_s"), MakeUserProjectFloatParam(3.0));
+	penaltyRegionEvent.Properties.Add(TEXT("duration_s"), MakeUserProjectFloatParam(1.0));
+	runRecord.EvaluationResult.Events.Add(penaltyRegionEvent);
+
+	FEpisodeEvaluationEvent nearMissEvent = MakeUserProjectEventTypeMatrixEvent(
+		5,
+		EEpisodeEvaluationEventType::PedestrianNearMiss,
+		TEXT("near miss"));
+	nearMissEvent.TargetInstanceId = TEXT("pedestrian_001");
+	nearMissEvent.Properties.Add(TEXT("min_distance_m"), MakeUserProjectFloatParam(0.4));
+	nearMissEvent.Properties.Add(TEXT("threshold_m"), MakeUserProjectFloatParam(0.5));
+	runRecord.EvaluationResult.Events.Add(nearMissEvent);
+
+	FEpisodeEvaluationEvent pedestrianCollisionEvent = MakeUserProjectEventTypeMatrixEvent(
+		6,
+		EEpisodeEvaluationEventType::PedestrianCollision,
+		TEXT("pedestrian collision"));
+	pedestrianCollisionEvent.TargetInstanceId = TEXT("pedestrian_002");
+	runRecord.EvaluationResult.Events.Add(pedestrianCollisionEvent);
+
+	FEpisodeEvaluationEvent simulationFailureEvent = MakeUserProjectEventTypeMatrixEvent(
+		7,
+		EEpisodeEvaluationEventType::DeliveryBotSimulationFailure,
+		TEXT("pathfinding failed"));
+	simulationFailureEvent.Properties.Add(TEXT("failure_type"), MakeUserProjectStringParam(TEXT("PathFindingFailed")));
+	runRecord.EvaluationResult.Events.Add(simulationFailureEvent);
+
+	FEpisodeEvaluationEvent stuckEvent = MakeUserProjectEventTypeMatrixEvent(
+		8,
+		EEpisodeEvaluationEventType::DeliveryBotSimulationFailure,
+		TEXT("stuck"));
+	stuckEvent.Properties.Add(TEXT("delivery_bot_failure_type"), MakeUserProjectStringParam(TEXT("Stuck")));
+	runRecord.EvaluationResult.Events.Add(stuckEvent);
+
+	FEpisodeEvaluationEvent repathEvent = MakeUserProjectEventTypeMatrixEvent(
+		9,
+		EEpisodeEvaluationEventType::DeliveryBotRepath,
+		TEXT("repath"));
+	repathEvent.Properties.Add(TEXT("policy_sequence"), MakeUserProjectIntegerParam(21));
+	repathEvent.Properties.Add(TEXT("policy_reason"), MakeUserProjectStringParam(TEXT("dynamic_repath_ready")));
+	runRecord.EvaluationResult.Events.Add(repathEvent);
+
+	FEpisodeEvaluationEvent pathfindFailEvent = MakeUserProjectEventTypeMatrixEvent(
+		10,
+		EEpisodeEvaluationEventType::DeliveryBotPolicyFailure,
+		TEXT("pathfind fail"));
+	pathfindFailEvent.Properties.Add(TEXT("policy_sequence"), MakeUserProjectIntegerParam(22));
+	pathfindFailEvent.Properties.Add(TEXT("error_code"), MakeUserProjectStringParam(TEXT("PATH_NOT_FOUND")));
+	runRecord.EvaluationResult.Events.Add(pathfindFailEvent);
+
+	FEpisodeEvaluationEvent policyDecisionErrorEvent = MakeUserProjectEventTypeMatrixEvent(
+		11,
+		EEpisodeEvaluationEventType::DeliveryBotPolicyServerFailure,
+		TEXT("policy decision error"));
+	policyDecisionErrorEvent.Properties.Add(TEXT("policy_sequence"), MakeUserProjectIntegerParam(23));
+	policyDecisionErrorEvent.Properties.Add(TEXT("error_code"), MakeUserProjectStringParam(TEXT("PYTHON_REQUEST_FAILED")));
+	runRecord.EvaluationResult.Events.Add(policyDecisionErrorEvent);
+
+	TArray<FString> diagnostics;
+	TestTrue(TEXT("episode artifacts write"), FUserProjectRunOutputJson::SaveEpisodeArtifacts(paths, runRecord, diagnostics));
+	TestEqual(TEXT("artifact diagnostics"), diagnostics.Num(), 0);
+
+	const FString eventsPath = FPaths::Combine(
+		FUserProjectRunOutputJson::BuildEpisodeDirectory(paths, runRecord.EpisodeId),
+		TEXT("events.jsonl"));
+	TArray<TSharedPtr<FJsonObject>> eventLines;
+	TestTrue(TEXT("parse event type matrix jsonl"), LoadUserProjectJsonlObjects(eventsPath, eventLines));
+	TestEqual(TEXT("event type matrix line count"), eventLines.Num(), 13);
+
+	const TArray<FString> expectedEventTypes = {
+		TEXT("Timeout"),
+		TEXT("RobotTipOver"),
+		TEXT("StaticObstacleCollision"),
+		TEXT("BlockedRegionCollision"),
+		TEXT("PenaltyRegionViolation"),
+		TEXT("PedestrianNearMiss"),
+		TEXT("PedestrianCollision"),
+		TEXT("DeliveryBotSimulationFailure"),
+		TEXT("GoalReached"),
+		TEXT("Stuck"),
+		TEXT("Repath"),
+		TEXT("PathfindFail"),
+		TEXT("PolicyDecisionError")
+	};
+	for (const FString& expectedEventType : expectedEventTypes)
+	{
+		TestEqual(
+			FString::Printf(TEXT("single event type: %s"), *expectedEventType),
+			CountEventTypeForTest(eventLines, expectedEventType),
+			1);
+	}
+
+	const auto expectedSourceForEventType = [](const FString& eventType)
+	{
+		if (eventType == TEXT("Repath") || eventType == TEXT("PathfindFail"))
+		{
+			return FString(TEXT("PythonPolicy"));
+		}
+		if (eventType == TEXT("PolicyDecisionError"))
+		{
+			return FString(TEXT("PolicyRuntime"));
+		}
+		return FString(TEXT("EvaluationSubsystem"));
+	};
+	const TMap<FString, int32> expectedActionSequences = {
+		{ TEXT("Repath"), 21 },
+		{ TEXT("PathfindFail"), 22 },
+		{ TEXT("PolicyDecisionError"), 23 }
+	};
+	for (const FString& expectedEventType : expectedEventTypes)
+	{
+		const TSharedPtr<FJsonObject> eventLine = FindEventLineByTypeForTest(eventLines, expectedEventType);
+		TestTrue(FString::Printf(TEXT("event line exists: %s"), *expectedEventType), eventLine.IsValid());
+		if (!eventLine.IsValid())
+		{
+			continue;
+		}
+
+		TestEqual(
+			FString::Printf(TEXT("event source: %s"), *expectedEventType),
+			eventLine->GetStringField(TEXT("source")),
+			expectedSourceForEventType(expectedEventType));
+		const TSharedPtr<FJsonValue> actionSequence = eventLine->TryGetField(TEXT("action_sequence"));
+		if (const int32* expectedActionSequence = expectedActionSequences.Find(expectedEventType))
+		{
+			TestTrue(
+				FString::Printf(TEXT("action sequence is number: %s"), *expectedEventType),
+				actionSequence.IsValid() && actionSequence->Type == EJson::Number);
+			if (actionSequence.IsValid() && actionSequence->Type == EJson::Number)
+			{
+				TestEqual(
+					FString::Printf(TEXT("action sequence: %s"), *expectedEventType),
+					static_cast<int32>(actionSequence->AsNumber()),
+					*expectedActionSequence);
+			}
+		}
+		else
+		{
+			TestTrue(
+				FString::Printf(TEXT("action sequence is null: %s"), *expectedEventType),
+				actionSequence.IsValid() && actionSequence->Type == EJson::Null);
+		}
+	}
+
+	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUserProjectRunOutputTerminalEventReuseTest,
+	"OdiroSim.UserProjectData.RunOutput.TerminalEventReuse",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUserProjectRunOutputTerminalEventReuseTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	const FString projectPath = MakeUserProjectDataTestRoot();
+	FUserProjectRunSnapshotPaths paths;
+	TestTrue(TEXT("write snapshot"), WriteUserProjectDataSnapshot(projectPath, paths));
+
+	const FUserProjectRunSnapshotParseResult snapshotResult = FUserProjectRunSnapshot::Parse(projectPath, TEXT("000001"));
+	TestTrue(TEXT("snapshot parses"), snapshotResult.bSuccess);
+
+	TArray<FUserProjectEpisodeScenarioWriteResult> writeResults;
+	TArray<FScenarioCompileDiagnostic> writeDiagnostics;
+	TestTrue(
+		TEXT("scenario samples write"),
+		FUserProjectEpisodeScenarioJson::WriteAllEpisodeScenarios(
+			snapshotResult.Paths,
+			snapshotResult.Setting,
+			writeResults,
+			writeDiagnostics));
+	if (writeResults.IsEmpty())
+	{
+		IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+		return false;
+	}
+
+	FEpisodeRunRecord runRecord;
+	runRecord.RunId = TEXT("000001");
+	runRecord.RunIndex = 0;
+	runRecord.EpisodeId = writeResults[0].EpisodeId;
+	runRecord.PairId = writeResults[0].EpisodeId;
+	runRecord.EpisodeScenarioJsonPath = writeResults[0].ScenarioPath;
+	runRecord.ProfileJsonPath = snapshotResult.Paths.ProfilePath;
+	runRecord.PolicySpecJsonPath = snapshotResult.Paths.PolicyEntrypointPath;
+	runRecord.EpisodeSetupHash = writeResults[0].ScenarioHash;
+	runRecord.DeliveryBotSetupHash = TEXT("crc32:profile");
+	runRecord.PairHash = TEXT("crc32:policy");
+	runRecord.bCompileSucceeded = true;
+	runRecord.bEpisodeSetupCompileSucceeded = true;
+	runRecord.bDeliveryBotSetupCompileSucceeded = true;
+	runRecord.bSetupSucceeded = true;
+	runRecord.bEvaluationCompleted = true;
+	runRecord.bSuccess = false;
+	runRecord.Outcome = EEpisodeEvaluationOutcome::Failure;
+	runRecord.TerminalReason = EEpisodeEvaluationTerminalReason::Timeout;
+	runRecord.DurationSeconds = 10.0;
+	runRecord.EvaluationResult.EpisodeId = writeResults[0].EpisodeId;
+	runRecord.EvaluationResult.bCompleted = true;
+	runRecord.EvaluationResult.bSuccess = false;
+	runRecord.EvaluationResult.Outcome = EEpisodeEvaluationOutcome::Failure;
+	runRecord.EvaluationResult.TerminalReason = EEpisodeEvaluationTerminalReason::Timeout;
+	runRecord.EvaluationResult.DurationSeconds = 10.0;
+	runRecord.EvaluationResult.Metrics.Add(TEXT("duration_s"), MakeUserProjectFloatParam(10.0));
+	runRecord.EvaluationResult.Metrics.Add(TEXT("max_duration_s"), MakeUserProjectFloatParam(10.0));
+	runRecord.EvaluationResult.Metrics.Add(TEXT("distance_to_goal_m"), MakeUserProjectFloatParam(2.5));
+
+	FEpisodeEvaluationEvent stuckEvent;
+	stuckEvent.EventIndex = 0;
+	stuckEvent.ElapsedTimeSeconds = 5.0;
+	stuckEvent.EventType = EEpisodeEvaluationEventType::DeliveryBotSimulationFailure;
+	stuckEvent.Severity = EEpisodeEvaluationEventSeverity::Warning;
+	stuckEvent.Message = TEXT("robot stuck");
+	stuckEvent.Properties.Add(TEXT("delivery_bot_failure_type"), MakeUserProjectStringParam(TEXT("Stuck")));
+	stuckEvent.Properties.Add(TEXT("duration_s"), MakeUserProjectFloatParam(5.0));
+	stuckEvent.Properties.Add(TEXT("distance_to_goal_m"), MakeUserProjectFloatParam(2.5));
+	runRecord.EvaluationResult.Events.Add(stuckEvent);
+
+	FEpisodeEvaluationEvent timeoutEvent;
+	timeoutEvent.EventIndex = 1;
+	timeoutEvent.ElapsedTimeSeconds = 10.0;
+	timeoutEvent.EventType = EEpisodeEvaluationEventType::Timeout;
+	timeoutEvent.Severity = EEpisodeEvaluationEventSeverity::Failure;
+	timeoutEvent.Message = TEXT("time limit exceeded");
+	timeoutEvent.Properties.Add(TEXT("duration_s"), MakeUserProjectFloatParam(10.0));
+	timeoutEvent.Properties.Add(TEXT("max_duration_s"), MakeUserProjectFloatParam(10.0));
+	timeoutEvent.Properties.Add(TEXT("distance_to_goal_m"), MakeUserProjectFloatParam(2.5));
+	runRecord.EvaluationResult.Events.Add(timeoutEvent);
+
+	TArray<FString> artifactDiagnostics;
+	TestTrue(
+		TEXT("episode artifacts write"),
+		FUserProjectRunOutputJson::SaveEpisodeArtifacts(snapshotResult.Paths, runRecord, artifactDiagnostics));
+	TestEqual(TEXT("artifact diagnostics"), artifactDiagnostics.Num(), 0);
+
+	const FString episodeDirectory = FUserProjectRunOutputJson::BuildEpisodeDirectory(snapshotResult.Paths, TEXT("000001"));
+	const FString resultPath = FPaths::Combine(episodeDirectory, TEXT("result.json"));
+	const FString eventsPath = FPaths::Combine(episodeDirectory, TEXT("events.jsonl"));
+
+	TestEqual(TEXT("events reuse existing terminal line"), CountJsonlLines(eventsPath), 2);
+
+	TSharedPtr<FJsonObject> resultObject;
+	TestTrue(TEXT("load result json"), LoadUserProjectJsonObject(resultPath, resultObject));
+	if (resultObject.IsValid())
+	{
+		TestEqual(
+			TEXT("summary terminal event index reuses timeout"),
+			static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("summary"))->GetNumberField(TEXT("terminal_event_index")))),
+			1);
+		TestEqual(
+			TEXT("event summary count reuses timeout"),
+			static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("event_count")))),
+			2);
+		TestEqual(
+			TEXT("event summary total reuses timeout"),
+			static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("total")))),
+			2);
+		TestEqual(
+			TEXT("event summary terminal event index reuses timeout"),
+			static_cast<int32>(FMath::RoundToInt(resultObject->GetObjectField(TEXT("event_summary"))->GetNumberField(TEXT("terminal_event_index")))),
+			1);
+
+		const TSharedPtr<FJsonObject> eventSummaryByType = resultObject->GetObjectField(TEXT("event_summary"))->GetObjectField(TEXT("by_type"));
+		TestEqual(TEXT("stuck count"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("Stuck")))), 1);
+		TestEqual(TEXT("timeout count"), static_cast<int32>(FMath::RoundToInt(eventSummaryByType->GetNumberField(TEXT("Timeout")))), 1);
+
+		const TSharedPtr<FJsonObject> eventSummaryBySource = resultObject->GetObjectField(TEXT("event_summary"))->GetObjectField(TEXT("by_source"));
+		TestEqual(TEXT("evaluation source count"), static_cast<int32>(FMath::RoundToInt(eventSummaryBySource->GetNumberField(TEXT("EvaluationSubsystem")))), 2);
+	}
+
+	TArray<TSharedPtr<FJsonObject>> eventLines;
+	TestTrue(TEXT("parse events jsonl"), LoadUserProjectJsonlObjects(eventsPath, eventLines));
+	TestEqual(TEXT("events parsed line count"), eventLines.Num(), 2);
+	TestEqual(TEXT("one stuck event"), CountEventTypeForTest(eventLines, TEXT("Stuck")), 1);
+	TestEqual(TEXT("one timeout event"), CountEventTypeForTest(eventLines, TEXT("Timeout")), 1);
+	if (eventLines.Num() == 2 && eventLines[1].IsValid())
+	{
+		TestEqual(TEXT("terminal timeout event index"), static_cast<int32>(eventLines[1]->GetNumberField(TEXT("event_index"))), 1);
+		TestEqual(TEXT("terminal timeout event type"), eventLines[1]->GetStringField(TEXT("event_type")), FString(TEXT("Timeout")));
+		TestEqual(TEXT("terminal timeout reason"), eventLines[1]->GetStringField(TEXT("reason")), FString(TEXT("Timeout")));
+	}
 
 	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
 	return true;

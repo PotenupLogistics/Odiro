@@ -58,6 +58,9 @@ episode_seed = sampling.base_seed + episode_index
 | `goal_acceptance_radius_m` | number | 예 | 목표 도달 판정 반경. 단위 m. |
 | `tip_over_angle_deg` | number | 예 | Robot 전복 판정 각도. 단위 degree. |
 | `near_miss_distance_m` | number | 예 | 보행자 near-miss 거리. 단위 m. |
+| `stuck_detection_window_s` | number | 아니오 | Stuck 이벤트를 기록하기 전 관찰 구간. 단위 s. 생략하면 simulator 기본값. |
+| `stuck_min_goal_progress_m` | number | 아니오 | 관찰 구간 안에서 유의미한 goal distance 개선으로 인정할 최소 거리. 단위 m. |
+| `stuck_speed_threshold_kmh` | number | 아니오 | 관찰 구간 안에서 robot이 정체 상태로 간주되는 최대 속도. 단위 km/h. |
 
 ## 소유 경계
 

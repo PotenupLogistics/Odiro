@@ -27,6 +27,7 @@ entry:
   - UserProjectDataTypes.h / .cpp
   - SimulationSetupTypesTest.cpp
   - UserProjectDataTypesTest.cpp
+  - ScenarioEvaluationSubsystemTest.cpp
   - ScenarioDocumentSampleJsonTest.cpp
   - ScenarioSampleWorldSpecAdapterTest.cpp
   - UserProjectScenarioSampleWorldSpecAdapterTest.cpp
@@ -64,8 +65,15 @@ keep:
   - Scenario LLM authoring saves v2 `scenario` responses to user project `scenario.json`; it must not save or execute RunQueue files.
   - Scenario LLM prompt generate/load/run is scoped to the current `<UserProject>/scenario.json`; run launches create `<UserProject>/runs/<RunId>` snapshots through SimulatorLaunchSubsystem.
   - Project run output uses `FUserProjectRunOutputJson` for `result.json`, `events.jsonl`, `actions.jsonl`, `trace.jsonl`, and `summary.json`.
-  - Project `setting.json` runtime/evaluation fields are simulator-run inputs: `time_scale` applies to world time dilation, and evaluation distances convert from meters to runtime centimeters.
-  - Client/Json/Schema and Client/Json/environment-catalog.md describe the Client-owned scenario catalog surface; keep them aligned with contracts/specs/user-project-data.md, the Client scenario catalog assets, and the temporary AI-side copy at Agents/docs/environment/environment-catalog.md.
+  - `FUserProjectRunOutputJson` maps internal evaluation enums to the external `events.jsonl` `event_type`, `source`, and `reason` contract names; runtime detectors should provide typed snapshot fields, not JSON-specific strings.
+  - `FUserProjectRunOutputJson` writes `events.jsonl.action_sequence` from typed `action_sequence` or `policy_sequence` event properties so policy events can join back to `actions.jsonl.sequence`.
+  - `FUserProjectRunOutputJson` preserves typed evaluation `TargetInstanceId` as `events.jsonl` `target_id` or `region_id` properties when runtime detectors have not already supplied those fields.
+  - `FUserProjectRunOutputJson` reuses an existing terminal-cause evaluation event for `result.json.summary.terminal_event_index`; it only writes a synthetic terminal `events.jsonl` line when no matching terminal event exists.
+  - ScenarioEvaluationSubsystem policy-event snapshots use the Python policy snapshot runtime and sequence as the `events.jsonl` run time and action-sequence join source.
+  - ScenarioEvaluationSubsystem DeliveryBot simulation-failure snapshots use `FDeliveryBotSimulationFailureInfo.TimeSeconds` as the `events.jsonl` run time when the producer supplies it.
+  - ScenarioEvaluationSubsystem owns non-terminal Stuck detection from goal-progress and observed-speed windows; project run output exposes it as `Stuck` through `DeliveryBotSimulationFailure` snapshot properties while `Timeout` remains the terminal reason.
+  - Project `setting.json` runtime/evaluation fields are simulator-run inputs: `time_scale` applies to world time dilation, `runtime.max_duration_s` resolves into `FScenarioRunConfig.MaxDurationSeconds`, evaluation distances convert from meters to runtime centimeters, and Stuck speed thresholds convert from km/h to cm/s.
+  - Client/Json/Schema and Client/Json/environment-catalog.md are LLM prompt-facing docs for one user project simulation set; keep them aligned with contracts/specs/user-project-data.md and the Client scenario catalog assets.
   - Scenario authoring/runtime projection stays separate from runtime WorldSpec and actor-spawn payload types.
 verify:
   - contract specs vs sample JSON alignment
@@ -74,6 +82,8 @@ verify:
   - Scenario document parse, project `scenario.json` adapter, version mismatch, scenario sample generation, and round-trip automation tests
   - Scenario-to-WorldSpec adapter automation tests, including generated user-project scenario sample adapter coverage, and OdiroSimEditor build after adapter/editor draft changes
   - `OdiroSim.UserProjectData.RunOutput.Write` after user project result writer changes
+  - `OdiroSim.UserProjectData.RunOutput.TerminalEventReuse` after terminal event JSONL/result summary mapping changes
+  - `OdiroSim.ScenarioEvaluation.Events` after runtime evaluation event detector or snapshot changes
   - `OdiroSim.UserProjectData.RobotAction.Write` after policy action logging changes
   - `OdiroSim.UserProjectData.EpisodeTrace.Write` after runtime trace logging changes
   - policy event JSONL/log mapping after adding new `EEpisodeEvaluationEventType` values

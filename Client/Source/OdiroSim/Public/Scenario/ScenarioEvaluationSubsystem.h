@@ -121,6 +121,23 @@ private:
 	bool CheckRobotTipOver();
 	void UpdateBlockedRegionViolations();
 	void UpdatePenaltyRegionViolations();
+	// Records a non-terminal stuck event once the robot stops making goal progress.
+	void UpdateStuckDetection();
+	// Adds Corridor-relative position fields for an event actor or impact point when sampled Corridor data is available.
+	bool TryFindCorridorSurfaceAtWorldLocation(
+		const FVector& location,
+		FScenarioRuntimeCorridorSurfaceQueryResult& outSurface) const;
+	// Writes event snapshot aliases that match the external events.jsonl property contract.
+	void AddCorridorSnapshotProperties(
+		TMap<FString, FScenarioParamValue>& properties,
+		const FScenarioRuntimeCorridorSurfaceQueryResult& surface,
+		const FString& prefix) const;
+	// Adds robot Corridor-relative fields for runtime detector snapshots.
+	void AddRobotCorridorSnapshotProperties(TMap<FString, FScenarioParamValue>& properties) const;
+	// Adds target Corridor-relative fields for collision and near-miss snapshots.
+	void AddTargetCorridorSnapshotProperties(
+		TMap<FString, FScenarioParamValue>& properties,
+		const FVector& targetLocation) const;
 	// Records a blocked sampled Corridor lane collision with surface-level identity.
 	void RecordBlockedCorridorSurfaceCollision(
 		const FScenarioRuntimeCorridorSurfaceQueryResult& surface,
@@ -157,6 +174,13 @@ private:
 	FString GetActorInstanceId(const AActor* actor) const;
 
 	double GetElapsedTimeSeconds() const;
+	// Starts a new stuck detection window from the supplied robot state.
+	void ResetStuckDetectionWindow(
+		double elapsedTimeSeconds,
+		const FVector& robotLocation,
+		double distanceToGoalCm);
+	// Clears stuck detector state between episodes.
+	void ClearStuckDetectionState();
 	void EndForTimeout();
 
 	UPROPERTY(Transient)
@@ -186,6 +210,22 @@ private:
 	int32 BlockedRegionCollisionCount = 0;
 	int32 PenaltyRegionViolationCount = 0;
 	int32 PedestrianCollisionCount = 0;
+	// Number of non-terminal stuck events recorded for the current episode.
+	int32 StuckEventCount = 0;
+	// True after the stuck detector records its single diagnostic event.
+	bool bStuckEventRecorded = false;
+	// True once the stuck detector has a baseline sample for the current window.
+	bool bHasStuckDetectionSample = false;
+	// Episode elapsed time at the start of the current stuck detection window.
+	double StuckWindowStartTimeSeconds = 0.0;
+	// Distance to goal at the start of the current stuck detection window.
+	double StuckWindowStartDistanceToGoalCm = 0.0;
+	// Last sampled robot location used to estimate observed movement speed.
+	FVector LastStuckSampleLocation = FVector::ZeroVector;
+	// Episode elapsed time for the last observed movement speed sample.
+	double LastStuckSampleTimeSeconds = 0.0;
+	// Last observed movement speed estimated from robot transform deltas.
+	double LastObservedRobotSpeedCmPerSecond = 0.0;
 
 	static constexpr double NearMissClearanceGraceSeconds = 0.25;
 	static constexpr double CollisionEventCooldownSeconds = 0.5;

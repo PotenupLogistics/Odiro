@@ -29,6 +29,10 @@ struct ODIROSIM_API FScenarioRunConfig
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	int32 IterationIndex = 0;
 
+	// Episode timeout seconds resolved from setting.runtime.max_duration_s; 0 disables timeout.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario", meta = (ClampMin = "0.0"))
+	double MaxDurationSeconds = 0.0;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario")
 	TMap<FString, FScenarioParamValue> Parameters;
 };
@@ -71,6 +75,18 @@ struct ODIROSIM_API FScenarioEvaluationConfig
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation", meta = (ClampMin = "0.0"))
 	double NearMissDistanceCm = 50.0;
+
+	// Seconds of insufficient goal progress and low observed speed before a stuck event is recorded.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation|Stuck", meta = (ClampMin = "0.0"))
+	double StuckDetectionWindowSeconds = 5.0;
+
+	// Minimum required goal-distance improvement during the stuck detection window.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation|Stuck", meta = (ClampMin = "0.0"))
+	double StuckMinGoalProgressCm = 10.0;
+
+	// Maximum observed robot movement speed for the stuck detector to treat the robot as stationary.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation|Stuck", meta = (ClampMin = "0.0"))
+	double StuckSpeedThresholdCmPerSecond = 5.0;
 
 	// Value attached to static-obstacle collision events.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Evaluation")

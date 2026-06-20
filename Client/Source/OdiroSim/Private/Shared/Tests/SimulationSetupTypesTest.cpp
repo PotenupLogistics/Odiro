@@ -46,7 +46,8 @@ namespace
 				TEXT("\"project_id\":\"automation_project\",")
 				TEXT("\"sampling\":{\"base_seed\":1000,\"episode_count\":3,\"generator_version\":\"0.1.0\"},")
 				TEXT("\"runtime\":{\"map_id\":\"ScenarioSimulationMap\",\"fixed_fps\":45,\"time_scale\":1.5,\"max_duration_s\":60},")
-				TEXT("\"evaluation\":{\"goal_acceptance_radius_m\":1.25,\"tip_over_angle_deg\":45,\"near_miss_distance_m\":0.75}")
+				TEXT("\"evaluation\":{\"goal_acceptance_radius_m\":1.25,\"tip_over_angle_deg\":45,\"near_miss_distance_m\":0.75,")
+				TEXT("\"stuck_detection_window_s\":3.5,\"stuck_min_goal_progress_m\":0.2,\"stuck_speed_threshold_kmh\":0.36}")
 				TEXT("}"))
 			&& SaveSimulationTestFile(
 				paths.ProfilePath,
@@ -315,6 +316,9 @@ bool FUserProjectRunSnapshotParseTest::RunTest(const FString& parameters)
 	TestEqual(TEXT("goal acceptance cm"), result.Setting.EvaluationConfig.GoalAcceptanceRadiusCm, 125.0);
 	TestEqual(TEXT("tip over degrees"), result.Setting.EvaluationConfig.TipOverAngleDegrees, 45.0);
 	TestEqual(TEXT("near miss cm"), result.Setting.EvaluationConfig.NearMissDistanceCm, 75.0);
+	TestEqual(TEXT("stuck window seconds"), result.Setting.EvaluationConfig.StuckDetectionWindowSeconds, 3.5);
+	TestEqual(TEXT("stuck progress cm"), result.Setting.EvaluationConfig.StuckMinGoalProgressCm, 20.0);
+	TestEqual(TEXT("stuck speed cm/s"), result.Setting.EvaluationConfig.StuckSpeedThresholdCmPerSecond, 10.0);
 	TestTrue(TEXT("policy entrypoint path"), result.Paths.PolicyEntrypointPath.EndsWith(TEXT("snapshot/policy/__init__.py")));
 
 	IFileManager::Get().DeleteDirectory(*projectPath, false, true);

@@ -19,6 +19,9 @@
 	{
 		"goal_acceptance_radius_m": 1,
 		"tip_over_angle_deg": 60,
-		"near_miss_distance_m": 0.5
+		"near_miss_distance_m": 0.5,
+		"stuck_detection_window_s": 5,
+		"stuck_min_goal_progress_m": 0.1,
+		"stuck_speed_threshold_kmh": 0.18
 	}
 }

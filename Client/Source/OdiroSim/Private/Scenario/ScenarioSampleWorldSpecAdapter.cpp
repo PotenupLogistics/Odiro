@@ -332,6 +332,56 @@ namespace
 		return FString::Printf(TEXT("%08x"), FCrc::StrCrc32(*HashSource));
 	}
 
+	bool TryReadSampleNumber(const FScenarioSampleParamValue& ParamValue, double& OutValue)
+	{
+		if (ParamValue.Type == EScenarioSampleParamValueType::Float)
+		{
+			OutValue = ParamValue.FloatValue;
+			return true;
+		}
+
+		if (ParamValue.Type == EScenarioSampleParamValueType::Integer)
+		{
+			OutValue = static_cast<double>(ParamValue.IntegerValue);
+			return true;
+		}
+
+		return false;
+	}
+
+	double ResolveSampleMaxDurationSeconds(
+		const FScenarioSampleDocument& Document,
+		FScenarioCompileResult& Result)
+	{
+		const FScenarioSampleParamValue* MaxDurationParam = Document.Scenario.Params.Find(TEXT("max_duration_s"));
+		if (!MaxDurationParam)
+		{
+			return 0.0;
+		}
+
+		double MaxDurationSeconds = 0.0;
+		if (!TryReadSampleNumber(*MaxDurationParam, MaxDurationSeconds))
+		{
+			AddAdapterDiagnostic(
+				Result,
+				EScenarioCompileDiagnosticSeverity::Warning,
+				TEXT("invalid_max_duration_s"),
+				TEXT("scenario_sample param 'max_duration_s' must be numeric to populate runtime MaxDurationSeconds."));
+			return 0.0;
+		}
+
+		if (MaxDurationSeconds < 0.0)
+		{
+			AddAdapterDiagnostic(
+				Result,
+				EScenarioCompileDiagnosticSeverity::Warning,
+				TEXT("negative_max_duration_s"),
+				FString::Printf(TEXT("scenario_sample param 'max_duration_s' was clamped to 0.0 from %.2f."), MaxDurationSeconds));
+		}
+
+		return FMath::Max(0.0, MaxDurationSeconds);
+	}
+
 	void PopulateRunConfig(
 		const FScenarioSampleDocument& Document,
 		FScenarioCompileResult& Result,
@@ -344,6 +394,7 @@ namespace
 		WorldSpec.RunConfig.GeneratorVersion = FScenarioSampleJson::SupportedVersion;
 		WorldSpec.RunConfig.BaseSeed = Document.Sample.Source.Seed;
 		WorldSpec.RunConfig.IterationIndex = 0;
+		WorldSpec.RunConfig.MaxDurationSeconds = ResolveSampleMaxDurationSeconds(Document, Result);
 
 		for (const TPair<FString, FScenarioSampleParamValue>& Pair : Document.Scenario.Params)
 		{

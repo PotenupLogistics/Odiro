@@ -16,8 +16,12 @@ CONTRACT_SPECS = REPO_ROOT / "contracts" / "specs"
 EPISODE_SETUP_CONTRACT = CONTRACT_SPECS / "EpisodeSetup.json.md"
 DELIVERY_BOT_CONTRACT = CONTRACT_SPECS / "DeliveryBotSetup.json.md"
 RUN_QUEUE_CONTRACT = CONTRACT_SPECS / "RunQueue.json.md"
-EVALUATION_REPORT_CONTRACT = CONTRACT_SPECS / "EpisodeEvaluationReport.json.md"
+MISSING_EVALUATION_REPORT_CONTRACT = CONTRACT_SPECS / ("EpisodeEvaluationReport" + ".json.md")
 POLICY_DECISION_CONTRACT = DOCS / "policy_server" / "POLICY_DECISION_JSON_GUIDE.md"
+SIMULATION_INTERFACE = REPO_ROOT / "docs" / "specs" / "simulation-interface.md"
+USER_PROJECT_DATA_CONTRACT = CONTRACT_SPECS / "user-project-data.md"
+LEGACY_TERMINOLOGY_DOC = DOCS / "archive" / "deprecated" / ("SCENARIO_" + "EPISODE_TERMINOLOGY.md")
+ENVIRONMENT_CATALOG = DOCS / "environment" / "environment-catalog.md"
 
 FORBIDDEN_CODE_PATHS = [
     ROOT / "ue",
@@ -76,13 +80,21 @@ def run_check() -> dict[str, Any]:
         "canonicalContractPathsExist": all(
             path.exists()
             for path in [
-                EPISODE_SETUP_CONTRACT,
-                DELIVERY_BOT_CONTRACT,
-                RUN_QUEUE_CONTRACT,
-                EVALUATION_REPORT_CONTRACT,
+                USER_PROJECT_DATA_CONTRACT,
+                SIMULATION_INTERFACE,
                 POLICY_DECISION_CONTRACT,
             ]
         ),
+        "legacyContractDocsRetained": all(
+            path.exists()
+            for path in [
+                EPISODE_SETUP_CONTRACT,
+                DELIVERY_BOT_CONTRACT,
+                RUN_QUEUE_CONTRACT,
+            ]
+        ),
+        "missingEvaluationReportContractNotIndexed": not MISSING_EVALUATION_REPORT_CONTRACT.exists()
+        and MISSING_EVALUATION_REPORT_CONTRACT.name not in readme_text,
         "legacyDocsArchived": all(
             (DOCS / "archive" / "previous_episode_spec" / name).exists()
             for name in [
@@ -102,9 +114,10 @@ def run_check() -> dict[str, Any]:
                 DOCS / "providers" / "OPENAI_PROVIDER_GUIDE.md",
                 DOCS / "providers" / "OLLAMA_PROVIDER_GUIDE.md",
                 DOCS / "research" / "RESEARCH_ALIGNMENT.md",
-                DOCS / "architecture" / "SCENARIO_EPISODE_TERMINOLOGY.md",
                 DOCS / "architecture" / "UE_CONTRACT_MIGRATION_PLAN.md",
                 DOCS / "environment" / "ENVIRONMENT_PARAMETER_SPEC.md",
+                ENVIRONMENT_CATALOG,
+                LEGACY_TERMINOLOGY_DOC,
                 DOCS / "policy" / "POLICY_SOURCE_REGISTRY.md",
                 DOCS / "rag" / "RAG_RETRIEVAL_STRATEGY.md",
                 DOCS / "tooling" / "HARNESS_GUIDE.md",
@@ -114,18 +127,20 @@ def run_check() -> dict[str, Any]:
         "readmesLinkCanonicalContractPaths": all(
             term in readme_text
             for term in [
-                "contracts/specs/EpisodeSetup.json.md",
-                "contracts/specs/DeliveryBotSetup.json.md",
-                "contracts/specs/RunQueue.json.md",
-                "contracts/specs/EpisodeEvaluationReport.json.md",
-                "docs/policy_server/POLICY_DECISION_JSON_GUIDE.md",
+                "docs/specs/simulation-interface.md",
+                "contracts/specs/user-project-data.md",
+                "api/V2_AGENT_APIS.md",
+                "agents/V2_AGENT_ARCHITECTURE.md",
+                "agents/V2_LANGGRAPH_DESIGN.md",
+                "environment/environment-catalog.md",
             ]
         ),
         "readmesLinkNewStructure": all(
             term in readme_text
             for term in [
-                "docs/architecture/UE_CONTRACT_MIGRATION_PLAN.md",
-                "docs/providers/OPENAI_PROVIDER_GUIDE.md",
+                "docs/specs/project-structure.md",
+                "docs/specs/simulation-interface.md",
+                "Agents/docs/environment/environment-catalog.md",
                 "archive/previous_episode_spec",
             ]
         ),
@@ -139,7 +154,9 @@ def run_check() -> dict[str, Any]:
     for key, message in [
         ("temporaryManagementDocsRemoved", "Temporary docs management files must be removed after cleanup."),
         ("expectedFoldersExist", "Expected docs structure folders are missing."),
-        ("canonicalContractPathsExist", "Canonical UE or policy contract document path is missing."),
+        ("canonicalContractPathsExist", "Canonical v2 contract or interface document path is missing."),
+        ("legacyContractDocsRetained", "Legacy UE contract documents should remain available as legacy references."),
+        ("missingEvaluationReportContractNotIndexed", "Missing evaluation report contract must not be indexed."),
         ("legacyDocsArchived", "Legacy EpisodeSpec documents must be archived under docs/archive/previous_episode_spec."),
         ("currentDocsMoved", "Current docs must be in their semantic folders."),
         ("readmesLinkCanonicalContractPaths", "README docs must link canonical contract paths."),

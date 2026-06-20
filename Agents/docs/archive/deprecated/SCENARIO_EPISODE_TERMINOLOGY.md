@@ -1,5 +1,13 @@
 # Scenario / Episode Terminology
 
+> Deprecated
+>
+> 현재 Scenario / Episode / Run / EpisodeScenario 용어의 canonical 기준은
+> [docs/specs/simulation-interface.md](../../../../docs/specs/simulation-interface.md)입니다.
+>
+> 이 문서는 legacy UE handoff 시기의 용어 추적용으로만 보관합니다.
+> 현재 v2 Agent 기준 문서나 LLM context allowlist에 포함하지 않습니다.
+
 ## Scenario
 
 * 추상적인 상황 유형이다.

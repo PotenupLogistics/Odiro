@@ -62,6 +62,7 @@ keep:
   - Project run runner owns the active output episode id for `actions.jsonl` and `trace.jsonl`; DeliveryBot policy logging must use the runner-provided output context instead of the evaluation template id.
   - Project `trace.jsonl` sampling is timer-driven from EpisodeMeasurementLogSubsystem once the runner starts the episode trace path, so short episodes still produce samples before terminal artifact write.
   - ScenarioRunnerSubsystem public start API accepts direct scenario_sample/profile run inputs; file-based RunQueue and ScenarioSetup start helpers are removed.
+  - ScenarioEvaluationSubsystem freezes terminal results and broadcasts a native end request; ScenarioRunnerSubsystem owns DeliveryBot `/scenario/end` coordination, a 3-second watchdog, late-callback rejection, cancellation, and world cleanup after final completion.
   - Scenario LLM authoring saves v2 `scenario` responses to user project `scenario.json`; it must not save or execute RunQueue files.
   - Scenario LLM prompt generate/load/run is scoped to the current `<UserProject>/scenario.json`; run launches create `<UserProject>/runs/<RunId>` snapshots through SimulatorLaunchSubsystem.
   - Project run output uses `FUserProjectRunOutputJson` for `result.json`, `events.jsonl`, `actions.jsonl`, `trace.jsonl`, and `summary.json`.
@@ -88,6 +89,7 @@ verify:
   - `OdiroSim.UserProjectData.EpisodeTrace.Write` after runtime trace logging changes
   - policy event JSONL/log mapping after adding new `EEpisodeEvaluationEventType` values
   - focused automation tests for Scenario/Episode changes
+  - Episode finalization callback, HTTP timeout, Runner watchdog, cancellation, and late-callback ordering before scenario cleanup
   - Client/Task-RunPreview.bat smoke when wrapper supports the changed mode
 related:
   - contracts-shared-data

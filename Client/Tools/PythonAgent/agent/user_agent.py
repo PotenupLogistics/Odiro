@@ -223,7 +223,19 @@ class BotPolicy:
 
         self.decisionLogWatcher.reset()
         self.configure_policies_from_start(request)
-        self.pointCloudRecorder.configure_from_start(request)
+        point_cloud_error = self.pointCloudRecorder.configure_from_start(request)
+        if point_cloud_error is not None:
+            return {
+                "status": "error",
+                "accepted": False,
+                "pathStatus": "empty",
+                "error": point_cloud_error,
+                "decision": build_decision_contract("LidarPointCloudRecorder", "output_initialization_failed"),
+                "path": build_path_contract(state),
+                "events": [],
+                "captures": [],
+            }
+
         self.pathfinder.configure_from_control_spec(request.controlSpec)
 
         result = self.pathfinder.find_path(
@@ -344,41 +356,12 @@ class BotPolicy:
         request: ScenarioEndRequest,
         state: AgentState,
     ) -> dict:
-        # /scenario/end 요청을 처리하고 episode metric summary를 반환한다.
-        episode_summary = {
-            "reason": "episode_end_recorded",
-            "status": request.status,
-            "stopCount": state.stopCount,
-            "repathCount": state.repathCount,
-            "slowdownCount": state.slowdownCount,
-            "obstacleWarningCount": state.obstacleWarningCount,
-            "lastObstacleWarningCell": state.lastObstacleWarningCell,
-            "lastObstacleWarningSource": state.lastObstacleWarningSource,
-            "blockedCorridorCellCount": len(state.lastBlockedCorridorCells),
-        }
-
+        # Episode 상태를 정리하고 최소 완료 응답을 반환한다.
         state.clear_after_end()
 
         return {
             "status": "ok",
             "accepted": True,
-            "metrics": {
-                "obstacleWarningCount": episode_summary["obstacleWarningCount"],
-                "stopCount": episode_summary["stopCount"],
-                "repathCount": episode_summary["repathCount"],
-                "slowdownCount": episode_summary["slowdownCount"],
-            },
-            "decision": build_decision_contract("PythonAgent", "episode_end_recorded"),
-            "path": {
-                "pathStatus": "empty",
-                "pathIndex": 0,
-                "pathLength": 0,
-                "targetPathIndex": 0,
-                "targetWorldPoint": None,
-                "pathWorldPoints": [],
-            },
-            "events": [],
-            "captures": [],
         }
 
 

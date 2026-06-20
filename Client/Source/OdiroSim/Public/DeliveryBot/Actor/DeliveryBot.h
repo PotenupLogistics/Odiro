@@ -55,7 +55,11 @@ protected:
 public:
 	virtual void Tick(float DeltaTime) override;
 
-public:
+	// 로봇을 정지하고 Python end 통신 결과를 요청자에게 반환한다.
+	void NotifyEpisodeFinalizingByEvaluation(
+		const FString& status,
+		TFunction<void(bool, const FString&)> onComplete);
+
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Setup")
 	void InitializeSetupInfo(const FDeliveryBotSetupInfo& setupInfo);
 
@@ -75,6 +79,10 @@ public:
 	bool StartPolicyRunWithPolicySpecFileName(const FString& policySpecFileName);
 
 	void ConfigureProjectActionLogging(const FString& projectOutputEpisodeId); // project actions.jsonl 기록 대상 output episode를 전달한다
+	bool ConfigureProjectEpisodeOutput(
+		const FString& projectOutputEpisodeId,
+		const FString& projectEpisodeOutputDirectory,
+		const FString& projectEpisodeOutputRelativeDirectory); // project episode artifact 출력 루트를 HTTP policy component에 전달한다
 
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Observation")
 	FDeliveryBotObservationInfo BuildPolicyObservation();
@@ -92,12 +100,6 @@ public:
 
 	// 현재 로봇 setup 정보를 읽기 전용으로 반환한다.
 	const FDeliveryBotSetupInfo& GetSetupInfo() const { return SetupInfo; }
-
-	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|Python")
-	void NotifyGoalReachedByEvaluation(); // 평가 시스템이 목표 도착을 알렸을 때 Python 서버에 종료를 요청한다
-
-	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
-	FString GetLastPythonScenarioResultJson() const; // Python 서버에서 받은 마지막 scenario result JSON을 반환한다
 
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|Python")
 	FDeliveryBotPolicyDecisionResultInfo GetLastPolicyDecisionResult() const; // Python policy의 마지막 decide 결과를 반환한다

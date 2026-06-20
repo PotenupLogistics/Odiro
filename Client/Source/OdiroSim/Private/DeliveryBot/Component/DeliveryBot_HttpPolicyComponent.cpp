@@ -426,7 +426,7 @@ void UDeliveryBot_HttpPolicyComponent::RequestStartScenario()
 	if (bScenarioStarted || bStartRequestInFlight)
 		return;
 
-	ResetScenarioState(false);
+	ResetScenarioState();
 
 	bStartRequested = true;
 	UE_LOG(
@@ -441,6 +441,80 @@ void UDeliveryBot_HttpPolicyComponent::RequestStartScenario()
 void UDeliveryBot_HttpPolicyComponent::ConfigureProjectActionLogging(const FString& projectOutputEpisodeId)
 {
 	ProjectActionEpisodeId = projectOutputEpisodeId.TrimStartAndEnd();
+}
+
+// Runner가 확정한 project episode 경로를 actions와 Python artifact의 공통 출력 기준으로 저장한다.
+bool UDeliveryBot_HttpPolicyComponent::ConfigureProjectEpisodeOutput(
+	const FString& projectOutputEpisodeId,
+	const FString& projectEpisodeOutputDirectory,
+	const FString& projectEpisodeOutputRelativeDirectory)
+{
+	ConfigureProjectActionLogging(projectOutputEpisodeId);
+	bProjectEpisodeOutputRequired = true;
+	ProjectEpisodeOutputDirectory.Reset();
+	ProjectEpisodeOutputRelativeDirectory.Reset();
+	ProjectEpisodeOutputErrorCode.Reset();
+	ProjectEpisodeOutputErrorMessage.Reset();
+
+	if (!FUserProjectEpisodeScenarioJson::IsValidEpisodeId(ProjectActionEpisodeId))
+	{
+		ProjectEpisodeOutputErrorCode = TEXT("INVALID_EPISODE_OUTPUT_ID");
+		ProjectEpisodeOutputErrorMessage = FString::Printf(
+			TEXT("Invalid project episode output id: %s"),
+			*ProjectActionEpisodeId);
+		UE_LOG(
+			LogDeliveryBotHttpPolicy,
+			Warning,
+			TEXT("Project episode output configuration deferred to /scenario/start failure: %s"),
+			*ProjectEpisodeOutputErrorMessage);
+		return false;
+	}
+
+	FString normalizedDirectory = projectEpisodeOutputDirectory.TrimStartAndEnd();
+	if (normalizedDirectory.IsEmpty() || FPaths::IsRelative(normalizedDirectory))
+	{
+		ProjectEpisodeOutputErrorCode = TEXT("INVALID_EPISODE_OUTPUT_PATH");
+		ProjectEpisodeOutputErrorMessage = FString::Printf(
+			TEXT("Absolute project episode output directory required: %s"),
+			*normalizedDirectory);
+		UE_LOG(
+			LogDeliveryBotHttpPolicy,
+			Warning,
+			TEXT("Project episode output configuration deferred to /scenario/start failure: %s"),
+			*ProjectEpisodeOutputErrorMessage);
+		return false;
+	}
+	FPaths::NormalizeDirectoryName(normalizedDirectory);
+
+	FString normalizedRelativeDirectory = projectEpisodeOutputRelativeDirectory.TrimStartAndEnd();
+	FPaths::NormalizeFilename(normalizedRelativeDirectory);
+	if (normalizedRelativeDirectory.IsEmpty()
+		|| !FPaths::IsRelative(normalizedRelativeDirectory)
+		|| normalizedRelativeDirectory.Equals(TEXT(".."))
+		|| normalizedRelativeDirectory.StartsWith(TEXT("../")))
+	{
+		ProjectEpisodeOutputErrorCode = TEXT("INVALID_EPISODE_OUTPUT_RELATIVE_PATH");
+		ProjectEpisodeOutputErrorMessage = FString::Printf(
+			TEXT("Safe run-relative project episode directory required: %s"),
+			*normalizedRelativeDirectory);
+		UE_LOG(
+			LogDeliveryBotHttpPolicy,
+			Warning,
+			TEXT("Project episode output configuration deferred to /scenario/start failure: %s"),
+			*ProjectEpisodeOutputErrorMessage);
+		return false;
+	}
+
+	ProjectEpisodeOutputDirectory = MoveTemp(normalizedDirectory);
+	ProjectEpisodeOutputRelativeDirectory = MoveTemp(normalizedRelativeDirectory);
+	UE_LOG(
+		LogDeliveryBotHttpPolicy,
+		Log,
+		TEXT("Project episode output configured: episode=%s root=%s relative=%s"),
+		*ProjectActionEpisodeId,
+		*ProjectEpisodeOutputDirectory,
+		*ProjectEpisodeOutputRelativeDirectory);
+	return true;
 }
 
 // start 전에는 재시도하고 start 후에는 decide를 반복 호출한다.
@@ -472,6 +546,99 @@ void UDeliveryBot_HttpPolicyComponent::UpdatePolicy(float deltaTime)
 	}
 }
 
+// Python /scenario/end를 제한 시간 안에 요청하고 결과를 정확히 한 번 반환한다.
+void UDeliveryBot_HttpPolicyComponent::EndScenario(
+	const FString& status,
+	TFunction<void(bool, const FString&)> onComplete)
+{
+	if (!bScenarioStarted || bEndRequestInFlight)
+	{
+		if (onComplete)
+		{
+			onComplete(
+				false,
+				TEXT("Scenario is not started or end request is already in flight."));
+		}
+		return;
+	}
+
+	FString payload;
+	if (!BuildEndPayload(status, payload))
+	{
+		if (onComplete)
+		{
+			onComplete(false, TEXT("Failed to build /scenario/end payload."));
+		}
+		return;
+	}
+
+	bEndRequestInFlight = true;
+	TWeakObjectPtr<UDeliveryBot_HttpPolicyComponent> weakThis(this);
+	const TSharedRef<bool, ESPMode::ThreadSafe> bCompletionReported =
+		MakeShared<bool, ESPMode::ThreadSafe>(false);
+
+	const auto completeOnce =
+		[bCompletionReported, onComplete](
+			bool bSucceeded,
+			const FString& errorMessage)
+		{
+			if (*bCompletionReported)
+			{
+				return;
+			}
+
+			*bCompletionReported = true;
+			if (onComplete)
+			{
+				onComplete(bSucceeded, errorMessage);
+			}
+		};
+
+	const bool bRequestStarted = SendPostRequest(
+		TEXT("/scenario/end"),
+		payload,
+		[weakThis, completeOnce](
+			FHttpResponsePtr response,
+			bool bHttpSucceeded) mutable
+		{
+			UDeliveryBot_HttpPolicyComponent* component = weakThis.Get();
+			if (!IsValid(component))
+			{
+				return;
+			}
+
+			component->bEndRequestInFlight = false;
+
+			TSharedPtr<FJsonObject> responseObject;
+			bool bAccepted = false;
+			const bool bEndSucceeded =
+				bHttpSucceeded
+				&& component->IsPythonResponseOk(response)
+				&& component->TryGetPythonResponseObject(response, responseObject)
+				&& responseObject.IsValid()
+				&& responseObject->TryGetBoolField(TEXT("accepted"), bAccepted)
+				&& bAccepted;
+
+			component->ResetScenarioState();
+
+			completeOnce(
+				bEndSucceeded,
+				bEndSucceeded
+					? FString()
+					: TEXT("Python /scenario/end timed out, failed, or was rejected."));
+		},
+		EndRequestTimeoutSeconds);
+
+	if (!bRequestStarted)
+	{
+		bEndRequestInFlight = false;
+
+		completeOnce(
+			false,
+			TEXT("Python /scenario/end HTTP request could not be started."));
+	}
+}
+
 // Python 서버에 /scenario/start 요청을 보낸다.
 bool UDeliveryBot_HttpPolicyComponent::TryStartScenario()
 {
@@ -499,7 +666,6 @@ bool UDeliveryBot_HttpPolicyComponent::TryStartScenario()
 			bStartRequestInFlight = false;
 
 			// /scenario/start envelope 응답의 response.status를 확인한다.
-			// /scenario/start envelope 응답의 response.status를 확인한다.
 			if (!bSucceeded || !IsPythonResponseOk(response))
 			{
 				const int32 responseCode = response.IsValid() ? response->GetResponseCode() : 0;
@@ -512,6 +678,30 @@ bool UDeliveryBot_HttpPolicyComponent::TryStartScenario()
 					bSucceeded ? TEXT("true") : TEXT("false"),
 					responseCode,
 					*responseBody);
+
+				TSharedPtr<FJsonObject> responseObject;
+				if (bSucceeded && TryGetPythonResponseObject(response, responseObject) && responseObject.IsValid())
+				{
+					FString errorCode = TEXT("PYTHON_START_REJECTED");
+					FString errorMessage = TEXT("Python scenario start was rejected.");
+					bool bRetryable = false;
+					TSharedPtr<FJsonObject> errorObject;
+					if (TryGetJsonObjectField(*responseObject, TEXT("error"), errorObject))
+					{
+						errorObject->TryGetStringField(TEXT("code"), errorCode);
+						errorObject->TryGetStringField(TEXT("message"), errorMessage);
+						errorObject->TryGetBoolField(TEXT("retryable"), bRetryable);
+					}
+
+					bStartRequested = bRetryable;
+					EmitPolicyFailureEvent(
+						TEXT("/scenario/start"),
+						responseObject,
+						errorCode,
+						errorMessage,
+						bRetryable,
+						!bRetryable);
+				}
 
 				return;
 			}
@@ -639,7 +829,11 @@ UDeliveryBotPythonProcessSubsystem* UDeliveryBot_HttpPolicyComponent::GetPythonP
 }
 
 // Python 서버에 POST 요청을 보낸다.
-bool UDeliveryBot_HttpPolicyComponent::SendPostRequest(const FString& endpoint, const FString& payload, TFunction<void(FHttpResponsePtr, bool)> onComplete)
+bool UDeliveryBot_HttpPolicyComponent::SendPostRequest(
+	const FString& endpoint,
+	const FString& payload,
+	TFunction<void(FHttpResponsePtr, bool)> onComplete,
+	float timeoutSeconds)
 {
 	const UDeliveryBotPythonProcessSubsystem* pythonProcessSubsystem = GetPythonProcessSubsystem();
 	if (!IsValid(pythonProcessSubsystem) || !pythonProcessSubsystem->IsReady())
@@ -653,9 +847,23 @@ bool UDeliveryBot_HttpPolicyComponent::SendPostRequest(const FString& endpoint, 
 	request->SetVerb(TEXT("POST"));
 	request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
 	request->SetContentAsString(payload);
+	if (timeoutSeconds > 0.f)
+	{
+		request->SetTimeout(timeoutSeconds);
+	}
 
-	request->OnProcessRequestComplete().BindWeakLambda(this, [onComplete = MoveTemp(onComplete)](FHttpRequestPtr, FHttpResponsePtr response,
-				bool bWasSuccessful) mutable{onComplete(response, bWasSuccessful);});
+	request->OnProcessRequestComplete().BindWeakLambda(
+		this,
+		[onComplete = MoveTemp(onComplete)](
+			FHttpRequestPtr,
+			FHttpResponsePtr response,
+			bool bWasSuccessful) mutable
+		{
+			if (onComplete)
+			{
+				onComplete(response, bWasSuccessful);
+			}
+		});
 
 	return request->ProcessRequest();
 }
@@ -979,10 +1187,19 @@ void UDeliveryBot_HttpPolicyComponent::LogPointCloudStartConfig(const FDeliveryB
 TSharedRef<FJsonObject> UDeliveryBot_HttpPolicyComponent::BuildArtifactSpecObject() const
 {
 	const FString captureRoot = BuildPointCloudCaptureRootDirectory();
+	const FString captureRootRelative = bProjectEpisodeOutputRequired
+		? ProjectEpisodeOutputRelativeDirectory
+		: FString(TEXT("captures"));
 
 	TSharedRef<FJsonObject> artifactSpecObject = MakeShared<FJsonObject>();
 	artifactSpecObject->SetStringField(TEXT("capturesRoot"), captureRoot);
-	artifactSpecObject->SetStringField(TEXT("capturesRootRelative"), TEXT("captures"));
+	artifactSpecObject->SetStringField(TEXT("capturesRootRelative"), captureRootRelative);
+	artifactSpecObject->SetBoolField(TEXT("required"), bProjectEpisodeOutputRequired);
+	if (!ProjectEpisodeOutputErrorCode.IsEmpty())
+	{
+		artifactSpecObject->SetStringField(TEXT("configurationErrorCode"), ProjectEpisodeOutputErrorCode);
+		artifactSpecObject->SetStringField(TEXT("configurationErrorMessage"), ProjectEpisodeOutputErrorMessage);
+	}
 
 	return artifactSpecObject;
 }
@@ -990,6 +1207,11 @@ TSharedRef<FJsonObject> UDeliveryBot_HttpPolicyComponent::BuildArtifactSpecObjec
 // Point Cloud capture 저장 루트 경로를 만든다.
 FString UDeliveryBot_HttpPolicyComponent::BuildPointCloudCaptureRootDirectory() const
 {
+	if (bProjectEpisodeOutputRequired)
+	{
+		return ProjectEpisodeOutputDirectory;
+	}
+
 	const FString scenarioFolderName = FString::Printf(
 		TEXT("scenario_%03d"),
 		FMath::Max(0, PythonPointCloudScenarioNumber));
@@ -1869,7 +2091,9 @@ bool UDeliveryBot_HttpPolicyComponent::BuildEndPayload(const FString& status, FS
 	outPayload.Reset();
 
 	if (EpisodeId.IsEmpty() || RobotInstanceId.IsEmpty())
+	{
 		return false;
+	}
 
 	TSharedRef<FJsonObject> requestObject = MakeShared<FJsonObject>();
 
@@ -1877,18 +2101,11 @@ bool UDeliveryBot_HttpPolicyComponent::BuildEndPayload(const FString& status, FS
 	requestObject->SetNumberField(TEXT("sequence"), LastDecisionSequence);
 	requestObject->SetStringField(TEXT("status"), status);
 
-	TSharedRef<FJsonObject> metricsObject = MakeShared<FJsonObject>();
-	requestObject->SetObjectField(TEXT("metrics"), metricsObject);
-
-	TSharedRef<FJsonObject> debugObject = MakeShared<FJsonObject>();
-	debugObject->SetStringField(TEXT("endSource"), TEXT("UScenarioEvaluationSubsystem"));
-	requestObject->SetObjectField(TEXT("debug"), debugObject);
-
 	return BuildMessagePayload(TEXT("scenario_end"), requestObject, outPayload);
 }
 
 // scenario 진행 상태를 초기화한다.
-void UDeliveryBot_HttpPolicyComponent::ResetScenarioState(bool bKeepLastResult)
+void UDeliveryBot_HttpPolicyComponent::ResetScenarioState()
 {
 	EpisodeId.Reset();
 	RobotInstanceId.Reset();
@@ -1906,49 +2123,4 @@ void UDeliveryBot_HttpPolicyComponent::ResetScenarioState(bool bKeepLastResult)
 	bDecisionRequestInFlight = false;
 	bEndRequestInFlight = false;
 	bLoggedStartWaitingForPython = false;
-
-	if (!bKeepLastResult)
-	{
-		LastScenarioResultJson.Reset();
-	}
-}
-
-// 목표 도착 시 Python 서버에 /scenario/end 요청을 보내고 결과 JSON을 저장한다.
-void UDeliveryBot_HttpPolicyComponent::EndScenario(const FString& status)
-{
-	if (!bScenarioStarted || bEndRequestInFlight)
-		return;
-
-	FString payload;
-	if (!BuildEndPayload(status, payload))
-		return;
-
-	bEndRequestInFlight = true;
-
-	// /scenario/end 응답을 저장하고 scenario 상태를 종료 상태로 초기화한다.
-	const bool bRequestStarted = SendPostRequest(
-		TEXT("/scenario/end"),
-		payload,
-		[this](FHttpResponsePtr response, bool bSucceeded)
-		{
-			bEndRequestInFlight = false;
-
-			LastScenarioResultJson = response.IsValid() ? response->GetContentAsString() : FString();
-
-			ResetScenarioState(true);
-
-			// /scenario/end envelope 응답의 response.status를 확인한다.
-			if (!bSucceeded || !IsPythonResponseOk(response))
-			{
-				UE_LOG(LogDeliveryBotHttpPolicy, Warning, TEXT("Python scenario end failed."));
-				return;
-			}
-
-			UE_LOG(LogDeliveryBotHttpPolicy, Log, TEXT("Python scenario result saved. Length=%d"), LastScenarioResultJson.Len());
-		});
-
-	if (!bRequestStarted)
-	{
-		bEndRequestInFlight = false;
-	}
 }

@@ -90,6 +90,25 @@ void ADeliveryBot::Tick(float DeltaTime)
 	UpdateFixedSimulation(DeltaTime);
 }
 
+// 로봇을 정지하고 Python end 통신 결과를 요청자에게 반환한다.
+void ADeliveryBot::NotifyEpisodeFinalizingByEvaluation(
+	const FString& status,
+	TFunction<void(bool, const FString&)> onComplete)
+{
+	ApplyParkingStop();
+
+	if (!IsValid(HttpPolicyComponent))
+	{
+		if (onComplete)
+		{
+			onComplete(false, TEXT("HttpPolicyComponent is invalid."));
+		}
+		return;
+	}
+
+	HttpPolicyComponent->EndScenario(status, MoveTemp(onComplete));
+}
+
 // 렌더 delta를 누적해서 고정 간격만큼 시뮬레이션을 진행한다.
 void ADeliveryBot::UpdateFixedSimulation(float deltaTime)
 {
@@ -451,6 +470,23 @@ void ADeliveryBot::ConfigureProjectActionLogging(const FString& projectOutputEpi
 	}
 }
 
+// Runner가 만든 project episode 출력 경로를 HTTP policy component에 전달한다.
+bool ADeliveryBot::ConfigureProjectEpisodeOutput(
+	const FString& projectOutputEpisodeId,
+	const FString& projectEpisodeOutputDirectory,
+	const FString& projectEpisodeOutputRelativeDirectory)
+{
+	if (!IsValid(HttpPolicyComponent))
+	{
+		return false;
+	}
+
+	return HttpPolicyComponent->ConfigureProjectEpisodeOutput(
+		projectOutputEpisodeId,
+		projectEpisodeOutputDirectory,
+		projectEpisodeOutputRelativeDirectory);
+}
+
 FDeliveryBotObservationInfo ADeliveryBot::BuildPolicyObservation()
 {
 	FDeliveryBotObservationInfo observation;
@@ -554,26 +590,6 @@ void ADeliveryBot::FillObservation(FDeliveryBotObservationInfo& observation) con
 
 	observation.LidarScanInfo = LastSensorSnapshot.LidarScanInfo;
 	observation.ObservedObjects = BuildObservedObjectsForPolicy();
-}
-
-// 평가 시스템이 목표 도착을 알려주면 Python 서버에 scenario end를 요청한다.
-void ADeliveryBot::NotifyGoalReachedByEvaluation()
-{
-	ApplyParkingStop();
-
-	if (!IsValid(HttpPolicyComponent))
-		return;
-
-	HttpPolicyComponent->EndScenario(TEXT("goal_reached"));
-}
-
-// Python 서버에서 받은 마지막 scenario result JSON을 반환한다.
-FString ADeliveryBot::GetLastPythonScenarioResultJson() const
-{
-	if (!IsValid(HttpPolicyComponent))
-		return FString();
-
-	return HttpPolicyComponent->GetLastScenarioResultJson();
 }
 
 // Python policy의 마지막 decide 결과를 반환한다.

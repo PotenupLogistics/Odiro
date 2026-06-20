@@ -9,14 +9,13 @@
 - `response.debug`는 시각화, 로그, 진단용이다. 필드를 추가해도 되지만 기존 필드의 이름과 타입은 함부로 바꾸지 않는다.
 - Python 서버는 envelope 안의 `request`를 우선 읽는다. 테스트 편의를 위해 raw request도 일부 허용하지만, Unreal 런타임은 envelope를 보낸다.
 - Unreal 요청 payload에는 `response`가 없다.
-- `/scenario/decide` 응답만 Unreal이 보낸 `request`를 그대로 유지하고 `response`를 추가한 같은 JSON 형식을 사용한다.
-- `/scenario/start`, `/scenario/end`는 기존처럼 요청 JSON과 응답 JSON을 분리해서 다룬다.
+- Python 응답은 Unreal이 보낸 envelope와 `request`를 유지하고 처리 결과를 `response`에 추가한다.
 - 통신 계약을 깨는 변경이면 `version`을 올리고 Unreal/Python 양쪽을 같이 수정한다.
 
 ## 공통 Envelope
 
 `POST /scenario/start`, `POST /scenario/decide`, `POST /scenario/end`는 같은 envelope 필드를 사용한다.
-다만 request를 response에 보존해서 하나의 JSON으로 묶는 규칙은 `/scenario/decide`에만 적용한다.
+Python은 세 endpoint 모두 요청 envelope를 보존하고 `response` 객체를 추가한다.
 
 예: `/scenario/decide` Unreal 요청:
 
@@ -664,11 +663,7 @@ robot_outside_grid_bounds
   "request": {
     "robotInstanceId": "BP_DeliveryBot_C_0",
     "sequence": 120,
-    "status": "arrived",
-    "metrics": {},
-    "debug": {
-      "endSource": "UScenarioEvaluationSubsystem"
-    }
+    "status": "goal_reached"
   }
 }
 ```
@@ -679,10 +674,7 @@ robot_outside_grid_bounds
 | --- | --- | --- |
 | `request.robotInstanceId` | 고정 | 종료 대상 로봇 ID |
 | `request.sequence` | 고정 | 마지막 decide sequence |
-| `request.status` | 고정 | 예: `arrived`, `failed`, `timeout` |
-| `request.error` | 확장 가능 | 실패 종료 원인. 현재 Unreal 기본 payload에서는 생략 가능 |
-| `request.metrics` | 확장 가능 | Unreal 측 결과 metric |
-| `request.debug` | 확장 가능 | 종료 원인 추적용 디버그 정보 |
+| `request.status` | 고정 | 예: `goal_reached`, `failed`, `timeout`, `cancelled` |
 
 ### 정상 응답 예시
 
@@ -691,27 +683,14 @@ robot_outside_grid_bounds
   "schema": "delivery_bot_python_message",
   "version": 1,
   "type": "scenario_end",
-  "request": {},
+  "request": {
+    "robotInstanceId": "BP_DeliveryBot_C_0",
+    "sequence": 120,
+    "status": "goal_reached"
+  },
   "response": {
     "status": "ok",
-    "accepted": true,
-    "metrics": {
-      "obstacleWarningCount": 1,
-      "stopCount": 0,
-      "repathCount": 1,
-      "slowdownCount": 3
-    },
-    "debug": {
-      "reason": "episode_end_recorded",
-      "status": "arrived",
-      "stopCount": 0,
-      "repathCount": 1,
-      "slowdownCount": 3,
-      "obstacleWarningCount": 1,
-      "lastObstacleWarningCell": null,
-      "lastObstacleWarningSource": "barrier_01",
-      "blockedCorridorCellCount": 0
-    }
+    "accepted": true
   }
 }
 ```
@@ -873,7 +852,7 @@ request.status
 | 라이다 장비 스펙 | `request.lidarSpec` |
 | actor 단위 관측 요약 | `request.observedObjects` |
 | 경로 시각화, 정책 선택 이유, obstacle warning 카운트 | `response.debug` |
-| episode 종료 metric | `request.metrics`, `/scenario/end`의 `response.metrics` |
+| episode 종료 결과 | Unreal의 `result.json`과 `summary.json` |
 
 ## Version을 올려야 하는 경우
 

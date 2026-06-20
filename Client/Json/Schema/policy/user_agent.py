@@ -282,30 +282,11 @@ class BotPolicy:
         request: ScenarioEndRequest,
         state: AgentState,
     ) -> dict:
-        debug = {
-            "reason": "episode_end_recorded",
-            "status": request.status,
-            "stopCount": state.stopCount,
-            "repathCount": state.repathCount,
-            "slowdownCount": state.slowdownCount,
-            "obstacleWarningCount": state.obstacleWarningCount,
-            "lastObstacleWarningCell": state.lastObstacleWarningCell,
-            "lastObstacleWarningSource": state.lastObstacleWarningSource,
-            "blockedCorridorCellCount": len(state.lastBlockedCorridorCells),
-        }
-
         state.clear_after_end()
 
         return {
             "status": "ok",
             "accepted": True,
-            "metrics": {
-                "obstacleWarningCount": debug["obstacleWarningCount"],
-                "stopCount": debug["stopCount"],
-                "repathCount": debug["repathCount"],
-                "slowdownCount": debug["slowdownCount"],
-            },
-            "debug": debug,
         }
 
 

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from app.agents.common.llm_json_client import AgentLlmClient, AgentLlmJsonClient
+from app.agents.common.spec_context_loader import SpecContextLoader
 from app.core.settings import Settings
 from app.agents.scenario_generation_v2.intent_parser import IntentParser, ScenarioIntent
 from app.agents.scenario_generation_v2.repair_handler import RepairHandler
@@ -25,10 +26,12 @@ class ScenarioGenerationV2Agent:
         *,
         settings: Settings | None = None,
         llm_client: AgentLlmClient | None = None,
+        spec_context_loader: SpecContextLoader | None = None,
     ) -> None:
         """Owns the agent components while leaving template persistence to callers."""
         self.settings = settings or Settings()
         self.llm_client = llm_client
+        self.spec_context_loader = spec_context_loader
         self.normalizer = RequestNormalizer()
         self.intent_parser = IntentParser()
         self.type_selector = ScenarioTypeSelector()
@@ -179,6 +182,7 @@ class ScenarioGenerationV2Agent:
         return "\n\n".join(
             [
                 self._read_prompt("template_writer_prompt.md"),
+                self._spec_context_prompt_block(),
                 "Project Scenario schema version 1 JSON 객체만 생성한다.",
                 "필수 root: schema, version, scenario_id, intent, corridor, obstacles, pedestrians, robot.",
                 "금지: template_id, template_path, current_template, sample_count, episode_count, base_seed, experiment_id, run_id, ground_model, static_obstacles, pedestrians.path.",
@@ -192,11 +196,18 @@ class ScenarioGenerationV2Agent:
         return "\n\n".join(
             [
                 self._read_prompt("repair_prompt.md"),
+                self._spec_context_prompt_block(),
                 f"사용자 prompt:\n{prompt}",
                 f"검증 결과:\n{validation}",
                 f"수정 대상 JSON:\n{json.dumps(template, ensure_ascii=False, default=str)}",
             ]
         )
+
+    def _spec_context_prompt_block(self) -> str:
+        """Load v2 Agent spec context lazily for LLM-only prompt paths."""
+        if self.spec_context_loader is None:
+            self.spec_context_loader = SpecContextLoader()
+        return self.spec_context_loader.build_prompt_block()
 
     def _read_prompt(self, filename: str) -> str:
         """Read a bundled prompt fragment for the scenario generation agent."""

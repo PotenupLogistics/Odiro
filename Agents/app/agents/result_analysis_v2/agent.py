@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.agents.common.llm_json_client import AgentLlmClient, AgentLlmJsonClient
+from app.agents.common.spec_context_loader import SpecContextLoader
 from app.agents.result_analysis_v2.analysis_context_builder import AnalysisContextBuilder
 from app.agents.result_analysis_v2.artifact_classifier import ArtifactClassifier
 from app.agents.result_analysis_v2.artifact_parser import ArtifactParser, ParsedArtifact
@@ -39,9 +40,11 @@ class ResultAnalysisV2Agent:
         *,
         settings: Settings | None = None,
         llm_client: AgentLlmClient | None = None,
+        spec_context_loader: SpecContextLoader | None = None,
     ) -> None:
         self.settings = settings or Settings()
         self.llm_client = llm_client
+        self.spec_context_loader = spec_context_loader
         self.experiments_root = experiments_root
         self.scanner = WorkspaceScanner()
         self.classifier = ArtifactClassifier()
@@ -515,11 +518,18 @@ class ResultAnalysisV2Agent:
         return "\n\n".join(
             [
                 self._read_prompt("recommendation_prompt.md"),
+                self._spec_context_prompt_block(),
                 "전체 raw log를 사용하지 말고 제공된 요약 metrics, aggregates, patterns에 근거해서만 추천한다.",
                 "target은 policy 또는 environment만 허용한다. evidence는 실제 제공된 episode만 참조한다.",
                 json.dumps(context, ensure_ascii=False, indent=2),
             ]
         )
+
+    def _spec_context_prompt_block(self) -> str:
+        """Load v2 Agent spec context lazily for LLM-only recommendation prompts."""
+        if self.spec_context_loader is None:
+            self.spec_context_loader = SpecContextLoader()
+        return self.spec_context_loader.build_prompt_block()
 
     def _read_prompt(self, filename: str) -> str:
         return (Path(__file__).parent / "prompts" / filename).read_text(encoding="utf-8")

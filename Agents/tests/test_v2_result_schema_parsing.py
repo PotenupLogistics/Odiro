@@ -33,6 +33,7 @@ def _episode_metrics(*, episode_id: str, failure_type: str | None = None, timeou
         average_speed_mps=None,
         max_speed_mps=None,
         stop_count=0,
+        repath_count=0,
         policy_decision_error_count=0,
         stuck_count=0,
         robot_tip_over_count=0,
@@ -61,6 +62,8 @@ def test_latest_result_summary_metrics_and_pascal_case_events_are_normalized() -
                     "PedestrianCollision": 4,
                     "PolicyDecisionError": 1,
                     "Stuck": 1,
+                    "RobotTipOver": 2,
+                    "Repath": 5,
                 }
             },
         },
@@ -80,6 +83,8 @@ def test_latest_result_summary_metrics_and_pascal_case_events_are_normalized() -
     assert metrics.blocked_region_violation_count == 1
     assert metrics.policy_decision_error_count == 1
     assert metrics.stuck_count == 1
+    assert metrics.robot_tip_over_count == 2
+    assert metrics.repath_count == 5
     assert metrics.duration_s == 12.5
 
 

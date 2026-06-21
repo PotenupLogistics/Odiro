@@ -292,6 +292,8 @@ class ResultAnalysisV2Agent:
             static_obstacle_collision_count=sum(episode.static_obstacle_collision_count for episode in episodes),
             pedestrian_collision_count=sum(episode.pedestrian_collision_count for episode in episodes),
             near_miss_count=sum(episode.near_miss_count for episode in episodes),
+            repath_count=sum(episode.repath_count for episode in episodes),
+            robot_tip_over_count=sum(episode.robot_tip_over_count for episode in episodes),
             blocked_region_violation_count=sum(episode.blocked_region_violation_count for episode in episodes),
             penalty_region_violation_count=sum(episode.penalty_region_violation_count for episode in episodes),
         )
@@ -333,6 +335,20 @@ class ResultAnalysisV2Agent:
                 event_summary,
                 "near_miss_count",
                 {"near_miss", "pedestrian_near_miss"},
+            ),
+            repath_count=self._summary_int(
+                summary,
+                metrics,
+                event_summary,
+                "repath_count",
+                {"repath"},
+            ),
+            robot_tip_over_count=self._summary_int(
+                summary,
+                metrics,
+                event_summary,
+                "robot_tip_over_count",
+                {"robot_tip_over"},
             ),
             blocked_region_violation_count=self._summary_int(
                 summary,
@@ -447,6 +463,7 @@ class ResultAnalysisV2Agent:
                 summary_judgement=response.summary.overall_judgement,
                 findings=findings,
                 data_coverage=data_coverage,
+                metrics=response.metrics,
             )
             response.recommendation_type = decision.recommendation_type
             response.run_id = request.run_id
@@ -461,6 +478,7 @@ class ResultAnalysisV2Agent:
                 recommendations=response.recommendations,
                 recommendation_type=decision.recommendation_type,
                 findings=findings,
+                metrics=response.metrics,
             )
             self._sync_modified_candidate_payloads(response)
             artifact_write = self.recommendation_artifact_writer.write(
@@ -579,6 +597,12 @@ class ResultAnalysisV2Agent:
         finding_types = {str(finding.get("type")) for finding in findings}
         if recommendation_type == "environment_review":
             response.summary.message = "환경 또는 장애물 관련 충돌 근거가 확인되어 환경 검토가 필요합니다."
+            self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
+            return
+        if response.metrics.success_count > 0 and response.metrics.failure_count == 0:
+            response.summary.message = (
+                "주행은 성공했지만, 패널티 구역 침범 등 안전/정책 검토가 필요한 근거가 확인되었습니다."
+            )
             self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
             return
         if (

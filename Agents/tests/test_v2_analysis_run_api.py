@@ -279,6 +279,30 @@ def test_v2_analysis_run_warns_for_missing_episode_artifacts(tmp_path) -> None:
     assert any("trace.jsonl is missing" in warning for warning in payload["warnings"])
 
 
+def test_v2_analysis_run_exposes_repath_and_tip_over_metrics(tmp_path) -> None:
+    """PascalCase Repath and RobotTipOver events are exposed in response and report metrics."""
+    project = tmp_path / "Project1"
+    _write_episode(
+        project,
+        "000001",
+        {"success": False, "goal_reached": False},
+        '{"event_type": "Repath"}\n{"event_type": "Repath"}\n{"event_type": "RobotTipOver"}\n',
+    )
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    review_dir = project / "runs" / "000001" / "review" / "0001"
+    report = json.loads((review_dir / "report.json").read_text(encoding="utf-8"))
+    assert payload["metrics"]["repath_count"] == 2
+    assert payload["metrics"]["robot_tip_over_count"] == 1
+    assert report["metrics"]["repath_count"] == 2
+    assert report["metrics"]["robot_tip_over_count"] == 1
+    assert any(finding["type"] == "repath" for finding in report["findings"])
+    assert any(finding["type"] == "robot_tip_over" for finding in report["findings"])
+
+
 def test_v2_analysis_run_successful_episodes_do_not_generate_recommendations(tmp_path) -> None:
     project = tmp_path / "Project1"
     for episode_id in ("000001", "000002"):
@@ -301,6 +325,32 @@ def test_v2_analysis_run_successful_episodes_do_not_generate_recommendations(tmp
     assert payload["recommendations"] == []
     assert payload["modified_policy_json"] == []
     assert payload["modified_environment_json"] == []
+
+
+def test_v2_analysis_run_success_with_policy_evidence_uses_safety_review_wording(tmp_path) -> None:
+    """Successful runs with safety evidence avoid failure-only recommendation wording."""
+    project = tmp_path / "Project1"
+    _write_episode(
+        project,
+        "000001",
+        {"success": True, "goal_reached": True, "penalty_region_violation_count": 2},
+        '{"event_type": "Repath"}\n{"event_type": "Repath"}\n',
+    )
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["recommendation_type"] == "policy_review"
+    assert payload["summary"]["overall_judgement"] == "change_recommended"
+    assert "주행은 성공했지만" in payload["summary"]["message"]
+    assert "실패 근거" not in payload["summary"]["message"]
+    assert "실패 근거" not in payload["analysis_text"]
+    assert "반복 실패" not in payload["analysis_text"]
+    assert "실패 지표" not in payload["analysis_text"]
+    assert "반복 실패" not in payload["recommendations"][0]["recommendation"]
+    assert "경로 재탐색" in payload["analysis_text"]
+    assert "경로 재탐색" in payload["recommendations"][0]["recommendation"]
 
 
 def test_v2_analysis_run_repeated_blocked_region_generates_environment_recommendation(tmp_path) -> None:

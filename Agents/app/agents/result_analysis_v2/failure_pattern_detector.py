@@ -19,6 +19,8 @@ class FailurePatternDetector:
                 self._add_episode(by_type, "blocked_region_violation", episode)
             if episode.near_miss_count:
                 self._add_episode(by_type, "near_miss", episode)
+            if episode.repath_count:
+                self._add_episode(by_type, "repath", episode)
             if episode.collision_count:
                 self._add_episode(by_type, "collision", episode)
             if episode.pedestrian_collision_count:
@@ -31,6 +33,8 @@ class FailurePatternDetector:
                 self._add_episode(by_type, "policy_decision_error", episode)
             if episode.stuck_count:
                 self._add_episode(by_type, "stuck", episode)
+            if episode.robot_tip_over_count:
+                self._add_episode(by_type, "robot_tip_over", episode)
 
         patterns: list[dict[str, Any]] = []
         for index, (pattern_type, item_by_episode) in enumerate(sorted(by_type.items()), start=1):

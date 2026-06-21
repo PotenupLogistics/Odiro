@@ -89,6 +89,7 @@ class FindingBuilder:
                 episode.policy_decision_error_count,
                 evidence_message("policy_decision_error", episode.policy_decision_error_count),
             ),
+            ("repath", "repath_count", episode.repath_count, evidence_message("repath", episode.repath_count)),
             (
                 "stuck",
                 "stuck_count",

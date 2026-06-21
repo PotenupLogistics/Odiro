@@ -25,6 +25,11 @@ INSUFFICIENT_DATA_SUMMARY_MESSAGE = (
     "result/events 로그를 확인한 뒤 다시 분석해 주세요."
 )
 
+# User-facing top-level recommendation reason for successful runs with policy review evidence.
+SUCCESS_POLICY_REVIEW_REASON = (
+    "주행은 성공했지만, 패널티 구역 침범과 경로 재탐색 반복 등 정책 검토가 필요한 근거가 확인되었습니다."
+)
+
 
 def default_artifacts() -> dict[str, dict[str, Any]]:
     """Return the stable artifact status object used by recommendations and manifest."""
@@ -55,6 +60,7 @@ FINDING_DISPLAY_LABELS = {
     "blocked_region_collision": ("차단 구역 충돌 또는 침범", "이"),
     "pedestrian_collision": ("보행자 충돌", "이"),
     "near_miss": ("근접 위험", "이"),
+    "repath": ("경로 재탐색 반복", "이"),
     "goal_not_reached": ("목표 미도달", "이"),
     "timeout": ("제한 시간 초과", "가"),
     "policy_decision_error": ("정책 판단 오류", "가"),
@@ -87,6 +93,8 @@ def evidence_message(finding_type: str, value: int) -> str:
         return f"보행자 충돌이 {value}회 발생했습니다."
     if finding_type == "near_miss":
         return f"근접 위험이 {value}회 발생했습니다."
+    if finding_type == "repath":
+        return f"경로 재탐색이 {value}회 발생했습니다."
     if finding_type == "timeout":
         return "에피소드가 제한 시간을 초과했습니다."
     if finding_type == "policy_decision_error":

@@ -15,6 +15,7 @@ EVENT_TYPE_ALIASES = {
     "PedestrianCollision": "pedestrian_collision",
     "Timeout": "timeout",
     "RobotTipOver": "robot_tip_over",
+    "Repath": "repath",
     "Stuck": "stuck",
     "PolicyDecisionError": "policy_decision_error",
 }
@@ -43,6 +44,7 @@ class EpisodeMetrics:
     average_speed_mps: float | None
     max_speed_mps: float | None
     stop_count: int
+    repath_count: int
     policy_decision_error_count: int
     stuck_count: int
     robot_tip_over_count: int
@@ -130,6 +132,7 @@ class EpisodeMetricExtractor:
             average_speed_mps=self._first_number(metrics, result, key="average_speed_mps"),
             max_speed_mps=self._first_number(metrics, result, key="max_speed_mps"),
             stop_count=self._count(result, metrics, event_summary, events, "stop_count", {"stop"}),
+            repath_count=self._count(result, metrics, event_summary, events, "repath_count", {"repath"}),
             policy_decision_error_count=self._count(
                 result,
                 metrics,

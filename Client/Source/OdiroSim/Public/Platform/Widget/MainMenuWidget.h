@@ -504,6 +504,10 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> ProjectExperimentConfigPanel;
 
+	// Project experiment result 분석 상세 switcher page. UI layout은 WBP_MainMenu가 소유한다.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ProjectExperimentResultDetailPanel;
+
 	// Project experiment target map id 입력 control.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableTextBox> ProjectExperimentMapIdTextBox;

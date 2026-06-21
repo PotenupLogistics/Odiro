@@ -2074,9 +2074,12 @@ void UMainMenuWidget::ShowProjectWorkspaceTab(const EProjectWorkspaceTabType tab
 		break;
 	case EProjectWorkspaceTabType::ExperimentResultDetail:
 		ShowProjectExperimentConfigPanel(false);
-		if (!setSwitcherWidget(ExperimentResultDetailSectionBoxScrollBox.Get()))
+		if (!setSwitcherWidget(ProjectExperimentResultDetailPanel.Get()))
 		{
-			setSwitcherIndex(2);
+			UE_LOG(
+				LogMainMenuWidget,
+				Warning,
+				TEXT("Project experiment result detail page is not a child of ProjectWorkspaceSwitcher."));
 		}
 		break;
 	}
@@ -2241,6 +2244,7 @@ bool UMainMenuWidget::ValidateRequiredBindings() const
 	requireWidget(ConfigureExperimentButton, TEXT("ConfigureExperimentButton"));
 	requireWidget(RunExperimentButton, TEXT("RunExperimentButton"));
 	requireWidget(ProjectExperimentConfigPanel, TEXT("ProjectExperimentConfigPanel"));
+	requireWidget(ProjectExperimentResultDetailPanel, TEXT("ProjectExperimentResultDetailPanel"));
 	requireWidget(CreateExperimentConfigButton, TEXT("CreateExperimentConfigButton"));
 	requireWidget(SaveExperimentConfigButton, TEXT("SaveExperimentConfigButton"));
 	requireWidget(CancelExperimentConfigButton, TEXT("CancelExperimentConfigButton"));

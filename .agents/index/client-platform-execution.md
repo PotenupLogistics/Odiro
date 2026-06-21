@@ -39,6 +39,7 @@ entry:
   - UmgMcp Widget/UmgSetSubsystem.cpp
   - UE_MCP_Bridge `capture_slate_window`
   - UE_MCP_Bridge `dump_runtime_widget_geometry`
+  - UE_MCP_Bridge `rename_widget`
   - Client/Docs/plans/PLAN-platform-architecture.md
   - Client/Task-RunPreview.bat
   - Client/Task-RunPythonPolicyServer.bat
@@ -76,12 +77,13 @@ keep:
   - MainMenu project scenario tab lists, opens, and starts runs from the active project session's `<UserProject>/scenario.json` project-run snapshots.
   - MainMenu project result rows use `WBP_FileListItem` primary action for completed detail view and secondary display text for run state.
   - UmgMcp widget create/delete must keep `WidgetVariableNameToGuidMap` consistent; persistent variable widgets should use GUID-safe creation paths and wait for structural edits to finish.
+  - UE_MCP_Bridge `rename_widget` preserves existing UMG widget hierarchy while changing the widget variable name; use it for BindWidget rename fixes instead of delete/recreate.
   - StartupMenu creates/validates projects through temporary file-based SimulatorLaunchSubsystem preset-composition helpers, then stores the active project in ProjectSessionSubsystem.
   - MainMenu creates run snapshots through temporary file-based SimulatorLaunchSubsystem workspace helpers using the active project session.
   - MainMenu project mode reads result runs from `<UserProject>/runs/<RunId>` and sends AI analysis through the v2 project-run path.
   - MainMenu project result detail is a dashboard, not a raw JSON/log preview: C++ reads `summary.json` for duration/success/collision/episode cards, then reads `review/analysis_run_response_v2.json` or latest `review/<ReviewId>/recommendations.json` for AI suggestion rows.
   - WBP_ProjectRunMetricCard, WBP_ProjectEpisodeReplayCard, and WBP_ProjectAiSuggestionRow own result-dashboard layout/style/default text. C++ only creates row/card instances and writes named child widget values/visibility.
-  - MainMenu project experiment uses WBP_ProjectWorkspaceTab for fixed and transient workspace tabs. 설정 opens ProjectExperimentConfigPanel as a switcher peer with a temporary tab; 실행 starts from current `setting.json`; 설정 패널의 저장 writes `setting.json` without launching; result detail opens a temporary 분석 tab. Temporary tab close/cancel/save returns to experiment status.
+  - MainMenu project experiment uses WBP_ProjectWorkspaceTab for fixed and transient workspace tabs. 설정 opens ProjectExperimentConfigPanel as a switcher peer with a temporary tab; 실행 starts from current `setting.json`; 설정 패널의 저장 writes `setting.json` without launching; result detail opens ProjectExperimentResultDetailPanel as a switcher peer with a temporary 분석 tab. Temporary tab close/cancel/save returns to experiment status.
   - MainMenu project mode must not call SimulationSetup or RunQueue writer/launcher paths.
   - MainMenu project mode must not create/select projects and must not fall back to legacy Json/Input, SimulationSetup, RunQueue, Saved/SimulationRuns, Saved/AnalysisLogs, or text input project paths when no active project session exists.
   - Legacy report + MeasurementLog analysis is removed; MainMenu project mode sends v2 project-run analysis only.
@@ -101,7 +103,7 @@ verify:
   - `OdiroSim.ScenarioEditor.Outliner.Model` for Scenario editor outliner item order/filter/selection state
   - `OdiroSim.ScenarioEditor.Outliner.Selection` for Scenario editor outliner key mapping and collapsed-parent filtering
   - OdiroSimEditor build after runner/trace lifecycle changes
-  - UmgMcp `get_widget_tree` after StartupMenu/MainMenu/ScenarioEditor UMG edits: WBP_StartupMenu owns project selection row/dropdowns and recent project header `RecentProjectAddButton`; WBP_MainMenu root is ProjectWorkspaceScreen; ScenarioEditorRootWidget is under ProjectScenarioEditPanel; WBP_ScenarioEditorRootWidget has no ToolbarWidget and exposes right-sidebar SaveButton, SaveStatusText, ScenarioEditorOutlinerWidget, InspectorSwitcher, TemplateSidebarPanel, PlaceableContextMenuPanel, LlmInspectorPanel, and Detail/LLM tab buttons; ProjectExperimentConfigPanel is a ProjectWorkspaceSwitcher peer; WBP_ProjectWorkspaceTab has TabButton, TabLabelText, CloseButton, and ActiveIndicator; result dashboard exposes ExperimentResultDetailTitleText, metric cards, EpisodeReplayCardWrapBox, AiAnalysisActionBox, AiSuggestionPanel, and the three result dashboard card WBP named children.
+  - UmgMcp `get_widget_tree` after StartupMenu/MainMenu/ScenarioEditor UMG edits: WBP_StartupMenu owns project selection row/dropdowns and recent project header `RecentProjectAddButton`; WBP_MainMenu root is ProjectWorkspaceScreen; ScenarioEditorRootWidget is under ProjectScenarioEditPanel; WBP_ScenarioEditorRootWidget has no ToolbarWidget and exposes right-sidebar SaveButton, SaveStatusText, ScenarioEditorOutlinerWidget, InspectorSwitcher, TemplateSidebarPanel, PlaceableContextMenuPanel, LlmInspectorPanel, and Detail/LLM tab buttons; ProjectExperimentConfigPanel and ProjectExperimentResultDetailPanel are ProjectWorkspaceSwitcher peers; WBP_ProjectWorkspaceTab has TabButton, TabLabelText, CloseButton, and ActiveIndicator; result dashboard exposes ExperimentResultDetailTitleText, metric cards, EpisodeReplayCardWrapBox, AiAnalysisActionBox, AiSuggestionPanel, and the three result dashboard card WBP named children.
   - Blueprint compile/save plus latest log scan for `WidgetVariableNameToGuidMap` after UmgMcp asset edits
   - UI smoke only after StartupMenu/MainMenu workflow changes; for Scenario editor layout, confirm UMG asset tree and runtime widget visibility/geometry through MCP `dump_runtime_widget_geometry`, then use `capture_slate_window` or preview screenshots as pixel evidence.
 related:

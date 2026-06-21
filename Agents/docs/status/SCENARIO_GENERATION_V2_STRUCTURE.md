@@ -53,6 +53,10 @@ Structured output schema는 `app/agents/scenario_generation_v2/scenario_template
 
 현재 schema는 Project Scenario v1 계약에 맞춰 robot abstract anchor(`entry`/`exit`)와 concrete anchor(`corridor_pose`)를 구분하고, 고정 숫자 또는 `{min,max}` 범위값, fixed/pattern/scatter obstacle placement, Unreal-supported override fields, placement `allow_blocking`, background `spawn_zone.segments`, 제한적 `corridor.segments[].replaced_by` choices를 허용한다. 기본 LLM 생성은 단순한 `fixed` placement를 우선한다.
 
+곡선 도로 또는 커브 도로 prompt는 `corridor_profile="curved-road"` intent로 해석한다. 이 경우 deterministic path, LLM valid path, LLM repair path, fallback path 모두에서 최종 scenario 확정 전 postprocess가 현재 alpha 기준 `static/templates/scenario/curved-road.json` preset을 기준으로 `corridor.axis`, `corridor.segments`, `robot.start`, `robot.goal`을 보정한다. 장애물 요청이 있으면 기존 obstacle placement를 `road_curve` segment로 remap하고, 없으면 preset처럼 빈 placements를 유지한다. 이 처리는 bundled preset을 generation seed로 읽는 것이며, scenario 파일 저장이나 template 관리 책임을 추가하지 않는다.
+
+보행자 요청은 현재 alpha 정책상 외부 scenario body에서 실행용 보행자 경로로 확장하지 않는다. 응답 root에는 `pedestrians`를 포함하되 `background.count=0`, `background.speed_mps=1.0`, `encounters=[]`로 정규화한다.
+
 ## 3. Request / Response 구조
 
 Request는 `prompt`만 받는다. Pydantic model은 `extra="forbid"`이므로 `experiment_id`, `run_id`, `project_id`, `sample_count`, `episode_count`, `base_seed`, `seed`, `current_template`, `mode` 같은 필드는 허용하지 않는다.

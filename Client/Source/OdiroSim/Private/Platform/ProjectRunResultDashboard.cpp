@@ -34,38 +34,38 @@ namespace
 		return Path;
 	}
 
-	bool TryParseJsonObject(const FString& JsonString, TSharedPtr<FJsonObject>& OutObject)
+	bool TryParseDashboardJsonObject(const FString& JsonString, TSharedPtr<FJsonObject>& OutObject)
 	{
 		OutObject.Reset();
 		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
 		return FJsonSerializer::Deserialize(Reader, OutObject) && OutObject.IsValid();
 	}
 
-	bool TryReadJsonObjectFile(const FString& JsonFilePath, TSharedPtr<FJsonObject>& OutObject)
+	bool TryReadDashboardJsonObjectFile(const FString& JsonFilePath, TSharedPtr<FJsonObject>& OutObject)
 	{
 		FString JsonString;
 		return FFileHelper::LoadFileToString(JsonString, *JsonFilePath)
-			&& TryParseJsonObject(JsonString, OutObject);
+			&& TryParseDashboardJsonObject(JsonString, OutObject);
 	}
 
-	FString ReadStringOrDefault(const FJsonObject& Object, const FString& FieldName, const FString& DefaultValue = FString())
+	FString ReadDashboardStringOrDefault(const FJsonObject& Object, const FString& FieldName, const FString& DefaultValue = FString())
 	{
 		FString Value;
 		return Object.TryGetStringField(FieldName, Value) ? Value : DefaultValue;
 	}
 
-	double ReadNumberOrDefault(const FJsonObject& Object, const FString& FieldName, const double DefaultValue = 0.0)
+	double ReadDashboardNumberOrDefault(const FJsonObject& Object, const FString& FieldName, const double DefaultValue = 0.0)
 	{
 		double Value = 0.0;
 		return Object.TryGetNumberField(FieldName, Value) ? Value : DefaultValue;
 	}
 
-	int32 ReadIntegerMetric(const FJsonObject& MetricsObject, const FString& FieldName)
+	int32 ReadDashboardIntegerMetric(const FJsonObject& MetricsObject, const FString& FieldName)
 	{
-		return FMath::RoundToInt(ReadNumberOrDefault(MetricsObject, FieldName, 0.0));
+		return FMath::RoundToInt(ReadDashboardNumberOrDefault(MetricsObject, FieldName, 0.0));
 	}
 
-	bool TryGetObjectField(const FJsonObject& Object, const FString& FieldName, TSharedPtr<FJsonObject>& OutObject)
+	bool TryGetDashboardObjectField(const FJsonObject& Object, const FString& FieldName, TSharedPtr<FJsonObject>& OutObject)
 	{
 		OutObject.Reset();
 		const TSharedPtr<FJsonValue> Value = Object.TryGetField(FieldName);
@@ -78,7 +78,7 @@ namespace
 		return OutObject.IsValid();
 	}
 
-	bool TryGetArrayField(const FJsonObject& Object, const FString& FieldName, TArray<TSharedPtr<FJsonValue>>& OutArray)
+	bool TryGetDashboardArrayField(const FJsonObject& Object, const FString& FieldName, TArray<TSharedPtr<FJsonValue>>& OutArray)
 	{
 		OutArray.Reset();
 		const TSharedPtr<FJsonValue> Value = Object.TryGetField(FieldName);
@@ -91,7 +91,7 @@ namespace
 		return true;
 	}
 
-	FString JsonValueToCompactString(const TSharedPtr<FJsonValue>& Value)
+	FString DashboardJsonValueToCompactString(const TSharedPtr<FJsonValue>& Value)
 	{
 		if (!Value.IsValid())
 		{
@@ -113,14 +113,14 @@ namespace
 		return FString();
 	}
 
-	int32 CountPrimaryCollisions(const FJsonObject& MetricsObject)
+	int32 CountDashboardPrimaryCollisions(const FJsonObject& MetricsObject)
 	{
-		return ReadIntegerMetric(MetricsObject, TEXT("blocked_region_collision_count"))
-			+ ReadIntegerMetric(MetricsObject, TEXT("pedestrian_collision_count"))
-			+ ReadIntegerMetric(MetricsObject, TEXT("static_obstacle_collision_count"));
+		return ReadDashboardIntegerMetric(MetricsObject, TEXT("blocked_region_collision_count"))
+			+ ReadDashboardIntegerMetric(MetricsObject, TEXT("pedestrian_collision_count"))
+			+ ReadDashboardIntegerMetric(MetricsObject, TEXT("static_obstacle_collision_count"));
 	}
 
-	bool TryReadRobotAnchor(
+	bool TryReadDashboardRobotAnchor(
 		const FJsonObject& RowObject,
 		const FString& AnchorName,
 		FDashboardRobotAnchor& OutAnchor)
@@ -128,27 +128,27 @@ namespace
 		TSharedPtr<FJsonObject> ScenarioSemanticObject;
 		TSharedPtr<FJsonObject> RobotObject;
 		TSharedPtr<FJsonObject> AnchorObject;
-		if (!TryGetObjectField(RowObject, TEXT("scenario_semantic"), ScenarioSemanticObject)
-			|| !TryGetObjectField(*ScenarioSemanticObject, TEXT("robot"), RobotObject)
-			|| !TryGetObjectField(*RobotObject, AnchorName, AnchorObject))
+		if (!TryGetDashboardObjectField(RowObject, TEXT("scenario_semantic"), ScenarioSemanticObject)
+			|| !TryGetDashboardObjectField(*ScenarioSemanticObject, TEXT("robot"), RobotObject)
+			|| !TryGetDashboardObjectField(*RobotObject, AnchorName, AnchorObject))
 		{
 			return false;
 		}
 
-		OutAnchor.Segment = ReadStringOrDefault(*AnchorObject, TEXT("segment"));
-		OutAnchor.AlongMeters = ReadNumberOrDefault(*AnchorObject, TEXT("along_m"));
-		OutAnchor.OffsetMeters = ReadNumberOrDefault(*AnchorObject, TEXT("offset_m"));
+		OutAnchor.Segment = ReadDashboardStringOrDefault(*AnchorObject, TEXT("segment"));
+		OutAnchor.AlongMeters = ReadDashboardNumberOrDefault(*AnchorObject, TEXT("along_m"));
+		OutAnchor.OffsetMeters = ReadDashboardNumberOrDefault(*AnchorObject, TEXT("offset_m"));
 		return true;
 	}
 
-	bool IsStartInsideGoalRadius(const FJsonObject& RowObject, const FJsonObject* MetricsObject)
+	bool IsDashboardStartInsideGoalRadius(const FJsonObject& RowObject, const FJsonObject* MetricsObject)
 	{
 		if (!MetricsObject)
 		{
 			return false;
 		}
 
-		const double GoalThresholdMeters = ReadNumberOrDefault(*MetricsObject, TEXT("goal_threshold_m"), -1.0);
+		const double GoalThresholdMeters = ReadDashboardNumberOrDefault(*MetricsObject, TEXT("goal_threshold_m"), -1.0);
 		if (GoalThresholdMeters <= 0.0)
 		{
 			return false;
@@ -156,8 +156,8 @@ namespace
 
 		FDashboardRobotAnchor StartAnchor;
 		FDashboardRobotAnchor GoalAnchor;
-		if (!TryReadRobotAnchor(RowObject, TEXT("start"), StartAnchor)
-			|| !TryReadRobotAnchor(RowObject, TEXT("goal"), GoalAnchor)
+		if (!TryReadDashboardRobotAnchor(RowObject, TEXT("start"), StartAnchor)
+			|| !TryReadDashboardRobotAnchor(RowObject, TEXT("goal"), GoalAnchor)
 			|| StartAnchor.Segment.IsEmpty()
 			|| !StartAnchor.Segment.Equals(GoalAnchor.Segment, ESearchCase::CaseSensitive))
 		{
@@ -182,7 +182,7 @@ namespace
 			return false;
 		}
 
-		return IsStartInsideGoalRadius(RowObject, MetricsObject)
+		return IsDashboardStartInsideGoalRadius(RowObject, MetricsObject)
 			|| DurationSeconds <= MainInstantGoalDurationToleranceSeconds;
 	}
 
@@ -197,13 +197,13 @@ namespace
 			return false;
 		}
 
-		const FString Outcome = ReadStringOrDefault(RowObject, TEXT("outcome"));
+		const FString Outcome = ReadDashboardStringOrDefault(RowObject, TEXT("outcome"));
 		if (Outcome.Equals(TEXT("Success"), ESearchCase::IgnoreCase))
 		{
 			return true;
 		}
 
-		return MetricsObject && ReadNumberOrDefault(*MetricsObject, TEXT("goal_reached"), 0.0) > 0.0;
+		return MetricsObject && ReadDashboardNumberOrDefault(*MetricsObject, TEXT("goal_reached"), 0.0) > 0.0;
 	}
 
 	FString MakePreviewImagePath(const FString& RunDirectory, const FString& EpisodeId)
@@ -248,7 +248,7 @@ namespace
 
 	EProjectRunAiSuggestionSeverity ParseSuggestionSeverity(const FJsonObject& Object)
 	{
-		const FString Severity = ReadStringOrDefault(Object, TEXT("severity")).TrimStartAndEnd().ToLower();
+		const FString Severity = ReadDashboardStringOrDefault(Object, TEXT("severity")).TrimStartAndEnd().ToLower();
 		if (Severity == TEXT("high") || Severity == TEXT("critical") || Severity == TEXT("error") || Severity == TEXT("높음"))
 		{
 			return EProjectRunAiSuggestionSeverity::High;
@@ -262,7 +262,7 @@ namespace
 			return EProjectRunAiSuggestionSeverity::Low;
 		}
 
-		const double Priority = ReadNumberOrDefault(Object, TEXT("priority"), 0.0);
+		const double Priority = ReadDashboardNumberOrDefault(Object, TEXT("priority"), 0.0);
 		if (Priority >= 3.0)
 		{
 			return EProjectRunAiSuggestionSeverity::High;
@@ -280,16 +280,16 @@ namespace
 
 	FString BuildSuggestionMessage(const FJsonObject& Object)
 	{
-		FString Message = ReadStringOrDefault(Object, TEXT("message")).TrimStartAndEnd();
+		FString Message = ReadDashboardStringOrDefault(Object, TEXT("message")).TrimStartAndEnd();
 		if (!Message.IsEmpty())
 		{
 			return Message;
 		}
 
-		Message = ReadStringOrDefault(Object, TEXT("reason")).TrimStartAndEnd();
-		const FString Param = ReadStringOrDefault(Object, TEXT("param")).TrimStartAndEnd();
-		const FString Current = JsonValueToCompactString(Object.TryGetField(TEXT("current"))).TrimStartAndEnd();
-		const FString Suggested = JsonValueToCompactString(Object.TryGetField(TEXT("suggested"))).TrimStartAndEnd();
+		Message = ReadDashboardStringOrDefault(Object, TEXT("reason")).TrimStartAndEnd();
+		const FString Param = ReadDashboardStringOrDefault(Object, TEXT("param")).TrimStartAndEnd();
+		const FString Current = DashboardJsonValueToCompactString(Object.TryGetField(TEXT("current"))).TrimStartAndEnd();
+		const FString Suggested = DashboardJsonValueToCompactString(Object.TryGetField(TEXT("suggested"))).TrimStartAndEnd();
 
 		TArray<FString> Parts;
 		if (!Param.IsEmpty() && (!Current.IsEmpty() || !Suggested.IsEmpty()))
@@ -308,7 +308,7 @@ namespace
 		FProjectRunResultDashboardData& OutDashboardData)
 	{
 		TArray<TSharedPtr<FJsonValue>> RecommendationValues;
-		if (!TryGetArrayField(RootObject, TEXT("recommendations"), RecommendationValues))
+		if (!TryGetDashboardArrayField(RootObject, TEXT("recommendations"), RecommendationValues))
 		{
 			return false;
 		}
@@ -401,13 +401,13 @@ bool FProjectRunResultDashboardJson::BuildFromSummaryJsonString(
 	outDashboardData.RunId = FPaths::GetCleanFilename(RunDirectory);
 
 	TSharedPtr<FJsonObject> RootObject;
-	if (!TryParseJsonObject(summaryJson, RootObject))
+	if (!TryParseDashboardJsonObject(summaryJson, RootObject))
 	{
 		outDashboardData.Diagnostics.Add(TEXT("summary.json JSON 파싱 실패"));
 		return false;
 	}
 
-	const FString Schema = ReadStringOrDefault(*RootObject, TEXT("schema"));
+	const FString Schema = ReadDashboardStringOrDefault(*RootObject, TEXT("schema"));
 	if (!Schema.Equals(TEXT("run_summary"), ESearchCase::CaseSensitive))
 	{
 		outDashboardData.Diagnostics.Add(FString::Printf(TEXT("지원하지 않는 summary schema: %s"), *Schema));
@@ -415,13 +415,13 @@ bool FProjectRunResultDashboardJson::BuildFromSummaryJsonString(
 	}
 
 	TSharedPtr<FJsonObject> RunObject;
-	if (TryGetObjectField(*RootObject, TEXT("run"), RunObject))
+	if (TryGetDashboardObjectField(*RootObject, TEXT("run"), RunObject))
 	{
-		outDashboardData.RunId = ReadStringOrDefault(*RunObject, TEXT("run_id"), outDashboardData.RunId);
+		outDashboardData.RunId = ReadDashboardStringOrDefault(*RunObject, TEXT("run_id"), outDashboardData.RunId);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> RowValues;
-	if (!TryGetArrayField(*RootObject, TEXT("rows"), RowValues))
+	if (!TryGetDashboardArrayField(*RootObject, TEXT("rows"), RowValues))
 	{
 		outDashboardData.Diagnostics.Add(TEXT("summary.json rows 배열 없음"));
 		return false;
@@ -441,22 +441,22 @@ bool FProjectRunResultDashboardJson::BuildFromSummaryJsonString(
 		}
 
 		TSharedPtr<FJsonObject> MetricsObject;
-		const FJsonObject* MetricsPtr = TryGetObjectField(*RowObject, TEXT("metrics"), MetricsObject)
+		const FJsonObject* MetricsPtr = TryGetDashboardObjectField(*RowObject, TEXT("metrics"), MetricsObject)
 			? MetricsObject.Get()
 			: nullptr;
 
 		FProjectRunEpisodeDashboardItem Episode;
-		Episode.EpisodeId = ReadStringOrDefault(*RowObject, TEXT("episode_id"));
-		Episode.DurationSeconds = ReadNumberOrDefault(*RowObject, TEXT("duration_s"),
-			MetricsPtr ? ReadNumberOrDefault(*MetricsPtr, TEXT("duration_s"), 0.0) : 0.0);
-		Episode.Outcome = ReadStringOrDefault(*RowObject, TEXT("outcome"));
-		Episode.TerminalReason = ReadStringOrDefault(*RowObject, TEXT("terminal_reason"));
+		Episode.EpisodeId = ReadDashboardStringOrDefault(*RowObject, TEXT("episode_id"));
+		Episode.DurationSeconds = ReadDashboardNumberOrDefault(*RowObject, TEXT("duration_s"),
+			MetricsPtr ? ReadDashboardNumberOrDefault(*MetricsPtr, TEXT("duration_s"), 0.0) : 0.0);
+		Episode.Outcome = ReadDashboardStringOrDefault(*RowObject, TEXT("outcome"));
+		Episode.TerminalReason = ReadDashboardStringOrDefault(*RowObject, TEXT("terminal_reason"));
 		Episode.bSuccess = IsSuccessRow(
 			*RowObject,
 			MetricsPtr,
 			Episode.TerminalReason,
 			Episode.DurationSeconds);
-		Episode.CollisionCount = MetricsPtr ? CountPrimaryCollisions(*MetricsPtr) : 0;
+		Episode.CollisionCount = MetricsPtr ? CountDashboardPrimaryCollisions(*MetricsPtr) : 0;
 		Episode.PreviewImagePath = MakePreviewImagePath(RunDirectory, Episode.EpisodeId);
 
 		outDashboardData.TotalDurationSeconds += Episode.DurationSeconds;
@@ -498,7 +498,7 @@ bool FProjectRunResultDashboardJson::AppendAiFromAnalysisResponseJsonString(
 	FProjectRunResultDashboardData& outDashboardData)
 {
 	TSharedPtr<FJsonObject> RootObject;
-	if (!TryParseJsonObject(responseJson, RootObject))
+	if (!TryParseDashboardJsonObject(responseJson, RootObject))
 	{
 		outDashboardData.Diagnostics.Add(TEXT("analysis_run_response_v2.json JSON 파싱 실패"));
 		return false;
@@ -512,7 +512,7 @@ bool FProjectRunResultDashboardJson::AppendAiFromAnalysisResponseJsonString(
 			const TSharedPtr<FJsonObject> SummaryObject = SummaryValue->AsObject();
 			if (SummaryObject.IsValid())
 			{
-				outDashboardData.AiSummary = ReadStringOrDefault(*SummaryObject, TEXT("message"), outDashboardData.AiSummary);
+				outDashboardData.AiSummary = ReadDashboardStringOrDefault(*SummaryObject, TEXT("message"), outDashboardData.AiSummary);
 			}
 		}
 		else if (SummaryValue->Type == EJson::String)
@@ -531,13 +531,13 @@ bool FProjectRunResultDashboardJson::AppendAiFromRecommendationsJsonString(
 	FProjectRunResultDashboardData& outDashboardData)
 {
 	TSharedPtr<FJsonObject> RootObject;
-	if (!TryParseJsonObject(recommendationsJson, RootObject))
+	if (!TryParseDashboardJsonObject(recommendationsJson, RootObject))
 	{
 		outDashboardData.Diagnostics.Add(TEXT("recommendations.json JSON 파싱 실패"));
 		return false;
 	}
 
-	const FString Reason = ReadStringOrDefault(*RootObject, TEXT("reason")).TrimStartAndEnd();
+	const FString Reason = ReadDashboardStringOrDefault(*RootObject, TEXT("reason")).TrimStartAndEnd();
 	if (outDashboardData.AiSummary.IsEmpty() && !Reason.IsEmpty())
 	{
 		outDashboardData.AiSummary = Reason;

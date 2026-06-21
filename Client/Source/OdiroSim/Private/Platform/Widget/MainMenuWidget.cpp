@@ -12,6 +12,7 @@
 #include "Components/WidgetSwitcher.h"
 #include "Dom/JsonObject.h"
 #include "Engine/GameInstance.h"
+#include "Kismet/GameplayStatics.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Platform/ProjectSessionSubsystem.h"
@@ -20,6 +21,7 @@
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Platform/Widget/ExperimentResultIterationButton.h"
 #include "Platform/Widget/FileListItemWidget.h"
+#include "Platform/Widget/ProjectWorkspaceTabWidget.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
 #include "Scenario/Widget/ScenarioEditorRootWidget.h"
 #include "Serialization/JsonReader.h"
@@ -50,6 +52,11 @@ namespace
 		TEXT("/Game/Fonts/Freesentation/Freesentation-4Regular_Font.Freesentation-4Regular_Font");
 	const TCHAR* MainMenuBoldFontPath =
 		TEXT("/Game/Fonts/Freesentation/Freesentation-7Bold_Font.Freesentation-7Bold_Font");
+	const FName MainMenuStartupMapId(TEXT("StartupMap"));
+	const FName ProjectScenarioEditTabId(TEXT("ScenarioEdit"));
+	const FName ProjectExperimentStatusTabId(TEXT("ExperimentStatus"));
+	const FName ProjectExperimentConfigTabId(TEXT("ExperimentConfig"));
+	const FName ProjectExperimentResultDetailTabId(TEXT("ExperimentResultDetail"));
 
 	enum class EMainMenuSection : int32
 	{
@@ -58,13 +65,6 @@ namespace
 		ExperimentConfig,
 		RunStatus,
 		ExperimentResult,
-	};
-
-	enum class EProjectWorkspaceTab : int32
-	{
-		ScenarioEdit = 0,
-		ExperimentStatus,
-		ExperimentResultDetail,
 	};
 
 	struct FExperimentResultReportItem
@@ -744,7 +744,7 @@ void UMainMenuWidget::NativeConstruct()
 		RefreshProjectRunSelection();
 		RefreshExperimentResultList();
 		ShowProjectWorkspaceScreen();
-		ShowProjectWorkspaceTab(static_cast<int32>(EProjectWorkspaceTab::ScenarioEdit));
+		ShowProjectWorkspaceTab(EProjectWorkspaceTabType::ScenarioEdit);
 	}
 	else
 	{
@@ -912,6 +912,41 @@ void UMainMenuWidget::ShowProjectExperimentConfigPanel(const bool bVisible)
 	{
 		SetProjectExperimentConfigWarningText(FString());
 	}
+}
+
+bool UMainMenuWidget::StartProjectExperimentRun(TArray<FString>& outDiagnostics, FString& outRunId)
+{
+	outDiagnostics.Reset();
+	outRunId.Reset();
+
+	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
+	if (!subsystem)
+	{
+		outDiagnostics.Add(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
+		return false;
+	}
+
+	const FSimulatorRunInfo activeRunInfo = subsystem->GetActiveRunInfo();
+	if (activeRunInfo.bProcessRunning && !USimulatorLaunchSubsystem::IsTerminalRunState(activeRunInfo.Status.State))
+	{
+		outDiagnostics.Add(TEXT("이미 실행 중인 실험이 있습니다."));
+		return false;
+	}
+
+	if (!CreateProjectRunForPrototype(outRunId, outDiagnostics, subsystem))
+	{
+		return false;
+	}
+
+	if (!subsystem->StartProjectRun(GetSelectedProjectPath(), outRunId))
+	{
+		outDiagnostics.Add(subsystem->GetLastError());
+		RefreshProjectRunSelection();
+		RefreshExperimentResultList();
+		return false;
+	}
+
+	return true;
 }
 
 bool UMainMenuWidget::LoadProjectExperimentSettingIntoPanel(TArray<FString>& outDiagnostics)
@@ -1640,19 +1675,30 @@ void UMainMenuWidget::HandleSendToAiClicked()
 
 void UMainMenuWidget::HandleShowProjectScenarioTabClicked()
 {
-	ShowProjectWorkspaceTab(static_cast<int32>(EProjectWorkspaceTab::ScenarioEdit));
+	ShowProjectWorkspaceTab(EProjectWorkspaceTabType::ScenarioEdit);
 }
 
 void UMainMenuWidget::HandleShowProjectExperimentStatusTabClicked()
 {
-	ClearExperimentResultIterationWidgets();
-	SetExperimentResultDetailVisible(false);
 	RefreshExperimentResultList();
 	UpdateReportAndLogText();
-	ShowProjectWorkspaceTab(static_cast<int32>(EProjectWorkspaceTab::ExperimentStatus));
+	ShowProjectWorkspaceTab(EProjectWorkspaceTabType::ExperimentStatus);
 }
 
-void UMainMenuWidget::HandleAddExperimentClicked()
+void UMainMenuWidget::HandleProjectHomeClicked()
+{
+	if (UProjectSessionSubsystem* projectSession = GetProjectSessionSubsystem())
+	{
+		projectSession->ClearActiveProject();
+	}
+
+	if (UWorld* world = GetWorld())
+	{
+		UGameplayStatics::OpenLevel(world, MainMenuStartupMapId);
+	}
+}
+
+void UMainMenuWidget::HandleConfigureExperimentClicked()
 {
 	TArray<FString> diagnostics;
 	if (!LoadProjectExperimentSettingIntoPanel(diagnostics))
@@ -1663,32 +1709,31 @@ void UMainMenuWidget::HandleAddExperimentClicked()
 	}
 
 	ShowProjectExperimentConfigPanel(true);
-	ShowProjectWorkspaceTab(static_cast<int32>(EProjectWorkspaceTab::ExperimentStatus));
+	OpenTransientProjectTab(EProjectWorkspaceTabType::ExperimentConfig, FText::FromString(TEXT("실험 설정")));
 	SetDiagnosticsText(TEXT("새 실험 설정을 수정하세요."));
 	UpdateStatusText();
 }
 
+void UMainMenuWidget::HandleRunExperimentClicked()
+{
+	TArray<FString> diagnostics;
+	FString runId;
+	if (!StartProjectExperimentRun(diagnostics, runId))
+	{
+		SetDiagnosticsText(JoinStringLines(diagnostics));
+		UpdateStatusText(TEXT("Experiment launch failed."));
+		return;
+	}
+
+	RefreshProjectRunSelection();
+	RefreshExperimentResultList();
+	ShowProjectWorkspaceTab(EProjectWorkspaceTabType::ExperimentStatus);
+	SetDiagnosticsText(FString::Printf(TEXT("실험 실행을 시작했습니다: %s"), *runId));
+	UpdateStatusText(TEXT("Project simulator launch requested."));
+}
+
 void UMainMenuWidget::HandleCreateExperimentFromConfigClicked()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		const FString message = TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다.");
-		SetProjectExperimentConfigWarningText(message);
-		SetDiagnosticsText(message);
-		return;
-	}
-
-	const FSimulatorRunInfo activeRunInfo = subsystem->GetActiveRunInfo();
-	if (activeRunInfo.bProcessRunning && !USimulatorLaunchSubsystem::IsTerminalRunState(activeRunInfo.Status.State))
-	{
-		const FString message = TEXT("이미 실행 중인 실험이 있습니다.");
-		SetProjectExperimentConfigWarningText(message);
-		SetDiagnosticsText(message);
-		UpdateStatusText(TEXT("Project simulator is already running."));
-		return;
-	}
-
 	TArray<FString> diagnostics;
 	if (!SaveProjectExperimentSettingFromPanel(diagnostics))
 	{
@@ -1700,39 +1745,47 @@ void UMainMenuWidget::HandleCreateExperimentFromConfigClicked()
 	}
 
 	FString runId;
-	if (!CreateProjectRunForPrototype(runId, diagnostics, subsystem))
+	if (!StartProjectExperimentRun(diagnostics, runId))
 	{
 		const FString message = JoinStringLines(diagnostics);
 		SetProjectExperimentConfigWarningText(message);
 		SetDiagnosticsText(message);
-		UpdateStatusText(TEXT("Experiment creation failed."));
-		return;
-	}
-
-	if (!subsystem->StartProjectRun(GetSelectedProjectPath(), runId))
-	{
-		diagnostics.Add(subsystem->GetLastError());
-		const FString message = JoinStringLines(diagnostics);
-		SetProjectExperimentConfigWarningText(message);
-		SetDiagnosticsText(message);
-		RefreshProjectRunSelection();
-		RefreshExperimentResultList();
 		UpdateStatusText(TEXT("Experiment launch failed."));
 		return;
 	}
 
-	ShowProjectExperimentConfigPanel(false);
+	SetProjectExperimentConfigWarningText(FString());
+	CloseTransientProjectTab(EProjectWorkspaceTabType::ExperimentConfig);
 	RefreshProjectRunSelection();
 	RefreshExperimentResultList();
-	ShowProjectWorkspaceTab(static_cast<int32>(EProjectWorkspaceTab::ExperimentStatus));
 	SetDiagnosticsText(FString::Printf(TEXT("실험 실행을 시작했습니다: %s"), *runId));
 	UpdateStatusText(TEXT("Project simulator launch requested."));
+}
+
+void UMainMenuWidget::HandleSaveExperimentConfigClicked()
+{
+	TArray<FString> diagnostics;
+	if (!SaveProjectExperimentSettingFromPanel(diagnostics))
+	{
+		const FString message = JoinStringLines(diagnostics);
+		SetProjectExperimentConfigWarningText(message);
+		SetDiagnosticsText(message);
+		UpdateStatusText(TEXT("Experiment setting save failed."));
+		return;
+	}
+
+	SetProjectExperimentConfigWarningText(FString());
+	CloseTransientProjectTab(EProjectWorkspaceTabType::ExperimentConfig);
+	RefreshProjectRunSelection();
+	RefreshExperimentResultList();
+	SetDiagnosticsText(TEXT("실험 설정을 저장했습니다."));
+	UpdateStatusText(TEXT("Experiment setting saved."));
 }
 
 void UMainMenuWidget::HandleCancelExperimentConfigClicked()
 {
 	SetProjectExperimentConfigWarningText(FString());
-	ShowProjectExperimentConfigPanel(false);
+	CloseTransientProjectTab(EProjectWorkspaceTabType::ExperimentConfig);
 	SetDiagnosticsText(TEXT("실험 설정 수정을 취소했습니다."));
 }
 
@@ -1765,7 +1818,7 @@ void UMainMenuWidget::HandleShowExperimentResultClicked()
 	{
 		RefreshExperimentResultList();
 		UpdateReportAndLogText();
-		ShowProjectWorkspaceTab(static_cast<int32>(EProjectWorkspaceTab::ExperimentStatus));
+		ShowProjectWorkspaceTab(EProjectWorkspaceTabType::ExperimentStatus);
 		return;
 	}
 
@@ -1841,61 +1894,192 @@ void UMainMenuWidget::ShowMainMenuSection(const int32 sectionIndex)
 
 void UMainMenuWidget::ShowProjectWorkspaceScreen()
 {
-	if (ProjectWorkspaceSwitcher)
+	ApplyProjectWorkspaceTabState(ActiveProjectWorkspaceTab);
+}
+
+void UMainMenuWidget::ShowProjectWorkspaceTab(const EProjectWorkspaceTabType tabType)
+{
+	ActiveProjectWorkspaceTab = tabType;
+	if (!ProjectWorkspaceSwitcher)
 	{
-		ApplyProjectWorkspaceTabStyle(ProjectWorkspaceSwitcher->GetActiveWidgetIndex());
+		ApplyProjectWorkspaceTabState(tabType);
+		return;
+	}
+
+	auto setSwitcherIndex = [this](const int32 tabIndex)
+	{
+		const int32 widgetCount = ProjectWorkspaceSwitcher->GetChildrenCount();
+		if (tabIndex >= 0 && tabIndex < widgetCount)
+		{
+			ProjectWorkspaceSwitcher->SetActiveWidgetIndex(tabIndex);
+		}
+	};
+
+	auto setSwitcherWidget = [this](UWidget* targetPage)
+	{
+		if (IsValid(targetPage) && ProjectWorkspaceSwitcher->GetChildIndex(targetPage) != INDEX_NONE)
+		{
+			ProjectWorkspaceSwitcher->SetActiveWidget(targetPage);
+			return true;
+		}
+		return false;
+	};
+
+	switch (tabType)
+	{
+	case EProjectWorkspaceTabType::ScenarioEdit:
+		ShowProjectExperimentConfigPanel(false);
+		setSwitcherIndex(0);
+		break;
+	case EProjectWorkspaceTabType::ExperimentStatus:
+		ShowProjectExperimentConfigPanel(false);
+		setSwitcherIndex(1);
+		break;
+	case EProjectWorkspaceTabType::ExperimentConfig:
+		ShowProjectExperimentConfigPanel(true);
+		if (!setSwitcherWidget(ProjectExperimentConfigPanel.Get()))
+		{
+			setSwitcherIndex(1);
+		}
+		break;
+	case EProjectWorkspaceTabType::ExperimentResultDetail:
+		ShowProjectExperimentConfigPanel(false);
+		if (!setSwitcherWidget(ExperimentResultDetailSectionBoxScrollBox.Get()))
+		{
+			setSwitcherIndex(2);
+		}
+		break;
+	}
+
+	ApplyProjectWorkspaceTabState(tabType);
+}
+
+void UMainMenuWidget::OpenTransientProjectTab(const EProjectWorkspaceTabType tabType, const FText& label)
+{
+	UProjectWorkspaceTabWidget* targetTab = nullptr;
+	if (tabType == EProjectWorkspaceTabType::ExperimentConfig)
+	{
+		bProjectExperimentConfigTabOpen = true;
+		targetTab = ExperimentConfigTab.Get();
+	}
+	else if (tabType == EProjectWorkspaceTabType::ExperimentResultDetail)
+	{
+		bProjectExperimentResultDetailTabOpen = true;
+		targetTab = ExperimentResultDetailTab.Get();
+	}
+
+	if (targetTab)
+	{
+		targetTab->SetTabLabel(label);
+		targetTab->SetTabClosable(true);
+		targetTab->SetTabVisible(true);
+	}
+
+	ShowProjectWorkspaceTab(tabType);
+}
+
+void UMainMenuWidget::CloseTransientProjectTab(const EProjectWorkspaceTabType tabType)
+{
+	if (tabType == EProjectWorkspaceTabType::ExperimentConfig)
+	{
+		bProjectExperimentConfigTabOpen = false;
+		ShowProjectExperimentConfigPanel(false);
+		if (ExperimentConfigTab)
+		{
+			ExperimentConfigTab->SetTabVisible(false);
+		}
+	}
+	else if (tabType == EProjectWorkspaceTabType::ExperimentResultDetail)
+	{
+		bProjectExperimentResultDetailTabOpen = false;
+		ClearExperimentResultIterationWidgets();
+		if (ExperimentResultDetailTab)
+		{
+			ExperimentResultDetailTab->SetTabVisible(false);
+		}
+	}
+
+	if (ActiveProjectWorkspaceTab == tabType)
+	{
+		ShowProjectWorkspaceTab(EProjectWorkspaceTabType::ExperimentStatus);
+	}
+	else
+	{
+		ApplyProjectWorkspaceTabState(ActiveProjectWorkspaceTab);
 	}
 }
 
-void UMainMenuWidget::ShowProjectWorkspaceTab(const int32 tabIndex)
+void UMainMenuWidget::ApplyProjectWorkspaceTabState(const EProjectWorkspaceTabType activeTabType)
 {
-	if (!ProjectWorkspaceSwitcher)
+	if (ScenarioEditTab)
+	{
+		ScenarioEditTab->SetTabVisible(true);
+		ScenarioEditTab->SetTabActive(activeTabType == EProjectWorkspaceTabType::ScenarioEdit);
+	}
+	if (ExperimentStatusTab)
+	{
+		ExperimentStatusTab->SetTabVisible(true);
+		ExperimentStatusTab->SetTabActive(activeTabType == EProjectWorkspaceTabType::ExperimentStatus);
+	}
+	if (ExperimentConfigTab)
+	{
+		ExperimentConfigTab->SetTabVisible(bProjectExperimentConfigTabOpen);
+		ExperimentConfigTab->SetTabActive(activeTabType == EProjectWorkspaceTabType::ExperimentConfig);
+	}
+	if (ExperimentResultDetailTab)
+	{
+		ExperimentResultDetailTab->SetTabVisible(bProjectExperimentResultDetailTabOpen);
+		ExperimentResultDetailTab->SetTabActive(activeTabType == EProjectWorkspaceTabType::ExperimentResultDetail);
+	}
+}
+
+void UMainMenuWidget::HandleProjectWorkspaceTabSelected(UProjectWorkspaceTabWidget* tabWidget)
+{
+	if (!IsValid(tabWidget))
 	{
 		return;
 	}
 
-	const int32 widgetCount = ProjectWorkspaceSwitcher->GetChildrenCount();
-	if (tabIndex >= 0 && tabIndex < widgetCount)
+	if (tabWidget == ScenarioEditTab.Get() || tabWidget->GetTabId() == ProjectScenarioEditTabId)
 	{
-		ProjectWorkspaceSwitcher->SetActiveWidgetIndex(tabIndex);
-		ApplyProjectWorkspaceTabStyle(tabIndex);
+		HandleShowProjectScenarioTabClicked();
+	}
+	else if (tabWidget == ExperimentStatusTab.Get() || tabWidget->GetTabId() == ProjectExperimentStatusTabId)
+	{
+		HandleShowProjectExperimentStatusTabClicked();
+	}
+	else if (bProjectExperimentConfigTabOpen
+		&& (tabWidget == ExperimentConfigTab.Get() || tabWidget->GetTabId() == ProjectExperimentConfigTabId))
+	{
+		ShowProjectWorkspaceTab(EProjectWorkspaceTabType::ExperimentConfig);
+	}
+	else if (bProjectExperimentResultDetailTabOpen
+		&& (tabWidget == ExperimentResultDetailTab.Get() || tabWidget->GetTabId() == ProjectExperimentResultDetailTabId))
+	{
+		ShowProjectWorkspaceTab(EProjectWorkspaceTabType::ExperimentResultDetail);
 	}
 }
 
-void UMainMenuWidget::ApplyProjectWorkspaceTabStyle(const int32 activeTabIndex)
+void UMainMenuWidget::HandleProjectWorkspaceTabCloseRequested(UProjectWorkspaceTabWidget* tabWidget)
 {
-	const FLinearColor transparentTab = MakeSrgbColor(0x15, 0x15, 0x15, 0.0f);
-	const FLinearColor hoverTab = MakeSrgbColor(0x20, 0x20, 0x20);
-	const FLinearColor activeTab = MakeSrgbColor(0x24, 0x24, 0x24);
-	const FLinearColor textColor = MakeSrgbColor(0xc0, 0xc0, 0xc0);
-	const FLinearColor activeTextColor = MakeSrgbColor(0xff, 0xff, 0xff);
-
-	auto applyStyle = [&transparentTab, &hoverTab, &activeTab, &textColor, &activeTextColor](UButton* button, const bool bActive)
+	if (!IsValid(tabWidget))
 	{
-		if (!button)
-		{
-			return;
-		}
+		return;
+	}
 
-		FButtonStyle buttonStyle = button->GetStyle();
-		buttonStyle.Normal.TintColor = FSlateColor(bActive ? activeTab : transparentTab);
-		buttonStyle.Hovered.TintColor = FSlateColor(bActive ? activeTab : hoverTab);
-		buttonStyle.Pressed.TintColor = FSlateColor(activeTab);
-		buttonStyle.Disabled.TintColor = FSlateColor(transparentTab);
-		buttonStyle.SetNormalForeground(FSlateColor(bActive ? activeTextColor : textColor));
-		buttonStyle.SetHoveredForeground(FSlateColor(activeTextColor));
-		buttonStyle.SetPressedForeground(FSlateColor(activeTextColor));
-		buttonStyle.SetDisabledForeground(FSlateColor(textColor));
-		button->SetStyle(buttonStyle);
-		button->SetBackgroundColor(FLinearColor::White);
-		button->SetColorAndOpacity(FLinearColor::White);
-	};
-
-	const int32 scenarioTabIndex = static_cast<int32>(EProjectWorkspaceTab::ScenarioEdit);
-	const int32 experimentStatusIndex = static_cast<int32>(EProjectWorkspaceTab::ExperimentStatus);
-	const int32 experimentDetailIndex = static_cast<int32>(EProjectWorkspaceTab::ExperimentResultDetail);
-	applyStyle(ScenarioEditTabButton, activeTabIndex == scenarioTabIndex);
-	applyStyle(ExperimentStatusTabButton, activeTabIndex == experimentStatusIndex || activeTabIndex == experimentDetailIndex);
+	if (tabWidget == ExperimentConfigTab.Get() || tabWidget->GetTabId() == ProjectExperimentConfigTabId)
+	{
+		SetProjectExperimentConfigWarningText(FString());
+		CloseTransientProjectTab(EProjectWorkspaceTabType::ExperimentConfig);
+		SetDiagnosticsText(TEXT("실험 설정 수정을 취소했습니다."));
+	}
+	else if (tabWidget == ExperimentResultDetailTab.Get() || tabWidget->GetTabId() == ProjectExperimentResultDetailTabId)
+	{
+		CloseTransientProjectTab(EProjectWorkspaceTabType::ExperimentResultDetail);
+		RefreshExperimentResultList();
+		UpdateReportAndLogText();
+		SetDiagnosticsText(TEXT("실험 결과 목록으로 돌아왔습니다."));
+	}
 }
 
 void UMainMenuWidget::SyncComboBoxSelection(UComboBoxString* targetComboBox, const FString& selectedItem)
@@ -1922,9 +2106,14 @@ bool UMainMenuWidget::ValidateRequiredBindings() const
 	requireWidget(ProjectWorkspaceScreen, TEXT("ProjectWorkspaceScreen"));
 	requireWidget(ScenarioEditorRootWidget, TEXT("ScenarioEditorRootWidget"));
 	requireWidget(ProjectWorkspaceSwitcher, TEXT("ProjectWorkspaceSwitcher"));
-	requireWidget(ScenarioEditTabButton, TEXT("ScenarioEditTabButton"));
-	requireWidget(ExperimentStatusTabButton, TEXT("ExperimentStatusTabButton"));
-	requireWidget(AddExperimentButton, TEXT("AddExperimentButton"));
+	requireWidget(ScenarioEditTab, TEXT("ScenarioEditTab"));
+	requireWidget(ExperimentStatusTab, TEXT("ExperimentStatusTab"));
+	requireWidget(ConfigureExperimentButton, TEXT("ConfigureExperimentButton"));
+	requireWidget(RunExperimentButton, TEXT("RunExperimentButton"));
+	requireWidget(ProjectExperimentConfigPanel, TEXT("ProjectExperimentConfigPanel"));
+	requireWidget(CreateExperimentConfigButton, TEXT("CreateExperimentConfigButton"));
+	requireWidget(SaveExperimentConfigButton, TEXT("SaveExperimentConfigButton"));
+	requireWidget(CancelExperimentConfigButton, TEXT("CancelExperimentConfigButton"));
 	requireWidget(ExperimentResultDetailSectionBoxScrollBox, TEXT("ExperimentResultDetailSectionBoxScrollBox"));
 	requireWidget(ExperimentResultListScrollBox, TEXT("ExperimentResultListScrollBox"));
 	requireWidget(ExperimentResultIterationScrollBox, TEXT("ExperimentResultIterationScrollBox"));
@@ -2115,26 +2304,73 @@ void UMainMenuWidget::BindProjectModeControls()
 		LogMainMenuWidget,
 		Log,
 		TEXT("Project mode controls bound: %s"),
-		ScenarioEditTabButton && ExperimentStatusTabButton && AddExperimentButton
+		ScenarioEditTab && ExperimentStatusTab && ConfigureExperimentButton && RunExperimentButton
 			? TEXT("true")
 			: TEXT("false"));
 
-	if (ScenarioEditTabButton)
+	auto bindWorkspaceTab = [this](
+		UProjectWorkspaceTabWidget* tabWidget,
+		const FName& tabId,
+		const FText& label,
+		const bool bClosable,
+		const bool bVisible)
 	{
-		ScenarioEditTabButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleShowProjectScenarioTabClicked);
-		ScenarioEditTabButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleShowProjectScenarioTabClicked);
+		if (!tabWidget)
+		{
+			return;
+		}
+
+		tabWidget->SetTabId(tabId);
+		tabWidget->SetTabLabel(label);
+		tabWidget->SetTabClosable(bClosable);
+		tabWidget->SetTabVisible(bVisible);
+		tabWidget->OnSelectedRequested.RemoveAll(this);
+		tabWidget->OnSelectedRequested.AddUObject(this, &UMainMenuWidget::HandleProjectWorkspaceTabSelected);
+		tabWidget->OnCloseRequested.RemoveAll(this);
+		tabWidget->OnCloseRequested.AddUObject(this, &UMainMenuWidget::HandleProjectWorkspaceTabCloseRequested);
+	};
+
+	bindWorkspaceTab(
+		ScenarioEditTab.Get(),
+		ProjectScenarioEditTabId,
+		FText::FromString(TEXT("시나리오")),
+		false,
+		true);
+	bindWorkspaceTab(
+		ExperimentStatusTab.Get(),
+		ProjectExperimentStatusTabId,
+		FText::FromString(TEXT("실험")),
+		false,
+		true);
+	bindWorkspaceTab(
+		ExperimentConfigTab.Get(),
+		ProjectExperimentConfigTabId,
+		FText::FromString(TEXT("실험 설정")),
+		true,
+		bProjectExperimentConfigTabOpen);
+	bindWorkspaceTab(
+		ExperimentResultDetailTab.Get(),
+		ProjectExperimentResultDetailTabId,
+		FText::FromString(TEXT("분석")),
+		true,
+		bProjectExperimentResultDetailTabOpen);
+
+	if (HomeButton)
+	{
+		HomeButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleProjectHomeClicked);
+		HomeButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleProjectHomeClicked);
 	}
 
-	if (ExperimentStatusTabButton)
+	if (ConfigureExperimentButton)
 	{
-		ExperimentStatusTabButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleShowProjectExperimentStatusTabClicked);
-		ExperimentStatusTabButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleShowProjectExperimentStatusTabClicked);
+		ConfigureExperimentButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleConfigureExperimentClicked);
+		ConfigureExperimentButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleConfigureExperimentClicked);
 	}
 
-	if (AddExperimentButton)
+	if (RunExperimentButton)
 	{
-		AddExperimentButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleAddExperimentClicked);
-		AddExperimentButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleAddExperimentClicked);
+		RunExperimentButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleRunExperimentClicked);
+		RunExperimentButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleRunExperimentClicked);
 	}
 
 	if (CreateExperimentConfigButton)
@@ -2143,11 +2379,19 @@ void UMainMenuWidget::BindProjectModeControls()
 		CreateExperimentConfigButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleCreateExperimentFromConfigClicked);
 	}
 
+	if (SaveExperimentConfigButton)
+	{
+		SaveExperimentConfigButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleSaveExperimentConfigClicked);
+		SaveExperimentConfigButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleSaveExperimentConfigClicked);
+	}
+
 	if (CancelExperimentConfigButton)
 	{
 		CancelExperimentConfigButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleCancelExperimentConfigClicked);
 		CancelExperimentConfigButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleCancelExperimentConfigClicked);
 	}
+
+	ApplyProjectWorkspaceTabState(ActiveProjectWorkspaceTab);
 }
 
 void UMainMenuWidget::LoadSelectedSetup()
@@ -2317,13 +2561,26 @@ void UMainMenuWidget::SetExperimentConfigDetailVisible(const bool bVisible)
 
 void UMainMenuWidget::SetExperimentResultDetailVisible(const bool bVisible)
 {
-	bExperimentResultDetailVisible = bVisible;
-
 	if (IsProjectModeSelected() && ProjectWorkspaceSwitcher)
 	{
 		ShowProjectWorkspaceScreen();
-		ShowProjectWorkspaceTab(static_cast<int32>(
-			bVisible ? EProjectWorkspaceTab::ExperimentResultDetail : EProjectWorkspaceTab::ExperimentStatus));
+		if (bVisible)
+		{
+			FString runId = ExtractProjectRunIdFromDirectory(SelectedExperimentResultRunDirectory);
+			if (!FUserProjectRunSnapshot::IsValidRunId(runId))
+			{
+				runId = GetSelectedProjectRunId();
+			}
+
+			const FText tabLabel = runId.IsEmpty()
+				? FText::FromString(TEXT("분석"))
+				: FText::FromString(FString::Printf(TEXT("분석 #%s"), *runId));
+			OpenTransientProjectTab(EProjectWorkspaceTabType::ExperimentResultDetail, tabLabel);
+		}
+		else
+		{
+			CloseTransientProjectTab(EProjectWorkspaceTabType::ExperimentResultDetail);
+		}
 		return;
 	}
 
@@ -2908,7 +3165,7 @@ void UMainMenuWidget::HandleRunInfoChanged(const FSimulatorRunInfo& runInfo)
 {
 	(void)runInfo;
 	UpdateStatusText();
-	if (bExperimentResultDetailVisible)
+	if (ActiveProjectWorkspaceTab == EProjectWorkspaceTabType::ExperimentResultDetail)
 	{
 		RefreshExperimentResultIterationList();
 	}

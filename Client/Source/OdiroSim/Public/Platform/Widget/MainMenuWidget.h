@@ -12,6 +12,7 @@ class UScenarioEditorLaunchSubsystem;
 class UExperimentResultIterationButton;
 class UFileListItemWidget;
 class UPlatformAnalysisAiSubsystem;
+class UProjectWorkspaceTabWidget;
 class UProjectSessionSubsystem;
 class UScenarioEditorRootWidget;
 class USimulatorLaunchSubsystem;
@@ -136,6 +137,10 @@ protected:
 	UFUNCTION()
 	void HandleSendToAiClicked();
 
+	// Project workspace에서 StartupMap으로 돌아간다.
+	UFUNCTION()
+	void HandleProjectHomeClicked();
+
 	// Project workspace의 시나리오 편집 tab을 표시한다.
 	UFUNCTION()
 	void HandleShowProjectScenarioTabClicked();
@@ -144,19 +149,36 @@ protected:
 	UFUNCTION()
 	void HandleShowProjectExperimentStatusTabClicked();
 
-	// 새 실험 설정 editor를 연다.
+	// Project experiment 설정 tab을 연다.
 	UFUNCTION()
-	void HandleAddExperimentClicked();
+	void HandleConfigureExperimentClicked();
+
+	// Project experiment를 현재 저장된 설정으로 바로 실행한다.
+	UFUNCTION()
+	void HandleRunExperimentClicked();
 
 	// Project experiment 설정을 저장하고 simulator 실행을 시작한다.
 	UFUNCTION()
 	void HandleCreateExperimentFromConfigClicked();
+
+	// Project experiment 설정을 저장하고 실험 현황으로 돌아간다.
+	UFUNCTION()
+	void HandleSaveExperimentConfigClicked();
 
 	// Project experiment 설정 패널을 닫는다.
 	UFUNCTION()
 	void HandleCancelExperimentConfigClicked();
 
 private:
+	// Project workspace content switcher가 표시하는 logical tab.
+	enum class EProjectWorkspaceTabType : uint8
+	{
+		ScenarioEdit,
+		ExperimentStatus,
+		ExperimentConfig,
+		ExperimentResultDetail,
+	};
+
 	bool ValidateRequiredBindings() const;
 	void BindControls();
 	// WBP_MainMenu가 소유한 project mode control을 C++ event handler에 연결한다.
@@ -165,15 +187,25 @@ private:
 	// Project workspace 화면을 표시한다.
 	void ShowProjectWorkspaceScreen();
 	// Project workspace 내부 tab을 표시한다.
-	void ShowProjectWorkspaceTab(int32 tabIndex);
-	// 현재 Project workspace tab에 맞춰 tab button 색을 갱신한다.
-	void ApplyProjectWorkspaceTabStyle(int32 activeTabIndex);
+	void ShowProjectWorkspaceTab(EProjectWorkspaceTabType tabType);
+	// Project workspace 임시 tab을 열고 해당 tab으로 이동한다.
+	void OpenTransientProjectTab(EProjectWorkspaceTabType tabType, const FText& label);
+	// Project workspace 임시 tab을 닫고 필요하면 실험 현황으로 복귀한다.
+	void CloseTransientProjectTab(EProjectWorkspaceTabType tabType);
+	// 현재 Project workspace tab에 맞춰 tab widget state를 갱신한다.
+	void ApplyProjectWorkspaceTabState(EProjectWorkspaceTabType activeTabType);
+	void HandleProjectWorkspaceTabSelected(UProjectWorkspaceTabWidget* tabWidget);
+	void HandleProjectWorkspaceTabCloseRequested(UProjectWorkspaceTabWidget* tabWidget);
 	void SyncComboBoxSelection(UComboBoxString* targetComboBox, const FString& selectedItem);
 	void LoadSelectedSetup();
 	// 선택된 user project의 현재 run 선택을 최신 상태로 맞춘다.
 	void RefreshProjectRunSelection();
 	// Project experiment 설정 패널 표시 상태를 바꾼다.
 	void ShowProjectExperimentConfigPanel(bool bVisible);
+	// Project experiment run 생성을 검증하고 simulator 실행을 시작한다.
+	bool StartProjectExperimentRun(
+		TArray<FString>& outDiagnostics,
+		FString& outRunId);
 	// user project setting.json 값을 Project experiment 설정 패널에 채운다.
 	bool LoadProjectExperimentSettingIntoPanel(TArray<FString>& outDiagnostics);
 	// Project experiment 설정 패널 값을 user project setting.json에 저장한다.
@@ -414,17 +446,33 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> SendToAiButton;
 
-	// Project workspace 시나리오 편집 tab button.
+	// Project workspace에서 StartupMap으로 돌아가는 home button.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> ScenarioEditTabButton;
+	TObjectPtr<UButton> HomeButton;
 
-	// Project workspace 실험 현황 tab button.
+	// Project workspace 시나리오 tab widget.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> ExperimentStatusTabButton;
+	TObjectPtr<UProjectWorkspaceTabWidget> ScenarioEditTab;
 
-	// 새 실험 run snapshot을 추가하는 button.
+	// Project workspace 실험 현황 tab widget.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> AddExperimentButton;
+	TObjectPtr<UProjectWorkspaceTabWidget> ExperimentStatusTab;
+
+	// Project workspace 실험 설정 임시 tab widget.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UProjectWorkspaceTabWidget> ExperimentConfigTab;
+
+	// Project workspace 분석 상세 임시 tab widget.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UProjectWorkspaceTabWidget> ExperimentResultDetailTab;
+
+	// Project experiment 설정 tab을 여는 button.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> ConfigureExperimentButton;
+
+	// Project experiment를 현재 설정으로 바로 실행하는 button.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> RunExperimentButton;
 
 	// Project experiment 설정 editor panel. UI layout은 WBP_MainMenu가 소유한다.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -449,6 +497,10 @@ private:
 	// Project experiment 설정 저장 후 simulator 실행을 시작하는 button.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> CreateExperimentConfigButton;
+
+	// Project experiment 설정만 저장하는 button.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> SaveExperimentConfigButton;
 
 	// Project experiment 설정 editor를 닫는 button.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -505,5 +557,10 @@ private:
 	// 선택된 user project run id cache.
 	FString SelectedProjectRunId;
 	bool bExperimentConfigDetailVisible = false;
-	bool bExperimentResultDetailVisible = false;
+	// Project experiment 설정 임시 tab이 현재 표시 중인지 나타낸다.
+	bool bProjectExperimentConfigTabOpen = false;
+	// Project experiment 분석 상세 임시 tab이 현재 표시 중인지 나타낸다.
+	bool bProjectExperimentResultDetailTabOpen = false;
+	// Project workspace switcher의 현재 logical tab.
+	EProjectWorkspaceTabType ActiveProjectWorkspaceTab = EProjectWorkspaceTabType::ScenarioEdit;
 };

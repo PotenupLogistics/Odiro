@@ -28,6 +28,7 @@ entry:
   - BP_StartupMenuBootstrap
   - WBP_MainMenu
   - WBP_ProjectTemplateCard
+  - WBP_ProjectWorkspaceTab
   - UmgMcp Widget/UmgSetSubsystem.cpp
   - Client/Docs/plans/PLAN-platform-architecture.md
   - Client/Task-RunPreview.bat
@@ -54,8 +55,9 @@ keep:
   - WBP_MainMenu owns control/workspace UI plus the ScenarioEditor root child; C++ requires the asset root to be ProjectWorkspaceScreen and does not create or promote the workspace at runtime.
   - WBP_MainMenu must place ScenarioEditorRootWidget under ProjectScenarioEditPanel, not directly under ProjectWorkspaceScreen.
   - StartupMenu/MainMenu UMG structure changes use UmgMcp asset edits and widget tree verification, not runtime fallback repair.
-  - Project preset and recent project cards reuse `WBP_ProjectTemplateCard`; card item layout, thumbnail fallback, and shadow styling stay in UMG assets.
-  - StartupMenu opens existing projects from a newest-first recent project card WrapBox; card size, spacing, and wrap behavior are WBP-owned, and anchored available width determines the natural card count per row. Recent cards support a right-click confirmation dialog that removes only the recent-list entry.
+  - Project preset and recent project cards reuse `WBP_ProjectTemplateCard`; card item layout, subtitle row, thumbnail fallback, and shadow styling stay in UMG assets.
+  - StartupMenu opens existing projects from a newest-first recent project card WrapBox; card size, spacing, and wrap behavior are WBP-owned, and anchored available width determines the natural card count per row. Recent cards show project folder name plus parent folder subtitle and support a right-click confirmation dialog that removes only the recent-list entry.
+  - StartupMenu project creation keeps parent folder, folder browse, and project name in one WBP-owned row; editor folder browse uses UE DesktopPlatform directory dialogs instead of OS-specific APIs, packaged/headless flows keep text input fallback, and scenario/profile/policy preset choices use dropdowns with hidden card fallback.
   - UmgMcp `query_widget_properties` must not request `Slot`; use `get_widget_tree`, export JSON, or direct `set_widget_properties` slot updates instead.
   - MainMenu project scenario tab lists, opens, and starts runs from the active project session's `<UserProject>/scenario.json` project-run snapshots.
   - MainMenu project result rows use `WBP_FileListItem` primary action for completed detail view and secondary display text for run state.
@@ -63,7 +65,7 @@ keep:
   - StartupMenu creates/validates projects through temporary file-based SimulatorLaunchSubsystem preset-composition helpers, then stores the active project in ProjectSessionSubsystem.
   - MainMenu creates run snapshots through temporary file-based SimulatorLaunchSubsystem workspace helpers using the active project session.
   - MainMenu project mode reads result runs from `<UserProject>/runs/<RunId>` and sends AI analysis through the v2 project-run path.
-  - MainMenu project experiment Add opens a WBP-owned setting editor; its 실행 action saves `<UserProject>/setting.json`, creates a run snapshot, starts the simulator, and then exposes the run in the status list.
+  - MainMenu project experiment uses WBP_ProjectWorkspaceTab for fixed and transient workspace tabs. 설정 opens ProjectExperimentConfigPanel as a switcher peer with a temporary tab; 실행 starts from current `setting.json`; 설정 패널의 저장 writes `setting.json` without launching; result detail opens a temporary 분석 tab. Temporary tab close/cancel/save returns to experiment status.
   - MainMenu project mode must not call SimulationSetup or RunQueue writer/launcher paths.
   - MainMenu project mode must not create/select projects and must not fall back to legacy Json/Input, SimulationSetup, RunQueue, Saved/SimulationRuns, Saved/AnalysisLogs, or text input project paths when no active project session exists.
   - Legacy report + MeasurementLog analysis is removed; MainMenu project mode sends v2 project-run analysis only.
@@ -79,7 +81,7 @@ verify:
   - `OdiroSim.SimulatorLaunch.ProjectRun.Validation` for project launch validation changes
   - `OdiroSim.Platform.AnalysisAi.ProjectRunRequestJsonBuild` for v2 analysis request changes
   - OdiroSimEditor build after runner/trace lifecycle changes
-  - UmgMcp `get_widget_tree` after StartupMenu/MainMenu UMG edits: WBP_StartupMenu owns project selection; WBP_MainMenu root is ProjectWorkspaceScreen; ScenarioEditorRootWidget is under ProjectScenarioEditPanel.
+  - UmgMcp `get_widget_tree` after StartupMenu/MainMenu UMG edits: WBP_StartupMenu owns project selection row/dropdowns; WBP_MainMenu root is ProjectWorkspaceScreen; ScenarioEditorRootWidget is under ProjectScenarioEditPanel; ProjectExperimentConfigPanel is a ProjectWorkspaceSwitcher peer; WBP_ProjectWorkspaceTab has TabButton, TabLabelText, CloseButton, and ActiveIndicator.
   - Blueprint compile/save plus latest log scan for `WidgetVariableNameToGuidMap` after UmgMcp asset edits
   - UI smoke only after StartupMenu/MainMenu workflow changes
 related:

@@ -6,6 +6,7 @@
 #include "StartupMenuWidget.generated.h"
 
 class UButton;
+class UComboBoxString;
 class UEditableTextBox;
 class UProjectSessionSubsystem;
 class UProjectTemplateCardWidget;
@@ -55,10 +56,25 @@ protected:
 	void HandleCreateNewProjectClicked();
 
 	UFUNCTION()
+	void HandleOpenProjectClicked();
+
+	UFUNCTION()
 	void HandleBackToRecentProjectsClicked();
 
 	UFUNCTION()
 	void HandleCreateProjectClicked();
+
+	UFUNCTION()
+	void HandleProjectParentFolderBrowseClicked();
+
+	UFUNCTION()
+	void HandleScenarioPresetSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
+
+	UFUNCTION()
+	void HandleProfilePresetSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
+
+	UFUNCTION()
+	void HandlePolicyPresetSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
 
 private:
 	void BindControls();
@@ -76,9 +92,11 @@ private:
 	void RefreshRecentProjectCards();
 	void RefreshProjectPresetOptions();
 	void RefreshProjectOpenActions();
-	void RefreshProjectPresetCardStates();
+	void RefreshProjectPresetSelectionStates();
 	void SetProjectOpenWarningText(const FString& message);
 	void SetDiagnosticsText(const FString& message);
+	bool BrowseForProjectParentFolder(FString& outFolder) const;
+	bool BrowseForExistingProjectFolder(FString& outFolder) const;
 	bool OpenExistingProject(const FString& projectPath);
 	bool CommitActiveProjectAndOpenEditor();
 	void HandleRecentProjectCardSelected(UProjectTemplateCardWidget* cardWidget);
@@ -129,10 +147,6 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> RecentProjectOpenWarningText;
 
-	// Recent project diagnostics text.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> RecentDiagnosticsTextBlock;
-
 	// Recent project removal confirmation dialog root.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> RecentProjectDeleteDialog;
@@ -153,6 +167,10 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> CreateNewProjectButton;
 
+	// Opens an existing user project folder from the recent project screen.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> OpenProjectButton;
+
 	// Navigates from the creation form back to recent projects.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BackToRecentProjectsButton;
@@ -161,9 +179,25 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableTextBox> ProjectParentFolderTextBox;
 
+	// Opens an OS folder picker for the project parent directory.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> ProjectParentFolderBrowseButton;
+
 	// User project directory name input.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableTextBox> ProjectNameTextBox;
+
+	// Scenario preset dropdown.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> ScenarioPresetSelectionBox;
+
+	// Profile preset dropdown.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> ProfilePresetSelectionBox;
+
+	// Policy preset dropdown.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> PolicyPresetSelectionBox;
 
 	// Scenario preset card container.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

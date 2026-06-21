@@ -71,7 +71,10 @@ FReply UProjectTemplateCardWidget::NativeOnPreviewMouseButtonDown(
 	return Super::NativeOnPreviewMouseButtonDown(inGeometry, inMouseEvent);
 }
 
-void UProjectTemplateCardWidget::InitializeCard(const FString& itemId, const FString& displayName)
+void UProjectTemplateCardWidget::InitializeCard(
+	const FString& itemId,
+	const FString& displayName,
+	const FString& subtitle)
 {
 	ItemId = itemId.TrimStartAndEnd();
 
@@ -81,6 +84,14 @@ void UProjectTemplateCardWidget::InitializeCard(const FString& itemId, const FSt
 	if (CardNameLabel)
 	{
 		CardNameLabel->SetText(FText::FromString(visibleName));
+	}
+	if (CardSubtitleLabel)
+	{
+		const FString visibleSubtitle = subtitle.TrimStartAndEnd();
+		CardSubtitleLabel->SetText(FText::FromString(visibleSubtitle));
+		CardSubtitleLabel->SetVisibility(visibleSubtitle.IsEmpty()
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
 	}
 
 	RefreshVisualState();
@@ -138,6 +149,10 @@ void UProjectTemplateCardWidget::RefreshVisualState()
 	if (CardNameLabel)
 	{
 		CardNameLabel->SetColorAndOpacity(FSlateColor(textColor));
+	}
+	if (CardSubtitleLabel)
+	{
+		CardSubtitleLabel->SetColorAndOpacity(FSlateColor(textColor));
 	}
 }
 

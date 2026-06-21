@@ -15,6 +15,9 @@
 #include "InputMappingContext.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "EngineUtils.h"
+#include "Misc/Guid.h"
+#include "Misc/Paths.h"
 #include "Platform/Widget/MainMenuWidget.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorController, Log, All);
@@ -159,6 +162,48 @@ namespace
 		}
 
 		return true;
+	}
+
+	FString MakeUniqueScenarioSavePath(const FString& preferredPath)
+	{
+		FString directory = FPaths::GetPath(preferredPath);
+		if (directory.IsEmpty())
+		{
+			directory = TEXT("Saved/UserProjects/ScenarioEditor");
+		}
+
+		const FString baseName = FPaths::GetBaseFilename(preferredPath).IsEmpty()
+			? FString(TEXT("scenario"))
+			: FPaths::GetBaseFilename(preferredPath);
+		const FString extension = FPaths::GetExtension(preferredPath).IsEmpty()
+			? FString(TEXT("json"))
+			: FPaths::GetExtension(preferredPath);
+
+		for (int32 index = 0; index < 1000; ++index)
+		{
+			const FString fileName = index == 0
+				? FString::Printf(TEXT("%s.%s"), *baseName, *extension)
+				: FString::Printf(TEXT("%s_%d.%s"), *baseName, index, *extension);
+			FString candidatePath = FPaths::Combine(directory, fileName);
+			candidatePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+			const FString resolvedCandidatePath = FPaths::IsRelative(candidatePath)
+				? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), candidatePath)
+				: FPaths::ConvertRelativePathToFull(candidatePath);
+			if (!FPaths::FileExists(resolvedCandidatePath))
+			{
+				return candidatePath;
+			}
+		}
+
+		FString fallbackPath = FPaths::Combine(
+			directory,
+			FString::Printf(
+				TEXT("%s_%s.%s"),
+				*baseName,
+				*FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(8),
+				*extension));
+		fallbackPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		return fallbackPath;
 	}
 }
 
@@ -758,6 +803,14 @@ bool AScenarioEditorController::SaveProjectScenarioJsonFile(
 	return authoringSubsystem->SaveProjectScenarioJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
 }
 
+bool AScenarioEditorController::SaveCurrentScenarioDraft(
+	FString& outResolvedJsonFilePath,
+	TArray<FString>& outDiagnostics)
+{
+	const FString savePath = ResolveCurrentScenarioDraftSavePath();
+	return SaveProjectScenarioJsonFile(savePath, outResolvedJsonFilePath, outDiagnostics);
+}
+
 FString AScenarioEditorController::GetSourceProjectScenarioJsonPath() const
 {
 	const UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
@@ -766,19 +819,11 @@ FString AScenarioEditorController::GetSourceProjectScenarioJsonPath() const
 
 UScenarioEditorToolbarWidget* AScenarioEditorController::ShowToolbarWidget()
 {
-	UScenarioEditorRootWidget* rootWidget = ShowEditorRootWidget();
-	return rootWidget ? rootWidget->GetToolbarWidget() : nullptr;
+	return nullptr;
 }
 
 void AScenarioEditorController::RemoveToolbarWidget()
 {
-	if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
-	{
-		if (UScenarioEditorToolbarWidget* toolbarWidget = rootWidget->GetToolbarWidget())
-		{
-			toolbarWidget->SetVisibility(ESlateVisibility::Collapsed);
-		}
-	}
 }
 
 UScenarioEditorRootWidget* AScenarioEditorController::ShowEditorRootWidget()
@@ -900,6 +945,33 @@ bool AScenarioEditorController::CanEditTransformGizmoOrientationForSelection() c
 		&& !IsCorridorHandlePlaceable(selectedPlaceable);
 }
 
+bool AScenarioEditorController::SelectPlaceableByInstanceId(const FString& instanceId)
+{
+	if (instanceId.IsEmpty())
+	{
+		ClearSelectedPlaceable();
+		return false;
+	}
+
+	UScenarioPlaceableComponent* placeableComponent = FindSelectablePlaceableByInstanceId(instanceId);
+	if (!placeableComponent)
+	{
+		return false;
+	}
+
+	SetSelectedPlaceable(placeableComponent);
+	return true;
+}
+
+void AScenarioEditorController::ClearSelectedPlaceable()
+{
+	SetSelectedPlaceable(nullptr);
+	if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
+	{
+		rootWidget->SetTemplateSidebarPanel(EScenarioTemplateSidebarPanel::Main);
+	}
+}
+
 void AScenarioEditorController::SetTransformGizmoOrientationMode(
 	EScenarioTransformGizmoOrientationMode orientationMode)
 {
@@ -915,7 +987,7 @@ void AScenarioEditorController::SetTransformGizmoOrientationMode(
 
 	TransformGizmoOrientationMode = orientationMode;
 	UpdateTransformGizmoForSelection();
-	UpdatePlaceableDetailsForSelection(false);
+	UpdatePlaceableDetailsForSelection();
 }
 
 bool AScenarioEditorController::TryUpdateSelectedPlaceableTransform(
@@ -1009,10 +1081,10 @@ bool AScenarioEditorController::TryUpdateSelectedPlaceableTransform(
 	}
 
 	UpdateTransformGizmoForSelection();
-	UpdatePlaceableDetailsForSelection(false);
+	UpdatePlaceableDetailsForSelection();
 	if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
 	{
-		rootWidget->RefreshTemplateSidebarWidget();
+		rootWidget->RefreshScenarioInspector();
 	}
 	return true;
 }
@@ -1054,7 +1126,12 @@ bool AScenarioEditorController::TryRenameSelectedPlaceableInstanceId(
 	}
 
 	UpdateTransformGizmoForSelection();
-	UpdatePlaceableDetailsForSelection(false);
+	UpdatePlaceableDetailsForSelection();
+	SelectedPlaceableChanged.Broadcast(selectedPlaceable->InstanceId);
+	if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
+	{
+		rootWidget->RefreshScenarioInspector();
+	}
 	return true;
 }
 
@@ -1109,6 +1186,12 @@ bool AScenarioEditorController::DeleteSelectedPlaceable(FString& outFailureReaso
 	SelectedPlaceableComponent.Reset();
 	HideTransformGizmo();
 	HidePlaceableDetails();
+	SelectedPlaceableChanged.Broadcast(FString());
+	if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
+	{
+		rootWidget->SetTemplateSidebarPanel(EScenarioTemplateSidebarPanel::Main);
+		rootWidget->RefreshScenarioInspector();
+	}
 	ApplyInputMode();
 	return true;
 }
@@ -1640,7 +1723,7 @@ void AScenarioEditorController::EndTransformGizmoDrag()
 	UpdateTransformGizmoForSelection();
 	if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
 	{
-		rootWidget->RefreshTemplateSidebarWidget();
+		rootWidget->RefreshScenarioInspector();
 	}
 	ApplyInputMode();
 }
@@ -1879,7 +1962,7 @@ bool AScenarioEditorController::ApplyTransformGizmoDragTransform(const FTransfor
 	if (bUpdated)
 	{
 		LastTransformGizmoDragFailureReason.Reset();
-		UpdatePlaceableDetailsForSelection(false);
+		UpdatePlaceableDetailsForSelection();
 		return true;
 	}
 
@@ -2004,6 +2087,46 @@ bool AScenarioEditorController::IsEditorSelectablePlaceable(const UScenarioPlace
 			|| IsRobotRouteMarkerPlaceable(placeableComponent));
 }
 
+UScenarioPlaceableComponent* AScenarioEditorController::FindSelectablePlaceableByInstanceId(
+	const FString& instanceId) const
+{
+	if (instanceId.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	UWorld* world = GetWorld();
+	if (!world)
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<AActor> actorIt(world); actorIt; ++actorIt)
+	{
+		AActor* actor = *actorIt;
+		UScenarioPlaceableComponent* placeableComponent =
+			actor ? actor->FindComponentByClass<UScenarioPlaceableComponent>() : nullptr;
+		if (IsEditorSelectablePlaceable(placeableComponent)
+			&& placeableComponent->InstanceId == instanceId)
+		{
+			return placeableComponent;
+		}
+	}
+
+	return nullptr;
+}
+
+FString AScenarioEditorController::ResolveCurrentScenarioDraftSavePath() const
+{
+	const FString sourcePath = GetSourceProjectScenarioJsonPath();
+	if (!sourcePath.IsEmpty())
+	{
+		return sourcePath;
+	}
+
+	return MakeUniqueScenarioSavePath(DefaultScenarioDraftSavePath);
+}
+
 bool AScenarioEditorController::IsCursorOverEditorWidgetInputModeFocus() const
 {
 	if (!FSlateApplication::IsInitialized())
@@ -2050,6 +2173,7 @@ void AScenarioEditorController::SetSelectedPlaceable(UScenarioPlaceableComponent
 	{
 		UpdateTransformGizmoForSelection();
 		UpdatePlaceableDetailsForSelection();
+		SelectedPlaceableChanged.Broadcast(placeableComponent ? placeableComponent->InstanceId : FString());
 		return;
 	}
 
@@ -2066,6 +2190,19 @@ void AScenarioEditorController::SetSelectedPlaceable(UScenarioPlaceableComponent
 
 	UpdateTransformGizmoForSelection();
 	UpdatePlaceableDetailsForSelection();
+	SelectedPlaceableChanged.Broadcast(placeableComponent ? placeableComponent->InstanceId : FString());
+	if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
+	{
+		if (placeableComponent)
+		{
+			rootWidget->RefreshScenarioInspector();
+		}
+		else
+		{
+			rootWidget->SetTemplateSidebarPanel(EScenarioTemplateSidebarPanel::Main);
+			rootWidget->RefreshScenarioInspector();
+		}
+	}
 }
 
 void AScenarioEditorController::ApplyAuthoringOutlinePostProcessMaterial(
@@ -2670,10 +2807,8 @@ UScenarioPlaceableDetailsWidget* AScenarioEditorController::EnsurePlaceableDetai
 	return rootWidget ? rootWidget->GetPlaceableDetailsWidget() : nullptr;
 }
 
-void AScenarioEditorController::UpdatePlaceableDetailsForSelection(bool bRepositionToMouse)
+void AScenarioEditorController::UpdatePlaceableDetailsForSelection()
 {
-	(void)bRepositionToMouse;
-
 	UScenarioPlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
 	if (!IsEditorSelectablePlaceable(selectedPlaceable))
 	{

@@ -21,6 +21,10 @@ entry:
   - ScenarioSampleJson.h / .cpp
   - ScenarioSampleWorldSpecAdapter.h / .cpp
   - Scenario/Editor/ScenarioAuthoringSubsystem.h / .cpp
+  - Scenario/Editor/ScenarioEditorController.h / .cpp
+  - Scenario/Widget/ScenarioEditorRootWidget.h / .cpp
+  - Scenario/Widget/ScenarioEditorOutlinerWidget.h / .cpp
+  - Scenario/Widget/ScenarioEditorOutlinerRowWidget.h / .cpp
   - Scenario/Llm/ScenarioLlmAuthoringSubsystem.h / .cpp
   - Scenario/Llm/ScenarioLlmPromptWidget.h / .cpp
   - SimulationSetupTypes.h / .cpp
@@ -65,6 +69,9 @@ keep:
   - ScenarioEvaluationSubsystem freezes terminal results and broadcasts a native end request; ScenarioRunnerSubsystem owns DeliveryBot `/scenario/end` coordination, a 3-second watchdog, late-callback rejection, cancellation, and world cleanup after final completion.
   - Scenario LLM authoring saves v2 `scenario` responses to user project `scenario.json`; it must not save or execute RunQueue files.
   - Scenario LLM prompt generate/load/run is scoped to the current `<UserProject>/scenario.json`; run launches create `<UserProject>/runs/<RunId>` snapshots through SimulatorLaunchSubsystem.
+  - Scenario editor selection is controller-owned: viewport clicks and Outliner clicks both route through `AScenarioEditorController::SetSelectedPlaceable`, then root UI mirrors the native selection delegate.
+  - Scenario editor Outliner is limited to authoring targets from ScenarioPlaceableComponent and template groups; it does not enumerate generic UE actors.
+  - Scenario editor save is root/sidebar driven through `SaveCurrentScenarioDraft`; the legacy toolbar is not the active save or detail-panel routing surface.
   - Project run output uses `FUserProjectRunOutputJson` for `result.json`, `events.jsonl`, `actions.jsonl`, `trace.jsonl`, and `summary.json`.
   - `FUserProjectRunOutputJson` maps internal evaluation enums to the external `events.jsonl` `event_type`, `source`, and `reason` contract names; runtime detectors should provide typed snapshot fields, not JSON-specific strings.
   - `FUserProjectRunOutputJson` writes `events.jsonl.action_sequence` from typed `action_sequence` or `policy_sequence` event properties so policy events can join back to `actions.jsonl.sequence`.
@@ -82,6 +89,7 @@ verify:
   - Client/Json/Schema and environment catalog docs against contracts/specs/user-project-data.md before prompt-facing doc changes
   - Scenario document parse, project `scenario.json` adapter, version mismatch, scenario sample generation, and round-trip automation tests
   - Scenario-to-WorldSpec adapter automation tests, including generated user-project scenario sample adapter coverage, and OdiroSimEditor build after adapter/editor draft changes
+  - `OdiroSim.ScenarioEditor.Outliner.Model` and `OdiroSim.ScenarioEditor.Outliner.Selection` after outliner model or selection mapping changes
   - `OdiroSim.UserProjectData.RunOutput.Write` after user project result writer changes
   - `OdiroSim.UserProjectData.RunOutput.TerminalEventReuse` after terminal event JSONL/result summary mapping changes
   - `OdiroSim.ScenarioEvaluation.Events` after runtime evaluation event detector or snapshot changes

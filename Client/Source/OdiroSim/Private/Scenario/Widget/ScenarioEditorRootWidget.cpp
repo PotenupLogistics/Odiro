@@ -3,11 +3,13 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
+#include "Components/WidgetSwitcher.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
 #include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "Scenario/Llm/ScenarioLlmPromptWidget.h"
 #include "Scenario/Widget/ScenarioAssetPaletteWidget.h"
+#include "Scenario/Widget/ScenarioEditorOutlinerWidget.h"
 #include "Scenario/Widget/ScenarioEditorToolbarWidget.h"
 #include "Scenario/Widget/ScenarioPlaceableContextMenuWidget.h"
 #include "Scenario/Widget/ScenarioPlaceableDetailsWidget.h"
@@ -23,20 +25,23 @@ void UScenarioEditorRootWidget::NativeConstruct()
 	Super::NativeConstruct();
 
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	SetPanelVisibility(ToolbarWidget.Get(), false);
 	HidePlaceableDetails();
 	HideAssetPaletteWidget();
-	SetLlmPanelVisible(false);
+	ShowInspectorTab(EScenarioEditorInspectorTab::Detail);
 	BindEditorModeButtons();
-	BindTemplateSidebarToolbar();
-	RefreshTemplateSidebarWidget();
+	BindSidebarControls();
+	SetTemplateSidebarPanel(EScenarioTemplateSidebarPanel::Main);
+	RefreshScenarioInspector();
 	RefreshViewModeButtons();
 	RefreshPlacementSnapButton();
 	BindEditorLaunchSubsystem();
+	SetSaveStatusText(TEXT("Ready"));
 }
 
 void UScenarioEditorRootWidget::NativeDestruct()
 {
-	UnbindTemplateSidebarToolbar();
+	UnbindSidebarControls();
 	UnbindEditorModeButtons();
 	UnbindEditorLaunchSubsystem();
 	Super::NativeDestruct();
@@ -46,10 +51,6 @@ void UScenarioEditorRootWidget::NativeTick(const FGeometry& myGeometry, const fl
 {
 	Super::NativeTick(myGeometry, inDeltaTime);
 
-	if (bAutoRevealLlmPanelOnRightEdge)
-	{
-		SetLlmPanelVisible(ShouldRevealLlmPanelFromMouseEdge());
-	}
 	if (bAutoRevealAssetPaletteOnBottomEdge)
 	{
 		SetAssetPaletteVisible(ShouldRevealAssetPaletteFromMouseEdge(), true);
@@ -98,8 +99,11 @@ UScenarioPlaceableDetailsWidget* UScenarioEditorRootWidget::ShowPlaceableDetails
 	}
 
 	PlaceableContextMenuWidget->SetSelectedPlaceable(selectedPlaceable);
+	ShowInspectorTab(EScenarioEditorInspectorTab::Detail);
+	SetPanelVisibility(ResolveTemplateSidebarVisibilityTarget(), false);
 	SetPanelVisibility(ResolvePlaceableDetailsVisibilityTarget(), true);
 	SetPanelVisibility(PlaceableContextMenuWidget.Get(), true);
+	SyncOutlinerSelectionToPlaceable(selectedPlaceable);
 	return PlaceableContextMenuWidget.Get();
 }
 
@@ -136,28 +140,79 @@ void UScenarioEditorRootWidget::SetLlmPanelVisible(const bool bVisible)
 	SetPanelVisibility(ScenarioEditorLlmWidget.Get(), bVisible);
 }
 
-void UScenarioEditorRootWidget::SetTemplateSidebarPanel(const EScenarioTemplateSidebarPanel activePanel)
+void UScenarioEditorRootWidget::ShowInspectorTab(const EScenarioEditorInspectorTab tab)
+{
+	ActiveInspectorTab = tab;
+	const bool bShowDetail = tab == EScenarioEditorInspectorTab::Detail;
+
+	if (InspectorSwitcher)
+	{
+		UWidget* activeWidget = nullptr;
+		if (bShowDetail && DetailInspectorPanel)
+		{
+			activeWidget = DetailInspectorPanel.Get();
+			InspectorSwitcher->SetActiveWidget(activeWidget);
+		}
+		else if (!bShowDetail && LlmInspectorPanel)
+		{
+			activeWidget = LlmInspectorPanel.Get();
+			InspectorSwitcher->SetActiveWidget(activeWidget);
+		}
+		else
+		{
+			const int32 activeIndex = bShowDetail ? 0 : 1;
+			InspectorSwitcher->SetActiveWidgetIndex(activeIndex);
+			activeWidget = InspectorSwitcher->GetWidgetAtIndex(activeIndex);
+		}
+		if (activeWidget)
+		{
+			SetPanelVisibility(activeWidget, true);
+		}
+		return;
+	}
+
+	SetPanelVisibility(ResolveDetailInspectorVisibilityTarget(), bShowDetail);
+	SetLlmPanelVisible(!bShowDetail);
+}
+
+void UScenarioEditorRootWidget::SetTemplateSidebarPanel(
+	const EScenarioTemplateSidebarPanel activePanel,
+	const bool bSyncOutlinerSelection)
 {
 	UScenarioEditorSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget();
+	HidePlaceableDetails();
+	ShowInspectorTab(EScenarioEditorInspectorTab::Detail);
 	SetPanelVisibility(ResolveTemplateSidebarVisibilityTarget(), true);
 	SetPanelVisibility(sidebarWidget, true);
 	ApplyTemplateSidebarPanel(activePanel);
+	if (bSyncOutlinerSelection && ScenarioEditorOutlinerWidget)
+	{
+		ScenarioEditorOutlinerWidget->SetSelectedItemKey(
+			UScenarioEditorOutlinerWidget::MakeTemplateItemKey(activePanel));
+	}
 }
 
 void UScenarioEditorRootWidget::RefreshTemplateSidebarWidget()
 {
 	UScenarioEditorSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget();
-	SetPanelVisibility(ResolveTemplateSidebarVisibilityTarget(), true);
-	SetPanelVisibility(sidebarWidget, true);
 	if (sidebarWidget)
 	{
 		sidebarWidget->RefreshFromDraft();
 	}
 }
 
-void UScenarioEditorRootWidget::HandleEditorSessionStarted(const bool)
+void UScenarioEditorRootWidget::RefreshScenarioInspector()
 {
 	RefreshTemplateSidebarWidget();
+	if (ScenarioEditorOutlinerWidget)
+	{
+		ScenarioEditorOutlinerWidget->RefreshFromEditorState();
+	}
+}
+
+void UScenarioEditorRootWidget::HandleEditorSessionStarted(const bool)
+{
+	RefreshScenarioInspector();
 
 	if (bAutoRevealAssetPaletteOnBottomEdge)
 	{
@@ -254,12 +309,6 @@ void UScenarioEditorRootWidget::HandleSnapPlacementToGridButtonClicked()
 	}
 }
 
-void UScenarioEditorRootWidget::HandleTemplateSidebarPanelChanged(
-	const EScenarioTemplateSidebarPanel activePanel)
-{
-	SetTemplateSidebarPanel(activePanel);
-}
-
 void UScenarioEditorRootWidget::BindEditorModeButtons()
 {
 	if (TopDownOrthoModeButton)
@@ -304,29 +353,132 @@ void UScenarioEditorRootWidget::UnbindEditorModeButtons()
 	}
 }
 
-void UScenarioEditorRootWidget::BindTemplateSidebarToolbar()
+void UScenarioEditorRootWidget::HandleSaveButtonClicked()
 {
-	if (!ToolbarWidget)
+	AScenarioEditorController* controller = GetEditorController();
+	if (!controller)
 	{
+		SetSaveStatusText(TEXT("Save failed: ScenarioEditorController unavailable."));
 		return;
 	}
 
-	ToolbarWidget->OnSidebarPanelChanged.RemoveDynamic(
-		this,
-		&UScenarioEditorRootWidget::HandleTemplateSidebarPanelChanged);
-	ToolbarWidget->OnSidebarPanelChanged.AddDynamic(
-		this,
-		&UScenarioEditorRootWidget::HandleTemplateSidebarPanelChanged);
-	ApplyTemplateSidebarPanel(ToolbarWidget->GetActiveSidebarPanel());
+	FString resolvedPath;
+	TArray<FString> diagnostics;
+	if (!controller->SaveCurrentScenarioDraft(resolvedPath, diagnostics))
+	{
+		SetSaveStatusText(diagnostics.IsEmpty()
+			? TEXT("Save failed.")
+			: FString::Join(diagnostics, TEXT("\n")));
+		return;
+	}
+
+	SetSaveStatusText(FString::Printf(TEXT("Saved: %s"), *resolvedPath));
+	RefreshScenarioInspector();
 }
 
-void UScenarioEditorRootWidget::UnbindTemplateSidebarToolbar()
+void UScenarioEditorRootWidget::HandleDetailInspectorTabClicked()
 {
-	if (ToolbarWidget)
+	ShowInspectorTab(EScenarioEditorInspectorTab::Detail);
+}
+
+void UScenarioEditorRootWidget::HandleLlmInspectorTabClicked()
+{
+	ShowInspectorTab(EScenarioEditorInspectorTab::Llm);
+}
+
+void UScenarioEditorRootWidget::HandleOutlinerItemSelected(FScenarioOutlinerItemViewModel item)
+{
+	AScenarioEditorController* controller = GetEditorController();
+	if (item.ItemType == EScenarioEditorOutlinerItemType::Placeable)
 	{
-		ToolbarWidget->OnSidebarPanelChanged.RemoveDynamic(
+		if (controller)
+		{
+			controller->SelectPlaceableByInstanceId(item.InstanceId);
+		}
+		return;
+	}
+
+	if (controller)
+	{
+		controller->ClearSelectedPlaceable();
+	}
+	SetTemplateSidebarPanel(item.TemplatePanel, false);
+	if (ScenarioEditorOutlinerWidget)
+	{
+		ScenarioEditorOutlinerWidget->SetSelectedItemKey(item.ItemKey);
+	}
+}
+
+void UScenarioEditorRootWidget::BindSidebarControls()
+{
+	if (SaveButton)
+	{
+		SaveButton->OnClicked.RemoveDynamic(this, &UScenarioEditorRootWidget::HandleSaveButtonClicked);
+		SaveButton->OnClicked.AddDynamic(this, &UScenarioEditorRootWidget::HandleSaveButtonClicked);
+	}
+	if (DetailInspectorTabButton)
+	{
+		DetailInspectorTabButton->OnClicked.RemoveDynamic(
 			this,
-			&UScenarioEditorRootWidget::HandleTemplateSidebarPanelChanged);
+			&UScenarioEditorRootWidget::HandleDetailInspectorTabClicked);
+		DetailInspectorTabButton->OnClicked.AddDynamic(
+			this,
+			&UScenarioEditorRootWidget::HandleDetailInspectorTabClicked);
+	}
+	if (LlmInspectorTabButton)
+	{
+		LlmInspectorTabButton->OnClicked.RemoveDynamic(
+			this,
+			&UScenarioEditorRootWidget::HandleLlmInspectorTabClicked);
+		LlmInspectorTabButton->OnClicked.AddDynamic(
+			this,
+			&UScenarioEditorRootWidget::HandleLlmInspectorTabClicked);
+	}
+	if (ScenarioEditorOutlinerWidget)
+	{
+		ScenarioEditorOutlinerWidget->OnItemSelected.RemoveDynamic(
+			this,
+			&UScenarioEditorRootWidget::HandleOutlinerItemSelected);
+		ScenarioEditorOutlinerWidget->OnItemSelected.AddDynamic(
+			this,
+			&UScenarioEditorRootWidget::HandleOutlinerItemSelected);
+	}
+	if (AScenarioEditorController* controller = GetEditorController())
+	{
+		controller->OnSelectedPlaceableChanged().RemoveAll(this);
+		controller->OnSelectedPlaceableChanged().AddUObject(
+			this,
+			&UScenarioEditorRootWidget::HandleControllerSelectedPlaceableChanged);
+	}
+}
+
+void UScenarioEditorRootWidget::UnbindSidebarControls()
+{
+	if (SaveButton)
+	{
+		SaveButton->OnClicked.RemoveDynamic(this, &UScenarioEditorRootWidget::HandleSaveButtonClicked);
+	}
+	if (DetailInspectorTabButton)
+	{
+		DetailInspectorTabButton->OnClicked.RemoveDynamic(
+			this,
+			&UScenarioEditorRootWidget::HandleDetailInspectorTabClicked);
+	}
+	if (LlmInspectorTabButton)
+	{
+		LlmInspectorTabButton->OnClicked.RemoveDynamic(
+			this,
+			&UScenarioEditorRootWidget::HandleLlmInspectorTabClicked);
+	}
+	if (ScenarioEditorOutlinerWidget)
+	{
+		ScenarioEditorOutlinerWidget->OnItemSelected.RemoveDynamic(
+			this,
+			&UScenarioEditorRootWidget::HandleOutlinerItemSelected);
+	}
+	if (AScenarioEditorController* controller = GetEditorController())
+	{
+		controller->OnSelectedPlaceableChanged().RemoveAll(this);
 	}
 }
 
@@ -424,20 +576,72 @@ UWidget* UScenarioEditorRootWidget::ResolveAssetPaletteVisibilityTarget() const
 
 UWidget* UScenarioEditorRootWidget::ResolveLlmPanelVisibilityTarget() const
 {
+	if (LlmInspectorPanel)
+	{
+		return LlmInspectorPanel.Get();
+	}
 	return LlmPanel ? LlmPanel.Get() : Cast<UWidget>(ScenarioEditorLlmWidget.Get());
+}
+
+UWidget* UScenarioEditorRootWidget::ResolveDetailInspectorVisibilityTarget() const
+{
+	if (DetailInspectorPanel)
+	{
+		return DetailInspectorPanel.Get();
+	}
+	return ResolveTemplateSidebarVisibilityTarget();
+}
+
+void UScenarioEditorRootWidget::SetSaveStatusText(const FString& message) const
+{
+	if (SaveStatusText)
+	{
+		SaveStatusText->SetText(FText::FromString(message));
+	}
+}
+
+void UScenarioEditorRootWidget::SyncOutlinerSelectionToPlaceable(
+	const UScenarioPlaceableComponent* selectedPlaceable) const
+{
+	if (!ScenarioEditorOutlinerWidget)
+	{
+		return;
+	}
+
+	const FString itemKey = selectedPlaceable && !selectedPlaceable->InstanceId.IsEmpty()
+		? UScenarioEditorOutlinerWidget::MakePlaceableItemKey(selectedPlaceable->InstanceId)
+		: UScenarioEditorOutlinerWidget::MakeTemplateItemKey(EScenarioTemplateSidebarPanel::Main);
+	ScenarioEditorOutlinerWidget->SetSelectedItemKey(itemKey);
+}
+
+void UScenarioEditorRootWidget::HandleControllerSelectedPlaceableChanged(
+	const FString& selectedInstanceId)
+{
+	if (!ScenarioEditorOutlinerWidget)
+	{
+		return;
+	}
+
+	ScenarioEditorOutlinerWidget->SetSelectedItemKey(
+		selectedInstanceId.IsEmpty()
+			? UScenarioEditorOutlinerWidget::MakeTemplateItemKey(EScenarioTemplateSidebarPanel::Main)
+			: UScenarioEditorOutlinerWidget::MakePlaceableItemKey(selectedInstanceId));
 }
 
 void UScenarioEditorRootWidget::SetAssetPaletteVisible(const bool bVisible, const bool bRebuildWhenShowing)
 {
-	const UWidget* visibilityTarget = ResolveAssetPaletteVisibilityTarget();
+	UWidget* visibilityTarget = ResolveAssetPaletteVisibilityTarget();
 	const bool bWasVisible = visibilityTarget && visibilityTarget->GetVisibility() != ESlateVisibility::Collapsed;
 	if (bVisible && bRebuildWhenShowing && !bWasVisible && AssetPaletteWidget)
 	{
 		AssetPaletteWidget->RebuildPalette();
 	}
 
-	SetPanelVisibility(ResolveAssetPaletteVisibilityTarget(), bVisible);
-	SetPanelVisibility(AssetPaletteWidget.Get(), bVisible);
+	SetPanelVisibility(visibilityTarget, bVisible);
+	if (visibilityTarget != AssetPaletteWidget.Get())
+	{
+		SetPanelVisibility(AssetPaletteWidget.Get(), bVisible);
+	}
 }
 
 void UScenarioEditorRootWidget::SetPanelVisibility(UWidget* targetWidget, const bool bVisible) const
@@ -483,41 +687,6 @@ bool UScenarioEditorRootWidget::ShouldRevealAssetPaletteFromMouseEdge() const
 	const float hideThreshold = FMath::Max(AssetPaletteRevealBottomEdgePixels, AssetPaletteHideBottomEdgePixels);
 	const float threshold = bPanelVisible ? hideThreshold : AssetPaletteRevealBottomEdgePixels;
 	return (static_cast<float>(viewportSizeY) - mouseY) <= threshold;
-}
-
-bool UScenarioEditorRootWidget::ShouldRevealLlmPanelFromMouseEdge() const
-{
-	const APlayerController* owningPlayer = GetOwningPlayer();
-	if (!owningPlayer)
-	{
-		return false;
-	}
-
-	float mouseX = 0.0f;
-	float mouseY = 0.0f;
-	if (!owningPlayer->GetMousePosition(mouseX, mouseY))
-	{
-		return false;
-	}
-
-	int32 viewportSizeX = 0;
-	int32 viewportSizeY = 0;
-	owningPlayer->GetViewportSize(viewportSizeX, viewportSizeY);
-	if (viewportSizeX <= 0)
-	{
-		return false;
-	}
-
-	const UWidget* llmVisibilityTarget = ResolveLlmPanelVisibilityTarget();
-	const bool bPanelVisible = llmVisibilityTarget && llmVisibilityTarget->GetVisibility() != ESlateVisibility::Collapsed;
-	if (bPanelVisible && IsMouseOverWidget(llmVisibilityTarget))
-	{
-		return true;
-	}
-
-	const float hideThreshold = FMath::Max(LlmPanelRevealRightEdgePixels, LlmPanelHideRightEdgePixels);
-	const float threshold = bPanelVisible ? hideThreshold : LlmPanelRevealRightEdgePixels;
-	return (static_cast<float>(viewportSizeX) - mouseX) <= threshold;
 }
 
 bool UScenarioEditorRootWidget::IsMouseOverWidget(const UWidget* targetWidget) const

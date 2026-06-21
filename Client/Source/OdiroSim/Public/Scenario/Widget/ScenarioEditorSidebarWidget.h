@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Scenario/Widget/ScenarioEditorToolbarWidget.h"
+#include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "Shared/ScenarioDocumentTypes.h"
 #include "ScenarioEditorSidebarWidget.generated.h"
 

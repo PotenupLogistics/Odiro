@@ -33,6 +33,9 @@ entry:
   - WBP_ProjectRunMetricCard
   - WBP_ProjectEpisodeReplayCard
   - WBP_ProjectAiSuggestionRow
+  - WBP_ScenarioEditorRootWidget
+  - ScenarioEditorOutlinerWidget.h / .cpp
+  - ScenarioEditorOutlinerRowWidget.h / .cpp
   - UmgMcp Widget/UmgSetSubsystem.cpp
   - UE_MCP_Bridge `capture_slate_window`
   - UE_MCP_Bridge `dump_runtime_widget_geometry`
@@ -60,6 +63,10 @@ keep:
   - WBP_MainMenu root is the project workspace surface; project selection, recent project cards, and create controls belong only to WBP_StartupMenu.
   - WBP_MainMenu owns control/workspace UI plus the ScenarioEditor root child; C++ requires the asset root to be ProjectWorkspaceScreen and does not create or promote the workspace at runtime.
   - WBP_MainMenu must place ScenarioEditorRootWidget under ProjectScenarioEditPanel, not directly under ProjectWorkspaceScreen.
+  - WBP_ScenarioEditorRootWidget owns the Scenario editor right Sidebar layout: SaveButton/SaveStatusText, ScenarioEditorOutlinerWidget, InspectorSwitcher, DetailInspectorPanel, LlmInspectorPanel, Detail/LLM tab buttons, TemplateSidebarPanel, PlaceableContextMenuPanel, and the moved LlmPanel. C++ only handles save, selection sync, tab switching, and data refresh.
+  - Scenario editor Outliner lists only editor-authored scenario objects. General UE actors such as lights, cameras, controllers, and editor helpers stay out of the outliner.
+  - Scenario editor LLM is Inspector-tab-only; do not reintroduce right-edge auto reveal.
+  - ScenarioEditorToolbarWidget is legacy C++ compatibility only; WBP_ScenarioEditorRootWidget must not contain ToolbarWidget in its widget tree.
   - StartupMenu/MainMenu UMG structure changes use UmgMcp asset edits and widget tree verification, not runtime fallback repair.
   - Project preset and recent project cards reuse `WBP_ProjectTemplateCard`; card item layout, subtitle row, thumbnail fallback, and shadow styling stay in UMG assets.
   - StartupMenu opens existing projects from a newest-first recent project card WrapBox; card size, spacing, and wrap behavior are WBP-owned, and anchored available width determines the natural card count per row. Recent cards show project folder name plus parent folder subtitle and support a right-click confirmation dialog that removes only the recent-list entry.
@@ -91,10 +98,12 @@ verify:
   - `OdiroSim.Platform.AnalysisAi.ProjectRunRequestJsonBuild` for v2 analysis request changes
   - `OdiroSim.ProjectRun.ResultDashboard.Summary` for summary.json duration/success/collision aggregation
   - `OdiroSim.ProjectRun.ResultDashboard.Ai` for AI v2 summary/recommendation parsing and empty recommendation handling
+  - `OdiroSim.ScenarioEditor.Outliner.Model` for Scenario editor outliner item order/filter/selection state
+  - `OdiroSim.ScenarioEditor.Outliner.Selection` for Scenario editor outliner key mapping and collapsed-parent filtering
   - OdiroSimEditor build after runner/trace lifecycle changes
-  - UmgMcp `get_widget_tree` after StartupMenu/MainMenu UMG edits: WBP_StartupMenu owns project selection row/dropdowns; WBP_MainMenu root is ProjectWorkspaceScreen; ScenarioEditorRootWidget is under ProjectScenarioEditPanel; ProjectExperimentConfigPanel is a ProjectWorkspaceSwitcher peer; WBP_ProjectWorkspaceTab has TabButton, TabLabelText, CloseButton, and ActiveIndicator; result dashboard exposes ExperimentResultDetailTitleText, metric cards, EpisodeReplayCardWrapBox, AiAnalysisActionBox, AiSuggestionPanel, and the three result dashboard card WBP named children.
+  - UmgMcp `get_widget_tree` after StartupMenu/MainMenu/ScenarioEditor UMG edits: WBP_StartupMenu owns project selection row/dropdowns; WBP_MainMenu root is ProjectWorkspaceScreen; ScenarioEditorRootWidget is under ProjectScenarioEditPanel; WBP_ScenarioEditorRootWidget has no ToolbarWidget and exposes right-sidebar SaveButton, SaveStatusText, ScenarioEditorOutlinerWidget, InspectorSwitcher, TemplateSidebarPanel, PlaceableContextMenuPanel, LlmInspectorPanel, and Detail/LLM tab buttons; ProjectExperimentConfigPanel is a ProjectWorkspaceSwitcher peer; WBP_ProjectWorkspaceTab has TabButton, TabLabelText, CloseButton, and ActiveIndicator; result dashboard exposes ExperimentResultDetailTitleText, metric cards, EpisodeReplayCardWrapBox, AiAnalysisActionBox, AiSuggestionPanel, and the three result dashboard card WBP named children.
   - Blueprint compile/save plus latest log scan for `WidgetVariableNameToGuidMap` after UmgMcp asset edits
-  - UI smoke only after StartupMenu/MainMenu workflow changes
+  - UI smoke only after StartupMenu/MainMenu workflow changes; for Scenario editor layout, confirm UMG asset tree and runtime widget visibility/geometry through MCP `dump_runtime_widget_geometry`, then use `capture_slate_window` or preview screenshots as pixel evidence.
 related:
   - client-runtime-foundation
   - client-simulation

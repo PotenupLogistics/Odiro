@@ -212,6 +212,33 @@ def test_policy_recommendation_copies_and_modifies_only_review_policy(tmp_path: 
     assert "runs/000001/review/0001/policy/path_follower.py" in manifest["generated_files"]
 
 
+def test_successful_policy_recommendation_reason_avoids_failure_wording(tmp_path: Path) -> None:
+    """Successful runs with safety evidence use a non-failure top-level recommendation reason."""
+    project = tmp_path / "Project1"
+    _write_policy(project)
+    _write_episode(
+        project,
+        {"success": True, "goal_reached": True, "penalty_region_violation_count": 2},
+        '{"event_type": "Repath"}\n{"event_type": "Repath"}\n',
+    )
+
+    response = _post_analysis(project)
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    review_dir = project / "runs" / "000001" / "review" / "0001"
+    recommendations = _read_json(review_dir / "recommendations.json")
+    assert payload["recommendation_type"] == "policy_review"
+    assert recommendations["recommendation_type"] == "policy_review"
+    assert recommendations["reason"] == (
+        "주행은 성공했지만, 패널티 구역 침범과 경로 재탐색 반복 등 정책 검토가 필요한 근거가 확인되었습니다."
+    )
+    assert "실패 근거" not in recommendations["reason"]
+    assert "실패 근거" not in payload["summary"]["message"]
+    assert "실패 근거" not in payload["analysis_text"]
+    assert all("실패 근거" not in recommendation["reason"] for recommendation in payload["recommendations"])
+
+
 def test_environment_recommendation_copies_and_modifies_only_root_scenario(tmp_path: Path) -> None:
     """Environment recommendations modify only review/scenario.json."""
     project = tmp_path / "Project1"

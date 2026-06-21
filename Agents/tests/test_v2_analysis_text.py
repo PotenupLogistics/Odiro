@@ -93,8 +93,8 @@ def test_analysis_text_mentions_environment_candidate_when_generated(tmp_path: P
     _assert_report_sections(text)
 
 
-def test_analysis_text_counts_environment_evidence_episodes_not_trace_only_episodes(tmp_path: Path) -> None:
-    """Environment evidence counts ignore episodes that only have auxiliary logs."""
+def test_analysis_text_avoids_scope_like_episode_count_for_environment_evidence(tmp_path: Path) -> None:
+    """Environment evidence text avoids wording that looks like total analyzed episodes."""
     project = tmp_path / "Project1"
     (project / "scenario.json").parent.mkdir(parents=True, exist_ok=True)
     (project / "scenario.json").write_text(json.dumps({"obstacles": {"placements": []}}), encoding="utf-8")
@@ -107,8 +107,69 @@ def test_analysis_text_counts_environment_evidence_episodes_not_trace_only_episo
 
     assert response.status_code == 200, response.text
     text = response.json()["analysis_text"]
-    assert "분석 가능한 1개 에피소드에서 정적 장애물 충돌" in text
+    assert "로그에서 정적 장애물 충돌이 총 1회 확인되었습니다." in text
+    assert "분석 가능한 1개 에피소드에서 정적 장애물 충돌" not in text
     assert "분석 가능한 2개 에피소드에서 정적 장애물 충돌" not in text
+
+
+def test_analysis_text_mentions_pedestrian_collision_in_environment_review(tmp_path: Path) -> None:
+    """Environment review text includes pedestrian collisions alongside static obstacle collisions."""
+    project = tmp_path / "Project1"
+    (project / "scenario.json").parent.mkdir(parents=True, exist_ok=True)
+    (project / "scenario.json").write_text(json.dumps({"obstacles": {"placements": []}}), encoding="utf-8")
+    episode_dir = project / "runs" / "000001" / "episodes" / "000001"
+    episode_dir.mkdir(parents=True)
+    (episode_dir / "result.json").write_text(
+        json.dumps(
+            {
+                "schema": "episode_result",
+                "version": 1,
+                "summary": {"success": False, "terminal_reason": "StaticObstacleCollision"},
+                "event_summary": {"by_type": {"StaticObstacleCollision": 74, "PedestrianCollision": 104}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    response = _post_analysis(project)
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    review_dir = project / "runs" / "000001" / "review" / "0001"
+    report = _read_json(review_dir / "report.json")
+    text = payload["analysis_text"]
+    assert payload["recommendation_type"] == "environment_review"
+    assert payload["metrics"]["pedestrian_collision_count"] == 104
+    assert "정적 장애물 충돌 74회와 보행자 충돌 104회가 확인되었습니다." in text
+    assert "분석 가능한 1개 에피소드에서 정적 장애물 충돌" not in text
+    assert any(finding["type"] == "pedestrian_collision" for finding in report["findings"])
+    assert any(item["metric"] == "pedestrian_collision_count" for item in report["evidence"])
+
+
+def test_analysis_text_mentions_repath_when_environment_review_has_repath_metric(tmp_path: Path) -> None:
+    """Environment review text can include repeated path replanning evidence."""
+    project = tmp_path / "Project1"
+    (project / "scenario.json").parent.mkdir(parents=True, exist_ok=True)
+    (project / "scenario.json").write_text(json.dumps({"obstacles": {"placements": []}}), encoding="utf-8")
+    episode_dir = project / "runs" / "000001" / "episodes" / "000001"
+    episode_dir.mkdir(parents=True)
+    (episode_dir / "result.json").write_text(
+        json.dumps(
+            {
+                "summary": {"success": False, "terminal_reason": "StaticObstacleCollision"},
+                "event_summary": {"by_type": {"StaticObstacleCollision": 3, "Repath": 7}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    response = _post_analysis(project)
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["recommendation_type"] == "environment_review"
+    assert payload["metrics"]["repath_count"] == 7
+    assert "경로 재탐색" in payload["analysis_text"]
 
 
 def test_analysis_text_distinguishes_missing_scenario_from_parse_failure(tmp_path: Path) -> None:

@@ -56,6 +56,8 @@ class AnalysisMetricsV2(BaseModel):
     static_obstacle_collision_count: int = Field(default=0, ge=0)
     pedestrian_collision_count: int = Field(default=0, ge=0)
     near_miss_count: int = Field(ge=0)
+    repath_count: int = Field(default=0, ge=0)
+    robot_tip_over_count: int = Field(default=0, ge=0)
     blocked_region_violation_count: int = Field(ge=0)
     penalty_region_violation_count: int = Field(ge=0)
 

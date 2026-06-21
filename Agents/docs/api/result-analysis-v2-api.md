@@ -127,7 +127,9 @@ API response는 review JSON 파일과 일부 값이 다르다. 특히 `analysis_
     "pedestrian_collision_count": 0,
     "blocked_region_violation_count": 0,
     "penalty_region_violation_count": 0,
-    "near_miss_count": 1
+    "near_miss_count": 1,
+    "repath_count": 0,
+    "robot_tip_over_count": 0
   },
   "recommendation_type": "environment_review",
   "recommendations": [
@@ -206,6 +208,8 @@ metrics는 episode result/events를 정규화해 집계한 수치다.
 | `blocked_region_violation_count` | integer | blocked region 침범/충돌 횟수. |
 | `penalty_region_violation_count` | integer | penalty region 침범 횟수. |
 | `near_miss_count` | integer | 보행자 또는 장애물 근접 위험 횟수. |
+| `repath_count` | integer | 경로 재탐색 이벤트 횟수. |
+| `robot_tip_over_count` | integer | 로봇 전도 이벤트 횟수. |
 
 구현에 따라 추가 metric이 포함될 수 있다. 클라이언트는 모르는 필드를 무시할 수 있어야 한다.
 
@@ -226,7 +230,7 @@ metrics는 episode result/events를 정규화해 집계한 수치다.
 | evidence-backed finding 없음 | `none` |
 | `static_obstacle_collision` 또는 `blocked_region_collision` 존재 | `environment_review` 우선 |
 | pedestrian collision만 있고 static/blocked 환경 근거가 없음 | 현재 정책 안전 대응 성격으로 `policy_review` |
-| `penalty_region_violation`, `timeout`, `goal_not_reached`, `near_miss`, `policy_decision_error`, `stuck` 등 존재 | `policy_review` |
+| `penalty_region_violation`, `timeout`, `goal_not_reached`, `near_miss`, `repath`, `robot_tip_over`, `policy_decision_error`, `stuck` 등 존재 | `policy_review` |
 
 ## 10. Recommendations Array
 
@@ -406,7 +410,9 @@ review 폴더에 환경 수정 후보가 생성되었습니다.
     "collision_count": 152,
     "static_obstacle_collision_count": 152,
     "pedestrian_collision_count": 0,
-    "near_miss_count": 1
+    "near_miss_count": 1,
+    "repath_count": 0,
+    "robot_tip_over_count": 0
   },
   "data_coverage": {
     "episode_dirs_count": 4,
@@ -719,6 +725,7 @@ patterns는 episode 반복 패턴을 나타낸다. 같은 pattern에 같은 `(ru
 | `PedestrianCollision` | `pedestrian_collision` |
 | `Timeout` | `timeout` |
 | `RobotTipOver` | `robot_tip_over` |
+| `Repath` | `repath` |
 | `Stuck` | `stuck` |
 | `PolicyDecisionError` | `policy_decision_error` |
 

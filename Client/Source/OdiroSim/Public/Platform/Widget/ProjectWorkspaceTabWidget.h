@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Styling/SlateTypes.h"
 #include "ProjectWorkspaceTabWidget.generated.h"
 
 class UButton;
@@ -58,6 +59,9 @@ protected:
 	void HandleCloseButtonClicked();
 
 private:
+	// 현재 tab state를 WBP의 optional visual widgets에 반영한다.
+	void ApplyTabVisualState();
+
 	// Tab 전체 click target. Visual layout은 WBP가 소유한다.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> TabButton;
@@ -74,6 +78,10 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> ActiveIndicator;
 
+	// Optional active-state TabButton style source. WBP owns the actual color values.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> ActiveTabButtonStyleSource;
+
 	// 이 tab의 stable logical id.
 	FName TabId;
 
@@ -82,4 +90,10 @@ private:
 
 	// 이 tab의 현재 closable 상태.
 	bool bClosable = false;
+
+	// WBP가 지정한 inactive TabButton style snapshot.
+	FButtonStyle InactiveTabButtonStyle;
+
+	// InactiveTabButtonStyle snapshot 생성 여부.
+	bool bHasInactiveTabButtonStyle = false;
 };

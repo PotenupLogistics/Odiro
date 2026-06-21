@@ -560,6 +560,10 @@ void UScenarioEditorSidebarFieldRow::RefreshRow()
 		MaxValueEditableTextBox.Get(),
 		TextStyleCatalog,
 		EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyComboBoxStringStyle(
+		ValueComboBox.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value);
 	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
 		RangeSeparatorTextBlock.Get(),
 		TextStyleCatalog,

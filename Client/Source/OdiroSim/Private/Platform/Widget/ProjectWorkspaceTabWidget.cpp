@@ -10,6 +10,8 @@ void UProjectWorkspaceTabWidget::NativeConstruct()
 
 	if (TabButton)
 	{
+		InactiveTabButtonStyle = TabButton->GetStyle();
+		bHasInactiveTabButtonStyle = true;
 		TabButton->OnClicked.RemoveDynamic(this, &UProjectWorkspaceTabWidget::HandleTabButtonClicked);
 		TabButton->OnClicked.AddDynamic(this, &UProjectWorkspaceTabWidget::HandleTabButtonClicked);
 	}
@@ -17,13 +19,9 @@ void UProjectWorkspaceTabWidget::NativeConstruct()
 	{
 		CloseButton->OnClicked.RemoveDynamic(this, &UProjectWorkspaceTabWidget::HandleCloseButtonClicked);
 		CloseButton->OnClicked.AddDynamic(this, &UProjectWorkspaceTabWidget::HandleCloseButtonClicked);
-		CloseButton->SetVisibility(bClosable ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	}
-	if (ActiveIndicator)
-	{
-		ActiveIndicator->SetVisibility(bActive ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	}
 
+	ApplyTabVisualState();
 	BP_OnTabStateChanged(bActive, bClosable);
 }
 
@@ -62,10 +60,7 @@ void UProjectWorkspaceTabWidget::SetTabActive(const bool bInActive)
 	}
 
 	bActive = bInActive;
-	if (ActiveIndicator)
-	{
-		ActiveIndicator->SetVisibility(bActive ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	}
+	ApplyTabVisualState();
 	BP_OnTabStateChanged(bActive, bClosable);
 }
 
@@ -77,10 +72,7 @@ void UProjectWorkspaceTabWidget::SetTabClosable(const bool bInClosable)
 	}
 
 	bClosable = bInClosable;
-	if (CloseButton)
-	{
-		CloseButton->SetVisibility(bClosable ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	}
+	ApplyTabVisualState();
 	BP_OnTabStateChanged(bActive, bClosable);
 }
 
@@ -97,4 +89,27 @@ void UProjectWorkspaceTabWidget::HandleTabButtonClicked()
 void UProjectWorkspaceTabWidget::HandleCloseButtonClicked()
 {
 	OnCloseRequested.Broadcast(this);
+}
+
+void UProjectWorkspaceTabWidget::ApplyTabVisualState()
+{
+	if (CloseButton)
+	{
+		CloseButton->SetVisibility(bClosable ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+	if (ActiveIndicator)
+	{
+		ActiveIndicator->SetVisibility(bActive ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+	if (TabButton)
+	{
+		if (bActive && ActiveTabButtonStyleSource)
+		{
+			TabButton->SetStyle(ActiveTabButtonStyleSource->GetStyle());
+		}
+		else if (bHasInactiveTabButtonStyle)
+		{
+			TabButton->SetStyle(InactiveTabButtonStyle);
+		}
+	}
 }

@@ -29,11 +29,19 @@ namespace
 	constexpr float SidebarPadding = 10.0f;
 	constexpr float SidebarPanelContentTopPadding = 4.0f;
 	constexpr float BlockOutlineThickness = 1.0f;
-	const FLinearColor PanelColor(0.11f, 0.13f, 0.15f, 0.92f);
-	const FLinearColor BlockColor(0.14f, 0.17f, 0.20f, 0.96f);
-	const FLinearColor NestedBlockColor(0.17f, 0.20f, 0.24f, 0.96f);
-	const FLinearColor BlockOutlineColor(0.27f, 0.33f, 0.39f, 1.0f);
-	const FLinearColor ActiveBlockOutlineColor(0.28f, 0.65f, 1.0f, 1.0f);
+
+	FLinearColor MakeUiColor(const TCHAR* hex, const float alpha = 1.0f)
+	{
+		FLinearColor color = FLinearColor::FromSRGBColor(FColor::FromHex(hex));
+		color.A = alpha;
+		return color;
+	}
+
+	const FLinearColor PanelColor = MakeUiColor(TEXT("1B1B1B"), 0.96f);
+	const FLinearColor BlockColor = MakeUiColor(TEXT("1B1B1B"), 0.96f);
+	const FLinearColor NestedBlockColor = MakeUiColor(TEXT("202020"), 0.96f);
+	const FLinearColor BlockOutlineColor = MakeUiColor(TEXT("353535"));
+	const FLinearColor ActiveBlockOutlineColor = MakeUiColor(TEXT("0070E0"));
 
 	FString JoinLines(const TArray<FString>& lines)
 	{

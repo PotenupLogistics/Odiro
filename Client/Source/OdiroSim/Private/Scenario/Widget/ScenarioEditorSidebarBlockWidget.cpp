@@ -17,12 +17,20 @@ namespace
 {
 	constexpr float SidebarBlockPadding = 10.0f;
 	constexpr float SidebarBlockOutlineThickness = 1.0f;
-	const FLinearColor SidebarBlockColor(0.14f, 0.17f, 0.20f, 0.96f);
-	const FLinearColor SidebarNestedBlockColor(0.17f, 0.20f, 0.24f, 0.96f);
-	const FLinearColor SidebarNestedLeafBlockColor(0.10f, 0.13f, 0.17f, 0.98f);
-	const FLinearColor SidebarBlockOutlineColor(0.27f, 0.33f, 0.39f, 1.0f);
-	const FLinearColor SidebarTransparentOutlineColor(0.27f, 0.33f, 0.39f, 0.0f);
-	const FLinearColor SidebarSelectedBlockOutlineColor(0.28f, 0.65f, 1.0f, 1.0f);
+
+	FLinearColor MakeUiColor(const TCHAR* hex, const float alpha = 1.0f)
+	{
+		FLinearColor color = FLinearColor::FromSRGBColor(FColor::FromHex(hex));
+		color.A = alpha;
+		return color;
+	}
+
+	const FLinearColor SidebarBlockColor = MakeUiColor(TEXT("1B1B1B"), 0.96f);
+	const FLinearColor SidebarNestedBlockColor = MakeUiColor(TEXT("202020"), 0.96f);
+	const FLinearColor SidebarNestedLeafBlockColor = MakeUiColor(TEXT("151515"), 0.98f);
+	const FLinearColor SidebarBlockOutlineColor = MakeUiColor(TEXT("353535"));
+	const FLinearColor SidebarTransparentOutlineColor = MakeUiColor(TEXT("353535"), 0.0f);
+	const FLinearColor SidebarSelectedBlockOutlineColor = MakeUiColor(TEXT("0070E0"));
 
 	FSlateBrush MakeBlockBrush(const FLinearColor& color)
 	{

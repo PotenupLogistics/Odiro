@@ -12,6 +12,7 @@ class UScenarioEditorLaunchSubsystem;
 class UExperimentResultIterationButton;
 class UFileListItemWidget;
 class UPlatformAnalysisAiSubsystem;
+class UProjectExperimentRunRowWidget;
 class UProjectWorkspaceTabWidget;
 class UProjectSessionSubsystem;
 class UScenarioEditorRootWidget;
@@ -84,6 +85,8 @@ protected:
 	void HandleExperimentConfigEditRequested(UFileListItemWidget* itemWidget);
 	void HandleExperimentConfigPlayRequested(UFileListItemWidget* itemWidget);
 	void HandleExperimentResultDetailsRequested(UFileListItemWidget* itemWidget);
+	// Project experiment run row의 분석 요청을 상세 탭 열기 흐름으로 연결한다.
+	void HandleProjectExperimentRunAnalyzeRequested(UProjectExperimentRunRowWidget* rowWidget);
 	void HandleExperimentResultIterationButtonClicked(UExperimentResultIterationButton* buttonWidget);
 
 	UFUNCTION()
@@ -255,6 +258,8 @@ private:
 		FSimulationSetup& outSetup,
 		TArray<FString>& outDiagnostics) const;
 	TSubclassOf<UFileListItemWidget> ResolveFileListItemWidgetClass() const;
+	// Project experiment run row WBP class를 반환한다.
+	TSubclassOf<UProjectExperimentRunRowWidget> ResolveProjectExperimentRunRowWidgetClass() const;
 	// Episode replay card WBP class를 반환한다.
 	TSubclassOf<UUserWidget> ResolveProjectEpisodeReplayCardWidgetClass() const;
 	// AI suggestion row WBP class를 반환한다.
@@ -500,6 +505,10 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> RunExperimentButton;
 
+	// Project experiment run 현황 switcher page. UI layout은 WBP_MainMenu가 소유한다.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ProjectExperimentStatusPanel;
+
 	// Project experiment 설정 editor panel. UI layout은 WBP_MainMenu가 소유한다.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> ProjectExperimentConfigPanel;
@@ -603,6 +612,10 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|List")
 	TSubclassOf<UFileListItemWidget> FileListItemWidgetClass;
 
+	// Project experiment status row WBP class.
+	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|ProjectExperiment")
+	TSubclassOf<UProjectExperimentRunRowWidget> ProjectExperimentRunRowWidgetClass;
+
 	// Project run episode replay card WBP class.
 	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|ProjectResult")
 	TSubclassOf<UUserWidget> ProjectEpisodeReplayCardWidgetClass;
@@ -622,6 +635,10 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UFileListItemWidget>> ExperimentResultListItems;
+
+	// Project experiment status의 동적 run row 목록.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProjectExperimentRunRowWidget>> ProjectExperimentRunRows;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UExperimentResultIterationButton>> ExperimentResultIterationButtons;

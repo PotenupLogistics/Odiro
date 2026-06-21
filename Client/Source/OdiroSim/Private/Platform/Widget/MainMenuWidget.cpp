@@ -25,6 +25,7 @@
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Platform/Widget/ExperimentResultIterationButton.h"
 #include "Platform/Widget/FileListItemWidget.h"
+#include "Platform/Widget/ProjectExperimentRunRowWidget.h"
 #include "Platform/Widget/ProjectWorkspaceTabWidget.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
 #include "Scenario/Widget/ScenarioEditorRootWidget.h"
@@ -50,6 +51,8 @@ namespace
 	const TCHAR* DeliveryBotTemplatePath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
 	const TCHAR* FileListItemWidgetBlueprintClassPath =
 		TEXT("/Game/Widgets/MainMenu/WBP_FileListItem.WBP_FileListItem_C");
+	const TCHAR* ProjectExperimentRunRowWidgetBlueprintClassPath =
+		TEXT("/Game/Widgets/MainMenu/WBP_ProjectExperimentRunRow.WBP_ProjectExperimentRunRow_C");
 	const TCHAR* ProjectEpisodeReplayCardWidgetBlueprintClassPath =
 		TEXT("/Game/Widgets/MainMenu/WBP_ProjectEpisodeReplayCard.WBP_ProjectEpisodeReplayCard_C");
 	const TCHAR* ProjectAiSuggestionRowWidgetBlueprintClassPath =
@@ -338,22 +341,9 @@ namespace
 		return TEXT("Unknown");
 	}
 
-	FString ToProjectRunStatusLabel(const ESimulationRunState state)
+	float ResolveProjectRunProgressPercent(const ESimulationRunState state)
 	{
-		switch (state)
-		{
-		case ESimulationRunState::Running:
-			return TEXT("실행중");
-		case ESimulationRunState::Completed:
-			return TEXT("완료");
-		case ESimulationRunState::Failed:
-			return TEXT("실패");
-		case ESimulationRunState::Canceled:
-			return TEXT("취소");
-		case ESimulationRunState::Pending:
-		default:
-			return TEXT("대기");
-		}
+		return state == ESimulationRunState::Completed ? 100.0f : 0.0f;
 	}
 
 	bool IsActiveProjectRunDirectory(
@@ -1110,14 +1100,6 @@ bool UMainMenuWidget::SaveProjectExperimentSettingFromPanel(TArray<FString>& out
 {
 	outDiagnostics.Reset();
 
-	const FString mapId = ProjectExperimentMapIdTextBox
-		? ProjectExperimentMapIdTextBox->GetText().ToString().TrimStartAndEnd()
-		: FString();
-	if (mapId.IsEmpty())
-	{
-		outDiagnostics.Add(TEXT("Map ID를 입력하세요."));
-	}
-
 	int32 fixedFps = 0;
 	int32 episodeCount = 0;
 	int64 baseSeed = 0;
@@ -1152,6 +1134,14 @@ bool UMainMenuWidget::SaveProjectExperimentSettingFromPanel(TArray<FString>& out
 
 	TSharedRef<FJsonObject> runtimeObject = FindOrCreateObjectField(rootObject.ToSharedRef(), TEXT("runtime"));
 	TSharedRef<FJsonObject> samplingObject = FindOrCreateObjectField(rootObject.ToSharedRef(), TEXT("sampling"));
+	const FString mapId = ProjectExperimentMapIdTextBox
+		? ProjectExperimentMapIdTextBox->GetText().ToString().TrimStartAndEnd()
+		: ReadJsonStringFieldOrDefault(*runtimeObject, TEXT("map_id"), MainMenuDefaultSimulationMapId);
+	if (mapId.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("Map ID를 입력하세요."));
+		return false;
+	}
 	runtimeObject->SetStringField(TEXT("map_id"), mapId);
 	runtimeObject->SetNumberField(TEXT("fixed_fps"), fixedFps);
 	samplingObject->SetNumberField(TEXT("episode_count"), episodeCount);
@@ -1628,6 +1618,16 @@ void UMainMenuWidget::HandleExperimentResultDetailsRequested(UFileListItemWidget
 	SetExperimentResultDetailVisible(true);
 }
 
+void UMainMenuWidget::HandleProjectExperimentRunAnalyzeRequested(UProjectExperimentRunRowWidget* rowWidget)
+{
+	if (!IsValid(rowWidget)) return;
+
+	SetSelectedExperimentResultRunDirectory(rowWidget->GetRunDirectory());
+	SetSelectedProjectRunId(ExtractProjectRunIdFromDirectory(SelectedExperimentResultRunDirectory));
+	RefreshExperimentResultDetailPanel();
+	SetExperimentResultDetailVisible(true);
+}
+
 void UMainMenuWidget::HandleExperimentResultIterationButtonClicked(UExperimentResultIterationButton* buttonWidget)
 {
 	if (!IsValid(buttonWidget)) return;
@@ -2063,7 +2063,10 @@ void UMainMenuWidget::ShowProjectWorkspaceTab(const EProjectWorkspaceTabType tab
 		break;
 	case EProjectWorkspaceTabType::ExperimentStatus:
 		ShowProjectExperimentConfigPanel(false);
-		setSwitcherIndex(1);
+		if (!setSwitcherWidget(ProjectExperimentStatusPanel.Get()))
+		{
+			setSwitcherIndex(1);
+		}
 		break;
 	case EProjectWorkspaceTabType::ExperimentConfig:
 		ShowProjectExperimentConfigPanel(true);
@@ -2867,11 +2870,11 @@ void UMainMenuWidget::RefreshExperimentResultList()
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
 	if (!subsystem) return;
 
-	const TSubclassOf<UFileListItemWidget> itemWidgetClass = ResolveFileListItemWidgetClass();
-	if (!itemWidgetClass) return;
-
 	if (IsProjectModeSelected())
 	{
+		const TSubclassOf<UProjectExperimentRunRowWidget> runRowWidgetClass = ResolveProjectExperimentRunRowWidgetClass();
+		if (!runRowWidgetClass) return;
+
 		TArray<FString> diagnostics;
 		TArray<FString> resultDirectories;
 		const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
@@ -2898,7 +2901,8 @@ void UMainMenuWidget::RefreshExperimentResultList()
 
 		ExperimentResultListScrollBox->ClearChildren();
 		ExperimentResultListItems.Reset();
-		ExperimentResultListItems.Reserve(resultDirectories.Num());
+		ProjectExperimentRunRows.Reset();
+		ProjectExperimentRunRows.Reserve(resultDirectories.Num());
 
 		if (resultDirectories.IsEmpty())
 		{
@@ -2908,32 +2912,34 @@ void UMainMenuWidget::RefreshExperimentResultList()
 
 		for (const FString& resultDirectory : resultDirectories)
 		{
-			UFileListItemWidget* itemWidget = CreateWidget<UFileListItemWidget>(this, itemWidgetClass);
-			if (!itemWidget) continue;
+			UProjectExperimentRunRowWidget* rowWidget =
+				CreateWidget<UProjectExperimentRunRowWidget>(this, runRowWidgetClass);
+			if (!rowWidget) continue;
 
 			const FString runId = ExtractProjectRunIdFromDirectory(resultDirectory);
 			const ESimulationRunState displayState =
 				ResolveProjectRunDisplayState(resultDirectory, runInfo, GetSelectedProjectPath());
-			const FString statusLabel = ToProjectRunStatusLabel(displayState);
 			const bool bCompleted = displayState == ESimulationRunState::Completed;
-			itemWidget->InitializeDisplayItem(
+			rowWidget->InitializeRunRow(
 				resultDirectory,
 				runId.IsEmpty() ? FPaths::GetBaseFilename(resultDirectory) : runId,
-				TEXT("분석"),
-				TEXT("실행"),
-				false,
-				bCompleted,
-				false);
-			itemWidget->SetSecondaryActionDisplayOnly(statusLabel);
+				displayState,
+				ResolveProjectRunProgressPercent(displayState),
+				bCompleted);
 			if (bCompleted)
 			{
-				itemWidget->OnPrimaryActionRequested.AddUObject(this, &UMainMenuWidget::HandleExperimentResultDetailsRequested);
+				rowWidget->OnAnalyzeRequested.AddUObject(
+					this,
+					&UMainMenuWidget::HandleProjectExperimentRunAnalyzeRequested);
 			}
-			ExperimentResultListScrollBox->AddChild(itemWidget);
-			ExperimentResultListItems.Add(itemWidget);
+			ExperimentResultListScrollBox->AddChild(rowWidget);
+			ProjectExperimentRunRows.Add(rowWidget);
 		}
 		return;
 	}
+
+	const TSubclassOf<UFileListItemWidget> itemWidgetClass = ResolveFileListItemWidgetClass();
+	if (!itemWidgetClass) return;
 
 	TArray<FString> resultDirectories = subsystem->ListSimulationRunResultDirectories();
 	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
@@ -2955,6 +2961,7 @@ void UMainMenuWidget::RefreshExperimentResultList()
 	ExperimentResultListScrollBox->ClearChildren();
 	ExperimentResultListItems.Reset();
 	ExperimentResultListItems.Reserve(resultDirectories.Num());
+	ProjectExperimentRunRows.Reset();
 
 	if (resultDirectories.IsEmpty())
 	{
@@ -3498,6 +3505,30 @@ TSubclassOf<UFileListItemWidget> UMainMenuWidget::ResolveFileListItemWidgetClass
 	}
 
 	return TSubclassOf<UFileListItemWidget>(loadedClass);
+}
+
+TSubclassOf<UProjectExperimentRunRowWidget> UMainMenuWidget::ResolveProjectExperimentRunRowWidgetClass() const
+{
+	if (ProjectExperimentRunRowWidgetClass)
+	{
+		return ProjectExperimentRunRowWidgetClass;
+	}
+
+	UClass* loadedClass = LoadClass<UProjectExperimentRunRowWidget>(
+		nullptr,
+		ProjectExperimentRunRowWidgetBlueprintClassPath);
+	if (!loadedClass)
+	{
+		UE_LOG(
+			LogMainMenuWidget,
+			Error,
+			TEXT("Project experiment run row widget class is missing: %s"),
+			ProjectExperimentRunRowWidgetBlueprintClassPath);
+		ensureMsgf(false, TEXT("Project experiment run row widget class is missing."));
+		return nullptr;
+	}
+
+	return TSubclassOf<UProjectExperimentRunRowWidget>(loadedClass);
 }
 
 TSubclassOf<UUserWidget> UMainMenuWidget::ResolveProjectEpisodeReplayCardWidgetClass() const

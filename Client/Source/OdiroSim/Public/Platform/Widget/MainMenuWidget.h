@@ -18,8 +18,11 @@ class UScenarioEditorRootWidget;
 class USimulatorLaunchSubsystem;
 class UScrollBox;
 class UTextBlock;
+class UVerticalBox;
 class UWidget;
 class UWidgetSwitcher;
+class UWrapBox;
+enum class EProjectRunAiSuggestionSeverity : uint8;
 struct FPlatformAnalysisAiResponse;
 struct FSimulationSetup;
 
@@ -217,6 +220,23 @@ private:
 	void RefreshExperimentConfigList();
 	void RefreshExperimentResultList();
 	void RefreshExperimentResultIterationList();
+	// 선택된 project run의 summary/review JSON을 분석 상세 dashboard에 반영한다.
+	void RefreshExperimentResultDetailPanel();
+	// Project run metric card WBP의 named text child에 값을 주입한다.
+	void SetProjectRunMetricCardText(UUserWidget* cardWidget, const FString& label, const FString& value, const FString& unit) const;
+	// Episode replay card WBP의 named child 상태를 갱신한다.
+	void ConfigureProjectEpisodeReplayCard(
+		UUserWidget* cardWidget,
+		const FString& episodeLabel,
+		const FString& durationLabel,
+		bool bSuccess,
+		bool bHasPreviewImage) const;
+	// AI suggestion row WBP의 named child 상태를 갱신한다.
+	void ConfigureProjectAiSuggestionRow(
+		UUserWidget* rowWidget,
+		EProjectRunAiSuggestionSeverity severity,
+		const FString& severityLabel,
+		const FString& message) const;
 	void ApplyNewSetupDefaults(const FString& setupPath);
 	void SetExperimentConfigDetailVisible(bool bVisible);
 	void SetExperimentResultDetailVisible(bool bVisible);
@@ -235,11 +255,17 @@ private:
 		FSimulationSetup& outSetup,
 		TArray<FString>& outDiagnostics) const;
 	TSubclassOf<UFileListItemWidget> ResolveFileListItemWidgetClass() const;
+	// Episode replay card WBP class를 반환한다.
+	TSubclassOf<UUserWidget> ResolveProjectEpisodeReplayCardWidgetClass() const;
+	// AI suggestion row WBP class를 반환한다.
+	TSubclassOf<UUserWidget> ResolveProjectAiSuggestionRowWidgetClass() const;
 	void HandleRunInfoChanged(const struct FSimulatorRunInfo& runInfo);
 	void HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response);
 	void UpdateStatusText(const FString& extraMessage = FString());
 	void UpdateReportAndLogText();
 	void SetDiagnosticsText(const FString& message);
+	// Project result dashboard의 동적 카드/row widget을 제거한다.
+	void ClearExperimentResultDashboardWidgets();
 	// Project path가 입력된 동안 project mode가 legacy UI 흐름보다 우선한다.
 	bool IsProjectModeSelected() const;
 	// 경로가 현재 선택된 user project의 run directory인지 확인한다.
@@ -513,6 +539,50 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> AiAnalysisTextBlock;
 
+	// Project run result detail 제목.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ExperimentResultDetailTitleText;
+
+	// 총 플레이 시간 metric card.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UUserWidget> TotalPlayTimeMetricCard;
+
+	// 성공률 metric card.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UUserWidget> SuccessRateMetricCard;
+
+	// 충돌 횟수 metric card.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UUserWidget> CollisionCountMetricCard;
+
+	// 에피소드 리플레이 개수 text.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> EpisodeReplayCountText;
+
+	// 에피소드 리플레이 card container.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWrapBox> EpisodeReplayCardWrapBox;
+
+	// AI 분석 실행 CTA 영역.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> AiAnalysisActionBox;
+
+	// AI 개선 제안 panel 영역.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> AiSuggestionPanel;
+
+	// AI 개선 제안 요약 text.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> AiSuggestionSummaryText;
+
+	// AI 개선 제안 row container.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UVerticalBox> AiSuggestionListBox;
+
+	// AI 제안이 없을 때 표시할 text.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> AiSuggestionEmptyText;
+
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> DiagnosticsTextBlock;
 
@@ -529,6 +599,14 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|List")
 	TSubclassOf<UFileListItemWidget> FileListItemWidgetClass;
 
+	// Project run episode replay card WBP class.
+	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|ProjectResult")
+	TSubclassOf<UUserWidget> ProjectEpisodeReplayCardWidgetClass;
+
+	// Project run AI suggestion row WBP class.
+	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|ProjectResult")
+	TSubclassOf<UUserWidget> ProjectAiSuggestionRowWidgetClass;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UFileListItemWidget>> ScenarioListItems;
 
@@ -543,6 +621,14 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UExperimentResultIterationButton>> ExperimentResultIterationButtons;
+
+	// Project result detail의 동적 episode card 목록.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UUserWidget>> ProjectEpisodeReplayCards;
+
+	// Project result detail의 동적 AI suggestion row 목록.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UUserWidget>> ProjectAiSuggestionRows;
 
 	// Scenario editor controller에 input mode를 요청할 때 사용한 focus widget.
 	UPROPERTY(Transient)

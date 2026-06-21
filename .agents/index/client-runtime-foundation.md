@@ -23,6 +23,9 @@ entry:
   - Client/Content/Widgets/MainMenu/WBP_MainMenu
   - Client/Content/Widgets/MainMenu/WBP_ProjectTemplateCard
   - Client/Content/Widgets/MainMenu/WBP_ProjectWorkspaceTab
+  - Client/Content/Widgets/MainMenu/WBP_ProjectRunMetricCard
+  - Client/Content/Widgets/MainMenu/WBP_ProjectEpisodeReplayCard
+  - Client/Content/Widgets/MainMenu/WBP_ProjectAiSuggestionRow
   - Client/Content/Widgets/Editor/WBP_ScenarioEditorRootWidget
   - Client/Content/Maps/StartupMap
   - Client/Content/Blueprints/Startup/BP_StartupMenuBootstrap
@@ -33,14 +36,15 @@ keep:
   - StartupMap is a project selection/creation shell; ScenarioEditorMap owns WBP_MainMenu and editor workspace UI.
   - WBP_MainMenu must expose ProjectWorkspaceScreen as its root surface and include ScenarioEditorRootWidget under ProjectScenarioEditPanel; recent project selection, recent-list removal dialog, folder browse, preset dropdowns, and preset-composition project creation widgets belong to WBP_StartupMenu.
   - WBP_ProjectWorkspaceTab owns the visual layout for project workspace tabs; C++ only drives label, active/visible/closable state, and click routing.
+  - WBP_ProjectRunMetricCard, WBP_ProjectEpisodeReplayCard, and WBP_ProjectAiSuggestionRow own project result dashboard card/row layout and default visuals; C++ updates named child text and visibility only.
   - StartupMenu/MainMenu asset edits are made and verified through UmgMcp; do not rely on runtime fallback to move ProjectOpenScreen or ScenarioEditorRootWidget.
   - ProjectBorealis UEGitPlugin is used for Editor checkout only; do not initialize `filter=lfs` attributes from the plugin UI.
   - DefaultEditorPerProjectUserSettings.ini defaults asset-modification checkout prompts; tools/set-git-config.ps1 corrects existing local Saved settings.
 verify:
   - smallest affected Unreal target build
   - source control provider loads as Git LFS 2 in Editor
-  - UmgMcp get_widget_tree after StartupMenu/MainMenu/ProjectWorkspaceTab UMG structure edits
-  - Blueprint compile/save for StartupMap, WBP_StartupMenu, WBP_MainMenu, WBP_ProjectTemplateCard, WBP_ProjectWorkspaceTab, WBP_ScenarioEditorRootWidget, and ScenarioEditorMap binding changes
+  - UmgMcp get_widget_tree after StartupMenu/MainMenu/ProjectWorkspaceTab/project result dashboard UMG structure edits
+  - Blueprint compile/save for StartupMap, WBP_StartupMenu, WBP_MainMenu, WBP_ProjectTemplateCard, WBP_ProjectWorkspaceTab, WBP_ProjectRunMetricCard, WBP_ProjectEpisodeReplayCard, WBP_ProjectAiSuggestionRow, WBP_ScenarioEditorRootWidget, and ScenarioEditorMap binding changes
   - separate PIE logs from packaged logs for packaging issues
 related:
   - client-simulation

@@ -9,12 +9,16 @@
 #include "Components/ScrollBoxSlot.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
 #include "Components/WidgetSwitcher.h"
+#include "Components/WrapBox.h"
+#include "Components/WrapBoxSlot.h"
 #include "Dom/JsonObject.h"
 #include "Engine/GameInstance.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Platform/ProjectRunResultDashboard.h"
 #include "Platform/ProjectSessionSubsystem.h"
 #include "Platform/ScenarioEditorLaunchSubsystem.h"
 #include "Platform/PlatformAnalysisAiSubsystem.h"
@@ -46,6 +50,25 @@ namespace
 	const TCHAR* DeliveryBotTemplatePath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
 	const TCHAR* FileListItemWidgetBlueprintClassPath =
 		TEXT("/Game/Widgets/MainMenu/WBP_FileListItem.WBP_FileListItem_C");
+	const TCHAR* ProjectEpisodeReplayCardWidgetBlueprintClassPath =
+		TEXT("/Game/Widgets/MainMenu/WBP_ProjectEpisodeReplayCard.WBP_ProjectEpisodeReplayCard_C");
+	const TCHAR* ProjectAiSuggestionRowWidgetBlueprintClassPath =
+		TEXT("/Game/Widgets/MainMenu/WBP_ProjectAiSuggestionRow.WBP_ProjectAiSuggestionRow_C");
+	const FName MetricLabelTextName(TEXT("MetricLabelText"));
+	const FName MetricValueTextName(TEXT("MetricValueText"));
+	const FName MetricUnitTextName(TEXT("MetricUnitText"));
+	const FName EpisodeLabelTextName(TEXT("EpisodeLabelText"));
+	const FName EpisodeDurationTextName(TEXT("EpisodeDurationText"));
+	const FName EpisodeSuccessStateBoxName(TEXT("EpisodeSuccessStateBox"));
+	const FName EpisodeFailureStateBoxName(TEXT("EpisodeFailureStateBox"));
+	const FName EpisodePreviewImageBoxName(TEXT("EpisodePreviewImageBox"));
+	const FName EpisodePreviewPlaceholderBoxName(TEXT("EpisodePreviewPlaceholderBox"));
+	const FName SuggestionSeverityTextName(TEXT("SuggestionSeverityText"));
+	const FName SuggestionMessageTextName(TEXT("SuggestionMessageText"));
+	const FName SuggestionHighIndicatorName(TEXT("SuggestionHighIndicator"));
+	const FName SuggestionMediumIndicatorName(TEXT("SuggestionMediumIndicator"));
+	const FName SuggestionLowIndicatorName(TEXT("SuggestionLowIndicator"));
+	const FName SuggestionInfoIndicatorName(TEXT("SuggestionInfoIndicator"));
 	const TCHAR* MainMenuUserProjectSettingFileName = TEXT("setting.json");
 	const TCHAR* MainMenuUserProjectScenarioFileName = TEXT("scenario.json");
 	const TCHAR* MainMenuRegularFontPath =
@@ -159,6 +182,68 @@ namespace
 	FString BuildProjectRunSummaryPath(const FString& runDirectory)
 	{
 		return NormalizeMainMenuPath(FPaths::Combine(runDirectory, TEXT("summary.json")));
+	}
+
+	FString FormatProjectRunTotalDuration(const double durationSeconds)
+	{
+		const int32 RoundedSeconds = FMath::Max(0, FMath::RoundToInt(durationSeconds));
+		const int32 Hours = RoundedSeconds / 3600;
+		const int32 Minutes = (RoundedSeconds % 3600) / 60;
+		const int32 Seconds = RoundedSeconds % 60;
+		return Hours > 0
+			? FString::Printf(TEXT("%d:%02d:%02d"), Hours, Minutes, Seconds)
+			: FString::Printf(TEXT("%02d:%02d"), Minutes, Seconds);
+	}
+
+	FString FormatProjectRunEpisodeDuration(const double durationSeconds)
+	{
+		const int32 RoundedSeconds = FMath::Max(0, FMath::RoundToInt(durationSeconds));
+		return FString::Printf(TEXT("%d:%02d"), RoundedSeconds / 60, RoundedSeconds % 60);
+	}
+
+	FString FormatProjectRunEpisodeLabel(const FString& episodeId)
+	{
+		const int32 EpisodeNumber = FCString::Atoi(*episodeId);
+		return EpisodeNumber > 0
+			? FString::Printf(TEXT("에피소드 %02d"), EpisodeNumber)
+			: TEXT("에피소드 ?");
+	}
+
+	FString FormatProjectRunSuccessRate(const int32 successCount, const int32 episodeCount)
+	{
+		if (episodeCount <= 0)
+		{
+			return TEXT("0");
+		}
+
+		const int32 Percent = FMath::RoundToInt(static_cast<double>(successCount) * 100.0 / static_cast<double>(episodeCount));
+		return FString::FromInt(FMath::Clamp(Percent, 0, 100));
+	}
+
+	void SetWidgetVisible(UWidget* widget, const bool bVisible)
+	{
+		if (widget)
+		{
+			widget->SetVisibility(bVisible ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+		}
+	}
+
+	UWidget* FindDashboardChildWidget(UUserWidget* ownerWidget, const FName childName)
+	{
+		return ownerWidget ? ownerWidget->GetWidgetFromName(childName) : nullptr;
+	}
+
+	void SetDashboardChildText(UUserWidget* ownerWidget, const FName childName, const FString& text)
+	{
+		if (UTextBlock* textBlock = Cast<UTextBlock>(FindDashboardChildWidget(ownerWidget, childName)))
+		{
+			textBlock->SetText(FText::FromString(text));
+		}
+	}
+
+	void SetDashboardChildVisibility(UUserWidget* ownerWidget, const FName childName, const bool bVisible)
+	{
+		SetWidgetVisible(FindDashboardChildWidget(ownerWidget, childName), bVisible);
 	}
 
 	FString BuildProjectSettingPath(const FString& projectPath)
@@ -1513,6 +1598,9 @@ void UMainMenuWidget::HandleExperimentResultDetailsRequested(UFileListItemWidget
 	if (IsProjectRunDirectory(SelectedExperimentResultRunDirectory))
 	{
 		SetSelectedProjectRunId(ExtractProjectRunIdFromDirectory(SelectedExperimentResultRunDirectory));
+		RefreshExperimentResultDetailPanel();
+		SetExperimentResultDetailVisible(true);
+		return;
 	}
 	RefreshExperimentResultIterationList();
 	UpdateReportAndLogText();
@@ -1525,7 +1613,14 @@ void UMainMenuWidget::HandleExperimentResultIterationButtonClicked(UExperimentRe
 
 	SetSelectedExperimentResultPath(buttonWidget->GetResultPath());
 	RefreshExperimentResultIterationList();
-	UpdateReportAndLogText();
+	if (IsProjectRunDirectory(SelectedExperimentResultRunDirectory))
+	{
+		RefreshExperimentResultDetailPanel();
+	}
+	else
+	{
+		UpdateReportAndLogText();
+	}
 }
 
 void UMainMenuWidget::HandleOpenPolicyTextEditorClicked()
@@ -1661,6 +1756,10 @@ void UMainMenuWidget::HandleSendToAiClicked()
 		{
 			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("Analyzing project run...")));
 		}
+		if (SendToAiButton)
+		{
+			SendToAiButton->SetIsEnabled(false);
+		}
 
 		analysisSubsystem->RequestAnalysisForProjectRun(projectPath, runId);
 		return;
@@ -1681,7 +1780,14 @@ void UMainMenuWidget::HandleShowProjectScenarioTabClicked()
 void UMainMenuWidget::HandleShowProjectExperimentStatusTabClicked()
 {
 	RefreshExperimentResultList();
-	UpdateReportAndLogText();
+	if (IsProjectRunDirectory(SelectedExperimentResultRunDirectory))
+	{
+		RefreshExperimentResultDetailPanel();
+	}
+	else
+	{
+		UpdateReportAndLogText();
+	}
 	ShowProjectWorkspaceTab(EProjectWorkspaceTabType::ExperimentStatus);
 }
 
@@ -2116,11 +2222,18 @@ bool UMainMenuWidget::ValidateRequiredBindings() const
 	requireWidget(CancelExperimentConfigButton, TEXT("CancelExperimentConfigButton"));
 	requireWidget(ExperimentResultDetailSectionBoxScrollBox, TEXT("ExperimentResultDetailSectionBoxScrollBox"));
 	requireWidget(ExperimentResultListScrollBox, TEXT("ExperimentResultListScrollBox"));
-	requireWidget(ExperimentResultIterationScrollBox, TEXT("ExperimentResultIterationScrollBox"));
-	requireWidget(ExperimentResultBackButton, TEXT("ExperimentResultBackButton"));
+	requireWidget(ExperimentResultDetailTitleText, TEXT("ExperimentResultDetailTitleText"));
+	requireWidget(TotalPlayTimeMetricCard, TEXT("TotalPlayTimeMetricCard"));
+	requireWidget(SuccessRateMetricCard, TEXT("SuccessRateMetricCard"));
+	requireWidget(CollisionCountMetricCard, TEXT("CollisionCountMetricCard"));
+	requireWidget(EpisodeReplayCountText, TEXT("EpisodeReplayCountText"));
+	requireWidget(EpisodeReplayCardWrapBox, TEXT("EpisodeReplayCardWrapBox"));
+	requireWidget(AiAnalysisActionBox, TEXT("AiAnalysisActionBox"));
+	requireWidget(AiSuggestionPanel, TEXT("AiSuggestionPanel"));
+	requireWidget(AiSuggestionSummaryText, TEXT("AiSuggestionSummaryText"));
+	requireWidget(AiSuggestionListBox, TEXT("AiSuggestionListBox"));
+	requireWidget(AiSuggestionEmptyText, TEXT("AiSuggestionEmptyText"));
 	requireWidget(DiagnosticsTextBlock, TEXT("DiagnosticsTextBlock"));
-	requireWidget(ReportTextBlock, TEXT("ReportTextBlock"));
-	requireWidget(LogPreviewTextBlock, TEXT("LogPreviewTextBlock"));
 
 	if (missingWidgetNames.IsEmpty())
 	{
@@ -2579,6 +2692,7 @@ void UMainMenuWidget::SetExperimentResultDetailVisible(const bool bVisible)
 		}
 		else
 		{
+			ClearExperimentResultDashboardWidgets();
 			CloseTransientProjectTab(EProjectWorkspaceTabType::ExperimentResultDetail);
 		}
 		return;
@@ -2988,6 +3102,182 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 	}
 }
 
+void UMainMenuWidget::RefreshExperimentResultDetailPanel()
+{
+	ClearExperimentResultDashboardWidgets();
+
+	if (!IsProjectRunDirectory(SelectedExperimentResultRunDirectory))
+	{
+		return;
+	}
+
+	FProjectRunResultDashboardData DashboardData;
+	FProjectRunResultDashboardJson::BuildFromRunDirectory(
+		SelectedExperimentResultRunDirectory,
+		DashboardData);
+
+	if (ExperimentResultDetailTitleText)
+	{
+		const FString Title = DashboardData.RunId.IsEmpty()
+			? TEXT("분석 상세")
+			: FString::Printf(TEXT("분석 상세   #%s"), *DashboardData.RunId);
+		ExperimentResultDetailTitleText->SetText(FText::FromString(Title));
+	}
+
+	if (TotalPlayTimeMetricCard)
+	{
+		SetProjectRunMetricCardText(
+			TotalPlayTimeMetricCard,
+			TEXT("총 플레이 시간"),
+			FormatProjectRunTotalDuration(DashboardData.TotalDurationSeconds),
+			FString());
+	}
+	if (SuccessRateMetricCard)
+	{
+		SetProjectRunMetricCardText(
+			SuccessRateMetricCard,
+			TEXT("성공률"),
+			FormatProjectRunSuccessRate(DashboardData.SuccessCount, DashboardData.EpisodeCount),
+			TEXT("%"));
+	}
+	if (CollisionCountMetricCard)
+	{
+		SetProjectRunMetricCardText(
+			CollisionCountMetricCard,
+			TEXT("충돌 횟수"),
+			FString::FromInt(DashboardData.CollisionCount),
+			TEXT("회"));
+	}
+	if (EpisodeReplayCountText)
+	{
+		EpisodeReplayCountText->SetText(FText::FromString(
+			FString::Printf(TEXT("%d개"), DashboardData.EpisodeCount)));
+	}
+
+	const TSubclassOf<UUserWidget> EpisodeCardClass =
+		ResolveProjectEpisodeReplayCardWidgetClass();
+	if (EpisodeReplayCardWrapBox && EpisodeCardClass)
+	{
+		for (const FProjectRunEpisodeDashboardItem& Episode : DashboardData.Episodes)
+		{
+			UUserWidget* CardWidget = CreateWidget<UUserWidget>(this, EpisodeCardClass);
+			if (!CardWidget)
+			{
+				continue;
+			}
+
+			ConfigureProjectEpisodeReplayCard(
+				CardWidget,
+				FormatProjectRunEpisodeLabel(Episode.EpisodeId),
+				FormatProjectRunEpisodeDuration(Episode.DurationSeconds),
+				Episode.bSuccess,
+				!Episode.PreviewImagePath.IsEmpty());
+
+			if (UWrapBoxSlot* WrapBoxSlot = EpisodeReplayCardWrapBox->AddChildToWrapBox(CardWidget))
+			{
+				WrapBoxSlot->SetPadding(FMargin(0.0f, 0.0f, 12.0f, 12.0f));
+			}
+			ProjectEpisodeReplayCards.Add(CardWidget);
+		}
+	}
+
+	UPlatformAnalysisAiSubsystem* AnalysisSubsystem = GetPlatformAnalysisAiSubsystem();
+	const bool bAnalysisPending = AnalysisSubsystem && AnalysisSubsystem->IsAnalysisRequestPending();
+	const bool bShowAiAction = bAnalysisPending || !DashboardData.bAiLoaded;
+	SetWidgetVisible(AiAnalysisActionBox, bShowAiAction);
+	SetWidgetVisible(AiSuggestionPanel, DashboardData.bAiLoaded && !bAnalysisPending);
+	if (SendToAiButton)
+	{
+		SendToAiButton->SetIsEnabled(!bAnalysisPending);
+	}
+	if (AiAnalysisTextBlock && bShowAiAction)
+	{
+		AiAnalysisTextBlock->SetText(FText::FromString(bAnalysisPending
+			? TEXT("AI 분석 중...")
+			: TEXT("에피소드 데이터를 기반으로 개선점을 제안합니다.")));
+	}
+
+	if (!DashboardData.bAiLoaded || bAnalysisPending)
+	{
+		return;
+	}
+
+	if (AiSuggestionSummaryText)
+	{
+		AiSuggestionSummaryText->SetText(FText::FromString(DashboardData.AiSummary.IsEmpty()
+			? TEXT("AI 분석 결과, 표시할 요약 문장이 없습니다.")
+			: DashboardData.AiSummary));
+	}
+
+	const bool bHasSuggestions = !DashboardData.Suggestions.IsEmpty();
+	SetWidgetVisible(AiSuggestionEmptyText, !bHasSuggestions);
+
+	const TSubclassOf<UUserWidget> SuggestionRowClass =
+		ResolveProjectAiSuggestionRowWidgetClass();
+	if (AiSuggestionListBox && SuggestionRowClass)
+	{
+		for (const FProjectRunAiSuggestionDashboardItem& Suggestion : DashboardData.Suggestions)
+		{
+			UUserWidget* RowWidget = CreateWidget<UUserWidget>(this, SuggestionRowClass);
+			if (!RowWidget)
+			{
+				continue;
+			}
+
+			ConfigureProjectAiSuggestionRow(
+				RowWidget,
+				Suggestion.Severity,
+				Suggestion.SeverityLabel,
+				Suggestion.Message);
+			AiSuggestionListBox->AddChild(RowWidget);
+			ProjectAiSuggestionRows.Add(RowWidget);
+		}
+	}
+}
+
+void UMainMenuWidget::SetProjectRunMetricCardText(
+	UUserWidget* cardWidget,
+	const FString& label,
+	const FString& value,
+	const FString& unit) const
+{
+	SetDashboardChildText(cardWidget, MetricLabelTextName, label);
+	SetDashboardChildText(cardWidget, MetricValueTextName, value);
+
+	const FString VisibleUnit = unit.TrimStartAndEnd();
+	SetDashboardChildText(cardWidget, MetricUnitTextName, VisibleUnit);
+	SetDashboardChildVisibility(cardWidget, MetricUnitTextName, !VisibleUnit.IsEmpty());
+}
+
+void UMainMenuWidget::ConfigureProjectEpisodeReplayCard(
+	UUserWidget* cardWidget,
+	const FString& episodeLabel,
+	const FString& durationLabel,
+	const bool bSuccess,
+	const bool bHasPreviewImage) const
+{
+	SetDashboardChildText(cardWidget, EpisodeLabelTextName, episodeLabel);
+	SetDashboardChildText(cardWidget, EpisodeDurationTextName, durationLabel);
+	SetDashboardChildVisibility(cardWidget, EpisodeSuccessStateBoxName, bSuccess);
+	SetDashboardChildVisibility(cardWidget, EpisodeFailureStateBoxName, !bSuccess);
+	SetDashboardChildVisibility(cardWidget, EpisodePreviewImageBoxName, bHasPreviewImage);
+	SetDashboardChildVisibility(cardWidget, EpisodePreviewPlaceholderBoxName, !bHasPreviewImage);
+}
+
+void UMainMenuWidget::ConfigureProjectAiSuggestionRow(
+	UUserWidget* rowWidget,
+	const EProjectRunAiSuggestionSeverity severity,
+	const FString& severityLabel,
+	const FString& message) const
+{
+	SetDashboardChildText(rowWidget, SuggestionSeverityTextName, severityLabel);
+	SetDashboardChildText(rowWidget, SuggestionMessageTextName, message);
+	SetDashboardChildVisibility(rowWidget, SuggestionHighIndicatorName, severity == EProjectRunAiSuggestionSeverity::High);
+	SetDashboardChildVisibility(rowWidget, SuggestionMediumIndicatorName, severity == EProjectRunAiSuggestionSeverity::Medium);
+	SetDashboardChildVisibility(rowWidget, SuggestionLowIndicatorName, severity == EProjectRunAiSuggestionSeverity::Low);
+	SetDashboardChildVisibility(rowWidget, SuggestionInfoIndicatorName, severity == EProjectRunAiSuggestionSeverity::Info);
+}
+
 void UMainMenuWidget::SetSelectedScenarioSetupPath(const FString& scenarioSetupPath)
 {
 	SelectedScenarioSetupPath = scenarioSetupPath.TrimStartAndEnd();
@@ -3058,6 +3348,21 @@ void UMainMenuWidget::ClearExperimentResultIterationWidgets()
 	if (ExperimentResultIterationScrollBox)
 	{
 		ExperimentResultIterationScrollBox->ClearChildren();
+	}
+}
+
+void UMainMenuWidget::ClearExperimentResultDashboardWidgets()
+{
+	ProjectEpisodeReplayCards.Reset();
+	ProjectAiSuggestionRows.Reset();
+
+	if (EpisodeReplayCardWrapBox)
+	{
+		EpisodeReplayCardWrapBox->ClearChildren();
+	}
+	if (AiSuggestionListBox)
+	{
+		AiSuggestionListBox->ClearChildren();
 	}
 }
 
@@ -3161,12 +3466,65 @@ TSubclassOf<UFileListItemWidget> UMainMenuWidget::ResolveFileListItemWidgetClass
 	return TSubclassOf<UFileListItemWidget>(loadedClass);
 }
 
+TSubclassOf<UUserWidget> UMainMenuWidget::ResolveProjectEpisodeReplayCardWidgetClass() const
+{
+	if (ProjectEpisodeReplayCardWidgetClass)
+	{
+		return ProjectEpisodeReplayCardWidgetClass;
+	}
+
+	UClass* loadedClass = LoadClass<UUserWidget>(
+		nullptr,
+		ProjectEpisodeReplayCardWidgetBlueprintClassPath);
+	if (!loadedClass)
+	{
+		UE_LOG(
+			LogMainMenuWidget,
+			Error,
+			TEXT("Project episode replay card widget class is missing: %s"),
+			ProjectEpisodeReplayCardWidgetBlueprintClassPath);
+		ensureMsgf(false, TEXT("Project episode replay card widget class is missing."));
+		return nullptr;
+	}
+
+	return TSubclassOf<UUserWidget>(loadedClass);
+}
+
+TSubclassOf<UUserWidget> UMainMenuWidget::ResolveProjectAiSuggestionRowWidgetClass() const
+{
+	if (ProjectAiSuggestionRowWidgetClass)
+	{
+		return ProjectAiSuggestionRowWidgetClass;
+	}
+
+	UClass* loadedClass = LoadClass<UUserWidget>(
+		nullptr,
+		ProjectAiSuggestionRowWidgetBlueprintClassPath);
+	if (!loadedClass)
+	{
+		UE_LOG(
+			LogMainMenuWidget,
+			Error,
+			TEXT("Project AI suggestion row widget class is missing: %s"),
+			ProjectAiSuggestionRowWidgetBlueprintClassPath);
+		ensureMsgf(false, TEXT("Project AI suggestion row widget class is missing."));
+		return nullptr;
+	}
+
+	return TSubclassOf<UUserWidget>(loadedClass);
+}
+
 void UMainMenuWidget::HandleRunInfoChanged(const FSimulatorRunInfo& runInfo)
 {
 	(void)runInfo;
 	UpdateStatusText();
 	if (ActiveProjectWorkspaceTab == EProjectWorkspaceTabType::ExperimentResultDetail)
 	{
+		if (IsProjectRunDirectory(SelectedExperimentResultRunDirectory))
+		{
+			RefreshExperimentResultDetailPanel();
+			return;
+		}
 		RefreshExperimentResultIterationList();
 	}
 	else
@@ -3178,6 +3536,19 @@ void UMainMenuWidget::HandleRunInfoChanged(const FSimulatorRunInfo& runInfo)
 
 void UMainMenuWidget::HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response)
 {
+	if (SendToAiButton)
+	{
+		SendToAiButton->SetIsEnabled(true);
+	}
+
+	if (IsProjectRunDirectory(SelectedExperimentResultRunDirectory)
+		&& ActiveProjectWorkspaceTab == EProjectWorkspaceTabType::ExperimentResultDetail
+		&& response.bSuccess)
+	{
+		RefreshExperimentResultDetailPanel();
+		return;
+	}
+
 	if (!AiAnalysisTextBlock)
 	{
 		return;
@@ -3185,7 +3556,7 @@ void UMainMenuWidget::HandleAnalysisCompleted(const FPlatformAnalysisAiResponse&
 
 	if (response.bSuccess)
 	{
-		AiAnalysisTextBlock->SetText(FText::FromString(response.DisplayText));
+		RefreshExperimentResultDetailPanel();
 		return;
 	}
 
@@ -3349,59 +3720,7 @@ void UMainMenuWidget::UpdateReportAndLogText()
 
 	if (IsProjectRunDirectory(SelectedExperimentResultRunDirectory))
 	{
-		if (ReportTextBlock)
-		{
-			TArray<FString> reportLines;
-			reportLines.Add(FString::Printf(TEXT("Project Run: %s"), *SelectedExperimentResultRunDirectory));
-
-			const FString summaryPath = NormalizeMainMenuPath(FPaths::Combine(SelectedExperimentResultRunDirectory, TEXT("summary.json")));
-			if (FPaths::FileExists(summaryPath))
-			{
-				FString summaryJson;
-				if (FFileHelper::LoadFileToString(summaryJson, *summaryPath))
-				{
-					reportLines.Add(TEXT(""));
-					reportLines.Add(FString::Printf(TEXT("Summary: %s"), *summaryPath));
-					reportLines.Add(TruncatePreview(summaryJson, ReportPreviewCharacterLimit));
-				}
-			}
-
-			if (!SelectedExperimentResultPath.IsEmpty())
-			{
-				FString resultJson;
-				if (FFileHelper::LoadFileToString(resultJson, *SelectedExperimentResultPath))
-				{
-					reportLines.Add(TEXT(""));
-					reportLines.Add(FString::Printf(TEXT("Episode Result: %s"), *SelectedExperimentResultPath));
-					reportLines.Add(TruncatePreview(resultJson, ReportPreviewCharacterLimit));
-				}
-			}
-
-			ReportTextBlock->SetText(FText::FromString(JoinStringLines(reportLines)));
-		}
-
-		if (LogPreviewTextBlock)
-		{
-			TArray<FString> logLines;
-			logLines.Add(TEXT("Project Run Logs"));
-			TArray<FString> logPaths = subsystem->ListProjectRunLogFiles(SelectedExperimentResultRunDirectory);
-			logPaths.Sort();
-			CurrentPreviewLogPath = logPaths.IsEmpty() ? FString() : logPaths.Last();
-
-			for (const FString& logPath : logPaths)
-			{
-				logLines.Add(FString::Printf(TEXT("- %s"), *logPath));
-			}
-
-			if (!CurrentPreviewLogPath.IsEmpty())
-			{
-				logLines.Add(TEXT(""));
-				logLines.Add(FString::Printf(TEXT("Preview: %s"), *CurrentPreviewLogPath));
-				logLines.Add(BuildLogPreview(CurrentPreviewLogPath));
-			}
-
-			LogPreviewTextBlock->SetText(FText::FromString(JoinStringLines(logLines)));
-		}
+		RefreshExperimentResultDetailPanel();
 		return;
 	}
 

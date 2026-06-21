@@ -20,6 +20,7 @@ entry:
   - ScenarioEditorLaunchSubsystem.h / .cpp
   - ProjectSessionSubsystem.h / .cpp
   - PlatformAnalysisAiSubsystem.h / .cpp
+  - ProjectRunResultDashboard.h / .cpp
   - Widget/StartupMenuWidget.h / .cpp
   - Widget/MainMenuWidget.h / .cpp
   - Widget/ProjectTemplateCardWidget.h / .cpp
@@ -29,6 +30,9 @@ entry:
   - WBP_MainMenu
   - WBP_ProjectTemplateCard
   - WBP_ProjectWorkspaceTab
+  - WBP_ProjectRunMetricCard
+  - WBP_ProjectEpisodeReplayCard
+  - WBP_ProjectAiSuggestionRow
   - UmgMcp Widget/UmgSetSubsystem.cpp
   - Client/Docs/plans/PLAN-platform-architecture.md
   - Client/Task-RunPreview.bat
@@ -65,6 +69,8 @@ keep:
   - StartupMenu creates/validates projects through temporary file-based SimulatorLaunchSubsystem preset-composition helpers, then stores the active project in ProjectSessionSubsystem.
   - MainMenu creates run snapshots through temporary file-based SimulatorLaunchSubsystem workspace helpers using the active project session.
   - MainMenu project mode reads result runs from `<UserProject>/runs/<RunId>` and sends AI analysis through the v2 project-run path.
+  - MainMenu project result detail is a dashboard, not a raw JSON/log preview: C++ reads `summary.json` for duration/success/collision/episode cards, then reads `review/analysis_run_response_v2.json` or latest `review/<ReviewId>/recommendations.json` for AI suggestion rows.
+  - WBP_ProjectRunMetricCard, WBP_ProjectEpisodeReplayCard, and WBP_ProjectAiSuggestionRow own result-dashboard layout/style/default text. C++ only creates row/card instances and writes named child widget values/visibility.
   - MainMenu project experiment uses WBP_ProjectWorkspaceTab for fixed and transient workspace tabs. 설정 opens ProjectExperimentConfigPanel as a switcher peer with a temporary tab; 실행 starts from current `setting.json`; 설정 패널의 저장 writes `setting.json` without launching; result detail opens a temporary 분석 tab. Temporary tab close/cancel/save returns to experiment status.
   - MainMenu project mode must not call SimulationSetup or RunQueue writer/launcher paths.
   - MainMenu project mode must not create/select projects and must not fall back to legacy Json/Input, SimulationSetup, RunQueue, Saved/SimulationRuns, Saved/AnalysisLogs, or text input project paths when no active project session exists.
@@ -80,8 +86,10 @@ verify:
   - `OdiroSim.SimulatorLaunch.ProjectWorkspace` for temporary workspace helper changes
   - `OdiroSim.SimulatorLaunch.ProjectRun.Validation` for project launch validation changes
   - `OdiroSim.Platform.AnalysisAi.ProjectRunRequestJsonBuild` for v2 analysis request changes
+  - `OdiroSim.ProjectRun.ResultDashboard.Summary` for summary.json duration/success/collision aggregation
+  - `OdiroSim.ProjectRun.ResultDashboard.Ai` for AI v2 summary/recommendation parsing and empty recommendation handling
   - OdiroSimEditor build after runner/trace lifecycle changes
-  - UmgMcp `get_widget_tree` after StartupMenu/MainMenu UMG edits: WBP_StartupMenu owns project selection row/dropdowns; WBP_MainMenu root is ProjectWorkspaceScreen; ScenarioEditorRootWidget is under ProjectScenarioEditPanel; ProjectExperimentConfigPanel is a ProjectWorkspaceSwitcher peer; WBP_ProjectWorkspaceTab has TabButton, TabLabelText, CloseButton, and ActiveIndicator.
+  - UmgMcp `get_widget_tree` after StartupMenu/MainMenu UMG edits: WBP_StartupMenu owns project selection row/dropdowns; WBP_MainMenu root is ProjectWorkspaceScreen; ScenarioEditorRootWidget is under ProjectScenarioEditPanel; ProjectExperimentConfigPanel is a ProjectWorkspaceSwitcher peer; WBP_ProjectWorkspaceTab has TabButton, TabLabelText, CloseButton, and ActiveIndicator; result dashboard exposes ExperimentResultDetailTitleText, metric cards, EpisodeReplayCardWrapBox, AiAnalysisActionBox, AiSuggestionPanel, and the three result dashboard card WBP named children.
   - Blueprint compile/save plus latest log scan for `WidgetVariableNameToGuidMap` after UmgMcp asset edits
   - UI smoke only after StartupMenu/MainMenu workflow changes
 related:

@@ -759,13 +759,6 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetPiePawn(const TSharedPtr<FJsonObject>
 // default; world="pie" for PIE). The 'args' object maps parameter names
 // to JSON values which are converted via FProperty ImportText. Out
 // parameters and return values are read back via the same export path.
-
-
-// #228/#229: invoke a BlueprintCallable / Exec UFUNCTION on a target.
-// Target resolution: actorLabel against the chosen world (editor by
-// default; world="pie" for PIE). The 'args' object maps parameter names
-// to JSON values which are converted via FProperty ImportText. Out
-// parameters and return values are read back via the same export path.
 TSharedPtr<FJsonValue> FEditorHandlers::InvokeFunction(const TSharedPtr<FJsonObject>& Params)
 {
 	FString FunctionName;
@@ -1134,7 +1127,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeStaticFunction(const TSharedPtr<FJ
 
 // #384: read/write ULevelEditorPlaySettings via reflection. Direct member
 // access is blocked because the fields are private; FProperty lookup gives
-// us the same access path Python's set_editor_property uses.
+// us the same access path Python's set_editor_property uses. Changes stay
+// session-local by default so MCP test setup does not poison a user's manual
+// PIE preferences; pass saveConfig=true for intentional persistence.
 
 
 TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObject>& Params)
@@ -1190,7 +1185,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 		return MCPError(TEXT("Nothing to configure - provide numClients / netMode / runUnderOneProcess / launchSeparateServer"));
 	}
 
-	Settings->SaveConfig();
+	bool bSaveConfig = false;
+	Params->TryGetBoolField(TEXT("saveConfig"), bSaveConfig);
+	if (bSaveConfig)
+	{
+		Settings->SaveConfig();
+	}
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1198,6 +1198,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 	Result->SetStringField(TEXT("netMode"), NetModeNameFromValue(GetEnumPropOn(Settings, TEXT("PlayNetMode"))));
 	Result->SetBoolField(TEXT("runUnderOneProcess"), GetBoolPropOn(Settings, TEXT("RunUnderOneProcess"), true));
 	Result->SetBoolField(TEXT("launchSeparateServer"), GetBoolPropOn(Settings, TEXT("bLaunchSeparateServer"), false));
+	Result->SetBoolField(TEXT("savedConfig"), bSaveConfig);
 	return MCPResult(Result);
 }
 

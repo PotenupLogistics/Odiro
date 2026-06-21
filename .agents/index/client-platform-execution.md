@@ -34,6 +34,8 @@ entry:
   - WBP_ProjectEpisodeReplayCard
   - WBP_ProjectAiSuggestionRow
   - UmgMcp Widget/UmgSetSubsystem.cpp
+  - UE_MCP_Bridge `capture_slate_window`
+  - UE_MCP_Bridge `dump_runtime_widget_geometry`
   - Client/Docs/plans/PLAN-platform-architecture.md
   - Client/Task-RunPreview.bat
   - Client/Task-RunPythonPolicyServer.bat
@@ -63,6 +65,7 @@ keep:
   - StartupMenu opens existing projects from a newest-first recent project card WrapBox; card size, spacing, and wrap behavior are WBP-owned, and anchored available width determines the natural card count per row. Recent cards show project folder name plus parent folder subtitle and support a right-click confirmation dialog that removes only the recent-list entry.
   - StartupMenu project creation keeps parent folder, folder browse, and project name in one WBP-owned row; editor folder browse uses UE DesktopPlatform directory dialogs instead of OS-specific APIs, packaged/headless flows keep text input fallback, and scenario/profile/policy preset choices use dropdowns with hidden card fallback.
   - UmgMcp `query_widget_properties` must not request `Slot`; use `get_widget_tree`, export JSON, or direct `set_widget_properties` slot updates instead.
+  - Full-app UI verification uses root `task-run.bat` preview mode, but interactive layout triage should prefer MCP `capture_slate_window` plus `dump_runtime_widget_geometry` over OS fullscreen screenshots; keep preview windowed while the user is watching progress.
   - MainMenu project scenario tab lists, opens, and starts runs from the active project session's `<UserProject>/scenario.json` project-run snapshots.
   - MainMenu project result rows use `WBP_FileListItem` primary action for completed detail view and secondary display text for run state.
   - UmgMcp widget create/delete must keep `WidgetVariableNameToGuidMap` consistent; persistent variable widgets should use GUID-safe creation paths and wait for structural edits to finish.

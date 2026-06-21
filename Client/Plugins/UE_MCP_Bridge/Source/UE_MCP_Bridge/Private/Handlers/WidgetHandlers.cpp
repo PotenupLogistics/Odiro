@@ -81,6 +81,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_widget_classes"), &ListWidgetClasses);
 	Registry.RegisterHandler(TEXT("list_runtime_widgets"), &ListRuntimeWidgets);
 	Registry.RegisterHandler(TEXT("get_runtime_widget"), &GetRuntimeWidget);
+	Registry.RegisterHandler(TEXT("dump_runtime_widget_geometry"), &DumpRuntimeWidgetGeometry);
 	// #161: Runtime delegate inspection
 	Registry.RegisterHandler(TEXT("get_runtime_delegates"), &GetRuntimeDelegates);
 }
@@ -955,6 +956,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ListWidgetClasses(const TSharedPtr<FJson
 // ─────────────────────────────────────────────────────────────
 namespace WidgetRuntime_Internal
 {
+	constexpr int32 DefaultRuntimeTreeMaxDepth = 6;
+
 	static UWorld* ResolveRuntimeWorld()
 	{
 		if (!GEditor) return nullptr;
@@ -990,6 +993,46 @@ namespace WidgetRuntime_Internal
 		return TEXT("Unknown");
 	}
 
+	static TSharedPtr<FJsonObject> MakeVectorJson(const FVector2D& Value)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("x"), Value.X);
+		Obj->SetNumberField(TEXT("y"), Value.Y);
+		return Obj;
+	}
+
+	static TSharedPtr<FJsonObject> MakeSlateRectJson(const FSlateRect& Rect)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("left"), Rect.Left);
+		Obj->SetNumberField(TEXT("top"), Rect.Top);
+		Obj->SetNumberField(TEXT("right"), Rect.Right);
+		Obj->SetNumberField(TEXT("bottom"), Rect.Bottom);
+		Obj->SetNumberField(TEXT("width"), Rect.Right - Rect.Left);
+		Obj->SetNumberField(TEXT("height"), Rect.Bottom - Rect.Top);
+		return Obj;
+	}
+
+	static TSharedPtr<FJsonObject> MakeGeometryJson(UWidget* Widget)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		if (!Widget || !Widget->GetCachedWidget().IsValid())
+		{
+			Obj->SetBoolField(TEXT("hasCachedGeometry"), false);
+			return Obj;
+		}
+
+		const FGeometry Geometry = Widget->GetCachedWidget()->GetTickSpaceGeometry();
+		const FVector2D LocalSize = Geometry.GetLocalSize();
+		const FVector2D AbsolutePosition = Geometry.GetAbsolutePosition();
+		Obj->SetBoolField(TEXT("hasCachedGeometry"), true);
+		Obj->SetObjectField(TEXT("localSize"), MakeVectorJson(LocalSize));
+		Obj->SetObjectField(TEXT("absolutePosition"), MakeVectorJson(AbsolutePosition));
+		Obj->SetObjectField(TEXT("layoutBoundingRect"), MakeSlateRectJson(Geometry.GetLayoutBoundingRect()));
+		Obj->SetObjectField(TEXT("renderBoundingRect"), MakeSlateRectJson(Geometry.GetRenderBoundingRect()));
+		return Obj;
+	}
+
 	static TSharedPtr<FJsonObject> BuildRuntimeNode(UWidget* Widget, int32 Depth, int32 MaxDepth)
 	{
 		if (!Widget) return nullptr;
@@ -998,6 +1041,7 @@ namespace WidgetRuntime_Internal
 		Obj->SetStringField(TEXT("class"), Widget->GetClass()->GetName());
 		Obj->SetStringField(TEXT("visibility"), VisibilityToString(Widget->GetVisibility()));
 		Obj->SetBoolField(TEXT("isVisible"), Widget->IsVisible());
+		Obj->SetObjectField(TEXT("geometry"), MakeGeometryJson(Widget));
 
 		FString Text = SafeGetText(Widget);
 		if (!Text.IsEmpty())
@@ -1133,7 +1177,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeWidget(const TSharedPtr<FJsonO
 		return MCPError(TEXT("Provide widgetName (exact instance name) or className (first match)."));
 	}
 
-	const int32 MaxDepth = OptionalInt(Params, TEXT("maxDepth"), 6);
+	const int32 MaxDepth = OptionalInt(Params, TEXT("maxDepth"), DefaultRuntimeTreeMaxDepth);
 	const FString ChildName = OptionalString(Params, TEXT("childName"), TEXT(""));
 
 	UUserWidget* Found = nullptr;
@@ -1196,6 +1240,66 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeWidget(const TSharedPtr<FJsonO
 	return MCPResult(Result);
 }
 
+TSharedPtr<FJsonValue> FWidgetHandlers::DumpRuntimeWidgetGeometry(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace WidgetRuntime_Internal;
+
+	UWorld* World = ResolveRuntimeWorld();
+	if (!World)
+	{
+		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+	}
+
+	FString WidgetName;
+	Params->TryGetStringField(TEXT("widgetName"), WidgetName);
+	FString ClassFilter;
+	Params->TryGetStringField(TEXT("className"), ClassFilter);
+	const FString NamePrefix = OptionalString(Params, TEXT("namePrefix"), TEXT(""));
+	const bool bInViewportOnly = OptionalBool(Params, TEXT("viewportOnly"), false);
+	const int32 MaxDepth = OptionalInt(Params, TEXT("maxDepth"), DefaultRuntimeTreeMaxDepth);
+
+	TArray<TSharedPtr<FJsonValue>> WidgetsArr;
+	for (TObjectIterator<UUserWidget> It; It; ++It)
+	{
+		UUserWidget* Widget = *It;
+		if (!IsValid(Widget) || Widget->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject)) continue;
+		if (Widget->GetWorld() != World) continue;
+
+		const FString ClassName = Widget->GetClass()->GetName();
+		const FString Name = Widget->GetName();
+		if (!WidgetName.IsEmpty() && Name != WidgetName) continue;
+		if (!ClassFilter.IsEmpty() && !ClassName.Contains(ClassFilter)) continue;
+		if (!NamePrefix.IsEmpty() && !Name.StartsWith(NamePrefix)) continue;
+		if (bInViewportOnly && !Widget->IsInViewport()) continue;
+
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), Name);
+		Obj->SetStringField(TEXT("class"), ClassName);
+		Obj->SetStringField(TEXT("visibility"), VisibilityToString(Widget->GetVisibility()));
+		Obj->SetBoolField(TEXT("isVisible"), Widget->IsVisible());
+		Obj->SetBoolField(TEXT("inViewport"), Widget->IsInViewport());
+		Obj->SetObjectField(TEXT("geometry"), MakeGeometryJson(Widget));
+
+		if (Widget->WidgetTree && Widget->WidgetTree->RootWidget)
+		{
+			if (TSharedPtr<FJsonObject> Tree = BuildRuntimeNode(Widget->WidgetTree->RootWidget, 0, MaxDepth))
+			{
+				Obj->SetObjectField(TEXT("tree"), Tree);
+			}
+		}
+
+		WidgetsArr.Add(MakeShared<FJsonValueObject>(Obj));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("world"), World->GetName());
+	Result->SetNumberField(TEXT("maxDepth"), MaxDepth);
+	Result->SetArrayField(TEXT("widgets"), WidgetsArr);
+	Result->SetNumberField(TEXT("count"), WidgetsArr.Num());
+	Result->SetStringField(TEXT("note"), TEXT("Geometry is Slate tick-space cached geometry; capture_slate_window reports screen pixels, so OS DPI scaling can require coordinate conversion for mouse automation."));
+	return MCPResult(Result);
+}
+
 // ─────────────────────────────────────────────────────────────
 // #161  Runtime delegate inspection — list FMulticastDelegateProperty fields on a live UUserWidget
 // ─────────────────────────────────────────────────────────────
@@ -1250,26 +1354,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeDelegates(const TSharedPtr<FJs
 		DelegateObj->SetStringField(TEXT("delegateName"), DelegateProp->GetName());
 
 		bool bIsBound = false;
-		int32 NumBindings = 0;
 		if (ScriptDelegate)
 		{
 			bIsBound = ScriptDelegate->IsBound();
-			// Use export text to estimate the number of bindings
-			FString ExportedStr;
-			DelegateProp->ExportTextItem_Direct(ExportedStr, DelegateAddr, nullptr, Found, PPF_None);
-			if (!ExportedStr.IsEmpty() && bIsBound)
-			{
-				// Count comma-separated entries in the exported delegate text
-				NumBindings = 1;
-				for (const TCHAR& Ch : ExportedStr)
-				{
-					if (Ch == TEXT(',')) ++NumBindings;
-				}
-			}
 		}
 
 		DelegateObj->SetBoolField(TEXT("isBound"), bIsBound);
-		DelegateObj->SetNumberField(TEXT("numBindings"), NumBindings);
 		DelegatesArr.Add(MakeShared<FJsonValueObject>(DelegateObj));
 	}
 

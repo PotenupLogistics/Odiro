@@ -1,17 +1,16 @@
 ## Repository
-- Asset edits: `.uasset` and `.umap` through editor, commandlet, or project scripts
-- Build: `Task-Build.bat`
-- PIE Preview: `Task-RunPreview.bat`
-- Python Policy Server: `Task-RunPythonPolicyServer.bat`
+- Asset edits: prefer MCP over commandlets if available; otherwise use editor, commandlet, or project scripts
+- Automation: build `Task-Build.bat`, PIE preview `Task-RunPreview.bat`
 - Commands: no hardcoded local UE install paths
 
 ## MCP
-- Reuse an open `Client/OdiroSim.uproject` editor when possible; launch it only when MCP needs an editor-backed server
-- Treat early `connection refused` as editor/MCP startup state
-- Use `UmgMcp` for UMG writes and `ue-mcp` for PIE/runtime screenshots, logs, build status, and screen-debug work
-- Do not use `ue-mcp` UI write actions unless explicitly requested
-- After MCP plugin source changes, rebuild/restart the editor before runtime verification
+- Before the first Unreal MCP call in a session, discover active tool names and match them to these roles; do not guess alternate server names
+  - `UmgMcp`: UMG writes
+  - `ue-mcp`: PIE/runtime screenshots, logs, build status, screen-debug work; no UI writes unless requested
+- Reuse an open editor when possible; launch it only when MCP needs an editor-backed server
 - If the agent launched an editor only for MCP, close or reuse it before C++ edits, builds, or another editor launch unless the user wants it open
+- Treat early `connection refused` as editor/MCP startup state
+- After MCP plugin source changes, rebuild/restart the editor before runtime verification
 
 ## Implementation
 - Prefer Component/Interface composition; separate Actor, Component, and Subsystem concerns
@@ -19,8 +18,8 @@
 - Expose tunables via `UPROPERTY(EditAnywhere)` or `BlueprintReadOnly`
 - Use `IsValid()` at UObject boundaries because callbacks may deliver pending-kill pointers
 - Do not rename reflected symbols without a migration plan
-- UMG: layout and styling live in Widget Blueprint assets. C++ owns behavior, binding, and data flow only.
-- Dynamic UMG item widgets: create a Widget Blueprint per item type and instantiate it from C++; do not build the visual tree in C++.
+- UMG: layout, styling, and visual property values live in Widget Blueprint assets; C++ exposes data/events and owns logic only
+- Dynamic or repeated UMG patterns: create a reusable Widget Blueprint per item or pattern and instantiate it from C++; do not copy widget trees or build the visual tree in C++
 
 ## Naming
 - Class/member/function: PascalCase, e.g. `class Apple`, `void SetDead()`, `float Hp = 0.f;`

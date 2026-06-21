@@ -173,6 +173,7 @@ class ScenarioGenerationGraphRunnerV2:
         scenario_type = str(state.get("selected_pattern") or "narrow_sidewalk_cross_path")
         plan = self.agent.planner.plan(intent, scenario_type)
         scenario = self.agent.writer.write(plan)
+        scenario = self.agent._postprocess_scenario_for_intent(scenario, intent)
         return {
             **state,
             "scenario": scenario,
@@ -356,6 +357,7 @@ class ScenarioGenerationGraphRunnerV2:
         fallback_intent = self.agent.intent_parser.parse(prompt)
         fallback_plan = self.agent.planner.plan(fallback_intent, "narrow_sidewalk_cross_path")
         fallback_scenario = self.agent.writer.write(fallback_plan)
+        fallback_scenario = self.agent._postprocess_scenario_for_intent(fallback_scenario, fallback_intent)
         assumptions = [
             *state.get("assumptions", []),
             "validation 실패 후 deterministic fallback scenario를 사용했습니다.",

@@ -11,6 +11,8 @@ Scenario generation v2는 항상 LangGraph runner를 실행합니다. `V2_AGENT_
 
 Scenario generation v2의 외부 response body는 API wrapper가 아니라 `scenario` v1 JSON 객체 자체입니다.
 Obstacle placement kind는 Unreal parser와 맞춰 `fixed`, `pattern`, `scatter`를 허용합니다. 기본 LLM 생성은 여전히 단순한 `fixed` placement를 우선 사용합니다.
+자연어 prompt가 곡선 도로, 커브길, curved road, curve, bend 같은 도로 유형을 요청하면 최종 scenario는 bundled `curved-road` preset의 corridor와 robot anchor를 기준으로 보정됩니다.
+보행자는 현재 alpha 정책상 root에는 항상 포함하지만 `background.count=0`, `background.speed_mps=1.0`, `encounters=[]`로 유지합니다.
 
 ## v1과 v2 차이
 
@@ -101,6 +103,7 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 * `obstacles.placements[].allow_blocking`: optional boolean
 * `pedestrians.background.spawn_zone.segments`: optional segment id 목록
 * `corridor.segments[].replaced_by`: fixed string 또는 `{ "choices": [...] }`
+* curved-road prompt: 현재 alpha 기준 `static/templates/scenario/curved-road.json` preset의 `corridor.axis`, `corridor.segments`, `robot.start`, `robot.goal`을 최종 응답에 사용
 
 ## `POST /api/v2/analysis/run`
 

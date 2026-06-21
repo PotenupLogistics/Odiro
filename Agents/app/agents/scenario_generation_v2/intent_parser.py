@@ -21,6 +21,7 @@ class ScenarioIntent:
     robot_anchor_only: bool = False
     robot_start_anchor: dict[str, Any] | None = None
     robot_goal_anchor: dict[str, Any] | None = None
+    corridor_profile: str = "default"
 
 
 class IntentParser:
@@ -35,6 +36,7 @@ class IntentParser:
         persona_hint = "vulnerable" if any(token in lowered for token in ("취약", "vulnerable")) else None
         explicit_blocking = self._is_explicit_blocking_prompt(prompt, lowered)
         requested_gate_obstacle_count = self._requested_gate_obstacle_count(prompt, lowered)
+        corridor_profile = "curved-road" if self._is_curved_road_prompt(prompt, lowered) else "default"
         robot_start_anchor = self._corridor_pose_anchor(prompt, "approach", default_along=1.0)
         robot_goal_anchor = self._corridor_pose_anchor(prompt, "exit", default_along=16.0)
         robot_anchor_only = bool(
@@ -77,6 +79,7 @@ class IntentParser:
             robot_anchor_only=robot_anchor_only,
             robot_start_anchor=robot_start_anchor,
             robot_goal_anchor=robot_goal_anchor,
+            corridor_profile=corridor_profile,
         )
 
     def _is_single_pedestrian_prompt(self, prompt: str, lowered: str) -> bool:
@@ -110,6 +113,12 @@ class IntentParser:
             token in lowered for token in ("two objects", "two panels", "two cones")
         )
         return 2 if has_gate and has_two else None
+
+    def _is_curved_road_prompt(self, prompt: str, lowered: str) -> bool:
+        """Return whether the prompt asks for the bundled curved-road corridor."""
+        korean_tokens = ("곡선 도로", "커브", "커브길", "굽은 도로", "휘어진 도로")
+        english_tokens = ("curved road", "curve", "bend")
+        return any(token in prompt for token in korean_tokens) or any(token in lowered for token in english_tokens)
 
     def _has_risk_element(self, prompt: str, lowered: str) -> bool:
         """Return whether the prompt asks for obstacles, pedestrians, or risk interactions."""

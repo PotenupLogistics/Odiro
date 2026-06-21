@@ -114,6 +114,35 @@ def _assert_alpha_static_scenario_contract(payload: dict) -> None:
     assert payload["robot"]["goal"]["type"] == "corridor_pose"
 
 
+def _assert_curved_road_scenario_contract(payload: dict, *, expect_obstacle: bool) -> None:
+    """Assert curved-road prompts produce preset-based corridor geometry."""
+    _assert_raw_scenario(payload)
+    points = payload["corridor"]["axis"]["points_m"]
+    assert len(points) >= 3
+    assert len({point[1] for point in points}) > 1
+    segment_ranges = {
+        segment["id"]: segment["along_range_m"]
+        for segment in payload["corridor"]["segments"]
+    }
+    assert {"entry_straight", "road_curve"} <= set(segment_ranges)
+    for anchor in (payload["robot"]["start"], payload["robot"]["goal"]):
+        assert anchor["segment"] in segment_ranges
+        start_m, end_m = segment_ranges[anchor["segment"]]
+        assert start_m <= anchor["along_m"] <= end_m
+    placements = payload["obstacles"]["placements"]
+    assert bool(placements) is expect_obstacle
+    for placement in placements:
+        segment = placement["at"]["segment"]
+        assert segment in segment_ranges
+        along_m = placement["at"]["along_m"]
+        start_m, end_m = segment_ranges[segment]
+        if isinstance(along_m, dict):
+            assert start_m <= along_m["min"] <= along_m["max"] <= end_m
+        else:
+            assert start_m <= along_m <= end_m
+    assert payload["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+
+
 def _add_valid_encounter(scenario: dict) -> dict:
     """Attach one valid pedestrian encounter for validator-specific tests."""
     encounter = {
@@ -744,6 +773,23 @@ def test_v2_scenario_graph_uses_valid_llm_scenario_without_fallback_warning() ->
     assert not any("fallback scenario" in warning.message for warning in response.validation.warnings)
 
 
+def test_v2_scenario_graph_curved_road_prompt_overrides_valid_straight_llm_candidate() -> None:
+    fake = _FakeJsonClient([_llm_scenario("valid_straight_graph_candidate")])
+    runner = ScenarioGenerationGraphRunnerV2(
+        settings=Settings(_env_file=None, v2AgentLlmEnabled=True),
+        llm_client=fake,
+    )
+
+    response = runner.run(ScenarioGenerateV2Request(prompt="곡선 도로에서 장애물이 있는 시나리오를 생성해줘"))
+
+    assert response.status == "success"
+    assert response.generation_mode == "langgraph"
+    assert response.scenario_id == "curved_road_static_obstacle"
+    assert response.validation.valid is True
+    assert response.scenario is not None
+    _assert_curved_road_scenario_contract(response.scenario, expect_obstacle=True)
+
+
 def test_v2_scenario_llm_prompt_includes_validator_required_template_shape() -> None:
     agent = ScenarioGenerationV2Agent(settings=Settings(_env_file=None, v2AgentLlmEnabled=True))
 
@@ -873,6 +919,37 @@ def test_v2_deterministic_complex_prompt_returns_alpha_static_obstacle_contract(
     _assert_alpha_static_scenario_contract(response.scenario)
     assert response.scenario["obstacles"]["placements"]
     assert response.scenario["scenario_id"] in {"narrow_sidewalk_cross_path", "static_obstacle_ahead"}
+
+
+def test_v2_deterministic_curved_road_obstacle_prompt_uses_curved_preset() -> None:
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="곡선 도로에서 장애물이 있는 시나리오를 생성해줘"))
+
+    assert response.scenario is not None
+    assert response.scenario["scenario_id"] == "curved_road_static_obstacle"
+    _assert_curved_road_scenario_contract(response.scenario, expect_obstacle=True)
+
+
+def test_v2_deterministic_curve_road_keyword_uses_curved_preset() -> None:
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="커브길에 장애물이 있는 시나리오를 만들어줘"))
+
+    assert response.scenario is not None
+    assert response.scenario["scenario_id"] == "curved_road_static_obstacle"
+    _assert_curved_road_scenario_contract(response.scenario, expect_obstacle=True)
+
+
+def test_v2_deterministic_non_curved_obstacle_prompt_keeps_straight_corridor() -> None:
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="직선 보도에서 장애물이 있는 시나리오를 생성해줘"))
+
+    assert response.scenario is not None
+    points = response.scenario["corridor"]["axis"]["points_m"]
+    assert points == [[0.0, 0.0], [18.0, 0.0]]
+    assert response.scenario["scenario_id"] == "static_obstacle_ahead"
 
 
 def test_v2_deterministic_pedestrian_prompt_keeps_alpha_pedestrians_empty() -> None:
@@ -1109,6 +1186,29 @@ def test_v2_llm_complex_prompt_is_postprocessed_to_alpha_static_contract() -> No
     assert response.generation_mode == "llm"
 
 
+def test_v2_llm_curved_road_prompt_overrides_valid_straight_candidate() -> None:
+    llm_scenario = _llm_scenario("llm_valid_straight_candidate")
+    llm_scenario["obstacles"]["placements"] = [
+        {
+            "kind": "fixed",
+            "id": "llm_cone",
+            "prop": "obstacle.road_cone_01",
+            "at": {"segment": "conflict", "along_m": 7.0, "offset_m": 0.25, "lane": "walkway"},
+            "yaw_deg": 0,
+            "allow_blocking": False,
+        }
+    ]
+    fake = _FakeJsonClient([llm_scenario])
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=True), llm_client=fake)
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="curved road with an obstacle"))
+
+    assert response.scenario is not None
+    assert response.generation_mode == "llm"
+    assert response.scenario_id == "curved_road_static_obstacle"
+    _assert_curved_road_scenario_contract(response.scenario, expect_obstacle=True)
+
+
 def test_v2_scenario_agent_uses_llm_scenario_when_enabled() -> None:
     fake = _FakeJsonClient([_llm_scenario()])
     agent = ScenarioGenerationV2Agent(
@@ -1189,6 +1289,23 @@ def test_v2_scenario_agent_falls_back_when_llm_and_repair_fail() -> None:
         warning.message == "LLM output validation failed; deterministic fallback scenario was used."
         for warning in response.validation.warnings
     )
+
+
+def test_v2_scenario_agent_curved_road_prompt_keeps_curved_preset_after_llm_fallback() -> None:
+    fake = _FakeJsonClient([ValueError("bad json"), ValueError("repair bad json")])
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=True, v2AgentLlmRepairEnabled=True),
+        llm_client=fake,
+    )
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="커브길에 장애물이 있는 시나리오를 만들어줘"))
+
+    assert response.generation_mode == "fallback"
+    assert response.status == "success"
+    assert response.validation.valid is True
+    assert response.scenario is not None
+    assert response.scenario_id == "curved_road_static_obstacle"
+    _assert_curved_road_scenario_contract(response.scenario, expect_obstacle=True)
 
 
 def test_v2_scenario_generate_uses_current_template_contract() -> None:

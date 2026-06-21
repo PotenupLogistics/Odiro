@@ -300,7 +300,7 @@ class ScenarioGenerationV2Agent:
             "prop": "obstacle.crate_01",
             "at": {
                 "segment": "road_curve",
-                "along_m": {"min": 6.5, "max": 8.5},
+                "along_m": self._default_curved_road_obstacle_along_range(),
                 "offset_m": {"min": 0.45, "max": 0.75},
                 "lane": "walkway",
             },
@@ -309,6 +309,10 @@ class ScenarioGenerationV2Agent:
         if intent.explicit_blocking:
             placement["allow_blocking"] = True
         return placement
+
+    def _default_curved_road_obstacle_along_range(self) -> dict[str, float]:
+        """Return the stable obstacle band used for curved-road demo scenarios."""
+        return {"min": 6.5, "max": 8.5}
 
     def _remap_obstacle_to_curved_road(
         self,
@@ -322,7 +326,7 @@ class ScenarioGenerationV2Agent:
             if not isinstance(at, dict):
                 at = {}
             at["segment"] = "road_curve"
-            at["along_m"] = self._clamp_along_value(at.get("along_m"), road_curve_range)
+            at["along_m"] = self._curved_road_obstacle_along_value(at.get("along_m"), road_curve_range)
             at.setdefault("offset_m", 0.0)
             at.setdefault("lane", "walkway")
             placement["at"] = at
@@ -346,8 +350,12 @@ class ScenarioGenerationV2Agent:
                     return (float(start), float(end))
         return (4.0, 9.6)
 
-    def _clamp_along_value(self, value: object, allowed_range: tuple[float, float]) -> object:
-        """Clamp fixed or ranged obstacle along values to the target segment range."""
+    def _curved_road_obstacle_along_value(
+        self,
+        value: object,
+        allowed_range: tuple[float, float],
+    ) -> object:
+        """Keep valid curved-road obstacle positions while avoiding collapsed edge ranges."""
         minimum, maximum = allowed_range
         if isinstance(value, dict):
             value_min = value.get("min")
@@ -355,11 +363,13 @@ class ScenarioGenerationV2Agent:
             if isinstance(value_min, int | float) and isinstance(value_max, int | float):
                 clamped_min = min(max(float(value_min), minimum), maximum)
                 clamped_max = min(max(float(value_max), minimum), maximum)
-                if clamped_min <= clamped_max:
+                if clamped_min < clamped_max:
+                    return {"min": clamped_min, "max": clamped_max}
+                if clamped_min == clamped_max and clamped_min not in {minimum, maximum}:
                     return {"min": clamped_min, "max": clamped_max}
         if isinstance(value, int | float):
             return min(max(float(value), minimum), maximum)
-        return {"min": 6.5, "max": 8.5}
+        return self._default_curved_road_obstacle_along_range()
 
     def _prefer_corridor_pose_robot_anchors(self, scenario: dict) -> None:
         """Replace abstract default robot anchors with UE-friendly corridor poses when possible."""

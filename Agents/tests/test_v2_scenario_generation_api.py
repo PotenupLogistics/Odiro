@@ -1209,6 +1209,63 @@ def test_v2_llm_curved_road_prompt_overrides_valid_straight_candidate() -> None:
     _assert_curved_road_scenario_contract(response.scenario, expect_obstacle=True)
 
 
+def _llm_curved_road_response_with_obstacle_along(along_m: object | None, *, include_along: bool = True):
+    """Generate a curved-road response from an LLM candidate with a specific obstacle along value."""
+    llm_scenario = _llm_scenario("llm_curved_obstacle_along_policy")
+    at = {"segment": "conflict", "offset_m": 0.25, "lane": "walkway"}
+    if include_along:
+        at["along_m"] = along_m
+    llm_scenario["obstacles"]["placements"] = [
+        {
+            "kind": "fixed",
+            "id": "llm_cone",
+            "prop": "obstacle.road_cone_01",
+            "at": at,
+            "yaw_deg": 0,
+        }
+    ]
+    fake = _FakeJsonClient([llm_scenario])
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=True), llm_client=fake)
+
+    return agent.generate(ScenarioGenerateV2Request(prompt="curved road with an obstacle"))
+
+
+def test_v2_llm_curved_road_prompt_preserves_valid_obstacle_range() -> None:
+    response = _llm_curved_road_response_with_obstacle_along({"min": 7.0, "max": 9.0})
+
+    assert response.scenario is not None
+    placement = response.scenario["obstacles"]["placements"][0]
+    assert placement["at"]["segment"] == "road_curve"
+    assert placement["at"]["along_m"] == {"min": 7.0, "max": 9.0}
+
+
+def test_v2_llm_curved_road_prompt_clamps_obstacle_range_inside_curve() -> None:
+    response = _llm_curved_road_response_with_obstacle_along({"min": 3.0, "max": 5.0})
+
+    assert response.scenario is not None
+    placement = response.scenario["obstacles"]["placements"][0]
+    assert placement["at"]["segment"] == "road_curve"
+    assert placement["at"]["along_m"] == {"min": 4.0, "max": 5.0}
+
+
+def test_v2_llm_curved_road_prompt_defaults_edge_collapsed_obstacle_range() -> None:
+    response = _llm_curved_road_response_with_obstacle_along({"min": 12.0, "max": 14.0})
+
+    assert response.scenario is not None
+    placement = response.scenario["obstacles"]["placements"][0]
+    assert placement["at"]["segment"] == "road_curve"
+    assert placement["at"]["along_m"] == {"min": 6.5, "max": 8.5}
+
+
+def test_v2_llm_curved_road_prompt_defaults_missing_obstacle_range() -> None:
+    response = _llm_curved_road_response_with_obstacle_along(None, include_along=False)
+
+    assert response.scenario is not None
+    placement = response.scenario["obstacles"]["placements"][0]
+    assert placement["at"]["segment"] == "road_curve"
+    assert placement["at"]["along_m"] == {"min": 6.5, "max": 8.5}
+
+
 def test_v2_scenario_agent_uses_llm_scenario_when_enabled() -> None:
     fake = _FakeJsonClient([_llm_scenario()])
     agent = ScenarioGenerationV2Agent(

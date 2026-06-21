@@ -54,7 +54,7 @@ public:
 
 	// Scenario generation endpoint path under BaseUrl.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM")
-	FString GenerateEndpoint = TEXT("/api/v1/scenarios/generate");
+	FString GenerateEndpoint = TEXT("/api/v2/scenarios/generate");
 
 	// Default project episode count requested when the prompt UI leaves it blank.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|LLM", meta = (ClampMin = "1", ClampMax = "20"))
@@ -74,6 +74,12 @@ public:
 		const FString& prompt,
 		const FString& projectScenarioJsonPath,
 		int32 episodeCount);
+
+	// Builds the prompt-only v2 scenario generation request body.
+	static bool BuildScenarioGenerateV2RequestJson(
+		const FString& prompt,
+		FString& outRequestJson,
+		TArray<FString>& outDiagnostics);
 
 	// Cancels the in-flight request without broadcasting a completion result.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|LLM")
@@ -104,8 +110,11 @@ private:
 	static FString BuildUrl(const FString& baseUrl, const FString& endpoint);
 	// Truncates large response bodies for diagnostics.
 	static FString TruncateForDiagnostic(const FString& value);
-	// Reads the project scenario path from a generation response without owning the full AI schema.
-	static bool TryReadScenarioPathFromResponse(const FString& responseBody, FString& outScenarioJsonPath, FString& outMessage, FString& outRunId);
+	// Validates and writes the v2 scenario response JSON to the selected project scenario file.
+	static bool TryWriteScenarioResponseToProjectFile(
+		const FString& responseBody,
+		const FString& projectScenarioJsonPath,
+		TArray<FString>& outDiagnostics);
 	// Resolves a project scenario path against the UE project directory when needed.
 	static FString ResolveProjectScenarioJsonPath(const FString& projectScenarioJsonPath);
 	// True when a path targets the user project scenario.json file.
@@ -121,4 +130,8 @@ private:
 	// Episode count associated with the current in-flight request.
 	UPROPERTY(Transient)
 	int32 PendingEpisodeCount = 0;
+
+	// User project scenario.json path associated with the current in-flight request.
+	UPROPERTY(Transient)
+	FString PendingProjectScenarioJsonPath;
 };

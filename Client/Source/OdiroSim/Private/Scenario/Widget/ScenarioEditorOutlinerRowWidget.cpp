@@ -20,17 +20,17 @@ namespace
 	constexpr float RowHorizontalPadding = 8.0f;
 	constexpr float RowIndentWidth = 14.0f;
 
-	FLinearColor MakeUiColor(const TCHAR* hex, const float alpha = 1.0f)
+	FLinearColor MakeScenarioEditorOutlinerRowUiColor(const TCHAR* hex, const float alpha = 1.0f)
 	{
 		FLinearColor color = FLinearColor::FromSRGBColor(FColor::FromHex(hex));
 		color.A = alpha;
 		return color;
 	}
 
-	const FLinearColor RowColor = MakeUiColor(TEXT("1B1B1B"), 0.96f);
-	const FLinearColor RowSelectedColor = MakeUiColor(TEXT("2B2B2B"), 0.98f);
-	const FLinearColor RowOutlineColor = MakeUiColor(TEXT("353535"), 0.85f);
-	const FLinearColor RowSelectedOutlineColor = MakeUiColor(TEXT("0070E0"));
+	const FLinearColor RowColor = MakeScenarioEditorOutlinerRowUiColor(TEXT("1B1B1B"), 0.96f);
+	const FLinearColor RowSelectedColor = MakeScenarioEditorOutlinerRowUiColor(TEXT("2B2B2B"), 0.98f);
+	const FLinearColor RowOutlineColor = MakeScenarioEditorOutlinerRowUiColor(TEXT("353535"), 0.85f);
+	const FLinearColor RowSelectedOutlineColor = MakeScenarioEditorOutlinerRowUiColor(TEXT("0070E0"));
 
 	FSlateBrush MakeOutlinerBrush(const FLinearColor& color)
 	{

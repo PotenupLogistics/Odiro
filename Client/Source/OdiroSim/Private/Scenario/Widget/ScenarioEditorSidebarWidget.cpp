@@ -30,18 +30,18 @@ namespace
 	constexpr float SidebarPanelContentTopPadding = 4.0f;
 	constexpr float BlockOutlineThickness = 1.0f;
 
-	FLinearColor MakeUiColor(const TCHAR* hex, const float alpha = 1.0f)
+	FLinearColor MakeScenarioEditorSidebarUiColor(const TCHAR* hex, const float alpha = 1.0f)
 	{
 		FLinearColor color = FLinearColor::FromSRGBColor(FColor::FromHex(hex));
 		color.A = alpha;
 		return color;
 	}
 
-	const FLinearColor PanelColor = MakeUiColor(TEXT("1B1B1B"), 0.96f);
-	const FLinearColor BlockColor = MakeUiColor(TEXT("1B1B1B"), 0.96f);
-	const FLinearColor NestedBlockColor = MakeUiColor(TEXT("202020"), 0.96f);
-	const FLinearColor BlockOutlineColor = MakeUiColor(TEXT("353535"));
-	const FLinearColor ActiveBlockOutlineColor = MakeUiColor(TEXT("0070E0"));
+	const FLinearColor PanelColor = MakeScenarioEditorSidebarUiColor(TEXT("1B1B1B"), 0.96f);
+	const FLinearColor BlockColor = MakeScenarioEditorSidebarUiColor(TEXT("1B1B1B"), 0.96f);
+	const FLinearColor NestedBlockColor = MakeScenarioEditorSidebarUiColor(TEXT("202020"), 0.96f);
+	const FLinearColor BlockOutlineColor = MakeScenarioEditorSidebarUiColor(TEXT("353535"));
+	const FLinearColor ActiveBlockOutlineColor = MakeScenarioEditorSidebarUiColor(TEXT("0070E0"));
 
 	FString JoinLines(const TArray<FString>& lines)
 	{

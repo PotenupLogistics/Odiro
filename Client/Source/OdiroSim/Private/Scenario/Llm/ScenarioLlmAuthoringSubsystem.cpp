@@ -1,15 +1,39 @@
 #include "Scenario/Llm/ScenarioLlmAuthoringSubsystem.h"
 
 #include "Dom/JsonObject.h"
+#include "HAL/FileManager.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "Shared/ScenarioDocumentJson.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioLlmAuthoring, Log, All);
+
+namespace
+{
+	// Appends schema validation messages to the generation diagnostics shown in the editor.
+	void AppendScenarioSchemaDiagnostics(
+		const TArray<FScenarioSchemaDiagnostic>& schemaDiagnostics,
+		TArray<FString>& outDiagnostics)
+	{
+		for (const FScenarioSchemaDiagnostic& diagnostic : schemaDiagnostics)
+		{
+			if (!diagnostic.Message.IsEmpty())
+			{
+				outDiagnostics.Add(diagnostic.Message);
+			}
+			else if (!diagnostic.Code.IsEmpty())
+			{
+				outDiagnostics.Add(diagnostic.Code);
+			}
+		}
+	}
+}
 
 void UScenarioLlmAuthoringSubsystem::Deinitialize()
 {
@@ -39,6 +63,7 @@ bool UScenarioLlmAuthoringSubsystem::GenerateProjectScenarioFromPrompt(
 		return false;
 	}
 	PendingEpisodeCount = episodeCount > 0 ? episodeCount : DefaultEpisodeCount;
+	PendingProjectScenarioJsonPath = ResolveProjectScenarioJsonPath(projectScenarioJsonPath);
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> request = FHttpModule::Get().CreateRequest();
 	request->SetURL(BuildUrl(BaseUrl, GenerateEndpoint));
@@ -67,6 +92,7 @@ bool UScenarioLlmAuthoringSubsystem::GenerateProjectScenarioFromPrompt(
 	{
 		PendingHttpRequest.Reset();
 		PendingEpisodeCount = 0;
+		PendingProjectScenarioJsonPath.Reset();
 		FScenarioLlmGenerationResult result;
 		result.Message = TEXT("Failed to start LLM generation HTTP request.");
 		result.Diagnostics.Add(result.Message);
@@ -89,6 +115,7 @@ void UScenarioLlmAuthoringSubsystem::CancelPendingRequest()
 	PendingHttpRequest->CancelRequest();
 	PendingHttpRequest.Reset();
 	PendingEpisodeCount = 0;
+	PendingProjectScenarioJsonPath.Reset();
 }
 
 void UScenarioLlmAuthoringSubsystem::HandleGenerateResponse(
@@ -116,17 +143,15 @@ void UScenarioLlmAuthoringSubsystem::HandleGenerateResponse(
 		return;
 	}
 
-	FString scenarioJsonPath;
-	FString responseMessage;
-	FString runId;
-	if (!TryReadScenarioPathFromResponse(responseBody, scenarioJsonPath, responseMessage, runId))
+	const FString scenarioJsonPath = PendingProjectScenarioJsonPath;
+	TArray<FString> diagnostics;
+	if (!TryWriteScenarioResponseToProjectFile(responseBody, scenarioJsonPath, diagnostics))
 	{
 		FScenarioLlmGenerationResult result;
 		result.HttpStatusCode = responseCode;
-		result.Message = responseMessage.IsEmpty()
-			? TEXT("LLM generation response did not include a project scenario.json path.")
-			: responseMessage;
+		result.Message = TEXT("LLM generation response did not produce a valid project scenario.json.");
 		result.Diagnostics.Add(result.Message);
+		result.Diagnostics.Append(diagnostics);
 		if (!responseBody.IsEmpty())
 		{
 			result.Diagnostics.Add(FString::Printf(TEXT("Response: %s"), *TruncateForDiagnostic(responseBody)));
@@ -138,12 +163,9 @@ void UScenarioLlmAuthoringSubsystem::HandleGenerateResponse(
 	FScenarioLlmGenerationResult result;
 	result.bSuccess = true;
 	result.HttpStatusCode = responseCode;
-	result.Message = responseMessage.IsEmpty()
-		? TEXT("LLM generation completed for project scenario.json.")
-		: responseMessage;
+	result.Message = TEXT("LLM generation completed and saved to project scenario.json.");
 	result.ProjectScenarioJsonPath = scenarioJsonPath;
 	result.EpisodeCount = PendingEpisodeCount;
-	result.RunId = runId;
 	CompleteRequest(result);
 }
 
@@ -151,6 +173,7 @@ void UScenarioLlmAuthoringSubsystem::CompleteRequest(const FScenarioLlmGeneratio
 {
 	LatestResult = result;
 	PendingEpisodeCount = 0;
+	PendingProjectScenarioJsonPath.Reset();
 	if (result.bSuccess)
 	{
 		UE_LOG(
@@ -200,26 +223,47 @@ bool UScenarioLlmAuthoringSubsystem::TryBuildRequestBody(
 		return false;
 	}
 
-	const int32 resolvedEpisodeCount = episodeCount > 0 ? episodeCount : DefaultEpisodeCount;
-	if (resolvedEpisodeCount <= 0)
+	(void)episodeCount;
+
+	TArray<FString> diagnostics;
+	if (!BuildScenarioGenerateV2RequestJson(trimmedPrompt, outBody, diagnostics))
 	{
-		outFailure.Message = TEXT("Episode count must be greater than zero.");
+		outFailure.Message = diagnostics.IsEmpty()
+			? TEXT("Failed to serialize LLM generation request JSON.")
+			: diagnostics[0];
 		outFailure.Diagnostics.Add(outFailure.Message);
+		for (int32 index = 1; index < diagnostics.Num(); ++index)
+		{
+			outFailure.Diagnostics.Add(diagnostics[index]);
+		}
 		return false;
 	}
 
-	const FString projectPath = FPaths::GetPath(resolvedScenarioJsonPath);
+	return true;
+}
+
+bool UScenarioLlmAuthoringSubsystem::BuildScenarioGenerateV2RequestJson(
+	const FString& prompt,
+	FString& outRequestJson,
+	TArray<FString>& outDiagnostics)
+{
+	outRequestJson.Reset();
+	outDiagnostics.Reset();
+
+	const FString trimmedPrompt = prompt.TrimStartAndEnd();
+	if (trimmedPrompt.IsEmpty())
+	{
+		outDiagnostics.Add(TEXT("Prompt must not be empty."));
+		return false;
+	}
+
 	TSharedRef<FJsonObject> rootObject = MakeShared<FJsonObject>();
 	rootObject->SetStringField(TEXT("prompt"), trimmedPrompt);
-	rootObject->SetStringField(TEXT("project_path"), projectPath);
-	rootObject->SetStringField(TEXT("scenario_path"), resolvedScenarioJsonPath);
-	rootObject->SetNumberField(TEXT("episode_count"), resolvedEpisodeCount);
 
-	const TSharedRef<TJsonWriter<>> writer = TJsonWriterFactory<>::Create(&outBody);
+	const TSharedRef<TJsonWriter<>> writer = TJsonWriterFactory<>::Create(&outRequestJson);
 	if (!FJsonSerializer::Serialize(rootObject, writer))
 	{
-		outFailure.Message = TEXT("Failed to serialize LLM generation request JSON.");
-		outFailure.Diagnostics.Add(outFailure.Message);
+		outDiagnostics.Add(TEXT("Failed to serialize LLM generation request JSON."));
 		return false;
 	}
 
@@ -243,46 +287,42 @@ FString UScenarioLlmAuthoringSubsystem::BuildUrl(const FString& baseUrl, const F
 	return trimmedBaseUrl + trimmedEndpoint;
 }
 
-bool UScenarioLlmAuthoringSubsystem::TryReadScenarioPathFromResponse(
+bool UScenarioLlmAuthoringSubsystem::TryWriteScenarioResponseToProjectFile(
 	const FString& responseBody,
-	FString& outScenarioJsonPath,
-	FString& outMessage,
-	FString& outRunId)
+	const FString& projectScenarioJsonPath,
+	TArray<FString>& outDiagnostics)
 {
-	outScenarioJsonPath.Reset();
-	outMessage.Reset();
-	outRunId.Reset();
+	outDiagnostics.Reset();
 
-	TSharedPtr<FJsonObject> rootObject;
-	const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(responseBody);
-	if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
+	const FString resolvedScenarioJsonPath = ResolveProjectScenarioJsonPath(projectScenarioJsonPath);
+	if (!IsProjectScenarioJsonPath(resolvedScenarioJsonPath))
 	{
-		outMessage = TEXT("LLM generation response was not valid JSON.");
+		outDiagnostics.Add(TEXT("LLM generation requires a <UserProject>/scenario.json target path."));
 		return false;
 	}
 
-	rootObject->TryGetStringField(TEXT("message"), outMessage);
-	rootObject->TryGetStringField(TEXT("run_id"), outRunId);
-
-	FString scenarioJsonPath;
-	if (!rootObject->TryGetStringField(TEXT("scenario_path"), scenarioJsonPath))
+	const FScenarioDocumentParseResult parseResult =
+		FScenarioDocumentJson::ParseProjectScenarioFromString(responseBody);
+	AppendScenarioSchemaDiagnostics(parseResult.Diagnostics, outDiagnostics);
+	if (!parseResult.bSuccess)
 	{
-		rootObject->TryGetStringField(TEXT("project_scenario_path"), scenarioJsonPath);
-	}
-	if (scenarioJsonPath.IsEmpty())
-	{
-		const TSharedPtr<FJsonObject>* projectObject = nullptr;
-		if (rootObject->TryGetObjectField(TEXT("project"), projectObject) && projectObject && projectObject->IsValid())
-		{
-			(*projectObject)->TryGetStringField(TEXT("scenario_path"), scenarioJsonPath);
-		}
+		outDiagnostics.Add(TEXT("Project scenario JSON import failed validation."));
+		return false;
 	}
 
-	outScenarioJsonPath = ResolveProjectScenarioJsonPath(scenarioJsonPath);
-	if (!IsProjectScenarioJsonPath(outScenarioJsonPath))
+	const FString directory = FPaths::GetPath(resolvedScenarioJsonPath);
+	if (!directory.IsEmpty() && !IFileManager::Get().MakeDirectory(*directory, true))
 	{
-		outMessage = TEXT("LLM generation response scenario_path must point to <UserProject>/scenario.json.");
-		outScenarioJsonPath.Reset();
+		outDiagnostics.Add(FString::Printf(TEXT("Failed to create project scenario directory: %s"), *directory));
+		return false;
+	}
+
+	if (!FFileHelper::SaveStringToFile(
+		responseBody,
+		*resolvedScenarioJsonPath,
+		FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		outDiagnostics.Add(FString::Printf(TEXT("Failed to save generated project scenario JSON to '%s'."), *resolvedScenarioJsonPath));
 		return false;
 	}
 

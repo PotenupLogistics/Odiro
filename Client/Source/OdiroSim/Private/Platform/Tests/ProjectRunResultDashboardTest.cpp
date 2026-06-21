@@ -112,23 +112,31 @@ bool FProjectRunResultDashboardAiTest::RunTest(const FString& Parameters)
 	(void)Parameters;
 
 	const FString ResponseJson = TEXT(R"({
-		"schema": "analysis_run_response_v2",
-		"version": 2,
+		"review_id": "0002",
+		"run_id": "000123",
+		"analysis_mode": "llm",
 		"summary": {
-			"overall_judgement": "needs_change",
-			"message": "골 지점 접근 구간에서 개선 여지가 있습니다."
+			"overall_judgement": "change_recommended",
+			"message": "환경 또는 장애물 배치 검토가 필요합니다."
 		},
+		"analysis_text": "[결과 요약]\n정적 장애물 충돌이 반복되었습니다.",
+		"recommendation_type": "environment_review",
 		"recommendations": [
 			{
-				"severity": "high",
-				"message": "브레이크 트리거를 앞당기세요."
+				"id": "REC-001",
+				"target": "environment",
+				"priority": "high",
+				"title": "정적 장애물 배치와 통로 폭 검토",
+				"reason": "정적 장애물 충돌이 반복되었습니다.",
+				"recommendation": "최소 통로 폭을 늘린 환경 수정 후보로 재실행하세요."
 			},
 			{
-				"priority": 2,
-				"param": "steering_gain",
-				"current": 0.8,
-				"suggested": 0.65,
-				"reason": "좌회전 구간 조향이 과도합니다."
+				"id": "REC-002",
+				"target": "policy",
+				"priority": "medium",
+				"title": "경로 추종 파라미터 검토",
+				"reason": "재탐색 이벤트가 반복되었습니다.",
+				"recommendation": "look-ahead 거리와 조향 변화량 상한을 보수적으로 조정하세요."
 			}
 		]
 	})");
@@ -138,16 +146,19 @@ bool FProjectRunResultDashboardAiTest::RunTest(const FString& Parameters)
 		TEXT("AI response parsed"),
 		FProjectRunResultDashboardJson::AppendAiFromAnalysisResponseJsonString(ResponseJson, DashboardData));
 	TestTrue(TEXT("AI loaded"), DashboardData.bAiLoaded);
-	TestTrue(TEXT("summary parsed"), DashboardData.AiSummary.Contains(TEXT("개선 여지")));
+	TestTrue(TEXT("analysis text parsed"), DashboardData.AiSummary.Contains(TEXT("정적 장애물 충돌")));
 	TestEqual(TEXT("suggestion count"), DashboardData.Suggestions.Num(), 2);
-	TestEqual(TEXT("explicit severity"), DashboardData.Suggestions[0].Severity, EProjectRunAiSuggestionSeverity::High);
-	TestEqual(TEXT("priority severity"), DashboardData.Suggestions[1].Severity, EProjectRunAiSuggestionSeverity::Medium);
-	TestTrue(TEXT("constructed message"), DashboardData.Suggestions[1].Message.Contains(TEXT("steering_gain")));
+	TestEqual(TEXT("string priority severity"), DashboardData.Suggestions[0].Severity, EProjectRunAiSuggestionSeverity::High);
+	TestEqual(TEXT("medium priority severity"), DashboardData.Suggestions[1].Severity, EProjectRunAiSuggestionSeverity::Medium);
+	TestTrue(TEXT("constructed v2 message includes title"), DashboardData.Suggestions[0].Message.Contains(TEXT("정적 장애물 배치")));
+	TestTrue(TEXT("constructed v2 message includes recommendation"), DashboardData.Suggestions[1].Message.Contains(TEXT("look-ahead")));
 
 	const FString EmptyRecommendationsJson = TEXT(R"({
-		"schema": "analysis_run_response_v2",
-		"version": 2,
-		"summary": { "message": "추가 개선 제안이 없습니다." },
+		"summary": {
+			"overall_judgement": "no_change_recommended",
+			"message": "추가 개선 제안이 없습니다."
+		},
+		"recommendation_type": "none",
 		"recommendations": []
 	})");
 
@@ -158,6 +169,23 @@ bool FProjectRunResultDashboardAiTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("empty AI loaded"), EmptyData.bAiLoaded);
 	TestEqual(TEXT("empty suggestion count"), EmptyData.Suggestions.Num(), 0);
 	TestTrue(TEXT("empty summary parsed"), EmptyData.AiSummary.Contains(TEXT("없습니다")));
+
+	const FString InsufficientDataJson = TEXT(R"({
+		"summary": {
+			"overall_judgement": "insufficient_data",
+			"message": "분석 가능한 로그가 부족합니다."
+		},
+		"recommendation_type": "insufficient_data",
+		"recommendations": []
+	})");
+
+	FProjectRunResultDashboardData InsufficientData;
+	TestTrue(
+		TEXT("insufficient data recommendations parsed"),
+		FProjectRunResultDashboardJson::AppendAiFromAnalysisResponseJsonString(InsufficientDataJson, InsufficientData));
+	TestTrue(TEXT("insufficient data AI loaded"), InsufficientData.bAiLoaded);
+	TestEqual(TEXT("insufficient data suggestion count"), InsufficientData.Suggestions.Num(), 0);
+	TestTrue(TEXT("insufficient data summary parsed"), InsufficientData.AiSummary.Contains(TEXT("부족합니다")));
 
 	return true;
 }

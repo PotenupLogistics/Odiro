@@ -77,15 +77,12 @@ bool UScenarioLlmPromptWidget::GenerateFromPromptTextBox()
 	FString prompt;
 	if (!TryGetPrompt(prompt)) return false;
 
-	int32 episodeCount = 0;
-	if (!TryGetEpisodeCount(episodeCount)) return false;
-
 	FString scenarioJsonPath;
 	FString projectPath;
 	if (!TryResolveCurrentProjectScenarioPath(scenarioJsonPath, projectPath)) return false;
 
 	SetStatusText(TEXT("Requesting project scenario generation."));
-	return llmSubsystem->GenerateProjectScenarioFromPrompt(prompt, scenarioJsonPath, episodeCount);
+	return llmSubsystem->GenerateProjectScenarioFromPrompt(prompt, scenarioJsonPath, llmSubsystem->DefaultEpisodeCount);
 }
 
 bool UScenarioLlmPromptWidget::LoadGeneratedScenario()

@@ -59,6 +59,7 @@ keep:
   - Project run child process exits after terminal runner state; Bridge owns status JSON lifecycle.
   - Project run completion writes user project result artifacts through the simulator process path; episode trace starts/stops through runner lifecycle.
   - PlatformAnalysisAi has a v2 project-run request path using `project_path` + `run_id`; successful responses are saved under run `review/`; root dev/run scripts may override the endpoint with `-ProjectRunAnalysisEndpointUrl`.
+  - MainMenu project result dashboard displays v2 analysis `analysis_text` first, maps string recommendation priorities to suggestion severity, and keeps empty suggestion states for `none`/`insufficient_data`.
   - ScenarioEditorLaunchSubsystem treats the pending path as a project scenario JSON path; URL options are inspectable only and subsystem state is authoritative.
   - ProjectSessionSubsystem is the single runtime source of truth for the active user project root after Startup UI selection.
   - StartupMap is the default entry map and only owns project selection/creation UI through WBP_StartupMenu plus a map-owned startup bootstrap actor; it does not use a custom Startup GameMode or PlayerController.

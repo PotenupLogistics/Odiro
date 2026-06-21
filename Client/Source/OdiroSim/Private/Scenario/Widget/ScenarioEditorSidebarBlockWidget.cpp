@@ -18,19 +18,19 @@ namespace
 	constexpr float SidebarBlockPadding = 10.0f;
 	constexpr float SidebarBlockOutlineThickness = 1.0f;
 
-	FLinearColor MakeUiColor(const TCHAR* hex, const float alpha = 1.0f)
+	FLinearColor MakeScenarioEditorSidebarBlockUiColor(const TCHAR* hex, const float alpha = 1.0f)
 	{
 		FLinearColor color = FLinearColor::FromSRGBColor(FColor::FromHex(hex));
 		color.A = alpha;
 		return color;
 	}
 
-	const FLinearColor SidebarBlockColor = MakeUiColor(TEXT("1B1B1B"), 0.96f);
-	const FLinearColor SidebarNestedBlockColor = MakeUiColor(TEXT("202020"), 0.96f);
-	const FLinearColor SidebarNestedLeafBlockColor = MakeUiColor(TEXT("151515"), 0.98f);
-	const FLinearColor SidebarBlockOutlineColor = MakeUiColor(TEXT("353535"));
-	const FLinearColor SidebarTransparentOutlineColor = MakeUiColor(TEXT("353535"), 0.0f);
-	const FLinearColor SidebarSelectedBlockOutlineColor = MakeUiColor(TEXT("0070E0"));
+	const FLinearColor SidebarBlockColor = MakeScenarioEditorSidebarBlockUiColor(TEXT("1B1B1B"), 0.96f);
+	const FLinearColor SidebarNestedBlockColor = MakeScenarioEditorSidebarBlockUiColor(TEXT("202020"), 0.96f);
+	const FLinearColor SidebarNestedLeafBlockColor = MakeScenarioEditorSidebarBlockUiColor(TEXT("151515"), 0.98f);
+	const FLinearColor SidebarBlockOutlineColor = MakeScenarioEditorSidebarBlockUiColor(TEXT("353535"));
+	const FLinearColor SidebarTransparentOutlineColor = MakeScenarioEditorSidebarBlockUiColor(TEXT("353535"), 0.0f);
+	const FLinearColor SidebarSelectedBlockOutlineColor = MakeScenarioEditorSidebarBlockUiColor(TEXT("0070E0"));
 
 	FSlateBrush MakeBlockBrush(const FLinearColor& color)
 	{

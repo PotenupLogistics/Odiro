@@ -262,6 +262,20 @@ namespace
 			return EProjectRunAiSuggestionSeverity::Low;
 		}
 
+		const FString PriorityText = ReadDashboardStringOrDefault(Object, TEXT("priority")).TrimStartAndEnd().ToLower();
+		if (PriorityText == TEXT("high") || PriorityText == TEXT("critical") || PriorityText == TEXT("높음"))
+		{
+			return EProjectRunAiSuggestionSeverity::High;
+		}
+		if (PriorityText == TEXT("medium") || PriorityText == TEXT("warning") || PriorityText == TEXT("중간"))
+		{
+			return EProjectRunAiSuggestionSeverity::Medium;
+		}
+		if (PriorityText == TEXT("low") || PriorityText == TEXT("낮음"))
+		{
+			return EProjectRunAiSuggestionSeverity::Low;
+		}
+
 		const double Priority = ReadDashboardNumberOrDefault(Object, TEXT("priority"), 0.0);
 		if (Priority >= 3.0)
 		{
@@ -286,19 +300,29 @@ namespace
 			return Message;
 		}
 
-		Message = ReadDashboardStringOrDefault(Object, TEXT("reason")).TrimStartAndEnd();
+		const FString Title = ReadDashboardStringOrDefault(Object, TEXT("title")).TrimStartAndEnd();
+		const FString Reason = ReadDashboardStringOrDefault(Object, TEXT("reason")).TrimStartAndEnd();
+		const FString Recommendation = ReadDashboardStringOrDefault(Object, TEXT("recommendation")).TrimStartAndEnd();
 		const FString Param = ReadDashboardStringOrDefault(Object, TEXT("param")).TrimStartAndEnd();
 		const FString Current = DashboardJsonValueToCompactString(Object.TryGetField(TEXT("current"))).TrimStartAndEnd();
 		const FString Suggested = DashboardJsonValueToCompactString(Object.TryGetField(TEXT("suggested"))).TrimStartAndEnd();
 
 		TArray<FString> Parts;
+		if (!Title.IsEmpty())
+		{
+			Parts.Add(Title);
+		}
+		if (!Reason.IsEmpty())
+		{
+			Parts.Add(FString::Printf(TEXT("이유: %s"), *Reason));
+		}
+		if (!Recommendation.IsEmpty())
+		{
+			Parts.Add(FString::Printf(TEXT("추천: %s"), *Recommendation));
+		}
 		if (!Param.IsEmpty() && (!Current.IsEmpty() || !Suggested.IsEmpty()))
 		{
 			Parts.Add(FString::Printf(TEXT("%s: %s -> %s"), *Param, *Current, *Suggested));
-		}
-		if (!Message.IsEmpty())
-		{
-			Parts.Add(Message);
 		}
 		return FString::Join(Parts, TEXT(" "));
 	}
@@ -504,8 +528,14 @@ bool FProjectRunResultDashboardJson::AppendAiFromAnalysisResponseJsonString(
 		return false;
 	}
 
+	FString AnalysisText;
+	if (RootObject->TryGetStringField(TEXT("analysis_text"), AnalysisText) && !AnalysisText.TrimStartAndEnd().IsEmpty())
+	{
+		outDashboardData.AiSummary = AnalysisText.TrimStartAndEnd();
+	}
+
 	const TSharedPtr<FJsonValue> SummaryValue = RootObject->TryGetField(TEXT("summary"));
-	if (SummaryValue.IsValid())
+	if (outDashboardData.AiSummary.IsEmpty() && SummaryValue.IsValid())
 	{
 		if (SummaryValue->Type == EJson::Object)
 		{

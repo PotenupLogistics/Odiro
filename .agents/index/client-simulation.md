@@ -88,6 +88,7 @@ verify:
   - `scenario`/`scenario_sample` docs vs Client shared schema type alignment
   - Client/Json/Schema and environment catalog docs against contracts/specs/user-project-data.md before prompt-facing doc changes
   - Scenario document parse, project `scenario.json` adapter, version mismatch, scenario sample generation, and round-trip automation tests
+  - `OdiroSim.ScenarioLlm.Authoring.V2Request` after Scenario LLM generation request/response contract changes
   - Scenario-to-WorldSpec adapter automation tests, including generated user-project scenario sample adapter coverage, and OdiroSimEditor build after adapter/editor draft changes
   - `OdiroSim.ScenarioEditor.Outliner.Model` and `OdiroSim.ScenarioEditor.Outliner.Selection` after outliner model or selection mapping changes
   - `OdiroSim.UserProjectData.RunOutput.Write` after user project result writer changes

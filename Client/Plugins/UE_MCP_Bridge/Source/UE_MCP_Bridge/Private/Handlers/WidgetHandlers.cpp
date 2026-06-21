@@ -75,6 +75,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("run_editor_utility_blueprint"), &RunEditorUtilityBlueprint);
 	Registry.RegisterHandler(TEXT("add_widget"), &AddWidget);
 	Registry.RegisterHandler(TEXT("remove_widget"), &RemoveWidget);
+	Registry.RegisterHandler(TEXT("rename_widget"), &RenameWidget);
 	Registry.RegisterHandler(TEXT("move_widget"), &MoveWidget);
 	Registry.RegisterHandler(TEXT("set_root_widget"), &SetRoot);
 	Registry.RegisterHandler(TEXT("wrap_root_widget"), &WrapRoot);
@@ -639,6 +640,135 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 	Result->SetStringField(TEXT("widgetName"), WidgetName);
 	Result->SetStringField(TEXT("widgetClass"), RemovedClass);
 	// No rollback: remove_widget is destructive (would need to snapshot widget tree to reverse).
+
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FWidgetHandlers::RenameWidget(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	FString OldWidgetName;
+	if (auto Err = RequireStringAlt(Params, TEXT("oldWidgetName"), TEXT("widgetName"), OldWidgetName)) return Err;
+
+	FString NewWidgetName;
+	if (auto Err = RequireStringAlt(Params, TEXT("newWidgetName"), TEXT("newName"), NewWidgetName)) return Err;
+
+	if (OldWidgetName == NewWidgetName)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("widgetName"), NewWidgetName);
+		Noop->SetStringField(TEXT("assetPath"), AssetPath);
+		return MCPResult(Noop);
+	}
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	if (!WidgetBP || !WidgetBP->WidgetTree)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
+	}
+
+	UWidget* WidgetToRename = nullptr;
+	UWidget* ExistingNewNameWidget = nullptr;
+	WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
+	{
+		if (!Widget) return;
+		if (Widget->GetName() == OldWidgetName) WidgetToRename = Widget;
+		if (Widget->GetName() == NewWidgetName) ExistingNewNameWidget = Widget;
+	});
+
+	if (ExistingNewNameWidget)
+	{
+		if (!WidgetToRename)
+		{
+			WidgetBP->Modify();
+			bool bRepairedGuidMap = false;
+			FGuid ExistingGuid;
+			if (WidgetBP->WidgetVariableNameToGuidMap.RemoveAndCopyValue(FName(*OldWidgetName), ExistingGuid))
+			{
+				WidgetBP->WidgetVariableNameToGuidMap.Add(ExistingNewNameWidget->GetFName(), ExistingGuid);
+				bRepairedGuidMap = true;
+			}
+			else if (ExistingNewNameWidget->bIsVariable &&
+				!WidgetBP->WidgetVariableNameToGuidMap.Contains(ExistingNewNameWidget->GetFName()))
+			{
+				WidgetBP->WidgetVariableNameToGuidMap.Add(ExistingNewNameWidget->GetFName(), FGuid::NewGuid());
+				bRepairedGuidMap = true;
+			}
+
+			if (bRepairedGuidMap)
+			{
+				WidgetBP->MarkPackageDirty();
+				FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+				UEditorAssetLibrary::SaveAsset(AssetPath);
+			}
+
+			auto AlreadyRenamed = MCPSuccess();
+			MCPSetExisted(AlreadyRenamed);
+			AlreadyRenamed->SetStringField(TEXT("oldWidgetName"), OldWidgetName);
+			AlreadyRenamed->SetStringField(TEXT("newWidgetName"), NewWidgetName);
+			AlreadyRenamed->SetStringField(TEXT("assetPath"), AssetPath);
+			AlreadyRenamed->SetBoolField(TEXT("repairedGuidMap"), bRepairedGuidMap);
+			return MCPResult(AlreadyRenamed);
+		}
+
+		return MCPError(FString::Printf(
+			TEXT("Cannot rename widget '%s' to '%s': target name already exists"),
+			*OldWidgetName,
+			*NewWidgetName));
+	}
+
+	if (!WidgetToRename)
+	{
+		return MCPError(FString::Printf(TEXT("Widget not found: '%s'"), *OldWidgetName));
+	}
+
+	WidgetBP->Modify();
+	WidgetBP->WidgetTree->Modify();
+	WidgetToRename->Modify();
+
+	FGuid ExistingGuid;
+	const bool bHadVariableGuid = WidgetBP->WidgetVariableNameToGuidMap.RemoveAndCopyValue(WidgetToRename->GetFName(), ExistingGuid);
+
+	const bool bRenamed = WidgetToRename->Rename(
+		*NewWidgetName,
+		WidgetBP->WidgetTree,
+		REN_DontCreateRedirectors | REN_ForceNoResetLoaders);
+	if (!bRenamed)
+	{
+		return MCPError(FString::Printf(
+			TEXT("Failed to rename widget '%s' to '%s'"),
+			*OldWidgetName,
+			*NewWidgetName));
+	}
+
+	if (bHadVariableGuid)
+	{
+		WidgetBP->WidgetVariableNameToGuidMap.Add(WidgetToRename->GetFName(), ExistingGuid);
+	}
+	else if (WidgetToRename->bIsVariable)
+	{
+		WidgetBP->WidgetVariableNameToGuidMap.Add(WidgetToRename->GetFName(), FGuid::NewGuid());
+	}
+
+	WidgetBP->MarkPackageDirty();
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+	UEditorAssetLibrary::SaveAsset(AssetPath);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("oldWidgetName"), OldWidgetName);
+	Result->SetStringField(TEXT("newWidgetName"), WidgetToRename->GetName());
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("oldWidgetName"), WidgetToRename->GetName());
+	Payload->SetStringField(TEXT("newWidgetName"), OldWidgetName);
+	MCPSetRollback(Result, TEXT("rename_widget"), Payload);
 
 	return MCPResult(Result);
 }

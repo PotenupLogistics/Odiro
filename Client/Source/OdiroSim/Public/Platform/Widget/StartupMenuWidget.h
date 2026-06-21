@@ -48,6 +48,15 @@ public:
 	// Validates the selected project through the simulator launch subsystem.
 	bool ValidateSelectedProject(TArray<FString>& outDiagnostics, USimulatorLaunchSubsystem* simulatorLaunchSubsystem = nullptr) const;
 
+	// Adds an existing user project to the recent list without opening it.
+	bool AddRecentProjectForPrototype(
+		const FString& projectPath,
+		TArray<FString>& outDiagnostics,
+		USimulatorLaunchSubsystem* simulatorLaunchSubsystem = nullptr);
+
+	// Returns normalized recent project paths ordered newest-first.
+	TArray<FString> GetRecentProjectPathsForPrototype() const;
+
 protected:
 	UFUNCTION()
 	void HandleProjectOpenInputChanged(const FText& text);
@@ -57,6 +66,9 @@ protected:
 
 	UFUNCTION()
 	void HandleOpenProjectClicked();
+
+	UFUNCTION()
+	void HandleAddRecentProjectClicked();
 
 	UFUNCTION()
 	void HandleBackToRecentProjectsClicked();
@@ -97,6 +109,10 @@ private:
 	void SetDiagnosticsText(const FString& message);
 	bool BrowseForProjectParentFolder(FString& outFolder) const;
 	bool BrowseForExistingProjectFolder(FString& outFolder) const;
+	bool AddRecentProjectIfValid(
+		const FString& projectPath,
+		TArray<FString>& outDiagnostics,
+		USimulatorLaunchSubsystem* simulatorLaunchSubsystem = nullptr);
 	bool OpenExistingProject(const FString& projectPath);
 	bool CommitActiveProjectAndOpenEditor();
 	void HandleRecentProjectCardSelected(UProjectTemplateCardWidget* cardWidget);
@@ -170,6 +186,10 @@ private:
 	// Opens an existing user project folder from the recent project screen.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> OpenProjectButton;
+
+	// Adds an existing user project folder to the recent project list.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> RecentProjectAddButton;
 
 	// Navigates from the creation form back to recent projects.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

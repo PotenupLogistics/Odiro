@@ -273,6 +273,10 @@ void UStartupMenuWidget::NativeDestruct()
 			this,
 			&UStartupMenuWidget::HandlePolicyPresetSelectionChanged);
 	}
+	if (RecentProjectAddButton)
+	{
+		RecentProjectAddButton->OnClicked.RemoveDynamic(this, &UStartupMenuWidget::HandleAddRecentProjectClicked);
+	}
 
 	Super::NativeDestruct();
 }
@@ -353,6 +357,19 @@ bool UStartupMenuWidget::ValidateSelectedProject(
 	return subsystem->ValidateUserProject(GetSelectedProjectPath(), outDiagnostics);
 }
 
+bool UStartupMenuWidget::AddRecentProjectForPrototype(
+	const FString& projectPath,
+	TArray<FString>& outDiagnostics,
+	USimulatorLaunchSubsystem* simulatorLaunchSubsystem)
+{
+	return AddRecentProjectIfValid(projectPath, outDiagnostics, simulatorLaunchSubsystem);
+}
+
+TArray<FString> UStartupMenuWidget::GetRecentProjectPathsForPrototype() const
+{
+	return RecentProjectPaths;
+}
+
 void UStartupMenuWidget::HandleProjectOpenInputChanged(const FText&)
 {
 	CacheProjectOpenOptionsFromWidgets();
@@ -377,6 +394,19 @@ void UStartupMenuWidget::HandleOpenProjectClicked()
 	}
 
 	OpenExistingProject(selectedProjectFolder);
+}
+
+void UStartupMenuWidget::HandleAddRecentProjectClicked()
+{
+	FString selectedProjectFolder;
+	if (!BrowseForExistingProjectFolder(selectedProjectFolder))
+	{
+		SetProjectOpenWarningText(TEXT("프로젝트 폴더를 선택하지 않았습니다."));
+		return;
+	}
+
+	TArray<FString> diagnostics;
+	AddRecentProjectIfValid(selectedProjectFolder, diagnostics);
 }
 
 void UStartupMenuWidget::HandleBackToRecentProjectsClicked()
@@ -552,6 +582,11 @@ void UStartupMenuWidget::BindControls()
 		OpenProjectButton->OnClicked.RemoveDynamic(this, &UStartupMenuWidget::HandleOpenProjectClicked);
 		OpenProjectButton->OnClicked.AddDynamic(this, &UStartupMenuWidget::HandleOpenProjectClicked);
 	}
+	if (RecentProjectAddButton)
+	{
+		RecentProjectAddButton->OnClicked.RemoveDynamic(this, &UStartupMenuWidget::HandleAddRecentProjectClicked);
+		RecentProjectAddButton->OnClicked.AddDynamic(this, &UStartupMenuWidget::HandleAddRecentProjectClicked);
+	}
 	if (BackToRecentProjectsButton)
 	{
 		BackToRecentProjectsButton->OnClicked.RemoveDynamic(this, &UStartupMenuWidget::HandleBackToRecentProjectsClicked);
@@ -600,6 +635,7 @@ bool UStartupMenuWidget::ValidateRequiredBindings() const
 	requireWidget(RecentProjectDeleteCancelButton, TEXT("RecentProjectDeleteCancelButton"));
 	requireWidget(CreateNewProjectButton, TEXT("CreateNewProjectButton"));
 	requireWidget(OpenProjectButton, TEXT("OpenProjectButton"));
+	requireWidget(RecentProjectAddButton, TEXT("RecentProjectAddButton"));
 	requireWidget(BackToRecentProjectsButton, TEXT("BackToRecentProjectsButton"));
 	requireWidget(ProjectParentFolderTextBox, TEXT("ProjectParentFolderTextBox"));
 	requireWidget(ProjectNameTextBox, TEXT("ProjectNameTextBox"));
@@ -1125,39 +1161,64 @@ bool UStartupMenuWidget::BrowseForExistingProjectFolder(FString& outFolder) cons
 	return PickStartupMenuFolder(TEXT("Open Project Folder"), GetSelectedProjectParentFolder(), outFolder);
 }
 
-bool UStartupMenuWidget::OpenExistingProject(const FString& projectPath)
+bool UStartupMenuWidget::AddRecentProjectIfValid(
+	const FString& projectPath,
+	TArray<FString>& outDiagnostics,
+	USimulatorLaunchSubsystem* simulatorLaunchSubsystem)
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
+	outDiagnostics.Reset();
+
+	USimulatorLaunchSubsystem* subsystem = simulatorLaunchSubsystem ? simulatorLaunchSubsystem : GetSimulatorLaunchSubsystem();
 	if (!subsystem)
 	{
-		SetProjectOpenWarningText(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
+		outDiagnostics.Add(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
+		SetProjectOpenWarningText(outDiagnostics[0]);
 		return false;
 	}
 
 	const FString normalizedProjectPath = NormalizeStartupMenuPath(projectPath);
 	if (normalizedProjectPath.IsEmpty())
 	{
-		SetProjectOpenWarningText(TEXT("프로젝트를 선택하세요."));
+		outDiagnostics.Add(TEXT("프로젝트를 선택하세요."));
+		SetProjectOpenWarningText(outDiagnostics[0]);
 		return false;
 	}
 	if (!IFileManager::Get().DirectoryExists(*normalizedProjectPath))
 	{
-		SetProjectOpenWarningText(TEXT("프로젝트 폴더가 없습니다."));
-		RefreshRecentProjectCards();
+		outDiagnostics.Add(TEXT("프로젝트 폴더가 없습니다."));
+		SetProjectOpenWarningText(outDiagnostics[0]);
 		return false;
 	}
 
-	SetProjectPathForPrototype(normalizedProjectPath);
-
-	TArray<FString> diagnostics;
-	if (!ValidateSelectedProject(diagnostics, subsystem))
+	if (!subsystem->ValidateUserProject(normalizedProjectPath, outDiagnostics))
 	{
-		SetProjectOpenWarningText(diagnostics.IsEmpty() ? TEXT("프로젝트 검증 실패") : diagnostics[0]);
-		SetDiagnosticsText(FString::Join(diagnostics, TEXT("\n")));
+		SetProjectOpenWarningText(outDiagnostics.IsEmpty() ? TEXT("프로젝트 검증 실패") : outDiagnostics[0]);
+		SetDiagnosticsText(FString::Join(outDiagnostics, TEXT("\n")));
 		return false;
 	}
 
 	RememberRecentProject(normalizedProjectPath);
+	RefreshRecentProjectCards();
+	SetProjectOpenWarningText(FString());
+	SetDiagnosticsText(FString());
+	return true;
+}
+
+bool UStartupMenuWidget::OpenExistingProject(const FString& projectPath)
+{
+	TArray<FString> diagnostics;
+	if (!AddRecentProjectIfValid(projectPath, diagnostics))
+	{
+		const FString normalizedProjectPath = NormalizeStartupMenuPath(projectPath);
+		if (!normalizedProjectPath.IsEmpty() && !IFileManager::Get().DirectoryExists(*normalizedProjectPath))
+		{
+			RefreshRecentProjectCards();
+		}
+		return false;
+	}
+
+	const FString normalizedProjectPath = NormalizeStartupMenuPath(projectPath);
+	SetProjectPathForPrototype(normalizedProjectPath);
 	SaveProjectOpenOptions();
 	if (!CommitActiveProjectAndOpenEditor())
 	{

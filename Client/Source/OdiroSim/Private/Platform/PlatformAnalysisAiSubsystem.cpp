@@ -6,8 +6,10 @@
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
+#include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -217,6 +219,21 @@ namespace
 	}
 }
 
+void UPlatformAnalysisAiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+
+	FString EndpointUrl;
+	if (FParse::Value(FCommandLine::Get(), TEXT("ProjectRunAnalysisEndpointUrl="), EndpointUrl))
+	{
+		EndpointUrl = EndpointUrl.TrimStartAndEnd();
+		if (!EndpointUrl.IsEmpty())
+		{
+			ProjectRunAnalysisEndpointUrl = EndpointUrl;
+		}
+	}
+}
+
 void UPlatformAnalysisAiSubsystem::Deinitialize()
 {
 	CancelPendingAnalysisRequest();
@@ -414,6 +431,13 @@ void UPlatformAnalysisAiSubsystem::HandleAnalysisResponse(
 	const FString ResponseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString();
 	if (!bWasSuccessful)
 	{
+		UE_LOG(
+			LogPlatformAnalysisAi,
+			Warning,
+			TEXT("AI analysis HTTP request failed | Url: %s, Code: %d, Body: %s"),
+			httpRequest.IsValid() ? *httpRequest->GetURL() : TEXT("<invalid>"),
+			ResponseCode,
+			*TruncateText(ResponseBody, RawResponsePreviewCharacterLimit));
 		BroadcastFailure(ResponseCode, TEXT("AI analysis HTTP request failed."), ResponseBody);
 		return;
 	}
@@ -421,6 +445,13 @@ void UPlatformAnalysisAiSubsystem::HandleAnalysisResponse(
 	if (ResponseCode < 200 || ResponseCode >= 300)
 	{
 		const FString Message = FString::Printf(TEXT("AI analysis HTTP error: %d"), ResponseCode);
+		UE_LOG(
+			LogPlatformAnalysisAi,
+			Warning,
+			TEXT("AI analysis HTTP error | Url: %s, Code: %d, Body: %s"),
+			httpRequest.IsValid() ? *httpRequest->GetURL() : TEXT("<invalid>"),
+			ResponseCode,
+			*TruncateText(ResponseBody, RawResponsePreviewCharacterLimit));
 		BroadcastFailure(ResponseCode, Message, ResponseBody);
 		return;
 	}

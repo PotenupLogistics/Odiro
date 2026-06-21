@@ -630,6 +630,15 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UUserWidget>> ProjectAiSuggestionRows;
 
+	// 현재 진행 중인 AI 분석 요청이 대상으로 삼은 project run id.
+	FString PendingProjectRunAnalysisRunId;
+
+	// 마지막 AI 분석 실패 안내가 속한 project run id.
+	FString LastProjectRunAnalysisFailureRunId;
+
+	// 실패 후 같은 run detail을 다시 그릴 때 유지할 사용자 안내 문구.
+	FString LastProjectRunAnalysisFailureText;
+
 	// Scenario editor controller에 input mode를 요청할 때 사용한 focus widget.
 	UPROPERTY(Transient)
 	TWeakObjectPtr<UWidget> RequestedInputModeFocusWidget;

@@ -547,6 +547,27 @@ namespace
 		return FString::Join(lines, TEXT("\n"));
 	}
 
+	// AI 분석 실패를 retry CTA와 함께 표시할 compact message로 변환한다.
+	FString BuildAnalysisFailureDisplayText(const FPlatformAnalysisAiResponse& response)
+	{
+		TArray<FString> lines;
+		lines.Add(TEXT("AI analysis failed"));
+		if (response.ResponseCode != 0)
+		{
+			lines.Add(FString::Printf(TEXT("Response: %d"), response.ResponseCode));
+		}
+		if (!response.ErrorMessage.IsEmpty())
+		{
+			lines.Add(response.ErrorMessage);
+		}
+		if (!response.ResponseBody.IsEmpty())
+		{
+			lines.Add(TEXT(""));
+			lines.Add(TruncatePreview(response.ResponseBody, ReportPreviewCharacterLimit));
+		}
+		return JoinStringLines(lines);
+	}
+
 	bool TryReadExperimentResultReportItem(const FString& reportPath, FExperimentResultReportItem& outItem)
 	{
 		outItem = FExperimentResultReportItem{};
@@ -1756,6 +1777,9 @@ void UMainMenuWidget::HandleSendToAiClicked()
 		{
 			AiAnalysisTextBlock->SetText(FText::FromString(TEXT("Analyzing project run...")));
 		}
+		PendingProjectRunAnalysisRunId = runId;
+		LastProjectRunAnalysisFailureRunId.Reset();
+		LastProjectRunAnalysisFailureText.Reset();
 		if (SendToAiButton)
 		{
 			SendToAiButton->SetIsEnabled(false);
@@ -3183,21 +3207,27 @@ void UMainMenuWidget::RefreshExperimentResultDetailPanel()
 
 	UPlatformAnalysisAiSubsystem* AnalysisSubsystem = GetPlatformAnalysisAiSubsystem();
 	const bool bAnalysisPending = AnalysisSubsystem && AnalysisSubsystem->IsAnalysisRequestPending();
-	const bool bShowAiAction = bAnalysisPending || !DashboardData.bAiLoaded;
+	const bool bHasAnalysisFailure =
+		!LastProjectRunAnalysisFailureText.IsEmpty()
+		&& LastProjectRunAnalysisFailureRunId.Equals(DashboardData.RunId, ESearchCase::CaseSensitive);
+	const bool bShowAiAction = bAnalysisPending || bHasAnalysisFailure || !DashboardData.bAiLoaded;
 	SetWidgetVisible(AiAnalysisActionBox, bShowAiAction);
-	SetWidgetVisible(AiSuggestionPanel, DashboardData.bAiLoaded && !bAnalysisPending);
+	SetWidgetVisible(AiSuggestionPanel, DashboardData.bAiLoaded && !bAnalysisPending && !bHasAnalysisFailure);
 	if (SendToAiButton)
 	{
 		SendToAiButton->SetIsEnabled(!bAnalysisPending);
 	}
 	if (AiAnalysisTextBlock && bShowAiAction)
 	{
-		AiAnalysisTextBlock->SetText(FText::FromString(bAnalysisPending
-			? TEXT("AI 분석 중...")
-			: TEXT("에피소드 데이터를 기반으로 개선점을 제안합니다.")));
+		const FString ActionText = bAnalysisPending
+			? FString(TEXT("AI 분석 중..."))
+			: (bHasAnalysisFailure
+				? LastProjectRunAnalysisFailureText
+				: FString(TEXT("에피소드 데이터를 기반으로 개선점을 제안합니다.")));
+		AiAnalysisTextBlock->SetText(FText::FromString(ActionText));
 	}
 
-	if (!DashboardData.bAiLoaded || bAnalysisPending)
+	if (!DashboardData.bAiLoaded || bAnalysisPending || bHasAnalysisFailure)
 	{
 		return;
 	}
@@ -3541,42 +3571,33 @@ void UMainMenuWidget::HandleAnalysisCompleted(const FPlatformAnalysisAiResponse&
 		SendToAiButton->SetIsEnabled(true);
 	}
 
-	if (IsProjectRunDirectory(SelectedExperimentResultRunDirectory)
-		&& ActiveProjectWorkspaceTab == EProjectWorkspaceTabType::ExperimentResultDetail
-		&& response.bSuccess)
-	{
-		RefreshExperimentResultDetailPanel();
-		return;
-	}
-
-	if (!AiAnalysisTextBlock)
-	{
-		return;
-	}
+	const FString CompletedRunId = PendingProjectRunAnalysisRunId.IsEmpty()
+		? GetSelectedProjectRunId()
+		: PendingProjectRunAnalysisRunId;
+	PendingProjectRunAnalysisRunId.Reset();
 
 	if (response.bSuccess)
 	{
+		LastProjectRunAnalysisFailureRunId.Reset();
+		LastProjectRunAnalysisFailureText.Reset();
 		RefreshExperimentResultDetailPanel();
 		return;
 	}
 
-	TArray<FString> lines;
-	lines.Add(TEXT("AI analysis failed"));
-	if (response.ResponseCode != 0)
+	LastProjectRunAnalysisFailureRunId = CompletedRunId;
+	LastProjectRunAnalysisFailureText = BuildAnalysisFailureDisplayText(response);
+
+	if (IsProjectRunDirectory(SelectedExperimentResultRunDirectory)
+		&& ActiveProjectWorkspaceTab == EProjectWorkspaceTabType::ExperimentResultDetail)
 	{
-		lines.Add(FString::Printf(TEXT("Response: %d"), response.ResponseCode));
-	}
-	if (!response.ErrorMessage.IsEmpty())
-	{
-		lines.Add(response.ErrorMessage);
-	}
-	if (!response.ResponseBody.IsEmpty())
-	{
-		lines.Add(TEXT(""));
-		lines.Add(TruncatePreview(response.ResponseBody, ReportPreviewCharacterLimit));
+		RefreshExperimentResultDetailPanel();
+		return;
 	}
 
-	AiAnalysisTextBlock->SetText(FText::FromString(JoinStringLines(lines)));
+	if (AiAnalysisTextBlock)
+	{
+		AiAnalysisTextBlock->SetText(FText::FromString(LastProjectRunAnalysisFailureText));
+	}
 }
 
 void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)

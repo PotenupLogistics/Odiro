@@ -124,6 +124,55 @@ bool ADeliveryBotPointCloudReviewActor::LoadPointCloudFile()
 	return LoadedPoints.Num() > 0;
 }
 
+// 외부에서 받은 xyz 경로를 정규화하고 검증한 뒤 기존 로드 흐름에 연결한다.
+bool ADeliveryBotPointCloudReviewActor::LoadPointCloudFromFile(const FString& xyzFilePath)
+{
+	FString resolvedFilePath = xyzFilePath.TrimStartAndEnd();
+	if (resolvedFilePath.IsEmpty())
+	{
+		UE_LOG(LogDeliveryBotPointCloudReview, Warning, TEXT("Point Cloud xyz path is empty."));
+		return false;
+	}
+
+	resolvedFilePath = FPaths::IsRelative(resolvedFilePath)
+		? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), resolvedFilePath)
+		: FPaths::ConvertRelativePathToFull(resolvedFilePath);
+	FPaths::NormalizeFilename(resolvedFilePath);
+
+	if (!FPaths::CollapseRelativeDirectories(resolvedFilePath))
+	{
+		UE_LOG(
+			LogDeliveryBotPointCloudReview,
+			Warning,
+			TEXT("Point Cloud xyz path normalization failed: %s"),
+			*xyzFilePath);
+		return false;
+	}
+
+	if (!FPaths::GetExtension(resolvedFilePath).Equals(TEXT("xyz"), ESearchCase::IgnoreCase))
+	{
+		UE_LOG(
+			LogDeliveryBotPointCloudReview,
+			Warning,
+			TEXT("Point Cloud file must use the xyz extension: %s"),
+			*resolvedFilePath);
+		return false;
+	}
+
+	if (!FPaths::FileExists(resolvedFilePath))
+	{
+		UE_LOG(
+			LogDeliveryBotPointCloudReview,
+			Warning,
+			TEXT("Point Cloud xyz file does not exist: %s"),
+			*resolvedFilePath);
+		return false;
+	}
+
+	XyzFilePath.FilePath = MoveTemp(resolvedFilePath);
+	return LoadPointCloudFile();
+}
+
 // 현재 표시 중인 point instance와 메모리 point 목록을 지운다.
 void ADeliveryBotPointCloudReviewActor::ClearPointCloud()
 {
@@ -139,6 +188,18 @@ void ADeliveryBotPointCloudReviewActor::ClearPointCloud()
 bool ADeliveryBotPointCloudReviewActor::ReloadPointCloud()
 {
 	return LoadPointCloudFile();
+}
+
+// Point Cloud 데이터를 유지한 채 액터 렌더링만 전환한다.
+void ADeliveryBotPointCloudReviewActor::SetPointCloudVisible(const bool bVisible)
+{
+	SetActorHiddenInGame(!bVisible);
+}
+
+// Actor hidden 상태를 외부 Replay 제어에서 사용할 표시 상태로 변환한다.
+bool ADeliveryBotPointCloudReviewActor::IsPointCloudVisible() const
+{
+	return !IsHidden();
 }
 
 // 현재 scenario 번호에 맞는 point cloud capture 폴더를 만든다.

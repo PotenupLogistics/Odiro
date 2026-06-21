@@ -53,6 +53,7 @@ keep:
   - Use LiDAR component hit-location debug before diagnosing Point Cloud import alignment issues.
   - Keep point cloud capture folders readable with scenario/run ids rather than opaque GUID-only names.
   - Keep DeliveryBotPointCloudReviewActor as a path lookup and small-point debug helper, not the primary point cloud renderer.
+  - Runtime review callers pass an explicit xyz path to DeliveryBotPointCloudReviewActor and toggle actor visibility without reloading the point data.
   - Keep Python reset tools template-based with backups; do not use git history operations for user-code restore.
   - Keep Python policy event classification in DeliveryBot_HttpPolicyComponent; ScenarioEvaluationSubsystem receives normalized FDeliveryBotPolicyEventSnapshot values and owns episode event publication.
   - Keep `/scenario/end` response minimal (`status`, `accepted`); DeliveryBot owns the 2-second HTTP timeout and reports success/error through the Runner callback, while ScenarioRunnerSubsystem owns the longer lifecycle watchdog.

@@ -50,6 +50,10 @@ public:
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "DeliveryBot|PointCloud")
 	bool LoadPointCloudFile();
 
+	// 지정한 xyz 파일을 검증하고 point instance로 로드한다.
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PointCloud")
+	bool LoadPointCloudFromFile(const FString& xyzFilePath);
+
 	// Clears rendered instances and the in-memory point list.
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "DeliveryBot|PointCloud")
 	void ClearPointCloud();
@@ -69,6 +73,14 @@ public:
 	// Returns the number of points loaded from the last xyz file.
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|PointCloud")
 	int32 GetLoadedPointCount() const { return LoadedPoints.Num(); }
+
+	// 로드한 Point Cloud의 월드 표시 상태를 변경한다.
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PointCloud")
+	void SetPointCloudVisible(bool bVisible);
+
+	// 로드한 Point Cloud가 현재 월드에 표시되는지 반환한다.
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|PointCloud")
+	bool IsPointCloudVisible() const;
 
 private:
 	// Builds the current scenario capture directory.

@@ -1,0 +1,59 @@
+id: client-platform-execution
+owner: Client
+description: Project UI flow, launch/process subsystems, run dashboard, and analysis integration.
+paths:
+  - Client/README.md
+  - Client/Source/OdiroSim/Public/Platform/**
+  - Client/Source/OdiroSim/Private/Platform/**
+  - Client/Plugins/UmgMcp/**
+  - Client/Task-*.bat
+  - Client/Tools/**
+  - task-run.bat
+  - task-dev.bat
+  - tools/run-preview.ps1
+  - tools/dev-session.ps1
+entry:
+  - id: platform-runtime
+    description: Project session, launch/process, analysis, and dashboard subsystems.
+    read:
+      - Client/Source/OdiroSim/Public/Platform
+      - Client/Source/OdiroSim/Private/Platform
+  - id: ui-and-tools
+    description: Platform widgets, UMG tooling plugin, and preview scripts.
+    read:
+      - Client/Source/OdiroSim/Public/Platform/Widget
+      - Client/Source/OdiroSim/Private/Platform/Widget
+      - Client/Plugins/UmgMcp
+      - Client/Tools
+      - tools/run-preview.ps1
+guardrails:
+  - Platform UI reads ProjectSession state and canonical user-project run artifacts, not simulator world objects.
+  - ProjectSessionSubsystem is the runtime source of truth for the active user project root.
+  - Startup UI owns project selection/creation; MainMenu owns the project workspace surface.
+  - Project mode must not fall back to legacy SimulationSetup, RunQueue, Json/Input, Saved runs, or text-input project paths.
+  - Project run launch uses the project-run command contract with project path, run id, and policy port inputs.
+  - Project-run AI analysis uses the v2 `project_path` plus `run_id` request path and stores review artifacts under the run.
+  - C++ writes state/text/visibility into WBP-owned layouts; structural UMG ownership stays in client-runtime-foundation.
+  - StartupMenu/MainMenu UMG edits use UmgMcp readback, compile/save, and runtime geometry or capture verification.
+  - Client tools use `Client/Tools/Common.ps1`, never root `tools/common.ps1`.
+verify:
+  - when: launch, process, or project-session behavior changes
+    run:
+      - focused SimulatorLaunch, SimulatorProcess, ProjectSession, and MainMenu project-mode tests
+      - runtime log plus status JSON check for process lifecycle changes
+  - when: analysis or dashboard behavior changes
+    run:
+      - focused PlatformAnalysisAi and ProjectRunResultDashboard tests
+  - when: platform UI or UMG tool flow changes
+    run:
+      - UmgMcp widget tree readback for touched assets
+      - Blueprint compile/save for touched widgets
+      - preview or MCP geometry/capture smoke for user-facing layout changes
+links:
+  - Client/README.md
+  - Client/Docs/plans/PLAN-platform-architecture.md
+related:
+  - client-runtime-foundation
+  - client-simulation
+  - bridge-host
+  - agents-generation-runtime

@@ -13,7 +13,7 @@
 | [`Bridge`](Bridge/README.md) | Go 백그라운드 프로세스 | 각 구현체 연결, 서브 프로세스 생성 및 추적, 파일 관리 |
 
 
-[상세 구조](docs/specs/project-structure.md), [규칙](docs/specs/project-rules.md), [agent index](.agents/index/INDEX.md) 참고.
+[상세 구조](docs/specs/project-structure.md), [규칙](docs/specs/project-rules.md), [agent index](.agents/index/README.md) 참고.
 
 ## 개발
 

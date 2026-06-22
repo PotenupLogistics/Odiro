@@ -1,0 +1,69 @@
+id: agents-generation-runtime
+owner: Agents
+description: FastAPI routes, v2 scenario generation, result analysis, and legacy generation adapters.
+paths:
+  - Agents/README.md
+  - Agents/app/api/**
+  - Agents/app/core/**
+  - Agents/app/models/**
+  - Agents/app/agents/common/**
+  - Agents/app/agents/scenario_generation_v2/**
+  - Agents/app/agents/result_analysis_v2/**
+  - Agents/app/services/*generation*
+  - Agents/app/services/*world_config*
+  - Agents/app/services/*episode*
+  - Agents/app/services/*run_queue*
+  - Agents/docs/api/**
+  - Agents/docs/environment/**
+  - contracts/specs/user-project-data.md
+entry:
+  - id: api-and-models
+    description: Public routes, settings, and payload models.
+    read:
+      - Agents/app/api/routes.py
+      - Agents/app/core
+      - Agents/app/models
+  - id: scenario-generation-v2
+    description: Active project-scenario generation graph and prompt context.
+    read:
+      - Agents/app/agents/common/spec_context_loader.py
+      - Agents/app/agents/scenario_generation_v2
+  - id: result-analysis-v2
+    description: Run analysis, recommendation response, and review artifacts.
+    read:
+      - Agents/app/agents/result_analysis_v2
+  - id: legacy-generation
+    description: Legacy generation services retained for compatibility/tooling.
+    read:
+      - Agents/app/services/world_config_generation_orchestrator.py
+      - Agents/app/services/run_queue_export_service.py
+      - Agents/app/services/world_config_to_episode_setup_adapter.py
+      - Agents/app/services/world_config_to_delivery_bot_setup_adapter.py
+guardrails:
+  - Active public scenario generation is v2 project scenario output, not legacy RunQueue export.
+  - Final user project contracts write project/run/episode artifacts under `contracts/specs/user-project-data.md`.
+  - V2 LLM prompt context is loaded only through the SpecContextLoader allowlist.
+  - Review artifacts are stored under `<UserProject>/runs/<RunId>/review/<ReviewId>/`.
+  - API display text such as `analysis_text` should not be treated as canonical review artifact data.
+  - Recommendation output uses the public `recommendation` field; normalize legacy internal names before API/artifact output.
+  - UI-facing finding/evidence text may be Korean; stable metric/type codes remain English.
+verify:
+  - when: route, model, or service payloads change
+    run:
+      - focused pytest for touched route/model/service
+      - contract validation for changed public fields
+  - when: v2 analysis or recommendation artifacts change
+    run:
+      - pytest covering v2 analysis run API, review lifecycle, parsing, text, and recommendation artifacts
+  - when: LLM prompt context changes
+    run:
+      - focused v2 spec-context prompt tests
+links:
+  - Agents/README.md
+  - Agents/docs/api/V2_AGENT_APIS.md
+  - Agents/docs/environment/environment-catalog.md
+  - contracts/specs/user-project-data.md
+related:
+  - agents-policy-rag-data
+  - contracts-shared-data
+  - client-simulation

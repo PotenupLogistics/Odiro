@@ -1,0 +1,64 @@
+id: root-dev-workflow
+owner: Root
+description: Root setup, build, run, hooks, CI, and repo tools.
+paths:
+  - .vscode/**
+  - .github/workflows/**
+  - .githooks/**
+  - .lfsconfig
+  - docs/guides/**
+  - task-setup.bat
+  - task-build.bat
+  - task-run.bat
+  - task-dev.bat
+  - task-push.bat
+  - tools/**
+entry:
+  - id: root-scripts
+    description: Root orchestration scripts and shared tool helpers.
+    read:
+      - task-setup.bat
+      - task-build.bat
+      - task-run.bat
+      - task-dev.bat
+      - tools/common.ps1
+      - tools/install.ps1
+      - tools/build.ps1
+      - tools/run-preview.ps1
+      - tools/dev-session.ps1
+  - id: vcs-and-ci
+    description: Git hooks, LFS lock flow, PR helper, and CI workflows.
+    read:
+      - tools/set-git-config.ps1
+      - tools/check-source-sanity.ps1
+      - tools/pre-push-policy.ps1
+      - tools/open-pull-request.ps1
+      - .githooks
+      - .github/workflows
+guardrails:
+  - Root scripts orchestrate project-owned task scripts; project startup details stay in each project.
+  - Root tools use `tools/common.ps1`; project tools use their own `Common.ps1`.
+  - Root build covers Bridge and Client; Agents has setup/test/run but no build phase.
+  - Git hooks and CI protect main-branch flow, source sanity, and Unreal asset lock ownership.
+  - Unreal binary assets stay Git blobs; Git LFS is for lock/read-only/push checks only.
+  - "`tools/set-git-config.ps1` owns local Git, GitHub CLI, LFS lock, and Unreal editor source-control setup."
+  - PR helper scripts may push/open PRs only when explicitly invoked by the user.
+  - Manual unlock remains human-only recovery; all-lock mode prompts per path, then unlocks listed ids through the LFS API to avoid local path validation.
+verify:
+  - when: root scripts or hooks change
+    run:
+      - PowerShell parse check for touched scripts
+      - focused dry-run or smoke for the changed task/helper
+      - git diff --check
+  - when: CI or hook policy changes
+    run:
+      - workflow syntax/semantic review
+      - pre-push or source-sanity dry-run covering the changed path
+links:
+  - docs/guides/development-environment.md
+  - docs/guides/working-rules.md
+  - docs/guides/branch-naming-rules.md
+related:
+  - agents-tooling-harness
+  - bridge-host
+  - client-platform-execution

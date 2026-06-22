@@ -1,0 +1,55 @@
+id: client-delivery-bot-policy
+owner: Client
+description: DeliveryBot movement, grid, HTTP policy loop, Python policy runtime, and LiDAR point-cloud capture.
+paths:
+  - Client/Source/OdiroSim/Public/DeliveryBot/**
+  - Client/Source/OdiroSim/Private/DeliveryBot/**
+  - Client/Source/OdiroSim/Public/Shared/Struct/DeliveryBot/**
+  - Client/Source/OdiroSim/Public/Shared/Types/DeliveryBot*.h
+  - Client/Tools/PythonAgent/**
+  - Client/Resources/policy-runtime.py
+  - static/templates/policy/**
+  - Client/Json/Input/PolicySpecs/**
+entry:
+  - id: unreal-delivery-bot
+    description: DeliveryBot actor, components, grid, policy HTTP, setup compiler, and Python process subsystem.
+    read:
+      - Client/Source/OdiroSim/Public/DeliveryBot
+      - Client/Source/OdiroSim/Private/DeliveryBot
+      - Client/Source/OdiroSim/Public/Shared/Struct/DeliveryBot
+      - Client/Source/OdiroSim/Public/Shared/Types
+  - id: python-policy-runtime
+    description: Development policy server, project policy templates, and packaged policy runtime bridge.
+    read:
+      - Client/Tools/PythonAgent
+      - Client/Resources/policy-runtime.py
+      - static/templates/policy
+guardrails:
+  - Prefer focused shared DeliveryBot structs over direct Scenario/Episode header coupling.
+  - Python policy process ownership lives in DeliveryBot subsystem/settings, not root batch files.
+  - User-facing robot/profile config flows through typed DeliveryBot setup structs.
+  - ScenarioRunner owns project episode output paths and injects them before Python `/scenario/start`.
+  - Required project-run artifact path validation must fail through `/scenario/start`, not silently fall back to Saved paths.
+  - Project-run point-cloud artifacts stay under `episodes/<EpisodeId>/lidar_point_cloud/`; frame dumps stay under `frames/`.
+  - NoPointCloud/basic runs with disabled capture are valid without a point-cloud output folder.
+  - DeliveryBot normalizes Python policy events before ScenarioEvaluationSubsystem publishes episode events.
+  - "`/scenario/end` response stays minimal; C++ runner owns lifecycle watchdog and exactly-once completion."
+  - RePath decisions come from Python `response.events`, not inferred C++ slowdown/path-follow reasons.
+verify:
+  - when: DeliveryBot C++ behavior changes
+    run:
+      - focused DeliveryBot automation tests
+      - movement/pathing smoke for behavior changes
+      - policy HTTP request/response contract check
+  - when: Python policy runtime or templates change
+    run:
+      - PythonAgent py_compile
+      - policy-runtime.py py_compile
+      - validate_lidar_capture for point-cloud artifact changes
+  - when: policy lifecycle changes
+    run:
+      - scenario start/end success, rejection, timeout, callback, and exactly-once completion coverage
+related:
+  - client-simulation
+  - contracts-shared-data
+  - agents-policy-rag-data

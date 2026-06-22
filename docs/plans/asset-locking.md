@@ -251,8 +251,8 @@ docs/guides/working-rules.md
 docs/guides/development-environment.md
 docs/specs/project-structure.md
 AGENTS.md
-.agents/index/root-dev-workflow.md
-.agents/index/client-runtime-foundation.md
+.agents/index/cards/root-dev-workflow.yaml
+.agents/index/cards/client-runtime-foundation.yaml
 .github/workflows/pull-request-check.yml
 .github/workflows/post-merge-task.yml
 ```

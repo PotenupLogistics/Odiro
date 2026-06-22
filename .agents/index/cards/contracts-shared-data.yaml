@@ -1,49 +1,53 @@
 id: contracts-shared-data
 owner: Root
-description: shared schemas, specs, payload/API/file contracts
+description: Shared specs, schemas, examples, static templates, and product structure docs.
 paths:
-  - Client/Docs/README.md
-  - Client/Docs/JSON_Guide/**
-  - Client/Docs/specs/**
   - contracts/**
-  - contracts/specs/**
-  - contracts/specs/bridge-ipc.md
   - docs/specs/**
   - static/templates/**
+  - static/run-defaults/**
+  - Client/Docs/JSON_Guide/**
+  - Client/Docs/specs/**
 entry:
-  - id: primary
-    description: Primary files and entry points for this area.
+  - id: shared-contracts
+    description: Shared payload, file, API, and IPC contracts.
     read:
-      - Client/Docs/README.md
-      - Client/Docs/JSON_Guide
-      - Client/Docs/specs
-      - contracts/schemas
       - contracts/specs
-      - contracts/examples
-      - contracts/specs/bridge-ipc.md
-      - contracts/specs/user-project-data.md
+      - contracts/schemas
+  - id: product-structure
+    description: Repository/product structure and shared runtime resource layout.
+    read:
       - docs/specs
       - static/templates
+      - static/run-defaults
+  - id: legacy-client-docs
+    description: Legacy Client JSON/interface references that must not become new shared contracts.
+    read:
+      - Client/Docs/JSON_Guide
+      - Client/Docs/specs
 guardrails:
-  - contracts/specs is the human-readable truth for shared payload/API/file formats.
-  - User project setting/profile/scenario/policy, run artifact, project preset, and run default file shapes belong in contracts/specs/user-project-data.md; Bridge IPC method shapes belong in contracts/specs/bridge-ipc.md.
-  - Client/Docs/Data was removed; do not recreate it as a shared file contract source.
-  - Client/Docs/JSON_Guide is legacy Client input/output reference and must not define new shared file contracts.
-  - Client/Docs/specs is legacy Client interface context; final product structure and execution flow belong in docs/specs.
-  - docs/specs is for repository/product structure, rules, and requirements.
-  - Bridge IPC uses local portless transports; message compatibility belongs in contracts/specs/bridge-ipc.md.
-  - '`RunQueue` and `DeliveryBotSetup` specs are legacy guides; new shared file contracts belong in user-project-data.md.'
+  - "`contracts/specs` is the human-readable truth for shared payload/API/file formats."
+  - "`contracts/schemas` contains machine-readable validation for shared contracts."
+  - User project files, run artifacts, presets, and run defaults belong in `contracts/specs/user-project-data.md`.
+  - Bridge IPC method compatibility belongs in `contracts/specs/bridge-ipc.md`.
+  - "`docs/specs` is for repository/product structure, rules, and requirements, not wire contracts."
+  - Client/Docs JSON guides are legacy Client references; do not define new shared file contracts there.
+  - RunQueue and DeliveryBotSetup specs are legacy guides unless an explicit migration restores them.
+  - static/templates and static/run-defaults must stay aligned with the shared user-project contract.
 verify:
-  - when: contracts-shared-data changes
+  - when: shared contracts or templates change
     run:
-      - consuming project schema validation
-      - contract specs vs generated examples before implementation changes
-      - compatibility fixtures when two components consume the same payload
+      - consuming project schema or fixture validation
+      - contract specs versus generated examples/templates review
+      - compatibility tests when two components consume the same payload
 links:
-  - Client/Docs/README.md
-  - contracts/specs/bridge-ipc.md
   - contracts/specs/user-project-data.md
+  - contracts/specs/bridge-ipc.md
+  - docs/specs/project-structure.md
+  - docs/specs/project-rules.md
+  - docs/specs/simulation-interface.md
 related:
+  - bridge-host
   - client-simulation
   - client-delivery-bot-policy
   - agents-generation-runtime

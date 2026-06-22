@@ -1,6 +1,6 @@
 id: agents-tooling-harness
 owner: Agents
-description: Agents scripts, harness, pytest
+description: Agents-local task scripts, tools, tests, and harness checks.
 paths:
   - Agents/harness/**
   - Agents/scripts/**
@@ -10,30 +10,30 @@ paths:
   - Agents/task-setup.bat
   - Agents/task-run.bat
   - Agents/task-dev.bat
+  - Agents/pyproject.toml
+  - Agents/uv.lock
 entry:
   - id: primary
-    description: Primary files and entry points for this area.
+    description: Agents setup/run scripts, tools, harness, and tests.
     read:
-      - Agents/harness/checks
-      - Agents/scripts
-      - Agents/tests
       - Agents/task-setup.bat
       - Agents/task-run.bat
       - Agents/task-dev.bat
-      - Agents/tools/check-prerequisites.ps1
-      - Agents/tools/install.ps1
-      - Agents/tools/run.ps1
-      - Agents/tools/dev.ps1
+      - Agents/tools
+      - Agents/harness
+      - Agents/tests
+      - Agents/pyproject.toml
 guardrails:
-  - Agents/tools use Agents/tools/common.ps1, never root tools/common.ps1.
-  - Agents has no build task; it is a Python server.
-  - Agents/tools/install.ps1 uses uv sync --check before uv sync so repeated setup calls are cheap when the environment is already synchronized, while still printing completion.
+  - Agents tools use `Agents/tools/common.ps1`, never root `tools/common.ps1`.
+  - Agents is a Python server; do not add a root build expectation for it.
+  - Setup should keep repeated `uv sync` calls cheap when the environment is already synchronized.
+  - Harness checks stay Agents-local unless promoted to root CI intentionally.
 verify:
-  - when: agents-tooling-harness changes
+  - when: Agents scripts, tools, or tests change
     run:
       - focused pytest for touched test surface
-      - harness.checks.check_all only for broad Agents readiness changes
-      - CLI help/smoke for script changes
+      - CLI help or smoke for changed scripts
+      - harness.checks.check_all for broad Agents readiness changes
 related:
   - root-dev-workflow
   - agents-generation-runtime

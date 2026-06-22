@@ -1,17 +1,12 @@
 id: root-dev-workflow
 owner: Root
-description: root setup/build/run/dev, hooks, repo tools
+description: Root setup, build, run, hooks, CI, and repo tools.
 paths:
-  - .vscode/launch.json
-  - .vscode/tasks.json
-  - Client/.idea/startup.xml
-  - Client/.run/*.cmd
-  - Client/.run/*.run.xml
+  - .vscode/**
   - .github/workflows/**
   - .githooks/**
   - .lfsconfig
-  - docs/guides/branch-naming-rules.md
-  - docs/guides/development-environment.md
+  - docs/guides/**
   - task-setup.bat
   - task-build.bat
   - task-run.bat
@@ -19,77 +14,50 @@ paths:
   - task-push.bat
   - tools/**
 entry:
-  - id: primary
-    description: Primary files and entry points for this area.
+  - id: root-scripts
+    description: Root orchestration scripts and shared tool helpers.
     read:
-      - .vscode/launch.json
-      - .vscode/tasks.json
       - task-setup.bat
       - task-build.bat
       - task-run.bat
       - task-dev.bat
-      - tools/check-prerequisites.ps1
+      - tools/common.ps1
       - tools/install.ps1
       - tools/build.ps1
       - tools/run-preview.ps1
       - tools/dev-session.ps1
+  - id: vcs-and-ci
+    description: Git hooks, LFS lock flow, PR helper, and CI workflows.
+    read:
       - tools/set-git-config.ps1
       - tools/check-source-sanity.ps1
       - tools/pre-push-policy.ps1
-      - tools/sync-ide-run-configs.ps1
-      - tools/list-lfs-locks.ps1
       - tools/open-pull-request.ps1
-      - tools/manual-unlock.ps1
+      - .githooks
+      - .github/workflows
 guardrails:
-  - VSCode Run and Debug launch configurations expose only build-plus-runtime sessions; VSCode tasks keep setup plus background Git LFS lock status without replacing root script entry points.
-  - VSCode tasks start a background Git LFS lock polling task on folder open, refresh immediately when VSCode regains focus, poll only while VSCode is foreground, and use a separate Git LFS Locks source for clickable file-owner inspection.
-  - VSCode task output remains Terminal-backed by VSCode design; Build and Git LFS status tasks avoid stealing focus and rely on Problems where possible.
-  - tools/run-preview.ps1 starts Agents API, Bridge service, and Client preview mode for terminal and VSCode preview sessions; preview flags pass through to Client/Task-RunPreview.bat after `--`.
-  - Root task-dev/task-run pass the active Agents analysis endpoint to Client via `-ProjectRunAnalysisEndpointUrl`; Agents startup prompts before stopping existing process owners when the requested port is occupied and fails if the user declines or the port remains busy.
-  - Root dev/run orchestration registers background Agents and Bridge process trees for Ctrl+C cleanup; cancellation exits with code 130 after stopping registered child processes.
-  - tools/sync-ide-run-configs.ps1 keeps Rider shared run configs focused on Preview Services plus debug-capable Uproject Preview Mode entries during task-setup.bat install; Preview Services runs separately so Preview Mode can stay a Rider Unreal debug configuration.
-  - Root scripts orchestrate project-owned task scripts; they do not implement Unreal or Agents startup details.
-  - Root setup calls project task scripts directly, not project public .bat wrappers, to avoid duplicate phases.
-  - Root build includes Bridge and Client; Agents has no build phase.
-  - Main branch direct commits, local merges, and fast-forward pushes are blocked by hooks; local main deletion and intentional non-fast-forward force push are allowed.
-  - Local pulls prefer rebase via pull.rebase=true, rebase.autoStash=true, branch.autoSetupRebase=always, and pull.ff=true so main sync and subbranch updates avoid merge commits without ff-only rejection.
-  - post-merge and rebase post-rewrite hooks call tools/install.ps1 through .githooks/helpers/run-install after pulls update the worktree.
-  - tools/install.ps1 calls tools/set-git-config.ps1, so setup and pull/rebase install hooks require GitHub CLI authentication when Git hook setup is enabled.
-  - git fetch is not wrapped because standard Git hooks do not cover no-op fetches consistently; use setup/pull hooks and explicit config checks instead.
-  - tools/set-git-config.ps1 is the single setup entry point for Git hooks, GitHub CLI auth, repo-local user.name/user.email, Git LFS locking config, local Unreal SourceControlSettings.ini, Editor checkout preferences, and read-only refresh.
-  - GitHub login, not display name, is the canonical value for repo-local user.name and Unreal Editor LfsUserName because Git LFS lock owners are compared by login.
-  - Unreal binary assets stay Git blobs; Git LFS is used for lock/read-only/push verification only.
-  - post-commit skips Git LFS read-only refresh when HEAD has no Unreal binary asset changes.
-  - Feature branch commit and merge hooks return without source sanity checks; PR source sanity check runs tools/check-source-sanity.ps1 on a shallow merge-ref soft-reset staged diff and narrows UnityBuild helper scans from changed definitions.
-  - PR helper task-push.bat delegates to tools/open-pull-request.ps1, pushes the current topic branch, skips duplicate open PRs into main, and uses GitHub CLI authentication only when the helper runs.
-  - Post-Merge Tasks asset unlock queues lock-mutating runs, uses shallow checkout, path-limits auto unlocks to pushed Unreal assets, and rechecks lock id plus trusted push cutoff before unlock.
-  - Manual LFS unlock is human-only exact-path recovery.
+  - Root scripts orchestrate project-owned task scripts; project startup details stay in each project.
+  - Root tools use `tools/common.ps1`; project tools use their own `Common.ps1`.
+  - Root build covers Bridge and Client; Agents has setup/test/run but no build phase.
+  - Git hooks and CI protect main-branch flow, source sanity, and Unreal asset lock ownership.
+  - Unreal binary assets stay Git blobs; Git LFS is for lock/read-only/push checks only.
+  - "`tools/set-git-config.ps1` owns local Git, GitHub CLI, LFS lock, and Unreal editor source-control setup."
+  - PR helper scripts may push/open PRs only when explicitly invoked by the user.
+  - Manual unlock remains human-only recovery; all-lock mode prompts per path before force-unlock.
 verify:
-  - when: root-dev-workflow changes
+  - when: root scripts or hooks change
     run:
-      - .vscode/launch.json parses as JSON
-      - .vscode/tasks.json parses as JSON
-      - PowerShell parse check for script edits
-      - tools/sync-ide-run-configs.ps1 dry-run and generated Rider XML parse checks
-      - hook syntax plus run-install smoke and staged main-delete smoke for .githooks changes
-      - tools/set-git-config.ps1 PowerShell parse check, missing-gh guidance smoke, gh auth failure smoke, and mocked gh dry-run smoke
-      - git check-attr lockable for sample Unreal asset
-      - tools/set-git-config.ps1 local config and GitHub identity smoke
-      - Client/Saved/Config/*Editor/EditorPerProjectUserSettings.ini checkout prompt smoke after tools/set-git-config.ps1
-      - git config --local --get pull.ff returns true; pull.rebase returns true; rebase.autoStash returns true; branch.autoSetupRebase returns always
-      - pre-push dry-run with empty updates and main fast-forward rejection
-      - task-push.bat -DryRun -AllowDirty
-      - tools/check-source-sanity.ps1 with no staged source inputs
-      - GitHub Merge Checks workflow runs Source Sanity from the PR merge ref, conditionally sets up Go for Bridge changes, and runs Asset Lock Ownership for Unreal binary assets
-      - GitHub Post-Merge Tasks workflow shallow-checks out main, queues lock-mutating runs, fetches the before commit for automatic push diffs, rechecks lock id/time before unlock, and preserves manual exact-path unlock handling
-      - GitHub asset lock workflows fail closed when Git LFS lock queries fail or return empty JSON
-      - tools/list-lfs-locks.ps1 prints active Git LFS lock paths with owner, lock time, and lock id for terminal inspection, one-shot Problems ingestion, and VSCode foreground-aware background Problems polling.
-      - task-setup.bat -AllowMissingPrerequisites -SkipAgents -SkipGitHooks for non-auth setup smoke
-      - tools/check-prerequisites.ps1 -AllowMissing
-      - tools/build.ps1 -Target bridge
+      - PowerShell parse check for touched scripts
+      - focused dry-run or smoke for the changed task/helper
+      - git diff --check
+  - when: CI or hook policy changes
+    run:
+      - workflow syntax/semantic review
+      - pre-push or source-sanity dry-run covering the changed path
 links:
-  - docs/guides/branch-naming-rules.md
   - docs/guides/development-environment.md
+  - docs/guides/working-rules.md
+  - docs/guides/branch-naming-rules.md
 related:
   - agents-tooling-harness
   - bridge-host

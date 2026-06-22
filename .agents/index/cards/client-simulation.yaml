@@ -1,6 +1,6 @@
 id: client-simulation
 owner: Client
-description: Scenario/Episode runtime, scenario_sample generation, reports
+description: Scenario authoring/runtime, episode execution, evaluation, and run output artifacts.
 paths:
   - Client/Source/OdiroSim/Public/Scenario/**
   - Client/Source/OdiroSim/Private/Scenario/**
@@ -8,112 +8,65 @@ paths:
   - Client/Source/OdiroSim/Private/Episode/**
   - Client/Source/OdiroSim/Public/Shared/**
   - Client/Source/OdiroSim/Private/Shared/**
+  - Client/Json/**
   - Client/Docs/plans/PLAN-260602-sim-logging.md
-  - Client/Json/Input/**
-  - Client/Json/Schema/**
-  - Client/Json/environment-catalog.md
-  - contracts/specs/**
-entry:
-  - id: primary
-    description: Primary files and entry points for this area.
-    read:
-      - ScenarioSchemaTypes.h
-      - ScenarioDocumentTypes.h
-      - ScenarioSampleTypes.h
-      - ScenarioDocumentJson.h / .cpp
-      - ScenarioSampleJson.h / .cpp
-      - ScenarioSampleWorldSpecAdapter.h / .cpp
-      - Scenario/Editor/ScenarioAuthoringSubsystem.h / .cpp
-      - Scenario/Editor/ScenarioEditorController.h / .cpp
-      - Scenario/Data/ScenarioEditorWidgetClassCatalog.h / .cpp
-      - Scenario/Widget/ScenarioEditorRootWidget.h / .cpp
-      - Scenario/Widget/ScenarioEditorOutlinerWidget.h / .cpp
-      - Scenario/Widget/ScenarioEditorOutlinerRowWidget.h / .cpp
-      - Scenario/Widget/ScenarioEditorSidebarWidget.h / .cpp
-      - Scenario/Widget/ScenarioEditorSidebar*Widget.h / .cpp
-      - Scenario/Llm/ScenarioLlmAuthoringSubsystem.h / .cpp
-      - Scenario/Llm/ScenarioLlmPromptWidget.h / .cpp
-      - SimulationSetupTypes.h / .cpp
-      - UserProjectDataTypes.h / .cpp
-      - SimulationSetupTypesTest.cpp
-      - UserProjectDataTypesTest.cpp
-      - ScenarioEvaluationSubsystemTest.cpp
-      - ScenarioDocumentSampleJsonTest.cpp
-      - ScenarioSampleWorldSpecAdapterTest.cpp
-      - UserProjectScenarioSampleWorldSpecAdapterTest.cpp
-      - ScenarioSimulationSubsystem.h / .cpp
-      - ScenarioRunnerSubsystem.h / .cpp
-      - EpisodeMeasurementLogSubsystem.h / .cpp
-      - EpisodeResultTypes.h
-      - Client/Docs/plans/PLAN-260602-sim-logging.md
-      - Client/Json/Input
-      - Client/Json/Schema
-      - Client/Json/environment-catalog.md
-      - contracts/specs
-      - contracts/specs/user-project-data.md
-guardrails:
-  - Parser-only samples/schemas owned only by Client stay in Client.
-  - Client/Docs/plans/PLAN-260602-sim-logging.md is superseded legacy context; final log file contracts belong in contracts/specs/user-project-data.md.
-  - Client/Docs/Data was removed; shared user project file contracts belong in contracts/specs/user-project-data.md.
-  - Scenario setup/run queue samples in Client/Json/Input are legacy client-owned examples; project run execution no longer accepts them through ScenarioRunnerSubsystem.
-  - ScenarioDocument* and ScenarioSample* remain internal editor/materialization surfaces unless a task explicitly targets them; public C++ editor entry points use project scenario naming.
-  - Final user project contract uses one editable `<UserProject>/scenario.json`; do not add new user-facing template/sample split.
-  - Generated `scenario_sample` files under `<UserProject>/runs/<RunId>/episodes/<EpisodeId>/scenario.json` are derived execution artifacts.
-  - Project run generates `scenario_sample` episode artifacts and compiles them through `ScenarioSampleWorldSpecAdapter`; sampled layout lanes become runtime Corridor specs/actors used by grid and evaluation, while manual GroundRegions remain a separate compatibility surface.
-  - Runtime corridor surfaces are materialized as spline-deformed LaneStripMesh cube sections from sampled axis points, lane offset ranges, and lane surface height offsets; keep visual/collision footprint deterministic and aligned with the analytic surface query.
-  - Runtime Corridor visual meshes mirror the editor lane-strip drawing path and coalesce adjacent equivalent lane segments; sampled layout intervals remain the query/cost source for grid and evaluation.
-  - ScenarioCorridorSurfaceResolver owns shared Corridor surface metadata and material fallback resolution; editor/runtime actors keep their own mesh construction and query semantics.
-  - ScenarioCorridorGeometry owns shared Corridor spline mesh component creation, analytic surface query helpers, lane surface Z offset rules, and runtime lane collision profile mapping.
-  - ScenarioStaticObstacle actor origin represents the semantic ground-contact point; mesh and preview components own local bounds-based Z alignment so editor and simulation placements share the same snap semantics.
-  - ScenarioStaticObstacle owns configured actor spawn plus prop application; editor and simulation only resolve catalogs and attach authoring/runtime registration after spawn.
-  - ScenarioGroundRegion owns configured actor spawn plus region spec application; editor and simulation only attach authoring/runtime registration after spawn.
-  - ScenarioSampleWorldSpecAdapter keeps sampled Entry/Exit robot anchors in `scenario_sample` and deterministically insets their runtime WorldSpec poses before spawning.
-  - ScenarioSimulationSubsystem owns runtime DeliveryBot grid rebuild after scenario surfaces spawn; runtime GridBoundsActor BeginPlay auto-build is disabled for that path.
-  - Project run runner owns the active output episode id for `actions.jsonl` and `trace.jsonl`; DeliveryBot policy logging must use the runner-provided output context instead of the evaluation template id.
-  - Project `trace.jsonl` sampling is timer-driven from EpisodeMeasurementLogSubsystem once the runner starts the episode trace path, so short episodes still produce samples before terminal artifact write.
-  - ScenarioRunnerSubsystem public start API accepts direct scenario_sample/profile run inputs; file-based RunQueue and ScenarioSetup start helpers are removed.
-  - ScenarioEvaluationSubsystem freezes terminal results and broadcasts a native end request; ScenarioRunnerSubsystem owns DeliveryBot `/scenario/end` coordination, a 3-second watchdog, late-callback rejection, cancellation, and world cleanup after final completion.
-  - Scenario LLM authoring saves v2 `scenario` responses to user project `scenario.json`; it must not save or execute RunQueue files.
-  - Scenario LLM prompt generate/load/run is scoped to the current `<UserProject>/scenario.json`; run launches create `<UserProject>/runs/<RunId>` snapshots through SimulatorLaunchSubsystem.
-  - 'Scenario editor selection is controller-owned: viewport clicks and Outliner clicks both route through `AScenarioEditorController::SetSelectedPlaceable`, then root UI mirrors the native selection delegate.'
-  - Scenario editor Outliner is limited to authoring targets from ScenarioPlaceableComponent and template groups; it does not enumerate generic UE actors.
-  - Scenario editor Outliner, Sidebar block/field rows, and scenario detail panels are WBP-first via `DA_ScenarioEditorWidgetClassCatalog`; C++ builds item models, creates configured WBP classes, binds delegates, and writes values/visibility only.
-  - Scenario editor save is root/sidebar driven through `SaveCurrentScenarioDraft`; the legacy toolbar is not the active save or detail-panel routing surface.
-  - Project run output uses `FUserProjectRunOutputJson` for `result.json`, `events.jsonl`, `actions.jsonl`, `trace.jsonl`, and `summary.json`.
-  - '`FUserProjectRunOutputJson` maps internal evaluation enums to the external `events.jsonl` `event_type`, `source`, and `reason` contract names; runtime detectors should provide typed snapshot fields, not JSON-specific strings.'
-  - '`FUserProjectRunOutputJson` writes `events.jsonl.action_sequence` from typed `action_sequence` or `policy_sequence` event properties so policy events can join back to `actions.jsonl.sequence`.'
-  - '`FUserProjectRunOutputJson` preserves typed evaluation `TargetInstanceId` as `events.jsonl` `target_id` or `region_id` properties when runtime detectors have not already supplied those fields.'
-  - '`FUserProjectRunOutputJson` reuses an existing terminal-cause evaluation event for `result.json.summary.terminal_event_index`; it only writes a synthetic terminal `events.jsonl` line when no matching terminal event exists.'
-  - ScenarioEvaluationSubsystem policy-event snapshots use the Python policy snapshot runtime and sequence as the `events.jsonl` run time and action-sequence join source.
-  - ScenarioEvaluationSubsystem DeliveryBot simulation-failure snapshots use `FDeliveryBotSimulationFailureInfo.TimeSeconds` as the `events.jsonl` run time when the producer supplies it.
-  - ScenarioEvaluationSubsystem owns non-terminal Stuck detection from goal-progress and observed-speed windows; project run output exposes it as `Stuck` through `DeliveryBotSimulationFailure` snapshot properties while `Timeout` remains the terminal reason.
-  - 'Project `setting.json` runtime/evaluation fields are simulator-run inputs: `time_scale` applies to world time dilation, `runtime.max_duration_s` resolves into `FScenarioRunConfig.MaxDurationSeconds`, evaluation distances convert from meters to runtime centimeters, and Stuck speed thresholds convert from km/h to cm/s.'
-  - Client/Json/Schema and Client/Json/environment-catalog.md are LLM prompt-facing docs for one user project simulation set; keep them aligned with contracts/specs/user-project-data.md and the Client scenario catalog assets.
-  - Scenario authoring/runtime projection stays separate from runtime WorldSpec and actor-spawn payload types.
-verify:
-  - when: client-simulation changes
-    run:
-      - contract specs vs sample JSON alignment
-      - '`scenario`/`scenario_sample` docs vs Client shared schema type alignment'
-      - Client/Json/Schema and environment catalog docs against contracts/specs/user-project-data.md before prompt-facing doc changes
-      - Scenario document parse, project `scenario.json` adapter, version mismatch, scenario sample generation, and round-trip automation tests
-      - '`OdiroSim.ScenarioLlm.Authoring.V2Request` after Scenario LLM generation request/response contract changes'
-      - Scenario-to-WorldSpec adapter automation tests, including generated user-project scenario sample adapter coverage, and OdiroSimEditor build after adapter/editor draft changes
-      - '`OdiroSim.ScenarioEditor.Outliner.Model` and `OdiroSim.ScenarioEditor.Outliner.Selection` after outliner model or selection mapping changes'
-      - '`OdiroSim.UserProjectData.RunOutput.Write` after user project result writer changes'
-      - '`OdiroSim.UserProjectData.RunOutput.TerminalEventReuse` after terminal event JSONL/result summary mapping changes'
-      - '`OdiroSim.ScenarioEvaluation.Events` after runtime evaluation event detector or snapshot changes'
-      - '`OdiroSim.UserProjectData.RobotAction.Write` after policy action logging changes'
-      - '`OdiroSim.UserProjectData.EpisodeTrace.Write` after runtime trace logging changes'
-      - policy event JSONL/log mapping after adding new `EEpisodeEvaluationEventType` values
-      - focused automation tests for Scenario/Episode changes
-      - Episode finalization callback, HTTP timeout, Runner watchdog, cancellation, and late-callback ordering before scenario cleanup
-      - Client/Task-RunPreview.bat smoke when wrapper supports the changed mode
-links:
-  - Client/Docs/plans/PLAN-260602-sim-logging.md
-  - Client/Json/environment-catalog.md
   - contracts/specs/user-project-data.md
+  - docs/specs/simulation-interface.md
+entry:
+  - id: contracts-and-shared-types
+    description: Scenario, sample, user-project, and run-output data shapes.
+    read:
+      - contracts/specs/user-project-data.md
+      - docs/specs/simulation-interface.md
+      - Client/Json
+      - Client/Source/OdiroSim/Public/Shared
+      - Client/Source/OdiroSim/Private/Shared
+  - id: scenario-authoring
+    description: Scenario editor, authoring controller, outliner/sidebar widgets, and LLM authoring.
+    read:
+      - Client/Source/OdiroSim/Public/Scenario/Editor
+      - Client/Source/OdiroSim/Private/Scenario/Editor
+      - Client/Source/OdiroSim/Public/Scenario/Widget
+      - Client/Source/OdiroSim/Private/Scenario/Widget
+      - Client/Source/OdiroSim/Public/Scenario/Llm
+      - Client/Source/OdiroSim/Private/Scenario/Llm
+  - id: scenario-runtime
+    description: Scenario sampling, world-spec adaptation, simulation, evaluation, runner lifecycle, and episode logs.
+    read:
+      - Client/Source/OdiroSim/Public/Scenario
+      - Client/Source/OdiroSim/Private/Scenario
+      - Client/Source/OdiroSim/Public/Episode
+      - Client/Source/OdiroSim/Private/Episode
+guardrails:
+  - Final user project input uses one editable `<UserProject>/scenario.json`; generated episode scenarios are derived run artifacts.
+  - Public project-run execution accepts direct scenario/profile inputs, not legacy RunQueue start helpers.
+  - Client/Json prompt-facing schemas and catalogs must stay aligned with shared user-project contracts.
+  - ScenarioDocument and ScenarioSample surfaces remain internal editor/materialization shapes unless the task targets them.
+  - ScenarioSimulationSubsystem owns runtime grid rebuild after scenario surfaces spawn.
+  - ScenarioRunnerSubsystem owns project episode lifecycle, policy start/end coordination, cancellation, late callbacks, and cleanup.
+  - User project run output is written through typed UserProjectData JSON writers.
+  - Scenario editor selection is controller-owned; WBP assets own layout and detail panel structure.
+  - Shared corridor/geometry helpers own reusable surface metadata, spline mesh helpers, and analytic surface queries.
+verify:
+  - when: scenario contracts, schemas, or samples change
+    run:
+      - contract specs versus Client/Json sample/schema alignment
+      - scenario document/sample parse and round-trip automation tests
+  - when: scenario authoring or editor UI changes
+    run:
+      - focused ScenarioEditor model/selection tests
+      - UmgMcp and Blueprint verification for touched editor widgets
+  - when: runtime, adapter, runner, evaluation, or output changes
+    run:
+      - focused Scenario/Episode automation tests
+      - adapter, run-output, event, action, trace, and lifecycle tests covering touched behavior
+links:
+  - contracts/specs/user-project-data.md
+  - docs/specs/simulation-interface.md
+  - Client/Docs/plans/PLAN-260602-sim-logging.md
+  - Client/Json/environment-catalog.md
 related:
   - contracts-shared-data
   - client-delivery-bot-policy
+  - client-platform-execution
   - agents-generation-runtime

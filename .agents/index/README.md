@@ -1,43 +1,32 @@
 # Agent Source Index
 
-Agent-only source index for entry points, ownership, guardrails, and focused verification.
+Agent-only YAML source index for routing code reading, ownership boundaries, and focused verification.
 
 ## Purpose
 - Route source reading to the smallest useful area before broad navigation.
-- Keep ownership, entry points, guardrails, and focused checks close to the paths they affect.
-- Treat source code, contracts, specs, tests, and build files as authoritative when they differ from this index.
+- Keep ownership, entry points, guardrails, and focused checks close to affected paths.
+- Treat source code, contracts, specs, tests, and build files as authoritative.
+- Treat cards as descriptive current-state metadata, not implementation policy.
+- If a card conflicts with source, canonical docs, higher-priority instructions, or a direct user request, follow the authoritative source and update the stale card when the change affects indexed facts.
 
 ## Reading Algorithm
-- Start here, then open only cards whose `paths` or `workflows` match the touched path or requested workflow.
+- Start here, then scan `cards/*.yaml`; open only cards whose `paths` or `workflows` match the task.
 - Read each matching card's `entry` groups in order.
-- Follow `links` only when canonical docs/specs are needed for the task.
-- Use `related` as a navigation hint when the change crosses area boundaries.
+- Follow `links` only when canonical docs/specs are needed.
+- Use `related` only when the change crosses area boundaries.
 
 ## Active Card Format
 - Root: `.agents/index/README.md`
 - Cards: `.agents/index/cards/<area>.yaml`
-- Card fields, in order: `id`, `owner`, `description`, `paths`, optional `workflows`, `entry`, `guardrails`, `verify`, `links`, optional `related`.
+- Field order: `id`, `owner`, `description`, `paths`, optional `workflows`, `entry`, `guardrails`, `verify`, `links`, optional `related`.
 - `entry` contains ordered read groups with `id`, `description`, optional `needs`, and `read`.
 - `verify` contains grouped checks with `when` and `run`.
 
 ## Maintenance
-- Update cards when paths, entry points, ownership, guardrails, or verification flow changes.
-- Keep cards as structured navigation data; move long explanations to canonical docs/specs and link them.
-- Preserve this YAML card layout unless an explicit migration replaces it.
-
-## Legacy Migration
-- Legacy root `INDEX.md` moved to this README.
-- Legacy root card files `<area>.md` moved to `cards/<area>.yaml`.
-
-## Cards
-- [`agent-context`](cards/agent-context.yaml): root agent rules and source index ownership
-- [`agents-generation-runtime`](cards/agents-generation-runtime.yaml): FastAPI generation, WorldConfig, user project migration boundary
-- [`agents-policy-rag-data`](cards/agents-policy-rag-data.yaml): policy RAG, policy cards, source/review data
-- [`agents-tooling-harness`](cards/agents-tooling-harness.yaml): Agents scripts, harness, pytest
-- [`bridge-host`](cards/bridge-host.yaml): Go host process, portless IPC, Bridge tooling
-- [`client-delivery-bot-policy`](cards/client-delivery-bot-policy.yaml): DeliveryBot movement, grid, policy HTTP
-- [`client-platform-execution`](cards/client-platform-execution.yaml): MainMenu, launcher, process status, AI analysis
-- [`client-runtime-foundation`](cards/client-runtime-foundation.yaml): Unreal project config, targets, module deps, assets
-- [`client-simulation`](cards/client-simulation.yaml): Scenario/Episode runtime, scenario_sample generation, reports
-- [`contracts-shared-data`](cards/contracts-shared-data.yaml): shared schemas, specs, payload/API/file contracts
-- [`root-dev-workflow`](cards/root-dev-workflow.yaml): root setup/build/run/dev, hooks, repo tools
+- Keep cards concise navigation data; move long explanations to canonical docs/specs and link them.
+- Prefer directory globs and stable read groups over exhaustive file/widget/test lists.
+- Keep `guardrails` to ownership, boundary, migration, and non-obvious lifecycle constraints; target 10 or fewer per card.
+- Keep each guardrail owned by one card. Use `related` for cross-card awareness instead of duplicating text.
+- Group verification by behavior or subsystem, not every test name, unless one named test is the canonical check.
+- Do not maintain a card manifest in this README; `cards/*.yaml` is the manifest to reduce concurrent-edit conflicts.
+- Split a card when unrelated owners or repeated merge conflicts make edits contend on the same file.

@@ -2,6 +2,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
+#include "HandlerJsonProperty.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -19,11 +20,13 @@
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
 #include "Components/Button.h"
+#include "Components/ButtonSlot.h"
 #include "Components/ProgressBar.h"
 #include "Components/CheckBox.h"
 #include "Components/Slider.h"
 #include "Components/EditableTextBox.h"
 #include "Components/ComboBoxString.h"
+#include "Components/ContentWidget.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
@@ -38,9 +41,11 @@
 #include "Components/Border.h"
 #include "Components/Spacer.h"
 #include "Components/RichTextBlock.h"
+#include "Components/MultiLineEditableTextBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/OverlaySlot.h"
+#include "Components/ScrollBoxSlot.h"
 #include "Animation/WidgetAnimation.h"
 #include "MovieScene.h"
 #include "MovieScenePossessable.h"
@@ -57,12 +62,265 @@
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInterface.h"
 #include "EngineUtils.h"
+#include "Styling/SlateTypes.h"
+
+namespace
+{
+	const TCHAR* McpRegularFontPath =
+		TEXT("/Game/Fonts/Freesentation/Freesentation-4Regular_Font.Freesentation-4Regular_Font");
+	const TCHAR* McpBoldFontPath =
+		TEXT("/Game/Fonts/Freesentation/Freesentation-7Bold_Font.Freesentation-7Bold_Font");
+
+	FLinearColor McpColorFromJson(const TSharedPtr<FJsonValue>& Value, const FLinearColor& Fallback = FLinearColor::White)
+	{
+		if (!Value.IsValid() || Value->IsNull())
+		{
+			return Fallback;
+		}
+
+		FString ColorString;
+		if (Value->TryGetString(ColorString))
+		{
+			ColorString.TrimStartAndEndInline();
+			if (ColorString.StartsWith(TEXT("#")))
+			{
+				ColorString.RightChopInline(1);
+			}
+			if (ColorString.Len() == 6 || ColorString.Len() == 8)
+			{
+				return FLinearColor::FromSRGBColor(FColor::FromHex(ColorString));
+			}
+		}
+
+		const TSharedPtr<FJsonObject>* Obj = nullptr;
+		if (Value->TryGetObject(Obj) && Obj && (*Obj).IsValid())
+		{
+			return FLinearColor(
+				static_cast<float>((*Obj)->GetNumberField(TEXT("r"))),
+				static_cast<float>((*Obj)->GetNumberField(TEXT("g"))),
+				static_cast<float>((*Obj)->GetNumberField(TEXT("b"))),
+				static_cast<float>((*Obj)->HasField(TEXT("a")) ? (*Obj)->GetNumberField(TEXT("a")) : 1.0));
+		}
+
+		return Fallback;
+	}
+
+	FMargin McpMarginFromJson(const TSharedPtr<FJsonValue>& Value, const FMargin& Fallback = FMargin())
+	{
+		if (!Value.IsValid() || Value->IsNull())
+		{
+			return Fallback;
+		}
+
+		double Uniform = 0.0;
+		if (Value->TryGetNumber(Uniform))
+		{
+			return FMargin(static_cast<float>(Uniform));
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Array = nullptr;
+		if (Value->TryGetArray(Array) && Array)
+		{
+			if (Array->Num() == 1)
+			{
+				return FMargin(static_cast<float>((*Array)[0]->AsNumber()));
+			}
+			if (Array->Num() >= 4)
+			{
+				return FMargin(
+					static_cast<float>((*Array)[0]->AsNumber()),
+					static_cast<float>((*Array)[1]->AsNumber()),
+					static_cast<float>((*Array)[2]->AsNumber()),
+					static_cast<float>((*Array)[3]->AsNumber()));
+			}
+		}
+
+		const TSharedPtr<FJsonObject>* Obj = nullptr;
+		if (Value->TryGetObject(Obj) && Obj && (*Obj).IsValid())
+		{
+			return FMargin(
+				static_cast<float>((*Obj)->GetNumberField(TEXT("left"))),
+				static_cast<float>((*Obj)->GetNumberField(TEXT("top"))),
+				static_cast<float>((*Obj)->GetNumberField(TEXT("right"))),
+				static_cast<float>((*Obj)->GetNumberField(TEXT("bottom"))));
+		}
+
+		return Fallback;
+	}
+
+	FVector2D McpVector2FromJson(const TSharedPtr<FJsonValue>& Value, const FVector2D& Fallback = FVector2D::ZeroVector)
+	{
+		if (!Value.IsValid() || Value->IsNull())
+		{
+			return Fallback;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Array = nullptr;
+		if (Value->TryGetArray(Array) && Array && Array->Num() >= 2)
+		{
+			return FVector2D(
+				static_cast<float>((*Array)[0]->AsNumber()),
+				static_cast<float>((*Array)[1]->AsNumber()));
+		}
+
+		const TSharedPtr<FJsonObject>* Obj = nullptr;
+		if (Value->TryGetObject(Obj) && Obj && (*Obj).IsValid())
+		{
+			return FVector2D(
+				static_cast<float>((*Obj)->GetNumberField(TEXT("x"))),
+				static_cast<float>((*Obj)->GetNumberField(TEXT("y"))));
+		}
+
+		return Fallback;
+	}
+
+	ESlateVisibility McpVisibilityFromString(const FString& Value)
+	{
+		if (Value.Equals(TEXT("Collapsed"), ESearchCase::IgnoreCase)) return ESlateVisibility::Collapsed;
+		if (Value.Equals(TEXT("Hidden"), ESearchCase::IgnoreCase)) return ESlateVisibility::Hidden;
+		if (Value.Equals(TEXT("HitTestInvisible"), ESearchCase::IgnoreCase)) return ESlateVisibility::HitTestInvisible;
+		if (Value.Equals(TEXT("SelfHitTestInvisible"), ESearchCase::IgnoreCase)) return ESlateVisibility::SelfHitTestInvisible;
+		return ESlateVisibility::Visible;
+	}
+
+	EHorizontalAlignment McpHAlignFromString(const FString& Value)
+	{
+		if (Value.Equals(TEXT("left"), ESearchCase::IgnoreCase) || Value.Equals(TEXT("HAlign_Left"), ESearchCase::IgnoreCase)) return HAlign_Left;
+		if (Value.Equals(TEXT("center"), ESearchCase::IgnoreCase) || Value.Equals(TEXT("HAlign_Center"), ESearchCase::IgnoreCase)) return HAlign_Center;
+		if (Value.Equals(TEXT("right"), ESearchCase::IgnoreCase) || Value.Equals(TEXT("HAlign_Right"), ESearchCase::IgnoreCase)) return HAlign_Right;
+		return HAlign_Fill;
+	}
+
+	EVerticalAlignment McpVAlignFromString(const FString& Value)
+	{
+		if (Value.Equals(TEXT("top"), ESearchCase::IgnoreCase) || Value.Equals(TEXT("VAlign_Top"), ESearchCase::IgnoreCase)) return VAlign_Top;
+		if (Value.Equals(TEXT("center"), ESearchCase::IgnoreCase) || Value.Equals(TEXT("VAlign_Center"), ESearchCase::IgnoreCase)) return VAlign_Center;
+		if (Value.Equals(TEXT("bottom"), ESearchCase::IgnoreCase) || Value.Equals(TEXT("VAlign_Bottom"), ESearchCase::IgnoreCase)) return VAlign_Bottom;
+		return VAlign_Fill;
+	}
+
+	FSlateBrush McpMakeBoxBrush(const FLinearColor& Color, const float Radius = 4.0f)
+	{
+		FSlateBrush Brush;
+		Brush.DrawAs = ESlateBrushDrawType::Box;
+		Brush.TintColor = FSlateColor(Color);
+		Brush.OutlineSettings.CornerRadii = FVector4(Radius, Radius, Radius, Radius);
+		Brush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
+		return Brush;
+	}
+
+	FSlateFontInfo McpMakeFont(const int32 Size, const bool bBold)
+	{
+		FSlateFontInfo FontInfo;
+		FontInfo.FontObject = LoadObject<UObject>(nullptr, bBold ? McpBoldFontPath : McpRegularFontPath);
+		FontInfo.Size = Size;
+		FontInfo.TypefaceFontName = bBold ? FName(TEXT("Bold")) : FName(TEXT("Regular"));
+		return FontInfo;
+	}
+
+	void McpApplyButtonStyle(UButton* Button, const TSharedPtr<FJsonObject>& StyleObj)
+	{
+		if (!Button || !StyleObj.IsValid())
+		{
+			return;
+		}
+
+		const FLinearColor Normal = McpColorFromJson(StyleObj->TryGetField(TEXT("normal")), FLinearColor(0.22f, 0.22f, 0.22f, 1.0f));
+		const FLinearColor Hovered = McpColorFromJson(StyleObj->TryGetField(TEXT("hover")), FLinearColor(0.34f, 0.34f, 0.34f, 1.0f));
+		const FLinearColor Pressed = McpColorFromJson(StyleObj->TryGetField(TEXT("pressed")), FLinearColor(0.18f, 0.18f, 0.18f, 1.0f));
+		const float Radius = StyleObj->HasField(TEXT("radius")) ? static_cast<float>(StyleObj->GetNumberField(TEXT("radius"))) : 4.0f;
+
+		FButtonStyle Style = Button->WidgetStyle;
+		Style.Normal = McpMakeBoxBrush(Normal, Radius);
+		Style.Hovered = McpMakeBoxBrush(Hovered, Radius);
+		Style.Pressed = McpMakeBoxBrush(Pressed, Radius);
+		Style.Disabled = McpMakeBoxBrush(Normal.CopyWithNewOpacity(0.45f), Radius);
+		Style.NormalPadding = FMargin(8.0f, 4.0f);
+		Style.PressedPadding = FMargin(8.0f, 5.0f, 8.0f, 3.0f);
+		Button->SetStyle(Style);
+	}
+
+	void McpApplyEditableTextBoxStyle(UEditableTextBox* TextBox, const TSharedPtr<FJsonObject>& StyleObj)
+	{
+		if (!TextBox || !StyleObj.IsValid())
+		{
+			return;
+		}
+
+		FEditableTextBoxStyle Style = TextBox->WidgetStyle;
+		const FLinearColor Background = McpColorFromJson(StyleObj->TryGetField(TEXT("background")), FLinearColor(0.015f, 0.015f, 0.015f, 1.0f));
+		const FLinearColor Border = McpColorFromJson(StyleObj->TryGetField(TEXT("border")), FLinearColor(0.035f, 0.035f, 0.035f, 1.0f));
+		const FLinearColor Focus = McpColorFromJson(StyleObj->TryGetField(TEXT("focus")), FLinearColor(0.0f, 0.44f, 0.88f, 1.0f));
+		const FLinearColor Text = McpColorFromJson(StyleObj->TryGetField(TEXT("text")), FLinearColor(0.86f, 0.86f, 0.86f, 1.0f));
+		const int32 FontSize = StyleObj->HasField(TEXT("fontSize")) ? static_cast<int32>(StyleObj->GetNumberField(TEXT("fontSize"))) : 13;
+
+		Style.BackgroundImageNormal = McpMakeBoxBrush(Background);
+		Style.BackgroundImageHovered = McpMakeBoxBrush(Border);
+		Style.BackgroundImageFocused = McpMakeBoxBrush(Focus);
+		Style.BackgroundImageReadOnly = McpMakeBoxBrush(Background.CopyWithNewOpacity(0.55f));
+		Style.ForegroundColor = FSlateColor(Text);
+		Style.Padding = FMargin(8.0f, 2.0f, 8.0f, 2.0f);
+		Style.TextStyle.SetFont(McpMakeFont(FontSize, false));
+		Style.TextStyle.SetColorAndOpacity(FSlateColor(Text));
+		TextBox->WidgetStyle = Style;
+	}
+
+	void McpApplyMultiLineEditableTextBoxStyle(UMultiLineEditableTextBox* TextBox, const TSharedPtr<FJsonObject>& StyleObj)
+	{
+		if (!TextBox || !StyleObj.IsValid())
+		{
+			return;
+		}
+
+		FEditableTextBoxStyle Style = TextBox->WidgetStyle;
+		const FLinearColor Background = McpColorFromJson(StyleObj->TryGetField(TEXT("background")), FLinearColor(0.015f, 0.015f, 0.015f, 1.0f));
+		const FLinearColor Border = McpColorFromJson(StyleObj->TryGetField(TEXT("border")), FLinearColor(0.035f, 0.035f, 0.035f, 1.0f));
+		const FLinearColor Focus = McpColorFromJson(StyleObj->TryGetField(TEXT("focus")), FLinearColor(0.0f, 0.44f, 0.88f, 1.0f));
+		const FLinearColor Text = McpColorFromJson(StyleObj->TryGetField(TEXT("text")), FLinearColor(0.86f, 0.86f, 0.86f, 1.0f));
+		const int32 FontSize = StyleObj->HasField(TEXT("fontSize")) ? static_cast<int32>(StyleObj->GetNumberField(TEXT("fontSize"))) : 13;
+
+		Style.BackgroundImageNormal = McpMakeBoxBrush(Background);
+		Style.BackgroundImageHovered = McpMakeBoxBrush(Border);
+		Style.BackgroundImageFocused = McpMakeBoxBrush(Focus);
+		Style.BackgroundImageReadOnly = McpMakeBoxBrush(Background.CopyWithNewOpacity(0.55f));
+		Style.ForegroundColor = FSlateColor(Text);
+		Style.Padding = FMargin(8.0f, 4.0f);
+		Style.TextStyle.SetFont(McpMakeFont(FontSize, false));
+		Style.TextStyle.SetColorAndOpacity(FSlateColor(Text));
+		TextBox->WidgetStyle = Style;
+		TextBox->SetTextStyle(Style.TextStyle);
+		TextBox->SetForegroundColor(Text);
+	}
+
+	void McpApplyComboBoxStyle(UComboBoxString* ComboBox, const TSharedPtr<FJsonObject>& StyleObj)
+	{
+		if (!ComboBox || !StyleObj.IsValid())
+		{
+			return;
+		}
+
+		const FLinearColor Background = McpColorFromJson(StyleObj->TryGetField(TEXT("background")), FLinearColor(0.015f, 0.015f, 0.015f, 1.0f));
+		const FLinearColor Hover = McpColorFromJson(StyleObj->TryGetField(TEXT("hover")), FLinearColor(0.09f, 0.09f, 0.09f, 1.0f));
+		const FLinearColor Text = McpColorFromJson(StyleObj->TryGetField(TEXT("text")), FLinearColor(0.86f, 0.86f, 0.86f, 1.0f));
+		const int32 FontSize = StyleObj->HasField(TEXT("fontSize")) ? static_cast<int32>(StyleObj->GetNumberField(TEXT("fontSize"))) : 13;
+
+		ComboBox->Font = McpMakeFont(FontSize, false);
+		ComboBox->ForegroundColor = FSlateColor(Text);
+		ComboBox->WidgetStyle.ComboButtonStyle.ButtonStyle.Normal = McpMakeBoxBrush(Background);
+		ComboBox->WidgetStyle.ComboButtonStyle.ButtonStyle.Hovered = McpMakeBoxBrush(Hover);
+		ComboBox->WidgetStyle.ComboButtonStyle.ButtonStyle.Pressed = McpMakeBoxBrush(Background * 0.85f);
+		ComboBox->ItemStyle.TextColor = FSlateColor(Text);
+	}
+}
+
+static UClass* ResolveWidgetClass(const FString& ClassName);
 
 void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	Registry.RegisterHandler(TEXT("list_widget_blueprints"), &ListWidgetBlueprints);
 	Registry.RegisterHandler(TEXT("create_widget_blueprint"), &CreateWidgetBlueprint);
 	Registry.RegisterHandler(TEXT("read_widget_tree"), &ReadWidgetTree);
+	Registry.RegisterHandler(TEXT("apply_widget_tree_spec"), &ApplyWidgetTreeSpec);
 	Registry.RegisterHandler(TEXT("create_editor_utility_widget"), &CreateEditorUtilityWidget);
 	Registry.RegisterHandler(TEXT("create_editor_utility_blueprint"), &CreateEditorUtilityBlueprint);
 	Registry.RegisterHandler(TEXT("get_widget_details"), &GetWidgetProperties);
@@ -243,6 +501,512 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReadWidgetTree(const TSharedPtr<FJsonObj
 	return MCPResult(Result);
 }
 
+TSharedPtr<FJsonValue> FWidgetHandlers::ApplyWidgetTreeSpec(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	const TSharedPtr<FJsonObject>* RootSpecPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("root"), RootSpecPtr) || !RootSpecPtr || !(*RootSpecPtr).IsValid())
+	{
+		return MCPError(TEXT("Missing 'root' widget spec object."));
+	}
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	if (!WidgetBP || !WidgetBP->WidgetTree)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
+	}
+
+	WidgetBP->Modify();
+	WidgetBP->WidgetTree->Modify();
+
+	if (OptionalBool(Params, TEXT("clearExisting"), true))
+	{
+		TArray<UWidget*> ExistingWidgets;
+		WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
+		{
+			if (Widget)
+			{
+				ExistingWidgets.Add(Widget);
+			}
+		});
+		WidgetBP->WidgetTree->RootWidget = nullptr;
+		int32 RemovedWidgetIndex = 0;
+		for (UWidget* Widget : ExistingWidgets)
+		{
+			if (Widget)
+			{
+				const FString RemovedName = FString::Printf(
+					TEXT("__McpRemoved_%s_%d"),
+					*Widget->GetName(),
+					RemovedWidgetIndex++);
+				Widget->Rename(
+					*RemovedName,
+					WidgetBP->WidgetTree,
+					REN_DontCreateRedirectors | REN_ForceNoResetLoaders | REN_NonTransactional);
+				WidgetBP->WidgetTree->RemoveWidget(Widget);
+			}
+		}
+	}
+
+	int32 CreatedCount = 0;
+	int32 PropertySetCount = 0;
+	TArray<FString> Errors;
+
+	TFunction<void(UWidget*, const TSharedPtr<FJsonObject>&)> ApplyProperties =
+		[&](UWidget* Widget, const TSharedPtr<FJsonObject>& Spec)
+	{
+		const TSharedPtr<FJsonObject>* PropsPtr = nullptr;
+		if (!Widget || !Spec->TryGetObjectField(TEXT("props"), PropsPtr) || !PropsPtr || !(*PropsPtr).IsValid())
+		{
+			return;
+		}
+
+		const TSharedPtr<FJsonObject>& Props = *PropsPtr;
+		for (const auto& Pair : Props->Values)
+		{
+			const FString& Key = Pair.Key;
+			const TSharedPtr<FJsonValue>& Value = Pair.Value;
+
+			if (Key == TEXT("text"))
+			{
+				FString Text;
+				if (Value->TryGetString(Text))
+				{
+					if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+					{
+						TextBlock->SetText(FText::FromString(Text));
+						PropertySetCount++;
+						continue;
+					}
+					if (UEditableTextBox* TextBox = Cast<UEditableTextBox>(Widget))
+					{
+						TextBox->SetText(FText::FromString(Text));
+						PropertySetCount++;
+						continue;
+					}
+					if (UMultiLineEditableTextBox* MultiLineTextBox = Cast<UMultiLineEditableTextBox>(Widget))
+					{
+						MultiLineTextBox->SetText(FText::FromString(Text));
+						PropertySetCount++;
+						continue;
+					}
+				}
+			}
+			else if (Key == TEXT("font"))
+			{
+				const TSharedPtr<FJsonObject>* FontObj = nullptr;
+				if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget);
+					TextBlock && Value->TryGetObject(FontObj) && FontObj && (*FontObj).IsValid())
+				{
+					const int32 Size = (*FontObj)->HasField(TEXT("size"))
+						? static_cast<int32>((*FontObj)->GetNumberField(TEXT("size")))
+						: TextBlock->GetFont().Size;
+					const bool bBold = (*FontObj)->HasField(TEXT("bold")) && (*FontObj)->GetBoolField(TEXT("bold"));
+					TextBlock->SetFont(McpMakeFont(Size, bBold));
+					PropertySetCount++;
+					continue;
+				}
+			}
+			else if (Key == TEXT("color"))
+			{
+				if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+				{
+					TextBlock->SetColorAndOpacity(FSlateColor(McpColorFromJson(Value)));
+					PropertySetCount++;
+					continue;
+				}
+			}
+			else if (Key == TEXT("brushColor"))
+			{
+				if (UBorder* Border = Cast<UBorder>(Widget))
+				{
+					const FLinearColor Color = McpColorFromJson(Value);
+					Border->SetBrush(McpMakeBoxBrush(Color));
+					Border->SetBrushColor(Color);
+					PropertySetCount++;
+					continue;
+				}
+			}
+			else if (Key == TEXT("padding"))
+			{
+				if (UBorder* Border = Cast<UBorder>(Widget))
+				{
+					Border->SetPadding(McpMarginFromJson(Value));
+					PropertySetCount++;
+					continue;
+				}
+			}
+			else if (Key == TEXT("visibility"))
+			{
+				FString Visibility;
+				if (Value->TryGetString(Visibility))
+				{
+					Widget->SetVisibility(McpVisibilityFromString(Visibility));
+					PropertySetCount++;
+					continue;
+				}
+			}
+			else if (Key == TEXT("buttonStyle"))
+			{
+				const TSharedPtr<FJsonObject>* StyleObj = nullptr;
+				if (UButton* Button = Cast<UButton>(Widget);
+					Button && Value->TryGetObject(StyleObj) && StyleObj && (*StyleObj).IsValid())
+				{
+					McpApplyButtonStyle(Button, *StyleObj);
+					PropertySetCount++;
+					continue;
+				}
+			}
+			else if (Key == TEXT("inputStyle"))
+			{
+				const TSharedPtr<FJsonObject>* StyleObj = nullptr;
+				if (Value->TryGetObject(StyleObj) && StyleObj && (*StyleObj).IsValid())
+				{
+					if (UEditableTextBox* TextBox = Cast<UEditableTextBox>(Widget))
+					{
+						McpApplyEditableTextBoxStyle(TextBox, *StyleObj);
+						PropertySetCount++;
+						continue;
+					}
+					if (UMultiLineEditableTextBox* TextBox = Cast<UMultiLineEditableTextBox>(Widget))
+					{
+						McpApplyMultiLineEditableTextBoxStyle(TextBox, *StyleObj);
+						PropertySetCount++;
+						continue;
+					}
+					if (UComboBoxString* ComboBox = Cast<UComboBoxString>(Widget))
+					{
+						McpApplyComboBoxStyle(ComboBox, *StyleObj);
+						PropertySetCount++;
+						continue;
+					}
+				}
+			}
+			else if (Key == TEXT("comboOptions"))
+			{
+				const TArray<TSharedPtr<FJsonValue>>* Options = nullptr;
+				if (UComboBoxString* ComboBox = Cast<UComboBoxString>(Widget);
+					ComboBox && Value->TryGetArray(Options) && Options)
+				{
+					ComboBox->ClearOptions();
+					for (const TSharedPtr<FJsonValue>& Option : *Options)
+					{
+						FString OptionText;
+						if (Option->TryGetString(OptionText))
+						{
+							ComboBox->AddOption(OptionText);
+						}
+					}
+					PropertySetCount++;
+					continue;
+				}
+			}
+			else if (Key == TEXT("widthOverride"))
+			{
+				if (USizeBox* SizeBox = Cast<USizeBox>(Widget))
+				{
+					SizeBox->SetWidthOverride(static_cast<float>(Value->AsNumber()));
+					PropertySetCount++;
+					continue;
+				}
+			}
+			else if (Key == TEXT("heightOverride"))
+			{
+				if (USizeBox* SizeBox = Cast<USizeBox>(Widget))
+				{
+					SizeBox->SetHeightOverride(static_cast<float>(Value->AsNumber()));
+					PropertySetCount++;
+					continue;
+				}
+			}
+			else if (Key == TEXT("minDesiredWidth"))
+			{
+				if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+				{
+					TextBlock->SetMinDesiredWidth(static_cast<float>(Value->AsNumber()));
+					PropertySetCount++;
+					continue;
+				}
+			}
+			else if (Key == TEXT("autoWrapText"))
+			{
+				if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+				{
+					TextBlock->SetAutoWrapText(Value->AsBool());
+					PropertySetCount++;
+					continue;
+				}
+			}
+
+			FProperty* Prop = Widget->GetClass()->FindPropertyByName(FName(*Key));
+			if (Prop)
+			{
+				void* Addr = Prop->ContainerPtrToValuePtr<void>(Widget);
+				FString SetError;
+				if (MCPJsonProperty::SetJsonOnProperty(Prop, Addr, Value, SetError))
+				{
+					PropertySetCount++;
+				}
+				else
+				{
+					Errors.Add(FString::Printf(TEXT("%s.%s: %s"), *Widget->GetName(), *Key, *SetError));
+				}
+			}
+		}
+	};
+
+	TFunction<void(UPanelSlot*, const TSharedPtr<FJsonObject>&)> ApplySlot =
+		[&](UPanelSlot* Slot, const TSharedPtr<FJsonObject>& Spec)
+	{
+		const TSharedPtr<FJsonObject>* SlotObjPtr = nullptr;
+		if (!Slot || !Spec->TryGetObjectField(TEXT("slot"), SlotObjPtr) || !SlotObjPtr || !(*SlotObjPtr).IsValid())
+		{
+			return;
+		}
+
+		const TSharedPtr<FJsonObject>& SlotObj = *SlotObjPtr;
+		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+		{
+			if (const TSharedPtr<FJsonValue> AnchorsValue = SlotObj->TryGetField(TEXT("anchors")))
+			{
+				const TArray<TSharedPtr<FJsonValue>>* Parts = nullptr;
+				if (AnchorsValue->TryGetArray(Parts) && Parts && Parts->Num() >= 4)
+				{
+					CanvasSlot->SetAnchors(FAnchors(
+						static_cast<float>((*Parts)[0]->AsNumber()),
+						static_cast<float>((*Parts)[1]->AsNumber()),
+						static_cast<float>((*Parts)[2]->AsNumber()),
+						static_cast<float>((*Parts)[3]->AsNumber())));
+				}
+			}
+			if (const TSharedPtr<FJsonValue> PositionValue = SlotObj->TryGetField(TEXT("position")))
+			{
+				CanvasSlot->SetPosition(McpVector2FromJson(PositionValue));
+			}
+			if (const TSharedPtr<FJsonValue> SizeValue = SlotObj->TryGetField(TEXT("size")))
+			{
+				CanvasSlot->SetSize(McpVector2FromJson(SizeValue));
+			}
+			if (const TSharedPtr<FJsonValue> AlignmentValue = SlotObj->TryGetField(TEXT("alignment")))
+			{
+				CanvasSlot->SetAlignment(McpVector2FromJson(AlignmentValue));
+			}
+			if (SlotObj->HasField(TEXT("zOrder")))
+			{
+				CanvasSlot->SetZOrder(static_cast<int32>(SlotObj->GetNumberField(TEXT("zOrder"))));
+			}
+			if (SlotObj->HasField(TEXT("autoSize")))
+			{
+				CanvasSlot->SetAutoSize(SlotObj->GetBoolField(TEXT("autoSize")));
+			}
+			return;
+		}
+
+		if (const TSharedPtr<FJsonValue> PaddingValue = SlotObj->TryGetField(TEXT("padding")))
+		{
+			if (UHorizontalBoxSlot* HorizontalSlot = Cast<UHorizontalBoxSlot>(Slot))
+			{
+				HorizontalSlot->SetPadding(McpMarginFromJson(PaddingValue));
+			}
+			else if (UVerticalBoxSlot* VerticalSlot = Cast<UVerticalBoxSlot>(Slot))
+			{
+				VerticalSlot->SetPadding(McpMarginFromJson(PaddingValue));
+			}
+			else if (UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>(Slot))
+			{
+				OverlaySlot->SetPadding(McpMarginFromJson(PaddingValue));
+			}
+			else if (UButtonSlot* ButtonSlot = Cast<UButtonSlot>(Slot))
+			{
+				ButtonSlot->SetPadding(McpMarginFromJson(PaddingValue));
+			}
+			else if (UScrollBoxSlot* ScrollBoxSlot = Cast<UScrollBoxSlot>(Slot))
+			{
+				ScrollBoxSlot->SetPadding(McpMarginFromJson(PaddingValue));
+			}
+			else
+			{
+				FProperty* PaddingProp = Slot->GetClass()->FindPropertyByName(TEXT("Padding"));
+				if (PaddingProp)
+				{
+					FString SetError;
+					MCPJsonProperty::SetJsonOnProperty(PaddingProp, PaddingProp->ContainerPtrToValuePtr<void>(Slot), PaddingValue, SetError);
+				}
+			}
+		}
+
+		FString HAlign;
+		FString VAlign;
+		SlotObj->TryGetStringField(TEXT("hAlign"), HAlign);
+		SlotObj->TryGetStringField(TEXT("vAlign"), VAlign);
+		if (UHorizontalBoxSlot* HorizontalSlot = Cast<UHorizontalBoxSlot>(Slot))
+		{
+			if (!HAlign.IsEmpty()) HorizontalSlot->SetHorizontalAlignment(McpHAlignFromString(HAlign));
+			if (!VAlign.IsEmpty()) HorizontalSlot->SetVerticalAlignment(McpVAlignFromString(VAlign));
+			if (SlotObj->HasField(TEXT("sizeRule")) || SlotObj->HasField(TEXT("fillWeight")))
+			{
+				const bool bFill = OptionalString(SlotObj, TEXT("sizeRule"), TEXT("auto")).Equals(TEXT("fill"), ESearchCase::IgnoreCase);
+				const float FillWeight = SlotObj->HasField(TEXT("fillWeight")) ? static_cast<float>(SlotObj->GetNumberField(TEXT("fillWeight"))) : 1.0f;
+				FSlateChildSize ChildSize;
+				ChildSize.SizeRule = bFill ? ESlateSizeRule::Fill : ESlateSizeRule::Automatic;
+				ChildSize.Value = FillWeight;
+				HorizontalSlot->SetSize(ChildSize);
+			}
+		}
+		else if (UVerticalBoxSlot* VerticalSlot = Cast<UVerticalBoxSlot>(Slot))
+		{
+			if (!HAlign.IsEmpty()) VerticalSlot->SetHorizontalAlignment(McpHAlignFromString(HAlign));
+			if (!VAlign.IsEmpty()) VerticalSlot->SetVerticalAlignment(McpVAlignFromString(VAlign));
+			if (SlotObj->HasField(TEXT("sizeRule")) || SlotObj->HasField(TEXT("fillWeight")))
+			{
+				const bool bFill = OptionalString(SlotObj, TEXT("sizeRule"), TEXT("auto")).Equals(TEXT("fill"), ESearchCase::IgnoreCase);
+				const float FillWeight = SlotObj->HasField(TEXT("fillWeight")) ? static_cast<float>(SlotObj->GetNumberField(TEXT("fillWeight"))) : 1.0f;
+				FSlateChildSize ChildSize;
+				ChildSize.SizeRule = bFill ? ESlateSizeRule::Fill : ESlateSizeRule::Automatic;
+				ChildSize.Value = FillWeight;
+				VerticalSlot->SetSize(ChildSize);
+			}
+		}
+		else if (UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>(Slot))
+		{
+			if (!HAlign.IsEmpty()) OverlaySlot->SetHorizontalAlignment(McpHAlignFromString(HAlign));
+			if (!VAlign.IsEmpty()) OverlaySlot->SetVerticalAlignment(McpVAlignFromString(VAlign));
+		}
+		else if (UButtonSlot* ButtonSlot = Cast<UButtonSlot>(Slot))
+		{
+			if (!HAlign.IsEmpty()) ButtonSlot->SetHorizontalAlignment(McpHAlignFromString(HAlign));
+			if (!VAlign.IsEmpty()) ButtonSlot->SetVerticalAlignment(McpVAlignFromString(VAlign));
+		}
+		else if (UScrollBoxSlot* ScrollBoxSlot = Cast<UScrollBoxSlot>(Slot))
+		{
+			if (!HAlign.IsEmpty()) ScrollBoxSlot->SetHorizontalAlignment(McpHAlignFromString(HAlign));
+			if (!VAlign.IsEmpty()) ScrollBoxSlot->SetVerticalAlignment(McpVAlignFromString(VAlign));
+		}
+
+		for (const auto& Pair : SlotObj->Values)
+		{
+			if (Pair.Key == TEXT("padding") || Pair.Key == TEXT("hAlign") || Pair.Key == TEXT("vAlign")
+				|| Pair.Key == TEXT("sizeRule") || Pair.Key == TEXT("fillWeight")
+				|| Pair.Key == TEXT("anchors") || Pair.Key == TEXT("position") || Pair.Key == TEXT("size")
+				|| Pair.Key == TEXT("alignment") || Pair.Key == TEXT("zOrder") || Pair.Key == TEXT("autoSize"))
+			{
+				continue;
+			}
+			if (FProperty* Prop = Slot->GetClass()->FindPropertyByName(FName(*Pair.Key)))
+			{
+				FString SetError;
+				MCPJsonProperty::SetJsonOnProperty(Prop, Prop->ContainerPtrToValuePtr<void>(Slot), Pair.Value, SetError);
+			}
+		}
+	};
+
+	TFunction<UWidget*(const TSharedPtr<FJsonObject>&, UPanelWidget*)> BuildWidget =
+		[&](const TSharedPtr<FJsonObject>& Spec, UPanelWidget* Parent) -> UWidget*
+	{
+		FString WidgetClassName;
+		if (!Spec->TryGetStringField(TEXT("class"), WidgetClassName))
+		{
+			Errors.Add(TEXT("Widget spec missing class."));
+			return nullptr;
+		}
+
+		FString WidgetName = OptionalString(Spec, TEXT("name"));
+		UClass* WidgetClass = ResolveWidgetClass(WidgetClassName);
+		if (!WidgetClass)
+		{
+			Errors.Add(FString::Printf(TEXT("Widget class not found: %s"), *WidgetClassName));
+			return nullptr;
+		}
+
+		UWidget* Widget = WidgetBP->WidgetTree->ConstructWidget<UWidget>(
+			WidgetClass,
+			WidgetName.IsEmpty() ? NAME_None : FName(*WidgetName));
+		if (!Widget)
+		{
+			Errors.Add(FString::Printf(TEXT("Failed to construct widget: %s"), *WidgetClassName));
+			return nullptr;
+		}
+		CreatedCount++;
+
+		UPanelSlot* Slot = nullptr;
+		if (Parent)
+		{
+			Slot = Parent->AddChild(Widget);
+			if (!Slot)
+			{
+				Errors.Add(FString::Printf(TEXT("Failed to add '%s' to parent '%s'"), *Widget->GetName(), *Parent->GetName()));
+			}
+		}
+		else
+		{
+			WidgetBP->WidgetTree->RootWidget = Widget;
+		}
+
+		ApplyProperties(Widget, Spec);
+		ApplySlot(Slot, Spec);
+
+		const TArray<TSharedPtr<FJsonValue>>* Children = nullptr;
+		if (Spec->TryGetArrayField(TEXT("children"), Children) && Children)
+		{
+			UPanelWidget* ParentPanel = Cast<UPanelWidget>(Widget);
+			if (!ParentPanel)
+			{
+				Errors.Add(FString::Printf(TEXT("Widget '%s' cannot host children."), *Widget->GetName()));
+			}
+			else
+			{
+				for (const TSharedPtr<FJsonValue>& ChildValue : *Children)
+				{
+					const TSharedPtr<FJsonObject>* ChildSpec = nullptr;
+					if (ChildValue->TryGetObject(ChildSpec) && ChildSpec && (*ChildSpec).IsValid())
+					{
+						BuildWidget(*ChildSpec, ParentPanel);
+					}
+				}
+			}
+		}
+
+		return Widget;
+	};
+
+	UWidget* RootWidget = BuildWidget(*RootSpecPtr, nullptr);
+	if (!RootWidget)
+	{
+		return MCPError(TEXT("Failed to build root widget from spec."));
+	}
+
+	WidgetBP->MarkPackageDirty();
+	FCompilerResultsLog CompileLog;
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::None, &CompileLog);
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	if (bSave)
+	{
+		UEditorAssetLibrary::SaveAsset(AssetPath);
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("rootWidget"), RootWidget->GetName());
+	Result->SetNumberField(TEXT("createdWidgets"), CreatedCount);
+	Result->SetNumberField(TEXT("propertiesSet"), PropertySetCount);
+	Result->SetNumberField(TEXT("compileErrors"), CompileLog.NumErrors);
+	Result->SetNumberField(TEXT("compileWarnings"), CompileLog.NumWarnings);
+	if (!Errors.IsEmpty())
+	{
+		TArray<TSharedPtr<FJsonValue>> ErrorArray;
+		for (const FString& Error : Errors)
+		{
+			ErrorArray.Add(MakeShared<FJsonValueString>(Error));
+		}
+		Result->SetArrayField(TEXT("errors"), ErrorArray);
+	}
+	return MCPResult(Result);
+}
+
 TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Path;
@@ -399,6 +1163,7 @@ static UClass* ResolveWidgetClass(const FString& ClassName)
 		{ TEXT("checkbox"),          TEXT("/Script/UMG.CheckBox") },
 		{ TEXT("slider"),            TEXT("/Script/UMG.Slider") },
 		{ TEXT("editabletextbox"),   TEXT("/Script/UMG.EditableTextBox") },
+		{ TEXT("multilineeditabletextbox"), TEXT("/Script/UMG.MultiLineEditableTextBox") },
 		{ TEXT("comboboxstring"),    TEXT("/Script/UMG.ComboBoxString") },
 		{ TEXT("spacer"),            TEXT("/Script/UMG.Spacer") },
 		{ TEXT("richtextblock"),     TEXT("/Script/UMG.RichTextBlock") },
@@ -416,6 +1181,26 @@ static UClass* ResolveWidgetClass(const FString& ClassName)
 	if (FullPathClass && FullPathClass->IsChildOf(UWidget::StaticClass()))
 	{
 		return FullPathClass;
+	}
+
+	FullPathClass = LoadObject<UClass>(nullptr, *ClassName);
+	if (FullPathClass && FullPathClass->IsChildOf(UWidget::StaticClass()))
+	{
+		return FullPathClass;
+	}
+
+	if (ClassName.StartsWith(TEXT("/")))
+	{
+		FString GeneratedClassPath = ClassName;
+		if (!GeneratedClassPath.EndsWith(TEXT("_C")))
+		{
+			GeneratedClassPath += TEXT("_C");
+		}
+		FullPathClass = LoadObject<UClass>(nullptr, *GeneratedClassPath);
+		if (FullPathClass && FullPathClass->IsChildOf(UWidget::StaticClass()))
+		{
+			return FullPathClass;
+		}
 	}
 
 	// Try /Script/UMG.<ClassName>

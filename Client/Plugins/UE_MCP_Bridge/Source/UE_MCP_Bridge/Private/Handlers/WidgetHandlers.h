@@ -13,6 +13,7 @@ private:
 	static TSharedPtr<FJsonValue> ListWidgetBlueprints(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateWidgetBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadWidgetTree(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ApplyWidgetTreeSpec(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateEditorUtilityWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateEditorUtilityBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetWidgetProperties(const TSharedPtr<FJsonObject>& Params);

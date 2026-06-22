@@ -67,7 +67,18 @@ namespace
 	const FName EpisodePreviewImageBoxName(TEXT("EpisodePreviewImageBox"));
 	const FName EpisodePreviewPlaceholderBoxName(TEXT("EpisodePreviewPlaceholderBox"));
 	const FName SuggestionSeverityTextName(TEXT("SuggestionSeverityText"));
+	const FName SuggestionTitleRowName(TEXT("SuggestionTitleRow"));
+	const FName SuggestionTitleTextName(TEXT("SuggestionTitleText"));
+	const FName SuggestionMessageRowName(TEXT("SuggestionMessageRow"));
 	const FName SuggestionMessageTextName(TEXT("SuggestionMessageText"));
+	const FName SuggestionReasonRowName(TEXT("SuggestionReasonRow"));
+	const FName SuggestionReasonTextName(TEXT("SuggestionReasonText"));
+	const FName SuggestionRecommendationRowName(TEXT("SuggestionRecommendationRow"));
+	const FName SuggestionRecommendationTextName(TEXT("SuggestionRecommendationText"));
+	const FName SuggestionValueRowName(TEXT("SuggestionValueRow"));
+	const FName SuggestionParamTextName(TEXT("SuggestionParamText"));
+	const FName SuggestionCurrentTextName(TEXT("SuggestionCurrentText"));
+	const FName SuggestionSuggestedTextName(TEXT("SuggestionSuggestedText"));
 	const FName SuggestionHighIndicatorName(TEXT("SuggestionHighIndicator"));
 	const FName SuggestionMediumIndicatorName(TEXT("SuggestionMediumIndicator"));
 	const FName SuggestionLowIndicatorName(TEXT("SuggestionLowIndicator"));
@@ -166,6 +177,38 @@ namespace
 	FString ExtractProjectRunIdFromDirectory(const FString& runDirectory)
 	{
 		return FPaths::GetCleanFilename(NormalizeMainMenuPath(runDirectory));
+	}
+
+	// Numeric project run ids keep zero-padded directory names but UI labels show the human run number.
+	FString FormatProjectRunDisplayId(const FString& runId)
+	{
+		const FString trimmedRunId = runId.TrimStartAndEnd();
+		if (trimmedRunId.IsEmpty())
+		{
+			return FString();
+		}
+
+		bool bAllDigits = true;
+		int32 firstNonZeroIndex = INDEX_NONE;
+		for (int32 index = 0; index < trimmedRunId.Len(); ++index)
+		{
+			const TCHAR character = trimmedRunId[index];
+			if (!FChar::IsDigit(character))
+			{
+				bAllDigits = false;
+				break;
+			}
+			if (character != TEXT('0') && firstNonZeroIndex == INDEX_NONE)
+			{
+				firstNonZeroIndex = index;
+			}
+		}
+
+		if (!bAllDigits)
+		{
+			return trimmedRunId;
+		}
+		return firstNonZeroIndex == INDEX_NONE ? FString(TEXT("0")) : trimmedRunId.Mid(firstNonZeroIndex);
 	}
 
 	FString BuildProjectRunDirectory(const FString& projectPath, const FString& runId)
@@ -1858,7 +1901,7 @@ void UMainMenuWidget::HandleRunExperimentClicked()
 	RefreshProjectRunSelection();
 	RefreshExperimentResultList();
 	ShowProjectWorkspaceTab(EProjectWorkspaceTabType::ExperimentStatus);
-	SetDiagnosticsText(FString::Printf(TEXT("실험 실행을 시작했습니다: %s"), *runId));
+	SetDiagnosticsText(FString::Printf(TEXT("실험 실행을 시작했습니다: %s"), *FormatProjectRunDisplayId(runId)));
 	UpdateStatusText(TEXT("Project simulator launch requested."));
 }
 
@@ -1888,7 +1931,7 @@ void UMainMenuWidget::HandleCreateExperimentFromConfigClicked()
 	CloseTransientProjectTab(EProjectWorkspaceTabType::ExperimentConfig);
 	RefreshProjectRunSelection();
 	RefreshExperimentResultList();
-	SetDiagnosticsText(FString::Printf(TEXT("실험 실행을 시작했습니다: %s"), *runId));
+	SetDiagnosticsText(FString::Printf(TEXT("실험 실행을 시작했습니다: %s"), *FormatProjectRunDisplayId(runId)));
 	UpdateStatusText(TEXT("Project simulator launch requested."));
 }
 
@@ -2718,7 +2761,7 @@ void UMainMenuWidget::SetExperimentResultDetailVisible(const bool bVisible)
 
 			const FText tabLabel = runId.IsEmpty()
 				? FText::FromString(TEXT("분석"))
-				: FText::FromString(FString::Printf(TEXT("분석 #%s"), *runId));
+				: FText::FromString(FString::Printf(TEXT("분석 #%s"), *FormatProjectRunDisplayId(runId)));
 			OpenTransientProjectTab(EProjectWorkspaceTabType::ExperimentResultDetail, tabLabel);
 		}
 		else
@@ -3155,7 +3198,7 @@ void UMainMenuWidget::RefreshExperimentResultDetailPanel()
 	{
 		const FString Title = DashboardData.RunId.IsEmpty()
 			? TEXT("분석 상세")
-			: FString::Printf(TEXT("분석 상세   #%s"), *DashboardData.RunId);
+			: FString::Printf(TEXT("분석 상세   #%s"), *FormatProjectRunDisplayId(DashboardData.RunId));
 		ExperimentResultDetailTitleText->SetText(FText::FromString(Title));
 	}
 
@@ -3265,11 +3308,7 @@ void UMainMenuWidget::RefreshExperimentResultDetailPanel()
 				continue;
 			}
 
-			ConfigureProjectAiSuggestionRow(
-				RowWidget,
-				Suggestion.Severity,
-				Suggestion.SeverityLabel,
-				Suggestion.Message);
+			ConfigureProjectAiSuggestionRow(RowWidget, Suggestion);
 			AiSuggestionListBox->AddChild(RowWidget);
 			ProjectAiSuggestionRows.Add(RowWidget);
 		}
@@ -3307,16 +3346,40 @@ void UMainMenuWidget::ConfigureProjectEpisodeReplayCard(
 
 void UMainMenuWidget::ConfigureProjectAiSuggestionRow(
 	UUserWidget* rowWidget,
-	const EProjectRunAiSuggestionSeverity severity,
-	const FString& severityLabel,
-	const FString& message) const
+	const FProjectRunAiSuggestionDashboardItem& suggestion) const
 {
-	SetDashboardChildText(rowWidget, SuggestionSeverityTextName, severityLabel);
-	SetDashboardChildText(rowWidget, SuggestionMessageTextName, message);
-	SetDashboardChildVisibility(rowWidget, SuggestionHighIndicatorName, severity == EProjectRunAiSuggestionSeverity::High);
-	SetDashboardChildVisibility(rowWidget, SuggestionMediumIndicatorName, severity == EProjectRunAiSuggestionSeverity::Medium);
-	SetDashboardChildVisibility(rowWidget, SuggestionLowIndicatorName, severity == EProjectRunAiSuggestionSeverity::Low);
-	SetDashboardChildVisibility(rowWidget, SuggestionInfoIndicatorName, severity == EProjectRunAiSuggestionSeverity::Info);
+	auto setTextAndVisibility = [rowWidget](
+		const FName textName,
+		const FName rowName,
+		const FString& value)
+	{
+		const FString visibleValue = value.TrimStartAndEnd();
+		SetDashboardChildText(rowWidget, textName, visibleValue);
+		SetDashboardChildVisibility(rowWidget, textName, !visibleValue.IsEmpty());
+		SetDashboardChildVisibility(rowWidget, rowName, !visibleValue.IsEmpty());
+	};
+
+	SetDashboardChildText(rowWidget, SuggestionSeverityTextName, suggestion.SeverityLabel);
+	setTextAndVisibility(SuggestionTitleTextName, SuggestionTitleRowName, suggestion.Title);
+	setTextAndVisibility(SuggestionMessageTextName, SuggestionMessageRowName, suggestion.Message);
+	setTextAndVisibility(SuggestionReasonTextName, SuggestionReasonRowName, suggestion.Reason);
+	setTextAndVisibility(
+		SuggestionRecommendationTextName,
+		SuggestionRecommendationRowName,
+		suggestion.Recommendation);
+
+	const bool bHasValueRow = !suggestion.ParameterName.TrimStartAndEnd().IsEmpty()
+		|| !suggestion.CurrentValue.TrimStartAndEnd().IsEmpty()
+		|| !suggestion.SuggestedValue.TrimStartAndEnd().IsEmpty();
+	SetDashboardChildText(rowWidget, SuggestionParamTextName, suggestion.ParameterName.TrimStartAndEnd());
+	SetDashboardChildText(rowWidget, SuggestionCurrentTextName, suggestion.CurrentValue.TrimStartAndEnd());
+	SetDashboardChildText(rowWidget, SuggestionSuggestedTextName, suggestion.SuggestedValue.TrimStartAndEnd());
+	SetDashboardChildVisibility(rowWidget, SuggestionValueRowName, bHasValueRow);
+
+	SetDashboardChildVisibility(rowWidget, SuggestionHighIndicatorName, suggestion.Severity == EProjectRunAiSuggestionSeverity::High);
+	SetDashboardChildVisibility(rowWidget, SuggestionMediumIndicatorName, suggestion.Severity == EProjectRunAiSuggestionSeverity::Medium);
+	SetDashboardChildVisibility(rowWidget, SuggestionLowIndicatorName, suggestion.Severity == EProjectRunAiSuggestionSeverity::Low);
+	SetDashboardChildVisibility(rowWidget, SuggestionInfoIndicatorName, suggestion.Severity == EProjectRunAiSuggestionSeverity::Info);
 }
 
 void UMainMenuWidget::SetSelectedScenarioSetupPath(const FString& scenarioSetupPath)
@@ -3660,7 +3723,7 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 				if (!runDirectories.IsEmpty())
 				{
 					lines.Add(FString::Printf(TEXT("Runs: %d"), runDirectories.Num()));
-					lines.Add(FString::Printf(TEXT("Selected Run: %s"), *GetSelectedProjectRunId()));
+					lines.Add(FString::Printf(TEXT("Selected Run: %s"), *FormatProjectRunDisplayId(GetSelectedProjectRunId())));
 				}
 			}
 			else
@@ -3678,7 +3741,7 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 				lines.Add(TEXT(""));
 				lines.Add(TEXT("Current Simulator Process"));
 				lines.Add(FString::Printf(TEXT("Mode: %s"), runInfo.bProjectRun ? TEXT("Project") : TEXT("Legacy")));
-				lines.Add(FString::Printf(TEXT("Run Id: %s"), *runInfo.RunId));
+				lines.Add(FString::Printf(TEXT("Run Id: %s"), *FormatProjectRunDisplayId(runInfo.RunId)));
 				lines.Add(FString::Printf(TEXT("State: %s"), *ToRunStateString(runInfo.Status.State)));
 				lines.Add(FString::Printf(TEXT("Process: %s"), runInfo.bProcessRunning ? TEXT("Running") : TEXT("Stopped")));
 				lines.Add(FString::Printf(TEXT("Launcher: %s"), runInfo.bUsedPreviewLauncher ? TEXT("Task-RunPreview.bat") : TEXT("Executable")));
@@ -3712,7 +3775,7 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 		{
 			lines.Add(TEXT(""));
 			lines.Add(TEXT("Current Simulator Process"));
-			lines.Add(FString::Printf(TEXT("Run Id: %s"), *runInfo.RunId));
+			lines.Add(FString::Printf(TEXT("Run Id: %s"), *FormatProjectRunDisplayId(runInfo.RunId)));
 			lines.Add(FString::Printf(TEXT("State: %s"), *ToRunStateString(runInfo.Status.State)));
 			lines.Add(FString::Printf(TEXT("Progress: %d / %d"), runInfo.Status.CompletedRuns, runInfo.Status.TotalRuns));
 			lines.Add(FString::Printf(TEXT("Process: %s"), runInfo.bProcessRunning ? TEXT("Running") : TEXT("Stopped")));

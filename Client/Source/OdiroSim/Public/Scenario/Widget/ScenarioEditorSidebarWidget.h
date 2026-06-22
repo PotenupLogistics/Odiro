@@ -9,10 +9,10 @@
 class UScrollBox;
 class UTextBlock;
 class UScenarioEditorSidebarMainPanel;
+class UScenarioEditorWidgetClassCatalog;
 class UWidget;
 class UWidgetSwitcher;
 class UWidgetTextStyleCatalog;
-class SWidget;
 
 // Scenario Template block viewer and panel switch host used by the editor side sidebar.
 UCLASS(BlueprintType, Blueprintable)
@@ -21,9 +21,6 @@ class ODIROSIM_API UScenarioEditorSidebarWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	// Builds a native sidebar tree when no Blueprint-authored root widget exists.
-	virtual TSharedRef<SWidget> RebuildWidget() override;
-
 	// Refreshes the read-only sidebar after UMG construction.
 	virtual void NativeConstruct() override;
 
@@ -34,6 +31,10 @@ public:
 	// Shared typography catalog used by the sidebar and child panel widgets.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
+
+	// WBP class catalog used for generated editor detail panels.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> WidgetClassCatalog;
 
 	// Optional title text for the active Scenario Template block.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
@@ -91,6 +92,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
 
+	// Updates the WBP class catalog used by this sidebar and child panel widgets.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetWidgetClassCatalog(TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> catalog);
+
 	// Pulls the current draft Scenario Template from the authoring subsystem and renders it.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void RefreshFromDraft();
@@ -116,28 +121,14 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UWidget> GeneratedPedestrianPanelWidget;
 
-	// Builds the native sidebar tree that mirrors the HTML discussion prototype.
-	void BuildDefaultWidgetTree();
-	// Applies scroll box defaults shared by native and Blueprint-authored trees.
-	void ConfigureScrollBox() const;
-	// Wraps a Blueprint-authored PanelSwitcher in a generated scroll area when no scroll box is bound.
-	bool EnsurePanelSwitcherIsScrollable();
 	// Rebuilds generated block content for the active placeholder panel widget.
 	void RefreshGeneratedPanelContent(const FScenarioDocument& scenarioTemplate);
-	// Creates or returns the generated fallback widget for one panel.
+	// Creates or returns a catalog-backed generated panel widget.
 	UWidget* EnsureGeneratedPanelWidget(EScenarioTemplateSidebarPanel panel);
-	// Returns the generated fallback widget for one panel without creating it.
+	// Returns a catalog-backed generated panel widget without creating it.
 	UWidget* ResolveGeneratedPanelWidget(EScenarioTemplateSidebarPanel panel) const;
-	// Replaces a panel placeholder's content with generated block content.
-	bool ApplyGeneratedContentToPanelWidget(UWidget* panelWidget, UWidget* contentWidget) const;
-	// Builds one generated block panel for the active template data.
-	UWidget* BuildGeneratedPanelContent(
-		EScenarioTemplateSidebarPanel panel,
-		const FScenarioDocument& scenarioTemplate);
 	// Applies the active panel to the optional UMG widget switcher.
 	void RefreshPanelSwitcher();
-	// Applies a small inset so panel outlines are not clipped by the switcher viewport.
-	void ApplyPanelContentPadding(UWidget* panelWidget) const;
 	// Shows read-only summary text when the active panel has no specialized widget yet.
 	void RefreshFallbackTextVisibility() const;
 	// Applies one visibility state to the legacy read-only summary area.
@@ -177,8 +168,8 @@ private:
 		const FString& diagnosticsText);
 	// Applies text to a bound text block when it exists.
 	void SetTextBlockText(UTextBlock* textBlock, const FString& text) const;
-	// Applies shared typography to title, summary text, and child panel widgets.
-	void ApplyTextStyles();
+	// Pushes non-visual dependencies to typed child panel widgets.
+	void ConfigureChildPanelDependencies() const;
 	// Returns the display title for one template sidebar panel.
 	static FString PanelToTitle(EScenarioTemplateSidebarPanel panel);
 	// Returns a stable label for a robot anchor type.

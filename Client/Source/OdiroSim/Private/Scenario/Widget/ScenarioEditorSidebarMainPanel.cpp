@@ -1,29 +1,17 @@
 #include "Scenario/Widget/ScenarioEditorSidebarMainPanel.h"
 
-#include "Blueprint/WidgetTree.h"
-#include "Components/Border.h"
-#include "Components/HorizontalBox.h"
-#include "Components/HorizontalBoxSlot.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
-#include "Components/VerticalBoxSlot.h"
 #include "Components/Widget.h"
 #include "Engine/World.h"
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
+#include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
-#include "Styling/SlateBrush.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
 
 namespace
 {
-	constexpr float MainPanelBlockPadding = 10.0f;
-	constexpr float MainPanelOutlineThickness = 1.0f;
-	const FLinearColor MainPanelBlockColor(0.14f, 0.17f, 0.20f, 0.96f);
-	const FLinearColor MainPanelNestedBlockColor(0.17f, 0.20f, 0.24f, 0.96f);
-	const FLinearColor MainPanelOutlineColor(0.27f, 0.33f, 0.39f, 1.0f);
-	const FLinearColor MainPanelActiveOutlineColor(0.28f, 0.65f, 1.0f, 1.0f);
-
 	FString JoinMainPanelDiagnostics(const TArray<FString>& diagnostics)
 	{
 		return diagnostics.IsEmpty() ? FString(TEXT("Unknown edit failure.")) : FString::Join(diagnostics, TEXT("\n"));
@@ -33,187 +21,15 @@ namespace
 	{
 		return FScenarioTemplateNumberValue();
 	}
-
-	FSlateBrush MakeMainPanelColorBrush(const FLinearColor& color)
-	{
-		FSlateBrush brush;
-		brush.DrawAs = ESlateBrushDrawType::Box;
-		brush.TintColor = FSlateColor(color);
-		return brush;
-	}
-
-	void ApplyMainPanelBorderFill(UBorder* border, const FLinearColor& color, const FMargin& padding)
-	{
-		if (!border)
-		{
-			return;
-		}
-
-		border->SetBrush(MakeMainPanelColorBrush(color));
-		border->SetBrushColor(color);
-		border->SetPadding(padding);
-	}
-
-	UTextBlock* MakeMainPanelText(
-		UWidgetTree* widgetTree,
-		const FString& text,
-		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalog,
-		const EWidgetTextStyleRole role)
-	{
-		UTextBlock* textBlock = widgetTree
-			? widgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass())
-			: nullptr;
-		if (!textBlock)
-		{
-			return nullptr;
-		}
-
-		textBlock->SetText(FText::FromString(text));
-		UWidgetTextStyleCatalog::ApplyTextBlockStyle(textBlock, catalog, role);
-		return textBlock;
-	}
-
-	void AddMainPanelTextToRow(
-		UHorizontalBox* row,
-		UTextBlock* textBlock,
-		const ESlateSizeRule::Type sizeRule,
-		const FMargin& padding)
-	{
-		if (!row || !textBlock)
-		{
-			return;
-		}
-
-		if (UHorizontalBoxSlot* slot = row->AddChildToHorizontalBox(textBlock))
-		{
-			slot->SetPadding(padding);
-			slot->SetVerticalAlignment(VAlign_Top);
-			slot->SetSize(FSlateChildSize(sizeRule));
-		}
-	}
-
-	void AddMainPanelWidgetToBox(UVerticalBox* box, UWidget* widget, const FMargin& padding = FMargin())
-	{
-		if (!box || !widget)
-		{
-			return;
-		}
-
-		if (UVerticalBoxSlot* slot = box->AddChildToVerticalBox(widget))
-		{
-			slot->SetPadding(padding);
-			slot->SetHorizontalAlignment(HAlign_Fill);
-		}
-	}
-
-	UVerticalBox* AddMainPanelBlock(
-		UWidgetTree* widgetTree,
-		UVerticalBox* parent,
-		const FString& name,
-		const FString& path,
-		const FString& badge,
-		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalog,
-		const bool bHighlighted = false,
-		const bool bNested = false)
-	{
-		if (!widgetTree || !parent)
-		{
-			return nullptr;
-		}
-
-		UBorder* outlineBorder = widgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-		ApplyMainPanelBorderFill(
-			outlineBorder,
-			bHighlighted ? MainPanelActiveOutlineColor : MainPanelOutlineColor,
-			FMargin(MainPanelOutlineThickness));
-
-		UBorder* contentBorder = widgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-		ApplyMainPanelBorderFill(
-			contentBorder,
-			bNested ? MainPanelNestedBlockColor : MainPanelBlockColor,
-			FMargin(MainPanelBlockPadding));
-		outlineBorder->SetContent(contentBorder);
-
-		UVerticalBox* blockBox = widgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
-		contentBorder->SetContent(blockBox);
-
-		UHorizontalBox* headerRow = widgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
-		AddMainPanelTextToRow(
-			headerRow,
-			MakeMainPanelText(widgetTree, TEXT("▼"), catalog, EWidgetTextStyleRole::Label),
-			ESlateSizeRule::Automatic,
-			FMargin(0.0f, 0.0f, 8.0f, 4.0f));
-		AddMainPanelTextToRow(
-			headerRow,
-			MakeMainPanelText(widgetTree, name, catalog, EWidgetTextStyleRole::Label),
-			ESlateSizeRule::Automatic,
-			FMargin(0.0f, 0.0f, 8.0f, 4.0f));
-		AddMainPanelTextToRow(
-			headerRow,
-			MakeMainPanelText(widgetTree, path, catalog, EWidgetTextStyleRole::Caption),
-			ESlateSizeRule::Fill,
-			FMargin(0.0f, 0.0f, 8.0f, 4.0f));
-		AddMainPanelTextToRow(
-			headerRow,
-			MakeMainPanelText(widgetTree, badge, catalog, EWidgetTextStyleRole::Label),
-			ESlateSizeRule::Automatic,
-			FMargin(0.0f, 0.0f, 0.0f, 4.0f));
-		AddMainPanelWidgetToBox(blockBox, headerRow);
-
-		UVerticalBox* body = widgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
-		AddMainPanelWidgetToBox(blockBox, body, FMargin(0.0f, 6.0f, 0.0f, 0.0f));
-		AddMainPanelWidgetToBox(parent, outlineBorder, FMargin(0.0f, 0.0f, 0.0f, MainPanelBlockPadding));
-		return body;
-	}
-
-	UVerticalBox* AddMainPanelBlockWidget(
-		UWidgetTree* widgetTree,
-		UVerticalBox* parent,
-		TObjectPtr<UScenarioEditorSidebarBlockWidget>& blockWidget,
-		const TCHAR* widgetName,
-		const FString& name,
-		const FString& path,
-		const FString& badge,
-		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalog,
-		const bool bHighlighted = false,
-		const bool bNested = false,
-		const bool bExpanded = true,
-		const bool bShowNormalOutline = true)
-	{
-		if (!widgetTree || !parent)
-		{
-			return nullptr;
-		}
-
-		blockWidget = widgetTree->ConstructWidget<UScenarioEditorSidebarBlockWidget>(
-			UScenarioEditorSidebarBlockWidget::StaticClass(),
-			FName(widgetName));
-		if (!blockWidget)
-		{
-			return nullptr;
-		}
-
-		blockWidget->SetTextStyleCatalog(catalog);
-		blockWidget->SetBlockMetadata(name, path, badge);
-		blockWidget->SetSelected(bHighlighted);
-		blockWidget->SetShowNormalOutline(bShowNormalOutline);
-		blockWidget->SetNested(bNested);
-		blockWidget->SetExpanded(bExpanded);
-		AddMainPanelWidgetToBox(parent, blockWidget.Get(), FMargin(0.0f, 0.0f, 0.0f, MainPanelBlockPadding));
-		return blockWidget->GetBodyBox();
-	}
-}
-
-TSharedRef<SWidget> UScenarioEditorSidebarMainPanel::RebuildWidget()
-{
-	Initialize();
-	BuildDefaultWidgetTree();
-	return Super::RebuildWidget();
 }
 
 void UScenarioEditorSidebarMainPanel::NativeConstruct()
 {
 	Super::NativeConstruct();
+	if (WidgetClassCatalog.IsNull())
+	{
+		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
+	}
 	BindFieldRows();
 	ConfigureFieldRows();
 	RefreshFromDraft();
@@ -230,6 +46,14 @@ void UScenarioEditorSidebarMainPanel::SetTextStyleCatalog(
 {
 	TextStyleCatalog = catalog;
 	ApplyTextStyles();
+}
+
+void UScenarioEditorSidebarMainPanel::SetWidgetClassCatalog(
+	TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> catalog)
+{
+	WidgetClassCatalog = catalog.IsNull()
+		? UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference()
+		: catalog;
 }
 
 void UScenarioEditorSidebarMainPanel::RefreshFromDraft()
@@ -500,125 +324,6 @@ void UScenarioEditorSidebarMainPanel::HandleRobotGoalHeadingCommitted(
 		EScenarioEditorSidebarRobotAnchorField::Heading,
 		text,
 		commitMethod);
-}
-
-void UScenarioEditorSidebarMainPanel::BuildDefaultWidgetTree()
-{
-	if (!WidgetTree || WidgetTree->RootWidget)
-	{
-		return;
-	}
-
-	UVerticalBox* rootBox = WidgetTree->ConstructWidget<UVerticalBox>(
-		UVerticalBox::StaticClass(),
-		TEXT("GeneratedMainPanelRoot"));
-	if (!rootBox)
-	{
-		return;
-	}
-
-	WidgetTree->RootWidget = rootBox;
-
-	UVerticalBox* rootBody = AddMainPanelBlockWidget(
-		WidgetTree,
-		rootBox,
-		RootBlockWidget,
-		TEXT("RootBlockWidget"),
-		TEXT("Root"),
-		TEXT("scenario"),
-		TEXT("Main"),
-		TextStyleCatalog,
-		true);
-	auto addFieldRow = [this](
-		UVerticalBox* parentBox,
-		TObjectPtr<UScenarioEditorSidebarFieldRow>& fieldRow,
-		const TCHAR* widgetName)
-	{
-		if (!parentBox)
-		{
-			return;
-		}
-
-		fieldRow = WidgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
-			UScenarioEditorSidebarFieldRow::StaticClass(),
-			FName(widgetName));
-		if (!fieldRow)
-		{
-			return;
-		}
-
-		if (UVerticalBoxSlot* slot = parentBox->AddChildToVerticalBox(fieldRow))
-		{
-			slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
-		}
-	};
-
-	addFieldRow(rootBody, SchemaFieldRow, TEXT("SchemaFieldRow"));
-	addFieldRow(rootBody, VersionFieldRow, TEXT("VersionFieldRow"));
-	addFieldRow(rootBody, ScenarioIdFieldRow, TEXT("ScenarioIdFieldRow"));
-	addFieldRow(rootBody, IntentFieldRow, TEXT("IntentFieldRow"));
-
-	UVerticalBox* robotBody = AddMainPanelBlockWidget(
-		WidgetTree,
-		rootBody,
-		RobotBlockWidget,
-		TEXT("RobotBlockWidget"),
-		TEXT("robot"),
-		TEXT("root.robot"),
-		TEXT("Template"),
-		TextStyleCatalog,
-		false,
-		true);
-	UVerticalBox* robotStartBody = AddMainPanelBlockWidget(
-		WidgetTree,
-		robotBody,
-		RobotStartBlockWidget,
-		TEXT("RobotStartBlockWidget"),
-		TEXT("start"),
-		TEXT("root.robot.start"),
-		TEXT("Property"),
-		TextStyleCatalog,
-		false,
-		true,
-		true,
-		false);
-	UVerticalBox* robotGoalBody = AddMainPanelBlockWidget(
-		WidgetTree,
-		robotBody,
-		RobotGoalBlockWidget,
-		TEXT("RobotGoalBlockWidget"),
-		TEXT("goal"),
-		TEXT("root.robot.goal"),
-		TEXT("Property"),
-		TextStyleCatalog,
-		false,
-		true,
-		true,
-		false);
-
-	addFieldRow(robotStartBody, RobotStartTypeFieldRow, TEXT("RobotStartTypeFieldRow"));
-	addFieldRow(robotStartBody, RobotStartSegmentFieldRow, TEXT("RobotStartSegmentFieldRow"));
-	addFieldRow(robotStartBody, RobotStartAlongFieldRow, TEXT("RobotStartAlongFieldRow"));
-	addFieldRow(robotStartBody, RobotStartOffsetFieldRow, TEXT("RobotStartOffsetFieldRow"));
-	addFieldRow(robotStartBody, RobotStartLaneFieldRow, TEXT("RobotStartLaneFieldRow"));
-	addFieldRow(robotStartBody, RobotStartHeadingFieldRow, TEXT("RobotStartHeadingFieldRow"));
-	addFieldRow(robotGoalBody, RobotGoalTypeFieldRow, TEXT("RobotGoalTypeFieldRow"));
-	addFieldRow(robotGoalBody, RobotGoalSegmentFieldRow, TEXT("RobotGoalSegmentFieldRow"));
-	addFieldRow(robotGoalBody, RobotGoalAlongFieldRow, TEXT("RobotGoalAlongFieldRow"));
-	addFieldRow(robotGoalBody, RobotGoalOffsetFieldRow, TEXT("RobotGoalOffsetFieldRow"));
-	addFieldRow(robotGoalBody, RobotGoalLaneFieldRow, TEXT("RobotGoalLaneFieldRow"));
-	addFieldRow(robotGoalBody, RobotGoalHeadingFieldRow, TEXT("RobotGoalHeadingFieldRow"));
-
-	DiagnosticsTextBlock = WidgetTree->ConstructWidget<UTextBlock>(
-		UTextBlock::StaticClass(),
-		TEXT("DiagnosticsTextBlock"));
-	if (DiagnosticsTextBlock)
-	{
-		if (UVerticalBoxSlot* slot = rootBox->AddChildToVerticalBox(DiagnosticsTextBlock))
-		{
-			slot->SetPadding(FMargin(0.0f, 4.0f, 0.0f, 0.0f));
-		}
-	}
 }
 
 void UScenarioEditorSidebarMainPanel::BindFieldRows()
@@ -933,14 +638,9 @@ void UScenarioEditorSidebarMainPanel::ApplyTextStyles()
 	}
 	if (DiagnosticsTextBlock)
 	{
-		UWidgetTextStyleCatalog::ApplyTextBlockStyle(
-			DiagnosticsTextBlock.Get(),
-			TextStyleCatalog,
-			EWidgetTextStyleRole::Value);
-	}
-	if (WidgetTree)
-	{
-		UWidgetTextStyleCatalog::ApplyWidgetTreeTextStyles(WidgetTree, TextStyleCatalog);
+		DiagnosticsTextBlock->SetVisibility(DiagnosticsTextBlock->GetText().IsEmpty()
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
 	}
 }
 

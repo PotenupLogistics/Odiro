@@ -150,8 +150,9 @@ bool FProjectRunResultDashboardAiTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("suggestion count"), DashboardData.Suggestions.Num(), 2);
 	TestEqual(TEXT("string priority severity"), DashboardData.Suggestions[0].Severity, EProjectRunAiSuggestionSeverity::High);
 	TestEqual(TEXT("medium priority severity"), DashboardData.Suggestions[1].Severity, EProjectRunAiSuggestionSeverity::Medium);
-	TestTrue(TEXT("constructed v2 message includes title"), DashboardData.Suggestions[0].Message.Contains(TEXT("정적 장애물 배치")));
-	TestTrue(TEXT("constructed v2 message includes recommendation"), DashboardData.Suggestions[1].Message.Contains(TEXT("look-ahead")));
+	TestTrue(TEXT("v2 suggestion title parsed"), DashboardData.Suggestions[0].Title.Contains(TEXT("정적 장애물 배치")));
+	TestTrue(TEXT("v2 suggestion reason parsed"), DashboardData.Suggestions[0].Reason.Contains(TEXT("충돌")));
+	TestTrue(TEXT("v2 suggestion recommendation parsed"), DashboardData.Suggestions[1].Recommendation.Contains(TEXT("look-ahead")));
 
 	const FString EmptyRecommendationsJson = TEXT(R"({
 		"summary": {

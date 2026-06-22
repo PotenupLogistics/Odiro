@@ -6,6 +6,41 @@
 #include "Components/Widget.h"
 #include "Misc/Paths.h"
 
+namespace
+{
+	// Numeric project run ids are stored zero-padded on disk but shown without leading zeros.
+	FString FormatProjectRunDisplayId(const FString& runId)
+	{
+		const FString trimmedRunId = runId.TrimStartAndEnd();
+		if (trimmedRunId.IsEmpty())
+		{
+			return FString();
+		}
+
+		bool bAllDigits = true;
+		int32 firstNonZeroIndex = INDEX_NONE;
+		for (int32 index = 0; index < trimmedRunId.Len(); ++index)
+		{
+			const TCHAR character = trimmedRunId[index];
+			if (!FChar::IsDigit(character))
+			{
+				bAllDigits = false;
+				break;
+			}
+			if (character != TEXT('0') && firstNonZeroIndex == INDEX_NONE)
+			{
+				firstNonZeroIndex = index;
+			}
+		}
+
+		if (!bAllDigits)
+		{
+			return trimmedRunId;
+		}
+		return firstNonZeroIndex == INDEX_NONE ? FString(TEXT("0")) : trimmedRunId.Mid(firstNonZeroIndex);
+	}
+}
+
 void UProjectExperimentRunRowWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -40,7 +75,8 @@ void UProjectExperimentRunRowWidget::InitializeRunRow(
 
 	if (RunIdText)
 	{
-		RunIdText->SetText(FText::FromString(runId.IsEmpty() ? FPaths::GetBaseFilename(runDirectory) : runId));
+		const FString sourceRunId = runId.IsEmpty() ? FPaths::GetBaseFilename(runDirectory) : runId;
+		RunIdText->SetText(FText::FromString(FormatProjectRunDisplayId(sourceRunId)));
 	}
 
 	const float clampedProgress = FMath::Clamp(progressPercent, 0.0f, 100.0f);

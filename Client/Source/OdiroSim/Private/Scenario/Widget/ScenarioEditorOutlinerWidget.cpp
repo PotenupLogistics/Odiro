@@ -1,18 +1,13 @@
 #include "Scenario/Widget/ScenarioEditorOutlinerWidget.h"
 
-#include "Blueprint/WidgetTree.h"
-#include "Components/Border.h"
 #include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
-#include "Components/VerticalBox.h"
-#include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
-#include "Scenario/Data/WidgetTextStyleCatalog.h"
+#include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
 #include "Scenario/Widget/ScenarioEditorOutlinerRowWidget.h"
-#include "Styling/SlateBrush.h"
 
 namespace
 {
@@ -22,16 +17,6 @@ namespace
 	const FString ObstaclesKey = TEXT("Scenario/Obstacles");
 	const FString GroundRegionsKey = TEXT("Scenario/GroundRegions");
 	const FString PedestriansKey = TEXT("Scenario/Pedestrians");
-
-	const FLinearColor PanelColor(0.08f, 0.10f, 0.13f, 0.94f);
-
-	FSlateBrush MakeOutlinerPanelBrush()
-	{
-		FSlateBrush brush;
-		brush.DrawAs = ESlateBrushDrawType::Box;
-		brush.TintColor = FSlateColor(PanelColor);
-		return brush;
-	}
 
 	bool IsVisibleByExpandedParents(
 		const FScenarioOutlinerItemViewModel& item,
@@ -138,16 +123,13 @@ namespace
 	}
 }
 
-TSharedRef<SWidget> UScenarioEditorOutlinerWidget::RebuildWidget()
-{
-	Initialize();
-	BuildDefaultWidgetTree();
-	return Super::RebuildWidget();
-}
-
 void UScenarioEditorOutlinerWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+	if (!WidgetClassCatalog.IsValid() && WidgetClassCatalog.IsNull())
+	{
+		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
+	}
 	AddDefaultExpandedKeys();
 	RefreshFromEditorState();
 }
@@ -232,8 +214,6 @@ void UScenarioEditorOutlinerWidget::BuildOutlinerItems(
 		const FText& label,
 		const EScenarioTemplateSidebarPanel panel)
 	{
-		allItems.Add(MakeTemplateItem(itemKey, ScenarioKey, label, 1, panel));
-
 		TArray<FScenarioOutlinerItemViewModel> groupPlaceables;
 		placeablesByParent.MultiFind(itemKey, groupPlaceables);
 		groupPlaceables.Sort([](
@@ -242,6 +222,8 @@ void UScenarioEditorOutlinerWidget::BuildOutlinerItems(
 		{
 			return lhs.Label.ToString() < rhs.Label.ToString();
 		});
+
+		allItems.Add(MakeTemplateItem(itemKey, ScenarioKey, label, 1, panel, !groupPlaceables.IsEmpty()));
 		for (const FScenarioOutlinerItemViewModel& placeableItem : groupPlaceables)
 		{
 			allItems.Add(placeableItem);
@@ -291,55 +273,6 @@ void UScenarioEditorOutlinerWidget::HandleRowExpansionToggled(FScenarioOutlinerI
 	RefreshFromEditorState();
 }
 
-void UScenarioEditorOutlinerWidget::BuildDefaultWidgetTree()
-{
-	if (!WidgetTree || WidgetTree->RootWidget)
-	{
-		return;
-	}
-
-	UBorder* panelBorder = WidgetTree->ConstructWidget<UBorder>(
-		UBorder::StaticClass(),
-		TEXT("GeneratedOutlinerPanel"));
-	if (!panelBorder)
-	{
-		return;
-	}
-	panelBorder->SetBrush(MakeOutlinerPanelBrush());
-	panelBorder->SetBrushColor(PanelColor);
-	panelBorder->SetPadding(FMargin(10.0f));
-	WidgetTree->RootWidget = panelBorder;
-
-	UVerticalBox* rootBox = WidgetTree->ConstructWidget<UVerticalBox>(
-		UVerticalBox::StaticClass(),
-		TEXT("GeneratedOutlinerRootBox"));
-	panelBorder->SetContent(rootBox);
-
-	UTextBlock* titleText = WidgetTree->ConstructWidget<UTextBlock>(
-		UTextBlock::StaticClass(),
-		TEXT("GeneratedOutlinerTitleText"));
-	titleText->SetText(FText::FromString(TEXT("Outliner")));
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(titleText, TextStyleCatalog, EWidgetTextStyleRole::Label);
-	if (UVerticalBoxSlot* slot = rootBox->AddChildToVerticalBox(titleText))
-	{
-		slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 8.0f));
-	}
-
-	RowScrollBox = WidgetTree->ConstructWidget<UScrollBox>(
-		UScrollBox::StaticClass(),
-		TEXT("RowScrollBox"));
-	if (UVerticalBoxSlot* slot = rootBox->AddChildToVerticalBox(RowScrollBox.Get()))
-	{
-		slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-	}
-
-	EmptyTextBlock = WidgetTree->ConstructWidget<UTextBlock>(
-		UTextBlock::StaticClass(),
-		TEXT("EmptyTextBlock"));
-	EmptyTextBlock->SetText(FText::FromString(TEXT("No scenario objects")));
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(EmptyTextBlock.Get(), TextStyleCatalog, EWidgetTextStyleRole::Caption);
-}
-
 void UScenarioEditorOutlinerWidget::RebuildRows(const TArray<FScenarioOutlinerItemViewModel>& items)
 {
 	if (!RowScrollBox)
@@ -371,7 +304,21 @@ void UScenarioEditorOutlinerWidget::RebuildRows(const TArray<FScenarioOutlinerIt
 	TSubclassOf<UScenarioEditorOutlinerRowWidget> rowClass = RowWidgetClass;
 	if (!rowClass)
 	{
-		rowClass = UScenarioEditorOutlinerRowWidget::StaticClass();
+		rowClass = UScenarioEditorWidgetClassCatalog::ResolveOutlinerRowWidgetClass(WidgetClassCatalog);
+	}
+	if (!rowClass)
+	{
+		if (EmptyTextBlock)
+		{
+			EmptyTextBlock->SetText(FText::FromString(TEXT("Outliner row widget class is missing.")));
+			EmptyTextBlock->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			RowScrollBox->AddChild(EmptyTextBlock.Get());
+		}
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Scenario editor outliner row WBP class is missing. Configure WidgetClassCatalog or RowWidgetClass."));
+		return;
 	}
 	for (const FScenarioOutlinerItemViewModel& item : items)
 	{

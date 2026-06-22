@@ -105,7 +105,13 @@ void UProjectWorkspaceTabWidget::ApplyTabVisualState()
 	{
 		if (bActive && ActiveTabButtonStyleSource)
 		{
-			TabButton->SetStyle(ActiveTabButtonStyleSource->GetStyle());
+			FButtonStyle activeStyle = ActiveTabButtonStyleSource->GetStyle();
+			if (bHasInactiveTabButtonStyle)
+			{
+				activeStyle.SetNormalPadding(InactiveTabButtonStyle.NormalPadding);
+				activeStyle.SetPressedPadding(InactiveTabButtonStyle.PressedPadding);
+			}
+			TabButton->SetStyle(activeStyle);
 		}
 		else if (bHasInactiveTabButtonStyle)
 		{

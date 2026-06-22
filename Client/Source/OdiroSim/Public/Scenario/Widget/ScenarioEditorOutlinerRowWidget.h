@@ -11,7 +11,6 @@ class USpacer;
 class UTextBlock;
 class UWidget;
 class UWidgetTextStyleCatalog;
-class SWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FScenarioOutlinerRowItemEvent,
@@ -25,11 +24,10 @@ class ODIROSIM_API UScenarioEditorOutlinerRowWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
-	// Shared typography catalog used by native fallback rows.
+	// Shared typography catalog retained for older assets; WBP owns visible text style.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Outliner")
 	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
 
@@ -63,9 +61,7 @@ private:
 
 	void BindControls();
 	void UnbindControls();
-	void BuildDefaultWidgetTree();
 	void RefreshRow();
-	void ApplyTextStyles() const;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Editor|Outliner", meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UBorder> SelectionBorder;
@@ -90,6 +86,10 @@ private:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Editor|Outliner", meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UWidget> SelectionIndicator;
+
+	// Indentation applied per view-model depth; value is configured by the row WBP.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Outliner", meta = (ClampMin = "0.0", AllowPrivateAccess = "true"))
+	float IndentPerDepth = 14.0f;
 
 	UPROPERTY(Transient)
 	FScenarioOutlinerItemViewModel Item;

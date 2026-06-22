@@ -22,9 +22,12 @@ entry:
   - ScenarioSampleWorldSpecAdapter.h / .cpp
   - Scenario/Editor/ScenarioAuthoringSubsystem.h / .cpp
   - Scenario/Editor/ScenarioEditorController.h / .cpp
+  - Scenario/Data/ScenarioEditorWidgetClassCatalog.h / .cpp
   - Scenario/Widget/ScenarioEditorRootWidget.h / .cpp
   - Scenario/Widget/ScenarioEditorOutlinerWidget.h / .cpp
   - Scenario/Widget/ScenarioEditorOutlinerRowWidget.h / .cpp
+  - Scenario/Widget/ScenarioEditorSidebarWidget.h / .cpp
+  - Scenario/Widget/ScenarioEditorSidebar*Widget.h / .cpp
   - Scenario/Llm/ScenarioLlmAuthoringSubsystem.h / .cpp
   - Scenario/Llm/ScenarioLlmPromptWidget.h / .cpp
   - SimulationSetupTypes.h / .cpp
@@ -71,6 +74,7 @@ keep:
   - Scenario LLM prompt generate/load/run is scoped to the current `<UserProject>/scenario.json`; run launches create `<UserProject>/runs/<RunId>` snapshots through SimulatorLaunchSubsystem.
   - Scenario editor selection is controller-owned: viewport clicks and Outliner clicks both route through `AScenarioEditorController::SetSelectedPlaceable`, then root UI mirrors the native selection delegate.
   - Scenario editor Outliner is limited to authoring targets from ScenarioPlaceableComponent and template groups; it does not enumerate generic UE actors.
+  - Scenario editor Outliner, Sidebar block/field rows, and scenario detail panels are WBP-first via `DA_ScenarioEditorWidgetClassCatalog`; C++ builds item models, creates configured WBP classes, binds delegates, and writes values/visibility only.
   - Scenario editor save is root/sidebar driven through `SaveCurrentScenarioDraft`; the legacy toolbar is not the active save or detail-panel routing surface.
   - Project run output uses `FUserProjectRunOutputJson` for `result.json`, `events.jsonl`, `actions.jsonl`, `trace.jsonl`, and `summary.json`.
   - `FUserProjectRunOutputJson` maps internal evaluation enums to the external `events.jsonl` `event_type`, `source`, and `reason` contract names; runtime detectors should provide typed snapshot fields, not JSON-specific strings.

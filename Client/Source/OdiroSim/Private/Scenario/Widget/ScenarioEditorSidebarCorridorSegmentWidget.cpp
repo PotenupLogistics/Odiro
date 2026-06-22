@@ -1,52 +1,6 @@
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorSegmentWidget.h"
 
-#include "Blueprint/WidgetTree.h"
-#include "Components/VerticalBox.h"
-#include "Components/VerticalBoxSlot.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
-
-namespace
-{
-	constexpr float CorridorSegmentWidgetPadding = 6.0f;
-
-	void AddSegmentWidgetToBox(UVerticalBox* box, UWidget* widget)
-	{
-		if (!box || !widget)
-		{
-			return;
-		}
-
-		if (UVerticalBoxSlot* slot = box->AddChildToVerticalBox(widget))
-		{
-			slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, CorridorSegmentWidgetPadding));
-			slot->SetHorizontalAlignment(HAlign_Fill);
-		}
-	}
-
-	void AddSegmentFieldRow(
-		UWidgetTree* widgetTree,
-		UVerticalBox* parent,
-		TObjectPtr<UScenarioEditorSidebarFieldRow>& fieldRow,
-		const TCHAR* widgetName)
-	{
-		if (!widgetTree || !parent)
-		{
-			return;
-		}
-
-		fieldRow = widgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
-			UScenarioEditorSidebarFieldRow::StaticClass(),
-			FName(widgetName));
-		AddSegmentWidgetToBox(parent, fieldRow.Get());
-	}
-}
-
-TSharedRef<SWidget> UScenarioEditorSidebarCorridorSegmentWidget::RebuildWidget()
-{
-	Initialize();
-	BuildDefaultWidgetTree();
-	return Super::RebuildWidget();
-}
 
 void UScenarioEditorSidebarCorridorSegmentWidget::NativeConstruct()
 {
@@ -131,32 +85,6 @@ void UScenarioEditorSidebarCorridorSegmentWidget::HandleAddSegmentRequested()
 void UScenarioEditorSidebarCorridorSegmentWidget::HandleRemoveSegmentRequested()
 {
 	OnRemoveSegmentRequested.Broadcast(SegmentIndex);
-}
-
-void UScenarioEditorSidebarCorridorSegmentWidget::BuildDefaultWidgetTree()
-{
-	if (!WidgetTree || WidgetTree->RootWidget)
-	{
-		return;
-	}
-
-	SegmentBlockWidget = WidgetTree->ConstructWidget<UScenarioEditorSidebarBlockWidget>(
-		UScenarioEditorSidebarBlockWidget::StaticClass(),
-		TEXT("SegmentBlockWidget"));
-	if (!SegmentBlockWidget)
-	{
-		return;
-	}
-
-	WidgetTree->RootWidget = SegmentBlockWidget;
-	SegmentBlockWidget->SetNested(true);
-	SegmentBlockWidget->SetShowNormalOutline(false);
-
-	UVerticalBox* segmentBody = SegmentBlockWidget->GetBodyBox();
-	AddSegmentFieldRow(WidgetTree, segmentBody, IdFieldRow, TEXT("IdFieldRow"));
-	AddSegmentFieldRow(WidgetTree, segmentBody, TypeFieldRow, TEXT("TypeFieldRow"));
-	AddSegmentFieldRow(WidgetTree, segmentBody, AlongRangeFieldRow, TEXT("AlongRangeFieldRow"));
-	AddSegmentFieldRow(WidgetTree, segmentBody, ReplacedByFieldRow, TEXT("ReplacedByFieldRow"));
 }
 
 void UScenarioEditorSidebarCorridorSegmentWidget::BindFieldRows()

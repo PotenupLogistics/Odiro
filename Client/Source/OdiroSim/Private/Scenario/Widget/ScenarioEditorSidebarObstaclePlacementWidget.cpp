@@ -1,52 +1,6 @@
 #include "Scenario/Widget/ScenarioEditorSidebarObstaclePlacementWidget.h"
 
-#include "Blueprint/WidgetTree.h"
-#include "Components/VerticalBox.h"
-#include "Components/VerticalBoxSlot.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
-
-namespace
-{
-	constexpr float ObstaclePlacementWidgetPadding = 6.0f;
-
-	void AddObstaclePlacementWidgetToBox(UVerticalBox* box, UWidget* widget)
-	{
-		if (!box || !widget)
-		{
-			return;
-		}
-
-		if (UVerticalBoxSlot* slot = box->AddChildToVerticalBox(widget))
-		{
-			slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, ObstaclePlacementWidgetPadding));
-			slot->SetHorizontalAlignment(HAlign_Fill);
-		}
-	}
-
-	void AddObstaclePlacementFieldRow(
-		UWidgetTree* widgetTree,
-		UVerticalBox* parent,
-		TObjectPtr<UScenarioEditorSidebarFieldRow>& fieldRow,
-		const TCHAR* widgetName)
-	{
-		if (!widgetTree || !parent)
-		{
-			return;
-		}
-
-		fieldRow = widgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
-			UScenarioEditorSidebarFieldRow::StaticClass(),
-			FName(widgetName));
-		AddObstaclePlacementWidgetToBox(parent, fieldRow.Get());
-	}
-}
-
-TSharedRef<SWidget> UScenarioEditorSidebarObstaclePlacementWidget::RebuildWidget()
-{
-	Initialize();
-	BuildDefaultWidgetTree();
-	return Super::RebuildWidget();
-}
 
 void UScenarioEditorSidebarObstaclePlacementWidget::NativeConstruct()
 {
@@ -274,46 +228,6 @@ void UScenarioEditorSidebarObstaclePlacementWidget::HandleAddRequested()
 void UScenarioEditorSidebarObstaclePlacementWidget::HandleRemoveRequested()
 {
 	OnRemoveRequested.Broadcast(PlacementIndex);
-}
-
-void UScenarioEditorSidebarObstaclePlacementWidget::BuildDefaultWidgetTree()
-{
-	if (!WidgetTree || WidgetTree->RootWidget)
-	{
-		return;
-	}
-
-	PlacementBlockWidget = WidgetTree->ConstructWidget<UScenarioEditorSidebarBlockWidget>(
-		UScenarioEditorSidebarBlockWidget::StaticClass(),
-		TEXT("PlacementBlockWidget"));
-	if (!PlacementBlockWidget)
-	{
-		return;
-	}
-
-	WidgetTree->RootWidget = PlacementBlockWidget;
-	PlacementBlockWidget->SetNested(true);
-	PlacementBlockWidget->SetShowNormalOutline(false);
-
-	UVerticalBox* placementBody = PlacementBlockWidget->GetBodyBox();
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, PlacementIdFieldRow, TEXT("PlacementIdFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, KindFieldRow, TEXT("KindFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, PropFieldRow, TEXT("PropFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, PatternFieldRow, TEXT("PatternFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, SegmentFieldRow, TEXT("SegmentFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, LaneFieldRow, TEXT("LaneFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, AlongFieldRow, TEXT("AlongFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, OffsetFieldRow, TEXT("OffsetFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, ZoneSegmentsFieldRow, TEXT("ZoneSegmentsFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, ZoneLanesFieldRow, TEXT("ZoneLanesFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, PaletteCategoriesFieldRow, TEXT("PaletteCategoriesFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, PaletteClassesFieldRow, TEXT("PaletteClassesFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, CountFieldRow, TEXT("CountFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, SpacingFieldRow, TEXT("SpacingFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, GapWidthFieldRow, TEXT("GapWidthFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, DensityFieldRow, TEXT("DensityFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, YawFieldRow, TEXT("YawFieldRow"));
-	AddObstaclePlacementFieldRow(WidgetTree, placementBody, AllowBlockingFieldRow, TEXT("AllowBlockingFieldRow"));
 }
 
 void UScenarioEditorSidebarObstaclePlacementWidget::BindFieldRows()

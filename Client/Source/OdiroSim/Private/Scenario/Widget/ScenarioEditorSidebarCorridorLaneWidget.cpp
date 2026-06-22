@@ -1,52 +1,6 @@
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorLaneWidget.h"
 
-#include "Blueprint/WidgetTree.h"
-#include "Components/VerticalBox.h"
-#include "Components/VerticalBoxSlot.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
-
-namespace
-{
-	constexpr float CorridorLaneWidgetPadding = 6.0f;
-
-	void AddLaneWidgetToBox(UVerticalBox* box, UWidget* widget)
-	{
-		if (!box || !widget)
-		{
-			return;
-		}
-
-		if (UVerticalBoxSlot* slot = box->AddChildToVerticalBox(widget))
-		{
-			slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, CorridorLaneWidgetPadding));
-			slot->SetHorizontalAlignment(HAlign_Fill);
-		}
-	}
-
-	void AddLaneFieldRow(
-		UWidgetTree* widgetTree,
-		UVerticalBox* parent,
-		TObjectPtr<UScenarioEditorSidebarFieldRow>& fieldRow,
-		const TCHAR* widgetName)
-	{
-		if (!widgetTree || !parent)
-		{
-			return;
-		}
-
-		fieldRow = widgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
-			UScenarioEditorSidebarFieldRow::StaticClass(),
-			FName(widgetName));
-		AddLaneWidgetToBox(parent, fieldRow.Get());
-	}
-}
-
-TSharedRef<SWidget> UScenarioEditorSidebarCorridorLaneWidget::RebuildWidget()
-{
-	Initialize();
-	BuildDefaultWidgetTree();
-	return Super::RebuildWidget();
-}
 
 void UScenarioEditorSidebarCorridorLaneWidget::NativeConstruct()
 {
@@ -127,30 +81,6 @@ void UScenarioEditorSidebarCorridorLaneWidget::HandleAddLaneRequested()
 void UScenarioEditorSidebarCorridorLaneWidget::HandleRemoveLaneRequested()
 {
 	OnRemoveLaneRequested.Broadcast(Side, LaneIndex);
-}
-
-void UScenarioEditorSidebarCorridorLaneWidget::BuildDefaultWidgetTree()
-{
-	if (!WidgetTree || WidgetTree->RootWidget)
-	{
-		return;
-	}
-
-	LaneBlockWidget = WidgetTree->ConstructWidget<UScenarioEditorSidebarBlockWidget>(
-		UScenarioEditorSidebarBlockWidget::StaticClass(),
-		TEXT("LaneBlockWidget"));
-	if (!LaneBlockWidget)
-	{
-		return;
-	}
-
-	WidgetTree->RootWidget = LaneBlockWidget;
-	LaneBlockWidget->SetNested(true);
-	LaneBlockWidget->SetShowNormalOutline(false);
-
-	UVerticalBox* laneBody = LaneBlockWidget->GetBodyBox();
-	AddLaneFieldRow(WidgetTree, laneBody, SurfaceFieldRow, TEXT("SurfaceFieldRow"));
-	AddLaneFieldRow(WidgetTree, laneBody, WidthFieldRow, TEXT("WidthFieldRow"));
 }
 
 void UScenarioEditorSidebarCorridorLaneWidget::BindFieldRows()

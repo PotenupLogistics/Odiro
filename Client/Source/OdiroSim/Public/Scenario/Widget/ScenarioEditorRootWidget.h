@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Scenario/Editor/ScenarioEditorTypes.h"
+#include "Styling/SlateTypes.h"
 #include "ScenarioEditorRootWidget.generated.h"
 
 enum class EScenarioEditorViewMode : uint8;
@@ -85,6 +86,10 @@ public:
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UButton> LlmInspectorTabButton;
+
+	// Optional active-state tab style source; WBP owns the color and padding values.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UButton> InspectorActiveTabButtonStyleSource;
 
 	// Optional visibility wrapper for the Scenario Template sidebar.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
@@ -242,6 +247,10 @@ private:
 	// Applies asset palette visibility without rebuilding it on every tick.
 	void SetAssetPaletteVisible(bool bVisible, bool bRebuildWhenShowing = false);
 	void SetPanelVisibility(UWidget* targetWidget, bool bVisible) const;
+	// Captures WBP-authored inactive inspector tab button styles.
+	void CacheInspectorTabButtonStyles();
+	// Applies the active inspector tab style without changing the selected tab model.
+	void ApplyInspectorTabVisualState();
 	// Checks whether the cursor is near enough to the bottom edge to reveal the asset palette.
 	bool ShouldRevealAssetPaletteFromMouseEdge() const;
 	bool IsMouseOverWidget(const UWidget* targetWidget) const;
@@ -254,4 +263,12 @@ private:
 	bool bLastSeenPlacementSnapToGrid = false;
 	bool bHasCachedPlacementSnapToGrid = false;
 	EScenarioEditorInspectorTab ActiveInspectorTab = EScenarioEditorInspectorTab::Detail;
+	// WBP-authored Detail tab style before active-state override.
+	FButtonStyle DetailInspectorInactiveTabButtonStyle;
+	// WBP-authored LLM tab style before active-state override.
+	FButtonStyle LlmInspectorInactiveTabButtonStyle;
+	// DetailInspectorInactiveTabButtonStyle snapshot 생성 여부.
+	bool bHasDetailInspectorInactiveTabButtonStyle = false;
+	// LlmInspectorInactiveTabButtonStyle snapshot 생성 여부.
+	bool bHasLlmInspectorInactiveTabButtonStyle = false;
 };

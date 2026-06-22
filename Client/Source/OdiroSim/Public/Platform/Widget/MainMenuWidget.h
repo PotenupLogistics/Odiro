@@ -24,6 +24,7 @@ class UWidget;
 class UWidgetSwitcher;
 class UWrapBox;
 enum class EProjectRunAiSuggestionSeverity : uint8;
+struct FProjectRunAiSuggestionDashboardItem;
 struct FPlatformAnalysisAiResponse;
 struct FSimulationSetup;
 
@@ -237,9 +238,7 @@ private:
 	// AI suggestion row WBP의 named child 상태를 갱신한다.
 	void ConfigureProjectAiSuggestionRow(
 		UUserWidget* rowWidget,
-		EProjectRunAiSuggestionSeverity severity,
-		const FString& severityLabel,
-		const FString& message) const;
+		const FProjectRunAiSuggestionDashboardItem& suggestion) const;
 	void ApplyNewSetupDefaults(const FString& setupPath);
 	void SetExperimentConfigDetailVisible(bool bVisible);
 	void SetExperimentResultDetailVisible(bool bVisible);

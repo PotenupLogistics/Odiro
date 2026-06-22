@@ -3,6 +3,11 @@
 #include "Scenario/Widget/ScenarioEditorOutlinerWidget.h"
 
 #include "Misc/AutomationTest.h"
+#include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
+#include "Scenario/Widget/ScenarioEditorOutlinerRowWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarCorridorPointWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
 
 namespace
 {
@@ -31,6 +36,18 @@ namespace
 			{
 				return item.ItemKey == itemKey;
 			});
+	}
+
+	template <typename TWidget>
+	void TestResolvesCatalogBlueprintClass(
+		FAutomationTestBase& test,
+		const FString& label,
+		const TSubclassOf<TWidget> resolvedClass)
+	{
+		test.TestNotNull(*FString::Printf(TEXT("%s resolves"), *label), resolvedClass.Get());
+		test.TestTrue(
+			*FString::Printf(TEXT("%s resolves to a Blueprint class"), *label),
+			resolvedClass && resolvedClass.Get() != TWidget::StaticClass());
 	}
 }
 
@@ -119,6 +136,38 @@ bool FScenarioEditorOutlinerSelectionTest::RunTest(const FString& Parameters)
 		TEXT("Placeable item key maps from instance id"),
 		benchKey,
 		FString(TEXT("Placeable:bench_01")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FScenarioEditorWidgetClassCatalogDefaultsTest,
+	"OdiroSim.ScenarioEditor.WidgetClassCatalog.Defaults",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FScenarioEditorWidgetClassCatalogDefaultsTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	const TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> invalidCatalog(
+		FSoftObjectPath(TEXT("/Game/Missing/DA_MissingScenarioEditorWidgetClassCatalog.DA_MissingScenarioEditorWidgetClassCatalog")));
+
+	TestResolvesCatalogBlueprintClass(
+		*this,
+		TEXT("Outliner row"),
+		UScenarioEditorWidgetClassCatalog::ResolveOutlinerRowWidgetClass(invalidCatalog));
+	TestResolvesCatalogBlueprintClass(
+		*this,
+		TEXT("Sidebar block"),
+		UScenarioEditorWidgetClassCatalog::ResolveSidebarBlockWidgetClass(invalidCatalog));
+	TestResolvesCatalogBlueprintClass(
+		*this,
+		TEXT("Sidebar field row"),
+		UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(invalidCatalog));
+	TestResolvesCatalogBlueprintClass(
+		*this,
+		TEXT("Corridor point row"),
+		UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorPointWidgetClass(invalidCatalog));
 
 	return true;
 }

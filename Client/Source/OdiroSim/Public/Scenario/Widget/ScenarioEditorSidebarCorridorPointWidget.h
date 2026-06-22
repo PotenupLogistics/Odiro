@@ -8,7 +8,6 @@
 
 class UScenarioEditorSidebarBlockWidget;
 class UWidgetTextStyleCatalog;
-class SWidget;
 
 // Broadcasts a committed Corridor axis point coordinate edit with point index context.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
@@ -33,9 +32,6 @@ class ODIROSIM_API UScenarioEditorSidebarCorridorPointWidget : public UUserWidge
 	GENERATED_BODY()
 
 public:
-	// Builds a native point detail block when no Blueprint-authored root widget exists.
-	virtual TSharedRef<SWidget> RebuildWidget() override;
-
 	// Binds point field row delegates after UMG construction.
 	virtual void NativeConstruct() override;
 
@@ -115,8 +111,6 @@ private:
 	UPROPERTY(Transient)
 	bool bHasCachedPoint = false;
 
-	// Builds the native fallback point tree when no Blueprint-authored tree is present.
-	void BuildDefaultWidgetTree();
 	// Binds child field row delegates owned by this point widget.
 	void BindFieldRows();
 	// Releases child field row delegates owned by this point widget.

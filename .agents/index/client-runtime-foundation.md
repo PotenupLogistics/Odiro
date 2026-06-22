@@ -40,14 +40,15 @@ keep:
   - WBP_ProjectExperimentRunRow owns project experiment status row layout, progress visual, state indicator colors, and analysis button style; C++ updates run id, progress, state visibility, and click routing only.
   - WBP_ProjectRunMetricCard, WBP_ProjectEpisodeReplayCard, and WBP_ProjectAiSuggestionRow own project result dashboard card/row layout and default visuals; WBP_MainMenu exposes ProjectExperimentResultDetailPanel as the ProjectWorkspaceSwitcher peer for the transient analysis tab, and C++ updates named child text and visibility only.
   - WBP_ScenarioEditorRootWidget owns Scenario editor right Sidebar layout and must expose SaveButton, SaveStatusText, ScenarioEditorOutlinerWidget, InspectorSwitcher, DetailInspectorPanel, LlmInspectorPanel, TemplateSidebarPanel, PlaceableContextMenuPanel, and Detail/LLM tab buttons. ToolbarWidget must not remain in the widget tree.
+  - DA_ScenarioEditorWidgetClassCatalog owns the Scenario editor WBP class references for Outliner rows, Sidebar blocks/field rows, and Scenario/Corridor/Obstacle/Pedestrian detail panels; C++ must not recreate those trees with native fallback widgets.
   - StartupMenu/MainMenu asset edits are made and verified through UmgMcp; do not rely on runtime fallback to move ProjectOpenScreen or ScenarioEditorRootWidget.
   - ProjectBorealis UEGitPlugin is used for Editor checkout only; do not initialize `filter=lfs` attributes from the plugin UI.
   - DefaultEditorPerProjectUserSettings.ini defaults asset-modification checkout prompts; tools/set-git-config.ps1 corrects existing local Saved settings.
 verify:
   - smallest affected Unreal target build
   - source control provider loads as Git LFS 2 in Editor
-  - UmgMcp get_widget_tree after StartupMenu/MainMenu/ProjectWorkspaceTab/project experiment row/project result dashboard/ScenarioEditor root UMG structure edits, including `WBP_StartupMenu.RecentProjectAddButton`, `WBP_ProjectExperimentRunRow` named children, and `WBP_MainMenu.ProjectExperimentResultDetailPanel` as a ProjectWorkspaceSwitcher peer
-  - Blueprint compile/save for StartupMap, WBP_StartupMenu, WBP_MainMenu, WBP_ProjectTemplateCard, WBP_ProjectWorkspaceTab, WBP_ProjectExperimentRunRow, WBP_ProjectRunMetricCard, WBP_ProjectEpisodeReplayCard, WBP_ProjectAiSuggestionRow, WBP_ScenarioEditorRootWidget, and ScenarioEditorMap binding changes
+  - UmgMcp get_widget_tree after StartupMenu/MainMenu/ProjectWorkspaceTab/project experiment row/project result dashboard/ScenarioEditor root UMG structure edits, including `WBP_StartupMenu.RecentProjectAddButton`, `WBP_ProjectExperimentRunRow` named children, `WBP_MainMenu.ProjectExperimentResultDetailPanel` as a ProjectWorkspaceSwitcher peer, and Scenario editor catalog-backed row/panel WBP named children
+  - Blueprint compile/save for StartupMap, WBP_StartupMenu, WBP_MainMenu, WBP_ProjectTemplateCard, WBP_ProjectWorkspaceTab, WBP_ProjectExperimentRunRow, WBP_ProjectRunMetricCard, WBP_ProjectEpisodeReplayCard, WBP_ProjectAiSuggestionRow, WBP_ScenarioEditorRootWidget, WBP_ScenarioEditorOutliner, WBP_ScenarioEditorOutlinerRow, WBP_ScenarioEditorSidebarBlock, WBP_ScenarioEditorSidebarFieldRow, Scenario editor detail panel WBP assets, and ScenarioEditorMap binding changes
   - separate PIE logs from packaged logs for packaging issues
 related:
   - client-simulation

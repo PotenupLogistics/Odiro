@@ -221,13 +221,9 @@ namespace
 		return FPaths::FileExists(PreviewPath) ? PreviewPath : FString();
 	}
 
-	FProjectRunAiSuggestionDashboardItem MakeSuggestion(
-		const EProjectRunAiSuggestionSeverity Severity,
-		FString Message)
+	void ApplySuggestionSeverityLabel(FProjectRunAiSuggestionDashboardItem& Item)
 	{
-		FProjectRunAiSuggestionDashboardItem Item;
-		Item.Severity = Severity;
-		switch (Severity)
+		switch (Item.Severity)
 		{
 		case EProjectRunAiSuggestionSeverity::High:
 			Item.SeverityLabel = TEXT("높음");
@@ -242,8 +238,6 @@ namespace
 			Item.SeverityLabel = TEXT("정보");
 			break;
 		}
-		Item.Message = MoveTemp(Message);
-		return Item;
 	}
 
 	EProjectRunAiSuggestionSeverity ParseSuggestionSeverity(const FJsonObject& Object)
@@ -292,39 +286,43 @@ namespace
 		return EProjectRunAiSuggestionSeverity::Info;
 	}
 
-	FString BuildSuggestionMessage(const FJsonObject& Object)
+	FString ReadTrimmedDashboardString(const FJsonObject& Object, const FString& FieldName)
 	{
-		FString Message = ReadDashboardStringOrDefault(Object, TEXT("message")).TrimStartAndEnd();
-		if (!Message.IsEmpty())
-		{
-			return Message;
-		}
+		return ReadDashboardStringOrDefault(Object, FieldName).TrimStartAndEnd();
+	}
 
-		const FString Title = ReadDashboardStringOrDefault(Object, TEXT("title")).TrimStartAndEnd();
-		const FString Reason = ReadDashboardStringOrDefault(Object, TEXT("reason")).TrimStartAndEnd();
-		const FString Recommendation = ReadDashboardStringOrDefault(Object, TEXT("recommendation")).TrimStartAndEnd();
-		const FString Param = ReadDashboardStringOrDefault(Object, TEXT("param")).TrimStartAndEnd();
-		const FString Current = DashboardJsonValueToCompactString(Object.TryGetField(TEXT("current"))).TrimStartAndEnd();
-		const FString Suggested = DashboardJsonValueToCompactString(Object.TryGetField(TEXT("suggested"))).TrimStartAndEnd();
+	bool HasSuggestionDisplayContent(const FProjectRunAiSuggestionDashboardItem& Item)
+	{
+		return !Item.Title.IsEmpty()
+			|| !Item.Message.IsEmpty()
+			|| !Item.Reason.IsEmpty()
+			|| !Item.Recommendation.IsEmpty()
+			|| !Item.ParameterName.IsEmpty()
+			|| !Item.CurrentValue.IsEmpty()
+			|| !Item.SuggestedValue.IsEmpty();
+	}
 
-		TArray<FString> Parts;
-		if (!Title.IsEmpty())
+	FProjectRunAiSuggestionDashboardItem MakeSuggestion(const FJsonObject& Object)
+	{
+		FProjectRunAiSuggestionDashboardItem Item;
+		Item.Severity = ParseSuggestionSeverity(Object);
+		ApplySuggestionSeverityLabel(Item);
+		Item.Title = ReadTrimmedDashboardString(Object, TEXT("title"));
+		Item.Message = ReadTrimmedDashboardString(Object, TEXT("message"));
+		Item.Reason = ReadTrimmedDashboardString(Object, TEXT("reason"));
+		Item.Recommendation = ReadTrimmedDashboardString(Object, TEXT("recommendation"));
+		if (Item.Recommendation.IsEmpty())
 		{
-			Parts.Add(Title);
+			Item.Recommendation = ReadTrimmedDashboardString(Object, TEXT("suggestion"));
 		}
-		if (!Reason.IsEmpty())
+		Item.ParameterName = ReadTrimmedDashboardString(Object, TEXT("param"));
+		if (Item.ParameterName.IsEmpty())
 		{
-			Parts.Add(FString::Printf(TEXT("이유: %s"), *Reason));
+			Item.ParameterName = ReadTrimmedDashboardString(Object, TEXT("parameter"));
 		}
-		if (!Recommendation.IsEmpty())
-		{
-			Parts.Add(FString::Printf(TEXT("추천: %s"), *Recommendation));
-		}
-		if (!Param.IsEmpty() && (!Current.IsEmpty() || !Suggested.IsEmpty()))
-		{
-			Parts.Add(FString::Printf(TEXT("%s: %s -> %s"), *Param, *Current, *Suggested));
-		}
-		return FString::Join(Parts, TEXT(" "));
+		Item.CurrentValue = DashboardJsonValueToCompactString(Object.TryGetField(TEXT("current"))).TrimStartAndEnd();
+		Item.SuggestedValue = DashboardJsonValueToCompactString(Object.TryGetField(TEXT("suggested"))).TrimStartAndEnd();
+		return Item;
 	}
 
 	bool AppendRecommendationsArray(
@@ -350,13 +348,13 @@ namespace
 				continue;
 			}
 
-			FString Message = BuildSuggestionMessage(*RecommendationObject);
-			if (Message.IsEmpty())
+			FProjectRunAiSuggestionDashboardItem Suggestion = MakeSuggestion(*RecommendationObject);
+			if (!HasSuggestionDisplayContent(Suggestion))
 			{
 				continue;
 			}
 
-			OutDashboardData.Suggestions.Add(MakeSuggestion(ParseSuggestionSeverity(*RecommendationObject), MoveTemp(Message)));
+			OutDashboardData.Suggestions.Add(MoveTemp(Suggestion));
 		}
 		return true;
 	}

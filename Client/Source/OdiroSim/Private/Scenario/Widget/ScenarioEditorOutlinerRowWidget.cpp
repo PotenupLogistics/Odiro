@@ -1,85 +1,14 @@
 #include "Scenario/Widget/ScenarioEditorOutlinerRowWidget.h"
 
-#include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
-#include "Components/HorizontalBox.h"
-#include "Components/HorizontalBoxSlot.h"
-#include "Components/SizeBox.h"
 #include "Components/Spacer.h"
 #include "Components/TextBlock.h"
-#include "Components/VerticalBox.h"
-#include "Components/VerticalBoxSlot.h"
 #include "Components/Widget.h"
-#include "Scenario/Data/WidgetTextStyleCatalog.h"
-#include "Styling/SlateBrush.h"
 
 namespace
 {
-	constexpr float RowVerticalPadding = 6.0f;
-	constexpr float RowHorizontalPadding = 8.0f;
-	constexpr float RowIndentWidth = 14.0f;
-
-	FLinearColor MakeScenarioEditorOutlinerRowUiColor(const TCHAR* hex, const float alpha = 1.0f)
-	{
-		FLinearColor color = FLinearColor::FromSRGBColor(FColor::FromHex(hex));
-		color.A = alpha;
-		return color;
-	}
-
-	const FLinearColor RowColor = MakeScenarioEditorOutlinerRowUiColor(TEXT("1B1B1B"), 0.96f);
-	const FLinearColor RowSelectedColor = MakeScenarioEditorOutlinerRowUiColor(TEXT("2B2B2B"), 0.98f);
-	const FLinearColor RowOutlineColor = MakeScenarioEditorOutlinerRowUiColor(TEXT("353535"), 0.85f);
-	const FLinearColor RowSelectedOutlineColor = MakeScenarioEditorOutlinerRowUiColor(TEXT("0070E0"));
-
-	FSlateBrush MakeOutlinerBrush(const FLinearColor& color)
-	{
-		FSlateBrush brush;
-		brush.DrawAs = ESlateBrushDrawType::Box;
-		brush.TintColor = FSlateColor(color);
-		return brush;
-	}
-
-	FButtonStyle MakeTransparentButtonStyle()
-	{
-		FSlateBrush emptyBrush;
-		emptyBrush.DrawAs = ESlateBrushDrawType::NoDrawType;
-		emptyBrush.TintColor = FSlateColor(FLinearColor::Transparent);
-
-		return FButtonStyle()
-			.SetNormal(emptyBrush)
-			.SetHovered(emptyBrush)
-			.SetPressed(emptyBrush)
-			.SetDisabled(emptyBrush)
-			.SetNormalPadding(FMargin())
-			.SetPressedPadding(FMargin());
-	}
-
-	void AddHeaderChild(
-		UHorizontalBox* row,
-		UWidget* child,
-		const ESlateSizeRule::Type sizeRule,
-		const FMargin& padding = FMargin())
-	{
-		if (!row || !child)
-		{
-			return;
-		}
-
-		if (UHorizontalBoxSlot* slot = row->AddChildToHorizontalBox(child))
-		{
-			slot->SetSize(FSlateChildSize(sizeRule));
-			slot->SetPadding(padding);
-			slot->SetVerticalAlignment(VAlign_Center);
-		}
-	}
-}
-
-TSharedRef<SWidget> UScenarioEditorOutlinerRowWidget::RebuildWidget()
-{
-	Initialize();
-	BuildDefaultWidgetTree();
-	return Super::RebuildWidget();
+	constexpr float MinimumIndentSpacerHeight = 1.0f;
 }
 
 void UScenarioEditorOutlinerRowWidget::NativeConstruct()
@@ -157,95 +86,8 @@ void UScenarioEditorOutlinerRowWidget::UnbindControls()
 	}
 }
 
-void UScenarioEditorOutlinerRowWidget::BuildDefaultWidgetTree()
-{
-	if (!WidgetTree || WidgetTree->RootWidget)
-	{
-		return;
-	}
-
-	SelectionBorder = WidgetTree->ConstructWidget<UBorder>(
-		UBorder::StaticClass(),
-		TEXT("SelectionBorder"));
-	if (!SelectionBorder)
-	{
-		return;
-	}
-	WidgetTree->RootWidget = SelectionBorder.Get();
-	SelectionBorder->SetPadding(FMargin(1.0f));
-
-	UBorder* rowFill = WidgetTree->ConstructWidget<UBorder>(
-		UBorder::StaticClass(),
-		TEXT("GeneratedRowFill"));
-	rowFill->SetPadding(FMargin(RowHorizontalPadding, RowVerticalPadding));
-	SelectionBorder->SetContent(rowFill);
-
-	RowButton = WidgetTree->ConstructWidget<UButton>(
-		UButton::StaticClass(),
-		TEXT("RowButton"));
-	RowButton->SetStyle(MakeTransparentButtonStyle());
-	rowFill->SetContent(RowButton.Get());
-
-	UHorizontalBox* headerRow = WidgetTree->ConstructWidget<UHorizontalBox>(
-		UHorizontalBox::StaticClass(),
-		TEXT("GeneratedHeaderRow"));
-	RowButton->SetContent(headerRow);
-
-	RowIndentSpacer = WidgetTree->ConstructWidget<USpacer>(
-		USpacer::StaticClass(),
-		TEXT("RowIndentSpacer"));
-	AddHeaderChild(headerRow, RowIndentSpacer.Get(), ESlateSizeRule::Automatic);
-
-	ExpandButton = WidgetTree->ConstructWidget<UButton>(
-		UButton::StaticClass(),
-		TEXT("ExpandButton"));
-	ExpandButton->SetStyle(MakeTransparentButtonStyle());
-	ExpandGlyphText = WidgetTree->ConstructWidget<UTextBlock>(
-		UTextBlock::StaticClass(),
-		TEXT("ExpandGlyphText"));
-	ExpandButton->SetContent(ExpandGlyphText.Get());
-	AddHeaderChild(headerRow, ExpandButton.Get(), ESlateSizeRule::Automatic, FMargin(0.0f, 0.0f, 8.0f, 0.0f));
-
-	UVerticalBox* textBox = WidgetTree->ConstructWidget<UVerticalBox>(
-		UVerticalBox::StaticClass(),
-		TEXT("GeneratedTextBox"));
-	AddHeaderChild(headerRow, textBox, ESlateSizeRule::Fill);
-
-	ItemLabelText = WidgetTree->ConstructWidget<UTextBlock>(
-		UTextBlock::StaticClass(),
-		TEXT("ItemLabelText"));
-	if (UVerticalBoxSlot* slot = textBox->AddChildToVerticalBox(ItemLabelText.Get()))
-	{
-		slot->SetHorizontalAlignment(HAlign_Fill);
-	}
-
-	ItemSubtitleText = WidgetTree->ConstructWidget<UTextBlock>(
-		UTextBlock::StaticClass(),
-		TEXT("ItemSubtitleText"));
-	ItemSubtitleText->SetAutoWrapText(true);
-	if (UVerticalBoxSlot* slot = textBox->AddChildToVerticalBox(ItemSubtitleText.Get()))
-	{
-		slot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 0.0f));
-		slot->SetHorizontalAlignment(HAlign_Fill);
-	}
-}
-
 void UScenarioEditorOutlinerRowWidget::RefreshRow()
 {
-	if (SelectionBorder)
-	{
-		const FLinearColor outlineColor = Item.bSelected ? RowSelectedOutlineColor : RowOutlineColor;
-		SelectionBorder->SetBrush(MakeOutlinerBrush(outlineColor));
-		SelectionBorder->SetBrushColor(outlineColor);
-	}
-
-	if (UBorder* rowFill = SelectionBorder ? Cast<UBorder>(SelectionBorder->GetContent()) : nullptr)
-	{
-		const FLinearColor fillColor = Item.bSelected ? RowSelectedColor : RowColor;
-		rowFill->SetBrush(MakeOutlinerBrush(fillColor));
-		rowFill->SetBrushColor(fillColor);
-	}
-
 	if (SelectionIndicator)
 	{
 		SelectionIndicator->SetVisibility(Item.bSelected ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Hidden);
@@ -253,19 +95,19 @@ void UScenarioEditorOutlinerRowWidget::RefreshRow()
 
 	if (RowIndentSpacer)
 	{
-		RowIndentSpacer->SetSize(FVector2D(FMath::Max(0, Item.Depth) * RowIndentWidth, 1.0f));
+		RowIndentSpacer->SetSize(
+			FVector2D(FMath::Max(0, Item.Depth) * IndentPerDepth, MinimumIndentSpacerHeight));
 	}
 
 	if (ExpandGlyphText)
 	{
-		const FString glyph = Item.bExpandable
-			? (Item.bExpanded ? FString(TEXT("v")) : FString(TEXT(">")))
-			: FString(TEXT(""));
-		ExpandGlyphText->SetText(FText::FromString(glyph));
+		FWidgetTransform glyphTransform;
+		glyphTransform.Angle = (Item.bExpandable && Item.bExpanded) ? 90.0f : 0.0f;
+		ExpandGlyphText->SetRenderTransform(glyphTransform);
 	}
 	if (ExpandButton)
 	{
-		ExpandButton->SetVisibility(Item.bExpandable ? ESlateVisibility::Visible : ESlateVisibility::HitTestInvisible);
+		ExpandButton->SetVisibility(Item.bExpandable ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	}
 
 	if (ItemLabelText)
@@ -277,13 +119,4 @@ void UScenarioEditorOutlinerRowWidget::RefreshRow()
 		ItemSubtitleText->SetText(Item.Subtitle);
 		ItemSubtitleText->SetVisibility(Item.Subtitle.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
 	}
-
-	ApplyTextStyles();
-}
-
-void UScenarioEditorOutlinerRowWidget::ApplyTextStyles() const
-{
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(ItemLabelText.Get(), TextStyleCatalog, EWidgetTextStyleRole::Label);
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(ItemSubtitleText.Get(), TextStyleCatalog, EWidgetTextStyleRole::Caption);
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(ExpandGlyphText.Get(), TextStyleCatalog, EWidgetTextStyleRole::Caption);
 }

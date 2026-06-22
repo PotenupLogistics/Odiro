@@ -28,6 +28,7 @@ void UScenarioEditorRootWidget::NativeConstruct()
 	SetPanelVisibility(ToolbarWidget.Get(), false);
 	HidePlaceableDetails();
 	HideAssetPaletteWidget();
+	CacheInspectorTabButtonStyles();
 	ShowInspectorTab(EScenarioEditorInspectorTab::Detail);
 	BindEditorModeButtons();
 	BindSidebarControls();
@@ -144,6 +145,7 @@ void UScenarioEditorRootWidget::ShowInspectorTab(const EScenarioEditorInspectorT
 {
 	ActiveInspectorTab = tab;
 	const bool bShowDetail = tab == EScenarioEditorInspectorTab::Detail;
+	ApplyInspectorTabVisualState();
 
 	if (InspectorSwitcher)
 	{
@@ -173,6 +175,67 @@ void UScenarioEditorRootWidget::ShowInspectorTab(const EScenarioEditorInspectorT
 
 	SetPanelVisibility(ResolveDetailInspectorVisibilityTarget(), bShowDetail);
 	SetLlmPanelVisible(!bShowDetail);
+}
+
+void UScenarioEditorRootWidget::CacheInspectorTabButtonStyles()
+{
+	if (DetailInspectorTabButton && !bHasDetailInspectorInactiveTabButtonStyle)
+	{
+		DetailInspectorInactiveTabButtonStyle = DetailInspectorTabButton->GetStyle();
+		bHasDetailInspectorInactiveTabButtonStyle = true;
+	}
+	if (LlmInspectorTabButton && !bHasLlmInspectorInactiveTabButtonStyle)
+	{
+		LlmInspectorInactiveTabButtonStyle = LlmInspectorTabButton->GetStyle();
+		bHasLlmInspectorInactiveTabButtonStyle = true;
+	}
+}
+
+void UScenarioEditorRootWidget::ApplyInspectorTabVisualState()
+{
+	const FButtonStyle* activeStyleSource = InspectorActiveTabButtonStyleSource
+		? &InspectorActiveTabButtonStyleSource->GetStyle()
+		: nullptr;
+
+	auto applyStyle = [activeStyleSource](
+		UButton* button,
+		const bool bIsActive,
+		const FButtonStyle& inactiveStyle,
+		const bool bHasInactiveStyle)
+	{
+		if (!button)
+		{
+			return;
+		}
+
+		if (bIsActive && activeStyleSource)
+		{
+			FButtonStyle activeStyle = *activeStyleSource;
+			if (bHasInactiveStyle)
+			{
+				activeStyle.SetNormalPadding(inactiveStyle.NormalPadding);
+				activeStyle.SetPressedPadding(inactiveStyle.PressedPadding);
+			}
+			button->SetStyle(activeStyle);
+			return;
+		}
+
+		if (bHasInactiveStyle)
+		{
+			button->SetStyle(inactiveStyle);
+		}
+	};
+
+	applyStyle(
+		DetailInspectorTabButton.Get(),
+		ActiveInspectorTab == EScenarioEditorInspectorTab::Detail,
+		DetailInspectorInactiveTabButtonStyle,
+		bHasDetailInspectorInactiveTabButtonStyle);
+	applyStyle(
+		LlmInspectorTabButton.Get(),
+		ActiveInspectorTab == EScenarioEditorInspectorTab::Llm,
+		LlmInspectorInactiveTabButtonStyle,
+		bHasLlmInspectorInactiveTabButtonStyle);
 }
 
 void UScenarioEditorRootWidget::SetTemplateSidebarPanel(

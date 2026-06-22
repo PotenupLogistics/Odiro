@@ -62,9 +62,33 @@ struct ODIROSIM_API FProjectRunAiSuggestionDashboardItem
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	FString SeverityLabel;
 
-	// 사용자에게 표시할 제안 본문.
+	// AI 응답의 제안 제목.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString Title;
+
+	// AI 응답의 자유 형식 제안 본문.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	FString Message;
+
+	// AI 응답의 제안 사유.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString Reason;
+
+	// AI 응답의 권장 조치.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString Recommendation;
+
+	// AI 응답이 가리키는 설정 parameter 이름.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString ParameterName;
+
+	// AI 응답의 현재 parameter 값.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString CurrentValue;
+
+	// AI 응답의 제안 parameter 값.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString SuggestedValue;
 };
 
 // Result dashboard 화면 하나를 채우는 집계 데이터.

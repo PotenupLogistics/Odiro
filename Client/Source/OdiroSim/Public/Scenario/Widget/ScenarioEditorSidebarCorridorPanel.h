@@ -14,8 +14,8 @@ class UScenarioEditorSidebarBlockWidget;
 class UScenarioEditorSidebarCorridorLaneWidget;
 class UScenarioEditorSidebarCorridorPointWidget;
 class UScenarioEditorSidebarCorridorSegmentWidget;
+class UScenarioEditorWidgetClassCatalog;
 class UWidgetTextStyleCatalog;
-class SWidget;
 
 // Corridor Scenario Template sidebar panel for axis, width, side lanes, and segments.
 UCLASS(BlueprintType, Blueprintable)
@@ -24,9 +24,6 @@ class ODIROSIM_API UScenarioEditorSidebarCorridorPanel : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	// Builds a native Corridor tree when no Blueprint-authored root widget exists.
-	virtual TSharedRef<SWidget> RebuildWidget() override;
-
 	// Binds Corridor field rows after UMG construction.
 	virtual void NativeConstruct() override;
 
@@ -36,6 +33,10 @@ public:
 	// Shared typography catalog passed down to blocks and field rows.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
+
+	// WBP class catalog passed down to dynamic child widgets.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> WidgetClassCatalog;
 
 	// Optional root Corridor template block.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
@@ -84,6 +85,10 @@ public:
 	// Updates the shared typography catalog used by this panel and its children.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
+
+	// Updates the WBP class catalog used by this panel and child widgets.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetWidgetClassCatalog(TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> catalog);
 
 	// Pulls the current draft Scenario Template and refreshes this panel.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
@@ -242,8 +247,6 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UScenarioEditorSidebarCorridorSegmentWidget>> SegmentWidgets;
 
-	// Builds the native fallback panel tree when no Blueprint-authored tree is present.
-	void BuildDefaultWidgetTree();
 	// Binds child field row delegates owned by this panel.
 	void BindFieldRows();
 	// Releases child field row delegates owned by this panel.

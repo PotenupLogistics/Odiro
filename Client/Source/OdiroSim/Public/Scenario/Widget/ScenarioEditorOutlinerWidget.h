@@ -6,10 +6,10 @@
 #include "ScenarioEditorOutlinerWidget.generated.h"
 
 class UScenarioEditorOutlinerRowWidget;
+class UScenarioEditorWidgetClassCatalog;
 class UScrollBox;
 class UTextBlock;
 class UWidgetTextStyleCatalog;
-class SWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FScenarioOutlinerItemSelected,
@@ -23,7 +23,6 @@ class ODIROSIM_API UScenarioEditorOutlinerWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
@@ -32,6 +31,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Outliner")
 	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
+
+	// Widget Blueprint class catalog used for generated outliner rows.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Outliner")
+	TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> WidgetClassCatalog;
 
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Outliner")
 	FScenarioOutlinerItemSelected OnItemSelected;
@@ -73,7 +76,6 @@ private:
 	UFUNCTION()
 	void HandleRowExpansionToggled(FScenarioOutlinerItemViewModel item);
 
-	void BuildDefaultWidgetTree();
 	void RebuildRows(const TArray<FScenarioOutlinerItemViewModel>& items);
 	void CollectPlaceableItems(TArray<FScenarioOutlinerItemViewModel>& outPlaceableItems) const;
 	void AddDefaultExpandedKeys();

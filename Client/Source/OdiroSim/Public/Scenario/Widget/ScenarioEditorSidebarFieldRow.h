@@ -13,7 +13,6 @@ class UMultiLineEditableTextBox;
 class USizeBox;
 class UTextBlock;
 class UWidgetTextStyleCatalog;
-class SWidget;
 
 // Value editor shape used by one Scenario Template field row.
 UENUM(BlueprintType)
@@ -56,8 +55,9 @@ class ODIROSIM_API UScenarioEditorSidebarFieldRow : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	virtual TSharedRef<SWidget> RebuildWidget() override;
+	// Binds editable controls after UMG construction.
 	virtual void NativeConstruct() override;
+	// Releases editable controls before teardown.
 	virtual void NativeDestruct() override;
 
 	// Label displayed on the left side of the field row.
@@ -281,8 +281,6 @@ private:
 	UFUNCTION()
 	void HandleRemoveItemClicked();
 
-	// Builds the native fallback row tree when no Blueprint-authored tree is present.
-	void BuildDefaultWidgetTree();
 	// Binds editable control delegates owned by this row.
 	void BindControls();
 	// Releases editable control delegates owned by this row.

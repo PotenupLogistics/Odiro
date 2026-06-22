@@ -30,11 +30,11 @@ namespace
 
 UProjectTemplateCardWidget::UProjectTemplateCardWidget(const FObjectInitializer& objectInitializer)
 	: Super(objectInitializer)
-	, DefaultBackgroundColor(MakeProjectTemplateCardSrgbColor(0x2f, 0x2f, 0x2f))
-	, HoverBackgroundColor(MakeProjectTemplateCardSrgbColor(0x57, 0x57, 0x57))
-	, PressedBackgroundColor(MakeProjectTemplateCardSrgbColor(0x27, 0x27, 0x27))
+	, DefaultBackgroundColor(MakeProjectTemplateCardSrgbColor(0x1b, 0x1b, 0x1b))
+	, HoverBackgroundColor(MakeProjectTemplateCardSrgbColor(0x38, 0x38, 0x38))
+	, PressedBackgroundColor(MakeProjectTemplateCardSrgbColor(0x2f, 0x2f, 0x2f))
 	, ActiveBackgroundColor(MakeProjectTemplateCardSrgbColor(0x00, 0x70, 0xe0))
-	, ActiveHoverBackgroundColor(MakeProjectTemplateCardSrgbColor(0x0e, 0x86, 0xff))
+	, ActiveHoverBackgroundColor(MakeProjectTemplateCardSrgbColor(0x0a, 0x86, 0xff))
 	, ActivePressedBackgroundColor(MakeProjectTemplateCardSrgbColor(0x00, 0x50, 0xa0))
 	, DefaultTextColor(MakeProjectTemplateCardSrgbColor(0xc0, 0xc0, 0xc0))
 	, ActiveTextColor(MakeProjectTemplateCardSrgbColor(0xff, 0xff, 0xff))
@@ -71,7 +71,10 @@ FReply UProjectTemplateCardWidget::NativeOnPreviewMouseButtonDown(
 	return Super::NativeOnPreviewMouseButtonDown(inGeometry, inMouseEvent);
 }
 
-void UProjectTemplateCardWidget::InitializeCard(const FString& itemId, const FString& displayName)
+void UProjectTemplateCardWidget::InitializeCard(
+	const FString& itemId,
+	const FString& displayName,
+	const FString& subtitle)
 {
 	ItemId = itemId.TrimStartAndEnd();
 
@@ -81,6 +84,14 @@ void UProjectTemplateCardWidget::InitializeCard(const FString& itemId, const FSt
 	if (CardNameLabel)
 	{
 		CardNameLabel->SetText(FText::FromString(visibleName));
+	}
+	if (CardSubtitleLabel)
+	{
+		const FString visibleSubtitle = subtitle.TrimStartAndEnd();
+		CardSubtitleLabel->SetText(FText::FromString(visibleSubtitle));
+		CardSubtitleLabel->SetVisibility(visibleSubtitle.IsEmpty()
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
 	}
 
 	RefreshVisualState();
@@ -138,6 +149,10 @@ void UProjectTemplateCardWidget::RefreshVisualState()
 	if (CardNameLabel)
 	{
 		CardNameLabel->SetColorAndOpacity(FSlateColor(textColor));
+	}
+	if (CardSubtitleLabel)
+	{
+		CardSubtitleLabel->SetColorAndOpacity(FSlateColor(textColor));
 	}
 }
 

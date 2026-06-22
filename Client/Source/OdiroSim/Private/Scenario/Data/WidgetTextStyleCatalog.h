@@ -38,6 +38,7 @@ struct ODIROSIM_API FWidgetTextStyle
 
 class UEditableText;
 class UEditableTextBox;
+class UComboBoxString;
 class UMultiLineEditableTextBox;
 class UTextBlock;
 class UWidgetTree;
@@ -92,6 +93,15 @@ public:
 
 	// Applies a project-default role style to a single-line editable text box.
 	static void ApplyEditableTextBoxStyle(UEditableTextBox* textBox, EWidgetTextStyleRole role);
+
+	// Applies a resolved role style to a compact combo box.
+	static void ApplyComboBoxStringStyle(
+		UComboBoxString* comboBox,
+		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference,
+		EWidgetTextStyleRole role);
+
+	// Applies a project-default role style to a compact combo box.
+	static void ApplyComboBoxStringStyle(UComboBoxString* comboBox, EWidgetTextStyleRole role);
 
 	// Applies a resolved role style to a multiline editable text box.
 	static void ApplyMultiLineEditableTextBoxStyle(

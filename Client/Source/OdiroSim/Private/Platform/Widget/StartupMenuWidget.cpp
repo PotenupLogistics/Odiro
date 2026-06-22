@@ -1,6 +1,7 @@
 #include "Platform/Widget/StartupMenuWidget.h"
 
 #include "Components/Button.h"
+#include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
 #include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
@@ -8,6 +9,7 @@
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/ConfigCacheIni.h"
@@ -16,6 +18,11 @@
 #include "Platform/ScenarioEditorLaunchSubsystem.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Platform/Widget/ProjectTemplateCardWidget.h"
+
+#if WITH_EDITOR
+#include "DesktopPlatformModule.h"
+#include "Framework/Application/SlateApplication.h"
+#endif
 
 DEFINE_LOG_CATEGORY_STATIC(LogStartupMenuWidget, Log, All);
 
@@ -83,8 +90,58 @@ namespace
 
 	FString MakeRecentProjectDisplayName(const FString& projectPath)
 	{
-		const FString projectName = FPaths::GetCleanFilename(projectPath);
-		return FString::Printf(TEXT("%s\n%s"), *projectName, *projectPath);
+		return FPaths::GetCleanFilename(projectPath);
+	}
+
+	FString MakeRecentProjectSubtitle(const FString& projectPath)
+	{
+		const FString parentFolderPath = FPaths::GetPath(NormalizeStartupMenuPath(projectPath));
+		const FString parentFolderName = FPaths::GetCleanFilename(parentFolderPath);
+		return parentFolderName.IsEmpty() ? parentFolderPath : parentFolderName;
+	}
+
+	void SetStartupMenuComboBoxSelection(UComboBoxString* comboBox, const FString& selectedItem)
+	{
+		if (!comboBox || selectedItem.IsEmpty() || comboBox->GetSelectedOption().Equals(selectedItem, ESearchCase::IgnoreCase))
+		{
+			return;
+		}
+
+		comboBox->SetSelectedOption(selectedItem);
+	}
+
+	bool PickStartupMenuFolder(const FString& dialogTitle, const FString& initialFolder, FString& outFolder)
+	{
+		outFolder.Reset();
+
+#if WITH_EDITOR
+		IDesktopPlatform* desktopPlatform = FDesktopPlatformModule::Get();
+		if (!desktopPlatform)
+		{
+			return false;
+		}
+
+		const FString normalizedInitialFolder = NormalizeStartupMenuPath(initialFolder);
+		const void* parentWindowHandle = FSlateApplication::IsInitialized()
+			? FSlateApplication::Get().FindBestParentWindowHandleForDialogs(nullptr)
+			: nullptr;
+		FString selectedFolder;
+		if (!desktopPlatform->OpenDirectoryDialog(
+			parentWindowHandle,
+			dialogTitle,
+			normalizedInitialFolder,
+			selectedFolder))
+		{
+			return false;
+		}
+
+		outFolder = NormalizeStartupMenuPath(selectedFolder);
+		return !outFolder.IsEmpty();
+#else
+		(void)dialogTitle;
+		(void)initialFolder;
+		return false;
+#endif
 	}
 
 	bool IsSameStartupMenuPath(const FString& left, const FString& right)
@@ -198,6 +255,29 @@ void UStartupMenuWidget::NativeDestruct()
 	clearPresetCards(ProfilePresetCards);
 	clearPresetCards(PolicyPresetCards);
 
+	if (ScenarioPresetSelectionBox)
+	{
+		ScenarioPresetSelectionBox->OnSelectionChanged.RemoveDynamic(
+			this,
+			&UStartupMenuWidget::HandleScenarioPresetSelectionChanged);
+	}
+	if (ProfilePresetSelectionBox)
+	{
+		ProfilePresetSelectionBox->OnSelectionChanged.RemoveDynamic(
+			this,
+			&UStartupMenuWidget::HandleProfilePresetSelectionChanged);
+	}
+	if (PolicyPresetSelectionBox)
+	{
+		PolicyPresetSelectionBox->OnSelectionChanged.RemoveDynamic(
+			this,
+			&UStartupMenuWidget::HandlePolicyPresetSelectionChanged);
+	}
+	if (RecentProjectAddButton)
+	{
+		RecentProjectAddButton->OnClicked.RemoveDynamic(this, &UStartupMenuWidget::HandleAddRecentProjectClicked);
+	}
+
 	Super::NativeDestruct();
 }
 
@@ -237,7 +317,7 @@ void UStartupMenuWidget::SelectProjectPresets(
 	SelectedPolicyPresetId = policyPresetId.TrimStartAndEnd().IsEmpty()
 		? FString(DefaultPolicyPresetId)
 		: policyPresetId.TrimStartAndEnd();
-	RefreshProjectPresetCardStates();
+	RefreshProjectPresetSelectionStates();
 }
 
 bool UStartupMenuWidget::CreateSelectedProject(
@@ -277,6 +357,19 @@ bool UStartupMenuWidget::ValidateSelectedProject(
 	return subsystem->ValidateUserProject(GetSelectedProjectPath(), outDiagnostics);
 }
 
+bool UStartupMenuWidget::AddRecentProjectForPrototype(
+	const FString& projectPath,
+	TArray<FString>& outDiagnostics,
+	USimulatorLaunchSubsystem* simulatorLaunchSubsystem)
+{
+	return AddRecentProjectIfValid(projectPath, outDiagnostics, simulatorLaunchSubsystem);
+}
+
+TArray<FString> UStartupMenuWidget::GetRecentProjectPathsForPrototype() const
+{
+	return RecentProjectPaths;
+}
+
 void UStartupMenuWidget::HandleProjectOpenInputChanged(const FText&)
 {
 	CacheProjectOpenOptionsFromWidgets();
@@ -289,6 +382,31 @@ void UStartupMenuWidget::HandleCreateNewProjectClicked()
 	SetProjectOpenWarningText(FString());
 	SetDiagnosticsText(FString());
 	RefreshProjectOpenActions();
+}
+
+void UStartupMenuWidget::HandleOpenProjectClicked()
+{
+	FString selectedProjectFolder;
+	if (!BrowseForExistingProjectFolder(selectedProjectFolder))
+	{
+		SetProjectOpenWarningText(TEXT("프로젝트 폴더를 선택하지 않았습니다."));
+		return;
+	}
+
+	OpenExistingProject(selectedProjectFolder);
+}
+
+void UStartupMenuWidget::HandleAddRecentProjectClicked()
+{
+	FString selectedProjectFolder;
+	if (!BrowseForExistingProjectFolder(selectedProjectFolder))
+	{
+		SetProjectOpenWarningText(TEXT("프로젝트 폴더를 선택하지 않았습니다."));
+		return;
+	}
+
+	TArray<FString> diagnostics;
+	AddRecentProjectIfValid(selectedProjectFolder, diagnostics);
 }
 
 void UStartupMenuWidget::HandleBackToRecentProjectsClicked()
@@ -347,6 +465,60 @@ void UStartupMenuWidget::HandleCreateProjectClicked()
 	SetDiagnosticsText(FString::Printf(TEXT("Project created: %s"), *projectPath));
 }
 
+void UStartupMenuWidget::HandleProjectParentFolderBrowseClicked()
+{
+	FString selectedFolder;
+	if (!BrowseForProjectParentFolder(selectedFolder))
+	{
+		SetProjectOpenWarningText(TEXT("프로젝트 상위 폴더를 선택하지 않았습니다."));
+		return;
+	}
+
+	SelectedProjectParentFolder = selectedFolder;
+	if (ProjectParentFolderTextBox)
+	{
+		ProjectParentFolderTextBox->SetText(FText::FromString(SelectedProjectParentFolder));
+	}
+	RefreshProjectOpenActions();
+	SetProjectOpenWarningText(FString());
+}
+
+void UStartupMenuWidget::HandleScenarioPresetSelectionChanged(
+	FString selectedItem,
+	ESelectInfo::Type)
+{
+	const FString selectedPresetId = selectedItem.TrimStartAndEnd();
+	if (!selectedPresetId.IsEmpty())
+	{
+		SelectedScenarioPresetId = selectedPresetId;
+		RefreshProjectPresetSelectionStates();
+	}
+}
+
+void UStartupMenuWidget::HandleProfilePresetSelectionChanged(
+	FString selectedItem,
+	ESelectInfo::Type)
+{
+	const FString selectedPresetId = selectedItem.TrimStartAndEnd();
+	if (!selectedPresetId.IsEmpty())
+	{
+		SelectedProfilePresetId = selectedPresetId;
+		RefreshProjectPresetSelectionStates();
+	}
+}
+
+void UStartupMenuWidget::HandlePolicyPresetSelectionChanged(
+	FString selectedItem,
+	ESelectInfo::Type)
+{
+	const FString selectedPresetId = selectedItem.TrimStartAndEnd();
+	if (!selectedPresetId.IsEmpty())
+	{
+		SelectedPolicyPresetId = selectedPresetId;
+		RefreshProjectPresetSelectionStates();
+	}
+}
+
 void UStartupMenuWidget::BindControls()
 {
 	if (ProjectParentFolderTextBox)
@@ -354,10 +526,46 @@ void UStartupMenuWidget::BindControls()
 		ProjectParentFolderTextBox->OnTextChanged.RemoveDynamic(this, &UStartupMenuWidget::HandleProjectOpenInputChanged);
 		ProjectParentFolderTextBox->OnTextChanged.AddDynamic(this, &UStartupMenuWidget::HandleProjectOpenInputChanged);
 	}
+	if (ProjectParentFolderBrowseButton)
+	{
+		ProjectParentFolderBrowseButton->OnClicked.RemoveDynamic(
+			this,
+			&UStartupMenuWidget::HandleProjectParentFolderBrowseClicked);
+		ProjectParentFolderBrowseButton->OnClicked.AddDynamic(
+			this,
+			&UStartupMenuWidget::HandleProjectParentFolderBrowseClicked);
+	}
 	if (ProjectNameTextBox)
 	{
 		ProjectNameTextBox->OnTextChanged.RemoveDynamic(this, &UStartupMenuWidget::HandleProjectOpenInputChanged);
 		ProjectNameTextBox->OnTextChanged.AddDynamic(this, &UStartupMenuWidget::HandleProjectOpenInputChanged);
+	}
+	if (ScenarioPresetSelectionBox)
+	{
+		ScenarioPresetSelectionBox->OnSelectionChanged.RemoveDynamic(
+			this,
+			&UStartupMenuWidget::HandleScenarioPresetSelectionChanged);
+		ScenarioPresetSelectionBox->OnSelectionChanged.AddDynamic(
+			this,
+			&UStartupMenuWidget::HandleScenarioPresetSelectionChanged);
+	}
+	if (ProfilePresetSelectionBox)
+	{
+		ProfilePresetSelectionBox->OnSelectionChanged.RemoveDynamic(
+			this,
+			&UStartupMenuWidget::HandleProfilePresetSelectionChanged);
+		ProfilePresetSelectionBox->OnSelectionChanged.AddDynamic(
+			this,
+			&UStartupMenuWidget::HandleProfilePresetSelectionChanged);
+	}
+	if (PolicyPresetSelectionBox)
+	{
+		PolicyPresetSelectionBox->OnSelectionChanged.RemoveDynamic(
+			this,
+			&UStartupMenuWidget::HandlePolicyPresetSelectionChanged);
+		PolicyPresetSelectionBox->OnSelectionChanged.AddDynamic(
+			this,
+			&UStartupMenuWidget::HandlePolicyPresetSelectionChanged);
 	}
 	if (CreateProjectButton)
 	{
@@ -368,6 +576,16 @@ void UStartupMenuWidget::BindControls()
 	{
 		CreateNewProjectButton->OnClicked.RemoveDynamic(this, &UStartupMenuWidget::HandleCreateNewProjectClicked);
 		CreateNewProjectButton->OnClicked.AddDynamic(this, &UStartupMenuWidget::HandleCreateNewProjectClicked);
+	}
+	if (OpenProjectButton)
+	{
+		OpenProjectButton->OnClicked.RemoveDynamic(this, &UStartupMenuWidget::HandleOpenProjectClicked);
+		OpenProjectButton->OnClicked.AddDynamic(this, &UStartupMenuWidget::HandleOpenProjectClicked);
+	}
+	if (RecentProjectAddButton)
+	{
+		RecentProjectAddButton->OnClicked.RemoveDynamic(this, &UStartupMenuWidget::HandleAddRecentProjectClicked);
+		RecentProjectAddButton->OnClicked.AddDynamic(this, &UStartupMenuWidget::HandleAddRecentProjectClicked);
 	}
 	if (BackToRecentProjectsButton)
 	{
@@ -411,18 +629,28 @@ bool UStartupMenuWidget::ValidateRequiredBindings() const
 	requireWidget(RecentProjectCardWrapBox, TEXT("RecentProjectCardWrapBox"));
 	requireWidget(RecentProjectsEmptyText, TEXT("RecentProjectsEmptyText"));
 	requireWidget(RecentProjectOpenWarningText, TEXT("RecentProjectOpenWarningText"));
-	requireWidget(RecentDiagnosticsTextBlock, TEXT("RecentDiagnosticsTextBlock"));
 	requireWidget(RecentProjectDeleteDialog, TEXT("RecentProjectDeleteDialog"));
 	requireWidget(RecentProjectDeleteDialogMessageText, TEXT("RecentProjectDeleteDialogMessageText"));
 	requireWidget(RecentProjectDeleteConfirmButton, TEXT("RecentProjectDeleteConfirmButton"));
 	requireWidget(RecentProjectDeleteCancelButton, TEXT("RecentProjectDeleteCancelButton"));
 	requireWidget(CreateNewProjectButton, TEXT("CreateNewProjectButton"));
+	requireWidget(OpenProjectButton, TEXT("OpenProjectButton"));
+	requireWidget(RecentProjectAddButton, TEXT("RecentProjectAddButton"));
 	requireWidget(BackToRecentProjectsButton, TEXT("BackToRecentProjectsButton"));
 	requireWidget(ProjectParentFolderTextBox, TEXT("ProjectParentFolderTextBox"));
 	requireWidget(ProjectNameTextBox, TEXT("ProjectNameTextBox"));
-	requireWidget(ScenarioPresetCardWrapBox, TEXT("ScenarioPresetCardWrapBox"));
-	requireWidget(ProfilePresetCardWrapBox, TEXT("ProfilePresetCardWrapBox"));
-	requireWidget(PolicyPresetCardWrapBox, TEXT("PolicyPresetCardWrapBox"));
+	if (!ScenarioPresetSelectionBox && !ScenarioPresetCardWrapBox)
+	{
+		missingWidgetNames.Add(TEXT("ScenarioPresetSelectionBox"));
+	}
+	if (!ProfilePresetSelectionBox && !ProfilePresetCardWrapBox)
+	{
+		missingWidgetNames.Add(TEXT("ProfilePresetSelectionBox"));
+	}
+	if (!PolicyPresetSelectionBox && !PolicyPresetCardWrapBox)
+	{
+		missingWidgetNames.Add(TEXT("PolicyPresetSelectionBox"));
+	}
 	requireWidget(CreateProjectButton, TEXT("CreateProjectButton"));
 	requireWidget(ProjectOpenWarningText, TEXT("ProjectOpenWarningText"));
 
@@ -541,14 +769,6 @@ void UStartupMenuWidget::LoadRecentProjectPaths()
 		}
 	}
 
-	if (RecentProjectPaths.IsEmpty())
-	{
-		const FString lastProjectPath = BuildProjectPathFromInputs(SelectedProjectParentFolder, SelectedProjectName);
-		if (!lastProjectPath.IsEmpty() && IFileManager::Get().DirectoryExists(*lastProjectPath))
-		{
-			RecentProjectPaths.Add(lastProjectPath);
-		}
-	}
 }
 
 void UStartupMenuWidget::SaveRecentProjectPaths() const
@@ -558,7 +778,14 @@ void UStartupMenuWidget::SaveRecentProjectPaths() const
 		return;
 	}
 
-	GConfig->SetArray(ProjectOpenOptionsConfigSection, RecentProjectPathsConfigKey, RecentProjectPaths, GGameUserSettingsIni);
+	if (RecentProjectPaths.IsEmpty())
+	{
+		GConfig->RemoveKey(ProjectOpenOptionsConfigSection, RecentProjectPathsConfigKey, GGameUserSettingsIni);
+	}
+	else
+	{
+		GConfig->SetArray(ProjectOpenOptionsConfigSection, RecentProjectPathsConfigKey, RecentProjectPaths, GGameUserSettingsIni);
+	}
 	GConfig->Flush(false, GGameUserSettingsIni);
 }
 
@@ -694,7 +921,10 @@ void UStartupMenuWidget::RefreshRecentProjectCards()
 			continue;
 		}
 
-		cardWidget->InitializeCard(recentProjectPath, MakeRecentProjectDisplayName(recentProjectPath));
+		cardWidget->InitializeCard(
+			recentProjectPath,
+			MakeRecentProjectDisplayName(recentProjectPath),
+			MakeRecentProjectSubtitle(recentProjectPath));
 		cardWidget->OnSelectedRequested.AddUObject(this, &UStartupMenuWidget::HandleRecentProjectCardSelected);
 		cardWidget->OnContextRequested.AddUObject(this, &UStartupMenuWidget::HandleRecentProjectCardContextRequested);
 		RecentProjectCards.Add(cardWidget);
@@ -704,7 +934,11 @@ void UStartupMenuWidget::RefreshRecentProjectCards()
 
 void UStartupMenuWidget::RefreshProjectPresetOptions()
 {
-	if (!ScenarioPresetCardWrapBox || !ProfilePresetCardWrapBox || !PolicyPresetCardWrapBox)
+	const bool bHasPresetComboBoxes =
+		ScenarioPresetSelectionBox && ProfilePresetSelectionBox && PolicyPresetSelectionBox;
+	const bool bHasPresetCardFallback =
+		ScenarioPresetCardWrapBox && ProfilePresetCardWrapBox && PolicyPresetCardWrapBox;
+	if (!bHasPresetComboBoxes && !bHasPresetCardFallback)
 	{
 		return;
 	}
@@ -722,9 +956,12 @@ void UStartupMenuWidget::RefreshProjectPresetOptions()
 			cards.Reset();
 			container->ClearChildren();
 		};
-	resetCards(ScenarioPresetCardWrapBox, ScenarioPresetCards);
-	resetCards(ProfilePresetCardWrapBox, ProfilePresetCards);
-	resetCards(PolicyPresetCardWrapBox, PolicyPresetCards);
+	if (bHasPresetCardFallback)
+	{
+		resetCards(ScenarioPresetCardWrapBox, ScenarioPresetCards);
+		resetCards(ProfilePresetCardWrapBox, ProfilePresetCards);
+		resetCards(PolicyPresetCardWrapBox, PolicyPresetCards);
+	}
 
 	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
 	FProjectPresetCatalog catalog;
@@ -750,6 +987,57 @@ void UStartupMenuWidget::RefreshProjectPresetOptions()
 	if (catalog.PolicyPresetIds.IsEmpty())
 	{
 		catalog.PolicyPresetIds.Add(DefaultPolicyPresetId);
+	}
+
+	const auto containsPreset =
+		[](const TArray<FString>& presetIds, const FString& selectedPresetId)
+		{
+			return presetIds.ContainsByPredicate(
+				[&selectedPresetId](const FString& presetId)
+				{
+					return presetId.Equals(selectedPresetId, ESearchCase::IgnoreCase);
+				});
+		};
+	if (!containsPreset(catalog.ScenarioPresetIds, SelectedScenarioPresetId))
+	{
+		SelectedScenarioPresetId = catalog.ScenarioPresetIds[0];
+	}
+	if (!containsPreset(catalog.ProfilePresetIds, SelectedProfilePresetId))
+	{
+		SelectedProfilePresetId = catalog.ProfilePresetIds[0];
+	}
+	if (!containsPreset(catalog.PolicyPresetIds, SelectedPolicyPresetId))
+	{
+		SelectedPolicyPresetId = catalog.PolicyPresetIds[0];
+	}
+
+	if (bHasPresetComboBoxes)
+	{
+		const auto populateComboBox =
+			[](UComboBoxString* comboBox, const TArray<FString>& presetIds, const FString& selectedPresetId)
+			{
+				if (!comboBox)
+				{
+					return;
+				}
+
+				comboBox->ClearOptions();
+				for (const FString& presetId : presetIds)
+				{
+					comboBox->AddOption(presetId);
+				}
+				SetStartupMenuComboBoxSelection(comboBox, selectedPresetId);
+			};
+
+		populateComboBox(ScenarioPresetSelectionBox, catalog.ScenarioPresetIds, SelectedScenarioPresetId);
+		populateComboBox(ProfilePresetSelectionBox, catalog.ProfilePresetIds, SelectedProfilePresetId);
+		populateComboBox(PolicyPresetSelectionBox, catalog.PolicyPresetIds, SelectedPolicyPresetId);
+	}
+
+	if (!bHasPresetCardFallback)
+	{
+		RefreshProjectPresetSelectionStates();
+		return;
 	}
 
 	TSubclassOf<UProjectTemplateCardWidget> cardClass = ResolveProjectTemplateCardWidgetClass();
@@ -795,28 +1083,7 @@ void UStartupMenuWidget::RefreshProjectPresetOptions()
 		catalog.PolicyPresetIds,
 		&UStartupMenuWidget::HandlePolicyPresetCardSelected);
 
-	const auto containsPreset =
-		[](const TArray<FString>& presetIds, const FString& selectedPresetId)
-		{
-			return presetIds.ContainsByPredicate(
-				[&selectedPresetId](const FString& presetId)
-				{
-					return presetId.Equals(selectedPresetId, ESearchCase::IgnoreCase);
-				});
-		};
-	if (!containsPreset(catalog.ScenarioPresetIds, SelectedScenarioPresetId))
-	{
-		SelectedScenarioPresetId = catalog.ScenarioPresetIds[0];
-	}
-	if (!containsPreset(catalog.ProfilePresetIds, SelectedProfilePresetId))
-	{
-		SelectedProfilePresetId = catalog.ProfilePresetIds[0];
-	}
-	if (!containsPreset(catalog.PolicyPresetIds, SelectedPolicyPresetId))
-	{
-		SelectedPolicyPresetId = catalog.PolicyPresetIds[0];
-	}
-	RefreshProjectPresetCardStates();
+	RefreshProjectPresetSelectionStates();
 }
 
 void UStartupMenuWidget::RefreshProjectOpenActions()
@@ -832,9 +1099,13 @@ void UStartupMenuWidget::RefreshProjectOpenActions()
 	}
 }
 
-void UStartupMenuWidget::RefreshProjectPresetCardStates()
+void UStartupMenuWidget::RefreshProjectPresetSelectionStates()
 {
 	const FProjectPresetSelection selection = GetSelectedProjectPresetSelection();
+	SetStartupMenuComboBoxSelection(ScenarioPresetSelectionBox, selection.ScenarioPresetId);
+	SetStartupMenuComboBoxSelection(ProfilePresetSelectionBox, selection.ProfilePresetId);
+	SetStartupMenuComboBoxSelection(PolicyPresetSelectionBox, selection.PolicyPresetId);
+
 	const auto refreshCards =
 		[](const TArray<TObjectPtr<UProjectTemplateCardWidget>>& cards, const FString& selectedPresetId)
 		{
@@ -876,45 +1147,78 @@ void UStartupMenuWidget::SetDiagnosticsText(const FString& message)
 	{
 		DiagnosticsTextBlock->SetText(FText::FromString(message));
 	}
-	if (RecentDiagnosticsTextBlock)
-	{
-		RecentDiagnosticsTextBlock->SetText(FText::FromString(message));
-	}
 }
 
-bool UStartupMenuWidget::OpenExistingProject(const FString& projectPath)
+bool UStartupMenuWidget::BrowseForProjectParentFolder(FString& outFolder) const
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
+	outFolder.Reset();
+	return PickStartupMenuFolder(TEXT("Select Project Parent Folder"), GetSelectedProjectParentFolder(), outFolder);
+}
+
+bool UStartupMenuWidget::BrowseForExistingProjectFolder(FString& outFolder) const
+{
+	outFolder.Reset();
+	return PickStartupMenuFolder(TEXT("Open Project Folder"), GetSelectedProjectParentFolder(), outFolder);
+}
+
+bool UStartupMenuWidget::AddRecentProjectIfValid(
+	const FString& projectPath,
+	TArray<FString>& outDiagnostics,
+	USimulatorLaunchSubsystem* simulatorLaunchSubsystem)
+{
+	outDiagnostics.Reset();
+
+	USimulatorLaunchSubsystem* subsystem = simulatorLaunchSubsystem ? simulatorLaunchSubsystem : GetSimulatorLaunchSubsystem();
 	if (!subsystem)
 	{
-		SetProjectOpenWarningText(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
+		outDiagnostics.Add(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
+		SetProjectOpenWarningText(outDiagnostics[0]);
 		return false;
 	}
 
 	const FString normalizedProjectPath = NormalizeStartupMenuPath(projectPath);
 	if (normalizedProjectPath.IsEmpty())
 	{
-		SetProjectOpenWarningText(TEXT("프로젝트를 선택하세요."));
+		outDiagnostics.Add(TEXT("프로젝트를 선택하세요."));
+		SetProjectOpenWarningText(outDiagnostics[0]);
 		return false;
 	}
 	if (!IFileManager::Get().DirectoryExists(*normalizedProjectPath))
 	{
-		SetProjectOpenWarningText(TEXT("프로젝트 폴더가 없습니다."));
-		RefreshRecentProjectCards();
+		outDiagnostics.Add(TEXT("프로젝트 폴더가 없습니다."));
+		SetProjectOpenWarningText(outDiagnostics[0]);
 		return false;
 	}
 
-	SetProjectPathForPrototype(normalizedProjectPath);
-
-	TArray<FString> diagnostics;
-	if (!ValidateSelectedProject(diagnostics, subsystem))
+	if (!subsystem->ValidateUserProject(normalizedProjectPath, outDiagnostics))
 	{
-		SetProjectOpenWarningText(diagnostics.IsEmpty() ? TEXT("프로젝트 검증 실패") : diagnostics[0]);
-		SetDiagnosticsText(FString::Join(diagnostics, TEXT("\n")));
+		SetProjectOpenWarningText(outDiagnostics.IsEmpty() ? TEXT("프로젝트 검증 실패") : outDiagnostics[0]);
+		SetDiagnosticsText(FString::Join(outDiagnostics, TEXT("\n")));
 		return false;
 	}
 
 	RememberRecentProject(normalizedProjectPath);
+	RefreshRecentProjectCards();
+	SetProjectOpenWarningText(FString());
+	SetDiagnosticsText(FString());
+	return true;
+}
+
+bool UStartupMenuWidget::OpenExistingProject(const FString& projectPath)
+{
+	TArray<FString> diagnostics;
+	if (!AddRecentProjectIfValid(projectPath, diagnostics))
+	{
+		const FString normalizedProjectPath = NormalizeStartupMenuPath(projectPath);
+		if (!normalizedProjectPath.IsEmpty() && !IFileManager::Get().DirectoryExists(*normalizedProjectPath))
+		{
+			RefreshRecentProjectCards();
+		}
+		return false;
+	}
+
+	const FString normalizedProjectPath = NormalizeStartupMenuPath(projectPath);
+	SetProjectPathForPrototype(normalizedProjectPath);
 	SaveProjectOpenOptions();
 	if (!CommitActiveProjectAndOpenEditor())
 	{
@@ -983,7 +1287,7 @@ void UStartupMenuWidget::HandleScenarioPresetCardSelected(UProjectTemplateCardWi
 	}
 
 	SelectedScenarioPresetId = cardWidget->GetItemId();
-	RefreshProjectPresetCardStates();
+	RefreshProjectPresetSelectionStates();
 }
 
 void UStartupMenuWidget::HandleProfilePresetCardSelected(UProjectTemplateCardWidget* cardWidget)
@@ -994,7 +1298,7 @@ void UStartupMenuWidget::HandleProfilePresetCardSelected(UProjectTemplateCardWid
 	}
 
 	SelectedProfilePresetId = cardWidget->GetItemId();
-	RefreshProjectPresetCardStates();
+	RefreshProjectPresetSelectionStates();
 }
 
 void UStartupMenuWidget::HandlePolicyPresetCardSelected(UProjectTemplateCardWidget* cardWidget)
@@ -1005,7 +1309,7 @@ void UStartupMenuWidget::HandlePolicyPresetCardSelected(UProjectTemplateCardWidg
 	}
 
 	SelectedPolicyPresetId = cardWidget->GetItemId();
-	RefreshProjectPresetCardStates();
+	RefreshProjectPresetSelectionStates();
 }
 
 void UStartupMenuWidget::ShowRecentProjectDeleteDialog(const FString& projectPath)

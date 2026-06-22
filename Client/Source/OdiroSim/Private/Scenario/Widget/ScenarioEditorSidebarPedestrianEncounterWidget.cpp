@@ -1,52 +1,6 @@
 #include "Scenario/Widget/ScenarioEditorSidebarPedestrianEncounterWidget.h"
 
-#include "Blueprint/WidgetTree.h"
-#include "Components/VerticalBox.h"
-#include "Components/VerticalBoxSlot.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
-
-namespace
-{
-	constexpr float PedestrianEncounterWidgetPadding = 6.0f;
-
-	void AddPedestrianEncounterWidgetToBox(UVerticalBox* box, UWidget* widget)
-	{
-		if (!box || !widget)
-		{
-			return;
-		}
-
-		if (UVerticalBoxSlot* slot = box->AddChildToVerticalBox(widget))
-		{
-			slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, PedestrianEncounterWidgetPadding));
-			slot->SetHorizontalAlignment(HAlign_Fill);
-		}
-	}
-
-	void AddPedestrianEncounterFieldRow(
-		UWidgetTree* widgetTree,
-		UVerticalBox* parent,
-		TObjectPtr<UScenarioEditorSidebarFieldRow>& fieldRow,
-		const TCHAR* widgetName)
-	{
-		if (!widgetTree || !parent)
-		{
-			return;
-		}
-
-		fieldRow = widgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
-			UScenarioEditorSidebarFieldRow::StaticClass(),
-			FName(widgetName));
-		AddPedestrianEncounterWidgetToBox(parent, fieldRow.Get());
-	}
-}
-
-TSharedRef<SWidget> UScenarioEditorSidebarPedestrianEncounterWidget::RebuildWidget()
-{
-	Initialize();
-	BuildDefaultWidgetTree();
-	return Super::RebuildWidget();
-}
 
 void UScenarioEditorSidebarPedestrianEncounterWidget::NativeConstruct()
 {
@@ -225,39 +179,6 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::HandleAddRequested()
 void UScenarioEditorSidebarPedestrianEncounterWidget::HandleRemoveRequested()
 {
 	OnRemoveRequested.Broadcast(EncounterIndex);
-}
-
-void UScenarioEditorSidebarPedestrianEncounterWidget::BuildDefaultWidgetTree()
-{
-	if (!WidgetTree || WidgetTree->RootWidget)
-	{
-		return;
-	}
-
-	EncounterBlockWidget = WidgetTree->ConstructWidget<UScenarioEditorSidebarBlockWidget>(
-		UScenarioEditorSidebarBlockWidget::StaticClass(),
-		TEXT("EncounterBlockWidget"));
-	if (!EncounterBlockWidget)
-	{
-		return;
-	}
-
-	WidgetTree->RootWidget = EncounterBlockWidget;
-	EncounterBlockWidget->SetNested(true);
-	EncounterBlockWidget->SetShowNormalOutline(false);
-
-	UVerticalBox* encounterBody = EncounterBlockWidget->GetBodyBox();
-	AddPedestrianEncounterFieldRow(WidgetTree, encounterBody, EncounterIdFieldRow, TEXT("EncounterIdFieldRow"));
-	AddPedestrianEncounterFieldRow(WidgetTree, encounterBody, TypeFieldRow, TEXT("TypeFieldRow"));
-	AddPedestrianEncounterFieldRow(WidgetTree, encounterBody, AtSegmentFieldRow, TEXT("AtSegmentFieldRow"));
-	AddPedestrianEncounterFieldRow(WidgetTree, encounterBody, PersonaFieldRow, TEXT("PersonaFieldRow"));
-	AddPedestrianEncounterFieldRow(WidgetTree, encounterBody, MeetOffsetFieldRow, TEXT("MeetOffsetFieldRow"));
-	AddPedestrianEncounterFieldRow(WidgetTree, encounterBody, CooperationFieldRow, TEXT("CooperationFieldRow"));
-	AddPedestrianEncounterFieldRow(WidgetTree, encounterBody, EvasivenessFieldRow, TEXT("EvasivenessFieldRow"));
-	AddPedestrianEncounterFieldRow(WidgetTree, encounterBody, PersonalSpaceFieldRow, TEXT("PersonalSpaceFieldRow"));
-	AddPedestrianEncounterFieldRow(WidgetTree, encounterBody, AwarenessHorizonFieldRow, TEXT("AwarenessHorizonFieldRow"));
-	AddPedestrianEncounterFieldRow(WidgetTree, encounterBody, MaxYieldWaitFieldRow, TEXT("MaxYieldWaitFieldRow"));
-	AddPedestrianEncounterFieldRow(WidgetTree, encounterBody, SidestepDistanceFieldRow, TEXT("SidestepDistanceFieldRow"));
 }
 
 void UScenarioEditorSidebarPedestrianEncounterWidget::BindFieldRows()

@@ -6,6 +6,7 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
 #include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
+#include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorLaneWidget.h"
@@ -15,109 +16,21 @@
 
 namespace
 {
-	constexpr float CorridorPanelBlockPadding = 10.0f;
-
 	FString JoinCorridorPanelDiagnostics(const TArray<FString>& diagnostics)
 	{
 		return diagnostics.IsEmpty()
 			? FString(TEXT("Unknown Corridor edit failure."))
 			: FString::Join(diagnostics, TEXT("\n"));
 	}
-
-	void AddCorridorPanelWidgetToBox(
-		UVerticalBox* box,
-		UWidget* widget,
-		const FMargin& padding = FMargin())
-	{
-		if (!box || !widget)
-		{
-			return;
-		}
-
-		if (UVerticalBoxSlot* slot = box->AddChildToVerticalBox(widget))
-		{
-			slot->SetPadding(padding);
-			slot->SetHorizontalAlignment(HAlign_Fill);
-		}
-	}
-
-	UVerticalBox* AddCorridorPanelBlockWidget(
-		UWidgetTree* widgetTree,
-		UVerticalBox* parent,
-		TObjectPtr<UScenarioEditorSidebarBlockWidget>& blockWidget,
-		const TCHAR* widgetName,
-		const FString& name,
-		const FString& path,
-		const FString& badge,
-		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalog,
-		const bool bHighlighted = false,
-		const bool bNested = false,
-		const bool bExpanded = true,
-		const bool bShowNormalOutline = true)
-	{
-		if (!widgetTree || !parent)
-		{
-			return nullptr;
-		}
-
-		blockWidget = widgetTree->ConstructWidget<UScenarioEditorSidebarBlockWidget>(
-			UScenarioEditorSidebarBlockWidget::StaticClass(),
-			FName(widgetName));
-		if (!blockWidget)
-		{
-			return nullptr;
-		}
-
-		blockWidget->SetTextStyleCatalog(catalog);
-		blockWidget->SetBlockMetadata(name, path, badge);
-		blockWidget->SetSelected(bHighlighted);
-		blockWidget->SetNested(bNested);
-		blockWidget->SetExpanded(bExpanded);
-		blockWidget->SetShowNormalOutline(bShowNormalOutline);
-		AddCorridorPanelWidgetToBox(
-			parent,
-			blockWidget.Get(),
-			FMargin(0.0f, 0.0f, 0.0f, CorridorPanelBlockPadding));
-		return blockWidget->GetBodyBox();
-	}
-
-	void AddCorridorPanelFieldRow(
-		UWidgetTree* widgetTree,
-		UVerticalBox* parent,
-		TObjectPtr<UScenarioEditorSidebarFieldRow>& fieldRow,
-		const TCHAR* widgetName)
-	{
-		if (!widgetTree || !parent)
-		{
-			return;
-		}
-
-		fieldRow = widgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
-			UScenarioEditorSidebarFieldRow::StaticClass(),
-			FName(widgetName));
-		if (!fieldRow)
-		{
-			return;
-		}
-
-		if (UVerticalBoxSlot* slot = parent->AddChildToVerticalBox(fieldRow.Get()))
-		{
-			slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
-			slot->SetHorizontalAlignment(HAlign_Fill);
-		}
-	}
-}
-
-TSharedRef<SWidget> UScenarioEditorSidebarCorridorPanel::RebuildWidget()
-{
-	Initialize();
-	BuildDefaultWidgetTree();
-	return Super::RebuildWidget();
 }
 
 void UScenarioEditorSidebarCorridorPanel::NativeConstruct()
 {
 	Super::NativeConstruct();
+	if (WidgetClassCatalog.IsNull())
+	{
+		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
+	}
 	BindFieldRows();
 	ConfigureFieldRows();
 	RefreshFromDraft();
@@ -134,6 +47,14 @@ void UScenarioEditorSidebarCorridorPanel::SetTextStyleCatalog(
 {
 	TextStyleCatalog = catalog;
 	ApplyTextStyles();
+}
+
+void UScenarioEditorSidebarCorridorPanel::SetWidgetClassCatalog(
+	TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> catalog)
+{
+	WidgetClassCatalog = catalog.IsNull()
+		? UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference()
+		: catalog;
 }
 
 void UScenarioEditorSidebarCorridorPanel::RefreshFromDraft()
@@ -424,127 +345,6 @@ void UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested()
 void UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountRemoveRequested()
 {
 	RemoveSegmentAt(GetDraftSegments().Num() - 1);
-}
-
-void UScenarioEditorSidebarCorridorPanel::BuildDefaultWidgetTree()
-{
-	if (!WidgetTree || WidgetTree->RootWidget)
-	{
-		return;
-	}
-
-	UVerticalBox* rootBox = WidgetTree->ConstructWidget<UVerticalBox>(
-		UVerticalBox::StaticClass(),
-		TEXT("GeneratedCorridorPanelRoot"));
-	if (!rootBox)
-	{
-		return;
-	}
-
-	WidgetTree->RootWidget = rootBox;
-
-	UVerticalBox* corridorBody = AddCorridorPanelBlockWidget(
-		WidgetTree,
-		rootBox,
-		CorridorBlockWidget,
-		TEXT("CorridorBlockWidget"),
-		TEXT("corridor"),
-		TEXT("root.corridor"),
-		TEXT("Template"),
-		TextStyleCatalog,
-		true);
-	UVerticalBox* axisBody = AddCorridorPanelBlockWidget(
-		WidgetTree,
-		corridorBody,
-		AxisBlockWidget,
-		TEXT("AxisBlockWidget"),
-		TEXT("axis"),
-		TEXT("root.corridor.axis"),
-		TEXT("Property"),
-		TextStyleCatalog,
-		false,
-		true,
-		true,
-		false);
-	AddCorridorPanelFieldRow(WidgetTree, axisBody, AxisTypeFieldRow, TEXT("AxisTypeFieldRow"));
-	UVerticalBox* axisPointsBody = AddCorridorPanelBlockWidget(
-		WidgetTree,
-		axisBody,
-		AxisPointsBlockWidget,
-		TEXT("AxisPointsBlockWidget"),
-		TEXT("points_m"),
-		TEXT("root.corridor.axis.points_m[]"),
-		TEXT("Property"),
-		TextStyleCatalog,
-		false,
-		true,
-		true,
-		false);
-	AddCorridorPanelFieldRow(WidgetTree, axisPointsBody, AxisPointsFieldRow, TEXT("AxisPointsFieldRow"));
-
-	UVerticalBox* walkwayBody = AddCorridorPanelBlockWidget(
-		WidgetTree,
-		corridorBody,
-		WalkwayWidthBlockWidget,
-		TEXT("WalkwayWidthBlockWidget"),
-		TEXT("walkway_width_m"),
-		TEXT("root.corridor.walkway_width_m"),
-		TEXT("Property"),
-		TextStyleCatalog,
-		false,
-		true,
-		true,
-		false);
-	AddCorridorPanelFieldRow(WidgetTree, walkwayBody, WalkwayWidthFieldRow, TEXT("WalkwayWidthFieldRow"));
-
-	AddCorridorPanelBlockWidget(
-		WidgetTree,
-		corridorBody,
-		BuildingSideBlockWidget,
-		TEXT("BuildingSideBlockWidget"),
-		TEXT("building_side"),
-		TEXT("root.corridor.building_side[]"),
-		TEXT("Property"),
-		TextStyleCatalog,
-		false,
-		true,
-		true,
-		false);
-	AddCorridorPanelBlockWidget(
-		WidgetTree,
-		corridorBody,
-		CurbSideBlockWidget,
-		TEXT("CurbSideBlockWidget"),
-		TEXT("curb_side"),
-		TEXT("root.corridor.curb_side[]"),
-		TEXT("Property"),
-		TextStyleCatalog,
-		false,
-		true,
-		true,
-		false);
-	AddCorridorPanelBlockWidget(
-		WidgetTree,
-		corridorBody,
-		SegmentsBlockWidget,
-		TEXT("SegmentsBlockWidget"),
-		TEXT("segments"),
-		TEXT("root.corridor.segments[]"),
-		TEXT("Property"),
-		TextStyleCatalog,
-		false,
-		true,
-		true,
-		false);
-
-	DiagnosticsTextBlock = WidgetTree->ConstructWidget<UTextBlock>(
-		UTextBlock::StaticClass(),
-		TEXT("DiagnosticsTextBlock"));
-	if (DiagnosticsTextBlock)
-	{
-		DiagnosticsTextBlock->SetAutoWrapText(true);
-		AddCorridorPanelWidgetToBox(rootBox, DiagnosticsTextBlock.Get());
-	}
 }
 
 void UScenarioEditorSidebarCorridorPanel::BindFieldRows()
@@ -858,13 +658,11 @@ void UScenarioEditorSidebarCorridorPanel::ApplyTextStyles()
 		}
 	}
 
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
-		DiagnosticsTextBlock.Get(),
-		TextStyleCatalog,
-		EWidgetTextStyleRole::Value);
-	if (WidgetTree)
+	if (DiagnosticsTextBlock)
 	{
-		UWidgetTextStyleCatalog::ApplyWidgetTreeTextStyles(WidgetTree, TextStyleCatalog);
+		DiagnosticsTextBlock->SetVisibility(DiagnosticsTextBlock->GetText().IsEmpty()
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
 	}
 }
 
@@ -1043,9 +841,10 @@ UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarCorridorPanel::AddReadOnly
 
 	UScenarioEditorSidebarFieldRow* fieldRow =
 		WidgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
-			UScenarioEditorSidebarFieldRow::StaticClass());
+			UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(WidgetClassCatalog));
 	if (!fieldRow)
 	{
+		SetDiagnosticsText(TEXT("Scenario editor field row widget class is missing."));
 		return nullptr;
 	}
 
@@ -1070,9 +869,10 @@ UScenarioEditorSidebarCorridorPointWidget* UScenarioEditorSidebarCorridorPanel::
 
 	UScenarioEditorSidebarCorridorPointWidget* pointWidget =
 		WidgetTree->ConstructWidget<UScenarioEditorSidebarCorridorPointWidget>(
-			UScenarioEditorSidebarCorridorPointWidget::StaticClass());
+			UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorPointWidgetClass(WidgetClassCatalog));
 	if (!pointWidget)
 	{
+		SetDiagnosticsText(TEXT("Scenario editor corridor point widget class is missing."));
 		return nullptr;
 	}
 
@@ -1121,9 +921,10 @@ UScenarioEditorSidebarCorridorLaneWidget* UScenarioEditorSidebarCorridorPanel::A
 
 	UScenarioEditorSidebarCorridorLaneWidget* laneWidget =
 		WidgetTree->ConstructWidget<UScenarioEditorSidebarCorridorLaneWidget>(
-			UScenarioEditorSidebarCorridorLaneWidget::StaticClass());
+			UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorLaneWidgetClass(WidgetClassCatalog));
 	if (!laneWidget)
 	{
+		SetDiagnosticsText(TEXT("Scenario editor corridor lane widget class is missing."));
 		return nullptr;
 	}
 
@@ -1178,9 +979,10 @@ UScenarioEditorSidebarCorridorSegmentWidget* UScenarioEditorSidebarCorridorPanel
 
 	UScenarioEditorSidebarCorridorSegmentWidget* segmentWidget =
 		WidgetTree->ConstructWidget<UScenarioEditorSidebarCorridorSegmentWidget>(
-			UScenarioEditorSidebarCorridorSegmentWidget::StaticClass());
+			UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorSegmentWidgetClass(WidgetClassCatalog));
 	if (!segmentWidget)
 	{
+		SetDiagnosticsText(TEXT("Scenario editor corridor segment widget class is missing."));
 		return nullptr;
 	}
 

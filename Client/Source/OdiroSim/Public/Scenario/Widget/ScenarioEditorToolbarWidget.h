@@ -2,21 +2,12 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "ScenarioEditorToolbarWidget.generated.h"
 
 class UButton;
 class UTextBlock;
 class UWidget;
-
-// Scenario template sidebar panels exposed by the editor toolbar.
-UENUM(BlueprintType)
-enum class EScenarioTemplateSidebarPanel : uint8
-{
-	Main,
-	Corridor,
-	Obstacle,
-	Pedestrian
-};
 
 // Notifies root widgets when the toolbar-selected template sidebar panel changes.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(

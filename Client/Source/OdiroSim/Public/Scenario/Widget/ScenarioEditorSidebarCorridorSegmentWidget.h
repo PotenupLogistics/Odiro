@@ -9,7 +9,6 @@
 
 class UScenarioEditorSidebarBlockWidget;
 class UWidgetTextStyleCatalog;
-class SWidget;
 
 // Broadcasts a committed Corridor segment text edit with segment index context.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
@@ -46,9 +45,6 @@ class ODIROSIM_API UScenarioEditorSidebarCorridorSegmentWidget : public UUserWid
 	GENERATED_BODY()
 
 public:
-	// Builds a native segment detail block when no Blueprint-authored root widget exists.
-	virtual TSharedRef<SWidget> RebuildWidget() override;
-
 	// Binds segment field row delegates after UMG construction.
 	virtual void NativeConstruct() override;
 
@@ -163,8 +159,6 @@ private:
 	UPROPERTY(Transient)
 	TArray<FString> SurfaceOptions;
 
-	// Builds the native fallback segment tree when no Blueprint-authored tree is present.
-	void BuildDefaultWidgetTree();
 	// Binds child field row delegates owned by this segment widget.
 	void BindFieldRows();
 	// Releases child field row delegates owned by this segment widget.

@@ -1,0 +1,202 @@
+{
+  "schema": "scenario",
+  "version": 1,
+  "scenario_id": "curved_road_static_obstacle",
+  "intent": "완만한 곡선 보도에서 지그재그 공사 콘/박스 장애물(5개 이상)이 있어도 로봇이 최소 통로 폭을 유지하며 우회하고 완전 차단 없이 통과하는지 검증한다.",
+  "corridor": {
+    "axis": {
+      "type": "polyline",
+      "points_m": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          4.0,
+          0.0
+        ],
+        [
+          7.0,
+          2.0
+        ],
+        [
+          9.0,
+          5.0
+        ]
+      ]
+    },
+    "walkway_width_m": 3.0,
+    "segments": [
+      {
+        "id": "entry_straight",
+        "type": "straight",
+        "along_range_m": [
+          0.0,
+          4.0
+        ]
+      },
+      {
+        "id": "road_curve",
+        "type": "straight",
+        "along_range_m": [
+          4.0,
+          9.6
+        ]
+      }
+    ],
+    "building_side": [
+      {
+        "surface": "wall",
+        "width_m": 0.5
+      }
+    ],
+    "curb_side": [
+      {
+        "surface": "road",
+        "width_m": 4.0
+      }
+    ]
+  },
+  "obstacles": {
+    "min_clear_width_m": 0.95,
+    "placements": [
+      {
+        "kind": "fixed",
+        "id": "zig_cone_01",
+        "prop": "obstacle.road_cone_01",
+        "at": {
+          "segment": "road_curve",
+          "along_m": {
+            "min": 7.0,
+            "max": 7.6
+          },
+          "offset_m": {
+            "min": -0.25,
+            "max": 0.05
+          },
+          "lane": "center"
+        },
+        "yaw_deg": 0,
+        "allow_blocking": false
+      },
+      {
+        "kind": "fixed",
+        "id": "zig_box_01",
+        "prop": "obstacle.road_cone_01",
+        "at": {
+          "segment": "road_curve",
+          "along_m": {
+            "min": 8.6,
+            "max": 9.2
+          },
+          "offset_m": {
+            "min": 0.15,
+            "max": 0.45
+          },
+          "lane": "center"
+        },
+        "yaw_deg": 0,
+        "allow_blocking": false
+      },
+      {
+        "kind": "fixed",
+        "id": "zig_box_02",
+        "prop": "obstacle.road_cone_01",
+        "at": {
+          "segment": "road_curve",
+          "along_m": {
+            "min": 6.5,
+            "max": 8.5
+          },
+          "offset_m": {
+            "min": -0.45,
+            "max": -0.15
+          },
+          "lane": "center"
+        },
+        "yaw_deg": 0,
+        "allow_blocking": false
+      },
+      {
+        "kind": "fixed",
+        "id": "zig_box_03",
+        "prop": "obstacle.road_cone_01",
+        "at": {
+          "segment": "road_curve",
+          "along_m": {
+            "min": 6.5,
+            "max": 8.5
+          },
+          "offset_m": {
+            "min": 0.05,
+            "max": 0.35
+          },
+          "lane": "center"
+        },
+        "yaw_deg": 0,
+        "allow_blocking": false
+      },
+      {
+        "kind": "fixed",
+        "id": "zig_box_04",
+        "prop": "obstacle.road_cone_01",
+        "at": {
+          "segment": "road_curve",
+          "along_m": {
+            "min": 6.5,
+            "max": 8.5
+          },
+          "offset_m": {
+            "min": -0.25,
+            "max": 0.05
+          },
+          "lane": "center"
+        },
+        "yaw_deg": 0,
+        "allow_blocking": false
+      },
+      {
+        "kind": "fixed",
+        "id": "zig_box_05",
+        "prop": "obstacle.road_cone_01",
+        "at": {
+          "segment": "road_curve",
+          "along_m": {
+            "min": 9.4,
+            "max": 9.6
+          },
+          "offset_m": {
+            "min": -0.05,
+            "max": 0.25
+          },
+          "lane": "center"
+        },
+        "yaw_deg": 0,
+        "allow_blocking": false
+      }
+    ]
+  },
+  "pedestrians": {
+    "background": {
+      "count": 0,
+      "speed_mps": 1.0
+    },
+    "encounters": []
+  },
+  "robot": {
+    "start": {
+      "type": "corridor_pose",
+      "segment": "entry_straight",
+      "along_m": 1.0,
+      "offset_m": 0.0,
+      "heading": "forward"
+    },
+    "goal": {
+      "type": "corridor_pose",
+      "segment": "road_curve",
+      "along_m": 8.0,
+      "offset_m": 0.0,
+      "heading": "forward"
+    }
+  }
+}

@@ -9,7 +9,6 @@
 
 class UScenarioEditorSidebarBlockWidget;
 class UWidgetTextStyleCatalog;
-class SWidget;
 
 // Editable field ids exposed by one root.obstacles.placements[] widget.
 UENUM(BlueprintType)
@@ -74,9 +73,6 @@ class ODIROSIM_API UScenarioEditorSidebarObstaclePlacementWidget : public UUserW
 	GENERATED_BODY()
 
 public:
-	// Builds a native placement detail block when no Blueprint-authored root widget exists.
-	virtual TSharedRef<SWidget> RebuildWidget() override;
-
 	// Binds placement field row delegates after UMG construction.
 	virtual void NativeConstruct() override;
 
@@ -286,8 +282,6 @@ private:
 	UPROPERTY(Transient)
 	bool bHasCachedPlacement = false;
 
-	// Builds the native fallback placement tree when no Blueprint-authored tree is present.
-	void BuildDefaultWidgetTree();
 	// Binds child field row delegates owned by this placement widget.
 	void BindFieldRows();
 	// Releases child field row delegates owned by this placement widget.

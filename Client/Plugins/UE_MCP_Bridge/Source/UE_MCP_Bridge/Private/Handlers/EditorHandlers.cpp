@@ -59,6 +59,121 @@
 #include "Engine/Blueprint.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
+#include "Framework/Application/SlateApplication.h"
+#include "ImageUtils.h"
+#include "Widgets/SViewport.h"
+#include "Widgets/SWindow.h"
+
+namespace
+{
+	FString ResolveMcpScreenshotPath(FString Filename, const FString& DefaultStem)
+	{
+		if (Filename.IsEmpty())
+		{
+			Filename = FString::Printf(TEXT("%s-%s.png"), *DefaultStem, *FDateTime::Now().ToString(TEXT("%Y%m%d-%H%M%S")));
+		}
+
+		if (!Filename.EndsWith(TEXT(".png"), ESearchCase::IgnoreCase))
+		{
+			Filename += TEXT(".png");
+		}
+
+		if (FPaths::IsRelative(Filename))
+		{
+			Filename = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots"), TEXT("MCP"), Filename);
+		}
+
+		FPaths::NormalizeFilename(Filename);
+		return Filename;
+	}
+
+	TSharedPtr<SWindow> FindSlateWindowByTitle(const FString& TitleFilter)
+	{
+		if (TitleFilter.IsEmpty() || !FSlateApplication::IsInitialized())
+		{
+			return nullptr;
+		}
+
+		for (const TSharedRef<SWindow>& Window : FSlateApplication::Get().GetTopLevelWindows())
+		{
+			if (Window->IsVisible() && Window->GetTitle().ToString().Contains(TitleFilter, ESearchCase::IgnoreCase))
+			{
+				return Window;
+			}
+		}
+
+		return nullptr;
+	}
+
+	TSharedPtr<SWindow> ResolveSlateWindowForCapture(
+		const FString& Target,
+		const FString& TitleFilter,
+		FString& OutResolvedTarget)
+	{
+		if (!FSlateApplication::IsInitialized())
+		{
+			return nullptr;
+		}
+
+		FSlateApplication& SlateApplication = FSlateApplication::Get();
+		if (TSharedPtr<SWindow> TitleWindow = FindSlateWindowByTitle(TitleFilter))
+		{
+			OutResolvedTarget = TEXT("title");
+			return TitleWindow;
+		}
+
+		const FString LowerTarget = Target.ToLower();
+		if (LowerTarget == TEXT("game") || LowerTarget == TEXT("viewport") || LowerTarget == TEXT("auto"))
+		{
+			if (TSharedPtr<SViewport> GameViewport = SlateApplication.GetGameViewport())
+			{
+				if (TSharedPtr<SWindow> GameWindow = SlateApplication.FindWidgetWindow(GameViewport.ToSharedRef()))
+				{
+					OutResolvedTarget = TEXT("game");
+					return GameWindow;
+				}
+			}
+		}
+
+		if (LowerTarget == TEXT("active") || LowerTarget == TEXT("auto"))
+		{
+			if (TSharedPtr<SWindow> ActiveWindow = SlateApplication.GetActiveTopLevelWindow())
+			{
+				OutResolvedTarget = TEXT("active");
+				return ActiveWindow;
+			}
+		}
+
+		TArray<TSharedRef<SWindow>> InteractiveWindows = SlateApplication.GetInteractiveTopLevelWindows();
+		for (const TSharedRef<SWindow>& Window : InteractiveWindows)
+		{
+			if (Window->IsVisible())
+			{
+				OutResolvedTarget = TEXT("interactive");
+				return Window;
+			}
+		}
+
+		for (const TSharedRef<SWindow>& Window : SlateApplication.GetTopLevelWindows())
+		{
+			if (Window->IsVisible())
+			{
+				OutResolvedTarget = TEXT("toplevel");
+				return Window;
+			}
+		}
+
+		return nullptr;
+	}
+
+	TSharedPtr<FJsonObject> MakeVector2Json(const FVector2D& Value)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("x"), Value.X);
+		Obj->SetNumberField(TEXT("y"), Value.Y);
+		return Obj;
+	}
+}
 
 void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -80,6 +195,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_build_status"), &GetBuildStatus);
 	Registry.RegisterHandler(TEXT("pie_control"), &PieControl);
 	Registry.RegisterHandler(TEXT("capture_screenshot"), &CaptureScreenshot);
+	Registry.RegisterHandler(TEXT("capture_slate_window"), &CaptureSlateWindow);
 	Registry.RegisterHandler(TEXT("set_viewport_camera"), &SetViewportCamera);
 	Registry.RegisterHandler(TEXT("undo"), &Undo);
 	Registry.RegisterHandler(TEXT("redo"), &Redo);
@@ -884,6 +1000,89 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 	Result->SetStringField(TEXT("filename"), FullPath);
 	Result->SetStringField(TEXT("target"), TEXT("editor"));
 	Result->SetStringField(TEXT("note"), TEXT("Screenshot queued. The file will be written asynchronously by the renderer."));
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::CaptureSlateWindow(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!FSlateApplication::IsInitialized())
+	{
+		return MCPError(TEXT("Slate application is not initialized"));
+	}
+
+	const FString Target = OptionalString(Params, TEXT("target"), TEXT("game"));
+	const FString TitleFilter = OptionalString(Params, TEXT("title"), TEXT(""));
+	FString ResolvedTarget;
+	TSharedPtr<SWindow> Window = ResolveSlateWindowForCapture(Target, TitleFilter, ResolvedTarget);
+	if (!Window.IsValid())
+	{
+		return MCPError(FString::Printf(
+			TEXT("No Slate window available for target='%s'%s"),
+			*Target,
+			TitleFilter.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" title='%s'"), *TitleFilter)));
+	}
+
+	if (OptionalBool(Params, TEXT("forceRedraw"), true))
+	{
+		FSlateApplication::Get().ForceRedrawWindow(Window.ToSharedRef());
+	}
+
+	TArray<FColor> Bitmap;
+	FIntVector ImageSize(0, 0, 0);
+	if (!FSlateApplication::Get().TakeScreenshot(Window.ToSharedRef(), Bitmap, ImageSize))
+	{
+		return MCPError(FString::Printf(TEXT("Failed to capture Slate window '%s'"), *Window->GetTitle().ToString()));
+	}
+
+	if (ImageSize.X <= 0 || ImageSize.Y <= 0 || Bitmap.IsEmpty())
+	{
+		return MCPError(FString::Printf(
+			TEXT("Slate screenshot returned empty image for '%s' (%dx%d, pixels=%d)"),
+			*Window->GetTitle().ToString(),
+			ImageSize.X,
+			ImageSize.Y,
+			Bitmap.Num()));
+	}
+
+	FString Filename = OptionalString(Params, TEXT("filename"), TEXT(""));
+	Filename = ResolveMcpScreenshotPath(Filename, TEXT("slate-window"));
+	const FString Directory = FPaths::GetPath(Filename);
+	if (!IFileManager::Get().MakeDirectory(*Directory, true))
+	{
+		return MCPError(FString::Printf(TEXT("Failed to create screenshot directory: %s"), *Directory));
+	}
+
+	TArray64<uint8> CompressedPng;
+	FImageUtils::PNGCompressImageArray(
+		ImageSize.X,
+		ImageSize.Y,
+		TArrayView64<const FColor>(Bitmap.GetData(), Bitmap.Num()),
+		CompressedPng);
+	if (CompressedPng.IsEmpty())
+	{
+		return MCPError(TEXT("Failed to encode Slate screenshot as PNG"));
+	}
+
+	if (!FFileHelper::SaveArrayToFile(CompressedPng, *Filename))
+	{
+		return MCPError(FString::Printf(TEXT("Failed to write Slate screenshot: %s"), *Filename));
+	}
+
+	const FVector2D WindowPosition = Window->GetPositionInScreen();
+	const FVector2D WindowSize = Window->GetSizeInScreen();
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("filename"), Filename);
+	Result->SetStringField(TEXT("target"), Target);
+	Result->SetStringField(TEXT("resolvedTarget"), ResolvedTarget);
+	Result->SetStringField(TEXT("windowTitle"), Window->GetTitle().ToString());
+	Result->SetNumberField(TEXT("width"), ImageSize.X);
+	Result->SetNumberField(TEXT("height"), ImageSize.Y);
+	Result->SetNumberField(TEXT("pixelCount"), Bitmap.Num());
+	Result->SetNumberField(TEXT("pngBytes"), static_cast<double>(CompressedPng.Num()));
+	Result->SetObjectField(TEXT("windowPosition"), MakeVector2Json(WindowPosition));
+	Result->SetObjectField(TEXT("windowSize"), MakeVector2Json(WindowSize));
+	Result->SetNumberField(TEXT("applicationScale"), FSlateApplication::Get().GetApplicationScale());
+	Result->SetStringField(TEXT("note"), TEXT("Captured via FSlateApplication::TakeScreenshot; includes Slate/UMG pixels for the selected window."));
 	return MCPResult(Result);
 }
 

@@ -1,9 +1,36 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Shared/ScenarioCoreTypes.h"
 #include "ScenarioEditorTypes.generated.h"
 
 class UTexture2D;
+
+// Scenario template sections exposed by the editor inspector.
+UENUM(BlueprintType)
+enum class EScenarioTemplateSidebarPanel : uint8
+{
+	Main,
+	Corridor,
+	Obstacle,
+	Pedestrian
+};
+
+// Right-sidebar inspector page owned by the Scenario Editor root widget.
+UENUM(BlueprintType)
+enum class EScenarioEditorInspectorTab : uint8
+{
+	Detail,
+	Llm
+};
+
+// Outliner row semantic action used by the root widget when a row is selected.
+UENUM(BlueprintType)
+enum class EScenarioEditorOutlinerItemType : uint8
+{
+	TemplatePanel,
+	Placeable
+};
 
 UENUM(BlueprintType)
 enum class EScenarioEditorControllerMode : uint8
@@ -127,4 +154,46 @@ struct ODIROSIM_API FScenarioAuthoringStaticObstacleRecord
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	FVector2D PlacementHalfExtent2D = FVector2D::ZeroVector;
+};
+
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FScenarioOutlinerItemViewModel
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Outliner")
+	FString ItemKey;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Outliner")
+	FString ParentKey;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Outliner")
+	FText Label;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Outliner")
+	FText Subtitle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Outliner")
+	int32 Depth = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Outliner")
+	bool bExpandable = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Outliner")
+	bool bExpanded = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Outliner")
+	bool bSelected = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Outliner")
+	EScenarioEditorOutlinerItemType ItemType = EScenarioEditorOutlinerItemType::TemplatePanel;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Outliner")
+	EScenarioTemplateSidebarPanel TemplatePanel = EScenarioTemplateSidebarPanel::Main;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Outliner")
+	FString InstanceId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Outliner")
+	EScenarioActorCategory ActorCategory = EScenarioActorCategory::StaticObstacle;
 };

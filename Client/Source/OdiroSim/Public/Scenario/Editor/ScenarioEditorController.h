@@ -24,6 +24,9 @@ class UMaterialInterface;
 class UWidget;
 struct FInputActionValue;
 
+// Native notification used by editor UI widgets to mirror viewport selection.
+DECLARE_MULTICAST_DELEGATE_OneParam(FScenarioSelectedPlaceableChanged, const FString&);
+
 UCLASS(BlueprintType)
 class ODIROSIM_API AScenarioEditorController : public APlayerController
 {
@@ -112,6 +115,10 @@ public:
 	// Viewport z-order used when ScenarioEditorMap attaches WBP_MainMenu.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
 	int32 MainMenuWidgetViewportZOrder = 10;
+
+	// Fallback save path used when the draft was not opened from a user project scenario.json.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
+	FString DefaultScenarioDraftSavePath = TEXT("Saved/UserProjects/ScenarioEditor/scenario.json");
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor")
 	void SetObserverMode();
@@ -207,14 +214,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
 	bool SaveProjectScenarioJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
+	// Saves the current editor draft to its source scenario.json or a new fallback path.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
+	bool SaveCurrentScenarioDraft(FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
+
 	// Returns the file path that currently owns the editor draft.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Authoring")
 	FString GetSourceProjectScenarioJsonPath() const;
 
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI", meta = (DeprecatedFunction, DeprecationMessage = "Toolbar UI was removed. Use ShowEditorRootWidget and the root sidebar controls."))
 	UScenarioEditorToolbarWidget* ShowToolbarWidget();
 
-	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI", meta = (DeprecatedFunction, DeprecationMessage = "Toolbar UI was removed. Use ShowEditorRootWidget and the root sidebar controls."))
 	void RemoveToolbarWidget();
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
@@ -248,6 +259,17 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Selection")
 	UScenarioPlaceableComponent* GetSelectedPlaceableComponent() const { return SelectedPlaceableComponent.Get(); }
+
+	// Selects a spawned editor placeable by scenario instance_id.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Selection")
+	bool SelectPlaceableByInstanceId(const FString& instanceId);
+
+	// Clears viewport placeable selection and hides placeable details.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Selection")
+	void ClearSelectedPlaceable();
+
+	// Returns the native selection change delegate for root/sidebar synchronization.
+	FScenarioSelectedPlaceableChanged& OnSelectedPlaceableChanged() { return SelectedPlaceableChanged; }
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Selection")
 	bool TryUpdateSelectedPlaceableTransform(const FTransform& transform, FString& outFailureReason);
@@ -283,6 +305,8 @@ private:
 	bool TraceMouseToPlane(const FVector& planeOrigin, const FVector& planeNormal, FVector& outPoint) const;
 	bool TraceMouseSelectablePlaceable(UScenarioPlaceableComponent*& outPlaceableComponent, FHitResult& outHit) const;
 	bool IsEditorSelectablePlaceable(const UScenarioPlaceableComponent* placeableComponent) const;
+	UScenarioPlaceableComponent* FindSelectablePlaceableByInstanceId(const FString& instanceId) const;
+	FString ResolveCurrentScenarioDraftSavePath() const;
 	bool IsCursorOverEditorWidgetInputModeFocus() const;
 	void SetHoveredPlaceable(UScenarioPlaceableComponent* placeableComponent);
 	void SetSelectedPlaceable(UScenarioPlaceableComponent* placeableComponent);
@@ -328,7 +352,7 @@ private:
 		FVector& outYAxis,
 		FVector& outZAxis) const;
 	UScenarioPlaceableDetailsWidget* EnsurePlaceableDetailsWidget();
-	void UpdatePlaceableDetailsForSelection(bool bRepositionToMouse = true);
+	void UpdatePlaceableDetailsForSelection();
 	void HidePlaceableDetails();
 	AScenarioEditorPawn* GetEditorPawn() const;
 	UScenarioAuthoringSubsystem* GetAuthoringSubsystem() const;
@@ -404,4 +428,5 @@ private:
 	TWeakObjectPtr<UScenarioPlaceableComponent> DraggedPlaceableComponent;
 	TWeakObjectPtr<UMaterialInterface> ActiveAuthoringOutlinePostProcessMaterial;
 	TArray<TWeakObjectPtr<UWidget>> EditorWidgetInputModeRequesters;
+	FScenarioSelectedPlaceableChanged SelectedPlaceableChanged;
 };

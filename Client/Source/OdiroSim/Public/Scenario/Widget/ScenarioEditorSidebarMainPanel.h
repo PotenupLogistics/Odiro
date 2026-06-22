@@ -10,8 +10,8 @@ class UTextBlock;
 class UScenarioAuthoringSubsystem;
 class UScenarioEditorSidebarBlockWidget;
 class UScenarioEditorSidebarFieldRow;
+class UScenarioEditorWidgetClassCatalog;
 class UWidgetTextStyleCatalog;
-class SWidget;
 
 // Robot anchor target edited by the Main sidebar panel.
 UENUM(BlueprintType)
@@ -40,8 +40,9 @@ class ODIROSIM_API UScenarioEditorSidebarMainPanel : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	virtual TSharedRef<SWidget> RebuildWidget() override;
+	// Binds Main panel rows after UMG construction.
 	virtual void NativeConstruct() override;
+	// Releases Main panel row bindings before teardown.
 	virtual void NativeDestruct() override;
 
 	// Optional editable row for scenario.scenario_id.
@@ -72,6 +73,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
 
+	// WBP class catalog passed down to dynamic child widgets.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> WidgetClassCatalog;
+
 	// Optional root project scenario block.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScenarioEditorSidebarBlockWidget> RootBlockWidget;
@@ -95,6 +100,10 @@ public:
 	// Updates the shared typography catalog used by this panel and its field rows.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
+
+	// Updates the WBP class catalog used by this panel and child widgets.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetWidgetClassCatalog(TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> catalog);
 
 	// Pulls the current draft project scenario and refreshes this panel.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
@@ -163,55 +172,53 @@ private:
 	void HandleRobotGoalHeadingCommitted(const FText& text, ETextCommit::Type commitMethod);
 
 	// Optional editable row for robot.start.type.
-	UPROPERTY(Transient)
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotStartTypeFieldRow;
 
 	// Optional editable row for robot.start.segment.
-	UPROPERTY(Transient)
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotStartSegmentFieldRow;
 
 	// Optional editable row for robot.start.along_m.
-	UPROPERTY(Transient)
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotStartAlongFieldRow;
 
 	// Optional editable row for robot.start.offset_m.
-	UPROPERTY(Transient)
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotStartOffsetFieldRow;
 
 	// Optional editable row for robot.start.lane.
-	UPROPERTY(Transient)
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotStartLaneFieldRow;
 
 	// Optional editable row for robot.start.heading.
-	UPROPERTY(Transient)
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotStartHeadingFieldRow;
 
 	// Optional editable row for robot.goal.type.
-	UPROPERTY(Transient)
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotGoalTypeFieldRow;
 
 	// Optional editable row for robot.goal.segment.
-	UPROPERTY(Transient)
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotGoalSegmentFieldRow;
 
 	// Optional editable row for robot.goal.along_m.
-	UPROPERTY(Transient)
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotGoalAlongFieldRow;
 
 	// Optional editable row for robot.goal.offset_m.
-	UPROPERTY(Transient)
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotGoalOffsetFieldRow;
 
 	// Optional editable row for robot.goal.lane.
-	UPROPERTY(Transient)
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotGoalLaneFieldRow;
 
 	// Optional editable row for robot.goal.heading.
-	UPROPERTY(Transient)
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> RobotGoalHeadingFieldRow;
 
-	// Builds the native fallback panel tree when no Blueprint-authored tree is present.
-	void BuildDefaultWidgetTree();
 	// Binds child field row delegates owned by this panel.
 	void BindFieldRows();
 	// Releases child field row delegates owned by this panel.

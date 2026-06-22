@@ -1,0 +1,270 @@
+{
+  "schema": "scenario",
+  "version": 1,
+  "scenario_id": "long_multi_curve_open_clearance_03",
+  "intent": "약 16m의 긴 다중 커브 보도에서 2~3번 굽는 경로와 분산 장애물이 있어도 로봇이 충분한 여유 폭을 유지하며 통과하는지 검증한다.",
+  "corridor": {
+    "axis": {
+      "type": "polyline",
+      "points_m": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          2.5,
+          -0.7
+        ],
+        [
+          5.0,
+          -1.4
+        ],
+        [
+          7.8,
+          0.8
+        ],
+        [
+          10.5,
+          1.5
+        ],
+        [
+          13.2,
+          -0.9
+        ],
+        [
+          16.0,
+          -0.1
+        ]
+      ]
+    },
+    "walkway_width_m": {
+      "min": 2.8,
+      "max": 3.2
+    },
+    "building_side": [
+      {
+        "surface": "wall",
+        "width_m": 0.4
+      }
+    ],
+    "curb_side": [
+      {
+        "surface": "road",
+        "width_m": 4.0
+      }
+    ],
+    "segments": [
+      {
+        "id": "entry",
+        "type": "straight",
+        "along_range_m": [
+          0.0,
+          2.2
+        ]
+      },
+      {
+        "id": "curve_left_1",
+        "type": "straight",
+        "along_range_m": [
+          2.2,
+          5.4
+        ]
+      },
+      {
+        "id": "curve_right_1",
+        "type": "narrowing",
+        "along_range_m": [
+          5.4,
+          9.0
+        ]
+      },
+      {
+        "id": "curve_left_2",
+        "type": "narrowing",
+        "along_range_m": [
+          9.0,
+          12.5
+        ]
+      },
+      {
+        "id": "curve_right_2",
+        "type": "straight",
+        "along_range_m": [
+          12.5,
+          15.0
+        ]
+      },
+      {
+        "id": "exit",
+        "type": "straight",
+        "along_range_m": [
+          15.0,
+          16.5
+        ]
+      }
+    ]
+  },
+  "obstacles": {
+    "min_clear_width_m": 1.15,
+    "placements": [
+      {
+        "kind": "fixed",
+        "id": "curve_left_1_cone",
+        "prop": "obstacle.road_cone_01",
+        "at": {
+          "segment": "curve_left_1",
+          "along_m": {
+            "min": 3.0,
+            "max": 3.5
+          },
+          "offset_m": {
+            "min": 0.45,
+            "max": 0.7
+          },
+          "lane": "center"
+        },
+        "yaw_deg": 0,
+        "allow_blocking": false
+      },
+      {
+        "kind": "fixed",
+        "id": "curve_left_1_crate",
+        "prop": "obstacle.crate_01",
+        "at": {
+          "segment": "curve_left_1",
+          "along_m": {
+            "min": 4.4,
+            "max": 4.9
+          },
+          "offset_m": {
+            "min": -0.7,
+            "max": -0.45
+          },
+          "lane": "center"
+        },
+        "yaw_deg": -12,
+        "allow_blocking": false
+      },
+      {
+        "kind": "fixed",
+        "id": "curve_right_1_cone",
+        "prop": "traffic_cone_01",
+        "at": {
+          "segment": "curve_right_1",
+          "along_m": {
+            "min": 6.2,
+            "max": 6.8
+          },
+          "offset_m": {
+            "min": 0.45,
+            "max": 0.7
+          },
+          "lane": "center"
+        },
+        "yaw_deg": 0,
+        "allow_blocking": false
+      },
+      {
+        "kind": "fixed",
+        "id": "curve_right_1_crate",
+        "prop": "obstacle.crate_01",
+        "at": {
+          "segment": "curve_right_1",
+          "along_m": {
+            "min": 8.1,
+            "max": 8.6
+          },
+          "offset_m": {
+            "min": -0.7,
+            "max": -0.45
+          },
+          "lane": "center"
+        },
+        "yaw_deg": 14,
+        "allow_blocking": false
+      },
+      {
+        "kind": "fixed",
+        "id": "curve_left_2_cone",
+        "prop": "obstacle.road_cone_01",
+        "at": {
+          "segment": "curve_left_2",
+          "along_m": {
+            "min": 9.7,
+            "max": 10.3
+          },
+          "offset_m": {
+            "min": 0.4,
+            "max": 0.65
+          },
+          "lane": "center"
+        },
+        "yaw_deg": 0,
+        "allow_blocking": false
+      },
+      {
+        "kind": "fixed",
+        "id": "curve_left_2_crate",
+        "prop": "obstacle.crate_01",
+        "at": {
+          "segment": "curve_left_2",
+          "along_m": {
+            "min": 11.5,
+            "max": 12.0
+          },
+          "offset_m": {
+            "min": -0.65,
+            "max": -0.4
+          },
+          "lane": "center"
+        },
+        "yaw_deg": -8,
+        "allow_blocking": false
+      },
+      {
+        "kind": "fixed",
+        "id": "curve_right_2_marker",
+        "prop": "traffic_cone_01",
+        "at": {
+          "segment": "curve_right_2",
+          "along_m": {
+            "min": 13.4,
+            "max": 14.0
+          },
+          "offset_m": {
+            "min": 0.35,
+            "max": 0.55
+          },
+          "lane": "center"
+        },
+        "yaw_deg": 0,
+        "allow_blocking": false
+      }
+    ]
+  },
+  "pedestrians": {
+    "background": {
+      "count": 0,
+      "speed_mps": 1.0
+    },
+    "encounters": []
+  },
+  "robot": {
+    "start": {
+      "type": "corridor_pose",
+      "segment": "entry",
+      "along_m": 0.8,
+      "offset_m": 0.0,
+      "lane": "walkway",
+      "heading": "forward"
+    },
+    "goal": {
+      "type": "corridor_pose",
+      "segment": "exit",
+      "along_m": 15.8,
+      "offset_m": 0.0,
+      "lane": "walkway",
+      "heading": "forward"
+    }
+  }
+}

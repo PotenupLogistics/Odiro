@@ -9,7 +9,6 @@
 
 class UScenarioEditorSidebarBlockWidget;
 class UWidgetTextStyleCatalog;
-class SWidget;
 
 // Editable field ids exposed by one root.pedestrians.encounters[] widget.
 UENUM(BlueprintType)
@@ -67,9 +66,6 @@ class ODIROSIM_API UScenarioEditorSidebarPedestrianEncounterWidget : public UUse
 	GENERATED_BODY()
 
 public:
-	// Builds a native encounter detail block when no Blueprint-authored root widget exists.
-	virtual TSharedRef<SWidget> RebuildWidget() override;
-
 	// Binds encounter field row delegates after UMG construction.
 	virtual void NativeConstruct() override;
 
@@ -230,8 +226,6 @@ private:
 	UPROPERTY(Transient)
 	bool bHasCachedEncounter = false;
 
-	// Builds the native fallback encounter tree when no Blueprint-authored tree is present.
-	void BuildDefaultWidgetTree();
 	// Binds child field row delegates owned by this encounter widget.
 	void BindFieldRows();
 	// Releases child field row delegates owned by this encounter widget.

@@ -12,6 +12,11 @@ public class OdiroSim : ModuleRules
 			"ChaosVehicles", "Json", "JsonUtilities", "HTTP", "DeveloperSettings" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "Slate" });
+
+		if (Target.bBuildEditor)
+		{
+			PrivateDependencyModuleNames.Add("DesktopPlatform");
+		}
 		
 		// Uncomment if you are using online features
 		// PrivateDependencyModuleNames.Add("OnlineSubsystem");

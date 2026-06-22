@@ -10,8 +10,8 @@
 class UTextBlock;
 class UScenarioAuthoringSubsystem;
 class UScenarioEditorSidebarBlockWidget;
+class UScenarioEditorWidgetClassCatalog;
 class UWidgetTextStyleCatalog;
-class SWidget;
 
 // Pedestrian Scenario Template sidebar panel that exposes the editable tree shape without committing edits yet.
 UCLASS(BlueprintType, Blueprintable)
@@ -20,15 +20,16 @@ class ODIROSIM_API UScenarioEditorSidebarPedestrianPanel : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	// Builds a native Pedestrian tree when no Blueprint-authored root widget exists.
-	virtual TSharedRef<SWidget> RebuildWidget() override;
-
 	// Configures Pedestrian rows after UMG construction.
 	virtual void NativeConstruct() override;
 
 	// Shared typography catalog passed down to blocks and field rows.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
+
+	// WBP class catalog passed down to dynamic child widgets.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> WidgetClassCatalog;
 
 	// Optional root pedestrians template block.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
@@ -66,6 +67,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
 
+	// Updates the WBP class catalog used by this panel and child widgets.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetWidgetClassCatalog(TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> catalog);
+
 	// Pulls the current draft Scenario Template and refreshes this panel.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void RefreshFromDraft();
@@ -83,8 +88,6 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UScenarioEditorSidebarPedestrianEncounterWidget>> EncounterWidgets;
 
-	// Builds the native fallback panel tree when no Blueprint-authored tree is present.
-	void BuildDefaultWidgetTree();
 	// Applies static labels, editability, and block metadata.
 	void ConfigureFieldRows();
 	// Applies shared typography to diagnostic text and child rows.

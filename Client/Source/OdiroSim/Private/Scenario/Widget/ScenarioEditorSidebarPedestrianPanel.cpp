@@ -5,108 +5,22 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
+#include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
 
 namespace
 {
-	constexpr float PedestrianPanelBlockPadding = 10.0f;
-
-	void AddPedestrianPanelWidgetToBox(
-		UVerticalBox* box,
-		UWidget* widget,
-		const FMargin& padding = FMargin())
-	{
-		if (!box || !widget)
-		{
-			return;
-		}
-
-		if (UVerticalBoxSlot* slot = box->AddChildToVerticalBox(widget))
-		{
-			slot->SetPadding(padding);
-			slot->SetHorizontalAlignment(HAlign_Fill);
-		}
-	}
-
-	UVerticalBox* AddPedestrianPanelBlockWidget(
-		UWidgetTree* widgetTree,
-		UVerticalBox* parent,
-		TObjectPtr<UScenarioEditorSidebarBlockWidget>& blockWidget,
-		const TCHAR* widgetName,
-		const FString& name,
-		const FString& path,
-		const FString& badge,
-		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalog,
-		const bool bHighlighted = false,
-		const bool bNested = false,
-		const bool bExpanded = true,
-		const bool bShowNormalOutline = true)
-	{
-		if (!widgetTree || !parent)
-		{
-			return nullptr;
-		}
-
-		blockWidget = widgetTree->ConstructWidget<UScenarioEditorSidebarBlockWidget>(
-			UScenarioEditorSidebarBlockWidget::StaticClass(),
-			FName(widgetName));
-		if (!blockWidget)
-		{
-			return nullptr;
-		}
-
-		blockWidget->SetTextStyleCatalog(catalog);
-		blockWidget->SetBlockMetadata(name, path, badge);
-		blockWidget->SetSelected(bHighlighted);
-		blockWidget->SetNested(bNested);
-		blockWidget->SetExpanded(bExpanded);
-		blockWidget->SetShowNormalOutline(bShowNormalOutline);
-		AddPedestrianPanelWidgetToBox(
-			parent,
-			blockWidget.Get(),
-			FMargin(0.0f, 0.0f, 0.0f, PedestrianPanelBlockPadding));
-		return blockWidget->GetBodyBox();
-	}
-
-	void AddPedestrianPanelFieldRow(
-		UWidgetTree* widgetTree,
-		UVerticalBox* parent,
-		TObjectPtr<UScenarioEditorSidebarFieldRow>& fieldRow,
-		const TCHAR* widgetName)
-	{
-		if (!widgetTree || !parent)
-		{
-			return;
-		}
-
-		fieldRow = widgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
-			UScenarioEditorSidebarFieldRow::StaticClass(),
-			FName(widgetName));
-		if (!fieldRow)
-		{
-			return;
-		}
-
-		if (UVerticalBoxSlot* slot = parent->AddChildToVerticalBox(fieldRow.Get()))
-		{
-			slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
-			slot->SetHorizontalAlignment(HAlign_Fill);
-		}
-	}
-}
-
-TSharedRef<SWidget> UScenarioEditorSidebarPedestrianPanel::RebuildWidget()
-{
-	Initialize();
-	BuildDefaultWidgetTree();
-	return Super::RebuildWidget();
 }
 
 void UScenarioEditorSidebarPedestrianPanel::NativeConstruct()
 {
 	Super::NativeConstruct();
+	if (WidgetClassCatalog.IsNull())
+	{
+		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
+	}
 	ConfigureFieldRows();
 	RefreshFromDraft();
 }
@@ -116,6 +30,14 @@ void UScenarioEditorSidebarPedestrianPanel::SetTextStyleCatalog(
 {
 	TextStyleCatalog = catalog;
 	ApplyTextStyles();
+}
+
+void UScenarioEditorSidebarPedestrianPanel::SetWidgetClassCatalog(
+	TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> catalog)
+{
+	WidgetClassCatalog = catalog.IsNull()
+		? UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference()
+		: catalog;
 }
 
 void UScenarioEditorSidebarPedestrianPanel::RefreshFromDraft()
@@ -151,79 +73,6 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshFromTemplate(
 	{
 		DiagnosticsTextBlock->SetText(FText::FromString(TEXT("Structure only: Pedestrian edits are not committed yet.")));
 	}
-}
-
-void UScenarioEditorSidebarPedestrianPanel::BuildDefaultWidgetTree()
-{
-	if (!WidgetTree || WidgetTree->RootWidget)
-	{
-		return;
-	}
-
-	UVerticalBox* rootBox = WidgetTree->ConstructWidget<UVerticalBox>(
-		UVerticalBox::StaticClass(),
-		TEXT("GeneratedPedestrianPanelRoot"));
-	if (!rootBox)
-	{
-		return;
-	}
-
-	WidgetTree->RootWidget = rootBox;
-
-	UVerticalBox* pedestriansBody = AddPedestrianPanelBlockWidget(
-		WidgetTree,
-		rootBox,
-		PedestriansBlockWidget,
-		TEXT("PedestriansBlockWidget"),
-		TEXT("pedestrians"),
-		TEXT("root.pedestrians"),
-		TEXT("Template"),
-		TextStyleCatalog,
-		true);
-	UVerticalBox* backgroundBody = AddPedestrianPanelBlockWidget(
-		WidgetTree,
-		pedestriansBody,
-		BackgroundBlockWidget,
-		TEXT("BackgroundBlockWidget"),
-		TEXT("background"),
-		TEXT("root.pedestrians.background"),
-		TEXT("Property"),
-		TextStyleCatalog,
-		false,
-		true,
-		true,
-		false);
-	AddPedestrianPanelFieldRow(WidgetTree, backgroundBody, BackgroundCountFieldRow, TEXT("BackgroundCountFieldRow"));
-	AddPedestrianPanelFieldRow(WidgetTree, backgroundBody, BackgroundSpeedFieldRow, TEXT("BackgroundSpeedFieldRow"));
-
-	UVerticalBox* spawnZoneBody = AddPedestrianPanelBlockWidget(
-		WidgetTree,
-		backgroundBody,
-		SpawnZoneBlockWidget,
-		TEXT("SpawnZoneBlockWidget"),
-		TEXT("spawn_zone"),
-		TEXT("root.pedestrians.background.spawn_zone"),
-		TEXT("Detail"),
-		TextStyleCatalog,
-		false,
-		true,
-		true,
-		false);
-	AddPedestrianPanelFieldRow(WidgetTree, spawnZoneBody, SpawnSegmentsFieldRow, TEXT("SpawnSegmentsFieldRow"));
-
-	AddPedestrianPanelBlockWidget(
-		WidgetTree,
-		pedestriansBody,
-		EncountersBlockWidget,
-		TEXT("EncountersBlockWidget"),
-		TEXT("encounters"),
-		TEXT("root.pedestrians.encounters[]"),
-		TEXT("Property"),
-		TextStyleCatalog,
-		false,
-		true,
-		true,
-		false);
 }
 
 void UScenarioEditorSidebarPedestrianPanel::ConfigureFieldRows()
@@ -314,13 +163,11 @@ void UScenarioEditorSidebarPedestrianPanel::ApplyTextStyles()
 		}
 	}
 
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
-		DiagnosticsTextBlock.Get(),
-		TextStyleCatalog,
-		EWidgetTextStyleRole::Value);
-	if (WidgetTree)
+	if (DiagnosticsTextBlock)
 	{
-		UWidgetTextStyleCatalog::ApplyWidgetTreeTextStyles(WidgetTree, TextStyleCatalog);
+		DiagnosticsTextBlock->SetVisibility(DiagnosticsTextBlock->GetText().IsEmpty()
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
 	}
 }
 
@@ -367,9 +214,13 @@ UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarPedestrianPanel::AddFieldR
 
 	UScenarioEditorSidebarFieldRow* fieldRow =
 		WidgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
-			UScenarioEditorSidebarFieldRow::StaticClass());
+			UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(WidgetClassCatalog));
 	if (!fieldRow)
 	{
+		if (DiagnosticsTextBlock)
+		{
+			DiagnosticsTextBlock->SetText(FText::FromString(TEXT("Scenario editor field row widget class is missing.")));
+		}
 		return nullptr;
 	}
 
@@ -395,9 +246,13 @@ UScenarioEditorSidebarPedestrianEncounterWidget* UScenarioEditorSidebarPedestria
 
 	UScenarioEditorSidebarPedestrianEncounterWidget* encounterWidget =
 		WidgetTree->ConstructWidget<UScenarioEditorSidebarPedestrianEncounterWidget>(
-			UScenarioEditorSidebarPedestrianEncounterWidget::StaticClass());
+			UScenarioEditorWidgetClassCatalog::ResolveSidebarPedestrianEncounterWidgetClass(WidgetClassCatalog));
 	if (!encounterWidget)
 	{
+		if (DiagnosticsTextBlock)
+		{
+			DiagnosticsTextBlock->SetText(FText::FromString(TEXT("Scenario editor pedestrian encounter widget class is missing.")));
+		}
 		return nullptr;
 	}
 

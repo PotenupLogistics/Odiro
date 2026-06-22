@@ -42,6 +42,8 @@ keep:
   - VSCode tasks start a background Git LFS lock polling task on folder open, refresh immediately when VSCode regains focus, poll only while VSCode is foreground, and use a separate Git LFS Locks source for clickable file-owner inspection.
   - VSCode task output remains Terminal-backed by VSCode design; Build and Git LFS status tasks avoid stealing focus and rely on Problems where possible.
   - tools/run-preview.ps1 starts Agents API, Bridge service, and Client preview mode for terminal and VSCode preview sessions; preview flags pass through to Client/Task-RunPreview.bat after `--`.
+  - Root task-dev/task-run pass the active Agents analysis endpoint to Client via `-ProjectRunAnalysisEndpointUrl`; Agents startup prompts before stopping existing process owners when the requested port is occupied and fails if the user declines or the port remains busy.
+  - Root dev/run orchestration registers background Agents and Bridge process trees for Ctrl+C cleanup; cancellation exits with code 130 after stopping registered child processes.
   - tools/sync-ide-run-configs.ps1 keeps Rider shared run configs focused on Preview Services plus debug-capable Uproject Preview Mode entries during task-setup.bat install; Preview Services runs separately so Preview Mode can stay a Rider Unreal debug configuration.
   - Root scripts orchestrate project-owned task scripts; they do not implement Unreal or Agents startup details.
   - Root setup calls project task scripts directly, not project public .bat wrappers, to avoid duplicate phases.

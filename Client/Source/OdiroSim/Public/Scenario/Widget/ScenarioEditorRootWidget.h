@@ -2,7 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Scenario/Widget/ScenarioEditorToolbarWidget.h"
+#include "Scenario/Editor/ScenarioEditorTypes.h"
+#include "Styling/SlateTypes.h"
 #include "ScenarioEditorRootWidget.generated.h"
 
 enum class EScenarioEditorViewMode : uint8;
@@ -13,11 +14,13 @@ class UTextBlock;
 class UScenarioAssetPaletteWidget;
 class UScenarioEditorToolbarWidget;
 class UScenarioLlmPromptWidget;
+class UScenarioEditorOutlinerWidget;
 class UScenarioPlaceableComponent;
 class UScenarioPlaceableContextMenuWidget;
 class UScenarioPlaceableDetailsWidget;
 class UScenarioEditorSidebarWidget;
 class UWidget;
+class UWidgetSwitcher;
 
 UCLASS(BlueprintType, Blueprintable)
 class ODIROSIM_API UScenarioEditorRootWidget : public UUserWidget
@@ -47,7 +50,7 @@ public:
 
 	// Controls whether the LLM prompt panel appears while the cursor is near the right edge.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root")
-	bool bAutoRevealLlmPanelOnRightEdge = true;
+	bool bAutoRevealLlmPanelOnRightEdge = false;
 
 	// Right-edge distance that reveals the LLM prompt panel.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root", meta = (ClampMin = "0.0"))
@@ -59,6 +62,34 @@ public:
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UScenarioEditorToolbarWidget> ToolbarWidget;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UButton> SaveButton;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UTextBlock> SaveStatusText;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UScenarioEditorOutlinerWidget> ScenarioEditorOutlinerWidget;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UWidgetSwitcher> InspectorSwitcher;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UWidget> DetailInspectorPanel;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UWidget> LlmInspectorPanel;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UButton> DetailInspectorTabButton;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UButton> LlmInspectorTabButton;
+
+	// Optional active-state tab style source; WBP owns the color and padding values.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
+	TObjectPtr<UButton> InspectorActiveTabButtonStyleSource;
 
 	// Optional visibility wrapper for the Scenario Template sidebar.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
@@ -132,13 +163,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void SetLlmPanelVisible(bool bVisible);
 
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
+	void ShowInspectorTab(EScenarioEditorInspectorTab tab);
+
 	// Selects the Scenario Template sidebar panel shown by the root widget.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
-	void SetTemplateSidebarPanel(EScenarioTemplateSidebarPanel activePanel);
+	void SetTemplateSidebarPanel(EScenarioTemplateSidebarPanel activePanel, bool bSyncOutlinerSelection = true);
 
 	// Refreshes the read-only Scenario Template sidebar from the authoring draft.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void RefreshTemplateSidebarWidget();
+
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
+	void RefreshScenarioInspector();
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void HandleEditorSessionStarted(bool bLoadedExistingScenario);
@@ -175,14 +212,21 @@ private:
 	void HandleSnapPlacementToGridButtonClicked();
 
 	UFUNCTION()
-	void HandleTemplateSidebarPanelChanged(EScenarioTemplateSidebarPanel activePanel);
+	void HandleSaveButtonClicked();
+
+	UFUNCTION()
+	void HandleDetailInspectorTabClicked();
+
+	UFUNCTION()
+	void HandleLlmInspectorTabClicked();
+
+	UFUNCTION()
+	void HandleOutlinerItemSelected(FScenarioOutlinerItemViewModel item);
 
 	void BindEditorModeButtons();
 	void UnbindEditorModeButtons();
-	// Binds toolbar tab changes to the Scenario Template sidebar.
-	void BindTemplateSidebarToolbar();
-	// Releases toolbar tab bindings owned by the root widget.
-	void UnbindTemplateSidebarToolbar();
+	void BindSidebarControls();
+	void UnbindSidebarControls();
 	// Applies one template sidebar panel to the sidebar and records the synchronized value.
 	void ApplyTemplateSidebarPanel(EScenarioTemplateSidebarPanel activePanel);
 	class AScenarioEditorController* GetEditorController() const;
@@ -196,12 +240,19 @@ private:
 	UWidget* ResolveTemplateSidebarVisibilityTarget() const;
 	UWidget* ResolveAssetPaletteVisibilityTarget() const;
 	UWidget* ResolveLlmPanelVisibilityTarget() const;
+	UWidget* ResolveDetailInspectorVisibilityTarget() const;
+	void SetSaveStatusText(const FString& message) const;
+	void SyncOutlinerSelectionToPlaceable(const UScenarioPlaceableComponent* selectedPlaceable) const;
+	void HandleControllerSelectedPlaceableChanged(const FString& selectedInstanceId);
 	// Applies asset palette visibility without rebuilding it on every tick.
 	void SetAssetPaletteVisible(bool bVisible, bool bRebuildWhenShowing = false);
 	void SetPanelVisibility(UWidget* targetWidget, bool bVisible) const;
+	// Captures WBP-authored inactive inspector tab button styles.
+	void CacheInspectorTabButtonStyles();
+	// Applies the active inspector tab style without changing the selected tab model.
+	void ApplyInspectorTabVisualState();
 	// Checks whether the cursor is near enough to the bottom edge to reveal the asset palette.
 	bool ShouldRevealAssetPaletteFromMouseEdge() const;
-	bool ShouldRevealLlmPanelFromMouseEdge() const;
 	bool IsMouseOverWidget(const UWidget* targetWidget) const;
 
 	FDelegateHandle AutoStartCompletedHandle;
@@ -211,4 +262,13 @@ private:
 	bool bHasCachedViewMode = false;
 	bool bLastSeenPlacementSnapToGrid = false;
 	bool bHasCachedPlacementSnapToGrid = false;
+	EScenarioEditorInspectorTab ActiveInspectorTab = EScenarioEditorInspectorTab::Detail;
+	// WBP-authored Detail tab style before active-state override.
+	FButtonStyle DetailInspectorInactiveTabButtonStyle;
+	// WBP-authored LLM tab style before active-state override.
+	FButtonStyle LlmInspectorInactiveTabButtonStyle;
+	// DetailInspectorInactiveTabButtonStyle snapshot 생성 여부.
+	bool bHasDetailInspectorInactiveTabButtonStyle = false;
+	// LlmInspectorInactiveTabButtonStyle snapshot 생성 여부.
+	bool bHasLlmInspectorInactiveTabButtonStyle = false;
 };

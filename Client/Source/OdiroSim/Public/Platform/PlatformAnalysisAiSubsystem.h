@@ -37,6 +37,8 @@ class ODIROSIM_API UPlatformAnalysisAiSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
+	// Command line endpoint override를 적용한다.
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
 	FPlatformAnalysisAiCompletedNative OnAnalysisCompleted;

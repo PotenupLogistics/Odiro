@@ -5,12 +5,19 @@
 #include "Platform/Widget/StartupMenuWidget.h"
 
 #include "Engine/GameInstance.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/Paths.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 
 namespace
 {
+	// StartupMenu config section that owns persisted project picker options.
+	const TCHAR* StartupMenuProjectOpenConfigSection = TEXT("OdiroSim.StartupMenu.ProjectOpen");
+
+	// Persisted recent project path array key used by StartupMenu.
+	const TCHAR* StartupMenuRecentProjectPathsConfigKey = TEXT("RecentProjectPaths");
+
 	FString MakeMainMenuProjectModeTestRoot()
 	{
 		return FPaths::ConvertRelativePathToFull(FPaths::Combine(
@@ -18,6 +25,50 @@ namespace
 			TEXT("Automation/MainMenuProjectMode"),
 			FGuid::NewGuid().ToString(EGuidFormats::Digits)));
 	}
+
+	// Restores user recent-project config after tests that exercise real persistence.
+	struct FScopedStartupMenuRecentProjectConfigRestore
+	{
+		FScopedStartupMenuRecentProjectConfigRestore()
+		{
+			if (GConfig)
+			{
+				GConfig->GetArray(
+					StartupMenuProjectOpenConfigSection,
+					StartupMenuRecentProjectPathsConfigKey,
+					OriginalRecentProjectPaths,
+					GGameUserSettingsIni);
+			}
+		}
+
+		~FScopedStartupMenuRecentProjectConfigRestore()
+		{
+			if (!GConfig)
+			{
+				return;
+			}
+
+			if (OriginalRecentProjectPaths.IsEmpty())
+			{
+				GConfig->RemoveKey(
+					StartupMenuProjectOpenConfigSection,
+					StartupMenuRecentProjectPathsConfigKey,
+					GGameUserSettingsIni);
+			}
+			else
+			{
+				GConfig->SetArray(
+					StartupMenuProjectOpenConfigSection,
+					StartupMenuRecentProjectPathsConfigKey,
+					OriginalRecentProjectPaths,
+					GGameUserSettingsIni);
+			}
+			GConfig->Flush(false, GGameUserSettingsIni);
+		}
+
+		// Snapshot of the user's recent project config before the test mutates it.
+		TArray<FString> OriginalRecentProjectPaths;
+	};
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -78,6 +129,67 @@ bool FStartupMenuProjectModeSmokeTest::RunTest(const FString& parameters)
 	TestTrue(TEXT("demo policy snapshot exists"), FPaths::FileExists(FPaths::Combine(runPath, TEXT("snapshot/policy/action.py"))));
 
 	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FStartupMenuRecentProjectsManualAddTest,
+	"OdiroSim.StartupMenu.RecentProjects.ManualAdd",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FStartupMenuRecentProjectsManualAddTest::RunTest(const FString& parameters)
+{
+	const FScopedStartupMenuRecentProjectConfigRestore recentProjectConfigRestore;
+
+	UStartupMenuWidget* widget = NewObject<UStartupMenuWidget>();
+	UGameInstance* gameInstance = NewObject<UGameInstance>();
+	USimulatorLaunchSubsystem* subsystem = NewObject<USimulatorLaunchSubsystem>(gameInstance);
+	TestNotNull(TEXT("widget created"), widget);
+	TestNotNull(TEXT("game instance created"), gameInstance);
+	TestNotNull(TEXT("subsystem created"), subsystem);
+	if (!widget || !gameInstance || !subsystem)
+	{
+		return false;
+	}
+
+	const FString testRoot = MakeMainMenuProjectModeTestRoot();
+	const FString projectAPath = FPaths::Combine(testRoot, TEXT("ProjectA"));
+	const FString projectBPath = FPaths::Combine(testRoot, TEXT("ProjectB"));
+	const FString invalidProjectPath = FPaths::Combine(testRoot, TEXT("InvalidProject"));
+	IFileManager::Get().DeleteDirectory(*testRoot, false, true);
+
+	widget->SelectProjectPresets(TEXT("demo"), TEXT("full"), TEXT("demo"));
+	TArray<FString> diagnostics;
+
+	widget->SetProjectPathForPrototype(projectAPath);
+	TestTrue(TEXT("create project A"), widget->CreateSelectedProject(diagnostics, subsystem));
+	widget->SetProjectPathForPrototype(projectBPath);
+	TestTrue(TEXT("create project B"), widget->CreateSelectedProject(diagnostics, subsystem));
+
+	TestTrue(TEXT("manual add project A"), widget->AddRecentProjectForPrototype(projectAPath, diagnostics, subsystem));
+	TestTrue(TEXT("manual add project B"), widget->AddRecentProjectForPrototype(projectBPath, diagnostics, subsystem));
+	TestTrue(TEXT("manual add duplicate project A"), widget->AddRecentProjectForPrototype(projectAPath, diagnostics, subsystem));
+
+	const TArray<FString> recentProjectPaths = widget->GetRecentProjectPathsForPrototype();
+	TestEqual(TEXT("duplicate add keeps two recent projects"), recentProjectPaths.Num(), 2);
+	if (recentProjectPaths.Num() >= 2)
+	{
+		FString expectedProjectAPath = projectAPath;
+		FString expectedProjectBPath = projectBPath;
+		FPaths::NormalizeFilename(expectedProjectAPath);
+		FPaths::NormalizeFilename(expectedProjectBPath);
+		TestEqual(TEXT("duplicate project moves to newest slot"), recentProjectPaths[0], expectedProjectAPath);
+		TestEqual(TEXT("previous newest shifts to second slot"), recentProjectPaths[1], expectedProjectBPath);
+	}
+
+	diagnostics.Reset();
+	TestFalse(
+		TEXT("invalid project folder is not added"),
+		widget->AddRecentProjectForPrototype(invalidProjectPath, diagnostics, subsystem));
+	TestTrue(TEXT("invalid project reports diagnostics"), diagnostics.Num() > 0);
+	TestEqual(TEXT("invalid project does not change recent list"), widget->GetRecentProjectPathsForPrototype().Num(), 2);
+
+	IFileManager::Get().DeleteDirectory(*testRoot, false, true);
 	return true;
 }
 

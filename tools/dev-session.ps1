@@ -61,6 +61,10 @@ $options = Parse-DevArguments @args
 $repoRoot = Get-RepoRoot
 $agentsDevScript = Join-Path $repoRoot "Agents\tools\dev.ps1"
 $clientDev = Join-Path $repoRoot "Client\Task-Dev.bat"
+$analysisEndpointArg = "-ProjectRunAnalysisEndpointUrl=http://127.0.0.1:$($options.AgentsPort)/api/v2/analysis/run"
+if (-not ($options.EditorArgs | Where-Object { $_ -like "-ProjectRunAnalysisEndpointUrl=*" })) {
+    $options.EditorArgs += $analysisEndpointArg
+}
 
 if ($options.SkipAgents -and $options.SkipEditor) {
     throw "Nothing to run for the development session. Remove -SkipAgents or -SkipEditor."
@@ -72,9 +76,11 @@ if ($options.SkipEditor) {
 }
 
 $agentsProcess = $null
+Register-CancelProcessCleanup
 try {
     if (-not $options.SkipAgents) {
         $agentsProcess = & $agentsDevScript -Port $options.AgentsPort -Background -LogPrefix "dev" -NoReload:$options.NoAgentsReload
+        Register-ManagedProcess -Process $agentsProcess -Label "Agents API"
     }
 
     if (-not (Test-Path -LiteralPath $clientDev -PathType Leaf)) {
@@ -88,8 +94,6 @@ try {
     }
 }
 finally {
-    if ($agentsProcess -and -not $agentsProcess.HasExited) {
-        Write-Step "Stop Agents API pid $($agentsProcess.Id)"
-        Stop-ProcessTree -ProcessId $agentsProcess.Id
-    }
+    Stop-ManagedProcessTrees
+    Unregister-CancelProcessCleanup
 }

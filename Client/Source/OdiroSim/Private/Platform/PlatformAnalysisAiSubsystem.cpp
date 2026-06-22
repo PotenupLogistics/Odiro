@@ -6,8 +6,10 @@
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
+#include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -116,6 +118,187 @@ namespace
 		}
 	}
 
+	void AppendStringArraySection(
+		const TSharedPtr<FJsonObject>& RootObject,
+		const FString& FieldName,
+		const FString& Title,
+		TArray<FString>& Lines)
+	{
+		if (!RootObject.IsValid())
+		{
+			return;
+		}
+
+		const TSharedPtr<FJsonValue> ArrayValue = RootObject->TryGetField(FieldName);
+		if (!ArrayValue.IsValid() || ArrayValue->Type != EJson::Array)
+		{
+			return;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>& Values = ArrayValue->AsArray();
+		if (Values.IsEmpty())
+		{
+			return;
+		}
+
+		Lines.Add(TEXT(""));
+		Lines.Add(Title);
+		for (const TSharedPtr<FJsonValue>& Value : Values)
+		{
+			if (Value.IsValid() && Value->Type == EJson::String)
+			{
+				Lines.Add(FString::Printf(TEXT("- %s"), *Value->AsString()));
+			}
+		}
+	}
+
+	void AppendAnalysisV2Metrics(
+		const TSharedPtr<FJsonObject>& RootObject,
+		TArray<FString>& Lines)
+	{
+		TSharedPtr<FJsonObject> MetricsObject;
+		if (!RootObject.IsValid() || !TryGetObjectField(*RootObject, TEXT("metrics"), MetricsObject))
+		{
+			return;
+		}
+
+		const int32 StartLineCount = Lines.Num();
+		Lines.Add(TEXT(""));
+		Lines.Add(TEXT("Metrics"));
+		AppendNumberFieldLine(MetricsObject, TEXT("Success"), TEXT("success_count"), Lines);
+		AppendNumberFieldLine(MetricsObject, TEXT("Failure"), TEXT("failure_count"), Lines);
+		AppendNumberFieldLine(MetricsObject, TEXT("Collision"), TEXT("collision_count"), Lines);
+		AppendNumberFieldLine(MetricsObject, TEXT("Static Obstacle Collision"), TEXT("static_obstacle_collision_count"), Lines);
+		AppendNumberFieldLine(MetricsObject, TEXT("Pedestrian Collision"), TEXT("pedestrian_collision_count"), Lines);
+		AppendNumberFieldLine(MetricsObject, TEXT("Near Miss"), TEXT("near_miss_count"), Lines);
+		AppendNumberFieldLine(MetricsObject, TEXT("Repath"), TEXT("repath_count"), Lines);
+		AppendNumberFieldLine(MetricsObject, TEXT("Tip Over"), TEXT("robot_tip_over_count"), Lines);
+
+		if (Lines.Num() == StartLineCount + 2)
+		{
+			Lines.SetNum(StartLineCount);
+		}
+	}
+
+	void AppendAnalysisV2Recommendations(
+		const TSharedPtr<FJsonObject>& RootObject,
+		TArray<FString>& Lines)
+	{
+		if (!RootObject.IsValid())
+		{
+			return;
+		}
+
+		const TSharedPtr<FJsonValue> RecommendationsValue = RootObject->TryGetField(TEXT("recommendations"));
+		if (!RecommendationsValue.IsValid() || RecommendationsValue->Type != EJson::Array)
+		{
+			return;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>& Recommendations = RecommendationsValue->AsArray();
+		if (Recommendations.IsEmpty())
+		{
+			return;
+		}
+
+		Lines.Add(TEXT(""));
+		Lines.Add(TEXT("Recommendations"));
+		for (const TSharedPtr<FJsonValue>& RecommendationValue : Recommendations)
+		{
+			if (!RecommendationValue.IsValid() || RecommendationValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			const TSharedPtr<FJsonObject> Recommendation = RecommendationValue->AsObject();
+			if (!Recommendation.IsValid())
+			{
+				continue;
+			}
+
+			FString Title;
+			FString Target;
+			FString Priority;
+			FString Reason;
+			FString RecommendationText;
+			Recommendation->TryGetStringField(TEXT("title"), Title);
+			Recommendation->TryGetStringField(TEXT("target"), Target);
+			Recommendation->TryGetStringField(TEXT("priority"), Priority);
+			Recommendation->TryGetStringField(TEXT("reason"), Reason);
+			Recommendation->TryGetStringField(TEXT("recommendation"), RecommendationText);
+
+			TArray<FString> Tags;
+			if (!Priority.IsEmpty())
+			{
+				Tags.Add(Priority);
+			}
+			if (!Target.IsEmpty())
+			{
+				Tags.Add(Target);
+			}
+
+			const FString TagText = Tags.IsEmpty() ? FString() : FString::Printf(TEXT("[%s] "), *FString::Join(Tags, TEXT(", ")));
+			const FString DisplayTitle = Title.IsEmpty() ? FString(TEXT("Recommendation")) : Title;
+			Lines.Add(FString::Printf(TEXT("- %s%s"), *TagText, *DisplayTitle));
+			if (!Reason.IsEmpty())
+			{
+				Lines.Add(FString::Printf(TEXT("  Reason: %s"), *Reason));
+			}
+			if (!RecommendationText.IsEmpty())
+			{
+				Lines.Add(FString::Printf(TEXT("  Recommendation: %s"), *RecommendationText));
+			}
+		}
+	}
+
+	bool IsAnalysisV2Response(const TSharedPtr<FJsonObject>& RootObject)
+	{
+		if (!RootObject.IsValid())
+		{
+			return false;
+		}
+
+		TSharedPtr<FJsonObject> SummaryObject;
+		return RootObject->HasField(TEXT("analysis_text"))
+			|| RootObject->HasField(TEXT("review_id"))
+			|| RootObject->HasField(TEXT("recommendation_type"))
+			|| RootObject->HasField(TEXT("metrics"))
+			|| TryGetObjectField(*RootObject, TEXT("summary"), SummaryObject);
+	}
+
+	FString BuildAnalysisV2DisplayText(const TSharedPtr<FJsonObject>& RootObject)
+	{
+		TArray<FString> Lines;
+
+		FString AnalysisText;
+		if (RootObject->TryGetStringField(TEXT("analysis_text"), AnalysisText) && !AnalysisText.IsEmpty())
+		{
+			Lines.Add(AnalysisText);
+		}
+		else
+		{
+			Lines.Add(TEXT("AI Analysis"));
+			AppendStringFieldLine(RootObject, TEXT("Review Id"), TEXT("review_id"), Lines);
+			AppendStringFieldLine(RootObject, TEXT("Run Id"), TEXT("run_id"), Lines);
+			AppendStringFieldLine(RootObject, TEXT("Mode"), TEXT("analysis_mode"), Lines);
+			AppendStringFieldLine(RootObject, TEXT("Recommendation Type"), TEXT("recommendation_type"), Lines);
+
+			TSharedPtr<FJsonObject> SummaryObject;
+			if (TryGetObjectField(*RootObject, TEXT("summary"), SummaryObject))
+			{
+				Lines.Add(TEXT(""));
+				Lines.Add(TEXT("Summary"));
+				AppendStringFieldLine(SummaryObject, TEXT("Judgement"), TEXT("overall_judgement"), Lines);
+				AppendStringFieldLine(SummaryObject, TEXT("Message"), TEXT("message"), Lines);
+			}
+		}
+
+		AppendAnalysisV2Metrics(RootObject, Lines);
+		AppendAnalysisV2Recommendations(RootObject, Lines);
+		AppendStringArraySection(RootObject, TEXT("warnings"), TEXT("Warnings"), Lines);
+		return JoinLines(Lines);
+	}
+
 	void AppendRecommendations(
 		const TSharedPtr<FJsonObject>& RootObject,
 		const FString& FieldName,
@@ -172,32 +355,7 @@ namespace
 
 	void AppendWarnings(const TSharedPtr<FJsonObject>& RootObject, TArray<FString>& Lines)
 	{
-		if (!RootObject.IsValid())
-		{
-			return;
-		}
-
-		const TSharedPtr<FJsonValue> WarningsValue = RootObject->TryGetField(TEXT("llmWarnings"));
-		if (!WarningsValue.IsValid() || WarningsValue->Type != EJson::Array)
-		{
-			return;
-		}
-
-		const TArray<TSharedPtr<FJsonValue>>& Warnings = WarningsValue->AsArray();
-		if (Warnings.IsEmpty())
-		{
-			return;
-		}
-
-		Lines.Add(TEXT(""));
-		Lines.Add(TEXT("Warnings"));
-		for (const TSharedPtr<FJsonValue>& WarningValue : Warnings)
-		{
-			if (WarningValue.IsValid() && WarningValue->Type == EJson::String)
-			{
-				Lines.Add(FString::Printf(TEXT("- %s"), *WarningValue->AsString()));
-			}
-		}
+		AppendStringArraySection(RootObject, TEXT("llmWarnings"), TEXT("Warnings"), Lines);
 	}
 
 	FPlatformAnalysisAiResponse MakeResponse(
@@ -214,6 +372,21 @@ namespace
 		Response.ErrorMessage = ErrorMessage;
 		Response.ResponseBody = ResponseBody;
 		return Response;
+	}
+}
+
+void UPlatformAnalysisAiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+
+	FString EndpointUrl;
+	if (FParse::Value(FCommandLine::Get(), TEXT("ProjectRunAnalysisEndpointUrl="), EndpointUrl))
+	{
+		EndpointUrl = EndpointUrl.TrimStartAndEnd();
+		if (!EndpointUrl.IsEmpty())
+		{
+			ProjectRunAnalysisEndpointUrl = EndpointUrl;
+		}
 	}
 }
 
@@ -360,6 +533,11 @@ FString UPlatformAnalysisAiSubsystem::BuildDisplayTextFromAnalysisResponse(
 		return TruncateText(responseBody, RawResponsePreviewCharacterLimit);
 	}
 
+	if (IsAnalysisV2Response(RootObject))
+	{
+		return BuildAnalysisV2DisplayText(RootObject);
+	}
+
 	TArray<FString> Lines;
 	Lines.Add(TEXT("AI Analysis"));
 	AppendStringFieldLine(RootObject, TEXT("Analysis Id"), TEXT("analysisId"), Lines);
@@ -414,6 +592,13 @@ void UPlatformAnalysisAiSubsystem::HandleAnalysisResponse(
 	const FString ResponseBody = httpResponse.IsValid() ? httpResponse->GetContentAsString() : FString();
 	if (!bWasSuccessful)
 	{
+		UE_LOG(
+			LogPlatformAnalysisAi,
+			Warning,
+			TEXT("AI analysis HTTP request failed | Url: %s, Code: %d, Body: %s"),
+			httpRequest.IsValid() ? *httpRequest->GetURL() : TEXT("<invalid>"),
+			ResponseCode,
+			*TruncateText(ResponseBody, RawResponsePreviewCharacterLimit));
 		BroadcastFailure(ResponseCode, TEXT("AI analysis HTTP request failed."), ResponseBody);
 		return;
 	}
@@ -421,6 +606,13 @@ void UPlatformAnalysisAiSubsystem::HandleAnalysisResponse(
 	if (ResponseCode < 200 || ResponseCode >= 300)
 	{
 		const FString Message = FString::Printf(TEXT("AI analysis HTTP error: %d"), ResponseCode);
+		UE_LOG(
+			LogPlatformAnalysisAi,
+			Warning,
+			TEXT("AI analysis HTTP error | Url: %s, Code: %d, Body: %s"),
+			httpRequest.IsValid() ? *httpRequest->GetURL() : TEXT("<invalid>"),
+			ResponseCode,
+			*TruncateText(ResponseBody, RawResponsePreviewCharacterLimit));
 		BroadcastFailure(ResponseCode, Message, ResponseBody);
 		return;
 	}

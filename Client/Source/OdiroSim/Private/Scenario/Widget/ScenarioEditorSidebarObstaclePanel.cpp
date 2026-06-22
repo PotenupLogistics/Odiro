@@ -5,6 +5,7 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
+#include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Shared/ScenarioCoreTypes.h"
@@ -12,96 +13,11 @@
 
 namespace
 {
-	constexpr float ObstaclePanelBlockPadding = 10.0f;
-
 	FString JoinObstaclePanelDiagnostics(const TArray<FString>& diagnostics)
 	{
 		return diagnostics.IsEmpty()
 			? FString(TEXT("Unknown Obstacle edit failure."))
 			: FString::Join(diagnostics, TEXT("\n"));
-	}
-
-	void AddObstaclePanelWidgetToBox(
-		UVerticalBox* box,
-		UWidget* widget,
-		const FMargin& padding = FMargin())
-	{
-		if (!box || !widget)
-		{
-			return;
-		}
-
-		if (UVerticalBoxSlot* slot = box->AddChildToVerticalBox(widget))
-		{
-			slot->SetPadding(padding);
-			slot->SetHorizontalAlignment(HAlign_Fill);
-		}
-	}
-
-	UVerticalBox* AddObstaclePanelBlockWidget(
-		UWidgetTree* widgetTree,
-		UVerticalBox* parent,
-		TObjectPtr<UScenarioEditorSidebarBlockWidget>& blockWidget,
-		const TCHAR* widgetName,
-		const FString& name,
-		const FString& path,
-		const FString& badge,
-		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalog,
-		const bool bHighlighted = false,
-		const bool bNested = false,
-		const bool bExpanded = true,
-		const bool bShowNormalOutline = true)
-	{
-		if (!widgetTree || !parent)
-		{
-			return nullptr;
-		}
-
-		blockWidget = widgetTree->ConstructWidget<UScenarioEditorSidebarBlockWidget>(
-			UScenarioEditorSidebarBlockWidget::StaticClass(),
-			FName(widgetName));
-		if (!blockWidget)
-		{
-			return nullptr;
-		}
-
-		blockWidget->SetTextStyleCatalog(catalog);
-		blockWidget->SetBlockMetadata(name, path, badge);
-		blockWidget->SetSelected(bHighlighted);
-		blockWidget->SetNested(bNested);
-		blockWidget->SetExpanded(bExpanded);
-		blockWidget->SetShowNormalOutline(bShowNormalOutline);
-		AddObstaclePanelWidgetToBox(
-			parent,
-			blockWidget.Get(),
-			FMargin(0.0f, 0.0f, 0.0f, ObstaclePanelBlockPadding));
-		return blockWidget->GetBodyBox();
-	}
-
-	void AddObstaclePanelFieldRow(
-		UWidgetTree* widgetTree,
-		UVerticalBox* parent,
-		TObjectPtr<UScenarioEditorSidebarFieldRow>& fieldRow,
-		const TCHAR* widgetName)
-	{
-		if (!widgetTree || !parent)
-		{
-			return;
-		}
-
-		fieldRow = widgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
-			UScenarioEditorSidebarFieldRow::StaticClass(),
-			FName(widgetName));
-		if (!fieldRow)
-		{
-			return;
-		}
-
-		if (UVerticalBoxSlot* slot = parent->AddChildToVerticalBox(fieldRow.Get()))
-		{
-			slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
-			slot->SetHorizontalAlignment(HAlign_Fill);
-		}
 	}
 
 	FScenarioTemplateNumberValue MakeUnsetNumberValue()
@@ -115,16 +31,13 @@ namespace
 	}
 }
 
-TSharedRef<SWidget> UScenarioEditorSidebarObstaclePanel::RebuildWidget()
-{
-	Initialize();
-	BuildDefaultWidgetTree();
-	return Super::RebuildWidget();
-}
-
 void UScenarioEditorSidebarObstaclePanel::NativeConstruct()
 {
 	Super::NativeConstruct();
+	if (WidgetClassCatalog.IsNull())
+	{
+		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
+	}
 	BindFieldRows();
 	ConfigureFieldRows();
 	RefreshFromDraft();
@@ -141,6 +54,14 @@ void UScenarioEditorSidebarObstaclePanel::SetTextStyleCatalog(
 {
 	TextStyleCatalog = catalog;
 	ApplyTextStyles();
+}
+
+void UScenarioEditorSidebarObstaclePanel::SetWidgetClassCatalog(
+	TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> catalog)
+{
+	WidgetClassCatalog = catalog.IsNull()
+		? UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference()
+		: catalog;
 }
 
 void UScenarioEditorSidebarObstaclePanel::RefreshFromDraft()
@@ -264,63 +185,6 @@ void UScenarioEditorSidebarObstaclePanel::HandlePlacementAddRequested(const int3
 void UScenarioEditorSidebarObstaclePanel::HandlePlacementRemoveRequested(const int32 placementIndex)
 {
 	RemovePlacementAt(placementIndex);
-}
-
-void UScenarioEditorSidebarObstaclePanel::BuildDefaultWidgetTree()
-{
-	if (!WidgetTree || WidgetTree->RootWidget)
-	{
-		return;
-	}
-
-	UVerticalBox* rootBox = WidgetTree->ConstructWidget<UVerticalBox>(
-		UVerticalBox::StaticClass(),
-		TEXT("GeneratedObstaclePanelRoot"));
-	if (!rootBox)
-	{
-		return;
-	}
-
-	WidgetTree->RootWidget = rootBox;
-
-	UVerticalBox* obstacleBody = AddObstaclePanelBlockWidget(
-		WidgetTree,
-		rootBox,
-		ObstacleBlockWidget,
-		TEXT("ObstacleBlockWidget"),
-		TEXT("obstacles"),
-		TEXT("root.obstacles"),
-		TEXT("Template"),
-		TextStyleCatalog,
-		true);
-	UVerticalBox* minClearWidthBody = AddObstaclePanelBlockWidget(
-		WidgetTree,
-		obstacleBody,
-		MinClearWidthBlockWidget,
-		TEXT("MinClearWidthBlockWidget"),
-		TEXT("min_clear_width_m"),
-		TEXT("root.obstacles.min_clear_width_m"),
-		TEXT("Property"),
-		TextStyleCatalog,
-		false,
-		true,
-		true,
-		false);
-	AddObstaclePanelFieldRow(WidgetTree, minClearWidthBody, MinClearWidthFieldRow, TEXT("MinClearWidthFieldRow"));
-
-	AddObstaclePanelBlockWidget(
-		WidgetTree,
-		obstacleBody,
-		PlacementsBlockWidget,
-		TEXT("PlacementsBlockWidget"),
-		TEXT("placements"),
-		TEXT("root.obstacles.placements[]"),
-		TEXT("Property"),
-		TextStyleCatalog,
-		false,
-		true,
-		true,
-		false);
 }
 
 void UScenarioEditorSidebarObstaclePanel::BindFieldRows()
@@ -451,13 +315,11 @@ void UScenarioEditorSidebarObstaclePanel::ApplyTextStyles()
 		}
 	}
 
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
-		DiagnosticsTextBlock.Get(),
-		TextStyleCatalog,
-		EWidgetTextStyleRole::Value);
-	if (WidgetTree)
+	if (DiagnosticsTextBlock)
 	{
-		UWidgetTextStyleCatalog::ApplyWidgetTreeTextStyles(WidgetTree, TextStyleCatalog);
+		DiagnosticsTextBlock->SetVisibility(DiagnosticsTextBlock->GetText().IsEmpty()
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
 	}
 }
 
@@ -519,9 +381,10 @@ UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarObstaclePanel::AddFieldRow
 
 	UScenarioEditorSidebarFieldRow* fieldRow =
 		WidgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
-			UScenarioEditorSidebarFieldRow::StaticClass());
+			UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(WidgetClassCatalog));
 	if (!fieldRow)
 	{
+		SetDiagnosticsText(TEXT("Scenario editor field row widget class is missing."));
 		return nullptr;
 	}
 
@@ -547,9 +410,10 @@ UScenarioEditorSidebarObstaclePlacementWidget* UScenarioEditorSidebarObstaclePan
 
 	UScenarioEditorSidebarObstaclePlacementWidget* placementWidget =
 		WidgetTree->ConstructWidget<UScenarioEditorSidebarObstaclePlacementWidget>(
-			UScenarioEditorSidebarObstaclePlacementWidget::StaticClass());
+			UScenarioEditorWidgetClassCatalog::ResolveSidebarObstaclePlacementWidgetClass(WidgetClassCatalog));
 	if (!placementWidget)
 	{
+		SetDiagnosticsText(TEXT("Scenario editor obstacle placement widget class is missing."));
 		return nullptr;
 	}
 

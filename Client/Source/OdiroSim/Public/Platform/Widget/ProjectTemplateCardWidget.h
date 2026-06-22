@@ -24,7 +24,7 @@ public:
 	virtual FReply NativeOnPreviewMouseButtonDown(const FGeometry& inGeometry, const FPointerEvent& inMouseEvent) override;
 
 	// Item id와 표시 이름을 card UI에 반영한다.
-	void InitializeCard(const FString& itemId, const FString& displayName);
+	void InitializeCard(const FString& itemId, const FString& displayName, const FString& subtitle = FString());
 
 	// 선택 상태를 card UI state에 반영한다.
 	void SetSelected(bool bInSelected);
@@ -74,6 +74,10 @@ private:
 	// Item 표시 이름 text. Visual layout은 WBP가 소유한다.
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> CardNameLabel;
+
+	// Item 보조 설명 text. Visual layout은 WBP가 소유한다.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CardSubtitleLabel;
 
 	// 기본 card 배경색. WBP default에서 조정한다.
 	UPROPERTY(EditDefaultsOnly, Category = "ProjectTemplateCard|Style")

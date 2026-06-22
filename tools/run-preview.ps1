@@ -62,6 +62,10 @@ $repoRoot = Get-RepoRoot
 $agentsRunScript = Join-Path $repoRoot "Agents\tools\run.ps1"
 $bridgeRunScript = Join-Path $repoRoot "Bridge\tools\run.ps1"
 $clientPreview = Join-Path $repoRoot "Client\Task-RunPreview.bat"
+$analysisEndpointArg = "-ProjectRunAnalysisEndpointUrl=http://127.0.0.1:$($options.AgentsPort)/api/v2/analysis/run"
+if (-not ($options.PreviewArgs | Where-Object { $_ -like "-ProjectRunAnalysisEndpointUrl=*" })) {
+    $options.PreviewArgs += $analysisEndpointArg
+}
 
 # Waits until the Bridge host reports its listening endpoint.
 function Wait-BridgeService {
@@ -98,15 +102,15 @@ if ($options.SkipAgents -and $options.SkipBridge -and $options.SkipClient) {
 if ($options.SkipClient) {
     if (-not $options.SkipAgents -and -not $options.SkipBridge) {
         $agentsProcess = $null
+        Register-CancelProcessCleanup
         try {
             $agentsProcess = & $agentsRunScript -Port $options.AgentsPort -Background -LogPrefix "run"
+            Register-ManagedProcess -Process $agentsProcess -Label "Agents API"
             & $bridgeRunScript
         }
         finally {
-            if ($agentsProcess -and -not $agentsProcess.HasExited) {
-                Write-Step "Stop Agents API pid $($agentsProcess.Id)"
-                Stop-ProcessTree -ProcessId $agentsProcess.Id
-            }
+            Stop-ManagedProcessTrees
+            Unregister-CancelProcessCleanup
         }
     }
     elseif (-not $options.SkipAgents) {
@@ -120,9 +124,11 @@ if ($options.SkipClient) {
 
 $agentsProcess = $null
 $bridgeProcess = $null
+Register-CancelProcessCleanup
 try {
     if (-not $options.SkipAgents) {
         $agentsProcess = & $agentsRunScript -Port $options.AgentsPort -Background -LogPrefix "run"
+        Register-ManagedProcess -Process $agentsProcess -Label "Agents API"
     }
 
     if (-not $options.SkipBridge) {
@@ -144,6 +150,7 @@ try {
             -RedirectStandardOutput $bridgeStdoutLog `
             -RedirectStandardError $bridgeStderrLog `
             -PassThru
+        Register-ManagedProcess -Process $bridgeProcess -Label "Bridge service"
 
         Wait-BridgeService -Process $bridgeProcess -StdoutLog $bridgeStdoutLog -StderrLog $bridgeStderrLog
         Write-Step "Bridge logs: $bridgeStdoutLog, $bridgeStderrLog"
@@ -160,13 +167,6 @@ try {
     }
 }
 finally {
-    if ($bridgeProcess -and -not $bridgeProcess.HasExited) {
-        Write-Step "Stop Bridge service pid $($bridgeProcess.Id)"
-        Stop-ProcessTree -ProcessId $bridgeProcess.Id
-    }
-
-    if ($agentsProcess -and -not $agentsProcess.HasExited) {
-        Write-Step "Stop Agents API pid $($agentsProcess.Id)"
-        Stop-ProcessTree -ProcessId $agentsProcess.Id
-    }
+    Stop-ManagedProcessTrees
+    Unregister-CancelProcessCleanup
 }

@@ -133,16 +133,54 @@ bool FPlatformAnalysisAiDisplayTextTest::RunTest(const FString& Parameters)
 	(void)Parameters;
 
 	const FString ResponseJson = TEXT(R"({
+		"review_id": "0002",
+		"run_id": "000005",
+		"analysis_mode": "llm",
+		"summary": {
+			"overall_judgement": "change_recommended",
+			"message": "환경 또는 장애물 배치 검토가 필요합니다."
+		},
+		"metrics": {
+			"success_count": 1,
+			"failure_count": 3,
+			"collision_count": 152,
+			"static_obstacle_collision_count": 152,
+			"pedestrian_collision_count": 0,
+			"near_miss_count": 1,
+			"repath_count": 0,
+			"robot_tip_over_count": 0
+		},
+		"recommendation_type": "environment_review",
+		"recommendations": [
+			{
+				"id": "REC-001",
+				"target": "environment",
+				"priority": "high",
+				"title": "정적 장애물 배치와 통로 폭 검토",
+				"reason": "정적 장애물 충돌이 반복되었습니다.",
+				"recommendation": "최소 통로 폭을 늘린 환경 수정 후보로 재실행하세요."
+			}
+		],
+		"analysis_text": "[결과 요약]\n총 4개 episode 중 성공 1회, 실패 3회가 확인되었습니다.",
+		"warnings": ["skipped large file: runs/000005/episodes/000001/actions.jsonl"]
+	})");
+
+	TArray<FString> Diagnostics;
+	const FString DisplayText = UPlatformAnalysisAiSubsystem::BuildDisplayTextFromAnalysisResponse(
+		ResponseJson,
+		Diagnostics);
+	TestEqual(TEXT("diagnostics"), Diagnostics.Num(), 0);
+	TestTrue(TEXT("contains analysis text"), DisplayText.Contains(TEXT("총 4개 episode")));
+	TestTrue(TEXT("contains metric"), DisplayText.Contains(TEXT("Collision")));
+	TestTrue(TEXT("contains v2 recommendation title"), DisplayText.Contains(TEXT("정적 장애물 배치")));
+	TestTrue(TEXT("contains v2 recommendation text"), DisplayText.Contains(TEXT("최소 통로 폭")));
+	TestTrue(TEXT("contains v2 warning"), DisplayText.Contains(TEXT("skipped large file")));
+
+	const FString LegacyResponseJson = TEXT(R"({
 		"schemaVersion": "1.0.0",
 		"analysisId": "analysis-001",
 		"generationMethod": "fallback_rules",
 		"summary": "fallback 규칙 기반으로 추천을 생성했습니다.",
-		"episodeStatistics": {
-			"outcome": "Failure",
-			"terminal_reason": "DeliveryBotSimulationFailed",
-			"duration_s": 38.6,
-			"score": -7.0
-		},
 		"botSetupRecommendations": [
 			{
 				"param": "stop_distance_m",
@@ -151,27 +189,17 @@ bool FPlatformAnalysisAiDisplayTextTest::RunTest(const FString& Parameters)
 				"reason": "near miss 때문에 정지 거리를 늘립니다."
 			}
 		],
-		"episodeSetupRecommendations": [],
-		"policyServerRecommendations": [
-			{
-				"param": "force_action_override",
-				"current": "Repath",
-				"suggested": "None",
-				"reason": "운영 회차에서 강제 액션을 해제합니다."
-			}
-		],
 		"llmWarnings": ["fallback_only=True"]
 	})");
 
-	TArray<FString> Diagnostics;
-	const FString DisplayText = UPlatformAnalysisAiSubsystem::BuildDisplayTextFromAnalysisResponse(
-		ResponseJson,
-		Diagnostics);
-	TestEqual(TEXT("diagnostics"), Diagnostics.Num(), 0);
-	TestTrue(TEXT("contains summary"), DisplayText.Contains(TEXT("fallback 규칙 기반")));
-	TestTrue(TEXT("contains bot recommendation"), DisplayText.Contains(TEXT("stop_distance_m")));
-	TestTrue(TEXT("contains policy recommendation"), DisplayText.Contains(TEXT("force_action_override")));
-	TestTrue(TEXT("contains warning"), DisplayText.Contains(TEXT("fallback_only=True")));
+	TArray<FString> LegacyDiagnostics;
+	const FString LegacyDisplayText = UPlatformAnalysisAiSubsystem::BuildDisplayTextFromAnalysisResponse(
+		LegacyResponseJson,
+		LegacyDiagnostics);
+	TestEqual(TEXT("legacy diagnostics"), LegacyDiagnostics.Num(), 0);
+	TestTrue(TEXT("legacy contains summary"), LegacyDisplayText.Contains(TEXT("fallback 규칙 기반")));
+	TestTrue(TEXT("legacy contains recommendation"), LegacyDisplayText.Contains(TEXT("stop_distance_m")));
+	TestTrue(TEXT("legacy contains warning"), LegacyDisplayText.Contains(TEXT("fallback_only=True")));
 
 	return true;
 }

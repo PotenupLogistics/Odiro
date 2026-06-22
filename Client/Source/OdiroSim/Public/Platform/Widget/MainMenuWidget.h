@@ -12,13 +12,19 @@ class UScenarioEditorLaunchSubsystem;
 class UExperimentResultIterationButton;
 class UFileListItemWidget;
 class UPlatformAnalysisAiSubsystem;
+class UProjectExperimentRunRowWidget;
+class UProjectWorkspaceTabWidget;
 class UProjectSessionSubsystem;
 class UScenarioEditorRootWidget;
 class USimulatorLaunchSubsystem;
 class UScrollBox;
 class UTextBlock;
+class UVerticalBox;
 class UWidget;
 class UWidgetSwitcher;
+class UWrapBox;
+enum class EProjectRunAiSuggestionSeverity : uint8;
+struct FProjectRunAiSuggestionDashboardItem;
 struct FPlatformAnalysisAiResponse;
 struct FSimulationSetup;
 
@@ -80,6 +86,8 @@ protected:
 	void HandleExperimentConfigEditRequested(UFileListItemWidget* itemWidget);
 	void HandleExperimentConfigPlayRequested(UFileListItemWidget* itemWidget);
 	void HandleExperimentResultDetailsRequested(UFileListItemWidget* itemWidget);
+	// Project experiment run row의 분석 요청을 상세 탭 열기 흐름으로 연결한다.
+	void HandleProjectExperimentRunAnalyzeRequested(UProjectExperimentRunRowWidget* rowWidget);
 	void HandleExperimentResultIterationButtonClicked(UExperimentResultIterationButton* buttonWidget);
 
 	UFUNCTION()
@@ -136,6 +144,10 @@ protected:
 	UFUNCTION()
 	void HandleSendToAiClicked();
 
+	// Project workspace에서 StartupMap으로 돌아간다.
+	UFUNCTION()
+	void HandleProjectHomeClicked();
+
 	// Project workspace의 시나리오 편집 tab을 표시한다.
 	UFUNCTION()
 	void HandleShowProjectScenarioTabClicked();
@@ -144,19 +156,36 @@ protected:
 	UFUNCTION()
 	void HandleShowProjectExperimentStatusTabClicked();
 
-	// 새 실험 설정 editor를 연다.
+	// Project experiment 설정 tab을 연다.
 	UFUNCTION()
-	void HandleAddExperimentClicked();
+	void HandleConfigureExperimentClicked();
+
+	// Project experiment를 현재 저장된 설정으로 바로 실행한다.
+	UFUNCTION()
+	void HandleRunExperimentClicked();
 
 	// Project experiment 설정을 저장하고 simulator 실행을 시작한다.
 	UFUNCTION()
 	void HandleCreateExperimentFromConfigClicked();
+
+	// Project experiment 설정을 저장하고 실험 현황으로 돌아간다.
+	UFUNCTION()
+	void HandleSaveExperimentConfigClicked();
 
 	// Project experiment 설정 패널을 닫는다.
 	UFUNCTION()
 	void HandleCancelExperimentConfigClicked();
 
 private:
+	// Project workspace content switcher가 표시하는 logical tab.
+	enum class EProjectWorkspaceTabType : uint8
+	{
+		ScenarioEdit,
+		ExperimentStatus,
+		ExperimentConfig,
+		ExperimentResultDetail,
+	};
+
 	bool ValidateRequiredBindings() const;
 	void BindControls();
 	// WBP_MainMenu가 소유한 project mode control을 C++ event handler에 연결한다.
@@ -165,15 +194,25 @@ private:
 	// Project workspace 화면을 표시한다.
 	void ShowProjectWorkspaceScreen();
 	// Project workspace 내부 tab을 표시한다.
-	void ShowProjectWorkspaceTab(int32 tabIndex);
-	// 현재 Project workspace tab에 맞춰 tab button 색을 갱신한다.
-	void ApplyProjectWorkspaceTabStyle(int32 activeTabIndex);
+	void ShowProjectWorkspaceTab(EProjectWorkspaceTabType tabType);
+	// Project workspace 임시 tab을 열고 해당 tab으로 이동한다.
+	void OpenTransientProjectTab(EProjectWorkspaceTabType tabType, const FText& label);
+	// Project workspace 임시 tab을 닫고 필요하면 실험 현황으로 복귀한다.
+	void CloseTransientProjectTab(EProjectWorkspaceTabType tabType);
+	// 현재 Project workspace tab에 맞춰 tab widget state를 갱신한다.
+	void ApplyProjectWorkspaceTabState(EProjectWorkspaceTabType activeTabType);
+	void HandleProjectWorkspaceTabSelected(UProjectWorkspaceTabWidget* tabWidget);
+	void HandleProjectWorkspaceTabCloseRequested(UProjectWorkspaceTabWidget* tabWidget);
 	void SyncComboBoxSelection(UComboBoxString* targetComboBox, const FString& selectedItem);
 	void LoadSelectedSetup();
 	// 선택된 user project의 현재 run 선택을 최신 상태로 맞춘다.
 	void RefreshProjectRunSelection();
 	// Project experiment 설정 패널 표시 상태를 바꾼다.
 	void ShowProjectExperimentConfigPanel(bool bVisible);
+	// Project experiment run 생성을 검증하고 simulator 실행을 시작한다.
+	bool StartProjectExperimentRun(
+		TArray<FString>& outDiagnostics,
+		FString& outRunId);
 	// user project setting.json 값을 Project experiment 설정 패널에 채운다.
 	bool LoadProjectExperimentSettingIntoPanel(TArray<FString>& outDiagnostics);
 	// Project experiment 설정 패널 값을 user project setting.json에 저장한다.
@@ -185,6 +224,21 @@ private:
 	void RefreshExperimentConfigList();
 	void RefreshExperimentResultList();
 	void RefreshExperimentResultIterationList();
+	// 선택된 project run의 summary/review JSON을 분석 상세 dashboard에 반영한다.
+	void RefreshExperimentResultDetailPanel();
+	// Project run metric card WBP의 named text child에 값을 주입한다.
+	void SetProjectRunMetricCardText(UUserWidget* cardWidget, const FString& label, const FString& value, const FString& unit) const;
+	// Episode replay card WBP의 named child 상태를 갱신한다.
+	void ConfigureProjectEpisodeReplayCard(
+		UUserWidget* cardWidget,
+		const FString& episodeLabel,
+		const FString& durationLabel,
+		bool bSuccess,
+		bool bHasPreviewImage) const;
+	// AI suggestion row WBP의 named child 상태를 갱신한다.
+	void ConfigureProjectAiSuggestionRow(
+		UUserWidget* rowWidget,
+		const FProjectRunAiSuggestionDashboardItem& suggestion) const;
 	void ApplyNewSetupDefaults(const FString& setupPath);
 	void SetExperimentConfigDetailVisible(bool bVisible);
 	void SetExperimentResultDetailVisible(bool bVisible);
@@ -203,11 +257,19 @@ private:
 		FSimulationSetup& outSetup,
 		TArray<FString>& outDiagnostics) const;
 	TSubclassOf<UFileListItemWidget> ResolveFileListItemWidgetClass() const;
+	// Project experiment run row WBP class를 반환한다.
+	TSubclassOf<UProjectExperimentRunRowWidget> ResolveProjectExperimentRunRowWidgetClass() const;
+	// Episode replay card WBP class를 반환한다.
+	TSubclassOf<UUserWidget> ResolveProjectEpisodeReplayCardWidgetClass() const;
+	// AI suggestion row WBP class를 반환한다.
+	TSubclassOf<UUserWidget> ResolveProjectAiSuggestionRowWidgetClass() const;
 	void HandleRunInfoChanged(const struct FSimulatorRunInfo& runInfo);
 	void HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response);
 	void UpdateStatusText(const FString& extraMessage = FString());
 	void UpdateReportAndLogText();
 	void SetDiagnosticsText(const FString& message);
+	// Project result dashboard의 동적 카드/row widget을 제거한다.
+	void ClearExperimentResultDashboardWidgets();
 	// Project path가 입력된 동안 project mode가 legacy UI 흐름보다 우선한다.
 	bool IsProjectModeSelected() const;
 	// 경로가 현재 선택된 user project의 run directory인지 확인한다.
@@ -414,21 +476,45 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> SendToAiButton;
 
-	// Project workspace 시나리오 편집 tab button.
+	// Project workspace에서 StartupMap으로 돌아가는 home button.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> ScenarioEditTabButton;
+	TObjectPtr<UButton> HomeButton;
 
-	// Project workspace 실험 현황 tab button.
+	// Project workspace 시나리오 tab widget.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> ExperimentStatusTabButton;
+	TObjectPtr<UProjectWorkspaceTabWidget> ScenarioEditTab;
 
-	// 새 실험 run snapshot을 추가하는 button.
+	// Project workspace 실험 현황 tab widget.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> AddExperimentButton;
+	TObjectPtr<UProjectWorkspaceTabWidget> ExperimentStatusTab;
+
+	// Project workspace 실험 설정 임시 tab widget.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UProjectWorkspaceTabWidget> ExperimentConfigTab;
+
+	// Project workspace 분석 상세 임시 tab widget.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UProjectWorkspaceTabWidget> ExperimentResultDetailTab;
+
+	// Project experiment 설정 tab을 여는 button.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> ConfigureExperimentButton;
+
+	// Project experiment를 현재 설정으로 바로 실행하는 button.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> RunExperimentButton;
+
+	// Project experiment run 현황 switcher page. UI layout은 WBP_MainMenu가 소유한다.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ProjectExperimentStatusPanel;
 
 	// Project experiment 설정 editor panel. UI layout은 WBP_MainMenu가 소유한다.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> ProjectExperimentConfigPanel;
+
+	// Project experiment result 분석 상세 switcher page. UI layout은 WBP_MainMenu가 소유한다.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ProjectExperimentResultDetailPanel;
 
 	// Project experiment target map id 입력 control.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -450,6 +536,10 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> CreateExperimentConfigButton;
 
+	// Project experiment 설정만 저장하는 button.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> SaveExperimentConfigButton;
+
 	// Project experiment 설정 editor를 닫는 button.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> CancelExperimentConfigButton;
@@ -460,6 +550,50 @@ private:
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> AiAnalysisTextBlock;
+
+	// Project run result detail 제목.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ExperimentResultDetailTitleText;
+
+	// 총 플레이 시간 metric card.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UUserWidget> TotalPlayTimeMetricCard;
+
+	// 성공률 metric card.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UUserWidget> SuccessRateMetricCard;
+
+	// 충돌 횟수 metric card.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UUserWidget> CollisionCountMetricCard;
+
+	// 에피소드 리플레이 개수 text.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> EpisodeReplayCountText;
+
+	// 에피소드 리플레이 card container.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWrapBox> EpisodeReplayCardWrapBox;
+
+	// AI 분석 실행 CTA 영역.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> AiAnalysisActionBox;
+
+	// AI 개선 제안 panel 영역.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> AiSuggestionPanel;
+
+	// AI 개선 제안 요약 text.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> AiSuggestionSummaryText;
+
+	// AI 개선 제안 row container.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UVerticalBox> AiSuggestionListBox;
+
+	// AI 제안이 없을 때 표시할 text.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> AiSuggestionEmptyText;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> DiagnosticsTextBlock;
@@ -477,6 +611,18 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|List")
 	TSubclassOf<UFileListItemWidget> FileListItemWidgetClass;
 
+	// Project experiment status row WBP class.
+	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|ProjectExperiment")
+	TSubclassOf<UProjectExperimentRunRowWidget> ProjectExperimentRunRowWidgetClass;
+
+	// Project run episode replay card WBP class.
+	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|ProjectResult")
+	TSubclassOf<UUserWidget> ProjectEpisodeReplayCardWidgetClass;
+
+	// Project run AI suggestion row WBP class.
+	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|ProjectResult")
+	TSubclassOf<UUserWidget> ProjectAiSuggestionRowWidgetClass;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UFileListItemWidget>> ScenarioListItems;
 
@@ -489,8 +635,29 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UFileListItemWidget>> ExperimentResultListItems;
 
+	// Project experiment status의 동적 run row 목록.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProjectExperimentRunRowWidget>> ProjectExperimentRunRows;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UExperimentResultIterationButton>> ExperimentResultIterationButtons;
+
+	// Project result detail의 동적 episode card 목록.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UUserWidget>> ProjectEpisodeReplayCards;
+
+	// Project result detail의 동적 AI suggestion row 목록.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UUserWidget>> ProjectAiSuggestionRows;
+
+	// 현재 진행 중인 AI 분석 요청이 대상으로 삼은 project run id.
+	FString PendingProjectRunAnalysisRunId;
+
+	// 마지막 AI 분석 실패 안내가 속한 project run id.
+	FString LastProjectRunAnalysisFailureRunId;
+
+	// 실패 후 같은 run detail을 다시 그릴 때 유지할 사용자 안내 문구.
+	FString LastProjectRunAnalysisFailureText;
 
 	// Scenario editor controller에 input mode를 요청할 때 사용한 focus widget.
 	UPROPERTY(Transient)
@@ -505,5 +672,10 @@ private:
 	// 선택된 user project run id cache.
 	FString SelectedProjectRunId;
 	bool bExperimentConfigDetailVisible = false;
-	bool bExperimentResultDetailVisible = false;
+	// Project experiment 설정 임시 tab이 현재 표시 중인지 나타낸다.
+	bool bProjectExperimentConfigTabOpen = false;
+	// Project experiment 분석 상세 임시 tab이 현재 표시 중인지 나타낸다.
+	bool bProjectExperimentResultDetailTabOpen = false;
+	// Project workspace switcher의 현재 logical tab.
+	EProjectWorkspaceTabType ActiveProjectWorkspaceTab = EProjectWorkspaceTabType::ScenarioEdit;
 };

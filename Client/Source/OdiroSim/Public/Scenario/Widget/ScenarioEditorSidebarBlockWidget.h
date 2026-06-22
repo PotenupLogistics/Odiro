@@ -4,13 +4,11 @@
 #include "Blueprint/UserWidget.h"
 #include "ScenarioEditorSidebarBlockWidget.generated.h"
 
-class UBorder;
 class UButton;
 class UTextBlock;
 class UVerticalBox;
 class UWidget;
 class UWidgetTextStyleCatalog;
-class SWidget;
 
 // Broadcasts the Scenario Template path represented by a selected sidebar block.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
@@ -25,9 +23,6 @@ class ODIROSIM_API UScenarioEditorSidebarBlockWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	// Builds a native block tree when no Blueprint-authored root widget exists.
-	virtual TSharedRef<SWidget> RebuildWidget() override;
-
 	// Binds local header controls after UMG construction.
 	virtual void NativeConstruct() override;
 
@@ -66,13 +61,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
 
-	// Optional outline border used for selected/unselected block state.
+	// Optional WBP-owned outline region for block visuals.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UBorder> OutlineBorder;
+	TObjectPtr<UWidget> OutlineBorder;
 
-	// Optional content border used for nested/non-nested background color.
+	// Optional WBP-owned content region for block visuals.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UBorder> ContentBorder;
+	TObjectPtr<UWidget> ContentBorder;
 
 	// Optional button that toggles body visibility.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
@@ -93,6 +88,10 @@ public:
 	// Optional header text for the hierarchy badge.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UTextBlock> BadgeTextBlock;
+
+	// Optional WBP-owned selected-state visual layer.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UWidget> SelectedStateWidget;
 
 	// Optional container that owns child field rows and nested blocks.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
@@ -126,7 +125,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
 
-	// Adds a child widget to the block body with standard spacing.
+	// Adds a child widget to the block body.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void AddBodyChild(UWidget* widget);
 
@@ -134,7 +133,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void ClearBodyChildren();
 
-	// Returns the body container, constructing the native fallback tree when necessary.
+	// Returns the WBP-owned body container.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	UVerticalBox* GetBodyBox();
 
@@ -143,8 +142,6 @@ private:
 	UFUNCTION()
 	void HandleToggleClicked();
 
-	// Builds the native fallback block tree when no Blueprint-authored tree is present.
-	void BuildDefaultWidgetTree();
 	// Binds optional local controls.
 	void BindControls();
 	// Releases optional local control bindings.

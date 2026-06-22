@@ -1,52 +1,6 @@
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorPointWidget.h"
 
-#include "Blueprint/WidgetTree.h"
-#include "Components/VerticalBox.h"
-#include "Components/VerticalBoxSlot.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
-
-namespace
-{
-	constexpr float CorridorPointWidgetPadding = 6.0f;
-
-	void AddPointWidgetToBox(UVerticalBox* box, UWidget* widget)
-	{
-		if (!box || !widget)
-		{
-			return;
-		}
-
-		if (UVerticalBoxSlot* slot = box->AddChildToVerticalBox(widget))
-		{
-			slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, CorridorPointWidgetPadding));
-			slot->SetHorizontalAlignment(HAlign_Fill);
-		}
-	}
-
-	void AddPointFieldRow(
-		UWidgetTree* widgetTree,
-		UVerticalBox* parent,
-		TObjectPtr<UScenarioEditorSidebarFieldRow>& fieldRow,
-		const TCHAR* widgetName)
-	{
-		if (!widgetTree || !parent)
-		{
-			return;
-		}
-
-		fieldRow = widgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
-			UScenarioEditorSidebarFieldRow::StaticClass(),
-			FName(widgetName));
-		AddPointWidgetToBox(parent, fieldRow.Get());
-	}
-}
-
-TSharedRef<SWidget> UScenarioEditorSidebarCorridorPointWidget::RebuildWidget()
-{
-	Initialize();
-	BuildDefaultWidgetTree();
-	return Super::RebuildWidget();
-}
 
 void UScenarioEditorSidebarCorridorPointWidget::NativeConstruct()
 {
@@ -105,30 +59,6 @@ void UScenarioEditorSidebarCorridorPointWidget::HandleAddPointRequested()
 void UScenarioEditorSidebarCorridorPointWidget::HandleRemovePointRequested()
 {
 	OnRemovePointRequested.Broadcast(PointIndex);
-}
-
-void UScenarioEditorSidebarCorridorPointWidget::BuildDefaultWidgetTree()
-{
-	if (!WidgetTree || WidgetTree->RootWidget)
-	{
-		return;
-	}
-
-	PointBlockWidget = WidgetTree->ConstructWidget<UScenarioEditorSidebarBlockWidget>(
-		UScenarioEditorSidebarBlockWidget::StaticClass(),
-		TEXT("PointBlockWidget"));
-	if (!PointBlockWidget)
-	{
-		return;
-	}
-
-	WidgetTree->RootWidget = PointBlockWidget;
-	PointBlockWidget->SetNested(true);
-	PointBlockWidget->SetShowNormalOutline(false);
-
-	UVerticalBox* pointBody = PointBlockWidget->GetBodyBox();
-	AddPointFieldRow(WidgetTree, pointBody, XFieldRow, TEXT("XFieldRow"));
-	AddPointFieldRow(WidgetTree, pointBody, YFieldRow, TEXT("YFieldRow"));
 }
 
 void UScenarioEditorSidebarCorridorPointWidget::BindFieldRows()

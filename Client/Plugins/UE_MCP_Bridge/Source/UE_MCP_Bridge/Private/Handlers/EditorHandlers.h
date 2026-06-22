@@ -127,6 +127,8 @@ private:
 	static TSharedPtr<FJsonValue> GetBuildStatus(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieControl(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CaptureScreenshot(const TSharedPtr<FJsonObject>& Params);
+	// Capture the final Slate window pixels, including UMG and editor chrome.
+	static TSharedPtr<FJsonValue> CaptureSlateWindow(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetViewportCamera(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> Undo(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> Redo(const TSharedPtr<FJsonObject>& Params);

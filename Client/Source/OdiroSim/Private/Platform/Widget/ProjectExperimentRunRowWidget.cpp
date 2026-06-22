@@ -9,7 +9,7 @@
 namespace
 {
 	// Numeric project run ids are stored zero-padded on disk but shown without leading zeros.
-	FString FormatProjectRunDisplayId(const FString& runId)
+	FString FormatProjectExperimentRunRowDisplayId(const FString& runId)
 	{
 		const FString trimmedRunId = runId.TrimStartAndEnd();
 		if (trimmedRunId.IsEmpty())
@@ -76,7 +76,7 @@ void UProjectExperimentRunRowWidget::InitializeRunRow(
 	if (RunIdText)
 	{
 		const FString sourceRunId = runId.IsEmpty() ? FPaths::GetBaseFilename(runDirectory) : runId;
-		RunIdText->SetText(FText::FromString(FormatProjectRunDisplayId(sourceRunId)));
+		RunIdText->SetText(FText::FromString(FormatProjectExperimentRunRowDisplayId(sourceRunId)));
 	}
 
 	const float clampedProgress = FMath::Clamp(progressPercent, 0.0f, 100.0f);

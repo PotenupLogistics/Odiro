@@ -21,7 +21,6 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 . "$PSScriptRoot\common.ps1"
-Set-ToolPrefix "list-lfs-locks"
 
 # Writes a VSCode problemMatcher-compatible error anchored to the task definition.
 function Write-ProblemMatcherError {
@@ -29,28 +28,6 @@ function Write-ProblemMatcherError {
 
     $singleLineMessage = ($Message -replace "(`r`n|`n|`r)", " ").Trim()
     Write-Output ".vscode/tasks.json(1,1): error: $singleLineMessage"
-}
-
-trap {
-    if ($ProblemMatcher) {
-        Write-ProblemMatcherError $_.Exception.Message
-    }
-    else {
-        Write-ErrorMessage $_.Exception.Message
-    }
-    exit 1
-}
-
-Assert-Command "git"
-
-$repoRoot = Get-RepoRoot
-$normalizedPrefix = ($PathPrefix -replace '\\', '/').Trim().TrimStart('./')
-if ($normalizedPrefix -match '(^|/)\.\.($|/)') {
-    throw "Parent directory segments are not allowed in PathPrefix."
-}
-
-if ($Watch -and -not $ProblemMatcher) {
-    throw "-Watch requires -ProblemMatcher."
 }
 
 # Loads the Windows foreground-window API used to avoid polling while VSCode is inactive.
@@ -116,6 +93,18 @@ function Test-LfsLockPollingActive {
     }
 
     return $false
+}
+
+# Normalizes the optional lock path prefix used for filtering rows.
+function ConvertTo-LfsLockPathPrefix {
+    param([string] $PathPrefix)
+
+    $normalizedPrefix = ($PathPrefix -replace '\\', '/').Trim().TrimStart('./')
+    if ($normalizedPrefix -match '(^|/)\.\.($|/)') {
+        throw "Parent directory segments are not allowed in PathPrefix."
+    }
+
+    return $normalizedPrefix
 }
 
 # Returns Git LFS locks as sorted rows ready for terminal or Problems output.
@@ -238,9 +227,14 @@ function Get-LfsLockRows {
 
 # Emits one VSCode watch cycle so old Git LFS lock Problems are replaced.
 function Write-ProblemMatcherRefresh {
+    param(
+        [string] $RepoRoot,
+        [string] $NormalizedPrefix
+    )
+
     Write-Output "Git LFS Locks refresh started"
     try {
-        $rows = @(Get-LfsLockRows -RepoRoot $repoRoot -NormalizedPrefix $normalizedPrefix)
+        $rows = @(Get-LfsLockRows -RepoRoot $RepoRoot -NormalizedPrefix $NormalizedPrefix)
         foreach ($row in $rows) {
             $message = "Locked by '$($row.Owner)' at $($row.LockedAtDisplay) ($($row.Id))"
             Write-Output "$($row.Path)(1,1): warning: $message"
@@ -256,6 +250,11 @@ function Write-ProblemMatcherRefresh {
 
 # Polls Git LFS locks for VSCode Problems until the task is stopped.
 function Watch-ProblemMatcherLocks {
+    param(
+        [string] $RepoRoot,
+        [string] $NormalizedPrefix
+    )
+
     $lastRefreshAtUtc = [datetime]::MinValue
     $wasPollingActive = $false
 
@@ -266,7 +265,7 @@ function Watch-ProblemMatcherLocks {
             $isIntervalRefresh = (([datetime]::UtcNow - $lastRefreshAtUtc).TotalSeconds -ge $IntervalSeconds)
 
             if ($isFocusRefresh -or $isIntervalRefresh) {
-                Write-ProblemMatcherRefresh
+                Write-ProblemMatcherRefresh -RepoRoot $RepoRoot -NormalizedPrefix $NormalizedPrefix
                 $lastRefreshAtUtc = [datetime]::UtcNow
             }
         }
@@ -276,32 +275,61 @@ function Watch-ProblemMatcherLocks {
     }
 }
 
-if ($ProblemMatcher) {
-    if ($Watch) {
-        Watch-ProblemMatcherLocks
+# Runs the command-line entry point when this script is executed directly.
+function Invoke-ListLfsLocksScript {
+    Set-ToolPrefix "list-lfs-locks"
+
+    try {
+        Assert-Command "git"
+
+        $repoRoot = Get-RepoRoot
+        $normalizedPrefix = ConvertTo-LfsLockPathPrefix -PathPrefix $PathPrefix
+
+        if ($Watch -and -not $ProblemMatcher) {
+            throw "-Watch requires -ProblemMatcher."
+        }
+
+        if ($ProblemMatcher) {
+            if ($Watch) {
+                Watch-ProblemMatcherLocks -RepoRoot $repoRoot -NormalizedPrefix $normalizedPrefix
+            }
+            else {
+                Write-ProblemMatcherRefresh -RepoRoot $repoRoot -NormalizedPrefix $normalizedPrefix
+            }
+            exit 0
+        }
+
+        $rows = @(Get-LfsLockRows -RepoRoot $repoRoot -NormalizedPrefix $normalizedPrefix)
+        if ($rows.Count -eq 0) {
+            if ([string]::IsNullOrWhiteSpace($normalizedPrefix)) {
+                Write-Success "No active Git LFS locks."
+            }
+            else {
+                Write-Success "No active Git LFS locks under: $normalizedPrefix"
+            }
+            exit 0
+        }
+
+        Write-Step "Active Git LFS locks: $($rows.Count)"
+        foreach ($row in $rows) {
+            Write-Host ""
+            Write-Host "Path     : $($row.Path)"
+            Write-Host "Owner    : $($row.Owner)"
+            Write-Host "LockedAt : $($row.LockedAt)"
+            Write-Host "Id       : $($row.Id)"
+        }
     }
-    else {
-        Write-ProblemMatcherRefresh
+    catch {
+        if ($ProblemMatcher) {
+            Write-ProblemMatcherError $_.Exception.Message
+        }
+        else {
+            Write-ErrorMessage $_.Exception.Message
+        }
+        exit 1
     }
-    exit 0
 }
 
-$rows = @(Get-LfsLockRows -RepoRoot $repoRoot -NormalizedPrefix $normalizedPrefix)
-if ($rows.Count -eq 0) {
-    if ([string]::IsNullOrWhiteSpace($normalizedPrefix)) {
-        Write-Success "No active Git LFS locks."
-    }
-    else {
-        Write-Success "No active Git LFS locks under: $normalizedPrefix"
-    }
-    exit 0
-}
-
-Write-Step "Active Git LFS locks: $($rows.Count)"
-foreach ($row in $rows) {
-    Write-Host ""
-    Write-Host "Path     : $($row.Path)"
-    Write-Host "Owner    : $($row.Owner)"
-    Write-Host "LockedAt : $($row.LockedAt)"
-    Write-Host "Id       : $($row.Id)"
+if ($MyInvocation.InvocationName -ne ".") {
+    Invoke-ListLfsLocksScript
 }

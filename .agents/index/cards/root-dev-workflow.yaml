@@ -43,7 +43,7 @@ guardrails:
   - Unreal binary assets stay Git blobs; Git LFS is for lock/read-only/push checks only.
   - "`tools/set-git-config.ps1` owns local Git, GitHub CLI, LFS lock, and Unreal editor source-control setup."
   - PR helper scripts may push/open PRs only when explicitly invoked by the user.
-  - Manual unlock remains human-only recovery; all-lock mode prompts per path before force-unlock.
+  - Manual unlock remains human-only recovery; all-lock mode prompts per path, then unlocks listed ids through the LFS API to avoid local path validation.
 verify:
   - when: root scripts or hooks change
     run:

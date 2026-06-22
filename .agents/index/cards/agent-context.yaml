@@ -1,19 +1,23 @@
----
 id: agent-context
 owner: Root
+description: root agent rules and source index ownership
 paths:
   - AGENTS.md
   - .agents/index/**
 entry:
-  - AGENTS.md
-  - .agents/index/INDEX.md
-keep:
+  - id: primary
+    description: Primary files and entry points for this area.
+    read:
+      - AGENTS.md
+      - .agents/index/README.md
+guardrails:
   - AGENTS.md owns repository-wide agent behavior, implementation, comment, and safety rules.
   - Project-local AGENTS.md files may narrow style or tooling rules inside their subtree.
   - .agents/index tracks entry points, ownership, boundaries, and focused verification flow.
 verify:
-  - git diff --check
+  - when: agent-context changes
+    run:
+      - git diff --check
 related:
   - root-dev-workflow
   - bridge-host
----

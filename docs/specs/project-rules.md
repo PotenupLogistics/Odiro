@@ -120,7 +120,7 @@ Release 배포 시 `resources` 폴더로 복사된다.
 
 ### Agent Context
 
-- `.agents/index`: agent-only source index for area entrypoints, ownership, boundaries, and verification
+- `.agents/index`: agent-only YAML source index for area entrypoints, ownership, guardrails, and verification
 
 ## 경로 처리
 

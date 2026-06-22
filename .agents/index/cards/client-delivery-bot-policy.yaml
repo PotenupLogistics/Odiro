@@ -1,6 +1,6 @@
----
 id: client-delivery-bot-policy
 owner: Client
+description: DeliveryBot movement, grid, policy HTTP
 paths:
   - Client/Source/OdiroSim/Public/DeliveryBot/**
   - Client/Source/OdiroSim/Private/DeliveryBot/**
@@ -10,30 +10,33 @@ paths:
   - Client/Json/Input/DeliveryBotSetupPlayable*.json
   - Client/Json/Input/PolicySpecs/**
 entry:
-  - DeliveryBot_GridSubsystem.h / .cpp
-  - DeliveryBot_DriveComponent.h / .cpp
-  - DeliveryBot_HttpPolicyComponent.h / .cpp
-  - DeliveryBot_LidarSensorComponent.h / .cpp
-  - DeliveryBotPointCloudReviewActor.h / .cpp
-  - DeliveryBotBodyConfigInfo.h
-  - DeliveryBotPointCloudCaptureConfigInfo.h
-  - DeliveryBotPolicyEventSnapshot.h
-  - DeliveryBotSetupCompiler.h / .cpp
-  - DeliveryBotPythonDeveloperSettings.h / .cpp
-  - DeliveryBotPythonProcessSubsystem.h / .cpp
-  - DeliveryBotPythonSettings.h
-  - Client/Tools/PythonAgent/agent/user_agent.py
-  - Client/Tools/PythonAgent/agent/lidar_selector.py
-  - Client/Tools/PythonAgent/agent/lidar_point_cloud.py
-  - Client/Tools/PythonAgent/templates
-  - Client/Tools/PythonAgent/tools/reset_user_code.py
-  - Client/Tools/PythonAgent/tools/validate_lidar_capture.py
-  - Client/Docs/Portfolio/04-lidar-point-cloud-implementation.html
-  - Client/Json/Input/DeliveryBotSetupPlayable_RealtimePointCloud.json
-  - Client/Json/Input/DeliveryBotSetupPlayable_QualityPointCloud.json
-  - Client/Json/Input/DeliveryBotSetupPlayable_NoPointCloud.json
-  - Client/Json/Input/PolicySpecs
-keep:
+  - id: primary
+    description: Primary files and entry points for this area.
+    read:
+      - DeliveryBot_GridSubsystem.h / .cpp
+      - DeliveryBot_DriveComponent.h / .cpp
+      - DeliveryBot_HttpPolicyComponent.h / .cpp
+      - DeliveryBot_LidarSensorComponent.h / .cpp
+      - DeliveryBotPointCloudReviewActor.h / .cpp
+      - DeliveryBotBodyConfigInfo.h
+      - DeliveryBotPointCloudCaptureConfigInfo.h
+      - DeliveryBotPolicyEventSnapshot.h
+      - DeliveryBotSetupCompiler.h / .cpp
+      - DeliveryBotPythonDeveloperSettings.h / .cpp
+      - DeliveryBotPythonProcessSubsystem.h / .cpp
+      - DeliveryBotPythonSettings.h
+      - Client/Tools/PythonAgent/agent/user_agent.py
+      - Client/Tools/PythonAgent/agent/lidar_selector.py
+      - Client/Tools/PythonAgent/agent/lidar_point_cloud.py
+      - Client/Tools/PythonAgent/templates
+      - Client/Tools/PythonAgent/tools/reset_user_code.py
+      - Client/Tools/PythonAgent/tools/validate_lidar_capture.py
+      - Client/Docs/Portfolio/04-lidar-point-cloud-implementation.html
+      - Client/Json/Input/DeliveryBotSetupPlayable_RealtimePointCloud.json
+      - Client/Json/Input/DeliveryBotSetupPlayable_QualityPointCloud.json
+      - Client/Json/Input/DeliveryBotSetupPlayable_NoPointCloud.json
+      - Client/Json/Input/PolicySpecs
+guardrails:
   - Prefer focused shared structs over direct DeliveryBot to Scenario/Episode header coupling.
   - Python policy process ownership lives in DeliveryBot Python subsystem/settings, not legacy root batch files.
   - Keep Unreal-only debug/log toggles on components or developer settings instead of user-facing DeliveryBotSetup JSON.
@@ -59,17 +62,18 @@ keep:
   - Keep `/scenario/end` response minimal (`status`, `accepted`); DeliveryBot owns the 2-second HTTP timeout and reports success/error through the Runner callback, while ScenarioRunnerSubsystem owns the longer lifecycle watchdog.
   - Keep Python user_agent.py emitting actual RePath decisions through response.events; C++ should not infer RePath from generic slowdown/path-follow reasons.
 verify:
-  - DeliveryBot automation tests for component changes
-  - policy request/response contract for HTTP policy fields
-  - policy server failure, policy failure, and RePath event routing through ScenarioEvaluationSubsystem.OnEvaluationEvent
-  - PythonAgent py_compile after changing response.events emission
-  - runtime movement/pathing smoke for behavior changes
-  - PythonAgent py_compile for Python policy/observer changes
-  - `/scenario/end` success, rejection, HTTP timeout, missing callback, and exactly-once completion behavior
-  - validate_lidar_capture for saved LiDAR Point Cloud capture folders
-  - reset_user_code dry-run before template restore changes
+  - when: client-delivery-bot-policy changes
+    run:
+      - DeliveryBot automation tests for component changes
+      - policy request/response contract for HTTP policy fields
+      - policy server failure, policy failure, and RePath event routing through ScenarioEvaluationSubsystem.OnEvaluationEvent
+      - PythonAgent py_compile after changing response.events emission
+      - runtime movement/pathing smoke for behavior changes
+      - PythonAgent py_compile for Python policy/observer changes
+      - '`/scenario/end` success, rejection, HTTP timeout, missing callback, and exactly-once completion behavior'
+      - validate_lidar_capture for saved LiDAR Point Cloud capture folders
+      - reset_user_code dry-run before template restore changes
 related:
   - client-simulation
   - contracts-shared-data
   - agents-policy-rag-data
----

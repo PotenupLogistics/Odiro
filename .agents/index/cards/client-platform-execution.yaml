@@ -1,6 +1,6 @@
----
 id: client-platform-execution
 owner: Client
+description: MainMenu, launcher, process status, AI analysis
 paths:
   - Client/README.md
   - Client/Source/OdiroSim/Public/Platform/**
@@ -14,42 +14,45 @@ paths:
   - tools/run-preview.ps1
   - tools/dev-session.ps1
 entry:
-  - Client/README.md
-  - SimulatorLaunchSubsystem.h / .cpp
-  - SimulatorProcessSubsystem.h / .cpp
-  - ScenarioEditorLaunchSubsystem.h / .cpp
-  - ProjectSessionSubsystem.h / .cpp
-  - PlatformAnalysisAiSubsystem.h / .cpp
-  - ProjectRunResultDashboard.h / .cpp
-  - Widget/StartupMenuWidget.h / .cpp
-  - Widget/MainMenuWidget.h / .cpp
-  - Widget/ProjectTemplateCardWidget.h / .cpp
-  - Widget/ProjectExperimentRunRowWidget.h / .cpp
-  - WBP_StartupMenu
-  - StartupMap
-  - BP_StartupMenuBootstrap
-  - WBP_MainMenu
-  - WBP_ProjectTemplateCard
-  - WBP_ProjectWorkspaceTab
-  - WBP_ProjectExperimentRunRow
-  - WBP_ProjectRunMetricCard
-  - WBP_ProjectEpisodeReplayCard
-  - WBP_ProjectAiSuggestionRow
-  - WBP_ScenarioEditorRootWidget
-  - ScenarioEditorOutlinerWidget.h / .cpp
-  - ScenarioEditorOutlinerRowWidget.h / .cpp
-  - UmgMcp Widget/UmgSetSubsystem.cpp
-  - UE_MCP_Bridge `capture_slate_window`
-  - UE_MCP_Bridge `dump_runtime_widget_geometry`
-  - UE_MCP_Bridge `rename_widget`
-  - Client/Docs/plans/PLAN-platform-architecture.md
-  - Client/Task-RunPreview.bat
-  - Client/Task-RunPythonPolicyServer.bat
-  - Client/Tools/CheckPrerequisites.ps1
-  - Client/Tools/Build.ps1
-  - Client/Tools/Dev.ps1
-  - Client/Tools/RunPreview.ps1
-keep:
+  - id: primary
+    description: Primary files and entry points for this area.
+    read:
+      - Client/README.md
+      - SimulatorLaunchSubsystem.h / .cpp
+      - SimulatorProcessSubsystem.h / .cpp
+      - ScenarioEditorLaunchSubsystem.h / .cpp
+      - ProjectSessionSubsystem.h / .cpp
+      - PlatformAnalysisAiSubsystem.h / .cpp
+      - ProjectRunResultDashboard.h / .cpp
+      - Widget/StartupMenuWidget.h / .cpp
+      - Widget/MainMenuWidget.h / .cpp
+      - Widget/ProjectTemplateCardWidget.h / .cpp
+      - Widget/ProjectExperimentRunRowWidget.h / .cpp
+      - WBP_StartupMenu
+      - StartupMap
+      - BP_StartupMenuBootstrap
+      - WBP_MainMenu
+      - WBP_ProjectTemplateCard
+      - WBP_ProjectWorkspaceTab
+      - WBP_ProjectExperimentRunRow
+      - WBP_ProjectRunMetricCard
+      - WBP_ProjectEpisodeReplayCard
+      - WBP_ProjectAiSuggestionRow
+      - WBP_ScenarioEditorRootWidget
+      - ScenarioEditorOutlinerWidget.h / .cpp
+      - ScenarioEditorOutlinerRowWidget.h / .cpp
+      - UmgMcp Widget/UmgSetSubsystem.cpp
+      - UE_MCP_Bridge `capture_slate_window`
+      - UE_MCP_Bridge `dump_runtime_widget_geometry`
+      - UE_MCP_Bridge `rename_widget`
+      - Client/Docs/plans/PLAN-platform-architecture.md
+      - Client/Task-RunPreview.bat
+      - Client/Task-RunPythonPolicyServer.bat
+      - Client/Tools/CheckPrerequisites.ps1
+      - Client/Tools/Build.ps1
+      - Client/Tools/Dev.ps1
+      - Client/Tools/RunPreview.ps1
+guardrails:
   - Platform UI reads launcher process state and canonical user-project run artifacts, not simulator world objects.
   - Client/Tools use Client/Tools/Common.ps1, never root tools/common.ps1.
   - Client prerequisite checks cover Windows Unreal C++ only; Android/iOS/macOS/MAUI are not failures.
@@ -67,7 +70,7 @@ keep:
   - WBP_MainMenu root is the project workspace surface; project selection, recent project cards, and create controls belong only to WBP_StartupMenu.
   - WBP_MainMenu owns control/workspace UI plus the ScenarioEditor root child; C++ requires the asset root to be ProjectWorkspaceScreen and does not create or promote the workspace at runtime.
   - WBP_MainMenu must place ScenarioEditorRootWidget under ProjectScenarioEditPanel, not directly under ProjectWorkspaceScreen.
-  - WBP_ScenarioEditorRootWidget owns the Scenario editor right Sidebar layout: SaveButton/SaveStatusText, ScenarioEditorOutlinerWidget, InspectorSwitcher, DetailInspectorPanel, LlmInspectorPanel, Detail/LLM tab buttons, TemplateSidebarPanel, PlaceableContextMenuPanel, and the moved LlmPanel. C++ only handles save, selection sync, tab switching, and data refresh.
+  - 'WBP_ScenarioEditorRootWidget owns the Scenario editor right Sidebar layout: SaveButton/SaveStatusText, ScenarioEditorOutlinerWidget, InspectorSwitcher, DetailInspectorPanel, LlmInspectorPanel, Detail/LLM tab buttons, TemplateSidebarPanel, PlaceableContextMenuPanel, and the moved LlmPanel. C++ only handles save, selection sync, tab switching, and data refresh.'
   - DA_ScenarioEditorWidgetClassCatalog owns catalog-backed Scenario editor WBP class references for OutlinerRow, SidebarBlock, SidebarFieldRow, Main/Corridor/Obstacle/Pedestrian panels, and repeated corridor/obstacle/pedestrian entries. Missing classes should report diagnostics instead of native UI fallback construction.
   - Scenario editor Outliner lists only editor-authored scenario objects. General UE actors such as lights, cameras, controllers, and editor helpers stay out of the outliner.
   - Scenario editor LLM is Inspector-tab-only; do not reintroduce right-edge auto reveal.
@@ -86,7 +89,7 @@ keep:
   - StartupMenu creates/validates projects through temporary file-based SimulatorLaunchSubsystem preset-composition helpers, then stores the active project in ProjectSessionSubsystem.
   - MainMenu creates run snapshots through temporary file-based SimulatorLaunchSubsystem workspace helpers using the active project session.
   - MainMenu project mode reads result runs from `<UserProject>/runs/<RunId>` and sends AI analysis through the v2 project-run path.
-  - MainMenu project result detail is a dashboard, not a raw JSON/log preview: C++ reads `summary.json` for duration/success/collision/episode cards, then reads `review/analysis_run_response_v2.json` or latest `review/<ReviewId>/recommendations.json` for AI suggestion rows.
+  - 'MainMenu project result detail is a dashboard, not a raw JSON/log preview: C++ reads `summary.json` for duration/success/collision/episode cards, then reads `review/analysis_run_response_v2.json` or latest `review/<ReviewId>/recommendations.json` for AI suggestion rows.'
   - WBP_ProjectRunMetricCard, WBP_ProjectEpisodeReplayCard, and WBP_ProjectAiSuggestionRow own result-dashboard layout/style/default text. C++ only creates row/card instances and writes named child widget values/visibility.
   - MainMenu project experiment uses WBP_ProjectWorkspaceTab for fixed and transient workspace tabs. 설정 opens ProjectExperimentConfigPanel as a switcher peer with a temporary tab; 실행 starts from current `setting.json`; 설정 패널의 저장 writes `setting.json` without launching; result detail opens ProjectExperimentResultDetailPanel as a switcher peer with a temporary 분석 tab. Temporary tab close/cancel/save returns to experiment status.
   - MainMenu project mode must not call SimulationSetup or RunQueue writer/launcher paths.
@@ -95,25 +98,30 @@ keep:
   - SimulatorLaunchSubsystem workspace helpers are a UI prototype bridge; replace internals with Bridge `workspace.*` and `process.*` once a UE Bridge IPC client exists.
   - SimulatorLaunchSubsystem legacy SimulationSetup/RunQueue/report helpers are Blueprint compatibility APIs only and should stay deprecated while retained.
 verify:
-  - launcher command contract tests for launch arg changes
-  - runtime log plus status JSON for process changes
-  - `OdiroSim.StartupMenu.ProjectMode.Smoke` for Startup project create/validate/run snapshot path changes
-  - `OdiroSim.ProjectSession.Paths` for active project path helpers
-  - `OdiroSim.MainMenu.ProjectSession.NoLegacyPathFallback` for MainMenu active-session-only project path behavior
-  - `OdiroSim.SimulatorLaunch.ProjectWorkspace` for temporary workspace helper changes
-  - `OdiroSim.SimulatorLaunch.ProjectRun.Validation` for project launch validation changes
-  - `OdiroSim.Platform.AnalysisAi.ProjectRunRequestJsonBuild` for v2 analysis request changes
-  - `OdiroSim.ProjectRun.ResultDashboard.Summary` for summary.json duration/success/collision aggregation
-  - `OdiroSim.ProjectRun.ResultDashboard.Ai` for AI v2 summary/recommendation parsing and empty recommendation handling
-  - `OdiroSim.ScenarioEditor.Outliner.Model` for Scenario editor outliner item order/filter/selection state
-  - `OdiroSim.ScenarioEditor.Outliner.Selection` for Scenario editor outliner key mapping and collapsed-parent filtering
-  - OdiroSimEditor build after runner/trace lifecycle changes
-  - UmgMcp `get_widget_tree` after StartupMenu/MainMenu/ScenarioEditor UMG edits: WBP_StartupMenu owns project selection row/dropdowns and recent project header `RecentProjectAddButton`; WBP_MainMenu root is ProjectWorkspaceScreen; ScenarioEditorRootWidget is under ProjectScenarioEditPanel; WBP_ScenarioEditorRootWidget has no ToolbarWidget and exposes right-sidebar SaveButton, SaveStatusText, ScenarioEditorOutlinerWidget, InspectorSwitcher, TemplateSidebarPanel, PlaceableContextMenuPanel, LlmInspectorPanel, and Detail/LLM tab buttons; Scenario editor catalog-backed OutlinerRow, SidebarBlock, SidebarFieldRow, and detail panel WBP expose their required BindWidget names; ProjectExperimentConfigPanel and ProjectExperimentResultDetailPanel are ProjectWorkspaceSwitcher peers; WBP_ProjectWorkspaceTab has TabButton, TabLabelText, CloseButton, ActiveIndicator, and ActiveTabButtonStyleSource; WBP_ProjectExperimentRunRow exposes RunIdText, ProgressBar, ProgressText, AnalyzeButton, and state boxes; result dashboard exposes ExperimentResultDetailTitleText, metric cards, EpisodeReplayCardWrapBox, AiAnalysisActionBox, AiSuggestionPanel, and the three result dashboard card WBP named children.
-  - Blueprint compile/save plus latest log scan for `WidgetVariableNameToGuidMap` after UmgMcp asset edits
-  - UI smoke only after StartupMenu/MainMenu workflow changes; for Scenario editor layout, confirm UMG asset tree and runtime widget visibility/geometry through MCP `dump_runtime_widget_geometry`, then use `capture_slate_window` or preview screenshots as pixel evidence.
+  - when: client-platform-execution changes
+    run:
+      - launcher command contract tests for launch arg changes
+      - runtime log plus status JSON for process changes
+      - '`OdiroSim.StartupMenu.ProjectMode.Smoke` for Startup project create/validate/run snapshot path changes'
+      - '`OdiroSim.ProjectSession.Paths` for active project path helpers'
+      - '`OdiroSim.MainMenu.ProjectSession.NoLegacyPathFallback` for MainMenu active-session-only project path behavior'
+      - '`OdiroSim.SimulatorLaunch.ProjectWorkspace` for temporary workspace helper changes'
+      - '`OdiroSim.SimulatorLaunch.ProjectRun.Validation` for project launch validation changes'
+      - '`OdiroSim.Platform.AnalysisAi.ProjectRunRequestJsonBuild` for v2 analysis request changes'
+      - '`OdiroSim.ProjectRun.ResultDashboard.Summary` for summary.json duration/success/collision aggregation'
+      - '`OdiroSim.ProjectRun.ResultDashboard.Ai` for AI v2 summary/recommendation parsing and empty recommendation handling'
+      - '`OdiroSim.ScenarioEditor.Outliner.Model` for Scenario editor outliner item order/filter/selection state'
+      - '`OdiroSim.ScenarioEditor.Outliner.Selection` for Scenario editor outliner key mapping and collapsed-parent filtering'
+      - OdiroSimEditor build after runner/trace lifecycle changes
+      - 'UmgMcp `get_widget_tree` after StartupMenu/MainMenu/ScenarioEditor UMG edits: WBP_StartupMenu owns project selection row/dropdowns and recent project header `RecentProjectAddButton`; WBP_MainMenu root is ProjectWorkspaceScreen; ScenarioEditorRootWidget is under ProjectScenarioEditPanel; WBP_ScenarioEditorRootWidget has no ToolbarWidget and exposes right-sidebar SaveButton, SaveStatusText, ScenarioEditorOutlinerWidget, InspectorSwitcher, TemplateSidebarPanel, PlaceableContextMenuPanel, LlmInspectorPanel, and Detail/LLM tab buttons; Scenario editor catalog-backed OutlinerRow, SidebarBlock, SidebarFieldRow, and detail panel WBP expose their required BindWidget names; ProjectExperimentConfigPanel and ProjectExperimentResultDetailPanel are ProjectWorkspaceSwitcher peers; WBP_ProjectWorkspaceTab has TabButton, TabLabelText, CloseButton, ActiveIndicator, and ActiveTabButtonStyleSource; WBP_ProjectExperimentRunRow exposes RunIdText, ProgressBar, ProgressText, AnalyzeButton, and state boxes;
+        result dashboard exposes ExperimentResultDetailTitleText, metric cards, EpisodeReplayCardWrapBox, AiAnalysisActionBox, AiSuggestionPanel, and the three result dashboard card WBP named children.'
+      - Blueprint compile/save plus latest log scan for `WidgetVariableNameToGuidMap` after UmgMcp asset edits
+      - UI smoke only after StartupMenu/MainMenu workflow changes; for Scenario editor layout, confirm UMG asset tree and runtime widget visibility/geometry through MCP `dump_runtime_widget_geometry`, then use `capture_slate_window` or preview screenshots as pixel evidence.
+links:
+  - Client/README.md
+  - Client/Docs/plans/PLAN-platform-architecture.md
 related:
   - client-runtime-foundation
   - client-simulation
   - agents-generation-runtime
   - root-dev-workflow
----

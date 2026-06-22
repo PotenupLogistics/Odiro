@@ -1,6 +1,6 @@
----
 id: client-runtime-foundation
 owner: Client
+description: Unreal project config, targets, module deps, assets
 paths:
   - Client/AGENTS.md
   - Client/OdiroSim.uproject
@@ -10,27 +10,30 @@ paths:
   - Client/Plugins/UEGitPlugin/**
   - Client/Content/**
 entry:
-  - Client/AGENTS.md
-  - Client/OdiroSim.uproject
-  - Client/Plugins/UEGitPlugin/GitSourceControl.uplugin
-  - Client/Source/OdiroSim.Target.cs
-  - Client/Source/OdiroSimEditor.Target.cs
-  - Client/Source/OdiroSim/OdiroSim.Build.cs
-  - Client/Config/Default*.ini
-  - Client/Content/Maps
-  - Client/Content/Blueprints
-  - Client/Content/Widgets/MainMenu/WBP_StartupMenu
-  - Client/Content/Widgets/MainMenu/WBP_MainMenu
-  - Client/Content/Widgets/MainMenu/WBP_ProjectTemplateCard
-  - Client/Content/Widgets/MainMenu/WBP_ProjectWorkspaceTab
-  - Client/Content/Widgets/MainMenu/WBP_ProjectExperimentRunRow
-  - Client/Content/Widgets/MainMenu/WBP_ProjectRunMetricCard
-  - Client/Content/Widgets/MainMenu/WBP_ProjectEpisodeReplayCard
-  - Client/Content/Widgets/MainMenu/WBP_ProjectAiSuggestionRow
-  - Client/Content/Widgets/Editor/WBP_ScenarioEditorRootWidget
-  - Client/Content/Maps/StartupMap
-  - Client/Content/Blueprints/Startup/BP_StartupMenuBootstrap
-keep:
+  - id: primary
+    description: Primary files and entry points for this area.
+    read:
+      - Client/AGENTS.md
+      - Client/OdiroSim.uproject
+      - Client/Plugins/UEGitPlugin/GitSourceControl.uplugin
+      - Client/Source/OdiroSim.Target.cs
+      - Client/Source/OdiroSimEditor.Target.cs
+      - Client/Source/OdiroSim/OdiroSim.Build.cs
+      - Client/Config/Default*.ini
+      - Client/Content/Maps
+      - Client/Content/Blueprints
+      - Client/Content/Widgets/MainMenu/WBP_StartupMenu
+      - Client/Content/Widgets/MainMenu/WBP_MainMenu
+      - Client/Content/Widgets/MainMenu/WBP_ProjectTemplateCard
+      - Client/Content/Widgets/MainMenu/WBP_ProjectWorkspaceTab
+      - Client/Content/Widgets/MainMenu/WBP_ProjectExperimentRunRow
+      - Client/Content/Widgets/MainMenu/WBP_ProjectRunMetricCard
+      - Client/Content/Widgets/MainMenu/WBP_ProjectEpisodeReplayCard
+      - Client/Content/Widgets/MainMenu/WBP_ProjectAiSuggestionRow
+      - Client/Content/Widgets/Editor/WBP_ScenarioEditorRootWidget
+      - Client/Content/Maps/StartupMap
+      - Client/Content/Blueprints/Startup/BP_StartupMenuBootstrap
+guardrails:
   - Unreal-specific config/assets stay in Client.
   - Add module dependencies only at the public/private boundary that needs them.
   - DefaultEngine.ini starts in `/Game/Maps/StartupMap.StartupMap` with Engine GameModeBase; Startup UI is attached by the map-owned startup bootstrap actor.
@@ -45,12 +48,13 @@ keep:
   - ProjectBorealis UEGitPlugin is used for Editor checkout only; do not initialize `filter=lfs` attributes from the plugin UI.
   - DefaultEditorPerProjectUserSettings.ini defaults asset-modification checkout prompts; tools/set-git-config.ps1 corrects existing local Saved settings.
 verify:
-  - smallest affected Unreal target build
-  - source control provider loads as Git LFS 2 in Editor
-  - UmgMcp get_widget_tree after StartupMenu/MainMenu/ProjectWorkspaceTab/project experiment row/project result dashboard/ScenarioEditor root UMG structure edits, including `WBP_StartupMenu.RecentProjectAddButton`, `WBP_ProjectExperimentRunRow` named children, `WBP_MainMenu.ProjectExperimentResultDetailPanel` as a ProjectWorkspaceSwitcher peer, and Scenario editor catalog-backed row/panel WBP named children
-  - Blueprint compile/save for StartupMap, WBP_StartupMenu, WBP_MainMenu, WBP_ProjectTemplateCard, WBP_ProjectWorkspaceTab, WBP_ProjectExperimentRunRow, WBP_ProjectRunMetricCard, WBP_ProjectEpisodeReplayCard, WBP_ProjectAiSuggestionRow, WBP_ScenarioEditorRootWidget, WBP_ScenarioEditorOutliner, WBP_ScenarioEditorOutlinerRow, WBP_ScenarioEditorSidebarBlock, WBP_ScenarioEditorSidebarFieldRow, Scenario editor detail panel WBP assets, and ScenarioEditorMap binding changes
-  - separate PIE logs from packaged logs for packaging issues
+  - when: client-runtime-foundation changes
+    run:
+      - smallest affected Unreal target build
+      - source control provider loads as Git LFS 2 in Editor
+      - UmgMcp get_widget_tree after StartupMenu/MainMenu/ProjectWorkspaceTab/project experiment row/project result dashboard/ScenarioEditor root UMG structure edits, including `WBP_StartupMenu.RecentProjectAddButton`, `WBP_ProjectExperimentRunRow` named children, `WBP_MainMenu.ProjectExperimentResultDetailPanel` as a ProjectWorkspaceSwitcher peer, and Scenario editor catalog-backed row/panel WBP named children
+      - Blueprint compile/save for StartupMap, WBP_StartupMenu, WBP_MainMenu, WBP_ProjectTemplateCard, WBP_ProjectWorkspaceTab, WBP_ProjectExperimentRunRow, WBP_ProjectRunMetricCard, WBP_ProjectEpisodeReplayCard, WBP_ProjectAiSuggestionRow, WBP_ScenarioEditorRootWidget, WBP_ScenarioEditorOutliner, WBP_ScenarioEditorOutlinerRow, WBP_ScenarioEditorSidebarBlock, WBP_ScenarioEditorSidebarFieldRow, Scenario editor detail panel WBP assets, and ScenarioEditorMap binding changes
+      - separate PIE logs from packaged logs for packaging issues
 related:
   - client-simulation
   - client-platform-execution
----

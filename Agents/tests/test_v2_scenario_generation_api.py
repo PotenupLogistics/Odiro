@@ -1257,6 +1257,7 @@ def test_v2_missing_preset_length_prompt_uses_intent_based_10m_fallback() -> Non
     segment_ranges = {segment["id"]: segment["along_range_m"] for segment in scenario["corridor"]["segments"]}
     assert max(along_range[1] for along_range in segment_ranges.values()) == 10.0
     assert 0.0 <= scenario["robot"]["goal"]["along_m"] <= 10.0
+    assert scenario["robot"]["goal"]["along_m"] == 9.0
 
 
 def test_v2_missing_preset_obstacle_count_uses_intent_based_count_fallback() -> None:

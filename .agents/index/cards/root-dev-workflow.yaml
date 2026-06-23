@@ -26,6 +26,8 @@ entry:
       - tools/build.ps1
       - tools/run-preview.ps1
       - tools/dev-session.ps1
+      - tools/pause-task-on-exit.bat
+      - tools/test-task-pause-on-exit.ps1
   - id: vcs-and-ci
     description: Git hooks, LFS lock flow, PR helper, and CI workflows.
     read:

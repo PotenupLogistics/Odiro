@@ -2,8 +2,18 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+
+@dataclass(frozen=True)
+class ScenarioPresetLoadResult:
+    """Optional preset load result used to keep missing presets out of API errors."""
+
+    preset_id: str
+    scenario: dict[str, Any] | None
+    error: Exception | None = None
 
 
 class ScenarioPresetLoader:
@@ -23,6 +33,13 @@ class ScenarioPresetLoader:
         if not isinstance(loaded, dict):
             raise ValueError("scenario preset root must be an object")
         return deepcopy(loaded)
+
+    def try_load_scenario_preset(self, preset_id: str) -> ScenarioPresetLoadResult:
+        """Return a preset object or a fallback reason without raising file/JSON errors."""
+        try:
+            return ScenarioPresetLoadResult(preset_id=preset_id, scenario=self.load_scenario_preset(preset_id))
+        except (FileNotFoundError, json.JSONDecodeError, ValueError) as exc:
+            return ScenarioPresetLoadResult(preset_id=preset_id, scenario=None, error=exc)
 
     def _find_scenario_preset_path(self, preset_id: str) -> Path:
         """Find a bundled scenario preset under repo static templates."""

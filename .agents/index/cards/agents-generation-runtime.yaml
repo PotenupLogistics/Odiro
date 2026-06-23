@@ -24,7 +24,7 @@ entry:
       - Agents/app/core
       - Agents/app/models
   - id: scenario-generation-v2
-    description: Active project-scenario generation graph and prompt context.
+    description: Active project-scenario generation graph, prompt context, prop normalization, and optional preset patch/fallback flow.
     read:
       - Agents/app/agents/common/spec_context_loader.py
       - Agents/app/agents/scenario_generation_v2
@@ -41,6 +41,8 @@ entry:
       - Agents/app/services/world_config_to_delivery_bot_setup_adapter.py
 guardrails:
   - Active public scenario generation is v2 project scenario output, not legacy RunQueue export.
+  - Scenario generation v2 may read bundled scenario presets as skeletons, but must deepcopy, patch user intent, validate, repair/revalidate, and fallback without changing the external scenario JSON response schema.
+  - Scenario generation v2 normalizes known legacy static obstacle prop ids through the shared prop normalizer before validator-gated preset, repair, or LLM output can become an API response.
   - Final user project contracts write project/run/episode artifacts under `contracts/specs/user-project-data.md`.
   - V2 LLM prompt context is loaded only through the SpecContextLoader allowlist.
   - Review artifacts are stored under `<UserProject>/runs/<RunId>/review/<ReviewId>/`.
@@ -52,6 +54,9 @@ verify:
     run:
       - focused pytest for touched route/model/service
       - contract validation for changed public fields
+  - when: v2 scenario preset selection, patching, validation, or fallback changes
+    run:
+      - cd Agents; uv run pytest tests/test_v2_scenario_generation_api.py -q
   - when: v2 analysis or recommendation artifacts change
     run:
       - pytest covering v2 analysis run API, review lifecycle, parsing, text, and recommendation artifacts

@@ -20,6 +20,7 @@ class TemplatePlan:
     single_pedestrian: bool
     explicit_blocking: bool
     requested_gate_obstacle_count: int | None
+    requested_obstacle_count: int | None
     robot_anchor_only: bool
     robot_start_anchor: dict[str, Any] | None
     robot_goal_anchor: dict[str, Any] | None
@@ -46,6 +47,7 @@ class TemplatePlanner:
             single_pedestrian=intent.single_pedestrian,
             explicit_blocking=intent.explicit_blocking,
             requested_gate_obstacle_count=intent.requested_gate_obstacle_count,
+            requested_obstacle_count=intent.requested_obstacle_count,
             robot_anchor_only=intent.robot_anchor_only,
             robot_start_anchor=intent.robot_start_anchor,
             robot_goal_anchor=intent.robot_goal_anchor,

@@ -11,24 +11,11 @@ class TemplateJsonWriter:
     def write(self, plan: TemplatePlan) -> dict[str, Any]:
         """Return a deterministic scenario object for the selected alpha pattern."""
         placements = []
-        if plan.include_obstacle and plan.requested_gate_obstacle_count == 2:
+        requested_count = self._requested_obstacle_count(plan)
+        if plan.include_obstacle and requested_count == 2:
             placements.extend(self._gate_pair_placements())
         elif plan.include_obstacle:
-            placement = {
-                "kind": "fixed",
-                "id": "center_obstacle",
-                "prop": "obstacle.crate_01",
-                "at": {
-                    "segment": "conflict",
-                    "along_m": {"min": 6.5, "max": 8.5},
-                    "offset_m": {"min": 0.45, "max": 0.75},
-                    "lane": "walkway",
-                },
-                "yaw_deg": 0,
-            }
-            if plan.explicit_blocking:
-                placement["allow_blocking"] = True
-            placements.append(placement)
+            placements.extend(self._fixed_obstacle_placements(requested_count or 1, explicit_blocking=plan.explicit_blocking))
 
         pedestrians = {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
         robot = {
@@ -72,6 +59,40 @@ class TemplateJsonWriter:
             "pedestrians": pedestrians,
             "robot": robot,
         }
+
+    def _requested_obstacle_count(self, plan: TemplatePlan) -> int | None:
+        """Return the explicit obstacle count carried by the parsed user request."""
+        if plan.requested_obstacle_count is not None:
+            return max(0, int(plan.requested_obstacle_count))
+        if plan.requested_gate_obstacle_count is not None:
+            return max(0, int(plan.requested_gate_obstacle_count))
+        return None
+
+    def _fixed_obstacle_placements(self, count: int, *, explicit_blocking: bool) -> list[dict[str, Any]]:
+        """Return catalog-safe fixed obstacle placements inside the conflict segment."""
+        placements = []
+        offsets = [
+            {"min": 0.45, "max": 0.75},
+            {"min": -0.35, "max": -0.05},
+            {"min": 0.05, "max": 0.35},
+        ]
+        for index in range(count):
+            placement: dict[str, Any] = {
+                "kind": "fixed",
+                "id": "center_obstacle" if index == 0 else f"center_obstacle_{index + 1}",
+                "prop": "obstacle.road_cone_01",
+                "at": {
+                    "segment": "conflict",
+                    "along_m": {"min": 6.5 + index * 0.2, "max": 8.5 + index * 0.2},
+                    "offset_m": offsets[index % len(offsets)],
+                    "lane": "walkway",
+                },
+                "yaw_deg": 0,
+            }
+            if explicit_blocking:
+                placement["allow_blocking"] = True
+            placements.append(placement)
+        return placements
 
     def _gate_pair_placements(self) -> list[dict[str, Any]]:
         """Return exactly one left/right gate pair for prompts that request two obstacles."""

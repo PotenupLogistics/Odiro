@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.catalogs.static_obstacle_catalog import get_allowed_static_obstacle_prop_ids
+
 
 def _range_schema() -> dict[str, Any]:
     """Return the shared numeric min/max range schema used by project scenario v1."""
@@ -174,7 +176,7 @@ def project_scenario_v1_json_schema() -> dict[str, Any]:
                                 "id": {"type": "string"},
                                 "prop": {
                                     "type": ["string", "null"],
-                                    "enum": ["obstacle.crate_01", "obstacle.road_cone_01", "traffic_cone_01", None],
+                                    "enum": [*sorted(get_allowed_static_obstacle_prop_ids()), None],
                                 },
                                 "pattern": {"type": ["string", "null"], "enum": ["gate", "line", "cluster", None]},
                                 "at": _nullable({

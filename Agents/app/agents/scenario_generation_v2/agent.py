@@ -14,10 +14,13 @@ from app.agents.scenario_generation_v2.request_normalizer import RequestNormaliz
 from app.agents.scenario_generation_v2.response_builder import ResponseBuilder
 from app.agents.scenario_generation_v2.scenario_template_schema import project_scenario_v1_response_schema
 from app.agents.scenario_generation_v2.scenario_preset_loader import ScenarioPresetLoader
+from app.agents.scenario_generation_v2.prop_normalizer import LEGACY_STATIC_OBSTACLE_PROP_ALIASES
+from app.agents.scenario_generation_v2.scenario_preset_patcher import ScenarioPresetPatcher
+from app.agents.scenario_generation_v2.scenario_preset_registry import ScenarioPresetRegistry
 from app.agents.scenario_generation_v2.scenario_type_selector import ScenarioTypeSelector
 from app.agents.scenario_generation_v2.template_json_writer import TemplateJsonWriter
 from app.agents.scenario_generation_v2.template_planner import TemplatePlanner
-from app.agents.scenario_generation_v2.template_validator import TemplateValidator
+from app.agents.scenario_generation_v2.template_validator import ALLOWED_PROPS, FORBIDDEN_ROOT_FIELDS, TemplateValidator
 from app.models.scenario_generation_v2 import ScenarioGenerateV2Request, ScenarioGenerateV2Response, V2ValidationIssue
 
 
@@ -37,6 +40,8 @@ class ScenarioGenerationV2Agent:
         self.llm_client = llm_client
         self.spec_context_loader = spec_context_loader
         self.scenario_preset_loader = scenario_preset_loader or ScenarioPresetLoader()
+        self.scenario_preset_registry = ScenarioPresetRegistry()
+        self.scenario_preset_patcher = ScenarioPresetPatcher()
         self.normalizer = RequestNormalizer()
         self.intent_parser = IntentParser()
         self.type_selector = ScenarioTypeSelector()
@@ -223,6 +228,12 @@ class ScenarioGenerationV2Agent:
 
     def _postprocess_scenario_for_intent(self, scenario: dict, intent: ScenarioIntent) -> dict:
         """Apply prompt-specific quality corrections after structured LLM generation."""
+        fallback = self._postprocess_base_scenario_for_intent(deepcopy(scenario), intent)
+        preset_scenario = self._try_build_preset_scenario(intent, source_scenario=fallback)
+        return preset_scenario if preset_scenario is not None else fallback
+
+    def _postprocess_base_scenario_for_intent(self, scenario: dict, intent: ScenarioIntent) -> dict:
+        """Apply prompt-specific corrections that are independent of optional presets."""
         self._apply_alpha_pedestrian_policy(scenario)
         self._prefer_corridor_pose_robot_anchors(scenario)
         if intent.robot_anchor_only:
@@ -235,141 +246,65 @@ class ScenarioGenerationV2Agent:
             placements = obstacles.get("placements")
             if isinstance(placements, list) and len(placements) > 2:
                 obstacles["placements"] = self._first_gate_pair(placements)
-        if intent.corridor_profile == "curved-road":
-            self._apply_curved_road_preset_policy(scenario, intent)
         return scenario
+
+    def _try_build_preset_scenario(
+        self,
+        intent: ScenarioIntent,
+        *,
+        source_scenario: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Load, patch, validate, repair, and re-validate an optional preset candidate."""
+        preset_id = self.scenario_preset_registry.select(intent)
+        if preset_id is None:
+            return None
+        load_result = self.scenario_preset_loader.try_load_scenario_preset(preset_id)
+        if load_result.scenario is None:
+            return None
+        if self._preset_has_blocking_contract_issue(load_result.scenario):
+            return None
+        try:
+            candidate = self.scenario_preset_patcher.patch(
+                load_result.scenario,
+                intent,
+                preset_id=preset_id,
+                source_scenario=source_scenario,
+            )
+            validation = self.validator.validate(candidate)
+            if not validation.valid:
+                candidate = self.repair_handler.repair(candidate)
+                validation = self.validator.validate(candidate)
+            return candidate if validation.valid else None
+        except Exception:
+            return None
+
+    def _preset_has_blocking_contract_issue(self, preset: dict[str, Any]) -> bool:
+        """Return whether a loaded preset has catalog or root fields that must fallback."""
+        if any(field in preset for field in FORBIDDEN_ROOT_FIELDS):
+            return True
+        obstacles = preset.get("obstacles")
+        if not isinstance(obstacles, dict):
+            return False
+        placements = obstacles.get("placements")
+        if not isinstance(placements, list):
+            return False
+        return any(self._placement_has_invalid_prop(placement) for placement in placements)
+
+    def _placement_has_invalid_prop(self, placement: object) -> bool:
+        """Return whether a preset placement references a prop outside the validator catalog."""
+        if not isinstance(placement, dict):
+            return False
+        kind = placement.get("kind")
+        if kind not in {"fixed", "pattern"}:
+            return False
+        prop = placement.get("prop")
+        return not isinstance(prop, str) or (
+            prop not in ALLOWED_PROPS and prop not in LEGACY_STATIC_OBSTACLE_PROP_ALIASES
+        )
 
     def _apply_alpha_pedestrian_policy(self, scenario: dict) -> None:
         """Keep pedestrian generation out of the external alpha scenario body."""
         scenario["pedestrians"] = {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
-
-    def _apply_curved_road_preset_policy(self, scenario: dict, intent: ScenarioIntent) -> None:
-        """Force curved-road intent to use the bundled curved-road corridor contract."""
-        preset = self.scenario_preset_loader.load_scenario_preset("curved-road")
-        scenario["schema"] = "scenario"
-        scenario["version"] = 1
-        scenario["corridor"] = deepcopy(preset["corridor"])
-        scenario["robot"] = deepcopy(preset["robot"])
-        self._apply_alpha_pedestrian_policy(scenario)
-
-        has_obstacle_intent = self._has_static_obstacle_intent(intent)
-        scenario["scenario_id"] = "curved_road_static_obstacle" if has_obstacle_intent else "curved_road_sidewalk"
-        if not isinstance(scenario.get("intent"), str) or not scenario["intent"]:
-            scenario["intent"] = str(preset.get("intent") or "Evaluate route following on a curved road sidewalk.")
-        self._normalize_curved_road_obstacles(scenario, preset, intent, include_obstacle=has_obstacle_intent)
-
-    def _has_static_obstacle_intent(self, intent: ScenarioIntent) -> bool:
-        """Return whether the prompt asked for static obstacle placement."""
-        return "static_obstacle_ahead" in intent.risk_factors or intent.requested_gate_obstacle_count == 2
-
-    def _normalize_curved_road_obstacles(
-        self,
-        scenario: dict,
-        preset: dict[str, Any],
-        intent: ScenarioIntent,
-        *,
-        include_obstacle: bool,
-    ) -> None:
-        """Map obstacle rules onto the curved-road preset segment ids and ranges."""
-        preset_obstacles = preset.get("obstacles") if isinstance(preset.get("obstacles"), dict) else {}
-        source_obstacles = scenario.get("obstacles") if isinstance(scenario.get("obstacles"), dict) else {}
-        min_clear_width = source_obstacles.get("min_clear_width_m", preset_obstacles.get("min_clear_width_m", 0.9))
-        if not include_obstacle:
-            scenario["obstacles"] = {"min_clear_width_m": min_clear_width, "placements": []}
-            return
-
-        source_placements = source_obstacles.get("placements")
-        placements = [deepcopy(placement) for placement in source_placements if isinstance(placement, dict)] if isinstance(source_placements, list) else []
-        if not placements:
-            placements = [self._default_curved_road_obstacle(intent)]
-
-        road_curve_range = self._segment_range(scenario["corridor"], "road_curve")
-        scenario["obstacles"] = {
-            "min_clear_width_m": min_clear_width,
-            "placements": [
-                self._remap_obstacle_to_curved_road(placement, road_curve_range)
-                for placement in placements
-            ],
-        }
-
-    def _default_curved_road_obstacle(self, intent: ScenarioIntent) -> dict[str, Any]:
-        """Build the default static obstacle used when a curved-road LLM candidate omits one."""
-        placement: dict[str, Any] = {
-            "kind": "fixed",
-            "id": "center_obstacle",
-            "prop": "obstacle.crate_01",
-            "at": {
-                "segment": "road_curve",
-                "along_m": self._default_curved_road_obstacle_along_range(),
-                "offset_m": {"min": 0.45, "max": 0.75},
-                "lane": "walkway",
-            },
-            "yaw_deg": 0,
-        }
-        if intent.explicit_blocking:
-            placement["allow_blocking"] = True
-        return placement
-
-    def _default_curved_road_obstacle_along_range(self) -> dict[str, float]:
-        """Return the stable obstacle band used for curved-road demo scenarios."""
-        return {"min": 6.5, "max": 8.5}
-
-    def _remap_obstacle_to_curved_road(
-        self,
-        placement: dict[str, Any],
-        road_curve_range: tuple[float, float],
-    ) -> dict[str, Any]:
-        """Rewrite obstacle placement anchors to the curved-road conflict segment."""
-        kind = placement.get("kind")
-        if kind in {"fixed", "pattern"}:
-            at = placement.get("at")
-            if not isinstance(at, dict):
-                at = {}
-            at["segment"] = "road_curve"
-            at["along_m"] = self._curved_road_obstacle_along_value(at.get("along_m"), road_curve_range)
-            at.setdefault("offset_m", 0.0)
-            at.setdefault("lane", "walkway")
-            placement["at"] = at
-        elif kind == "scatter":
-            zone = placement.get("zone")
-            if not isinstance(zone, dict):
-                zone = {}
-            zone["segments"] = ["road_curve"]
-            placement["zone"] = zone
-        return placement
-
-    def _segment_range(self, corridor: dict[str, Any], segment_id: str) -> tuple[float, float]:
-        """Return the fixed along-range for a segment in a scenario corridor."""
-        for segment in corridor.get("segments", []):
-            if not isinstance(segment, dict) or segment.get("id") != segment_id:
-                continue
-            along_range = segment.get("along_range_m")
-            if isinstance(along_range, list) and len(along_range) == 2:
-                start, end = along_range
-                if isinstance(start, int | float) and isinstance(end, int | float):
-                    return (float(start), float(end))
-        return (4.0, 9.6)
-
-    def _curved_road_obstacle_along_value(
-        self,
-        value: object,
-        allowed_range: tuple[float, float],
-    ) -> object:
-        """Keep valid curved-road obstacle positions while avoiding collapsed edge ranges."""
-        minimum, maximum = allowed_range
-        if isinstance(value, dict):
-            value_min = value.get("min")
-            value_max = value.get("max")
-            if isinstance(value_min, int | float) and isinstance(value_max, int | float):
-                clamped_min = min(max(float(value_min), minimum), maximum)
-                clamped_max = min(max(float(value_max), minimum), maximum)
-                if clamped_min < clamped_max:
-                    return {"min": clamped_min, "max": clamped_max}
-                if clamped_min == clamped_max and clamped_min not in {minimum, maximum}:
-                    return {"min": clamped_min, "max": clamped_max}
-        if isinstance(value, int | float):
-            return min(max(float(value), minimum), maximum)
-        return self._default_curved_road_obstacle_along_range()
 
     def _prefer_corridor_pose_robot_anchors(self, scenario: dict) -> None:
         """Replace abstract default robot anchors with UE-friendly corridor poses when possible."""

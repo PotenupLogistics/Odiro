@@ -17,7 +17,7 @@ class TemplateJsonWriter:
             placement = {
                 "kind": "fixed",
                 "id": "center_obstacle",
-                "prop": "obstacle.crate_01",
+                "prop": "obstacle.road_cone_01",
                 "at": {
                     "segment": "conflict",
                     "along_m": {"min": 6.5, "max": 8.5},

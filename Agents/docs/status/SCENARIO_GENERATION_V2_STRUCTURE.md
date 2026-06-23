@@ -53,7 +53,7 @@ Structured output schema는 `app/agents/scenario_generation_v2/scenario_template
 
 현재 schema는 Project Scenario v1 계약에 맞춰 robot abstract anchor(`entry`/`exit`)와 concrete anchor(`corridor_pose`)를 구분하고, 고정 숫자 또는 `{min,max}` 범위값, fixed/pattern/scatter obstacle placement, Unreal-supported override fields, placement `allow_blocking`, background `spawn_zone.segments`, 제한적 `corridor.segments[].replaced_by` choices를 허용한다. 기본 LLM 생성은 단순한 `fixed` placement를 우선한다.
 
-곡선 도로 또는 커브 도로 prompt는 `corridor_profile="curved-road"` intent로 해석한다. 이 경우 deterministic path, LLM valid path, LLM repair path, fallback path 모두에서 최종 scenario 확정 전 postprocess가 현재 alpha 기준 `static/templates/scenario/curved-road.json` preset을 기준으로 `corridor.axis`, `corridor.segments`, `robot.start`, `robot.goal`을 보정한다. 장애물 요청이 있으면 기존 obstacle placement를 `road_curve` segment로 remap하고, 없으면 preset처럼 빈 placements를 유지한다. 이 처리는 bundled preset을 generation seed로 읽는 것이며, scenario 파일 저장이나 template 관리 책임을 추가하지 않는다.
+직선/커브/공사구간/S자 길 prompt는 `ScenarioPresetRegistry`가 `blank`, `line`, `curved`, `barricade`, `s-curve` canonical preset 중 하나로 해석할 수 있다. legacy id는 loader가 아니라 registry에서 `curved-road -> curved`, `demo -> line`으로 resolve한다. preset은 `ScenarioPresetLoader`의 optional load 결과를 `ScenarioPresetPatcher`가 deepcopy 후 사용자 intent로 patch하고, `TemplateValidator` 검증 실패 시 deterministic repair 후 재검증한다. preset 누락, 파싱 실패, patch/validation 실패는 API 500이 아니라 기존 writer 기반 scenario fallback으로 처리한다. 이 처리는 bundled preset을 generation seed로 읽는 것이며, scenario 파일 저장이나 template 관리 책임을 추가하지 않는다.
 
 보행자 요청은 현재 alpha 정책상 외부 scenario body에서 실행용 보행자 경로로 확장하지 않는다. 응답 root에는 `pedestrians`를 포함하되 `background.count=0`, `background.speed_mps=1.0`, `encounters=[]`로 정규화한다.
 
@@ -155,7 +155,7 @@ Excluded:
 | `validate_request_node` | `ScenarioGenerationGraphRunnerV2.validate_request_node` | Guardrail / validator | `request`, `prompt` | `prompt`, optional failed `validation` | prompt 존재와 문자열/blank 여부를 확인한다. |
 | `interpret_user_prompt_node` | `ScenarioGenerationGraphRunnerV2.interpret_user_prompt_node` | LLM-assisted / Deterministic parser | `prompt` | normalized `prompt`, optional `interpreted_intent`, optional `llm_template_candidate`, `llm_validation`, `llm_warnings` | `V2_AGENT_LLM_ENABLED=true`이면 prompt 정규화 직후 LLM 후보 생성을 먼저 시도한다. 유효한 후보가 없을 때만 기존 `IntentParser`로 자연어 의도를 구조화한다. |
 | `select_scenario_pattern_node` | `ScenarioGenerationGraphRunnerV2.select_scenario_pattern_node` | Deterministic selector | optional `interpreted_intent`, optional `llm_template_candidate` | `selected_pattern` | 유효한 LLM 후보가 있으면 후보 scenario id를 선택값으로 사용한다. 없으면 기존 `ScenarioTypeSelector`로 지원 패턴 중 하나를 선택한다. |
-| `build_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.build_scenario_template_node` | Scenario builder | `interpreted_intent`, `selected_pattern`, optional validated `llm_template_candidate` | `scenario`, `summary`, `assumptions` | validator를 통과한 LLM 후보가 있으면 사용하고, 없으면 기존 planner/writer로 deterministic `scenario` v1 객체를 만든다. |
+| `build_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.build_scenario_template_node` | Scenario builder | `interpreted_intent`, `selected_pattern`, optional validated `llm_template_candidate` | `scenario`, `summary`, `assumptions` | validator를 통과한 LLM 후보가 있으면 사용하고, 없으면 기존 planner/writer로 deterministic `scenario` v1 객체를 만든다. 최종 확정 전 agent postprocess에서 optional preset load/patch/validate/fallback 흐름을 적용한다. |
 | `validate_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.validate_scenario_template_node` | Guardrail / validator | `scenario` | `validation`, `diagnostics`, `status` | 기존 `TemplateValidator`로 schema, 참조, catalog, forbidden field를 검사한다. |
 | `repair_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.repair_scenario_template_node` | Repair | invalid `scenario`, `repair_count` | repaired `scenario`, incremented `repair_count`, diagnostics | 기존 `RepairHandler`로 deterministic repair를 적용한다. 최대 2회 경로만 허용된다. |
 | `fallback_scenario_template_node` | `ScenarioGenerationGraphRunnerV2.fallback_scenario_template_node` | Fallback | invalid state after repair attempts | fallback `scenario`, `validation`, `assumptions` | `narrow_sidewalk_cross_path` deterministic fallback scenario를 생성한다. |
@@ -190,6 +190,8 @@ Validation checks include:
 - policy/robot setup field 금지: `policy`, `robot_setup`, `robot.setup`
 
 Repair first applies deterministic local repair. It normalizes `scenario_id`, migrates legacy `template_id` to `scenario_id`, removes `template_id`, and swaps inverted `min/max` ranges. If LLM output remains invalid and LLM repair is enabled, the graph sends the original prompt, invalid scenario, and validator errors to an LLM-assisted repair call using the same structured output schema. Only repair results that pass `TemplateValidator` are used. If repair still fails, deterministic fallback scenario generation runs.
+
+Preset 기반 scenario 후보도 같은 validator gate를 사용한다. 흐름은 `load -> deepcopy -> patch -> validate -> repair if needed -> re-validate -> response`이며, repair 후에도 `TemplateValidator`를 통과하지 못하면 preset 후보를 버리고 기존 `TemplateJsonWriter` 기반 fallback scenario를 사용한다. 외부 `/api/v2/scenarios/generate` response body는 항상 raw `scenario` JSON 계약을 유지하며 preset diagnostic field를 추가하지 않는다.
 
 ## 8. 하지 않는 일
 

@@ -3,11 +3,12 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from app.catalogs.static_obstacle_catalog import get_allowed_static_obstacle_prop_ids
 from app.models.scenario_generation_v2 import V2ValidationIssue, V2ValidationResult
 
 
 ALLOWED_SURFACES = {"sidewalk", "crosswalk_stripe", "grass", "road", "driveway", "wall", "building"}
-ALLOWED_PROPS = {"obstacle.crate_01", "obstacle.road_cone_01", "traffic_cone_01"}
+ALLOWED_PROPS = get_allowed_static_obstacle_prop_ids()
 ALLOWED_SEGMENT_TYPES = {"straight", "narrowing", "crosswalk", "entrance"}
 ALLOWED_PLACEMENT_KINDS = {"fixed", "pattern", "scatter"}
 ALLOWED_PATTERNS = {"gate", "line", "cluster"}

@@ -4,6 +4,8 @@ from copy import deepcopy
 import re
 from typing import Any
 
+from app.agents.scenario_generation_v2.prop_normalizer import normalize_legacy_static_obstacle_prop_id
+
 
 class RepairHandler:
     """Applies deterministic, local-only repairs before validation."""
@@ -42,6 +44,8 @@ class RepairHandler:
             }
             if direct_pose and not isinstance(at, dict):
                 placement["at"] = direct_pose
+            if "prop" in placement:
+                placement["prop"] = normalize_legacy_static_obstacle_prop_id(placement["prop"])
 
     def _repair_robot_anchors(self, template: dict[str, Any]) -> None:
         """Normalize abstract and concrete robot anchors without inventing positions."""

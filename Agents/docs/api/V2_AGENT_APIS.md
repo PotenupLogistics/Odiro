@@ -11,7 +11,7 @@ Scenario generation v2는 항상 LangGraph runner를 실행합니다. `V2_AGENT_
 
 Scenario generation v2의 외부 response body는 API wrapper가 아니라 `scenario` v1 JSON 객체 자체입니다.
 Obstacle placement kind는 Unreal parser와 맞춰 `fixed`, `pattern`, `scatter`를 허용합니다. 기본 LLM 생성은 여전히 단순한 `fixed` placement를 우선 사용합니다.
-자연어 prompt가 곡선 도로, 커브길, curved road, curve, bend 같은 도로 유형을 요청하면 최종 scenario는 bundled `curved-road` preset의 corridor와 robot anchor를 기준으로 보정됩니다.
+자연어 prompt가 직선/커브/공사구간/S자 길 같은 도로 유형을 요청하면 scenario generation v2는 bundled `static/templates/scenario` preset을 완성 응답이 아니라 기본 골격으로만 참고합니다. legacy preset id는 `curved-road -> curved`, `demo -> line`으로 resolver 단계에서 처리하며, preset은 `load -> deepcopy -> patch -> validate -> repair if needed -> re-validate -> response` 흐름을 통과한 경우에만 사용합니다.
 보행자는 현재 alpha 정책상 root에는 항상 포함하지만 `background.count=0`, `background.speed_mps=1.0`, `encounters=[]`로 유지합니다.
 
 ## v1과 v2 차이
@@ -103,7 +103,7 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 * `obstacles.placements[].allow_blocking`: optional boolean
 * `pedestrians.background.spawn_zone.segments`: optional segment id 목록
 * `corridor.segments[].replaced_by`: fixed string 또는 `{ "choices": [...] }`
-* curved-road prompt: 현재 alpha 기준 `static/templates/scenario/curved-road.json` preset의 `corridor.axis`, `corridor.segments`, `robot.start`, `robot.goal`을 최종 응답에 사용
+* preset prompt: `blank`, `line`, `curved`, `barricade`, `s-curve` 중 하나를 선택해 corridor/robot skeleton을 참고하되, 장애물 개수/장애물 없음/길이 같은 사용자 명시 조건을 preset 기본값보다 우선 적용
 
 ## `POST /api/v2/analysis/run`
 
@@ -167,7 +167,7 @@ V2_AGENT_GRAPH_ENABLED=false
 * LLM JSON 파싱 실패 시 fallback합니다.
 * `scenario` 검증 실패 시 repair를 시도하고, repair도 실패하면 deterministic fallback합니다.
 * analysis recommendation의 evidence가 실제 project/run/episode와 맞지 않으면 rule-based fallback합니다.
-* fallback이 발생하면 `warnings` 또는 `validation.warnings`에 사유를 남깁니다.
+* scenario generation preset 누락, JSON 파싱 실패, validator 실패는 내부 diagnostic으로만 남기고 외부 `/api/v2/scenarios/generate` 응답 body에는 `warnings`, `generation_mode`, `validation`을 추가하지 않습니다.
 
 ## 추천 없음 규칙
 

@@ -144,6 +144,7 @@ build/Release/
   profile.json                    # 시뮬레이션 환경 프로필 설정. 기존 DeliveryBotSetup 포함
 
   scenario.json                   # 편집 가능한 단일 시나리오. 랜덤 요소 가능. seed/count는 setting.json 소유
+  preview.png
 
   policy/                         # 행동 정책
     __init__.py                   # 진입점. 지정된 인터페이스로 구현해야 함

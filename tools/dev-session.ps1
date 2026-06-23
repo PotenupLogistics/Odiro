@@ -60,7 +60,7 @@ function Parse-DevArguments {
 $options = Parse-DevArguments @args
 $repoRoot = Get-RepoRoot
 $agentsDevScript = Join-Path $repoRoot "Agents\tools\dev.ps1"
-$clientDev = Join-Path $repoRoot "Client\Task-Dev.bat"
+$clientDev = Join-Path $repoRoot "Client\Tools\Dev.ps1"
 $analysisEndpointArg = "-ProjectRunAnalysisEndpointUrl=http://127.0.0.1:$($options.AgentsPort)/api/v2/analysis/run"
 if (-not ($options.EditorArgs | Where-Object { $_ -like "-ProjectRunAnalysisEndpointUrl=*" })) {
     $options.EditorArgs += $analysisEndpointArg

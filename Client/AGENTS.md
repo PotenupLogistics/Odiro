@@ -1,6 +1,6 @@
 ## Repository
 - Asset edits: prefer MCP over commandlets if available; otherwise use editor, commandlet, or project scripts
-- Automation: build `Task-Build.bat`, PIE preview `Task-RunPreview.bat`
+- Automation: build `..\task-build.bat client`, PIE preview `..\task-run.bat -SkipAgents -SkipBridge -- ...`
 - Commands: no hardcoded local UE install paths
 
 ## MCP

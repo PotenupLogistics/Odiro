@@ -23,9 +23,6 @@ entry:
       - static/templates
       - static/run-defaults
       - Bridge/tools
-      - Bridge/task-setup.bat
-      - Bridge/task-build.bat
-      - Bridge/task-run.bat
 guardrails:
   - Bridge exposes local portless IPC; adding HTTP ports requires a contract update.
   - IPC transport is selected by Go build tags: Windows named pipe or Unix domain socket.

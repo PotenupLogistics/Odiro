@@ -6,7 +6,6 @@ paths:
   - Client/Source/OdiroSim/Public/Platform/**
   - Client/Source/OdiroSim/Private/Platform/**
   - Client/Plugins/UmgMcp/**
-  - Client/Task-*.bat
   - Client/Tools/**
   - task-run.bat
   - task-dev.bat
@@ -50,6 +49,8 @@ guardrails:
   - ExperimentResultViewModel owns dashboard display state only; project run summary/review JSON loading and AI request relay stay behind PlatformUiSubsystem APIs.
   - ProjectWorkspaceViewModel does not call OpenLevel directly; startup return navigation is mediated by PlatformUiSubsystem.
   - Platform widgets must not rebuild WBP layout with WidgetTree/ConstructWidget fallback UI; keep structural layout and empty states in WBP-owned surfaces.
+  - Root `task-build.bat`, `task-run.bat`, and `task-dev.bat` are the user-facing Client task entrypoints.
+  - Client runtime-internal launch scripts live under `Client/Tools`, not root task wrappers.
   - Project mode must not fall back to legacy SimulationSetup, RunQueue, Json/Input, Saved runs, or text-input project paths.
   - Project run launch uses the project-run command contract with project path, run id, and policy port inputs.
   - Project experiment launch commands create a fresh user-project run through ProjectWorkspaceViewModel before starting; selected historical runs are analysis/navigation targets and must not be overwritten.

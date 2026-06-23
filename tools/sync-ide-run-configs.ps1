@@ -26,7 +26,7 @@ function Set-TextFile {
         [string[]] $Lines
     )
 
-    $content = (($Lines -join "`r`n") + "`r`n")
+    $content = (($Lines -join "`n") + "`n")
     if ($DryRun) {
         Write-Step "Would write: $Path"
         return

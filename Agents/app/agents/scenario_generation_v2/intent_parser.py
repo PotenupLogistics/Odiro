@@ -137,6 +137,9 @@ class IntentParser:
             return int(value)
         if any(token in prompt for token in ("장애물 두 개", "두 개의 장애물", "장애물 2개")):
             return 2
+        generic_korean_match = re.search(r"(\d+)\s*개", prompt)
+        if generic_korean_match and ("장애물" in prompt or "obstacle" in lowered or "cone" in lowered):
+            return int(generic_korean_match.group(1))
         english_match = re.search(r"(?:obstacle[s]?\D+(\d+)|(\d+)\D+obstacle[s]?)", lowered)
         if english_match:
             value = english_match.group(1) or english_match.group(2)
@@ -147,7 +150,8 @@ class IntentParser:
 
     def _is_explicit_no_obstacles_prompt(self, prompt: str, lowered: str) -> bool:
         """Return whether the prompt explicitly removes static obstacles."""
-        return any(token in prompt for token in ("장애물 없는", "장애물 없이", "장애물 제거")) or any(
+        korean_no_obstacle = re.search(r"장애물(?:은|는|이|가)?\s*(?:없|제거)", prompt) is not None
+        return korean_no_obstacle or any(token in prompt for token in ("장애물 없는", "장애물 없이", "장애물 제거")) or any(
             token in lowered for token in ("without obstacle", "without obstacles", "no obstacle", "no obstacles")
         )
 

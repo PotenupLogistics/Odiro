@@ -1094,6 +1094,30 @@ def test_v2_deterministic_curved_obstacle_count_patches_preset_count() -> None:
     assert len(response.scenario["obstacles"]["placements"]) == 2
 
 
+def test_v2_deterministic_generic_obstacle_count_patches_code_generation_count() -> None:
+    """Keep explicitly requested obstacle counts outside preset-backed prompts."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="장애물 2개 설치해줘"))
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    assert len(response.scenario["obstacles"]["placements"]) == 2
+
+
+def test_v2_deterministic_catalog_prop_count_prompt_patches_code_generation_count() -> None:
+    """Parse catalog prop id count prompts and keep catalog-safe placements."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="obstacle.road_cone_01 2개 설치해줘"))
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    placements = response.scenario["obstacles"]["placements"]
+    assert len(placements) == 2
+    assert {placement["prop"] for placement in placements} <= {"obstacle.road_cone_01", "obstacle.road_cone_02"}
+
+
 def test_v2_deterministic_line_length_prompt_patches_corridor_and_robot_anchors() -> None:
     """Patch line preset length together with segment ranges and robot anchors."""
     agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
@@ -1110,6 +1134,24 @@ def test_v2_deterministic_line_length_prompt_patches_corridor_and_robot_anchors(
     for anchor in (scenario["robot"]["start"], scenario["robot"]["goal"]):
         start_m, end_m = segment_ranges[anchor["segment"]]
         assert start_m <= anchor["along_m"] <= end_m
+    assert scenario["robot"]["goal"]["along_m"] == 9.0
+
+
+def test_v2_deterministic_line_length_no_obstacle_phrase_overrides_default_obstacle() -> None:
+    """Honor particle-bearing Korean no-obstacle phrases in compound length prompts."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(
+        ScenarioGenerateV2Request(prompt="길을 길게 만들어줘. 10m 로 만들어주고 장애물은 없는 직선 보도 시나리오로 만들어줘.")
+    )
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    assert scenario["obstacles"]["placements"] == []
+    assert scenario["corridor"]["axis"]["points_m"][-1] == [10.0, 0.0]
+    segment_ranges = {segment["id"]: segment["along_range_m"] for segment in scenario["corridor"]["segments"]}
+    assert max(along_range[1] for along_range in segment_ranges.values()) == 10.0
     assert scenario["robot"]["goal"]["along_m"] == 9.0
 
 

@@ -135,6 +135,7 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
     },
     "robotSpec": {
       "maxSpeedKmh": 7.0,
+      "maxReverseSpeedKmh": 3.0,
       "bodyLengthCm": 72.0,
       "bodyWidthCm": 48.0,
       "bodyHeightCm": 55.0,
@@ -152,7 +153,27 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
     "lidarSpec": {
       "scanRangeM": 6.0,
       "angleStepDegree": 5.0,
-      "sensorHeightM": 0.07
+      "sensorHeightM": 0.07,
+      "frontHalfAngleDegree": 50.0,
+      "stopDistanceM": 2.0,
+      "obstacleWarningDistanceM": 5.0,
+      "slowDownDistanceM": 8.0,
+      "collisionStopHalfAngleDegree": 15.0,
+      "collisionStopDistanceM": 1.0,
+      "scanRateHz": 5.0,
+      "observationProfile": "quality_point_cloud",
+      "pointCloudOptions": {
+        "captureEnabled": true,
+        "captureEveryNSensorFrames": 10,
+        "maxPoints": 4096,
+        "includeGroundPoints": true,
+        "rangeLimitM": 15.0
+      }
+    },
+    "artifactSpec": {
+      "capturesRoot": "C:/UserProject/runs/000001/episodes/000001",
+      "capturesRootRelative": "episodes/000001",
+      "required": true
     }
   }
 }
@@ -168,6 +189,7 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
 | `request.grid` | 고정 | Python A* 경로 탐색에 사용하는 grid |
 | `request.grid.cells[]` | 고정 | 각 cell의 좌표, area, cost, blocked 여부 |
 | `request.robotSpec.maxSpeedKmh` | 확장 가능 | 로봇 최대 전진 속도 |
+| `request.robotSpec.maxReverseSpeedKmh` | 확장 가능 | 로봇 최대 후진 속도 |
 | `request.robotSpec.bodyLengthCm` | 확장 가능 | 로봇 본체 길이. Unreal의 로봇 충돌 박스 크기에서 가져온다. |
 | `request.robotSpec.bodyWidthCm` | 확장 가능 | 로봇 본체 폭. Unreal의 로봇 충돌 박스 크기에서 가져온다. |
 | `request.robotSpec.bodyHeightCm` | 확장 가능 | 로봇 본체 높이. Unreal의 로봇 충돌 박스 크기에서 가져온다. |
@@ -182,12 +204,32 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
 | `request.lidarSpec.scanRangeM` | 확장 가능 | 라이다 전체 탐지 거리 |
 | `request.lidarSpec.angleStepDegree` | 확장 가능 | 2D 라이다 ray 간격 |
 | `request.lidarSpec.sensorHeightM` | 확장 가능 | 라이다 센서 높이 |
+| `request.lidarSpec.frontHalfAngleDegree` | 확장 가능 | 전방 LiDAR 판정에 사용하는 반각. 단위 degree |
+| `request.lidarSpec.stopDistanceM` | 확장 가능 | Python 정책의 전방 정지 거리 |
+| `request.lidarSpec.obstacleWarningDistanceM` | 확장 가능 | Python 정책의 장애물 경고 및 재경로 판단 거리 |
+| `request.lidarSpec.slowDownDistanceM` | 확장 가능 | Python 정책의 감속 시작 거리 |
+| `request.lidarSpec.collisionStopHalfAngleDegree` | 확장 가능 | 즉시 충돌 정지에 사용하는 중앙 반각 |
+| `request.lidarSpec.collisionStopDistanceM` | 확장 가능 | 즉시 충돌 정지 거리 |
+| `request.lidarSpec.scanRateHz` | 확장 가능 | LiDAR sensor frame 생성 빈도 |
+| `request.lidarSpec.observationProfile` | 고정 | Python이 사용할 관측 profile. 예: `basic`, `realtime_point_cloud`, `quality_point_cloud` |
+| `request.lidarSpec.pointCloudOptions.captureEnabled` | 고정 | Point Cloud artifact 저장 여부 |
+| `request.lidarSpec.pointCloudOptions.captureEveryNSensorFrames` | 확장 가능 | Point Cloud를 저장할 sensor frame 간격 |
+| `request.lidarSpec.pointCloudOptions.maxPoints` | 확장 가능 | frame당 저장할 최대 point 수 |
+| `request.lidarSpec.pointCloudOptions.includeGroundPoints` | 확장 가능 | ground point 저장 여부 |
+| `request.lidarSpec.pointCloudOptions.rangeLimitM` | 확장 가능 | 0보다 클 때 적용하는 Point Cloud 저장 거리 제한 |
+| `request.artifactSpec.capturesRoot` | 고정 | Python이 artifact를 저장할 절대 episode 경로. Point Cloud recorder가 이 경로 아래에 `lidar_point_cloud/`를 만든다. |
+| `request.artifactSpec.capturesRootRelative` | 고정 | Python 응답과 JSONL에 기록할 run 기준 episode 상대 경로 |
+| `request.artifactSpec.required` | 고정 | project run에서 artifact 경로 초기화 실패를 `/scenario/start` 오류로 처리할지 여부 |
+| `request.artifactSpec.configurationErrorCode` | 조건부 | Unreal이 episode 경로 구성에 실패했을 때 전달하는 오류 코드 |
+| `request.artifactSpec.configurationErrorMessage` | 조건부 | Unreal이 episode 경로 구성에 실패했을 때 전달하는 오류 설명 |
 
 주의:
 
 - `scenario_start`는 Unreal에서 실제로 설정/측정할 수 있는 로봇, 구동, 라이다 스펙만 보낸다.
-- `obstacleWarningDistanceM`, `stopDistanceM`, `slowDownDistanceM`, `frontHalfAngleDegree` 같은 정책 판정값은 더 이상 start JSON에 싣지 않는다. Python 예시 정책의 기본값 또는 사용자가 작성한 Python 정책 코드에서 관리한다.
+- `frontHalfAngleDegree`, `stopDistanceM`, `obstacleWarningDistanceM`, `slowDownDistanceM`, `collisionStopHalfAngleDegree`, `collisionStopDistanceM`은 현재 `lidarSpec`으로 전달되어 Python 정책의 시작 설정에 사용된다.
 - 과거 호환을 위해 Python parser는 legacy `vehicleSpec`, `controlSpec`를 읽을 수 있지만, 새 Unreal payload는 `robotSpec`, `driveSpec`, `lidarSpec`만 보낸다.
+- project run에서 `capturesRoot`는 `runs/<RunId>/episodes/<EpisodeId>` 절대 경로이며 최종 Point Cloud 파일은 `runs/<RunId>/episodes/<EpisodeId>/lidar_point_cloud/` 아래에 생성된다.
+- standalone 실행에서는 `required=false`이며 기존 `Saved/LidarPointCloudCaptures/.../captures` 경로를 사용할 수 있다.
 - `draw_obstacle_warning_debug`는 DeliveryBotSetup JSON 설정값이며 Python 통신 payload에는 포함되지 않는다.
 - `allowDiagonalPathfinding=true`이면 A*가 대각선 cell 이동을 허용한다. 단, 대각선으로 장애물 모서리를 뚫고 지나가지 않도록 양옆 cell이 모두 walkable일 때만 대각선 이동한다.
 - `smoothPathWithLineOfSight=true`이면 A* 결과가 line-of-sight shortcut으로 줄어든다. 이후 `pathWorldPoints`에는 follower corner smoothing과 `useExactGoalAsFinalPoint`가 반영된 실제 추종 경로가 들어간다.
@@ -246,10 +288,20 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
     "status": "ok",
     "accepted": true,
     "pathStatus": "valid",
-    "debug": {
-      "reason": "initial_path_ready",
-      "pathLength": 22
-    }
+    "decision": {
+      "selectedPolicy": "AStarPathfinder",
+      "reason": "initial_path_ready"
+    },
+    "path": {
+      "pathStatus": "valid",
+      "pathIndex": 0,
+      "pathLength": 22,
+      "targetPathIndex": 0,
+      "targetWorldPoint": null,
+      "pathWorldPoints": []
+    },
+    "events": [],
+    "captures": []
   }
 }
 ```
@@ -270,9 +322,20 @@ episode 시작 시 한 번 호출한다. Python은 이 요청으로 시작 위�
       "code": "PATH_NOT_FOUND",
       "message": "goal_cell_blocked"
     },
-    "debug": {
+    "decision": {
+      "selectedPolicy": "AStarPathfinder",
       "reason": "goal_cell_blocked"
-    }
+    },
+    "path": {
+      "pathStatus": "empty",
+      "pathIndex": 0,
+      "pathLength": 0,
+      "targetPathIndex": 0,
+      "targetWorldPoint": null,
+      "pathWorldPoints": []
+    },
+    "events": [],
+    "captures": []
   }
 }
 ```
@@ -293,12 +356,17 @@ decision tick마다 호출한다. Unreal은 현재 로봇 상태, 라이다 ray,
   "request": {
     "sequence": 75,
     "runTimeSeconds": 12.5,
+    "sensorSequence": 120,
+    "sensorTimeSeconds": 12.4,
     "robotState": {
       "x": -120.0,
       "y": 15.0,
       "z": 11.5,
       "yawDegree": 2.0,
-      "speedKmh": 3.2
+      "speedKmh": 3.2,
+      "bColliding": false,
+      "collisionActorName": "",
+      "collisionActorTags": []
     },
     "lidarRays": [
       {
@@ -318,6 +386,29 @@ decision tick마다 호출한다. Unreal은 현재 로봇 상태, 라이다 ray,
         "actorTags": []
       }
     ],
+    "lidar": {
+      "mode": "ThreeD",
+      "sensorSequence": 120,
+      "sensorTimeSeconds": 12.4,
+      "rays1d": [],
+      "rays2d": [],
+      "rays3d": [
+        {
+          "hit": true,
+          "distanceM": 1.37,
+          "rayIndex": 61,
+          "yawDegree": 12.0,
+          "pitchDegree": -5.0,
+          "actorName": "barrier_01",
+          "actorTags": ["StaticObstacle"],
+          "hitLocationCm": {
+            "x": 16.2,
+            "y": 43.4,
+            "z": 8.1
+          }
+        }
+      ]
+    },
     "observedObjects": [
       {
         "actorName": "barrier_01",
@@ -339,9 +430,14 @@ decision tick마다 호출한다. Unreal은 현재 로봇 상태, 라이다 ray,
 | --- | --- | --- |
 | `request.sequence` | 고정 | decide 요청 순서 번호 |
 | `request.runTimeSeconds` | 고정 | Unreal world time |
+| `request.sensorSequence` | 고정 | 현재 LiDAR sensor frame 순서 번호 |
+| `request.sensorTimeSeconds` | 고정 | 현재 LiDAR sensor frame의 simulation time |
 | `request.robotState.x/y/z` | 고정 | 로봇 위치. 단위는 cm |
 | `request.robotState.yawDegree` | 고정 | 로봇 yaw. 단위는 degree |
 | `request.robotState.speedKmh` | 고정 | 현재 속도. 단위는 km/h |
+| `request.robotState.bColliding` | 고정 | 현재 충돌 정지 상태 여부 |
+| `request.robotState.collisionActorName` | 확장 가능 | 현재 충돌한 actor 이름 |
+| `request.robotState.collisionActorTags` | 확장 가능 | 현재 충돌한 actor tag 목록 |
 | `request.lidarRays[].hit` | 고정 | 해당 ray가 유효 actor를 맞췄는지 여부 |
 | `request.lidarRays[].distanceM` | 고정 | ray hit 또는 ray 끝까지의 거리. 단위는 m |
 | `request.lidarRays[].rayIndex` | 고정 | ray index. 없으면 `null` 가능 |
@@ -349,9 +445,13 @@ decision tick마다 호출한다. Unreal은 현재 로봇 상태, 라이다 ray,
 | `request.lidarRays[].actorName` | 확장 가능 | hit actor 이름. miss면 빈 문자열 가능 |
 | `request.lidarRays[].actorTags` | 확장 가능 | hit actor tag 목록 |
 | `request.lidar.mode` | 확장 가능 | typed LiDAR 모드. 예: `OneD`, `TwoD`, `ThreeD`, `OneDAndTwoD`, `TwoDAndThreeD`, `All` |
+| `request.lidar.sensorSequence` | 고정 | typed LiDAR 관측의 sensor frame 순서 번호 |
+| `request.lidar.sensorTimeSeconds` | 고정 | typed LiDAR 관측의 simulation time |
 | `request.lidar.rays1d[]` | 확장 가능 | 1D 전방 ray 목록. 정책에서는 yaw 0도 전방 장애물 판단으로만 사용 |
 | `request.lidar.rays2d[]` | 확장 가능 | 2D 수평 ray 목록. 2D 사용 모드에서는 정책 판단과 재경로의 기준 입력 |
 | `request.lidar.rays3d[]` | 확장 가능 | 3D ray 목록. 3D 단독 모드에서는 같은 yaw의 vertical ray 중 가장 가까운 hit를 2D 정책 ray로 투영해 사용 |
+| `request.lidar.rays3d[].yawDegree` | 확장 가능 | 로봇 기준 3D ray local yaw |
+| `request.lidar.rays3d[].pitchDegree` | 확장 가능 | 로봇 기준 3D ray local pitch |
 | `request.lidar.rays3d[].hitLocationCm` | 확장 가능 | Unreal raycast가 실제로 맞춘 world hit 위치. Point Cloud export는 이 값이 있으면 거리/각도 재계산보다 우선 사용한다. |
 | `request.observedObjects[]` | 확장 가능 | ray를 actor 단위로 묶은 관측 요약 |
 
@@ -432,9 +532,11 @@ PathFollower가 soft stop으로 강제 재탐색을 요청한 경우에는 같�
       "brake": 0.0,
       "direction": "Forward"
     },
-    "debug": {
+    "decision": {
       "selectedPolicy": "PathFollower",
-      "reason": "follow_path",
+      "reason": "follow_path"
+    },
+    "path": {
       "pathStatus": "valid",
       "pathIndex": 4,
       "pathLength": 22,
@@ -455,15 +557,20 @@ PathFollower가 soft stop으로 강제 재탐색을 요청한 경우에는 같�
         "x": -250.0,
         "y": 50.0,
         "z": 11.5
-      },
-      "closestPathDistanceCm": 42.0,
-      "maxPathErrorCm": 120.0,
-      "obstacleWarningCount": 0,
-      "lastObstacleWarningCell": null,
-      "lastObstacleWarningSource": "",
-      "blockedCorridorCellCount": 0,
-      "recoveryUntilSeconds": 0.0
-    }
+      }
+    },
+    "events": [],
+    "captures": [
+      {
+        "captureType": "lidar_point_cloud",
+        "sensorId": "deliverybot_lidar",
+        "sensorSequence": 120,
+        "sensorTimeSeconds": 12.4,
+        "runTimeSeconds": 12.5,
+        "format": "xyzrgb_ascii",
+        "path": "episodes/000001/lidar_point_cloud/frames/frame_000120.xyz"
+      }
+    ]
   }
 }
 ```
@@ -609,6 +716,23 @@ OR distanceM <= collisionStopDistanceM
 | `response.action.targetSpeedKmh` | 고정 | 목표 속도. 단위는 km/h |
 | `response.action.brake` | 고정 | brake 입력. Unreal에서 `0.0`부터 `1.0`으로 clamp |
 | `response.action.direction` | 고정 | 현재 Python 예시 정책은 `Forward`만 반환한다. |
+| `response.decision.selectedPolicy` | 고정 | action을 선택한 Python policy 이름 |
+| `response.decision.reason` | 고정 | policy가 해당 action을 선택한 이유 |
+| `response.path.pathStatus` | 고정 | `valid` 또는 `empty` |
+| `response.path.pathIndex` | 고정 | 현재 따라가는 path index |
+| `response.path.pathLength` | 고정 | 현재 path point 개수 |
+| `response.path.pathWorldPoints` | 고정 | Unreal debug line과 Replay 근거로 사용하는 path world 좌표 |
+| `response.path.targetPathIndex` | 고정 | 현재 실제 추종 target index |
+| `response.path.targetWorldPoint` | 고정 | 현재 실제 추종 target world 좌표 또는 `null` |
+| `response.events[]` | 고정 | RePath처럼 episode event로 승격할 정책 이벤트 목록 |
+| `response.captures[]` | 고정 | 현재 decide에서 새로 생성한 capture artifact 참조 목록 |
+| `response.captures[].captureType` | 고정 | Point Cloud는 `lidar_point_cloud` |
+| `response.captures[].sensorId` | 고정 | capture를 생성한 sensor 식별자 |
+| `response.captures[].sensorSequence` | 고정 | capture가 대응하는 sensor frame 순서 번호 |
+| `response.captures[].sensorTimeSeconds` | 고정 | capture가 대응하는 sensor simulation time |
+| `response.captures[].runTimeSeconds` | 고정 | capture가 생성된 episode runtime |
+| `response.captures[].format` | 고정 | Point Cloud는 `xyzrgb_ascii` |
+| `response.captures[].path` | 고정 | run 기준 capture 파일 상대 경로. 예: `episodes/000001/lidar_point_cloud/frames/frame_000120.xyz` |
 | `response.debug.selectedPolicy` | 확장 가능 | action을 반환한 Python policy 이름 |
 | `response.debug.reason` | 확장 가능 | policy가 선택한 이유 |
 | `response.debug.pathStatus` | 확장 가능 | `valid` 또는 `empty` |
@@ -628,6 +752,8 @@ OR distanceM <= collisionStopDistanceM
 | `response.debug.selectedLidarPolicyMode` | 확장 가능 | Python 정책이 선택한 LiDAR 입력 차원. 예: `1d`, `2d`, `3d`, `legacy2d` |
 | `response.debug.selectedLidarRaySource` | 확장 가능 | 실제 정책 입력으로 선택한 ray 출처 |
 | `response.debug.selectedLidarHorizontalPitchDegree` | 확장 가능 | 3D projection에서 miss 대표 ray를 고를 때 기준이 되는 수평 row pitch 절대값. 2D/1D에서는 `null` |
+
+현재 기본 `user_agent.py`는 안정된 계약인 `decision`, `path`, `events`, `captures`를 반환한다. `debug`는 사용자 정책이 추가 진단값을 반환할 때 사용할 수 있는 호환 확장 영역이다.
 
 현재 자주 쓰는 `reason` 값:
 
@@ -792,6 +918,7 @@ request.grid.cells[].cost
 request.grid.cells[].blocked
 request.grid.cells[].sourceCollisionProfile
 request.robotSpec.maxSpeedKmh
+request.robotSpec.maxReverseSpeedKmh
 request.robotSpec.bodyLengthCm
 request.robotSpec.bodyWidthCm
 request.robotSpec.bodyHeightCm
@@ -806,6 +933,21 @@ request.driveSpec.stopBrakeInput
 request.lidarSpec.scanRangeM
 request.lidarSpec.angleStepDegree
 request.lidarSpec.sensorHeightM
+request.lidarSpec.frontHalfAngleDegree
+request.lidarSpec.stopDistanceM
+request.lidarSpec.obstacleWarningDistanceM
+request.lidarSpec.slowDownDistanceM
+request.lidarSpec.collisionStopHalfAngleDegree
+request.lidarSpec.collisionStopDistanceM
+request.lidarSpec.scanRateHz
+request.lidarSpec.observationProfile
+request.lidarSpec.pointCloudOptions.captureEnabled
+request.lidarSpec.pointCloudOptions.captureEveryNSensorFrames
+request.lidarSpec.pointCloudOptions.maxPoints
+request.lidarSpec.pointCloudOptions.includeGroundPoints
+request.artifactSpec.capturesRoot
+request.artifactSpec.capturesRootRelative
+request.artifactSpec.required
 ```
 
 `/scenario/decide`:
@@ -813,11 +955,22 @@ request.lidarSpec.sensorHeightM
 ```text
 request.sequence
 request.runTimeSeconds
+request.sensorSequence
+request.sensorTimeSeconds
 request.robotState.x
 request.robotState.y
 request.robotState.z
 request.robotState.yawDegree
 request.robotState.speedKmh
+request.robotState.bColliding
+request.robotState.collisionActorName
+request.robotState.collisionActorTags
+request.lidar.mode
+request.lidar.sensorSequence
+request.lidar.sensorTimeSeconds
+request.lidar.rays1d
+request.lidar.rays2d
+request.lidar.rays3d
 request.lidarRays[].hit
 request.lidarRays[].distanceM
 request.lidarRays[].rayIndex
@@ -830,6 +983,23 @@ response.action.steering
 response.action.targetSpeedKmh
 response.action.brake
 response.action.direction
+response.decision.selectedPolicy
+response.decision.reason
+response.path.pathStatus
+response.path.pathIndex
+response.path.pathLength
+response.path.targetPathIndex
+response.path.targetWorldPoint
+response.path.pathWorldPoints
+response.events
+response.captures
+response.captures[].captureType
+response.captures[].sensorId
+response.captures[].sensorSequence
+response.captures[].sensorTimeSeconds
+response.captures[].runTimeSeconds
+response.captures[].format
+response.captures[].path
 ```
 
 `/scenario/end`:
@@ -850,8 +1020,12 @@ request.status
 | 전방 각도, obstacle warning/충돌 경계 같은 라이다 해석 기준 | Python 정책 코드의 설정값 |
 | 로봇 물리/속도 제약 | `request.robotSpec`, `request.driveSpec` |
 | 라이다 장비 스펙 | `request.lidarSpec` |
+| Point Cloud 저장 조건 | `request.lidarSpec.pointCloudOptions` |
+| Point Cloud 절대 저장 경로와 상대 참조 기준 | `request.artifactSpec` |
 | actor 단위 관측 요약 | `request.observedObjects` |
 | 경로 시각화, 정책 선택 이유, obstacle warning 카운트 | `response.debug` |
+| 안정된 정책 선택과 경로 상태 | `response.decision`, `response.path` |
+| episode event와 capture artifact 참조 | `response.events`, `response.captures` |
 | episode 종료 결과 | Unreal의 `result.json`과 `summary.json` |
 
 ## Version을 올려야 하는 경우
@@ -861,6 +1035,7 @@ request.status
 - `response.action` 필드 이름 변경
 - `response.action.direction` 값 체계 변경
 - `request.robotState`, `request.grid.cells`, `request.lidarRays`의 필수 필드 제거 또는 타입 변경
+- `request.artifactSpec` 또는 `response.captures[]`의 경로 의미 변경
 - `response.status` 값 체계 변경
 - 기존 고정 필드의 의미 변경
 

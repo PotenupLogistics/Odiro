@@ -6,6 +6,11 @@ from typing import Any
 
 from app.agents.scenario_generation_v2.intent_parser import ScenarioIntent
 from app.agents.scenario_generation_v2.prop_normalizer import normalize_legacy_static_obstacle_prop_id
+from app.catalogs.static_obstacle_catalog import get_allowed_static_obstacle_prop_ids
+
+
+ALLOWED_STATIC_OBSTACLE_PROPS = get_allowed_static_obstacle_prop_ids()
+"""Catalog-owned static obstacle prop ids accepted in patched preset output."""
 
 
 class ScenarioPresetPatcher:
@@ -258,7 +263,7 @@ class ScenarioPresetPatcher:
         placement: dict[str, Any] = {
             "kind": "fixed",
             "id": f"{preset_id.replace('-', '_')}_obstacle_{index + 1}",
-            "prop": "obstacle.road_cone_01",
+            "prop": self._requested_catalog_prop(intent) or "obstacle.road_cone_01",
             "at": {
                 "segment": segment_id,
                 "along_m": self._default_along_range(segment_range, preset_id=preset_id),
@@ -283,6 +288,9 @@ class ScenarioPresetPatcher:
         kind = normalized.get("kind")
         if kind in {"fixed", "pattern"}:
             self._normalize_legacy_prop(normalized)
+            requested_prop = self._requested_catalog_prop(intent)
+            if requested_prop is not None:
+                normalized["prop"] = requested_prop
             at = normalized.get("at")
             if not isinstance(at, dict):
                 at = {}
@@ -308,6 +316,13 @@ class ScenarioPresetPatcher:
         """Replace known legacy preset prop ids with catalog-owned prop ids."""
         if "prop" in placement:
             placement["prop"] = normalize_legacy_static_obstacle_prop_id(placement["prop"])
+
+    def _requested_catalog_prop(self, intent: ScenarioIntent) -> str | None:
+        """Return a requested prop only when it is present in the static obstacle catalog."""
+        prop = normalize_legacy_static_obstacle_prop_id(intent.requested_prop)
+        if isinstance(prop, str) and prop in ALLOWED_STATIC_OBSTACLE_PROPS:
+            return prop
+        return None
 
     def _dedupe_placement_ids(self, placements: list[dict[str, Any]], *, preset_id: str) -> list[dict[str, Any]]:
         """Ensure patched placement ids stay unique after trimming or expanding a preset."""

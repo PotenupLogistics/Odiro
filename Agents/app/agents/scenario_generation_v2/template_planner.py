@@ -21,6 +21,12 @@ class TemplatePlan:
     explicit_blocking: bool
     requested_gate_obstacle_count: int | None
     requested_obstacle_count: int | None
+    requested_prop: str | None
+    requested_length_m: float | None
+    corridor_profile: str
+    explicit_no_obstacles: bool
+    pedestrian_count: int | None
+    explicit_no_pedestrians: bool
     robot_anchor_only: bool
     robot_start_anchor: dict[str, Any] | None
     robot_goal_anchor: dict[str, Any] | None
@@ -34,7 +40,14 @@ class TemplatePlanner:
 
     def plan(self, intent: ScenarioIntent, scenario_type: str) -> TemplatePlan:
         encounter_type = "oncoming_pass" if scenario_type == "pinch_oncoming_pass" else "cross_path"
-        include_obstacle = scenario_type in {"narrow_sidewalk_cross_path", "static_obstacle_ahead"}
+        include_obstacle = (
+            not intent.explicit_no_obstacles
+            and (
+                "static_obstacle_ahead" in intent.risk_factors
+                or intent.requested_obstacle_count is not None
+                or intent.requested_gate_obstacle_count is not None
+            )
+        )
         persona = intent.persona_hint or ("assertive" if scenario_type == "pinch_oncoming_pass" else "normal")
         return TemplatePlan(
             scenario_id=scenario_type,
@@ -48,6 +61,12 @@ class TemplatePlanner:
             explicit_blocking=intent.explicit_blocking,
             requested_gate_obstacle_count=intent.requested_gate_obstacle_count,
             requested_obstacle_count=intent.requested_obstacle_count,
+            requested_prop=intent.requested_prop,
+            requested_length_m=intent.requested_length_m,
+            corridor_profile=intent.corridor_profile,
+            explicit_no_obstacles=intent.explicit_no_obstacles,
+            pedestrian_count=intent.pedestrian_count,
+            explicit_no_pedestrians=intent.explicit_no_pedestrians,
             robot_anchor_only=intent.robot_anchor_only,
             robot_start_anchor=intent.robot_start_anchor,
             robot_goal_anchor=intent.robot_goal_anchor,

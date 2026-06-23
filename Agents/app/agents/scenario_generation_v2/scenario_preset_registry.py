@@ -35,8 +35,12 @@ class ScenarioPresetRegistry:
         resolved = self.resolve(intent.preset_profile)
         if resolved is not None:
             return resolved
-        if intent.corridor_profile == "curved-road":
-            return self.resolve("curved-road")
+        if intent.corridor_profile == "curved":
+            return self.resolve("curved")
+        if intent.corridor_profile == "s-curve":
+            return self.resolve("s-curve")
+        if intent.corridor_profile == "construction":
+            return self.resolve("barricade")
         if intent.requested_length_m is not None:
             return self.resolve("line")
         return None

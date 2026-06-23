@@ -1222,6 +1222,108 @@ def test_v2_scenario_missing_preset_uses_code_generation_fallback() -> None:
     _assert_raw_scenario(response.scenario)
 
 
+def test_v2_missing_preset_curved_prompt_uses_intent_based_curved_fallback() -> None:
+    """Build a curved fallback from intent when the curved preset is unavailable."""
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=False),
+        scenario_preset_loader=_MissingScenarioPresetLoader(),
+    )
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="커브 길을 만들어줘"))
+
+    assert response.status == "success"
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    points = response.scenario["corridor"]["axis"]["points_m"]
+    assert len(points) >= 3
+    assert len({point[1] for point in points}) > 1
+    assert response.scenario["obstacles"]["placements"] == []
+
+
+def test_v2_missing_preset_length_prompt_uses_intent_based_10m_fallback() -> None:
+    """Build a 10m fallback corridor without relying on the line preset file."""
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=False),
+        scenario_preset_loader=_MissingScenarioPresetLoader(),
+    )
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="10m 로 만들어줘"))
+
+    assert response.status == "success"
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    assert scenario["corridor"]["axis"]["points_m"][-1] == [10.0, 0.0]
+    segment_ranges = {segment["id"]: segment["along_range_m"] for segment in scenario["corridor"]["segments"]}
+    assert max(along_range[1] for along_range in segment_ranges.values()) == 10.0
+    assert 0.0 <= scenario["robot"]["goal"]["along_m"] <= 10.0
+
+
+def test_v2_missing_preset_obstacle_count_uses_intent_based_count_fallback() -> None:
+    """Build exactly the requested obstacle count in fallback output."""
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=False),
+        scenario_preset_loader=_MissingScenarioPresetLoader(),
+    )
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="장애물 2개 설치해줘"))
+
+    assert response.status == "success"
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    assert len(response.scenario["obstacles"]["placements"]) == 2
+
+
+def test_v2_missing_preset_requested_catalog_prop_uses_intent_prop_fallback() -> None:
+    """Use an explicitly requested catalog prop in fallback obstacle placements."""
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=False),
+        scenario_preset_loader=_MissingScenarioPresetLoader(),
+    )
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="obstacle.box_01 2개 설치해줘"))
+
+    assert response.status == "success"
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    placements = response.scenario["obstacles"]["placements"]
+    assert len(placements) == 2
+    assert {placement["prop"] for placement in placements} == {"obstacle.box_01"}
+
+
+def test_v2_missing_preset_unknown_prop_fallback_keeps_catalog_safe_output() -> None:
+    """Do not expose unknown prompt prop ids in validator-approved fallback output."""
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=False),
+        scenario_preset_loader=_MissingScenarioPresetLoader(),
+    )
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="obstacle.unknown_prop_99 장애물 2개 설치해줘"))
+
+    assert response.status == "success"
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    props = {placement["prop"] for placement in response.scenario["obstacles"]["placements"]}
+    assert "obstacle.unknown_prop_99" not in props
+    assert props <= get_allowed_static_obstacle_prop_ids()
+
+
+def test_v2_endpoint_missing_preset_fallback_returns_raw_scenario_json(monkeypatch) -> None:
+    """Keep the external endpoint body unwrapped when preset loading falls back."""
+    monkeypatch.setenv("V2_AGENT_LLM_ENABLED", "false")
+    monkeypatch.setattr(
+        "app.agents.scenario_generation_v2.agent.ScenarioPresetLoader",
+        lambda: _MissingScenarioPresetLoader(),
+    )
+
+    response = TestClient(app).post("/api/v2/scenarios/generate", json={"prompt": "커브 길을 만들어줘"})
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    _assert_raw_scenario(payload)
+    assert TemplateValidator().validate(payload).valid is True
+
+
 def test_v2_scenario_invalid_preset_uses_code_generation_fallback() -> None:
     """Fallback when loaded preset content cannot pass TemplateValidator."""
     agent = ScenarioGenerationV2Agent(
@@ -1234,7 +1336,8 @@ def test_v2_scenario_invalid_preset_uses_code_generation_fallback() -> None:
     assert response.status == "success"
     assert response.scenario is not None
     assert response.validation.valid is True
-    assert response.scenario["scenario_id"] == "static_obstacle_ahead"
+    assert response.scenario["scenario_id"] == "curved_road_static_obstacle"
+    _assert_curved_road_scenario_contract(response.scenario, expect_obstacle=True)
 
 
 def test_v2_scenario_preset_loader_optional_load_handles_json_parse_failure(tmp_path) -> None:
@@ -1820,6 +1923,67 @@ def test_v2_preset_patcher_normalizes_legacy_preset_props_to_catalog_ids() -> No
         props = {placement["prop"] for placement in patched["obstacles"]["placements"]}
         assert props == {expected_prop}
         assert props <= get_allowed_static_obstacle_prop_ids()
+
+
+def test_v2_preset_patcher_requested_catalog_prop_overrides_preset_props() -> None:
+    """Apply user-requested catalog props inside preset patching, even without fallback source placements."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+    intent = agent.intent_parser.parse("커브 길에 obstacle.box_01 2개 설치해줘")
+
+    patched = agent._try_build_preset_scenario(intent, source_scenario={"obstacles": {"placements": []}})
+
+    assert patched is not None
+    assert agent.validator.validate(patched).valid is True
+    placements = patched["obstacles"]["placements"]
+    assert len(placements) == 2
+    assert {placement["prop"] for placement in placements} == {"obstacle.box_01"}
+
+
+def test_v2_preset_success_complex_prompt_applies_intent_count_prop_and_pedestrian_policy() -> None:
+    """Keep preset-success output aligned with explicit count, prop, shape, and no-pedestrian intent."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(
+        ScenarioGenerateV2Request(
+            prompt="공사구간이 있는 S자 커브 길을 만들어줘. obstacle.road_cone_01 2개만 설치하고 보행자는 없게 해줘."
+        )
+    )
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    points = scenario["corridor"]["axis"]["points_m"]
+    assert len(points) >= 5
+    assert any(point[1] < 0 for point in points)
+    assert any(point[1] > 0 for point in points)
+    assert len(scenario["obstacles"]["placements"]) == 2
+    assert {placement["prop"] for placement in scenario["obstacles"]["placements"]} == {"obstacle.road_cone_01"}
+    assert scenario["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+
+
+def test_v2_fallback_complex_prompt_applies_same_core_intent_conditions() -> None:
+    """Keep missing-preset fallback aligned with the same explicit count, prop, shape, and pedestrian intent."""
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=False),
+        scenario_preset_loader=_MissingScenarioPresetLoader(),
+    )
+
+    response = agent.generate(
+        ScenarioGenerateV2Request(
+            prompt="공사구간이 있는 S자 커브 길을 만들어줘. obstacle.road_cone_01 2개만 설치하고 보행자는 없게 해줘."
+        )
+    )
+
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    scenario = response.scenario
+    points = scenario["corridor"]["axis"]["points_m"]
+    assert len(points) >= 5
+    assert any(point[1] < 0 for point in points)
+    assert any(point[1] > 0 for point in points)
+    assert len(scenario["obstacles"]["placements"]) == 2
+    assert {placement["prop"] for placement in scenario["obstacles"]["placements"]} == {"obstacle.road_cone_01"}
+    assert scenario["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
 
 
 def test_v2_unknown_non_catalog_preset_prop_uses_fallback_without_legacy_prop() -> None:

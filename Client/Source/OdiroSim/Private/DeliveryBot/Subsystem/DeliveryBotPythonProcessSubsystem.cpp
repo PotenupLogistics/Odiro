@@ -45,16 +45,21 @@ namespace
 	}
 
 	// /health 응답이 같은 policy package를 사용하는 서버인지 확인한다.
-	bool IsHealthResponseOk(const FHttpResponsePtr& response, const FString& expectedPolicyPath)
+	// 성공한 runtime /health 응답에서 policy package 경로를 읽는다.
+	bool TryReadHealthPolicyPath(
+		const FHttpResponsePtr& response,
+		FString& outPolicyPath)
 	{
+		outPolicyPath.Reset();
 		if (!response.IsValid() || response->GetResponseCode() < 200 || response->GetResponseCode() >= 300)
+		{
 			return false;
+		}
 
 		TSharedPtr<FJsonObject> rootObject;
 		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(response->GetContentAsString());
 
 		FString status;
-		FString policyPath;
 		const bool bOk = FJsonSerializer::Deserialize(reader, rootObject)
 			&& rootObject.IsValid()
 			&& rootObject->TryGetStringField(TEXT("status"), status)
@@ -64,12 +69,34 @@ namespace
 			return false;
 		}
 
-		if (!rootObject->TryGetStringField(TEXT("policyPath"), policyPath))
+		return rootObject->TryGetStringField(TEXT("policyPath"), outPolicyPath);
+	}
+
+	bool IsHealthResponseOk(const FHttpResponsePtr& response, const FString& expectedPolicyPath)
+	{
+		FString policyPath;
+		if (!TryReadHealthPolicyPath(response, policyPath))
 		{
 			return false;
 		}
 
 		return NormalizePolicyRuntimePath(policyPath).Equals(
+			NormalizePolicyRuntimePath(expectedPolicyPath),
+			ESearchCase::IgnoreCase);
+	}
+
+	// 같은 포트의 live server가 다른 policy package를 제공하는지 확인한다.
+	bool IsHealthResponsePolicyMismatch(
+		const FHttpResponsePtr& response,
+		const FString& expectedPolicyPath,
+		FString& outActualPolicyPath)
+	{
+		if (!TryReadHealthPolicyPath(response, outActualPolicyPath))
+		{
+			return false;
+		}
+
+		return !NormalizePolicyRuntimePath(outActualPolicyPath).Equals(
 			NormalizePolicyRuntimePath(expectedPolicyPath),
 			ESearchCase::IgnoreCase);
 	}
@@ -99,6 +126,19 @@ namespace
 			responseCode,
 			*expectedPolicyPath,
 			*responseBody);
+	}
+
+	// policy 시작 진단에 보여줄 실행 가능한 포트 충돌 오류를 만든다.
+	FString BuildPolicyPathMismatchMessage(
+		const FString& baseUrl,
+		const FString& expectedPolicyPath,
+		const FString& actualPolicyPath)
+	{
+		return FString::Printf(
+			TEXT("Python policy port is already serving another policy package. BaseUrl=%s ExpectedPolicy=%s ActualPolicy=%s"),
+			*baseUrl,
+			*expectedPolicyPath,
+			*actualPolicyPath);
 	}
 }
 
@@ -170,6 +210,13 @@ void UDeliveryBotPythonProcessSubsystem::CheckExistingServerHealth()
 			}
 
 			LastHealthCheckFailureSummary = BuildHealthFailureSummary(response, bSucceeded, expectedPolicyPath);
+			FString actualPolicyPath;
+			if (IsHealthResponsePolicyMismatch(response, expectedPolicyPath, actualPolicyPath))
+			{
+				RecordFailed(BuildPolicyPathMismatchMessage(GetBaseUrl(), expectedPolicyPath, actualPolicyPath));
+				return;
+			}
+
 			LaunchPythonProcess();
 		});
 
@@ -290,13 +337,19 @@ void UDeliveryBotPythonProcessSubsystem::SendHealthCheckRequest()
 		{
 			bHealthRequestInFlight = false;
 
-			if (IsHealthResponseOk(response, ResolvePolicyPackagePath()))
+			const FString expectedPolicyPath = ResolvePolicyPackagePath();
+			if (IsHealthResponseOk(response, expectedPolicyPath))
 			{
 				RecordReady(false);
 				return;
 			}
 
-			LastHealthCheckFailureSummary = BuildHealthFailureSummary(response, bSucceeded, ResolvePolicyPackagePath());
+			LastHealthCheckFailureSummary = BuildHealthFailureSummary(response, bSucceeded, expectedPolicyPath);
+			FString actualPolicyPath;
+			if (IsHealthResponsePolicyMismatch(response, expectedPolicyPath, actualPolicyPath))
+			{
+				RecordFailed(BuildPolicyPathMismatchMessage(GetBaseUrl(), expectedPolicyPath, actualPolicyPath));
+			}
 		});
 
 	request->ProcessRequest();

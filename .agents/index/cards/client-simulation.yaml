@@ -13,7 +13,7 @@ paths:
   - Client/Json/**
   - Client/Docs/plans/PLAN-260602-sim-logging.md
   - Client/Docs/PreviewAgent.local.md
-  - Client/Docs/plans/PLAN-260622-scenario-episode-preview-capture.md
+  - Client/Docs/plans/PLAN-260622-scenario-episode-preview-capture.local.md
   - contracts/specs/user-project-data.md
   - docs/specs/simulation-interface.md
 entry:
@@ -49,7 +49,7 @@ entry:
     description: Shared map bounds, scenario top-view preview, episode top-view preview, and PNG capture flow.
     read:
       - Client/Docs/PreviewAgent.local.md
-      - Client/Docs/plans/PLAN-260622-scenario-episode-preview-capture.md
+      - Client/Docs/plans/PLAN-260622-scenario-episode-preview-capture.local.md
       - Client/Source/OdiroSim/Public/Shared/Actors
       - Client/Source/OdiroSim/Private/Shared/Actors
       - Client/Source/OdiroSim/Public/Scenario
@@ -73,7 +73,7 @@ guardrails:
   - ScenarioPreviewCaptureSubsystem owns transient SceneCapture2D and render-target cleanup for one-shot top-view orthographic FinalColorLDR PNG capture.
   - ScenarioEditorMap and ScenarioSimulationMap keep matching directional-light intensity and rotation; preview capture does not add episode-only exposure compensation or temporary lighting.
   - ScenarioEditorController requests the project preview only after scenario.json saves successfully; capture failure removes stale preview.png without changing the save result.
-  - ScenarioRunnerSubsystem does not generate episode preview.png; dashboard code may still read an existing episode preview.png as an optional file.
+  - ScenarioRunnerSubsystem schedules project episode preview.png after evaluation starts; capture failure must not change episode outcome.
 verify:
   - when: scenario contracts, schemas, or samples change
     run:
@@ -97,7 +97,7 @@ links:
   - docs/specs/simulation-interface.md
   - Client/Docs/plans/PLAN-260602-sim-logging.md
   - Client/Docs/PreviewAgent.local.md
-  - Client/Docs/plans/PLAN-260622-scenario-episode-preview-capture.md
+  - Client/Docs/plans/PLAN-260622-scenario-episode-preview-capture.local.md
   - Client/Json/environment-catalog.md
 related:
   - contracts-shared-data

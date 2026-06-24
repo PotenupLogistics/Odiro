@@ -9,6 +9,8 @@
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Shared/Actors/ScenarioPreviewCaptureSubsystem.h"
+#include "Shared/Actors/ScenarioPreviewFraming.h"
 #include "Shared/ScenarioSampleJson.h"
 #include "Shared/UserProjectDataTypes.h"
 #include "TimerManager.h"
@@ -437,6 +439,7 @@ void UScenarioRunnerSubsystem::CancelRun()
 {
 	PendingRunInputs.Reset();
 	bCancelRequested = true;
+	ResetEpisodePreviewCapture();
 
 	UScenarioEvaluationSubsystem* evaluationSubsystem =
 		ResolveEvaluationSubsystem();
@@ -506,6 +509,8 @@ void UScenarioRunnerSubsystem::SetRunnerState(EScenarioRunnerState runnerState)
 // 최종 결과를 저장하고 world를 정리한 뒤 다음 Scenario를 예약한다.
 void UScenarioRunnerSubsystem::HandleEpisodeEnded(FEpisodeEvaluationResult result)
 {
+	ResetEpisodePreviewCapture();
+
 	if (bCancelRequested)
 	{
 		result.bSuccess = false;
@@ -554,6 +559,8 @@ void UScenarioRunnerSubsystem::HandleEpisodeEnded(FEpisodeEvaluationResult resul
 
 void UScenarioRunnerSubsystem::StartNextScenario()
 {
+	ResetEpisodePreviewCapture();
+
 	if (PendingRunInputs.IsEmpty())
 	{
 		SetRunnerState(EScenarioRunnerState::Completed);
@@ -853,6 +860,10 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	}
 
 	StartProjectTraceLoggingForEpisode(world, projectOutputEpisodeId);
+	ScheduleEpisodePreviewCapture(
+		simulationSetupSpec,
+		runtimeContext,
+		projectOutputEpisodeId);
 
 	SetRunnerState(EScenarioRunnerState::Running);
 	UE_LOG(LogScenarioRunner, Log, TEXT("Scenario 실행 중 | RunId: %s, Scenario: %s"), *CurrentRecord.RunId, *runtimeContext.EpisodeId);
@@ -992,6 +1003,8 @@ UScenarioEvaluationSubsystem* UScenarioRunnerSubsystem::ResolveEvaluationSubsyst
 void UScenarioRunnerSubsystem::HandleEpisodeEndRequested(
 	const FEpisodeEvaluationResult& result)
 {
+	ResetEpisodePreviewCapture();
+
 	if (bEpisodeFinalizationInFlight)
 	{
 		return;
@@ -1177,10 +1190,198 @@ void UScenarioRunnerSubsystem::ResetEpisodeFinalizationState()
 	CurrentDeliveryBotActor.Reset();
 }
 
-// Subsystem 종료 전에 delegate와 timer를 정리한다.
+// Schedules a non-blocking top-view PNG for the active project episode.
+void UScenarioRunnerSubsystem::ScheduleEpisodePreviewCapture(
+	const FScenarioSimulationSetupSpec& setupSpec,
+	const FScenarioRuntimeContext& runtimeContext,
+	const FString& projectOutputEpisodeId)
+{
+	ResetEpisodePreviewCapture();
+
+	UWorld* world = ResolveWorld();
+	if (!IsValid(world))
+	{
+		return;
+	}
+
+	const FString outputPath =
+		BuildProjectOutputPathForEpisode(projectOutputEpisodeId, TEXT("preview.png"));
+	if (outputPath.IsEmpty())
+	{
+		return;
+	}
+
+	const FString outputDirectory = FPaths::GetPath(outputPath);
+	if (outputDirectory.IsEmpty()
+		|| !IFileManager::Get().MakeDirectory(*outputDirectory, true))
+	{
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Episode preview directory create failed | Episode: %s, Path: %s"),
+			*projectOutputEpisodeId,
+			*outputDirectory);
+		return;
+	}
+
+	const uint64 captureGeneration = ++EpisodePreviewCaptureGeneration;
+	FTimerDelegate captureDelegate;
+	captureDelegate.BindUObject(
+		this,
+		&UScenarioRunnerSubsystem::CaptureEpisodePreview,
+		captureGeneration,
+		setupSpec,
+		runtimeContext,
+		outputPath);
+
+	world->GetTimerManager().SetTimer(
+		EpisodePreviewCaptureTimerHandle,
+		captureDelegate,
+		EpisodePreviewCaptureDelaySeconds,
+		false);
+
+	UE_LOG(
+		LogScenarioRunner,
+		Log,
+		TEXT("Episode preview capture scheduled | Episode: %s, Delay: %.2fs, Output: %s"),
+		*projectOutputEpisodeId,
+		EpisodePreviewCaptureDelaySeconds,
+		*outputPath);
+}
+
+// Captures the active episode if the delayed request still belongs to it.
+void UScenarioRunnerSubsystem::CaptureEpisodePreview(
+	uint64 captureGeneration,
+	FScenarioSimulationSetupSpec setupSpec,
+	FScenarioRuntimeContext runtimeContext,
+	FString outputPath)
+{
+	if (captureGeneration != EpisodePreviewCaptureGeneration)
+	{
+		return;
+	}
+
+	UWorld* world = ResolveWorld();
+	if (!IsValid(world))
+	{
+		return;
+	}
+
+	world->GetTimerManager().ClearTimer(EpisodePreviewCaptureTimerHandle);
+
+	UScenarioSimulationSubsystem* simulationSubsystem =
+		ResolveSimulationSubsystem();
+	UScenarioPreviewCaptureSubsystem* captureSubsystem =
+		world->GetSubsystem<UScenarioPreviewCaptureSubsystem>();
+	if (!IsValid(simulationSubsystem) || !IsValid(captureSubsystem))
+	{
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Episode preview capture skipped: required subsystem missing | Simulation: %s, Capture: %s"),
+			IsValid(simulationSubsystem) ? TEXT("valid") : TEXT("null"),
+			IsValid(captureSubsystem) ? TEXT("valid") : TEXT("null"));
+		return;
+	}
+
+	TArray<AActor*> surfaceActors;
+	surfaceActors.Reserve(runtimeContext.GroundRegionActors.Num() + runtimeContext.CorridorActors.Num());
+	for (const TObjectPtr<AActor>& groundRegionActor : runtimeContext.GroundRegionActors)
+	{
+		AActor* actor = groundRegionActor.Get();
+		if (IsValid(actor))
+		{
+			surfaceActors.Add(actor);
+		}
+	}
+	for (const TObjectPtr<AActor>& corridorActor : runtimeContext.CorridorActors)
+	{
+		AActor* actor = corridorActor.Get();
+		if (IsValid(actor))
+		{
+			surfaceActors.Add(actor);
+		}
+	}
+
+	FScenarioMapBounds mapBounds;
+	if (!simulationSubsystem->TryResolveScenarioMapBounds(
+			surfaceActors,
+			setupSpec.Placeables,
+			mapBounds))
+	{
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Episode preview capture skipped: map bounds unavailable | Episode: %s, Surfaces: %d"),
+			*runtimeContext.EpisodeId,
+			surfaceActors.Num());
+		return;
+	}
+
+	FScenarioPreviewFramingSettings framingSettings;
+	framingSettings.OutputWidth = 512;
+	framingSettings.OutputHeight = 384;
+	framingSettings.ScenarioPreviewFitScale = 1.0;
+
+	FScenarioPreviewFrame frame;
+	if (!FScenarioPreviewFramingResolver::TryResolveScenario(
+			mapBounds,
+			framingSettings,
+			frame))
+	{
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Episode preview capture skipped: framing failed | Episode: %s"),
+			*runtimeContext.EpisodeId);
+		return;
+	}
+
+	FScenarioPreviewCaptureRequest captureRequest;
+	captureRequest.Frame = frame;
+	captureRequest.OutputPath = outputPath;
+	captureRequest.OutputSize = FIntPoint(
+		framingSettings.OutputWidth,
+		framingSettings.OutputHeight);
+
+	const FScenarioPreviewCaptureResult captureResult =
+		captureSubsystem->CapturePreview(captureRequest);
+	if (!captureResult.bSuccess)
+	{
+		UE_LOG(
+			LogScenarioRunner,
+			Warning,
+			TEXT("Episode preview capture failed | Episode: %s, Stage: %s, Reason: %s"),
+			*runtimeContext.EpisodeId,
+			*captureResult.FailureStage,
+			*captureResult.FailureReason);
+		return;
+	}
+
+	UE_LOG(
+		LogScenarioRunner,
+		Log,
+		TEXT("Episode preview capture saved | Episode: %s, Output: %s"),
+		*runtimeContext.EpisodeId,
+		*outputPath);
+}
+
+// Cancels any delayed episode preview capture from an older episode.
+void UScenarioRunnerSubsystem::ResetEpisodePreviewCapture()
+{
+	if (UWorld* world = ResolveWorld())
+	{
+		world->GetTimerManager().ClearTimer(EpisodePreviewCaptureTimerHandle);
+	}
+
+	++EpisodePreviewCaptureGeneration;
+}
+
+// Clears delegates and timers before the subsystem is destroyed.
 void UScenarioRunnerSubsystem::Deinitialize()
 {
 	UnbindEvaluationDelegates();
+	ResetEpisodePreviewCapture();
 	ResetEpisodeFinalizationState();
 	Super::Deinitialize();
 }

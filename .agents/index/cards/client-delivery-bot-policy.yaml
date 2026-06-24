@@ -27,7 +27,7 @@ entry:
 guardrails:
   - Prefer focused shared DeliveryBot structs over direct Scenario/Episode header coupling.
   - Python policy process ownership lives in DeliveryBot subsystem/settings, not root batch files.
-  - Python policy runtime default port is owned by DeliveryBotPythonDeveloperSettings and stays aligned with project-run launcher policy port.
+  - Python policy runtime development port is owned by DeliveryBotPythonDeveloperSettings; project-run launch chooses and passes an isolated policy port.
   - User-facing robot/profile config flows through typed DeliveryBot setup structs.
   - ScenarioRunner owns project episode output paths and injects them before Python `/scenario/start`.
   - Required project-run artifact path validation must fail through `/scenario/start`, not silently fall back to Saved paths.

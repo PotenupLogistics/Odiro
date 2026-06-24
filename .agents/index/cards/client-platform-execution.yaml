@@ -53,6 +53,7 @@ guardrails:
   - Client runtime-internal launch scripts live under `Client/Tools`, not root task wrappers.
   - Project mode must not fall back to legacy SimulationSetup, RunQueue, Json/Input, Saved runs, or text-input project paths.
   - Project run launch uses the project-run command contract with project path, run id, and policy port inputs.
+  - Editor preview launch invokes `Client/Tools/RunPreview.ps1` through `powershell.exe` directly; do not wrap it in nested `cmd.exe /c` quoting.
   - Project experiment launch commands create a fresh user-project run through ProjectWorkspaceViewModel before starting; selected historical runs are analysis/navigation targets and must not be overwritten.
   - SimulatorLaunchSubsystem treats run output artifacts such as status.json, summary.json, and episode result.json as immutable start guards.
   - Project-run AI analysis uses the v2 `project_path` plus `run_id` request path and stores review artifacts under the run.

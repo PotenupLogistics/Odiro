@@ -69,6 +69,10 @@ struct ODIROSIM_API FSimulatorRunInfo
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	FString LaunchArguments;
 
+	// 이 project-run process에 할당된 Python policy server 포트다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
+	int32 PolicyPort = 0;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulator|Launch")
 	bool bUsedPreviewLauncher = false;
 
@@ -309,7 +313,7 @@ private:
 		bool bReplaceScenarioSetupReference,
 		TArray<FString>& outDiagnostics) const;
 	bool BuildLaunchCommand(const FString& setupPath, const FString& runId, FString& outExecutable, FString& outArguments, bool& bOutUsesPreviewLauncher) const;
-	bool BuildProjectRunLaunchCommand(const FString& projectPath, const FString& runId, FString& outExecutable, FString& outArguments, bool& bOutUsesPreviewLauncher) const;
+	bool BuildProjectRunLaunchCommand(const FString& projectPath, const FString& runId, FString& outExecutable, FString& outArguments, int32& outPolicyPort, bool& bOutUsesPreviewLauncher, FString& outError) const;
 	bool ShouldUsePreviewLauncher(FString& outPreviewLauncherPath) const;
 	bool CreateRuntimeSimulationSetupFile(
 		const FSimulationSetup& sourceSetup,

@@ -1,6 +1,9 @@
 
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "DeliveryBot/DeliveryBotSetupCompiler.h"
+#include "IPAddress.h"
+#include "SocketSubsystem.h"
+#include "Sockets.h"
 #include "Shared/ScenarioDocumentJson.h"
 #include "Shared/UserProjectDataTypes.h"
 
@@ -21,6 +24,8 @@ namespace
 	const TCHAR* LaunchDefaultPolicySpecJsonPath = TEXT("Json/Input/PolicySpecs/PolicySpec_DefaultDelivery.json");
 	const TCHAR* SimulatorProcessFlags = TEXT("-nosound -unattended -NoLoadingScreen");
 	const int32 ProjectRunDefaultPolicyPort = 18145;
+	const int32 ProjectRunPolicyPortRangeEnd = 18245;
+	const TCHAR* ProjectRunPolicyHost = TEXT("127.0.0.1");
 	const TCHAR* UserProjectStaticDirectory = TEXT("static");
 	const TCHAR* UserProjectResourcesDirectory = TEXT("resources");
 	const TCHAR* UserProjectPresetDirectory = TEXT("templates");
@@ -67,6 +72,51 @@ namespace
 	bool IsDirectory(const FString& path)
 	{
 		return !path.IsEmpty() && IFileManager::Get().DirectoryExists(*path);
+	}
+
+	// 로컬 TCP listener가 policy 포트에 bind할 수 있는지 확인한다.
+	bool IsTcpPortAvailableOnLocalhost(int32 port)
+	{
+		ISocketSubsystem* socketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
+		if (!socketSubsystem || port <= 0)
+		{
+			return false;
+		}
+
+		bool bAddressValid = false;
+		TSharedRef<FInternetAddr> address = socketSubsystem->CreateInternetAddr();
+		address->SetIp(ProjectRunPolicyHost, bAddressValid);
+		address->SetPort(port);
+		if (!bAddressValid)
+		{
+			return false;
+		}
+
+		FSocket* socket = socketSubsystem->CreateSocket(NAME_Stream, TEXT("OdiroProjectRunPolicyPortProbe"), false);
+		if (!socket)
+		{
+			return false;
+		}
+
+		socket->SetReuseAddr(false);
+		const bool bBound = socket->Bind(*address);
+		socketSubsystem->DestroySocket(socket);
+		return bBound;
+	}
+
+	// project-run 전용 로컬 범위에서 첫 번째 빈 policy 포트를 찾는다.
+	bool TryFindAvailableProjectRunPolicyPort(int32& outPolicyPort)
+	{
+		outPolicyPort = 0;
+		for (int32 port = ProjectRunDefaultPolicyPort; port <= ProjectRunPolicyPortRangeEnd; ++port)
+		{
+			if (IsTcpPortAvailableOnLocalhost(port))
+			{
+				outPolicyPort = port;
+				return true;
+			}
+		}
+		return false;
 	}
 
 	bool IsFile(const FString& path)
@@ -467,6 +517,36 @@ namespace
 		const bool bRelative = FPaths::MakePathRelativeTo(outRelativePath, *normalizedRoot);
 		outRelativePath.ReplaceInline(TEXT("\\"), TEXT("/"));
 		return bRelative && !outRelativePath.StartsWith(TEXT(".."));
+	}
+
+	// 이 run에 선택된 policy 포트를 포함해 packaged 실행 인자를 만든다.
+	FString BuildProjectRunSimulatorArgumentStringWithPolicyPort(
+		const FString& projectPath,
+		const FString& runId,
+		int32 policyPort)
+	{
+		return FString::Printf(
+			TEXT("%s %s %s %s"),
+			*USimulatorLaunchSubsystem::QuoteCommandLineArgument(FString::Printf(TEXT("-OdiroProject=%s"), *projectPath)),
+			*USimulatorLaunchSubsystem::QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
+			*USimulatorLaunchSubsystem::QuoteCommandLineArgument(FString::Printf(TEXT("-PolicyPort=%d"), policyPort)),
+			SimulatorProcessFlags);
+	}
+
+	// 이 run에 선택된 policy 포트를 포함해 editor preview launcher 인자를 만든다.
+	FString BuildProjectRunPreviewLauncherArgumentStringWithPolicyPort(
+		const FString& previewLauncherPath,
+		const FString& projectPath,
+		const FString& runId,
+		int32 policyPort)
+	{
+		return FString::Printf(
+			TEXT("-NoProfile -ExecutionPolicy Bypass -File %s %s %s %s %s"),
+			*USimulatorLaunchSubsystem::QuoteCommandLineArgument(previewLauncherPath),
+			*USimulatorLaunchSubsystem::QuoteCommandLineArgument(FString::Printf(TEXT("-OdiroProject=%s"), *projectPath)),
+			*USimulatorLaunchSubsystem::QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
+			*USimulatorLaunchSubsystem::QuoteCommandLineArgument(FString::Printf(TEXT("-PolicyPort=%d"), policyPort)),
+			SimulatorProcessFlags);
 	}
 
 	bool CopyUserProjectFile(const FString& sourcePath, const FString& targetPath, TArray<FString>& outDiagnostics)
@@ -1584,20 +1664,27 @@ bool USimulatorLaunchSubsystem::StartProjectRun(const FString& projectPath, cons
 
 	FString executable;
 	FString arguments;
+	int32 policyPort = 0;
 	bool bUsesPreviewLauncher = false;
+	FString launchError;
 	if (!BuildProjectRunLaunchCommand(
 			snapshotParseResult.Paths.ProjectPath,
 			snapshotParseResult.Paths.RunId,
 			executable,
 			arguments,
-			bUsesPreviewLauncher))
+			policyPort,
+			bUsesPreviewLauncher,
+			launchError))
 	{
 		ActiveRunInfo = FSimulatorRunInfo{};
 		ActiveRunInfo.RunId = snapshotParseResult.Paths.RunId;
 		ActiveRunInfo.ProjectPath = snapshotParseResult.Paths.ProjectPath;
 		ActiveRunInfo.StatusPath = snapshotParseResult.Paths.StatusPath;
 		ActiveRunInfo.bProjectRun = true;
-		MarkActiveRunFailed(TEXT("Project run launch command could not be built."));
+		MarkActiveRunFailed(
+			launchError.IsEmpty()
+				? TEXT("Project run launch command could not be built.")
+				: launchError);
 		return false;
 	}
 
@@ -1607,6 +1694,7 @@ bool USimulatorLaunchSubsystem::StartProjectRun(const FString& projectPath, cons
 	ActiveRunInfo.StatusPath = snapshotParseResult.Paths.StatusPath;
 	ActiveRunInfo.LaunchExecutable = executable;
 	ActiveRunInfo.LaunchArguments = arguments;
+	ActiveRunInfo.PolicyPort = policyPort;
 	ActiveRunInfo.bUsedPreviewLauncher = bUsesPreviewLauncher;
 	ActiveRunInfo.bProjectRun = true;
 	ActiveRunInfo.Status.RunId = snapshotParseResult.Paths.RunId;
@@ -1642,9 +1730,10 @@ bool USimulatorLaunchSubsystem::StartProjectRun(const FString& projectPath, cons
 	UE_LOG(
 		LogSimulatorLaunch,
 		Log,
-		TEXT("Project run process started | Project: %s, RunId: %s, Executable: %s, Arguments: %s"),
+		TEXT("Project run process started | Project: %s, RunId: %s, PolicyPort: %d, Executable: %s, Arguments: %s"),
 		*snapshotParseResult.Paths.ProjectPath,
 		*snapshotParseResult.Paths.RunId,
+		policyPort,
 		*executable,
 		*arguments);
 
@@ -2111,12 +2200,10 @@ FString USimulatorLaunchSubsystem::BuildSimulatorArgumentString(const FString& s
 
 FString USimulatorLaunchSubsystem::BuildProjectRunSimulatorArgumentString(const FString& projectPath, const FString& runId)
 {
-	return FString::Printf(
-		TEXT("%s %s %s %s"),
-		*QuoteCommandLineArgument(FString::Printf(TEXT("-OdiroProject=%s"), *projectPath)),
-		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
-		*QuoteCommandLineArgument(FString::Printf(TEXT("-PolicyPort=%d"), ProjectRunDefaultPolicyPort)),
-		SimulatorProcessFlags);
+	return BuildProjectRunSimulatorArgumentStringWithPolicyPort(
+		projectPath,
+		runId,
+		ProjectRunDefaultPolicyPort);
 }
 
 FString USimulatorLaunchSubsystem::BuildPreviewLauncherArgumentString(
@@ -2124,10 +2211,9 @@ FString USimulatorLaunchSubsystem::BuildPreviewLauncherArgumentString(
 	const FString& setupPath,
 	const FString& runId)
 {
-	// cmd.exe quoting is intentionally centralized here; CreateProc receives cmd.exe as executable.
 	return FString::Printf(
-		TEXT("/d /s /c \"powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"\"%s\"\" %s %s %s\""),
-		*previewLauncherPath,
+		TEXT("-NoProfile -ExecutionPolicy Bypass -File %s %s %s %s"),
+		*QuoteCommandLineArgument(previewLauncherPath),
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-Simulate=%s"), *setupPath)),
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
 		SimulatorProcessFlags);
@@ -2138,14 +2224,11 @@ FString USimulatorLaunchSubsystem::BuildProjectRunPreviewLauncherArgumentString(
 	const FString& projectPath,
 	const FString& runId)
 {
-	// cmd.exe quoting is intentionally centralized here; CreateProc receives cmd.exe as executable.
-	return FString::Printf(
-		TEXT("/d /s /c \"powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"\"%s\"\" %s %s %s %s\""),
-		*previewLauncherPath,
-		*QuoteCommandLineArgument(FString::Printf(TEXT("-OdiroProject=%s"), *projectPath)),
-		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
-		*QuoteCommandLineArgument(FString::Printf(TEXT("-PolicyPort=%d"), ProjectRunDefaultPolicyPort)),
-		SimulatorProcessFlags);
+	return BuildProjectRunPreviewLauncherArgumentStringWithPolicyPort(
+		previewLauncherPath,
+		projectPath,
+		runId,
+		ProjectRunDefaultPolicyPort);
 }
 
 bool USimulatorLaunchSubsystem::TryReadScenarioRunQueueJson(
@@ -2295,7 +2378,7 @@ bool USimulatorLaunchSubsystem::BuildLaunchCommand(
 	FString previewLauncherPath;
 	if (ShouldUsePreviewLauncher(previewLauncherPath))
 	{
-		outExecutable = TEXT("cmd.exe");
+		outExecutable = TEXT("powershell.exe");
 		outArguments = BuildPreviewLauncherArgumentString(previewLauncherPath, setupPath, runId);
 		bOutUsesPreviewLauncher = true;
 		return true;
@@ -2311,22 +2394,53 @@ bool USimulatorLaunchSubsystem::BuildProjectRunLaunchCommand(
 	const FString& runId,
 	FString& outExecutable,
 	FString& outArguments,
-	bool& bOutUsesPreviewLauncher) const
+	int32& outPolicyPort,
+	bool& bOutUsesPreviewLauncher,
+	FString& outError) const
 {
+	outExecutable.Reset();
+	outArguments.Reset();
 	bOutUsesPreviewLauncher = false;
+	outPolicyPort = 0;
+	outError.Reset();
+	if (!TryFindAvailableProjectRunPolicyPort(outPolicyPort))
+	{
+		outError = FString::Printf(
+			TEXT("No available project-run policy port found in range %d-%d."),
+			ProjectRunDefaultPolicyPort,
+			ProjectRunPolicyPortRangeEnd);
+		UE_LOG(
+			LogSimulatorLaunch,
+			Warning,
+			TEXT("%s"),
+			*outError);
+		return false;
+	}
 
 	FString previewLauncherPath;
 	if (ShouldUsePreviewLauncher(previewLauncherPath))
 	{
-		outExecutable = TEXT("cmd.exe");
-		outArguments = BuildProjectRunPreviewLauncherArgumentString(previewLauncherPath, projectPath, runId);
+		outExecutable = TEXT("powershell.exe");
+		outArguments = BuildProjectRunPreviewLauncherArgumentStringWithPolicyPort(
+			previewLauncherPath,
+			projectPath,
+			runId,
+			outPolicyPort);
 		bOutUsesPreviewLauncher = true;
 		return true;
 	}
 
 	outExecutable = FPlatformProcess::ExecutablePath();
-	outArguments = BuildProjectRunSimulatorArgumentString(projectPath, runId);
-	return !outExecutable.IsEmpty();
+	outArguments = BuildProjectRunSimulatorArgumentStringWithPolicyPort(
+		projectPath,
+		runId,
+		outPolicyPort);
+	if (outExecutable.IsEmpty())
+	{
+		outError = TEXT("Project run executable path is empty.");
+		return false;
+	}
+	return true;
 }
 
 bool USimulatorLaunchSubsystem::ShouldUsePreviewLauncher(FString& outPreviewLauncherPath) const

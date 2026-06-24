@@ -83,6 +83,7 @@ bool FSimulatorLaunchCommandLineBuildTest::RunTest(const FString& parameters)
 		TEXT("000001"));
 	TestTrue(TEXT("simulator passes project path"), simulatorArguments.Contains(TEXT("\"-OdiroProject=X:/Projects/DeliveryBotA\"")));
 	TestTrue(TEXT("simulator passes run id"), simulatorArguments.Contains(TEXT("\"-RunId=000001\"")));
+	TestTrue(TEXT("simulator passes default policy port"), simulatorArguments.Contains(TEXT("\"-PolicyPort=18145\"")));
 	TestFalse(TEXT("simulator omits legacy simulate setup"), simulatorArguments.Contains(TEXT("-Simulate")));
 	TestFalse(TEXT("simulator omits fixed step args"), simulatorArguments.Contains(TEXT("UseFixedTimeStep")));
 
@@ -91,12 +92,13 @@ bool FSimulatorLaunchCommandLineBuildTest::RunTest(const FString& parameters)
 		TEXT("Client/Tools/RunPreview.ps1"),
 		TEXT("X:/Projects/DeliveryBotA"),
 		TEXT("000001"));
-	TestTrue(TEXT("preview uses cmd run wrapper"), previewArguments.StartsWith(TEXT("/d /s /c \"powershell.exe ")));
+	TestTrue(TEXT("preview uses powershell arguments"), previewArguments.StartsWith(TEXT("-NoProfile ")));
 	TestTrue(TEXT("preview disables profile loading"), previewArguments.Contains(TEXT("-NoProfile")));
 	TestTrue(TEXT("preview bypasses local script policy"), previewArguments.Contains(TEXT("-ExecutionPolicy Bypass")));
 	TestTrue(TEXT("preview uses Client-owned preview script"), previewArguments.Contains(TEXT("Client/Tools/RunPreview.ps1")));
 	TestTrue(TEXT("preview passes project path"), previewArguments.Contains(TEXT("\"-OdiroProject=X:/Projects/DeliveryBotA\"")));
 	TestTrue(TEXT("preview passes run id"), previewArguments.Contains(TEXT("\"-RunId=000001\"")));
+	TestTrue(TEXT("preview passes default policy port"), previewArguments.Contains(TEXT("\"-PolicyPort=18145\"")));
 	TestFalse(TEXT("preview omits legacy simulate setup"), previewArguments.Contains(TEXT("-Simulate")));
 
 	return true;

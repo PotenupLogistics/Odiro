@@ -8,6 +8,7 @@
 #include "ScenarioRunnerSubsystem.generated.h"
 
 struct FDeliveryBotSetupCompileResult;
+struct FScenarioSimulationSetupSpec;
 class UScenarioEvaluationSubsystem;
 class UScenarioSimulationSubsystem;
 class ADeliveryBot;
@@ -124,11 +125,28 @@ private:
 	// timer와 DeliveryBot 참조를 초기화한다.
 	void ResetEpisodeFinalizationState();
 
+	// Schedules a non-blocking top-view PNG for the active project episode.
+	void ScheduleEpisodePreviewCapture(
+		const FScenarioSimulationSetupSpec& setupSpec,
+		const FScenarioRuntimeContext& runtimeContext,
+		const FString& projectOutputEpisodeId);
+
+	// Captures the active episode if the delayed request still belongs to it.
+	void CaptureEpisodePreview(
+		uint64 captureGeneration,
+		FScenarioSimulationSetupSpec setupSpec,
+		FScenarioRuntimeContext runtimeContext,
+		FString outputPath);
+
+	// Cancels any delayed episode preview capture from an older episode.
+	void ResetEpisodePreviewCapture();
+
 private:
 
 	TWeakObjectPtr<ADeliveryBot> CurrentDeliveryBotActor;// 현재 Episode의 DeliveryBot 약한 참조다.
 	FDelegateHandle EpisodeEndRequestedHandle;// Evaluation 종료 요청 delegate 연결이다.
 	FTimerHandle EpisodeFinalizationTimeoutHandle;	// Runner의 Python end watchdog timer다.
+	FTimerHandle EpisodePreviewCaptureTimerHandle;	// Delayed project episode preview timer.
 
 	bool bEpisodeFinalizationInFlight = false;	// callback 또는 watchdog을 기다리는 상태다.
 	bool bCancelRequested = false;	// 취소 후 다음 Scenario 시작을 막는다.
@@ -136,6 +154,12 @@ private:
 	// 이전 Episode의 늦은 callback을 차단한다.
 	uint64 EpisodeFinalizationGeneration = 0;
 
+	// Blocks stale delayed preview callbacks from previous episodes.
+	uint64 EpisodePreviewCaptureGeneration = 0;
+
 	// Episode 종료 흐름의 최대 대기 시간이다.
 	static constexpr double EpisodeFinalizationTimeoutSeconds = 3.0;
+
+	// Delay after the episode starts before writing preview.png.
+	static constexpr double EpisodePreviewCaptureDelaySeconds = 2.0;
 };

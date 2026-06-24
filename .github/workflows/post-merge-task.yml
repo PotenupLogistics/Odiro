@@ -226,7 +226,7 @@ jobs:
                   if ([string]::IsNullOrWhiteSpace($detail)) {
                       throw "Failed to unlock $Path by Git LFS lock id ${Id}: no output from gh api. Check GH_TOKEN admin access and LFS endpoint reachability."
                   }
-                  throw "Failed to unlock $Path by Git LFS lock id $Id.`n$detail"
+                  throw "Failed to unlock $Path by Git LFS lock id ${Id}.`n$detail"
               }
           }
 

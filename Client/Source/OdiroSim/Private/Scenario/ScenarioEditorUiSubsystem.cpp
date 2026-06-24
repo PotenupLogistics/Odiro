@@ -53,7 +53,7 @@ namespace
 	}
 
 	// 기존 저장 파일을 덮어쓰지 않는 기본 scenario.json 저장 후보를 만든다.
-	FString MakeUniqueScenarioSavePath(const FString& preferredPath)
+	FString MakeUniqueScenarioEditorUiSavePath(const FString& preferredPath)
 	{
 		FString directory = FPaths::GetPath(preferredPath);
 		if (directory.IsEmpty())
@@ -576,7 +576,7 @@ FString UScenarioEditorUiSubsystem::ResolveSavePath(const FString& defaultSavePa
 		}
 	}
 
-	return MakeUniqueScenarioSavePath(defaultSavePath);
+	return MakeUniqueScenarioEditorUiSavePath(defaultSavePath);
 }
 
 UScenarioLlmAuthoringSubsystem* UScenarioEditorUiSubsystem::ResolveLlmAuthoringSubsystem() const

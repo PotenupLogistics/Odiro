@@ -3,6 +3,10 @@
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "GameFramework/FloatingPawnMovement.h"
+#include "Materials/MaterialInterface.h"
+
+// Logs scenario editor camera presentation setup failures.
+DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorPawn, Log, All);
 
 AScenarioEditorPawn::AScenarioEditorPawn()
 {
@@ -18,6 +22,9 @@ AScenarioEditorPawn::AScenarioEditorPawn()
 	FloatingMovementComponent = CreateDefaultSubobject<UFloatingPawnMovement>(TEXT("FloatingMovementComponent"));
 	FloatingMovementComponent->SetUpdatedComponent(SceneRoot);
 
+	GreyBackgroundPostProcessMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(
+		TEXT("/Game/Materials/Scenario/M_PP_ScenarioEditorGreyBackground.M_PP_ScenarioEditorGreyBackground")));
+
 	AutoPossessAI = EAutoPossessAI::Disabled;
 }
 
@@ -30,6 +37,7 @@ void AScenarioEditorPawn::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
 	ApplyMovementSettings();
+	ApplyGreyBackgroundPostProcessMaterial();
 }
 
 void AScenarioEditorPawn::ApplyMoveInput(float forwardValue, float rightValue, float upValue)
@@ -155,4 +163,22 @@ void AScenarioEditorPawn::ApplyTopDownPanSpeed()
 	FloatingMovementComponent->MaxSpeed = MaxMoveSpeed * widthRatio;
 	FloatingMovementComponent->Acceleration = Acceleration * widthRatio;
 	FloatingMovementComponent->Deceleration = Deceleration * widthRatio;
+}
+
+void AScenarioEditorPawn::ApplyGreyBackgroundPostProcessMaterial()
+{
+	if (!CameraComponent || GreyBackgroundBlendWeight <= 0.0f)
+	{
+		return;
+	}
+
+	UMaterialInterface* backgroundMaterial = GreyBackgroundPostProcessMaterial.LoadSynchronous();
+	if (!backgroundMaterial)
+	{
+		UE_LOG(LogScenarioEditorPawn, Warning, TEXT("Scenario editor grey background post-process material is unavailable."));
+		return;
+	}
+
+	CameraComponent->PostProcessBlendWeight = 1.0f;
+	CameraComponent->PostProcessSettings.AddBlendable(backgroundMaterial, GreyBackgroundBlendWeight);
 }

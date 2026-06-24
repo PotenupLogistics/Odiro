@@ -333,7 +333,8 @@ class ScenarioGenerationV2Agent:
             start, end = along_range
             if isinstance(start, int | float) and isinstance(end, int | float):
                 span = float(end) - float(start)
-                along_m = float(start) + min(2.0, max(0.5, span * (0.25 if prefer_start else 0.75)))
+                inner_offset = min(1.0, max(0.5, span * 0.25))
+                along_m = float(start) + inner_offset if prefer_start else float(end) - inner_offset
         return {
             "type": "corridor_pose",
             "segment": segment_id,

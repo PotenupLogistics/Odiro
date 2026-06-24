@@ -6,6 +6,11 @@ from typing import Any
 
 from app.agents.scenario_generation_v2.intent_parser import ScenarioIntent
 from app.agents.scenario_generation_v2.prop_normalizer import normalize_legacy_static_obstacle_prop_id
+from app.catalogs.static_obstacle_catalog import get_allowed_static_obstacle_prop_ids
+
+
+ALLOWED_STATIC_OBSTACLE_PROPS = get_allowed_static_obstacle_prop_ids()
+"""Catalog-owned static obstacle prop ids accepted in patched preset output."""
 
 
 class ScenarioPresetPatcher:
@@ -23,12 +28,54 @@ class ScenarioPresetPatcher:
         scenario = deepcopy(preset)
         scenario["schema"] = "scenario"
         scenario["version"] = 1
+        self._apply_corridor_profile(scenario, intent)
         self._apply_requested_length(scenario, intent)
         self._apply_robot_anchor_consistency(scenario, intent)
         self._apply_obstacle_intent(scenario, intent, preset_id=preset_id, source_scenario=source_scenario)
         self._apply_alpha_pedestrians(scenario)
         self._apply_scenario_identity(scenario, intent, preset_id=preset_id)
         return scenario
+
+    def _apply_corridor_profile(self, scenario: dict[str, Any], intent: ScenarioIntent) -> None:
+        """Replace preset geometry when a higher-priority road-shape intent requires it."""
+        if intent.corridor_profile not in {"g-shape", "l-shape"}:
+            return
+        length_m = intent.requested_length_m if intent.requested_length_m is not None and intent.requested_length_m > 0 else 20.0
+        scenario["corridor"] = self._g_shape_corridor(length_m)
+
+    def _g_shape_corridor(self, length_m: float) -> dict[str, Any]:
+        """Return a right-angle corridor with a construction zone before the corner."""
+        length_m = self._rounded(max(6.0, length_m))
+        corner_along_m = self._rounded(length_m * 0.5)
+        exit_leg_m = self._rounded(length_m - corner_along_m)
+        pre_corner_width_m = self._rounded(min(3.0, max(1.5, length_m * 0.15)))
+        pre_corner_start_m = self._rounded(max(0.0, corner_along_m - pre_corner_width_m))
+        return {
+            "axis": {
+                "type": "polyline",
+                "points_m": [
+                    [0.0, 0.0],
+                    [corner_along_m, 0.0],
+                    [corner_along_m, exit_leg_m],
+                ],
+            },
+            "walkway_width_m": {"min": 1.6, "max": 2.2},
+            "building_side": [{"surface": "wall", "width_m": 0.4}],
+            "curb_side": [{"surface": "road", "width_m": 4.0}],
+            "segments": [
+                {"id": "approach", "type": "straight", "along_range_m": [0.0, pre_corner_start_m]},
+                {
+                    "id": "pre_corner_construction",
+                    "type": "narrowing",
+                    "along_range_m": [pre_corner_start_m, corner_along_m],
+                },
+                {
+                    "id": "turn_and_exit",
+                    "type": "straight",
+                    "along_range_m": [corner_along_m, length_m],
+                },
+            ],
+        }
 
     def _apply_requested_length(self, scenario: dict[str, Any], intent: ScenarioIntent) -> None:
         """Scale corridor axis and segment along ranges when the user gives a meter length."""
@@ -104,6 +151,7 @@ class ScenarioPresetPatcher:
             self._normalize_obstacle_placement(placement, scenario, preset_id=preset_id, intent=intent)
             for placement in placements
         ]
+        normalized = self._redistribute_requested_obstacles(normalized, scenario, preset_id=preset_id, intent=intent)
         scenario["obstacles"] = {
             "min_clear_width_m": min_clear_width,
             "placements": self._dedupe_placement_ids(normalized, preset_id=preset_id),
@@ -116,7 +164,16 @@ class ScenarioPresetPatcher:
     def _apply_scenario_identity(self, scenario: dict[str, Any], intent: ScenarioIntent, *, preset_id: str) -> None:
         """Adjust ids and intent text when patching changes the preset semantics."""
         placement_count = len(self._placements_from(scenario))
-        if preset_id == "curved":
+        if intent.corridor_profile in {"g-shape", "l-shape"}:
+            scenario["scenario_id"] = (
+                "g_shape_pre_corner_construction_cones" if placement_count else "g_shape_corridor_navigation"
+            )
+            scenario["intent"] = (
+                "Evaluate right-angle corridor navigation with pre-corner construction cone placement."
+                if placement_count
+                else "Evaluate right-angle corridor navigation without static obstacles."
+            )
+        elif preset_id == "curved":
             scenario["scenario_id"] = "curved_road_static_obstacle" if placement_count else "curved_road_sidewalk"
             scenario["intent"] = (
                 "Evaluate route following on a curved road sidewalk with user-requested static obstacles."
@@ -258,7 +315,7 @@ class ScenarioPresetPatcher:
         placement: dict[str, Any] = {
             "kind": "fixed",
             "id": f"{preset_id.replace('-', '_')}_obstacle_{index + 1}",
-            "prop": "obstacle.road_cone_01",
+            "prop": self._requested_catalog_prop(intent) or "obstacle.road_cone_01",
             "at": {
                 "segment": segment_id,
                 "along_m": self._default_along_range(segment_range, preset_id=preset_id),
@@ -283,6 +340,9 @@ class ScenarioPresetPatcher:
         kind = normalized.get("kind")
         if kind in {"fixed", "pattern"}:
             self._normalize_legacy_prop(normalized)
+            requested_prop = self._requested_catalog_prop(intent)
+            if requested_prop is not None:
+                normalized["prop"] = requested_prop
             at = normalized.get("at")
             if not isinstance(at, dict):
                 at = {}
@@ -309,6 +369,79 @@ class ScenarioPresetPatcher:
         if "prop" in placement:
             placement["prop"] = normalize_legacy_static_obstacle_prop_id(placement["prop"])
 
+    def _requested_catalog_prop(self, intent: ScenarioIntent) -> str | None:
+        """Return a requested prop only when it is present in the static obstacle catalog."""
+        prop = normalize_legacy_static_obstacle_prop_id(intent.requested_prop)
+        if isinstance(prop, str) and prop in ALLOWED_STATIC_OBSTACLE_PROPS:
+            return prop
+        return None
+
+    def _redistribute_requested_obstacles(
+        self,
+        placements: list[dict[str, Any]],
+        scenario: dict[str, Any],
+        *,
+        preset_id: str,
+        intent: ScenarioIntent,
+    ) -> list[dict[str, Any]]:
+        """Distribute explicitly requested repeated obstacles across the target segment."""
+        if len(placements) <= 1:
+            return placements
+        if intent.requested_obstacle_count is None and intent.corridor_profile not in {"g-shape", "l-shape"}:
+            return placements
+        segment_id, segment_range = self._target_segment(scenario, preset_id=preset_id, requested_segment=None)
+        requested_prop = self._requested_catalog_prop(intent)
+        redistributed: list[dict[str, Any]] = []
+        for index, placement in enumerate(placements):
+            normalized = deepcopy(placement)
+            if requested_prop is not None:
+                normalized["prop"] = requested_prop
+            normalized["id"] = self._placement_id(normalized, preset_id=preset_id, index=index)
+            at = normalized.get("at") if isinstance(normalized.get("at"), dict) else {}
+            at["segment"] = segment_id
+            at["along_m"] = self._distributed_along_range(segment_range, index, len(placements))
+            at["offset_m"] = self._offset_range(self._zigzag_offset(index))
+            at.setdefault("lane", "walkway")
+            normalized["at"] = at
+            normalized["allow_blocking"] = bool(intent.explicit_blocking)
+            redistributed.append(normalized)
+        return redistributed
+
+    def _placement_id(self, placement: dict[str, Any], *, preset_id: str, index: int) -> str:
+        """Return a stable id for redistributed obstacle placements."""
+        prop = placement.get("prop")
+        if prop == "obstacle.road_cone_01":
+            return f"cone_{index + 1:02d}"
+        placement_id = placement.get("id")
+        if isinstance(placement_id, str) and placement_id:
+            return placement_id
+        return f"{preset_id.replace('-', '_')}_obstacle_{index + 1}"
+
+    def _distributed_along_range(
+        self,
+        segment_range: tuple[float, float],
+        index: int,
+        count: int,
+    ) -> dict[str, float]:
+        """Return a small along band spaced apart from other requested obstacles."""
+        minimum, maximum = segment_range
+        span = max(0.0, maximum - minimum)
+        center = minimum + span * ((index + 1) / (max(1, count) + 1))
+        half_width = min(0.12, max(0.05, span / (max(1, count) + 1) * 0.15))
+        return {
+            "min": self._rounded(self._clamp(center - half_width, minimum, maximum)),
+            "max": self._rounded(self._clamp(center + half_width, minimum, maximum)),
+        }
+
+    def _zigzag_offset(self, index: int) -> float:
+        """Return alternating left/center/right offsets for repeated obstacles."""
+        pattern = [-0.35, 0.25, -0.15, 0.35, -0.25, 0.15]
+        return pattern[index % len(pattern)]
+
+    def _offset_range(self, center_m: float) -> dict[str, float]:
+        """Return a narrow offset band around a zigzag center value."""
+        return {"min": self._rounded(center_m - 0.05), "max": self._rounded(center_m + 0.05)}
+
     def _dedupe_placement_ids(self, placements: list[dict[str, Any]], *, preset_id: str) -> list[dict[str, Any]]:
         """Ensure patched placement ids stay unique after trimming or expanding a preset."""
         seen: set[str] = set()
@@ -329,6 +462,8 @@ class ScenarioPresetPatcher:
     ) -> tuple[str, tuple[float, float]]:
         """Return the segment id and range to use for patched obstacle anchors."""
         ranges = self._segment_ranges(scenario)
+        if "pre_corner_construction" in ranges:
+            return "pre_corner_construction", ranges["pre_corner_construction"]
         if preset_id == "curved" and "road_curve" in ranges:
             return "road_curve", ranges["road_curve"]
         if requested_segment in ranges:

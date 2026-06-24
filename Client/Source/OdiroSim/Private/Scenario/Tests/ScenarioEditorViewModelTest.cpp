@@ -138,11 +138,19 @@ bool FScenarioEditorSidebarViewModelTest::RunTest(const FString& Parameters)
 	UScenarioTemplateFieldRowViewModel* buildingCountItem = viewModel->FindCorridorFieldItem(TEXT("BuildingSideCount"));
 	TestNotNull(TEXT("Corridor building side count field item exists"), buildingCountItem);
 	TestEqual(TEXT("Corridor building side count is formatted"), buildingCountItem ? buildingCountItem->GetValueText() : FString(), FString(TEXT("1")));
+	TestEqual(
+		TEXT("Corridor building side count uses object array input"),
+		buildingCountItem ? buildingCountItem->GetInputType() : EScenarioEditorSidebarFieldInputType::Text,
+		EScenarioEditorSidebarFieldInputType::ObjectArray);
 
 	TArray<UScenarioTemplateFieldRowViewModel*> pointItems =
 		viewModel->CreateCorridorPointFieldItems(0, scenarioTemplate.Corridor.Axis.PointsMeters[0]);
 	TestEqual(TEXT("Corridor point field items are created"), pointItems.Num(), 2);
 	TestEqual(TEXT("Corridor point x is formatted"), pointItems.IsValidIndex(0) ? pointItems[0]->GetValueText() : FString(), FString(TEXT("0.00")));
+	TestEqual(
+		TEXT("Corridor point x keeps number input"),
+		pointItems.IsValidIndex(0) ? pointItems[0]->GetInputType() : EScenarioEditorSidebarFieldInputType::Text,
+		EScenarioEditorSidebarFieldInputType::Number);
 	TestTrue(TEXT("Corridor point x exposes array controls"), pointItems.IsValidIndex(0) && pointItems[0]->HasArrayControls());
 
 	const TArray<FString> surfaceOptions = { TEXT("sidewalk"), TEXT("tile") };
@@ -188,6 +196,10 @@ bool FScenarioEditorSidebarViewModelTest::RunTest(const FString& Parameters)
 	UScenarioTemplateFieldRowViewModel* spawnSegmentsItem = viewModel->FindPedestrianFieldItem(TEXT("SpawnSegments"));
 	TestNotNull(TEXT("Pedestrian spawn segments field item exists"), spawnSegmentsItem);
 	TestEqual(TEXT("Pedestrian spawn segments join as display text"), spawnSegmentsItem ? spawnSegmentsItem->GetValueText() : FString(), FString(TEXT("north, south")));
+	TestEqual(
+		TEXT("Pedestrian spawn segments use string list input"),
+		spawnSegmentsItem ? spawnSegmentsItem->GetInputType() : EScenarioEditorSidebarFieldInputType::Text,
+		EScenarioEditorSidebarFieldInputType::StringList);
 
 	TArray<UScenarioTemplateFieldRowViewModel*> encounterItems =
 		viewModel->CreatePedestrianEncounterFieldItems(0, scenarioTemplate.Pedestrians.Encounters[0]);
@@ -226,6 +238,12 @@ bool FScenarioEditorSidebarViewModelTest::RunTest(const FString& Parameters)
 	UScenarioTemplateFieldRowViewModel* minClearWidthItem = viewModel->FindObstacleFieldItem(TEXT("MinClearWidth"));
 	TestNotNull(TEXT("Obstacle min clear width field item exists"), minClearWidthItem);
 	TestEqual(TEXT("Obstacle min clear width min is formatted"), minClearWidthItem ? minClearWidthItem->GetMinValueText() : FString(), FString(TEXT("0.80")));
+	UScenarioTemplateFieldRowViewModel* placementsCountItem = viewModel->FindObstacleFieldItem(TEXT("PlacementsCount"));
+	TestNotNull(TEXT("Obstacle placements count field item exists"), placementsCountItem);
+	TestEqual(
+		TEXT("Obstacle placements count uses object array input"),
+		placementsCountItem ? placementsCountItem->GetInputType() : EScenarioEditorSidebarFieldInputType::Text,
+		EScenarioEditorSidebarFieldInputType::ObjectArray);
 
 	TArray<UScenarioTemplateFieldRowViewModel*> placementItems =
 		viewModel->CreateObstaclePlacementFieldItems(0, scatterPlacement);
@@ -237,6 +255,14 @@ bool FScenarioEditorSidebarViewModelTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Obstacle pattern has line option"), placementItems.IsValidIndex(3) && placementItems[3]->GetComboOptions().Contains(TEXT("line")));
 	TestTrue(TEXT("Obstacle segment has corridor id option"), placementItems.IsValidIndex(4) && placementItems[4]->GetComboOptions().Contains(TEXT("narrow")));
 	TestTrue(TEXT("Obstacle lane has walkway option"), placementItems.IsValidIndex(5) && placementItems[5]->GetComboOptions().Contains(TEXT("walkway")));
+	TestEqual(
+		TEXT("Obstacle zone segments use string list input"),
+		placementItems.IsValidIndex(8) ? placementItems[8]->GetInputType() : EScenarioEditorSidebarFieldInputType::Text,
+		EScenarioEditorSidebarFieldInputType::StringList);
+	TestEqual(
+		TEXT("Obstacle palette categories use string list input"),
+		placementItems.IsValidIndex(10) ? placementItems[10]->GetInputType() : EScenarioEditorSidebarFieldInputType::Text,
+		EScenarioEditorSidebarFieldInputType::StringList);
 	TestTrue(TEXT("Obstacle scatter density field shows"), placementItems.IsValidIndex(15) && placementItems[15]->IsFieldVisible());
 	TestEqual(TEXT("Obstacle scatter density min is formatted"), placementItems.IsValidIndex(15) ? placementItems[15]->GetMinValueText() : FString(), FString(TEXT("1.00")));
 	TestEqual(TEXT("Obstacle allow blocking uses combo input"), placementItems.IsValidIndex(17) ? placementItems[17]->GetInputType() : EScenarioEditorSidebarFieldInputType::Text, EScenarioEditorSidebarFieldInputType::ComboBox);

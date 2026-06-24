@@ -9,7 +9,10 @@
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarWidgetHelpers.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
+
+namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 
 void UScenarioEditorSidebarObstaclePanel::NativeConstruct()
 {
@@ -219,12 +222,7 @@ void UScenarioEditorSidebarObstaclePanel::UnbindFieldRows()
 	}
 	if (PlacementsCountFieldRow)
 	{
-		PlacementsCountFieldRow->OnAddItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountAddRequested);
-		PlacementsCountFieldRow->OnRemoveItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountRemoveRequested);
+		SidebarWidgetHelpers::UnbindFieldRowActions(PlacementsCountFieldRow.Get(), this);
 	}
 
 	for (UScenarioEditorSidebarObstaclePlacementWidget* placementWidget : PlacementWidgets)
@@ -253,29 +251,33 @@ void UScenarioEditorSidebarObstaclePanel::ConfigureFieldRows()
 {
 	if (ObstacleBlockWidget)
 	{
-		ObstacleBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		ObstacleBlockWidget->SetBlockMetadata(TEXT("장애물"), TEXT("root.obstacles"), TEXT("구성"));
-		ObstacleBlockWidget->SetSelected(true);
+		SidebarWidgetHelpers::ConfigureBlock(ObstacleBlockWidget.Get(), TextStyleCatalog, {
+			TEXT("장애물"),
+			TEXT("root.obstacles"),
+			TEXT("구성"),
+			true,
+			false,
+			true });
 	}
 	if (MinClearWidthBlockWidget)
 	{
-		MinClearWidthBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		MinClearWidthBlockWidget->SetBlockMetadata(
+		SidebarWidgetHelpers::ConfigureBlock(MinClearWidthBlockWidget.Get(), TextStyleCatalog, {
 			TEXT("최소 통행 폭"),
 			TEXT("root.obstacles.min_clear_width_m"),
-			TEXT("속성"));
-		MinClearWidthBlockWidget->SetNested(true);
-		MinClearWidthBlockWidget->SetShowNormalOutline(false);
+			TEXT("속성"),
+			false,
+			true,
+			false });
 	}
 	if (PlacementsBlockWidget)
 	{
-		PlacementsBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		PlacementsBlockWidget->SetBlockMetadata(
+		SidebarWidgetHelpers::ConfigureBlock(PlacementsBlockWidget.Get(), TextStyleCatalog, {
 			TEXT("배치 규칙"),
 			TEXT("root.obstacles.placements[]"),
-			TEXT("속성"));
-		PlacementsBlockWidget->SetNested(true);
-		PlacementsBlockWidget->SetShowNormalOutline(false);
+			TEXT("속성"),
+			false,
+			true,
+			false });
 	}
 
 	if (MinClearWidthFieldRow)
@@ -358,18 +360,15 @@ void UScenarioEditorSidebarObstaclePanel::RefreshPlacementRows(
 			: nullptr);
 	if (PlacementsCountFieldRow)
 	{
-		PlacementsCountFieldRow->OnAddItemRequested.RemoveDynamic(
+		SidebarWidgetHelpers::BindFieldRowActions(
+			PlacementsCountFieldRow.Get(),
 			this,
-			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountAddRequested);
-		PlacementsCountFieldRow->OnAddItemRequested.AddDynamic(
-			this,
-			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountAddRequested);
-		PlacementsCountFieldRow->OnRemoveItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountRemoveRequested);
-		PlacementsCountFieldRow->OnRemoveItemRequested.AddDynamic(
-			this,
-			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountRemoveRequested);
+			GET_FUNCTION_NAME_CHECKED(
+				UScenarioEditorSidebarObstaclePanel,
+				HandlePlacementsCountAddRequested),
+			GET_FUNCTION_NAME_CHECKED(
+				UScenarioEditorSidebarObstaclePanel,
+				HandlePlacementsCountRemoveRequested));
 	}
 
 	for (int32 placementIndex = 0; placementIndex < placements.Num(); ++placementIndex)
@@ -386,24 +385,18 @@ UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarObstaclePanel::AddFieldRow
 	UScenarioEditorSidebarBlockWidget* parentBlockWidget,
 	UScenarioTemplateFieldRowViewModel* fieldItemViewModel) const
 {
-	if (!GetWorld() || !parentBlockWidget)
-	{
-		return nullptr;
-	}
-
-	UScenarioEditorSidebarFieldRow* fieldRow =
-		CreateWidget<UScenarioEditorSidebarFieldRow>(
-			GetWorld(),
-			UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(WidgetClassCatalog));
+	UScenarioEditorSidebarFieldRow* fieldRow = SidebarWidgetHelpers::CreateFieldRow(
+		GetWorld(),
+		WidgetClassCatalog,
+		TextStyleCatalog,
+		fieldItemViewModel,
+		parentBlockWidget);
 	if (!fieldRow)
 	{
 		SetDiagnosticsText(TEXT("Scenario editor field row widget class is missing."));
 		return nullptr;
 	}
 
-	fieldRow->SetTextStyleCatalog(TextStyleCatalog);
-	fieldRow->InitializeFromItemViewModel(fieldItemViewModel);
-	parentBlockWidget->AddBodyChild(fieldRow);
 	return fieldRow;
 }
 

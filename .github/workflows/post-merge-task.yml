@@ -198,12 +198,16 @@ jobs:
                   [string] $Id
               )
 
-              if ($Id -notmatch '^[A-Za-z0-9-]+$') {
-                  throw "Git LFS lock id contains unsupported characters: $Id"
+              if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
+                  throw "GH_TOKEN must be set from LFS_LOCK_BOT_TOKEN before calling gh api."
+              }
+              if ([string]::IsNullOrWhiteSpace($Id)) {
+                  throw "Git LFS lock id is required."
               }
 
               $endpoint = Get-LfsApiEndpoint
-              $unlockUrl = "$endpoint/locks/$Id/unlock"
+              $encodedId = [Uri]::EscapeDataString($Id)
+              $unlockUrl = "$endpoint/locks/$encodedId/unlock"
               $body = @{ force = $true } | ConvertTo-Json -Compress
 
               $output = @(

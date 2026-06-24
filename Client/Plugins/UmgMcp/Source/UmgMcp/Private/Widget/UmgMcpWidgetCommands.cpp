@@ -90,6 +90,88 @@ TSharedPtr<FJsonObject> FUmgMcpWidgetCommands::HandleCommand(const FString& Comm
             Response->SetStringField(TEXT("error"), TEXT("Missing 'widget_name' or 'properties' parameter."));
         }
     }
+    else if (Command == TEXT("get_layout_data"))
+    {
+        UUmgGetSubsystem* GetSubsystem = GEditor->GetEditorSubsystem<UUmgGetSubsystem>();
+        int32 ResolutionWidth = 1920;
+        int32 ResolutionHeight = 1080;
+
+        const TSharedPtr<FJsonObject>* ResolutionObject = nullptr;
+        if (Params->TryGetObjectField(TEXT("resolution"), ResolutionObject) && ResolutionObject && ResolutionObject->IsValid())
+        {
+            double WidthValue = 0.0;
+            double HeightValue = 0.0;
+            if ((*ResolutionObject)->TryGetNumberField(TEXT("width"), WidthValue))
+            {
+                ResolutionWidth = FMath::Max(1, FMath::RoundToInt(WidthValue));
+            }
+            if ((*ResolutionObject)->TryGetNumberField(TEXT("height"), HeightValue))
+            {
+                ResolutionHeight = FMath::Max(1, FMath::RoundToInt(HeightValue));
+            }
+        }
+
+        double WidthValue = 0.0;
+        double HeightValue = 0.0;
+        if (Params->TryGetNumberField(TEXT("resolution_width"), WidthValue))
+        {
+            ResolutionWidth = FMath::Max(1, FMath::RoundToInt(WidthValue));
+        }
+        if (Params->TryGetNumberField(TEXT("resolution_height"), HeightValue))
+        {
+            ResolutionHeight = FMath::Max(1, FMath::RoundToInt(HeightValue));
+        }
+
+        FString LayoutDataString = GetSubsystem->GetLayoutData(TargetBlueprint, ResolutionWidth, ResolutionHeight);
+        TArray<TSharedPtr<FJsonValue>> LayoutData;
+        TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(LayoutDataString);
+        if (FJsonSerializer::Deserialize(Reader, LayoutData))
+        {
+            Response->SetBoolField(TEXT("success"), true);
+            Response->SetNumberField(TEXT("resolution_width"), ResolutionWidth);
+            Response->SetNumberField(TEXT("resolution_height"), ResolutionHeight);
+            Response->SetArrayField(TEXT("layout_data"), LayoutData);
+            if (LayoutData.Num() == 0)
+            {
+                Response->SetStringField(TEXT("note"), TEXT("No cached widget geometry was available. Open or preview the widget, then run get_layout_data again."));
+            }
+        }
+        else
+        {
+            Response->SetBoolField(TEXT("success"), false);
+            Response->SetStringField(TEXT("error"), TEXT("Failed to collect or parse UMG layout data."));
+        }
+    }
+    else if (Command == TEXT("check_widget_overlap"))
+    {
+        UUmgGetSubsystem* GetSubsystem = GEditor->GetEditorSubsystem<UUmgGetSubsystem>();
+        TArray<FString> WidgetNames;
+        const TArray<TSharedPtr<FJsonValue>>* WidgetNamesJsonArray = nullptr;
+
+        if (Params->TryGetArrayField(TEXT("widget_names"), WidgetNamesJsonArray) ||
+            Params->TryGetArrayField(TEXT("widget_ids"), WidgetNamesJsonArray))
+        {
+            for (const TSharedPtr<FJsonValue>& JsonValue : *WidgetNamesJsonArray)
+            {
+                if (JsonValue.IsValid())
+                {
+                    WidgetNames.Add(JsonValue->AsString());
+                }
+            }
+        }
+
+        const bool bHasOverlap = GetSubsystem->CheckWidgetOverlap(TargetBlueprint, WidgetNames);
+        TArray<TSharedPtr<FJsonValue>> WidgetNamesJson;
+        for (const FString& WidgetName : WidgetNames)
+        {
+            WidgetNamesJson.Add(MakeShared<FJsonValueString>(WidgetName));
+        }
+
+        Response->SetBoolField(TEXT("success"), true);
+        Response->SetBoolField(TEXT("has_overlap"), bHasOverlap);
+        Response->SetArrayField(TEXT("checked_widgets"), WidgetNamesJson);
+        Response->SetStringField(TEXT("scope"), WidgetNames.Num() > 0 ? FString(TEXT("specified_widgets")) : FString(TEXT("all_cached_widgets")));
+    }
     else if (Command == TEXT("get_widget_schema"))
     {
         UUmgGetSubsystem* GetSubsystem = GEditor->GetEditorSubsystem<UUmgGetSubsystem>();

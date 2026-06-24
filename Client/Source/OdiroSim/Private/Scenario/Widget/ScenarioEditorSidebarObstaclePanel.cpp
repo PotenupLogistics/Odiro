@@ -254,16 +254,16 @@ void UScenarioEditorSidebarObstaclePanel::ConfigureFieldRows()
 	if (ObstacleBlockWidget)
 	{
 		ObstacleBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		ObstacleBlockWidget->SetBlockMetadata(TEXT("obstacles"), TEXT("root.obstacles"), TEXT("Template"));
+		ObstacleBlockWidget->SetBlockMetadata(TEXT("장애물"), TEXT("root.obstacles"), TEXT("구성"));
 		ObstacleBlockWidget->SetSelected(true);
 	}
 	if (MinClearWidthBlockWidget)
 	{
 		MinClearWidthBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
 		MinClearWidthBlockWidget->SetBlockMetadata(
-			TEXT("min_clear_width_m"),
+			TEXT("최소 통행 폭"),
 			TEXT("root.obstacles.min_clear_width_m"),
-			TEXT("Property"));
+			TEXT("속성"));
 		MinClearWidthBlockWidget->SetNested(true);
 		MinClearWidthBlockWidget->SetShowNormalOutline(false);
 	}
@@ -271,9 +271,9 @@ void UScenarioEditorSidebarObstaclePanel::ConfigureFieldRows()
 	{
 		PlacementsBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
 		PlacementsBlockWidget->SetBlockMetadata(
-			TEXT("placements"),
+			TEXT("배치 규칙"),
 			TEXT("root.obstacles.placements[]"),
-			TEXT("Property"));
+			TEXT("속성"));
 		PlacementsBlockWidget->SetNested(true);
 		PlacementsBlockWidget->SetShowNormalOutline(false);
 	}

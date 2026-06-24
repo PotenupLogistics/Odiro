@@ -42,7 +42,7 @@ public:
 	/**
 	 * Gets the asset path of the current target UMG asset.
 	 * If a target is explicitly set via SetTargetUmgAsset, it returns that target.
-	 * Otherwise, it falls back to returning the last edited UMG asset.
+	 * Generated fallback workspace targets yield to real open UMG editors before history fallback.
 	 * @return FString The asset path of the target UMG asset.
 	 */
 	FString GetTargetUmgAsset() const;

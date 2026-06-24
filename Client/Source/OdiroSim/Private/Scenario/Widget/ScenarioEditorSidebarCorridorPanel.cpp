@@ -573,14 +573,14 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 	if (CorridorBlockWidget)
 	{
 		CorridorBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		CorridorBlockWidget->SetBlockMetadata(TEXT("corridor"), TEXT("root.corridor"), TEXT("Template"));
+		CorridorBlockWidget->SetBlockMetadata(TEXT("통로"), TEXT("root.corridor"), TEXT("구성"));
 		CorridorBlockWidget->SetSelected(true);
 		CorridorBlockWidget->SetNested(false);
 	}
 	if (AxisBlockWidget)
 	{
 		AxisBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		AxisBlockWidget->SetBlockMetadata(TEXT("axis"), TEXT("root.corridor.axis"), TEXT("Property"));
+		AxisBlockWidget->SetBlockMetadata(TEXT("중심 경로"), TEXT("root.corridor.axis"), TEXT("속성"));
 		AxisBlockWidget->SetNested(true);
 		AxisBlockWidget->SetShowNormalOutline(false);
 	}
@@ -588,9 +588,9 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 	{
 		AxisPointsBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
 		AxisPointsBlockWidget->SetBlockMetadata(
-			TEXT("points_m"),
+			TEXT("경로 점"),
 			TEXT("root.corridor.axis.points_m[]"),
-			TEXT("Property"));
+			TEXT("속성"));
 		AxisPointsBlockWidget->SetNested(true);
 		AxisPointsBlockWidget->SetShowNormalOutline(false);
 	}
@@ -598,9 +598,9 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 	{
 		WalkwayWidthBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
 		WalkwayWidthBlockWidget->SetBlockMetadata(
-			TEXT("walkway_width_m"),
+			TEXT("보행로 폭"),
 			TEXT("root.corridor.walkway_width_m"),
-			TEXT("Property"));
+			TEXT("속성"));
 		WalkwayWidthBlockWidget->SetNested(true);
 		WalkwayWidthBlockWidget->SetShowNormalOutline(false);
 	}
@@ -608,9 +608,9 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 	{
 		BuildingSideBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
 		BuildingSideBlockWidget->SetBlockMetadata(
-			TEXT("building_side"),
+			TEXT("건물측 영역"),
 			TEXT("root.corridor.building_side[]"),
-			TEXT("Property"));
+			TEXT("속성"));
 		BuildingSideBlockWidget->SetNested(true);
 		BuildingSideBlockWidget->SetShowNormalOutline(false);
 	}
@@ -618,9 +618,9 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 	{
 		CurbSideBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
 		CurbSideBlockWidget->SetBlockMetadata(
-			TEXT("curb_side"),
+			TEXT("도로측 영역"),
 			TEXT("root.corridor.curb_side[]"),
-			TEXT("Property"));
+			TEXT("속성"));
 		CurbSideBlockWidget->SetNested(true);
 		CurbSideBlockWidget->SetShowNormalOutline(false);
 	}
@@ -628,9 +628,9 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 	{
 		SegmentsBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
 		SegmentsBlockWidget->SetBlockMetadata(
-			TEXT("segments"),
+			TEXT("의미 구간"),
 			TEXT("root.corridor.segments[]"),
-			TEXT("Property"));
+			TEXT("속성"));
 		SegmentsBlockWidget->SetNested(true);
 		SegmentsBlockWidget->SetShowNormalOutline(false);
 	}

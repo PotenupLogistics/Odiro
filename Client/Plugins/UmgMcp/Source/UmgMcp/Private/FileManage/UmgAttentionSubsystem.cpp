@@ -13,6 +13,21 @@
 // Define a log category for easy debugging.
 DEFINE_LOG_CATEGORY_STATIC(LogUmgAttention, Log, All);
 
+namespace
+{
+	/** Returns the generated fallback workspace path used only when no real UMG target is known. */
+	const TCHAR* GetFallbackWorkspaceAssetPath()
+	{
+		return TEXT("/Game/DefaultAndCanBeDelete.DefaultAndCanBeDelete");
+	}
+
+	/** Returns whether the asset path points at the generated fallback workspace. */
+	bool IsFallbackWorkspaceAssetPath(const FString& AssetPath)
+	{
+		return AssetPath == GetFallbackWorkspaceAssetPath();
+	}
+}
+
 void UUmgAttentionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
@@ -64,10 +79,18 @@ void UUmgAttentionSubsystem::HandleAssetOpened(UObject* Asset, class IAssetEdito
 		UmgAssetHistory.Remove(AssetPath);
 		UmgAssetHistory.Insert(AssetPath, 0);
 
-        // If the opened asset is our current target, update the cached object pointer for free.
-        if (AssetPath == AttentionTargetAssetPath)
+        // A fallback target is only a temporary workspace; a real opened UMG asset should replace it.
+        const bool bShouldUpdateTarget = AttentionTargetAssetPath.IsEmpty()
+            || AssetPath == AttentionTargetAssetPath
+            || IsFallbackWorkspaceAssetPath(AttentionTargetAssetPath);
+        if (bShouldUpdateTarget)
         {
-            UE_LOG(LogUmgAttention, Log, TEXT("Opened asset matches current attention target. Updating cached object."));
+            UE_LOG(LogUmgAttention, Log, TEXT("Opened asset is eligible for attention target. Updating cached object: %s"), *AssetPath);
+            if (AssetPath != AttentionTargetAssetPath)
+            {
+                CurrentWidgetName.Empty();
+            }
+            AttentionTargetAssetPath = AssetPath;
             CachedTargetWidgetBlueprint = WidgetBP;
         }
 	}
@@ -183,6 +206,8 @@ FString UUmgAttentionSubsystem::GetTargetUmgAsset() const
 {
     // Non-const mutable copy for potential lazy-loading
     UUmgAttentionSubsystem* MutableThis = const_cast<UUmgAttentionSubsystem*>(this);
+    const FString FallbackWorkspacePath = GetFallbackWorkspaceAssetPath();
+    const bool bCurrentTargetIsFallbackWorkspace = IsFallbackWorkspaceAssetPath(AttentionTargetAssetPath);
 
     // If we have an explicit target path, but our cached object is invalid, try to reload it.
     if (!AttentionTargetAssetPath.IsEmpty() && !CachedTargetWidgetBlueprint.IsValid())
@@ -196,11 +221,14 @@ FString UUmgAttentionSubsystem::GetTargetUmgAsset() const
         }
         else
         {
-             UE_LOG(LogUmgAttention, Warning, TEXT("Failed to reload UMG asset object."));
+             UE_LOG(LogUmgAttention, Warning, TEXT("Failed to reload UMG asset object. Clearing stale attention target: %s"), *AttentionTargetAssetPath);
+             MutableThis->AttentionTargetAssetPath.Empty();
+             MutableThis->CurrentWidgetName.Empty();
         }
     }
 
-    if (!AttentionTargetAssetPath.IsEmpty())
+    // A generated fallback target must not hide a real Widget Blueprint that is currently open.
+    if (!AttentionTargetAssetPath.IsEmpty() && !bCurrentTargetIsFallbackWorkspace)
     {
         return AttentionTargetAssetPath;
     }
@@ -219,7 +247,12 @@ FString UUmgAttentionSubsystem::GetTargetUmgAsset() const
                     FString AssetPath = WidgetBP->GetPathName();
                     UE_LOG(LogUmgAttention, Log, TEXT("Found currently open UMG editor: %s"), *AssetPath);
 
-                    // Update our cache
+                    // Promote the discovered editor asset when the previous target was empty or fallback-only.
+                    if (AttentionTargetAssetPath.IsEmpty() || bCurrentTargetIsFallbackWorkspace)
+                    {
+                        MutableThis->AttentionTargetAssetPath = AssetPath;
+                        MutableThis->CurrentWidgetName.Empty();
+                    }
                     MutableThis->CachedTargetWidgetBlueprint = WidgetBP;
 
                     // Return the first found UMG asset
@@ -237,10 +270,9 @@ FString UUmgAttentionSubsystem::GetTargetUmgAsset() const
     }
 
     // Auto-create default asset if nothing exists
-    FString DefaultPath = TEXT("/Game/DefaultAndCanBeDelete.DefaultAndCanBeDelete");
-    UE_LOG(LogUmgAttention, Log, TEXT("GetTargetUmgAsset: No active or historical UMG target found. Auto-generating default workspace: %s"), *DefaultPath);
-    MutableThis->SetTargetUmgAsset(DefaultPath);
-    return DefaultPath;
+    UE_LOG(LogUmgAttention, Log, TEXT("GetTargetUmgAsset: No active or historical UMG target found. Auto-generating default workspace: %s"), *FallbackWorkspacePath);
+    MutableThis->SetTargetUmgAsset(FallbackWorkspacePath);
+    return FallbackWorkspacePath;
 }
 
 UWidgetBlueprint* UUmgAttentionSubsystem::GetCachedTargetWidgetBlueprint() const

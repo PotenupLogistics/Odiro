@@ -332,9 +332,9 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::ConfigureFieldRows()
 		EncounterBlockWidget->SetBlockMetadata(
 			bHasCachedEncounter && !CachedEncounter.EncounterId.IsEmpty()
 				? CachedEncounter.EncounterId
-				: FString::Printf(TEXT("encounter[%d]"), EncounterIndex),
+				: FString::Printf(TEXT("상호작용 %d"), EncounterIndex + 1),
 			TEXT("root.pedestrians.encounters[]"),
-			TEXT("Detail"));
+			TEXT("세부"));
 		EncounterBlockWidget->SetNested(true);
 		EncounterBlockWidget->SetShowNormalOutline(false);
 	}
@@ -389,10 +389,10 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::ApplyCachedEncounterToRows
 	{
 		EncounterBlockWidget->SetBlockMetadata(
 			CachedEncounter.EncounterId.IsEmpty()
-				? FString::Printf(TEXT("encounter[%d]"), EncounterIndex)
+				? FString::Printf(TEXT("상호작용 %d"), EncounterIndex + 1)
 				: CachedEncounter.EncounterId,
 			TEXT("root.pedestrians.encounters[]"),
-			TEXT("Detail"));
+			TEXT("세부"));
 	}
 	if (EncounterIdFieldRow)
 	{

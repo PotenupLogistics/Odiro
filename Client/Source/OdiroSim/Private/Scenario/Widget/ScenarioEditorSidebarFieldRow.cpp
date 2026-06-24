@@ -107,6 +107,7 @@ void UScenarioEditorSidebarFieldRow::InitializeFromItemViewModel(
 {
 	if (!itemViewModel)
 	{
+		SetVisibility(ESlateVisibility::Collapsed);
 		return;
 	}
 

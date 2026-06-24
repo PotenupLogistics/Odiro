@@ -41,6 +41,9 @@ struct FScenarioCorridorLaneMeshBuildSpec
 	// Lane mesh center Z in centimeters.
 	double LaneCenterZCm = 0.0;
 
+	// Shared centerline fillet radius used to round Corridor corner joins in centimeters.
+	double CornerFilletRadiusCm = 0.0;
+
 	// Collision profile applied when CollisionEnabled is not NoCollision.
 	FName CollisionProfileName;
 

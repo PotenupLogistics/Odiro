@@ -111,5 +111,6 @@ private:
 	// Creates procedural mesh sections for one sampled layout lane interval.
 	void AddLaneStrip(
 		const FScenarioRuntimeCorridorLayoutEntry& layoutEntry,
-		const FScenarioRuntimeCorridorLaneSpec& laneSpec);
+		const FScenarioRuntimeCorridorLaneSpec& laneSpec,
+		double cornerFilletRadiusMeters);
 };

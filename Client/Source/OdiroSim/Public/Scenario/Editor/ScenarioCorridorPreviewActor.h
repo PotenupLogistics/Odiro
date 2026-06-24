@@ -70,6 +70,7 @@ private:
 		const FString& surfaceId,
 		double minOffsetMeters,
 		double maxOffsetMeters,
+		double cornerFilletRadiusMeters,
 		double surfaceZOffsetCm);
 
 	// Resolves fixed/range template numbers to a deterministic editor-preview value.

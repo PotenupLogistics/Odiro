@@ -245,6 +245,8 @@ class ScenarioPresetPatcher:
         start_m, end_m = self._numeric_pair_or_default(along_range, (0.0, 1.0))
         span = max(0.0, end_m - start_m)
         inner_offset = min(1.0, max(0.0, span * 0.25))
+        if span <= 4.0:
+            inner_offset = min(0.5, max(0.0, span * 0.125))
         along_m = start_m + inner_offset if prefer_start else end_m - inner_offset
         return {
             "type": "corridor_pose",
@@ -466,6 +468,10 @@ class ScenarioPresetPatcher:
             return "pre_corner_construction", ranges["pre_corner_construction"]
         if preset_id == "curved" and "road_curve" in ranges:
             return "road_curve", ranges["road_curve"]
+        if preset_id == "s-curve":
+            for segment_id in ("curve_right_1", "curve_left_2", "curve_left_1", "curve_right_2"):
+                if segment_id in ranges:
+                    return segment_id, ranges[segment_id]
         if requested_segment in ranges:
             return requested_segment, ranges[requested_segment]
         if "conflict" in ranges:

@@ -8,9 +8,10 @@ from fastapi.testclient import TestClient
 from app.agents.common.json_response_parser import parse_json_response
 from app.agents.scenario_generation_v2 import ScenarioGenerationV2Agent
 from app.agents.scenario_generation_v2.graph_runner import ScenarioGenerationGraphRunnerV2
+from app.agents.scenario_generation_v2.repair_handler import ROBOT_ANCHOR_EXCLUSION_RADIUS_M
 from app.agents.scenario_generation_v2.scenario_preset_loader import ScenarioPresetLoader
 from app.agents.scenario_generation_v2.scenario_template_schema import project_scenario_v1_json_schema
-from app.agents.scenario_generation_v2.template_validator import TemplateValidator
+from app.agents.scenario_generation_v2.template_validator import ALLOWED_LANES, TemplateValidator
 from app.catalogs.static_obstacle_catalog import get_allowed_static_obstacle_prop_ids
 from app.core.settings import Settings
 from app.main import app
@@ -273,6 +274,86 @@ def _range_center(value: object) -> float:
     if isinstance(value, dict):
         return (float(value["min"]) + float(value["max"])) / 2.0
     return float(value)
+
+
+def _range_bounds(value: object) -> tuple[float, float]:
+    """Return comparable bounds for scalar or ranged scenario coordinates."""
+    if isinstance(value, dict):
+        return float(value["min"]), float(value["max"])
+    numeric = float(value)
+    return numeric, numeric
+
+
+def _ranges_overlap(left: tuple[float, float], right: tuple[float, float]) -> bool:
+    """Return whether two closed numeric intervals overlap."""
+    return left[0] <= right[1] and right[0] <= left[1]
+
+
+def _min_numeric_value(value: object) -> float | None:
+    """Return the minimum numeric value from scalar or min/max scenario fields."""
+    if isinstance(value, dict):
+        return float(value["min"])
+    if isinstance(value, int | float):
+        return float(value)
+    return None
+
+
+def _max_numeric_value(value: object) -> float | None:
+    """Return the maximum numeric value from scalar or min/max scenario fields."""
+    if isinstance(value, dict):
+        return float(value["max"])
+    if isinstance(value, int | float):
+        return float(value)
+    return None
+
+
+def _assert_scenario_quality_guardrails(
+    payload: dict,
+    *,
+    safety_radius_m: float = ROBOT_ANCHOR_EXCLUSION_RADIUS_M,
+) -> None:
+    """Assert generated scenarios satisfy UE-facing obstacle quality guardrails."""
+    _assert_raw_scenario(payload)
+    assert TemplateValidator().validate(payload).valid is True
+    allowed_props = get_allowed_static_obstacle_prop_ids()
+    corridor = payload["corridor"]
+    segment_ranges = {segment["id"]: segment["along_range_m"] for segment in corridor["segments"]}
+    segment_ids = set(segment_ranges)
+    for anchor in (payload["robot"]["start"], payload["robot"]["goal"]):
+        assert anchor["segment"] in segment_ids
+        start_m, end_m = segment_ranges[anchor["segment"]]
+        assert float(start_m) <= float(anchor["along_m"]) <= float(end_m)
+        assert anchor.get("lane") in ALLOWED_LANES
+
+    placements = payload["obstacles"]["placements"]
+    walkway_width_m = _min_numeric_value(corridor["walkway_width_m"])
+    min_clear_width_m = _max_numeric_value(payload["obstacles"].get("min_clear_width_m"))
+    for placement in placements:
+        assert placement["prop"] in allowed_props
+        at = placement["at"]
+        assert at["segment"] in segment_ids
+        assert at.get("lane") in ALLOWED_LANES
+        segment_start, segment_end = segment_ranges[at["segment"]]
+        along_bounds = _range_bounds(at["along_m"])
+        assert float(segment_start) <= along_bounds[0] <= along_bounds[1] <= float(segment_end)
+        for anchor in (payload["robot"]["start"], payload["robot"]["goal"]):
+            if at["segment"] != anchor["segment"]:
+                continue
+            anchor_along = float(anchor["along_m"])
+            forbidden = (anchor_along - safety_radius_m, anchor_along + safety_radius_m)
+            assert not _ranges_overlap(along_bounds, forbidden)
+        if walkway_width_m is not None and min_clear_width_m is not None:
+            offset_min, offset_max = _range_bounds(at["offset_m"])
+            half_width = walkway_width_m / 2.0
+            assert max(offset_min + half_width, half_width - offset_max) + 1e-6 >= min_clear_width_m
+
+    for left_index, left in enumerate(placements):
+        for right in placements[left_index + 1 :]:
+            if left["at"]["segment"] != right["at"]["segment"]:
+                continue
+            along_overlap = _ranges_overlap(_range_bounds(left["at"]["along_m"]), _range_bounds(right["at"]["along_m"]))
+            offset_overlap = _ranges_overlap(_range_bounds(left["at"]["offset_m"]), _range_bounds(right["at"]["offset_m"]))
+            assert not (along_overlap and offset_overlap)
 
 
 def _assert_complex_g_shape_construction_scenario(payload: dict) -> None:
@@ -1246,6 +1327,31 @@ def test_v2_endpoint_complex_g_shape_construction_prompt_patches_preset(monkeypa
     _assert_complex_g_shape_construction_scenario(response.json())
 
 
+def test_v2_endpoint_beta_quality_guardrails_for_natural_language_prompts(monkeypatch) -> None:
+    """Keep generated obstacle scenarios drivable for beta UE setup tests."""
+    monkeypatch.setenv("V2_AGENT_LLM_ENABLED", "false")
+    cases = [
+        ("출발 지점 바로 앞에 콘 2개를 배치해줘.", 2),
+        ("도착 지점 근처에 장애물 2개를 배치해줘.", 2),
+        ("좁은 보도에 콘 4개를 지그재그로 배치해줘.", 4),
+        (COMPLEX_G_SHAPE_CONSTRUCTION_PROMPT, 3),
+        ("S자 커브 길에 중간 공사구간이 있고 콘 3개만 배치해줘. 보행자는 없게 해줘.", 3),
+    ]
+
+    client = TestClient(app)
+    for prompt, expected_count in cases:
+        response = client.post("/api/v2/scenarios/generate", json={"prompt": prompt})
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        _assert_scenario_quality_guardrails(payload)
+        assert len(payload["obstacles"]["placements"]) == expected_count
+        assert all(
+            placement["prop"] == "obstacle.road_cone_01"
+            for placement in payload["obstacles"]["placements"]
+        )
+
+
 def test_v2_deterministic_g_shape_prompt_without_obstacles_builds_corner_corridor() -> None:
     """Build an obstacle-free L-shape corridor when only road shape is requested."""
     agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
@@ -1766,12 +1872,12 @@ def _llm_curved_road_response_with_obstacle_along(along_m: object | None, *, inc
 
 
 def test_v2_llm_curved_road_prompt_preserves_valid_obstacle_range() -> None:
-    response = _llm_curved_road_response_with_obstacle_along({"min": 7.0, "max": 9.0})
+    response = _llm_curved_road_response_with_obstacle_along({"min": 5.0, "max": 6.0})
 
     assert response.scenario is not None
     placement = response.scenario["obstacles"]["placements"][0]
     assert placement["at"]["segment"] == "road_curve"
-    assert placement["at"]["along_m"] == {"min": 7.0, "max": 9.0}
+    assert placement["at"]["along_m"] == {"min": 5.0, "max": 6.0}
 
 
 def test_v2_llm_curved_road_prompt_clamps_obstacle_range_inside_curve() -> None:
@@ -1789,7 +1895,7 @@ def test_v2_llm_curved_road_prompt_defaults_edge_collapsed_obstacle_range() -> N
     assert response.scenario is not None
     placement = response.scenario["obstacles"]["placements"][0]
     assert placement["at"]["segment"] == "road_curve"
-    assert placement["at"]["along_m"] == {"min": 6.5, "max": 8.5}
+    _assert_scenario_quality_guardrails(response.scenario)
 
 
 def test_v2_llm_curved_road_prompt_defaults_missing_obstacle_range() -> None:
@@ -1798,7 +1904,7 @@ def test_v2_llm_curved_road_prompt_defaults_missing_obstacle_range() -> None:
     assert response.scenario is not None
     placement = response.scenario["obstacles"]["placements"][0]
     assert placement["at"]["segment"] == "road_curve"
-    assert placement["at"]["along_m"] == {"min": 6.5, "max": 8.5}
+    _assert_scenario_quality_guardrails(response.scenario)
 
 
 def test_v2_scenario_agent_uses_llm_scenario_when_enabled() -> None:

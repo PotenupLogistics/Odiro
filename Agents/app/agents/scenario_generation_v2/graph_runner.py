@@ -185,7 +185,7 @@ class ScenarioGenerationGraphRunnerV2:
         """Validate the generated project scenario and expose diagnostics to the graph."""
         if state.get("status") == "failed" and state.get("validation") is not None:
             return state
-        scenario = state.get("scenario")
+        scenario = self.agent.repair_handler.repair(state.get("scenario") or {})
         validation = self.agent.validator.validate(scenario or {})
         validation.warnings.extend(state.get("llm_warnings", []))
         diagnostics = [
@@ -200,6 +200,7 @@ class ScenarioGenerationGraphRunnerV2:
         ]
         return {
             **state,
+            "scenario": scenario,
             "validation": validation,
             "diagnostics": diagnostics,
             "status": "success" if validation.valid else "failed",
@@ -213,9 +214,10 @@ class ScenarioGenerationGraphRunnerV2:
         )
         try:
             candidate = self.agent._generate_llm_template(prompt, response_name="scenario_graph_intent")
-            candidate = self.agent.repair_handler.repair(candidate)
+            candidate = self.agent.repair_handler.repair(candidate, repair_quality=False)
             intent = self.agent.intent_parser.parse(prompt)
             candidate = self.agent._postprocess_scenario_for_intent(candidate, intent)
+            candidate = self.agent.repair_handler.repair(candidate)
             validation = self.agent.validator.validate(candidate)
             if validation.valid:
                 return {
@@ -269,9 +271,10 @@ class ScenarioGenerationGraphRunnerV2:
                 validation,
                 response_name="scenario_graph_repair",
             )
-            repaired = self.agent.repair_handler.repair(repaired)
+            repaired = self.agent.repair_handler.repair(repaired, repair_quality=False)
             intent = self.agent.intent_parser.parse(prompt)
             repaired = self.agent._postprocess_scenario_for_intent(repaired, intent)
+            repaired = self.agent.repair_handler.repair(repaired)
             repaired_validation = self.agent.validator.validate(repaired)
             repair_diagnostics = [
                 *diagnostics,

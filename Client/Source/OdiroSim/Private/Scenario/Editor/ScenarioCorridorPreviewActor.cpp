@@ -198,6 +198,14 @@ void AScenarioCorridorPreviewActor::ConfigureFromCorridor(const FScenarioTemplat
 		}
 	}
 
+	double cornerFilletRadiusMeters = 0.0;
+	for (const FPreviewCorridorVisualLaneSpec& visualLaneSpec : visualLaneSpecs)
+	{
+		cornerFilletRadiusMeters = FMath::Max(
+			cornerFilletRadiusMeters,
+			FMath::Max(FMath::Abs(visualLaneSpec.MinOffsetMeters), FMath::Abs(visualLaneSpec.MaxOffsetMeters)));
+	}
+
 	for (const FPreviewCorridorVisualLaneSpec& visualLaneSpec : visualLaneSpecs)
 	{
 		AddLaneStrip(
@@ -207,6 +215,7 @@ void AScenarioCorridorPreviewActor::ConfigureFromCorridor(const FScenarioTemplat
 			visualLaneSpec.SurfaceId,
 			visualLaneSpec.MinOffsetMeters,
 			visualLaneSpec.MaxOffsetMeters,
+			cornerFilletRadiusMeters,
 			visualLaneSpec.SurfaceZOffsetCm);
 	}
 }
@@ -258,6 +267,7 @@ void AScenarioCorridorPreviewActor::AddLaneStrip(
 	const FString& surfaceId,
 	double minOffsetMeters,
 	double maxOffsetMeters,
+	double cornerFilletRadiusMeters,
 	double surfaceZOffsetCm)
 {
 	if (!HasRenderableCorridor())
@@ -318,6 +328,8 @@ void AScenarioCorridorPreviewActor::AddLaneStrip(
 	meshSpec.MaxOffsetCm = maxOffsetMeters * FScenarioCorridorGeometry::MetersToCentimeters;
 	meshSpec.LaneHeightCm = laneHeightCm;
 	meshSpec.LaneCenterZCm = laneCenterZCm;
+	meshSpec.CornerFilletRadiusCm = FMath::Max(cornerFilletRadiusMeters, 0.0)
+		* FScenarioCorridorGeometry::MetersToCentimeters;
 	meshSpec.CollisionEnabled = bBlockedSurface ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision;
 	meshSpec.CollisionProfileName = bBlockedSurface ? BlockedPreviewCollisionProfileName : NAME_None;
 	FScenarioCorridorGeometry::AddLaneStripMeshes(meshSpec, LaneMeshComponents);

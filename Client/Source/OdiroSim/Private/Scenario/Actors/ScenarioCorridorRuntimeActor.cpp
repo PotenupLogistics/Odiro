@@ -143,9 +143,19 @@ void AScenarioCorridorRuntimeActor::ConfigureCorridor(const FScenarioRuntimeCorr
 		}
 	}
 
+	double cornerFilletRadiusMeters = 0.0;
 	for (const FRuntimeCorridorVisualLaneSpec& visualLaneSpec : visualLaneSpecs)
 	{
-		AddLaneStrip(visualLaneSpec.LayoutEntry, visualLaneSpec.LaneSpec);
+		cornerFilletRadiusMeters = FMath::Max(
+			cornerFilletRadiusMeters,
+			FMath::Max(
+				FMath::Abs(visualLaneSpec.LaneSpec.OffsetRangeMeters.MinMeters),
+				FMath::Abs(visualLaneSpec.LaneSpec.OffsetRangeMeters.MaxMeters)));
+	}
+
+	for (const FRuntimeCorridorVisualLaneSpec& visualLaneSpec : visualLaneSpecs)
+	{
+		AddLaneStrip(visualLaneSpec.LayoutEntry, visualLaneSpec.LaneSpec, cornerFilletRadiusMeters);
 	}
 }
 
@@ -226,7 +236,8 @@ bool AScenarioCorridorRuntimeActor::TryFindSurfaceAtWorldLocation2D(
 
 void AScenarioCorridorRuntimeActor::AddLaneStrip(
 	const FScenarioRuntimeCorridorLayoutEntry& layoutEntry,
-	const FScenarioRuntimeCorridorLaneSpec& laneSpec)
+	const FScenarioRuntimeCorridorLaneSpec& laneSpec,
+	double cornerFilletRadiusMeters)
 {
 	const double laneWidthMeters = laneSpec.OffsetRangeMeters.MaxMeters - laneSpec.OffsetRangeMeters.MinMeters;
 	if (laneWidthMeters <= KINDA_SMALL_NUMBER)
@@ -283,6 +294,8 @@ void AScenarioCorridorRuntimeActor::AddLaneStrip(
 	meshSpec.MaxOffsetCm = laneSpec.OffsetRangeMeters.MaxMeters * FScenarioCorridorGeometry::MetersToCentimeters;
 	meshSpec.LaneHeightCm = laneHeightCm;
 	meshSpec.LaneCenterZCm = laneCenterZCm;
+	meshSpec.CornerFilletRadiusCm = FMath::Max(cornerFilletRadiusMeters, 0.0)
+		* FScenarioCorridorGeometry::MetersToCentimeters;
 	meshSpec.CollisionEnabled = ECollisionEnabled::QueryAndPhysics;
 	meshSpec.CollisionProfileName = collisionProfileName;
 	meshSpec.ComponentTag = collisionTag;

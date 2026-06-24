@@ -5,6 +5,9 @@
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarWidgetHelpers.h"
+
+namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 
 void UScenarioEditorSidebarCorridorLaneWidget::NativeConstruct()
 {
@@ -105,18 +108,15 @@ void UScenarioEditorSidebarCorridorLaneWidget::BindFieldRows()
 		SurfaceFieldRow->OnValueTextCommitted.AddDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorLaneWidget::HandleSurfaceCommitted);
-		SurfaceFieldRow->OnAddItemRequested.RemoveDynamic(
+		SidebarWidgetHelpers::BindFieldRowActions(
+			SurfaceFieldRow.Get(),
 			this,
-			&UScenarioEditorSidebarCorridorLaneWidget::HandleAddLaneRequested);
-		SurfaceFieldRow->OnAddItemRequested.AddDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorLaneWidget::HandleAddLaneRequested);
-		SurfaceFieldRow->OnRemoveItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorLaneWidget::HandleRemoveLaneRequested);
-		SurfaceFieldRow->OnRemoveItemRequested.AddDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorLaneWidget::HandleRemoveLaneRequested);
+			GET_FUNCTION_NAME_CHECKED(
+				UScenarioEditorSidebarCorridorLaneWidget,
+				HandleAddLaneRequested),
+			GET_FUNCTION_NAME_CHECKED(
+				UScenarioEditorSidebarCorridorLaneWidget,
+				HandleRemoveLaneRequested));
 	}
 
 	if (WidthFieldRow)
@@ -143,12 +143,7 @@ void UScenarioEditorSidebarCorridorLaneWidget::UnbindFieldRows()
 		SurfaceFieldRow->OnValueTextCommitted.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorLaneWidget::HandleSurfaceCommitted);
-		SurfaceFieldRow->OnAddItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorLaneWidget::HandleAddLaneRequested);
-		SurfaceFieldRow->OnRemoveItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorLaneWidget::HandleRemoveLaneRequested);
+		SidebarWidgetHelpers::UnbindFieldRowActions(SurfaceFieldRow.Get(), this);
 	}
 
 	if (WidthFieldRow)
@@ -166,13 +161,14 @@ void UScenarioEditorSidebarCorridorLaneWidget::ConfigureFieldRows()
 {
 	if (LaneBlockWidget)
 	{
-		LaneBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		LaneBlockWidget->SetBlockMetadata(
-			FString::Printf(TEXT("lane[%d]"), LaneIndex),
+		const TCHAR* sideLabel = Side == EScenarioEditorCorridorSide::Building ? TEXT("건물측") : TEXT("도로측");
+		SidebarWidgetHelpers::ConfigureBlock(LaneBlockWidget.Get(), TextStyleCatalog, {
+			FString::Printf(TEXT("%s 영역 %d"), sideLabel, LaneIndex + 1),
 			MakeLanePath(Side),
-			TEXT("Detail"));
-		LaneBlockWidget->SetNested(true);
-		LaneBlockWidget->SetShowNormalOutline(false);
+			TEXT("세부"),
+			false,
+			true,
+			false });
 	}
 
 	if (SurfaceFieldRow)

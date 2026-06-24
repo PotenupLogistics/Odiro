@@ -167,7 +167,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void ShowInspectorTab(EScenarioEditorInspectorTab tab);
 
-	// Selects the Scenario Template sidebar panel shown by the root widget.
+	// Applies the Scenario Template sidebar panel shown by the root widget.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void SetTemplateSidebarPanel(EScenarioTemplateSidebarPanel activePanel, bool bSyncOutlinerSelection = true);
 

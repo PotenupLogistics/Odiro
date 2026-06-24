@@ -6,8 +6,12 @@
 #include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/Widget/ScenarioEditorOutlinerRowWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarCorridorPanel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorPointWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
+#include "Scenario/Widget/ScenarioEditorSidebarMainPanel.h"
+#include "Scenario/Widget/ScenarioEditorSidebarObstaclePanel.h"
+#include "Scenario/Widget/ScenarioEditorSidebarPedestrianPanel.h"
 
 namespace
 {
@@ -69,16 +73,20 @@ bool FScenarioEditorOutlinerModelTest::RunTest(const FString& Parameters)
 		EScenarioActorCategory::StaticObstacle);
 	const FString robotGroupKey = UScenarioEditorOutlinerWidget::MakeCategoryGroupItemKey(
 		EScenarioActorCategory::DeliveryBot);
+	const FString groundRegionGroupKey = UScenarioEditorOutlinerWidget::MakeCategoryGroupItemKey(
+		EScenarioActorCategory::GroundRegion);
+	const FString legacyGroundRegionKey = UScenarioEditorOutlinerWidget::MakePlaceableItemKey(TEXT("region_001"));
 
 	placeableItems.Add(MakeOutlinerLeaf(TEXT("bench_01"), obstacleGroupKey, TEXT("Bench")));
 	placeableItems.Add(MakeOutlinerLeaf(TEXT("robot_start"), robotGroupKey, TEXT("Robot Start")));
+	placeableItems.Add(MakeOutlinerLeaf(TEXT("region_001"), groundRegionGroupKey, TEXT("Legacy Ground Region")));
 
 	TSet<FString> expandedKeys;
 	expandedKeys.Add(scenarioKey);
 	expandedKeys.Add(UScenarioEditorOutlinerWidget::MakeTemplateItemKey(EScenarioTemplateSidebarPanel::Corridor));
 	expandedKeys.Add(robotGroupKey);
 	expandedKeys.Add(obstacleGroupKey);
-	expandedKeys.Add(UScenarioEditorOutlinerWidget::MakeCategoryGroupItemKey(EScenarioActorCategory::GroundRegion));
+	expandedKeys.Add(groundRegionGroupKey);
 	expandedKeys.Add(UScenarioEditorOutlinerWidget::MakeTemplateItemKey(EScenarioTemplateSidebarPanel::Pedestrian));
 
 	TArray<FScenarioOutlinerItemViewModel> builtItems;
@@ -91,6 +99,8 @@ bool FScenarioEditorOutlinerModelTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Scenario root is first"), builtItems.Num() > 0 && builtItems[0].ItemKey == scenarioKey);
 	TestTrue(TEXT("Robot child is present under expanded Robot group"), ContainsItemKey(builtItems, robotStartKey));
 	TestTrue(TEXT("Obstacle child is present under expanded Obstacles group"), ContainsItemKey(builtItems, benchKey));
+	TestFalse(TEXT("Legacy Ground Regions group is omitted"), ContainsItemKey(builtItems, groundRegionGroupKey));
+	TestFalse(TEXT("Legacy GroundRegion leaf is omitted"), ContainsItemKey(builtItems, legacyGroundRegionKey));
 
 	const FScenarioOutlinerItemViewModel* selectedItem = builtItems.FindByPredicate(
 		[&benchKey](const FScenarioOutlinerItemViewModel& item)
@@ -165,8 +175,24 @@ bool FScenarioEditorWidgetClassCatalogDefaultsTest::RunTest(const FString& Param
 		UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(emptyCatalog));
 	TestResolvesCatalogBlueprintClass(
 		*this,
+		TEXT("Sidebar main panel"),
+		UScenarioEditorWidgetClassCatalog::ResolveSidebarMainPanelWidgetClass(emptyCatalog));
+	TestResolvesCatalogBlueprintClass(
+		*this,
+		TEXT("Sidebar corridor panel"),
+		UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorPanelWidgetClass(emptyCatalog));
+	TestResolvesCatalogBlueprintClass(
+		*this,
 		TEXT("Corridor point row"),
 		UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorPointWidgetClass(emptyCatalog));
+	TestResolvesCatalogBlueprintClass(
+		*this,
+		TEXT("Sidebar obstacle panel"),
+		UScenarioEditorWidgetClassCatalog::ResolveSidebarObstaclePanelWidgetClass(emptyCatalog));
+	TestResolvesCatalogBlueprintClass(
+		*this,
+		TEXT("Sidebar pedestrian panel"),
+		UScenarioEditorWidgetClassCatalog::ResolveSidebarPedestrianPanelWidgetClass(emptyCatalog));
 
 	return true;
 }

@@ -42,6 +42,13 @@ namespace
 		return true;
 	}
 
+	bool IsHiddenLegacyGroundRegionPlaceable(const UScenarioPlaceableComponent* placeableComponent)
+	{
+		return placeableComponent
+			&& placeableComponent->Category == EScenarioActorCategory::GroundRegion
+			&& placeableComponent->AuthoringRole == EScenarioPlaceableAuthoringRole::Generic;
+	}
+
 	FString ActorCategoryToText(const EScenarioActorCategory category)
 	{
 		switch (category)
@@ -90,6 +97,26 @@ namespace
 		return FText::FromString(placeableComponent->InstanceId.IsEmpty()
 			? FString(TEXT("Placeable"))
 			: placeableComponent->InstanceId);
+	}
+
+	FText MakePlaceableSubtitle(const UScenarioPlaceableComponent* placeableComponent)
+	{
+		if (!placeableComponent)
+		{
+			return FText::FromString(TEXT("Placeable"));
+		}
+
+		if (placeableComponent->AuthoringRole == EScenarioPlaceableAuthoringRole::CorridorVertexHandle)
+		{
+			return FText::FromString(TEXT("Corridor vertex"));
+		}
+
+		if (placeableComponent->AuthoringRole == EScenarioPlaceableAuthoringRole::CorridorSegmentHandle)
+		{
+			return FText::FromString(TEXT("Corridor segment"));
+		}
+
+		return FText::FromString(ActorCategoryToText(placeableComponent->Category));
 	}
 
 	FString ResolveParentKey(const UScenarioPlaceableComponent* placeableComponent)
@@ -166,10 +193,9 @@ void UScenarioEditorOutlinerWidget::RefreshFromEditorState()
 		{
 			selectedKey = MakePlaceableItemKey(shellViewModel->GetSelectedPlaceableId());
 		}
-		else if (const UScenarioEditorOutlinerViewModel* outlinerViewModel = uiSubsystem->GetOutlinerViewModel();
-			outlinerViewModel && !outlinerViewModel->GetSelectedItemKey().IsEmpty())
+		else
 		{
-			selectedKey = outlinerViewModel->GetSelectedItemKey();
+			selectedKey = MakeTemplateItemKey(shellViewModel->GetActiveSidebarPanel());
 		}
 	}
 
@@ -243,7 +269,6 @@ void UScenarioEditorOutlinerWidget::BuildOutlinerItems(
 	appendGroup(CorridorKey, FText::FromString(TEXT("Corridor")), EScenarioTemplateSidebarPanel::Corridor);
 	appendGroup(RobotKey, FText::FromString(TEXT("Robot")), EScenarioTemplateSidebarPanel::Main);
 	appendGroup(ObstaclesKey, FText::FromString(TEXT("Obstacles")), EScenarioTemplateSidebarPanel::Obstacle);
-	appendGroup(GroundRegionsKey, FText::FromString(TEXT("Ground Regions")), EScenarioTemplateSidebarPanel::Main);
 	appendGroup(PedestriansKey, FText::FromString(TEXT("Pedestrians")), EScenarioTemplateSidebarPanel::Pedestrian);
 
 	TMap<FString, FScenarioOutlinerItemViewModel> itemByKey;
@@ -391,7 +416,10 @@ void UScenarioEditorOutlinerWidget::CollectPlaceableItems(
 		const AActor* actor = *actorIt;
 		const UScenarioPlaceableComponent* placeableComponent =
 			actor ? actor->FindComponentByClass<UScenarioPlaceableComponent>() : nullptr;
-		if (!placeableComponent || !placeableComponent->bAuthoringSelectable || placeableComponent->InstanceId.IsEmpty())
+		if (!placeableComponent
+			|| !placeableComponent->bAuthoringSelectable
+			|| placeableComponent->InstanceId.IsEmpty()
+			|| IsHiddenLegacyGroundRegionPlaceable(placeableComponent))
 		{
 			continue;
 		}
@@ -399,7 +427,7 @@ void UScenarioEditorOutlinerWidget::CollectPlaceableItems(
 		outPlaceableItems.Add(MakePlaceableItem(
 			ResolveParentKey(placeableComponent),
 			MakePlaceableLabel(placeableComponent),
-			FText::FromString(ActorCategoryToText(placeableComponent->Category)),
+			MakePlaceableSubtitle(placeableComponent),
 			2,
 			placeableComponent->InstanceId,
 			placeableComponent->Category));
@@ -428,7 +456,6 @@ void UScenarioEditorOutlinerWidget::AddDefaultExpandedKeys()
 	ExpandedItemKeys.Add(CorridorKey);
 	ExpandedItemKeys.Add(RobotKey);
 	ExpandedItemKeys.Add(ObstaclesKey);
-	ExpandedItemKeys.Add(GroundRegionsKey);
 	ExpandedItemKeys.Add(PedestriansKey);
 }
 

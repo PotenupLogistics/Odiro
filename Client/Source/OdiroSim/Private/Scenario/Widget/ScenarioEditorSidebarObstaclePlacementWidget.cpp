@@ -5,6 +5,9 @@
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarWidgetHelpers.h"
+
+namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 
 void UScenarioEditorSidebarObstaclePlacementWidget::NativeConstruct()
 {
@@ -245,10 +248,15 @@ void UScenarioEditorSidebarObstaclePlacementWidget::BindFieldRows()
 	{
 		PlacementIdFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePlacementIdCommitted);
 		PlacementIdFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePlacementIdCommitted);
-		PlacementIdFieldRow->OnAddItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleAddRequested);
-		PlacementIdFieldRow->OnAddItemRequested.AddDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleAddRequested);
-		PlacementIdFieldRow->OnRemoveItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleRemoveRequested);
-		PlacementIdFieldRow->OnRemoveItemRequested.AddDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleRemoveRequested);
+		SidebarWidgetHelpers::BindFieldRowActions(
+			PlacementIdFieldRow.Get(),
+			this,
+			GET_FUNCTION_NAME_CHECKED(
+				UScenarioEditorSidebarObstaclePlacementWidget,
+				HandleAddRequested),
+			GET_FUNCTION_NAME_CHECKED(
+				UScenarioEditorSidebarObstaclePlacementWidget,
+				HandleRemoveRequested));
 	}
 	if (KindFieldRow)
 	{
@@ -356,8 +364,7 @@ void UScenarioEditorSidebarObstaclePlacementWidget::UnbindFieldRows()
 	if (PlacementIdFieldRow)
 	{
 		PlacementIdFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePlacementIdCommitted);
-		PlacementIdFieldRow->OnAddItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleAddRequested);
-		PlacementIdFieldRow->OnRemoveItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleRemoveRequested);
+		SidebarWidgetHelpers::UnbindFieldRowActions(PlacementIdFieldRow.Get(), this);
 	}
 	if (KindFieldRow)
 	{
@@ -440,15 +447,15 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ConfigureFieldRows()
 {
 	if (PlacementBlockWidget)
 	{
-		PlacementBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		PlacementBlockWidget->SetBlockMetadata(
+		SidebarWidgetHelpers::ConfigureBlock(PlacementBlockWidget.Get(), TextStyleCatalog, {
 			bHasCachedPlacement && !CachedPlacement.PlacementId.IsEmpty()
 				? CachedPlacement.PlacementId
-				: FString::Printf(TEXT("placement[%d]"), PlacementIndex),
+				: FString::Printf(TEXT("배치 규칙 %d"), PlacementIndex + 1),
 			TEXT("root.obstacles.placements[]"),
-			TEXT("Detail"));
-		PlacementBlockWidget->SetNested(true);
-		PlacementBlockWidget->SetShowNormalOutline(false);
+			TEXT("세부"),
+			false,
+			true,
+			false });
 	}
 
 	for (UScenarioEditorSidebarFieldRow* fieldRow : {
@@ -493,10 +500,10 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ApplyCachedPlacementToRows()
 	{
 		PlacementBlockWidget->SetBlockMetadata(
 			CachedPlacement.PlacementId.IsEmpty()
-				? FString::Printf(TEXT("placement[%d]"), PlacementIndex)
+				? FString::Printf(TEXT("배치 규칙 %d"), PlacementIndex + 1)
 				: CachedPlacement.PlacementId,
 			TEXT("root.obstacles.placements[]"),
-			TEXT("Detail"));
+			TEXT("세부"));
 	}
 	if (PlacementIdFieldRow)
 	{

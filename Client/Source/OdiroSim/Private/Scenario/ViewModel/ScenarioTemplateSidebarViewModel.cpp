@@ -5,6 +5,77 @@
 #include "Scenario/ScenarioEditorUiSubsystem.h"
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 
+namespace
+{
+	// Field row ViewModel 초기화 전에 확정되는 field metadata.
+	struct FScenarioTemplateFieldSpec
+	{
+		// Command dispatch와 테스트에서 사용하는 안정적인 field id.
+		FString Id;
+		// Sidebar에 표시되는 사용자용 field label.
+		FString Label;
+		// 재사용 field row widget이 사용할 control shape.
+		EScenarioEditorSidebarFieldInputType InputType = EScenarioEditorSidebarFieldInputType::Text;
+		// Row가 editable value control을 노출해야 하는지 여부.
+		bool bEditable = true;
+		// Row가 repeated item add/remove command를 노출해야 하는지 여부.
+		bool bArrayControlsEnabled = false;
+		// 현재 schema branch에서 row를 표시할지 여부.
+		bool bVisible = true;
+	};
+
+	// 전용 list widget이 생기기 전까지 comma-separated text로 다루는 string-list field를 식별한다.
+	bool IsScenarioTemplateStringListField(const FString& fieldId)
+	{
+		return fieldId == TEXT("SpawnSegments")
+			|| fieldId == TEXT("PlacementZoneSegments")
+			|| fieldId == TEXT("PlacementZoneLanes")
+			|| fieldId == TEXT("PlacementPaletteCategories")
+			|| fieldId == TEXT("PlacementPaletteClasses");
+	}
+
+	// Count row와 add/remove command로 표현되는 repeated object collection field를 식별한다.
+	bool IsScenarioTemplateObjectArrayField(const FString& fieldId)
+	{
+		return fieldId == TEXT("AxisPointsCount")
+			|| fieldId == TEXT("BuildingSideCount")
+			|| fieldId == TEXT("CurbSideCount")
+			|| fieldId == TEXT("SegmentsCount")
+			|| fieldId == TEXT("Placements")
+			|| fieldId == TEXT("PlacementsCount")
+			|| fieldId == TEXT("EncountersCount");
+	}
+
+	// 현재 fallback widget shape만으로 드러나지 않는 semantic field metadata를 적용한다.
+	FScenarioTemplateFieldSpec ResolveScenarioTemplateFieldSpec(
+		const FString& id,
+		const FString& label,
+		const EScenarioEditorSidebarFieldInputType inputType,
+		const bool bEditable,
+		const bool bArrayControlsEnabled,
+		const bool bVisible)
+	{
+		FScenarioTemplateFieldSpec fieldSpec;
+		fieldSpec.Id = id;
+		fieldSpec.Label = label;
+		fieldSpec.InputType = inputType;
+		fieldSpec.bEditable = bEditable;
+		fieldSpec.bArrayControlsEnabled = bArrayControlsEnabled;
+		fieldSpec.bVisible = bVisible;
+
+		if (IsScenarioTemplateStringListField(fieldSpec.Id))
+		{
+			fieldSpec.InputType = EScenarioEditorSidebarFieldInputType::StringList;
+		}
+		else if (IsScenarioTemplateObjectArrayField(fieldSpec.Id))
+		{
+			fieldSpec.InputType = EScenarioEditorSidebarFieldInputType::ObjectArray;
+		}
+
+		return fieldSpec;
+	}
+}
+
 void UScenarioTemplateSidebarViewModel::InitializeForSubsystem(UScenarioEditorUiSubsystem* uiSubsystem)
 {
 	UiSubsystem = uiSubsystem;
@@ -23,40 +94,40 @@ void UScenarioTemplateSidebarViewModel::RefreshDefaultFields()
 	CorridorFieldItems.Reset();
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("AxisType"),
-		TEXT("type"),
+		TEXT("경로 유형"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::EnumText,
 		false));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("AxisPointsCount"),
-		TEXT("count"),
+		TEXT("경로 점 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
 		true));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("WalkwayWidth"),
-		TEXT("value"),
+		TEXT("보행로 폭"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("BuildingSideCount"),
-		TEXT("count"),
+		TEXT("건물측 영역 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
 		true));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("CurbSideCount"),
-		TEXT("count"),
+		TEXT("도로측 영역 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
 		true));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("SegmentsCount"),
-		TEXT("count"),
+		TEXT("의미 구간 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
@@ -65,13 +136,13 @@ void UScenarioTemplateSidebarViewModel::RefreshDefaultFields()
 	ObstacleFieldItems.Reset();
 	ObstacleFieldItems.Add(CreateFieldItem(
 		TEXT("MinClearWidth"),
-		TEXT("min_clear_width_m"),
+		TEXT("최소 통행 폭"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true));
 	ObstacleFieldItems.Add(CreateFieldItem(
 		TEXT("Placements"),
-		TEXT("placements"),
+		TEXT("배치 규칙 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
@@ -80,26 +151,26 @@ void UScenarioTemplateSidebarViewModel::RefreshDefaultFields()
 	PedestrianFieldItems.Reset();
 	PedestrianFieldItems.Add(CreateFieldItem(
 		TEXT("BackgroundCount"),
-		TEXT("count"),
+		TEXT("배경 보행자 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true));
 	PedestrianFieldItems.Add(CreateFieldItem(
 		TEXT("BackgroundSpeed"),
-		TEXT("speed_mps"),
+		TEXT("보행 속도"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true));
 	PedestrianFieldItems.Add(CreateFieldItem(
 		TEXT("SpawnSegments"),
-		TEXT("segments"),
+		TEXT("스폰 구간"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Text,
 		true,
 		true));
 	PedestrianFieldItems.Add(CreateFieldItem(
 		TEXT("EncountersCount"),
-		TEXT("count"),
+		TEXT("상호작용 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
@@ -1119,41 +1190,30 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::G
 void UScenarioTemplateSidebarViewModel::RefreshMainFieldItemsFromTemplate(
 	const FScenarioDocument& scenarioTemplate)
 {
+	CacheCorridorSegmentOptions(scenarioTemplate);
 	MainFieldItems.Reset();
 
 	MainFieldItems.Add(CreateFieldItem(
-		TEXT("Schema"),
-		TEXT("schema"),
-		scenarioTemplate.Schema,
-		EScenarioEditorSidebarFieldInputType::Text,
-		false));
-	MainFieldItems.Add(CreateFieldItem(
 		TEXT("ScenarioId"),
-		TEXT("scenario_id"),
+		TEXT("시나리오 이름"),
 		scenarioTemplate.ScenarioId,
 		EScenarioEditorSidebarFieldInputType::Text,
 		true));
 	MainFieldItems.Add(CreateFieldItem(
-		TEXT("Version"),
-		TEXT("version"),
-		FString::FromInt(scenarioTemplate.Version),
-		EScenarioEditorSidebarFieldInputType::Integer,
-		false));
-	MainFieldItems.Add(CreateFieldItem(
 		TEXT("Intent"),
-		TEXT("intent"),
+		TEXT("검증 목표"),
 		scenarioTemplate.Intent,
 		EScenarioEditorSidebarFieldInputType::MultilineText,
 		true));
 	MainFieldItems.Add(CreateFieldItem(
 		TEXT("RobotStart"),
-		TEXT("robot.start"),
+		TEXT("시작 위치"),
 		FormatRobotAnchorSummary(scenarioTemplate.Robot.Start),
 		EScenarioEditorSidebarFieldInputType::Text,
 		false));
 	MainFieldItems.Add(CreateFieldItem(
 		TEXT("RobotGoal"),
-		TEXT("robot.goal"),
+		TEXT("목표 위치"),
 		FormatRobotAnchorSummary(scenarioTemplate.Robot.Goal),
 		EScenarioEditorSidebarFieldInputType::Text,
 		false));
@@ -1187,13 +1247,14 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::G
 void UScenarioTemplateSidebarViewModel::RefreshPedestrianFieldItemsFromTemplate(
 	const FScenarioDocument& scenarioTemplate)
 {
+	CacheCorridorSegmentOptions(scenarioTemplate);
 	const FScenarioTemplatePedestrianRules& pedestrians = scenarioTemplate.Pedestrians;
 
 	PedestrianFieldItems.Reset();
 
 	UScenarioTemplateFieldRowViewModel* backgroundCount = CreateFieldItem(
 		TEXT("BackgroundCount"),
-		TEXT("count"),
+		TEXT("배경 보행자 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true);
@@ -1202,7 +1263,7 @@ void UScenarioTemplateSidebarViewModel::RefreshPedestrianFieldItemsFromTemplate(
 
 	UScenarioTemplateFieldRowViewModel* backgroundSpeed = CreateFieldItem(
 		TEXT("BackgroundSpeed"),
-		TEXT("speed_mps"),
+		TEXT("보행 속도"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true);
@@ -1211,7 +1272,7 @@ void UScenarioTemplateSidebarViewModel::RefreshPedestrianFieldItemsFromTemplate(
 
 	PedestrianFieldItems.Add(CreateFieldItem(
 		TEXT("SpawnSegments"),
-		TEXT("segments"),
+		TEXT("스폰 구간"),
 		JoinStringList(pedestrians.Background.SpawnSegmentIds),
 		EScenarioEditorSidebarFieldInputType::Text,
 		true,
@@ -1219,7 +1280,7 @@ void UScenarioTemplateSidebarViewModel::RefreshPedestrianFieldItemsFromTemplate(
 
 	PedestrianFieldItems.Add(CreateFieldItem(
 		TEXT("EncountersCount"),
-		TEXT("count"),
+		TEXT("상호작용 수"),
 		FString::FromInt(pedestrians.Encounters.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
@@ -1237,13 +1298,14 @@ UScenarioTemplateFieldRowViewModel* UScenarioTemplateSidebarViewModel::FindPedes
 void UScenarioTemplateSidebarViewModel::RefreshObstacleFieldItemsFromTemplate(
 	const FScenarioDocument& scenarioTemplate)
 {
+	CacheCorridorSegmentOptions(scenarioTemplate);
 	const FScenarioTemplateObstacleRules& obstacles = scenarioTemplate.Obstacles;
 
 	ObstacleFieldItems.Reset();
 
 	UScenarioTemplateFieldRowViewModel* minClearWidth = CreateFieldItem(
 		TEXT("MinClearWidth"),
-		TEXT("value"),
+		TEXT("최소 통행 폭"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true);
@@ -1252,7 +1314,7 @@ void UScenarioTemplateSidebarViewModel::RefreshObstacleFieldItemsFromTemplate(
 
 	ObstacleFieldItems.Add(CreateFieldItem(
 		TEXT("PlacementsCount"),
-		TEXT("count"),
+		TEXT("배치 규칙 수"),
 		FString::FromInt(obstacles.Placements.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
@@ -1270,19 +1332,20 @@ UScenarioTemplateFieldRowViewModel* UScenarioTemplateSidebarViewModel::FindObsta
 void UScenarioTemplateSidebarViewModel::RefreshCorridorFieldItemsFromTemplate(
 	const FScenarioDocument& scenarioTemplate)
 {
+	CacheCorridorSegmentOptions(scenarioTemplate);
 	const FScenarioTemplateCorridor& corridor = scenarioTemplate.Corridor;
 
 	CorridorFieldItems.Reset();
 
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("AxisType"),
-		TEXT("type"),
+		TEXT("경로 유형"),
 		AxisTypeToString(corridor.Axis.Type),
 		EScenarioEditorSidebarFieldInputType::EnumText,
 		false));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("AxisPointsCount"),
-		TEXT("count"),
+		TEXT("경로 점 수"),
 		FString::FromInt(corridor.Axis.PointsMeters.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
@@ -1290,7 +1353,7 @@ void UScenarioTemplateSidebarViewModel::RefreshCorridorFieldItemsFromTemplate(
 
 	UScenarioTemplateFieldRowViewModel* walkwayWidth = CreateFieldItem(
 		TEXT("WalkwayWidth"),
-		TEXT("value"),
+		TEXT("보행로 폭"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true);
@@ -1299,21 +1362,21 @@ void UScenarioTemplateSidebarViewModel::RefreshCorridorFieldItemsFromTemplate(
 
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("BuildingSideCount"),
-		TEXT("count"),
+		TEXT("건물측 영역 수"),
 		FString::FromInt(corridor.BuildingSide.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
 		true));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("CurbSideCount"),
-		TEXT("count"),
+		TEXT("도로측 영역 수"),
 		FString::FromInt(corridor.CurbSide.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
 		true));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("SegmentsCount"),
-		TEXT("count"),
+		TEXT("의미 구간 수"),
 		FString::FromInt(corridor.Segments.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
@@ -1337,14 +1400,14 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	fieldItems.Add(CreateFieldItem(
 		TEXT("CorridorPointX"),
-		TEXT("x"),
+		TEXT("X 위치"),
 		FormatEditableNumber(pointMeters.X),
 		EScenarioEditorSidebarFieldInputType::Number,
 		true,
 		true));
 	fieldItems.Add(CreateFieldItem(
 		TEXT("CorridorPointY"),
-		TEXT("y"),
+		TEXT("Y 위치"),
 		FormatEditableNumber(pointMeters.Y),
 		EScenarioEditorSidebarFieldInputType::Number,
 		true));
@@ -1370,7 +1433,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* surface = CreateFieldItem(
 		TEXT("CorridorLaneSurface"),
-		TEXT("surface"),
+		TEXT("표면 유형"),
 		lane.SurfaceId,
 		EScenarioEditorSidebarFieldInputType::ComboBox,
 		true,
@@ -1381,7 +1444,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* width = CreateFieldItem(
 		TEXT("CorridorLaneWidth"),
-		TEXT("width_m"),
+		TEXT("폭"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true);
@@ -1412,7 +1475,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	fieldItems.Add(CreateFieldItem(
 		TEXT("CorridorSegmentId"),
-		TEXT("id"),
+		TEXT("구간 이름"),
 		segment.SegmentId,
 		EScenarioEditorSidebarFieldInputType::Text,
 		true,
@@ -1420,7 +1483,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* segmentType = CreateFieldItem(
 		TEXT("CorridorSegmentType"),
-		TEXT("type"),
+		TEXT("구간 유형"),
 		SegmentTypeToString(segment.Type),
 		EScenarioEditorSidebarFieldInputType::ComboBox,
 		true);
@@ -1432,7 +1495,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 	const FString endMeters = FormatEditableNumber(segment.AlongRangeMeters.EndMeters);
 	UScenarioTemplateFieldRowViewModel* alongRange = CreateFieldItem(
 		TEXT("CorridorSegmentAlongRange"),
-		TEXT("along_range_m"),
+		TEXT("적용 범위"),
 		FString::Printf(TEXT("%s..%s"), *startMeters, *endMeters),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true);
@@ -1442,7 +1505,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* replacedBy = CreateFieldItem(
 		TEXT("CorridorSegmentReplacedBy"),
-		TEXT("replaced_by"),
+		TEXT("대체 표면"),
 		FormatEditableStringValue(segment.ReplacedBySurfaceId),
 		EScenarioEditorSidebarFieldInputType::ComboBox,
 		true);
@@ -1473,53 +1536,67 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	fieldItems.Add(CreateFieldItem(
 		TEXT("PlacementId"),
-		TEXT("id"),
+		TEXT("규칙 이름"),
 		placement.PlacementId,
 		EScenarioEditorSidebarFieldInputType::Text,
 		true,
 		true));
-	fieldItems.Add(CreateFieldItem(
+	UScenarioTemplateFieldRowViewModel* placementKind = CreateFieldItem(
 		TEXT("PlacementKind"),
-		TEXT("kind"),
+		TEXT("배치 방식"),
 		ObstaclePlacementKindToString(placement.Kind),
-		EScenarioEditorSidebarFieldInputType::EnumText,
-		true));
+		EScenarioEditorSidebarFieldInputType::ComboBox,
+		true);
+	placementKind->SetComboOptions(GetObstaclePlacementKindOptions());
+	placementKind->SetComboAllowsUnset(false, FString());
+	fieldItems.Add(placementKind);
 	fieldItems.Add(CreateFieldItem(
 		TEXT("PlacementProp"),
-		TEXT("prop"),
+		TEXT("장애물 종류"),
 		placement.PropId,
 		EScenarioEditorSidebarFieldInputType::Text,
 		bFixedPlacement || bPatternPlacement,
 		false,
 		bFixedPlacement || bPatternPlacement));
-	fieldItems.Add(CreateFieldItem(
+	UScenarioTemplateFieldRowViewModel* pattern = CreateFieldItem(
 		TEXT("PlacementPattern"),
-		TEXT("pattern"),
+		TEXT("배치 패턴"),
 		placement.PatternId,
-		EScenarioEditorSidebarFieldInputType::Text,
+		EScenarioEditorSidebarFieldInputType::ComboBox,
 		bPatternPlacement,
 		false,
-		bPatternPlacement));
-	fieldItems.Add(CreateFieldItem(
+		bPatternPlacement);
+	pattern->SetComboOptions(GetObstaclePatternOptions());
+	pattern->SetComboAllowsUnset(false, FString());
+	fieldItems.Add(pattern);
+
+	UScenarioTemplateFieldRowViewModel* segment = CreateFieldItem(
 		TEXT("PlacementSegment"),
-		TEXT("at.segment"),
+		TEXT("구간"),
 		placement.At.SegmentId,
-		EScenarioEditorSidebarFieldInputType::Text,
+		EScenarioEditorSidebarFieldInputType::ComboBox,
 		bFixedPlacement || bPatternPlacement,
 		false,
-		bFixedPlacement || bPatternPlacement));
-	fieldItems.Add(CreateFieldItem(
+		bFixedPlacement || bPatternPlacement);
+	segment->SetComboOptions(CorridorSegmentIdOptions);
+	segment->SetComboAllowsUnset(false, FString());
+	fieldItems.Add(segment);
+
+	UScenarioTemplateFieldRowViewModel* lane = CreateFieldItem(
 		TEXT("PlacementLane"),
-		TEXT("at.lane"),
+		TEXT("배치 영역"),
 		placement.At.LaneId,
-		EScenarioEditorSidebarFieldInputType::Text,
+		EScenarioEditorSidebarFieldInputType::ComboBox,
 		bFixedPlacement || bPatternPlacement,
 		false,
-		bFixedPlacement || bPatternPlacement));
+		bFixedPlacement || bPatternPlacement);
+	lane->SetComboOptions(GetLaneHintOptions());
+	lane->SetComboAllowsUnset(true, TEXT("(unset)"));
+	fieldItems.Add(lane);
 
 	UScenarioTemplateFieldRowViewModel* along = CreateFieldItem(
 		TEXT("PlacementAlong"),
-		TEXT("at.along_m"),
+		TEXT("진행 거리"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		bFixedPlacement || bPatternPlacement,
@@ -1530,7 +1607,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* offset = CreateFieldItem(
 		TEXT("PlacementOffset"),
-		TEXT("at.offset_m"),
+		TEXT("좌우 위치"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		bFixedPlacement || bPatternPlacement,
@@ -1541,7 +1618,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	fieldItems.Add(CreateFieldItem(
 		TEXT("PlacementZoneSegments"),
-		TEXT("zone.segments"),
+		TEXT("허용 구간"),
 		JoinStringList(placement.Zone.SegmentIds),
 		EScenarioEditorSidebarFieldInputType::Text,
 		bScatterPlacement,
@@ -1549,7 +1626,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 		bScatterPlacement));
 	fieldItems.Add(CreateFieldItem(
 		TEXT("PlacementZoneLanes"),
-		TEXT("zone.lanes"),
+		TEXT("허용 영역"),
 		JoinStringList(placement.Zone.LaneIds),
 		EScenarioEditorSidebarFieldInputType::Text,
 		bScatterPlacement,
@@ -1557,7 +1634,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 		bScatterPlacement));
 	fieldItems.Add(CreateFieldItem(
 		TEXT("PlacementPaletteCategories"),
-		TEXT("palette.categories"),
+		TEXT("후보 카테고리"),
 		JoinStringList(placement.Palette.CategoryIds),
 		EScenarioEditorSidebarFieldInputType::Text,
 		bScatterPlacement,
@@ -1565,7 +1642,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 		bScatterPlacement));
 	fieldItems.Add(CreateFieldItem(
 		TEXT("PlacementPaletteClasses"),
-		TEXT("palette.classes"),
+		TEXT("후보 클래스"),
 		JoinStringList(placement.Palette.ClassIds),
 		EScenarioEditorSidebarFieldInputType::Text,
 		bScatterPlacement,
@@ -1574,7 +1651,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* count = CreateFieldItem(
 		TEXT("PlacementCount"),
-		TEXT("count"),
+		TEXT("개수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		bPatternPlacement || bScatterPlacement,
@@ -1585,7 +1662,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* spacing = CreateFieldItem(
 		TEXT("PlacementSpacing"),
-		TEXT("spacing_m"),
+		TEXT("간격"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		bPatternPlacement,
@@ -1596,7 +1673,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* gapWidth = CreateFieldItem(
 		TEXT("PlacementGapWidth"),
-		TEXT("gap_width_m"),
+		TEXT("통과 간격"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		bPatternPlacement,
@@ -1607,7 +1684,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* density = CreateFieldItem(
 		TEXT("PlacementDensity"),
-		TEXT("density_per_10m"),
+		TEXT("생성 밀도"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		bScatterPlacement,
@@ -1618,19 +1695,22 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* yaw = CreateFieldItem(
 		TEXT("PlacementYaw"),
-		TEXT("yaw_deg"),
+		TEXT("회전"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true);
 	ApplyNumberFieldValue(yaw, placement.YawDegrees);
 	fieldItems.Add(yaw);
 
-	fieldItems.Add(CreateFieldItem(
+	UScenarioTemplateFieldRowViewModel* allowBlocking = CreateFieldItem(
 		TEXT("PlacementAllowBlocking"),
-		TEXT("allow_blocking"),
+		TEXT("통로 차단 허용"),
 		placement.bAllowBlocking ? FString(TEXT("true")) : FString(TEXT("false")),
-		EScenarioEditorSidebarFieldInputType::EnumText,
-		true));
+		EScenarioEditorSidebarFieldInputType::ComboBox,
+		true);
+	allowBlocking->SetComboOptions(GetBooleanOptions());
+	allowBlocking->SetComboAllowsUnset(false, FString());
+	fieldItems.Add(allowBlocking);
 
 	for (UScenarioTemplateFieldRowViewModel* fieldItem : fieldItems)
 	{
@@ -1651,32 +1731,43 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	fieldItems.Add(CreateFieldItem(
 		TEXT("EncounterId"),
-		TEXT("id"),
+		TEXT("상황 이름"),
 		encounter.EncounterId,
 		EScenarioEditorSidebarFieldInputType::Text,
 		true));
-	fieldItems.Add(CreateFieldItem(
+	UScenarioTemplateFieldRowViewModel* type = CreateFieldItem(
 		TEXT("EncounterType"),
-		TEXT("type"),
+		TEXT("상황 유형"),
 		EncounterTypeToString(encounter.Type),
-		EScenarioEditorSidebarFieldInputType::EnumText,
-		true));
-	fieldItems.Add(CreateFieldItem(
+		EScenarioEditorSidebarFieldInputType::ComboBox,
+		true);
+	type->SetComboOptions(GetPedestrianEncounterTypeOptions());
+	type->SetComboAllowsUnset(false, FString());
+	fieldItems.Add(type);
+
+	UScenarioTemplateFieldRowViewModel* atSegment = CreateFieldItem(
 		TEXT("EncounterAtSegment"),
-		TEXT("at"),
+		TEXT("발생 구간"),
 		encounter.AtSegmentId,
-		EScenarioEditorSidebarFieldInputType::Text,
-		true));
-	fieldItems.Add(CreateFieldItem(
+		EScenarioEditorSidebarFieldInputType::ComboBox,
+		true);
+	atSegment->SetComboOptions(CorridorSegmentIdOptions);
+	atSegment->SetComboAllowsUnset(false, FString());
+	fieldItems.Add(atSegment);
+
+	UScenarioTemplateFieldRowViewModel* persona = CreateFieldItem(
 		TEXT("EncounterPersona"),
-		TEXT("persona"),
+		TEXT("보행자 성향"),
 		encounter.PersonaId,
-		EScenarioEditorSidebarFieldInputType::Text,
-		true));
+		EScenarioEditorSidebarFieldInputType::ComboBox,
+		true);
+	persona->SetComboOptions(GetPedestrianPersonaOptions());
+	persona->SetComboAllowsUnset(true, TEXT("(unset)"));
+	fieldItems.Add(persona);
 
 	UScenarioTemplateFieldRowViewModel* meetOffset = CreateFieldItem(
 		TEXT("EncounterMeetOffset"),
-		TEXT("meet_offset_m"),
+		TEXT("만남 위치 보정"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true);
@@ -1685,7 +1776,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* cooperation = CreateFieldItem(
 		TEXT("EncounterCooperation"),
-		TEXT("overrides.cooperation"),
+		TEXT("양보 성향"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true);
@@ -1694,7 +1785,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* evasiveness = CreateFieldItem(
 		TEXT("EncounterEvasiveness"),
-		TEXT("overrides.evasiveness"),
+		TEXT("회피 성향"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true);
@@ -1703,7 +1794,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* personalSpace = CreateFieldItem(
 		TEXT("EncounterPersonalSpace"),
-		TEXT("overrides.personal_space_m"),
+		TEXT("개인 공간"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true);
@@ -1712,7 +1803,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* awarenessHorizon = CreateFieldItem(
 		TEXT("EncounterAwarenessHorizon"),
-		TEXT("overrides.awareness_horizon_s"),
+		TEXT("예측 시간"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true);
@@ -1721,7 +1812,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* maxYieldWait = CreateFieldItem(
 		TEXT("EncounterMaxYieldWait"),
-		TEXT("overrides.max_yield_wait_s"),
+		TEXT("대기 한계 시간"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true);
@@ -1730,7 +1821,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	UScenarioTemplateFieldRowViewModel* sidestepDistance = CreateFieldItem(
 		TEXT("EncounterSidestepDistance"),
-		TEXT("overrides.sidestep_distance_m"),
+		TEXT("회피 이동 거리"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true);
@@ -1759,7 +1850,21 @@ UScenarioTemplateFieldRowViewModel* UScenarioTemplateSidebarViewModel::CreateFie
 	UScenarioTemplateFieldRowViewModel* item = NewObject<UScenarioTemplateFieldRowViewModel>(this);
 	if (item)
 	{
-		item->InitializeFieldRow(id, label, value, inputType, bEditable, bArrayControlsEnabled, bVisible);
+		const FScenarioTemplateFieldSpec fieldSpec = ResolveScenarioTemplateFieldSpec(
+			id,
+			label,
+			inputType,
+			bEditable,
+			bArrayControlsEnabled,
+			bVisible);
+		item->InitializeFieldRow(
+			fieldSpec.Id,
+			fieldSpec.Label,
+			value,
+			fieldSpec.InputType,
+			fieldSpec.bEditable,
+			fieldSpec.bArrayControlsEnabled,
+			fieldSpec.bVisible);
 	}
 	return item;
 }
@@ -1834,6 +1939,49 @@ UScenarioTemplateFieldRowViewModel* UScenarioTemplateSidebarViewModel::FindField
 	return nullptr;
 }
 
+void UScenarioTemplateSidebarViewModel::CacheCorridorSegmentOptions(
+	const FScenarioDocument& scenarioTemplate)
+{
+	CorridorSegmentIdOptions.Reset();
+	for (const FScenarioTemplateSegment& segment : scenarioTemplate.Corridor.Segments)
+	{
+		if (!segment.SegmentId.IsEmpty())
+		{
+			CorridorSegmentIdOptions.AddUnique(segment.SegmentId);
+		}
+	}
+}
+
+TArray<FString> UScenarioTemplateSidebarViewModel::GetObstaclePlacementKindOptions()
+{
+	return { TEXT("fixed"), TEXT("pattern"), TEXT("scatter") };
+}
+
+TArray<FString> UScenarioTemplateSidebarViewModel::GetObstaclePatternOptions()
+{
+	return { TEXT("gate"), TEXT("line"), TEXT("cluster") };
+}
+
+TArray<FString> UScenarioTemplateSidebarViewModel::GetLaneHintOptions()
+{
+	return { TEXT("walkway"), TEXT("building_edge"), TEXT("center"), TEXT("curb_edge"), TEXT("across") };
+}
+
+TArray<FString> UScenarioTemplateSidebarViewModel::GetPedestrianEncounterTypeOptions()
+{
+	return { TEXT("oncoming_pass"), TEXT("overtake"), TEXT("cross_path"), TEXT("standing_group") };
+}
+
+TArray<FString> UScenarioTemplateSidebarViewModel::GetPedestrianPersonaOptions()
+{
+	return { TEXT("passive"), TEXT("normal"), TEXT("assertive"), TEXT("vulnerable") };
+}
+
+TArray<FString> UScenarioTemplateSidebarViewModel::GetBooleanOptions()
+{
+	return { TEXT("false"), TEXT("true") };
+}
+
 void UScenarioTemplateSidebarViewModel::AppendRobotAnchorFieldItems(
 	TArray<TObjectPtr<UScenarioTemplateFieldRowViewModel>>& items,
 	const FString& idPrefix,
@@ -1845,7 +1993,7 @@ void UScenarioTemplateSidebarViewModel::AppendRobotAnchorFieldItems(
 
 	UScenarioTemplateFieldRowViewModel* type = CreateFieldItem(
 		idPrefix + TEXT("Type"),
-		TEXT("type"),
+		TEXT("위치 기준"),
 		RobotAnchorTypeToString(anchor.Type),
 		EScenarioEditorSidebarFieldInputType::ComboBox,
 		true);
@@ -1853,18 +2001,21 @@ void UScenarioTemplateSidebarViewModel::AppendRobotAnchorFieldItems(
 	type->SetComboAllowsUnset(false, FString());
 	items.Add(type);
 
-	items.Add(CreateFieldItem(
+	UScenarioTemplateFieldRowViewModel* segment = CreateFieldItem(
 		idPrefix + TEXT("Segment"),
-		TEXT("segment"),
+		TEXT("구간"),
 		anchor.SegmentId,
-		EScenarioEditorSidebarFieldInputType::Text,
+		EScenarioEditorSidebarFieldInputType::ComboBox,
 		true,
 		false,
-		bUsesCorridorPose));
+		bUsesCorridorPose);
+	segment->SetComboOptions(CorridorSegmentIdOptions);
+	segment->SetComboAllowsUnset(false, FString());
+	items.Add(segment);
 
 	UScenarioTemplateFieldRowViewModel* along = CreateFieldItem(
 		idPrefix + TEXT("Along"),
-		TEXT("along_m"),
+		TEXT("진행 거리"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true,
@@ -1875,7 +2026,7 @@ void UScenarioTemplateSidebarViewModel::AppendRobotAnchorFieldItems(
 
 	UScenarioTemplateFieldRowViewModel* offset = CreateFieldItem(
 		idPrefix + TEXT("Offset"),
-		TEXT("offset_m"),
+		TEXT("좌우 위치"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Range,
 		true,
@@ -1884,18 +2035,21 @@ void UScenarioTemplateSidebarViewModel::AppendRobotAnchorFieldItems(
 	ApplyNumberFieldValue(offset, anchor.OffsetMeters);
 	items.Add(offset);
 
-	items.Add(CreateFieldItem(
+	UScenarioTemplateFieldRowViewModel* lane = CreateFieldItem(
 		idPrefix + TEXT("Lane"),
-		TEXT("lane"),
+		TEXT("이동 영역"),
 		anchor.LaneId,
-		EScenarioEditorSidebarFieldInputType::EnumText,
+		EScenarioEditorSidebarFieldInputType::ComboBox,
 		true,
 		false,
-		bUsesCorridorPose));
+		bUsesCorridorPose);
+	lane->SetComboOptions(GetLaneHintOptions());
+	lane->SetComboAllowsUnset(true, TEXT("(unset)"));
+	items.Add(lane);
 
 	UScenarioTemplateFieldRowViewModel* heading = CreateFieldItem(
 		idPrefix + TEXT("Heading"),
-		TEXT("heading"),
+		TEXT("진행 방향"),
 		RobotHeadingToString(anchor.Heading),
 		EScenarioEditorSidebarFieldInputType::ComboBox,
 		true);

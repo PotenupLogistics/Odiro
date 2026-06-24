@@ -5,6 +5,9 @@
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarWidgetHelpers.h"
+
+namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 
 void UScenarioEditorSidebarCorridorSegmentWidget::NativeConstruct()
 {
@@ -109,18 +112,15 @@ void UScenarioEditorSidebarCorridorSegmentWidget::BindFieldRows()
 		IdFieldRow->OnValueTextCommitted.AddDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorSegmentWidget::HandleIdCommitted);
-		IdFieldRow->OnAddItemRequested.RemoveDynamic(
+		SidebarWidgetHelpers::BindFieldRowActions(
+			IdFieldRow.Get(),
 			this,
-			&UScenarioEditorSidebarCorridorSegmentWidget::HandleAddSegmentRequested);
-		IdFieldRow->OnAddItemRequested.AddDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorSegmentWidget::HandleAddSegmentRequested);
-		IdFieldRow->OnRemoveItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorSegmentWidget::HandleRemoveSegmentRequested);
-		IdFieldRow->OnRemoveItemRequested.AddDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorSegmentWidget::HandleRemoveSegmentRequested);
+			GET_FUNCTION_NAME_CHECKED(
+				UScenarioEditorSidebarCorridorSegmentWidget,
+				HandleAddSegmentRequested),
+			GET_FUNCTION_NAME_CHECKED(
+				UScenarioEditorSidebarCorridorSegmentWidget,
+				HandleRemoveSegmentRequested));
 	}
 
 	if (TypeFieldRow)
@@ -161,12 +161,7 @@ void UScenarioEditorSidebarCorridorSegmentWidget::UnbindFieldRows()
 		IdFieldRow->OnValueTextCommitted.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorSegmentWidget::HandleIdCommitted);
-		IdFieldRow->OnAddItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorSegmentWidget::HandleAddSegmentRequested);
-		IdFieldRow->OnRemoveItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorSegmentWidget::HandleRemoveSegmentRequested);
+		SidebarWidgetHelpers::UnbindFieldRowActions(IdFieldRow.Get(), this);
 	}
 	if (TypeFieldRow)
 	{
@@ -192,15 +187,15 @@ void UScenarioEditorSidebarCorridorSegmentWidget::ConfigureFieldRows()
 {
 	if (SegmentBlockWidget)
 	{
-		SegmentBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		SegmentBlockWidget->SetBlockMetadata(
+		SidebarWidgetHelpers::ConfigureBlock(SegmentBlockWidget.Get(), TextStyleCatalog, {
 			CachedSegment.SegmentId.IsEmpty()
-				? FString::Printf(TEXT("segment[%d]"), SegmentIndex)
+				? FString::Printf(TEXT("구간 %d"), SegmentIndex + 1)
 				: CachedSegment.SegmentId,
 			TEXT("root.corridor.segments[]"),
-			TEXT("Detail"));
-		SegmentBlockWidget->SetNested(true);
-		SegmentBlockWidget->SetShowNormalOutline(false);
+			TEXT("세부"),
+			false,
+			true,
+			false });
 	}
 
 	if (IdFieldRow)
@@ -248,10 +243,10 @@ void UScenarioEditorSidebarCorridorSegmentWidget::ApplyCachedSegmentToRows()
 	{
 		SegmentBlockWidget->SetBlockMetadata(
 			CachedSegment.SegmentId.IsEmpty()
-				? FString::Printf(TEXT("segment[%d]"), SegmentIndex)
+				? FString::Printf(TEXT("구간 %d"), SegmentIndex + 1)
 				: CachedSegment.SegmentId,
 			TEXT("root.corridor.segments[]"),
-			TEXT("Detail"));
+			TEXT("세부"));
 	}
 	if (IdFieldRow)
 	{

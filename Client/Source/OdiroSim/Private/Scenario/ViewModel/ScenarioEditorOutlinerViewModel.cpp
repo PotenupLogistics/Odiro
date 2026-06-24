@@ -79,8 +79,7 @@ bool UScenarioEditorOutlinerViewModel::SelectItem(UScenarioEditorListItemViewMod
 		return shellViewModel->SelectPlaceable(itemViewModel->GetInstanceId());
 	}
 
-	shellViewModel->ClearSelectedPlaceable();
-	shellViewModel->SelectSidebarPanel(itemViewModel->GetTemplatePanel());
+	shellViewModel->SelectTemplatePanel(itemViewModel->GetTemplatePanel());
 	return true;
 }
 

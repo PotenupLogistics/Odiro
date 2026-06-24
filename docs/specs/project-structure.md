@@ -29,9 +29,6 @@ Odiro/
     scripts/                      # Agent 전용 CLI/tooling. TODO: tools로 이동
     tools/                        # Agents 전용 보조 도구
     tests/                        # Agent 단위 테스트
-    task-setup.bat                # uv sync 의존성 설치
-    task-run.bat                  # Agents API server 실행
-    task-dev.bat                  # 개발용으로 실행 (코드 변경 시 자동 재시작)
     main.py
     uv.lock
     pyproject.toml
@@ -45,10 +42,6 @@ Odiro/
       policy-runtime.py           # 사용자 행동 정책 Python과 Unreal을 연결하는 런타임 스크립트
     Tools/                        # Unreal 전용 보조 도구
     Docs/                         # Unreal 전용 문서
-    Task-Setup.bat                # 의존성 확인
-    Task-Build.bat                # C++ 컴파일
-    Task-Dev.bat                  # Unreal Editor 실행
-    Task-RunPreview.bat           # 단독 모드 PIE 프리뷰 실행
     OdiroSim.uproject
 
   Bridge/                         # --- Go 백그라운드 서비스 ---

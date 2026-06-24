@@ -274,13 +274,13 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Simulator|Launch")
 	static FString BuildPreviewLauncherArgumentString(
-		const FString& previewBatPath,
+		const FString& previewLauncherPath,
 		const FString& setupPath,
 		const FString& runId);
 
 	UFUNCTION(BlueprintPure, Category = "Simulator|Launch")
 	static FString BuildProjectRunPreviewLauncherArgumentString(
-		const FString& previewBatPath,
+		const FString& previewLauncherPath,
 		const FString& projectPath,
 		const FString& runId);
 
@@ -310,7 +310,7 @@ private:
 		TArray<FString>& outDiagnostics) const;
 	bool BuildLaunchCommand(const FString& setupPath, const FString& runId, FString& outExecutable, FString& outArguments, bool& bOutUsesPreviewLauncher) const;
 	bool BuildProjectRunLaunchCommand(const FString& projectPath, const FString& runId, FString& outExecutable, FString& outArguments, bool& bOutUsesPreviewLauncher) const;
-	bool ShouldUsePreviewLauncher(FString& outPreviewBatPath) const;
+	bool ShouldUsePreviewLauncher(FString& outPreviewLauncherPath) const;
 	bool CreateRuntimeSimulationSetupFile(
 		const FSimulationSetup& sourceSetup,
 		const FString& runId,

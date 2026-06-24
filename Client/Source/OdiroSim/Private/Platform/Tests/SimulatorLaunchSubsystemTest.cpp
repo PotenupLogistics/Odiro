@@ -88,10 +88,13 @@ bool FSimulatorLaunchCommandLineBuildTest::RunTest(const FString& parameters)
 
 	// 개발 fallback도 packaged exe와 같은 public args를 유지해야 한다.
 	const FString previewArguments = USimulatorLaunchSubsystem::BuildProjectRunPreviewLauncherArgumentString(
-		TEXT("Task-RunPreview.bat"),
+		TEXT("Client/Tools/RunPreview.ps1"),
 		TEXT("X:/Projects/DeliveryBotA"),
 		TEXT("000001"));
-	TestTrue(TEXT("preview uses cmd run wrapper"), previewArguments.StartsWith(TEXT("/d /s /c \"\"")));
+	TestTrue(TEXT("preview uses cmd run wrapper"), previewArguments.StartsWith(TEXT("/d /s /c \"powershell.exe ")));
+	TestTrue(TEXT("preview disables profile loading"), previewArguments.Contains(TEXT("-NoProfile")));
+	TestTrue(TEXT("preview bypasses local script policy"), previewArguments.Contains(TEXT("-ExecutionPolicy Bypass")));
+	TestTrue(TEXT("preview uses Client-owned preview script"), previewArguments.Contains(TEXT("Client/Tools/RunPreview.ps1")));
 	TestTrue(TEXT("preview passes project path"), previewArguments.Contains(TEXT("\"-OdiroProject=X:/Projects/DeliveryBotA\"")));
 	TestTrue(TEXT("preview passes run id"), previewArguments.Contains(TEXT("\"-RunId=000001\"")));
 	TestFalse(TEXT("preview omits legacy simulate setup"), previewArguments.Contains(TEXT("-Simulate")));

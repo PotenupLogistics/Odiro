@@ -3440,7 +3440,7 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 				lines.Add(FString::Printf(TEXT("Run Id: %s"), *FormatProjectRunDisplayId(runInfo.RunId)));
 				lines.Add(FString::Printf(TEXT("State: %s"), *ToRunStateString(runInfo.Status.State)));
 				lines.Add(FString::Printf(TEXT("Process: %s"), runInfo.bProcessRunning ? TEXT("Running") : TEXT("Stopped")));
-				lines.Add(FString::Printf(TEXT("Launcher: %s"), runInfo.bUsedPreviewLauncher ? TEXT("Task-RunPreview.bat") : TEXT("Executable")));
+				lines.Add(FString::Printf(TEXT("Launcher: %s"), runInfo.bUsedPreviewLauncher ? TEXT("RunPreview.ps1") : TEXT("Executable")));
 				if (runInfo.ProcessReturnCode != INDEX_NONE)
 				{
 					lines.Add(FString::Printf(TEXT("Exit code: %d"), runInfo.ProcessReturnCode));
@@ -3476,7 +3476,7 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 			lines.Add(FString::Printf(TEXT("State: %s"), *ToRunStateString(runInfo.Status.State)));
 			lines.Add(FString::Printf(TEXT("Progress: %d / %d"), runInfo.Status.CompletedRuns, runInfo.Status.TotalRuns));
 			lines.Add(FString::Printf(TEXT("Process: %s"), runInfo.bProcessRunning ? TEXT("Running") : TEXT("Stopped")));
-			lines.Add(FString::Printf(TEXT("Launcher: %s"), runInfo.bUsedPreviewLauncher ? TEXT("Task-RunPreview.bat") : TEXT("Executable")));
+			lines.Add(FString::Printf(TEXT("Launcher: %s"), runInfo.bUsedPreviewLauncher ? TEXT("RunPreview.ps1") : TEXT("Executable")));
 			if (runInfo.ProcessReturnCode != INDEX_NONE)
 			{
 				lines.Add(FString::Printf(TEXT("Exit code: %d"), runInfo.ProcessReturnCode));

@@ -61,6 +61,137 @@
 #include "Blueprint/UmgBlueprintFunctionSubsystem.h"
 #include "FileManage/UmgAttentionSubsystem.h"
 
+namespace
+{
+bool bUmgDesignVerificationPending = false;
+FString PendingUmgDesignMutationCommand;
+TSet<FString> CompletedUmgDesignVerificationSteps;
+
+// Identifies UMG commands whose successful result must be followed by visual layout verification.
+bool IsUmgDesignMutationCommand(const FString& CommandType)
+{
+    return CommandType == TEXT("create_widget") ||
+           CommandType == TEXT("set_widget_properties") ||
+           CommandType == TEXT("delete_widget") ||
+           CommandType == TEXT("reparent_widget") ||
+           CommandType == TEXT("move_widget") ||
+           CommandType == TEXT("apply_json_to_umg") ||
+           CommandType == TEXT("apply_layout") ||
+           CommandType == TEXT("create_animation") ||
+           CommandType == TEXT("delete_animation") ||
+           CommandType == TEXT("set_property_keys") ||
+           CommandType == TEXT("remove_property_track") ||
+           CommandType == TEXT("remove_keys") ||
+           CommandType == TEXT("animation_append_widget_tracks") ||
+           CommandType == TEXT("animation_append_time_slice") ||
+           CommandType == TEXT("animation_delete_widget_keys");
+}
+
+// Identifies verification commands that satisfy the mandatory post-edit UMG checklist.
+bool IsUmgDesignVerificationCommand(const FString& CommandType)
+{
+    return CommandType == TEXT("get_widget_tree") ||
+           CommandType == TEXT("compile_blueprint") ||
+           CommandType == TEXT("get_layout_data") ||
+           CommandType == TEXT("check_widget_overlap");
+}
+
+// Requires cached geometry before the layout-data step can count as complete.
+bool DidUmgDesignVerificationCommandPass(const FString& CommandType, const TSharedPtr<FJsonObject>& ResultJson)
+{
+    if (CommandType != TEXT("get_layout_data"))
+    {
+        return true;
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* LayoutData = nullptr;
+    return ResultJson.IsValid() &&
+           ResultJson->TryGetArrayField(TEXT("layout_data"), LayoutData) &&
+           LayoutData &&
+           LayoutData->Num() > 0;
+}
+
+// Returns the fixed verification sequence required after UMG design mutations.
+TArray<FString> GetUmgDesignRequiredSequence()
+{
+    TArray<FString> RequiredSequence;
+    RequiredSequence.Add(TEXT("get_widget_tree"));
+    RequiredSequence.Add(TEXT("compile_blueprint"));
+    RequiredSequence.Add(TEXT("get_layout_data"));
+    RequiredSequence.Add(TEXT("check_widget_overlap"));
+    return RequiredSequence;
+}
+
+// Reports completed checklist items in required-sequence order for stable responses.
+TArray<FString> GetCompletedUmgDesignVerificationSteps()
+{
+    TArray<FString> CompletedSteps;
+    for (const FString& Step : GetUmgDesignRequiredSequence())
+    {
+        if (CompletedUmgDesignVerificationSteps.Contains(Step))
+        {
+            CompletedSteps.Add(Step);
+        }
+    }
+    return CompletedSteps;
+}
+
+// Converts a string sequence to JSON values for response payloads.
+TArray<TSharedPtr<FJsonValue>> MakeStringArray(const TArray<FString>& Values)
+{
+    TArray<TSharedPtr<FJsonValue>> JsonValues;
+    for (const FString& Value : Values)
+    {
+        JsonValues.Add(MakeShared<FJsonValueString>(Value));
+    }
+    return JsonValues;
+}
+
+// Reports checklist items that have not completed since the last UMG design mutation.
+TArray<FString> GetMissingUmgDesignVerificationSteps()
+{
+    TArray<FString> MissingSteps;
+    for (const FString& Step : GetUmgDesignRequiredSequence())
+    {
+        if (!CompletedUmgDesignVerificationSteps.Contains(Step))
+        {
+            MissingSteps.Add(Step);
+        }
+    }
+    return MissingSteps;
+}
+
+// Returns true only when all required verification steps have passed.
+bool IsUmgDesignVerificationComplete()
+{
+    return GetMissingUmgDesignVerificationSteps().Num() == 0;
+}
+
+// Adds a machine-readable verification checklist to mutation responses for MCP clients.
+void AddUmgDesignVerificationRequirement(const TSharedPtr<FJsonObject>& ResponseJson, const FString& CommandType)
+{
+    if (!ResponseJson.IsValid())
+    {
+        return;
+    }
+
+    TArray<TSharedPtr<FJsonValue>> VisualVerificationOptions;
+    VisualVerificationOptions.Add(MakeShared<FJsonValueString>(TEXT("capture_slate_window")));
+    VisualVerificationOptions.Add(MakeShared<FJsonValueString>(TEXT("dump_runtime_widget_geometry")));
+
+    TSharedPtr<FJsonObject> Verification = MakeShared<FJsonObject>();
+    Verification->SetBoolField(TEXT("required"), true);
+    Verification->SetStringField(TEXT("trigger_command"), CommandType);
+    Verification->SetStringField(TEXT("reason"), TEXT("UMG visual or layout state changed; verify tree, compile result, layout geometry, overlap, and visual/runtime capture before reporting completion."));
+    Verification->SetArrayField(TEXT("required_sequence"), MakeStringArray(GetUmgDesignRequiredSequence()));
+    Verification->SetArrayField(TEXT("completed_sequence"), MakeStringArray(GetCompletedUmgDesignVerificationSteps()));
+    Verification->SetArrayField(TEXT("missing_sequence"), MakeStringArray(GetMissingUmgDesignVerificationSteps()));
+    Verification->SetArrayField(TEXT("visual_verification_options"), VisualVerificationOptions);
+
+    ResponseJson->SetObjectField(TEXT("design_verification_required"), Verification);
+}
+}
+
 
 
 UUmgMcpBridge::UUmgMcpBridge()
@@ -286,6 +417,18 @@ FString UUmgMcpBridge::ExecuteCommand(const FString& CommandType, const TSharedP
 FString UUmgMcpBridge::InternalExecuteCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params)
 {
     TSharedPtr<FJsonObject> ResponseJson = MakeShareable(new FJsonObject);
+
+    if (CommandType == TEXT("save_asset") && bUmgDesignVerificationPending && !IsUmgDesignVerificationComplete())
+    {
+        ResponseJson->SetStringField(TEXT("status"), TEXT("error"));
+        ResponseJson->SetStringField(TEXT("error"), TEXT("UMG design verification is pending. Run the missing design verification steps before save_asset."));
+        AddUmgDesignVerificationRequirement(ResponseJson, PendingUmgDesignMutationCommand);
+
+        FString ResultString;
+        TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ResultString);
+        FJsonSerializer::Serialize(ResponseJson.ToSharedRef(), Writer);
+        return ResultString;
+    }
 
     try
     {
@@ -687,6 +830,25 @@ FString UUmgMcpBridge::InternalExecuteCommand(const FString& CommandType, const 
                 {
                     ResponseJson->SetField(Key, Field.Value);
                 }
+            }
+
+            if (IsUmgDesignVerificationCommand(CommandType) && DidUmgDesignVerificationCommandPass(CommandType, ResultJson))
+            {
+                CompletedUmgDesignVerificationSteps.Add(CommandType);
+            }
+
+            if (IsUmgDesignMutationCommand(CommandType))
+            {
+                bUmgDesignVerificationPending = true;
+                PendingUmgDesignMutationCommand = CommandType;
+                CompletedUmgDesignVerificationSteps.Empty();
+                AddUmgDesignVerificationRequirement(ResponseJson, CommandType);
+            }
+            else if (CommandType == TEXT("save_asset") && bUmgDesignVerificationPending && IsUmgDesignVerificationComplete())
+            {
+                bUmgDesignVerificationPending = false;
+                PendingUmgDesignMutationCommand.Empty();
+                CompletedUmgDesignVerificationSteps.Empty();
             }
         }
         else

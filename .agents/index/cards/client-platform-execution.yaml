@@ -6,7 +6,6 @@ paths:
   - Client/Source/OdiroSim/Public/Platform/**
   - Client/Source/OdiroSim/Private/Platform/**
   - Client/Plugins/UmgMcp/**
-  - Client/Task-*.bat
   - Client/Tools/**
   - task-run.bat
   - task-dev.bat
@@ -50,13 +49,15 @@ guardrails:
   - ExperimentResultViewModel owns dashboard display state only; project run summary/review JSON loading and AI request relay stay behind PlatformUiSubsystem APIs.
   - ProjectWorkspaceViewModel does not call OpenLevel directly; startup return navigation is mediated by PlatformUiSubsystem.
   - Platform widgets must not rebuild WBP layout with WidgetTree/ConstructWidget fallback UI; keep structural layout and empty states in WBP-owned surfaces.
+  - Root `task-build.bat`, `task-run.bat`, and `task-dev.bat` are the user-facing Client task entrypoints.
+  - Client runtime-internal launch scripts live under `Client/Tools`, not root task wrappers.
   - Project mode must not fall back to legacy SimulationSetup, RunQueue, Json/Input, Saved runs, or text-input project paths.
   - Project run launch uses the project-run command contract with project path, run id, and policy port inputs.
   - Project experiment launch commands create a fresh user-project run through ProjectWorkspaceViewModel before starting; selected historical runs are analysis/navigation targets and must not be overwritten.
   - SimulatorLaunchSubsystem treats run output artifacts such as status.json, summary.json, and episode result.json as immutable start guards.
   - Project-run AI analysis uses the v2 `project_path` plus `run_id` request path and stores review artifacts under the run.
   - C++ writes state/text/visibility into WBP-owned layouts; structural UMG ownership stays in client-runtime-foundation.
-  - StartupMenu/MainMenu UMG edits use UmgMcp tree readback, compile/save, and runtime capture verification; property or geometry MCP queries require a scoped safety check because broad JsonUtilities serialization can stack-overflow editor sessions.
+  - StartupMenu/MainMenu UMG edits must complete UmgMcp tree readback, Blueprint compile/save, layout data, overlap check, and runtime or Slate capture verification before completion; property or geometry MCP queries require a scoped safety check because broad JsonUtilities serialization can stack-overflow editor sessions.
   - StartupMap and ScenarioEditorMap root widget classes are configured by PlatformUiDeveloperSettings or exposed controller/widget properties, not hardcoded class paths.
   - Platform UI dynamic row/card widget classes, including startup recent-project cards and project run/result rows, are configured by WBP exposed properties first, with PlatformUiDeveloperSettings soft-class fallbacks for project-level defaults.
   - Client tools use `Client/Tools/Common.ps1`, never root `tools/common.ps1`.
@@ -73,7 +74,8 @@ verify:
       - focused OdiroSim.PlatformUi automation tests for ViewModel/Common UI native changes
       - UmgMcp widget tree readback for touched assets; avoid broad property/layout queries unless first scoped to a known-safe widget
       - Blueprint compile/save for touched widgets
-      - preview or MCP geometry/capture smoke for user-facing layout changes
+      - UmgMcp get_layout_data and check_widget_overlap after every user-facing UMG mutation
+      - preview or MCP geometry/capture smoke for every user-facing layout change
 links:
   - Client/README.md
   - Client/Docs/plans/PLAN-platform-architecture.md

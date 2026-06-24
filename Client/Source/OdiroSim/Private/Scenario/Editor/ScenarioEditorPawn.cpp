@@ -41,6 +41,19 @@ void AScenarioEditorPawn::ApplyMoveInput(float forwardValue, float rightValue, f
 	AddMovementInput(FVector::UpVector, upValue);
 }
 
+void AScenarioEditorPawn::ApplyWorldHeightInput(float upValue)
+{
+	if (!Controller || FMath::IsNearlyZero(upValue)) return;
+
+	const UWorld* world = GetWorld();
+	const double deltaSeconds = world ? world->GetDeltaSeconds() : 0.0;
+	if (FMath::IsNearlyZero(deltaSeconds)) return;
+
+	FVector location = GetActorLocation();
+	location.Z += static_cast<double>(upValue) * MaxMoveSpeed * deltaSeconds;
+	SetActorLocation(location);
+}
+
 void AScenarioEditorPawn::ApplyLookInput(float yawDeltaDegrees, float pitchDeltaDegrees)
 {
 	FRotator newRotation = GetActorRotation().GetNormalized();

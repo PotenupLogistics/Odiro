@@ -52,6 +52,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	TSoftObjectPtr<UInputAction> EditorLookAction;
 
+	// Mouse-button action that gates camera look or top-down drag pan input.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
+	TSoftObjectPtr<UInputAction> EditorLookCaptureAction;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	TSoftObjectPtr<UInputAction> EditorSelectionAction;
 
@@ -75,9 +79,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	int32 EditorInputMappingPriority = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input", meta = (ClampMin = "0.0"))
-	double SelectionClickLookDeltaThreshold = 4.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement", meta = (ClampMin = "1.0"))
 	float PlacementTraceDistanceCm = 100000.0f;
@@ -289,6 +290,8 @@ private:
 	void HandleScaleModeInput();
 	void HandleEditorMoveAction(const FInputActionValue& inputActionValue);
 	void HandleEditorLookAction(const FInputActionValue& inputActionValue);
+	void HandleLookCaptureStartedInput();
+	void HandleLookCaptureCompletedInput();
 	void HandleViewModeToggleInput();
 	void HandleEditorZoomAction(const FInputActionValue& inputActionValue);
 	void BeginLookInputCapture();
@@ -412,7 +415,6 @@ private:
 	FString CurrentPlacementFailureReason;
 
 	bool bIsLookInputHeld = false;
-	double LookCaptureAccumulatedDelta = 0.0;
 	bool bIsRegionDragging = false;
 	FVector RegionDragStartWorld = FVector::ZeroVector;
 	bool bIsTransformGizmoDragging = false;

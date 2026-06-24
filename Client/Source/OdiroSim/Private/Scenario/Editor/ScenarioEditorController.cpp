@@ -219,6 +219,7 @@ AScenarioEditorController::AScenarioEditorController()
 	EditorInputMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Editor.IMC_Editor")));
 	EditorMoveAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorMove.IA_EditorMove")));
 	EditorLookAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorLook.IA_EditorLook")));
+	EditorLookCaptureAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorLookCapture.IA_EditorLookCapture")));
 	EditorSelectionAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_Selection.IA_Selection")));
 	EditorDeselectionAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_Deselection.IA_Deselection")));
 	EditorTranslateAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorTranslate.IA_EditorTranslate")));
@@ -292,7 +293,6 @@ void AScenarioEditorController::SetObserverMode()
 	bCurrentPlacementValid = false;
 	CurrentPlacementFailureReason.Reset();
 	bIsLookInputHeld = false;
-	LookCaptureAccumulatedDelta = 0.0;
 	bIsRegionDragging = false;
 	PressedPlaceableComponent.Reset();
 	ResetTransformGizmoDrag();
@@ -376,7 +376,6 @@ bool AScenarioEditorController::BeginStaticObstaclePlacement(FName propId)
 bool AScenarioEditorController::BeginPalettePlacement(EScenarioPaletteItemType itemType, FName assetId)
 {
 	bIsLookInputHeld = false;
-	LookCaptureAccumulatedDelta = 0.0;
 	bIsRegionDragging = false;
 	PressedPlaceableComponent.Reset();
 	ResetTransformGizmoDrag();
@@ -531,7 +530,6 @@ bool AScenarioEditorController::ConfirmPlacement()
 bool AScenarioEditorController::BeginGroundRegionDraw(EScenarioGroundRegionType regionType)
 {
 	bIsLookInputHeld = false;
-	LookCaptureAccumulatedDelta = 0.0;
 	bIsRegionDragging = false;
 	PressedPlaceableComponent.Reset();
 	ResetTransformGizmoDrag();
@@ -1258,7 +1256,6 @@ void AScenarioEditorController::HandleSelectionStartedInput()
 		}
 
 		PressedPlaceableComponent = HoveredPlaceableComponent;
-		BeginLookInputCapture();
 	}
 }
 
@@ -1281,11 +1278,9 @@ void AScenarioEditorController::HandleSelectionCompletedInput()
 
 	const bool bShouldSelectPressedPlaceable =
 		EditorMode == EScenarioEditorControllerMode::Observer
-		&& bIsLookInputHeld
-		&& LookCaptureAccumulatedDelta <= SelectionClickLookDeltaThreshold;
+		&& !bIsLookInputHeld;
 	UScenarioPlaceableComponent* placeableToSelect = PressedPlaceableComponent.Get();
 
-	EndLookInputCapture();
 	PressedPlaceableComponent.Reset();
 
 	if (bShouldSelectPressedPlaceable)
@@ -1356,7 +1351,7 @@ void AScenarioEditorController::HandleEditorMoveAction(const FInputActionValue& 
 	{
 		const FVector moveValue = inputActionValue.Get<FVector>();
 		forwardValue = moveValue.X;
-		rightValue = moveValue.Y;
+		rightValue = -moveValue.Y;
 		upValue = moveValue.Z;
 		break;
 	}
@@ -1379,12 +1374,13 @@ void AScenarioEditorController::HandleEditorMoveAction(const FInputActionValue& 
 
 	if (EditorViewMode == EScenarioEditorViewMode::TopDownOrtho)
 	{
-		// In top-down view, zoom is handled by mouse-wheel input, so ignore Z-axis movement here.
 		editorPawn->ApplyTopDownPanInput(forwardValue, rightValue);
+		editorPawn->ApplyWorldHeightInput(upValue);
 		return;
 	}
 
-	editorPawn->ApplyMoveInput(forwardValue, rightValue, upValue);
+	editorPawn->ApplyMoveInput(forwardValue, rightValue, 0.0f);
+	editorPawn->ApplyWorldHeightInput(upValue);
 }
 
 void AScenarioEditorController::HandleEditorLookAction(const FInputActionValue& inputActionValue)
@@ -1419,10 +1415,7 @@ void AScenarioEditorController::HandleEditorLookAction(const FInputActionValue& 
 		break;
 	}
 
-	LookCaptureAccumulatedDelta += FVector2D(yawValue, pitchValue).Size();
-
 	// In top-down view, route look input to drag panning instead of rotation.
-	// Selection clicks depend on accumulated look-capture delta, so capture state remains active.
 	if (EditorViewMode == EScenarioEditorViewMode::TopDownOrtho)
 	{
 		editorPawn->ApplyTopDownDragPanInput(yawValue, pitchValue);
@@ -1432,6 +1425,24 @@ void AScenarioEditorController::HandleEditorLookAction(const FInputActionValue& 
 	editorPawn->ApplyLookInput(
 		yawValue * MouseLookSensitivity,
 		pitchValue * MouseLookSensitivity);
+}
+
+void AScenarioEditorController::HandleLookCaptureStartedInput()
+{
+	if (EditorMode != EScenarioEditorControllerMode::Observer
+		|| bIsTransformGizmoDragging
+		|| IsCursorOverEditorWidgetInputModeFocus())
+	{
+		return;
+	}
+
+	PressedPlaceableComponent.Reset();
+	BeginLookInputCapture();
+}
+
+void AScenarioEditorController::HandleLookCaptureCompletedInput()
+{
+	EndLookInputCapture();
 }
 
 void AScenarioEditorController::HandleViewModeToggleInput()
@@ -1460,7 +1471,6 @@ void AScenarioEditorController::BeginLookInputCapture()
 	}
 
 	bIsLookInputHeld = true;
-	LookCaptureAccumulatedDelta = 0.0;
 	ApplyInputMode();
 }
 
@@ -1589,7 +1599,6 @@ bool AScenarioEditorController::BeginTransformGizmoDrag(
 	}
 
 	bIsLookInputHeld = false;
-	LookCaptureAccumulatedDelta = 0.0;
 	PressedPlaceableComponent.Reset();
 	SetHoveredPlaceable(nullptr);
 
@@ -2304,6 +2313,27 @@ void AScenarioEditorController::BindEditorInputActions()
 			ETriggerEvent::Triggered,
 			this,
 			&AScenarioEditorController::HandleEditorLookAction);
+	}
+
+	if (UInputAction* lookCaptureAction = EditorLookCaptureAction.LoadSynchronous())
+	{
+		enhancedInputComponent->BindAction(
+			lookCaptureAction,
+			ETriggerEvent::Started,
+			this,
+			&AScenarioEditorController::HandleLookCaptureStartedInput);
+
+		enhancedInputComponent->BindAction(
+			lookCaptureAction,
+			ETriggerEvent::Completed,
+			this,
+			&AScenarioEditorController::HandleLookCaptureCompletedInput);
+
+		enhancedInputComponent->BindAction(
+			lookCaptureAction,
+			ETriggerEvent::Canceled,
+			this,
+			&AScenarioEditorController::HandleLookCaptureCompletedInput);
 	}
 
 	if (UInputAction* selectionAction = EditorSelectionAction.LoadSynchronous())

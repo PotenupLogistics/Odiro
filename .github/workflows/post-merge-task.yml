@@ -157,9 +157,22 @@ jobs:
           # Returns the repository's effective Git LFS API endpoint without a trailing slash.
           # Throws when git lfs env fails or does not report an Endpoint line.
           function Get-LfsApiEndpoint {
-              $lines = @(git lfs env)
-              if ($LASTEXITCODE -ne 0) {
-                  throw "Failed to read Git LFS environment."
+              $stderrPath = [System.IO.Path]::GetTempFileName()
+              try {
+                  $lines = @(git lfs env 2>$stderrPath)
+                  $gitExitCode = $LASTEXITCODE
+                  $stderrText = Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue
+              }
+              finally {
+                  Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+              }
+
+              $stderr = if ($null -eq $stderrText) { "" } else { $stderrText.Trim() }
+              if ($gitExitCode -ne 0) {
+                  if ([string]::IsNullOrWhiteSpace($stderr)) {
+                      throw "Failed to read Git LFS environment."
+                  }
+                  throw "Failed to read Git LFS environment.`n$stderr"
               }
 
               foreach ($line in $lines) {
@@ -168,7 +181,7 @@ jobs:
                   }
               }
 
-              throw "Git LFS endpoint was not found."
+              throw "Git LFS endpoint was not found. Verify Git LFS is configured for this repository."
           }
 
           # Force-unlocks one Git LFS lock by id through the Git LFS HTTP API using gh api.
@@ -181,6 +194,10 @@ jobs:
                   # Git LFS lock identifier returned by git lfs locks --json.
                   [string] $Id
               )
+
+              if ($Id -notmatch '^[A-Za-z0-9._:-]+$') {
+                  throw "Git LFS lock id contains unsupported characters: $Id"
+              }
 
               $endpoint = Get-LfsApiEndpoint
               $unlockUrl = "$endpoint/locks/$Id/unlock"
@@ -198,7 +215,7 @@ jobs:
               if ($LASTEXITCODE -ne 0) {
                   $detail = (($output | ForEach-Object { [string] $_ }) -join "`n").Trim()
                   if ([string]::IsNullOrWhiteSpace($detail)) {
-                      throw "Failed to unlock $Path by Git LFS lock id $Id."
+                      throw "Failed to unlock $Path by Git LFS lock id $Id because gh api returned no output. Check GH_TOKEN permissions and network access."
                   }
                   throw "Failed to unlock $Path by Git LFS lock id $Id.`n$detail"
               }

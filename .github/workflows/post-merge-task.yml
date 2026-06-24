@@ -24,7 +24,7 @@ concurrency:
   queue: max
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   unlock:
@@ -61,6 +61,7 @@ jobs:
           PUSHED_AT: ${{ github.event.repository.pushed_at }}
           DISPATCH_MODE: ${{ github.event.inputs.mode }}
           DISPATCH_PATH: ${{ github.event.inputs.path }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
           Set-StrictMode -Version Latest
@@ -151,6 +152,52 @@ jobs:
                   return @($locks.Value)
               }
               return @($Payload)
+          }
+
+          # Reads the Git LFS API endpoint from the repository's effective LFS config.
+          function Get-LfsApiEndpoint {
+              $lines = @(git lfs env)
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to read Git LFS environment."
+              }
+
+              foreach ($line in $lines) {
+                  if ($line -match '^Endpoint=(?<Url>\S+)') {
+                      return ([string] $Matches["Url"]).TrimEnd("/")
+                  }
+              }
+
+              throw "Git LFS endpoint was not found."
+          }
+
+          # Force-unlocks one Git LFS lock via the LFS HTTP API using gh api (mirrors manual-unlock.ps1).
+          # Requires GH_TOKEN to be set in the environment with sufficient repository write access.
+          function Invoke-ForceUnlockById {
+              param(
+                  [string] $Path,
+                  [string] $Id
+              )
+
+              $endpoint = Get-LfsApiEndpoint
+              $unlockUrl = "$endpoint/locks/$Id/unlock"
+              $body = @{ force = $true } | ConvertTo-Json -Compress
+
+              $output = @(
+                  $body | gh api `
+                      -X POST `
+                      $unlockUrl `
+                      -H "Accept: application/vnd.git-lfs+json" `
+                      -H "Content-Type: application/vnd.git-lfs+json" `
+                      --input - `
+                      2>&1
+              )
+              if ($LASTEXITCODE -ne 0) {
+                  $detail = (($output | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  if ([string]::IsNullOrWhiteSpace($detail)) {
+                      throw "Failed to unlock $Path by Git LFS lock id $Id."
+                  }
+                  throw "Failed to unlock $Path by Git LFS lock id $Id.`n$detail"
+              }
           }
 
           # Reads current Git LFS locks and fails closed on query or JSON errors.
@@ -308,13 +355,14 @@ jobs:
               }
 
               if ([string]::IsNullOrWhiteSpace($id)) {
+                  # No lock ID available; fall back to path-based unlock via git lfs CLI.
                   git lfs unlock --force $path
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "Failed to unlock $path."
+                  }
               }
               else {
-                  git lfs unlock --force "--id=$id"
-              }
-              if ($LASTEXITCODE -ne 0) {
-                  throw "Failed to unlock $path."
+                  Invoke-ForceUnlockById -Path $path -Id $id
               }
               Write-Host "Unlocked: $path"
           }

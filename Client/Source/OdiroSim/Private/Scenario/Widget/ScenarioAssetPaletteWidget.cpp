@@ -10,40 +10,8 @@
 #include "Scenario/ViewModel/ScenarioEditorListItemViewModel.h"
 #include "Scenario/Widget/ScenarioPlaceablePaletteItemWidget.h"
 #include "Shared/ScenarioCoreTypes.h"
-#include "Shared/ScenarioSpecTypes.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioAssetPaletteWidget, Log, All);
-
-namespace
-{
-	const FName GroundRegionWalkableAssetId(TEXT("ground.walkable"));
-	const FName GroundRegionPenaltyAssetId(TEXT("ground.penalty"));
-	const FName GroundRegionBlockedAssetId(TEXT("ground.blocked"));
-
-	bool TryResolveGroundRegionType(FName assetId, EScenarioGroundRegionType& outRegionType)
-	{
-		const FString normalizedId = assetId.ToString().ToLower();
-		if (normalizedId == TEXT("ground.walkable") || normalizedId == TEXT("walkable"))
-		{
-			outRegionType = EScenarioGroundRegionType::Walkable;
-			return true;
-		}
-
-		if (normalizedId == TEXT("ground.penalty") || normalizedId == TEXT("penalty"))
-		{
-			outRegionType = EScenarioGroundRegionType::Penalty;
-			return true;
-		}
-
-		if (normalizedId == TEXT("ground.blocked") || normalizedId == TEXT("blocked") || normalizedId == TEXT("block"))
-		{
-			outRegionType = EScenarioGroundRegionType::Blocked;
-			return true;
-		}
-
-		return false;
-	}
-}
 
 UScenarioAssetPaletteWidget::UScenarioAssetPaletteWidget(const FObjectInitializer& objectInitializer)
 	: Super(objectInitializer)
@@ -79,8 +47,7 @@ bool UScenarioAssetPaletteWidget::RebuildPalette()
 	ClearPalette();
 
 	UHorizontalBox* staticObstacleContainer = ResolveStaticObstacleItemContainer();
-	UHorizontalBox* groundRegionContainer = ResolveGroundRegionItemContainer();
-	if (!staticObstacleContainer && !groundRegionContainer)
+	if (!staticObstacleContainer)
 	{
 		UE_LOG(LogScenarioAssetPaletteWidget, Warning, TEXT("No palette item container is bound."));
 		return false;
@@ -106,7 +73,6 @@ bool UScenarioAssetPaletteWidget::RebuildPalette()
 		paletteItemEntries.Add(UScenarioPlaceablePaletteItemWidget::MakeStaticObstaclePaletteItemEntry(paletteEntry));
 	}
 
-	int32 groundRegionEntryCount = 0;
 	const UScenarioAssetPaletteCatalog* paletteCatalog = GetPaletteCatalog();
 	if (paletteCatalog)
 	{
@@ -114,26 +80,6 @@ bool UScenarioAssetPaletteWidget::RebuildPalette()
 		{
 			if (specialEntry.ItemType == EScenarioPaletteItemType::GroundRegion)
 			{
-				if (!bIncludeGroundRegionDraw)
-				{
-					continue;
-				}
-
-				EScenarioGroundRegionType unusedRegionType = EScenarioGroundRegionType::Walkable;
-				if (!TryResolveGroundRegionType(specialEntry.AssetId, unusedRegionType))
-				{
-					UE_LOG(
-						LogScenarioAssetPaletteWidget,
-						Warning,
-						TEXT("Skipping ground region palette entry with unsupported asset id: %s"),
-						*specialEntry.AssetId.ToString());
-					continue;
-				}
-
-				FScenarioPaletteItemEntry groundRegionEntry = specialEntry;
-				SeedGroundRegionThumbnail(groundRegionEntry);
-				paletteItemEntries.Add(groundRegionEntry);
-				++groundRegionEntryCount;
 				continue;
 			}
 
@@ -146,18 +92,9 @@ bool UScenarioAssetPaletteWidget::RebuildPalette()
 		}
 	}
 
-	if (bIncludeGroundRegionDraw && groundRegionEntryCount == 0)
-	{
-		paletteItemEntries.Add(MakeGroundRegionPaletteItemEntry(GroundRegionWalkableAssetId, TEXT("Walkable")));
-		paletteItemEntries.Add(MakeGroundRegionPaletteItemEntry(GroundRegionPenaltyAssetId, TEXT("Penalty")));
-		paletteItemEntries.Add(MakeGroundRegionPaletteItemEntry(GroundRegionBlockedAssetId, TEXT("Blocked")));
-		groundRegionEntryCount += 3;
-	}
-
 	AssetPaletteViewModel->SetPaletteEntries(paletteItemEntries);
 
 	int32 itemCount = 0;
-	int32 groundRegionItemCount = 0;
 	for (UScenarioEditorListItemViewModel* itemViewModel : AssetPaletteViewModel->GetItems())
 	{
 		if (!itemViewModel)
@@ -166,7 +103,12 @@ bool UScenarioAssetPaletteWidget::RebuildPalette()
 		}
 
 		const bool bGroundRegion = itemViewModel->GetPaletteItemType() == EScenarioPaletteItemType::GroundRegion;
-		UHorizontalBox* targetContainer = bGroundRegion ? groundRegionContainer : staticObstacleContainer;
+		if (bGroundRegion)
+		{
+			continue;
+		}
+
+		UHorizontalBox* targetContainer = staticObstacleContainer;
 		if (!targetContainer)
 		{
 			UE_LOG(
@@ -180,19 +122,14 @@ bool UScenarioAssetPaletteWidget::RebuildPalette()
 		if (AddPaletteItemWidget(targetContainer, itemViewModel))
 		{
 			++itemCount;
-			if (bGroundRegion)
-			{
-				++groundRegionItemCount;
-			}
 		}
 	}
 
 	UE_LOG(
 		LogScenarioAssetPaletteWidget,
 		Log,
-		TEXT("Loaded %d palette assets | GroundRegions: %d"),
-		itemCount,
-		groundRegionItemCount);
+		TEXT("Loaded %d palette assets"),
+		itemCount);
 	return true;
 }
 
@@ -207,13 +144,6 @@ void UScenarioAssetPaletteWidget::ClearPalette()
 	{
 		StaticObstacleItemContainer->ClearChildren();
 	}
-
-	if (GroundRegionItemContainer
-		&& GroundRegionItemContainer != PlaceableItemContainer
-		&& GroundRegionItemContainer != StaticObstacleItemContainer)
-	{
-		GroundRegionItemContainer->ClearChildren();
-	}
 }
 
 void UScenarioAssetPaletteWidget::HandlePaletteItemSelected(EScenarioPaletteItemType itemType, FName assetId)
@@ -226,31 +156,10 @@ void UScenarioAssetPaletteWidget::HandlePaletteItemSelected(EScenarioPaletteItem
 
 	if (itemType == EScenarioPaletteItemType::GroundRegion)
 	{
-		EScenarioGroundRegionType regionType = EScenarioGroundRegionType::Walkable;
-		if (!TryResolveGroundRegionType(assetId, regionType))
-		{
-			UE_LOG(
-				LogScenarioAssetPaletteWidget,
-				Warning,
-				TEXT("Unsupported ground region palette asset id: %s"),
-				*assetId.ToString());
-			return;
-		}
-
-		if (!AssetPaletteViewModel->BeginGroundRegionDraw(regionType))
-		{
-			UE_LOG(
-				LogScenarioAssetPaletteWidget,
-				Warning,
-				TEXT("Failed to begin ground region draw | AssetId: %s"),
-				*assetId.ToString());
-			return;
-		}
-
 		UE_LOG(
 			LogScenarioAssetPaletteWidget,
-			Log,
-			TEXT("Ground region draw selected | AssetId: %s"),
+			Warning,
+			TEXT("Ground region drawing is disabled; author Corridor surfaces instead. AssetId: %s"),
 			*assetId.ToString());
 		return;
 	}
@@ -299,11 +208,6 @@ const UScenarioAssetPaletteCatalog* UScenarioAssetPaletteWidget::GetPaletteCatal
 UHorizontalBox* UScenarioAssetPaletteWidget::ResolveStaticObstacleItemContainer() const
 {
 	return StaticObstacleItemContainer ? StaticObstacleItemContainer.Get() : PlaceableItemContainer.Get();
-}
-
-UHorizontalBox* UScenarioAssetPaletteWidget::ResolveGroundRegionItemContainer() const
-{
-	return GroundRegionItemContainer ? GroundRegionItemContainer.Get() : PlaceableItemContainer.Get();
 }
 
 UScenarioPlaceablePaletteItemWidget* UScenarioAssetPaletteWidget::CreatePaletteItemWidget() const
@@ -369,84 +273,6 @@ bool UScenarioAssetPaletteWidget::AddPaletteItemWidget(
 	BindPaletteItemWidget(itemWidget);
 	targetContainer->AddChildToHorizontalBox(itemWidget);
 	return true;
-}
-
-int32 UScenarioAssetPaletteWidget::AddDefaultGroundRegionPaletteEntries()
-{
-	UHorizontalBox* groundRegionContainer = ResolveGroundRegionItemContainer();
-	if (!groundRegionContainer)
-	{
-		return 0;
-	}
-
-	int32 itemCount = 0;
-	if (AddPaletteItemWidget(
-			groundRegionContainer,
-			MakeGroundRegionPaletteItemEntry(GroundRegionWalkableAssetId, TEXT("Walkable"))))
-	{
-		++itemCount;
-	}
-
-	if (AddPaletteItemWidget(
-			groundRegionContainer,
-			MakeGroundRegionPaletteItemEntry(GroundRegionPenaltyAssetId, TEXT("Penalty"))))
-	{
-		++itemCount;
-	}
-
-	if (AddPaletteItemWidget(
-			groundRegionContainer,
-			MakeGroundRegionPaletteItemEntry(GroundRegionBlockedAssetId, TEXT("Blocked"))))
-	{
-		++itemCount;
-	}
-
-	return itemCount;
-}
-
-void UScenarioAssetPaletteWidget::SeedGroundRegionThumbnail(FScenarioPaletteItemEntry& entry) const
-{
-	if (!entry.ThumbnailTexture.IsNull())
-	{
-		return;
-	}
-
-	entry.ThumbnailTexture = ResolveGroundRegionThumbnail(entry.AssetId);
-}
-
-TSoftObjectPtr<UTexture2D> UScenarioAssetPaletteWidget::ResolveGroundRegionThumbnail(const FName assetId) const
-{
-	EScenarioGroundRegionType regionType = EScenarioGroundRegionType::Walkable;
-	if (!TryResolveGroundRegionType(assetId, regionType))
-	{
-		return nullptr;
-	}
-
-	switch (regionType)
-	{
-	case EScenarioGroundRegionType::Walkable:
-		return WalkableGroundRegionThumbnail;
-	case EScenarioGroundRegionType::Penalty:
-		return PenaltyGroundRegionThumbnail;
-	case EScenarioGroundRegionType::Blocked:
-		return BlockedGroundRegionThumbnail;
-	default:
-		return nullptr;
-	}
-}
-
-FScenarioPaletteItemEntry UScenarioAssetPaletteWidget::MakeGroundRegionPaletteItemEntry(
-	const FName assetId,
-	const TCHAR* displayName) const
-{
-	FScenarioPaletteItemEntry entry;
-	entry.ItemType = EScenarioPaletteItemType::GroundRegion;
-	entry.AssetId = assetId;
-	entry.DisplayName = FText::FromString(displayName);
-	entry.CategoryText = FText::FromString(TEXT("Ground Region"));
-	entry.IconName = assetId.ToString();
-	SeedGroundRegionThumbnail(entry);
-	return entry;
 }
 
 bool UScenarioAssetPaletteWidget::ShouldIncludeSpecialEntry(

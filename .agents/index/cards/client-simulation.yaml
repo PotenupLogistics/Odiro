@@ -8,6 +8,7 @@ paths:
   - Client/Source/OdiroSim/Private/Episode/**
   - Client/Source/OdiroSim/Public/Shared/**
   - Client/Source/OdiroSim/Private/Shared/**
+  - Client/Content/Input/**
   - Client/Content/Maps/ScenarioEditorMap.umap
   - Client/Content/Maps/ScenarioSimulationMap.umap
   - Client/Json/**
@@ -38,6 +39,7 @@ entry:
       - Client/Source/OdiroSim/Private/Scenario/Widget
       - Client/Source/OdiroSim/Public/Scenario/Llm
       - Client/Source/OdiroSim/Private/Scenario/Llm
+      - Client/Content/Input
   - id: scenario-runtime
     description: Scenario sampling, world-spec adaptation, simulation, evaluation, runner lifecycle, and episode logs.
     read:
@@ -64,6 +66,7 @@ guardrails:
   - User project run output is written through typed UserProjectData JSON writers.
   - ScenarioEditorUiSubsystem owns ScenarioEditorMap UI ViewModel lifecycle and stores no widget pointers.
   - Scenario editor selection, subsystem lookup, and world mutation stay controller/subsystem/component-owned; ViewModels expose FieldNotify state and command facades through ScenarioEditorUiSubsystem.
+  - Scenario editor viewport navigation input is owned by ScenarioEditorController with Enhanced Input assets under Client/Content/Input; keep mouse capture, selection, and cancel bindings explicit.
   - ScenarioEditorShellViewModel owns editor UI selection commands for template panel/block and placeable selection; widgets adapt events into Shell commands instead of composing selection state locally.
   - Scenario editor reusable WBP class references come from ScenarioEditorWidgetClassCatalog assets or exposed widget properties; do not add C++ WBP class-path fallbacks.
   - Scenario LLM prompt widgets read input and forward commands only; prompt ViewModel owns generation/load/run command state, while scenario path validation, generation delegate binding, editor load/save, and project run launch stay behind ScenarioEditorUiSubsystem.

@@ -67,6 +67,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor")
 	void ApplyMoveInput(float forwardValue, float rightValue, float upValue);
 
+	// Moves only the pawn world-location Z component, independent of camera rotation or movement acceleration.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor")
+	void ApplyWorldHeightInput(float upValue);
+
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor")
 	void ApplyLookInput(float yawDeltaDegrees, float pitchDeltaDegrees);
 

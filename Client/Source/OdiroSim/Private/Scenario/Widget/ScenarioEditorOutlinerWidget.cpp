@@ -166,10 +166,9 @@ void UScenarioEditorOutlinerWidget::RefreshFromEditorState()
 		{
 			selectedKey = MakePlaceableItemKey(shellViewModel->GetSelectedPlaceableId());
 		}
-		else if (const UScenarioEditorOutlinerViewModel* outlinerViewModel = uiSubsystem->GetOutlinerViewModel();
-			outlinerViewModel && !outlinerViewModel->GetSelectedItemKey().IsEmpty())
+		else
 		{
-			selectedKey = outlinerViewModel->GetSelectedItemKey();
+			selectedKey = MakeTemplateItemKey(shellViewModel->GetActiveSidebarPanel());
 		}
 	}
 

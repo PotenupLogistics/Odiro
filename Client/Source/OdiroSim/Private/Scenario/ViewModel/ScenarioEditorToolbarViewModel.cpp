@@ -82,7 +82,7 @@ void UScenarioEditorToolbarViewModel::SelectSidebarPanel(const EScenarioTemplate
 	{
 		if (UScenarioEditorShellViewModel* shellViewModel = UiSubsystem->GetShellViewModel())
 		{
-			shellViewModel->SelectSidebarPanel(panel);
+			shellViewModel->SelectTemplatePanel(panel);
 		}
 		if (UScenarioTemplateSidebarViewModel* sidebarViewModel = UiSubsystem->GetTemplateSidebarViewModel())
 		{

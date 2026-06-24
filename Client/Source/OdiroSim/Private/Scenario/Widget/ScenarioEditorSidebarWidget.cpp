@@ -5,7 +5,9 @@
 #include "Components/WidgetSwitcher.h"
 #include "Engine/World.h"
 #include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioEditorShellViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
+#include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorPanel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarMainPanel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarObstaclePanel.h"
@@ -49,6 +51,12 @@ void UScenarioEditorSidebarWidget::NativeConstruct()
 	RefreshFromDraft();
 }
 
+void UScenarioEditorSidebarWidget::NativeDestruct()
+{
+	UnbindAllPanelBlockSelection();
+	Super::NativeDestruct();
+}
+
 void UScenarioEditorSidebarWidget::SetActivePanel(const EScenarioTemplateSidebarPanel panel)
 {
 	if (ActivePanel == panel)
@@ -56,6 +64,7 @@ void UScenarioEditorSidebarWidget::SetActivePanel(const EScenarioTemplateSidebar
 		return;
 	}
 
+	UnbindPanelBlockSelection(ResolvePanelWidget(ActivePanel));
 	ActivePanel = panel;
 	RefreshFromDraft();
 }
@@ -98,13 +107,18 @@ void UScenarioEditorSidebarWidget::RefreshFromDraft()
 void UScenarioEditorSidebarWidget::RefreshFromTemplate(const FScenarioDocument& scenarioTemplate)
 {
 	SetSidebarShellText(PanelToTitle(ActivePanel), FString());
-	if (!RefreshActivePanelContent(scenarioTemplate))
+	const bool bRefreshed = RefreshActivePanelContent(scenarioTemplate);
+	if (!bRefreshed)
 	{
 		SetSidebarShellText(
 			PanelToTitle(ActivePanel),
 			TEXT("Scenario editor panel widget class is missing."));
 	}
 	RefreshPanelSwitcher();
+	if (bRefreshed)
+	{
+		BindPanelBlockSelection(ResolvePanelWidget(ActivePanel));
+	}
 }
 
 bool UScenarioEditorSidebarWidget::RefreshActivePanelContent(
@@ -384,6 +398,142 @@ void UScenarioEditorSidebarWidget::ConfigureChildPanelDependencies() const
 	{
 		pedestrianPanel->SetWidgetClassCatalog(WidgetClassCatalog);
 		pedestrianPanel->SetTextStyleCatalog(TextStyleCatalog);
+	}
+}
+
+void UScenarioEditorSidebarWidget::BindPanelBlockSelection(UWidget* panelWidget)
+{
+	UnbindPanelBlockSelection(panelWidget);
+
+	if (UScenarioEditorSidebarMainPanel* mainPanel = Cast<UScenarioEditorSidebarMainPanel>(panelWidget))
+	{
+		BindBlockSelection(mainPanel->RootBlockWidget.Get());
+		BindBlockSelection(mainPanel->RobotBlockWidget.Get());
+		BindBlockSelection(mainPanel->RobotStartBlockWidget.Get());
+		BindBlockSelection(mainPanel->RobotGoalBlockWidget.Get());
+		return;
+	}
+
+	if (UScenarioEditorSidebarCorridorPanel* corridorPanel =
+		Cast<UScenarioEditorSidebarCorridorPanel>(panelWidget))
+	{
+		BindBlockSelection(corridorPanel->CorridorBlockWidget.Get());
+		BindBlockSelection(corridorPanel->AxisBlockWidget.Get());
+		BindBlockSelection(corridorPanel->AxisPointsBlockWidget.Get());
+		BindBlockSelection(corridorPanel->WalkwayWidthBlockWidget.Get());
+		BindBlockSelection(corridorPanel->BuildingSideBlockWidget.Get());
+		BindBlockSelection(corridorPanel->CurbSideBlockWidget.Get());
+		BindBlockSelection(corridorPanel->SegmentsBlockWidget.Get());
+		return;
+	}
+
+	if (UScenarioEditorSidebarObstaclePanel* obstaclePanel =
+		Cast<UScenarioEditorSidebarObstaclePanel>(panelWidget))
+	{
+		BindBlockSelection(obstaclePanel->ObstacleBlockWidget.Get());
+		BindBlockSelection(obstaclePanel->MinClearWidthBlockWidget.Get());
+		BindBlockSelection(obstaclePanel->PlacementsBlockWidget.Get());
+		return;
+	}
+
+	if (UScenarioEditorSidebarPedestrianPanel* pedestrianPanel =
+		Cast<UScenarioEditorSidebarPedestrianPanel>(panelWidget))
+	{
+		BindBlockSelection(pedestrianPanel->PedestriansBlockWidget.Get());
+		BindBlockSelection(pedestrianPanel->BackgroundBlockWidget.Get());
+		BindBlockSelection(pedestrianPanel->SpawnZoneBlockWidget.Get());
+		BindBlockSelection(pedestrianPanel->EncountersBlockWidget.Get());
+	}
+}
+
+void UScenarioEditorSidebarWidget::UnbindPanelBlockSelection(UWidget* panelWidget)
+{
+	if (UScenarioEditorSidebarMainPanel* mainPanel = Cast<UScenarioEditorSidebarMainPanel>(panelWidget))
+	{
+		UnbindBlockSelection(mainPanel->RootBlockWidget.Get());
+		UnbindBlockSelection(mainPanel->RobotBlockWidget.Get());
+		UnbindBlockSelection(mainPanel->RobotStartBlockWidget.Get());
+		UnbindBlockSelection(mainPanel->RobotGoalBlockWidget.Get());
+		return;
+	}
+
+	if (UScenarioEditorSidebarCorridorPanel* corridorPanel =
+		Cast<UScenarioEditorSidebarCorridorPanel>(panelWidget))
+	{
+		UnbindBlockSelection(corridorPanel->CorridorBlockWidget.Get());
+		UnbindBlockSelection(corridorPanel->AxisBlockWidget.Get());
+		UnbindBlockSelection(corridorPanel->AxisPointsBlockWidget.Get());
+		UnbindBlockSelection(corridorPanel->WalkwayWidthBlockWidget.Get());
+		UnbindBlockSelection(corridorPanel->BuildingSideBlockWidget.Get());
+		UnbindBlockSelection(corridorPanel->CurbSideBlockWidget.Get());
+		UnbindBlockSelection(corridorPanel->SegmentsBlockWidget.Get());
+		return;
+	}
+
+	if (UScenarioEditorSidebarObstaclePanel* obstaclePanel =
+		Cast<UScenarioEditorSidebarObstaclePanel>(panelWidget))
+	{
+		UnbindBlockSelection(obstaclePanel->ObstacleBlockWidget.Get());
+		UnbindBlockSelection(obstaclePanel->MinClearWidthBlockWidget.Get());
+		UnbindBlockSelection(obstaclePanel->PlacementsBlockWidget.Get());
+		return;
+	}
+
+	if (UScenarioEditorSidebarPedestrianPanel* pedestrianPanel =
+		Cast<UScenarioEditorSidebarPedestrianPanel>(panelWidget))
+	{
+		UnbindBlockSelection(pedestrianPanel->PedestriansBlockWidget.Get());
+		UnbindBlockSelection(pedestrianPanel->BackgroundBlockWidget.Get());
+		UnbindBlockSelection(pedestrianPanel->SpawnZoneBlockWidget.Get());
+		UnbindBlockSelection(pedestrianPanel->EncountersBlockWidget.Get());
+	}
+}
+
+void UScenarioEditorSidebarWidget::UnbindAllPanelBlockSelection()
+{
+	for (EScenarioTemplateSidebarPanel panel : {
+		EScenarioTemplateSidebarPanel::Main,
+		EScenarioTemplateSidebarPanel::Corridor,
+		EScenarioTemplateSidebarPanel::Obstacle,
+		EScenarioTemplateSidebarPanel::Pedestrian })
+	{
+		UnbindPanelBlockSelection(ResolvePanelWidget(panel));
+	}
+}
+
+void UScenarioEditorSidebarWidget::BindBlockSelection(UScenarioEditorSidebarBlockWidget* blockWidget)
+{
+	if (!blockWidget)
+	{
+		return;
+	}
+
+	blockWidget->OnBlockSelected.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarWidget::HandlePanelBlockSelected);
+	blockWidget->OnBlockSelected.AddDynamic(
+		this,
+		&UScenarioEditorSidebarWidget::HandlePanelBlockSelected);
+}
+
+void UScenarioEditorSidebarWidget::UnbindBlockSelection(UScenarioEditorSidebarBlockWidget* blockWidget)
+{
+	if (blockWidget)
+	{
+		blockWidget->OnBlockSelected.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarWidget::HandlePanelBlockSelected);
+	}
+}
+
+void UScenarioEditorSidebarWidget::HandlePanelBlockSelected(const FString& blockPath)
+{
+	if (UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this))
+	{
+		if (UScenarioEditorShellViewModel* shellViewModel = uiSubsystem->GetShellViewModel())
+		{
+			shellViewModel->SelectTemplateBlock(ActivePanel, blockPath);
+		}
 	}
 }
 

@@ -29,7 +29,7 @@ struct ODIROSIM_API FDeliveryBotPythonSettings
 
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Python", meta = (ClampMin = "1"))
-	int32 Port{ 8000 };
+	int32 Port{ 18145 };
 
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DeliveryBot|Python", meta = (ClampMin = "0.1"))

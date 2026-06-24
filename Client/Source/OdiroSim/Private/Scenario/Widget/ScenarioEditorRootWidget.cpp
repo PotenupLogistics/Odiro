@@ -8,22 +8,24 @@
 #include "Scenario/Editor/ScenarioEditorController.h"
 #include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "Scenario/Llm/ScenarioLlmPromptWidget.h"
+#include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioEditorShellViewModel.h"
+#include "Scenario/ViewModel/ScenarioEditorToolbarViewModel.h"
+#include "Scenario/ViewModel/ScenarioPlaceableDetailsViewModel.h"
 #include "Scenario/Widget/ScenarioAssetPaletteWidget.h"
 #include "Scenario/Widget/ScenarioEditorOutlinerWidget.h"
 #include "Scenario/Widget/ScenarioEditorToolbarWidget.h"
 #include "Scenario/Widget/ScenarioPlaceableContextMenuWidget.h"
 #include "Scenario/Widget/ScenarioPlaceableDetailsWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarWidget.h"
-#include "Engine/GameInstance.h"
-#include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
 #include "GameFramework/PlayerController.h"
-#include "Platform/ScenarioEditorLaunchSubsystem.h"
 
 void UScenarioEditorRootWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
+	InitializeViewModel();
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	SetPanelVisibility(ToolbarWidget.Get(), false);
 	HidePlaceableDetails();
@@ -58,15 +60,16 @@ void UScenarioEditorRootWidget::NativeTick(const FGeometry& myGeometry, const fl
 	}
 
 	// Polls external view-mode changes from keyboard shortcuts and controller-owned transitions.
-	if (const AScenarioEditorController* controller = GetEditorController())
+	if (ShellViewModel)
 	{
-		if (!bHasCachedViewMode || controller->GetEditorViewMode() != LastSeenViewMode)
+		ShellViewModel->RefreshFromController();
+		if (!bHasCachedViewMode || ShellViewModel->GetViewMode() != LastSeenViewMode)
 		{
 			RefreshViewModeButtons();
 		}
 
 		if (!bHasCachedPlacementSnapToGrid
-			|| controller->IsPlacementSnapToGridEnabled() != bLastSeenPlacementSnapToGrid)
+			|| ShellViewModel->IsPlacementSnapToGridEnabled() != bLastSeenPlacementSnapToGrid)
 		{
 			RefreshPlacementSnapButton();
 		}
@@ -105,6 +108,13 @@ UScenarioPlaceableDetailsWidget* UScenarioEditorRootWidget::ShowPlaceableDetails
 	SetPanelVisibility(ResolvePlaceableDetailsVisibilityTarget(), true);
 	SetPanelVisibility(PlaceableContextMenuWidget.Get(), true);
 	SyncOutlinerSelectionToPlaceable(selectedPlaceable);
+	if (UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this))
+	{
+		if (UScenarioPlaceableDetailsViewModel* detailsViewModel = uiSubsystem->GetPlaceableDetailsViewModel())
+		{
+			detailsViewModel->SetSelectedPlaceable(selectedPlaceable->InstanceId, selectedPlaceable->InstanceId);
+		}
+	}
 	return PlaceableContextMenuWidget.Get();
 }
 
@@ -116,6 +126,13 @@ void UScenarioEditorRootWidget::HidePlaceableDetails()
 	}
 	SetPanelVisibility(ResolvePlaceableDetailsVisibilityTarget(), false);
 	SetPanelVisibility(PlaceableContextMenuWidget.Get(), false);
+	if (UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this))
+	{
+		if (UScenarioPlaceableDetailsViewModel* detailsViewModel = uiSubsystem->GetPlaceableDetailsViewModel())
+		{
+			detailsViewModel->ClearSelectedPlaceable();
+		}
+	}
 }
 
 UScenarioPlaceableContextMenuWidget* UScenarioEditorRootWidget::ShowPlaceableContextMenu(
@@ -137,6 +154,10 @@ UScenarioPlaceableContextMenuWidget* UScenarioEditorRootWidget::GetPlaceableCont
 
 void UScenarioEditorRootWidget::SetLlmPanelVisible(const bool bVisible)
 {
+	if (ShellViewModel)
+	{
+		ShellViewModel->SetLlmPanelVisible(bVisible);
+	}
 	SetPanelVisibility(ResolveLlmPanelVisibilityTarget(), bVisible);
 	SetPanelVisibility(ScenarioEditorLlmWidget.Get(), bVisible);
 }
@@ -144,6 +165,10 @@ void UScenarioEditorRootWidget::SetLlmPanelVisible(const bool bVisible)
 void UScenarioEditorRootWidget::ShowInspectorTab(const EScenarioEditorInspectorTab tab)
 {
 	ActiveInspectorTab = tab;
+	if (ShellViewModel)
+	{
+		ShellViewModel->SelectInspectorTab(tab);
+	}
 	const bool bShowDetail = tab == EScenarioEditorInspectorTab::Detail;
 	ApplyInspectorTabVisualState();
 
@@ -247,6 +272,10 @@ void UScenarioEditorRootWidget::SetTemplateSidebarPanel(
 	ShowInspectorTab(EScenarioEditorInspectorTab::Detail);
 	SetPanelVisibility(ResolveTemplateSidebarVisibilityTarget(), true);
 	SetPanelVisibility(sidebarWidget, true);
+	if (ShellViewModel)
+	{
+		ShellViewModel->SelectSidebarPanel(activePanel);
+	}
 	ApplyTemplateSidebarPanel(activePanel);
 	if (bSyncOutlinerSelection && ScenarioEditorOutlinerWidget)
 	{
@@ -291,13 +320,16 @@ void UScenarioEditorRootWidget::HandleEditorSessionStarted(const bool)
 
 void UScenarioEditorRootWidget::RefreshViewModeButtons()
 {
-	const AScenarioEditorController* controller = GetEditorController();
-	if (!controller)
+	if (ShellViewModel)
+	{
+		ShellViewModel->RefreshFromController();
+	}
+	if (!ShellViewModel)
 	{
 		return;
 	}
 
-	const EScenarioEditorViewMode viewMode = controller->GetEditorViewMode();
+	const EScenarioEditorViewMode viewMode = ShellViewModel->GetViewMode();
 	LastSeenViewMode = viewMode;
 	bHasCachedViewMode = true;
 
@@ -317,13 +349,16 @@ void UScenarioEditorRootWidget::RefreshViewModeButtons()
 
 void UScenarioEditorRootWidget::RefreshPlacementSnapButton()
 {
-	const AScenarioEditorController* controller = GetEditorController();
-	if (!controller)
+	if (ShellViewModel)
+	{
+		ShellViewModel->RefreshFromController();
+	}
+	if (!ShellViewModel)
 	{
 		return;
 	}
 
-	const bool bSnapEnabled = controller->IsPlacementSnapToGridEnabled();
+	const bool bSnapEnabled = ShellViewModel->IsPlacementSnapToGridEnabled();
 	bLastSeenPlacementSnapToGrid = bSnapEnabled;
 	bHasCachedPlacementSnapToGrid = true;
 
@@ -347,27 +382,27 @@ void UScenarioEditorRootWidget::RefreshPlacementSnapButton()
 
 void UScenarioEditorRootWidget::HandleTopDownOrthoModeButtonClicked()
 {
-	if (AScenarioEditorController* controller = GetEditorController())
+	if (ShellViewModel)
 	{
-		controller->SetEditorViewMode(EScenarioEditorViewMode::TopDownOrtho);
+		ShellViewModel->SetTopDownOrthoViewMode();
 		RefreshViewModeButtons();
 	}
 }
 
 void UScenarioEditorRootWidget::HandlePerspectiveModeButtonClicked()
 {
-	if (AScenarioEditorController* controller = GetEditorController())
+	if (ShellViewModel)
 	{
-		controller->SetEditorViewMode(EScenarioEditorViewMode::Perspective);
+		ShellViewModel->SetPerspectiveViewMode();
 		RefreshViewModeButtons();
 	}
 }
 
 void UScenarioEditorRootWidget::HandleSnapPlacementToGridButtonClicked()
 {
-	if (AScenarioEditorController* controller = GetEditorController())
+	if (ShellViewModel)
 	{
-		controller->TogglePlacementSnapToGrid();
+		ShellViewModel->TogglePlacementSnapToGrid();
 		RefreshPlacementSnapButton();
 	}
 }
@@ -418,25 +453,34 @@ void UScenarioEditorRootWidget::UnbindEditorModeButtons()
 
 void UScenarioEditorRootWidget::HandleSaveButtonClicked()
 {
-	AScenarioEditorController* controller = GetEditorController();
-	if (!controller)
+	if (ToolbarWidget)
 	{
-		SetSaveStatusText(TEXT("Save failed: ScenarioEditorController unavailable."));
+		const bool bSaved = ToolbarWidget->SaveScenario();
+		if (const UScenarioEditorToolbarViewModel* toolbarViewModel = ToolbarWidget->GetToolbarViewModel())
+		{
+			SetSaveStatusText(toolbarViewModel->GetStatusText());
+		}
+		if (bSaved)
+		{
+			RefreshScenarioInspector();
+		}
 		return;
 	}
 
-	FString resolvedPath;
-	TArray<FString> diagnostics;
-	if (!controller->SaveCurrentScenarioDraft(resolvedPath, diagnostics))
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	UScenarioEditorToolbarViewModel* toolbarViewModel = uiSubsystem ? uiSubsystem->GetToolbarViewModel() : nullptr;
+	if (!toolbarViewModel)
 	{
-		SetSaveStatusText(diagnostics.IsEmpty()
-			? TEXT("Save failed.")
-			: FString::Join(diagnostics, TEXT("\n")));
+		SetSaveStatusText(TEXT("Save failed: ScenarioEditorToolbarViewModel unavailable."));
 		return;
 	}
 
-	SetSaveStatusText(FString::Printf(TEXT("Saved: %s"), *resolvedPath));
-	RefreshScenarioInspector();
+	const bool bSaved = toolbarViewModel->SaveScenario();
+	SetSaveStatusText(toolbarViewModel->GetStatusText());
+	if (bSaved)
+	{
+		RefreshScenarioInspector();
+	}
 }
 
 void UScenarioEditorRootWidget::HandleDetailInspectorTabClicked()
@@ -451,19 +495,19 @@ void UScenarioEditorRootWidget::HandleLlmInspectorTabClicked()
 
 void UScenarioEditorRootWidget::HandleOutlinerItemSelected(FScenarioOutlinerItemViewModel item)
 {
-	AScenarioEditorController* controller = GetEditorController();
 	if (item.ItemType == EScenarioEditorOutlinerItemType::Placeable)
 	{
-		if (controller)
+		if (ShellViewModel)
 		{
-			controller->SelectPlaceableByInstanceId(item.InstanceId);
+			ShellViewModel->SelectPlaceable(item.InstanceId);
 		}
 		return;
 	}
 
-	if (controller)
+	if (ShellViewModel)
 	{
-		controller->ClearSelectedPlaceable();
+		ShellViewModel->ClearSelectedPlaceable();
+		ShellViewModel->SelectSidebarPanel(item.TemplatePanel);
 	}
 	SetTemplateSidebarPanel(item.TemplatePanel, false);
 	if (ScenarioEditorOutlinerWidget)
@@ -545,6 +589,16 @@ void UScenarioEditorRootWidget::UnbindSidebarControls()
 	}
 }
 
+void UScenarioEditorRootWidget::InitializeViewModel()
+{
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	ShellViewModel = uiSubsystem ? uiSubsystem->GetShellViewModel() : nullptr;
+	if (ShellViewModel)
+	{
+		ShellViewModel->RefreshFromController();
+	}
+}
+
 void UScenarioEditorRootWidget::ApplyTemplateSidebarPanel(const EScenarioTemplateSidebarPanel activePanel)
 {
 	UScenarioEditorSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget();
@@ -561,27 +615,23 @@ AScenarioEditorController* UScenarioEditorRootWidget::GetEditorController() cons
 
 void UScenarioEditorRootWidget::BindEditorLaunchSubsystem()
 {
-	UWorld* world = GetWorld();
-	UGameInstance* gameInstance = world ? world->GetGameInstance() : nullptr;
-	UScenarioEditorLaunchSubsystem* launchSubsystem = gameInstance
-		? gameInstance->GetSubsystem<UScenarioEditorLaunchSubsystem>()
-		: nullptr;
-	if (!launchSubsystem)
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	if (!uiSubsystem)
 	{
 		return;
 	}
 
 	if (!AutoStartCompletedHandle.IsValid())
 	{
-		AutoStartCompletedHandle = launchSubsystem->OnAutoStartCompleted().AddUObject(
+		AutoStartCompletedHandle = uiSubsystem->OnEditorAutoStartCompleted().AddUObject(
 			this,
 			&UScenarioEditorRootWidget::HandleAutoStartCompleted);
 	}
 
-	if (launchSubsystem->HasAutoStartedScenarioEditorSession())
+	if (uiSubsystem->HasAutoStartedScenarioEditorSession())
 	{
 		HandleAutoStartCompleted(
-			launchSubsystem->WasAutoStartedScenarioEditorSessionLoadedExistingScenario());
+			uiSubsystem->WasAutoStartedScenarioEditorSessionLoadedExistingScenario());
 	}
 }
 
@@ -592,13 +642,9 @@ void UScenarioEditorRootWidget::UnbindEditorLaunchSubsystem()
 		return;
 	}
 
-	UWorld* world = GetWorld();
-	UGameInstance* gameInstance = world ? world->GetGameInstance() : nullptr;
-	if (UScenarioEditorLaunchSubsystem* launchSubsystem = gameInstance
-		? gameInstance->GetSubsystem<UScenarioEditorLaunchSubsystem>()
-		: nullptr)
+	if (UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this))
 	{
-		launchSubsystem->OnAutoStartCompleted().Remove(AutoStartCompletedHandle);
+		uiSubsystem->OnEditorAutoStartCompleted().Remove(AutoStartCompletedHandle);
 	}
 
 	AutoStartCompletedHandle.Reset();
@@ -680,6 +726,11 @@ void UScenarioEditorRootWidget::SyncOutlinerSelectionToPlaceable(
 void UScenarioEditorRootWidget::HandleControllerSelectedPlaceableChanged(
 	const FString& selectedInstanceId)
 {
+	if (ShellViewModel)
+	{
+		ShellViewModel->RefreshFromController();
+	}
+
 	if (!ScenarioEditorOutlinerWidget)
 	{
 		return;
@@ -693,6 +744,11 @@ void UScenarioEditorRootWidget::HandleControllerSelectedPlaceableChanged(
 
 void UScenarioEditorRootWidget::SetAssetPaletteVisible(const bool bVisible, const bool bRebuildWhenShowing)
 {
+	if (ShellViewModel)
+	{
+		ShellViewModel->SetAssetPaletteVisible(bVisible);
+	}
+
 	UWidget* visibilityTarget = ResolveAssetPaletteVisibilityTarget();
 	const bool bWasVisible = visibilityTarget && visibilityTarget->GetVisibility() != ESlateVisibility::Collapsed;
 	if (bVisible && bRebuildWhenShowing && !bWasVisible && AssetPaletteWidget)

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "Platform/Widget/OdiroCommonUserWidget.h"
 #include "Styling/SlateTypes.h"
 #include "ProjectWorkspaceTabWidget.generated.h"
 
@@ -13,7 +13,7 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FProjectWorkspaceTabNative, class UProjectWo
 
 // Project workspace 상단 tab의 상태와 click event를 C++ 로직에 연결하는 widget.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UProjectWorkspaceTabWidget : public UUserWidget
+class ODIROSIM_API UProjectWorkspaceTabWidget : public UOdiroCommonUserWidget
 {
 	GENERATED_BODY()
 

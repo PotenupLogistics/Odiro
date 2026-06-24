@@ -1,6 +1,6 @@
 id: client-platform-execution
 owner: Client
-description: Project UI flow, launch/process subsystems, run dashboard, and analysis integration.
+description: Project UI flow, Platform UI MVVM state, launch/process subsystems, run dashboard, and analysis integration.
 paths:
   - Client/README.md
   - Client/Source/OdiroSim/Public/Platform/**
@@ -18,6 +18,17 @@ entry:
     read:
       - Client/Source/OdiroSim/Public/Platform
       - Client/Source/OdiroSim/Private/Platform
+  - id: platform-ui-mvvm
+    description: Common UI native bases, PlatformUiSubsystem, and MVVM ViewModel state/command layer.
+    read:
+      - Client/Source/OdiroSim/Public/Platform/PlatformUiSubsystem.h
+      - Client/Source/OdiroSim/Private/Platform/PlatformUiSubsystem.cpp
+      - Client/Source/OdiroSim/Public/Platform/PlatformUiDeveloperSettings.h
+      - Client/Source/OdiroSim/Private/Platform/PlatformUiDeveloperSettings.cpp
+      - Client/Source/OdiroSim/Public/Platform/ViewModel
+      - Client/Source/OdiroSim/Private/Platform/ViewModel
+      - Client/Source/OdiroSim/Public/Platform/Widget/Odiro*Widget.h
+      - Client/Source/OdiroSim/Private/Platform/Widget/Odiro*Widget.cpp
   - id: ui-and-tools
     description: Platform widgets, UMG tooling plugin, and preview scripts.
     read:
@@ -30,11 +41,24 @@ guardrails:
   - Platform UI reads ProjectSession state and canonical user-project run artifacts, not simulator world objects.
   - ProjectSessionSubsystem is the runtime source of truth for the active user project root.
   - Startup UI owns project selection/creation; MainMenu owns the project workspace surface.
+  - PlatformUiSubsystem owns ViewModel lifecycle only; it must not store widget pointers.
+  - Platform widgets resolve PlatformUiSubsystem/ViewModels only; ProjectSession, SimulatorLaunch, and AnalysisAI lookup or event relay stays behind PlatformUiSubsystem/ViewModels except explicit test seams.
+  - UUserWidget/Common UI classes are view adapters; project/file/run/AI command logic belongs in ViewModels or Platform subsystems.
+  - ViewModel repeatable UI data uses UObject item ViewModels for ListView/TileView-style rows/cards, including project result iteration selectors.
+  - StartupMenuViewModel owns open/create form state, persisted project-open options, and recent-project list state; project path existence checks go through PlatformUiSubsystem path helpers.
+  - ExperimentConfigViewModel owns FieldNotify input state only; user-project setting.json file/JSON I/O stays behind PlatformUiSubsystem experiment setting APIs.
+  - ExperimentResultViewModel owns dashboard display state only; project run summary/review JSON loading and AI request relay stay behind PlatformUiSubsystem APIs.
+  - ProjectWorkspaceViewModel does not call OpenLevel directly; startup return navigation is mediated by PlatformUiSubsystem.
+  - Platform widgets must not rebuild WBP layout with WidgetTree/ConstructWidget fallback UI; keep structural layout and empty states in WBP-owned surfaces.
   - Project mode must not fall back to legacy SimulationSetup, RunQueue, Json/Input, Saved runs, or text-input project paths.
   - Project run launch uses the project-run command contract with project path, run id, and policy port inputs.
+  - Project experiment launch commands create a fresh user-project run through ProjectWorkspaceViewModel before starting; selected historical runs are analysis/navigation targets and must not be overwritten.
+  - SimulatorLaunchSubsystem treats run output artifacts such as status.json, summary.json, and episode result.json as immutable start guards.
   - Project-run AI analysis uses the v2 `project_path` plus `run_id` request path and stores review artifacts under the run.
   - C++ writes state/text/visibility into WBP-owned layouts; structural UMG ownership stays in client-runtime-foundation.
-  - StartupMenu/MainMenu UMG edits use UmgMcp readback, compile/save, and runtime geometry or capture verification.
+  - StartupMenu/MainMenu UMG edits use UmgMcp tree readback, compile/save, and runtime capture verification; property or geometry MCP queries require a scoped safety check because broad JsonUtilities serialization can stack-overflow editor sessions.
+  - StartupMap and ScenarioEditorMap root widget classes are configured by PlatformUiDeveloperSettings or exposed controller/widget properties, not hardcoded class paths.
+  - Platform UI dynamic row/card widget classes, including startup recent-project cards and project run/result rows, are configured by WBP exposed properties first, with PlatformUiDeveloperSettings soft-class fallbacks for project-level defaults.
   - Client tools use `Client/Tools/Common.ps1`, never root `tools/common.ps1`.
 verify:
   - when: launch, process, or project-session behavior changes
@@ -46,7 +70,8 @@ verify:
       - focused PlatformAnalysisAi and ProjectRunResultDashboard tests
   - when: platform UI or UMG tool flow changes
     run:
-      - UmgMcp widget tree readback for touched assets
+      - focused OdiroSim.PlatformUi automation tests for ViewModel/Common UI native changes
+      - UmgMcp widget tree readback for touched assets; avoid broad property/layout queries unless first scoped to a known-safe widget
       - Blueprint compile/save for touched widgets
       - preview or MCP geometry/capture smoke for user-facing layout changes
 links:

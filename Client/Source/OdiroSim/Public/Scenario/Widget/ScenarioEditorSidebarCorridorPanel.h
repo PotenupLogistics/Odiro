@@ -9,12 +9,13 @@
 #include "ScenarioEditorSidebarCorridorPanel.generated.h"
 
 class UTextBlock;
-class UScenarioAuthoringSubsystem;
 class UScenarioEditorSidebarBlockWidget;
 class UScenarioEditorSidebarCorridorLaneWidget;
 class UScenarioEditorSidebarCorridorPointWidget;
 class UScenarioEditorSidebarCorridorSegmentWidget;
 class UScenarioEditorWidgetClassCatalog;
+class UScenarioTemplateFieldRowViewModel;
+class UScenarioTemplateSidebarViewModel;
 class UWidgetTextStyleCatalog;
 
 // Corridor Scenario Template sidebar panel for axis, width, side lanes, and segments.
@@ -253,6 +254,8 @@ private:
 	void UnbindFieldRows();
 	// Applies static labels and editability to field rows and blocks.
 	void ConfigureFieldRows();
+	// Applies Corridor top-level field row ViewModels to bound rows.
+	void ApplyCorridorFieldItems();
 	// Applies shared typography to diagnostic text and child rows.
 	void ApplyTextStyles();
 	// Rebuilds editable lane widgets for one Corridor side lane profile.
@@ -267,9 +270,7 @@ private:
 	// Adds a read-only field row to a dynamic block body.
 	UScenarioEditorSidebarFieldRow* AddReadOnlyFieldRow(
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget,
-		const FString& label,
-		const FString& value,
-		EScenarioEditorSidebarFieldInputType inputType) const;
+		UScenarioTemplateFieldRowViewModel* fieldItemViewModel) const;
 	// Adds an editable lane widget to a side profile block.
 	UScenarioEditorSidebarCorridorLaneWidget* AddLaneWidget(
 		EScenarioEditorCorridorSide side,
@@ -288,87 +289,12 @@ private:
 		const FScenarioTemplateSegment& segment,
 		const TArray<FString>& surfaceOptions,
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget);
-	// Resolves the authoring subsystem that owns the draft template.
-	UScenarioAuthoringSubsystem* GetAuthoringSubsystem() const;
+	// Resolves the ViewModel that forwards draft template commands.
+	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
 	// Returns catalog-backed Corridor surface ids for combo-box fields.
 	TArray<FString> GetCorridorSurfaceIdOptions() const;
-	// Returns the current draft side lane profile by value for mutation.
-	TArray<FScenarioTemplateLaneRule> GetDraftLaneProfile(EScenarioEditorCorridorSide side) const;
-	// Returns the current draft axis points by value for mutation.
-	TArray<FVector2D> GetDraftAxisPoints() const;
-	// Returns the current draft segment list by value for mutation.
-	TArray<FScenarioTemplateSegment> GetDraftSegments() const;
-	// Commits a fixed walkway width edit to the draft template.
-	void CommitWalkwayWidthText(const FText& text);
-	// Commits a min/max walkway width edit to the draft template.
-	void CommitWalkwayWidthRangeText(const FText& minText, const FText& maxText);
-	// Commits a validated walkway width value through the authoring subsystem.
-	void CommitWalkwayWidthValue(const FScenarioTemplateNumberValue& widthMeters);
-	// Commits one lane surface id edit to the draft template.
-	void CommitLaneSurfaceText(EScenarioEditorCorridorSide side, int32 laneIndex, const FText& text);
-	// Commits one fixed lane width edit to the draft template.
-	void CommitLaneWidthText(EScenarioEditorCorridorSide side, int32 laneIndex, const FText& text);
-	// Commits one min/max lane width edit to the draft template.
-	void CommitLaneWidthRangeText(
-		EScenarioEditorCorridorSide side,
-		int32 laneIndex,
-		const FText& minText,
-		const FText& maxText);
-	// Commits a full side lane profile through the authoring subsystem.
-	void CommitLaneProfile(EScenarioEditorCorridorSide side, const TArray<FScenarioTemplateLaneRule>& lanes);
-	// Adds a lane after the provided lane index.
-	void AddLaneAfter(EScenarioEditorCorridorSide side, int32 laneIndex);
-	// Removes the lane at the provided lane index.
-	void RemoveLaneAt(EScenarioEditorCorridorSide side, int32 laneIndex);
-	// Creates a valid default lane rule for one Corridor side.
-	static FScenarioTemplateLaneRule MakeDefaultLaneRule(
-		EScenarioEditorCorridorSide side,
-		const TArray<FScenarioTemplateLaneRule>& existingLanes,
-		int32 neighborIndex);
-	// Commits one axis point x edit to the draft template.
-	void CommitAxisPointXText(int32 pointIndex, const FText& text);
-	// Commits one axis point y edit to the draft template.
-	void CommitAxisPointYText(int32 pointIndex, const FText& text);
-	// Commits a full axis point list through the authoring subsystem.
-	void CommitAxisPoints(const TArray<FVector2D>& pointsMeters);
-	// Adds an axis point after the provided point index.
-	void AddAxisPointAfter(int32 pointIndex);
-	// Removes the axis point at the provided point index.
-	void RemoveAxisPointAt(int32 pointIndex);
-	// Creates a default axis point near another point.
-	static FVector2D MakeDefaultAxisPoint(
-		const TArray<FVector2D>& existingPoints,
-		int32 neighborIndex);
-	// Commits one segment id edit to the draft template.
-	void CommitSegmentIdText(int32 segmentIndex, const FText& text);
-	// Commits one segment type edit to the draft template.
-	void CommitSegmentTypeText(int32 segmentIndex, const FText& text);
-	// Commits one segment along-range edit to the draft template.
-	void CommitSegmentAlongRangeText(int32 segmentIndex, const FText& minText, const FText& maxText);
-	// Commits one segment replaced_by edit to the draft template.
-	void CommitSegmentReplacedByText(int32 segmentIndex, const FText& text);
-	// Commits a full segment list through the authoring subsystem.
-	void CommitSegments(const TArray<FScenarioTemplateSegment>& segments);
-	// Adds a segment after the provided segment index.
-	void AddSegmentAfter(int32 segmentIndex);
-	// Removes the segment at the provided segment index.
-	void RemoveSegmentAt(int32 segmentIndex);
-	// Creates a valid default segment rule near another segment.
-	FScenarioTemplateSegment MakeDefaultSegment(
-		const TArray<FScenarioTemplateSegment>& existingSegments,
-		int32 neighborIndex) const;
+	// Runs a ViewModel command, refreshes the panel, and mirrors command status text.
+	void ExecuteTemplateCommand(TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command);
 	// Applies diagnostics to the optional diagnostics text block.
 	void SetDiagnosticsText(const FString& text) const;
-	// Parses one meter value from field row text.
-	static bool TryParseMeters(const FText& text, double& outMeters);
-	// Parses one corridor segment type from field row text.
-	static bool TryParseSegmentType(const FText& text, EScenarioTemplateSegmentType& outType);
-	// Returns a stable label for a corridor axis type.
-	static FString AxisTypeToString(EScenarioCorridorAxisType type);
-	// Returns a stable label for a corridor segment type.
-	static FString SegmentTypeToString(EScenarioTemplateSegmentType type);
-	// Formats one authored numeric value for editable text controls.
-	static FString FormatEditableNumber(double value);
-	// Measures the authored corridor polyline in meters.
-	static double MeasureAxisLengthMeters(const TArray<FVector2D>& pointsMeters);
 };

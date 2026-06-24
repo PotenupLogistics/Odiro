@@ -1,10 +1,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "Platform/Widget/OdiroCommonUserWidget.h"
 #include "ProjectTemplateCardWidget.generated.h"
 
 class UButton;
+class UOdiroListItemViewModel;
 class UTextBlock;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FProjectTemplateCardSelectedNative, class UProjectTemplateCardWidget*);
@@ -12,7 +13,7 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FProjectTemplateCardContextNative, class UPr
 
 // StartupMenu card item layout과 interaction binding을 담당하는 widget.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UProjectTemplateCardWidget : public UUserWidget
+class ODIROSIM_API UProjectTemplateCardWidget : public UOdiroCommonUserWidget
 {
 	GENERATED_BODY()
 
@@ -25,6 +26,9 @@ public:
 
 	// Item id와 표시 이름을 card UI에 반영한다.
 	void InitializeCard(const FString& itemId, const FString& displayName, const FString& subtitle = FString());
+
+	// 공통 item ViewModel의 표시 상태를 card UI에 반영한다.
+	void InitializeFromItemViewModel(UOdiroListItemViewModel* itemViewModel);
 
 	// 선택 상태를 card UI state에 반영한다.
 	void SetSelected(bool bInSelected);
@@ -110,6 +114,10 @@ private:
 	// 선택 또는 hover card text 색. WBP default에서 조정한다.
 	UPROPERTY(EditDefaultsOnly, Category = "ProjectTemplateCard|Style")
 	FLinearColor ActiveTextColor;
+
+	// Card 표시 상태를 제공하는 item ViewModel 참조.
+	UPROPERTY(Transient)
+	TObjectPtr<UOdiroListItemViewModel> ItemViewModel;
 
 	// 이 card가 대표하는 item id.
 	FString ItemId;

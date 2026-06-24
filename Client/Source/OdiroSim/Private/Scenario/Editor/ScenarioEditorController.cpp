@@ -18,6 +18,7 @@
 #include "EngineUtils.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
+#include "Platform/PlatformUiDeveloperSettings.h"
 #include "Platform/Widget/MainMenuWidget.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorController, Log, All);
@@ -215,12 +216,6 @@ AScenarioEditorController::AScenarioEditorController()
 	bEnableMouseOverEvents = false;
 	PlacementPreviewActorClass = AScenarioPlacementPreviewActor::StaticClass();
 	TransformGizmoActorClass = AScenarioTransformGizmoActor::StaticClass();
-	static ConstructorHelpers::FClassFinder<UMainMenuWidget> mainMenuWidgetFinder(
-		TEXT("/Game/Widgets/MainMenu/WBP_MainMenu"));
-	if (mainMenuWidgetFinder.Succeeded())
-	{
-		MainMenuWidgetClass = mainMenuWidgetFinder.Class;
-	}
 	EditorInputMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Editor.IMC_Editor")));
 	EditorMoveAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorMove.IA_EditorMove")));
 	EditorLookAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorLook.IA_EditorLook")));
@@ -874,13 +869,25 @@ UMainMenuWidget* AScenarioEditorController::ShowMainMenuWidget()
 		return MainMenuWidget.Get();
 	}
 
-	if (!MainMenuWidgetClass)
+	TSubclassOf<UMainMenuWidget> widgetClass = MainMenuWidgetClass;
+	if (!widgetClass)
 	{
-		UE_LOG(LogScenarioEditorController, Error, TEXT("MainMenuWidgetClass is not set."));
+		const UPlatformUiDeveloperSettings* platformUiSettings = GetDefault<UPlatformUiDeveloperSettings>();
+		widgetClass = platformUiSettings
+			? platformUiSettings->MainMenuWidgetClass.LoadSynchronous()
+			: nullptr;
+	}
+
+	if (!widgetClass)
+	{
+		UE_LOG(
+			LogScenarioEditorController,
+			Error,
+			TEXT("MainMenuWidgetClass is not set on the controller or Platform UI project settings."));
 		return nullptr;
 	}
 
-	MainMenuWidget = CreateWidget<UMainMenuWidget>(this, MainMenuWidgetClass);
+	MainMenuWidget = CreateWidget<UMainMenuWidget>(this, widgetClass);
 	if (!MainMenuWidget)
 	{
 		UE_LOG(LogScenarioEditorController, Error, TEXT("Failed to create main menu widget."));

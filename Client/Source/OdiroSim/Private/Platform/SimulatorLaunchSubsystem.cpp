@@ -631,6 +631,31 @@ namespace
 		return true;
 	}
 
+	bool HasProjectRunOutputArtifacts(const FUserProjectRunSnapshotPaths& paths, FString& outArtifactPath)
+	{
+		outArtifactPath.Reset();
+		if (IsFile(paths.StatusPath))
+		{
+			outArtifactPath = paths.StatusPath;
+			return true;
+		}
+		if (IsFile(paths.SummaryPath))
+		{
+			outArtifactPath = paths.SummaryPath;
+			return true;
+		}
+
+		TArray<FString> resultFiles;
+		IFileManager::Get().FindFilesRecursive(resultFiles, *paths.EpisodesPath, TEXT("result.json"), true, false);
+		if (!resultFiles.IsEmpty())
+		{
+			outArtifactPath = NormalizeAbsolutePath(resultFiles[0]);
+			return true;
+		}
+
+		return false;
+	}
+
 	void FindProjectFiles(const FString& relativeDirectory, const TCHAR* filePattern, TArray<FString>& outFiles)
 	{
 		outFiles.Reset();
@@ -1537,6 +1562,22 @@ bool USimulatorLaunchSubsystem::StartProjectRun(const FString& projectPath, cons
 		ActiveRunInfo.bProjectRun = true;
 		ActiveRunInfo.Status.State = ESimulationRunState::Failed;
 		ActiveRunInfo.LastError = JoinDiagnostics(snapshotParseResult.Diagnostics);
+		BroadcastRunInfoChanged();
+		return false;
+	}
+
+	FString existingOutputArtifactPath;
+	if (HasProjectRunOutputArtifacts(snapshotParseResult.Paths, existingOutputArtifactPath))
+	{
+		ActiveRunInfo = FSimulatorRunInfo{};
+		ActiveRunInfo.RunId = snapshotParseResult.Paths.RunId;
+		ActiveRunInfo.ProjectPath = snapshotParseResult.Paths.ProjectPath;
+		ActiveRunInfo.StatusPath = snapshotParseResult.Paths.StatusPath;
+		ActiveRunInfo.bProjectRun = true;
+		ActiveRunInfo.Status.State = ESimulationRunState::Failed;
+		ActiveRunInfo.LastError = FString::Printf(
+			TEXT("Project run already has output artifacts and cannot be started again: %s"),
+			*existingOutputArtifactPath);
 		BroadcastRunInfoChanged();
 		return false;
 	}

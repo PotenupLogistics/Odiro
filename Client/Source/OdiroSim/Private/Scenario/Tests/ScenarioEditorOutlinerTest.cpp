@@ -149,25 +149,24 @@ bool FScenarioEditorWidgetClassCatalogDefaultsTest::RunTest(const FString& Param
 {
 	(void)Parameters;
 
-	const TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> invalidCatalog(
-		FSoftObjectPath(TEXT("/Game/Missing/DA_MissingScenarioEditorWidgetClassCatalog.DA_MissingScenarioEditorWidgetClassCatalog")));
+	const TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> emptyCatalog;
 
 	TestResolvesCatalogBlueprintClass(
 		*this,
 		TEXT("Outliner row"),
-		UScenarioEditorWidgetClassCatalog::ResolveOutlinerRowWidgetClass(invalidCatalog));
+		UScenarioEditorWidgetClassCatalog::ResolveOutlinerRowWidgetClass(emptyCatalog));
 	TestResolvesCatalogBlueprintClass(
 		*this,
 		TEXT("Sidebar block"),
-		UScenarioEditorWidgetClassCatalog::ResolveSidebarBlockWidgetClass(invalidCatalog));
+		UScenarioEditorWidgetClassCatalog::ResolveSidebarBlockWidgetClass(emptyCatalog));
 	TestResolvesCatalogBlueprintClass(
 		*this,
 		TEXT("Sidebar field row"),
-		UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(invalidCatalog));
+		UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(emptyCatalog));
 	TestResolvesCatalogBlueprintClass(
 		*this,
 		TEXT("Corridor point row"),
-		UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorPointWidgetClass(invalidCatalog));
+		UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorPointWidgetClass(emptyCatalog));
 
 	return true;
 }

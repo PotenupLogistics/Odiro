@@ -9,6 +9,8 @@
 #include "ScenarioEditorSidebarCorridorLaneWidget.generated.h"
 
 class UScenarioEditorSidebarBlockWidget;
+class UScenarioTemplateFieldRowViewModel;
+class UScenarioTemplateSidebarViewModel;
 class UWidgetTextStyleCatalog;
 
 // Broadcasts a committed Corridor lane surface edit with side and lane index context.
@@ -166,18 +168,26 @@ private:
 	UPROPERTY(Transient)
 	TArray<FString> SurfaceOptions;
 
+	// Field row ViewModels generated from the cached lane state.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UScenarioTemplateFieldRowViewModel>> CachedFieldItems;
+
 	// Binds child field row delegates owned by this lane widget.
 	void BindFieldRows();
 	// Releases child field row delegates owned by this lane widget.
 	void UnbindFieldRows();
 	// Applies static labels, editability, and block metadata.
 	void ConfigureFieldRows();
+	// Regenerates field row ViewModels from the cached lane state.
+	void RefreshFieldItemsFromViewModel();
 	// Applies cached lane values to bound field rows.
 	void ApplyCachedLaneToRows();
 	// Applies shared typography to this lane block and rows.
 	void ApplyTextStyles();
-	// Formats one authored numeric value for editable text controls.
-	static FString FormatEditableNumber(double value);
+	// Resolves the Scenario Template sidebar ViewModel that creates item ViewModels.
+	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
+	// Finds one cached field row ViewModel by id.
+	UScenarioTemplateFieldRowViewModel* FindCachedFieldItem(const FString& fieldId) const;
 	// Returns the Scenario Template path for this lane's side profile.
 	static FString MakeLanePath(EScenarioEditorCorridorSide side);
 };

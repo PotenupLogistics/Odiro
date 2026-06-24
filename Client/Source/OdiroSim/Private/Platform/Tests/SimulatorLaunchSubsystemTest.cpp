@@ -232,6 +232,58 @@ bool FSimulatorLaunchProjectRunSnapshotPrepareTest::RunTest(const FString& param
 
 	const FUserProjectRunSnapshotParseResult parseResult = FUserProjectRunSnapshot::Parse(projectPath, runId);
 	TestTrue(TEXT("snapshot parses"), parseResult.bSuccess);
+
+	FString secondRunId;
+	TestTrue(TEXT("prepare second snapshot"), subsystem->PrepareProjectRunSnapshot(projectPath, FString(), secondRunId, diagnostics));
+	TestEqual(TEXT("second run id"), secondRunId, FString(TEXT("000002")));
+
+	FString thirdRunId;
+	TestTrue(TEXT("prepare third snapshot"), subsystem->PrepareProjectRunSnapshot(projectPath, FString(), thirdRunId, diagnostics));
+	TestEqual(TEXT("third run id"), thirdRunId, FString(TEXT("000003")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimulatorLaunchProjectRunRejectsExistingOutputTest,
+	"OdiroSim.SimulatorLaunch.ProjectRun.RejectsExistingOutput",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimulatorLaunchProjectRunRejectsExistingOutputTest::RunTest(const FString& parameters)
+{
+	(void)parameters;
+
+	const FString projectPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+		FPaths::ProjectSavedDir(),
+		TEXT("Automation/SimulatorLaunchProjectRunRejectExisting"),
+		FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+	TestTrue(TEXT("write project inputs"), WriteSimulatorLaunchProject(projectPath));
+
+	UGameInstance* gameInstance = NewObject<UGameInstance>();
+	USimulatorLaunchSubsystem* subsystem = NewObject<USimulatorLaunchSubsystem>(gameInstance);
+	TestNotNull(TEXT("subsystem created"), subsystem);
+	if (!subsystem)
+	{
+		return false;
+	}
+
+	FString runId;
+	TArray<FString> diagnostics;
+	TestTrue(TEXT("prepare snapshot"), subsystem->PrepareProjectRunSnapshot(projectPath, FString(), runId, diagnostics));
+	TestEqual(TEXT("prepared run id"), runId, FString(TEXT("000001")));
+
+	const FUserProjectRunSnapshotPaths paths = FUserProjectRunSnapshot::BuildPaths(projectPath, runId);
+	TestTrue(
+		TEXT("write existing status artifact"),
+		SaveSimulatorLaunchTestFile(paths.StatusPath, TEXT("{\"schema\":\"simulation_run_status\",\"run_id\":\"000001\"}")));
+
+	const bool bStarted = subsystem->StartProjectRun(projectPath, runId);
+	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
+	TestFalse(TEXT("existing output run does not start"), bStarted);
+	TestTrue(TEXT("error explains existing output"), runInfo.LastError.Contains(TEXT("already has output artifacts")));
+	TestEqual(TEXT("blocked run id recorded"), runInfo.RunId, runId);
+	TestEqual(TEXT("blocked state"), runInfo.Status.State, ESimulationRunState::Failed);
+
+	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
 	return true;
 }
 

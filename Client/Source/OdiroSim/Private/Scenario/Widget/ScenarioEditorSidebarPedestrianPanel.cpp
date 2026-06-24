@@ -1,12 +1,13 @@
 #include "Scenario/Widget/ScenarioEditorSidebarPedestrianPanel.h"
 
-#include "Blueprint/WidgetTree.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
 #include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
-#include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
+#include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
+#include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
 
@@ -42,17 +43,20 @@ void UScenarioEditorSidebarPedestrianPanel::SetWidgetClassCatalog(
 
 void UScenarioEditorSidebarPedestrianPanel::RefreshFromDraft()
 {
-	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
-	if (!authoringSubsystem)
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	FScenarioDocument scenarioTemplate;
+	FString failureReason;
+	if (!templateSidebarViewModel || !templateSidebarViewModel->TryGetDraftScenario(scenarioTemplate, failureReason))
 	{
 		if (DiagnosticsTextBlock)
 		{
-			DiagnosticsTextBlock->SetText(FText::FromString(TEXT("ScenarioAuthoringSubsystem unavailable.")));
+			DiagnosticsTextBlock->SetText(FText::FromString(
+				failureReason.IsEmpty() ? TEXT("ScenarioTemplateSidebarViewModel unavailable.") : failureReason));
 		}
 		return;
 	}
 
-	RefreshFromTemplate(authoringSubsystem->GetDraftScenario());
+	RefreshFromTemplate(scenarioTemplate);
 }
 
 void UScenarioEditorSidebarPedestrianPanel::RefreshFromTemplate(
@@ -60,15 +64,19 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshFromTemplate(
 {
 	ConfigureFieldRows();
 
-	const FScenarioTemplatePedestrianRules& pedestrians = scenarioTemplate.Pedestrians;
-	SetIntegerRowValue(BackgroundCountFieldRow.Get(), pedestrians.Background.Count);
-	SetNumberRowValue(BackgroundSpeedFieldRow.Get(), pedestrians.Background.SpeedMetersPerSecond);
-	if (SpawnSegmentsFieldRow)
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	if (!templateSidebarViewModel)
 	{
-		SpawnSegmentsFieldRow->SetValueText(JoinStringList(pedestrians.Background.SpawnSegmentIds));
+		if (DiagnosticsTextBlock)
+		{
+			DiagnosticsTextBlock->SetText(FText::FromString(TEXT("ScenarioTemplateSidebarViewModel unavailable.")));
+		}
+		return;
 	}
 
-	RefreshEncounterRows(pedestrians.Encounters);
+	templateSidebarViewModel->RefreshPedestrianFieldItemsFromTemplate(scenarioTemplate);
+	ApplyPedestrianFieldItems();
+	RefreshEncounterRows(scenarioTemplate.Pedestrians.Encounters);
 	if (DiagnosticsTextBlock)
 	{
 		DiagnosticsTextBlock->SetText(FText::FromString(TEXT("Structure only: Pedestrian edits are not committed yet.")));
@@ -110,25 +118,16 @@ void UScenarioEditorSidebarPedestrianPanel::ConfigureFieldRows()
 	if (BackgroundCountFieldRow)
 	{
 		BackgroundCountFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		BackgroundCountFieldRow->SetFieldLabel(TEXT("count"));
-		BackgroundCountFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Range);
-		BackgroundCountFieldRow->SetEditable(true);
 	}
 	if (BackgroundSpeedFieldRow)
 	{
 		BackgroundSpeedFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		BackgroundSpeedFieldRow->SetFieldLabel(TEXT("speed_mps"));
-		BackgroundSpeedFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Range);
-		BackgroundSpeedFieldRow->SetEditable(true);
 	}
 	if (SpawnSegmentsFieldRow)
 	{
 		SpawnSegmentsFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		SpawnSegmentsFieldRow->SetFieldLabel(TEXT("segments"));
-		SpawnSegmentsFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
-		SpawnSegmentsFieldRow->SetEditable(true);
-		SpawnSegmentsFieldRow->SetArrayControlsEnabled(true);
 	}
+	ApplyPedestrianFieldItems();
 }
 
 void UScenarioEditorSidebarPedestrianPanel::ApplyTextStyles()
@@ -171,6 +170,36 @@ void UScenarioEditorSidebarPedestrianPanel::ApplyTextStyles()
 	}
 }
 
+void UScenarioEditorSidebarPedestrianPanel::ApplyPedestrianFieldItems()
+{
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	if (!templateSidebarViewModel)
+	{
+		return;
+	}
+
+	if (BackgroundCountFieldRow)
+	{
+		BackgroundCountFieldRow->InitializeFromItemViewModel(
+			templateSidebarViewModel->FindPedestrianFieldItem(TEXT("BackgroundCount")));
+	}
+	if (BackgroundSpeedFieldRow)
+	{
+		BackgroundSpeedFieldRow->InitializeFromItemViewModel(
+			templateSidebarViewModel->FindPedestrianFieldItem(TEXT("BackgroundSpeed")));
+	}
+	if (SpawnSegmentsFieldRow)
+	{
+		SpawnSegmentsFieldRow->InitializeFromItemViewModel(
+			templateSidebarViewModel->FindPedestrianFieldItem(TEXT("SpawnSegments")));
+	}
+	if (EncountersCountFieldRow)
+	{
+		EncountersCountFieldRow->InitializeFromItemViewModel(
+			templateSidebarViewModel->FindPedestrianFieldItem(TEXT("EncountersCount")));
+	}
+}
+
 void UScenarioEditorSidebarPedestrianPanel::RefreshEncounterRows(
 	const TArray<FScenarioTemplatePedestrianEncounter>& encounters)
 {
@@ -183,11 +212,9 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshEncounterRows(
 	EncountersBlockWidget->ClearBodyChildren();
 	EncountersCountFieldRow = AddFieldRow(
 		EncountersBlockWidget.Get(),
-		TEXT("count"),
-		FString::FromInt(encounters.Num()),
-		EScenarioEditorSidebarFieldInputType::Integer,
-		false,
-		true);
+		GetTemplateSidebarViewModel()
+			? GetTemplateSidebarViewModel()->FindPedestrianFieldItem(TEXT("EncountersCount"))
+			: nullptr);
 
 	for (int32 encounterIndex = 0; encounterIndex < encounters.Num(); ++encounterIndex)
 	{
@@ -201,19 +228,16 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshEncounterRows(
 
 UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarPedestrianPanel::AddFieldRow(
 	UScenarioEditorSidebarBlockWidget* parentBlockWidget,
-	const FString& label,
-	const FString& value,
-	const EScenarioEditorSidebarFieldInputType inputType,
-	const bool bEditable,
-	const bool bArrayControlsEnabled) const
+	UScenarioTemplateFieldRowViewModel* fieldItemViewModel) const
 {
-	if (!WidgetTree || !parentBlockWidget)
+	if (!GetWorld() || !parentBlockWidget)
 	{
 		return nullptr;
 	}
 
 	UScenarioEditorSidebarFieldRow* fieldRow =
-		WidgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
+		CreateWidget<UScenarioEditorSidebarFieldRow>(
+			GetWorld(),
 			UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(WidgetClassCatalog));
 	if (!fieldRow)
 	{
@@ -225,11 +249,7 @@ UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarPedestrianPanel::AddFieldR
 	}
 
 	fieldRow->SetTextStyleCatalog(TextStyleCatalog);
-	fieldRow->SetFieldLabel(label);
-	fieldRow->SetValueText(value);
-	fieldRow->SetInputType(inputType);
-	fieldRow->SetEditable(bEditable);
-	fieldRow->SetArrayControlsEnabled(bArrayControlsEnabled);
+	fieldRow->InitializeFromItemViewModel(fieldItemViewModel);
 	parentBlockWidget->AddBodyChild(fieldRow);
 	return fieldRow;
 }
@@ -239,13 +259,14 @@ UScenarioEditorSidebarPedestrianEncounterWidget* UScenarioEditorSidebarPedestria
 	const FScenarioTemplatePedestrianEncounter& encounter,
 	UScenarioEditorSidebarBlockWidget* parentBlockWidget)
 {
-	if (!WidgetTree || !parentBlockWidget)
+	if (!GetWorld() || !parentBlockWidget)
 	{
 		return nullptr;
 	}
 
 	UScenarioEditorSidebarPedestrianEncounterWidget* encounterWidget =
-		WidgetTree->ConstructWidget<UScenarioEditorSidebarPedestrianEncounterWidget>(
+		CreateWidget<UScenarioEditorSidebarPedestrianEncounterWidget>(
+			GetWorld(),
 			UScenarioEditorWidgetClassCatalog::ResolveSidebarPedestrianEncounterWidgetClass(WidgetClassCatalog));
 	if (!encounterWidget)
 	{
@@ -263,79 +284,8 @@ UScenarioEditorSidebarPedestrianEncounterWidget* UScenarioEditorSidebarPedestria
 	return encounterWidget;
 }
 
-UScenarioAuthoringSubsystem* UScenarioEditorSidebarPedestrianPanel::GetAuthoringSubsystem() const
+UScenarioTemplateSidebarViewModel* UScenarioEditorSidebarPedestrianPanel::GetTemplateSidebarViewModel() const
 {
-	UWorld* world = GetWorld();
-	return world ? world->GetSubsystem<UScenarioAuthoringSubsystem>() : nullptr;
-}
-
-void UScenarioEditorSidebarPedestrianPanel::SetNumberRowValue(
-	UScenarioEditorSidebarFieldRow* fieldRow,
-	const FScenarioTemplateNumberValue& value)
-{
-	if (!fieldRow)
-	{
-		return;
-	}
-
-	if (!value.bIsSet)
-	{
-		fieldRow->SetValueText(FString());
-		fieldRow->SetRangeValueText(FString(), FString());
-		fieldRow->SetRangeInputEnabled(false);
-		return;
-	}
-	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
-	{
-		fieldRow->SetValueText(FormatEditableNumber((value.MinValue + value.MaxValue) * 0.5));
-		fieldRow->SetRangeValueText(FormatEditableNumber(value.MinValue), FormatEditableNumber(value.MaxValue));
-		fieldRow->SetRangeInputEnabled(true);
-		return;
-	}
-	fieldRow->SetValueText(FormatEditableNumber(value.FixedValue));
-	fieldRow->SetRangeValueText(FormatEditableNumber(value.FixedValue), FormatEditableNumber(value.FixedValue));
-	fieldRow->SetRangeInputEnabled(false);
-}
-
-void UScenarioEditorSidebarPedestrianPanel::SetIntegerRowValue(
-	UScenarioEditorSidebarFieldRow* fieldRow,
-	const FScenarioTemplateIntegerValue& value)
-{
-	if (!fieldRow)
-	{
-		return;
-	}
-
-	if (!value.bIsSet)
-	{
-		fieldRow->SetValueText(FString());
-		fieldRow->SetRangeValueText(FString(), FString());
-		fieldRow->SetRangeInputEnabled(false);
-		return;
-	}
-	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
-	{
-		fieldRow->SetValueText(FormatEditableInteger(FMath::RoundToInt((value.MinValue + value.MaxValue) * 0.5f)));
-		fieldRow->SetRangeValueText(FormatEditableInteger(value.MinValue), FormatEditableInteger(value.MaxValue));
-		fieldRow->SetRangeInputEnabled(true);
-		return;
-	}
-	fieldRow->SetValueText(FormatEditableInteger(value.FixedValue));
-	fieldRow->SetRangeValueText(FormatEditableInteger(value.FixedValue), FormatEditableInteger(value.FixedValue));
-	fieldRow->SetRangeInputEnabled(false);
-}
-
-FString UScenarioEditorSidebarPedestrianPanel::JoinStringList(const TArray<FString>& values)
-{
-	return FString::Join(values, TEXT(", "));
-}
-
-FString UScenarioEditorSidebarPedestrianPanel::FormatEditableNumber(const double value)
-{
-	return FString::Printf(TEXT("%.2f"), value);
-}
-
-FString UScenarioEditorSidebarPedestrianPanel::FormatEditableInteger(const int32 value)
-{
-	return FString::FromInt(value);
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	return uiSubsystem ? uiSubsystem->GetTemplateSidebarViewModel() : nullptr;
 }

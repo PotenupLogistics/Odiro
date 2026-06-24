@@ -8,6 +8,7 @@
 
 class UButton;
 class UImage;
+class UScenarioEditorListItemViewModel;
 class UTextBlock;
 class UTexture2D;
 
@@ -61,6 +62,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Palette")
 	void SetPaletteItemEntry(const FScenarioPaletteItemEntry& paletteItemEntry);
 
+	// 공통 palette item ViewModel의 표시/command 상태를 tile UI에 반영한다.
+	void InitializeFromItemViewModel(UScenarioEditorListItemViewModel* itemViewModel);
+
+	// Static obstacle catalog entry를 공통 palette entry로 변환한다.
+	static FScenarioPaletteItemEntry MakeStaticObstaclePaletteItemEntry(const FScenarioStaticObstaclePropEntry& propEntry);
+
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Palette")
 	FScenarioPaletteItemEntry GetPaletteItemEntry() const { return PaletteItemEntry; }
 
@@ -77,9 +84,12 @@ protected:
 private:
 	static FText CategoryToText(EScenarioStaticObstaclePropCategory category);
 	static FString MakeDisplayNameFromPropId(FName propId);
-	static FScenarioPaletteItemEntry MakeStaticObstaclePaletteItemEntry(const FScenarioStaticObstaclePropEntry& propEntry);
 
 	void ApplyThumbnailImage();
+
+	// Tile 표시 데이터를 제공하는 palette item ViewModel 참조.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorListItemViewModel> ItemViewModel;
 
 	UPROPERTY(Transient)
 	FScenarioStaticObstaclePropEntry PropEntry;

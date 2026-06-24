@@ -3,35 +3,16 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Types/SlateEnums.h"
+#include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "Shared/ScenarioDocumentTypes.h"
 #include "ScenarioEditorSidebarMainPanel.generated.h"
 
 class UTextBlock;
-class UScenarioAuthoringSubsystem;
 class UScenarioEditorSidebarBlockWidget;
 class UScenarioEditorSidebarFieldRow;
 class UScenarioEditorWidgetClassCatalog;
+class UScenarioTemplateSidebarViewModel;
 class UWidgetTextStyleCatalog;
-
-// Robot anchor target edited by the Main sidebar panel.
-UENUM(BlueprintType)
-enum class EScenarioEditorSidebarRobotAnchorTarget : uint8
-{
-	Start,
-	Goal
-};
-
-// Robot anchor field edited by the Main sidebar panel.
-UENUM(BlueprintType)
-enum class EScenarioEditorSidebarRobotAnchorField : uint8
-{
-	Type,
-	Segment,
-	Along,
-	Offset,
-	Lane,
-	Heading
-};
 
 // Main project scenario sidebar panel for scenario metadata and robot anchors.
 UCLASS(BlueprintType, Blueprintable)
@@ -225,46 +206,14 @@ private:
 	void UnbindFieldRows();
 	// Applies static labels and editability to field rows.
 	void ConfigureFieldRows();
+	// Applies Main panel field row ViewModels to bound row widgets.
+	void ApplyMainFieldItems();
 	// Applies shared typography to diagnostic text and child rows.
 	void ApplyTextStyles();
-	// Applies static labels and editability to one robot anchor detail row group.
-	void ConfigureRobotAnchorRows(
-		UScenarioEditorSidebarFieldRow* typeRow,
-		UScenarioEditorSidebarFieldRow* segmentRow,
-		UScenarioEditorSidebarFieldRow* alongRow,
-		UScenarioEditorSidebarFieldRow* offsetRow,
-		UScenarioEditorSidebarFieldRow* laneRow,
-		UScenarioEditorSidebarFieldRow* headingRow);
-	// Refreshes one robot anchor detail row group from template data.
-	void RefreshRobotAnchorRows(
-		const FScenarioTemplateRobotAnchor& anchor,
-		UScenarioEditorSidebarFieldRow* typeRow,
-		UScenarioEditorSidebarFieldRow* segmentRow,
-		UScenarioEditorSidebarFieldRow* alongRow,
-		UScenarioEditorSidebarFieldRow* offsetRow,
-		UScenarioEditorSidebarFieldRow* laneRow,
-		UScenarioEditorSidebarFieldRow* headingRow) const;
-	// Resolves the authoring subsystem that owns the draft template.
-	UScenarioAuthoringSubsystem* GetAuthoringSubsystem() const;
-	// Commits a scenario_id edit to the draft scenario.
-	void CommitScenarioIdText(const FText& text);
-	// Commits an intent edit to the draft template.
-	void CommitIntentText(const FText& text);
-	// Commits one robot anchor text field edit to the draft template.
-	void CommitRobotAnchorText(
-		EScenarioEditorSidebarRobotAnchorTarget target,
-		EScenarioEditorSidebarRobotAnchorField field,
-		const FText& text);
-	// Commits one robot anchor range field edit to the draft template.
-	void CommitRobotAnchorRange(
-		EScenarioEditorSidebarRobotAnchorTarget target,
-		EScenarioEditorSidebarRobotAnchorField field,
-		const FText& minText,
-		const FText& maxText);
-	// Commits one full robot anchor object through the authoring subsystem.
-	void CommitRobotAnchorValue(
-		EScenarioEditorSidebarRobotAnchorTarget target,
-		const FScenarioTemplateRobotAnchor& anchor);
+	// Resolves the ViewModel that forwards draft template commands.
+	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
+	// Runs a ViewModel command, refreshes the panel, and mirrors command status text.
+	void ExecuteTemplateCommand(TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command);
 	// Handles robot anchor text commit boilerplate shared by start and goal rows.
 	void HandleRobotAnchorTextCommitted(
 		EScenarioEditorSidebarRobotAnchorTarget target,
@@ -280,25 +229,4 @@ private:
 		ETextCommit::Type commitMethod);
 	// Applies diagnostics to the optional diagnostics text block.
 	void SetDiagnosticsText(const FString& text) const;
-	// Applies one authored number value to a field row.
-	static void SetNumberRowValue(UScenarioEditorSidebarFieldRow* fieldRow, const FScenarioTemplateNumberValue& value);
-	// Parses one optional number value from field row text.
-	static bool TryParseOptionalNumber(const FText& text, FScenarioTemplateNumberValue& outValue);
-	// Parses one optional number range from field row text.
-	static bool TryParseOptionalNumberRange(
-		const FText& minText,
-		const FText& maxText,
-		FScenarioTemplateNumberValue& outValue);
-	// Parses one robot anchor type from editor text.
-	static bool TryParseRobotAnchorType(const FText& text, EScenarioTemplateRobotAnchorType& outType);
-	// Parses one robot heading hint from editor text.
-	static bool TryParseRobotHeading(const FText& text, EScenarioTemplateRobotHeading& outHeading);
-	// Returns a stable label for a robot anchor type.
-	static FString RobotAnchorTypeToString(EScenarioTemplateRobotAnchorType type);
-	// Returns a stable label for a robot heading hint.
-	static FString RobotHeadingToString(EScenarioTemplateRobotHeading heading);
-	// Formats one authored numeric value for compact display.
-	static FString FormatNumberValue(const FScenarioTemplateNumberValue& value, const FString& suffix = FString());
-	// Formats a robot anchor in template-space terms.
-	static FString FormatRobotAnchor(const FScenarioTemplateRobotAnchor& anchor);
 };

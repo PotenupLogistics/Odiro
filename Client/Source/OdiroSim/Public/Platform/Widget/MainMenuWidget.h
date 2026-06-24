@@ -1,28 +1,31 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "Platform/Widget/OdiroActivatableScreenWidget.h"
 #include "MainMenuWidget.generated.h"
 
 class UButton;
 class UCheckBox;
 class UComboBoxString;
 class UEditableTextBox;
-class UScenarioEditorLaunchSubsystem;
-class UExperimentResultIterationButton;
+class UExperimentResultIterationSelectorWidget;
+class UExperimentResultEpisodeViewModel;
+class UExperimentResultSuggestionViewModel;
 class UFileListItemWidget;
-class UPlatformAnalysisAiSubsystem;
+class UExperimentConfigViewModel;
+class UExperimentResultViewModel;
+class UPlatformUiSubsystem;
 class UProjectExperimentRunRowWidget;
+class UProjectWorkspaceViewModel;
 class UProjectWorkspaceTabWidget;
-class UProjectSessionSubsystem;
 class UScenarioEditorRootWidget;
-class USimulatorLaunchSubsystem;
 class UScrollBox;
 class UTextBlock;
 class UVerticalBox;
 class UWidget;
 class UWidgetSwitcher;
 class UWrapBox;
+class UUserWidget;
 enum class EProjectRunAiSuggestionSeverity : uint8;
 struct FProjectRunAiSuggestionDashboardItem;
 struct FPlatformAnalysisAiResponse;
@@ -30,7 +33,7 @@ struct FSimulationSetup;
 
 // ScenarioEditorMap에서 UMG Blueprint layout과 platform workflow event handler를 연결하는 widget.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UMainMenuWidget : public UUserWidget
+class ODIROSIM_API UMainMenuWidget : public UOdiroActivatableScreenWidget
 {
 	GENERATED_BODY()
 
@@ -50,11 +53,17 @@ public:
 	// WBP_MainMenu가 포함한 scenario editor root widget을 반환한다.
 	UScenarioEditorRootWidget* GetScenarioEditorRootWidget() const { return ScenarioEditorRootWidget.Get(); }
 
-	// 현재 project 입력에서 run snapshot을 생성하고 선택한다.
-	bool CreateProjectRunForPrototype(
-		FString& outRunId,
-		TArray<FString>& outDiagnostics,
-		USimulatorLaunchSubsystem* simulatorLaunchSubsystem = nullptr);
+	// Project workspace ViewModel 연결 상태를 반환한다.
+	UFUNCTION(BlueprintPure, Category = "MainMenu|ViewModel")
+	UProjectWorkspaceViewModel* GetProjectWorkspaceViewModel() const { return ProjectWorkspaceViewModel; }
+
+	// Experiment config ViewModel 연결 상태를 반환한다.
+	UFUNCTION(BlueprintPure, Category = "MainMenu|ViewModel")
+	UExperimentConfigViewModel* GetExperimentConfigViewModel() const { return ExperimentConfigViewModel; }
+
+	// Experiment result ViewModel 연결 상태를 반환한다.
+	UFUNCTION(BlueprintPure, Category = "MainMenu|ViewModel")
+	UExperimentResultViewModel* GetExperimentResultViewModel() const { return ExperimentResultViewModel; }
 
 protected:
 	UFUNCTION()
@@ -88,7 +97,7 @@ protected:
 	void HandleExperimentResultDetailsRequested(UFileListItemWidget* itemWidget);
 	// Project experiment run row의 분석 요청을 상세 탭 열기 흐름으로 연결한다.
 	void HandleProjectExperimentRunAnalyzeRequested(UProjectExperimentRunRowWidget* rowWidget);
-	void HandleExperimentResultIterationButtonClicked(UExperimentResultIterationButton* buttonWidget);
+	void HandleExperimentResultIterationSelectorClicked(UExperimentResultIterationSelectorWidget* selectorWidget);
 
 	UFUNCTION()
 	void HandleOpenPolicyTextEditorClicked();
@@ -137,9 +146,6 @@ protected:
 
 	UFUNCTION()
 	void HandlePolicySpecSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
-
-	UFUNCTION()
-	UWidget* HandleGenerateComboBoxItem(FString item);
 
 	UFUNCTION()
 	void HandleSendToAiClicked();
@@ -231,14 +237,11 @@ private:
 	// Episode replay card WBP의 named child 상태를 갱신한다.
 	void ConfigureProjectEpisodeReplayCard(
 		UUserWidget* cardWidget,
-		const FString& episodeLabel,
-		const FString& durationLabel,
-		bool bSuccess,
-		bool bHasPreviewImage) const;
+		const UExperimentResultEpisodeViewModel* episodeItem) const;
 	// AI suggestion row WBP의 named child 상태를 갱신한다.
 	void ConfigureProjectAiSuggestionRow(
 		UUserWidget* rowWidget,
-		const FProjectRunAiSuggestionDashboardItem& suggestion) const;
+		const UExperimentResultSuggestionViewModel* suggestionItem) const;
 	void ApplyNewSetupDefaults(const FString& setupPath);
 	void SetExperimentConfigDetailVisible(bool bVisible);
 	void SetExperimentResultDetailVisible(bool bVisible);
@@ -263,6 +266,8 @@ private:
 	TSubclassOf<UUserWidget> ResolveProjectEpisodeReplayCardWidgetClass() const;
 	// AI suggestion row WBP class를 반환한다.
 	TSubclassOf<UUserWidget> ResolveProjectAiSuggestionRowWidgetClass() const;
+	// Experiment result iteration selector WBP class를 반환한다.
+	TSubclassOf<UExperimentResultIterationSelectorWidget> ResolveExperimentResultIterationSelectorWidgetClass() const;
 	void HandleRunInfoChanged(const struct FSimulatorRunInfo& runInfo);
 	void HandleAnalysisCompleted(const FPlatformAnalysisAiResponse& response);
 	void UpdateStatusText(const FString& extraMessage = FString());
@@ -290,16 +295,25 @@ private:
 	void SetSelectedProjectRunId(const FString& runId);
 	// Active project session이 있어 workspace가 project mode로 동작할 수 있는지 반환한다.
 	bool IsProjectOpened() const;
-	UProjectSessionSubsystem* GetProjectSessionSubsystem() const;
-	USimulatorLaunchSubsystem* GetSimulatorLaunchSubsystem() const;
-	UScenarioEditorLaunchSubsystem* GetScenarioEditorLaunchSubsystem() const;
-	UPlatformAnalysisAiSubsystem* GetPlatformAnalysisAiSubsystem() const;
+	UPlatformUiSubsystem* GetPlatformUiSubsystem() const;
 	void RequestEditorWidgetInputMode();
 	void ReleaseEditorWidgetInputMode();
 	UWidget* ResolveInputModeFocusWidget() const;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidgetSwitcher> MainContentSwitcher;
+
+	// PlatformUiSubsystem이 소유하는 project workspace ViewModel 참조.
+	UPROPERTY(Transient)
+	TObjectPtr<UProjectWorkspaceViewModel> ProjectWorkspaceViewModel;
+
+	// PlatformUiSubsystem이 소유하는 experiment config ViewModel 참조.
+	UPROPERTY(Transient)
+	TObjectPtr<UExperimentConfigViewModel> ExperimentConfigViewModel;
+
+	// PlatformUiSubsystem이 소유하는 experiment result ViewModel 참조.
+	UPROPERTY(Transient)
+	TObjectPtr<UExperimentResultViewModel> ExperimentResultViewModel;
 
 	// ScenarioEditorMap에서 WBP_MainMenu 내부에 포함되는 editor root UI.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -623,6 +637,14 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|ProjectResult")
 	TSubclassOf<UUserWidget> ProjectAiSuggestionRowWidgetClass;
 
+	// Project run result episode selector WBP class.
+	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|ProjectResult")
+	TSubclassOf<UExperimentResultIterationSelectorWidget> ExperimentResultIterationSelectorWidgetClass;
+
+	// Project run result episode selector slot padding.
+	UPROPERTY(EditDefaultsOnly, Category = "MainMenu|ProjectResult")
+	FMargin ExperimentResultIterationSelectorPadding = FMargin(0.0f, 0.0f, 8.0f, 0.0f);
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UFileListItemWidget>> ScenarioListItems;
 
@@ -640,7 +662,7 @@ private:
 	TArray<TObjectPtr<UProjectExperimentRunRowWidget>> ProjectExperimentRunRows;
 
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<UExperimentResultIterationButton>> ExperimentResultIterationButtons;
+	TArray<TObjectPtr<UExperimentResultIterationSelectorWidget>> ExperimentResultIterationSelectors;
 
 	// Project result detail의 동적 episode card 목록.
 	UPROPERTY(Transient)

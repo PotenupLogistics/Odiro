@@ -8,6 +8,8 @@
 #include "ScenarioEditorSidebarCorridorSegmentWidget.generated.h"
 
 class UScenarioEditorSidebarBlockWidget;
+class UScenarioTemplateFieldRowViewModel;
+class UScenarioTemplateSidebarViewModel;
 class UWidgetTextStyleCatalog;
 
 // Broadcasts a committed Corridor segment text edit with segment index context.
@@ -159,20 +161,24 @@ private:
 	UPROPERTY(Transient)
 	TArray<FString> SurfaceOptions;
 
+	// Field row ViewModels generated from the cached segment state.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UScenarioTemplateFieldRowViewModel>> CachedFieldItems;
+
 	// Binds child field row delegates owned by this segment widget.
 	void BindFieldRows();
 	// Releases child field row delegates owned by this segment widget.
 	void UnbindFieldRows();
 	// Applies static labels, editability, and block metadata.
 	void ConfigureFieldRows();
+	// Regenerates field row ViewModels from the cached segment state.
+	void RefreshFieldItemsFromViewModel();
 	// Applies cached segment values to bound field rows.
 	void ApplyCachedSegmentToRows();
 	// Applies shared typography to this segment block and rows.
 	void ApplyTextStyles();
-	// Returns a stable label for a corridor segment type.
-	static FString SegmentTypeToString(EScenarioTemplateSegmentType type);
-	// Formats one authored string value for compact editing.
-	static FString FormatEditableStringValue(const FScenarioTemplateStringValue& value);
-	// Formats one authored numeric value for editable text controls.
-	static FString FormatEditableNumber(double value);
+	// Resolves the Scenario Template sidebar ViewModel that creates item ViewModels.
+	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
+	// Finds one cached field row ViewModel by id.
+	UScenarioTemplateFieldRowViewModel* FindCachedFieldItem(const FString& fieldId) const;
 };

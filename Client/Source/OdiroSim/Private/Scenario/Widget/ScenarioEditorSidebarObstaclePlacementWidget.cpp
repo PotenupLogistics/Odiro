@@ -1,5 +1,9 @@
 #include "Scenario/Widget/ScenarioEditorSidebarObstaclePlacementWidget.h"
 
+#include "Engine/World.h"
+#include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
+#include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 
 void UScenarioEditorSidebarObstaclePlacementWidget::NativeConstruct()
@@ -19,6 +23,10 @@ void UScenarioEditorSidebarObstaclePlacementWidget::NativeDestruct()
 void UScenarioEditorSidebarObstaclePlacementWidget::SetPlacementIndex(const int32 inPlacementIndex)
 {
 	PlacementIndex = inPlacementIndex;
+	if (bHasCachedPlacement)
+	{
+		RefreshFieldItemsFromViewModel();
+	}
 	ConfigureFieldRows();
 }
 
@@ -34,6 +42,7 @@ void UScenarioEditorSidebarObstaclePlacementWidget::RefreshFromPlacement(
 {
 	CachedPlacement = placement;
 	bHasCachedPlacement = true;
+	RefreshFieldItemsFromViewModel();
 	ConfigureFieldRows();
 	ApplyCachedPlacementToRows();
 }
@@ -429,13 +438,6 @@ void UScenarioEditorSidebarObstaclePlacementWidget::UnbindFieldRows()
 
 void UScenarioEditorSidebarObstaclePlacementWidget::ConfigureFieldRows()
 {
-	const EScenarioTemplateObstaclePlacementKind kind = bHasCachedPlacement
-		? CachedPlacement.Kind
-		: EScenarioTemplateObstaclePlacementKind::Fixed;
-	const bool bFixedPlacement = kind == EScenarioTemplateObstaclePlacementKind::Fixed;
-	const bool bPatternPlacement = kind == EScenarioTemplateObstaclePlacementKind::Pattern;
-	const bool bScatterPlacement = kind == EScenarioTemplateObstaclePlacementKind::Scatter;
-
 	if (PlacementBlockWidget)
 	{
 		PlacementBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
@@ -449,52 +451,31 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ConfigureFieldRows()
 		PlacementBlockWidget->SetShowNormalOutline(false);
 	}
 
-	auto configureRow = [this](
-		UScenarioEditorSidebarFieldRow* fieldRow,
-		const FString& label,
-		const EScenarioEditorSidebarFieldInputType inputType,
-		const bool bVisible,
-		const bool bArrayControlsEnabled = false)
-	{
-		if (!fieldRow)
-		{
-			return;
-		}
-
-		fieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		fieldRow->SetFieldLabel(label);
-		fieldRow->SetInputType(inputType);
-		fieldRow->SetEditable(bVisible);
-		fieldRow->SetArrayControlsEnabled(bArrayControlsEnabled);
-		fieldRow->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	};
-
-	configureRow(PlacementIdFieldRow.Get(), TEXT("id"), EScenarioEditorSidebarFieldInputType::Text, true, true);
-	configureRow(KindFieldRow.Get(), TEXT("kind"), EScenarioEditorSidebarFieldInputType::EnumText, true);
-	configureRow(PropFieldRow.Get(), TEXT("prop"), EScenarioEditorSidebarFieldInputType::Text, bFixedPlacement || bPatternPlacement);
-	configureRow(PatternFieldRow.Get(), TEXT("pattern"), EScenarioEditorSidebarFieldInputType::Text, bPatternPlacement);
-	configureRow(SegmentFieldRow.Get(), TEXT("at.segment"), EScenarioEditorSidebarFieldInputType::Text, bFixedPlacement || bPatternPlacement);
-	configureRow(LaneFieldRow.Get(), TEXT("at.lane"), EScenarioEditorSidebarFieldInputType::Text, bFixedPlacement || bPatternPlacement);
-	configureRow(
+	for (UScenarioEditorSidebarFieldRow* fieldRow : {
+		PlacementIdFieldRow.Get(),
+		KindFieldRow.Get(),
+		PropFieldRow.Get(),
+		PatternFieldRow.Get(),
+		SegmentFieldRow.Get(),
+		LaneFieldRow.Get(),
 		AlongFieldRow.Get(),
-		TEXT("at.along_m"),
-		EScenarioEditorSidebarFieldInputType::Range,
-		bFixedPlacement || bPatternPlacement);
-	configureRow(
 		OffsetFieldRow.Get(),
-		TEXT("at.offset_m"),
-		EScenarioEditorSidebarFieldInputType::Range,
-		bFixedPlacement || bPatternPlacement);
-	configureRow(ZoneSegmentsFieldRow.Get(), TEXT("zone.segments"), EScenarioEditorSidebarFieldInputType::Text, bScatterPlacement);
-	configureRow(ZoneLanesFieldRow.Get(), TEXT("zone.lanes"), EScenarioEditorSidebarFieldInputType::Text, bScatterPlacement);
-	configureRow(PaletteCategoriesFieldRow.Get(), TEXT("palette.categories"), EScenarioEditorSidebarFieldInputType::Text, bScatterPlacement);
-	configureRow(PaletteClassesFieldRow.Get(), TEXT("palette.classes"), EScenarioEditorSidebarFieldInputType::Text, bScatterPlacement);
-	configureRow(CountFieldRow.Get(), TEXT("count"), EScenarioEditorSidebarFieldInputType::Range, bPatternPlacement || bScatterPlacement);
-	configureRow(SpacingFieldRow.Get(), TEXT("spacing_m"), EScenarioEditorSidebarFieldInputType::Range, bPatternPlacement);
-	configureRow(GapWidthFieldRow.Get(), TEXT("gap_width_m"), EScenarioEditorSidebarFieldInputType::Range, bPatternPlacement);
-	configureRow(DensityFieldRow.Get(), TEXT("density_per_10m"), EScenarioEditorSidebarFieldInputType::Range, bScatterPlacement);
-	configureRow(YawFieldRow.Get(), TEXT("yaw_deg"), EScenarioEditorSidebarFieldInputType::Range, true);
-	configureRow(AllowBlockingFieldRow.Get(), TEXT("allow_blocking"), EScenarioEditorSidebarFieldInputType::EnumText, true);
+		ZoneSegmentsFieldRow.Get(),
+		ZoneLanesFieldRow.Get(),
+		PaletteCategoriesFieldRow.Get(),
+		PaletteClassesFieldRow.Get(),
+		CountFieldRow.Get(),
+		SpacingFieldRow.Get(),
+		GapWidthFieldRow.Get(),
+		DensityFieldRow.Get(),
+		YawFieldRow.Get(),
+		AllowBlockingFieldRow.Get() })
+	{
+		if (fieldRow)
+		{
+			fieldRow->SetTextStyleCatalog(TextStyleCatalog);
+		}
+	}
 }
 
 void UScenarioEditorSidebarObstaclePlacementWidget::ApplyCachedPlacementToRows()
@@ -502,6 +483,10 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ApplyCachedPlacementToRows()
 	if (!bHasCachedPlacement)
 	{
 		return;
+	}
+	if (CachedFieldItems.IsEmpty())
+	{
+		RefreshFieldItemsFromViewModel();
 	}
 
 	if (PlacementBlockWidget)
@@ -515,54 +500,96 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ApplyCachedPlacementToRows()
 	}
 	if (PlacementIdFieldRow)
 	{
-		PlacementIdFieldRow->SetValueText(CachedPlacement.PlacementId);
+		PlacementIdFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementId")));
 	}
 	if (KindFieldRow)
 	{
-		KindFieldRow->SetValueText(PlacementKindToString(CachedPlacement.Kind));
+		KindFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementKind")));
 	}
 	if (PropFieldRow)
 	{
-		PropFieldRow->SetValueText(CachedPlacement.PropId);
+		PropFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementProp")));
 	}
 	if (PatternFieldRow)
 	{
-		PatternFieldRow->SetValueText(CachedPlacement.PatternId);
+		PatternFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementPattern")));
 	}
 	if (SegmentFieldRow)
 	{
-		SegmentFieldRow->SetValueText(CachedPlacement.At.SegmentId);
+		SegmentFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementSegment")));
 	}
 	if (LaneFieldRow)
 	{
-		LaneFieldRow->SetValueText(CachedPlacement.At.LaneId);
+		LaneFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementLane")));
 	}
-	SetNumberRowValue(AlongFieldRow.Get(), CachedPlacement.At.AlongMeters);
-	SetNumberRowValue(OffsetFieldRow.Get(), CachedPlacement.At.OffsetMeters);
+	if (AlongFieldRow)
+	{
+		AlongFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementAlong")));
+	}
+	if (OffsetFieldRow)
+	{
+		OffsetFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementOffset")));
+	}
 	if (ZoneSegmentsFieldRow)
 	{
-		ZoneSegmentsFieldRow->SetValueText(JoinStringList(CachedPlacement.Zone.SegmentIds));
+		ZoneSegmentsFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementZoneSegments")));
 	}
 	if (ZoneLanesFieldRow)
 	{
-		ZoneLanesFieldRow->SetValueText(JoinStringList(CachedPlacement.Zone.LaneIds));
+		ZoneLanesFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementZoneLanes")));
 	}
 	if (PaletteCategoriesFieldRow)
 	{
-		PaletteCategoriesFieldRow->SetValueText(JoinStringList(CachedPlacement.Palette.CategoryIds));
+		PaletteCategoriesFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementPaletteCategories")));
 	}
 	if (PaletteClassesFieldRow)
 	{
-		PaletteClassesFieldRow->SetValueText(JoinStringList(CachedPlacement.Palette.ClassIds));
+		PaletteClassesFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementPaletteClasses")));
 	}
-	SetIntegerRowValue(CountFieldRow.Get(), CachedPlacement.Count);
-	SetNumberRowValue(SpacingFieldRow.Get(), CachedPlacement.SpacingMeters);
-	SetNumberRowValue(GapWidthFieldRow.Get(), CachedPlacement.GapWidthMeters);
-	SetNumberRowValue(DensityFieldRow.Get(), CachedPlacement.DensityPer10Meters);
-	SetNumberRowValue(YawFieldRow.Get(), CachedPlacement.YawDegrees);
+	if (CountFieldRow)
+	{
+		CountFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementCount")));
+	}
+	if (SpacingFieldRow)
+	{
+		SpacingFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementSpacing")));
+	}
+	if (GapWidthFieldRow)
+	{
+		GapWidthFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementGapWidth")));
+	}
+	if (DensityFieldRow)
+	{
+		DensityFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementDensity")));
+	}
+	if (YawFieldRow)
+	{
+		YawFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementYaw")));
+	}
 	if (AllowBlockingFieldRow)
 	{
-		AllowBlockingFieldRow->SetValueText(CachedPlacement.bAllowBlocking ? TEXT("true") : TEXT("false"));
+		AllowBlockingFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementAllowBlocking")));
+	}
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::RefreshFieldItemsFromViewModel()
+{
+	CachedFieldItems.Reset();
+	if (!bHasCachedPlacement)
+	{
+		return;
+	}
+
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	if (!templateSidebarViewModel)
+	{
+		return;
+	}
+
+	for (UScenarioTemplateFieldRowViewModel* fieldItem :
+		templateSidebarViewModel->CreateObstaclePlacementFieldItems(PlacementIndex, CachedPlacement))
+	{
+		CachedFieldItems.Add(fieldItem);
 	}
 }
 
@@ -616,89 +643,21 @@ void UScenarioEditorSidebarObstaclePlacementWidget::BroadcastRange(
 	OnFieldRangeCommitted.Broadcast(PlacementIndex, field, minText, maxText, commitMethod);
 }
 
-FString UScenarioEditorSidebarObstaclePlacementWidget::PlacementKindToString(
-	const EScenarioTemplateObstaclePlacementKind kind)
+UScenarioTemplateSidebarViewModel* UScenarioEditorSidebarObstaclePlacementWidget::GetTemplateSidebarViewModel() const
 {
-	switch (kind)
-	{
-	case EScenarioTemplateObstaclePlacementKind::Fixed:
-		return TEXT("fixed");
-	case EScenarioTemplateObstaclePlacementKind::Pattern:
-		return TEXT("pattern");
-	case EScenarioTemplateObstaclePlacementKind::Scatter:
-		return TEXT("scatter");
-	default:
-		return TEXT("unknown");
-	}
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	return uiSubsystem ? uiSubsystem->GetTemplateSidebarViewModel() : nullptr;
 }
 
-FString UScenarioEditorSidebarObstaclePlacementWidget::JoinStringList(const TArray<FString>& values)
+UScenarioTemplateFieldRowViewModel* UScenarioEditorSidebarObstaclePlacementWidget::FindCachedFieldItem(
+	const FString& fieldId) const
 {
-	return FString::Join(values, TEXT(", "));
-}
-
-void UScenarioEditorSidebarObstaclePlacementWidget::SetNumberRowValue(
-	UScenarioEditorSidebarFieldRow* fieldRow,
-	const FScenarioTemplateNumberValue& value)
-{
-	if (!fieldRow)
+	for (UScenarioTemplateFieldRowViewModel* fieldItem : CachedFieldItems)
 	{
-		return;
+		if (fieldItem && fieldItem->GetItemId() == fieldId)
+		{
+			return fieldItem;
+		}
 	}
-
-	if (!value.bIsSet)
-	{
-		fieldRow->SetValueText(FString());
-		fieldRow->SetRangeValueText(FString(), FString());
-		fieldRow->SetRangeInputEnabled(false);
-		return;
-	}
-	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
-	{
-		fieldRow->SetValueText(FormatEditableNumber((value.MinValue + value.MaxValue) * 0.5));
-		fieldRow->SetRangeValueText(FormatEditableNumber(value.MinValue), FormatEditableNumber(value.MaxValue));
-		fieldRow->SetRangeInputEnabled(true);
-		return;
-	}
-	fieldRow->SetValueText(FormatEditableNumber(value.FixedValue));
-	fieldRow->SetRangeValueText(FormatEditableNumber(value.FixedValue), FormatEditableNumber(value.FixedValue));
-	fieldRow->SetRangeInputEnabled(false);
-}
-
-void UScenarioEditorSidebarObstaclePlacementWidget::SetIntegerRowValue(
-	UScenarioEditorSidebarFieldRow* fieldRow,
-	const FScenarioTemplateIntegerValue& value)
-{
-	if (!fieldRow)
-	{
-		return;
-	}
-
-	if (!value.bIsSet)
-	{
-		fieldRow->SetValueText(FString());
-		fieldRow->SetRangeValueText(FString(), FString());
-		fieldRow->SetRangeInputEnabled(false);
-		return;
-	}
-	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
-	{
-		fieldRow->SetValueText(FormatEditableInteger(FMath::RoundToInt((value.MinValue + value.MaxValue) * 0.5f)));
-		fieldRow->SetRangeValueText(FormatEditableInteger(value.MinValue), FormatEditableInteger(value.MaxValue));
-		fieldRow->SetRangeInputEnabled(true);
-		return;
-	}
-	fieldRow->SetValueText(FormatEditableInteger(value.FixedValue));
-	fieldRow->SetRangeValueText(FormatEditableInteger(value.FixedValue), FormatEditableInteger(value.FixedValue));
-	fieldRow->SetRangeInputEnabled(false);
-}
-
-FString UScenarioEditorSidebarObstaclePlacementWidget::FormatEditableNumber(const double value)
-{
-	return FString::Printf(TEXT("%.2f"), value);
-}
-
-FString UScenarioEditorSidebarObstaclePlacementWidget::FormatEditableInteger(const int32 value)
-{
-	return FString::FromInt(value);
+	return nullptr;
 }

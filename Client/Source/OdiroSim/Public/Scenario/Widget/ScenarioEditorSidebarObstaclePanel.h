@@ -9,9 +9,10 @@
 #include "ScenarioEditorSidebarObstaclePanel.generated.h"
 
 class UTextBlock;
-class UScenarioAuthoringSubsystem;
 class UScenarioEditorSidebarBlockWidget;
 class UScenarioEditorWidgetClassCatalog;
+class UScenarioTemplateFieldRowViewModel;
+class UScenarioTemplateSidebarViewModel;
 class UWidgetTextStyleCatalog;
 
 // Obstacle Scenario Template sidebar panel for minimum clearance and placement rules.
@@ -132,86 +133,23 @@ private:
 	void ConfigureFieldRows();
 	// Applies shared typography to diagnostic text and child rows.
 	void ApplyTextStyles();
+	// Applies current Obstacle field row ViewModels to bound row widgets.
+	void ApplyObstacleFieldItems();
 	// Rebuilds editable placement widgets for obstacle placement rules.
 	void RefreshPlacementRows(const TArray<FScenarioTemplateObstaclePlacement>& placements);
 	// Adds one field row to a dynamic block body.
 	UScenarioEditorSidebarFieldRow* AddFieldRow(
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget,
-		const FString& label,
-		const FString& value,
-		EScenarioEditorSidebarFieldInputType inputType,
-		bool bEditable,
-		bool bArrayControlsEnabled = false) const;
+		UScenarioTemplateFieldRowViewModel* fieldItemViewModel) const;
 	// Adds an editable placement widget to the placements block.
 	UScenarioEditorSidebarObstaclePlacementWidget* AddPlacementWidget(
 		int32 placementIndex,
 		const FScenarioTemplateObstaclePlacement& placement,
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget);
-	// Resolves the authoring subsystem that owns the draft template.
-	UScenarioAuthoringSubsystem* GetAuthoringSubsystem() const;
-	// Returns the current draft placement list by value for mutation.
-	TArray<FScenarioTemplateObstaclePlacement> GetDraftPlacements() const;
-	// Commits a fixed min_clear_width_m edit to the draft template.
-	void CommitMinClearWidthText(const FText& text);
-	// Commits a min/max min_clear_width_m edit to the draft template.
-	void CommitMinClearWidthRangeText(const FText& minText, const FText& maxText);
-	// Commits a validated min_clear_width_m value through the authoring subsystem.
-	void CommitMinClearWidthValue(const FScenarioTemplateNumberValue& widthMeters);
-	// Commits one placement text field edit to the draft template.
-	void CommitPlacementText(
-		int32 placementIndex,
-		EScenarioEditorSidebarObstaclePlacementField field,
-		const FText& text);
-	// Commits one placement range field edit to the draft template.
-	void CommitPlacementRange(
-		int32 placementIndex,
-		EScenarioEditorSidebarObstaclePlacementField field,
-		const FText& minText,
-		const FText& maxText);
-	// Adds one placement after the provided placement index.
-	void AddPlacementAfter(int32 placementIndex);
-	// Removes one placement at the provided placement index.
-	void RemovePlacementAt(int32 placementIndex);
-	// Creates a default placement that can pass the current template validation.
-	FScenarioTemplateObstaclePlacement MakeDefaultPlacement(
-		const TArray<FScenarioTemplateObstaclePlacement>& existingPlacements,
-		int32 neighborIndex) const;
-	// Commits a full placement list through the authoring subsystem.
-	void CommitPlacements(const TArray<FScenarioTemplateObstaclePlacement>& placements);
+	// Resolves the ViewModel that forwards draft template commands.
+	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
+	// Runs a ViewModel command, refreshes the panel, and mirrors command status text.
+	void ExecuteTemplateCommand(TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command);
 	// Applies diagnostics to the optional diagnostics text block.
 	void SetDiagnosticsText(const FString& text) const;
-	// Applies one number value to the selected placement field.
-	static bool SetPlacementNumberField(
-		FScenarioTemplateObstaclePlacement& placement,
-		EScenarioEditorSidebarObstaclePlacementField field,
-		const FScenarioTemplateNumberValue& value);
-	// Applies one integer value to the selected placement field.
-	static bool SetPlacementIntegerField(
-		FScenarioTemplateObstaclePlacement& placement,
-		EScenarioEditorSidebarObstaclePlacementField field,
-		const FScenarioTemplateIntegerValue& value);
-	// Parses a placement kind from editor text.
-	static bool TryParsePlacementKind(const FText& text, EScenarioTemplateObstaclePlacementKind& outKind);
-	// Parses one meter/degree scalar from field row text.
-	static bool TryParseScalar(const FText& text, double& outValue);
-	// Parses one optional number value from field row text.
-	static bool TryParseOptionalNumber(const FText& text, FScenarioTemplateNumberValue& outValue);
-	// Parses one optional number range from field row text.
-	static bool TryParseOptionalNumberRange(
-		const FText& minText,
-		const FText& maxText,
-		FScenarioTemplateNumberValue& outValue);
-	// Parses one optional integer value from field row text.
-	static bool TryParseOptionalInteger(const FText& text, FScenarioTemplateIntegerValue& outValue);
-	// Parses one optional integer range from field row text.
-	static bool TryParseOptionalIntegerRange(
-		const FText& minText,
-		const FText& maxText,
-		FScenarioTemplateIntegerValue& outValue);
-	// Parses one boolean value from field row text.
-	static bool TryParseBool(const FText& text, bool& outValue);
-	// Parses a comma-separated string list, trimming empty elements.
-	static TArray<FString> ParseStringList(const FString& text);
-	// Formats one authored numeric value for editable text controls.
-	static FString FormatEditableNumber(double value);
 };

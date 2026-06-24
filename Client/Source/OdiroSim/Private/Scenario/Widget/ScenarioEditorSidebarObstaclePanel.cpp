@@ -1,35 +1,15 @@
 #include "Scenario/Widget/ScenarioEditorSidebarObstaclePanel.h"
 
-#include "Blueprint/WidgetTree.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
 #include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
-#include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
+#include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
+#include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
-#include "Shared/ScenarioCoreTypes.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
-
-namespace
-{
-	FString JoinObstaclePanelDiagnostics(const TArray<FString>& diagnostics)
-	{
-		return diagnostics.IsEmpty()
-			? FString(TEXT("Unknown Obstacle edit failure."))
-			: FString::Join(diagnostics, TEXT("\n"));
-	}
-
-	FScenarioTemplateNumberValue MakeUnsetNumberValue()
-	{
-		return FScenarioTemplateNumberValue();
-	}
-
-	FScenarioTemplateIntegerValue MakeUnsetIntegerValue()
-	{
-		return FScenarioTemplateIntegerValue();
-	}
-}
 
 void UScenarioEditorSidebarObstaclePanel::NativeConstruct()
 {
@@ -66,14 +46,16 @@ void UScenarioEditorSidebarObstaclePanel::SetWidgetClassCatalog(
 
 void UScenarioEditorSidebarObstaclePanel::RefreshFromDraft()
 {
-	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
-	if (!authoringSubsystem)
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	FScenarioDocument scenarioTemplate;
+	FString failureReason;
+	if (!templateSidebarViewModel || !templateSidebarViewModel->TryGetDraftScenario(scenarioTemplate, failureReason))
 	{
-		SetDiagnosticsText(TEXT("ScenarioAuthoringSubsystem unavailable."));
+		SetDiagnosticsText(failureReason.IsEmpty() ? TEXT("ScenarioTemplateSidebarViewModel unavailable.") : failureReason);
 		return;
 	}
 
-	RefreshFromTemplate(authoringSubsystem->GetDraftScenario());
+	RefreshFromTemplate(scenarioTemplate);
 }
 
 void UScenarioEditorSidebarObstaclePanel::RefreshFromTemplate(
@@ -81,31 +63,16 @@ void UScenarioEditorSidebarObstaclePanel::RefreshFromTemplate(
 {
 	ConfigureFieldRows();
 
-	const FScenarioTemplateObstacleRules& obstacles = scenarioTemplate.Obstacles;
-	if (MinClearWidthFieldRow)
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	if (!templateSidebarViewModel)
 	{
-		const FScenarioTemplateNumberValue& minClearWidth = obstacles.MinClearWidthMeters;
-		const double fixedDisplayValue = minClearWidth.Mode == EScenarioTemplateNumberValueMode::Range
-			? (minClearWidth.MinValue + minClearWidth.MaxValue) * 0.5
-			: minClearWidth.FixedValue;
-		const double minDisplayValue = minClearWidth.Mode == EScenarioTemplateNumberValueMode::Range
-			? minClearWidth.MinValue
-			: fixedDisplayValue;
-		const double maxDisplayValue = minClearWidth.Mode == EScenarioTemplateNumberValueMode::Range
-			? minClearWidth.MaxValue
-			: fixedDisplayValue;
-
-		MinClearWidthFieldRow->SetValueText(
-			minClearWidth.bIsSet ? FormatEditableNumber(fixedDisplayValue) : FString());
-		MinClearWidthFieldRow->SetRangeValueText(
-			minClearWidth.bIsSet ? FormatEditableNumber(minDisplayValue) : FString(),
-			minClearWidth.bIsSet ? FormatEditableNumber(maxDisplayValue) : FString());
-		MinClearWidthFieldRow->SetRangeInputEnabled(
-			minClearWidth.bIsSet
-			&& minClearWidth.Mode == EScenarioTemplateNumberValueMode::Range);
+		SetDiagnosticsText(TEXT("ScenarioTemplateSidebarViewModel unavailable."));
+		return;
 	}
 
-	RefreshPlacementRows(obstacles.Placements);
+	templateSidebarViewModel->RefreshObstacleFieldItemsFromTemplate(scenarioTemplate);
+	ApplyObstacleFieldItems();
+	RefreshPlacementRows(scenarioTemplate.Obstacles.Placements);
 	SetDiagnosticsText(TEXT(""));
 }
 
@@ -119,7 +86,10 @@ void UScenarioEditorSidebarObstaclePanel::HandleMinClearWidthCommitted(
 		return;
 	}
 
-	CommitMinClearWidthText(text);
+	ExecuteTemplateCommand([&text](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->CommitObstacleMinClearWidthText(text, statusText);
+	});
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandleMinClearWidthRangeCommitted(
@@ -133,17 +103,26 @@ void UScenarioEditorSidebarObstaclePanel::HandleMinClearWidthRangeCommitted(
 		return;
 	}
 
-	CommitMinClearWidthRangeText(minText, maxText);
+	ExecuteTemplateCommand([&minText, &maxText](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->CommitObstacleMinClearWidthRangeText(minText, maxText, statusText);
+	});
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountAddRequested()
 {
-	AddPlacementAfter(GetDraftPlacements().Num() - 1);
+	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->AddObstaclePlacementAfter(INDEX_NONE, statusText);
+	});
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountRemoveRequested()
 {
-	RemovePlacementAt(GetDraftPlacements().Num() - 1);
+	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->RemoveObstaclePlacementAt(INDEX_NONE, statusText);
+	});
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandlePlacementFieldTextCommitted(
@@ -158,7 +137,11 @@ void UScenarioEditorSidebarObstaclePanel::HandlePlacementFieldTextCommitted(
 		return;
 	}
 
-	CommitPlacementText(placementIndex, field, text);
+	ExecuteTemplateCommand(
+		[placementIndex, field, &text](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+		{
+			return viewModel->CommitObstaclePlacementText(placementIndex, field, text, statusText);
+		});
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandlePlacementFieldRangeCommitted(
@@ -174,17 +157,34 @@ void UScenarioEditorSidebarObstaclePanel::HandlePlacementFieldRangeCommitted(
 		return;
 	}
 
-	CommitPlacementRange(placementIndex, field, minText, maxText);
+	ExecuteTemplateCommand(
+		[placementIndex, field, &minText, &maxText](
+			UScenarioTemplateSidebarViewModel* viewModel,
+			FString& statusText)
+		{
+			return viewModel->CommitObstaclePlacementRange(
+				placementIndex,
+				field,
+				minText,
+				maxText,
+				statusText);
+		});
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandlePlacementAddRequested(const int32 placementIndex)
 {
-	AddPlacementAfter(placementIndex);
+	ExecuteTemplateCommand([placementIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->AddObstaclePlacementAfter(placementIndex, statusText);
+	});
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandlePlacementRemoveRequested(const int32 placementIndex)
 {
-	RemovePlacementAt(placementIndex);
+	ExecuteTemplateCommand([placementIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->RemoveObstaclePlacementAt(placementIndex, statusText);
+	});
 }
 
 void UScenarioEditorSidebarObstaclePanel::BindFieldRows()
@@ -281,10 +281,8 @@ void UScenarioEditorSidebarObstaclePanel::ConfigureFieldRows()
 	if (MinClearWidthFieldRow)
 	{
 		MinClearWidthFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		MinClearWidthFieldRow->SetFieldLabel(TEXT("value"));
-		MinClearWidthFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Range);
-		MinClearWidthFieldRow->SetEditable(true);
 	}
+	ApplyObstacleFieldItems();
 }
 
 void UScenarioEditorSidebarObstaclePanel::ApplyTextStyles()
@@ -323,6 +321,26 @@ void UScenarioEditorSidebarObstaclePanel::ApplyTextStyles()
 	}
 }
 
+void UScenarioEditorSidebarObstaclePanel::ApplyObstacleFieldItems()
+{
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	if (!templateSidebarViewModel)
+	{
+		return;
+	}
+
+	if (MinClearWidthFieldRow)
+	{
+		MinClearWidthFieldRow->InitializeFromItemViewModel(
+			templateSidebarViewModel->FindObstacleFieldItem(TEXT("MinClearWidth")));
+	}
+	if (PlacementsCountFieldRow)
+	{
+		PlacementsCountFieldRow->InitializeFromItemViewModel(
+			templateSidebarViewModel->FindObstacleFieldItem(TEXT("PlacementsCount")));
+	}
+}
+
 void UScenarioEditorSidebarObstaclePanel::RefreshPlacementRows(
 	const TArray<FScenarioTemplateObstaclePlacement>& placements)
 {
@@ -335,11 +353,9 @@ void UScenarioEditorSidebarObstaclePanel::RefreshPlacementRows(
 	PlacementsBlockWidget->ClearBodyChildren();
 	PlacementsCountFieldRow = AddFieldRow(
 		PlacementsBlockWidget.Get(),
-		TEXT("count"),
-		FString::FromInt(placements.Num()),
-		EScenarioEditorSidebarFieldInputType::Integer,
-		false,
-		true);
+		GetTemplateSidebarViewModel()
+			? GetTemplateSidebarViewModel()->FindObstacleFieldItem(TEXT("PlacementsCount"))
+			: nullptr);
 	if (PlacementsCountFieldRow)
 	{
 		PlacementsCountFieldRow->OnAddItemRequested.RemoveDynamic(
@@ -368,19 +384,16 @@ void UScenarioEditorSidebarObstaclePanel::RefreshPlacementRows(
 
 UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarObstaclePanel::AddFieldRow(
 	UScenarioEditorSidebarBlockWidget* parentBlockWidget,
-	const FString& label,
-	const FString& value,
-	const EScenarioEditorSidebarFieldInputType inputType,
-	const bool bEditable,
-	const bool bArrayControlsEnabled) const
+	UScenarioTemplateFieldRowViewModel* fieldItemViewModel) const
 {
-	if (!WidgetTree || !parentBlockWidget)
+	if (!GetWorld() || !parentBlockWidget)
 	{
 		return nullptr;
 	}
 
 	UScenarioEditorSidebarFieldRow* fieldRow =
-		WidgetTree->ConstructWidget<UScenarioEditorSidebarFieldRow>(
+		CreateWidget<UScenarioEditorSidebarFieldRow>(
+			GetWorld(),
 			UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(WidgetClassCatalog));
 	if (!fieldRow)
 	{
@@ -389,11 +402,7 @@ UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarObstaclePanel::AddFieldRow
 	}
 
 	fieldRow->SetTextStyleCatalog(TextStyleCatalog);
-	fieldRow->SetFieldLabel(label);
-	fieldRow->SetValueText(value);
-	fieldRow->SetInputType(inputType);
-	fieldRow->SetEditable(bEditable);
-	fieldRow->SetArrayControlsEnabled(bArrayControlsEnabled);
+	fieldRow->InitializeFromItemViewModel(fieldItemViewModel);
 	parentBlockWidget->AddBodyChild(fieldRow);
 	return fieldRow;
 }
@@ -403,13 +412,14 @@ UScenarioEditorSidebarObstaclePlacementWidget* UScenarioEditorSidebarObstaclePan
 	const FScenarioTemplateObstaclePlacement& placement,
 	UScenarioEditorSidebarBlockWidget* parentBlockWidget)
 {
-	if (!WidgetTree || !parentBlockWidget)
+	if (!GetWorld() || !parentBlockWidget)
 	{
 		return nullptr;
 	}
 
 	UScenarioEditorSidebarObstaclePlacementWidget* placementWidget =
-		WidgetTree->ConstructWidget<UScenarioEditorSidebarObstaclePlacementWidget>(
+		CreateWidget<UScenarioEditorSidebarObstaclePlacementWidget>(
+			GetWorld(),
 			UScenarioEditorWidgetClassCatalog::ResolveSidebarObstaclePlacementWidgetClass(WidgetClassCatalog));
 	if (!placementWidget)
 	{
@@ -448,372 +458,26 @@ UScenarioEditorSidebarObstaclePlacementWidget* UScenarioEditorSidebarObstaclePan
 	return placementWidget;
 }
 
-UScenarioAuthoringSubsystem* UScenarioEditorSidebarObstaclePanel::GetAuthoringSubsystem() const
+UScenarioTemplateSidebarViewModel* UScenarioEditorSidebarObstaclePanel::GetTemplateSidebarViewModel() const
 {
-	UWorld* world = GetWorld();
-	return world ? world->GetSubsystem<UScenarioAuthoringSubsystem>() : nullptr;
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	return uiSubsystem ? uiSubsystem->GetTemplateSidebarViewModel() : nullptr;
 }
 
-TArray<FScenarioTemplateObstaclePlacement> UScenarioEditorSidebarObstaclePanel::GetDraftPlacements() const
+void UScenarioEditorSidebarObstaclePanel::ExecuteTemplateCommand(
+	TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command)
 {
-	const UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
-	if (!authoringSubsystem)
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	if (!templateSidebarViewModel)
 	{
-		return {};
-	}
-
-	return authoringSubsystem->GetDraftScenario().Obstacles.Placements;
-}
-
-void UScenarioEditorSidebarObstaclePanel::CommitMinClearWidthText(const FText& text)
-{
-	FScenarioTemplateNumberValue widthMeters;
-	if (!TryParseOptionalNumber(text, widthMeters) || !widthMeters.bIsSet)
-	{
-		RefreshFromDraft();
-		SetDiagnosticsText(TEXT("min_clear_width_m must be a number in meters."));
+		SetDiagnosticsText(TEXT("ScenarioTemplateSidebarViewModel unavailable."));
 		return;
 	}
 
-	CommitMinClearWidthValue(widthMeters);
-}
-
-void UScenarioEditorSidebarObstaclePanel::CommitMinClearWidthRangeText(
-	const FText& minText,
-	const FText& maxText)
-{
-	FScenarioTemplateNumberValue widthMeters;
-	if (!TryParseOptionalNumberRange(minText, maxText, widthMeters) || !widthMeters.bIsSet)
-	{
-		RefreshFromDraft();
-		SetDiagnosticsText(TEXT("min_clear_width_m range must use numeric min/max meters."));
-		return;
-	}
-
-	CommitMinClearWidthValue(widthMeters);
-}
-
-void UScenarioEditorSidebarObstaclePanel::CommitMinClearWidthValue(
-	const FScenarioTemplateNumberValue& widthMeters)
-{
-	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
-	if (!authoringSubsystem)
-	{
-		SetDiagnosticsText(TEXT("ScenarioAuthoringSubsystem unavailable."));
-		return;
-	}
-
-	TArray<FString> diagnostics;
-	if (!authoringSubsystem->SetObstacleMinClearWidthMeters(widthMeters, diagnostics))
-	{
-		RefreshFromDraft();
-		SetDiagnosticsText(JoinObstaclePanelDiagnostics(diagnostics));
-		return;
-	}
-
+	FString statusText;
+	command(templateSidebarViewModel, statusText);
 	RefreshFromDraft();
-}
-
-void UScenarioEditorSidebarObstaclePanel::CommitPlacementText(
-	const int32 placementIndex,
-	const EScenarioEditorSidebarObstaclePlacementField field,
-	const FText& text)
-{
-	TArray<FScenarioTemplateObstaclePlacement> placements = GetDraftPlacements();
-	if (!placements.IsValidIndex(placementIndex))
-	{
-		RefreshFromDraft();
-		SetDiagnosticsText(TEXT("Obstacle placement index is no longer valid."));
-		return;
-	}
-
-	FScenarioTemplateObstaclePlacement& placement = placements[placementIndex];
-	const FString trimmedText = text.ToString().TrimStartAndEnd();
-	switch (field)
-	{
-	case EScenarioEditorSidebarObstaclePlacementField::PlacementId:
-		placement.PlacementId = trimmedText;
-		break;
-	case EScenarioEditorSidebarObstaclePlacementField::Kind:
-	{
-		EScenarioTemplateObstaclePlacementKind placementKind = placement.Kind;
-		if (!TryParsePlacementKind(text, placementKind))
-		{
-			RefreshFromDraft();
-			SetDiagnosticsText(TEXT("kind must be fixed, pattern, or scatter."));
-			return;
-		}
-		placement.Kind = placementKind;
-		if (placement.Kind == EScenarioTemplateObstaclePlacementKind::Pattern)
-		{
-			if (placement.PatternId.IsEmpty())
-			{
-				placement.PatternId = TEXT("line");
-			}
-			if (!placement.Count.bIsSet)
-			{
-				placement.Count = UScenarioAuthoringSubsystem::MakeFixedTemplateIntegerValue(2);
-			}
-			if (!placement.SpacingMeters.bIsSet)
-			{
-				placement.SpacingMeters = UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(1.0);
-			}
-			if (placement.At.LaneId.IsEmpty())
-			{
-				placement.At.LaneId = TEXT("across");
-			}
-		}
-		else if (placement.Kind == EScenarioTemplateObstaclePlacementKind::Scatter)
-		{
-			if (placement.Zone.SegmentIds.IsEmpty())
-			{
-				placement.Zone.SegmentIds.Add(MakeDefaultPlacement(placements, placementIndex).At.SegmentId);
-			}
-			if (placement.Zone.LaneIds.IsEmpty())
-			{
-				placement.Zone.LaneIds.Add(TEXT("walkway"));
-			}
-			if (!placement.DensityPer10Meters.bIsSet)
-			{
-				placement.DensityPer10Meters = UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(1.0);
-			}
-		}
-		else
-		{
-			if (placement.PropId.IsEmpty())
-			{
-				placement.PropId = MakeDefaultPlacement(placements, placementIndex).PropId;
-			}
-			if (placement.At.SegmentId.IsEmpty())
-			{
-				placement.At.SegmentId = MakeDefaultPlacement(placements, placementIndex).At.SegmentId;
-			}
-			if (!placement.At.AlongMeters.bIsSet)
-			{
-				placement.At.AlongMeters = UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(0.0);
-			}
-			if (!placement.At.OffsetMeters.bIsSet)
-			{
-				placement.At.OffsetMeters = UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(0.0);
-			}
-			if (placement.At.LaneId.IsEmpty())
-			{
-				placement.At.LaneId = TEXT("walkway");
-			}
-		}
-		break;
-	}
-	case EScenarioEditorSidebarObstaclePlacementField::Prop:
-		placement.PropId = trimmedText;
-		break;
-	case EScenarioEditorSidebarObstaclePlacementField::Pattern:
-		placement.PatternId = trimmedText;
-		break;
-	case EScenarioEditorSidebarObstaclePlacementField::Segment:
-		placement.At.SegmentId = trimmedText;
-		break;
-	case EScenarioEditorSidebarObstaclePlacementField::Lane:
-		placement.At.LaneId = trimmedText;
-		break;
-	case EScenarioEditorSidebarObstaclePlacementField::Along:
-	case EScenarioEditorSidebarObstaclePlacementField::Offset:
-	case EScenarioEditorSidebarObstaclePlacementField::Spacing:
-	case EScenarioEditorSidebarObstaclePlacementField::GapWidth:
-	case EScenarioEditorSidebarObstaclePlacementField::Density:
-	case EScenarioEditorSidebarObstaclePlacementField::Yaw:
-	{
-		FScenarioTemplateNumberValue numberValue;
-		if (!TryParseOptionalNumber(text, numberValue) || !SetPlacementNumberField(placement, field, numberValue))
-		{
-			RefreshFromDraft();
-			SetDiagnosticsText(TEXT("Obstacle numeric fields must be finite numbers or empty optional values."));
-			return;
-		}
-		break;
-	}
-	case EScenarioEditorSidebarObstaclePlacementField::ZoneSegments:
-		placement.Zone.SegmentIds = ParseStringList(trimmedText);
-		break;
-	case EScenarioEditorSidebarObstaclePlacementField::ZoneLanes:
-		placement.Zone.LaneIds = ParseStringList(trimmedText);
-		break;
-	case EScenarioEditorSidebarObstaclePlacementField::PaletteCategories:
-		placement.Palette.CategoryIds = ParseStringList(trimmedText);
-		break;
-	case EScenarioEditorSidebarObstaclePlacementField::PaletteClasses:
-		placement.Palette.ClassIds = ParseStringList(trimmedText);
-		break;
-	case EScenarioEditorSidebarObstaclePlacementField::Count:
-	{
-		FScenarioTemplateIntegerValue integerValue;
-		if (!TryParseOptionalInteger(text, integerValue) || !SetPlacementIntegerField(placement, field, integerValue))
-		{
-			RefreshFromDraft();
-			SetDiagnosticsText(TEXT("count must be an integer, an integer range, or empty."));
-			return;
-		}
-		break;
-	}
-	case EScenarioEditorSidebarObstaclePlacementField::AllowBlocking:
-	{
-		bool bAllowBlocking = false;
-		if (!TryParseBool(text, bAllowBlocking))
-		{
-			RefreshFromDraft();
-			SetDiagnosticsText(TEXT("allow_blocking must be true or false."));
-			return;
-		}
-		placement.bAllowBlocking = bAllowBlocking;
-		break;
-	}
-	default:
-		break;
-	}
-
-	CommitPlacements(placements);
-}
-
-void UScenarioEditorSidebarObstaclePanel::CommitPlacementRange(
-	const int32 placementIndex,
-	const EScenarioEditorSidebarObstaclePlacementField field,
-	const FText& minText,
-	const FText& maxText)
-{
-	TArray<FScenarioTemplateObstaclePlacement> placements = GetDraftPlacements();
-	if (!placements.IsValidIndex(placementIndex))
-	{
-		RefreshFromDraft();
-		SetDiagnosticsText(TEXT("Obstacle placement index is no longer valid."));
-		return;
-	}
-
-	if (field == EScenarioEditorSidebarObstaclePlacementField::Count)
-	{
-		FScenarioTemplateIntegerValue integerValue;
-		if (!TryParseOptionalIntegerRange(minText, maxText, integerValue)
-			|| !SetPlacementIntegerField(placements[placementIndex], field, integerValue))
-		{
-			RefreshFromDraft();
-			SetDiagnosticsText(TEXT("count range must use integer min/max values."));
-			return;
-		}
-		CommitPlacements(placements);
-		return;
-	}
-
-	FScenarioTemplateNumberValue numberValue;
-	if (!TryParseOptionalNumberRange(minText, maxText, numberValue)
-		|| !SetPlacementNumberField(placements[placementIndex], field, numberValue))
-	{
-		RefreshFromDraft();
-		SetDiagnosticsText(TEXT("Obstacle range fields must use numeric min/max values."));
-		return;
-	}
-
-	CommitPlacements(placements);
-}
-
-void UScenarioEditorSidebarObstaclePanel::AddPlacementAfter(const int32 placementIndex)
-{
-	TArray<FScenarioTemplateObstaclePlacement> placements = GetDraftPlacements();
-	const int32 insertIndex = placements.IsValidIndex(placementIndex)
-		? placementIndex + 1
-		: placements.Num();
-	placements.Insert(MakeDefaultPlacement(placements, placementIndex), insertIndex);
-	CommitPlacements(placements);
-}
-
-void UScenarioEditorSidebarObstaclePanel::RemovePlacementAt(const int32 placementIndex)
-{
-	TArray<FScenarioTemplateObstaclePlacement> placements = GetDraftPlacements();
-	if (!placements.IsValidIndex(placementIndex))
-	{
-		RefreshFromDraft();
-		SetDiagnosticsText(TEXT("Obstacle placement index is no longer valid."));
-		return;
-	}
-
-	placements.RemoveAt(placementIndex);
-	CommitPlacements(placements);
-}
-
-FScenarioTemplateObstaclePlacement UScenarioEditorSidebarObstaclePanel::MakeDefaultPlacement(
-	const TArray<FScenarioTemplateObstaclePlacement>& existingPlacements,
-	const int32 neighborIndex) const
-{
-	FScenarioTemplateObstaclePlacement placement;
-	placement.Kind = EScenarioTemplateObstaclePlacementKind::Fixed;
-
-	FString baseId = TEXT("obstacle");
-	for (int32 candidateIndex = 1; candidateIndex < 1000; ++candidateIndex)
-	{
-		const FString candidateId = FString::Printf(TEXT("%s_%03d"), *baseId, candidateIndex);
-		const bool bExists = existingPlacements.ContainsByPredicate(
-			[&candidateId](const FScenarioTemplateObstaclePlacement& existingPlacement)
-			{
-				return existingPlacement.PlacementId == candidateId;
-			});
-		if (!bExists)
-		{
-			placement.PlacementId = candidateId;
-			break;
-		}
-	}
-
-	if (existingPlacements.IsValidIndex(neighborIndex) && !existingPlacements[neighborIndex].PropId.IsEmpty())
-	{
-		placement.PropId = existingPlacements[neighborIndex].PropId;
-	}
-	else if (UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem())
-	{
-		TArray<FScenarioStaticObstaclePropEntry> propEntries;
-		authoringSubsystem->GetStaticObstaclePaletteEntries(propEntries);
-		if (!propEntries.IsEmpty() && !propEntries[0].PropId.IsNone())
-		{
-			placement.PropId = propEntries[0].PropId.ToString();
-		}
-	}
-
-	if (existingPlacements.IsValidIndex(neighborIndex) && !existingPlacements[neighborIndex].At.SegmentId.IsEmpty())
-	{
-		placement.At.SegmentId = existingPlacements[neighborIndex].At.SegmentId;
-	}
-	else if (const UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem())
-	{
-		const FScenarioDocument scenarioTemplate = authoringSubsystem->GetDraftScenario();
-		const TArray<FScenarioTemplateSegment>& segments = scenarioTemplate.Corridor.Segments;
-		if (!segments.IsEmpty())
-		{
-			placement.At.SegmentId = segments[0].SegmentId;
-		}
-	}
-	placement.At.AlongMeters = UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(0.0);
-	placement.At.OffsetMeters = UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(0.0);
-	placement.At.LaneId = TEXT("walkway");
-	placement.YawDegrees = UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(0.0);
-	placement.bAllowBlocking = false;
-	return placement;
-}
-
-void UScenarioEditorSidebarObstaclePanel::CommitPlacements(
-	const TArray<FScenarioTemplateObstaclePlacement>& placements)
-{
-	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
-	if (!authoringSubsystem)
-	{
-		SetDiagnosticsText(TEXT("ScenarioAuthoringSubsystem unavailable."));
-		return;
-	}
-
-	TArray<FString> diagnostics;
-	if (!authoringSubsystem->SetObstaclePlacements(placements, diagnostics))
-	{
-		RefreshFromDraft();
-		SetDiagnosticsText(JoinObstaclePanelDiagnostics(diagnostics));
-		return;
-	}
-
-	RefreshFromDraft();
+	SetDiagnosticsText(statusText);
 }
 
 void UScenarioEditorSidebarObstaclePanel::SetDiagnosticsText(const FString& text) const
@@ -822,210 +486,4 @@ void UScenarioEditorSidebarObstaclePanel::SetDiagnosticsText(const FString& text
 	{
 		DiagnosticsTextBlock->SetText(FText::FromString(text));
 	}
-}
-
-bool UScenarioEditorSidebarObstaclePanel::SetPlacementNumberField(
-	FScenarioTemplateObstaclePlacement& placement,
-	const EScenarioEditorSidebarObstaclePlacementField field,
-	const FScenarioTemplateNumberValue& value)
-{
-	switch (field)
-	{
-	case EScenarioEditorSidebarObstaclePlacementField::Along:
-		placement.At.AlongMeters = value;
-		return true;
-	case EScenarioEditorSidebarObstaclePlacementField::Offset:
-		placement.At.OffsetMeters = value;
-		return true;
-	case EScenarioEditorSidebarObstaclePlacementField::Spacing:
-		placement.SpacingMeters = value;
-		return true;
-	case EScenarioEditorSidebarObstaclePlacementField::GapWidth:
-		placement.GapWidthMeters = value;
-		return true;
-	case EScenarioEditorSidebarObstaclePlacementField::Density:
-		placement.DensityPer10Meters = value;
-		return true;
-	case EScenarioEditorSidebarObstaclePlacementField::Yaw:
-		placement.YawDegrees = value;
-		return true;
-	default:
-		return false;
-	}
-}
-
-bool UScenarioEditorSidebarObstaclePanel::SetPlacementIntegerField(
-	FScenarioTemplateObstaclePlacement& placement,
-	const EScenarioEditorSidebarObstaclePlacementField field,
-	const FScenarioTemplateIntegerValue& value)
-{
-	if (field != EScenarioEditorSidebarObstaclePlacementField::Count)
-	{
-		return false;
-	}
-
-	placement.Count = value;
-	return true;
-}
-
-bool UScenarioEditorSidebarObstaclePanel::TryParsePlacementKind(
-	const FText& text,
-	EScenarioTemplateObstaclePlacementKind& outKind)
-{
-	const FString kindText = text.ToString().TrimStartAndEnd().ToLower();
-	if (kindText == TEXT("fixed"))
-	{
-		outKind = EScenarioTemplateObstaclePlacementKind::Fixed;
-		return true;
-	}
-	if (kindText == TEXT("pattern"))
-	{
-		outKind = EScenarioTemplateObstaclePlacementKind::Pattern;
-		return true;
-	}
-	if (kindText == TEXT("scatter"))
-	{
-		outKind = EScenarioTemplateObstaclePlacementKind::Scatter;
-		return true;
-	}
-	return false;
-}
-
-bool UScenarioEditorSidebarObstaclePanel::TryParseScalar(const FText& text, double& outValue)
-{
-	FString scalarText = text.ToString().TrimStartAndEnd();
-	scalarText.RemoveFromEnd(TEXT("m"), ESearchCase::IgnoreCase);
-	scalarText.RemoveFromEnd(TEXT("deg"), ESearchCase::IgnoreCase);
-	scalarText.TrimStartAndEndInline();
-	return LexTryParseString(outValue, *scalarText) && FMath::IsFinite(outValue);
-}
-
-bool UScenarioEditorSidebarObstaclePanel::TryParseOptionalNumber(
-	const FText& text,
-	FScenarioTemplateNumberValue& outValue)
-{
-	const FString trimmedText = text.ToString().TrimStartAndEnd();
-	if (trimmedText.IsEmpty())
-	{
-		outValue = MakeUnsetNumberValue();
-		return true;
-	}
-
-	double parsedValue = 0.0;
-	if (!TryParseScalar(text, parsedValue))
-	{
-		return false;
-	}
-
-	outValue = UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(parsedValue);
-	return true;
-}
-
-bool UScenarioEditorSidebarObstaclePanel::TryParseOptionalNumberRange(
-	const FText& minText,
-	const FText& maxText,
-	FScenarioTemplateNumberValue& outValue)
-{
-	const bool bMinEmpty = minText.ToString().TrimStartAndEnd().IsEmpty();
-	const bool bMaxEmpty = maxText.ToString().TrimStartAndEnd().IsEmpty();
-	if (bMinEmpty && bMaxEmpty)
-	{
-		outValue = MakeUnsetNumberValue();
-		return true;
-	}
-
-	double minValue = 0.0;
-	double maxValue = 0.0;
-	if (!TryParseScalar(minText, minValue) || !TryParseScalar(maxText, maxValue))
-	{
-		return false;
-	}
-
-	outValue = UScenarioAuthoringSubsystem::MakeRangeTemplateNumberValue(minValue, maxValue);
-	return true;
-}
-
-bool UScenarioEditorSidebarObstaclePanel::TryParseOptionalInteger(
-	const FText& text,
-	FScenarioTemplateIntegerValue& outValue)
-{
-	const FString trimmedText = text.ToString().TrimStartAndEnd();
-	if (trimmedText.IsEmpty())
-	{
-		outValue = MakeUnsetIntegerValue();
-		return true;
-	}
-
-	int32 parsedValue = 0;
-	if (!LexTryParseString(parsedValue, *trimmedText))
-	{
-		return false;
-	}
-
-	outValue = UScenarioAuthoringSubsystem::MakeFixedTemplateIntegerValue(parsedValue);
-	return true;
-}
-
-bool UScenarioEditorSidebarObstaclePanel::TryParseOptionalIntegerRange(
-	const FText& minText,
-	const FText& maxText,
-	FScenarioTemplateIntegerValue& outValue)
-{
-	const bool bMinEmpty = minText.ToString().TrimStartAndEnd().IsEmpty();
-	const bool bMaxEmpty = maxText.ToString().TrimStartAndEnd().IsEmpty();
-	if (bMinEmpty && bMaxEmpty)
-	{
-		outValue = MakeUnsetIntegerValue();
-		return true;
-	}
-
-	int32 minValue = 0;
-	int32 maxValue = 0;
-	const FString trimmedMinText = minText.ToString().TrimStartAndEnd();
-	const FString trimmedMaxText = maxText.ToString().TrimStartAndEnd();
-	if (!LexTryParseString(minValue, *trimmedMinText)
-		|| !LexTryParseString(maxValue, *trimmedMaxText))
-	{
-		return false;
-	}
-
-	outValue = UScenarioAuthoringSubsystem::MakeRangeTemplateIntegerValue(minValue, maxValue);
-	return true;
-}
-
-bool UScenarioEditorSidebarObstaclePanel::TryParseBool(const FText& text, bool& outValue)
-{
-	const FString boolText = text.ToString().TrimStartAndEnd().ToLower();
-	if (boolText == TEXT("true") || boolText == TEXT("1") || boolText == TEXT("yes"))
-	{
-		outValue = true;
-		return true;
-	}
-	if (boolText == TEXT("false") || boolText == TEXT("0") || boolText == TEXT("no"))
-	{
-		outValue = false;
-		return true;
-	}
-	return false;
-}
-
-TArray<FString> UScenarioEditorSidebarObstaclePanel::ParseStringList(const FString& text)
-{
-	TArray<FString> values;
-	text.ParseIntoArray(values, TEXT(","), true);
-	for (FString& value : values)
-	{
-		value.TrimStartAndEndInline();
-	}
-	values.RemoveAll(
-		[](const FString& value)
-		{
-			return value.IsEmpty();
-		});
-	return values;
-}
-
-FString UScenarioEditorSidebarObstaclePanel::FormatEditableNumber(const double value)
-{
-	return FString::Printf(TEXT("%.2f"), value);
 }

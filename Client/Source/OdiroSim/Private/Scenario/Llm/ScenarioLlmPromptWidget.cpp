@@ -4,41 +4,9 @@
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/TextBlock.h"
-#include "Misc/Paths.h"
-#include "Platform/SimulatorLaunchSubsystem.h"
-#include "Scenario/Editor/ScenarioEditorController.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
-
-namespace
-{
-	const TCHAR* ProjectScenarioFileName = TEXT("scenario.json");
-
-	FString ResolveProjectScenarioJsonPath(FString rawPath)
-	{
-		rawPath.TrimStartAndEndInline();
-		rawPath.ReplaceInline(TEXT("\\"), TEXT("/"));
-		if (rawPath.IsEmpty())
-		{
-			return FString();
-		}
-
-		if (FPaths::GetExtension(rawPath).IsEmpty())
-		{
-			rawPath = FPaths::Combine(rawPath, ProjectScenarioFileName);
-		}
-		if (FPaths::IsRelative(rawPath))
-		{
-			rawPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), rawPath);
-		}
-		FPaths::NormalizeFilename(rawPath);
-		return rawPath;
-	}
-
-	bool IsProjectScenarioJsonPath(const FString& scenarioJsonPath)
-	{
-		return FPaths::GetCleanFilename(scenarioJsonPath).Equals(ProjectScenarioFileName, ESearchCase::IgnoreCase);
-	}
-}
+#include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioLlmPromptViewModel.h"
 
 void UScenarioLlmPromptWidget::NativeOnInitialized()
 {
@@ -67,100 +35,59 @@ void UScenarioLlmPromptWidget::NativeDestruct()
 
 bool UScenarioLlmPromptWidget::GenerateFromPromptTextBox()
 {
-	UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem();
-	if (!llmSubsystem)
+	UScenarioLlmPromptViewModel* viewModel = GetLlmPromptViewModel();
+	if (!viewModel)
 	{
-		SetStatusText(TEXT("LLM authoring subsystem is unavailable."));
+		SetStatusText(TEXT("Scenario LLM ViewModel is unavailable."));
 		return false;
 	}
 
 	FString prompt;
 	if (!TryGetPrompt(prompt)) return false;
 
-	FString scenarioJsonPath;
-	FString projectPath;
-	if (!TryResolveCurrentProjectScenarioPath(scenarioJsonPath, projectPath)) return false;
+	int32 episodeCount = 0;
+	if (!TryGetEpisodeCount(episodeCount)) return false;
 
-	SetStatusText(TEXT("Requesting project scenario generation."));
-	return llmSubsystem->GenerateProjectScenarioFromPrompt(prompt, scenarioJsonPath, llmSubsystem->DefaultEpisodeCount);
+	const bool bRequested = viewModel->RequestGenerationFromInput(prompt, episodeCount);
+	SetStatusText(viewModel->GetStatusText());
+	return bRequested;
 }
 
 bool UScenarioLlmPromptWidget::LoadGeneratedScenario()
 {
-	AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
-	if (!editorController)
+	UScenarioLlmPromptViewModel* viewModel = GetLlmPromptViewModel();
+	if (!viewModel)
 	{
-		SetStatusText(TEXT("Owning player is not ScenarioEditorController."));
+		SetStatusText(TEXT("Scenario LLM ViewModel is unavailable."));
 		return false;
 	}
 
-	FString scenarioJsonPath;
-	FString projectPath;
-	if (const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem())
-	{
-		const FScenarioLlmGenerationResult result = llmSubsystem->GetLatestResult();
-		if (result.bSuccess && !result.ProjectScenarioJsonPath.IsEmpty())
-		{
-			scenarioJsonPath = ResolveProjectScenarioJsonPath(result.ProjectScenarioJsonPath);
-		}
-	}
-	if (scenarioJsonPath.IsEmpty())
-	{
-		if (!TryResolveCurrentProjectScenarioPath(scenarioJsonPath, projectPath)) return false;
-	}
-
-	FString resolvedJsonFilePath;
-	TArray<FString> diagnostics;
-	if (!editorController->LoadProjectScenarioJsonFile(
-			scenarioJsonPath,
-			resolvedJsonFilePath,
-			diagnostics))
-	{
-		SetStatusText(diagnostics.IsEmpty()
-			? FString::Printf(TEXT("scenario.json load failed: %s"), *scenarioJsonPath)
-			: FString::Printf(TEXT("scenario.json load failed:\n%s"), *FString::Join(diagnostics, TEXT("\n"))));
-		return false;
-	}
-
-	SetStatusText(FString::Printf(TEXT("Loaded project scenario: %s"), *resolvedJsonFilePath));
-	return true;
+	const bool bLoaded = viewModel->LoadGeneratedScenario();
+	SetStatusText(viewModel->GetStatusText());
+	return bLoaded;
 }
 
 bool UScenarioLlmPromptWidget::RunGeneratedSimulation()
 {
-	USimulatorLaunchSubsystem* launchSubsystem = GetSimulatorLaunchSubsystem();
-	if (!launchSubsystem)
+	UScenarioLlmPromptViewModel* viewModel = GetLlmPromptViewModel();
+	if (!viewModel)
 	{
-		SetStatusText(TEXT("SimulatorLaunchSubsystem is unavailable."));
+		SetStatusText(TEXT("Scenario LLM ViewModel is unavailable."));
 		return false;
 	}
 
-	FString scenarioJsonPath;
-	FString projectPath;
-	if (!TrySaveCurrentProjectScenario(scenarioJsonPath, projectPath)) return false;
-
-	FString runId;
-	TArray<FString> diagnostics;
-	if (!launchSubsystem->PrepareProjectRunSnapshot(projectPath, FString(), runId, diagnostics))
-	{
-		SetStatusText(diagnostics.IsEmpty()
-			? FString::Printf(TEXT("Project run snapshot preparation failed: %s"), *projectPath)
-			: FString::Printf(TEXT("Project run snapshot preparation failed:\n%s"), *FString::Join(diagnostics, TEXT("\n"))));
-		return false;
-	}
-
-	if (!launchSubsystem->StartProjectRun(projectPath, runId))
-	{
-		SetStatusText(launchSubsystem->GetLastError());
-		return false;
-	}
-
-	SetStatusText(FString::Printf(TEXT("Project run launch requested: %s / %s"), *projectPath, *runId));
-	return true;
+	const bool bStarted = viewModel->RunGeneratedSimulation();
+	SetStatusText(viewModel->GetStatusText());
+	return bStarted;
 }
 
 void UScenarioLlmPromptWidget::SetStatusText(const FString& message)
 {
+	if (UScenarioLlmPromptViewModel* viewModel = GetLlmPromptViewModel())
+	{
+		viewModel->SetStatusText(message);
+	}
+
 	if (StatusTextBlock)
 	{
 		StatusTextBlock->SetText(FText::FromString(message));
@@ -184,6 +111,11 @@ void UScenarioLlmPromptWidget::HandleRunGeneratedSimulationButtonClicked()
 
 void UScenarioLlmPromptWidget::HandleGenerationCompleted(const FScenarioLlmGenerationResult& result)
 {
+	if (UScenarioLlmPromptViewModel* viewModel = GetLlmPromptViewModel())
+	{
+		viewModel->SetBusy(false);
+	}
+
 	if (!result.bSuccess)
 	{
 		SetStatusText(result.Diagnostics.IsEmpty()
@@ -234,24 +166,19 @@ void UScenarioLlmPromptWidget::BindControls()
 
 void UScenarioLlmPromptWidget::BindLlmSubsystem()
 {
-	if (UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem())
+	if (UScenarioEditorUiSubsystem* uiSubsystem = GetEditorUiSubsystem())
 	{
-		llmSubsystem->OnGenerationCompleted.RemoveDynamic(
+		uiSubsystem->BindScenarioGenerationCompleted(
 			this,
-			&UScenarioLlmPromptWidget::HandleGenerationCompleted);
-		llmSubsystem->OnGenerationCompleted.AddDynamic(
-			this,
-			&UScenarioLlmPromptWidget::HandleGenerationCompleted);
+			GET_FUNCTION_NAME_CHECKED(UScenarioLlmPromptWidget, HandleGenerationCompleted));
 	}
 }
 
 void UScenarioLlmPromptWidget::UnbindLlmSubsystem()
 {
-	if (UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem())
+	if (UScenarioEditorUiSubsystem* uiSubsystem = GetEditorUiSubsystem())
 	{
-		llmSubsystem->OnGenerationCompleted.RemoveDynamic(
-			this,
-			&UScenarioLlmPromptWidget::HandleGenerationCompleted);
+		uiSubsystem->UnbindScenarioGenerationCompleted(this);
 	}
 }
 
@@ -268,24 +195,24 @@ void UScenarioLlmPromptWidget::ConfigureStatusTextBlock()
 
 void UScenarioLlmPromptWidget::RequestEditorWidgetInputMode()
 {
-	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	if (UScenarioEditorUiSubsystem* uiSubsystem = GetEditorUiSubsystem())
 	{
 		UWidget* focusWidget = ResolveInputModeFocusWidget();
 		RequestedInputModeFocusWidget = focusWidget;
-		editorController->RequestEditorWidgetInputMode(focusWidget);
+		uiSubsystem->RequestEditorWidgetInputMode(focusWidget);
 	}
 }
 
 void UScenarioLlmPromptWidget::ReleaseEditorWidgetInputMode()
 {
-	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	if (UScenarioEditorUiSubsystem* uiSubsystem = GetEditorUiSubsystem())
 	{
 		UWidget* focusWidget = RequestedInputModeFocusWidget.Get();
 		if (!focusWidget)
 		{
 			focusWidget = ResolveInputModeFocusWidget();
 		}
-		editorController->ReleaseEditorWidgetInputMode(focusWidget);
+		uiSubsystem->ReleaseEditorWidgetInputMode(focusWidget);
 		RequestedInputModeFocusWidget.Reset();
 	}
 }
@@ -310,26 +237,16 @@ bool UScenarioLlmPromptWidget::TryGetEpisodeCount(int32& outEpisodeCount)
 	outEpisodeCount = 0;
 	if (!ScenarioCountTextBox)
 	{
-		if (const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem())
-		{
-			outEpisodeCount = llmSubsystem->DefaultEpisodeCount;
-			return true;
-		}
-
-		outEpisodeCount = 1;
+		const UScenarioEditorUiSubsystem* uiSubsystem = GetEditorUiSubsystem();
+		outEpisodeCount = uiSubsystem ? uiSubsystem->GetDefaultScenarioGenerationEpisodeCount() : 1;
 		return true;
 	}
 
 	const FString text = ScenarioCountTextBox->GetText().ToString().TrimStartAndEnd();
 	if (text.IsEmpty())
 	{
-		if (const UScenarioLlmAuthoringSubsystem* llmSubsystem = GetLlmAuthoringSubsystem())
-		{
-			outEpisodeCount = llmSubsystem->DefaultEpisodeCount;
-			return true;
-		}
-
-		outEpisodeCount = 1;
+		const UScenarioEditorUiSubsystem* uiSubsystem = GetEditorUiSubsystem();
+		outEpisodeCount = uiSubsystem ? uiSubsystem->GetDefaultScenarioGenerationEpisodeCount() : 1;
 		return true;
 	}
 
@@ -349,67 +266,6 @@ bool UScenarioLlmPromptWidget::TryGetEpisodeCount(int32& outEpisodeCount)
 	return true;
 }
 
-bool UScenarioLlmPromptWidget::TryResolveCurrentProjectScenarioPath(FString& outScenarioJsonPath, FString& outProjectPath)
-{
-	outScenarioJsonPath.Reset();
-	outProjectPath.Reset();
-
-	const AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
-	if (!editorController)
-	{
-		SetStatusText(TEXT("Owning player is not ScenarioEditorController."));
-		return false;
-	}
-
-	outScenarioJsonPath = ResolveProjectScenarioJsonPath(editorController->GetSourceProjectScenarioJsonPath());
-	if (!IsProjectScenarioJsonPath(outScenarioJsonPath))
-	{
-		SetStatusText(TEXT("LLM generate/load/run requires the editor source to be <UserProject>/scenario.json."));
-		return false;
-	}
-
-	outProjectPath = FPaths::GetPath(outScenarioJsonPath);
-	if (outProjectPath.IsEmpty())
-	{
-		SetStatusText(TEXT("Project path could not be resolved from scenario.json."));
-		return false;
-	}
-
-	return true;
-}
-
-bool UScenarioLlmPromptWidget::TrySaveCurrentProjectScenario(FString& outScenarioJsonPath, FString& outProjectPath)
-{
-	outScenarioJsonPath.Reset();
-	outProjectPath.Reset();
-
-	AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
-	if (!editorController)
-	{
-		SetStatusText(TEXT("Owning player is not ScenarioEditorController."));
-		return false;
-	}
-
-	if (!TryResolveCurrentProjectScenarioPath(outScenarioJsonPath, outProjectPath))
-	{
-		return false;
-	}
-
-	FString resolvedJsonFilePath;
-	TArray<FString> diagnostics;
-	if (!editorController->SaveProjectScenarioJsonFile(outScenarioJsonPath, resolvedJsonFilePath, diagnostics))
-	{
-		SetStatusText(diagnostics.IsEmpty()
-			? FString::Printf(TEXT("scenario.json save failed: %s"), *outScenarioJsonPath)
-			: FString::Printf(TEXT("scenario.json save failed:\n%s"), *FString::Join(diagnostics, TEXT("\n"))));
-		return false;
-	}
-
-	outScenarioJsonPath = ResolveProjectScenarioJsonPath(resolvedJsonFilePath);
-	outProjectPath = FPaths::GetPath(outScenarioJsonPath);
-	return true;
-}
-
 UWidget* UScenarioLlmPromptWidget::ResolveInputModeFocusWidget()
 {
 	if (LlmInputModeFocus)
@@ -425,14 +281,13 @@ UWidget* UScenarioLlmPromptWidget::ResolveInputModeFocusWidget()
 	return this;
 }
 
-UScenarioLlmAuthoringSubsystem* UScenarioLlmPromptWidget::GetLlmAuthoringSubsystem() const
+UScenarioEditorUiSubsystem* UScenarioLlmPromptWidget::GetEditorUiSubsystem() const
 {
-	UGameInstance* gameInstance = GetGameInstance();
-	return gameInstance ? gameInstance->GetSubsystem<UScenarioLlmAuthoringSubsystem>() : nullptr;
+	return UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
 }
 
-USimulatorLaunchSubsystem* UScenarioLlmPromptWidget::GetSimulatorLaunchSubsystem() const
+UScenarioLlmPromptViewModel* UScenarioLlmPromptWidget::GetLlmPromptViewModel() const
 {
-	UGameInstance* gameInstance = GetGameInstance();
-	return gameInstance ? gameInstance->GetSubsystem<USimulatorLaunchSubsystem>() : nullptr;
+	const UScenarioEditorUiSubsystem* uiSubsystem = GetEditorUiSubsystem();
+	return uiSubsystem ? uiSubsystem->GetLlmPromptViewModel() : nullptr;
 }

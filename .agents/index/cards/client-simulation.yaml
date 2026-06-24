@@ -22,8 +22,12 @@ entry:
       - Client/Source/OdiroSim/Public/Shared
       - Client/Source/OdiroSim/Private/Shared
   - id: scenario-authoring
-    description: Scenario editor, authoring controller, outliner/sidebar widgets, and LLM authoring.
+    description: Scenario editor, authoring controller, UI ViewModels, outliner/sidebar widgets, and LLM authoring.
     read:
+      - Client/Source/OdiroSim/Public/Scenario/ScenarioEditorUiSubsystem.h
+      - Client/Source/OdiroSim/Private/Scenario/ScenarioEditorUiSubsystem.cpp
+      - Client/Source/OdiroSim/Public/Scenario/ViewModel
+      - Client/Source/OdiroSim/Private/Scenario/ViewModel
       - Client/Source/OdiroSim/Public/Scenario/Editor
       - Client/Source/OdiroSim/Private/Scenario/Editor
       - Client/Source/OdiroSim/Public/Scenario/Widget
@@ -45,7 +49,11 @@ guardrails:
   - ScenarioSimulationSubsystem owns runtime grid rebuild after scenario surfaces spawn.
   - ScenarioRunnerSubsystem owns project episode lifecycle, policy start/end coordination, cancellation, late callbacks, and cleanup.
   - User project run output is written through typed UserProjectData JSON writers.
-  - Scenario editor selection is controller-owned; WBP assets own layout and detail panel structure.
+  - ScenarioEditorUiSubsystem owns ScenarioEditorMap UI ViewModel lifecycle and stores no widget pointers.
+  - Scenario editor selection, subsystem lookup, and world mutation stay controller/subsystem/component-owned; ViewModels expose FieldNotify state and command facades through ScenarioEditorUiSubsystem.
+  - Scenario editor reusable WBP class references come from ScenarioEditorWidgetClassCatalog assets or exposed widget properties; do not add C++ WBP class-path fallbacks.
+  - Scenario LLM prompt widgets read input and forward commands only; prompt ViewModel owns generation/load/run command state, while scenario path validation, generation delegate binding, editor load/save, and project run launch stay behind ScenarioEditorUiSubsystem.
+  - Scenario Template sidebar repeated rows use ScenarioTemplateFieldRowViewModel items; native widgets only bind rows, inject item state, and forward edit events.
   - Shared corridor/geometry helpers own reusable surface metadata, spline mesh helpers, and analytic surface queries.
 verify:
   - when: scenario contracts, schemas, or samples change
@@ -55,6 +63,7 @@ verify:
   - when: scenario authoring or editor UI changes
     run:
       - focused ScenarioEditor model/selection tests
+      - OdiroSim.ScenarioEditor.ViewModel automation tests
       - UmgMcp and Blueprint verification for touched editor widgets
   - when: runtime, adapter, runner, evaluation, or output changes
     run:

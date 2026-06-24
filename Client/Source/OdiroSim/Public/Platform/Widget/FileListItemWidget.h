@@ -1,11 +1,12 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "Platform/Widget/OdiroCommonUserWidget.h"
 #include "FileListItemWidget.generated.h"
 
 class UButton;
 class UEditableTextBox;
+class UOdiroListItemViewModel;
 class UTextBlock;
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(
@@ -15,7 +16,7 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(
 DECLARE_MULTICAST_DELEGATE_OneParam(FFileListActionRequestedNative, class UFileListItemWidget*);
 
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UFileListItemWidget : public UUserWidget
+class ODIROSIM_API UFileListItemWidget : public UOdiroCommonUserWidget
 {
 	GENERATED_BODY()
 
@@ -32,6 +33,14 @@ public:
 	void InitializeDisplayItem(
 		const FString& itemPath,
 		const FString& displayText,
+		FString primaryActionLabel = FString(TEXT("편집")),
+		FString secondaryActionLabel = FString(TEXT("실행")),
+		bool bInAllowRename = true,
+		bool bInAllowPrimaryAction = true,
+		bool bInAllowSecondaryAction = false);
+	// 공통 item ViewModel의 경로/표시 상태를 list row UI에 반영한다.
+	void InitializeFromItemViewModel(
+		UOdiroListItemViewModel* itemViewModel,
 		FString primaryActionLabel = FString(TEXT("편집")),
 		FString secondaryActionLabel = FString(TEXT("실행")),
 		bool bInAllowRename = true,
@@ -82,6 +91,10 @@ private:
 
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> SecondaryActionLabel;
+
+	// Row 표시 데이터를 제공하는 item ViewModel 참조.
+	UPROPERTY(Transient)
+	TObjectPtr<UOdiroListItemViewModel> ItemViewModel;
 
 	FString OriginalPath;
 	bool bAllowRename = true;

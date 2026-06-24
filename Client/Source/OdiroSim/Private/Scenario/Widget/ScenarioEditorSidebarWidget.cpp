@@ -1,17 +1,12 @@
 #include "Scenario/Widget/ScenarioEditorSidebarWidget.h"
 
-#include "Components/ContentWidget.h"
-#include "Components/PanelSlot.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
 #include "Components/WidgetSwitcher.h"
-#include "Components/WidgetSwitcherSlot.h"
 #include "Engine/World.h"
 #include "Scenario/ScenarioEditorUiSubsystem.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
-#include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorPanel.h"
-#include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
 #include "Scenario/Widget/ScenarioEditorSidebarMainPanel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarObstaclePanel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarPedestrianPanel.h"
@@ -20,47 +15,24 @@
 
 namespace
 {
-	constexpr float SidebarPanelContentTopPadding = 4.0f;
-
-	FString JoinLines(const TArray<FString>& lines)
+	// Verifies that a resolved panel widget has the native type required by the sidebar shell.
+	bool ScenarioEditorSidebarIsExpectedPanelWidget(
+		const EScenarioTemplateSidebarPanel panel,
+		const UWidget* widget)
 	{
-		return lines.IsEmpty() ? FString(TEXT("None")) : FString::Join(lines, TEXT("\n"));
-	}
-
-	FString FormatMeters(const double value)
-	{
-		return FString::Printf(TEXT("%.2fm"), value);
-	}
-
-	// Infers a conservative editor control type for generated read-only rows.
-	EScenarioEditorSidebarFieldInputType InferGeneratedFieldInputType(const FString& label)
-	{
-		const FString normalizedLabel = label.ToLower();
-		if (normalizedLabel.Contains(TEXT("range"))
-			|| normalizedLabel.Contains(TEXT("along_m"))
-			|| normalizedLabel.Contains(TEXT("offset_m")))
+		switch (panel)
 		{
-			return EScenarioEditorSidebarFieldInputType::Range;
+		case EScenarioTemplateSidebarPanel::Main:
+			return Cast<UScenarioEditorSidebarMainPanel>(widget) != nullptr;
+		case EScenarioTemplateSidebarPanel::Corridor:
+			return Cast<UScenarioEditorSidebarCorridorPanel>(widget) != nullptr;
+		case EScenarioTemplateSidebarPanel::Obstacle:
+			return Cast<UScenarioEditorSidebarObstaclePanel>(widget) != nullptr;
+		case EScenarioTemplateSidebarPanel::Pedestrian:
+			return Cast<UScenarioEditorSidebarPedestrianPanel>(widget) != nullptr;
+		default:
+			return false;
 		}
-		if (normalizedLabel.Contains(TEXT("count"))
-			|| normalizedLabel.Contains(TEXT("version")))
-		{
-			return EScenarioEditorSidebarFieldInputType::Integer;
-		}
-		if (normalizedLabel.Contains(TEXT("_m"))
-			|| normalizedLabel.Contains(TEXT("density"))
-			|| normalizedLabel.Contains(TEXT("cooperation"))
-			|| normalizedLabel.Contains(TEXT("speed")))
-		{
-			return EScenarioEditorSidebarFieldInputType::Number;
-		}
-		if (normalizedLabel.Contains(TEXT("type"))
-			|| normalizedLabel.Contains(TEXT("kind"))
-			|| normalizedLabel.Contains(TEXT("allow_")))
-		{
-			return EScenarioEditorSidebarFieldInputType::EnumText;
-		}
-		return EScenarioEditorSidebarFieldInputType::Text;
 	}
 }
 
@@ -73,6 +45,7 @@ void UScenarioEditorSidebarWidget::NativeConstruct()
 	}
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	ConfigureChildPanelDependencies();
+	CollapseLegacySummaryWidgets();
 	RefreshFromDraft();
 }
 
@@ -113,13 +86,9 @@ void UScenarioEditorSidebarWidget::RefreshFromDraft()
 	FString failureReason;
 	if (!templateSidebarViewModel || !templateSidebarViewModel->TryGetDraftScenario(scenarioTemplate, failureReason))
 	{
-		SetSidebarText(
+		SetSidebarShellText(
 			PanelToTitle(ActivePanel),
-			TEXT(""),
-			TEXT(""),
-			TEXT(""),
 			failureReason.IsEmpty() ? TEXT("ScenarioTemplateSidebarViewModel unavailable.") : failureReason);
-		SetFallbackTextVisibility(ESlateVisibility::SelfHitTestInvisible);
 		return;
 	}
 
@@ -128,63 +97,24 @@ void UScenarioEditorSidebarWidget::RefreshFromDraft()
 
 void UScenarioEditorSidebarWidget::RefreshFromTemplate(const FScenarioDocument& scenarioTemplate)
 {
-	FString primaryText;
-	FString secondaryText;
-	FString listText;
-
-	switch (ActivePanel)
+	SetSidebarShellText(PanelToTitle(ActivePanel), FString());
+	if (!RefreshActivePanelContent(scenarioTemplate))
 	{
-	case EScenarioTemplateSidebarPanel::Main:
-		BuildMainPanelText(scenarioTemplate, primaryText, secondaryText, listText);
-		break;
-	case EScenarioTemplateSidebarPanel::Corridor:
-		BuildCorridorPanelText(scenarioTemplate, primaryText, secondaryText, listText);
-		break;
-	case EScenarioTemplateSidebarPanel::Obstacle:
-		BuildObstaclePanelText(scenarioTemplate, primaryText, secondaryText, listText);
-		break;
-	case EScenarioTemplateSidebarPanel::Pedestrian:
-		BuildPedestrianPanelText(scenarioTemplate, primaryText, secondaryText, listText);
-		break;
-	default:
-		break;
+		SetSidebarShellText(
+			PanelToTitle(ActivePanel),
+			TEXT("Scenario editor panel widget class is missing."));
 	}
-
-	SetSidebarText(PanelToTitle(ActivePanel), primaryText, secondaryText, listText, TEXT(""));
-	if (ActivePanel == EScenarioTemplateSidebarPanel::Main && MainPanelWidget)
-	{
-		MainPanelWidget->SetWidgetClassCatalog(WidgetClassCatalog);
-		MainPanelWidget->SetTextStyleCatalog(TextStyleCatalog);
-		MainPanelWidget->RefreshFromTemplate(scenarioTemplate);
-	}
-	RefreshGeneratedPanelContent(scenarioTemplate);
 	RefreshPanelSwitcher();
-	RefreshFallbackTextVisibility();
 }
 
-void UScenarioEditorSidebarWidget::RefreshGeneratedPanelContent(
+bool UScenarioEditorSidebarWidget::RefreshActivePanelContent(
 	const FScenarioDocument& scenarioTemplate)
 {
-	if (!PanelSwitcher)
-	{
-		return;
-	}
-
 	const EScenarioTemplateSidebarPanel panel = ActivePanel;
-	UWidget* panelWidget = ResolvePanelWidget(panel);
+	UWidget* panelWidget = EnsurePanelWidget(panel);
 	if (!panelWidget)
 	{
-		panelWidget = EnsureGeneratedPanelWidget(panel);
-	}
-	if (!panelWidget)
-	{
-		SetSidebarText(
-			PanelToTitle(panel),
-			TEXT(""),
-			TEXT(""),
-			TEXT(""),
-			TEXT("Scenario editor panel widget class is missing."));
-		return;
+		return false;
 	}
 
 	switch (panel)
@@ -195,7 +125,7 @@ void UScenarioEditorSidebarWidget::RefreshGeneratedPanelContent(
 			mainPanel->SetWidgetClassCatalog(WidgetClassCatalog);
 			mainPanel->SetTextStyleCatalog(TextStyleCatalog);
 			mainPanel->RefreshFromTemplate(scenarioTemplate);
-			return;
+			return true;
 		}
 		break;
 	case EScenarioTemplateSidebarPanel::Corridor:
@@ -204,7 +134,7 @@ void UScenarioEditorSidebarWidget::RefreshGeneratedPanelContent(
 			corridorPanel->SetWidgetClassCatalog(WidgetClassCatalog);
 			corridorPanel->SetTextStyleCatalog(TextStyleCatalog);
 			corridorPanel->RefreshFromTemplate(scenarioTemplate);
-			return;
+			return true;
 		}
 		break;
 	case EScenarioTemplateSidebarPanel::Obstacle:
@@ -213,7 +143,7 @@ void UScenarioEditorSidebarWidget::RefreshGeneratedPanelContent(
 			obstaclePanel->SetWidgetClassCatalog(WidgetClassCatalog);
 			obstaclePanel->SetTextStyleCatalog(TextStyleCatalog);
 			obstaclePanel->RefreshFromTemplate(scenarioTemplate);
-			return;
+			return true;
 		}
 		break;
 	case EScenarioTemplateSidebarPanel::Pedestrian:
@@ -222,27 +152,29 @@ void UScenarioEditorSidebarWidget::RefreshGeneratedPanelContent(
 			pedestrianPanel->SetWidgetClassCatalog(WidgetClassCatalog);
 			pedestrianPanel->SetTextStyleCatalog(TextStyleCatalog);
 			pedestrianPanel->RefreshFromTemplate(scenarioTemplate);
-			return;
+			return true;
 		}
 		break;
 	default:
 		break;
 	}
 
-	UWidget* generatedWidget = EnsureGeneratedPanelWidget(panel);
-	if (generatedWidget && generatedWidget != panelWidget)
+	SetSidebarShellText(
+		PanelToTitle(panel),
+		TEXT("Scenario editor panel widget binding has an unexpected type."));
+	return false;
+}
+
+UWidget* UScenarioEditorSidebarWidget::EnsurePanelWidget(
+	const EScenarioTemplateSidebarPanel panel)
+{
+	UWidget* resolvedWidget = ResolvePanelWidget(panel);
+	if (ScenarioEditorSidebarIsExpectedPanelWidget(panel, resolvedWidget))
 	{
-		PanelSwitcher->SetActiveWidget(generatedWidget);
-		RefreshGeneratedPanelContent(scenarioTemplate);
-		return;
+		return resolvedWidget;
 	}
 
-	SetSidebarText(
-		PanelToTitle(panel),
-		TEXT(""),
-		TEXT(""),
-		TEXT(""),
-		TEXT("Scenario editor panel widget binding has an unexpected type."));
+	return EnsureGeneratedPanelWidget(panel);
 }
 
 UWidget* UScenarioEditorSidebarWidget::EnsureGeneratedPanelWidget(
@@ -359,45 +291,9 @@ void UScenarioEditorSidebarWidget::RefreshPanelSwitcher()
 		return;
 	}
 
-	if (UWidget* panelWidget = ResolvePanelWidget(ActivePanel))
+	if (UWidget* panelWidget = EnsurePanelWidget(ActivePanel))
 	{
 		PanelSwitcher->SetActiveWidget(panelWidget);
-	}
-}
-
-void UScenarioEditorSidebarWidget::RefreshFallbackTextVisibility() const
-{
-	const bool bHasActivePanelWidget = PanelSwitcher && ResolvePanelWidget(ActivePanel);
-	const ESlateVisibility visibility = bHasActivePanelWidget
-		? ESlateVisibility::Collapsed
-		: ESlateVisibility::SelfHitTestInvisible;
-
-	SetFallbackTextVisibility(visibility);
-}
-
-void UScenarioEditorSidebarWidget::SetFallbackTextVisibility(const ESlateVisibility visibility) const
-{
-	if (FallbackSummaryContainer)
-	{
-		FallbackSummaryContainer->SetVisibility(visibility);
-		return;
-	}
-
-	if (PrimaryFieldsTextBlock)
-	{
-		PrimaryFieldsTextBlock->SetVisibility(visibility);
-	}
-	if (SecondaryFieldsTextBlock)
-	{
-		SecondaryFieldsTextBlock->SetVisibility(visibility);
-	}
-	if (ListSummaryTextBlock)
-	{
-		ListSummaryTextBlock->SetVisibility(visibility);
-	}
-	if (DiagnosticsTextBlock)
-	{
-		DiagnosticsTextBlock->SetVisibility(visibility);
 	}
 }
 
@@ -419,138 +315,39 @@ UWidget* UScenarioEditorSidebarWidget::ResolvePanelWidget(
 	}
 }
 
-void UScenarioEditorSidebarWidget::BuildMainPanelText(
-	const FScenarioDocument& scenarioTemplate,
-	FString& outPrimaryText,
-	FString& outSecondaryText,
-	FString& outListText) const
-{
-	outPrimaryText = FString::Printf(
-		TEXT("시나리오 이름: %s"),
-		scenarioTemplate.ScenarioId.IsEmpty() ? TEXT("(미설정)") : *scenarioTemplate.ScenarioId);
-
-	outSecondaryText = FString::Printf(
-		TEXT("검증 목표: %s"),
-		scenarioTemplate.Intent.IsEmpty() ? TEXT("(미설정)") : *scenarioTemplate.Intent);
-
-	TArray<FString> robotLines;
-	robotLines.Add(FString::Printf(TEXT("시작 위치: %s"), *FormatRobotAnchor(scenarioTemplate.Robot.Start)));
-	robotLines.Add(FString::Printf(TEXT("목표 위치: %s"), *FormatRobotAnchor(scenarioTemplate.Robot.Goal)));
-	outListText = JoinLines(robotLines);
-}
-
-void UScenarioEditorSidebarWidget::BuildCorridorPanelText(
-	const FScenarioDocument& scenarioTemplate,
-	FString& outPrimaryText,
-	FString& outSecondaryText,
-	FString& outListText) const
-{
-	const FScenarioTemplateCorridor& corridor = scenarioTemplate.Corridor;
-	outPrimaryText = FString::Printf(
-		TEXT("중심 경로: 경로 점 %d개, 길이 %s\n보행로 폭: %s"),
-		corridor.Axis.PointsMeters.Num(),
-		*FormatMeters(MeasureAxisLengthMeters(corridor.Axis.PointsMeters)),
-		*FormatNumberValue(corridor.WalkwayWidthMeters, TEXT("m")));
-
-	TArray<FString> laneLines;
-	laneLines.Add(FString::Printf(TEXT("건물측 영역: %d개"), corridor.BuildingSide.Num()));
-	for (const FScenarioTemplateLaneRule& lane : corridor.BuildingSide)
-	{
-		laneLines.Add(FString::Printf(TEXT("  - %s"), *FormatLaneRule(lane)));
-	}
-	laneLines.Add(FString::Printf(TEXT("도로측 영역: %d개"), corridor.CurbSide.Num()));
-	for (const FScenarioTemplateLaneRule& lane : corridor.CurbSide)
-	{
-		laneLines.Add(FString::Printf(TEXT("  - %s"), *FormatLaneRule(lane)));
-	}
-	outSecondaryText = JoinLines(laneLines);
-
-	TArray<FString> segmentLines;
-	for (const FScenarioTemplateSegment& segment : corridor.Segments)
-	{
-		segmentLines.Add(FString::Printf(
-			TEXT("%s | %s | %.2f..%.2fm | 대체 표면: %s"),
-			segment.SegmentId.IsEmpty() ? TEXT("(이름 없음)") : *segment.SegmentId,
-			*SegmentTypeToString(segment.Type),
-			segment.AlongRangeMeters.StartMeters,
-			segment.AlongRangeMeters.EndMeters,
-			*FormatStringValue(segment.ReplacedBySurfaceId)));
-	}
-	outListText = JoinLines(segmentLines);
-}
-
-void UScenarioEditorSidebarWidget::BuildObstaclePanelText(
-	const FScenarioDocument& scenarioTemplate,
-	FString& outPrimaryText,
-	FString& outSecondaryText,
-	FString& outListText) const
-{
-	const FScenarioTemplateObstacleRules& obstacles = scenarioTemplate.Obstacles;
-	outPrimaryText = FString::Printf(
-		TEXT("최소 통행 폭: %s\n배치 규칙: %d개"),
-		*FormatNumberValue(obstacles.MinClearWidthMeters, TEXT("m")),
-		obstacles.Placements.Num());
-
-	outSecondaryText = TEXT("고정/패턴/분산 배치 규칙");
-
-	TArray<FString> placementLines;
-	for (const FScenarioTemplateObstaclePlacement& placement : obstacles.Placements)
-	{
-		placementLines.Add(FString::Printf(
-			TEXT("%s | %s | 장애물: %s | 구간: %s | 진행 거리: %s | 좌우 위치: %s"),
-			placement.PlacementId.IsEmpty() ? TEXT("(이름 없음)") : *placement.PlacementId,
-			*ObstaclePlacementKindToString(placement.Kind),
-			placement.PropId.IsEmpty() ? TEXT("(미설정)") : *placement.PropId,
-			placement.At.SegmentId.IsEmpty() ? TEXT("(미설정)") : *placement.At.SegmentId,
-			*FormatNumberValue(placement.At.AlongMeters, TEXT("m")),
-			*FormatNumberValue(placement.At.OffsetMeters, TEXT("m"))));
-	}
-	outListText = JoinLines(placementLines);
-}
-
-void UScenarioEditorSidebarWidget::BuildPedestrianPanelText(
-	const FScenarioDocument& scenarioTemplate,
-	FString& outPrimaryText,
-	FString& outSecondaryText,
-	FString& outListText) const
-{
-	const FScenarioTemplatePedestrianRules& pedestrians = scenarioTemplate.Pedestrians;
-	outPrimaryText = FString::Printf(
-		TEXT("배경 보행자 수: %s\n보행 속도: %s\n상호작용 상황: %d개"),
-		*FormatIntegerValue(pedestrians.Background.Count),
-		*FormatNumberValue(pedestrians.Background.SpeedMetersPerSecond, TEXT("m/s")),
-		pedestrians.Encounters.Num());
-
-	outSecondaryText = FString::Printf(
-		TEXT("스폰 구간: %s"),
-		*FormatStringList(pedestrians.Background.SpawnSegmentIds));
-
-	TArray<FString> encounterLines;
-	for (const FScenarioTemplatePedestrianEncounter& encounter : pedestrians.Encounters)
-	{
-		encounterLines.Add(FString::Printf(
-			TEXT("%s | %s | 구간: %s | 보행자 성향: %s | 만남 위치 보정: %s"),
-			encounter.EncounterId.IsEmpty() ? TEXT("(이름 없음)") : *encounter.EncounterId,
-			*EncounterTypeToString(encounter.Type),
-			encounter.AtSegmentId.IsEmpty() ? TEXT("(미설정)") : *encounter.AtSegmentId,
-			encounter.PersonaId.IsEmpty() ? TEXT("(미설정)") : *encounter.PersonaId,
-			*FormatNumberValue(encounter.MeetOffsetMeters, TEXT("m"))));
-	}
-	outListText = JoinLines(encounterLines);
-}
-
-void UScenarioEditorSidebarWidget::SetSidebarText(
+void UScenarioEditorSidebarWidget::SetSidebarShellText(
 	const FString& title,
-	const FString& primaryText,
-	const FString& secondaryText,
-	const FString& listText,
 	const FString& diagnosticsText)
 {
 	SetTextBlockText(PanelTitleTextBlock.Get(), title);
-	SetTextBlockText(PrimaryFieldsTextBlock.Get(), primaryText);
-	SetTextBlockText(SecondaryFieldsTextBlock.Get(), secondaryText);
-	SetTextBlockText(ListSummaryTextBlock.Get(), listText);
 	SetTextBlockText(DiagnosticsTextBlock.Get(), diagnosticsText);
+	if (DiagnosticsTextBlock)
+	{
+		DiagnosticsTextBlock->SetVisibility(
+			diagnosticsText.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
+	CollapseLegacySummaryWidgets();
+}
+
+void UScenarioEditorSidebarWidget::CollapseLegacySummaryWidgets() const
+{
+	if (FallbackSummaryContainer)
+	{
+		FallbackSummaryContainer->SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+	if (PrimaryFieldsTextBlock)
+	{
+		PrimaryFieldsTextBlock->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	if (SecondaryFieldsTextBlock)
+	{
+		SecondaryFieldsTextBlock->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	if (ListSummaryTextBlock)
+	{
+		ListSummaryTextBlock->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 void UScenarioEditorSidebarWidget::SetTextBlockText(UTextBlock* textBlock, const FString& text) const
@@ -605,173 +402,4 @@ FString UScenarioEditorSidebarWidget::PanelToTitle(const EScenarioTemplateSideba
 	default:
 		return TEXT("시나리오 템플릿");
 	}
-}
-
-FString UScenarioEditorSidebarWidget::RobotAnchorTypeToString(const EScenarioTemplateRobotAnchorType type)
-{
-	switch (type)
-	{
-	case EScenarioTemplateRobotAnchorType::Entry:
-		return TEXT("entry");
-	case EScenarioTemplateRobotAnchorType::Exit:
-		return TEXT("exit");
-	case EScenarioTemplateRobotAnchorType::CorridorPose:
-		return TEXT("corridor_pose");
-	default:
-		return TEXT("unknown");
-	}
-}
-
-FString UScenarioEditorSidebarWidget::RobotHeadingToString(const EScenarioTemplateRobotHeading heading)
-{
-	switch (heading)
-	{
-	case EScenarioTemplateRobotHeading::Forward:
-		return TEXT("forward");
-	case EScenarioTemplateRobotHeading::Backward:
-		return TEXT("backward");
-	case EScenarioTemplateRobotHeading::Auto:
-		return TEXT("auto");
-	default:
-		return TEXT("unknown");
-	}
-}
-
-FString UScenarioEditorSidebarWidget::SegmentTypeToString(const EScenarioTemplateSegmentType type)
-{
-	switch (type)
-	{
-	case EScenarioTemplateSegmentType::Straight:
-		return TEXT("straight");
-	case EScenarioTemplateSegmentType::Narrowing:
-		return TEXT("narrowing");
-	case EScenarioTemplateSegmentType::Crosswalk:
-		return TEXT("crosswalk");
-	case EScenarioTemplateSegmentType::Entrance:
-		return TEXT("entrance");
-	default:
-		return TEXT("unknown");
-	}
-}
-
-FString UScenarioEditorSidebarWidget::ObstaclePlacementKindToString(
-	const EScenarioTemplateObstaclePlacementKind kind)
-{
-	switch (kind)
-	{
-	case EScenarioTemplateObstaclePlacementKind::Fixed:
-		return TEXT("fixed");
-	case EScenarioTemplateObstaclePlacementKind::Pattern:
-		return TEXT("pattern");
-	case EScenarioTemplateObstaclePlacementKind::Scatter:
-		return TEXT("scatter");
-	default:
-		return TEXT("unknown");
-	}
-}
-
-FString UScenarioEditorSidebarWidget::EncounterTypeToString(const EScenarioTemplateEncounterType type)
-{
-	switch (type)
-	{
-	case EScenarioTemplateEncounterType::OncomingPass:
-		return TEXT("oncoming_pass");
-	case EScenarioTemplateEncounterType::Overtake:
-		return TEXT("overtake");
-	case EScenarioTemplateEncounterType::CrossPath:
-		return TEXT("cross_path");
-	case EScenarioTemplateEncounterType::StandingGroup:
-		return TEXT("standing_group");
-	default:
-		return TEXT("unknown");
-	}
-}
-
-FString UScenarioEditorSidebarWidget::FormatNumberValue(
-	const FScenarioTemplateNumberValue& value,
-	const FString& suffix)
-{
-	if (!value.bIsSet)
-	{
-		return TEXT("(unset)");
-	}
-
-	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
-	{
-		return FString::Printf(TEXT("%.2f..%.2f%s"), value.MinValue, value.MaxValue, *suffix);
-	}
-
-	return FString::Printf(TEXT("%.2f%s"), value.FixedValue, *suffix);
-}
-
-FString UScenarioEditorSidebarWidget::FormatIntegerValue(const FScenarioTemplateIntegerValue& value)
-{
-	if (!value.bIsSet)
-	{
-		return TEXT("(unset)");
-	}
-
-	if (value.Mode == EScenarioTemplateNumberValueMode::Range)
-	{
-		return FString::Printf(TEXT("%d..%d"), value.MinValue, value.MaxValue);
-	}
-
-	return FString::FromInt(value.FixedValue);
-}
-
-FString UScenarioEditorSidebarWidget::FormatStringValue(const FScenarioTemplateStringValue& value)
-{
-	if (!value.bIsSet)
-	{
-		return TEXT("(unset)");
-	}
-
-	if (value.Mode == EScenarioTemplateStringValueMode::Choices)
-	{
-		return FString::Printf(TEXT("[%s]"), *FormatStringList(value.Choices));
-	}
-
-	return value.FixedValue.IsEmpty() ? FString(TEXT("(empty)")) : value.FixedValue;
-}
-
-FString UScenarioEditorSidebarWidget::FormatRobotAnchor(const FScenarioTemplateRobotAnchor& anchor)
-{
-	if (anchor.Type != EScenarioTemplateRobotAnchorType::CorridorPose)
-	{
-		return FString::Printf(
-			TEXT("%s | heading: %s"),
-			*RobotAnchorTypeToString(anchor.Type),
-			*RobotHeadingToString(anchor.Heading));
-	}
-
-	return FString::Printf(
-		TEXT("corridor_pose | segment: %s | along: %s | offset: %s | lane: %s | heading: %s"),
-		anchor.SegmentId.IsEmpty() ? TEXT("(unset)") : *anchor.SegmentId,
-		*FormatNumberValue(anchor.AlongMeters, TEXT("m")),
-		*FormatNumberValue(anchor.OffsetMeters, TEXT("m")),
-		anchor.LaneId.IsEmpty() ? TEXT("(unset)") : *anchor.LaneId,
-		*RobotHeadingToString(anchor.Heading));
-}
-
-FString UScenarioEditorSidebarWidget::FormatLaneRule(const FScenarioTemplateLaneRule& lane)
-{
-	return FString::Printf(
-		TEXT("%s | width: %s"),
-		lane.SurfaceId.IsEmpty() ? TEXT("(unset)") : *lane.SurfaceId,
-		*FormatNumberValue(lane.WidthMeters, TEXT("m")));
-}
-
-FString UScenarioEditorSidebarWidget::FormatStringList(const TArray<FString>& values)
-{
-	return values.IsEmpty() ? FString(TEXT("(none)")) : FString::Join(values, TEXT(", "));
-}
-
-double UScenarioEditorSidebarWidget::MeasureAxisLengthMeters(const TArray<FVector2D>& pointsMeters)
-{
-	double lengthMeters = 0.0;
-	for (int32 index = 1; index < pointsMeters.Num(); ++index)
-	{
-		lengthMeters += FVector2D::Distance(pointsMeters[index - 1], pointsMeters[index]);
-	}
-	return lengthMeters;
 }

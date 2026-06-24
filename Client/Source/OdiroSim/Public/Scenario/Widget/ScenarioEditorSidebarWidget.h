@@ -14,7 +14,7 @@ class UWidget;
 class UWidgetSwitcher;
 class UWidgetTextStyleCatalog;
 
-// Scenario Template block viewer and panel switch host used by the editor side sidebar.
+// Scenario Template panel switch host used by the editor side sidebar.
 UCLASS(BlueprintType, Blueprintable)
 class ODIROSIM_API UScenarioEditorSidebarWidget : public UUserWidget
 {
@@ -40,18 +40,6 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UTextBlock> PanelTitleTextBlock;
 
-	// Optional field group for the most important active-block fields.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UTextBlock> PrimaryFieldsTextBlock;
-
-	// Optional field group for secondary active-block fields.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UTextBlock> SecondaryFieldsTextBlock;
-
-	// Optional list-style summary for repeated active-block items.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UTextBlock> ListSummaryTextBlock;
-
 	// Optional status text for missing draft or sidebar binding diagnostics.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UTextBlock> DiagnosticsTextBlock;
@@ -59,10 +47,6 @@ public:
 	// Optional scroll area that owns the active Scenario Template block panel.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UScrollBox> SidebarScrollBox;
-
-	// Optional container that groups legacy read-only summary text widgets.
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
-	TObjectPtr<UWidget> FallbackSummaryContainer;
 
 	// Optional switcher that hosts Main/Corridor/Obstacle/Pedestrian panel widgets.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
@@ -105,95 +89,60 @@ public:
 	void RefreshFromTemplate(const FScenarioDocument& scenarioTemplate);
 
 private:
-	// Generated Main panel used only when no specialized Main panel is bound.
+	// Generated Main panel used when no typed Main panel is bound.
 	UPROPERTY(Transient)
 	TObjectPtr<UWidget> GeneratedMainPanelWidget;
 
-	// Generated Corridor panel used only when no Blueprint placeholder is bound.
+	// Generated Corridor panel used when no typed Corridor panel is bound.
 	UPROPERTY(Transient)
 	TObjectPtr<UWidget> GeneratedCorridorPanelWidget;
 
-	// Generated Obstacle panel used only when no Blueprint placeholder is bound.
+	// Generated Obstacle panel used when no typed Obstacle panel is bound.
 	UPROPERTY(Transient)
 	TObjectPtr<UWidget> GeneratedObstaclePanelWidget;
 
-	// Generated Pedestrian panel used only when no Blueprint placeholder is bound.
+	// Generated Pedestrian panel used when no typed Pedestrian panel is bound.
 	UPROPERTY(Transient)
 	TObjectPtr<UWidget> GeneratedPedestrianPanelWidget;
 
-	// Rebuilds generated block content for the active placeholder panel widget.
-	void RefreshGeneratedPanelContent(const FScenarioDocument& scenarioTemplate);
-	// Creates or returns a catalog-backed generated panel widget.
+	// Legacy summary container kept only so migrated WBP trees can be hidden by C++.
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
+	TObjectPtr<UWidget> FallbackSummaryContainer;
+
+	// Legacy primary summary text kept only for migration-time collapse.
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
+	TObjectPtr<UTextBlock> PrimaryFieldsTextBlock;
+
+	// Legacy secondary summary text kept only for migration-time collapse.
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
+	TObjectPtr<UTextBlock> SecondaryFieldsTextBlock;
+
+	// Legacy repeated-item summary text kept only for migration-time collapse.
+	UPROPERTY(meta = (BindWidgetOptional), Transient)
+	TObjectPtr<UTextBlock> ListSummaryTextBlock;
+
+	// Refreshes the active typed panel widget.
+	bool RefreshActivePanelContent(const FScenarioDocument& scenarioTemplate);
+	// Creates or returns the typed widget for one sidebar panel.
+	UWidget* EnsurePanelWidget(EScenarioTemplateSidebarPanel panel);
+	// Creates or returns a catalog-backed generated panel widget for one sidebar panel.
 	UWidget* EnsureGeneratedPanelWidget(EScenarioTemplateSidebarPanel panel);
 	// Returns a catalog-backed generated panel widget without creating it.
 	UWidget* ResolveGeneratedPanelWidget(EScenarioTemplateSidebarPanel panel) const;
 	// Applies the active panel to the optional UMG widget switcher.
 	void RefreshPanelSwitcher();
-	// Shows read-only summary text when the active panel has no specialized widget yet.
-	void RefreshFallbackTextVisibility() const;
-	// Applies one visibility state to the legacy read-only summary area.
-	void SetFallbackTextVisibility(ESlateVisibility visibility) const;
 	// Resolves the switcher child widget for one sidebar panel.
 	UWidget* ResolvePanelWidget(EScenarioTemplateSidebarPanel panel) const;
-	// Builds read-only text for root template metadata and robot anchors.
-	void BuildMainPanelText(
-		const FScenarioDocument& scenarioTemplate,
-		FString& outPrimaryText,
-		FString& outSecondaryText,
-		FString& outListText) const;
-	// Builds read-only text for Corridor axis, side lanes, and semantic segments.
-	void BuildCorridorPanelText(
-		const FScenarioDocument& scenarioTemplate,
-		FString& outPrimaryText,
-		FString& outSecondaryText,
-		FString& outListText) const;
-	// Builds read-only text for obstacle rules and placement blocks.
-	void BuildObstaclePanelText(
-		const FScenarioDocument& scenarioTemplate,
-		FString& outPrimaryText,
-		FString& outSecondaryText,
-		FString& outListText) const;
-	// Builds read-only text for pedestrian background and encounter rules.
-	void BuildPedestrianPanelText(
-		const FScenarioDocument& scenarioTemplate,
-		FString& outPrimaryText,
-		FString& outSecondaryText,
-		FString& outListText) const;
-	// Applies the resolved sidebar text to optional UMG text blocks.
-	void SetSidebarText(
+	// Applies shell-level title and diagnostics text.
+	void SetSidebarShellText(
 		const FString& title,
-		const FString& primaryText,
-		const FString& secondaryText,
-		const FString& listText,
 		const FString& diagnosticsText);
+	// Collapses migrated summary text widgets so typed panels are the only detail surface.
+	void CollapseLegacySummaryWidgets() const;
 	// Applies text to a bound text block when it exists.
 	void SetTextBlockText(UTextBlock* textBlock, const FString& text) const;
 	// Pushes non-visual dependencies to typed child panel widgets.
 	void ConfigureChildPanelDependencies() const;
 	// Returns the display title for one template sidebar panel.
 	static FString PanelToTitle(EScenarioTemplateSidebarPanel panel);
-	// Returns a stable label for a robot anchor type.
-	static FString RobotAnchorTypeToString(EScenarioTemplateRobotAnchorType type);
-	// Returns a stable label for a robot heading hint.
-	static FString RobotHeadingToString(EScenarioTemplateRobotHeading heading);
-	// Returns a stable label for a corridor segment type.
-	static FString SegmentTypeToString(EScenarioTemplateSegmentType type);
-	// Returns a stable label for an obstacle placement kind.
-	static FString ObstaclePlacementKindToString(EScenarioTemplateObstaclePlacementKind kind);
-	// Returns a stable label for a pedestrian encounter type.
-	static FString EncounterTypeToString(EScenarioTemplateEncounterType type);
-	// Formats one authored numeric value for read-only display.
-	static FString FormatNumberValue(const FScenarioTemplateNumberValue& value, const FString& suffix = FString());
-	// Formats one authored integer value for read-only display.
-	static FString FormatIntegerValue(const FScenarioTemplateIntegerValue& value);
-	// Formats one authored string value for read-only display.
-	static FString FormatStringValue(const FScenarioTemplateStringValue& value);
-	// Formats a robot anchor in template-space terms.
-	static FString FormatRobotAnchor(const FScenarioTemplateRobotAnchor& anchor);
-	// Formats a corridor lane rule.
-	static FString FormatLaneRule(const FScenarioTemplateLaneRule& lane);
-	// Formats a comma-separated string list.
-	static FString FormatStringList(const TArray<FString>& values);
-	// Measures the authored corridor polyline in meters.
-	static double MeasureAxisLengthMeters(const TArray<FVector2D>& pointsMeters);
 };

@@ -6,8 +6,12 @@
 #include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/Widget/ScenarioEditorOutlinerRowWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarCorridorPanel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorPointWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
+#include "Scenario/Widget/ScenarioEditorSidebarMainPanel.h"
+#include "Scenario/Widget/ScenarioEditorSidebarObstaclePanel.h"
+#include "Scenario/Widget/ScenarioEditorSidebarPedestrianPanel.h"
 
 namespace
 {
@@ -165,8 +169,24 @@ bool FScenarioEditorWidgetClassCatalogDefaultsTest::RunTest(const FString& Param
 		UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(emptyCatalog));
 	TestResolvesCatalogBlueprintClass(
 		*this,
+		TEXT("Sidebar main panel"),
+		UScenarioEditorWidgetClassCatalog::ResolveSidebarMainPanelWidgetClass(emptyCatalog));
+	TestResolvesCatalogBlueprintClass(
+		*this,
+		TEXT("Sidebar corridor panel"),
+		UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorPanelWidgetClass(emptyCatalog));
+	TestResolvesCatalogBlueprintClass(
+		*this,
 		TEXT("Corridor point row"),
 		UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorPointWidgetClass(emptyCatalog));
+	TestResolvesCatalogBlueprintClass(
+		*this,
+		TEXT("Sidebar obstacle panel"),
+		UScenarioEditorWidgetClassCatalog::ResolveSidebarObstaclePanelWidgetClass(emptyCatalog));
+	TestResolvesCatalogBlueprintClass(
+		*this,
+		TEXT("Sidebar pedestrian panel"),
+		UScenarioEditorWidgetClassCatalog::ResolveSidebarPedestrianPanelWidgetClass(emptyCatalog));
 
 	return true;
 }

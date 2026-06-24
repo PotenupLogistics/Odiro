@@ -135,9 +135,9 @@ void UScenarioEditorSidebarCorridorPointWidget::ConfigureFieldRows()
 	{
 		PointBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
 		PointBlockWidget->SetBlockMetadata(
-			FString::Printf(TEXT("point[%d]"), PointIndex),
+			FString::Printf(TEXT("경로 점 %d"), PointIndex + 1),
 			TEXT("root.corridor.axis.points_m[]"),
-			TEXT("Detail"));
+			TEXT("세부"));
 		PointBlockWidget->SetNested(true);
 		PointBlockWidget->SetShowNormalOutline(false);
 	}

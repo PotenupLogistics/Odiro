@@ -195,10 +195,10 @@ void UScenarioEditorSidebarCorridorSegmentWidget::ConfigureFieldRows()
 		SegmentBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
 		SegmentBlockWidget->SetBlockMetadata(
 			CachedSegment.SegmentId.IsEmpty()
-				? FString::Printf(TEXT("segment[%d]"), SegmentIndex)
+				? FString::Printf(TEXT("구간 %d"), SegmentIndex + 1)
 				: CachedSegment.SegmentId,
 			TEXT("root.corridor.segments[]"),
-			TEXT("Detail"));
+			TEXT("세부"));
 		SegmentBlockWidget->SetNested(true);
 		SegmentBlockWidget->SetShowNormalOutline(false);
 	}
@@ -248,10 +248,10 @@ void UScenarioEditorSidebarCorridorSegmentWidget::ApplyCachedSegmentToRows()
 	{
 		SegmentBlockWidget->SetBlockMetadata(
 			CachedSegment.SegmentId.IsEmpty()
-				? FString::Printf(TEXT("segment[%d]"), SegmentIndex)
+				? FString::Printf(TEXT("구간 %d"), SegmentIndex + 1)
 				: CachedSegment.SegmentId,
 			TEXT("root.corridor.segments[]"),
-			TEXT("Detail"));
+			TEXT("세부"));
 	}
 	if (IdFieldRow)
 	{

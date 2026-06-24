@@ -88,13 +88,13 @@ void UScenarioEditorSidebarPedestrianPanel::ConfigureFieldRows()
 	if (PedestriansBlockWidget)
 	{
 		PedestriansBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		PedestriansBlockWidget->SetBlockMetadata(TEXT("pedestrians"), TEXT("root.pedestrians"), TEXT("Template"));
+		PedestriansBlockWidget->SetBlockMetadata(TEXT("보행자"), TEXT("root.pedestrians"), TEXT("구성"));
 		PedestriansBlockWidget->SetSelected(true);
 	}
 	if (BackgroundBlockWidget)
 	{
 		BackgroundBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		BackgroundBlockWidget->SetBlockMetadata(TEXT("background"), TEXT("root.pedestrians.background"), TEXT("Property"));
+		BackgroundBlockWidget->SetBlockMetadata(TEXT("배경 보행자"), TEXT("root.pedestrians.background"), TEXT("속성"));
 		BackgroundBlockWidget->SetNested(true);
 		BackgroundBlockWidget->SetShowNormalOutline(false);
 	}
@@ -102,16 +102,16 @@ void UScenarioEditorSidebarPedestrianPanel::ConfigureFieldRows()
 	{
 		SpawnZoneBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
 		SpawnZoneBlockWidget->SetBlockMetadata(
-			TEXT("spawn_zone"),
+			TEXT("스폰 구역"),
 			TEXT("root.pedestrians.background.spawn_zone"),
-			TEXT("Detail"));
+			TEXT("세부"));
 		SpawnZoneBlockWidget->SetNested(true);
 		SpawnZoneBlockWidget->SetShowNormalOutline(false);
 	}
 	if (EncountersBlockWidget)
 	{
 		EncountersBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		EncountersBlockWidget->SetBlockMetadata(TEXT("encounters"), TEXT("root.pedestrians.encounters[]"), TEXT("Property"));
+		EncountersBlockWidget->SetBlockMetadata(TEXT("상호작용 상황"), TEXT("root.pedestrians.encounters[]"), TEXT("속성"));
 		EncountersBlockWidget->SetNested(true);
 		EncountersBlockWidget->SetShowNormalOutline(false);
 	}

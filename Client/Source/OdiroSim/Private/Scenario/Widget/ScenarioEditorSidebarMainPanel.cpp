@@ -458,27 +458,27 @@ void UScenarioEditorSidebarMainPanel::ConfigureFieldRows()
 	if (RootBlockWidget)
 	{
 		RootBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		RootBlockWidget->SetBlockMetadata(TEXT("Root"), TEXT("scenario"), TEXT("Main"));
+		RootBlockWidget->SetBlockMetadata(TEXT("시나리오"), TEXT("scenario"), TEXT("기본"));
 		RootBlockWidget->SetSelected(true);
 		RootBlockWidget->SetNested(false);
 	}
 	if (RobotBlockWidget)
 	{
 		RobotBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		RobotBlockWidget->SetBlockMetadata(TEXT("robot"), TEXT("root.robot"), TEXT("Template"));
+		RobotBlockWidget->SetBlockMetadata(TEXT("로봇 경로"), TEXT("root.robot"), TEXT("구성"));
 		RobotBlockWidget->SetSelected(false);
 		RobotBlockWidget->SetNested(true);
 	}
 	if (RobotStartBlockWidget)
 	{
 		RobotStartBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		RobotStartBlockWidget->SetBlockMetadata(TEXT("start"), TEXT("root.robot.start"), TEXT("Property"));
+		RobotStartBlockWidget->SetBlockMetadata(TEXT("시작 위치"), TEXT("root.robot.start"), TEXT("속성"));
 		RobotStartBlockWidget->SetNested(true);
 	}
 	if (RobotGoalBlockWidget)
 	{
 		RobotGoalBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		RobotGoalBlockWidget->SetBlockMetadata(TEXT("goal"), TEXT("root.robot.goal"), TEXT("Property"));
+		RobotGoalBlockWidget->SetBlockMetadata(TEXT("목표 위치"), TEXT("root.robot.goal"), TEXT("속성"));
 		RobotGoalBlockWidget->SetNested(true);
 	}
 	ApplyTextStyles();

@@ -444,9 +444,9 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ConfigureFieldRows()
 		PlacementBlockWidget->SetBlockMetadata(
 			bHasCachedPlacement && !CachedPlacement.PlacementId.IsEmpty()
 				? CachedPlacement.PlacementId
-				: FString::Printf(TEXT("placement[%d]"), PlacementIndex),
+				: FString::Printf(TEXT("배치 규칙 %d"), PlacementIndex + 1),
 			TEXT("root.obstacles.placements[]"),
-			TEXT("Detail"));
+			TEXT("세부"));
 		PlacementBlockWidget->SetNested(true);
 		PlacementBlockWidget->SetShowNormalOutline(false);
 	}
@@ -493,10 +493,10 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ApplyCachedPlacementToRows()
 	{
 		PlacementBlockWidget->SetBlockMetadata(
 			CachedPlacement.PlacementId.IsEmpty()
-				? FString::Printf(TEXT("placement[%d]"), PlacementIndex)
+				? FString::Printf(TEXT("배치 규칙 %d"), PlacementIndex + 1)
 				: CachedPlacement.PlacementId,
 			TEXT("root.obstacles.placements[]"),
-			TEXT("Detail"));
+			TEXT("세부"));
 	}
 	if (PlacementIdFieldRow)
 	{

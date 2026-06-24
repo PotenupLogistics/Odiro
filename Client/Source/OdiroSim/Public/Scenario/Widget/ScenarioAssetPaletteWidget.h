@@ -8,7 +8,6 @@
 class UHorizontalBox;
 class UScrollBox;
 class USizeBox;
-class UTexture2D;
 class UWidget;
 class UScenarioAssetPaletteCatalog;
 class UScenarioAssetPaletteViewModel;
@@ -41,21 +40,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
 	bool bIncludeRobotRoutePlacement = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
-	bool bIncludeGroundRegionDraw = true;
-
-	// Walkable ground-region fallback thumbnail; catalog entries can override per item.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
-	TSoftObjectPtr<UTexture2D> WalkableGroundRegionThumbnail;
-
-	// Penalty ground-region fallback thumbnail; catalog entries can override per item.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
-	TSoftObjectPtr<UTexture2D> PenaltyGroundRegionThumbnail;
-
-	// Blocked ground-region fallback thumbnail; catalog entries can override per item.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
-	TSoftObjectPtr<UTexture2D> BlockedGroundRegionThumbnail;
-
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
 	TObjectPtr<USizeBox> PaletteSizeBox;
 
@@ -67,9 +51,6 @@ public:
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
 	TObjectPtr<UHorizontalBox> StaticObstacleItemContainer;
-
-	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Palette")
-	TObjectPtr<UHorizontalBox> GroundRegionItemContainer;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Palette")
 	bool RebuildPalette();
@@ -87,7 +68,6 @@ protected:
 private:
 	const UScenarioAssetPaletteCatalog* GetPaletteCatalog() const;
 	UHorizontalBox* ResolveStaticObstacleItemContainer() const;
-	UHorizontalBox* ResolveGroundRegionItemContainer() const;
 	UScenarioPlaceablePaletteItemWidget* CreatePaletteItemWidget() const;
 	void BindPaletteItemWidget(UScenarioPlaceablePaletteItemWidget* itemWidget);
 	bool AddPaletteItemWidget(
@@ -96,10 +76,6 @@ private:
 	bool AddPaletteItemWidget(
 		UHorizontalBox* targetContainer,
 		UScenarioEditorListItemViewModel* itemViewModel);
-	int32 AddDefaultGroundRegionPaletteEntries();
-	void SeedGroundRegionThumbnail(FScenarioPaletteItemEntry& entry) const;
-	TSoftObjectPtr<UTexture2D> ResolveGroundRegionThumbnail(FName assetId) const;
-	FScenarioPaletteItemEntry MakeGroundRegionPaletteItemEntry(FName assetId, const TCHAR* displayName) const;
 	static bool ShouldIncludeSpecialEntry(
 		const FScenarioPaletteItemEntry& entry,
 		bool bIncludePedestrian,

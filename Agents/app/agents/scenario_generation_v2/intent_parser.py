@@ -76,7 +76,7 @@ class IntentParser:
             risk_factors.append("narrow_sidewalk")
             difficulty = "medium_high"
         if not explicit_no_obstacles and (
-            any(token in prompt for token in ("장애물", "공사", "바리케이드", "차단막", "공사 콘", "안내판"))
+            any(token in prompt for token in ("장애물", "공사", "바리케이드", "차단막", "공사 콘", "콘", "꼬깔", "안내판"))
             or any(token in lowered for token in ("obstacle", "cone", "sign", "panel"))
         ):
             risk_factors.append("static_obstacle_ahead")
@@ -150,14 +150,16 @@ class IntentParser:
 
     def _requested_obstacle_count(self, prompt: str, lowered: str) -> int | None:
         """Return an explicit obstacle count from common Korean and English phrasings."""
-        korean_match = re.search(r"장애물\s*(\d+)\s*개|(\d+)\s*개(?:만)?\s*.*장애물", prompt)
+        korean_match = re.search(r"(?:장애물|콘|꼬깔)\s*(\d+)\s*개|(\d+)\s*개(?:만)?\s*.*(?:장애물|콘|꼬깔)", prompt)
         if korean_match:
             value = korean_match.group(1) or korean_match.group(2)
             return int(value)
-        if any(token in prompt for token in ("장애물 두 개", "두 개의 장애물", "장애물 2개")):
+        if any(token in prompt for token in ("장애물 두 개", "두 개의 장애물", "장애물 2개", "콘 두 개", "두 개의 콘", "콘 2개")):
             return 2
         generic_korean_match = re.search(r"(\d+)\s*개", prompt)
-        if generic_korean_match and ("장애물" in prompt or "obstacle" in lowered or "cone" in lowered):
+        if generic_korean_match and (
+            "장애물" in prompt or "콘" in prompt or "꼬깔" in prompt or "obstacle" in lowered or "cone" in lowered
+        ):
             return int(generic_korean_match.group(1))
         english_match = re.search(r"(?:obstacle[s]?\D+(\d+)|(\d+)\D+obstacle[s]?)", lowered)
         if english_match:
@@ -170,6 +172,8 @@ class IntentParser:
     def _requested_prop(self, prompt: str, lowered: str) -> str | None:
         """Return a prompt-mentioned static obstacle prop id without inventing unknown aliases."""
         allowed_props = get_allowed_static_obstacle_prop_ids()
+        if "콘" in prompt or "꼬깔" in prompt or "cone" in lowered:
+            return "obstacle.road_cone_01"
         prop_pattern = r"(?:obstacle\.[a-z0-9_]+|[a-z][a-z0-9]*(?:_[a-z0-9]+)+_\d+)"
         match = re.search(prop_pattern, lowered)
         if match is None:
@@ -224,6 +228,8 @@ class IntentParser:
             token in lowered for token in ("s-curve", "s curve")
         ):
             return "s-curve"
+        if self._is_right_angle_corridor_prompt(prompt, lowered):
+            return "g-shape"
         if any(token in prompt for token in ("공사", "바리케이드", "차단막")) or any(
             token in lowered for token in ("construction", "barricade")
         ):
@@ -252,6 +258,11 @@ class IntentParser:
             token in lowered for token in ("s-curve", "s curve")
         ):
             return "s-curve"
+        if self._is_right_angle_corridor_prompt(prompt, lowered) and not (
+            any(token in prompt for token in ("공사", "바리케이드", "차단막"))
+            or any(token in lowered for token in ("construction", "barricade"))
+        ):
+            return None
         if any(token in prompt for token in ("공사", "바리케이드", "차단막")) or any(
             token in lowered for token in ("construction", "barricade")
         ):
@@ -270,9 +281,15 @@ class IntentParser:
         english_tokens = ("curved road", "curve", "bend")
         return any(token in prompt for token in korean_tokens) or any(token in lowered for token in english_tokens)
 
+    def _is_right_angle_corridor_prompt(self, prompt: str, lowered: str) -> bool:
+        """Return whether the prompt asks for a right-angle or L-shaped corridor."""
+        korean_tokens = ("ㄱ자", "L자", "l자", "엘자", "직각", "꺾인 도로", "코너")
+        english_tokens = ("l-shaped", "l shaped", "right angle", "right-angle", "corner")
+        return any(token in prompt for token in korean_tokens) or any(token in lowered for token in english_tokens)
+
     def _has_risk_element(self, prompt: str, lowered: str) -> bool:
         """Return whether the prompt asks for obstacles, pedestrians, or risk interactions."""
-        korean_tokens = ("장애물", "공사 콘", "안내판", "보행자", "가로지르는", "마주 오는", "대향", "추월", "군중", "충돌", "위험")
+        korean_tokens = ("장애물", "공사 콘", "콘", "꼬깔", "안내판", "보행자", "가로지르는", "마주 오는", "대향", "추월", "군중", "충돌", "위험")
         english_tokens = ("obstacle", "pedestrian", "crossing", "oncoming", "crowd", "collision", "near miss", "risk", "blocked", "blocking")
         return any(token in prompt for token in korean_tokens) or any(token in lowered for token in english_tokens)
 

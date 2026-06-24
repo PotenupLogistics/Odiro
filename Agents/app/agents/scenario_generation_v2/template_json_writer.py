@@ -53,6 +53,8 @@ class TemplateJsonWriter:
             return self._curved_corridor(length_m)
         if plan.corridor_profile == "s-curve":
             return self._s_curve_corridor(length_m)
+        if plan.corridor_profile in {"g-shape", "l-shape"}:
+            return self._g_shape_corridor(length_m)
         if plan.corridor_profile == "construction":
             return self._construction_corridor(length_m)
         return self._straight_corridor(length_m, single_segment=plan.requested_length_m is not None)
@@ -67,6 +69,8 @@ class TemplateJsonWriter:
             return 12.0
         if plan.corridor_profile == "curved":
             return 10.0
+        if plan.corridor_profile in {"g-shape", "l-shape"}:
+            return 20.0
         return 18.0
 
     def _straight_corridor(self, length_m: float, *, single_segment: bool) -> dict[str, Any]:
@@ -159,6 +163,40 @@ class TemplateJsonWriter:
             ],
         }
 
+    def _g_shape_corridor(self, length_m: float) -> dict[str, Any]:
+        """Return a right-angle corridor with a pre-corner construction segment."""
+        length_m = self._rounded(max(6.0, length_m))
+        corner_along_m = self._rounded(length_m * 0.5)
+        exit_leg_m = self._rounded(length_m - corner_along_m)
+        pre_corner_width_m = self._rounded(min(3.0, max(1.5, length_m * 0.15)))
+        pre_corner_start_m = self._rounded(max(0.0, corner_along_m - pre_corner_width_m))
+        return {
+            "axis": {
+                "type": "polyline",
+                "points_m": [
+                    [0.0, 0.0],
+                    [corner_along_m, 0.0],
+                    [corner_along_m, exit_leg_m],
+                ],
+            },
+            "walkway_width_m": {"min": 1.6, "max": 2.2},
+            "building_side": [{"surface": "wall", "width_m": 0.4}],
+            "curb_side": [{"surface": "road", "width_m": 4.0}],
+            "segments": [
+                {"id": "approach", "type": "straight", "along_range_m": [0.0, pre_corner_start_m]},
+                {
+                    "id": "pre_corner_construction",
+                    "type": "narrowing",
+                    "along_range_m": [pre_corner_start_m, corner_along_m],
+                },
+                {
+                    "id": "turn_and_exit",
+                    "type": "straight",
+                    "along_range_m": [corner_along_m, length_m],
+                },
+            ],
+        }
+
     def _construction_corridor(self, length_m: float) -> dict[str, Any]:
         """Return a construction-style straight corridor for fallback generation."""
         corridor = self._straight_corridor(length_m, single_segment=False)
@@ -200,21 +238,17 @@ class TemplateJsonWriter:
     ) -> list[dict[str, Any]]:
         """Return catalog-safe fixed obstacle placements inside the conflict segment."""
         placements = []
-        offsets = [
-            {"min": 0.45, "max": 0.75},
-            {"min": -0.35, "max": -0.05},
-            {"min": 0.05, "max": 0.35},
-        ]
-        along_range = self._obstacle_along_range(segment_range)
+        offset_centers = [-0.35, 0.25, -0.15, 0.35, -0.25, 0.15]
         for index in range(count):
+            offset_center = offset_centers[index % len(offset_centers)]
             placement: dict[str, Any] = {
                 "kind": "fixed",
-                "id": "center_obstacle" if index == 0 else f"center_obstacle_{index + 1}",
+                "id": self._obstacle_id(prop, index),
                 "prop": prop,
                 "at": {
                     "segment": segment_id,
-                    "along_m": self._shifted_along_range(along_range, segment_range, index),
-                    "offset_m": offsets[index % len(offsets)],
+                    "along_m": self._distributed_along_range(segment_range, index, count),
+                    "offset_m": self._offset_range(offset_center),
                     "lane": "walkway",
                 },
                 "yaw_deg": 0,
@@ -265,7 +299,7 @@ class TemplateJsonWriter:
     def _target_obstacle_segment(self, corridor: dict[str, Any]) -> tuple[str, tuple[float, float]]:
         """Return a valid segment anchor for generated fallback obstacles."""
         segments = [segment for segment in corridor.get("segments", []) if isinstance(segment, dict)]
-        for preferred_id in ("conflict", "road_curve", "curve_right_1", "main"):
+        for preferred_id in ("pre_corner_construction", "conflict", "road_curve", "curve_right_1", "main"):
             for segment in segments:
                 if segment.get("id") == preferred_id:
                     return str(preferred_id), self._segment_range(segment)
@@ -299,21 +333,32 @@ class TemplateJsonWriter:
             "max": self._rounded(min(end_m, center + half_width)),
         }
 
-    def _shifted_along_range(
+    def _distributed_along_range(
         self,
-        along_range: dict[str, float],
         segment_range: tuple[float, float],
         index: int,
+        count: int,
     ) -> dict[str, float]:
-        """Return a slightly shifted along band for repeated generated obstacles."""
-        if index == 0:
-            return along_range
+        """Return a non-overlapping-ish along band distributed through the segment."""
         start_m, end_m = segment_range
-        shift = index * 0.25
+        span = max(0.0, end_m - start_m)
+        slot_count = max(1, count)
+        center = start_m + span * ((index + 1) / (slot_count + 1))
+        half_width = min(0.12, max(0.05, span / (slot_count + 1) * 0.15))
         return {
-            "min": self._rounded(min(max(start_m, along_range["min"] + shift), end_m)),
-            "max": self._rounded(min(max(start_m, along_range["max"] + shift), end_m)),
+            "min": self._rounded(self._clamp(center - half_width, start_m, end_m)),
+            "max": self._rounded(self._clamp(center + half_width, start_m, end_m)),
         }
+
+    def _offset_range(self, center_m: float) -> dict[str, float]:
+        """Return a narrow offset band around the requested obstacle lane center."""
+        return {"min": self._rounded(center_m - 0.05), "max": self._rounded(center_m + 0.05)}
+
+    def _obstacle_id(self, prop: str, index: int) -> str:
+        """Return a stable placement id that reflects cone-specific prompt intent."""
+        if prop == "obstacle.road_cone_01":
+            return f"cone_{index + 1:02d}"
+        return "center_obstacle" if index == 0 else f"center_obstacle_{index + 1}"
 
     def _pedestrians(self, plan: TemplatePlan) -> dict[str, Any]:
         """Return alpha fallback pedestrian output from parsed pedestrian intent."""
@@ -361,6 +406,8 @@ class TemplateJsonWriter:
             return "curved_road_static_obstacle" if obstacle_count else "curved_road_sidewalk"
         if plan.corridor_profile == "s-curve":
             return "long_multi_curve_open_clearance_03"
+        if plan.corridor_profile in {"g-shape", "l-shape"}:
+            return "g_shape_pre_corner_construction_cones" if obstacle_count else "g_shape_corridor_navigation"
         if plan.corridor_profile == "construction":
             return "construction_fallback_static_obstacle" if obstacle_count else "construction_fallback_sidewalk"
         if plan.requested_length_m is not None:
@@ -377,6 +424,12 @@ class TemplateJsonWriter:
             )
         if plan.corridor_profile == "s-curve":
             return "Evaluate route following on a long S-curve sidewalk with intent-based obstacle placement."
+        if plan.corridor_profile in {"g-shape", "l-shape"}:
+            return (
+                "Evaluate right-angle corridor navigation with pre-corner construction cone placement."
+                if obstacle_count
+                else "Evaluate right-angle corridor navigation without static obstacles."
+            )
         if plan.requested_length_m is not None:
             return f"Evaluate straight sidewalk navigation over {plan.requested_length_m:g}m."
         return plan.intent
@@ -390,3 +443,7 @@ class TemplateJsonWriter:
     def _rounded(self, value: float) -> float:
         """Round generated geometry values to stable millimeter precision."""
         return round(float(value), 3)
+
+    def _clamp(self, value: float, minimum: float, maximum: float) -> float:
+        """Clamp a number to an inclusive range."""
+        return min(max(value, minimum), maximum)

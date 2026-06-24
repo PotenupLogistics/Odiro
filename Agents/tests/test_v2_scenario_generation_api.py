@@ -17,6 +17,12 @@ from app.main import app
 from app.models.scenario_generation_v2 import ScenarioGenerateV2Request
 
 
+COMPLEX_G_SHAPE_CONSTRUCTION_PROMPT = (
+    "ㄱ자 도로에 중간 공사구간이 있고, 커브 직전에 콘 3개를 지그재그로 배치해줘. "
+    "전체 길이는 20m 정도로 하고 보행자는 없게 해줘."
+)
+
+
 class _FakeJsonClient:
     def __init__(self, responses):
         self.responses = list(responses)
@@ -248,6 +254,65 @@ def _assert_curved_road_scenario_contract(payload: dict, *, expect_obstacle: boo
             assert start_m <= along_m["min"] <= along_m["max"] <= end_m
         else:
             assert start_m <= along_m <= end_m
+    assert payload["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+
+
+def _axis_path_length(points: list[list[float]]) -> float:
+    """Return the polyline length used by scenario corridor assertions."""
+    total = 0.0
+    for previous, current in zip(points, points[1:], strict=False):
+        total += (
+            (float(current[0]) - float(previous[0])) ** 2
+            + (float(current[1]) - float(previous[1])) ** 2
+        ) ** 0.5
+    return total
+
+
+def _range_center(value: object) -> float:
+    """Return a comparable center for scalar or ranged scenario coordinates."""
+    if isinstance(value, dict):
+        return (float(value["min"]) + float(value["max"])) / 2.0
+    return float(value)
+
+
+def _assert_complex_g_shape_construction_scenario(payload: dict) -> None:
+    """Assert the complex Korean prompt keeps shape, count, and placement intent."""
+    _assert_raw_scenario(payload)
+    corridor = payload["corridor"]
+    points = corridor["axis"]["points_m"]
+    assert len(points) >= 3
+    assert points != [[0.0, 0.0], [20.0, 0.0]]
+    assert 19.0 <= _axis_path_length(points) <= 21.0
+
+    segment_by_id = {segment["id"]: segment for segment in corridor["segments"]}
+    assert "pre_corner_construction" in segment_by_id
+    assert "turn_and_exit" in segment_by_id
+    pre_corner = segment_by_id["pre_corner_construction"]
+    assert pre_corner["type"] == "narrowing"
+    pre_corner_range = pre_corner["along_range_m"]
+    assert 6.5 <= float(pre_corner_range[0]) <= 7.5
+    assert 9.5 <= float(pre_corner_range[1]) <= 10.5
+
+    placements = payload["obstacles"]["placements"]
+    assert len(placements) == 3
+    assert {placement["prop"] for placement in placements} == {"obstacle.road_cone_01"}
+    assert len({placement["id"] for placement in placements}) == 3
+
+    positions: set[tuple[float, float]] = set()
+    offsets: list[float] = []
+    for placement in placements:
+        at = placement["at"]
+        assert at["segment"] == "pre_corner_construction"
+        along_center = _range_center(at["along_m"])
+        offset_center = _range_center(at["offset_m"])
+        assert float(pre_corner_range[0]) <= along_center <= float(pre_corner_range[1])
+        positions.add((round(along_center, 2), round(offset_center, 2)))
+        offsets.append(offset_center)
+    assert len(positions) == len(placements)
+    assert len({round(offset, 2) for offset in offsets}) >= 2
+    assert any(offset < 0 for offset in offsets)
+    assert any(offset > 0 for offset in offsets)
+
     assert payload["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
 
 
@@ -1168,6 +1233,34 @@ def test_v2_deterministic_construction_prompt_uses_barricade_preset_skeleton() -
     assert scenario["corridor"]["segments"][1]["id"] == "conflict"
 
 
+def test_v2_endpoint_complex_g_shape_construction_prompt_patches_preset(monkeypatch) -> None:
+    """Preserve L-shape intent while patching the construction preset."""
+    monkeypatch.setenv("V2_AGENT_LLM_ENABLED", "false")
+
+    response = TestClient(app).post(
+        "/api/v2/scenarios/generate",
+        json={"prompt": COMPLEX_G_SHAPE_CONSTRUCTION_PROMPT},
+    )
+
+    assert response.status_code == 200, response.text
+    _assert_complex_g_shape_construction_scenario(response.json())
+
+
+def test_v2_deterministic_g_shape_prompt_without_obstacles_builds_corner_corridor() -> None:
+    """Build an obstacle-free L-shape corridor when only road shape is requested."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="ㄱ자 도로 생성해줘"))
+
+    assert response.scenario is not None
+    scenario = response.scenario
+    _assert_raw_scenario(scenario)
+    points = scenario["corridor"]["axis"]["points_m"]
+    assert len(points) >= 3
+    assert points != [[0.0, 0.0], [20.0, 0.0]]
+    assert scenario["obstacles"]["placements"] == []
+
+
 def test_v2_deterministic_s_curve_prompt_uses_s_curve_preset_skeleton() -> None:
     """Select the s-curve preset for multi-curve path prompts."""
     agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
@@ -1275,6 +1368,21 @@ def test_v2_missing_preset_obstacle_count_uses_intent_based_count_fallback() -> 
     assert len(response.scenario["obstacles"]["placements"]) == 2
 
 
+def test_v2_missing_preset_complex_g_shape_construction_prompt_uses_intent_fallback() -> None:
+    """Build the same complex L-shape construction scene when presets are unavailable."""
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(v2AgentLlmEnabled=False),
+        scenario_preset_loader=_MissingScenarioPresetLoader(),
+    )
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt=COMPLEX_G_SHAPE_CONSTRUCTION_PROMPT))
+
+    assert response.status == "success"
+    assert response.scenario is not None
+    assert response.validation.valid is True
+    _assert_complex_g_shape_construction_scenario(response.scenario)
+
+
 def test_v2_missing_preset_requested_catalog_prop_uses_intent_prop_fallback() -> None:
     """Use an explicitly requested catalog prop in fallback obstacle placements."""
     agent = ScenarioGenerationV2Agent(
@@ -1365,6 +1473,18 @@ def test_v2_deterministic_straight_obstacle_prompt_uses_line_preset_skeleton() -
     assert points == [[0.0, 0.0], [4.0, 0.0]]
     assert response.scenario["scenario_id"] == "demo_sidewalk_obstacle"
     assert len(response.scenario["obstacles"]["placements"]) == 1
+
+
+def test_v2_deterministic_straight_obstacle_count_prompt_keeps_requested_count() -> None:
+    """Keep straight corridor geometry while honoring an explicit obstacle count."""
+    agent = ScenarioGenerationV2Agent(settings=Settings(v2AgentLlmEnabled=False))
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="장애물 3개 있는 직선 도로 만들어줘"))
+
+    assert response.scenario is not None
+    scenario = response.scenario
+    assert scenario["corridor"]["axis"]["points_m"] == [[0.0, 0.0], [4.0, 0.0]]
+    assert len(scenario["obstacles"]["placements"]) == 3
 
 
 def test_v2_deterministic_pedestrian_prompt_keeps_alpha_pedestrians_empty() -> None:

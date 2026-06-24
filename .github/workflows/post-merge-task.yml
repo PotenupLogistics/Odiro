@@ -154,7 +154,8 @@ jobs:
               return @($Payload)
           }
 
-          # Reads the Git LFS API endpoint from the repository's effective LFS config.
+          # Returns the repository's effective Git LFS API endpoint without a trailing slash.
+          # Throws when git lfs env fails or does not report an Endpoint line.
           function Get-LfsApiEndpoint {
               $lines = @(git lfs env)
               if ($LASTEXITCODE -ne 0) {
@@ -162,7 +163,7 @@ jobs:
               }
 
               foreach ($line in $lines) {
-                  if ($line -match '^Endpoint=(?<Url>\S+)') {
+                  if ($line -match '^Endpoint=(?<Url>.+)$') {
                       return ([string] $Matches["Url"]).TrimEnd("/")
                   }
               }
@@ -170,11 +171,14 @@ jobs:
               throw "Git LFS endpoint was not found."
           }
 
-          # Force-unlocks one Git LFS lock via the LFS HTTP API using gh api (mirrors manual-unlock.ps1).
-          # Requires GH_TOKEN to be set in the environment to the admin PAT used for LFS unlocks.
+          # Force-unlocks one Git LFS lock by id through the Git LFS HTTP API using gh api.
+          # Path is the repository-relative asset path used for diagnostics, and Id is the Git LFS lock id string.
+          # Throws when GH_TOKEN is missing, the HTTP call fails, or the LFS server rejects the unlock request.
           function Invoke-ForceUnlockById {
               param(
+                  # Repository-relative lock path used in error output.
                   [string] $Path,
+                  # Git LFS lock identifier returned by git lfs locks --json.
                   [string] $Id
               )
 

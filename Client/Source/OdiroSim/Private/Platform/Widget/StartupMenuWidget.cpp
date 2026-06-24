@@ -7,16 +7,15 @@
 #include "Components/WidgetSwitcher.h"
 #include "Components/WrapBox.h"
 #include "Engine/Engine.h"
-#include "Engine/GameInstance.h"
 #include "GameFramework/PlayerController.h"
-#include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
 #include "Kismet/GameplayStatics.h"
-#include "Misc/ConfigCacheIni.h"
 #include "Misc/Paths.h"
-#include "Platform/ProjectSessionSubsystem.h"
-#include "Platform/ScenarioEditorLaunchSubsystem.h"
+#include "Platform/PlatformUiDeveloperSettings.h"
+#include "Platform/PlatformUiSubsystem.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
+#include "Platform/ViewModel/OdiroListItemViewModel.h"
+#include "Platform/ViewModel/StartupMenuViewModel.h"
 #include "Platform/Widget/ProjectTemplateCardWidget.h"
 
 #if WITH_EDITOR
@@ -28,20 +27,9 @@ DEFINE_LOG_CATEGORY_STATIC(LogStartupMenuWidget, Log, All);
 
 namespace
 {
-	const TCHAR* ProjectOpenOptionsConfigSection = TEXT("OdiroSim.StartupMenu.ProjectOpen");
-	const TCHAR* ProjectOpenParentFolderConfigKey = TEXT("ParentFolder");
-	const TCHAR* ProjectOpenProjectNameConfigKey = TEXT("ProjectName");
-	const TCHAR* ProjectOpenScenarioPresetIdConfigKey = TEXT("ScenarioPresetId");
-	const TCHAR* ProjectOpenProfilePresetIdConfigKey = TEXT("ProfilePresetId");
-	const TCHAR* ProjectOpenPolicyPresetIdConfigKey = TEXT("PolicyPresetId");
-	const TCHAR* RecentProjectPathsConfigKey = TEXT("RecentProjectPaths");
 	const TCHAR* DefaultScenarioPresetId = TEXT("blank");
 	const TCHAR* DefaultProfilePresetId = TEXT("basic");
 	const TCHAR* DefaultPolicyPresetId = TEXT("blank");
-	const TCHAR* StartupMenuDefaultWidgetBlueprintClassPath =
-		TEXT("/Game/Widgets/MainMenu/WBP_StartupMenu.WBP_StartupMenu_C");
-	const TCHAR* ProjectTemplateCardWidgetBlueprintClassPath =
-		TEXT("/Game/Widgets/MainMenu/WBP_ProjectTemplateCard.WBP_ProjectTemplateCard_C");
 
 	FString NormalizeStartupMenuPath(FString path)
 	{
@@ -144,10 +132,6 @@ namespace
 #endif
 	}
 
-	bool IsSameStartupMenuPath(const FString& left, const FString& right)
-	{
-		return NormalizeStartupMenuPath(left).Equals(NormalizeStartupMenuPath(right), ESearchCase::IgnoreCase);
-	}
 }
 
 UStartupMenuWidget* UStartupMenuWidget::ShowStartupMenu(UObject* WorldContextObject, const int32 ZOrder)
@@ -174,14 +158,16 @@ UStartupMenuWidget* UStartupMenuWidget::ShowStartupMenu(UObject* WorldContextObj
 		return nullptr;
 	}
 
-	UClass* widgetClass = LoadClass<UStartupMenuWidget>(nullptr, StartupMenuDefaultWidgetBlueprintClassPath);
+	const UPlatformUiDeveloperSettings* platformUiSettings = GetDefault<UPlatformUiDeveloperSettings>();
+	const TSubclassOf<UStartupMenuWidget> widgetClass = platformUiSettings
+		? platformUiSettings->StartupMenuWidgetClass.LoadSynchronous()
+		: nullptr;
 	if (!widgetClass)
 	{
 		UE_LOG(
 			LogStartupMenuWidget,
 			Error,
-			TEXT("StartupMenu widget class is missing: %s"),
-			StartupMenuDefaultWidgetBlueprintClassPath);
+			TEXT("StartupMenuWidgetClass is not configured in Platform UI project settings."));
 		return nullptr;
 	}
 
@@ -210,6 +196,10 @@ void UStartupMenuWidget::NativeConstruct()
 	Super::NativeConstruct();
 
 	SetIsFocusable(true);
+	if (UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem())
+	{
+		StartupMenuViewModel = platformUiSubsystem->GetStartupMenuViewModel();
+	}
 	if (!ValidateRequiredBindings())
 	{
 		return;
@@ -284,6 +274,10 @@ void UStartupMenuWidget::NativeDestruct()
 void UStartupMenuWidget::SetProjectPathForPrototype(const FString& projectPath)
 {
 	const FString normalizedProjectPath = NormalizeStartupMenuPath(projectPath);
+	if (UStartupMenuViewModel* viewModel = EnsureStartupMenuViewModel())
+	{
+		viewModel->SetProjectPathForPrototype(normalizedProjectPath);
+	}
 	SelectedProjectParentFolder = NormalizeStartupMenuPath(FPaths::GetPath(normalizedProjectPath));
 	SelectedProjectName = FPaths::GetCleanFilename(normalizedProjectPath);
 
@@ -317,44 +311,30 @@ void UStartupMenuWidget::SelectProjectPresets(
 	SelectedPolicyPresetId = policyPresetId.TrimStartAndEnd().IsEmpty()
 		? FString(DefaultPolicyPresetId)
 		: policyPresetId.TrimStartAndEnd();
+	if (UStartupMenuViewModel* viewModel = EnsureStartupMenuViewModel())
+	{
+		viewModel->SelectProjectPresets(
+			SelectedScenarioPresetId,
+			SelectedProfilePresetId,
+			SelectedPolicyPresetId);
+	}
 	RefreshProjectPresetSelectionStates();
 }
 
-bool UStartupMenuWidget::CreateSelectedProject(
+bool UStartupMenuWidget::ValidateSelectedProject(
 	TArray<FString>& outDiagnostics,
 	USimulatorLaunchSubsystem* simulatorLaunchSubsystem)
 {
 	outDiagnostics.Reset();
 
-	USimulatorLaunchSubsystem* subsystem = simulatorLaunchSubsystem ? simulatorLaunchSubsystem : GetSimulatorLaunchSubsystem();
-	if (!subsystem)
+	UStartupMenuViewModel* viewModel = EnsureStartupMenuViewModel(simulatorLaunchSubsystem);
+	if (!viewModel)
 	{
-		outDiagnostics.Add(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
+		outDiagnostics.Add(TEXT("StartupMenuViewModel을 사용할 수 없습니다."));
 		return false;
 	}
 
-	if (!subsystem->CreateProjectFromPresets(GetSelectedProjectPath(), GetSelectedProjectPresetSelection(), outDiagnostics))
-	{
-		return false;
-	}
-
-	return subsystem->ValidateUserProject(GetSelectedProjectPath(), outDiagnostics);
-}
-
-bool UStartupMenuWidget::ValidateSelectedProject(
-	TArray<FString>& outDiagnostics,
-	USimulatorLaunchSubsystem* simulatorLaunchSubsystem) const
-{
-	outDiagnostics.Reset();
-
-	USimulatorLaunchSubsystem* subsystem = simulatorLaunchSubsystem ? simulatorLaunchSubsystem : GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		outDiagnostics.Add(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
-		return false;
-	}
-
-	return subsystem->ValidateUserProject(GetSelectedProjectPath(), outDiagnostics);
+	return viewModel->ValidateProject(GetSelectedProjectPath(), outDiagnostics);
 }
 
 bool UStartupMenuWidget::AddRecentProjectForPrototype(
@@ -365,8 +345,12 @@ bool UStartupMenuWidget::AddRecentProjectForPrototype(
 	return AddRecentProjectIfValid(projectPath, outDiagnostics, simulatorLaunchSubsystem);
 }
 
-TArray<FString> UStartupMenuWidget::GetRecentProjectPathsForPrototype() const
+TArray<FString> UStartupMenuWidget::GetRecentProjectPathsForPrototype()
 {
+	if (UStartupMenuViewModel* viewModel = EnsureStartupMenuViewModel())
+	{
+		return viewModel->GetRecentProjectPaths();
+	}
 	return RecentProjectPaths;
 }
 
@@ -418,10 +402,9 @@ void UStartupMenuWidget::HandleBackToRecentProjectsClicked()
 
 void UStartupMenuWidget::HandleCreateProjectClicked()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
+	if (!StartupMenuViewModel)
 	{
-		SetProjectOpenWarningText(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
+		SetProjectOpenWarningText(TEXT("StartupMenuViewModel을 사용할 수 없습니다."));
 		return;
 	}
 
@@ -432,30 +415,18 @@ void UStartupMenuWidget::HandleCreateProjectClicked()
 		RefreshProjectOpenActions();
 		return;
 	}
-	if (IFileManager::Get().DirectoryExists(*projectPath))
-	{
-		SetProjectOpenWarningText(TEXT("이미 존재하는 프로젝트입니다."));
-		RefreshProjectOpenActions();
-		return;
-	}
-	if (FPaths::FileExists(projectPath))
-	{
-		SetProjectOpenWarningText(TEXT("같은 이름의 파일이 있습니다."));
-		RefreshProjectOpenActions();
-		return;
-	}
 
 	SaveProjectOpenOptions();
 
-	TArray<FString> diagnostics;
-	if (!CreateSelectedProject(diagnostics, subsystem))
+	const FProjectPresetSelection presets = GetSelectedProjectPresetSelection();
+	if (!StartupMenuViewModel->CreateProject(SelectedProjectParentFolder, SelectedProjectName, presets))
 	{
-		SetProjectOpenWarningText(diagnostics.IsEmpty() ? TEXT("프로젝트 생성 실패") : diagnostics[0]);
-		SetDiagnosticsText(FString::Join(diagnostics, TEXT("\n")));
+		SetProjectOpenWarningText(StartupMenuViewModel->GetProjectOpenWarningText());
+		SetDiagnosticsText(StartupMenuViewModel->GetDiagnosticsText());
 		return;
 	}
 
-	RememberRecentProject(projectPath);
+	RecentProjectPaths = StartupMenuViewModel->GetRecentProjectPaths();
 	if (!CommitActiveProjectAndOpenEditor())
 	{
 		return;
@@ -690,148 +661,52 @@ void UStartupMenuWidget::InitializeProjectPathInputs()
 
 void UStartupMenuWidget::LoadProjectOpenOptions()
 {
-	FString parentFolder;
-	FString projectName;
-	FString scenarioPresetId;
-	FString profilePresetId;
-	FString policyPresetId;
-	if (GConfig)
+	UStartupMenuViewModel* viewModel = EnsureStartupMenuViewModel();
+	if (!viewModel)
 	{
-		GConfig->GetString(ProjectOpenOptionsConfigSection, ProjectOpenParentFolderConfigKey, parentFolder, GGameUserSettingsIni);
-		GConfig->GetString(ProjectOpenOptionsConfigSection, ProjectOpenProjectNameConfigKey, projectName, GGameUserSettingsIni);
-		GConfig->GetString(ProjectOpenOptionsConfigSection, ProjectOpenScenarioPresetIdConfigKey, scenarioPresetId, GGameUserSettingsIni);
-		GConfig->GetString(ProjectOpenOptionsConfigSection, ProjectOpenProfilePresetIdConfigKey, profilePresetId, GGameUserSettingsIni);
-		GConfig->GetString(ProjectOpenOptionsConfigSection, ProjectOpenPolicyPresetIdConfigKey, policyPresetId, GGameUserSettingsIni);
+		SelectedProjectParentFolder = GetDefaultProjectParentFolder();
+		SelectedProjectName = TEXT("OdiroProject");
+		SelectedScenarioPresetId = DefaultScenarioPresetId;
+		SelectedProfilePresetId = DefaultProfilePresetId;
+		SelectedPolicyPresetId = DefaultPolicyPresetId;
+		return;
 	}
 
-	SelectedProjectParentFolder = parentFolder.TrimStartAndEnd().IsEmpty()
-		? GetDefaultProjectParentFolder()
-		: NormalizeStartupMenuPath(parentFolder);
-	SelectedProjectName = projectName.TrimStartAndEnd().IsEmpty()
-		? FString(TEXT("OdiroProject"))
-		: NormalizeProjectDirectoryName(projectName);
-	SelectedScenarioPresetId = scenarioPresetId.TrimStartAndEnd().IsEmpty()
-		? FString(DefaultScenarioPresetId)
-		: scenarioPresetId.TrimStartAndEnd();
-	SelectedProfilePresetId = profilePresetId.TrimStartAndEnd().IsEmpty()
-		? FString(DefaultProfilePresetId)
-		: profilePresetId.TrimStartAndEnd();
-	SelectedPolicyPresetId = policyPresetId.TrimStartAndEnd().IsEmpty()
-		? FString(DefaultPolicyPresetId)
-		: policyPresetId.TrimStartAndEnd();
-	LoadRecentProjectPaths();
+	viewModel->LoadProjectOpenOptions();
+	SelectedProjectParentFolder = viewModel->GetProjectParentFolder();
+	SelectedProjectName = viewModel->GetProjectName();
+	const FProjectPresetSelection selection = viewModel->GetSelectedProjectPresetSelection();
+	SelectedScenarioPresetId = selection.ScenarioPresetId;
+	SelectedProfilePresetId = selection.ProfilePresetId;
+	SelectedPolicyPresetId = selection.PolicyPresetId;
 }
 
 void UStartupMenuWidget::SaveProjectOpenOptions()
 {
 	CacheProjectOpenOptionsFromWidgets();
-	if (!GConfig)
+	UStartupMenuViewModel* viewModel = EnsureStartupMenuViewModel();
+	if (!viewModel)
 	{
 		return;
 	}
 
-	GConfig->SetString(ProjectOpenOptionsConfigSection, ProjectOpenParentFolderConfigKey, *SelectedProjectParentFolder, GGameUserSettingsIni);
-	GConfig->SetString(ProjectOpenOptionsConfigSection, ProjectOpenProjectNameConfigKey, *SelectedProjectName, GGameUserSettingsIni);
 	const FProjectPresetSelection selection = GetSelectedProjectPresetSelection();
-	GConfig->SetString(ProjectOpenOptionsConfigSection, ProjectOpenScenarioPresetIdConfigKey, *selection.ScenarioPresetId, GGameUserSettingsIni);
-	GConfig->SetString(ProjectOpenOptionsConfigSection, ProjectOpenProfilePresetIdConfigKey, *selection.ProfilePresetId, GGameUserSettingsIni);
-	GConfig->SetString(ProjectOpenOptionsConfigSection, ProjectOpenPolicyPresetIdConfigKey, *selection.PolicyPresetId, GGameUserSettingsIni);
-	GConfig->SetArray(ProjectOpenOptionsConfigSection, RecentProjectPathsConfigKey, RecentProjectPaths, GGameUserSettingsIni);
-	GConfig->Flush(false, GGameUserSettingsIni);
-}
-
-void UStartupMenuWidget::LoadRecentProjectPaths()
-{
-	RecentProjectPaths.Reset();
-
-	TArray<FString> storedPaths;
-	if (GConfig)
-	{
-		GConfig->GetArray(ProjectOpenOptionsConfigSection, RecentProjectPathsConfigKey, storedPaths, GGameUserSettingsIni);
-	}
-
-	for (const FString& storedPath : storedPaths)
-	{
-		const FString normalizedPath = NormalizeStartupMenuPath(storedPath);
-		if (normalizedPath.IsEmpty())
-		{
-			continue;
-		}
-
-		const bool bAlreadyPresent = RecentProjectPaths.ContainsByPredicate(
-			[&normalizedPath](const FString& existingPath)
-			{
-				return IsSameStartupMenuPath(existingPath, normalizedPath);
-			});
-		if (!bAlreadyPresent)
-		{
-			RecentProjectPaths.Add(normalizedPath);
-		}
-	}
-
-}
-
-void UStartupMenuWidget::SaveRecentProjectPaths() const
-{
-	if (!GConfig)
-	{
-		return;
-	}
-
-	if (RecentProjectPaths.IsEmpty())
-	{
-		GConfig->RemoveKey(ProjectOpenOptionsConfigSection, RecentProjectPathsConfigKey, GGameUserSettingsIni);
-	}
-	else
-	{
-		GConfig->SetArray(ProjectOpenOptionsConfigSection, RecentProjectPathsConfigKey, RecentProjectPaths, GGameUserSettingsIni);
-	}
-	GConfig->Flush(false, GGameUserSettingsIni);
-}
-
-void UStartupMenuWidget::RememberRecentProject(const FString& projectPath)
-{
-	const FString normalizedPath = NormalizeStartupMenuPath(projectPath);
-	if (normalizedPath.IsEmpty())
-	{
-		return;
-	}
-
-	RecentProjectPaths.RemoveAll(
-		[&normalizedPath](const FString& existingPath)
-		{
-			return IsSameStartupMenuPath(existingPath, normalizedPath);
-		});
-	RecentProjectPaths.Insert(normalizedPath, 0);
-
-	while (RecentProjectPaths.Num() > MaxRecentProjectCount)
-	{
-		RecentProjectPaths.RemoveAt(RecentProjectPaths.Num() - 1);
-	}
-
-	SaveRecentProjectPaths();
+	viewModel->SetProjectParentFolder(SelectedProjectParentFolder);
+	viewModel->SetProjectName(SelectedProjectName);
+	viewModel->SelectProjectPresets(selection.ScenarioPresetId, selection.ProfilePresetId, selection.PolicyPresetId);
+	viewModel->SaveProjectOpenOptions();
 }
 
 bool UStartupMenuWidget::RemoveRecentProject(const FString& projectPath)
 {
-	const FString normalizedPath = NormalizeStartupMenuPath(projectPath);
-	if (normalizedPath.IsEmpty())
+	if (UStartupMenuViewModel* viewModel = EnsureStartupMenuViewModel())
 	{
-		return false;
+		const bool bRemoved = viewModel->RemoveRecentProject(projectPath);
+		RecentProjectPaths = viewModel->GetRecentProjectPaths();
+		return bRemoved;
 	}
 
-	const int32 removedCount = RecentProjectPaths.RemoveAll(
-		[&normalizedPath](const FString& existingPath)
-		{
-			return IsSameStartupMenuPath(existingPath, normalizedPath);
-		});
-	if (removedCount <= 0)
-	{
-		return false;
-	}
-
-	SaveRecentProjectPaths();
-	return true;
+	return false;
 }
 
 void UStartupMenuWidget::CacheProjectOpenOptionsFromWidgets()
@@ -883,21 +758,14 @@ void UStartupMenuWidget::RefreshRecentProjectCards()
 	RecentProjectCardWrapBox->ClearChildren();
 
 	TSubclassOf<UProjectTemplateCardWidget> cardClass = ResolveProjectTemplateCardWidgetClass();
-	TArray<FString> visibleProjectPaths;
-	for (const FString& recentProjectPath : RecentProjectPaths)
+	TArray<FString> visibleProjectPaths = RecentProjectPaths;
+	TArray<UOdiroListItemViewModel*> visibleProjectItems;
+	if (StartupMenuViewModel)
 	{
-		const FString normalizedProjectPath = NormalizeStartupMenuPath(recentProjectPath);
-		if (!normalizedProjectPath.IsEmpty() && IFileManager::Get().DirectoryExists(*normalizedProjectPath))
-		{
-			visibleProjectPaths.Add(normalizedProjectPath);
-		}
-	}
-
-	const bool bPrunedMissingProjects = visibleProjectPaths.Num() != RecentProjectPaths.Num();
-	RecentProjectPaths = visibleProjectPaths;
-	if (bPrunedMissingProjects)
-	{
-		SaveRecentProjectPaths();
+		StartupMenuViewModel->RefreshRecentProjects();
+		visibleProjectPaths = StartupMenuViewModel->GetRecentProjectPaths();
+		visibleProjectItems = StartupMenuViewModel->GetRecentProjectItems();
+		RecentProjectPaths = visibleProjectPaths;
 	}
 
 	if (RecentProjectsEmptyText)
@@ -921,10 +789,17 @@ void UStartupMenuWidget::RefreshRecentProjectCards()
 			continue;
 		}
 
-		cardWidget->InitializeCard(
-			recentProjectPath,
-			MakeRecentProjectDisplayName(recentProjectPath),
-			MakeRecentProjectSubtitle(recentProjectPath));
+		if (visibleProjectItems.IsValidIndex(cardIndex))
+		{
+			cardWidget->InitializeFromItemViewModel(visibleProjectItems[cardIndex]);
+		}
+		else
+		{
+			cardWidget->InitializeCard(
+				recentProjectPath,
+				MakeRecentProjectDisplayName(recentProjectPath),
+				MakeRecentProjectSubtitle(recentProjectPath));
+		}
 		cardWidget->OnSelectedRequested.AddUObject(this, &UStartupMenuWidget::HandleRecentProjectCardSelected);
 		cardWidget->OnContextRequested.AddUObject(this, &UStartupMenuWidget::HandleRecentProjectCardContextRequested);
 		RecentProjectCards.Add(cardWidget);
@@ -963,17 +838,24 @@ void UStartupMenuWidget::RefreshProjectPresetOptions()
 		resetCards(PolicyPresetCardWrapBox, PolicyPresetCards);
 	}
 
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
 	FProjectPresetCatalog catalog;
-	if (!subsystem)
+	TArray<UOdiroListItemViewModel*> scenarioPresetItems;
+	TArray<UOdiroListItemViewModel*> profilePresetItems;
+	TArray<UOdiroListItemViewModel*> policyPresetItems;
+	if (StartupMenuViewModel)
+	{
+		StartupMenuViewModel->RefreshProjectPresets();
+		catalog = StartupMenuViewModel->GetProjectPresetCatalog();
+	}
+	else if (const UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem())
+	{
+		catalog = platformUiSubsystem->ListProjectPresets();
+	}
+	else
 	{
 		catalog.ScenarioPresetIds.Add(DefaultScenarioPresetId);
 		catalog.ProfilePresetIds.Add(DefaultProfilePresetId);
 		catalog.PolicyPresetIds.Add(DefaultPolicyPresetId);
-	}
-	else
-	{
-		catalog = subsystem->ListProjectPresets();
 	}
 
 	if (catalog.ScenarioPresetIds.IsEmpty())
@@ -1010,6 +892,16 @@ void UStartupMenuWidget::RefreshProjectPresetOptions()
 	{
 		SelectedPolicyPresetId = catalog.PolicyPresetIds[0];
 	}
+	if (StartupMenuViewModel)
+	{
+		StartupMenuViewModel->SelectProjectPresets(
+			SelectedScenarioPresetId,
+			SelectedProfilePresetId,
+			SelectedPolicyPresetId);
+		scenarioPresetItems = StartupMenuViewModel->GetScenarioPresetItems();
+		profilePresetItems = StartupMenuViewModel->GetProfilePresetItems();
+		policyPresetItems = StartupMenuViewModel->GetPolicyPresetItems();
+	}
 
 	if (bHasPresetComboBoxes)
 	{
@@ -1045,6 +937,7 @@ void UStartupMenuWidget::RefreshProjectPresetOptions()
 		[this, cardClass](
 			UWrapBox* container,
 			TArray<TObjectPtr<UProjectTemplateCardWidget>>& cards,
+			const TArray<UOdiroListItemViewModel*>& presetItems,
 			const TArray<FString>& presetIds,
 			void (UStartupMenuWidget::*selectionHandler)(UProjectTemplateCardWidget*))
 		{
@@ -1061,7 +954,15 @@ void UStartupMenuWidget::RefreshProjectPresetOptions()
 					continue;
 				}
 
-				cardWidget->InitializeCard(presetId, MakeProjectPresetDisplayName(presetId));
+				const int32 presetIndex = presetIds.IndexOfByKey(presetId);
+				if (presetItems.IsValidIndex(presetIndex))
+				{
+					cardWidget->InitializeFromItemViewModel(presetItems[presetIndex]);
+				}
+				else
+				{
+					cardWidget->InitializeCard(presetId, MakeProjectPresetDisplayName(presetId));
+				}
 				cardWidget->OnSelectedRequested.AddUObject(this, selectionHandler);
 				cards.Add(cardWidget);
 				container->AddChildToWrapBox(cardWidget);
@@ -1070,16 +971,19 @@ void UStartupMenuWidget::RefreshProjectPresetOptions()
 	populateCards(
 		ScenarioPresetCardWrapBox,
 		ScenarioPresetCards,
+		scenarioPresetItems,
 		catalog.ScenarioPresetIds,
 		&UStartupMenuWidget::HandleScenarioPresetCardSelected);
 	populateCards(
 		ProfilePresetCardWrapBox,
 		ProfilePresetCards,
+		profilePresetItems,
 		catalog.ProfilePresetIds,
 		&UStartupMenuWidget::HandleProfilePresetCardSelected);
 	populateCards(
 		PolicyPresetCardWrapBox,
 		PolicyPresetCards,
+		policyPresetItems,
 		catalog.PolicyPresetIds,
 		&UStartupMenuWidget::HandlePolicyPresetCardSelected);
 
@@ -1088,14 +992,25 @@ void UStartupMenuWidget::RefreshProjectPresetOptions()
 
 void UStartupMenuWidget::RefreshProjectOpenActions()
 {
-	const FString selectedProjectPath = GetSelectedProjectPath();
-	const bool bHasProjectPath = !selectedProjectPath.TrimStartAndEnd().IsEmpty();
-	const bool bProjectDirectoryExists = IFileManager::Get().DirectoryExists(*selectedProjectPath);
-	const bool bProjectFileExists = FPaths::FileExists(selectedProjectPath);
+	bool bCanCreateProject = false;
+	if (StartupMenuViewModel)
+	{
+		StartupMenuViewModel->SetProjectParentFolder(GetSelectedProjectParentFolder());
+		StartupMenuViewModel->SetProjectName(GetSelectedProjectName());
+		bCanCreateProject = StartupMenuViewModel->CanCreateProject();
+	}
+	else
+	{
+		const FString selectedProjectPath = GetSelectedProjectPath();
+		const bool bHasProjectPath = !selectedProjectPath.TrimStartAndEnd().IsEmpty();
+		const bool bProjectDirectoryExists = UPlatformUiSubsystem::DoesResolvedDirectoryExist(selectedProjectPath);
+		const bool bProjectFileExists = UPlatformUiSubsystem::DoesResolvedFileExist(selectedProjectPath);
+		bCanCreateProject = bHasProjectPath && !bProjectDirectoryExists && !bProjectFileExists;
+	}
 
 	if (CreateProjectButton)
 	{
-		CreateProjectButton->SetIsEnabled(bHasProjectPath && !bProjectDirectoryExists && !bProjectFileExists);
+		CreateProjectButton->SetIsEnabled(bCanCreateProject);
 	}
 }
 
@@ -1168,40 +1083,23 @@ bool UStartupMenuWidget::AddRecentProjectIfValid(
 {
 	outDiagnostics.Reset();
 
-	USimulatorLaunchSubsystem* subsystem = simulatorLaunchSubsystem ? simulatorLaunchSubsystem : GetSimulatorLaunchSubsystem();
-	if (!subsystem)
+	UStartupMenuViewModel* viewModel = EnsureStartupMenuViewModel(simulatorLaunchSubsystem);
+	if (!viewModel)
 	{
-		outDiagnostics.Add(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
+		outDiagnostics.Add(TEXT("StartupMenuViewModel을 사용할 수 없습니다."));
 		SetProjectOpenWarningText(outDiagnostics[0]);
 		return false;
 	}
 
-	const FString normalizedProjectPath = NormalizeStartupMenuPath(projectPath);
-	if (normalizedProjectPath.IsEmpty())
+	const bool bAdded = viewModel->AddRecentProjectIfValid(projectPath, outDiagnostics);
+	SetProjectOpenWarningText(viewModel->GetProjectOpenWarningText());
+	SetDiagnosticsText(viewModel->GetDiagnosticsText());
+	RecentProjectPaths = viewModel->GetRecentProjectPaths();
+	if (bAdded)
 	{
-		outDiagnostics.Add(TEXT("프로젝트를 선택하세요."));
-		SetProjectOpenWarningText(outDiagnostics[0]);
-		return false;
+		RefreshRecentProjectCards();
 	}
-	if (!IFileManager::Get().DirectoryExists(*normalizedProjectPath))
-	{
-		outDiagnostics.Add(TEXT("프로젝트 폴더가 없습니다."));
-		SetProjectOpenWarningText(outDiagnostics[0]);
-		return false;
-	}
-
-	if (!subsystem->ValidateUserProject(normalizedProjectPath, outDiagnostics))
-	{
-		SetProjectOpenWarningText(outDiagnostics.IsEmpty() ? TEXT("프로젝트 검증 실패") : outDiagnostics[0]);
-		SetDiagnosticsText(FString::Join(outDiagnostics, TEXT("\n")));
-		return false;
-	}
-
-	RememberRecentProject(normalizedProjectPath);
-	RefreshRecentProjectCards();
-	SetProjectOpenWarningText(FString());
-	SetDiagnosticsText(FString());
-	return true;
+	return bAdded;
 }
 
 bool UStartupMenuWidget::OpenExistingProject(const FString& projectPath)
@@ -1209,11 +1107,7 @@ bool UStartupMenuWidget::OpenExistingProject(const FString& projectPath)
 	TArray<FString> diagnostics;
 	if (!AddRecentProjectIfValid(projectPath, diagnostics))
 	{
-		const FString normalizedProjectPath = NormalizeStartupMenuPath(projectPath);
-		if (!normalizedProjectPath.IsEmpty() && !IFileManager::Get().DirectoryExists(*normalizedProjectPath))
-		{
-			RefreshRecentProjectCards();
-		}
+		RefreshRecentProjectCards();
 		return false;
 	}
 
@@ -1233,26 +1127,16 @@ bool UStartupMenuWidget::OpenExistingProject(const FString& projectPath)
 bool UStartupMenuWidget::CommitActiveProjectAndOpenEditor()
 {
 	const FString projectPath = GetSelectedProjectPath();
-	UProjectSessionSubsystem* projectSession = GetProjectSessionSubsystem();
-	if (!projectSession)
+	if (!StartupMenuViewModel)
 	{
-		SetProjectOpenWarningText(TEXT("ProjectSessionSubsystem을 사용할 수 없습니다."));
+		SetProjectOpenWarningText(TEXT("StartupMenuViewModel을 사용할 수 없습니다."));
 		return false;
 	}
 
-	projectSession->SetActiveProjectPath(projectPath);
-
-	UScenarioEditorLaunchSubsystem* scenarioEditorLaunch = GetScenarioEditorLaunchSubsystem();
-	if (!scenarioEditorLaunch)
+	if (!StartupMenuViewModel->OpenProject(projectPath))
 	{
-		SetProjectOpenWarningText(TEXT("ScenarioEditorLaunchSubsystem을 사용할 수 없습니다."));
-		return false;
-	}
-
-	const FString scenarioPath = projectSession->GetActiveProjectScenarioPath();
-	if (!scenarioEditorLaunch->OpenScenarioEditor(scenarioPath))
-	{
-		SetProjectOpenWarningText(TEXT("ScenarioEditorMap 열기 실패."));
+		SetProjectOpenWarningText(StartupMenuViewModel->GetProjectOpenWarningText());
+		SetDiagnosticsText(StartupMenuViewModel->GetDiagnosticsText());
 		return false;
 	}
 
@@ -1409,34 +1293,44 @@ TSubclassOf<UProjectTemplateCardWidget> UStartupMenuWidget::ResolveProjectTempla
 		return ProjectTemplateCardWidgetClass;
 	}
 
-	UClass* loadedClass = LoadClass<UProjectTemplateCardWidget>(nullptr, ProjectTemplateCardWidgetBlueprintClassPath);
-	if (!loadedClass)
+	const UPlatformUiDeveloperSettings* platformUiSettings = GetDefault<UPlatformUiDeveloperSettings>();
+	const TSubclassOf<UProjectTemplateCardWidget> configuredClass = platformUiSettings
+		? platformUiSettings->ProjectTemplateCardWidgetClass.LoadSynchronous()
+		: nullptr;
+	if (!configuredClass)
 	{
 		UE_LOG(
 			LogStartupMenuWidget,
 			Warning,
-			TEXT("Project preset card widget class load failed | Path: %s"),
-			ProjectTemplateCardWidgetBlueprintClassPath);
+			TEXT("ProjectTemplateCardWidgetClass is not configured on the StartupMenu widget asset or Platform UI project settings."));
 		return nullptr;
 	}
 
-	return TSubclassOf<UProjectTemplateCardWidget>(loadedClass);
+	return configuredClass;
 }
 
-USimulatorLaunchSubsystem* UStartupMenuWidget::GetSimulatorLaunchSubsystem() const
+UStartupMenuViewModel* UStartupMenuWidget::EnsureStartupMenuViewModel(
+	USimulatorLaunchSubsystem* simulatorLaunchSubsystem)
 {
-	const UGameInstance* gameInstance = GetGameInstance();
-	return gameInstance ? gameInstance->GetSubsystem<USimulatorLaunchSubsystem>() : nullptr;
+	if (!StartupMenuViewModel)
+	{
+		if (UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem())
+		{
+			StartupMenuViewModel = platformUiSubsystem->GetStartupMenuViewModel();
+		}
+	}
+	if (!StartupMenuViewModel)
+	{
+		StartupMenuViewModel = NewObject<UStartupMenuViewModel>(this);
+	}
+	if (StartupMenuViewModel && simulatorLaunchSubsystem)
+	{
+		StartupMenuViewModel->SetSubsystemOverrides(simulatorLaunchSubsystem, nullptr, nullptr);
+	}
+	return StartupMenuViewModel;
 }
 
-UScenarioEditorLaunchSubsystem* UStartupMenuWidget::GetScenarioEditorLaunchSubsystem() const
+UPlatformUiSubsystem* UStartupMenuWidget::GetPlatformUiSubsystem() const
 {
-	const UGameInstance* gameInstance = GetGameInstance();
-	return gameInstance ? gameInstance->GetSubsystem<UScenarioEditorLaunchSubsystem>() : nullptr;
-}
-
-UProjectSessionSubsystem* UStartupMenuWidget::GetProjectSessionSubsystem() const
-{
-	const UGameInstance* gameInstance = GetGameInstance();
-	return gameInstance ? gameInstance->GetSubsystem<UProjectSessionSubsystem>() : nullptr;
+	return UPlatformUiSubsystem::ResolveForWorldContext(this);
 }

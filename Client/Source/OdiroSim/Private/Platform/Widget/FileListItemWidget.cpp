@@ -3,6 +3,7 @@
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
 #include "Components/TextBlock.h"
+#include "Platform/ViewModel/OdiroListItemViewModel.h"
 
 void UFileListItemWidget::NativeConstruct()
 {
@@ -95,6 +96,27 @@ void UFileListItemWidget::InitializeDisplayItem(
 	}
 
 	RefreshButtonState();
+}
+
+void UFileListItemWidget::InitializeFromItemViewModel(
+	UOdiroListItemViewModel* itemViewModel,
+	FString primaryActionLabel,
+	FString secondaryActionLabel,
+	const bool bInAllowRename,
+	const bool bInAllowPrimaryAction,
+	const bool bInAllowSecondaryAction)
+{
+	ItemViewModel = itemViewModel;
+	const FString itemPath = ItemViewModel ? ItemViewModel->GetPayloadPath() : FString();
+	const FString displayText = ItemViewModel ? ItemViewModel->GetTitle() : FString();
+	InitializeDisplayItem(
+		itemPath,
+		displayText,
+		MoveTemp(primaryActionLabel),
+		MoveTemp(secondaryActionLabel),
+		bInAllowRename,
+		bInAllowPrimaryAction && (!ItemViewModel || ItemViewModel->IsEnabled()),
+		bInAllowSecondaryAction && (!ItemViewModel || ItemViewModel->IsEnabled()));
 }
 
 void UFileListItemWidget::SetSecondaryActionDisplayOnly(const FString& displayText)

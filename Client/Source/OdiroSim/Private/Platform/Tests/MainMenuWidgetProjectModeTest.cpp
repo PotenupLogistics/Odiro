@@ -1,6 +1,8 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Platform/ProjectSessionSubsystem.h"
+#include "Platform/ViewModel/StartupMenuViewModel.h"
+#include "Platform/ViewModel/ProjectWorkspaceViewModel.h"
 #include "Platform/Widget/MainMenuWidget.h"
 #include "Platform/Widget/StartupMenuWidget.h"
 
@@ -24,6 +26,34 @@ namespace
 			FPaths::ProjectSavedDir(),
 			TEXT("Automation/MainMenuProjectMode"),
 			FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+	}
+
+	bool CreateProjectThroughStartupViewModel(
+		USimulatorLaunchSubsystem* simulatorLaunchSubsystem,
+		const FString& projectPath,
+		const FProjectPresetSelection& presets,
+		FString& outDiagnostics)
+	{
+		outDiagnostics.Reset();
+
+		UStartupMenuViewModel* viewModel = NewObject<UStartupMenuViewModel>();
+		if (!viewModel)
+		{
+			outDiagnostics = TEXT("StartupMenuViewModel allocation failed.");
+			return false;
+		}
+
+		viewModel->SetSubsystemOverrides(simulatorLaunchSubsystem, nullptr, nullptr);
+		const bool bCreated = viewModel->CreateProject(
+			FPaths::GetPath(projectPath),
+			FPaths::GetCleanFilename(projectPath),
+			presets);
+		outDiagnostics = viewModel->GetDiagnosticsText();
+		if (outDiagnostics.IsEmpty())
+		{
+			outDiagnostics = viewModel->GetProjectOpenWarningText();
+		}
+		return bCreated;
 	}
 
 	// Restores user recent-project config after tests that exercise real persistence.
@@ -93,16 +123,21 @@ bool FStartupMenuProjectModeSmokeTest::RunTest(const FString& parameters)
 	IFileManager::Get().DeleteDirectory(*projectPath, false, true);
 
 	widget->SetProjectPathForPrototype(projectPath);
-	widget->SelectProjectPresets(TEXT("demo"), TEXT("full"), TEXT("demo"));
+	widget->SelectProjectPresets(TEXT("blank"), TEXT("full"), TEXT("demo"));
 	TestEqual(TEXT("project path selected"), widget->GetProjectPathForPrototype(), projectPath);
 
 	TArray<FString> diagnostics;
+	FString createDiagnostics;
+	FProjectPresetSelection presets;
+	presets.ScenarioPresetId = TEXT("blank");
+	presets.ProfilePresetId = TEXT("full");
+	presets.PolicyPresetId = TEXT("demo");
 	TestTrue(
 		TEXT("create project through StartupMenu project mode"),
-		widget->CreateSelectedProject(diagnostics, subsystem));
-	if (!diagnostics.IsEmpty())
+		CreateProjectThroughStartupViewModel(subsystem, projectPath, presets, createDiagnostics));
+	if (!createDiagnostics.IsEmpty())
 	{
-		AddInfo(FString::Printf(TEXT("create diagnostics: %s"), *FString::Join(diagnostics, TEXT("\n"))));
+		AddInfo(FString::Printf(TEXT("create diagnostics: %s"), *createDiagnostics));
 	}
 
 	TestTrue(
@@ -158,13 +193,18 @@ bool FStartupMenuRecentProjectsManualAddTest::RunTest(const FString& parameters)
 	const FString invalidProjectPath = FPaths::Combine(testRoot, TEXT("InvalidProject"));
 	IFileManager::Get().DeleteDirectory(*testRoot, false, true);
 
-	widget->SelectProjectPresets(TEXT("demo"), TEXT("full"), TEXT("demo"));
+	widget->SelectProjectPresets(TEXT("blank"), TEXT("full"), TEXT("demo"));
 	TArray<FString> diagnostics;
+	FString createDiagnostics;
+	FProjectPresetSelection presets;
+	presets.ScenarioPresetId = TEXT("blank");
+	presets.ProfilePresetId = TEXT("full");
+	presets.PolicyPresetId = TEXT("demo");
 
 	widget->SetProjectPathForPrototype(projectAPath);
-	TestTrue(TEXT("create project A"), widget->CreateSelectedProject(diagnostics, subsystem));
+	TestTrue(TEXT("create project A"), CreateProjectThroughStartupViewModel(subsystem, projectAPath, presets, createDiagnostics));
 	widget->SetProjectPathForPrototype(projectBPath);
-	TestTrue(TEXT("create project B"), widget->CreateSelectedProject(diagnostics, subsystem));
+	TestTrue(TEXT("create project B"), CreateProjectThroughStartupViewModel(subsystem, projectBPath, presets, createDiagnostics));
 
 	TestTrue(TEXT("manual add project A"), widget->AddRecentProjectForPrototype(projectAPath, diagnostics, subsystem));
 	TestTrue(TEXT("manual add project B"), widget->AddRecentProjectForPrototype(projectBPath, diagnostics, subsystem));
@@ -200,27 +240,25 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMainMenuProjectSessionNoLegacyPathFallbackTest::RunTest(const FString& parameters)
 {
-	UMainMenuWidget* widget = NewObject<UMainMenuWidget>();
-	TestNotNull(TEXT("widget created"), widget);
-	if (!widget)
-	{
-		return false;
-	}
-
 	UGameInstance* gameInstance = NewObject<UGameInstance>();
 	USimulatorLaunchSubsystem* subsystem = NewObject<USimulatorLaunchSubsystem>(gameInstance);
+	UProjectWorkspaceViewModel* viewModel = NewObject<UProjectWorkspaceViewModel>();
 	TestNotNull(TEXT("game instance created"), gameInstance);
 	TestNotNull(TEXT("subsystem created"), subsystem);
-	if (!gameInstance || !subsystem)
+	TestNotNull(TEXT("workspace viewmodel created"), viewModel);
+	if (!gameInstance || !subsystem || !viewModel)
 	{
 		return false;
 	}
 
+	viewModel->InitializeForGameInstance(gameInstance);
+	viewModel->SetSubsystemOverrides(subsystem, nullptr, nullptr, nullptr);
+	viewModel->RefreshFromProjectSession();
+
 	FString runId;
-	TArray<FString> diagnostics;
 	TestFalse(
-		TEXT("MainMenu cannot create a project run without an active ProjectSession"),
-		widget->CreateProjectRunForPrototype(runId, diagnostics, subsystem));
+		TEXT("Workspace ViewModel cannot create a project run without an active ProjectSession"),
+		viewModel->CreateRun(runId));
 	TestTrue(TEXT("run id remains empty"), runId.IsEmpty());
 	return true;
 }

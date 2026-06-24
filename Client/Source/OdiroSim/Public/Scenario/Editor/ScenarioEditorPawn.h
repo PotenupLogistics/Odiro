@@ -6,6 +6,7 @@
 
 class UCameraComponent;
 class UFloatingPawnMovement;
+class UMaterialInterface;
 class UPawnMovementComponent;
 class USceneComponent;
 
@@ -25,6 +26,14 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	TObjectPtr<UFloatingPawnMovement> FloatingMovementComponent;
+
+	// Post-process material that replaces pixels without scene geometry with the editor grey viewport background.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Viewport")
+	TSoftObjectPtr<UMaterialInterface> GreyBackgroundPostProcessMaterial;
+
+	// Blend weight used when the editor grey background post-process material is attached to the camera.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Viewport", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float GreyBackgroundBlendWeight = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Movement", meta = (ClampMin = "1.0"))
 	float MaxMoveSpeed = 2400.0f;
@@ -97,6 +106,8 @@ public:
 private:
 	void ApplyMovementSettings();
 	void ApplyTopDownPanSpeed();
+	// Applies the editor viewport background post-process material to the camera.
+	void ApplyGreyBackgroundPostProcessMaterial();
 
 	UPROPERTY(Transient)
 	bool bTopDownViewActive = false;

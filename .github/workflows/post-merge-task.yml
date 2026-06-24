@@ -199,7 +199,7 @@ jobs:
               )
 
               if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
-                  throw "GH_TOKEN must be set from LFS_LOCK_BOT_TOKEN before calling gh api."
+                  throw "GH_TOKEN environment variable is required before calling gh api."
               }
               if ([string]::IsNullOrWhiteSpace($Id)) {
                   throw "Git LFS lock id is required."
@@ -222,7 +222,7 @@ jobs:
               if ($LASTEXITCODE -ne 0) {
                   $detail = (($output | ForEach-Object { [string] $_ }) -join "`n").Trim()
                   if ([string]::IsNullOrWhiteSpace($detail)) {
-                      throw "Failed to unlock $Path by Git LFS lock id $Id because gh api returned no output. Check LFS_LOCK_BOT_TOKEN permissions and network access."
+                      throw "Failed to unlock $Path by Git LFS lock id $Id because gh api returned no output. Check GH_TOKEN authentication and network access."
                   }
                   throw "Failed to unlock $Path by Git LFS lock id $Id.`n$detail"
               }

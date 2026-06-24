@@ -7,6 +7,7 @@
 #include "ScenarioEditorSidebarWidget.generated.h"
 
 class UScrollBox;
+class UScenarioEditorSidebarBlockWidget;
 class UTextBlock;
 class UScenarioEditorSidebarMainPanel;
 class UScenarioEditorWidgetClassCatalog;
@@ -23,6 +24,9 @@ class ODIROSIM_API UScenarioEditorSidebarWidget : public UUserWidget
 public:
 	// Refreshes the read-only sidebar after UMG construction.
 	virtual void NativeConstruct() override;
+
+	// Releases block-selection bindings before teardown.
+	virtual void NativeDestruct() override;
 
 	// Scenario Template block currently displayed by the sidebar.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
@@ -145,4 +149,17 @@ private:
 	void ConfigureChildPanelDependencies() const;
 	// Returns the display title for one template sidebar panel.
 	static FString PanelToTitle(EScenarioTemplateSidebarPanel panel);
+	// Binds active panel block events to the shell selection command.
+	void BindPanelBlockSelection(UWidget* panelWidget);
+	// Releases active panel block events from the shell selection command.
+	void UnbindPanelBlockSelection(UWidget* panelWidget);
+	// Releases block events from every currently resolved panel widget.
+	void UnbindAllPanelBlockSelection();
+	// Binds one optional block widget to the shell selection command.
+	void BindBlockSelection(UScenarioEditorSidebarBlockWidget* blockWidget);
+	// Releases one optional block widget from the shell selection command.
+	void UnbindBlockSelection(UScenarioEditorSidebarBlockWidget* blockWidget);
+	// Routes a selected sidebar block path into the shared shell ViewModel.
+	UFUNCTION()
+	void HandlePanelBlockSelected(const FString& blockPath);
 };

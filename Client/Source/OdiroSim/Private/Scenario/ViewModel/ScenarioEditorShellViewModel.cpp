@@ -4,6 +4,34 @@
 #include "Scenario/ScenarioEditorUiSubsystem.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
 
+namespace
+{
+	// Returns the root template block path for a sidebar panel.
+	FString ResolveDefaultTemplateBlockPath(const EScenarioTemplateSidebarPanel panel)
+	{
+		switch (panel)
+		{
+		case EScenarioTemplateSidebarPanel::Corridor:
+			return TEXT("root.corridor");
+		case EScenarioTemplateSidebarPanel::Obstacle:
+			return TEXT("root.obstacles");
+		case EScenarioTemplateSidebarPanel::Pedestrian:
+			return TEXT("root.pedestrians");
+		case EScenarioTemplateSidebarPanel::Main:
+		default:
+			return TEXT("scenario");
+		}
+	}
+
+	// Uses a panel root path when a child block path is not available.
+	FString ResolveTemplateBlockPath(
+		const EScenarioTemplateSidebarPanel panel,
+		const FString& blockPath)
+	{
+		return blockPath.IsEmpty() ? ResolveDefaultTemplateBlockPath(panel) : blockPath;
+	}
+}
+
 void UScenarioEditorShellViewModel::InitializeForSubsystem(UScenarioEditorUiSubsystem* uiSubsystem)
 {
 	UiSubsystem = uiSubsystem;
@@ -25,6 +53,14 @@ void UScenarioEditorShellViewModel::RefreshFromController()
 	UE_MVVM_SET_PROPERTY_VALUE(
 		SelectedPlaceableId,
 		selectedPlaceable ? selectedPlaceable->InstanceId : FString());
+	if (selectedPlaceable)
+	{
+		UE_MVVM_SET_PROPERTY_VALUE(SelectedTemplateBlockPath, FString());
+	}
+	else if (SelectedTemplateBlockPath.IsEmpty())
+	{
+		UE_MVVM_SET_PROPERTY_VALUE(SelectedTemplateBlockPath, ResolveDefaultTemplateBlockPath(ActiveSidebarPanel));
+	}
 }
 
 void UScenarioEditorShellViewModel::SelectInspectorTab(const EScenarioEditorInspectorTab tab)
@@ -35,7 +71,27 @@ void UScenarioEditorShellViewModel::SelectInspectorTab(const EScenarioEditorInsp
 
 void UScenarioEditorShellViewModel::SelectSidebarPanel(const EScenarioTemplateSidebarPanel panel)
 {
+	SelectTemplatePanel(panel);
+}
+
+void UScenarioEditorShellViewModel::SelectTemplatePanel(const EScenarioTemplateSidebarPanel panel)
+{
+	SelectTemplateBlock(panel, ResolveDefaultTemplateBlockPath(panel));
+}
+
+void UScenarioEditorShellViewModel::SelectTemplateBlock(
+	const EScenarioTemplateSidebarPanel panel,
+	const FString& blockPath)
+{
 	UE_MVVM_SET_PROPERTY_VALUE(ActiveSidebarPanel, panel);
+	UE_MVVM_SET_PROPERTY_VALUE(SelectedPlaceableId, FString());
+	UE_MVVM_SET_PROPERTY_VALUE(SelectedTemplateBlockPath, ResolveTemplateBlockPath(panel, blockPath));
+
+	if (AScenarioEditorController* controller = UiSubsystem ? UiSubsystem->ResolveEditorController() : nullptr;
+		controller && controller->GetSelectedPlaceableComponent())
+	{
+		controller->ClearSelectedPlaceable();
+	}
 }
 
 void UScenarioEditorShellViewModel::SetAssetPaletteVisible(const bool bVisible)
@@ -105,15 +161,28 @@ bool UScenarioEditorShellViewModel::SelectPlaceable(const FString& instanceId)
 	if (bSelected)
 	{
 		UE_MVVM_SET_PROPERTY_VALUE(SelectedPlaceableId, instanceId);
+		UE_MVVM_SET_PROPERTY_VALUE(SelectedTemplateBlockPath, FString());
 	}
 	return bSelected;
 }
 
 void UScenarioEditorShellViewModel::ClearSelectedPlaceable()
 {
-	if (AScenarioEditorController* controller = UiSubsystem ? UiSubsystem->ResolveEditorController() : nullptr)
+	UE_MVVM_SET_PROPERTY_VALUE(SelectedPlaceableId, FString());
+	if (SelectedTemplateBlockPath.IsEmpty())
+	{
+		UE_MVVM_SET_PROPERTY_VALUE(SelectedTemplateBlockPath, ResolveDefaultTemplateBlockPath(ActiveSidebarPanel));
+	}
+
+	if (AScenarioEditorController* controller = UiSubsystem ? UiSubsystem->ResolveEditorController() : nullptr;
+		controller && controller->GetSelectedPlaceableComponent())
 	{
 		controller->ClearSelectedPlaceable();
 	}
-	UE_MVVM_SET_PROPERTY_VALUE(SelectedPlaceableId, FString());
+}
+
+void UScenarioEditorShellViewModel::ClearSelection()
+{
+	ClearSelectedPlaceable();
+	UE_MVVM_SET_PROPERTY_VALUE(SelectedTemplateBlockPath, ResolveDefaultTemplateBlockPath(ActiveSidebarPanel));
 }

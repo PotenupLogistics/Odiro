@@ -272,10 +272,6 @@ void UScenarioEditorRootWidget::SetTemplateSidebarPanel(
 	ShowInspectorTab(EScenarioEditorInspectorTab::Detail);
 	SetPanelVisibility(ResolveTemplateSidebarVisibilityTarget(), true);
 	SetPanelVisibility(sidebarWidget, true);
-	if (ShellViewModel)
-	{
-		ShellViewModel->SelectSidebarPanel(activePanel);
-	}
 	ApplyTemplateSidebarPanel(activePanel);
 	if (bSyncOutlinerSelection && ScenarioEditorOutlinerWidget)
 	{
@@ -506,8 +502,7 @@ void UScenarioEditorRootWidget::HandleOutlinerItemSelected(FScenarioOutlinerItem
 
 	if (ShellViewModel)
 	{
-		ShellViewModel->ClearSelectedPlaceable();
-		ShellViewModel->SelectSidebarPanel(item.TemplatePanel);
+		ShellViewModel->SelectTemplatePanel(item.TemplatePanel);
 	}
 	SetTemplateSidebarPanel(item.TemplatePanel, false);
 	if (ScenarioEditorOutlinerWidget)
@@ -738,7 +733,8 @@ void UScenarioEditorRootWidget::HandleControllerSelectedPlaceableChanged(
 
 	ScenarioEditorOutlinerWidget->SetSelectedItemKey(
 		selectedInstanceId.IsEmpty()
-			? UScenarioEditorOutlinerWidget::MakeTemplateItemKey(EScenarioTemplateSidebarPanel::Main)
+			? UScenarioEditorOutlinerWidget::MakeTemplateItemKey(
+				ShellViewModel ? ShellViewModel->GetActiveSidebarPanel() : EScenarioTemplateSidebarPanel::Main)
 			: UScenarioEditorOutlinerWidget::MakePlaceableItemKey(selectedInstanceId));
 }
 

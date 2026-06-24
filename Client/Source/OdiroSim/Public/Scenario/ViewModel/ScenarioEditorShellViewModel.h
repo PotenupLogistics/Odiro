@@ -30,6 +30,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Shell")
 	void SelectSidebarPanel(EScenarioTemplateSidebarPanel panel);
 
+	// Selects a template sidebar panel and clears any placeable selection.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Shell")
+	void SelectTemplatePanel(EScenarioTemplateSidebarPanel panel);
+
+	// Selects a template block path within the requested sidebar panel.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Shell")
+	void SelectTemplateBlock(EScenarioTemplateSidebarPanel panel, const FString& blockPath);
+
 	// Asset palette visibility 표시 상태를 갱신한다.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Shell")
 	void SetAssetPaletteVisible(bool bVisible);
@@ -66,6 +74,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Shell")
 	void ClearSelectedPlaceable();
 
+	// Clears placeable selection and restores template block selection for the active panel.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Shell")
+	void ClearSelection();
+
 	// 현재 inspector tab을 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Shell")
 	EScenarioEditorInspectorTab GetActiveInspectorTab() const { return ActiveInspectorTab; }
@@ -93,6 +105,10 @@ public:
 	// 선택된 placeable instance id를 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Shell")
 	FString GetSelectedPlaceableId() const { return SelectedPlaceableId; }
+
+	// Returns the selected Scenario Template block path when no placeable is selected.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Shell")
+	FString GetSelectedTemplateBlockPath() const { return SelectedTemplateBlockPath; }
 
 private:
 	// Subsystem을 통해 world/controller 명령에 접근한다.
@@ -126,4 +142,8 @@ private:
 	// 현재 선택된 placeable instance id.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scenario|Editor|Shell", meta = (AllowPrivateAccess = "true"))
 	FString SelectedPlaceableId;
+
+	// Selected Scenario Template block path while the sidebar is in template editing mode.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scenario|Editor|Shell", meta = (AllowPrivateAccess = "true"))
+	FString SelectedTemplateBlockPath;
 };

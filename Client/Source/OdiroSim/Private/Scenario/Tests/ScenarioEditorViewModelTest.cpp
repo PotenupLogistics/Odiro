@@ -29,8 +29,29 @@ bool FScenarioEditorShellViewModelTest::RunTest(const FString& Parameters)
 
 	TestEqual(TEXT("Inspector tab updates"), viewModel->GetActiveInspectorTab(), EScenarioEditorInspectorTab::Llm);
 	TestEqual(TEXT("Sidebar panel updates"), viewModel->GetActiveSidebarPanel(), EScenarioTemplateSidebarPanel::Obstacle);
+	TestEqual(
+		TEXT("Sidebar panel selects default template block"),
+		viewModel->GetSelectedTemplateBlockPath(),
+		FString(TEXT("root.obstacles")));
 	TestTrue(TEXT("Asset palette visibility updates"), viewModel->IsAssetPaletteVisible());
 	TestFalse(TEXT("Controller command fails without subsystem"), viewModel->SetPerspectiveViewMode());
+
+	viewModel->SelectTemplateBlock(EScenarioTemplateSidebarPanel::Corridor, TEXT("root.corridor.axis"));
+	TestEqual(
+		TEXT("Template block selection updates active panel"),
+		viewModel->GetActiveSidebarPanel(),
+		EScenarioTemplateSidebarPanel::Corridor);
+	TestEqual(
+		TEXT("Template block path updates"),
+		viewModel->GetSelectedTemplateBlockPath(),
+		FString(TEXT("root.corridor.axis")));
+
+	viewModel->ClearSelection();
+	TestTrue(TEXT("Placeable selection clears"), viewModel->GetSelectedPlaceableId().IsEmpty());
+	TestEqual(
+		TEXT("Clear selection restores active panel root block"),
+		viewModel->GetSelectedTemplateBlockPath(),
+		FString(TEXT("root.corridor")));
 
 	return true;
 }

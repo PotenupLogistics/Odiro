@@ -142,9 +142,10 @@ try {
         $bridgeStderrLog = Join-Path $logsDir "run-bridge.err.log"
 
         Write-Step "Start Bridge service"
+        # Windows PowerShell flattens ArgumentList, so preserve quotes around paths containing spaces.
         $bridgeProcess = Start-Process `
             -FilePath "powershell.exe" `
-            -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $bridgeRunScript) `
+            -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$bridgeRunScript`"") `
             -WorkingDirectory $repoRoot `
             -WindowStyle Hidden `
             -RedirectStandardOutput $bridgeStdoutLog `

@@ -206,6 +206,7 @@ jobs:
               }
 
               $endpoint = Get-LfsApiEndpoint
+              # Escapes any special characters in the lock id before composing the LFS API path segment.
               $encodedId = [Uri]::EscapeDataString($Id)
               $unlockUrl = "$endpoint/locks/$encodedId/unlock"
               $body = @{ force = $true } | ConvertTo-Json -Compress
@@ -222,7 +223,7 @@ jobs:
               if ($LASTEXITCODE -ne 0) {
                   $detail = (($output | ForEach-Object { [string] $_ }) -join "`n").Trim()
                   if ([string]::IsNullOrWhiteSpace($detail)) {
-                      throw "Failed to unlock $Path by Git LFS lock id $Id because gh api returned no output. Check GH_TOKEN authentication and network access."
+                      throw "Failed to unlock $Path by Git LFS lock id $Id because gh api returned no output. Check GH_TOKEN admin access for force unlocks and that the LFS endpoint is reachable."
                   }
                   throw "Failed to unlock $Path by Git LFS lock id $Id.`n$detail"
               }

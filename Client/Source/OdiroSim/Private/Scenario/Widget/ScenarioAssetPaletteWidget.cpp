@@ -13,6 +13,33 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioAssetPaletteWidget, Log, All);
 
+namespace
+{
+	// Object Palette currently authors only concrete fixed static-obstacle placement rows.
+	bool IsObjectPaletteAuthoringSupported(const EScenarioPaletteItemType itemType)
+	{
+		return itemType == EScenarioPaletteItemType::StaticObstacle;
+	}
+
+	// User-facing reason for palette entries that exist in legacy/catalog data but have no active authoring contract.
+	const TCHAR* GetUnsupportedObjectPaletteAuthoringReason(const EScenarioPaletteItemType itemType)
+	{
+		switch (itemType)
+		{
+		case EScenarioPaletteItemType::Pedestrian:
+			return TEXT("Pedestrian authoring is encounter-based and is not connected to Object Palette placement yet.");
+		case EScenarioPaletteItemType::RobotStart:
+		case EScenarioPaletteItemType::RobotGoal:
+			return TEXT("Robot start/goal anchors are authored from robot route controls, not Object Palette placement.");
+		case EScenarioPaletteItemType::GroundRegion:
+			return TEXT("Ground regions are authored by Corridor surfaces, not Object Palette placement.");
+		case EScenarioPaletteItemType::StaticObstacle:
+		default:
+			return TEXT("Object Palette entry type is unsupported.");
+		}
+	}
+}
+
 UScenarioAssetPaletteWidget::UScenarioAssetPaletteWidget(const FObjectInitializer& objectInitializer)
 	: Super(objectInitializer)
 {
@@ -148,19 +175,21 @@ void UScenarioAssetPaletteWidget::ClearPalette()
 
 void UScenarioAssetPaletteWidget::HandlePaletteItemSelected(EScenarioPaletteItemType itemType, FName assetId)
 {
-	if (!AssetPaletteViewModel)
-	{
-		UE_LOG(LogScenarioAssetPaletteWidget, Warning, TEXT("ScenarioAssetPaletteViewModel is not available."));
-		return;
-	}
-
-	if (itemType == EScenarioPaletteItemType::GroundRegion)
+	if (!IsObjectPaletteAuthoringSupported(itemType))
 	{
 		UE_LOG(
 			LogScenarioAssetPaletteWidget,
 			Warning,
-			TEXT("Ground region drawing is disabled; author Corridor surfaces instead. AssetId: %s"),
-			*assetId.ToString());
+			TEXT("Object Palette entry is not backed by the active authoring contract | Type: %d | AssetId: %s | Reason: %s"),
+			static_cast<int32>(itemType),
+			*assetId.ToString(),
+			GetUnsupportedObjectPaletteAuthoringReason(itemType));
+		return;
+	}
+
+	if (!AssetPaletteViewModel)
+	{
+		UE_LOG(LogScenarioAssetPaletteWidget, Warning, TEXT("ScenarioAssetPaletteViewModel is not available."));
 		return;
 	}
 
@@ -280,6 +309,11 @@ bool UScenarioAssetPaletteWidget::ShouldIncludeSpecialEntry(
 	bool bIncludePedestrian,
 	bool bIncludeRobotRoute)
 {
+	if (!IsObjectPaletteAuthoringSupported(entry.ItemType))
+	{
+		return false;
+	}
+
 	(void)bIncludeRobotRoute;
 	switch (entry.ItemType)
 	{

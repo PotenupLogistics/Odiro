@@ -71,7 +71,7 @@
 | JSON path | 표시명 | Block | Schema type | 권장 control | Options source | Viewport | 현재 Sidebar | 상태 | 차이/다음 작업 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `$.obstacles.min_clear_width_m` | 최소 통행 폭 | Obstacle > 최소 통행 폭 | number or range | RangeNumber | - | corridor clearance band | `MinClearWidth`, range | Live | Viewport clearance envelope needed. |
-| `$.obstacles.placements` | 배치 규칙 | Obstacle > 배치 규칙 | array | ArrayBlock + count | - | obstacle previews | `PlacementsCount`, placement widgets | Live | Asset palette placement already reuses this list. |
+| `$.obstacles.placements` | 배치 규칙 | Obstacle > 배치 규칙 | array | ArrayBlock + count | - | obstacle previews | `PlacementsCount`, placement widgets | Live | Object Palette creates fixed static-obstacle placement rows in this list; pedestrian, robot anchors, and ground surfaces are not palette-authored. |
 | `$.obstacles.placements[].id` | 규칙 이름 | Obstacle > 배치 규칙 N | string | Text | unique placement ids | outliner/labels | `PlacementId`, text | Live | Rename should keep outliner and actor link coherent. |
 | `$.obstacles.placements[].kind` | 배치 방식 | Obstacle > 배치 규칙 N | string enum | Combo | `fixed`, `pattern`, `scatter` | controls visible fields | `PlacementKind`, Combo | Live | Display/value mapping can be improved later. |
 | `$.obstacles.placements[].prop` | 장애물 종류 | Obstacle > 배치 규칙 N | string | Combo | `environment-catalog.md` Props, static obstacle palette | obstacle mesh preview | `PlacementProp`, text | Partial | Should use palette/catalog picker, not free text. |

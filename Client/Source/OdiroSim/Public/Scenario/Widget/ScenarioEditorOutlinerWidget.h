@@ -6,6 +6,7 @@
 #include "ScenarioEditorOutlinerWidget.generated.h"
 
 class UScenarioEditorOutlinerRowWidget;
+class UScenarioEditorOutlinerViewModel;
 class UScenarioEditorWidgetClassCatalog;
 class UScrollBox;
 class UTextBlock;
@@ -76,6 +77,8 @@ private:
 	UFUNCTION()
 	void HandleRowExpansionToggled(FScenarioOutlinerItemViewModel item);
 
+	// Resolves the subsystem-owned outliner ViewModel for selection display state.
+	UScenarioEditorOutlinerViewModel* GetOutlinerViewModel() const;
 	void RebuildRows(const TArray<FScenarioOutlinerItemViewModel>& items);
 	void CollectPlaceableItems(TArray<FScenarioOutlinerItemViewModel>& outPlaceableItems) const;
 	void AddDefaultExpandedKeys();

@@ -42,6 +42,7 @@ verify:
     run:
       - UmgMcp widget tree readback for touched assets
       - Blueprint compile/save for touched maps/widgets/data assets
+      - UmgMcp get_layout_data and check_widget_overlap for user-facing UMG layout/style mutations
       - relevant PIE or runtime log check
 related:
   - client-platform-execution

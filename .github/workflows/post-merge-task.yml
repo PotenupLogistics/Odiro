@@ -61,6 +61,8 @@ jobs:
           PUSHED_AT: ${{ github.event.repository.pushed_at }}
           DISPATCH_MODE: ${{ github.event.inputs.mode }}
           DISPATCH_PATH: ${{ github.event.inputs.path }}
+          # Step-scoped because only Invoke-ForceUnlockById should use the admin PAT via gh api.
+          GH_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
         run: |
           $ErrorActionPreference = "Stop"
           Set-StrictMode -Version Latest
@@ -151,6 +153,81 @@ jobs:
                   return @($locks.Value)
               }
               return @($Payload)
+          }
+
+          # Returns the repository's effective Git LFS API endpoint without a trailing slash.
+          # Throws when git lfs env fails or does not report an Endpoint line.
+          function Get-LfsApiEndpoint {
+              $stderrPath = [System.IO.Path]::GetTempFileName()
+              try {
+                  $lines = @(git lfs env 2>$stderrPath)
+                  $gitExitCode = $LASTEXITCODE
+                  $stderrText = Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue
+              }
+              finally {
+                  Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+              }
+
+              $trimmedStderr = if ($null -eq $stderrText) { "" } else { $stderrText.Trim() }
+              if ($gitExitCode -ne 0) {
+                  if ([string]::IsNullOrWhiteSpace($trimmedStderr)) {
+                      throw "Failed to read Git LFS environment."
+                  }
+                  throw "Failed to read Git LFS environment.`n$trimmedStderr"
+              }
+              if ($lines.Count -eq 0) {
+                  throw "Git LFS environment output was empty."
+              }
+
+              foreach ($line in $lines) {
+                  if ($line -match '^Endpoint=(?<Url>.+)$') {
+                      return ([string] $Matches["Url"]).TrimEnd("/")
+                  }
+              }
+
+              throw "Git LFS endpoint was not found. Verify Git LFS is configured for this repository."
+          }
+
+          # Force-unlocks one Git LFS lock by id through the Git LFS HTTP API using gh api.
+          # Path is the repository-relative asset path used for diagnostics, and Id is the Git LFS lock id string.
+          # Throws when GH_TOKEN is missing, the HTTP call fails, or the LFS server rejects the unlock request.
+          function Invoke-ForceUnlockById {
+              param(
+                  # Repository-relative lock path used in error output.
+                  [string] $Path,
+                  # Git LFS lock identifier returned by git lfs locks --json.
+                  [string] $Id
+              )
+
+              if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
+                  throw "GH_TOKEN environment variable is required before calling gh api."
+              }
+              if ([string]::IsNullOrWhiteSpace($Id)) {
+                  throw "Git LFS lock id is required."
+              }
+
+              $endpoint = Get-LfsApiEndpoint
+              # Escapes lock ids for URL-path safety because providers may emit reserved characters such as ':'.
+              $encodedId = [Uri]::EscapeDataString($Id)
+              $unlockUrl = "$endpoint/locks/$encodedId/unlock"
+              $body = @{ force = $true } | ConvertTo-Json -Compress
+
+              $output = @(
+                  $body | gh api `
+                      -X POST `
+                      $unlockUrl `
+                      -H "Accept: application/vnd.git-lfs+json" `
+                      -H "Content-Type: application/vnd.git-lfs+json" `
+                      --input - `
+                      2>&1
+              )
+              if ($LASTEXITCODE -ne 0) {
+                  $detail = (($output | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  if ([string]::IsNullOrWhiteSpace($detail)) {
+                      throw "Failed to unlock $Path by Git LFS lock id ${Id}: no output from gh api. Check GH_TOKEN admin access and LFS endpoint reachability."
+                  }
+                  throw "Failed to unlock $Path by Git LFS lock id ${Id}.`n$detail"
+              }
           }
 
           # Reads current Git LFS locks and fails closed on query or JSON errors.
@@ -308,13 +385,14 @@ jobs:
               }
 
               if ([string]::IsNullOrWhiteSpace($id)) {
+                  # No lock ID available; fall back to path-based unlock via git lfs CLI.
                   git lfs unlock --force $path
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "Failed to unlock $path."
+                  }
               }
               else {
-                  git lfs unlock --force "--id=$id"
-              }
-              if ($LASTEXITCODE -ne 0) {
-                  throw "Failed to unlock $path."
+                  Invoke-ForceUnlockById -Path $path -Id $id
               }
               Write-Host "Unlocked: $path"
           }

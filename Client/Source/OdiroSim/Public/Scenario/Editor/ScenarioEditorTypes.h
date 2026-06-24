@@ -16,6 +16,63 @@ enum class EScenarioTemplateSidebarPanel : uint8
 	Pedestrian
 };
 
+// Value editor shape used by one Scenario Template field row.
+UENUM(BlueprintType)
+enum class EScenarioEditorSidebarFieldInputType : uint8
+{
+	Text,
+	MultilineText,
+	Integer,
+	Number,
+	EnumText,
+	ComboBox,
+	Range
+};
+
+// Editable field ids exposed by one root.obstacles.placements[] editor row.
+UENUM(BlueprintType)
+enum class EScenarioEditorSidebarObstaclePlacementField : uint8
+{
+	PlacementId,
+	Kind,
+	Prop,
+	Pattern,
+	Segment,
+	Lane,
+	Along,
+	Offset,
+	ZoneSegments,
+	ZoneLanes,
+	PaletteCategories,
+	PaletteClasses,
+	Count,
+	Spacing,
+	GapWidth,
+	Density,
+	Yaw,
+	AllowBlocking
+};
+
+// Robot anchor target edited by the Scenario Template main panel.
+UENUM(BlueprintType)
+enum class EScenarioEditorSidebarRobotAnchorTarget : uint8
+{
+	Start,
+	Goal
+};
+
+// Robot anchor field edited by the Scenario Template main panel.
+UENUM(BlueprintType)
+enum class EScenarioEditorSidebarRobotAnchorField : uint8
+{
+	Type,
+	Segment,
+	Along,
+	Offset,
+	Lane,
+	Heading
+};
+
 // Right-sidebar inspector page owned by the Scenario Editor root widget.
 UENUM(BlueprintType)
 enum class EScenarioEditorInspectorTab : uint8

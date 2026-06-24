@@ -1,37 +1,33 @@
 
 #include "Platform/Widget/MainMenuWidget.h"
-#include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Components/CheckBox.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
 #include "Components/ScrollBox.h"
 #include "Components/ScrollBoxSlot.h"
-#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/WidgetSwitcher.h"
 #include "Components/WrapBox.h"
 #include "Components/WrapBoxSlot.h"
-#include "Dom/JsonObject.h"
-#include "Engine/GameInstance.h"
-#include "Kismet/GameplayStatics.h"
-#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Platform/PlatformUiDeveloperSettings.h"
+#include "Platform/PlatformUiSubsystem.h"
 #include "Platform/ProjectRunResultDashboard.h"
-#include "Platform/ProjectSessionSubsystem.h"
-#include "Platform/ScenarioEditorLaunchSubsystem.h"
 #include "Platform/PlatformAnalysisAiSubsystem.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
-#include "Platform/Widget/ExperimentResultIterationButton.h"
+#include "Platform/ViewModel/ExperimentConfigViewModel.h"
+#include "Platform/ViewModel/ExperimentResultItemViewModels.h"
+#include "Platform/ViewModel/ExperimentResultViewModel.h"
+#include "Platform/ViewModel/OdiroListItemViewModel.h"
+#include "Platform/ViewModel/ProjectWorkspaceViewModel.h"
+#include "Platform/Widget/ExperimentResultIterationSelectorWidget.h"
 #include "Platform/Widget/FileListItemWidget.h"
 #include "Platform/Widget/ProjectExperimentRunRowWidget.h"
 #include "Platform/Widget/ProjectWorkspaceTabWidget.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
 #include "Scenario/Widget/ScenarioEditorRootWidget.h"
-#include "Serialization/JsonReader.h"
-#include "Serialization/JsonSerializer.h"
-#include "Serialization/JsonWriter.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMainMenuWidget, Log, All);
 
@@ -49,14 +45,6 @@ namespace
 	const int32 DefaultFlushIntervalTicks = 60;
 	const TCHAR* ScenarioSetupTemplatePath = TEXT("Json/Input/ScenarioSetupSample_0.json");
 	const TCHAR* DeliveryBotTemplatePath = TEXT("Json/Input/DeliveryBotSetupSample_0.json");
-	const TCHAR* FileListItemWidgetBlueprintClassPath =
-		TEXT("/Game/Widgets/MainMenu/WBP_FileListItem.WBP_FileListItem_C");
-	const TCHAR* ProjectExperimentRunRowWidgetBlueprintClassPath =
-		TEXT("/Game/Widgets/MainMenu/WBP_ProjectExperimentRunRow.WBP_ProjectExperimentRunRow_C");
-	const TCHAR* ProjectEpisodeReplayCardWidgetBlueprintClassPath =
-		TEXT("/Game/Widgets/MainMenu/WBP_ProjectEpisodeReplayCard.WBP_ProjectEpisodeReplayCard_C");
-	const TCHAR* ProjectAiSuggestionRowWidgetBlueprintClassPath =
-		TEXT("/Game/Widgets/MainMenu/WBP_ProjectAiSuggestionRow.WBP_ProjectAiSuggestionRow_C");
 	const FName MetricLabelTextName(TEXT("MetricLabelText"));
 	const FName MetricValueTextName(TEXT("MetricValueText"));
 	const FName MetricUnitTextName(TEXT("MetricUnitText"));
@@ -83,13 +71,7 @@ namespace
 	const FName SuggestionMediumIndicatorName(TEXT("SuggestionMediumIndicator"));
 	const FName SuggestionLowIndicatorName(TEXT("SuggestionLowIndicator"));
 	const FName SuggestionInfoIndicatorName(TEXT("SuggestionInfoIndicator"));
-	const TCHAR* MainMenuUserProjectSettingFileName = TEXT("setting.json");
 	const TCHAR* MainMenuUserProjectScenarioFileName = TEXT("scenario.json");
-	const TCHAR* MainMenuRegularFontPath =
-		TEXT("/Game/Fonts/Freesentation/Freesentation-4Regular_Font.Freesentation-4Regular_Font");
-	const TCHAR* MainMenuBoldFontPath =
-		TEXT("/Game/Fonts/Freesentation/Freesentation-7Bold_Font.Freesentation-7Bold_Font");
-	const FName MainMenuStartupMapId(TEXT("StartupMap"));
 	const FName ProjectScenarioEditTabId(TEXT("ScenarioEdit"));
 	const FName ProjectExperimentStatusTabId(TEXT("ExperimentStatus"));
 	const FName ProjectExperimentConfigTabId(TEXT("ExperimentConfig"));
@@ -104,59 +86,10 @@ namespace
 		ExperimentResult,
 	};
 
-	struct FExperimentResultReportItem
-	{
-		FString ReportPath;
-		int32 RunIndex = INDEX_NONE;
-	};
-
-	FName MakeUniqueWidgetName(UWidgetTree* widgetTree, UClass* widgetClass, const FName name)
-	{
-		return MakeUniqueObjectName(widgetTree, widgetClass, name);
-	}
-
-	template <typename WidgetT>
-	WidgetT* MakeWidget(UWidgetTree* widgetTree, const FName name)
-	{
-		return widgetTree->ConstructWidget<WidgetT>(
-			WidgetT::StaticClass(),
-			MakeUniqueWidgetName(widgetTree, WidgetT::StaticClass(), name));
-	}
-
 	FLinearColor MakeSrgbColor(const uint8 red, const uint8 green, const uint8 blue, const float alpha = 1.0f)
 	{
 		const uint8 alphaByte = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(alpha * 255.0f), 0, 255));
 		return FLinearColor::FromSRGBColor(FColor(red, green, blue, alphaByte));
-	}
-
-	UObject* ResolveMainMenuFontObject(const bool bBold)
-	{
-		return LoadObject<UObject>(nullptr, bBold ? MainMenuBoldFontPath : MainMenuRegularFontPath);
-	}
-
-	FSlateFontInfo MakeMainMenuFont(const int32 fontSize, const bool bBold = false)
-	{
-		FSlateFontInfo fontInfo;
-		fontInfo.FontObject = ResolveMainMenuFontObject(bBold);
-		fontInfo.Size = fontSize;
-		return fontInfo;
-	}
-
-	void ApplyTextBlockStyle(UTextBlock* textBlock, const int32 fontSize, const bool bBold, const FLinearColor& color)
-	{
-		if (!textBlock) return;
-
-		textBlock->SetFont(MakeMainMenuFont(fontSize, bBold));
-		textBlock->SetColorAndOpacity(FSlateColor(color));
-	}
-
-	UTextBlock* MakeTextBlock(UWidgetTree* widgetTree, const FName name, const FString& text, const int32 fontSize = 16)
-	{
-		UTextBlock* textBlock = MakeWidget<UTextBlock>(widgetTree, name);
-		textBlock->SetText(FText::FromString(text));
-		textBlock->SetAutoWrapText(true);
-		ApplyTextBlockStyle(textBlock, fontSize, false, MakeSrgbColor(0xc0, 0xc0, 0xc0));
-		return textBlock;
 	}
 
 	FString NormalizeMainMenuPath(FString path)
@@ -292,64 +225,6 @@ namespace
 		SetWidgetVisible(FindDashboardChildWidget(ownerWidget, childName), bVisible);
 	}
 
-	FString BuildProjectSettingPath(const FString& projectPath)
-	{
-		return NormalizeMainMenuPath(FPaths::Combine(projectPath, MainMenuUserProjectSettingFileName));
-	}
-
-	bool TryLoadJsonRootObject(const FString& jsonFilePath, TSharedPtr<FJsonObject>& outRootObject, FString& outError)
-	{
-		outRootObject.Reset();
-		outError.Reset();
-
-		FString jsonString;
-		if (!FFileHelper::LoadFileToString(jsonString, *jsonFilePath))
-		{
-			outError = FString::Printf(TEXT("setting.json 읽기 실패: %s"), *jsonFilePath);
-			return false;
-		}
-
-		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(jsonString);
-		if (!FJsonSerializer::Deserialize(reader, outRootObject) || !outRootObject.IsValid())
-		{
-			outError = FString::Printf(TEXT("setting.json 파싱 실패: %s"), *jsonFilePath);
-			return false;
-		}
-
-		return true;
-	}
-
-	TSharedRef<FJsonObject> FindOrCreateObjectField(const TSharedRef<FJsonObject>& rootObject, const FString& fieldName)
-	{
-		const TSharedPtr<FJsonObject>* existingObject = nullptr;
-		if (rootObject->TryGetObjectField(fieldName, existingObject) && existingObject && existingObject->IsValid())
-		{
-			return existingObject->ToSharedRef();
-		}
-
-		TSharedRef<FJsonObject> newObject = MakeShared<FJsonObject>();
-		rootObject->SetObjectField(fieldName, newObject);
-		return newObject;
-	}
-
-	FString ReadJsonStringFieldOrDefault(const FJsonObject& object, const FString& fieldName, const FString& defaultValue)
-	{
-		FString value;
-		return object.TryGetStringField(fieldName, value) ? value : defaultValue;
-	}
-
-	int32 ReadJsonIntFieldOrDefault(const FJsonObject& object, const FString& fieldName, const int32 defaultValue)
-	{
-		double value = 0.0;
-		return object.TryGetNumberField(fieldName, value) ? FMath::RoundToInt(value) : defaultValue;
-	}
-
-	int64 ReadJsonInt64FieldOrDefault(const FJsonObject& object, const FString& fieldName, const int64 defaultValue)
-	{
-		double value = 0.0;
-		return object.TryGetNumberField(fieldName, value) ? static_cast<int64>(value) : defaultValue;
-	}
-
 	bool TryParsePositiveIntText(const FString& text, const FString& label, int32& outValue, TArray<FString>& outDiagnostics)
 	{
 		const FString trimmedText = text.TrimStartAndEnd();
@@ -405,66 +280,7 @@ namespace
 		const FString& statusPath,
 		ESimulationRunState& outState)
 	{
-		outState = ESimulationRunState::Pending;
-		if (!FPaths::FileExists(statusPath))
-		{
-			return false;
-		}
-
-		FString statusJson;
-		if (!FFileHelper::LoadFileToString(statusJson, *statusPath))
-		{
-			return false;
-		}
-
-		TSharedPtr<FJsonObject> rootObject;
-		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(statusJson);
-		if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
-		{
-			return false;
-		}
-
-		FString schema;
-		if (!rootObject->TryGetStringField(TEXT("schema"), schema)
-			|| !schema.Equals(TEXT("run_status"), ESearchCase::CaseSensitive))
-		{
-			return false;
-		}
-
-		FString stateText;
-		if (!rootObject->TryGetStringField(TEXT("state"), stateText))
-		{
-			return false;
-		}
-
-		stateText = stateText.TrimStartAndEnd().ToLower();
-		if (stateText == TEXT("starting")
-			|| stateText == TEXT("running")
-			|| stateText == TEXT("stopping"))
-		{
-			outState = ESimulationRunState::Running;
-			return true;
-		}
-
-		if (stateText == TEXT("exited") || stateText == TEXT("completed"))
-		{
-			outState = ESimulationRunState::Completed;
-			return true;
-		}
-
-		if (stateText == TEXT("failed"))
-		{
-			outState = ESimulationRunState::Failed;
-			return true;
-		}
-
-		if (stateText == TEXT("canceled") || stateText == TEXT("cancelled"))
-		{
-			outState = ESimulationRunState::Canceled;
-			return true;
-		}
-
-		return false;
+		return UPlatformUiSubsystem::TryReadBridgeRunStatusState(statusPath, outState);
 	}
 
 	bool TryReadProjectRunStatusState(
@@ -473,7 +289,7 @@ namespace
 	{
 		outState = ESimulationRunState::Pending;
 		const FString statusPath = BuildProjectRunStatusPath(resultDirectory);
-		if (!FPaths::FileExists(statusPath))
+		if (!UPlatformUiSubsystem::DoesResolvedFileExist(statusPath))
 		{
 			return false;
 		}
@@ -525,7 +341,7 @@ namespace
 			return runInfo.Status.State;
 		}
 
-		if (FPaths::FileExists(BuildProjectRunSummaryPath(resultDirectory)))
+		if (UPlatformUiSubsystem::DoesResolvedFileExist(BuildProjectRunSummaryPath(resultDirectory)))
 		{
 			return ESimulationRunState::Completed;
 		}
@@ -548,31 +364,7 @@ namespace
 
 	FString BuildLogPreview(const FString& logPath)
 	{
-		TArray<FString> lines;
-		if (!FFileHelper::LoadFileToStringArray(lines, *FSimulationSetupJson::ResolveProjectPath(logPath)))
-		{
-			return FString::Printf(TEXT("Log read failed: %s"), *logPath);
-		}
-
-		TArray<FString> previewLines;
-		for (int32 lineIndex = 0; lineIndex < FMath::Min(LogPreviewEdgeLineCount, lines.Num()); ++lineIndex)
-		{
-			previewLines.Add(lines[lineIndex]);
-		}
-
-		// Measurement JSONL은 tick record가 커질 수 있어 전체 내용을 UI에 펼치지 않는다.
-		if (lines.Num() > LogPreviewEdgeLineCount * 2)
-		{
-			previewLines.Add(TEXT("..."));
-		}
-
-		const int32 tailStartIndex = FMath::Max(LogPreviewEdgeLineCount, lines.Num() - LogPreviewEdgeLineCount);
-		for (int32 lineIndex = tailStartIndex; lineIndex < lines.Num(); ++lineIndex)
-		{
-			previewLines.Add(lines[lineIndex]);
-		}
-
-		return FString::Join(previewLines, TEXT("\n"));
+		return UPlatformUiSubsystem::BuildLogPreview(logPath, LogPreviewEdgeLineCount);
 	}
 
 	FString JoinStringLines(const TArray<FString>& lines)
@@ -603,80 +395,12 @@ namespace
 
 	bool TryReadExperimentResultReportItem(const FString& reportPath, FExperimentResultReportItem& outItem)
 	{
-		outItem = FExperimentResultReportItem{};
-		outItem.ReportPath = reportPath;
-
-		FString reportJson;
-		if (!FFileHelper::LoadFileToString(reportJson, *FSimulationSetupJson::ResolveProjectPath(reportPath)))
-		{
-			return false;
-		}
-
-		TSharedPtr<FJsonObject> rootObject;
-		const TSharedRef<TJsonReader<>> reader = TJsonReaderFactory<>::Create(reportJson);
-		if (!FJsonSerializer::Deserialize(reader, rootObject) || !rootObject.IsValid())
-		{
-			return false;
-		}
-
-		FString schema;
-		if (!rootObject->TryGetStringField(TEXT("schema"), schema)
-			|| !schema.Equals(TEXT("episode_evaluation_report"), ESearchCase::CaseSensitive))
-		{
-			return false;
-		}
-
-		const TSharedPtr<FJsonValue> runValue = rootObject->TryGetField(TEXT("run"));
-		if (!runValue.IsValid() || runValue->Type != EJson::Object)
-		{
-			return false;
-		}
-
-		const TSharedPtr<FJsonObject> runObject = runValue->AsObject();
-		if (!runObject.IsValid())
-		{
-			return false;
-		}
-
-		double runIndex = 0.0;
-		if (runObject->TryGetNumberField(TEXT("run_index"), runIndex))
-		{
-			outItem.RunIndex = FMath::RoundToInt(runIndex);
-		}
-		return true;
+		return UPlatformUiSubsystem::TryReadExperimentResultReportItem(reportPath, outItem);
 	}
 
 	TArray<FExperimentResultReportItem> BuildExperimentResultReportItems(const TArray<FString>& reportPaths)
 	{
-		TArray<FExperimentResultReportItem> items;
-		items.Reserve(reportPaths.Num());
-		for (const FString& reportPath : reportPaths)
-		{
-			FExperimentResultReportItem item;
-			if (TryReadExperimentResultReportItem(reportPath, item))
-			{
-				items.Add(item);
-			}
-		}
-
-		items.Sort([](const FExperimentResultReportItem& left, const FExperimentResultReportItem& right)
-		{
-			if (left.RunIndex != right.RunIndex)
-			{
-				if (left.RunIndex == INDEX_NONE)
-				{
-					return false;
-				}
-				if (right.RunIndex == INDEX_NONE)
-				{
-					return true;
-				}
-				return left.RunIndex < right.RunIndex;
-			}
-
-			return left.ReportPath < right.ReportPath;
-		});
-		return items;
+		return UPlatformUiSubsystem::BuildExperimentResultReportItems(reportPaths);
 	}
 
 	bool IsReferenceSampleJsonPath(const FString& jsonPath)
@@ -737,56 +461,12 @@ namespace
 		const FString& itemLabel,
 		FString& outError)
 	{
-		outError.Reset();
-		if (sourcePath.Equals(targetPath, ESearchCase::IgnoreCase))
-		{
-			return true;
-		}
-
-		const FString resolvedSourcePath = FSimulationSetupJson::ResolveProjectPath(sourcePath);
-		const FString resolvedTargetPath = FSimulationSetupJson::ResolveProjectPath(targetPath);
-		if (!FPaths::FileExists(resolvedSourcePath))
-		{
-			outError = FString::Printf(TEXT("%s 파일을 찾을 수 없습니다: %s"), *itemLabel, *sourcePath);
-			return false;
-		}
-		if (FPaths::FileExists(resolvedTargetPath))
-		{
-			outError = FString::Printf(TEXT("%s 파일이 이미 존재합니다: %s"), *itemLabel, *targetPath);
-			return false;
-		}
-
-		const FString targetDirectory = FPaths::GetPath(resolvedTargetPath);
-		if (!IFileManager::Get().MakeDirectory(*targetDirectory, true)
-			|| !IFileManager::Get().Move(*resolvedTargetPath, *resolvedSourcePath, false, false))
-		{
-			outError = FString::Printf(TEXT("%s 이름 변경 실패: %s -> %s"), *itemLabel, *sourcePath, *targetPath);
-			return false;
-		}
-
-		return true;
+		return UPlatformUiSubsystem::MoveProjectRelativeFile(sourcePath, targetPath, itemLabel, outError);
 	}
 
 	FString MakeUniqueInputJsonPath(const FString& baseFileName)
 	{
-		for (int32 index = 0; index < 1000; ++index)
-		{
-			const FString fileName = index == 0
-				? FString::Printf(TEXT("%s.json"), *baseFileName)
-				: FString::Printf(TEXT("%s_%d.json"), *baseFileName, index);
-			FString relativePath = FPaths::Combine(TEXT("Json/Input"), fileName);
-			relativePath.ReplaceInline(TEXT("\\"), TEXT("/"));
-			if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(relativePath)))
-			{
-				return relativePath;
-			}
-		}
-
-		FString fallbackPath = FPaths::Combine(
-			TEXT("Json/Input"),
-			FString::Printf(TEXT("%s_%s.json"), *baseFileName, *FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(8)));
-		fallbackPath.ReplaceInline(TEXT("\\"), TEXT("/"));
-		return fallbackPath;
+		return UPlatformUiSubsystem::MakeUniqueInputJsonPath(baseFileName);
 	}
 
 	FString MakeGeneratedRunQueuePathForSetup(const FString& setupPath)
@@ -829,13 +509,6 @@ namespace
 		return false;
 	}
 
-	void AddEmptyListMessage(UWidgetTree* widgetTree, UScrollBox* scrollBox, const FString& message)
-	{
-		if (!widgetTree || !scrollBox) return;
-
-		scrollBox->AddChild(MakeTextBlock(widgetTree, TEXT("EmptyListMessage"), message, 14));
-	}
-
 	void SetComboBoxOptions(UComboBoxString* comboBox, const TArray<FString>& options, const FString& preferredOption)
 	{
 		if (!comboBox) return;
@@ -862,6 +535,13 @@ void UMainMenuWidget::NativeConstruct()
 	Super::NativeConstruct();
 
 	SetIsFocusable(true);
+	if (UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem())
+	{
+		ProjectWorkspaceViewModel = platformUiSubsystem->GetProjectWorkspaceViewModel();
+		ExperimentConfigViewModel = platformUiSubsystem->GetExperimentConfigViewModel();
+		ExperimentResultViewModel = platformUiSubsystem->GetExperimentResultViewModel();
+		platformUiSubsystem->RefreshFromProjectSession();
+	}
 	if (!ValidateRequiredBindings()) return;
 
 	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
@@ -891,16 +571,12 @@ void UMainMenuWidget::NativeConstruct()
 		SetDiagnosticsText(TEXT("Active project가 없습니다. StartupMap에서 프로젝트를 선택하세요."));
 	}
 
-	if (USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem())
+	if (UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem())
 	{
-		subsystem->OnRunInfoChanged.RemoveAll(this);
-		subsystem->OnRunInfoChanged.AddUObject(this, &UMainMenuWidget::HandleRunInfoChanged);
-	}
-
-	if (UPlatformAnalysisAiSubsystem* analysisSubsystem = GetPlatformAnalysisAiSubsystem())
-	{
-		analysisSubsystem->OnAnalysisCompleted.RemoveAll(this);
-		analysisSubsystem->OnAnalysisCompleted.AddUObject(this, &UMainMenuWidget::HandleAnalysisCompleted);
+		platformUiSubsystem->OnRunInfoChanged.RemoveAll(this);
+		platformUiSubsystem->OnRunInfoChanged.AddUObject(this, &UMainMenuWidget::HandleRunInfoChanged);
+		platformUiSubsystem->OnAnalysisCompleted.RemoveAll(this);
+		platformUiSubsystem->OnAnalysisCompleted.AddUObject(this, &UMainMenuWidget::HandleAnalysisCompleted);
 	}
 
 	if (UWorld* world = GetWorld())
@@ -934,14 +610,10 @@ void UMainMenuWidget::NativeDestruct()
 		world->GetTimerManager().ClearTimer(RefreshTimerHandle);
 	}
 
-	if (USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem())
+	if (UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem())
 	{
-		subsystem->OnRunInfoChanged.RemoveAll(this);
-	}
-
-	if (UPlatformAnalysisAiSubsystem* analysisSubsystem = GetPlatformAnalysisAiSubsystem())
-	{
-		analysisSubsystem->OnAnalysisCompleted.RemoveAll(this);
+		platformUiSubsystem->OnRunInfoChanged.RemoveAll(this);
+		platformUiSubsystem->OnAnalysisCompleted.RemoveAll(this);
 	}
 
 	Super::NativeDestruct();
@@ -949,11 +621,11 @@ void UMainMenuWidget::NativeDestruct()
 
 void UMainMenuWidget::RefreshSetupOptions()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem) return;
+	UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	if (!platformUiSubsystem) return;
 
 	const FString currentPath = GetSelectedSetupPath();
-	const TArray<FString> setupFiles = subsystem->ListSimulationSetupFiles();
+	const TArray<FString> setupFiles = platformUiSubsystem->ListLegacySimulationSetupFiles();
 	SetComboBoxOptions(SetupComboBox, setupFiles, currentPath);
 
 	const FString selectedPath = setupFiles.Contains(currentPath)
@@ -971,7 +643,7 @@ void UMainMenuWidget::RefreshSetupOptions()
 	}
 	RefreshExperimentConfigList();
 
-	const TArray<FString> scenarioSetupFiles = subsystem->ListScenarioSetupFiles();
+	const TArray<FString> scenarioSetupFiles = platformUiSubsystem->ListLegacyScenarioSetupFiles();
 	const FString currentScenarioSetupPath = GetSelectedScenarioSetupPath();
 	const FString selectedScenarioSetupPath = scenarioSetupFiles.Contains(currentScenarioSetupPath)
 		? currentScenarioSetupPath
@@ -981,7 +653,7 @@ void UMainMenuWidget::RefreshSetupOptions()
 	SetSelectedScenarioSetupPath(selectedScenarioSetupPath);
 	RefreshScenarioList();
 
-	const TArray<FString> deliveryBotSetupFiles = subsystem->ListDeliveryBotSetupFiles();
+	const TArray<FString> deliveryBotSetupFiles = platformUiSubsystem->ListLegacyDeliveryBotSetupFiles();
 	const FString currentDeliveryBotSetupPath = GetSelectedDeliveryBotSetupPath();
 	const FString selectedDeliveryBotSetupPath = deliveryBotSetupFiles.Contains(currentDeliveryBotSetupPath)
 		? currentDeliveryBotSetupPath
@@ -991,7 +663,7 @@ void UMainMenuWidget::RefreshSetupOptions()
 	SetSelectedDeliveryBotSetupPath(selectedDeliveryBotSetupPath);
 	RefreshPolicyList();
 
-	const TArray<FString> policySpecFiles = subsystem->ListPolicySpecFiles();
+	const TArray<FString> policySpecFiles = platformUiSubsystem->ListLegacyPolicySpecFiles();
 	const FString currentPolicySpecPath = GetSelectedPolicySpecPath();
 	const FString defaultPolicySpecPath = MainMenuDefaultPolicySpecJsonPath;
 	const FString selectedPolicySpecPath = policySpecFiles.Contains(currentPolicySpecPath)
@@ -1008,24 +680,18 @@ void UMainMenuWidget::RefreshSetupOptions()
 
 void UMainMenuWidget::RefreshProjectRunSelection()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem || !IsProjectModeSelected())
+	if (!IsProjectModeSelected() || !ProjectWorkspaceViewModel)
 	{
 		SetSelectedProjectRunId(FString());
 		return;
 	}
 
-	TArray<FString> diagnostics;
-	if (!subsystem->ValidateUserProject(GetSelectedProjectPath(), diagnostics))
-	{
-		SetSelectedProjectRunId(FString());
-		return;
-	}
+	ProjectWorkspaceViewModel->RefreshProjectRuns();
 
 	TArray<FString> runIds;
-	for (const FString& runDirectory : subsystem->ListProjectRunDirectories(GetSelectedProjectPath()))
+	for (const UOdiroListItemViewModel* runItem : ProjectWorkspaceViewModel->GetRunItems())
 	{
-		const FString runId = ExtractProjectRunIdFromDirectory(runDirectory);
+		const FString runId = runItem ? runItem->GetItemId() : FString();
 		if (FUserProjectRunSnapshot::IsValidRunId(runId))
 		{
 			runIds.Add(runId);
@@ -1038,6 +704,7 @@ void UMainMenuWidget::RefreshProjectRunSelection()
 		? currentRunId
 		: (runIds.IsEmpty() ? FString() : runIds.Last());
 	SetSelectedProjectRunId(selectedRunId);
+	ProjectWorkspaceViewModel->SelectRun(selectedRunId);
 }
 
 void UMainMenuWidget::ShowProjectExperimentConfigPanel(const bool bVisible)
@@ -1058,81 +725,53 @@ bool UMainMenuWidget::StartProjectExperimentRun(TArray<FString>& outDiagnostics,
 	outDiagnostics.Reset();
 	outRunId.Reset();
 
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
+	if (!ProjectWorkspaceViewModel)
 	{
-		outDiagnostics.Add(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
+		outDiagnostics.Add(TEXT("ProjectWorkspaceViewModel이 없습니다."));
 		return false;
 	}
 
-	const FSimulatorRunInfo activeRunInfo = subsystem->GetActiveRunInfo();
-	if (activeRunInfo.bProcessRunning && !USimulatorLaunchSubsystem::IsTerminalRunState(activeRunInfo.Status.State))
+	if (!ProjectWorkspaceViewModel->StartNewRun(outRunId))
 	{
-		outDiagnostics.Add(TEXT("이미 실행 중인 실험이 있습니다."));
+		const FString diagnostics = ProjectWorkspaceViewModel->GetDiagnosticsText();
+		outDiagnostics.Add(diagnostics.IsEmpty() ? TEXT("Project run 시작 실패.") : diagnostics);
 		return false;
 	}
 
-	if (!CreateProjectRunForPrototype(outRunId, outDiagnostics, subsystem))
-	{
-		return false;
-	}
-
-	if (!subsystem->StartProjectRun(GetSelectedProjectPath(), outRunId))
-	{
-		outDiagnostics.Add(subsystem->GetLastError());
-		RefreshProjectRunSelection();
-		RefreshExperimentResultList();
-		return false;
-	}
-
+	SetSelectedProjectRunId(outRunId);
 	return true;
 }
 
 bool UMainMenuWidget::LoadProjectExperimentSettingIntoPanel(TArray<FString>& outDiagnostics)
 {
 	outDiagnostics.Reset();
-
-	const FString settingPath = BuildProjectSettingPath(GetSelectedProjectPath());
-	TSharedPtr<FJsonObject> rootObject;
-	FString error;
-	if (!TryLoadJsonRootObject(settingPath, rootObject, error))
+	if (!ExperimentConfigViewModel)
 	{
-		outDiagnostics.Add(error);
+		outDiagnostics.Add(TEXT("ExperimentConfigViewModel이 없습니다."));
 		return false;
 	}
 
-	const TSharedPtr<FJsonObject>* runtimeObject = nullptr;
-	const TSharedPtr<FJsonObject>* samplingObject = nullptr;
-	if (!rootObject->TryGetObjectField(TEXT("runtime"), runtimeObject) || !runtimeObject || !runtimeObject->IsValid())
+	if (!ExperimentConfigViewModel->LoadFromProject(GetSelectedProjectPath()))
 	{
-		outDiagnostics.Add(TEXT("setting.json에 runtime object가 없습니다."));
-		return false;
-	}
-	if (!rootObject->TryGetObjectField(TEXT("sampling"), samplingObject) || !samplingObject || !samplingObject->IsValid())
-	{
-		outDiagnostics.Add(TEXT("setting.json에 sampling object가 없습니다."));
+		outDiagnostics.Add(ExperimentConfigViewModel->GetDiagnosticsText());
 		return false;
 	}
 
 	if (ProjectExperimentMapIdTextBox)
 	{
-		ProjectExperimentMapIdTextBox->SetText(FText::FromString(
-			ReadJsonStringFieldOrDefault(*runtimeObject->Get(), TEXT("map_id"), MainMenuDefaultSimulationMapId)));
+		ProjectExperimentMapIdTextBox->SetText(FText::FromString(ExperimentConfigViewModel->GetMapId()));
 	}
 	if (ProjectExperimentFixedFpsTextBox)
 	{
-		ProjectExperimentFixedFpsTextBox->SetText(FText::AsNumber(
-			ReadJsonIntFieldOrDefault(*runtimeObject->Get(), TEXT("fixed_fps"), 60)));
+		ProjectExperimentFixedFpsTextBox->SetText(FText::AsNumber(ExperimentConfigViewModel->GetFixedFps()));
 	}
 	if (ProjectExperimentEpisodeCountTextBox)
 	{
-		ProjectExperimentEpisodeCountTextBox->SetText(FText::AsNumber(
-			ReadJsonIntFieldOrDefault(*samplingObject->Get(), TEXT("episode_count"), 1)));
+		ProjectExperimentEpisodeCountTextBox->SetText(FText::AsNumber(ExperimentConfigViewModel->GetEpisodeCount()));
 	}
 	if (ProjectExperimentBaseSeedTextBox)
 	{
-		ProjectExperimentBaseSeedTextBox->SetText(FText::AsNumber(
-			ReadJsonInt64FieldOrDefault(*samplingObject->Get(), TEXT("base_seed"), 0)));
+		ProjectExperimentBaseSeedTextBox->SetText(FText::AsNumber(ExperimentConfigViewModel->GetBaseSeed()));
 	}
 
 	SetProjectExperimentConfigWarningText(FString());
@@ -1142,6 +781,11 @@ bool UMainMenuWidget::LoadProjectExperimentSettingIntoPanel(TArray<FString>& out
 bool UMainMenuWidget::SaveProjectExperimentSettingFromPanel(TArray<FString>& outDiagnostics)
 {
 	outDiagnostics.Reset();
+	if (!ExperimentConfigViewModel)
+	{
+		outDiagnostics.Add(TEXT("ExperimentConfigViewModel이 없습니다."));
+		return false;
+	}
 
 	int32 fixedFps = 0;
 	int32 episodeCount = 0;
@@ -1166,45 +810,22 @@ bool UMainMenuWidget::SaveProjectExperimentSettingFromPanel(TArray<FString>& out
 		return false;
 	}
 
-	const FString settingPath = BuildProjectSettingPath(GetSelectedProjectPath());
-	TSharedPtr<FJsonObject> rootObject;
-	FString error;
-	if (!TryLoadJsonRootObject(settingPath, rootObject, error))
-	{
-		outDiagnostics.Add(error);
-		return false;
-	}
-
-	TSharedRef<FJsonObject> runtimeObject = FindOrCreateObjectField(rootObject.ToSharedRef(), TEXT("runtime"));
-	TSharedRef<FJsonObject> samplingObject = FindOrCreateObjectField(rootObject.ToSharedRef(), TEXT("sampling"));
 	const FString mapId = ProjectExperimentMapIdTextBox
 		? ProjectExperimentMapIdTextBox->GetText().ToString().TrimStartAndEnd()
-		: ReadJsonStringFieldOrDefault(*runtimeObject, TEXT("map_id"), MainMenuDefaultSimulationMapId);
+		: ExperimentConfigViewModel->GetMapId();
 	if (mapId.IsEmpty())
 	{
 		outDiagnostics.Add(TEXT("Map ID를 입력하세요."));
 		return false;
 	}
-	runtimeObject->SetStringField(TEXT("map_id"), mapId);
-	runtimeObject->SetNumberField(TEXT("fixed_fps"), fixedFps);
-	samplingObject->SetNumberField(TEXT("episode_count"), episodeCount);
-	samplingObject->SetNumberField(TEXT("base_seed"), static_cast<double>(baseSeed));
 
-	FString updatedJson;
-	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
-		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&updatedJson);
-	if (!FJsonSerializer::Serialize(rootObject.ToSharedRef(), writer))
+	ExperimentConfigViewModel->SetMapId(mapId);
+	ExperimentConfigViewModel->SetFixedFps(fixedFps);
+	ExperimentConfigViewModel->SetEpisodeCount(episodeCount);
+	ExperimentConfigViewModel->SetBaseSeed(baseSeed);
+	if (!ExperimentConfigViewModel->SaveToProject(GetSelectedProjectPath()))
 	{
-		outDiagnostics.Add(TEXT("setting.json 직렬화 실패."));
-		return false;
-	}
-
-	if (!FFileHelper::SaveStringToFile(
-		updatedJson,
-		*settingPath,
-		FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
-	{
-		outDiagnostics.Add(FString::Printf(TEXT("setting.json 저장 실패: %s"), *settingPath));
+		outDiagnostics.Add(ExperimentConfigViewModel->GetDiagnosticsText());
 		return false;
 	}
 
@@ -1226,9 +847,9 @@ void UMainMenuWidget::SetProjectExperimentConfigWarningText(const FString& messa
 
 void UMainMenuWidget::RefreshFromSubsystem()
 {
-	if (USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem())
+	if (UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem())
 	{
-		subsystem->RefreshActiveRunStatus();
+		platformUiSubsystem->RefreshActiveRunStatus();
 	}
 
 	UpdateStatusText();
@@ -1257,7 +878,7 @@ void UMainMenuWidget::HandleLoadClicked()
 	{
 		SetupComboBox->SetVisibility(ESlateVisibility::Visible);
 		if (GetSelectedSetupPath().TrimStartAndEnd().IsEmpty()
-			|| !FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(GetSelectedSetupPath())))
+			|| !UPlatformUiSubsystem::DoesResolvedFileExist(GetSelectedSetupPath()))
 		{
 			SetDiagnosticsText(TEXT("SimulationSetup을 선택하거나 새 구성을 만든 뒤 불러오세요."));
 			return;
@@ -1282,8 +903,8 @@ void UMainMenuWidget::HandleNewSetupClicked()
 
 void UMainMenuWidget::HandleSaveFpsClicked()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem || !FixedStepFpsTextBox)
+	UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	if (!platformUiSubsystem || !FixedStepFpsTextBox)
 	{
 		return;
 	}
@@ -1296,7 +917,7 @@ void UMainMenuWidget::HandleSaveFpsClicked()
 	}
 
 	TArray<FString> diagnostics;
-	if (subsystem->SaveFixedStepFpsToSetupFile(GetSelectedSetupPath(), fps, diagnostics))
+	if (platformUiSubsystem->SaveLegacyFixedStepFpsToSetupFile(GetSelectedSetupPath(), fps, diagnostics))
 	{
 		UpdateStatusText(FString::Printf(TEXT("fixed_step.fps 저장됨: %d"), fps));
 		return;
@@ -1361,8 +982,8 @@ bool UMainMenuWidget::BuildSimulationSetupFromControls(
 
 void UMainMenuWidget::HandleSaveSetupClicked()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
+	UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	if (!platformUiSubsystem)
 	{
 		return;
 	}
@@ -1394,7 +1015,7 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 	}
 
 	FSimulationSetup setupBase;
-	const FSimulationSetupParseResult parseResult = subsystem->LoadSimulationSetupFile(setupPath);
+	const FSimulationSetupParseResult parseResult = platformUiSubsystem->LoadLegacySimulationSetupFile(setupPath);
 	if (parseResult.bSuccess)
 	{
 		setupBase = parseResult.Setup;
@@ -1428,7 +1049,7 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 	}
 
 	TArray<FString> diagnostics;
-	if (!subsystem->SaveScenarioRunQueueFile(runQueuePath, runInputs, diagnostics))
+	if (!platformUiSubsystem->SaveLegacyScenarioRunQueueFile(runQueuePath, runInputs, diagnostics))
 	{
 		SetDiagnosticsText(JoinStringLines(diagnostics));
 		return;
@@ -1442,7 +1063,7 @@ void UMainMenuWidget::HandleSaveSetupClicked()
 		return;
 	}
 
-	if (subsystem->SaveSimulationSetupFile(setupPath, setup, diagnostics))
+	if (platformUiSubsystem->SaveLegacySimulationSetupFile(setupPath, setup, diagnostics))
 	{
 		RefreshSetupOptions();
 		SetExperimentConfigDetailVisible(false);
@@ -1495,10 +1116,10 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 		return;
 	}
 
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
+	UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	if (!platformUiSubsystem)
 	{
-		SetDiagnosticsText(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
+		SetDiagnosticsText(TEXT("PlatformUiSubsystem을 사용할 수 없습니다."));
 		return;
 	}
 
@@ -1510,7 +1131,7 @@ void UMainMenuWidget::HandleScenarioRenameRequested(UFileListItemWidget* itemWid
 	}
 
 	TArray<FString> diagnostics;
-	if (!subsystem->ReplaceScenarioSetupReferencesInRunQueues(sourcePath, targetPath, diagnostics))
+	if (!platformUiSubsystem->ReplaceLegacyScenarioSetupReferencesInRunQueues(sourcePath, targetPath, diagnostics))
 	{
 		FString rollbackError;
 		if (MoveProjectRelativeFile(targetPath, sourcePath, TEXT("Scenario rollback"), rollbackError))
@@ -1553,10 +1174,10 @@ void UMainMenuWidget::HandlePolicyRenameRequested(UFileListItemWidget* itemWidge
 		return;
 	}
 
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
+	UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	if (!platformUiSubsystem)
 	{
-		SetDiagnosticsText(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
+		SetDiagnosticsText(TEXT("PlatformUiSubsystem을 사용할 수 없습니다."));
 		return;
 	}
 
@@ -1568,7 +1189,7 @@ void UMainMenuWidget::HandlePolicyRenameRequested(UFileListItemWidget* itemWidge
 	}
 
 	TArray<FString> diagnostics;
-	if (!subsystem->ReplaceDeliveryBotSetupReferencesInRunQueues(sourcePath, targetPath, diagnostics))
+	if (!platformUiSubsystem->ReplaceLegacyDeliveryBotSetupReferencesInRunQueues(sourcePath, targetPath, diagnostics))
 	{
 		FString rollbackError;
 		if (MoveProjectRelativeFile(targetPath, sourcePath, TEXT("Policy rollback"), rollbackError))
@@ -1652,6 +1273,10 @@ void UMainMenuWidget::HandleExperimentResultDetailsRequested(UFileListItemWidget
 	if (IsProjectRunDirectory(SelectedExperimentResultRunDirectory))
 	{
 		SetSelectedProjectRunId(ExtractProjectRunIdFromDirectory(SelectedExperimentResultRunDirectory));
+		if (ExperimentResultViewModel)
+		{
+			ExperimentResultViewModel->LoadRunDirectory(SelectedExperimentResultRunDirectory);
+		}
 		RefreshExperimentResultDetailPanel();
 		SetExperimentResultDetailVisible(true);
 		return;
@@ -1667,15 +1292,20 @@ void UMainMenuWidget::HandleProjectExperimentRunAnalyzeRequested(UProjectExperim
 
 	SetSelectedExperimentResultRunDirectory(rowWidget->GetRunDirectory());
 	SetSelectedProjectRunId(ExtractProjectRunIdFromDirectory(SelectedExperimentResultRunDirectory));
+	if (ExperimentResultViewModel)
+	{
+		ExperimentResultViewModel->LoadRunDirectory(SelectedExperimentResultRunDirectory);
+	}
 	RefreshExperimentResultDetailPanel();
 	SetExperimentResultDetailVisible(true);
 }
 
-void UMainMenuWidget::HandleExperimentResultIterationButtonClicked(UExperimentResultIterationButton* buttonWidget)
+void UMainMenuWidget::HandleExperimentResultIterationSelectorClicked(
+	UExperimentResultIterationSelectorWidget* selectorWidget)
 {
-	if (!IsValid(buttonWidget)) return;
+	if (!IsValid(selectorWidget)) return;
 
-	SetSelectedExperimentResultPath(buttonWidget->GetResultPath());
+	SetSelectedExperimentResultPath(selectorWidget->GetResultPath());
 	RefreshExperimentResultIterationList();
 	if (IsProjectRunDirectory(SelectedExperimentResultRunDirectory))
 	{
@@ -1702,7 +1332,7 @@ void UMainMenuWidget::HandleOpenPolicyTextEditorClicked()
 	}
 
 	const FString resolvedPolicyPath = FSimulationSetupJson::ResolveProjectPath(policyPath);
-	if (!FPaths::FileExists(resolvedPolicyPath))
+	if (!UPlatformUiSubsystem::DoesResolvedFileExist(resolvedPolicyPath))
 	{
 		SetDiagnosticsText(FString::Printf(TEXT("행동 정책 파일을 찾을 수 없습니다: %s"), *resolvedPolicyPath));
 		return;
@@ -1720,24 +1350,13 @@ void UMainMenuWidget::HandleOpenPolicyTextEditorClicked()
 
 void UMainMenuWidget::HandleNewPolicyClicked()
 {
-	const FString templatePath = FSimulationSetupJson::ResolveProjectPath(DeliveryBotTemplatePath);
-	FString templateJson;
-	if (!FFileHelper::LoadFileToString(templateJson, *templatePath))
-	{
-		SetDiagnosticsText(FString::Printf(TEXT("행동 정책 템플릿 읽기 실패: %s"), DeliveryBotTemplatePath));
-		return;
-	}
-
 	const FString newPolicyPath = MakeUniqueInputJsonPath(TEXT("DeliveryBotSetupNew"));
-	const FString resolvedNewPolicyPath = FSimulationSetupJson::ResolveProjectPath(newPolicyPath);
-	const FString outputDirectory = FPaths::GetPath(resolvedNewPolicyPath);
-	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true)
-		|| !FFileHelper::SaveStringToFile(
-			templateJson,
-			*resolvedNewPolicyPath,
-			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	FString errorText;
+	if (!UPlatformUiSubsystem::CreateTextFileFromTemplate(DeliveryBotTemplatePath, newPolicyPath, errorText))
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("행동 정책 파일 생성 실패: %s"), *resolvedNewPolicyPath));
+		SetDiagnosticsText(errorText.IsEmpty()
+			? FString::Printf(TEXT("행동 정책 파일 생성 실패: %s"), *newPolicyPath)
+			: errorText);
 		return;
 	}
 
@@ -1749,40 +1368,44 @@ void UMainMenuWidget::HandleNewPolicyClicked()
 
 void UMainMenuWidget::HandleStartClicked()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem) return;
-
 	if (IsProjectModeSelected())
 	{
-		FString runId = GetSelectedProjectRunId();
-		TArray<FString> diagnostics;
-		if (runId.IsEmpty() && !CreateProjectRunForPrototype(runId, diagnostics))
+		if (!ProjectWorkspaceViewModel)
 		{
-			SetDiagnosticsText(JoinStringLines(diagnostics));
+			SetDiagnosticsText(TEXT("ProjectWorkspaceViewModel이 없습니다."));
 			UpdateStatusText(TEXT("Project run creation failed."));
 			return;
 		}
 
-		if (subsystem->StartProjectRun(GetSelectedProjectPath(), runId))
+		if (ProjectWorkspaceViewModel->StartRun())
 		{
+			SetSelectedProjectRunId(ProjectWorkspaceViewModel->GetSelectedRunId());
 			RefreshProjectRunSelection();
 			RefreshExperimentResultList();
 			UpdateStatusText(TEXT("Project simulator launch requested."));
 			return;
 		}
 
-		UpdateStatusText(subsystem->GetLastError());
+		UpdateStatusText(ProjectWorkspaceViewModel->GetDiagnosticsText());
+		return;
+	}
+
+	UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	if (!platformUiSubsystem)
+	{
+		UpdateStatusText(TEXT("PlatformUiSubsystem을 사용할 수 없습니다."));
 		return;
 	}
 
 	const FString requestedRunId = RunIdTextBox ? RunIdTextBox->GetText().ToString().TrimStartAndEnd() : FString();
-	if (subsystem->StartSimulationRun(GetSelectedSetupPath(), requestedRunId))
+	FString errorText;
+	if (platformUiSubsystem->StartLegacySimulationRun(GetSelectedSetupPath(), requestedRunId, errorText))
 	{
 		UpdateStatusText(TEXT("Simulator launch requested."));
 		return;
 	}
 
-	UpdateStatusText(subsystem->GetLastError());
+	UpdateStatusText(errorText);
 }
 
 void UMainMenuWidget::HandleRefreshClicked()
@@ -1795,7 +1418,6 @@ void UMainMenuWidget::HandleSendToAiClicked()
 {
 	if (IsProjectModeSelected())
 	{
-		const FString projectPath = GetSelectedProjectPath();
 		const FString runId = GetSelectedProjectRunId();
 		if (runId.IsEmpty())
 		{
@@ -1806,12 +1428,11 @@ void UMainMenuWidget::HandleSendToAiClicked()
 			return;
 		}
 
-		UPlatformAnalysisAiSubsystem* analysisSubsystem = GetPlatformAnalysisAiSubsystem();
-		if (!analysisSubsystem)
+		if (!ExperimentResultViewModel && !ProjectWorkspaceViewModel)
 		{
 			if (AiAnalysisTextBlock)
 			{
-				AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: subsystem not found.")));
+				AiAnalysisTextBlock->SetText(FText::FromString(TEXT("AI analysis unavailable: ViewModel not found.")));
 			}
 			return;
 		}
@@ -1828,7 +1449,25 @@ void UMainMenuWidget::HandleSendToAiClicked()
 			SendToAiButton->SetIsEnabled(false);
 		}
 
-		analysisSubsystem->RequestAnalysisForProjectRun(projectPath, runId);
+		const bool bRequested = ExperimentResultViewModel
+			? ExperimentResultViewModel->RequestAiAnalysis(GetSelectedProjectPath(), runId)
+			: ProjectWorkspaceViewModel->RequestAiAnalysis();
+		if (!bRequested)
+		{
+			const FString diagnostics = ExperimentResultViewModel
+				? ExperimentResultViewModel->GetDiagnosticsText()
+				: ProjectWorkspaceViewModel->GetDiagnosticsText();
+			if (AiAnalysisTextBlock)
+			{
+				AiAnalysisTextBlock->SetText(FText::FromString(diagnostics.IsEmpty()
+					? TEXT("AI analysis request failed.")
+					: diagnostics));
+			}
+			if (SendToAiButton)
+			{
+				SendToAiButton->SetIsEnabled(true);
+			}
+		}
 		return;
 	}
 
@@ -1860,15 +1499,12 @@ void UMainMenuWidget::HandleShowProjectExperimentStatusTabClicked()
 
 void UMainMenuWidget::HandleProjectHomeClicked()
 {
-	if (UProjectSessionSubsystem* projectSession = GetProjectSessionSubsystem())
+	if (ProjectWorkspaceViewModel && ProjectWorkspaceViewModel->ReturnToStartup())
 	{
-		projectSession->ClearActiveProject();
+		return;
 	}
 
-	if (UWorld* world = GetWorld())
-	{
-		UGameplayStatics::OpenLevel(world, MainMenuStartupMapId);
-	}
+	SetDiagnosticsText(TEXT("ProjectWorkspaceViewModel을 통해 Startup으로 돌아갈 수 없습니다."));
 }
 
 void UMainMenuWidget::HandleConfigureExperimentClicked()
@@ -1879,6 +1515,10 @@ void UMainMenuWidget::HandleConfigureExperimentClicked()
 		SetDiagnosticsText(JoinStringLines(diagnostics));
 		UpdateStatusText(TEXT("Experiment creation failed."));
 		return;
+	}
+	if (ExperimentConfigViewModel)
+	{
+		ExperimentConfigViewModel->LoadFromActiveProject();
 	}
 
 	ShowProjectExperimentConfigPanel(true);
@@ -1931,6 +1571,7 @@ void UMainMenuWidget::HandleCreateExperimentFromConfigClicked()
 	CloseTransientProjectTab(EProjectWorkspaceTabType::ExperimentConfig);
 	RefreshProjectRunSelection();
 	RefreshExperimentResultList();
+	ShowProjectWorkspaceTab(EProjectWorkspaceTabType::ExperimentStatus);
 	SetDiagnosticsText(FString::Printf(TEXT("실험 실행을 시작했습니다: %s"), *FormatProjectRunDisplayId(runId)));
 	UpdateStatusText(TEXT("Project simulator launch requested."));
 }
@@ -2043,11 +1684,6 @@ void UMainMenuWidget::HandlePolicySpecSelectionChanged(FString selectedItem, ESe
 	SetSelectedPolicySpecPath(selectedItem);
 }
 
-UWidget* UMainMenuWidget::HandleGenerateComboBoxItem(FString item)
-{
-	return WidgetTree ? MakeTextBlock(WidgetTree, TEXT("ComboBoxItemText"), item, 13) : nullptr;
-}
-
 void UMainMenuWidget::ShowMainMenuSection(const int32 sectionIndex)
 {
 	if (MainContentSwitcher)
@@ -2073,6 +1709,26 @@ void UMainMenuWidget::ShowProjectWorkspaceScreen()
 void UMainMenuWidget::ShowProjectWorkspaceTab(const EProjectWorkspaceTabType tabType)
 {
 	ActiveProjectWorkspaceTab = tabType;
+	if (ProjectWorkspaceViewModel)
+	{
+		FName tabId = ProjectScenarioEditTabId;
+		switch (tabType)
+		{
+		case EProjectWorkspaceTabType::ScenarioEdit:
+			tabId = ProjectScenarioEditTabId;
+			break;
+		case EProjectWorkspaceTabType::ExperimentStatus:
+			tabId = ProjectExperimentStatusTabId;
+			break;
+		case EProjectWorkspaceTabType::ExperimentConfig:
+			tabId = ProjectExperimentConfigTabId;
+			break;
+		case EProjectWorkspaceTabType::ExperimentResultDetail:
+			tabId = ProjectExperimentResultDetailTabId;
+			break;
+		}
+		ProjectWorkspaceViewModel->SelectWorkspaceTab(tabId);
+	}
 	if (!ProjectWorkspaceSwitcher)
 	{
 		ApplyProjectWorkspaceTabState(tabType);
@@ -2370,48 +2026,36 @@ void UMainMenuWidget::BindControls()
 
 	if (SetupComboBox)
 	{
-		SetupComboBox->OnGenerateWidgetEvent.Unbind();
-		SetupComboBox->OnGenerateWidgetEvent.BindDynamic(this, &UMainMenuWidget::HandleGenerateComboBoxItem);
 		SetupComboBox->OnSelectionChanged.RemoveDynamic(this, &UMainMenuWidget::HandleSetupSelectionChanged);
 		SetupComboBox->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::HandleSetupSelectionChanged);
 	}
 
 	if (ScenarioSetupComboBox)
 	{
-		ScenarioSetupComboBox->OnGenerateWidgetEvent.Unbind();
-		ScenarioSetupComboBox->OnGenerateWidgetEvent.BindDynamic(this, &UMainMenuWidget::HandleGenerateComboBoxItem);
 		ScenarioSetupComboBox->OnSelectionChanged.RemoveDynamic(this, &UMainMenuWidget::HandleScenarioSetupSelectionChanged);
 		ScenarioSetupComboBox->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::HandleScenarioSetupSelectionChanged);
 	}
 
 	if (PolicyDeliveryBotSetupComboBox)
 	{
-		PolicyDeliveryBotSetupComboBox->OnGenerateWidgetEvent.Unbind();
-		PolicyDeliveryBotSetupComboBox->OnGenerateWidgetEvent.BindDynamic(this, &UMainMenuWidget::HandleGenerateComboBoxItem);
 		PolicyDeliveryBotSetupComboBox->OnSelectionChanged.RemoveDynamic(this, &UMainMenuWidget::HandlePolicyDeliveryBotSelectionChanged);
 		PolicyDeliveryBotSetupComboBox->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::HandlePolicyDeliveryBotSelectionChanged);
 	}
 
 	if (ExperimentScenarioSetupComboBox)
 	{
-		ExperimentScenarioSetupComboBox->OnGenerateWidgetEvent.Unbind();
-		ExperimentScenarioSetupComboBox->OnGenerateWidgetEvent.BindDynamic(this, &UMainMenuWidget::HandleGenerateComboBoxItem);
 		ExperimentScenarioSetupComboBox->OnSelectionChanged.RemoveDynamic(this, &UMainMenuWidget::HandleExperimentScenarioSetupSelectionChanged);
 		ExperimentScenarioSetupComboBox->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::HandleExperimentScenarioSetupSelectionChanged);
 	}
 
 	if (DeliveryBotSetupComboBox)
 	{
-		DeliveryBotSetupComboBox->OnGenerateWidgetEvent.Unbind();
-		DeliveryBotSetupComboBox->OnGenerateWidgetEvent.BindDynamic(this, &UMainMenuWidget::HandleGenerateComboBoxItem);
 		DeliveryBotSetupComboBox->OnSelectionChanged.RemoveDynamic(this, &UMainMenuWidget::HandleExperimentDeliveryBotSelectionChanged);
 		DeliveryBotSetupComboBox->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::HandleExperimentDeliveryBotSelectionChanged);
 	}
 
 	if (PolicySpecComboBox)
 	{
-		PolicySpecComboBox->OnGenerateWidgetEvent.Unbind();
-		PolicySpecComboBox->OnGenerateWidgetEvent.BindDynamic(this, &UMainMenuWidget::HandleGenerateComboBoxItem);
 		PolicySpecComboBox->OnSelectionChanged.RemoveDynamic(this, &UMainMenuWidget::HandlePolicySpecSelectionChanged);
 		PolicySpecComboBox->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::HandlePolicySpecSelectionChanged);
 	}
@@ -2583,10 +2227,11 @@ void UMainMenuWidget::BindProjectModeControls()
 
 void UMainMenuWidget::LoadSelectedSetup()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem) return;
+	UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	if (!platformUiSubsystem) return;
 
-	const FSimulationSetupParseResult parseResult = subsystem->LoadSimulationSetupFile(GetSelectedSetupPath());
+	const FSimulationSetupParseResult parseResult =
+		platformUiSubsystem->LoadLegacySimulationSetupFile(GetSelectedSetupPath());
 	if (!parseResult.bSuccess)
 	{
 		if (GetSelectedSetupPath().TrimStartAndEnd().IsEmpty())
@@ -2595,7 +2240,7 @@ void UMainMenuWidget::LoadSelectedSetup()
 			return;
 		}
 
-		if (!FPaths::FileExists(FSimulationSetupJson::ResolveProjectPath(GetSelectedSetupPath())))
+		if (!UPlatformUiSubsystem::DoesResolvedFileExist(GetSelectedSetupPath()))
 		{
 			SetDiagnosticsText(FString::Printf(TEXT("SimulationSetup 파일이 아직 없습니다: %s\n저장 버튼으로 생성하세요."), *GetSelectedSetupPath()));
 			return;
@@ -2624,7 +2269,10 @@ void UMainMenuWidget::LoadSelectedSetup()
 	// SimulationSetup stores a generated ScenarioRunQueue path; the detail page exposes the resolved pair and run count.
 	TArray<FScenarioRunInput> loadedRunInputs;
 	TArray<FString> runQueueDiagnostics;
-	if (subsystem->LoadScenarioRunQueueFile(parseResult.Setup.RunQueueJsonPath, loadedRunInputs, runQueueDiagnostics)
+	if (platformUiSubsystem->LoadLegacyScenarioRunQueueFile(
+			parseResult.Setup.RunQueueJsonPath,
+			loadedRunInputs,
+			runQueueDiagnostics)
 		&& !loadedRunInputs.IsEmpty())
 	{
 		const FScenarioRunInput& firstRunInput = loadedRunInputs[0];
@@ -2789,8 +2437,8 @@ void UMainMenuWidget::RefreshScenarioList()
 {
 	if (!ScenarioListScrollBox) return;
 
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem) return;
+	UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	if (!platformUiSubsystem) return;
 
 	const TSubclassOf<UFileListItemWidget> itemWidgetClass = ResolveFileListItemWidgetClass();
 	if (!itemWidgetClass)
@@ -2799,7 +2447,7 @@ void UMainMenuWidget::RefreshScenarioList()
 		return;
 	}
 
-	const TArray<FString> scenarioSetupFiles = subsystem->ListScenarioSetupFiles();
+	const TArray<FString> scenarioSetupFiles = platformUiSubsystem->ListLegacyScenarioSetupFiles();
 	if (!scenarioSetupFiles.Contains(SelectedScenarioSetupPath))
 	{
 		SetSelectedScenarioSetupPath(scenarioSetupFiles.IsEmpty() ? FString() : scenarioSetupFiles[0]);
@@ -2809,12 +2457,14 @@ void UMainMenuWidget::RefreshScenarioList()
 	ScenarioListItems.Reset();
 	ScenarioListItems.Reserve(scenarioSetupFiles.Num());
 
-	for (const FString& scenarioSetupFile : scenarioSetupFiles)
+	const TArray<UOdiroListItemViewModel*> scenarioItems =
+		platformUiSubsystem->CreatePathItemViewModels(scenarioSetupFiles, false);
+	for (UOdiroListItemViewModel* scenarioItem : scenarioItems)
 	{
 		UFileListItemWidget* itemWidget = CreateWidget<UFileListItemWidget>(this, itemWidgetClass);
 		if (!itemWidget) continue;
 
-		itemWidget->InitializeItem(scenarioSetupFile, TEXT("편집"), TEXT("실행"), true, true, false);
+		itemWidget->InitializeFromItemViewModel(scenarioItem, TEXT("편집"), TEXT("실행"), true, true, false);
 		itemWidget->OnRenameRequested.AddUObject(this, &UMainMenuWidget::HandleScenarioRenameRequested);
 		itemWidget->OnPrimaryActionRequested.AddUObject(this, &UMainMenuWidget::HandleScenarioEditRequested);
 		ScenarioListScrollBox->AddChild(itemWidget);
@@ -2826,13 +2476,13 @@ void UMainMenuWidget::RefreshPolicyList()
 {
 	if (!PolicyListScrollBox) return;
 
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem) return;
+	UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	if (!platformUiSubsystem) return;
 
 	const TSubclassOf<UFileListItemWidget> itemWidgetClass = ResolveFileListItemWidgetClass();
 	if (!itemWidgetClass) return;
 
-	const TArray<FString> deliveryBotSetupFiles = subsystem->ListDeliveryBotSetupFiles();
+	const TArray<FString> deliveryBotSetupFiles = platformUiSubsystem->ListLegacyDeliveryBotSetupFiles();
 	const FString currentPath = GetSelectedDeliveryBotSetupPath();
 	const FString selectedPath = deliveryBotSetupFiles.Contains(currentPath)
 		? currentPath
@@ -2845,16 +2495,18 @@ void UMainMenuWidget::RefreshPolicyList()
 
 	if (deliveryBotSetupFiles.IsEmpty())
 	{
-		AddEmptyListMessage(WidgetTree, PolicyListScrollBox, TEXT("편집 가능한 DeliveryBotSetup JSON이 없습니다."));
+		SetDiagnosticsText(TEXT("편집 가능한 DeliveryBotSetup JSON이 없습니다."));
 		return;
 	}
 
-	for (const FString& deliveryBotSetupFile : deliveryBotSetupFiles)
+	const TArray<UOdiroListItemViewModel*> deliveryBotItems =
+		platformUiSubsystem->CreatePathItemViewModels(deliveryBotSetupFiles, false);
+	for (UOdiroListItemViewModel* deliveryBotItem : deliveryBotItems)
 	{
 		UFileListItemWidget* itemWidget = CreateWidget<UFileListItemWidget>(this, itemWidgetClass);
 		if (!itemWidget) continue;
 
-		itemWidget->InitializeItem(deliveryBotSetupFile, TEXT("편집"), TEXT("실행"), true, true, false);
+		itemWidget->InitializeFromItemViewModel(deliveryBotItem, TEXT("편집"), TEXT("실행"), true, true, false);
 		itemWidget->OnRenameRequested.AddUObject(this, &UMainMenuWidget::HandlePolicyRenameRequested);
 		itemWidget->OnPrimaryActionRequested.AddUObject(this, &UMainMenuWidget::HandlePolicyEditRequested);
 		PolicyListScrollBox->AddChild(itemWidget);
@@ -2866,13 +2518,13 @@ void UMainMenuWidget::RefreshExperimentConfigList()
 {
 	if (!ExperimentConfigListScrollBox) return;
 
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem) return;
+	UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	if (!platformUiSubsystem) return;
 
 	const TSubclassOf<UFileListItemWidget> itemWidgetClass = ResolveFileListItemWidgetClass();
 	if (!itemWidgetClass) return;
 
-	const TArray<FString> setupFiles = subsystem->ListSimulationSetupFiles();
+	const TArray<FString> setupFiles = platformUiSubsystem->ListLegacySimulationSetupFiles();
 	const FString currentPath = GetSelectedSetupPath();
 	const FString selectedPath = setupFiles.Contains(currentPath)
 		? currentPath
@@ -2888,16 +2540,18 @@ void UMainMenuWidget::RefreshExperimentConfigList()
 
 	if (setupFiles.IsEmpty())
 	{
-		AddEmptyListMessage(WidgetTree, ExperimentConfigListScrollBox, TEXT("편집 가능한 SimulationSetup JSON이 없습니다."));
+		SetDiagnosticsText(TEXT("편집 가능한 SimulationSetup JSON이 없습니다."));
 		return;
 	}
 
-	for (const FString& setupFile : setupFiles)
+	const TArray<UOdiroListItemViewModel*> setupItems =
+		platformUiSubsystem->CreatePathItemViewModels(setupFiles, false);
+	for (UOdiroListItemViewModel* setupItem : setupItems)
 	{
 		UFileListItemWidget* itemWidget = CreateWidget<UFileListItemWidget>(this, itemWidgetClass);
 		if (!itemWidget) continue;
 
-		itemWidget->InitializeItem(setupFile, TEXT("편집"), TEXT("실행"), true, true, true);
+		itemWidget->InitializeFromItemViewModel(setupItem, TEXT("편집"), TEXT("실행"), true, true, true);
 		itemWidget->OnRenameRequested.AddUObject(this, &UMainMenuWidget::HandleExperimentConfigRenameRequested);
 		itemWidget->OnPrimaryActionRequested.AddUObject(this, &UMainMenuWidget::HandleExperimentConfigEditRequested);
 		itemWidget->OnSecondaryActionRequested.AddUObject(this, &UMainMenuWidget::HandleExperimentConfigPlayRequested);
@@ -2910,62 +2564,72 @@ void UMainMenuWidget::RefreshExperimentResultList()
 {
 	if (!ExperimentResultListScrollBox) return;
 
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem) return;
+	UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
 
 	if (IsProjectModeSelected())
 	{
 		const TSubclassOf<UProjectExperimentRunRowWidget> runRowWidgetClass = ResolveProjectExperimentRunRowWidgetClass();
 		if (!runRowWidgetClass) return;
+		if (!ProjectWorkspaceViewModel) return;
 
-		TArray<FString> diagnostics;
-		TArray<FString> resultDirectories;
-		const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
-		if (subsystem->ValidateUserProject(GetSelectedProjectPath(), diagnostics))
+		TArray<UOdiroListItemViewModel*> visibleRunItems;
+		const FSimulatorRunInfo runInfo = platformUiSubsystem
+			? platformUiSubsystem->GetActiveRunInfo()
+			: FSimulatorRunInfo();
+		ProjectWorkspaceViewModel->RefreshProjectRuns();
+		for (UOdiroListItemViewModel* runItem : ProjectWorkspaceViewModel->GetRunItems())
 		{
-			resultDirectories = subsystem->ListProjectRunDirectories(GetSelectedProjectPath());
-			if (runInfo.bProjectRun && runInfo.ProjectPath.Equals(GetSelectedProjectPath(), ESearchCase::IgnoreCase))
+			if (!runItem || runItem->GetPayloadPath().IsEmpty())
 			{
-				resultDirectories.AddUnique(BuildProjectRunDirectory(runInfo.ProjectPath, runInfo.RunId));
+				continue;
+			}
+			if (IsVisibleProjectRunDirectory(runItem->GetPayloadPath(), runInfo, GetSelectedProjectPath()))
+			{
+				visibleRunItems.AddUnique(runItem);
 			}
 		}
-		resultDirectories = resultDirectories.FilterByPredicate(
-			[&runInfo, this](const FString& resultDirectory)
-			{
-				return IsVisibleProjectRunDirectory(resultDirectory, runInfo, GetSelectedProjectPath());
-			});
-		resultDirectories.Sort();
-
-		if (!resultDirectories.Contains(SelectedExperimentResultRunDirectory))
+		visibleRunItems.Sort([](const UOdiroListItemViewModel& left, const UOdiroListItemViewModel& right)
 		{
-			SetSelectedExperimentResultRunDirectory(resultDirectories.IsEmpty() ? FString() : resultDirectories.Last());
+			return left.GetPayloadPath() < right.GetPayloadPath();
+		});
+
+		const bool bSelectedRunStillVisible = visibleRunItems.ContainsByPredicate(
+			[this](const UOdiroListItemViewModel* runItem)
+			{
+				return runItem
+					&& runItem->GetPayloadPath().Equals(SelectedExperimentResultRunDirectory, ESearchCase::IgnoreCase);
+			});
+		if (!bSelectedRunStillVisible)
+		{
+			SetSelectedExperimentResultRunDirectory(visibleRunItems.IsEmpty()
+				? FString()
+				: visibleRunItems.Last()->GetPayloadPath());
 		}
 		SetSelectedProjectRunId(ExtractProjectRunIdFromDirectory(SelectedExperimentResultRunDirectory));
 
 		ExperimentResultListScrollBox->ClearChildren();
 		ExperimentResultListItems.Reset();
 		ProjectExperimentRunRows.Reset();
-		ProjectExperimentRunRows.Reserve(resultDirectories.Num());
+		ProjectExperimentRunRows.Reserve(visibleRunItems.Num());
 
-		if (resultDirectories.IsEmpty())
+		if (visibleRunItems.IsEmpty())
 		{
-			AddEmptyListMessage(WidgetTree, ExperimentResultListScrollBox, TEXT("실행된 실험이 없습니다."));
+			SetDiagnosticsText(TEXT("실행된 실험이 없습니다."));
 			return;
 		}
 
-		for (const FString& resultDirectory : resultDirectories)
+		for (UOdiroListItemViewModel* runItem : visibleRunItems)
 		{
 			UProjectExperimentRunRowWidget* rowWidget =
 				CreateWidget<UProjectExperimentRunRowWidget>(this, runRowWidgetClass);
 			if (!rowWidget) continue;
 
-			const FString runId = ExtractProjectRunIdFromDirectory(resultDirectory);
+			const FString resultDirectory = runItem ? runItem->GetPayloadPath() : FString();
 			const ESimulationRunState displayState =
 				ResolveProjectRunDisplayState(resultDirectory, runInfo, GetSelectedProjectPath());
 			const bool bCompleted = displayState == ESimulationRunState::Completed;
-			rowWidget->InitializeRunRow(
-				resultDirectory,
-				runId.IsEmpty() ? FPaths::GetBaseFilename(resultDirectory) : runId,
+			rowWidget->InitializeFromItemViewModel(
+				runItem,
 				displayState,
 				ResolveProjectRunProgressPercent(displayState),
 				bCompleted);
@@ -2975,17 +2639,23 @@ void UMainMenuWidget::RefreshExperimentResultList()
 					this,
 					&UMainMenuWidget::HandleProjectExperimentRunAnalyzeRequested);
 			}
-			ExperimentResultListScrollBox->AddChild(rowWidget);
+			if (UScrollBoxSlot* scrollBoxSlot =
+				Cast<UScrollBoxSlot>(ExperimentResultListScrollBox->AddChild(rowWidget)))
+			{
+				scrollBoxSlot->SetHorizontalAlignment(HAlign_Fill);
+			}
 			ProjectExperimentRunRows.Add(rowWidget);
 		}
 		return;
 	}
 
+	if (!platformUiSubsystem) return;
+
 	const TSubclassOf<UFileListItemWidget> itemWidgetClass = ResolveFileListItemWidgetClass();
 	if (!itemWidgetClass) return;
 
-	TArray<FString> resultDirectories = subsystem->ListSimulationRunResultDirectories();
-	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
+	TArray<FString> resultDirectories = platformUiSubsystem->ListLegacySimulationRunResultDirectories();
+	const FSimulatorRunInfo runInfo = platformUiSubsystem->GetActiveRunInfo();
 	if (!runInfo.StatusPath.IsEmpty())
 	{
 		const FString activeRunDirectory = FPaths::GetPath(runInfo.StatusPath);
@@ -3008,25 +2678,30 @@ void UMainMenuWidget::RefreshExperimentResultList()
 
 	if (resultDirectories.IsEmpty())
 	{
-		AddEmptyListMessage(WidgetTree, ExperimentResultListScrollBox, TEXT("실험 결과가 없습니다."));
+		SetDiagnosticsText(TEXT("실험 결과가 없습니다."));
 		return;
 	}
 
-	for (const FString& resultDirectory : resultDirectories)
+	const TArray<UOdiroListItemViewModel*> resultItems =
+		platformUiSubsystem->CreatePathItemViewModels(resultDirectories, true);
+	for (UOdiroListItemViewModel* resultItem : resultItems)
 	{
 		UFileListItemWidget* itemWidget = CreateWidget<UFileListItemWidget>(this, itemWidgetClass);
 		if (!itemWidget) continue;
-		
-		itemWidget->InitializeDisplayItem(
-			resultDirectory,
-			FPaths::GetBaseFilename(resultDirectory),
+
+		itemWidget->InitializeFromItemViewModel(
+			resultItem,
 			TEXT("상세 보기"),
 			TEXT("실행"),
 			false,
 			true,
 			false);
 		itemWidget->OnPrimaryActionRequested.AddUObject(this, &UMainMenuWidget::HandleExperimentResultDetailsRequested);
-		ExperimentResultListScrollBox->AddChild(itemWidget);
+		if (UScrollBoxSlot* scrollBoxSlot =
+			Cast<UScrollBoxSlot>(ExperimentResultListScrollBox->AddChild(itemWidget)))
+		{
+			scrollBoxSlot->SetHorizontalAlignment(HAlign_Fill);
+		}
 		ExperimentResultListItems.Add(itemWidget);
 	}
 }
@@ -3035,21 +2710,22 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 {
 	ClearExperimentResultIterationWidgets();
 
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem || SelectedExperimentResultRunDirectory.IsEmpty())
+	UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	if (SelectedExperimentResultRunDirectory.IsEmpty())
 	{
 		return;
 	}
 
-	if (!ensureMsgf(IsValid(ExperimentResultIterationScrollBox), TEXT("Missing required WBP binding: ExperimentResultIterationScrollBox"))
-		|| !ensureMsgf(IsValid(WidgetTree), TEXT("MainMenuWidget requires a valid WidgetTree.")))
+	if (!ensureMsgf(IsValid(ExperimentResultIterationScrollBox), TEXT("Missing required WBP binding: ExperimentResultIterationScrollBox")))
 	{
 		return;
 	}
 
 	if (IsProjectRunDirectory(SelectedExperimentResultRunDirectory))
 	{
-		TArray<FString> resultPaths = subsystem->ListProjectEpisodeResultFiles(SelectedExperimentResultRunDirectory);
+		TArray<FString> resultPaths = platformUiSubsystem
+			? platformUiSubsystem->ListProjectEpisodeResultFiles(SelectedExperimentResultRunDirectory)
+			: TArray<FString>();
 		if (resultPaths.IsEmpty())
 		{
 			SetSelectedExperimentResultPath(FString());
@@ -3067,48 +2743,44 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 			const int32 episodeIndex = FUserProjectRunSnapshot::IsValidRunId(episodeId)
 				? FCString::Atoi(*episodeId)
 				: INDEX_NONE;
+			const FText labelText = FText::FromString(
+				episodeIndex == INDEX_NONE ? FString(TEXT("?")) : FString::FromInt(episodeIndex));
 
-			USizeBox* sizeBox = WidgetTree->ConstructWidget<USizeBox>(
-				USizeBox::StaticClass(),
-				MakeUniqueWidgetName(WidgetTree, USizeBox::StaticClass(), TEXT("ProjectResultEpisodeButtonSlot")));
-			UExperimentResultIterationButton* button = WidgetTree->ConstructWidget<UExperimentResultIterationButton>(
-				UExperimentResultIterationButton::StaticClass(),
-				MakeUniqueWidgetName(WidgetTree, UExperimentResultIterationButton::StaticClass(), TEXT("ProjectResultEpisodeButton")));
-			UTextBlock* label = MakeTextBlock(
-				WidgetTree,
-				TEXT("ProjectResultEpisodeButtonLabel"),
-				episodeIndex == INDEX_NONE ? FString(TEXT("?")) : FString::FromInt(episodeIndex),
-				18);
-
-			if (!sizeBox || !button || !label) continue;
+			const TSubclassOf<UExperimentResultIterationSelectorWidget> selectorClass =
+				ResolveExperimentResultIterationSelectorWidgetClass();
+			if (!selectorClass) return;
 
 			const bool bSelected = resultPath.Equals(SelectedExperimentResultPath, ESearchCase::IgnoreCase);
-			button->Configure(resultPath, episodeId);
-			button->SetBackgroundColor(bSelected
-				? FLinearColor(0.16f, 0.42f, 0.78f, 1.0f)
-				: FLinearColor(0.10f, 0.11f, 0.14f, 1.0f));
-			button->SetColorAndOpacity(FLinearColor::White);
-			button->OnIterationClicked.AddUObject(this, &UMainMenuWidget::HandleExperimentResultIterationButtonClicked);
+			UExperimentResultIterationSelectorWidget* selectorWidget =
+				CreateWidget<UExperimentResultIterationSelectorWidget>(this, selectorClass);
+			if (!selectorWidget) continue;
 
-			label->SetJustification(ETextJustify::Center);
-			label->SetColorAndOpacity(FSlateColor(FLinearColor::White));
-
-			button->SetContent(label);
-			sizeBox->SetWidthOverride(44.0f);
-			sizeBox->SetHeightOverride(36.0f);
-			sizeBox->SetContent(button);
-
-			if (UScrollBoxSlot* scrollBoxSlot = Cast<UScrollBoxSlot>(ExperimentResultIterationScrollBox->AddChild(sizeBox)))
+			UOdiroListItemViewModel* selectorItem = NewObject<UOdiroListItemViewModel>(selectorWidget);
+			if (!selectorItem) continue;
+			selectorItem->InitializeItem(episodeId, labelText.ToString(), FString(), resultPath);
+			selectorItem->SetSelected(bSelected);
+			selectorWidget->InitializeFromItemViewModel(selectorItem);
+			selectorWidget->OnSelectorClicked.AddUObject(
+				this,
+				&UMainMenuWidget::HandleExperimentResultIterationSelectorClicked);
+			if (UScrollBoxSlot* scrollBoxSlot =
+				Cast<UScrollBoxSlot>(ExperimentResultIterationScrollBox->AddChild(selectorWidget)))
 			{
-				scrollBoxSlot->SetPadding(FMargin(0.0f, 0.0f, 8.0f, 0.0f));
+				scrollBoxSlot->SetPadding(ExperimentResultIterationSelectorPadding);
 			}
-			ExperimentResultIterationButtons.Add(button);
+			ExperimentResultIterationSelectors.Add(selectorWidget);
 		}
 		return;
 	}
 
-	TArray<FString> reportPaths = subsystem->ListEvaluationReportFilesInDirectory(SelectedExperimentResultRunDirectory);
-	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
+	if (!platformUiSubsystem)
+	{
+		return;
+	}
+
+	TArray<FString> reportPaths =
+		platformUiSubsystem->ListLegacyEvaluationReportFilesInDirectory(SelectedExperimentResultRunDirectory);
+	const FSimulatorRunInfo runInfo = platformUiSubsystem->GetActiveRunInfo();
 	if (FPaths::GetPath(runInfo.StatusPath).Equals(SelectedExperimentResultRunDirectory, ESearchCase::IgnoreCase))
 	{
 		for (const FString& reportPath : runInfo.Status.ResultPaths)
@@ -3140,43 +2812,31 @@ void UMainMenuWidget::RefreshExperimentResultIterationList()
 
 	for (const FExperimentResultReportItem& reportItem : reportItems)
 	{
-		USizeBox* sizeBox = WidgetTree->ConstructWidget<USizeBox>(
-			USizeBox::StaticClass(),
-			MakeUniqueWidgetName(WidgetTree, USizeBox::StaticClass(), TEXT("ExperimentResultIterationButtonSlot")));
-		UExperimentResultIterationButton* button = WidgetTree->ConstructWidget<UExperimentResultIterationButton>(
-			UExperimentResultIterationButton::StaticClass(),
-			MakeUniqueWidgetName(WidgetTree, UExperimentResultIterationButton::StaticClass(), TEXT("ExperimentResultIterationButton")));
-		UTextBlock* label = MakeTextBlock(
-			WidgetTree,
-			TEXT("ExperimentResultIterationButtonLabel"),
-			reportItem.RunIndex == INDEX_NONE ? FString(TEXT("?")) : FString::FromInt(reportItem.RunIndex),
-			18);
-
-		if (!sizeBox || !button || !label) continue;
+		const FString iterationLabel =
+			reportItem.RunIndex == INDEX_NONE ? FString(TEXT("?")) : FString::FromInt(reportItem.RunIndex);
+		const TSubclassOf<UExperimentResultIterationSelectorWidget> selectorClass =
+			ResolveExperimentResultIterationSelectorWidgetClass();
+		if (!selectorClass) return;
 
 		const bool bSelected = reportItem.ReportPath.Equals(SelectedExperimentResultPath, ESearchCase::IgnoreCase);
-		button->Configure(
-			reportItem.ReportPath,
-			reportItem.RunIndex == INDEX_NONE ? FString(TEXT("?")) : FString::FromInt(reportItem.RunIndex));
-		button->SetBackgroundColor(bSelected
-			? FLinearColor(0.16f, 0.42f, 0.78f, 1.0f)
-			: FLinearColor(0.10f, 0.11f, 0.14f, 1.0f));
-		button->SetColorAndOpacity(FLinearColor::White);
-		button->OnIterationClicked.AddUObject(this, &UMainMenuWidget::HandleExperimentResultIterationButtonClicked);
+		UExperimentResultIterationSelectorWidget* selectorWidget =
+			CreateWidget<UExperimentResultIterationSelectorWidget>(this, selectorClass);
+		if (!selectorWidget) continue;
 
-		label->SetJustification(ETextJustify::Center);
-		label->SetColorAndOpacity(FSlateColor(FLinearColor::White));
-
-		button->SetContent(label);
-		sizeBox->SetWidthOverride(44.0f);
-		sizeBox->SetHeightOverride(36.0f);
-		sizeBox->SetContent(button);
-
-		if (UScrollBoxSlot* scrollBoxSlot = Cast<UScrollBoxSlot>(ExperimentResultIterationScrollBox->AddChild(sizeBox)))
+		UOdiroListItemViewModel* selectorItem = NewObject<UOdiroListItemViewModel>(selectorWidget);
+		if (!selectorItem) continue;
+		selectorItem->InitializeItem(iterationLabel, iterationLabel, FString(), reportItem.ReportPath);
+		selectorItem->SetSelected(bSelected);
+		selectorWidget->InitializeFromItemViewModel(selectorItem);
+		selectorWidget->OnSelectorClicked.AddUObject(
+			this,
+			&UMainMenuWidget::HandleExperimentResultIterationSelectorClicked);
+		if (UScrollBoxSlot* scrollBoxSlot =
+			Cast<UScrollBoxSlot>(ExperimentResultIterationScrollBox->AddChild(selectorWidget)))
 		{
-			scrollBoxSlot->SetPadding(FMargin(0.0f, 0.0f, 8.0f, 0.0f));
+			scrollBoxSlot->SetPadding(ExperimentResultIterationSelectorPadding);
 		}
-		ExperimentResultIterationButtons.Add(button);
+		ExperimentResultIterationSelectors.Add(selectorWidget);
 	}
 }
 
@@ -3189,10 +2849,19 @@ void UMainMenuWidget::RefreshExperimentResultDetailPanel()
 		return;
 	}
 
-	FProjectRunResultDashboardData DashboardData;
-	FProjectRunResultDashboardJson::BuildFromRunDirectory(
-		SelectedExperimentResultRunDirectory,
-		DashboardData);
+	if (!ExperimentResultViewModel)
+	{
+		SetDiagnosticsText(TEXT("ExperimentResultViewModel이 없습니다."));
+		return;
+	}
+
+	const bool bDashboardLoaded =
+		ExperimentResultViewModel->LoadRunDirectory(SelectedExperimentResultRunDirectory);
+	const FProjectRunResultDashboardData DashboardData = ExperimentResultViewModel->GetDashboardData();
+	if (!bDashboardLoaded && !ExperimentResultViewModel->GetDiagnosticsText().IsEmpty())
+	{
+		SetDiagnosticsText(ExperimentResultViewModel->GetDiagnosticsText());
+	}
 
 	if (ExperimentResultDetailTitleText)
 	{
@@ -3236,7 +2905,7 @@ void UMainMenuWidget::RefreshExperimentResultDetailPanel()
 		ResolveProjectEpisodeReplayCardWidgetClass();
 	if (EpisodeReplayCardWrapBox && EpisodeCardClass)
 	{
-		for (const FProjectRunEpisodeDashboardItem& Episode : DashboardData.Episodes)
+		for (const UExperimentResultEpisodeViewModel* EpisodeItem : ExperimentResultViewModel->GetEpisodeItems())
 		{
 			UUserWidget* CardWidget = CreateWidget<UUserWidget>(this, EpisodeCardClass);
 			if (!CardWidget)
@@ -3244,12 +2913,7 @@ void UMainMenuWidget::RefreshExperimentResultDetailPanel()
 				continue;
 			}
 
-			ConfigureProjectEpisodeReplayCard(
-				CardWidget,
-				FormatProjectRunEpisodeLabel(Episode.EpisodeId),
-				FormatProjectRunEpisodeDuration(Episode.DurationSeconds),
-				Episode.bSuccess,
-				!Episode.PreviewImagePath.IsEmpty());
+			ConfigureProjectEpisodeReplayCard(CardWidget, EpisodeItem);
 
 			if (UWrapBoxSlot* WrapBoxSlot = EpisodeReplayCardWrapBox->AddChildToWrapBox(CardWidget))
 			{
@@ -3259,8 +2923,8 @@ void UMainMenuWidget::RefreshExperimentResultDetailPanel()
 		}
 	}
 
-	UPlatformAnalysisAiSubsystem* AnalysisSubsystem = GetPlatformAnalysisAiSubsystem();
-	const bool bAnalysisPending = AnalysisSubsystem && AnalysisSubsystem->IsAnalysisRequestPending();
+	const UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	const bool bAnalysisPending = platformUiSubsystem && platformUiSubsystem->IsAnalysisRequestPending();
 	const bool bHasAnalysisFailure =
 		!LastProjectRunAnalysisFailureText.IsEmpty()
 		&& LastProjectRunAnalysisFailureRunId.Equals(DashboardData.RunId, ESearchCase::CaseSensitive);
@@ -3300,7 +2964,7 @@ void UMainMenuWidget::RefreshExperimentResultDetailPanel()
 		ResolveProjectAiSuggestionRowWidgetClass();
 	if (AiSuggestionListBox && SuggestionRowClass)
 	{
-		for (const FProjectRunAiSuggestionDashboardItem& Suggestion : DashboardData.Suggestions)
+		for (const UExperimentResultSuggestionViewModel* SuggestionItem : ExperimentResultViewModel->GetSuggestionItems())
 		{
 			UUserWidget* RowWidget = CreateWidget<UUserWidget>(this, SuggestionRowClass);
 			if (!RowWidget)
@@ -3308,7 +2972,7 @@ void UMainMenuWidget::RefreshExperimentResultDetailPanel()
 				continue;
 			}
 
-			ConfigureProjectAiSuggestionRow(RowWidget, Suggestion);
+			ConfigureProjectAiSuggestionRow(RowWidget, SuggestionItem);
 			AiSuggestionListBox->AddChild(RowWidget);
 			ProjectAiSuggestionRows.Add(RowWidget);
 		}
@@ -3331,23 +2995,30 @@ void UMainMenuWidget::SetProjectRunMetricCardText(
 
 void UMainMenuWidget::ConfigureProjectEpisodeReplayCard(
 	UUserWidget* cardWidget,
-	const FString& episodeLabel,
-	const FString& durationLabel,
-	const bool bSuccess,
-	const bool bHasPreviewImage) const
+	const UExperimentResultEpisodeViewModel* episodeItem) const
 {
-	SetDashboardChildText(cardWidget, EpisodeLabelTextName, episodeLabel);
-	SetDashboardChildText(cardWidget, EpisodeDurationTextName, durationLabel);
-	SetDashboardChildVisibility(cardWidget, EpisodeSuccessStateBoxName, bSuccess);
-	SetDashboardChildVisibility(cardWidget, EpisodeFailureStateBoxName, !bSuccess);
-	SetDashboardChildVisibility(cardWidget, EpisodePreviewImageBoxName, bHasPreviewImage);
-	SetDashboardChildVisibility(cardWidget, EpisodePreviewPlaceholderBoxName, !bHasPreviewImage);
+	if (!episodeItem)
+	{
+		return;
+	}
+
+	SetDashboardChildText(cardWidget, EpisodeLabelTextName, episodeItem->GetTitle());
+	SetDashboardChildText(cardWidget, EpisodeDurationTextName, episodeItem->GetDurationLabel());
+	SetDashboardChildVisibility(cardWidget, EpisodeSuccessStateBoxName, episodeItem->IsSuccess());
+	SetDashboardChildVisibility(cardWidget, EpisodeFailureStateBoxName, !episodeItem->IsSuccess());
+	SetDashboardChildVisibility(cardWidget, EpisodePreviewImageBoxName, episodeItem->HasPreviewImage());
+	SetDashboardChildVisibility(cardWidget, EpisodePreviewPlaceholderBoxName, !episodeItem->HasPreviewImage());
 }
 
 void UMainMenuWidget::ConfigureProjectAiSuggestionRow(
 	UUserWidget* rowWidget,
-	const FProjectRunAiSuggestionDashboardItem& suggestion) const
+	const UExperimentResultSuggestionViewModel* suggestionItem) const
 {
+	if (!suggestionItem)
+	{
+		return;
+	}
+
 	auto setTextAndVisibility = [rowWidget](
 		const FName textName,
 		const FName rowName,
@@ -3359,27 +3030,27 @@ void UMainMenuWidget::ConfigureProjectAiSuggestionRow(
 		SetDashboardChildVisibility(rowWidget, rowName, !visibleValue.IsEmpty());
 	};
 
-	SetDashboardChildText(rowWidget, SuggestionSeverityTextName, suggestion.SeverityLabel);
-	setTextAndVisibility(SuggestionTitleTextName, SuggestionTitleRowName, suggestion.Title);
-	setTextAndVisibility(SuggestionMessageTextName, SuggestionMessageRowName, suggestion.Message);
-	setTextAndVisibility(SuggestionReasonTextName, SuggestionReasonRowName, suggestion.Reason);
+	SetDashboardChildText(rowWidget, SuggestionSeverityTextName, suggestionItem->GetSeverityLabel());
+	setTextAndVisibility(SuggestionTitleTextName, SuggestionTitleRowName, suggestionItem->GetTitle());
+	setTextAndVisibility(SuggestionMessageTextName, SuggestionMessageRowName, suggestionItem->GetSubtitle());
+	setTextAndVisibility(SuggestionReasonTextName, SuggestionReasonRowName, suggestionItem->GetReason());
 	setTextAndVisibility(
 		SuggestionRecommendationTextName,
 		SuggestionRecommendationRowName,
-		suggestion.Recommendation);
+		suggestionItem->GetRecommendation());
 
-	const bool bHasValueRow = !suggestion.ParameterName.TrimStartAndEnd().IsEmpty()
-		|| !suggestion.CurrentValue.TrimStartAndEnd().IsEmpty()
-		|| !suggestion.SuggestedValue.TrimStartAndEnd().IsEmpty();
-	SetDashboardChildText(rowWidget, SuggestionParamTextName, suggestion.ParameterName.TrimStartAndEnd());
-	SetDashboardChildText(rowWidget, SuggestionCurrentTextName, suggestion.CurrentValue.TrimStartAndEnd());
-	SetDashboardChildText(rowWidget, SuggestionSuggestedTextName, suggestion.SuggestedValue.TrimStartAndEnd());
+	const bool bHasValueRow = !suggestionItem->GetParameterName().TrimStartAndEnd().IsEmpty()
+		|| !suggestionItem->GetCurrentValue().TrimStartAndEnd().IsEmpty()
+		|| !suggestionItem->GetSuggestedValue().TrimStartAndEnd().IsEmpty();
+	SetDashboardChildText(rowWidget, SuggestionParamTextName, suggestionItem->GetParameterName().TrimStartAndEnd());
+	SetDashboardChildText(rowWidget, SuggestionCurrentTextName, suggestionItem->GetCurrentValue().TrimStartAndEnd());
+	SetDashboardChildText(rowWidget, SuggestionSuggestedTextName, suggestionItem->GetSuggestedValue().TrimStartAndEnd());
 	SetDashboardChildVisibility(rowWidget, SuggestionValueRowName, bHasValueRow);
 
-	SetDashboardChildVisibility(rowWidget, SuggestionHighIndicatorName, suggestion.Severity == EProjectRunAiSuggestionSeverity::High);
-	SetDashboardChildVisibility(rowWidget, SuggestionMediumIndicatorName, suggestion.Severity == EProjectRunAiSuggestionSeverity::Medium);
-	SetDashboardChildVisibility(rowWidget, SuggestionLowIndicatorName, suggestion.Severity == EProjectRunAiSuggestionSeverity::Low);
-	SetDashboardChildVisibility(rowWidget, SuggestionInfoIndicatorName, suggestion.Severity == EProjectRunAiSuggestionSeverity::Info);
+	SetDashboardChildVisibility(rowWidget, SuggestionHighIndicatorName, suggestionItem->GetSeverity() == EProjectRunAiSuggestionSeverity::High);
+	SetDashboardChildVisibility(rowWidget, SuggestionMediumIndicatorName, suggestionItem->GetSeverity() == EProjectRunAiSuggestionSeverity::Medium);
+	SetDashboardChildVisibility(rowWidget, SuggestionLowIndicatorName, suggestionItem->GetSeverity() == EProjectRunAiSuggestionSeverity::Low);
+	SetDashboardChildVisibility(rowWidget, SuggestionInfoIndicatorName, suggestionItem->GetSeverity() == EProjectRunAiSuggestionSeverity::Info);
 }
 
 void UMainMenuWidget::SetSelectedScenarioSetupPath(const FString& scenarioSetupPath)
@@ -3440,15 +3111,15 @@ void UMainMenuWidget::SetSelectedExperimentResultPath(const FString& reportPath)
 
 void UMainMenuWidget::ClearExperimentResultIterationWidgets()
 {
-	for (UExperimentResultIterationButton* button : ExperimentResultIterationButtons)
+	for (UExperimentResultIterationSelectorWidget* selectorWidget : ExperimentResultIterationSelectors)
 	{
-		if (IsValid(button))
+		if (IsValid(selectorWidget))
 		{
-			button->OnIterationClicked.RemoveAll(this);
+			selectorWidget->OnSelectorClicked.RemoveAll(this);
 		}
 	}
 
-	ExperimentResultIterationButtons.Reset();
+	ExperimentResultIterationSelectors.Reset();
 	if (ExperimentResultIterationScrollBox)
 	{
 		ExperimentResultIterationScrollBox->ClearChildren();
@@ -3472,14 +3143,6 @@ void UMainMenuWidget::ClearExperimentResultDashboardWidgets()
 
 bool UMainMenuWidget::CreateScenarioFileFromTemplate(const FString& scenarioSetupPath)
 {
-	const FString resolvedTemplatePath = FSimulationSetupJson::ResolveProjectPath(ScenarioSetupTemplatePath);
-	FString templateJson;
-	if (!FFileHelper::LoadFileToString(templateJson, *resolvedTemplatePath))
-	{
-		SetDiagnosticsText(FString::Printf(TEXT("시나리오 템플릿 읽기 실패: %s"), ScenarioSetupTemplatePath));
-		return false;
-	}
-
 	const FString normalizedScenarioSetupPath = NormalizeInputJsonPath(scenarioSetupPath);
 	if (!IsEditableInputJsonPath(normalizedScenarioSetupPath))
 	{
@@ -3488,20 +3151,21 @@ bool UMainMenuWidget::CreateScenarioFileFromTemplate(const FString& scenarioSetu
 	}
 
 	const FString resolvedScenarioSetupPath = FSimulationSetupJson::ResolveProjectPath(normalizedScenarioSetupPath);
-	if (FPaths::FileExists(resolvedScenarioSetupPath))
+	if (UPlatformUiSubsystem::DoesResolvedFileExist(resolvedScenarioSetupPath))
 	{
 		SetDiagnosticsText(FString::Printf(TEXT("시나리오 파일이 이미 존재합니다: %s"), *normalizedScenarioSetupPath));
 		return false;
 	}
 
-	const FString outputDirectory = FPaths::GetPath(resolvedScenarioSetupPath);
-	if (!IFileManager::Get().MakeDirectory(*outputDirectory, true)
-		|| !FFileHelper::SaveStringToFile(
-			templateJson,
-			*resolvedScenarioSetupPath,
-			FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	FString errorText;
+	if (!UPlatformUiSubsystem::CreateTextFileFromTemplate(
+		ScenarioSetupTemplatePath,
+		resolvedScenarioSetupPath,
+		errorText))
 	{
-		SetDiagnosticsText(FString::Printf(TEXT("시나리오 파일 생성 실패: %s"), *resolvedScenarioSetupPath));
+		SetDiagnosticsText(errorText.IsEmpty()
+			? FString::Printf(TEXT("시나리오 파일 생성 실패: %s"), *resolvedScenarioSetupPath)
+			: errorText);
 		return false;
 	}
 
@@ -3510,13 +3174,6 @@ bool UMainMenuWidget::CreateScenarioFileFromTemplate(const FString& scenarioSetu
 
 bool UMainMenuWidget::OpenScenarioInEditor(const FString& scenarioSetupPath)
 {
-	UScenarioEditorLaunchSubsystem* subsystem = GetScenarioEditorLaunchSubsystem();
-	if (!subsystem)
-	{
-		SetDiagnosticsText(TEXT("ScenarioEditorLaunchSubsystem을 사용할 수 없습니다."));
-		return false;
-	}
-
 	const FString trimmedScenarioPath = scenarioSetupPath.TrimStartAndEnd();
 	const FString normalizedInputScenarioPath = NormalizeInputJsonPath(trimmedScenarioPath);
 	const bool bLegacyInputScenario = IsEditableInputJsonPath(normalizedInputScenarioPath);
@@ -3533,15 +3190,35 @@ bool UMainMenuWidget::OpenScenarioInEditor(const FString& scenarioSetupPath)
 		SetDiagnosticsText(TEXT("project scenario는 <UserProject>/scenario.json 경로여야 합니다."));
 		return false;
 	}
-	if (!bLegacyInputScenario && !FPaths::FileExists(normalizedScenarioPath))
+	if (!bLegacyInputScenario && !UPlatformUiSubsystem::DoesResolvedFileExist(normalizedScenarioPath))
 	{
 		SetDiagnosticsText(FString::Printf(TEXT("project scenario 파일이 없습니다: %s"), *normalizedScenarioPath));
 		return false;
 	}
 
-	if (!subsystem->OpenScenarioEditor(normalizedScenarioPath))
+	if (!bLegacyInputScenario && ProjectWorkspaceViewModel)
 	{
-		SetDiagnosticsText(TEXT("ScenarioEditorMap 열기 실패."));
+		if (!ProjectWorkspaceViewModel->OpenScenarioEditor())
+		{
+			const FString diagnostics = ProjectWorkspaceViewModel->GetDiagnosticsText();
+			SetDiagnosticsText(diagnostics.IsEmpty() ? TEXT("ScenarioEditorMap 열기 실패.") : diagnostics);
+			return false;
+		}
+
+		return true;
+	}
+
+	UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	if (!platformUiSubsystem)
+	{
+		SetDiagnosticsText(TEXT("PlatformUiSubsystem을 사용할 수 없습니다."));
+		return false;
+	}
+
+	FString errorText;
+	if (!platformUiSubsystem->OpenScenarioEditorPath(normalizedScenarioPath, errorText))
+	{
+		SetDiagnosticsText(errorText);
 		return false;
 	}
 
@@ -3550,24 +3227,17 @@ bool UMainMenuWidget::OpenScenarioInEditor(const FString& scenarioSetupPath)
 
 TSubclassOf<UFileListItemWidget> UMainMenuWidget::ResolveFileListItemWidgetClass() const
 {
-	if (FileListItemWidgetClass)
-	{
-		return FileListItemWidgetClass;
-	}
-
-	UClass* loadedClass = LoadClass<UFileListItemWidget>(nullptr, FileListItemWidgetBlueprintClassPath);
-	if (!loadedClass)
+	if (!FileListItemWidgetClass)
 	{
 		UE_LOG(
 			LogMainMenuWidget,
 			Error,
-			TEXT("File list item widget class is missing: %s"),
-			FileListItemWidgetBlueprintClassPath);
+			TEXT("FileListItemWidgetClass is not configured on the MainMenu widget asset."));
 		ensureMsgf(false, TEXT("File list item widget class is missing."));
 		return nullptr;
 	}
 
-	return TSubclassOf<UFileListItemWidget>(loadedClass);
+	return FileListItemWidgetClass;
 }
 
 TSubclassOf<UProjectExperimentRunRowWidget> UMainMenuWidget::ResolveProjectExperimentRunRowWidgetClass() const
@@ -3577,21 +3247,21 @@ TSubclassOf<UProjectExperimentRunRowWidget> UMainMenuWidget::ResolveProjectExper
 		return ProjectExperimentRunRowWidgetClass;
 	}
 
-	UClass* loadedClass = LoadClass<UProjectExperimentRunRowWidget>(
-		nullptr,
-		ProjectExperimentRunRowWidgetBlueprintClassPath);
-	if (!loadedClass)
+	const UPlatformUiDeveloperSettings* platformUiSettings = GetDefault<UPlatformUiDeveloperSettings>();
+	const TSubclassOf<UProjectExperimentRunRowWidget> configuredClass = platformUiSettings
+		? platformUiSettings->ProjectExperimentRunRowWidgetClass.LoadSynchronous()
+		: nullptr;
+	if (!configuredClass)
 	{
 		UE_LOG(
 			LogMainMenuWidget,
 			Error,
-			TEXT("Project experiment run row widget class is missing: %s"),
-			ProjectExperimentRunRowWidgetBlueprintClassPath);
+			TEXT("ProjectExperimentRunRowWidgetClass is not configured on the MainMenu widget asset or Platform UI project settings."));
 		ensureMsgf(false, TEXT("Project experiment run row widget class is missing."));
 		return nullptr;
 	}
 
-	return TSubclassOf<UProjectExperimentRunRowWidget>(loadedClass);
+	return configuredClass;
 }
 
 TSubclassOf<UUserWidget> UMainMenuWidget::ResolveProjectEpisodeReplayCardWidgetClass() const
@@ -3601,21 +3271,21 @@ TSubclassOf<UUserWidget> UMainMenuWidget::ResolveProjectEpisodeReplayCardWidgetC
 		return ProjectEpisodeReplayCardWidgetClass;
 	}
 
-	UClass* loadedClass = LoadClass<UUserWidget>(
-		nullptr,
-		ProjectEpisodeReplayCardWidgetBlueprintClassPath);
-	if (!loadedClass)
+	const UPlatformUiDeveloperSettings* platformUiSettings = GetDefault<UPlatformUiDeveloperSettings>();
+	const TSubclassOf<UUserWidget> configuredClass = platformUiSettings
+		? platformUiSettings->ProjectEpisodeReplayCardWidgetClass.LoadSynchronous()
+		: nullptr;
+	if (!configuredClass)
 	{
 		UE_LOG(
 			LogMainMenuWidget,
 			Error,
-			TEXT("Project episode replay card widget class is missing: %s"),
-			ProjectEpisodeReplayCardWidgetBlueprintClassPath);
+			TEXT("ProjectEpisodeReplayCardWidgetClass is not configured on the MainMenu widget asset or Platform UI project settings."));
 		ensureMsgf(false, TEXT("Project episode replay card widget class is missing."));
 		return nullptr;
 	}
 
-	return TSubclassOf<UUserWidget>(loadedClass);
+	return configuredClass;
 }
 
 TSubclassOf<UUserWidget> UMainMenuWidget::ResolveProjectAiSuggestionRowWidgetClass() const
@@ -3625,21 +3295,45 @@ TSubclassOf<UUserWidget> UMainMenuWidget::ResolveProjectAiSuggestionRowWidgetCla
 		return ProjectAiSuggestionRowWidgetClass;
 	}
 
-	UClass* loadedClass = LoadClass<UUserWidget>(
-		nullptr,
-		ProjectAiSuggestionRowWidgetBlueprintClassPath);
-	if (!loadedClass)
+	const UPlatformUiDeveloperSettings* platformUiSettings = GetDefault<UPlatformUiDeveloperSettings>();
+	const TSubclassOf<UUserWidget> configuredClass = platformUiSettings
+		? platformUiSettings->ProjectAiSuggestionRowWidgetClass.LoadSynchronous()
+		: nullptr;
+	if (!configuredClass)
 	{
 		UE_LOG(
 			LogMainMenuWidget,
 			Error,
-			TEXT("Project AI suggestion row widget class is missing: %s"),
-			ProjectAiSuggestionRowWidgetBlueprintClassPath);
+			TEXT("ProjectAiSuggestionRowWidgetClass is not configured on the MainMenu widget asset or Platform UI project settings."));
 		ensureMsgf(false, TEXT("Project AI suggestion row widget class is missing."));
 		return nullptr;
 	}
 
-	return TSubclassOf<UUserWidget>(loadedClass);
+	return configuredClass;
+}
+
+TSubclassOf<UExperimentResultIterationSelectorWidget>
+UMainMenuWidget::ResolveExperimentResultIterationSelectorWidgetClass() const
+{
+	if (ExperimentResultIterationSelectorWidgetClass)
+	{
+		return ExperimentResultIterationSelectorWidgetClass;
+	}
+
+	const UPlatformUiDeveloperSettings* platformUiSettings = GetDefault<UPlatformUiDeveloperSettings>();
+	const TSubclassOf<UExperimentResultIterationSelectorWidget> configuredClass = platformUiSettings
+		? platformUiSettings->ExperimentResultIterationSelectorWidgetClass.LoadSynchronous()
+		: nullptr;
+	if (configuredClass)
+	{
+		return configuredClass;
+	}
+
+	UE_LOG(
+		LogMainMenuWidget,
+		Warning,
+		TEXT("ExperimentResultIterationSelectorWidgetClass is not configured on the MainMenu widget asset or Platform UI project settings."));
+	return nullptr;
 }
 
 void UMainMenuWidget::HandleRunInfoChanged(const FSimulatorRunInfo& runInfo)
@@ -3708,34 +3402,36 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 		lines.Add(extraMessage);
 	}
 
-	if (USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem())
+	if (UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem())
 	{
 		if (IsProjectModeSelected())
 		{
-			const FString projectPath = GetSelectedProjectPath();
+			const FString projectPath = ProjectWorkspaceViewModel && !ProjectWorkspaceViewModel->GetActiveProjectPath().IsEmpty()
+				? ProjectWorkspaceViewModel->GetActiveProjectPath()
+				: GetSelectedProjectPath();
 			lines.Add(FString::Printf(TEXT("Project: %s"), *projectPath));
 
-			TArray<FString> diagnostics;
-			if (subsystem->ValidateUserProject(projectPath, diagnostics))
+			if (ProjectWorkspaceViewModel)
 			{
-				lines.Add(TEXT("Project Status: Valid"));
-				const TArray<FString> runDirectories = subsystem->ListProjectRunDirectories(projectPath);
-				if (!runDirectories.IsEmpty())
+				ProjectWorkspaceViewModel->RefreshProjectRuns();
+				const TArray<UOdiroListItemViewModel*> runItems = ProjectWorkspaceViewModel->GetRunItems();
+				const FString workspaceStatus = ProjectWorkspaceViewModel->GetStatusText();
+				if (!workspaceStatus.IsEmpty())
 				{
-					lines.Add(FString::Printf(TEXT("Runs: %d"), runDirectories.Num()));
-					lines.Add(FString::Printf(TEXT("Selected Run: %s"), *FormatProjectRunDisplayId(GetSelectedProjectRunId())));
+					lines.Add(workspaceStatus);
 				}
+				if (!runItems.IsEmpty())
+				{
+					lines.Add(FString::Printf(TEXT("Runs: %d"), runItems.Num()));
+				}
+				lines.Add(FString::Printf(TEXT("Selected Run: %s"), *FormatProjectRunDisplayId(GetSelectedProjectRunId())));
 			}
 			else
 			{
-				lines.Add(TEXT("Project Status: Invalid"));
-				for (const FString& diagnostic : diagnostics)
-				{
-					lines.Add(FString::Printf(TEXT("Diagnostic: %s"), *diagnostic));
-				}
+				lines.Add(TEXT("ProjectWorkspaceViewModel unavailable."));
 			}
 
-			const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
+			const FSimulatorRunInfo runInfo = platformUiSubsystem->GetActiveRunInfo();
 			if (!runInfo.RunId.IsEmpty())
 			{
 				lines.Add(TEXT(""));
@@ -3744,7 +3440,7 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 				lines.Add(FString::Printf(TEXT("Run Id: %s"), *FormatProjectRunDisplayId(runInfo.RunId)));
 				lines.Add(FString::Printf(TEXT("State: %s"), *ToRunStateString(runInfo.Status.State)));
 				lines.Add(FString::Printf(TEXT("Process: %s"), runInfo.bProcessRunning ? TEXT("Running") : TEXT("Stopped")));
-				lines.Add(FString::Printf(TEXT("Launcher: %s"), runInfo.bUsedPreviewLauncher ? TEXT("Task-RunPreview.bat") : TEXT("Executable")));
+				lines.Add(FString::Printf(TEXT("Launcher: %s"), runInfo.bUsedPreviewLauncher ? TEXT("RunPreview.ps1") : TEXT("Executable")));
 				if (runInfo.ProcessReturnCode != INDEX_NONE)
 				{
 					lines.Add(FString::Printf(TEXT("Exit code: %d"), runInfo.ProcessReturnCode));
@@ -3763,14 +3459,15 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 			return;
 		}
 
-		const FSimulationSetupParseResult setupParseResult = subsystem->LoadSimulationSetupFile(GetSelectedSetupPath());
+		const FSimulationSetupParseResult setupParseResult =
+			platformUiSubsystem->LoadLegacySimulationSetupFile(GetSelectedSetupPath());
 		if (setupParseResult.bSuccess)
 		{
 			lines.Add(FString::Printf(TEXT("Setup: %s"), *GetSelectedSetupPath()));
 			lines.Add(FString::Printf(TEXT("Fixed-Step FPS: %d"), setupParseResult.Setup.FixedStep.Fps));
 		}
 
-		const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
+		const FSimulatorRunInfo runInfo = platformUiSubsystem->GetActiveRunInfo();
 		if (!runInfo.RunId.IsEmpty())
 		{
 			lines.Add(TEXT(""));
@@ -3779,7 +3476,7 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 			lines.Add(FString::Printf(TEXT("State: %s"), *ToRunStateString(runInfo.Status.State)));
 			lines.Add(FString::Printf(TEXT("Progress: %d / %d"), runInfo.Status.CompletedRuns, runInfo.Status.TotalRuns));
 			lines.Add(FString::Printf(TEXT("Process: %s"), runInfo.bProcessRunning ? TEXT("Running") : TEXT("Stopped")));
-			lines.Add(FString::Printf(TEXT("Launcher: %s"), runInfo.bUsedPreviewLauncher ? TEXT("Task-RunPreview.bat") : TEXT("Executable")));
+			lines.Add(FString::Printf(TEXT("Launcher: %s"), runInfo.bUsedPreviewLauncher ? TEXT("RunPreview.ps1") : TEXT("Executable")));
 			if (runInfo.ProcessReturnCode != INDEX_NONE)
 			{
 				lines.Add(FString::Printf(TEXT("Exit code: %d"), runInfo.ProcessReturnCode));
@@ -3794,7 +3491,7 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 			}
 		}
 
-		const TArray<FString> statusFiles = subsystem->ListSimulationRunStatusFiles();
+		const TArray<FString> statusFiles = platformUiSubsystem->ListLegacySimulationRunStatusFiles();
 		if (!statusFiles.IsEmpty())
 		{
 			lines.Add(TEXT(""));
@@ -3826,13 +3523,13 @@ void UMainMenuWidget::UpdateStatusText(const FString& extraMessage)
 
 void UMainMenuWidget::UpdateReportAndLogText()
 {
-	USimulatorLaunchSubsystem* subsystem = GetSimulatorLaunchSubsystem();
-	if (!subsystem)
+	UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	if (!platformUiSubsystem)
 	{
 		return;
 	}
 
-	const FSimulatorRunInfo runInfo = subsystem->GetActiveRunInfo();
+	const FSimulatorRunInfo runInfo = platformUiSubsystem->GetActiveRunInfo();
 
 	CurrentPreviewReportPath = SelectedExperimentResultPath;
 	CurrentPreviewLogPath.Reset();
@@ -3853,7 +3550,7 @@ void UMainMenuWidget::UpdateReportAndLogText()
 		if (!SelectedExperimentResultPath.IsEmpty())
 		{
 			FString reportJson;
-			if (FFileHelper::LoadFileToString(reportJson, *FSimulationSetupJson::ResolveProjectPath(SelectedExperimentResultPath)))
+			if (UPlatformUiSubsystem::ReadResolvedTextFile(SelectedExperimentResultPath, reportJson))
 			{
 				reportLines.Add(TEXT(""));
 				reportLines.Add(FString::Printf(TEXT("Details: %s"), *SelectedExperimentResultPath));
@@ -3871,7 +3568,7 @@ void UMainMenuWidget::UpdateReportAndLogText()
 		TArray<FString> logPaths;
 		if (!SelectedExperimentResultRunDirectory.IsEmpty())
 		{
-			logPaths = subsystem->ListMeasurementLogFilesInDirectory(SelectedExperimentResultRunDirectory);
+			logPaths = platformUiSubsystem->ListLegacyMeasurementLogFilesInDirectory(SelectedExperimentResultRunDirectory);
 			if (FPaths::GetPath(runInfo.StatusPath).Equals(SelectedExperimentResultRunDirectory, ESearchCase::IgnoreCase))
 			{
 				for (const FString& logPath : runInfo.Status.LogPaths)
@@ -3937,40 +3634,15 @@ FString UMainMenuWidget::GetProjectRunIdForPrototype() const
 	return GetSelectedProjectRunId();
 }
 
-bool UMainMenuWidget::CreateProjectRunForPrototype(
-	FString& outRunId,
-	TArray<FString>& outDiagnostics,
-	USimulatorLaunchSubsystem* simulatorLaunchSubsystem)
-{
-	outRunId.Reset();
-	outDiagnostics.Reset();
-
-	USimulatorLaunchSubsystem* subsystem = simulatorLaunchSubsystem ? simulatorLaunchSubsystem : GetSimulatorLaunchSubsystem();
-	if (!subsystem)
-	{
-		outDiagnostics.Add(TEXT("SimulatorLaunchSubsystem을 사용할 수 없습니다."));
-		return false;
-	}
-
-	if (!subsystem->CreateProjectRun(GetSelectedProjectPath(), outRunId, outDiagnostics))
-	{
-		return false;
-	}
-
-	SetSelectedProjectRunId(outRunId);
-	if (!simulatorLaunchSubsystem)
-	{
-		RefreshProjectRunSelection();
-		RefreshExperimentResultIterationList();
-		UpdateReportAndLogText();
-	}
-	return true;
-}
-
 bool UMainMenuWidget::IsProjectOpened() const
 {
-	const UProjectSessionSubsystem* projectSession = GetProjectSessionSubsystem();
-	return projectSession && projectSession->HasActiveProject();
+	if (ProjectWorkspaceViewModel)
+	{
+		return !ProjectWorkspaceViewModel->GetActiveProjectPath().IsEmpty();
+	}
+
+	const UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem();
+	return platformUiSubsystem && platformUiSubsystem->HasActiveProject();
 }
 
 FString UMainMenuWidget::GetSelectedSetupPath() const
@@ -4029,10 +3701,14 @@ FString UMainMenuWidget::GetSelectedPolicySpecPath() const
 
 FString UMainMenuWidget::GetSelectedProjectPath() const
 {
-	if (const UProjectSessionSubsystem* projectSession = GetProjectSessionSubsystem();
-		projectSession && projectSession->HasActiveProject())
+	if (ProjectWorkspaceViewModel && !ProjectWorkspaceViewModel->GetActiveProjectPath().IsEmpty())
 	{
-		return projectSession->GetActiveProjectPath();
+		return ProjectWorkspaceViewModel->GetActiveProjectPath();
+	}
+
+	if (const UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem())
+	{
+		return platformUiSubsystem->GetActiveProjectPath();
 	}
 
 	return FString();
@@ -4040,10 +3716,14 @@ FString UMainMenuWidget::GetSelectedProjectPath() const
 
 FString UMainMenuWidget::GetSelectedProjectScenarioPath() const
 {
-	if (const UProjectSessionSubsystem* projectSession = GetProjectSessionSubsystem();
-		projectSession && projectSession->HasActiveProject())
+	if (ProjectWorkspaceViewModel && !ProjectWorkspaceViewModel->GetActiveScenarioPath().IsEmpty())
 	{
-		return projectSession->GetActiveProjectScenarioPath();
+		return ProjectWorkspaceViewModel->GetActiveScenarioPath();
+	}
+
+	if (const UPlatformUiSubsystem* platformUiSubsystem = GetPlatformUiSubsystem())
+	{
+		return platformUiSubsystem->GetActiveProjectScenarioPath();
 	}
 
 	return FString();
@@ -4067,10 +3747,18 @@ FString UMainMenuWidget::GetSelectedProjectRunDirectory() const
 void UMainMenuWidget::SetSelectedProjectRunId(const FString& runId)
 {
 	SelectedProjectRunId = runId.TrimStartAndEnd();
+	if (ProjectWorkspaceViewModel)
+	{
+		ProjectWorkspaceViewModel->SelectRun(SelectedProjectRunId);
+	}
 
 	if (IsProjectModeSelected() && FUserProjectRunSnapshot::IsValidRunId(SelectedProjectRunId))
 	{
 		SetSelectedExperimentResultRunDirectory(GetSelectedProjectRunDirectory());
+		if (ExperimentResultViewModel)
+		{
+			ExperimentResultViewModel->LoadRunDirectory(SelectedExperimentResultRunDirectory);
+		}
 	}
 	else if (SelectedProjectRunId.IsEmpty())
 	{
@@ -4078,28 +3766,9 @@ void UMainMenuWidget::SetSelectedProjectRunId(const FString& runId)
 	}
 }
 
-UProjectSessionSubsystem* UMainMenuWidget::GetProjectSessionSubsystem() const
+UPlatformUiSubsystem* UMainMenuWidget::GetPlatformUiSubsystem() const
 {
-	const UGameInstance* gameInstance = GetGameInstance();
-	return gameInstance ? gameInstance->GetSubsystem<UProjectSessionSubsystem>() : nullptr;
-}
-
-USimulatorLaunchSubsystem* UMainMenuWidget::GetSimulatorLaunchSubsystem() const
-{
-	const UGameInstance* gameInstance = GetGameInstance();
-	return gameInstance ? gameInstance->GetSubsystem<USimulatorLaunchSubsystem>() : nullptr;
-}
-
-UScenarioEditorLaunchSubsystem* UMainMenuWidget::GetScenarioEditorLaunchSubsystem() const
-{
-	const UGameInstance* gameInstance = GetGameInstance();
-	return gameInstance ? gameInstance->GetSubsystem<UScenarioEditorLaunchSubsystem>() : nullptr;
-}
-
-UPlatformAnalysisAiSubsystem* UMainMenuWidget::GetPlatformAnalysisAiSubsystem() const
-{
-	const UGameInstance* gameInstance = GetGameInstance();
-	return gameInstance ? gameInstance->GetSubsystem<UPlatformAnalysisAiSubsystem>() : nullptr;
+	return UPlatformUiSubsystem::ResolveForWorldContext(this);
 }
 
 void UMainMenuWidget::RequestEditorWidgetInputMode()

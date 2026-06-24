@@ -41,7 +41,7 @@
           actions.jsonl                # robot policy request/response log
           events.jsonl                 # episode event log
           trace.jsonl                  # runtime trace
-          preview.png                  # 대표 이미지
+          preview.png                  # optional image. 현재 Runner는 자동 생성하지 않음
           captures/                    # sensor/image/data artifacts
             ...
 ```

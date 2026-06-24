@@ -18,6 +18,7 @@
 #include "EngineUtils.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
+#include "Platform/PlatformUiDeveloperSettings.h"
 #include "Platform/Widget/MainMenuWidget.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorController, Log, All);
@@ -215,12 +216,6 @@ AScenarioEditorController::AScenarioEditorController()
 	bEnableMouseOverEvents = false;
 	PlacementPreviewActorClass = AScenarioPlacementPreviewActor::StaticClass();
 	TransformGizmoActorClass = AScenarioTransformGizmoActor::StaticClass();
-	static ConstructorHelpers::FClassFinder<UMainMenuWidget> mainMenuWidgetFinder(
-		TEXT("/Game/Widgets/MainMenu/WBP_MainMenu"));
-	if (mainMenuWidgetFinder.Succeeded())
-	{
-		MainMenuWidgetClass = mainMenuWidgetFinder.Class;
-	}
 	EditorInputMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Editor.IMC_Editor")));
 	EditorMoveAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorMove.IA_EditorMove")));
 	EditorLookAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorLook.IA_EditorLook")));
@@ -785,22 +780,43 @@ void AScenarioEditorController::NewScenarioDraft()
 	}
 }
 
+// 현재 Editor Draft를 저장하고 성공한 경우 프로젝트 대표 Preview를 갱신한다.
 bool AScenarioEditorController::SaveProjectScenarioJsonFile(
 	const FString& jsonFilePath,
 	FString& outResolvedJsonFilePath,
 	TArray<FString>& outDiagnostics)
 {
+	// 이전 저장 호출의 출력 상태를 초기화한다.
 	outResolvedJsonFilePath.Reset();
 	outDiagnostics.Reset();
 
-	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
-	if (!authoringSubsystem)
+	// JSON 저장 책임을 가진 AuthoringSubsystem을 조회한다.
+	UScenarioAuthoringSubsystem* authoringSubsystem =
+		GetAuthoringSubsystem();
+	if (!IsValid(authoringSubsystem))
 	{
-		outDiagnostics.Add(TEXT("Scenario authoring subsystem is unavailable."));
+		outDiagnostics.Add(
+			TEXT("Scenario authoring subsystem is unavailable."));
 		return false;
 	}
 
-	return authoringSubsystem->SaveProjectScenarioJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
+	// 검증된 scenario.json을 먼저 저장한다.
+	const bool bSaved =
+		authoringSubsystem->SaveProjectScenarioJsonFile(
+			jsonFilePath,
+			outResolvedJsonFilePath,
+			outDiagnostics);
+	if (!bSaved)
+	{
+		return false;
+	}
+
+	// JSON 저장 성공과 분리된 파생 artifact로 Preview를 생성한다.
+	CaptureScenarioPreviewAfterSave(
+		outResolvedJsonFilePath,
+		authoringSubsystem);
+
+	return true;
 }
 
 bool AScenarioEditorController::SaveCurrentScenarioDraft(
@@ -874,13 +890,25 @@ UMainMenuWidget* AScenarioEditorController::ShowMainMenuWidget()
 		return MainMenuWidget.Get();
 	}
 
-	if (!MainMenuWidgetClass)
+	TSubclassOf<UMainMenuWidget> widgetClass = MainMenuWidgetClass;
+	if (!widgetClass)
 	{
-		UE_LOG(LogScenarioEditorController, Error, TEXT("MainMenuWidgetClass is not set."));
+		const UPlatformUiDeveloperSettings* platformUiSettings = GetDefault<UPlatformUiDeveloperSettings>();
+		widgetClass = platformUiSettings
+			? platformUiSettings->MainMenuWidgetClass.LoadSynchronous()
+			: nullptr;
+	}
+
+	if (!widgetClass)
+	{
+		UE_LOG(
+			LogScenarioEditorController,
+			Error,
+			TEXT("MainMenuWidgetClass is not set on the controller or Platform UI project settings."));
 		return nullptr;
 	}
 
-	MainMenuWidget = CreateWidget<UMainMenuWidget>(this, MainMenuWidgetClass);
+	MainMenuWidget = CreateWidget<UMainMenuWidget>(this, widgetClass);
 	if (!MainMenuWidget)
 	{
 		UE_LOG(LogScenarioEditorController, Error, TEXT("Failed to create main menu widget."));

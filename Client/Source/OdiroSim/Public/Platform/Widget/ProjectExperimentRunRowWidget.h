@@ -1,11 +1,12 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "Platform/Widget/OdiroCommonUserWidget.h"
 #include "Shared/SimulationSetupTypes.h"
 #include "ProjectExperimentRunRowWidget.generated.h"
 
 class UButton;
+class UOdiroListItemViewModel;
 class UProgressBar;
 class UTextBlock;
 class UWidget;
@@ -17,7 +18,7 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FProjectExperimentRunRowAnalyzeRequestedNati
 
 // Project run 한 줄의 UMG-owned layout과 state visual을 데이터로 갱신하는 widget.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UProjectExperimentRunRowWidget : public UUserWidget
+class ODIROSIM_API UProjectExperimentRunRowWidget : public UOdiroCommonUserWidget
 {
 	GENERATED_BODY()
 
@@ -32,6 +33,13 @@ public:
 	void InitializeRunRow(
 		const FString& runDirectory,
 		const FString& runId,
+		ESimulationRunState state,
+		float progressPercent,
+		bool bCanAnalyze);
+
+	// 공통 item ViewModel의 run id/path와 표시 상태를 run row UI에 반영한다.
+	void InitializeFromItemViewModel(
+		UOdiroListItemViewModel* itemViewModel,
 		ESimulationRunState state,
 		float progressPercent,
 		bool bCanAnalyze);
@@ -58,6 +66,10 @@ private:
 
 	// 현재 row에서 분석 요청을 허용하는지 여부.
 	bool bAnalyzeEnabled = false;
+
+	// Row 표시 데이터를 제공하는 project run item ViewModel 참조.
+	UPROPERTY(Transient)
+	TObjectPtr<UOdiroListItemViewModel> ItemViewModel;
 
 	// run id 표시 텍스트.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

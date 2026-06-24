@@ -9,6 +9,7 @@ class USizeBox;
 class UButton;
 class UEditableText;
 class UEditableTextBox;
+class UScenarioPlaceableDetailsViewModel;
 class UScenarioPlaceableComponent;
 class UTextBlock;
 class UWidget;
@@ -137,6 +138,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Details")
 	void RefreshFromSelectedPlaceable();
 
+	// Returns the manually injected or subsystem-owned details ViewModel.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Details")
+	UScenarioPlaceableDetailsViewModel* GetDetailsViewModel() const { return DetailsViewModel; }
+
 protected:
 	// Handles the request to make the selected instance id editable.
 	UFUNCTION()
@@ -199,6 +204,8 @@ private:
 	void RequestEditorWidgetInputMode();
 	// Releases editor widget input mode requested by this details panel.
 	void ReleaseEditorWidgetInputMode();
+	// Resolves the subsystem-owned Details ViewModel for command forwarding.
+	void InitializeViewModel();
 	// Commits one transform row after validating the complete transform block.
 	bool CommitTransformField(
 		UEditableTextBox* textBox,
@@ -237,6 +244,9 @@ private:
 
 	// Currently selected placeable whose fields are displayed by the details panel.
 	TWeakObjectPtr<UScenarioPlaceableComponent> SelectedPlaceableComponent;
+	// Details command and display state owned by ScenarioEditorUiSubsystem.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioPlaceableDetailsViewModel> DetailsViewModel;
 	// Guards field-change handlers while the panel is refreshing from selection state.
 	bool bRefreshingFields = false;
 };

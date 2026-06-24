@@ -6,7 +6,8 @@
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
-#include "Scenario/Editor/ScenarioEditorController.h"
+#include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioPlaceableDetailsViewModel.h"
 #include "GameFramework/Actor.h"
 #include "Styling/SlateTypes.h"
 #include "TimerManager.h"
@@ -131,6 +132,7 @@ void UScenarioPlaceableDetailsWidget::NativeOnInitialized()
 void UScenarioPlaceableDetailsWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+	InitializeViewModel();
 	UWidgetTextStyleCatalog::ApplyEditableTextStyle(InstanceIdEditableText.Get(), EWidgetTextStyleRole::Value);
 	UWidgetTextStyleCatalog::ApplyTextBlockStyle(AssetNameTextBlock.Get(), EWidgetTextStyleRole::Value);
 	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(LocationXTextBox.Get(), EWidgetTextStyleRole::Value);
@@ -196,28 +198,25 @@ void UScenarioPlaceableDetailsWidget::HandleEditInstanceIdButtonClicked()
 
 void UScenarioPlaceableDetailsWidget::HandleWorldOrientationButtonClicked()
 {
-	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	if (DetailsViewModel && DetailsViewModel->SetTransformGizmoOrientationMode(EScenarioTransformGizmoOrientationMode::World))
 	{
-		editorController->SetTransformGizmoOrientationMode(EScenarioTransformGizmoOrientationMode::World);
 		RefreshFromSelectedPlaceable();
 	}
 }
 
 void UScenarioPlaceableDetailsWidget::HandleRelativeOrientationButtonClicked()
 {
-	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	if (DetailsViewModel && DetailsViewModel->SetTransformGizmoOrientationMode(EScenarioTransformGizmoOrientationMode::Relative))
 	{
-		editorController->SetTransformGizmoOrientationMode(EScenarioTransformGizmoOrientationMode::Relative);
 		RefreshFromSelectedPlaceable();
 	}
 }
 
 void UScenarioPlaceableDetailsWidget::HandleDeleteButtonClicked()
 {
-	AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
-	if (!editorController)
+	if (!DetailsViewModel)
 	{
-		UE_LOG(LogScenarioPlaceableDetailsWidget, Warning, TEXT("Owning player is not an ScenarioEditorController."));
+		UE_LOG(LogScenarioPlaceableDetailsWidget, Warning, TEXT("ScenarioPlaceableDetailsViewModel unavailable."));
 		return;
 	}
 
@@ -230,7 +229,7 @@ void UScenarioPlaceableDetailsWidget::HandleDeleteButtonClicked()
 		return;
 	}
 
-	if (!editorController->DeleteSelectedPlaceable(failureReason))
+	if (!DetailsViewModel->DeleteSelectedPlaceable(failureReason))
 	{
 		UE_LOG(LogScenarioPlaceableDetailsWidget, Warning, TEXT("Failed to delete selected placeable | %s"), *failureReason);
 		FlashInvalidInstanceIdField();
@@ -245,10 +244,9 @@ void UScenarioPlaceableDetailsWidget::HandleInstanceIdCommitted(const FText& tex
 		return;
 	}
 
-	AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
-	if (!editorController)
+	if (!DetailsViewModel)
 	{
-		UE_LOG(LogScenarioPlaceableDetailsWidget, Warning, TEXT("Owning player is not an ScenarioEditorController."));
+		UE_LOG(LogScenarioPlaceableDetailsWidget, Warning, TEXT("ScenarioPlaceableDetailsViewModel unavailable."));
 		return;
 	}
 
@@ -262,7 +260,7 @@ void UScenarioPlaceableDetailsWidget::HandleInstanceIdCommitted(const FText& tex
 	}
 
 	FString failureReason;
-	if (!editorController->TryRenameSelectedPlaceableInstanceId(text.ToString().TrimStartAndEnd(), failureReason))
+	if (!DetailsViewModel->RenameSelectedPlaceableInstanceId(text.ToString().TrimStartAndEnd(), failureReason))
 	{
 		UE_LOG(LogScenarioPlaceableDetailsWidget, Warning, TEXT("Rejected InstanceId edit | %s"), *failureReason);
 		RefreshFromSelectedPlaceable();
@@ -320,17 +318,30 @@ void UScenarioPlaceableDetailsWidget::HandleScaleZCommitted(const FText&, ETextC
 
 void UScenarioPlaceableDetailsWidget::RequestEditorWidgetInputMode()
 {
-	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	if (DetailsViewModel)
 	{
-		editorController->RequestEditorWidgetInputMode(this);
+		DetailsViewModel->RequestEditorWidgetInputMode(this);
 	}
 }
 
 void UScenarioPlaceableDetailsWidget::ReleaseEditorWidgetInputMode()
 {
-	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	if (DetailsViewModel)
 	{
-		editorController->ReleaseEditorWidgetInputMode(this);
+		DetailsViewModel->ReleaseEditorWidgetInputMode(this);
+	}
+}
+
+void UScenarioPlaceableDetailsWidget::InitializeViewModel()
+{
+	if (DetailsViewModel)
+	{
+		return;
+	}
+
+	if (UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this))
+	{
+		DetailsViewModel = uiSubsystem->GetPlaceableDetailsViewModel();
 	}
 }
 
@@ -367,15 +378,14 @@ bool UScenarioPlaceableDetailsWidget::CommitTransformField(
 		return false;
 	}
 
-	AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
-	if (!editorController)
+	if (!DetailsViewModel)
 	{
-		UE_LOG(LogScenarioPlaceableDetailsWidget, Warning, TEXT("Owning player is not an ScenarioEditorController."));
+		UE_LOG(LogScenarioPlaceableDetailsWidget, Warning, TEXT("ScenarioPlaceableDetailsViewModel unavailable."));
 		return false;
 	}
 
 	FString failureReason;
-	if (!editorController->TryUpdateSelectedPlaceableTransform(transform, failureReason))
+	if (!DetailsViewModel->UpdateSelectedPlaceableTransform(transform, failureReason))
 	{
 		UE_LOG(
 			LogScenarioPlaceableDetailsWidget,
@@ -540,10 +550,9 @@ void UScenarioPlaceableDetailsWidget::ApplyEditPermissions(
 void UScenarioPlaceableDetailsWidget::ApplyOrientationControls(
 	const UScenarioPlaceableComponent* placeableComponent)
 {
-	AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
 	const bool bCanEditOrientation = placeableComponent
-		&& editorController
-		&& editorController->CanEditTransformGizmoOrientationForSelection();
+		&& DetailsViewModel
+		&& DetailsViewModel->CanEditTransformGizmoOrientationForSelection();
 	const ESlateVisibility orientationVisibility = bCanEditOrientation
 		? ESlateVisibility::Visible
 		: ESlateVisibility::Collapsed;
@@ -567,7 +576,7 @@ void UScenarioPlaceableDetailsWidget::ApplyOrientationControls(
 	}
 
 	const EScenarioTransformGizmoOrientationMode effectiveOrientationMode =
-		editorController->GetEffectiveTransformGizmoOrientationMode();
+		DetailsViewModel->GetEffectiveTransformGizmoOrientationMode();
 	if (WorldOrientationButton)
 	{
 		WorldOrientationButton->SetIsEnabled(

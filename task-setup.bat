@@ -33,7 +33,8 @@ if /I "%~1"=="-SkipAgents" (
 )
 
 echo [setup] Unknown option: %~1
-exit /b 1
+set "TASK_EXIT_CODE=1"
+goto exit_task
 
 :run_setup
 echo [setup] Started.
@@ -44,7 +45,10 @@ if not defined SKIP_PREREQUISITES (
 	) else (
 		"%POWERSHELL%" -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%tools\check-prerequisites.ps1"
 	)
-	if errorlevel 1 exit /b 1
+	if errorlevel 1 (
+		set "TASK_EXIT_CODE=1"
+		goto exit_task
+	)
 )
 
 set "INSTALL_ARGS="
@@ -52,7 +56,15 @@ if defined SKIP_GIT_HOOKS set "INSTALL_ARGS=%INSTALL_ARGS% -SkipGitHooks"
 if defined SKIP_AGENTS set "INSTALL_ARGS=%INSTALL_ARGS% -SkipAgents"
 
 "%POWERSHELL%" -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%tools\install.ps1" %INSTALL_ARGS%
-if errorlevel 1 exit /b 1
+if errorlevel 1 (
+	set "TASK_EXIT_CODE=1"
+	goto exit_task
+)
 
 echo [setup] Complete.
-exit /b 0
+set "TASK_EXIT_CODE=0"
+goto exit_task
+
+:exit_task
+call "%SCRIPT_DIR%tools\pause-task-on-exit.bat" "%~nx0"
+exit /b %TASK_EXIT_CODE%

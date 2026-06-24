@@ -13,11 +13,10 @@
 
 ## Scripts
 
-- `Task-Build.bat`: Unreal 빌드
-- `Task-Dev.bat`: Unreal Editor 실행
-- `Task-RunPreview.bat`: Standalone PIE 실행 (`UnrealEditor.exe <uproject> -game -NoSplash`)
+- `..\task-build.bat client`: Unreal 빌드
+- `..\task-dev.bat -SkipAgents`: Unreal Editor 실행
+- `..\task-run.bat -SkipAgents -SkipBridge -- <PreviewArgs>`: Standalone PIE 실행 (`UnrealEditor.exe <uproject> -game -NoSplash`)
   - user project run: `-OdiroProject=<UserProject> -RunId=<RunId> [-PolicyPort=<Port>]`
-- `Task-RunPythonPolicyServer.bat`: `Resources\policy-runtime.py` 실행
 - Rider `.run/*.run.xml`: `task-setup.bat` 실행 시 `tools/sync-ide-run-configs.ps1`가 루트 VSCode 실행/태스크 흐름과 맞춰 생성
   - `Preview Services`: `Preview Mode` 디버깅 전 Agents API와 Bridge service 실행
   - `Preview Mode`: Rider Unreal 실행 설정으로 Client preview mode 실행. C++ 디버깅 가능

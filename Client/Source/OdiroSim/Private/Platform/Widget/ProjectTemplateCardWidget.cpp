@@ -4,6 +4,7 @@
 #include "Components/Button.h"
 #include "Input/Events.h"
 #include "InputCoreTypes.h"
+#include "Platform/ViewModel/OdiroListItemViewModel.h"
 #include "Components/TextBlock.h"
 #include "Styling/SlateBrush.h"
 
@@ -76,6 +77,7 @@ void UProjectTemplateCardWidget::InitializeCard(
 	const FString& displayName,
 	const FString& subtitle)
 {
+	ItemViewModel = nullptr;
 	ItemId = itemId.TrimStartAndEnd();
 
 	const FString visibleName = displayName.TrimStartAndEnd().IsEmpty()
@@ -95,6 +97,29 @@ void UProjectTemplateCardWidget::InitializeCard(
 	}
 
 	RefreshVisualState();
+}
+
+void UProjectTemplateCardWidget::InitializeFromItemViewModel(UOdiroListItemViewModel* itemViewModel)
+{
+	ItemViewModel = itemViewModel;
+	if (!ItemViewModel)
+	{
+		InitializeCard(FString(), FString(), FString());
+		SetSelected(false);
+		if (CardButton)
+		{
+			CardButton->SetIsEnabled(false);
+		}
+		return;
+	}
+
+	InitializeCard(ItemViewModel->GetItemId(), ItemViewModel->GetTitle(), ItemViewModel->GetSubtitle());
+	ItemViewModel = itemViewModel;
+	SetSelected(ItemViewModel->IsSelected());
+	if (CardButton)
+	{
+		CardButton->SetIsEnabled(ItemViewModel->IsEnabled());
+	}
 }
 
 void UProjectTemplateCardWidget::SetSelected(const bool bInSelected)

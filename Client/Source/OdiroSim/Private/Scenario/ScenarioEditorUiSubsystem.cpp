@@ -1,0 +1,644 @@
+#include "Scenario/ScenarioEditorUiSubsystem.h"
+
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
+#include "Misc/Guid.h"
+#include "Misc/Paths.h"
+#include "Platform/ScenarioEditorLaunchSubsystem.h"
+#include "Platform/SimulatorLaunchSubsystem.h"
+#include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
+#include "Scenario/Editor/ScenarioEditorController.h"
+#include "Scenario/Llm/ScenarioLlmAuthoringSubsystem.h"
+#include "Scenario/ViewModel/ScenarioAssetPaletteViewModel.h"
+#include "Scenario/ViewModel/ScenarioEditorOutlinerViewModel.h"
+#include "Scenario/ViewModel/ScenarioEditorShellViewModel.h"
+#include "Scenario/ViewModel/ScenarioEditorToolbarViewModel.h"
+#include "Scenario/ViewModel/ScenarioLlmPromptViewModel.h"
+#include "Scenario/ViewModel/ScenarioPlaceableDetailsViewModel.h"
+#include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
+#include "Components/Widget.h"
+#include "Shared/ScenarioCoreTypes.h"
+
+namespace
+{
+	const TCHAR* ScenarioEditorUiProjectScenarioFileName = TEXT("scenario.json");
+
+	FString ResolveScenarioEditorUiProjectScenarioJsonPath(FString rawPath)
+	{
+		rawPath.TrimStartAndEndInline();
+		rawPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (rawPath.IsEmpty())
+		{
+			return FString();
+		}
+
+		if (FPaths::GetExtension(rawPath).IsEmpty())
+		{
+			rawPath = FPaths::Combine(rawPath, ScenarioEditorUiProjectScenarioFileName);
+		}
+		if (FPaths::IsRelative(rawPath))
+		{
+			rawPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), rawPath);
+		}
+		FPaths::NormalizeFilename(rawPath);
+		return rawPath;
+	}
+
+	bool IsScenarioEditorUiProjectScenarioJsonPath(const FString& scenarioJsonPath)
+	{
+		return FPaths::GetCleanFilename(scenarioJsonPath).Equals(
+			ScenarioEditorUiProjectScenarioFileName,
+			ESearchCase::IgnoreCase);
+	}
+
+	// 기존 저장 파일을 덮어쓰지 않는 기본 scenario.json 저장 후보를 만든다.
+	FString MakeUniqueScenarioEditorUiSavePath(const FString& preferredPath)
+	{
+		FString directory = FPaths::GetPath(preferredPath);
+		if (directory.IsEmpty())
+		{
+			directory = TEXT("Saved/UserProjects/ScenarioEditor");
+		}
+
+		const FString baseName = FPaths::GetBaseFilename(preferredPath).IsEmpty()
+			? FString(TEXT("scenario"))
+			: FPaths::GetBaseFilename(preferredPath);
+		const FString extension = FPaths::GetExtension(preferredPath).IsEmpty()
+			? FString(TEXT("json"))
+			: FPaths::GetExtension(preferredPath);
+
+		for (int32 index = 0; index < 1000; ++index)
+		{
+			const FString fileName = index == 0
+				? FString::Printf(TEXT("%s.%s"), *baseName, *extension)
+				: FString::Printf(TEXT("%s_%d.%s"), *baseName, index, *extension);
+			FString candidatePath = FPaths::Combine(directory, fileName);
+			candidatePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+			const FString resolvedCandidatePath = FPaths::IsRelative(candidatePath)
+				? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), candidatePath)
+				: FPaths::ConvertRelativePathToFull(candidatePath);
+			if (!FPaths::FileExists(resolvedCandidatePath))
+			{
+				return candidatePath;
+			}
+		}
+
+		FString fallbackPath = FPaths::Combine(
+			directory,
+			FString::Printf(
+				TEXT("%s_%s.%s"),
+				*baseName,
+				*FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(8),
+				*extension));
+		fallbackPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		return fallbackPath;
+	}
+}
+
+void UScenarioEditorUiSubsystem::Initialize(FSubsystemCollectionBase& collection)
+{
+	Super::Initialize(collection);
+
+	ShellViewModel = NewObject<UScenarioEditorShellViewModel>(this);
+	ToolbarViewModel = NewObject<UScenarioEditorToolbarViewModel>(this);
+	OutlinerViewModel = NewObject<UScenarioEditorOutlinerViewModel>(this);
+	AssetPaletteViewModel = NewObject<UScenarioAssetPaletteViewModel>(this);
+	PlaceableDetailsViewModel = NewObject<UScenarioPlaceableDetailsViewModel>(this);
+	LlmPromptViewModel = NewObject<UScenarioLlmPromptViewModel>(this);
+	TemplateSidebarViewModel = NewObject<UScenarioTemplateSidebarViewModel>(this);
+
+	if (ShellViewModel)
+	{
+		ShellViewModel->InitializeForSubsystem(this);
+	}
+	if (ToolbarViewModel)
+	{
+		ToolbarViewModel->InitializeForSubsystem(this);
+	}
+	if (OutlinerViewModel)
+	{
+		OutlinerViewModel->InitializeForSubsystem(this);
+	}
+	if (AssetPaletteViewModel)
+	{
+		AssetPaletteViewModel->InitializeForSubsystem(this);
+	}
+	if (PlaceableDetailsViewModel)
+	{
+		PlaceableDetailsViewModel->InitializeForSubsystem(this);
+	}
+	if (LlmPromptViewModel)
+	{
+		LlmPromptViewModel->InitializeForSubsystem(this);
+	}
+	if (TemplateSidebarViewModel)
+	{
+		TemplateSidebarViewModel->InitializeForSubsystem(this);
+	}
+
+	if (UScenarioEditorLaunchSubsystem* launchSubsystem = ResolveScenarioEditorLaunchSubsystem())
+	{
+		launchSubsystem->OnAutoStartCompleted().RemoveAll(this);
+		EditorAutoStartCompletedHandle = launchSubsystem->OnAutoStartCompleted().AddUObject(
+			this,
+			&UScenarioEditorUiSubsystem::HandleEditorAutoStartCompleted);
+	}
+
+	RefreshFromEditorState();
+}
+
+void UScenarioEditorUiSubsystem::Deinitialize()
+{
+	if (EditorAutoStartCompletedHandle.IsValid())
+	{
+		if (UScenarioEditorLaunchSubsystem* launchSubsystem = ResolveScenarioEditorLaunchSubsystem())
+		{
+			launchSubsystem->OnAutoStartCompleted().Remove(EditorAutoStartCompletedHandle);
+		}
+		EditorAutoStartCompletedHandle.Reset();
+	}
+
+	ShellViewModel = nullptr;
+	ToolbarViewModel = nullptr;
+	OutlinerViewModel = nullptr;
+	AssetPaletteViewModel = nullptr;
+	PlaceableDetailsViewModel = nullptr;
+	LlmPromptViewModel = nullptr;
+	TemplateSidebarViewModel = nullptr;
+
+	Super::Deinitialize();
+}
+
+UScenarioEditorUiSubsystem* UScenarioEditorUiSubsystem::ResolveForWorldContext(const UObject* worldContextObject)
+{
+	UWorld* world = worldContextObject ? worldContextObject->GetWorld() : nullptr;
+	return world ? world->GetSubsystem<UScenarioEditorUiSubsystem>() : nullptr;
+}
+
+bool UScenarioEditorUiSubsystem::HasAutoStartedScenarioEditorSession() const
+{
+	const UScenarioEditorLaunchSubsystem* launchSubsystem = ResolveScenarioEditorLaunchSubsystem();
+	return launchSubsystem && launchSubsystem->HasAutoStartedScenarioEditorSession();
+}
+
+bool UScenarioEditorUiSubsystem::WasAutoStartedScenarioEditorSessionLoadedExistingScenario() const
+{
+	const UScenarioEditorLaunchSubsystem* launchSubsystem = ResolveScenarioEditorLaunchSubsystem();
+	return launchSubsystem && launchSubsystem->WasAutoStartedScenarioEditorSessionLoadedExistingScenario();
+}
+
+void UScenarioEditorUiSubsystem::RefreshFromEditorState()
+{
+	if (ShellViewModel)
+	{
+		ShellViewModel->RefreshFromController();
+	}
+	if (OutlinerViewModel)
+	{
+		OutlinerViewModel->RefreshTemplatePanels();
+	}
+	if (TemplateSidebarViewModel && ShellViewModel)
+	{
+		TemplateSidebarViewModel->SelectPanel(ShellViewModel->GetActiveSidebarPanel());
+	}
+}
+
+bool UScenarioEditorUiSubsystem::SaveScenario(
+	const FString& defaultSavePath,
+	FString& outResolvedPath,
+	TArray<FString>& outDiagnostics) const
+{
+	outResolvedPath.Reset();
+	outDiagnostics.Reset();
+
+	AScenarioEditorController* editorController = ResolveEditorController();
+	if (!editorController)
+	{
+		outDiagnostics.Add(TEXT("ScenarioEditorController unavailable."));
+		return false;
+	}
+
+	const FString savePath = ResolveSavePath(defaultSavePath);
+	return editorController->SaveProjectScenarioJsonFile(savePath, outResolvedPath, outDiagnostics);
+}
+
+bool UScenarioEditorUiSubsystem::RequestScenarioGeneration(
+	const FString& prompt,
+	const FString& projectScenarioJsonPath,
+	const int32 episodeCount,
+	FString& outFailureReason) const
+{
+	outFailureReason.Reset();
+
+	UScenarioLlmAuthoringSubsystem* llmSubsystem = ResolveLlmAuthoringSubsystem();
+	if (!llmSubsystem)
+	{
+		outFailureReason = TEXT("Scenario LLM subsystem unavailable.");
+		return false;
+	}
+
+	if (!llmSubsystem->GenerateProjectScenarioFromPrompt(prompt, projectScenarioJsonPath, episodeCount))
+	{
+		outFailureReason = TEXT("Scenario generation request rejected.");
+		return false;
+	}
+
+	return true;
+}
+
+bool UScenarioEditorUiSubsystem::BindScenarioGenerationCompleted(UObject* listener, const FName functionName) const
+{
+	if (!listener || functionName.IsNone())
+	{
+		return false;
+	}
+
+	UScenarioLlmAuthoringSubsystem* llmSubsystem = ResolveLlmAuthoringSubsystem();
+	if (!llmSubsystem)
+	{
+		return false;
+	}
+
+	FScriptDelegate delegate;
+	delegate.BindUFunction(listener, functionName);
+	llmSubsystem->OnGenerationCompleted.Remove(delegate);
+	llmSubsystem->OnGenerationCompleted.Add(delegate);
+	return true;
+}
+
+void UScenarioEditorUiSubsystem::UnbindScenarioGenerationCompleted(UObject* listener) const
+{
+	if (listener)
+	{
+		if (UScenarioLlmAuthoringSubsystem* llmSubsystem = ResolveLlmAuthoringSubsystem())
+		{
+			llmSubsystem->OnGenerationCompleted.RemoveAll(listener);
+		}
+	}
+}
+
+int32 UScenarioEditorUiSubsystem::GetDefaultScenarioGenerationEpisodeCount() const
+{
+	const UScenarioLlmAuthoringSubsystem* llmSubsystem = ResolveLlmAuthoringSubsystem();
+	return llmSubsystem ? FMath::Max(1, llmSubsystem->DefaultEpisodeCount) : 1;
+}
+
+FString UScenarioEditorUiSubsystem::GetLatestGeneratedProjectScenarioPath() const
+{
+	const UScenarioLlmAuthoringSubsystem* llmSubsystem = ResolveLlmAuthoringSubsystem();
+	if (!llmSubsystem)
+	{
+		return FString();
+	}
+
+	const FScenarioLlmGenerationResult result = llmSubsystem->GetLatestResult();
+	if (!result.bSuccess || result.ProjectScenarioJsonPath.IsEmpty())
+	{
+		return FString();
+	}
+
+	const FString scenarioJsonPath = ResolveScenarioEditorUiProjectScenarioJsonPath(result.ProjectScenarioJsonPath);
+	return IsScenarioEditorUiProjectScenarioJsonPath(scenarioJsonPath) ? scenarioJsonPath : FString();
+}
+
+bool UScenarioEditorUiSubsystem::ResolveCurrentProjectScenarioPath(
+	FString& outScenarioJsonPath,
+	FString& outProjectPath,
+	FString& outFailureReason) const
+{
+	outScenarioJsonPath.Reset();
+	outProjectPath.Reset();
+	outFailureReason.Reset();
+
+	const AScenarioEditorController* editorController = ResolveEditorController();
+	if (!editorController)
+	{
+		outFailureReason = TEXT("ScenarioEditorController unavailable.");
+		return false;
+	}
+
+	outScenarioJsonPath = ResolveScenarioEditorUiProjectScenarioJsonPath(
+		editorController->GetSourceProjectScenarioJsonPath());
+	if (!IsScenarioEditorUiProjectScenarioJsonPath(outScenarioJsonPath))
+	{
+		outFailureReason = TEXT("LLM generate/load/run requires the editor source to be <UserProject>/scenario.json.");
+		return false;
+	}
+
+	outProjectPath = FPaths::GetPath(outScenarioJsonPath);
+	if (outProjectPath.IsEmpty())
+	{
+		outFailureReason = TEXT("Project path could not be resolved from scenario.json.");
+		return false;
+	}
+
+	return true;
+}
+
+bool UScenarioEditorUiSubsystem::LoadLatestGeneratedProjectScenario(FString& outStatusText) const
+{
+	outStatusText.Reset();
+
+	AScenarioEditorController* editorController = ResolveEditorController();
+	if (!editorController)
+	{
+		outStatusText = TEXT("ScenarioEditorController unavailable.");
+		return false;
+	}
+
+	FString scenarioJsonPath = GetLatestGeneratedProjectScenarioPath();
+	FString projectPath;
+	if (scenarioJsonPath.IsEmpty())
+	{
+		FString failureReason;
+		if (!ResolveCurrentProjectScenarioPath(scenarioJsonPath, projectPath, failureReason))
+		{
+			outStatusText = failureReason;
+			return false;
+		}
+	}
+
+	FString resolvedJsonFilePath;
+	TArray<FString> diagnostics;
+	if (!editorController->LoadProjectScenarioJsonFile(scenarioJsonPath, resolvedJsonFilePath, diagnostics))
+	{
+		outStatusText = diagnostics.IsEmpty()
+			? FString::Printf(TEXT("scenario.json load failed: %s"), *scenarioJsonPath)
+			: FString::Printf(TEXT("scenario.json load failed:\n%s"), *FString::Join(diagnostics, TEXT("\n")));
+		return false;
+	}
+
+	outStatusText = FString::Printf(TEXT("Loaded project scenario: %s"), *resolvedJsonFilePath);
+	return true;
+}
+
+bool UScenarioEditorUiSubsystem::RunCurrentProjectScenario(FString& outStatusText) const
+{
+	outStatusText.Reset();
+
+	USimulatorLaunchSubsystem* launchSubsystem = ResolveSimulatorLaunchSubsystem();
+	if (!launchSubsystem)
+	{
+		outStatusText = TEXT("SimulatorLaunchSubsystem is unavailable.");
+		return false;
+	}
+
+	FString scenarioJsonPath;
+	FString projectPath;
+	if (!SaveCurrentProjectScenario(scenarioJsonPath, projectPath, outStatusText))
+	{
+		return false;
+	}
+
+	FString runId;
+	TArray<FString> diagnostics;
+	if (!launchSubsystem->PrepareProjectRunSnapshot(projectPath, FString(), runId, diagnostics))
+	{
+		outStatusText = diagnostics.IsEmpty()
+			? FString::Printf(TEXT("Project run snapshot preparation failed: %s"), *projectPath)
+			: FString::Printf(TEXT("Project run snapshot preparation failed:\n%s"), *FString::Join(diagnostics, TEXT("\n")));
+		return false;
+	}
+
+	if (!launchSubsystem->StartProjectRun(projectPath, runId))
+	{
+		outStatusText = launchSubsystem->GetLastError();
+		return false;
+	}
+
+	outStatusText = FString::Printf(TEXT("Project run launch requested: %s / %s"), *projectPath, *runId);
+	return true;
+}
+
+bool UScenarioEditorUiSubsystem::ReturnToStartup(const FString& startupMapId) const
+{
+	const FString trimmedMapId = startupMapId.TrimStartAndEnd();
+	if (trimmedMapId.IsEmpty())
+	{
+		return false;
+	}
+
+	UWorld* world = GetWorld();
+	if (!world)
+	{
+		return false;
+	}
+
+	UGameplayStatics::OpenLevel(world, FName(*trimmedMapId));
+	return true;
+}
+
+void UScenarioEditorUiSubsystem::RequestEditorWidgetInputMode(UWidget* requestingWidget) const
+{
+	if (!requestingWidget)
+	{
+		return;
+	}
+
+	if (AScenarioEditorController* editorController = ResolveEditorController())
+	{
+		editorController->RequestEditorWidgetInputMode(requestingWidget);
+	}
+}
+
+void UScenarioEditorUiSubsystem::ReleaseEditorWidgetInputMode(UWidget* requestingWidget) const
+{
+	if (!requestingWidget)
+	{
+		return;
+	}
+
+	if (AScenarioEditorController* editorController = ResolveEditorController())
+	{
+		editorController->ReleaseEditorWidgetInputMode(requestingWidget);
+	}
+}
+
+bool UScenarioEditorUiSubsystem::SetTransformGizmoOrientationMode(
+	const EScenarioTransformGizmoOrientationMode orientationMode) const
+{
+	AScenarioEditorController* editorController = ResolveEditorController();
+	if (!editorController)
+	{
+		return false;
+	}
+
+	editorController->SetTransformGizmoOrientationMode(orientationMode);
+	return true;
+}
+
+bool UScenarioEditorUiSubsystem::CanEditTransformGizmoOrientationForSelection() const
+{
+	const AScenarioEditorController* editorController = ResolveEditorController();
+	return editorController && editorController->CanEditTransformGizmoOrientationForSelection();
+}
+
+EScenarioTransformGizmoOrientationMode UScenarioEditorUiSubsystem::GetEffectiveTransformGizmoOrientationMode() const
+{
+	const AScenarioEditorController* editorController = ResolveEditorController();
+	return editorController
+		? editorController->GetEffectiveTransformGizmoOrientationMode()
+		: EScenarioTransformGizmoOrientationMode::World;
+}
+
+bool UScenarioEditorUiSubsystem::DeleteSelectedPlaceable(FString& outFailureReason) const
+{
+	outFailureReason.Reset();
+
+	AScenarioEditorController* editorController = ResolveEditorController();
+	if (!editorController)
+	{
+		outFailureReason = TEXT("ScenarioEditorController unavailable.");
+		return false;
+	}
+
+	return editorController->DeleteSelectedPlaceable(outFailureReason);
+}
+
+bool UScenarioEditorUiSubsystem::RenameSelectedPlaceableInstanceId(
+	const FString& instanceId,
+	FString& outFailureReason) const
+{
+	outFailureReason.Reset();
+
+	AScenarioEditorController* editorController = ResolveEditorController();
+	if (!editorController)
+	{
+		outFailureReason = TEXT("ScenarioEditorController unavailable.");
+		return false;
+	}
+
+	return editorController->TryRenameSelectedPlaceableInstanceId(instanceId.TrimStartAndEnd(), outFailureReason);
+}
+
+bool UScenarioEditorUiSubsystem::UpdateSelectedPlaceableTransform(
+	const FTransform& transform,
+	FString& outFailureReason) const
+{
+	outFailureReason.Reset();
+
+	AScenarioEditorController* editorController = ResolveEditorController();
+	if (!editorController)
+	{
+		outFailureReason = TEXT("ScenarioEditorController unavailable.");
+		return false;
+	}
+
+	return editorController->TryUpdateSelectedPlaceableTransform(transform, outFailureReason);
+}
+
+void UScenarioEditorUiSubsystem::GetStaticObstaclePaletteEntries(
+	TArray<FScenarioStaticObstaclePropEntry>& outEntries) const
+{
+	outEntries.Reset();
+	if (const AScenarioEditorController* editorController = ResolveEditorController())
+	{
+		editorController->GetStaticObstaclePaletteEntries(outEntries);
+	}
+}
+
+bool UScenarioEditorUiSubsystem::BeginPalettePlacement(
+	const EScenarioPaletteItemType itemType,
+	const FName assetId) const
+{
+	AScenarioEditorController* editorController = ResolveEditorController();
+	return editorController && editorController->BeginPalettePlacement(itemType, assetId);
+}
+
+bool UScenarioEditorUiSubsystem::BeginGroundRegionDraw(
+	const EScenarioGroundRegionType regionType) const
+{
+	AScenarioEditorController* editorController = ResolveEditorController();
+	return editorController && editorController->BeginGroundRegionDraw(regionType);
+}
+
+AScenarioEditorController* UScenarioEditorUiSubsystem::ResolveEditorController() const
+{
+	UWorld* world = GetWorld();
+	return world ? Cast<AScenarioEditorController>(world->GetFirstPlayerController()) : nullptr;
+}
+
+UScenarioAuthoringSubsystem* UScenarioEditorUiSubsystem::ResolveAuthoringSubsystem() const
+{
+	UWorld* world = GetWorld();
+	return world ? world->GetSubsystem<UScenarioAuthoringSubsystem>() : nullptr;
+}
+
+FString UScenarioEditorUiSubsystem::ResolveSavePath(const FString& defaultSavePath) const
+{
+	if (const AScenarioEditorController* editorController = ResolveEditorController())
+	{
+		const FString sourcePath = editorController->GetSourceProjectScenarioJsonPath();
+		if (!sourcePath.IsEmpty())
+		{
+			return sourcePath;
+		}
+	}
+
+	return MakeUniqueScenarioEditorUiSavePath(defaultSavePath);
+}
+
+UScenarioLlmAuthoringSubsystem* UScenarioEditorUiSubsystem::ResolveLlmAuthoringSubsystem() const
+{
+	UWorld* world = GetWorld();
+	UGameInstance* gameInstance = world ? world->GetGameInstance() : nullptr;
+	return gameInstance ? gameInstance->GetSubsystem<UScenarioLlmAuthoringSubsystem>() : nullptr;
+}
+
+USimulatorLaunchSubsystem* UScenarioEditorUiSubsystem::ResolveSimulatorLaunchSubsystem() const
+{
+	UWorld* world = GetWorld();
+	UGameInstance* gameInstance = world ? world->GetGameInstance() : nullptr;
+	return gameInstance ? gameInstance->GetSubsystem<USimulatorLaunchSubsystem>() : nullptr;
+}
+
+UScenarioEditorLaunchSubsystem* UScenarioEditorUiSubsystem::ResolveScenarioEditorLaunchSubsystem() const
+{
+	UWorld* world = GetWorld();
+	UGameInstance* gameInstance = world ? world->GetGameInstance() : nullptr;
+	return gameInstance ? gameInstance->GetSubsystem<UScenarioEditorLaunchSubsystem>() : nullptr;
+}
+
+void UScenarioEditorUiSubsystem::HandleEditorAutoStartCompleted(const bool bLoadedExistingScenario)
+{
+	EditorAutoStartCompletedEvent.Broadcast(bLoadedExistingScenario);
+}
+
+bool UScenarioEditorUiSubsystem::SaveCurrentProjectScenario(
+	FString& outScenarioJsonPath,
+	FString& outProjectPath,
+	FString& outStatusText) const
+{
+	outScenarioJsonPath.Reset();
+	outProjectPath.Reset();
+	outStatusText.Reset();
+
+	AScenarioEditorController* editorController = ResolveEditorController();
+	if (!editorController)
+	{
+		outStatusText = TEXT("ScenarioEditorController unavailable.");
+		return false;
+	}
+
+	FString failureReason;
+	if (!ResolveCurrentProjectScenarioPath(outScenarioJsonPath, outProjectPath, failureReason))
+	{
+		outStatusText = failureReason;
+		return false;
+	}
+
+	FString resolvedJsonFilePath;
+	TArray<FString> diagnostics;
+	if (!editorController->SaveProjectScenarioJsonFile(outScenarioJsonPath, resolvedJsonFilePath, diagnostics))
+	{
+		outStatusText = diagnostics.IsEmpty()
+			? FString::Printf(TEXT("scenario.json save failed: %s"), *outScenarioJsonPath)
+			: FString::Printf(TEXT("scenario.json save failed:\n%s"), *FString::Join(diagnostics, TEXT("\n")));
+		return false;
+	}
+
+	outScenarioJsonPath = ResolveScenarioEditorUiProjectScenarioJsonPath(resolvedJsonFilePath);
+	outProjectPath = FPaths::GetPath(outScenarioJsonPath);
+	return true;
+}

@@ -1,24 +1,18 @@
 id: agents-tooling-harness
 owner: Agents
-description: Agents-local task scripts, tools, tests, and harness checks.
+description: Agents-local tools, tests, and harness checks.
 paths:
   - Agents/harness/**
   - Agents/scripts/**
   - Agents/tools/**
   - Agents/tests/**
   - Agents/docs/tooling/**
-  - Agents/task-setup.bat
-  - Agents/task-run.bat
-  - Agents/task-dev.bat
   - Agents/pyproject.toml
   - Agents/uv.lock
 entry:
   - id: primary
-    description: Agents setup/run scripts, tools, harness, and tests.
+    description: Agents tools, harness, and tests.
     read:
-      - Agents/task-setup.bat
-      - Agents/task-run.bat
-      - Agents/task-dev.bat
       - Agents/tools
       - Agents/harness
       - Agents/tests
@@ -26,6 +20,7 @@ entry:
 guardrails:
   - Agents tools use `Agents/tools/common.ps1`, never root `tools/common.ps1`.
   - Agents is a Python server; do not add a root build expectation for it.
+  - Root `task-setup.bat`, `task-run.bat`, and `task-dev.bat` are the user-facing Agents task entrypoints.
   - Setup should keep repeated `uv sync` calls cheap when the environment is already synchronized.
   - Harness checks stay Agents-local unless promoted to root CI intentionally.
 verify:

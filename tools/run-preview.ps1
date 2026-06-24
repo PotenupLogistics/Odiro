@@ -61,7 +61,7 @@ $options = Parse-RunArguments @args
 $repoRoot = Get-RepoRoot
 $agentsRunScript = Join-Path $repoRoot "Agents\tools\run.ps1"
 $bridgeRunScript = Join-Path $repoRoot "Bridge\tools\run.ps1"
-$clientPreview = Join-Path $repoRoot "Client\Task-RunPreview.bat"
+$clientPreview = Join-Path $repoRoot "Client\Tools\RunPreview.ps1"
 $analysisEndpointArg = "-ProjectRunAnalysisEndpointUrl=http://127.0.0.1:$($options.AgentsPort)/api/v2/analysis/run"
 if (-not ($options.PreviewArgs | Where-Object { $_ -like "-ProjectRunAnalysisEndpointUrl=*" })) {
     $options.PreviewArgs += $analysisEndpointArg
@@ -142,9 +142,10 @@ try {
         $bridgeStderrLog = Join-Path $logsDir "run-bridge.err.log"
 
         Write-Step "Start Bridge service"
+        # Windows PowerShell flattens ArgumentList, so preserve quotes around paths containing spaces.
         $bridgeProcess = Start-Process `
             -FilePath "powershell.exe" `
-            -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $bridgeRunScript) `
+            -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$bridgeRunScript`"") `
             -WorkingDirectory $repoRoot `
             -WindowStyle Hidden `
             -RedirectStandardOutput $bridgeStdoutLog `

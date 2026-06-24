@@ -408,7 +408,7 @@ T10 처리:
 - 통과:
   - `git diff --check`
   - OdiroSimEditor build
-    - `Client\Task-Build.bat`
+    - `task-build.bat client`
   - MCP Blueprint compile/save
     - `WBP_MainMenu`
     - project mode BindWidget 이름 존재 확인
@@ -429,7 +429,7 @@ T10 처리:
 남은 판단:
 
 - Bridge IPC client를 UE에 붙일 시점
-- root `Client/Task-Build.bat`는 병렬/XGE에서 MSVC PCH memory 부족 가능
+- root `task-build.bat client`는 병렬/XGE에서 MSVC PCH memory 부족 가능
 
 ## 검색 명령
 

@@ -426,13 +426,35 @@ bool UUmgGetSubsystem::CheckWidgetOverlap(UWidgetBlueprint* WidgetBlueprint, con
     TArray<UWidget*> AllWidgets;
     WidgetBlueprint->WidgetTree->GetAllWidgets(AllWidgets);
 
+    TSet<FString> RequestedWidgets;
+    for (const FString& WidgetId : WidgetIds)
+    {
+        if (!WidgetId.IsEmpty())
+        {
+            RequestedWidgets.Add(WidgetId);
+        }
+    }
+
     TArray<FSlateRect> BoundingBoxes;
     for (UWidget* Widget : AllWidgets)
     {
         if (Widget && Widget->GetCachedWidget().IsValid())
         {
+            if (RequestedWidgets.Num() > 0 &&
+                !RequestedWidgets.Contains(Widget->GetName()) &&
+                !RequestedWidgets.Contains(Widget->GetPathName()))
+            {
+                continue;
+            }
+
             BoundingBoxes.Add(Widget->GetCachedWidget()->GetTickSpaceGeometry().GetLayoutBoundingRect());
         }
+    }
+
+    if (BoundingBoxes.Num() < 2)
+    {
+        UE_LOG(LogUmgGet, Log, TEXT("CheckWidgetOverlap: Fewer than two cached widget geometries available for '%s'."), *WidgetBlueprint->GetPathName());
+        return false;
     }
 
     for (int32 i = 0; i < BoundingBoxes.Num(); ++i)

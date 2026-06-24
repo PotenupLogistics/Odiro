@@ -1,16 +1,16 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
+#include "Platform/Widget/OdiroActivatableScreenWidget.h"
 #include "StartupMenuWidget.generated.h"
 
 class UButton;
 class UComboBoxString;
 class UEditableTextBox;
-class UProjectSessionSubsystem;
+class UPlatformUiSubsystem;
 class UProjectTemplateCardWidget;
-class UScenarioEditorLaunchSubsystem;
+class UStartupMenuViewModel;
 class UTextBlock;
 class UWidget;
 class UWidgetSwitcher;
@@ -18,7 +18,7 @@ class UWrapBox;
 
 // StartupMap project picker that selects or creates a user project before loading ScenarioEditorMap.
 UCLASS(BlueprintType, Blueprintable)
-class ODIROSIM_API UStartupMenuWidget : public UUserWidget
+class ODIROSIM_API UStartupMenuWidget : public UOdiroActivatableScreenWidget
 {
 	GENERATED_BODY()
 
@@ -42,11 +42,8 @@ public:
 		const FString& profilePresetId,
 		const FString& policyPresetId);
 
-	// Creates the selected project through the simulator launch subsystem.
-	bool CreateSelectedProject(TArray<FString>& outDiagnostics, USimulatorLaunchSubsystem* simulatorLaunchSubsystem = nullptr);
-
 	// Validates the selected project through the simulator launch subsystem.
-	bool ValidateSelectedProject(TArray<FString>& outDiagnostics, USimulatorLaunchSubsystem* simulatorLaunchSubsystem = nullptr) const;
+	bool ValidateSelectedProject(TArray<FString>& outDiagnostics, USimulatorLaunchSubsystem* simulatorLaunchSubsystem = nullptr);
 
 	// Adds an existing user project to the recent list without opening it.
 	bool AddRecentProjectForPrototype(
@@ -55,7 +52,11 @@ public:
 		USimulatorLaunchSubsystem* simulatorLaunchSubsystem = nullptr);
 
 	// Returns normalized recent project paths ordered newest-first.
-	TArray<FString> GetRecentProjectPathsForPrototype() const;
+	TArray<FString> GetRecentProjectPathsForPrototype();
+
+	// Startup menu ViewModel 연결 상태를 반환한다.
+	UFUNCTION(BlueprintPure, Category = "StartupMenu|ViewModel")
+	UStartupMenuViewModel* GetStartupMenuViewModel() const { return StartupMenuViewModel; }
 
 protected:
 	UFUNCTION()
@@ -94,9 +95,6 @@ private:
 	void InitializeProjectPathInputs();
 	void LoadProjectOpenOptions();
 	void SaveProjectOpenOptions();
-	void LoadRecentProjectPaths();
-	void SaveRecentProjectPaths() const;
-	void RememberRecentProject(const FString& projectPath);
 	bool RemoveRecentProject(const FString& projectPath);
 	void CacheProjectOpenOptionsFromWidgets();
 	void ShowRecentProjectsScreen();
@@ -135,13 +133,16 @@ private:
 	FProjectPresetSelection GetSelectedProjectPresetSelection() const;
 
 	TSubclassOf<UProjectTemplateCardWidget> ResolveProjectTemplateCardWidgetClass() const;
-	USimulatorLaunchSubsystem* GetSimulatorLaunchSubsystem() const;
-	UScenarioEditorLaunchSubsystem* GetScenarioEditorLaunchSubsystem() const;
-	UProjectSessionSubsystem* GetProjectSessionSubsystem() const;
+	UStartupMenuViewModel* EnsureStartupMenuViewModel(USimulatorLaunchSubsystem* simulatorLaunchSubsystem = nullptr);
+	UPlatformUiSubsystem* GetPlatformUiSubsystem() const;
 
 	// Startup flow screen switcher owned by WBP_StartupMenu.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidgetSwitcher> StartupScreenSwitcher;
+
+	// PlatformUiSubsystem이 소유하는 startup ViewModel 참조.
+	UPROPERTY(Transient)
+	TObjectPtr<UStartupMenuViewModel> StartupMenuViewModel;
 
 	// Recent project card screen owned by WBP_StartupMenu.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

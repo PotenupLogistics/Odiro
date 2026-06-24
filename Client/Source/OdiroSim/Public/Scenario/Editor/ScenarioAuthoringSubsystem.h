@@ -22,6 +22,7 @@ class AActor;
 class FJsonObject;
 class FJsonValue;
 class UScenarioCorridorSurfaceCatalog;
+struct FScenarioMapBounds;
 
 UCLASS(BlueprintType)
 class ODIROSIM_API UScenarioAuthoringSubsystem : public UWorldSubsystem
@@ -320,6 +321,14 @@ public:
 	void GetAuthoredStaticObstacleActors(TArray<AScenarioStaticObstacle*>& outActors) const;
 
 	void GetEditorPlacementIgnoredActors(TArray<AActor*>& outActors) const;
+
+	// 현재 Editor Preview Surface만 기준으로 촬영용 Map Bounds를 계산한다.
+	bool TryResolveScenarioPreviewMapBounds(
+		FScenarioMapBounds& outBounds) const;
+
+	// Corridor Handle처럼 Scenario Preview에서 숨겨야 할 Authoring Actor를 반환한다.
+	void GetScenarioPreviewHiddenActors(
+		TArray<AActor*>& outActors) const;
 
 	// Exports the current editor draft as the user project scenario.json contract.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")

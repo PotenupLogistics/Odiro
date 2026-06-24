@@ -16,6 +16,7 @@
 #include "Scenario/ScenarioCorridorGeometry.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Scenario/ScenarioSampler.h"
+#include "Shared/Actors/ScenarioMapBounds.h"
 #include "Shared/ScenarioDocumentJson.h"
 #include "UObject/ConstructorHelpers.h"
 #include "HAL/FileManager.h"
@@ -761,6 +762,67 @@ void UScenarioAuthoringSubsystem::GetEditorPlacementIgnoredActors(TArray<AActor*
 	if (AActor* actor = CorridorPreviewActor.Get())
 	{
 		outActors.Add(actor);
+	}
+}
+
+// 현재 Editor Preview Surface만 기준으로 촬영용 Map Bounds를 계산한다.
+bool UScenarioAuthoringSubsystem::TryResolveScenarioPreviewMapBounds(
+	FScenarioMapBounds& outBounds) const
+{
+	// 실패 시 이전 결과가 사용되지 않도록 초기화한다.
+	outBounds = FScenarioMapBounds{};
+
+	// 현재 화면에 생성된 Corridor와 GroundRegion Surface를 수집한다.
+	TArray<AActor*> surfaceActors;
+	surfaceActors.Reserve(GroundRegionActors.Num() + 1);
+
+	if (IsValid(CorridorPreviewActor))
+	{
+		surfaceActors.Add(CorridorPreviewActor);
+	}
+
+	for (const TPair<FString, TObjectPtr<AScenarioGroundRegion>>& pair
+		: GroundRegionActors)
+	{
+		if (IsValid(pair.Value))
+		{
+			surfaceActors.Add(pair.Value);
+		}
+	}
+
+	// 촬영 기준이 될 Surface가 없으면 유효한 Bounds를 만들 수 없다.
+	if (surfaceActors.IsEmpty())
+	{
+		return false;
+	}
+
+	// 시나리오 대표 Preview는 DeliveryBot Start/Goal로 영역을 확장하지 않는다.
+	const TArray<FScenarioPlaceableInstanceSpec> emptyPlaceables;
+
+	// Surface Bounds 그대로 촬영 Bounds를 계산한다.
+	return FScenarioMapBoundsResolver::TryResolve(
+		surfaceActors,
+		emptyPlaceables,
+		0.0,
+		outBounds);
+}
+
+// Corridor Handle처럼 Scenario Preview에서 숨겨야 할 Authoring Actor를 반환한다.
+void UScenarioAuthoringSubsystem::GetScenarioPreviewHiddenActors(
+	TArray<AActor*>& outActors) const
+{
+	// 호출자가 이전에 보관한 Actor 목록을 제거한다.
+	outActors.Reset();
+	outActors.Reserve(CorridorHandleActors.Num());
+
+	// 현재 살아 있는 Corridor Handle만 제외 목록에 추가한다.
+	for (const TPair<FString, TObjectPtr<AScenarioCorridorHandleActor>>& pair
+		: CorridorHandleActors)
+	{
+		if (IsValid(pair.Value))
+		{
+			outActors.Add(pair.Value);
+		}
 	}
 }
 

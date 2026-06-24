@@ -7,12 +7,12 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/PanelWidget.h"
 #include "Components/ContentWidget.h"
+#include "EditorAssetLibrary.h"
 #include "JsonObjectConverter.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
-#include "FileHelpers.h"
 #include "FileManage/UmgFileTransformation.h"
 #include "Components/CanvasPanelSlot.h"
 
@@ -862,12 +862,7 @@ bool UUmgSetSubsystem::SaveAsset(UWidgetBlueprint* WidgetBlueprint)
         return false;
     }
 
-    TArray<UPackage*> PackagesToSave;
-    PackagesToSave.Add(Package);
-
-    FEditorFileUtils::EPromptReturnCode ReturnCode = FEditorFileUtils::PromptForCheckoutAndSave(PackagesToSave, false, false);
-
-    if (ReturnCode == FEditorFileUtils::EPromptReturnCode::PR_Success)
+    if (UEditorAssetLibrary::SaveLoadedAsset(WidgetBlueprint, false))
     {
         UE_LOG(LogUmgSet, Log, TEXT("SaveAsset: Successfully saved asset '%s'."), *WidgetBlueprint->GetPathName());
         return true;

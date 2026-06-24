@@ -4,6 +4,7 @@
 #include "Math/Box2D.h"
 #include "Scenario/Data/ScenarioStaticObstaclePropCatalog.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "Shared/Actors/ScenarioMapBounds.h"
 #include "Shared/ScenarioSpecTypes.h"
 #include "ScenarioSimulationSubsystem.generated.h"
 
@@ -49,6 +50,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Classes")
 	TSubclassOf<ADeliveryBot_GridBoundsActor> GridBoundsActorClass;
 
+	// 현재 Scenario가 소유한 runtime actor, Grid, Bounds와 보행자 계획을 정리한다.
 	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	void ClearScenario();
 
@@ -60,6 +62,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	FScenarioRuntimeContext BuildRuntimeContext(const FScenarioSimulationSetupSpec& setupSpec) const;
+
+	// 전달받은 Surface Actor와 Placeable을 Grid와 동일한 Padding으로 계산한다.
+	bool TryResolveScenarioMapBounds(
+		const TArray<AActor*>& surfaceActors,
+		const TArray<FScenarioPlaceableInstanceSpec>& placeables,
+		FScenarioMapBounds& outBounds) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	AScenarioSplinePath* SpawnSplinePath(const FString& pathId, const TArray<FVector>& points, bool bClosedLoop);
@@ -134,27 +142,19 @@ private:
 		const TArray<FScenarioGroundRegionSpec>& groundRegionSpecs,
 		FBox2D& outXYBounds,
 		double& outCenterZ) const;
-	// Builds grid bounds from spawned runtime surfaces that the user actually sees in the world.
+	// Spawn된 runtime surface actor에서 Grid/Preview 공용 XY 영역과 평균 중심 Z를 계산한다.
 	bool TryBuildRuntimeSurfaceXYBounds(
 		FBox2D& outXYBounds,
 		double& outCenterZ) const;
-	ADeliveryBot_GridBoundsActor* SpawnDeliveryBotGridBoundsActor(const FBox2D& xyBounds, double centerZ);
-	void ApplyXYBoundsToGridBoundsActor(
+	// 최종 Map Bounds를 사용하는 runtime DeliveryBot GridBoundsActor를 생성한다.
+	ADeliveryBot_GridBoundsActor* SpawnDeliveryBotGridBoundsActor(
+		const FScenarioMapBounds& mapBounds);
+	// 최종 Map Bounds의 중심과 크기를 GridBoundsActor에 적용한다.
+	void ApplyMapBoundsToGridBoundsActor(
 		ADeliveryBot_GridBoundsActor* gridBoundsActor,
-		const FBox2D& xyBounds,
-		double centerZ) const;
+		const FScenarioMapBounds& mapBounds) const;
 	static void ExpandXYBoundsWithGroundRegion(
 		const FScenarioGroundRegionSpec& regionSpec,
-		FBox2D& inOutXYBounds);
-	// Expands XY bounds from a spawned actor's component bounds.
-	static void ExpandXYBoundsWithActor(
-		const AActor* actor,
-		FBox2D& inOutXYBounds,
-		double& inOutZSum,
-		int32& inOutValidActorCount);
-	// Ensures DeliveryBot start and goal anchors are inside the generated navigation grid bounds.
-	static void ExpandXYBoundsWithDeliveryBotRoute(
-		const FScenarioPlaceableInstanceSpec& placeableSpec,
 		FBox2D& inOutXYBounds);
 	bool ResolveDeliveryBotGridLocation(
 		const FString& robotInstanceId,

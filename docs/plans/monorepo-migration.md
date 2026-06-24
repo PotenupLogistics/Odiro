@@ -226,7 +226,7 @@ git -C X:\Odiro check-ignore -v Client\Binaries\ Client\Intermediate\ Client\Sav
 
 - `Agents` 테스트가 가능한 상태면 실행한다.
 - `Bridge`가 아직 없으면 `go test ./...`는 "not implemented"로 기록한다.
-- `Client/Task-RunPreview.bat --dry-run`이 없거나 미구현이면 "not implemented"로 기록한다.
+- `task-run.bat -SkipAgents -SkipBridge -- --dry-run`이 없거나 미구현이면 "not implemented"로 기록한다.
 - 실패는 숨기지 않고 명령, exit code, 원인을 기록한다.
 
 검증:
@@ -239,7 +239,7 @@ cd X:\Odiro\Bridge
 go test ./...
 
 cd X:\Odiro
-Client\Task-RunPreview.bat --dry-run
+task-run.bat -SkipAgents -SkipBridge -- --dry-run
 ```
 
 ## 진행 기록
@@ -270,10 +270,10 @@ cd ..\Bridge
 go test ./...
 
 cd ..
-Client\Task-RunPreview.bat --dry-run
+task-run.bat -SkipAgents -SkipBridge -- --dry-run
 ```
 
-`Bridge`가 아직 없거나 `Client/Task-RunPreview.bat --dry-run`이 구현 전이면 해당 검증은 "not implemented"로 기록한다.
+`Bridge`가 아직 없거나 `task-run.bat -SkipAgents -SkipBridge -- --dry-run`이 구현 전이면 해당 검증은 "not implemented"로 기록한다.
 
 현재 검증 결과:
 
@@ -283,7 +283,7 @@ Client\Task-RunPreview.bat --dry-run
 - `uv run python -m harness.checks.check_ue_contract_docs`: passed.
 - `uv run python -m harness.checks.check_json_schemas`: failed, `policy card count must remain 9` while current imported baseline has 11 cards.
 - `$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; uv run pytest`: failed during collection, `ModuleNotFoundError: No module named 'trio'` from FastAPI/anyio import path.
-- `Bridge` and `Client\Task-RunPreview.bat --dry-run`: not implemented in current migration scope.
+- `Bridge` and `task-run.bat -SkipAgents -SkipBridge -- --dry-run`: not implemented in current migration scope.
 
 ## 완료 기준
 

@@ -8,6 +8,8 @@
 #include "ScenarioEditorSidebarPedestrianEncounterWidget.generated.h"
 
 class UScenarioEditorSidebarBlockWidget;
+class UScenarioTemplateFieldRowViewModel;
+class UScenarioTemplateSidebarViewModel;
 class UWidgetTextStyleCatalog;
 
 // Editable field ids exposed by one root.pedestrians.encounters[] widget.
@@ -226,6 +228,10 @@ private:
 	UPROPERTY(Transient)
 	bool bHasCachedEncounter = false;
 
+	// Field row ViewModels generated from CachedEncounter.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UScenarioTemplateFieldRowViewModel>> CachedFieldItems;
+
 	// Binds child field row delegates owned by this encounter widget.
 	void BindFieldRows();
 	// Releases child field row delegates owned by this encounter widget.
@@ -234,16 +240,16 @@ private:
 	void ConfigureFieldRows();
 	// Applies cached encounter values to bound field rows.
 	void ApplyCachedEncounterToRows();
+	// Rebuilds cached field row ViewModels from the current encounter.
+	void RefreshFieldItemsFromViewModel();
 	// Applies shared typography to this encounter block and rows.
 	void ApplyTextStyles();
 	// Broadcasts a fixed-value text commit for one field.
 	void BroadcastText(EScenarioEditorSidebarPedestrianEncounterField field, const FText& text, ETextCommit::Type commitMethod);
 	// Broadcasts a range commit for one field.
 	void BroadcastRange(EScenarioEditorSidebarPedestrianEncounterField field, const FText& minText, const FText& maxText, ETextCommit::Type commitMethod);
-	// Applies one authored number value to a numeric field row.
-	static void SetNumberRowValue(UScenarioEditorSidebarFieldRow* fieldRow, const FScenarioTemplateNumberValue& value);
-	// Returns a stable label for a pedestrian encounter type.
-	static FString EncounterTypeToString(EScenarioTemplateEncounterType type);
-	// Formats one authored numeric value for editable text controls.
-	static FString FormatEditableNumber(double value);
+	// Resolves the ViewModel that formats template sidebar field items.
+	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
+	// Finds one cached field row ViewModel by id.
+	UScenarioTemplateFieldRowViewModel* FindCachedFieldItem(const FString& fieldId) const;
 };

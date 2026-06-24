@@ -13,6 +13,7 @@ class USizeBox;
 class UTextBlock;
 class UScenarioAssetPaletteWidget;
 class UScenarioEditorToolbarWidget;
+class UScenarioEditorShellViewModel;
 class UScenarioLlmPromptWidget;
 class UScenarioEditorOutlinerWidget;
 class UScenarioPlaceableComponent;
@@ -193,6 +194,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Root")
 	UScenarioEditorToolbarWidget* GetToolbarWidget() const { return ToolbarWidget.Get(); }
 
+	// Returns the subsystem-owned root shell ViewModel used for MVVM binding and command forwarding.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Root")
+	UScenarioEditorShellViewModel* GetShellViewModel() const { return ShellViewModel; }
+
 	// Returns the active placeable details widget, including legacy context-menu UMG bindings.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Root")
 	UScenarioPlaceableDetailsWidget* GetPlaceableDetailsWidget() const { return PlaceableContextMenuWidget.Get(); }
@@ -227,6 +232,8 @@ private:
 	void UnbindEditorModeButtons();
 	void BindSidebarControls();
 	void UnbindSidebarControls();
+	// Connects the root adapter to the subsystem-owned shell ViewModel.
+	void InitializeViewModel();
 	// Applies one template sidebar panel to the sidebar and records the synchronized value.
 	void ApplyTemplateSidebarPanel(EScenarioTemplateSidebarPanel activePanel);
 	class AScenarioEditorController* GetEditorController() const;
@@ -256,6 +263,10 @@ private:
 	bool IsMouseOverWidget(const UWidget* targetWidget) const;
 
 	FDelegateHandle AutoStartCompletedHandle;
+
+	// Subsystem-owned shell ViewModel used by MVVM binding and command forwarding.
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Scenario|Editor|Root", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UScenarioEditorShellViewModel> ShellViewModel;
 
 	// Cached view-mode state used to keep keyboard toggles and button visibility in sync.
 	EScenarioEditorViewMode LastSeenViewMode = static_cast<EScenarioEditorViewMode>(0);

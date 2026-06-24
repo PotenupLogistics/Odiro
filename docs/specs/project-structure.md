@@ -29,9 +29,6 @@ Odiro/
     scripts/                      # Agent 전용 CLI/tooling. TODO: tools로 이동
     tools/                        # Agents 전용 보조 도구
     tests/                        # Agent 단위 테스트
-    task-setup.bat                # uv sync 의존성 설치
-    task-run.bat                  # Agents API server 실행
-    task-dev.bat                  # 개발용으로 실행 (코드 변경 시 자동 재시작)
     main.py
     uv.lock
     pyproject.toml
@@ -45,10 +42,6 @@ Odiro/
       policy-runtime.py           # 사용자 행동 정책 Python과 Unreal을 연결하는 런타임 스크립트
     Tools/                        # Unreal 전용 보조 도구
     Docs/                         # Unreal 전용 문서
-    Task-Setup.bat                # 의존성 확인
-    Task-Build.bat                # C++ 컴파일
-    Task-Dev.bat                  # Unreal Editor 실행
-    Task-RunPreview.bat           # 단독 모드 PIE 프리뷰 실행
     OdiroSim.uproject
 
   Bridge/                         # --- Go 백그라운드 서비스 ---
@@ -144,6 +137,7 @@ build/Release/
   profile.json                    # 시뮬레이션 환경 프로필 설정. 기존 DeliveryBotSetup 포함
 
   scenario.json                   # 편집 가능한 단일 시나리오. 랜덤 요소 가능. seed/count는 setting.json 소유
+  preview.png
 
   policy/                         # 행동 정책
     __init__.py                   # 진입점. 지정된 인터페이스로 구현해야 함
@@ -168,7 +162,7 @@ build/Release/
           events.jsonl            # 발생 이벤트 (장애물 감지, 충돌 등)
           trace.jsonl             # 환경 정보 기록. 로봇이 못본 데이터 분석/리플레이에 활용
           result.json             # 실행 시간, 성공/실패, 충돌 횟수 등
-          preview.png             # 대표 이벤트 이미지
+          preview.png             # 선택 파일. 현재 클라이언트 Runner는 자동 생성하지 않음
           captures/               # 센서 데이터 이미지
 ```
 

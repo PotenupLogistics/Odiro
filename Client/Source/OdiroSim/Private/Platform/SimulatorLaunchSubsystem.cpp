@@ -12,7 +12,7 @@ namespace
 	const TCHAR* SimulatorLaunchPolicySpecInputDirectory = TEXT("Json/Input/PolicySpecs");
 	const TCHAR* EvaluationReportOutputDirectory = TEXT("Json/Output");
 	const TCHAR* SimulationRunStatusDirectory = TEXT("Saved/SimulationRuns");
-	const TCHAR* PreviewLauncherFileName = TEXT("Task-RunPreview.bat");
+	const TCHAR* PreviewLauncherRelativePath = TEXT("Tools/RunPreview.ps1");
 	const TCHAR* LaunchSimulationSetupSchema = TEXT("simulation_setup");
 	const TCHAR* LaunchScenarioSetupSchema = TEXT("scenario_actor_spawn_mvp");
 	const TCHAR* LaunchDeliveryBotSetupSchema = TEXT("delivery_bot_setup");
@@ -631,6 +631,31 @@ namespace
 		return true;
 	}
 
+	bool HasProjectRunOutputArtifacts(const FUserProjectRunSnapshotPaths& paths, FString& outArtifactPath)
+	{
+		outArtifactPath.Reset();
+		if (IsFile(paths.StatusPath))
+		{
+			outArtifactPath = paths.StatusPath;
+			return true;
+		}
+		if (IsFile(paths.SummaryPath))
+		{
+			outArtifactPath = paths.SummaryPath;
+			return true;
+		}
+
+		TArray<FString> resultFiles;
+		IFileManager::Get().FindFilesRecursive(resultFiles, *paths.EpisodesPath, TEXT("result.json"), true, false);
+		if (!resultFiles.IsEmpty())
+		{
+			outArtifactPath = NormalizeAbsolutePath(resultFiles[0]);
+			return true;
+		}
+
+		return false;
+	}
+
 	void FindProjectFiles(const FString& relativeDirectory, const TCHAR* filePattern, TArray<FString>& outFiles)
 	{
 		outFiles.Reset();
@@ -758,7 +783,7 @@ namespace
 
 	bool IsUnrealEditorExecutable()
 	{
-		// Editor preview에서만 Task-RunPreview.bat fallback을 쓴다. Packaged game은 자기 executable을 다시 실행한다.
+		// Editor preview에서만 Client-owned RunPreview.ps1 fallback을 쓴다. Packaged game은 자기 executable을 다시 실행한다.
 		const FString executableName = FPaths::GetBaseFilename(FPlatformProcess::ExecutablePath());
 		return executableName.StartsWith(TEXT("UnrealEditor"), ESearchCase::IgnoreCase);
 	}
@@ -1541,6 +1566,22 @@ bool USimulatorLaunchSubsystem::StartProjectRun(const FString& projectPath, cons
 		return false;
 	}
 
+	FString existingOutputArtifactPath;
+	if (HasProjectRunOutputArtifacts(snapshotParseResult.Paths, existingOutputArtifactPath))
+	{
+		ActiveRunInfo = FSimulatorRunInfo{};
+		ActiveRunInfo.RunId = snapshotParseResult.Paths.RunId;
+		ActiveRunInfo.ProjectPath = snapshotParseResult.Paths.ProjectPath;
+		ActiveRunInfo.StatusPath = snapshotParseResult.Paths.StatusPath;
+		ActiveRunInfo.bProjectRun = true;
+		ActiveRunInfo.Status.State = ESimulationRunState::Failed;
+		ActiveRunInfo.LastError = FString::Printf(
+			TEXT("Project run already has output artifacts and cannot be started again: %s"),
+			*existingOutputArtifactPath);
+		BroadcastRunInfoChanged();
+		return false;
+	}
+
 	FString executable;
 	FString arguments;
 	bool bUsesPreviewLauncher = false;
@@ -2079,28 +2120,28 @@ FString USimulatorLaunchSubsystem::BuildProjectRunSimulatorArgumentString(const 
 }
 
 FString USimulatorLaunchSubsystem::BuildPreviewLauncherArgumentString(
-	const FString& previewBatPath,
+	const FString& previewLauncherPath,
 	const FString& setupPath,
 	const FString& runId)
 {
 	// cmd.exe quoting is intentionally centralized here; CreateProc receives cmd.exe as executable.
 	return FString::Printf(
-		TEXT("/d /s /c \"\"%s\" %s %s %s\""),
-		*previewBatPath,
+		TEXT("/d /s /c \"powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"\"%s\"\" %s %s %s\""),
+		*previewLauncherPath,
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-Simulate=%s"), *setupPath)),
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
 		SimulatorProcessFlags);
 }
 
 FString USimulatorLaunchSubsystem::BuildProjectRunPreviewLauncherArgumentString(
-	const FString& previewBatPath,
+	const FString& previewLauncherPath,
 	const FString& projectPath,
 	const FString& runId)
 {
 	// cmd.exe quoting is intentionally centralized here; CreateProc receives cmd.exe as executable.
 	return FString::Printf(
-		TEXT("/d /s /c \"\"%s\" %s %s %s %s\""),
-		*previewBatPath,
+		TEXT("/d /s /c \"powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"\"%s\"\" %s %s %s %s\""),
+		*previewLauncherPath,
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-OdiroProject=%s"), *projectPath)),
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-RunId=%s"), *runId)),
 		*QuoteCommandLineArgument(FString::Printf(TEXT("-PolicyPort=%d"), ProjectRunDefaultPolicyPort)),
@@ -2251,11 +2292,11 @@ bool USimulatorLaunchSubsystem::BuildLaunchCommand(
 {
 	bOutUsesPreviewLauncher = false;
 
-	FString previewBatPath;
-	if (ShouldUsePreviewLauncher(previewBatPath))
+	FString previewLauncherPath;
+	if (ShouldUsePreviewLauncher(previewLauncherPath))
 	{
 		outExecutable = TEXT("cmd.exe");
-		outArguments = BuildPreviewLauncherArgumentString(previewBatPath, setupPath, runId);
+		outArguments = BuildPreviewLauncherArgumentString(previewLauncherPath, setupPath, runId);
 		bOutUsesPreviewLauncher = true;
 		return true;
 	}
@@ -2274,11 +2315,11 @@ bool USimulatorLaunchSubsystem::BuildProjectRunLaunchCommand(
 {
 	bOutUsesPreviewLauncher = false;
 
-	FString previewBatPath;
-	if (ShouldUsePreviewLauncher(previewBatPath))
+	FString previewLauncherPath;
+	if (ShouldUsePreviewLauncher(previewLauncherPath))
 	{
 		outExecutable = TEXT("cmd.exe");
-		outArguments = BuildProjectRunPreviewLauncherArgumentString(previewBatPath, projectPath, runId);
+		outArguments = BuildProjectRunPreviewLauncherArgumentString(previewLauncherPath, projectPath, runId);
 		bOutUsesPreviewLauncher = true;
 		return true;
 	}
@@ -2288,9 +2329,9 @@ bool USimulatorLaunchSubsystem::BuildProjectRunLaunchCommand(
 	return !outExecutable.IsEmpty();
 }
 
-bool USimulatorLaunchSubsystem::ShouldUsePreviewLauncher(FString& outPreviewBatPath) const
+bool USimulatorLaunchSubsystem::ShouldUsePreviewLauncher(FString& outPreviewLauncherPath) const
 {
-	outPreviewBatPath.Reset();
+	outPreviewLauncherPath.Reset();
 
 	if (!IsUnrealEditorExecutable())
 	{
@@ -2298,14 +2339,14 @@ bool USimulatorLaunchSubsystem::ShouldUsePreviewLauncher(FString& outPreviewBatP
 	}
 
 	// Packaged executable이 없는 개발 중에도 packaged-style public args를 검증하기 위한 fallback이다.
-	const FString previewBatPath = FPaths::ConvertRelativePathToFull(
-		FPaths::Combine(FPaths::ProjectDir(), PreviewLauncherFileName));
-	if (!FPaths::FileExists(previewBatPath))
+	const FString previewLauncherPath = FPaths::ConvertRelativePathToFull(
+		FPaths::Combine(FPaths::ProjectDir(), PreviewLauncherRelativePath));
+	if (!FPaths::FileExists(previewLauncherPath))
 	{
 		return false;
 	}
 
-	outPreviewBatPath = previewBatPath;
+	outPreviewLauncherPath = previewLauncherPath;
 	return true;
 }
 

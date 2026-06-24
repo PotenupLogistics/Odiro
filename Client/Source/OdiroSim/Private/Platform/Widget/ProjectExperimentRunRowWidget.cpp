@@ -5,6 +5,7 @@
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
 #include "Misc/Paths.h"
+#include "Platform/ViewModel/OdiroListItemViewModel.h"
 
 namespace
 {
@@ -70,6 +71,7 @@ void UProjectExperimentRunRowWidget::InitializeRunRow(
 	const float progressPercent,
 	const bool bCanAnalyze)
 {
+	ItemViewModel = nullptr;
 	RunDirectory = runDirectory;
 	bAnalyzeEnabled = bCanAnalyze;
 
@@ -98,6 +100,22 @@ void UProjectExperimentRunRowWidget::InitializeRunRow(
 	}
 
 	RefreshStateVisibility(state);
+}
+
+void UProjectExperimentRunRowWidget::InitializeFromItemViewModel(
+	UOdiroListItemViewModel* itemViewModel,
+	const ESimulationRunState state,
+	const float progressPercent,
+	const bool bCanAnalyze)
+{
+	ItemViewModel = itemViewModel;
+	InitializeRunRow(
+		ItemViewModel ? ItemViewModel->GetPayloadPath() : FString(),
+		ItemViewModel ? ItemViewModel->GetItemId() : FString(),
+		state,
+		progressPercent,
+		bCanAnalyze && (!ItemViewModel || ItemViewModel->IsEnabled()));
+	ItemViewModel = itemViewModel;
 }
 
 void UProjectExperimentRunRowWidget::HandleAnalyzeClicked()

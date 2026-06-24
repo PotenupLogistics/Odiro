@@ -183,6 +183,102 @@ class ContextManager:
 # Global Context Manager Instance
 context_manager = ContextManager()
 
+UMG_DESIGN_MUTATION_TOOLS = {
+    "create_widget",
+    "set_widget_properties",
+    "delete_widget",
+    "reparent_widget",
+    "apply_layout",
+    "create_animation",
+    "delete_animation",
+    "set_property_keys",
+    "remove_property_track",
+    "remove_keys",
+    "animation_append_widget_tracks",
+    "animation_append_time_slice",
+    "animation_delete_widget_keys",
+}
+
+UMG_DESIGN_REQUIRED_SEQUENCE = [
+    "get_widget_tree",
+    "compile_blueprint",
+    "get_layout_data",
+    "check_widget_overlap",
+]
+
+UMG_DESIGN_VISUAL_OPTIONS = [
+    "capture_slate_window",
+    "dump_runtime_widget_geometry",
+]
+
+umg_design_verification_pending = False
+pending_umg_design_mutation_command = ""
+completed_umg_design_verification_steps = set()
+
+def _is_successful_response(response: Dict[str, Any]) -> bool:
+    """Return true when a response represents a successful Unreal command result."""
+    if not isinstance(response, dict):
+        return False
+    if response.get("status") == "error":
+        return False
+    if response.get("success") is False:
+        return False
+    return response.get("status") == "success" or response.get("success") is True
+
+def _completed_umg_design_verification_steps() -> List[str]:
+    """Return completed UMG design verification steps in required order."""
+    return [
+        step for step in UMG_DESIGN_REQUIRED_SEQUENCE
+        if step in completed_umg_design_verification_steps
+    ]
+
+def _missing_umg_design_verification_steps() -> List[str]:
+    """Return missing UMG design verification steps in required order."""
+    return [
+        step for step in UMG_DESIGN_REQUIRED_SEQUENCE
+        if step not in completed_umg_design_verification_steps
+    ]
+
+def _build_umg_design_verification_requirement(trigger_command: str) -> Dict[str, Any]:
+    """Build the response payload for mandatory UMG design verification progress."""
+    return {
+        "required": True,
+        "trigger_command": trigger_command,
+        "reason": "UMG visual or layout state changed; verify tree, compile result, layout geometry, overlap, and visual/runtime capture before reporting completion.",
+        "required_sequence": UMG_DESIGN_REQUIRED_SEQUENCE,
+        "completed_sequence": _completed_umg_design_verification_steps(),
+        "missing_sequence": _missing_umg_design_verification_steps(),
+        "visual_verification_options": UMG_DESIGN_VISUAL_OPTIONS,
+    }
+
+def _mark_umg_design_verification_pending(command_name: str) -> None:
+    """Start a new pending UMG design verification checklist."""
+    global umg_design_verification_pending, pending_umg_design_mutation_command
+    umg_design_verification_pending = True
+    pending_umg_design_mutation_command = command_name
+    completed_umg_design_verification_steps.clear()
+
+def _mark_umg_design_verification_step(command_name: str, response: Dict[str, Any]) -> Dict[str, Any]:
+    """Record a successful verification step while preserving no-geometry layout failures."""
+    if not umg_design_verification_pending or command_name not in UMG_DESIGN_REQUIRED_SEQUENCE:
+        return response
+    if not _is_successful_response(response):
+        return response
+    if command_name == "get_layout_data" and not response.get("layout_data"):
+        return response
+
+    completed_umg_design_verification_steps.add(command_name)
+    return response
+
+def require_umg_design_verification(command_name: str, response: Dict[str, Any]) -> Dict[str, Any]:
+    """Attach the mandatory post-edit UMG design verification checklist."""
+    if command_name not in UMG_DESIGN_MUTATION_TOOLS or not _is_successful_response(response):
+        return response
+
+    _mark_umg_design_verification_pending(command_name)
+    response["design_verification_required"] = _build_umg_design_verification_requirement(command_name)
+    return response
+
 # Global connection state
 _unreal_connection: UnrealConnection = None
 
@@ -479,7 +575,8 @@ async def get_widget_tree() -> Dict[str, Any]:
     # or just let the plugin handle it.
     # Given the user's strong preference for implicit defaults, we just call the method.
 
-    return await umg_get_client.get_widget_tree()
+    result = await umg_get_client.get_widget_tree()
+    return _mark_umg_design_verification_step("get_widget_tree", result)
 
 @register_tool("query_widget_properties", "Queries specific properties of a widget.")
 async def query_widget_properties(widget_name: str, properties: List[str]) -> Dict[str, Any]:
@@ -497,7 +594,8 @@ async def get_layout_data(resolution_width: int = 1920, resolution_height: int =
     """
     conn = get_unreal_connection()
     umg_get_client = UMGGet.UMGGet(conn)
-    return await umg_get_client.get_layout_data(resolution_width, resolution_height)
+    result = await umg_get_client.get_layout_data(resolution_width, resolution_height)
+    return _mark_umg_design_verification_step("get_layout_data", result)
 
 @register_tool("check_widget_overlap", "Checks for widget overlap.")
 async def check_widget_overlap(widget_names: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -506,7 +604,8 @@ async def check_widget_overlap(widget_names: Optional[List[str]] = None) -> Dict
     """
     conn = get_unreal_connection()
     umg_get_client = UMGGet.UMGGet(conn)
-    return await umg_get_client.check_widget_overlap(widget_names)
+    result = await umg_get_client.check_widget_overlap(widget_names)
+    return _mark_umg_design_verification_step("check_widget_overlap", result)
 
 # =============================================================================
 #  Category: Action
@@ -526,7 +625,7 @@ async def create_widget(parent_name: str, widget_type: str, new_widget_name: str
         # context_manager.invalidate_cache() # If we had one
         pass
 
-    return result
+    return require_umg_design_verification("create_widget", result)
 
 @register_tool("set_widget_properties", "Sets properties on a widget.")
 async def set_widget_properties(widget_name: str, properties: Dict[str, Any]) -> Dict[str, Any]:
@@ -535,7 +634,8 @@ async def set_widget_properties(widget_name: str, properties: Dict[str, Any]) ->
     """
     conn = get_unreal_connection()
     umg_set_client = UMGSet.UMGSet(conn)
-    return await umg_set_client.set_widget_properties(widget_name, properties)
+    result = await umg_set_client.set_widget_properties(widget_name, properties)
+    return require_umg_design_verification("set_widget_properties", result)
 
 @register_tool("delete_widget", "Deletes a widget.")
 async def delete_widget(widget_name: str) -> Dict[str, Any]:
@@ -544,7 +644,8 @@ async def delete_widget(widget_name: str) -> Dict[str, Any]:
     """
     conn = get_unreal_connection()
     umg_set_client = UMGSet.UMGSet(conn)
-    return await umg_set_client.delete_widget(widget_name)
+    result = await umg_set_client.delete_widget(widget_name)
+    return require_umg_design_verification("delete_widget", result)
 
 @register_tool("reparent_widget", "Moves a widget to a new parent.")
 async def reparent_widget(widget_name: str, new_parent_name: str) -> Dict[str, Any]:
@@ -553,16 +654,30 @@ async def reparent_widget(widget_name: str, new_parent_name: str) -> Dict[str, A
     """
     conn = get_unreal_connection()
     umg_set_client = UMGSet.UMGSet(conn)
-    return await umg_set_client.reparent_widget(widget_name, new_parent_name)
+    result = await umg_set_client.reparent_widget(widget_name, new_parent_name)
+    return require_umg_design_verification("reparent_widget", result)
 
 @register_tool("save_asset", "Saves the UMG asset.")
 async def save_asset() -> Dict[str, Any]:
     """
     (Description loaded from prompts.json)
     """
+    global umg_design_verification_pending, pending_umg_design_mutation_command
+    if umg_design_verification_pending and _missing_umg_design_verification_steps():
+        return {
+            "status": "error",
+            "error": "UMG design verification is pending. Run the missing design verification steps before save_asset.",
+            "design_verification_required": _build_umg_design_verification_requirement(pending_umg_design_mutation_command),
+        }
+
     conn = get_unreal_connection()
     umg_set_client = UMGSet.UMGSet(conn)
-    return await umg_set_client.save_asset()
+    result = await umg_set_client.save_asset()
+    if _is_successful_response(result):
+        umg_design_verification_pending = False
+        pending_umg_design_mutation_command = ""
+        completed_umg_design_verification_steps.clear()
+    return result
 
 # =============================================================================
 #  Category: File Transformation (Explicit Path)
@@ -624,7 +739,8 @@ async def apply_layout(layout_content: str, widget_name: Optional[str] = None) -
     context_manager.set_target(final_path, target_widget)
 
     umg_trans_client = UMGFileTransformation.UMGFileTransformation(conn)
-    return await umg_trans_client.apply_json_to_umg(final_path, json_data, target_widget)
+    result = await umg_trans_client.apply_json_to_umg(final_path, json_data, target_widget)
+    return require_umg_design_verification("apply_layout", result)
 
 @mcp.tool()
 async def apply_json_to_umg(asset_path: str, json_data: dict, widget_name: Optional[str] = None) -> Dict[str, Any]:
@@ -633,7 +749,8 @@ async def apply_json_to_umg(asset_path: str, json_data: dict, widget_name: Optio
     target_widget = widget_name if widget_name is not None else (context_manager.get_target_widget() or "Root")
     conn = get_unreal_connection()
     umg_trans_client = UMGFileTransformation.UMGFileTransformation(conn)
-    return await umg_trans_client.apply_json_to_umg(asset_path, json_data, target_widget)
+    result = await umg_trans_client.apply_json_to_umg(asset_path, json_data, target_widget)
+    return require_umg_design_verification("apply_layout", result)
 
 @mcp.tool()
 async def apply_html_to_umg(asset_path: str, html_content: str, widget_name: Optional[str] = None) -> Dict[str, Any]:
@@ -709,7 +826,8 @@ async def compile_blueprint(blueprint_name: str = None) -> Dict[str, Any]:
     (Description loaded from prompts.json)
     """
     conn = get_unreal_connection()
-    return await conn.send_command("compile_blueprint", {"blueprint_name": blueprint_name})
+    result = await conn.send_command("compile_blueprint", {"blueprint_name": blueprint_name})
+    return _mark_umg_design_verification_step("compile_blueprint", result)
 
 
 @register_tool("add_step", "Adds an Executable Node to the current Program Counter.")
@@ -978,7 +1096,8 @@ async def create_animation(animation_name: str) -> Dict[str, Any]:
     """
     conn = get_unreal_connection()
     sequencer_client = UMGSequencer.UMGSequencer(conn)
-    return await sequencer_client.create_animation(asset_path=None, animation_name=animation_name)
+    result = await sequencer_client.create_animation(asset_path=None, animation_name=animation_name)
+    return require_umg_design_verification("create_animation", result)
 
 @register_tool("delete_animation", "Deletes an animation (requires confirm_delete=true).")
 async def delete_animation(animation_name: str, confirm_delete: bool = False) -> Dict[str, Any]:
@@ -987,7 +1106,8 @@ async def delete_animation(animation_name: str, confirm_delete: bool = False) ->
     """
     conn = get_unreal_connection()
     sequencer_client = UMGSequencer.UMGSequencer(conn)
-    return await sequencer_client.delete_animation(asset_path=None, animation_name=animation_name, confirm_delete=confirm_delete)
+    result = await sequencer_client.delete_animation(asset_path=None, animation_name=animation_name, confirm_delete=confirm_delete)
+    return require_umg_design_verification("delete_animation", result)
 
 @register_tool("set_property_keys", "Sets keyframes for a property.")
 async def set_property_keys(property_name: str, keys: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -996,7 +1116,8 @@ async def set_property_keys(property_name: str, keys: List[Dict[str, Any]]) -> D
     """
     conn = get_unreal_connection()
     sequencer_client = UMGSequencer.UMGSequencer(conn)
-    return await sequencer_client.set_property_keys(property_name, keys)
+    result = await sequencer_client.set_property_keys(property_name, keys)
+    return require_umg_design_verification("set_property_keys", result)
 
 @register_tool("remove_property_track", "Removes a property track (confirm_delete required).")
 async def remove_property_track(property_name: str, confirm_delete: bool = False) -> Dict[str, Any]:
@@ -1005,7 +1126,8 @@ async def remove_property_track(property_name: str, confirm_delete: bool = False
     """
     conn = get_unreal_connection()
     sequencer_client = UMGSequencer.UMGSequencer(conn)
-    return await sequencer_client.remove_property_track(property_name, confirm_delete)
+    result = await sequencer_client.remove_property_track(property_name, confirm_delete)
+    return require_umg_design_verification("remove_property_track", result)
 
 @register_tool("remove_keys", "Removes specific keys (confirm_delete required).")
 async def remove_keys(property_name: str, times: List[float], confirm_delete: bool = False) -> Dict[str, Any]:
@@ -1014,25 +1136,29 @@ async def remove_keys(property_name: str, times: List[float], confirm_delete: bo
     """
     conn = get_unreal_connection()
     sequencer_client = UMGSequencer.UMGSequencer(conn)
-    return await sequencer_client.remove_keys(property_name, times, confirm_delete)
+    result = await sequencer_client.remove_keys(property_name, times, confirm_delete)
+    return require_umg_design_verification("remove_keys", result)
 
 @register_tool("animation_append_widget_tracks", "Append/overwrite property keys from the widget perspective.")
 async def animation_append_widget_tracks(widget_name: str, tracks: List[Dict[str, Any]], animation_name: str = "") -> Dict[str, Any]:
     conn = get_unreal_connection()
     sequencer_client = UMGSequencer.UMGSequencer(conn)
-    return await sequencer_client.append_widget_tracks(widget_name, tracks, animation_name)
+    result = await sequencer_client.append_widget_tracks(widget_name, tracks, animation_name)
+    return require_umg_design_verification("animation_append_widget_tracks", result)
 
 @register_tool("animation_append_time_slice", "Append a time-slice of widget properties (diff recommended).")
 async def animation_append_time_slice(time: float, widgets: List[Dict[str, Any]], animation_name: str = "") -> Dict[str, Any]:
     conn = get_unreal_connection()
     sequencer_client = UMGSequencer.UMGSequencer(conn)
-    return await sequencer_client.append_time_slice(time, widgets, animation_name)
+    result = await sequencer_client.append_time_slice(time, widgets, animation_name)
+    return require_umg_design_verification("animation_append_time_slice", result)
 
 @register_tool("animation_delete_widget_keys", "Delete keys for a widget/property at specific times (confirm_delete required).")
 async def animation_delete_widget_keys(property_name: str, times: List[float], widget_name: str = "", animation_name: str = "", confirm_delete: bool = False) -> Dict[str, Any]:
     conn = get_unreal_connection()
     sequencer_client = UMGSequencer.UMGSequencer(conn)
-    return await sequencer_client.delete_widget_keys(property_name, times, widget_name, animation_name, confirm_delete)
+    result = await sequencer_client.delete_widget_keys(property_name, times, widget_name, animation_name, confirm_delete)
+    return require_umg_design_verification("animation_delete_widget_keys", result)
 
 
 # =============================================================================

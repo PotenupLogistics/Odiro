@@ -7,6 +7,7 @@
 
 class UBorder;
 class UButton;
+class UScenarioEditorListItemViewModel;
 class USpacer;
 class UTextBlock;
 class UWidget;
@@ -40,6 +41,9 @@ public:
 	// Initializes row text, depth, selection state, and semantic payload.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Outliner")
 	void InitializeRow(const FScenarioOutlinerItemViewModel& viewModel);
+
+	// Initializes row display from the subsystem-owned item ViewModel.
+	void InitializeFromItemViewModel(UScenarioEditorListItemViewModel* itemViewModel);
 
 	// Applies the selected visual state owned by the row widget.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Outliner")
@@ -93,4 +97,8 @@ private:
 
 	UPROPERTY(Transient)
 	FScenarioOutlinerItemViewModel Item;
+
+	// Row 표시 데이터를 제공하는 outliner item ViewModel 참조.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorListItemViewModel> ItemViewModel;
 };

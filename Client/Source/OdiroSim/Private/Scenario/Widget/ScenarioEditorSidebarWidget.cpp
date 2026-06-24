@@ -426,18 +426,18 @@ void UScenarioEditorSidebarWidget::BuildMainPanelText(
 	FString& outListText) const
 {
 	outPrimaryText = FString::Printf(
-		TEXT("schema: %s\nversion: %d\nscenario_id: %s"),
+		TEXT("문서 형식: %s\n버전: %d\n시나리오 이름: %s"),
 		*scenarioTemplate.Schema,
 		scenarioTemplate.Version,
-		scenarioTemplate.ScenarioId.IsEmpty() ? TEXT("(unset)") : *scenarioTemplate.ScenarioId);
+		scenarioTemplate.ScenarioId.IsEmpty() ? TEXT("(미설정)") : *scenarioTemplate.ScenarioId);
 
 	outSecondaryText = FString::Printf(
-		TEXT("intent: %s"),
-		scenarioTemplate.Intent.IsEmpty() ? TEXT("(unset)") : *scenarioTemplate.Intent);
+		TEXT("검증 목표: %s"),
+		scenarioTemplate.Intent.IsEmpty() ? TEXT("(미설정)") : *scenarioTemplate.Intent);
 
 	TArray<FString> robotLines;
-	robotLines.Add(FString::Printf(TEXT("start: %s"), *FormatRobotAnchor(scenarioTemplate.Robot.Start)));
-	robotLines.Add(FString::Printf(TEXT("goal: %s"), *FormatRobotAnchor(scenarioTemplate.Robot.Goal)));
+	robotLines.Add(FString::Printf(TEXT("시작 위치: %s"), *FormatRobotAnchor(scenarioTemplate.Robot.Start)));
+	robotLines.Add(FString::Printf(TEXT("목표 위치: %s"), *FormatRobotAnchor(scenarioTemplate.Robot.Goal)));
 	outListText = JoinLines(robotLines);
 }
 
@@ -449,18 +449,18 @@ void UScenarioEditorSidebarWidget::BuildCorridorPanelText(
 {
 	const FScenarioTemplateCorridor& corridor = scenarioTemplate.Corridor;
 	outPrimaryText = FString::Printf(
-		TEXT("axis: %d point(s), %s\nwalkway_width: %s"),
+		TEXT("중심 경로: 경로 점 %d개, 길이 %s\n보행로 폭: %s"),
 		corridor.Axis.PointsMeters.Num(),
 		*FormatMeters(MeasureAxisLengthMeters(corridor.Axis.PointsMeters)),
 		*FormatNumberValue(corridor.WalkwayWidthMeters, TEXT("m")));
 
 	TArray<FString> laneLines;
-	laneLines.Add(FString::Printf(TEXT("building_side: %d lane(s)"), corridor.BuildingSide.Num()));
+	laneLines.Add(FString::Printf(TEXT("건물측 영역: %d개"), corridor.BuildingSide.Num()));
 	for (const FScenarioTemplateLaneRule& lane : corridor.BuildingSide)
 	{
 		laneLines.Add(FString::Printf(TEXT("  - %s"), *FormatLaneRule(lane)));
 	}
-	laneLines.Add(FString::Printf(TEXT("curb_side: %d lane(s)"), corridor.CurbSide.Num()));
+	laneLines.Add(FString::Printf(TEXT("도로측 영역: %d개"), corridor.CurbSide.Num()));
 	for (const FScenarioTemplateLaneRule& lane : corridor.CurbSide)
 	{
 		laneLines.Add(FString::Printf(TEXT("  - %s"), *FormatLaneRule(lane)));
@@ -471,8 +471,8 @@ void UScenarioEditorSidebarWidget::BuildCorridorPanelText(
 	for (const FScenarioTemplateSegment& segment : corridor.Segments)
 	{
 		segmentLines.Add(FString::Printf(
-			TEXT("%s | %s | %.2f..%.2fm | replace: %s"),
-			segment.SegmentId.IsEmpty() ? TEXT("(unnamed)") : *segment.SegmentId,
+			TEXT("%s | %s | %.2f..%.2fm | 대체 표면: %s"),
+			segment.SegmentId.IsEmpty() ? TEXT("(이름 없음)") : *segment.SegmentId,
 			*SegmentTypeToString(segment.Type),
 			segment.AlongRangeMeters.StartMeters,
 			segment.AlongRangeMeters.EndMeters,
@@ -489,21 +489,21 @@ void UScenarioEditorSidebarWidget::BuildObstaclePanelText(
 {
 	const FScenarioTemplateObstacleRules& obstacles = scenarioTemplate.Obstacles;
 	outPrimaryText = FString::Printf(
-		TEXT("min_clear_width: %s\nplacements: %d"),
+		TEXT("최소 통행 폭: %s\n배치 규칙: %d개"),
 		*FormatNumberValue(obstacles.MinClearWidthMeters, TEXT("m")),
 		obstacles.Placements.Num());
 
-	outSecondaryText = TEXT("fixed/pattern/scatter placement rules");
+	outSecondaryText = TEXT("고정/패턴/분산 배치 규칙");
 
 	TArray<FString> placementLines;
 	for (const FScenarioTemplateObstaclePlacement& placement : obstacles.Placements)
 	{
 		placementLines.Add(FString::Printf(
-			TEXT("%s | %s | prop: %s | segment: %s | along: %s | offset: %s"),
-			placement.PlacementId.IsEmpty() ? TEXT("(unnamed)") : *placement.PlacementId,
+			TEXT("%s | %s | 장애물: %s | 구간: %s | 진행 거리: %s | 좌우 위치: %s"),
+			placement.PlacementId.IsEmpty() ? TEXT("(이름 없음)") : *placement.PlacementId,
 			*ObstaclePlacementKindToString(placement.Kind),
-			placement.PropId.IsEmpty() ? TEXT("(unset)") : *placement.PropId,
-			placement.At.SegmentId.IsEmpty() ? TEXT("(unset)") : *placement.At.SegmentId,
+			placement.PropId.IsEmpty() ? TEXT("(미설정)") : *placement.PropId,
+			placement.At.SegmentId.IsEmpty() ? TEXT("(미설정)") : *placement.At.SegmentId,
 			*FormatNumberValue(placement.At.AlongMeters, TEXT("m")),
 			*FormatNumberValue(placement.At.OffsetMeters, TEXT("m"))));
 	}
@@ -518,24 +518,24 @@ void UScenarioEditorSidebarWidget::BuildPedestrianPanelText(
 {
 	const FScenarioTemplatePedestrianRules& pedestrians = scenarioTemplate.Pedestrians;
 	outPrimaryText = FString::Printf(
-		TEXT("background_count: %s\nbackground_speed: %s\nencounters: %d"),
+		TEXT("배경 보행자 수: %s\n보행 속도: %s\n상호작용 상황: %d개"),
 		*FormatIntegerValue(pedestrians.Background.Count),
 		*FormatNumberValue(pedestrians.Background.SpeedMetersPerSecond, TEXT("m/s")),
 		pedestrians.Encounters.Num());
 
 	outSecondaryText = FString::Printf(
-		TEXT("spawn_segments: %s"),
+		TEXT("스폰 구간: %s"),
 		*FormatStringList(pedestrians.Background.SpawnSegmentIds));
 
 	TArray<FString> encounterLines;
 	for (const FScenarioTemplatePedestrianEncounter& encounter : pedestrians.Encounters)
 	{
 		encounterLines.Add(FString::Printf(
-			TEXT("%s | %s | segment: %s | persona: %s | meet_offset: %s"),
-			encounter.EncounterId.IsEmpty() ? TEXT("(unnamed)") : *encounter.EncounterId,
+			TEXT("%s | %s | 구간: %s | 보행자 성향: %s | 만남 위치 보정: %s"),
+			encounter.EncounterId.IsEmpty() ? TEXT("(이름 없음)") : *encounter.EncounterId,
 			*EncounterTypeToString(encounter.Type),
-			encounter.AtSegmentId.IsEmpty() ? TEXT("(unset)") : *encounter.AtSegmentId,
-			encounter.PersonaId.IsEmpty() ? TEXT("(unset)") : *encounter.PersonaId,
+			encounter.AtSegmentId.IsEmpty() ? TEXT("(미설정)") : *encounter.AtSegmentId,
+			encounter.PersonaId.IsEmpty() ? TEXT("(미설정)") : *encounter.PersonaId,
 			*FormatNumberValue(encounter.MeetOffsetMeters, TEXT("m"))));
 	}
 	outListText = JoinLines(encounterLines);
@@ -597,15 +597,15 @@ FString UScenarioEditorSidebarWidget::PanelToTitle(const EScenarioTemplateSideba
 	switch (panel)
 	{
 	case EScenarioTemplateSidebarPanel::Main:
-		return TEXT("Main");
+		return TEXT("기본 정보");
 	case EScenarioTemplateSidebarPanel::Corridor:
-		return TEXT("Corridor");
+		return TEXT("통로");
 	case EScenarioTemplateSidebarPanel::Obstacle:
-		return TEXT("Obstacle");
+		return TEXT("장애물");
 	case EScenarioTemplateSidebarPanel::Pedestrian:
-		return TEXT("Pedestrian");
+		return TEXT("보행자");
 	default:
-		return TEXT("Scenario Template");
+		return TEXT("시나리오 템플릿");
 	}
 }
 

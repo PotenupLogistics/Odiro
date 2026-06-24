@@ -166,11 +166,12 @@ void UScenarioEditorSidebarCorridorLaneWidget::ConfigureFieldRows()
 {
 	if (LaneBlockWidget)
 	{
+		const TCHAR* sideLabel = Side == EScenarioEditorCorridorSide::Building ? TEXT("건물측") : TEXT("도로측");
 		LaneBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
 		LaneBlockWidget->SetBlockMetadata(
-			FString::Printf(TEXT("lane[%d]"), LaneIndex),
+			FString::Printf(TEXT("%s 영역 %d"), sideLabel, LaneIndex + 1),
 			MakeLanePath(Side),
-			TEXT("Detail"));
+			TEXT("세부"));
 		LaneBlockWidget->SetNested(true);
 		LaneBlockWidget->SetShowNormalOutline(false);
 	}

@@ -169,7 +169,7 @@ build/Release/
           events.jsonl            # 발생 이벤트 (장애물 감지, 충돌 등)
           trace.jsonl             # 환경 정보 기록. 로봇이 못본 데이터 분석/리플레이에 활용
           result.json             # 실행 시간, 성공/실패, 충돌 횟수 등
-          preview.png             # 대표 이벤트 이미지
+          preview.png             # 선택 파일. 현재 클라이언트 Runner는 자동 생성하지 않음
           captures/               # 센서 데이터 이미지
 ```
 

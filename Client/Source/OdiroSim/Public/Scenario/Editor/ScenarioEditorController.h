@@ -210,7 +210,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Authoring")
 	void NewScenarioDraft();
 
-	// Saves the current editor draft to a user project scenario.json file.
+	// 현재 Draft를 저장하고 저장 결과와 독립적으로 프로젝트 Preview 생성을 시도한다.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Export")
 	bool SaveProjectScenarioJsonFile(const FString& jsonFilePath, FString& outResolvedJsonFilePath, TArray<FString>& outDiagnostics);
 
@@ -307,6 +307,10 @@ private:
 	bool IsEditorSelectablePlaceable(const UScenarioPlaceableComponent* placeableComponent) const;
 	UScenarioPlaceableComponent* FindSelectablePlaceableByInstanceId(const FString& instanceId) const;
 	FString ResolveCurrentScenarioDraftSavePath() const;
+	// 저장된 scenario.json과 현재 Editor Preview로 프로젝트 대표 PNG를 생성한다.
+	void CaptureScenarioPreviewAfterSave(
+		const FString& resolvedJsonFilePath,
+		UScenarioAuthoringSubsystem* authoringSubsystem);
 	bool IsCursorOverEditorWidgetInputModeFocus() const;
 	void SetHoveredPlaceable(UScenarioPlaceableComponent* placeableComponent);
 	void SetSelectedPlaceable(UScenarioPlaceableComponent* placeableComponent);

@@ -12,7 +12,7 @@ bool FScenarioMapBoundsResolver::TryResolve(
 {
 	outBounds = FScenarioMapBounds{};
 
-	FBox2D xyBounds(ForceInit);
+	FBox2D surfaceXYBounds(ForceInit);
 	double centerZSum = 0.0;
 	int32 validActorCount = 0;
 
@@ -20,24 +20,55 @@ bool FScenarioMapBoundsResolver::TryResolve(
 	{
 		AccumulateSurfaceActor(
 			surfaceActor,
-			xyBounds,
+			surfaceXYBounds,
 			centerZSum,
 			validActorCount);
 	}
 
-	if (!xyBounds.bIsValid || validActorCount <= 0)
+	if (!surfaceXYBounds.bIsValid || validActorCount <= 0)
 		return false;
+
+	const double centerZ = centerZSum / static_cast<double>(validActorCount);
+
+	return TryResolveFromSurfaceBounds(
+		surfaceXYBounds,
+		centerZ,
+		placeables,
+		paddingCm,
+		outBounds);
+}
+
+// 이미 계산된 Surface Bounds에 DeliveryBot route와 Padding을 적용한다.
+bool FScenarioMapBoundsResolver::TryResolveFromSurfaceBounds(
+	const FBox2D& surfaceXYBounds,
+	const double centerZ,
+	const TArray<FScenarioPlaceableInstanceSpec>& placeables,
+	const double paddingCm,
+	FScenarioMapBounds& outBounds)
+{
+	outBounds = FScenarioMapBounds{};
+
+	if (!surfaceXYBounds.bIsValid
+		|| !FMath::IsFinite(centerZ)
+		|| !FMath::IsFinite(paddingCm))
+	{
+		return false;
+	}
+
+	FBox2D resolvedXYBounds = surfaceXYBounds;
 
 	for (const FScenarioPlaceableInstanceSpec& placeableSpec : placeables)
 	{
-		ExpandForDeliveryBotRoute(placeableSpec, xyBounds);
+		ExpandForDeliveryBotRoute(placeableSpec, resolvedXYBounds);
 	}
 
 	const double safePaddingCm = FMath::Max(paddingCm, 0.0);
 	const FVector2D padding(safePaddingCm, safePaddingCm);
 
-	outBounds.XYBounds = FBox2D(xyBounds.Min - padding, xyBounds.Max + padding);
-	outBounds.CenterZ = centerZSum / static_cast<double>(validActorCount);
+	outBounds.XYBounds = FBox2D(
+		resolvedXYBounds.Min - padding,
+		resolvedXYBounds.Max + padding);
+	outBounds.CenterZ = centerZ;
 
 	return outBounds.IsValid();
 }

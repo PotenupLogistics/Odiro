@@ -1,4 +1,5 @@
 #include "Scenario/ScenarioSimulationSubsystem.h"
+#include "Shared/Actors/ScenarioMapBounds.h"
 #include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
 #include "Scenario/Actors/ScenarioGroundRegion.h"
 #include "Scenario/Actors/ScenarioPedestrian.h"
@@ -57,20 +58,24 @@ UScenarioSimulationSubsystem::UScenarioSimulationSubsystem()
 	}
 }
 
+// 현재 Scenario가 소유한 runtime actor, Grid와 보행자 계획을 정리한다.
 void UScenarioSimulationSubsystem::ClearScenario()
 {
+	// 정리 결과 로그에 사용할 현재 runtime object 수를 보관한다.
 	const int32 actorCount = RuntimeActors.Num();
 	const int32 actorIdCount = RuntimeActorsById.Num();
 	const int32 groundRegionCount = RuntimeGroundRegions.Num();
 	const int32 corridorCount = RuntimeCorridors.Num();
 	const int32 pathCount = RuntimePaths.Num();
 
+	// 이전 Scenario가 생성한 Runtime GridBoundsActor를 제거한다.
 	if (IsValid(RuntimeGridBoundsActor))
 	{
 		RuntimeGridBoundsActor->Destroy();
 	}
 	RuntimeGridBoundsActor = nullptr;
 
+	// SimulationSubsystem이 소유한 모든 runtime actor를 제거한다.
 	for (int32 index = RuntimeActors.Num() - 1; index >= 0; --index)
 	{
 		if (AActor* actor = RuntimeActors[index].Get())
@@ -79,94 +84,153 @@ void UScenarioSimulationSubsystem::ClearScenario()
 		}
 	}
 
+	// Runtime actor와 lookup collection을 초기화한다.
 	RuntimeActors.Reset();
 	RuntimeGroundRegions.Reset();
 	RuntimeCorridors.Reset();
 	RuntimePaths.Reset();
 	RuntimeActorsById.Reset();
+
+	// 이전 Scenario가 남긴 persistent debug drawing을 제거한다.
 	FlushPersistentDebugLines(GetWorld());
 
+	// 이전 Scenario가 생성한 보행자 계획을 제거한다.
 	if (UWorld* world = GetWorld())
 	{
-		if (UScenarioPedestrianPlanSubsystem* pedestrianPlanSubsystem = world->GetSubsystem<UScenarioPedestrianPlanSubsystem>())
+		if (UScenarioPedestrianPlanSubsystem* pedestrianPlanSubsystem =
+			world->GetSubsystem<UScenarioPedestrianPlanSubsystem>())
 		{
 			pedestrianPlanSubsystem->ClearPlans();
 		}
 	}
 
-	if (actorCount > 0 || actorIdCount > 0 || groundRegionCount > 0 || corridorCount > 0 || pathCount > 0)
+	// 실제로 정리한 runtime object가 있을 때만 cleanup 결과를 기록한다.
+	if (actorCount > 0
+		|| actorIdCount > 0
+		|| groundRegionCount > 0
+		|| corridorCount > 0
+		|| pathCount > 0)
 	{
 		UE_LOG(
 			LogScenarioSimulation,
-			 Warning,
-			TEXT("Scenario runtime cleanup complete | Actors: %d, ActorIds: %d, GroundRegions: %d, Corridors: %d, Paths: %d"),
-		actorCount,
-		actorIdCount,
-		groundRegionCount,
-		corridorCount,
-		pathCount);
+			Warning,
+			TEXT(
+				"Scenario runtime cleanup complete | "
+				"Actors: %d, ActorIds: %d, GroundRegions: %d, "
+				"Corridors: %d, Paths: %d"),
+			actorCount,
+			actorIdCount,
+			groundRegionCount,
+			corridorCount,
+			pathCount);
 	}
 }
 
-bool UScenarioSimulationSubsystem::RebuildDeliveryBotGridFromScenarioSurfaces(const FScenarioSimulationSetupSpec& setupSpec)
+// 시나리오 Surface와 DeliveryBot route에서 최종 Bounds를 계산해 runtime Grid를 다시 만든다.
+bool UScenarioSimulationSubsystem::RebuildDeliveryBotGridFromScenarioSurfaces(
+	const FScenarioSimulationSetupSpec& setupSpec)
 {
+	// Grid를 생성할 World와 GridSubsystem을 검증한다.
 	UWorld* world = GetWorld();
 	if (!IsValid(world))
+	{
 		return false;
+	}
 
-	UDeliveryBot_GridSubsystem* gridSubsystem = world->GetSubsystem<UDeliveryBot_GridSubsystem>();
+	UDeliveryBot_GridSubsystem* gridSubsystem =
+		world->GetSubsystem<UDeliveryBot_GridSubsystem>();
 	if (!IsValid(gridSubsystem))
 	{
-		UE_LOG(LogScenarioSimulation, Warning, TEXT("DeliveryBot grid rebuild failed. GridSubsystem is invalid."));
+		UE_LOG(
+			LogScenarioSimulation,
+			Warning,
+			TEXT("DeliveryBot grid rebuild failed. GridSubsystem is invalid."));
 		return false;
 	}
 
-	FBox2D xyBounds(ForceInit);
-	double centerZ = 0.0;
-	if (!TryBuildRuntimeSurfaceXYBounds(xyBounds, centerZ)
-		&& !TryBuildGroundRegionXYBounds(setupSpec.GroundRegions, xyBounds, centerZ))
+	// Spawn된 Surface actor를 우선 사용하고 실패하면 GroundRegion spec으로 fallback한다.
+	FBox2D surfaceXYBounds(ForceInit);
+	double surfaceCenterZ = 0.0;
+
+	if (!TryBuildRuntimeSurfaceXYBounds(
+			surfaceXYBounds,
+			surfaceCenterZ)
+		&& !TryBuildGroundRegionXYBounds(
+			setupSpec.GroundRegions,
+			surfaceXYBounds,
+			surfaceCenterZ))
 	{
-		UE_LOG(LogScenarioSimulation, Warning, TEXT("DeliveryBot grid bounds build failed. No valid scenario surfaces."));
+		UE_LOG(
+			LogScenarioSimulation,
+			Warning,
+			TEXT("DeliveryBot grid bounds build failed. No valid scenario surfaces."));
 		return false;
 	}
 
-	for (const FScenarioPlaceableInstanceSpec& placeableSpec : setupSpec.Placeables)
+	// Surface Bounds에 DeliveryBot Start, Goal과 Grid Padding을 적용한다.
+	FScenarioMapBounds mapBounds;
+	if (!FScenarioMapBoundsResolver::TryResolveFromSurfaceBounds(
+			surfaceXYBounds,
+			surfaceCenterZ,
+			setupSpec.Placeables,
+			DeliveryBotGridBoundsPaddingCm,
+			mapBounds))
 	{
-		ExpandXYBoundsWithDeliveryBotRoute(placeableSpec, xyBounds);
+		UE_LOG(
+			LogScenarioSimulation,
+			Warning,
+			TEXT("DeliveryBot grid bounds resolve failed."));
+		return false;
 	}
 
+	// Grid 생성에 사용할 Bounds를 기록한다.
 	UE_LOG(
 		LogScenarioSimulation,
 		Log,
-		TEXT("DeliveryBot grid bounds resolved from scenario surfaces and robot route anchors. Min: %s, Max: %s"),
-		*xyBounds.Min.ToString(),
-		*xyBounds.Max.ToString());
+		TEXT(
+			"DeliveryBot grid bounds resolved from scenario surfaces, "
+			"robot route anchors, and padding. Min: %s, Max: %s, CenterZ: %.2f"),
+		*mapBounds.XYBounds.Min.ToString(),
+		*mapBounds.XYBounds.Max.ToString(),
+		mapBounds.CenterZ);
 
+	// 이전 Scenario가 생성한 GridBoundsActor를 제거한다.
 	if (IsValid(RuntimeGridBoundsActor))
 	{
 		RuntimeGridBoundsActor->Destroy();
 		RuntimeGridBoundsActor = nullptr;
 	}
 
-	ADeliveryBot_GridBoundsActor* gridBoundsActor = SpawnDeliveryBotGridBoundsActor(xyBounds, centerZ);
+	// 최종 Map Bounds를 사용하는 새 GridBoundsActor를 생성한다.
+	ADeliveryBot_GridBoundsActor* gridBoundsActor =
+		SpawnDeliveryBotGridBoundsActor(mapBounds);
 	if (!IsValid(gridBoundsActor))
 	{
-		UE_LOG(LogScenarioSimulation, Warning, TEXT("DeliveryBot grid rebuild failed. Runtime GridBoundsActor spawn failed."));
+		UE_LOG(
+			LogScenarioSimulation,
+			Warning,
+			TEXT(
+				"DeliveryBot grid rebuild failed. "
+				"Runtime GridBoundsActor spawn failed."));
 		return false;
 	}
 
+	// 생성된 GridBoundsActor를 기준으로 실제 Navigation Grid를 만든다.
 	gridSubsystem->BuildGridFromBounds(gridBoundsActor);
+	const bool bGridBuilt = gridSubsystem->HasBuiltGrid();
 
+	// 최종 Grid 생성 결과와 cell 수를 기록한다.
 	UE_LOG(
 		LogScenarioSimulation,
 		Log,
-		TEXT("DeliveryBot grid rebuilt from episode scenario surfaces. BoundsActor: %s, HasGrid: %s, Cells: %d"),
+		TEXT(
+			"DeliveryBot grid rebuilt from episode scenario surfaces. "
+			"BoundsActor: %s, HasGrid: %s, Cells: %d"),
 		*gridBoundsActor->GetName(),
-		gridSubsystem->HasBuiltGrid() ? TEXT("true") : TEXT("false"),
-		gridSubsystem->GetGridCellCount()
-	);
+		bGridBuilt ? TEXT("true") : TEXT("false"),
+		gridSubsystem->GetGridCellCount());
 
-	return gridSubsystem->HasBuiltGrid();
+	return bGridBuilt;
 }
 
 bool UScenarioSimulationSubsystem::TryBuildGroundRegionXYBounds(
@@ -196,152 +260,169 @@ bool UScenarioSimulationSubsystem::TryBuildGroundRegionXYBounds(
 	return true;
 }
 
+// Spawn된 runtime surface actor에서 Grid/Preview 공용 XY 영역과 평균 중심 Z를 계산한다.
 bool UScenarioSimulationSubsystem::TryBuildRuntimeSurfaceXYBounds(
 	FBox2D& outXYBounds,
 	double& outCenterZ) const
 {
 	outXYBounds = FBox2D(ForceInit);
+	outCenterZ = 0.0;
 
-	double zSum = 0.0;
-	int32 validActorCount = 0;
+	TArray<AActor*> surfaceActors;
+	surfaceActors.Reserve(
+		RuntimeCorridors.Num()
+		+ RuntimeGroundRegions.Num());
 
 	for (const TPair<FString, TObjectPtr<AScenarioCorridorRuntimeActor>>& pair : RuntimeCorridors)
 	{
-		ExpandXYBoundsWithActor(pair.Value.Get(), outXYBounds, zSum, validActorCount);
+		surfaceActors.Add(pair.Value.Get());
 	}
 
 	for (const TPair<FString, TObjectPtr<AScenarioGroundRegion>>& pair : RuntimeGroundRegions)
 	{
-		ExpandXYBoundsWithActor(pair.Value.Get(), outXYBounds, zSum, validActorCount);
+		surfaceActors.Add(pair.Value.Get());
 	}
 
-	if (!outXYBounds.bIsValid || validActorCount <= 0)
+	const TArray<FScenarioPlaceableInstanceSpec> emptyPlaceables;
+
+	FScenarioMapBounds resolvedBounds;
+	if (!FScenarioMapBoundsResolver::TryResolve(
+			surfaceActors,
+			emptyPlaceables,
+			0.0,
+			resolvedBounds))
 	{
 		return false;
 	}
 
-	outCenterZ = zSum / static_cast<double>(validActorCount);
+	outXYBounds = resolvedBounds.XYBounds;
+	outCenterZ = resolvedBounds.CenterZ;
 	return true;
 }
 
-void UScenarioSimulationSubsystem::ExpandXYBoundsWithActor(
-	const AActor* actor,
-	FBox2D& inOutXYBounds,
-	double& inOutZSum,
-	int32& inOutValidActorCount)
+// 최종 Map Bounds를 사용하는 runtime DeliveryBot GridBoundsActor를 생성한다.
+ADeliveryBot_GridBoundsActor*
+UScenarioSimulationSubsystem::SpawnDeliveryBotGridBoundsActor(
+	const FScenarioMapBounds& mapBounds)
 {
-	if (!IsValid(actor))
+	// GridActor 생성 전에 최종 Map Bounds를 검증한다.
+	if (!mapBounds.IsValid())
 	{
-		return;
+		return nullptr;
 	}
 
-	const FBox componentBounds = actor->GetComponentsBoundingBox(true);
-	if (!componentBounds.IsValid)
-	{
-		return;
-	}
-
-	inOutXYBounds += FVector2D(componentBounds.Min.X, componentBounds.Min.Y);
-	inOutXYBounds += FVector2D(componentBounds.Max.X, componentBounds.Max.Y);
-	inOutZSum += componentBounds.GetCenter().Z;
-	++inOutValidActorCount;
-}
-
-void UScenarioSimulationSubsystem::ExpandXYBoundsWithDeliveryBotRoute(
-	const FScenarioPlaceableInstanceSpec& placeableSpec,
-	FBox2D& inOutXYBounds)
-{
-	if (placeableSpec.Category != EScenarioActorCategory::DeliveryBot)
-	{
-		return;
-	}
-
-	if (placeableSpec.DeliveryBot.bHasStartLocation)
-	{
-		const FVector& startLocation = placeableSpec.DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm;
-		inOutXYBounds += FVector2D(startLocation.X, startLocation.Y);
-	}
-	else
-	{
-		const FVector startLocation = placeableSpec.Transform.GetLocation();
-		inOutXYBounds += FVector2D(startLocation.X, startLocation.Y);
-	}
-
-	if (placeableSpec.DeliveryBot.bHasGoalLocation)
-	{
-		const FVector& goalLocation = placeableSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm;
-		inOutXYBounds += FVector2D(goalLocation.X, goalLocation.Y);
-	}
-}
-ADeliveryBot_GridBoundsActor* UScenarioSimulationSubsystem::SpawnDeliveryBotGridBoundsActor(
-	const FBox2D& xyBounds,
-	double centerZ)
-{
+	// Actor를 생성할 World를 검증한다.
 	UWorld* world = GetWorld();
 	if (!IsValid(world))
+	{
 		return nullptr;
+	}
 
-	TSubclassOf<ADeliveryBot_GridBoundsActor> spawnClass = GridBoundsActorClass;
+	// 설정된 GridBoundsActor class를 사용하고 없으면 기본 C++ class를 사용한다.
+	TSubclassOf<ADeliveryBot_GridBoundsActor> spawnClass =
+		GridBoundsActorClass;
 	if (!spawnClass)
 	{
 		spawnClass = ADeliveryBot_GridBoundsActor::StaticClass();
 	}
 
-	const double safePadding = FMath::Max(static_cast<double>(DeliveryBotGridBoundsPaddingCm), 0.0);
-	const FVector2D paddedMin = xyBounds.Min - FVector2D(safePadding, safePadding);
-	const FVector2D paddedMax = xyBounds.Max + FVector2D(safePadding, safePadding);
-	const FVector2D boundsCenter = (paddedMin + paddedMax) * 0.5;
+	// 최종 Map Bounds 중앙에 Actor를 배치할 spawn transform을 계산한다.
+	const FVector2D boundsCenter =
+		mapBounds.XYBounds.GetCenter();
+
 	const FTransform spawnTransform(
 		FRotator::ZeroRotator,
-		FVector(boundsCenter.X, boundsCenter.Y, centerZ),
+		FVector(
+			boundsCenter.X,
+			boundsCenter.Y,
+			mapBounds.CenterZ),
 		FVector::OneVector);
 
-	ADeliveryBot_GridBoundsActor* gridBoundsActor = world->SpawnActorDeferred<ADeliveryBot_GridBoundsActor>(
-		spawnClass,
-		spawnTransform,
-		nullptr,
-		nullptr,
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	// BeginPlay 전 설정을 적용할 수 있도록 GridBoundsActor를 지연 생성한다.
+	ADeliveryBot_GridBoundsActor* gridBoundsActor =
+		world->SpawnActorDeferred<ADeliveryBot_GridBoundsActor>(
+			spawnClass,
+			spawnTransform,
+			nullptr,
+			nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 
 	if (!IsValid(gridBoundsActor))
+	{
 		return nullptr;
+	}
 
+	// ScenarioSimulationSubsystem이 Grid 생성을 소유하도록 BeginPlay 자동 생성을 막는다.
 	gridBoundsActor->SetBuildGridOnBeginPlay(false);
 
-	UGameplayStatics::FinishSpawningActor(gridBoundsActor, spawnTransform);
-	ApplyXYBoundsToGridBoundsActor(gridBoundsActor, xyBounds, centerZ);
+	// Actor 생성을 완료하고 최종 Bounds 크기를 적용한다.
+	UGameplayStatics::FinishSpawningActor(
+		gridBoundsActor,
+		spawnTransform);
 
+	ApplyMapBoundsToGridBoundsActor(
+		gridBoundsActor,
+		mapBounds);
+
+	// 현재 Scenario가 소유한 Runtime GridBoundsActor를 보관한다.
 	RuntimeGridBoundsActor = gridBoundsActor;
 	return gridBoundsActor;
 }
 
-void UScenarioSimulationSubsystem::ApplyXYBoundsToGridBoundsActor(
+// 최종 Map Bounds의 중심과 크기를 GridBoundsActor에 적용한다.
+void UScenarioSimulationSubsystem::ApplyMapBoundsToGridBoundsActor(
 	ADeliveryBot_GridBoundsActor* gridBoundsActor,
-	const FBox2D& xyBounds,
-	double centerZ) const
+	const FScenarioMapBounds& mapBounds) const
 {
-	if (!IsValid(gridBoundsActor)) return;
+	// 적용 대상 Actor와 Map Bounds를 검증한다.
+	if (!IsValid(gridBoundsActor) || !mapBounds.IsValid())
+	{
+		return;
+	}
 
-	UBoxComponent* boundsBox = gridBoundsActor->GetBoundsBox();
-	if (!IsValid(boundsBox)) return;
+	// Grid 영역을 표현할 BoxComponent를 검증한다.
+	UBoxComponent* boundsBox =
+		gridBoundsActor->GetBoundsBox();
+	if (!IsValid(boundsBox))
+	{
+		return;
+	}
 
-	const double safePadding = FMath::Max(static_cast<double>(DeliveryBotGridBoundsPaddingCm), 0.0);
-	const FVector2D paddedMin = xyBounds.Min - FVector2D(safePadding, safePadding);
-	const FVector2D paddedMax = xyBounds.Max + FVector2D(safePadding, safePadding);
-	const FVector2D boundsCenter = (paddedMin + paddedMax) * 0.5;
-	const FVector2D boundsSize = paddedMax - paddedMin;
+	// 최종 Bounds에서 Actor 중심과 Box 전체 크기를 계산한다.
+	const FVector2D boundsCenter =
+		mapBounds.XYBounds.GetCenter();
+	const FVector2D boundsSize =
+		mapBounds.XYBounds.GetSize();
 
-	gridBoundsActor->SetActorLocation(FVector(boundsCenter.X, boundsCenter.Y, centerZ));
-	gridBoundsActor->SetActorRotation(FRotator::ZeroRotator);
-	gridBoundsActor->SetActorScale3D(FVector::OneVector);
+	// GridBoundsActor를 최종 Map Bounds 중앙에 배치한다.
+	gridBoundsActor->SetActorLocation(
+		FVector(
+			boundsCenter.X,
+			boundsCenter.Y,
+			mapBounds.CenterZ));
+	gridBoundsActor->SetActorRotation(
+		FRotator::ZeroRotator);
+	gridBoundsActor->SetActorScale3D(
+		FVector::OneVector);
 
+	// BoxComponent가 별도 child인 경우 상대 transform을 초기화한다.
 	if (boundsBox != gridBoundsActor->GetRootComponent())
 	{
-		boundsBox->SetRelativeLocation(FVector::ZeroVector);
-		boundsBox->SetRelativeRotation(FRotator::ZeroRotator);
-		boundsBox->SetRelativeScale3D(FVector::OneVector);
+		boundsBox->SetRelativeLocation(
+			FVector::ZeroVector);
+		boundsBox->SetRelativeRotation(
+			FRotator::ZeroRotator);
+		boundsBox->SetRelativeScale3D(
+			FVector::OneVector);
 	}
-	boundsBox->SetBoxExtent(FVector(boundsSize.X * 0.5, boundsSize.Y * 0.5, 100.0), true);
+
+	// 최종 Map Bounds 크기를 Grid Box의 half extent로 적용한다.
+	boundsBox->SetBoxExtent(
+		FVector(
+			boundsSize.X * 0.5,
+			boundsSize.Y * 0.5,
+			100.0),
+		true);
 	boundsBox->UpdateBounds();
 }
 
@@ -596,6 +677,23 @@ bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationS
 		RuntimePaths.Num());
 
 	return bAllSpawned;
+}
+
+// 전달받은 Surface Actor와 Placeable을 Grid와 동일한 Padding으로 계산한다.
+bool UScenarioSimulationSubsystem::TryResolveScenarioMapBounds(
+	const TArray<AActor*>& surfaceActors,
+	const TArray<FScenarioPlaceableInstanceSpec>& placeables,
+	FScenarioMapBounds& outBounds) const
+{
+	// 실패 시 이전 결과가 사용되지 않도록 초기화한다.
+	outBounds = FScenarioMapBounds{};
+
+	// Grid와 동일한 Resolver와 Padding 설정으로 최종 영역을 계산한다.
+	return FScenarioMapBoundsResolver::TryResolve(
+		surfaceActors,
+		placeables,
+		DeliveryBotGridBoundsPaddingCm,
+		outBounds);
 }
 
 AActor* UScenarioSimulationSubsystem::FindRuntimeActor(const FString& instanceId) const

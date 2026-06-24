@@ -862,9 +862,9 @@ PNG 파일
 
 규칙:
 
-- episode 대표 이미지
-- 실패, near-miss, 충돌 등 대표 event 장면 우선
-- 해상도, event 참조, 대체 frame 규칙은 추후 확정
+- 선택 artifact다. 현재 클라이언트 Runner는 episode 실행 중 자동 생성하지 않는다.
+- 기존 파일이나 외부 도구가 생성한 파일이 있으면 UI가 선택적으로 사용할 수 있다.
+- 대표 event 장면은 `preview.png`와 의미가 다르므로 필요하면 별도 artifact로 설계
 
 ### Sensor Captures
 

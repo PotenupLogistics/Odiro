@@ -785,22 +785,43 @@ void AScenarioEditorController::NewScenarioDraft()
 	}
 }
 
+// 현재 Editor Draft를 저장하고 성공한 경우 프로젝트 대표 Preview를 갱신한다.
 bool AScenarioEditorController::SaveProjectScenarioJsonFile(
 	const FString& jsonFilePath,
 	FString& outResolvedJsonFilePath,
 	TArray<FString>& outDiagnostics)
 {
+	// 이전 저장 호출의 출력 상태를 초기화한다.
 	outResolvedJsonFilePath.Reset();
 	outDiagnostics.Reset();
 
-	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
-	if (!authoringSubsystem)
+	// JSON 저장 책임을 가진 AuthoringSubsystem을 조회한다.
+	UScenarioAuthoringSubsystem* authoringSubsystem =
+		GetAuthoringSubsystem();
+	if (!IsValid(authoringSubsystem))
 	{
-		outDiagnostics.Add(TEXT("Scenario authoring subsystem is unavailable."));
+		outDiagnostics.Add(
+			TEXT("Scenario authoring subsystem is unavailable."));
 		return false;
 	}
 
-	return authoringSubsystem->SaveProjectScenarioJsonFile(jsonFilePath, outResolvedJsonFilePath, outDiagnostics);
+	// 검증된 scenario.json을 먼저 저장한다.
+	const bool bSaved =
+		authoringSubsystem->SaveProjectScenarioJsonFile(
+			jsonFilePath,
+			outResolvedJsonFilePath,
+			outDiagnostics);
+	if (!bSaved)
+	{
+		return false;
+	}
+
+	// JSON 저장 성공과 분리된 파생 artifact로 Preview를 생성한다.
+	CaptureScenarioPreviewAfterSave(
+		outResolvedJsonFilePath,
+		authoringSubsystem);
+
+	return true;
 }
 
 bool AScenarioEditorController::SaveCurrentScenarioDraft(

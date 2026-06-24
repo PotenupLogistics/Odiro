@@ -8,8 +8,12 @@ paths:
   - Client/Source/OdiroSim/Private/Episode/**
   - Client/Source/OdiroSim/Public/Shared/**
   - Client/Source/OdiroSim/Private/Shared/**
+  - Client/Content/Maps/ScenarioEditorMap.umap
+  - Client/Content/Maps/ScenarioSimulationMap.umap
   - Client/Json/**
   - Client/Docs/plans/PLAN-260602-sim-logging.md
+  - Client/Docs/PreviewAgent.local.md
+  - Client/Docs/plans/PLAN-260622-scenario-episode-preview-capture.md
   - contracts/specs/user-project-data.md
   - docs/specs/simulation-interface.md
 entry:
@@ -37,6 +41,15 @@ entry:
       - Client/Source/OdiroSim/Private/Scenario
       - Client/Source/OdiroSim/Public/Episode
       - Client/Source/OdiroSim/Private/Episode
+  - id: scenario-preview-capture
+    description: Shared map bounds, scenario top-view preview, episode top-view preview, and PNG capture flow.
+    read:
+      - Client/Docs/PreviewAgent.local.md
+      - Client/Docs/plans/PLAN-260622-scenario-episode-preview-capture.md
+      - Client/Source/OdiroSim/Public/Shared/Actors
+      - Client/Source/OdiroSim/Private/Shared/Actors
+      - Client/Source/OdiroSim/Public/Scenario
+      - Client/Source/OdiroSim/Private/Scenario
 guardrails:
   - Final user project input uses one editable `<UserProject>/scenario.json`; generated episode scenarios are derived run artifacts.
   - Public project-run execution accepts direct scenario/profile inputs, not legacy RunQueue start helpers.
@@ -47,6 +60,12 @@ guardrails:
   - User project run output is written through typed UserProjectData JSON writers.
   - Scenario editor selection is controller-owned; WBP assets own layout and detail panel structure.
   - Shared corridor/geometry helpers own reusable surface metadata, spline mesh helpers, and analytic surface queries.
+  - Scenario preview framing consumes Scenario-owned bounds resolving and does not inspect DeliveryBot grid actors directly.
+  - Scenario save preview uses surface-only bounds with ScenarioPreviewFitScale.
+  - ScenarioPreviewCaptureSubsystem owns transient SceneCapture2D and render-target cleanup for one-shot top-view orthographic FinalColorLDR PNG capture.
+  - ScenarioEditorMap and ScenarioSimulationMap keep matching directional-light intensity and rotation; preview capture does not add episode-only exposure compensation or temporary lighting.
+  - ScenarioEditorController requests the project preview only after scenario.json saves successfully; capture failure removes stale preview.png without changing the save result.
+  - ScenarioRunnerSubsystem does not generate episode preview.png; dashboard code may still read an existing episode preview.png as an optional file.
 verify:
   - when: scenario contracts, schemas, or samples change
     run:
@@ -60,10 +79,16 @@ verify:
     run:
       - focused Scenario/Episode automation tests
       - adapter, run-output, event, action, trace, and lifecycle tests covering touched behavior
+  - when: scenario preview capture changes
+    run:
+      - focused map-bounds and preview-framing automation tests
+      - OdiroSimEditor build
 links:
   - contracts/specs/user-project-data.md
   - docs/specs/simulation-interface.md
   - Client/Docs/plans/PLAN-260602-sim-logging.md
+  - Client/Docs/PreviewAgent.local.md
+  - Client/Docs/plans/PLAN-260622-scenario-episode-preview-capture.md
   - Client/Json/environment-catalog.md
 related:
   - contracts-shared-data

@@ -84,8 +84,9 @@ class ScenarioGenerationV2Agent:
         fallback_warning: V2ValidationIssue | None = None,
     ) -> ScenarioGenerateV2Response:
         scenario = self.writer.write(plan)
-        scenario = self.repair_handler.repair(scenario)
+        scenario = self.repair_handler.repair(scenario, repair_quality=False)
         scenario = self._postprocess_scenario_for_intent(scenario, intent)
+        scenario = self.repair_handler.repair(scenario)
         validation = self.validator.validate(scenario)
         if fallback_warning is not None:
             validation.warnings.append(fallback_warning)
@@ -114,8 +115,9 @@ class ScenarioGenerationV2Agent:
         try:
             scenario = self._generate_llm_template(prompt, client=client, response_name="scenario")
             intent = self.intent_parser.parse(prompt)
-            scenario = self.repair_handler.repair(scenario)
+            scenario = self.repair_handler.repair(scenario, repair_quality=False)
             scenario = self._postprocess_scenario_for_intent(scenario, intent)
+            scenario = self.repair_handler.repair(scenario)
             validation = self.validator.validate(scenario)
             if validation.valid:
                 return self.response_builder.success(
@@ -139,9 +141,10 @@ class ScenarioGenerationV2Agent:
                     client=client,
                     response_name="project_scenario_repair",
                 )
-                repaired = self.repair_handler.repair(repaired)
+                repaired = self.repair_handler.repair(repaired, repair_quality=False)
                 intent = self.intent_parser.parse(prompt)
                 repaired = self._postprocess_scenario_for_intent(repaired, intent)
+                repaired = self.repair_handler.repair(repaired)
                 repaired_validation = self.validator.validate(repaired)
                 if repaired_validation.valid:
                     return self.response_builder.success(
@@ -270,6 +273,7 @@ class ScenarioGenerationV2Agent:
                 preset_id=preset_id,
                 source_scenario=source_scenario,
             )
+            candidate = self.repair_handler.repair(candidate)
             validation = self.validator.validate(candidate)
             if not validation.valid:
                 candidate = self.repair_handler.repair(candidate)
@@ -334,6 +338,8 @@ class ScenarioGenerationV2Agent:
             if isinstance(start, int | float) and isinstance(end, int | float):
                 span = float(end) - float(start)
                 inner_offset = min(1.0, max(0.5, span * 0.25))
+                if span <= 4.0:
+                    inner_offset = min(0.5, max(0.0, span * 0.125))
                 along_m = float(start) + inner_offset if prefer_start else float(end) - inner_offset
         return {
             "type": "corridor_pose",

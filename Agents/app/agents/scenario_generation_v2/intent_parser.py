@@ -28,8 +28,11 @@ class ScenarioIntent:
     preset_profile: str | None = None
     requested_length_m: float | None = None
     requested_obstacle_count: int | None = None
+    requested_obstacle_counts: list[int] = field(default_factory=list)
     requested_prop: str | None = None
     explicit_no_obstacles: bool = False
+    start_goal_clearance: bool = False
+    requested_conflict_segment_count: int | None = None
     pedestrian_count: int | None = None
     explicit_no_pedestrians: bool = False
 
@@ -51,11 +54,14 @@ class IntentParser:
         persona_hint = "vulnerable" if any(token in lowered for token in ("취약", "vulnerable")) else None
         explicit_blocking = self._is_explicit_blocking_prompt(prompt, lowered)
         requested_gate_obstacle_count = self._requested_gate_obstacle_count(prompt, lowered)
-        requested_obstacle_count = self._requested_obstacle_count(prompt, lowered)
+        requested_obstacle_counts = self._requested_obstacle_counts(prompt, lowered)
+        requested_obstacle_count = sum(requested_obstacle_counts) if requested_obstacle_counts else None
         if requested_obstacle_count is None and requested_gate_obstacle_count is not None:
             requested_obstacle_count = requested_gate_obstacle_count
         requested_prop = self._requested_prop(prompt, lowered)
-        explicit_no_obstacles = self._is_explicit_no_obstacles_prompt(prompt, lowered)
+        start_goal_clearance = self._is_start_goal_clearance_prompt(prompt, lowered)
+        requested_conflict_segment_count = self._requested_conflict_segment_count(prompt, lowered)
+        explicit_no_obstacles = self._is_explicit_no_obstacles_prompt(prompt, lowered, start_goal_clearance)
         explicit_no_pedestrians = self._is_explicit_no_pedestrians_prompt(prompt, lowered)
         pedestrian_count = self._requested_pedestrian_count(prompt, lowered)
         requested_length_m = self._requested_length_m(prompt)
@@ -110,8 +116,11 @@ class IntentParser:
             preset_profile=preset_profile,
             requested_length_m=requested_length_m,
             requested_obstacle_count=requested_obstacle_count,
+            requested_obstacle_counts=requested_obstacle_counts,
             requested_prop=requested_prop,
             explicit_no_obstacles=explicit_no_obstacles,
+            start_goal_clearance=start_goal_clearance,
+            requested_conflict_segment_count=requested_conflict_segment_count,
             pedestrian_count=pedestrian_count,
             explicit_no_pedestrians=explicit_no_pedestrians,
         )
@@ -148,26 +157,36 @@ class IntentParser:
         )
         return 2 if has_gate and has_two else None
 
-    def _requested_obstacle_count(self, prompt: str, lowered: str) -> int | None:
-        """Return an explicit obstacle count from common Korean and English phrasings."""
-        korean_match = re.search(r"(?:장애물|콘|꼬깔)\s*(\d+)\s*개|(\d+)\s*개(?:만)?\s*.*(?:장애물|콘|꼬깔)", prompt)
-        if korean_match:
-            value = korean_match.group(1) or korean_match.group(2)
-            return int(value)
-        if any(token in prompt for token in ("장애물 두 개", "두 개의 장애물", "장애물 2개", "콘 두 개", "두 개의 콘", "콘 2개")):
-            return 2
-        generic_korean_match = re.search(r"(\d+)\s*개", prompt)
-        if generic_korean_match and (
-            "장애물" in prompt or "콘" in prompt or "꼬깔" in prompt or "obstacle" in lowered or "cone" in lowered
-        ):
-            return int(generic_korean_match.group(1))
-        english_match = re.search(r"(?:obstacle[s]?\D+(\d+)|(\d+)\D+obstacle[s]?)", lowered)
-        if english_match:
-            value = english_match.group(1) or english_match.group(2)
-            return int(value)
+    def _requested_obstacle_counts(self, prompt: str, lowered: str) -> list[int]:
+        """Return obstacle counts without confusing segment counts for placements."""
+        counts: list[tuple[int, tuple[int, int]]] = []
+        obstacle_terms = r"(?:장애물|콘|꼬깔|road\s*cone|obstacle\.[a-z0-9_]+)"
+        patterns = (
+            re.compile(rf"{obstacle_terms}\s*(\d+)\s*개", re.IGNORECASE),
+            re.compile(rf"(\d+)\s*개(?:만|의)?\s*{obstacle_terms}", re.IGNORECASE),
+        )
+        for pattern in patterns:
+            for match in pattern.finditer(lowered):
+                value = next((group for group in match.groups() if group), None)
+                if value is not None:
+                    counts.append((int(value), match.span()))
+        if any(token in prompt for token in ("장애물 두 개", "두 개의 장애물", "콘 두 개", "두 개의 콘")):
+            counts.append((2, (-1, -1)))
+        if not counts:
+            english_match = re.search(r"(?:obstacle[s]?\D+(\d+)|(\d+)\D+obstacle[s]?)", lowered)
+            if english_match:
+                value = english_match.group(1) or english_match.group(2)
+                counts.append((int(value), english_match.span()))
         if any(token in lowered for token in ("two obstacles", "two obstacle")):
-            return 2
-        return None
+            counts.append((2, (-2, -2)))
+        deduped: list[int] = []
+        seen_spans: set[tuple[int, int]] = set()
+        for value, span in counts:
+            if span in seen_spans:
+                continue
+            seen_spans.add(span)
+            deduped.append(value)
+        return deduped
 
     def _requested_prop(self, prompt: str, lowered: str) -> str | None:
         """Return a prompt-mentioned static obstacle prop id without inventing unknown aliases."""
@@ -189,12 +208,31 @@ class IntentParser:
             return prefixed
         return requested
 
-    def _is_explicit_no_obstacles_prompt(self, prompt: str, lowered: str) -> bool:
+    def _is_explicit_no_obstacles_prompt(self, prompt: str, lowered: str, start_goal_clearance: bool) -> bool:
         """Return whether the prompt explicitly removes static obstacles."""
+        if start_goal_clearance and not any(token in prompt for token in ("장애물 없는", "장애물 없이", "장애물 제거")):
+            return any(token in lowered for token in ("without obstacle", "without obstacles", "no obstacle", "no obstacles"))
         korean_no_obstacle = re.search(r"장애물(?:은|는|이|가)?\s*(?:없|제거)", prompt) is not None
         return korean_no_obstacle or any(token in prompt for token in ("장애물 없는", "장애물 없이", "장애물 제거")) or any(
             token in lowered for token in ("without obstacle", "without obstacles", "no obstacle", "no obstacles")
         )
+
+    def _is_start_goal_clearance_prompt(self, prompt: str, lowered: str) -> bool:
+        """Return whether no-obstacle wording only protects robot anchors."""
+        has_start = any(token in prompt for token in ("출발", "시작")) or "start" in lowered
+        has_goal = any(token in prompt for token in ("도착", "목표")) or "goal" in lowered
+        has_local = any(token in prompt for token in ("주변", "근처", "앞")) or any(
+            token in lowered for token in ("near", "around")
+        )
+        has_no_obstacle = "장애물" in prompt and any(token in prompt for token in ("없게", "없도록", "없이"))
+        return has_start and has_goal and has_local and has_no_obstacle
+
+    def _requested_conflict_segment_count(self, prompt: str, lowered: str) -> int | None:
+        """Return requested conflict-zone count without treating it as obstacle count."""
+        match = re.search(r"(?:conflict|구간)\s*(?:구간)?(?:을|를)?\s*(\d+)\s*개", lowered)
+        if match and ("conflict" in lowered or "좁아지는" in prompt):
+            return int(match.group(1))
+        return None
 
     def _is_explicit_no_pedestrians_prompt(self, prompt: str, lowered: str) -> bool:
         """Return whether the prompt explicitly removes pedestrians."""
@@ -224,9 +262,12 @@ class IntentParser:
 
     def _corridor_profile(self, prompt: str, lowered: str, requested_length_m: float | None) -> str:
         """Return the natural-language corridor shape used by preset and fallback generation."""
-        if any(token in prompt for token in ("S자", "s자", "에스자")) or any(
+        has_s_curve = any(token in prompt for token in ("S자", "s자", "에스자")) or any(
             token in lowered for token in ("s-curve", "s curve")
-        ):
+        )
+        if has_s_curve and self._is_right_angle_corridor_prompt(prompt, lowered):
+            return "complex"
+        if has_s_curve:
             return "s-curve"
         if self._is_right_angle_corridor_prompt(prompt, lowered):
             return "g-shape"
@@ -251,6 +292,11 @@ class IntentParser:
     ) -> str | None:
         """Return the semantic preset family requested by natural-language tokens."""
         if robot_anchor_only:
+            return None
+        if (
+            (any(token in prompt for token in ("S자", "s자", "에스자")) or any(token in lowered for token in ("s-curve", "s curve")))
+            and self._is_right_angle_corridor_prompt(prompt, lowered)
+        ):
             return None
         if any(token in prompt for token in ("빈 보도", "기본 보도")) or "blank" in lowered:
             return "blank"

@@ -12,6 +12,7 @@ ALLOWED_PROPS = get_allowed_static_obstacle_prop_ids()
 ALLOWED_SEGMENT_TYPES = {"straight", "narrowing", "crosswalk", "entrance"}
 ALLOWED_PLACEMENT_KINDS = {"fixed", "pattern", "scatter"}
 ALLOWED_PATTERNS = {"gate", "line", "cluster"}
+ALLOWED_LANES = {"walkway", "building_edge", "center", "curb_edge", "across"}
 ALLOWED_ENCOUNTER_TYPES = {"oncoming_pass", "overtake", "cross_path", "standing_group"}
 ALLOWED_PERSONAS = {"passive", "normal", "assertive", "vulnerable"}
 ALLOWED_OVERRIDE_FIELDS = {
@@ -67,10 +68,12 @@ class TemplateValidator:
             return V2ValidationResult(valid=False, errors=[V2ValidationIssue(field="scenario", message="scenario는 dict여야 합니다.")], warnings=[])
 
         self._validate_root(template, errors)
-        segment_ids = self._validate_corridor(template.get("corridor"), errors)
-        self._validate_obstacles(template.get("obstacles"), segment_ids, errors, warnings)
+        corridor = template.get("corridor")
+        segment_ids = self._validate_corridor(corridor, errors)
+        segment_ranges = self._segment_ranges(corridor)
+        self._validate_obstacles(template.get("obstacles"), segment_ids, segment_ranges, errors, warnings)
         self._validate_pedestrians(template.get("pedestrians"), segment_ids, errors)
-        self._validate_robot(template.get("robot"), self._segment_ranges(template.get("corridor")), segment_ids, errors)
+        self._validate_robot(template.get("robot"), segment_ranges, segment_ids, errors)
         self._check_ranges(template, errors)
 
         return V2ValidationResult(valid=not errors, errors=errors, warnings=warnings)
@@ -146,6 +149,7 @@ class TemplateValidator:
         self,
         obstacles: Any,
         segment_ids: set[str],
+        segment_ranges: dict[str, tuple[float, float]],
         errors: list[V2ValidationIssue],
         warnings: list[V2ValidationIssue],
     ) -> None:
@@ -189,7 +193,7 @@ class TemplateValidator:
                 continue
             kind = str(placement.get("kind"))
             if kind in {"fixed", "pattern"}:
-                self._validate_fixed_or_pattern_placement(placement, field, segment_ids, errors)
+                self._validate_fixed_or_pattern_placement(placement, field, segment_ids, segment_ranges, errors)
             elif kind == "scatter":
                 self._validate_scatter_placement(placement, field, segment_ids, errors)
             allow_blocking = placement.get("allow_blocking")
@@ -201,6 +205,7 @@ class TemplateValidator:
         placement: dict[str, Any],
         field: str,
         segment_ids: set[str],
+        segment_ranges: dict[str, tuple[float, float]],
         errors: list[V2ValidationIssue],
     ) -> None:
         """Validate fixed and pattern placement fields."""
@@ -227,7 +232,7 @@ class TemplateValidator:
         if not isinstance(at, dict):
             errors.append(V2ValidationIssue(field=f"{field}.at", message="at object가 필요합니다."))
         else:
-            self._validate_placement_anchor(at, f"{field}.at", segment_ids, errors)
+            self._validate_placement_anchor(at, f"{field}.at", segment_ids, segment_ranges, errors)
         if "yaw_deg" in placement:
             self._validate_number_or_range(placement.get("yaw_deg"), f"{field}.yaw_deg", errors)
 
@@ -264,6 +269,15 @@ class TemplateValidator:
                 lanes = zone.get("lanes")
                 if lanes is not None and not isinstance(lanes, list):
                     errors.append(V2ValidationIssue(field=f"{field}.zone.lanes", message="lanes는 list여야 합니다."))
+                elif isinstance(lanes, list):
+                    for lane_index, lane in enumerate(lanes):
+                        if not isinstance(lane, str) or lane not in ALLOWED_LANES:
+                            errors.append(
+                                V2ValidationIssue(
+                                    field=f"{field}.zone.lanes[{lane_index}]",
+                                    message="지원하지 않는 lane hint입니다.",
+                                )
+                            )
         palette = placement.get("palette")
         if palette is not None and not isinstance(palette, dict):
             errors.append(V2ValidationIssue(field=f"{field}.palette", message="palette는 object여야 합니다."))
@@ -273,6 +287,7 @@ class TemplateValidator:
         at: dict[str, Any],
         field: str,
         segment_ids: set[str],
+        segment_ranges: dict[str, tuple[float, float]],
         errors: list[V2ValidationIssue],
     ) -> None:
         """Validate corridor-local obstacle anchor fields."""
@@ -283,15 +298,22 @@ class TemplateValidator:
             errors.append(V2ValidationIssue(field=f"{field}.segment", message="존재하지 않는 segment 참조입니다."))
         if "along_m" not in at:
             errors.append(V2ValidationIssue(field=f"{field}.along_m", message="along_m이 필요합니다."))
+            along_bounds = None
         else:
-            self._validate_number_or_range(at.get("along_m"), f"{field}.along_m", errors)
+            along_m = at.get("along_m")
+            self._validate_number_or_range(along_m, f"{field}.along_m", errors)
+            along_bounds = self._numeric_bounds(along_m)
+        if along_bounds is not None and segment in segment_ranges:
+            minimum, maximum = segment_ranges[segment]
+            if along_bounds[0] < minimum or along_bounds[1] > maximum:
+                errors.append(V2ValidationIssue(field=f"{field}.along_m", message="along_m이 segment 범위를 벗어났습니다."))
         if "offset_m" not in at:
             errors.append(V2ValidationIssue(field=f"{field}.offset_m", message="offset_m이 필요합니다."))
         else:
             self._validate_number_or_range(at.get("offset_m"), f"{field}.offset_m", errors)
         lane = at.get("lane")
-        if lane is not None and not isinstance(lane, str):
-            errors.append(V2ValidationIssue(field=f"{field}.lane", message="lane은 고정 string이어야 합니다."))
+        if lane is not None and (not isinstance(lane, str) or lane not in ALLOWED_LANES):
+            errors.append(V2ValidationIssue(field=f"{field}.lane", message="지원하지 않는 lane hint입니다."))
 
     def _validate_pedestrians(self, pedestrians: Any, segment_ids: set[str], errors: list[V2ValidationIssue]) -> None:
         """Validate pedestrian encounters and reject direct path authoring."""
@@ -394,8 +416,8 @@ class TemplateValidator:
                 if heading is not None and (not isinstance(heading, str) or heading not in {"forward", "backward", "auto"}):
                     errors.append(V2ValidationIssue(field=f"{field}.heading", message="지원하지 않는 heading입니다."))
                 lane = anchor.get("lane")
-                if lane is not None and not isinstance(lane, str):
-                    errors.append(V2ValidationIssue(field=f"{field}.lane", message="lane은 고정 string이어야 합니다."))
+                if lane is not None and (not isinstance(lane, str) or lane not in ALLOWED_LANES):
+                    errors.append(V2ValidationIssue(field=f"{field}.lane", message="지원하지 않는 lane hint입니다."))
 
     def _validate_surface_list(self, lanes: Any, field: str, errors: list[V2ValidationIssue]) -> None:
         """Validate surface ids in corridor side lane arrays."""

@@ -16,17 +16,18 @@ class TemplateJsonWriter:
         obstacle_count = self._obstacle_count(plan)
         obstacle_prop = self._obstacle_prop(plan)
         placements = []
-        segment_id, segment_range = self._target_obstacle_segment(corridor)
-        if obstacle_count == 2:
+        target_segments = self._target_obstacle_segments(corridor, plan)
+        segment_id, segment_range = target_segments[0]
+        if obstacle_count == 2 and len(target_segments) == 1:
             placements.extend(self._gate_pair_placements(segment_id, segment_range, prop=obstacle_prop))
         elif obstacle_count > 0:
             placements.extend(
-                self._fixed_obstacle_placements(
+                self._fixed_obstacle_placements_across_segments(
                     obstacle_count,
-                    segment_id,
-                    segment_range,
+                    target_segments,
                     prop=obstacle_prop,
                     explicit_blocking=plan.explicit_blocking,
+                    requested_counts=plan.requested_obstacle_counts,
                 )
             )
 
@@ -49,6 +50,8 @@ class TemplateJsonWriter:
     def _corridor(self, plan: TemplatePlan) -> dict[str, Any]:
         """Return fallback corridor geometry derived from the parsed intent."""
         length_m = self._corridor_length(plan)
+        if plan.corridor_profile == "complex":
+            return self._complex_corridor(length_m)
         if plan.corridor_profile == "curved":
             return self._curved_corridor(length_m)
         if plan.corridor_profile == "s-curve":
@@ -63,6 +66,8 @@ class TemplateJsonWriter:
         """Return the positive corridor length requested by the user or a profile default."""
         if plan.requested_length_m is not None and plan.requested_length_m > 0:
             return float(plan.requested_length_m)
+        if plan.corridor_profile == "complex":
+            return 35.0
         if plan.corridor_profile == "s-curve":
             return 16.5
         if plan.corridor_profile == "construction":
@@ -197,6 +202,52 @@ class TemplateJsonWriter:
             ],
         }
 
+    def _complex_corridor(self, length_m: float) -> dict[str, Any]:
+        """Return a long straight/S-curve/right-angle corridor for compound prompts."""
+        length_m = self._rounded(max(12.0, length_m))
+        base_points = [
+            [0.0, 0.0],
+            [10.0, 0.0],
+            [14.0, -2.0],
+            [18.0, 2.0],
+            [22.0, -1.5],
+            [26.0, 0.0],
+            [30.0, 0.0],
+            [30.0, 5.0],
+        ]
+        scale = length_m / self._axis_path_length(base_points)
+        points = [[self._rounded(point[0] * scale), self._rounded(point[1] * scale)] for point in base_points]
+        return {
+            "axis": {"type": "polyline", "points_m": points},
+            "walkway_width_m": {"min": 2.4, "max": 3.0},
+            "building_side": [{"surface": "wall", "width_m": 0.4}],
+            "curb_side": [{"surface": "road", "width_m": 4.0}],
+            "segments": [
+                {"id": "entry_straight", "type": "straight", "along_range_m": [0.0, self._rounded(length_m * 0.25)]},
+                {
+                    "id": "s_curve_entry",
+                    "type": "straight",
+                    "along_range_m": [self._rounded(length_m * 0.25), self._rounded(length_m * 0.42)],
+                },
+                {
+                    "id": "middle_construction",
+                    "type": "narrowing",
+                    "along_range_m": [self._rounded(length_m * 0.42), self._rounded(length_m * 0.58)],
+                },
+                {
+                    "id": "s_curve_exit",
+                    "type": "straight",
+                    "along_range_m": [self._rounded(length_m * 0.58), self._rounded(length_m * 0.68)],
+                },
+                {
+                    "id": "pre_corner_conflict",
+                    "type": "narrowing",
+                    "along_range_m": [self._rounded(length_m * 0.68), self._rounded(length_m * 0.84)],
+                },
+                {"id": "turn_and_exit", "type": "straight", "along_range_m": [self._rounded(length_m * 0.84), length_m]},
+            ],
+        }
+
     def _construction_corridor(self, length_m: float) -> dict[str, Any]:
         """Return a construction-style straight corridor for fallback generation."""
         corridor = self._straight_corridor(length_m, single_segment=False)
@@ -235,15 +286,17 @@ class TemplateJsonWriter:
         *,
         prop: str,
         explicit_blocking: bool,
+        start_index: int = 0,
     ) -> list[dict[str, Any]]:
         """Return catalog-safe fixed obstacle placements inside the conflict segment."""
         placements = []
         offset_centers = [-0.35, 0.25, -0.15, 0.35, -0.25, 0.15]
         for index in range(count):
-            offset_center = offset_centers[index % len(offset_centers)]
+            global_index = start_index + index
+            offset_center = offset_centers[global_index % len(offset_centers)]
             placement: dict[str, Any] = {
                 "kind": "fixed",
-                "id": self._obstacle_id(prop, index),
+                "id": self._obstacle_id(prop, global_index),
                 "prop": prop,
                 "at": {
                     "segment": segment_id,
@@ -257,6 +310,48 @@ class TemplateJsonWriter:
                 placement["allow_blocking"] = True
             placements.append(placement)
         return placements
+
+    def _fixed_obstacle_placements_across_segments(
+        self,
+        count: int,
+        target_segments: list[tuple[str, tuple[float, float]]],
+        *,
+        prop: str,
+        explicit_blocking: bool,
+        requested_counts: list[int],
+    ) -> list[dict[str, Any]]:
+        """Return repeated obstacles distributed across one or more target segments."""
+        if not target_segments:
+            return []
+        segment_counts = self._segment_obstacle_counts(count, len(target_segments), requested_counts)
+        placements: list[dict[str, Any]] = []
+        start_index = 0
+        for (segment_id, segment_range), segment_count in zip(target_segments, segment_counts, strict=False):
+            placements.extend(
+                self._fixed_obstacle_placements(
+                    segment_count,
+                    segment_id,
+                    segment_range,
+                    prop=prop,
+                    explicit_blocking=explicit_blocking,
+                    start_index=start_index,
+                )
+            )
+            start_index += segment_count
+        return placements
+
+    def _segment_obstacle_counts(self, count: int, segment_count: int, requested_counts: list[int]) -> list[int]:
+        """Map requested obstacle groups onto available target segments."""
+        if segment_count <= 0:
+            return []
+        if len(requested_counts) > 1:
+            counts = [0 for _ in range(segment_count)]
+            for index, requested_count in enumerate(requested_counts):
+                counts[min(index, segment_count - 1)] += max(0, int(requested_count))
+            return counts
+        base = count // segment_count
+        remainder = count % segment_count
+        return [base + (1 if index < remainder else 0) for index in range(segment_count)]
 
     def _gate_pair_placements(
         self,
@@ -308,6 +403,22 @@ class TemplateJsonWriter:
             segment = segments[index]
             return str(segment.get("id") or "main"), self._segment_range(segment)
         return "main", (0.0, 1.0)
+
+    def _target_obstacle_segments(
+        self,
+        corridor: dict[str, Any],
+        plan: TemplatePlan,
+    ) -> list[tuple[str, tuple[float, float]]]:
+        """Return one or more segment anchors for generated fallback obstacles."""
+        if plan.corridor_profile == "complex":
+            segments = [
+                (str(segment.get("id")), self._segment_range(segment))
+                for segment in corridor.get("segments", [])
+                if isinstance(segment, dict) and segment.get("type") == "narrowing" and isinstance(segment.get("id"), str)
+            ]
+            if segments:
+                return segments
+        return [self._target_obstacle_segment(corridor)]
 
     def _segment_range(self, segment: dict[str, Any]) -> tuple[float, float]:
         """Return a segment along range or a valid fallback range."""
@@ -402,6 +513,8 @@ class TemplateJsonWriter:
 
     def _scenario_id(self, plan: TemplatePlan, obstacle_count: int) -> str:
         """Return a scenario id that matches the intent-based fallback shape."""
+        if plan.corridor_profile == "complex":
+            return "complex_s_curve_corner_obstacles" if obstacle_count else "complex_s_curve_corner_navigation"
         if plan.corridor_profile == "curved":
             return "curved_road_static_obstacle" if obstacle_count else "curved_road_sidewalk"
         if plan.corridor_profile == "s-curve":
@@ -416,6 +529,12 @@ class TemplateJsonWriter:
 
     def _intent(self, plan: TemplatePlan, obstacle_count: int) -> str:
         """Return intent text aligned with generated fallback geometry."""
+        if plan.corridor_profile == "complex":
+            return (
+                "Evaluate long sidewalk navigation through straight, S-curve, and right-angle corner sections with distributed cones."
+                if obstacle_count
+                else "Evaluate long sidewalk navigation through straight, S-curve, and right-angle corner sections."
+            )
         if plan.corridor_profile == "curved":
             return (
                 "Evaluate route following on a curved road sidewalk with user-requested static obstacles."
@@ -443,6 +562,16 @@ class TemplateJsonWriter:
     def _rounded(self, value: float) -> float:
         """Round generated geometry values to stable millimeter precision."""
         return round(float(value), 3)
+
+    def _axis_path_length(self, points: list[list[float]]) -> float:
+        """Return the 2D length of a polyline used for generated corridor scaling."""
+        total = 0.0
+        for previous, current in zip(points, points[1:], strict=False):
+            total += (
+                (float(current[0]) - float(previous[0])) ** 2
+                + (float(current[1]) - float(previous[1])) ** 2
+            ) ** 0.5
+        return total
 
     def _clamp(self, value: float, minimum: float, maximum: float) -> float:
         """Clamp a number to an inclusive range."""

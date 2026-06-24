@@ -221,7 +221,7 @@ ASceneCapture2D* UScenarioPreviewCaptureSubsystem::SpawnCaptureActor(
 		request.Frame.CenterXY.X,
 		request.Frame.CenterXY.Y,
 		request.Frame.CenterZ + request.CaptureHeightCm);
-	const FRotator captureRotation(-90.0, 0.0, 0.0);
+	const FRotator captureRotation(-90.0, -90.0, 0.0);
 
 	FActorSpawnParameters spawnParameters;
 	spawnParameters.ObjectFlags |= RF_Transient;
@@ -312,6 +312,18 @@ bool UScenarioPreviewCaptureSubsystem::TryCompressRenderTarget(
 	{
 		outFailureReason = TEXT("Render target readback produced an empty image.");
 		return false;
+	}
+
+	if (capturedImage.Format != ERawImageFormat::BGRA8)
+	{
+		outFailureReason = TEXT("Render target readback produced an unexpected pixel format.");
+		return false;
+	}
+
+	// UI 썸네일이 SceneCapture의 투명 Alpha로 사라지지 않도록 불투명 PNG로 정규화한다.
+	for (FColor& pixel : capturedImage.AsBGRA8())
+	{
+		pixel.A = 255;
 	}
 
 	// Image 데이터를 PNG 파일 형식의 바이트 배열로 압축한다.

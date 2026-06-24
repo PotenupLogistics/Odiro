@@ -294,6 +294,8 @@ private:
 	void HandleLookCaptureCompletedInput();
 	void HandleViewModeToggleInput();
 	void HandleEditorZoomAction(const FInputActionValue& inputActionValue);
+	// Resolves fixed keyboard navigation so Q/E remain pure world-Z movement even if Axis3D mapping values are polluted.
+	bool TryResolveEditorKeyboardMoveInput(float& outForwardValue, float& outRightValue, float& outUpValue) const;
 	void BeginLookInputCapture();
 	void EndLookInputCapture();
 	void UpdateHoveredPlaceable();

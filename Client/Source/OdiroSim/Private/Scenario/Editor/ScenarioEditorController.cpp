@@ -16,6 +16,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "EngineUtils.h"
+#include "InputCoreTypes.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "Platform/PlatformUiDeveloperSettings.h"
@@ -163,6 +164,12 @@ namespace
 		}
 
 		return true;
+	}
+
+	// Object Palette currently has a scenario.json authoring contract only for fixed static obstacles.
+	bool IsObjectPalettePlacementSupported(const EScenarioPaletteItemType itemType)
+	{
+		return itemType == EScenarioPaletteItemType::StaticObstacle;
 	}
 
 	FString MakeUniqueScenarioSavePath(const FString& preferredPath)
@@ -375,6 +382,17 @@ bool AScenarioEditorController::BeginStaticObstaclePlacement(FName propId)
 
 bool AScenarioEditorController::BeginPalettePlacement(EScenarioPaletteItemType itemType, FName assetId)
 {
+	if (!IsObjectPalettePlacementSupported(itemType))
+	{
+		UE_LOG(
+			LogScenarioEditorController,
+			Warning,
+			TEXT("Object Palette placement is not supported for this authoring type | Type: %d | AssetId: %s"),
+			static_cast<int32>(itemType),
+			*assetId.ToString());
+		return false;
+	}
+
 	bIsLookInputHeld = false;
 	bIsRegionDragging = false;
 	PressedPlaceableComponent.Reset();
@@ -1345,31 +1363,34 @@ void AScenarioEditorController::HandleEditorMoveAction(const FInputActionValue& 
 	float rightValue = 0.0f;
 	float upValue = 0.0f;
 
-	switch (inputActionValue.GetValueType())
+	if (!TryResolveEditorKeyboardMoveInput(forwardValue, rightValue, upValue))
 	{
-	case EInputActionValueType::Axis3D:
-	{
-		const FVector moveValue = inputActionValue.Get<FVector>();
-		forwardValue = moveValue.X;
-		rightValue = -moveValue.Y;
-		upValue = moveValue.Z;
-		break;
-	}
-	case EInputActionValueType::Axis2D:
-	{
-		const FVector2D moveValue = inputActionValue.Get<FVector2D>();
-		forwardValue = moveValue.X;
-		rightValue = -moveValue.Y;
-		break;
-	}
-	case EInputActionValueType::Axis1D:
-		forwardValue = inputActionValue.Get<float>();
-		break;
-	case EInputActionValueType::Boolean:
-		forwardValue = inputActionValue.Get<bool>() ? 1.0f : 0.0f;
-		break;
-	default:
-		break;
+		switch (inputActionValue.GetValueType())
+		{
+		case EInputActionValueType::Axis3D:
+		{
+			const FVector moveValue = inputActionValue.Get<FVector>();
+			forwardValue = moveValue.X;
+			rightValue = -moveValue.Y;
+			upValue = moveValue.Z;
+			break;
+		}
+		case EInputActionValueType::Axis2D:
+		{
+			const FVector2D moveValue = inputActionValue.Get<FVector2D>();
+			forwardValue = moveValue.X;
+			rightValue = -moveValue.Y;
+			break;
+		}
+		case EInputActionValueType::Axis1D:
+			forwardValue = inputActionValue.Get<float>();
+			break;
+		case EInputActionValueType::Boolean:
+			forwardValue = inputActionValue.Get<bool>() ? 1.0f : 0.0f;
+			break;
+		default:
+			break;
+		}
 	}
 
 	if (EditorViewMode == EScenarioEditorViewMode::TopDownOrtho)
@@ -1381,6 +1402,29 @@ void AScenarioEditorController::HandleEditorMoveAction(const FInputActionValue& 
 
 	editorPawn->ApplyMoveInput(forwardValue, rightValue, 0.0f);
 	editorPawn->ApplyWorldHeightInput(upValue);
+}
+
+bool AScenarioEditorController::TryResolveEditorKeyboardMoveInput(
+	float& outForwardValue,
+	float& outRightValue,
+	float& outUpValue) const
+{
+	const bool bForwardHeld = IsInputKeyDown(EKeys::W);
+	const bool bBackwardHeld = IsInputKeyDown(EKeys::S);
+	const bool bRightHeld = IsInputKeyDown(EKeys::D);
+	const bool bLeftHeld = IsInputKeyDown(EKeys::A);
+	const bool bUpHeld = IsInputKeyDown(EKeys::E);
+	const bool bDownHeld = IsInputKeyDown(EKeys::Q);
+
+	if (!bForwardHeld && !bBackwardHeld && !bRightHeld && !bLeftHeld && !bUpHeld && !bDownHeld)
+	{
+		return false;
+	}
+
+	outForwardValue = (bForwardHeld ? 1.0f : 0.0f) - (bBackwardHeld ? 1.0f : 0.0f);
+	outRightValue = (bRightHeld ? 1.0f : 0.0f) - (bLeftHeld ? 1.0f : 0.0f);
+	outUpValue = (bUpHeld ? 1.0f : 0.0f) - (bDownHeld ? 1.0f : 0.0f);
+	return true;
 }
 
 void AScenarioEditorController::HandleEditorLookAction(const FInputActionValue& inputActionValue)

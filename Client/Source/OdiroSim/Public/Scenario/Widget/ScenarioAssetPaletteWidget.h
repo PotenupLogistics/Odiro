@@ -34,9 +34,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
 	bool bRebuildOnConstruct = true;
 
+	// Legacy toggle retained for asset compatibility; pedestrian authoring is not palette-backed yet.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
-	bool bIncludePedestrianPlacement = true;
+	bool bIncludePedestrianPlacement = false;
 
+	// Legacy toggle retained for asset compatibility; robot anchors are authored through route controls.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Palette")
 	bool bIncludeRobotRoutePlacement = false;
 

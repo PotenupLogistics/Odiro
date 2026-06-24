@@ -61,6 +61,7 @@ jobs:
           PUSHED_AT: ${{ github.event.repository.pushed_at }}
           DISPATCH_MODE: ${{ github.event.inputs.mode }}
           DISPATCH_PATH: ${{ github.event.inputs.path }}
+          # Step-scoped because only Invoke-ForceUnlockById should use the admin PAT via gh api.
           GH_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
         run: |
           $ErrorActionPreference = "Stop"
@@ -167,12 +168,12 @@ jobs:
                   Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
               }
 
-              $stderr = if ($null -eq $stderrText) { "" } else { $stderrText.Trim() }
+              $trimmedStderr = if ($null -eq $stderrText) { "" } else { $stderrText.Trim() }
               if ($gitExitCode -ne 0) {
-                  if ([string]::IsNullOrWhiteSpace($stderr)) {
+                  if ([string]::IsNullOrWhiteSpace($trimmedStderr)) {
                       throw "Failed to read Git LFS environment."
                   }
-                  throw "Failed to read Git LFS environment.`n$stderr"
+                  throw "Failed to read Git LFS environment.`n$trimmedStderr"
               }
               if ($lines.Count -eq 0) {
                   throw "Git LFS environment output was empty."
@@ -206,7 +207,7 @@ jobs:
               }
 
               $endpoint = Get-LfsApiEndpoint
-              # Escapes any special characters in the lock id before composing the LFS API path segment.
+              # Escapes lock ids for URL-path safety because providers may emit reserved characters such as ':'.
               $encodedId = [Uri]::EscapeDataString($Id)
               $unlockUrl = "$endpoint/locks/$encodedId/unlock"
               $body = @{ force = $true } | ConvertTo-Json -Compress
@@ -223,7 +224,7 @@ jobs:
               if ($LASTEXITCODE -ne 0) {
                   $detail = (($output | ForEach-Object { [string] $_ }) -join "`n").Trim()
                   if ([string]::IsNullOrWhiteSpace($detail)) {
-                      throw "Failed to unlock $Path by Git LFS lock id $Id because gh api returned no output. Check GH_TOKEN admin access for force unlocks and that the LFS endpoint is reachable."
+                      throw "Failed to unlock $Path by Git LFS lock id $Id: no output from gh api. Check GH_TOKEN admin access and LFS endpoint reachability."
                   }
                   throw "Failed to unlock $Path by Git LFS lock id $Id.`n$detail"
               }

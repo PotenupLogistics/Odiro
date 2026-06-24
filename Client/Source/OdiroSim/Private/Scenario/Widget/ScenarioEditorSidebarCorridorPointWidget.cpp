@@ -5,6 +5,9 @@
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarWidgetHelpers.h"
+
+namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 
 void UScenarioEditorSidebarCorridorPointWidget::NativeConstruct()
 {
@@ -82,18 +85,15 @@ void UScenarioEditorSidebarCorridorPointWidget::BindFieldRows()
 		XFieldRow->OnValueTextCommitted.AddDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorPointWidget::HandleXCommitted);
-		XFieldRow->OnAddItemRequested.RemoveDynamic(
+		SidebarWidgetHelpers::BindFieldRowActions(
+			XFieldRow.Get(),
 			this,
-			&UScenarioEditorSidebarCorridorPointWidget::HandleAddPointRequested);
-		XFieldRow->OnAddItemRequested.AddDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPointWidget::HandleAddPointRequested);
-		XFieldRow->OnRemoveItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPointWidget::HandleRemovePointRequested);
-		XFieldRow->OnRemoveItemRequested.AddDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPointWidget::HandleRemovePointRequested);
+			GET_FUNCTION_NAME_CHECKED(
+				UScenarioEditorSidebarCorridorPointWidget,
+				HandleAddPointRequested),
+			GET_FUNCTION_NAME_CHECKED(
+				UScenarioEditorSidebarCorridorPointWidget,
+				HandleRemovePointRequested));
 	}
 
 	if (YFieldRow)
@@ -114,12 +114,7 @@ void UScenarioEditorSidebarCorridorPointWidget::UnbindFieldRows()
 		XFieldRow->OnValueTextCommitted.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorPointWidget::HandleXCommitted);
-		XFieldRow->OnAddItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPointWidget::HandleAddPointRequested);
-		XFieldRow->OnRemoveItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPointWidget::HandleRemovePointRequested);
+		SidebarWidgetHelpers::UnbindFieldRowActions(XFieldRow.Get(), this);
 	}
 	if (YFieldRow)
 	{
@@ -133,13 +128,13 @@ void UScenarioEditorSidebarCorridorPointWidget::ConfigureFieldRows()
 {
 	if (PointBlockWidget)
 	{
-		PointBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		PointBlockWidget->SetBlockMetadata(
+		SidebarWidgetHelpers::ConfigureBlock(PointBlockWidget.Get(), TextStyleCatalog, {
 			FString::Printf(TEXT("경로 점 %d"), PointIndex + 1),
 			TEXT("root.corridor.axis.points_m[]"),
-			TEXT("세부"));
-		PointBlockWidget->SetNested(true);
-		PointBlockWidget->SetShowNormalOutline(false);
+			TEXT("세부"),
+			false,
+			true,
+			false });
 	}
 
 	if (XFieldRow)

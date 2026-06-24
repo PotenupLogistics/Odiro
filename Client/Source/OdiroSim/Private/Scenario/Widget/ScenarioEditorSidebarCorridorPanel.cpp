@@ -13,7 +13,10 @@
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorLaneWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorPointWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorSegmentWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarWidgetHelpers.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
+
+namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 
 void UScenarioEditorSidebarCorridorPanel::NativeConstruct()
 {
@@ -440,39 +443,19 @@ void UScenarioEditorSidebarCorridorPanel::UnbindFieldRows()
 	}
 	if (BuildingSideCountFieldRow)
 	{
-		BuildingSideCountFieldRow->OnAddItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleBuildingSideCountAddRequested);
-		BuildingSideCountFieldRow->OnRemoveItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleBuildingSideCountRemoveRequested);
+		SidebarWidgetHelpers::UnbindFieldRowActions(BuildingSideCountFieldRow.Get(), this);
 	}
 	if (CurbSideCountFieldRow)
 	{
-		CurbSideCountFieldRow->OnAddItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountAddRequested);
-		CurbSideCountFieldRow->OnRemoveItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountRemoveRequested);
+		SidebarWidgetHelpers::UnbindFieldRowActions(CurbSideCountFieldRow.Get(), this);
 	}
 	if (AxisPointsFieldRow)
 	{
-		AxisPointsFieldRow->OnAddItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested);
-		AxisPointsFieldRow->OnRemoveItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountRemoveRequested);
+		SidebarWidgetHelpers::UnbindFieldRowActions(AxisPointsFieldRow.Get(), this);
 	}
 	if (SegmentsCountFieldRow)
 	{
-		SegmentsCountFieldRow->OnAddItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested);
-		SegmentsCountFieldRow->OnRemoveItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountRemoveRequested);
+		SidebarWidgetHelpers::UnbindFieldRowActions(SegmentsCountFieldRow.Get(), this);
 	}
 	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : BuildingSideLaneWidgets)
 	{
@@ -572,67 +555,73 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 {
 	if (CorridorBlockWidget)
 	{
-		CorridorBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		CorridorBlockWidget->SetBlockMetadata(TEXT("통로"), TEXT("root.corridor"), TEXT("구성"));
-		CorridorBlockWidget->SetSelected(true);
-		CorridorBlockWidget->SetNested(false);
+		SidebarWidgetHelpers::ConfigureBlock(CorridorBlockWidget.Get(), TextStyleCatalog, {
+			TEXT("통로"),
+			TEXT("root.corridor"),
+			TEXT("구성"),
+			true,
+			false,
+			true });
 	}
 	if (AxisBlockWidget)
 	{
-		AxisBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		AxisBlockWidget->SetBlockMetadata(TEXT("중심 경로"), TEXT("root.corridor.axis"), TEXT("속성"));
-		AxisBlockWidget->SetNested(true);
-		AxisBlockWidget->SetShowNormalOutline(false);
+		SidebarWidgetHelpers::ConfigureBlock(AxisBlockWidget.Get(), TextStyleCatalog, {
+			TEXT("중심 경로"),
+			TEXT("root.corridor.axis"),
+			TEXT("속성"),
+			false,
+			true,
+			false });
 	}
 	if (AxisPointsBlockWidget)
 	{
-		AxisPointsBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		AxisPointsBlockWidget->SetBlockMetadata(
+		SidebarWidgetHelpers::ConfigureBlock(AxisPointsBlockWidget.Get(), TextStyleCatalog, {
 			TEXT("경로 점"),
 			TEXT("root.corridor.axis.points_m[]"),
-			TEXT("속성"));
-		AxisPointsBlockWidget->SetNested(true);
-		AxisPointsBlockWidget->SetShowNormalOutline(false);
+			TEXT("속성"),
+			false,
+			true,
+			false });
 	}
 	if (WalkwayWidthBlockWidget)
 	{
-		WalkwayWidthBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		WalkwayWidthBlockWidget->SetBlockMetadata(
+		SidebarWidgetHelpers::ConfigureBlock(WalkwayWidthBlockWidget.Get(), TextStyleCatalog, {
 			TEXT("보행로 폭"),
 			TEXT("root.corridor.walkway_width_m"),
-			TEXT("속성"));
-		WalkwayWidthBlockWidget->SetNested(true);
-		WalkwayWidthBlockWidget->SetShowNormalOutline(false);
+			TEXT("속성"),
+			false,
+			true,
+			false });
 	}
 	if (BuildingSideBlockWidget)
 	{
-		BuildingSideBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		BuildingSideBlockWidget->SetBlockMetadata(
+		SidebarWidgetHelpers::ConfigureBlock(BuildingSideBlockWidget.Get(), TextStyleCatalog, {
 			TEXT("건물측 영역"),
 			TEXT("root.corridor.building_side[]"),
-			TEXT("속성"));
-		BuildingSideBlockWidget->SetNested(true);
-		BuildingSideBlockWidget->SetShowNormalOutline(false);
+			TEXT("속성"),
+			false,
+			true,
+			false });
 	}
 	if (CurbSideBlockWidget)
 	{
-		CurbSideBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		CurbSideBlockWidget->SetBlockMetadata(
+		SidebarWidgetHelpers::ConfigureBlock(CurbSideBlockWidget.Get(), TextStyleCatalog, {
 			TEXT("도로측 영역"),
 			TEXT("root.corridor.curb_side[]"),
-			TEXT("속성"));
-		CurbSideBlockWidget->SetNested(true);
-		CurbSideBlockWidget->SetShowNormalOutline(false);
+			TEXT("속성"),
+			false,
+			true,
+			false });
 	}
 	if (SegmentsBlockWidget)
 	{
-		SegmentsBlockWidget->SetTextStyleCatalog(TextStyleCatalog);
-		SegmentsBlockWidget->SetBlockMetadata(
+		SidebarWidgetHelpers::ConfigureBlock(SegmentsBlockWidget.Get(), TextStyleCatalog, {
 			TEXT("의미 구간"),
 			TEXT("root.corridor.segments[]"),
-			TEXT("속성"));
-		SegmentsBlockWidget->SetNested(true);
-		SegmentsBlockWidget->SetShowNormalOutline(false);
+			TEXT("속성"),
+			false,
+			true,
+			false });
 	}
 	if (AxisTypeFieldRow)
 	{
@@ -759,18 +748,15 @@ void UScenarioEditorSidebarCorridorPanel::RefreshAxisPointRows(
 				templateSidebarViewModel->FindCorridorFieldItem(TEXT("AxisPointsCount")));
 		}
 		AxisPointsFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		AxisPointsFieldRow->OnAddItemRequested.RemoveDynamic(
+		SidebarWidgetHelpers::BindFieldRowActions(
+			AxisPointsFieldRow.Get(),
 			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested);
-		AxisPointsFieldRow->OnAddItemRequested.AddDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested);
-		AxisPointsFieldRow->OnRemoveItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountRemoveRequested);
-		AxisPointsFieldRow->OnRemoveItemRequested.AddDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountRemoveRequested);
+			GET_FUNCTION_NAME_CHECKED(
+				UScenarioEditorSidebarCorridorPanel,
+				HandleAxisPointsCountAddRequested),
+			GET_FUNCTION_NAME_CHECKED(
+				UScenarioEditorSidebarCorridorPanel,
+				HandleAxisPointsCountRemoveRequested));
 	}
 
 	if (!AxisPointsBlockWidget)
@@ -826,34 +812,28 @@ void UScenarioEditorSidebarCorridorPanel::RefreshLaneProfileRows(
 		if (side == EScenarioEditorCorridorSide::Building)
 		{
 			BuildingSideCountFieldRow = countRow;
-			countRow->OnAddItemRequested.RemoveDynamic(
+			SidebarWidgetHelpers::BindFieldRowActions(
+				countRow,
 				this,
-				&UScenarioEditorSidebarCorridorPanel::HandleBuildingSideCountAddRequested);
-			countRow->OnAddItemRequested.AddDynamic(
-				this,
-				&UScenarioEditorSidebarCorridorPanel::HandleBuildingSideCountAddRequested);
-			countRow->OnRemoveItemRequested.RemoveDynamic(
-				this,
-				&UScenarioEditorSidebarCorridorPanel::HandleBuildingSideCountRemoveRequested);
-			countRow->OnRemoveItemRequested.AddDynamic(
-				this,
-				&UScenarioEditorSidebarCorridorPanel::HandleBuildingSideCountRemoveRequested);
+				GET_FUNCTION_NAME_CHECKED(
+					UScenarioEditorSidebarCorridorPanel,
+					HandleBuildingSideCountAddRequested),
+				GET_FUNCTION_NAME_CHECKED(
+					UScenarioEditorSidebarCorridorPanel,
+					HandleBuildingSideCountRemoveRequested));
 		}
 		else
 		{
 			CurbSideCountFieldRow = countRow;
-			countRow->OnAddItemRequested.RemoveDynamic(
+			SidebarWidgetHelpers::BindFieldRowActions(
+				countRow,
 				this,
-				&UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountAddRequested);
-			countRow->OnAddItemRequested.AddDynamic(
-				this,
-				&UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountAddRequested);
-			countRow->OnRemoveItemRequested.RemoveDynamic(
-				this,
-				&UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountRemoveRequested);
-			countRow->OnRemoveItemRequested.AddDynamic(
-				this,
-				&UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountRemoveRequested);
+				GET_FUNCTION_NAME_CHECKED(
+					UScenarioEditorSidebarCorridorPanel,
+					HandleCurbSideCountAddRequested),
+				GET_FUNCTION_NAME_CHECKED(
+					UScenarioEditorSidebarCorridorPanel,
+					HandleCurbSideCountRemoveRequested));
 		}
 	}
 
@@ -887,18 +867,15 @@ void UScenarioEditorSidebarCorridorPanel::RefreshSegmentRows(
 	if (countRow)
 	{
 		SegmentsCountFieldRow = countRow;
-		countRow->OnAddItemRequested.RemoveDynamic(
+		SidebarWidgetHelpers::BindFieldRowActions(
+			countRow,
 			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested);
-		countRow->OnAddItemRequested.AddDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested);
-		countRow->OnRemoveItemRequested.RemoveDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountRemoveRequested);
-		countRow->OnRemoveItemRequested.AddDynamic(
-			this,
-			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountRemoveRequested);
+			GET_FUNCTION_NAME_CHECKED(
+				UScenarioEditorSidebarCorridorPanel,
+				HandleSegmentsCountAddRequested),
+			GET_FUNCTION_NAME_CHECKED(
+				UScenarioEditorSidebarCorridorPanel,
+				HandleSegmentsCountRemoveRequested));
 	}
 
 	for (int32 segmentIndex = 0; segmentIndex < segments.Num(); ++segmentIndex)
@@ -915,24 +892,18 @@ UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarCorridorPanel::AddReadOnly
 	UScenarioEditorSidebarBlockWidget* parentBlockWidget,
 	UScenarioTemplateFieldRowViewModel* fieldItemViewModel) const
 {
-	if (!GetWorld() || !parentBlockWidget)
-	{
-		return nullptr;
-	}
-
-	UScenarioEditorSidebarFieldRow* fieldRow =
-		CreateWidget<UScenarioEditorSidebarFieldRow>(
-			GetWorld(),
-			UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(WidgetClassCatalog));
+	UScenarioEditorSidebarFieldRow* fieldRow = SidebarWidgetHelpers::CreateFieldRow(
+		GetWorld(),
+		WidgetClassCatalog,
+		TextStyleCatalog,
+		fieldItemViewModel,
+		parentBlockWidget);
 	if (!fieldRow)
 	{
 		SetDiagnosticsText(TEXT("Scenario editor field row widget class is missing."));
 		return nullptr;
 	}
 
-	fieldRow->SetTextStyleCatalog(TextStyleCatalog);
-	fieldRow->InitializeFromItemViewModel(fieldItemViewModel);
-	parentBlockWidget->AddBodyChild(fieldRow);
 	return fieldRow;
 }
 

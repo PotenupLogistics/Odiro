@@ -26,7 +26,9 @@ enum class EScenarioEditorSidebarFieldInputType : uint8
 	Number,
 	EnumText,
 	ComboBox,
-	Range
+	Range,
+	StringList,
+	ObjectArray
 };
 
 // Editable field ids exposed by one root.obstacles.placements[] editor row.

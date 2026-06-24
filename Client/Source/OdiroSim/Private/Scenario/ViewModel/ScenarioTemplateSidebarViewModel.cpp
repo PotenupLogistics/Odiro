@@ -5,6 +5,77 @@
 #include "Scenario/ScenarioEditorUiSubsystem.h"
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 
+namespace
+{
+	// Field row ViewModel 초기화 전에 확정되는 field metadata.
+	struct FScenarioTemplateFieldSpec
+	{
+		// Command dispatch와 테스트에서 사용하는 안정적인 field id.
+		FString Id;
+		// Sidebar에 표시되는 사용자용 field label.
+		FString Label;
+		// 재사용 field row widget이 사용할 control shape.
+		EScenarioEditorSidebarFieldInputType InputType = EScenarioEditorSidebarFieldInputType::Text;
+		// Row가 editable value control을 노출해야 하는지 여부.
+		bool bEditable = true;
+		// Row가 repeated item add/remove command를 노출해야 하는지 여부.
+		bool bArrayControlsEnabled = false;
+		// 현재 schema branch에서 row를 표시할지 여부.
+		bool bVisible = true;
+	};
+
+	// 전용 list widget이 생기기 전까지 comma-separated text로 다루는 string-list field를 식별한다.
+	bool IsScenarioTemplateStringListField(const FString& fieldId)
+	{
+		return fieldId == TEXT("SpawnSegments")
+			|| fieldId == TEXT("PlacementZoneSegments")
+			|| fieldId == TEXT("PlacementZoneLanes")
+			|| fieldId == TEXT("PlacementPaletteCategories")
+			|| fieldId == TEXT("PlacementPaletteClasses");
+	}
+
+	// Count row와 add/remove command로 표현되는 repeated object collection field를 식별한다.
+	bool IsScenarioTemplateObjectArrayField(const FString& fieldId)
+	{
+		return fieldId == TEXT("AxisPointsCount")
+			|| fieldId == TEXT("BuildingSideCount")
+			|| fieldId == TEXT("CurbSideCount")
+			|| fieldId == TEXT("SegmentsCount")
+			|| fieldId == TEXT("Placements")
+			|| fieldId == TEXT("PlacementsCount")
+			|| fieldId == TEXT("EncountersCount");
+	}
+
+	// 현재 fallback widget shape만으로 드러나지 않는 semantic field metadata를 적용한다.
+	FScenarioTemplateFieldSpec ResolveScenarioTemplateFieldSpec(
+		const FString& id,
+		const FString& label,
+		const EScenarioEditorSidebarFieldInputType inputType,
+		const bool bEditable,
+		const bool bArrayControlsEnabled,
+		const bool bVisible)
+	{
+		FScenarioTemplateFieldSpec fieldSpec;
+		fieldSpec.Id = id;
+		fieldSpec.Label = label;
+		fieldSpec.InputType = inputType;
+		fieldSpec.bEditable = bEditable;
+		fieldSpec.bArrayControlsEnabled = bArrayControlsEnabled;
+		fieldSpec.bVisible = bVisible;
+
+		if (IsScenarioTemplateStringListField(fieldSpec.Id))
+		{
+			fieldSpec.InputType = EScenarioEditorSidebarFieldInputType::StringList;
+		}
+		else if (IsScenarioTemplateObjectArrayField(fieldSpec.Id))
+		{
+			fieldSpec.InputType = EScenarioEditorSidebarFieldInputType::ObjectArray;
+		}
+
+		return fieldSpec;
+	}
+}
+
 void UScenarioTemplateSidebarViewModel::InitializeForSubsystem(UScenarioEditorUiSubsystem* uiSubsystem)
 {
 	UiSubsystem = uiSubsystem;
@@ -1779,7 +1850,21 @@ UScenarioTemplateFieldRowViewModel* UScenarioTemplateSidebarViewModel::CreateFie
 	UScenarioTemplateFieldRowViewModel* item = NewObject<UScenarioTemplateFieldRowViewModel>(this);
 	if (item)
 	{
-		item->InitializeFieldRow(id, label, value, inputType, bEditable, bArrayControlsEnabled, bVisible);
+		const FScenarioTemplateFieldSpec fieldSpec = ResolveScenarioTemplateFieldSpec(
+			id,
+			label,
+			inputType,
+			bEditable,
+			bArrayControlsEnabled,
+			bVisible);
+		item->InitializeFieldRow(
+			fieldSpec.Id,
+			fieldSpec.Label,
+			value,
+			fieldSpec.InputType,
+			fieldSpec.bEditable,
+			fieldSpec.bArrayControlsEnabled,
+			fieldSpec.bVisible);
 	}
 	return item;
 }

@@ -426,9 +426,7 @@ void UScenarioEditorSidebarWidget::BuildMainPanelText(
 	FString& outListText) const
 {
 	outPrimaryText = FString::Printf(
-		TEXT("문서 형식: %s\n버전: %d\n시나리오 이름: %s"),
-		*scenarioTemplate.Schema,
-		scenarioTemplate.Version,
+		TEXT("시나리오 이름: %s"),
 		scenarioTemplate.ScenarioId.IsEmpty() ? TEXT("(미설정)") : *scenarioTemplate.ScenarioId);
 
 	outSecondaryText = FString::Printf(

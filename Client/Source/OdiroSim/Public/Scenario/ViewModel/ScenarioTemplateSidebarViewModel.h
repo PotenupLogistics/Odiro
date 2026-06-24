@@ -339,6 +339,27 @@ private:
 		const FString& idPrefix,
 		const FScenarioTemplateRobotAnchor& anchor);
 
+	// 현재 draft corridor segment id를 closed-set field option으로 캐시한다.
+	void CacheCorridorSegmentOptions(const FScenarioDocument& scenarioTemplate);
+
+	// Obstacle placement kind option 목록을 반환한다.
+	static TArray<FString> GetObstaclePlacementKindOptions();
+
+	// Obstacle pattern id option 목록을 반환한다.
+	static TArray<FString> GetObstaclePatternOptions();
+
+	// Corridor lane hint option 목록을 반환한다.
+	static TArray<FString> GetLaneHintOptions();
+
+	// Pedestrian encounter type option 목록을 반환한다.
+	static TArray<FString> GetPedestrianEncounterTypeOptions();
+
+	// Pedestrian persona option 목록을 반환한다.
+	static TArray<FString> GetPedestrianPersonaOptions();
+
+	// Boolean field option 목록을 반환한다.
+	static TArray<FString> GetBooleanOptions();
+
 	// Robot anchor type 표시 문자열을 반환한다.
 	static FString RobotAnchorTypeToString(EScenarioTemplateRobotAnchorType type);
 
@@ -536,4 +557,7 @@ private:
 	// Pedestrian panel field row ViewModel 목록.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scenario|Editor|TemplateSidebar", meta = (AllowPrivateAccess = "true"))
 	TArray<TObjectPtr<UScenarioTemplateFieldRowViewModel>> PedestrianFieldItems;
+
+	// 현재 draft의 corridor segment id options.
+	TArray<FString> CorridorSegmentIdOptions;
 };

@@ -5,11 +5,10 @@
 
 class AActor;
 class UMaterialInterface;
+class UProceduralMeshComponent;
 class USceneComponent;
-class USplineMeshComponent;
-class UStaticMesh;
 
-// Complete input needed to create deterministic spline-deformed Corridor lane mesh sections.
+// Complete input needed to create deterministic procedural Corridor lane mesh sections.
 struct FScenarioCorridorLaneMeshBuildSpec
 {
 	// Actor that owns the generated components.
@@ -18,13 +17,10 @@ struct FScenarioCorridorLaneMeshBuildSpec
 	// Scene component used as the generated components' attachment parent.
 	USceneComponent* AttachParent = nullptr;
 
-	// Mesh deformed along each Corridor axis segment.
-	UStaticMesh* LaneStripMesh = nullptr;
-
 	// Material assigned to every generated lane section.
 	UMaterialInterface* Material = nullptr;
 
-	// Stable component name prefix before the segment index suffix.
+	// Stable component name used as the generated lane mesh base object name.
 	FName ComponentNameBase;
 
 	// Axis point locations in the target component space, expressed in centimeters.
@@ -33,20 +29,17 @@ struct FScenarioCorridorLaneMeshBuildSpec
 	// Tangents paired by index with AxisLocationsCm, expressed in centimeters.
 	TArray<FVector> AxisTangentsCm;
 
-	// Lateral offset from the axis centerline in centimeters.
-	double CenterOffsetCm = 0.0;
+	// Lower lateral boundary from the axis centerline in centimeters.
+	double MinOffsetCm = 0.0;
 
-	// Lane strip width in centimeters.
-	double LaneWidthCm = 0.0;
+	// Upper lateral boundary from the axis centerline in centimeters.
+	double MaxOffsetCm = 0.0;
 
-	// Spline mesh Z scale derived from the lane physical height.
-	double LaneHeightScale = 1.0;
+	// Physical prism height for the generated lane mesh in centimeters.
+	double LaneHeightCm = 0.0;
 
 	// Lane mesh center Z in centimeters.
 	double LaneCenterZCm = 0.0;
-
-	// Corridor surface top Z in centimeters for the supplied axis points.
-	double SurfaceTopZCm = 0.0;
 
 	// Collision profile applied when CollisionEnabled is not NoCollision.
 	FName CollisionProfileName;
@@ -92,7 +85,7 @@ public:
 		const FScenarioRuntimeCorridorSpec& corridorSpec,
 		const FVector& worldLocation);
 
-	// Approximates editor spline tangents from axis vertices so runtime visuals bend through the same points.
+	// Approximates axis tangents from axis vertices so generated visuals bend through the same points.
 	static FVector ResolveCurveTangentCm(const TArray<FVector>& axisLocationsCm, int32 pointIndex);
 
 	// Identifies sampler/editor lane ids that represent the curb-side surface band.
@@ -132,8 +125,8 @@ public:
 		int32 layoutIndex,
 		int32 laneIndex);
 
-	// Creates spline-deformed lane mesh components and appends them to the caller-owned component list.
+	// Creates procedural lane mesh components and appends them to the caller-owned component list.
 	static int32 AddLaneStripMeshes(
 		const FScenarioCorridorLaneMeshBuildSpec& meshSpec,
-		TArray<TObjectPtr<USplineMeshComponent>>& outLaneMeshComponents);
+		TArray<TObjectPtr<UProceduralMeshComponent>>& outLaneMeshComponents);
 };

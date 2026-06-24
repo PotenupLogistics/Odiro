@@ -1,6 +1,6 @@
 #include "Scenario/ScenarioCorridorGeometry.h"
 
-#include "Components/SplineMeshComponent.h"
+#include "ProceduralMeshComponent.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/UObjectGlobals.h"
@@ -13,6 +13,145 @@ namespace
 	const FName PenaltyRuntimeCollisionProfileName{ TEXT("Penalty") };
 	// Collision profile used by runtime blocked lane meshes.
 	const FName BlockedRuntimeCollisionProfileName{ TEXT("Blocked") };
+
+	struct FScenarioCorridorProceduralLaneSample
+	{
+		// Top vertex on the lower lateral boundary.
+		FVector MinTopLocationCm = FVector::ZeroVector;
+
+		// Top vertex on the upper lateral boundary.
+		FVector MaxTopLocationCm = FVector::ZeroVector;
+
+		// Bottom vertex on the lower lateral boundary.
+		FVector MinBottomLocationCm = FVector::ZeroVector;
+
+		// Bottom vertex on the upper lateral boundary.
+		FVector MaxBottomLocationCm = FVector::ZeroVector;
+
+		// Distance from the first sample along the generated mesh.
+		double AlongCm = 0.0;
+	};
+
+	// Resolves a stable horizontal tangent for one lane sample, falling back to adjacent axis points.
+	FVector ResolveScenarioCorridorProceduralDirectionCm(
+		const TArray<FVector>& axisLocationsCm,
+		const TArray<FVector>& axisTangentsCm,
+		int32 pointIndex)
+	{
+		FVector directionCm = axisTangentsCm.IsValidIndex(pointIndex) ? axisTangentsCm[pointIndex] : FVector::ZeroVector;
+		directionCm.Z = 0.0;
+		if (!directionCm.IsNearlyZero())
+		{
+			return directionCm.GetSafeNormal();
+		}
+
+		if (axisLocationsCm.IsValidIndex(pointIndex + 1))
+		{
+			directionCm = axisLocationsCm[pointIndex + 1] - axisLocationsCm[pointIndex];
+		}
+		else if (axisLocationsCm.IsValidIndex(pointIndex - 1))
+		{
+			directionCm = axisLocationsCm[pointIndex] - axisLocationsCm[pointIndex - 1];
+		}
+
+		directionCm.Z = 0.0;
+		return directionCm.GetSafeNormal();
+	}
+
+	// Builds top and bottom prism boundary samples from semantic lane offset bounds.
+	bool BuildScenarioCorridorProceduralLaneSamples(
+		const FScenarioCorridorLaneMeshBuildSpec& meshSpec,
+		TArray<FScenarioCorridorProceduralLaneSample>& outSamples)
+	{
+		outSamples.Reset();
+		const double minOffsetCm = FMath::Min(meshSpec.MinOffsetCm, meshSpec.MaxOffsetCm);
+		const double maxOffsetCm = FMath::Max(meshSpec.MinOffsetCm, meshSpec.MaxOffsetCm);
+		const double topZCm = meshSpec.LaneCenterZCm + (meshSpec.LaneHeightCm * 0.5);
+		const double bottomZCm = meshSpec.LaneCenterZCm - (meshSpec.LaneHeightCm * 0.5);
+		double accumulatedAlongCm = 0.0;
+		outSamples.Reserve(meshSpec.AxisLocationsCm.Num());
+
+		for (int32 pointIndex = 0; pointIndex < meshSpec.AxisLocationsCm.Num(); ++pointIndex)
+		{
+			if (pointIndex > 0)
+			{
+				accumulatedAlongCm += FVector::Dist2D(
+					meshSpec.AxisLocationsCm[pointIndex - 1],
+					meshSpec.AxisLocationsCm[pointIndex]);
+			}
+
+			const FVector directionCm = ResolveScenarioCorridorProceduralDirectionCm(
+				meshSpec.AxisLocationsCm,
+				meshSpec.AxisTangentsCm,
+				pointIndex);
+			if (directionCm.IsNearlyZero())
+			{
+				return false;
+			}
+
+			const FVector rightCm = FVector::CrossProduct(FVector::UpVector, directionCm).GetSafeNormal();
+			if (rightCm.IsNearlyZero())
+			{
+				return false;
+			}
+
+			const FVector minLocationCm = meshSpec.AxisLocationsCm[pointIndex] + (rightCm * minOffsetCm);
+			const FVector maxLocationCm = meshSpec.AxisLocationsCm[pointIndex] + (rightCm * maxOffsetCm);
+
+			FScenarioCorridorProceduralLaneSample sample;
+			sample.MinTopLocationCm = FVector(minLocationCm.X, minLocationCm.Y, topZCm);
+			sample.MaxTopLocationCm = FVector(maxLocationCm.X, maxLocationCm.Y, topZCm);
+			sample.MinBottomLocationCm = FVector(minLocationCm.X, minLocationCm.Y, bottomZCm);
+			sample.MaxBottomLocationCm = FVector(maxLocationCm.X, maxLocationCm.Y, bottomZCm);
+			sample.AlongCm = accumulatedAlongCm;
+			outSamples.Add(sample);
+		}
+
+		return outSamples.Num() >= 2;
+	}
+
+	// Appends one outward-wound quad with shared per-face normal data.
+	void AddScenarioCorridorProceduralQuad(
+		const FVector& firstLocationCm,
+		const FVector& secondLocationCm,
+		const FVector& thirdLocationCm,
+		const FVector& fourthLocationCm,
+		const FVector2D& firstUv,
+		const FVector2D& secondUv,
+		const FVector2D& thirdUv,
+		const FVector2D& fourthUv,
+		TArray<FVector>& vertices,
+		TArray<int32>& triangles,
+		TArray<FVector>& normals,
+		TArray<FVector2D>& uv0)
+	{
+		const int32 firstVertexIndex = vertices.Num();
+		const FVector normal = FVector::CrossProduct(
+			secondLocationCm - firstLocationCm,
+			thirdLocationCm - firstLocationCm).GetSafeNormal();
+
+		vertices.Add(firstLocationCm);
+		vertices.Add(secondLocationCm);
+		vertices.Add(thirdLocationCm);
+		vertices.Add(fourthLocationCm);
+
+		triangles.Add(firstVertexIndex);
+		triangles.Add(firstVertexIndex + 1);
+		triangles.Add(firstVertexIndex + 2);
+		triangles.Add(firstVertexIndex);
+		triangles.Add(firstVertexIndex + 2);
+		triangles.Add(firstVertexIndex + 3);
+
+		normals.Add(normal);
+		normals.Add(normal);
+		normals.Add(normal);
+		normals.Add(normal);
+
+		uv0.Add(firstUv);
+		uv0.Add(secondUv);
+		uv0.Add(thirdUv);
+		uv0.Add(fourthUv);
+	}
 }
 
 FVector2D FScenarioCorridorGeometry::RotatePointMeters(const FVector2D& pointMeters, double headingDegrees)
@@ -273,15 +412,14 @@ FString FScenarioCorridorGeometry::MakeSurfaceInstanceId(
 
 int32 FScenarioCorridorGeometry::AddLaneStripMeshes(
 	const FScenarioCorridorLaneMeshBuildSpec& meshSpec,
-	TArray<TObjectPtr<USplineMeshComponent>>& outLaneMeshComponents)
+	TArray<TObjectPtr<UProceduralMeshComponent>>& outLaneMeshComponents)
 {
 	if (!meshSpec.Owner
 		|| !meshSpec.AttachParent
-		|| !meshSpec.LaneStripMesh
 		|| meshSpec.AxisLocationsCm.Num() < 2
 		|| meshSpec.AxisLocationsCm.Num() != meshSpec.AxisTangentsCm.Num()
-		|| meshSpec.LaneWidthCm <= KINDA_SMALL_NUMBER
-		|| meshSpec.LaneHeightScale <= KINDA_SMALL_NUMBER)
+		|| FMath::Abs(meshSpec.MaxOffsetCm - meshSpec.MinOffsetCm) <= KINDA_SMALL_NUMBER
+		|| meshSpec.LaneHeightCm <= KINDA_SMALL_NUMBER)
 	{
 		return 0;
 	}
@@ -289,65 +427,158 @@ int32 FScenarioCorridorGeometry::AddLaneStripMeshes(
 	const FString componentNameBase = meshSpec.ComponentNameBase.IsNone()
 		? TEXT("CorridorLane")
 		: meshSpec.ComponentNameBase.ToString();
-	int32 createdCount = 0;
-	for (int32 pointIndex = 0; pointIndex < meshSpec.AxisLocationsCm.Num() - 1; ++pointIndex)
+
+	TArray<FScenarioCorridorProceduralLaneSample> samples;
+	if (!BuildScenarioCorridorProceduralLaneSamples(meshSpec, samples))
 	{
-		const FVector startLocation = meshSpec.AxisLocationsCm[pointIndex];
-		const FVector endLocation = meshSpec.AxisLocationsCm[pointIndex + 1];
-		const FVector startTangent = meshSpec.AxisTangentsCm[pointIndex];
-		const FVector endTangent = meshSpec.AxisTangentsCm[pointIndex + 1];
-		const FVector startDirection = startTangent.GetSafeNormal();
-		const FVector endDirection = endTangent.GetSafeNormal();
-		if (startDirection.IsNearlyZero() || endDirection.IsNearlyZero())
-		{
-			continue;
-		}
-
-		const FVector startRight = FVector::CrossProduct(FVector::UpVector, startDirection).GetSafeNormal();
-		const FVector endRight = FVector::CrossProduct(FVector::UpVector, endDirection).GetSafeNormal();
-		const FVector laneHeightOffset(0.0, 0.0, meshSpec.LaneCenterZCm - meshSpec.SurfaceTopZCm);
-		const FName componentName = MakeUniqueObjectName(
-			meshSpec.Owner,
-			USplineMeshComponent::StaticClass(),
-			FName(*FString::Printf(TEXT("%s_%02d"), *componentNameBase, pointIndex)));
-		USplineMeshComponent* meshComponent = NewObject<USplineMeshComponent>(meshSpec.Owner, componentName);
-		if (!meshComponent)
-		{
-			continue;
-		}
-
-		meshComponent->SetMobility(EComponentMobility::Movable);
-		meshComponent->SetupAttachment(meshSpec.AttachParent);
-		meshComponent->SetStaticMesh(meshSpec.LaneStripMesh);
-		meshComponent->SetForwardAxis(ESplineMeshAxis::X, false);
-		meshComponent->SetStartAndEnd(
-			startLocation + startRight * meshSpec.CenterOffsetCm + laneHeightOffset,
-			startTangent,
-			endLocation + endRight * meshSpec.CenterOffsetCm + laneHeightOffset,
-			endTangent,
-			false);
-		meshComponent->SetStartScale(FVector2D(meshSpec.LaneWidthCm / 100.0, meshSpec.LaneHeightScale), false);
-		meshComponent->SetEndScale(FVector2D(meshSpec.LaneWidthCm / 100.0, meshSpec.LaneHeightScale), false);
-		if (meshSpec.CollisionEnabled != ECollisionEnabled::NoCollision)
-		{
-			meshComponent->SetCollisionProfileName(meshSpec.CollisionProfileName);
-		}
-		meshComponent->SetCollisionEnabled(meshSpec.CollisionEnabled);
-		meshComponent->SetGenerateOverlapEvents(false);
-		meshComponent->SetCastShadow(false);
-		if (!meshSpec.ComponentTag.IsNone())
-		{
-			meshComponent->ComponentTags.AddUnique(meshSpec.ComponentTag);
-		}
-		if (meshSpec.Material)
-		{
-			meshComponent->SetMaterial(0, meshSpec.Material);
-		}
-		meshComponent->RegisterComponent();
-		meshComponent->UpdateMesh();
-		outLaneMeshComponents.Add(meshComponent);
-		++createdCount;
+		return 0;
 	}
 
-	return createdCount;
+	TArray<FVector> vertices;
+	TArray<int32> triangles;
+	TArray<FVector> normals;
+	TArray<FVector2D> uv0;
+	const int32 segmentCount = samples.Num() - 1;
+	const int32 estimatedVertexCount = (segmentCount * 16) + 8;
+	vertices.Reserve(estimatedVertexCount);
+	triangles.Reserve((segmentCount * 24) + 12);
+	normals.Reserve(estimatedVertexCount);
+	uv0.Reserve(estimatedVertexCount);
+
+	for (int32 segmentIndex = 0; segmentIndex < segmentCount; ++segmentIndex)
+	{
+		const FScenarioCorridorProceduralLaneSample& startSample = samples[segmentIndex];
+		const FScenarioCorridorProceduralLaneSample& endSample = samples[segmentIndex + 1];
+		const double startU = startSample.AlongCm / MetersToCentimeters;
+		const double endU = endSample.AlongCm / MetersToCentimeters;
+
+		AddScenarioCorridorProceduralQuad(
+			startSample.MinTopLocationCm,
+			endSample.MinTopLocationCm,
+			endSample.MaxTopLocationCm,
+			startSample.MaxTopLocationCm,
+			FVector2D(startU, 0.0),
+			FVector2D(endU, 0.0),
+			FVector2D(endU, 1.0),
+			FVector2D(startU, 1.0),
+			vertices,
+			triangles,
+			normals,
+			uv0);
+		AddScenarioCorridorProceduralQuad(
+			startSample.MinBottomLocationCm,
+			startSample.MaxBottomLocationCm,
+			endSample.MaxBottomLocationCm,
+			endSample.MinBottomLocationCm,
+			FVector2D(startU, 0.0),
+			FVector2D(startU, 1.0),
+			FVector2D(endU, 1.0),
+			FVector2D(endU, 0.0),
+			vertices,
+			triangles,
+			normals,
+			uv0);
+		AddScenarioCorridorProceduralQuad(
+			startSample.MinBottomLocationCm,
+			endSample.MinBottomLocationCm,
+			endSample.MinTopLocationCm,
+			startSample.MinTopLocationCm,
+			FVector2D(startU, 1.0),
+			FVector2D(endU, 1.0),
+			FVector2D(endU, 0.0),
+			FVector2D(startU, 0.0),
+			vertices,
+			triangles,
+			normals,
+			uv0);
+		AddScenarioCorridorProceduralQuad(
+			startSample.MaxBottomLocationCm,
+			startSample.MaxTopLocationCm,
+			endSample.MaxTopLocationCm,
+			endSample.MaxBottomLocationCm,
+			FVector2D(startU, 1.0),
+			FVector2D(startU, 0.0),
+			FVector2D(endU, 0.0),
+			FVector2D(endU, 1.0),
+			vertices,
+			triangles,
+			normals,
+			uv0);
+	}
+
+	const FScenarioCorridorProceduralLaneSample& firstSample = samples[0];
+	const FScenarioCorridorProceduralLaneSample& lastSample = samples.Last();
+	const double lastU = lastSample.AlongCm / MetersToCentimeters;
+	AddScenarioCorridorProceduralQuad(
+		firstSample.MinBottomLocationCm,
+		firstSample.MinTopLocationCm,
+		firstSample.MaxTopLocationCm,
+		firstSample.MaxBottomLocationCm,
+		FVector2D(0.0, 1.0),
+		FVector2D(0.0, 0.0),
+		FVector2D(1.0, 0.0),
+		FVector2D(1.0, 1.0),
+		vertices,
+		triangles,
+		normals,
+		uv0);
+	AddScenarioCorridorProceduralQuad(
+		lastSample.MinBottomLocationCm,
+		lastSample.MaxBottomLocationCm,
+		lastSample.MaxTopLocationCm,
+		lastSample.MinTopLocationCm,
+		FVector2D(lastU, 1.0),
+		FVector2D(lastU + 1.0, 1.0),
+		FVector2D(lastU + 1.0, 0.0),
+		FVector2D(lastU, 0.0),
+		vertices,
+		triangles,
+		normals,
+		uv0);
+
+	const FName componentName = MakeUniqueObjectName(
+		meshSpec.Owner,
+		UProceduralMeshComponent::StaticClass(),
+		FName(*componentNameBase));
+	UProceduralMeshComponent* meshComponent = NewObject<UProceduralMeshComponent>(meshSpec.Owner, componentName);
+	if (!meshComponent)
+	{
+		return 0;
+	}
+
+	meshComponent->SetMobility(EComponentMobility::Movable);
+	meshComponent->SetupAttachment(meshSpec.AttachParent);
+	meshComponent->bUseAsyncCooking = true;
+	if (meshSpec.CollisionEnabled != ECollisionEnabled::NoCollision)
+	{
+		meshComponent->SetCollisionProfileName(meshSpec.CollisionProfileName);
+	}
+	meshComponent->SetCollisionEnabled(meshSpec.CollisionEnabled);
+	meshComponent->SetGenerateOverlapEvents(false);
+	meshComponent->SetCastShadow(false);
+	if (!meshSpec.ComponentTag.IsNone())
+	{
+		meshComponent->ComponentTags.AddUnique(meshSpec.ComponentTag);
+	}
+	meshComponent->RegisterComponent();
+
+	TArray<FLinearColor> vertexColors;
+	TArray<FProcMeshTangent> tangents;
+	const bool bCreateCollision = meshSpec.CollisionEnabled != ECollisionEnabled::NoCollision;
+	meshComponent->CreateMeshSection_LinearColor(
+		0,
+		vertices,
+		triangles,
+		normals,
+		uv0,
+		vertexColors,
+		tangents,
+		bCreateCollision);
+	if (meshSpec.Material)
+	{
+		meshComponent->SetMaterial(0, meshSpec.Material);
+	}
+
+	outLaneMeshComponents.Add(meshComponent);
+	return 1;
 }

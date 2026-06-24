@@ -23,6 +23,20 @@ COMPLEX_G_SHAPE_CONSTRUCTION_PROMPT = (
     "전체 길이는 20m 정도로 하고 보행자는 없게 해줘."
 )
 
+COMPLEX_LONG_S_CURVE_CORNER_PROMPT = (
+    "전체 길이 35m 정도의 긴 보도 시나리오를 만들어줘. 시작 부분은 직선이고, 중간에는 S자 커브가 있고, "
+    "마지막에는 L자 코너로 꺾이는 도로였으면 해. 중간 공사구간에는 콘 5개를 지그재그로 배치하고, "
+    "코너 직전에는 road cone 3개를 추가로 좌우 번갈아 배치해줘. 보행자는 없게 하고, "
+    "출발 지점과 도착 지점 주변에는 장애물이 없게 해줘."
+)
+
+COMPLEX_40M_CONFLICTS_CORNER_PROMPT = (
+    "40m 정도의 복잡한 보도 주행 시나리오를 만들어줘. 처음 10m는 직선, 그 다음은 S자 형태로 휘어지고, "
+    "후반부는 ㄱ자 도로처럼 직각으로 꺾이게 해줘. 좁아지는 conflict 구간을 2개 만들고, "
+    "첫 번째 구간에는 콘 4개, 두 번째 구간에는 obstacle.road_cone_01 4개를 지그재그로 배치해줘. "
+    "장애물끼리는 겹치지 않게 하고 보행자는 없이 만들어줘."
+)
+
 
 class _FakeJsonClient:
     def __init__(self, responses):
@@ -267,6 +281,34 @@ def _axis_path_length(points: list[list[float]]) -> float:
             + (float(current[1]) - float(previous[1])) ** 2
         ) ** 0.5
     return total
+
+
+def _has_s_curve_shape(points: list[list[float]]) -> bool:
+    """Return whether a polyline has both left and right lateral movement."""
+    y_values = [float(point[1]) for point in points]
+    return len(points) >= 5 and min(y_values) < -0.2 and max(y_values) > 0.2
+
+
+def _has_late_corner_turn(points: list[list[float]]) -> bool:
+    """Return whether the latter half contains a meaningful direction change."""
+    if len(points) < 4:
+        return False
+    start_index = max(1, len(points) // 2)
+    for index in range(start_index, len(points) - 1):
+        previous = points[index - 1]
+        current = points[index]
+        following = points[index + 1]
+        first = (float(current[0]) - float(previous[0]), float(current[1]) - float(previous[1]))
+        second = (float(following[0]) - float(current[0]), float(following[1]) - float(current[1]))
+        first_length = (first[0] ** 2 + first[1] ** 2) ** 0.5
+        second_length = (second[0] ** 2 + second[1] ** 2) ** 0.5
+        if first_length == 0 or second_length == 0:
+            continue
+        cross = abs(first[0] * second[1] - first[1] * second[0])
+        sin_angle = cross / (first_length * second_length)
+        if sin_angle >= 0.7:
+            return True
+    return False
 
 
 def _range_center(value: object) -> float:
@@ -1350,6 +1392,61 @@ def test_v2_endpoint_beta_quality_guardrails_for_natural_language_prompts(monkey
             placement["prop"] == "obstacle.road_cone_01"
             for placement in payload["obstacles"]["placements"]
         )
+
+
+def test_v2_endpoint_complex_long_s_curve_corner_prompt_preserves_obstacle_intent(monkeypatch) -> None:
+    """Treat start/goal no-obstacle wording as clearance while preserving requested cones."""
+    monkeypatch.setenv("V2_AGENT_LLM_ENABLED", "false")
+
+    response = TestClient(app).post(
+        "/api/v2/scenarios/generate",
+        json={"prompt": COMPLEX_LONG_S_CURVE_CORNER_PROMPT},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    _assert_scenario_quality_guardrails(payload)
+
+    points = payload["corridor"]["axis"]["points_m"]
+    assert 30.0 <= _axis_path_length(points) <= 40.0
+    assert _has_s_curve_shape(points)
+    assert _has_late_corner_turn(points)
+    assert sum(1 for segment in payload["corridor"]["segments"] if segment["type"] == "narrowing") >= 2
+
+    placements = payload["obstacles"]["placements"]
+    assert len(placements) == 8
+    assert {placement["prop"] for placement in placements} == {"obstacle.road_cone_01"}
+    assert len({placement["at"]["segment"] for placement in placements}) >= 2
+    assert payload["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
+
+
+def test_v2_endpoint_complex_conflict_count_prompt_splits_cones_across_conflicts(monkeypatch) -> None:
+    """Do not confuse conflict segment count with requested obstacle count."""
+    monkeypatch.setenv("V2_AGENT_LLM_ENABLED", "false")
+
+    response = TestClient(app).post(
+        "/api/v2/scenarios/generate",
+        json={"prompt": COMPLEX_40M_CONFLICTS_CORNER_PROMPT},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    _assert_scenario_quality_guardrails(payload)
+
+    points = payload["corridor"]["axis"]["points_m"]
+    assert 35.0 <= _axis_path_length(points) <= 45.0
+    assert _has_s_curve_shape(points)
+    assert _has_late_corner_turn(points)
+
+    narrowing_segments = [segment["id"] for segment in payload["corridor"]["segments"] if segment["type"] == "narrowing"]
+    assert len(narrowing_segments) >= 2
+
+    placements = payload["obstacles"]["placements"]
+    assert len(placements) == 8
+    assert {placement["prop"] for placement in placements} == {"obstacle.road_cone_01"}
+    placement_segments = {placement["at"]["segment"] for placement in placements}
+    assert len(placement_segments & set(narrowing_segments)) >= 2
+    assert payload["pedestrians"] == {"background": {"count": 0, "speed_mps": 1.0}, "encounters": []}
 
 
 def test_v2_deterministic_g_shape_prompt_without_obstacles_builds_corner_corridor() -> None:

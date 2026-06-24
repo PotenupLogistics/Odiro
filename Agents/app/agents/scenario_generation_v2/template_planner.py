@@ -21,10 +21,13 @@ class TemplatePlan:
     explicit_blocking: bool
     requested_gate_obstacle_count: int | None
     requested_obstacle_count: int | None
+    requested_obstacle_counts: list[int]
     requested_prop: str | None
     requested_length_m: float | None
     corridor_profile: str
     explicit_no_obstacles: bool
+    start_goal_clearance: bool
+    requested_conflict_segment_count: int | None
     pedestrian_count: int | None
     explicit_no_pedestrians: bool
     robot_anchor_only: bool
@@ -61,10 +64,13 @@ class TemplatePlanner:
             explicit_blocking=intent.explicit_blocking,
             requested_gate_obstacle_count=intent.requested_gate_obstacle_count,
             requested_obstacle_count=intent.requested_obstacle_count,
+            requested_obstacle_counts=intent.requested_obstacle_counts,
             requested_prop=intent.requested_prop,
             requested_length_m=intent.requested_length_m,
             corridor_profile=intent.corridor_profile,
             explicit_no_obstacles=intent.explicit_no_obstacles,
+            start_goal_clearance=intent.start_goal_clearance,
+            requested_conflict_segment_count=intent.requested_conflict_segment_count,
             pedestrian_count=intent.pedestrian_count,
             explicit_no_pedestrians=intent.explicit_no_pedestrians,
             robot_anchor_only=intent.robot_anchor_only,

@@ -24,7 +24,7 @@ concurrency:
   queue: max
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   unlock:
@@ -61,7 +61,7 @@ jobs:
           PUSHED_AT: ${{ github.event.repository.pushed_at }}
           DISPATCH_MODE: ${{ github.event.inputs.mode }}
           DISPATCH_PATH: ${{ github.event.inputs.path }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
         run: |
           $ErrorActionPreference = "Stop"
           Set-StrictMode -Version Latest
@@ -171,7 +171,7 @@ jobs:
           }
 
           # Force-unlocks one Git LFS lock via the LFS HTTP API using gh api (mirrors manual-unlock.ps1).
-          # Requires GH_TOKEN to be set in the environment with sufficient repository write access.
+          # Requires GH_TOKEN to be set in the environment to the admin PAT used for LFS unlocks.
           function Invoke-ForceUnlockById {
               param(
                   [string] $Path,

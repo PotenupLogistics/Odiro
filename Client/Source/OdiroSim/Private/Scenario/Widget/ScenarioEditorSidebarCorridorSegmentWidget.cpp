@@ -1,5 +1,9 @@
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorSegmentWidget.h"
 
+#include "Engine/World.h"
+#include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
+#include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 
 void UScenarioEditorSidebarCorridorSegmentWidget::NativeConstruct()
@@ -7,6 +11,7 @@ void UScenarioEditorSidebarCorridorSegmentWidget::NativeConstruct()
 	Super::NativeConstruct();
 	BindFieldRows();
 	ConfigureFieldRows();
+	RefreshFieldItemsFromViewModel();
 	ApplyCachedSegmentToRows();
 }
 
@@ -19,7 +24,12 @@ void UScenarioEditorSidebarCorridorSegmentWidget::NativeDestruct()
 void UScenarioEditorSidebarCorridorSegmentWidget::SetSegmentIndex(const int32 inSegmentIndex)
 {
 	SegmentIndex = inSegmentIndex;
+	if (bHasCachedSegment)
+	{
+		RefreshFieldItemsFromViewModel();
+	}
 	ConfigureFieldRows();
+	ApplyCachedSegmentToRows();
 }
 
 void UScenarioEditorSidebarCorridorSegmentWidget::SetTextStyleCatalog(
@@ -33,10 +43,11 @@ void UScenarioEditorSidebarCorridorSegmentWidget::SetSurfaceOptions(
 	const TArray<FString>& surfaceIds)
 {
 	SurfaceOptions = surfaceIds;
-	if (ReplacedByFieldRow)
+	if (bHasCachedSegment)
 	{
-		ReplacedByFieldRow->SetComboOptions(SurfaceOptions);
+		RefreshFieldItemsFromViewModel();
 	}
+	ApplyCachedSegmentToRows();
 }
 
 void UScenarioEditorSidebarCorridorSegmentWidget::RefreshFromSegment(
@@ -44,6 +55,7 @@ void UScenarioEditorSidebarCorridorSegmentWidget::RefreshFromSegment(
 {
 	CachedSegment = segment;
 	bHasCachedSegment = true;
+	RefreshFieldItemsFromViewModel();
 	ConfigureFieldRows();
 	ApplyCachedSegmentToRows();
 }
@@ -194,51 +206,44 @@ void UScenarioEditorSidebarCorridorSegmentWidget::ConfigureFieldRows()
 	if (IdFieldRow)
 	{
 		IdFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		IdFieldRow->SetFieldLabel(TEXT("id"));
-		IdFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
-		IdFieldRow->SetEditable(true);
-		IdFieldRow->SetArrayControlsEnabled(true);
 	}
 	if (TypeFieldRow)
 	{
-		TArray<FString> segmentTypeOptions;
-		segmentTypeOptions.Add(TEXT("straight"));
-		segmentTypeOptions.Add(TEXT("narrowing"));
-		segmentTypeOptions.Add(TEXT("crosswalk"));
-		segmentTypeOptions.Add(TEXT("entrance"));
 		TypeFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		TypeFieldRow->SetFieldLabel(TEXT("type"));
-		TypeFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::ComboBox);
-		TypeFieldRow->SetComboOptions(segmentTypeOptions);
-		TypeFieldRow->SetComboAllowsUnset(false, FString());
-		TypeFieldRow->SetEditable(true);
 	}
 	if (AlongRangeFieldRow)
 	{
 		AlongRangeFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		AlongRangeFieldRow->SetFieldLabel(TEXT("along_range_m"));
-		AlongRangeFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Range);
-		AlongRangeFieldRow->SetEditable(true);
-		AlongRangeFieldRow->SetRangeInputEnabled(true);
 	}
 	if (ReplacedByFieldRow)
 	{
 		ReplacedByFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		ReplacedByFieldRow->SetFieldLabel(TEXT("replaced_by"));
-		ReplacedByFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::ComboBox);
-		ReplacedByFieldRow->SetComboOptions(SurfaceOptions);
-		ReplacedByFieldRow->SetComboAllowsUnset(true, TEXT("(unset)"));
-		ReplacedByFieldRow->SetEditable(true);
 	}
 }
 
-void UScenarioEditorSidebarCorridorSegmentWidget::ApplyCachedSegmentToRows()
+void UScenarioEditorSidebarCorridorSegmentWidget::RefreshFieldItemsFromViewModel()
 {
 	if (!bHasCachedSegment)
 	{
 		return;
 	}
 
+	CachedFieldItems.Reset();
+	if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+	{
+		for (UScenarioTemplateFieldRowViewModel* fieldItem :
+			templateSidebarViewModel->CreateCorridorSegmentFieldItems(
+				SegmentIndex,
+				CachedSegment,
+				SurfaceOptions))
+		{
+			CachedFieldItems.Add(fieldItem);
+		}
+	}
+}
+
+void UScenarioEditorSidebarCorridorSegmentWidget::ApplyCachedSegmentToRows()
+{
 	if (SegmentBlockWidget)
 	{
 		SegmentBlockWidget->SetBlockMetadata(
@@ -250,26 +255,25 @@ void UScenarioEditorSidebarCorridorSegmentWidget::ApplyCachedSegmentToRows()
 	}
 	if (IdFieldRow)
 	{
-		IdFieldRow->SetValueText(CachedSegment.SegmentId);
+		IdFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("CorridorSegmentId")));
+		IdFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 	}
 	if (TypeFieldRow)
 	{
-		TypeFieldRow->SetValueText(SegmentTypeToString(CachedSegment.Type));
+		TypeFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("CorridorSegmentType")));
+		TypeFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 	}
 	if (AlongRangeFieldRow)
 	{
-		AlongRangeFieldRow->SetRangeValueText(
-			FormatEditableNumber(CachedSegment.AlongRangeMeters.StartMeters),
-			FormatEditableNumber(CachedSegment.AlongRangeMeters.EndMeters));
-		AlongRangeFieldRow->SetValueText(FString::Printf(
-			TEXT("%s..%s"),
-			*FormatEditableNumber(CachedSegment.AlongRangeMeters.StartMeters),
-			*FormatEditableNumber(CachedSegment.AlongRangeMeters.EndMeters)));
-		AlongRangeFieldRow->SetRangeInputEnabled(true);
+		AlongRangeFieldRow->InitializeFromItemViewModel(
+			FindCachedFieldItem(TEXT("CorridorSegmentAlongRange")));
+		AlongRangeFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 	}
 	if (ReplacedByFieldRow)
 	{
-		ReplacedByFieldRow->SetValueText(FormatEditableStringValue(CachedSegment.ReplacedBySurfaceId));
+		ReplacedByFieldRow->InitializeFromItemViewModel(
+			FindCachedFieldItem(TEXT("CorridorSegmentReplacedBy")));
+		ReplacedByFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 	}
 }
 
@@ -292,40 +296,21 @@ void UScenarioEditorSidebarCorridorSegmentWidget::ApplyTextStyles()
 	}
 }
 
-FString UScenarioEditorSidebarCorridorSegmentWidget::SegmentTypeToString(
-	const EScenarioTemplateSegmentType type)
+UScenarioTemplateSidebarViewModel* UScenarioEditorSidebarCorridorSegmentWidget::GetTemplateSidebarViewModel() const
 {
-	switch (type)
-	{
-	case EScenarioTemplateSegmentType::Straight:
-		return TEXT("straight");
-	case EScenarioTemplateSegmentType::Narrowing:
-		return TEXT("narrowing");
-	case EScenarioTemplateSegmentType::Crosswalk:
-		return TEXT("crosswalk");
-	case EScenarioTemplateSegmentType::Entrance:
-		return TEXT("entrance");
-	default:
-		return TEXT("unknown");
-	}
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	return uiSubsystem ? uiSubsystem->GetTemplateSidebarViewModel() : nullptr;
 }
 
-FString UScenarioEditorSidebarCorridorSegmentWidget::FormatEditableStringValue(
-	const FScenarioTemplateStringValue& value)
+UScenarioTemplateFieldRowViewModel* UScenarioEditorSidebarCorridorSegmentWidget::FindCachedFieldItem(
+	const FString& fieldId) const
 {
-	if (!value.bIsSet)
+	for (UScenarioTemplateFieldRowViewModel* fieldItem : CachedFieldItems)
 	{
-		return FString();
+		if (fieldItem && fieldItem->GetItemId() == fieldId)
+		{
+			return fieldItem;
+		}
 	}
-	if (value.Mode == EScenarioTemplateStringValueMode::Choices)
-	{
-		return value.Choices.IsEmpty() ? FString() : value.Choices[0];
-	}
-
-	return value.FixedValue;
-}
-
-FString UScenarioEditorSidebarCorridorSegmentWidget::FormatEditableNumber(const double value)
-{
-	return FString::Printf(TEXT("%.2f"), value);
+	return nullptr;
 }

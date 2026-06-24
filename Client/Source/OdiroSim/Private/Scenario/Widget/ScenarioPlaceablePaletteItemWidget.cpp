@@ -5,6 +5,7 @@
 #include "Components/TextBlock.h"
 #include "Engine/Texture2D.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
+#include "Scenario/ViewModel/ScenarioEditorListItemViewModel.h"
 
 void UScenarioPlaceablePaletteItemWidget::NativeOnInitialized()
 {
@@ -26,12 +27,14 @@ void UScenarioPlaceablePaletteItemWidget::NativeConstruct()
 
 void UScenarioPlaceablePaletteItemWidget::SetPropEntry(const FScenarioStaticObstaclePropEntry& propEntry)
 {
+	ItemViewModel = nullptr;
 	PropEntry = propEntry;
 	SetPaletteItemEntry(MakeStaticObstaclePaletteItemEntry(propEntry));
 }
 
 void UScenarioPlaceablePaletteItemWidget::SetPaletteItemEntry(const FScenarioPaletteItemEntry& paletteItemEntry)
 {
+	ItemViewModel = nullptr;
 	PaletteItemEntry = paletteItemEntry;
 
 	if (DisplayNameTextBlock)
@@ -44,6 +47,33 @@ void UScenarioPlaceablePaletteItemWidget::SetPaletteItemEntry(const FScenarioPal
 		CategoryTextBlock->SetText(PaletteItemEntry.CategoryText);
 	}
 
+	ApplyThumbnailImage();
+}
+
+void UScenarioPlaceablePaletteItemWidget::InitializeFromItemViewModel(
+	UScenarioEditorListItemViewModel* itemViewModel)
+{
+	ItemViewModel = itemViewModel;
+
+	FScenarioPaletteItemEntry paletteItemEntry;
+	if (ItemViewModel)
+	{
+		paletteItemEntry.ItemType = ItemViewModel->GetPaletteItemType();
+		paletteItemEntry.AssetId = ItemViewModel->GetAssetId();
+		paletteItemEntry.DisplayName = FText::FromString(ItemViewModel->GetTitle());
+		paletteItemEntry.CategoryText = FText::FromString(ItemViewModel->GetSubtitle());
+		paletteItemEntry.ThumbnailTexture = ItemViewModel->GetThumbnailTexture();
+	}
+
+	PaletteItemEntry = paletteItemEntry;
+	if (DisplayNameTextBlock)
+	{
+		DisplayNameTextBlock->SetText(PaletteItemEntry.DisplayName);
+	}
+	if (CategoryTextBlock)
+	{
+		CategoryTextBlock->SetText(PaletteItemEntry.CategoryText);
+	}
 	ApplyThumbnailImage();
 }
 

@@ -8,9 +8,10 @@
 class UButton;
 class UEditableTextBox;
 class UMultiLineEditableTextBox;
+class UScenarioEditorUiSubsystem;
+class UScenarioLlmPromptViewModel;
 class UTextBlock;
 class UWidget;
-class USimulatorLaunchSubsystem;
 
 UCLASS(BlueprintType, Blueprintable)
 class ODIROSIM_API UScenarioLlmPromptWidget : public UUserWidget
@@ -79,16 +80,12 @@ private:
 	bool TryGetPrompt(FString& outPrompt);
 	// Reads and validates the requested project episode count.
 	bool TryGetEpisodeCount(int32& outEpisodeCount);
-	// Resolves the editor source file as <UserProject>/scenario.json.
-	bool TryResolveCurrentProjectScenarioPath(FString& outScenarioJsonPath, FString& outProjectPath);
-	// Saves the current editor draft back to its project scenario.json file.
-	bool TrySaveCurrentProjectScenario(FString& outScenarioJsonPath, FString& outProjectPath);
 	// Returns the widget that should receive text input focus.
 	UWidget* ResolveInputModeFocusWidget();
-	// Returns the game-instance LLM authoring subsystem.
-	UScenarioLlmAuthoringSubsystem* GetLlmAuthoringSubsystem() const;
-	// Returns the game-instance simulator launcher subsystem.
-	USimulatorLaunchSubsystem* GetSimulatorLaunchSubsystem() const;
+	// Returns the world-owned scenario editor UI subsystem.
+	UScenarioEditorUiSubsystem* GetEditorUiSubsystem() const;
+	// Returns the prompt ViewModel owned by the scenario editor UI subsystem.
+	UScenarioLlmPromptViewModel* GetLlmPromptViewModel() const;
 
 	// Optional focus widget used when requesting editor input mode.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

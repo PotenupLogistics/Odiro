@@ -5,6 +5,7 @@
 #include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
+#include "Scenario/ViewModel/ScenarioEditorListItemViewModel.h"
 
 namespace
 {
@@ -26,6 +27,32 @@ void UScenarioEditorOutlinerRowWidget::NativeDestruct()
 
 void UScenarioEditorOutlinerRowWidget::InitializeRow(const FScenarioOutlinerItemViewModel& viewModel)
 {
+	ItemViewModel = nullptr;
+	Item = viewModel;
+	RefreshRow();
+}
+
+void UScenarioEditorOutlinerRowWidget::InitializeFromItemViewModel(
+	UScenarioEditorListItemViewModel* itemViewModel)
+{
+	ItemViewModel = itemViewModel;
+	FScenarioOutlinerItemViewModel viewModel;
+	if (ItemViewModel)
+	{
+		viewModel.ItemKey = ItemViewModel->GetItemId();
+		viewModel.ParentKey = ItemViewModel->GetParentKey();
+		viewModel.Label = FText::FromString(ItemViewModel->GetTitle());
+		viewModel.Subtitle = FText::FromString(ItemViewModel->GetSubtitle());
+		viewModel.Depth = ItemViewModel->GetDepth();
+		viewModel.bExpandable = ItemViewModel->IsExpandable();
+		viewModel.bExpanded = ItemViewModel->IsExpanded();
+		viewModel.bSelected = ItemViewModel->IsSelected();
+		viewModel.ItemType = ItemViewModel->GetOutlinerItemType();
+		viewModel.TemplatePanel = ItemViewModel->GetTemplatePanel();
+		viewModel.InstanceId = ItemViewModel->GetInstanceId();
+		viewModel.ActorCategory = ItemViewModel->GetActorCategory();
+	}
+
 	Item = viewModel;
 	RefreshRow();
 }
@@ -33,12 +60,20 @@ void UScenarioEditorOutlinerRowWidget::InitializeRow(const FScenarioOutlinerItem
 void UScenarioEditorOutlinerRowWidget::SetSelected(const bool bInSelected)
 {
 	Item.bSelected = bInSelected;
+	if (ItemViewModel)
+	{
+		ItemViewModel->SetSelected(bInSelected);
+	}
 	RefreshRow();
 }
 
 void UScenarioEditorOutlinerRowWidget::SetExpanded(const bool bInExpanded)
 {
 	Item.bExpanded = bInExpanded;
+	if (ItemViewModel)
+	{
+		ItemViewModel->SetExpanded(bInExpanded);
+	}
 	RefreshRow();
 }
 

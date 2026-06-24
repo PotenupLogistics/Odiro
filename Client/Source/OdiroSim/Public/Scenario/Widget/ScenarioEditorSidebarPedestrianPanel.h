@@ -8,9 +8,10 @@
 #include "ScenarioEditorSidebarPedestrianPanel.generated.h"
 
 class UTextBlock;
-class UScenarioAuthoringSubsystem;
 class UScenarioEditorSidebarBlockWidget;
 class UScenarioEditorWidgetClassCatalog;
+class UScenarioTemplateFieldRowViewModel;
+class UScenarioTemplateSidebarViewModel;
 class UWidgetTextStyleCatalog;
 
 // Pedestrian Scenario Template sidebar panel that exposes the editable tree shape without committing edits yet.
@@ -92,31 +93,19 @@ private:
 	void ConfigureFieldRows();
 	// Applies shared typography to diagnostic text and child rows.
 	void ApplyTextStyles();
+	// Applies current Pedestrian field row ViewModels to bound row widgets.
+	void ApplyPedestrianFieldItems();
 	// Rebuilds structure-only encounter widgets for pedestrian encounter rules.
 	void RefreshEncounterRows(const TArray<FScenarioTemplatePedestrianEncounter>& encounters);
 	// Adds one structure row to a dynamic block body.
 	UScenarioEditorSidebarFieldRow* AddFieldRow(
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget,
-		const FString& label,
-		const FString& value,
-		EScenarioEditorSidebarFieldInputType inputType,
-		bool bEditable,
-		bool bArrayControlsEnabled = false) const;
+		UScenarioTemplateFieldRowViewModel* fieldItemViewModel) const;
 	// Adds an editable encounter widget to the encounters block without committing field changes.
 	UScenarioEditorSidebarPedestrianEncounterWidget* AddEncounterWidget(
 		int32 encounterIndex,
 		const FScenarioTemplatePedestrianEncounter& encounter,
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget);
-	// Resolves the authoring subsystem that owns the draft template.
-	UScenarioAuthoringSubsystem* GetAuthoringSubsystem() const;
-	// Applies one authored number value to a field row.
-	static void SetNumberRowValue(UScenarioEditorSidebarFieldRow* fieldRow, const FScenarioTemplateNumberValue& value);
-	// Applies one authored integer value to a field row.
-	static void SetIntegerRowValue(UScenarioEditorSidebarFieldRow* fieldRow, const FScenarioTemplateIntegerValue& value);
-	// Joins a string list for one editable field row.
-	static FString JoinStringList(const TArray<FString>& values);
-	// Formats one authored numeric value for editable text controls.
-	static FString FormatEditableNumber(double value);
-	// Formats one authored integer value for editable text controls.
-	static FString FormatEditableInteger(int32 value);
+	// Resolves the ViewModel that forwards draft template commands.
+	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
 };

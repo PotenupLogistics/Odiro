@@ -7,6 +7,8 @@
 #include "ScenarioEditorSidebarCorridorPointWidget.generated.h"
 
 class UScenarioEditorSidebarBlockWidget;
+class UScenarioTemplateFieldRowViewModel;
+class UScenarioTemplateSidebarViewModel;
 class UWidgetTextStyleCatalog;
 
 // Broadcasts a committed Corridor axis point coordinate edit with point index context.
@@ -111,16 +113,24 @@ private:
 	UPROPERTY(Transient)
 	bool bHasCachedPoint = false;
 
+	// Field row ViewModels generated from the cached point state.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UScenarioTemplateFieldRowViewModel>> CachedFieldItems;
+
 	// Binds child field row delegates owned by this point widget.
 	void BindFieldRows();
 	// Releases child field row delegates owned by this point widget.
 	void UnbindFieldRows();
 	// Applies static labels, editability, and block metadata.
 	void ConfigureFieldRows();
+	// Regenerates field row ViewModels from the cached point state.
+	void RefreshFieldItemsFromViewModel();
 	// Applies cached point values to bound field rows.
 	void ApplyCachedPointToRows();
 	// Applies shared typography to this point block and rows.
 	void ApplyTextStyles();
-	// Formats one coordinate for editable text controls.
-	static FString FormatEditableNumber(double value);
+	// Resolves the Scenario Template sidebar ViewModel that creates item ViewModels.
+	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
+	// Finds one cached field row ViewModel by id.
+	UScenarioTemplateFieldRowViewModel* FindCachedFieldItem(const FString& fieldId) const;
 };

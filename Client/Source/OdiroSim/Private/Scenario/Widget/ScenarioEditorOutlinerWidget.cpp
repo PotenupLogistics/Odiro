@@ -6,7 +6,10 @@
 #include "EngineUtils.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
 #include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
-#include "Scenario/Editor/ScenarioEditorController.h"
+#include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioEditorListItemViewModel.h"
+#include "Scenario/ViewModel/ScenarioEditorOutlinerViewModel.h"
+#include "Scenario/ViewModel/ScenarioEditorShellViewModel.h"
 #include "Scenario/Widget/ScenarioEditorOutlinerRowWidget.h"
 
 namespace
@@ -154,12 +157,19 @@ void UScenarioEditorOutlinerWidget::RefreshFromEditorState()
 	AddDefaultExpandedKeys();
 
 	FString selectedKey = SelectedItemKey.IsEmpty() ? ScenarioKey : SelectedItemKey;
-	if (const AScenarioEditorController* controller = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	const UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	if (const UScenarioEditorShellViewModel* shellViewModel = uiSubsystem
+			? uiSubsystem->GetShellViewModel()
+			: nullptr)
 	{
-		const UScenarioPlaceableComponent* selectedPlaceable = controller->GetSelectedPlaceableComponent();
-		if (selectedPlaceable && !selectedPlaceable->InstanceId.IsEmpty())
+		if (!shellViewModel->GetSelectedPlaceableId().IsEmpty())
 		{
-			selectedKey = MakePlaceableItemKey(selectedPlaceable->InstanceId);
+			selectedKey = MakePlaceableItemKey(shellViewModel->GetSelectedPlaceableId());
+		}
+		else if (const UScenarioEditorOutlinerViewModel* outlinerViewModel = uiSubsystem->GetOutlinerViewModel();
+			outlinerViewModel && !outlinerViewModel->GetSelectedItemKey().IsEmpty())
+		{
+			selectedKey = outlinerViewModel->GetSelectedItemKey();
 		}
 	}
 
@@ -257,6 +267,10 @@ void UScenarioEditorOutlinerWidget::BuildOutlinerItems(
 void UScenarioEditorOutlinerWidget::HandleRowSelected(FScenarioOutlinerItemViewModel item)
 {
 	SetSelectedItemKey(item.ItemKey);
+	if (UScenarioEditorOutlinerViewModel* outlinerViewModel = GetOutlinerViewModel())
+	{
+		outlinerViewModel->SetSelectedItemKey(item.ItemKey);
+	}
 	OnItemSelected.Broadcast(item);
 }
 
@@ -271,6 +285,12 @@ void UScenarioEditorOutlinerWidget::HandleRowExpansionToggled(FScenarioOutlinerI
 		ExpandedItemKeys.Remove(item.ItemKey);
 	}
 	RefreshFromEditorState();
+}
+
+UScenarioEditorOutlinerViewModel* UScenarioEditorOutlinerWidget::GetOutlinerViewModel() const
+{
+	const UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	return uiSubsystem ? uiSubsystem->GetOutlinerViewModel() : nullptr;
 }
 
 void UScenarioEditorOutlinerWidget::RebuildRows(const TArray<FScenarioOutlinerItemViewModel>& items)
@@ -320,7 +340,15 @@ void UScenarioEditorOutlinerWidget::RebuildRows(const TArray<FScenarioOutlinerIt
 			TEXT("Scenario editor outliner row WBP class is missing. Configure WidgetClassCatalog or RowWidgetClass."));
 		return;
 	}
-	for (const FScenarioOutlinerItemViewModel& item : items)
+
+	TArray<UScenarioEditorListItemViewModel*> itemViewModels;
+	if (UScenarioEditorOutlinerViewModel* outlinerViewModel = GetOutlinerViewModel())
+	{
+		outlinerViewModel->SetItemsFromOutlinerRows(items);
+		itemViewModels = outlinerViewModel->GetItems();
+	}
+
+	for (int32 itemIndex = 0; itemIndex < items.Num(); ++itemIndex)
 	{
 		UScenarioEditorOutlinerRowWidget* rowWidget =
 			CreateWidget<UScenarioEditorOutlinerRowWidget>(this, rowClass);
@@ -330,7 +358,14 @@ void UScenarioEditorOutlinerWidget::RebuildRows(const TArray<FScenarioOutlinerIt
 		}
 
 		rowWidget->TextStyleCatalog = TextStyleCatalog;
-		rowWidget->InitializeRow(item);
+		if (itemViewModels.IsValidIndex(itemIndex))
+		{
+			rowWidget->InitializeFromItemViewModel(itemViewModels[itemIndex]);
+		}
+		else
+		{
+			rowWidget->InitializeRow(items[itemIndex]);
+		}
 		rowWidget->OnRowSelected.AddDynamic(this, &UScenarioEditorOutlinerWidget::HandleRowSelected);
 		rowWidget->OnRowExpansionToggled.AddDynamic(
 			this,

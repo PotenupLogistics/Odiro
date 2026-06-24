@@ -14,22 +14,18 @@
 #include "Scenario/Widget/ScenarioEditorSidebarPedestrianPanel.h"
 #include "UObject/SoftObjectPath.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorWidgetClassCatalog, Log, All);
+
 namespace
 {
 	const FSoftObjectPath DefaultScenarioEditorWidgetClassCatalogPath(
 		TEXT("/Game/Data/UI/DA_ScenarioEditorWidgetClassCatalog.DA_ScenarioEditorWidgetClassCatalog"));
 
 	template <typename TWidget>
-	TSubclassOf<TWidget> LoadWidgetClass(const TCHAR* classPath)
-	{
-		return LoadClass<TWidget>(nullptr, classPath);
-	}
-
-	template <typename TWidget>
 	TSubclassOf<TWidget> ResolveCatalogClass(
 		const TSoftObjectPtr<UScenarioEditorWidgetClassCatalog>& catalogReference,
 		TSubclassOf<TWidget> UScenarioEditorWidgetClassCatalog::*member,
-		const TCHAR* defaultClassPath)
+		const TCHAR* classLabel)
 	{
 		if (const UScenarioEditorWidgetClassCatalog* catalog = catalogReference.LoadSynchronous())
 		{
@@ -52,7 +48,12 @@ namespace
 			}
 		}
 
-		return LoadWidgetClass<TWidget>(defaultClassPath);
+		UE_LOG(
+			LogScenarioEditorWidgetClassCatalog,
+			Warning,
+			TEXT("Scenario editor widget class is not configured in the widget class catalog: %s"),
+			classLabel);
+		return nullptr;
 	}
 }
 
@@ -69,7 +70,7 @@ UScenarioEditorWidgetClassCatalog::ResolveOutlinerRowWidgetClass(
 	return ResolveCatalogClass(
 		catalogReference,
 		&UScenarioEditorWidgetClassCatalog::OutlinerRowWidgetClass,
-		TEXT("/Game/Widgets/Editor/WBP_ScenarioEditorOutlinerRow.WBP_ScenarioEditorOutlinerRow_C"));
+		TEXT("OutlinerRowWidgetClass"));
 }
 
 TSubclassOf<UScenarioEditorSidebarBlockWidget>
@@ -79,7 +80,7 @@ UScenarioEditorWidgetClassCatalog::ResolveSidebarBlockWidgetClass(
 	return ResolveCatalogClass(
 		catalogReference,
 		&UScenarioEditorWidgetClassCatalog::SidebarBlockWidgetClass,
-		TEXT("/Game/Widgets/Editor/WBP_ScenarioEditorSidebarBlock.WBP_ScenarioEditorSidebarBlock_C"));
+		TEXT("SidebarBlockWidgetClass"));
 }
 
 TSubclassOf<UScenarioEditorSidebarFieldRow>
@@ -89,7 +90,7 @@ UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(
 	return ResolveCatalogClass(
 		catalogReference,
 		&UScenarioEditorWidgetClassCatalog::SidebarFieldRowWidgetClass,
-		TEXT("/Game/Widgets/Editor/WBP_ScenarioEditorSidebarFieldRow.WBP_ScenarioEditorSidebarFieldRow_C"));
+		TEXT("SidebarFieldRowWidgetClass"));
 }
 
 TSubclassOf<UScenarioEditorSidebarMainPanel>
@@ -99,7 +100,7 @@ UScenarioEditorWidgetClassCatalog::ResolveSidebarMainPanelWidgetClass(
 	return ResolveCatalogClass(
 		catalogReference,
 		&UScenarioEditorWidgetClassCatalog::SidebarMainPanelWidgetClass,
-		TEXT("/Game/Widgets/Editor/WBP_ScenarioEditorSidebarMainPanel.WBP_ScenarioEditorSidebarMainPanel_C"));
+		TEXT("SidebarMainPanelWidgetClass"));
 }
 
 TSubclassOf<UScenarioEditorSidebarCorridorPanel>
@@ -109,7 +110,7 @@ UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorPanelWidgetClass(
 	return ResolveCatalogClass(
 		catalogReference,
 		&UScenarioEditorWidgetClassCatalog::SidebarCorridorPanelWidgetClass,
-		TEXT("/Game/Widgets/Editor/WBP_ScenarioEditorSidebarCorridorPanel.WBP_ScenarioEditorSidebarCorridorPanel_C"));
+		TEXT("SidebarCorridorPanelWidgetClass"));
 }
 
 TSubclassOf<UScenarioEditorSidebarCorridorPointWidget>
@@ -119,7 +120,7 @@ UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorPointWidgetClass(
 	return ResolveCatalogClass(
 		catalogReference,
 		&UScenarioEditorWidgetClassCatalog::SidebarCorridorPointWidgetClass,
-		TEXT("/Game/Widgets/Editor/WBP_ScenarioEditorSidebarCorridorPoint.WBP_ScenarioEditorSidebarCorridorPoint_C"));
+		TEXT("SidebarCorridorPointWidgetClass"));
 }
 
 TSubclassOf<UScenarioEditorSidebarCorridorLaneWidget>
@@ -129,7 +130,7 @@ UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorLaneWidgetClass(
 	return ResolveCatalogClass(
 		catalogReference,
 		&UScenarioEditorWidgetClassCatalog::SidebarCorridorLaneWidgetClass,
-		TEXT("/Game/Widgets/Editor/WBP_ScenarioEditorSidebarCorridorLane.WBP_ScenarioEditorSidebarCorridorLane_C"));
+		TEXT("SidebarCorridorLaneWidgetClass"));
 }
 
 TSubclassOf<UScenarioEditorSidebarCorridorSegmentWidget>
@@ -139,7 +140,7 @@ UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorSegmentWidgetClass(
 	return ResolveCatalogClass(
 		catalogReference,
 		&UScenarioEditorWidgetClassCatalog::SidebarCorridorSegmentWidgetClass,
-		TEXT("/Game/Widgets/Editor/WBP_ScenarioEditorSidebarCorridorSegment.WBP_ScenarioEditorSidebarCorridorSegment_C"));
+		TEXT("SidebarCorridorSegmentWidgetClass"));
 }
 
 TSubclassOf<UScenarioEditorSidebarObstaclePanel>
@@ -149,7 +150,7 @@ UScenarioEditorWidgetClassCatalog::ResolveSidebarObstaclePanelWidgetClass(
 	return ResolveCatalogClass(
 		catalogReference,
 		&UScenarioEditorWidgetClassCatalog::SidebarObstaclePanelWidgetClass,
-		TEXT("/Game/Widgets/Editor/WBP_ScenarioEditorSidebarObstaclePanel.WBP_ScenarioEditorSidebarObstaclePanel_C"));
+		TEXT("SidebarObstaclePanelWidgetClass"));
 }
 
 TSubclassOf<UScenarioEditorSidebarObstaclePlacementWidget>
@@ -159,7 +160,7 @@ UScenarioEditorWidgetClassCatalog::ResolveSidebarObstaclePlacementWidgetClass(
 	return ResolveCatalogClass(
 		catalogReference,
 		&UScenarioEditorWidgetClassCatalog::SidebarObstaclePlacementWidgetClass,
-		TEXT("/Game/Widgets/Editor/WBP_ScenarioEditorSidebarObstaclePlacement.WBP_ScenarioEditorSidebarObstaclePlacement_C"));
+		TEXT("SidebarObstaclePlacementWidgetClass"));
 }
 
 TSubclassOf<UScenarioEditorSidebarPedestrianPanel>
@@ -169,7 +170,7 @@ UScenarioEditorWidgetClassCatalog::ResolveSidebarPedestrianPanelWidgetClass(
 	return ResolveCatalogClass(
 		catalogReference,
 		&UScenarioEditorWidgetClassCatalog::SidebarPedestrianPanelWidgetClass,
-		TEXT("/Game/Widgets/Editor/WBP_ScenarioEditorSidebarPedestrianPanel.WBP_ScenarioEditorSidebarPedestrianPanel_C"));
+		TEXT("SidebarPedestrianPanelWidgetClass"));
 }
 
 TSubclassOf<UScenarioEditorSidebarPedestrianEncounterWidget>
@@ -179,5 +180,5 @@ UScenarioEditorWidgetClassCatalog::ResolveSidebarPedestrianEncounterWidgetClass(
 	return ResolveCatalogClass(
 		catalogReference,
 		&UScenarioEditorWidgetClassCatalog::SidebarPedestrianEncounterWidgetClass,
-		TEXT("/Game/Widgets/Editor/WBP_ScenarioEditorSidebarPedestrianEncounter.WBP_ScenarioEditorSidebarPedestrianEncounter_C"));
+		TEXT("SidebarPedestrianEncounterWidgetClass"));
 }

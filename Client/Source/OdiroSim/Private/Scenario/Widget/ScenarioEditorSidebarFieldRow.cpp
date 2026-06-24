@@ -7,6 +7,7 @@
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 
 void UScenarioEditorSidebarFieldRow::NativeConstruct()
 {
@@ -99,6 +100,26 @@ void UScenarioEditorSidebarFieldRow::SetTextStyleCatalog(
 {
 	TextStyleCatalog = catalog;
 	RefreshRow();
+}
+
+void UScenarioEditorSidebarFieldRow::InitializeFromItemViewModel(
+	UScenarioTemplateFieldRowViewModel* itemViewModel)
+{
+	if (!itemViewModel)
+	{
+		return;
+	}
+
+	SetFieldLabel(itemViewModel->GetTitle());
+	SetValueText(itemViewModel->GetValueText());
+	SetRangeValueText(itemViewModel->GetMinValueText(), itemViewModel->GetMaxValueText());
+	SetComboOptions(itemViewModel->GetComboOptions());
+	SetInputType(itemViewModel->GetInputType());
+	SetEditable(itemViewModel->IsFieldEditable());
+	SetRangeInputEnabled(itemViewModel->IsRangeInputEnabled());
+	SetArrayControlsEnabled(itemViewModel->HasArrayControls());
+	SetComboAllowsUnset(itemViewModel->AllowsComboUnset(), itemViewModel->GetComboUnsetDisplayText());
+	SetVisibility(itemViewModel->IsFieldVisible() ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 }
 
 FString UScenarioEditorSidebarFieldRow::GetValueText() const

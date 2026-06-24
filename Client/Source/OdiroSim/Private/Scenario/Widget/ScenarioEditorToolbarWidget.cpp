@@ -3,63 +3,29 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
-#include "Scenario/Editor/ScenarioEditorController.h"
+#include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioEditorToolbarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorRootWidget.h"
-#include "Kismet/GameplayStatics.h"
-#include "Misc/Guid.h"
-#include "Misc/Paths.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
-
-namespace
-{
-	FString MakeUniqueSavePath(const FString& preferredPath)
-	{
-		FString directory = FPaths::GetPath(preferredPath);
-		if (directory.IsEmpty())
-		{
-			directory = TEXT("Saved/UserProjects/ScenarioEditor");
-		}
-
-		const FString baseName = FPaths::GetBaseFilename(preferredPath).IsEmpty()
-			? FString(TEXT("scenario"))
-			: FPaths::GetBaseFilename(preferredPath);
-		const FString extension = FPaths::GetExtension(preferredPath).IsEmpty()
-			? FString(TEXT("json"))
-			: FPaths::GetExtension(preferredPath);
-
-		for (int32 index = 0; index < 1000; ++index)
-		{
-			const FString fileName = index == 0
-				? FString::Printf(TEXT("%s.%s"), *baseName, *extension)
-				: FString::Printf(TEXT("%s_%d.%s"), *baseName, index, *extension);
-			FString candidatePath = FPaths::Combine(directory, fileName);
-			candidatePath.ReplaceInline(TEXT("\\"), TEXT("/"));
-			const FString resolvedCandidatePath = FPaths::IsRelative(candidatePath)
-				? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), candidatePath)
-				: FPaths::ConvertRelativePathToFull(candidatePath);
-			if (!FPaths::FileExists(resolvedCandidatePath))
-			{
-				return candidatePath;
-			}
-		}
-
-		FString fallbackPath = FPaths::Combine(
-			directory,
-			FString::Printf(TEXT("%s_%s.%s"), *baseName, *FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(8), *extension));
-		fallbackPath.ReplaceInline(TEXT("\\"), TEXT("/"));
-		return fallbackPath;
-	}
-}
 
 void UScenarioEditorToolbarWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+	InitializeViewModel();
 	BindControls();
 	UWidgetTextStyleCatalog::ApplyTextBlockStyle(StatusTextBlock.Get(), EWidgetTextStyleRole::Value);
 	RefreshSidebarPanelButtons();
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	RequestEditorWidgetInputMode();
-	SetStatusText(TEXT("준비됨"));
+	if (ToolbarViewModel)
+	{
+		ToolbarViewModel->SetStatusText(TEXT("준비됨"));
+		SetStatusText(ToolbarViewModel->GetStatusText());
+	}
+	else
+	{
+		SetStatusText(TEXT("준비됨"));
+	}
 }
 
 void UScenarioEditorToolbarWidget::NativeDestruct()
@@ -70,33 +36,30 @@ void UScenarioEditorToolbarWidget::NativeDestruct()
 
 bool UScenarioEditorToolbarWidget::SaveScenario()
 {
-	AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
-	if (!editorController)
+	if (!ToolbarViewModel)
 	{
-		SetStatusText(TEXT("저장 실패: ScenarioEditorController unavailable."));
+		SetStatusText(TEXT("저장 실패: ScenarioEditorToolbarViewModel unavailable."));
 		return false;
 	}
 
-	FString resolvedPath;
-	TArray<FString> diagnostics;
-	const FString savePath = ResolveSavePath();
-	if (!editorController->SaveProjectScenarioJsonFile(savePath, resolvedPath, diagnostics))
-	{
-		SetStatusText(diagnostics.IsEmpty()
-			? FString::Printf(TEXT("저장 실패: %s"), *savePath)
-			: FString::Join(diagnostics, TEXT("\n")));
-		return false;
-	}
-
-	SetStatusText(FString::Printf(TEXT("저장됨: %s"), *resolvedPath));
-	return true;
+	ToolbarViewModel->SetDefaultSavePath(DefaultSavePath);
+	const bool bSaved = ToolbarViewModel->SaveScenario();
+	SetStatusText(ToolbarViewModel->GetStatusText());
+	return bSaved;
 }
 
 void UScenarioEditorToolbarWidget::ReturnToMainMenu()
 {
-	if (UWorld* world = GetWorld())
+	if (!ToolbarViewModel)
 	{
-		UGameplayStatics::OpenLevel(world, FName(*StartupMapId));
+		SetStatusText(TEXT("복귀 실패: ScenarioEditorToolbarViewModel unavailable."));
+		return;
+	}
+
+	ToolbarViewModel->SetStartupMapId(StartupMapId);
+	if (!ToolbarViewModel->ReturnToStartup())
+	{
+		SetStatusText(ToolbarViewModel->GetStatusText());
 	}
 }
 
@@ -108,16 +71,12 @@ void UScenarioEditorToolbarWidget::SetActiveSidebarPanel(const EScenarioTemplate
 	}
 
 	ActiveSidebarPanel = panel;
+	if (ToolbarViewModel)
+	{
+		ToolbarViewModel->SelectSidebarPanel(ActiveSidebarPanel);
+	}
 	RefreshSidebarPanelButtons();
 	OnSidebarPanelChanged.Broadcast(ActiveSidebarPanel);
-
-	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
-	{
-		if (UScenarioEditorRootWidget* rootWidget = editorController->GetEditorRootWidget())
-		{
-			rootWidget->SetTemplateSidebarPanel(ActiveSidebarPanel);
-		}
-	}
 }
 
 void UScenarioEditorToolbarWidget::SelectMainSidebarPanel()
@@ -219,17 +178,17 @@ void UScenarioEditorToolbarWidget::BindControls()
 
 void UScenarioEditorToolbarWidget::RequestEditorWidgetInputMode()
 {
-	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	if (ToolbarViewModel)
 	{
 		UWidget* focusWidget = ResolveInputModeFocusWidget();
 		RequestedInputModeFocusWidget = focusWidget;
-		editorController->RequestEditorWidgetInputMode(focusWidget);
+		ToolbarViewModel->RequestEditorWidgetInputMode(focusWidget);
 	}
 }
 
 void UScenarioEditorToolbarWidget::ReleaseEditorWidgetInputMode()
 {
-	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	if (ToolbarViewModel)
 	{
 		UWidget* focusWidget = RequestedInputModeFocusWidget.Get();
 		if (!focusWidget)
@@ -237,7 +196,7 @@ void UScenarioEditorToolbarWidget::ReleaseEditorWidgetInputMode()
 			focusWidget = ResolveInputModeFocusWidget();
 		}
 
-		editorController->ReleaseEditorWidgetInputMode(focusWidget);
+		ToolbarViewModel->ReleaseEditorWidgetInputMode(focusWidget);
 		RequestedInputModeFocusWidget.Reset();
 	}
 }
@@ -250,23 +209,21 @@ void UScenarioEditorToolbarWidget::SetStatusText(const FString& message)
 	}
 }
 
+void UScenarioEditorToolbarWidget::InitializeViewModel()
+{
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	ToolbarViewModel = uiSubsystem ? uiSubsystem->GetToolbarViewModel() : nullptr;
+	if (ToolbarViewModel)
+	{
+		ToolbarViewModel->SetDefaultSavePath(DefaultSavePath);
+		ToolbarViewModel->SetStartupMapId(StartupMapId);
+		ToolbarViewModel->SelectSidebarPanel(ActiveSidebarPanel);
+	}
+}
+
 UWidget* UScenarioEditorToolbarWidget::ResolveInputModeFocusWidget() const
 {
 	return ToolbarInputModeFocus.Get();
-}
-
-FString UScenarioEditorToolbarWidget::ResolveSavePath() const
-{
-	if (const AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
-	{
-		const FString sourcePath = editorController->GetSourceProjectScenarioJsonPath();
-		if (!sourcePath.IsEmpty())
-		{
-			return sourcePath;
-		}
-	}
-
-	return MakeUniqueSavePath(DefaultSavePath);
 }
 
 void UScenarioEditorToolbarWidget::ApplySidebarPanelButtonState(

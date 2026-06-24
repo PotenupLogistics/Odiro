@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "Types/SlateEnums.h"
 #include "ScenarioEditorSidebarFieldRow.generated.h"
 
@@ -13,19 +14,7 @@ class UMultiLineEditableTextBox;
 class USizeBox;
 class UTextBlock;
 class UWidgetTextStyleCatalog;
-
-// Value editor shape used by one Scenario Template field row.
-UENUM(BlueprintType)
-enum class EScenarioEditorSidebarFieldInputType : uint8
-{
-	Text,
-	MultilineText,
-	Integer,
-	Number,
-	EnumText,
-	ComboBox,
-	Range
-};
+class UScenarioTemplateFieldRowViewModel;
 
 // Broadcasts when a Scenario Template field row commits an editable text value.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
@@ -243,6 +232,10 @@ public:
 	// Updates the shared typography catalog reference used by this row.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
+
+	// Applies display/editor state from the field row ViewModel.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void InitializeFromItemViewModel(UScenarioTemplateFieldRowViewModel* itemViewModel);
 
 	// Returns the value currently displayed by the row.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Template")

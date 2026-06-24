@@ -1,6 +1,5 @@
 #include "Scenario/Widget/ScenarioEditorSidebarWidget.h"
 
-#include "Blueprint/WidgetTree.h"
 #include "Components/ContentWidget.h"
 #include "Components/PanelSlot.h"
 #include "Components/TextBlock.h"
@@ -8,7 +7,8 @@
 #include "Components/WidgetSwitcher.h"
 #include "Components/WidgetSwitcherSlot.h"
 #include "Engine/World.h"
-#include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
+#include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorPanel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
@@ -105,23 +105,25 @@ void UScenarioEditorSidebarWidget::SetWidgetClassCatalog(
 
 void UScenarioEditorSidebarWidget::RefreshFromDraft()
 {
-	UWorld* world = GetWorld();
-	const UScenarioAuthoringSubsystem* authoringSubsystem = world
-		? world->GetSubsystem<UScenarioAuthoringSubsystem>()
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = uiSubsystem
+		? uiSubsystem->GetTemplateSidebarViewModel()
 		: nullptr;
-	if (!authoringSubsystem)
+	FScenarioDocument scenarioTemplate;
+	FString failureReason;
+	if (!templateSidebarViewModel || !templateSidebarViewModel->TryGetDraftScenario(scenarioTemplate, failureReason))
 	{
 		SetSidebarText(
 			PanelToTitle(ActivePanel),
 			TEXT(""),
 			TEXT(""),
 			TEXT(""),
-			TEXT("ScenarioAuthoringSubsystem unavailable."));
+			failureReason.IsEmpty() ? TEXT("ScenarioTemplateSidebarViewModel unavailable.") : failureReason);
 		SetFallbackTextVisibility(ESlateVisibility::SelfHitTestInvisible);
 		return;
 	}
 
-	RefreshFromTemplate(authoringSubsystem->GetDraftScenario());
+	RefreshFromTemplate(scenarioTemplate);
 }
 
 void UScenarioEditorSidebarWidget::RefreshFromTemplate(const FScenarioDocument& scenarioTemplate)
@@ -163,7 +165,7 @@ void UScenarioEditorSidebarWidget::RefreshFromTemplate(const FScenarioDocument& 
 void UScenarioEditorSidebarWidget::RefreshGeneratedPanelContent(
 	const FScenarioDocument& scenarioTemplate)
 {
-	if (!PanelSwitcher || !WidgetTree)
+	if (!PanelSwitcher)
 	{
 		return;
 	}
@@ -250,7 +252,7 @@ UWidget* UScenarioEditorSidebarWidget::EnsureGeneratedPanelWidget(
 	{
 		return generatedWidget;
 	}
-	if (!PanelSwitcher || !WidgetTree)
+	if (!PanelSwitcher || !GetWorld())
 	{
 		return nullptr;
 	}
@@ -262,7 +264,8 @@ UWidget* UScenarioEditorSidebarWidget::EnsureGeneratedPanelWidget(
 		if (TSubclassOf<UScenarioEditorSidebarMainPanel> panelClass =
 			UScenarioEditorWidgetClassCatalog::ResolveSidebarMainPanelWidgetClass(WidgetClassCatalog))
 		{
-			panelWidget = WidgetTree->ConstructWidget<UScenarioEditorSidebarMainPanel>(
+			panelWidget = CreateWidget<UScenarioEditorSidebarMainPanel>(
+				GetWorld(),
 				panelClass,
 				TEXT("GeneratedMainPanelWidget"));
 		}
@@ -271,7 +274,8 @@ UWidget* UScenarioEditorSidebarWidget::EnsureGeneratedPanelWidget(
 		if (TSubclassOf<UScenarioEditorSidebarCorridorPanel> panelClass =
 			UScenarioEditorWidgetClassCatalog::ResolveSidebarCorridorPanelWidgetClass(WidgetClassCatalog))
 		{
-			panelWidget = WidgetTree->ConstructWidget<UScenarioEditorSidebarCorridorPanel>(
+			panelWidget = CreateWidget<UScenarioEditorSidebarCorridorPanel>(
+				GetWorld(),
 				panelClass,
 				TEXT("GeneratedCorridorPanelWidget"));
 		}
@@ -280,7 +284,8 @@ UWidget* UScenarioEditorSidebarWidget::EnsureGeneratedPanelWidget(
 		if (TSubclassOf<UScenarioEditorSidebarObstaclePanel> panelClass =
 			UScenarioEditorWidgetClassCatalog::ResolveSidebarObstaclePanelWidgetClass(WidgetClassCatalog))
 		{
-			panelWidget = WidgetTree->ConstructWidget<UScenarioEditorSidebarObstaclePanel>(
+			panelWidget = CreateWidget<UScenarioEditorSidebarObstaclePanel>(
+				GetWorld(),
 				panelClass,
 				TEXT("GeneratedObstaclePanelWidget"));
 		}
@@ -289,7 +294,8 @@ UWidget* UScenarioEditorSidebarWidget::EnsureGeneratedPanelWidget(
 		if (TSubclassOf<UScenarioEditorSidebarPedestrianPanel> panelClass =
 			UScenarioEditorWidgetClassCatalog::ResolveSidebarPedestrianPanelWidgetClass(WidgetClassCatalog))
 		{
-			panelWidget = WidgetTree->ConstructWidget<UScenarioEditorSidebarPedestrianPanel>(
+			panelWidget = CreateWidget<UScenarioEditorSidebarPedestrianPanel>(
+				GetWorld(),
 				panelClass,
 				TEXT("GeneratedPedestrianPanelWidget"));
 		}

@@ -3,8 +3,11 @@
 #include "Components/HorizontalBox.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
+#include "Engine/World.h"
 #include "Scenario/Data/ScenarioAssetPaletteCatalog.h"
-#include "Scenario/Editor/ScenarioEditorController.h"
+#include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioAssetPaletteViewModel.h"
+#include "Scenario/ViewModel/ScenarioEditorListItemViewModel.h"
 #include "Scenario/Widget/ScenarioPlaceablePaletteItemWidget.h"
 #include "Shared/ScenarioCoreTypes.h"
 #include "Shared/ScenarioSpecTypes.h"
@@ -16,9 +19,6 @@ namespace
 	const FName GroundRegionWalkableAssetId(TEXT("ground.walkable"));
 	const FName GroundRegionPenaltyAssetId(TEXT("ground.penalty"));
 	const FName GroundRegionBlockedAssetId(TEXT("ground.blocked"));
-	const TCHAR* GroundRegionWalkableThumbnailPath = TEXT("/Game/Widgets/Thumbnail/icon_walkable.icon_walkable");
-	const TCHAR* GroundRegionPenaltyThumbnailPath = TEXT("/Game/Widgets/Thumbnail/icon_panalty.icon_panalty");
-	const TCHAR* GroundRegionBlockedThumbnailPath = TEXT("/Game/Widgets/Thumbnail/icon_block.icon_block");
 
 	bool TryResolveGroundRegionType(FName assetId, EScenarioGroundRegionType& outRegionType)
 	{
@@ -43,54 +43,6 @@ namespace
 
 		return false;
 	}
-
-	const TCHAR* ResolveGroundRegionThumbnailPath(FName assetId)
-	{
-		EScenarioGroundRegionType regionType = EScenarioGroundRegionType::Walkable;
-		if (!TryResolveGroundRegionType(assetId, regionType))
-		{
-			return nullptr;
-		}
-
-		switch (regionType)
-		{
-		case EScenarioGroundRegionType::Walkable:
-			return GroundRegionWalkableThumbnailPath;
-		case EScenarioGroundRegionType::Penalty:
-			return GroundRegionPenaltyThumbnailPath;
-		case EScenarioGroundRegionType::Blocked:
-			return GroundRegionBlockedThumbnailPath;
-		default:
-			return nullptr;
-		}
-	}
-
-	void SeedGroundRegionThumbnail(FScenarioPaletteItemEntry& entry)
-	{
-		if (!entry.ThumbnailTexture.IsNull())
-		{
-			return;
-		}
-
-		if (const TCHAR* thumbnailPath = ResolveGroundRegionThumbnailPath(entry.AssetId))
-		{
-			entry.ThumbnailTexture = TSoftObjectPtr<UTexture2D>(FSoftObjectPath(thumbnailPath));
-		}
-	}
-
-	FScenarioPaletteItemEntry MakeGroundRegionPaletteItemEntry(
-		FName assetId,
-		const TCHAR* displayName)
-	{
-		FScenarioPaletteItemEntry entry;
-		entry.ItemType = EScenarioPaletteItemType::GroundRegion;
-		entry.AssetId = assetId;
-		entry.DisplayName = FText::FromString(displayName);
-		entry.CategoryText = FText::FromString(TEXT("Ground Region"));
-		entry.IconName = assetId.ToString();
-		SeedGroundRegionThumbnail(entry);
-		return entry;
-	}
 }
 
 UScenarioAssetPaletteWidget::UScenarioAssetPaletteWidget(const FObjectInitializer& objectInitializer)
@@ -102,6 +54,7 @@ UScenarioAssetPaletteWidget::UScenarioAssetPaletteWidget(const FObjectInitialize
 void UScenarioAssetPaletteWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+	InitializeViewModel();
 	RequestEditorWidgetInputMode();
 
 	if (PaletteScrollBox)
@@ -139,35 +92,21 @@ bool UScenarioAssetPaletteWidget::RebuildPalette()
 		return false;
 	}
 
-	AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
-	if (!editorController)
+	if (!AssetPaletteViewModel)
 	{
-		UE_LOG(LogScenarioAssetPaletteWidget, Warning, TEXT("Owning player is not an ScenarioEditorController."));
+		UE_LOG(LogScenarioAssetPaletteWidget, Warning, TEXT("ScenarioAssetPaletteViewModel is not available."));
 		return false;
 	}
 
+	TArray<FScenarioPaletteItemEntry> paletteItemEntries;
 	TArray<FScenarioStaticObstaclePropEntry> paletteEntries;
-	editorController->GetStaticObstaclePaletteEntries(paletteEntries);
-	int32 itemCount = 0;
-	if (staticObstacleContainer)
+	AssetPaletteViewModel->GetStaticObstaclePaletteEntries(paletteEntries);
+	for (const FScenarioStaticObstaclePropEntry& paletteEntry : paletteEntries)
 	{
-		for (const FScenarioStaticObstaclePropEntry& paletteEntry : paletteEntries)
-		{
-			UScenarioPlaceablePaletteItemWidget* itemWidget = CreatePaletteItemWidget(editorController);
-			if (!itemWidget) continue;
-
-			itemWidget->SetPropEntry(paletteEntry);
-			BindPaletteItemWidget(itemWidget);
-			staticObstacleContainer->AddChildToHorizontalBox(itemWidget);
-			++itemCount;
-		}
-	}
-	else if (!paletteEntries.IsEmpty())
-	{
-		UE_LOG(LogScenarioAssetPaletteWidget, Warning, TEXT("Static obstacle palette container is not bound."));
+		paletteItemEntries.Add(UScenarioPlaceablePaletteItemWidget::MakeStaticObstaclePaletteItemEntry(paletteEntry));
 	}
 
-	int32 groundRegionItemCount = 0;
+	int32 groundRegionEntryCount = 0;
 	const UScenarioAssetPaletteCatalog* paletteCatalog = GetPaletteCatalog();
 	if (paletteCatalog)
 	{
@@ -175,7 +114,7 @@ bool UScenarioAssetPaletteWidget::RebuildPalette()
 		{
 			if (specialEntry.ItemType == EScenarioPaletteItemType::GroundRegion)
 			{
-				if (!bIncludeGroundRegionDraw || !groundRegionContainer)
+				if (!bIncludeGroundRegionDraw)
 				{
 					continue;
 				}
@@ -193,11 +132,8 @@ bool UScenarioAssetPaletteWidget::RebuildPalette()
 
 				FScenarioPaletteItemEntry groundRegionEntry = specialEntry;
 				SeedGroundRegionThumbnail(groundRegionEntry);
-				if (AddPaletteItemWidget(editorController, groundRegionContainer, groundRegionEntry))
-				{
-					++itemCount;
-					++groundRegionItemCount;
-				}
+				paletteItemEntries.Add(groundRegionEntry);
+				++groundRegionEntryCount;
 				continue;
 			}
 
@@ -206,18 +142,49 @@ bool UScenarioAssetPaletteWidget::RebuildPalette()
 				continue;
 			}
 
-			if (AddPaletteItemWidget(editorController, staticObstacleContainer, specialEntry))
-			{
-				++itemCount;
-			}
+			paletteItemEntries.Add(specialEntry);
 		}
 	}
 
-	if (bIncludeGroundRegionDraw && groundRegionContainer && groundRegionItemCount == 0)
+	if (bIncludeGroundRegionDraw && groundRegionEntryCount == 0)
 	{
-		const int32 defaultGroundRegionCount = AddDefaultGroundRegionPaletteEntries(editorController);
-		itemCount += defaultGroundRegionCount;
-		groundRegionItemCount += defaultGroundRegionCount;
+		paletteItemEntries.Add(MakeGroundRegionPaletteItemEntry(GroundRegionWalkableAssetId, TEXT("Walkable")));
+		paletteItemEntries.Add(MakeGroundRegionPaletteItemEntry(GroundRegionPenaltyAssetId, TEXT("Penalty")));
+		paletteItemEntries.Add(MakeGroundRegionPaletteItemEntry(GroundRegionBlockedAssetId, TEXT("Blocked")));
+		groundRegionEntryCount += 3;
+	}
+
+	AssetPaletteViewModel->SetPaletteEntries(paletteItemEntries);
+
+	int32 itemCount = 0;
+	int32 groundRegionItemCount = 0;
+	for (UScenarioEditorListItemViewModel* itemViewModel : AssetPaletteViewModel->GetItems())
+	{
+		if (!itemViewModel)
+		{
+			continue;
+		}
+
+		const bool bGroundRegion = itemViewModel->GetPaletteItemType() == EScenarioPaletteItemType::GroundRegion;
+		UHorizontalBox* targetContainer = bGroundRegion ? groundRegionContainer : staticObstacleContainer;
+		if (!targetContainer)
+		{
+			UE_LOG(
+				LogScenarioAssetPaletteWidget,
+				Warning,
+				TEXT("Skipping palette item without target container | AssetId: %s"),
+				*itemViewModel->GetAssetId().ToString());
+			continue;
+		}
+
+		if (AddPaletteItemWidget(targetContainer, itemViewModel))
+		{
+			++itemCount;
+			if (bGroundRegion)
+			{
+				++groundRegionItemCount;
+			}
+		}
 	}
 
 	UE_LOG(
@@ -251,10 +218,9 @@ void UScenarioAssetPaletteWidget::ClearPalette()
 
 void UScenarioAssetPaletteWidget::HandlePaletteItemSelected(EScenarioPaletteItemType itemType, FName assetId)
 {
-	AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
-	if (!editorController)
+	if (!AssetPaletteViewModel)
 	{
-		UE_LOG(LogScenarioAssetPaletteWidget, Warning, TEXT("Owning player is not an ScenarioEditorController."));
+		UE_LOG(LogScenarioAssetPaletteWidget, Warning, TEXT("ScenarioAssetPaletteViewModel is not available."));
 		return;
 	}
 
@@ -271,7 +237,7 @@ void UScenarioAssetPaletteWidget::HandlePaletteItemSelected(EScenarioPaletteItem
 			return;
 		}
 
-		if (!editorController->BeginGroundRegionDraw(regionType))
+		if (!AssetPaletteViewModel->BeginGroundRegionDraw(regionType))
 		{
 			UE_LOG(
 				LogScenarioAssetPaletteWidget,
@@ -289,7 +255,7 @@ void UScenarioAssetPaletteWidget::HandlePaletteItemSelected(EScenarioPaletteItem
 		return;
 	}
 
-	if (!editorController->BeginPalettePlacement(itemType, assetId))
+	if (!AssetPaletteViewModel->BeginPalettePlacement(itemType, assetId))
 	{
 		UE_LOG(
 			LogScenarioAssetPaletteWidget,
@@ -340,16 +306,15 @@ UHorizontalBox* UScenarioAssetPaletteWidget::ResolveGroundRegionItemContainer() 
 	return GroundRegionItemContainer ? GroundRegionItemContainer.Get() : PlaceableItemContainer.Get();
 }
 
-UScenarioPlaceablePaletteItemWidget* UScenarioAssetPaletteWidget::CreatePaletteItemWidget(
-	AScenarioEditorController* editorController) const
+UScenarioPlaceablePaletteItemWidget* UScenarioAssetPaletteWidget::CreatePaletteItemWidget() const
 {
-	if (!editorController || !PlaceableItemWidgetClass)
+	if (!PlaceableItemWidgetClass)
 	{
 		return nullptr;
 	}
 
 	return CreateWidget<UScenarioPlaceablePaletteItemWidget>(
-		editorController,
+		GetOwningPlayer(),
 		PlaceableItemWidgetClass);
 }
 
@@ -365,7 +330,6 @@ void UScenarioAssetPaletteWidget::BindPaletteItemWidget(UScenarioPlaceablePalett
 }
 
 bool UScenarioAssetPaletteWidget::AddPaletteItemWidget(
-	AScenarioEditorController* editorController,
 	UHorizontalBox* targetContainer,
 	const FScenarioPaletteItemEntry& paletteItemEntry)
 {
@@ -374,7 +338,7 @@ bool UScenarioAssetPaletteWidget::AddPaletteItemWidget(
 		return false;
 	}
 
-	UScenarioPlaceablePaletteItemWidget* itemWidget = CreatePaletteItemWidget(editorController);
+	UScenarioPlaceablePaletteItemWidget* itemWidget = CreatePaletteItemWidget();
 	if (!itemWidget)
 	{
 		return false;
@@ -386,7 +350,28 @@ bool UScenarioAssetPaletteWidget::AddPaletteItemWidget(
 	return true;
 }
 
-int32 UScenarioAssetPaletteWidget::AddDefaultGroundRegionPaletteEntries(AScenarioEditorController* editorController)
+bool UScenarioAssetPaletteWidget::AddPaletteItemWidget(
+	UHorizontalBox* targetContainer,
+	UScenarioEditorListItemViewModel* itemViewModel)
+{
+	if (!targetContainer || !itemViewModel)
+	{
+		return false;
+	}
+
+	UScenarioPlaceablePaletteItemWidget* itemWidget = CreatePaletteItemWidget();
+	if (!itemWidget)
+	{
+		return false;
+	}
+
+	itemWidget->InitializeFromItemViewModel(itemViewModel);
+	BindPaletteItemWidget(itemWidget);
+	targetContainer->AddChildToHorizontalBox(itemWidget);
+	return true;
+}
+
+int32 UScenarioAssetPaletteWidget::AddDefaultGroundRegionPaletteEntries()
 {
 	UHorizontalBox* groundRegionContainer = ResolveGroundRegionItemContainer();
 	if (!groundRegionContainer)
@@ -396,7 +381,6 @@ int32 UScenarioAssetPaletteWidget::AddDefaultGroundRegionPaletteEntries(AScenari
 
 	int32 itemCount = 0;
 	if (AddPaletteItemWidget(
-			editorController,
 			groundRegionContainer,
 			MakeGroundRegionPaletteItemEntry(GroundRegionWalkableAssetId, TEXT("Walkable"))))
 	{
@@ -404,7 +388,6 @@ int32 UScenarioAssetPaletteWidget::AddDefaultGroundRegionPaletteEntries(AScenari
 	}
 
 	if (AddPaletteItemWidget(
-			editorController,
 			groundRegionContainer,
 			MakeGroundRegionPaletteItemEntry(GroundRegionPenaltyAssetId, TEXT("Penalty"))))
 	{
@@ -412,7 +395,6 @@ int32 UScenarioAssetPaletteWidget::AddDefaultGroundRegionPaletteEntries(AScenari
 	}
 
 	if (AddPaletteItemWidget(
-			editorController,
 			groundRegionContainer,
 			MakeGroundRegionPaletteItemEntry(GroundRegionBlockedAssetId, TEXT("Blocked"))))
 	{
@@ -420,6 +402,51 @@ int32 UScenarioAssetPaletteWidget::AddDefaultGroundRegionPaletteEntries(AScenari
 	}
 
 	return itemCount;
+}
+
+void UScenarioAssetPaletteWidget::SeedGroundRegionThumbnail(FScenarioPaletteItemEntry& entry) const
+{
+	if (!entry.ThumbnailTexture.IsNull())
+	{
+		return;
+	}
+
+	entry.ThumbnailTexture = ResolveGroundRegionThumbnail(entry.AssetId);
+}
+
+TSoftObjectPtr<UTexture2D> UScenarioAssetPaletteWidget::ResolveGroundRegionThumbnail(const FName assetId) const
+{
+	EScenarioGroundRegionType regionType = EScenarioGroundRegionType::Walkable;
+	if (!TryResolveGroundRegionType(assetId, regionType))
+	{
+		return nullptr;
+	}
+
+	switch (regionType)
+	{
+	case EScenarioGroundRegionType::Walkable:
+		return WalkableGroundRegionThumbnail;
+	case EScenarioGroundRegionType::Penalty:
+		return PenaltyGroundRegionThumbnail;
+	case EScenarioGroundRegionType::Blocked:
+		return BlockedGroundRegionThumbnail;
+	default:
+		return nullptr;
+	}
+}
+
+FScenarioPaletteItemEntry UScenarioAssetPaletteWidget::MakeGroundRegionPaletteItemEntry(
+	const FName assetId,
+	const TCHAR* displayName) const
+{
+	FScenarioPaletteItemEntry entry;
+	entry.ItemType = EScenarioPaletteItemType::GroundRegion;
+	entry.AssetId = assetId;
+	entry.DisplayName = FText::FromString(displayName);
+	entry.CategoryText = FText::FromString(TEXT("Ground Region"));
+	entry.IconName = assetId.ToString();
+	SeedGroundRegionThumbnail(entry);
+	return entry;
 }
 
 bool UScenarioAssetPaletteWidget::ShouldIncludeSpecialEntry(
@@ -443,17 +470,17 @@ bool UScenarioAssetPaletteWidget::ShouldIncludeSpecialEntry(
 
 void UScenarioAssetPaletteWidget::RequestEditorWidgetInputMode()
 {
-	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	if (AssetPaletteViewModel)
 	{
 		UWidget* focusWidget = ResolveInputModeFocusWidget();
 		RequestedInputModeFocusWidget = focusWidget;
-		editorController->RequestEditorWidgetInputMode(focusWidget);
+		AssetPaletteViewModel->RequestEditorWidgetInputMode(focusWidget);
 	}
 }
 
 void UScenarioAssetPaletteWidget::ReleaseEditorWidgetInputMode()
 {
-	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
+	if (AssetPaletteViewModel)
 	{
 		UWidget* focusWidget = RequestedInputModeFocusWidget.Get();
 		if (!focusWidget)
@@ -461,8 +488,21 @@ void UScenarioAssetPaletteWidget::ReleaseEditorWidgetInputMode()
 			focusWidget = ResolveInputModeFocusWidget();
 		}
 
-		editorController->ReleaseEditorWidgetInputMode(focusWidget);
+		AssetPaletteViewModel->ReleaseEditorWidgetInputMode(focusWidget);
 		RequestedInputModeFocusWidget.Reset();
+	}
+}
+
+void UScenarioAssetPaletteWidget::InitializeViewModel()
+{
+	if (AssetPaletteViewModel)
+	{
+		return;
+	}
+
+	if (UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this))
+	{
+		AssetPaletteViewModel = uiSubsystem->GetAssetPaletteViewModel();
 	}
 }
 

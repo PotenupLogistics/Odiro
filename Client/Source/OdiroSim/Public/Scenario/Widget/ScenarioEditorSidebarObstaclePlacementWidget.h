@@ -3,36 +3,15 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Types/SlateEnums.h"
+#include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
 #include "Shared/ScenarioDocumentTypes.h"
 #include "ScenarioEditorSidebarObstaclePlacementWidget.generated.h"
 
 class UScenarioEditorSidebarBlockWidget;
+class UScenarioTemplateFieldRowViewModel;
+class UScenarioTemplateSidebarViewModel;
 class UWidgetTextStyleCatalog;
-
-// Editable field ids exposed by one root.obstacles.placements[] widget.
-UENUM(BlueprintType)
-enum class EScenarioEditorSidebarObstaclePlacementField : uint8
-{
-	PlacementId,
-	Kind,
-	Prop,
-	Pattern,
-	Segment,
-	Lane,
-	Along,
-	Offset,
-	ZoneSegments,
-	ZoneLanes,
-	PaletteCategories,
-	PaletteClasses,
-	Count,
-	Spacing,
-	GapWidth,
-	Density,
-	Yaw,
-	AllowBlocking
-};
 
 // Broadcasts a committed text edit for one static obstacle placement field.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
@@ -282,6 +261,10 @@ private:
 	UPROPERTY(Transient)
 	bool bHasCachedPlacement = false;
 
+	// Field row ViewModels generated from CachedPlacement.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UScenarioTemplateFieldRowViewModel>> CachedFieldItems;
+
 	// Binds child field row delegates owned by this placement widget.
 	void BindFieldRows();
 	// Releases child field row delegates owned by this placement widget.
@@ -290,6 +273,8 @@ private:
 	void ConfigureFieldRows();
 	// Applies cached placement values to bound field rows.
 	void ApplyCachedPlacementToRows();
+	// Rebuilds cached field row ViewModels from the current placement.
+	void RefreshFieldItemsFromViewModel();
 	// Applies shared typography to this placement block and rows.
 	void ApplyTextStyles();
 	// Broadcasts a text commit for one placement field.
@@ -300,16 +285,8 @@ private:
 		const FText& minText,
 		const FText& maxText,
 		ETextCommit::Type commitMethod);
-	// Returns a stable label for an obstacle placement kind.
-	static FString PlacementKindToString(EScenarioTemplateObstaclePlacementKind kind);
-	// Joins a string list for one editable field row.
-	static FString JoinStringList(const TArray<FString>& values);
-	// Applies one authored number value to a field row.
-	static void SetNumberRowValue(UScenarioEditorSidebarFieldRow* fieldRow, const FScenarioTemplateNumberValue& value);
-	// Applies one authored integer value to a field row.
-	static void SetIntegerRowValue(UScenarioEditorSidebarFieldRow* fieldRow, const FScenarioTemplateIntegerValue& value);
-	// Formats one authored numeric value for editable text controls.
-	static FString FormatEditableNumber(double value);
-	// Formats one authored integer value for editable text controls.
-	static FString FormatEditableInteger(int32 value);
+	// Resolves the ViewModel that formats template sidebar field items.
+	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
+	// Finds one cached field row ViewModel by id.
+	UScenarioTemplateFieldRowViewModel* FindCachedFieldItem(const FString& fieldId) const;
 };

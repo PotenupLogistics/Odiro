@@ -1,5 +1,9 @@
 #include "Scenario/Widget/ScenarioEditorSidebarPedestrianEncounterWidget.h"
 
+#include "Engine/World.h"
+#include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
+#include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 
 void UScenarioEditorSidebarPedestrianEncounterWidget::NativeConstruct()
@@ -19,6 +23,10 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::NativeDestruct()
 void UScenarioEditorSidebarPedestrianEncounterWidget::SetEncounterIndex(const int32 inEncounterIndex)
 {
 	EncounterIndex = inEncounterIndex;
+	if (bHasCachedEncounter)
+	{
+		RefreshFieldItemsFromViewModel();
+	}
 	ConfigureFieldRows();
 }
 
@@ -34,6 +42,7 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::RefreshFromEncounter(
 {
 	CachedEncounter = encounter;
 	bHasCachedEncounter = true;
+	RefreshFieldItemsFromViewModel();
 	ConfigureFieldRows();
 	ApplyCachedEncounterToRows();
 }
@@ -333,50 +342,34 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::ConfigureFieldRows()
 	if (EncounterIdFieldRow)
 	{
 		EncounterIdFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		EncounterIdFieldRow->SetFieldLabel(TEXT("id"));
-		EncounterIdFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
-		EncounterIdFieldRow->SetEditable(true);
-		EncounterIdFieldRow->SetArrayControlsEnabled(false);
 	}
 	if (TypeFieldRow)
 	{
 		TypeFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		TypeFieldRow->SetFieldLabel(TEXT("type"));
-		TypeFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::EnumText);
-		TypeFieldRow->SetEditable(true);
 	}
 	if (AtSegmentFieldRow)
 	{
 		AtSegmentFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		AtSegmentFieldRow->SetFieldLabel(TEXT("at"));
-		AtSegmentFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
-		AtSegmentFieldRow->SetEditable(true);
 	}
 	if (PersonaFieldRow)
 	{
 		PersonaFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		PersonaFieldRow->SetFieldLabel(TEXT("persona"));
-		PersonaFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Text);
-		PersonaFieldRow->SetEditable(true);
 	}
 
-	const TArray<TPair<UScenarioEditorSidebarFieldRow*, FString>> numberRows = {
-		{ MeetOffsetFieldRow.Get(), TEXT("meet_offset_m") },
-		{ CooperationFieldRow.Get(), TEXT("overrides.cooperation") },
-		{ EvasivenessFieldRow.Get(), TEXT("overrides.evasiveness") },
-		{ PersonalSpaceFieldRow.Get(), TEXT("overrides.personal_space_m") },
-		{ AwarenessHorizonFieldRow.Get(), TEXT("overrides.awareness_horizon_s") },
-		{ MaxYieldWaitFieldRow.Get(), TEXT("overrides.max_yield_wait_s") },
-		{ SidestepDistanceFieldRow.Get(), TEXT("overrides.sidestep_distance_m") }
+	const TArray<UScenarioEditorSidebarFieldRow*> numberRows = {
+		MeetOffsetFieldRow.Get(),
+		CooperationFieldRow.Get(),
+		EvasivenessFieldRow.Get(),
+		PersonalSpaceFieldRow.Get(),
+		AwarenessHorizonFieldRow.Get(),
+		MaxYieldWaitFieldRow.Get(),
+		SidestepDistanceFieldRow.Get()
 	};
-	for (const TPair<UScenarioEditorSidebarFieldRow*, FString>& numberRow : numberRows)
+	for (UScenarioEditorSidebarFieldRow* numberRow : numberRows)
 	{
-		if (numberRow.Key)
+		if (numberRow)
 		{
-			numberRow.Key->SetTextStyleCatalog(TextStyleCatalog);
-			numberRow.Key->SetFieldLabel(numberRow.Value);
-			numberRow.Key->SetInputType(EScenarioEditorSidebarFieldInputType::Range);
-			numberRow.Key->SetEditable(true);
+			numberRow->SetTextStyleCatalog(TextStyleCatalog);
 		}
 	}
 }
@@ -386,6 +379,10 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::ApplyCachedEncounterToRows
 	if (!bHasCachedEncounter)
 	{
 		return;
+	}
+	if (CachedFieldItems.IsEmpty())
+	{
+		RefreshFieldItemsFromViewModel();
 	}
 
 	if (EncounterBlockWidget)
@@ -399,27 +396,69 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::ApplyCachedEncounterToRows
 	}
 	if (EncounterIdFieldRow)
 	{
-		EncounterIdFieldRow->SetValueText(CachedEncounter.EncounterId);
+		EncounterIdFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("EncounterId")));
 	}
 	if (TypeFieldRow)
 	{
-		TypeFieldRow->SetValueText(EncounterTypeToString(CachedEncounter.Type));
+		TypeFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("EncounterType")));
 	}
 	if (AtSegmentFieldRow)
 	{
-		AtSegmentFieldRow->SetValueText(CachedEncounter.AtSegmentId);
+		AtSegmentFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("EncounterAtSegment")));
 	}
 	if (PersonaFieldRow)
 	{
-		PersonaFieldRow->SetValueText(CachedEncounter.PersonaId);
+		PersonaFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("EncounterPersona")));
 	}
-	SetNumberRowValue(MeetOffsetFieldRow.Get(), CachedEncounter.MeetOffsetMeters);
-	SetNumberRowValue(CooperationFieldRow.Get(), CachedEncounter.Overrides.Cooperation);
-	SetNumberRowValue(EvasivenessFieldRow.Get(), CachedEncounter.Overrides.Evasiveness);
-	SetNumberRowValue(PersonalSpaceFieldRow.Get(), CachedEncounter.Overrides.PersonalSpaceMeters);
-	SetNumberRowValue(AwarenessHorizonFieldRow.Get(), CachedEncounter.Overrides.AwarenessHorizonSeconds);
-	SetNumberRowValue(MaxYieldWaitFieldRow.Get(), CachedEncounter.Overrides.MaxYieldWaitSeconds);
-	SetNumberRowValue(SidestepDistanceFieldRow.Get(), CachedEncounter.Overrides.SidestepDistanceMeters);
+	if (MeetOffsetFieldRow)
+	{
+		MeetOffsetFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("EncounterMeetOffset")));
+	}
+	if (CooperationFieldRow)
+	{
+		CooperationFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("EncounterCooperation")));
+	}
+	if (EvasivenessFieldRow)
+	{
+		EvasivenessFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("EncounterEvasiveness")));
+	}
+	if (PersonalSpaceFieldRow)
+	{
+		PersonalSpaceFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("EncounterPersonalSpace")));
+	}
+	if (AwarenessHorizonFieldRow)
+	{
+		AwarenessHorizonFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("EncounterAwarenessHorizon")));
+	}
+	if (MaxYieldWaitFieldRow)
+	{
+		MaxYieldWaitFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("EncounterMaxYieldWait")));
+	}
+	if (SidestepDistanceFieldRow)
+	{
+		SidestepDistanceFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("EncounterSidestepDistance")));
+	}
+}
+
+void UScenarioEditorSidebarPedestrianEncounterWidget::RefreshFieldItemsFromViewModel()
+{
+	CachedFieldItems.Reset();
+	if (!bHasCachedEncounter)
+	{
+		return;
+	}
+
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	if (!templateSidebarViewModel)
+	{
+		return;
+	}
+
+	for (UScenarioTemplateFieldRowViewModel* fieldItem :
+		templateSidebarViewModel->CreatePedestrianEncounterFieldItems(EncounterIndex, CachedEncounter))
+	{
+		CachedFieldItems.Add(fieldItem);
+	}
 }
 
 void UScenarioEditorSidebarPedestrianEncounterWidget::ApplyTextStyles()
@@ -465,57 +504,21 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::BroadcastRange(
 	OnFieldRangeCommitted.Broadcast(EncounterIndex, field, minText, maxText, commitMethod);
 }
 
-void UScenarioEditorSidebarPedestrianEncounterWidget::SetNumberRowValue(
-	UScenarioEditorSidebarFieldRow* fieldRow,
-	const FScenarioTemplateNumberValue& value)
+UScenarioTemplateSidebarViewModel* UScenarioEditorSidebarPedestrianEncounterWidget::GetTemplateSidebarViewModel() const
 {
-	if (!fieldRow)
-	{
-		return;
-	}
-
-	if (!value.bIsSet)
-	{
-		fieldRow->SetValueText(FString());
-		fieldRow->SetRangeValueText(FString(), FString());
-		fieldRow->SetRangeInputEnabled(false);
-		return;
-	}
-
-	const double fixedDisplayValue = value.Mode == EScenarioTemplateNumberValueMode::Range
-		? (value.MinValue + value.MaxValue) * 0.5
-		: value.FixedValue;
-	const double minDisplayValue = value.Mode == EScenarioTemplateNumberValueMode::Range
-		? value.MinValue
-		: fixedDisplayValue;
-	const double maxDisplayValue = value.Mode == EScenarioTemplateNumberValueMode::Range
-		? value.MaxValue
-		: fixedDisplayValue;
-
-	fieldRow->SetValueText(FormatEditableNumber(fixedDisplayValue));
-	fieldRow->SetRangeValueText(FormatEditableNumber(minDisplayValue), FormatEditableNumber(maxDisplayValue));
-	fieldRow->SetRangeInputEnabled(value.Mode == EScenarioTemplateNumberValueMode::Range);
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	return uiSubsystem ? uiSubsystem->GetTemplateSidebarViewModel() : nullptr;
 }
 
-FString UScenarioEditorSidebarPedestrianEncounterWidget::EncounterTypeToString(
-	const EScenarioTemplateEncounterType type)
+UScenarioTemplateFieldRowViewModel* UScenarioEditorSidebarPedestrianEncounterWidget::FindCachedFieldItem(
+	const FString& fieldId) const
 {
-	switch (type)
+	for (UScenarioTemplateFieldRowViewModel* fieldItem : CachedFieldItems)
 	{
-	case EScenarioTemplateEncounterType::OncomingPass:
-		return TEXT("oncoming_pass");
-	case EScenarioTemplateEncounterType::Overtake:
-		return TEXT("overtake");
-	case EScenarioTemplateEncounterType::CrossPath:
-		return TEXT("cross_path");
-	case EScenarioTemplateEncounterType::StandingGroup:
-		return TEXT("standing_group");
-	default:
-		return TEXT("unknown");
+		if (fieldItem && fieldItem->GetItemId() == fieldId)
+		{
+			return fieldItem;
+		}
 	}
-}
-
-FString UScenarioEditorSidebarPedestrianEncounterWidget::FormatEditableNumber(const double value)
-{
-	return FString::Printf(TEXT("%.2f"), value);
+	return nullptr;
 }

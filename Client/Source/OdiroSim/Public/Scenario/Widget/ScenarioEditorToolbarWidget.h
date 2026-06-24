@@ -6,6 +6,7 @@
 #include "ScenarioEditorToolbarWidget.generated.h"
 
 class UButton;
+class UScenarioEditorToolbarViewModel;
 class UTextBlock;
 class UWidget;
 
@@ -69,6 +70,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Toolbar")
 	EScenarioTemplateSidebarPanel GetActiveSidebarPanel() const { return ActiveSidebarPanel; }
 
+	// Returns the toolbar ViewModel injected from the world UI subsystem.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Toolbar")
+	UScenarioEditorToolbarViewModel* GetToolbarViewModel() const { return ToolbarViewModel; }
+
 	// Applies the active-panel visual state to optional toolbar panel buttons.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
 	void RefreshSidebarPanelButtons();
@@ -107,12 +112,16 @@ private:
 	void ReleaseEditorWidgetInputMode();
 	// Updates the toolbar status text when the bound label exists.
 	void SetStatusText(const FString& message);
+	// Connects the widget adapter to the subsystem-owned toolbar ViewModel.
+	void InitializeViewModel();
 	// Resolves the widget that should receive input focus while the toolbar is active.
 	UWidget* ResolveInputModeFocusWidget() const;
-	// Resolves the save destination, preserving loaded source paths when available.
-	FString ResolveSavePath() const;
 	// Applies active/inactive visual state to one optional sidebar tab button.
 	void ApplySidebarPanelButtonState(UButton* button, EScenarioTemplateSidebarPanel panel) const;
+
+	// Subsystem-owned toolbar ViewModel used by MVVM binding and command forwarding.
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Scenario|Editor|Toolbar", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UScenarioEditorToolbarViewModel> ToolbarViewModel;
 
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UWidget> ToolbarInputModeFocus;

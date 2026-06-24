@@ -1,5 +1,9 @@
 #include "Scenario/Widget/ScenarioEditorSidebarCorridorPointWidget.h"
 
+#include "Engine/World.h"
+#include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
+#include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 
 void UScenarioEditorSidebarCorridorPointWidget::NativeConstruct()
@@ -7,6 +11,7 @@ void UScenarioEditorSidebarCorridorPointWidget::NativeConstruct()
 	Super::NativeConstruct();
 	BindFieldRows();
 	ConfigureFieldRows();
+	RefreshFieldItemsFromViewModel();
 	ApplyCachedPointToRows();
 }
 
@@ -19,7 +24,12 @@ void UScenarioEditorSidebarCorridorPointWidget::NativeDestruct()
 void UScenarioEditorSidebarCorridorPointWidget::SetPointIndex(const int32 inPointIndex)
 {
 	PointIndex = inPointIndex;
+	if (bHasCachedPoint)
+	{
+		RefreshFieldItemsFromViewModel();
+	}
 	ConfigureFieldRows();
+	ApplyCachedPointToRows();
 }
 
 void UScenarioEditorSidebarCorridorPointWidget::SetTextStyleCatalog(
@@ -33,6 +43,7 @@ void UScenarioEditorSidebarCorridorPointWidget::RefreshFromPoint(const FVector2D
 {
 	CachedPointMeters = pointMeters;
 	bHasCachedPoint = true;
+	RefreshFieldItemsFromViewModel();
 	ConfigureFieldRows();
 	ApplyCachedPointToRows();
 }
@@ -134,34 +145,42 @@ void UScenarioEditorSidebarCorridorPointWidget::ConfigureFieldRows()
 	if (XFieldRow)
 	{
 		XFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		XFieldRow->SetFieldLabel(TEXT("x"));
-		XFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Number);
-		XFieldRow->SetEditable(true);
-		XFieldRow->SetArrayControlsEnabled(true);
 	}
 	if (YFieldRow)
 	{
 		YFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		YFieldRow->SetFieldLabel(TEXT("y"));
-		YFieldRow->SetInputType(EScenarioEditorSidebarFieldInputType::Number);
-		YFieldRow->SetEditable(true);
 	}
 }
 
-void UScenarioEditorSidebarCorridorPointWidget::ApplyCachedPointToRows()
+void UScenarioEditorSidebarCorridorPointWidget::RefreshFieldItemsFromViewModel()
 {
 	if (!bHasCachedPoint)
 	{
 		return;
 	}
 
+	CachedFieldItems.Reset();
+	if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+	{
+		for (UScenarioTemplateFieldRowViewModel* fieldItem :
+			templateSidebarViewModel->CreateCorridorPointFieldItems(PointIndex, CachedPointMeters))
+		{
+			CachedFieldItems.Add(fieldItem);
+		}
+	}
+}
+
+void UScenarioEditorSidebarCorridorPointWidget::ApplyCachedPointToRows()
+{
 	if (XFieldRow)
 	{
-		XFieldRow->SetValueText(FormatEditableNumber(CachedPointMeters.X));
+		XFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("CorridorPointX")));
+		XFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 	}
 	if (YFieldRow)
 	{
-		YFieldRow->SetValueText(FormatEditableNumber(CachedPointMeters.Y));
+		YFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("CorridorPointY")));
+		YFieldRow->SetTextStyleCatalog(TextStyleCatalog);
 	}
 }
 
@@ -181,7 +200,21 @@ void UScenarioEditorSidebarCorridorPointWidget::ApplyTextStyles()
 	}
 }
 
-FString UScenarioEditorSidebarCorridorPointWidget::FormatEditableNumber(const double value)
+UScenarioTemplateSidebarViewModel* UScenarioEditorSidebarCorridorPointWidget::GetTemplateSidebarViewModel() const
 {
-	return FString::Printf(TEXT("%.2f"), value);
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	return uiSubsystem ? uiSubsystem->GetTemplateSidebarViewModel() : nullptr;
+}
+
+UScenarioTemplateFieldRowViewModel* UScenarioEditorSidebarCorridorPointWidget::FindCachedFieldItem(
+	const FString& fieldId) const
+{
+	for (UScenarioTemplateFieldRowViewModel* fieldItem : CachedFieldItems)
+	{
+		if (fieldItem && fieldItem->GetItemId() == fieldId)
+		{
+			return fieldItem;
+		}
+	}
+	return nullptr;
 }

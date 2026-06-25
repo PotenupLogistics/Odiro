@@ -9,12 +9,16 @@
 #include "EngineUtils.h"
 #include "Dom/JsonObject.h"
 #include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
+#include "Scenario/Actors/ScenarioStaticObstacle.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 
 namespace
 {
+	// Source label used when a scenario static obstacle blocks a navigation grid cell.
+	const FName StaticObstacleGridBlockSourceName{ TEXT("StaticObstacle") };
+
 	FDeliveryBotGridCollisionRuleInfo MakeGridSubsystemFallbackCollisionRule(
 		FName collisionProfileName,
 		EDeliveryBotGridAreaType areaType,
@@ -81,6 +85,13 @@ namespace
 		default:
 			return 1.0f;
 		}
+	}
+
+	// Identifies runtime/editor static obstacle collision primitives regardless of profile name.
+	bool IsScenarioStaticObstacleComponent(const UPrimitiveComponent* primitiveComponent)
+	{
+		return IsValid(primitiveComponent)
+			&& IsValid(Cast<AScenarioStaticObstacle>(primitiveComponent->GetOwner()));
 	}
 }
 
@@ -657,6 +668,12 @@ bool UDeliveryBot_GridSubsystem::ClassifyCellByCollisionPreset(const FVector& ce
 		return true;
 	}
 
+	if (IsScenarioStaticObstacleComponent(hitComponent))
+	{
+		ApplyBlockedCell(outCellInfo, StaticObstacleGridBlockSourceName);
+		return true;
+	}
+
 	const FName profileName = hitComponent->GetCollisionProfileName();
 	const FDeliveryBotGridCollisionRuleInfo* rule =
 		FindCollisionRuleByProfileName(profileName, collisionRules);
@@ -867,6 +884,12 @@ bool UDeliveryBot_GridSubsystem::HasBlockingFootprintOverlap(const FVector& grou
 
 		if (ignoredActor && overlapComponent->GetOwner() == ignoredActor)
 			continue;
+
+		if (IsScenarioStaticObstacleComponent(overlapComponent))
+		{
+			outBlockingProfileName = StaticObstacleGridBlockSourceName;
+			return true;
+		}
 
 		const FName profileName = overlapComponent->GetCollisionProfileName();
 		const FDeliveryBotGridCollisionRuleInfo* rule =

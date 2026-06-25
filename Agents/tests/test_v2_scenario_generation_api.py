@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.agents.common.json_response_parser import parse_json_response
 from app.agents.scenario_generation_v2 import ScenarioGenerationV2Agent
 from app.agents.scenario_generation_v2.graph_runner import ScenarioGenerationGraphRunnerV2
+from app.agents.scenario_generation_v2.repair_diagnostics import RepairDiagnosticCode
 from app.agents.scenario_generation_v2.repair_handler import ROBOT_ANCHOR_EXCLUSION_RADIUS_M
 from app.agents.scenario_generation_v2.scenario_preset_loader import ScenarioPresetLoader
 from app.agents.scenario_generation_v2.scenario_template_schema import project_scenario_v1_json_schema
@@ -217,7 +218,17 @@ def _assert_raw_scenario(payload: dict) -> None:
     assert "obstacles" in payload
     assert "pedestrians" in payload
     assert "robot" in payload
-    wrapper_fields = {"status", "summary", "scenario", "validation", "assumptions", "generation_mode"}
+    wrapper_fields = {
+        "status",
+        "summary",
+        "scenario",
+        "validation",
+        "assumptions",
+        "generation_mode",
+        "warnings",
+        "diagnostics",
+        "repair_events",
+    }
     assert wrapper_fields.isdisjoint(payload)
     legacy_fields = {"ground_model", "static_obstacles"}
     assert legacy_fields.isdisjoint(payload)
@@ -481,6 +492,49 @@ def test_v2_scenario_graph_runner_uses_langgraph_compile_invoke() -> None:
     assert response.scenario["schema"] == "scenario"
     forbidden_root_fields = {"ground_model", "static_obstacles", "template_id", "sample_count", "base_seed"}
     assert forbidden_root_fields.isdisjoint(response.scenario)
+
+
+def test_v2_scenario_graph_runner_records_internal_repair_events() -> None:
+    scenario = _llm_scenario_with_obstacle("llm_legacy_repair_event")
+    scenario["obstacles"]["placements"][0]["prop"] = "traffic_cone_01"
+    fake = _FakeJsonClient([scenario])
+    runner = ScenarioGenerationGraphRunnerV2(
+        settings=Settings(_env_file=None, v2AgentLlmEnabled=True),
+        llm_client=fake,
+    )
+
+    response = runner.run(ScenarioGenerateV2Request(prompt="좁은 보도에 콘 하나를 배치해줘"))
+
+    assert response.status == "success"
+    repair_events = runner.last_state["repair_events"]
+    assert any(
+        event["code"] == RepairDiagnosticCode.PROP_NORMALIZED.value
+        and event["stage"] == "graph.llm_candidate.initial"
+        and event["before"] == "traffic_cone_01"
+        and event["after"] == "obstacle.road_cone_01"
+        for event in repair_events
+    )
+    assert "repair_events" not in response.model_dump()
+
+
+def test_v2_scenario_agent_records_internal_repair_events() -> None:
+    scenario = _llm_scenario_with_obstacle("agent_legacy_repair_event")
+    scenario["obstacles"]["placements"][0]["prop"] = "traffic_cone_01"
+    fake = _FakeJsonClient([scenario])
+    agent = ScenarioGenerationV2Agent(
+        settings=Settings(_env_file=None, v2AgentLlmEnabled=True),
+        llm_client=fake,
+    )
+
+    response = agent.generate(ScenarioGenerateV2Request(prompt="좁은 보도에 콘 하나를 배치해줘"))
+
+    assert response.status == "success"
+    assert any(
+        event["code"] == RepairDiagnosticCode.PROP_NORMALIZED.value
+        and event["stage"] == "agent.llm.initial"
+        for event in agent.last_repair_events
+    )
+    assert "repair_events" not in response.model_dump()
 
 
 def test_v2_scenario_graph_endpoint_keeps_prompt_only_contract(monkeypatch) -> None:

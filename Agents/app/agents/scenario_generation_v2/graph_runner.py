@@ -6,6 +6,7 @@ from typing import Any
 from app.agents.common.llm_json_client import AgentLlmClient
 from app.agents.scenario_generation_v2.agent import ScenarioGenerationV2Agent
 from app.agents.scenario_generation_v2.graph_state import ScenarioGenerationGraphStateV2
+from app.agents.scenario_generation_v2.repair_diagnostics import RepairDiagnosticCollector, format_repair_event_summary
 from app.models.scenario_generation_v2 import ScenarioGenerateV2Request, ScenarioGenerateV2Response, V2ValidationIssue, V2ValidationResult
 from app.core.settings import Settings
 
@@ -101,6 +102,7 @@ class ScenarioGenerationGraphRunnerV2:
             "scenario": None,
             "validation": None,
             "diagnostics": [],
+            "repair_events": [],
             "repair_count": 0,
             "status": None,
             "summary": None,
@@ -173,22 +175,34 @@ class ScenarioGenerationGraphRunnerV2:
         scenario_type = str(state.get("selected_pattern") or "narrow_sidewalk_cross_path")
         plan = self.agent.planner.plan(intent, scenario_type)
         scenario = self.agent.writer.write(plan)
-        scenario = self.agent._postprocess_scenario_for_intent(scenario, intent)
+        collector = RepairDiagnosticCollector()
+        scenario = self.agent._postprocess_scenario_for_intent(
+            scenario,
+            intent,
+            diagnostics=collector,
+            stage_prefix="graph.build_node",
+        )
+        repair_events = collector.as_dicts()
         return {
             **state,
             "scenario": scenario,
             "summary": plan.summary,
             "assumptions": plan.assumptions,
+            "repair_events": [*state.get("repair_events", []), *repair_events],
         }
 
     def validate_scenario_template_node(self, state: ScenarioGenerationGraphStateV2) -> ScenarioGenerationGraphStateV2:
         """Validate the generated project scenario and expose diagnostics to the graph."""
         if state.get("status") == "failed" and state.get("validation") is not None:
             return state
-        scenario = self.agent.repair_handler.repair(state.get("scenario") or {})
+        scenario, repair_events = self._repair_with_events(
+            state.get("scenario") or {},
+            stage="graph.validate_node",
+        )
         validation = self.agent.validator.validate(scenario or {})
         validation.warnings.extend(state.get("llm_warnings", []))
         diagnostics = [
+            *state.get("diagnostics", []),
             *[
                 {"level": "error", "field": issue.field, "message": issue.message}
                 for issue in validation.errors
@@ -198,11 +212,14 @@ class ScenarioGenerationGraphRunnerV2:
                 for issue in validation.warnings
             ],
         ]
+        if repair_events:
+            diagnostics.append(self._repair_summary_diagnostic("deterministic repair was applied during validation", repair_events))
         return {
             **state,
             "scenario": scenario,
             "validation": validation,
             "diagnostics": diagnostics,
+            "repair_events": [*state.get("repair_events", []), *repair_events],
             "status": "success" if validation.valid else "failed",
         }
 
@@ -213,11 +230,25 @@ class ScenarioGenerationGraphRunnerV2:
             message="LLM output validation failed; deterministic fallback scenario was used.",
         )
         try:
+            repair_events: list[dict[str, Any]] = []
             candidate = self.agent._generate_llm_template(prompt, response_name="scenario_graph_intent")
-            candidate = self.agent.repair_handler.repair(candidate, repair_quality=False)
+            candidate, events = self._repair_with_events(
+                candidate,
+                stage="graph.llm_candidate.initial",
+                repair_quality=False,
+            )
+            repair_events.extend(events)
             intent = self.agent.intent_parser.parse(prompt)
-            candidate = self.agent._postprocess_scenario_for_intent(candidate, intent)
-            candidate = self.agent.repair_handler.repair(candidate)
+            collector = RepairDiagnosticCollector()
+            candidate = self.agent._postprocess_scenario_for_intent(
+                candidate,
+                intent,
+                diagnostics=collector,
+                stage_prefix="graph.llm_candidate",
+            )
+            repair_events.extend(collector.as_dicts())
+            candidate, events = self._repair_with_events(candidate, stage="graph.llm_candidate.final")
+            repair_events.extend(events)
             validation = self.agent.validator.validate(candidate)
             if validation.valid:
                 return {
@@ -225,12 +256,13 @@ class ScenarioGenerationGraphRunnerV2:
                     "llm_validation": validation,
                     "llm_warnings": [],
                     "diagnostics": [],
+                    "repair_events": repair_events,
                 }
             diagnostics = [
                 {"level": "warning", "field": issue.field, "message": issue.message}
                 for issue in validation.errors
             ]
-            repaired_update = self._llm_repair_candidate_update(prompt, candidate, validation, diagnostics)
+            repaired_update = self._llm_repair_candidate_update(prompt, candidate, validation, diagnostics, repair_events)
             if repaired_update is not None:
                 return repaired_update
             return {
@@ -238,6 +270,7 @@ class ScenarioGenerationGraphRunnerV2:
                 "llm_validation": validation,
                 "llm_warnings": [warning],
                 "diagnostics": diagnostics,
+                "repair_events": repair_events,
             }
         except Exception as exc:
             return {
@@ -252,6 +285,7 @@ class ScenarioGenerationGraphRunnerV2:
                 "diagnostics": [
                     {"level": "warning", "field": "llm", "message": "LLM-assisted graph node failed."}
                 ],
+                "repair_events": [],
             }
 
     def _llm_repair_candidate_update(
@@ -260,6 +294,7 @@ class ScenarioGenerationGraphRunnerV2:
         candidate: dict[str, Any],
         validation: V2ValidationResult,
         diagnostics: list[dict[str, Any]],
+        repair_events: list[dict[str, Any]],
     ) -> ScenarioGenerationGraphStateV2 | None:
         """Try one validator-error-guided LLM repair for an invalid LLM candidate."""
         if not self.settings.v2AgentLlmRepairEnabled or self.settings.v2AgentLlmMaxRepairAttempts <= 0:
@@ -271,10 +306,23 @@ class ScenarioGenerationGraphRunnerV2:
                 validation,
                 response_name="scenario_graph_repair",
             )
-            repaired = self.agent.repair_handler.repair(repaired, repair_quality=False)
+            repaired, events = self._repair_with_events(
+                repaired,
+                stage="graph.llm_repair.initial",
+                repair_quality=False,
+            )
+            repair_events = [*repair_events, *events]
             intent = self.agent.intent_parser.parse(prompt)
-            repaired = self.agent._postprocess_scenario_for_intent(repaired, intent)
-            repaired = self.agent.repair_handler.repair(repaired)
+            collector = RepairDiagnosticCollector()
+            repaired = self.agent._postprocess_scenario_for_intent(
+                repaired,
+                intent,
+                diagnostics=collector,
+                stage_prefix="graph.llm_repair",
+            )
+            repair_events = [*repair_events, *collector.as_dicts()]
+            repaired, events = self._repair_with_events(repaired, stage="graph.llm_repair.final")
+            repair_events = [*repair_events, *events]
             repaired_validation = self.agent.validator.validate(repaired)
             repair_diagnostics = [
                 *diagnostics,
@@ -291,6 +339,7 @@ class ScenarioGenerationGraphRunnerV2:
                         )
                     ],
                     "diagnostics": repair_diagnostics,
+                    "repair_events": repair_events,
                 }
             return {
                 "llm_template_candidate": candidate,
@@ -308,6 +357,7 @@ class ScenarioGenerationGraphRunnerV2:
                         for issue in repaired_validation.errors
                     ],
                 ],
+                "repair_events": repair_events,
             }
         except Exception:
             return {
@@ -323,6 +373,7 @@ class ScenarioGenerationGraphRunnerV2:
                     *diagnostics,
                     {"level": "warning", "field": "llm_repair", "message": "LLM-assisted repair failed."},
                 ],
+                "repair_events": repair_events,
             }
 
     def _has_valid_llm_candidate(self, update: dict[str, Any]) -> bool:
@@ -346,13 +397,25 @@ class ScenarioGenerationGraphRunnerV2:
 
     def repair_scenario_template_node(self, state: ScenarioGenerationGraphStateV2) -> ScenarioGenerationGraphStateV2:
         """Apply deterministic local scenario repair and record the attempt."""
-        repaired = self.agent.repair_handler.repair(state.get("scenario") or {})
+        repaired, repair_events = self._repair_with_events(
+            state.get("scenario") or {},
+            stage="graph.repair_node",
+        )
         repair_count = int(state.get("repair_count") or 0) + 1
+        message = "deterministic repair was applied"
+        if repair_events:
+            message = f"{message}: {format_repair_event_summary(repair_events)}"
         diagnostics = [
             *state.get("diagnostics", []),
-            {"level": "repair", "field": "scenario", "message": "deterministic repair was applied."},
+            {"level": "repair", "field": "scenario", "message": message},
         ]
-        return {**state, "scenario": repaired, "repair_count": repair_count, "diagnostics": diagnostics}
+        return {
+            **state,
+            "scenario": repaired,
+            "repair_count": repair_count,
+            "diagnostics": diagnostics,
+            "repair_events": [*state.get("repair_events", []), *repair_events],
+        }
 
     def fallback_scenario_template_node(self, state: ScenarioGenerationGraphStateV2) -> ScenarioGenerationGraphStateV2:
         """Build the deterministic fallback scenario after repair attempts are exhausted."""
@@ -360,7 +423,14 @@ class ScenarioGenerationGraphRunnerV2:
         fallback_intent = self.agent.intent_parser.parse(prompt)
         fallback_plan = self.agent.planner.plan(fallback_intent, "narrow_sidewalk_cross_path")
         fallback_scenario = self.agent.writer.write(fallback_plan)
-        fallback_scenario = self.agent._postprocess_scenario_for_intent(fallback_scenario, fallback_intent)
+        collector = RepairDiagnosticCollector()
+        fallback_scenario = self.agent._postprocess_scenario_for_intent(
+            fallback_scenario,
+            fallback_intent,
+            diagnostics=collector,
+            stage_prefix="graph.fallback_node",
+        )
+        repair_events = collector.as_dicts()
         assumptions = [
             *state.get("assumptions", []),
             "validation 실패 후 deterministic fallback scenario를 사용했습니다.",
@@ -378,6 +448,7 @@ class ScenarioGenerationGraphRunnerV2:
             "selected_pattern": "narrow_sidewalk_cross_path",
             "summary": fallback_plan.summary,
             "assumptions": assumptions,
+            "repair_events": [*state.get("repair_events", []), *repair_events],
             "status": "success" if validation.valid else "failed",
         }
 
@@ -405,3 +476,25 @@ class ScenarioGenerationGraphRunnerV2:
                 generation_mode="langgraph",
             )
         return {**state, "response": response, "output": response}
+
+    def _repair_with_events(
+        self,
+        scenario: dict[str, Any],
+        *,
+        stage: str,
+        repair_quality: bool = True,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Run repair with a fresh collector and return JSON-friendly events."""
+        collector = RepairDiagnosticCollector()
+        repaired = self.agent.repair_handler.repair(
+            scenario,
+            repair_quality=repair_quality,
+            diagnostics=collector,
+            stage=stage,
+        )
+        return repaired, collector.as_dicts()
+
+    def _repair_summary_diagnostic(self, prefix: str, events: list[dict[str, Any]]) -> dict[str, str]:
+        """Return a coarse diagnostics entry summarizing detailed repair events."""
+        summary = format_repair_event_summary(events)
+        return {"level": "repair", "field": "scenario", "message": f"{prefix}: {summary}"}

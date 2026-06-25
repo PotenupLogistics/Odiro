@@ -15,8 +15,20 @@ struct ODIROSIM_API FScenarioViewportPresentation
 	// Returns the canonical grey background post-process asset for preload requests.
 	static TSoftObjectPtr<UObject> MakeGreyBackgroundPreloadAsset();
 
-	// Loads the canonical grey background post-process material.
-	static UMaterialInterface* LoadGreyBackgroundPostProcessMaterial();
+	// Returns visual assets that should be resident before entering scenario editor or simulation maps.
+	static TArray<TSoftObjectPtr<UObject>> MakeScenarioMapPreloadAssets();
+
+	// Returns an already-loaded material without triggering synchronous asset load.
+	static UMaterialInterface* ResolveLoadedMaterial(const TSoftObjectPtr<UMaterialInterface>& materialReference);
+
+	// Returns a material from memory first, falling back to synchronous load only when preload did not run.
+	static UMaterialInterface* ResolveOrLoadMaterial(const TSoftObjectPtr<UMaterialInterface>& materialReference);
+
+	// Returns the canonical grey background material from memory without triggering synchronous asset load.
+	static UMaterialInterface* ResolveLoadedGreyBackgroundPostProcessMaterial();
+
+	// Returns the canonical grey background material, falling back to synchronous load only when preload did not run.
+	static UMaterialInterface* ResolveOrLoadGreyBackgroundPostProcessMaterial();
 
 	// Applies a grey background post-process material to an editor or gameplay camera component.
 	static bool ApplyGreyBackgroundPostProcess(

@@ -1,8 +1,11 @@
 
 #include "Platform/SimulatorProcessSubsystem.h"
 #include "Episode/EpisodeMeasurementLogSubsystem.h"
+#include "Engine/AssetManager.h"
+#include "Engine/StreamableManager.h"
 #include "HAL/PlatformMisc.h"
 #include "Scenario/ScenarioRunnerSubsystem.h"
+#include "Shared/ScenarioViewportPresentation.h"
 #include "Shared/UserProjectDataTypes.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -160,6 +163,14 @@ void USimulatorProcessSubsystem::Deinitialize()
 		PostLoadMapHandle.Reset();
 	}
 
+	if (SimulationVisualPreloadHandle.IsValid() && SimulationVisualPreloadHandle->IsLoadingInProgress())
+	{
+		SimulationVisualPreloadHandle->CancelHandle();
+	}
+	SimulationVisualPreloadHandle.Reset();
+	LoadedSimulationVisualPreloadAssets.Reset();
+	PendingSimulationOpenLevelName.Reset();
+
 	if (bSimulatorMode)
 	{
 		if (UGameInstance* gameInstance = GetGameInstance())
@@ -283,12 +294,114 @@ void USimulatorProcessSubsystem::ProcessLoadedWorld(UWorld* world)
 			TEXT("Simulator target map 로드 요청 | Current: %s, Target: %s"),
 			*world->GetMapName(),
 			*openLevelName);
-		UGameplayStatics::OpenLevel(world, FName(*openLevelName));
+		RequestSimulationVisualPreload(world, openLevelName);
 		return;
 	}
 
 	ApplyWorldSetup(world, true);
 	QueueStartSimulationRun(world);
+}
+
+void USimulatorProcessSubsystem::RequestSimulationVisualPreload(UWorld* world, const FString& openLevelName)
+{
+	if (!IsValid(world))
+	{
+		RequestProcessExitWithError(TEXT("Simulation visual preload failed: World unavailable."));
+		return;
+	}
+
+	PendingSimulationOpenLevelName = openLevelName;
+
+	TArray<FSoftObjectPath> preloadAssetPaths;
+	for (const TSoftObjectPtr<UObject>& preloadAsset : FScenarioViewportPresentation::MakeScenarioMapPreloadAssets())
+	{
+		const FSoftObjectPath preloadAssetPath = preloadAsset.ToSoftObjectPath();
+		if (!preloadAssetPath.IsNull())
+		{
+			preloadAssetPaths.AddUnique(preloadAssetPath);
+		}
+	}
+
+	if (preloadAssetPaths.IsEmpty())
+	{
+		LoadedSimulationVisualPreloadAssets.Reset();
+		OpenSimulationMapAfterPreload();
+		return;
+	}
+
+	if (SimulationVisualPreloadHandle.IsValid() && SimulationVisualPreloadHandle->IsLoadingInProgress())
+	{
+		UE_LOG(
+			LogSimulatorProcess,
+			Log,
+			TEXT("Simulation visual asset preload already in progress | Count: %d"),
+			preloadAssetPaths.Num());
+		return;
+	}
+
+	FStreamableManager& streamableManager = UAssetManager::GetStreamableManager();
+	SimulationVisualPreloadHandle = streamableManager.RequestAsyncLoad(
+		MoveTemp(preloadAssetPaths),
+		FStreamableDelegate::CreateUObject(
+			this,
+			&USimulatorProcessSubsystem::HandleSimulationVisualPreloadComplete),
+		FStreamableManager::DefaultAsyncLoadPriority,
+		false,
+		false,
+		TEXT("ScenarioSimulationVisualPreload"));
+
+	if (!SimulationVisualPreloadHandle.IsValid())
+	{
+		UE_LOG(LogSimulatorProcess, Warning, TEXT("Simulation visual asset preload request failed."));
+		OpenSimulationMapAfterPreload();
+	}
+}
+
+void USimulatorProcessSubsystem::OpenSimulationMapAfterPreload()
+{
+	UWorld* world = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
+	if (!IsValid(world))
+	{
+		RequestProcessExitWithError(TEXT("Simulation map open failed after visual preload: World unavailable."));
+		return;
+	}
+
+	const FString openLevelName = PendingSimulationOpenLevelName.IsEmpty()
+		? NormalizeMapIdForOpenLevel(ActiveMapId)
+		: PendingSimulationOpenLevelName;
+	PendingSimulationOpenLevelName.Reset();
+
+	UE_LOG(
+		LogSimulatorProcess,
+		Log,
+		TEXT("Simulation visual preload complete, opening target map | Map: %s"),
+		*openLevelName);
+	UGameplayStatics::OpenLevel(world, FName(*openLevelName));
+}
+
+void USimulatorProcessSubsystem::HandleSimulationVisualPreloadComplete()
+{
+	CacheLoadedSimulationVisualPreloadAssets();
+	SimulationVisualPreloadHandle.Reset();
+	OpenSimulationMapAfterPreload();
+}
+
+void USimulatorProcessSubsystem::CacheLoadedSimulationVisualPreloadAssets()
+{
+	LoadedSimulationVisualPreloadAssets.Reset();
+	for (const TSoftObjectPtr<UObject>& preloadAsset : FScenarioViewportPresentation::MakeScenarioMapPreloadAssets())
+	{
+		if (UObject* loadedAsset = preloadAsset.Get())
+		{
+			LoadedSimulationVisualPreloadAssets.Add(loadedAsset);
+		}
+	}
+
+	UE_LOG(
+		LogSimulatorProcess,
+		Log,
+		TEXT("Simulation visual asset preload complete | Loaded: %d"),
+		LoadedSimulationVisualPreloadAssets.Num());
 }
 
 void USimulatorProcessSubsystem::QueueStartSimulationRun(UWorld* world)

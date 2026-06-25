@@ -173,7 +173,8 @@ void AScenarioEditorPawn::ApplyGreyBackgroundPostProcessMaterial()
 		return;
 	}
 
-	UMaterialInterface* backgroundMaterial = GreyBackgroundPostProcessMaterial.LoadSynchronous();
+	UMaterialInterface* backgroundMaterial =
+		FScenarioViewportPresentation::ResolveOrLoadMaterial(GreyBackgroundPostProcessMaterial);
 	if (!backgroundMaterial)
 	{
 		UE_LOG(LogScenarioEditorPawn, Warning, TEXT("Scenario editor grey background post-process material is unavailable."));

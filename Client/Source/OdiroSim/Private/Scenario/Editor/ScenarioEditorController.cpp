@@ -23,6 +23,7 @@
 #include "Misc/Paths.h"
 #include "Platform/PlatformUiDeveloperSettings.h"
 #include "Platform/Widget/MainMenuWidget.h"
+#include "Shared/ScenarioViewportPresentation.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorController, Log, All);
 
@@ -2500,7 +2501,7 @@ void AScenarioEditorController::ApplyAuthoringOutlinePostProcessMaterial(
 	}
 
 	UMaterialInterface* outlinePostProcessMaterial =
-		placeableComponent->AuthoringHoverOutlineMaterial.LoadSynchronous();
+		FScenarioViewportPresentation::ResolveOrLoadMaterial(placeableComponent->AuthoringHoverOutlineMaterial);
 	if (!outlinePostProcessMaterial || ActiveAuthoringOutlinePostProcessMaterial.Get() == outlinePostProcessMaterial)
 	{
 		return;

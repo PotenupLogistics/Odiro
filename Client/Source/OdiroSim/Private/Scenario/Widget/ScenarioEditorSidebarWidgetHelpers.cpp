@@ -23,6 +23,27 @@ void ScenarioEditorSidebarWidgetHelpers::ConfigureBlock(
 	blockWidget->SetShowNormalOutline(config.bShowNormalOutline);
 }
 
+FString ScenarioEditorSidebarWidgetHelpers::MakeIndexedBlockPath(
+	const FString& listPath,
+	const int32 itemIndex)
+{
+	return itemIndex >= 0
+		? FString::Printf(TEXT("%s[%d]"), *listPath, itemIndex)
+		: listPath;
+}
+
+void ScenarioEditorSidebarWidgetHelpers::ApplySelectedBlockPath(
+	UScenarioEditorSidebarBlockWidget* blockWidget,
+	const FString& selectedBlockPath)
+{
+	if (!blockWidget)
+	{
+		return;
+	}
+
+	blockWidget->SetSelected(!selectedBlockPath.IsEmpty() && blockWidget->BlockPath == selectedBlockPath);
+}
+
 void ScenarioEditorSidebarWidgetHelpers::InitializeFieldRow(
 	UScenarioEditorSidebarFieldRow* fieldRow,
 	TSoftObjectPtr<UWidgetTextStyleCatalog> textStyleCatalog,

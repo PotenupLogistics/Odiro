@@ -256,6 +256,8 @@ private:
 	void ConfigureFieldRows();
 	// Applies Corridor top-level field row ViewModels to bound rows.
 	void ApplyCorridorFieldItems();
+	// Applies the shell-selected block path to this panel and repeated Corridor blocks.
+	void ApplySelectedBlockPath();
 	// Applies shared typography to diagnostic text and child rows.
 	void ApplyTextStyles();
 	// Rebuilds editable lane widgets for one Corridor side lane profile.

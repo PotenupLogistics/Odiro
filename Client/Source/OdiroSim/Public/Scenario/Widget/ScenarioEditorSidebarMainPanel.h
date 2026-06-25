@@ -210,6 +210,8 @@ private:
 	void ApplyMainFieldItems();
 	// Applies shared typography to diagnostic text and child rows.
 	void ApplyTextStyles();
+	// Applies the shell-selected block path to this panel's selected visuals.
+	void ApplySelectedBlockPath();
 	// Resolves the ViewModel that forwards draft template commands.
 	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
 	// Runs a ViewModel command, refreshes the panel, and mirrors command status text.

@@ -205,6 +205,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void SetTemplateSidebarPanel(EScenarioTemplateSidebarPanel activePanel, bool bSyncOutlinerSelection = true);
 
+	// Focuses the Scenario Template sidebar block represented by a selected viewport placeable.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
+	bool FocusSidebarForSelectedPlaceable(UScenarioPlaceableComponent* selectedPlaceable);
+
 	// Refreshes the read-only Scenario Template sidebar from the authoring draft.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void RefreshTemplateSidebarWidget();

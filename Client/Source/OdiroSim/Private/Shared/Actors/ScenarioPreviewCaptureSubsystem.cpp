@@ -9,9 +9,17 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeExit.h"
+#include "TimerManager.h"
 
 // Preview Capture의 요청, 자원 생성, 인코딩과 파일 교체 결과를 기록한다.
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioPreviewCapture, Log, All);
+
+// 보류 중인 warmup capture 자원을 정리한다.
+void UScenarioPreviewCaptureSubsystem::Deinitialize()
+{
+	ResetWarmupCapture();
+	Super::Deinitialize();
+}
 
 // Capture Service가 안전하게 처리할 수 있는 요청인지 확인한다.
 bool FScenarioPreviewCaptureRequest::IsValid() const
@@ -175,6 +183,113 @@ FScenarioPreviewCaptureResult UScenarioPreviewCaptureSubsystem::CapturePreview(
 	FScenarioPreviewCaptureResult result;
 	result.bSuccess = true;
 	return result;
+}
+
+// SceneCapture 렌더링 상태를 유지한 뒤 최종 프레임을 PNG로 저장하도록 예약한다.
+FScenarioPreviewCaptureResult UScenarioPreviewCaptureSubsystem::CapturePreviewAfterWarmup(
+	const FScenarioPreviewCaptureRequest& request,
+	double warmupSeconds)
+{
+	// Game Thread와 외부 요청 경계를 검증한다.
+	if (!IsInGameThread())
+	{
+		return MakeFailure(
+			request,
+			TEXT("request_validation"),
+			TEXT("CapturePreviewAfterWarmup must run on the Game Thread."));
+	}
+
+	if (!request.IsValid()
+		|| !FMath::IsFinite(warmupSeconds)
+		|| warmupSeconds <= 0.0)
+	{
+		return MakeFailure(
+			request,
+			TEXT("request_validation"),
+			TEXT("Warmup capture request contains an invalid camera, size, path, or warmup time."));
+	}
+
+	UWorld* world = GetWorld();
+	if (!IsValid(world))
+	{
+		return MakeFailure(
+			request,
+			TEXT("world_validation"),
+			TEXT("Capture world is unavailable."));
+	}
+
+	ResetWarmupCapture();
+	WarmupCaptureRequest = request;
+
+	WarmupRenderTarget = CreateRenderTarget(request.OutputSize);
+	if (!IsValid(WarmupRenderTarget))
+	{
+		ResetWarmupCapture();
+		return MakeFailure(
+			request,
+			TEXT("render_target_creation"),
+			TEXT("Failed to create the transient render target."));
+	}
+
+	WarmupCaptureActor = SpawnCaptureActor(request, WarmupRenderTarget);
+	if (!IsValid(WarmupCaptureActor))
+	{
+		ResetWarmupCapture();
+		return MakeFailure(
+			request,
+			TEXT("capture_actor_creation"),
+			TEXT("Failed to create or configure the transient SceneCapture2D actor."));
+	}
+
+	USceneCaptureComponent2D* captureComponent =
+		WarmupCaptureActor->GetCaptureComponent2D();
+	if (!IsValid(captureComponent))
+	{
+		ResetWarmupCapture();
+		return MakeFailure(
+			request,
+			TEXT("capture_component_validation"),
+			TEXT("SceneCapture2D does not have a valid capture component."));
+	}
+
+	captureComponent->bCaptureEveryFrame = true;
+	captureComponent->bAlwaysPersistRenderingState = true;
+	captureComponent->CaptureScene();
+
+	const uint64 captureGeneration = WarmupCaptureGeneration;
+	FTimerDelegate completionDelegate;
+	completionDelegate.BindUObject(
+		this,
+		&UScenarioPreviewCaptureSubsystem::CompleteWarmupCapture,
+		captureGeneration);
+	world->GetTimerManager().SetTimer(
+		WarmupCaptureTimerHandle,
+		completionDelegate,
+		static_cast<float>(warmupSeconds),
+		false);
+
+	UE_LOG(
+		LogScenarioPreviewCapture,
+		Log,
+		TEXT("Preview warmup capture scheduled. output_path=\"%s\" warmup_seconds=%.2f center=(%.2f, %.2f, %.2f) ortho_width=%.2f resolution=%dx%d"),
+		*request.OutputPath,
+		warmupSeconds,
+		request.Frame.CenterXY.X,
+		request.Frame.CenterXY.Y,
+		request.Frame.CenterZ,
+		request.Frame.OrthoWidth,
+		request.OutputSize.X,
+		request.OutputSize.Y);
+
+	FScenarioPreviewCaptureResult result;
+	result.bSuccess = true;
+	return result;
+}
+
+// 예약되었거나 warmup 중인 비동기 Preview capture를 취소하고 자원을 정리한다.
+void UScenarioPreviewCaptureSubsystem::CancelPendingWarmupCapture()
+{
+	ResetWarmupCapture();
 }
 
 // 요청한 출력 크기의 임시 8비트 sRGB RenderTarget을 생성한다.
@@ -449,6 +564,110 @@ bool UScenarioPreviewCaptureSubsystem::TryWritePngAtomically(
 	}
 
 	return true;
+}
+
+// warmup이 끝난 SceneCapture의 최종 프레임을 저장한다.
+void UScenarioPreviewCaptureSubsystem::CompleteWarmupCapture(
+	uint64 captureGeneration)
+{
+	if (captureGeneration != WarmupCaptureGeneration)
+	{
+		return;
+	}
+
+	const FScenarioPreviewCaptureRequest request = WarmupCaptureRequest;
+	UTextureRenderTarget2D* renderTarget = WarmupRenderTarget.Get();
+	ASceneCapture2D* captureActor = WarmupCaptureActor.Get();
+	USceneCaptureComponent2D* captureComponent =
+		IsValid(captureActor)
+			? captureActor->GetCaptureComponent2D()
+			: nullptr;
+
+	if (!IsValid(renderTarget) || !IsValid(captureComponent))
+	{
+		MakeFailure(
+			request,
+			TEXT("warmup_capture_validation"),
+			TEXT("Warmup capture resources became invalid before the final frame."));
+		ResetWarmupCapture();
+		return;
+	}
+
+	captureComponent->bCaptureEveryFrame = false;
+	captureComponent->CaptureScene();
+
+	TArray64<uint8> pngData;
+	FString failureReason;
+	if (!TryCompressRenderTarget(
+		renderTarget,
+		pngData,
+		failureReason))
+	{
+		MakeFailure(
+			request,
+			TEXT("render_target_readback"),
+			failureReason);
+		ResetWarmupCapture();
+		return;
+	}
+
+	if (!TryWritePngAtomically(
+		request.OutputPath,
+		pngData,
+		failureReason))
+	{
+		MakeFailure(
+			request,
+			TEXT("file_commit"),
+			failureReason);
+		ResetWarmupCapture();
+		return;
+	}
+
+	UE_LOG(
+		LogScenarioPreviewCapture,
+		Log,
+		TEXT("Preview warmup capture succeeded. output_path=\"%s\" mode=\"top_view_orthographic\" source=\"final_color_ldr\" center=(%.2f, %.2f, %.2f) ortho_width=%.2f resolution=%dx%d"),
+		*request.OutputPath,
+		request.Frame.CenterXY.X,
+		request.Frame.CenterXY.Y,
+		request.Frame.CenterZ,
+		request.Frame.OrthoWidth,
+		request.OutputSize.X,
+		request.OutputSize.Y);
+
+	ResetWarmupCapture();
+}
+
+// 보류 중인 warmup timer와 capture 자원 소유권을 해제한다.
+void UScenarioPreviewCaptureSubsystem::ResetWarmupCapture()
+{
+	if (UWorld* world = GetWorld())
+	{
+		world->GetTimerManager().ClearTimer(WarmupCaptureTimerHandle);
+	}
+
+	if (IsValid(WarmupCaptureActor))
+	{
+		if (USceneCaptureComponent2D* captureComponent =
+			WarmupCaptureActor->GetCaptureComponent2D())
+		{
+			captureComponent->TextureTarget = nullptr;
+		}
+
+		WarmupCaptureActor->Destroy();
+	}
+
+	if (IsValid(WarmupRenderTarget))
+	{
+		WarmupRenderTarget->ReleaseResource();
+	}
+
+	WarmupCaptureActor = nullptr;
+	WarmupRenderTarget = nullptr;
+	WarmupCaptureRequest = FScenarioPreviewCaptureRequest{};
+	WarmupCaptureTimerHandle.Invalidate();
+	++WarmupCaptureGeneration;
 }
 
 // 실패 단계와 원인을 로그에 남기고 표준 실패 결과를 구성한다.

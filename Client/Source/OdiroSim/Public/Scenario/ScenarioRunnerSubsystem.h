@@ -162,4 +162,7 @@ private:
 
 	// Delay after the episode starts before writing preview.png.
 	static constexpr double EpisodePreviewCaptureDelaySeconds = 2.0;
+
+	// SceneCapture exposure history warmup before the final preview frame is saved.
+	static constexpr double EpisodePreviewCaptureWarmupSeconds = 0.5;
 };

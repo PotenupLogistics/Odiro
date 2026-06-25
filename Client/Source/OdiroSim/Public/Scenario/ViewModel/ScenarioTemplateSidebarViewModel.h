@@ -213,6 +213,40 @@ public:
 	// obstacle placement removal command를 처리한다.
 	bool RemoveObstaclePlacementAt(int32 placementIndex, FString& outStatusText);
 
+	// Commits one string-list item on an obstacle placement field.
+	bool CommitObstaclePlacementStringListItemText(
+		int32 placementIndex,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		int32 itemIndex,
+		const FText& text,
+		FString& outStatusText);
+
+	// Inserts one string-list item on an obstacle placement field.
+	bool AddObstaclePlacementStringListItemAfter(
+		int32 placementIndex,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		int32 itemIndex,
+		FString& outStatusText);
+
+	// Removes one string-list item on an obstacle placement field.
+	bool RemoveObstaclePlacementStringListItemAt(
+		int32 placementIndex,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		int32 itemIndex,
+		FString& outStatusText);
+
+	// Commits one pedestrian background spawn segment item.
+	bool CommitPedestrianSpawnSegmentText(
+		int32 segmentIndex,
+		const FText& text,
+		FString& outStatusText);
+
+	// Inserts one pedestrian background spawn segment item.
+	bool AddPedestrianSpawnSegmentAfter(int32 segmentIndex, FString& outStatusText);
+
+	// Removes one pedestrian background spawn segment item.
+	bool RemovePedestrianSpawnSegmentAt(int32 segmentIndex, FString& outStatusText);
+
 	// pedestrian encounter insertion command를 처리한다.
 	bool AddPedestrianEncounterAfter(int32 encounterIndex, FString& outStatusText);
 
@@ -471,6 +505,29 @@ private:
 	FScenarioTemplateObstaclePlacement MakeDefaultObstaclePlacement(
 		const TArray<FScenarioTemplateObstaclePlacement>& existingPlacements,
 		int32 neighborIndex) const;
+
+	// Resolves the mutable string list represented by one obstacle placement field.
+	static bool ResolveObstaclePlacementStringListField(
+		FScenarioTemplateObstaclePlacement& placement,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		TArray<FString>*& outValues);
+
+	// Creates a default item for one obstacle placement string-list field.
+	FString MakeDefaultObstaclePlacementStringListItem(
+		EScenarioEditorSidebarObstaclePlacementField field,
+		const TArray<FString>& existingValues) const;
+
+	// Creates a default corridor segment id for pedestrian background spawn filtering.
+	FString MakeDefaultPedestrianSpawnSegmentId(const TArray<FString>& existingValues) const;
+
+	// Converts one static obstacle catalog category enum to the schema-facing id.
+	static FString StaticObstacleCategoryToId(EScenarioStaticObstaclePropCategory category);
+
+	// Returns schema-facing static obstacle category ids from the prop catalog.
+	TArray<FString> GetObstacleCategoryIdOptions() const;
+
+	// Returns schema-facing static obstacle class ids from the prop catalog.
+	TArray<FString> GetObstacleClassIdOptions() const;
 
 	// 현재 draft pedestrian rules를 command 처리용 값으로 복사한다.
 	bool TryGetPedestrianRules(FScenarioTemplatePedestrianRules& outPedestrianRules, FString& outStatusText) const;

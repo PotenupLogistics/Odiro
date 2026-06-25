@@ -51,6 +51,13 @@ void UScenarioEditorSidebarObstaclePanel::SetWidgetClassCatalog(
 	WidgetClassCatalog = catalog.IsNull()
 		? UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference()
 		: catalog;
+	for (UScenarioEditorSidebarObstaclePlacementWidget* placementWidget : PlacementWidgets)
+	{
+		if (placementWidget)
+		{
+			placementWidget->SetWidgetClassCatalog(WidgetClassCatalog);
+		}
+	}
 }
 
 void UScenarioEditorSidebarObstaclePanel::RefreshFromDraft()
@@ -234,6 +241,65 @@ void UScenarioEditorSidebarObstaclePanel::HandlePlacementRemoveRequested(const i
 	});
 }
 
+void UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemTextCommitted(
+	const int32 placementIndex,
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	const int32 itemIndex,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	if (commitMethod == ETextCommit::OnCleared)
+	{
+		RefreshFromDraft();
+		return;
+	}
+
+	ExecuteTemplateCommand(
+		[placementIndex, field, itemIndex, &text](
+			UScenarioTemplateSidebarViewModel* viewModel,
+			FString& statusText)
+		{
+			return viewModel->CommitObstaclePlacementStringListItemText(
+				placementIndex,
+				field,
+				itemIndex,
+				text,
+				statusText);
+		});
+}
+
+void UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemAddRequested(
+	const int32 placementIndex,
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	const int32 itemIndex)
+{
+	ExecuteTemplateCommand(
+		[placementIndex, field, itemIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+		{
+			return viewModel->AddObstaclePlacementStringListItemAfter(
+				placementIndex,
+				field,
+				itemIndex,
+				statusText);
+		});
+}
+
+void UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemRemoveRequested(
+	const int32 placementIndex,
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	const int32 itemIndex)
+{
+	ExecuteTemplateCommand(
+		[placementIndex, field, itemIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+		{
+			return viewModel->RemoveObstaclePlacementStringListItemAt(
+				placementIndex,
+				field,
+				itemIndex,
+				statusText);
+		});
+}
+
 void UScenarioEditorSidebarObstaclePanel::BindFieldRows()
 {
 	if (MinClearWidthFieldRow)
@@ -308,6 +374,15 @@ void UScenarioEditorSidebarObstaclePanel::UnbindFieldRows()
 		placementWidget->OnRemoveRequested.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarObstaclePanel::HandlePlacementRemoveRequested);
+		placementWidget->OnStringListItemTextCommitted.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemTextCommitted);
+		placementWidget->OnStringListItemAddRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemAddRequested);
+		placementWidget->OnStringListItemRemoveRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemRemoveRequested);
 	}
 }
 
@@ -506,6 +581,7 @@ UScenarioEditorSidebarObstaclePlacementWidget* UScenarioEditorSidebarObstaclePan
 	}
 
 	placementWidget->SetTextStyleCatalog(TextStyleCatalog);
+	placementWidget->SetWidgetClassCatalog(WidgetClassCatalog);
 	placementWidget->SetPlacementIndex(placementIndex);
 	placementWidget->RefreshFromPlacement(placement);
 	placementWidget->OnFieldTextCommitted.RemoveDynamic(
@@ -532,6 +608,24 @@ UScenarioEditorSidebarObstaclePlacementWidget* UScenarioEditorSidebarObstaclePan
 	placementWidget->OnRemoveRequested.AddDynamic(
 		this,
 		&UScenarioEditorSidebarObstaclePanel::HandlePlacementRemoveRequested);
+	placementWidget->OnStringListItemTextCommitted.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemTextCommitted);
+	placementWidget->OnStringListItemTextCommitted.AddDynamic(
+		this,
+		&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemTextCommitted);
+	placementWidget->OnStringListItemAddRequested.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemAddRequested);
+	placementWidget->OnStringListItemAddRequested.AddDynamic(
+		this,
+		&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemAddRequested);
+	placementWidget->OnStringListItemRemoveRequested.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemRemoveRequested);
+	placementWidget->OnStringListItemRemoveRequested.AddDynamic(
+		this,
+		&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemRemoveRequested);
 	parentBlockWidget->AddBodyChild(placementWidget);
 	return placementWidget;
 }

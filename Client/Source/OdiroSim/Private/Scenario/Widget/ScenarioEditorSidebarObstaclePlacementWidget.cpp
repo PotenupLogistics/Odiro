@@ -1,6 +1,10 @@
 #include "Scenario/Widget/ScenarioEditorSidebarObstaclePlacementWidget.h"
 
+#include "Components/PanelSlot.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
+#include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/ScenarioEditorUiSubsystem.h"
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
@@ -12,6 +16,10 @@ namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 void UScenarioEditorSidebarObstaclePlacementWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+	if (WidgetClassCatalog.IsNull())
+	{
+		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
+	}
 	BindFieldRows();
 	ConfigureFieldRows();
 	ApplyCachedPlacementToRows();
@@ -38,6 +46,14 @@ void UScenarioEditorSidebarObstaclePlacementWidget::SetTextStyleCatalog(
 {
 	TextStyleCatalog = catalog;
 	ApplyTextStyles();
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::SetWidgetClassCatalog(
+	TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> catalog)
+{
+	WidgetClassCatalog = catalog.IsNull()
+		? UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference()
+		: catalog;
 }
 
 void UScenarioEditorSidebarObstaclePlacementWidget::RefreshFromPlacement(
@@ -242,6 +258,118 @@ void UScenarioEditorSidebarObstaclePlacementWidget::HandleRemoveRequested()
 	OnRemoveRequested.Broadcast(PlacementIndex);
 }
 
+void UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneSegmentsAddRequested()
+{
+	BroadcastStringListItemAction(
+		OnStringListItemAddRequested,
+		EScenarioEditorSidebarObstaclePlacementField::ZoneSegments,
+		INDEX_NONE);
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneLanesAddRequested()
+{
+	BroadcastStringListItemAction(
+		OnStringListItemAddRequested,
+		EScenarioEditorSidebarObstaclePlacementField::ZoneLanes,
+		INDEX_NONE);
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteCategoriesAddRequested()
+{
+	BroadcastStringListItemAction(
+		OnStringListItemAddRequested,
+		EScenarioEditorSidebarObstaclePlacementField::PaletteCategories,
+		INDEX_NONE);
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteClassesAddRequested()
+{
+	BroadcastStringListItemAction(
+		OnStringListItemAddRequested,
+		EScenarioEditorSidebarObstaclePlacementField::PaletteClasses,
+		INDEX_NONE);
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneSegmentItemCommitted(
+	const int32 itemIndex,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	BroadcastStringListItemText(
+		EScenarioEditorSidebarObstaclePlacementField::ZoneSegments,
+		itemIndex,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneLaneItemCommitted(
+	const int32 itemIndex,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	BroadcastStringListItemText(
+		EScenarioEditorSidebarObstaclePlacementField::ZoneLanes,
+		itemIndex,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteCategoryItemCommitted(
+	const int32 itemIndex,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	BroadcastStringListItemText(
+		EScenarioEditorSidebarObstaclePlacementField::PaletteCategories,
+		itemIndex,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteClassItemCommitted(
+	const int32 itemIndex,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	BroadcastStringListItemText(
+		EScenarioEditorSidebarObstaclePlacementField::PaletteClasses,
+		itemIndex,
+		text,
+		commitMethod);
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneSegmentItemRemoveRequested(const int32 itemIndex)
+{
+	BroadcastStringListItemAction(
+		OnStringListItemRemoveRequested,
+		EScenarioEditorSidebarObstaclePlacementField::ZoneSegments,
+		itemIndex);
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneLaneItemRemoveRequested(const int32 itemIndex)
+{
+	BroadcastStringListItemAction(
+		OnStringListItemRemoveRequested,
+		EScenarioEditorSidebarObstaclePlacementField::ZoneLanes,
+		itemIndex);
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteCategoryItemRemoveRequested(const int32 itemIndex)
+{
+	BroadcastStringListItemAction(
+		OnStringListItemRemoveRequested,
+		EScenarioEditorSidebarObstaclePlacementField::PaletteCategories,
+		itemIndex);
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteClassItemRemoveRequested(const int32 itemIndex)
+{
+	BroadcastStringListItemAction(
+		OnStringListItemRemoveRequested,
+		EScenarioEditorSidebarObstaclePlacementField::PaletteClasses,
+		itemIndex);
+}
+
 void UScenarioEditorSidebarObstaclePlacementWidget::BindFieldRows()
 {
 	if (PlacementBlockWidget)
@@ -306,22 +434,26 @@ void UScenarioEditorSidebarObstaclePlacementWidget::BindFieldRows()
 	if (ZoneSegmentsFieldRow)
 	{
 		ZoneSegmentsFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneSegmentsCommitted);
-		ZoneSegmentsFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneSegmentsCommitted);
+		ZoneSegmentsFieldRow->OnAddItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneSegmentsAddRequested);
+		ZoneSegmentsFieldRow->OnAddItemRequested.AddDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneSegmentsAddRequested);
 	}
 	if (ZoneLanesFieldRow)
 	{
 		ZoneLanesFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneLanesCommitted);
-		ZoneLanesFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneLanesCommitted);
+		ZoneLanesFieldRow->OnAddItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneLanesAddRequested);
+		ZoneLanesFieldRow->OnAddItemRequested.AddDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneLanesAddRequested);
 	}
 	if (PaletteCategoriesFieldRow)
 	{
 		PaletteCategoriesFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteCategoriesCommitted);
-		PaletteCategoriesFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteCategoriesCommitted);
+		PaletteCategoriesFieldRow->OnAddItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteCategoriesAddRequested);
+		PaletteCategoriesFieldRow->OnAddItemRequested.AddDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteCategoriesAddRequested);
 	}
 	if (PaletteClassesFieldRow)
 	{
 		PaletteClassesFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteClassesCommitted);
-		PaletteClassesFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteClassesCommitted);
+		PaletteClassesFieldRow->OnAddItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteClassesAddRequested);
+		PaletteClassesFieldRow->OnAddItemRequested.AddDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteClassesAddRequested);
 	}
 	if (CountFieldRow)
 	{
@@ -413,18 +545,22 @@ void UScenarioEditorSidebarObstaclePlacementWidget::UnbindFieldRows()
 	if (ZoneSegmentsFieldRow)
 	{
 		ZoneSegmentsFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneSegmentsCommitted);
+		ZoneSegmentsFieldRow->OnAddItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneSegmentsAddRequested);
 	}
 	if (ZoneLanesFieldRow)
 	{
 		ZoneLanesFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneLanesCommitted);
+		ZoneLanesFieldRow->OnAddItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneLanesAddRequested);
 	}
 	if (PaletteCategoriesFieldRow)
 	{
 		PaletteCategoriesFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteCategoriesCommitted);
+		PaletteCategoriesFieldRow->OnAddItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteCategoriesAddRequested);
 	}
 	if (PaletteClassesFieldRow)
 	{
 		PaletteClassesFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteClassesCommitted);
+		PaletteClassesFieldRow->OnAddItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteClassesAddRequested);
 	}
 	if (CountFieldRow)
 	{
@@ -455,6 +591,10 @@ void UScenarioEditorSidebarObstaclePlacementWidget::UnbindFieldRows()
 	{
 		AllowBlockingFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandleAllowBlockingCommitted);
 	}
+	ClearStringListRows(EScenarioEditorSidebarObstaclePlacementField::ZoneSegments);
+	ClearStringListRows(EScenarioEditorSidebarObstaclePlacementField::ZoneLanes);
+	ClearStringListRows(EScenarioEditorSidebarObstaclePlacementField::PaletteCategories);
+	ClearStringListRows(EScenarioEditorSidebarObstaclePlacementField::PaletteClasses);
 }
 
 void UScenarioEditorSidebarObstaclePlacementWidget::ConfigureFieldRows()
@@ -497,6 +637,20 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ConfigureFieldRows()
 		if (fieldRow)
 		{
 			fieldRow->SetTextStyleCatalog(TextStyleCatalog);
+		}
+	}
+	for (TArray<TObjectPtr<UScenarioEditorSidebarFieldRow>>* rows : {
+		&ZoneSegmentItemRows,
+		&ZoneLaneItemRows,
+		&PaletteCategoryItemRows,
+		&PaletteClassItemRows })
+	{
+		for (UScenarioEditorSidebarFieldRow* fieldRow : *rows)
+		{
+			if (fieldRow)
+			{
+				fieldRow->SetTextStyleCatalog(TextStyleCatalog);
+			}
 		}
 	}
 }
@@ -555,19 +709,53 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ApplyCachedPlacementToRows()
 	}
 	if (ZoneSegmentsFieldRow)
 	{
-		ZoneSegmentsFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementZoneSegments")));
+		UScenarioTemplateFieldRowViewModel* fieldItem = FindCachedFieldItem(TEXT("PlacementZoneSegments"));
+		ZoneSegmentsFieldRow->InitializeFromItemViewModel(fieldItem);
+		const UScenarioTemplateFieldRowViewModel* segmentItem = FindCachedFieldItem(TEXT("PlacementSegment"));
+		RefreshStringListRows(
+			EScenarioEditorSidebarObstaclePlacementField::ZoneSegments,
+			ZoneSegmentsFieldRow.Get(),
+			CachedPlacement.Zone.SegmentIds,
+			segmentItem ? segmentItem->GetComboOptions() : TArray<FString>(),
+			TEXT("구간"),
+			fieldItem && fieldItem->IsFieldVisible());
 	}
 	if (ZoneLanesFieldRow)
 	{
-		ZoneLanesFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementZoneLanes")));
+		UScenarioTemplateFieldRowViewModel* fieldItem = FindCachedFieldItem(TEXT("PlacementZoneLanes"));
+		ZoneLanesFieldRow->InitializeFromItemViewModel(fieldItem);
+		const UScenarioTemplateFieldRowViewModel* laneItem = FindCachedFieldItem(TEXT("PlacementLane"));
+		RefreshStringListRows(
+			EScenarioEditorSidebarObstaclePlacementField::ZoneLanes,
+			ZoneLanesFieldRow.Get(),
+			CachedPlacement.Zone.LaneIds,
+			laneItem ? laneItem->GetComboOptions() : TArray<FString>(),
+			TEXT("영역"),
+			fieldItem && fieldItem->IsFieldVisible());
 	}
 	if (PaletteCategoriesFieldRow)
 	{
-		PaletteCategoriesFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementPaletteCategories")));
+		UScenarioTemplateFieldRowViewModel* fieldItem = FindCachedFieldItem(TEXT("PlacementPaletteCategories"));
+		PaletteCategoriesFieldRow->InitializeFromItemViewModel(fieldItem);
+		RefreshStringListRows(
+			EScenarioEditorSidebarObstaclePlacementField::PaletteCategories,
+			PaletteCategoriesFieldRow.Get(),
+			CachedPlacement.Palette.CategoryIds,
+			TArray<FString>(),
+			TEXT("카테고리"),
+			fieldItem && fieldItem->IsFieldVisible());
 	}
 	if (PaletteClassesFieldRow)
 	{
-		PaletteClassesFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementPaletteClasses")));
+		UScenarioTemplateFieldRowViewModel* fieldItem = FindCachedFieldItem(TEXT("PlacementPaletteClasses"));
+		PaletteClassesFieldRow->InitializeFromItemViewModel(fieldItem);
+		RefreshStringListRows(
+			EScenarioEditorSidebarObstaclePlacementField::PaletteClasses,
+			PaletteClassesFieldRow.Get(),
+			CachedPlacement.Palette.ClassIds,
+			TArray<FString>(),
+			TEXT("클래스"),
+			fieldItem && fieldItem->IsFieldVisible());
 	}
 	if (CountFieldRow)
 	{
@@ -683,4 +871,200 @@ UScenarioTemplateFieldRowViewModel* UScenarioEditorSidebarObstaclePlacementWidge
 		}
 	}
 	return nullptr;
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::RefreshStringListRows(
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	UScenarioEditorSidebarFieldRow* collectionFieldRow,
+	const TArray<FString>& values,
+	const TArray<FString>& options,
+	const FString& itemLabelPrefix,
+	const bool bVisible)
+{
+	ClearStringListRows(field);
+	if (!collectionFieldRow)
+	{
+		return;
+	}
+
+	collectionFieldRow->SetValueText(FString::FromInt(values.Num()));
+	collectionFieldRow->SetEditable(false);
+	collectionFieldRow->SetArrayControlsEnabled(false);
+	collectionFieldRow->SetAddItemControlVisible(bVisible);
+	collectionFieldRow->SetRemoveItemControlVisible(false);
+	collectionFieldRow->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (!bVisible)
+	{
+		return;
+	}
+
+	TArray<TObjectPtr<UScenarioEditorSidebarFieldRow>>* rows = ResolveStringListRows(field);
+	if (!rows)
+	{
+		return;
+	}
+
+	for (int32 itemIndex = 0; itemIndex < values.Num(); ++itemIndex)
+	{
+		if (UScenarioEditorSidebarFieldRow* fieldRow =
+			AddStringListItemRow(field, collectionFieldRow, itemIndex, values[itemIndex], options, itemLabelPrefix))
+		{
+			rows->Add(fieldRow);
+		}
+	}
+}
+
+UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarObstaclePlacementWidget::AddStringListItemRow(
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	UScenarioEditorSidebarFieldRow* collectionFieldRow,
+	const int32 itemIndex,
+	const FString& value,
+	const TArray<FString>& options,
+	const FString& itemLabelPrefix)
+{
+	if (!GetWorld() || !PlacementBlockWidget || !collectionFieldRow)
+	{
+		return nullptr;
+	}
+
+	UScenarioEditorSidebarFieldRow* fieldRow =
+		CreateWidget<UScenarioEditorSidebarFieldRow>(
+			GetWorld(),
+			UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(WidgetClassCatalog));
+	if (!fieldRow)
+	{
+		return nullptr;
+	}
+
+	fieldRow->SetTextStyleCatalog(TextStyleCatalog);
+	fieldRow->SetFieldLabel(FString::Printf(TEXT("%s %d"), *itemLabelPrefix, itemIndex + 1));
+	fieldRow->SetValueText(value);
+	fieldRow->SetInputType(options.IsEmpty()
+		? EScenarioEditorSidebarFieldInputType::Text
+		: EScenarioEditorSidebarFieldInputType::ComboBox);
+	fieldRow->SetComboOptions(options);
+	fieldRow->SetComboAllowsUnset(false, FString());
+	fieldRow->SetEditable(true);
+	fieldRow->SetArrayControlsEnabled(false);
+	fieldRow->SetAddItemControlVisible(false);
+	fieldRow->SetRemoveItemControlVisible(true);
+	fieldRow->SetActionContextIndex(itemIndex);
+
+	switch (field)
+	{
+	case EScenarioEditorSidebarObstaclePlacementField::ZoneSegments:
+		fieldRow->OnIndexedValueTextCommitted.AddDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneSegmentItemCommitted);
+		fieldRow->OnIndexedRemoveItemRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneSegmentItemRemoveRequested);
+		break;
+	case EScenarioEditorSidebarObstaclePlacementField::ZoneLanes:
+		fieldRow->OnIndexedValueTextCommitted.AddDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneLaneItemCommitted);
+		fieldRow->OnIndexedRemoveItemRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePlacementWidget::HandleZoneLaneItemRemoveRequested);
+		break;
+	case EScenarioEditorSidebarObstaclePlacementField::PaletteCategories:
+		fieldRow->OnIndexedValueTextCommitted.AddDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteCategoryItemCommitted);
+		fieldRow->OnIndexedRemoveItemRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteCategoryItemRemoveRequested);
+		break;
+	case EScenarioEditorSidebarObstaclePlacementField::PaletteClasses:
+		fieldRow->OnIndexedValueTextCommitted.AddDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteClassItemCommitted);
+		fieldRow->OnIndexedRemoveItemRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePlacementWidget::HandlePaletteClassItemRemoveRequested);
+		break;
+	default:
+		break;
+	}
+
+	if (UVerticalBox* bodyBox = PlacementBlockWidget->GetBodyBox())
+	{
+		int32 anchorIndex = INDEX_NONE;
+		for (int32 childIndex = 0; childIndex < bodyBox->GetChildrenCount(); ++childIndex)
+		{
+			if (bodyBox->GetChildAt(childIndex) == collectionFieldRow)
+			{
+				anchorIndex = childIndex;
+				break;
+			}
+		}
+
+		UPanelSlot* insertedSlot = anchorIndex == INDEX_NONE
+			? bodyBox->AddChild(fieldRow)
+			: bodyBox->InsertChildAt(anchorIndex + 1 + itemIndex, fieldRow);
+		if (UVerticalBoxSlot* verticalSlot = Cast<UVerticalBoxSlot>(insertedSlot))
+		{
+			verticalSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 2.0f));
+			verticalSlot->SetHorizontalAlignment(HAlign_Fill);
+		}
+	}
+	return fieldRow;
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::ClearStringListRows(
+	const EScenarioEditorSidebarObstaclePlacementField field)
+{
+	TArray<TObjectPtr<UScenarioEditorSidebarFieldRow>>* rows = ResolveStringListRows(field);
+	if (!rows)
+	{
+		return;
+	}
+
+	for (UScenarioEditorSidebarFieldRow* fieldRow : *rows)
+	{
+		if (fieldRow)
+		{
+			fieldRow->OnIndexedValueTextCommitted.RemoveAll(this);
+			fieldRow->OnIndexedRemoveItemRequested.RemoveAll(this);
+			fieldRow->RemoveFromParent();
+		}
+	}
+	rows->Reset();
+}
+
+TArray<TObjectPtr<UScenarioEditorSidebarFieldRow>>*
+UScenarioEditorSidebarObstaclePlacementWidget::ResolveStringListRows(
+	const EScenarioEditorSidebarObstaclePlacementField field)
+{
+	switch (field)
+	{
+	case EScenarioEditorSidebarObstaclePlacementField::ZoneSegments:
+		return &ZoneSegmentItemRows;
+	case EScenarioEditorSidebarObstaclePlacementField::ZoneLanes:
+		return &ZoneLaneItemRows;
+	case EScenarioEditorSidebarObstaclePlacementField::PaletteCategories:
+		return &PaletteCategoryItemRows;
+	case EScenarioEditorSidebarObstaclePlacementField::PaletteClasses:
+		return &PaletteClassItemRows;
+	default:
+		return nullptr;
+	}
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::BroadcastStringListItemText(
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	const int32 itemIndex,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	OnStringListItemTextCommitted.Broadcast(PlacementIndex, field, itemIndex, text, commitMethod);
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::BroadcastStringListItemAction(
+	FScenarioEditorSidebarObstaclePlacementStringListItemActionRequested& action,
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	const int32 itemIndex)
+{
+	action.Broadcast(PlacementIndex, field, itemIndex);
 }

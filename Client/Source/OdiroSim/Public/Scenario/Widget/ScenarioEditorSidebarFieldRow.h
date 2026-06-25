@@ -37,6 +37,22 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 // Broadcasts when an array-capable row requests a structural edit.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FScenarioEditorSidebarFieldRowActionRequested);
 
+// Broadcasts committed text with the row-owned repeated item index.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
+	FScenarioEditorSidebarFieldRowIndexedTextCommitted,
+	int32,
+	ItemIndex,
+	const FText&,
+	Text,
+	ETextCommit::Type,
+	CommitMethod);
+
+// Broadcasts an array action with the row-owned repeated item index.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FScenarioEditorSidebarFieldRowIndexedActionRequested,
+	int32,
+	ItemIndex);
+
 // Leaf property row for project scenario sidebar fields such as "scenario_id : value".
 UCLASS(BlueprintType, Blueprintable)
 class ODIROSIM_API UScenarioEditorSidebarFieldRow : public UUserWidget
@@ -89,9 +105,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	bool bArrayControlsEnabled = false;
 
+	// Controls whether this row exposes the add button independently from remove.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bAddItemControlVisible = false;
+
+	// Controls whether this row exposes the remove button independently from add.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bRemoveItemControlVisible = false;
+
 	// Controls whether combo-box input exposes an explicit unset option.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	bool bComboAllowsUnset = false;
+
+	// Repeated item index emitted by indexed row delegates.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	int32 ActionContextIndex = INDEX_NONE;
 
 	// Display label used for an unset combo-box value.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
@@ -189,6 +217,18 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
 	FScenarioEditorSidebarFieldRowActionRequested OnRemoveItemRequested;
 
+	// Emits committed text with the row action context index.
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarFieldRowIndexedTextCommitted OnIndexedValueTextCommitted;
+
+	// Emits add requests with the row action context index.
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarFieldRowIndexedActionRequested OnIndexedAddItemRequested;
+
+	// Emits remove requests with the row action context index.
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarFieldRowIndexedActionRequested OnIndexedRemoveItemRequested;
+
 	// Updates the row label and refreshes bound controls.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetFieldLabel(const FString& label);
@@ -224,6 +264,18 @@ public:
 	// Toggles add/remove controls for array-like fields.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetArrayControlsEnabled(bool bInArrayControlsEnabled);
+
+	// Toggles only the add control for array-like fields.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetAddItemControlVisible(bool bInAddItemControlVisible);
+
+	// Toggles only the remove control for array-like fields.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetRemoveItemControlVisible(bool bInRemoveItemControlVisible);
+
+	// Updates the repeated item context index emitted by indexed delegates.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetActionContextIndex(int32 inActionContextIndex);
 
 	// Toggles the explicit unset option for combo-box fields.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")

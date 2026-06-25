@@ -126,6 +126,29 @@ private:
 	UFUNCTION()
 	void HandlePlacementRemoveRequested(int32 placementIndex);
 
+	// Handles text commits from dynamic placement string-list item rows.
+	UFUNCTION()
+	void HandlePlacementStringListItemTextCommitted(
+		int32 placementIndex,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		int32 itemIndex,
+		const FText& text,
+		ETextCommit::Type commitMethod);
+
+	// Handles add requests from dynamic placement string-list collection rows.
+	UFUNCTION()
+	void HandlePlacementStringListItemAddRequested(
+		int32 placementIndex,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		int32 itemIndex);
+
+	// Handles remove requests from dynamic placement string-list item rows.
+	UFUNCTION()
+	void HandlePlacementStringListItemRemoveRequested(
+		int32 placementIndex,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		int32 itemIndex);
+
 	// Dynamic placement widgets owned by root.obstacles.placements[].
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UScenarioEditorSidebarObstaclePlacementWidget>> PlacementWidgets;

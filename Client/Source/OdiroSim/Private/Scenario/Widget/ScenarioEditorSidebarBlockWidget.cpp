@@ -2,6 +2,9 @@
 
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/HorizontalBoxSlot.h"
+#include "Components/PanelSlot.h"
+#include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
@@ -10,6 +13,8 @@
 #include "Input/Reply.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
+#include "Styling/SlateBrush.h"
+#include "Styling/SlateTypes.h"
 
 namespace
 {
@@ -19,6 +24,38 @@ namespace
 		FLinearColor color = FLinearColor::FromSRGBColor(FColor::FromHex(hex));
 		color.A = alpha;
 		return color;
+	}
+
+	// Builds the flat brush used by generated block header action buttons.
+	FSlateBrush MakeSidebarActionBrush(const TCHAR* hex, const float alpha = 1.0f)
+	{
+		FSlateBrush brush;
+		brush.DrawAs = ESlateBrushDrawType::Box;
+		brush.TintColor = FSlateColor(MakeSidebarBlockColor(hex, alpha));
+		brush.Margin = FMargin(0.0f);
+		brush.ImageSize = FVector2D(32.0f, 32.0f);
+		brush.OutlineSettings.Width = 0.0f;
+		brush.OutlineSettings.Color = FLinearColor::Transparent;
+		brush.OutlineSettings.CornerRadii = FVector4(4.0f, 4.0f, 4.0f, 4.0f);
+		brush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
+		return brush;
+	}
+
+	// Creates a compact borderless button style matching the sidebar's existing flat controls.
+	FButtonStyle MakeSidebarActionButtonStyle()
+	{
+		FButtonStyle style;
+		style.SetNormal(MakeSidebarActionBrush(TEXT("1E1E1E")));
+		style.SetHovered(MakeSidebarActionBrush(TEXT("282828")));
+		style.SetPressed(MakeSidebarActionBrush(TEXT("151515")));
+		style.SetDisabled(MakeSidebarActionBrush(TEXT("1E1E1E"), 0.45f));
+		style.SetNormalForeground(FSlateColor(MakeSidebarBlockColor(TEXT("F2F2F2"))));
+		style.SetHoveredForeground(FSlateColor(MakeSidebarBlockColor(TEXT("FFFFFF"))));
+		style.SetPressedForeground(FSlateColor(MakeSidebarBlockColor(TEXT("DDE8F2"))));
+		style.SetDisabledForeground(FSlateColor(MakeSidebarBlockColor(TEXT("878787"))));
+		style.SetNormalPadding(FMargin(6.0f, 2.0f));
+		style.SetPressedPadding(FMargin(6.0f, 2.0f));
+		return style;
 	}
 }
 
@@ -67,6 +104,18 @@ void UScenarioEditorSidebarBlockWidget::SetShowNormalOutline(const bool bInShowN
 void UScenarioEditorSidebarBlockWidget::SetNested(const bool bInNested)
 {
 	bNested = bInNested;
+	RefreshBlock();
+}
+
+void UScenarioEditorSidebarBlockWidget::SetAddActionVisible(const bool bInAddActionVisible)
+{
+	bAddActionVisible = bInAddActionVisible;
+	RefreshBlock();
+}
+
+void UScenarioEditorSidebarBlockWidget::SetRemoveActionVisible(const bool bInRemoveActionVisible)
+{
+	bRemoveActionVisible = bInRemoveActionVisible;
 	RefreshBlock();
 }
 
@@ -129,6 +178,18 @@ void UScenarioEditorSidebarBlockWidget::HandleToggleClicked()
 	BroadcastBlockSelected();
 }
 
+void UScenarioEditorSidebarBlockWidget::HandleAddActionClicked()
+{
+	BroadcastBlockSelected();
+	OnAddActionRequested.Broadcast();
+}
+
+void UScenarioEditorSidebarBlockWidget::HandleRemoveActionClicked()
+{
+	BroadcastBlockSelected();
+	OnRemoveActionRequested.Broadcast();
+}
+
 void UScenarioEditorSidebarBlockWidget::BroadcastBlockSelected()
 {
 	OnBlockSelected.Broadcast(BlockPath);
@@ -169,6 +230,7 @@ void UScenarioEditorSidebarBlockWidget::BindControls()
 			this,
 			&UScenarioEditorSidebarBlockWidget::HandleToggleClicked);
 	}
+	EnsureActionButtons();
 }
 
 void UScenarioEditorSidebarBlockWidget::UnbindControls()
@@ -178,6 +240,107 @@ void UScenarioEditorSidebarBlockWidget::UnbindControls()
 		ToggleButton->OnClicked.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarBlockWidget::HandleToggleClicked);
+	}
+	if (AddActionButton)
+	{
+		AddActionButton->OnClicked.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarBlockWidget::HandleAddActionClicked);
+	}
+	if (RemoveActionButton)
+	{
+		RemoveActionButton->OnClicked.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarBlockWidget::HandleRemoveActionClicked);
+	}
+}
+
+void UScenarioEditorSidebarBlockWidget::EnsureActionButtons()
+{
+	if (!bAddActionVisible && !bRemoveActionVisible)
+	{
+		return;
+	}
+
+	CreateActionButton(AddActionButton, AddActionTextBlock);
+	if (AddActionButton)
+	{
+		AddActionButton->OnClicked.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarBlockWidget::HandleAddActionClicked);
+		AddActionButton->OnClicked.AddDynamic(
+			this,
+			&UScenarioEditorSidebarBlockWidget::HandleAddActionClicked);
+	}
+
+	CreateActionButton(RemoveActionButton, RemoveActionTextBlock);
+	if (RemoveActionButton)
+	{
+		RemoveActionButton->OnClicked.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarBlockWidget::HandleRemoveActionClicked);
+		RemoveActionButton->OnClicked.AddDynamic(
+			this,
+			&UScenarioEditorSidebarBlockWidget::HandleRemoveActionClicked);
+	}
+}
+
+void UScenarioEditorSidebarBlockWidget::CreateActionButton(
+	TObjectPtr<UButton>& outButton,
+	TObjectPtr<UTextBlock>& outTextBlock)
+{
+	if (outButton || !BlockHeaderRow)
+	{
+		return;
+	}
+
+	UPanelWidget* headerPanel = Cast<UPanelWidget>(BlockHeaderRow.Get());
+	if (!headerPanel)
+	{
+		return;
+	}
+
+	outButton = NewObject<UButton>(this);
+	outTextBlock = NewObject<UTextBlock>(outButton.Get());
+	if (!outButton || !outTextBlock)
+	{
+		outButton = nullptr;
+		outTextBlock = nullptr;
+		return;
+	}
+
+	outButton->SetContent(outTextBlock.Get());
+	outButton->SetStyle(MakeSidebarActionButtonStyle());
+	if (UPanelSlot* actionSlot = headerPanel->AddChild(outButton.Get()))
+	{
+		if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(actionSlot))
+		{
+			horizontalSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
+			horizontalSlot->SetHorizontalAlignment(HAlign_Right);
+			horizontalSlot->SetVerticalAlignment(VAlign_Center);
+		}
+	}
+	outButton->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UScenarioEditorSidebarBlockWidget::SetActionButtonState(
+	UButton* button,
+	UTextBlock* textBlock,
+	const bool bVisible,
+	const FString& label) const
+{
+	if (button)
+	{
+		button->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		button->SetStyle(MakeSidebarActionButtonStyle());
+		button->SetBackgroundColor(FLinearColor::White);
+		button->SetColorAndOpacity(FLinearColor::White);
+	}
+	if (textBlock)
+	{
+		textBlock->SetText(FText::FromString(label));
+		textBlock->SetJustification(ETextJustify::Center);
+		textBlock->SetColorAndOpacity(FSlateColor(MakeSidebarBlockColor(TEXT("F2F2F2"))));
 	}
 }
 
@@ -242,6 +405,14 @@ void UScenarioEditorSidebarBlockWidget::ApplyVisualStyle()
 		ToggleTextBlock.Get(),
 		TextStyleCatalog,
 		EWidgetTextStyleRole::Caption);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		AddActionTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Label);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		RemoveActionTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Label);
 
 	if (NameTextBlock && bSelected)
 	{
@@ -268,6 +439,8 @@ void UScenarioEditorSidebarBlockWidget::ApplyVisualStyle()
 
 void UScenarioEditorSidebarBlockWidget::RefreshBlock()
 {
+	EnsureActionButtons();
+
 	if (ToggleTextBlock)
 	{
 		FWidgetTransform toggleTransform;
@@ -277,6 +450,8 @@ void UScenarioEditorSidebarBlockWidget::RefreshBlock()
 	SetTextBlockText(NameTextBlock.Get(), BlockName);
 	SetTextBlockText(PathTextBlock.Get(), BlockPath);
 	SetTextBlockText(BadgeTextBlock.Get(), BadgeText);
+	SetActionButtonState(AddActionButton.Get(), AddActionTextBlock.Get(), bAddActionVisible, TEXT("+"));
+	SetActionButtonState(RemoveActionButton.Get(), RemoveActionTextBlock.Get(), bRemoveActionVisible, TEXT("-"));
 	ApplyVisualStyle();
 
 	if (SelectedStateWidget)

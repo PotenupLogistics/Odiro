@@ -16,6 +16,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	const FString&,
 	BlockPath);
 
+// Broadcasts a structural action requested from a sidebar block header.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FScenarioEditorSidebarBlockActionRequested);
+
 // Collapsible Scenario Template tree block used by sidebar panels.
 UCLASS(BlueprintType, Blueprintable)
 class ODIROSIM_API UScenarioEditorSidebarBlockWidget : public UUserWidget
@@ -61,6 +64,14 @@ public:
 	// Whether the block is nested inside another Scenario Template block.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	bool bNested = false;
+
+	// Whether the header exposes an add action for this block's collection.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bAddActionVisible = false;
+
+	// Whether the header exposes a remove action for this block's item.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bRemoveActionVisible = false;
 
 	// Shared typography catalog used by header text.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
@@ -110,6 +121,14 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
 	FScenarioEditorSidebarBlockSelected OnBlockSelected;
 
+	// Emits when the block header add action is clicked.
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarBlockActionRequested OnAddActionRequested;
+
+	// Emits when the block header remove action is clicked.
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarBlockActionRequested OnRemoveActionRequested;
+
 	// Updates block header metadata and refreshes bound controls.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetBlockMetadata(const FString& name, const FString& path, const FString& badge);
@@ -129,6 +148,14 @@ public:
 	// Updates nested state and background treatment.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetNested(bool bInNested);
+
+	// Updates whether the header add action is visible.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetAddActionVisible(bool bInAddActionVisible);
+
+	// Updates whether the header remove action is visible.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetRemoveActionVisible(bool bInRemoveActionVisible);
 
 	// Updates the shared typography catalog used by this block.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
@@ -151,6 +178,30 @@ private:
 	UFUNCTION()
 	void HandleToggleClicked();
 
+	// Handles add action clicks from the generated header button.
+	UFUNCTION()
+	void HandleAddActionClicked();
+
+	// Handles remove action clicks from the generated header button.
+	UFUNCTION()
+	void HandleRemoveActionClicked();
+
+	// Generated add button owned by the header row when action visibility requires it.
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> AddActionButton;
+
+	// Generated add button text owned by AddActionButton.
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> AddActionTextBlock;
+
+	// Generated remove button owned by the header row when action visibility requires it.
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> RemoveActionButton;
+
+	// Generated remove button text owned by RemoveActionButton.
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> RemoveActionTextBlock;
+
 	// Broadcasts this block path as the active sidebar selection.
 	void BroadcastBlockSelected();
 	// Returns true when this block should claim a click before child controls handle it.
@@ -159,6 +210,12 @@ private:
 	void BindControls();
 	// Releases optional local control bindings.
 	void UnbindControls();
+	// Creates generated header action buttons when the WBP header can host them.
+	void EnsureActionButtons();
+	// Creates one generated header button and attaches it to the header row.
+	void CreateActionButton(TObjectPtr<UButton>& outButton, TObjectPtr<UTextBlock>& outTextBlock);
+	// Applies visibility and label state to one generated header button.
+	void SetActionButtonState(UButton* button, UTextBlock* textBlock, bool bVisible, const FString& label) const;
 	// Applies shared sidebar spacing and block surface styling.
 	void ApplyVisualStyle();
 	// Applies stored metadata, styles, and state to bound controls.

@@ -23,12 +23,19 @@ void UScenarioEditorSidebarPedestrianPanel::NativeConstruct()
 		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
 	}
 	SidebarWidgetHelpers::ApplyPanelRootPadding(this, FName(TEXT("PedestrianPanelRootBox")));
+	BindControls();
 	ConfigureFieldRows();
 	RefreshFromDraft();
 
 	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
 	CollectBlockWidgets(blockWidgets);
 	SidebarWidgetHelpers::ApplyPanelBlockSpacing(blockWidgets);
+}
+
+void UScenarioEditorSidebarPedestrianPanel::NativeDestruct()
+{
+	UnbindControls();
+	Super::NativeDestruct();
 }
 
 void UScenarioEditorSidebarPedestrianPanel::SetTextStyleCatalog(
@@ -53,11 +60,8 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshFromDraft()
 	FString failureReason;
 	if (!templateSidebarViewModel || !templateSidebarViewModel->TryGetDraftScenario(scenarioTemplate, failureReason))
 	{
-		if (DiagnosticsTextBlock)
-		{
-			DiagnosticsTextBlock->SetText(FText::FromString(
-				failureReason.IsEmpty() ? TEXT("ScenarioTemplateSidebarViewModel unavailable.") : failureReason));
-		}
+		SetDiagnosticsText(
+			failureReason.IsEmpty() ? TEXT("ScenarioTemplateSidebarViewModel unavailable.") : failureReason);
 		return;
 	}
 
@@ -72,21 +76,31 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshFromTemplate(
 	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
 	if (!templateSidebarViewModel)
 	{
-		if (DiagnosticsTextBlock)
-		{
-			DiagnosticsTextBlock->SetText(FText::FromString(TEXT("ScenarioTemplateSidebarViewModel unavailable.")));
-		}
+		SetDiagnosticsText(TEXT("ScenarioTemplateSidebarViewModel unavailable."));
 		return;
 	}
 
 	templateSidebarViewModel->RefreshPedestrianFieldItemsFromTemplate(scenarioTemplate);
 	ApplyPedestrianFieldItems();
 	RefreshEncounterRows(scenarioTemplate.Pedestrians.Encounters);
-	if (DiagnosticsTextBlock)
-	{
-		DiagnosticsTextBlock->SetText(FText::FromString(TEXT("Structure only: Pedestrian edits are not committed yet.")));
-	}
+	SetDiagnosticsText(TEXT(""));
 	ApplySelectedBlockPath();
+}
+
+void UScenarioEditorSidebarPedestrianPanel::HandleEncounterCollectionAddRequested()
+{
+	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->AddPedestrianEncounterAfter(INDEX_NONE, statusText);
+	});
+}
+
+void UScenarioEditorSidebarPedestrianPanel::HandleEncounterRemoveRequested(const int32 encounterIndex)
+{
+	ExecuteTemplateCommand([encounterIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->RemovePedestrianEncounterAt(encounterIndex, statusText);
+	});
 }
 
 void UScenarioEditorSidebarPedestrianPanel::ApplySelectedBlockPath()
@@ -183,6 +197,8 @@ void UScenarioEditorSidebarPedestrianPanel::ConfigureFieldRows()
 		EncountersBlockWidget->SetBlockMetadata(TEXT("상호작용 상황"), TEXT("root.pedestrians.encounters[]"), TEXT("속성"));
 		EncountersBlockWidget->SetNested(true);
 		EncountersBlockWidget->SetShowNormalOutline(false);
+		EncountersBlockWidget->SetAddActionVisible(true);
+		EncountersBlockWidget->SetRemoveActionVisible(false);
 	}
 	if (BackgroundCountFieldRow)
 	{
@@ -269,6 +285,38 @@ void UScenarioEditorSidebarPedestrianPanel::ApplyPedestrianFieldItems()
 	}
 }
 
+void UScenarioEditorSidebarPedestrianPanel::BindControls()
+{
+	if (EncountersBlockWidget)
+	{
+		EncountersBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleEncounterCollectionAddRequested);
+		EncountersBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleEncounterCollectionAddRequested);
+	}
+}
+
+void UScenarioEditorSidebarPedestrianPanel::UnbindControls()
+{
+	if (EncountersBlockWidget)
+	{
+		EncountersBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleEncounterCollectionAddRequested);
+	}
+	for (UScenarioEditorSidebarPedestrianEncounterWidget* encounterWidget : EncounterWidgets)
+	{
+		if (encounterWidget)
+		{
+			encounterWidget->OnRemoveRequested.RemoveDynamic(
+				this,
+				&UScenarioEditorSidebarPedestrianPanel::HandleEncounterRemoveRequested);
+		}
+	}
+}
+
 void UScenarioEditorSidebarPedestrianPanel::RefreshEncounterRows(
 	const TArray<FScenarioTemplatePedestrianEncounter>& encounters)
 {
@@ -277,6 +325,15 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshEncounterRows(
 		return;
 	}
 
+	for (UScenarioEditorSidebarPedestrianEncounterWidget* encounterWidget : EncounterWidgets)
+	{
+		if (encounterWidget)
+		{
+			encounterWidget->OnRemoveRequested.RemoveDynamic(
+				this,
+				&UScenarioEditorSidebarPedestrianPanel::HandleEncounterRemoveRequested);
+		}
+	}
 	EncounterWidgets.Reset();
 	EncountersBlockWidget->ClearBodyChildren();
 	EncountersCountFieldRow = AddFieldRow(
@@ -349,6 +406,12 @@ UScenarioEditorSidebarPedestrianEncounterWidget* UScenarioEditorSidebarPedestria
 	encounterWidget->SetTextStyleCatalog(TextStyleCatalog);
 	encounterWidget->SetEncounterIndex(encounterIndex);
 	encounterWidget->RefreshFromEncounter(encounter);
+	encounterWidget->OnRemoveRequested.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarPedestrianPanel::HandleEncounterRemoveRequested);
+	encounterWidget->OnRemoveRequested.AddDynamic(
+		this,
+		&UScenarioEditorSidebarPedestrianPanel::HandleEncounterRemoveRequested);
 	parentBlockWidget->AddBodyChild(encounterWidget);
 	return encounterWidget;
 }
@@ -357,4 +420,28 @@ UScenarioTemplateSidebarViewModel* UScenarioEditorSidebarPedestrianPanel::GetTem
 {
 	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
 	return uiSubsystem ? uiSubsystem->GetTemplateSidebarViewModel() : nullptr;
+}
+
+void UScenarioEditorSidebarPedestrianPanel::ExecuteTemplateCommand(
+	TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command)
+{
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	if (!templateSidebarViewModel)
+	{
+		SetDiagnosticsText(TEXT("ScenarioTemplateSidebarViewModel unavailable."));
+		return;
+	}
+
+	FString statusText;
+	command(templateSidebarViewModel, statusText);
+	RefreshFromDraft();
+	SetDiagnosticsText(statusText);
+}
+
+void UScenarioEditorSidebarPedestrianPanel::SetDiagnosticsText(const FString& text) const
+{
+	if (DiagnosticsTextBlock)
+	{
+		DiagnosticsTextBlock->SetText(FText::FromString(text));
+	}
 }

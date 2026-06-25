@@ -251,6 +251,21 @@ void UScenarioEditorSidebarObstaclePanel::BindFieldRows()
 			this,
 			&UScenarioEditorSidebarObstaclePanel::HandleMinClearWidthRangeCommitted);
 	}
+	if (PlacementsBlockWidget)
+	{
+		PlacementsBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountAddRequested);
+		PlacementsBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountAddRequested);
+		PlacementsBlockWidget->OnRemoveActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountRemoveRequested);
+		PlacementsBlockWidget->OnRemoveActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountRemoveRequested);
+	}
 }
 
 void UScenarioEditorSidebarObstaclePanel::UnbindFieldRows()
@@ -264,9 +279,14 @@ void UScenarioEditorSidebarObstaclePanel::UnbindFieldRows()
 			this,
 			&UScenarioEditorSidebarObstaclePanel::HandleMinClearWidthRangeCommitted);
 	}
-	if (PlacementsCountFieldRow)
+	if (PlacementsBlockWidget)
 	{
-		SidebarWidgetHelpers::UnbindFieldRowActions(PlacementsCountFieldRow.Get(), this);
+		PlacementsBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountAddRequested);
+		PlacementsBlockWidget->OnRemoveActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountRemoveRequested);
 	}
 
 	for (UScenarioEditorSidebarObstaclePlacementWidget* placementWidget : PlacementWidgets)
@@ -322,6 +342,8 @@ void UScenarioEditorSidebarObstaclePanel::ConfigureFieldRows()
 			false,
 			true,
 			false });
+		PlacementsBlockWidget->SetAddActionVisible(true);
+		PlacementsBlockWidget->SetRemoveActionVisible(false);
 	}
 
 	if (MinClearWidthFieldRow)
@@ -431,15 +453,7 @@ void UScenarioEditorSidebarObstaclePanel::RefreshPlacementRows(
 			: nullptr);
 	if (PlacementsCountFieldRow)
 	{
-		SidebarWidgetHelpers::BindFieldRowActions(
-			PlacementsCountFieldRow.Get(),
-			this,
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarObstaclePanel,
-				HandlePlacementsCountAddRequested),
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarObstaclePanel,
-				HandlePlacementsCountRemoveRequested));
+		PlacementsCountFieldRow->SetArrayControlsEnabled(false);
 	}
 
 	for (int32 placementIndex = 0; placementIndex < placements.Num(); ++placementIndex)

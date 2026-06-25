@@ -108,15 +108,6 @@ void UScenarioEditorSidebarCorridorLaneWidget::BindFieldRows()
 		SurfaceFieldRow->OnValueTextCommitted.AddDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorLaneWidget::HandleSurfaceCommitted);
-		SidebarWidgetHelpers::BindFieldRowActions(
-			SurfaceFieldRow.Get(),
-			this,
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorLaneWidget,
-				HandleAddLaneRequested),
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorLaneWidget,
-				HandleRemoveLaneRequested));
 	}
 
 	if (WidthFieldRow)
@@ -134,6 +125,15 @@ void UScenarioEditorSidebarCorridorLaneWidget::BindFieldRows()
 			this,
 			&UScenarioEditorSidebarCorridorLaneWidget::HandleWidthRangeCommitted);
 	}
+	if (LaneBlockWidget)
+	{
+		LaneBlockWidget->OnRemoveActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorLaneWidget::HandleRemoveLaneRequested);
+		LaneBlockWidget->OnRemoveActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorLaneWidget::HandleRemoveLaneRequested);
+	}
 }
 
 void UScenarioEditorSidebarCorridorLaneWidget::UnbindFieldRows()
@@ -143,7 +143,6 @@ void UScenarioEditorSidebarCorridorLaneWidget::UnbindFieldRows()
 		SurfaceFieldRow->OnValueTextCommitted.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorLaneWidget::HandleSurfaceCommitted);
-		SidebarWidgetHelpers::UnbindFieldRowActions(SurfaceFieldRow.Get(), this);
 	}
 
 	if (WidthFieldRow)
@@ -154,6 +153,12 @@ void UScenarioEditorSidebarCorridorLaneWidget::UnbindFieldRows()
 		WidthFieldRow->OnRangeValueTextCommitted.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorLaneWidget::HandleWidthRangeCommitted);
+	}
+	if (LaneBlockWidget)
+	{
+		LaneBlockWidget->OnRemoveActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorLaneWidget::HandleRemoveLaneRequested);
 	}
 }
 
@@ -169,6 +174,8 @@ void UScenarioEditorSidebarCorridorLaneWidget::ConfigureFieldRows()
 			false,
 			true,
 			false });
+		LaneBlockWidget->SetAddActionVisible(false);
+		LaneBlockWidget->SetRemoveActionVisible(true);
 	}
 
 	if (SurfaceFieldRow)

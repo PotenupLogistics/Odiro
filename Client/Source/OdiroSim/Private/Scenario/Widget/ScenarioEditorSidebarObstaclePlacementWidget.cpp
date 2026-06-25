@@ -244,19 +244,25 @@ void UScenarioEditorSidebarObstaclePlacementWidget::HandleRemoveRequested()
 
 void UScenarioEditorSidebarObstaclePlacementWidget::BindFieldRows()
 {
+	if (PlacementBlockWidget)
+	{
+		PlacementBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePlacementWidget::HandleAddRequested);
+		PlacementBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePlacementWidget::HandleAddRequested);
+		PlacementBlockWidget->OnRemoveActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePlacementWidget::HandleRemoveRequested);
+		PlacementBlockWidget->OnRemoveActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePlacementWidget::HandleRemoveRequested);
+	}
 	if (PlacementIdFieldRow)
 	{
 		PlacementIdFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePlacementIdCommitted);
 		PlacementIdFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePlacementIdCommitted);
-		SidebarWidgetHelpers::BindFieldRowActions(
-			PlacementIdFieldRow.Get(),
-			this,
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarObstaclePlacementWidget,
-				HandleAddRequested),
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarObstaclePlacementWidget,
-				HandleRemoveRequested));
 	}
 	if (KindFieldRow)
 	{
@@ -361,10 +367,18 @@ void UScenarioEditorSidebarObstaclePlacementWidget::BindFieldRows()
 
 void UScenarioEditorSidebarObstaclePlacementWidget::UnbindFieldRows()
 {
+	if (PlacementBlockWidget)
+	{
+		PlacementBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePlacementWidget::HandleAddRequested);
+		PlacementBlockWidget->OnRemoveActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePlacementWidget::HandleRemoveRequested);
+	}
 	if (PlacementIdFieldRow)
 	{
 		PlacementIdFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarObstaclePlacementWidget::HandlePlacementIdCommitted);
-		SidebarWidgetHelpers::UnbindFieldRowActions(PlacementIdFieldRow.Get(), this);
 	}
 	if (KindFieldRow)
 	{
@@ -456,6 +470,8 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ConfigureFieldRows()
 			false,
 			true,
 			false });
+		PlacementBlockWidget->SetAddActionVisible(false);
+		PlacementBlockWidget->SetRemoveActionVisible(true);
 	}
 
 	for (UScenarioEditorSidebarFieldRow* fieldRow : {

@@ -526,6 +526,7 @@ void UScenarioEditorSidebarWidget::HandlePanelBlockSelected(const FString& block
 			if (TryResolvePlaceableIdForBlockPath(blockPath, placeableId)
 				&& shellViewModel->SelectPlaceable(placeableId))
 			{
+				shellViewModel->FocusPlaceableTemplateBlock(ActivePanel, blockPath, placeableId);
 				ApplyActivePanelSelectionState();
 				RequestScrollSelectedBlockIntoView();
 				return;

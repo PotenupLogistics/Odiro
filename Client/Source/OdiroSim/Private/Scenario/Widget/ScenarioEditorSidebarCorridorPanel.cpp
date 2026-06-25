@@ -497,6 +497,42 @@ void UScenarioEditorSidebarCorridorPanel::BindFieldRows()
 			this,
 			&UScenarioEditorSidebarCorridorPanel::HandleWalkwayWidthRangeCommitted);
 	}
+	if (AxisPointsBlockWidget)
+	{
+		AxisPointsBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested);
+		AxisPointsBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested);
+	}
+	if (BuildingSideBlockWidget)
+	{
+		BuildingSideBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleBuildingSideCountAddRequested);
+		BuildingSideBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleBuildingSideCountAddRequested);
+	}
+	if (CurbSideBlockWidget)
+	{
+		CurbSideBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountAddRequested);
+		CurbSideBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountAddRequested);
+	}
+	if (SegmentsBlockWidget)
+	{
+		SegmentsBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested);
+		SegmentsBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested);
+	}
 }
 
 void UScenarioEditorSidebarCorridorPanel::UnbindFieldRows()
@@ -510,14 +546,6 @@ void UScenarioEditorSidebarCorridorPanel::UnbindFieldRows()
 			this,
 			&UScenarioEditorSidebarCorridorPanel::HandleWalkwayWidthRangeCommitted);
 	}
-	if (BuildingSideCountFieldRow)
-	{
-		SidebarWidgetHelpers::UnbindFieldRowActions(BuildingSideCountFieldRow.Get(), this);
-	}
-	if (CurbSideCountFieldRow)
-	{
-		SidebarWidgetHelpers::UnbindFieldRowActions(CurbSideCountFieldRow.Get(), this);
-	}
 	if (AxisPointsFieldRow)
 	{
 		SidebarWidgetHelpers::UnbindFieldRowActions(AxisPointsFieldRow.Get(), this);
@@ -525,6 +553,30 @@ void UScenarioEditorSidebarCorridorPanel::UnbindFieldRows()
 	if (SegmentsCountFieldRow)
 	{
 		SidebarWidgetHelpers::UnbindFieldRowActions(SegmentsCountFieldRow.Get(), this);
+	}
+	if (AxisPointsBlockWidget)
+	{
+		AxisPointsBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested);
+	}
+	if (BuildingSideBlockWidget)
+	{
+		BuildingSideBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleBuildingSideCountAddRequested);
+	}
+	if (CurbSideBlockWidget)
+	{
+		CurbSideBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountAddRequested);
+	}
+	if (SegmentsBlockWidget)
+	{
+		SegmentsBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested);
 	}
 	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : BuildingSideLaneWidgets)
 	{
@@ -651,6 +703,8 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 			false,
 			true,
 			false });
+		AxisPointsBlockWidget->SetAddActionVisible(true);
+		AxisPointsBlockWidget->SetRemoveActionVisible(false);
 	}
 	if (WalkwayWidthBlockWidget)
 	{
@@ -671,6 +725,8 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 			false,
 			true,
 			false });
+		BuildingSideBlockWidget->SetAddActionVisible(true);
+		BuildingSideBlockWidget->SetRemoveActionVisible(false);
 	}
 	if (CurbSideBlockWidget)
 	{
@@ -681,6 +737,8 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 			false,
 			true,
 			false });
+		CurbSideBlockWidget->SetAddActionVisible(true);
+		CurbSideBlockWidget->SetRemoveActionVisible(false);
 	}
 	if (SegmentsBlockWidget)
 	{
@@ -691,6 +749,8 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 			false,
 			true,
 			false });
+		SegmentsBlockWidget->SetAddActionVisible(true);
+		SegmentsBlockWidget->SetRemoveActionVisible(false);
 	}
 	if (AxisTypeFieldRow)
 	{
@@ -877,15 +937,6 @@ void UScenarioEditorSidebarCorridorPanel::RefreshAxisPointRows(
 				templateSidebarViewModel->FindCorridorFieldItem(TEXT("AxisPointsCount")));
 		}
 		AxisPointsFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		SidebarWidgetHelpers::BindFieldRowActions(
-			AxisPointsFieldRow.Get(),
-			this,
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorPanel,
-				HandleAxisPointsCountAddRequested),
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorPanel,
-				HandleAxisPointsCountRemoveRequested));
 	}
 
 	if (!AxisPointsBlockWidget)
@@ -941,28 +992,10 @@ void UScenarioEditorSidebarCorridorPanel::RefreshLaneProfileRows(
 		if (side == EScenarioEditorCorridorSide::Building)
 		{
 			BuildingSideCountFieldRow = countRow;
-			SidebarWidgetHelpers::BindFieldRowActions(
-				countRow,
-				this,
-				GET_FUNCTION_NAME_CHECKED(
-					UScenarioEditorSidebarCorridorPanel,
-					HandleBuildingSideCountAddRequested),
-				GET_FUNCTION_NAME_CHECKED(
-					UScenarioEditorSidebarCorridorPanel,
-					HandleBuildingSideCountRemoveRequested));
 		}
 		else
 		{
 			CurbSideCountFieldRow = countRow;
-			SidebarWidgetHelpers::BindFieldRowActions(
-				countRow,
-				this,
-				GET_FUNCTION_NAME_CHECKED(
-					UScenarioEditorSidebarCorridorPanel,
-					HandleCurbSideCountAddRequested),
-				GET_FUNCTION_NAME_CHECKED(
-					UScenarioEditorSidebarCorridorPanel,
-					HandleCurbSideCountRemoveRequested));
 		}
 	}
 
@@ -996,15 +1029,6 @@ void UScenarioEditorSidebarCorridorPanel::RefreshSegmentRows(
 	if (countRow)
 	{
 		SegmentsCountFieldRow = countRow;
-		SidebarWidgetHelpers::BindFieldRowActions(
-			countRow,
-			this,
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorPanel,
-				HandleSegmentsCountAddRequested),
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorPanel,
-				HandleSegmentsCountRemoveRequested));
 	}
 
 	for (int32 segmentIndex = 0; segmentIndex < segments.Num(); ++segmentIndex)

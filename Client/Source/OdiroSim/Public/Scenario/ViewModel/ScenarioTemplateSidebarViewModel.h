@@ -178,6 +178,11 @@ public:
 		const TArray<FScenarioTemplateObstaclePlacement>& placements,
 		TArray<FString>& outDiagnostics);
 
+	// pedestrian generation rules draft edit을 authoring subsystem에 위임한다.
+	bool SetPedestrianRules(
+		const FScenarioTemplatePedestrianRules& pedestrianRules,
+		TArray<FString>& outDiagnostics);
+
 	// obstacle min_clear_width_m fixed text edit command를 처리한다.
 	bool CommitObstacleMinClearWidthText(const FText& text, FString& outStatusText);
 
@@ -207,6 +212,12 @@ public:
 
 	// obstacle placement removal command를 처리한다.
 	bool RemoveObstaclePlacementAt(int32 placementIndex, FString& outStatusText);
+
+	// pedestrian encounter insertion command를 처리한다.
+	bool AddPedestrianEncounterAfter(int32 encounterIndex, FString& outStatusText);
+
+	// pedestrian encounter removal command를 처리한다.
+	bool RemovePedestrianEncounterAt(int32 encounterIndex, FString& outStatusText);
 
 	// 고정 number template 값을 생성한다.
 	static FScenarioTemplateNumberValue MakeFixedTemplateNumberValue(double value);
@@ -345,6 +356,9 @@ private:
 	// Obstacle placement kind option 목록을 반환한다.
 	static TArray<FString> GetObstaclePlacementKindOptions();
 
+	// Authoring catalog에서 static obstacle prop id option 목록을 읽어 반환한다.
+	TArray<FString> GetObstaclePropIdOptions() const;
+
 	// Obstacle pattern id option 목록을 반환한다.
 	static TArray<FString> GetObstaclePatternOptions();
 
@@ -456,6 +470,19 @@ private:
 	// Creates a default obstacle placement that can pass template validation.
 	FScenarioTemplateObstaclePlacement MakeDefaultObstaclePlacement(
 		const TArray<FScenarioTemplateObstaclePlacement>& existingPlacements,
+		int32 neighborIndex) const;
+
+	// 현재 draft pedestrian rules를 command 처리용 값으로 복사한다.
+	bool TryGetPedestrianRules(FScenarioTemplatePedestrianRules& outPedestrianRules, FString& outStatusText) const;
+
+	// Pedestrian rules 값을 authoring subsystem에 반영한다.
+	bool CommitPedestrianRules(
+		const FScenarioTemplatePedestrianRules& pedestrianRules,
+		FString& outStatusText);
+
+	// Creates a default pedestrian encounter that can pass template validation.
+	FScenarioTemplatePedestrianEncounter MakeDefaultPedestrianEncounter(
+		const TArray<FScenarioTemplatePedestrianEncounter>& existingEncounters,
 		int32 neighborIndex) const;
 
 	// Applies one number value to the selected placement field.

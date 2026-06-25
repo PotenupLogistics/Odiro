@@ -173,6 +173,11 @@ void AScenarioCorridorRuntimeActor::ClearLaneMeshes()
 	Tags.Reset();
 }
 
+double AScenarioCorridorRuntimeActor::GetRuntimeSurfaceTopZCm()
+{
+	return RuntimeSurfaceTopZCm;
+}
+
 bool AScenarioCorridorRuntimeActor::TryFindSurfaceAtWorldLocation2D(
 	const FVector& worldLocation,
 	FScenarioRuntimeCorridorSurfaceQueryResult& outSurface) const

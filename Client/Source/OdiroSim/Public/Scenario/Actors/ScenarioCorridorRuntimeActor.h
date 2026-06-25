@@ -78,6 +78,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Corridor")
 	FScenarioRuntimeCorridorSpec GetCorridorSpec() const { return CorridorSpec; }
 
+	// Returns the shared runtime top surface height used by generated corridor lane meshes.
+	static double GetRuntimeSurfaceTopZCm();
+
 	// Resolves the runtime lane surface containing the supplied world location in XY.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Corridor")
 	bool TryFindSurfaceAtWorldLocation2D(

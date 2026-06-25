@@ -5,8 +5,10 @@
 #include "ProjectTemplateCardWidget.generated.h"
 
 class UButton;
+class UImage;
 class UOdiroListItemViewModel;
 class UTextBlock;
+class UTexture2D;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FProjectTemplateCardSelectedNative, class UProjectTemplateCardWidget*);
 DECLARE_MULTICAST_DELEGATE_OneParam(FProjectTemplateCardContextNative, class UProjectTemplateCardWidget*);
@@ -71,6 +73,9 @@ private:
 	// 현재 active/hover state에 맞는 text 색을 반환한다.
 	FLinearColor ResolveTextColor() const;
 
+	// User project root의 preview.png를 card thumbnail image에 적용한다.
+	bool ApplyProjectPreviewThumbnail(const FString& projectPath);
+
 	// Card 전체 click target. Visual layout은 WBP가 소유한다.
 	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UButton> CardButton;
@@ -82,6 +87,10 @@ private:
 	// Item 보조 설명 text. Visual layout은 WBP가 소유한다.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> CardSubtitleLabel;
+
+	// Scenario preview thumbnail image. Visual layout은 WBP가 소유한다.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> CardThumbnailImage;
 
 	// 기본 card 배경색. WBP default에서 조정한다.
 	UPROPERTY(EditDefaultsOnly, Category = "ProjectTemplateCard|Style")
@@ -118,6 +127,10 @@ private:
 	// Card 표시 상태를 제공하는 item ViewModel 참조.
 	UPROPERTY(Transient)
 	TObjectPtr<UOdiroListItemViewModel> ItemViewModel;
+
+	// Runtime에서 읽은 preview.png texture의 card 수명 동안의 소유 참조.
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> CardThumbnailTexture;
 
 	// 이 card가 대표하는 item id.
 	FString ItemId;

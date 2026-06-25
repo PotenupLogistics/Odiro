@@ -43,6 +43,14 @@ struct ODIROSIM_API FProjectRunEpisodeDashboardItem
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	int32 CollisionCount = 0;
 
+	// Episode replay artifact가 저장된 episode directory 경로.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	FString EpisodeDirectory;
+
+	// replay.meta.json과 replay.frames.bin이 모두 존재하는지 여부.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
+	bool bReplayAvailable = false;
+
 	// 존재할 경우 episode preview.png 절대 경로.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Platform|ProjectRun")
 	FString PreviewImagePath;

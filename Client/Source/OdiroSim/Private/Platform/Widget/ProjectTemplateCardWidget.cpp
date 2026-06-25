@@ -2,10 +2,14 @@
 #include "Platform/Widget/ProjectTemplateCardWidget.h"
 
 #include "Components/Button.h"
+#include "Components/Image.h"
+#include "Components/TextBlock.h"
+#include "Engine/Texture2D.h"
+#include "ImageUtils.h"
 #include "Input/Events.h"
 #include "InputCoreTypes.h"
+#include "Misc/Paths.h"
 #include "Platform/ViewModel/OdiroListItemViewModel.h"
-#include "Components/TextBlock.h"
 #include "Styling/SlateBrush.h"
 
 namespace
@@ -26,6 +30,24 @@ namespace
 		FLinearColor result = color;
 		result.A = alpha;
 		return result;
+	}
+
+	// User project root 경로에서 preview.png가 존재할 때만 절대 경로를 반환한다.
+	FString ResolveProjectTemplateCardPreviewPath(const FString& projectPath)
+	{
+		FString normalizedProjectPath = projectPath.TrimStartAndEnd();
+		normalizedProjectPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		FPaths::NormalizeDirectoryName(normalizedProjectPath);
+		if (normalizedProjectPath.IsEmpty()
+			|| FPaths::IsRelative(normalizedProjectPath)
+			|| !FPaths::DirectoryExists(normalizedProjectPath))
+		{
+			return FString();
+		}
+
+		FString previewPath = FPaths::Combine(normalizedProjectPath, TEXT("preview.png"));
+		FPaths::NormalizeFilename(previewPath);
+		return FPaths::FileExists(previewPath) ? previewPath : FString();
 	}
 }
 
@@ -115,6 +137,7 @@ void UProjectTemplateCardWidget::InitializeFromItemViewModel(UOdiroListItemViewM
 
 	InitializeCard(ItemViewModel->GetItemId(), ItemViewModel->GetTitle(), ItemViewModel->GetSubtitle());
 	ItemViewModel = itemViewModel;
+	ApplyProjectPreviewThumbnail(ItemViewModel->GetPayloadPath());
 	SetSelected(ItemViewModel->IsSelected());
 	if (CardButton)
 	{
@@ -148,6 +171,33 @@ void UProjectTemplateCardWidget::HandleCardUnhovered()
 {
 	bHovered = false;
 	RefreshVisualState();
+}
+
+// User project preview.png를 transient texture로 읽어 thumbnail image에 적용한다.
+bool UProjectTemplateCardWidget::ApplyProjectPreviewThumbnail(const FString& projectPath)
+{
+	if (!CardThumbnailImage)
+	{
+		return false;
+	}
+
+	const FString previewPath = ResolveProjectTemplateCardPreviewPath(projectPath);
+	if (previewPath.IsEmpty())
+	{
+		return false;
+	}
+
+	UTexture2D* thumbnailTexture = FImageUtils::ImportFileAsTexture2D(previewPath);
+	if (!thumbnailTexture)
+	{
+		return false;
+	}
+
+	CardThumbnailTexture = thumbnailTexture;
+	CardThumbnailImage->SetBrushFromTexture(CardThumbnailTexture.Get(), false);
+	CardThumbnailImage->SetColorAndOpacity(FLinearColor::White);
+	CardThumbnailImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+	return true;
 }
 
 void UProjectTemplateCardWidget::RefreshVisualState()

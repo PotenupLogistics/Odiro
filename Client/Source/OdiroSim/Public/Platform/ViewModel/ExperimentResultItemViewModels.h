@@ -47,6 +47,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Platform|ExperimentResult")
 	void SetHasPreviewImage(bool bInHasPreviewImage);
 
+	// Episode replay artifact가 저장된 episode directory 경로를 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	FString GetEpisodeDirectory() const { return EpisodeDirectory; }
+
+	// Episode replay artifact directory 경로를 갱신한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|ExperimentResult")
+	void SetEpisodeDirectory(const FString& episodeDirectory);
+
+	// Episode replay artifact를 열 수 있는지 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Platform|ExperimentResult")
+	bool IsReplayAvailable() const { return bReplayAvailable; }
+
+	// Episode replay artifact 사용 가능 상태를 갱신한다.
+	UFUNCTION(BlueprintCallable, Category = "Platform|ExperimentResult")
+	void SetReplayAvailable(bool bInReplayAvailable);
+
 private:
 	// 6자리 episode id.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
@@ -63,6 +79,14 @@ private:
 	// Episode preview image 존재 여부.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
 	bool bHasPreviewImage = false;
+
+	// Episode replay artifact가 저장된 episode directory 경로.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	FString EpisodeDirectory;
+
+	// replay.meta.json과 replay.frames.bin이 모두 존재하는지 여부.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
+	bool bReplayAvailable = false;
 };
 
 // Project run result dashboard의 AI suggestion row item ViewModel.

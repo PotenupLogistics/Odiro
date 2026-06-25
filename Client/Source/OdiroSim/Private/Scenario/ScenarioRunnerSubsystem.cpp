@@ -247,6 +247,46 @@ namespace
 		}
 	}
 
+	void StartProjectReplayRecordingForEpisode(
+		UWorld* world,
+		const FString& projectOutputEpisodeId,
+		const FString& scenarioSamplePath,
+		const FString& scenarioHash)
+	{
+		if (!IsValid(world))
+		{
+			return;
+		}
+
+		const FString replayAnchorPath = BuildProjectOutputPathForEpisode(projectOutputEpisodeId, TEXT("replay.meta.json"));
+		if (replayAnchorPath.IsEmpty())
+		{
+			return;
+		}
+
+		const FString episodeDirectory = FPaths::GetPath(replayAnchorPath);
+		if (episodeDirectory.IsEmpty())
+		{
+			return;
+		}
+
+		if (UEpisodeMeasurementLogSubsystem* measurementLogSubsystem = world->GetSubsystem<UEpisodeMeasurementLogSubsystem>())
+		{
+			if (!measurementLogSubsystem->StartProjectReplayRecording(
+					episodeDirectory,
+					scenarioSamplePath,
+					scenarioHash))
+			{
+				UE_LOG(
+					LogScenarioRunner,
+					Warning,
+					TEXT("Project replay recording start failed | Episode: %s, Directory: %s"),
+					*projectOutputEpisodeId,
+					*episodeDirectory);
+			}
+		}
+	}
+
 	bool ConfigureProjectEpisodeOutputForEpisode(
 		const FScenarioRuntimeContext& runtimeContext,
 		const FString& projectOutputEpisodeId)
@@ -860,6 +900,11 @@ void UScenarioRunnerSubsystem::StartNextScenario()
 	}
 
 	StartProjectTraceLoggingForEpisode(world, projectOutputEpisodeId);
+	StartProjectReplayRecordingForEpisode(
+		world,
+		projectOutputEpisodeId,
+		CurrentRecord.EpisodeScenarioJsonPath,
+		CurrentRecord.EpisodeSetupHash);
 	ScheduleEpisodePreviewCapture(
 		simulationSetupSpec,
 		runtimeContext,

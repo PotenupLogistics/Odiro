@@ -15,6 +15,8 @@ class UFileListItemWidget;
 class UExperimentConfigViewModel;
 class UExperimentResultViewModel;
 class UPlatformUiSubsystem;
+class UProjectEpisodeReplayCardWidget;
+class UProjectEpisodeReplayViewerWidget;
 class UProjectExperimentRunRowWidget;
 class UProjectWorkspaceViewModel;
 class UProjectWorkspaceTabWidget;
@@ -26,6 +28,7 @@ class UWidget;
 class UWidgetSwitcher;
 class UWrapBox;
 class UUserWidget;
+class UTexture2D;
 enum class EProjectRunAiSuggestionSeverity : uint8;
 struct FProjectRunAiSuggestionDashboardItem;
 struct FPlatformAnalysisAiResponse;
@@ -234,10 +237,16 @@ private:
 	void RefreshExperimentResultDetailPanel();
 	// Project run metric card WBP의 named text child에 값을 주입한다.
 	void SetProjectRunMetricCardText(UUserWidget* cardWidget, const FString& label, const FString& value, const FString& unit) const;
-	// Episode replay card WBP의 named child 상태를 갱신한다.
+	// Episode replay card WBP의 named child 상태와 preview image를 갱신한다.
 	void ConfigureProjectEpisodeReplayCard(
 		UUserWidget* cardWidget,
-		const UExperimentResultEpisodeViewModel* episodeItem) const;
+		const UExperimentResultEpisodeViewModel* episodeItem);
+	// Episode replay card click request를 현재 단계 diagnostics로 처리한다.
+	void HandleProjectEpisodeReplayRequested(UProjectEpisodeReplayCardWidget* cardWidget);
+	// Episode preview PNG를 WBP placeholder border에 적용한다.
+	bool ApplyProjectEpisodePreviewImage(
+		UUserWidget* cardWidget,
+		const FString& imagePath);
 	// AI suggestion row WBP의 named child 상태를 갱신한다.
 	void ConfigureProjectAiSuggestionRow(
 		UUserWidget* rowWidget,
@@ -589,6 +598,10 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWrapBox> EpisodeReplayCardWrapBox;
 
+	// Embedded replay viewer placed in WBP_MainMenu beside the episode cards.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UProjectEpisodeReplayViewerWidget> ProjectEpisodeReplayViewerWidget;
+
 	// AI 분석 실행 CTA 영역.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> AiAnalysisActionBox;
@@ -667,6 +680,10 @@ private:
 	// Project result detail의 동적 episode card 목록.
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UUserWidget>> ProjectEpisodeReplayCards;
+
+	// Project result detail card가 표시 중인 episode preview texture를 보관한다.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UTexture2D>> ProjectEpisodePreviewTextures;
 
 	// Project result detail의 동적 AI suggestion row 목록.
 	UPROPERTY(Transient)

@@ -206,17 +206,40 @@ namespace
 		return MetricsObject && ReadDashboardNumberOrDefault(*MetricsObject, TEXT("goal_reached"), 0.0) > 0.0;
 	}
 
-	FString MakePreviewImagePath(const FString& RunDirectory, const FString& EpisodeId)
+	FString MakeEpisodeDirectory(const FString& RunDirectory, const FString& EpisodeId)
 	{
 		if (RunDirectory.IsEmpty() || EpisodeId.IsEmpty())
 		{
 			return FString();
 		}
 
-		const FString PreviewPath = NormalizeDashboardPath(FPaths::Combine(
+		return NormalizeDashboardPath(FPaths::Combine(
 			RunDirectory,
 			TEXT("episodes"),
-			EpisodeId,
+			EpisodeId));
+	}
+
+	bool HasEpisodeReplayArtifacts(const FString& EpisodeDirectory)
+	{
+		if (EpisodeDirectory.IsEmpty())
+		{
+			return false;
+		}
+
+		return FPaths::FileExists(FPaths::Combine(EpisodeDirectory, TEXT("replay.meta.json")))
+			&& FPaths::FileExists(FPaths::Combine(EpisodeDirectory, TEXT("replay.frames.bin")));
+	}
+
+	FString MakePreviewImagePath(const FString& RunDirectory, const FString& EpisodeId)
+	{
+		const FString EpisodeDirectory = MakeEpisodeDirectory(RunDirectory, EpisodeId);
+		if (EpisodeDirectory.IsEmpty())
+		{
+			return FString();
+		}
+
+		const FString PreviewPath = NormalizeDashboardPath(FPaths::Combine(
+			EpisodeDirectory,
 			TEXT("preview.png")));
 		return FPaths::FileExists(PreviewPath) ? PreviewPath : FString();
 	}
@@ -479,6 +502,8 @@ bool FProjectRunResultDashboardJson::BuildFromSummaryJsonString(
 			Episode.TerminalReason,
 			Episode.DurationSeconds);
 		Episode.CollisionCount = MetricsPtr ? CountDashboardPrimaryCollisions(*MetricsPtr) : 0;
+		Episode.EpisodeDirectory = MakeEpisodeDirectory(RunDirectory, Episode.EpisodeId);
+		Episode.bReplayAvailable = HasEpisodeReplayArtifacts(Episode.EpisodeDirectory);
 		Episode.PreviewImagePath = MakePreviewImagePath(RunDirectory, Episode.EpisodeId);
 
 		outDashboardData.TotalDurationSeconds += Episode.DurationSeconds;

@@ -1162,6 +1162,187 @@ bool UScenarioTemplateSidebarViewModel::RemoveObstaclePlacementAt(
 	return CommitObstaclePlacements(placements, outStatusText);
 }
 
+bool UScenarioTemplateSidebarViewModel::CommitObstaclePlacementStringListItemText(
+	const int32 placementIndex,
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	const int32 itemIndex,
+	const FText& text,
+	FString& outStatusText)
+{
+	TArray<FScenarioTemplateObstaclePlacement> placements;
+	if (!TryGetObstaclePlacements(placements, outStatusText))
+	{
+		return false;
+	}
+	if (!placements.IsValidIndex(placementIndex))
+	{
+		outStatusText = TEXT("Obstacle placement index is no longer valid.");
+		return false;
+	}
+
+	TArray<FString>* values = nullptr;
+	if (!ResolveObstaclePlacementStringListField(placements[placementIndex], field, values) || !values)
+	{
+		outStatusText = TEXT("Obstacle placement field is not a string list.");
+		return false;
+	}
+	if (!values->IsValidIndex(itemIndex))
+	{
+		outStatusText = TEXT("Obstacle string-list item index is no longer valid.");
+		return false;
+	}
+
+	const FString trimmedText = text.ToString().TrimStartAndEnd();
+	if (trimmedText.IsEmpty())
+	{
+		outStatusText = TEXT("String-list item values cannot be empty.");
+		return false;
+	}
+
+	(*values)[itemIndex] = trimmedText;
+	return CommitObstaclePlacements(placements, outStatusText);
+}
+
+bool UScenarioTemplateSidebarViewModel::AddObstaclePlacementStringListItemAfter(
+	const int32 placementIndex,
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	const int32 itemIndex,
+	FString& outStatusText)
+{
+	TArray<FScenarioTemplateObstaclePlacement> placements;
+	if (!TryGetObstaclePlacements(placements, outStatusText))
+	{
+		return false;
+	}
+	if (!placements.IsValidIndex(placementIndex))
+	{
+		outStatusText = TEXT("Obstacle placement index is no longer valid.");
+		return false;
+	}
+
+	TArray<FString>* values = nullptr;
+	if (!ResolveObstaclePlacementStringListField(placements[placementIndex], field, values) || !values)
+	{
+		outStatusText = TEXT("Obstacle placement field is not a string list.");
+		return false;
+	}
+
+	const FString defaultValue = MakeDefaultObstaclePlacementStringListItem(field, *values);
+	if (defaultValue.IsEmpty())
+	{
+		outStatusText = TEXT("No default value is available for this string-list field.");
+		return false;
+	}
+
+	const int32 insertIndex = values->IsValidIndex(itemIndex) ? itemIndex + 1 : values->Num();
+	values->Insert(defaultValue, insertIndex);
+	return CommitObstaclePlacements(placements, outStatusText);
+}
+
+bool UScenarioTemplateSidebarViewModel::RemoveObstaclePlacementStringListItemAt(
+	const int32 placementIndex,
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	const int32 itemIndex,
+	FString& outStatusText)
+{
+	TArray<FScenarioTemplateObstaclePlacement> placements;
+	if (!TryGetObstaclePlacements(placements, outStatusText))
+	{
+		return false;
+	}
+	if (!placements.IsValidIndex(placementIndex))
+	{
+		outStatusText = TEXT("Obstacle placement index is no longer valid.");
+		return false;
+	}
+
+	TArray<FString>* values = nullptr;
+	if (!ResolveObstaclePlacementStringListField(placements[placementIndex], field, values) || !values)
+	{
+		outStatusText = TEXT("Obstacle placement field is not a string list.");
+		return false;
+	}
+	if (!values->IsValidIndex(itemIndex))
+	{
+		outStatusText = TEXT("Obstacle string-list item index is no longer valid.");
+		return false;
+	}
+
+	values->RemoveAt(itemIndex);
+	return CommitObstaclePlacements(placements, outStatusText);
+}
+
+bool UScenarioTemplateSidebarViewModel::CommitPedestrianSpawnSegmentText(
+	const int32 segmentIndex,
+	const FText& text,
+	FString& outStatusText)
+{
+	FScenarioTemplatePedestrianRules pedestrianRules;
+	if (!TryGetPedestrianRules(pedestrianRules, outStatusText))
+	{
+		return false;
+	}
+	if (!pedestrianRules.Background.SpawnSegmentIds.IsValidIndex(segmentIndex))
+	{
+		outStatusText = TEXT("Pedestrian spawn segment index is no longer valid.");
+		return false;
+	}
+
+	const FString trimmedText = text.ToString().TrimStartAndEnd();
+	if (trimmedText.IsEmpty())
+	{
+		outStatusText = TEXT("Pedestrian spawn segment cannot be empty.");
+		return false;
+	}
+
+	pedestrianRules.Background.SpawnSegmentIds[segmentIndex] = trimmedText;
+	return CommitPedestrianRules(pedestrianRules, outStatusText);
+}
+
+bool UScenarioTemplateSidebarViewModel::AddPedestrianSpawnSegmentAfter(
+	const int32 segmentIndex,
+	FString& outStatusText)
+{
+	FScenarioTemplatePedestrianRules pedestrianRules;
+	if (!TryGetPedestrianRules(pedestrianRules, outStatusText))
+	{
+		return false;
+	}
+
+	const FString defaultSegmentId = MakeDefaultPedestrianSpawnSegmentId(
+		pedestrianRules.Background.SpawnSegmentIds);
+	if (defaultSegmentId.IsEmpty())
+	{
+		outStatusText = TEXT("No corridor segment is available for pedestrian spawning.");
+		return false;
+	}
+
+	const int32 insertIndex = pedestrianRules.Background.SpawnSegmentIds.IsValidIndex(segmentIndex)
+		? segmentIndex + 1
+		: pedestrianRules.Background.SpawnSegmentIds.Num();
+	pedestrianRules.Background.SpawnSegmentIds.Insert(defaultSegmentId, insertIndex);
+	return CommitPedestrianRules(pedestrianRules, outStatusText);
+}
+
+bool UScenarioTemplateSidebarViewModel::RemovePedestrianSpawnSegmentAt(
+	const int32 segmentIndex,
+	FString& outStatusText)
+{
+	FScenarioTemplatePedestrianRules pedestrianRules;
+	if (!TryGetPedestrianRules(pedestrianRules, outStatusText))
+	{
+		return false;
+	}
+	if (!pedestrianRules.Background.SpawnSegmentIds.IsValidIndex(segmentIndex))
+	{
+		outStatusText = TEXT("Pedestrian spawn segment index is no longer valid.");
+		return false;
+	}
+
+	pedestrianRules.Background.SpawnSegmentIds.RemoveAt(segmentIndex);
+	return CommitPedestrianRules(pedestrianRules, outStatusText);
+}
+
 bool UScenarioTemplateSidebarViewModel::AddPedestrianEncounterAfter(
 	const int32 encounterIndex,
 	FString& outStatusText)
@@ -2015,6 +2196,62 @@ TArray<FString> UScenarioTemplateSidebarViewModel::GetObstaclePropIdOptions() co
 	return propIds;
 }
 
+FString UScenarioTemplateSidebarViewModel::StaticObstacleCategoryToId(
+	const EScenarioStaticObstaclePropCategory category)
+{
+	switch (category)
+	{
+	case EScenarioStaticObstaclePropCategory::StreetFurniture:
+		return TEXT("street_furniture");
+	case EScenarioStaticObstaclePropCategory::TrafficControl:
+		return TEXT("traffic_control");
+	case EScenarioStaticObstaclePropCategory::DeliveryItem:
+		return TEXT("delivery_item");
+	case EScenarioStaticObstaclePropCategory::Utility:
+		return TEXT("utility");
+	case EScenarioStaticObstaclePropCategory::SurfaceObject:
+		return TEXT("surface_object");
+	case EScenarioStaticObstaclePropCategory::Unknown:
+	default:
+		return FString();
+	}
+}
+
+TArray<FString> UScenarioTemplateSidebarViewModel::GetObstacleCategoryIdOptions() const
+{
+	TArray<FScenarioStaticObstaclePropEntry> propEntries;
+	GetStaticObstaclePaletteEntries(propEntries);
+
+	TArray<FString> categoryIds;
+	categoryIds.Reserve(propEntries.Num());
+	for (const FScenarioStaticObstaclePropEntry& propEntry : propEntries)
+	{
+		const FString categoryId = StaticObstacleCategoryToId(propEntry.Category);
+		if (!categoryId.IsEmpty())
+		{
+			categoryIds.AddUnique(categoryId);
+		}
+	}
+	return categoryIds;
+}
+
+TArray<FString> UScenarioTemplateSidebarViewModel::GetObstacleClassIdOptions() const
+{
+	TArray<FScenarioStaticObstaclePropEntry> propEntries;
+	GetStaticObstaclePaletteEntries(propEntries);
+
+	TArray<FString> classIds;
+	classIds.Reserve(propEntries.Num());
+	for (const FScenarioStaticObstaclePropEntry& propEntry : propEntries)
+	{
+		if (!propEntry.SemanticTypeId.IsNone())
+		{
+			classIds.AddUnique(propEntry.SemanticTypeId.ToString());
+		}
+	}
+	return classIds;
+}
+
 TArray<FString> UScenarioTemplateSidebarViewModel::GetObstaclePatternOptions()
 {
 	return { TEXT("gate"), TEXT("line"), TEXT("cluster") };
@@ -2622,6 +2859,107 @@ FScenarioTemplateObstaclePlacement UScenarioTemplateSidebarViewModel::MakeDefaul
 	placement.YawDegrees = MakeFixedTemplateNumberValue(0.0);
 	placement.bAllowBlocking = false;
 	return placement;
+}
+
+bool UScenarioTemplateSidebarViewModel::ResolveObstaclePlacementStringListField(
+	FScenarioTemplateObstaclePlacement& placement,
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	TArray<FString>*& outValues)
+{
+	outValues = nullptr;
+	switch (field)
+	{
+	case EScenarioEditorSidebarObstaclePlacementField::ZoneSegments:
+		outValues = &placement.Zone.SegmentIds;
+		return true;
+	case EScenarioEditorSidebarObstaclePlacementField::ZoneLanes:
+		outValues = &placement.Zone.LaneIds;
+		return true;
+	case EScenarioEditorSidebarObstaclePlacementField::PaletteCategories:
+		outValues = &placement.Palette.CategoryIds;
+		return true;
+	case EScenarioEditorSidebarObstaclePlacementField::PaletteClasses:
+		outValues = &placement.Palette.ClassIds;
+		return true;
+	default:
+		return false;
+	}
+}
+
+FString UScenarioTemplateSidebarViewModel::MakeDefaultObstaclePlacementStringListItem(
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	const TArray<FString>& existingValues) const
+{
+	TArray<FString> options;
+	FString fallbackValue;
+	switch (field)
+	{
+	case EScenarioEditorSidebarObstaclePlacementField::ZoneSegments:
+		options = CorridorSegmentIdOptions;
+		if (options.IsEmpty())
+		{
+			FScenarioDocument scenarioTemplate;
+			FString failureReason;
+			if (TryGetDraftScenario(scenarioTemplate, failureReason))
+			{
+				for (const FScenarioTemplateSegment& segment : scenarioTemplate.Corridor.Segments)
+				{
+					if (!segment.SegmentId.IsEmpty())
+					{
+						options.AddUnique(segment.SegmentId);
+					}
+				}
+			}
+		}
+		break;
+	case EScenarioEditorSidebarObstaclePlacementField::ZoneLanes:
+		options = GetLaneHintOptions();
+		fallbackValue = TEXT("walkway");
+		break;
+	case EScenarioEditorSidebarObstaclePlacementField::PaletteCategories:
+		options = GetObstacleCategoryIdOptions();
+		fallbackValue = TEXT("street_furniture");
+		break;
+	case EScenarioEditorSidebarObstaclePlacementField::PaletteClasses:
+		options = GetObstacleClassIdOptions();
+		fallbackValue = TEXT("obstacle");
+		break;
+	default:
+		break;
+	}
+
+	for (const FString& option : options)
+	{
+		if (!option.IsEmpty() && !existingValues.Contains(option))
+		{
+			return option;
+		}
+	}
+	if (!fallbackValue.IsEmpty() && !existingValues.Contains(fallbackValue))
+	{
+		return fallbackValue;
+	}
+	return options.IsEmpty() ? fallbackValue : FString();
+}
+
+FString UScenarioTemplateSidebarViewModel::MakeDefaultPedestrianSpawnSegmentId(
+	const TArray<FString>& existingValues) const
+{
+	FScenarioDocument scenarioTemplate;
+	FString failureReason;
+	if (!TryGetDraftScenario(scenarioTemplate, failureReason))
+	{
+		return FString();
+	}
+
+	for (const FScenarioTemplateSegment& segment : scenarioTemplate.Corridor.Segments)
+	{
+		if (!segment.SegmentId.IsEmpty() && !existingValues.Contains(segment.SegmentId))
+		{
+			return segment.SegmentId;
+		}
+	}
+	return FString();
 }
 
 bool UScenarioTemplateSidebarViewModel::TryGetPedestrianRules(

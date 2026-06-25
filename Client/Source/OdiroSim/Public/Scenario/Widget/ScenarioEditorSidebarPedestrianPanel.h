@@ -101,9 +101,25 @@ private:
 	UFUNCTION()
 	void HandleEncounterRemoveRequested(int32 encounterIndex);
 
+	// Handles add requests from the spawn segment collection row.
+	UFUNCTION()
+	void HandleSpawnSegmentAddRequested();
+
+	// Handles text commits from a spawn segment item row.
+	UFUNCTION()
+	void HandleSpawnSegmentTextCommitted(int32 segmentIndex, const FText& text, ETextCommit::Type commitMethod);
+
+	// Handles remove requests from a spawn segment item row.
+	UFUNCTION()
+	void HandleSpawnSegmentRemoveRequested(int32 segmentIndex);
+
 	// Dynamic count row for root.pedestrians.encounters[].
 	UPROPERTY(Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> EncountersCountFieldRow;
+
+	// Dynamic item rows for root.pedestrians.background.spawn_zone.segments[].
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UScenarioEditorSidebarFieldRow>> SpawnSegmentItemRows;
 
 	// Dynamic encounter widgets owned by root.pedestrians.encounters[].
 	UPROPERTY(Transient)
@@ -121,6 +137,15 @@ private:
 	void UnbindControls();
 	// Rebuilds structure-only encounter widgets for pedestrian encounter rules.
 	void RefreshEncounterRows(const TArray<FScenarioTemplatePedestrianEncounter>& encounters);
+	// Rebuilds item rows for pedestrian background spawn segment filters.
+	void RefreshSpawnSegmentRows(
+		const TArray<FString>& spawnSegmentIds,
+		const TArray<FScenarioTemplateSegment>& corridorSegments);
+	// Adds one editable spawn segment item row below the collection field row.
+	UScenarioEditorSidebarFieldRow* AddSpawnSegmentItemRow(
+		int32 segmentIndex,
+		const FString& segmentId,
+		const TArray<FString>& segmentOptions);
 	// Adds one structure row to a dynamic block body.
 	UScenarioEditorSidebarFieldRow* AddFieldRow(
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget,

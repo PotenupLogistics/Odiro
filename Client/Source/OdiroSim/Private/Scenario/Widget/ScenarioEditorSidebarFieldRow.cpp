@@ -116,6 +116,26 @@ void UScenarioEditorSidebarFieldRow::SetRangeInputEnabled(const bool bInRangeInp
 void UScenarioEditorSidebarFieldRow::SetArrayControlsEnabled(const bool bInArrayControlsEnabled)
 {
 	bArrayControlsEnabled = bInArrayControlsEnabled;
+	bAddItemControlVisible = bInArrayControlsEnabled;
+	bRemoveItemControlVisible = bInArrayControlsEnabled;
+	RefreshRow();
+}
+
+void UScenarioEditorSidebarFieldRow::SetAddItemControlVisible(const bool bInAddItemControlVisible)
+{
+	bAddItemControlVisible = bInAddItemControlVisible;
+	RefreshRow();
+}
+
+void UScenarioEditorSidebarFieldRow::SetRemoveItemControlVisible(const bool bInRemoveItemControlVisible)
+{
+	bRemoveItemControlVisible = bInRemoveItemControlVisible;
+	RefreshRow();
+}
+
+void UScenarioEditorSidebarFieldRow::SetActionContextIndex(const int32 inActionContextIndex)
+{
+	ActionContextIndex = inActionContextIndex;
 	RefreshRow();
 }
 
@@ -200,6 +220,7 @@ void UScenarioEditorSidebarFieldRow::HandleValueTextCommitted(
 {
 	ValueText = text.ToString();
 	OnValueTextCommitted.Broadcast(text, commitMethod);
+	OnIndexedValueTextCommitted.Broadcast(ActionContextIndex, text, commitMethod);
 }
 
 void UScenarioEditorSidebarFieldRow::HandleValueComboSelectionChanged(
@@ -214,6 +235,7 @@ void UScenarioEditorSidebarFieldRow::HandleValueComboSelectionChanged(
 	const bool bSelectedUnset = bComboAllowsUnset && selectedItem == ComboUnsetDisplayText;
 	ValueText = bSelectedUnset ? FString() : selectedItem;
 	OnValueTextCommitted.Broadcast(FText::FromString(ValueText), ETextCommit::Default);
+	OnIndexedValueTextCommitted.Broadcast(ActionContextIndex, FText::FromString(ValueText), ETextCommit::Default);
 }
 
 void UScenarioEditorSidebarFieldRow::HandleMinValueTextCommitted(
@@ -240,11 +262,13 @@ void UScenarioEditorSidebarFieldRow::HandleRangeToggleClicked()
 void UScenarioEditorSidebarFieldRow::HandleAddItemClicked()
 {
 	OnAddItemRequested.Broadcast();
+	OnIndexedAddItemRequested.Broadcast(ActionContextIndex);
 }
 
 void UScenarioEditorSidebarFieldRow::HandleRemoveItemClicked()
 {
 	OnRemoveItemRequested.Broadcast();
+	OnIndexedRemoveItemRequested.Broadcast(ActionContextIndex);
 }
 
 void UScenarioEditorSidebarFieldRow::BindControls()
@@ -517,13 +541,13 @@ void UScenarioEditorSidebarFieldRow::RefreshRow()
 	}
 	if (AddItemButton)
 	{
-		AddItemButton->SetVisibility(bArrayControlsEnabled
+		AddItemButton->SetVisibility(bAddItemControlVisible
 			? ESlateVisibility::Visible
 			: ESlateVisibility::Collapsed);
 	}
 	if (RemoveItemButton)
 	{
-		RemoveItemButton->SetVisibility(bArrayControlsEnabled
+		RemoveItemButton->SetVisibility(bRemoveItemControlVisible
 			? ESlateVisibility::Visible
 			: ESlateVisibility::Collapsed);
 	}

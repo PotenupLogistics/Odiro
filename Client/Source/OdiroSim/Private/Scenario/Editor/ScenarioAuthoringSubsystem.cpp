@@ -843,10 +843,19 @@ FTransform UScenarioAuthoringSubsystem::ResolveEditorGroundActorPlacementTransfo
 {
 	FTransform resolvedTransform = transform;
 	FVector locationCm = transform.GetLocation();
-	double surfaceZOffsetCm = 0.0;
-	if (TryResolveCorridorSurfaceZOffsetCm(locationCm, surfaceZOffsetCm))
+	double alongMeters = 0.0;
+	double offsetMeters = 0.0;
+	FString segmentId;
+	if (TryProjectLocationToCorridor(locationCm, alongMeters, offsetMeters, segmentId))
 	{
-		locationCm.Z = surfaceZOffsetCm;
+		FVector2D pointMeters;
+		double yawDegrees = 0.0;
+		if (TryResolveCorridorPoseMeters(alongMeters, offsetMeters, pointMeters, yawDegrees))
+		{
+			locationCm.X = pointMeters.X / CentimetersToMeters;
+			locationCm.Y = pointMeters.Y / CentimetersToMeters;
+		}
+		locationCm.Z = ResolveCorridorSurfaceZOffsetCm(offsetMeters);
 		resolvedTransform.SetLocation(locationCm);
 	}
 	return resolvedTransform;

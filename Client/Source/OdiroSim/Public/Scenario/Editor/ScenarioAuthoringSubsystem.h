@@ -205,7 +205,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	FTransform ResolveStaticObstaclePlacementTransform(const FTransform& transform) const;
 
-	// Resolves editor ground placement Z to the authored Corridor surface below the XY location.
+	// Resolves editor ground placement through the authored Corridor along/offset space.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	FTransform ResolveEditorGroundActorPlacementTransform(const FTransform& transform) const;
 

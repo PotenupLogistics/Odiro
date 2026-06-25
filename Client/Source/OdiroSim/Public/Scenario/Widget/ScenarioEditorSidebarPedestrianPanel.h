@@ -24,6 +24,9 @@ public:
 	// Configures Pedestrian rows after UMG construction.
 	virtual void NativeConstruct() override;
 
+	// Releases Pedestrian block action bindings before teardown.
+	virtual void NativeDestruct() override;
+
 	// Shared typography catalog passed down to blocks and field rows.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
@@ -90,6 +93,14 @@ public:
 	UScenarioEditorSidebarBlockWidget* FindBlockWidgetByPath(const FString& blockPath) const;
 
 private:
+	// Handles add requests from the encounters collection block.
+	UFUNCTION()
+	void HandleEncounterCollectionAddRequested();
+
+	// Handles remove requests from an encounter item block.
+	UFUNCTION()
+	void HandleEncounterRemoveRequested(int32 encounterIndex);
+
 	// Dynamic count row for root.pedestrians.encounters[].
 	UPROPERTY(Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> EncountersCountFieldRow;
@@ -104,6 +115,10 @@ private:
 	void ApplyTextStyles();
 	// Applies current Pedestrian field row ViewModels to bound row widgets.
 	void ApplyPedestrianFieldItems();
+	// Binds child block action delegates owned by this panel.
+	void BindControls();
+	// Releases child block action delegates owned by this panel.
+	void UnbindControls();
 	// Rebuilds structure-only encounter widgets for pedestrian encounter rules.
 	void RefreshEncounterRows(const TArray<FScenarioTemplatePedestrianEncounter>& encounters);
 	// Adds one structure row to a dynamic block body.
@@ -117,4 +132,8 @@ private:
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget);
 	// Resolves the ViewModel that forwards draft template commands.
 	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
+	// Runs a ViewModel command, refreshes the panel, and mirrors command status text.
+	void ExecuteTemplateCommand(TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command);
+	// Applies diagnostics to the optional diagnostics text block.
+	void SetDiagnosticsText(const FString& text) const;
 };

@@ -170,6 +170,12 @@ public:
 		const TArray<FScenarioTemplateObstaclePlacement>& placements,
 		TArray<FString>& outDiagnostics);
 
+	// Draft pedestrian generation rules are replaced as one template-owned branch.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Pedestrian")
+	bool SetPedestrianRules(
+		const FScenarioTemplatePedestrianRules& pedestrianRules,
+		TArray<FString>& outDiagnostics);
+
 	// Draft robot.start anchor is replaced as one template-owned object.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Robot")
 	bool SetDraftRobotStartAnchor(

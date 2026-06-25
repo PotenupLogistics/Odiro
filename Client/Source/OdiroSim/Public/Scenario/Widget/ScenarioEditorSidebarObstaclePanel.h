@@ -93,11 +93,11 @@ private:
 		const FText& maxText,
 		ETextCommit::Type commitMethod);
 
-	// Handles add requests from the placements count row.
+	// Handles add requests from the placements collection block.
 	UFUNCTION()
 	void HandlePlacementsCountAddRequested();
 
-	// Handles remove requests from the placements count row.
+	// Handles remove requests from the placements collection block.
 	UFUNCTION()
 	void HandlePlacementsCountRemoveRequested();
 

@@ -639,6 +639,35 @@ bool UScenarioAuthoringSubsystem::SetObstaclePlacements(
 	return CommitObstacleDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
 }
 
+bool UScenarioAuthoringSubsystem::SetPedestrianRules(
+	const FScenarioTemplatePedestrianRules& pedestrianRules,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+
+	FScenarioTemplatePedestrianRules normalizedRules = pedestrianRules;
+	for (FString& segmentId : normalizedRules.Background.SpawnSegmentIds)
+	{
+		segmentId = segmentId.TrimStartAndEnd();
+	}
+	for (FScenarioTemplatePedestrianEncounter& encounter : normalizedRules.Encounters)
+	{
+		encounter.EncounterId = encounter.EncounterId.TrimStartAndEnd();
+		encounter.AtSegmentId = encounter.AtSegmentId.TrimStartAndEnd();
+		encounter.PersonaId = encounter.PersonaId.TrimStartAndEnd();
+	}
+
+	const FScenarioDocument previousTemplate = DraftScenario;
+	const bool bPreviousDirty = bDirty;
+	if (IsDraftScenarioEmpty())
+	{
+		InitializeDraftDefaults();
+	}
+
+	DraftScenario.Pedestrians = normalizedRules;
+	return CommitScenarioMetadataDraftEdit(previousTemplate, bPreviousDirty, outDiagnostics);
+}
+
 bool UScenarioAuthoringSubsystem::UpdateCorridorVertexHandleTransform(
 	const FString& handleId,
 	const FTransform& transform,

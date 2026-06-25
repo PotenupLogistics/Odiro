@@ -196,10 +196,6 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::BindFieldRows()
 	{
 		EncounterIdFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleEncounterIdCommitted);
 		EncounterIdFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleEncounterIdCommitted);
-		EncounterIdFieldRow->OnAddItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleAddRequested);
-		EncounterIdFieldRow->OnAddItemRequested.AddDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleAddRequested);
-		EncounterIdFieldRow->OnRemoveItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleRemoveRequested);
-		EncounterIdFieldRow->OnRemoveItemRequested.AddDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleRemoveRequested);
 	}
 	if (TypeFieldRow)
 	{
@@ -265,6 +261,11 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::BindFieldRows()
 		SidestepDistanceFieldRow->OnRangeValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleSidestepDistanceRangeCommitted);
 		SidestepDistanceFieldRow->OnRangeValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleSidestepDistanceRangeCommitted);
 	}
+	if (EncounterBlockWidget)
+	{
+		EncounterBlockWidget->OnRemoveActionRequested.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleRemoveRequested);
+		EncounterBlockWidget->OnRemoveActionRequested.AddDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleRemoveRequested);
+	}
 }
 
 void UScenarioEditorSidebarPedestrianEncounterWidget::UnbindFieldRows()
@@ -272,8 +273,6 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::UnbindFieldRows()
 	if (EncounterIdFieldRow)
 	{
 		EncounterIdFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleEncounterIdCommitted);
-		EncounterIdFieldRow->OnAddItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleAddRequested);
-		EncounterIdFieldRow->OnRemoveItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleRemoveRequested);
 	}
 	if (TypeFieldRow)
 	{
@@ -322,6 +321,10 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::UnbindFieldRows()
 		SidestepDistanceFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleSidestepDistanceCommitted);
 		SidestepDistanceFieldRow->OnRangeValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleSidestepDistanceRangeCommitted);
 	}
+	if (EncounterBlockWidget)
+	{
+		EncounterBlockWidget->OnRemoveActionRequested.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleRemoveRequested);
+	}
 }
 
 void UScenarioEditorSidebarPedestrianEncounterWidget::ConfigureFieldRows()
@@ -337,6 +340,8 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::ConfigureFieldRows()
 			TEXT("세부"));
 		EncounterBlockWidget->SetNested(true);
 		EncounterBlockWidget->SetShowNormalOutline(false);
+		EncounterBlockWidget->SetAddActionVisible(false);
+		EncounterBlockWidget->SetRemoveActionVisible(true);
 	}
 
 	if (EncounterIdFieldRow)

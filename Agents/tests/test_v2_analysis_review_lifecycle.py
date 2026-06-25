@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -37,6 +38,12 @@ def _write_large_actions_file(project: Path, run_id: str, episode_id: str) -> No
     actions_path = project / "runs" / run_id / "episodes" / episode_id / "actions.jsonl"
     actions_path.parent.mkdir(parents=True, exist_ok=True)
     actions_path.write_bytes(b"{\"action\":\"noop\"}\n" + b" " * 5_000_001)
+
+
+@pytest.fixture(autouse=True)
+def _disable_endpoint_llm(monkeypatch) -> None:
+    """Keep review artifact regression tests independent from provider credentials."""
+    monkeypatch.setenv("V2_AGENT_LLM_ENABLED", "false")
 
 
 def test_v2_analysis_run_writes_review_artifacts_and_index(tmp_path) -> None:
@@ -238,11 +245,10 @@ def test_v2_analysis_run_existing_empty_run_keeps_insufficient_data_summary(tmp_
     assert recommendations["recommendation_type"] == payload["recommendation_type"]
 
 
-def test_v2_analysis_graph_mode_writes_review_artifacts(monkeypatch, tmp_path) -> None:
+def test_v2_analysis_run_writes_review_artifacts_for_failed_run(tmp_path) -> None:
     project = tmp_path / "Project1"
-    _write_snapshot(project, "000001", {"scenario_id": "graph"})
+    _write_snapshot(project, "000001", {"scenario_id": "failed_run"})
     _write_episode(project, "000001", "000001", {"success": False, "failure_type": "timeout"})
-    monkeypatch.setenv("V2_AGENT_GRAPH_ENABLED", "true")
 
     response = TestClient(app).post(
         "/api/v2/analysis/run",

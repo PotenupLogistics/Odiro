@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
+from app.api import routes
 from app.agents.result_analysis_v2 import ResultAnalysisV2Agent
 from app.core.settings import Settings
 from app.main import app
-from app.models.analysis_v2 import AnalysisRunV2Request
+from app.models.analysis_v2 import AnalysisRunV2Request, AnalysisRunV2Response
 
 
 class _FakeJsonClient:
@@ -30,12 +32,42 @@ class _FakeJsonClient:
         return response
 
 
+@pytest.fixture(autouse=True)
+def _disable_endpoint_llm(monkeypatch) -> None:
+    """Keep endpoint regression tests independent from local provider settings."""
+    monkeypatch.setenv("V2_AGENT_LLM_ENABLED", "false")
+
+
 def _request(project: Path, run_id: str = "000001") -> dict:
     return {"project_path": str(project), "run_id": run_id}
 
 
 def _request_model(project: Path, run_id: str = "000001") -> AnalysisRunV2Request:
     return AnalysisRunV2Request(project_path=str(project), run_id=run_id)
+
+
+def _empty_analysis_response(run_id: str = "000001") -> AnalysisRunV2Response:
+    """Build a minimal response used by route-level runner dispatch tests."""
+    return AnalysisRunV2Response(
+        run_id=run_id,
+        review_id=None,
+        analysis_scope={"experiments_count": 0, "runs_count": 0, "episodes_count": 0},
+        summary={"overall_judgement": "insufficient_data", "message": "graph runner response"},
+        metrics={
+            "success_count": 0,
+            "failure_count": 0,
+            "collision_count": 0,
+            "static_obstacle_collision_count": 0,
+            "pedestrian_collision_count": 0,
+            "near_miss_count": 0,
+            "repath_count": 0,
+            "robot_tip_over_count": 0,
+            "blocked_region_violation_count": 0,
+            "penalty_region_violation_count": 0,
+        },
+        recommendation_type="insufficient_data",
+        analysis_text="graph runner response",
+    )
 
 
 def _write_episode(project: Path, episode_id: str, result: dict, events: str = "") -> None:
@@ -126,6 +158,28 @@ def test_v2_analysis_run_rejects_unknown_extra_field() -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_v2_analysis_run_uses_graph_runner_without_env_flag(monkeypatch, tmp_path) -> None:
+    """Verify the v2 analysis route always dispatches through the graph runner."""
+    calls: list[AnalysisRunV2Request] = []
+
+    class _FakeGraphRunner:
+        def __init__(self, *, settings: Settings) -> None:
+            self.settings = settings
+
+        def run(self, request: AnalysisRunV2Request) -> AnalysisRunV2Response:
+            calls.append(request)
+            return _empty_analysis_response(run_id=request.run_id)
+
+    monkeypatch.setattr(routes, "ResultAnalysisGraphRunnerV2", _FakeGraphRunner)
+    project = tmp_path / "Project1"
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    assert [call.run_id for call in calls] == ["000001"]
+    assert response.json()["summary"]["message"] == "graph runner response"
 
 
 def test_v2_analysis_run_missing_requested_run_returns_insufficient_data(tmp_path) -> None:

@@ -128,10 +128,6 @@ class Settings(BaseSettings):
         default=1,
         validation_alias=AliasChoices("V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS", "v2AgentLlmMaxRepairAttempts"),
     )
-    v2AgentGraphEnabled: bool = Field(
-        default=False,
-        validation_alias=AliasChoices("V2_AGENT_GRAPH_ENABLED", "v2AgentGraphEnabled"),
-    )
 
     @field_validator("llmProviderChain", mode="before")
     @classmethod

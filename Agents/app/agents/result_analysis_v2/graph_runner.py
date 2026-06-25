@@ -244,6 +244,7 @@ class ResultAnalysisGraphRunnerV2:
         parsed = state.get("parsed_artifacts", [])
         episodes = state.get("episode_metrics", [])
         experiments_count, runs_count, episodes_count = self.agent._scope_counts(parsed, episodes)
+        request = state.get("request")
         response = self.agent.response_builder.build(
             experiments_count=experiments_count,
             runs_count=runs_count,
@@ -253,6 +254,7 @@ class ResultAnalysisGraphRunnerV2:
             recommendations=state.get("recommendations", []),
             warnings=state.get("warnings", []),
             analysis_mode=state.get("analysis_mode", "rule_based"),
+            run_id=request.run_id if request is not None else None,
         )
         response = self.agent._with_prompt_focus(response, state.get("request"))
         return {

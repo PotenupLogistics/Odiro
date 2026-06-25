@@ -12,7 +12,7 @@ AI 서버 설정은 `.env`에서 읽습니다. UserProject의 `<UserProject>/set
 | --- | --- | --- |
 | `V2_AGENT_LLM_ENABLED` | `false` | `true`이면 LLM JSON 후보를 먼저 생성하고, validator 통과 시 채택합니다. |
 | `V2_AGENT_LLM_REPAIR_ENABLED` | `true` | LLM 후보가 invalid일 때 LLM 기반 repair를 시도할지 정합니다. |
-| `V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS` | `1` | LLM repair 허용 횟수입니다. 현재 graph 경로는 0보다 크면 1회 repair를 시도합니다. |
+| `V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS` | `1` | LLM repair 허용 횟수입니다. 현재 runner는 0보다 크면 1회 repair를 시도합니다. |
 
 ## 실행 흐름
 

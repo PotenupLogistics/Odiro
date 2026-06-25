@@ -6,12 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.agents.result_analysis_v2.graph_runner import ResultAnalysisGraphRunnerV2, StateGraph as AnalysisStateGraph
 from app.agents.scenario_generation_v2.graph_runner import ScenarioGenerationGraphRunnerV2, StateGraph as ScenarioStateGraph
-from app.core.settings import Settings
 from app.main import app
-
-
-def test_v2_agent_graph_enabled_defaults_false() -> None:
-    assert Settings(_env_file=None).v2AgentGraphEnabled is False
 
 
 def test_v2_graph_runner_imports_without_langgraph_dependency() -> None:
@@ -21,7 +16,7 @@ def test_v2_graph_runner_imports_without_langgraph_dependency() -> None:
     assert AnalysisStateGraph is None or AnalysisStateGraph.__name__ == "StateGraph"
 
 
-def test_graph_disabled_keeps_existing_v2_api_behavior(monkeypatch, tmp_path) -> None:
+def test_v2_analysis_api_keeps_response_schema_without_internal_state(tmp_path) -> None:
     project = tmp_path / "Project1"
     episode_dir = project / "runs" / "000001" / "episodes" / "000001"
     episode_dir.mkdir(parents=True)
@@ -29,7 +24,6 @@ def test_graph_disabled_keeps_existing_v2_api_behavior(monkeypatch, tmp_path) ->
         json.dumps({"success": True, "goal_reached": True}),
         encoding="utf-8",
     )
-    monkeypatch.setenv("V2_AGENT_GRAPH_ENABLED", "false")
 
     response = TestClient(app).post("/api/v2/analysis/run", json={"project_path": str(project), "run_id": "000001"})
 

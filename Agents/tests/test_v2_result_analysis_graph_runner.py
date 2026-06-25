@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.agents.result_analysis_v2.graph_runner import ResultAnalysisGraphRunnerV2
@@ -39,6 +40,12 @@ def _write_project_summary(project, summary: dict) -> None:
     run_dir = project / "runs" / "000001"
     run_dir.mkdir(parents=True)
     (run_dir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+
+
+@pytest.fixture(autouse=True)
+def _disable_endpoint_llm(monkeypatch) -> None:
+    """Keep endpoint tests on the deterministic recommendation path."""
+    monkeypatch.setenv("V2_AGENT_LLM_ENABLED", "false")
 
 
 def test_result_analysis_graph_runner_imports_without_langgraph_dependency() -> None:
@@ -86,11 +93,10 @@ def test_graph_runner_exposes_node_state_without_response_schema_changes(tmp_pat
     assert "rag_queries" not in response.model_dump(by_alias=True)
 
 
-def test_graph_mode_false_keeps_existing_v2_api_behavior(monkeypatch, tmp_path) -> None:
+def test_analysis_api_preserves_response_schema(tmp_path) -> None:
     project = tmp_path / "Project1"
     _write_project_blocked_episode(project, "000001")
     _write_project_blocked_episode(project, "000002")
-    monkeypatch.setenv("V2_AGENT_GRAPH_ENABLED", "false")
 
     response = TestClient(app).post("/api/v2/analysis/run", json={"project_path": str(project), "run_id": "000001"})
 
@@ -101,11 +107,10 @@ def test_graph_mode_false_keeps_existing_v2_api_behavior(monkeypatch, tmp_path) 
     assert "episode_timelines" not in payload
 
 
-def test_graph_mode_true_uses_graph_runner_path(monkeypatch, tmp_path) -> None:
+def test_analysis_api_uses_graph_runner_path(tmp_path) -> None:
     project = tmp_path / "Project1"
     _write_project_blocked_episode(project, "000001")
     _write_project_blocked_episode(project, "000002")
-    monkeypatch.setenv("V2_AGENT_GRAPH_ENABLED", "true")
 
     response = TestClient(app).post("/api/v2/analysis/run", json={"project_path": str(project), "run_id": "000001"})
 
@@ -116,10 +121,9 @@ def test_graph_mode_true_uses_graph_runner_path(monkeypatch, tmp_path) -> None:
     assert payload["analysis_mode"] == "rule_based"
 
 
-def test_graph_mode_true_uses_summary_without_episode_results(monkeypatch, tmp_path) -> None:
+def test_analysis_api_uses_summary_without_episode_results(tmp_path) -> None:
     project = tmp_path / "Project1"
     _write_project_summary(project, {"episode_count": 2, "success_count": 1, "failure_count": 1})
-    monkeypatch.setenv("V2_AGENT_GRAPH_ENABLED", "true")
 
     response = TestClient(app).post("/api/v2/analysis/run", json={"project_path": str(project), "run_id": "000001"})
 
@@ -131,11 +135,10 @@ def test_graph_mode_true_uses_summary_without_episode_results(monkeypatch, tmp_p
     assert payload["metrics"]["failure_count"] == 1
 
 
-def test_graph_mode_true_accepts_prompt_without_schema_changes(monkeypatch, tmp_path) -> None:
+def test_analysis_api_accepts_prompt_without_schema_changes(tmp_path) -> None:
     project = tmp_path / "Project1"
     _write_project_blocked_episode(project, "000001")
     _write_project_blocked_episode(project, "000002")
-    monkeypatch.setenv("V2_AGENT_GRAPH_ENABLED", "true")
 
     response = TestClient(app).post(
         "/api/v2/analysis/run",

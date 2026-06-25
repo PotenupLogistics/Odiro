@@ -8,9 +8,9 @@ v2 Agent는 deterministic/rule-based 경로와 optional LLM fallback 구조를 �
 
 ## 2. 적용 범위
 
-Scenario generation v2는 `/api/v2/scenarios/generate`에서 항상 LangGraph runner를 사용합니다. `V2_AGENT_LLM_ENABLED=false`이면 deterministic graph path만 사용하고, `true`이면 graph 내부 LLM-assisted node가 OpenAI JSON Schema structured output 호출을 시도한 뒤 validator/repair/fallback을 거칩니다.
+Scenario generation v2는 `/api/v2/scenarios/generate`에서 항상 LangGraph runner를 사용합니다. `V2_AGENT_LLM_ENABLED=false`이면 deterministic node path만 사용하고, `true`이면 graph 내부 LLM-assisted node가 OpenAI JSON Schema structured output 호출을 시도한 뒤 validator/repair/fallback을 거칩니다.
 
-`V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아닙니다. 이 설정은 ResultAnalysisV2 graph 경로와 legacy rollback 호환을 위해 유지합니다.
+Result analysis v2는 `/api/v2/analysis/run`에서 항상 `ResultAnalysisGraphRunnerV2`를 사용합니다.
 
 주의: 일부 내부 node 이름에 남은 `template`은 legacy 구현 명칭입니다. 외부 계약과 저장 대상은 `scenario` JSON입니다.
 
@@ -131,7 +131,7 @@ Analysis는 데이터 수와 패턴 유무로 먼저 route합니다. 데이터�
 
 * v1 Agent/API는 변경하지 않습니다.
 * Scenario generation v2는 항상 LangGraph runner를 사용합니다.
-* `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아닙니다.
+* Result analysis v2는 항상 `ResultAnalysisGraphRunnerV2`를 사용합니다.
 * `/api/v2/scenarios/generate`의 외부 response body는 raw `scenario` v1 객체입니다.
 * Scenario generation v2 structured output은 `corridor_pose`, fixed number/range value, Unreal-supported override fields, optional `allow_blocking`, optional background `spawn_zone`을 허용합니다.
 * Robot `entry`/`exit`는 추상 anchor로 concrete pose field를 섞지 않으며, segment/along/offset이 필요하면 `corridor_pose`로 표현합니다.

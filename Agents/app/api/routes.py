@@ -4,7 +4,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
-from app.agents.result_analysis_v2 import ResultAnalysisV2Agent
 from app.agents.result_analysis_v2.graph_runner import ResultAnalysisGraphRunnerV2
 from app.agents.scenario_generation_v2.graph_runner import ScenarioGenerationGraphRunnerV2
 from app.core.settings import Settings
@@ -141,6 +140,4 @@ def analysis_run_v2_endpoint(
     request: AnalysisRunV2Request,
 ) -> AnalysisRunV2Response:
     settings = Settings()
-    if settings.v2AgentGraphEnabled:
-        return ResultAnalysisGraphRunnerV2(settings=settings).run(request)
-    return ResultAnalysisV2Agent(settings=settings).run(request)
+    return ResultAnalysisGraphRunnerV2(settings=settings).run(request)

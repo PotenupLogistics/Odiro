@@ -48,6 +48,7 @@ guardrails:
   - Scenario generation v2 repair diagnostics are internal only: detailed `repair_events` may be stored on graph/agent state for debugging, while `/api/v2/scenarios/generate` continues to return only the project scenario body.
   - Final user project contracts write project/run/episode artifacts under `contracts/specs/user-project-data.md`.
   - V2 LLM prompt context is loaded only through the SpecContextLoader allowlist.
+  - `/api/v2/analysis/run` always executes `ResultAnalysisGraphRunnerV2`; do not add runtime settings that switch it to another analysis path.
   - Review artifacts are stored under `<UserProject>/runs/<RunId>/review/<ReviewId>/`.
   - API display text such as `analysis_text` should not be treated as canonical review artifact data.
   - Recommendation output uses the public `recommendation` field; normalize legacy internal names before API/artifact output.
@@ -66,7 +67,8 @@ verify:
       - cd Agents; uv run pytest tests/test_v2_scenario_generation_api.py -q
   - when: v2 analysis or recommendation artifacts change
     run:
-      - pytest covering v2 analysis run API, review lifecycle, parsing, text, and recommendation artifacts
+      - cd Agents; uv run pytest tests/test_v2_analysis_run_api.py -q
+      - pytest covering review lifecycle, parsing, text, and recommendation artifacts when those surfaces change
   - when: LLM prompt context changes
     run:
       - focused v2 spec-context prompt tests

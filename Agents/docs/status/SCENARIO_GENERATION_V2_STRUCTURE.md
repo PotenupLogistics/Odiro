@@ -43,7 +43,7 @@ scenario_generate_v2_endpoint()
 
 `/api/v2/scenarios/generate`는 v2 LangGraph workflow를 기본 실행 경로로 사용한다. LangGraph import가 불가능한 환경에서는 runner 내부에서만 기존 sequential agent로 fallback한다.
 
-`V2_AGENT_LLM_ENABLED=false`이면 LangGraph 내부 deterministic parser/selector/builder 경로만 사용한다. `V2_AGENT_LLM_ENABLED=true`이면 `interpret_user_prompt_node`에서 JSON Schema structured output 기반 LLM-assisted 후보 scenario 생성을 먼저 시도하고, validator를 통과한 경우에만 그 후보를 사용한다. 이 경우 deterministic pattern selection은 건너뛴다. LLM 호출 실패 또는 LLM output validation 실패 시 deterministic graph path로 fallback한다. `generation_mode`는 내부 graph response metadata로만 유지하고 외부 API response body에는 노출하지 않는다.
+`V2_AGENT_LLM_ENABLED=false`이면 LangGraph 내부 deterministic parser/selector/builder 경로만 사용한다. `V2_AGENT_LLM_ENABLED=true`이면 `interpret_user_prompt_node`에서 JSON Schema structured output 기반 LLM-assisted 후보 scenario 생성을 먼저 시도하고, validator를 통과한 경우에만 그 후보를 사용한다. 이 경우 deterministic pattern selection은 건너뛴다. LLM 호출 실패 또는 LLM output validation 실패 시 deterministic fallback을 사용한다. `generation_mode`는 내부 graph response metadata로만 유지하고 외부 API response body에는 노출하지 않는다.
 
 LLM prompt는 validator가 요구하는 최소 `scenario` v1 구조를 직접 제시한다. 특히 `corridor.axis`, `corridor.walkway_width_m`, `corridor.segments`, object형 `obstacles`, `pedestrians.encounters`, `robot.start`, `robot.goal`을 명시해 WorldConfig-style output이 나오지 않도록 한다.
 
@@ -217,7 +217,7 @@ Reproducibility:
 - Scenario Generation v2 does not accept `seed`, `base_seed`, or `sample_count`.
 - These fields are not part of the request model, external response model, or generated scenario.
 - The deterministic parser/selector/builder path is tested to return the same raw `scenario` for the same prompt.
-- Tests do not depend on LLM output; graph-path reproducibility tests run with `V2_AGENT_LLM_ENABLED=false`.
+- Tests do not depend on LLM output; runner reproducibility tests run with `V2_AGENT_LLM_ENABLED=false`.
 
 Latest verification commands:
 

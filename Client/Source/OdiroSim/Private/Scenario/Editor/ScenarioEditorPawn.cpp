@@ -3,6 +3,11 @@
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "GameFramework/FloatingPawnMovement.h"
+#include "Materials/MaterialInterface.h"
+#include "Shared/ScenarioViewportPresentation.h"
+
+// Logs scenario editor camera presentation setup failures.
+DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorPawn, Log, All);
 
 AScenarioEditorPawn::AScenarioEditorPawn()
 {
@@ -18,6 +23,9 @@ AScenarioEditorPawn::AScenarioEditorPawn()
 	FloatingMovementComponent = CreateDefaultSubobject<UFloatingPawnMovement>(TEXT("FloatingMovementComponent"));
 	FloatingMovementComponent->SetUpdatedComponent(SceneRoot);
 
+	GreyBackgroundPostProcessMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(
+		TEXT("/Game/Materials/Scenario/M_PP_ScenarioEditorGreyBackground.M_PP_ScenarioEditorGreyBackground")));
+
 	AutoPossessAI = EAutoPossessAI::Disabled;
 }
 
@@ -30,6 +38,7 @@ void AScenarioEditorPawn::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
 	ApplyMovementSettings();
+	ApplyGreyBackgroundPostProcessMaterial();
 }
 
 void AScenarioEditorPawn::ApplyMoveInput(float forwardValue, float rightValue, float upValue)
@@ -39,6 +48,19 @@ void AScenarioEditorPawn::ApplyMoveInput(float forwardValue, float rightValue, f
 	AddMovementInput(GetActorForwardVector(), forwardValue);
 	AddMovementInput(GetActorRightVector(), rightValue);
 	AddMovementInput(FVector::UpVector, upValue);
+}
+
+void AScenarioEditorPawn::ApplyWorldHeightInput(float upValue)
+{
+	if (!Controller || FMath::IsNearlyZero(upValue)) return;
+
+	const UWorld* world = GetWorld();
+	const double deltaSeconds = world ? world->GetDeltaSeconds() : 0.0;
+	if (FMath::IsNearlyZero(deltaSeconds)) return;
+
+	FVector location = GetActorLocation();
+	location.Z += static_cast<double>(upValue) * MaxMoveSpeed * deltaSeconds;
+	SetActorLocation(location);
 }
 
 void AScenarioEditorPawn::ApplyLookInput(float yawDeltaDegrees, float pitchDeltaDegrees)
@@ -142,4 +164,25 @@ void AScenarioEditorPawn::ApplyTopDownPanSpeed()
 	FloatingMovementComponent->MaxSpeed = MaxMoveSpeed * widthRatio;
 	FloatingMovementComponent->Acceleration = Acceleration * widthRatio;
 	FloatingMovementComponent->Deceleration = Deceleration * widthRatio;
+}
+
+void AScenarioEditorPawn::ApplyGreyBackgroundPostProcessMaterial()
+{
+	if (!CameraComponent || GreyBackgroundBlendWeight <= 0.0f)
+	{
+		return;
+	}
+
+	UMaterialInterface* backgroundMaterial =
+		FScenarioViewportPresentation::ResolveOrLoadMaterial(GreyBackgroundPostProcessMaterial);
+	if (!backgroundMaterial)
+	{
+		UE_LOG(LogScenarioEditorPawn, Warning, TEXT("Scenario editor grey background post-process material is unavailable."));
+		return;
+	}
+
+	FScenarioViewportPresentation::ApplyGreyBackgroundPostProcess(
+		CameraComponent,
+		backgroundMaterial,
+		GreyBackgroundBlendWeight);
 }

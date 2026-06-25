@@ -7,19 +7,24 @@
 #include "Scenario/Editor/ScenarioEditorPawn.h"
 #include "Scenario/Editor/ScenarioPlacementPreviewActor.h"
 #include "Scenario/Editor/ScenarioTransformGizmoActor.h"
+#include "Scenario/Widget/ScenarioEditorRouteMarkerOverlayWidget.h"
 #include "Scenario/Widget/ScenarioEditorRootWidget.h"
 #include "Scenario/Widget/ScenarioEditorToolbarWidget.h"
 #include "Scenario/Actors/ScenarioPedestrian.h"
+#include "Scenario/ViewModel/ScenarioEditorShellViewModel.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
 #include "Camera/CameraComponent.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "EngineUtils.h"
+#include "InputCoreTypes.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "Platform/PlatformUiDeveloperSettings.h"
 #include "Platform/Widget/MainMenuWidget.h"
+#include "Shared/ScenarioViewportPresentation.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorController, Log, All);
 
@@ -31,6 +36,44 @@ namespace
 
 		return placeableComponent->AuthoringRole == EScenarioPlaceableAuthoringRole::RobotStartMarker
 			|| placeableComponent->AuthoringRole == EScenarioPlaceableAuthoringRole::RobotGoalMarker;
+	}
+
+	// Tests the triangular tail of the screen-space route marker hit shape.
+	bool IsPointInsideTriangle2D(
+		const FVector2D& point,
+		const FVector2D& triangleA,
+		const FVector2D& triangleB,
+		const FVector2D& triangleC)
+	{
+		const auto sign = [](const FVector2D& pointA, const FVector2D& pointB, const FVector2D& pointC)
+		{
+			return (pointA.X - pointC.X) * (pointB.Y - pointC.Y)
+				- (pointB.X - pointC.X) * (pointA.Y - pointC.Y);
+		};
+
+		const double d1 = sign(point, triangleA, triangleB);
+		const double d2 = sign(point, triangleB, triangleC);
+		const double d3 = sign(point, triangleC, triangleA);
+		const bool bHasNegative = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+		const bool bHasPositive = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+		return !(bHasNegative && bHasPositive);
+	}
+
+	double GetPointToSegmentDistanceSquared2D(
+		const FVector2D& point,
+		const FVector2D& segmentStart,
+		const FVector2D& segmentEnd)
+	{
+		const FVector2D segment = segmentEnd - segmentStart;
+		const double segmentLengthSquared = segment.SizeSquared();
+		if (segmentLengthSquared <= KINDA_SMALL_NUMBER)
+		{
+			return (point - segmentStart).SizeSquared();
+		}
+
+		const double projectedRatio = FVector2D::DotProduct(point - segmentStart, segment) / segmentLengthSquared;
+		const FVector2D closestPoint = segmentStart + segment * FMath::Clamp(projectedRatio, 0.0, 1.0);
+		return (point - closestPoint).SizeSquared();
 	}
 
 	// Identifies vertex handles so transform editing can update corridor axis points.
@@ -165,6 +208,12 @@ namespace
 		return true;
 	}
 
+	// Object Palette currently has a scenario.json authoring contract only for fixed static obstacles.
+	bool IsObjectPalettePlacementSupported(const EScenarioPaletteItemType itemType)
+	{
+		return itemType == EScenarioPaletteItemType::StaticObstacle;
+	}
+
 	FString MakeUniqueScenarioSavePath(const FString& preferredPath)
 	{
 		FString directory = FPaths::GetPath(preferredPath);
@@ -219,6 +268,7 @@ AScenarioEditorController::AScenarioEditorController()
 	EditorInputMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Editor.IMC_Editor")));
 	EditorMoveAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorMove.IA_EditorMove")));
 	EditorLookAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorLook.IA_EditorLook")));
+	EditorLookCaptureAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorLookCapture.IA_EditorLookCapture")));
 	EditorSelectionAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_Selection.IA_Selection")));
 	EditorDeselectionAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_Deselection.IA_Deselection")));
 	EditorTranslateAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/IA_EditorTranslate.IA_EditorTranslate")));
@@ -292,7 +342,6 @@ void AScenarioEditorController::SetObserverMode()
 	bCurrentPlacementValid = false;
 	CurrentPlacementFailureReason.Reset();
 	bIsLookInputHeld = false;
-	LookCaptureAccumulatedDelta = 0.0;
 	bIsRegionDragging = false;
 	PressedPlaceableComponent.Reset();
 	ResetTransformGizmoDrag();
@@ -375,8 +424,18 @@ bool AScenarioEditorController::BeginStaticObstaclePlacement(FName propId)
 
 bool AScenarioEditorController::BeginPalettePlacement(EScenarioPaletteItemType itemType, FName assetId)
 {
+	if (!IsObjectPalettePlacementSupported(itemType))
+	{
+		UE_LOG(
+			LogScenarioEditorController,
+			Warning,
+			TEXT("Object Palette placement is not supported for this authoring type | Type: %d | AssetId: %s"),
+			static_cast<int32>(itemType),
+			*assetId.ToString());
+		return false;
+	}
+
 	bIsLookInputHeld = false;
-	LookCaptureAccumulatedDelta = 0.0;
 	bIsRegionDragging = false;
 	PressedPlaceableComponent.Reset();
 	ResetTransformGizmoDrag();
@@ -531,7 +590,6 @@ bool AScenarioEditorController::ConfirmPlacement()
 bool AScenarioEditorController::BeginGroundRegionDraw(EScenarioGroundRegionType regionType)
 {
 	bIsLookInputHeld = false;
-	LookCaptureAccumulatedDelta = 0.0;
 	bIsRegionDragging = false;
 	PressedPlaceableComponent.Reset();
 	ResetTransformGizmoDrag();
@@ -852,9 +910,11 @@ UScenarioEditorRootWidget* AScenarioEditorController::ShowEditorRootWidget()
 			{
 				MainMenuWidget->AddToViewport(MainMenuWidgetViewportZOrder);
 			}
+			ShowRouteMarkerOverlayWidget(EditorRootWidget.Get());
 			return EditorRootWidget.Get();
 		}
 
+		RemoveRouteMarkerOverlayWidget();
 		EditorRootWidget = nullptr;
 	}
 
@@ -876,6 +936,7 @@ UScenarioEditorRootWidget* AScenarioEditorController::ShowEditorRootWidget()
 
 void AScenarioEditorController::RemoveEditorRootWidget()
 {
+	RemoveRouteMarkerOverlayWidget();
 	EditorRootWidget = nullptr;
 }
 
@@ -948,6 +1009,7 @@ void AScenarioEditorController::RegisterEditorRootWidget(UScenarioEditorRootWidg
 	}
 
 	EditorRootWidget = rootWidget;
+	ShowRouteMarkerOverlayWidget(rootWidget);
 }
 
 void AScenarioEditorController::ClearRegisteredEditorRootWidget(UScenarioEditorRootWidget* rootWidget)
@@ -957,7 +1019,48 @@ void AScenarioEditorController::ClearRegisteredEditorRootWidget(UScenarioEditorR
 		return;
 	}
 
+	RemoveRouteMarkerOverlayWidget();
 	EditorRootWidget = nullptr;
+}
+
+void AScenarioEditorController::ShowRouteMarkerOverlayWidget(UScenarioEditorRootWidget* rootWidget)
+{
+	if (!IsValid(rootWidget))
+	{
+		RemoveRouteMarkerOverlayWidget();
+		return;
+	}
+
+	if (!IsValid(RouteMarkerOverlayWidget))
+	{
+		RouteMarkerOverlayWidget = CreateWidget<UScenarioEditorRouteMarkerOverlayWidget>(
+			this,
+			UScenarioEditorRouteMarkerOverlayWidget::StaticClass());
+		if (!RouteMarkerOverlayWidget)
+		{
+			UE_LOG(LogScenarioEditorController, Error, TEXT("Failed to create route marker overlay widget."));
+			return;
+		}
+	}
+
+	RouteMarkerOverlayWidget->ApplyStyleFromRootWidget(rootWidget);
+	RouteMarkerOverlayWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+	if (!RouteMarkerOverlayWidget->IsInViewport())
+	{
+		RouteMarkerOverlayWidget->AddToViewport(
+			MainMenuWidgetViewportZOrder + RouteMarkerOverlayViewportZOrderOffset);
+	}
+}
+
+void AScenarioEditorController::RemoveRouteMarkerOverlayWidget()
+{
+	if (IsValid(RouteMarkerOverlayWidget))
+	{
+		RouteMarkerOverlayWidget->RemoveFromParent();
+	}
+
+	RouteMarkerOverlayWidget = nullptr;
 }
 
 EScenarioTransformGizmoOrientationMode AScenarioEditorController::GetEffectiveTransformGizmoOrientationMode() const
@@ -1258,7 +1361,6 @@ void AScenarioEditorController::HandleSelectionStartedInput()
 		}
 
 		PressedPlaceableComponent = HoveredPlaceableComponent;
-		BeginLookInputCapture();
 	}
 }
 
@@ -1281,11 +1383,9 @@ void AScenarioEditorController::HandleSelectionCompletedInput()
 
 	const bool bShouldSelectPressedPlaceable =
 		EditorMode == EScenarioEditorControllerMode::Observer
-		&& bIsLookInputHeld
-		&& LookCaptureAccumulatedDelta <= SelectionClickLookDeltaThreshold;
+		&& !bIsLookInputHeld;
 	UScenarioPlaceableComponent* placeableToSelect = PressedPlaceableComponent.Get();
 
-	EndLookInputCapture();
 	PressedPlaceableComponent.Reset();
 
 	if (bShouldSelectPressedPlaceable)
@@ -1350,41 +1450,68 @@ void AScenarioEditorController::HandleEditorMoveAction(const FInputActionValue& 
 	float rightValue = 0.0f;
 	float upValue = 0.0f;
 
-	switch (inputActionValue.GetValueType())
+	if (!TryResolveEditorKeyboardMoveInput(forwardValue, rightValue, upValue))
 	{
-	case EInputActionValueType::Axis3D:
-	{
-		const FVector moveValue = inputActionValue.Get<FVector>();
-		forwardValue = moveValue.X;
-		rightValue = moveValue.Y;
-		upValue = moveValue.Z;
-		break;
-	}
-	case EInputActionValueType::Axis2D:
-	{
-		const FVector2D moveValue = inputActionValue.Get<FVector2D>();
-		forwardValue = moveValue.X;
-		rightValue = -moveValue.Y;
-		break;
-	}
-	case EInputActionValueType::Axis1D:
-		forwardValue = inputActionValue.Get<float>();
-		break;
-	case EInputActionValueType::Boolean:
-		forwardValue = inputActionValue.Get<bool>() ? 1.0f : 0.0f;
-		break;
-	default:
-		break;
+		switch (inputActionValue.GetValueType())
+		{
+		case EInputActionValueType::Axis3D:
+		{
+			const FVector moveValue = inputActionValue.Get<FVector>();
+			forwardValue = moveValue.X;
+			rightValue = -moveValue.Y;
+			upValue = moveValue.Z;
+			break;
+		}
+		case EInputActionValueType::Axis2D:
+		{
+			const FVector2D moveValue = inputActionValue.Get<FVector2D>();
+			forwardValue = moveValue.X;
+			rightValue = -moveValue.Y;
+			break;
+		}
+		case EInputActionValueType::Axis1D:
+			forwardValue = inputActionValue.Get<float>();
+			break;
+		case EInputActionValueType::Boolean:
+			forwardValue = inputActionValue.Get<bool>() ? 1.0f : 0.0f;
+			break;
+		default:
+			break;
+		}
 	}
 
 	if (EditorViewMode == EScenarioEditorViewMode::TopDownOrtho)
 	{
-		// In top-down view, zoom is handled by mouse-wheel input, so ignore Z-axis movement here.
 		editorPawn->ApplyTopDownPanInput(forwardValue, rightValue);
+		editorPawn->ApplyWorldHeightInput(upValue);
 		return;
 	}
 
-	editorPawn->ApplyMoveInput(forwardValue, rightValue, upValue);
+	editorPawn->ApplyMoveInput(forwardValue, rightValue, 0.0f);
+	editorPawn->ApplyWorldHeightInput(upValue);
+}
+
+bool AScenarioEditorController::TryResolveEditorKeyboardMoveInput(
+	float& outForwardValue,
+	float& outRightValue,
+	float& outUpValue) const
+{
+	const bool bForwardHeld = IsInputKeyDown(EKeys::W);
+	const bool bBackwardHeld = IsInputKeyDown(EKeys::S);
+	const bool bRightHeld = IsInputKeyDown(EKeys::D);
+	const bool bLeftHeld = IsInputKeyDown(EKeys::A);
+	const bool bUpHeld = IsInputKeyDown(EKeys::E);
+	const bool bDownHeld = IsInputKeyDown(EKeys::Q);
+
+	if (!bForwardHeld && !bBackwardHeld && !bRightHeld && !bLeftHeld && !bUpHeld && !bDownHeld)
+	{
+		return false;
+	}
+
+	outForwardValue = (bForwardHeld ? 1.0f : 0.0f) - (bBackwardHeld ? 1.0f : 0.0f);
+	outRightValue = (bRightHeld ? 1.0f : 0.0f) - (bLeftHeld ? 1.0f : 0.0f);
+	outUpValue = (bUpHeld ? 1.0f : 0.0f) - (bDownHeld ? 1.0f : 0.0f);
+	return true;
 }
 
 void AScenarioEditorController::HandleEditorLookAction(const FInputActionValue& inputActionValue)
@@ -1419,10 +1546,7 @@ void AScenarioEditorController::HandleEditorLookAction(const FInputActionValue& 
 		break;
 	}
 
-	LookCaptureAccumulatedDelta += FVector2D(yawValue, pitchValue).Size();
-
 	// In top-down view, route look input to drag panning instead of rotation.
-	// Selection clicks depend on accumulated look-capture delta, so capture state remains active.
 	if (EditorViewMode == EScenarioEditorViewMode::TopDownOrtho)
 	{
 		editorPawn->ApplyTopDownDragPanInput(yawValue, pitchValue);
@@ -1432,6 +1556,24 @@ void AScenarioEditorController::HandleEditorLookAction(const FInputActionValue& 
 	editorPawn->ApplyLookInput(
 		yawValue * MouseLookSensitivity,
 		pitchValue * MouseLookSensitivity);
+}
+
+void AScenarioEditorController::HandleLookCaptureStartedInput()
+{
+	if (EditorMode != EScenarioEditorControllerMode::Observer
+		|| bIsTransformGizmoDragging
+		|| IsCursorOverEditorWidgetInputModeFocus())
+	{
+		return;
+	}
+
+	PressedPlaceableComponent.Reset();
+	BeginLookInputCapture();
+}
+
+void AScenarioEditorController::HandleLookCaptureCompletedInput()
+{
+	EndLookInputCapture();
 }
 
 void AScenarioEditorController::HandleViewModeToggleInput()
@@ -1460,7 +1602,6 @@ void AScenarioEditorController::BeginLookInputCapture()
 	}
 
 	bIsLookInputHeld = true;
-	LookCaptureAccumulatedDelta = 0.0;
 	ApplyInputMode();
 }
 
@@ -1589,7 +1730,6 @@ bool AScenarioEditorController::BeginTransformGizmoDrag(
 	}
 
 	bIsLookInputHeld = false;
-	LookCaptureAccumulatedDelta = 0.0;
 	PressedPlaceableComponent.Reset();
 	SetHoveredPlaceable(nullptr);
 
@@ -2043,11 +2183,290 @@ bool AScenarioEditorController::TraceMouseToPlane(
 	return true;
 }
 
+bool AScenarioEditorController::TraceMouseRobotRouteMarkerOverlay(
+	UScenarioPlaceableComponent*& outPlaceableComponent,
+	FHitResult& outHit) const
+{
+	outPlaceableComponent = nullptr;
+	outHit = FHitResult();
+
+	float rawMouseX = 0.0f;
+	float rawMouseY = 0.0f;
+	if (!GetMousePosition(rawMouseX, rawMouseY))
+	{
+		return false;
+	}
+
+	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		return false;
+	}
+
+	TArray<FScenarioEditorRouteMarkerOverlayItem> items;
+	authoringSubsystem->GetRobotRouteMarkerOverlayItems(items);
+	if (items.IsEmpty())
+	{
+		return false;
+	}
+
+	const FVector2D mousePosition = UWidgetLayoutLibrary::GetMousePositionOnViewport(this);
+	double bestDistanceSquared = MAX_dbl;
+	const FScenarioEditorRouteMarkerOverlayItem* bestItem = nullptr;
+	FVector2D bestMarkerPosition = FVector2D::ZeroVector;
+	for (const FScenarioEditorRouteMarkerOverlayItem& item : items)
+	{
+		FVector2D markerPosition = FVector2D::ZeroVector;
+		if (!UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(
+			const_cast<AScenarioEditorController*>(this),
+			item.WorldLocation,
+			markerPosition,
+			true))
+		{
+			continue;
+		}
+
+		if (!IsScreenPointInsideRobotRouteMarkerOverlay(mousePosition, markerPosition))
+		{
+			continue;
+		}
+
+		const double distanceSquared = (mousePosition - markerPosition).SizeSquared();
+		if (distanceSquared < bestDistanceSquared)
+		{
+			bestDistanceSquared = distanceSquared;
+			bestItem = &item;
+			bestMarkerPosition = markerPosition;
+		}
+	}
+
+	if (!bestItem)
+	{
+		return false;
+	}
+
+	UScenarioPlaceableComponent* placeableComponent =
+		authoringSubsystem->GetRobotRouteMarkerPlaceableComponent(bestItem->Kind);
+	if (!IsEditorSelectablePlaceable(placeableComponent)
+		|| !authoringSubsystem->SyncRobotRouteMarkerProxyLocation(bestItem->Kind, bestItem->WorldLocation))
+	{
+		return false;
+	}
+
+	outPlaceableComponent = placeableComponent;
+	outHit.Location = bestItem->WorldLocation;
+	outHit.ImpactPoint = bestItem->WorldLocation;
+	outHit.Distance = FVector2D::Distance(mousePosition, bestMarkerPosition);
+	return true;
+}
+
+bool AScenarioEditorController::TraceMouseCorridorHandleOverlay(
+	UScenarioPlaceableComponent*& outPlaceableComponent,
+	FHitResult& outHit) const
+{
+	outPlaceableComponent = nullptr;
+	outHit = FHitResult();
+
+	if (!ShouldShowCorridorHandleOverlay())
+	{
+		return false;
+	}
+
+	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		return false;
+	}
+
+	TArray<FScenarioEditorCorridorHandleOverlayItem> items;
+	authoringSubsystem->GetCorridorHandleOverlayItems(items);
+	if (items.IsEmpty())
+	{
+		return false;
+	}
+
+	const FVector2D mousePosition = UWidgetLayoutLibrary::GetMousePositionOnViewport(this);
+	const FScenarioEditorCorridorHandleOverlayItem* bestItem = nullptr;
+	double bestDistanceSquared = MAX_dbl;
+	for (const FScenarioEditorCorridorHandleOverlayItem& item : items)
+	{
+		if (item.HandleType != EScenarioCorridorHandleType::Vertex)
+		{
+			continue;
+		}
+
+		FVector2D gripPosition = FVector2D::ZeroVector;
+		if (!UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(
+			const_cast<AScenarioEditorController*>(this),
+			item.WorldLocation,
+			gripPosition,
+			true)
+			|| !IsScreenPointInsideCorridorVertexHandleOverlay(mousePosition, gripPosition))
+		{
+			continue;
+		}
+
+		const double distanceSquared = (mousePosition - gripPosition).SizeSquared();
+		if (distanceSquared < bestDistanceSquared)
+		{
+			bestDistanceSquared = distanceSquared;
+			bestItem = &item;
+		}
+	}
+
+	for (const FScenarioEditorCorridorHandleOverlayItem& item : items)
+	{
+		if (item.HandleType != EScenarioCorridorHandleType::Segment)
+		{
+			continue;
+		}
+
+		FVector2D startPosition = FVector2D::ZeroVector;
+		FVector2D endPosition = FVector2D::ZeroVector;
+		FVector2D gripPosition = FVector2D::ZeroVector;
+		if (!UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(
+			const_cast<AScenarioEditorController*>(this),
+			item.SegmentStartWorldLocation,
+			startPosition,
+			true)
+			|| !UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(
+				const_cast<AScenarioEditorController*>(this),
+				item.SegmentEndWorldLocation,
+				endPosition,
+				true)
+			|| !UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(
+				const_cast<AScenarioEditorController*>(this),
+				item.WorldLocation,
+				gripPosition,
+				true))
+		{
+			continue;
+		}
+
+		double distanceSquared = MAX_dbl;
+		if (!IsScreenPointInsideCorridorSegmentHandleOverlay(
+			mousePosition,
+			startPosition,
+			endPosition,
+			gripPosition,
+			distanceSquared))
+		{
+			continue;
+		}
+
+		if (bestItem && bestItem->HandleType == EScenarioCorridorHandleType::Vertex)
+		{
+			continue;
+		}
+		if (distanceSquared < bestDistanceSquared)
+		{
+			bestDistanceSquared = distanceSquared;
+			bestItem = &item;
+		}
+	}
+
+	if (!bestItem
+		|| !authoringSubsystem->SyncCorridorHandleProxyTransform(bestItem->InstanceId, bestItem->WorldTransform))
+	{
+		return false;
+	}
+
+	UScenarioPlaceableComponent* placeableComponent =
+		authoringSubsystem->GetCorridorHandlePlaceableComponent(bestItem->InstanceId);
+	if (!IsEditorSelectablePlaceable(placeableComponent))
+	{
+		return false;
+	}
+
+	outPlaceableComponent = placeableComponent;
+	outHit.Location = bestItem->WorldLocation;
+	outHit.ImpactPoint = bestItem->WorldLocation;
+	outHit.Distance = FMath::Sqrt(bestDistanceSquared);
+	return true;
+}
+
+bool AScenarioEditorController::IsScreenPointInsideRobotRouteMarkerOverlay(
+	const FVector2D& screenPoint,
+	const FVector2D& markerAnchorPoint) const
+{
+	const FVector2D baseSize(
+		FMath::Max(1.0, RobotRouteMarkerOverlayHitSize.X),
+		FMath::Max(1.0, RobotRouteMarkerOverlayHitSize.Y));
+	const double padding = FMath::Max(0.0, RobotRouteMarkerOverlayHitPaddingPixels);
+	const FVector2D markerSize = baseSize + FVector2D(padding * 2.0, padding * 2.0);
+	const FVector2D safeAnchor(
+		FMath::Clamp(RobotRouteMarkerOverlayHitAnchor.X, 0.0, 1.0),
+		FMath::Clamp(RobotRouteMarkerOverlayHitAnchor.Y, 0.0, 1.0));
+	const FVector2D topLeft = markerAnchorPoint - baseSize * safeAnchor - FVector2D(padding, padding);
+	const FVector2D localPoint = screenPoint - topLeft;
+	if (localPoint.X < 0.0
+		|| localPoint.Y < 0.0
+		|| localPoint.X > markerSize.X
+		|| localPoint.Y > markerSize.Y)
+	{
+		return false;
+	}
+
+	const FVector2D circleCenter(markerSize.X * 0.5, markerSize.Y * 0.31);
+	const double circleRadius = markerSize.X * 0.39;
+	if ((localPoint - circleCenter).SizeSquared() <= FMath::Square(circleRadius))
+	{
+		return true;
+	}
+
+	const FVector2D leftBase(markerSize.X * 0.18, markerSize.Y * 0.43);
+	const FVector2D rightBase(markerSize.X * 0.82, markerSize.Y * 0.43);
+	const FVector2D tip(markerSize.X * 0.5, markerSize.Y * 0.98);
+	return IsPointInsideTriangle2D(localPoint, leftBase, rightBase, tip);
+}
+
+bool AScenarioEditorController::IsScreenPointInsideCorridorVertexHandleOverlay(
+	const FVector2D& screenPoint,
+	const FVector2D& gripCenterPoint) const
+{
+	const FVector2D safeHitSize(
+		FMath::Max(1.0, CorridorVertexHandleOverlayHitSize.X),
+		FMath::Max(1.0, CorridorVertexHandleOverlayHitSize.Y));
+	const double hitRadius = FMath::Max(safeHitSize.X, safeHitSize.Y) * 0.5;
+	return (screenPoint - gripCenterPoint).SizeSquared() <= FMath::Square(hitRadius);
+}
+
+bool AScenarioEditorController::IsScreenPointInsideCorridorSegmentHandleOverlay(
+	const FVector2D& screenPoint,
+	const FVector2D& segmentStartPoint,
+	const FVector2D& segmentEndPoint,
+	const FVector2D& gripCenterPoint,
+	double& outDistanceSquared) const
+{
+	const FVector2D safeGripHitSize(
+		FMath::Max(1.0, CorridorSegmentHandleGripHitSize.X),
+		FMath::Max(1.0, CorridorSegmentHandleGripHitSize.Y));
+	const FVector2D gripHalfSize = safeGripHitSize * 0.5;
+	const FVector2D gripLocalPoint = screenPoint - gripCenterPoint;
+	if (FMath::Abs(gripLocalPoint.X) <= gripHalfSize.X
+		&& FMath::Abs(gripLocalPoint.Y) <= gripHalfSize.Y)
+	{
+		outDistanceSquared = gripLocalPoint.SizeSquared();
+		return true;
+	}
+
+	outDistanceSquared = GetPointToSegmentDistanceSquared2D(screenPoint, segmentStartPoint, segmentEndPoint);
+	return outDistanceSquared <= FMath::Square(FMath::Max(0.0, CorridorSegmentHandleLineHitHalfThicknessPixels));
+}
+
 bool AScenarioEditorController::TraceMouseSelectablePlaceable(
 	UScenarioPlaceableComponent*& outPlaceableComponent,
 	FHitResult& outHit) const
 {
 	outPlaceableComponent = nullptr;
+	if (TraceMouseCorridorHandleOverlay(outPlaceableComponent, outHit))
+	{
+		return true;
+	}
+	if (TraceMouseRobotRouteMarkerOverlay(outPlaceableComponent, outHit))
+	{
+		return true;
+	}
 
 	FVector worldOrigin = FVector::ZeroVector;
 	FVector worldDirection = FVector::ForwardVector;
@@ -2129,6 +2548,48 @@ UScenarioPlaceableComponent* AScenarioEditorController::FindSelectablePlaceableB
 		return nullptr;
 	}
 
+	if (UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem())
+	{
+		TArray<FScenarioEditorRouteMarkerOverlayItem> routeMarkerItems;
+		authoringSubsystem->GetRobotRouteMarkerOverlayItems(routeMarkerItems);
+		for (const FScenarioEditorRouteMarkerOverlayItem& item : routeMarkerItems)
+		{
+			if (item.InstanceId != instanceId)
+			{
+				continue;
+			}
+
+			UScenarioPlaceableComponent* routeMarkerComponent =
+				authoringSubsystem->GetRobotRouteMarkerPlaceableComponent(item.Kind);
+			if (IsEditorSelectablePlaceable(routeMarkerComponent)
+				&& authoringSubsystem->SyncRobotRouteMarkerProxyLocation(item.Kind, item.WorldLocation))
+			{
+				return routeMarkerComponent;
+			}
+		}
+	}
+
+	if (UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem())
+	{
+		TArray<FScenarioEditorCorridorHandleOverlayItem> corridorHandleItems;
+		authoringSubsystem->GetCorridorHandleOverlayItems(corridorHandleItems);
+		for (const FScenarioEditorCorridorHandleOverlayItem& item : corridorHandleItems)
+		{
+			if (item.InstanceId != instanceId)
+			{
+				continue;
+			}
+
+			UScenarioPlaceableComponent* corridorHandleComponent =
+				authoringSubsystem->GetCorridorHandlePlaceableComponent(item.InstanceId);
+			if (IsEditorSelectablePlaceable(corridorHandleComponent)
+				&& authoringSubsystem->SyncCorridorHandleProxyTransform(item.InstanceId, item.WorldTransform))
+			{
+				return corridorHandleComponent;
+			}
+		}
+	}
+
 	for (TActorIterator<AActor> actorIt(world); actorIt; ++actorIt)
 	{
 		AActor* actor = *actorIt;
@@ -2142,6 +2603,23 @@ UScenarioPlaceableComponent* AScenarioEditorController::FindSelectablePlaceableB
 	}
 
 	return nullptr;
+}
+
+bool AScenarioEditorController::ShouldShowCorridorHandleOverlay() const
+{
+	if (IsCorridorHandlePlaceable(SelectedPlaceableComponent.Get())
+		|| IsCorridorHandlePlaceable(HoveredPlaceableComponent.Get())
+		|| IsCorridorHandlePlaceable(PressedPlaceableComponent.Get())
+		|| IsCorridorHandlePlaceable(DraggedPlaceableComponent.Get()))
+	{
+		return true;
+	}
+
+	const UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget();
+	const UScenarioEditorShellViewModel* shellViewModel =
+		rootWidget ? rootWidget->GetShellViewModel() : nullptr;
+	return shellViewModel
+		&& shellViewModel->GetActiveSidebarPanel() == EScenarioTemplateSidebarPanel::Corridor;
 }
 
 FString AScenarioEditorController::ResolveCurrentScenarioDraftSavePath() const
@@ -2242,7 +2720,7 @@ void AScenarioEditorController::ApplyAuthoringOutlinePostProcessMaterial(
 	}
 
 	UMaterialInterface* outlinePostProcessMaterial =
-		placeableComponent->AuthoringHoverOutlineMaterial.LoadSynchronous();
+		FScenarioViewportPresentation::ResolveOrLoadMaterial(placeableComponent->AuthoringHoverOutlineMaterial);
 	if (!outlinePostProcessMaterial || ActiveAuthoringOutlinePostProcessMaterial.Get() == outlinePostProcessMaterial)
 	{
 		return;
@@ -2304,6 +2782,27 @@ void AScenarioEditorController::BindEditorInputActions()
 			ETriggerEvent::Triggered,
 			this,
 			&AScenarioEditorController::HandleEditorLookAction);
+	}
+
+	if (UInputAction* lookCaptureAction = EditorLookCaptureAction.LoadSynchronous())
+	{
+		enhancedInputComponent->BindAction(
+			lookCaptureAction,
+			ETriggerEvent::Started,
+			this,
+			&AScenarioEditorController::HandleLookCaptureStartedInput);
+
+		enhancedInputComponent->BindAction(
+			lookCaptureAction,
+			ETriggerEvent::Completed,
+			this,
+			&AScenarioEditorController::HandleLookCaptureCompletedInput);
+
+		enhancedInputComponent->BindAction(
+			lookCaptureAction,
+			ETriggerEvent::Canceled,
+			this,
+			&AScenarioEditorController::HandleLookCaptureCompletedInput);
 	}
 
 	if (UInputAction* selectionAction = EditorSelectionAction.LoadSynchronous())
@@ -2398,10 +2897,13 @@ void AScenarioEditorController::UpdatePlacementPreview()
 	CurrentPlacementTransform = BuildPlacementTransform(hit.ImpactPoint);
 
 	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
-	if (SelectedPlacementItemType == EScenarioPaletteItemType::StaticObstacle && authoringSubsystem)
+	if ((SelectedPlacementItemType == EScenarioPaletteItemType::StaticObstacle
+			|| SelectedPlacementItemType == EScenarioPaletteItemType::RobotStart
+			|| SelectedPlacementItemType == EScenarioPaletteItemType::RobotGoal)
+		&& authoringSubsystem)
 	{
 		CurrentPlacementTransform =
-			authoringSubsystem->ResolveStaticObstaclePlacementTransform(CurrentPlacementTransform);
+			authoringSubsystem->ResolveEditorGroundActorPlacementTransform(CurrentPlacementTransform);
 	}
 	if (!authoringSubsystem)
 	{
@@ -2477,18 +2979,10 @@ bool AScenarioEditorController::ConfigurePlacementPreviewForSelectedItem(
 		return true;
 	}
 	case EScenarioPaletteItemType::RobotStart:
-		if (!PlacementPreviewActor->ConfigureActorPreviewClass(authoringSubsystem->StartPointClass))
-		{
-			CurrentPlacementFailureReason = TEXT("Failed to configure robot start preview.");
-			return false;
-		}
+		PlacementPreviewActor->SetActorHiddenInGame(true);
 		return true;
 	case EScenarioPaletteItemType::RobotGoal:
-		if (!PlacementPreviewActor->ConfigureActorPreviewClass(authoringSubsystem->GoalPointClass))
-		{
-			CurrentPlacementFailureReason = TEXT("Failed to configure robot goal preview.");
-			return false;
-		}
+		PlacementPreviewActor->SetActorHiddenInGame(true);
 		return true;
 	default:
 		CurrentPlacementFailureReason = TEXT("Unknown palette placement item type.");
@@ -2555,8 +3049,39 @@ bool AScenarioEditorController::HasAuthoredRobotStart(
 	return false;
 }
 
+bool AScenarioEditorController::ShouldUseSchemaPlacementPlane() const
+{
+	switch (SelectedPlacementItemType)
+	{
+	case EScenarioPaletteItemType::StaticObstacle:
+	case EScenarioPaletteItemType::RobotStart:
+	case EScenarioPaletteItemType::RobotGoal:
+		return true;
+	default:
+		return false;
+	}
+}
+
 bool AScenarioEditorController::TraceMousePlacement(FHitResult& outHit) const
 {
+	outHit = FHitResult();
+	if (ShouldUseSchemaPlacementPlane())
+	{
+		FVector planePoint = FVector::ZeroVector;
+		if (!TraceMouseToPlane(FVector::ZeroVector, FVector::UpVector, planePoint))
+		{
+			return false;
+		}
+
+		outHit.TraceStart = planePoint;
+		outHit.TraceEnd = planePoint;
+		outHit.Location = planePoint;
+		outHit.ImpactPoint = planePoint;
+		outHit.ImpactNormal = FVector::UpVector;
+		outHit.Normal = FVector::UpVector;
+		return true;
+	}
+
 	FVector worldOrigin = FVector::ZeroVector;
 	FVector worldDirection = FVector::ForwardVector;
 	if (!DeprojectMousePositionToWorld(worldOrigin, worldDirection)) return false;
@@ -2829,12 +3354,6 @@ void AScenarioEditorController::GetTransformGizmoBasis(
 	if (outZAxis.IsNearlyZero()) outZAxis = FVector::UpVector;
 }
 
-UScenarioPlaceableDetailsWidget* AScenarioEditorController::EnsurePlaceableDetailsWidget()
-{
-	UScenarioEditorRootWidget* rootWidget = ShowEditorRootWidget();
-	return rootWidget ? rootWidget->GetPlaceableDetailsWidget() : nullptr;
-}
-
 void AScenarioEditorController::UpdatePlaceableDetailsForSelection()
 {
 	UScenarioPlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
@@ -2845,7 +3364,7 @@ void AScenarioEditorController::UpdatePlaceableDetailsForSelection()
 	}
 
 	UScenarioEditorRootWidget* rootWidget = ShowEditorRootWidget();
-	if (!rootWidget || !rootWidget->ShowPlaceableDetails(selectedPlaceable))
+	if (!rootWidget || !rootWidget->FocusSidebarForSelectedPlaceable(selectedPlaceable))
 	{
 		return;
 	}

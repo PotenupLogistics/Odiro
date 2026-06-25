@@ -130,7 +130,7 @@ void UScenarioEditorSidebarCorridorPointWidget::ConfigureFieldRows()
 	{
 		SidebarWidgetHelpers::ConfigureBlock(PointBlockWidget.Get(), TextStyleCatalog, {
 			FString::Printf(TEXT("경로 점 %d"), PointIndex + 1),
-			TEXT("root.corridor.axis.points_m[]"),
+			SidebarWidgetHelpers::MakeIndexedBlockPath(TEXT("root.corridor.axis.points_m"), PointIndex),
 			TEXT("세부"),
 			false,
 			true,

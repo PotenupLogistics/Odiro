@@ -3,6 +3,15 @@
 #include "Scenario/ScenarioEditorUiSubsystem.h"
 #include "Scenario/ViewModel/ScenarioEditorListItemViewModel.h"
 
+namespace
+{
+	// Asset Palette commands currently materialize only fixed static-obstacle placements.
+	bool IsAssetPalettePlacementSupported(const EScenarioPaletteItemType itemType)
+	{
+		return itemType == EScenarioPaletteItemType::StaticObstacle;
+	}
+}
+
 void UScenarioAssetPaletteViewModel::InitializeForSubsystem(UScenarioEditorUiSubsystem* uiSubsystem)
 {
 	UiSubsystem = uiSubsystem;
@@ -84,6 +93,11 @@ bool UScenarioAssetPaletteViewModel::BeginPalettePlacement(
 	const EScenarioPaletteItemType itemType,
 	const FName assetId)
 {
+	if (!IsAssetPalettePlacementSupported(itemType))
+	{
+		return false;
+	}
+
 	SelectAsset(assetId);
 	return UiSubsystem && UiSubsystem->BeginPalettePlacement(itemType, assetId);
 }

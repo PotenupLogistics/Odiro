@@ -450,8 +450,8 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ConfigureFieldRows()
 		SidebarWidgetHelpers::ConfigureBlock(PlacementBlockWidget.Get(), TextStyleCatalog, {
 			bHasCachedPlacement && !CachedPlacement.PlacementId.IsEmpty()
 				? CachedPlacement.PlacementId
-				: FString::Printf(TEXT("배치 규칙 %d"), PlacementIndex + 1),
-			TEXT("root.obstacles.placements[]"),
+				: FString::Printf(TEXT("배치된 장애물 %d"), PlacementIndex + 1),
+			SidebarWidgetHelpers::MakeIndexedBlockPath(TEXT("root.obstacles.placements"), PlacementIndex),
 			TEXT("세부"),
 			false,
 			true,
@@ -500,9 +500,9 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ApplyCachedPlacementToRows()
 	{
 		PlacementBlockWidget->SetBlockMetadata(
 			CachedPlacement.PlacementId.IsEmpty()
-				? FString::Printf(TEXT("배치 규칙 %d"), PlacementIndex + 1)
+				? FString::Printf(TEXT("배치된 장애물 %d"), PlacementIndex + 1)
 				: CachedPlacement.PlacementId,
-			TEXT("root.obstacles.placements[]"),
+			SidebarWidgetHelpers::MakeIndexedBlockPath(TEXT("root.obstacles.placements"), PlacementIndex),
 			TEXT("세부"));
 	}
 	if (PlacementIdFieldRow)

@@ -9,6 +9,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeExit.h"
+#include "Shared/ScenarioViewportPresentation.h"
 #include "TimerManager.h"
 
 // Preview Capture의 요청, 자원 생성, 인코딩과 파일 교체 결과를 기록한다.
@@ -381,6 +382,7 @@ ASceneCapture2D* UScenarioPreviewCaptureSubsystem::SpawnCaptureActor(
 	captureComponent->bAlwaysPersistRenderingState = false;
 	captureComponent->bExcludeFromSceneTextureExtents = true;
 	captureComponent->bUseRayTracingIfEnabled = false;
+	FScenarioViewportPresentation::ApplyGreyBackgroundPostProcess(captureComponent, 1.0f);
 
 	// 호출자가 지정한 유효한 Actor를 촬영 결과에서 제외한다.
 	captureComponent->HiddenActors.Reset();

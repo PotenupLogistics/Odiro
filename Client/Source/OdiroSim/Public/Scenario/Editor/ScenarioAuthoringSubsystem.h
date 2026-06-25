@@ -205,6 +205,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	FTransform ResolveStaticObstaclePlacementTransform(const FTransform& transform) const;
 
+	// Resolves editor ground placement through the authored Corridor along/offset space.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
+	FTransform ResolveEditorGroundActorPlacementTransform(const FTransform& transform) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool CanPlaceEditorGroundActor(const FTransform& transform, FString& outFailureReason) const;
 
@@ -252,6 +256,29 @@ public:
 	bool UpdateRobotGoalPointTransform(
 		const FTransform& transform,
 		FString& outFailureReason);
+
+	// Exports editor-only robot route endpoint proxies for screen-space overlay painting and hit testing.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Overlay")
+	void GetRobotRouteMarkerOverlayItems(TArray<FScenarioEditorRouteMarkerOverlayItem>& outItems) const;
+
+	// Exports editor-only corridor handle proxies for screen-space overlay painting and hit testing.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Overlay")
+	void GetCorridorHandleOverlayItems(TArray<FScenarioEditorCorridorHandleOverlayItem>& outItems) const;
+
+	// Returns the tracked route marker proxy component for selection and gizmo ownership.
+	UScenarioPlaceableComponent* GetRobotRouteMarkerPlaceableComponent(
+		EScenarioEditorRouteMarkerKind markerKind) const;
+
+	// Aligns the tracked route marker proxy actor to the draft-derived overlay position.
+	bool SyncRobotRouteMarkerProxyLocation(
+		EScenarioEditorRouteMarkerKind markerKind,
+		const FVector& markerLocationCm);
+
+	// Returns the tracked corridor handle proxy component for selection and gizmo ownership.
+	UScenarioPlaceableComponent* GetCorridorHandlePlaceableComponent(const FString& instanceId) const;
+
+	// Aligns the tracked corridor handle proxy actor to the draft-derived overlay transform.
+	bool SyncCorridorHandleProxyTransform(const FString& instanceId, const FTransform& transform);
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool RenameStaticObstacleInstanceId(
@@ -556,17 +583,27 @@ private:
 		const FVector2D& sizeCm,
 		double yawDegrees) const;
 	bool SpawnRobotRouteMarkers(const FScenarioPlaceableInstanceSpec& spec, TArray<FString>& outDiagnostics);
-	AActor* SpawnEditorMarkerActor(TSubclassOf<AActor> markerClass, const FTransform& transform);
+	// Spawns the editor-only route marker proxy that owns hit testing but no visible mesh.
+	AActor* SpawnEditorRouteMarkerProxyActor(const FTransform& transform);
+	// Replaces one endpoint proxy while preserving the fixed start/goal instance id contract.
 	AActor* SpawnOrReplaceRouteMarker(
 		TObjectPtr<AActor>& markerActor,
-		TSubclassOf<AActor> markerClass,
 		const FTransform& transform,
 		EScenarioPlaceableAuthoringRole markerRole,
 		FString& outFailureReason);
+	// Attaches route marker authoring metadata and invisible selection collision to a proxy actor.
 	bool ConfigureRobotRouteMarkerActor(
 		AActor* markerActor,
 		EScenarioPlaceableAuthoringRole markerRole,
 		FString& outFailureReason) const;
+	// Adds one valid route marker proxy to the overlay DTO list consumed by UI and hit tests.
+	void AddRobotRouteMarkerOverlayItem(
+		AActor* markerActor,
+		EScenarioEditorRouteMarkerKind markerKind,
+		const FVector& markerLocationCm,
+		TArray<FScenarioEditorRouteMarkerOverlayItem>& outItems) const;
+	// Returns the tracked proxy actor for one robot route endpoint.
+	AActor* GetRobotRouteMarkerActor(EScenarioEditorRouteMarkerKind markerKind) const;
 	void AddStaticObstacleViewRecord(
 		const FScenarioPlaceableInstanceSpec& spec,
 		const FScenarioStaticObstaclePropEntry& propEntry,

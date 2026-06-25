@@ -9,7 +9,8 @@ public class OdiroSim : ModuleRules
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "SlateCore",
-			"CommonUI", "ModelViewViewModel", "FieldNotification", "ChaosVehicles", "Json", "JsonUtilities", "HTTP", "DeveloperSettings" });
+			"CommonUI", "ModelViewViewModel", "FieldNotification", "ChaosVehicles", "Json", "JsonUtilities", "HTTP", "DeveloperSettings",
+			"ProceduralMeshComponent" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "Sockets" });
 

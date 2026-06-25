@@ -15,9 +15,9 @@ class AScenarioTransformGizmoActor;
 class UScenarioAuthoringSubsystem;
 class UScenarioEditorRootWidget;
 class UScenarioEditorToolbarWidget;
+class UScenarioEditorRouteMarkerOverlayWidget;
 class UMainMenuWidget;
 class UScenarioPlaceableComponent;
-class UScenarioPlaceableDetailsWidget;
 class UInputAction;
 class UInputMappingContext;
 class UMaterialInterface;
@@ -52,6 +52,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	TSoftObjectPtr<UInputAction> EditorLookAction;
 
+	// Mouse-button action that gates camera look or top-down drag pan input.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
+	TSoftObjectPtr<UInputAction> EditorLookCaptureAction;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	TSoftObjectPtr<UInputAction> EditorSelectionAction;
 
@@ -75,9 +79,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input")
 	int32 EditorInputMappingPriority = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Input", meta = (ClampMin = "0.0"))
-	double SelectionClickLookDeltaThreshold = 4.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Placement", meta = (ClampMin = "1.0"))
 	float PlacementTraceDistanceCm = 100000.0f;
@@ -115,6 +116,34 @@ public:
 	// Viewport z-order used when ScenarioEditorMap attaches WBP_MainMenu.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
 	int32 MainMenuWidgetViewportZOrder = 10;
+
+	// Viewport z-order offset that keeps route markers below WBP_MainMenu and its editor panels.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
+	int32 RouteMarkerOverlayViewportZOrderOffset = -1;
+
+	// Screen-space route marker hit size matched to the root overlay's default 78:120 aspect.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FVector2D RobotRouteMarkerOverlayHitSize = FVector2D(39.0, 60.0);
+
+	// Normalized hit anchor; the marker tip is expected at the projected world point.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FVector2D RobotRouteMarkerOverlayHitAnchor = FVector2D(0.5, 1.0);
+
+	// Extra screen-space tolerance applied around the pin-shaped route marker hit mask.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay", meta = (ClampMin = "0.0"))
+	double RobotRouteMarkerOverlayHitPaddingPixels = 3.0;
+
+	// Screen-space hit box size for corridor vertex overlay grips.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FVector2D CorridorVertexHandleOverlayHitSize = FVector2D(20.0, 20.0);
+
+	// Screen-space hit box size for corridor segment center grips.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FVector2D CorridorSegmentHandleGripHitSize = FVector2D(18.0, 18.0);
+
+	// Screen-space half thickness used when hit-testing corridor segment lines.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay", meta = (ClampMin = "0.0"))
+	double CorridorSegmentHandleLineHitHalfThicknessPixels = 6.0;
 
 	// Fallback save path used when the draft was not opened from a user project scenario.json.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
@@ -271,6 +300,9 @@ public:
 	// Returns the native selection change delegate for root/sidebar synchronization.
 	FScenarioSelectedPlaceableChanged& OnSelectedPlaceableChanged() { return SelectedPlaceableChanged; }
 
+	// Returns whether corridor handles should currently be visible and screen-space selectable.
+	bool ShouldShowCorridorHandleOverlay() const;
+
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Selection")
 	bool TryUpdateSelectedPlaceableTransform(const FTransform& transform, FString& outFailureReason);
 
@@ -289,13 +321,36 @@ private:
 	void HandleScaleModeInput();
 	void HandleEditorMoveAction(const FInputActionValue& inputActionValue);
 	void HandleEditorLookAction(const FInputActionValue& inputActionValue);
+	void HandleLookCaptureStartedInput();
+	void HandleLookCaptureCompletedInput();
 	void HandleViewModeToggleInput();
 	void HandleEditorZoomAction(const FInputActionValue& inputActionValue);
+	// Resolves fixed keyboard navigation so Q/E remain pure world-Z movement even if Axis3D mapping values are polluted.
+	bool TryResolveEditorKeyboardMoveInput(float& outForwardValue, float& outRightValue, float& outUpValue) const;
 	void BeginLookInputCapture();
 	void EndLookInputCapture();
 	void UpdateHoveredPlaceable();
 	bool UpdateHoveredTransformGizmo();
 	bool TraceMouseTransformGizmo(EScenarioTransformGizmoHandle& outHandle, FHitResult& outHit) const;
+	// Resolves screen-space route marker hits before world traces can select geometry behind the marker.
+	bool TraceMouseRobotRouteMarkerOverlay(UScenarioPlaceableComponent*& outPlaceableComponent, FHitResult& outHit) const;
+	// Resolves screen-space corridor handle hits before world traces can select geometry behind the handle.
+	bool TraceMouseCorridorHandleOverlay(UScenarioPlaceableComponent*& outPlaceableComponent, FHitResult& outHit) const;
+	// Checks whether a viewport point is inside the route marker's approximate pin-shaped hit mask.
+	bool IsScreenPointInsideRobotRouteMarkerOverlay(
+		const FVector2D& screenPoint,
+		const FVector2D& markerAnchorPoint) const;
+	// Checks whether a viewport point is inside one corridor vertex grip hit box.
+	bool IsScreenPointInsideCorridorVertexHandleOverlay(
+		const FVector2D& screenPoint,
+		const FVector2D& gripCenterPoint) const;
+	// Checks whether a viewport point is inside one corridor segment line or center grip.
+	bool IsScreenPointInsideCorridorSegmentHandleOverlay(
+		const FVector2D& screenPoint,
+		const FVector2D& segmentStartPoint,
+		const FVector2D& segmentEndPoint,
+		const FVector2D& gripCenterPoint,
+		double& outDistanceSquared) const;
 	bool BeginTransformGizmoDrag(EScenarioTransformGizmoHandle handle, const FHitResult& hit);
 	void UpdateTransformGizmoDrag();
 	void EndTransformGizmoDrag();
@@ -318,12 +373,18 @@ private:
 	void EnsureAuthoringOutlineCustomDepthEnabled() const;
 	void AddEditorInputMappingContext();
 	void BindEditorInputActions();
+	// Ensures the route marker visual overlay is present below the main editor UI.
+	void ShowRouteMarkerOverlayWidget(UScenarioEditorRootWidget* rootWidget);
+	// Removes the route marker visual overlay owned by this controller.
+	void RemoveRouteMarkerOverlayWidget();
 	void UpdatePlacementPreview();
 	bool ConfigurePlacementPreviewForSelectedItem(UScenarioAuthoringSubsystem* authoringSubsystem);
 	bool ValidatePlacementForSelectedItem(
 		const UScenarioAuthoringSubsystem* authoringSubsystem,
 		FString& outFailureReason) const;
 	bool HasAuthoredRobotStart(const UScenarioAuthoringSubsystem* authoringSubsystem) const;
+	// Returns true when palette placement should use Corridor schema projection instead of mesh collision hits.
+	bool ShouldUseSchemaPlacementPlane() const;
 	bool TraceMousePlacement(FHitResult& outHit) const;
 	FTransform BuildPlacementTransform(const FVector& location) const;
 	FVector SnapLocationIfNeeded(const FVector& location) const;
@@ -355,7 +416,6 @@ private:
 		FVector& outXAxis,
 		FVector& outYAxis,
 		FVector& outZAxis) const;
-	UScenarioPlaceableDetailsWidget* EnsurePlaceableDetailsWidget();
 	void UpdatePlaceableDetailsForSelection();
 	void HidePlaceableDetails();
 	AScenarioEditorPawn* GetEditorPawn() const;
@@ -398,6 +458,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UScenarioEditorRootWidget> EditorRootWidget;
 
+	// Viewport-level route marker overlay rendered beneath WBP_MainMenu.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorRouteMarkerOverlayWidget> RouteMarkerOverlayWidget;
+
 	// MainMenu widget created by ScenarioEditorMap controller.
 	UPROPERTY(Transient)
 	TObjectPtr<UMainMenuWidget> MainMenuWidget;
@@ -412,7 +476,6 @@ private:
 	FString CurrentPlacementFailureReason;
 
 	bool bIsLookInputHeld = false;
-	double LookCaptureAccumulatedDelta = 0.0;
 	bool bIsRegionDragging = false;
 	FVector RegionDragStartWorld = FVector::ZeroVector;
 	bool bIsTransformGizmoDragging = false;

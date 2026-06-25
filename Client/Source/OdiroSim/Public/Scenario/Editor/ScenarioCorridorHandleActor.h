@@ -5,14 +5,12 @@
 #include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "ScenarioCorridorHandleActor.generated.h"
 
-class UMaterialInterface;
 class USceneComponent;
 class UScenarioPlaceableComponent;
 class USplineMeshComponent;
-class UStaticMesh;
 class UStaticMeshComponent;
 
-// Editor-only visual handle for authoring the project scenario corridor axis.
+// Editor-only invisible proxy that lets screen-space corridor handles reuse selection and gizmo flows.
 UCLASS()
 class ODIROSIM_API AScenarioCorridorHandleActor : public AActor
 {
@@ -25,11 +23,11 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Corridor")
 	TObjectPtr<USceneComponent> SceneRoot;
 
-	// Sphere mesh that provides visible feedback and selectable trace geometry for vertex handles.
+	// Disabled legacy mesh component kept so existing spawned handles remain valid proxy actors.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Corridor")
 	TObjectPtr<UStaticMeshComponent> HandleMeshComponent;
 
-	// Spline-deformed cylinder mesh that provides visible feedback and selectable trace geometry for segment handles.
+	// Disabled legacy spline mesh component kept so existing spawned handles remain valid proxy actors.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scenario|Editor|Corridor")
 	TObjectPtr<USplineMeshComponent> SegmentSplineMeshComponent;
 
@@ -60,21 +58,6 @@ public:
 		double InSegmentLengthCm);
 
 private:
-	// Mesh loaded from engine content for vertex handles.
-	UPROPERTY(Transient)
-	TObjectPtr<UStaticMesh> VertexMesh;
-
-	// Mesh loaded from engine content for segment handles.
-	UPROPERTY(Transient)
-	TObjectPtr<UStaticMesh> SegmentMesh;
-
-	// Material loaded from engine content for lightweight editor visualization.
-	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInterface> HandleMaterial;
-
-	// Current segment handle length used when rebuilding the spline cylinder.
-	double SegmentLengthCm = 0.0;
-
-	// Applies mesh, material, and editable flags for the current handle type.
+	// Applies invisible proxy state and editable flags for the current handle type.
 	void ApplyHandleVisual();
 };

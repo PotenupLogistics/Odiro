@@ -1,7 +1,10 @@
 
 #include "Platform/ScenarioEditorLaunchSubsystem.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
+#include "Engine/AssetManager.h"
+#include "Engine/StreamableManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "Shared/ScenarioViewportPresentation.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorLaunch, Log, All);
 
@@ -25,6 +28,11 @@ namespace
 	}
 }
 
+UScenarioEditorLaunchSubsystem::UScenarioEditorLaunchSubsystem()
+{
+	ScenarioEditorPreloadAssets = FScenarioViewportPresentation::MakeScenarioMapPreloadAssets();
+}
+
 void UScenarioEditorLaunchSubsystem::Initialize(FSubsystemCollectionBase& collection)
 {
 	Super::Initialize(collection);
@@ -40,6 +48,14 @@ void UScenarioEditorLaunchSubsystem::Deinitialize()
 		FCoreUObjectDelegates::PostLoadMapWithWorld.Remove(PostLoadMapHandle);
 		PostLoadMapHandle.Reset();
 	}
+
+	if (ScenarioEditorPreloadHandle.IsValid() && ScenarioEditorPreloadHandle->IsLoadingInProgress())
+	{
+		ScenarioEditorPreloadHandle->CancelHandle();
+	}
+	ScenarioEditorPreloadHandle.Reset();
+	PendingScenarioEditorOpenLevelOptions.Reset();
+	LoadedScenarioEditorPreloadAssets.Reset();
 
 	Super::Deinitialize();
 }
@@ -68,9 +84,7 @@ bool UScenarioEditorLaunchSubsystem::OpenScenarioEditorMap()
 	bAutoStartedScenarioEditorSession = false;
 	bAutoStartedScenarioEditorSessionLoadedExistingScenario = false;
 
-	const FString openLevelName = NormalizeMapIdForOpenLevel(ScenarioEditorMapId);
-	UE_LOG(LogScenarioEditorLaunch, Log, TEXT("ScenarioEditorMap 열기 요청 | Map: %s"), *openLevelName);
-	UGameplayStatics::OpenLevel(world, FName(*openLevelName), true);
+	RequestScenarioEditorPreload(FString());
 	return true;
 }
 
@@ -113,7 +127,7 @@ bool UScenarioEditorLaunchSubsystem::OpenScenarioEditorInternal(
 		TEXT("ScenarioEditorMap 열기 요청 | Map: %s, Options: %s"),
 		*openLevelName,
 		*openLevelOptions);
-	UGameplayStatics::OpenLevel(world, FName(*openLevelName), true, openLevelOptions);
+	RequestScenarioEditorPreload(openLevelOptions);
 	return true;
 }
 
@@ -126,6 +140,117 @@ void UScenarioEditorLaunchSubsystem::ResetPendingAutoStartState()
 {
 	PendingScenarioSetupPath.Reset();
 	PendingAutoStartMode = EScenarioEditorAutoStartMode::None;
+}
+
+bool UScenarioEditorLaunchSubsystem::OpenScenarioEditorMapAfterPreload(const FString& openLevelOptions)
+{
+	UWorld* world = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
+	if (!world)
+	{
+		UE_LOG(LogScenarioEditorLaunch, Warning, TEXT("ScenarioEditorMap 열기 실패: World 없음"));
+		return false;
+	}
+
+	const FString openLevelName = NormalizeMapIdForOpenLevel(ScenarioEditorMapId);
+	UE_LOG(
+		LogScenarioEditorLaunch,
+		Log,
+		TEXT("ScenarioEditorMap 프리로드 완료 후 OpenLevel | Map: %s, Options: %s"),
+		*openLevelName,
+		openLevelOptions.IsEmpty() ? TEXT("<none>") : *openLevelOptions);
+	UGameplayStatics::OpenLevel(world, FName(*openLevelName), true, openLevelOptions);
+	return true;
+}
+
+void UScenarioEditorLaunchSubsystem::RequestScenarioEditorPreload(const FString& openLevelOptions)
+{
+	PendingScenarioEditorOpenLevelOptions = openLevelOptions;
+
+	TArray<FSoftObjectPath> preloadAssetPaths;
+	for (const TSoftObjectPtr<UObject>& preloadAsset : ScenarioEditorPreloadAssets)
+	{
+		const FSoftObjectPath preloadAssetPath = preloadAsset.ToSoftObjectPath();
+		if (!preloadAssetPath.IsNull())
+		{
+			preloadAssetPaths.AddUnique(preloadAssetPath);
+		}
+	}
+
+	if (preloadAssetPaths.IsEmpty())
+	{
+		LoadedScenarioEditorPreloadAssets.Reset();
+		OpenScenarioEditorMapAfterPreload(PendingScenarioEditorOpenLevelOptions);
+		PendingScenarioEditorOpenLevelOptions.Reset();
+		return;
+	}
+
+	if (ScenarioEditorPreloadHandle.IsValid() && ScenarioEditorPreloadHandle->IsLoadingInProgress())
+	{
+		UE_LOG(
+			LogScenarioEditorLaunch,
+			Log,
+			TEXT("ScenarioEditor visual asset preload already in progress | Count: %d"),
+			preloadAssetPaths.Num());
+		return;
+	}
+
+	FStreamableManager& streamableManager = UAssetManager::GetStreamableManager();
+	ScenarioEditorPreloadHandle = streamableManager.RequestAsyncLoad(
+		MoveTemp(preloadAssetPaths),
+		FStreamableDelegate::CreateUObject(
+			this,
+			&UScenarioEditorLaunchSubsystem::HandleScenarioEditorPreloadComplete),
+		FStreamableManager::DefaultAsyncLoadPriority,
+		false,
+		false,
+		TEXT("ScenarioEditorVisualPreload"));
+
+	if (!ScenarioEditorPreloadHandle.IsValid())
+	{
+		UE_LOG(LogScenarioEditorLaunch, Warning, TEXT("ScenarioEditor visual asset preload request failed."));
+		OpenScenarioEditorMapAfterPreload(PendingScenarioEditorOpenLevelOptions);
+		PendingScenarioEditorOpenLevelOptions.Reset();
+	}
+}
+
+void UScenarioEditorLaunchSubsystem::HandleScenarioEditorPreloadComplete()
+{
+	CacheLoadedScenarioEditorPreloadAssets();
+	ScenarioEditorPreloadHandle.Reset();
+
+	const FString openLevelOptions = PendingScenarioEditorOpenLevelOptions;
+	PendingScenarioEditorOpenLevelOptions.Reset();
+	OpenScenarioEditorMapAfterPreload(openLevelOptions);
+}
+
+void UScenarioEditorLaunchSubsystem::CacheLoadedScenarioEditorPreloadAssets()
+{
+	LoadedScenarioEditorPreloadAssets.Reset();
+	for (const TSoftObjectPtr<UObject>& preloadAsset : ScenarioEditorPreloadAssets)
+	{
+		if (UObject* loadedAsset = preloadAsset.Get())
+		{
+			LoadedScenarioEditorPreloadAssets.Add(loadedAsset);
+			continue;
+		}
+
+		const FSoftObjectPath preloadAssetPath = preloadAsset.ToSoftObjectPath();
+		if (!preloadAssetPath.IsNull())
+		{
+			UE_LOG(
+				LogScenarioEditorLaunch,
+				Warning,
+				TEXT("ScenarioEditor visual asset preload missing asset | Path: %s"),
+				*preloadAssetPath.ToString());
+		}
+	}
+
+	UE_LOG(
+		LogScenarioEditorLaunch,
+		Log,
+		TEXT("ScenarioEditor visual asset preload complete | Loaded: %d / Configured: %d"),
+		LoadedScenarioEditorPreloadAssets.Num(),
+		ScenarioEditorPreloadAssets.Num());
 }
 
 void UScenarioEditorLaunchSubsystem::HandlePostLoadMapWithWorld(UWorld* loadedWorld)

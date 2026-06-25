@@ -38,6 +38,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Shell")
 	void SelectTemplateBlock(EScenarioTemplateSidebarPanel panel, const FString& blockPath);
 
+	// Focuses a sidebar block that represents the selected viewport placeable.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Shell")
+	void FocusPlaceableTemplateBlock(
+		EScenarioTemplateSidebarPanel panel,
+		const FString& blockPath,
+		const FString& placeableId);
+
 	// Asset palette visibility 표시 상태를 갱신한다.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Shell")
 	void SetAssetPaletteVisible(bool bVisible);

@@ -20,6 +20,7 @@ class UScenarioPlaceableComponent;
 class UScenarioPlaceableContextMenuWidget;
 class UScenarioPlaceableDetailsWidget;
 class UScenarioEditorSidebarWidget;
+class UTexture2D;
 class UWidget;
 class UWidgetSwitcher;
 
@@ -60,6 +61,30 @@ public:
 	// Right-edge distance that keeps the LLM prompt panel visible after it has opened.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root", meta = (ClampMin = "0.0"))
 	float LlmPanelHideRightEdgePixels = 96.0f;
+
+	// Texture drawn for the editor-only robot start marker overlay.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	TObjectPtr<UTexture2D> RobotStartMarkerOverlayTexture;
+
+	// Texture drawn for the editor-only robot goal marker overlay.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	TObjectPtr<UTexture2D> RobotGoalMarkerOverlayTexture;
+
+	// Fixed screen-space size for route marker overlays, preserving the default 78:120 marker aspect.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FVector2D RobotRouteMarkerOverlaySize = FVector2D(39.0, 60.0);
+
+	// Normalized overlay anchor point; the marker tip is expected at the bottom center.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FVector2D RobotRouteMarkerOverlayAnchor = FVector2D(0.5, 1.0);
+
+	// Fallback tint for the robot start marker when no texture is assigned.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FLinearColor RobotStartMarkerOverlayTint = FLinearColor(0.0f, 0.48f, 1.0f, 0.82f);
+
+	// Fallback tint for the robot goal marker when no texture is assigned.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FLinearColor RobotGoalMarkerOverlayTint = FLinearColor(1.0f, 0.03f, 0.03f, 0.82f);
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UScenarioEditorToolbarWidget> ToolbarWidget;
@@ -145,7 +170,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void HideAssetPaletteWidget();
 
-	// Shows the selection details panel for a placeable-backed editor item.
+	// Legacy entry point that focuses the sidebar block for a placeable-backed editor item.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	UScenarioPlaceableDetailsWidget* ShowPlaceableDetails(UScenarioPlaceableComponent* selectedPlaceable);
 
@@ -153,7 +178,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void HidePlaceableDetails();
 
-	// Legacy compatibility wrapper for old context-menu callers.
+	// Legacy compatibility wrapper that routes old context-menu callers to sidebar focus.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	UScenarioPlaceableContextMenuWidget* ShowPlaceableContextMenu(UScenarioPlaceableComponent* selectedPlaceable);
 
@@ -170,6 +195,10 @@ public:
 	// Applies the Scenario Template sidebar panel shown by the root widget.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void SetTemplateSidebarPanel(EScenarioTemplateSidebarPanel activePanel, bool bSyncOutlinerSelection = true);
+
+	// Focuses the Scenario Template sidebar block represented by a selected viewport placeable.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
+	bool FocusSidebarForSelectedPlaceable(UScenarioPlaceableComponent* selectedPlaceable);
 
 	// Refreshes the read-only Scenario Template sidebar from the authoring draft.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
@@ -261,7 +290,6 @@ private:
 	// Checks whether the cursor is near enough to the bottom edge to reveal the asset palette.
 	bool ShouldRevealAssetPaletteFromMouseEdge() const;
 	bool IsMouseOverWidget(const UWidget* targetWidget) const;
-
 	FDelegateHandle AutoStartCompletedHandle;
 
 	// Subsystem-owned shell ViewModel used by MVVM binding and command forwarding.

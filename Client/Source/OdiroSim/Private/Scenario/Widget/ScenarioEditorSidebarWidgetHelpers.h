@@ -39,6 +39,14 @@ namespace ScenarioEditorSidebarWidgetHelpers
 		TSoftObjectPtr<UWidgetTextStyleCatalog> textStyleCatalog,
 		const FSidebarBlockConfig& config);
 
+	// Formats one repeated block path with its stable list path and zero-based item index.
+	FString MakeIndexedBlockPath(const FString& listPath, int32 itemIndex);
+
+	// Applies selected visual state when the block path matches the current shell selection.
+	void ApplySelectedBlockPath(
+		UScenarioEditorSidebarBlockWidget* blockWidget,
+		const FString& selectedBlockPath);
+
 	// Applies standard style and item data to a field row.
 	void InitializeFieldRow(
 		UScenarioEditorSidebarFieldRow* fieldRow,

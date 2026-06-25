@@ -45,6 +45,7 @@ guardrails:
   - Scenario generation v2 preset patching and fallback generation must both use the same `ScenarioIntent` fields for corridor profile, length, obstacle count, requested prop, and no-obstacle/no-pedestrian policy.
   - Scenario generation v2 fallback output must be generated from `ScenarioIntent` values such as corridor profile, requested length, obstacle count, prop id, and no-obstacle/no-pedestrian flags without requiring static scenario preset files.
   - Scenario generation v2 normalizes known legacy static obstacle prop ids through the shared prop normalizer before validator-gated preset, repair, or LLM output can become an API response.
+  - Scenario generation v2 repair diagnostics are internal only: detailed `repair_events` may be stored on graph/agent state for debugging, while `/api/v2/scenarios/generate` continues to return only the project scenario body.
   - Final user project contracts write project/run/episode artifacts under `contracts/specs/user-project-data.md`.
   - V2 LLM prompt context is loaded only through the SpecContextLoader allowlist.
   - Review artifacts are stored under `<UserProject>/runs/<RunId>/review/<ReviewId>/`.
@@ -58,6 +59,10 @@ verify:
       - contract validation for changed public fields
   - when: v2 scenario preset selection, patching, validation, or fallback changes
     run:
+      - cd Agents; uv run pytest tests/test_v2_scenario_generation_api.py -q
+  - when: v2 scenario repair behavior or repair diagnostics change
+    run:
+      - cd Agents; uv run pytest tests/test_scenario_quality_repairer.py -q
       - cd Agents; uv run pytest tests/test_v2_scenario_generation_api.py -q
   - when: v2 analysis or recommendation artifacts change
     run:

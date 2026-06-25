@@ -6,13 +6,19 @@
 #include "Components/BoxComponent.h"
 #include "DeliveryBot/Actor/DeliveryBot_GridBoundsActor.h"
 #include "Engine/OverlapResult.h"
+#include "EngineUtils.h"
 #include "Dom/JsonObject.h"
+#include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
+#include "Scenario/Actors/ScenarioStaticObstacle.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 
 namespace
 {
+	// Source label used when a scenario static obstacle blocks a navigation grid cell.
+	const FName StaticObstacleGridBlockSourceName{ TEXT("StaticObstacle") };
+
 	FDeliveryBotGridCollisionRuleInfo MakeGridSubsystemFallbackCollisionRule(
 		FName collisionProfileName,
 		EDeliveryBotGridAreaType areaType,
@@ -37,6 +43,55 @@ namespace
 		};
 
 		return rules;
+	}
+
+	FName ResolveGridCollisionProfileNameForScenarioRegion(EScenarioGroundRegionType regionType)
+	{
+		switch (regionType)
+		{
+		case EScenarioGroundRegionType::Penalty:
+			return FName(TEXT("Penalty"));
+		case EScenarioGroundRegionType::Blocked:
+			return FName(TEXT("Blocked"));
+		case EScenarioGroundRegionType::Walkable:
+		default:
+			return FName(TEXT("Walkable"));
+		}
+	}
+
+	EDeliveryBotGridAreaType ResolveGridAreaTypeForScenarioRegion(EScenarioGroundRegionType regionType)
+	{
+		switch (regionType)
+		{
+		case EScenarioGroundRegionType::Penalty:
+			return EDeliveryBotGridAreaType::Penalty;
+		case EScenarioGroundRegionType::Blocked:
+			return EDeliveryBotGridAreaType::Blocked;
+		case EScenarioGroundRegionType::Walkable:
+		default:
+			return EDeliveryBotGridAreaType::Walkable;
+		}
+	}
+
+	float ResolveFallbackGridCostForAreaType(EDeliveryBotGridAreaType areaType)
+	{
+		switch (areaType)
+		{
+		case EDeliveryBotGridAreaType::Penalty:
+			return 3.0f;
+		case EDeliveryBotGridAreaType::Blocked:
+			return BIG_NUMBER;
+		case EDeliveryBotGridAreaType::Walkable:
+		default:
+			return 1.0f;
+		}
+	}
+
+	// Identifies runtime/editor static obstacle collision primitives regardless of profile name.
+	bool IsScenarioStaticObstacleComponent(const UPrimitiveComponent* primitiveComponent)
+	{
+		return IsValid(primitiveComponent)
+			&& IsValid(Cast<AScenarioStaticObstacle>(primitiveComponent->GetOwner()));
 	}
 }
 
@@ -576,6 +631,16 @@ bool UDeliveryBot_GridSubsystem::ClassifyCellByCollisionPreset(const FVector& ce
 		return false;
 	}
 
+	if (TryApplyScenarioCorridorSurfaceCell(
+		cellCenterLocation,
+		robotBoxExtent,
+		gridTraceChannel,
+		collisionRules,
+		outCellInfo))
+	{
+		return true;
+	}
+
 	const FVector traceStart(cellCenterLocation.X, cellCenterLocation.Y, cellCenterLocation.Z + 1000.f);
 	const FVector traceEnd(cellCenterLocation.X, cellCenterLocation.Y, cellCenterLocation.Z - 1000.f);
 
@@ -600,6 +665,12 @@ bool UDeliveryBot_GridSubsystem::ClassifyCellByCollisionPreset(const FVector& ce
 	if (!IsValid(hitComponent))
 	{
 		ApplyBlockedCell(outCellInfo, TEXT("InvalidHitComponent"));
+		return true;
+	}
+
+	if (IsScenarioStaticObstacleComponent(hitComponent))
+	{
+		ApplyBlockedCell(outCellInfo, StaticObstacleGridBlockSourceName);
 		return true;
 	}
 
@@ -637,6 +708,7 @@ bool UDeliveryBot_GridSubsystem::ClassifyCellByCollisionPreset(const FVector& ce
 		robotBoxExtent,
 		gridTraceChannel,
 		collisionRules,
+		nullptr,
 		blockingProfileName))
 	{
 		ApplyBlockedCell(outCellInfo, blockingProfileName);
@@ -655,9 +727,127 @@ bool UDeliveryBot_GridSubsystem::ClassifyCellByCollisionPreset(const FVector& ce
 	return true;
 }
 
-	// 로봇의 실제 크기만큼 박스 overlap을 해서, 해당 셀에 로봇이 들어갈 수 있는지 검사한다.
+bool UDeliveryBot_GridSubsystem::TryApplyScenarioCorridorSurfaceCell(
+	const FVector& cellCenterLocation,
+	const FVector& robotBoxExtent,
+	const ECollisionChannel gridTraceChannel,
+	const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules,
+	FDeliveryBotGridCellInfo& outCellInfo) const
+{
+	const UWorld* world = GetWorld();
+	if (!IsValid(world))
+	{
+		return false;
+	}
+
+	FScenarioRuntimeCorridorSurfaceQueryResult surface;
+	const AScenarioCorridorRuntimeActor* corridorActor = nullptr;
+	for (TActorIterator<AScenarioCorridorRuntimeActor> actorIt(world); actorIt; ++actorIt)
+	{
+		AScenarioCorridorRuntimeActor* candidateActor = *actorIt;
+		if (IsValid(candidateActor)
+			&& candidateActor->TryFindSurfaceAtWorldLocation2D(cellCenterLocation, surface))
+		{
+			corridorActor = candidateActor;
+			break;
+		}
+	}
+
+	if (!IsValid(corridorActor))
+	{
+		return false;
+	}
+
+	const FName profileName = ResolveGridCollisionProfileNameForScenarioRegion(surface.RegionType);
+	const FDeliveryBotGridCollisionRuleInfo* rule =
+		FindCollisionRuleByProfileName(profileName, collisionRules);
+	const EDeliveryBotGridAreaType areaType = rule
+		? rule->AreaType
+		: ResolveGridAreaTypeForScenarioRegion(surface.RegionType);
+	const float cost = rule
+		? rule->Cost
+		: ResolveFallbackGridCostForAreaType(areaType);
+
+	outCellInfo.GroundLocation = FVector(
+		cellCenterLocation.X,
+		cellCenterLocation.Y,
+		AScenarioCorridorRuntimeActor::GetRuntimeSurfaceTopZCm() + surface.SurfaceZOffsetCm);
+	outCellInfo.GroundNormal = FVector::UpVector;
+	outCellInfo.WorldLocation = outCellInfo.GroundLocation;
+	outCellInfo.SlopeDegree = 0.0f;
+
+	if ((rule != nullptr && rule->bBlocksMovement) || areaType == EDeliveryBotGridAreaType::Blocked)
+	{
+		ApplyBlockedCell(outCellInfo, profileName);
+		return true;
+	}
+
+	FName blockingProfileName = NAME_None;
+	if (HasBlockingCorridorFootprintOverlap(*corridorActor, outCellInfo.GroundLocation, robotBoxExtent, blockingProfileName))
+	{
+		ApplyBlockedCell(outCellInfo, blockingProfileName);
+		return true;
+	}
+
+	if (HasBlockingFootprintOverlap(
+		outCellInfo.GroundLocation,
+		robotBoxExtent,
+		gridTraceChannel,
+		collisionRules,
+		corridorActor,
+		blockingProfileName))
+	{
+		ApplyBlockedCell(outCellInfo, blockingProfileName);
+		return true;
+	}
+
+	ApplyWalkableCell(outCellInfo, areaType, cost, profileName);
+	return true;
+}
+
+bool UDeliveryBot_GridSubsystem::HasBlockingCorridorFootprintOverlap(
+	const AScenarioCorridorRuntimeActor& corridorActor,
+	const FVector& groundLocation,
+	const FVector& robotBoxExtent,
+	FName& outBlockingProfileName) const
+{
+	outBlockingProfileName = NAME_None;
+
+	const FVector2D sampleOffsets[] =
+	{
+		FVector2D(-robotBoxExtent.X, -robotBoxExtent.Y),
+		FVector2D(-robotBoxExtent.X, robotBoxExtent.Y),
+		FVector2D(robotBoxExtent.X, -robotBoxExtent.Y),
+		FVector2D(robotBoxExtent.X, robotBoxExtent.Y)
+	};
+
+	for (const FVector2D& sampleOffset : sampleOffsets)
+	{
+		const FVector sampleLocation(
+			groundLocation.X + sampleOffset.X,
+			groundLocation.Y + sampleOffset.Y,
+			groundLocation.Z);
+		FScenarioRuntimeCorridorSurfaceQueryResult surface;
+		if (!corridorActor.TryFindSurfaceAtWorldLocation2D(sampleLocation, surface))
+		{
+			outBlockingProfileName = TEXT("NoCorridorSurface");
+			return true;
+		}
+
+		const EDeliveryBotGridAreaType areaType = ResolveGridAreaTypeForScenarioRegion(surface.RegionType);
+		if (areaType == EDeliveryBotGridAreaType::Blocked)
+		{
+			outBlockingProfileName = ResolveGridCollisionProfileNameForScenarioRegion(surface.RegionType);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// 로봇의 실제 크기만큼 박스 overlap을 해서, 해당 셀에 로봇이 들어갈 수 있는지 검사한다.
 bool UDeliveryBot_GridSubsystem::HasBlockingFootprintOverlap(const FVector& groundLocation, const FVector& robotBoxExtent, ECollisionChannel gridTraceChannel,
-	const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, FName& outBlockingProfileName) const
+	const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, const AActor* ignoredActor, FName& outBlockingProfileName) const
 {
 	outBlockingProfileName = NAME_None;
 
@@ -691,6 +881,15 @@ bool UDeliveryBot_GridSubsystem::HasBlockingFootprintOverlap(const FVector& grou
 		const UPrimitiveComponent* overlapComponent = overlapResult.GetComponent();
 		if (!IsValid(overlapComponent))
 			continue;
+
+		if (ignoredActor && overlapComponent->GetOwner() == ignoredActor)
+			continue;
+
+		if (IsScenarioStaticObstacleComponent(overlapComponent))
+		{
+			outBlockingProfileName = StaticObstacleGridBlockSourceName;
+			return true;
+		}
 
 		const FName profileName = overlapComponent->GetCollisionProfileName();
 		const FDeliveryBotGridCollisionRuleInfo* rule =

@@ -1,12 +1,9 @@
 #include "Scenario/Widget/ScenarioEditorRootWidget.h"
 
-#include "Blueprint/WidgetLayoutLibrary.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
 #include "Components/WidgetSwitcher.h"
-#include "Engine/Texture2D.h"
-#include "Rendering/DrawElements.h"
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
@@ -24,7 +21,6 @@
 #include "Scenario/Widget/ScenarioEditorSidebarWidget.h"
 #include "Framework/Application/SlateApplication.h"
 #include "GameFramework/PlayerController.h"
-#include "Styling/CoreStyle.h"
 
 namespace
 {
@@ -195,26 +191,6 @@ void UScenarioEditorRootWidget::NativeTick(const FGeometry& myGeometry, const fl
 			RefreshPlacementSnapButton();
 		}
 	}
-}
-
-int32 UScenarioEditorRootWidget::NativePaint(
-	const FPaintArgs& args,
-	const FGeometry& allottedGeometry,
-	const FSlateRect& myCullingRect,
-	FSlateWindowElementList& outDrawElements,
-	const int32 layerId,
-	const FWidgetStyle& inWidgetStyle,
-	const bool bParentEnabled) const
-{
-	const int32 overlayLayerId = PaintRobotRouteMarkerOverlays(allottedGeometry, outDrawElements, layerId);
-	return Super::NativePaint(
-		args,
-		allottedGeometry,
-		myCullingRect,
-		outDrawElements,
-		overlayLayerId + 1,
-		inWidgetStyle,
-		bParentEnabled);
 }
 
 UScenarioAssetPaletteWidget* UScenarioEditorRootWidget::ShowAssetPaletteWidget()
@@ -1006,155 +982,4 @@ bool UScenarioEditorRootWidget::IsMouseOverWidget(const UWidget* targetWidget) c
 	}
 
 	return targetWidget->GetCachedGeometry().IsUnderLocation(FSlateApplication::Get().GetCursorPos());
-}
-
-int32 UScenarioEditorRootWidget::PaintRobotRouteMarkerOverlays(
-	const FGeometry& allottedGeometry,
-	FSlateWindowElementList& outDrawElements,
-	const int32 layerId) const
-{
-	const UScenarioAuthoringSubsystem* authoringSubsystem =
-		GetWorld() ? GetWorld()->GetSubsystem<UScenarioAuthoringSubsystem>() : nullptr;
-	if (!authoringSubsystem)
-	{
-		return layerId;
-	}
-
-	TArray<FScenarioEditorRouteMarkerOverlayItem> items;
-	authoringSubsystem->GetRobotRouteMarkerOverlayItems(items);
-
-	int32 maxLayerId = layerId;
-	for (const FScenarioEditorRouteMarkerOverlayItem& item : items)
-	{
-		FVector2D localPosition = FVector2D::ZeroVector;
-		if (!TryProjectRouteMarkerOverlayPosition(item.WorldLocation, allottedGeometry, localPosition))
-		{
-			continue;
-		}
-
-		maxLayerId = FMath::Max(
-			maxLayerId,
-			PaintRobotRouteMarkerOverlayItem(item, localPosition, allottedGeometry, outDrawElements, layerId));
-	}
-	return maxLayerId;
-}
-
-int32 UScenarioEditorRootWidget::PaintRobotRouteMarkerOverlayItem(
-	const FScenarioEditorRouteMarkerOverlayItem& item,
-	const FVector2D& localPosition,
-	const FGeometry& allottedGeometry,
-	FSlateWindowElementList& outDrawElements,
-	const int32 layerId) const
-{
-	const FVector2D safeMarkerSize(
-		FMath::Max(1.0, RobotRouteMarkerOverlaySize.X),
-		FMath::Max(1.0, RobotRouteMarkerOverlaySize.Y));
-	const FVector2D markerSize = safeMarkerSize;
-	const FVector2D safeAnchor(
-		FMath::Clamp(RobotRouteMarkerOverlayAnchor.X, 0.0, 1.0),
-		FMath::Clamp(RobotRouteMarkerOverlayAnchor.Y, 0.0, 1.0));
-	const FVector2D topLeft = localPosition - markerSize * safeAnchor;
-	const FVector2D localSize = allottedGeometry.GetLocalSize();
-	if (topLeft.X > localSize.X
-		|| topLeft.Y > localSize.Y
-		|| topLeft.X + markerSize.X < 0.0
-		|| topLeft.Y + markerSize.Y < 0.0)
-	{
-		return layerId;
-	}
-
-	UTexture2D* markerTexture = item.Kind == EScenarioEditorRouteMarkerKind::Start
-		? RobotStartMarkerOverlayTexture.Get()
-		: RobotGoalMarkerOverlayTexture.Get();
-	const FLinearColor baseTint = item.Kind == EScenarioEditorRouteMarkerKind::Start
-		? RobotStartMarkerOverlayTint
-		: RobotGoalMarkerOverlayTint;
-
-	if (markerTexture)
-	{
-		FSlateBrush markerBrush;
-		markerBrush.SetResourceObject(markerTexture);
-		markerBrush.ImageSize = markerSize;
-		markerBrush.DrawAs = ESlateBrushDrawType::Image;
-		FSlateDrawElement::MakeBox(
-			outDrawElements,
-			layerId,
-			allottedGeometry.ToPaintGeometry(markerSize, FSlateLayoutTransform(topLeft)),
-			&markerBrush,
-			ESlateDrawEffect::None,
-			baseTint);
-		return layerId + 1;
-	}
-
-	const FSlateBrush* whiteBrush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
-	if (whiteBrush)
-	{
-		const FVector2D headSize(markerSize.X * 0.74, markerSize.X * 0.74);
-		const FVector2D headTopLeft(
-			topLeft.X + (markerSize.X - headSize.X) * 0.5,
-			topLeft.Y + markerSize.Y * 0.08);
-		FSlateDrawElement::MakeBox(
-			outDrawElements,
-			layerId,
-			allottedGeometry.ToPaintGeometry(headSize, FSlateLayoutTransform(headTopLeft)),
-			whiteBrush,
-			ESlateDrawEffect::None,
-			baseTint);
-
-		const FVector2D tip(topLeft.X + markerSize.X * 0.5, topLeft.Y + markerSize.Y);
-		const FVector2D leftBase(topLeft.X + markerSize.X * 0.24, topLeft.Y + markerSize.Y * 0.42);
-		const FVector2D rightBase(topLeft.X + markerSize.X * 0.76, topLeft.Y + markerSize.Y * 0.42);
-		TArray<FVector2D> markerLines;
-		markerLines.Reserve(4);
-		markerLines.Add(leftBase);
-		markerLines.Add(tip);
-		markerLines.Add(rightBase);
-		markerLines.Add(leftBase);
-		FSlateDrawElement::MakeLines(
-			outDrawElements,
-			layerId + 1,
-			allottedGeometry.ToPaintGeometry(),
-			markerLines,
-			ESlateDrawEffect::None,
-			baseTint,
-			true,
-			3.0f);
-		return layerId + 2;
-	}
-
-	return layerId;
-}
-
-bool UScenarioEditorRootWidget::TryProjectRouteMarkerOverlayPosition(
-	const FVector& worldLocation,
-	const FGeometry& allottedGeometry,
-	FVector2D& outLocalPosition) const
-{
-	APlayerController* owningPlayer = GetOwningPlayer();
-	if (!owningPlayer)
-	{
-		return false;
-	}
-
-	FVector2D widgetPosition = FVector2D::ZeroVector;
-	if (!UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(
-		owningPlayer,
-		worldLocation,
-		widgetPosition,
-		true))
-	{
-		return false;
-	}
-
-	const FGeometry viewportGeometry = UWidgetLayoutLibrary::GetViewportWidgetGeometry(this);
-	const FVector2D rootOriginInViewport = viewportGeometry.AbsoluteToLocal(allottedGeometry.GetAbsolutePosition());
-	outLocalPosition = widgetPosition - rootOriginInViewport;
-	const FVector2D localSize = allottedGeometry.GetLocalSize();
-	const FVector2D markerSize(
-		FMath::Max(1.0, RobotRouteMarkerOverlaySize.X),
-		FMath::Max(1.0, RobotRouteMarkerOverlaySize.Y));
-	return outLocalPosition.X >= -markerSize.X
-		&& outLocalPosition.Y >= -markerSize.Y
-		&& outLocalPosition.X <= localSize.X + markerSize.X
-		&& outLocalPosition.Y <= localSize.Y + markerSize.Y;
 }

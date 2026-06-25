@@ -15,6 +15,7 @@ class AScenarioTransformGizmoActor;
 class UScenarioAuthoringSubsystem;
 class UScenarioEditorRootWidget;
 class UScenarioEditorToolbarWidget;
+class UScenarioEditorRouteMarkerOverlayWidget;
 class UMainMenuWidget;
 class UScenarioPlaceableComponent;
 class UInputAction;
@@ -115,6 +116,10 @@ public:
 	// Viewport z-order used when ScenarioEditorMap attaches WBP_MainMenu.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
 	int32 MainMenuWidgetViewportZOrder = 10;
+
+	// Viewport z-order offset that keeps route markers below WBP_MainMenu and its editor panels.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
+	int32 RouteMarkerOverlayViewportZOrderOffset = -1;
 
 	// Screen-space route marker hit size matched to the root overlay's default 78:120 aspect.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
@@ -340,6 +345,10 @@ private:
 	void EnsureAuthoringOutlineCustomDepthEnabled() const;
 	void AddEditorInputMappingContext();
 	void BindEditorInputActions();
+	// Ensures the route marker visual overlay is present below the main editor UI.
+	void ShowRouteMarkerOverlayWidget(UScenarioEditorRootWidget* rootWidget);
+	// Removes the route marker visual overlay owned by this controller.
+	void RemoveRouteMarkerOverlayWidget();
 	void UpdatePlacementPreview();
 	bool ConfigurePlacementPreviewForSelectedItem(UScenarioAuthoringSubsystem* authoringSubsystem);
 	bool ValidatePlacementForSelectedItem(
@@ -420,6 +429,10 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UScenarioEditorRootWidget> EditorRootWidget;
+
+	// Viewport-level route marker overlay rendered beneath WBP_MainMenu.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorRouteMarkerOverlayWidget> RouteMarkerOverlayWidget;
 
 	// MainMenu widget created by ScenarioEditorMap controller.
 	UPROPERTY(Transient)

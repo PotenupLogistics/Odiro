@@ -7,6 +7,7 @@
 #include "Scenario/Editor/ScenarioEditorPawn.h"
 #include "Scenario/Editor/ScenarioPlacementPreviewActor.h"
 #include "Scenario/Editor/ScenarioTransformGizmoActor.h"
+#include "Scenario/Widget/ScenarioEditorRouteMarkerOverlayWidget.h"
 #include "Scenario/Widget/ScenarioEditorRootWidget.h"
 #include "Scenario/Widget/ScenarioEditorToolbarWidget.h"
 #include "Scenario/Actors/ScenarioPedestrian.h"
@@ -890,9 +891,11 @@ UScenarioEditorRootWidget* AScenarioEditorController::ShowEditorRootWidget()
 			{
 				MainMenuWidget->AddToViewport(MainMenuWidgetViewportZOrder);
 			}
+			ShowRouteMarkerOverlayWidget(EditorRootWidget.Get());
 			return EditorRootWidget.Get();
 		}
 
+		RemoveRouteMarkerOverlayWidget();
 		EditorRootWidget = nullptr;
 	}
 
@@ -914,6 +917,7 @@ UScenarioEditorRootWidget* AScenarioEditorController::ShowEditorRootWidget()
 
 void AScenarioEditorController::RemoveEditorRootWidget()
 {
+	RemoveRouteMarkerOverlayWidget();
 	EditorRootWidget = nullptr;
 }
 
@@ -986,6 +990,7 @@ void AScenarioEditorController::RegisterEditorRootWidget(UScenarioEditorRootWidg
 	}
 
 	EditorRootWidget = rootWidget;
+	ShowRouteMarkerOverlayWidget(rootWidget);
 }
 
 void AScenarioEditorController::ClearRegisteredEditorRootWidget(UScenarioEditorRootWidget* rootWidget)
@@ -995,7 +1000,48 @@ void AScenarioEditorController::ClearRegisteredEditorRootWidget(UScenarioEditorR
 		return;
 	}
 
+	RemoveRouteMarkerOverlayWidget();
 	EditorRootWidget = nullptr;
+}
+
+void AScenarioEditorController::ShowRouteMarkerOverlayWidget(UScenarioEditorRootWidget* rootWidget)
+{
+	if (!IsValid(rootWidget))
+	{
+		RemoveRouteMarkerOverlayWidget();
+		return;
+	}
+
+	if (!IsValid(RouteMarkerOverlayWidget))
+	{
+		RouteMarkerOverlayWidget = CreateWidget<UScenarioEditorRouteMarkerOverlayWidget>(
+			this,
+			UScenarioEditorRouteMarkerOverlayWidget::StaticClass());
+		if (!RouteMarkerOverlayWidget)
+		{
+			UE_LOG(LogScenarioEditorController, Error, TEXT("Failed to create route marker overlay widget."));
+			return;
+		}
+	}
+
+	RouteMarkerOverlayWidget->ApplyStyleFromRootWidget(rootWidget);
+	RouteMarkerOverlayWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+	if (!RouteMarkerOverlayWidget->IsInViewport())
+	{
+		RouteMarkerOverlayWidget->AddToViewport(
+			MainMenuWidgetViewportZOrder + RouteMarkerOverlayViewportZOrderOffset);
+	}
+}
+
+void AScenarioEditorController::RemoveRouteMarkerOverlayWidget()
+{
+	if (IsValid(RouteMarkerOverlayWidget))
+	{
+		RouteMarkerOverlayWidget->RemoveFromParent();
+	}
+
+	RouteMarkerOverlayWidget = nullptr;
 }
 
 EScenarioTransformGizmoOrientationMode AScenarioEditorController::GetEffectiveTransformGizmoOrientationMode() const

@@ -4,6 +4,7 @@
 #include "Engine/AssetManager.h"
 #include "Engine/StreamableManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "Shared/ScenarioViewportPresentation.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorLaunch, Log, All);
 
@@ -30,8 +31,7 @@ namespace
 UScenarioEditorLaunchSubsystem::UScenarioEditorLaunchSubsystem()
 {
 	ScenarioEditorPreloadAssets = {
-		TSoftObjectPtr<UObject>(FSoftObjectPath(
-			TEXT("/Game/Materials/Scenario/M_PP_ScenarioEditorGreyBackground.M_PP_ScenarioEditorGreyBackground"))),
+		FScenarioViewportPresentation::MakeGreyBackgroundPreloadAsset(),
 		TSoftObjectPtr<UObject>(FSoftObjectPath(TEXT("/Game/Materials/M_EditorOutline.M_EditorOutline")))
 	};
 }

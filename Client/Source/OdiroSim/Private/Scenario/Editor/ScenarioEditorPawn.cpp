@@ -4,6 +4,7 @@
 #include "Components/SceneComponent.h"
 #include "GameFramework/FloatingPawnMovement.h"
 #include "Materials/MaterialInterface.h"
+#include "Shared/ScenarioViewportPresentation.h"
 
 // Logs scenario editor camera presentation setup failures.
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioEditorPawn, Log, All);
@@ -179,6 +180,8 @@ void AScenarioEditorPawn::ApplyGreyBackgroundPostProcessMaterial()
 		return;
 	}
 
-	CameraComponent->PostProcessBlendWeight = 1.0f;
-	CameraComponent->PostProcessSettings.AddBlendable(backgroundMaterial, GreyBackgroundBlendWeight);
+	FScenarioViewportPresentation::ApplyGreyBackgroundPostProcess(
+		CameraComponent,
+		backgroundMaterial,
+		GreyBackgroundBlendWeight);
 }

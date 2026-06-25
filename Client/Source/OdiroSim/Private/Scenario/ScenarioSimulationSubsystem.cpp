@@ -9,12 +9,17 @@
 #include "Scenario/Components/ScenarioPedestrianRuntimeComponent.h"
 #include "Scenario/Components/ScenarioPlaceableComponent.h"
 #include "Scenario/ScenarioPedestrianPlanSubsystem.h"
+#include "Scenario/Widget/ScenarioEditorRouteMarkerOverlayWidget.h"
 #include "Shared/ScenarioPedestrianPlanTypes.h"
+#include "Shared/ScenarioViewportPresentation.h"
 #include "Shared/Struct/DeliveryBot/Setup/DeliveryBotSetupInfo.h"
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "DeliveryBot/Actor/DeliveryBot_GridBoundsActor.h"
 #include "DeliveryBot/Subsystem/DeliveryBot_GridSubsystem.h"
+#include "Blueprint/UserWidget.h"
 #include "Components/BoxComponent.h"
+#include "Engine/PostProcessVolume.h"
+#include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 
 
@@ -36,17 +41,6 @@ UScenarioSimulationSubsystem::UScenarioSimulationSubsystem()
 	{
 		RobotActorClass = ADeliveryBot::StaticClass();
 	}
-	static ConstructorHelpers::FClassFinder<AActor> goalPointBlueprintClass(TEXT("/Game/Blueprints/Scenario/BP_GoalPoint"));
-	if (goalPointBlueprintClass.Succeeded())
-	{
-		GoalPointClass = goalPointBlueprintClass.Class;
-	}
-	static ConstructorHelpers::FClassFinder<AActor> startPointBlueprintClass(TEXT("/Game/Blueprints/Scenario/BP_StartPoint"));
-	if (startPointBlueprintClass.Succeeded())
-	{
-		StartPointClass = startPointBlueprintClass.Class;
-	}
-
 	static ConstructorHelpers::FClassFinder<AScenarioPedestrian> pedestrianBlueprintClass(TEXT("/Game/Blueprints/Scenario/BP_ScenarioPedestrian"));
 	if (pedestrianBlueprintClass.Succeeded())
 	{
@@ -68,12 +62,21 @@ void UScenarioSimulationSubsystem::ClearScenario()
 	const int32 corridorCount = RuntimeCorridors.Num();
 	const int32 pathCount = RuntimePaths.Num();
 
+	RemoveRuntimeRouteMarkerOverlayWidget();
+	RuntimeRouteMarkerOverlayItems.Reset();
+
 	// 이전 Scenario가 생성한 Runtime GridBoundsActor를 제거한다.
 	if (IsValid(RuntimeGridBoundsActor))
 	{
 		RuntimeGridBoundsActor->Destroy();
 	}
 	RuntimeGridBoundsActor = nullptr;
+
+	if (IsValid(RuntimeGreyBackgroundPostProcessVolume))
+	{
+		RuntimeGreyBackgroundPostProcessVolume->Destroy();
+	}
+	RuntimeGreyBackgroundPostProcessVolume = nullptr;
 
 	// SimulationSubsystem이 소유한 모든 runtime actor를 제거한다.
 	for (int32 index = RuntimeActors.Num() - 1; index >= 0; --index)
@@ -543,6 +546,7 @@ bool UScenarioSimulationSubsystem::ValidateDeliveryBotRouteOnGrid(
 bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationSetupSpec& setupSpec)
 {
 	ClearScenario();
+	ApplyRuntimeViewportPresentation();
 
 	UE_LOG(
 		LogScenarioSimulation,
@@ -676,6 +680,8 @@ bool UScenarioSimulationSubsystem::SetupScenarioWorld(const FScenarioSimulationS
 		RuntimeCorridors.Num(),
 		RuntimePaths.Num());
 
+	ShowRuntimeRouteMarkerOverlayWidget();
+
 	return bAllSpawned;
 }
 
@@ -694,6 +700,12 @@ bool UScenarioSimulationSubsystem::TryResolveScenarioMapBounds(
 		placeables,
 		DeliveryBotGridBoundsPaddingCm,
 		outBounds);
+}
+
+void UScenarioSimulationSubsystem::GetRobotRouteMarkerOverlayItems(
+	TArray<FScenarioEditorRouteMarkerOverlayItem>& outItems) const
+{
+	outItems = RuntimeRouteMarkerOverlayItems;
 }
 
 AActor* UScenarioSimulationSubsystem::FindRuntimeActor(const FString& instanceId) const
@@ -1014,6 +1026,74 @@ bool UScenarioSimulationSubsystem::TryFindStaticObstacleProp(
 	return propCatalog->FindPropEntryById(propId, outPropEntry);
 }
 
+void UScenarioSimulationSubsystem::ApplyRuntimeViewportPresentation()
+{
+	if (IsValid(RuntimeGreyBackgroundPostProcessVolume))
+	{
+		return;
+	}
+
+	RuntimeGreyBackgroundPostProcessVolume =
+		FScenarioViewportPresentation::SpawnGreyBackgroundPostProcessVolume(GetWorld(), 1.0f);
+}
+
+void UScenarioSimulationSubsystem::AddRuntimeRouteMarkerOverlayItem(
+	const FString& instanceId,
+	const bool bStartMarker,
+	const FVector& worldLocation)
+{
+	FScenarioEditorRouteMarkerOverlayItem overlayItem;
+	overlayItem.InstanceId = instanceId;
+	overlayItem.Kind = bStartMarker
+		? EScenarioEditorRouteMarkerKind::Start
+		: EScenarioEditorRouteMarkerKind::Goal;
+	overlayItem.WorldLocation = worldLocation;
+	RuntimeRouteMarkerOverlayItems.Add(overlayItem);
+}
+
+void UScenarioSimulationSubsystem::ShowRuntimeRouteMarkerOverlayWidget()
+{
+	if (RuntimeRouteMarkerOverlayItems.IsEmpty())
+	{
+		RemoveRuntimeRouteMarkerOverlayWidget();
+		return;
+	}
+
+	UWorld* world = GetWorld();
+	APlayerController* playerController = world ? world->GetFirstPlayerController() : nullptr;
+	if (!IsValid(playerController))
+	{
+		return;
+	}
+
+	if (!IsValid(RuntimeRouteMarkerOverlayWidget))
+	{
+		RuntimeRouteMarkerOverlayWidget = CreateWidget<UScenarioEditorRouteMarkerOverlayWidget>(
+			playerController,
+			UScenarioEditorRouteMarkerOverlayWidget::StaticClass());
+		if (!IsValid(RuntimeRouteMarkerOverlayWidget))
+		{
+			UE_LOG(LogScenarioSimulation, Warning, TEXT("Runtime route marker overlay widget creation failed."));
+			return;
+		}
+	}
+
+	RuntimeRouteMarkerOverlayWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (!RuntimeRouteMarkerOverlayWidget->IsInViewport())
+	{
+		RuntimeRouteMarkerOverlayWidget->AddToViewport(0);
+	}
+}
+
+void UScenarioSimulationSubsystem::RemoveRuntimeRouteMarkerOverlayWidget()
+{
+	if (IsValid(RuntimeRouteMarkerOverlayWidget))
+	{
+		RuntimeRouteMarkerOverlayWidget->RemoveFromParent();
+	}
+	RuntimeRouteMarkerOverlayWidget = nullptr;
+}
+
 AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableInstanceSpec& placeableSpec)
 {
 	UWorld* world{ GetWorld() };
@@ -1096,27 +1176,14 @@ AActor* UScenarioSimulationSubsystem::SpawnRobotActor(const FScenarioPlaceableIn
 			return robotActor;
 		}
 
-		if (GoalPointClass)
-		{
-			FActorSpawnParameters spawnParams;
-			spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-			if (AActor* goalPointActor = world->SpawnActor<AActor>(GoalPointClass, FTransform(FRotator::ZeroRotator, goalLocation), spawnParams))
-			{
-				RuntimeActors.Add(goalPointActor);
-			}
-		}
-
-		if (StartPointClass)
-		{
-			FActorSpawnParameters spawnParams;
-			spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-			if (AActor* startPointActor = world->SpawnActor<AActor>(StartPointClass, robotSpawnTransform, spawnParams))
-			{
-				RuntimeActors.Add(startPointActor);
-			}
-		}
+		AddRuntimeRouteMarkerOverlayItem(
+			FString::Printf(TEXT("%s:start"), *placeableSpec.InstanceId),
+			true,
+			robotSpawnTransform.GetLocation());
+		AddRuntimeRouteMarkerOverlayItem(
+			FString::Printf(TEXT("%s:goal"), *placeableSpec.InstanceId),
+			false,
+			goalLocation);
 
 	}
 

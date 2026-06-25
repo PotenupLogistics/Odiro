@@ -1,5 +1,6 @@
 
 #include "Platform/Widget/MainMenuWidget.h"
+#include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/CheckBox.h"
 #include "Components/ComboBoxString.h"
@@ -11,6 +12,8 @@
 #include "Components/WidgetSwitcher.h"
 #include "Components/WrapBox.h"
 #include "Components/WrapBoxSlot.h"
+#include "Engine/Texture2D.h"
+#include "ImageUtils.h"
 #include "Misc/Paths.h"
 #include "Platform/PlatformUiDeveloperSettings.h"
 #include "Platform/PlatformUiSubsystem.h"
@@ -2993,9 +2996,41 @@ void UMainMenuWidget::SetProjectRunMetricCardText(
 	SetDashboardChildVisibility(cardWidget, MetricUnitTextName, !VisibleUnit.IsEmpty());
 }
 
+// Episode preview PNG를 WBP placeholder border background로 적용한다.
+bool UMainMenuWidget::ApplyProjectEpisodePreviewImage(
+	UUserWidget* cardWidget,
+	const FString& imagePath)
+{
+	const FString normalizedImagePath = imagePath.TrimStartAndEnd();
+	if (!cardWidget || normalizedImagePath.IsEmpty() || !FPaths::FileExists(normalizedImagePath))
+	{
+		return false;
+	}
+
+	UBorder* previewBorder = Cast<UBorder>(FindDashboardChildWidget(cardWidget, EpisodePreviewPlaceholderBoxName));
+	if (!previewBorder)
+	{
+		return false;
+	}
+
+	UTexture2D* previewTexture = FImageUtils::ImportFileAsTexture2D(normalizedImagePath);
+	if (!previewTexture)
+	{
+		return false;
+	}
+
+	ProjectEpisodePreviewTextures.Add(previewTexture);
+
+	previewBorder->SetBrushFromTexture(previewTexture);
+	previewBorder->SetBrushColor(FLinearColor::White);
+	previewBorder->SetVisibility(ESlateVisibility::HitTestInvisible);
+	return true;
+}
+
+// Episode replay card WBP의 텍스트, 상태, preview image를 갱신한다.
 void UMainMenuWidget::ConfigureProjectEpisodeReplayCard(
 	UUserWidget* cardWidget,
-	const UExperimentResultEpisodeViewModel* episodeItem) const
+	const UExperimentResultEpisodeViewModel* episodeItem)
 {
 	if (!episodeItem)
 	{
@@ -3006,8 +3041,12 @@ void UMainMenuWidget::ConfigureProjectEpisodeReplayCard(
 	SetDashboardChildText(cardWidget, EpisodeDurationTextName, episodeItem->GetDurationLabel());
 	SetDashboardChildVisibility(cardWidget, EpisodeSuccessStateBoxName, episodeItem->IsSuccess());
 	SetDashboardChildVisibility(cardWidget, EpisodeFailureStateBoxName, !episodeItem->IsSuccess());
-	SetDashboardChildVisibility(cardWidget, EpisodePreviewImageBoxName, episodeItem->HasPreviewImage());
-	SetDashboardChildVisibility(cardWidget, EpisodePreviewPlaceholderBoxName, !episodeItem->HasPreviewImage());
+	if (episodeItem->HasPreviewImage())
+	{
+		ApplyProjectEpisodePreviewImage(cardWidget, episodeItem->GetPayloadPath());
+	}
+	SetDashboardChildVisibility(cardWidget, EpisodePreviewPlaceholderBoxName, true);
+	SetDashboardChildVisibility(cardWidget, EpisodePreviewImageBoxName, false);
 }
 
 void UMainMenuWidget::ConfigureProjectAiSuggestionRow(
@@ -3129,6 +3168,7 @@ void UMainMenuWidget::ClearExperimentResultIterationWidgets()
 void UMainMenuWidget::ClearExperimentResultDashboardWidgets()
 {
 	ProjectEpisodeReplayCards.Reset();
+	ProjectEpisodePreviewTextures.Reset();
 	ProjectAiSuggestionRows.Reset();
 
 	if (EpisodeReplayCardWrapBox)

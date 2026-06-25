@@ -347,6 +347,8 @@ private:
 		const UScenarioAuthoringSubsystem* authoringSubsystem,
 		FString& outFailureReason) const;
 	bool HasAuthoredRobotStart(const UScenarioAuthoringSubsystem* authoringSubsystem) const;
+	// Returns true when palette placement should use Corridor schema projection instead of mesh collision hits.
+	bool ShouldUseSchemaPlacementPlane() const;
 	bool TraceMousePlacement(FHitResult& outHit) const;
 	FTransform BuildPlacementTransform(const FVector& location) const;
 	FVector SnapLocationIfNeeded(const FVector& location) const;

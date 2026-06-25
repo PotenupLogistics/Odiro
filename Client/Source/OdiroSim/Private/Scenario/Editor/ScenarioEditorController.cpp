@@ -2783,8 +2783,39 @@ bool AScenarioEditorController::HasAuthoredRobotStart(
 	return false;
 }
 
+bool AScenarioEditorController::ShouldUseSchemaPlacementPlane() const
+{
+	switch (SelectedPlacementItemType)
+	{
+	case EScenarioPaletteItemType::StaticObstacle:
+	case EScenarioPaletteItemType::RobotStart:
+	case EScenarioPaletteItemType::RobotGoal:
+		return true;
+	default:
+		return false;
+	}
+}
+
 bool AScenarioEditorController::TraceMousePlacement(FHitResult& outHit) const
 {
+	outHit = FHitResult();
+	if (ShouldUseSchemaPlacementPlane())
+	{
+		FVector planePoint = FVector::ZeroVector;
+		if (!TraceMouseToPlane(FVector::ZeroVector, FVector::UpVector, planePoint))
+		{
+			return false;
+		}
+
+		outHit.TraceStart = planePoint;
+		outHit.TraceEnd = planePoint;
+		outHit.Location = planePoint;
+		outHit.ImpactPoint = planePoint;
+		outHit.ImpactNormal = FVector::UpVector;
+		outHit.Normal = FVector::UpVector;
+		return true;
+	}
+
 	FVector worldOrigin = FVector::ZeroVector;
 	FVector worldDirection = FVector::ForwardVector;
 	if (!DeprojectMousePositionToWorld(worldOrigin, worldDirection)) return false;

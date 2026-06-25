@@ -237,26 +237,23 @@ void UScenarioEditorRootWidget::HideAssetPaletteWidget()
 UScenarioPlaceableDetailsWidget* UScenarioEditorRootWidget::ShowPlaceableDetails(
 	UScenarioPlaceableComponent* selectedPlaceable)
 {
-	if (!PlaceableContextMenuWidget || !selectedPlaceable)
+	if (!selectedPlaceable)
 	{
 		HidePlaceableDetails();
 		return nullptr;
 	}
 
-	PlaceableContextMenuWidget->SetSelectedPlaceable(selectedPlaceable);
-	ShowInspectorTab(EScenarioEditorInspectorTab::Detail);
-	SetPanelVisibility(ResolveTemplateSidebarVisibilityTarget(), false);
-	SetPanelVisibility(ResolvePlaceableDetailsVisibilityTarget(), true);
-	SetPanelVisibility(PlaceableContextMenuWidget.Get(), true);
-	SyncOutlinerSelectionToPlaceable(selectedPlaceable);
-	if (UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this))
+	if (AScenarioEditorController* controller = GetEditorController();
+		controller
+		&& controller->GetSelectedPlaceableComponent() != selectedPlaceable
+		&& !selectedPlaceable->InstanceId.IsEmpty()
+		&& controller->SelectPlaceableByInstanceId(selectedPlaceable->InstanceId))
 	{
-		if (UScenarioPlaceableDetailsViewModel* detailsViewModel = uiSubsystem->GetPlaceableDetailsViewModel())
-		{
-			detailsViewModel->SetSelectedPlaceable(selectedPlaceable->InstanceId, selectedPlaceable->InstanceId);
-		}
+		return nullptr;
 	}
-	return PlaceableContextMenuWidget.Get();
+
+	FocusSidebarForSelectedPlaceable(selectedPlaceable);
+	return nullptr;
 }
 
 void UScenarioEditorRootWidget::HidePlaceableDetails()
@@ -280,7 +277,7 @@ UScenarioPlaceableContextMenuWidget* UScenarioEditorRootWidget::ShowPlaceableCon
 	UScenarioPlaceableComponent* selectedPlaceable)
 {
 	ShowPlaceableDetails(selectedPlaceable);
-	return Cast<UScenarioPlaceableContextMenuWidget>(PlaceableContextMenuWidget.Get());
+	return nullptr;
 }
 
 void UScenarioEditorRootWidget::HidePlaceableContextMenu()
@@ -682,9 +679,17 @@ void UScenarioEditorRootWidget::HandleOutlinerItemSelected(FScenarioOutlinerItem
 {
 	if (item.ItemType == EScenarioEditorOutlinerItemType::Placeable)
 	{
+		bool bSelectedPlaceable = false;
 		if (ShellViewModel)
 		{
-			ShellViewModel->SelectPlaceable(item.InstanceId);
+			bSelectedPlaceable = ShellViewModel->SelectPlaceable(item.InstanceId);
+		}
+		if (bSelectedPlaceable)
+		{
+			if (AScenarioEditorController* controller = GetEditorController())
+			{
+				FocusSidebarForSelectedPlaceable(controller->GetSelectedPlaceableComponent());
+			}
 		}
 		return;
 	}

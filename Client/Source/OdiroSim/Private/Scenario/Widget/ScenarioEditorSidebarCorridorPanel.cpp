@@ -93,6 +93,68 @@ void UScenarioEditorSidebarCorridorPanel::RefreshFromTemplate(
 	SetDiagnosticsText(TEXT(""));
 }
 
+void UScenarioEditorSidebarCorridorPanel::CollectBlockWidgets(
+	TArray<UScenarioEditorSidebarBlockWidget*>& outBlockWidgets) const
+{
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : {
+		CorridorBlockWidget.Get(),
+		AxisBlockWidget.Get(),
+		AxisPointsBlockWidget.Get(),
+		WalkwayWidthBlockWidget.Get(),
+		BuildingSideBlockWidget.Get(),
+		CurbSideBlockWidget.Get(),
+		SegmentsBlockWidget.Get() })
+	{
+		if (blockWidget)
+		{
+			outBlockWidgets.Add(blockWidget);
+		}
+	}
+	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : BuildingSideLaneWidgets)
+	{
+		if (laneWidget && laneWidget->LaneBlockWidget)
+		{
+			outBlockWidgets.Add(laneWidget->LaneBlockWidget.Get());
+		}
+	}
+	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : CurbSideLaneWidgets)
+	{
+		if (laneWidget && laneWidget->LaneBlockWidget)
+		{
+			outBlockWidgets.Add(laneWidget->LaneBlockWidget.Get());
+		}
+	}
+	for (UScenarioEditorSidebarCorridorPointWidget* pointWidget : AxisPointWidgets)
+	{
+		if (pointWidget && pointWidget->PointBlockWidget)
+		{
+			outBlockWidgets.Add(pointWidget->PointBlockWidget.Get());
+		}
+	}
+	for (UScenarioEditorSidebarCorridorSegmentWidget* segmentWidget : SegmentWidgets)
+	{
+		if (segmentWidget && segmentWidget->SegmentBlockWidget)
+		{
+			outBlockWidgets.Add(segmentWidget->SegmentBlockWidget.Get());
+		}
+	}
+}
+
+UScenarioEditorSidebarBlockWidget* UScenarioEditorSidebarCorridorPanel::FindBlockWidgetByPath(
+	const FString& blockPath) const
+{
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectBlockWidgets(blockWidgets);
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : blockWidgets)
+	{
+		if (blockWidget && blockWidget->BlockPath == blockPath)
+		{
+			return blockWidget;
+		}
+	}
+	return nullptr;
+}
+
 void UScenarioEditorSidebarCorridorPanel::HandleWalkwayWidthCommitted(
 	const FText& text,
 	const ETextCommit::Type commitMethod)
@@ -711,6 +773,20 @@ void UScenarioEditorSidebarCorridorPanel::ApplySelectedBlockPath()
 		if (segmentWidget)
 		{
 			SidebarWidgetHelpers::ApplySelectedBlockPath(segmentWidget->SegmentBlockWidget.Get(), selectedBlockPath);
+		}
+	}
+	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : BuildingSideLaneWidgets)
+	{
+		if (laneWidget)
+		{
+			SidebarWidgetHelpers::ApplySelectedBlockPath(laneWidget->LaneBlockWidget.Get(), selectedBlockPath);
+		}
+	}
+	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : CurbSideLaneWidgets)
+	{
+		if (laneWidget)
+		{
+			SidebarWidgetHelpers::ApplySelectedBlockPath(laneWidget->LaneBlockWidget.Get(), selectedBlockPath);
 		}
 	}
 }

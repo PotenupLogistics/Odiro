@@ -6,14 +6,14 @@
 #include "Engine/World.h"
 #include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioEditorShellViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarWidgetHelpers.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
 
-namespace
-{
-}
+namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 
 void UScenarioEditorSidebarPedestrianPanel::NativeConstruct()
 {
@@ -81,6 +81,70 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshFromTemplate(
 	{
 		DiagnosticsTextBlock->SetText(FText::FromString(TEXT("Structure only: Pedestrian edits are not committed yet.")));
 	}
+	ApplySelectedBlockPath();
+}
+
+void UScenarioEditorSidebarPedestrianPanel::ApplySelectedBlockPath()
+{
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	const UScenarioEditorShellViewModel* shellViewModel = uiSubsystem ? uiSubsystem->GetShellViewModel() : nullptr;
+	const FString selectedBlockPath = shellViewModel ? shellViewModel->GetSelectedTemplateBlockPath() : FString();
+
+	SidebarWidgetHelpers::ApplySelectedBlockPath(PedestriansBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(BackgroundBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(SpawnZoneBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(EncountersBlockWidget.Get(), selectedBlockPath);
+
+	if (EncountersBlockWidget && selectedBlockPath.StartsWith(TEXT("root.pedestrians.encounters[")))
+	{
+		EncountersBlockWidget->SetExpanded(true);
+	}
+
+	for (UScenarioEditorSidebarPedestrianEncounterWidget* encounterWidget : EncounterWidgets)
+	{
+		if (encounterWidget)
+		{
+			SidebarWidgetHelpers::ApplySelectedBlockPath(encounterWidget->EncounterBlockWidget.Get(), selectedBlockPath);
+		}
+	}
+}
+
+void UScenarioEditorSidebarPedestrianPanel::CollectBlockWidgets(
+	TArray<UScenarioEditorSidebarBlockWidget*>& outBlockWidgets) const
+{
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : {
+		PedestriansBlockWidget.Get(),
+		BackgroundBlockWidget.Get(),
+		SpawnZoneBlockWidget.Get(),
+		EncountersBlockWidget.Get() })
+	{
+		if (blockWidget)
+		{
+			outBlockWidgets.Add(blockWidget);
+		}
+	}
+	for (UScenarioEditorSidebarPedestrianEncounterWidget* encounterWidget : EncounterWidgets)
+	{
+		if (encounterWidget && encounterWidget->EncounterBlockWidget)
+		{
+			outBlockWidgets.Add(encounterWidget->EncounterBlockWidget.Get());
+		}
+	}
+}
+
+UScenarioEditorSidebarBlockWidget* UScenarioEditorSidebarPedestrianPanel::FindBlockWidgetByPath(
+	const FString& blockPath) const
+{
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectBlockWidgets(blockWidgets);
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : blockWidgets)
+	{
+		if (blockWidget && blockWidget->BlockPath == blockPath)
+		{
+			return blockWidget;
+		}
+	}
+	return nullptr;
 }
 
 void UScenarioEditorSidebarPedestrianPanel::ConfigureFieldRows()

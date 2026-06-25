@@ -80,6 +80,37 @@ void UScenarioEditorSidebarMainPanel::RefreshFromTemplate(const FScenarioDocumen
 	SetDiagnosticsText(TEXT(""));
 }
 
+void UScenarioEditorSidebarMainPanel::CollectBlockWidgets(
+	TArray<UScenarioEditorSidebarBlockWidget*>& outBlockWidgets) const
+{
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : {
+		RootBlockWidget.Get(),
+		RobotBlockWidget.Get(),
+		RobotStartBlockWidget.Get(),
+		RobotGoalBlockWidget.Get() })
+	{
+		if (blockWidget)
+		{
+			outBlockWidgets.Add(blockWidget);
+		}
+	}
+}
+
+UScenarioEditorSidebarBlockWidget* UScenarioEditorSidebarMainPanel::FindBlockWidgetByPath(
+	const FString& blockPath) const
+{
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectBlockWidgets(blockWidgets);
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : blockWidgets)
+	{
+		if (blockWidget && blockWidget->BlockPath == blockPath)
+		{
+			return blockWidget;
+		}
+	}
+	return nullptr;
+}
+
 void UScenarioEditorSidebarMainPanel::HandleScenarioIdCommitted(
 	const FText& text,
 	const ETextCommit::Type commitMethod)

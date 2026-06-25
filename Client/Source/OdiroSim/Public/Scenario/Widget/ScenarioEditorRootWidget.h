@@ -179,7 +179,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void HideAssetPaletteWidget();
 
-	// Shows the selection details panel for a placeable-backed editor item.
+	// Legacy entry point that focuses the sidebar block for a placeable-backed editor item.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	UScenarioPlaceableDetailsWidget* ShowPlaceableDetails(UScenarioPlaceableComponent* selectedPlaceable);
 
@@ -187,7 +187,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void HidePlaceableDetails();
 
-	// Legacy compatibility wrapper for old context-menu callers.
+	// Legacy compatibility wrapper that routes old context-menu callers to sidebar focus.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	UScenarioPlaceableContextMenuWidget* ShowPlaceableContextMenu(UScenarioPlaceableComponent* selectedPlaceable);
 

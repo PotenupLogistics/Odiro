@@ -4,6 +4,8 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/Widget.h"
+#include "Input/Events.h"
+#include "Input/Reply.h"
 
 void UScenarioEditorSidebarBlockWidget::NativeConstruct()
 {
@@ -86,10 +88,54 @@ UVerticalBox* UScenarioEditorSidebarBlockWidget::GetBodyBox()
 	return BodyBox.Get();
 }
 
+FReply UScenarioEditorSidebarBlockWidget::NativeOnPreviewMouseButtonDown(
+	const FGeometry& inGeometry,
+	const FPointerEvent& inMouseEvent)
+{
+	if (inMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		if (ShouldBroadcastSelectionForPointer(inMouseEvent))
+		{
+			BroadcastBlockSelected();
+		}
+	}
+
+	return Super::NativeOnPreviewMouseButtonDown(inGeometry, inMouseEvent);
+}
+
 void UScenarioEditorSidebarBlockWidget::HandleToggleClicked()
 {
 	SetExpanded(!bExpanded);
+	BroadcastBlockSelected();
+}
+
+void UScenarioEditorSidebarBlockWidget::BroadcastBlockSelected()
+{
 	OnBlockSelected.Broadcast(BlockPath);
+}
+
+bool UScenarioEditorSidebarBlockWidget::ShouldBroadcastSelectionForPointer(
+	const FPointerEvent& mouseEvent) const
+{
+	if (!BodyBox
+		|| !BodyBox->IsVisible()
+		|| !BodyBox->GetCachedGeometry().IsUnderLocation(mouseEvent.GetScreenSpacePosition()))
+	{
+		return true;
+	}
+
+	for (int32 childIndex = 0; childIndex < BodyBox->GetChildrenCount(); ++childIndex)
+	{
+		UWidget* childWidget = BodyBox->GetChildAt(childIndex);
+		if (childWidget
+			&& childWidget->IsVisible()
+			&& childWidget->GetCachedGeometry().IsUnderLocation(mouseEvent.GetScreenSpacePosition()))
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 void UScenarioEditorSidebarBlockWidget::BindControls()

@@ -174,7 +174,6 @@ bool UScenarioEditorShellViewModel::SelectPlaceable(const FString& instanceId)
 	if (bSelected)
 	{
 		UE_MVVM_SET_PROPERTY_VALUE(SelectedPlaceableId, instanceId);
-		UE_MVVM_SET_PROPERTY_VALUE(SelectedTemplateBlockPath, FString());
 	}
 	return bSelected;
 }

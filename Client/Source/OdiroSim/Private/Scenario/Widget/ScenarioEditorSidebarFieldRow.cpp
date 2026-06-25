@@ -1,18 +1,50 @@
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
 
+#include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
 #include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBoxSlot.h"
+#include "Components/Widget.h"
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
+
+namespace
+{
+	// Applies padding when a field child is owned by a horizontal box row.
+	void SetHorizontalSlotPadding(UWidget* widget, const FMargin& padding)
+	{
+		if (widget)
+		{
+			if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(widget->Slot))
+			{
+				horizontalSlot->SetPadding(padding);
+			}
+		}
+	}
+
+	// Applies padding when a field child is owned by a vertical box row.
+	void SetVerticalSlotPadding(UWidget* widget, const FMargin& padding)
+	{
+		if (widget)
+		{
+			if (UVerticalBoxSlot* verticalSlot = Cast<UVerticalBoxSlot>(widget->Slot))
+			{
+				verticalSlot->SetPadding(padding);
+			}
+		}
+	}
+}
 
 void UScenarioEditorSidebarFieldRow::NativeConstruct()
 {
 	Super::NativeConstruct();
 	BindControls();
+	ApplyVisualStyle();
 	RefreshRow();
 }
 
@@ -338,6 +370,36 @@ void UScenarioEditorSidebarFieldRow::UnbindControls()
 		RemoveItemButton->OnClicked.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarFieldRow::HandleRemoveItemClicked);
+	}
+}
+
+void UScenarioEditorSidebarFieldRow::ApplyVisualStyle()
+{
+	if (WidgetTree)
+	{
+		if (USizeBox* rowSizeBox = Cast<USizeBox>(WidgetTree->FindWidget(FName(TEXT("SizeBox_0")))))
+		{
+			rowSizeBox->SetMinDesiredHeight(32.0f);
+			SetVerticalSlotPadding(rowSizeBox, FMargin(0.0f, 1.0f, 0.0f, 1.0f));
+		}
+	}
+
+	SetHorizontalSlotPadding(LabelTextBlock.Get(), FMargin(0.0f, 0.0f, 6.0f, 0.0f));
+	SetHorizontalSlotPadding(SeparatorTextBlock.Get(), FMargin(0.0f, 0.0f, 6.0f, 0.0f));
+	SetHorizontalSlotPadding(ValueTextBlock.Get(), FMargin(2.0f, 0.0f, 0.0f, 0.0f));
+	SetHorizontalSlotPadding(ValueEditableTextBox.Get(), FMargin(2.0f, 2.0f, 0.0f, 2.0f));
+	SetHorizontalSlotPadding(ValueComboBox.Get(), FMargin(2.0f, 2.0f, 0.0f, 2.0f));
+	SetHorizontalSlotPadding(ValueRangeBox.Get(), FMargin(2.0f, 2.0f, 0.0f, 2.0f));
+	SetHorizontalSlotPadding(MinValueEditableTextBox.Get(), FMargin(0.0f, 0.0f, 4.0f, 0.0f));
+	SetHorizontalSlotPadding(RangeSeparatorTextBlock.Get(), FMargin(2.0f, 0.0f, 6.0f, 0.0f));
+	SetHorizontalSlotPadding(RangeToggleButton.Get(), FMargin(6.0f, 2.0f, 0.0f, 2.0f));
+	SetHorizontalSlotPadding(AddItemButton.Get(), FMargin(6.0f, 2.0f, 2.0f, 2.0f));
+	SetHorizontalSlotPadding(RemoveItemButton.Get(), FMargin(2.0f, 2.0f, 0.0f, 2.0f));
+
+	if (ValueMultiLineSizeBox)
+	{
+		ValueMultiLineSizeBox->SetMinDesiredHeight(104.0f);
+		SetHorizontalSlotPadding(ValueMultiLineSizeBox.Get(), FMargin(2.0f, 3.0f, 0.0f, 3.0f));
 	}
 }
 

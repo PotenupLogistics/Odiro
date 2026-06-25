@@ -22,8 +22,13 @@ void UScenarioEditorSidebarPedestrianPanel::NativeConstruct()
 	{
 		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
 	}
+	SidebarWidgetHelpers::ApplyPanelRootPadding(this, FName(TEXT("PedestrianPanelRootBox")));
 	ConfigureFieldRows();
 	RefreshFromDraft();
+
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectBlockWidgets(blockWidgets);
+	SidebarWidgetHelpers::ApplyPanelBlockSpacing(blockWidgets);
 }
 
 void UScenarioEditorSidebarPedestrianPanel::SetTextStyleCatalog(

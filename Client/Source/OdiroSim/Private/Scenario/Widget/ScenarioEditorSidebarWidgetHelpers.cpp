@@ -1,6 +1,9 @@
 #include "Scenario/Widget/ScenarioEditorSidebarWidgetHelpers.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Components/ScrollBoxSlot.h"
+#include "Components/VerticalBoxSlot.h"
+#include "Components/Widget.h"
 #include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
@@ -56,6 +59,41 @@ void ScenarioEditorSidebarWidgetHelpers::InitializeFieldRow(
 
 	fieldRow->SetTextStyleCatalog(textStyleCatalog);
 	fieldRow->InitializeFromItemViewModel(fieldItemViewModel);
+}
+
+void ScenarioEditorSidebarWidgetHelpers::ApplyPanelRootPadding(
+	UUserWidget* ownerWidget,
+	const FName rootWidgetName)
+{
+	if (!ownerWidget || rootWidgetName.IsNone())
+	{
+		return;
+	}
+
+	if (UWidget* rootWidget = ownerWidget->GetWidgetFromName(rootWidgetName))
+	{
+		if (UScrollBoxSlot* scrollBoxSlot = Cast<UScrollBoxSlot>(rootWidget->Slot))
+		{
+			scrollBoxSlot->SetPadding(FMargin(8.0f, 8.0f, 8.0f, 10.0f));
+		}
+	}
+}
+
+void ScenarioEditorSidebarWidgetHelpers::ApplyPanelBlockSpacing(
+	const TArray<UScenarioEditorSidebarBlockWidget*>& blockWidgets)
+{
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : blockWidgets)
+	{
+		if (!blockWidget)
+		{
+			continue;
+		}
+
+		if (UVerticalBoxSlot* verticalBoxSlot = Cast<UVerticalBoxSlot>(blockWidget->Slot))
+		{
+			verticalBoxSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
+		}
+	}
 }
 
 UScenarioEditorSidebarFieldRow* ScenarioEditorSidebarWidgetHelpers::CreateFieldRow(

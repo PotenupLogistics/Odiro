@@ -74,6 +74,10 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UWidget> ContentBorder;
 
+	// Optional WBP-owned header row used for block spacing.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UWidget> BlockHeaderRow;
+
 	// Optional button that toggles body visibility.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UButton> ToggleButton;
@@ -155,6 +159,8 @@ private:
 	void BindControls();
 	// Releases optional local control bindings.
 	void UnbindControls();
+	// Applies shared sidebar spacing and block surface styling.
+	void ApplyVisualStyle();
 	// Applies stored metadata, styles, and state to bound controls.
 	void RefreshBlock();
 	// Applies text to a bound text block.

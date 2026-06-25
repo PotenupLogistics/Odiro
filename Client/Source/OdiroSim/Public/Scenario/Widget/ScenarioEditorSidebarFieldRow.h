@@ -278,6 +278,8 @@ private:
 	void BindControls();
 	// Releases editable control delegates owned by this row.
 	void UnbindControls();
+	// Applies shared sidebar field spacing to the optional WBP-owned controls.
+	void ApplyVisualStyle();
 	// Applies stored label, value, and editability state to bound controls.
 	void RefreshRow();
 	// Returns whether the current type should show the multiline editor.

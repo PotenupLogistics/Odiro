@@ -4,6 +4,7 @@
 #include "Engine/Texture2D.h"
 #include "Rendering/DrawElements.h"
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
+#include "Scenario/Editor/ScenarioEditorController.h"
 #include "Scenario/ScenarioSimulationSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorRootWidget.h"
 #include "Styling/CoreStyle.h"
@@ -14,6 +15,28 @@ namespace
 		TEXT("/Game/Textures/Scenario/T_StartPointMarker.T_StartPointMarker");
 	const TCHAR* DefaultRobotGoalMarkerOverlayTexturePath =
 		TEXT("/Game/Textures/Scenario/T_GoalPointMarker.T_GoalPointMarker");
+	const int32 CorridorVertexCircleSegmentCount = 24;
+
+	void BuildCircleLinePoints(
+		const FVector2D& center,
+		const double radius,
+		TArray<FVector2D>& outPoints)
+	{
+		outPoints.Reset();
+		if (radius <= 0.0)
+		{
+			return;
+		}
+
+		outPoints.Reserve(CorridorVertexCircleSegmentCount + 1);
+		for (int32 pointIndex = 0; pointIndex <= CorridorVertexCircleSegmentCount; ++pointIndex)
+		{
+			const double angleRadians = 2.0 * static_cast<double>(PI)
+				* static_cast<double>(pointIndex)
+				/ static_cast<double>(CorridorVertexCircleSegmentCount);
+			outPoints.Add(center + FVector2D(FMath::Cos(angleRadians), FMath::Sin(angleRadians)) * radius);
+		}
+	}
 }
 
 void UScenarioEditorRouteMarkerOverlayWidget::NativeConstruct()
@@ -32,7 +55,8 @@ int32 UScenarioEditorRouteMarkerOverlayWidget::NativePaint(
 	const FWidgetStyle& inWidgetStyle,
 	const bool bParentEnabled) const
 {
-	const int32 markerLayerId = PaintRobotRouteMarkerOverlays(allottedGeometry, outDrawElements, layerId);
+	const int32 corridorLayerId = PaintCorridorHandleOverlays(allottedGeometry, outDrawElements, layerId);
+	const int32 markerLayerId = PaintRobotRouteMarkerOverlays(allottedGeometry, outDrawElements, corridorLayerId);
 	return Super::NativePaint(
 		args,
 		allottedGeometry,
@@ -74,6 +98,107 @@ void UScenarioEditorRouteMarkerOverlayWidget::LoadDefaultMarkerOverlayTextures()
 	}
 }
 
+int32 UScenarioEditorRouteMarkerOverlayWidget::PaintCorridorHandleOverlays(
+	const FGeometry& allottedGeometry,
+	FSlateWindowElementList& outDrawElements,
+	const int32 layerId) const
+{
+	const AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer());
+	if (!editorController || !editorController->ShouldShowCorridorHandleOverlay())
+	{
+		return layerId;
+	}
+
+	const UScenarioAuthoringSubsystem* authoringSubsystem =
+		GetWorld() ? GetWorld()->GetSubsystem<UScenarioAuthoringSubsystem>() : nullptr;
+	if (!authoringSubsystem)
+	{
+		return layerId;
+	}
+
+	TArray<FScenarioEditorCorridorHandleOverlayItem> items;
+	authoringSubsystem->GetCorridorHandleOverlayItems(items);
+	if (items.IsEmpty())
+	{
+		return layerId;
+	}
+
+	int32 maxLayerId = layerId;
+	const FSlateBrush* whiteBrush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
+	if (!whiteBrush)
+	{
+		return maxLayerId;
+	}
+
+	for (const FScenarioEditorCorridorHandleOverlayItem& item : items)
+	{
+		if (item.HandleType != EScenarioCorridorHandleType::Segment)
+		{
+			continue;
+		}
+
+		FVector2D startPosition = FVector2D::ZeroVector;
+		FVector2D endPosition = FVector2D::ZeroVector;
+		FVector2D centerPosition = FVector2D::ZeroVector;
+		if (!TryProjectWorldLocationToOverlayPosition(item.SegmentStartWorldLocation, allottedGeometry, startPosition)
+			|| !TryProjectWorldLocationToOverlayPosition(item.SegmentEndWorldLocation, allottedGeometry, endPosition)
+			|| !TryProjectWorldLocationToOverlayPosition(item.WorldLocation, allottedGeometry, centerPosition))
+		{
+			continue;
+		}
+
+		TArray<FVector2D> segmentLine;
+		segmentLine.Reserve(2);
+		segmentLine.Add(startPosition);
+		segmentLine.Add(endPosition);
+		FSlateDrawElement::MakeLines(
+			outDrawElements,
+			layerId,
+			allottedGeometry.ToPaintGeometry(),
+			segmentLine,
+			ESlateDrawEffect::None,
+			ResolveCorridorHandleTint(item),
+			true,
+			FMath::Max(1.0f, CorridorSegmentLineThickness));
+		maxLayerId = FMath::Max(maxLayerId, layerId + 1);
+		maxLayerId = FMath::Max(
+			maxLayerId,
+			PaintCorridorHandleGrip(
+				item,
+				centerPosition,
+				CorridorSegmentGripOverlaySize,
+				allottedGeometry,
+				outDrawElements,
+				layerId + 1));
+	}
+
+	for (const FScenarioEditorCorridorHandleOverlayItem& item : items)
+	{
+		if (item.HandleType != EScenarioCorridorHandleType::Vertex)
+		{
+			continue;
+		}
+
+		FVector2D localPosition = FVector2D::ZeroVector;
+		if (!TryProjectWorldLocationToOverlayPosition(item.WorldLocation, allottedGeometry, localPosition))
+		{
+			continue;
+		}
+
+		maxLayerId = FMath::Max(
+			maxLayerId,
+			PaintCorridorHandleGrip(
+				item,
+				localPosition,
+				CorridorVertexHandleOverlaySize,
+				allottedGeometry,
+				outDrawElements,
+				layerId + 2));
+	}
+
+	return maxLayerId;
+}
+
 int32 UScenarioEditorRouteMarkerOverlayWidget::PaintRobotRouteMarkerOverlays(
 	const FGeometry& allottedGeometry,
 	FSlateWindowElementList& outDrawElements,
@@ -101,7 +226,7 @@ int32 UScenarioEditorRouteMarkerOverlayWidget::PaintRobotRouteMarkerOverlays(
 	for (const FScenarioEditorRouteMarkerOverlayItem& item : items)
 	{
 		FVector2D localPosition = FVector2D::ZeroVector;
-		if (!TryProjectRouteMarkerOverlayPosition(item.WorldLocation, allottedGeometry, localPosition))
+		if (!TryProjectWorldLocationToOverlayPosition(item.WorldLocation, allottedGeometry, localPosition))
 		{
 			continue;
 		}
@@ -111,6 +236,57 @@ int32 UScenarioEditorRouteMarkerOverlayWidget::PaintRobotRouteMarkerOverlays(
 			PaintRobotRouteMarkerOverlayItem(item, localPosition, allottedGeometry, outDrawElements, layerId));
 	}
 	return maxLayerId;
+}
+
+int32 UScenarioEditorRouteMarkerOverlayWidget::PaintCorridorHandleGrip(
+	const FScenarioEditorCorridorHandleOverlayItem& item,
+	const FVector2D& localPosition,
+	const FVector2D& gripSize,
+	const FGeometry& allottedGeometry,
+	FSlateWindowElementList& outDrawElements,
+	const int32 layerId) const
+{
+	const FVector2D safeGripSize(FMath::Max(1.0, gripSize.X), FMath::Max(1.0, gripSize.Y));
+	const FVector2D topLeft = localPosition - safeGripSize * 0.5;
+	const FVector2D localSize = allottedGeometry.GetLocalSize();
+	if (topLeft.X > localSize.X
+		|| topLeft.Y > localSize.Y
+		|| topLeft.X + safeGripSize.X < 0.0
+		|| topLeft.Y + safeGripSize.Y < 0.0)
+	{
+		return layerId;
+	}
+
+	if (item.HandleType == EScenarioCorridorHandleType::Vertex)
+	{
+		TArray<FVector2D> circlePoints;
+		BuildCircleLinePoints(localPosition, FMath::Min(safeGripSize.X, safeGripSize.Y) * 0.5, circlePoints);
+		if (!circlePoints.IsEmpty())
+		{
+			FSlateDrawElement::MakeLines(
+				outDrawElements,
+				layerId,
+				allottedGeometry.ToPaintGeometry(),
+				circlePoints,
+				ESlateDrawEffect::None,
+				ResolveCorridorHandleTint(item),
+				true,
+				3.0f);
+		}
+		return layerId + 1;
+	}
+
+	if (const FSlateBrush* whiteBrush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")))
+	{
+		FSlateDrawElement::MakeBox(
+			outDrawElements,
+			layerId,
+			allottedGeometry.ToPaintGeometry(safeGripSize, FSlateLayoutTransform(topLeft)),
+			whiteBrush,
+			ESlateDrawEffect::None,
+			ResolveCorridorHandleTint(item));
+	}
+	return layerId + 1;
 }
 
 int32 UScenarioEditorRouteMarkerOverlayWidget::PaintRobotRouteMarkerOverlayItem(
@@ -199,7 +375,7 @@ int32 UScenarioEditorRouteMarkerOverlayWidget::PaintRobotRouteMarkerOverlayItem(
 	return layerId;
 }
 
-bool UScenarioEditorRouteMarkerOverlayWidget::TryProjectRouteMarkerOverlayPosition(
+bool UScenarioEditorRouteMarkerOverlayWidget::TryProjectWorldLocationToOverlayPosition(
 	const FVector& worldLocation,
 	const FGeometry& allottedGeometry,
 	FVector2D& outLocalPosition) const
@@ -220,15 +396,20 @@ bool UScenarioEditorRouteMarkerOverlayWidget::TryProjectRouteMarkerOverlayPositi
 		return false;
 	}
 
-	const FGeometry viewportGeometry = UWidgetLayoutLibrary::GetViewportWidgetGeometry(this);
-	const FVector2D overlayOriginInViewport = viewportGeometry.AbsoluteToLocal(allottedGeometry.GetAbsolutePosition());
-	outLocalPosition = widgetPosition - overlayOriginInViewport;
-	const FVector2D localSize = allottedGeometry.GetLocalSize();
-	const FVector2D markerSize(
-		FMath::Max(1.0, RobotRouteMarkerOverlaySize.X),
-		FMath::Max(1.0, RobotRouteMarkerOverlaySize.Y));
-	return outLocalPosition.X >= -markerSize.X
-		&& outLocalPosition.Y >= -markerSize.Y
-		&& outLocalPosition.X <= localSize.X + markerSize.X
-		&& outLocalPosition.Y <= localSize.Y + markerSize.Y;
+	outLocalPosition = widgetPosition;
+	return true;
+}
+
+FLinearColor UScenarioEditorRouteMarkerOverlayWidget::ResolveCorridorHandleTint(
+	const FScenarioEditorCorridorHandleOverlayItem& item) const
+{
+	if (item.bSelected)
+	{
+		return CorridorHandleOverlaySelectedTint;
+	}
+	if (item.bHovered)
+	{
+		return CorridorHandleOverlayHoverTint;
+	}
+	return CorridorHandleOverlayTint;
 }

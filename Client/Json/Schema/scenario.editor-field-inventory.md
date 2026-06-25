@@ -60,7 +60,7 @@
 | `$.corridor.curb_side` | 도로측 영역 | Corridor > 도로측 영역 | array | ArrayBlock + count | - | side lane bands | `CurbSideCount`, lane widgets | Live | Add/remove count row exists. |
 | `$.corridor.curb_side[].surface` | 표면 유형 | Corridor > 도로측 영역 N | string | Combo | `environment-catalog.md` Surface, `DA_ScenarioCorridorSurfaceCatalog` | lane material/color | `CorridorLaneSurface`, Combo | Live | Catalog display name mapping still needed. |
 | `$.corridor.curb_side[].width_m` | 폭 | Corridor > 도로측 영역 N | number or range | RangeNumber | - | lane width band | `CorridorLaneWidth`, range | Live | Viewport range preview needed. |
-| `$.corridor.segments` | 의미 구간 | Corridor > 의미 구간 | array | ArrayBlock + count | - | segment spans along axis | `SegmentsCount`, segment widgets | Live | Segment span overlay is primary viewport need. |
+| `$.corridor.segments` | 구간 | Corridor > 의미 구간 | array | ArrayBlock + count | - | segment spans along axis | `SegmentsCount`, segment widgets | Live | Segment span overlay is primary viewport need. |
 | `$.corridor.segments[].id` | 구간 이름 | Corridor > 의미 구간 N | string | Text | unique segment ids | outliner/labels | `CorridorSegmentId`, text | Live | References should update or validate on rename. |
 | `$.corridor.segments[].type` | 구간 유형 | Corridor > 의미 구간 N | string enum | Combo | `straight`, `narrowing`, `crosswalk`, `entrance` | segment color/icon | `CorridorSegmentType`, Combo | Live | Display/value mapping needed. |
 | `$.corridor.segments[].along_range_m` | 적용 범위 | Corridor > 의미 구간 N | `[start_m, end_m]` | RangeNumber | - | segment span handles | `CorridorSegmentAlongRange`, range | Live | Viewport min/max span editing is high priority. |
@@ -71,8 +71,8 @@
 | JSON path | 표시명 | Block | Schema type | 권장 control | Options source | Viewport | 현재 Sidebar | 상태 | 차이/다음 작업 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `$.obstacles.min_clear_width_m` | 최소 통행 폭 | Obstacle > 최소 통행 폭 | number or range | RangeNumber | - | corridor clearance band | `MinClearWidth`, range | Live | Viewport clearance envelope needed. |
-| `$.obstacles.placements` | 배치 규칙 | Obstacle > 배치 규칙 | array | ArrayBlock + count | - | obstacle previews | `PlacementsCount`, placement widgets | Live | Object Palette creates fixed static-obstacle placement rows in this list; pedestrian, robot anchors, and ground surfaces are not palette-authored. |
-| `$.obstacles.placements[].id` | 규칙 이름 | Obstacle > 배치 규칙 N | string | Text | unique placement ids | outliner/labels | `PlacementId`, text | Live | Rename should keep outliner and actor link coherent. |
+| `$.obstacles.placements` | 배치된 장애물 | Obstacle > 배치 규칙 | array | ArrayBlock + count | - | obstacle previews | `PlacementsCount`, placement widgets | Live | Object Palette creates fixed static-obstacle placement rows in this list; pedestrian, robot anchors, and ground surfaces are not palette-authored. |
+| `$.obstacles.placements[].id` | 장애물명 | Obstacle > 배치 규칙 N | string | Text | unique placement ids | outliner/labels | `PlacementId`, text | Live | Rename should keep outliner and actor link coherent. |
 | `$.obstacles.placements[].kind` | 배치 방식 | Obstacle > 배치 규칙 N | string enum | Combo | `fixed`, `pattern`, `scatter` | controls visible fields | `PlacementKind`, Combo | Live | Display/value mapping can be improved later. |
 | `$.obstacles.placements[].prop` | 장애물 종류 | Obstacle > 배치 규칙 N | string | Combo | `environment-catalog.md` Props, static obstacle palette | obstacle mesh preview | `PlacementProp`, text | Partial | Should use palette/catalog picker, not free text. |
 | `$.obstacles.placements[].pattern` | 배치 패턴 | Obstacle > 배치 규칙 N | string | Combo | pattern catalog: `gate`, `line`, `cluster` | pattern preview | `PlacementPattern`, Combo | Partial | Pattern id list is inline options, not a first-class catalog yet. |
@@ -139,8 +139,8 @@
 
 | Schema shape | 표시명 | 적용 field | 권장 UX | 현재 구현 | 다음 작업 |
 | --- | --- | --- | --- | --- | --- |
-| `number` | 고정 숫자 | all `number or range` fields | single value input with unit suffix | `Range` row can disable min/max | Unit suffix and mode affordance needed. |
-| `{ "min": n, "max": n }` | 범위 숫자 | `walkway_width_m`, widths, along/offset, behavior values | fixed/range segmented control + min/max fields | `Range` row exposes min/max when enabled | Add viewport min/max visualization. |
+| `number` | 고정값 | all `number or range` fields | single value input with unit suffix | `Range` row can disable min/max | Unit suffix and mode affordance needed. |
+| `{ "min": n, "max": n }` | 범위값 | `walkway_width_m`, widths, along/offset, behavior values | fixed/range segmented control + min/max fields | `Range` row exposes min/max when enabled | Add viewport min/max visualization. |
 | `integer` / integer range | 고정/범위 정수 | counts, group size | integer stepper or range integer | generic `Range` row | Prevent fractional input and show count semantics. |
 | `string` catalog id | 카탈로그 선택 | surface, prop, persona, segment refs | Combo/search picker with display name and raw id tooltip | single-select refs mostly Combo; prop/palette still Text | Catalog display labels and prop picker remain. |
 | `{ "choices": [...] }` | 후보 선택 | `segments[].replaced_by` | multi-choice editor or "sampled from choices" mode | not fully surfaced | Needed before random-choice authoring feels complete. |

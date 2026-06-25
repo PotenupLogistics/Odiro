@@ -48,8 +48,8 @@ namespace
 	const FVector DefaultRobotGoalLocationCm(600.0, 0.0, 0.0);
 	const FString CorridorVertexHandleIdPrefix(TEXT("corridor_vertex_"));
 	const FString CorridorSegmentHandleIdPrefix(TEXT("corridor_segment_"));
-	const double CorridorVertexHandleHeightCm = 32.0;
-	const double CorridorSegmentHandleHeightCm = 18.0;
+	const double CorridorVertexHandleHeightCm = 0.0;
+	const double CorridorSegmentHandleHeightCm = CorridorVertexHandleHeightCm;
 	const double CorridorVertexHandleScale = 0.28;
 
 	FScenarioParamValue MakeStringParamValue(const FString& value)
@@ -1239,6 +1239,81 @@ void UScenarioAuthoringSubsystem::GetRobotRouteMarkerOverlayItems(
 		outItems);
 }
 
+void UScenarioAuthoringSubsystem::GetCorridorHandleOverlayItems(
+	TArray<FScenarioEditorCorridorHandleOverlayItem>& outItems) const
+{
+	outItems.Reset();
+
+	const TArray<FVector2D>& pointsMeters = DraftScenario.Corridor.Axis.PointsMeters;
+	if (pointsMeters.Num() < 2)
+	{
+		return;
+	}
+
+	outItems.Reserve(pointsMeters.Num() + pointsMeters.Num() - 1);
+	for (int32 vertexIndex = 0; vertexIndex < pointsMeters.Num(); ++vertexIndex)
+	{
+		const FString handleId = MakeCorridorVertexHandleId(vertexIndex);
+		const TObjectPtr<AScenarioCorridorHandleActor>* handleActor = CorridorHandleActors.Find(handleId);
+		if (!handleActor || !IsValid(handleActor->Get()))
+		{
+			continue;
+		}
+
+		const UScenarioPlaceableComponent* placeableComponent =
+			handleActor->Get()->FindComponentByClass<UScenarioPlaceableComponent>();
+		if (!placeableComponent)
+		{
+			continue;
+		}
+
+		FScenarioEditorCorridorHandleOverlayItem item;
+		item.InstanceId = placeableComponent->InstanceId;
+		item.HandleType = EScenarioCorridorHandleType::Vertex;
+		item.WorldTransform = MakeCorridorVertexHandleTransform(pointsMeters[vertexIndex]);
+		item.WorldLocation = item.WorldTransform.GetLocation();
+		item.SegmentStartWorldLocation = item.WorldLocation;
+		item.SegmentEndWorldLocation = item.WorldLocation;
+		item.bHovered = placeableComponent->IsAuthoringHovered();
+		item.bSelected = placeableComponent->IsAuthoringSelected();
+		outItems.Add(item);
+	}
+
+	for (int32 segmentIndex = 0; segmentIndex < pointsMeters.Num() - 1; ++segmentIndex)
+	{
+		const FString handleId = MakeCorridorSegmentHandleId(segmentIndex);
+		const TObjectPtr<AScenarioCorridorHandleActor>* handleActor = CorridorHandleActors.Find(handleId);
+		if (!handleActor || !IsValid(handleActor->Get()))
+		{
+			continue;
+		}
+
+		const UScenarioPlaceableComponent* placeableComponent =
+			handleActor->Get()->FindComponentByClass<UScenarioPlaceableComponent>();
+		if (!placeableComponent)
+		{
+			continue;
+		}
+
+		FScenarioEditorCorridorHandleOverlayItem item;
+		item.InstanceId = placeableComponent->InstanceId;
+		item.HandleType = EScenarioCorridorHandleType::Segment;
+		item.WorldTransform = MakeCorridorSegmentHandleTransform(pointsMeters[segmentIndex], pointsMeters[segmentIndex + 1]);
+		item.WorldLocation = item.WorldTransform.GetLocation();
+		item.SegmentStartWorldLocation = FVector(
+			pointsMeters[segmentIndex].X / CentimetersToMeters,
+			pointsMeters[segmentIndex].Y / CentimetersToMeters,
+			CorridorSegmentHandleHeightCm);
+		item.SegmentEndWorldLocation = FVector(
+			pointsMeters[segmentIndex + 1].X / CentimetersToMeters,
+			pointsMeters[segmentIndex + 1].Y / CentimetersToMeters,
+			CorridorSegmentHandleHeightCm);
+		item.bHovered = placeableComponent->IsAuthoringHovered();
+		item.bSelected = placeableComponent->IsAuthoringSelected();
+		outItems.Add(item);
+	}
+}
+
 UScenarioPlaceableComponent* UScenarioAuthoringSubsystem::GetRobotRouteMarkerPlaceableComponent(
 	const EScenarioEditorRouteMarkerKind markerKind) const
 {
@@ -1257,6 +1332,29 @@ bool UScenarioAuthoringSubsystem::SyncRobotRouteMarkerProxyLocation(
 	}
 
 	markerActor->SetActorLocation(markerLocationCm, false, nullptr, ETeleportType::TeleportPhysics);
+	return true;
+}
+
+UScenarioPlaceableComponent* UScenarioAuthoringSubsystem::GetCorridorHandlePlaceableComponent(
+	const FString& instanceId) const
+{
+	const TObjectPtr<AScenarioCorridorHandleActor>* handleActor = CorridorHandleActors.Find(instanceId);
+	return handleActor && IsValid(handleActor->Get())
+		? handleActor->Get()->FindComponentByClass<UScenarioPlaceableComponent>()
+		: nullptr;
+}
+
+bool UScenarioAuthoringSubsystem::SyncCorridorHandleProxyTransform(
+	const FString& instanceId,
+	const FTransform& transform)
+{
+	const TObjectPtr<AScenarioCorridorHandleActor>* handleActor = CorridorHandleActors.Find(instanceId);
+	if (!handleActor || !IsValid(handleActor->Get()))
+	{
+		return false;
+	}
+
+	handleActor->Get()->SetActorTransform(transform, false, nullptr, ETeleportType::TeleportPhysics);
 	return true;
 }
 

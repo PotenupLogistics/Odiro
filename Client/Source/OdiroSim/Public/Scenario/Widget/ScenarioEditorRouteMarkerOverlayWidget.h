@@ -53,10 +53,47 @@ private:
 	UPROPERTY(Transient)
 	FLinearColor RobotGoalMarkerOverlayTint = FLinearColor(1.0f, 0.03f, 0.03f, 0.82f);
 
+	// Fixed screen-space size for corridor vertex square grips.
+	UPROPERTY(Transient)
+	FVector2D CorridorVertexHandleOverlaySize = FVector2D(12.0, 12.0);
+
+	// Fixed screen-space size for corridor segment center grips.
+	UPROPERTY(Transient)
+	FVector2D CorridorSegmentGripOverlaySize = FVector2D(10.0, 10.0);
+
+	// Screen-space thickness for corridor segment overlay lines.
+	UPROPERTY(Transient)
+	float CorridorSegmentLineThickness = 2.0f;
+
+	// Default tint for inactive corridor handle overlays.
+	UPROPERTY(Transient)
+	FLinearColor CorridorHandleOverlayTint = FLinearColor(0.86f, 0.95f, 1.0f, 0.92f);
+
+	// Tint for hovered corridor handle overlays.
+	UPROPERTY(Transient)
+	FLinearColor CorridorHandleOverlayHoverTint = FLinearColor(1.0f, 0.72f, 0.32f, 1.0f);
+
+	// Tint for selected corridor handle overlays.
+	UPROPERTY(Transient)
+	FLinearColor CorridorHandleOverlaySelectedTint = FLinearColor(1.0f, 0.48f, 0.12f, 1.0f);
+
 	// Ensures runtime-created overlays can use the same default marker textures as the editor root widget.
 	void LoadDefaultMarkerOverlayTextures();
+	// Paints editor-only corridor vertex and segment handles when the Corridor panel or handle selection is active.
+	int32 PaintCorridorHandleOverlays(
+		const FGeometry& allottedGeometry,
+		FSlateWindowElementList& outDrawElements,
+		int32 layerId) const;
 	// Paints every visible robot route endpoint overlay for the current editor draft or simulation run.
 	int32 PaintRobotRouteMarkerOverlays(
+		const FGeometry& allottedGeometry,
+		FSlateWindowElementList& outDrawElements,
+		int32 layerId) const;
+	// Paints one square corridor overlay grip at a projected local position.
+	int32 PaintCorridorHandleGrip(
+		const FScenarioEditorCorridorHandleOverlayItem& item,
+		const FVector2D& localPosition,
+		const FVector2D& gripSize,
 		const FGeometry& allottedGeometry,
 		FSlateWindowElementList& outDrawElements,
 		int32 layerId) const;
@@ -67,9 +104,11 @@ private:
 		const FGeometry& allottedGeometry,
 		FSlateWindowElementList& outDrawElements,
 		int32 layerId) const;
-	// Projects a route marker world location into this full-screen overlay widget's local paint space.
-	bool TryProjectRouteMarkerOverlayPosition(
+	// Projects a world location into this full-screen overlay widget's local paint space.
+	bool TryProjectWorldLocationToOverlayPosition(
 		const FVector& worldLocation,
 		const FGeometry& allottedGeometry,
 		FVector2D& outLocalPosition) const;
+	// Resolves the visual color for one corridor handle state.
+	FLinearColor ResolveCorridorHandleTint(const FScenarioEditorCorridorHandleOverlayItem& item) const;
 };

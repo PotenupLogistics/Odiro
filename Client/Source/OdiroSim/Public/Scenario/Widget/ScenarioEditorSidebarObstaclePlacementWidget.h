@@ -9,6 +9,7 @@
 #include "ScenarioEditorSidebarObstaclePlacementWidget.generated.h"
 
 class UScenarioEditorSidebarBlockWidget;
+class UScenarioEditorWidgetClassCatalog;
 class UScenarioTemplateFieldRowViewModel;
 class UScenarioTemplateSidebarViewModel;
 class UWidgetTextStyleCatalog;
@@ -45,6 +46,30 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	int32,
 	PlacementIndex);
 
+// Broadcasts a committed text edit for one static obstacle placement string-list item.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FiveParams(
+	FScenarioEditorSidebarObstaclePlacementStringListItemTextCommitted,
+	int32,
+	PlacementIndex,
+	EScenarioEditorSidebarObstaclePlacementField,
+	Field,
+	int32,
+	ItemIndex,
+	const FText&,
+	Text,
+	ETextCommit::Type,
+	CommitMethod);
+
+// Broadcasts a structural edit request for one placement string-list item.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
+	FScenarioEditorSidebarObstaclePlacementStringListItemActionRequested,
+	int32,
+	PlacementIndex,
+	EScenarioEditorSidebarObstaclePlacementField,
+	Field,
+	int32,
+	ItemIndex);
+
 // Detail block for one root.obstacles.placements[] entry.
 UCLASS(BlueprintType, Blueprintable)
 class ODIROSIM_API UScenarioEditorSidebarObstaclePlacementWidget : public UUserWidget
@@ -65,6 +90,10 @@ public:
 	// Shared typography catalog passed down to this placement block and rows.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
+
+	// WBP class catalog used to create dynamic string-list item rows.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> WidgetClassCatalog;
 
 	// Optional block wrapping this placement detail row group.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
@@ -158,6 +187,18 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
 	FScenarioEditorSidebarObstaclePlacementActionRequested OnRemoveRequested;
 
+	// Emits committed text for one placement string-list item.
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarObstaclePlacementStringListItemTextCommitted OnStringListItemTextCommitted;
+
+	// Emits an add request for one placement string-list item collection.
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarObstaclePlacementStringListItemActionRequested OnStringListItemAddRequested;
+
+	// Emits a remove request for one placement string-list item.
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarObstaclePlacementStringListItemActionRequested OnStringListItemRemoveRequested;
+
 	// Updates index context and refreshes the placement block metadata.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetPlacementIndex(int32 inPlacementIndex);
@@ -165,6 +206,10 @@ public:
 	// Updates the shared typography catalog used by this placement widget.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
+
+	// Updates the WBP class catalog used by dynamic child rows.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetWidgetClassCatalog(TSoftObjectPtr<UScenarioEditorWidgetClassCatalog> catalog);
 
 	// Refreshes this placement widget from one template placement entry.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
@@ -253,6 +298,43 @@ private:
 	UFUNCTION()
 	void HandleRemoveRequested();
 
+	// Handles add requests for zone.segments[].
+	UFUNCTION()
+	void HandleZoneSegmentsAddRequested();
+	// Handles add requests for zone.lanes[].
+	UFUNCTION()
+	void HandleZoneLanesAddRequested();
+	// Handles add requests for palette.categories[].
+	UFUNCTION()
+	void HandlePaletteCategoriesAddRequested();
+	// Handles add requests for palette.classes[].
+	UFUNCTION()
+	void HandlePaletteClassesAddRequested();
+	// Handles text commits for zone.segments[] items.
+	UFUNCTION()
+	void HandleZoneSegmentItemCommitted(int32 itemIndex, const FText& text, ETextCommit::Type commitMethod);
+	// Handles text commits for zone.lanes[] items.
+	UFUNCTION()
+	void HandleZoneLaneItemCommitted(int32 itemIndex, const FText& text, ETextCommit::Type commitMethod);
+	// Handles text commits for palette.categories[] items.
+	UFUNCTION()
+	void HandlePaletteCategoryItemCommitted(int32 itemIndex, const FText& text, ETextCommit::Type commitMethod);
+	// Handles text commits for palette.classes[] items.
+	UFUNCTION()
+	void HandlePaletteClassItemCommitted(int32 itemIndex, const FText& text, ETextCommit::Type commitMethod);
+	// Handles remove requests for zone.segments[] items.
+	UFUNCTION()
+	void HandleZoneSegmentItemRemoveRequested(int32 itemIndex);
+	// Handles remove requests for zone.lanes[] items.
+	UFUNCTION()
+	void HandleZoneLaneItemRemoveRequested(int32 itemIndex);
+	// Handles remove requests for palette.categories[] items.
+	UFUNCTION()
+	void HandlePaletteCategoryItemRemoveRequested(int32 itemIndex);
+	// Handles remove requests for palette.classes[] items.
+	UFUNCTION()
+	void HandlePaletteClassItemRemoveRequested(int32 itemIndex);
+
 	// Last placement used to refresh this widget across UMG construction timing.
 	UPROPERTY(Transient)
 	FScenarioTemplateObstaclePlacement CachedPlacement;
@@ -264,6 +346,22 @@ private:
 	// Field row ViewModels generated from CachedPlacement.
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UScenarioTemplateFieldRowViewModel>> CachedFieldItems;
+
+	// Dynamic item rows for root.obstacles.placements[].zone.segments[].
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UScenarioEditorSidebarFieldRow>> ZoneSegmentItemRows;
+
+	// Dynamic item rows for root.obstacles.placements[].zone.lanes[].
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UScenarioEditorSidebarFieldRow>> ZoneLaneItemRows;
+
+	// Dynamic item rows for root.obstacles.placements[].palette.categories[].
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UScenarioEditorSidebarFieldRow>> PaletteCategoryItemRows;
+
+	// Dynamic item rows for root.obstacles.placements[].palette.classes[].
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UScenarioEditorSidebarFieldRow>> PaletteClassItemRows;
 
 	// Binds child field row delegates owned by this placement widget.
 	void BindFieldRows();
@@ -289,4 +387,36 @@ private:
 	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
 	// Finds one cached field row ViewModel by id.
 	UScenarioTemplateFieldRowViewModel* FindCachedFieldItem(const FString& fieldId) const;
+	// Applies collection summary state and rebuilds dynamic item rows for one string-list field.
+	void RefreshStringListRows(
+		EScenarioEditorSidebarObstaclePlacementField field,
+		UScenarioEditorSidebarFieldRow* collectionFieldRow,
+		const TArray<FString>& values,
+		const TArray<FString>& options,
+		const FString& itemLabelPrefix,
+		bool bVisible);
+	// Adds one string-list item row below the collection field row.
+	UScenarioEditorSidebarFieldRow* AddStringListItemRow(
+		EScenarioEditorSidebarObstaclePlacementField field,
+		UScenarioEditorSidebarFieldRow* collectionFieldRow,
+		int32 itemIndex,
+		const FString& value,
+		const TArray<FString>& options,
+		const FString& itemLabelPrefix);
+	// Removes all dynamic item rows for one string-list field.
+	void ClearStringListRows(EScenarioEditorSidebarObstaclePlacementField field);
+	// Resolves the dynamic row storage for one string-list field.
+	TArray<TObjectPtr<UScenarioEditorSidebarFieldRow>>* ResolveStringListRows(
+		EScenarioEditorSidebarObstaclePlacementField field);
+	// Emits text edits from dynamic string-list item rows.
+	void BroadcastStringListItemText(
+		EScenarioEditorSidebarObstaclePlacementField field,
+		int32 itemIndex,
+		const FText& text,
+		ETextCommit::Type commitMethod);
+	// Emits add/remove requests from string-list collection and item rows.
+	void BroadcastStringListItemAction(
+		FScenarioEditorSidebarObstaclePlacementStringListItemActionRequested& action,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		int32 itemIndex);
 };

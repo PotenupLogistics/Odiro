@@ -1,6 +1,7 @@
 #include "Scenario/Widget/ScenarioEditorSidebarPedestrianPanel.h"
 
 #include "Components/TextBlock.h"
+#include "Components/PanelSlot.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
@@ -82,6 +83,9 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshFromTemplate(
 
 	templateSidebarViewModel->RefreshPedestrianFieldItemsFromTemplate(scenarioTemplate);
 	ApplyPedestrianFieldItems();
+	RefreshSpawnSegmentRows(
+		scenarioTemplate.Pedestrians.Background.SpawnSegmentIds,
+		scenarioTemplate.Corridor.Segments);
 	RefreshEncounterRows(scenarioTemplate.Pedestrians.Encounters);
 	SetDiagnosticsText(TEXT(""));
 	ApplySelectedBlockPath();
@@ -190,6 +194,8 @@ void UScenarioEditorSidebarPedestrianPanel::ConfigureFieldRows()
 			TEXT("세부"));
 		SpawnZoneBlockWidget->SetNested(true);
 		SpawnZoneBlockWidget->SetShowNormalOutline(false);
+		SpawnZoneBlockWidget->SetAddActionVisible(true);
+		SpawnZoneBlockWidget->SetRemoveActionVisible(false);
 	}
 	if (EncountersBlockWidget)
 	{
@@ -211,6 +217,10 @@ void UScenarioEditorSidebarPedestrianPanel::ConfigureFieldRows()
 	if (SpawnSegmentsFieldRow)
 	{
 		SpawnSegmentsFieldRow->SetTextStyleCatalog(TextStyleCatalog);
+		SpawnSegmentsFieldRow->SetEditable(false);
+		SpawnSegmentsFieldRow->SetArrayControlsEnabled(false);
+		SpawnSegmentsFieldRow->SetAddItemControlVisible(false);
+		SpawnSegmentsFieldRow->SetRemoveItemControlVisible(false);
 	}
 	ApplyPedestrianFieldItems();
 }
@@ -233,6 +243,13 @@ void UScenarioEditorSidebarPedestrianPanel::ApplyTextStyles()
 		BackgroundSpeedFieldRow.Get(),
 		SpawnSegmentsFieldRow.Get(),
 		EncountersCountFieldRow.Get() })
+	{
+		if (fieldRow)
+		{
+			fieldRow->SetTextStyleCatalog(TextStyleCatalog);
+		}
+	}
+	for (UScenarioEditorSidebarFieldRow* fieldRow : SpawnSegmentItemRows)
 	{
 		if (fieldRow)
 		{
@@ -277,6 +294,10 @@ void UScenarioEditorSidebarPedestrianPanel::ApplyPedestrianFieldItems()
 	{
 		SpawnSegmentsFieldRow->InitializeFromItemViewModel(
 			templateSidebarViewModel->FindPedestrianFieldItem(TEXT("SpawnSegments")));
+		SpawnSegmentsFieldRow->SetEditable(false);
+		SpawnSegmentsFieldRow->SetArrayControlsEnabled(false);
+		SpawnSegmentsFieldRow->SetAddItemControlVisible(false);
+		SpawnSegmentsFieldRow->SetRemoveItemControlVisible(false);
 	}
 	if (EncountersCountFieldRow)
 	{
@@ -296,6 +317,15 @@ void UScenarioEditorSidebarPedestrianPanel::BindControls()
 			this,
 			&UScenarioEditorSidebarPedestrianPanel::HandleEncounterCollectionAddRequested);
 	}
+	if (SpawnZoneBlockWidget)
+	{
+		SpawnZoneBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentAddRequested);
+		SpawnZoneBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentAddRequested);
+	}
 }
 
 void UScenarioEditorSidebarPedestrianPanel::UnbindControls()
@@ -306,6 +336,24 @@ void UScenarioEditorSidebarPedestrianPanel::UnbindControls()
 			this,
 			&UScenarioEditorSidebarPedestrianPanel::HandleEncounterCollectionAddRequested);
 	}
+	if (SpawnZoneBlockWidget)
+	{
+		SpawnZoneBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentAddRequested);
+	}
+	for (UScenarioEditorSidebarFieldRow* fieldRow : SpawnSegmentItemRows)
+	{
+		if (fieldRow)
+		{
+			fieldRow->OnIndexedValueTextCommitted.RemoveDynamic(
+				this,
+				&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentTextCommitted);
+			fieldRow->OnIndexedRemoveItemRequested.RemoveDynamic(
+				this,
+				&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentRemoveRequested);
+		}
+	}
 	for (UScenarioEditorSidebarPedestrianEncounterWidget* encounterWidget : EncounterWidgets)
 	{
 		if (encounterWidget)
@@ -315,6 +363,39 @@ void UScenarioEditorSidebarPedestrianPanel::UnbindControls()
 				&UScenarioEditorSidebarPedestrianPanel::HandleEncounterRemoveRequested);
 		}
 	}
+}
+
+void UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentAddRequested()
+{
+	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->AddPedestrianSpawnSegmentAfter(INDEX_NONE, statusText);
+	});
+}
+
+void UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentTextCommitted(
+	const int32 segmentIndex,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	if (commitMethod == ETextCommit::OnCleared)
+	{
+		RefreshFromDraft();
+		return;
+	}
+
+	ExecuteTemplateCommand([segmentIndex, &text](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->CommitPedestrianSpawnSegmentText(segmentIndex, text, statusText);
+	});
+}
+
+void UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentRemoveRequested(const int32 segmentIndex)
+{
+	ExecuteTemplateCommand([segmentIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->RemovePedestrianSpawnSegmentAt(segmentIndex, statusText);
+	});
 }
 
 void UScenarioEditorSidebarPedestrianPanel::RefreshEncounterRows(
@@ -350,6 +431,128 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshEncounterRows(
 			EncounterWidgets.Add(encounterWidget);
 		}
 	}
+}
+
+void UScenarioEditorSidebarPedestrianPanel::RefreshSpawnSegmentRows(
+	const TArray<FString>& spawnSegmentIds,
+	const TArray<FScenarioTemplateSegment>& corridorSegments)
+{
+	for (UScenarioEditorSidebarFieldRow* fieldRow : SpawnSegmentItemRows)
+	{
+		if (!fieldRow)
+		{
+			continue;
+		}
+
+		fieldRow->OnIndexedValueTextCommitted.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentTextCommitted);
+		fieldRow->OnIndexedRemoveItemRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentRemoveRequested);
+		fieldRow->RemoveFromParent();
+	}
+	SpawnSegmentItemRows.Reset();
+
+	if (!SpawnZoneBlockWidget || !SpawnSegmentsFieldRow)
+	{
+		return;
+	}
+
+	TArray<FString> segmentOptions;
+	segmentOptions.Reserve(corridorSegments.Num());
+	for (const FScenarioTemplateSegment& segment : corridorSegments)
+	{
+		if (!segment.SegmentId.IsEmpty())
+		{
+			segmentOptions.AddUnique(segment.SegmentId);
+		}
+	}
+
+	SpawnSegmentsFieldRow->SetValueText(FString::FromInt(spawnSegmentIds.Num()));
+	SpawnSegmentsFieldRow->SetEditable(false);
+	SpawnSegmentsFieldRow->SetArrayControlsEnabled(false);
+	SpawnSegmentsFieldRow->SetAddItemControlVisible(false);
+	SpawnSegmentsFieldRow->SetRemoveItemControlVisible(false);
+
+	for (int32 segmentIndex = 0; segmentIndex < spawnSegmentIds.Num(); ++segmentIndex)
+	{
+		if (UScenarioEditorSidebarFieldRow* fieldRow =
+			AddSpawnSegmentItemRow(segmentIndex, spawnSegmentIds[segmentIndex], segmentOptions))
+		{
+			SpawnSegmentItemRows.Add(fieldRow);
+		}
+	}
+}
+
+UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarPedestrianPanel::AddSpawnSegmentItemRow(
+	const int32 segmentIndex,
+	const FString& segmentId,
+	const TArray<FString>& segmentOptions)
+{
+	if (!GetWorld() || !SpawnZoneBlockWidget)
+	{
+		return nullptr;
+	}
+
+	UScenarioEditorSidebarFieldRow* fieldRow =
+		CreateWidget<UScenarioEditorSidebarFieldRow>(
+			GetWorld(),
+			UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(WidgetClassCatalog));
+	if (!fieldRow)
+	{
+		SetDiagnosticsText(TEXT("Scenario editor field row widget class is missing."));
+		return nullptr;
+	}
+
+	fieldRow->SetTextStyleCatalog(TextStyleCatalog);
+	fieldRow->SetFieldLabel(FString::Printf(TEXT("구간 %d"), segmentIndex + 1));
+	fieldRow->SetValueText(segmentId);
+	fieldRow->SetInputType(segmentOptions.IsEmpty()
+		? EScenarioEditorSidebarFieldInputType::Text
+		: EScenarioEditorSidebarFieldInputType::ComboBox);
+	fieldRow->SetComboOptions(segmentOptions);
+	fieldRow->SetComboAllowsUnset(false, FString());
+	fieldRow->SetEditable(true);
+	fieldRow->SetArrayControlsEnabled(false);
+	fieldRow->SetAddItemControlVisible(false);
+	fieldRow->SetRemoveItemControlVisible(true);
+	fieldRow->SetActionContextIndex(segmentIndex);
+	fieldRow->OnIndexedValueTextCommitted.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentTextCommitted);
+	fieldRow->OnIndexedValueTextCommitted.AddDynamic(
+		this,
+		&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentTextCommitted);
+	fieldRow->OnIndexedRemoveItemRequested.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentRemoveRequested);
+	fieldRow->OnIndexedRemoveItemRequested.AddDynamic(
+		this,
+		&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentRemoveRequested);
+
+	if (UVerticalBox* bodyBox = SpawnZoneBlockWidget->GetBodyBox())
+	{
+		int32 anchorIndex = INDEX_NONE;
+		for (int32 childIndex = 0; childIndex < bodyBox->GetChildrenCount(); ++childIndex)
+		{
+			if (bodyBox->GetChildAt(childIndex) == SpawnSegmentsFieldRow.Get())
+			{
+				anchorIndex = childIndex;
+				break;
+			}
+		}
+
+		UPanelSlot* insertedSlot = anchorIndex == INDEX_NONE
+			? bodyBox->AddChild(fieldRow)
+			: bodyBox->InsertChildAt(anchorIndex + 1 + segmentIndex, fieldRow);
+		if (UVerticalBoxSlot* verticalSlot = Cast<UVerticalBoxSlot>(insertedSlot))
+		{
+			verticalSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 2.0f));
+			verticalSlot->SetHorizontalAlignment(HAlign_Fill);
+		}
+	}
+	return fieldRow;
 }
 
 UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarPedestrianPanel::AddFieldRow(

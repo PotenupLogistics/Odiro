@@ -22,8 +22,16 @@ TSharedPtr<FJsonObject> FUmgMcpAttentionCommands::HandleCommand(const FString& C
 	if (Command == TEXT("get_target_umg_asset"))
 	{
         FString AssetPath = AttentionSubsystem->GetTargetUmgAsset();
-        Response->SetBoolField(TEXT("success"), true);
-        Response->SetStringField(TEXT("asset_path"), AssetPath);
+        if (AssetPath.IsEmpty())
+        {
+            Response->SetBoolField(TEXT("success"), false);
+            Response->SetStringField(TEXT("error"), TEXT("No active UMG asset target. Open a Widget Blueprint editor or call set_target_umg_asset first."));
+        }
+        else
+        {
+            Response->SetBoolField(TEXT("success"), true);
+            Response->SetStringField(TEXT("asset_path"), AssetPath);
+        }
 	}
 	else if (Command == TEXT("get_last_edited_umg_asset"))
 	{
@@ -139,8 +147,17 @@ TSharedPtr<FJsonObject> FUmgMcpAttentionCommands::HandleCommand(const FString& C
     }
     else if (Command == TEXT("get_target_widget"))
     {
-        Response->SetBoolField(TEXT("success"), true);
-        Response->SetStringField(TEXT("widget_name"), AttentionSubsystem->GetTargetWidget());
+        FString WidgetName = AttentionSubsystem->GetTargetWidget();
+        if (WidgetName.IsEmpty())
+        {
+            Response->SetBoolField(TEXT("success"), false);
+            Response->SetStringField(TEXT("error"), TEXT("No active UMG widget target. Open a Widget Blueprint editor or call set_target_umg_asset first."));
+        }
+        else
+        {
+            Response->SetBoolField(TEXT("success"), true);
+            Response->SetStringField(TEXT("widget_name"), WidgetName);
+        }
     }
 	else
 	{

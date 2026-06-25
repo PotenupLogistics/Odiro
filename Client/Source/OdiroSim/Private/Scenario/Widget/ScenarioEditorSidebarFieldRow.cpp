@@ -11,6 +11,7 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/Widget.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 
 namespace
@@ -131,6 +132,7 @@ void UScenarioEditorSidebarFieldRow::SetTextStyleCatalog(
 	TSoftObjectPtr<UWidgetTextStyleCatalog> catalog)
 {
 	TextStyleCatalog = catalog;
+	ApplyVisualStyle();
 	RefreshRow();
 }
 
@@ -401,6 +403,55 @@ void UScenarioEditorSidebarFieldRow::ApplyVisualStyle()
 		ValueMultiLineSizeBox->SetMinDesiredHeight(104.0f);
 		SetHorizontalSlotPadding(ValueMultiLineSizeBox.Get(), FMargin(2.0f, 3.0f, 0.0f, 3.0f));
 	}
+
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		LabelTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Label);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		SeparatorTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Caption);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		ValueTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		RangeSeparatorTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Caption);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		RangeToggleTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Caption);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		AddItemTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Label);
+	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+		RemoveItemTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Label);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(
+		ValueEditableTextBox.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(
+		MinValueEditableTextBox.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyEditableTextBoxStyle(
+		MaxValueEditableTextBox.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyComboBoxStringStyle(
+		ValueComboBox.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value);
+	UWidgetTextStyleCatalog::ApplyMultiLineEditableTextBoxStyle(
+		ValueMultiLineEditableTextBox.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value);
 }
 
 void UScenarioEditorSidebarFieldRow::RefreshRow()

@@ -127,7 +127,7 @@ void UScenarioTemplateSidebarViewModel::RefreshDefaultFields()
 		true));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("SegmentsCount"),
-		TEXT("의미 구간 수"),
+		TEXT("구간 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
@@ -142,7 +142,7 @@ void UScenarioTemplateSidebarViewModel::RefreshDefaultFields()
 		true));
 	ObstacleFieldItems.Add(CreateFieldItem(
 		TEXT("Placements"),
-		TEXT("배치 규칙 수"),
+		TEXT("배치된 장애물 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
@@ -1314,7 +1314,7 @@ void UScenarioTemplateSidebarViewModel::RefreshObstacleFieldItemsFromTemplate(
 
 	ObstacleFieldItems.Add(CreateFieldItem(
 		TEXT("PlacementsCount"),
-		TEXT("배치 규칙 수"),
+		TEXT("배치된 장애물 수"),
 		FString::FromInt(obstacles.Placements.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
@@ -1376,7 +1376,7 @@ void UScenarioTemplateSidebarViewModel::RefreshCorridorFieldItemsFromTemplate(
 		true));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("SegmentsCount"),
-		TEXT("의미 구간 수"),
+		TEXT("구간 수"),
 		FString::FromInt(corridor.Segments.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
@@ -1536,7 +1536,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 
 	fieldItems.Add(CreateFieldItem(
 		TEXT("PlacementId"),
-		TEXT("규칙 이름"),
+		TEXT("장애물명"),
 		placement.PlacementId,
 		EScenarioEditorSidebarFieldInputType::Text,
 		true,

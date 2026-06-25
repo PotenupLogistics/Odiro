@@ -680,7 +680,7 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 	if (SegmentsBlockWidget)
 	{
 		SidebarWidgetHelpers::ConfigureBlock(SegmentsBlockWidget.Get(), TextStyleCatalog, {
-			TEXT("의미 구간"),
+			TEXT("구간"),
 			TEXT("root.corridor.segments[]"),
 			TEXT("속성"),
 			false,

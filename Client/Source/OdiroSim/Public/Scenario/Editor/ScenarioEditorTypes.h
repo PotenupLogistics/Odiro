@@ -229,6 +229,45 @@ struct ODIROSIM_API FScenarioEditorRouteMarkerOverlayItem
 	bool bSelected = false;
 };
 
+// Projected corridor handle data consumed by the editor viewport overlay and screen-space hit tests.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FScenarioEditorCorridorHandleOverlayItem
+{
+	GENERATED_BODY()
+
+	// Stable selectable instance id owned by the corridor handle proxy actor.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FString InstanceId;
+
+	// Semantic corridor handle represented by this overlay item.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	EScenarioCorridorHandleType HandleType = EScenarioCorridorHandleType::Vertex;
+
+	// Proxy transform used by the transform gizmo and authoring update path.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FTransform WorldTransform = FTransform::Identity;
+
+	// World-space anchor projected for vertex grips and segment center grips.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FVector WorldLocation = FVector::ZeroVector;
+
+	// Segment start point used when painting and hit-testing segment lines.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FVector SegmentStartWorldLocation = FVector::ZeroVector;
+
+	// Segment end point used when painting and hit-testing segment lines.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FVector SegmentEndWorldLocation = FVector::ZeroVector;
+
+	// Whether the proxy actor is currently hovered by editor input.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	bool bHovered = false;
+
+	// Whether the proxy actor is currently selected by editor input.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	bool bSelected = false;
+};
+
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FScenarioAuthoringStaticObstacleRecord
 {

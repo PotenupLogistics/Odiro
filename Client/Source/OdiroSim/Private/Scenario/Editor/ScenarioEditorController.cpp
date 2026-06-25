@@ -11,6 +11,7 @@
 #include "Scenario/Widget/ScenarioEditorRootWidget.h"
 #include "Scenario/Widget/ScenarioEditorToolbarWidget.h"
 #include "Scenario/Actors/ScenarioPedestrian.h"
+#include "Scenario/ViewModel/ScenarioEditorShellViewModel.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Camera/CameraComponent.h"
 #include "InputAction.h"
@@ -56,6 +57,23 @@ namespace
 		const bool bHasNegative = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
 		const bool bHasPositive = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
 		return !(bHasNegative && bHasPositive);
+	}
+
+	double GetPointToSegmentDistanceSquared2D(
+		const FVector2D& point,
+		const FVector2D& segmentStart,
+		const FVector2D& segmentEnd)
+	{
+		const FVector2D segment = segmentEnd - segmentStart;
+		const double segmentLengthSquared = segment.SizeSquared();
+		if (segmentLengthSquared <= KINDA_SMALL_NUMBER)
+		{
+			return (point - segmentStart).SizeSquared();
+		}
+
+		const double projectedRatio = FVector2D::DotProduct(point - segmentStart, segment) / segmentLengthSquared;
+		const FVector2D closestPoint = segmentStart + segment * FMath::Clamp(projectedRatio, 0.0, 1.0);
+		return (point - closestPoint).SizeSquared();
 	}
 
 	// Identifies vertex handles so transform editing can update corridor axis points.
@@ -2242,6 +2260,131 @@ bool AScenarioEditorController::TraceMouseRobotRouteMarkerOverlay(
 	return true;
 }
 
+bool AScenarioEditorController::TraceMouseCorridorHandleOverlay(
+	UScenarioPlaceableComponent*& outPlaceableComponent,
+	FHitResult& outHit) const
+{
+	outPlaceableComponent = nullptr;
+	outHit = FHitResult();
+
+	if (!ShouldShowCorridorHandleOverlay())
+	{
+		return false;
+	}
+
+	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		return false;
+	}
+
+	TArray<FScenarioEditorCorridorHandleOverlayItem> items;
+	authoringSubsystem->GetCorridorHandleOverlayItems(items);
+	if (items.IsEmpty())
+	{
+		return false;
+	}
+
+	const FVector2D mousePosition = UWidgetLayoutLibrary::GetMousePositionOnViewport(this);
+	const FScenarioEditorCorridorHandleOverlayItem* bestItem = nullptr;
+	double bestDistanceSquared = MAX_dbl;
+	for (const FScenarioEditorCorridorHandleOverlayItem& item : items)
+	{
+		if (item.HandleType != EScenarioCorridorHandleType::Vertex)
+		{
+			continue;
+		}
+
+		FVector2D gripPosition = FVector2D::ZeroVector;
+		if (!UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(
+			const_cast<AScenarioEditorController*>(this),
+			item.WorldLocation,
+			gripPosition,
+			true)
+			|| !IsScreenPointInsideCorridorVertexHandleOverlay(mousePosition, gripPosition))
+		{
+			continue;
+		}
+
+		const double distanceSquared = (mousePosition - gripPosition).SizeSquared();
+		if (distanceSquared < bestDistanceSquared)
+		{
+			bestDistanceSquared = distanceSquared;
+			bestItem = &item;
+		}
+	}
+
+	for (const FScenarioEditorCorridorHandleOverlayItem& item : items)
+	{
+		if (item.HandleType != EScenarioCorridorHandleType::Segment)
+		{
+			continue;
+		}
+
+		FVector2D startPosition = FVector2D::ZeroVector;
+		FVector2D endPosition = FVector2D::ZeroVector;
+		FVector2D gripPosition = FVector2D::ZeroVector;
+		if (!UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(
+			const_cast<AScenarioEditorController*>(this),
+			item.SegmentStartWorldLocation,
+			startPosition,
+			true)
+			|| !UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(
+				const_cast<AScenarioEditorController*>(this),
+				item.SegmentEndWorldLocation,
+				endPosition,
+				true)
+			|| !UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(
+				const_cast<AScenarioEditorController*>(this),
+				item.WorldLocation,
+				gripPosition,
+				true))
+		{
+			continue;
+		}
+
+		double distanceSquared = MAX_dbl;
+		if (!IsScreenPointInsideCorridorSegmentHandleOverlay(
+			mousePosition,
+			startPosition,
+			endPosition,
+			gripPosition,
+			distanceSquared))
+		{
+			continue;
+		}
+
+		if (bestItem && bestItem->HandleType == EScenarioCorridorHandleType::Vertex)
+		{
+			continue;
+		}
+		if (distanceSquared < bestDistanceSquared)
+		{
+			bestDistanceSquared = distanceSquared;
+			bestItem = &item;
+		}
+	}
+
+	if (!bestItem
+		|| !authoringSubsystem->SyncCorridorHandleProxyTransform(bestItem->InstanceId, bestItem->WorldTransform))
+	{
+		return false;
+	}
+
+	UScenarioPlaceableComponent* placeableComponent =
+		authoringSubsystem->GetCorridorHandlePlaceableComponent(bestItem->InstanceId);
+	if (!IsEditorSelectablePlaceable(placeableComponent))
+	{
+		return false;
+	}
+
+	outPlaceableComponent = placeableComponent;
+	outHit.Location = bestItem->WorldLocation;
+	outHit.ImpactPoint = bestItem->WorldLocation;
+	outHit.Distance = FMath::Sqrt(bestDistanceSquared);
+	return true;
+}
+
 bool AScenarioEditorController::IsScreenPointInsideRobotRouteMarkerOverlay(
 	const FVector2D& screenPoint,
 	const FVector2D& markerAnchorPoint) const
@@ -2277,11 +2420,49 @@ bool AScenarioEditorController::IsScreenPointInsideRobotRouteMarkerOverlay(
 	return IsPointInsideTriangle2D(localPoint, leftBase, rightBase, tip);
 }
 
+bool AScenarioEditorController::IsScreenPointInsideCorridorVertexHandleOverlay(
+	const FVector2D& screenPoint,
+	const FVector2D& gripCenterPoint) const
+{
+	const FVector2D safeHitSize(
+		FMath::Max(1.0, CorridorVertexHandleOverlayHitSize.X),
+		FMath::Max(1.0, CorridorVertexHandleOverlayHitSize.Y));
+	const double hitRadius = FMath::Max(safeHitSize.X, safeHitSize.Y) * 0.5;
+	return (screenPoint - gripCenterPoint).SizeSquared() <= FMath::Square(hitRadius);
+}
+
+bool AScenarioEditorController::IsScreenPointInsideCorridorSegmentHandleOverlay(
+	const FVector2D& screenPoint,
+	const FVector2D& segmentStartPoint,
+	const FVector2D& segmentEndPoint,
+	const FVector2D& gripCenterPoint,
+	double& outDistanceSquared) const
+{
+	const FVector2D safeGripHitSize(
+		FMath::Max(1.0, CorridorSegmentHandleGripHitSize.X),
+		FMath::Max(1.0, CorridorSegmentHandleGripHitSize.Y));
+	const FVector2D gripHalfSize = safeGripHitSize * 0.5;
+	const FVector2D gripLocalPoint = screenPoint - gripCenterPoint;
+	if (FMath::Abs(gripLocalPoint.X) <= gripHalfSize.X
+		&& FMath::Abs(gripLocalPoint.Y) <= gripHalfSize.Y)
+	{
+		outDistanceSquared = gripLocalPoint.SizeSquared();
+		return true;
+	}
+
+	outDistanceSquared = GetPointToSegmentDistanceSquared2D(screenPoint, segmentStartPoint, segmentEndPoint);
+	return outDistanceSquared <= FMath::Square(FMath::Max(0.0, CorridorSegmentHandleLineHitHalfThicknessPixels));
+}
+
 bool AScenarioEditorController::TraceMouseSelectablePlaceable(
 	UScenarioPlaceableComponent*& outPlaceableComponent,
 	FHitResult& outHit) const
 {
 	outPlaceableComponent = nullptr;
+	if (TraceMouseCorridorHandleOverlay(outPlaceableComponent, outHit))
+	{
+		return true;
+	}
 	if (TraceMouseRobotRouteMarkerOverlay(outPlaceableComponent, outHit))
 	{
 		return true;
@@ -2388,6 +2569,27 @@ UScenarioPlaceableComponent* AScenarioEditorController::FindSelectablePlaceableB
 		}
 	}
 
+	if (UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem())
+	{
+		TArray<FScenarioEditorCorridorHandleOverlayItem> corridorHandleItems;
+		authoringSubsystem->GetCorridorHandleOverlayItems(corridorHandleItems);
+		for (const FScenarioEditorCorridorHandleOverlayItem& item : corridorHandleItems)
+		{
+			if (item.InstanceId != instanceId)
+			{
+				continue;
+			}
+
+			UScenarioPlaceableComponent* corridorHandleComponent =
+				authoringSubsystem->GetCorridorHandlePlaceableComponent(item.InstanceId);
+			if (IsEditorSelectablePlaceable(corridorHandleComponent)
+				&& authoringSubsystem->SyncCorridorHandleProxyTransform(item.InstanceId, item.WorldTransform))
+			{
+				return corridorHandleComponent;
+			}
+		}
+	}
+
 	for (TActorIterator<AActor> actorIt(world); actorIt; ++actorIt)
 	{
 		AActor* actor = *actorIt;
@@ -2401,6 +2603,23 @@ UScenarioPlaceableComponent* AScenarioEditorController::FindSelectablePlaceableB
 	}
 
 	return nullptr;
+}
+
+bool AScenarioEditorController::ShouldShowCorridorHandleOverlay() const
+{
+	if (IsCorridorHandlePlaceable(SelectedPlaceableComponent.Get())
+		|| IsCorridorHandlePlaceable(HoveredPlaceableComponent.Get())
+		|| IsCorridorHandlePlaceable(PressedPlaceableComponent.Get())
+		|| IsCorridorHandlePlaceable(DraggedPlaceableComponent.Get()))
+	{
+		return true;
+	}
+
+	const UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget();
+	const UScenarioEditorShellViewModel* shellViewModel =
+		rootWidget ? rootWidget->GetShellViewModel() : nullptr;
+	return shellViewModel
+		&& shellViewModel->GetActiveSidebarPanel() == EScenarioTemplateSidebarPanel::Corridor;
 }
 
 FString AScenarioEditorController::ResolveCurrentScenarioDraftSavePath() const

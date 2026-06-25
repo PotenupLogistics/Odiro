@@ -311,7 +311,7 @@ void UScenarioEditorSidebarObstaclePanel::ConfigureFieldRows()
 	if (PlacementsBlockWidget)
 	{
 		SidebarWidgetHelpers::ConfigureBlock(PlacementsBlockWidget.Get(), TextStyleCatalog, {
-			TEXT("배치 규칙"),
+			TEXT("배치된 장애물"),
 			TEXT("root.obstacles.placements[]"),
 			TEXT("속성"),
 			false,

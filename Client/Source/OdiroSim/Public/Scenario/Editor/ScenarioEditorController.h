@@ -133,6 +133,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay", meta = (ClampMin = "0.0"))
 	double RobotRouteMarkerOverlayHitPaddingPixels = 3.0;
 
+	// Screen-space hit box size for corridor vertex overlay grips.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FVector2D CorridorVertexHandleOverlayHitSize = FVector2D(20.0, 20.0);
+
+	// Screen-space hit box size for corridor segment center grips.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FVector2D CorridorSegmentHandleGripHitSize = FVector2D(18.0, 18.0);
+
+	// Screen-space half thickness used when hit-testing corridor segment lines.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay", meta = (ClampMin = "0.0"))
+	double CorridorSegmentHandleLineHitHalfThicknessPixels = 6.0;
+
 	// Fallback save path used when the draft was not opened from a user project scenario.json.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
 	FString DefaultScenarioDraftSavePath = TEXT("Saved/UserProjects/ScenarioEditor/scenario.json");
@@ -288,6 +300,9 @@ public:
 	// Returns the native selection change delegate for root/sidebar synchronization.
 	FScenarioSelectedPlaceableChanged& OnSelectedPlaceableChanged() { return SelectedPlaceableChanged; }
 
+	// Returns whether corridor handles should currently be visible and screen-space selectable.
+	bool ShouldShowCorridorHandleOverlay() const;
+
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Selection")
 	bool TryUpdateSelectedPlaceableTransform(const FTransform& transform, FString& outFailureReason);
 
@@ -319,10 +334,23 @@ private:
 	bool TraceMouseTransformGizmo(EScenarioTransformGizmoHandle& outHandle, FHitResult& outHit) const;
 	// Resolves screen-space route marker hits before world traces can select geometry behind the marker.
 	bool TraceMouseRobotRouteMarkerOverlay(UScenarioPlaceableComponent*& outPlaceableComponent, FHitResult& outHit) const;
+	// Resolves screen-space corridor handle hits before world traces can select geometry behind the handle.
+	bool TraceMouseCorridorHandleOverlay(UScenarioPlaceableComponent*& outPlaceableComponent, FHitResult& outHit) const;
 	// Checks whether a viewport point is inside the route marker's approximate pin-shaped hit mask.
 	bool IsScreenPointInsideRobotRouteMarkerOverlay(
 		const FVector2D& screenPoint,
 		const FVector2D& markerAnchorPoint) const;
+	// Checks whether a viewport point is inside one corridor vertex grip hit box.
+	bool IsScreenPointInsideCorridorVertexHandleOverlay(
+		const FVector2D& screenPoint,
+		const FVector2D& gripCenterPoint) const;
+	// Checks whether a viewport point is inside one corridor segment line or center grip.
+	bool IsScreenPointInsideCorridorSegmentHandleOverlay(
+		const FVector2D& screenPoint,
+		const FVector2D& segmentStartPoint,
+		const FVector2D& segmentEndPoint,
+		const FVector2D& gripCenterPoint,
+		double& outDistanceSquared) const;
 	bool BeginTransformGizmoDrag(EScenarioTransformGizmoHandle handle, const FHitResult& hit);
 	void UpdateTransformGizmoDrag();
 	void EndTransformGizmoDrag();

@@ -261,6 +261,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Overlay")
 	void GetRobotRouteMarkerOverlayItems(TArray<FScenarioEditorRouteMarkerOverlayItem>& outItems) const;
 
+	// Exports editor-only corridor handle proxies for screen-space overlay painting and hit testing.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Overlay")
+	void GetCorridorHandleOverlayItems(TArray<FScenarioEditorCorridorHandleOverlayItem>& outItems) const;
+
 	// Returns the tracked route marker proxy component for selection and gizmo ownership.
 	UScenarioPlaceableComponent* GetRobotRouteMarkerPlaceableComponent(
 		EScenarioEditorRouteMarkerKind markerKind) const;
@@ -269,6 +273,12 @@ public:
 	bool SyncRobotRouteMarkerProxyLocation(
 		EScenarioEditorRouteMarkerKind markerKind,
 		const FVector& markerLocationCm);
+
+	// Returns the tracked corridor handle proxy component for selection and gizmo ownership.
+	UScenarioPlaceableComponent* GetCorridorHandlePlaceableComponent(const FString& instanceId) const;
+
+	// Aligns the tracked corridor handle proxy actor to the draft-derived overlay transform.
+	bool SyncCorridorHandleProxyTransform(const FString& instanceId, const FTransform& transform);
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Placement")
 	bool RenameStaticObstacleInstanceId(

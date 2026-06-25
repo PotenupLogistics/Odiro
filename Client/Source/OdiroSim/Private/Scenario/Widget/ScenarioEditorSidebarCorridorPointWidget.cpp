@@ -85,15 +85,6 @@ void UScenarioEditorSidebarCorridorPointWidget::BindFieldRows()
 		XFieldRow->OnValueTextCommitted.AddDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorPointWidget::HandleXCommitted);
-		SidebarWidgetHelpers::BindFieldRowActions(
-			XFieldRow.Get(),
-			this,
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorPointWidget,
-				HandleAddPointRequested),
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorPointWidget,
-				HandleRemovePointRequested));
 	}
 
 	if (YFieldRow)
@@ -105,6 +96,15 @@ void UScenarioEditorSidebarCorridorPointWidget::BindFieldRows()
 			this,
 			&UScenarioEditorSidebarCorridorPointWidget::HandleYCommitted);
 	}
+	if (PointBlockWidget)
+	{
+		PointBlockWidget->OnRemoveActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPointWidget::HandleRemovePointRequested);
+		PointBlockWidget->OnRemoveActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPointWidget::HandleRemovePointRequested);
+	}
 }
 
 void UScenarioEditorSidebarCorridorPointWidget::UnbindFieldRows()
@@ -114,13 +114,18 @@ void UScenarioEditorSidebarCorridorPointWidget::UnbindFieldRows()
 		XFieldRow->OnValueTextCommitted.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorPointWidget::HandleXCommitted);
-		SidebarWidgetHelpers::UnbindFieldRowActions(XFieldRow.Get(), this);
 	}
 	if (YFieldRow)
 	{
 		YFieldRow->OnValueTextCommitted.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorPointWidget::HandleYCommitted);
+	}
+	if (PointBlockWidget)
+	{
+		PointBlockWidget->OnRemoveActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPointWidget::HandleRemovePointRequested);
 	}
 }
 
@@ -135,6 +140,8 @@ void UScenarioEditorSidebarCorridorPointWidget::ConfigureFieldRows()
 			false,
 			true,
 			false });
+		PointBlockWidget->SetAddActionVisible(false);
+		PointBlockWidget->SetRemoveActionVisible(true);
 	}
 
 	if (XFieldRow)

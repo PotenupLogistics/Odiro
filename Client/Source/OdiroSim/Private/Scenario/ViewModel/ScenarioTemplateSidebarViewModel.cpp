@@ -103,8 +103,7 @@ void UScenarioTemplateSidebarViewModel::RefreshDefaultFields()
 		TEXT("경로 점 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Integer,
-		false,
-		true));
+		false));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("WalkwayWidth"),
 		TEXT("보행로 폭"),
@@ -116,22 +115,19 @@ void UScenarioTemplateSidebarViewModel::RefreshDefaultFields()
 		TEXT("건물측 영역 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Integer,
-		false,
-		true));
+		false));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("CurbSideCount"),
 		TEXT("도로측 영역 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Integer,
-		false,
-		true));
+		false));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("SegmentsCount"),
 		TEXT("구간 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Integer,
-		false,
-		true));
+		false));
 
 	ObstacleFieldItems.Reset();
 	ObstacleFieldItems.Add(CreateFieldItem(
@@ -173,8 +169,7 @@ void UScenarioTemplateSidebarViewModel::RefreshDefaultFields()
 		TEXT("상호작용 수"),
 		FString(),
 		EScenarioEditorSidebarFieldInputType::Integer,
-		false,
-		true));
+		false));
 
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(CorridorFieldItems);
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(ObstacleFieldItems);
@@ -475,6 +470,15 @@ bool UScenarioTemplateSidebarViewModel::SetCorridorSegments(
 	outDiagnostics.Reset();
 	UScenarioAuthoringSubsystem* authoringSubsystem = ResolveAuthoringSubsystem();
 	return authoringSubsystem && authoringSubsystem->SetCorridorSegments(segments, outDiagnostics);
+}
+
+bool UScenarioTemplateSidebarViewModel::SetPedestrianRules(
+	const FScenarioTemplatePedestrianRules& pedestrianRules,
+	TArray<FString>& outDiagnostics)
+{
+	outDiagnostics.Reset();
+	UScenarioAuthoringSubsystem* authoringSubsystem = ResolveAuthoringSubsystem();
+	return authoringSubsystem && authoringSubsystem->SetPedestrianRules(pedestrianRules, outDiagnostics);
 }
 
 bool UScenarioTemplateSidebarViewModel::CommitCorridorWalkwayWidthText(
@@ -1158,6 +1162,48 @@ bool UScenarioTemplateSidebarViewModel::RemoveObstaclePlacementAt(
 	return CommitObstaclePlacements(placements, outStatusText);
 }
 
+bool UScenarioTemplateSidebarViewModel::AddPedestrianEncounterAfter(
+	const int32 encounterIndex,
+	FString& outStatusText)
+{
+	FScenarioTemplatePedestrianRules pedestrianRules;
+	if (!TryGetPedestrianRules(pedestrianRules, outStatusText))
+	{
+		return false;
+	}
+
+	const int32 insertIndex = pedestrianRules.Encounters.IsValidIndex(encounterIndex)
+		? encounterIndex + 1
+		: pedestrianRules.Encounters.Num();
+	pedestrianRules.Encounters.Insert(
+		MakeDefaultPedestrianEncounter(pedestrianRules.Encounters, encounterIndex),
+		insertIndex);
+	return CommitPedestrianRules(pedestrianRules, outStatusText);
+}
+
+bool UScenarioTemplateSidebarViewModel::RemovePedestrianEncounterAt(
+	const int32 encounterIndex,
+	FString& outStatusText)
+{
+	FScenarioTemplatePedestrianRules pedestrianRules;
+	if (!TryGetPedestrianRules(pedestrianRules, outStatusText))
+	{
+		return false;
+	}
+
+	const int32 resolvedEncounterIndex = encounterIndex == INDEX_NONE
+		? pedestrianRules.Encounters.Num() - 1
+		: encounterIndex;
+	if (!pedestrianRules.Encounters.IsValidIndex(resolvedEncounterIndex))
+	{
+		outStatusText = TEXT("Pedestrian encounter index is no longer valid.");
+		return false;
+	}
+
+	pedestrianRules.Encounters.RemoveAt(resolvedEncounterIndex);
+	return CommitPedestrianRules(pedestrianRules, outStatusText);
+}
+
 FScenarioTemplateNumberValue UScenarioTemplateSidebarViewModel::MakeFixedTemplateNumberValue(const double value)
 {
 	return UScenarioAuthoringSubsystem::MakeFixedTemplateNumberValue(value);
@@ -1283,8 +1329,7 @@ void UScenarioTemplateSidebarViewModel::RefreshPedestrianFieldItemsFromTemplate(
 		TEXT("상호작용 수"),
 		FString::FromInt(pedestrians.Encounters.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer,
-		false,
-		true));
+		false));
 
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(PedestrianFieldItems);
 }
@@ -1318,7 +1363,7 @@ void UScenarioTemplateSidebarViewModel::RefreshObstacleFieldItemsFromTemplate(
 		FString::FromInt(obstacles.Placements.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer,
 		false,
-		true));
+		false));
 
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(ObstacleFieldItems);
 }
@@ -1348,8 +1393,7 @@ void UScenarioTemplateSidebarViewModel::RefreshCorridorFieldItemsFromTemplate(
 		TEXT("경로 점 수"),
 		FString::FromInt(corridor.Axis.PointsMeters.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer,
-		false,
-		true));
+		false));
 
 	UScenarioTemplateFieldRowViewModel* walkwayWidth = CreateFieldItem(
 		TEXT("WalkwayWidth"),
@@ -1365,22 +1409,19 @@ void UScenarioTemplateSidebarViewModel::RefreshCorridorFieldItemsFromTemplate(
 		TEXT("건물측 영역 수"),
 		FString::FromInt(corridor.BuildingSide.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer,
-		false,
-		true));
+		false));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("CurbSideCount"),
 		TEXT("도로측 영역 수"),
 		FString::FromInt(corridor.CurbSide.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer,
-		false,
-		true));
+		false));
 	CorridorFieldItems.Add(CreateFieldItem(
 		TEXT("SegmentsCount"),
 		TEXT("구간 수"),
 		FString::FromInt(corridor.Segments.Num()),
 		EScenarioEditorSidebarFieldInputType::Integer,
-		false,
-		true));
+		false));
 
 	UE_MVVM_BROADCAST_FIELD_VALUE_CHANGED(CorridorFieldItems);
 }
@@ -1403,7 +1444,6 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 		TEXT("X 위치"),
 		FormatEditableNumber(pointMeters.X),
 		EScenarioEditorSidebarFieldInputType::Number,
-		true,
 		true));
 	fieldItems.Add(CreateFieldItem(
 		TEXT("CorridorPointY"),
@@ -1436,7 +1476,6 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 		TEXT("표면 유형"),
 		lane.SurfaceId,
 		EScenarioEditorSidebarFieldInputType::ComboBox,
-		true,
 		true);
 	surface->SetComboOptions(surfaceOptions);
 	surface->SetComboAllowsUnset(false, FString());
@@ -1478,7 +1517,6 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 		TEXT("구간 이름"),
 		segment.SegmentId,
 		EScenarioEditorSidebarFieldInputType::Text,
-		true,
 		true));
 
 	UScenarioTemplateFieldRowViewModel* segmentType = CreateFieldItem(
@@ -1540,7 +1578,7 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 		placement.PlacementId,
 		EScenarioEditorSidebarFieldInputType::Text,
 		true,
-		true));
+		false));
 	UScenarioTemplateFieldRowViewModel* placementKind = CreateFieldItem(
 		TEXT("PlacementKind"),
 		TEXT("배치 방식"),
@@ -1550,14 +1588,17 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 	placementKind->SetComboOptions(GetObstaclePlacementKindOptions());
 	placementKind->SetComboAllowsUnset(false, FString());
 	fieldItems.Add(placementKind);
-	fieldItems.Add(CreateFieldItem(
+	UScenarioTemplateFieldRowViewModel* prop = CreateFieldItem(
 		TEXT("PlacementProp"),
 		TEXT("장애물 종류"),
 		placement.PropId,
-		EScenarioEditorSidebarFieldInputType::Text,
+		EScenarioEditorSidebarFieldInputType::ComboBox,
 		bFixedPlacement || bPatternPlacement,
 		false,
-		bFixedPlacement || bPatternPlacement));
+		bFixedPlacement || bPatternPlacement);
+	prop->SetComboOptions(GetObstaclePropIdOptions());
+	prop->SetComboAllowsUnset(false, FString());
+	fieldItems.Add(prop);
 	UScenarioTemplateFieldRowViewModel* pattern = CreateFieldItem(
 		TEXT("PlacementPattern"),
 		TEXT("배치 패턴"),
@@ -1955,6 +1996,23 @@ void UScenarioTemplateSidebarViewModel::CacheCorridorSegmentOptions(
 TArray<FString> UScenarioTemplateSidebarViewModel::GetObstaclePlacementKindOptions()
 {
 	return { TEXT("fixed"), TEXT("pattern"), TEXT("scatter") };
+}
+
+TArray<FString> UScenarioTemplateSidebarViewModel::GetObstaclePropIdOptions() const
+{
+	TArray<FScenarioStaticObstaclePropEntry> propEntries;
+	GetStaticObstaclePaletteEntries(propEntries);
+
+	TArray<FString> propIds;
+	propIds.Reserve(propEntries.Num());
+	for (const FScenarioStaticObstaclePropEntry& propEntry : propEntries)
+	{
+		if (!propEntry.PropId.IsNone())
+		{
+			propIds.AddUnique(propEntry.PropId.ToString());
+		}
+	}
+	return propIds;
 }
 
 TArray<FString> UScenarioTemplateSidebarViewModel::GetObstaclePatternOptions()
@@ -2564,6 +2622,82 @@ FScenarioTemplateObstaclePlacement UScenarioTemplateSidebarViewModel::MakeDefaul
 	placement.YawDegrees = MakeFixedTemplateNumberValue(0.0);
 	placement.bAllowBlocking = false;
 	return placement;
+}
+
+bool UScenarioTemplateSidebarViewModel::TryGetPedestrianRules(
+	FScenarioTemplatePedestrianRules& outPedestrianRules,
+	FString& outStatusText) const
+{
+	FScenarioDocument scenarioTemplate;
+	FString failureReason;
+	if (!TryGetDraftScenario(scenarioTemplate, failureReason))
+	{
+		outStatusText = failureReason;
+		return false;
+	}
+
+	outPedestrianRules = scenarioTemplate.Pedestrians;
+	return true;
+}
+
+bool UScenarioTemplateSidebarViewModel::CommitPedestrianRules(
+	const FScenarioTemplatePedestrianRules& pedestrianRules,
+	FString& outStatusText)
+{
+	TArray<FString> diagnostics;
+	if (!SetPedestrianRules(pedestrianRules, diagnostics))
+	{
+		outStatusText = JoinDiagnostics(diagnostics, TEXT("Unknown Pedestrian edit failure."));
+		return false;
+	}
+
+	outStatusText.Reset();
+	return true;
+}
+
+FScenarioTemplatePedestrianEncounter UScenarioTemplateSidebarViewModel::MakeDefaultPedestrianEncounter(
+	const TArray<FScenarioTemplatePedestrianEncounter>& existingEncounters,
+	const int32 neighborIndex) const
+{
+	FScenarioTemplatePedestrianEncounter encounter;
+	encounter.Type = existingEncounters.IsValidIndex(neighborIndex)
+		? existingEncounters[neighborIndex].Type
+		: EScenarioTemplateEncounterType::CrossPath;
+	encounter.PersonaId = existingEncounters.IsValidIndex(neighborIndex)
+		&& !existingEncounters[neighborIndex].PersonaId.IsEmpty()
+			? existingEncounters[neighborIndex].PersonaId
+			: TEXT("normal");
+	encounter.MeetOffsetMeters = MakeFixedTemplateNumberValue(0.0);
+
+	for (int32 candidateIndex = 1; candidateIndex < 1000; ++candidateIndex)
+	{
+		const FString candidateId = FString::Printf(TEXT("encounter_%03d"), candidateIndex);
+		const bool bExists = existingEncounters.ContainsByPredicate(
+			[&candidateId](const FScenarioTemplatePedestrianEncounter& existingEncounter)
+			{
+				return existingEncounter.EncounterId == candidateId;
+			});
+		if (!bExists)
+		{
+			encounter.EncounterId = candidateId;
+			break;
+		}
+	}
+
+	if (existingEncounters.IsValidIndex(neighborIndex) && !existingEncounters[neighborIndex].AtSegmentId.IsEmpty())
+	{
+		encounter.AtSegmentId = existingEncounters[neighborIndex].AtSegmentId;
+		return encounter;
+	}
+
+	FScenarioDocument scenarioTemplate;
+	FString failureReason;
+	if (TryGetDraftScenario(scenarioTemplate, failureReason)
+		&& !scenarioTemplate.Corridor.Segments.IsEmpty())
+	{
+		encounter.AtSegmentId = scenarioTemplate.Corridor.Segments[0].SegmentId;
+	}
+	return encounter;
 }
 
 bool UScenarioTemplateSidebarViewModel::SetPlacementNumberField(

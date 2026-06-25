@@ -6,6 +6,7 @@ class UScenarioEditorSidebarBlockWidget;
 class UScenarioEditorSidebarFieldRow;
 class UScenarioEditorWidgetClassCatalog;
 class UScenarioTemplateFieldRowViewModel;
+class UUserWidget;
 class UWidgetTextStyleCatalog;
 class UWorld;
 
@@ -52,6 +53,12 @@ namespace ScenarioEditorSidebarWidgetHelpers
 		UScenarioEditorSidebarFieldRow* fieldRow,
 		TSoftObjectPtr<UWidgetTextStyleCatalog> textStyleCatalog,
 		UScenarioTemplateFieldRowViewModel* fieldItemViewModel);
+
+	// Applies the shared outer padding used by a sidebar panel root inside its scroll box.
+	void ApplyPanelRootPadding(UUserWidget* ownerWidget, FName rootWidgetName);
+
+	// Applies the shared spacing used between top-level sidebar blocks.
+	void ApplyPanelBlockSpacing(const TArray<UScenarioEditorSidebarBlockWidget*>& blockWidgets);
 
 	// Creates a standard sidebar field row and attaches it to the parent block body.
 	UScenarioEditorSidebarFieldRow* CreateFieldRow(

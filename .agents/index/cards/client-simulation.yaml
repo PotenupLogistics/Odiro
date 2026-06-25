@@ -62,6 +62,7 @@ guardrails:
   - Client/Json prompt-facing schemas and catalogs must stay aligned with shared user-project contracts.
   - ScenarioDocument and ScenarioSample surfaces remain internal editor/materialization shapes unless the task targets them.
   - ScenarioSimulationSubsystem owns runtime grid rebuild after scenario surfaces spawn.
+  - DeliveryBot runtime grid classifies generated Corridor surfaces through ScenarioCorridorRuntimeActor semantic lane lookup before applying procedural mesh collision overlap.
   - ScenarioRunnerSubsystem owns project episode lifecycle, policy start/end coordination, cancellation, late callbacks, and cleanup.
   - User project run output is written through typed UserProjectData JSON writers.
   - ScenarioEditorUiSubsystem owns ScenarioEditorMap UI ViewModel lifecycle and stores no widget pointers.

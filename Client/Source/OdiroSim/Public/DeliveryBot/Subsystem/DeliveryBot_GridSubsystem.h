@@ -57,6 +57,7 @@ public:
 class UPrimitiveComponent;
 class AActor;
 class ADeliveryBot_GridBoundsActor;
+class AScenarioCorridorRuntimeActor;
 UCLASS()
 class ODIROSIM_API UDeliveryBot_GridSubsystem : public UWorldSubsystem
 {
@@ -100,8 +101,23 @@ private:
 	bool ClassifyCellByCollisionPreset(const FVector& cellCenterLocation, const FVector& robotBoxExtent,	float maxWalkableSlopeDegree, ECollisionChannel gridTraceChannel,
 		const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, FDeliveryBotGridCellInfo& outCellInfo) const;
 
+	// Applies scenario corridor semantic lane data before procedural mesh collision details affect grid cells.
+	bool TryApplyScenarioCorridorSurfaceCell(
+		const FVector& cellCenterLocation,
+		const FVector& robotBoxExtent,
+		ECollisionChannel gridTraceChannel,
+		const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules,
+		FDeliveryBotGridCellInfo& outCellInfo) const;
+
+	// Tests the robot footprint against corridor semantic surfaces instead of generated mesh bodies.
+	bool HasBlockingCorridorFootprintOverlap(
+		const AScenarioCorridorRuntimeActor& corridorActor,
+		const FVector& groundLocation,
+		const FVector& robotBoxExtent,
+		FName& outBlockingProfileName) const;
+
 	bool HasBlockingFootprintOverlap(const FVector& groundLocation,	const FVector& robotBoxExtent, ECollisionChannel gridTraceChannel, 
-		const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, FName& outBlockingProfileName) const;
+		const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, const AActor* ignoredActor, FName& outBlockingProfileName) const;
 	
 	FColor GetDebugColorByAreaType(EDeliveryBotGridAreaType areaType) const;
 	

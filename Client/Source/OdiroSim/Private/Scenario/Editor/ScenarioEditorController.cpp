@@ -10,6 +10,7 @@
 #include "Scenario/Widget/ScenarioEditorRootWidget.h"
 #include "Scenario/Widget/ScenarioEditorToolbarWidget.h"
 #include "Scenario/Actors/ScenarioPedestrian.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
 #include "Camera/CameraComponent.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
@@ -32,6 +33,27 @@ namespace
 
 		return placeableComponent->AuthoringRole == EScenarioPlaceableAuthoringRole::RobotStartMarker
 			|| placeableComponent->AuthoringRole == EScenarioPlaceableAuthoringRole::RobotGoalMarker;
+	}
+
+	// Tests the triangular tail of the screen-space route marker hit shape.
+	bool IsPointInsideTriangle2D(
+		const FVector2D& point,
+		const FVector2D& triangleA,
+		const FVector2D& triangleB,
+		const FVector2D& triangleC)
+	{
+		const auto sign = [](const FVector2D& pointA, const FVector2D& pointB, const FVector2D& pointC)
+		{
+			return (pointA.X - pointC.X) * (pointB.Y - pointC.Y)
+				- (pointB.X - pointC.X) * (pointA.Y - pointC.Y);
+		};
+
+		const double d1 = sign(point, triangleA, triangleB);
+		const double d2 = sign(point, triangleB, triangleC);
+		const double d3 = sign(point, triangleC, triangleA);
+		const bool bHasNegative = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+		const bool bHasPositive = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+		return !(bHasNegative && bHasPositive);
 	}
 
 	// Identifies vertex handles so transform editing can update corridor axis points.
@@ -2096,11 +2118,127 @@ bool AScenarioEditorController::TraceMouseToPlane(
 	return true;
 }
 
+bool AScenarioEditorController::TraceMouseRobotRouteMarkerOverlay(
+	UScenarioPlaceableComponent*& outPlaceableComponent,
+	FHitResult& outHit) const
+{
+	outPlaceableComponent = nullptr;
+	outHit = FHitResult();
+
+	float rawMouseX = 0.0f;
+	float rawMouseY = 0.0f;
+	if (!GetMousePosition(rawMouseX, rawMouseY))
+	{
+		return false;
+	}
+
+	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
+	if (!authoringSubsystem)
+	{
+		return false;
+	}
+
+	TArray<FScenarioEditorRouteMarkerOverlayItem> items;
+	authoringSubsystem->GetRobotRouteMarkerOverlayItems(items);
+	if (items.IsEmpty())
+	{
+		return false;
+	}
+
+	const FVector2D mousePosition = UWidgetLayoutLibrary::GetMousePositionOnViewport(this);
+	double bestDistanceSquared = MAX_dbl;
+	const FScenarioEditorRouteMarkerOverlayItem* bestItem = nullptr;
+	FVector2D bestMarkerPosition = FVector2D::ZeroVector;
+	for (const FScenarioEditorRouteMarkerOverlayItem& item : items)
+	{
+		FVector2D markerPosition = FVector2D::ZeroVector;
+		if (!UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(
+			const_cast<AScenarioEditorController*>(this),
+			item.WorldLocation,
+			markerPosition,
+			true))
+		{
+			continue;
+		}
+
+		if (!IsScreenPointInsideRobotRouteMarkerOverlay(mousePosition, markerPosition))
+		{
+			continue;
+		}
+
+		const double distanceSquared = (mousePosition - markerPosition).SizeSquared();
+		if (distanceSquared < bestDistanceSquared)
+		{
+			bestDistanceSquared = distanceSquared;
+			bestItem = &item;
+			bestMarkerPosition = markerPosition;
+		}
+	}
+
+	if (!bestItem)
+	{
+		return false;
+	}
+
+	UScenarioPlaceableComponent* placeableComponent =
+		authoringSubsystem->GetRobotRouteMarkerPlaceableComponent(bestItem->Kind);
+	if (!IsEditorSelectablePlaceable(placeableComponent)
+		|| !authoringSubsystem->SyncRobotRouteMarkerProxyLocation(bestItem->Kind, bestItem->WorldLocation))
+	{
+		return false;
+	}
+
+	outPlaceableComponent = placeableComponent;
+	outHit.Location = bestItem->WorldLocation;
+	outHit.ImpactPoint = bestItem->WorldLocation;
+	outHit.Distance = FVector2D::Distance(mousePosition, bestMarkerPosition);
+	return true;
+}
+
+bool AScenarioEditorController::IsScreenPointInsideRobotRouteMarkerOverlay(
+	const FVector2D& screenPoint,
+	const FVector2D& markerAnchorPoint) const
+{
+	const FVector2D baseSize(
+		FMath::Max(1.0, RobotRouteMarkerOverlayHitSize.X),
+		FMath::Max(1.0, RobotRouteMarkerOverlayHitSize.Y));
+	const double padding = FMath::Max(0.0, RobotRouteMarkerOverlayHitPaddingPixels);
+	const FVector2D markerSize = baseSize + FVector2D(padding * 2.0, padding * 2.0);
+	const FVector2D safeAnchor(
+		FMath::Clamp(RobotRouteMarkerOverlayHitAnchor.X, 0.0, 1.0),
+		FMath::Clamp(RobotRouteMarkerOverlayHitAnchor.Y, 0.0, 1.0));
+	const FVector2D topLeft = markerAnchorPoint - baseSize * safeAnchor - FVector2D(padding, padding);
+	const FVector2D localPoint = screenPoint - topLeft;
+	if (localPoint.X < 0.0
+		|| localPoint.Y < 0.0
+		|| localPoint.X > markerSize.X
+		|| localPoint.Y > markerSize.Y)
+	{
+		return false;
+	}
+
+	const FVector2D circleCenter(markerSize.X * 0.5, markerSize.Y * 0.31);
+	const double circleRadius = markerSize.X * 0.39;
+	if ((localPoint - circleCenter).SizeSquared() <= FMath::Square(circleRadius))
+	{
+		return true;
+	}
+
+	const FVector2D leftBase(markerSize.X * 0.18, markerSize.Y * 0.43);
+	const FVector2D rightBase(markerSize.X * 0.82, markerSize.Y * 0.43);
+	const FVector2D tip(markerSize.X * 0.5, markerSize.Y * 0.98);
+	return IsPointInsideTriangle2D(localPoint, leftBase, rightBase, tip);
+}
+
 bool AScenarioEditorController::TraceMouseSelectablePlaceable(
 	UScenarioPlaceableComponent*& outPlaceableComponent,
 	FHitResult& outHit) const
 {
 	outPlaceableComponent = nullptr;
+	if (TraceMouseRobotRouteMarkerOverlay(outPlaceableComponent, outHit))
+	{
+		return true;
+	}
 
 	FVector worldOrigin = FVector::ZeroVector;
 	FVector worldDirection = FVector::ForwardVector;
@@ -2180,6 +2318,27 @@ UScenarioPlaceableComponent* AScenarioEditorController::FindSelectablePlaceableB
 	if (!world)
 	{
 		return nullptr;
+	}
+
+	if (UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem())
+	{
+		TArray<FScenarioEditorRouteMarkerOverlayItem> routeMarkerItems;
+		authoringSubsystem->GetRobotRouteMarkerOverlayItems(routeMarkerItems);
+		for (const FScenarioEditorRouteMarkerOverlayItem& item : routeMarkerItems)
+		{
+			if (item.InstanceId != instanceId)
+			{
+				continue;
+			}
+
+			UScenarioPlaceableComponent* routeMarkerComponent =
+				authoringSubsystem->GetRobotRouteMarkerPlaceableComponent(item.Kind);
+			if (IsEditorSelectablePlaceable(routeMarkerComponent)
+				&& authoringSubsystem->SyncRobotRouteMarkerProxyLocation(item.Kind, item.WorldLocation))
+			{
+				return routeMarkerComponent;
+			}
+		}
 	}
 
 	for (TActorIterator<AActor> actorIt(world); actorIt; ++actorIt)
@@ -2472,10 +2631,13 @@ void AScenarioEditorController::UpdatePlacementPreview()
 	CurrentPlacementTransform = BuildPlacementTransform(hit.ImpactPoint);
 
 	UScenarioAuthoringSubsystem* authoringSubsystem = GetAuthoringSubsystem();
-	if (SelectedPlacementItemType == EScenarioPaletteItemType::StaticObstacle && authoringSubsystem)
+	if ((SelectedPlacementItemType == EScenarioPaletteItemType::StaticObstacle
+			|| SelectedPlacementItemType == EScenarioPaletteItemType::RobotStart
+			|| SelectedPlacementItemType == EScenarioPaletteItemType::RobotGoal)
+		&& authoringSubsystem)
 	{
 		CurrentPlacementTransform =
-			authoringSubsystem->ResolveStaticObstaclePlacementTransform(CurrentPlacementTransform);
+			authoringSubsystem->ResolveEditorGroundActorPlacementTransform(CurrentPlacementTransform);
 	}
 	if (!authoringSubsystem)
 	{
@@ -2551,18 +2713,10 @@ bool AScenarioEditorController::ConfigurePlacementPreviewForSelectedItem(
 		return true;
 	}
 	case EScenarioPaletteItemType::RobotStart:
-		if (!PlacementPreviewActor->ConfigureActorPreviewClass(authoringSubsystem->StartPointClass))
-		{
-			CurrentPlacementFailureReason = TEXT("Failed to configure robot start preview.");
-			return false;
-		}
+		PlacementPreviewActor->SetActorHiddenInGame(true);
 		return true;
 	case EScenarioPaletteItemType::RobotGoal:
-		if (!PlacementPreviewActor->ConfigureActorPreviewClass(authoringSubsystem->GoalPointClass))
-		{
-			CurrentPlacementFailureReason = TEXT("Failed to configure robot goal preview.");
-			return false;
-		}
+		PlacementPreviewActor->SetActorHiddenInGame(true);
 		return true;
 	default:
 		CurrentPlacementFailureReason = TEXT("Unknown palette placement item type.");

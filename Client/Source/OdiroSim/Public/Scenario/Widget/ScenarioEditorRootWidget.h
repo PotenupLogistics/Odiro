@@ -20,6 +20,7 @@ class UScenarioPlaceableComponent;
 class UScenarioPlaceableContextMenuWidget;
 class UScenarioPlaceableDetailsWidget;
 class UScenarioEditorSidebarWidget;
+class UTexture2D;
 class UWidget;
 class UWidgetSwitcher;
 
@@ -32,6 +33,15 @@ public:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& myGeometry, float inDeltaTime) override;
+	// Draws editor-only screen-space overlays after the authored UMG tree has painted.
+	virtual int32 NativePaint(
+		const FPaintArgs& args,
+		const FGeometry& allottedGeometry,
+		const FSlateRect& myCullingRect,
+		FSlateWindowElementList& outDrawElements,
+		int32 layerId,
+		const FWidgetStyle& inWidgetStyle,
+		bool bParentEnabled) const override;
 
 	// Controls whether the asset palette is shown immediately when auto reveal is disabled.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root")
@@ -60,6 +70,30 @@ public:
 	// Right-edge distance that keeps the LLM prompt panel visible after it has opened.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root", meta = (ClampMin = "0.0"))
 	float LlmPanelHideRightEdgePixels = 96.0f;
+
+	// Texture drawn for the editor-only robot start marker overlay.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	TObjectPtr<UTexture2D> RobotStartMarkerOverlayTexture;
+
+	// Texture drawn for the editor-only robot goal marker overlay.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	TObjectPtr<UTexture2D> RobotGoalMarkerOverlayTexture;
+
+	// Fixed screen-space size for route marker overlays, preserving the default 78:120 marker aspect.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FVector2D RobotRouteMarkerOverlaySize = FVector2D(39.0, 60.0);
+
+	// Normalized overlay anchor point; the marker tip is expected at the bottom center.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FVector2D RobotRouteMarkerOverlayAnchor = FVector2D(0.5, 1.0);
+
+	// Fallback tint for the robot start marker when no texture is assigned.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FLinearColor RobotStartMarkerOverlayTint = FLinearColor(0.0f, 0.48f, 1.0f, 0.82f);
+
+	// Fallback tint for the robot goal marker when no texture is assigned.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FLinearColor RobotGoalMarkerOverlayTint = FLinearColor(1.0f, 0.03f, 0.03f, 0.82f);
 
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Root")
 	TObjectPtr<UScenarioEditorToolbarWidget> ToolbarWidget;
@@ -261,6 +295,23 @@ private:
 	// Checks whether the cursor is near enough to the bottom edge to reveal the asset palette.
 	bool ShouldRevealAssetPaletteFromMouseEdge() const;
 	bool IsMouseOverWidget(const UWidget* targetWidget) const;
+	// Paints every visible robot route endpoint overlay for the current editor draft.
+	int32 PaintRobotRouteMarkerOverlays(
+		const FGeometry& allottedGeometry,
+		FSlateWindowElementList& outDrawElements,
+		int32 layerId) const;
+	// Paints one fixed-size robot route endpoint marker at its projected widget position.
+	int32 PaintRobotRouteMarkerOverlayItem(
+		const FScenarioEditorRouteMarkerOverlayItem& item,
+		const FVector2D& localPosition,
+		const FGeometry& allottedGeometry,
+		FSlateWindowElementList& outDrawElements,
+		int32 layerId) const;
+	// Projects a route marker world location into this root widget's local paint space.
+	bool TryProjectRouteMarkerOverlayPosition(
+		const FVector& worldLocation,
+		const FGeometry& allottedGeometry,
+		FVector2D& outLocalPosition) const;
 
 	FDelegateHandle AutoStartCompletedHandle;
 

@@ -117,6 +117,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
 	int32 MainMenuWidgetViewportZOrder = 10;
 
+	// Screen-space route marker hit size matched to the root overlay's default 78:120 aspect.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FVector2D RobotRouteMarkerOverlayHitSize = FVector2D(39.0, 60.0);
+
+	// Normalized hit anchor; the marker tip is expected at the projected world point.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay")
+	FVector2D RobotRouteMarkerOverlayHitAnchor = FVector2D(0.5, 1.0);
+
+	// Extra screen-space tolerance applied around the pin-shaped route marker hit mask.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Overlay", meta = (ClampMin = "0.0"))
+	double RobotRouteMarkerOverlayHitPaddingPixels = 3.0;
+
 	// Fallback save path used when the draft was not opened from a user project scenario.json.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|UI")
 	FString DefaultScenarioDraftSavePath = TEXT("Saved/UserProjects/ScenarioEditor/scenario.json");
@@ -301,6 +313,12 @@ private:
 	void UpdateHoveredPlaceable();
 	bool UpdateHoveredTransformGizmo();
 	bool TraceMouseTransformGizmo(EScenarioTransformGizmoHandle& outHandle, FHitResult& outHit) const;
+	// Resolves screen-space route marker hits before world traces can select geometry behind the marker.
+	bool TraceMouseRobotRouteMarkerOverlay(UScenarioPlaceableComponent*& outPlaceableComponent, FHitResult& outHit) const;
+	// Checks whether a viewport point is inside the route marker's approximate pin-shaped hit mask.
+	bool IsScreenPointInsideRobotRouteMarkerOverlay(
+		const FVector2D& screenPoint,
+		const FVector2D& markerAnchorPoint) const;
 	bool BeginTransformGizmoDrag(EScenarioTransformGizmoHandle handle, const FHitResult& hit);
 	void UpdateTransformGizmoDrag();
 	void EndTransformGizmoDrag();

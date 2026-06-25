@@ -63,6 +63,14 @@
 #include "Materials/MaterialInterface.h"
 #include "EngineUtils.h"
 #include "Styling/SlateTypes.h"
+#include "Slate/WidgetRenderer.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Kismet/KismetRenderingLibrary.h"
+#include "RenderingThread.h"
+#include "Misc/Paths.h"
+#include "Misc/PackageName.h"
+#include "HAL/FileManager.h"
+#include "Widgets/SWidget.h"
 
 namespace
 {
@@ -88,7 +96,10 @@ namespace
 			}
 			if (ColorString.Len() == 6 || ColorString.Len() == 8)
 			{
-				return FLinearColor::FromSRGBColor(FColor::FromHex(ColorString));
+				// Slate UI brush colors are applied without an sRGB->linear
+				// decode; reinterpret the authored sRGB bytes directly so panel
+				// surfaces and the accent match the design-system hex values.
+				return FColor::FromHex(ColorString).ReinterpretAsLinear();
 			}
 		}
 
@@ -315,8 +326,197 @@ namespace
 
 static UClass* ResolveWidgetClass(const FString& ClassName);
 
+// Walks a constructed UserWidget's runtime tree (descending into nested child
+// UserWidgets) and records each widget's effective color state. Used to debug
+// why a runtime-applied brush tint can render differently than an identical
+// asset-baked tint.
+static void DumpWidgetColorsRecursive(UUserWidget* Owner, const FString& Prefix, TArray<TSharedPtr<FJsonValue>>& Out)
+{
+	if (!Owner || !Owner->WidgetTree)
+	{
+		return;
+	}
+	TArray<UWidget*> Children;
+	Owner->WidgetTree->GetAllWidgets(Children);
+	for (UWidget* W : Children)
+	{
+		if (!W)
+		{
+			continue;
+		}
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("name"), Prefix + W->GetName());
+		Entry->SetStringField(TEXT("class"), W->GetClass()->GetName());
+		Entry->SetNumberField(TEXT("renderOpacity"), W->GetRenderOpacity());
+		if (UBorder* B = Cast<UBorder>(W))
+		{
+			Entry->SetStringField(TEXT("brushColor"), B->GetBrushColor().ToString());
+			const FSlateBrush& Br = B->Background;
+			Entry->SetNumberField(TEXT("drawAs"), static_cast<int32>(Br.DrawAs));
+			Entry->SetStringField(TEXT("tintColorFull"), Br.TintColor.GetSpecifiedColor().ToString());
+			Entry->SetStringField(TEXT("imageSize"), Br.ImageSize.ToString());
+			Entry->SetStringField(TEXT("margin"), FString::Printf(TEXT("%.2f,%.2f,%.2f,%.2f"),
+				Br.Margin.Left, Br.Margin.Top, Br.Margin.Right, Br.Margin.Bottom));
+			Entry->SetBoolField(TEXT("hasResource"), Br.GetResourceObject() != nullptr);
+			Entry->SetNumberField(TEXT("outlineWidth"), Br.OutlineSettings.Width);
+			Entry->SetStringField(TEXT("outlineColor"), Br.OutlineSettings.Color.GetSpecifiedColor().ToString());
+		}
+		// Reflectively read any FLinearColor named ColorAndOpacity to find a
+		// content tint introduced by an intermediate node (e.g. CommonButton).
+		for (const TCHAR* PropName : { TEXT("ColorAndOpacity"), TEXT("ContentColorAndOpacity") })
+		{
+			if (FStructProperty* SP = CastField<FStructProperty>(W->GetClass()->FindPropertyByName(FName(PropName))))
+			{
+				if (SP->Struct == TBaseStructure<FLinearColor>::Get())
+				{
+					const FLinearColor* C = SP->ContainerPtrToValuePtr<FLinearColor>(W);
+					if (C)
+					{
+						Entry->SetStringField(PropName, C->ToString());
+					}
+				}
+			}
+		}
+		if (UUserWidget* ChildUW = Cast<UUserWidget>(W))
+		{
+			Entry->SetStringField(TEXT("colorAndOpacity"), ChildUW->GetColorAndOpacity().ToString());
+			Entry->SetBoolField(TEXT("isEnabled"), ChildUW->GetIsEnabled());
+			Out.Add(MakeShared<FJsonValueObject>(Entry));
+			DumpWidgetColorsRecursive(ChildUW, Prefix + W->GetName() + TEXT("/"), Out);
+			continue;
+		}
+		Out.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+}
+
+// Renders one Widget Blueprint in isolation to a PNG via FWidgetRenderer.
+// Unlike capture_slate_window (whole editor window, where the designer canvas
+// and Details panel occlude the preview), this draws only the widget at its
+// own size onto a chosen backdrop, so the design system can be verified clean.
+TSharedPtr<FJsonValue> FWidgetHandlers::CaptureWidget(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+
+	// Resolve the generated widget class ("/Game/.../WBP_X.WBP_X_C").
+	FString Package, ObjectName;
+	if (!AssetPath.Split(TEXT("."), &Package, &ObjectName))
+	{
+		Package = AssetPath;
+		ObjectName = FPackageName::GetShortName(AssetPath);
+	}
+	if (ObjectName.EndsWith(TEXT("_C")))
+	{
+		ObjectName.LeftChopInline(2);
+	}
+	const FString ClassPath = Package + TEXT(".") + ObjectName + TEXT("_C");
+	UClass* WidgetClass = LoadObject<UClass>(nullptr, *ClassPath);
+	if (!WidgetClass || !WidgetClass->IsChildOf(UUserWidget::StaticClass()))
+	{
+		return MCPError(FString::Printf(TEXT("Not a UserWidget class: %s"), *ClassPath));
+	}
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		return MCPError(TEXT("Editor world not available for widget render"));
+	}
+
+	UUserWidget* Widget = CreateWidget<UUserWidget>(World, WidgetClass);
+	if (!Widget)
+	{
+		return MCPError(FString::Printf(TEXT("CreateWidget failed for %s"), *ClassPath));
+	}
+
+	TSharedRef<SWidget> SlateWidget = Widget->TakeWidget();
+
+	// Optional diagnostic: dump each runtime widget's effective color/opacity.
+	TArray<TSharedPtr<FJsonValue>> ColorDump;
+	if (OptionalBool(Params, TEXT("dumpColors"), false))
+	{
+		DumpWidgetColorsRecursive(Widget, TEXT(""), ColorDump);
+	}
+
+	// Size: explicit params win; otherwise the widget's prepass desired size.
+	int32 Width = OptionalInt(Params, TEXT("width"), 0);
+	int32 Height = OptionalInt(Params, TEXT("height"), 0);
+	if (Width <= 0 || Height <= 0)
+	{
+		SlateWidget->SlatePrepass(1.0f);
+		const FVector2D Desired = SlateWidget->GetDesiredSize();
+		if (Width <= 0) Width = FMath::CeilToInt(Desired.X);
+		if (Height <= 0) Height = FMath::CeilToInt(Desired.Y);
+	}
+	if (Width <= 0 || Height <= 0)
+	{
+		return MCPError(TEXT("Could not determine widget size; pass width/height"));
+	}
+	Width = FMath::Clamp(Width, 8, 8192);
+	Height = FMath::Clamp(Height, 8, 8192);
+
+	// Backdrop fill for areas the widget leaves transparent (default surface-app).
+	const FLinearColor Background = McpColorFromJson(
+		Params->TryGetField(TEXT("background")),
+		FColor::FromHex(TEXT("1A1A1A")).ReinterpretAsLinear());
+
+	// Slate UI colors are authored without sRGB->linear decode, so render
+	// without gamma correction by default to match the on-screen appearance.
+	const bool bGammaCorrect = OptionalBool(Params, TEXT("gammaCorrect"), false);
+
+	UTextureRenderTarget2D* RenderTarget = UKismetRenderingLibrary::CreateRenderTarget2D(
+		World, Width, Height, ETextureRenderTargetFormat::RTF_RGBA8_SRGB, Background, false);
+	if (!RenderTarget)
+	{
+		return MCPError(TEXT("Failed to create render target for widget"));
+	}
+
+	FWidgetRenderer* Renderer = new FWidgetRenderer(bGammaCorrect, /*bInClearTarget=*/true);
+	const FVector2D DrawSize(Width, Height);
+	// Draw twice: first pass settles layout, second pass renders final pixels.
+	Renderer->DrawWidget(RenderTarget, SlateWidget, DrawSize, 0.0f);
+	FlushRenderingCommands();
+	Renderer->DrawWidget(RenderTarget, SlateWidget, DrawSize, 0.0f);
+	FlushRenderingCommands();
+	BeginCleanup(Renderer);
+
+	FString Filename;
+	if (auto Err = RequireString(Params, TEXT("filename"), Filename)) return Err;
+	if (FPaths::IsRelative(Filename))
+	{
+		Filename = FPaths::Combine(FPaths::ProjectDir(), Filename);
+	}
+	if (!Filename.EndsWith(TEXT(".png")))
+	{
+		Filename += TEXT(".png");
+	}
+	const FString OutDir = FPaths::GetPath(Filename);
+	const FString OutName = FPaths::GetCleanFilename(Filename);
+	IFileManager::Get().MakeDirectory(*OutDir, /*Tree=*/true);
+	UKismetRenderingLibrary::ExportRenderTarget(World, RenderTarget, OutDir, OutName);
+
+	const int64 FileSize = IFileManager::Get().FileSize(*Filename);
+	if (FileSize <= 0)
+	{
+		return MCPError(FString::Printf(TEXT("Widget capture did not write a file: %s"), *Filename));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("filename"), Filename);
+	Result->SetStringField(TEXT("widgetClass"), ClassPath);
+	Result->SetNumberField(TEXT("width"), Width);
+	Result->SetNumberField(TEXT("height"), Height);
+	Result->SetNumberField(TEXT("sizeBytes"), static_cast<double>(FileSize));
+	Result->SetBoolField(TEXT("gammaCorrect"), bGammaCorrect);
+	if (ColorDump.Num() > 0)
+	{
+		Result->SetArrayField(TEXT("colorDump"), ColorDump);
+	}
+	return MCPResult(Result);
+}
+
 void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	Registry.RegisterHandler(TEXT("capture_widget"), &CaptureWidget);
 	Registry.RegisterHandler(TEXT("list_widget_blueprints"), &ListWidgetBlueprints);
 	Registry.RegisterHandler(TEXT("create_widget_blueprint"), &CreateWidgetBlueprint);
 	Registry.RegisterHandler(TEXT("read_widget_tree"), &ReadWidgetTree);

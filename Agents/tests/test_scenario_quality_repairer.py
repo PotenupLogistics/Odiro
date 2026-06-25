@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+from app.agents.scenario_generation_v2.repair_diagnostics import RepairDiagnosticCode, RepairDiagnosticCollector
 from app.agents.scenario_generation_v2.repair_handler import ROBOT_ANCHOR_EXCLUSION_RADIUS_M, RepairHandler
 from app.agents.scenario_generation_v2.template_validator import TemplateValidator
 
@@ -100,6 +101,211 @@ def _assert_no_placement_overlaps(scenario: dict) -> None:
             along_overlap = _overlaps(_bounds(left["at"]["along_m"]), _bounds(right["at"]["along_m"]))
             offset_overlap = _overlaps(_bounds(left["at"]["offset_m"]), _bounds(right["at"]["offset_m"]))
             assert not (along_overlap and offset_overlap)
+
+
+def _repair_with_events(
+    scenario: dict,
+    *,
+    stage: str = "unit.repair",
+    repair_quality: bool = True,
+) -> tuple[dict, list[dict]]:
+    """Run repair with an event collector and return JSON-friendly events."""
+    collector = RepairDiagnosticCollector()
+    repaired = RepairHandler().repair(deepcopy(scenario), repair_quality=repair_quality, diagnostics=collector, stage=stage)
+    return repaired, collector.as_dicts()
+
+
+def _event_by_code(events: list[dict], code: RepairDiagnosticCode) -> dict:
+    """Return the first diagnostic event with the requested code."""
+    return next(event for event in events if event["code"] == code.value)
+
+
+def _event_codes(events: list[dict]) -> set[str]:
+    """Return repair diagnostic codes from JSON-friendly event objects."""
+    return {event["code"] for event in events}
+
+
+def test_repair_records_legacy_pose_prop_and_lane_diagnostics() -> None:
+    scenario = _base_quality_scenario()
+    existing_at = _cone("existing_at", along_m=5.0, offset_m=-0.65)
+    existing_at.update({"segment": "main", "along_m": 5.2, "offset_m": 0.2, "lane": "center"})
+    scenario["obstacles"]["placements"] = [
+        {
+            "kind": "fixed",
+            "id": "legacy_pose",
+            "prop": "traffic_cone_01",
+            "segment": "main",
+            "along_m": 4.0,
+            "offset_m": -0.65,
+            "lane": "hover_lane",
+            "yaw_deg": 0,
+        },
+        existing_at,
+    ]
+
+    repaired, events = _repair_with_events(scenario, repair_quality=False)
+
+    assert repaired["obstacles"]["placements"][0]["prop"] == "obstacle.road_cone_01"
+    assert repaired["obstacles"]["placements"][0]["at"]["lane"] == "walkway"
+    assert "segment" not in repaired["obstacles"]["placements"][1]
+    assert repaired["obstacles"]["placements"][1]["at"]["along_m"] == 5.0
+    assert {
+        RepairDiagnosticCode.LEGACY_POSE_MIGRATED.value,
+        RepairDiagnosticCode.LEGACY_POSE_REMOVED_DUE_TO_EXISTING_AT.value,
+        RepairDiagnosticCode.PROP_NORMALIZED.value,
+        RepairDiagnosticCode.LANE_HINT_NORMALIZED.value,
+    } <= _event_codes(events)
+    prop_event = _event_by_code(events, RepairDiagnosticCode.PROP_NORMALIZED)
+    assert prop_event["stage"] == "unit.repair"
+    assert prop_event["path"] == "obstacles.placements[0].prop"
+    assert prop_event["target_id"] == "legacy_pose"
+    assert prop_event["before"] == "traffic_cone_01"
+    assert prop_event["after"] == "obstacle.road_cone_01"
+
+
+def test_repair_records_robot_anchor_and_range_diagnostics() -> None:
+    scenario = _base_quality_scenario()
+    scenario["robot"]["start"] = {
+        "type": "entry",
+        "segment": "main",
+        "along_m": 1.0,
+        "offset_m": 0.0,
+        "lane": "walkway",
+    }
+    scenario["obstacles"]["placements"] = [
+        _cone("range_cone", along_m={"min": 5.0, "max": 4.0}, offset_m=-0.65)
+    ]
+
+    repaired, events = _repair_with_events(scenario, repair_quality=False)
+
+    assert repaired["robot"]["start"]["type"] == "corridor_pose"
+    assert repaired["obstacles"]["placements"][0]["at"]["along_m"] == {"min": 4.0, "max": 5.0}
+    assert RepairDiagnosticCode.ROBOT_ANCHOR_NORMALIZED.value in _event_codes(events)
+    range_event = _event_by_code(events, RepairDiagnosticCode.RANGE_SWAPPED)
+    assert range_event["path"] == "obstacles.placements[0].at.along_m"
+    assert range_event["before"] == "min=5.0,max=4.0"
+    assert range_event["after"] == "min=4.0,max=5.0"
+
+
+def test_repair_records_no_events_when_nothing_changes() -> None:
+    scenario = _base_quality_scenario()
+    scenario["obstacles"]["placements"] = [_cone("safe_cone", along_m=5.0, offset_m=-0.65)]
+
+    _, events = _repair_with_events(scenario)
+
+    assert events == []
+
+
+def test_repair_records_anchor_clearance_relocation_and_removal() -> None:
+    scenario = _base_quality_scenario()
+    scenario["obstacles"]["placements"] = [_cone("start_cone", along_m=1.2, offset_m=-0.65)]
+
+    repaired, events = _repair_with_events(scenario)
+
+    assert len(repaired["obstacles"]["placements"]) == 1
+    _assert_no_anchor_conflicts(repaired)
+    assert RepairDiagnosticCode.OBSTACLE_RELOCATED_ANCHOR_CLEARANCE.value in _event_codes(events)
+
+    blocked = _base_quality_scenario()
+    blocked["corridor"]["axis"]["points_m"] = [[0.0, 0.0], [2.0, 0.0]]
+    blocked["corridor"]["segments"] = [{"id": "main", "type": "straight", "along_range_m": [0.0, 2.0]}]
+    blocked["robot"]["start"]["along_m"] = 0.5
+    blocked["robot"]["goal"]["along_m"] = 1.5
+    blocked["obstacles"]["placements"] = [_cone("trapped_cone", along_m=1.0, offset_m=-0.65)]
+
+    removed, removal_events = _repair_with_events(blocked)
+
+    assert removed["obstacles"]["placements"] == []
+    assert RepairDiagnosticCode.OBSTACLE_REMOVED_ANCHOR_CLEARANCE.value in _event_codes(removal_events)
+
+
+def test_repair_records_overlap_redistribution() -> None:
+    scenario = _base_quality_scenario()
+    scenario["obstacles"]["placements"] = [
+        _cone("cone_01", along_m={"min": 4.0, "max": 4.4}, offset_m=-0.65),
+        _cone("cone_02", along_m={"min": 4.1, "max": 4.3}, offset_m=-0.65),
+    ]
+
+    repaired, events = _repair_with_events(scenario)
+
+    _assert_no_placement_overlaps(repaired)
+    assert RepairDiagnosticCode.OBSTACLE_OVERLAP_REDISTRIBUTED.value in _event_codes(events)
+
+
+def test_repair_records_min_clear_width_adjustment_and_removal() -> None:
+    scenario = _base_quality_scenario()
+    scenario["corridor"]["walkway_width_m"] = 1.2
+    scenario["obstacles"]["min_clear_width_m"] = 0.9
+    scenario["obstacles"]["placements"] = [
+        _cone("center_blocker", along_m={"min": 4.0, "max": 4.4}, offset_m={"min": -0.25, "max": 0.25})
+    ]
+
+    repaired, events = _repair_with_events(scenario)
+
+    assert _max_clear_width(1.2, repaired["obstacles"]["placements"][0]["at"]["offset_m"]) >= 0.9
+    assert RepairDiagnosticCode.MIN_CLEAR_WIDTH_OFFSET_ADJUSTED.value in _event_codes(events)
+
+    impossible = _base_quality_scenario()
+    impossible["corridor"]["walkway_width_m"] = 0.9
+    impossible["obstacles"]["min_clear_width_m"] = 0.85
+    impossible["obstacles"]["placements"] = [
+        _cone("impossible_blocker", along_m={"min": 4.0, "max": 4.4}, offset_m={"min": -0.1, "max": 0.1})
+    ]
+
+    removed, removal_events = _repair_with_events(impossible)
+
+    assert removed["obstacles"]["placements"] == []
+    assert RepairDiagnosticCode.OBSTACLE_REMOVED_MIN_CLEAR_WIDTH.value in _event_codes(removal_events)
+
+
+def test_repair_records_invalid_anchor_removals() -> None:
+    """Remove malformed obstacle anchors with an explicit invalid-anchor diagnostic."""
+    scenario = _base_quality_scenario()
+    non_object_at = _cone("non_object_at", along_m=4.0, offset_m=-0.65)
+    non_object_at["at"] = "main:4.0"
+    missing_segment = _cone("missing_segment", along_m=5.0, offset_m=-0.65)
+    missing_segment["at"].pop("segment")
+    unknown_segment = _cone("unknown_segment", along_m=6.0, offset_m=-0.65)
+    unknown_segment["at"]["segment"] = "missing_segment"
+    bad_along = _cone("bad_along", along_m=7.0, offset_m=-0.65)
+    bad_along["at"]["along_m"] = "seven"
+    scenario["obstacles"]["placements"] = [non_object_at, missing_segment, unknown_segment, bad_along]
+
+    repaired, events = _repair_with_events(scenario)
+
+    assert repaired["obstacles"]["placements"] == []
+    invalid_events = [
+        event for event in events if event["code"] == RepairDiagnosticCode.OBSTACLE_REMOVED_INVALID_ANCHOR.value
+    ]
+    assert len(invalid_events) == 4
+    assert {event["target_id"] for event in invalid_events} == {
+        "non_object_at",
+        "missing_segment",
+        "unknown_segment",
+        "bad_along",
+    }
+    for event in invalid_events:
+        assert event["stage"] == "unit.repair"
+        assert event["after"] == "removed"
+        assert event["severity"] == "warning"
+        assert isinstance(event["before"], str)
+        assert not event["before"].startswith("{")
+
+
+def test_repair_records_no_valid_interval_removal_separately_from_invalid_anchor() -> None:
+    """Keep exhausted-interval removal distinct from malformed-anchor removal."""
+    scenario = _base_quality_scenario()
+    scenario["corridor"]["axis"]["points_m"] = [[0.0, 0.0], [2.0, 0.0]]
+    scenario["corridor"]["segments"] = [{"id": "main", "type": "straight", "along_range_m": [0.0, 2.0]}]
+    scenario["robot"]["start"]["along_m"] = 0.5
+    scenario["robot"]["goal"]["along_m"] = 1.5
+    scenario["obstacles"]["placements"] = [_cone("outside_but_parseable", along_m=20.0, offset_m=-0.65)]
+
+    repaired, events = _repair_with_events(scenario)
+
+    assert repaired["obstacles"]["placements"] == []
+    assert RepairDiagnosticCode.OBSTACLE_REMOVED_NO_VALID_INTERVAL.value in _event_codes(events)
+    assert RepairDiagnosticCode.OBSTACLE_REMOVED_INVALID_ANCHOR.value not in _event_codes(events)
 
 
 def test_repair_moves_obstacles_outside_robot_start_and_goal_safety_radius() -> None:

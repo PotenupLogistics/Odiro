@@ -9,6 +9,7 @@ from app.agents.common.llm_json_client import AgentLlmClient, AgentLlmJsonClient
 from app.agents.common.spec_context_loader import SpecContextLoader
 from app.core.settings import Settings
 from app.agents.scenario_generation_v2.intent_parser import IntentParser, ScenarioIntent
+from app.agents.scenario_generation_v2.repair_diagnostics import RepairDiagnosticCollector
 from app.agents.scenario_generation_v2.repair_handler import RepairHandler
 from app.agents.scenario_generation_v2.request_normalizer import RequestNormalizer
 from app.agents.scenario_generation_v2.response_builder import ResponseBuilder
@@ -50,13 +51,17 @@ class ScenarioGenerationV2Agent:
         self.validator = TemplateValidator()
         self.repair_handler = RepairHandler()
         self.response_builder = ResponseBuilder()
+        self.last_repair_events: list[dict[str, object]] = []
 
     def generate(self, request: ScenarioGenerateV2Request) -> ScenarioGenerateV2Response:
         """Generate a project scenario JSON object from a single natural-language prompt."""
+        diagnostics = RepairDiagnosticCollector()
+        self.last_repair_events = []
         normalized = self.normalizer.normalize(request.prompt)
         if self.settings.v2AgentLlmEnabled:
-            response = self._generate_with_llm(normalized.normalized_prompt)
+            response = self._generate_with_llm(normalized.normalized_prompt, diagnostics=diagnostics)
             if response is not None:
+                self.last_repair_events = diagnostics.as_dicts()
                 return response
 
         intent = self.intent_parser.parse(normalized.normalized_prompt)
@@ -64,7 +69,7 @@ class ScenarioGenerationV2Agent:
         plan = self.planner.plan(intent, scenario_type)
 
         if self.settings.v2AgentLlmEnabled:
-            return self._generate_deterministic(
+            response = self._generate_deterministic(
                 plan,
                 intent=intent,
                 generation_mode="fallback",
@@ -72,8 +77,18 @@ class ScenarioGenerationV2Agent:
                     field="scenario",
                     message="LLM output validation failed; deterministic fallback scenario was used.",
                 ),
+                diagnostics=diagnostics,
             )
-        return self._generate_deterministic(plan, intent=intent, generation_mode="deterministic")
+            self.last_repair_events = diagnostics.as_dicts()
+            return response
+        response = self._generate_deterministic(
+            plan,
+            intent=intent,
+            generation_mode="deterministic",
+            diagnostics=diagnostics,
+        )
+        self.last_repair_events = diagnostics.as_dicts()
+        return response
 
     def _generate_deterministic(
         self,
@@ -82,11 +97,22 @@ class ScenarioGenerationV2Agent:
         intent: ScenarioIntent,
         generation_mode: str,
         fallback_warning: V2ValidationIssue | None = None,
+        diagnostics: RepairDiagnosticCollector | None = None,
     ) -> ScenarioGenerateV2Response:
         scenario = self.writer.write(plan)
-        scenario = self.repair_handler.repair(scenario, repair_quality=False)
-        scenario = self._postprocess_scenario_for_intent(scenario, intent)
-        scenario = self.repair_handler.repair(scenario)
+        scenario = self.repair_handler.repair(
+            scenario,
+            repair_quality=False,
+            diagnostics=diagnostics,
+            stage="agent.deterministic.initial",
+        )
+        scenario = self._postprocess_scenario_for_intent(
+            scenario,
+            intent,
+            diagnostics=diagnostics,
+            stage_prefix="agent.deterministic",
+        )
+        scenario = self.repair_handler.repair(scenario, diagnostics=diagnostics, stage="agent.deterministic.final")
         validation = self.validator.validate(scenario)
         if fallback_warning is not None:
             validation.warnings.append(fallback_warning)
@@ -109,15 +135,27 @@ class ScenarioGenerationV2Agent:
     def _generate_with_llm(
         self,
         prompt: str,
+        *,
+        diagnostics: RepairDiagnosticCollector | None = None,
     ) -> ScenarioGenerateV2Response | None:
         """Try LLM generation and at most one repair before deterministic fallback."""
         client = self.llm_client or AgentLlmJsonClient(settings=self.settings)
         try:
             scenario = self._generate_llm_template(prompt, client=client, response_name="scenario")
             intent = self.intent_parser.parse(prompt)
-            scenario = self.repair_handler.repair(scenario, repair_quality=False)
-            scenario = self._postprocess_scenario_for_intent(scenario, intent)
-            scenario = self.repair_handler.repair(scenario)
+            scenario = self.repair_handler.repair(
+                scenario,
+                repair_quality=False,
+                diagnostics=diagnostics,
+                stage="agent.llm.initial",
+            )
+            scenario = self._postprocess_scenario_for_intent(
+                scenario,
+                intent,
+                diagnostics=diagnostics,
+                stage_prefix="agent.llm",
+            )
+            scenario = self.repair_handler.repair(scenario, diagnostics=diagnostics, stage="agent.llm.final")
             validation = self.validator.validate(scenario)
             if validation.valid:
                 return self.response_builder.success(
@@ -141,10 +179,20 @@ class ScenarioGenerationV2Agent:
                     client=client,
                     response_name="project_scenario_repair",
                 )
-                repaired = self.repair_handler.repair(repaired, repair_quality=False)
+                repaired = self.repair_handler.repair(
+                    repaired,
+                    repair_quality=False,
+                    diagnostics=diagnostics,
+                    stage="agent.llm_repair.initial",
+                )
                 intent = self.intent_parser.parse(prompt)
-                repaired = self._postprocess_scenario_for_intent(repaired, intent)
-                repaired = self.repair_handler.repair(repaired)
+                repaired = self._postprocess_scenario_for_intent(
+                    repaired,
+                    intent,
+                    diagnostics=diagnostics,
+                    stage_prefix="agent.llm_repair",
+                )
+                repaired = self.repair_handler.repair(repaired, diagnostics=diagnostics, stage="agent.llm_repair.final")
                 repaired_validation = self.validator.validate(repaired)
                 if repaired_validation.valid:
                     return self.response_builder.success(
@@ -229,10 +277,22 @@ class ScenarioGenerationV2Agent:
         """Read a bundled prompt fragment for the scenario generation agent."""
         return (Path(__file__).parent / "prompts" / filename).read_text(encoding="utf-8")
 
-    def _postprocess_scenario_for_intent(self, scenario: dict, intent: ScenarioIntent) -> dict:
+    def _postprocess_scenario_for_intent(
+        self,
+        scenario: dict,
+        intent: ScenarioIntent,
+        *,
+        diagnostics: RepairDiagnosticCollector | None = None,
+        stage_prefix: str = "agent",
+    ) -> dict:
         """Apply prompt-specific quality corrections after structured LLM generation."""
         fallback = self._postprocess_base_scenario_for_intent(deepcopy(scenario), intent)
-        preset_scenario = self._try_build_preset_scenario(intent, source_scenario=fallback)
+        preset_scenario = self._try_build_preset_scenario(
+            intent,
+            source_scenario=fallback,
+            diagnostics=diagnostics,
+            stage_prefix=stage_prefix,
+        )
         return preset_scenario if preset_scenario is not None else fallback
 
     def _postprocess_base_scenario_for_intent(self, scenario: dict, intent: ScenarioIntent) -> dict:
@@ -256,6 +316,8 @@ class ScenarioGenerationV2Agent:
         intent: ScenarioIntent,
         *,
         source_scenario: dict[str, Any],
+        diagnostics: RepairDiagnosticCollector | None = None,
+        stage_prefix: str = "agent",
     ) -> dict[str, Any] | None:
         """Load, patch, validate, repair, and re-validate an optional preset candidate."""
         preset_id = self.scenario_preset_registry.select(intent)
@@ -273,10 +335,18 @@ class ScenarioGenerationV2Agent:
                 preset_id=preset_id,
                 source_scenario=source_scenario,
             )
-            candidate = self.repair_handler.repair(candidate)
+            candidate = self.repair_handler.repair(
+                candidate,
+                diagnostics=diagnostics,
+                stage=f"{stage_prefix}.preset.final",
+            )
             validation = self.validator.validate(candidate)
             if not validation.valid:
-                candidate = self.repair_handler.repair(candidate)
+                candidate = self.repair_handler.repair(
+                    candidate,
+                    diagnostics=diagnostics,
+                    stage=f"{stage_prefix}.preset.retry",
+                )
                 validation = self.validator.validate(candidate)
             return candidate if validation.valid else None
         except Exception:

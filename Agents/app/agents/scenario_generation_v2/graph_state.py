@@ -16,6 +16,7 @@ class ScenarioGenerationGraphStateV2(TypedDict, total=False):
     scenario: dict[str, Any] | None
     validation: Any
     diagnostics: list[dict[str, Any]]
+    repair_events: list[dict[str, Any]]
     repair_count: int
     status: str | None
     summary: str | None

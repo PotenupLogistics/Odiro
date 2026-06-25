@@ -15,7 +15,7 @@ class ODIROSIM_API UScenarioEditorRouteMarkerOverlayWidget : public UUserWidget
 
 public:
 	virtual void NativeConstruct() override;
-	// Draws editor-only robot route markers in a viewport layer below the main editor UI.
+	// Draws robot route markers in a viewport layer for editor and simulation worlds.
 	virtual int32 NativePaint(
 		const FPaintArgs& args,
 		const FGeometry& allottedGeometry,
@@ -53,7 +53,9 @@ private:
 	UPROPERTY(Transient)
 	FLinearColor RobotGoalMarkerOverlayTint = FLinearColor(1.0f, 0.03f, 0.03f, 0.82f);
 
-	// Paints every visible robot route endpoint overlay for the current editor draft.
+	// Ensures runtime-created overlays can use the same default marker textures as the editor root widget.
+	void LoadDefaultMarkerOverlayTextures();
+	// Paints every visible robot route endpoint overlay for the current editor draft or simulation run.
 	int32 PaintRobotRouteMarkerOverlays(
 		const FGeometry& allottedGeometry,
 		FSlateWindowElementList& outDrawElements,

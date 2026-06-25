@@ -70,8 +70,9 @@ guardrails:
   - Scenario editor selection, subsystem lookup, and world mutation stay controller/subsystem/component-owned; ViewModels expose FieldNotify state and command facades through ScenarioEditorUiSubsystem.
   - Scenario editor viewport navigation input is owned by ScenarioEditorController with Enhanced Input assets under Client/Content/Input; keep mouse capture, selection, and cancel bindings explicit.
   - ScenarioEditorLaunchSubsystem owns ScenarioEditorMap travel gating for editor visual asset preload before the viewport becomes visible.
-  - ScenarioEditorPawn owns camera-level viewport presentation defaults such as the grey background post-process blendable.
+  - ScenarioViewportPresentation owns shared grey background post-process application for editor cameras, runtime unbound post-process volumes, and preview SceneCapture components.
   - Scenario editor robot Start/Goal markers use authoring-subsystem proxy actors for selection and a ScenarioEditorController-owned viewport overlay below WBP_MainMenu for visible markers.
+  - Scenario simulation robot Start/Goal markers are runtime overlay items owned by ScenarioSimulationSubsystem; simulation no longer spawns visible BP_StartPoint/BP_GoalPoint marker actors.
   - Scenario Object Palette commands must be backed by scenario.json authoring contracts; currently it creates only fixed static-obstacle rows in obstacles.placements.
   - ScenarioEditorShellViewModel owns editor UI selection commands for template panel/block and placeable selection; viewport and outliner placeable selection focus and scroll to the matching sidebar block, and sidebar placeable-backed blocks route reverse selection through Shell commands instead of composing selection state locally.
   - Scenario editor reusable WBP class references come from ScenarioEditorWidgetClassCatalog assets or exposed widget properties; do not add C++ WBP class-path fallbacks.

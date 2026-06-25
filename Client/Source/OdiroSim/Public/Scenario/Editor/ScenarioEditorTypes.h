@@ -170,7 +170,7 @@ enum class EScenarioPaletteItemType : uint8
 	GroundRegion
 };
 
-// Screen-space overlay marker kind used for editor-only robot route endpoints.
+// Screen-space overlay marker kind used for robot route endpoints.
 UENUM(BlueprintType)
 enum class EScenarioEditorRouteMarkerKind : uint8
 {
@@ -202,7 +202,7 @@ struct ODIROSIM_API FScenarioPaletteItemEntry
 	TSoftObjectPtr<UTexture2D> ThumbnailTexture;
 };
 
-// Editor-only projected marker data consumed by viewport overlay paint and hit testing.
+// Projected marker data consumed by editor and simulation viewport overlay paint paths.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FScenarioEditorRouteMarkerOverlayItem
 {

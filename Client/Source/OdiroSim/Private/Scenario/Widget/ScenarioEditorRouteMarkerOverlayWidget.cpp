@@ -4,13 +4,23 @@
 #include "Engine/Texture2D.h"
 #include "Rendering/DrawElements.h"
 #include "Scenario/Editor/ScenarioAuthoringSubsystem.h"
+#include "Scenario/ScenarioSimulationSubsystem.h"
 #include "Scenario/Widget/ScenarioEditorRootWidget.h"
 #include "Styling/CoreStyle.h"
+
+namespace
+{
+	const TCHAR* DefaultRobotStartMarkerOverlayTexturePath =
+		TEXT("/Game/Textures/Scenario/T_StartPointMarker.T_StartPointMarker");
+	const TCHAR* DefaultRobotGoalMarkerOverlayTexturePath =
+		TEXT("/Game/Textures/Scenario/T_GoalPointMarker.T_GoalPointMarker");
+}
 
 void UScenarioEditorRouteMarkerOverlayWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	SetVisibility(ESlateVisibility::HitTestInvisible);
+	LoadDefaultMarkerOverlayTextures();
 }
 
 int32 UScenarioEditorRouteMarkerOverlayWidget::NativePaint(
@@ -47,6 +57,21 @@ void UScenarioEditorRouteMarkerOverlayWidget::ApplyStyleFromRootWidget(
 	RobotRouteMarkerOverlayAnchor = rootWidget->RobotRouteMarkerOverlayAnchor;
 	RobotStartMarkerOverlayTint = rootWidget->RobotStartMarkerOverlayTint;
 	RobotGoalMarkerOverlayTint = rootWidget->RobotGoalMarkerOverlayTint;
+	LoadDefaultMarkerOverlayTextures();
+}
+
+void UScenarioEditorRouteMarkerOverlayWidget::LoadDefaultMarkerOverlayTextures()
+{
+	if (!RobotStartMarkerOverlayTexture)
+	{
+		RobotStartMarkerOverlayTexture =
+			LoadObject<UTexture2D>(nullptr, DefaultRobotStartMarkerOverlayTexturePath);
+	}
+	if (!RobotGoalMarkerOverlayTexture)
+	{
+		RobotGoalMarkerOverlayTexture =
+			LoadObject<UTexture2D>(nullptr, DefaultRobotGoalMarkerOverlayTexturePath);
+	}
 }
 
 int32 UScenarioEditorRouteMarkerOverlayWidget::PaintRobotRouteMarkerOverlays(
@@ -56,13 +81,21 @@ int32 UScenarioEditorRouteMarkerOverlayWidget::PaintRobotRouteMarkerOverlays(
 {
 	const UScenarioAuthoringSubsystem* authoringSubsystem =
 		GetWorld() ? GetWorld()->GetSubsystem<UScenarioAuthoringSubsystem>() : nullptr;
-	if (!authoringSubsystem)
-	{
-		return layerId;
-	}
 
 	TArray<FScenarioEditorRouteMarkerOverlayItem> items;
-	authoringSubsystem->GetRobotRouteMarkerOverlayItems(items);
+	if (authoringSubsystem)
+	{
+		authoringSubsystem->GetRobotRouteMarkerOverlayItems(items);
+	}
+	if (items.IsEmpty())
+	{
+		const UScenarioSimulationSubsystem* simulationSubsystem =
+			GetWorld() ? GetWorld()->GetSubsystem<UScenarioSimulationSubsystem>() : nullptr;
+		if (simulationSubsystem)
+		{
+			simulationSubsystem->GetRobotRouteMarkerOverlayItems(items);
+		}
+	}
 
 	int32 maxLayerId = layerId;
 	for (const FScenarioEditorRouteMarkerOverlayItem& item : items)

@@ -3088,12 +3088,6 @@ void AScenarioEditorController::GetTransformGizmoBasis(
 	if (outZAxis.IsNearlyZero()) outZAxis = FVector::UpVector;
 }
 
-UScenarioPlaceableDetailsWidget* AScenarioEditorController::EnsurePlaceableDetailsWidget()
-{
-	UScenarioEditorRootWidget* rootWidget = ShowEditorRootWidget();
-	return rootWidget ? rootWidget->GetPlaceableDetailsWidget() : nullptr;
-}
-
 void AScenarioEditorController::UpdatePlaceableDetailsForSelection()
 {
 	UScenarioPlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();

@@ -1,9 +1,11 @@
 #include "Scenario/Widget/ScenarioEditorSidebarWidget.h"
 
+#include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
 #include "Components/WidgetSwitcher.h"
 #include "Engine/World.h"
+#include "Scenario/Editor/ScenarioEditorController.h"
 #include "Scenario/ScenarioEditorUiSubsystem.h"
 #include "Scenario/ViewModel/ScenarioEditorShellViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
@@ -14,9 +16,61 @@
 #include "Scenario/Widget/ScenarioEditorSidebarPedestrianPanel.h"
 #include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
+#include "TimerManager.h"
 
 namespace
 {
+	// Extra padding applied when the shell auto-scrolls a selected block into view.
+	constexpr float SelectedBlockScrollPadding = 12.0f;
+
+	// Stable authoring proxy instance id used for the robot start marker.
+	const FString RobotStartMarkerInstanceId(TEXT("robot_start_point"));
+
+	// Stable authoring proxy instance id used for the robot goal marker.
+	const FString RobotGoalMarkerInstanceId(TEXT("robot_goal_point"));
+
+	// Stable prefix used by authoring corridor vertex proxy components.
+	const FString CorridorVertexHandleIdPrefix(TEXT("corridor_vertex_"));
+
+	// Stable prefix used by authoring corridor segment proxy components.
+	const FString CorridorSegmentHandleIdPrefix(TEXT("corridor_segment_"));
+
+	// Formats a corridor proxy instance id without reaching into private authoring helpers.
+	FString MakeScenarioEditorCorridorHandleId(const FString& prefix, const int32 itemIndex)
+	{
+		return FString::Printf(TEXT("%s%03d"), *prefix, itemIndex);
+	}
+
+	// Parses paths shaped like root.list.path[index] without accepting the non-indexed [] parent path.
+	bool TryParseScenarioEditorIndexedBlockPath(
+		const FString& blockPath,
+		const TCHAR* listPath,
+		int32& outItemIndex)
+	{
+		outItemIndex = INDEX_NONE;
+		const FString prefix = FString::Printf(TEXT("%s["), listPath);
+		if (!blockPath.StartsWith(prefix) || !blockPath.EndsWith(TEXT("]")))
+		{
+			return false;
+		}
+
+		const int32 indexStart = prefix.Len();
+		const int32 indexLength = blockPath.Len() - indexStart - 1;
+		if (indexLength <= 0)
+		{
+			return false;
+		}
+
+		const FString indexText = blockPath.Mid(indexStart, indexLength);
+		if (!indexText.IsNumeric())
+		{
+			return false;
+		}
+
+		outItemIndex = FCString::Atoi(*indexText);
+		return outItemIndex >= 0;
+	}
+
 	// Verifies that a resolved panel widget has the native type required by the sidebar shell.
 	bool ScenarioEditorSidebarIsExpectedPanelWidget(
 		const EScenarioTemplateSidebarPanel panel,
@@ -118,6 +172,8 @@ void UScenarioEditorSidebarWidget::RefreshFromTemplate(const FScenarioDocument& 
 	if (bRefreshed)
 	{
 		BindPanelBlockSelection(ResolvePanelWidget(ActivePanel));
+		ApplyActivePanelSelectionState();
+		RequestScrollSelectedBlockIntoView();
 	}
 }
 
@@ -405,87 +461,21 @@ void UScenarioEditorSidebarWidget::BindPanelBlockSelection(UWidget* panelWidget)
 {
 	UnbindPanelBlockSelection(panelWidget);
 
-	if (UScenarioEditorSidebarMainPanel* mainPanel = Cast<UScenarioEditorSidebarMainPanel>(panelWidget))
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectPanelBlockWidgets(panelWidget, blockWidgets);
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : blockWidgets)
 	{
-		BindBlockSelection(mainPanel->RootBlockWidget.Get());
-		BindBlockSelection(mainPanel->RobotBlockWidget.Get());
-		BindBlockSelection(mainPanel->RobotStartBlockWidget.Get());
-		BindBlockSelection(mainPanel->RobotGoalBlockWidget.Get());
-		return;
-	}
-
-	if (UScenarioEditorSidebarCorridorPanel* corridorPanel =
-		Cast<UScenarioEditorSidebarCorridorPanel>(panelWidget))
-	{
-		BindBlockSelection(corridorPanel->CorridorBlockWidget.Get());
-		BindBlockSelection(corridorPanel->AxisBlockWidget.Get());
-		BindBlockSelection(corridorPanel->AxisPointsBlockWidget.Get());
-		BindBlockSelection(corridorPanel->WalkwayWidthBlockWidget.Get());
-		BindBlockSelection(corridorPanel->BuildingSideBlockWidget.Get());
-		BindBlockSelection(corridorPanel->CurbSideBlockWidget.Get());
-		BindBlockSelection(corridorPanel->SegmentsBlockWidget.Get());
-		return;
-	}
-
-	if (UScenarioEditorSidebarObstaclePanel* obstaclePanel =
-		Cast<UScenarioEditorSidebarObstaclePanel>(panelWidget))
-	{
-		BindBlockSelection(obstaclePanel->ObstacleBlockWidget.Get());
-		BindBlockSelection(obstaclePanel->MinClearWidthBlockWidget.Get());
-		BindBlockSelection(obstaclePanel->PlacementsBlockWidget.Get());
-		return;
-	}
-
-	if (UScenarioEditorSidebarPedestrianPanel* pedestrianPanel =
-		Cast<UScenarioEditorSidebarPedestrianPanel>(panelWidget))
-	{
-		BindBlockSelection(pedestrianPanel->PedestriansBlockWidget.Get());
-		BindBlockSelection(pedestrianPanel->BackgroundBlockWidget.Get());
-		BindBlockSelection(pedestrianPanel->SpawnZoneBlockWidget.Get());
-		BindBlockSelection(pedestrianPanel->EncountersBlockWidget.Get());
+		BindBlockSelection(blockWidget);
 	}
 }
 
 void UScenarioEditorSidebarWidget::UnbindPanelBlockSelection(UWidget* panelWidget)
 {
-	if (UScenarioEditorSidebarMainPanel* mainPanel = Cast<UScenarioEditorSidebarMainPanel>(panelWidget))
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectPanelBlockWidgets(panelWidget, blockWidgets);
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : blockWidgets)
 	{
-		UnbindBlockSelection(mainPanel->RootBlockWidget.Get());
-		UnbindBlockSelection(mainPanel->RobotBlockWidget.Get());
-		UnbindBlockSelection(mainPanel->RobotStartBlockWidget.Get());
-		UnbindBlockSelection(mainPanel->RobotGoalBlockWidget.Get());
-		return;
-	}
-
-	if (UScenarioEditorSidebarCorridorPanel* corridorPanel =
-		Cast<UScenarioEditorSidebarCorridorPanel>(panelWidget))
-	{
-		UnbindBlockSelection(corridorPanel->CorridorBlockWidget.Get());
-		UnbindBlockSelection(corridorPanel->AxisBlockWidget.Get());
-		UnbindBlockSelection(corridorPanel->AxisPointsBlockWidget.Get());
-		UnbindBlockSelection(corridorPanel->WalkwayWidthBlockWidget.Get());
-		UnbindBlockSelection(corridorPanel->BuildingSideBlockWidget.Get());
-		UnbindBlockSelection(corridorPanel->CurbSideBlockWidget.Get());
-		UnbindBlockSelection(corridorPanel->SegmentsBlockWidget.Get());
-		return;
-	}
-
-	if (UScenarioEditorSidebarObstaclePanel* obstaclePanel =
-		Cast<UScenarioEditorSidebarObstaclePanel>(panelWidget))
-	{
-		UnbindBlockSelection(obstaclePanel->ObstacleBlockWidget.Get());
-		UnbindBlockSelection(obstaclePanel->MinClearWidthBlockWidget.Get());
-		UnbindBlockSelection(obstaclePanel->PlacementsBlockWidget.Get());
-		return;
-	}
-
-	if (UScenarioEditorSidebarPedestrianPanel* pedestrianPanel =
-		Cast<UScenarioEditorSidebarPedestrianPanel>(panelWidget))
-	{
-		UnbindBlockSelection(pedestrianPanel->PedestriansBlockWidget.Get());
-		UnbindBlockSelection(pedestrianPanel->BackgroundBlockWidget.Get());
-		UnbindBlockSelection(pedestrianPanel->SpawnZoneBlockWidget.Get());
-		UnbindBlockSelection(pedestrianPanel->EncountersBlockWidget.Get());
+		UnbindBlockSelection(blockWidget);
 	}
 }
 
@@ -532,9 +522,196 @@ void UScenarioEditorSidebarWidget::HandlePanelBlockSelected(const FString& block
 	{
 		if (UScenarioEditorShellViewModel* shellViewModel = uiSubsystem->GetShellViewModel())
 		{
+			FString placeableId;
+			if (TryResolvePlaceableIdForBlockPath(blockPath, placeableId)
+				&& shellViewModel->SelectPlaceable(placeableId))
+			{
+				ApplyActivePanelSelectionState();
+				RequestScrollSelectedBlockIntoView();
+				return;
+			}
+
 			shellViewModel->SelectTemplateBlock(ActivePanel, blockPath);
 		}
 	}
+
+	ApplyActivePanelSelectionState();
+	RequestScrollSelectedBlockIntoView();
+}
+
+void UScenarioEditorSidebarWidget::ApplyActivePanelSelectionState()
+{
+	UWidget* panelWidget = ResolvePanelWidget(ActivePanel);
+	if (UScenarioEditorSidebarMainPanel* mainPanel = Cast<UScenarioEditorSidebarMainPanel>(panelWidget))
+	{
+		mainPanel->ApplySelectedBlockPath();
+		return;
+	}
+	if (UScenarioEditorSidebarCorridorPanel* corridorPanel = Cast<UScenarioEditorSidebarCorridorPanel>(panelWidget))
+	{
+		corridorPanel->ApplySelectedBlockPath();
+		return;
+	}
+	if (UScenarioEditorSidebarObstaclePanel* obstaclePanel = Cast<UScenarioEditorSidebarObstaclePanel>(panelWidget))
+	{
+		obstaclePanel->ApplySelectedBlockPath();
+		return;
+	}
+	if (UScenarioEditorSidebarPedestrianPanel* pedestrianPanel = Cast<UScenarioEditorSidebarPedestrianPanel>(panelWidget))
+	{
+		pedestrianPanel->ApplySelectedBlockPath();
+	}
+}
+
+void UScenarioEditorSidebarWidget::RequestScrollSelectedBlockIntoView()
+{
+	UWorld* world = GetWorld();
+	if (!world)
+	{
+		ScrollSelectedBlockIntoView();
+		return;
+	}
+
+	world->GetTimerManager().SetTimerForNextTick(
+		FTimerDelegate::CreateWeakLambda(
+			this,
+			[this]
+			{
+				ScrollSelectedBlockIntoView();
+			}));
+}
+
+void UScenarioEditorSidebarWidget::ScrollSelectedBlockIntoView()
+{
+	if (!SidebarScrollBox)
+	{
+		return;
+	}
+
+	const UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	const UScenarioEditorShellViewModel* shellViewModel = uiSubsystem ? uiSubsystem->GetShellViewModel() : nullptr;
+	const FString selectedBlockPath = shellViewModel ? shellViewModel->GetSelectedTemplateBlockPath() : FString();
+	if (selectedBlockPath.IsEmpty())
+	{
+		return;
+	}
+
+	UScenarioEditorSidebarBlockWidget* blockWidget = FindActivePanelBlockWidgetByPath(selectedBlockPath);
+	if (!blockWidget)
+	{
+		return;
+	}
+
+	SidebarScrollBox->ScrollWidgetIntoView(
+		blockWidget,
+		true,
+		EDescendantScrollDestination::IntoView,
+		SelectedBlockScrollPadding);
+}
+
+UScenarioEditorSidebarBlockWidget* UScenarioEditorSidebarWidget::FindActivePanelBlockWidgetByPath(
+	const FString& blockPath) const
+{
+	UWidget* panelWidget = ResolvePanelWidget(ActivePanel);
+	if (const UScenarioEditorSidebarMainPanel* mainPanel = Cast<UScenarioEditorSidebarMainPanel>(panelWidget))
+	{
+		return mainPanel->FindBlockWidgetByPath(blockPath);
+	}
+	if (const UScenarioEditorSidebarCorridorPanel* corridorPanel = Cast<UScenarioEditorSidebarCorridorPanel>(panelWidget))
+	{
+		return corridorPanel->FindBlockWidgetByPath(blockPath);
+	}
+	if (const UScenarioEditorSidebarObstaclePanel* obstaclePanel = Cast<UScenarioEditorSidebarObstaclePanel>(panelWidget))
+	{
+		return obstaclePanel->FindBlockWidgetByPath(blockPath);
+	}
+	if (const UScenarioEditorSidebarPedestrianPanel* pedestrianPanel = Cast<UScenarioEditorSidebarPedestrianPanel>(panelWidget))
+	{
+		return pedestrianPanel->FindBlockWidgetByPath(blockPath);
+	}
+	return nullptr;
+}
+
+void UScenarioEditorSidebarWidget::CollectPanelBlockWidgets(
+	UWidget* panelWidget,
+	TArray<UScenarioEditorSidebarBlockWidget*>& outBlockWidgets) const
+{
+	if (const UScenarioEditorSidebarMainPanel* mainPanel = Cast<UScenarioEditorSidebarMainPanel>(panelWidget))
+	{
+		mainPanel->CollectBlockWidgets(outBlockWidgets);
+		return;
+	}
+	if (const UScenarioEditorSidebarCorridorPanel* corridorPanel = Cast<UScenarioEditorSidebarCorridorPanel>(panelWidget))
+	{
+		corridorPanel->CollectBlockWidgets(outBlockWidgets);
+		return;
+	}
+	if (const UScenarioEditorSidebarObstaclePanel* obstaclePanel = Cast<UScenarioEditorSidebarObstaclePanel>(panelWidget))
+	{
+		obstaclePanel->CollectBlockWidgets(outBlockWidgets);
+		return;
+	}
+	if (const UScenarioEditorSidebarPedestrianPanel* pedestrianPanel = Cast<UScenarioEditorSidebarPedestrianPanel>(panelWidget))
+	{
+		pedestrianPanel->CollectBlockWidgets(outBlockWidgets);
+	}
+}
+
+bool UScenarioEditorSidebarWidget::TryResolvePlaceableIdForBlockPath(
+	const FString& blockPath,
+	FString& outInstanceId) const
+{
+	outInstanceId.Reset();
+	if (blockPath == TEXT("root.robot.start"))
+	{
+		outInstanceId = RobotStartMarkerInstanceId;
+		return true;
+	}
+	if (blockPath == TEXT("root.robot.goal"))
+	{
+		outInstanceId = RobotGoalMarkerInstanceId;
+		return true;
+	}
+
+	int32 itemIndex = INDEX_NONE;
+	if (TryParseScenarioEditorIndexedBlockPath(
+		blockPath,
+		TEXT("root.corridor.axis.points_m"),
+		itemIndex))
+	{
+		outInstanceId = MakeScenarioEditorCorridorHandleId(CorridorVertexHandleIdPrefix, itemIndex);
+		return true;
+	}
+	if (TryParseScenarioEditorIndexedBlockPath(
+		blockPath,
+		TEXT("root.corridor.segments"),
+		itemIndex))
+	{
+		outInstanceId = MakeScenarioEditorCorridorHandleId(CorridorSegmentHandleIdPrefix, itemIndex);
+		return true;
+	}
+	if (TryParseScenarioEditorIndexedBlockPath(
+		blockPath,
+		TEXT("root.obstacles.placements"),
+		itemIndex))
+	{
+		const UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+		const UScenarioTemplateSidebarViewModel* templateSidebarViewModel = uiSubsystem
+			? uiSubsystem->GetTemplateSidebarViewModel()
+			: nullptr;
+		FScenarioDocument scenarioTemplate;
+		FString failureReason;
+		if (templateSidebarViewModel
+			&& templateSidebarViewModel->TryGetDraftScenario(scenarioTemplate, failureReason)
+			&& scenarioTemplate.Obstacles.Placements.IsValidIndex(itemIndex)
+			&& !scenarioTemplate.Obstacles.Placements[itemIndex].PlacementId.IsEmpty())
+		{
+			outInstanceId = scenarioTemplate.Obstacles.Placements[itemIndex].PlacementId;
+			return true;
+		}
+	}
+
+	return false;
 }
 
 FString UScenarioEditorSidebarWidget::PanelToTitle(const EScenarioTemplateSidebarPanel panel)

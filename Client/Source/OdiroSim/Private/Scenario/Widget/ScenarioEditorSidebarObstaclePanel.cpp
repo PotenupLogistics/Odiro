@@ -81,6 +81,43 @@ void UScenarioEditorSidebarObstaclePanel::RefreshFromTemplate(
 	SetDiagnosticsText(TEXT(""));
 }
 
+void UScenarioEditorSidebarObstaclePanel::CollectBlockWidgets(
+	TArray<UScenarioEditorSidebarBlockWidget*>& outBlockWidgets) const
+{
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : {
+		ObstacleBlockWidget.Get(),
+		MinClearWidthBlockWidget.Get(),
+		PlacementsBlockWidget.Get() })
+	{
+		if (blockWidget)
+		{
+			outBlockWidgets.Add(blockWidget);
+		}
+	}
+	for (UScenarioEditorSidebarObstaclePlacementWidget* placementWidget : PlacementWidgets)
+	{
+		if (placementWidget && placementWidget->PlacementBlockWidget)
+		{
+			outBlockWidgets.Add(placementWidget->PlacementBlockWidget.Get());
+		}
+	}
+}
+
+UScenarioEditorSidebarBlockWidget* UScenarioEditorSidebarObstaclePanel::FindBlockWidgetByPath(
+	const FString& blockPath) const
+{
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectBlockWidgets(blockWidgets);
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : blockWidgets)
+	{
+		if (blockWidget && blockWidget->BlockPath == blockPath)
+		{
+			return blockWidget;
+		}
+	}
+	return nullptr;
+}
+
 void UScenarioEditorSidebarObstaclePanel::HandleMinClearWidthCommitted(
 	const FText& text,
 	const ETextCommit::Type commitMethod)

@@ -71,7 +71,7 @@ guardrails:
   - ScenarioEditorPawn owns camera-level viewport presentation defaults such as the grey background post-process blendable.
   - Scenario editor robot Start/Goal markers use authoring-subsystem proxy actors for selection and root-widget screen-space overlay paint for visible markers.
   - Scenario Object Palette commands must be backed by scenario.json authoring contracts; currently it creates only fixed static-obstacle rows in obstacles.placements.
-  - ScenarioEditorShellViewModel owns editor UI selection commands for template panel/block and placeable selection; viewport placeable selection focuses the matching sidebar block, and widgets adapt events into Shell commands instead of composing selection state locally.
+  - ScenarioEditorShellViewModel owns editor UI selection commands for template panel/block and placeable selection; viewport and outliner placeable selection focus and scroll to the matching sidebar block, and sidebar placeable-backed blocks route reverse selection through Shell commands instead of composing selection state locally.
   - Scenario editor reusable WBP class references come from ScenarioEditorWidgetClassCatalog assets or exposed widget properties; do not add C++ WBP class-path fallbacks.
   - Scenario LLM prompt widgets read input and forward commands only; prompt ViewModel owns generation/load/run command state, while scenario path validation, generation delegate binding, editor load/save, and project run launch stay behind ScenarioEditorUiSubsystem.
   - Scenario Template sidebar repeated rows use ScenarioTemplateFieldRowViewModel items; native widgets only bind rows, inject item state, and forward edit events.

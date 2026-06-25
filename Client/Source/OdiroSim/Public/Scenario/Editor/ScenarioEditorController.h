@@ -17,7 +17,6 @@ class UScenarioEditorRootWidget;
 class UScenarioEditorToolbarWidget;
 class UMainMenuWidget;
 class UScenarioPlaceableComponent;
-class UScenarioPlaceableDetailsWidget;
 class UInputAction;
 class UInputMappingContext;
 class UMaterialInterface;
@@ -380,7 +379,6 @@ private:
 		FVector& outXAxis,
 		FVector& outYAxis,
 		FVector& outZAxis) const;
-	UScenarioPlaceableDetailsWidget* EnsurePlaceableDetailsWidget();
 	void UpdatePlaceableDetailsForSelection();
 	void HidePlaceableDetails();
 	AScenarioEditorPawn* GetEditorPawn() const;

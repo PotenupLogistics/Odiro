@@ -29,6 +29,11 @@ public:
 	// Releases local header control bindings before teardown.
 	virtual void NativeDestruct() override;
 
+	// Observes block clicks before child controls so selection can follow body-row interactions.
+	virtual FReply NativeOnPreviewMouseButtonDown(
+		const FGeometry& inGeometry,
+		const FPointerEvent& inMouseEvent) override;
+
 	// User-facing label shown in the block header.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	FString BlockName;
@@ -97,7 +102,7 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UVerticalBox> BodyBox;
 
-	// Emits when the block header toggle is clicked.
+	// Emits when the block header or background is selected.
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
 	FScenarioEditorSidebarBlockSelected OnBlockSelected;
 
@@ -142,6 +147,10 @@ private:
 	UFUNCTION()
 	void HandleToggleClicked();
 
+	// Broadcasts this block path as the active sidebar selection.
+	void BroadcastBlockSelected();
+	// Returns true when this block should claim a click before child controls handle it.
+	bool ShouldBroadcastSelectionForPointer(const FPointerEvent& mouseEvent) const;
 	// Binds optional local controls.
 	void BindControls();
 	// Releases optional local control bindings.

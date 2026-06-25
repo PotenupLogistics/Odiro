@@ -15,6 +15,8 @@ class UFileListItemWidget;
 class UExperimentConfigViewModel;
 class UExperimentResultViewModel;
 class UPlatformUiSubsystem;
+class UProjectEpisodeReplayCardWidget;
+class UProjectEpisodeReplayViewerWidget;
 class UProjectExperimentRunRowWidget;
 class UProjectWorkspaceViewModel;
 class UProjectWorkspaceTabWidget;
@@ -239,6 +241,8 @@ private:
 	void ConfigureProjectEpisodeReplayCard(
 		UUserWidget* cardWidget,
 		const UExperimentResultEpisodeViewModel* episodeItem);
+	// Episode replay card click request를 현재 단계 diagnostics로 처리한다.
+	void HandleProjectEpisodeReplayRequested(UProjectEpisodeReplayCardWidget* cardWidget);
 	// Episode preview PNG를 WBP placeholder border에 적용한다.
 	bool ApplyProjectEpisodePreviewImage(
 		UUserWidget* cardWidget,
@@ -593,6 +597,10 @@ private:
 	// 에피소드 리플레이 card container.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UWrapBox> EpisodeReplayCardWrapBox;
+
+	// Embedded replay viewer placed in WBP_MainMenu beside the episode cards.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UProjectEpisodeReplayViewerWidget> ProjectEpisodeReplayViewerWidget;
 
 	// AI 분석 실행 CTA 영역.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

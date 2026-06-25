@@ -1,8 +1,10 @@
 #include "Episode/EpisodeMeasurementLogSubsystem.h"
 
 #include "DeliveryBot/Actor/DeliveryBot.h"
+#include "DeliveryBot/Component/DeliveryBot_DriveComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Episode/EpisodeReplayRecorder.h"
 #include "HAL/FileManager.h"
 #include "Scenario/ScenarioEvaluationSubsystem.h"
 #include "Episode/EpisodeRobotMeasurementAdapter.h"
@@ -85,6 +87,18 @@ namespace
 		ParamValue.Type = EScenarioParamValueType::String;
 		ParamValue.StringValue = Value;
 		return ParamValue;
+	}
+
+	EEpisodeReplayDirection ConvertReplayDirection(const FDeliveryBotMoveCommandInfo& MoveCommandInfo)
+	{
+		if (MoveCommandInfo.bBrake && MoveCommandInfo.TargetSpeedKmh <= KINDA_SMALL_NUMBER)
+		{
+			return EEpisodeReplayDirection::Stopped;
+		}
+
+		return MoveCommandInfo.MoveDirectionType == EDeliveryBotMoveDirectionType::Reverse
+			? EEpisodeReplayDirection::Reverse
+			: EEpisodeReplayDirection::Forward;
 	}
 }
 
@@ -276,6 +290,11 @@ bool UEpisodeMeasurementLogSubsystem::IsLogging() const
 	return Writer && Writer->IsOpen();
 }
 
+bool UEpisodeMeasurementLogSubsystem::IsProjectReplayRecording() const
+{
+	return ReplayRecorder && ReplayRecorder->IsOpen();
+}
+
 FString UEpisodeMeasurementLogSubsystem::GetCurrentLogPath() const
 {
 	return CurrentLogPath;
@@ -448,8 +467,64 @@ bool UEpisodeMeasurementLogSubsystem::StartProjectTraceLogging(const FString& Tr
 	return true;
 }
 
+bool UEpisodeMeasurementLogSubsystem::StartProjectReplayRecording(
+	const FString& EpisodeDirectory,
+	const FString& ScenarioSamplePath,
+	const FString& ScenarioHash)
+{
+	if (EpisodeDirectory.TrimStartAndEnd().IsEmpty())
+	{
+		AddDiagnostic(
+			EEpisodeMeasurementLogSeverity::Warning,
+			TEXT("empty_project_replay_directory"),
+			TEXT("Project replay recording requires an episode directory."));
+		return false;
+	}
+
+	if (!ReplayRecorder)
+	{
+		ReplayRecorder = MakeUnique<FEpisodeReplayRecorder>();
+	}
+
+	TArray<FString> ReplayDiagnostics;
+	const bool bStarted = ReplayRecorder->Open(
+		EpisodeDirectory,
+		ScenarioSamplePath,
+		ScenarioHash,
+		ReplayDiagnostics);
+	for (const FString& Diagnostic : ReplayDiagnostics)
+	{
+		AddDiagnostic(
+			EEpisodeMeasurementLogSeverity::Warning,
+			TEXT("project_replay_start_warning"),
+			Diagnostic);
+	}
+
+	return bStarted;
+}
+
+void UEpisodeMeasurementLogSubsystem::StopProjectReplayRecording()
+{
+	if (!ReplayRecorder || !ReplayRecorder->IsOpen())
+	{
+		return;
+	}
+
+	TArray<FString> ReplayDiagnostics;
+	ReplayRecorder->Close(ReplayDiagnostics);
+	for (const FString& Diagnostic : ReplayDiagnostics)
+	{
+		AddDiagnostic(
+			EEpisodeMeasurementLogSeverity::Warning,
+			TEXT("project_replay_stop_warning"),
+			Diagnostic);
+	}
+}
+
 void UEpisodeMeasurementLogSubsystem::StopProjectTraceLogging()
 {
+	StopProjectReplayRecording();
+
 	if (!bProjectTraceLogging)
 	{
 		return;
@@ -541,6 +616,24 @@ bool UEpisodeMeasurementLogSubsystem::WriteProjectTraceTick(float DeltaTime)
 	}
 
 	const FEpisodeMeasurementLogTickRecord TickRecord = BuildTickRecord(DeltaTime);
+	if (ReplayRecorder && ReplayRecorder->IsOpen())
+	{
+		TArray<FString> ReplayDiagnostics;
+		ADeliveryBot* RobotActor = FindRobotActor();
+		ReplayRecorder->RecordSample(
+			TickRecord.WorldTimeSeconds,
+			BuildReplayFrame(TickRecord, RobotActor),
+			ReplayDiagnostics);
+		for (const FString& Diagnostic : ReplayDiagnostics)
+		{
+			AddDiagnostic(
+				EEpisodeMeasurementLogSeverity::Warning,
+				TEXT("project_replay_write_warning"),
+				Diagnostic,
+				TickRecord.WorldTimeSeconds);
+		}
+	}
+
 	TArray<FString> TraceDiagnostics;
 	const bool bWrote = FUserProjectRunOutputJson::AppendEpisodeTraceRecordToFile(
 		CurrentProjectTracePath,
@@ -620,6 +713,52 @@ FEpisodeMeasurementLogTickRecord UEpisodeMeasurementLogSubsystem::BuildTickRecor
 
 	CaptureMovingActors(TickRecord, RobotActor);
 	return TickRecord;
+}
+
+FEpisodeReplayRobotFrame UEpisodeMeasurementLogSubsystem::BuildReplayFrame(
+	const FEpisodeMeasurementLogTickRecord& TickRecord,
+	ADeliveryBot* RobotActor) const
+{
+	FEpisodeReplayRobotFrame ReplayFrame;
+	ReplayFrame.PositionCm = TickRecord.Robot.Truth.PositionCm;
+	if (TickRecord.Robot.Truth.RotationQuatXyzw.Num() == 4)
+	{
+		ReplayFrame.Rotation = FQuat(
+			TickRecord.Robot.Truth.RotationQuatXyzw[0],
+			TickRecord.Robot.Truth.RotationQuatXyzw[1],
+			TickRecord.Robot.Truth.RotationQuatXyzw[2],
+			TickRecord.Robot.Truth.RotationQuatXyzw[3]).GetNormalized();
+	}
+	ReplayFrame.VelocityCmPerSecond = TickRecord.Robot.Truth.VelocityCmPerSecond;
+	ReplayFrame.SpeedKmh =
+		static_cast<float>(ReplayFrame.VelocityCmPerSecond.Size() * 0.036);
+	ReplayFrame.Steering = static_cast<float>(TickRecord.Robot.Action.Steering);
+	ReplayFrame.Brake = static_cast<float>(TickRecord.Robot.Action.Brake);
+	ReplayFrame.TargetSpeedKmh = static_cast<float>(TickRecord.Robot.Action.TargetSpeedKmh);
+
+	if (IsValid(RobotActor))
+	{
+		FDeliveryBotMoveCommandInfo MoveCommandInfo;
+		FString ActionReason;
+		if (RobotActor->GetLastMoveCommandInfo(MoveCommandInfo, ActionReason))
+		{
+			ReplayFrame.Direction = ConvertReplayDirection(MoveCommandInfo);
+			ReplayFrame.TargetSpeedKmh = MoveCommandInfo.TargetSpeedKmh;
+		}
+
+		if (const UDeliveryBot_DriveComponent* DriveComponent =
+			RobotActor->FindComponentByClass<UDeliveryBot_DriveComponent>())
+		{
+			const FDeliveryBotDriveRuntimeSnapshot DriveSnapshot =
+				DriveComponent->GetRuntimeSnapshot();
+			ReplayFrame.Throttle = DriveSnapshot.Throttle;
+			ReplayFrame.Brake = DriveSnapshot.Brake;
+			ReplayFrame.Steering = DriveSnapshot.Steering;
+			ReplayFrame.TargetSpeedKmh = DriveSnapshot.TargetSpeedKmh;
+		}
+	}
+
+	return ReplayFrame;
 }
 
 FEpisodeMeasurementLogHeaderRecord UEpisodeMeasurementLogSubsystem::BuildHeaderRecord(double WorldTimeSeconds) const

@@ -286,6 +286,17 @@ float UDeliveryBot_DriveComponent::GetMaxSpeedCmPerSecond() const
 	return GetKmhToCmPerSecond(DriveConfigInfo.MaxSpeedKmh);
 }
 
+// 현재 적용 중인 주행 입력 snapshot을 반환한다.
+FDeliveryBotDriveRuntimeSnapshot UDeliveryBot_DriveComponent::GetRuntimeSnapshot() const
+{
+	FDeliveryBotDriveRuntimeSnapshot Snapshot;
+	Snapshot.Throttle = CurrentThrottleInput;
+	Snapshot.Brake = CurrentBrakeInput;
+	Snapshot.Steering = CurrentSteeringInput;
+	Snapshot.TargetSpeedKmh = CurrentTargetSpeedKmh;
+	return Snapshot;
+}
+
 // 엔진 RPM별 토크 곡선을 설정한다.
 void UDeliveryBot_DriveComponent::SetupTorqueCurve(	UChaosWheeledVehicleMovementComponent* wheeledMovement) const
 {

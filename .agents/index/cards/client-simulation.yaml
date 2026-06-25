@@ -8,11 +8,18 @@ paths:
   - Client/Source/OdiroSim/Private/Episode/**
   - Client/Source/OdiroSim/Public/Shared/**
   - Client/Source/OdiroSim/Private/Shared/**
+  - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayCardWidget.h
+  - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayCardWidget.cpp
+  - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayViewerWidget.h
+  - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayViewerWidget.cpp
   - Client/Content/Maps/ScenarioEditorMap.umap
   - Client/Content/Maps/ScenarioSimulationMap.umap
   - Client/Json/**
   - Client/Docs/plans/PLAN-260602-sim-logging.md
   - Client/Docs/PreviewAgent.local.md
+  - ReplayAgent.local.md
+  - ReplayCurrentHandoff.local.md
+  - ReplayRobotVisual.local.md
   - Client/Docs/plans/PLAN-260622-scenario-episode-preview-capture.local.md
   - contracts/specs/user-project-data.md
   - docs/specs/simulation-interface.md
@@ -54,6 +61,25 @@ entry:
       - Client/Source/OdiroSim/Private/Shared/Actors
       - Client/Source/OdiroSim/Public/Scenario
       - Client/Source/OdiroSim/Private/Scenario
+  - id: scenario-replay
+    description: Embedded episode replay data, binary frame playback, replay capture, and result UI integration.
+    read:
+      - ReplayAgent.local.md
+      - ReplayCurrentHandoff.local.md
+      - ReplayRobotVisual.local.md
+      - Client/Docs/specs/replay-embedded-view-flow.local.html
+      - Client/Source/OdiroSim/Public/Scenario
+      - Client/Source/OdiroSim/Private/Scenario
+      - Client/Source/OdiroSim/Public/Episode
+      - Client/Source/OdiroSim/Private/Episode
+      - Client/Source/OdiroSim/Public/Shared
+      - Client/Source/OdiroSim/Private/Shared
+      - Client/Source/OdiroSim/Public/Platform/Widget/MainMenuWidget.h
+      - Client/Source/OdiroSim/Private/Platform/Widget/MainMenuWidget.cpp
+      - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayCardWidget.h
+      - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayCardWidget.cpp
+      - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayViewerWidget.h
+      - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayViewerWidget.cpp
 guardrails:
   - Final user project input uses one editable `<UserProject>/scenario.json`; generated episode scenarios are derived run artifacts.
   - Public project-run execution accepts direct scenario/profile inputs, not legacy RunQueue start helpers.
@@ -77,6 +103,8 @@ guardrails:
   - ScenarioEditorMap and ScenarioSimulationMap keep matching directional-light intensity and rotation; preview capture avoids temporary lighting and pixel-level RGB correction for episode thumbnails.
   - ScenarioEditorController requests the project preview only after scenario.json saves successfully; capture failure removes stale preview.png without changing the save result.
   - ScenarioRunnerSubsystem schedules project episode preview.png after evaluation starts; capture failure must not change episode outcome.
+  - Embedded Replay reads episode replay artifacts and must not call OpenLevel, launch a new window, or re-run policy/physics as replay.
+  - Replay-specific high-frequency data belongs in replay.meta.json/replay.frames.bin; trace.jsonl remains LLM/human analysis-oriented unless a task explicitly changes trace.
 verify:
   - when: scenario contracts, schemas, or samples change
     run:
@@ -95,11 +123,20 @@ verify:
     run:
       - focused map-bounds and preview-framing automation tests
       - OdiroSimEditor build
+  - when: embedded replay data, writer, reader, playback, or UI changes
+    run:
+      - focused replay manifest/binary reader tests
+      - focused Scenario/Episode run-output tests
+      - OdiroSimEditor build
 links:
   - contracts/specs/user-project-data.md
   - docs/specs/simulation-interface.md
   - Client/Docs/plans/PLAN-260602-sim-logging.md
   - Client/Docs/PreviewAgent.local.md
+  - ReplayAgent.local.md
+  - ReplayCurrentHandoff.local.md
+  - ReplayRobotVisual.local.md
+  - Client/Docs/specs/replay-embedded-view-flow.local.html
   - Client/Docs/plans/PLAN-260622-scenario-episode-preview-capture.local.md
   - Client/Json/environment-catalog.md
 related:

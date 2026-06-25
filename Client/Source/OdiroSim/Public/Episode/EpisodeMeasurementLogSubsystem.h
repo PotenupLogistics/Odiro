@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Episode/EpisodeReplayRecorder.h"
 #include "Shared/EpisodeResultTypes.h"
 #include "Shared/EpisodeJsonlMeasurementWriter.h"
 #include "Shared/EpisodeMeasurementLogTypes.h"
@@ -11,6 +12,7 @@
 class UEpisodeLogSubjectRegistry;
 class UScenarioEvaluationSubsystem;
 class ADeliveryBot;
+struct FEpisodeReplayRobotFrame;
 
 /// Owns measurement log lifecycle for a PIE or game world.
 UCLASS(BlueprintType)
@@ -40,6 +42,15 @@ public:
 	/// Stops project trace logging without writing legacy footer records.
 	void StopProjectTraceLogging();
 
+	/// Starts project replay recording for the same episode output directory used by trace logging.
+	bool StartProjectReplayRecording(
+		const FString& EpisodeDirectory,
+		const FString& ScenarioSamplePath,
+		const FString& ScenarioHash);
+
+	/// Stops project replay recording and writes replay artifacts when frames exist.
+	void StopProjectReplayRecording();
+
 	/// Appends an event record immediately.
 	UFUNCTION(BlueprintCallable, Category = "Episode|MeasurementLog")
 	bool WriteEventRecord(const FEpisodeMeasurementLogEventRecord& EventRecord);
@@ -67,6 +78,9 @@ public:
 
 	/// Returns true while project trace logging is active.
 	bool IsProjectTraceLogging() const { return bProjectTraceLogging; }
+
+	/// Returns true while project replay recording is active.
+	bool IsProjectReplayRecording() const;
 
 	/// Returns the absolute path of the active log file.
 	UFUNCTION(BlueprintPure, Category = "Episode|MeasurementLog")
@@ -110,6 +124,7 @@ private:
 	int32 NextProjectTraceSampleIndex = 0;
 	FTimerHandle ProjectTraceTimerHandle;
 	float ProjectTraceIntervalSeconds = 1.0f / 60.0f;
+	TUniquePtr<FEpisodeReplayRecorder> ReplayRecorder;
 
 	UFUNCTION()
 	void HandleEvaluationEvent(FEpisodeEvaluationEvent Event);
@@ -122,6 +137,9 @@ private:
 	void HandleProjectTraceTimerTick();
 	bool WriteFooter(const FString& CloseReason);
 	FEpisodeMeasurementLogTickRecord BuildTickRecord(float DeltaTime);
+	FEpisodeReplayRobotFrame BuildReplayFrame(
+		const FEpisodeMeasurementLogTickRecord& TickRecord,
+		ADeliveryBot* RobotActor) const;
 	FEpisodeMeasurementLogHeaderRecord BuildHeaderRecord(double WorldTimeSeconds) const;
 	ADeliveryBot* FindRobotActor() const;
 	void CaptureMovingActors(FEpisodeMeasurementLogTickRecord& TickRecord, AActor* RobotActor);

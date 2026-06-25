@@ -1,5 +1,7 @@
 #include "Platform/ViewModel/ExperimentResultItemViewModels.h"
 
+#include "Misc/Paths.h"
+
 namespace
 {
 	// Converts stored numeric/string episode ids into the compact dashboard label.
@@ -28,6 +30,8 @@ void UExperimentResultEpisodeViewModel::InitializeFromDashboardItem(
 	SetDurationLabel(FormatExperimentResultEpisodeDuration(episodeItem.DurationSeconds));
 	SetSuccess(episodeItem.bSuccess);
 	SetHasPreviewImage(!episodeItem.PreviewImagePath.IsEmpty());
+	SetEpisodeDirectory(episodeItem.EpisodeDirectory);
+	SetReplayAvailable(episodeItem.bReplayAvailable);
 	InitializeItem(
 		episodeItem.EpisodeId,
 		FormatExperimentResultEpisodeLabel(episodeItem.EpisodeId),
@@ -53,6 +57,18 @@ void UExperimentResultEpisodeViewModel::SetSuccess(const bool bInSuccess)
 void UExperimentResultEpisodeViewModel::SetHasPreviewImage(const bool bInHasPreviewImage)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(bHasPreviewImage, bInHasPreviewImage);
+}
+
+void UExperimentResultEpisodeViewModel::SetEpisodeDirectory(const FString& episodeDirectory)
+{
+	FString NormalizedEpisodeDirectory = episodeDirectory.TrimStartAndEnd();
+	FPaths::NormalizeDirectoryName(NormalizedEpisodeDirectory);
+	UE_MVVM_SET_PROPERTY_VALUE(EpisodeDirectory, NormalizedEpisodeDirectory);
+}
+
+void UExperimentResultEpisodeViewModel::SetReplayAvailable(const bool bInReplayAvailable)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(bReplayAvailable, bInReplayAvailable);
 }
 
 void UExperimentResultSuggestionViewModel::InitializeFromDashboardItem(

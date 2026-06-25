@@ -27,6 +27,8 @@
 #include "Platform/ViewModel/ProjectWorkspaceViewModel.h"
 #include "Platform/Widget/ExperimentResultIterationSelectorWidget.h"
 #include "Platform/Widget/FileListItemWidget.h"
+#include "Platform/Widget/ProjectEpisodeReplayCardWidget.h"
+#include "Platform/Widget/ProjectEpisodeReplayViewerWidget.h"
 #include "Platform/Widget/ProjectExperimentRunRowWidget.h"
 #include "Platform/Widget/ProjectWorkspaceTabWidget.h"
 #include "Scenario/Editor/ScenarioEditorController.h"
@@ -2917,6 +2919,14 @@ void UMainMenuWidget::RefreshExperimentResultDetailPanel()
 			}
 
 			ConfigureProjectEpisodeReplayCard(CardWidget, EpisodeItem);
+			if (UProjectEpisodeReplayCardWidget* ReplayCardWidget = Cast<UProjectEpisodeReplayCardWidget>(CardWidget))
+			{
+				ReplayCardWidget->InitializeFromEpisodeViewModel(EpisodeItem);
+				ReplayCardWidget->OnReplayRequested.RemoveAll(this);
+				ReplayCardWidget->OnReplayRequested.AddUObject(
+					this,
+					&UMainMenuWidget::HandleProjectEpisodeReplayRequested);
+			}
 
 			if (UWrapBoxSlot* WrapBoxSlot = EpisodeReplayCardWrapBox->AddChildToWrapBox(CardWidget))
 			{
@@ -3049,6 +3059,41 @@ void UMainMenuWidget::ConfigureProjectEpisodeReplayCard(
 	SetDashboardChildVisibility(cardWidget, EpisodePreviewImageBoxName, false);
 }
 
+void UMainMenuWidget::HandleProjectEpisodeReplayRequested(UProjectEpisodeReplayCardWidget* cardWidget)
+{
+	if (!IsValid(cardWidget))
+	{
+		return;
+	}
+
+	const FString EpisodeDirectory = cardWidget->GetEpisodeDirectory();
+	if (EpisodeDirectory.IsEmpty())
+	{
+		SetDiagnosticsText(TEXT("Replay episode 경로가 없습니다."));
+		return;
+	}
+
+	if (!cardWidget->IsReplayAvailable())
+	{
+		SetDiagnosticsText(FString::Printf(TEXT("Replay 파일이 없습니다: %s"), *EpisodeDirectory));
+		return;
+	}
+
+	if (!ProjectEpisodeReplayViewerWidget)
+	{
+		SetDiagnosticsText(TEXT("ProjectEpisodeReplayViewerWidget is not bound in WBP_MainMenu."));
+		return;
+	}
+
+	if (!ProjectEpisodeReplayViewerWidget->OpenEpisodeReplay(EpisodeDirectory))
+	{
+		SetDiagnosticsText(ProjectEpisodeReplayViewerWidget->GetLastDiagnosticsText());
+		return;
+	}
+
+	SetDiagnosticsText(ProjectEpisodeReplayViewerWidget->GetLastDiagnosticsText());
+}
+
 void UMainMenuWidget::ConfigureProjectAiSuggestionRow(
 	UUserWidget* rowWidget,
 	const UExperimentResultSuggestionViewModel* suggestionItem) const
@@ -3167,6 +3212,14 @@ void UMainMenuWidget::ClearExperimentResultIterationWidgets()
 
 void UMainMenuWidget::ClearExperimentResultDashboardWidgets()
 {
+	for (UUserWidget* CardWidget : ProjectEpisodeReplayCards)
+	{
+		if (UProjectEpisodeReplayCardWidget* ReplayCardWidget = Cast<UProjectEpisodeReplayCardWidget>(CardWidget))
+		{
+			ReplayCardWidget->OnReplayRequested.RemoveAll(this);
+		}
+	}
+
 	ProjectEpisodeReplayCards.Reset();
 	ProjectEpisodePreviewTextures.Reset();
 	ProjectAiSuggestionRows.Reset();

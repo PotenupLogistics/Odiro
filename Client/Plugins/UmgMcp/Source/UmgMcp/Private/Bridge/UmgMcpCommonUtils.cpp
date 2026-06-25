@@ -809,7 +809,7 @@ UWidgetBlueprint* FUmgMcpCommonUtils::GetTargetWidgetBlueprint(const TSharedPtr<
 
     if (AssetPath.IsEmpty())
     {
-        OutError = TEXT("No UMG asset target specified. Please provide an 'asset_path' parameter or set a target using the attention subsystem.");
+        OutError = TEXT("No active UMG asset target. Open a Widget Blueprint editor, provide an 'asset_path' parameter, or call set_target_umg_asset first.");
         return nullptr;
     }
 

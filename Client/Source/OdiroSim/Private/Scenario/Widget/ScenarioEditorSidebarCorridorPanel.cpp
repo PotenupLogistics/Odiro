@@ -26,9 +26,14 @@ void UScenarioEditorSidebarCorridorPanel::NativeConstruct()
 	{
 		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
 	}
+	SidebarWidgetHelpers::ApplyPanelRootPadding(this, FName(TEXT("CorridorPanelRootBox")));
 	BindFieldRows();
 	ConfigureFieldRows();
 	RefreshFromDraft();
+
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectBlockWidgets(blockWidgets);
+	SidebarWidgetHelpers::ApplyPanelBlockSpacing(blockWidgets);
 }
 
 void UScenarioEditorSidebarCorridorPanel::NativeDestruct()

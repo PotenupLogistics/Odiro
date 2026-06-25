@@ -1,16 +1,20 @@
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 
+#include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Components/Widget.h"
 #include "Input/Events.h"
 #include "Input/Reply.h"
+#include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
 
 void UScenarioEditorSidebarBlockWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	BindControls();
+	ApplyVisualStyle();
 	RefreshBlock();
 }
 
@@ -71,7 +75,12 @@ void UScenarioEditorSidebarBlockWidget::AddBodyChild(UWidget* widget)
 
 	if (UVerticalBox* bodyBox = GetBodyBox())
 	{
-		bodyBox->AddChildToVerticalBox(widget);
+		if (UVerticalBoxSlot* bodySlot = bodyBox->AddChildToVerticalBox(widget))
+		{
+			const bool bFieldRowChild = widget->IsA<UScenarioEditorSidebarFieldRow>();
+			bodySlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, bFieldRowChild ? 2.0f : 6.0f));
+			bodySlot->SetHorizontalAlignment(HAlign_Fill);
+		}
 	}
 }
 
@@ -158,6 +167,37 @@ void UScenarioEditorSidebarBlockWidget::UnbindControls()
 		ToggleButton->OnClicked.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarBlockWidget::HandleToggleClicked);
+	}
+}
+
+void UScenarioEditorSidebarBlockWidget::ApplyVisualStyle()
+{
+	if (UBorder* outlineBorder = Cast<UBorder>(OutlineBorder.Get()))
+	{
+		outlineBorder->SetPadding(FMargin(1.0f));
+		outlineBorder->SetBrushColor(FLinearColor(0.055f, 0.055f, 0.055f, 1.0f));
+	}
+
+	if (UBorder* contentBorder = Cast<UBorder>(ContentBorder.Get()))
+	{
+		contentBorder->SetPadding(FMargin(6.0f, 4.0f, 6.0f, 6.0f));
+		contentBorder->SetBrushColor(FLinearColor(0.014f, 0.014f, 0.014f, 1.0f));
+	}
+
+	if (BlockHeaderRow)
+	{
+		if (UVerticalBoxSlot* headerSlot = Cast<UVerticalBoxSlot>(BlockHeaderRow->Slot))
+		{
+			headerSlot->SetPadding(FMargin(0.0f, 1.0f, 0.0f, 3.0f));
+		}
+	}
+
+	if (BodyBox)
+	{
+		if (UVerticalBoxSlot* bodySlot = Cast<UVerticalBoxSlot>(BodyBox->Slot))
+		{
+			bodySlot->SetPadding(FMargin(10.0f, 7.0f, 4.0f, 2.0f));
+		}
 	}
 }
 

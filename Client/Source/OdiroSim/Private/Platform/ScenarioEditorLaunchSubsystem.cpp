@@ -30,10 +30,7 @@ namespace
 
 UScenarioEditorLaunchSubsystem::UScenarioEditorLaunchSubsystem()
 {
-	ScenarioEditorPreloadAssets = {
-		FScenarioViewportPresentation::MakeGreyBackgroundPreloadAsset(),
-		TSoftObjectPtr<UObject>(FSoftObjectPath(TEXT("/Game/Materials/M_EditorOutline.M_EditorOutline")))
-	};
+	ScenarioEditorPreloadAssets = FScenarioViewportPresentation::MakeScenarioMapPreloadAssets();
 }
 
 void UScenarioEditorLaunchSubsystem::Initialize(FSubsystemCollectionBase& collection)

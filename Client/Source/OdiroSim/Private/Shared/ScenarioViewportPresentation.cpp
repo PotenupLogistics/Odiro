@@ -10,6 +10,8 @@ namespace
 {
 	const TCHAR* GreyBackgroundPostProcessMaterialPath =
 		TEXT("/Game/Materials/Scenario/M_PP_ScenarioEditorGreyBackground.M_PP_ScenarioEditorGreyBackground");
+	const TCHAR* EditorOutlinePostProcessMaterialPath =
+		TEXT("/Game/Materials/M_EditorOutline.M_EditorOutline");
 
 	bool IsValidGreyBackgroundRequest(const float blendWeight)
 	{
@@ -23,6 +25,28 @@ namespace
 	{
 		postProcessSettings.AddBlendable(postProcessMaterial, blendWeight);
 	}
+
+	// Resolves material residency without triggering sync load after map travel.
+	UMaterialInterface* ResolveLoadedMaterialFromPath(const FSoftObjectPath& materialPath)
+	{
+		if (!materialPath.IsValid())
+		{
+			return nullptr;
+		}
+
+		return Cast<UMaterialInterface>(materialPath.ResolveObject());
+	}
+
+	// Keeps legacy callers working when the preload gate was skipped or failed.
+	UMaterialInterface* ResolveOrLoadMaterialFromPath(const FSoftObjectPath& materialPath)
+	{
+		if (UMaterialInterface* loadedMaterial = ResolveLoadedMaterialFromPath(materialPath))
+		{
+			return loadedMaterial;
+		}
+
+		return Cast<UMaterialInterface>(materialPath.TryLoad());
+	}
 }
 
 TSoftObjectPtr<UObject> FScenarioViewportPresentation::MakeGreyBackgroundPreloadAsset()
@@ -30,9 +54,34 @@ TSoftObjectPtr<UObject> FScenarioViewportPresentation::MakeGreyBackgroundPreload
 	return TSoftObjectPtr<UObject>(FSoftObjectPath(GreyBackgroundPostProcessMaterialPath));
 }
 
-UMaterialInterface* FScenarioViewportPresentation::LoadGreyBackgroundPostProcessMaterial()
+TArray<TSoftObjectPtr<UObject>> FScenarioViewportPresentation::MakeScenarioMapPreloadAssets()
 {
-	return LoadObject<UMaterialInterface>(nullptr, GreyBackgroundPostProcessMaterialPath);
+	return {
+		MakeGreyBackgroundPreloadAsset(),
+		TSoftObjectPtr<UObject>(FSoftObjectPath(EditorOutlinePostProcessMaterialPath))
+	};
+}
+
+UMaterialInterface* FScenarioViewportPresentation::ResolveLoadedMaterial(
+	const TSoftObjectPtr<UMaterialInterface>& materialReference)
+{
+	return ResolveLoadedMaterialFromPath(materialReference.ToSoftObjectPath());
+}
+
+UMaterialInterface* FScenarioViewportPresentation::ResolveOrLoadMaterial(
+	const TSoftObjectPtr<UMaterialInterface>& materialReference)
+{
+	return ResolveOrLoadMaterialFromPath(materialReference.ToSoftObjectPath());
+}
+
+UMaterialInterface* FScenarioViewportPresentation::ResolveLoadedGreyBackgroundPostProcessMaterial()
+{
+	return ResolveLoadedMaterialFromPath(FSoftObjectPath(GreyBackgroundPostProcessMaterialPath));
+}
+
+UMaterialInterface* FScenarioViewportPresentation::ResolveOrLoadGreyBackgroundPostProcessMaterial()
+{
+	return ResolveOrLoadMaterialFromPath(FSoftObjectPath(GreyBackgroundPostProcessMaterialPath));
 }
 
 bool FScenarioViewportPresentation::ApplyGreyBackgroundPostProcess(
@@ -56,7 +105,7 @@ bool FScenarioViewportPresentation::ApplyGreyBackgroundPostProcess(
 {
 	return ApplyGreyBackgroundPostProcess(
 		cameraComponent,
-		LoadGreyBackgroundPostProcessMaterial(),
+		ResolveOrLoadGreyBackgroundPostProcessMaterial(),
 		blendWeight);
 }
 
@@ -64,7 +113,7 @@ bool FScenarioViewportPresentation::ApplyGreyBackgroundPostProcess(
 	USceneCaptureComponent2D* captureComponent,
 	const float blendWeight)
 {
-	UMaterialInterface* postProcessMaterial = LoadGreyBackgroundPostProcessMaterial();
+	UMaterialInterface* postProcessMaterial = ResolveOrLoadGreyBackgroundPostProcessMaterial();
 	if (!captureComponent || !postProcessMaterial || !IsValidGreyBackgroundRequest(blendWeight))
 	{
 		return false;
@@ -79,7 +128,7 @@ APostProcessVolume* FScenarioViewportPresentation::SpawnGreyBackgroundPostProces
 	UWorld* world,
 	const float blendWeight)
 {
-	UMaterialInterface* postProcessMaterial = LoadGreyBackgroundPostProcessMaterial();
+	UMaterialInterface* postProcessMaterial = ResolveOrLoadGreyBackgroundPostProcessMaterial();
 	if (!IsValid(world) || !postProcessMaterial || !IsValidGreyBackgroundRequest(blendWeight))
 	{
 		return nullptr;

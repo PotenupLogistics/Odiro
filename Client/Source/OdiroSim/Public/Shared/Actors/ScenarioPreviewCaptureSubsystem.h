@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Shared/Actors/ScenarioPreviewFraming.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "TimerManager.h"
 #include "ScenarioPreviewCaptureSubsystem.generated.h"
 
 class AActor;
@@ -51,9 +52,20 @@ class ODIROSIM_API UScenarioPreviewCaptureSubsystem : public UWorldSubsystem
 	GENERATED_BODY()
 
 public:
+	// 보류 중인 warmup capture 자원을 정리한다.
+	virtual void Deinitialize() override;
+
 	// 전달받은 프레이밍으로 월드를 한 번 촬영하고 PNG를 원자적으로 저장한다.
 	FScenarioPreviewCaptureResult CapturePreview(
 		const FScenarioPreviewCaptureRequest& request);
+
+	// SceneCapture 렌더링 상태를 유지한 뒤 최종 프레임을 PNG로 저장하도록 예약한다.
+	FScenarioPreviewCaptureResult CapturePreviewAfterWarmup(
+		const FScenarioPreviewCaptureRequest& request,
+		double warmupSeconds);
+
+	// 예약되었거나 warmup 중인 비동기 Preview capture를 취소하고 자원을 정리한다.
+	void CancelPendingWarmupCapture();
 
 private:
 	// 요청한 출력 크기의 임시 8비트 sRGB RenderTarget을 생성한다.
@@ -82,4 +94,25 @@ private:
 		const FScenarioPreviewCaptureRequest& request,
 		const FString& failureStage,
 		const FString& failureReason);
+
+	// warmup이 끝난 SceneCapture의 최종 프레임을 저장한다.
+	void CompleteWarmupCapture(uint64 captureGeneration);
+
+	// 보류 중인 warmup timer와 capture 자원 소유권을 해제한다.
+	void ResetWarmupCapture();
+
+	UPROPERTY(Transient)
+	TObjectPtr<ASceneCapture2D> WarmupCaptureActor;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextureRenderTarget2D> WarmupRenderTarget;
+
+	// warmup 완료 시 사용할 요청 원본이다.
+	FScenarioPreviewCaptureRequest WarmupCaptureRequest;
+
+	// 현재 warmup 완료 timer 핸들이다.
+	FTimerHandle WarmupCaptureTimerHandle;
+
+	// 취소되거나 교체된 warmup callback을 무시하기 위한 세대 값이다.
+	uint64 WarmupCaptureGeneration = 0;
 };

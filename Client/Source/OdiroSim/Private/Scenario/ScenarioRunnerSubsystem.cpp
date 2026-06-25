@@ -1234,17 +1234,23 @@ void UScenarioRunnerSubsystem::ScheduleEpisodePreviewCapture(
 		runtimeContext,
 		outputPath);
 
+	const double warmupStartDelaySeconds =
+		FMath::Max(
+			0.0,
+			EpisodePreviewCaptureDelaySeconds - EpisodePreviewCaptureWarmupSeconds);
 	world->GetTimerManager().SetTimer(
 		EpisodePreviewCaptureTimerHandle,
 		captureDelegate,
-		EpisodePreviewCaptureDelaySeconds,
+		warmupStartDelaySeconds,
 		false);
 
 	UE_LOG(
 		LogScenarioRunner,
 		Log,
-		TEXT("Episode preview capture scheduled | Episode: %s, Delay: %.2fs, Output: %s"),
+		TEXT("Episode preview capture scheduled | Episode: %s, StartDelay: %.2fs, Warmup: %.2fs, TargetDelay: %.2fs, Output: %s"),
 		*projectOutputEpisodeId,
+		warmupStartDelaySeconds,
+		EpisodePreviewCaptureWarmupSeconds,
 		EpisodePreviewCaptureDelaySeconds,
 		*outputPath);
 }
@@ -1345,13 +1351,15 @@ void UScenarioRunnerSubsystem::CaptureEpisodePreview(
 		framingSettings.OutputHeight);
 
 	const FScenarioPreviewCaptureResult captureResult =
-		captureSubsystem->CapturePreview(captureRequest);
+		captureSubsystem->CapturePreviewAfterWarmup(
+			captureRequest,
+			EpisodePreviewCaptureWarmupSeconds);
 	if (!captureResult.bSuccess)
 	{
 		UE_LOG(
 			LogScenarioRunner,
 			Warning,
-			TEXT("Episode preview capture failed | Episode: %s, Stage: %s, Reason: %s"),
+			TEXT("Episode preview capture schedule failed | Episode: %s, Stage: %s, Reason: %s"),
 			*runtimeContext.EpisodeId,
 			*captureResult.FailureStage,
 			*captureResult.FailureReason);
@@ -1361,7 +1369,7 @@ void UScenarioRunnerSubsystem::CaptureEpisodePreview(
 	UE_LOG(
 		LogScenarioRunner,
 		Log,
-		TEXT("Episode preview capture saved | Episode: %s, Output: %s"),
+		TEXT("Episode preview warmup capture scheduled | Episode: %s, Output: %s"),
 		*runtimeContext.EpisodeId,
 		*outputPath);
 }
@@ -1372,6 +1380,11 @@ void UScenarioRunnerSubsystem::ResetEpisodePreviewCapture()
 	if (UWorld* world = ResolveWorld())
 	{
 		world->GetTimerManager().ClearTimer(EpisodePreviewCaptureTimerHandle);
+		if (UScenarioPreviewCaptureSubsystem* captureSubsystem =
+			world->GetSubsystem<UScenarioPreviewCaptureSubsystem>())
+		{
+			captureSubsystem->CancelPendingWarmupCapture();
+		}
 	}
 
 	++EpisodePreviewCaptureGeneration;

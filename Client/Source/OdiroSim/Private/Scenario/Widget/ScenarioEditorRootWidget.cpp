@@ -26,6 +26,122 @@
 #include "GameFramework/PlayerController.h"
 #include "Styling/CoreStyle.h"
 
+namespace
+{
+	// Formats a repeated sidebar block path with a zero-based item index.
+	FString MakeScenarioEditorIndexedBlockPath(const TCHAR* listPath, const int32 itemIndex)
+	{
+		return itemIndex >= 0
+			? FString::Printf(TEXT("%s[%d]"), listPath, itemIndex)
+			: FString(listPath);
+	}
+
+	// Parses an editor-only corridor handle id suffix without expanding authoring subsystem API surface.
+	bool TryParseScenarioEditorIndexedHandleId(
+		const FString& handleId,
+		const TCHAR* prefix,
+		int32& outHandleIndex)
+	{
+		outHandleIndex = INDEX_NONE;
+		const FString prefixText(prefix);
+		if (!handleId.StartsWith(prefixText))
+		{
+			return false;
+		}
+
+		const FString indexText = handleId.RightChop(prefixText.Len());
+		if (indexText.IsEmpty() || !indexText.IsNumeric())
+		{
+			return false;
+		}
+
+		outHandleIndex = FCString::Atoi(*indexText);
+		return outHandleIndex >= 0;
+	}
+
+	// Finds the static obstacle placement block that corresponds to a placeable instance id.
+	bool TryResolveStaticObstacleSidebarBlockPath(
+		const FScenarioDocument& draftScenario,
+		const FString& instanceId,
+		FString& outBlockPath)
+	{
+		for (int32 placementIndex = 0; placementIndex < draftScenario.Obstacles.Placements.Num(); ++placementIndex)
+		{
+			if (draftScenario.Obstacles.Placements[placementIndex].PlacementId == instanceId)
+			{
+				outBlockPath = MakeScenarioEditorIndexedBlockPath(TEXT("root.obstacles.placements"), placementIndex);
+				return true;
+			}
+		}
+
+		outBlockPath = TEXT("root.obstacles.placements[]");
+		return !instanceId.IsEmpty();
+	}
+
+	// Maps one selectable editor placeable to the sidebar panel and block that should receive focus.
+	bool TryResolvePlaceableSidebarFocusTarget(
+		const UScenarioPlaceableComponent* selectedPlaceable,
+		const FScenarioDocument& draftScenario,
+		EScenarioTemplateSidebarPanel& outPanel,
+		FString& outBlockPath)
+	{
+		if (!selectedPlaceable)
+		{
+			return false;
+		}
+
+		if (selectedPlaceable->AuthoringRole == EScenarioPlaceableAuthoringRole::RobotStartMarker)
+		{
+			outPanel = EScenarioTemplateSidebarPanel::Main;
+			outBlockPath = TEXT("root.robot.start");
+			return true;
+		}
+
+		if (selectedPlaceable->AuthoringRole == EScenarioPlaceableAuthoringRole::RobotGoalMarker)
+		{
+			outPanel = EScenarioTemplateSidebarPanel::Main;
+			outBlockPath = TEXT("root.robot.goal");
+			return true;
+		}
+
+		int32 handleIndex = INDEX_NONE;
+		if (selectedPlaceable->AuthoringRole == EScenarioPlaceableAuthoringRole::CorridorVertexHandle)
+		{
+			outPanel = EScenarioTemplateSidebarPanel::Corridor;
+			outBlockPath = TryParseScenarioEditorIndexedHandleId(
+				selectedPlaceable->InstanceId,
+				TEXT("corridor_vertex_"),
+				handleIndex)
+				? MakeScenarioEditorIndexedBlockPath(TEXT("root.corridor.axis.points_m"), handleIndex)
+				: FString(TEXT("root.corridor.axis.points_m[]"));
+			return true;
+		}
+
+		if (selectedPlaceable->AuthoringRole == EScenarioPlaceableAuthoringRole::CorridorSegmentHandle)
+		{
+			outPanel = EScenarioTemplateSidebarPanel::Corridor;
+			outBlockPath = TryParseScenarioEditorIndexedHandleId(
+				selectedPlaceable->InstanceId,
+				TEXT("corridor_segment_"),
+				handleIndex)
+				? MakeScenarioEditorIndexedBlockPath(TEXT("root.corridor.segments"), handleIndex)
+				: FString(TEXT("root.corridor.segments[]"));
+			return true;
+		}
+
+		if (selectedPlaceable->Category == EScenarioActorCategory::StaticObstacle)
+		{
+			outPanel = EScenarioTemplateSidebarPanel::Obstacle;
+			return TryResolveStaticObstacleSidebarBlockPath(
+				draftScenario,
+				selectedPlaceable->InstanceId,
+				outBlockPath);
+		}
+
+		return false;
+	}
+}
+
 void UScenarioEditorRootWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -303,6 +419,54 @@ void UScenarioEditorRootWidget::SetTemplateSidebarPanel(
 		ScenarioEditorOutlinerWidget->SetSelectedItemKey(
 			UScenarioEditorOutlinerWidget::MakeTemplateItemKey(activePanel));
 	}
+}
+
+bool UScenarioEditorRootWidget::FocusSidebarForSelectedPlaceable(
+	UScenarioPlaceableComponent* selectedPlaceable)
+{
+	if (!selectedPlaceable)
+	{
+		HidePlaceableDetails();
+		return false;
+	}
+
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	const UScenarioAuthoringSubsystem* authoringSubsystem = uiSubsystem
+		? uiSubsystem->ResolveAuthoringSubsystem()
+		: nullptr;
+	if (!uiSubsystem || !authoringSubsystem)
+	{
+		HidePlaceableDetails();
+		return false;
+	}
+
+	EScenarioTemplateSidebarPanel targetPanel = EScenarioTemplateSidebarPanel::Main;
+	FString targetBlockPath;
+	if (!TryResolvePlaceableSidebarFocusTarget(
+		selectedPlaceable,
+		authoringSubsystem->GetDraftScenario(),
+		targetPanel,
+		targetBlockPath))
+	{
+		HidePlaceableDetails();
+		return false;
+	}
+
+	HidePlaceableDetails();
+	ShowInspectorTab(EScenarioEditorInspectorTab::Detail);
+	SetPanelVisibility(ResolveTemplateSidebarVisibilityTarget(), true);
+	if (UScenarioEditorSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget())
+	{
+		SetPanelVisibility(sidebarWidget, true);
+	}
+	if (ShellViewModel)
+	{
+		ShellViewModel->FocusPlaceableTemplateBlock(targetPanel, targetBlockPath, selectedPlaceable->InstanceId);
+	}
+	ApplyTemplateSidebarPanel(targetPanel);
+	RefreshTemplateSidebarWidget();
+	SyncOutlinerSelectionToPlaceable(selectedPlaceable);
+	return true;
 }
 
 void UScenarioEditorRootWidget::RefreshTemplateSidebarWidget()

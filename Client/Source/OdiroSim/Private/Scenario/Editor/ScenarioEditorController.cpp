@@ -3104,7 +3104,7 @@ void AScenarioEditorController::UpdatePlaceableDetailsForSelection()
 	}
 
 	UScenarioEditorRootWidget* rootWidget = ShowEditorRootWidget();
-	if (!rootWidget || !rootWidget->ShowPlaceableDetails(selectedPlaceable))
+	if (!rootWidget || !rootWidget->FocusSidebarForSelectedPlaceable(selectedPlaceable))
 	{
 		return;
 	}

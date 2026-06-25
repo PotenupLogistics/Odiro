@@ -7,6 +7,7 @@
 #include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
 #include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioEditorShellViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
@@ -88,6 +89,7 @@ void UScenarioEditorSidebarCorridorPanel::RefreshFromTemplate(
 		CurbSideBlockWidget.Get(),
 		corridor.CurbSide);
 	RefreshSegmentRows(corridor.Segments);
+	ApplySelectedBlockPath();
 	SetDiagnosticsText(TEXT(""));
 }
 
@@ -664,6 +666,52 @@ void UScenarioEditorSidebarCorridorPanel::ApplyCorridorFieldItems()
 		WalkwayWidthFieldRow->InitializeFromItemViewModel(
 			templateSidebarViewModel->FindCorridorFieldItem(TEXT("WalkwayWidth")));
 		WalkwayWidthFieldRow->SetTextStyleCatalog(TextStyleCatalog);
+	}
+}
+
+void UScenarioEditorSidebarCorridorPanel::ApplySelectedBlockPath()
+{
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	const UScenarioEditorShellViewModel* shellViewModel = uiSubsystem ? uiSubsystem->GetShellViewModel() : nullptr;
+	const FString selectedBlockPath = shellViewModel ? shellViewModel->GetSelectedTemplateBlockPath() : FString();
+
+	SidebarWidgetHelpers::ApplySelectedBlockPath(CorridorBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(AxisBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(AxisPointsBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(WalkwayWidthBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(BuildingSideBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(CurbSideBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(SegmentsBlockWidget.Get(), selectedBlockPath);
+
+	if (selectedBlockPath.StartsWith(TEXT("root.corridor.axis.points_m[")))
+	{
+		if (AxisBlockWidget)
+		{
+			AxisBlockWidget->SetExpanded(true);
+		}
+		if (AxisPointsBlockWidget)
+		{
+			AxisPointsBlockWidget->SetExpanded(true);
+		}
+	}
+	else if (selectedBlockPath.StartsWith(TEXT("root.corridor.segments[")) && SegmentsBlockWidget)
+	{
+		SegmentsBlockWidget->SetExpanded(true);
+	}
+
+	for (UScenarioEditorSidebarCorridorPointWidget* pointWidget : AxisPointWidgets)
+	{
+		if (pointWidget)
+		{
+			SidebarWidgetHelpers::ApplySelectedBlockPath(pointWidget->PointBlockWidget.Get(), selectedBlockPath);
+		}
+	}
+	for (UScenarioEditorSidebarCorridorSegmentWidget* segmentWidget : SegmentWidgets)
+	{
+		if (segmentWidget)
+		{
+			SidebarWidgetHelpers::ApplySelectedBlockPath(segmentWidget->SegmentBlockWidget.Get(), selectedBlockPath);
+		}
 	}
 }
 

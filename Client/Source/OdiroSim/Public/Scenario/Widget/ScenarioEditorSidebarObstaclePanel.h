@@ -135,6 +135,8 @@ private:
 	void ApplyTextStyles();
 	// Applies current Obstacle field row ViewModels to bound row widgets.
 	void ApplyObstacleFieldItems();
+	// Applies the shell-selected block path to this panel and repeated placement blocks.
+	void ApplySelectedBlockPath();
 	// Rebuilds editable placement widgets for obstacle placement rules.
 	void RefreshPlacementRows(const TArray<FScenarioTemplateObstaclePlacement>& placements);
 	// Adds one field row to a dynamic block body.

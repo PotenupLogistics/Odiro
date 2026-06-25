@@ -170,6 +170,14 @@ enum class EScenarioPaletteItemType : uint8
 	GroundRegion
 };
 
+// Screen-space overlay marker kind used for editor-only robot route endpoints.
+UENUM(BlueprintType)
+enum class EScenarioEditorRouteMarkerKind : uint8
+{
+	Start,
+	Goal
+};
+
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FScenarioPaletteItemEntry
 {
@@ -192,6 +200,33 @@ struct ODIROSIM_API FScenarioPaletteItemEntry
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	TSoftObjectPtr<UTexture2D> ThumbnailTexture;
+};
+
+// Editor-only projected marker data consumed by viewport overlay paint and hit testing.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FScenarioEditorRouteMarkerOverlayItem
+{
+	GENERATED_BODY()
+
+	// Stable selectable instance id owned by the route marker proxy actor.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FString InstanceId;
+
+	// Semantic endpoint represented by this overlay marker.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	EScenarioEditorRouteMarkerKind Kind = EScenarioEditorRouteMarkerKind::Start;
+
+	// World-space endpoint location that should be projected into the viewport.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FVector WorldLocation = FVector::ZeroVector;
+
+	// Whether the proxy actor is currently hovered by editor input.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	bool bHovered = false;
+
+	// Whether the proxy actor is currently selected by editor input.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	bool bSelected = false;
 };
 
 USTRUCT(BlueprintType)

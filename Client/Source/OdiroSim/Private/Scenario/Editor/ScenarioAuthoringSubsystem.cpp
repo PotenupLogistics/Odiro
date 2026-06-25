@@ -836,6 +836,11 @@ bool UScenarioAuthoringSubsystem::CanPlaceStaticObstacle(
 
 FTransform UScenarioAuthoringSubsystem::ResolveStaticObstaclePlacementTransform(const FTransform& transform) const
 {
+	return ResolveEditorGroundActorPlacementTransform(transform);
+}
+
+FTransform UScenarioAuthoringSubsystem::ResolveEditorGroundActorPlacementTransform(const FTransform& transform) const
+{
 	FTransform resolvedTransform = transform;
 	FVector locationCm = transform.GetLocation();
 	double surfaceZOffsetCm = 0.0;
@@ -1020,7 +1025,8 @@ bool UScenarioAuthoringSubsystem::SetRobotStartLocation(
 	outMarker = nullptr;
 	outFailureReason.Reset();
 
-	if (!CanPlaceEditorGroundActor(transform, outFailureReason))
+	const FTransform resolvedTransform = ResolveEditorGroundActorPlacementTransform(transform);
+	if (!CanPlaceEditorGroundActor(resolvedTransform, outFailureReason))
 	{
 		return false;
 	}
@@ -1032,8 +1038,7 @@ bool UScenarioAuthoringSubsystem::SetRobotStartLocation(
 
 	outMarker = SpawnOrReplaceRouteMarker(
 		RobotStartMarkerActor,
-		StartPointClass,
-		transform,
+		resolvedTransform,
 		EScenarioPlaceableAuthoringRole::RobotStartMarker,
 		outFailureReason);
 	if (!outMarker)
@@ -1041,7 +1046,7 @@ bool UScenarioAuthoringSubsystem::SetRobotStartLocation(
 		return false;
 	}
 
-	DraftScenario.Robot.Start = MakeRobotAnchorFromLocationCm(transform.GetLocation());
+	DraftScenario.Robot.Start = MakeRobotAnchorFromLocationCm(resolvedTransform.GetLocation());
 	outSpec = MakeDeliveryBotSpecFromTemplateRobot();
 	bDirty = true;
 
@@ -1050,7 +1055,7 @@ bool UScenarioAuthoringSubsystem::SetRobotStartLocation(
 		Log,
 		TEXT("Set robot start | InstanceId: %s | Location: %s"),
 		*outSpec.InstanceId,
-		*transform.GetLocation().ToCompactString());
+		*resolvedTransform.GetLocation().ToCompactString());
 
 	return true;
 }
@@ -1065,7 +1070,8 @@ bool UScenarioAuthoringSubsystem::SetRobotGoalLocation(
 	outMarker = nullptr;
 	outFailureReason.Reset();
 
-	if (!CanPlaceEditorGroundActor(transform, outFailureReason))
+	const FTransform resolvedTransform = ResolveEditorGroundActorPlacementTransform(transform);
+	if (!CanPlaceEditorGroundActor(resolvedTransform, outFailureReason))
 	{
 		return false;
 	}
@@ -1078,8 +1084,7 @@ bool UScenarioAuthoringSubsystem::SetRobotGoalLocation(
 
 	outMarker = SpawnOrReplaceRouteMarker(
 		RobotGoalMarkerActor,
-		GoalPointClass,
-		transform,
+		resolvedTransform,
 		EScenarioPlaceableAuthoringRole::RobotGoalMarker,
 		outFailureReason);
 	if (!outMarker)
@@ -1087,7 +1092,7 @@ bool UScenarioAuthoringSubsystem::SetRobotGoalLocation(
 		return false;
 	}
 
-	DraftScenario.Robot.Goal = MakeRobotAnchorFromLocationCm(transform.GetLocation());
+	DraftScenario.Robot.Goal = MakeRobotAnchorFromLocationCm(resolvedTransform.GetLocation());
 	outSpec = MakeDeliveryBotSpecFromTemplateRobot();
 	bDirty = true;
 
@@ -1096,7 +1101,7 @@ bool UScenarioAuthoringSubsystem::SetRobotGoalLocation(
 		Log,
 		TEXT("Set robot goal | InstanceId: %s | Location: %s"),
 		*outSpec.InstanceId,
-		*transform.GetLocation().ToCompactString());
+		*resolvedTransform.GetLocation().ToCompactString());
 
 	return true;
 }
@@ -1153,7 +1158,8 @@ bool UScenarioAuthoringSubsystem::UpdateRobotStartPointTransform(
 	FString& outFailureReason)
 {
 	outFailureReason.Reset();
-	if (!CanPlaceEditorGroundActor(transform, outFailureReason))
+	const FTransform resolvedTransform = ResolveEditorGroundActorPlacementTransform(transform);
+	if (!CanPlaceEditorGroundActor(resolvedTransform, outFailureReason))
 	{
 		return false;
 	}
@@ -1169,7 +1175,7 @@ bool UScenarioAuthoringSubsystem::UpdateRobotStartPointTransform(
 		return false;
 	}
 
-	const FVector location = transform.GetLocation();
+	const FVector location = resolvedTransform.GetLocation();
 	DraftScenario.Robot.Start = MakeRobotAnchorFromLocationCm(location);
 	RobotStartMarkerActor->SetActorLocation(location, false, nullptr, ETeleportType::TeleportPhysics);
 
@@ -1182,7 +1188,8 @@ bool UScenarioAuthoringSubsystem::UpdateRobotGoalPointTransform(
 	FString& outFailureReason)
 {
 	outFailureReason.Reset();
-	if (!CanPlaceEditorGroundActor(transform, outFailureReason))
+	const FTransform resolvedTransform = ResolveEditorGroundActorPlacementTransform(transform);
+	if (!CanPlaceEditorGroundActor(resolvedTransform, outFailureReason))
 	{
 		return false;
 	}
@@ -1198,11 +1205,49 @@ bool UScenarioAuthoringSubsystem::UpdateRobotGoalPointTransform(
 		return false;
 	}
 
-	const FVector location = transform.GetLocation();
+	const FVector location = resolvedTransform.GetLocation();
 	DraftScenario.Robot.Goal = MakeRobotAnchorFromLocationCm(location);
 	RobotGoalMarkerActor->SetActorLocation(location, false, nullptr, ETeleportType::TeleportPhysics);
 
 	bDirty = true;
+	return true;
+}
+
+void UScenarioAuthoringSubsystem::GetRobotRouteMarkerOverlayItems(
+	TArray<FScenarioEditorRouteMarkerOverlayItem>& outItems) const
+{
+	outItems.Reset();
+	outItems.Reserve(2);
+	AddRobotRouteMarkerOverlayItem(
+		RobotStartMarkerActor.Get(),
+		EScenarioEditorRouteMarkerKind::Start,
+		ResolveRobotAnchorLocationCm(DraftScenario.Robot.Start, false),
+		outItems);
+	AddRobotRouteMarkerOverlayItem(
+		RobotGoalMarkerActor.Get(),
+		EScenarioEditorRouteMarkerKind::Goal,
+		ResolveRobotAnchorLocationCm(DraftScenario.Robot.Goal, true),
+		outItems);
+}
+
+UScenarioPlaceableComponent* UScenarioAuthoringSubsystem::GetRobotRouteMarkerPlaceableComponent(
+	const EScenarioEditorRouteMarkerKind markerKind) const
+{
+	AActor* markerActor = GetRobotRouteMarkerActor(markerKind);
+	return IsValid(markerActor) ? markerActor->FindComponentByClass<UScenarioPlaceableComponent>() : nullptr;
+}
+
+bool UScenarioAuthoringSubsystem::SyncRobotRouteMarkerProxyLocation(
+	const EScenarioEditorRouteMarkerKind markerKind,
+	const FVector& markerLocationCm)
+{
+	AActor* markerActor = GetRobotRouteMarkerActor(markerKind);
+	if (!IsValid(markerActor))
+	{
+		return false;
+	}
+
+	markerActor->SetActorLocation(markerLocationCm, false, nullptr, ETeleportType::TeleportPhysics);
 	return true;
 }
 
@@ -3357,21 +3402,24 @@ FVector UScenarioAuthoringSubsystem::ResolveRobotAnchorLocationCm(
 {
 	if (anchor.Type == EScenarioTemplateRobotAnchorType::CorridorPose)
 	{
+		const double alongMeters = GetFixedTemplateNumber(
+			anchor.AlongMeters,
+			bGoalAnchor ? DefaultRobotGoalLocationCm.X * CentimetersToMeters : DefaultRobotStartLocationCm.X * CentimetersToMeters);
+		const double offsetMeters = GetFixedTemplateNumber(
+			anchor.OffsetMeters,
+			bGoalAnchor ? DefaultRobotGoalLocationCm.Y * CentimetersToMeters : DefaultRobotStartLocationCm.Y * CentimetersToMeters);
+		const double surfaceZOffsetCm = ResolveCorridorSurfaceZOffsetCm(offsetMeters);
 		FVector2D pointMeters;
 		double yawDegrees = 0.0;
-		if (TryResolveCorridorPoseMeters(
-				GetFixedTemplateNumber(anchor.AlongMeters, bGoalAnchor ? DefaultRobotGoalLocationCm.X * CentimetersToMeters : DefaultRobotStartLocationCm.X * CentimetersToMeters),
-				GetFixedTemplateNumber(anchor.OffsetMeters, bGoalAnchor ? DefaultRobotGoalLocationCm.Y * CentimetersToMeters : DefaultRobotStartLocationCm.Y * CentimetersToMeters),
-				pointMeters,
-				yawDegrees))
+		if (TryResolveCorridorPoseMeters(alongMeters, offsetMeters, pointMeters, yawDegrees))
 		{
-			return FVector(pointMeters.X / CentimetersToMeters, pointMeters.Y / CentimetersToMeters, 0.0);
+			return FVector(pointMeters.X / CentimetersToMeters, pointMeters.Y / CentimetersToMeters, surfaceZOffsetCm);
 		}
 
 		return FVector(
-			GetFixedTemplateNumber(anchor.AlongMeters, bGoalAnchor ? DefaultRobotGoalLocationCm.X * CentimetersToMeters : DefaultRobotStartLocationCm.X * CentimetersToMeters) / CentimetersToMeters,
-			GetFixedTemplateNumber(anchor.OffsetMeters, bGoalAnchor ? DefaultRobotGoalLocationCm.Y * CentimetersToMeters : DefaultRobotStartLocationCm.Y * CentimetersToMeters) / CentimetersToMeters,
-			0.0);
+			alongMeters / CentimetersToMeters,
+			offsetMeters / CentimetersToMeters,
+			surfaceZOffsetCm);
 	}
 
 	if (DraftScenario.Corridor.Axis.PointsMeters.Num() >= 2)
@@ -3453,6 +3501,7 @@ FScenarioPlaceableInstanceSpec UScenarioAuthoringSubsystem::MakeDeliveryBotSpecF
 	robotSpec.DeliveryBot.bHasGoalLocation = true;
 	robotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.StartLocationCm = startLocationCm;
 	robotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm = goalLocationCm;
+	robotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.bHasGoal = true;
 	robotSpec.DeliveryBot.SetupInfo.LocationSetupInfo.bAutoStartRoute = true;
 	return robotSpec;
 }
@@ -3850,15 +3899,10 @@ bool UScenarioAuthoringSubsystem::SpawnRobotRouteMarkers(
 	const FScenarioPlaceableInstanceSpec& spec,
 	TArray<FString>& outDiagnostics)
 {
-	if (!StartPointClass)
-	{
-		outDiagnostics.Add(FString::Printf(
-			TEXT("StartPointClass is not set; robot start marker was not spawned for '%s'."),
-			*spec.InstanceId));
-		return false;
-	}
-
-	AActor* startMarker = SpawnEditorMarkerActor(StartPointClass, FTransform(spec.Transform));
+	const FVector startLocationCm = ResolveRobotAnchorLocationCm(DraftScenario.Robot.Start, false);
+	const FTransform startTransform = ResolveEditorGroundActorPlacementTransform(
+		FTransform(spec.Transform.GetRotation(), startLocationCm, spec.Transform.GetScale3D()));
+	AActor* startMarker = SpawnEditorRouteMarkerProxyActor(startTransform);
 	if (!startMarker)
 	{
 		outDiagnostics.Add(FString::Printf(TEXT("Failed to spawn robot start marker for '%s'."), *spec.InstanceId));
@@ -3905,17 +3949,10 @@ bool UScenarioAuthoringSubsystem::SpawnRobotRouteMarkers(
 		return false;
 	}
 
-	if (!GoalPointClass)
-	{
-		outDiagnostics.Add(FString::Printf(
-			TEXT("GoalPointClass is not set; robot goal marker was not spawned for '%s'."),
-			*spec.InstanceId));
-		cleanupStartMarker();
-		return false;
-	}
-
-	const FTransform goalTransform(FRotator::ZeroRotator, spec.DeliveryBot.SetupInfo.LocationSetupInfo.GoalLocationCm);
-	AActor* goalMarker = SpawnEditorMarkerActor(GoalPointClass, goalTransform);
+	const FVector goalLocationCm = ResolveRobotAnchorLocationCm(DraftScenario.Robot.Goal, true);
+	const FTransform goalTransform = ResolveEditorGroundActorPlacementTransform(
+		FTransform(FRotator::ZeroRotator, goalLocationCm));
+	AActor* goalMarker = SpawnEditorRouteMarkerProxyActor(goalTransform);
 	if (!goalMarker)
 	{
 		outDiagnostics.Add(FString::Printf(TEXT("Failed to spawn robot goal marker for '%s'."), *spec.InstanceId));
@@ -3941,33 +3978,29 @@ bool UScenarioAuthoringSubsystem::SpawnRobotRouteMarkers(
 	return true;
 }
 
-AActor* UScenarioAuthoringSubsystem::SpawnEditorMarkerActor(
-	TSubclassOf<AActor> markerClass,
-	const FTransform& transform)
+AActor* UScenarioAuthoringSubsystem::SpawnEditorRouteMarkerProxyActor(const FTransform& transform)
 {
 	UWorld* world = GetWorld();
-	if (!world || !markerClass) return nullptr;
+	if (!world) return nullptr;
 
 	FActorSpawnParameters spawnParams;
 	spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	return world->SpawnActor<AActor>(markerClass, transform, spawnParams);
+	AActor* markerActor = world->SpawnActor<AActor>(AActor::StaticClass(), transform, spawnParams);
+	if (markerActor)
+	{
+		markerActor->SetActorHiddenInGame(true);
+	}
+	return markerActor;
 }
 
 AActor* UScenarioAuthoringSubsystem::SpawnOrReplaceRouteMarker(
 	TObjectPtr<AActor>& markerActor,
-	TSubclassOf<AActor> markerClass,
 	const FTransform& transform,
 	EScenarioPlaceableAuthoringRole markerRole,
 	FString& outFailureReason)
 {
 	outFailureReason.Reset();
-	if (!markerClass)
-	{
-		outFailureReason = TEXT("Marker actor class is not set.");
-		return nullptr;
-	}
-
-	AActor* spawnedMarker = SpawnEditorMarkerActor(markerClass, transform);
+	AActor* spawnedMarker = SpawnEditorRouteMarkerProxyActor(transform);
 	if (!spawnedMarker)
 	{
 		outFailureReason = TEXT("Failed to spawn marker actor.");
@@ -4064,6 +4097,10 @@ bool UScenarioAuthoringSubsystem::ConfigureRobotRouteMarkerActor(
 			{
 				selectionComponent->SetupAttachment(rootComponent);
 			}
+			else
+			{
+				markerActor->SetRootComponent(selectionComponent);
+			}
 			selectionComponent->RegisterComponent();
 		}
 	}
@@ -4086,6 +4123,47 @@ bool UScenarioAuthoringSubsystem::ConfigureRobotRouteMarkerActor(
 		selectionComponent->SetGenerateOverlapEvents(false);
 	}
 	return true;
+}
+
+void UScenarioAuthoringSubsystem::AddRobotRouteMarkerOverlayItem(
+	AActor* markerActor,
+	EScenarioEditorRouteMarkerKind markerKind,
+	const FVector& markerLocationCm,
+	TArray<FScenarioEditorRouteMarkerOverlayItem>& outItems) const
+{
+	if (!IsValid(markerActor))
+	{
+		return;
+	}
+
+	const UScenarioPlaceableComponent* placeableComponent =
+		markerActor->FindComponentByClass<UScenarioPlaceableComponent>();
+	if (!placeableComponent)
+	{
+		return;
+	}
+
+	FScenarioEditorRouteMarkerOverlayItem item;
+	item.InstanceId = placeableComponent->InstanceId;
+	item.Kind = markerKind;
+	item.WorldLocation = markerLocationCm;
+	item.bHovered = placeableComponent->IsAuthoringHovered();
+	item.bSelected = placeableComponent->IsAuthoringSelected();
+	outItems.Add(item);
+}
+
+AActor* UScenarioAuthoringSubsystem::GetRobotRouteMarkerActor(
+	const EScenarioEditorRouteMarkerKind markerKind) const
+{
+	switch (markerKind)
+	{
+	case EScenarioEditorRouteMarkerKind::Start:
+		return RobotStartMarkerActor.Get();
+	case EScenarioEditorRouteMarkerKind::Goal:
+		return RobotGoalMarkerActor.Get();
+	default:
+		return nullptr;
+	}
 }
 
 bool UScenarioAuthoringSubsystem::SpawnEditorStaticObstacleActor(

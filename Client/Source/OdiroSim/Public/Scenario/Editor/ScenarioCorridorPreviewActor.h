@@ -7,11 +7,10 @@
 #include "ScenarioCorridorPreviewActor.generated.h"
 
 class UMaterialInterface;
+class UProceduralMeshComponent;
 class UScenarioCorridorSurfaceCatalog;
 class USceneComponent;
 class USplineComponent;
-class USplineMeshComponent;
-class UStaticMesh;
 
 // Editor-only spline visualization for the authored project scenario corridor.
 UCLASS()
@@ -43,11 +42,7 @@ public:
 private:
 	// Generated lane surface mesh components owned by this actor.
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<USplineMeshComponent>> LaneMeshComponents;
-
-	// Mesh deformed along spline sections for each lane strip.
-	UPROPERTY(Transient)
-	TObjectPtr<UStaticMesh> LaneStripMesh;
+	TArray<TObjectPtr<UProceduralMeshComponent>> LaneMeshComponents;
 
 	// Material used for walkable lane strips such as sidewalk and walkway.
 	UPROPERTY(Transient)
@@ -75,6 +70,7 @@ private:
 		const FString& surfaceId,
 		double minOffsetMeters,
 		double maxOffsetMeters,
+		double cornerFilletRadiusMeters,
 		double surfaceZOffsetCm);
 
 	// Resolves fixed/range template numbers to a deterministic editor-preview value.

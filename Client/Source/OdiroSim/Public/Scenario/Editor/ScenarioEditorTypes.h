@@ -170,6 +170,14 @@ enum class EScenarioPaletteItemType : uint8
 	GroundRegion
 };
 
+// Screen-space overlay marker kind used for robot route endpoints.
+UENUM(BlueprintType)
+enum class EScenarioEditorRouteMarkerKind : uint8
+{
+	Start,
+	Goal
+};
+
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FScenarioPaletteItemEntry
 {
@@ -192,6 +200,72 @@ struct ODIROSIM_API FScenarioPaletteItemEntry
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
 	TSoftObjectPtr<UTexture2D> ThumbnailTexture;
+};
+
+// Projected marker data consumed by editor and simulation viewport overlay paint paths.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FScenarioEditorRouteMarkerOverlayItem
+{
+	GENERATED_BODY()
+
+	// Stable selectable instance id owned by the route marker proxy actor.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FString InstanceId;
+
+	// Semantic endpoint represented by this overlay marker.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	EScenarioEditorRouteMarkerKind Kind = EScenarioEditorRouteMarkerKind::Start;
+
+	// World-space endpoint location that should be projected into the viewport.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FVector WorldLocation = FVector::ZeroVector;
+
+	// Whether the proxy actor is currently hovered by editor input.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	bool bHovered = false;
+
+	// Whether the proxy actor is currently selected by editor input.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	bool bSelected = false;
+};
+
+// Projected corridor handle data consumed by the editor viewport overlay and screen-space hit tests.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FScenarioEditorCorridorHandleOverlayItem
+{
+	GENERATED_BODY()
+
+	// Stable selectable instance id owned by the corridor handle proxy actor.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FString InstanceId;
+
+	// Semantic corridor handle represented by this overlay item.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	EScenarioCorridorHandleType HandleType = EScenarioCorridorHandleType::Vertex;
+
+	// Proxy transform used by the transform gizmo and authoring update path.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FTransform WorldTransform = FTransform::Identity;
+
+	// World-space anchor projected for vertex grips and segment center grips.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FVector WorldLocation = FVector::ZeroVector;
+
+	// Segment start point used when painting and hit-testing segment lines.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FVector SegmentStartWorldLocation = FVector::ZeroVector;
+
+	// Segment end point used when painting and hit-testing segment lines.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	FVector SegmentEndWorldLocation = FVector::ZeroVector;
+
+	// Whether the proxy actor is currently hovered by editor input.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	bool bHovered = false;
+
+	// Whether the proxy actor is currently selected by editor input.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|Editor")
+	bool bSelected = false;
 };
 
 USTRUCT(BlueprintType)

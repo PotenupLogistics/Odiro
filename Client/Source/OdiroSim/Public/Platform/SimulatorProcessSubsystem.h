@@ -9,7 +9,9 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "SimulatorProcessSubsystem.generated.h"
 
+class UObject;
 class UScenarioRunnerSubsystem;
+struct FStreamableHandle;
 
 // Boots simulator runtime from the public user project command-line contract.
 UCLASS(BlueprintType)
@@ -61,6 +63,18 @@ private:
 
 	// Validates map identity and queues the project run when the world is ready.
 	void ProcessLoadedWorld(UWorld* world);
+
+	// Starts or reuses visual preload before opening the target simulation map.
+	void RequestSimulationVisualPreload(UWorld* world, const FString& openLevelName);
+
+	// Performs the target simulation map travel after visual assets are resident.
+	void OpenSimulationMapAfterPreload();
+
+	// Opens the pending simulation map after async visual preload completes.
+	void HandleSimulationVisualPreloadComplete();
+
+	// Keeps preloaded visual assets alive across the simulation map transition.
+	void CacheLoadedSimulationVisualPreloadAssets();
 
 	// Defers run start to the next tick so world subsystems are initialized.
 	void QueueStartSimulationRun(UWorld* world);
@@ -131,6 +145,17 @@ private:
 	UPROPERTY(Transient)
 	// Prevents duplicate process-exit requests from repeated terminal callbacks.
 	bool bProjectRunExitRequested = false;
+
+	// Active visual asset preload request that gates simulation map OpenLevel.
+	TSharedPtr<FStreamableHandle> SimulationVisualPreloadHandle;
+
+	UPROPERTY(Transient)
+	// Strong references keeping preloaded visual assets resident across the map transition.
+	TArray<TObjectPtr<UObject>> LoadedSimulationVisualPreloadAssets;
+
+	UPROPERTY(Transient)
+	// OpenLevel target waiting for simulation visual asset preload completion.
+	FString PendingSimulationOpenLevelName;
 
 	UPROPERTY(Transient)
 	// Target simulation map id resolved from project setting.json.

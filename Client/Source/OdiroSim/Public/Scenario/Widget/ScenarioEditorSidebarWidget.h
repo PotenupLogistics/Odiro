@@ -153,6 +153,18 @@ private:
 	void BindPanelBlockSelection(UWidget* panelWidget);
 	// Releases active panel block events from the shell selection command.
 	void UnbindPanelBlockSelection(UWidget* panelWidget);
+	// Applies the current ViewModel-selected block state to the active panel.
+	void ApplyActivePanelSelectionState();
+	// Defers selected block scrolling until refreshed panel layout is available.
+	void RequestScrollSelectedBlockIntoView();
+	// Scrolls the current ViewModel-selected block into the sidebar viewport.
+	void ScrollSelectedBlockIntoView();
+	// Finds a block widget in the active panel by stable block path.
+	UScenarioEditorSidebarBlockWidget* FindActivePanelBlockWidgetByPath(const FString& blockPath) const;
+	// Appends every selectable block widget owned by one panel.
+	void CollectPanelBlockWidgets(UWidget* panelWidget, TArray<UScenarioEditorSidebarBlockWidget*>& outBlockWidgets) const;
+	// Resolves a placeable id represented by a sidebar block path.
+	bool TryResolvePlaceableIdForBlockPath(const FString& blockPath, FString& outInstanceId) const;
 	// Releases block events from every currently resolved panel widget.
 	void UnbindAllPanelBlockSelection();
 	// Binds one optional block widget to the shell selection command.

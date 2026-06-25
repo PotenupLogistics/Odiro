@@ -191,7 +191,7 @@ void UScenarioEditorSidebarCorridorSegmentWidget::ConfigureFieldRows()
 			CachedSegment.SegmentId.IsEmpty()
 				? FString::Printf(TEXT("구간 %d"), SegmentIndex + 1)
 				: CachedSegment.SegmentId,
-			TEXT("root.corridor.segments[]"),
+			SidebarWidgetHelpers::MakeIndexedBlockPath(TEXT("root.corridor.segments"), SegmentIndex),
 			TEXT("세부"),
 			false,
 			true,
@@ -245,7 +245,7 @@ void UScenarioEditorSidebarCorridorSegmentWidget::ApplyCachedSegmentToRows()
 			CachedSegment.SegmentId.IsEmpty()
 				? FString::Printf(TEXT("구간 %d"), SegmentIndex + 1)
 				: CachedSegment.SegmentId,
-			TEXT("root.corridor.segments[]"),
+			SidebarWidgetHelpers::MakeIndexedBlockPath(TEXT("root.corridor.segments"), SegmentIndex),
 			TEXT("세부"));
 	}
 	if (IdFieldRow)

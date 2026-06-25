@@ -7,6 +7,7 @@
 #include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
 #include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioEditorShellViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
@@ -88,7 +89,70 @@ void UScenarioEditorSidebarCorridorPanel::RefreshFromTemplate(
 		CurbSideBlockWidget.Get(),
 		corridor.CurbSide);
 	RefreshSegmentRows(corridor.Segments);
+	ApplySelectedBlockPath();
 	SetDiagnosticsText(TEXT(""));
+}
+
+void UScenarioEditorSidebarCorridorPanel::CollectBlockWidgets(
+	TArray<UScenarioEditorSidebarBlockWidget*>& outBlockWidgets) const
+{
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : {
+		CorridorBlockWidget.Get(),
+		AxisBlockWidget.Get(),
+		AxisPointsBlockWidget.Get(),
+		WalkwayWidthBlockWidget.Get(),
+		BuildingSideBlockWidget.Get(),
+		CurbSideBlockWidget.Get(),
+		SegmentsBlockWidget.Get() })
+	{
+		if (blockWidget)
+		{
+			outBlockWidgets.Add(blockWidget);
+		}
+	}
+	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : BuildingSideLaneWidgets)
+	{
+		if (laneWidget && laneWidget->LaneBlockWidget)
+		{
+			outBlockWidgets.Add(laneWidget->LaneBlockWidget.Get());
+		}
+	}
+	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : CurbSideLaneWidgets)
+	{
+		if (laneWidget && laneWidget->LaneBlockWidget)
+		{
+			outBlockWidgets.Add(laneWidget->LaneBlockWidget.Get());
+		}
+	}
+	for (UScenarioEditorSidebarCorridorPointWidget* pointWidget : AxisPointWidgets)
+	{
+		if (pointWidget && pointWidget->PointBlockWidget)
+		{
+			outBlockWidgets.Add(pointWidget->PointBlockWidget.Get());
+		}
+	}
+	for (UScenarioEditorSidebarCorridorSegmentWidget* segmentWidget : SegmentWidgets)
+	{
+		if (segmentWidget && segmentWidget->SegmentBlockWidget)
+		{
+			outBlockWidgets.Add(segmentWidget->SegmentBlockWidget.Get());
+		}
+	}
+}
+
+UScenarioEditorSidebarBlockWidget* UScenarioEditorSidebarCorridorPanel::FindBlockWidgetByPath(
+	const FString& blockPath) const
+{
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectBlockWidgets(blockWidgets);
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : blockWidgets)
+	{
+		if (blockWidget && blockWidget->BlockPath == blockPath)
+		{
+			return blockWidget;
+		}
+	}
+	return nullptr;
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleWalkwayWidthCommitted(
@@ -616,7 +680,7 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 	if (SegmentsBlockWidget)
 	{
 		SidebarWidgetHelpers::ConfigureBlock(SegmentsBlockWidget.Get(), TextStyleCatalog, {
-			TEXT("의미 구간"),
+			TEXT("구간"),
 			TEXT("root.corridor.segments[]"),
 			TEXT("속성"),
 			false,
@@ -664,6 +728,66 @@ void UScenarioEditorSidebarCorridorPanel::ApplyCorridorFieldItems()
 		WalkwayWidthFieldRow->InitializeFromItemViewModel(
 			templateSidebarViewModel->FindCorridorFieldItem(TEXT("WalkwayWidth")));
 		WalkwayWidthFieldRow->SetTextStyleCatalog(TextStyleCatalog);
+	}
+}
+
+void UScenarioEditorSidebarCorridorPanel::ApplySelectedBlockPath()
+{
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	const UScenarioEditorShellViewModel* shellViewModel = uiSubsystem ? uiSubsystem->GetShellViewModel() : nullptr;
+	const FString selectedBlockPath = shellViewModel ? shellViewModel->GetSelectedTemplateBlockPath() : FString();
+
+	SidebarWidgetHelpers::ApplySelectedBlockPath(CorridorBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(AxisBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(AxisPointsBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(WalkwayWidthBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(BuildingSideBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(CurbSideBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(SegmentsBlockWidget.Get(), selectedBlockPath);
+
+	if (selectedBlockPath.StartsWith(TEXT("root.corridor.axis.points_m[")))
+	{
+		if (AxisBlockWidget)
+		{
+			AxisBlockWidget->SetExpanded(true);
+		}
+		if (AxisPointsBlockWidget)
+		{
+			AxisPointsBlockWidget->SetExpanded(true);
+		}
+	}
+	else if (selectedBlockPath.StartsWith(TEXT("root.corridor.segments[")) && SegmentsBlockWidget)
+	{
+		SegmentsBlockWidget->SetExpanded(true);
+	}
+
+	for (UScenarioEditorSidebarCorridorPointWidget* pointWidget : AxisPointWidgets)
+	{
+		if (pointWidget)
+		{
+			SidebarWidgetHelpers::ApplySelectedBlockPath(pointWidget->PointBlockWidget.Get(), selectedBlockPath);
+		}
+	}
+	for (UScenarioEditorSidebarCorridorSegmentWidget* segmentWidget : SegmentWidgets)
+	{
+		if (segmentWidget)
+		{
+			SidebarWidgetHelpers::ApplySelectedBlockPath(segmentWidget->SegmentBlockWidget.Get(), selectedBlockPath);
+		}
+	}
+	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : BuildingSideLaneWidgets)
+	{
+		if (laneWidget)
+		{
+			SidebarWidgetHelpers::ApplySelectedBlockPath(laneWidget->LaneBlockWidget.Get(), selectedBlockPath);
+		}
+	}
+	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : CurbSideLaneWidgets)
+	{
+		if (laneWidget)
+		{
+			SidebarWidgetHelpers::ApplySelectedBlockPath(laneWidget->LaneBlockWidget.Get(), selectedBlockPath);
+		}
 	}
 }
 

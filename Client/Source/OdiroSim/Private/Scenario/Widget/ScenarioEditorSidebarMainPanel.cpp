@@ -6,11 +6,15 @@
 #include "Engine/World.h"
 #include "Scenario/ScenarioEditorUiSubsystem.h"
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
+#include "Scenario/ViewModel/ScenarioEditorShellViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
+#include "Scenario/Widget/ScenarioEditorSidebarWidgetHelpers.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
+
+namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 
 void UScenarioEditorSidebarMainPanel::NativeConstruct()
 {
@@ -72,7 +76,39 @@ void UScenarioEditorSidebarMainPanel::RefreshFromTemplate(const FScenarioDocumen
 
 	templateSidebarViewModel->RefreshMainFieldItemsFromTemplate(scenarioTemplate);
 	ApplyMainFieldItems();
+	ApplySelectedBlockPath();
 	SetDiagnosticsText(TEXT(""));
+}
+
+void UScenarioEditorSidebarMainPanel::CollectBlockWidgets(
+	TArray<UScenarioEditorSidebarBlockWidget*>& outBlockWidgets) const
+{
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : {
+		RootBlockWidget.Get(),
+		RobotBlockWidget.Get(),
+		RobotStartBlockWidget.Get(),
+		RobotGoalBlockWidget.Get() })
+	{
+		if (blockWidget)
+		{
+			outBlockWidgets.Add(blockWidget);
+		}
+	}
+}
+
+UScenarioEditorSidebarBlockWidget* UScenarioEditorSidebarMainPanel::FindBlockWidgetByPath(
+	const FString& blockPath) const
+{
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectBlockWidgets(blockWidgets);
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : blockWidgets)
+	{
+		if (blockWidget && blockWidget->BlockPath == blockPath)
+		{
+			return blockWidget;
+		}
+	}
+	return nullptr;
 }
 
 void UScenarioEditorSidebarMainPanel::HandleScenarioIdCommitted(
@@ -591,6 +627,23 @@ void UScenarioEditorSidebarMainPanel::ApplyTextStyles()
 		DiagnosticsTextBlock->SetVisibility(DiagnosticsTextBlock->GetText().IsEmpty()
 			? ESlateVisibility::Collapsed
 			: ESlateVisibility::SelfHitTestInvisible);
+	}
+}
+
+void UScenarioEditorSidebarMainPanel::ApplySelectedBlockPath()
+{
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	const UScenarioEditorShellViewModel* shellViewModel = uiSubsystem ? uiSubsystem->GetShellViewModel() : nullptr;
+	const FString selectedBlockPath = shellViewModel ? shellViewModel->GetSelectedTemplateBlockPath() : FString();
+
+	SidebarWidgetHelpers::ApplySelectedBlockPath(RootBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(RobotBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(RobotStartBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(RobotGoalBlockWidget.Get(), selectedBlockPath);
+
+	if (RobotBlockWidget && selectedBlockPath.StartsWith(TEXT("root.robot.")))
+	{
+		RobotBlockWidget->SetExpanded(true);
 	}
 }
 

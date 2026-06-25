@@ -1,7 +1,7 @@
 #include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
 
+#include "ProceduralMeshComponent.h"
 #include "Components/SceneComponent.h"
-#include "Components/SplineMeshComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Scenario/ScenarioCorridorGeometry.h"
 #include "Scenario/Data/ScenarioCorridorSurfaceResolver.h"
@@ -96,12 +96,6 @@ AScenarioCorridorRuntimeActor::AScenarioCorridorRuntimeActor()
 
 	SurfaceCatalog = UScenarioCorridorSurfaceCatalog::MakeDefaultCatalogReference();
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> laneStripMeshAsset(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	if (laneStripMeshAsset.Succeeded())
-	{
-		LaneStripMesh = laneStripMeshAsset.Object;
-	}
-
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> walkableGroundMaterialAsset(
 		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorSidewalk.M_ScenarioCorridorSidewalk"));
 	if (walkableGroundMaterialAsset.Succeeded())
@@ -129,15 +123,14 @@ void AScenarioCorridorRuntimeActor::ConfigureCorridor(const FScenarioRuntimeCorr
 	CorridorSpec = inCorridorSpec;
 	ClearLaneMeshes();
 
-	if (!LaneStripMesh || CorridorSpec.PointsMeters.Num() < 2)
+	if (CorridorSpec.PointsMeters.Num() < 2)
 	{
 		UE_LOG(
 			LogScenarioCorridorRuntime,
 			Warning,
-			TEXT("Runtime corridor cannot render. CorridorId: %s | Points: %d | HasMesh: %s"),
+			TEXT("Runtime corridor cannot render. CorridorId: %s | Points: %d"),
 			*CorridorSpec.CorridorId,
-			CorridorSpec.PointsMeters.Num(),
-			LaneStripMesh ? TEXT("true") : TEXT("false"));
+			CorridorSpec.PointsMeters.Num());
 		return;
 	}
 
@@ -150,15 +143,25 @@ void AScenarioCorridorRuntimeActor::ConfigureCorridor(const FScenarioRuntimeCorr
 		}
 	}
 
+	double cornerFilletRadiusMeters = 0.0;
 	for (const FRuntimeCorridorVisualLaneSpec& visualLaneSpec : visualLaneSpecs)
 	{
-		AddLaneStrip(visualLaneSpec.LayoutEntry, visualLaneSpec.LaneSpec);
+		cornerFilletRadiusMeters = FMath::Max(
+			cornerFilletRadiusMeters,
+			FMath::Max(
+				FMath::Abs(visualLaneSpec.LaneSpec.OffsetRangeMeters.MinMeters),
+				FMath::Abs(visualLaneSpec.LaneSpec.OffsetRangeMeters.MaxMeters)));
+	}
+
+	for (const FRuntimeCorridorVisualLaneSpec& visualLaneSpec : visualLaneSpecs)
+	{
+		AddLaneStrip(visualLaneSpec.LayoutEntry, visualLaneSpec.LaneSpec, cornerFilletRadiusMeters);
 	}
 }
 
 void AScenarioCorridorRuntimeActor::ClearLaneMeshes()
 {
-	for (const TObjectPtr<USplineMeshComponent>& meshComponent : LaneMeshComponents)
+	for (const TObjectPtr<UProceduralMeshComponent>& meshComponent : LaneMeshComponents)
 	{
 		if (IsValid(meshComponent))
 		{
@@ -168,6 +171,11 @@ void AScenarioCorridorRuntimeActor::ClearLaneMeshes()
 
 	LaneMeshComponents.Reset();
 	Tags.Reset();
+}
+
+double AScenarioCorridorRuntimeActor::GetRuntimeSurfaceTopZCm()
+{
+	return RuntimeSurfaceTopZCm;
 }
 
 bool AScenarioCorridorRuntimeActor::TryFindSurfaceAtWorldLocation2D(
@@ -233,7 +241,8 @@ bool AScenarioCorridorRuntimeActor::TryFindSurfaceAtWorldLocation2D(
 
 void AScenarioCorridorRuntimeActor::AddLaneStrip(
 	const FScenarioRuntimeCorridorLayoutEntry& layoutEntry,
-	const FScenarioRuntimeCorridorLaneSpec& laneSpec)
+	const FScenarioRuntimeCorridorLaneSpec& laneSpec,
+	double cornerFilletRadiusMeters)
 {
 	const double laneWidthMeters = laneSpec.OffsetRangeMeters.MaxMeters - laneSpec.OffsetRangeMeters.MinMeters;
 	if (laneWidthMeters <= KINDA_SMALL_NUMBER)
@@ -250,17 +259,12 @@ void AScenarioCorridorRuntimeActor::AddLaneStrip(
 		PenaltyGroundMaterial.Get(),
 		BlockedGroundMaterial.Get());
 
-	const double centerOffsetCm =
-		((laneSpec.OffsetRangeMeters.MinMeters + laneSpec.OffsetRangeMeters.MaxMeters) * 0.5)
-		* FScenarioCorridorGeometry::MetersToCentimeters;
-	const double laneWidthCm = laneWidthMeters * FScenarioCorridorGeometry::MetersToCentimeters;
 	const bool bBlockedSurface = laneSpec.RegionType == EScenarioGroundRegionType::Blocked;
 	const double laneHeightCm = bBlockedSurface ? RuntimeBlockedHeightCm : RuntimeSurfaceHeightCm;
 	const double laneSurfaceZCm = RuntimeSurfaceTopZCm + laneSpec.SurfaceZOffsetCm;
 	const double laneCenterZCm = bBlockedSurface
 		? laneSurfaceZCm + (laneHeightCm * 0.5)
 		: laneSurfaceZCm - (laneHeightCm * 0.5);
-	const double laneHeightScale = laneHeightCm / 100.0;
 	const FName collisionProfileName = FScenarioCorridorGeometry::ResolveRuntimeCollisionProfileName(laneSpec.RegionType);
 
 	TArray<FVector> axisLocationsCm;
@@ -284,7 +288,6 @@ void AScenarioCorridorRuntimeActor::AddLaneStrip(
 	FScenarioCorridorLaneMeshBuildSpec meshSpec;
 	meshSpec.Owner = this;
 	meshSpec.AttachParent = SceneRoot;
-	meshSpec.LaneStripMesh = LaneStripMesh.Get();
 	meshSpec.Material = material;
 	meshSpec.ComponentNameBase = FName(*FString::Printf(
 		TEXT("RuntimeCorridor_%s_%s"),
@@ -292,11 +295,12 @@ void AScenarioCorridorRuntimeActor::AddLaneStrip(
 		*laneSpec.LaneId));
 	meshSpec.AxisLocationsCm = MoveTemp(axisLocationsCm);
 	meshSpec.AxisTangentsCm = MoveTemp(axisTangentsCm);
-	meshSpec.CenterOffsetCm = centerOffsetCm;
-	meshSpec.LaneWidthCm = laneWidthCm;
-	meshSpec.LaneHeightScale = laneHeightScale;
+	meshSpec.MinOffsetCm = laneSpec.OffsetRangeMeters.MinMeters * FScenarioCorridorGeometry::MetersToCentimeters;
+	meshSpec.MaxOffsetCm = laneSpec.OffsetRangeMeters.MaxMeters * FScenarioCorridorGeometry::MetersToCentimeters;
+	meshSpec.LaneHeightCm = laneHeightCm;
 	meshSpec.LaneCenterZCm = laneCenterZCm;
-	meshSpec.SurfaceTopZCm = RuntimeSurfaceTopZCm;
+	meshSpec.CornerFilletRadiusCm = FMath::Max(cornerFilletRadiusMeters, 0.0)
+		* FScenarioCorridorGeometry::MetersToCentimeters;
 	meshSpec.CollisionEnabled = ECollisionEnabled::QueryAndPhysics;
 	meshSpec.CollisionProfileName = collisionProfileName;
 	meshSpec.ComponentTag = collisionTag;

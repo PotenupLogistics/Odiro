@@ -7,9 +7,8 @@
 #include "ScenarioCorridorRuntimeActor.generated.h"
 
 class UMaterialInterface;
+class UProceduralMeshComponent;
 class USceneComponent;
-class USplineMeshComponent;
-class UStaticMesh;
 
 // Deterministic lookup result for one sampled runtime Corridor lane surface.
 USTRUCT(BlueprintType)
@@ -79,6 +78,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Corridor")
 	FScenarioRuntimeCorridorSpec GetCorridorSpec() const { return CorridorSpec; }
 
+	// Returns the shared runtime top surface height used by generated corridor lane meshes.
+	static double GetRuntimeSurfaceTopZCm();
+
 	// Resolves the runtime lane surface containing the supplied world location in XY.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Corridor")
 	bool TryFindSurfaceAtWorldLocation2D(
@@ -92,11 +94,7 @@ private:
 
 	// Generated lane surface mesh components owned by this actor.
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<USplineMeshComponent>> LaneMeshComponents;
-
-	// Cube mesh deformed along sampled axis sections for each lane strip.
-	UPROPERTY(Transient)
-	TObjectPtr<UStaticMesh> LaneStripMesh;
+	TArray<TObjectPtr<UProceduralMeshComponent>> LaneMeshComponents;
 
 	// Material used for walkable lane strips when the catalog has no material.
 	UPROPERTY(Transient)
@@ -113,8 +111,9 @@ private:
 	// Removes generated lane mesh components before rebuilding the corridor.
 	void ClearLaneMeshes();
 
-	// Creates spline-deformed cube mesh sections for one sampled layout lane interval.
+	// Creates procedural mesh sections for one sampled layout lane interval.
 	void AddLaneStrip(
 		const FScenarioRuntimeCorridorLayoutEntry& layoutEntry,
-		const FScenarioRuntimeCorridorLaneSpec& laneSpec);
+		const FScenarioRuntimeCorridorLaneSpec& laneSpec,
+		double cornerFilletRadiusMeters);
 };

@@ -72,6 +72,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void RefreshFromTemplate(const FScenarioDocument& scenarioTemplate);
 
+	// Applies the shell-selected block path to this panel and repeated placement blocks.
+	void ApplySelectedBlockPath();
+
+	// Appends every block widget currently owned by this panel.
+	void CollectBlockWidgets(TArray<UScenarioEditorSidebarBlockWidget*>& outBlockWidgets) const;
+
+	// Returns the block widget that owns the requested stable block path.
+	UScenarioEditorSidebarBlockWidget* FindBlockWidgetByPath(const FString& blockPath) const;
+
 private:
 	// Handles fixed min_clear_width_m edits committed by the field row.
 	UFUNCTION()

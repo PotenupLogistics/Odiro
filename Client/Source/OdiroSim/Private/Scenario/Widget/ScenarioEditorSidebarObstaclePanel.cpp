@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "Scenario/Data/ScenarioEditorWidgetClassCatalog.h"
 #include "Scenario/ScenarioEditorUiSubsystem.h"
+#include "Scenario/ViewModel/ScenarioEditorShellViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
@@ -76,7 +77,45 @@ void UScenarioEditorSidebarObstaclePanel::RefreshFromTemplate(
 	templateSidebarViewModel->RefreshObstacleFieldItemsFromTemplate(scenarioTemplate);
 	ApplyObstacleFieldItems();
 	RefreshPlacementRows(scenarioTemplate.Obstacles.Placements);
+	ApplySelectedBlockPath();
 	SetDiagnosticsText(TEXT(""));
+}
+
+void UScenarioEditorSidebarObstaclePanel::CollectBlockWidgets(
+	TArray<UScenarioEditorSidebarBlockWidget*>& outBlockWidgets) const
+{
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : {
+		ObstacleBlockWidget.Get(),
+		MinClearWidthBlockWidget.Get(),
+		PlacementsBlockWidget.Get() })
+	{
+		if (blockWidget)
+		{
+			outBlockWidgets.Add(blockWidget);
+		}
+	}
+	for (UScenarioEditorSidebarObstaclePlacementWidget* placementWidget : PlacementWidgets)
+	{
+		if (placementWidget && placementWidget->PlacementBlockWidget)
+		{
+			outBlockWidgets.Add(placementWidget->PlacementBlockWidget.Get());
+		}
+	}
+}
+
+UScenarioEditorSidebarBlockWidget* UScenarioEditorSidebarObstaclePanel::FindBlockWidgetByPath(
+	const FString& blockPath) const
+{
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectBlockWidgets(blockWidgets);
+	for (UScenarioEditorSidebarBlockWidget* blockWidget : blockWidgets)
+	{
+		if (blockWidget && blockWidget->BlockPath == blockPath)
+		{
+			return blockWidget;
+		}
+	}
+	return nullptr;
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandleMinClearWidthCommitted(
@@ -272,7 +311,7 @@ void UScenarioEditorSidebarObstaclePanel::ConfigureFieldRows()
 	if (PlacementsBlockWidget)
 	{
 		SidebarWidgetHelpers::ConfigureBlock(PlacementsBlockWidget.Get(), TextStyleCatalog, {
-			TEXT("배치 규칙"),
+			TEXT("배치된 장애물"),
 			TEXT("root.obstacles.placements[]"),
 			TEXT("속성"),
 			false,
@@ -340,6 +379,33 @@ void UScenarioEditorSidebarObstaclePanel::ApplyObstacleFieldItems()
 	{
 		PlacementsCountFieldRow->InitializeFromItemViewModel(
 			templateSidebarViewModel->FindObstacleFieldItem(TEXT("PlacementsCount")));
+	}
+}
+
+void UScenarioEditorSidebarObstaclePanel::ApplySelectedBlockPath()
+{
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	const UScenarioEditorShellViewModel* shellViewModel = uiSubsystem ? uiSubsystem->GetShellViewModel() : nullptr;
+	const FString selectedBlockPath = shellViewModel ? shellViewModel->GetSelectedTemplateBlockPath() : FString();
+
+	SidebarWidgetHelpers::ApplySelectedBlockPath(ObstacleBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(MinClearWidthBlockWidget.Get(), selectedBlockPath);
+	SidebarWidgetHelpers::ApplySelectedBlockPath(PlacementsBlockWidget.Get(), selectedBlockPath);
+
+	const bool bSelectedPlacementItem = selectedBlockPath.StartsWith(TEXT("root.obstacles.placements["));
+	if (PlacementsBlockWidget && bSelectedPlacementItem)
+	{
+		PlacementsBlockWidget->SetExpanded(true);
+	}
+
+	for (UScenarioEditorSidebarObstaclePlacementWidget* placementWidget : PlacementWidgets)
+	{
+		if (placementWidget)
+		{
+			SidebarWidgetHelpers::ApplySelectedBlockPath(
+				placementWidget->PlacementBlockWidget.Get(),
+				selectedBlockPath);
+		}
 	}
 }
 

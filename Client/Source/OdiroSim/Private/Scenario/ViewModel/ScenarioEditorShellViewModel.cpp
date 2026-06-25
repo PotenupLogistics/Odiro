@@ -55,7 +55,10 @@ void UScenarioEditorShellViewModel::RefreshFromController()
 		selectedPlaceable ? selectedPlaceable->InstanceId : FString());
 	if (selectedPlaceable)
 	{
-		UE_MVVM_SET_PROPERTY_VALUE(SelectedTemplateBlockPath, FString());
+		if (SelectedTemplateBlockPath.IsEmpty())
+		{
+			UE_MVVM_SET_PROPERTY_VALUE(SelectedTemplateBlockPath, ResolveDefaultTemplateBlockPath(ActiveSidebarPanel));
+		}
 	}
 	else if (SelectedTemplateBlockPath.IsEmpty())
 	{
@@ -92,6 +95,16 @@ void UScenarioEditorShellViewModel::SelectTemplateBlock(
 	{
 		controller->ClearSelectedPlaceable();
 	}
+}
+
+void UScenarioEditorShellViewModel::FocusPlaceableTemplateBlock(
+	const EScenarioTemplateSidebarPanel panel,
+	const FString& blockPath,
+	const FString& placeableId)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(ActiveSidebarPanel, panel);
+	UE_MVVM_SET_PROPERTY_VALUE(SelectedPlaceableId, placeableId);
+	UE_MVVM_SET_PROPERTY_VALUE(SelectedTemplateBlockPath, ResolveTemplateBlockPath(panel, blockPath));
 }
 
 void UScenarioEditorShellViewModel::SetAssetPaletteVisible(const bool bVisible)
@@ -161,7 +174,6 @@ bool UScenarioEditorShellViewModel::SelectPlaceable(const FString& instanceId)
 	if (bSelected)
 	{
 		UE_MVVM_SET_PROPERTY_VALUE(SelectedPlaceableId, instanceId);
-		UE_MVVM_SET_PROPERTY_VALUE(SelectedTemplateBlockPath, FString());
 	}
 	return bSelected;
 }

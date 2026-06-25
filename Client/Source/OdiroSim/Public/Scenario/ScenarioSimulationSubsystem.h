@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Math/Box2D.h"
 #include "Scenario/Data/ScenarioStaticObstaclePropCatalog.h"
+#include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "Shared/Actors/ScenarioMapBounds.h"
 #include "Shared/ScenarioSpecTypes.h"
@@ -10,6 +11,7 @@
 
 class ADeliveryBot;
 class ADeliveryBot_GridBoundsActor;
+class APostProcessVolume;
 class AScenarioCorridorRuntimeActor;
 class AScenarioGroundRegion;
 class AScenarioPedestrian;
@@ -17,6 +19,7 @@ class AScenarioSplinePath;
 class AScenarioStaticObstacle;
 class UPrimitiveComponent;
 class UScenarioPlaceableComponent;
+class UScenarioEditorRouteMarkerOverlayWidget;
 struct FScenarioPedestrianPlan;
 struct FScenarioPedestrianPlanBuildContext;
 struct FDeliveryBotSetupInfo;
@@ -37,12 +40,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Classes")
 	TSubclassOf<ADeliveryBot> RobotActorClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Classes")
-	TSubclassOf<AActor> GoalPointClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Classes")
-	TSubclassOf<AActor> StartPointClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Catalog")
 	TSoftObjectPtr<UScenarioStaticObstaclePropCatalog> StaticObstaclePropCatalog;
@@ -68,6 +65,9 @@ public:
 		const TArray<AActor*>& surfaceActors,
 		const TArray<FScenarioPlaceableInstanceSpec>& placeables,
 		FScenarioMapBounds& outBounds) const;
+
+	// Copies the current runtime robot route endpoint overlays for viewport painting.
+	void GetRobotRouteMarkerOverlayItems(TArray<FScenarioEditorRouteMarkerOverlayItem>& outItems) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Scenario")
 	AScenarioSplinePath* SpawnSplinePath(const FString& pathId, const TArray<FVector>& points, bool bClosedLoop);
@@ -126,6 +126,18 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<ADeliveryBot_GridBoundsActor> RuntimeGridBoundsActor;
 
+	// Runtime grey background post-process volume owned by the active scenario setup.
+	UPROPERTY(Transient)
+	TObjectPtr<APostProcessVolume> RuntimeGreyBackgroundPostProcessVolume;
+
+	// Screen-space overlay widget that mirrors editor route marker presentation during simulation.
+	UPROPERTY(Transient)
+	TObjectPtr<UScenarioEditorRouteMarkerOverlayWidget> RuntimeRouteMarkerOverlayWidget;
+
+	// Runtime start/goal marker snapshots projected by RuntimeRouteMarkerOverlayWidget.
+	UPROPERTY(Transient)
+	TArray<FScenarioEditorRouteMarkerOverlayItem> RuntimeRouteMarkerOverlayItems;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|DeliveryBot|Grid", meta = (AllowPrivateAccess = "true"))
 	float DeliveryBotGridBoundsPaddingCm{ 100.f };
 
@@ -165,6 +177,21 @@ private:
 		FDeliveryBotSetupInfo& setupInfo,
 		bool bHasGoal,
 		FVector& inOutGoalLocation) const;
+
+	// Creates or refreshes runtime camera/capture presentation state for the active scenario.
+	void ApplyRuntimeViewportPresentation();
+
+	// Adds one robot route endpoint marker item for runtime viewport overlay painting.
+	void AddRuntimeRouteMarkerOverlayItem(
+		const FString& instanceId,
+		bool bStartMarker,
+		const FVector& worldLocation);
+
+	// Shows the runtime route marker overlay if a local player controller is available.
+	void ShowRuntimeRouteMarkerOverlayWidget();
+
+	// Removes the runtime route marker overlay before replacing or clearing the scenario.
+	void RemoveRuntimeRouteMarkerOverlayWidget();
 
 	void RegisterRuntimeActor(
 		const FString& instanceId,

@@ -42,8 +42,8 @@ public:
 	/**
 	 * Gets the asset path of the current target UMG asset.
 	 * If a target is explicitly set via SetTargetUmgAsset, it returns that target.
-	 * Generated fallback workspace targets yield to real open UMG editors before history fallback.
-	 * @return FString The asset path of the target UMG asset.
+	 * Legacy generated fallback workspace targets are ignored instead of being auto-selected.
+	 * @return FString The asset path of the target UMG asset, or an empty string if none is known.
 	 */
 	FString GetTargetUmgAsset() const;
 
@@ -81,7 +81,7 @@ public:
 
 	/**
 	 * Gets the name of the currently focused widget.
-	 * @return FString The widget name.
+	 * @return FString The widget name, or an empty string if no target widget blueprint is available.
 	 */
 	FString GetTargetWidget() const;
 

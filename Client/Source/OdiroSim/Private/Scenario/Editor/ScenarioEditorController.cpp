@@ -2697,13 +2697,9 @@ void AScenarioEditorController::SetSelectedPlaceable(UScenarioPlaceableComponent
 	UpdateTransformGizmoForSelection();
 	UpdatePlaceableDetailsForSelection();
 	SelectedPlaceableChanged.Broadcast(placeableComponent ? placeableComponent->InstanceId : FString());
-	if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
+	if (!placeableComponent)
 	{
-		if (placeableComponent)
-		{
-			rootWidget->RefreshScenarioInspector();
-		}
-		else
+		if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
 		{
 			rootWidget->SetTemplateSidebarPanel(EScenarioTemplateSidebarPanel::Main);
 			rootWidget->RefreshScenarioInspector();

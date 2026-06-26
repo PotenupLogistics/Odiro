@@ -122,11 +122,12 @@ bool FEpisodeReplayRecorder::Close(TArray<FString>& OutDiagnostics)
 	Manifest.FrameCount = Frames.Num();
 	Manifest.DurationSeconds = Frames.Last().TimeSeconds;
 	Manifest.SampleRateHz = EpisodeReplayV1::SampleRateHz;
-	Manifest.FrameSizeBytes = EpisodeReplayV1::FixedFrameSizeBytes;
+	Manifest.Version = FEpisodeReplayBinary::ResolveFrameVersion(Frames);
+	Manifest.FrameSizeBytes = FEpisodeReplayBinary::GetFrameSizeBytesForVersion(Manifest.Version);
 	Manifest.FirstFrameOffsetBytes = EpisodeReplayV1::BinaryHeaderSizeBytes;
 	Manifest.Features.bRobotBody = true;
 	Manifest.Features.bControl = true;
-	Manifest.Features.bWheels = false;
+	Manifest.Features.bWheels = Manifest.Version == EpisodeReplayV2::Version;
 	Manifest.Features.bMovingActors = false;
 
 	TArray<FString> ManifestDiagnostics;

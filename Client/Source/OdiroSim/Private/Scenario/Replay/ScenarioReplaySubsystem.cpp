@@ -1175,6 +1175,31 @@ bool UScenarioReplaySubsystem::BuildInterpolatedFrameAtTime(
 	OutFrame.Direction = Alpha < 0.5
 		? LowerFrame.Direction
 		: UpperFrame.Direction;
+	if (LowerFrame.Wheels.Num() == EpisodeReplayV2::WheelCount
+		&& UpperFrame.Wheels.Num() == EpisodeReplayV2::WheelCount)
+	{
+		OutFrame.Wheels.SetNum(EpisodeReplayV2::WheelCount);
+		for (int32 WheelIndex = 0; WheelIndex < EpisodeReplayV2::WheelCount; ++WheelIndex)
+		{
+			const FEpisodeReplayWheelFrame& LowerWheelFrame = LowerFrame.Wheels[WheelIndex];
+			const FEpisodeReplayWheelFrame& UpperWheelFrame = UpperFrame.Wheels[WheelIndex];
+			FEpisodeReplayWheelFrame& OutWheelFrame = OutFrame.Wheels[WheelIndex];
+			OutWheelFrame.LocalLocationCm = FMath::Lerp(
+				LowerWheelFrame.LocalLocationCm,
+				UpperWheelFrame.LocalLocationCm,
+				Alpha);
+			OutWheelFrame.LocalRotation = FQuat::Slerp(
+				LowerWheelFrame.LocalRotation,
+				UpperWheelFrame.LocalRotation,
+				Alpha).GetNormalized();
+			OutWheelFrame.bInContact = Alpha < 0.5
+				? LowerWheelFrame.bInContact
+				: UpperWheelFrame.bInContact;
+			OutWheelFrame.bHasVisualPose =
+				LowerWheelFrame.bHasVisualPose
+				&& UpperWheelFrame.bHasVisualPose;
+		}
+	}
 	OutFrameIndex = FMath::Clamp(
 		FMath::RoundToInt(FramePosition),
 		0,

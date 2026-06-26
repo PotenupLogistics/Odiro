@@ -39,6 +39,7 @@ void ADeliveryBotReplayActor::ApplyReplayFrame(
 {
 	SetActorLocation(Frame.PositionCm + ReplayWorldOffset);
 	SetActorRotation(Frame.Rotation);
+	ApplyReplayWheelFrames(Frame);
 }
 
 AActor* ADeliveryBotReplayActor::GetReplayVisualActor() const
@@ -73,4 +74,78 @@ void ADeliveryBotReplayActor::ConfigureReplayVisualActor() const
 		PrimitiveComponent->SetSimulatePhysics(false);
 		PrimitiveComponent->SetComponentTickEnabled(false);
 	}
+}
+
+void ADeliveryBotReplayActor::ApplyReplayWheelFrames(const FEpisodeReplayRobotFrame& Frame) const
+{
+	if (Frame.Wheels.Num() != EpisodeReplayV2::WheelCount)
+	{
+		return;
+	}
+
+	static const FName PivotNames[EpisodeReplayV2::WheelCount] =
+	{
+		TEXT("Wheel_FL_Pivot"),
+		TEXT("Wheel_FR_Pivot"),
+		TEXT("Wheel_RL_Pivot"),
+		TEXT("Wheel_RR_Pivot")
+	};
+	static const FName MeshNames[EpisodeReplayV2::WheelCount] =
+	{
+		TEXT("Wheel_FL_Mesh"),
+		TEXT("Wheel_FR_Mesh"),
+		TEXT("Wheel_RL_Mesh"),
+		TEXT("Wheel_RR_Mesh")
+	};
+
+	for (int32 WheelIndex = 0; WheelIndex < EpisodeReplayV2::WheelCount; ++WheelIndex)
+	{
+		const FEpisodeReplayWheelFrame& WheelFrame = Frame.Wheels[WheelIndex];
+		if (!WheelFrame.bHasVisualPose)
+		{
+			continue;
+		}
+
+		if (USceneComponent* PivotComponent = FindReplayVisualComponent(PivotNames[WheelIndex]))
+		{
+			if (!WheelFrame.LocalLocationCm.IsNearlyZero(KINDA_SMALL_NUMBER))
+			{
+				PivotComponent->SetRelativeLocation(WheelFrame.LocalLocationCm);
+			}
+		}
+
+		if (USceneComponent* MeshComponent = FindReplayVisualComponent(MeshNames[WheelIndex]))
+		{
+			MeshComponent->SetRelativeRotation(WheelFrame.LocalRotation);
+		}
+	}
+}
+
+USceneComponent* ADeliveryBotReplayActor::FindReplayVisualComponent(const FName ComponentName) const
+{
+	AActor* VisualActor = GetReplayVisualActor();
+	if (!IsValid(VisualActor))
+	{
+		return nullptr;
+	}
+
+	TArray<USceneComponent*> SceneComponents;
+	const FString TargetComponentName = ComponentName.ToString();
+	VisualActor->GetComponents<USceneComponent>(SceneComponents);
+	for (USceneComponent* SceneComponent : SceneComponents)
+	{
+		if (!IsValid(SceneComponent))
+		{
+			continue;
+		}
+
+		const FString SceneComponentName = SceneComponent->GetName();
+		if (SceneComponent->GetFName() == ComponentName
+			|| SceneComponentName.StartsWith(TargetComponentName + TEXT("_"), ESearchCase::IgnoreCase))
+		{
+			return SceneComponent;
+		}
+	}
+
+	return nullptr;
 }

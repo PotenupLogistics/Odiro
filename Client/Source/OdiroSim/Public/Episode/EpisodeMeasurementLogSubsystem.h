@@ -140,6 +140,9 @@ private:
 	FEpisodeReplayRobotFrame BuildReplayFrame(
 		const FEpisodeMeasurementLogTickRecord& TickRecord,
 		ADeliveryBot* RobotActor) const;
+	void CaptureReplayWheelFrames(
+		const ADeliveryBot* RobotActor,
+		FEpisodeReplayRobotFrame& ReplayFrame) const;
 	FEpisodeMeasurementLogHeaderRecord BuildHeaderRecord(double WorldTimeSeconds) const;
 	ADeliveryBot* FindRobotActor() const;
 	void CaptureMovingActors(FEpisodeMeasurementLogTickRecord& TickRecord, AActor* RobotActor);

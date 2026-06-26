@@ -1091,6 +1091,7 @@ bool AScenarioEditorController::SelectPlaceableByInstanceId(const FString& insta
 	if (UScenarioPlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
 		IsEditorSelectablePlaceable(selectedPlaceable) && selectedPlaceable->InstanceId == instanceId)
 	{
+		UpdatePlaceableDetailsForSelection();
 		return true;
 	}
 
@@ -1104,13 +1105,9 @@ bool AScenarioEditorController::SelectPlaceableByInstanceId(const FString& insta
 	return true;
 }
 
-void AScenarioEditorController::ClearSelectedPlaceable()
+void AScenarioEditorController::ClearSelectedPlaceable(const bool bResetTemplateSidebarPanel)
 {
-	SetSelectedPlaceable(nullptr);
-	if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
-	{
-		rootWidget->SetTemplateSidebarPanel(EScenarioTemplateSidebarPanel::Main);
-	}
+	SetSelectedPlaceable(nullptr, bResetTemplateSidebarPanel);
 }
 
 void AScenarioEditorController::SetTransformGizmoOrientationMode(
@@ -2683,7 +2680,9 @@ void AScenarioEditorController::SetHoveredPlaceable(UScenarioPlaceableComponent*
 	}
 }
 
-void AScenarioEditorController::SetSelectedPlaceable(UScenarioPlaceableComponent* placeableComponent)
+void AScenarioEditorController::SetSelectedPlaceable(
+	UScenarioPlaceableComponent* placeableComponent,
+	const bool bResetTemplateSidebarPanel)
 {
 	if (SelectedPlaceableComponent.Get() == placeableComponent)
 	{
@@ -2704,7 +2703,7 @@ void AScenarioEditorController::SetSelectedPlaceable(UScenarioPlaceableComponent
 	UpdateTransformGizmoForSelection();
 	UpdatePlaceableDetailsForSelection();
 	SelectedPlaceableChanged.Broadcast(placeableComponent ? placeableComponent->InstanceId : FString());
-	if (!placeableComponent)
+	if (!placeableComponent && bResetTemplateSidebarPanel)
 	{
 		if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
 		{

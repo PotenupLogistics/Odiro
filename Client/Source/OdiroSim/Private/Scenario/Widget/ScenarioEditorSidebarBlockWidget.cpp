@@ -326,7 +326,7 @@ bool UScenarioEditorSidebarBlockWidget::ShouldBroadcastSelectionForPointer(
 			&& childWidget->IsVisible()
 			&& childWidget->GetCachedGeometry().IsUnderLocation(mouseEvent.GetScreenSpacePosition()))
 		{
-			return false;
+			return childWidget->IsA<UScenarioEditorSidebarFieldRow>();
 		}
 	}
 

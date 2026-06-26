@@ -23,6 +23,9 @@ namespace
 	// Extra padding applied when the shell auto-scrolls a selected block into view.
 	constexpr float SelectedBlockScrollPadding = 12.0f;
 
+	// Maximum deferred attempts for selection scroll after panel rebuild or block expansion.
+	constexpr int32 SelectedBlockScrollMaxAttempts = 5;
+
 	// Stable authoring proxy instance id used for the robot start marker.
 	const FString RobotStartMarkerInstanceId(TEXT("robot_start_point"));
 
@@ -103,10 +106,12 @@ void UScenarioEditorSidebarWidget::NativeConstruct()
 	ConfigureChildPanelDependencies();
 	CollapseLegacySummaryWidgets();
 	RefreshFromDraft();
+	RequestEditorWidgetInputMode();
 }
 
 void UScenarioEditorSidebarWidget::NativeDestruct()
 {
+	ReleaseEditorWidgetInputMode();
 	UnbindAllPanelBlockSelection();
 	Super::NativeDestruct();
 }
@@ -436,6 +441,22 @@ void UScenarioEditorSidebarWidget::SetTextBlockText(UTextBlock* textBlock, const
 	}
 }
 
+void UScenarioEditorSidebarWidget::RequestEditorWidgetInputMode()
+{
+	if (UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this))
+	{
+		uiSubsystem->RequestEditorWidgetInputMode(this);
+	}
+}
+
+void UScenarioEditorSidebarWidget::ReleaseEditorWidgetInputMode()
+{
+	if (UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this))
+	{
+		uiSubsystem->ReleaseEditorWidgetInputMode(this);
+	}
+}
+
 void UScenarioEditorSidebarWidget::ConfigureChildPanelDependencies() const
 {
 	if (MainPanelWidget)
@@ -574,6 +595,15 @@ void UScenarioEditorSidebarWidget::ApplyActivePanelSelectionState()
 
 void UScenarioEditorSidebarWidget::RequestScrollSelectedBlockIntoView()
 {
+	RequestScrollSelectedBlockIntoView(SelectedBlockScrollMaxAttempts);
+}
+
+void UScenarioEditorSidebarWidget::RequestScrollSelectedBlockIntoView(const int32 attemptsRemaining)
+{
+	SelectedBlockScrollAttemptsRemaining = FMath::Max(
+		SelectedBlockScrollAttemptsRemaining,
+		FMath::Max(0, attemptsRemaining));
+
 	if (bSelectedBlockScrollPending)
 	{
 		return;
@@ -582,7 +612,9 @@ void UScenarioEditorSidebarWidget::RequestScrollSelectedBlockIntoView()
 	UWorld* world = GetWorld();
 	if (!world)
 	{
-		ScrollSelectedBlockIntoView();
+		const int32 attemptsForThisScroll = SelectedBlockScrollAttemptsRemaining;
+		SelectedBlockScrollAttemptsRemaining = 0;
+		ScrollSelectedBlockIntoView(attemptsForThisScroll);
 		return;
 	}
 
@@ -593,11 +625,13 @@ void UScenarioEditorSidebarWidget::RequestScrollSelectedBlockIntoView()
 			[this]
 			{
 				bSelectedBlockScrollPending = false;
-				ScrollSelectedBlockIntoView();
+				const int32 attemptsForThisScroll = SelectedBlockScrollAttemptsRemaining;
+				SelectedBlockScrollAttemptsRemaining = 0;
+				ScrollSelectedBlockIntoView(attemptsForThisScroll);
 			}));
 }
 
-void UScenarioEditorSidebarWidget::ScrollSelectedBlockIntoView()
+void UScenarioEditorSidebarWidget::ScrollSelectedBlockIntoView(const int32 attemptsRemaining)
 {
 	if (!SidebarScrollBox)
 	{
@@ -615,13 +649,19 @@ void UScenarioEditorSidebarWidget::ScrollSelectedBlockIntoView()
 	UScenarioEditorSidebarBlockWidget* blockWidget = FindActivePanelBlockWidgetByPath(selectedBlockPath);
 	if (!blockWidget)
 	{
+		if (attemptsRemaining > 0)
+		{
+			RequestScrollSelectedBlockIntoView(attemptsRemaining - 1);
+		}
 		return;
 	}
 
+	SidebarScrollBox->InvalidateLayoutAndVolatility();
+	blockWidget->InvalidateLayoutAndVolatility();
 	SidebarScrollBox->ScrollWidgetIntoView(
 		blockWidget,
 		true,
-		EDescendantScrollDestination::IntoView,
+		EDescendantScrollDestination::TopOrLeft,
 		SelectedBlockScrollPadding);
 }
 

@@ -293,9 +293,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Selection")
 	bool SelectPlaceableByInstanceId(const FString& instanceId);
 
-	// Clears viewport placeable selection and hides placeable details.
+	// Clears viewport placeable selection and optionally returns the sidebar to the default panel.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Selection")
-	void ClearSelectedPlaceable();
+	void ClearSelectedPlaceable(bool bResetTemplateSidebarPanel = true);
 
 	// Returns the native selection change delegate for root/sidebar synchronization.
 	FScenarioSelectedPlaceableChanged& OnSelectedPlaceableChanged() { return SelectedPlaceableChanged; }
@@ -368,7 +368,9 @@ private:
 		UScenarioAuthoringSubsystem* authoringSubsystem);
 	bool IsCursorOverEditorWidgetInputModeFocus() const;
 	void SetHoveredPlaceable(UScenarioPlaceableComponent* placeableComponent);
-	void SetSelectedPlaceable(UScenarioPlaceableComponent* placeableComponent);
+	void SetSelectedPlaceable(
+		UScenarioPlaceableComponent* placeableComponent,
+		bool bResetTemplateSidebarPanel = true);
 	void ApplyAuthoringOutlinePostProcessMaterial(const UScenarioPlaceableComponent* placeableComponent);
 	void EnsureAuthoringOutlineCustomDepthEnabled() const;
 	void AddEditorInputMappingContext();

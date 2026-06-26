@@ -132,6 +132,9 @@ private:
 	// True while a selected-block scroll request has already been deferred to the next tick.
 	bool bSelectedBlockScrollPending = false;
 
+	// Remaining deferred attempts used while panel rows and expanded block layouts settle.
+	int32 SelectedBlockScrollAttemptsRemaining = 0;
+
 	// Refreshes the active typed panel widget.
 	bool RefreshActivePanelContent(const FScenarioDocument& scenarioTemplate);
 	// Creates or returns the typed widget for one sidebar panel.
@@ -152,6 +155,10 @@ private:
 	void CollapseLegacySummaryWidgets() const;
 	// Applies text to a bound text block when it exists.
 	void SetTextBlockText(UTextBlock* textBlock, const FString& text) const;
+	// Registers this sidebar as an editor UI region so viewport selection ignores sidebar clicks.
+	void RequestEditorWidgetInputMode();
+	// Releases this sidebar from editor UI-region tracking before teardown.
+	void ReleaseEditorWidgetInputMode();
 	// Pushes non-visual dependencies to typed child panel widgets.
 	void ConfigureChildPanelDependencies() const;
 	// Returns the display title for one template sidebar panel.
@@ -164,8 +171,10 @@ private:
 	void ApplyActivePanelSelectionState();
 	// Defers selected block scrolling until refreshed panel layout is available.
 	void RequestScrollSelectedBlockIntoView();
+	// Defers selected block scrolling with a bounded retry count for dynamic panel rebuilds.
+	void RequestScrollSelectedBlockIntoView(int32 attemptsRemaining);
 	// Scrolls the current ViewModel-selected block into the sidebar viewport.
-	void ScrollSelectedBlockIntoView();
+	void ScrollSelectedBlockIntoView(int32 attemptsRemaining);
 	// Finds a block widget in the active panel by stable block path.
 	UScenarioEditorSidebarBlockWidget* FindActivePanelBlockWidgetByPath(const FString& blockPath) const;
 	// Appends every selectable block widget owned by one panel.

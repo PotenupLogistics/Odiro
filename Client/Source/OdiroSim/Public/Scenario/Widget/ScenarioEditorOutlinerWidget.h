@@ -88,8 +88,11 @@ private:
 	void CollectPlaceableItems(TArray<FScenarioOutlinerItemViewModel>& outPlaceableItems);
 	// Rebuilds the placeable registry from the current world after structural editor changes.
 	void RebuildPlaceableRegistry();
-	// Removes invalid or no-longer-selectable components from the cached placeable registry.
+	// Removes invalid or legacy-hidden components while keeping transiently unselectable rows recoverable.
 	void CompactPlaceableRegistry();
+	// Registers newly spawned placeable components after authoring preview actors are refreshed.
+	void SyncPlaceableRegistryFromWorld();
+	// Seeds default expanded group keys for the template hierarchy.
 	void AddDefaultExpandedKeys();
 	static FScenarioOutlinerItemViewModel MakeTemplateItem(
 		const FString& itemKey,
@@ -115,7 +118,7 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UScenarioEditorOutlinerRowWidget>> RowWidgets;
 
-	// Cached authoring placeables; refreshed only when structural editor changes invalidate it.
+	// Cached authoring placeables; row visibility is filtered separately from registry lifetime.
 	UPROPERTY(Transient)
 	TArray<TWeakObjectPtr<UScenarioPlaceableComponent>> PlaceableComponentRegistry;
 

@@ -93,7 +93,7 @@ void UScenarioEditorShellViewModel::SelectTemplateBlock(
 	if (AScenarioEditorController* controller = UiSubsystem ? UiSubsystem->ResolveEditorController() : nullptr;
 		controller && controller->GetSelectedPlaceableComponent())
 	{
-		controller->ClearSelectedPlaceable();
+		controller->ClearSelectedPlaceable(false);
 	}
 }
 

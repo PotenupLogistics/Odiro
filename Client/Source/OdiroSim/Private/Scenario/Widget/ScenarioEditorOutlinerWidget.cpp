@@ -57,6 +57,11 @@ namespace
 			&& !IsHiddenLegacyGroundRegionPlaceable(placeableComponent);
 	}
 
+	bool ShouldTrackPlaceableInOutlinerRegistry(const UScenarioPlaceableComponent* placeableComponent)
+	{
+		return placeableComponent && !IsHiddenLegacyGroundRegionPlaceable(placeableComponent);
+	}
+
 	FString ActorCategoryToText(const EScenarioActorCategory category)
 	{
 		switch (category)
@@ -312,15 +317,13 @@ void UScenarioEditorOutlinerWidget::BuildOutlinerItems(
 void UScenarioEditorOutlinerWidget::HandleRowSelected(FScenarioOutlinerItemViewModel item)
 {
 	const FString resolvedItemKey = item.ItemKey.IsEmpty() ? ScenarioKey : item.ItemKey;
-	if (SelectedItemKey == resolvedItemKey)
+	if (SelectedItemKey != resolvedItemKey)
 	{
-		return;
-	}
-
-	SetSelectedItemKey(item.ItemKey);
-	if (UScenarioEditorOutlinerViewModel* outlinerViewModel = GetOutlinerViewModel())
-	{
-		outlinerViewModel->SetSelectedItemKey(item.ItemKey);
+		SetSelectedItemKey(item.ItemKey);
+		if (UScenarioEditorOutlinerViewModel* outlinerViewModel = GetOutlinerViewModel())
+		{
+			outlinerViewModel->SetSelectedItemKey(item.ItemKey);
+		}
 	}
 	OnItemSelected.Broadcast(item);
 }
@@ -483,6 +486,7 @@ void UScenarioEditorOutlinerWidget::CollectPlaceableItems(
 	else
 	{
 		CompactPlaceableRegistry();
+		SyncPlaceableRegistryFromWorld();
 	}
 
 	for (const TWeakObjectPtr<UScenarioPlaceableComponent>& placeableComponentPtr : PlaceableComponentRegistry)
@@ -530,7 +534,7 @@ void UScenarioEditorOutlinerWidget::RebuildPlaceableRegistry()
 		const AActor* actor = *actorIt;
 		UScenarioPlaceableComponent* placeableComponent =
 			actor ? actor->FindComponentByClass<UScenarioPlaceableComponent>() : nullptr;
-		if (ShouldShowPlaceableInOutliner(placeableComponent))
+		if (ShouldTrackPlaceableInOutlinerRegistry(placeableComponent))
 		{
 			PlaceableComponentRegistry.Add(placeableComponent);
 		}
@@ -543,8 +547,39 @@ void UScenarioEditorOutlinerWidget::CompactPlaceableRegistry()
 {
 	PlaceableComponentRegistry.RemoveAllSwap([](const TWeakObjectPtr<UScenarioPlaceableComponent>& placeableComponentPtr)
 	{
-		return !ShouldShowPlaceableInOutliner(placeableComponentPtr.Get());
+		return !ShouldTrackPlaceableInOutlinerRegistry(placeableComponentPtr.Get());
 	});
+}
+
+void UScenarioEditorOutlinerWidget::SyncPlaceableRegistryFromWorld()
+{
+	UWorld* world = GetWorld();
+	if (!world)
+	{
+		return;
+	}
+
+	TSet<const UScenarioPlaceableComponent*> registeredComponents;
+	for (const TWeakObjectPtr<UScenarioPlaceableComponent>& placeableComponentPtr : PlaceableComponentRegistry)
+	{
+		if (const UScenarioPlaceableComponent* placeableComponent = placeableComponentPtr.Get())
+		{
+			registeredComponents.Add(placeableComponent);
+		}
+	}
+
+	for (TActorIterator<AActor> actorIt(world); actorIt; ++actorIt)
+	{
+		const AActor* actor = *actorIt;
+		UScenarioPlaceableComponent* placeableComponent =
+			actor ? actor->FindComponentByClass<UScenarioPlaceableComponent>() : nullptr;
+		if (ShouldTrackPlaceableInOutlinerRegistry(placeableComponent)
+			&& !registeredComponents.Contains(placeableComponent))
+		{
+			PlaceableComponentRegistry.Add(placeableComponent);
+			registeredComponents.Add(placeableComponent);
+		}
+	}
 }
 
 void UScenarioEditorOutlinerWidget::AddDefaultExpandedKeys()

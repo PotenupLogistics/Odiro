@@ -207,6 +207,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void RefreshScenarioInspector();
 
+	// Refreshes after structural placeable changes that require an outliner registry rescan.
+	void RefreshScenarioInspectorWithOutlinerRegistryRebuild();
+
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Root")
 	void HandleEditorSessionStarted(bool bLoadedExistingScenario);
 
@@ -277,6 +280,8 @@ private:
 	UWidget* ResolveAssetPaletteVisibilityTarget() const;
 	UWidget* ResolveLlmPanelVisibilityTarget() const;
 	UWidget* ResolveDetailInspectorVisibilityTarget() const;
+	// Refreshes sidebar/outliner while optionally invalidating the outliner placeable registry.
+	void RefreshScenarioInspectorInternal(bool bRebuildOutlinerPlaceableRegistry);
 	void SetSaveStatusText(const FString& message) const;
 	void SyncOutlinerSelectionToPlaceable(const UScenarioPlaceableComponent* selectedPlaceable) const;
 	void HandleControllerSelectedPlaceableChanged(const FString& selectedInstanceId);

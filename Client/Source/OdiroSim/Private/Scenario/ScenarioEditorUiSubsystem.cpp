@@ -211,7 +211,7 @@ void UScenarioEditorUiSubsystem::RefreshEditorRootInspector()
 	{
 		if (UScenarioEditorRootWidget* rootWidget = editorController->GetEditorRootWidget())
 		{
-			rootWidget->RefreshScenarioInspector();
+			rootWidget->RefreshScenarioInspectorWithOutlinerRegistryRebuild();
 		}
 	}
 }

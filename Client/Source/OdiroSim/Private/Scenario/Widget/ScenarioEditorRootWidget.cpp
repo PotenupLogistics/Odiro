@@ -458,9 +458,23 @@ void UScenarioEditorRootWidget::RefreshTemplateSidebarWidget()
 
 void UScenarioEditorRootWidget::RefreshScenarioInspector()
 {
+	RefreshScenarioInspectorInternal(false);
+}
+
+void UScenarioEditorRootWidget::RefreshScenarioInspectorWithOutlinerRegistryRebuild()
+{
+	RefreshScenarioInspectorInternal(true);
+}
+
+void UScenarioEditorRootWidget::RefreshScenarioInspectorInternal(const bool bRebuildOutlinerPlaceableRegistry)
+{
 	RefreshTemplateSidebarWidget();
 	if (ScenarioEditorOutlinerWidget)
 	{
+		if (bRebuildOutlinerPlaceableRegistry)
+		{
+			ScenarioEditorOutlinerWidget->InvalidatePlaceableRegistry();
+		}
 		ScenarioEditorOutlinerWidget->RefreshFromEditorState();
 	}
 }

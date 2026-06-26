@@ -158,7 +158,9 @@ private:
 	// Resolves the ViewModel that forwards draft template commands.
 	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
 	// Runs a ViewModel command, refreshes the panel, and mirrors command status text.
-	void ExecuteTemplateCommand(TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command);
+	void ExecuteTemplateCommand(
+		TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command,
+		bool bRefreshInspectorOnSuccess = false);
 	// Applies diagnostics to the optional diagnostics text block.
 	void SetDiagnosticsText(const FString& text) const;
 };

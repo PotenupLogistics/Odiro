@@ -77,6 +77,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
 	void RefreshFromEditorState();
 
+	// Refreshes the visible editor root after a draft mutation changes object rows.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|UI")
+	void RefreshEditorRootInspector();
+
 	// 현재 draft scenario를 저장하고 resolve된 파일 경로를 반환한다.
 	bool SaveScenario(const FString& defaultSavePath, FString& outResolvedPath, TArray<FString>& outDiagnostics) const;
 

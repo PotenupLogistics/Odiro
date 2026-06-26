@@ -168,7 +168,7 @@ void UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountAddRequested()
 	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->AddObstaclePlacementAfter(INDEX_NONE, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountRemoveRequested()
@@ -176,7 +176,7 @@ void UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountRemoveRequested()
 	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->RemoveObstaclePlacementAt(INDEX_NONE, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandlePlacementFieldTextCommitted(
@@ -230,7 +230,7 @@ void UScenarioEditorSidebarObstaclePanel::HandlePlacementAddRequested(const int3
 	ExecuteTemplateCommand([placementIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->AddObstaclePlacementAfter(placementIndex, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandlePlacementRemoveRequested(const int32 placementIndex)
@@ -238,7 +238,7 @@ void UScenarioEditorSidebarObstaclePanel::HandlePlacementRemoveRequested(const i
 	ExecuteTemplateCommand([placementIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->RemoveObstaclePlacementAt(placementIndex, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemTextCommitted(
@@ -637,9 +637,13 @@ UScenarioTemplateSidebarViewModel* UScenarioEditorSidebarObstaclePanel::GetTempl
 }
 
 void UScenarioEditorSidebarObstaclePanel::ExecuteTemplateCommand(
-	TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command)
+	TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command,
+	const bool bRefreshInspectorOnSuccess)
 {
-	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = uiSubsystem
+		? uiSubsystem->GetTemplateSidebarViewModel()
+		: nullptr;
 	if (!templateSidebarViewModel)
 	{
 		SetDiagnosticsText(TEXT("ScenarioTemplateSidebarViewModel unavailable."));
@@ -647,8 +651,15 @@ void UScenarioEditorSidebarObstaclePanel::ExecuteTemplateCommand(
 	}
 
 	FString statusText;
-	command(templateSidebarViewModel, statusText);
-	RefreshFromDraft();
+	const bool bCommandSucceeded = command(templateSidebarViewModel, statusText);
+	if (bCommandSucceeded && bRefreshInspectorOnSuccess && uiSubsystem)
+	{
+		uiSubsystem->RefreshEditorRootInspector();
+	}
+	else
+	{
+		RefreshFromDraft();
+	}
 	SetDiagnosticsText(statusText);
 }
 

@@ -347,7 +347,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleAxisPointAddRequested(const int3
 	ExecuteTemplateCommand([pointIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->AddCorridorAxisPointAfter(pointIndex, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleAxisPointRemoveRequested(const int32 pointIndex)
@@ -355,7 +355,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleAxisPointRemoveRequested(const i
 	ExecuteTemplateCommand([pointIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->RemoveCorridorAxisPointAt(pointIndex, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested()
@@ -363,7 +363,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested()
 	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->AddCorridorAxisPointAfter(INDEX_NONE, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountRemoveRequested()
@@ -371,7 +371,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountRemoveRequested()
 	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->RemoveCorridorAxisPointAt(INDEX_NONE, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleSegmentIdCommitted(
@@ -453,7 +453,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleSegmentAddRequested(const int32 
 	ExecuteTemplateCommand([segmentIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->AddCorridorSegmentAfter(segmentIndex, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleSegmentRemoveRequested(const int32 segmentIndex)
@@ -461,7 +461,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleSegmentRemoveRequested(const int
 	ExecuteTemplateCommand([segmentIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->RemoveCorridorSegmentAt(segmentIndex, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested()
@@ -469,7 +469,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested()
 	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->AddCorridorSegmentAfter(INDEX_NONE, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountRemoveRequested()
@@ -477,7 +477,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountRemoveRequested()
 	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->RemoveCorridorSegmentAt(INDEX_NONE, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::BindFieldRows()
@@ -1279,9 +1279,13 @@ TArray<FString> UScenarioEditorSidebarCorridorPanel::GetCorridorSurfaceIdOptions
 }
 
 void UScenarioEditorSidebarCorridorPanel::ExecuteTemplateCommand(
-	TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command)
+	TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command,
+	const bool bRefreshInspectorOnSuccess)
 {
-	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = uiSubsystem
+		? uiSubsystem->GetTemplateSidebarViewModel()
+		: nullptr;
 	if (!templateSidebarViewModel)
 	{
 		SetDiagnosticsText(TEXT("ScenarioTemplateSidebarViewModel unavailable."));
@@ -1289,8 +1293,15 @@ void UScenarioEditorSidebarCorridorPanel::ExecuteTemplateCommand(
 	}
 
 	FString statusText;
-	command(templateSidebarViewModel, statusText);
-	RefreshFromDraft();
+	const bool bCommandSucceeded = command(templateSidebarViewModel, statusText);
+	if (bCommandSucceeded && bRefreshInspectorOnSuccess && uiSubsystem)
+	{
+		uiSubsystem->RefreshEditorRootInspector();
+	}
+	else
+	{
+		RefreshFromDraft();
+	}
 	SetDiagnosticsText(statusText);
 }
 

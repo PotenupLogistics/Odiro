@@ -167,6 +167,8 @@ private:
 	void ApplyTextStyles();
 	// Applies current Obstacle field row ViewModels to bound row widgets.
 	void ApplyObstacleFieldItems();
+	// Shows only the selected placement block when focus targets one static obstacle.
+	void ApplyFocusedPlacementDetailLayout(const FString& selectedBlockPath);
 	// Rebuilds editable placement widgets for obstacle placement rules.
 	void RefreshPlacementRows(const TArray<FScenarioTemplateObstaclePlacement>& placements);
 	// Adds one field row to a dynamic block body.

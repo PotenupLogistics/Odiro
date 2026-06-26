@@ -91,6 +91,17 @@ bool FScenarioEditorSidebarViewModelTest::RunTest(const FString& Parameters)
 	UScenarioTemplateSidebarViewModel* viewModel = NewObject<UScenarioTemplateSidebarViewModel>();
 	TestNotNull(TEXT("Sidebar ViewModel is created"), viewModel);
 
+	const auto ContainsVisibleField = [](
+		const TArray<UScenarioTemplateFieldRowViewModel*>& items,
+		const FString& fieldId)
+	{
+		return items.ContainsByPredicate(
+			[&fieldId](const UScenarioTemplateFieldRowViewModel* item)
+			{
+				return item && item->GetItemId() == fieldId;
+			});
+	};
+
 	viewModel->RefreshDefaultFields();
 	viewModel->SelectPanel(EScenarioTemplateSidebarPanel::Pedestrian);
 
@@ -156,20 +167,11 @@ bool FScenarioEditorSidebarViewModelTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Corridor walkway width enables range input"), walkwayWidthItem && walkwayWidthItem->IsRangeInputEnabled());
 	TestEqual(TEXT("Corridor walkway width min is formatted"), walkwayWidthItem ? walkwayWidthItem->GetMinValueText() : FString(), FString(TEXT("1.20")));
 
-	UScenarioTemplateFieldRowViewModel* buildingCountItem = viewModel->FindCorridorFieldItem(TEXT("BuildingSideCount"));
-	TestNotNull(TEXT("Corridor building side count field item exists"), buildingCountItem);
-	TestEqual(TEXT("Corridor building side count is formatted"), buildingCountItem ? buildingCountItem->GetValueText() : FString(), FString(TEXT("1")));
-	TestEqual(
-		TEXT("Corridor building side count uses object array input"),
-		buildingCountItem ? buildingCountItem->GetInputType() : EScenarioEditorSidebarFieldInputType::Text,
-		EScenarioEditorSidebarFieldInputType::ObjectArray);
-	TestFalse(TEXT("Corridor building side count hides row array controls"), buildingCountItem && buildingCountItem->HasArrayControls());
-	UScenarioTemplateFieldRowViewModel* curbCountItem = viewModel->FindCorridorFieldItem(TEXT("CurbSideCount"));
-	TestNotNull(TEXT("Corridor curb side count field item exists"), curbCountItem);
-	TestFalse(TEXT("Corridor curb side count hides row array controls"), curbCountItem && curbCountItem->HasArrayControls());
-	UScenarioTemplateFieldRowViewModel* axisPointsCountItem = viewModel->FindCorridorFieldItem(TEXT("AxisPointsCount"));
-	TestNotNull(TEXT("Corridor axis point count field item exists"), axisPointsCountItem);
-	TestFalse(TEXT("Corridor axis point count hides row array controls"), axisPointsCountItem && axisPointsCountItem->HasArrayControls());
+	const TArray<UScenarioTemplateFieldRowViewModel*> visibleCorridorItems = viewModel->GetCorridorFieldItems();
+	TestFalse(TEXT("Corridor building side count field is hidden from editor rows"), ContainsVisibleField(visibleCorridorItems, TEXT("BuildingSideCount")));
+	TestFalse(TEXT("Corridor curb side count field is hidden from editor rows"), ContainsVisibleField(visibleCorridorItems, TEXT("CurbSideCount")));
+	TestFalse(TEXT("Corridor axis point count field is hidden from editor rows"), ContainsVisibleField(visibleCorridorItems, TEXT("AxisPointsCount")));
+	TestFalse(TEXT("Corridor segment count field is hidden from editor rows"), ContainsVisibleField(visibleCorridorItems, TEXT("SegmentsCount")));
 
 	TArray<UScenarioTemplateFieldRowViewModel*> pointItems =
 		viewModel->CreateCorridorPointFieldItems(0, scenarioTemplate.Corridor.Axis.PointsMeters[0]);
@@ -216,23 +218,16 @@ bool FScenarioEditorSidebarViewModelTest::RunTest(const FString& Parameters)
 		UScenarioTemplateSidebarViewModel::MakeRangeTemplateNumberValue(0.5, 1.5);
 	viewModel->RefreshPedestrianFieldItemsFromTemplate(scenarioTemplate);
 
-	UScenarioTemplateFieldRowViewModel* countItem = viewModel->FindPedestrianFieldItem(TEXT("BackgroundCount"));
-	TestNotNull(TEXT("Pedestrian count field item exists"), countItem);
-	TestEqual(TEXT("Pedestrian count field uses range input"), countItem ? countItem->GetInputType() : EScenarioEditorSidebarFieldInputType::Text, EScenarioEditorSidebarFieldInputType::Range);
-	TestTrue(TEXT("Pedestrian count field enables range input"), countItem && countItem->IsRangeInputEnabled());
-	TestEqual(TEXT("Pedestrian count range min is formatted"), countItem ? countItem->GetMinValueText() : FString(), FString(TEXT("2")));
-	TestEqual(TEXT("Pedestrian count range max is formatted"), countItem ? countItem->GetMaxValueText() : FString(), FString(TEXT("4")));
+	const TArray<UScenarioTemplateFieldRowViewModel*> visiblePedestrianItems = viewModel->GetPedestrianFieldItems();
+	TestFalse(TEXT("Pedestrian background count field is hidden from editor rows"), ContainsVisibleField(visiblePedestrianItems, TEXT("BackgroundCount")));
+	TestFalse(TEXT("Pedestrian spawn segments field is hidden from editor rows"), ContainsVisibleField(visiblePedestrianItems, TEXT("SpawnSegments")));
+	TestFalse(TEXT("Pedestrian encounters count field is hidden from editor rows"), ContainsVisibleField(visiblePedestrianItems, TEXT("EncountersCount")));
 
-	UScenarioTemplateFieldRowViewModel* spawnSegmentsItem = viewModel->FindPedestrianFieldItem(TEXT("SpawnSegments"));
-	TestNotNull(TEXT("Pedestrian spawn segments field item exists"), spawnSegmentsItem);
-	TestEqual(TEXT("Pedestrian spawn segments join as display text"), spawnSegmentsItem ? spawnSegmentsItem->GetValueText() : FString(), FString(TEXT("north, south")));
-	TestEqual(
-		TEXT("Pedestrian spawn segments use string list input"),
-		spawnSegmentsItem ? spawnSegmentsItem->GetInputType() : EScenarioEditorSidebarFieldInputType::Text,
-		EScenarioEditorSidebarFieldInputType::StringList);
-	UScenarioTemplateFieldRowViewModel* encountersCountItem = viewModel->FindPedestrianFieldItem(TEXT("EncountersCount"));
-	TestNotNull(TEXT("Pedestrian encounters count field item exists"), encountersCountItem);
-	TestFalse(TEXT("Pedestrian encounters count hides row array controls"), encountersCountItem && encountersCountItem->HasArrayControls());
+	UScenarioTemplateFieldRowViewModel* speedItem = viewModel->FindPedestrianFieldItem(TEXT("BackgroundSpeed"));
+	TestNotNull(TEXT("Pedestrian speed field item exists"), speedItem);
+	TestEqual(TEXT("Pedestrian speed field uses range input"), speedItem ? speedItem->GetInputType() : EScenarioEditorSidebarFieldInputType::Text, EScenarioEditorSidebarFieldInputType::Range);
+	TestFalse(TEXT("Pedestrian speed field disables range input for fixed values"), speedItem && speedItem->IsRangeInputEnabled());
+	TestEqual(TEXT("Pedestrian speed fixed value is formatted"), speedItem ? speedItem->GetValueText() : FString(), FString(TEXT("1.25")));
 
 	TArray<UScenarioTemplateFieldRowViewModel*> encounterItems =
 		viewModel->CreatePedestrianEncounterFieldItems(0, scenarioTemplate.Pedestrians.Encounters[0]);
@@ -271,13 +266,8 @@ bool FScenarioEditorSidebarViewModelTest::RunTest(const FString& Parameters)
 	UScenarioTemplateFieldRowViewModel* minClearWidthItem = viewModel->FindObstacleFieldItem(TEXT("MinClearWidth"));
 	TestNotNull(TEXT("Obstacle min clear width field item exists"), minClearWidthItem);
 	TestEqual(TEXT("Obstacle min clear width min is formatted"), minClearWidthItem ? minClearWidthItem->GetMinValueText() : FString(), FString(TEXT("0.80")));
-	UScenarioTemplateFieldRowViewModel* placementsCountItem = viewModel->FindObstacleFieldItem(TEXT("PlacementsCount"));
-	TestNotNull(TEXT("Obstacle placements count field item exists"), placementsCountItem);
-	TestEqual(
-		TEXT("Obstacle placements count uses object array input"),
-		placementsCountItem ? placementsCountItem->GetInputType() : EScenarioEditorSidebarFieldInputType::Text,
-		EScenarioEditorSidebarFieldInputType::ObjectArray);
-	TestFalse(TEXT("Obstacle placements count hides row array controls"), placementsCountItem && placementsCountItem->HasArrayControls());
+	const TArray<UScenarioTemplateFieldRowViewModel*> visibleObstacleItems = viewModel->GetObstacleFieldItems();
+	TestFalse(TEXT("Obstacle placements count field is hidden from editor rows"), ContainsVisibleField(visibleObstacleItems, TEXT("PlacementsCount")));
 
 	TArray<UScenarioTemplateFieldRowViewModel*> placementItems =
 		viewModel->CreateObstaclePlacementFieldItems(0, scatterPlacement);

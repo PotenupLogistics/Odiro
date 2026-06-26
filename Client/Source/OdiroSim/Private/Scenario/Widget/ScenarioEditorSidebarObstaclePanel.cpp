@@ -15,6 +15,15 @@
 
 namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 
+namespace
+{
+	// Returns true for concrete static obstacle placement detail blocks.
+	bool IsObstaclePlacementItemBlockPath(const FString& blockPath)
+	{
+		return blockPath.StartsWith(TEXT("root.obstacles.placements["));
+	}
+}
+
 void UScenarioEditorSidebarObstaclePanel::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -507,6 +516,68 @@ void UScenarioEditorSidebarObstaclePanel::ApplySelectedBlockPath()
 			SidebarWidgetHelpers::ApplySelectedBlockPath(
 				placementWidget->PlacementBlockWidget.Get(),
 				selectedBlockPath);
+		}
+	}
+	ApplyFocusedPlacementDetailLayout(selectedBlockPath);
+}
+
+void UScenarioEditorSidebarObstaclePanel::ApplyFocusedPlacementDetailLayout(
+	const FString& selectedBlockPath)
+{
+	const bool bFocusPlacementDetail = IsObstaclePlacementItemBlockPath(selectedBlockPath);
+
+	if (ObstacleBlockWidget)
+	{
+		ObstacleBlockWidget->SetVisibility(ESlateVisibility::Visible);
+		ObstacleBlockWidget->SetDetailHostLayout(bFocusPlacementDetail);
+		if (bFocusPlacementDetail)
+		{
+			ObstacleBlockWidget->SetExpanded(true);
+		}
+	}
+	if (MinClearWidthBlockWidget)
+	{
+		MinClearWidthBlockWidget->SetVisibility(bFocusPlacementDetail ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	}
+	if (PlacementsBlockWidget)
+	{
+		PlacementsBlockWidget->SetVisibility(ESlateVisibility::Visible);
+		PlacementsBlockWidget->SetDetailHostLayout(bFocusPlacementDetail);
+		if (bFocusPlacementDetail)
+		{
+			PlacementsBlockWidget->SetExpanded(true);
+		}
+	}
+	if (PlacementsCountFieldRow)
+	{
+		if (bFocusPlacementDetail)
+		{
+			PlacementsCountFieldRow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+		{
+			PlacementsCountFieldRow->InitializeFromItemViewModel(
+				templateSidebarViewModel->FindObstacleFieldItem(TEXT("PlacementsCount")));
+		}
+	}
+
+	for (UScenarioEditorSidebarObstaclePlacementWidget* placementWidget : PlacementWidgets)
+	{
+		if (!placementWidget || !placementWidget->PlacementBlockWidget)
+		{
+			continue;
+		}
+
+		const bool bSelectedPlacement =
+			placementWidget->PlacementBlockWidget->BlockPath == selectedBlockPath;
+		placementWidget->SetVisibility(!bFocusPlacementDetail || bSelectedPlacement
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		placementWidget->PlacementBlockWidget->SetFocusedDetailLayout(
+			bFocusPlacementDetail && bSelectedPlacement);
+		if (bFocusPlacementDetail && bSelectedPlacement)
+		{
+			placementWidget->PlacementBlockWidget->SetExpanded(true);
 		}
 	}
 }

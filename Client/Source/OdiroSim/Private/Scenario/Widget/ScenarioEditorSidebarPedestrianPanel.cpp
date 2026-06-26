@@ -458,6 +458,10 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshSpawnSegmentRows(
 	{
 		return;
 	}
+	if (SpawnSegmentsFieldRow->GetVisibility() == ESlateVisibility::Collapsed)
+	{
+		return;
+	}
 
 	TArray<FString> segmentOptions;
 	segmentOptions.Reserve(corridorSegments.Num());

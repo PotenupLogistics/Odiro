@@ -65,6 +65,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	bool bNested = false;
 
+	// Whether this block should render as a focused detail root without hierarchy indentation.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bFocusedDetailLayout = false;
+
+	// Whether this block should render only its body as an invisible detail host.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bDetailHostLayout = false;
+
 	// Whether the header exposes an add action for this block's collection.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	bool bAddActionVisible = false;
@@ -148,6 +156,14 @@ public:
 	// Updates nested state and background treatment.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetNested(bool bInNested);
+
+	// Updates focused detail layout state and removes hierarchy indentation while active.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetFocusedDetailLayout(bool bInFocusedDetailLayout);
+
+	// Updates detail host layout state for wrapper blocks that should not be visually exposed.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetDetailHostLayout(bool bInDetailHostLayout);
 
 	// Updates whether the header add action is visible.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")

@@ -46,6 +46,21 @@ namespace
 			|| fieldId == TEXT("EncountersCount");
 	}
 
+	// schema 구조를 설명하는 보조 필드는 detail row 목록에서 제외한다.
+	bool IsScenarioTemplateHiddenDetailField(const FString& fieldId)
+	{
+		return fieldId == TEXT("AxisType")
+			|| fieldId == TEXT("AxisPointsCount")
+			|| fieldId == TEXT("BuildingSideCount")
+			|| fieldId == TEXT("CurbSideCount")
+			|| fieldId == TEXT("SegmentsCount")
+			|| fieldId == TEXT("Placements")
+			|| fieldId == TEXT("PlacementsCount")
+			|| fieldId == TEXT("BackgroundCount")
+			|| fieldId == TEXT("SpawnSegments")
+			|| fieldId == TEXT("EncountersCount");
+	}
+
 	// 현재 fallback widget shape만으로 드러나지 않는 semantic field metadata를 적용한다.
 	FScenarioTemplateFieldSpec ResolveScenarioTemplateFieldSpec(
 		const FString& id,
@@ -61,7 +76,7 @@ namespace
 		fieldSpec.InputType = inputType;
 		fieldSpec.bEditable = bEditable;
 		fieldSpec.bArrayControlsEnabled = bArrayControlsEnabled;
-		fieldSpec.bVisible = bVisible;
+		fieldSpec.bVisible = bVisible && !IsScenarioTemplateHiddenDetailField(id);
 
 		if (IsScenarioTemplateStringListField(fieldSpec.Id))
 		{
@@ -3366,7 +3381,10 @@ TArray<UScenarioTemplateFieldRowViewModel*> UScenarioTemplateSidebarViewModel::C
 	result.Reserve(source.Num());
 	for (UScenarioTemplateFieldRowViewModel* item : source)
 	{
-		result.Add(item);
+		if (item && item->IsFieldVisible())
+		{
+			result.Add(item);
+		}
 	}
 	return result;
 }

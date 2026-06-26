@@ -221,6 +221,18 @@ void UScenarioEditorSidebarBlockWidget::SetNested(const bool bInNested)
 	RefreshBlock();
 }
 
+void UScenarioEditorSidebarBlockWidget::SetFocusedDetailLayout(const bool bInFocusedDetailLayout)
+{
+	bFocusedDetailLayout = bInFocusedDetailLayout;
+	RefreshBlock();
+}
+
+void UScenarioEditorSidebarBlockWidget::SetDetailHostLayout(const bool bInDetailHostLayout)
+{
+	bDetailHostLayout = bInDetailHostLayout;
+	RefreshBlock();
+}
+
 void UScenarioEditorSidebarBlockWidget::SetAddActionVisible(const bool bInAddActionVisible)
 {
 	bAddActionVisible = bInAddActionVisible;
@@ -460,26 +472,44 @@ void UScenarioEditorSidebarBlockWidget::SetActionButtonState(
 
 void UScenarioEditorSidebarBlockWidget::ApplyVisualStyle()
 {
-	const int32 blockDepth = ResolveSidebarBlockDepth(BlockPath, bNested);
+	const int32 blockDepth = bFocusedDetailLayout || bDetailHostLayout
+		? 0
+		: ResolveSidebarBlockDepth(BlockPath, bNested);
 	const FSidebarBlockSurfaceStyle surfaceStyle =
 		ResolveSidebarSurfaceStyle(blockDepth, bSelected, bShowNormalOutline);
+	FSidebarBlockSurfaceStyle resolvedSurfaceStyle = surfaceStyle;
+	if (bFocusedDetailLayout)
+	{
+		resolvedSurfaceStyle.OutlinePadding = FMargin(0.0f);
+		resolvedSurfaceStyle.ContentPadding.Left = 0.0f;
+		resolvedSurfaceStyle.BodyPadding.Left = 0.0f;
+	}
+	if (bDetailHostLayout)
+	{
+		resolvedSurfaceStyle.OutlineColor = FLinearColor::Transparent;
+		resolvedSurfaceStyle.ContentColor = FLinearColor::Transparent;
+		resolvedSurfaceStyle.OutlinePadding = FMargin(0.0f);
+		resolvedSurfaceStyle.ContentPadding = FMargin(0.0f);
+		resolvedSurfaceStyle.BodyPadding = FMargin(0.0f);
+	}
 
 	if (UBorder* outlineBorder = Cast<UBorder>(OutlineBorder.Get()))
 	{
 		outlineBorder->SetBrush(MakeSidebarSurfaceBrush());
-		outlineBorder->SetPadding(surfaceStyle.OutlinePadding);
-		outlineBorder->SetBrushColor(surfaceStyle.OutlineColor);
+		outlineBorder->SetPadding(resolvedSurfaceStyle.OutlinePadding);
+		outlineBorder->SetBrushColor(resolvedSurfaceStyle.OutlineColor);
 	}
 
 	if (UBorder* contentBorder = Cast<UBorder>(ContentBorder.Get()))
 	{
 		contentBorder->SetBrush(MakeSidebarSurfaceBrush());
-		contentBorder->SetPadding(surfaceStyle.ContentPadding);
-		contentBorder->SetBrushColor(surfaceStyle.ContentColor);
+		contentBorder->SetPadding(resolvedSurfaceStyle.ContentPadding);
+		contentBorder->SetBrushColor(resolvedSurfaceStyle.ContentColor);
 	}
 
 	if (BlockHeaderRow)
 	{
+		BlockHeaderRow->SetVisibility(bDetailHostLayout ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
 		if (UVerticalBoxSlot* headerSlot = Cast<UVerticalBoxSlot>(BlockHeaderRow->Slot))
 		{
 			headerSlot->SetPadding(FMargin(0.0f, 1.0f, 0.0f, 3.0f));
@@ -490,7 +520,7 @@ void UScenarioEditorSidebarBlockWidget::ApplyVisualStyle()
 	{
 		if (UVerticalBoxSlot* bodySlot = Cast<UVerticalBoxSlot>(BodyBox->Slot))
 		{
-			bodySlot->SetPadding(surfaceStyle.BodyPadding);
+			bodySlot->SetPadding(resolvedSurfaceStyle.BodyPadding);
 		}
 	}
 
@@ -556,13 +586,15 @@ void UScenarioEditorSidebarBlockWidget::RefreshBlock()
 	SetTextBlockText(NameTextBlock.Get(), BlockName);
 	SetTextBlockText(PathTextBlock.Get(), BlockPath);
 	SetTextBlockText(BadgeTextBlock.Get(), BadgeText);
-	SetActionButtonState(AddActionButton.Get(), AddActionTextBlock.Get(), bAddActionVisible, TEXT("+"));
-	SetActionButtonState(RemoveActionButton.Get(), RemoveActionTextBlock.Get(), bRemoveActionVisible, TEXT("-"));
+	SetActionButtonState(AddActionButton.Get(), AddActionTextBlock.Get(), bAddActionVisible && !bDetailHostLayout, TEXT("+"));
+	SetActionButtonState(RemoveActionButton.Get(), RemoveActionTextBlock.Get(), bRemoveActionVisible && !bDetailHostLayout, TEXT("-"));
 	ApplyVisualStyle();
 
 	if (SelectedStateWidget)
 	{
-		SelectedStateWidget->SetVisibility(bSelected ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+		SelectedStateWidget->SetVisibility(bSelected && !bDetailHostLayout
+			? ESlateVisibility::SelfHitTestInvisible
+			: ESlateVisibility::Collapsed);
 	}
 	if (BodyBox)
 	{

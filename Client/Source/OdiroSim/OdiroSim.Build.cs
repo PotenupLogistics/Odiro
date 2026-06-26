@@ -10,7 +10,7 @@ public class OdiroSim : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "SlateCore",
 			"CommonUI", "ModelViewViewModel", "FieldNotification", "ChaosVehicles", "Json", "JsonUtilities", "HTTP", "DeveloperSettings",
-			"ProceduralMeshComponent" });
+			"ProceduralMeshComponent", "LidarPointCloudRuntime" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "Sockets" });
 

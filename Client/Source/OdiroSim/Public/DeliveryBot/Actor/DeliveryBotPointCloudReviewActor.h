@@ -5,7 +5,11 @@
 #include "Misc/FileHelper.h"
 #include "DeliveryBotPointCloudReviewActor.generated.h"
 
+class ULidarPointCloud;
+class ULidarPointCloudComponent;
 class UHierarchicalInstancedStaticMeshComponent;
+class UMaterialInstanceDynamic;
+class UMaterialInterface;
 class USceneComponent;
 class UStaticMesh;
 
@@ -15,6 +19,14 @@ enum class EDeliveryBotPointCloudCoordinateTypes : uint8
 {
 	World,
 	ActorLocal
+};
+
+// Selects the replay review plugin rendering profile used for the loaded point cloud.
+UENUM(BlueprintType)
+enum class EDeliveryBotPointCloudReviewRenderMode : uint8
+{
+	Plugin3D,
+	TopDownProjection
 };
 
 // Stores one parsed xyz point and its optional RGB color.
@@ -31,6 +43,9 @@ struct FDeliveryBotPointCloudReviewPointInfo
 
 	// Source xyz RGB color, or white when the file omits color.
 	FColor Color{ FColor::White };
+
+	// Semantic classification inferred from the xyz RGB color.
+	FName Classification{ TEXT("unknown") };
 };
 
 UCLASS(Blueprintable)
@@ -39,14 +54,20 @@ class ODIROSIM_API ADeliveryBotPointCloudReviewActor : public AActor
 	GENERATED_BODY()
 
 public:
+	// Creates the point cloud review actor and its plugin rendering component.
 	ADeliveryBotPointCloudReviewActor();
 
 protected:
+	// Optionally loads the configured point cloud when gameplay begins.
 	virtual void BeginPlay() override;
+
+	// Optionally reloads the configured point cloud after editor construction changes.
 	virtual void OnConstruction(const FTransform& transform) override;
 
 public:
-	// Loads XyzFilePath and rebuilds the point instances.
+	// Point cloud loading
+
+	// Loads XyzFilePath and rebuilds the runtime plugin point cloud.
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "DeliveryBot|PointCloud")
 	bool LoadPointCloudFile();
 
@@ -54,7 +75,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PointCloud")
 	bool LoadPointCloudFromFile(const FString& xyzFilePath);
 
-	// Clears rendered instances and the in-memory point list.
+	// map_accumulated.xyz의 map-local 좌표를 source world 좌표로 복원해서 로드한다.
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PointCloud")
+	bool LoadReplayMapPointCloudFromFile(
+		const FString& xyzFilePath,
+		const FVector& captureOriginCm,
+		float importYAxisSign);
+
+	// Clears the runtime plugin point cloud and the in-memory point list.
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "DeliveryBot|PointCloud")
 	void ClearPointCloud();
 
@@ -74,6 +102,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|PointCloud")
 	int32 GetLoadedPointCount() const { return LoadedPoints.Num(); }
 
+public:
+	// Point cloud visibility
+
 	// 로드한 Point Cloud의 월드 표시 상태를 변경한다.
 	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PointCloud")
 	void SetPointCloudVisible(bool bVisible);
@@ -82,7 +113,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DeliveryBot|PointCloud")
 	bool IsPointCloudVisible() const;
 
+	// Sets the renderer used by replay review cameras.
+	UFUNCTION(BlueprintCallable, Category = "DeliveryBot|PointCloud")
+	void SetReviewRenderMode(EDeliveryBotPointCloudReviewRenderMode NewMode);
+
+	// Returns the renderer currently used by replay review cameras.
+	UFUNCTION(BlueprintPure, Category = "DeliveryBot|PointCloud")
+	EDeliveryBotPointCloudReviewRenderMode GetReviewRenderMode() const { return ReviewRenderMode; }
+
 private:
+	// File path helpers
+
+	// Resolves and validates one xyz file path.
+	bool TryResolveXyzFilePath(const FString& xyzFilePath, FString& outResolvedFilePath) const;
+
 	// Builds the current scenario capture directory.
 	FString BuildScenarioCaptureDirectory() const;
 
@@ -92,17 +136,52 @@ private:
 	// Finds the newest map_accumulated.xyz path under the current scenario directory.
 	bool TryFindLatestMapAccumulatedFilePath(FString& outFilePath) const;
 
+private:
+	// Point conversion and rendering
+
 	// Converts one xyz line into point data.
 	bool ParseXyzLine(const FString& line, FDeliveryBotPointCloudReviewPointInfo& outPoint) const;
 
-	// Converts point data into an instanced mesh transform.
-	FTransform MakePointInstanceTransform(const FDeliveryBotPointCloudReviewPointInfo& point) const;
+	// Resolves the semantic class encoded in one xyz RGB color.
+	FName ResolvePointClassificationFromColor(const FColor& Color) const;
+
+	// map_accumulated.xyz의 map-local 좌표를 source world 좌표로 변환한다.
+	FVector ResolveReplayMapSourceWorldLocation(const FDeliveryBotPointCloudReviewPointInfo& point) const;
+
+	// Resolves point data into the plugin point cloud component local space.
+	FVector ResolvePointCloudLocalLocation(const FDeliveryBotPointCloudReviewPointInfo& point) const;
 
 	// Resolves point data to its world-space debug draw location.
 	FVector ResolvePointWorldLocation(const FDeliveryBotPointCloudReviewPointInfo& point) const;
 
-	// Rebuilds instanced mesh points and optional debug color overlay.
-	void RebuildPointInstances();
+	// Rebuilds the runtime Lidar Point Cloud asset and component.
+	bool RebuildPointCloudAsset();
+
+	// Applies replay review rendering options to the plugin point cloud component.
+	void ConfigurePointCloudRendering();
+
+	// Rebuilds the TopDown-only sphere instances from loaded point colors.
+	bool BuildTopDownSphereInstances();
+
+	// Clears the TopDown-only sphere instances.
+	void ClearTopDownSphereInstances();
+
+	// Applies common rendering settings to one TopDown sphere instance component.
+	void ConfigureTopDownSphereInstanceComponent(UHierarchicalInstancedStaticMeshComponent* component) const;
+
+	// Creates or updates TopDown sphere materials for semantic point colors.
+	void ApplyTopDownSphereMaterials();
+
+	// Returns the TopDown sphere component that matches one parsed point classification.
+	UHierarchicalInstancedStaticMeshComponent* ResolveTopDownSphereComponentForClassification(const FName& classification) const;
+
+	// Creates or updates one dynamic TopDown sphere material.
+	UMaterialInstanceDynamic* GetOrCreateTopDownSphereMaterial(
+		TObjectPtr<UMaterialInstanceDynamic>& materialSlot,
+		const FColor& color);
+
+	// Applies the active review render mode to owned render components.
+	void ApplyReviewRenderMode();
 
 	// Draws the color debug overlay for loaded points.
 	void DrawDebugColorOverlay() const;
@@ -112,13 +191,53 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|PointCloud")
 	TObjectPtr<USceneComponent> SceneRoot;
 
-	// Instanced mesh component that renders xyz points.
+	// Plugin component that renders the loaded point cloud.
 	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|PointCloud")
-	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> PointInstances;
+	TObjectPtr<ULidarPointCloudComponent> PointCloudComponent;
 
-	// Static mesh used for each point instance.
-	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud")
-	TObjectPtr<UStaticMesh> PointMesh;
+	// TopDown-only sphere instances for ground-colored points.
+	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|PointCloud")
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TopDownGroundPointInstances;
+
+	// TopDown-only sphere instances for wall-colored points.
+	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|PointCloud")
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TopDownWallPointInstances;
+
+	// TopDown-only sphere instances for obstacle-colored points.
+	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|PointCloud")
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TopDownObstaclePointInstances;
+
+	// TopDown-only sphere instances for unknown-colored points.
+	UPROPERTY(VisibleAnywhere, Category = "DeliveryBot|PointCloud")
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TopDownUnknownPointInstances;
+
+	// Transient runtime point cloud asset owned by this review actor.
+	UPROPERTY(Transient)
+	TObjectPtr<ULidarPointCloud> PointCloudAsset;
+
+	// Static mesh used by TopDown-only sphere point instances.
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|TopDown")
+	TObjectPtr<UStaticMesh> TopDownSphereMesh;
+
+	// Base material used to create TopDown semantic color materials.
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|TopDown")
+	TObjectPtr<UMaterialInterface> TopDownSphereBaseMaterial;
+
+	// Runtime material for TopDown ground-colored point spheres.
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> TopDownGroundPointMaterial;
+
+	// Runtime material for TopDown wall-colored point spheres.
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> TopDownWallPointMaterial;
+
+	// Runtime material for TopDown obstacle-colored point spheres.
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> TopDownObstaclePointMaterial;
+
+	// Runtime material for TopDown unknown-colored point spheres.
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> TopDownUnknownPointMaterial;
 
 	// Absolute or project-resolved xyz file path to load manually.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud")
@@ -140,15 +259,23 @@ private:
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud")
 	bool bAutoLoadOnConstruction{ false };
 
-	// Render size for each point instance in centimeters.
+	// Plugin point sprite size used when rendering the cloud.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud", meta = (ClampMin = "0.1"))
-	float PointSizeCm{ 5.f };
+	float PointSizeCm{ 0.7f };
+
+	// Sphere diameter in centimeters used only by the TopDown renderer.
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|TopDown", meta = (ClampMin = "0.1"))
+	float TopDownSphereSizeCm{ 2.0f };
+
+	// Optional Z offset in centimeters used only by the TopDown sphere renderer.
+	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|TopDown")
+	float TopDownSphereZOffsetCm{ 0.0f };
 
 	// Maximum point count loaded from one xyz file.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud", meta = (ClampMin = "1"))
 	int32 MaxPointCount{ 200000 };
 
-	// Whether to draw color debug points in addition to mesh instances.
+	// Whether to draw debug color points in addition to plugin rendering.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|Debug")
 	bool bDrawDebugColorOverlay{ false };
 
@@ -159,6 +286,19 @@ private:
 	// Screen size for debug color overlay points.
 	UPROPERTY(EditAnywhere, Category = "DeliveryBot|PointCloud|Debug", meta = (ClampMin = "1.0"))
 	float DebugOverlayPointSize{ 5.f };
+
+	// Capture origin used to restore map_accumulated.xyz points into source world coordinates.
+	FVector MapCaptureOriginCm = FVector::ZeroVector;
+
+	// Y-axis sign used to restore map_accumulated.xyz points into source world coordinates.
+	float MapImportYAxisSign = -1.0f;
+
+	// True when loaded xyz points should be interpreted as map-local replay points.
+	bool bUseMapLocalImportTransform = false;
+
+	// Active replay review render mode.
+	UPROPERTY(Transient)
+	EDeliveryBotPointCloudReviewRenderMode ReviewRenderMode = EDeliveryBotPointCloudReviewRenderMode::Plugin3D;
 
 	// Last points parsed from the xyz file.
 	TArray<FDeliveryBotPointCloudReviewPointInfo> LoadedPoints;

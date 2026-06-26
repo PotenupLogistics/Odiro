@@ -101,10 +101,6 @@ private:
 	UFUNCTION()
 	void HandleResetClicked();
 
-	// Hides the embedded viewer and unloads transient replay state.
-	UFUNCTION()
-	void HandleCloseClicked();
-
 	// Advances the replay camera to the next available mode.
 	UFUNCTION()
 	void HandleCameraModeClicked();
@@ -186,7 +182,7 @@ private:
 	// Clears right-mouse look state tracked by the replay viewer.
 	void ClearReplayLookInput();
 
-	// Writes a status message into the optional replay diagnostics text block.
+	// Stores the latest replay diagnostics message for parent/UI consumers.
 	void SetDiagnosticsText(const FString& Message);
 
 	// Image that displays the replay render target.
@@ -197,10 +193,6 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> PlayPauseButton;
 
-	// Alternate button name for pause/resume controls in newer WBP layouts.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> PauseButton;
-
 	// Button that pauses playback at the current frame.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> StopButton;
@@ -208,10 +200,6 @@ private:
 	// Button that resets playback to the first frame.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> ResetButton;
-
-	// Button that hides the embedded replay viewer.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> CloseButton;
 
 	// Button that cycles through top-down, free, and vehicle-forward cameras.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
@@ -225,18 +213,6 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<USlider> ReplayTimelineSlider;
 
-	// Button that selects the robot-following top-down replay camera.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> TopDownCameraButton;
-
-	// Button that selects the user-controlled free replay camera.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> FreeCameraButton;
-
-	// Button that selects the robot-mounted forward replay camera.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> VehicleFrontCameraButton;
-
 	// Fullscreen overlay root that covers the normal replay layout.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> ReplayFullscreenLayer;
@@ -245,17 +221,33 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UImage> ReplayFullscreenImage;
 
-	// Button that cycles replay cameras while fullscreen is visible.
+	// Fullscreen button that toggles replay playback between playing and paused.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UButton> FullscreenCameraModeButton;
+	TObjectPtr<UButton> FullscreenPlayPauseButton;
+
+	// Fullscreen button that pauses playback at the current frame.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> FullscreenStopButton;
+
+	// Fullscreen button that resets playback to the first frame.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> FullscreenResetButton;
+
+	// Fullscreen button that selects the robot-following top-down replay camera.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> FullscreenTopDownCameraButton;
+
+	// Fullscreen button that selects the user-controlled free replay camera.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> FullscreenFreeCameraButton;
+
+	// Fullscreen button that selects the robot-mounted forward replay camera.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> FullscreenVehicleFrontCameraButton;
 
 	// Button that hides the fullscreen replay overlay.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> ExitFullscreenButton;
-
-	// Optional status text owned by WBP_Replay.
-	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> ReplayDiagnosticsText;
 
 	// Optional label shown inside or near the camera cycle button.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

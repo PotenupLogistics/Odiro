@@ -26,6 +26,120 @@ namespace
 		return color;
 	}
 
+	// Visual treatment resolved from the sidebar block hierarchy depth.
+	struct FSidebarBlockSurfaceStyle
+	{
+		// Background color used by the block content border.
+		FLinearColor ContentColor = MakeSidebarBlockColor(TEXT("0B0B0B"));
+
+		// Outline color used by the outer block border.
+		FLinearColor OutlineColor = MakeSidebarBlockColor(TEXT("0E0E0E"));
+
+		// Padding that exposes the outer border as a hierarchy strip.
+		FMargin OutlinePadding = FMargin(1.0f);
+
+		// Padding applied inside the content border.
+		FMargin ContentPadding = FMargin(6.0f, 4.0f, 6.0f, 6.0f);
+
+		// Padding applied before the block body rows.
+		FMargin BodyPadding = FMargin(10.0f, 7.0f, 4.0f, 2.0f);
+	};
+
+	// Counts semantic path depth below root so nested template blocks get distinct surfaces.
+	int32 ResolveSidebarBlockDepth(const FString& blockPath, const bool bNested)
+	{
+		FString relativePath = blockPath;
+		if (relativePath.StartsWith(TEXT("root.")))
+		{
+			relativePath.RightChopInline(5);
+		}
+		else if (relativePath == TEXT("root") || relativePath == TEXT("scenario"))
+		{
+			relativePath.Reset();
+		}
+
+		int32 depth = 0;
+		for (const TCHAR character : relativePath)
+		{
+			if (character == TEXT('.'))
+			{
+				++depth;
+			}
+		}
+		return bNested ? FMath::Max(depth, 1) : depth;
+	}
+
+	// Resolves a stronger block surface palette and indentation for the requested depth.
+	FSidebarBlockSurfaceStyle ResolveSidebarSurfaceStyle(
+		const int32 blockDepth,
+		const bool bSelected,
+		const bool bShowNormalOutline)
+	{
+		const int32 clampedDepth = FMath::Clamp(blockDepth, 0, 3);
+		const TCHAR* contentColors[] = {
+			TEXT("080808"),
+			TEXT("121212"),
+			TEXT("1C1C1C"),
+			TEXT("262626")
+		};
+		const TCHAR* outlineColors[] = {
+			TEXT("101010"),
+			TEXT("2A2A2A"),
+			TEXT("404040"),
+			TEXT("555555")
+		};
+
+		FSidebarBlockSurfaceStyle style;
+		style.ContentColor = bSelected
+			? MakeSidebarBlockColor(TEXT("0A1824"))
+			: MakeSidebarBlockColor(contentColors[clampedDepth]);
+		style.OutlineColor = bSelected
+			? MakeSidebarBlockColor(TEXT("2498FF"))
+			: MakeSidebarBlockColor(bShowNormalOutline || blockDepth > 0
+				? outlineColors[clampedDepth]
+				: TEXT("070707"));
+		style.OutlinePadding = blockDepth > 0 || bSelected
+			? FMargin(2.0f + static_cast<float>(clampedDepth), 0.0f, 0.0f, 0.0f)
+			: FMargin(1.0f, 0.0f, 0.0f, 0.0f);
+		style.ContentPadding = FMargin(
+			6.0f + static_cast<float>(clampedDepth * 2),
+			4.0f + static_cast<float>(clampedDepth),
+			0.0f,
+			6.0f + static_cast<float>(clampedDepth));
+		style.BodyPadding = FMargin(
+			10.0f + static_cast<float>(clampedDepth * 4),
+			7.0f,
+			0.0f,
+			3.0f + static_cast<float>(clampedDepth));
+		return style;
+	}
+
+	// Creates a guaranteed box brush so C++ color changes do not depend on the WBP brush asset.
+	FSlateBrush MakeSidebarSurfaceBrush()
+	{
+		FSlateBrush brush;
+		brush.DrawAs = ESlateBrushDrawType::Box;
+		brush.TintColor = FSlateColor(FLinearColor::White);
+		return brush;
+	}
+
+	// Applies compact hierarchy-heading typography without changing the shared catalog asset.
+	void ApplyCompactBlockNameStyle(
+		UTextBlock* textBlock,
+		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference,
+		const bool bNested,
+		const int32 blockDepth)
+	{
+		if (!IsValid(textBlock)) return;
+
+		FWidgetTextStyle style = UWidgetTextStyleCatalog::ResolveStyle(
+			catalogReference,
+			bNested ? EWidgetTextStyleRole::Label : EWidgetTextStyleRole::Title);
+		style.Font.Size = 14.f;
+		textBlock->SetFont(style.Font);
+		textBlock->SetColorAndOpacity(FSlateColor(style.Color));
+	}
+
 	// Builds the flat brush used by generated block header action buttons.
 	FSlateBrush MakeSidebarActionBrush(const TCHAR* hex, const float alpha = 1.0f)
 	{
@@ -346,31 +460,22 @@ void UScenarioEditorSidebarBlockWidget::SetActionButtonState(
 
 void UScenarioEditorSidebarBlockWidget::ApplyVisualStyle()
 {
-	const FLinearColor selectedAccent = MakeSidebarBlockColor(TEXT("2498FF"));
-	const FLinearColor normalOutline = MakeSidebarBlockColor(TEXT("0E0E0E"));
-	const FLinearColor mutedOutline = MakeSidebarBlockColor(TEXT("070707"));
+	const int32 blockDepth = ResolveSidebarBlockDepth(BlockPath, bNested);
+	const FSidebarBlockSurfaceStyle surfaceStyle =
+		ResolveSidebarSurfaceStyle(blockDepth, bSelected, bShowNormalOutline);
 
 	if (UBorder* outlineBorder = Cast<UBorder>(OutlineBorder.Get()))
 	{
-		outlineBorder->SetPadding(FMargin(1.0f));
-		outlineBorder->SetBrushColor(bSelected
-			? selectedAccent
-			: (bShowNormalOutline ? normalOutline : mutedOutline));
+		outlineBorder->SetBrush(MakeSidebarSurfaceBrush());
+		outlineBorder->SetPadding(surfaceStyle.OutlinePadding);
+		outlineBorder->SetBrushColor(surfaceStyle.OutlineColor);
 	}
 
 	if (UBorder* contentBorder = Cast<UBorder>(ContentBorder.Get()))
 	{
-		contentBorder->SetPadding(FMargin(6.0f, 4.0f, 6.0f, 6.0f));
-		if (bSelected)
-		{
-			contentBorder->SetBrushColor(MakeSidebarBlockColor(TEXT("07111A")));
-		}
-		else
-		{
-			contentBorder->SetBrushColor(bNested
-				? MakeSidebarBlockColor(TEXT("070707"))
-				: MakeSidebarBlockColor(TEXT("0B0B0B")));
-		}
+		contentBorder->SetBrush(MakeSidebarSurfaceBrush());
+		contentBorder->SetPadding(surfaceStyle.ContentPadding);
+		contentBorder->SetBrushColor(surfaceStyle.ContentColor);
 	}
 
 	if (BlockHeaderRow)
@@ -385,14 +490,15 @@ void UScenarioEditorSidebarBlockWidget::ApplyVisualStyle()
 	{
 		if (UVerticalBoxSlot* bodySlot = Cast<UVerticalBoxSlot>(BodyBox->Slot))
 		{
-			bodySlot->SetPadding(FMargin(10.0f, 7.0f, 4.0f, 2.0f));
+			bodySlot->SetPadding(surfaceStyle.BodyPadding);
 		}
 	}
 
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
+	ApplyCompactBlockNameStyle(
 		NameTextBlock.Get(),
 		TextStyleCatalog,
-		bNested ? EWidgetTextStyleRole::Label : EWidgetTextStyleRole::Title);
+		bNested,
+		blockDepth);
 	UWidgetTextStyleCatalog::ApplyTextBlockStyle(
 		PathTextBlock.Get(),
 		TextStyleCatalog,
@@ -432,7 +538,7 @@ void UScenarioEditorSidebarBlockWidget::ApplyVisualStyle()
 	}
 	if (UBorder* selectedBorder = Cast<UBorder>(SelectedStateWidget.Get()))
 	{
-		selectedBorder->SetPadding(FMargin(2.0f));
+		selectedBorder->SetPadding(FMargin(3.0f, 0.0f, 0.0f, 0.0f));
 		selectedBorder->SetBrushColor(MakeSidebarBlockColor(TEXT("2498FF")));
 	}
 }

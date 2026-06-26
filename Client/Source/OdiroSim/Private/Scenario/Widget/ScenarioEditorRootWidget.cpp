@@ -481,7 +481,7 @@ void UScenarioEditorRootWidget::RefreshScenarioInspectorInternal(const bool bReb
 
 void UScenarioEditorRootWidget::HandleEditorSessionStarted(const bool)
 {
-	RefreshScenarioInspector();
+	RefreshScenarioInspectorWithOutlinerRegistryRebuild();
 
 	if (bShowAssetPaletteOnEditorSessionStart)
 	{

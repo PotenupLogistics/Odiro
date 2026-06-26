@@ -7,7 +7,9 @@ v2 API는 기존 v1 실행 중심 흐름과 별도로, Agent 역할을 명확히
 * `/api/v2/scenarios/generate`: 사용자 자연어 `prompt`를 입력받아 `<UserProject>/scenario.json`에 저장 가능한 Project Scenario JSON을 생성합니다.
 * `/api/v2/analysis/run`: 사용자 project path와 run id를 입력받아 해당 run 결과를 분석합니다.
 
-Scenario generation v2는 항상 LangGraph runner를 실행합니다. `V2_AGENT_LLM_ENABLED=true`일 때만 LangGraph 내부 LLM-assisted node에서 JSON 호출을 시도하고, 실패하거나 validator를 통과하지 못하면 deterministic graph path로 fallback합니다. `V2_AGENT_GRAPH_ENABLED`는 scenario generation v2의 on/off switch가 아니며, 현재 결과 분석 v2 graph 경로 제어에 사용됩니다.
+Scenario generation v2는 항상 LangGraph runner를 실행합니다. `V2_AGENT_LLM_ENABLED=true`일 때만 LangGraph 내부 LLM-assisted node에서 JSON 호출을 시도하고, 실패하거나 validator를 통과하지 못하면 deterministic fallback을 사용합니다. Result analysis v2도 항상 `ResultAnalysisGraphRunnerV2`를 실행합니다.
+
+두 v2 endpoint는 `AgentLlmJsonClient`가 설정된 첫 LLM provider만 호출합니다. LLM 호출이 실패하면 다른 provider 재시도 대신 scenario generation은 deterministic fallback, result analysis는 rule-based fallback으로 기본 응답을 보장합니다.
 
 Scenario generation v2의 외부 response body는 API wrapper가 아니라 `scenario` v1 JSON 객체 자체입니다.
 Obstacle placement kind는 Unreal parser와 맞춰 `fixed`, `pattern`, `scatter`를 허용합니다. 기본 LLM 생성은 여전히 단순한 `fixed` placement를 우선 사용합니다.
@@ -50,7 +52,7 @@ Episode Scenario는 run 시점에 snapshot scenario와 seed로 확정되는 실�
 
 ### 목적
 
-사용자 자연어 `prompt`를 입력받아 `scenario` v1 JSON 객체를 생성합니다. 이 endpoint는 `V2_AGENT_GRAPH_ENABLED` 값과 무관하게 LangGraph runner를 사용합니다.
+사용자 자연어 `prompt`를 입력받아 `scenario` v1 JSON 객체를 생성합니다. 이 endpoint는 항상 `ScenarioGenerationGraphRunnerV2`를 사용합니다.
 
 ### Request
 
@@ -90,7 +92,7 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 }
 ```
 
-외부 응답 최상위에는 `status`, `summary`, `template`, `validation`, `assumptions`, `generation_mode` wrapper field를 포함하지 않습니다. LangGraph mode와 validation 결과는 내부 graph state에서만 사용합니다.
+외부 응답 최상위에는 `status`, `summary`, `template`, `validation`, `assumptions`, `generation_mode` wrapper field를 포함하지 않습니다. LangGraph validation 결과는 내부 graph state에서만 사용합니다.
 
 `scenario` v1은 다음 값을 허용합니다.
 
@@ -151,20 +153,16 @@ V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS=1
 * `V2_AGENT_LLM_REPAIR_ENABLED`: LLM 생성 결과가 validator를 통과하지 못할 때 repair를 시도할지 결정합니다.
 * `V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS`: repair 최대 시도 횟수입니다.
 
-## Graph mode 설정
+## Runner 실행 경로
 
-```text
-V2_AGENT_GRAPH_ENABLED=false
-```
-
-* 이 설정은 scenario generation v2 endpoint의 graph on/off switch가 아닙니다.
-* `/api/v2/scenarios/generate`는 이 값과 무관하게 LangGraph runner를 사용합니다.
-* 현재 이 설정은 결과 분석 v2 graph 경로 제어와 legacy rollback 호환을 위해 유지합니다.
+* `/api/v2/scenarios/generate`는 항상 `ScenarioGenerationGraphRunnerV2`를 사용합니다.
+* `/api/v2/analysis/run`은 항상 `ResultAnalysisGraphRunnerV2`를 사용합니다.
 
 ## fallback 정책
 
 * LLM 호출 실패 시 API 500이 아니라 fallback 응답을 반환합니다.
 * LLM JSON 파싱 실패 시 fallback합니다.
+* 기본 `LLM_PROVIDER_CHAIN=openai`는 v2 endpoint에서 provider 순회 설정이 아닙니다. LLM provider 실패 시 자체 fallback으로 내려갑니다.
 * `scenario` 검증 실패 시 repair를 시도하고, repair도 실패하면 deterministic fallback합니다.
 * analysis recommendation의 evidence가 실제 project/run/episode와 맞지 않으면 rule-based fallback합니다.
 * scenario generation preset 누락, JSON 파싱 실패, validator 실패는 내부 diagnostic으로만 남기고 외부 `/api/v2/scenarios/generate` 응답 body에는 `warnings`, `generation_mode`, `validation`을 추가하지 않습니다.

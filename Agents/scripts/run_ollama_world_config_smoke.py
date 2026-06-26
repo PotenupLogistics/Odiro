@@ -274,7 +274,7 @@ def _recommended_next_action(result: WorldConfigGenerationResult, summary: dict[
     if result.error and result.error.code == "scenario_reflection_failed":
         return "Schema passed but scenario reflection failed. Check scenario repair prompt and semantic binding rules."
     if result.attempts and not result.success and repair_summary["repairAttempts"] > 0:
-        return "Repeated validation failure after repair. Consider prompt repair improvements before OpenAI fallback."
+        return "Repeated validation failure after repair. Consider prompt repair improvements before a separate manual OpenAI smoke."
     if result.success:
         return "Validated payload generated. Review scenario quality before UE5 handoff."
     return "Inspect attempt details and improve prompt constraints."

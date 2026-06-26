@@ -5,7 +5,6 @@ from typing import Any
 from app.core.settings import Settings
 from app.core.contract_types import ContractType
 from app.models.generation import (
-    WorldConfigFallbackTrace,
     WorldConfigGenerationAttempt,
     WorldConfigGenerationError,
     WorldConfigGenerationRequest,
@@ -21,7 +20,6 @@ from app.services.environment_generation_constraints_builder import (
 from app.services.json_output_extractor import JsonExtractionError, extract_json_object
 from app.services.llm_client import BaseLlmClient
 from app.services.llm_client_factory import create_llm_client
-from app.services.llm_provider_policy import select_next_provider
 from app.services.world_config_prompt_builder import (
     build_world_config_prompt_package,
     build_world_config_repair_prompt_package,
@@ -147,65 +145,6 @@ def _failed_disabled_result(
         warnings=warnings + llm_response.warnings,
         error=WorldConfigGenerationError(code="provider_disabled", message=message),
     )
-
-
-def _with_fallback_trace(
-    result: WorldConfigGenerationResult,
-    trace: WorldConfigFallbackTrace,
-) -> WorldConfigGenerationResult:
-    result.fallbackTrace.insert(0, trace)
-    return result
-
-
-def _fallback_or_result(
-    result: WorldConfigGenerationResult,
-    request: WorldConfigGenerationRequest,
-    provider: LlmProvider,
-    error_code: str,
-    settings: Settings,
-    timeout_sec: int | None,
-    context_top_k: int,
-    compact_prompt: bool,
-    fallback_client_overrides: dict[LlmProvider, BaseLlmClient] | None,
-    allow_fallback: bool,
-) -> WorldConfigGenerationResult:
-    if not allow_fallback:
-        return result
-    next_provider = select_next_provider(provider, settings, error_code)
-    if next_provider is None:
-        return result
-    fallback_result = generate_world_config(
-        request,
-        provider=next_provider,
-        client_override=(fallback_client_overrides or {}).get(next_provider),
-        timeout_sec=timeout_sec,
-        context_top_k=context_top_k,
-        compact_prompt=compact_prompt,
-        settings=settings,
-        fallback_client_overrides=fallback_client_overrides,
-        allow_fallback=False,
-    )
-    trace = WorldConfigFallbackTrace(
-        fromProvider=provider.value,
-        toProvider=next_provider.value,
-        reason=f"{error_code} triggered provider fallback.",
-        errorCode=error_code,
-        success=fallback_result.success,
-    )
-    if fallback_result.success:
-        return _with_fallback_trace(fallback_result, trace)
-    messages = []
-    if result.error:
-        messages.append(f"{provider.value}: {result.error.code} - {result.error.message}")
-    if fallback_result.error:
-        messages.append(
-            f"{next_provider.value}: {fallback_result.error.code} - {fallback_result.error.message}"
-        )
-    fallback_result.error = WorldConfigGenerationError(
-        code="provider_chain_failed",
-        message="Both provider attempts failed. " + " | ".join(messages),
-    )
-    return _with_fallback_trace(fallback_result, trace)
 
 
 def _attempt_from_response(
@@ -354,8 +293,6 @@ def generate_world_config(
     context_top_k: int = 5,
     compact_prompt: bool = False,
     settings: Settings | None = None,
-    fallback_client_overrides: dict[LlmProvider, BaseLlmClient] | None = None,
-    allow_fallback: bool = True,
 ) -> WorldConfigGenerationResult:
     settings = settings or Settings()
     prompt_package = build_world_config_prompt_package(
@@ -666,18 +603,7 @@ def generate_world_config(
                 message=last_reflection.summary,
             ),
         )
-        return _fallback_or_result(
-            failed_result,
-            request,
-            provider,
-            "scenario_reflection_failed",
-            settings,
-            timeout_sec,
-            context_top_k,
-            compact_prompt,
-            fallback_client_overrides,
-            allow_fallback,
-        )
+        return failed_result
 
     provider_error_codes = [attempt.providerErrorCode for attempt in attempts if attempt.providerErrorCode]
     validation_actually_run = any(attempt.jsonExtractionSuccess for attempt in attempts)
@@ -706,18 +632,7 @@ def generate_world_config(
                 message="Provider failed before JSON extraction or world_config validation could run.",
             ),
         )
-        return _fallback_or_result(
-            failed_result,
-            request,
-            provider,
-            provider_error,
-            settings,
-            timeout_sec,
-            context_top_k,
-            compact_prompt,
-            fallback_client_overrides,
-            allow_fallback,
-        )
+        return failed_result
 
     failed_result = WorldConfigGenerationResult(
         requestId=request.requestId,
@@ -737,15 +652,4 @@ def generate_world_config(
             message="World Config generation did not produce a valid payload.",
         ),
     )
-    return _fallback_or_result(
-        failed_result,
-        request,
-        provider,
-        "validation_failed_after_repair",
-        settings,
-        timeout_sec,
-        context_top_k,
-        compact_prompt,
-        fallback_client_overrides,
-        allow_fallback,
-    )
+    return failed_result

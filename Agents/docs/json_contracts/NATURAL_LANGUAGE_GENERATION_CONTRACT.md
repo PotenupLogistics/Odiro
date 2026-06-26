@@ -26,7 +26,7 @@ POST /api/v1/scenarios/generate
 
 - `disabled`: `provider_disabled` 실패 결과를 반환한다.
 - `openai`: live provider client가 구현되어 있으며 수동 smoke에서만 실제 호출한다.
-- `ollama`: fallback provider로 유지한다.
+- `ollama`: 로컬 개발/수동 smoke용 선택 provider로 유지한다.
 - automated tests와 harness checks는 실제 OpenAI/Ollama 호출을 하지 않는다.
 
 `generatedPayload`는 JSON extraction과 validation이 성공한 경우에만 포함한다.

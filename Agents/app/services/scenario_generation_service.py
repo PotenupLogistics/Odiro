@@ -308,12 +308,11 @@ def generate_scenario_artifacts(
     *,
     write_export: bool = True,
 ) -> ScenarioGenerationArtifacts:
-    settings = Settings(llmAllowOpenaiFallback=False, llmProviderChain=["openai"], llmMaxTotalAttempts=1)
+    settings = Settings(llmProviderChain=["openai"], llmMaxTotalAttempts=1)
     generation = generate_world_config(
         _generation_request(request),
         provider=LlmProvider.openai,
         settings=settings,
-        allow_fallback=False,
     )
     if generation.generatedPayload is None:
         raise RuntimeError(generation.error.message if generation.error else "WorldConfig generation failed.")

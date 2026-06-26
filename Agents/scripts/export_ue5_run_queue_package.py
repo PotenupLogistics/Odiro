@@ -86,13 +86,12 @@ def _generation_request(args: argparse.Namespace) -> WorldConfigGenerationReques
 
 
 def _generate_live_world_config(args: argparse.Namespace) -> tuple[dict[str, Any] | None, dict[str, Any]]:
-    settings = Settings(llmAllowOpenaiFallback=False, llmProviderChain=["openai"], llmMaxTotalAttempts=1)
+    settings = Settings(llmProviderChain=["openai"], llmMaxTotalAttempts=1)
     request = _generation_request(args)
     result = generate_world_config(
         request,
         provider=LlmProvider.openai,
         settings=settings,
-        allow_fallback=False,
     )
     metadata = {
         "openaiCallCount": len(result.attempts),

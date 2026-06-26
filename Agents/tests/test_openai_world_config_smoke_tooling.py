@@ -32,6 +32,7 @@ def test_openai_smoke_help_works() -> None:
     assert "--prompt" in completed.stdout
     assert "--dry-run" in completed.stdout
     assert "--report" in completed.stdout
+    assert "--allow-" + "fallback" not in completed.stdout
 
 
 def test_openai_smoke_dry_run_does_not_create_files_or_call_openai() -> None:
@@ -56,7 +57,7 @@ def test_openai_smoke_dry_run_does_not_create_files_or_call_openai() -> None:
     payload = json.loads(completed.stdout)
     assert payload["dryRun"] is True
     assert payload["openaiCalled"] is False
-    assert payload["providerChain"] == ["openai", "ollama"]
+    assert payload["providerChain"] == ["openai"]
     assert before == after
     assert not (ROOT / "samples").exists()
     assert not (ROOT / "fixtures").exists()

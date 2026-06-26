@@ -2,7 +2,7 @@
 
 ## 1. 목적
 
-이 문서는 Ollama live smoke에서 `validation_failed`가 발생했을 때 원인을 진단하는 방법을 설명한다. 목표는 schema 변경, OpenAI fallback 추가, generation API 변경 전에 model output 품질을 먼저 확인하는 것이다.
+이 문서는 Ollama live smoke에서 `validation_failed`가 발생했을 때 원인을 진단하는 방법을 설명한다. 목표는 schema 변경, provider 전략 변경, generation API 변경 전에 model output 품질을 먼저 확인하는 것이다.
 
 ## 2. 확인할 항목
 
@@ -40,7 +40,7 @@
 * required field가 누락되면 schema summary와 required field checklist를 강화한다.
 * enum 또는 type error가 발생하면 prompt에 enum/type constraint를 더 명확히 제공한다.
 * repair 이후에도 같은 validation failure가 남으면 fallback을 추가하기 전에 repair prompt 품질을 확인한다.
-* local model이 prompt 개선 이후에도 계속 실패하면 OpenAI fallback을 별도 평가한다.
+* local model이 prompt 개선 이후에도 계속 실패하면 OpenAI 사용 또는 rule-based degradation 같은 대체 전략을 별도 평가한다.
 * 모든 attempt가 `providerErrorCode=ollama_timeout`이면 validation은 실제로 실행되지 않은 것이다. timeout 또는 runtime부터 조정한다.
 
 ## 5. Constraints

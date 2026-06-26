@@ -31,7 +31,6 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--model")
     parser.add_argument("--max-repair-attempts", type=int)
-    parser.add_argument("--allow-fallback", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--report")
     parser.add_argument("--print-payload", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -68,7 +67,7 @@ def main() -> int:
     args = _parser().parse_args()
     settings = Settings(_env_file=".env")
     settings.llmProvider = LlmProvider.openai
-    settings.llmProviderChain = ["openai", "ollama"]
+    settings.llmProviderChain = ["openai"]
     if args.model:
         settings.openaiModel = args.model
     if args.max_repair_attempts is not None:
@@ -99,7 +98,6 @@ def main() -> int:
         request,
         provider=LlmProvider.openai,
         settings=settings,
-        allow_fallback=args.allow_fallback,
     )
     payload = result.model_dump(mode="json")
     _write_report(args.report, payload)

@@ -45,7 +45,7 @@ def run_check() -> dict[str, Any]:
             term in model_text
             for term in ["ScenarioGenerateRequest", "extra=\"forbid\"", "prompt", "episode_count", "ge=1", "strict=True"]
         ),
-        "serviceUsesOpenAiOnlyNoFallback": "allow_fallback=False" in service_text and "llmProviderChain=[\"openai\"]" in service_text,
+        "serviceUsesOpenAiOnly": "provider=LlmProvider.openai" in service_text and "llmProviderChain=[\"openai\"]" in service_text,
         "serviceUsesRunQueueGenerator": "generate_setup_pair_queue" in service_text and "export_run_queue_package" in service_text,
         "testsCoverRequestValidation": all(term in tests_text for term in ["episode_count", "episodeCount", "1.5", "\"3\"", "openapi"]),
         "noLiveProviderCallsInHarness": not _imports_live_http_client(Path(__file__)),
@@ -55,7 +55,7 @@ def run_check() -> dict[str, Any]:
     for key, message in [
         ("routeExists", "Scenario generation API route is missing."),
         ("promptWithOptionalEpisodeCountModel", "Scenario generation request model must accept prompt and optional positive integer episode_count only."),
-        ("serviceUsesOpenAiOnlyNoFallback", "Scenario generation service must use OpenAI only with fallback disabled."),
+        ("serviceUsesOpenAiOnly", "Scenario generation service must call the selected OpenAI provider only."),
         ("serviceUsesRunQueueGenerator", "Scenario generation service must generate/export RunQueue packages."),
         ("testsCoverRequestValidation", "Scenario generation tests must cover episode_count validation and extra field rejection."),
         ("noLiveProviderCallsInHarness", "Scenario generation harness must not perform live provider calls."),

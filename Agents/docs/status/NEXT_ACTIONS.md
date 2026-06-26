@@ -2,7 +2,7 @@
 
 ## Current Limitations
 
-- OpenAI first / Ollama fallback provider chain is implemented.
+- OpenAI first provider configuration is implemented; Ollama remains a local development/manual smoke option, not the preferred operational fallback for v2 result analysis or scenario generation.
 - vector DB와 embedding index는 아직 구현하지 않았습니다.
 - source document RAG는 아직 구현하지 않았습니다.
 - 실제 UE actor spawn은 UE 팀 검증이 필요합니다.

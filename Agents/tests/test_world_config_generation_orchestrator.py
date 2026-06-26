@@ -229,6 +229,15 @@ class FakeGenericObstacleIncompleteClient:
         )
 
 
+class CountingSuccessClient(FakeSuccessClient):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def generate(self, request: LlmGenerationRequest) -> LlmGenerationResponse:
+        self.calls += 1
+        return super().generate(request)
+
+
 class FakeOpenAIFailureClient:
     def generate(self, request: LlmGenerationRequest) -> LlmGenerationResponse:
         return LlmGenerationResponse(
@@ -418,21 +427,48 @@ def test_environment_sampling_post_processing_runs_even_when_prompt_reflection_p
     assert "set_obstacle_blocking_ratio_from_environment_sampler" in patch_types
 
 
-def test_openai_failure_can_fallback_to_fake_ollama_success() -> None:
+def test_openai_failure_does_not_fallback_to_ollama_by_default() -> None:
     result = generate_world_config(
         _request(max_repairs=0),
         provider=LlmProvider.openai,
         client_override=FakeOpenAIFailureClient(),
-        fallback_client_overrides={LlmProvider.ollama: FakeSuccessClient()},
         settings=Settings(_env_file=None, openaiApiKey="test-key"),
     )
 
-    assert result.success is True
-    assert result.generatedPayload is not None
-    assert result.fallbackTrace
-    assert result.fallbackTrace[0].fromProvider == "openai"
-    assert result.fallbackTrace[0].toProvider == "ollama"
-    assert result.fallbackTrace[0].success is True
+    assert result.success is False
+    assert result.fallbackTrace == []
+
+
+def test_openai_failure_does_not_call_ollama_even_when_legacy_flag_is_supplied(monkeypatch) -> None:
+    ollama_client = CountingSuccessClient()
+    legacy_flag_name = "llm" + "Allow" + "Openai" + "Fallback"
+
+    def fake_create_llm_client(provider: LlmProvider, **kwargs):
+        if provider == LlmProvider.ollama:
+            return ollama_client
+        raise AssertionError(f"Unexpected provider factory call: {provider}")
+
+    monkeypatch.setattr(
+        "app.services.world_config_generation_orchestrator.create_llm_client",
+        fake_create_llm_client,
+    )
+
+    result = generate_world_config(
+        _request(max_repairs=0),
+        provider=LlmProvider.openai,
+        client_override=FakeOpenAIFailureClient(),
+        settings=Settings(
+            _env_file=None,
+            openaiApiKey="test-key",
+            llmProviderChain=["openai", "ollama"],
+            **{legacy_flag_name: True},
+        ),
+    )
+
+    assert result.success is False
+    assert result.generatedPayload is None
+    assert result.fallbackTrace == []
+    assert ollama_client.calls == 0
 
 
 def test_orchestrator_keeps_expected_fastapi_endpoints_and_forbidden_artifacts_absent() -> None:

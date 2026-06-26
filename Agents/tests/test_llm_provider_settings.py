@@ -14,14 +14,20 @@ def test_default_settings_load_without_env_file() -> None:
     settings = Settings(_env_file=None)
 
     assert settings.llmProvider == LlmProvider.openai
-    assert settings.llmProviderChain == ["openai", "ollama"]
+    assert settings.llmProviderChain == ["openai"]
+    assert all("Fallback" not in name for name in Settings.model_fields)
     assert settings.openaiApiKey == ""
     assert settings.ollamaBaseUrl == "http://localhost:11434"
-    assert settings.v2AgentGraphEnabled is False
 
 
-def test_default_provider_chain_is_openai_then_ollama() -> None:
+def test_default_provider_chain_is_openai_only() -> None:
     settings = Settings(_env_file=None)
+
+    assert get_provider_chain(settings) == [LlmProvider.openai]
+
+
+def test_explicit_provider_chain_can_include_ollama() -> None:
+    settings = Settings(_env_file=None, llmProviderChain=["openai", "ollama"])
 
     assert get_provider_chain(settings) == [LlmProvider.openai, LlmProvider.ollama]
 

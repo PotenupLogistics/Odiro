@@ -55,9 +55,9 @@ Post-processing 결과는 UE5 handoff response의 `postProcessing` 필드에 포
 * `set_obstacle_blocking_ratio_from_environment_sampler`
 * `set_runtime_limit_from_environment_sampler`
 
-## 5. OpenAI Fallback과의 관계
+## 5. 실패 처리와의 관계
 
-OpenAI fallback은 post-processing과 scenario repair 후에도 실패가 반복될 때 검토한다. 현재 단계에서는 OpenAI API를 호출하지 않는다.
+post-processing과 scenario repair 후에도 실패가 반복되면 최종 실패 결과를 반환한다. 현재 단계에서는 OpenAI API를 호출하지 않는다.
 
 ## Route-relative placement post-processing
 

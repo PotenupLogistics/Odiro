@@ -33,14 +33,12 @@ uv run pytest -q
 
 ```text
 V2_AGENT_LLM_ENABLED=false
-V2_AGENT_GRAPH_ENABLED=false
 ```
 
 이 상태에서는 외부 LLM provider를 호출하지 않습니다.
 
-* scenario generation v2는 항상 LangGraph runner를 사용하며 deterministic graph path로 template을 생성합니다.
+* scenario generation v2는 항상 LangGraph runner를 사용하며 deterministic node path로 template을 생성합니다.
 * analysis는 rule-based failure pattern detector와 recommendation generator를 사용합니다.
-* `V2_AGENT_GRAPH_ENABLED=false`는 scenario generation v2의 graph off switch가 아닙니다.
 * 외부 API key 없이 테스트가 통과해야 합니다.
 
 ## 5. fake/mock client 기반 LLM 경로 테스트
@@ -87,19 +85,15 @@ LLM mode를 켜면 scenario generation v2는 `project_scenario_v1` JSON Schema s
 
 Scenario generation contract tests cover raw `scenario` response shape, abstract `entry`/`exit` robot anchors, concrete `corridor_pose` robot anchors, mixed-anchor repair, fixed number or min/max range values, fixed/pattern/scatter obstacle placements, Unreal-supported persona override fields, optional placement `allow_blocking`, optional background `spawn_zone` segment references, optional `meet_offset_m`, and limited `corridor.segments[].replaced_by` string choices.
 
-## 9. Graph mode 운영 설정
+## 9. Runner 운영 확인
 
-```text
-V2_AGENT_GRAPH_ENABLED=false
-```
-
-Scenario generation v2는 `V2_AGENT_GRAPH_ENABLED` 값과 무관하게 LangGraph runner를 사용합니다. ResultAnalysisV2 graph runner는 `V2_AGENT_GRAPH_ENABLED`로 graph 경로와 legacy 경로를 선택하며, `langgraph`가 설치되지 않은 환경에서도 graph-compatible node pipeline으로 동작해야 합니다. response schema는 기존 `analysis_run_response_v2`를 유지해야 합니다.
+Scenario generation v2는 항상 LangGraph runner를 사용합니다. ResultAnalysisV2도 항상 `ResultAnalysisGraphRunnerV2`를 사용하며, `langgraph`가 설치되지 않은 환경에서도 graph-compatible node pipeline으로 동작해야 합니다. response schema는 기존 `analysis_run_response_v2`를 유지해야 합니다.
 
 ```powershell
 uv run pytest tests/test_v2_result_analysis_graph_runner.py -q
 ```
 
-이 테스트는 import 가능성, insufficient data response, 반복 blocked region violation recommendation, graph flag true/false API 경로, timeline/RAG 내부 state 유지와 response schema 비노출을 검증합니다.
+이 테스트는 import 가능성, insufficient data response, 반복 blocked region violation recommendation, API response schema, timeline/RAG 내부 state 유지와 response schema 비노출을 검증합니다.
 
 ## 10. timeline/RAG builder 테스트
 

@@ -70,6 +70,8 @@ prompt
 
 LLM 후보가 valid이면 `select_scenario_pattern_node`는 deterministic `ScenarioTypeSelector`를 호출하지 않습니다. 이 경로는 LLM을 최종 결정권자로 두는 것이 아니라, validator를 통과한 후보만 graph state에 채택하는 구조입니다.
 
+`AgentLlmJsonClient`는 설정된 첫 LLM provider만 선택합니다. provider 실패 시 graph는 deterministic fallback으로 degraded 처리합니다.
+
 ## Routing
 
 `validate_scenario_template_node` 이후 `route_validation_node`가 validation 결과와 `repair_count`로 분기합니다.

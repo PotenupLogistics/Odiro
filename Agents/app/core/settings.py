@@ -21,7 +21,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LLM_PROVIDER", "llmProvider"),
     )
     llmProviderChain: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["openai", "ollama"],
+        default_factory=lambda: ["openai"],
         validation_alias=AliasChoices("LLM_PROVIDER_CHAIN", "llmProviderChain"),
     )
     openaiApiKey: str = Field(
@@ -71,10 +71,6 @@ class Settings(BaseSettings):
     ollamaTemperature: float = Field(
         default=0.1,
         validation_alias=AliasChoices("OLLAMA_TEMPERATURE", "ollamaTemperature"),
-    )
-    llmAllowOpenaiFallback: bool = Field(
-        default=True,
-        validation_alias=AliasChoices("LLM_ALLOW_OPENAI_FALLBACK", "llmAllowOpenaiFallback"),
     )
     llmMaxTotalAttempts: int = Field(
         default=3,
@@ -128,10 +124,6 @@ class Settings(BaseSettings):
         default=1,
         validation_alias=AliasChoices("V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS", "v2AgentLlmMaxRepairAttempts"),
     )
-    v2AgentGraphEnabled: bool = Field(
-        default=False,
-        validation_alias=AliasChoices("V2_AGENT_GRAPH_ENABLED", "v2AgentGraphEnabled"),
-    )
 
     @field_validator("llmProviderChain", mode="before")
     @classmethod
@@ -140,4 +132,4 @@ class Settings(BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         if isinstance(value, list):
             return [str(item) for item in value]
-        return ["openai", "ollama"]
+        return ["openai"]

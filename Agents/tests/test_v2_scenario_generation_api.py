@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from app.agents.common.json_response_parser import parse_json_response
+from app.agents.common.llm_json_client import AgentLlmJsonClient
 from app.agents.scenario_generation_v2 import ScenarioGenerationV2Agent
 from app.agents.scenario_generation_v2.graph_runner import ScenarioGenerationGraphRunnerV2
 from app.agents.scenario_generation_v2.repair_diagnostics import RepairDiagnosticCode
@@ -477,6 +478,48 @@ def test_v2_scenario_generate_accepts_prompt_only() -> None:
     payload = response.json()
     _assert_raw_scenario(payload)
     assert "template_path" not in payload
+
+
+def test_v2_scenario_api_falls_back_when_openai_fails_without_ollama_attempt(monkeypatch) -> None:
+    monkeypatch.setenv("V2_AGENT_LLM_ENABLED", "true")
+    monkeypatch.setenv("LLM_PROVIDER_CHAIN", "openai,ollama")
+    providers: list[str] = []
+
+    def fail_generate_json(self, **_kwargs):
+        providers.append(self.provider.value)
+        raise ValueError("simulated provider failure")
+
+    monkeypatch.setattr(AgentLlmJsonClient, "generate_json", fail_generate_json)
+
+    response = TestClient(app).post(
+        "/api/v2/scenarios/generate",
+        json={"prompt": "좁은 보도에서 장애물이 있고 보행자가 가로지르는 상황"},
+    )
+
+    assert response.status_code == 200, response.text
+    _assert_raw_scenario(response.json())
+    assert providers == ["openai"]
+
+
+def test_v2_scenario_api_falls_back_when_selected_ollama_provider_fails(monkeypatch) -> None:
+    monkeypatch.setenv("V2_AGENT_LLM_ENABLED", "true")
+    monkeypatch.setenv("LLM_PROVIDER_CHAIN", "ollama")
+    providers: list[str] = []
+
+    def fail_generate_json(self, **_kwargs):
+        providers.append(self.provider.value)
+        raise ValueError("simulated provider failure")
+
+    monkeypatch.setattr(AgentLlmJsonClient, "generate_json", fail_generate_json)
+
+    response = TestClient(app).post(
+        "/api/v2/scenarios/generate",
+        json={"prompt": "좁은 보도에서 장애물이 있고 보행자가 가로지르는 상황"},
+    )
+
+    assert response.status_code == 200, response.text
+    _assert_raw_scenario(response.json())
+    assert providers == ["ollama"]
 
 
 def test_v2_scenario_graph_runner_uses_langgraph_compile_invoke() -> None:

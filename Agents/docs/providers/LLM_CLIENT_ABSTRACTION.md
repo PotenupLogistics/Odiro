@@ -24,9 +24,11 @@ LLM client abstraction은 WorldConfig generation에서 provider를 교체할 수
 
 Provider 설정은 `app/core/settings.py`에서 로드한다.
 
-* 기본 provider chain: `openai, ollama`
+* 기본 provider chain: `openai`
 * OpenAI는 accuracy-first provider다.
-* Ollama는 fallback provider다.
+* Ollama는 로컬 개발/수동 smoke용 선택 provider다.
+* `/api/v2/analysis/run`과 `/api/v2/scenarios/generate`는 provider chain을 순회하지 않고 설정된 첫 provider만 선택한다.
+* 선택된 LLM provider 실패 시 result analysis는 rule-based fallback, scenario generation은 deterministic fallback을 반환한다.
 * API key는 `.env`에서 읽으며 source code에 hardcode하지 않는다.
 * 자동 tests는 mock transport 또는 dry-run 경로를 사용한다.
 

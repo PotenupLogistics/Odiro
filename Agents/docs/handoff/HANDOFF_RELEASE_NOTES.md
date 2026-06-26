@@ -19,7 +19,7 @@
 * Scenario reflection
 * Scenario post-processing
 * OpenAI-first provider 경로
-* Ollama fallback provider 경로
+* Ollama local/manual provider 경로
 * legacy UE handoff endpoint 제거
 * legacy `WorldConfig` -> `EpisodeSpec` adapter/archive tooling
 * 이전 `WorldConfig` -> `EpisodeSetup` + `DeliveryBotSetup` adapter

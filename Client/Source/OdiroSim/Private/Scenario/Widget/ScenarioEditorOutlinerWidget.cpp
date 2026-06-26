@@ -208,7 +208,13 @@ void UScenarioEditorOutlinerWidget::RefreshFromEditorState()
 
 void UScenarioEditorOutlinerWidget::SetSelectedItemKey(const FString& itemKey)
 {
-	SelectedItemKey = itemKey.IsEmpty() ? ScenarioKey : itemKey;
+	const FString resolvedItemKey = itemKey.IsEmpty() ? ScenarioKey : itemKey;
+	if (SelectedItemKey == resolvedItemKey)
+	{
+		return;
+	}
+
+	SelectedItemKey = resolvedItemKey;
 	for (UScenarioEditorOutlinerRowWidget* rowWidget : RowWidgets)
 	{
 		if (!rowWidget)
@@ -291,6 +297,12 @@ void UScenarioEditorOutlinerWidget::BuildOutlinerItems(
 
 void UScenarioEditorOutlinerWidget::HandleRowSelected(FScenarioOutlinerItemViewModel item)
 {
+	const FString resolvedItemKey = item.ItemKey.IsEmpty() ? ScenarioKey : item.ItemKey;
+	if (SelectedItemKey == resolvedItemKey)
+	{
+		return;
+	}
+
 	SetSelectedItemKey(item.ItemKey);
 	if (UScenarioEditorOutlinerViewModel* outlinerViewModel = GetOutlinerViewModel())
 	{

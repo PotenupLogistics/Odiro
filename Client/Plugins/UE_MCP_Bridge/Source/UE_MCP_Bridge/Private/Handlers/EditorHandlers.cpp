@@ -60,6 +60,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Framework/Application/SlateApplication.h"
+#include "GenericPlatform/GenericWindow.h"
 #include "ImageUtils.h"
 #include "Widgets/SViewport.h"
 #include "Widgets/SWindow.h"
@@ -172,6 +173,33 @@ namespace
 		Obj->SetNumberField(TEXT("x"), Value.X);
 		Obj->SetNumberField(TEXT("y"), Value.Y);
 		return Obj;
+	}
+
+	TSharedPtr<FJsonObject> MakeSlateRectJson(const FSlateRect& Value)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("left"), Value.Left);
+		Obj->SetNumberField(TEXT("top"), Value.Top);
+		Obj->SetNumberField(TEXT("right"), Value.Right);
+		Obj->SetNumberField(TEXT("bottom"), Value.Bottom);
+		Obj->SetNumberField(TEXT("width"), Value.GetSize().X);
+		Obj->SetNumberField(TEXT("height"), Value.GetSize().Y);
+		return Obj;
+	}
+
+	FString WindowModeToString(const EWindowMode::Type WindowMode)
+	{
+		switch (WindowMode)
+		{
+		case EWindowMode::Fullscreen:
+			return TEXT("Fullscreen");
+		case EWindowMode::WindowedFullscreen:
+			return TEXT("WindowedFullscreen");
+		case EWindowMode::Windowed:
+			return TEXT("Windowed");
+		default:
+			return TEXT("Unknown");
+		}
 	}
 }
 
@@ -1070,6 +1098,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureSlateWindow(const TSharedPtr<FJso
 
 	const FVector2D WindowPosition = Window->GetPositionInScreen();
 	const FVector2D WindowSize = Window->GetSizeInScreen();
+	const FSlateRect WindowRect = Window->GetRectInScreen();
+	const FSlateRect ClientRect = Window->GetClientRectInScreen();
+	const double ApplicationScale = FSlateApplication::Get().GetApplicationScale();
+	const double WindowDpiScale = Window->GetDPIScaleFactor();
+	const double WindowRootScale = ApplicationScale * WindowDpiScale;
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("filename"), Filename);
 	Result->SetStringField(TEXT("target"), Target);
@@ -1081,8 +1114,38 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureSlateWindow(const TSharedPtr<FJso
 	Result->SetNumberField(TEXT("pngBytes"), static_cast<double>(CompressedPng.Num()));
 	Result->SetObjectField(TEXT("windowPosition"), MakeVector2Json(WindowPosition));
 	Result->SetObjectField(TEXT("windowSize"), MakeVector2Json(WindowSize));
-	Result->SetNumberField(TEXT("applicationScale"), FSlateApplication::Get().GetApplicationScale());
-	Result->SetStringField(TEXT("note"), TEXT("Captured via FSlateApplication::TakeScreenshot; includes Slate/UMG pixels for the selected window."));
+	Result->SetObjectField(TEXT("windowPositionPixels"), MakeVector2Json(WindowPosition));
+	Result->SetObjectField(TEXT("windowSizePixels"), MakeVector2Json(WindowSize));
+	Result->SetObjectField(TEXT("windowRectPixels"), MakeSlateRectJson(WindowRect));
+	Result->SetObjectField(TEXT("clientRectPixels"), MakeSlateRectJson(ClientRect));
+	Result->SetNumberField(TEXT("applicationScale"), ApplicationScale);
+	Result->SetNumberField(TEXT("windowDpiScale"), WindowDpiScale);
+	Result->SetNumberField(TEXT("windowRootScale"), WindowRootScale);
+	Result->SetNumberField(TEXT("screenshotToWindowScaleX"), WindowSize.X > 0.0 ? static_cast<double>(ImageSize.X) / WindowSize.X : 0.0);
+	Result->SetNumberField(TEXT("screenshotToWindowScaleY"), WindowSize.Y > 0.0 ? static_cast<double>(ImageSize.Y) / WindowSize.Y : 0.0);
+	if (TSharedPtr<FGenericWindow> NativeWindow = Window->GetNativeWindow())
+	{
+		Result->SetBoolField(TEXT("nativeWindowVisible"), NativeWindow->IsVisible());
+		Result->SetBoolField(TEXT("nativeWindowMinimized"), NativeWindow->IsMinimized());
+		Result->SetBoolField(TEXT("nativeWindowMaximized"), NativeWindow->IsMaximized());
+		Result->SetNumberField(TEXT("nativeWindowDpiScale"), NativeWindow->GetDPIScaleFactor());
+		Result->SetStringField(TEXT("nativeWindowMode"), WindowModeToString(NativeWindow->GetWindowMode()));
+
+		int32 FullScreenX = 0;
+		int32 FullScreenY = 0;
+		int32 FullScreenWidth = 0;
+		int32 FullScreenHeight = 0;
+		if (NativeWindow->GetFullScreenInfo(FullScreenX, FullScreenY, FullScreenWidth, FullScreenHeight))
+		{
+			TSharedPtr<FJsonObject> FullScreenInfo = MakeShared<FJsonObject>();
+			FullScreenInfo->SetNumberField(TEXT("x"), FullScreenX);
+			FullScreenInfo->SetNumberField(TEXT("y"), FullScreenY);
+			FullScreenInfo->SetNumberField(TEXT("width"), FullScreenWidth);
+			FullScreenInfo->SetNumberField(TEXT("height"), FullScreenHeight);
+			Result->SetObjectField(TEXT("nativeFullScreenInfoPixels"), FullScreenInfo);
+		}
+	}
+	Result->SetStringField(TEXT("note"), TEXT("Captured selected Slate window content via FSlateApplication::TakeScreenshot. Width/height are PNG pixels; window/client fields are screen pixels for DPI diagnostics, not a full-desktop capture."));
 	return MCPResult(Result);
 }
 

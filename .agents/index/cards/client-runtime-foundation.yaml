@@ -6,6 +6,8 @@ paths:
   - Client/OdiroSim.uproject
   - Client/Source/*.Target.cs
   - Client/Source/OdiroSim/OdiroSim.Build.cs
+  - Client/Source/OdiroSim/Public/UI/Base*.h
+  - Client/Source/OdiroSim/Private/UI/Base*.cpp
   - Client/Config/**
   - Client/Content/**
   - Client/Plugins/UEGitPlugin/**
@@ -26,11 +28,18 @@ entry:
       - Client/Content/Widgets
       - Client/Content/Data
       - Client/Plugins/UEGitPlugin
+  - id: base-widgets
+    description: Independent base widget token types, component view adapters, and WBP assets.
+    read:
+      - Client/Source/OdiroSim/Public/UI
+      - Client/Source/OdiroSim/Private/UI
+      - Client/Content/Widgets/Common
 guardrails:
   - Unreal-specific config and assets stay in Client.
   - Add module dependencies only at the public/private boundary that needs them.
   - Default startup uses StartupMap for project selection; ScenarioEditorMap owns the editor workspace.
   - UMG assets own layout/style and required BindWidget names; C++ should not reconstruct asset trees as fallback UI.
+  - Base widget assets are independent common component surfaces; do not wire them into existing screens during foundation work.
   - Scenario editor widget class references are catalog-owned through Client Content data assets.
   - UEGitPlugin is for editor checkout/lock flow; do not add `filter=lfs` attributes from the plugin UI.
 verify:

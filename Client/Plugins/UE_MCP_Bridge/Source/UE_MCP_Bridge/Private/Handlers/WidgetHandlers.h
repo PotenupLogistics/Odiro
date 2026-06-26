@@ -34,6 +34,9 @@ private:
 	static TSharedPtr<FJsonValue> WrapRoot(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListWidgetClasses(const TSharedPtr<FJsonObject>& Params);
 
+	// Renders a Widget Blueprint in isolation to a PNG (no editor-window occlusion).
+	static TSharedPtr<FJsonValue> CaptureWidget(const TSharedPtr<FJsonObject>& Params);
+
 	// Runtime (PIE) widget inspection (#160)
 	static TSharedPtr<FJsonValue> ListRuntimeWidgets(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetRuntimeWidget(const TSharedPtr<FJsonObject>& Params);

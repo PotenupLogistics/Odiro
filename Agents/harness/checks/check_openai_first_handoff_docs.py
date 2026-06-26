@@ -53,7 +53,6 @@ def _detect_hardcoded_keys() -> list[str]:
 
 
 def run_check() -> dict[str, Any]:
-    result_doc_text = _read(RESULT_DOC)
     root_readme_text = _read(ROOT_README)
     docs_readme_text = _read(DOCS_README)
     related_text = "\n".join(_read(path) for path in RELATED_DOCS)
@@ -67,7 +66,7 @@ def run_check() -> dict[str, Any]:
         "rootReadmeLinksResult": "HANDOFF_RELEASE_NOTES.md" in root_readme_text,
         "docsReadmeLinksResult": "HANDOFF_RELEASE_NOTES.md" in docs_readme_text,
         "mentionsOpenAiFirst": "OpenAI-first" in related_text,
-        "mentionsOllamaFallback": "Ollama fallback" in related_text,
+        "mentionsOllamaLocalManualProvider": "Ollama" in related_text and "local/manual" in related_text,
         "recordsProviderUsedOpenAi": "providerUsed=openai" in related_text,
         "recordsFallbackUsedFalse": "fallbackUsed=false" in related_text,
         "mentionsApiKeyNotStored": "API key" in related_text and "저장하지" in related_text,
@@ -84,7 +83,7 @@ def run_check() -> dict[str, Any]:
         ("rootReadmeLinksResult", "README.md must link docs/handoff/HANDOFF_RELEASE_NOTES.md."),
         ("docsReadmeLinksResult", "docs/README.md must link HANDOFF_RELEASE_NOTES.md."),
         ("mentionsOpenAiFirst", "Related docs must mention OpenAI-first."),
-        ("mentionsOllamaFallback", "Related docs must mention Ollama fallback."),
+        ("mentionsOllamaLocalManualProvider", "Related docs must mention Ollama local/manual provider role."),
         ("recordsProviderUsedOpenAi", "Related docs must record providerUsed=openai."),
         ("recordsFallbackUsedFalse", "Related docs must record fallbackUsed=false."),
         ("mentionsApiKeyNotStored", "Related docs must state API key is not stored."),

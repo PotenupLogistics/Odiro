@@ -32,7 +32,7 @@ START
 
 `V2_AGENT_LLM_ENABLED=true`이면 `interpret_user_prompt_node`가 prompt 정규화 직후 LLM 후보 생성을 먼저 시도합니다. 후보가 `TemplateValidator`를 통과하면 deterministic `ScenarioTypeSelector`/`TemplatePlanner` 경로를 건너뛰고 `build_scenario_template_node`에서 해당 후보를 채택합니다.
 
-LLM 후보가 없거나 invalid이면 deterministic 경로로 내려갑니다.
+`AgentLlmJsonClient`는 설정된 첫 LLM provider만 선택합니다. LLM 후보가 없거나 invalid이면 다른 provider 재시도 대신 deterministic 경로로 내려갑니다.
 
 ```text
 prompt
@@ -51,7 +51,7 @@ prompt
 | `ScenarioTypeSelector` | deterministic fallback에서 지원 가능한 생성 패턴 선택 |
 | `TemplatePlanner` | deterministic fallback용 생성 계획 작성 |
 | `TemplateJsonWriter` | deterministic Project Scenario JSON 작성 |
-| `AgentLlmJsonClient` | 설정된 provider(OpenAI/Ollama)에 JSON 생성 요청 |
+| `AgentLlmJsonClient` | 설정된 첫 LLM provider에 JSON 생성 요청 |
 | `TemplateValidator` | Project Scenario v1 규칙 검증 |
 | `RepairHandler` | 자동 보정 가능한 JSON 구조 수정 |
 | `ResponseBuilder` | 내부 `ScenarioGenerateV2Response` 구성 |

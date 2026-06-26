@@ -38,8 +38,10 @@ Use `.env.example` as the template:
 
 - `OLLAMA_BASE_URL=http://localhost:11434`
 - `OLLAMA_MODEL=llama3.1:8b`
-- `LLM_PROVIDER=openai`
-- `LLM_PROVIDER_CHAIN=openai,ollama`
+- `LLM_PROVIDER=ollama` for explicit local/manual provider checks
+- `LLM_PROVIDER_CHAIN=openai` for the default OpenAI path
+
+For `/api/v2/analysis/run` and `/api/v2/scenarios/generate`, provider switching is not the stability fallback. If the selected LLM provider fails, result analysis returns rule-based fallback and scenario generation returns deterministic fallback instead of relying on Ollama availability.
 
 Do not commit a real `.env` file.
 
@@ -47,7 +49,7 @@ Do not commit a real `.env` file.
 
 - Ollama must be running locally for real generation.
 - The configured model must be pulled before use.
-- OpenAI is now the first provider. Ollama remains the fallback provider.
+- Ollama is a local development/manual smoke provider; do not depend on it as the production fallback path.
 
 ## 4. API Usage
 
@@ -69,7 +71,7 @@ If generation succeeds and the extracted JSON passes validation, the response in
 - `ollama_invalid_response`: response body was not valid JSON.
 - `ollama_missing_content`: response did not include `message.content`.
 
-Invalid JSON or validation failure can enter the repair loop. OpenAI fallback remains a later provider implementation step.
+Invalid JSON or validation failure can enter the repair loop. Provider retry remains a separate implementation decision.
 
 ## 6. Testing Policy
 

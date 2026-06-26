@@ -12,7 +12,7 @@ AI Backend는 OpenAI-first provider chain에서 내부 `WorldConfig`를 UE 실�
 
 * `POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=episode_spec`
 * `POST /api/v1/ue5/world-config/handoff?provider=openai&responseFormat=both`
-* Ollama는 fallback provider로 유지한다.
+* Ollama는 local/manual provider option으로 유지한다.
 
 ## 3. EpisodeSpec 변환 범위
 

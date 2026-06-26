@@ -11,6 +11,7 @@ v2 Agent는 user project 전환 기준으로 Project Scenario 생성과 run 결�
 * raw log 전체를 LLM에 넣지 않습니다.
 * LLM 출력은 반드시 validator를 통과해야 합니다.
 * 실패 시 API 500 대신 fallback 응답과 warning을 반환합니다.
+* v2 endpoint의 `AgentLlmJsonClient`는 설정된 첫 LLM provider만 선택합니다. provider 실패 시 자체 fallback으로 기본 응답을 보장합니다.
 
 ## ScenarioGenerationV2 흐름
 
@@ -70,6 +71,8 @@ LLM output 처리 순서:
 5. repair 결과가 `TemplateValidator`를 통과하면 repaired scenario를 사용합니다.
 6. repair도 실패하면 warning을 남기고 deterministic fallback을 사용합니다.
 7. Scenario generation v2 response는 graph 실행 결과이므로 `generation_mode="langgraph"`를 유지합니다.
+
+Scenario generation v2는 선택된 LLM provider 실패를 deterministic fallback으로 처리합니다.
 
 ## ResultAnalysisV2 흐름
 
@@ -170,7 +173,7 @@ LLM이 반환하는 것은 final response 전체가 아니라 recommendation/sum
 
 ## fallback 설계
 
-Scenario generation에서 LLM output 또는 repair output이 검증 실패하면 deterministic fallback을 사용합니다.
+Scenario generation에서 LLM 호출, LLM output, repair output이 실패하거나 검증 실패하면 deterministic fallback을 사용합니다.
 
 Analysis에서 LLM 호출, JSON 파싱, recommendation validation, evidence validation이 실패하면 rule-based fallback을 사용합니다.
 

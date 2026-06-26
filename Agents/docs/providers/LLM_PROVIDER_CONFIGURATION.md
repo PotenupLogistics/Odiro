@@ -2,7 +2,7 @@
 
 ## 1. 목적
 
-이 문서는 OpenAI와 Ollama를 교체 가능한 LLM provider로 사용하기 위한 설정 구조를 정리한다. 현재 기본 방향은 OpenAI를 정확도 우선 provider로 사용하고, Ollama를 로컬 fallback provider로 유지하는 것이다.
+이 문서는 OpenAI와 Ollama를 교체 가능한 LLM provider로 사용하기 위한 설정 구조를 정리한다. 현재 기본 방향은 OpenAI를 정확도 우선 provider로 사용하고, Ollama는 로컬 개발/수동 smoke용 선택 provider로 유지하는 것이다.
 
 ## 2. Manual Ollama Smoke 설정
 
@@ -22,14 +22,16 @@ uv run python scripts/run_ollama_world_config_smoke.py --prompt "장애물이 �
 
 `--report`를 지정하지 않으면 smoke runner는 파일을 생성하지 않는다.
 
-## 3. OpenAI First Provider Chain
+## 3. OpenAI First Provider 설정
 
-현재 provider 순서:
+현재 기본 provider 설정:
 
 * `LLM_PROVIDER=openai`
-* `LLM_PROVIDER_CHAIN=openai,ollama`
+* `LLM_PROVIDER_CHAIN=openai`
 
-OpenAI는 WorldConfig generation의 1순위 provider다. Ollama는 API key 누락, timeout, rate limit, HTTP error, invalid response, repair 이후 validation failure 같은 제한된 상황에서 fallback으로 유지한다.
+OpenAI는 기본 provider다. Ollama는 로컬 개발이나 수동 smoke에서 직접 선택할 수 있는 provider다. `/api/v2/analysis/run`과 `/api/v2/scenarios/generate`는 provider chain을 순회하지 않는다. 선택된 LLM provider가 실패하면 result analysis는 rule-based fallback, scenario generation은 deterministic fallback을 반환한다.
+
+비-v2 WorldConfig 도구도 선택한 provider만 한 번 호출한다. OpenAI smoke는 OpenAI만 호출하고, Ollama 검증은 별도 Ollama smoke에서 provider를 직접 선택한다.
 
 OpenAI-first EpisodeSpec handoff smoke는 `providerUsed=openai`, `fallbackUsed=false`, `episodeValidationPassed=true`, `episodeScenarioReflectionPassed=true`, `ueCompilerReadiness=true`로 통과했다. Legacy setup_pair smoke도 별도 문서에서 관리한다.
 
@@ -61,7 +63,9 @@ OpenAI provider client는 Responses API를 대상으로 `httpx`로 구현되어 
 ## 5. 비용 제어 전략
 
 * 정확도가 중요한 WorldConfig generation에는 OpenAI first를 사용한다.
-* 제한된 실패 상황에서는 Ollama fallback을 허용한다.
+* `/api/v2/analysis/run`은 LLM provider 실패 시 rule-based fallback을 사용한다.
+* `/api/v2/scenarios/generate`는 LLM provider 실패 시 deterministic fallback을 사용한다.
+* Ollama는 로컬 개발 또는 수동 비교가 필요할 때 명시적으로 선택한다.
 * max tokens를 제한한다.
 * 낮은 temperature를 사용한다.
 * repair attempt 횟수를 제한한다.

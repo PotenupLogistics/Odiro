@@ -51,13 +51,11 @@ raw Ollama `message.content`는 JSON extraction과 `world_config` validation을 
 
 repair attempt는 같은 provider를 재사용한다.
 
-## Provider Chain Policy
+## Provider Selection Policy
 
-provider chain은 OpenAI first, Ollama fallback second 구조다.
+비-v2 WorldConfig orchestrator는 호출자가 전달한 provider만 한 번 사용한다. `provider=openai`이면 `OpenAILlmClient`만 호출하고, `provider=ollama`이면 `OllamaLlmClient`만 호출한다.
 
-`provider=openai`이면 orchestrator는 `OpenAILlmClient`를 호출한다. OpenAI가 fallback 대상 provider error로 실패하거나 repair 후에도 valid payload를 만들지 못하면 provider policy가 같은 요청을 Ollama로 전달할 수 있다. fallback 여부는 `fallbackTrace`에 기록한다.
-
-fallback 대상에는 OpenAI API key 없음, timeout, rate limit, HTTP error, invalid response, missing content, repair 이후 validation failure가 포함된다. 모호하거나 지원하지 않는 사용자 요청은 fallback을 유발하지 않는다.
+OpenAI WorldConfig smoke와 Ollama WorldConfig smoke는 각각 직접 선택한 provider를 검증하는 수동 도구다. v2 endpoint의 안정성 처리는 provider 전환이 아니라 `/api/v2/analysis/run`의 rule-based fallback과 `/api/v2/scenarios/generate`의 deterministic fallback에서 담당한다.
 
 ## API Endpoint Status
 

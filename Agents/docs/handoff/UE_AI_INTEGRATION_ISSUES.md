@@ -27,7 +27,7 @@
 | --- | --- | --- |
 | UE feedback에 따른 EpisodeSpec adapter 수정 | deferred | UE parser 결과 기반 조정 |
 | `obstacle.kickboard` 추가 후 mapping 변경 | deferred | catalog 추가 후 prop_id 변경 |
-| OpenAI fallback 필요 여부 | deferred | Ollama 품질/속도 한계 발생 시 판단 |
+| LLM 실패 시 자체 fallback 정책 유지 | deferred | API 안정성을 우선하고 로컬 provider는 수동 검증용으로 유지 |
 | 추가 scenario type 확장 여부 | deferred | UE integration 후 결정 |
 
 ## 3. Blocker / Non-blocker / Deferred 기준

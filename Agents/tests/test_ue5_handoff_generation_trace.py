@@ -54,7 +54,6 @@ def _response(include_diagnostics: bool = True):
             generation_request,
             provider=provider,
             client_override=fake_client,
-            allow_fallback=False,
         ),
     )
 

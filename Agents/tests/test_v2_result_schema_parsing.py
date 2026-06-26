@@ -3,12 +3,19 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.agents.result_analysis_v2.episode_metric_extractor import EpisodeMetricExtractor
 from app.agents.result_analysis_v2.episode_metric_extractor import EpisodeMetrics
 from app.agents.result_analysis_v2.failure_pattern_detector import FailurePatternDetector
 from app.main import app
+
+
+@pytest.fixture(autouse=True)
+def _disable_endpoint_llm(monkeypatch) -> None:
+    """Keep endpoint schema parsing tests independent from local LLM settings."""
+    monkeypatch.setenv("V2_AGENT_LLM_ENABLED", "false")
 
 
 def _episode_metrics(*, episode_id: str, failure_type: str | None = None, timeout: bool | None = None) -> EpisodeMetrics:

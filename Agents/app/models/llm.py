@@ -67,22 +67,3 @@ class LlmProviderStatus(BaseModel):
     available: bool
     reason: str
     model: str | None = None
-
-
-class LlmFallbackDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    shouldFallback: bool
-    fromProvider: LlmProvider | None = None
-    toProvider: LlmProvider | None = None
-    reason: str
-    costSensitive: bool = True
-
-
-class LlmProviderChainPlan(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    providers: list[LlmProvider]
-    statuses: list[LlmProviderStatus]
-    allowOpenaiFallback: bool
-    maxTotalAttempts: int

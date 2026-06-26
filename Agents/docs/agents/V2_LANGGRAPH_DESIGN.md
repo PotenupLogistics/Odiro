@@ -2,15 +2,17 @@
 
 ## 1. 적용 이유
 
-v2 Agent는 deterministic/rule-based 경로와 optional LLM fallback 구조를 갖고 있습니다. LangGraph는 이 흐름을 node, edge, state, guardrail 단위로 명시해 분석 가능성과 단계별 테스트 가능성을 높이기 위한 구조입니다.
+v2 Agent는 deterministic/rule-based 경로와 optional LLM 경로를 갖고 있습니다. LangGraph는 이 흐름을 node, edge, state, guardrail 단위로 명시해 분석 가능성과 단계별 테스트 가능성을 높이기 위한 구조입니다.
 
 특히 scenario generation은 scenario 생성, 검증, repair, fallback이 분기형 workflow이고, result analysis는 workspace scan부터 RAG context, LLM recommendation validation까지 긴 pipeline입니다. Graph 표현은 각 단계의 입력/출력과 실패 처리 책임을 분리하는 데 유리합니다.
 
 ## 2. 적용 범위
 
-Scenario generation v2는 `/api/v2/scenarios/generate`에서 항상 LangGraph runner를 사용합니다. `V2_AGENT_LLM_ENABLED=false`이면 deterministic node path만 사용하고, `true`이면 graph 내부 LLM-assisted node가 OpenAI JSON Schema structured output 호출을 시도한 뒤 validator/repair/fallback을 거칩니다.
+Scenario generation v2는 `/api/v2/scenarios/generate`에서 항상 LangGraph runner를 사용합니다. `V2_AGENT_LLM_ENABLED=false`이면 deterministic node path만 사용하고, `true`이면 graph 내부 LLM-assisted node가 설정된 첫 LLM provider로 JSON 호출을 시도한 뒤 validator/repair/fallback을 거칩니다.
 
 Result analysis v2는 `/api/v2/analysis/run`에서 항상 `ResultAnalysisGraphRunnerV2`를 사용합니다.
+
+두 v2 endpoint 모두 provider chain을 순회하지 않습니다. 선택된 provider의 LLM 호출이 실패하면 scenario generation은 deterministic fallback, result analysis는 rule-based fallback으로 degraded 처리합니다.
 
 주의: 일부 내부 node 이름에 남은 `template`은 legacy 구현 명칭입니다. 외부 계약과 저장 대상은 `scenario` JSON입니다.
 

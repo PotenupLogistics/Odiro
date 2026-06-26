@@ -71,7 +71,8 @@ def run_check() -> dict[str, Any]:
             path.relative_to(ROOT).as_posix(): path.exists() for path in REQUIRED_FILES
         },
         "envProviderOpenAi": "LLM_PROVIDER=openai" in env_text,
-        "envProviderChainOpenAiOllama": "LLM_PROVIDER_CHAIN=openai,ollama" in env_text,
+        "envProviderChainOpenAiOnly": "LLM_PROVIDER_CHAIN=openai" in env_text,
+        "envNoLegacyProviderRetryToggle": "OPENAI_FALLBACK" not in env_text,
         "envOpenAiKeyEmpty": "OPENAI_API_KEY=\n" in env_text,
         "usesResponsesEndpoint": "https://api.openai.com/v1/responses" in client_text,
         "usesJsonSchemaFormat": '"type": "json_schema"' in client_text,
@@ -88,7 +89,8 @@ def run_check() -> dict[str, Any]:
         result["errors"].append(f"Missing OpenAI provider files: {missing}")
     for key, message in [
         ("envProviderOpenAi", ".env.example must set LLM_PROVIDER=openai."),
-        ("envProviderChainOpenAiOllama", ".env.example must set LLM_PROVIDER_CHAIN=openai,ollama."),
+        ("envProviderChainOpenAiOnly", ".env.example must set LLM_PROVIDER_CHAIN=openai."),
+        ("envNoLegacyProviderRetryToggle", ".env.example must not expose the removed provider switching toggle."),
         ("envOpenAiKeyEmpty", ".env.example OPENAI_API_KEY must be empty."),
         ("usesResponsesEndpoint", "OpenAI client must use the Responses endpoint."),
         ("usesJsonSchemaFormat", "OpenAI client must request JSON Schema structured output."),

@@ -13,8 +13,10 @@
 - `WorldConfig` -> EpisodeSetup adapter
 - `WorldConfig` -> DeliveryBotSetup adapter
 - Legacy RunQueue model, service, export tooling
-- OpenAI-first / Ollama fallback provider chain
-- local `WorldConfig` generation via Ollama provider
+- OpenAI-first provider configuration
+- local development `WorldConfig` generation via Ollama provider
+- rule-based result analysis fallback when optional LLM recommendation fails
+- deterministic scenario generation fallback when optional LLM generation fails
 
 ## Policy RAG
 

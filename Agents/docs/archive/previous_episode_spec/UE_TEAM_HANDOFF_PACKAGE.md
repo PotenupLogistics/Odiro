@@ -17,7 +17,7 @@ legacy EpisodeSpec JSON 참고 문서는 `docs/archive/previous_episode_spec/UE_
 * `EpisodeSpec` scenario reflection 가능
 * OpenAI-first EpisodeSpec handoff smoke 통과
 * environmentSampling 기반 EpisodeSpec handoff smoke 통과
-* Ollama fallback provider 유지
+* Ollama local/manual provider option 유지
 
 ## 2. UE가 사용할 기본 endpoint
 
@@ -28,7 +28,7 @@ legacy EpisodeSpec JSON 참고 문서는 `docs/archive/previous_episode_spec/UE_
 
 * 기본 권장: `responseFormat=episode_spec`
 * 디버깅용: `responseFormat=both`
-* fallback: Ollama provider
+* 로컬/수동 비교용: Ollama provider
 
 ## 4. EpisodeSpec root 구조
 

@@ -5,6 +5,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from app.agents.common.llm_json_client import AgentLlmJsonClient
 from app.agents.result_analysis_v2.graph_runner import ResultAnalysisGraphRunnerV2
 from app.core.settings import Settings
 from app.main import app
@@ -119,6 +120,60 @@ def test_analysis_api_uses_graph_runner_path(tmp_path) -> None:
     assert payload["schema"] == "analysis_run_response_v2"
     assert payload["summary"]["overall_judgement"] == "change_recommended"
     assert payload["analysis_mode"] == "rule_based"
+
+
+def test_analysis_api_falls_back_when_openai_fails_without_ollama_attempt(monkeypatch, tmp_path) -> None:
+    """Keep result analysis stable when the first configured LLM provider fails."""
+    project = tmp_path / "Project1"
+    _write_project_blocked_episode(project, "000001")
+    _write_project_blocked_episode(project, "000002")
+    providers: list[str] = []
+
+    def fail_generate_json(self, **_kwargs) -> dict:
+        providers.append(self.provider.value)
+        raise ValueError("forced OpenAI failure")
+
+    monkeypatch.setenv("V2_AGENT_LLM_ENABLED", "true")
+    monkeypatch.setenv("LLM_PROVIDER_CHAIN", "openai,ollama")
+    monkeypatch.setattr(AgentLlmJsonClient, "generate_json", fail_generate_json)
+
+    response = TestClient(app).post("/api/v2/analysis/run", json={"project_path": str(project), "run_id": "000001"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert providers == ["openai"]
+    assert payload["schema"] == "analysis_run_response_v2"
+    assert payload["analysis_mode"] == "fallback"
+    assert payload["summary"]["overall_judgement"] == "change_recommended"
+    assert payload["recommendations"]
+    assert any("rule-based recommendation fallback" in warning for warning in payload["warnings"])
+
+
+def test_analysis_api_falls_back_when_ollama_provider_fails(monkeypatch, tmp_path) -> None:
+    """Treat a selected local Ollama provider failure as a non-fatal LLM failure."""
+    project = tmp_path / "Project1"
+    _write_project_blocked_episode(project, "000001")
+    _write_project_blocked_episode(project, "000002")
+    providers: list[str] = []
+
+    def fail_generate_json(self, **_kwargs) -> dict:
+        providers.append(self.provider.value)
+        raise ValueError("forced Ollama failure")
+
+    monkeypatch.setenv("V2_AGENT_LLM_ENABLED", "true")
+    monkeypatch.setenv("LLM_PROVIDER_CHAIN", "ollama")
+    monkeypatch.setattr(AgentLlmJsonClient, "generate_json", fail_generate_json)
+
+    response = TestClient(app).post("/api/v2/analysis/run", json={"project_path": str(project), "run_id": "000001"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert providers == ["ollama"]
+    assert payload["schema"] == "analysis_run_response_v2"
+    assert payload["analysis_mode"] == "fallback"
+    assert payload["summary"]["overall_judgement"] == "change_recommended"
+    assert payload["recommendations"]
+    assert any("rule-based recommendation fallback" in warning for warning in payload["warnings"])
 
 
 def test_analysis_api_uses_summary_without_episode_results(tmp_path) -> None:

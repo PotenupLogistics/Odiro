@@ -32,7 +32,7 @@ request validation이 필요한 경우 `generatedPayload`는 schema validation�
 
 ## 5. Scope
 
-이 계층은 heuristic/rule-based layer다. sample JSON, fixture, vector DB, embedding index, OpenAI fallback behavior를 생성하지 않는다.
+이 계층은 heuristic/rule-based layer다. sample JSON, fixture, vector DB, embedding index, provider 전환 behavior를 생성하지 않는다.
 
 ## 6. Binding To Schema Paths
 

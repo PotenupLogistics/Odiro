@@ -1,6 +1,6 @@
 """
 test_sample 5개 파일을 입력받아 OpenAI LLM으로 분석·추천 결과를 생성한다.
-LLM 실패 시 규칙 기반 fallback으로 자동 전환.
+LLM 실패 시 규칙 기반 fallback 결과를 사용한다.
 
 입력 (test_sample/):
   - DeliveryBotSetupSample_1.json   로봇 파라미터

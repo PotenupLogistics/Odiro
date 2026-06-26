@@ -212,7 +212,6 @@ def test_handoff_generation_path_removes_penalties_and_corrects_route_midpoint()
             generation_request,
             provider=provider,
             client_override=fake_client,
-            allow_fallback=False,
         ),
     )
 

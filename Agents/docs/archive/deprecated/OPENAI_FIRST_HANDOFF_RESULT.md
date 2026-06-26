@@ -11,9 +11,9 @@ OpenAI-first provider chain에서 WorldConfig generation과 EpisodeSpec handoff�
 ## 2. Provider 설정
 
 * primary provider: OpenAI
-* fallback provider: Ollama
+* local/manual provider option: Ollama
 * `LLM_PROVIDER=openai`
-* `LLM_PROVIDER_CHAIN=openai,ollama`
+* `LLM_PROVIDER_CHAIN=openai`
 * API key는 `.env`에서 읽으며 문서나 report에 저장하지 않음
 
 ## 3. Smoke 결과

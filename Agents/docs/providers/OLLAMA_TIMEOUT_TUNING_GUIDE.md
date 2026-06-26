@@ -12,7 +12,7 @@ This guide describes how to tune Ollama live smoke runs when provider timeout ha
 4. Reduce `contextTopK`.
 5. Use compact prompt mode.
 6. Test a smaller or faster local model.
-7. If local models still fail after runtime and prompt tuning, evaluate OpenAI fallback separately.
+7. If local models still fail after runtime and prompt tuning, run a separate manual OpenAI smoke only when needed.
 
 ## 3. Recommended Commands
 

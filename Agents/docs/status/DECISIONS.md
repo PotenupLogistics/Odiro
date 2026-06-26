@@ -10,12 +10,12 @@
 - 실패한 handoff 응답에는 `worldConfig`를 포함하지 않는다.
 - sample JSON과 fixture 파일은 자동 생성하지 않는다.
 
-## Scenario Post-Processing Before Fallback 결정
+## Scenario Post-Processing Before Final Failure 결정
 
 - schema는 통과했지만 scenario reflection이 실패한 payload는 먼저 deterministic scenario post-processing을 거친다.
 - post-processing은 추출된 scenario intent에서 직접 유도되는 누락 요소만 보강한다.
 - post-processing 후에도 실패하면 scenario repair prompt flow를 사용한다.
-- OpenAI fallback은 local post-processing과 repair가 실패한 뒤에만 검토한다.
+- local post-processing과 repair가 실패하면 최종 실패 결과를 반환하고, 원인 확인이 필요할 때만 별도 live smoke를 실행한다.
 
 ## Ollama Manual Smoke 결정
 
@@ -33,8 +33,10 @@
 ## Provider 결정
 
 - OpenAI는 현재 1순위 provider다.
-- Ollama는 비용 절감과 회복성을 위한 fallback provider로 유지한다.
-- provider chain은 `openai, ollama`를 기준으로 한다.
+- Ollama는 로컬 개발과 수동 smoke용 선택 provider로 유지한다.
+- `/api/v2/analysis/run`과 `/api/v2/scenarios/generate`는 provider chain을 순회하지 않고 첫 provider만 선택한다.
+- 선택된 LLM provider 실패 시 result analysis는 rule-based fallback, scenario generation은 deterministic fallback을 반환한다.
+- 기본 provider chain은 `openai`로 문서화한다. Ollama는 로컬 개발과 수동 smoke용 선택 provider로 유지한다.
 - OpenAI API key는 환경 설정에서 읽으며 실제 `.env` 파일은 commit하지 않는다.
 - API key와 secret은 source code, 문서, report에 하드코딩하지 않는다.
 - LLM output은 JSON extraction과 validation을 통과한 뒤에만 `generatedPayload`가 될 수 있다.
@@ -178,10 +180,10 @@
 - 원본 문서 RAG와 정책 카드 RAG는 분리한다.
 - embedding/vector DB 생성은 chunk 검증 이후 별도 단계에서 진행한다.
 
-## Decision: Harden World Config Prompt Before Provider Fallback
+## Decision: Harden World Config Prompt Before Final Failure
 
 - Ollama JSON extraction 실패와 validation 실패는 별도로 진단한다.
-- JSON extraction은 성공했지만 `world_config` validation이 실패하면 OpenAI fallback 전에 prompt/schema summary hardening을 먼저 시도한다.
+- JSON extraction은 성공했지만 `world_config` validation이 실패하면 최종 실패로 확정하기 전에 prompt/schema summary hardening을 먼저 시도한다.
 - prompt hardening은 기존 JSON Schema를 사용하며 schema file을 수정하지 않는다.
 - repair prompt는 missing required field와 schema-extra field를 명시해야 한다.
 - prompt hardening 중 sample JSON이나 fixture 파일은 생성하지 않는다.
@@ -192,19 +194,19 @@
 - schema-valid `world_config`라도 자연어 scenario 조건이 누락되면 성공으로 보지 않는다.
 - Korean keyword expansion은 RAG retrieval 전에 실행한다.
 - Scenario requirement는 World Config prompt package에 주입한다.
-- scenario detail이 누락됐다고 곧바로 OpenAI fallback을 사용하지 않고, intent extraction, retrieval, prompt guidance를 먼저 개선한다.
+- scenario detail이 누락됐다고 곧바로 실패로 확정하지 않고, intent extraction, retrieval, prompt guidance를 먼저 개선한다.
 
-## Decision: Strengthen Output Contract Before Provider Fallback
+## Decision: Strengthen Output Contract Before Final Failure
 
-- schema validation이 실패하면 OpenAI fallback 전에 output contract prompt hardening을 먼저 시도한다.
+- schema validation이 실패하면 output contract prompt hardening을 먼저 시도한다.
 - prompt 안에서 scenario requirement를 schema path와 연결한다.
 - prompt hardening을 위해 JSON Schema는 수정하지 않는다.
 - smoke report는 output contract와 scenario requirement diagnostics를 기록한다.
 
-## Decision: Add Scenario Repair Before Provider Fallback
+## Decision: Add Scenario Repair Before Final Failure
 
 - schema validation과 scenario reflection validation은 계속 별도 stage로 유지한다.
-- schema validation은 통과했지만 scenario reflection이 실패하면 provider fallback을 검토하기 전에 scenario repair loop를 실행한다.
+- schema validation은 통과했지만 scenario reflection이 실패하면 최종 실패로 처리하기 전에 scenario repair loop를 실행한다.
 - scenario repair는 schema-valid JSON을 유지하고 누락된 semantic requirement만 보강한다.
 - 최종 성공은 schema validation과 scenario reflection validation을 모두 통과해야 한다.
 # UE5 EpisodeSpec adapter 결정
@@ -260,9 +262,9 @@
 
 # OpenAI provider 결정
 
-* LLM provider 우선순위는 OpenAI first, Ollama fallback으로 변경한다.
+* LLM provider 우선순위는 OpenAI first로 유지한다.
 * OpenAI는 정확도 우선 provider로 사용한다.
-* Ollama는 비용 절감 및 fallback provider로 유지한다.
+* Ollama는 로컬 개발과 수동 smoke용 선택 provider로 유지한다.
 * OpenAI API key는 `.env`에서 읽고 코드에 하드코딩하지 않는다.
 * 테스트와 하네스는 실제 OpenAI API를 호출하지 않는다.
 
@@ -276,7 +278,7 @@
 
 * OpenAI-first provider chain에서 WorldConfig generation과 EpisodeSpec handoff smoke가 통과했다.
 * `providerUsed=openai`, `fallbackUsed=false` 결과를 handoff readiness 문서에 기록한다.
-* Ollama는 fallback provider로 유지한다.
+* Ollama는 로컬 개발과 수동 smoke용 선택 provider로 유지한다.
 * API key와 full WorldConfig/full EpisodeSpec은 report에 저장하지 않는다.
 * UE 실제 actor spawn, parser integration, route injection은 UE 팀 확인 단계로 둔다.
 

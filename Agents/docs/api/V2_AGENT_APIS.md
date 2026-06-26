@@ -9,6 +9,8 @@ v2 API는 기존 v1 실행 중심 흐름과 별도로, Agent 역할을 명확히
 
 Scenario generation v2는 항상 LangGraph runner를 실행합니다. `V2_AGENT_LLM_ENABLED=true`일 때만 LangGraph 내부 LLM-assisted node에서 JSON 호출을 시도하고, 실패하거나 validator를 통과하지 못하면 deterministic fallback을 사용합니다. Result analysis v2도 항상 `ResultAnalysisGraphRunnerV2`를 실행합니다.
 
+두 v2 endpoint는 `AgentLlmJsonClient`가 설정된 첫 LLM provider만 호출합니다. LLM 호출이 실패하면 다른 provider 재시도 대신 scenario generation은 deterministic fallback, result analysis는 rule-based fallback으로 기본 응답을 보장합니다.
+
 Scenario generation v2의 외부 response body는 API wrapper가 아니라 `scenario` v1 JSON 객체 자체입니다.
 Obstacle placement kind는 Unreal parser와 맞춰 `fixed`, `pattern`, `scatter`를 허용합니다. 기본 LLM 생성은 여전히 단순한 `fixed` placement를 우선 사용합니다.
 자연어 prompt가 직선/커브/공사구간/S자 길 같은 도로 유형을 요청하면 scenario generation v2는 bundled `static/templates/scenario` preset을 완성 응답이 아니라 기본 골격으로만 참고합니다. legacy preset id는 `curved-road -> curved`, `demo -> line`으로 resolver 단계에서 처리하며, preset은 `load -> deepcopy -> patch -> validate -> repair if needed -> re-validate -> response` 흐름을 통과한 경우에만 사용합니다.
@@ -160,6 +162,7 @@ V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS=1
 
 * LLM 호출 실패 시 API 500이 아니라 fallback 응답을 반환합니다.
 * LLM JSON 파싱 실패 시 fallback합니다.
+* 기본 `LLM_PROVIDER_CHAIN=openai`는 v2 endpoint에서 provider 순회 설정이 아닙니다. LLM provider 실패 시 자체 fallback으로 내려갑니다.
 * `scenario` 검증 실패 시 repair를 시도하고, repair도 실패하면 deterministic fallback합니다.
 * analysis recommendation의 evidence가 실제 project/run/episode와 맞지 않으면 rule-based fallback합니다.
 * scenario generation preset 누락, JSON 파싱 실패, validator 실패는 내부 diagnostic으로만 남기고 외부 `/api/v2/scenarios/generate` 응답 body에는 `warnings`, `generation_mode`, `validation`을 추가하지 않습니다.

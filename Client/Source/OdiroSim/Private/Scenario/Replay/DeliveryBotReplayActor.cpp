@@ -1,6 +1,7 @@
 #include "Scenario/Replay/DeliveryBotReplayActor.h"
 
-#include "Components/StaticMeshComponent.h"
+#include "Components/ChildActorComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 ADeliveryBotReplayActor::ADeliveryBotReplayActor()
@@ -12,20 +13,24 @@ ADeliveryBotReplayActor::ADeliveryBotReplayActor()
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
 
-	BodyMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BodyMesh"));
-	BodyMesh->SetupAttachment(SceneRoot);
-	BodyMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	BodyMesh->SetGenerateOverlapEvents(false);
-	BodyMesh->SetSimulatePhysics(false);
-	BodyMesh->SetRelativeScale3D(FVector(0.8, 1.2, 0.35));
-	BodyMesh->SetCastShadow(false);
+	VisualActorComponent = CreateDefaultSubobject<UChildActorComponent>(TEXT("ReplayVisualActor"));
+	VisualActorComponent->SetupAttachment(SceneRoot);
+	VisualActorComponent->SetRelativeScale3D(ReplayVisualScale);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMeshFinder(
-		TEXT("/Engine/BasicShapes/Cube.Cube"));
-	if (CubeMeshFinder.Succeeded())
+	static ConstructorHelpers::FClassFinder<AActor> ReplayVisualActorFinder(
+		TEXT("/Game/Blueprints/Vehicle/BP_DeliveryBotReplayVisual"));
+	if (ReplayVisualActorFinder.Succeeded())
 	{
-		BodyMesh->SetStaticMesh(CubeMeshFinder.Object);
+		ReplayVisualActorClass = ReplayVisualActorFinder.Class;
+		VisualActorComponent->SetChildActorClass(ReplayVisualActorClass);
 	}
+}
+
+void ADeliveryBotReplayActor::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	ConfigureReplayVisualActor();
 }
 
 void ADeliveryBotReplayActor::ApplyReplayFrame(
@@ -34,4 +39,38 @@ void ADeliveryBotReplayActor::ApplyReplayFrame(
 {
 	SetActorLocation(Frame.PositionCm + ReplayWorldOffset);
 	SetActorRotation(Frame.Rotation);
+}
+
+AActor* ADeliveryBotReplayActor::GetReplayVisualActor() const
+{
+	return IsValid(VisualActorComponent)
+		? VisualActorComponent->GetChildActor()
+		: nullptr;
+}
+
+void ADeliveryBotReplayActor::ConfigureReplayVisualActor() const
+{
+	AActor* VisualActor = GetReplayVisualActor();
+	if (!IsValid(VisualActor))
+	{
+		return;
+	}
+
+	VisualActor->Tags.AddUnique(FName(TEXT("ReplayOnly")));
+	VisualActor->SetActorEnableCollision(false);
+
+	TArray<UPrimitiveComponent*> PrimitiveComponents;
+	VisualActor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
+	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
+	{
+		if (!IsValid(PrimitiveComponent))
+		{
+			continue;
+		}
+
+		PrimitiveComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		PrimitiveComponent->SetGenerateOverlapEvents(false);
+		PrimitiveComponent->SetSimulatePhysics(false);
+		PrimitiveComponent->SetComponentTickEnabled(false);
+	}
 }

@@ -1,12 +1,11 @@
 id: client-delivery-bot-policy
 owner: Client
-description: DeliveryBot movement, grid, HTTP policy loop, Python policy runtime, and LiDAR point-cloud capture.
+description: DeliveryBot movement, grid, HTTP policy loop, project policy templates, and LiDAR point-cloud capture.
 paths:
   - Client/Source/OdiroSim/Public/DeliveryBot/**
   - Client/Source/OdiroSim/Private/DeliveryBot/**
   - Client/Source/OdiroSim/Public/Shared/Struct/DeliveryBot/**
   - Client/Source/OdiroSim/Public/Shared/Types/DeliveryBot*.h
-  - Client/Tools/PythonAgent/**
   - Client/Resources/policy-runtime.py
   - static/templates/policy/**
   - Client/Json/Input/PolicySpecs/**
@@ -19,9 +18,8 @@ entry:
       - Client/Source/OdiroSim/Public/Shared/Struct/DeliveryBot
       - Client/Source/OdiroSim/Public/Shared/Types
   - id: python-policy-runtime
-    description: Development policy server, project policy templates, and packaged policy runtime bridge.
+    description: Project policy templates and packaged policy runtime bridge.
     read:
-      - Client/Tools/PythonAgent
       - Client/Resources/policy-runtime.py
       - static/templates/policy
 guardrails:
@@ -44,9 +42,9 @@ verify:
       - policy HTTP request/response contract check
   - when: Python policy runtime or templates change
     run:
-      - PythonAgent py_compile
+      - static/templates/policy/demo syntax check without writing __pycache__
       - policy-runtime.py py_compile
-      - validate_lidar_capture for point-cloud artifact changes
+      - new point-cloud episode artifact summary check for point-cloud changes
   - when: policy lifecycle changes
     run:
       - scenario start/end success, rejection, timeout, callback, and exactly-once completion coverage

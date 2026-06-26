@@ -6,6 +6,7 @@
 #include "Components/EditableTextBox.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/Image.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
@@ -17,6 +18,8 @@
 
 namespace
 {
+	constexpr float ComboOptionThumbnailSizePx = 22.0f;
+
 	// Applies padding when a field child is owned by a horizontal box row.
 	void SetHorizontalSlotPadding(UWidget* widget, const FMargin& padding)
 	{
@@ -201,6 +204,15 @@ void UScenarioEditorSidebarFieldRow::SetComboOptions(const TArray<FString>& opti
 	RefreshRow();
 }
 
+void UScenarioEditorSidebarFieldRow::SetComboOptionSummaries(
+	const TMap<FString, FText>& optionDisplayTexts,
+	const TMap<FString, TSoftObjectPtr<UTexture2D>>& optionThumbnailTextures)
+{
+	ComboOptionDisplayTextByValue = optionDisplayTexts;
+	ComboOptionThumbnailByValue = optionThumbnailTextures;
+	RefreshRow();
+}
+
 void UScenarioEditorSidebarFieldRow::SetInputType(const EScenarioEditorSidebarFieldInputType inInputType)
 {
 	InputType = inInputType;
@@ -359,6 +371,56 @@ void UScenarioEditorSidebarFieldRow::HandleValueComboSelectionChanged(
 	OnIndexedValueTextCommitted.Broadcast(ActionContextIndex, FText::FromString(ValueText), ETextCommit::Default);
 }
 
+UWidget* UScenarioEditorSidebarFieldRow::HandleGenerateComboOptionWidget(const FString item)
+{
+	UHorizontalBox* optionBox = NewObject<UHorizontalBox>(this);
+	if (!optionBox)
+	{
+		return nullptr;
+	}
+
+	const TSoftObjectPtr<UTexture2D> thumbnailReference = ResolveComboOptionThumbnail(item);
+	UTexture2D* thumbnailTexture = thumbnailReference.IsNull()
+		? nullptr
+		: thumbnailReference.LoadSynchronous();
+	if (thumbnailTexture)
+	{
+		USizeBox* thumbnailSizeBox = NewObject<USizeBox>(optionBox);
+		UImage* thumbnailImage = NewObject<UImage>(thumbnailSizeBox);
+		if (thumbnailSizeBox && thumbnailImage)
+		{
+			thumbnailSizeBox->SetWidthOverride(ComboOptionThumbnailSizePx);
+			thumbnailSizeBox->SetHeightOverride(ComboOptionThumbnailSizePx);
+			thumbnailImage->SetBrushFromTexture(thumbnailTexture, false);
+			thumbnailSizeBox->AddChild(thumbnailImage);
+
+			if (UHorizontalBoxSlot* thumbnailSlot = optionBox->AddChildToHorizontalBox(thumbnailSizeBox))
+			{
+				thumbnailSlot->SetPadding(FMargin(0.0f, 0.0f, 6.0f, 0.0f));
+				thumbnailSlot->SetVerticalAlignment(VAlign_Center);
+			}
+		}
+	}
+
+	UTextBlock* optionTextBlock = NewObject<UTextBlock>(optionBox);
+	if (optionTextBlock)
+	{
+		optionTextBlock->SetText(ResolveComboOptionDisplayText(item));
+		ApplyCompactTextBlockStyle(
+			optionTextBlock,
+			TextStyleCatalog,
+			EWidgetTextStyleRole::Value,
+			11.0f);
+		if (UHorizontalBoxSlot* textSlot = optionBox->AddChildToHorizontalBox(optionTextBlock))
+		{
+			textSlot->SetVerticalAlignment(VAlign_Center);
+			textSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		}
+	}
+
+	return optionBox;
+}
+
 void UScenarioEditorSidebarFieldRow::HandleMinValueTextCommitted(
 	const FText& text,
 	const ETextCommit::Type commitMethod)
@@ -420,6 +482,9 @@ void UScenarioEditorSidebarFieldRow::BindControls()
 		ValueComboBox->OnSelectionChanged.AddDynamic(
 			this,
 			&UScenarioEditorSidebarFieldRow::HandleValueComboSelectionChanged);
+		ValueComboBox->OnGenerateWidgetEvent.BindDynamic(
+			this,
+			&UScenarioEditorSidebarFieldRow::HandleGenerateComboOptionWidget);
 	}
 	if (MinValueEditableTextBox)
 	{
@@ -487,6 +552,7 @@ void UScenarioEditorSidebarFieldRow::UnbindControls()
 		ValueComboBox->OnSelectionChanged.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarFieldRow::HandleValueComboSelectionChanged);
+		ValueComboBox->OnGenerateWidgetEvent.Unbind();
 	}
 	if (MinValueEditableTextBox)
 	{
@@ -746,6 +812,25 @@ void UScenarioEditorSidebarFieldRow::RefreshComboBoxOptions()
 	{
 		ValueComboBox->ClearSelection();
 	}
+}
+
+FText UScenarioEditorSidebarFieldRow::ResolveComboOptionDisplayText(const FString& option) const
+{
+	if (const FText* displayText = ComboOptionDisplayTextByValue.Find(option))
+	{
+		return *displayText;
+	}
+	return FText::FromString(option);
+}
+
+TSoftObjectPtr<UTexture2D> UScenarioEditorSidebarFieldRow::ResolveComboOptionThumbnail(
+	const FString& option) const
+{
+	if (const TSoftObjectPtr<UTexture2D>* thumbnailTexture = ComboOptionThumbnailByValue.Find(option))
+	{
+		return *thumbnailTexture;
+	}
+	return TSoftObjectPtr<UTexture2D>();
 }
 
 void UScenarioEditorSidebarFieldRow::SetTextBlockText(UTextBlock* textBlock, const FString& text) const

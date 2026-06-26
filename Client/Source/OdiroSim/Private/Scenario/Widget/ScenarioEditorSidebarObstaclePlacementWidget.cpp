@@ -689,6 +689,7 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ApplyCachedPlacementToRows()
 	if (PropFieldRow)
 	{
 		PropFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementProp")));
+		ApplyPropFieldOptionSummaries();
 	}
 	if (PatternFieldRow)
 	{
@@ -836,6 +837,37 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ApplyAssetHeaderSummary()
 		FText::FromString(placementName),
 		thumbnailTexture,
 		true);
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::ApplyPropFieldOptionSummaries()
+{
+	if (!PropFieldRow)
+	{
+		return;
+	}
+
+	TMap<FString, FText> optionDisplayTexts;
+	TMap<FString, TSoftObjectPtr<UTexture2D>> optionThumbnailTextures;
+	if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+	{
+		TArray<FScenarioStaticObstaclePropEntry> propEntries;
+		templateSidebarViewModel->GetStaticObstaclePaletteEntries(propEntries);
+		for (const FScenarioStaticObstaclePropEntry& propEntry : propEntries)
+		{
+			if (propEntry.PropId.IsNone())
+			{
+				continue;
+			}
+
+			const FScenarioPaletteItemEntry paletteItem =
+				UScenarioPlaceablePaletteItemWidget::MakeStaticObstaclePaletteItemEntry(propEntry);
+			const FString propIdText = propEntry.PropId.ToString();
+			optionDisplayTexts.Add(propIdText, paletteItem.DisplayName);
+			optionThumbnailTextures.Add(propIdText, paletteItem.ThumbnailTexture);
+		}
+	}
+
+	PropFieldRow->SetComboOptionSummaries(optionDisplayTexts, optionThumbnailTextures);
 }
 
 void UScenarioEditorSidebarObstaclePlacementWidget::RefreshFieldItemsFromViewModel()

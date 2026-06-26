@@ -10,6 +10,7 @@ class UEditableTextBox;
 class UButton;
 class UComboBoxString;
 class UHorizontalBox;
+class UTexture2D;
 class UMultiLineEditableTextBox;
 class USizeBox;
 class UTextBlock;
@@ -245,6 +246,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetComboOptions(const TArray<FString>& options);
 
+	// Updates optional display names and thumbnails used by combo-box options.
+	void SetComboOptionSummaries(
+		const TMap<FString, FText>& optionDisplayTexts,
+		const TMap<FString, TSoftObjectPtr<UTexture2D>>& optionThumbnailTextures);
+
 	// Updates the preferred editor control shape for this row.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetInputType(EScenarioEditorSidebarFieldInputType inInputType);
@@ -310,6 +316,10 @@ private:
 	UFUNCTION()
 	void HandleValueComboSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
 
+	// Builds one combo option row with optional asset thumbnail metadata.
+	UFUNCTION()
+	UWidget* HandleGenerateComboOptionWidget(FString item);
+
 	// Handles range minimum text commits.
 	UFUNCTION()
 	void HandleMinValueTextCommitted(const FText& text, ETextCommit::Type commitMethod);
@@ -344,6 +354,18 @@ private:
 	bool UsesRangeInput() const;
 	// Applies combo options and selected value to the bound combo box.
 	void RefreshComboBoxOptions();
+	// Returns the user-facing display text for one combo option.
+	FText ResolveComboOptionDisplayText(const FString& option) const;
+	// Returns the optional thumbnail texture for one combo option.
+	TSoftObjectPtr<UTexture2D> ResolveComboOptionThumbnail(const FString& option) const;
 	// Applies text to a bound text block.
 	void SetTextBlockText(UTextBlock* textBlock, const FString& text) const;
+
+	// Option value to display text map used by asset-backed combo rows.
+	UPROPERTY(Transient)
+	TMap<FString, FText> ComboOptionDisplayTextByValue;
+
+	// Option value to thumbnail map used by asset-backed combo rows.
+	UPROPERTY(Transient)
+	TMap<FString, TSoftObjectPtr<UTexture2D>> ComboOptionThumbnailByValue;
 };

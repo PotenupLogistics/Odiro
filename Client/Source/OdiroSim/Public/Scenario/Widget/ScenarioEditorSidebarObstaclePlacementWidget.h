@@ -373,6 +373,8 @@ private:
 	void ApplyCachedPlacementToRows();
 	// Applies the catalog-backed asset summary to this placement block header.
 	void ApplyAssetHeaderSummary();
+	// Applies catalog-backed display names and thumbnails to the obstacle prop combo row.
+	void ApplyPropFieldOptionSummaries();
 	// Rebuilds cached field row ViewModels from the current placement.
 	void RefreshFieldItemsFromViewModel();
 	// Applies shared typography to this placement block and rows.

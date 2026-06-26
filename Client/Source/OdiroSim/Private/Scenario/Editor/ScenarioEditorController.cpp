@@ -1084,6 +1084,12 @@ bool AScenarioEditorController::SelectPlaceableByInstanceId(const FString& insta
 		return false;
 	}
 
+	if (UScenarioPlaceableComponent* selectedPlaceable = SelectedPlaceableComponent.Get();
+		IsEditorSelectablePlaceable(selectedPlaceable) && selectedPlaceable->InstanceId == instanceId)
+	{
+		return true;
+	}
+
 	UScenarioPlaceableComponent* placeableComponent = FindSelectablePlaceableByInstanceId(instanceId);
 	if (!placeableComponent)
 	{
@@ -2677,9 +2683,6 @@ void AScenarioEditorController::SetSelectedPlaceable(UScenarioPlaceableComponent
 {
 	if (SelectedPlaceableComponent.Get() == placeableComponent)
 	{
-		UpdateTransformGizmoForSelection();
-		UpdatePlaceableDetailsForSelection();
-		SelectedPlaceableChanged.Broadcast(placeableComponent ? placeableComponent->InstanceId : FString());
 		return;
 	}
 

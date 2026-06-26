@@ -854,6 +854,208 @@ void UScenarioEditorSidebarCorridorPanel::ApplySelectedBlockPath()
 			SidebarWidgetHelpers::ApplySelectedBlockPath(laneWidget->LaneBlockWidget.Get(), selectedBlockPath);
 		}
 	}
+	ApplyFocusedCorridorItemDetailLayout(selectedBlockPath);
+}
+
+void UScenarioEditorSidebarCorridorPanel::ApplyFocusedCorridorItemDetailLayout(
+	const FString& selectedBlockPath)
+{
+	const bool bFocusAxisPoint = selectedBlockPath.StartsWith(TEXT("root.corridor.axis.points_m["));
+	const bool bFocusSegment = selectedBlockPath.StartsWith(TEXT("root.corridor.segments["));
+	const bool bFocusBuildingLane = selectedBlockPath.StartsWith(TEXT("root.corridor.building_side["));
+	const bool bFocusCurbLane = selectedBlockPath.StartsWith(TEXT("root.corridor.curb_side["));
+	const bool bFocusLane = bFocusBuildingLane || bFocusCurbLane;
+	const bool bFocusCorridorItem = bFocusAxisPoint || bFocusSegment || bFocusLane;
+
+	if (CorridorBlockWidget)
+	{
+		CorridorBlockWidget->SetVisibility(ESlateVisibility::Visible);
+		CorridorBlockWidget->SetDetailHostLayout(bFocusCorridorItem);
+		if (bFocusCorridorItem)
+		{
+			CorridorBlockWidget->SetExpanded(true);
+		}
+	}
+	if (AxisBlockWidget)
+	{
+		AxisBlockWidget->SetVisibility(!bFocusCorridorItem || bFocusAxisPoint
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		AxisBlockWidget->SetDetailHostLayout(bFocusAxisPoint);
+		if (bFocusAxisPoint)
+		{
+			AxisBlockWidget->SetExpanded(true);
+		}
+	}
+	if (AxisPointsBlockWidget)
+	{
+		AxisPointsBlockWidget->SetVisibility(!bFocusCorridorItem || bFocusAxisPoint
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		AxisPointsBlockWidget->SetDetailHostLayout(bFocusAxisPoint);
+		if (bFocusAxisPoint)
+		{
+			AxisPointsBlockWidget->SetExpanded(true);
+		}
+	}
+	if (WalkwayWidthBlockWidget)
+	{
+		WalkwayWidthBlockWidget->SetVisibility(bFocusCorridorItem
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::Visible);
+	}
+	if (BuildingSideBlockWidget)
+	{
+		BuildingSideBlockWidget->SetVisibility(!bFocusCorridorItem || bFocusBuildingLane
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		BuildingSideBlockWidget->SetDetailHostLayout(bFocusBuildingLane);
+		if (bFocusBuildingLane)
+		{
+			BuildingSideBlockWidget->SetExpanded(true);
+		}
+	}
+	if (CurbSideBlockWidget)
+	{
+		CurbSideBlockWidget->SetVisibility(!bFocusCorridorItem || bFocusCurbLane
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		CurbSideBlockWidget->SetDetailHostLayout(bFocusCurbLane);
+		if (bFocusCurbLane)
+		{
+			CurbSideBlockWidget->SetExpanded(true);
+		}
+	}
+	if (SegmentsBlockWidget)
+	{
+		SegmentsBlockWidget->SetVisibility(!bFocusCorridorItem || bFocusSegment
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		SegmentsBlockWidget->SetDetailHostLayout(bFocusSegment);
+		if (bFocusSegment)
+		{
+			SegmentsBlockWidget->SetExpanded(true);
+		}
+	}
+
+	if (AxisPointsFieldRow)
+	{
+		if (bFocusAxisPoint)
+		{
+			AxisPointsFieldRow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+		{
+			AxisPointsFieldRow->InitializeFromItemViewModel(
+				templateSidebarViewModel->FindCorridorFieldItem(TEXT("AxisPointsCount")));
+		}
+	}
+	if (SegmentsCountFieldRow)
+	{
+		if (bFocusSegment)
+		{
+			SegmentsCountFieldRow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+		{
+			SegmentsCountFieldRow->InitializeFromItemViewModel(
+				templateSidebarViewModel->FindCorridorFieldItem(TEXT("SegmentsCount")));
+		}
+	}
+	if (BuildingSideCountFieldRow)
+	{
+		if (bFocusBuildingLane)
+		{
+			BuildingSideCountFieldRow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+		{
+			BuildingSideCountFieldRow->InitializeFromItemViewModel(
+				templateSidebarViewModel->FindCorridorFieldItem(TEXT("BuildingSideCount")));
+		}
+	}
+	if (CurbSideCountFieldRow)
+	{
+		if (bFocusCurbLane)
+		{
+			CurbSideCountFieldRow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+		{
+			CurbSideCountFieldRow->InitializeFromItemViewModel(
+				templateSidebarViewModel->FindCorridorFieldItem(TEXT("CurbSideCount")));
+		}
+	}
+
+	for (UScenarioEditorSidebarCorridorPointWidget* pointWidget : AxisPointWidgets)
+	{
+		if (!pointWidget || !pointWidget->PointBlockWidget)
+		{
+			continue;
+		}
+
+		const bool bSelectedPoint = pointWidget->PointBlockWidget->BlockPath == selectedBlockPath;
+		pointWidget->SetVisibility(!bFocusCorridorItem || (bFocusAxisPoint && bSelectedPoint)
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		pointWidget->PointBlockWidget->SetFocusedDetailLayout(bFocusAxisPoint && bSelectedPoint);
+		if (bFocusAxisPoint && bSelectedPoint)
+		{
+			pointWidget->PointBlockWidget->SetExpanded(true);
+		}
+	}
+	for (UScenarioEditorSidebarCorridorSegmentWidget* segmentWidget : SegmentWidgets)
+	{
+		if (!segmentWidget || !segmentWidget->SegmentBlockWidget)
+		{
+			continue;
+		}
+
+		const bool bSelectedSegment = segmentWidget->SegmentBlockWidget->BlockPath == selectedBlockPath;
+		segmentWidget->SetVisibility(!bFocusCorridorItem || (bFocusSegment && bSelectedSegment)
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		segmentWidget->SegmentBlockWidget->SetFocusedDetailLayout(bFocusSegment && bSelectedSegment);
+		if (bFocusSegment && bSelectedSegment)
+		{
+			segmentWidget->SegmentBlockWidget->SetExpanded(true);
+		}
+	}
+
+	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : BuildingSideLaneWidgets)
+	{
+		if (!laneWidget || !laneWidget->LaneBlockWidget)
+		{
+			continue;
+		}
+
+		const bool bSelectedLane = laneWidget->LaneBlockWidget->BlockPath == selectedBlockPath;
+		laneWidget->SetVisibility(!bFocusCorridorItem || (bFocusBuildingLane && bSelectedLane)
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		laneWidget->LaneBlockWidget->SetFocusedDetailLayout(bFocusBuildingLane && bSelectedLane);
+		if (bFocusBuildingLane && bSelectedLane)
+		{
+			laneWidget->LaneBlockWidget->SetExpanded(true);
+		}
+	}
+	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : CurbSideLaneWidgets)
+	{
+		if (!laneWidget || !laneWidget->LaneBlockWidget)
+		{
+			continue;
+		}
+
+		const bool bSelectedLane = laneWidget->LaneBlockWidget->BlockPath == selectedBlockPath;
+		laneWidget->SetVisibility(!bFocusCorridorItem || (bFocusCurbLane && bSelectedLane)
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		laneWidget->LaneBlockWidget->SetFocusedDetailLayout(bFocusCurbLane && bSelectedLane);
+		if (bFocusCurbLane && bSelectedLane)
+		{
+			laneWidget->LaneBlockWidget->SetExpanded(true);
+		}
+	}
 }
 
 void UScenarioEditorSidebarCorridorPanel::ApplyTextStyles()

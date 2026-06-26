@@ -267,6 +267,8 @@ private:
 	void ApplyCorridorFieldItems();
 	// Applies shared typography to diagnostic text and child rows.
 	void ApplyTextStyles();
+	// Shows only the selected corridor vertex or segment detail block when focused from viewport or outliner.
+	void ApplyFocusedCorridorItemDetailLayout(const FString& selectedBlockPath);
 	// Rebuilds editable lane widgets for one Corridor side lane profile.
 	void RefreshLaneProfileRows(
 		EScenarioEditorCorridorSide side,

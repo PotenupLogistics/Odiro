@@ -5,6 +5,9 @@
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarWidgetHelpers.h"
+
+namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 
 void UScenarioEditorSidebarPedestrianEncounterWidget::NativeConstruct()
 {
@@ -336,7 +339,7 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::ConfigureFieldRows()
 			bHasCachedEncounter && !CachedEncounter.EncounterId.IsEmpty()
 				? CachedEncounter.EncounterId
 				: FString::Printf(TEXT("상호작용 %d"), EncounterIndex + 1),
-			TEXT("root.pedestrians.encounters[]"),
+			SidebarWidgetHelpers::MakeIndexedBlockPath(TEXT("root.pedestrians.encounters"), EncounterIndex),
 			TEXT("세부"));
 		EncounterBlockWidget->SetNested(true);
 		EncounterBlockWidget->SetShowNormalOutline(false);
@@ -396,7 +399,7 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::ApplyCachedEncounterToRows
 			CachedEncounter.EncounterId.IsEmpty()
 				? FString::Printf(TEXT("상호작용 %d"), EncounterIndex + 1)
 				: CachedEncounter.EncounterId,
-			TEXT("root.pedestrians.encounters[]"),
+			SidebarWidgetHelpers::MakeIndexedBlockPath(TEXT("root.pedestrians.encounters"), EncounterIndex),
 			TEXT("세부"));
 	}
 	if (EncounterIdFieldRow)

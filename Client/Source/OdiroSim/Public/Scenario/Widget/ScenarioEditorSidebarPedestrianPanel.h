@@ -131,6 +131,8 @@ private:
 	void ApplyTextStyles();
 	// Applies current Pedestrian field row ViewModels to bound row widgets.
 	void ApplyPedestrianFieldItems();
+	// Shows only the selected pedestrian encounter detail block when focused from the sidebar.
+	void ApplyFocusedEncounterDetailLayout(const FString& selectedBlockPath);
 	// Binds child block action delegates owned by this panel.
 	void BindControls();
 	// Releases child block action delegates owned by this panel.

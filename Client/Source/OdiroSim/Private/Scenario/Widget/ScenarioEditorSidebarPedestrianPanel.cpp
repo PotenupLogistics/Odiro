@@ -130,6 +130,7 @@ void UScenarioEditorSidebarPedestrianPanel::ApplySelectedBlockPath()
 			SidebarWidgetHelpers::ApplySelectedBlockPath(encounterWidget->EncounterBlockWidget.Get(), selectedBlockPath);
 		}
 	}
+	ApplyFocusedEncounterDetailLayout(selectedBlockPath);
 }
 
 void UScenarioEditorSidebarPedestrianPanel::CollectBlockWidgets(
@@ -303,6 +304,75 @@ void UScenarioEditorSidebarPedestrianPanel::ApplyPedestrianFieldItems()
 	{
 		EncountersCountFieldRow->InitializeFromItemViewModel(
 			templateSidebarViewModel->FindPedestrianFieldItem(TEXT("EncountersCount")));
+	}
+}
+
+void UScenarioEditorSidebarPedestrianPanel::ApplyFocusedEncounterDetailLayout(
+	const FString& selectedBlockPath)
+{
+	const bool bFocusEncounter = selectedBlockPath.StartsWith(TEXT("root.pedestrians.encounters["));
+
+	if (PedestriansBlockWidget)
+	{
+		PedestriansBlockWidget->SetVisibility(ESlateVisibility::Visible);
+		PedestriansBlockWidget->SetDetailHostLayout(bFocusEncounter);
+		if (bFocusEncounter)
+		{
+			PedestriansBlockWidget->SetExpanded(true);
+		}
+	}
+	if (BackgroundBlockWidget)
+	{
+		BackgroundBlockWidget->SetVisibility(bFocusEncounter
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::Visible);
+		BackgroundBlockWidget->SetDetailHostLayout(false);
+	}
+	if (SpawnZoneBlockWidget)
+	{
+		SpawnZoneBlockWidget->SetVisibility(bFocusEncounter
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::Visible);
+		SpawnZoneBlockWidget->SetDetailHostLayout(false);
+	}
+	if (EncountersBlockWidget)
+	{
+		EncountersBlockWidget->SetVisibility(ESlateVisibility::Visible);
+		EncountersBlockWidget->SetDetailHostLayout(bFocusEncounter);
+		if (bFocusEncounter)
+		{
+			EncountersBlockWidget->SetExpanded(true);
+		}
+	}
+	if (EncountersCountFieldRow)
+	{
+		if (bFocusEncounter)
+		{
+			EncountersCountFieldRow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+		{
+			EncountersCountFieldRow->InitializeFromItemViewModel(
+				templateSidebarViewModel->FindPedestrianFieldItem(TEXT("EncountersCount")));
+		}
+	}
+
+	for (UScenarioEditorSidebarPedestrianEncounterWidget* encounterWidget : EncounterWidgets)
+	{
+		if (!encounterWidget || !encounterWidget->EncounterBlockWidget)
+		{
+			continue;
+		}
+
+		const bool bSelectedEncounter = encounterWidget->EncounterBlockWidget->BlockPath == selectedBlockPath;
+		encounterWidget->SetVisibility(!bFocusEncounter || bSelectedEncounter
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		encounterWidget->EncounterBlockWidget->SetFocusedDetailLayout(bFocusEncounter && bSelectedEncounter);
+		if (bFocusEncounter && bSelectedEncounter)
+		{
+			encounterWidget->EncounterBlockWidget->SetExpanded(true);
+		}
 	}
 }
 

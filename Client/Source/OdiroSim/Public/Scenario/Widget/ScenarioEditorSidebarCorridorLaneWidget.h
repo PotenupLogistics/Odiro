@@ -188,6 +188,6 @@ private:
 	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
 	// Finds one cached field row ViewModel by id.
 	UScenarioTemplateFieldRowViewModel* FindCachedFieldItem(const FString& fieldId) const;
-	// Returns the Scenario Template path for this lane's side profile.
-	static FString MakeLanePath(EScenarioEditorCorridorSide side);
+	// Returns the Scenario Template path for this lane's side profile item.
+	static FString MakeLanePath(EScenarioEditorCorridorSide side, int32 laneIndex);
 };

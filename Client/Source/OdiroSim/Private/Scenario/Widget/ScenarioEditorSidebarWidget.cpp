@@ -172,7 +172,15 @@ void UScenarioEditorSidebarWidget::RefreshFromTemplate(const FScenarioDocument& 
 	if (bRefreshed)
 	{
 		BindPanelBlockSelection(ResolvePanelWidget(ActivePanel));
-		ApplyActivePanelSelectionState();
+		ApplySelectedBlockFocus(true);
+	}
+}
+
+void UScenarioEditorSidebarWidget::ApplySelectedBlockFocus(const bool bScrollIntoView)
+{
+	ApplyActivePanelSelectionState();
+	if (bScrollIntoView)
+	{
 		RequestScrollSelectedBlockIntoView();
 	}
 }
@@ -566,6 +574,11 @@ void UScenarioEditorSidebarWidget::ApplyActivePanelSelectionState()
 
 void UScenarioEditorSidebarWidget::RequestScrollSelectedBlockIntoView()
 {
+	if (bSelectedBlockScrollPending)
+	{
+		return;
+	}
+
 	UWorld* world = GetWorld();
 	if (!world)
 	{
@@ -573,11 +586,13 @@ void UScenarioEditorSidebarWidget::RequestScrollSelectedBlockIntoView()
 		return;
 	}
 
+	bSelectedBlockScrollPending = true;
 	world->GetTimerManager().SetTimerForNextTick(
 		FTimerDelegate::CreateWeakLambda(
 			this,
 			[this]
 			{
+				bSelectedBlockScrollPending = false;
 				ScrollSelectedBlockIntoView();
 			}));
 }

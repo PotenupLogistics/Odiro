@@ -92,6 +92,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void RefreshFromTemplate(const FScenarioDocument& scenarioTemplate);
 
+	// Applies the selected block visuals without rebuilding the active panel content.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void ApplySelectedBlockFocus(bool bScrollIntoView);
+
 private:
 	// Generated Main panel used when no typed Main panel is bound.
 	UPROPERTY(Transient)
@@ -124,6 +128,9 @@ private:
 	// Legacy repeated-item summary text kept only for migration-time collapse.
 	UPROPERTY(meta = (BindWidgetOptional), Transient)
 	TObjectPtr<UTextBlock> ListSummaryTextBlock;
+
+	// True while a selected-block scroll request has already been deferred to the next tick.
+	bool bSelectedBlockScrollPending = false;
 
 	// Refreshes the active typed panel widget.
 	bool RefreshActivePanelContent(const FScenarioDocument& scenarioTemplate);

@@ -568,6 +568,10 @@ bool AScenarioEditorController::ConfirmPlacement()
 	if (bPlaced)
 	{
 		SetObserverMode();
+		if (UScenarioEditorRootWidget* rootWidget = GetEditorRootWidget())
+		{
+			rootWidget->RefreshScenarioInspectorWithOutlinerRegistryRebuild();
+		}
 		return true;
 	}
 

@@ -56,6 +56,16 @@ class FindingBuilder:
 
     def _episode_signals(self, episode: EpisodeMetrics) -> list[tuple[str, str, int, str]]:
         """Map one episode metrics object to supported alpha finding signals."""
+        if episode.failure_type == "setup_failed":
+            return [
+                (
+                    "setup_failed",
+                    "setup_failed",
+                    1,
+                    self._setup_failure_message(episode),
+                )
+            ]
+
         signals = [
             (
                 "penalty_region_violation",
@@ -66,28 +76,29 @@ class FindingBuilder:
             (
                 "static_obstacle_collision",
                 "static_obstacle_collision_count",
-                episode.static_obstacle_collision_count,
-                evidence_message("static_obstacle_collision", episode.static_obstacle_collision_count),
+                episode.static_obstacle_collision_count or (1 if episode.failure_type == "static_obstacle_collision" else 0),
+                evidence_message("static_obstacle_collision", episode.static_obstacle_collision_count or 1),
             ),
             (
                 "pedestrian_collision",
                 "pedestrian_collision_count",
-                episode.pedestrian_collision_count,
-                evidence_message("pedestrian_collision", episode.pedestrian_collision_count),
+                episode.pedestrian_collision_count or (1 if episode.failure_type == "pedestrian_collision" else 0),
+                evidence_message("pedestrian_collision", episode.pedestrian_collision_count or 1),
             ),
             (
                 "blocked_region_collision",
                 "blocked_region_violation_count",
-                episode.blocked_region_violation_count,
-                evidence_message("blocked_region_collision", episode.blocked_region_violation_count),
+                episode.blocked_region_violation_count
+                or (1 if episode.failure_type in {"blocked_region_collision", "blocked_region_violation"} else 0),
+                evidence_message("blocked_region_collision", episode.blocked_region_violation_count or 1),
             ),
             ("near_miss", "near_miss_count", episode.near_miss_count, evidence_message("near_miss", episode.near_miss_count)),
             ("timeout", "timeout", 1 if episode.timeout else 0, evidence_message("timeout", 1)),
             (
                 "policy_decision_error",
                 "policy_decision_error_count",
-                episode.policy_decision_error_count,
-                evidence_message("policy_decision_error", episode.policy_decision_error_count),
+                episode.policy_decision_error_count or (1 if episode.failure_type == "policy_decision_error" else 0),
+                evidence_message("policy_decision_error", episode.policy_decision_error_count or 1),
             ),
             ("repath", "repath_count", episode.repath_count, evidence_message("repath", episode.repath_count)),
             (
@@ -101,17 +112,31 @@ class FindingBuilder:
             (
                 "robot_tip_over",
                 "robot_tip_over_count",
-                episode.robot_tip_over_count,
-                evidence_message("robot_tip_over", episode.robot_tip_over_count),
+                episode.robot_tip_over_count or (1 if episode.failure_type == "robot_tip_over" else 0),
+                evidence_message("robot_tip_over", episode.robot_tip_over_count or 1),
             ),
             (
                 "goal_not_reached",
                 "goal_reached",
-                1 if episode.goal_reached is False or (episode.success is False and episode.failure_type != "timeout") else 0,
+                1 if episode.failure_type == "goal_not_reached" else 0,
                 evidence_message("goal_not_reached", 1),
             ),
         ]
         return signals
+
+    def _setup_failure_message(self, episode: EpisodeMetrics) -> str:
+        """Describe setup-stage interruption using only logged structured details."""
+        details = episode.setup_failure_details
+        if details is None:
+            return "시뮬레이션 세팅 단계에서 실행이 중단되었습니다."
+        parts = ["시뮬레이션 세팅 단계에서 실행이 중단되었습니다."]
+        if details.message:
+            parts.append(details.message)
+        if details.error_code:
+            parts.append(f"오류 코드: {details.error_code}.")
+        if details.resource_type and details.resource_id:
+            parts.append(f"{details.resource_type} ID: {details.resource_id}.")
+        return " ".join(parts)
 
     def _finding(
         self,

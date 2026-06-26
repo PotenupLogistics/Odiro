@@ -50,7 +50,8 @@ def _post_analysis(project: Path):
 def _assert_report_sections(text: str) -> None:
     """Assert the UI analysis text has the stable report sections."""
     assert "[결과 요약]" in text
-    assert "[주요 근거]" in text
+    assert "[확인 내용]" in text
+    assert "[주요 근거]" not in text
     assert "[판단]" in text
     assert "[추천]" in text
 

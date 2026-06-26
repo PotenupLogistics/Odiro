@@ -13,6 +13,15 @@ from app.main import app
 from app.models.analysis_v2 import AnalysisRunV2Request, AnalysisRunV2Response
 
 
+FORBIDDEN_USER_TEXT = (
+    "주요 근거",
+    "근거가 확인되었습니다",
+    "근거를 토대로",
+    "pipeline.diagnostics",
+    "evidence",
+)
+
+
 class _FakeJsonClient:
     def __init__(self, responses):
         self.responses = list(responses)
@@ -44,6 +53,18 @@ def _request(project: Path, run_id: str = "000001") -> dict:
 
 def _request_model(project: Path, run_id: str = "000001") -> AnalysisRunV2Request:
     return AnalysisRunV2Request(project_path=str(project), run_id=run_id)
+
+
+def _read_json(path: Path) -> dict:
+    """Read a generated review JSON fixture."""
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _assert_display_text_hides_internal_evidence(payload: dict) -> None:
+    """Ensure summary and analysis text do not expose internal evidence plumbing."""
+    user_text = f"{payload['summary']['message']}\n{payload['analysis_text']}"
+    for forbidden in FORBIDDEN_USER_TEXT:
+        assert forbidden not in user_text
 
 
 def _empty_analysis_response(run_id: str = "000001") -> AnalysisRunV2Response:
@@ -100,6 +121,85 @@ def _write_penalty_episode(project: Path, episode_id: str) -> None:
         episode_id,
         {"success": False, "goal_reached": False, "penalty_region_violation_count": 1},
         '{"event_type": "PenaltyRegionViolation"}\n',
+    )
+
+
+def _write_policy_source(project: Path) -> None:
+    """Create a minimal policy source that candidate generation can copy and adjust."""
+    policy_dir = project / "policy"
+    policy_dir.mkdir(parents=True, exist_ok=True)
+    (policy_dir / "path_follower.py").write_text(
+        "\n".join(
+            [
+                "followSpeedKmh = 6.0",
+                "maxPathErrorM = 1.4",
+                "lookAheadDistanceM = 2.0",
+                "pathSmoothingDistanceM = 0.7",
+                "maxSteeringDelta = 0.12",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_setup_failed_episode(project: Path, episode_id: str, *, with_prop_detail: bool = False) -> None:
+    """Create a setup-failed episode with optional structured diagnostics."""
+    diagnostic = (
+        {
+            "code": "unknown_prop_id",
+            "message": "Static obstacle prop is not registered.",
+            "prop_id": "obstacle.road_cone_99",
+        }
+        if with_prop_detail
+        else "World setup failed before simulation start."
+    )
+    _write_episode(
+        project,
+        episode_id,
+        {
+            "summary": {
+                "success": False,
+                "terminal_reason": "SetupFailed",
+                "outcome": "setup aborted before simulation",
+            },
+            "pipeline": {
+                "world_setup_succeeded": False,
+                "evaluation_completed": False,
+                "diagnostics": [diagnostic],
+            },
+            "event_summary": {"by_type": {"Repath": 2, "PenaltyRegionViolation": 1}},
+        },
+    )
+
+
+def _write_setup_failed_episode_without_details(project: Path, episode_id: str) -> None:
+    """Create a setup-failed episode that has no structured diagnostic detail."""
+    _write_episode(
+        project,
+        episode_id,
+        {
+            "summary": {"success": False, "terminal_reason": "SetupFailed"},
+            "pipeline": {
+                "world_setup_succeeded": False,
+                "evaluation_completed": False,
+            },
+        },
+    )
+
+
+def _write_setup_failed_episode_with_diagnostic(project: Path, episode_id: str, diagnostic: dict) -> None:
+    """Create a setup-failed episode with a caller-supplied structured diagnostic."""
+    _write_episode(
+        project,
+        episode_id,
+        {
+            "summary": {"success": False, "terminal_reason": "SetupFailed"},
+            "pipeline": {
+                "world_setup_succeeded": False,
+                "evaluation_completed": False,
+                "diagnostics": [diagnostic],
+            },
+        },
     )
 
 
@@ -435,6 +535,246 @@ def test_v2_analysis_run_repeated_blocked_region_generates_environment_recommend
     assert payload["modified_environment_json"][0]["source_recommendation_id"] == payload["recommendations"][0]["id"]
     assert payload["modified_environment_json"][0]["target"] == "environment"
     assert payload["modified_policy_json"] == []
+
+
+def test_v2_analysis_run_setup_failed_only_uses_setup_text_and_no_candidates(tmp_path) -> None:
+    """Setup-only runs are not treated as policy failures or successful no-change runs."""
+    project = tmp_path / "Project1"
+    _write_setup_failed_episode(project, "000001", with_prop_detail=True)
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    review_dir = project / "runs" / "000001" / "review" / "0001"
+    report = _read_json(review_dir / "report.json")
+    recommendations = _read_json(review_dir / "recommendations.json")
+    finding_types = {finding["type"] for finding in report["findings"]}
+    assert payload["recommendation_type"] == "none"
+    assert payload["summary"]["overall_judgement"] == "change_recommended"
+    assert payload["metrics"]["failure_count"] == 1
+    assert "setup_failed" in finding_types
+    assert "goal_not_reached" not in finding_types
+    assert "penalty_region_violation" not in finding_types
+    assert payload["recommendations"] == []
+    assert payload["modified_policy_json"] == []
+    assert payload["modified_environment_json"] == []
+    assert _read_json(review_dir / "manifest.json")["artifacts"] == {
+        "policy": {"generated": False, "path": None},
+        "environment": {"generated": False, "path": None},
+    }
+    assert "세팅 단계" in payload["summary"]["message"]
+    assert "obstacle.road_cone_99" in payload["summary"]["message"]
+    assert "정책 성능" in payload["analysis_text"]
+    assert "obstacle.road_cone_99" in payload["analysis_text"]
+    assert "환경 카탈로그" in payload["analysis_text"]
+    _assert_display_text_hides_internal_evidence(payload)
+    assert "수정 추천을 생성하지 않았습니다" not in payload["summary"]["message"]
+    assert "수정이 필요하다고 판단할 만한" not in recommendations["reason"]
+    assert "setup" in recommendations["reason"].casefold()
+    assert recommendations["evidence_ids"] == ["EV-0001"]
+    assert report["evidence"][0]["message"]
+    assert "obstacle.road_cone_99" in report["evidence"][0]["message"]
+    assert not (review_dir / "policy").exists()
+    assert not (review_dir / "scenario.json").exists()
+
+
+def test_v2_analysis_run_setup_failed_only_without_details_uses_generic_checks(tmp_path) -> None:
+    """Setup-only runs without detail do not invent prop or asset identifiers."""
+    project = tmp_path / "Project1"
+    _write_setup_failed_episode_without_details(project, "000001")
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    review_dir = project / "runs" / "000001" / "review" / "0001"
+    report = _read_json(review_dir / "report.json")
+    finding_types = {finding["type"] for finding in report["findings"]}
+    assert payload["recommendation_type"] == "none"
+    assert payload["summary"]["overall_judgement"] == "change_recommended"
+    assert finding_types == {"setup_failed"}
+    assert payload["recommendations"] == []
+    assert payload["modified_policy_json"] == []
+    assert payload["modified_environment_json"] == []
+    assert "세팅 단계" in payload["summary"]["message"]
+    assert "scenario" in payload["analysis_text"]
+    assert "catalog" in payload["analysis_text"] or "카탈로그" in payload["analysis_text"]
+    assert "obstacle.road_cone_99" not in payload["summary"]["message"]
+    assert "obstacle.road_cone_99" not in payload["analysis_text"]
+    assert "asset.delivery" not in payload["analysis_text"]
+    _assert_display_text_hides_internal_evidence(payload)
+
+
+def test_v2_analysis_run_setup_failed_with_success_still_needs_setup_review(tmp_path) -> None:
+    """Setup failures mixed with successes are not ordinary no-change runs."""
+    project = tmp_path / "Project1"
+    _write_setup_failed_episode(project, "000001")
+    _write_episode(project, "000002", {"success": True, "goal_reached": True})
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["recommendation_type"] == "none"
+    assert payload["summary"]["overall_judgement"] == "change_recommended"
+    assert payload["metrics"]["success_count"] == 1
+    assert payload["metrics"]["failure_count"] == 1
+    assert payload["recommendations"] == []
+    assert "세팅 단계" in payload["summary"]["message"]
+    assert "별도 수정 후보를 생성하지 않는 것이 적절" not in payload["analysis_text"]
+    _assert_display_text_hides_internal_evidence(payload)
+    review_dir = project / "runs" / "000001" / "review" / "0001"
+    assert not (review_dir / "policy").exists()
+    assert not (review_dir / "scenario.json").exists()
+
+
+def test_v2_analysis_run_setup_failed_mixed_with_policy_failure_uses_runtime_policy_failure(tmp_path) -> None:
+    """Setup failures do not block policy review from runtime failure episodes."""
+    project = tmp_path / "Project1"
+    _write_policy_source(project)
+    _write_setup_failed_episode(project, "000001")
+    _write_penalty_episode(project, "000002")
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    review_dir = project / "runs" / "000001" / "review" / "0001"
+    report = _read_json(review_dir / "report.json")
+    finding_types = {finding["type"] for finding in report["findings"]}
+    assert payload["recommendation_type"] == "policy_review"
+    assert "setup_failed" in finding_types
+    assert "penalty_region_violation" in finding_types
+    assert "goal_not_reached" not in finding_types
+    assert payload["recommendations"][0]["target"] == "policy"
+    assert "세팅 단계" in payload["analysis_text"]
+    _assert_display_text_hides_internal_evidence(payload)
+    recommendations = _read_json(review_dir / "recommendations.json")
+    setup_evidence_id = next(finding["evidence_ids"][0] for finding in report["findings"] if finding["type"] == "setup_failed")
+    runtime_evidence_id = next(
+        finding["evidence_ids"][0] for finding in report["findings"] if finding["type"] == "penalty_region_violation"
+    )
+    assert setup_evidence_id not in recommendations["evidence_ids"]
+    assert recommendations["evidence_ids"] == [runtime_evidence_id]
+    assert (review_dir / "policy").is_dir()
+    assert not (review_dir / "scenario.json").exists()
+
+
+def test_v2_analysis_run_setup_failed_mixed_with_environment_failure_uses_runtime_environment_failure(tmp_path) -> None:
+    """Setup failures do not block environment review from runtime failure episodes."""
+    project = tmp_path / "Project1"
+    (project / "scenario.json").parent.mkdir(parents=True, exist_ok=True)
+    (project / "scenario.json").write_text(json.dumps({"obstacles": {"placements": []}}), encoding="utf-8")
+    _write_setup_failed_episode(project, "000001")
+    _write_episode(
+        project,
+        "000002",
+        {
+            "summary": {"success": False, "terminal_reason": "StaticObstacleCollision"},
+            "event_summary": {"by_type": {"StaticObstacleCollision": 1}},
+        },
+    )
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    review_dir = project / "runs" / "000001" / "review" / "0001"
+    report = _read_json(review_dir / "report.json")
+    finding_types = {finding["type"] for finding in report["findings"]}
+    assert payload["recommendation_type"] == "environment_review"
+    assert "setup_failed" in finding_types
+    assert "static_obstacle_collision" in finding_types
+    assert "goal_not_reached" not in finding_types
+    assert payload["recommendations"][0]["target"] == "environment"
+    assert "세팅 단계" in payload["analysis_text"]
+    _assert_display_text_hides_internal_evidence(payload)
+    recommendations = _read_json(review_dir / "recommendations.json")
+    setup_evidence_id = next(finding["evidence_ids"][0] for finding in report["findings"] if finding["type"] == "setup_failed")
+    runtime_evidence_id = next(
+        finding["evidence_ids"][0] for finding in report["findings"] if finding["type"] == "static_obstacle_collision"
+    )
+    assert setup_evidence_id not in recommendations["evidence_ids"]
+    assert recommendations["evidence_ids"] == [runtime_evidence_id]
+    assert not (review_dir / "policy").exists()
+    assert (review_dir / "scenario.json").is_file()
+
+
+def test_v2_analysis_run_multiple_setup_failures_show_logged_details_only(tmp_path) -> None:
+    """Multiple setup failures keep setup findings without making runtime recommendations."""
+    project = tmp_path / "Project1"
+    _write_setup_failed_episode_with_diagnostic(
+        project,
+        "000001",
+        {
+            "code": "unknown_prop_id",
+            "message": "Static obstacle prop is not registered.",
+            "prop_id": "obstacle.road_cone_99",
+        },
+    )
+    _write_setup_failed_episode_with_diagnostic(
+        project,
+        "000002",
+        {
+            "code": "asset_load_failed",
+            "message": "Asset failed to load.",
+            "asset_id": "asset.delivery_cart_01",
+        },
+    )
+
+    response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    review_dir = project / "runs" / "000001" / "review" / "0001"
+    report = _read_json(review_dir / "report.json")
+    setup_finding = next(finding for finding in report["findings"] if finding["type"] == "setup_failed")
+    assert payload["recommendation_type"] == "none"
+    assert payload["summary"]["overall_judgement"] == "change_recommended"
+    assert setup_finding["evidence_ids"] == ["EV-0001", "EV-0002"]
+    assert "goal_not_reached" not in {finding["type"] for finding in report["findings"]}
+    assert "obstacle.road_cone_99" in payload["analysis_text"]
+    assert "asset.delivery_cart_01" in payload["analysis_text"]
+    assert payload["recommendations"] == []
+    assert payload["modified_policy_json"] == []
+    assert payload["modified_environment_json"] == []
+    _assert_display_text_hides_internal_evidence(payload)
+    assert not (review_dir / "policy").exists()
+    assert not (review_dir / "scenario.json").exists()
+
+
+def test_v2_analysis_run_terminal_reason_controls_goal_not_reached_finding(tmp_path) -> None:
+    """Only explicit GoalNotReached creates the goal_not_reached finding."""
+    cases = [
+        ("GoalNotReached", {"success": False, "terminal_reason": "GoalNotReached"}, {"goal_not_reached"}),
+        ("Timeout", {"success": False, "terminal_reason": "Timeout"}, {"timeout"}),
+        ("StaticObstacleCollision", {"success": False, "terminal_reason": "StaticObstacleCollision"}, {"static_obstacle_collision"}),
+        ("BlockedRegionCollision", {"success": False, "terminal_reason": "BlockedRegionCollision"}, {"blocked_region_collision"}),
+        ("RobotTipOver", {"success": False, "terminal_reason": "RobotTipOver"}, {"robot_tip_over"}),
+        ("UnknownTerminal", {"success": False, "terminal_reason": "UnexpectedShutdown"}, set()),
+        ("MissingTerminal", {"success": False}, set()),
+        ("GoalReached", {"success": True, "terminal_reason": "GoalReached"}, set()),
+    ]
+
+    for case_name, summary, expected_findings in cases:
+        project = tmp_path / case_name
+        _write_episode(project, "000001", {"summary": summary})
+
+        response = TestClient(app).post("/api/v2/analysis/run", json=_request(project))
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        report = _read_json(project / "runs" / "000001" / "review" / "0001" / "report.json")
+        finding_types = {finding["type"] for finding in report["findings"]}
+        assert expected_findings <= finding_types
+        if case_name != "GoalNotReached":
+            assert "goal_not_reached" not in finding_types
+        if case_name == "BlockedRegionCollision":
+            assert "차단 구역" in payload["analysis_text"]
+            assert "차단 구역 충돌, 근접 위험 항목은 확인되지 않았습니다" not in payload["analysis_text"]
+        if case_name == "RobotTipOver":
+            assert "로봇 전도" in payload["analysis_text"]
 
 
 def test_v2_analysis_agent_keeps_rule_based_mode_when_llm_disabled(tmp_path) -> None:

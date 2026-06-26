@@ -45,6 +45,8 @@ def _episode_metrics(*, episode_id: str, failure_type: str | None = None, timeou
         stuck_count=0,
         robot_tip_over_count=0,
         stuck_duration_s=None,
+        terminal_reason=None,
+        setup_failure_details=None,
     )
 
 
@@ -93,6 +95,66 @@ def test_latest_result_summary_metrics_and_pascal_case_events_are_normalized() -
     assert metrics.robot_tip_over_count == 2
     assert metrics.repath_count == 5
     assert metrics.duration_s == 12.5
+
+
+def test_setup_failed_terminal_reason_is_normalized_without_policy_metrics() -> None:
+    """SetupFailed remains a setup failure with structured details when available."""
+    metrics = EpisodeMetricExtractor().extract(
+        experiment_id="Project1",
+        run_id="000001",
+        episode_id="000001",
+        result={
+            "summary": {"success": False, "terminal_reason": "SetupFailed", "outcome": "setup aborted"},
+            "pipeline": {
+                "diagnostics": [
+                    {
+                        "code": "unknown_prop_id",
+                        "message": "Static obstacle prop is not registered.",
+                        "prop_id": "obstacle.road_cone_99",
+                    }
+                ]
+            },
+            "metrics": {"delivery_bot_failure_message": "policy should not use this as runtime failure"},
+            "event_summary": {"by_type": {"Repath": 2, "PenaltyRegionViolation": 1}},
+        },
+        events=[],
+    )
+
+    assert metrics.success is False
+    assert metrics.terminal_reason == "SetupFailed"
+    assert metrics.failure_type == "setup_failed"
+    assert metrics.setup_failure_details is not None
+    assert metrics.setup_failure_details.error_code == "unknown_prop_id"
+    assert metrics.setup_failure_details.resource_type == "prop"
+    assert metrics.setup_failure_details.resource_id == "obstacle.road_cone_99"
+
+
+def test_known_unknown_and_missing_terminal_reasons_are_preserved() -> None:
+    """Known terminal reasons keep normalized types without inventing goal misses."""
+    extractor = EpisodeMetricExtractor()
+
+    cases = [
+        ({"success": False, "terminal_reason": "GoalNotReached"}, "goal_not_reached", "GoalNotReached"),
+        ({"success": False, "terminal_reason": "Timeout"}, "timeout", "Timeout"),
+        ({"success": False, "terminal_reason": "StaticObstacleCollision"}, "static_obstacle_collision", "StaticObstacleCollision"),
+        ({"success": False, "terminal_reason": "BlockedRegionCollision"}, "blocked_region_collision", "BlockedRegionCollision"),
+        ({"success": False, "terminal_reason": "RobotTipOver"}, "robot_tip_over", "RobotTipOver"),
+        ({"success": False, "terminal_reason": "UnexpectedShutdown"}, "unknown_failure", "UnexpectedShutdown"),
+        ({"success": False}, None, None),
+        ({"success": True, "terminal_reason": "GoalReached"}, None, "GoalReached"),
+    ]
+
+    for index, (summary, expected_failure_type, expected_terminal_reason) in enumerate(cases, start=1):
+        metrics = extractor.extract(
+            experiment_id="Project1",
+            run_id="000001",
+            episode_id=f"{index:06d}",
+            result={"summary": summary},
+            events=[],
+        )
+
+        assert metrics.failure_type == expected_failure_type
+        assert metrics.terminal_reason == expected_terminal_reason
 
 
 def test_timeout_pattern_deduplicates_failure_type_and_timeout_flag() -> None:
@@ -185,7 +247,7 @@ def test_environment_review_summary_uses_environment_message_when_penalty_also_e
     report = json.loads((review_dir / "report.json").read_text(encoding="utf-8"))
     pedestrian_finding = next(finding for finding in report["findings"] if finding["type"] == "pedestrian_collision")
     pedestrian_evidence = next(item for item in report["evidence"] if item["metric"] == "pedestrian_collision_count")
-    assert payload["summary"]["message"].startswith("환경 또는 장애물 관련 충돌 근거가 확인되어")
+    assert payload["summary"]["message"].startswith("환경 또는 장애물 관련 충돌이 발생해")
     assert "Penalty region violation" not in payload["summary"]["message"]
     assert report["summary"]["message"] == payload["summary"]["message"]
     assert payload["metrics"]["pedestrian_collision_count"] == 104

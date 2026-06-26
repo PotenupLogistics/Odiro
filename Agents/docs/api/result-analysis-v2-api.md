@@ -167,7 +167,7 @@ API response는 review JSON 파일과 일부 값이 다르다. 특히 `analysis_
 | `analysis_mode` | string | 분석 모드. 예: `llm`, `fallback`. LLM 호출 성공 여부와 fallback 여부를 UI에서 구분할 때 사용한다. |
 | `summary` | object | 전체 판단 요약. |
 | `metrics` | object | episode result/events에서 집계한 주요 수치. |
-| `recommendation_type` | string | 추천 유형. `policy_review`, `environment_review`, `none`, `insufficient_data`. |
+| `recommendation_type` | string | 추천 유형. `policy_review`, `environment_review`, `none`, `insufficient_data`. `SetupFailed`는 이번 계약에서 enum을 추가하지 않고 임시로 `none`을 사용한다. |
 | `recommendations` | array | 사람이 읽을 수 있는 추천 item 목록. `policy_review`/`environment_review`일 때 최소 1개 생성한다. |
 | `analysis_text` | string | UI 표시용 자연어 보고서. API response에만 포함하며 review JSON에는 저장하지 않는다. |
 | `warnings` | array[string] | 분석 중 발생한 비치명 warning. 예: large actions file skip, 일부 파일 누락. |
@@ -222,15 +222,20 @@ metrics는 episode result/events를 정규화해 집계한 수치다.
 | `none` | 분석은 가능하지만 수정 추천을 뒷받침할 근거가 없음 | 없음 |
 | `insufficient_data` | 분석 가능한 result/events/summary가 부족함 | 없음 |
 
+`terminal_reason: SetupFailed`는 내부 finding `setup_failed`로 기록한다. 추천 유형 enum은 변경하지 않으므로 setup-only Run 또는 SetupFailed와 성공 episode만 있는 Run은 `recommendation_type: "none"`을 사용하지만, 일반 `none`과 달리 `summary.overall_judgement`는 `change_recommended`이며 setup 설정 점검 문구를 표시한다.
+
 ### 9.1 판단 우선순위
 
 | 조건 | 추천 유형 |
 |---|---|
 | 분석 가능한 result 파일도 없고 usable summary도 없음 | `insufficient_data` |
 | evidence-backed finding 없음 | `none` |
+| `setup_failed` finding만 존재 | `none` (setup 점검 필요, 후보 artifact 없음) |
 | `static_obstacle_collision` 또는 `blocked_region_collision` 존재 | `environment_review` 우선 |
 | pedestrian collision만 있고 static/blocked 환경 근거가 없음 | 현재 정책 안전 대응 성격으로 `policy_review` |
 | `penalty_region_violation`, `timeout`, `goal_not_reached`, `near_miss`, `repath`, `robot_tip_over`, `policy_decision_error`, `stuck` 등 존재 | `policy_review` |
+
+SetupFailed episode는 `analysis_scope.episodes_count`, `metrics.failure_count`, `data_coverage`, `report.json.findings`에는 포함한다. 다만 정책 성능 판단, 정책 관련 finding, 정책 추천, 정책 후보 artifact 생성에는 사용하지 않는다. SetupFailed와 실제 주행 실패 episode가 섞인 Run은 실제 주행 episode에서 나온 finding 기준으로 기존 `policy_review` 또는 `environment_review` 판단을 유지한다.
 
 ## 10. Recommendations Array
 
@@ -513,6 +518,7 @@ review 폴더에 환경 수정 후보가 생성되었습니다.
 | `goal_not_reached` | 목표 미도달. |
 | `robot_tip_over` | 로봇 전도. |
 | `policy_decision_error` | 정책 판단 오류. |
+| `setup_failed` | 주행 시작 전 setup 단계 실패. 정책 성능 판단에는 사용하지 않는다. |
 
 ### 14.5 patterns[]
 
@@ -777,6 +783,7 @@ warnings는 API response에 포함될 수 있다.
 | policy_review | `review/<id>/policy/` 생성, 원본 policy 불변 |
 | environment_review | `review/<id>/scenario.json` 생성, 원본 scenario 불변 |
 | none/insufficient_data | policy/scenario 후보 artifact 생성 없음 |
+| setup-only Run | `recommendation_type="none"`, `overall_judgement="change_recommended"`, policy/scenario 후보 artifact 생성 없음 |
 | artifacts | `recommendations.json.artifacts`와 `manifest.json.artifacts` 일치 |
 | generated_files | 실제 생성 파일 전체 포함 |
 | analysis_text | API response에만 존재, review JSON에는 없음 |

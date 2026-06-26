@@ -135,6 +135,8 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 * `analysis_text`
 * `warnings`
 
+`terminal_reason: SetupFailed`는 추천 유형 enum을 추가하지 않고 내부 `setup_failed` finding으로 분류합니다. setup-only Run 또는 SetupFailed와 성공 episode만 있는 Run은 임시 호환 처리로 `recommendation_type="none"`을 반환하지만, 일반 `none/no_change_needed`와 달리 `summary.overall_judgement="change_recommended"`로 표시하고 scenario, prop, catalog, asset, 환경 설정 점검을 안내합니다. SetupFailed episode는 episode/failure 집계와 review report에는 남기되 정책 판단과 후보 artifact 생성에는 사용하지 않습니다.
+
 ### Review 저장 위치
 
 ```text

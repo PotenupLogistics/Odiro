@@ -459,6 +459,7 @@ class ResultAnalysisV2Agent:
                 parsed_artifacts=parsed,
                 prompt_focus=self._prompt_focus(request),
             )
+            setup_failure_details = self._setup_failure_details(episodes)
             decision = self.recommendation_type_decider.decide(
                 summary_judgement=response.summary.overall_judgement,
                 findings=findings,
@@ -473,6 +474,7 @@ class ResultAnalysisV2Agent:
                 recommendation_type=decision.recommendation_type,
                 findings=findings,
                 prompt_focus=self._prompt_focus(request),
+                setup_failure_details=setup_failure_details,
             )
             response.recommendations = self.recommendation_generator.ensure_for_review(
                 recommendations=response.recommendations,
@@ -499,6 +501,7 @@ class ResultAnalysisV2Agent:
                 patterns=response.patterns,
                 findings=findings,
                 evidence=evidence,
+                setup_failure_details=setup_failure_details,
             )
             snapshot_hashes = self.snapshot_hash_builder.build(project_path=Path(request.project_path), run_id=request.run_id)
             comparison = self.previous_run_comparator.compare(
@@ -565,6 +568,10 @@ class ResultAnalysisV2Agent:
             return False
         return not relative_path.startswith("runs/") or "/review/" not in relative_path
 
+    def _setup_failure_details(self, episodes: list[EpisodeMetrics]) -> list[Any]:
+        """Return setup failure details recorded on setup-stage episodes."""
+        return [episode.setup_failure_details for episode in episodes if episode.setup_failure_details is not None]
+
     def _sync_modified_candidate_payloads(self, response: AnalysisRunV2Response) -> None:
         """Refresh modified_*_json arrays after review-level recommendation changes."""
         response.modified_policy_json = self.response_builder.modified_candidate_payloads(
@@ -583,9 +590,15 @@ class ResultAnalysisV2Agent:
         recommendation_type: str,
         findings: list[dict[str, Any]],
         prompt_focus: list[str],
+        setup_failure_details: list[Any],
     ) -> None:
         """Keep user-facing summary consistent with review artifact recommendation type."""
         if recommendation_type == "none":
+            if self._has_setup_failure(findings=findings, setup_failure_details=setup_failure_details):
+                response.summary.overall_judgement = "change_recommended"
+                response.summary.message = self._setup_summary_message(setup_failure_details)
+                self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
+                return
             response.summary.overall_judgement = "no_change_needed"
             return
         if recommendation_type == "insufficient_data":
@@ -595,13 +608,16 @@ class ResultAnalysisV2Agent:
 
         response.summary.overall_judgement = "change_recommended"
         finding_types = {str(finding.get("type")) for finding in findings}
+        has_setup_failure = self._has_setup_failure(findings=findings, setup_failure_details=setup_failure_details)
         if recommendation_type == "environment_review":
-            response.summary.message = "환경 또는 장애물 관련 충돌 근거가 확인되어 환경 검토가 필요합니다."
+            response.summary.message = "환경 또는 장애물 관련 충돌이 발생해 환경 검토가 필요합니다."
+            if has_setup_failure:
+                response.summary.message = f"{response.summary.message} 일부 episode는 세팅 단계에서 중단되어 환경 판단에서 제외했습니다."
             self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
             return
         if response.metrics.success_count > 0 and response.metrics.failure_count == 0:
             response.summary.message = (
-                "주행은 성공했지만, 패널티 구역 침범 등 안전/정책 검토가 필요한 근거가 확인되었습니다."
+                "주행은 성공했지만, 패널티 구역 침범 등 안전/정책 검토가 필요한 신호가 나타났습니다."
             )
             self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
             return
@@ -611,12 +627,42 @@ class ResultAnalysisV2Agent:
             and not {"static_obstacle_collision", "blocked_region_collision"} & finding_types
         ):
             response.summary.message = (
-                "사용자 요청 관점에서 요청한 장애물/충돌 근거는 확인되지 않았고, "
-                "패널티 구역 침범 근거가 확인되어 주행 정책 검토가 필요합니다."
+                "사용자 요청 관점에서 요청한 장애물/충돌 문제는 확인되지 않았고, "
+                "패널티 구역 침범이 발생해 주행 정책 검토가 필요합니다."
             )
         else:
-            response.summary.message = "주행 정책 검토가 필요한 실패 근거가 확인되었습니다."
+            response.summary.message = "주행 정책 검토가 필요한 실패가 발생했습니다."
+        if has_setup_failure:
+            response.summary.message = f"{response.summary.message} 일부 episode는 세팅 단계에서 중단되어 정책 판단에서 제외했습니다."
         self._append_prompt_focus_message(response=response, prompt_focus=prompt_focus)
+
+    def _has_setup_failure(self, *, findings: list[dict[str, Any]], setup_failure_details: list[Any]) -> bool:
+        """Return whether this run contains setup-stage failures."""
+        return bool(setup_failure_details) or any(finding.get("type") == "setup_failed" for finding in findings)
+
+    def _setup_summary_message(self, setup_failure_details: list[Any]) -> str:
+        """Build setup-failure summary text without exposing diagnostic source paths."""
+        if not setup_failure_details:
+            return (
+                "주행 시작 전 세팅 단계에서 실행이 중단되었습니다. "
+                "scenario, prop, catalog, asset, 환경 설정 확인이 필요합니다."
+            )
+        detail = setup_failure_details[0]
+        resource_type = str(getattr(detail, "resource_type", "") or "").strip()
+        resource_id = str(getattr(detail, "resource_id", "") or "").strip()
+        message = str(getattr(detail, "message", "") or "").strip()
+        if resource_type == "prop" and resource_id:
+            return f"{resource_id}가 환경 카탈로그에 등록되지 않아 주행 시작 전 세팅 단계에서 실행이 중단되었습니다."
+        if resource_type == "asset" and resource_id:
+            return f"{resource_id} asset을 불러오지 못해 주행 시작 전 세팅 단계에서 실행이 중단되었습니다."
+        if resource_type in {"map", "segment"} and resource_id:
+            return f"{resource_type} 참조 ID {resource_id}를 확인하지 못해 주행 시작 전 세팅 단계에서 실행이 중단되었습니다."
+        if message:
+            return f"주행 시작 전 세팅 단계에서 실행이 중단되었습니다. 기록된 setup 오류: {message}"
+        return (
+            "주행 시작 전 세팅 단계에서 실행이 중단되었습니다. "
+            "scenario, prop, catalog, asset, 환경 설정 확인이 필요합니다."
+        )
 
     def _append_prompt_focus_message(self, *, response: AnalysisRunV2Response, prompt_focus: list[str]) -> None:
         """Append prompt focus text when summary alignment replaced the original message."""

@@ -765,6 +765,79 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ApplyWidgetTreeSpec(const TSharedPtr<FJs
 		}
 
 		const TSharedPtr<FJsonObject>& Props = *PropsPtr;
+
+		// UBorder brush authoring: compose rounded-box / 9-slice texture surfaces in
+		// one pass so brushColor, drawAs, radius, outlineColor, outlineWidth, texture,
+		// brushMargin, and imageSize cooperate instead of overwriting each other.
+		// These keys are skipped in the per-key loop below for borders.
+		if (UBorder* BrushBorder = Cast<UBorder>(Widget))
+		{
+			static const TCHAR* BrushKeys[] = {
+				TEXT("brushColor"), TEXT("drawAs"), TEXT("radius"), TEXT("outlineColor"),
+				TEXT("outlineWidth"), TEXT("texture"), TEXT("resourceObject"),
+				TEXT("brushMargin"), TEXT("imageSize") };
+			bool bAnyBrushKey = false;
+			for (const TCHAR* K : BrushKeys) { if (Props->HasField(K)) { bAnyBrushKey = true; break; } }
+			if (bAnyBrushKey)
+			{
+				FSlateBrush Brush = BrushBorder->Background;
+				FLinearColor Fill = BrushBorder->GetBrushColor();
+
+				FString DrawAsStr;
+				if (Props->TryGetStringField(TEXT("drawAs"), DrawAsStr))
+				{
+					const FString V = DrawAsStr.ToLower();
+					if (V == TEXT("box")) Brush.DrawAs = ESlateBrushDrawType::Box;
+					else if (V == TEXT("roundedbox")) Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
+					else if (V == TEXT("image")) Brush.DrawAs = ESlateBrushDrawType::Image;
+					else if (V == TEXT("border")) Brush.DrawAs = ESlateBrushDrawType::Border;
+					else if (V == TEXT("none") || V == TEXT("nodrawtype")) Brush.DrawAs = ESlateBrushDrawType::NoDrawType;
+				}
+				double Radius = 0.0;
+				if (Props->TryGetNumberField(TEXT("radius"), Radius))
+				{
+					Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
+					Brush.OutlineSettings.CornerRadii = FVector4(Radius, Radius, Radius, Radius);
+					Brush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
+				}
+				if (Props->HasField(TEXT("outlineColor")))
+				{
+					Brush.OutlineSettings.Color = FSlateColor(McpColorFromJson(Props->TryGetField(TEXT("outlineColor"))));
+				}
+				double OutlineWidth = 0.0;
+				if (Props->TryGetNumberField(TEXT("outlineWidth"), OutlineWidth))
+				{
+					Brush.OutlineSettings.Width = static_cast<float>(OutlineWidth);
+				}
+				FString TexturePath;
+				if (Props->TryGetStringField(TEXT("texture"), TexturePath)
+					|| Props->TryGetStringField(TEXT("resourceObject"), TexturePath))
+				{
+					if (UObject* Resource = LoadObject<UObject>(nullptr, *TexturePath))
+					{
+						Brush.SetResourceObject(Resource);
+					}
+				}
+				if (Props->HasField(TEXT("brushMargin")))
+				{
+					Brush.Margin = McpMarginFromJson(Props->TryGetField(TEXT("brushMargin")));
+				}
+				const TArray<TSharedPtr<FJsonValue>>* SizeArr = nullptr;
+				if (Props->TryGetArrayField(TEXT("imageSize"), SizeArr) && SizeArr && SizeArr->Num() >= 2)
+				{
+					Brush.ImageSize = FVector2D((*SizeArr)[0]->AsNumber(), (*SizeArr)[1]->AsNumber());
+				}
+				if (Props->HasField(TEXT("brushColor")))
+				{
+					Fill = McpColorFromJson(Props->TryGetField(TEXT("brushColor")));
+					Brush.TintColor = FSlateColor(Fill);
+				}
+				BrushBorder->SetBrush(Brush);
+				BrushBorder->SetBrushColor(Fill);
+				PropertySetCount++;
+			}
+		}
+
 		for (const auto& Pair : Props->Values)
 		{
 			const FString& Key = Pair.Key;
@@ -819,14 +892,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ApplyWidgetTreeSpec(const TSharedPtr<FJs
 					continue;
 				}
 			}
-			else if (Key == TEXT("brushColor"))
+			else if (Key == TEXT("brushColor") || Key == TEXT("drawAs") || Key == TEXT("radius")
+				|| Key == TEXT("outlineColor") || Key == TEXT("outlineWidth") || Key == TEXT("texture")
+				|| Key == TEXT("resourceObject") || Key == TEXT("brushMargin") || Key == TEXT("imageSize"))
 			{
-				if (UBorder* Border = Cast<UBorder>(Widget))
+				// Borders: handled by the brush-composition pass above.
+				if (Cast<UBorder>(Widget))
 				{
-					const FLinearColor Color = McpColorFromJson(Value);
-					Border->SetBrush(McpMakeBoxBrush(Color));
-					Border->SetBrushColor(Color);
-					PropertySetCount++;
 					continue;
 				}
 			}

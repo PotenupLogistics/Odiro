@@ -96,7 +96,7 @@ void UScenarioEditorSidebarPedestrianPanel::HandleEncounterCollectionAddRequeste
 	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->AddPedestrianEncounterAfter(INDEX_NONE, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarPedestrianPanel::HandleEncounterRemoveRequested(const int32 encounterIndex)
@@ -104,7 +104,7 @@ void UScenarioEditorSidebarPedestrianPanel::HandleEncounterRemoveRequested(const
 	ExecuteTemplateCommand([encounterIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->RemovePedestrianEncounterAt(encounterIndex, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarPedestrianPanel::ApplySelectedBlockPath()
@@ -626,9 +626,13 @@ UScenarioTemplateSidebarViewModel* UScenarioEditorSidebarPedestrianPanel::GetTem
 }
 
 void UScenarioEditorSidebarPedestrianPanel::ExecuteTemplateCommand(
-	TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command)
+	TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command,
+	const bool bRefreshInspectorOnSuccess)
 {
-	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = uiSubsystem
+		? uiSubsystem->GetTemplateSidebarViewModel()
+		: nullptr;
 	if (!templateSidebarViewModel)
 	{
 		SetDiagnosticsText(TEXT("ScenarioTemplateSidebarViewModel unavailable."));
@@ -636,8 +640,15 @@ void UScenarioEditorSidebarPedestrianPanel::ExecuteTemplateCommand(
 	}
 
 	FString statusText;
-	command(templateSidebarViewModel, statusText);
-	RefreshFromDraft();
+	const bool bCommandSucceeded = command(templateSidebarViewModel, statusText);
+	if (bCommandSucceeded && bRefreshInspectorOnSuccess && uiSubsystem)
+	{
+		uiSubsystem->RefreshEditorRootInspector();
+	}
+	else
+	{
+		RefreshFromDraft();
+	}
 	SetDiagnosticsText(statusText);
 }
 

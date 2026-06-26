@@ -171,7 +171,7 @@ void UScenarioEditorRootWidget::NativeTick(const FGeometry& myGeometry, const fl
 {
 	Super::NativeTick(myGeometry, inDeltaTime);
 
-	if (bAutoRevealAssetPaletteOnBottomEdge)
+	if (!bShowAssetPaletteOnEditorSessionStart && bAutoRevealAssetPaletteOnBottomEdge)
 	{
 		SetAssetPaletteVisible(ShouldRevealAssetPaletteFromMouseEdge(), true);
 	}
@@ -469,15 +469,15 @@ void UScenarioEditorRootWidget::HandleEditorSessionStarted(const bool)
 {
 	RefreshScenarioInspector();
 
-	if (bAutoRevealAssetPaletteOnBottomEdge)
-	{
-		SetAssetPaletteVisible(ShouldRevealAssetPaletteFromMouseEdge(), true);
-		return;
-	}
-
 	if (bShowAssetPaletteOnEditorSessionStart)
 	{
 		ShowAssetPaletteWidget();
+		return;
+	}
+
+	if (bAutoRevealAssetPaletteOnBottomEdge)
+	{
+		SetAssetPaletteVisible(ShouldRevealAssetPaletteFromMouseEdge(), true);
 	}
 }
 

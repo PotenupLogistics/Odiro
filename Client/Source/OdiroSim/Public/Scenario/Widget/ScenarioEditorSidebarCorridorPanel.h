@@ -303,7 +303,9 @@ private:
 	// Returns catalog-backed Corridor surface ids for combo-box fields.
 	TArray<FString> GetCorridorSurfaceIdOptions() const;
 	// Runs a ViewModel command, refreshes the panel, and mirrors command status text.
-	void ExecuteTemplateCommand(TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command);
+	void ExecuteTemplateCommand(
+		TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command,
+		bool bRefreshInspectorOnSuccess = false);
 	// Applies diagnostics to the optional diagnostics text block.
 	void SetDiagnosticsText(const FString& text) const;
 };

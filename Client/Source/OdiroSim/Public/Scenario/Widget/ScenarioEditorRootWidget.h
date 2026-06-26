@@ -34,13 +34,13 @@ public:
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& myGeometry, float inDeltaTime) override;
 
-	// Controls whether the asset palette is shown immediately when auto reveal is disabled.
+	// Controls whether the asset palette stays visible as a persistent editor surface.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root")
 	bool bShowAssetPaletteOnEditorSessionStart = true;
 
-	// Controls whether the asset palette appears while the cursor is near the bottom edge.
+	// Legacy reveal mode used only when the persistent asset palette is disabled.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root")
-	bool bAutoRevealAssetPaletteOnBottomEdge = true;
+	bool bAutoRevealAssetPaletteOnBottomEdge = false;
 
 	// Bottom-edge distance that reveals the asset palette.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Root", meta = (ClampMin = "0.0"))

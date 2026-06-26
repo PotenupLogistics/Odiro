@@ -49,6 +49,19 @@ namespace
 			&& placeableComponent->AuthoringRole == EScenarioPlaceableAuthoringRole::Generic;
 	}
 
+	bool ShouldShowPlaceableInOutliner(const UScenarioPlaceableComponent* placeableComponent)
+	{
+		return placeableComponent
+			&& placeableComponent->bAuthoringSelectable
+			&& !placeableComponent->InstanceId.IsEmpty()
+			&& !IsHiddenLegacyGroundRegionPlaceable(placeableComponent);
+	}
+
+	bool ShouldTrackPlaceableInOutlinerRegistry(const UScenarioPlaceableComponent* placeableComponent)
+	{
+		return placeableComponent && !IsHiddenLegacyGroundRegionPlaceable(placeableComponent);
+	}
+
 	FString ActorCategoryToText(const EScenarioActorCategory category)
 	{
 		switch (category)
@@ -206,9 +219,21 @@ void UScenarioEditorOutlinerWidget::RefreshFromEditorState()
 	RebuildRows(CachedItems);
 }
 
+void UScenarioEditorOutlinerWidget::InvalidatePlaceableRegistry()
+{
+	PlaceableComponentRegistry.Reset();
+	bPlaceableRegistryInitialized = false;
+}
+
 void UScenarioEditorOutlinerWidget::SetSelectedItemKey(const FString& itemKey)
 {
-	SelectedItemKey = itemKey.IsEmpty() ? ScenarioKey : itemKey;
+	const FString resolvedItemKey = itemKey.IsEmpty() ? ScenarioKey : itemKey;
+	if (SelectedItemKey == resolvedItemKey)
+	{
+		return;
+	}
+
+	SelectedItemKey = resolvedItemKey;
 	for (UScenarioEditorOutlinerRowWidget* rowWidget : RowWidgets)
 	{
 		if (!rowWidget)
@@ -291,10 +316,14 @@ void UScenarioEditorOutlinerWidget::BuildOutlinerItems(
 
 void UScenarioEditorOutlinerWidget::HandleRowSelected(FScenarioOutlinerItemViewModel item)
 {
-	SetSelectedItemKey(item.ItemKey);
-	if (UScenarioEditorOutlinerViewModel* outlinerViewModel = GetOutlinerViewModel())
+	const FString resolvedItemKey = item.ItemKey.IsEmpty() ? ScenarioKey : item.ItemKey;
+	if (SelectedItemKey != resolvedItemKey)
 	{
-		outlinerViewModel->SetSelectedItemKey(item.ItemKey);
+		SetSelectedItemKey(item.ItemKey);
+		if (UScenarioEditorOutlinerViewModel* outlinerViewModel = GetOutlinerViewModel())
+		{
+			outlinerViewModel->SetSelectedItemKey(item.ItemKey);
+		}
 	}
 	OnItemSelected.Broadcast(item);
 }
@@ -325,20 +354,31 @@ void UScenarioEditorOutlinerWidget::RebuildRows(const TArray<FScenarioOutlinerIt
 		return;
 	}
 
+	TMap<FString, UScenarioEditorOutlinerRowWidget*> reusableRowsByKey;
+	TArray<UScenarioEditorOutlinerRowWidget*> retiredRows;
 	for (UScenarioEditorOutlinerRowWidget* rowWidget : RowWidgets)
 	{
 		if (!rowWidget)
 		{
 			continue;
 		}
-		rowWidget->OnRowSelected.RemoveDynamic(this, &UScenarioEditorOutlinerWidget::HandleRowSelected);
-		rowWidget->OnRowExpansionToggled.RemoveDynamic(this, &UScenarioEditorOutlinerWidget::HandleRowExpansionToggled);
+		RowScrollBox->RemoveChild(rowWidget);
+
+		const FString rowItemKey = rowWidget->GetItem().ItemKey;
+		if (!rowItemKey.IsEmpty() && !reusableRowsByKey.Contains(rowItemKey))
+		{
+			reusableRowsByKey.Add(rowItemKey, rowWidget);
+		}
+		else
+		{
+			retiredRows.Add(rowWidget);
+		}
 	}
 	RowWidgets.Reset();
-	RowScrollBox->ClearChildren();
 
 	if (EmptyTextBlock)
 	{
+		RowScrollBox->RemoveChild(EmptyTextBlock.Get());
 		EmptyTextBlock->SetVisibility(items.IsEmpty() ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 		if (items.IsEmpty())
 		{
@@ -357,7 +397,10 @@ void UScenarioEditorOutlinerWidget::RebuildRows(const TArray<FScenarioOutlinerIt
 		{
 			EmptyTextBlock->SetText(FText::FromString(TEXT("Outliner row widget class is missing.")));
 			EmptyTextBlock->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-			RowScrollBox->AddChild(EmptyTextBlock.Get());
+			if (!EmptyTextBlock->GetParent())
+			{
+				RowScrollBox->AddChild(EmptyTextBlock.Get());
+			}
 		}
 		UE_LOG(
 			LogTemp,
@@ -373,10 +416,18 @@ void UScenarioEditorOutlinerWidget::RebuildRows(const TArray<FScenarioOutlinerIt
 		itemViewModels = outlinerViewModel->GetItems();
 	}
 
+	TSet<UScenarioEditorOutlinerRowWidget*> reusedRows;
 	for (int32 itemIndex = 0; itemIndex < items.Num(); ++itemIndex)
 	{
-		UScenarioEditorOutlinerRowWidget* rowWidget =
-			CreateWidget<UScenarioEditorOutlinerRowWidget>(this, rowClass);
+		UScenarioEditorOutlinerRowWidget* rowWidget = nullptr;
+		if (UScenarioEditorOutlinerRowWidget** reusableRow = reusableRowsByKey.Find(items[itemIndex].ItemKey))
+		{
+			rowWidget = *reusableRow;
+		}
+		if (!rowWidget)
+		{
+			rowWidget = CreateWidget<UScenarioEditorOutlinerRowWidget>(this, rowClass);
+		}
 		if (!rowWidget)
 		{
 			continue;
@@ -391,35 +442,57 @@ void UScenarioEditorOutlinerWidget::RebuildRows(const TArray<FScenarioOutlinerIt
 		{
 			rowWidget->InitializeRow(items[itemIndex]);
 		}
+		rowWidget->OnRowSelected.RemoveDynamic(this, &UScenarioEditorOutlinerWidget::HandleRowSelected);
 		rowWidget->OnRowSelected.AddDynamic(this, &UScenarioEditorOutlinerWidget::HandleRowSelected);
+		rowWidget->OnRowExpansionToggled.RemoveDynamic(this, &UScenarioEditorOutlinerWidget::HandleRowExpansionToggled);
 		rowWidget->OnRowExpansionToggled.AddDynamic(
 			this,
 			&UScenarioEditorOutlinerWidget::HandleRowExpansionToggled);
 		RowScrollBox->AddChild(rowWidget);
 		RowWidgets.Add(rowWidget);
+		reusedRows.Add(rowWidget);
+	}
+
+	for (const TPair<FString, UScenarioEditorOutlinerRowWidget*>& reusableRowPair : reusableRowsByKey)
+	{
+		UScenarioEditorOutlinerRowWidget* rowWidget = reusableRowPair.Value;
+		if (!rowWidget || reusedRows.Contains(rowWidget))
+		{
+			continue;
+		}
+		rowWidget->OnRowSelected.RemoveDynamic(this, &UScenarioEditorOutlinerWidget::HandleRowSelected);
+		rowWidget->OnRowExpansionToggled.RemoveDynamic(this, &UScenarioEditorOutlinerWidget::HandleRowExpansionToggled);
+	}
+	for (UScenarioEditorOutlinerRowWidget* rowWidget : retiredRows)
+	{
+		if (!rowWidget)
+		{
+			continue;
+		}
+		rowWidget->OnRowSelected.RemoveDynamic(this, &UScenarioEditorOutlinerWidget::HandleRowSelected);
+		rowWidget->OnRowExpansionToggled.RemoveDynamic(this, &UScenarioEditorOutlinerWidget::HandleRowExpansionToggled);
 	}
 }
 
 void UScenarioEditorOutlinerWidget::CollectPlaceableItems(
-	TArray<FScenarioOutlinerItemViewModel>& outPlaceableItems) const
+	TArray<FScenarioOutlinerItemViewModel>& outPlaceableItems)
 {
 	outPlaceableItems.Reset();
 
-	const UWorld* world = GetWorld();
-	if (!world)
+	if (!bPlaceableRegistryInitialized)
 	{
-		return;
+		RebuildPlaceableRegistry();
+	}
+	else
+	{
+		CompactPlaceableRegistry();
+		SyncPlaceableRegistryFromWorld();
 	}
 
-	for (TActorIterator<AActor> actorIt(world); actorIt; ++actorIt)
+	for (const TWeakObjectPtr<UScenarioPlaceableComponent>& placeableComponentPtr : PlaceableComponentRegistry)
 	{
-		const AActor* actor = *actorIt;
-		const UScenarioPlaceableComponent* placeableComponent =
-			actor ? actor->FindComponentByClass<UScenarioPlaceableComponent>() : nullptr;
-		if (!placeableComponent
-			|| !placeableComponent->bAuthoringSelectable
-			|| placeableComponent->InstanceId.IsEmpty()
-			|| IsHiddenLegacyGroundRegionPlaceable(placeableComponent))
+		const UScenarioPlaceableComponent* placeableComponent = placeableComponentPtr.Get();
+		if (!ShouldShowPlaceableInOutliner(placeableComponent))
 		{
 			continue;
 		}
@@ -443,6 +516,70 @@ void UScenarioEditorOutlinerWidget::CollectPlaceableItems(
 		}
 		return lhs.Label.ToString() < rhs.Label.ToString();
 	});
+}
+
+void UScenarioEditorOutlinerWidget::RebuildPlaceableRegistry()
+{
+	PlaceableComponentRegistry.Reset();
+
+	const UWorld* world = GetWorld();
+	if (!world)
+	{
+		bPlaceableRegistryInitialized = false;
+		return;
+	}
+
+	for (TActorIterator<AActor> actorIt(world); actorIt; ++actorIt)
+	{
+		const AActor* actor = *actorIt;
+		UScenarioPlaceableComponent* placeableComponent =
+			actor ? actor->FindComponentByClass<UScenarioPlaceableComponent>() : nullptr;
+		if (ShouldTrackPlaceableInOutlinerRegistry(placeableComponent))
+		{
+			PlaceableComponentRegistry.Add(placeableComponent);
+		}
+	}
+
+	bPlaceableRegistryInitialized = true;
+}
+
+void UScenarioEditorOutlinerWidget::CompactPlaceableRegistry()
+{
+	PlaceableComponentRegistry.RemoveAllSwap([](const TWeakObjectPtr<UScenarioPlaceableComponent>& placeableComponentPtr)
+	{
+		return !ShouldTrackPlaceableInOutlinerRegistry(placeableComponentPtr.Get());
+	});
+}
+
+void UScenarioEditorOutlinerWidget::SyncPlaceableRegistryFromWorld()
+{
+	UWorld* world = GetWorld();
+	if (!world)
+	{
+		return;
+	}
+
+	TSet<const UScenarioPlaceableComponent*> registeredComponents;
+	for (const TWeakObjectPtr<UScenarioPlaceableComponent>& placeableComponentPtr : PlaceableComponentRegistry)
+	{
+		if (const UScenarioPlaceableComponent* placeableComponent = placeableComponentPtr.Get())
+		{
+			registeredComponents.Add(placeableComponent);
+		}
+	}
+
+	for (TActorIterator<AActor> actorIt(world); actorIt; ++actorIt)
+	{
+		const AActor* actor = *actorIt;
+		UScenarioPlaceableComponent* placeableComponent =
+			actor ? actor->FindComponentByClass<UScenarioPlaceableComponent>() : nullptr;
+		if (ShouldTrackPlaceableInOutlinerRegistry(placeableComponent)
+			&& !registeredComponents.Contains(placeableComponent))
+		{
+			PlaceableComponentRegistry.Add(placeableComponent);
+			registeredComponents.Add(placeableComponent);
+		}
+	}
 }
 
 void UScenarioEditorOutlinerWidget::AddDefaultExpandedKeys()

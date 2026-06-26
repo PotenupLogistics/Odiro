@@ -108,15 +108,6 @@ void UScenarioEditorSidebarCorridorLaneWidget::BindFieldRows()
 		SurfaceFieldRow->OnValueTextCommitted.AddDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorLaneWidget::HandleSurfaceCommitted);
-		SidebarWidgetHelpers::BindFieldRowActions(
-			SurfaceFieldRow.Get(),
-			this,
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorLaneWidget,
-				HandleAddLaneRequested),
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorLaneWidget,
-				HandleRemoveLaneRequested));
 	}
 
 	if (WidthFieldRow)
@@ -134,6 +125,15 @@ void UScenarioEditorSidebarCorridorLaneWidget::BindFieldRows()
 			this,
 			&UScenarioEditorSidebarCorridorLaneWidget::HandleWidthRangeCommitted);
 	}
+	if (LaneBlockWidget)
+	{
+		LaneBlockWidget->OnRemoveActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorLaneWidget::HandleRemoveLaneRequested);
+		LaneBlockWidget->OnRemoveActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorLaneWidget::HandleRemoveLaneRequested);
+	}
 }
 
 void UScenarioEditorSidebarCorridorLaneWidget::UnbindFieldRows()
@@ -143,7 +143,6 @@ void UScenarioEditorSidebarCorridorLaneWidget::UnbindFieldRows()
 		SurfaceFieldRow->OnValueTextCommitted.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorLaneWidget::HandleSurfaceCommitted);
-		SidebarWidgetHelpers::UnbindFieldRowActions(SurfaceFieldRow.Get(), this);
 	}
 
 	if (WidthFieldRow)
@@ -155,6 +154,12 @@ void UScenarioEditorSidebarCorridorLaneWidget::UnbindFieldRows()
 			this,
 			&UScenarioEditorSidebarCorridorLaneWidget::HandleWidthRangeCommitted);
 	}
+	if (LaneBlockWidget)
+	{
+		LaneBlockWidget->OnRemoveActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorLaneWidget::HandleRemoveLaneRequested);
+	}
 }
 
 void UScenarioEditorSidebarCorridorLaneWidget::ConfigureFieldRows()
@@ -164,11 +169,13 @@ void UScenarioEditorSidebarCorridorLaneWidget::ConfigureFieldRows()
 		const TCHAR* sideLabel = Side == EScenarioEditorCorridorSide::Building ? TEXT("건물측") : TEXT("도로측");
 		SidebarWidgetHelpers::ConfigureBlock(LaneBlockWidget.Get(), TextStyleCatalog, {
 			FString::Printf(TEXT("%s 영역 %d"), sideLabel, LaneIndex + 1),
-			MakeLanePath(Side),
+			MakeLanePath(Side, LaneIndex),
 			TEXT("세부"),
 			false,
 			true,
 			false });
+		LaneBlockWidget->SetAddActionVisible(false);
+		LaneBlockWidget->SetRemoveActionVisible(true);
 	}
 
 	if (SurfaceFieldRow)
@@ -255,9 +262,10 @@ UScenarioTemplateFieldRowViewModel* UScenarioEditorSidebarCorridorLaneWidget::Fi
 }
 
 FString UScenarioEditorSidebarCorridorLaneWidget::MakeLanePath(
-	const EScenarioEditorCorridorSide side)
+	const EScenarioEditorCorridorSide side,
+	const int32 laneIndex)
 {
 	return side == EScenarioEditorCorridorSide::Building
-		? FString(TEXT("root.corridor.building_side[]"))
-		: FString(TEXT("root.corridor.curb_side[]"));
+		? SidebarWidgetHelpers::MakeIndexedBlockPath(TEXT("root.corridor.building_side"), laneIndex)
+		: SidebarWidgetHelpers::MakeIndexedBlockPath(TEXT("root.corridor.curb_side"), laneIndex);
 }

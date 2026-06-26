@@ -15,6 +15,15 @@
 
 namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 
+namespace
+{
+	// Returns true for concrete static obstacle placement detail blocks.
+	bool IsObstaclePlacementItemBlockPath(const FString& blockPath)
+	{
+		return blockPath.StartsWith(TEXT("root.obstacles.placements["));
+	}
+}
+
 void UScenarioEditorSidebarObstaclePanel::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -22,9 +31,14 @@ void UScenarioEditorSidebarObstaclePanel::NativeConstruct()
 	{
 		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
 	}
+	SidebarWidgetHelpers::ApplyPanelRootPadding(this, FName(TEXT("ObstaclePanelRootBox")));
 	BindFieldRows();
 	ConfigureFieldRows();
 	RefreshFromDraft();
+
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectBlockWidgets(blockWidgets);
+	SidebarWidgetHelpers::ApplyPanelBlockSpacing(blockWidgets);
 }
 
 void UScenarioEditorSidebarObstaclePanel::NativeDestruct()
@@ -46,6 +60,13 @@ void UScenarioEditorSidebarObstaclePanel::SetWidgetClassCatalog(
 	WidgetClassCatalog = catalog.IsNull()
 		? UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference()
 		: catalog;
+	for (UScenarioEditorSidebarObstaclePlacementWidget* placementWidget : PlacementWidgets)
+	{
+		if (placementWidget)
+		{
+			placementWidget->SetWidgetClassCatalog(WidgetClassCatalog);
+		}
+	}
 }
 
 void UScenarioEditorSidebarObstaclePanel::RefreshFromDraft()
@@ -156,7 +177,7 @@ void UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountAddRequested()
 	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->AddObstaclePlacementAfter(INDEX_NONE, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountRemoveRequested()
@@ -164,7 +185,7 @@ void UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountRemoveRequested()
 	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->RemoveObstaclePlacementAt(INDEX_NONE, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandlePlacementFieldTextCommitted(
@@ -218,7 +239,7 @@ void UScenarioEditorSidebarObstaclePanel::HandlePlacementAddRequested(const int3
 	ExecuteTemplateCommand([placementIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->AddObstaclePlacementAfter(placementIndex, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarObstaclePanel::HandlePlacementRemoveRequested(const int32 placementIndex)
@@ -226,7 +247,66 @@ void UScenarioEditorSidebarObstaclePanel::HandlePlacementRemoveRequested(const i
 	ExecuteTemplateCommand([placementIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->RemoveObstaclePlacementAt(placementIndex, statusText);
-	});
+	}, true);
+}
+
+void UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemTextCommitted(
+	const int32 placementIndex,
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	const int32 itemIndex,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	if (commitMethod == ETextCommit::OnCleared)
+	{
+		RefreshFromDraft();
+		return;
+	}
+
+	ExecuteTemplateCommand(
+		[placementIndex, field, itemIndex, &text](
+			UScenarioTemplateSidebarViewModel* viewModel,
+			FString& statusText)
+		{
+			return viewModel->CommitObstaclePlacementStringListItemText(
+				placementIndex,
+				field,
+				itemIndex,
+				text,
+				statusText);
+		});
+}
+
+void UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemAddRequested(
+	const int32 placementIndex,
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	const int32 itemIndex)
+{
+	ExecuteTemplateCommand(
+		[placementIndex, field, itemIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+		{
+			return viewModel->AddObstaclePlacementStringListItemAfter(
+				placementIndex,
+				field,
+				itemIndex,
+				statusText);
+		});
+}
+
+void UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemRemoveRequested(
+	const int32 placementIndex,
+	const EScenarioEditorSidebarObstaclePlacementField field,
+	const int32 itemIndex)
+{
+	ExecuteTemplateCommand(
+		[placementIndex, field, itemIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+		{
+			return viewModel->RemoveObstaclePlacementStringListItemAt(
+				placementIndex,
+				field,
+				itemIndex,
+				statusText);
+		});
 }
 
 void UScenarioEditorSidebarObstaclePanel::BindFieldRows()
@@ -246,6 +326,21 @@ void UScenarioEditorSidebarObstaclePanel::BindFieldRows()
 			this,
 			&UScenarioEditorSidebarObstaclePanel::HandleMinClearWidthRangeCommitted);
 	}
+	if (PlacementsBlockWidget)
+	{
+		PlacementsBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountAddRequested);
+		PlacementsBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountAddRequested);
+		PlacementsBlockWidget->OnRemoveActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountRemoveRequested);
+		PlacementsBlockWidget->OnRemoveActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountRemoveRequested);
+	}
 }
 
 void UScenarioEditorSidebarObstaclePanel::UnbindFieldRows()
@@ -259,9 +354,14 @@ void UScenarioEditorSidebarObstaclePanel::UnbindFieldRows()
 			this,
 			&UScenarioEditorSidebarObstaclePanel::HandleMinClearWidthRangeCommitted);
 	}
-	if (PlacementsCountFieldRow)
+	if (PlacementsBlockWidget)
 	{
-		SidebarWidgetHelpers::UnbindFieldRowActions(PlacementsCountFieldRow.Get(), this);
+		PlacementsBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountAddRequested);
+		PlacementsBlockWidget->OnRemoveActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementsCountRemoveRequested);
 	}
 
 	for (UScenarioEditorSidebarObstaclePlacementWidget* placementWidget : PlacementWidgets)
@@ -283,6 +383,15 @@ void UScenarioEditorSidebarObstaclePanel::UnbindFieldRows()
 		placementWidget->OnRemoveRequested.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarObstaclePanel::HandlePlacementRemoveRequested);
+		placementWidget->OnStringListItemTextCommitted.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemTextCommitted);
+		placementWidget->OnStringListItemAddRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemAddRequested);
+		placementWidget->OnStringListItemRemoveRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemRemoveRequested);
 	}
 }
 
@@ -317,6 +426,8 @@ void UScenarioEditorSidebarObstaclePanel::ConfigureFieldRows()
 			false,
 			true,
 			false });
+		PlacementsBlockWidget->SetAddActionVisible(true);
+		PlacementsBlockWidget->SetRemoveActionVisible(false);
 	}
 
 	if (MinClearWidthFieldRow)
@@ -407,6 +518,68 @@ void UScenarioEditorSidebarObstaclePanel::ApplySelectedBlockPath()
 				selectedBlockPath);
 		}
 	}
+	ApplyFocusedPlacementDetailLayout(selectedBlockPath);
+}
+
+void UScenarioEditorSidebarObstaclePanel::ApplyFocusedPlacementDetailLayout(
+	const FString& selectedBlockPath)
+{
+	const bool bFocusPlacementDetail = IsObstaclePlacementItemBlockPath(selectedBlockPath);
+
+	if (ObstacleBlockWidget)
+	{
+		ObstacleBlockWidget->SetVisibility(ESlateVisibility::Visible);
+		ObstacleBlockWidget->SetDetailHostLayout(bFocusPlacementDetail);
+		if (bFocusPlacementDetail)
+		{
+			ObstacleBlockWidget->SetExpanded(true);
+		}
+	}
+	if (MinClearWidthBlockWidget)
+	{
+		MinClearWidthBlockWidget->SetVisibility(bFocusPlacementDetail ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	}
+	if (PlacementsBlockWidget)
+	{
+		PlacementsBlockWidget->SetVisibility(ESlateVisibility::Visible);
+		PlacementsBlockWidget->SetDetailHostLayout(bFocusPlacementDetail);
+		if (bFocusPlacementDetail)
+		{
+			PlacementsBlockWidget->SetExpanded(true);
+		}
+	}
+	if (PlacementsCountFieldRow)
+	{
+		if (bFocusPlacementDetail)
+		{
+			PlacementsCountFieldRow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+		{
+			PlacementsCountFieldRow->InitializeFromItemViewModel(
+				templateSidebarViewModel->FindObstacleFieldItem(TEXT("PlacementsCount")));
+		}
+	}
+
+	for (UScenarioEditorSidebarObstaclePlacementWidget* placementWidget : PlacementWidgets)
+	{
+		if (!placementWidget || !placementWidget->PlacementBlockWidget)
+		{
+			continue;
+		}
+
+		const bool bSelectedPlacement =
+			placementWidget->PlacementBlockWidget->BlockPath == selectedBlockPath;
+		placementWidget->SetVisibility(!bFocusPlacementDetail || bSelectedPlacement
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		placementWidget->PlacementBlockWidget->SetFocusedDetailLayout(
+			bFocusPlacementDetail && bSelectedPlacement);
+		if (bFocusPlacementDetail && bSelectedPlacement)
+		{
+			placementWidget->PlacementBlockWidget->SetExpanded(true);
+		}
+	}
 }
 
 void UScenarioEditorSidebarObstaclePanel::RefreshPlacementRows(
@@ -426,15 +599,7 @@ void UScenarioEditorSidebarObstaclePanel::RefreshPlacementRows(
 			: nullptr);
 	if (PlacementsCountFieldRow)
 	{
-		SidebarWidgetHelpers::BindFieldRowActions(
-			PlacementsCountFieldRow.Get(),
-			this,
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarObstaclePanel,
-				HandlePlacementsCountAddRequested),
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarObstaclePanel,
-				HandlePlacementsCountRemoveRequested));
+		PlacementsCountFieldRow->SetArrayControlsEnabled(false);
 	}
 
 	for (int32 placementIndex = 0; placementIndex < placements.Num(); ++placementIndex)
@@ -487,6 +652,7 @@ UScenarioEditorSidebarObstaclePlacementWidget* UScenarioEditorSidebarObstaclePan
 	}
 
 	placementWidget->SetTextStyleCatalog(TextStyleCatalog);
+	placementWidget->SetWidgetClassCatalog(WidgetClassCatalog);
 	placementWidget->SetPlacementIndex(placementIndex);
 	placementWidget->RefreshFromPlacement(placement);
 	placementWidget->OnFieldTextCommitted.RemoveDynamic(
@@ -513,6 +679,24 @@ UScenarioEditorSidebarObstaclePlacementWidget* UScenarioEditorSidebarObstaclePan
 	placementWidget->OnRemoveRequested.AddDynamic(
 		this,
 		&UScenarioEditorSidebarObstaclePanel::HandlePlacementRemoveRequested);
+	placementWidget->OnStringListItemTextCommitted.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemTextCommitted);
+	placementWidget->OnStringListItemTextCommitted.AddDynamic(
+		this,
+		&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemTextCommitted);
+	placementWidget->OnStringListItemAddRequested.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemAddRequested);
+	placementWidget->OnStringListItemAddRequested.AddDynamic(
+		this,
+		&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemAddRequested);
+	placementWidget->OnStringListItemRemoveRequested.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemRemoveRequested);
+	placementWidget->OnStringListItemRemoveRequested.AddDynamic(
+		this,
+		&UScenarioEditorSidebarObstaclePanel::HandlePlacementStringListItemRemoveRequested);
 	parentBlockWidget->AddBodyChild(placementWidget);
 	return placementWidget;
 }
@@ -524,9 +708,13 @@ UScenarioTemplateSidebarViewModel* UScenarioEditorSidebarObstaclePanel::GetTempl
 }
 
 void UScenarioEditorSidebarObstaclePanel::ExecuteTemplateCommand(
-	TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command)
+	TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command,
+	const bool bRefreshInspectorOnSuccess)
 {
-	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = uiSubsystem
+		? uiSubsystem->GetTemplateSidebarViewModel()
+		: nullptr;
 	if (!templateSidebarViewModel)
 	{
 		SetDiagnosticsText(TEXT("ScenarioTemplateSidebarViewModel unavailable."));
@@ -534,8 +722,15 @@ void UScenarioEditorSidebarObstaclePanel::ExecuteTemplateCommand(
 	}
 
 	FString statusText;
-	command(templateSidebarViewModel, statusText);
-	RefreshFromDraft();
+	const bool bCommandSucceeded = command(templateSidebarViewModel, statusText);
+	if (bCommandSucceeded && bRefreshInspectorOnSuccess && uiSubsystem)
+	{
+		uiSubsystem->RefreshEditorRootInspector();
+	}
+	else
+	{
+		RefreshFromDraft();
+	}
 	SetDiagnosticsText(statusText);
 }
 

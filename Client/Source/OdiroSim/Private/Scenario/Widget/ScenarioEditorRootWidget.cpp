@@ -171,7 +171,7 @@ void UScenarioEditorRootWidget::NativeTick(const FGeometry& myGeometry, const fl
 {
 	Super::NativeTick(myGeometry, inDeltaTime);
 
-	if (bAutoRevealAssetPaletteOnBottomEdge)
+	if (!bShowAssetPaletteOnEditorSessionStart && bAutoRevealAssetPaletteOnBottomEdge)
 	{
 		SetAssetPaletteVisible(ShouldRevealAssetPaletteFromMouseEdge(), true);
 	}
@@ -428,7 +428,8 @@ bool UScenarioEditorRootWidget::FocusSidebarForSelectedPlaceable(
 	HidePlaceableDetails();
 	ShowInspectorTab(EScenarioEditorInspectorTab::Detail);
 	SetPanelVisibility(ResolveTemplateSidebarVisibilityTarget(), true);
-	if (UScenarioEditorSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget())
+	UScenarioEditorSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget();
+	if (sidebarWidget)
 	{
 		SetPanelVisibility(sidebarWidget, true);
 	}
@@ -436,8 +437,12 @@ bool UScenarioEditorRootWidget::FocusSidebarForSelectedPlaceable(
 	{
 		ShellViewModel->FocusPlaceableTemplateBlock(targetPanel, targetBlockPath, selectedPlaceable->InstanceId);
 	}
+	const bool bPanelWillChange = sidebarWidget && sidebarWidget->ActivePanel != targetPanel;
 	ApplyTemplateSidebarPanel(targetPanel);
-	RefreshTemplateSidebarWidget();
+	if (sidebarWidget && !bPanelWillChange)
+	{
+		sidebarWidget->ApplySelectedBlockFocus(true);
+	}
 	SyncOutlinerSelectionToPlaceable(selectedPlaceable);
 	return true;
 }
@@ -453,26 +458,40 @@ void UScenarioEditorRootWidget::RefreshTemplateSidebarWidget()
 
 void UScenarioEditorRootWidget::RefreshScenarioInspector()
 {
+	RefreshScenarioInspectorInternal(false);
+}
+
+void UScenarioEditorRootWidget::RefreshScenarioInspectorWithOutlinerRegistryRebuild()
+{
+	RefreshScenarioInspectorInternal(true);
+}
+
+void UScenarioEditorRootWidget::RefreshScenarioInspectorInternal(const bool bRebuildOutlinerPlaceableRegistry)
+{
 	RefreshTemplateSidebarWidget();
 	if (ScenarioEditorOutlinerWidget)
 	{
+		if (bRebuildOutlinerPlaceableRegistry)
+		{
+			ScenarioEditorOutlinerWidget->InvalidatePlaceableRegistry();
+		}
 		ScenarioEditorOutlinerWidget->RefreshFromEditorState();
 	}
 }
 
 void UScenarioEditorRootWidget::HandleEditorSessionStarted(const bool)
 {
-	RefreshScenarioInspector();
-
-	if (bAutoRevealAssetPaletteOnBottomEdge)
-	{
-		SetAssetPaletteVisible(ShouldRevealAssetPaletteFromMouseEdge(), true);
-		return;
-	}
+	RefreshScenarioInspectorWithOutlinerRegistryRebuild();
 
 	if (bShowAssetPaletteOnEditorSessionStart)
 	{
 		ShowAssetPaletteWidget();
+		return;
+	}
+
+	if (bAutoRevealAssetPaletteOnBottomEdge)
+	{
+		SetAssetPaletteVisible(ShouldRevealAssetPaletteFromMouseEdge(), true);
 	}
 }
 
@@ -655,17 +674,9 @@ void UScenarioEditorRootWidget::HandleOutlinerItemSelected(FScenarioOutlinerItem
 {
 	if (item.ItemType == EScenarioEditorOutlinerItemType::Placeable)
 	{
-		bool bSelectedPlaceable = false;
 		if (ShellViewModel)
 		{
-			bSelectedPlaceable = ShellViewModel->SelectPlaceable(item.InstanceId);
-		}
-		if (bSelectedPlaceable)
-		{
-			if (AScenarioEditorController* controller = GetEditorController())
-			{
-				FocusSidebarForSelectedPlaceable(controller->GetSelectedPlaceableComponent());
-			}
+			ShellViewModel->SelectPlaceable(item.InstanceId);
 		}
 		return;
 	}

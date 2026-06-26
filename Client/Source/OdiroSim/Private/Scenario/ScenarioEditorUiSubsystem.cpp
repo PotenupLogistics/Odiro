@@ -204,6 +204,18 @@ void UScenarioEditorUiSubsystem::RefreshFromEditorState()
 	}
 }
 
+void UScenarioEditorUiSubsystem::RefreshEditorRootInspector()
+{
+	RefreshFromEditorState();
+	if (AScenarioEditorController* editorController = ResolveEditorController())
+	{
+		if (UScenarioEditorRootWidget* rootWidget = editorController->GetEditorRootWidget())
+		{
+			rootWidget->RefreshScenarioInspectorWithOutlinerRegistryRebuild();
+		}
+	}
+}
+
 bool UScenarioEditorUiSubsystem::SaveScenario(
 	const FString& defaultSavePath,
 	FString& outResolvedPath,

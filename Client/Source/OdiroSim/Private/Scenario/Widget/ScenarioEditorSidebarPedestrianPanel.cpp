@@ -1,6 +1,7 @@
 #include "Scenario/Widget/ScenarioEditorSidebarPedestrianPanel.h"
 
 #include "Components/TextBlock.h"
+#include "Components/PanelSlot.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
@@ -22,8 +23,20 @@ void UScenarioEditorSidebarPedestrianPanel::NativeConstruct()
 	{
 		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
 	}
+	SidebarWidgetHelpers::ApplyPanelRootPadding(this, FName(TEXT("PedestrianPanelRootBox")));
+	BindControls();
 	ConfigureFieldRows();
 	RefreshFromDraft();
+
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectBlockWidgets(blockWidgets);
+	SidebarWidgetHelpers::ApplyPanelBlockSpacing(blockWidgets);
+}
+
+void UScenarioEditorSidebarPedestrianPanel::NativeDestruct()
+{
+	UnbindControls();
+	Super::NativeDestruct();
 }
 
 void UScenarioEditorSidebarPedestrianPanel::SetTextStyleCatalog(
@@ -48,11 +61,8 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshFromDraft()
 	FString failureReason;
 	if (!templateSidebarViewModel || !templateSidebarViewModel->TryGetDraftScenario(scenarioTemplate, failureReason))
 	{
-		if (DiagnosticsTextBlock)
-		{
-			DiagnosticsTextBlock->SetText(FText::FromString(
-				failureReason.IsEmpty() ? TEXT("ScenarioTemplateSidebarViewModel unavailable.") : failureReason));
-		}
+		SetDiagnosticsText(
+			failureReason.IsEmpty() ? TEXT("ScenarioTemplateSidebarViewModel unavailable.") : failureReason);
 		return;
 	}
 
@@ -67,21 +77,34 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshFromTemplate(
 	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
 	if (!templateSidebarViewModel)
 	{
-		if (DiagnosticsTextBlock)
-		{
-			DiagnosticsTextBlock->SetText(FText::FromString(TEXT("ScenarioTemplateSidebarViewModel unavailable.")));
-		}
+		SetDiagnosticsText(TEXT("ScenarioTemplateSidebarViewModel unavailable."));
 		return;
 	}
 
 	templateSidebarViewModel->RefreshPedestrianFieldItemsFromTemplate(scenarioTemplate);
 	ApplyPedestrianFieldItems();
+	RefreshSpawnSegmentRows(
+		scenarioTemplate.Pedestrians.Background.SpawnSegmentIds,
+		scenarioTemplate.Corridor.Segments);
 	RefreshEncounterRows(scenarioTemplate.Pedestrians.Encounters);
-	if (DiagnosticsTextBlock)
-	{
-		DiagnosticsTextBlock->SetText(FText::FromString(TEXT("Structure only: Pedestrian edits are not committed yet.")));
-	}
+	SetDiagnosticsText(TEXT(""));
 	ApplySelectedBlockPath();
+}
+
+void UScenarioEditorSidebarPedestrianPanel::HandleEncounterCollectionAddRequested()
+{
+	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->AddPedestrianEncounterAfter(INDEX_NONE, statusText);
+	}, true);
+}
+
+void UScenarioEditorSidebarPedestrianPanel::HandleEncounterRemoveRequested(const int32 encounterIndex)
+{
+	ExecuteTemplateCommand([encounterIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->RemovePedestrianEncounterAt(encounterIndex, statusText);
+	}, true);
 }
 
 void UScenarioEditorSidebarPedestrianPanel::ApplySelectedBlockPath()
@@ -107,6 +130,7 @@ void UScenarioEditorSidebarPedestrianPanel::ApplySelectedBlockPath()
 			SidebarWidgetHelpers::ApplySelectedBlockPath(encounterWidget->EncounterBlockWidget.Get(), selectedBlockPath);
 		}
 	}
+	ApplyFocusedEncounterDetailLayout(selectedBlockPath);
 }
 
 void UScenarioEditorSidebarPedestrianPanel::CollectBlockWidgets(
@@ -171,6 +195,8 @@ void UScenarioEditorSidebarPedestrianPanel::ConfigureFieldRows()
 			TEXT("세부"));
 		SpawnZoneBlockWidget->SetNested(true);
 		SpawnZoneBlockWidget->SetShowNormalOutline(false);
+		SpawnZoneBlockWidget->SetAddActionVisible(true);
+		SpawnZoneBlockWidget->SetRemoveActionVisible(false);
 	}
 	if (EncountersBlockWidget)
 	{
@@ -178,6 +204,8 @@ void UScenarioEditorSidebarPedestrianPanel::ConfigureFieldRows()
 		EncountersBlockWidget->SetBlockMetadata(TEXT("상호작용 상황"), TEXT("root.pedestrians.encounters[]"), TEXT("속성"));
 		EncountersBlockWidget->SetNested(true);
 		EncountersBlockWidget->SetShowNormalOutline(false);
+		EncountersBlockWidget->SetAddActionVisible(true);
+		EncountersBlockWidget->SetRemoveActionVisible(false);
 	}
 	if (BackgroundCountFieldRow)
 	{
@@ -190,6 +218,10 @@ void UScenarioEditorSidebarPedestrianPanel::ConfigureFieldRows()
 	if (SpawnSegmentsFieldRow)
 	{
 		SpawnSegmentsFieldRow->SetTextStyleCatalog(TextStyleCatalog);
+		SpawnSegmentsFieldRow->SetEditable(false);
+		SpawnSegmentsFieldRow->SetArrayControlsEnabled(false);
+		SpawnSegmentsFieldRow->SetAddItemControlVisible(false);
+		SpawnSegmentsFieldRow->SetRemoveItemControlVisible(false);
 	}
 	ApplyPedestrianFieldItems();
 }
@@ -212,6 +244,13 @@ void UScenarioEditorSidebarPedestrianPanel::ApplyTextStyles()
 		BackgroundSpeedFieldRow.Get(),
 		SpawnSegmentsFieldRow.Get(),
 		EncountersCountFieldRow.Get() })
+	{
+		if (fieldRow)
+		{
+			fieldRow->SetTextStyleCatalog(TextStyleCatalog);
+		}
+	}
+	for (UScenarioEditorSidebarFieldRow* fieldRow : SpawnSegmentItemRows)
 	{
 		if (fieldRow)
 		{
@@ -256,12 +295,177 @@ void UScenarioEditorSidebarPedestrianPanel::ApplyPedestrianFieldItems()
 	{
 		SpawnSegmentsFieldRow->InitializeFromItemViewModel(
 			templateSidebarViewModel->FindPedestrianFieldItem(TEXT("SpawnSegments")));
+		SpawnSegmentsFieldRow->SetEditable(false);
+		SpawnSegmentsFieldRow->SetArrayControlsEnabled(false);
+		SpawnSegmentsFieldRow->SetAddItemControlVisible(false);
+		SpawnSegmentsFieldRow->SetRemoveItemControlVisible(false);
 	}
 	if (EncountersCountFieldRow)
 	{
 		EncountersCountFieldRow->InitializeFromItemViewModel(
 			templateSidebarViewModel->FindPedestrianFieldItem(TEXT("EncountersCount")));
 	}
+}
+
+void UScenarioEditorSidebarPedestrianPanel::ApplyFocusedEncounterDetailLayout(
+	const FString& selectedBlockPath)
+{
+	const bool bFocusEncounter = selectedBlockPath.StartsWith(TEXT("root.pedestrians.encounters["));
+
+	if (PedestriansBlockWidget)
+	{
+		PedestriansBlockWidget->SetVisibility(ESlateVisibility::Visible);
+		PedestriansBlockWidget->SetDetailHostLayout(bFocusEncounter);
+		if (bFocusEncounter)
+		{
+			PedestriansBlockWidget->SetExpanded(true);
+		}
+	}
+	if (BackgroundBlockWidget)
+	{
+		BackgroundBlockWidget->SetVisibility(bFocusEncounter
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::Visible);
+		BackgroundBlockWidget->SetDetailHostLayout(false);
+	}
+	if (SpawnZoneBlockWidget)
+	{
+		SpawnZoneBlockWidget->SetVisibility(bFocusEncounter
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::Visible);
+		SpawnZoneBlockWidget->SetDetailHostLayout(false);
+	}
+	if (EncountersBlockWidget)
+	{
+		EncountersBlockWidget->SetVisibility(ESlateVisibility::Visible);
+		EncountersBlockWidget->SetDetailHostLayout(bFocusEncounter);
+		if (bFocusEncounter)
+		{
+			EncountersBlockWidget->SetExpanded(true);
+		}
+	}
+	if (EncountersCountFieldRow)
+	{
+		if (bFocusEncounter)
+		{
+			EncountersCountFieldRow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+		{
+			EncountersCountFieldRow->InitializeFromItemViewModel(
+				templateSidebarViewModel->FindPedestrianFieldItem(TEXT("EncountersCount")));
+		}
+	}
+
+	for (UScenarioEditorSidebarPedestrianEncounterWidget* encounterWidget : EncounterWidgets)
+	{
+		if (!encounterWidget || !encounterWidget->EncounterBlockWidget)
+		{
+			continue;
+		}
+
+		const bool bSelectedEncounter = encounterWidget->EncounterBlockWidget->BlockPath == selectedBlockPath;
+		encounterWidget->SetVisibility(!bFocusEncounter || bSelectedEncounter
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		encounterWidget->EncounterBlockWidget->SetFocusedDetailLayout(bFocusEncounter && bSelectedEncounter);
+		if (bFocusEncounter && bSelectedEncounter)
+		{
+			encounterWidget->EncounterBlockWidget->SetExpanded(true);
+		}
+	}
+}
+
+void UScenarioEditorSidebarPedestrianPanel::BindControls()
+{
+	if (EncountersBlockWidget)
+	{
+		EncountersBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleEncounterCollectionAddRequested);
+		EncountersBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleEncounterCollectionAddRequested);
+	}
+	if (SpawnZoneBlockWidget)
+	{
+		SpawnZoneBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentAddRequested);
+		SpawnZoneBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentAddRequested);
+	}
+}
+
+void UScenarioEditorSidebarPedestrianPanel::UnbindControls()
+{
+	if (EncountersBlockWidget)
+	{
+		EncountersBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleEncounterCollectionAddRequested);
+	}
+	if (SpawnZoneBlockWidget)
+	{
+		SpawnZoneBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentAddRequested);
+	}
+	for (UScenarioEditorSidebarFieldRow* fieldRow : SpawnSegmentItemRows)
+	{
+		if (fieldRow)
+		{
+			fieldRow->OnIndexedValueTextCommitted.RemoveDynamic(
+				this,
+				&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentTextCommitted);
+			fieldRow->OnIndexedRemoveItemRequested.RemoveDynamic(
+				this,
+				&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentRemoveRequested);
+		}
+	}
+	for (UScenarioEditorSidebarPedestrianEncounterWidget* encounterWidget : EncounterWidgets)
+	{
+		if (encounterWidget)
+		{
+			encounterWidget->OnRemoveRequested.RemoveDynamic(
+				this,
+				&UScenarioEditorSidebarPedestrianPanel::HandleEncounterRemoveRequested);
+		}
+	}
+}
+
+void UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentAddRequested()
+{
+	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->AddPedestrianSpawnSegmentAfter(INDEX_NONE, statusText);
+	});
+}
+
+void UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentTextCommitted(
+	const int32 segmentIndex,
+	const FText& text,
+	const ETextCommit::Type commitMethod)
+{
+	if (commitMethod == ETextCommit::OnCleared)
+	{
+		RefreshFromDraft();
+		return;
+	}
+
+	ExecuteTemplateCommand([segmentIndex, &text](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->CommitPedestrianSpawnSegmentText(segmentIndex, text, statusText);
+	});
+}
+
+void UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentRemoveRequested(const int32 segmentIndex)
+{
+	ExecuteTemplateCommand([segmentIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
+	{
+		return viewModel->RemovePedestrianSpawnSegmentAt(segmentIndex, statusText);
+	});
 }
 
 void UScenarioEditorSidebarPedestrianPanel::RefreshEncounterRows(
@@ -272,6 +476,15 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshEncounterRows(
 		return;
 	}
 
+	for (UScenarioEditorSidebarPedestrianEncounterWidget* encounterWidget : EncounterWidgets)
+	{
+		if (encounterWidget)
+		{
+			encounterWidget->OnRemoveRequested.RemoveDynamic(
+				this,
+				&UScenarioEditorSidebarPedestrianPanel::HandleEncounterRemoveRequested);
+		}
+	}
 	EncounterWidgets.Reset();
 	EncountersBlockWidget->ClearBodyChildren();
 	EncountersCountFieldRow = AddFieldRow(
@@ -288,6 +501,132 @@ void UScenarioEditorSidebarPedestrianPanel::RefreshEncounterRows(
 			EncounterWidgets.Add(encounterWidget);
 		}
 	}
+}
+
+void UScenarioEditorSidebarPedestrianPanel::RefreshSpawnSegmentRows(
+	const TArray<FString>& spawnSegmentIds,
+	const TArray<FScenarioTemplateSegment>& corridorSegments)
+{
+	for (UScenarioEditorSidebarFieldRow* fieldRow : SpawnSegmentItemRows)
+	{
+		if (!fieldRow)
+		{
+			continue;
+		}
+
+		fieldRow->OnIndexedValueTextCommitted.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentTextCommitted);
+		fieldRow->OnIndexedRemoveItemRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentRemoveRequested);
+		fieldRow->RemoveFromParent();
+	}
+	SpawnSegmentItemRows.Reset();
+
+	if (!SpawnZoneBlockWidget || !SpawnSegmentsFieldRow)
+	{
+		return;
+	}
+	if (SpawnSegmentsFieldRow->GetVisibility() == ESlateVisibility::Collapsed)
+	{
+		return;
+	}
+
+	TArray<FString> segmentOptions;
+	segmentOptions.Reserve(corridorSegments.Num());
+	for (const FScenarioTemplateSegment& segment : corridorSegments)
+	{
+		if (!segment.SegmentId.IsEmpty())
+		{
+			segmentOptions.AddUnique(segment.SegmentId);
+		}
+	}
+
+	SpawnSegmentsFieldRow->SetValueText(FString::FromInt(spawnSegmentIds.Num()));
+	SpawnSegmentsFieldRow->SetEditable(false);
+	SpawnSegmentsFieldRow->SetArrayControlsEnabled(false);
+	SpawnSegmentsFieldRow->SetAddItemControlVisible(false);
+	SpawnSegmentsFieldRow->SetRemoveItemControlVisible(false);
+
+	for (int32 segmentIndex = 0; segmentIndex < spawnSegmentIds.Num(); ++segmentIndex)
+	{
+		if (UScenarioEditorSidebarFieldRow* fieldRow =
+			AddSpawnSegmentItemRow(segmentIndex, spawnSegmentIds[segmentIndex], segmentOptions))
+		{
+			SpawnSegmentItemRows.Add(fieldRow);
+		}
+	}
+}
+
+UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarPedestrianPanel::AddSpawnSegmentItemRow(
+	const int32 segmentIndex,
+	const FString& segmentId,
+	const TArray<FString>& segmentOptions)
+{
+	if (!GetWorld() || !SpawnZoneBlockWidget)
+	{
+		return nullptr;
+	}
+
+	UScenarioEditorSidebarFieldRow* fieldRow =
+		CreateWidget<UScenarioEditorSidebarFieldRow>(
+			GetWorld(),
+			UScenarioEditorWidgetClassCatalog::ResolveSidebarFieldRowWidgetClass(WidgetClassCatalog));
+	if (!fieldRow)
+	{
+		SetDiagnosticsText(TEXT("Scenario editor field row widget class is missing."));
+		return nullptr;
+	}
+
+	fieldRow->SetTextStyleCatalog(TextStyleCatalog);
+	fieldRow->SetFieldLabel(FString::Printf(TEXT("구간 %d"), segmentIndex + 1));
+	fieldRow->SetValueText(segmentId);
+	fieldRow->SetInputType(segmentOptions.IsEmpty()
+		? EScenarioEditorSidebarFieldInputType::Text
+		: EScenarioEditorSidebarFieldInputType::ComboBox);
+	fieldRow->SetComboOptions(segmentOptions);
+	fieldRow->SetComboAllowsUnset(false, FString());
+	fieldRow->SetEditable(true);
+	fieldRow->SetArrayControlsEnabled(false);
+	fieldRow->SetAddItemControlVisible(false);
+	fieldRow->SetRemoveItemControlVisible(true);
+	fieldRow->SetActionContextIndex(segmentIndex);
+	fieldRow->OnIndexedValueTextCommitted.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentTextCommitted);
+	fieldRow->OnIndexedValueTextCommitted.AddDynamic(
+		this,
+		&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentTextCommitted);
+	fieldRow->OnIndexedRemoveItemRequested.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentRemoveRequested);
+	fieldRow->OnIndexedRemoveItemRequested.AddDynamic(
+		this,
+		&UScenarioEditorSidebarPedestrianPanel::HandleSpawnSegmentRemoveRequested);
+
+	if (UVerticalBox* bodyBox = SpawnZoneBlockWidget->GetBodyBox())
+	{
+		int32 anchorIndex = INDEX_NONE;
+		for (int32 childIndex = 0; childIndex < bodyBox->GetChildrenCount(); ++childIndex)
+		{
+			if (bodyBox->GetChildAt(childIndex) == SpawnSegmentsFieldRow.Get())
+			{
+				anchorIndex = childIndex;
+				break;
+			}
+		}
+
+		UPanelSlot* insertedSlot = anchorIndex == INDEX_NONE
+			? bodyBox->AddChild(fieldRow)
+			: bodyBox->InsertChildAt(anchorIndex + 1 + segmentIndex, fieldRow);
+		if (UVerticalBoxSlot* verticalSlot = Cast<UVerticalBoxSlot>(insertedSlot))
+		{
+			verticalSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 2.0f));
+			verticalSlot->SetHorizontalAlignment(HAlign_Fill);
+		}
+	}
+	return fieldRow;
 }
 
 UScenarioEditorSidebarFieldRow* UScenarioEditorSidebarPedestrianPanel::AddFieldRow(
@@ -344,6 +683,12 @@ UScenarioEditorSidebarPedestrianEncounterWidget* UScenarioEditorSidebarPedestria
 	encounterWidget->SetTextStyleCatalog(TextStyleCatalog);
 	encounterWidget->SetEncounterIndex(encounterIndex);
 	encounterWidget->RefreshFromEncounter(encounter);
+	encounterWidget->OnRemoveRequested.RemoveDynamic(
+		this,
+		&UScenarioEditorSidebarPedestrianPanel::HandleEncounterRemoveRequested);
+	encounterWidget->OnRemoveRequested.AddDynamic(
+		this,
+		&UScenarioEditorSidebarPedestrianPanel::HandleEncounterRemoveRequested);
 	parentBlockWidget->AddBodyChild(encounterWidget);
 	return encounterWidget;
 }
@@ -352,4 +697,39 @@ UScenarioTemplateSidebarViewModel* UScenarioEditorSidebarPedestrianPanel::GetTem
 {
 	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
 	return uiSubsystem ? uiSubsystem->GetTemplateSidebarViewModel() : nullptr;
+}
+
+void UScenarioEditorSidebarPedestrianPanel::ExecuteTemplateCommand(
+	TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command,
+	const bool bRefreshInspectorOnSuccess)
+{
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = uiSubsystem
+		? uiSubsystem->GetTemplateSidebarViewModel()
+		: nullptr;
+	if (!templateSidebarViewModel)
+	{
+		SetDiagnosticsText(TEXT("ScenarioTemplateSidebarViewModel unavailable."));
+		return;
+	}
+
+	FString statusText;
+	const bool bCommandSucceeded = command(templateSidebarViewModel, statusText);
+	if (bCommandSucceeded && bRefreshInspectorOnSuccess && uiSubsystem)
+	{
+		uiSubsystem->RefreshEditorRootInspector();
+	}
+	else
+	{
+		RefreshFromDraft();
+	}
+	SetDiagnosticsText(statusText);
+}
+
+void UScenarioEditorSidebarPedestrianPanel::SetDiagnosticsText(const FString& text) const
+{
+	if (DiagnosticsTextBlock)
+	{
+		DiagnosticsTextBlock->SetText(FText::FromString(text));
+	}
 }

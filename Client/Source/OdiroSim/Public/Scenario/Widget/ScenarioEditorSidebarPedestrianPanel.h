@@ -24,6 +24,9 @@ public:
 	// Configures Pedestrian rows after UMG construction.
 	virtual void NativeConstruct() override;
 
+	// Releases Pedestrian block action bindings before teardown.
+	virtual void NativeDestruct() override;
+
 	// Shared typography catalog passed down to blocks and field rows.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	TSoftObjectPtr<UWidgetTextStyleCatalog> TextStyleCatalog;
@@ -90,9 +93,33 @@ public:
 	UScenarioEditorSidebarBlockWidget* FindBlockWidgetByPath(const FString& blockPath) const;
 
 private:
+	// Handles add requests from the encounters collection block.
+	UFUNCTION()
+	void HandleEncounterCollectionAddRequested();
+
+	// Handles remove requests from an encounter item block.
+	UFUNCTION()
+	void HandleEncounterRemoveRequested(int32 encounterIndex);
+
+	// Handles add requests from the spawn segment collection row.
+	UFUNCTION()
+	void HandleSpawnSegmentAddRequested();
+
+	// Handles text commits from a spawn segment item row.
+	UFUNCTION()
+	void HandleSpawnSegmentTextCommitted(int32 segmentIndex, const FText& text, ETextCommit::Type commitMethod);
+
+	// Handles remove requests from a spawn segment item row.
+	UFUNCTION()
+	void HandleSpawnSegmentRemoveRequested(int32 segmentIndex);
+
 	// Dynamic count row for root.pedestrians.encounters[].
 	UPROPERTY(Transient)
 	TObjectPtr<UScenarioEditorSidebarFieldRow> EncountersCountFieldRow;
+
+	// Dynamic item rows for root.pedestrians.background.spawn_zone.segments[].
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UScenarioEditorSidebarFieldRow>> SpawnSegmentItemRows;
 
 	// Dynamic encounter widgets owned by root.pedestrians.encounters[].
 	UPROPERTY(Transient)
@@ -104,8 +131,23 @@ private:
 	void ApplyTextStyles();
 	// Applies current Pedestrian field row ViewModels to bound row widgets.
 	void ApplyPedestrianFieldItems();
+	// Shows only the selected pedestrian encounter detail block when focused from the sidebar.
+	void ApplyFocusedEncounterDetailLayout(const FString& selectedBlockPath);
+	// Binds child block action delegates owned by this panel.
+	void BindControls();
+	// Releases child block action delegates owned by this panel.
+	void UnbindControls();
 	// Rebuilds structure-only encounter widgets for pedestrian encounter rules.
 	void RefreshEncounterRows(const TArray<FScenarioTemplatePedestrianEncounter>& encounters);
+	// Rebuilds item rows for pedestrian background spawn segment filters.
+	void RefreshSpawnSegmentRows(
+		const TArray<FString>& spawnSegmentIds,
+		const TArray<FScenarioTemplateSegment>& corridorSegments);
+	// Adds one editable spawn segment item row below the collection field row.
+	UScenarioEditorSidebarFieldRow* AddSpawnSegmentItemRow(
+		int32 segmentIndex,
+		const FString& segmentId,
+		const TArray<FString>& segmentOptions);
 	// Adds one structure row to a dynamic block body.
 	UScenarioEditorSidebarFieldRow* AddFieldRow(
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget,
@@ -117,4 +159,10 @@ private:
 		UScenarioEditorSidebarBlockWidget* parentBlockWidget);
 	// Resolves the ViewModel that forwards draft template commands.
 	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
+	// Runs a ViewModel command, refreshes the panel, and mirrors command status text.
+	void ExecuteTemplateCommand(
+		TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command,
+		bool bRefreshInspectorOnSuccess = false);
+	// Applies diagnostics to the optional diagnostics text block.
+	void SetDiagnosticsText(const FString& text) const;
 };

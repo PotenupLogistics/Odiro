@@ -26,9 +26,14 @@ void UScenarioEditorSidebarCorridorPanel::NativeConstruct()
 	{
 		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
 	}
+	SidebarWidgetHelpers::ApplyPanelRootPadding(this, FName(TEXT("CorridorPanelRootBox")));
 	BindFieldRows();
 	ConfigureFieldRows();
 	RefreshFromDraft();
+
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectBlockWidgets(blockWidgets);
+	SidebarWidgetHelpers::ApplyPanelBlockSpacing(blockWidgets);
 }
 
 void UScenarioEditorSidebarCorridorPanel::NativeDestruct()
@@ -342,7 +347,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleAxisPointAddRequested(const int3
 	ExecuteTemplateCommand([pointIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->AddCorridorAxisPointAfter(pointIndex, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleAxisPointRemoveRequested(const int32 pointIndex)
@@ -350,7 +355,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleAxisPointRemoveRequested(const i
 	ExecuteTemplateCommand([pointIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->RemoveCorridorAxisPointAt(pointIndex, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested()
@@ -358,7 +363,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested()
 	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->AddCorridorAxisPointAfter(INDEX_NONE, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountRemoveRequested()
@@ -366,7 +371,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountRemoveRequested()
 	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->RemoveCorridorAxisPointAt(INDEX_NONE, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleSegmentIdCommitted(
@@ -448,7 +453,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleSegmentAddRequested(const int32 
 	ExecuteTemplateCommand([segmentIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->AddCorridorSegmentAfter(segmentIndex, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleSegmentRemoveRequested(const int32 segmentIndex)
@@ -456,7 +461,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleSegmentRemoveRequested(const int
 	ExecuteTemplateCommand([segmentIndex](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->RemoveCorridorSegmentAt(segmentIndex, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested()
@@ -464,7 +469,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested()
 	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->AddCorridorSegmentAfter(INDEX_NONE, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountRemoveRequested()
@@ -472,7 +477,7 @@ void UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountRemoveRequested()
 	ExecuteTemplateCommand([](UScenarioTemplateSidebarViewModel* viewModel, FString& statusText)
 	{
 		return viewModel->RemoveCorridorSegmentAt(INDEX_NONE, statusText);
-	});
+	}, true);
 }
 
 void UScenarioEditorSidebarCorridorPanel::BindFieldRows()
@@ -492,6 +497,42 @@ void UScenarioEditorSidebarCorridorPanel::BindFieldRows()
 			this,
 			&UScenarioEditorSidebarCorridorPanel::HandleWalkwayWidthRangeCommitted);
 	}
+	if (AxisPointsBlockWidget)
+	{
+		AxisPointsBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested);
+		AxisPointsBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested);
+	}
+	if (BuildingSideBlockWidget)
+	{
+		BuildingSideBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleBuildingSideCountAddRequested);
+		BuildingSideBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleBuildingSideCountAddRequested);
+	}
+	if (CurbSideBlockWidget)
+	{
+		CurbSideBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountAddRequested);
+		CurbSideBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountAddRequested);
+	}
+	if (SegmentsBlockWidget)
+	{
+		SegmentsBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested);
+		SegmentsBlockWidget->OnAddActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested);
+	}
 }
 
 void UScenarioEditorSidebarCorridorPanel::UnbindFieldRows()
@@ -505,14 +546,6 @@ void UScenarioEditorSidebarCorridorPanel::UnbindFieldRows()
 			this,
 			&UScenarioEditorSidebarCorridorPanel::HandleWalkwayWidthRangeCommitted);
 	}
-	if (BuildingSideCountFieldRow)
-	{
-		SidebarWidgetHelpers::UnbindFieldRowActions(BuildingSideCountFieldRow.Get(), this);
-	}
-	if (CurbSideCountFieldRow)
-	{
-		SidebarWidgetHelpers::UnbindFieldRowActions(CurbSideCountFieldRow.Get(), this);
-	}
 	if (AxisPointsFieldRow)
 	{
 		SidebarWidgetHelpers::UnbindFieldRowActions(AxisPointsFieldRow.Get(), this);
@@ -520,6 +553,30 @@ void UScenarioEditorSidebarCorridorPanel::UnbindFieldRows()
 	if (SegmentsCountFieldRow)
 	{
 		SidebarWidgetHelpers::UnbindFieldRowActions(SegmentsCountFieldRow.Get(), this);
+	}
+	if (AxisPointsBlockWidget)
+	{
+		AxisPointsBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleAxisPointsCountAddRequested);
+	}
+	if (BuildingSideBlockWidget)
+	{
+		BuildingSideBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleBuildingSideCountAddRequested);
+	}
+	if (CurbSideBlockWidget)
+	{
+		CurbSideBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleCurbSideCountAddRequested);
+	}
+	if (SegmentsBlockWidget)
+	{
+		SegmentsBlockWidget->OnAddActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorPanel::HandleSegmentsCountAddRequested);
 	}
 	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : BuildingSideLaneWidgets)
 	{
@@ -646,6 +703,8 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 			false,
 			true,
 			false });
+		AxisPointsBlockWidget->SetAddActionVisible(true);
+		AxisPointsBlockWidget->SetRemoveActionVisible(false);
 	}
 	if (WalkwayWidthBlockWidget)
 	{
@@ -666,6 +725,8 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 			false,
 			true,
 			false });
+		BuildingSideBlockWidget->SetAddActionVisible(true);
+		BuildingSideBlockWidget->SetRemoveActionVisible(false);
 	}
 	if (CurbSideBlockWidget)
 	{
@@ -676,6 +737,8 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 			false,
 			true,
 			false });
+		CurbSideBlockWidget->SetAddActionVisible(true);
+		CurbSideBlockWidget->SetRemoveActionVisible(false);
 	}
 	if (SegmentsBlockWidget)
 	{
@@ -686,6 +749,8 @@ void UScenarioEditorSidebarCorridorPanel::ConfigureFieldRows()
 			false,
 			true,
 			false });
+		SegmentsBlockWidget->SetAddActionVisible(true);
+		SegmentsBlockWidget->SetRemoveActionVisible(false);
 	}
 	if (AxisTypeFieldRow)
 	{
@@ -789,6 +854,208 @@ void UScenarioEditorSidebarCorridorPanel::ApplySelectedBlockPath()
 			SidebarWidgetHelpers::ApplySelectedBlockPath(laneWidget->LaneBlockWidget.Get(), selectedBlockPath);
 		}
 	}
+	ApplyFocusedCorridorItemDetailLayout(selectedBlockPath);
+}
+
+void UScenarioEditorSidebarCorridorPanel::ApplyFocusedCorridorItemDetailLayout(
+	const FString& selectedBlockPath)
+{
+	const bool bFocusAxisPoint = selectedBlockPath.StartsWith(TEXT("root.corridor.axis.points_m["));
+	const bool bFocusSegment = selectedBlockPath.StartsWith(TEXT("root.corridor.segments["));
+	const bool bFocusBuildingLane = selectedBlockPath.StartsWith(TEXT("root.corridor.building_side["));
+	const bool bFocusCurbLane = selectedBlockPath.StartsWith(TEXT("root.corridor.curb_side["));
+	const bool bFocusLane = bFocusBuildingLane || bFocusCurbLane;
+	const bool bFocusCorridorItem = bFocusAxisPoint || bFocusSegment || bFocusLane;
+
+	if (CorridorBlockWidget)
+	{
+		CorridorBlockWidget->SetVisibility(ESlateVisibility::Visible);
+		CorridorBlockWidget->SetDetailHostLayout(bFocusCorridorItem);
+		if (bFocusCorridorItem)
+		{
+			CorridorBlockWidget->SetExpanded(true);
+		}
+	}
+	if (AxisBlockWidget)
+	{
+		AxisBlockWidget->SetVisibility(!bFocusCorridorItem || bFocusAxisPoint
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		AxisBlockWidget->SetDetailHostLayout(bFocusAxisPoint);
+		if (bFocusAxisPoint)
+		{
+			AxisBlockWidget->SetExpanded(true);
+		}
+	}
+	if (AxisPointsBlockWidget)
+	{
+		AxisPointsBlockWidget->SetVisibility(!bFocusCorridorItem || bFocusAxisPoint
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		AxisPointsBlockWidget->SetDetailHostLayout(bFocusAxisPoint);
+		if (bFocusAxisPoint)
+		{
+			AxisPointsBlockWidget->SetExpanded(true);
+		}
+	}
+	if (WalkwayWidthBlockWidget)
+	{
+		WalkwayWidthBlockWidget->SetVisibility(bFocusCorridorItem
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::Visible);
+	}
+	if (BuildingSideBlockWidget)
+	{
+		BuildingSideBlockWidget->SetVisibility(!bFocusCorridorItem || bFocusBuildingLane
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		BuildingSideBlockWidget->SetDetailHostLayout(bFocusBuildingLane);
+		if (bFocusBuildingLane)
+		{
+			BuildingSideBlockWidget->SetExpanded(true);
+		}
+	}
+	if (CurbSideBlockWidget)
+	{
+		CurbSideBlockWidget->SetVisibility(!bFocusCorridorItem || bFocusCurbLane
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		CurbSideBlockWidget->SetDetailHostLayout(bFocusCurbLane);
+		if (bFocusCurbLane)
+		{
+			CurbSideBlockWidget->SetExpanded(true);
+		}
+	}
+	if (SegmentsBlockWidget)
+	{
+		SegmentsBlockWidget->SetVisibility(!bFocusCorridorItem || bFocusSegment
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		SegmentsBlockWidget->SetDetailHostLayout(bFocusSegment);
+		if (bFocusSegment)
+		{
+			SegmentsBlockWidget->SetExpanded(true);
+		}
+	}
+
+	if (AxisPointsFieldRow)
+	{
+		if (bFocusAxisPoint)
+		{
+			AxisPointsFieldRow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+		{
+			AxisPointsFieldRow->InitializeFromItemViewModel(
+				templateSidebarViewModel->FindCorridorFieldItem(TEXT("AxisPointsCount")));
+		}
+	}
+	if (SegmentsCountFieldRow)
+	{
+		if (bFocusSegment)
+		{
+			SegmentsCountFieldRow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+		{
+			SegmentsCountFieldRow->InitializeFromItemViewModel(
+				templateSidebarViewModel->FindCorridorFieldItem(TEXT("SegmentsCount")));
+		}
+	}
+	if (BuildingSideCountFieldRow)
+	{
+		if (bFocusBuildingLane)
+		{
+			BuildingSideCountFieldRow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+		{
+			BuildingSideCountFieldRow->InitializeFromItemViewModel(
+				templateSidebarViewModel->FindCorridorFieldItem(TEXT("BuildingSideCount")));
+		}
+	}
+	if (CurbSideCountFieldRow)
+	{
+		if (bFocusCurbLane)
+		{
+			CurbSideCountFieldRow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+		{
+			CurbSideCountFieldRow->InitializeFromItemViewModel(
+				templateSidebarViewModel->FindCorridorFieldItem(TEXT("CurbSideCount")));
+		}
+	}
+
+	for (UScenarioEditorSidebarCorridorPointWidget* pointWidget : AxisPointWidgets)
+	{
+		if (!pointWidget || !pointWidget->PointBlockWidget)
+		{
+			continue;
+		}
+
+		const bool bSelectedPoint = pointWidget->PointBlockWidget->BlockPath == selectedBlockPath;
+		pointWidget->SetVisibility(!bFocusCorridorItem || (bFocusAxisPoint && bSelectedPoint)
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		pointWidget->PointBlockWidget->SetFocusedDetailLayout(bFocusAxisPoint && bSelectedPoint);
+		if (bFocusAxisPoint && bSelectedPoint)
+		{
+			pointWidget->PointBlockWidget->SetExpanded(true);
+		}
+	}
+	for (UScenarioEditorSidebarCorridorSegmentWidget* segmentWidget : SegmentWidgets)
+	{
+		if (!segmentWidget || !segmentWidget->SegmentBlockWidget)
+		{
+			continue;
+		}
+
+		const bool bSelectedSegment = segmentWidget->SegmentBlockWidget->BlockPath == selectedBlockPath;
+		segmentWidget->SetVisibility(!bFocusCorridorItem || (bFocusSegment && bSelectedSegment)
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		segmentWidget->SegmentBlockWidget->SetFocusedDetailLayout(bFocusSegment && bSelectedSegment);
+		if (bFocusSegment && bSelectedSegment)
+		{
+			segmentWidget->SegmentBlockWidget->SetExpanded(true);
+		}
+	}
+
+	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : BuildingSideLaneWidgets)
+	{
+		if (!laneWidget || !laneWidget->LaneBlockWidget)
+		{
+			continue;
+		}
+
+		const bool bSelectedLane = laneWidget->LaneBlockWidget->BlockPath == selectedBlockPath;
+		laneWidget->SetVisibility(!bFocusCorridorItem || (bFocusBuildingLane && bSelectedLane)
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		laneWidget->LaneBlockWidget->SetFocusedDetailLayout(bFocusBuildingLane && bSelectedLane);
+		if (bFocusBuildingLane && bSelectedLane)
+		{
+			laneWidget->LaneBlockWidget->SetExpanded(true);
+		}
+	}
+	for (UScenarioEditorSidebarCorridorLaneWidget* laneWidget : CurbSideLaneWidgets)
+	{
+		if (!laneWidget || !laneWidget->LaneBlockWidget)
+		{
+			continue;
+		}
+
+		const bool bSelectedLane = laneWidget->LaneBlockWidget->BlockPath == selectedBlockPath;
+		laneWidget->SetVisibility(!bFocusCorridorItem || (bFocusCurbLane && bSelectedLane)
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		laneWidget->LaneBlockWidget->SetFocusedDetailLayout(bFocusCurbLane && bSelectedLane);
+		if (bFocusCurbLane && bSelectedLane)
+		{
+			laneWidget->LaneBlockWidget->SetExpanded(true);
+		}
+	}
 }
 
 void UScenarioEditorSidebarCorridorPanel::ApplyTextStyles()
@@ -872,15 +1139,6 @@ void UScenarioEditorSidebarCorridorPanel::RefreshAxisPointRows(
 				templateSidebarViewModel->FindCorridorFieldItem(TEXT("AxisPointsCount")));
 		}
 		AxisPointsFieldRow->SetTextStyleCatalog(TextStyleCatalog);
-		SidebarWidgetHelpers::BindFieldRowActions(
-			AxisPointsFieldRow.Get(),
-			this,
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorPanel,
-				HandleAxisPointsCountAddRequested),
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorPanel,
-				HandleAxisPointsCountRemoveRequested));
 	}
 
 	if (!AxisPointsBlockWidget)
@@ -936,28 +1194,10 @@ void UScenarioEditorSidebarCorridorPanel::RefreshLaneProfileRows(
 		if (side == EScenarioEditorCorridorSide::Building)
 		{
 			BuildingSideCountFieldRow = countRow;
-			SidebarWidgetHelpers::BindFieldRowActions(
-				countRow,
-				this,
-				GET_FUNCTION_NAME_CHECKED(
-					UScenarioEditorSidebarCorridorPanel,
-					HandleBuildingSideCountAddRequested),
-				GET_FUNCTION_NAME_CHECKED(
-					UScenarioEditorSidebarCorridorPanel,
-					HandleBuildingSideCountRemoveRequested));
 		}
 		else
 		{
 			CurbSideCountFieldRow = countRow;
-			SidebarWidgetHelpers::BindFieldRowActions(
-				countRow,
-				this,
-				GET_FUNCTION_NAME_CHECKED(
-					UScenarioEditorSidebarCorridorPanel,
-					HandleCurbSideCountAddRequested),
-				GET_FUNCTION_NAME_CHECKED(
-					UScenarioEditorSidebarCorridorPanel,
-					HandleCurbSideCountRemoveRequested));
 		}
 	}
 
@@ -991,15 +1231,6 @@ void UScenarioEditorSidebarCorridorPanel::RefreshSegmentRows(
 	if (countRow)
 	{
 		SegmentsCountFieldRow = countRow;
-		SidebarWidgetHelpers::BindFieldRowActions(
-			countRow,
-			this,
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorPanel,
-				HandleSegmentsCountAddRequested),
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorPanel,
-				HandleSegmentsCountRemoveRequested));
 	}
 
 	for (int32 segmentIndex = 0; segmentIndex < segments.Num(); ++segmentIndex)
@@ -1250,9 +1481,13 @@ TArray<FString> UScenarioEditorSidebarCorridorPanel::GetCorridorSurfaceIdOptions
 }
 
 void UScenarioEditorSidebarCorridorPanel::ExecuteTemplateCommand(
-	TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command)
+	TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command,
+	const bool bRefreshInspectorOnSuccess)
 {
-	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel();
+	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
+	UScenarioTemplateSidebarViewModel* templateSidebarViewModel = uiSubsystem
+		? uiSubsystem->GetTemplateSidebarViewModel()
+		: nullptr;
 	if (!templateSidebarViewModel)
 	{
 		SetDiagnosticsText(TEXT("ScenarioTemplateSidebarViewModel unavailable."));
@@ -1260,8 +1495,15 @@ void UScenarioEditorSidebarCorridorPanel::ExecuteTemplateCommand(
 	}
 
 	FString statusText;
-	command(templateSidebarViewModel, statusText);
-	RefreshFromDraft();
+	const bool bCommandSucceeded = command(templateSidebarViewModel, statusText);
+	if (bCommandSucceeded && bRefreshInspectorOnSuccess && uiSubsystem)
+	{
+		uiSubsystem->RefreshEditorRootInspector();
+	}
+	else
+	{
+		RefreshFromDraft();
+	}
 	SetDiagnosticsText(statusText);
 }
 

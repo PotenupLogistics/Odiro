@@ -8,6 +8,7 @@
 class UScenarioEditorOutlinerRowWidget;
 class UScenarioEditorOutlinerViewModel;
 class UScenarioEditorWidgetClassCatalog;
+class UScenarioPlaceableComponent;
 class UScrollBox;
 class UTextBlock;
 class UWidgetTextStyleCatalog;
@@ -43,6 +44,9 @@ public:
 	// Rebuilds rows from the current authoring draft and spawned editor placeables.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Outliner")
 	void RefreshFromEditorState();
+
+	// Invalidates the cached placeable registry when actors/components were structurally added or removed.
+	void InvalidatePlaceableRegistry();
 
 	// Selects one row key without changing the controller selection.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Outliner")
@@ -80,7 +84,15 @@ private:
 	// Resolves the subsystem-owned outliner ViewModel for selection display state.
 	UScenarioEditorOutlinerViewModel* GetOutlinerViewModel() const;
 	void RebuildRows(const TArray<FScenarioOutlinerItemViewModel>& items);
-	void CollectPlaceableItems(TArray<FScenarioOutlinerItemViewModel>& outPlaceableItems) const;
+	// Collects placeable rows from the cached registry instead of scanning the world every refresh.
+	void CollectPlaceableItems(TArray<FScenarioOutlinerItemViewModel>& outPlaceableItems);
+	// Rebuilds the placeable registry from the current world after structural editor changes.
+	void RebuildPlaceableRegistry();
+	// Removes invalid or legacy-hidden components while keeping transiently unselectable rows recoverable.
+	void CompactPlaceableRegistry();
+	// Registers newly spawned placeable components after authoring preview actors are refreshed.
+	void SyncPlaceableRegistryFromWorld();
+	// Seeds default expanded group keys for the template hierarchy.
 	void AddDefaultExpandedKeys();
 	static FScenarioOutlinerItemViewModel MakeTemplateItem(
 		const FString& itemKey,
@@ -106,6 +118,10 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UScenarioEditorOutlinerRowWidget>> RowWidgets;
 
+	// Cached authoring placeables; row visibility is filtered separately from registry lifetime.
+	UPROPERTY(Transient)
+	TArray<TWeakObjectPtr<UScenarioPlaceableComponent>> PlaceableComponentRegistry;
+
 	UPROPERTY(Transient)
 	TArray<FScenarioOutlinerItemViewModel> CachedItems;
 
@@ -113,4 +129,7 @@ private:
 	FString SelectedItemKey = TEXT("Scenario");
 
 	TSet<FString> ExpandedItemKeys;
+
+	// Tracks whether the placeable registry has performed its initial world scan.
+	bool bPlaceableRegistryInitialized = false;
 };

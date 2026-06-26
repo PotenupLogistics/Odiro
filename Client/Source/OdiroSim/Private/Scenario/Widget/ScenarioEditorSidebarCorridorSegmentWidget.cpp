@@ -112,15 +112,6 @@ void UScenarioEditorSidebarCorridorSegmentWidget::BindFieldRows()
 		IdFieldRow->OnValueTextCommitted.AddDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorSegmentWidget::HandleIdCommitted);
-		SidebarWidgetHelpers::BindFieldRowActions(
-			IdFieldRow.Get(),
-			this,
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorSegmentWidget,
-				HandleAddSegmentRequested),
-			GET_FUNCTION_NAME_CHECKED(
-				UScenarioEditorSidebarCorridorSegmentWidget,
-				HandleRemoveSegmentRequested));
 	}
 
 	if (TypeFieldRow)
@@ -152,6 +143,15 @@ void UScenarioEditorSidebarCorridorSegmentWidget::BindFieldRows()
 			this,
 			&UScenarioEditorSidebarCorridorSegmentWidget::HandleReplacedByCommitted);
 	}
+	if (SegmentBlockWidget)
+	{
+		SegmentBlockWidget->OnRemoveActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorSegmentWidget::HandleRemoveSegmentRequested);
+		SegmentBlockWidget->OnRemoveActionRequested.AddDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorSegmentWidget::HandleRemoveSegmentRequested);
+	}
 }
 
 void UScenarioEditorSidebarCorridorSegmentWidget::UnbindFieldRows()
@@ -161,7 +161,6 @@ void UScenarioEditorSidebarCorridorSegmentWidget::UnbindFieldRows()
 		IdFieldRow->OnValueTextCommitted.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarCorridorSegmentWidget::HandleIdCommitted);
-		SidebarWidgetHelpers::UnbindFieldRowActions(IdFieldRow.Get(), this);
 	}
 	if (TypeFieldRow)
 	{
@@ -181,6 +180,12 @@ void UScenarioEditorSidebarCorridorSegmentWidget::UnbindFieldRows()
 			this,
 			&UScenarioEditorSidebarCorridorSegmentWidget::HandleReplacedByCommitted);
 	}
+	if (SegmentBlockWidget)
+	{
+		SegmentBlockWidget->OnRemoveActionRequested.RemoveDynamic(
+			this,
+			&UScenarioEditorSidebarCorridorSegmentWidget::HandleRemoveSegmentRequested);
+	}
 }
 
 void UScenarioEditorSidebarCorridorSegmentWidget::ConfigureFieldRows()
@@ -196,6 +201,8 @@ void UScenarioEditorSidebarCorridorSegmentWidget::ConfigureFieldRows()
 			false,
 			true,
 			false });
+		SegmentBlockWidget->SetAddActionVisible(false);
+		SegmentBlockWidget->SetRemoveActionVisible(true);
 	}
 
 	if (IdFieldRow)

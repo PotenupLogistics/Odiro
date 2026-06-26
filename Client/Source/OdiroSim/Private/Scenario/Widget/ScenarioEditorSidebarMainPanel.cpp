@@ -23,9 +23,14 @@ void UScenarioEditorSidebarMainPanel::NativeConstruct()
 	{
 		WidgetClassCatalog = UScenarioEditorWidgetClassCatalog::MakeDefaultCatalogReference();
 	}
+	SidebarWidgetHelpers::ApplyPanelRootPadding(this, FName(TEXT("MainPanelRootBox")));
 	BindFieldRows();
 	ConfigureFieldRows();
 	RefreshFromDraft();
+
+	TArray<UScenarioEditorSidebarBlockWidget*> blockWidgets;
+	CollectBlockWidgets(blockWidgets);
+	SidebarWidgetHelpers::ApplyPanelBlockSpacing(blockWidgets);
 }
 
 void UScenarioEditorSidebarMainPanel::NativeDestruct()
@@ -644,6 +649,76 @@ void UScenarioEditorSidebarMainPanel::ApplySelectedBlockPath()
 	if (RobotBlockWidget && selectedBlockPath.StartsWith(TEXT("root.robot.")))
 	{
 		RobotBlockWidget->SetExpanded(true);
+	}
+	ApplyFocusedRobotAnchorDetailLayout(selectedBlockPath);
+}
+
+void UScenarioEditorSidebarMainPanel::ApplyFocusedRobotAnchorDetailLayout(
+	const FString& selectedBlockPath)
+{
+	const bool bFocusStart = selectedBlockPath == TEXT("root.robot.start");
+	const bool bFocusGoal = selectedBlockPath == TEXT("root.robot.goal");
+	const bool bFocusRobotAnchor = bFocusStart || bFocusGoal;
+
+	if (!bFocusRobotAnchor)
+	{
+		ApplyMainFieldItems();
+	}
+
+	if (RootBlockWidget)
+	{
+		RootBlockWidget->SetVisibility(ESlateVisibility::Visible);
+		RootBlockWidget->SetDetailHostLayout(bFocusRobotAnchor);
+		if (bFocusRobotAnchor)
+		{
+			RootBlockWidget->SetExpanded(true);
+		}
+	}
+	if (RobotBlockWidget)
+	{
+		RobotBlockWidget->SetVisibility(ESlateVisibility::Visible);
+		RobotBlockWidget->SetDetailHostLayout(bFocusRobotAnchor);
+		if (bFocusRobotAnchor)
+		{
+			RobotBlockWidget->SetExpanded(true);
+		}
+	}
+
+	for (UScenarioEditorSidebarFieldRow* fieldRow : {
+		SchemaFieldRow.Get(),
+		ScenarioIdFieldRow.Get(),
+		VersionFieldRow.Get(),
+		IntentFieldRow.Get(),
+		RobotStartFieldRow.Get(),
+		RobotGoalFieldRow.Get() })
+	{
+		if (fieldRow && bFocusRobotAnchor)
+		{
+			fieldRow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+
+	if (RobotStartBlockWidget)
+	{
+		RobotStartBlockWidget->SetVisibility(!bFocusRobotAnchor || bFocusStart
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		RobotStartBlockWidget->SetFocusedDetailLayout(bFocusStart);
+		if (bFocusStart)
+		{
+			RobotStartBlockWidget->SetExpanded(true);
+		}
+	}
+	if (RobotGoalBlockWidget)
+	{
+		RobotGoalBlockWidget->SetVisibility(!bFocusRobotAnchor || bFocusGoal
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+		RobotGoalBlockWidget->SetFocusedDetailLayout(bFocusGoal);
+		if (bFocusGoal)
+		{
+			RobotGoalBlockWidget->SetExpanded(true);
+		}
 	}
 }
 

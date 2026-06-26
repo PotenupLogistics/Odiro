@@ -93,11 +93,11 @@ private:
 		const FText& maxText,
 		ETextCommit::Type commitMethod);
 
-	// Handles add requests from the placements count row.
+	// Handles add requests from the placements collection block.
 	UFUNCTION()
 	void HandlePlacementsCountAddRequested();
 
-	// Handles remove requests from the placements count row.
+	// Handles remove requests from the placements collection block.
 	UFUNCTION()
 	void HandlePlacementsCountRemoveRequested();
 
@@ -126,6 +126,29 @@ private:
 	UFUNCTION()
 	void HandlePlacementRemoveRequested(int32 placementIndex);
 
+	// Handles text commits from dynamic placement string-list item rows.
+	UFUNCTION()
+	void HandlePlacementStringListItemTextCommitted(
+		int32 placementIndex,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		int32 itemIndex,
+		const FText& text,
+		ETextCommit::Type commitMethod);
+
+	// Handles add requests from dynamic placement string-list collection rows.
+	UFUNCTION()
+	void HandlePlacementStringListItemAddRequested(
+		int32 placementIndex,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		int32 itemIndex);
+
+	// Handles remove requests from dynamic placement string-list item rows.
+	UFUNCTION()
+	void HandlePlacementStringListItemRemoveRequested(
+		int32 placementIndex,
+		EScenarioEditorSidebarObstaclePlacementField field,
+		int32 itemIndex);
+
 	// Dynamic placement widgets owned by root.obstacles.placements[].
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UScenarioEditorSidebarObstaclePlacementWidget>> PlacementWidgets;
@@ -144,6 +167,8 @@ private:
 	void ApplyTextStyles();
 	// Applies current Obstacle field row ViewModels to bound row widgets.
 	void ApplyObstacleFieldItems();
+	// Shows only the selected placement block when focus targets one static obstacle.
+	void ApplyFocusedPlacementDetailLayout(const FString& selectedBlockPath);
 	// Rebuilds editable placement widgets for obstacle placement rules.
 	void RefreshPlacementRows(const TArray<FScenarioTemplateObstaclePlacement>& placements);
 	// Adds one field row to a dynamic block body.
@@ -158,7 +183,9 @@ private:
 	// Resolves the ViewModel that forwards draft template commands.
 	UScenarioTemplateSidebarViewModel* GetTemplateSidebarViewModel() const;
 	// Runs a ViewModel command, refreshes the panel, and mirrors command status text.
-	void ExecuteTemplateCommand(TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command);
+	void ExecuteTemplateCommand(
+		TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command,
+		bool bRefreshInspectorOnSuccess = false);
 	// Applies diagnostics to the optional diagnostics text block.
 	void SetDiagnosticsText(const FString& text) const;
 };

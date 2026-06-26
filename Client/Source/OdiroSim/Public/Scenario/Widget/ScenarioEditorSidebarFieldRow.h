@@ -10,6 +10,7 @@ class UEditableTextBox;
 class UButton;
 class UComboBoxString;
 class UHorizontalBox;
+class UTexture2D;
 class UMultiLineEditableTextBox;
 class USizeBox;
 class UTextBlock;
@@ -36,6 +37,22 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 
 // Broadcasts when an array-capable row requests a structural edit.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FScenarioEditorSidebarFieldRowActionRequested);
+
+// Broadcasts committed text with the row-owned repeated item index.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
+	FScenarioEditorSidebarFieldRowIndexedTextCommitted,
+	int32,
+	ItemIndex,
+	const FText&,
+	Text,
+	ETextCommit::Type,
+	CommitMethod);
+
+// Broadcasts an array action with the row-owned repeated item index.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FScenarioEditorSidebarFieldRowIndexedActionRequested,
+	int32,
+	ItemIndex);
 
 // Leaf property row for project scenario sidebar fields such as "scenario_id : value".
 UCLASS(BlueprintType, Blueprintable)
@@ -89,9 +106,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	bool bArrayControlsEnabled = false;
 
+	// Controls whether this row exposes the add button independently from remove.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bAddItemControlVisible = false;
+
+	// Controls whether this row exposes the remove button independently from add.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bRemoveItemControlVisible = false;
+
 	// Controls whether combo-box input exposes an explicit unset option.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	bool bComboAllowsUnset = false;
+
+	// Repeated item index emitted by indexed row delegates.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	int32 ActionContextIndex = INDEX_NONE;
 
 	// Display label used for an unset combo-box value.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
@@ -189,6 +218,18 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
 	FScenarioEditorSidebarFieldRowActionRequested OnRemoveItemRequested;
 
+	// Emits committed text with the row action context index.
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarFieldRowIndexedTextCommitted OnIndexedValueTextCommitted;
+
+	// Emits add requests with the row action context index.
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarFieldRowIndexedActionRequested OnIndexedAddItemRequested;
+
+	// Emits remove requests with the row action context index.
+	UPROPERTY(BlueprintAssignable, Category = "Scenario|Editor|Template")
+	FScenarioEditorSidebarFieldRowIndexedActionRequested OnIndexedRemoveItemRequested;
+
 	// Updates the row label and refreshes bound controls.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetFieldLabel(const FString& label);
@@ -204,6 +245,11 @@ public:
 	// Updates the options available when this row uses combo-box input.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetComboOptions(const TArray<FString>& options);
+
+	// Updates optional display names and thumbnails used by combo-box options.
+	void SetComboOptionSummaries(
+		const TMap<FString, FText>& optionDisplayTexts,
+		const TMap<FString, TSoftObjectPtr<UTexture2D>>& optionThumbnailTextures);
 
 	// Updates the preferred editor control shape for this row.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
@@ -224,6 +270,18 @@ public:
 	// Toggles add/remove controls for array-like fields.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetArrayControlsEnabled(bool bInArrayControlsEnabled);
+
+	// Toggles only the add control for array-like fields.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetAddItemControlVisible(bool bInAddItemControlVisible);
+
+	// Toggles only the remove control for array-like fields.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetRemoveItemControlVisible(bool bInRemoveItemControlVisible);
+
+	// Updates the repeated item context index emitted by indexed delegates.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetActionContextIndex(int32 inActionContextIndex);
 
 	// Toggles the explicit unset option for combo-box fields.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
@@ -258,6 +316,10 @@ private:
 	UFUNCTION()
 	void HandleValueComboSelectionChanged(FString selectedItem, ESelectInfo::Type selectionType);
 
+	// Builds one combo option row with optional asset thumbnail metadata.
+	UFUNCTION()
+	UWidget* HandleGenerateComboOptionWidget(FString item);
+
 	// Handles range minimum text commits.
 	UFUNCTION()
 	void HandleMinValueTextCommitted(const FText& text, ETextCommit::Type commitMethod);
@@ -278,6 +340,8 @@ private:
 	void BindControls();
 	// Releases editable control delegates owned by this row.
 	void UnbindControls();
+	// Applies shared sidebar field spacing to the optional WBP-owned controls.
+	void ApplyVisualStyle();
 	// Applies stored label, value, and editability state to bound controls.
 	void RefreshRow();
 	// Returns whether the current type should show the multiline editor.
@@ -290,6 +354,18 @@ private:
 	bool UsesRangeInput() const;
 	// Applies combo options and selected value to the bound combo box.
 	void RefreshComboBoxOptions();
+	// Returns the user-facing display text for one combo option.
+	FText ResolveComboOptionDisplayText(const FString& option) const;
+	// Returns the optional thumbnail texture for one combo option.
+	TSoftObjectPtr<UTexture2D> ResolveComboOptionThumbnail(const FString& option) const;
 	// Applies text to a bound text block.
 	void SetTextBlockText(UTextBlock* textBlock, const FString& text) const;
+
+	// Option value to display text map used by asset-backed combo rows.
+	UPROPERTY(Transient)
+	TMap<FString, FText> ComboOptionDisplayTextByValue;
+
+	// Option value to thumbnail map used by asset-backed combo rows.
+	UPROPERTY(Transient)
+	TMap<FString, TSoftObjectPtr<UTexture2D>> ComboOptionThumbnailByValue;
 };

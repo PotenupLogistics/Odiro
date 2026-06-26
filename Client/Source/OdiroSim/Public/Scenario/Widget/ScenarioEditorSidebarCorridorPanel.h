@@ -267,6 +267,8 @@ private:
 	void ApplyCorridorFieldItems();
 	// Applies shared typography to diagnostic text and child rows.
 	void ApplyTextStyles();
+	// Shows only the selected corridor vertex or segment detail block when focused from viewport or outliner.
+	void ApplyFocusedCorridorItemDetailLayout(const FString& selectedBlockPath);
 	// Rebuilds editable lane widgets for one Corridor side lane profile.
 	void RefreshLaneProfileRows(
 		EScenarioEditorCorridorSide side,
@@ -303,7 +305,9 @@ private:
 	// Returns catalog-backed Corridor surface ids for combo-box fields.
 	TArray<FString> GetCorridorSurfaceIdOptions() const;
 	// Runs a ViewModel command, refreshes the panel, and mirrors command status text.
-	void ExecuteTemplateCommand(TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command);
+	void ExecuteTemplateCommand(
+		TFunctionRef<bool(UScenarioTemplateSidebarViewModel*, FString&)> command,
+		bool bRefreshInspectorOnSuccess = false);
 	// Applies diagnostics to the optional diagnostics text block.
 	void SetDiagnosticsText(const FString& text) const;
 };

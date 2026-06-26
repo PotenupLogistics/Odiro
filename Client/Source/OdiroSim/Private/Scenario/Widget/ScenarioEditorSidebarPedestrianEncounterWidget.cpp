@@ -5,6 +5,9 @@
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
+#include "Scenario/Widget/ScenarioEditorSidebarWidgetHelpers.h"
+
+namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 
 void UScenarioEditorSidebarPedestrianEncounterWidget::NativeConstruct()
 {
@@ -196,10 +199,6 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::BindFieldRows()
 	{
 		EncounterIdFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleEncounterIdCommitted);
 		EncounterIdFieldRow->OnValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleEncounterIdCommitted);
-		EncounterIdFieldRow->OnAddItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleAddRequested);
-		EncounterIdFieldRow->OnAddItemRequested.AddDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleAddRequested);
-		EncounterIdFieldRow->OnRemoveItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleRemoveRequested);
-		EncounterIdFieldRow->OnRemoveItemRequested.AddDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleRemoveRequested);
 	}
 	if (TypeFieldRow)
 	{
@@ -265,6 +264,11 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::BindFieldRows()
 		SidestepDistanceFieldRow->OnRangeValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleSidestepDistanceRangeCommitted);
 		SidestepDistanceFieldRow->OnRangeValueTextCommitted.AddDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleSidestepDistanceRangeCommitted);
 	}
+	if (EncounterBlockWidget)
+	{
+		EncounterBlockWidget->OnRemoveActionRequested.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleRemoveRequested);
+		EncounterBlockWidget->OnRemoveActionRequested.AddDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleRemoveRequested);
+	}
 }
 
 void UScenarioEditorSidebarPedestrianEncounterWidget::UnbindFieldRows()
@@ -272,8 +276,6 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::UnbindFieldRows()
 	if (EncounterIdFieldRow)
 	{
 		EncounterIdFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleEncounterIdCommitted);
-		EncounterIdFieldRow->OnAddItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleAddRequested);
-		EncounterIdFieldRow->OnRemoveItemRequested.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleRemoveRequested);
 	}
 	if (TypeFieldRow)
 	{
@@ -322,6 +324,10 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::UnbindFieldRows()
 		SidestepDistanceFieldRow->OnValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleSidestepDistanceCommitted);
 		SidestepDistanceFieldRow->OnRangeValueTextCommitted.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleSidestepDistanceRangeCommitted);
 	}
+	if (EncounterBlockWidget)
+	{
+		EncounterBlockWidget->OnRemoveActionRequested.RemoveDynamic(this, &UScenarioEditorSidebarPedestrianEncounterWidget::HandleRemoveRequested);
+	}
 }
 
 void UScenarioEditorSidebarPedestrianEncounterWidget::ConfigureFieldRows()
@@ -333,10 +339,12 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::ConfigureFieldRows()
 			bHasCachedEncounter && !CachedEncounter.EncounterId.IsEmpty()
 				? CachedEncounter.EncounterId
 				: FString::Printf(TEXT("상호작용 %d"), EncounterIndex + 1),
-			TEXT("root.pedestrians.encounters[]"),
+			SidebarWidgetHelpers::MakeIndexedBlockPath(TEXT("root.pedestrians.encounters"), EncounterIndex),
 			TEXT("세부"));
 		EncounterBlockWidget->SetNested(true);
 		EncounterBlockWidget->SetShowNormalOutline(false);
+		EncounterBlockWidget->SetAddActionVisible(false);
+		EncounterBlockWidget->SetRemoveActionVisible(true);
 	}
 
 	if (EncounterIdFieldRow)
@@ -391,7 +399,7 @@ void UScenarioEditorSidebarPedestrianEncounterWidget::ApplyCachedEncounterToRows
 			CachedEncounter.EncounterId.IsEmpty()
 				? FString::Printf(TEXT("상호작용 %d"), EncounterIndex + 1)
 				: CachedEncounter.EncounterId,
-			TEXT("root.pedestrians.encounters[]"),
+			SidebarWidgetHelpers::MakeIndexedBlockPath(TEXT("root.pedestrians.encounters"), EncounterIndex),
 			TEXT("세부"));
 	}
 	if (EncounterIdFieldRow)

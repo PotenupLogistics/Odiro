@@ -21,7 +21,6 @@ void UScenarioPlaceablePaletteItemWidget::NativeOnInitialized()
 void UScenarioPlaceablePaletteItemWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
-	UWidgetTextStyleCatalog::ApplyTextBlockStyle(DisplayNameTextBlock.Get(), EWidgetTextStyleRole::Value);
 	UWidgetTextStyleCatalog::ApplyTextBlockStyle(CategoryTextBlock.Get(), EWidgetTextStyleRole::Label);
 }
 

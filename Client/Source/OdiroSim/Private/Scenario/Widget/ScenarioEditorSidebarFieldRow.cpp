@@ -1,18 +1,175 @@
 #include "Scenario/Widget/ScenarioEditorSidebarFieldRow.h"
 
+#include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
 #include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
+#include "Components/Image.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBoxSlot.h"
+#include "Components/Widget.h"
+#include "Scenario/Data/WidgetTextStyleCatalog.h"
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
+#include "Styling/SlateTypes.h"
+
+namespace
+{
+	constexpr float ComboOptionThumbnailSizePx = 22.0f;
+
+	// Applies padding when a field child is owned by a horizontal box row.
+	void SetHorizontalSlotPadding(UWidget* widget, const FMargin& padding)
+	{
+		if (widget)
+		{
+			if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(widget->Slot))
+			{
+				horizontalSlot->SetPadding(padding);
+			}
+		}
+	}
+
+	// Applies padding when a field child is owned by a vertical box row.
+	void SetVerticalSlotPadding(UWidget* widget, const FMargin& padding)
+	{
+		if (widget)
+		{
+			if (UVerticalBoxSlot* verticalSlot = Cast<UVerticalBoxSlot>(widget->Slot))
+			{
+				verticalSlot->SetPadding(padding);
+			}
+		}
+	}
+
+	// Resolves compact typography for dense property rows inside nested detail blocks.
+	FWidgetTextStyle ResolveCompactFieldStyle(
+		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference,
+		const EWidgetTextStyleRole role,
+		const float fontSize)
+	{
+		FWidgetTextStyle style = UWidgetTextStyleCatalog::ResolveStyle(catalogReference, role);
+		style.Font.Size = fontSize;
+		return style;
+	}
+
+	// Applies compact text styling without changing the shared catalog asset.
+	void ApplyCompactTextBlockStyle(
+		UTextBlock* textBlock,
+		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference,
+		const EWidgetTextStyleRole role,
+		const float fontSize)
+	{
+		if (!IsValid(textBlock))
+		{
+			return;
+		}
+
+		const FWidgetTextStyle style = ResolveCompactFieldStyle(catalogReference, role, fontSize);
+		textBlock->SetFont(style.Font);
+		textBlock->SetColorAndOpacity(FSlateColor(style.Color));
+	}
+
+	// Applies compact editable text styling so value controls fit narrow sidebar columns.
+	void ApplyCompactEditableTextBoxStyle(
+		UEditableTextBox* textBox,
+		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference)
+	{
+		if (!IsValid(textBox))
+		{
+			return;
+		}
+
+		const FWidgetTextStyle style =
+			ResolveCompactFieldStyle(catalogReference, EWidgetTextStyleRole::Value, 11.0f);
+		FTextBlockStyle textStyle = textBox->WidgetStyle.TextStyle;
+		textStyle.SetFont(style.Font);
+		textStyle.SetColorAndOpacity(FSlateColor(style.Color));
+		textBox->WidgetStyle
+			.SetTextStyle(textStyle)
+			.SetFont(style.Font)
+			.SetForegroundColor(FSlateColor(style.Color))
+			.SetReadOnlyForegroundColor(FSlateColor(style.Color))
+			.SetFocusedForegroundColor(FSlateColor(style.Color))
+			.SetPadding(FMargin(5.0f, 1.0f));
+		textBox->SynchronizeProperties();
+		textBox->SetForegroundColor(style.Color);
+	}
+
+	// Applies compact multiline styling while preserving the existing editable-text box colors.
+	void ApplyCompactMultiLineEditableTextBoxStyle(
+		UMultiLineEditableTextBox* textBox,
+		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference)
+	{
+		if (!IsValid(textBox))
+		{
+			return;
+		}
+
+		const FWidgetTextStyle style =
+			ResolveCompactFieldStyle(catalogReference, EWidgetTextStyleRole::Value, 11.0f);
+		FTextBlockStyle textStyle = textBox->WidgetStyle.TextStyle;
+		textStyle.SetFont(style.Font);
+		textStyle.SetColorAndOpacity(FSlateColor(style.Color));
+		textBox->WidgetStyle
+			.SetTextStyle(textStyle)
+			.SetFont(style.Font)
+			.SetForegroundColor(FSlateColor(style.Color))
+			.SetReadOnlyForegroundColor(FSlateColor(style.Color))
+			.SetFocusedForegroundColor(FSlateColor(style.Color))
+			.SetPadding(FMargin(5.0f, 2.0f));
+		textBox->SynchronizeProperties();
+		textBox->SetForegroundColor(style.Color);
+	}
+
+	// Tightens combo-box typography and inner padding for long catalog values.
+	void ApplyCompactComboBoxStringStyle(
+		UComboBoxString* comboBox,
+		const TSoftObjectPtr<UWidgetTextStyleCatalog>& catalogReference)
+	{
+		if (!IsValid(comboBox))
+		{
+			return;
+		}
+
+		UWidgetTextStyleCatalog::ApplyComboBoxStringStyle(
+			comboBox,
+			catalogReference,
+			EWidgetTextStyleRole::Value);
+		const FWidgetTextStyle style =
+			ResolveCompactFieldStyle(catalogReference, EWidgetTextStyleRole::Value, 11.0f);
+
+		FComboBoxStyle comboStyle = comboBox->GetWidgetStyle();
+		FComboButtonStyle comboButtonStyle = comboStyle.ComboButtonStyle;
+		FButtonStyle buttonStyle = comboButtonStyle.ButtonStyle;
+		buttonStyle
+			.SetNormalPadding(FMargin(5.0f, 1.0f))
+			.SetPressedPadding(FMargin(5.0f, 1.0f));
+		comboButtonStyle
+			.SetButtonStyle(buttonStyle)
+			.SetContentPadding(FMargin(5.0f, 1.0f));
+		comboStyle
+			.SetComboButtonStyle(comboButtonStyle)
+			.SetContentPadding(FMargin(5.0f, 1.0f))
+			.SetMenuRowPadding(FMargin(5.0f, 1.0f));
+		comboBox->SetWidgetStyle(comboStyle);
+		comboBox->SetContentPadding(FMargin(5.0f, 1.0f));
+
+PRAGMA_DISABLE_DEPRECATION_WARNINGS
+		comboBox->Font = style.Font;
+		comboBox->ForegroundColor = FSlateColor(style.Color);
+PRAGMA_ENABLE_DEPRECATION_WARNINGS
+		comboBox->SynchronizeProperties();
+	}
+}
 
 void UScenarioEditorSidebarFieldRow::NativeConstruct()
 {
 	Super::NativeConstruct();
 	BindControls();
+	ApplyVisualStyle();
 	RefreshRow();
 }
 
@@ -44,6 +201,15 @@ void UScenarioEditorSidebarFieldRow::SetRangeValueText(const FString& minText, c
 void UScenarioEditorSidebarFieldRow::SetComboOptions(const TArray<FString>& options)
 {
 	ComboOptions = options;
+	RefreshRow();
+}
+
+void UScenarioEditorSidebarFieldRow::SetComboOptionSummaries(
+	const TMap<FString, FText>& optionDisplayTexts,
+	const TMap<FString, TSoftObjectPtr<UTexture2D>>& optionThumbnailTextures)
+{
+	ComboOptionDisplayTextByValue = optionDisplayTexts;
+	ComboOptionThumbnailByValue = optionThumbnailTextures;
 	RefreshRow();
 }
 
@@ -83,6 +249,26 @@ void UScenarioEditorSidebarFieldRow::SetRangeInputEnabled(const bool bInRangeInp
 void UScenarioEditorSidebarFieldRow::SetArrayControlsEnabled(const bool bInArrayControlsEnabled)
 {
 	bArrayControlsEnabled = bInArrayControlsEnabled;
+	bAddItemControlVisible = bInArrayControlsEnabled;
+	bRemoveItemControlVisible = bInArrayControlsEnabled;
+	RefreshRow();
+}
+
+void UScenarioEditorSidebarFieldRow::SetAddItemControlVisible(const bool bInAddItemControlVisible)
+{
+	bAddItemControlVisible = bInAddItemControlVisible;
+	RefreshRow();
+}
+
+void UScenarioEditorSidebarFieldRow::SetRemoveItemControlVisible(const bool bInRemoveItemControlVisible)
+{
+	bRemoveItemControlVisible = bInRemoveItemControlVisible;
+	RefreshRow();
+}
+
+void UScenarioEditorSidebarFieldRow::SetActionContextIndex(const int32 inActionContextIndex)
+{
+	ActionContextIndex = inActionContextIndex;
 	RefreshRow();
 }
 
@@ -99,6 +285,7 @@ void UScenarioEditorSidebarFieldRow::SetTextStyleCatalog(
 	TSoftObjectPtr<UWidgetTextStyleCatalog> catalog)
 {
 	TextStyleCatalog = catalog;
+	ApplyVisualStyle();
 	RefreshRow();
 }
 
@@ -166,6 +353,7 @@ void UScenarioEditorSidebarFieldRow::HandleValueTextCommitted(
 {
 	ValueText = text.ToString();
 	OnValueTextCommitted.Broadcast(text, commitMethod);
+	OnIndexedValueTextCommitted.Broadcast(ActionContextIndex, text, commitMethod);
 }
 
 void UScenarioEditorSidebarFieldRow::HandleValueComboSelectionChanged(
@@ -180,6 +368,57 @@ void UScenarioEditorSidebarFieldRow::HandleValueComboSelectionChanged(
 	const bool bSelectedUnset = bComboAllowsUnset && selectedItem == ComboUnsetDisplayText;
 	ValueText = bSelectedUnset ? FString() : selectedItem;
 	OnValueTextCommitted.Broadcast(FText::FromString(ValueText), ETextCommit::Default);
+	OnIndexedValueTextCommitted.Broadcast(ActionContextIndex, FText::FromString(ValueText), ETextCommit::Default);
+}
+
+UWidget* UScenarioEditorSidebarFieldRow::HandleGenerateComboOptionWidget(const FString item)
+{
+	UHorizontalBox* optionBox = NewObject<UHorizontalBox>(this);
+	if (!optionBox)
+	{
+		return nullptr;
+	}
+
+	const TSoftObjectPtr<UTexture2D> thumbnailReference = ResolveComboOptionThumbnail(item);
+	UTexture2D* thumbnailTexture = thumbnailReference.IsNull()
+		? nullptr
+		: thumbnailReference.LoadSynchronous();
+	if (thumbnailTexture)
+	{
+		USizeBox* thumbnailSizeBox = NewObject<USizeBox>(optionBox);
+		UImage* thumbnailImage = NewObject<UImage>(thumbnailSizeBox);
+		if (thumbnailSizeBox && thumbnailImage)
+		{
+			thumbnailSizeBox->SetWidthOverride(ComboOptionThumbnailSizePx);
+			thumbnailSizeBox->SetHeightOverride(ComboOptionThumbnailSizePx);
+			thumbnailImage->SetBrushFromTexture(thumbnailTexture, false);
+			thumbnailSizeBox->AddChild(thumbnailImage);
+
+			if (UHorizontalBoxSlot* thumbnailSlot = optionBox->AddChildToHorizontalBox(thumbnailSizeBox))
+			{
+				thumbnailSlot->SetPadding(FMargin(0.0f, 0.0f, 6.0f, 0.0f));
+				thumbnailSlot->SetVerticalAlignment(VAlign_Center);
+			}
+		}
+	}
+
+	UTextBlock* optionTextBlock = NewObject<UTextBlock>(optionBox);
+	if (optionTextBlock)
+	{
+		optionTextBlock->SetText(ResolveComboOptionDisplayText(item));
+		ApplyCompactTextBlockStyle(
+			optionTextBlock,
+			TextStyleCatalog,
+			EWidgetTextStyleRole::Value,
+			11.0f);
+		if (UHorizontalBoxSlot* textSlot = optionBox->AddChildToHorizontalBox(optionTextBlock))
+		{
+			textSlot->SetVerticalAlignment(VAlign_Center);
+			textSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		}
+	}
+
+	return optionBox;
 }
 
 void UScenarioEditorSidebarFieldRow::HandleMinValueTextCommitted(
@@ -206,11 +445,13 @@ void UScenarioEditorSidebarFieldRow::HandleRangeToggleClicked()
 void UScenarioEditorSidebarFieldRow::HandleAddItemClicked()
 {
 	OnAddItemRequested.Broadcast();
+	OnIndexedAddItemRequested.Broadcast(ActionContextIndex);
 }
 
 void UScenarioEditorSidebarFieldRow::HandleRemoveItemClicked()
 {
 	OnRemoveItemRequested.Broadcast();
+	OnIndexedRemoveItemRequested.Broadcast(ActionContextIndex);
 }
 
 void UScenarioEditorSidebarFieldRow::BindControls()
@@ -241,6 +482,9 @@ void UScenarioEditorSidebarFieldRow::BindControls()
 		ValueComboBox->OnSelectionChanged.AddDynamic(
 			this,
 			&UScenarioEditorSidebarFieldRow::HandleValueComboSelectionChanged);
+		ValueComboBox->OnGenerateWidgetEvent.BindDynamic(
+			this,
+			&UScenarioEditorSidebarFieldRow::HandleGenerateComboOptionWidget);
 	}
 	if (MinValueEditableTextBox)
 	{
@@ -308,6 +552,7 @@ void UScenarioEditorSidebarFieldRow::UnbindControls()
 		ValueComboBox->OnSelectionChanged.RemoveDynamic(
 			this,
 			&UScenarioEditorSidebarFieldRow::HandleValueComboSelectionChanged);
+		ValueComboBox->OnGenerateWidgetEvent.Unbind();
 	}
 	if (MinValueEditableTextBox)
 	{
@@ -339,6 +584,87 @@ void UScenarioEditorSidebarFieldRow::UnbindControls()
 			this,
 			&UScenarioEditorSidebarFieldRow::HandleRemoveItemClicked);
 	}
+}
+
+void UScenarioEditorSidebarFieldRow::ApplyVisualStyle()
+{
+	if (WidgetTree)
+	{
+		if (USizeBox* rowSizeBox = Cast<USizeBox>(WidgetTree->FindWidget(FName(TEXT("SizeBox_0")))))
+		{
+			rowSizeBox->SetMinDesiredHeight(26.0f);
+			SetVerticalSlotPadding(rowSizeBox, FMargin(0.0f, 0.0f, 0.0f, 1.0f));
+		}
+	}
+
+	SetHorizontalSlotPadding(LabelTextBlock.Get(), FMargin(0.0f, 0.0f, 4.0f, 0.0f));
+	SetHorizontalSlotPadding(SeparatorTextBlock.Get(), FMargin(0.0f, 0.0f, 3.0f, 0.0f));
+	SetHorizontalSlotPadding(ValueTextBlock.Get(), FMargin(1.0f, 0.0f, 0.0f, 0.0f));
+	SetHorizontalSlotPadding(ValueEditableTextBox.Get(), FMargin(1.0f, 1.0f, 0.0f, 1.0f));
+	SetHorizontalSlotPadding(ValueComboBox.Get(), FMargin(1.0f, 1.0f, 0.0f, 1.0f));
+	SetHorizontalSlotPadding(ValueRangeBox.Get(), FMargin(1.0f, 1.0f, 0.0f, 1.0f));
+	SetHorizontalSlotPadding(MinValueEditableTextBox.Get(), FMargin(0.0f, 0.0f, 2.0f, 0.0f));
+	SetHorizontalSlotPadding(RangeSeparatorTextBlock.Get(), FMargin(1.0f, 0.0f, 3.0f, 0.0f));
+	SetHorizontalSlotPadding(RangeToggleButton.Get(), FMargin(4.0f, 1.0f, 0.0f, 1.0f));
+	SetHorizontalSlotPadding(AddItemButton.Get(), FMargin(4.0f, 1.0f, 0.0f, 1.0f));
+	SetHorizontalSlotPadding(RemoveItemButton.Get(), FMargin(1.0f, 1.0f, 0.0f, 1.0f));
+
+	if (ValueMultiLineSizeBox)
+	{
+		ValueMultiLineSizeBox->SetMinDesiredHeight(104.0f);
+		SetHorizontalSlotPadding(ValueMultiLineSizeBox.Get(), FMargin(1.0f, 2.0f, 0.0f, 2.0f));
+	}
+
+	ApplyCompactTextBlockStyle(
+		LabelTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Label,
+		11.5f);
+	ApplyCompactTextBlockStyle(
+		SeparatorTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Caption,
+		10.f);
+	ApplyCompactTextBlockStyle(
+		ValueTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Value,
+		11.5f);
+	ApplyCompactTextBlockStyle(
+		RangeSeparatorTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Caption,
+		10.f);
+	ApplyCompactTextBlockStyle(
+		RangeToggleTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Caption,
+		10.f);
+	ApplyCompactTextBlockStyle(
+		AddItemTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Label,
+		11.f);
+	ApplyCompactTextBlockStyle(
+		RemoveItemTextBlock.Get(),
+		TextStyleCatalog,
+		EWidgetTextStyleRole::Label,
+		11.f);
+	ApplyCompactEditableTextBoxStyle(
+		ValueEditableTextBox.Get(),
+		TextStyleCatalog);
+	ApplyCompactEditableTextBoxStyle(
+		MinValueEditableTextBox.Get(),
+		TextStyleCatalog);
+	ApplyCompactEditableTextBoxStyle(
+		MaxValueEditableTextBox.Get(),
+		TextStyleCatalog);
+	ApplyCompactComboBoxStringStyle(
+		ValueComboBox.Get(),
+		TextStyleCatalog);
+	ApplyCompactMultiLineEditableTextBoxStyle(
+		ValueMultiLineEditableTextBox.Get(),
+		TextStyleCatalog);
 }
 
 void UScenarioEditorSidebarFieldRow::RefreshRow()
@@ -404,13 +730,13 @@ void UScenarioEditorSidebarFieldRow::RefreshRow()
 	}
 	if (AddItemButton)
 	{
-		AddItemButton->SetVisibility(bArrayControlsEnabled
+		AddItemButton->SetVisibility(bAddItemControlVisible
 			? ESlateVisibility::Visible
 			: ESlateVisibility::Collapsed);
 	}
 	if (RemoveItemButton)
 	{
-		RemoveItemButton->SetVisibility(bArrayControlsEnabled
+		RemoveItemButton->SetVisibility(bRemoveItemControlVisible
 			? ESlateVisibility::Visible
 			: ESlateVisibility::Collapsed);
 	}
@@ -486,6 +812,25 @@ void UScenarioEditorSidebarFieldRow::RefreshComboBoxOptions()
 	{
 		ValueComboBox->ClearSelection();
 	}
+}
+
+FText UScenarioEditorSidebarFieldRow::ResolveComboOptionDisplayText(const FString& option) const
+{
+	if (const FText* displayText = ComboOptionDisplayTextByValue.Find(option))
+	{
+		return *displayText;
+	}
+	return FText::FromString(option);
+}
+
+TSoftObjectPtr<UTexture2D> UScenarioEditorSidebarFieldRow::ResolveComboOptionThumbnail(
+	const FString& option) const
+{
+	if (const TSoftObjectPtr<UTexture2D>* thumbnailTexture = ComboOptionThumbnailByValue.Find(option))
+	{
+		return *thumbnailTexture;
+	}
+	return TSoftObjectPtr<UTexture2D>();
 }
 
 void UScenarioEditorSidebarFieldRow::SetTextBlockText(UTextBlock* textBlock, const FString& text) const

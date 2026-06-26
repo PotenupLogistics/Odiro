@@ -21,6 +21,7 @@ paths:
   - ReplayAgent.local.md
   - ReplayCurrentHandoff.local.md
   - ReplayRobotVisual.local.md
+  - ReplayPointCloudAgent.local.md
   - Client/Docs/plans/PLAN-260622-scenario-episode-preview-capture.local.md
   - contracts/specs/user-project-data.md
   - docs/specs/simulation-interface.md
@@ -69,6 +70,7 @@ entry:
       - ReplayAgent.local.md
       - ReplayCurrentHandoff.local.md
       - ReplayRobotVisual.local.md
+      - ReplayPointCloudAgent.local.md
       - Client/Docs/specs/replay-embedded-view-flow.local.html
       - Client/Source/OdiroSim/Public/Scenario
       - Client/Source/OdiroSim/Private/Scenario
@@ -116,6 +118,10 @@ guardrails:
   - ScenarioEditorController requests the project preview only after scenario.json saves successfully; capture failure removes stale preview.png without changing the save result.
   - ScenarioRunnerSubsystem schedules project episode preview.png after evaluation starts; capture failure must not change episode outcome.
   - Embedded Replay reads episode replay artifacts and must not call OpenLevel, launch a new window, or re-run policy/physics as replay.
+  - Embedded Replay camera modes move only the replay SceneCapture; TopDown, Free, and VehicleFront views must not alter replay frames, robot playback, or simulation physics.
+  - Embedded Replay camera tuning values are project settings owned by Scenario Replay developer settings; tune camera feel there before changing replay frame data.
+  - Embedded Replay timeline UI displays replay subsystem time/frame/speed state and seeks through ScenarioReplaySubsystem.Seek rather than mutating replay artifacts.
+  - Embedded Replay fullscreen in WBP_MainMenu moves the same ProjectEpisodeReplayViewerWidget between normal and fullscreen Overlay hosts; do not create a second replay viewer instance for fullscreen.
   - Replay-specific high-frequency data belongs in replay.meta.json/replay.frames.bin; trace.jsonl remains LLM/human analysis-oriented unless a task explicitly changes trace.
 verify:
   - when: scenario contracts, schemas, or samples change
@@ -148,6 +154,7 @@ links:
   - ReplayAgent.local.md
   - ReplayCurrentHandoff.local.md
   - ReplayRobotVisual.local.md
+  - ReplayPointCloudAgent.local.md
   - Client/Docs/specs/replay-embedded-view-flow.local.html
   - Client/Docs/plans/PLAN-260622-scenario-episode-preview-capture.local.md
   - Client/Json/environment-catalog.md

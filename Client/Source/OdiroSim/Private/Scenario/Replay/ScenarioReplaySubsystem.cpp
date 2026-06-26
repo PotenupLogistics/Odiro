@@ -9,6 +9,7 @@
 #include "Engine/SceneCapture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Misc/Paths.h"
+#include "Scenario/Replay/ScenarioReplayDeveloperSettings.h"
 #include "Scenario/Replay/DeliveryBotReplayActor.h"
 #include "Shared/ScenarioCompileTypes.h"
 #include "Shared/ScenarioSampleJson.h"
@@ -47,6 +48,7 @@ bool UScenarioReplaySubsystem::LoadEpisodeReplay(
 {
 	OutDiagnostics.Reset();
 	CleanupReplayWorld();
+	ApplyCameraSettingsFromDefaults();
 	PlaybackState = EScenarioReplayPlaybackState::Loading;
 
 	LoadedEpisodeDirectory = EpisodeDirectory.TrimStartAndEnd();
@@ -193,6 +195,124 @@ bool UScenarioReplaySubsystem::Seek(double TimeSeconds)
 	return ApplyFrameAtTime(CurrentReplayTimeSeconds);
 }
 
+double UScenarioReplaySubsystem::GetPlaybackProgress() const
+{
+	if (Manifest.DurationSeconds <= 0.0)
+	{
+		return 0.0;
+	}
+
+	return FMath::Clamp(
+		CurrentReplayTimeSeconds / Manifest.DurationSeconds,
+		0.0,
+		1.0);
+}
+
+bool UScenarioReplaySubsystem::IsReplayCameraInputAllowed() const
+{
+	return PlaybackState == EScenarioReplayPlaybackState::Playing
+		|| (bAllowCameraInputWhilePaused
+			&& PlaybackState == EScenarioReplayPlaybackState::Paused);
+}
+
+void UScenarioReplaySubsystem::SetReplayCameraMode(EScenarioReplayCameraMode NewMode)
+{
+	if (CameraMode == NewMode)
+	{
+		return;
+	}
+
+	CameraMode = NewMode;
+	if (CameraMode == EScenarioReplayCameraMode::Free)
+	{
+		const FVector RobotLocation =
+			IsValid(ReplayRobotActor)
+				? ReplayRobotActor->GetActorLocation()
+				: ReplayWorldOffset;
+		FreeCameraLocation = RobotLocation + FVector(-900.0, -900.0, 650.0);
+		FreeCameraRotation = (RobotLocation - FreeCameraLocation).Rotation();
+	}
+
+	if (!Frames.IsEmpty())
+	{
+		ApplyFrameAtTime(CurrentReplayTimeSeconds);
+	}
+}
+
+void UScenarioReplaySubsystem::AddFreeCameraMovement(
+	const FVector& LocalInput,
+	float DeltaSeconds)
+{
+	if (CameraMode != EScenarioReplayCameraMode::Free
+		|| !IsValid(ReplayCaptureActor)
+		|| DeltaSeconds <= 0.0f)
+	{
+		return;
+	}
+
+	const FVector ClampedInput = LocalInput.GetClampedToMaxSize(1.0);
+	if (ClampedInput.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FRotationMatrix RotationMatrix(FreeCameraRotation);
+	const FVector Forward = RotationMatrix.GetUnitAxis(EAxis::X);
+	const FVector Right = RotationMatrix.GetUnitAxis(EAxis::Y);
+	const FVector Up = FVector::UpVector;
+
+	FreeCameraLocation +=
+		(Forward * ClampedInput.X
+			+ Right * ClampedInput.Y
+			+ Up * ClampedInput.Z)
+		* FreeCameraSpeedCmPerSecond
+		* static_cast<double>(DeltaSeconds);
+	FreeCameraLocation.Z = FMath::Max(FreeCameraLocation.Z, ReplayWorldOffset.Z + 50.0);
+
+	UpdateFreeReplayCamera();
+	CaptureReplayScene();
+}
+
+void UScenarioReplaySubsystem::AddFreeCameraLook(const FVector2D& MouseDelta)
+{
+	if (CameraMode != EScenarioReplayCameraMode::Free
+		|| !IsValid(ReplayCaptureActor)
+		|| MouseDelta.IsNearlyZero())
+	{
+		return;
+	}
+
+	FreeCameraRotation.Yaw += MouseDelta.X * FreeCameraLookSensitivity;
+	FreeCameraRotation.Pitch = FMath::Clamp(
+		FreeCameraRotation.Pitch - MouseDelta.Y * FreeCameraLookSensitivity,
+		MinFreeCameraPitchDegrees,
+		MaxFreeCameraPitchDegrees);
+	FreeCameraRotation.Roll = 0.0;
+
+	UpdateFreeReplayCamera();
+	CaptureReplayScene();
+}
+
+void UScenarioReplaySubsystem::AddTopDownZoom(float ZoomDirection)
+{
+	if (CameraMode != EScenarioReplayCameraMode::TopDown
+		|| FMath::IsNearlyZero(ZoomDirection))
+	{
+		return;
+	}
+
+	CaptureOrthoWidthCm = FMath::Clamp(
+		CaptureOrthoWidthCm
+			- static_cast<double>(ZoomDirection) * TopDownZoomStepCm,
+		MinTopDownOrthoWidthCm,
+		MaxTopDownOrthoWidthCm);
+
+	if (!Frames.IsEmpty())
+	{
+		ApplyFrameAtTime(CurrentReplayTimeSeconds);
+	}
+}
+
 void UScenarioReplaySubsystem::Tick(float DeltaTime)
 {
 	if (PlaybackState != EScenarioReplayPlaybackState::Playing)
@@ -228,6 +348,72 @@ void UScenarioReplaySubsystem::Deinitialize()
 	Super::Deinitialize();
 }
 
+void UScenarioReplaySubsystem::ApplyCameraSettingsFromDefaults()
+{
+	if (const UScenarioReplayDeveloperSettings* Settings =
+		GetDefault<UScenarioReplayDeveloperSettings>())
+	{
+		ApplyCameraSettings(*Settings);
+	}
+}
+
+void UScenarioReplaySubsystem::ApplyCameraSettings(
+	const UScenarioReplayDeveloperSettings& Settings)
+{
+	bAllowCameraInputWhilePaused = Settings.bAllowCameraInputWhilePaused;
+
+	CaptureHeightCm = FMath::Max(1.0, Settings.TopDownCaptureHeightCm);
+
+	const double OrderedMinOrthoWidth =
+		FMath::Max(1.0, FMath::Min(
+			Settings.MinTopDownOrthoWidthCm,
+			Settings.MaxTopDownOrthoWidthCm));
+	const double OrderedMaxOrthoWidth =
+		FMath::Max(OrderedMinOrthoWidth, FMath::Max(
+			Settings.MinTopDownOrthoWidthCm,
+			Settings.MaxTopDownOrthoWidthCm));
+	MinTopDownOrthoWidthCm = OrderedMinOrthoWidth;
+	MaxTopDownOrthoWidthCm = OrderedMaxOrthoWidth;
+	CaptureOrthoWidthCm = FMath::Clamp(
+		Settings.TopDownOrthoWidthCm,
+		MinTopDownOrthoWidthCm,
+		MaxTopDownOrthoWidthCm);
+	TopDownZoomStepCm = FMath::Max(1.0, Settings.TopDownZoomStepCm);
+
+	FreeCameraSpeedCmPerSecond =
+		FMath::Max(1.0, Settings.FreeCameraSpeedCmPerSecond);
+	FreeCameraFovDegrees = FMath::Clamp(
+		Settings.FreeCameraFovDegrees,
+		5.0,
+		170.0);
+	FreeCameraLookSensitivity =
+		FMath::Max(0.001, Settings.FreeCameraLookSensitivity);
+
+	const double OrderedMinPitch = FMath::Clamp(
+		FMath::Min(
+			Settings.MinFreeCameraPitchDegrees,
+			Settings.MaxFreeCameraPitchDegrees),
+		-89.0,
+		89.0);
+	const double OrderedMaxPitch = FMath::Clamp(
+		FMath::Max(
+			Settings.MinFreeCameraPitchDegrees,
+			Settings.MaxFreeCameraPitchDegrees),
+		OrderedMinPitch,
+		89.0);
+	MinFreeCameraPitchDegrees = OrderedMinPitch;
+	MaxFreeCameraPitchDegrees = OrderedMaxPitch;
+
+	VehicleFrontCameraLocalOffsetCm =
+		Settings.VehicleFrontCameraLocalOffsetCm;
+	VehicleFrontCameraLocalRotation =
+		Settings.VehicleFrontCameraLocalRotation;
+	VehicleFrontCameraFovDegrees = FMath::Clamp(
+		Settings.VehicleFrontCameraFovDegrees,
+		5.0,
+		170.0);
+}
+
 void UScenarioReplaySubsystem::CleanupReplayWorld()
 {
 	if (IsValid(ReplayCaptureActor))
@@ -261,7 +447,13 @@ void UScenarioReplaySubsystem::CleanupReplayWorld()
 	Manifest = FEpisodeReplayManifest{};
 	LoadedEpisodeDirectory.Reset();
 	CurrentReplayTimeSeconds = 0.0;
+	CurrentFrameIndex = INDEX_NONE;
+	CurrentRobotSpeedKmh = 0.0;
+	CurrentRobotPositionCm = FVector::ZeroVector;
 	PlaybackState = EScenarioReplayPlaybackState::Stopped;
+	CameraMode = EScenarioReplayCameraMode::TopDown;
+	FreeCameraLocation = FVector::ZeroVector;
+	FreeCameraRotation = FRotator(-35.0, 0.0, 0.0);
 }
 
 bool UScenarioReplaySubsystem::LoadEpisodeScenarioWorld(
@@ -443,29 +635,212 @@ bool UScenarioReplaySubsystem::ApplyFrameAtTime(double TimeSeconds)
 		return false;
 	}
 
-	const int32 FrameIndex = FEpisodeReplayBinary::ResolveFrameIndex(TimeSeconds, Manifest);
-	if (!Frames.IsValidIndex(FrameIndex))
+	FEpisodeReplayRobotFrame Frame;
+	int32 FrameIndex = INDEX_NONE;
+	if (!BuildInterpolatedFrameAtTime(TimeSeconds, Frame, FrameIndex))
 	{
 		return false;
 	}
 
-	const FEpisodeReplayRobotFrame& Frame = Frames[FrameIndex];
 	ReplayRobotActor->ApplyReplayFrame(Frame, ReplayWorldOffset);
+	CurrentFrameIndex = FrameIndex;
+	CurrentRobotSpeedKmh = Frame.SpeedKmh;
+	CurrentRobotPositionCm = Frame.PositionCm;
 
-	if (IsValid(ReplayCaptureActor))
+	UpdateReplayCaptureView(Frame);
+	CaptureReplayScene();
+
+	return true;
+}
+
+bool UScenarioReplaySubsystem::BuildInterpolatedFrameAtTime(
+	double TimeSeconds,
+	FEpisodeReplayRobotFrame& OutFrame,
+	int32& OutFrameIndex) const
+{
+	OutFrame = FEpisodeReplayRobotFrame{};
+	OutFrameIndex = INDEX_NONE;
+
+	if (Frames.IsEmpty())
 	{
-		ReplayCaptureActor->SetActorLocation(
-			Frame.PositionCm
-			+ ReplayWorldOffset
-			+ FVector(0.0, 0.0, CaptureHeightCm));
+		return false;
 	}
 
+	if (Frames.Num() == 1)
+	{
+		OutFrame = Frames[0];
+		OutFrameIndex = 0;
+		return true;
+	}
+
+	const double SampleRateHz = Manifest.SampleRateHz > 0.0
+		? Manifest.SampleRateHz
+		: EpisodeReplayV1::SampleRateHz;
+	const double ClampedTimeSeconds =
+		FMath::Clamp(TimeSeconds, 0.0, Manifest.DurationSeconds);
+	const double FramePosition =
+		FMath::Clamp(
+			ClampedTimeSeconds * SampleRateHz,
+			0.0,
+			static_cast<double>(Frames.Num() - 1));
+
+	const int32 LowerFrameIndex =
+		FMath::Clamp(
+			FMath::FloorToInt(FramePosition),
+			0,
+			Frames.Num() - 1);
+	const int32 UpperFrameIndex =
+		FMath::Clamp(
+			LowerFrameIndex + 1,
+			0,
+			Frames.Num() - 1);
+	const double Alpha = FMath::Clamp(
+		FramePosition - static_cast<double>(LowerFrameIndex),
+		0.0,
+		1.0);
+
+	const FEpisodeReplayRobotFrame& LowerFrame = Frames[LowerFrameIndex];
+	const FEpisodeReplayRobotFrame& UpperFrame = Frames[UpperFrameIndex];
+	if (LowerFrameIndex == UpperFrameIndex || Alpha <= UE_SMALL_NUMBER)
+	{
+		OutFrame = LowerFrame;
+		OutFrameIndex = LowerFrameIndex;
+		return true;
+	}
+
+	OutFrame.TimeSeconds =
+		static_cast<float>(FMath::Lerp(
+			static_cast<double>(LowerFrame.TimeSeconds),
+			static_cast<double>(UpperFrame.TimeSeconds),
+			Alpha));
+	OutFrame.PositionCm =
+		FMath::Lerp(LowerFrame.PositionCm, UpperFrame.PositionCm, Alpha);
+	OutFrame.Rotation =
+		FQuat::Slerp(LowerFrame.Rotation, UpperFrame.Rotation, Alpha)
+			.GetNormalized();
+	OutFrame.VelocityCmPerSecond =
+		FMath::Lerp(
+			LowerFrame.VelocityCmPerSecond,
+			UpperFrame.VelocityCmPerSecond,
+			Alpha);
+	OutFrame.SpeedKmh =
+		static_cast<float>(FMath::Lerp(
+			static_cast<double>(LowerFrame.SpeedKmh),
+			static_cast<double>(UpperFrame.SpeedKmh),
+			Alpha));
+	OutFrame.Steering =
+		static_cast<float>(FMath::Lerp(
+			static_cast<double>(LowerFrame.Steering),
+			static_cast<double>(UpperFrame.Steering),
+			Alpha));
+	OutFrame.Throttle =
+		static_cast<float>(FMath::Lerp(
+			static_cast<double>(LowerFrame.Throttle),
+			static_cast<double>(UpperFrame.Throttle),
+			Alpha));
+	OutFrame.Brake =
+		static_cast<float>(FMath::Lerp(
+			static_cast<double>(LowerFrame.Brake),
+			static_cast<double>(UpperFrame.Brake),
+			Alpha));
+	OutFrame.TargetSpeedKmh =
+		static_cast<float>(FMath::Lerp(
+			static_cast<double>(LowerFrame.TargetSpeedKmh),
+			static_cast<double>(UpperFrame.TargetSpeedKmh),
+			Alpha));
+	OutFrame.Direction = Alpha < 0.5
+		? LowerFrame.Direction
+		: UpperFrame.Direction;
+	OutFrameIndex = FMath::Clamp(
+		FMath::RoundToInt(FramePosition),
+		0,
+		Frames.Num() - 1);
+	return true;
+}
+
+void UScenarioReplaySubsystem::UpdateReplayCaptureView(
+	const FEpisodeReplayRobotFrame& Frame)
+{
+	switch (CameraMode)
+	{
+	case EScenarioReplayCameraMode::Free:
+		UpdateFreeReplayCamera();
+		break;
+
+	case EScenarioReplayCameraMode::VehicleFront:
+		UpdateVehicleFrontReplayCamera(Frame);
+		break;
+
+	case EScenarioReplayCameraMode::TopDown:
+	default:
+		UpdateTopDownReplayCamera(Frame);
+		break;
+	}
+}
+
+void UScenarioReplaySubsystem::UpdateTopDownReplayCamera(
+	const FEpisodeReplayRobotFrame& Frame)
+{
+	USceneCaptureComponent2D* CaptureComponent = GetReplayCaptureComponent();
+	if (!IsValid(ReplayCaptureActor) || !IsValid(CaptureComponent))
+	{
+		return;
+	}
+
+	CaptureComponent->ProjectionType = ECameraProjectionMode::Orthographic;
+	CaptureComponent->OrthoWidth = static_cast<float>(CaptureOrthoWidthCm);
+	ReplayCaptureActor->SetActorLocation(
+		Frame.PositionCm
+		+ ReplayWorldOffset
+		+ FVector(0.0, 0.0, CaptureHeightCm));
+	ReplayCaptureActor->SetActorRotation(FRotator(-90.0, -90.0, 0.0));
+}
+
+void UScenarioReplaySubsystem::UpdateFreeReplayCamera()
+{
+	USceneCaptureComponent2D* CaptureComponent = GetReplayCaptureComponent();
+	if (!IsValid(ReplayCaptureActor) || !IsValid(CaptureComponent))
+	{
+		return;
+	}
+
+	CaptureComponent->ProjectionType = ECameraProjectionMode::Perspective;
+	CaptureComponent->FOVAngle = static_cast<float>(FreeCameraFovDegrees);
+	ReplayCaptureActor->SetActorLocation(FreeCameraLocation);
+	ReplayCaptureActor->SetActorRotation(FreeCameraRotation);
+}
+
+void UScenarioReplaySubsystem::UpdateVehicleFrontReplayCamera(
+	const FEpisodeReplayRobotFrame& Frame)
+{
+	USceneCaptureComponent2D* CaptureComponent = GetReplayCaptureComponent();
+	if (!IsValid(ReplayCaptureActor) || !IsValid(CaptureComponent))
+	{
+		return;
+	}
+
+	const FTransform RobotWorldTransform(
+		Frame.Rotation,
+		Frame.PositionCm + ReplayWorldOffset);
+	const FVector CameraLocation =
+		RobotWorldTransform.TransformPosition(VehicleFrontCameraLocalOffsetCm);
+	const FQuat CameraRotation =
+		RobotWorldTransform.GetRotation()
+		* VehicleFrontCameraLocalRotation.Quaternion();
+
+	CaptureComponent->ProjectionType = ECameraProjectionMode::Perspective;
+	CaptureComponent->FOVAngle =
+		static_cast<float>(VehicleFrontCameraFovDegrees);
+	ReplayCaptureActor->SetActorLocation(CameraLocation);
+	ReplayCaptureActor->SetActorRotation(CameraRotation);
+}
+
+void UScenarioReplaySubsystem::CaptureReplayScene()
+{
 	if (USceneCaptureComponent2D* CaptureComponent = GetReplayCaptureComponent())
 	{
 		CaptureComponent->CaptureScene();
 	}
-
-	return true;
 }
 
 UTextureRenderTarget2D* UScenarioReplaySubsystem::CreateReplayRenderTarget()

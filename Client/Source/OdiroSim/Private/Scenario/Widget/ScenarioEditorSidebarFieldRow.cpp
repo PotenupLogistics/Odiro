@@ -14,11 +14,85 @@
 #include "Components/Widget.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
 #include "Scenario/ViewModel/ScenarioTemplateFieldRowViewModel.h"
+#include "Styling/SlateBrush.h"
 #include "Styling/SlateTypes.h"
 
 namespace
 {
 	constexpr float ComboOptionThumbnailSizePx = 22.0f;
+
+	// Texture path for editing a numeric field as min/max range.
+	const TCHAR* SidebarFieldRangeIconPath = TEXT("/Game/Widgets/Icon/icon_range.icon_range");
+
+	// Texture path for editing a numeric field as a single fixed value.
+	const TCHAR* SidebarFieldFixedIconPath = TEXT("/Game/Widgets/Icon/icon_fixed.icon_fixed");
+
+	// Compact square footprint shared by field-row action buttons.
+	constexpr float SidebarFieldActionIconSize = 18.0f;
+
+	// Square hit and hover footprint for field-row action buttons.
+	constexpr float SidebarFieldActionButtonSize = 24.0f;
+
+	// Converts UI hex colors into Slate linear colors with a caller-controlled alpha.
+	FLinearColor MakeSidebarFieldColor(const TCHAR* hex, const float alpha = 1.0f)
+	{
+		FLinearColor color = FLinearColor::FromSRGBColor(FColor::FromHex(hex));
+		color.A = alpha;
+		return color;
+	}
+
+	// Builds a box brush for transparent-normal flat action buttons.
+	FSlateBrush MakeSidebarFieldActionBrush(const TCHAR* hex, const float alpha = 1.0f)
+	{
+		FSlateBrush brush;
+		brush.DrawAs = ESlateBrushDrawType::Box;
+		brush.TintColor = FSlateColor(MakeSidebarFieldColor(hex, alpha));
+		brush.Margin = FMargin(0.0f);
+		brush.ImageSize = FVector2D(SidebarFieldActionButtonSize, SidebarFieldActionButtonSize);
+		brush.OutlineSettings.Width = 0.0f;
+		brush.OutlineSettings.Color = FLinearColor::Transparent;
+		brush.OutlineSettings.CornerRadii = FVector4(4.0f, 4.0f, 4.0f, 4.0f);
+		brush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
+		return brush;
+	}
+
+	// Creates a compact borderless button style for field-row auxiliary controls.
+	FButtonStyle MakeSidebarFieldActionButtonStyle()
+	{
+		FButtonStyle style;
+		style.SetNormal(MakeSidebarFieldActionBrush(TEXT("000000"), 0.0f));
+		style.SetHovered(MakeSidebarFieldActionBrush(TEXT("3A3A3A"), 0.8f));
+		style.SetPressed(MakeSidebarFieldActionBrush(TEXT("2F2F2F"), 0.9f));
+		style.SetDisabled(MakeSidebarFieldActionBrush(TEXT("000000"), 0.0f));
+		style.SetNormalForeground(FSlateColor(MakeSidebarFieldColor(TEXT("F2F2F2"))));
+		style.SetHoveredForeground(FSlateColor(MakeSidebarFieldColor(TEXT("FFFFFF"))));
+		style.SetPressedForeground(FSlateColor(MakeSidebarFieldColor(TEXT("DDE8F2"))));
+		style.SetDisabledForeground(FSlateColor(MakeSidebarFieldColor(TEXT("878787"))));
+		const float squareButtonInset = (SidebarFieldActionButtonSize - SidebarFieldActionIconSize) * 0.5f;
+		style.SetNormalPadding(FMargin(squareButtonInset));
+		style.SetPressedPadding(FMargin(squareButtonInset));
+		return style;
+	}
+
+	// Loads a field-row action icon from a fixed project content path.
+	UTexture2D* LoadSidebarFieldIconTexture(const TCHAR* texturePath)
+	{
+		return texturePath ? LoadObject<UTexture2D>(nullptr, texturePath) : nullptr;
+	}
+
+	// Applies the fixed field-row icon texture while preserving a consistent footprint.
+	void ApplySidebarFieldIconBrush(UImage* image, UTexture2D* texture, const FLinearColor& tint)
+	{
+		if (!image || !texture)
+		{
+			return;
+		}
+
+		image->SetBrushFromTexture(texture, false);
+		image->SetDesiredSizeOverride(FVector2D(SidebarFieldActionIconSize, SidebarFieldActionIconSize));
+		image->SetColorAndOpacity(tint);
+		image->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	}
 
 	// Applies padding when a field child is owned by a horizontal box row.
 	void SetHorizontalSlotPadding(UWidget* widget, const FMargin& padding)
@@ -586,8 +660,91 @@ void UScenarioEditorSidebarFieldRow::UnbindControls()
 	}
 }
 
+void UScenarioEditorSidebarFieldRow::EnsureRangeToggleIcon()
+{
+	if (RangeToggleIconImage)
+	{
+		if (RangeToggleTextBlock)
+		{
+			RangeToggleTextBlock->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		return;
+	}
+
+	if (!RangeToggleButton)
+	{
+		return;
+	}
+
+	UTexture2D* rangeTexture = LoadSidebarFieldIconTexture(SidebarFieldRangeIconPath);
+	UTexture2D* fixedTexture = LoadSidebarFieldIconTexture(SidebarFieldFixedIconPath);
+	if (!rangeTexture && !fixedTexture)
+	{
+		return;
+	}
+
+	RangeToggleIconImage = NewObject<UImage>(RangeToggleButton.Get());
+	if (!RangeToggleIconImage)
+	{
+		return;
+	}
+
+	RangeToggleButton->SetContent(RangeToggleIconImage.Get());
+	if (RangeToggleTextBlock)
+	{
+		RangeToggleTextBlock->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void UScenarioEditorSidebarFieldRow::ApplyFlatButtonStyle(UButton* button) const
+{
+	if (!button)
+	{
+		return;
+	}
+
+	button->SetStyle(MakeSidebarFieldActionButtonStyle());
+	button->SetBackgroundColor(FLinearColor::White);
+	button->SetColorAndOpacity(FLinearColor::White);
+}
+
+void UScenarioEditorSidebarFieldRow::ApplyRangeToggleButtonState() const
+{
+	ApplyFlatButtonStyle(RangeToggleButton.Get());
+	if (RangeToggleIconImage)
+	{
+		UTexture2D* texture = LoadSidebarFieldIconTexture(
+			bRangeInputEnabled ? SidebarFieldRangeIconPath : SidebarFieldFixedIconPath);
+		ApplySidebarFieldIconBrush(
+			RangeToggleIconImage.Get(),
+			texture,
+			MakeSidebarFieldColor(TEXT("DDE8F2")));
+	}
+	if (RangeToggleTextBlock)
+	{
+		RangeToggleTextBlock->SetVisibility(
+			RangeToggleIconImage ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
+}
+
+void UScenarioEditorSidebarFieldRow::ApplyArrayActionButtonState() const
+{
+	ApplyFlatButtonStyle(AddItemButton.Get());
+	ApplyFlatButtonStyle(RemoveItemButton.Get());
+	if (AddItemTextBlock)
+	{
+		AddItemTextBlock->SetColorAndOpacity(FSlateColor(MakeSidebarFieldColor(TEXT("F2F2F2"))));
+	}
+	if (RemoveItemTextBlock)
+	{
+		RemoveItemTextBlock->SetColorAndOpacity(FSlateColor(MakeSidebarFieldColor(TEXT("F2F2F2"))));
+	}
+}
+
 void UScenarioEditorSidebarFieldRow::ApplyVisualStyle()
 {
+	EnsureRangeToggleIcon();
+
 	if (WidgetTree)
 	{
 		if (USizeBox* rowSizeBox = Cast<USizeBox>(WidgetTree->FindWidget(FName(TEXT("SizeBox_0")))))
@@ -665,10 +822,14 @@ void UScenarioEditorSidebarFieldRow::ApplyVisualStyle()
 	ApplyCompactMultiLineEditableTextBoxStyle(
 		ValueMultiLineEditableTextBox.Get(),
 		TextStyleCatalog);
+	ApplyRangeToggleButtonState();
+	ApplyArrayActionButtonState();
 }
 
 void UScenarioEditorSidebarFieldRow::RefreshRow()
 {
+	EnsureRangeToggleIcon();
+
 	SetTextBlockText(LabelTextBlock.Get(), FieldLabel);
 	SetTextBlockText(SeparatorTextBlock.Get(), TEXT(":"));
 	SetTextBlockText(ValueTextBlock.Get(), ValueText);
@@ -740,6 +901,8 @@ void UScenarioEditorSidebarFieldRow::RefreshRow()
 			? ESlateVisibility::Visible
 			: ESlateVisibility::Collapsed);
 	}
+	ApplyRangeToggleButtonState();
+	ApplyArrayActionButtonState();
 
 	if (ValueTextBlock)
 	{

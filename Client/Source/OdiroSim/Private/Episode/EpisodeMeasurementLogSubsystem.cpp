@@ -2,6 +2,7 @@
 
 #include "DeliveryBot/Actor/DeliveryBot.h"
 #include "DeliveryBot/Component/DeliveryBot_DriveComponent.h"
+#include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Episode/EpisodeReplayRecorder.h"
@@ -99,6 +100,72 @@ namespace
 		return MoveCommandInfo.MoveDirectionType == EDeliveryBotMoveDirectionType::Reverse
 			? EEpisodeReplayDirection::Reverse
 			: EEpisodeReplayDirection::Forward;
+	}
+
+	// Returns true when a runtime component name matches one replay wheel slot alias.
+	bool MatchesReplayWheelComponentName(
+		const USceneComponent* Component,
+		const TArray<FString>& CandidatePrefixes)
+	{
+		if (!IsValid(Component))
+		{
+			return false;
+		}
+
+		const FString ComponentName = Component->GetName();
+		for (const FString& CandidatePrefix : CandidatePrefixes)
+		{
+			if (ComponentName.Equals(CandidatePrefix, ESearchCase::IgnoreCase)
+				|| ComponentName.StartsWith(CandidatePrefix + TEXT("_"), ESearchCase::IgnoreCase)
+				|| ComponentName.StartsWith(CandidatePrefix + TEXT("_GEN_VARIABLE"), ESearchCase::IgnoreCase))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	// Finds the visible runtime wheel component that should feed one replay wheel slot.
+	USceneComponent* FindReplayWheelComponent(
+		const AActor* RobotActor,
+		const EEpisodeReplayWheelSlot WheelSlot)
+	{
+		if (!IsValid(RobotActor))
+		{
+			return nullptr;
+		}
+
+		TArray<FString> CandidatePrefixes;
+		switch (WheelSlot)
+		{
+		case EEpisodeReplayWheelSlot::FrontLeft:
+			CandidatePrefixes = TArray<FString>{ TEXT("FL_Wheel_0"), TEXT("Wheel_FL") };
+			break;
+		case EEpisodeReplayWheelSlot::FrontRight:
+			CandidatePrefixes = TArray<FString>{ TEXT("FR_Wheel_0"), TEXT("Wheel_FR") };
+			break;
+		case EEpisodeReplayWheelSlot::RearLeft:
+			CandidatePrefixes = TArray<FString>{ TEXT("BL_Wheel_0"), TEXT("RL_Wheel_0"), TEXT("Wheel_RL") };
+			break;
+		case EEpisodeReplayWheelSlot::RearRight:
+			CandidatePrefixes = TArray<FString>{ TEXT("BR_Wheel_0"), TEXT("RR_Wheel_0"), TEXT("Wheel_RR") };
+			break;
+		default:
+			return nullptr;
+		}
+
+		TArray<USceneComponent*> SceneComponents;
+		RobotActor->GetComponents<USceneComponent>(SceneComponents);
+		for (USceneComponent* SceneComponent : SceneComponents)
+		{
+			if (MatchesReplayWheelComponentName(SceneComponent, CandidatePrefixes))
+			{
+				return SceneComponent;
+			}
+		}
+
+		return nullptr;
 	}
 }
 
@@ -758,7 +825,40 @@ FEpisodeReplayRobotFrame UEpisodeMeasurementLogSubsystem::BuildReplayFrame(
 		}
 	}
 
+	CaptureReplayWheelFrames(RobotActor, ReplayFrame);
 	return ReplayFrame;
+}
+
+void UEpisodeMeasurementLogSubsystem::CaptureReplayWheelFrames(
+	const ADeliveryBot* RobotActor,
+	FEpisodeReplayRobotFrame& ReplayFrame) const
+{
+	if (!IsValid(RobotActor))
+	{
+		return;
+	}
+
+	ReplayFrame.Wheels.SetNum(EpisodeReplayV2::WheelCount);
+
+	for (int32 WheelIndex = 0; WheelIndex < EpisodeReplayV2::WheelCount; ++WheelIndex)
+	{
+		FEpisodeReplayWheelFrame& WheelFrame = ReplayFrame.Wheels[WheelIndex];
+		const EEpisodeReplayWheelSlot WheelSlot =
+			static_cast<EEpisodeReplayWheelSlot>(WheelIndex);
+		const USceneComponent* WheelComponent =
+			FindReplayWheelComponent(RobotActor, WheelSlot);
+		if (!IsValid(WheelComponent))
+		{
+			continue;
+		}
+
+		const FTransform WheelLocalTransform =
+			WheelComponent->GetComponentTransform()
+				.GetRelativeTransform(RobotActor->GetActorTransform());
+		WheelFrame.LocalLocationCm = WheelLocalTransform.GetLocation();
+		WheelFrame.LocalRotation = WheelLocalTransform.GetRotation().GetNormalized();
+		WheelFrame.bHasVisualPose = true;
+	}
 }
 
 FEpisodeMeasurementLogHeaderRecord UEpisodeMeasurementLogSubsystem::BuildHeaderRecord(double WorldTimeSeconds) const

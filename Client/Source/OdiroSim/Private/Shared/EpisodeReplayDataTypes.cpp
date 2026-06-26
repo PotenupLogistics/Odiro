@@ -36,6 +36,49 @@ namespace
 			&& FMath::IsFinite(Value.W);
 	}
 
+	// Returns true when the version has a fixed binary frame contract.
+	bool IsSupportedReplayVersion(const int32 Version)
+	{
+		return Version == EpisodeReplayV1::Version
+			|| Version == EpisodeReplayV2::Version;
+	}
+
+	// Serializes one fixed-size V2 wheel visual pose.
+	void SerializeReplayWheelFrame(FArchive& Archive, FEpisodeReplayWheelFrame& WheelFrame)
+	{
+		float LocationX = ToReplayFloat(WheelFrame.LocalLocationCm.X);
+		float LocationY = ToReplayFloat(WheelFrame.LocalLocationCm.Y);
+		float LocationZ = ToReplayFloat(WheelFrame.LocalLocationCm.Z);
+		float RotationX = ToReplayFloat(WheelFrame.LocalRotation.X);
+		float RotationY = ToReplayFloat(WheelFrame.LocalRotation.Y);
+		float RotationZ = ToReplayFloat(WheelFrame.LocalRotation.Z);
+		float RotationW = ToReplayFloat(WheelFrame.LocalRotation.W);
+		uint8 bInContact = WheelFrame.bInContact ? 1 : 0;
+		uint8 bHasVisualPose = WheelFrame.bHasVisualPose ? 1 : 0;
+		uint8 Reserved1 = 0;
+		uint8 Reserved2 = 0;
+
+		Archive << LocationX;
+		Archive << LocationY;
+		Archive << LocationZ;
+		Archive << RotationX;
+		Archive << RotationY;
+		Archive << RotationZ;
+		Archive << RotationW;
+		Archive << bInContact;
+		Archive << bHasVisualPose;
+		Archive << Reserved1;
+		Archive << Reserved2;
+
+		if (Archive.IsLoading())
+		{
+			WheelFrame.LocalLocationCm = FVector(LocationX, LocationY, LocationZ);
+			WheelFrame.LocalRotation = FQuat(RotationX, RotationY, RotationZ, RotationW).GetNormalized();
+			WheelFrame.bInContact = bInContact != 0;
+			WheelFrame.bHasVisualPose = bHasVisualPose != 0;
+		}
+	}
+
 	// Serializes the fixed V1 binary header.
 	void SerializeReplayHeader(FArchive& Archive, FEpisodeReplayBinaryHeader& Header)
 	{
@@ -83,8 +126,8 @@ namespace
 		}
 	}
 
-	// Serializes one fixed-size V1 robot replay frame.
-	void SerializeReplayFrame(FArchive& Archive, FEpisodeReplayRobotFrame& Frame)
+	// Serializes one fixed-size robot replay frame for the selected schema version.
+	void SerializeReplayFrame(FArchive& Archive, FEpisodeReplayRobotFrame& Frame, const int32 Version)
 	{
 		float TimeSeconds = Frame.TimeSeconds;
 		float PositionX = ToReplayFloat(Frame.PositionCm.X);
@@ -141,6 +184,25 @@ namespace
 			Frame.TargetSpeedKmh = TargetSpeedKmh;
 			Frame.Direction = static_cast<EEpisodeReplayDirection>(Direction);
 		}
+
+		if (Version == EpisodeReplayV2::Version)
+		{
+			if (Archive.IsSaving() && Frame.Wheels.Num() != EpisodeReplayV2::WheelCount)
+			{
+				Archive.SetError();
+				return;
+			}
+
+			if (Archive.IsLoading())
+			{
+				Frame.Wheels.SetNum(EpisodeReplayV2::WheelCount);
+			}
+
+			for (int32 WheelIndex = 0; WheelIndex < EpisodeReplayV2::WheelCount; ++WheelIndex)
+			{
+				SerializeReplayWheelFrame(Archive, Frame.Wheels[WheelIndex]);
+			}
+		}
 	}
 
 	// Adds a diagnostic message and returns false for compact validation branches.
@@ -175,9 +237,15 @@ namespace
 	}
 }
 
+bool FEpisodeReplayWheelFrame::IsValidFrame() const
+{
+	return IsFiniteVector(LocalLocationCm)
+		&& IsFiniteQuat(LocalRotation);
+}
+
 bool FEpisodeReplayRobotFrame::IsValidFrame() const
 {
-	return FMath::IsFinite(TimeSeconds)
+	bool bValid = FMath::IsFinite(TimeSeconds)
 		&& TimeSeconds >= 0.0f
 		&& IsFiniteVector(PositionCm)
 		&& IsFiniteQuat(Rotation)
@@ -187,12 +255,32 @@ bool FEpisodeReplayRobotFrame::IsValidFrame() const
 		&& FMath::IsFinite(Throttle)
 		&& FMath::IsFinite(Brake)
 		&& FMath::IsFinite(TargetSpeedKmh);
+
+	if (!bValid || Wheels.IsEmpty())
+	{
+		return bValid;
+	}
+
+	if (Wheels.Num() != EpisodeReplayV2::WheelCount)
+	{
+		return false;
+	}
+
+	for (const FEpisodeReplayWheelFrame& WheelFrame : Wheels)
+	{
+		if (!WheelFrame.IsValidFrame())
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 bool FEpisodeReplayBinaryHeader::IsValidHeader(TArray<FString>& OutDiagnostics) const
 {
 	bool bValid = true;
-	if (Version != EpisodeReplayV1::Version)
+	if (!IsSupportedReplayVersion(Version))
 	{
 		bValid = AddReplayDiagnostic(
 			OutDiagnostics,
@@ -204,7 +292,8 @@ bool FEpisodeReplayBinaryHeader::IsValidHeader(TArray<FString>& OutDiagnostics) 
 		bValid = AddReplayDiagnostic(OutDiagnostics, TEXT("Replay binary frame count must not be negative."));
 	}
 
-	if (FrameSizeBytes != EpisodeReplayV1::FixedFrameSizeBytes)
+	const int32 ExpectedFrameSizeBytes = FEpisodeReplayBinary::GetFrameSizeBytesForVersion(Version);
+	if (ExpectedFrameSizeBytes <= 0 || FrameSizeBytes != ExpectedFrameSizeBytes)
 	{
 		bValid = AddReplayDiagnostic(
 			OutDiagnostics,
@@ -236,7 +325,7 @@ bool FEpisodeReplayManifest::IsValidManifest(TArray<FString>& OutDiagnostics) co
 			FString::Printf(TEXT("Unsupported replay manifest schema: %s"), *Schema));
 	}
 
-	if (Version != EpisodeReplayV1::Version)
+	if (!IsSupportedReplayVersion(Version))
 	{
 		bValid = AddReplayDiagnostic(
 			OutDiagnostics,
@@ -263,7 +352,8 @@ bool FEpisodeReplayManifest::IsValidManifest(TArray<FString>& OutDiagnostics) co
 		bValid = AddReplayDiagnostic(OutDiagnostics, TEXT("Replay manifest sample_rate_hz must be positive."));
 	}
 
-	if (FrameSizeBytes != EpisodeReplayV1::FixedFrameSizeBytes)
+	const int32 ExpectedFrameSizeBytes = FEpisodeReplayBinary::GetFrameSizeBytesForVersion(Version);
+	if (ExpectedFrameSizeBytes <= 0 || FrameSizeBytes != ExpectedFrameSizeBytes)
 	{
 		bValid = AddReplayDiagnostic(
 			OutDiagnostics,
@@ -279,12 +369,22 @@ bool FEpisodeReplayManifest::IsValidManifest(TArray<FString>& OutDiagnostics) co
 
 	if (!Features.bRobotBody)
 	{
-		bValid = AddReplayDiagnostic(OutDiagnostics, TEXT("Replay V1 requires robot_body frames."));
+		bValid = AddReplayDiagnostic(OutDiagnostics, TEXT("Replay requires robot_body frames."));
 	}
 
-	if (Features.bWheels || Features.bMovingActors)
+	if (Version == EpisodeReplayV1::Version && Features.bWheels)
 	{
-		bValid = AddReplayDiagnostic(OutDiagnostics, TEXT("Replay V1 does not support wheels or moving actors."));
+		bValid = AddReplayDiagnostic(OutDiagnostics, TEXT("Replay V1 does not support wheels."));
+	}
+
+	if (Version == EpisodeReplayV2::Version && !Features.bWheels)
+	{
+		bValid = AddReplayDiagnostic(OutDiagnostics, TEXT("Replay V2 requires wheels feature data."));
+	}
+
+	if (Features.bMovingActors)
+	{
+		bValid = AddReplayDiagnostic(OutDiagnostics, TEXT("Replay moving actors are not supported yet."));
 	}
 
 	return bValid;
@@ -421,6 +521,32 @@ bool FEpisodeReplayManifestJson::LoadFromFile(
 	return OutManifest.IsValidManifest(OutDiagnostics);
 }
 
+int32 FEpisodeReplayBinary::ResolveFrameVersion(const TArray<FEpisodeReplayRobotFrame>& Frames)
+{
+	for (const FEpisodeReplayRobotFrame& Frame : Frames)
+	{
+		if (!Frame.Wheels.IsEmpty())
+		{
+			return EpisodeReplayV2::Version;
+		}
+	}
+
+	return EpisodeReplayV1::Version;
+}
+
+int32 FEpisodeReplayBinary::GetFrameSizeBytesForVersion(const int32 Version)
+{
+	switch (Version)
+	{
+	case EpisodeReplayV1::Version:
+		return EpisodeReplayV1::FixedFrameSizeBytes;
+	case EpisodeReplayV2::Version:
+		return EpisodeReplayV2::FixedFrameSizeBytes;
+	default:
+		return 0;
+	}
+}
+
 bool FEpisodeReplayBinary::SaveFramesToFile(
 	const FString& FramePath,
 	const TArray<FEpisodeReplayRobotFrame>& Frames,
@@ -441,8 +567,11 @@ bool FEpisodeReplayBinary::SaveFramesToFile(
 	}
 
 	FBufferArchive Archive;
+	const int32 FrameVersion = ResolveFrameVersion(Frames);
 	FEpisodeReplayBinaryHeader Header;
+	Header.Version = FrameVersion;
 	Header.FrameCount = Frames.Num();
+	Header.FrameSizeBytes = GetFrameSizeBytesForVersion(FrameVersion);
 	SerializeReplayHeader(Archive, Header);
 
 	if (Archive.IsError() || Archive.Num() != EpisodeReplayV1::BinaryHeaderSizeBytes)
@@ -459,9 +588,14 @@ bool FEpisodeReplayBinary::SaveFramesToFile(
 
 		const int64 FrameStartOffset = Archive.Num();
 		FEpisodeReplayRobotFrame Frame = SourceFrame;
-		SerializeReplayFrame(Archive, Frame);
+		SerializeReplayFrame(Archive, Frame, FrameVersion);
+		if (Archive.IsError())
+		{
+			return AddReplayDiagnostic(OutDiagnostics, TEXT("Replay binary writer failed to serialize a frame."));
+		}
+
 		const int64 FrameByteCount = Archive.Num() - FrameStartOffset;
-		if (FrameByteCount != EpisodeReplayV1::FixedFrameSizeBytes)
+		if (FrameByteCount != Header.FrameSizeBytes)
 		{
 			return AddReplayDiagnostic(
 				OutDiagnostics,
@@ -528,7 +662,7 @@ bool FEpisodeReplayBinary::LoadFramesFromFile(
 	{
 		const int64 FrameStartOffset = Reader.Tell();
 		FEpisodeReplayRobotFrame Frame;
-		SerializeReplayFrame(Reader, Frame);
+		SerializeReplayFrame(Reader, Frame, OutHeader.Version);
 		if (Reader.IsError())
 		{
 			return AddReplayDiagnostic(

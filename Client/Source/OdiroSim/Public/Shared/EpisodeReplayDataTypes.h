@@ -17,6 +17,20 @@ namespace EpisodeReplayV1
 	constexpr uint16 EndianMarker = 0x1234;
 }
 
+namespace EpisodeReplayV2
+{
+	// Schema version that adds replay-only wheel visual poses.
+	constexpr int32 Version = 2;
+	// Fixed wheel count used by the DeliveryBot replay visual rig.
+	constexpr int32 WheelCount = 4;
+	// Serialized byte count for one wheel visual pose.
+	constexpr int32 FixedWheelFrameSizeBytes = 32;
+	// Fixed binary frame byte size for V2 robot body and wheel visual frames.
+	constexpr int32 FixedFrameSizeBytes =
+		EpisodeReplayV1::FixedFrameSizeBytes
+		+ WheelCount * FixedWheelFrameSizeBytes;
+}
+
 // Direction state stored with a replay frame for visual playback and overlays.
 UENUM(BlueprintType)
 enum class EEpisodeReplayDirection : uint8
@@ -24,6 +38,16 @@ enum class EEpisodeReplayDirection : uint8
 	Stopped,
 	Forward,
 	Reverse
+};
+
+// Fixed wheel slot order used by replay recording and visual playback.
+UENUM(BlueprintType)
+enum class EEpisodeReplayWheelSlot : uint8
+{
+	FrontLeft,
+	FrontRight,
+	RearLeft,
+	RearRight
 };
 
 // Playback lifecycle state exposed to temporary debug UI and later formal UI.
@@ -38,7 +62,33 @@ enum class EScenarioReplayPlaybackState : uint8
 	Failed
 };
 
-// Per-frame robot body and control state for Replay V1.
+// Per-frame wheel visual pose recorded from the runtime DeliveryBot.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FEpisodeReplayWheelFrame
+{
+	GENERATED_BODY()
+
+	// Wheel component local position relative to the robot actor.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Replay")
+	FVector LocalLocationCm = FVector::ZeroVector;
+
+	// Wheel component local rotation relative to the robot actor.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Replay")
+	FQuat LocalRotation = FQuat::Identity;
+
+	// True when a later recorder can prove this wheel is touching the ground.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Replay")
+	bool bInContact = false;
+
+	// True when a runtime visual component was found for this wheel.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Replay")
+	bool bHasVisualPose = false;
+
+	// Returns true when the wheel visual pose can be serialized safely.
+	bool IsValidFrame() const;
+};
+
+// Per-frame robot body, control state, and optional Replay V2 wheel visual state.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FEpisodeReplayRobotFrame
 {
@@ -83,6 +133,10 @@ struct ODIROSIM_API FEpisodeReplayRobotFrame
 	// Requested movement direction for the recorded frame.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Replay")
 	EEpisodeReplayDirection Direction = EEpisodeReplayDirection::Stopped;
+
+	// Optional fixed-order wheel visual poses; present for Replay V2 frames.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Replay")
+	TArray<FEpisodeReplayWheelFrame> Wheels;
 
 	// Returns true when the frame can be serialized and replayed safely.
 	bool IsValidFrame() const;
@@ -214,13 +268,19 @@ struct ODIROSIM_API FEpisodeReplayManifestJson
 // Fixed-size binary reader and writer for replay.frames.bin.
 struct ODIROSIM_API FEpisodeReplayBinary
 {
-	// Writes a V1 fixed-size robot replay frame file.
+	// Resolves the binary schema version needed for the given frames.
+	static int32 ResolveFrameVersion(const TArray<FEpisodeReplayRobotFrame>& Frames);
+
+	// Returns the fixed binary frame size for one supported replay version.
+	static int32 GetFrameSizeBytesForVersion(int32 Version);
+
+	// Writes a fixed-size robot replay frame file.
 	static bool SaveFramesToFile(
 		const FString& FramePath,
 		const TArray<FEpisodeReplayRobotFrame>& Frames,
 		TArray<FString>& OutDiagnostics);
 
-	// Reads and validates all V1 fixed-size robot replay frames.
+	// Reads and validates all fixed-size robot replay frames.
 	static bool LoadFramesFromFile(
 		const FString& FramePath,
 		TArray<FEpisodeReplayRobotFrame>& OutFrames,

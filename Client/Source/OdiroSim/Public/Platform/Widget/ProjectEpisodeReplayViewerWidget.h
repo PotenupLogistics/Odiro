@@ -129,6 +129,14 @@ private:
 	UFUNCTION()
 	void HandleVehicleFrontCameraClicked();
 
+	// Toggles replay scenario map visibility in fullscreen mode.
+	UFUNCTION()
+	void HandleFullscreenMapToggleClicked();
+
+	// Toggles replay point cloud visibility in fullscreen mode.
+	UFUNCTION()
+	void HandleFullscreenPointCloudToggleClicked();
+
 	// Returns the world replay subsystem for this viewer.
 	UScenarioReplaySubsystem* GetReplaySubsystem() const;
 
@@ -143,6 +151,9 @@ private:
 
 	// Forces fullscreen-only child widgets to fill their authored parent slots.
 	void ApplyReplayFullscreenLayout();
+
+	// Finds fullscreen layer toggle buttons by name when they are not exposed as WBP variables.
+	void ResolveFullscreenLayerToggleWidgets();
 
 	// Applies one replay camera mode and refreshes camera UI text.
 	void ApplyReplayCameraMode(EScenarioReplayCameraMode NewMode);
@@ -244,6 +255,14 @@ private:
 	// Fullscreen button that selects the robot-mounted forward replay camera.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> FullscreenVehicleFrontCameraButton;
+
+	// Fullscreen button that toggles replay map visibility.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> FullscreenMapToggleButton;
+
+	// Fullscreen button that toggles replay point cloud visibility.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> FullscreenPointCloudToggleButton;
 
 	// Button that hides the fullscreen replay overlay.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

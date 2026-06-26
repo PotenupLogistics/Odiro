@@ -32,6 +32,12 @@ private:
 	// Disables physical interaction on the visual child while keeping it renderable.
 	void ConfigureReplayVisualActor() const;
 
+	// Applies Replay V2 wheel visual poses to the child visual rig.
+	void ApplyReplayWheelFrames(const FEpisodeReplayRobotFrame& Frame) const;
+
+	// Finds a named scene component on the child visual actor.
+	USceneComponent* FindReplayVisualComponent(FName ComponentName) const;
+
 	// Root component that owns the visual replay transform.
 	UPROPERTY(VisibleAnywhere, Category = "Scenario|Replay")
 	TObjectPtr<USceneComponent> SceneRoot;

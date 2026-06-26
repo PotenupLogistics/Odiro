@@ -193,6 +193,20 @@ void UProjectEpisodeReplayViewerWidget::NativeConstruct()
 		FullscreenVehicleFrontCameraButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleVehicleFrontCameraClicked);
 	}
 
+	ResolveFullscreenLayerToggleWidgets();
+
+	if (FullscreenMapToggleButton)
+	{
+		FullscreenMapToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenMapToggleClicked);
+		FullscreenMapToggleButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenMapToggleClicked);
+	}
+
+	if (FullscreenPointCloudToggleButton)
+	{
+		FullscreenPointCloudToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked);
+		FullscreenPointCloudToggleButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked);
+	}
+
 	if (ExitFullscreenButton)
 	{
 		ExitFullscreenButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleExitFullscreenClicked);
@@ -264,6 +278,16 @@ void UProjectEpisodeReplayViewerWidget::NativeDestruct()
 	if (FullscreenVehicleFrontCameraButton)
 	{
 		FullscreenVehicleFrontCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleVehicleFrontCameraClicked);
+	}
+
+	if (FullscreenMapToggleButton)
+	{
+		FullscreenMapToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenMapToggleClicked);
+	}
+
+	if (FullscreenPointCloudToggleButton)
+	{
+		FullscreenPointCloudToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked);
 	}
 
 	if (ExitFullscreenButton)
@@ -577,6 +601,49 @@ void UProjectEpisodeReplayViewerWidget::HandleVehicleFrontCameraClicked()
 	ApplyReplayCameraMode(EScenarioReplayCameraMode::VehicleFront);
 }
 
+// Toggles replay scenario map visibility in fullscreen mode.
+void UProjectEpisodeReplayViewerWidget::HandleFullscreenMapToggleClicked()
+{
+	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
+	if (!ReplaySubsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioReplaySubsystem is unavailable."));
+		return;
+	}
+
+	const bool bNewVisible = !ReplaySubsystem->IsReplayMapVisible();
+	ReplaySubsystem->SetReplayMapVisible(bNewVisible);
+	SetDiagnosticsText(bNewVisible
+		? TEXT("Replay map visible.")
+		: TEXT("Replay map hidden."));
+	RequestReplayInputFocus();
+}
+
+// Toggles replay point cloud visibility in fullscreen mode.
+void UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked()
+{
+	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
+	if (!ReplaySubsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioReplaySubsystem is unavailable."));
+		return;
+	}
+
+	if (!ReplaySubsystem->HasReplayPointCloud())
+	{
+		SetDiagnosticsText(TEXT("Replay point cloud is unavailable."));
+		RequestReplayInputFocus();
+		return;
+	}
+
+	const bool bNewVisible = !ReplaySubsystem->IsReplayPointCloudVisible();
+	ReplaySubsystem->SetReplayPointCloudVisible(bNewVisible);
+	SetDiagnosticsText(bNewVisible
+		? TEXT("Replay point cloud visible.")
+		: TEXT("Replay point cloud hidden."));
+	RequestReplayInputFocus();
+}
+
 UScenarioReplaySubsystem* UProjectEpisodeReplayViewerWidget::GetReplaySubsystem() const
 {
 	UWorld* World = GetWorld();
@@ -654,6 +721,21 @@ void UProjectEpisodeReplayViewerWidget::ApplyReplayFullscreenLayout()
 	ApplyReplayFillSlot(ReplayFullscreenLayer.Get(), ReplayFullscreenLayerZOrder);
 	InvalidateLayoutAndVolatility();
 	ForceLayoutPrepass();
+}
+
+// Finds fullscreen layer toggle buttons by name when they are not exposed as WBP variables.
+void UProjectEpisodeReplayViewerWidget::ResolveFullscreenLayerToggleWidgets()
+{
+	if (!FullscreenMapToggleButton)
+	{
+		FullscreenMapToggleButton = Cast<UButton>(GetWidgetFromName(TEXT("FullscreenMapToggleButton")));
+	}
+
+	if (!FullscreenPointCloudToggleButton)
+	{
+		FullscreenPointCloudToggleButton =
+			Cast<UButton>(GetWidgetFromName(TEXT("FullscreenPointCloudToggleButton")));
+	}
 }
 
 void UProjectEpisodeReplayViewerWidget::ApplyReplayCameraMode(

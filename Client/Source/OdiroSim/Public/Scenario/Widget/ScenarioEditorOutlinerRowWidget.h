@@ -7,9 +7,12 @@
 
 class UBorder;
 class UButton;
+class UHorizontalBox;
+class UImage;
 class UScenarioEditorListItemViewModel;
 class USpacer;
 class UTextBlock;
+class UTexture2D;
 class UWidget;
 class UWidgetTextStyleCatalog;
 
@@ -25,6 +28,9 @@ class ODIROSIM_API UScenarioEditorOutlinerRowWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	// Creates default icon references used when the row WBP has no custom overrides.
+	explicit UScenarioEditorOutlinerRowWidget(const FObjectInitializer& objectInitializer);
+
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
@@ -66,6 +72,10 @@ private:
 	void BindControls();
 	void UnbindControls();
 	void RefreshRow();
+	// Resolves the authored or runtime-created semantic icon image for this row.
+	UImage* ResolveOutlinerIconImage();
+	// Resolves the semantic icon texture from the row group or actor category.
+	UTexture2D* ResolveIconTexture() const;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Editor|Outliner", meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UBorder> SelectionBorder;
@@ -85,6 +95,14 @@ private:
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Editor|Outliner", meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UTextBlock> ItemSubtitleText;
 
+	// Optional icon image authored by WBP; created at runtime when the older WBP lacks the slot.
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Editor|Outliner", meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UImage> OutlinerIconImage;
+
+	// Existing horizontal text row used as an insertion point for runtime icon fallback.
+	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Editor|Outliner", meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UHorizontalBox> OutlinerRowTextBox;
+
 	UPROPERTY(BlueprintReadOnly, Category = "Scenario|Editor|Outliner", meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<USpacer> RowIndentSpacer;
 
@@ -94,6 +112,26 @@ private:
 	// Indentation applied per view-model depth; value is configured by the row WBP.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Outliner", meta = (ClampMin = "0.0", AllowPrivateAccess = "true"))
 	float IndentPerDepth = 14.0f;
+
+	// Fixed pixel size for the outliner semantic icon.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Outliner", meta = (ClampMin = "0.0", AllowPrivateAccess = "true"))
+	float OutlinerIconSize = 14.0f;
+
+	// Icon texture for corridor rows.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Outliner", meta = (AllowPrivateAccess = "true"))
+	TSoftObjectPtr<UTexture2D> CorridorIcon;
+
+	// Icon texture for robot rows.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Outliner", meta = (AllowPrivateAccess = "true"))
+	TSoftObjectPtr<UTexture2D> RobotIcon;
+
+	// Icon texture for obstacle rows.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Outliner", meta = (AllowPrivateAccess = "true"))
+	TSoftObjectPtr<UTexture2D> ObstacleIcon;
+
+	// Icon texture for pedestrian rows.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Outliner", meta = (AllowPrivateAccess = "true"))
+	TSoftObjectPtr<UTexture2D> PedestrianIcon;
 
 	UPROPERTY(Transient)
 	FScenarioOutlinerItemViewModel Item;

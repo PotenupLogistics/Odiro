@@ -21,6 +21,7 @@ class UProjectExperimentRunRowWidget;
 class UProjectWorkspaceViewModel;
 class UProjectWorkspaceTabWidget;
 class UScenarioEditorRootWidget;
+class UOverlay;
 class UScrollBox;
 class UTextBlock;
 class UVerticalBox;
@@ -243,6 +244,12 @@ private:
 		const UExperimentResultEpisodeViewModel* episodeItem);
 	// Episode replay card click request를 현재 단계 diagnostics로 처리한다.
 	void HandleProjectEpisodeReplayRequested(UProjectEpisodeReplayCardWidget* cardWidget);
+	// Moves the embedded replay viewer between normal and fullscreen WBP_MainMenu hosts.
+	void HandleProjectEpisodeReplayFullscreenChanged(
+		UProjectEpisodeReplayViewerWidget* viewerWidget,
+		bool bFullscreen);
+	// Restores the embedded replay viewer into its normal WBP_MainMenu host.
+	void RestoreProjectEpisodeReplayViewerToNormalHost();
 	// Episode preview PNG를 WBP placeholder border에 적용한다.
 	bool ApplyProjectEpisodePreviewImage(
 		UUserWidget* cardWidget,
@@ -601,6 +608,14 @@ private:
 	// Embedded replay viewer placed in WBP_MainMenu beside the episode cards.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UProjectEpisodeReplayViewerWidget> ProjectEpisodeReplayViewerWidget;
+
+	// Normal-size host that owns the embedded replay viewer when not fullscreen.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UOverlay> ProjectEpisodeReplayNormalHost;
+
+	// Fullscreen host that temporarily owns the embedded replay viewer.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UOverlay> ProjectEpisodeReplayFullscreenHost;
 
 	// AI 분석 실행 CTA 영역.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

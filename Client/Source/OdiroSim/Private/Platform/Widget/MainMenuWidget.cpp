@@ -2,9 +2,12 @@
 #include "Platform/Widget/MainMenuWidget.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/CheckBox.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "Components/ScrollBox.h"
 #include "Components/ScrollBoxSlot.h"
 #include "Components/TextBlock.h"
@@ -90,6 +93,18 @@ namespace
 		RunStatus,
 		ExperimentResult,
 	};
+
+	// Keeps fullscreen overlays full-screen even when their WBP Canvas slot was authored with fixed offsets.
+	void ApplyMainMenuFullscreenCanvasSlot(UWidget* widget)
+	{
+		if (UCanvasPanelSlot* canvasSlot = Cast<UCanvasPanelSlot>(widget ? widget->Slot : nullptr))
+		{
+			canvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+			canvasSlot->SetAlignment(FVector2D::ZeroVector);
+			canvasSlot->SetOffsets(FMargin(0.0f));
+			canvasSlot->SetZOrder(100);
+		}
+	}
 
 	FLinearColor MakeSrgbColor(const uint8 red, const uint8 green, const uint8 blue, const float alpha = 1.0f)
 	{
@@ -601,6 +616,11 @@ void UMainMenuWidget::NativeConstruct()
 void UMainMenuWidget::NativeDestruct()
 {
 	ReleaseEditorWidgetInputMode();
+
+	if (ProjectEpisodeReplayViewerWidget)
+	{
+		ProjectEpisodeReplayViewerWidget->OnReplayFullscreenChanged.RemoveAll(this);
+	}
 
 	if (AScenarioEditorController* editorController = Cast<AScenarioEditorController>(GetOwningPlayer()))
 	{
@@ -1963,6 +1983,9 @@ bool UMainMenuWidget::ValidateRequiredBindings() const
 	requireWidget(CollisionCountMetricCard, TEXT("CollisionCountMetricCard"));
 	requireWidget(EpisodeReplayCountText, TEXT("EpisodeReplayCountText"));
 	requireWidget(EpisodeReplayCardWrapBox, TEXT("EpisodeReplayCardWrapBox"));
+	requireWidget(ProjectEpisodeReplayViewerWidget, TEXT("ProjectEpisodeReplayViewerWidget"));
+	requireWidget(ProjectEpisodeReplayNormalHost, TEXT("ProjectEpisodeReplayNormalHost"));
+	requireWidget(ProjectEpisodeReplayFullscreenHost, TEXT("ProjectEpisodeReplayFullscreenHost"));
 	requireWidget(AiAnalysisActionBox, TEXT("AiAnalysisActionBox"));
 	requireWidget(AiSuggestionPanel, TEXT("AiSuggestionPanel"));
 	requireWidget(AiSuggestionSummaryText, TEXT("AiSuggestionSummaryText"));
@@ -2225,6 +2248,15 @@ void UMainMenuWidget::BindProjectModeControls()
 	{
 		CancelExperimentConfigButton->OnClicked.RemoveDynamic(this, &UMainMenuWidget::HandleCancelExperimentConfigClicked);
 		CancelExperimentConfigButton->OnClicked.AddDynamic(this, &UMainMenuWidget::HandleCancelExperimentConfigClicked);
+	}
+
+	if (ProjectEpisodeReplayViewerWidget)
+	{
+		ProjectEpisodeReplayViewerWidget->OnReplayFullscreenChanged.RemoveAll(this);
+		ProjectEpisodeReplayViewerWidget->OnReplayFullscreenChanged.AddUObject(
+			this,
+			&UMainMenuWidget::HandleProjectEpisodeReplayFullscreenChanged);
+		RestoreProjectEpisodeReplayViewerToNormalHost();
 	}
 
 	ApplyProjectWorkspaceTabState(ActiveProjectWorkspaceTab);
@@ -3085,6 +3117,8 @@ void UMainMenuWidget::HandleProjectEpisodeReplayRequested(UProjectEpisodeReplayC
 		return;
 	}
 
+	RestoreProjectEpisodeReplayViewerToNormalHost();
+
 	if (!ProjectEpisodeReplayViewerWidget->OpenEpisodeReplay(EpisodeDirectory))
 	{
 		SetDiagnosticsText(ProjectEpisodeReplayViewerWidget->GetLastDiagnosticsText());
@@ -3092,6 +3126,82 @@ void UMainMenuWidget::HandleProjectEpisodeReplayRequested(UProjectEpisodeReplayC
 	}
 
 	SetDiagnosticsText(ProjectEpisodeReplayViewerWidget->GetLastDiagnosticsText());
+}
+
+void UMainMenuWidget::HandleProjectEpisodeReplayFullscreenChanged(
+	UProjectEpisodeReplayViewerWidget* viewerWidget,
+	bool bFullscreen)
+{
+	if (!IsValid(viewerWidget) || viewerWidget != ProjectEpisodeReplayViewerWidget)
+	{
+		return;
+	}
+
+	UOverlay* targetHost = bFullscreen
+		? ProjectEpisodeReplayFullscreenHost.Get()
+		: ProjectEpisodeReplayNormalHost.Get();
+	if (!targetHost)
+	{
+		SetDiagnosticsText(
+			bFullscreen
+				? TEXT("ProjectEpisodeReplayFullscreenHost is not bound in WBP_MainMenu.")
+				: TEXT("ProjectEpisodeReplayNormalHost is not bound in WBP_MainMenu."));
+		return;
+	}
+
+	if (ProjectEpisodeReplayFullscreenHost)
+	{
+		if (bFullscreen)
+		{
+			ApplyMainMenuFullscreenCanvasSlot(ProjectEpisodeReplayFullscreenHost.Get());
+		}
+
+		ProjectEpisodeReplayFullscreenHost->SetVisibility(
+			bFullscreen
+				? ESlateVisibility::Visible
+				: ESlateVisibility::Collapsed);
+	}
+
+	viewerWidget->RemoveFromParent();
+	if (UOverlaySlot* overlaySlot = targetHost->AddChildToOverlay(viewerWidget))
+	{
+		overlaySlot->SetHorizontalAlignment(HAlign_Fill);
+		overlaySlot->SetVerticalAlignment(VAlign_Fill);
+		overlaySlot->SetPadding(FMargin(0.0f));
+	}
+
+	targetHost->InvalidateLayoutAndVolatility();
+	targetHost->ForceLayoutPrepass();
+	viewerWidget->InvalidateLayoutAndVolatility();
+	viewerWidget->ForceLayoutPrepass();
+}
+
+void UMainMenuWidget::RestoreProjectEpisodeReplayViewerToNormalHost()
+{
+	if (!ProjectEpisodeReplayViewerWidget || !ProjectEpisodeReplayNormalHost)
+	{
+		return;
+	}
+
+	if (ProjectEpisodeReplayFullscreenHost)
+	{
+		ApplyMainMenuFullscreenCanvasSlot(ProjectEpisodeReplayFullscreenHost.Get());
+		ProjectEpisodeReplayFullscreenHost->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	ProjectEpisodeReplayViewerWidget->RemoveFromParent();
+	if (UOverlaySlot* overlaySlot =
+		ProjectEpisodeReplayNormalHost->AddChildToOverlay(ProjectEpisodeReplayViewerWidget))
+	{
+		overlaySlot->SetHorizontalAlignment(HAlign_Fill);
+		overlaySlot->SetVerticalAlignment(VAlign_Fill);
+		overlaySlot->SetPadding(FMargin(0.0f));
+	}
+
+	ProjectEpisodeReplayNormalHost->InvalidateLayoutAndVolatility();
+	ProjectEpisodeReplayNormalHost->ForceLayoutPrepass();
+	ProjectEpisodeReplayViewerWidget->InvalidateLayoutAndVolatility();
+	ProjectEpisodeReplayViewerWidget->ForceLayoutPrepass();
 }
 
 void UMainMenuWidget::ConfigureProjectAiSuggestionRow(

@@ -371,6 +371,8 @@ private:
 	void ConfigureFieldRows();
 	// Applies cached placement values to bound field rows.
 	void ApplyCachedPlacementToRows();
+	// Applies the catalog-backed asset summary to this placement block header.
+	void ApplyAssetHeaderSummary();
 	// Rebuilds cached field row ViewModels from the current placement.
 	void RefreshFieldItemsFromViewModel();
 	// Applies shared typography to this placement block and rows.

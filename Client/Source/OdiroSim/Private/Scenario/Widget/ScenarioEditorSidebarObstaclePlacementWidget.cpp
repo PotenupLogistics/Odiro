@@ -10,6 +10,7 @@
 #include "Scenario/ViewModel/ScenarioTemplateSidebarViewModel.h"
 #include "Scenario/Widget/ScenarioEditorSidebarBlockWidget.h"
 #include "Scenario/Widget/ScenarioEditorSidebarWidgetHelpers.h"
+#include "Scenario/Widget/ScenarioPlaceablePaletteItemWidget.h"
 
 namespace SidebarWidgetHelpers = ScenarioEditorSidebarWidgetHelpers;
 
@@ -613,6 +614,7 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ConfigureFieldRows()
 		PlacementBlockWidget->SetAddActionVisible(false);
 		PlacementBlockWidget->SetRemoveActionVisible(true);
 	}
+	ApplyAssetHeaderSummary();
 
 	for (UScenarioEditorSidebarFieldRow* fieldRow : {
 		PlacementIdFieldRow.Get(),
@@ -675,6 +677,7 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ApplyCachedPlacementToRows()
 			SidebarWidgetHelpers::MakeIndexedBlockPath(TEXT("root.obstacles.placements"), PlacementIndex),
 			TEXT("세부"));
 	}
+	ApplyAssetHeaderSummary();
 	if (PlacementIdFieldRow)
 	{
 		PlacementIdFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementId")));
@@ -781,6 +784,58 @@ void UScenarioEditorSidebarObstaclePlacementWidget::ApplyCachedPlacementToRows()
 	{
 		AllowBlockingFieldRow->InitializeFromItemViewModel(FindCachedFieldItem(TEXT("PlacementAllowBlocking")));
 	}
+}
+
+void UScenarioEditorSidebarObstaclePlacementWidget::ApplyAssetHeaderSummary()
+{
+	if (!PlacementBlockWidget)
+	{
+		return;
+	}
+	if (!bHasCachedPlacement)
+	{
+		PlacementBlockWidget->SetAssetHeaderSummary(
+			FText::GetEmpty(),
+			FText::GetEmpty(),
+			TSoftObjectPtr<UTexture2D>(),
+			false);
+		return;
+	}
+
+	FText assetKindText = CachedPlacement.PropId.IsEmpty()
+		? FText::FromString(TEXT("Obstacle asset"))
+		: FText::FromString(CachedPlacement.PropId);
+	TSoftObjectPtr<UTexture2D> thumbnailTexture;
+
+	if (!CachedPlacement.PropId.IsEmpty())
+	{
+		if (UScenarioTemplateSidebarViewModel* templateSidebarViewModel = GetTemplateSidebarViewModel())
+		{
+			TArray<FScenarioStaticObstaclePropEntry> propEntries;
+			templateSidebarViewModel->GetStaticObstaclePaletteEntries(propEntries);
+			const FName propId(*CachedPlacement.PropId);
+			for (const FScenarioStaticObstaclePropEntry& propEntry : propEntries)
+			{
+				if (propEntry.PropId == propId)
+				{
+					const FScenarioPaletteItemEntry paletteItem =
+						UScenarioPlaceablePaletteItemWidget::MakeStaticObstaclePaletteItemEntry(propEntry);
+					assetKindText = paletteItem.DisplayName;
+					thumbnailTexture = paletteItem.ThumbnailTexture;
+					break;
+				}
+			}
+		}
+	}
+
+	const FString placementName = CachedPlacement.PlacementId.IsEmpty()
+		? FString::Printf(TEXT("Obstacle %d"), PlacementIndex + 1)
+		: CachedPlacement.PlacementId;
+	PlacementBlockWidget->SetAssetHeaderSummary(
+		assetKindText,
+		FText::FromString(placementName),
+		thumbnailTexture,
+		true);
 }
 
 void UScenarioEditorSidebarObstaclePlacementWidget::RefreshFieldItemsFromViewModel()

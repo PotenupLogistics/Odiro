@@ -2,13 +2,16 @@
 
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/Image.h"
 #include "Components/PanelSlot.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/Widget.h"
+#include "Engine/Texture2D.h"
 #include "Input/Events.h"
 #include "Input/Reply.h"
 #include "Scenario/Data/WidgetTextStyleCatalog.h"
@@ -252,6 +255,19 @@ void UScenarioEditorSidebarBlockWidget::SetTextStyleCatalog(
 	RefreshBlock();
 }
 
+void UScenarioEditorSidebarBlockWidget::SetAssetHeaderSummary(
+	const FText& typeText,
+	const FText& nameText,
+	TSoftObjectPtr<UTexture2D> thumbnailTexture,
+	const bool bVisible)
+{
+	AssetHeaderTypeText = typeText;
+	AssetHeaderNameText = nameText;
+	AssetHeaderThumbnailTexture = thumbnailTexture;
+	bAssetHeaderSummaryVisible = bVisible;
+	RefreshBlock();
+}
+
 void UScenarioEditorSidebarBlockWidget::AddBodyChild(UWidget* widget)
 {
 	if (!widget)
@@ -411,6 +427,68 @@ void UScenarioEditorSidebarBlockWidget::EnsureActionButtons()
 	}
 }
 
+void UScenarioEditorSidebarBlockWidget::EnsureAssetHeaderSummary()
+{
+	if (AssetHeaderContainer || !BlockHeaderRow)
+	{
+		return;
+	}
+
+	UPanelWidget* headerPanel = Cast<UPanelWidget>(BlockHeaderRow.Get());
+	if (!headerPanel)
+	{
+		return;
+	}
+
+	AssetHeaderContainer = NewObject<UHorizontalBox>(this);
+	AssetHeaderThumbnailImage = NewObject<UImage>(AssetHeaderContainer.Get());
+	AssetHeaderTextBox = NewObject<UVerticalBox>(AssetHeaderContainer.Get());
+	AssetHeaderTypeTextBlock = NewObject<UTextBlock>(AssetHeaderTextBox.Get());
+	AssetHeaderNameTextBlock = NewObject<UTextBlock>(AssetHeaderTextBox.Get());
+	if (!AssetHeaderContainer
+		|| !AssetHeaderThumbnailImage
+		|| !AssetHeaderTextBox
+		|| !AssetHeaderTypeTextBlock
+		|| !AssetHeaderNameTextBlock)
+	{
+		AssetHeaderContainer = nullptr;
+		AssetHeaderThumbnailImage = nullptr;
+		AssetHeaderTextBox = nullptr;
+		AssetHeaderTypeTextBlock = nullptr;
+		AssetHeaderNameTextBlock = nullptr;
+		return;
+	}
+
+	if (UHorizontalBoxSlot* thumbnailSlot =
+		AssetHeaderContainer->AddChildToHorizontalBox(AssetHeaderThumbnailImage.Get()))
+	{
+		thumbnailSlot->SetPadding(FMargin(0.0f, 0.0f, 7.0f, 0.0f));
+		thumbnailSlot->SetVerticalAlignment(VAlign_Center);
+	}
+	if (UHorizontalBoxSlot* textSlot =
+		AssetHeaderContainer->AddChildToHorizontalBox(AssetHeaderTextBox.Get()))
+	{
+		textSlot->SetPadding(FMargin(0.0f));
+		textSlot->SetVerticalAlignment(VAlign_Center);
+	}
+	if (UVerticalBoxSlot* typeSlot =
+		AssetHeaderTextBox->AddChildToVerticalBox(AssetHeaderTypeTextBlock.Get()))
+	{
+		typeSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 1.0f));
+	}
+	AssetHeaderTextBox->AddChildToVerticalBox(AssetHeaderNameTextBlock.Get());
+
+	if (UPanelSlot* headerSlot = headerPanel->AddChild(AssetHeaderContainer.Get()))
+	{
+		if (UHorizontalBoxSlot* horizontalSlot = Cast<UHorizontalBoxSlot>(headerSlot))
+		{
+			horizontalSlot->SetPadding(FMargin(6.0f, 0.0f, 4.0f, 0.0f));
+			horizontalSlot->SetVerticalAlignment(VAlign_Center);
+		}
+	}
+	AssetHeaderContainer->SetVisibility(ESlateVisibility::Collapsed);
+}
+
 void UScenarioEditorSidebarBlockWidget::CreateActionButton(
 	TObjectPtr<UButton>& outButton,
 	TObjectPtr<UTextBlock>& outTextBlock)
@@ -467,6 +545,76 @@ void UScenarioEditorSidebarBlockWidget::SetActionButtonState(
 		textBlock->SetText(FText::FromString(label));
 		textBlock->SetJustification(ETextJustify::Center);
 		textBlock->SetColorAndOpacity(FSlateColor(MakeSidebarBlockColor(TEXT("F2F2F2"))));
+	}
+}
+
+void UScenarioEditorSidebarBlockWidget::ApplyAssetHeaderSummaryState()
+{
+	const bool bShowAssetHeader = bAssetHeaderSummaryVisible && AssetHeaderContainer;
+	if (NameTextBlock)
+	{
+		NameTextBlock->SetVisibility(bShowAssetHeader
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
+	}
+	if (PathTextBlock)
+	{
+		PathTextBlock->SetVisibility(bShowAssetHeader
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
+	}
+	if (BadgeTextBlock)
+	{
+		BadgeTextBlock->SetVisibility(bShowAssetHeader
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::SelfHitTestInvisible);
+	}
+	if (!AssetHeaderContainer)
+	{
+		return;
+	}
+
+	AssetHeaderContainer->SetVisibility(bShowAssetHeader
+		? ESlateVisibility::SelfHitTestInvisible
+		: ESlateVisibility::Collapsed);
+	if (!bShowAssetHeader)
+	{
+		return;
+	}
+
+	if (AssetHeaderTypeTextBlock)
+	{
+		AssetHeaderTypeTextBlock->SetText(AssetHeaderTypeText);
+		FWidgetTextStyle typeStyle =
+			UWidgetTextStyleCatalog::ResolveStyle(TextStyleCatalog, EWidgetTextStyleRole::Caption);
+		typeStyle.Font.Size = 11;
+		AssetHeaderTypeTextBlock->SetFont(typeStyle.Font);
+		AssetHeaderTypeTextBlock->SetColorAndOpacity(FSlateColor(typeStyle.Color));
+	}
+	if (AssetHeaderNameTextBlock)
+	{
+		AssetHeaderNameTextBlock->SetText(AssetHeaderNameText);
+		FWidgetTextStyle nameStyle =
+			UWidgetTextStyleCatalog::ResolveStyle(TextStyleCatalog, EWidgetTextStyleRole::Label);
+		nameStyle.Font.Size = 14;
+		AssetHeaderNameTextBlock->SetFont(nameStyle.Font);
+		AssetHeaderNameTextBlock->SetColorAndOpacity(FSlateColor(nameStyle.Color));
+	}
+	if (AssetHeaderThumbnailImage)
+	{
+		UTexture2D* thumbnailTexture = AssetHeaderThumbnailTexture.IsNull()
+			? nullptr
+			: AssetHeaderThumbnailTexture.LoadSynchronous();
+		if (thumbnailTexture)
+		{
+			AssetHeaderThumbnailImage->SetBrushFromTexture(thumbnailTexture, true);
+			AssetHeaderThumbnailImage->SetDesiredSizeOverride(FVector2D(34.0f, 34.0f));
+			AssetHeaderThumbnailImage->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		}
+		else
+		{
+			AssetHeaderThumbnailImage->SetVisibility(ESlateVisibility::Collapsed);
+		}
 	}
 }
 
@@ -575,6 +723,7 @@ void UScenarioEditorSidebarBlockWidget::ApplyVisualStyle()
 
 void UScenarioEditorSidebarBlockWidget::RefreshBlock()
 {
+	EnsureAssetHeaderSummary();
 	EnsureActionButtons();
 
 	if (ToggleTextBlock)
@@ -589,6 +738,7 @@ void UScenarioEditorSidebarBlockWidget::RefreshBlock()
 	SetActionButtonState(AddActionButton.Get(), AddActionTextBlock.Get(), bAddActionVisible && !bDetailHostLayout, TEXT("+"));
 	SetActionButtonState(RemoveActionButton.Get(), RemoveActionTextBlock.Get(), bRemoveActionVisible && !bDetailHostLayout, TEXT("-"));
 	ApplyVisualStyle();
+	ApplyAssetHeaderSummaryState();
 
 	if (SelectedStateWidget)
 	{

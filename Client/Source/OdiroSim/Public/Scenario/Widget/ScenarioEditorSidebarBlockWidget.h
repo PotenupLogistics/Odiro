@@ -5,10 +5,13 @@
 #include "ScenarioEditorSidebarBlockWidget.generated.h"
 
 class UButton;
+class UHorizontalBox;
+class UImage;
 class UTextBlock;
 class UVerticalBox;
 class UWidget;
 class UWidgetTextStyleCatalog;
+class UTexture2D;
 
 // Broadcasts the Scenario Template path represented by a selected sidebar block.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
@@ -72,6 +75,10 @@ public:
 	// Whether this block should render only its body as an invisible detail host.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
 	bool bDetailHostLayout = false;
+
+	// Whether this block header uses asset thumbnail and two-line summary text.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
+	bool bAssetHeaderSummaryVisible = false;
 
 	// Whether the header exposes an add action for this block's collection.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|Template")
@@ -177,6 +184,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void SetTextStyleCatalog(TSoftObjectPtr<UWidgetTextStyleCatalog> catalog);
 
+	// Updates the optional asset summary header used by object detail blocks.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
+	void SetAssetHeaderSummary(
+		const FText& typeText,
+		const FText& nameText,
+		TSoftObjectPtr<UTexture2D> thumbnailTexture,
+		bool bVisible);
+
 	// Adds a child widget to the block body.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Template")
 	void AddBodyChild(UWidget* widget);
@@ -218,6 +233,38 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> RemoveActionTextBlock;
 
+	// Generated asset summary container owned by the header row.
+	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> AssetHeaderContainer;
+
+	// Generated thumbnail image shown by the asset summary header.
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> AssetHeaderThumbnailImage;
+
+	// Generated vertical text stack owned by AssetHeaderContainer.
+	UPROPERTY(Transient)
+	TObjectPtr<UVerticalBox> AssetHeaderTextBox;
+
+	// Generated first-line asset kind text.
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> AssetHeaderTypeTextBlock;
+
+	// Generated second-line object name text.
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> AssetHeaderNameTextBlock;
+
+	// Cached asset kind text for the generated asset summary header.
+	UPROPERTY(Transient)
+	FText AssetHeaderTypeText;
+
+	// Cached object name text for the generated asset summary header.
+	UPROPERTY(Transient)
+	FText AssetHeaderNameText;
+
+	// Cached thumbnail texture for the generated asset summary header.
+	UPROPERTY(Transient)
+	TSoftObjectPtr<UTexture2D> AssetHeaderThumbnailTexture;
+
 	// Broadcasts this block path as the active sidebar selection.
 	void BroadcastBlockSelected();
 	// Returns true when this block should claim a click before child controls handle it.
@@ -228,10 +275,14 @@ private:
 	void UnbindControls();
 	// Creates generated header action buttons when the WBP header can host them.
 	void EnsureActionButtons();
+	// Creates the generated asset summary header when the WBP header can host it.
+	void EnsureAssetHeaderSummary();
 	// Creates one generated header button and attaches it to the header row.
 	void CreateActionButton(TObjectPtr<UButton>& outButton, TObjectPtr<UTextBlock>& outTextBlock);
 	// Applies visibility and label state to one generated header button.
 	void SetActionButtonState(UButton* button, UTextBlock* textBlock, bool bVisible, const FString& label) const;
+	// Applies cached asset summary data to generated header widgets.
+	void ApplyAssetHeaderSummaryState();
 	// Applies shared sidebar spacing and block surface styling.
 	void ApplyVisualStyle();
 	// Applies stored metadata, styles, and state to bound controls.

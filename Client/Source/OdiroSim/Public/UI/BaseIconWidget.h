@@ -6,6 +6,7 @@
 
 class UImage;
 class UTexture2D;
+class UWidget;
 
 // Standalone icon component for base widget layouts.
 UCLASS(BlueprintType, Blueprintable)
@@ -14,9 +15,6 @@ class ODIROSIM_API UBaseIconWidget : public UBaseWidget
 	GENERATED_BODY()
 
 public:
-	// Creates preview defaults for standalone editor rendering.
-	UBaseIconWidget();
-
 	// Applies icon texture, variant color, and disabled state to the WBP-owned image.
 	virtual void SynchronizeBaseProperties() override;
 
@@ -72,4 +70,8 @@ protected:
 	// Icon visual owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UImage> IconImage;
+
+	// Fixed-size wrapper hidden when no icon image resource is assigned.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> IconBox;
 };

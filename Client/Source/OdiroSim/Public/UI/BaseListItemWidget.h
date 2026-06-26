@@ -15,9 +15,6 @@ class ODIROSIM_API UBaseListItemWidget : public UBaseCardWidget
 	GENERATED_BODY()
 
 public:
-	// Creates preview defaults for standalone editor rendering.
-	UBaseListItemWidget();
-
 	// Applies card state plus optional leading icon.
 	virtual void SynchronizeBaseProperties() override;
 

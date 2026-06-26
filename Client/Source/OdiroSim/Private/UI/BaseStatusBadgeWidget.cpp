@@ -4,12 +4,6 @@
 #include "Components/TextBlock.h"
 #include "UI/BaseWidgetPrivate.h"
 
-UBaseStatusBadgeWidget::UBaseStatusBadgeWidget()
-	: Label(FText::FromString(TEXT("Ready")))
-	, State(EBaseWidgetState::Success)
-{
-}
-
 void UBaseStatusBadgeWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
@@ -20,7 +14,7 @@ void UBaseStatusBadgeWidget::SynchronizeBaseProperties()
 		: ResolveStateColor(State);
 	if (LabelTextBlock)
 	{
-		LabelTextBlock->SetText(Label);
+		BaseWidgetPrivate::ApplyTextIfSet(LabelTextBlock.Get(), Label);
 		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Caption);
 		LabelTextBlock->SetColorAndOpacity(FSlateColor(bDisabled && tokens
 			? tokens->TextFaintColor
@@ -34,6 +28,7 @@ void UBaseStatusBadgeWidget::SynchronizeBaseProperties()
 			SurfaceBorder.Get(),
 			tokens->SurfaceControlColor,
 			tokens->LineFieldColor,
+			tokens->Radius,
 			tokens->BorderWidth);
 	}
 	else
@@ -41,6 +36,12 @@ void UBaseStatusBadgeWidget::SynchronizeBaseProperties()
 		ApplyBorderColor(SurfaceBorder.Get(), ResolveVariantColor(EBaseWidgetVariant::Secondary));
 	}
 	ApplyBorderColor(StatusDot.Get(), badgeColor);
+}
+
+int32 UBaseStatusBadgeWidget::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, const bool bParentEnabled) const
+{
+	BaseWidgetPrivate::UpdateRoundedSurfaceSize(SurfaceBorder.Get(), AllottedGeometry.GetLocalSize());
+	return Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
 }
 
 void UBaseStatusBadgeWidget::SetLabel(const FText inLabel)

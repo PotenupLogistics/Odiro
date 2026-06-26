@@ -13,9 +13,6 @@ class ODIROSIM_API UBaseTabWidget : public UBaseButtonWidget
 	GENERATED_BODY()
 
 public:
-	// Creates preview defaults for standalone editor rendering.
-	UBaseTabWidget(const FObjectInitializer& objectInitializer = FObjectInitializer::Get());
-
 	// Applies button state plus selected tab indicator.
 	virtual void SynchronizeBaseProperties() override;
 

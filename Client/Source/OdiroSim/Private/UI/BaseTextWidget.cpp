@@ -1,11 +1,7 @@
 #include "UI/BaseTextWidget.h"
 
 #include "Components/TextBlock.h"
-
-UBaseTextWidget::UBaseTextWidget()
-	: Text(FText::FromString(TEXT("Base text")))
-{
-}
+#include "UI/BaseWidgetPrivate.h"
 
 void UBaseTextWidget::SynchronizeBaseProperties()
 {
@@ -13,7 +9,7 @@ void UBaseTextWidget::SynchronizeBaseProperties()
 
 	if (TextBlock)
 	{
-		TextBlock->SetText(Text);
+		BaseWidgetPrivate::ApplyTextIfSet(TextBlock.Get(), Text);
 		ApplyTextStyle(TextBlock.Get(), TextRole);
 		if (bDisabled)
 		{

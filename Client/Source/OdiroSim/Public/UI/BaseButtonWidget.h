@@ -34,7 +34,7 @@ class ODIROSIM_API UBaseButtonWidget : public UCommonButtonBase
 	GENERATED_BODY()
 
 public:
-	// Creates preview defaults for standalone editor rendering.
+	// Creates the transparent CommonUI shell used by WBP-owned visuals.
 	UBaseButtonWidget(const FObjectInitializer& objectInitializer = FObjectInitializer::Get());
 
 	// Resolves the configured base tokens, falling back to the project default asset or built-in defaults.
@@ -142,6 +142,9 @@ public:
 	FBaseButtonWidgetEvent OnBaseReleased;
 
 protected:
+	// Feeds the rounded surface material its painted size each paint (capture-safe).
+	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
+
 	// Reasserts the internal transparent CommonUI style before CommonUI rebuilds Slate styles.
 	void UseTransparentCommonStyle();
 

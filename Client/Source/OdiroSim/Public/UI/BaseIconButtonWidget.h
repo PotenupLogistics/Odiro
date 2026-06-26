@@ -10,7 +10,4 @@ class ODIROSIM_API UBaseIconButtonWidget : public UBaseButtonWidget
 {
 	GENERATED_BODY()
 
-public:
-	// Creates preview defaults for standalone editor rendering.
-	UBaseIconButtonWidget(const FObjectInitializer& objectInitializer = FObjectInitializer::Get());
 };

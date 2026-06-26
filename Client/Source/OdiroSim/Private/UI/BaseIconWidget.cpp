@@ -4,11 +4,6 @@
 #include "Engine/Texture2D.h"
 #include "UI/BaseWidgetPrivate.h"
 
-UBaseIconWidget::UBaseIconWidget()
-	: Variant(EBaseWidgetVariant::Info)
-{
-}
-
 void UBaseIconWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
@@ -22,15 +17,11 @@ void UBaseIconWidget::SynchronizeBaseProperties()
 	{
 		IconImage->SetBrushFromTexture(Icon, false);
 	}
+	const bool bHasIcon = Icon != nullptr || BaseWidgetPrivate::HasAssignedImageResource(IconImage.Get());
+	BaseWidgetPrivate::SetOptionalIconVisibility(IconBox.Get(), IconImage.Get(), bHasIcon);
 	const FLinearColor iconColor = bDisabled
 		? ResolveStateColor(EBaseWidgetState::Disabled)
 		: ResolveVariantColor(Variant);
-	const float iconSize = BaseWidgetPrivate::ResolveIconPreviewSize(Size);
-	if (!Icon)
-	{
-		IconImage->SetBrush(BaseWidgetPrivate::MakeColorBrush(iconColor, FVector2D(iconSize, iconSize)));
-	}
-	BaseWidgetPrivate::ApplyFixedImageBrushSize(IconImage.Get(), iconSize);
 	IconImage->SetColorAndOpacity(iconColor);
 }
 

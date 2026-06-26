@@ -13,9 +13,6 @@ class ODIROSIM_API UBaseMetricCardWidget : public UBaseCardWidget
 	GENERATED_BODY()
 
 public:
-	// Creates preview defaults for standalone editor rendering.
-	UBaseMetricCardWidget();
-
 	// Applies metric value in addition to base card text.
 	virtual void SynchronizeBaseProperties() override;
 

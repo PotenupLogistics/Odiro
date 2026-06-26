@@ -1,18 +1,8 @@
 #include "UI/BaseProgressRowWidget.h"
 
 #include "Components/Border.h"
-#include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
 #include "UI/BaseWidgetPrivate.h"
-
-UBaseProgressRowWidget::UBaseProgressRowWidget()
-	: Label(FText::FromString(TEXT("Episode progress")))
-	, Description(FText::FromString(TEXT("24 of 32 episodes")))
-	, ProgressPercent(72.0f)
-	, ValueText(FText::FromString(TEXT("72%")))
-	, State(EBaseWidgetState::Success)
-{
-}
 
 void UBaseProgressRowWidget::SynchronizeBaseProperties()
 {
@@ -25,33 +15,44 @@ void UBaseProgressRowWidget::SynchronizeBaseProperties()
 			SurfaceBorder.Get(),
 			tokens->SurfacePanelColor,
 			tokens->LineFieldColor,
+			tokens->Radius,
 			tokens->BorderWidth);
 	}
 
 	if (LabelTextBlock)
 	{
-		LabelTextBlock->SetText(Label);
+		BaseWidgetPrivate::ApplyTextIfSet(LabelTextBlock.Get(), Label);
 		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Label);
 	}
 	if (DescriptionTextBlock)
 	{
-		DescriptionTextBlock->SetText(Description);
+		BaseWidgetPrivate::ApplyTextIfSet(DescriptionTextBlock.Get(), Description);
 		ApplyTextStyle(DescriptionTextBlock.Get(), EBaseTextRole::Caption);
-		DescriptionTextBlock->SetVisibility(Description.IsEmpty()
-			? ESlateVisibility::Collapsed
-			: ESlateVisibility::SelfHitTestInvisible);
 	}
 	if (ValueTextBlock)
 	{
-		ValueTextBlock->SetText(ValueText);
+		BaseWidgetPrivate::ApplyTextIfSet(ValueTextBlock.Get(), ValueText);
 		ApplyTextStyle(ValueTextBlock.Get(), EBaseTextRole::Caption);
 	}
-	if (ProgressBar)
+	if (ProgressTrack)
 	{
+		const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
 		const float clampedPercent = FMath::Clamp(ProgressPercent, 0.0f, 100.0f) / 100.0f;
-		ProgressBar->SetPercent(clampedPercent);
-		ProgressBar->SetFillColorAndOpacity(ResolveStateColor(State));
+		const FLinearColor trackColor = tokens ? tokens->SurfaceWellColor : ResolveVariantColor(EBaseWidgetVariant::Neutral);
+		BaseWidgetPrivate::ApplyProgressSurface(
+			ProgressTrack.Get(),
+			trackColor,
+			ResolveStateColor(State),
+			clampedPercent,
+			tokens ? tokens->RadiusPill : 999.0f);
 	}
+}
+
+int32 UBaseProgressRowWidget::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, const bool bParentEnabled) const
+{
+	BaseWidgetPrivate::UpdateRoundedSurfaceSize(SurfaceBorder.Get(), AllottedGeometry.GetLocalSize());
+	BaseWidgetPrivate::UpdateRoundedSurfaceSize(ProgressTrack.Get(), AllottedGeometry.GetLocalSize());
+	return Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
 }
 
 void UBaseProgressRowWidget::SetLabel(const FText inLabel)

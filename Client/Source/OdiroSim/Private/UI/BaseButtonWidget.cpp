@@ -3,7 +3,6 @@
 #include "Components/Border.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
-#include "Components/Widget.h"
 #include "Engine/Texture2D.h"
 #include "UI/BaseIconButtonWidget.h"
 #include "UI/BaseTabWidget.h"
@@ -29,7 +28,6 @@ UBaseTransparentButtonStyle::UBaseTransparentButtonStyle()
 
 UBaseButtonWidget::UBaseButtonWidget(const FObjectInitializer& objectInitializer)
 	: Super(objectInitializer)
-	, Label(FText::FromString(TEXT("Run action")))
 {
 	bApplyAlphaOnDisable = false;
 	UseTransparentCommonStyle();
@@ -85,37 +83,22 @@ void UBaseButtonWidget::SynchronizeBaseProperties()
 
 	if (LabelTextBlock)
 	{
-		LabelTextBlock->SetText(Label);
+		BaseWidgetPrivate::ApplyTextIfSet(LabelTextBlock.Get(), Label);
 		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Label);
 		LabelTextBlock->SetColorAndOpacity(FSlateColor(foregroundColor));
 	}
-	bool bShowIcon = false;
 	if (IconImage)
 	{
-		const float iconSize = BaseWidgetPrivate::ResolveIconPreviewSize(Size);
-		bShowIcon = Icon != nullptr;
 		if (Icon)
 		{
 			IconImage->SetBrushFromTexture(Icon, false);
-			BaseWidgetPrivate::ApplyFixedImageBrushSize(IconImage.Get(), iconSize);
 		}
-		else
-		{
-			BaseWidgetPrivate::ApplyFixedImageBrushSize(IconImage.Get(), iconSize);
-			bShowIcon = BaseWidgetPrivate::HasAssignedImageResource(IconImage.Get());
-		}
-		BaseWidgetPrivate::SetOptionalIconVisibility(IconBox.Get(), IconImage.Get(), bShowIcon);
+		const bool bHasIcon = Icon != nullptr || BaseWidgetPrivate::HasAssignedImageResource(IconImage.Get());
+		BaseWidgetPrivate::SetOptionalIconVisibility(IconBox.Get(), IconImage.Get(), bHasIcon);
 		IconImage->SetColorAndOpacity(foregroundColor);
-	}
-	else if (IconBox)
-	{
-		IconBox->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	if (IconGlyph)
 	{
-		IconGlyph->SetVisibility(bShowIcon
-			? ESlateVisibility::Collapsed
-			: ESlateVisibility::SelfHitTestInvisible);
 		IconGlyph->SetColorAndOpacity(foregroundColor);
 	}
 
@@ -170,7 +153,14 @@ void UBaseButtonWidget::SynchronizeBaseProperties()
 		SurfaceBorder.Get(),
 		surfaceColor,
 		frameColor,
+		tokens ? tokens->Radius : 4.0f,
 		tokens ? tokens->BorderWidth : 1.0f);
+}
+
+int32 UBaseButtonWidget::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, const bool bParentEnabled) const
+{
+	BaseWidgetPrivate::UpdateRoundedSurfaceSize(SurfaceBorder.Get(), AllottedGeometry.GetLocalSize());
+	return Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
 }
 
 void UBaseButtonWidget::SetLabel(const FText inLabel)
@@ -335,18 +325,6 @@ void UBaseButtonWidget::UseTransparentCommonStyle()
 #if WITH_EDITORONLY_DATA
 	bStyleNoLongerNeedsConversion = true;
 #endif
-}
-
-UBaseIconButtonWidget::UBaseIconButtonWidget(const FObjectInitializer& objectInitializer)
-	: Super(objectInitializer)
-{
-	Label = FText::GetEmpty();
-}
-
-UBaseTabWidget::UBaseTabWidget(const FObjectInitializer& objectInitializer)
-	: Super(objectInitializer)
-{
-	Label = FText::FromString(TEXT("Overview"));
 }
 
 void UBaseTabWidget::SynchronizeBaseProperties()

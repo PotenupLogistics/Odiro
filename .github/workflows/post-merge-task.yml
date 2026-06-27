@@ -558,6 +558,98 @@ jobs:
               }
           }
 
+          # Returns the repository's effective Git LFS API endpoint without a trailing slash.
+          function Get-LfsApiEndpoint {
+              $lines = @(git lfs env 2>&1)
+              if ($LASTEXITCODE -ne 0) {
+                  $detail = (($lines | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  throw "Failed to read Git LFS environment.`n$detail"
+              }
+
+              foreach ($line in $lines) {
+                  if ([string] $line -match '^Endpoint=(?<Url>\S+)(?:\s+\(auth=[^)]+\))?') {
+                      return ([string] $Matches["Url"]).TrimEnd("/")
+                  }
+              }
+
+              throw "Git LFS endpoint was not found."
+          }
+
+          # Builds a Git LFS Basic auth header from the token owner login and token.
+          function New-LfsBasicAuthHeader {
+              if ([string]::IsNullOrWhiteSpace($env:LFS_LOCK_BOT_LOGIN)) {
+                  throw "LFS_LOCK_BOT_LOGIN is required for Git LFS API auth."
+              }
+              if ([string]::IsNullOrWhiteSpace($env:LFS_LOCK_BOT_TOKEN)) {
+                  throw "LFS_LOCK_BOT_TOKEN is required for Git LFS API auth."
+              }
+
+              $credential = "$($env:LFS_LOCK_BOT_LOGIN):$($env:LFS_LOCK_BOT_TOKEN)"
+              $encodedCredential = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($credential))
+              return "Authorization: Basic $encodedCredential"
+          }
+
+          # Calls the Git LFS HTTP API with explicit Basic auth, bypassing git credential helpers.
+          function Invoke-LfsApi {
+              param(
+                  [Parameter(Mandatory = $true)][string] $Method,
+                  [Parameter(Mandatory = $true)][string] $Url,
+                  [string] $Body = ""
+              )
+
+              $responsePath = [System.IO.Path]::GetTempFileName()
+              $requestPath = $null
+              try {
+                  $curlArgs = @(
+                      "--silent",
+                      "--show-error",
+                      "--location",
+                      "--request",
+                      $Method,
+                      "--header",
+                      (New-LfsBasicAuthHeader),
+                      "--header",
+                      "Accept: application/vnd.git-lfs+json",
+                      "--header",
+                      "Content-Type: application/vnd.git-lfs+json",
+                      "--output",
+                      $responsePath,
+                      "--write-out",
+                      "%{http_code}",
+                      $Url
+                  )
+
+                  if (-not [string]::IsNullOrWhiteSpace($Body)) {
+                      $requestPath = [System.IO.Path]::GetTempFileName()
+                      [System.IO.File]::WriteAllText($requestPath, $Body, [System.Text.UTF8Encoding]::new($false))
+                      $curlArgs = @("--data-binary", "@$requestPath") + $curlArgs
+                  }
+
+                  $statusOutput = @(curl @curlArgs 2>&1)
+                  $curlExitCode = $LASTEXITCODE
+                  $statusText = (($statusOutput | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  $responseText = [System.IO.File]::ReadAllText($responsePath)
+
+                  if ($curlExitCode -ne 0) {
+                      throw "curl failed for Git LFS API request.`n$statusText`n$responseText"
+                  }
+                  if ($statusText -notmatch "(?<Status>\d{3})$") {
+                      throw "curl did not return an HTTP status code for Git LFS API request.`n$statusText`n$responseText"
+                  }
+
+                  return [pscustomobject]@{
+                      Status = [int] $Matches["Status"]
+                      Body = $responseText.Trim()
+                  }
+              }
+              finally {
+                  Remove-Item -LiteralPath $responsePath -Force -ErrorAction SilentlyContinue
+                  if ($null -ne $requestPath) {
+                      Remove-Item -LiteralPath $requestPath -Force -ErrorAction SilentlyContinue
+                  }
+              }
+          }
+
           # Runs a native command and throws with its stderr/stdout when it fails.
           function Invoke-CheckedNativeCommand {
               param(
@@ -591,10 +683,14 @@ jobs:
                   throw "Git LFS lock id is required."
               }
 
-              Invoke-CheckedNativeCommand `
-                  -FailureMessage "Failed to force unlock $Path by Git LFS lock id ${Id}." `
-                  -Command { git lfs unlock --force "--id=$Id" } |
-                  Out-Null
+              $endpoint = Get-LfsApiEndpoint
+              $escapedId = [Uri]::EscapeDataString($Id)
+              $unlockUrl = "$endpoint/locks/$escapedId/unlock"
+              $body = @{ force = $true } | ConvertTo-Json -Compress
+              $response = Invoke-LfsApi -Method "POST" -Url $unlockUrl -Body $body
+              if ($response.Status -lt 200 -or $response.Status -ge 300) {
+                  throw "Failed to force unlock $Path by Git LFS lock id ${Id}.`nHTTP $($response.Status)`n$($response.Body)"
+              }
           }
 
           # Reads current Git LFS locks and fails closed on query or JSON errors.

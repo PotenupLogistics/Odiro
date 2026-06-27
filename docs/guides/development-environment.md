@@ -56,7 +56,7 @@ uv --version
 ### 확인
 
 ```powershell
-.\Client\Tools\CheckPrerequisites.ps1 -AllowMissing
+.\Client\Tools\CheckPrerequisites.ps1
 ```
 
 공식 문서: [Install Unreal Engine](https://dev.epicgames.com/documentation/unreal-engine/install-unreal-engine), [Offline Installer](https://dev.epicgames.com/documentation/unreal-engine/offline-installer-of-unreal-engine)
@@ -86,7 +86,7 @@ UE 5.7은 Visual Studio 2022 17.8 이상을 지원하고 17.14를 권장한다.
 ### 확인
 
 ```powershell
-.\Client\Tools\CheckPrerequisites.ps1 -AllowMissing
+.\Client\Tools\CheckPrerequisites.ps1
 ```
 
 공식 문서: [Epic: Visual Studio 구성하기](https://dev.epicgames.com/documentation/unreal-engine/setting-up-visual-studio-development-environment-for-cplusplus-projects-in-unreal-engine), [Visual Studio Tools for Unreal Engine](https://learn.microsoft.com/en-us/visualstudio/gamedev/unreal/get-started/vs-tools-unreal-install)

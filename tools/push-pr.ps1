@@ -5,8 +5,7 @@ param(
     [string] $Title = "",
     [string] $Body = "",
     [switch] $Draft,
-    [switch] $AllowDirty,
-    [switch] $DryRun
+    [switch] $CheckOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,7 +20,7 @@ trap {
 }
 
 Assert-Command "git"
-if (-not $DryRun) {
+if (-not $CheckOnly) {
     Assert-Command "gh"
 }
 
@@ -291,10 +290,10 @@ function Invoke-LfsCheckoutPreflight {
         [string] $RemoteName,
         [string] $BaseBranch,
         [string] $Branch,
-        [switch] $DryRun
+        [switch] $CheckOnly
     )
 
-    if (-not $DryRun) {
+    if (-not $CheckOnly) {
         Update-RemoteBranchRefIfPresent -RemoteName $RemoteName -BranchName $Branch
         Update-RemoteBranchRefIfPresent -RemoteName $RemoteName -BranchName $BaseBranch
     }
@@ -324,8 +323,8 @@ function Invoke-LfsCheckoutPreflight {
         }
     }
 
-    if ($DryRun) {
-        Write-Step "Dry run: would ask whether to checkout each listed asset before push."
+    if ($CheckOnly) {
+        Write-Step "Check only: would ask whether to checkout each listed asset before push."
         return
     }
 
@@ -376,19 +375,15 @@ if ($LASTEXITCODE -ne 0) {
 
 $dirty = @(git -C $repoRoot status --porcelain)
 if ($dirty.Count -gt 0) {
-    $dirtySummary = ($dirty | Select-Object -First 10) -join "`n"
-    if (-not $AllowDirty) {
-        throw "Working tree has uncommitted changes. Commit or stash them first, or rerun with -AllowDirty to push only committed branch state.`n$dirtySummary"
-    }
     Write-WarningMessage "Working tree has uncommitted changes; they will not be included in the pushed branch."
 }
 
-if ($DryRun) {
-    Invoke-LfsCheckoutPreflight -RemoteName $RemoteName -BaseBranch $BaseBranch -Branch $branch -DryRun
+if ($CheckOnly) {
+    Invoke-LfsCheckoutPreflight -RemoteName $RemoteName -BaseBranch $BaseBranch -Branch $branch -CheckOnly
     Write-Step "Would push: git push -u $RemoteName HEAD:refs/heads/$branch"
     Write-Step "Would check existing open PR: base=$BaseBranch head=$branch"
     Write-Step "Would create PR only when no open PR exists."
-    Write-Success "Dry run complete."
+    Write-Success "Check only complete."
     exit 0
 }
 

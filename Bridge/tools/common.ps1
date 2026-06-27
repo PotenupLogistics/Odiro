@@ -145,7 +145,7 @@ function Complete-Prerequisites {
     }
 
     if ($AllowMissing) {
-        Write-WarningMessage "Continuing because -AllowMissing was set."
+        Write-WarningMessage "Continuing with missing prerequisites allowed."
         return
     }
 

@@ -1,7 +1,6 @@
 # Checks repository setup prerequisites across project-owned phases.
 param(
-    [switch] $AllowMissing,
-    [switch] $PassThru
+    [switch] $CheckOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -102,15 +101,15 @@ $repoRoot = Get-RepoRoot
 $issues = @()
 $issues += @(Test-GitLfsPrerequisite)
 $issues += @(Test-GitHubCliPrerequisite)
-$issues += @(& (Join-Path $repoRoot "Agents\tools\check-prerequisites.ps1") -PassThru)
-$issues += @(& (Join-Path $repoRoot "Bridge\tools\check-prerequisites.ps1") -PassThru)
-$issues += @(& (Join-Path $repoRoot "Client\Tools\CheckPrerequisites.ps1") -PassThru)
+$issues += @(& (Join-Path $repoRoot "Agents\tools\check-prerequisites.ps1") -CheckOnly)
+$issues += @(& (Join-Path $repoRoot "Bridge\tools\check-prerequisites.ps1") -CheckOnly)
+$issues += @(& (Join-Path $repoRoot "Client\Tools\CheckPrerequisites.ps1") -CheckOnly)
 
-if ($PassThru) {
+if ($CheckOnly) {
     return $issues
 }
 
 Complete-Prerequisites `
     -Issues $issues `
-    -AllowMissing:$AllowMissing `
+    -AllowMissing `
     -SuccessMessage "Repository prerequisites OK."

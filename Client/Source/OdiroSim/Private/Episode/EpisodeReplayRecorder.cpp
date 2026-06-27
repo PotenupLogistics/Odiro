@@ -5,6 +5,15 @@
 
 namespace
 {
+	// Folder name for replay-only artifacts inside an episode directory.
+	const TCHAR* ReplayArtifactDirectoryName = TEXT("replay");
+
+	// Binary frame file name stored in the replay artifact folder.
+	const TCHAR* ReplayFrameFileName = TEXT("replay.frames.bin");
+
+	// Manifest file name stored in the replay artifact folder.
+	const TCHAR* ReplayManifestFileName = TEXT("replay.meta.json");
+
 	// Converts absolute scenario paths to a compact manifest source when possible.
 	FString NormalizeReplaySourcePath(const FString& ScenarioSamplePath)
 	{
@@ -104,8 +113,9 @@ bool FEpisodeReplayRecorder::Close(TArray<FString>& OutDiagnostics)
 		return true;
 	}
 
-	const FString FramePath = FPaths::Combine(EpisodeDirectory, TEXT("replay.frames.bin"));
-	const FString ManifestPath = FPaths::Combine(EpisodeDirectory, TEXT("replay.meta.json"));
+	const FString ReplayDirectory = FPaths::Combine(EpisodeDirectory, ReplayArtifactDirectoryName);
+	const FString FramePath = FPaths::Combine(ReplayDirectory, ReplayFrameFileName);
+	const FString ManifestPath = FPaths::Combine(ReplayDirectory, ReplayManifestFileName);
 
 	if (Frames.IsEmpty())
 	{
@@ -116,7 +126,7 @@ bool FEpisodeReplayRecorder::Close(TArray<FString>& OutDiagnostics)
 	bool bSuccess = FEpisodeReplayBinary::SaveFramesToFile(FramePath, Frames, OutDiagnostics);
 
 	FEpisodeReplayManifest Manifest;
-	Manifest.FrameFile = TEXT("replay.frames.bin");
+	Manifest.FrameFile = ReplayFrameFileName;
 	Manifest.ScenarioSample = NormalizeReplaySourcePath(ScenarioSamplePath);
 	Manifest.ScenarioHash = ScenarioHash;
 	Manifest.FrameCount = Frames.Num();

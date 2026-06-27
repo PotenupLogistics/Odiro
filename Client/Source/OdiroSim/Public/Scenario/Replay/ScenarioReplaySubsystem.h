@@ -1,12 +1,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Shared/EpisodeLidarRayReplayDataTypes.h"
 #include "Shared/EpisodeReplayDataTypes.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "ScenarioReplaySubsystem.generated.h"
 
 class ADeliveryBotReplayActor;
 class ADeliveryBotPointCloudReviewActor;
+class ADeliveryBotLidarRayReviewActor;
 class AActor;
 class ASceneCapture2D;
 class UScenarioReplayDeveloperSettings;
@@ -21,13 +23,16 @@ UENUM(BlueprintType)
 enum class EScenarioReplayCameraMode : uint8
 {
 	// Orthographic top-down camera that follows the replay robot.
-	TopDown,
+	TopDown = 0,
 
 	// User-controlled perspective camera moved by replay viewer input.
-	Free,
+	Free = 1,
 
 	// Perspective camera mounted at the replay robot's forward body offset.
-	VehicleFront
+	VehicleFront = 2,
+
+	// Robot-centered perspective camera that orbits around the replay robot.
+	Orbit = 3
 };
 
 // Owns embedded replay loading, playback state, replay actors, and render target capture.
@@ -115,6 +120,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
 	bool IsReplayCameraInputAllowed() const;
 
+	// Returns true when replay frames and capture actors are ready for camera operations.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
+	bool HasLoadedReplayFrames() const;
+
+	// Places the free camera behind and above the current replay robot.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Replay")
+	bool FocusFreeCameraOnReplayRobot();
+
 	// Shows or hides replay scenario map actors in the replay capture.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Replay")
 	void SetReplayMapVisible(bool bVisible);
@@ -131,9 +144,36 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
 	bool IsReplayPointCloudVisible() const { return bReplayPointCloudVisible; }
 
+	// Shows or hides the replay LiDAR ray actor in the replay capture.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Replay")
+	void SetReplayLidarRaysVisible(bool bVisible);
+
+	// Returns whether replay LiDAR rays are visible in the replay capture.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
+	bool IsReplayLidarRaysVisible() const { return bReplayLidarRaysVisible; }
+
 	// Returns whether the current replay has a loaded point cloud actor.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
 	bool HasReplayPointCloud() const;
+
+	// Returns whether the current replay has loaded LiDAR ray frames.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
+	bool HasReplayLidarRays() const;
+
+	// Returns the number of loaded LiDAR ray sensor frames.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
+	int32 GetLidarRayFrameCount() const;
+
+	// Returns the LiDAR ray frame index resolved from the current replay time.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
+	int32 GetCurrentLidarRayFrameIndex() const;
+
+	// Returns the number of rays in the current LiDAR ray frame.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
+	int32 GetCurrentLidarRayCount() const;
+
+	// Returns the current LiDAR ray frame for C++ replay render layers.
+	const FEpisodeLidarRayFrame* GetCurrentLidarRayFrame() const;
 
 	// Moves the free replay camera in camera-local space.
 	void AddFreeCameraMovement(
@@ -142,6 +182,12 @@ public:
 
 	// Rotates the free replay camera from mouse-look input.
 	void AddFreeCameraLook(const FVector2D& MouseDelta);
+
+	// Rotates the robot-centered replay orbit camera from mouse-look input.
+	void AddOrbitCameraLook(const FVector2D& MouseDelta);
+
+	// Adjusts the robot-centered replay orbit camera distance.
+	void AddOrbitCameraZoom(float ZoomDirection);
 
 	// Adjusts the top-down orthographic zoom by changing the capture width.
 	void AddTopDownZoom(float ZoomDirection);
@@ -171,6 +217,14 @@ private:
 	bool LoadEpisodePointCloudWorld(
 		const FString& EpisodeDirectory,
 		TArray<FString>& OutDiagnostics);
+
+	// Loads optional LiDAR ray frames for replay-only ray review.
+	bool LoadEpisodeLidarRayReplay(
+		const FString& EpisodeDirectory,
+		TArray<FString>& OutDiagnostics);
+
+	// Spawns the replay-only LiDAR ray actor when ray frames are loaded.
+	bool SpawnReplayLidarRayActor(TArray<FString>& OutDiagnostics);
 
 	// Spawns replay-only scenario actors from a compiled scenario world spec.
 	bool SpawnReplayScenarioWorld(
@@ -213,6 +267,12 @@ private:
 		FEpisodeReplayRobotFrame& OutFrame,
 		int32& OutFrameIndex) const;
 
+	// Updates the current LiDAR ray frame index for the requested replay time.
+	void ApplyLidarRayFrameAtTime(double TimeSeconds);
+
+	// Pushes the currently selected LiDAR ray frame into the render actor.
+	void RefreshReplayLidarRayActor();
+
 	// Applies the selected camera mode to the replay SceneCapture actor.
 	void UpdateReplayCaptureView(const FEpisodeReplayRobotFrame& Frame);
 
@@ -221,6 +281,9 @@ private:
 
 	// Applies user-controlled perspective capture settings.
 	void UpdateFreeReplayCamera();
+
+	// Applies robot-centered orbit capture settings.
+	void UpdateOrbitReplayCamera(const FEpisodeReplayRobotFrame& Frame);
 
 	// Applies a robot-mounted perspective camera transform.
 	void UpdateVehicleFrontReplayCamera(const FEpisodeReplayRobotFrame& Frame);
@@ -269,6 +332,18 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<ADeliveryBotPointCloudReviewActor> ReplayPointCloudActor;
 
+	// Replay-only actor that renders currently selected LiDAR ray frame lines.
+	UPROPERTY(Transient)
+	TObjectPtr<ADeliveryBotLidarRayReviewActor> ReplayLidarRayActor;
+
+	// Parsed manifest for optional episode/replay/lidar_rays artifacts.
+	UPROPERTY(Transient)
+	FEpisodeLidarRayReplayManifest LidarRayManifest;
+
+	// Loaded optional LiDAR ray frames keyed by replay time.
+	UPROPERTY(Transient)
+	TArray<FEpisodeLidarRayFrame> LidarRayFrames;
+
 	// Current playback state.
 	UPROPERTY(Transient)
 	EScenarioReplayPlaybackState PlaybackState = EScenarioReplayPlaybackState::Stopped;
@@ -285,6 +360,10 @@ private:
 	UPROPERTY(Transient)
 	bool bReplayPointCloudVisible = true;
 
+	// Whether the replay LiDAR ray actor is included in the replay capture.
+	UPROPERTY(Transient)
+	bool bReplayLidarRaysVisible = false;
+
 	// True when camera input is allowed while replay playback is paused.
 	bool bAllowCameraInputWhilePaused = true;
 
@@ -293,6 +372,9 @@ private:
 
 	// Frame index currently represented in UI and diagnostics.
 	int32 CurrentFrameIndex = INDEX_NONE;
+
+	// LiDAR ray frame index currently represented in UI and future ray rendering.
+	int32 CurrentLidarRayFrameIndex = INDEX_NONE;
 
 	// Robot speed currently represented in UI and diagnostics.
 	double CurrentRobotSpeedKmh = 0.0;
@@ -335,6 +417,51 @@ private:
 
 	// Mouse-look sensitivity used by the replay free camera.
 	double FreeCameraLookSensitivity = 0.12;
+
+	// Robot-local backward distance used when refocusing the replay free camera.
+	double FreeCameraFocusBackDistanceCm = 1200.0;
+
+	// Robot-local side offset used when refocusing the replay free camera.
+	double FreeCameraFocusSideOffsetCm = 350.0;
+
+	// Vertical lift used when refocusing the replay free camera.
+	double FreeCameraFocusHeightCm = 900.0;
+
+	// Height above the replay robot that the free camera looks at when refocusing.
+	double FreeCameraFocusTargetHeightCm = 120.0;
+
+	// Perspective field of view used by the replay orbit camera.
+	double OrbitCameraFovDegrees = 70.0;
+
+	// Current orbit yaw around the replay robot.
+	double OrbitCameraYawDegrees = 0.0;
+
+	// Current orbit pitch around the replay robot.
+	double OrbitCameraPitchDegrees = -35.0;
+
+	// Current orbit distance from the replay robot target.
+	double OrbitCameraDistanceCm = 1400.0;
+
+	// Minimum orbit distance allowed by replay zoom controls.
+	double MinOrbitCameraDistanceCm = 300.0;
+
+	// Maximum orbit distance allowed by replay zoom controls.
+	double MaxOrbitCameraDistanceCm = 6000.0;
+
+	// Orbit distance delta applied for one zoom input step.
+	double OrbitCameraZoomStepCm = 180.0;
+
+	// Minimum pitch allowed for replay orbit camera look.
+	double MinOrbitCameraPitchDegrees = -85.0;
+
+	// Maximum pitch allowed for replay orbit camera look.
+	double MaxOrbitCameraPitchDegrees = -5.0;
+
+	// Mouse-look sensitivity used by the replay orbit camera.
+	double OrbitCameraLookSensitivity = 0.12;
+
+	// Height above the replay robot that the orbit camera looks at.
+	double OrbitCameraTargetHeightCm = 120.0;
 
 	// Minimum pitch allowed for replay free camera look.
 	double MinFreeCameraPitchDegrees = -85.0;

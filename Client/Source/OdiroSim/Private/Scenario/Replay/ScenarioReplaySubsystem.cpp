@@ -1,5 +1,6 @@
 #include "Scenario/Replay/ScenarioReplaySubsystem.h"
 
+#include "DeliveryBot/Actor/DeliveryBotLidarRayReviewActor.h"
 #include "DeliveryBot/Actor/DeliveryBotPointCloudReviewActor.h"
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
@@ -26,10 +27,14 @@ DEFINE_LOG_CATEGORY_STATIC(LogScenarioReplay, Log, All);
 namespace
 {
 	const TCHAR* ReplayScenarioFileName = TEXT("scenario.json");
+	const TCHAR* ReplayArtifactDirectoryName = TEXT("replay");
+	const TCHAR* ReplayManifestFileName = TEXT("replay.meta.json");
 	const TCHAR* ReplayPointCloudDirectoryName = TEXT("lidar_point_cloud");
 	const TCHAR* ReplayPointCloudMapFileName = TEXT("map_accumulated.xyz");
 	const TCHAR* ReplayPointCloudManifestFileName = TEXT("manifest.json");
 	const TCHAR* ReplayPointCloudCaptureSummaryFileName = TEXT("capture_summary.json");
+	const TCHAR* ReplayLidarRayDirectoryName = TEXT("lidar_rays");
+	const TCHAR* ReplayLidarRayManifestFileName = TEXT("rays.meta.json");
 
 	// Carries validated point cloud import paths and coordinate metadata.
 	struct FReplayPointCloudImportInfo
@@ -49,6 +54,91 @@ namespace
 		// True after all required import files and metadata are valid.
 		bool bAvailable = false;
 	};
+
+	// Resolves the replay manifest path, preferring the replay folder and falling back to legacy root files.
+	bool TryResolveEpisodeReplayManifestPath(
+		const FString& EpisodeDirectory,
+		FString& OutManifestPath)
+	{
+		const FString ManifestPath = FPaths::Combine(
+			EpisodeDirectory,
+			ReplayArtifactDirectoryName,
+			ReplayManifestFileName);
+		if (IFileManager::Get().FileExists(*ManifestPath))
+		{
+			OutManifestPath = ManifestPath;
+			return true;
+		}
+
+		const FString LegacyManifestPath = FPaths::Combine(
+			EpisodeDirectory,
+			ReplayManifestFileName);
+		if (IFileManager::Get().FileExists(*LegacyManifestPath))
+		{
+			OutManifestPath = LegacyManifestPath;
+			return true;
+		}
+
+		OutManifestPath = ManifestPath;
+		return false;
+	}
+
+	// Resolves the binary frame file relative to the manifest that declared it.
+	FString ResolveEpisodeReplayFramePath(
+		const FString& ManifestPath,
+		const FString& FrameFile)
+	{
+		return FPaths::IsRelative(FrameFile)
+			? FPaths::Combine(FPaths::GetPath(ManifestPath), FrameFile)
+			: FrameFile;
+	}
+
+	// Counts all ray samples loaded for an optional LiDAR ray replay layer.
+	int32 CountReplayLidarRaySamples(const TArray<FEpisodeLidarRayFrame>& Frames)
+	{
+		int32 TotalRayCount = 0;
+		for (const FEpisodeLidarRayFrame& Frame : Frames)
+		{
+			TotalRayCount += Frame.Rays.Num();
+		}
+
+		return TotalRayCount;
+	}
+
+	// Returns true when loaded LiDAR ray frames are ordered for binary-search lookup.
+	bool AreReplayLidarRayFramesSorted(const TArray<FEpisodeLidarRayFrame>& Frames)
+	{
+		for (int32 FrameIndex = 1; FrameIndex < Frames.Num(); ++FrameIndex)
+		{
+			if (Frames[FrameIndex].TimeSeconds < Frames[FrameIndex - 1].TimeSeconds)
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	// Appends one optional LiDAR ray load diagnostic with layer context.
+	void AppendReplayLidarRayLoadDiagnostic(
+		const FString& Diagnostic,
+		TArray<FString>& OutDiagnostics)
+	{
+		OutDiagnostics.Add(FString::Printf(
+			TEXT("Replay LiDAR ray layer disabled: %s"),
+			*Diagnostic));
+	}
+
+	// Appends optional LiDAR ray load diagnostics with layer context.
+	void AppendReplayLidarRayLoadDiagnostics(
+		const TArray<FString>& SourceDiagnostics,
+		TArray<FString>& OutDiagnostics)
+	{
+		for (const FString& Diagnostic : SourceDiagnostics)
+		{
+			AppendReplayLidarRayLoadDiagnostic(Diagnostic, OutDiagnostics);
+		}
+	}
 
 	// Reads a nested object field if it exists and is an object.
 	bool TryGetReplayJsonObjectField(
@@ -299,14 +389,21 @@ bool UScenarioReplaySubsystem::LoadEpisodeReplay(
 		return false;
 	}
 
-	const FString ManifestPath = FPaths::Combine(LoadedEpisodeDirectory, TEXT("replay.meta.json"));
+	FString ManifestPath;
+	if (!TryResolveEpisodeReplayManifestPath(LoadedEpisodeDirectory, ManifestPath))
+	{
+		OutDiagnostics.Add(FString::Printf(TEXT("Replay manifest does not exist: %s"), *ManifestPath));
+		PlaybackState = EScenarioReplayPlaybackState::Failed;
+		return false;
+	}
+
 	if (!FEpisodeReplayManifestJson::LoadFromFile(ManifestPath, Manifest, OutDiagnostics))
 	{
 		PlaybackState = EScenarioReplayPlaybackState::Failed;
 		return false;
 	}
 
-	const FString FramePath = FPaths::Combine(LoadedEpisodeDirectory, Manifest.FrameFile);
+	const FString FramePath = ResolveEpisodeReplayFramePath(ManifestPath, Manifest.FrameFile);
 	FEpisodeReplayBinaryHeader Header;
 	if (!FEpisodeReplayBinary::LoadFramesFromFile(FramePath, Frames, Header, OutDiagnostics))
 	{
@@ -337,6 +434,7 @@ bool UScenarioReplaySubsystem::LoadEpisodeReplay(
 	}
 
 	LoadEpisodePointCloudWorld(LoadedEpisodeDirectory, OutDiagnostics);
+	LoadEpisodeLidarRayReplay(LoadedEpisodeDirectory, OutDiagnostics);
 
 	FActorSpawnParameters SpawnParameters;
 	SpawnParameters.ObjectFlags |= RF_Transient;
@@ -451,7 +549,13 @@ double UScenarioReplaySubsystem::GetPlaybackProgress() const
 
 bool UScenarioReplaySubsystem::IsReplayCameraInputAllowed() const
 {
+	if (!HasLoadedReplayFrames())
+	{
+		return false;
+	}
+
 	return PlaybackState == EScenarioReplayPlaybackState::Playing
+		|| PlaybackState == EScenarioReplayPlaybackState::Ready
 		|| (bAllowCameraInputWhilePaused
 			&& PlaybackState == EScenarioReplayPlaybackState::Paused);
 }
@@ -502,34 +606,138 @@ void UScenarioReplaySubsystem::SetReplayPointCloudVisible(const bool bVisible)
 		IsValid(ReplayPointCloudActor) ? TEXT("true") : TEXT("false"));
 }
 
+void UScenarioReplaySubsystem::SetReplayLidarRaysVisible(const bool bVisible)
+{
+	bReplayLidarRaysVisible = bVisible;
+
+	if (bVisible && HasReplayLidarRays() && !IsValid(ReplayLidarRayActor))
+	{
+		TArray<FString> SpawnDiagnostics;
+		SpawnReplayLidarRayActor(SpawnDiagnostics);
+		for (const FString& Diagnostic : SpawnDiagnostics)
+		{
+			UE_LOG(LogScenarioReplay, Warning, TEXT("%s"), *Diagnostic);
+		}
+	}
+
+	if (IsValid(ReplayLidarRayActor))
+	{
+		ReplayLidarRayActor->SetLidarRaysVisible(bVisible);
+		if (bVisible)
+		{
+			RefreshReplayLidarRayActor();
+		}
+	}
+
+	RefreshReplayCaptureShowOnlyActors();
+	CaptureReplayScene();
+
+	UE_LOG(
+		LogScenarioReplay,
+		Log,
+		TEXT("Replay LiDAR ray visibility changed | Visible=%s Available=%s"),
+		bReplayLidarRaysVisible ? TEXT("true") : TEXT("false"),
+		IsValid(ReplayLidarRayActor) ? TEXT("true") : TEXT("false"));
+}
+
 // 현재 replay가 point cloud actor를 가지고 있는지 반환한다.
 bool UScenarioReplaySubsystem::HasReplayPointCloud() const
 {
 	return IsValid(ReplayPointCloudActor);
 }
 
+bool UScenarioReplaySubsystem::HasReplayLidarRays() const
+{
+	return !LidarRayFrames.IsEmpty();
+}
+
+int32 UScenarioReplaySubsystem::GetLidarRayFrameCount() const
+{
+	return LidarRayFrames.Num();
+}
+
+int32 UScenarioReplaySubsystem::GetCurrentLidarRayFrameIndex() const
+{
+	return CurrentLidarRayFrameIndex;
+}
+
+int32 UScenarioReplaySubsystem::GetCurrentLidarRayCount() const
+{
+	const FEpisodeLidarRayFrame* CurrentLidarRayFrame = GetCurrentLidarRayFrame();
+	return CurrentLidarRayFrame != nullptr
+		? CurrentLidarRayFrame->Rays.Num()
+		: 0;
+}
+
+const FEpisodeLidarRayFrame* UScenarioReplaySubsystem::GetCurrentLidarRayFrame() const
+{
+	return LidarRayFrames.IsValidIndex(CurrentLidarRayFrameIndex)
+		? &LidarRayFrames[CurrentLidarRayFrameIndex]
+		: nullptr;
+}
+
+bool UScenarioReplaySubsystem::HasLoadedReplayFrames() const
+{
+	return !Frames.IsEmpty()
+		&& IsValid(ReplayRobotActor)
+		&& IsValid(ReplayCaptureActor)
+		&& IsValid(ReplayRenderTarget);
+}
+
+bool UScenarioReplaySubsystem::FocusFreeCameraOnReplayRobot()
+{
+	if (!HasLoadedReplayFrames())
+	{
+		return false;
+	}
+
+	CameraMode = EScenarioReplayCameraMode::Free;
+
+	const FTransform RobotTransform = ReplayRobotActor->GetActorTransform();
+	const FVector TargetLocation =
+		RobotTransform.GetLocation()
+		+ FVector::UpVector * FreeCameraFocusTargetHeightCm;
+	const FVector CameraLocation =
+		TargetLocation
+		- RobotTransform.GetUnitAxis(EAxis::X) * FreeCameraFocusBackDistanceCm
+		+ RobotTransform.GetUnitAxis(EAxis::Y) * FreeCameraFocusSideOffsetCm
+		+ FVector::UpVector * FreeCameraFocusHeightCm;
+
+	FreeCameraLocation = CameraLocation;
+	FreeCameraRotation = (TargetLocation - FreeCameraLocation).Rotation();
+	FreeCameraRotation.Roll = 0.0;
+
+	UpdateFreeReplayCamera();
+	CaptureReplayScene();
+	return true;
+}
+
 void UScenarioReplaySubsystem::SetReplayCameraMode(EScenarioReplayCameraMode NewMode)
 {
+	if (!HasLoadedReplayFrames())
+	{
+		return;
+	}
+
 	if (CameraMode == NewMode)
 	{
 		return;
 	}
 
 	CameraMode = NewMode;
+	if (CameraMode == EScenarioReplayCameraMode::Orbit)
+	{
+		OrbitCameraYawDegrees = ReplayRobotActor->GetActorRotation().Yaw;
+		ApplyFrameAtTime(CurrentReplayTimeSeconds);
+		return;
+	}
 	if (CameraMode == EScenarioReplayCameraMode::Free)
 	{
-		const FVector RobotLocation =
-			IsValid(ReplayRobotActor)
-				? ReplayRobotActor->GetActorLocation()
-				: ReplayWorldOffset;
-		FreeCameraLocation = RobotLocation + FVector(-900.0, -900.0, 650.0);
-		FreeCameraRotation = (RobotLocation - FreeCameraLocation).Rotation();
+		FocusFreeCameraOnReplayRobot();
+		return;
 	}
 
-	if (!Frames.IsEmpty())
-	{
-		ApplyFrameAtTime(CurrentReplayTimeSeconds);
-	}
+	ApplyFrameAtTime(CurrentReplayTimeSeconds);
 }
 
 void UScenarioReplaySubsystem::AddFreeCameraMovement(
@@ -537,7 +745,7 @@ void UScenarioReplaySubsystem::AddFreeCameraMovement(
 	float DeltaSeconds)
 {
 	if (CameraMode != EScenarioReplayCameraMode::Free
-		|| !IsValid(ReplayCaptureActor)
+		|| !IsReplayCameraInputAllowed()
 		|| DeltaSeconds <= 0.0f)
 	{
 		return;
@@ -569,7 +777,7 @@ void UScenarioReplaySubsystem::AddFreeCameraMovement(
 void UScenarioReplaySubsystem::AddFreeCameraLook(const FVector2D& MouseDelta)
 {
 	if (CameraMode != EScenarioReplayCameraMode::Free
-		|| !IsValid(ReplayCaptureActor)
+		|| !IsReplayCameraInputAllowed()
 		|| MouseDelta.IsNearlyZero())
 	{
 		return;
@@ -586,9 +794,46 @@ void UScenarioReplaySubsystem::AddFreeCameraLook(const FVector2D& MouseDelta)
 	CaptureReplayScene();
 }
 
+void UScenarioReplaySubsystem::AddOrbitCameraLook(const FVector2D& MouseDelta)
+{
+	if (CameraMode != EScenarioReplayCameraMode::Orbit
+		|| !IsReplayCameraInputAllowed()
+		|| MouseDelta.IsNearlyZero())
+	{
+		return;
+	}
+
+	OrbitCameraYawDegrees += MouseDelta.X * OrbitCameraLookSensitivity;
+	OrbitCameraPitchDegrees = FMath::Clamp(
+		OrbitCameraPitchDegrees - MouseDelta.Y * OrbitCameraLookSensitivity,
+		MinOrbitCameraPitchDegrees,
+		MaxOrbitCameraPitchDegrees);
+
+	ApplyFrameAtTime(CurrentReplayTimeSeconds);
+}
+
+void UScenarioReplaySubsystem::AddOrbitCameraZoom(float ZoomDirection)
+{
+	if (CameraMode != EScenarioReplayCameraMode::Orbit
+		|| !IsReplayCameraInputAllowed()
+		|| FMath::IsNearlyZero(ZoomDirection))
+	{
+		return;
+	}
+
+	OrbitCameraDistanceCm = FMath::Clamp(
+		OrbitCameraDistanceCm
+			- static_cast<double>(ZoomDirection) * OrbitCameraZoomStepCm,
+		MinOrbitCameraDistanceCm,
+		MaxOrbitCameraDistanceCm);
+
+	ApplyFrameAtTime(CurrentReplayTimeSeconds);
+}
+
 void UScenarioReplaySubsystem::AddTopDownZoom(float ZoomDirection)
 {
 	if (CameraMode != EScenarioReplayCameraMode::TopDown
+		|| !IsReplayCameraInputAllowed()
 		|| FMath::IsNearlyZero(ZoomDirection))
 	{
 		return;
@@ -681,6 +926,56 @@ void UScenarioReplaySubsystem::ApplyCameraSettings(
 		170.0);
 	FreeCameraLookSensitivity =
 		FMath::Max(0.001, Settings.FreeCameraLookSensitivity);
+	FreeCameraFocusBackDistanceCm =
+		FMath::Max(0.0, Settings.FreeCameraFocusBackDistanceCm);
+	FreeCameraFocusSideOffsetCm = Settings.FreeCameraFocusSideOffsetCm;
+	FreeCameraFocusHeightCm =
+		FMath::Max(0.0, Settings.FreeCameraFocusHeightCm);
+	FreeCameraFocusTargetHeightCm =
+		FMath::Max(0.0, Settings.FreeCameraFocusTargetHeightCm);
+
+	OrbitCameraFovDegrees = FMath::Clamp(
+		Settings.OrbitCameraFovDegrees,
+		5.0,
+		170.0);
+	const double OrderedMinOrbitDistance =
+		FMath::Max(1.0, FMath::Min(
+			Settings.MinOrbitCameraDistanceCm,
+			Settings.MaxOrbitCameraDistanceCm));
+	const double OrderedMaxOrbitDistance =
+		FMath::Max(OrderedMinOrbitDistance, FMath::Max(
+			Settings.MinOrbitCameraDistanceCm,
+			Settings.MaxOrbitCameraDistanceCm));
+	MinOrbitCameraDistanceCm = OrderedMinOrbitDistance;
+	MaxOrbitCameraDistanceCm = OrderedMaxOrbitDistance;
+	OrbitCameraDistanceCm = FMath::Clamp(
+		Settings.OrbitCameraDistanceCm,
+		MinOrbitCameraDistanceCm,
+		MaxOrbitCameraDistanceCm);
+	OrbitCameraZoomStepCm = FMath::Max(1.0, Settings.OrbitCameraZoomStepCm);
+
+	const double OrderedMinOrbitPitch = FMath::Clamp(
+		FMath::Min(
+			Settings.MinOrbitCameraPitchDegrees,
+			Settings.MaxOrbitCameraPitchDegrees),
+		-89.0,
+		89.0);
+	const double OrderedMaxOrbitPitch = FMath::Clamp(
+		FMath::Max(
+			Settings.MinOrbitCameraPitchDegrees,
+			Settings.MaxOrbitCameraPitchDegrees),
+		OrderedMinOrbitPitch,
+		89.0);
+	MinOrbitCameraPitchDegrees = OrderedMinOrbitPitch;
+	MaxOrbitCameraPitchDegrees = OrderedMaxOrbitPitch;
+	OrbitCameraPitchDegrees = FMath::Clamp(
+		Settings.OrbitCameraPitchDegrees,
+		MinOrbitCameraPitchDegrees,
+		MaxOrbitCameraPitchDegrees);
+	OrbitCameraLookSensitivity =
+		FMath::Max(0.001, Settings.OrbitCameraLookSensitivity);
+	OrbitCameraTargetHeightCm =
+		FMath::Max(0.0, Settings.OrbitCameraTargetHeightCm);
 
 	const double OrderedMinPitch = FMath::Clamp(
 		FMath::Min(
@@ -727,6 +1022,12 @@ void UScenarioReplaySubsystem::CleanupReplayWorld()
 	}
 	ReplayPointCloudActor = nullptr;
 
+	if (IsValid(ReplayLidarRayActor))
+	{
+		ReplayLidarRayActor->Destroy();
+	}
+	ReplayLidarRayActor = nullptr;
+
 	for (int32 Index = ReplayScenarioActors.Num() - 1; Index >= 0; --Index)
 	{
 		if (AActor* Actor = ReplayScenarioActors[Index].Get())
@@ -744,15 +1045,19 @@ void UScenarioReplaySubsystem::CleanupReplayWorld()
 
 	Frames.Reset();
 	Manifest = FEpisodeReplayManifest{};
+	LidarRayFrames.Reset();
+	LidarRayManifest = FEpisodeLidarRayReplayManifest{};
 	LoadedEpisodeDirectory.Reset();
 	CurrentReplayTimeSeconds = 0.0;
 	CurrentFrameIndex = INDEX_NONE;
+	CurrentLidarRayFrameIndex = INDEX_NONE;
 	CurrentRobotSpeedKmh = 0.0;
 	CurrentRobotPositionCm = FVector::ZeroVector;
 	PlaybackState = EScenarioReplayPlaybackState::Stopped;
 	CameraMode = EScenarioReplayCameraMode::TopDown;
 	bReplayMapVisible = true;
 	bReplayPointCloudVisible = true;
+	bReplayLidarRaysVisible = false;
 	FreeCameraLocation = FVector::ZeroVector;
 	FreeCameraRotation = FRotator(-35.0, 0.0, 0.0);
 }
@@ -861,6 +1166,140 @@ bool UScenarioReplaySubsystem::LoadEpisodePointCloudWorld(
 		ImportInfo.CaptureOriginCm.Z,
 		ImportInfo.ImportYAxisSign);
 
+	return true;
+}
+
+bool UScenarioReplaySubsystem::LoadEpisodeLidarRayReplay(
+	const FString& EpisodeDirectory,
+	TArray<FString>& OutDiagnostics)
+{
+	LidarRayManifest = FEpisodeLidarRayReplayManifest{};
+	LidarRayFrames.Reset();
+	CurrentLidarRayFrameIndex = INDEX_NONE;
+
+	FString LidarRayDirectory = FPaths::Combine(
+		EpisodeDirectory,
+		ReplayArtifactDirectoryName,
+		ReplayLidarRayDirectoryName);
+	FPaths::NormalizeDirectoryName(LidarRayDirectory);
+
+	FString ManifestPath = FPaths::Combine(
+		LidarRayDirectory,
+		ReplayLidarRayManifestFileName);
+	FPaths::NormalizeFilename(ManifestPath);
+	if (!IFileManager::Get().FileExists(*ManifestPath))
+	{
+		AppendReplayLidarRayLoadDiagnostic(
+			FString::Printf(TEXT("manifest is missing: %s"), *ManifestPath),
+			OutDiagnostics);
+		return false;
+	}
+
+	FEpisodeLidarRayReplayManifest LoadedManifest;
+	TArray<FString> LidarRayDiagnostics;
+	if (!FEpisodeLidarRayReplayManifestJson::LoadFromFile(
+		ManifestPath,
+		LoadedManifest,
+		LidarRayDiagnostics))
+	{
+		AppendReplayLidarRayLoadDiagnostics(LidarRayDiagnostics, OutDiagnostics);
+		return false;
+	}
+
+	const FString FramePath = ResolveEpisodeReplayFramePath(ManifestPath, LoadedManifest.FrameFile);
+	TArray<FEpisodeLidarRayFrame> LoadedFrames;
+	if (!FEpisodeLidarRayReplayBinary::LoadFramesFromFile(
+		FramePath,
+		LoadedFrames,
+		LidarRayDiagnostics))
+	{
+		AppendReplayLidarRayLoadDiagnostics(LidarRayDiagnostics, OutDiagnostics);
+		return false;
+	}
+
+	if (LoadedFrames.Num() != LoadedManifest.FrameCount)
+	{
+		AppendReplayLidarRayLoadDiagnostic(
+			TEXT("manifest frame count does not match binary frame count."),
+			OutDiagnostics);
+		return false;
+	}
+
+	const int32 LoadedRayCount = CountReplayLidarRaySamples(LoadedFrames);
+	if (LoadedRayCount != LoadedManifest.TotalRayCount)
+	{
+		AppendReplayLidarRayLoadDiagnostic(
+			TEXT("manifest total ray count does not match binary ray count."),
+			OutDiagnostics);
+		return false;
+	}
+
+	if (!AreReplayLidarRayFramesSorted(LoadedFrames))
+	{
+		AppendReplayLidarRayLoadDiagnostic(
+			TEXT("frame times are not sorted."),
+			OutDiagnostics);
+		return false;
+	}
+
+	LidarRayManifest = MoveTemp(LoadedManifest);
+	LidarRayFrames = MoveTemp(LoadedFrames);
+	CurrentLidarRayFrameIndex = FEpisodeLidarRayReplayBinary::ResolveFrameIndex(
+		0.0,
+		LidarRayFrames);
+
+	UE_LOG(
+		LogScenarioReplay,
+		Log,
+		TEXT("Replay LiDAR ray layer loaded | Frames=%d Rays=%d FirstSequence=%d LastSequence=%d"),
+		LidarRayFrames.Num(),
+		LoadedRayCount,
+		LidarRayManifest.FirstSensorSequence,
+		LidarRayManifest.LastSensorSequence);
+	return HasReplayLidarRays();
+}
+
+bool UScenarioReplaySubsystem::SpawnReplayLidarRayActor(TArray<FString>& OutDiagnostics)
+{
+	if (IsValid(ReplayLidarRayActor))
+	{
+		return true;
+	}
+
+	if (!HasReplayLidarRays())
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		OutDiagnostics.Add(TEXT("Replay LiDAR ray actor requires a valid world."));
+		return false;
+	}
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.ObjectFlags |= RF_Transient;
+	SpawnParameters.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	ADeliveryBotLidarRayReviewActor* LidarRayActor =
+		World->SpawnActor<ADeliveryBotLidarRayReviewActor>(
+			ADeliveryBotLidarRayReviewActor::StaticClass(),
+			ReplayWorldOffset,
+			FRotator::ZeroRotator,
+			SpawnParameters);
+	if (!IsValid(LidarRayActor))
+	{
+		OutDiagnostics.Add(TEXT("Failed to spawn replay LiDAR ray actor; LiDAR ray layer will be disabled."));
+		return false;
+	}
+
+	LidarRayActor->Tags.AddUnique(FName(TEXT("ReplayOnly")));
+	LidarRayActor->SetLidarRaysVisible(bReplayLidarRaysVisible);
+	ReplayLidarRayActor = LidarRayActor;
+	RefreshReplayLidarRayActor();
+	RefreshReplayCaptureShowOnlyActors();
 	return true;
 }
 
@@ -1026,6 +1465,11 @@ void UScenarioReplaySubsystem::PopulateReplayCaptureShowOnlyActors(
 	{
 		CaptureComponent.ShowOnlyActors.Add(ReplayPointCloudActor);
 	}
+
+	if (bReplayLidarRaysVisible && IsValid(ReplayLidarRayActor))
+	{
+		CaptureComponent.ShowOnlyActors.Add(ReplayLidarRayActor);
+	}
 }
 
 // 현재 replay capture component의 show-only 목록을 다시 만든다.
@@ -1070,6 +1514,7 @@ bool UScenarioReplaySubsystem::ApplyFrameAtTime(double TimeSeconds)
 	CurrentFrameIndex = FrameIndex;
 	CurrentRobotSpeedKmh = Frame.SpeedKmh;
 	CurrentRobotPositionCm = Frame.PositionCm;
+	ApplyLidarRayFrameAtTime(TimeSeconds);
 
 	UpdateReplayCaptureView(Frame);
 	CaptureReplayScene();
@@ -1207,6 +1652,27 @@ bool UScenarioReplaySubsystem::BuildInterpolatedFrameAtTime(
 	return true;
 }
 
+void UScenarioReplaySubsystem::ApplyLidarRayFrameAtTime(double TimeSeconds)
+{
+	CurrentLidarRayFrameIndex = FEpisodeLidarRayReplayBinary::ResolveFrameIndex(
+		TimeSeconds,
+		LidarRayFrames);
+	RefreshReplayLidarRayActor();
+}
+
+void UScenarioReplaySubsystem::RefreshReplayLidarRayActor()
+{
+	if (!IsValid(ReplayLidarRayActor))
+	{
+		return;
+	}
+
+	ReplayLidarRayActor->ApplyLidarRayFrame(
+		GetCurrentLidarRayFrame(),
+		LidarRayManifest,
+		ReplayWorldOffset);
+}
+
 void UScenarioReplaySubsystem::UpdateReplayCaptureView(
 	const FEpisodeReplayRobotFrame& Frame)
 {
@@ -1214,6 +1680,10 @@ void UScenarioReplaySubsystem::UpdateReplayCaptureView(
 
 	switch (CameraMode)
 	{
+	case EScenarioReplayCameraMode::Orbit:
+		UpdateOrbitReplayCamera(Frame);
+		break;
+
 	case EScenarioReplayCameraMode::Free:
 		UpdateFreeReplayCamera();
 		break;
@@ -1259,6 +1729,33 @@ void UScenarioReplaySubsystem::UpdateFreeReplayCamera()
 	CaptureComponent->FOVAngle = static_cast<float>(FreeCameraFovDegrees);
 	ReplayCaptureActor->SetActorLocation(FreeCameraLocation);
 	ReplayCaptureActor->SetActorRotation(FreeCameraRotation);
+}
+
+void UScenarioReplaySubsystem::UpdateOrbitReplayCamera(
+	const FEpisodeReplayRobotFrame& Frame)
+{
+	USceneCaptureComponent2D* CaptureComponent = GetReplayCaptureComponent();
+	if (!IsValid(ReplayCaptureActor) || !IsValid(CaptureComponent))
+	{
+		return;
+	}
+
+	const FVector TargetLocation =
+		Frame.PositionCm
+		+ ReplayWorldOffset
+		+ FVector::UpVector * OrbitCameraTargetHeightCm;
+	const FRotator OrbitRotation(
+		OrbitCameraPitchDegrees,
+		OrbitCameraYawDegrees,
+		0.0);
+	const FVector CameraLocation =
+		TargetLocation
+		- OrbitRotation.Vector() * OrbitCameraDistanceCm;
+
+	CaptureComponent->ProjectionType = ECameraProjectionMode::Perspective;
+	CaptureComponent->FOVAngle = static_cast<float>(OrbitCameraFovDegrees);
+	ReplayCaptureActor->SetActorLocation(CameraLocation);
+	ReplayCaptureActor->SetActorRotation((TargetLocation - CameraLocation).Rotation());
 }
 
 void UScenarioReplaySubsystem::UpdateVehicleFrontReplayCamera(

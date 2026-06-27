@@ -121,6 +121,10 @@ private:
 	UFUNCTION()
 	void HandleTopDownCameraClicked();
 
+	// Switches the replay camera to robot-centered orbit mode.
+	UFUNCTION()
+	void HandleOrbitCameraClicked();
+
 	// Switches the replay camera to user-controlled free mode.
 	UFUNCTION()
 	void HandleFreeCameraClicked();
@@ -136,6 +140,10 @@ private:
 	// Toggles replay point cloud visibility in fullscreen mode.
 	UFUNCTION()
 	void HandleFullscreenPointCloudToggleClicked();
+
+	// Toggles replay LiDAR ray visibility in fullscreen mode.
+	UFUNCTION()
+	void HandleFullscreenRayToggleClicked();
 
 	// Returns the world replay subsystem for this viewer.
 	UScenarioReplaySubsystem* GetReplaySubsystem() const;
@@ -181,8 +189,8 @@ private:
 	// Returns true when replay camera shortcuts should affect the active replay.
 	bool CanUseReplayCameraInput() const;
 
-	// Returns true when free-camera mouse look should affect the active replay.
-	bool CanUseFreeCameraLook() const;
+	// Returns true when mouse look should affect the active replay camera.
+	bool CanUseReplayCameraLook() const;
 
 	// Builds a camera-local movement vector from held replay movement keys.
 	FVector BuildFreeCameraInput() const;
@@ -248,6 +256,10 @@ private:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> FullscreenTopDownCameraButton;
 
+	// Fullscreen button that selects the robot-centered orbit replay camera.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> FullscreenOrbitCameraButton;
+
 	// Fullscreen button that selects the user-controlled free replay camera.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> FullscreenFreeCameraButton;
@@ -263,6 +275,10 @@ private:
 	// Fullscreen button that toggles replay point cloud visibility.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> FullscreenPointCloudToggleButton;
+
+	// Fullscreen button that toggles replay LiDAR ray visibility.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> FullscreenRayToggleButton;
 
 	// Button that hides the fullscreen replay overlay.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

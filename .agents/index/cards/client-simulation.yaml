@@ -8,11 +8,16 @@ paths:
   - Client/Source/OdiroSim/Private/Episode/**
   - Client/Source/OdiroSim/Public/Shared/**
   - Client/Source/OdiroSim/Private/Shared/**
+  - Client/Source/OdiroSim/Public/DeliveryBot/Actor/DeliveryBotLidarRayReviewActor.h
+  - Client/Source/OdiroSim/Private/DeliveryBot/Actor/DeliveryBotLidarRayReviewActor.cpp
   - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayCardWidget.h
   - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayCardWidget.cpp
   - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayViewerWidget.h
   - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayViewerWidget.cpp
   - Client/Content/Blueprints/Vehicle/BP_DeliveryBotReplayVisual.uasset
+  - Client/Content/Materials/M_LidarRayHit.uasset
+  - Client/Content/Materials/M_LidarRayMiss.uasset
+  - Client/Content/Models/DeliveryBot/SM_LiDARLay.uasset
   - Client/Content/Input/**
   - Client/Content/Maps/ScenarioEditorMap.umap
   - Client/Content/Maps/ScenarioSimulationMap.umap
@@ -23,6 +28,7 @@ paths:
   - ReplayCurrentHandoff.local.md
   - ReplayRobotVisual.local.md
   - ReplayPointCloudAgent.local.md
+  - LiDARLayAgent.local.md
   - Client/Docs/plans/PLAN-260622-scenario-episode-preview-capture.local.md
   - contracts/specs/user-project-data.md
   - docs/specs/simulation-interface.md
@@ -72,6 +78,7 @@ entry:
       - ReplayCurrentHandoff.local.md
       - ReplayRobotVisual.local.md
       - ReplayPointCloudAgent.local.md
+      - LiDARLayAgent.local.md
       - Client/Docs/specs/replay-embedded-view-flow.local.html
       - Client/Source/OdiroSim/Public/Scenario
       - Client/Source/OdiroSim/Private/Scenario
@@ -120,15 +127,20 @@ guardrails:
   - ScenarioEditorController requests the project preview only after scenario.json saves successfully; capture failure removes stale preview.png without changing the save result.
   - ScenarioRunnerSubsystem schedules project episode preview.png after evaluation starts; capture failure must not change episode outcome.
   - Embedded Replay reads episode replay artifacts and must not call OpenLevel, launch a new window, or re-run policy/physics as replay.
-  - Embedded Replay camera modes move only the replay SceneCapture; TopDown, Free, and VehicleFront views must not alter replay frames, robot playback, or simulation physics.
+  - Embedded Replay camera modes move only the replay SceneCapture; TopDown, Orbit, Free, and VehicleFront views must not alter replay frames, robot playback, or simulation physics.
+  - Embedded Replay camera input and mode changes require loaded replay frames and capture actors; re-clicking Free refocuses the camera on the current replay robot.
   - Embedded Replay camera tuning values are project settings owned by Scenario Replay developer settings; tune camera feel there before changing replay frame data.
   - Embedded Replay timeline UI displays replay subsystem time/frame/speed state and seeks through ScenarioReplaySubsystem.Seek rather than mutating replay artifacts.
   - Embedded Replay fullscreen in WBP_MainMenu moves the same ProjectEpisodeReplayViewerWidget between normal and fullscreen Overlay hosts; do not create a second replay viewer instance for fullscreen.
-  - Embedded Replay fullscreen controls use dedicated WBP_Replay button names for playback, direct camera selection, and map/point-cloud layer toggles; the normal view can keep its single camera-cycle button.
+  - Embedded Replay fullscreen controls use dedicated WBP_Replay button names for playback, direct camera selection, and map/point-cloud/LiDAR-ray layer toggles; the normal view can keep its single camera-cycle button.
   - Embedded Replay map and point-cloud toggles are render-layer visibility only; they must not alter replay frames, robot playback, policy, or physics.
-  - Embedded Replay point-cloud review uses LidarPointCloudRuntime rendering for Free and VehicleFront views, while TopDown uses review-actor-owned HISM sphere instances because the plugin renderer is not reliable in orthographic capture.
+  - Embedded Replay point-cloud review uses LidarPointCloudRuntime rendering for Orbit, Free, and VehicleFront views, while TopDown uses review-actor-owned HISM sphere instances because the plugin renderer is not reliable in orthographic capture.
+  - Embedded Replay LiDAR Ray review is a replay-only optional layer sourced from Unreal sensor snapshots and stored under episode/replay/lidar_rays; it must not depend on Python point-cloud artifacts.
+  - ScenarioReplaySubsystem owns LiDAR Ray artifact load state and time-to-frame selection; render actors should consume its current-frame API rather than reading rays.frames.bin directly.
+  - Embedded Replay LiDAR Ray rendering uses a ScenarioReplaySubsystem-owned replay-only actor; UI controls should toggle subsystem visibility, not spawn actors or read ray files.
+  - Embedded Replay LiDAR Ray rendering uses SM_LiDARLay through hit/miss UInstancedStaticMeshComponent components with M_LidarRayHit and M_LidarRayMiss; keep the layer default-off and add it to SceneCapture show-only only while toggled visible.
   - Embedded Replay V2 wheel data stores baked visual wheel poses from the runtime robot; replay actors must apply the poses without running Chaos Vehicle, policy, HTTP, or sensors.
-  - Replay-specific high-frequency data belongs in replay.meta.json/replay.frames.bin; trace.jsonl remains LLM/human analysis-oriented unless a task explicitly changes trace.
+  - Replay-specific high-frequency data belongs under episode/replay/ (replay.meta.json, replay.frames.bin, and future lidar_rays files); trace.jsonl remains LLM/human analysis-oriented unless a task explicitly changes trace.
 verify:
   - when: scenario contracts, schemas, or samples change
     run:
@@ -150,6 +162,7 @@ verify:
   - when: embedded replay data, writer, reader, playback, or UI changes
     run:
       - focused replay manifest/binary reader tests
+      - focused LiDAR ray data/recorder automation tests
       - focused Scenario/Episode run-output tests
       - OdiroSimEditor build
 links:

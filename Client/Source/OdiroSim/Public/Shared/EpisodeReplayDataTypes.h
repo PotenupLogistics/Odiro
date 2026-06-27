@@ -209,7 +209,7 @@ struct ODIROSIM_API FEpisodeReplayManifest
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Replay")
 	int32 Version = EpisodeReplayV1::Version;
 
-	// Binary frame file name relative to the episode directory.
+	// Binary frame file name relative to the replay manifest directory.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Episode|Replay")
 	FString FrameFile = TEXT("replay.frames.bin");
 

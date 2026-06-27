@@ -6,6 +6,7 @@
 #include "ScenarioReplaySubsystem.generated.h"
 
 class ADeliveryBotReplayActor;
+class ADeliveryBotPointCloudReviewActor;
 class AActor;
 class ASceneCapture2D;
 class UScenarioReplayDeveloperSettings;
@@ -114,6 +115,26 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
 	bool IsReplayCameraInputAllowed() const;
 
+	// Shows or hides replay scenario map actors in the replay capture.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Replay")
+	void SetReplayMapVisible(bool bVisible);
+
+	// Returns whether replay scenario map actors are visible in the replay capture.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
+	bool IsReplayMapVisible() const { return bReplayMapVisible; }
+
+	// Shows or hides the replay point cloud actor in the replay capture.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Replay")
+	void SetReplayPointCloudVisible(bool bVisible);
+
+	// Returns whether the replay point cloud actor is visible in the replay capture.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
+	bool IsReplayPointCloudVisible() const { return bReplayPointCloudVisible; }
+
+	// Returns whether the current replay has a loaded point cloud actor.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Replay")
+	bool HasReplayPointCloud() const;
+
 	// Moves the free replay camera in camera-local space.
 	void AddFreeCameraMovement(
 		const FVector& LocalInput,
@@ -146,6 +167,11 @@ private:
 		const FString& EpisodeDirectory,
 		TArray<FString>& OutDiagnostics);
 
+	// Loads the optional episode point cloud layer when capture artifacts exist.
+	bool LoadEpisodePointCloudWorld(
+		const FString& EpisodeDirectory,
+		TArray<FString>& OutDiagnostics);
+
 	// Spawns replay-only scenario actors from a compiled scenario world spec.
 	bool SpawnReplayScenarioWorld(
 		const FScenarioWorldSpec& WorldSpec,
@@ -167,6 +193,16 @@ private:
 
 	// Adds one transient replay actor to capture visibility and cleanup ownership.
 	void RegisterReplayScenarioActor(AActor* Actor);
+
+	// Rebuilds one capture component's show-only list from current replay layer visibility.
+	void PopulateReplayCaptureShowOnlyActors(
+		USceneCaptureComponent2D& CaptureComponent) const;
+
+	// Rebuilds the active replay capture show-only list from current replay layer visibility.
+	void RefreshReplayCaptureShowOnlyActors();
+
+	// Updates the point cloud renderer for the active replay camera mode.
+	void RefreshReplayPointCloudRenderMode();
 
 	// Applies the nearest loaded frame and captures the scene into the render target.
 	bool ApplyFrameAtTime(double TimeSeconds);
@@ -229,6 +265,10 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> ReplayScenarioActors;
 
+	// Replay-only point cloud actor generated from episode lidar_point_cloud artifacts.
+	UPROPERTY(Transient)
+	TObjectPtr<ADeliveryBotPointCloudReviewActor> ReplayPointCloudActor;
+
 	// Current playback state.
 	UPROPERTY(Transient)
 	EScenarioReplayPlaybackState PlaybackState = EScenarioReplayPlaybackState::Stopped;
@@ -236,6 +276,14 @@ private:
 	// Camera mode used to place and configure the replay SceneCapture.
 	UPROPERTY(Transient)
 	EScenarioReplayCameraMode CameraMode = EScenarioReplayCameraMode::TopDown;
+
+	// Whether replay scenario map actors are included in the replay capture.
+	UPROPERTY(Transient)
+	bool bReplayMapVisible = true;
+
+	// Whether the replay point cloud actor is included in the replay capture.
+	UPROPERTY(Transient)
+	bool bReplayPointCloudVisible = true;
 
 	// True when camera input is allowed while replay playback is paused.
 	bool bAllowCameraInputWhilePaused = true;

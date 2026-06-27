@@ -1,5 +1,7 @@
 #include "Scenario/Replay/ScenarioReplaySubsystem.h"
 
+#include "DeliveryBot/Actor/DeliveryBotPointCloudReviewActor.h"
+#include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
 #include "Scenario/Actors/ScenarioCorridorRuntimeActor.h"
 #include "Scenario/Actors/ScenarioStaticObstacle.h"
@@ -8,19 +10,255 @@
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/SceneCapture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Scenario/Replay/ScenarioReplayDeveloperSettings.h"
 #include "Scenario/Replay/DeliveryBotReplayActor.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "Shared/ScenarioCompileTypes.h"
 #include "Shared/ScenarioSampleJson.h"
 #include "Shared/ScenarioSpecTypes.h"
+#include "Shared/ScenarioViewportPresentation.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogScenarioReplay, Log, All);
 
 namespace
 {
 	const TCHAR* ReplayScenarioFileName = TEXT("scenario.json");
+	const TCHAR* ReplayPointCloudDirectoryName = TEXT("lidar_point_cloud");
+	const TCHAR* ReplayPointCloudMapFileName = TEXT("map_accumulated.xyz");
+	const TCHAR* ReplayPointCloudManifestFileName = TEXT("manifest.json");
+	const TCHAR* ReplayPointCloudCaptureSummaryFileName = TEXT("capture_summary.json");
 
+	// Carries validated point cloud import paths and coordinate metadata.
+	struct FReplayPointCloudImportInfo
+	{
+		// Absolute path to the episode map_accumulated.xyz file.
+		FString XyzFilePath;
+
+		// Absolute path to the metadata file that provided coordinate settings.
+		FString MetadataFilePath;
+
+		// Capture-space origin used to restore map-local xyz points.
+		FVector CaptureOriginCm = FVector::ZeroVector;
+
+		// Y-axis sign used to restore map-local xyz points.
+		float ImportYAxisSign = -1.0f;
+
+		// True after all required import files and metadata are valid.
+		bool bAvailable = false;
+	};
+
+	// Reads a nested object field if it exists and is an object.
+	bool TryGetReplayJsonObjectField(
+		const FJsonObject& Object,
+		const FString& FieldName,
+		TSharedPtr<FJsonObject>& OutObject)
+	{
+		const TSharedPtr<FJsonObject>* ObjectPtr = nullptr;
+		if (!Object.TryGetObjectField(FieldName, ObjectPtr)
+			|| ObjectPtr == nullptr
+			|| !ObjectPtr->IsValid())
+		{
+			OutObject.Reset();
+			return false;
+		}
+
+		OutObject = *ObjectPtr;
+		return true;
+	}
+
+	// Loads one JSON object file for replay point cloud metadata.
+	bool LoadReplayJsonObject(
+		const FString& JsonPath,
+		TSharedPtr<FJsonObject>& OutRootObject,
+		FString& OutErrorMessage)
+	{
+		OutRootObject.Reset();
+		OutErrorMessage.Reset();
+
+		FString JsonString;
+		if (!FFileHelper::LoadFileToString(JsonString, *JsonPath))
+		{
+			OutErrorMessage = FString::Printf(TEXT("failed to read json file: %s"), *JsonPath);
+			return false;
+		}
+
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
+		if (!FJsonSerializer::Deserialize(Reader, OutRootObject) || !OutRootObject.IsValid())
+		{
+			OutErrorMessage = FString::Printf(TEXT("failed to parse json file: %s"), *JsonPath);
+			return false;
+		}
+
+		return true;
+	}
+
+	// Reads a centimeter vector object with x, y, and z number fields.
+	bool TryReadReplayPointCloudVectorCm(
+		const FJsonObject& JsonObject,
+		const FString& FieldName,
+		FVector& OutVector)
+	{
+		TSharedPtr<FJsonObject> VectorObject;
+		if (!TryGetReplayJsonObjectField(JsonObject, FieldName, VectorObject))
+		{
+			return false;
+		}
+
+		double X = 0.0;
+		double Y = 0.0;
+		double Z = 0.0;
+		if (!VectorObject->TryGetNumberField(TEXT("x"), X)
+			|| !VectorObject->TryGetNumberField(TEXT("y"), Y)
+			|| !VectorObject->TryGetNumberField(TEXT("z"), Z)
+			|| !FMath::IsFinite(X)
+			|| !FMath::IsFinite(Y)
+			|| !FMath::IsFinite(Z))
+		{
+			return false;
+		}
+
+		OutVector = FVector(X, Y, Z);
+		return true;
+	}
+
+	// Reads point cloud coordinate metadata from manifest.json or capture_summary.json.
+	bool TryReadReplayPointCloudMetadata(
+		const FString& MetadataPath,
+		FReplayPointCloudImportInfo& InOutInfo,
+		FString& OutErrorMessage)
+	{
+		OutErrorMessage.Reset();
+
+		TSharedPtr<FJsonObject> RootObject;
+		if (!LoadReplayJsonObject(MetadataPath, RootObject, OutErrorMessage))
+		{
+			return false;
+		}
+
+		FString PointUnit;
+		if (!RootObject->TryGetStringField(TEXT("pointUnit"), PointUnit)
+			|| !PointUnit.Equals(TEXT("centimeter"), ESearchCase::IgnoreCase))
+		{
+			OutErrorMessage = FString::Printf(
+				TEXT("pointUnit must be centimeter: %s"),
+				*MetadataPath);
+			return false;
+		}
+
+		FString PointFormat;
+		if (RootObject->TryGetStringField(TEXT("pointFormat"), PointFormat)
+			&& !PointFormat.Equals(TEXT("xyzrgb_ascii"), ESearchCase::IgnoreCase))
+		{
+			OutErrorMessage = FString::Printf(
+				TEXT("pointFormat must be xyzrgb_ascii: %s"),
+				*MetadataPath);
+			return false;
+		}
+
+		FVector CaptureOriginCm = FVector::ZeroVector;
+		if (!TryReadReplayPointCloudVectorCm(*RootObject, TEXT("captureOriginCm"), CaptureOriginCm))
+		{
+			OutErrorMessage = FString::Printf(
+				TEXT("captureOriginCm is missing or invalid: %s"),
+				*MetadataPath);
+			return false;
+		}
+
+		double ImportYAxisSign = 0.0;
+		if (!RootObject->TryGetNumberField(TEXT("importYAxisSign"), ImportYAxisSign)
+			|| !FMath::IsFinite(ImportYAxisSign)
+			|| !FMath::IsNearlyEqual(FMath::Abs(ImportYAxisSign), 1.0, 0.001))
+		{
+			OutErrorMessage = FString::Printf(
+				TEXT("importYAxisSign must be -1 or 1: %s"),
+				*MetadataPath);
+			return false;
+		}
+
+		InOutInfo.MetadataFilePath = MetadataPath;
+		InOutInfo.CaptureOriginCm = CaptureOriginCm;
+		InOutInfo.ImportYAxisSign = static_cast<float>(ImportYAxisSign);
+		return true;
+	}
+
+	// Resolves the optional episode point cloud file and its coordinate metadata.
+	bool TryResolveReplayPointCloudImportInfo(
+		const FString& EpisodeDirectory,
+		FReplayPointCloudImportInfo& OutImportInfo,
+		TArray<FString>& OutDiagnostics)
+	{
+		OutImportInfo = FReplayPointCloudImportInfo{};
+
+		FString PointCloudDirectory = FPaths::Combine(
+			EpisodeDirectory,
+			ReplayPointCloudDirectoryName);
+		FPaths::NormalizeDirectoryName(PointCloudDirectory);
+
+		FString XyzFilePath = FPaths::Combine(
+			PointCloudDirectory,
+			ReplayPointCloudMapFileName);
+		FPaths::NormalizeFilename(XyzFilePath);
+
+		if (!IFileManager::Get().FileExists(*XyzFilePath))
+		{
+			OutDiagnostics.Add(FString::Printf(
+				TEXT("Replay point cloud file is missing; point cloud layer will be disabled: %s"),
+				*XyzFilePath));
+			return false;
+		}
+
+		TArray<FString> MetadataPaths;
+		const FString ManifestPath = FPaths::Combine(
+			PointCloudDirectory,
+			ReplayPointCloudManifestFileName);
+		if (IFileManager::Get().FileExists(*ManifestPath))
+		{
+			MetadataPaths.Add(ManifestPath);
+		}
+
+		const FString CaptureSummaryPath = FPaths::Combine(
+			PointCloudDirectory,
+			ReplayPointCloudCaptureSummaryFileName);
+		if (IFileManager::Get().FileExists(*CaptureSummaryPath))
+		{
+			MetadataPaths.Add(CaptureSummaryPath);
+		}
+
+		if (MetadataPaths.IsEmpty())
+		{
+			OutDiagnostics.Add(FString::Printf(
+				TEXT("Replay point cloud metadata is missing; point cloud layer will be disabled: %s"),
+				*PointCloudDirectory));
+			return false;
+		}
+
+		for (FString MetadataPath : MetadataPaths)
+		{
+			FPaths::NormalizeFilename(MetadataPath);
+
+			FReplayPointCloudImportInfo CandidateInfo;
+			CandidateInfo.XyzFilePath = XyzFilePath;
+
+			FString ErrorMessage;
+			if (TryReadReplayPointCloudMetadata(MetadataPath, CandidateInfo, ErrorMessage))
+			{
+				CandidateInfo.bAvailable = true;
+				OutImportInfo = MoveTemp(CandidateInfo);
+				return true;
+			}
+
+			OutDiagnostics.Add(FString::Printf(
+				TEXT("Replay point cloud metadata is invalid; trying next metadata file if available: %s"),
+				*ErrorMessage));
+		}
+
+		return false;
+	}
+
+	// Appends schema diagnostics to replay UI diagnostics.
 	void AppendReplaySchemaDiagnostics(
 		const TArray<FScenarioSchemaDiagnostic>& SourceDiagnostics,
 		TArray<FString>& OutDiagnostics)
@@ -31,6 +269,7 @@ namespace
 		}
 	}
 
+	// Appends compile diagnostics to replay UI diagnostics.
 	void AppendReplayCompileDiagnostics(
 		const TArray<FScenarioCompileDiagnostic>& SourceDiagnostics,
 		TArray<FString>& OutDiagnostics)
@@ -96,6 +335,8 @@ bool UScenarioReplaySubsystem::LoadEpisodeReplay(
 		PlaybackState = EScenarioReplayPlaybackState::Failed;
 		return false;
 	}
+
+	LoadEpisodePointCloudWorld(LoadedEpisodeDirectory, OutDiagnostics);
 
 	FActorSpawnParameters SpawnParameters;
 	SpawnParameters.ObjectFlags |= RF_Transient;
@@ -213,6 +454,58 @@ bool UScenarioReplaySubsystem::IsReplayCameraInputAllowed() const
 	return PlaybackState == EScenarioReplayPlaybackState::Playing
 		|| (bAllowCameraInputWhilePaused
 			&& PlaybackState == EScenarioReplayPlaybackState::Paused);
+}
+
+// Replay scenario map actors의 표시 상태를 바꾸고 capture 목록을 갱신한다.
+void UScenarioReplaySubsystem::SetReplayMapVisible(const bool bVisible)
+{
+	bReplayMapVisible = bVisible;
+
+	// Keep actor hidden state and SceneCapture show-only state aligned.
+	for (const TObjectPtr<AActor>& ReplayScenarioActor : ReplayScenarioActors)
+	{
+		if (AActor* Actor = ReplayScenarioActor.Get())
+		{
+			Actor->SetActorHiddenInGame(!bVisible);
+		}
+	}
+
+	RefreshReplayCaptureShowOnlyActors();
+	CaptureReplayScene();
+
+	UE_LOG(
+		LogScenarioReplay,
+		Log,
+		TEXT("Replay map visibility changed | Visible=%s"),
+		bReplayMapVisible ? TEXT("true") : TEXT("false"));
+}
+
+// Replay point cloud actor의 표시 상태를 바꾸고 capture 목록을 갱신한다.
+void UScenarioReplaySubsystem::SetReplayPointCloudVisible(const bool bVisible)
+{
+	bReplayPointCloudVisible = bVisible;
+
+	// Point cloud can be unavailable for episodes that have no lidar_point_cloud artifact.
+	if (IsValid(ReplayPointCloudActor))
+	{
+		ReplayPointCloudActor->SetPointCloudVisible(bVisible);
+	}
+
+	RefreshReplayCaptureShowOnlyActors();
+	CaptureReplayScene();
+
+	UE_LOG(
+		LogScenarioReplay,
+		Log,
+		TEXT("Replay point cloud visibility changed | Visible=%s Available=%s"),
+		bReplayPointCloudVisible ? TEXT("true") : TEXT("false"),
+		IsValid(ReplayPointCloudActor) ? TEXT("true") : TEXT("false"));
+}
+
+// 현재 replay가 point cloud actor를 가지고 있는지 반환한다.
+bool UScenarioReplaySubsystem::HasReplayPointCloud() const
+{
+	return IsValid(ReplayPointCloudActor);
 }
 
 void UScenarioReplaySubsystem::SetReplayCameraMode(EScenarioReplayCameraMode NewMode)
@@ -428,6 +721,12 @@ void UScenarioReplaySubsystem::CleanupReplayWorld()
 	}
 	ReplayRobotActor = nullptr;
 
+	if (IsValid(ReplayPointCloudActor))
+	{
+		ReplayPointCloudActor->Destroy();
+	}
+	ReplayPointCloudActor = nullptr;
+
 	for (int32 Index = ReplayScenarioActors.Num() - 1; Index >= 0; --Index)
 	{
 		if (AActor* Actor = ReplayScenarioActors[Index].Get())
@@ -452,6 +751,8 @@ void UScenarioReplaySubsystem::CleanupReplayWorld()
 	CurrentRobotPositionCm = FVector::ZeroVector;
 	PlaybackState = EScenarioReplayPlaybackState::Stopped;
 	CameraMode = EScenarioReplayCameraMode::TopDown;
+	bReplayMapVisible = true;
+	bReplayPointCloudVisible = true;
 	FreeCameraLocation = FVector::ZeroVector;
 	FreeCameraRotation = FRotator(-35.0, 0.0, 0.0);
 }
@@ -492,6 +793,75 @@ bool UScenarioReplaySubsystem::LoadEpisodeScenarioWorld(
 	}
 
 	return SpawnReplayScenarioWorld(CompileResult.WorldSpec, OutDiagnostics);
+}
+
+// Loads optional point cloud artifacts into the replay-only world layer.
+bool UScenarioReplaySubsystem::LoadEpisodePointCloudWorld(
+	const FString& EpisodeDirectory,
+	TArray<FString>& OutDiagnostics)
+{
+	FReplayPointCloudImportInfo ImportInfo;
+	if (!TryResolveReplayPointCloudImportInfo(EpisodeDirectory, ImportInfo, OutDiagnostics))
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		OutDiagnostics.Add(TEXT("Replay point cloud requires a valid world."));
+		return false;
+	}
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.ObjectFlags |= RF_Transient;
+	SpawnParameters.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	ADeliveryBotPointCloudReviewActor* PointCloudActor =
+		World->SpawnActor<ADeliveryBotPointCloudReviewActor>(
+			ADeliveryBotPointCloudReviewActor::StaticClass(),
+			ReplayWorldOffset,
+			FRotator::ZeroRotator,
+			SpawnParameters);
+	if (!IsValid(PointCloudActor))
+	{
+		OutDiagnostics.Add(TEXT("Failed to spawn replay point cloud actor."));
+		return false;
+	}
+
+	PointCloudActor->Tags.AddUnique(FName(TEXT("ReplayOnly")));
+	PointCloudActor->SetPointCloudVisible(bReplayPointCloudVisible);
+
+	if (!PointCloudActor->LoadReplayMapPointCloudFromFile(
+		ImportInfo.XyzFilePath,
+		ImportInfo.CaptureOriginCm,
+		ImportInfo.ImportYAxisSign))
+	{
+		OutDiagnostics.Add(FString::Printf(
+			TEXT("Failed to load replay point cloud file; point cloud layer will be disabled: %s"),
+			*ImportInfo.XyzFilePath));
+		PointCloudActor->Destroy();
+		return false;
+	}
+
+	ReplayPointCloudActor = PointCloudActor;
+	RefreshReplayPointCloudRenderMode();
+	RefreshReplayCaptureShowOnlyActors();
+
+	UE_LOG(
+		LogScenarioReplay,
+		Log,
+		TEXT("Replay point cloud loaded | File=%s Metadata=%s Points=%d Origin=(%.3f, %.3f, %.3f) YSign=%.1f"),
+		*ImportInfo.XyzFilePath,
+		*ImportInfo.MetadataFilePath,
+		PointCloudActor->GetLoadedPointCount(),
+		ImportInfo.CaptureOriginCm.X,
+		ImportInfo.CaptureOriginCm.Y,
+		ImportInfo.CaptureOriginCm.Z,
+		ImportInfo.ImportYAxisSign);
+
+	return true;
 }
 
 bool UScenarioReplaySubsystem::SpawnReplayScenarioWorld(
@@ -621,11 +991,65 @@ void UScenarioReplaySubsystem::RegisterReplayScenarioActor(AActor* Actor)
 
 	Actor->Tags.AddUnique(FName(TEXT("ReplayOnly")));
 	ReplayScenarioActors.Add(Actor);
+	Actor->SetActorHiddenInGame(!bReplayMapVisible);
 
+	RefreshReplayCaptureShowOnlyActors();
+}
+
+// 현재 replay 레이어 상태를 기준으로 한 SceneCapture show-only 목록을 채운다.
+void UScenarioReplaySubsystem::PopulateReplayCaptureShowOnlyActors(
+	USceneCaptureComponent2D& CaptureComponent) const
+{
+	CaptureComponent.ShowOnlyActors.Reset();
+
+	if (IsValid(ReplayRobotActor))
+	{
+		CaptureComponent.ShowOnlyActors.Add(ReplayRobotActor);
+		if (AActor* ReplayVisualActor = ReplayRobotActor->GetReplayVisualActor())
+		{
+			CaptureComponent.ShowOnlyActors.Add(ReplayVisualActor);
+		}
+	}
+
+	if (bReplayMapVisible)
+	{
+		for (const TObjectPtr<AActor>& ReplayScenarioActor : ReplayScenarioActors)
+		{
+			if (AActor* Actor = ReplayScenarioActor.Get())
+			{
+				CaptureComponent.ShowOnlyActors.Add(Actor);
+			}
+		}
+	}
+
+	if (bReplayPointCloudVisible && IsValid(ReplayPointCloudActor))
+	{
+		CaptureComponent.ShowOnlyActors.Add(ReplayPointCloudActor);
+	}
+}
+
+// 현재 replay capture component의 show-only 목록을 다시 만든다.
+void UScenarioReplaySubsystem::RefreshReplayCaptureShowOnlyActors()
+{
 	if (USceneCaptureComponent2D* CaptureComponent = GetReplayCaptureComponent())
 	{
-		CaptureComponent->ShowOnlyActors.Add(Actor);
+		PopulateReplayCaptureShowOnlyActors(*CaptureComponent);
 	}
+}
+
+// Updates the point cloud renderer for the active replay camera mode.
+void UScenarioReplaySubsystem::RefreshReplayPointCloudRenderMode()
+{
+	if (!IsValid(ReplayPointCloudActor))
+	{
+		return;
+	}
+
+	const EDeliveryBotPointCloudReviewRenderMode RenderMode =
+		CameraMode == EScenarioReplayCameraMode::TopDown
+			? EDeliveryBotPointCloudReviewRenderMode::TopDownProjection
+			: EDeliveryBotPointCloudReviewRenderMode::Plugin3D;
+	ReplayPointCloudActor->SetReviewRenderMode(RenderMode);
 }
 
 bool UScenarioReplaySubsystem::ApplyFrameAtTime(double TimeSeconds)
@@ -751,6 +1175,31 @@ bool UScenarioReplaySubsystem::BuildInterpolatedFrameAtTime(
 	OutFrame.Direction = Alpha < 0.5
 		? LowerFrame.Direction
 		: UpperFrame.Direction;
+	if (LowerFrame.Wheels.Num() == EpisodeReplayV2::WheelCount
+		&& UpperFrame.Wheels.Num() == EpisodeReplayV2::WheelCount)
+	{
+		OutFrame.Wheels.SetNum(EpisodeReplayV2::WheelCount);
+		for (int32 WheelIndex = 0; WheelIndex < EpisodeReplayV2::WheelCount; ++WheelIndex)
+		{
+			const FEpisodeReplayWheelFrame& LowerWheelFrame = LowerFrame.Wheels[WheelIndex];
+			const FEpisodeReplayWheelFrame& UpperWheelFrame = UpperFrame.Wheels[WheelIndex];
+			FEpisodeReplayWheelFrame& OutWheelFrame = OutFrame.Wheels[WheelIndex];
+			OutWheelFrame.LocalLocationCm = FMath::Lerp(
+				LowerWheelFrame.LocalLocationCm,
+				UpperWheelFrame.LocalLocationCm,
+				Alpha);
+			OutWheelFrame.LocalRotation = FQuat::Slerp(
+				LowerWheelFrame.LocalRotation,
+				UpperWheelFrame.LocalRotation,
+				Alpha).GetNormalized();
+			OutWheelFrame.bInContact = Alpha < 0.5
+				? LowerWheelFrame.bInContact
+				: UpperWheelFrame.bInContact;
+			OutWheelFrame.bHasVisualPose =
+				LowerWheelFrame.bHasVisualPose
+				&& UpperWheelFrame.bHasVisualPose;
+		}
+	}
 	OutFrameIndex = FMath::Clamp(
 		FMath::RoundToInt(FramePosition),
 		0,
@@ -761,6 +1210,8 @@ bool UScenarioReplaySubsystem::BuildInterpolatedFrameAtTime(
 void UScenarioReplaySubsystem::UpdateReplayCaptureView(
 	const FEpisodeReplayRobotFrame& Frame)
 {
+	RefreshReplayPointCloudRenderMode();
+
 	switch (CameraMode)
 	{
 	case EScenarioReplayCameraMode::Free:
@@ -855,7 +1306,7 @@ UTextureRenderTarget2D* UScenarioReplaySubsystem::CreateReplayRenderTarget()
 	}
 
 	RenderTarget->RenderTargetFormat = RTF_RGBA8_SRGB;
-	RenderTarget->ClearColor = FLinearColor(0.04f, 0.05f, 0.06f, 1.0f);
+	RenderTarget->ClearColor = FLinearColor(0.026042f, 0.026042f, 0.026042f, 1.0f);
 	RenderTarget->bAutoGenerateMips = false;
 	RenderTarget->InitAutoFormat(1024, 576);
 	RenderTarget->UpdateResourceImmediate(true);
@@ -896,15 +1347,13 @@ ASceneCapture2D* UScenarioReplaySubsystem::SpawnReplayCaptureActor()
 	CaptureComponent->OrthoWidth = static_cast<float>(CaptureOrthoWidthCm);
 	CaptureComponent->PrimitiveRenderMode =
 		ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
-	CaptureComponent->ShowOnlyActors.Reset();
-	CaptureComponent->ShowOnlyActors.Add(ReplayRobotActor);
-	for (const TObjectPtr<AActor>& ReplayScenarioActor : ReplayScenarioActors)
-	{
-		if (AActor* Actor = ReplayScenarioActor.Get())
-		{
-			CaptureComponent->ShowOnlyActors.Add(Actor);
-		}
-	}
+	CaptureComponent->ShowFlags.SetPostProcessing(true);
+	CaptureComponent->ShowFlags.SetPostProcessMaterial(true);
+	CaptureComponent->ShowFlags.SetAtmosphere(false);
+	CaptureComponent->ShowFlags.SetFog(false);
+	CaptureComponent->ShowFlags.SetCloud(false);
+	CaptureComponent->ShowFlags.SetSkyLighting(false);
+	PopulateReplayCaptureShowOnlyActors(*CaptureComponent);
 	CaptureComponent->CaptureSource = SCS_FinalColorLDR;
 	CaptureComponent->TextureTarget = ReplayRenderTarget;
 	CaptureComponent->bCaptureEveryFrame = false;
@@ -912,6 +1361,13 @@ ASceneCapture2D* UScenarioReplaySubsystem::SpawnReplayCaptureActor()
 	CaptureComponent->bAlwaysPersistRenderingState = false;
 	CaptureComponent->bExcludeFromSceneTextureExtents = true;
 	CaptureComponent->bUseRayTracingIfEnabled = false;
+	if (!FScenarioViewportPresentation::ApplyGreyBackgroundPostProcess(CaptureComponent, 1.0f))
+	{
+		UE_LOG(
+			LogScenarioReplay,
+			Warning,
+			TEXT("Failed to apply replay grey background post-process material."));
+	}
 	return CaptureActor;
 }
 

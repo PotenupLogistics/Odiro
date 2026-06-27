@@ -5,6 +5,10 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
 #include "HAL/FileManager.h"
+#include "LidarPointCloud.h"
+#include "LidarPointCloudComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "Misc/Paths.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -13,6 +17,20 @@ DEFINE_LOG_CATEGORY_STATIC(LogDeliveryBotPointCloudReview, Log, All);
 namespace
 {
 	const TCHAR* MapAccumulatedFileName = TEXT("map_accumulated.xyz");
+	const TCHAR* TopDownSphereMeshPath = TEXT("/Engine/BasicShapes/Sphere.Sphere");
+	const TCHAR* TopDownSphereMaterialPath = TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial");
+	const FName PointClassificationGround(TEXT("ground"));
+	const FName PointClassificationWall(TEXT("wall"));
+	const FName PointClassificationObstacle(TEXT("obstacle"));
+	const FName PointClassificationUnknown(TEXT("unknown"));
+	const FName MaterialColorParameterName(TEXT("Color"));
+	const FName MaterialBaseColorParameterName(TEXT("BaseColor"));
+	const FName MaterialTintColorParameterName(TEXT("TintColor"));
+	const FColor GroundPointColor(120, 120, 120);
+	const FColor WallPointColor(80, 180, 255);
+	const FColor ObstaclePointColor(255, 80, 60);
+	const FColor UnknownPointColor(160, 120, 255);
+	const FColor LegacyUnknownPointColor(80, 160, 255);
 }
 
 ADeliveryBotPointCloudReviewActor::ADeliveryBotPointCloudReviewActor()
@@ -22,18 +40,39 @@ ADeliveryBotPointCloudReviewActor::ADeliveryBotPointCloudReviewActor()
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	RootComponent = SceneRoot;
 
-	PointInstances = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("PointInstances"));
-	PointInstances->SetupAttachment(SceneRoot);
-	PointInstances->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	PointInstances->SetMobility(EComponentMobility::Movable);
+	PointCloudComponent = CreateDefaultSubobject<ULidarPointCloudComponent>(TEXT("PointCloudComponent"));
+	PointCloudComponent->SetupAttachment(SceneRoot);
+	PointCloudComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	PointCloudComponent->SetMobility(EComponentMobility::Movable);
+	ConfigurePointCloudRendering();
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> sphereMesh(
-		TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-	if (sphereMesh.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TopDownSphereMeshPath);
+	if (SphereMesh.Succeeded())
 	{
-		PointMesh = sphereMesh.Object;
-		PointInstances->SetStaticMesh(PointMesh);
+		TopDownSphereMesh = SphereMesh.Object;
 	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> SphereMaterial(TopDownSphereMaterialPath);
+	if (SphereMaterial.Succeeded())
+	{
+		TopDownSphereBaseMaterial = SphereMaterial.Object;
+	}
+
+	TopDownGroundPointInstances = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("TopDownGroundPointInstances"));
+	TopDownGroundPointInstances->SetupAttachment(SceneRoot);
+	ConfigureTopDownSphereInstanceComponent(TopDownGroundPointInstances);
+
+	TopDownWallPointInstances = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("TopDownWallPointInstances"));
+	TopDownWallPointInstances->SetupAttachment(SceneRoot);
+	ConfigureTopDownSphereInstanceComponent(TopDownWallPointInstances);
+
+	TopDownObstaclePointInstances = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("TopDownObstaclePointInstances"));
+	TopDownObstaclePointInstances->SetupAttachment(SceneRoot);
+	ConfigureTopDownSphereInstanceComponent(TopDownObstaclePointInstances);
+
+	TopDownUnknownPointInstances = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("TopDownUnknownPointInstances"));
+	TopDownUnknownPointInstances->SetupAttachment(SceneRoot);
+	ConfigureTopDownSphereInstanceComponent(TopDownUnknownPointInstances);
 }
 
 // BeginPlay에서 옵션에 따라 xyz 파일을 자동 로드한다.
@@ -63,19 +102,11 @@ bool ADeliveryBotPointCloudReviewActor::LoadPointCloudFile()
 {
 	ClearPointCloud();
 
-	if (PointInstances == nullptr)
+	if (PointCloudComponent == nullptr)
 	{
-		UE_LOG(LogDeliveryBotPointCloudReview, Warning, TEXT("PointInstances component is missing."));
+		UE_LOG(LogDeliveryBotPointCloudReview, Warning, TEXT("PointCloudComponent is missing."));
 		return false;
 	}
-
-	if (PointMesh == nullptr)
-	{
-		UE_LOG(LogDeliveryBotPointCloudReview, Warning, TEXT("PointMesh is missing."));
-		return false;
-	}
-
-	PointInstances->SetStaticMesh(PointMesh);
 
 	const FString filePath = XyzFilePath.FilePath;
 	if (filePath.IsEmpty())
@@ -111,35 +142,41 @@ bool ADeliveryBotPointCloudReviewActor::LoadPointCloudFile()
 		}
 	}
 
-	RebuildPointInstances();
+	if (!RebuildPointCloudAsset())
+	{
+		return false;
+	}
 
 	UE_LOG(
 		LogDeliveryBotPointCloudReview,
 		Log,
-		TEXT("Loaded xyz point cloud: path=%s pointCount=%d coordinateType=%s"),
+		TEXT("Loaded xyz point cloud with LidarPointCloudRuntime: path=%s pointCount=%d coordinateType=%s mapLocalImport=%s"),
 		*filePath,
 		LoadedPoints.Num(),
-		CoordinateType == EDeliveryBotPointCloudCoordinateTypes::World ? TEXT("World") : TEXT("ActorLocal"));
+		CoordinateType == EDeliveryBotPointCloudCoordinateTypes::World ? TEXT("World") : TEXT("ActorLocal"),
+		bUseMapLocalImportTransform ? TEXT("true") : TEXT("false"));
 
 	return LoadedPoints.Num() > 0;
 }
 
-// 외부에서 받은 xyz 경로를 정규화하고 검증한 뒤 기존 로드 흐름에 연결한다.
-bool ADeliveryBotPointCloudReviewActor::LoadPointCloudFromFile(const FString& xyzFilePath)
+// 외부에서 받은 xyz 경로를 절대 경로로 정규화하고 검증한다.
+bool ADeliveryBotPointCloudReviewActor::TryResolveXyzFilePath(
+	const FString& xyzFilePath,
+	FString& outResolvedFilePath) const
 {
-	FString resolvedFilePath = xyzFilePath.TrimStartAndEnd();
-	if (resolvedFilePath.IsEmpty())
+	outResolvedFilePath = xyzFilePath.TrimStartAndEnd();
+	if (outResolvedFilePath.IsEmpty())
 	{
 		UE_LOG(LogDeliveryBotPointCloudReview, Warning, TEXT("Point Cloud xyz path is empty."));
 		return false;
 	}
 
-	resolvedFilePath = FPaths::IsRelative(resolvedFilePath)
-		? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), resolvedFilePath)
-		: FPaths::ConvertRelativePathToFull(resolvedFilePath);
-	FPaths::NormalizeFilename(resolvedFilePath);
+	outResolvedFilePath = FPaths::IsRelative(outResolvedFilePath)
+		? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), outResolvedFilePath)
+		: FPaths::ConvertRelativePathToFull(outResolvedFilePath);
+	FPaths::NormalizeFilename(outResolvedFilePath);
 
-	if (!FPaths::CollapseRelativeDirectories(resolvedFilePath))
+	if (!FPaths::CollapseRelativeDirectories(outResolvedFilePath))
 	{
 		UE_LOG(
 			LogDeliveryBotPointCloudReview,
@@ -149,25 +186,61 @@ bool ADeliveryBotPointCloudReviewActor::LoadPointCloudFromFile(const FString& xy
 		return false;
 	}
 
-	if (!FPaths::GetExtension(resolvedFilePath).Equals(TEXT("xyz"), ESearchCase::IgnoreCase))
+	if (!FPaths::GetExtension(outResolvedFilePath).Equals(TEXT("xyz"), ESearchCase::IgnoreCase))
 	{
 		UE_LOG(
 			LogDeliveryBotPointCloudReview,
 			Warning,
 			TEXT("Point Cloud file must use the xyz extension: %s"),
-			*resolvedFilePath);
+			*outResolvedFilePath);
 		return false;
 	}
 
-	if (!FPaths::FileExists(resolvedFilePath))
+	if (!FPaths::FileExists(outResolvedFilePath))
 	{
 		UE_LOG(
 			LogDeliveryBotPointCloudReview,
 			Warning,
 			TEXT("Point Cloud xyz file does not exist: %s"),
-			*resolvedFilePath);
+			*outResolvedFilePath);
 		return false;
 	}
+
+	return true;
+}
+
+// 외부에서 받은 xyz 경로를 일반 point cloud 좌표로 로드한다.
+bool ADeliveryBotPointCloudReviewActor::LoadPointCloudFromFile(const FString& xyzFilePath)
+{
+	FString resolvedFilePath;
+	if (!TryResolveXyzFilePath(xyzFilePath, resolvedFilePath))
+	{
+		return false;
+	}
+
+	bUseMapLocalImportTransform = false;
+	XyzFilePath.FilePath = MoveTemp(resolvedFilePath);
+	return LoadPointCloudFile();
+}
+
+// map_accumulated.xyz의 map-local 좌표를 source world 좌표로 복원해서 로드한다.
+bool ADeliveryBotPointCloudReviewActor::LoadReplayMapPointCloudFromFile(
+	const FString& xyzFilePath,
+	const FVector& captureOriginCm,
+	const float importYAxisSign)
+{
+	FString resolvedFilePath;
+	if (!TryResolveXyzFilePath(xyzFilePath, resolvedFilePath))
+	{
+		return false;
+	}
+
+	MapCaptureOriginCm = captureOriginCm;
+	MapImportYAxisSign = FMath::IsNearlyZero(importYAxisSign)
+		? -1.0f
+		: importYAxisSign;
+	bUseMapLocalImportTransform = true;
+	CoordinateType = EDeliveryBotPointCloudCoordinateTypes::ActorLocal;
 
 	XyzFilePath.FilePath = MoveTemp(resolvedFilePath);
 	return LoadPointCloudFile();
@@ -177,11 +250,15 @@ bool ADeliveryBotPointCloudReviewActor::LoadPointCloudFromFile(const FString& xy
 void ADeliveryBotPointCloudReviewActor::ClearPointCloud()
 {
 	LoadedPoints.Reset();
+	PointCloudAsset = nullptr;
 
-	if (PointInstances != nullptr)
+	if (PointCloudComponent != nullptr)
 	{
-		PointInstances->ClearInstances();
+		PointCloudComponent->SetPointCloud(nullptr);
 	}
+
+	ClearTopDownSphereInstances();
+	ApplyReviewRenderMode();
 }
 
 // point cloud를 지운 뒤 같은 xyz 파일을 다시 읽는다.
@@ -194,12 +271,27 @@ bool ADeliveryBotPointCloudReviewActor::ReloadPointCloud()
 void ADeliveryBotPointCloudReviewActor::SetPointCloudVisible(const bool bVisible)
 {
 	SetActorHiddenInGame(!bVisible);
+
+	ApplyReviewRenderMode();
 }
 
 // Actor hidden 상태를 외부 Replay 제어에서 사용할 표시 상태로 변환한다.
 bool ADeliveryBotPointCloudReviewActor::IsPointCloudVisible() const
 {
 	return !IsHidden();
+}
+
+// Sets the renderer used by replay review cameras.
+void ADeliveryBotPointCloudReviewActor::SetReviewRenderMode(const EDeliveryBotPointCloudReviewRenderMode NewMode)
+{
+	if (ReviewRenderMode == NewMode)
+	{
+		return;
+	}
+
+	ReviewRenderMode = NewMode;
+	ConfigurePointCloudRendering();
+	ApplyReviewRenderMode();
 }
 
 // 현재 scenario 번호에 맞는 point cloud capture 폴더를 만든다.
@@ -297,6 +389,7 @@ bool ADeliveryBotPointCloudReviewActor::LoadLatestMapAccumulated()
 	}
 
 	XyzFilePath.FilePath = latestFilePath;
+	bUseMapLocalImportTransform = false;
 	UE_LOG(
 		LogDeliveryBotPointCloudReview,
 		Log,
@@ -307,13 +400,13 @@ bool ADeliveryBotPointCloudReviewActor::LoadLatestMapAccumulated()
 	return LoadPointCloudFile();
 }
 
-// xyz 파일의 한 줄을 point 정보로 변환한다.
 // 에디터 Details 버튼에서 최신 map_accumulated.xyz 로드를 실행한다.
 void ADeliveryBotPointCloudReviewActor::LoadLatestMapAccumulatedInEditor()
 {
 	LoadLatestMapAccumulated();
 }
 
+// xyz 파일의 한 줄을 point 정보로 변환한다.
 bool ADeliveryBotPointCloudReviewActor::ParseXyzLine(
 	const FString& line,
 	FDeliveryBotPointCloudReviewPointInfo& outPoint) const
@@ -359,55 +452,381 @@ bool ADeliveryBotPointCloudReviewActor::ParseXyzLine(
 		static_cast<uint8>(FMath::Clamp(red, 0, 255)),
 		static_cast<uint8>(FMath::Clamp(green, 0, 255)),
 		static_cast<uint8>(FMath::Clamp(blue, 0, 255)));
+	outPoint.Classification = ResolvePointClassificationFromColor(outPoint.Color);
 
 	return true;
 }
 
-// coordinate mode에 맞춰 point를 instance transform으로 변환한다.
-FTransform ADeliveryBotPointCloudReviewActor::MakePointInstanceTransform(
-	const FDeliveryBotPointCloudReviewPointInfo& point) const
+// map_accumulated.xyz의 map-local 좌표를 source world 좌표로 변환한다.
+// Resolves the semantic class encoded in one xyz RGB color.
+FName ADeliveryBotPointCloudReviewActor::ResolvePointClassificationFromColor(const FColor& Color) const
 {
-	const float pointScale = FMath::Max(PointSizeCm, 0.1f) / 100.f;
-	return FTransform(
-		FRotator::ZeroRotator,
-		FVector(point.X, point.Y, point.Z),
-		FVector(pointScale));
+	if (Color == GroundPointColor)
+	{
+		return PointClassificationGround;
+	}
+
+	if (Color == WallPointColor)
+	{
+		return PointClassificationWall;
+	}
+
+	if (Color == ObstaclePointColor)
+	{
+		return PointClassificationObstacle;
+	}
+
+	if (Color == UnknownPointColor || Color == LegacyUnknownPointColor)
+	{
+		return PointClassificationUnknown;
+	}
+
+	return PointClassificationUnknown;
 }
 
+// Restores map-local xyz coordinates into source world coordinates.
+FVector ADeliveryBotPointCloudReviewActor::ResolveReplayMapSourceWorldLocation(
+	const FDeliveryBotPointCloudReviewPointInfo& point) const
+{
+	return FVector(
+		MapCaptureOriginCm.X + point.X,
+		MapCaptureOriginCm.Y + MapImportYAxisSign * point.Y,
+		point.Z);
+}
+
+// point instance 렌더링에 사용할 좌표를 현재 import 모드에 맞춰 계산한다.
+FVector ADeliveryBotPointCloudReviewActor::ResolvePointCloudLocalLocation(
+	const FDeliveryBotPointCloudReviewPointInfo& point) const
+{
+	FVector SourceLocation(point.X, point.Y, point.Z);
+	if (bUseMapLocalImportTransform)
+	{
+		SourceLocation = ResolveReplayMapSourceWorldLocation(point);
+	}
+
+	return CoordinateType == EDeliveryBotPointCloudCoordinateTypes::World
+		? GetActorTransform().InverseTransformPosition(SourceLocation)
+		: SourceLocation;
+}
+
+// coordinate mode에 맞춰 point를 instance transform으로 변환한다.
 // coordinate mode에 맞춰 point의 실제 world 위치를 계산한다.
 FVector ADeliveryBotPointCloudReviewActor::ResolvePointWorldLocation(
 	const FDeliveryBotPointCloudReviewPointInfo& point) const
 {
-	const FVector pointLocation(point.X, point.Y, point.Z);
-
-	if (CoordinateType == EDeliveryBotPointCloudCoordinateTypes::World)
-	{
-		return pointLocation;
-	}
-
-	return GetActorTransform().TransformPosition(pointLocation);
+	return GetActorTransform().TransformPosition(ResolvePointCloudLocalLocation(point));
 }
 
 // 로드된 point 목록으로 instanced mesh와 선택적 debug overlay를 만든다.
-void ADeliveryBotPointCloudReviewActor::RebuildPointInstances()
+bool ADeliveryBotPointCloudReviewActor::RebuildPointCloudAsset()
 {
-	if (PointInstances == nullptr)
-		return;
-
-	PointInstances->ClearInstances();
-	PointInstances->PreAllocateInstancesMemory(LoadedPoints.Num());
-
-	const bool bWorldSpace = CoordinateType == EDeliveryBotPointCloudCoordinateTypes::World;
-	for (const FDeliveryBotPointCloudReviewPointInfo& point : LoadedPoints)
+	if (PointCloudComponent == nullptr)
 	{
-		PointInstances->AddInstance(MakePointInstanceTransform(point), bWorldSpace);
+		return false;
 	}
 
-	PointInstances->MarkRenderStateDirty();
+	if (LoadedPoints.IsEmpty())
+	{
+		UE_LOG(LogDeliveryBotPointCloudReview, Warning, TEXT("No valid points were parsed from xyz file."));
+		return false;
+	}
+
+	TArray<FLidarPointCloudPoint> LidarPoints;
+	LidarPoints.Reserve(LoadedPoints.Num());
+
+	for (const FDeliveryBotPointCloudReviewPointInfo& point : LoadedPoints)
+	{
+		const FVector LocalLocation = ResolvePointCloudLocalLocation(point);
+		LidarPoints.Emplace(
+			FVector3f(
+				static_cast<float>(LocalLocation.X),
+				static_cast<float>(LocalLocation.Y),
+				static_cast<float>(LocalLocation.Z)),
+			point.Color,
+			true,
+			0);
+	}
+
+	PointCloudAsset = ULidarPointCloud::CreateFromData(LidarPoints, false);
+	if (!IsValid(PointCloudAsset))
+	{
+		UE_LOG(LogDeliveryBotPointCloudReview, Warning, TEXT("Failed to create Lidar Point Cloud asset."));
+		return false;
+	}
+
+	PointCloudAsset->SetSourcePath(XyzFilePath.FilePath);
+	PointCloudComponent->SetPointCloud(PointCloudAsset);
+	ConfigurePointCloudRendering();
+	BuildTopDownSphereInstances();
+	ApplyReviewRenderMode();
+
 	DrawDebugColorOverlay();
+	return PointCloudAsset->GetNumPoints() > 0;
 }
 
 // 색상 확인용 DrawDebugPoint overlay를 그린다.
+// Applies RGB, size, shape, and camera-mode scaling to plugin-rendered review points.
+void ADeliveryBotPointCloudReviewActor::ConfigurePointCloudRendering()
+{
+	if (PointCloudComponent == nullptr)
+	{
+		return;
+	}
+
+	PointCloudComponent->PointSize = FMath::Max(PointSizeCm, 0.0f);
+	PointCloudComponent->ColorSource = ELidarPointCloudColorationMode::Data;
+	PointCloudComponent->PointOrientation = ELidarPointCloudSpriteOrientation::PreferFacingCamera;
+	PointCloudComponent->ScalingMethod = ELidarPointCloudScalingMethod::PerNodeAdaptive;
+	PointCloudComponent->GapFillingStrength = 0.0f;
+	PointCloudComponent->SetPointShape(ELidarPointCloudSpriteShape::Circle);
+	PointCloudComponent->MarkRenderStateDirty();
+}
+
+// Rebuilds the TopDown-only sphere instances from loaded point colors.
+bool ADeliveryBotPointCloudReviewActor::BuildTopDownSphereInstances()
+{
+	ClearTopDownSphereInstances();
+
+	if (LoadedPoints.IsEmpty())
+	{
+		return false;
+	}
+
+	if (TopDownSphereMesh == nullptr)
+	{
+		UE_LOG(LogDeliveryBotPointCloudReview, Warning, TEXT("TopDownSphereMesh is missing."));
+		return false;
+	}
+
+	ConfigureTopDownSphereInstanceComponent(TopDownGroundPointInstances);
+	ConfigureTopDownSphereInstanceComponent(TopDownWallPointInstances);
+	ConfigureTopDownSphereInstanceComponent(TopDownObstaclePointInstances);
+	ConfigureTopDownSphereInstanceComponent(TopDownUnknownPointInstances);
+	ApplyTopDownSphereMaterials();
+
+	int32 GroundCount = 0;
+	int32 WallCount = 0;
+	int32 ObstacleCount = 0;
+	int32 UnknownCount = 0;
+	for (const FDeliveryBotPointCloudReviewPointInfo& Point : LoadedPoints)
+	{
+		if (Point.Classification == PointClassificationGround)
+		{
+			++GroundCount;
+		}
+		else if (Point.Classification == PointClassificationWall)
+		{
+			++WallCount;
+		}
+		else if (Point.Classification == PointClassificationObstacle)
+		{
+			++ObstacleCount;
+		}
+		else
+		{
+			++UnknownCount;
+		}
+	}
+
+	if (TopDownGroundPointInstances != nullptr)
+	{
+		TopDownGroundPointInstances->PreAllocateInstancesMemory(GroundCount);
+	}
+	if (TopDownWallPointInstances != nullptr)
+	{
+		TopDownWallPointInstances->PreAllocateInstancesMemory(WallCount);
+	}
+	if (TopDownObstaclePointInstances != nullptr)
+	{
+		TopDownObstaclePointInstances->PreAllocateInstancesMemory(ObstacleCount);
+	}
+	if (TopDownUnknownPointInstances != nullptr)
+	{
+		TopDownUnknownPointInstances->PreAllocateInstancesMemory(UnknownCount);
+	}
+
+	const float SphereScale = FMath::Max(TopDownSphereSizeCm, 0.1f) / 100.0f;
+	int32 AddedPointCount = 0;
+	for (const FDeliveryBotPointCloudReviewPointInfo& Point : LoadedPoints)
+	{
+		UHierarchicalInstancedStaticMeshComponent* Component =
+			ResolveTopDownSphereComponentForClassification(Point.Classification);
+		if (Component == nullptr)
+		{
+			continue;
+		}
+
+		const FVector LocalLocation =
+			ResolvePointCloudLocalLocation(Point) + FVector(0.0, 0.0, TopDownSphereZOffsetCm);
+		Component->AddInstance(
+			FTransform(FRotator::ZeroRotator, LocalLocation, FVector(SphereScale)),
+			false);
+		++AddedPointCount;
+	}
+
+	if (TopDownGroundPointInstances != nullptr)
+	{
+		TopDownGroundPointInstances->MarkRenderStateDirty();
+	}
+	if (TopDownWallPointInstances != nullptr)
+	{
+		TopDownWallPointInstances->MarkRenderStateDirty();
+	}
+	if (TopDownObstaclePointInstances != nullptr)
+	{
+		TopDownObstaclePointInstances->MarkRenderStateDirty();
+	}
+	if (TopDownUnknownPointInstances != nullptr)
+	{
+		TopDownUnknownPointInstances->MarkRenderStateDirty();
+	}
+
+	return AddedPointCount > 0;
+}
+
+// Clears the TopDown-only sphere instances.
+void ADeliveryBotPointCloudReviewActor::ClearTopDownSphereInstances()
+{
+	if (TopDownGroundPointInstances != nullptr)
+	{
+		TopDownGroundPointInstances->ClearInstances();
+	}
+	if (TopDownWallPointInstances != nullptr)
+	{
+		TopDownWallPointInstances->ClearInstances();
+	}
+	if (TopDownObstaclePointInstances != nullptr)
+	{
+		TopDownObstaclePointInstances->ClearInstances();
+	}
+	if (TopDownUnknownPointInstances != nullptr)
+	{
+		TopDownUnknownPointInstances->ClearInstances();
+	}
+}
+
+// Applies common rendering settings to one TopDown sphere instance component.
+void ADeliveryBotPointCloudReviewActor::ConfigureTopDownSphereInstanceComponent(
+	UHierarchicalInstancedStaticMeshComponent* component) const
+{
+	if (component == nullptr)
+	{
+		return;
+	}
+
+	component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	component->SetGenerateOverlapEvents(false);
+	component->SetMobility(EComponentMobility::Movable);
+	component->SetCastShadow(false);
+	component->SetVisibility(false, true);
+	component->SetStaticMesh(TopDownSphereMesh);
+}
+
+// Creates or updates TopDown sphere materials for semantic point colors.
+void ADeliveryBotPointCloudReviewActor::ApplyTopDownSphereMaterials()
+{
+	if (TopDownGroundPointInstances != nullptr)
+	{
+		TopDownGroundPointInstances->SetMaterial(
+			0,
+			GetOrCreateTopDownSphereMaterial(TopDownGroundPointMaterial, GroundPointColor));
+	}
+	if (TopDownWallPointInstances != nullptr)
+	{
+		TopDownWallPointInstances->SetMaterial(
+			0,
+			GetOrCreateTopDownSphereMaterial(TopDownWallPointMaterial, WallPointColor));
+	}
+	if (TopDownObstaclePointInstances != nullptr)
+	{
+		TopDownObstaclePointInstances->SetMaterial(
+			0,
+			GetOrCreateTopDownSphereMaterial(TopDownObstaclePointMaterial, ObstaclePointColor));
+	}
+	if (TopDownUnknownPointInstances != nullptr)
+	{
+		TopDownUnknownPointInstances->SetMaterial(
+			0,
+			GetOrCreateTopDownSphereMaterial(TopDownUnknownPointMaterial, UnknownPointColor));
+	}
+}
+
+// Returns the TopDown sphere component that matches one parsed point classification.
+UHierarchicalInstancedStaticMeshComponent* ADeliveryBotPointCloudReviewActor::ResolveTopDownSphereComponentForClassification(
+	const FName& classification) const
+{
+	if (classification == PointClassificationGround)
+	{
+		return TopDownGroundPointInstances;
+	}
+
+	if (classification == PointClassificationWall)
+	{
+		return TopDownWallPointInstances;
+	}
+
+	if (classification == PointClassificationObstacle)
+	{
+		return TopDownObstaclePointInstances;
+	}
+
+	return TopDownUnknownPointInstances;
+}
+
+// Creates or updates one dynamic TopDown sphere material.
+UMaterialInstanceDynamic* ADeliveryBotPointCloudReviewActor::GetOrCreateTopDownSphereMaterial(
+	TObjectPtr<UMaterialInstanceDynamic>& materialSlot,
+	const FColor& color)
+{
+	if (TopDownSphereBaseMaterial == nullptr)
+	{
+		return nullptr;
+	}
+
+	if (!IsValid(materialSlot))
+	{
+		materialSlot = UMaterialInstanceDynamic::Create(TopDownSphereBaseMaterial, this);
+	}
+
+	const FLinearColor LinearColor(color);
+	materialSlot->SetVectorParameterValue(MaterialColorParameterName, LinearColor);
+	materialSlot->SetVectorParameterValue(MaterialBaseColorParameterName, LinearColor);
+	materialSlot->SetVectorParameterValue(MaterialTintColorParameterName, LinearColor);
+	return materialSlot;
+}
+
+// Applies the active review render mode to owned render components.
+void ADeliveryBotPointCloudReviewActor::ApplyReviewRenderMode()
+{
+	const bool bVisible = IsPointCloudVisible();
+	const bool bShowPlugin3D =
+		bVisible && ReviewRenderMode == EDeliveryBotPointCloudReviewRenderMode::Plugin3D;
+	const bool bShowTopDownSpheres =
+		bVisible && ReviewRenderMode == EDeliveryBotPointCloudReviewRenderMode::TopDownProjection;
+
+	if (PointCloudComponent != nullptr)
+	{
+		PointCloudComponent->SetVisibility(bShowPlugin3D, true);
+	}
+
+	if (TopDownGroundPointInstances != nullptr)
+	{
+		TopDownGroundPointInstances->SetVisibility(bShowTopDownSpheres, true);
+	}
+	if (TopDownWallPointInstances != nullptr)
+	{
+		TopDownWallPointInstances->SetVisibility(bShowTopDownSpheres, true);
+	}
+	if (TopDownObstaclePointInstances != nullptr)
+	{
+		TopDownObstaclePointInstances->SetVisibility(bShowTopDownSpheres, true);
+	}
+	if (TopDownUnknownPointInstances != nullptr)
+	{
+		TopDownUnknownPointInstances->SetVisibility(bShowTopDownSpheres, true);
+	}
+}
+
 void ADeliveryBotPointCloudReviewActor::DrawDebugColorOverlay() const
 {
 	if (!bDrawDebugColorOverlay)

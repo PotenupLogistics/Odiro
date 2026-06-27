@@ -127,12 +127,6 @@ void UProjectEpisodeReplayViewerWidget::NativeConstruct()
 		PlayPauseButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
 	}
 
-	if (PauseButton)
-	{
-		PauseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
-		PauseButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
-	}
-
 	if (StopButton)
 	{
 		StopButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleStopClicked);
@@ -143,12 +137,6 @@ void UProjectEpisodeReplayViewerWidget::NativeConstruct()
 	{
 		ResetButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleResetClicked);
 		ResetButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleResetClicked);
-	}
-
-	if (CloseButton)
-	{
-		CloseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleCloseClicked);
-		CloseButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleCloseClicked);
 	}
 
 	if (CameraModeButton)
@@ -169,28 +157,54 @@ void UProjectEpisodeReplayViewerWidget::NativeConstruct()
 		ReplayTimelineSlider->OnValueChanged.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleReplayTimelineValueChanged);
 	}
 
-	if (TopDownCameraButton)
+	if (FullscreenPlayPauseButton)
 	{
-		TopDownCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleTopDownCameraClicked);
-		TopDownCameraButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleTopDownCameraClicked);
+		FullscreenPlayPauseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
+		FullscreenPlayPauseButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
 	}
 
-	if (FreeCameraButton)
+	if (FullscreenStopButton)
 	{
-		FreeCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFreeCameraClicked);
-		FreeCameraButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFreeCameraClicked);
+		FullscreenStopButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleStopClicked);
+		FullscreenStopButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleStopClicked);
 	}
 
-	if (VehicleFrontCameraButton)
+	if (FullscreenResetButton)
 	{
-		VehicleFrontCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleVehicleFrontCameraClicked);
-		VehicleFrontCameraButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleVehicleFrontCameraClicked);
+		FullscreenResetButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleResetClicked);
+		FullscreenResetButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleResetClicked);
 	}
 
-	if (FullscreenCameraModeButton)
+	if (FullscreenTopDownCameraButton)
 	{
-		FullscreenCameraModeButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleCameraModeClicked);
-		FullscreenCameraModeButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleCameraModeClicked);
+		FullscreenTopDownCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleTopDownCameraClicked);
+		FullscreenTopDownCameraButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleTopDownCameraClicked);
+	}
+
+	if (FullscreenFreeCameraButton)
+	{
+		FullscreenFreeCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFreeCameraClicked);
+		FullscreenFreeCameraButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFreeCameraClicked);
+	}
+
+	if (FullscreenVehicleFrontCameraButton)
+	{
+		FullscreenVehicleFrontCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleVehicleFrontCameraClicked);
+		FullscreenVehicleFrontCameraButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleVehicleFrontCameraClicked);
+	}
+
+	ResolveFullscreenLayerToggleWidgets();
+
+	if (FullscreenMapToggleButton)
+	{
+		FullscreenMapToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenMapToggleClicked);
+		FullscreenMapToggleButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenMapToggleClicked);
+	}
+
+	if (FullscreenPointCloudToggleButton)
+	{
+		FullscreenPointCloudToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked);
+		FullscreenPointCloudToggleButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked);
 	}
 
 	if (ExitFullscreenButton)
@@ -211,11 +225,6 @@ void UProjectEpisodeReplayViewerWidget::NativeDestruct()
 		PlayPauseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
 	}
 
-	if (PauseButton)
-	{
-		PauseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
-	}
-
 	if (StopButton)
 	{
 		StopButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleStopClicked);
@@ -224,11 +233,6 @@ void UProjectEpisodeReplayViewerWidget::NativeDestruct()
 	if (ResetButton)
 	{
 		ResetButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleResetClicked);
-	}
-
-	if (CloseButton)
-	{
-		CloseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleCloseClicked);
 	}
 
 	if (CameraModeButton)
@@ -246,24 +250,44 @@ void UProjectEpisodeReplayViewerWidget::NativeDestruct()
 		ReplayTimelineSlider->OnValueChanged.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleReplayTimelineValueChanged);
 	}
 
-	if (TopDownCameraButton)
+	if (FullscreenPlayPauseButton)
 	{
-		TopDownCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleTopDownCameraClicked);
+		FullscreenPlayPauseButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandlePlayPauseClicked);
 	}
 
-	if (FreeCameraButton)
+	if (FullscreenStopButton)
 	{
-		FreeCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFreeCameraClicked);
+		FullscreenStopButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleStopClicked);
 	}
 
-	if (VehicleFrontCameraButton)
+	if (FullscreenResetButton)
 	{
-		VehicleFrontCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleVehicleFrontCameraClicked);
+		FullscreenResetButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleResetClicked);
 	}
 
-	if (FullscreenCameraModeButton)
+	if (FullscreenTopDownCameraButton)
 	{
-		FullscreenCameraModeButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleCameraModeClicked);
+		FullscreenTopDownCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleTopDownCameraClicked);
+	}
+
+	if (FullscreenFreeCameraButton)
+	{
+		FullscreenFreeCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFreeCameraClicked);
+	}
+
+	if (FullscreenVehicleFrontCameraButton)
+	{
+		FullscreenVehicleFrontCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleVehicleFrontCameraClicked);
+	}
+
+	if (FullscreenMapToggleButton)
+	{
+		FullscreenMapToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenMapToggleClicked);
+	}
+
+	if (FullscreenPointCloudToggleButton)
+	{
+		FullscreenPointCloudToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked);
 	}
 
 	if (ExitFullscreenButton)
@@ -516,14 +540,6 @@ void UProjectEpisodeReplayViewerWidget::HandleResetClicked()
 	SetDiagnosticsText(TEXT("Replay reset to first frame."));
 }
 
-void UProjectEpisodeReplayViewerWidget::HandleCloseClicked()
-{
-	ClearReplayMovementInput();
-	ClearReplayLookInput();
-	ResetReplay();
-	SetVisibility(ESlateVisibility::Collapsed);
-}
-
 void UProjectEpisodeReplayViewerWidget::HandleCameraModeClicked()
 {
 	const UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
@@ -583,6 +599,49 @@ void UProjectEpisodeReplayViewerWidget::HandleFreeCameraClicked()
 void UProjectEpisodeReplayViewerWidget::HandleVehicleFrontCameraClicked()
 {
 	ApplyReplayCameraMode(EScenarioReplayCameraMode::VehicleFront);
+}
+
+// Toggles replay scenario map visibility in fullscreen mode.
+void UProjectEpisodeReplayViewerWidget::HandleFullscreenMapToggleClicked()
+{
+	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
+	if (!ReplaySubsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioReplaySubsystem is unavailable."));
+		return;
+	}
+
+	const bool bNewVisible = !ReplaySubsystem->IsReplayMapVisible();
+	ReplaySubsystem->SetReplayMapVisible(bNewVisible);
+	SetDiagnosticsText(bNewVisible
+		? TEXT("Replay map visible.")
+		: TEXT("Replay map hidden."));
+	RequestReplayInputFocus();
+}
+
+// Toggles replay point cloud visibility in fullscreen mode.
+void UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked()
+{
+	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
+	if (!ReplaySubsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioReplaySubsystem is unavailable."));
+		return;
+	}
+
+	if (!ReplaySubsystem->HasReplayPointCloud())
+	{
+		SetDiagnosticsText(TEXT("Replay point cloud is unavailable."));
+		RequestReplayInputFocus();
+		return;
+	}
+
+	const bool bNewVisible = !ReplaySubsystem->IsReplayPointCloudVisible();
+	ReplaySubsystem->SetReplayPointCloudVisible(bNewVisible);
+	SetDiagnosticsText(bNewVisible
+		? TEXT("Replay point cloud visible.")
+		: TEXT("Replay point cloud hidden."));
+	RequestReplayInputFocus();
 }
 
 UScenarioReplaySubsystem* UProjectEpisodeReplayViewerWidget::GetReplaySubsystem() const
@@ -660,9 +719,23 @@ void UProjectEpisodeReplayViewerWidget::UpdateReplayFullscreenVisibility()
 void UProjectEpisodeReplayViewerWidget::ApplyReplayFullscreenLayout()
 {
 	ApplyReplayFillSlot(ReplayFullscreenLayer.Get(), ReplayFullscreenLayerZOrder);
-	ApplyReplayFillSlot(ReplayFullscreenImage.Get(), INDEX_NONE);
 	InvalidateLayoutAndVolatility();
 	ForceLayoutPrepass();
+}
+
+// Finds fullscreen layer toggle buttons by name when they are not exposed as WBP variables.
+void UProjectEpisodeReplayViewerWidget::ResolveFullscreenLayerToggleWidgets()
+{
+	if (!FullscreenMapToggleButton)
+	{
+		FullscreenMapToggleButton = Cast<UButton>(GetWidgetFromName(TEXT("FullscreenMapToggleButton")));
+	}
+
+	if (!FullscreenPointCloudToggleButton)
+	{
+		FullscreenPointCloudToggleButton =
+			Cast<UButton>(GetWidgetFromName(TEXT("FullscreenPointCloudToggleButton")));
+	}
 }
 
 void UProjectEpisodeReplayViewerWidget::ApplyReplayCameraMode(
@@ -893,8 +966,4 @@ void UProjectEpisodeReplayViewerWidget::ClearReplayLookInput()
 void UProjectEpisodeReplayViewerWidget::SetDiagnosticsText(const FString& Message)
 {
 	LastDiagnosticsText = Message;
-	if (ReplayDiagnosticsText)
-	{
-		ReplayDiagnosticsText->SetText(FText::FromString(Message));
-	}
 }

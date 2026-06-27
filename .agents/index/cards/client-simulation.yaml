@@ -12,6 +12,7 @@ paths:
   - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayCardWidget.cpp
   - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayViewerWidget.h
   - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayViewerWidget.cpp
+  - Client/Content/Blueprints/Vehicle/BP_DeliveryBotReplayVisual.uasset
   - Client/Content/Input/**
   - Client/Content/Maps/ScenarioEditorMap.umap
   - Client/Content/Maps/ScenarioSimulationMap.umap
@@ -65,7 +66,7 @@ entry:
       - Client/Source/OdiroSim/Public/Scenario
       - Client/Source/OdiroSim/Private/Scenario
   - id: scenario-replay
-    description: Embedded episode replay data, binary frame playback, replay capture, and result UI integration.
+    description: Embedded episode replay data, binary frame playback, optional point-cloud review layer, replay capture, and result UI integration.
     read:
       - ReplayAgent.local.md
       - ReplayCurrentHandoff.local.md
@@ -84,6 +85,7 @@ entry:
       - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayCardWidget.cpp
       - Client/Source/OdiroSim/Public/Platform/Widget/ProjectEpisodeReplayViewerWidget.h
       - Client/Source/OdiroSim/Private/Platform/Widget/ProjectEpisodeReplayViewerWidget.cpp
+      - Client/Content/Blueprints/Vehicle/BP_DeliveryBotReplayVisual.uasset
 guardrails:
   - Final user project input uses one editable `<UserProject>/scenario.json`; generated episode scenarios are derived run artifacts.
   - Public project-run execution accepts direct scenario/profile inputs, not legacy RunQueue start helpers.
@@ -122,6 +124,10 @@ guardrails:
   - Embedded Replay camera tuning values are project settings owned by Scenario Replay developer settings; tune camera feel there before changing replay frame data.
   - Embedded Replay timeline UI displays replay subsystem time/frame/speed state and seeks through ScenarioReplaySubsystem.Seek rather than mutating replay artifacts.
   - Embedded Replay fullscreen in WBP_MainMenu moves the same ProjectEpisodeReplayViewerWidget between normal and fullscreen Overlay hosts; do not create a second replay viewer instance for fullscreen.
+  - Embedded Replay fullscreen controls use dedicated WBP_Replay button names for playback, direct camera selection, and map/point-cloud layer toggles; the normal view can keep its single camera-cycle button.
+  - Embedded Replay map and point-cloud toggles are render-layer visibility only; they must not alter replay frames, robot playback, policy, or physics.
+  - Embedded Replay point-cloud review uses LidarPointCloudRuntime rendering for Free and VehicleFront views, while TopDown uses review-actor-owned HISM sphere instances because the plugin renderer is not reliable in orthographic capture.
+  - Embedded Replay V2 wheel data stores baked visual wheel poses from the runtime robot; replay actors must apply the poses without running Chaos Vehicle, policy, HTTP, or sensors.
   - Replay-specific high-frequency data belongs in replay.meta.json/replay.frames.bin; trace.jsonl remains LLM/human analysis-oriented unless a task explicitly changes trace.
 verify:
   - when: scenario contracts, schemas, or samples change

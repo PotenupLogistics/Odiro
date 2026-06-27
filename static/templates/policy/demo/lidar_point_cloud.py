@@ -51,8 +51,9 @@ POINT_CLOUD_FRAME_DIRECTORY_NAME = "frames"
 # Point classification별 표시 색상.
 POINT_CLOUD_CLASSIFICATION_COLORS = {
     "ground": (120, 120, 120),
+    "wall": (80, 180, 255),
     "obstacle": (255, 80, 60),
-    "unknown": (80, 160, 255),
+    "unknown": (160, 120, 255),
 }
 
 
@@ -197,6 +198,7 @@ class LidarPointCloudRecorder:
             "frameCount": 0,
             "totalPointCount": 0,
             "groundPointCount": 0,
+            "wallPointCount": 0,
             "obstaclePointCount": 0,
             "unknownPointCount": 0,
             "firstSensorSequence": None,
@@ -245,7 +247,11 @@ class LidarPointCloudRecorder:
             "pointUnit": POINT_CLOUD_UNIT,
             "pointCount": len(points),
             "groundPointCount": sum(1 for point in points if point["classification"] == "ground"),
+            "wallPointCount": sum(1 for point in points if point["classification"] == "wall"),
             "obstaclePointCount": sum(1 for point in points if point["classification"] == "obstacle"),
+            "unknownPointCount": sum(
+                1 for point in points if point["classification"] not in ("ground", "wall", "obstacle")
+            ),
             "format": POINT_CLOUD_POINT_FORMAT,
             "captureOriginCm": self.captureOriginCm,
             "importYAxisSign": POINT_CLOUD_IMPORT_Y_SIGN,
@@ -290,11 +296,14 @@ class LidarPointCloudRecorder:
         self.captureSummary["groundPointCount"] = int(self.captureSummary["groundPointCount"]) + sum(
             1 for point in points if point["classification"] == "ground"
         )
+        self.captureSummary["wallPointCount"] = int(self.captureSummary["wallPointCount"]) + sum(
+            1 for point in points if point["classification"] == "wall"
+        )
         self.captureSummary["obstaclePointCount"] = int(self.captureSummary["obstaclePointCount"]) + sum(
             1 for point in points if point["classification"] == "obstacle"
         )
         self.captureSummary["unknownPointCount"] = int(self.captureSummary["unknownPointCount"]) + sum(
-            1 for point in points if point["classification"] not in ("ground", "obstacle")
+            1 for point in points if point["classification"] not in ("ground", "wall", "obstacle")
         )
         self.captureSummary["lastSensorSequence"] = frame["sensorSequence"]
         self.captureSummary["lastSensorTimeSeconds"] = frame["sensorTimeSeconds"]
@@ -638,17 +647,52 @@ def _get_robot_pose_cm(request: ScenarioDecideRequest) -> dict[str, float]:
 
 
 # actor tag 유무와 actor 이름으로 point classification을 정한다.
-def _classify_lidar_ray(ray: LidarRay3D) -> str:
-    actor_name = ray.actorName or ""
-    actor_tags = ray.actorTags or []
+# Normalizes LiDAR actor identity markers for classification checks.
+def _get_lidar_actor_markers(ray: LidarRay3D) -> tuple[str, set[str]]:
+    actor_name = str(ray.actorName or "").lower()
+    actor_tags = {str(tag).lower() for tag in (ray.actorTags or [])}
+    return actor_name, actor_tags
 
-    if actor_name.startswith("ScenarioGroundRegion") and len(actor_tags) == 0:
+
+# Returns true when any marker appears in the actor name or tags.
+def _has_lidar_marker(actor_name: str, actor_tags: set[str], markers: tuple[str, ...]) -> bool:
+    return any(marker in actor_name or any(marker in tag for tag in actor_tags) for marker in markers)
+
+
+# Reads the Unreal hit Z coordinate from a LiDAR ray when it is available.
+def _get_lidar_hit_z_cm(ray: LidarRay3D) -> float | None:
+    if ray.hitLocationCm is None:
+        return None
+
+    try:
+        return float(ray.hitLocationCm["z"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+# Classifies one LiDAR hit for point cloud review coloring.
+def _classify_lidar_ray(ray: LidarRay3D) -> str:
+    actor_name, actor_tags = _get_lidar_actor_markers(ray)
+    hit_z_cm = _get_lidar_hit_z_cm(ray)
+
+    if _has_lidar_marker(actor_name, actor_tags, ("obstacle", "pedestrian", "vehicle", "prop")):
+        return "obstacle"
+
+    if _has_lidar_marker(actor_name, actor_tags, ("wall", "barrier", "fence")):
+        return "wall"
+
+    if _has_lidar_marker(actor_name, actor_tags, ("ground", "floor", "road", "walkable", "lane")):
+        return "ground"
+
+    if "corridor" in actor_name:
+        if hit_z_cm is not None and hit_z_cm > 12.0:
+            return "wall"
         return "ground"
 
     if len(actor_tags) == 0:
         return "ground"
 
-    return "obstacle"
+    return "unknown"
 
 
 # point 수가 제한을 넘으면 균등 간격으로 샘플링한다.

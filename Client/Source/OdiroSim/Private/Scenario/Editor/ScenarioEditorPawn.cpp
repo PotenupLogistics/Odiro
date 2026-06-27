@@ -92,6 +92,7 @@ void AScenarioEditorPawn::EnterTopDownView()
 	CurrentOrthoWidthCm = FMath::Clamp(TopDownOrthoWidthCm, TopDownOrthoWidthMinCm, TopDownOrthoWidthMaxCm);
 	CameraComponent->SetProjectionMode(ECameraProjectionMode::Orthographic);
 	CameraComponent->SetOrthoWidth(CurrentOrthoWidthCm);
+	ApplyTopDownOrthoPlanes();
 
 	FloatingMovementComponent->StopMovementImmediately();
 	ApplyTopDownPanSpeed();
@@ -164,6 +165,17 @@ void AScenarioEditorPawn::ApplyTopDownPanSpeed()
 	FloatingMovementComponent->MaxSpeed = MaxMoveSpeed * widthRatio;
 	FloatingMovementComponent->Acceleration = Acceleration * widthRatio;
 	FloatingMovementComponent->Deceleration = Deceleration * widthRatio;
+}
+
+void AScenarioEditorPawn::ApplyTopDownOrthoPlanes()
+{
+	if (!CameraComponent) return;
+
+	CameraComponent->SetAutoCalculateOrthoPlanes(false);
+	CameraComponent->SetUpdateOrthoPlanes(false);
+	CameraComponent->SetOrthoNearClipPlane(0.0f);
+	CameraComponent->SetOrthoFarClipPlane(
+		static_cast<float>(FMath::Max(1000000.0, TopDownOrthoFarClipPlaneCm)));
 }
 
 void AScenarioEditorPawn::ApplyGreyBackgroundPostProcessMaterial()

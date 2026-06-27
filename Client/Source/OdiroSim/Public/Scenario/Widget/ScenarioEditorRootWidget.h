@@ -260,12 +260,19 @@ private:
 	UFUNCTION()
 	void HandleOutlinerItemSelected(FScenarioOutlinerItemViewModel item);
 
+	UFUNCTION()
+	void HandleToolbarSidebarPanelChanged(EScenarioTemplateSidebarPanel activePanel);
+
 	void BindEditorModeButtons();
 	void UnbindEditorModeButtons();
+	void BindToolbarControls();
+	void UnbindToolbarControls();
 	void BindSidebarControls();
 	void UnbindSidebarControls();
 	// Connects the root adapter to the subsystem-owned shell ViewModel.
 	void InitializeViewModel();
+	// Applies ShellViewModel-only panel changes when no placeable block is focused.
+	void SyncTemplateSidebarPanelFromShellViewModel();
 	// Applies one template sidebar panel to the sidebar and records the synchronized value.
 	void ApplyTemplateSidebarPanel(EScenarioTemplateSidebarPanel activePanel);
 	class AScenarioEditorController* GetEditorController() const;

@@ -467,6 +467,46 @@ void UScenarioEditorUiSubsystem::ReleaseEditorWidgetInputMode(UWidget* requestin
 	}
 }
 
+bool UScenarioEditorUiSubsystem::SetEditorViewMode(const EScenarioEditorViewMode viewMode) const
+{
+	AScenarioEditorController* editorController = ResolveEditorController();
+	if (!editorController)
+	{
+		return false;
+	}
+
+	editorController->SetEditorViewMode(viewMode);
+	return true;
+}
+
+EScenarioEditorViewMode UScenarioEditorUiSubsystem::GetEditorViewMode() const
+{
+	const AScenarioEditorController* editorController = ResolveEditorController();
+	return editorController
+		? editorController->GetEditorViewMode()
+		: EScenarioEditorViewMode::Perspective;
+}
+
+bool UScenarioEditorUiSubsystem::SetTransformGizmoMode(const EScenarioTransformGizmoMode mode) const
+{
+	AScenarioEditorController* editorController = ResolveEditorController();
+	if (!editorController)
+	{
+		return false;
+	}
+
+	editorController->SetTransformGizmoMode(mode);
+	return true;
+}
+
+EScenarioTransformGizmoMode UScenarioEditorUiSubsystem::GetTransformGizmoMode() const
+{
+	const AScenarioEditorController* editorController = ResolveEditorController();
+	return editorController
+		? editorController->GetTransformGizmoMode()
+		: EScenarioTransformGizmoMode::Translate;
+}
+
 bool UScenarioEditorUiSubsystem::SetTransformGizmoOrientationMode(
 	const EScenarioTransformGizmoOrientationMode orientationMode) const
 {
@@ -478,6 +518,14 @@ bool UScenarioEditorUiSubsystem::SetTransformGizmoOrientationMode(
 
 	editorController->SetTransformGizmoOrientationMode(orientationMode);
 	return true;
+}
+
+EScenarioTransformGizmoOrientationMode UScenarioEditorUiSubsystem::GetTransformGizmoOrientationMode() const
+{
+	const AScenarioEditorController* editorController = ResolveEditorController();
+	return editorController
+		? editorController->GetTransformGizmoOrientationMode()
+		: EScenarioTransformGizmoOrientationMode::World;
 }
 
 bool UScenarioEditorUiSubsystem::CanEditTransformGizmoOrientationForSelection() const

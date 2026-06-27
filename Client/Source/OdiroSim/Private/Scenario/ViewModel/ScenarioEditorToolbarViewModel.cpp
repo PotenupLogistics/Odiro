@@ -91,6 +91,65 @@ void UScenarioEditorToolbarViewModel::SelectSidebarPanel(const EScenarioTemplate
 	}
 }
 
+bool UScenarioEditorToolbarViewModel::SetEditorViewMode(const EScenarioEditorViewMode viewMode)
+{
+	return UiSubsystem && UiSubsystem->SetEditorViewMode(viewMode);
+}
+
+bool UScenarioEditorToolbarViewModel::SetTopDownOrthoViewMode()
+{
+	return SetEditorViewMode(EScenarioEditorViewMode::TopDownOrtho);
+}
+
+bool UScenarioEditorToolbarViewModel::SetPerspectiveViewMode()
+{
+	return SetEditorViewMode(EScenarioEditorViewMode::Perspective);
+}
+
+bool UScenarioEditorToolbarViewModel::SetTransformGizmoMode(const EScenarioTransformGizmoMode mode)
+{
+	return UiSubsystem && UiSubsystem->SetTransformGizmoMode(mode);
+}
+
+bool UScenarioEditorToolbarViewModel::SetTransformGizmoOrientationMode(
+	const EScenarioTransformGizmoOrientationMode orientationMode)
+{
+	return UiSubsystem && UiSubsystem->SetTransformGizmoOrientationMode(orientationMode);
+}
+
+EScenarioTransformGizmoMode UScenarioEditorToolbarViewModel::GetTransformGizmoMode() const
+{
+	return UiSubsystem
+		? UiSubsystem->GetTransformGizmoMode()
+		: EScenarioTransformGizmoMode::Translate;
+}
+
+EScenarioEditorViewMode UScenarioEditorToolbarViewModel::GetEditorViewMode() const
+{
+	return UiSubsystem
+		? UiSubsystem->GetEditorViewMode()
+		: EScenarioEditorViewMode::Perspective;
+}
+
+EScenarioTransformGizmoOrientationMode UScenarioEditorToolbarViewModel::GetTransformGizmoOrientationMode() const
+{
+	return UiSubsystem
+		? UiSubsystem->GetTransformGizmoOrientationMode()
+		: EScenarioTransformGizmoOrientationMode::World;
+}
+
+EScenarioTransformGizmoOrientationMode UScenarioEditorToolbarViewModel::GetEffectiveTransformGizmoOrientationMode() const
+{
+	return UiSubsystem
+		? UiSubsystem->GetEffectiveTransformGizmoOrientationMode()
+		: EScenarioTransformGizmoOrientationMode::World;
+}
+
+bool UScenarioEditorToolbarViewModel::CanEditTransformGizmoOrientationForSelection() const
+{
+	return UiSubsystem && UiSubsystem->CanEditTransformGizmoOrientationForSelection();
+}
+
 void UScenarioEditorToolbarViewModel::SetStatusText(const FString& message)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(StatusText, message);

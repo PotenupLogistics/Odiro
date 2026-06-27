@@ -112,6 +112,10 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UTextBlock> ToggleTextBlock;
 
+	// Optional image showing the expanded/collapsed glyph when the WBP owns icon binding.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UImage> ToggleIconImage;
+
 	// Optional header text for the block name.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UTextBlock> NameTextBlock;
@@ -275,12 +279,16 @@ private:
 	void UnbindControls();
 	// Creates generated header action buttons when the WBP header can host them.
 	void EnsureActionButtons();
+	// Replaces the optional text toggle glyph with the configured icon image.
+	void EnsureToggleIcon();
 	// Creates the generated asset summary header when the WBP header can host it.
 	void EnsureAssetHeaderSummary();
 	// Creates one generated header button and attaches it to the header row.
 	void CreateActionButton(TObjectPtr<UButton>& outButton, TObjectPtr<UTextBlock>& outTextBlock);
 	// Applies visibility and label state to one generated header button.
 	void SetActionButtonState(UButton* button, UTextBlock* textBlock, bool bVisible, const FString& label) const;
+	// Applies expanded/collapsed icon and flat button style to the header toggle.
+	void ApplyToggleButtonState() const;
 	// Applies cached asset summary data to generated header widgets.
 	void ApplyAssetHeaderSummaryState();
 	// Applies shared sidebar spacing and block surface styling.

@@ -47,6 +47,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
 	void SelectSidebarPanel(EScenarioTemplateSidebarPanel panel);
 
+	// Sets the editor viewport projection mode from the toolbar command rail.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
+	bool SetEditorViewMode(EScenarioEditorViewMode viewMode);
+
+	// Switches the editor viewport to top-down orthographic mode.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
+	bool SetTopDownOrthoViewMode();
+
+	// Switches the editor viewport to perspective mode.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
+	bool SetPerspectiveViewMode();
+
+	// Sets the transform gizmo edit mode from the toolbar command rail.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
+	bool SetTransformGizmoMode(EScenarioTransformGizmoMode mode);
+
+	// Sets the transform gizmo orientation mode from the toolbar command rail.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
+	bool SetTransformGizmoOrientationMode(EScenarioTransformGizmoOrientationMode orientationMode);
+
 	// Toolbar 상태 표시 문자열을 갱신한다.
 	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Toolbar")
 	void SetStatusText(const FString& message);
@@ -54,6 +74,26 @@ public:
 	// 현재 active template sidebar panel을 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Toolbar")
 	EScenarioTemplateSidebarPanel GetActiveSidebarPanel() const { return ActiveSidebarPanel; }
+
+	// Returns the active transform gizmo edit mode.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Toolbar")
+	EScenarioTransformGizmoMode GetTransformGizmoMode() const;
+
+	// Returns the editor viewport projection mode.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Toolbar")
+	EScenarioEditorViewMode GetEditorViewMode() const;
+
+	// Returns the toolbar-selected transform gizmo orientation mode.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Toolbar")
+	EScenarioTransformGizmoOrientationMode GetTransformGizmoOrientationMode() const;
+
+	// Returns the orientation mode currently applied to the selected gizmo target.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Toolbar")
+	EScenarioTransformGizmoOrientationMode GetEffectiveTransformGizmoOrientationMode() const;
+
+	// Returns whether the current selection can use local/world orientation switching.
+	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Toolbar")
+	bool CanEditTransformGizmoOrientationForSelection() const;
 
 	// Toolbar 상태 표시 문자열을 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Toolbar")

@@ -125,8 +125,23 @@ public:
 	// Details widget이 요청했던 editor input mode를 해제한다.
 	void ReleaseEditorWidgetInputMode(UWidget* requestingWidget) const;
 
+	// Sets the editor viewport projection mode.
+	bool SetEditorViewMode(EScenarioEditorViewMode viewMode) const;
+
+	// Returns the editor viewport projection mode.
+	EScenarioEditorViewMode GetEditorViewMode() const;
+
+	// Sets the active transform gizmo edit mode.
+	bool SetTransformGizmoMode(EScenarioTransformGizmoMode mode) const;
+
+	// Returns the active transform gizmo edit mode.
+	EScenarioTransformGizmoMode GetTransformGizmoMode() const;
+
 	// 선택 transform gizmo 방향을 변경한다.
 	bool SetTransformGizmoOrientationMode(EScenarioTransformGizmoOrientationMode orientationMode) const;
+
+	// Returns the toolbar-selected transform gizmo orientation mode.
+	EScenarioTransformGizmoOrientationMode GetTransformGizmoOrientationMode() const;
 
 	// 선택 transform gizmo 방향을 편집할 수 있는지 반환한다.
 	bool CanEditTransformGizmoOrientationForSelection() const;

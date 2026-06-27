@@ -10,6 +10,7 @@ class UEditableTextBox;
 class UButton;
 class UComboBoxString;
 class UHorizontalBox;
+class UImage;
 class UTexture2D;
 class UMultiLineEditableTextBox;
 class USizeBox;
@@ -186,6 +187,10 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UTextBlock> RangeToggleTextBlock;
 
+	// Optional icon used by the range toggle button when the WBP owns icon binding.
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
+	TObjectPtr<UImage> RangeToggleIconImage;
+
 	// Optional button that requests adding an array item near this row.
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "Scenario|Editor|Template")
 	TObjectPtr<UButton> AddItemButton;
@@ -342,6 +347,14 @@ private:
 	void UnbindControls();
 	// Applies shared sidebar field spacing to the optional WBP-owned controls.
 	void ApplyVisualStyle();
+	// Creates generated icon content for optional range/fixed buttons when WBP binding is absent.
+	void EnsureRangeToggleIcon();
+	// Applies the flat no-background visual style to row action buttons.
+	void ApplyFlatButtonStyle(UButton* button) const;
+	// Applies the range/fixed icon and flat visual state to the range toggle button.
+	void ApplyRangeToggleButtonState() const;
+	// Applies visibility and style state to row add/remove buttons.
+	void ApplyArrayActionButtonState() const;
 	// Applies stored label, value, and editability state to bound controls.
 	void RefreshRow();
 	// Returns whether the current type should show the multiline editor.

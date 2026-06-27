@@ -98,6 +98,7 @@ guardrails:
   - User project run output is written through typed UserProjectData JSON writers.
   - ScenarioEditorUiSubsystem owns ScenarioEditorMap UI ViewModel lifecycle and stores no widget pointers.
   - Scenario editor selection, subsystem lookup, and world mutation stay controller/subsystem/component-owned; ViewModels expose FieldNotify state and command facades through ScenarioEditorUiSubsystem.
+  - ScenarioEditorToolbarWidget is the left command rail for template panel switching and transform gizmo mode/orientation commands; save, return, and status remain outside the toolbar surface.
   - Scenario editor viewport navigation input is owned by ScenarioEditorController with Enhanced Input assets under Client/Content/Input; keep mouse capture, selection, and cancel bindings explicit.
   - ScenarioEditorLaunchSubsystem owns ScenarioEditorMap travel gating for shared visual asset preload before the viewport becomes visible.
   - SimulatorProcessSubsystem gates project-run ScenarioSimulationMap travel behind the same shared visual asset preload when launching from StartupMap.

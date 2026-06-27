@@ -144,12 +144,13 @@ void UScenarioEditorRootWidget::NativeConstruct()
 
 	InitializeViewModel();
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-	SetPanelVisibility(ToolbarWidget.Get(), false);
+	SetPanelVisibility(ToolbarWidget.Get(), true);
 	HidePlaceableDetails();
 	HideAssetPaletteWidget();
 	CacheInspectorTabButtonStyles();
 	ShowInspectorTab(EScenarioEditorInspectorTab::Detail);
 	BindEditorModeButtons();
+	BindToolbarControls();
 	BindSidebarControls();
 	SetTemplateSidebarPanel(EScenarioTemplateSidebarPanel::Main);
 	RefreshScenarioInspector();
@@ -162,6 +163,7 @@ void UScenarioEditorRootWidget::NativeConstruct()
 void UScenarioEditorRootWidget::NativeDestruct()
 {
 	UnbindSidebarControls();
+	UnbindToolbarControls();
 	UnbindEditorModeButtons();
 	UnbindEditorLaunchSubsystem();
 	Super::NativeDestruct();
@@ -190,6 +192,8 @@ void UScenarioEditorRootWidget::NativeTick(const FGeometry& myGeometry, const fl
 		{
 			RefreshPlacementSnapButton();
 		}
+
+		SyncTemplateSidebarPanelFromShellViewModel();
 	}
 }
 
@@ -630,20 +634,6 @@ void UScenarioEditorRootWidget::UnbindEditorModeButtons()
 
 void UScenarioEditorRootWidget::HandleSaveButtonClicked()
 {
-	if (ToolbarWidget)
-	{
-		const bool bSaved = ToolbarWidget->SaveScenario();
-		if (const UScenarioEditorToolbarViewModel* toolbarViewModel = ToolbarWidget->GetToolbarViewModel())
-		{
-			SetSaveStatusText(toolbarViewModel->GetStatusText());
-		}
-		if (bSaved)
-		{
-			RefreshScenarioInspector();
-		}
-		return;
-	}
-
 	UScenarioEditorUiSubsystem* uiSubsystem = UScenarioEditorUiSubsystem::ResolveForWorldContext(this);
 	UScenarioEditorToolbarViewModel* toolbarViewModel = uiSubsystem ? uiSubsystem->GetToolbarViewModel() : nullptr;
 	if (!toolbarViewModel)
@@ -690,6 +680,36 @@ void UScenarioEditorRootWidget::HandleOutlinerItemSelected(FScenarioOutlinerItem
 	{
 		ScenarioEditorOutlinerWidget->SetSelectedItemKey(item.ItemKey);
 	}
+}
+
+void UScenarioEditorRootWidget::HandleToolbarSidebarPanelChanged(
+	const EScenarioTemplateSidebarPanel activePanel)
+{
+	SetTemplateSidebarPanel(activePanel);
+}
+
+void UScenarioEditorRootWidget::BindToolbarControls()
+{
+	if (!ToolbarWidget)
+	{
+		return;
+	}
+
+	ToolbarWidget->OnSidebarPanelChanged.RemoveDynamic(
+		this, &UScenarioEditorRootWidget::HandleToolbarSidebarPanelChanged);
+	ToolbarWidget->OnSidebarPanelChanged.AddDynamic(
+		this, &UScenarioEditorRootWidget::HandleToolbarSidebarPanelChanged);
+}
+
+void UScenarioEditorRootWidget::UnbindToolbarControls()
+{
+	if (!ToolbarWidget)
+	{
+		return;
+	}
+
+	ToolbarWidget->OnSidebarPanelChanged.RemoveDynamic(
+		this, &UScenarioEditorRootWidget::HandleToolbarSidebarPanelChanged);
 }
 
 void UScenarioEditorRootWidget::BindSidebarControls()
@@ -775,8 +795,29 @@ void UScenarioEditorRootWidget::InitializeViewModel()
 	}
 }
 
+void UScenarioEditorRootWidget::SyncTemplateSidebarPanelFromShellViewModel()
+{
+	if (!ShellViewModel || !ShellViewModel->GetSelectedPlaceableId().IsEmpty())
+	{
+		return;
+	}
+
+	UScenarioEditorSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget();
+	if (!sidebarWidget || sidebarWidget->ActivePanel == ShellViewModel->GetActiveSidebarPanel())
+	{
+		return;
+	}
+
+	SetTemplateSidebarPanel(ShellViewModel->GetActiveSidebarPanel());
+}
+
 void UScenarioEditorRootWidget::ApplyTemplateSidebarPanel(const EScenarioTemplateSidebarPanel activePanel)
 {
+	if (ToolbarWidget)
+	{
+		ToolbarWidget->SetActiveSidebarPanel(activePanel);
+	}
+
 	UScenarioEditorSidebarWidget* sidebarWidget = ResolveTemplateSidebarWidget();
 	if (sidebarWidget)
 	{

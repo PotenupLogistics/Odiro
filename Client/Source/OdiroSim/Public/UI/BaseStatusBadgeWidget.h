@@ -42,9 +42,6 @@ public:
 	bool IsDisabled() const { return bDisabled; }
 
 protected:
-	// Feeds the rounded surface material its painted size each paint (capture-safe).
-	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
-
 	// Badge text.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLabel", Setter = "SetLabel", BlueprintGetter = "GetLabel", BlueprintSetter = "SetLabel", Category = "UI|Base Status Badge", meta = (ExposeOnSpawn = "true"))
 	FText Label;

@@ -21,27 +21,9 @@ void UBaseStatusBadgeWidget::SynchronizeBaseProperties()
 			: badgeColor));
 	}
 
-	if (tokens)
-	{
-		BaseWidgetPrivate::ApplyRoundedSurface(
-			BorderFrame.Get(),
-			SurfaceBorder.Get(),
-			tokens->SurfaceControlColor,
-			tokens->LineFieldColor,
-			tokens->Radius,
-			tokens->BorderWidth);
-	}
-	else
-	{
-		ApplyBorderColor(SurfaceBorder.Get(), ResolveVariantColor(EBaseWidgetVariant::Secondary));
-	}
+	BaseWidgetPrivate::MakeBorderVisualTransparent(BorderFrame.Get());
+	BaseWidgetPrivate::MakeBorderVisualTransparent(SurfaceBorder.Get());
 	ApplyBorderColor(StatusDot.Get(), badgeColor);
-}
-
-int32 UBaseStatusBadgeWidget::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, const bool bParentEnabled) const
-{
-	BaseWidgetPrivate::UpdateRoundedSurfaceSize(SurfaceBorder.Get(), AllottedGeometry.GetLocalSize());
-	return Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
 }
 
 void UBaseStatusBadgeWidget::SetLabel(const FText inLabel)

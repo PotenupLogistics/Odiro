@@ -34,13 +34,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Icon")
 	EBaseWidgetVariant GetVariant() const { return Variant; }
 
-	// Updates the size hint used by the WBP layout.
+	// Updates the icon box and image size in pixels.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Icon")
-	void SetBaseSize(EBaseWidgetSize inSize);
+	void SetIconSize(float inIconSize);
 
-	// Returns the size hint used by the WBP layout.
+	// Returns the icon box and image size in pixels.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Icon")
-	EBaseWidgetSize GetBaseSize() const { return Size; }
+	float GetIconSize() const { return IconSize; }
 
 	// Updates the disabled visual state.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Icon")
@@ -59,9 +59,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetVariant", Setter = "SetVariant", BlueprintGetter = "GetVariant", BlueprintSetter = "SetVariant", Category = "UI|Base Icon", meta = (ExposeOnSpawn = "true"))
 	EBaseWidgetVariant Variant = EBaseWidgetVariant::Neutral;
 
-	// Size hint used by WBP variants.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetBaseSize", Setter = "SetBaseSize", BlueprintGetter = "GetBaseSize", BlueprintSetter = "SetBaseSize", Category = "UI|Base Icon", meta = (ExposeOnSpawn = "true"))
-	EBaseWidgetSize Size = EBaseWidgetSize::Medium;
+	// Icon box and image size in pixels.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIconSize", Setter = "SetIconSize", BlueprintGetter = "GetIconSize", BlueprintSetter = "SetIconSize", Category = "UI|Base Icon", meta = (DisplayName = "Icon Size (px)", ClampMin = "1.0", UIMin = "8.0", UIMax = "64.0", ExposeOnSpawn = "true"))
+	float IconSize = 24.0f;
 
 	// Disabled icon state.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|Base Icon", meta = (ExposeOnSpawn = "true"))

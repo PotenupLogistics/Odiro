@@ -36,6 +36,9 @@ namespace BaseWidgetPrivate
 	// Owns optional icon visibility from image assignment instead of letting WBP visibility drift.
 	void SetOptionalIconVisibility(UWidget* iconBox, UImage* iconImage, bool bVisible);
 
+	// Applies one square pixel size to an optional icon wrapper and its image brush.
+	void ApplyIconSize(UWidget* iconBox, UImage* iconImage, float iconSize);
+
 	// Configures a brush that contributes no visual area from CommonUI itself.
 	void MakeNoDrawBrush(FSlateBrush& brush);
 
@@ -45,11 +48,9 @@ namespace BaseWidgetPrivate
 	// Applies semantic color to a border without replacing its authored brush shape.
 	void ApplyBorderBrushTint(UBorder* border, const FLinearColor& color);
 
-	// Draws a crisp rounded surface (fill + inner stroke) on surfaceBorder via the
-	// analytic SDF UI material as a dynamic instance. The shader derives element
-	// size from screen-space UV derivatives, so it stays sharp at any size with no
-	// per-tick element size. frameBorder is the legacy stroke layer and is made
-	// inert (the one material draws both fill and stroke); it may be null.
+	// Draws a crisp rounded surface (fill + inner stroke) on surfaceBorder via an
+	// analytic SDF UI material. NativePaint feeds the material's ElementSize
+	// parameter so it stays sharp at the WBP-authored size.
 	void ApplyRoundedSurface(
 		UBorder* frameBorder,
 		UBorder* surfaceBorder,
@@ -58,10 +59,18 @@ namespace BaseWidgetPrivate
 		float radiusPx,
 		float borderWidthPx);
 
+	// Draws a tab surface with only the top corners rounded and no bottom stroke.
+	void ApplyTopRoundedSurface(
+		UBorder* frameBorder,
+		UBorder* surfaceBorder,
+		const FLinearColor& fillColor,
+		const FLinearColor& strokeColor,
+		float radiusPx,
+		float borderWidthPx);
+
 	// Draws a rounded progress bar on a border via the progress SDF material:
-	// a rounded track plus a fill clipped to percent (left end follows the track
-	// rounding, right end straight). The WBP-authored brush ImageSize is preserved;
-	// pixel size for the shader is fed via UpdateRoundedSurfaceSize.
+	// a rounded track plus a fill clipped to percent. NativePaint feeds the
+	// material's ElementSize parameter for pixel-accurate corners.
 	void ApplyProgressSurface(
 		UBorder* trackBorder,
 		const FLinearColor& trackColor,
@@ -76,4 +85,7 @@ namespace BaseWidgetPrivate
 	// before the surface has a cached geometry. (Overloads for the two host widgets.)
 	void UpdateRoundedSurfaceSize(UBorder* surfaceBorder, const FVector2D& fallbackSize);
 	void UpdateRoundedSurfaceSize(UImage* surfaceImage, const FVector2D& fallbackSize);
+
+	// Clears border drawing while keeping WBP-authored padding and child layout.
+	void MakeBorderVisualTransparent(UBorder* border);
 }

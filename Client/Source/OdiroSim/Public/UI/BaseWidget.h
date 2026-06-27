@@ -49,8 +49,8 @@ protected:
 	// Applies a semantic tint to an optional border while preserving its WBP-owned brush.
 	void ApplyBorderColor(UBorder* border, const FLinearColor& color) const;
 
-	// Shared base token catalog used by this component instance.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Widgets", meta = (ExposeOnSpawn = "true"))
+	// Optional token catalog override; empty uses the shared DA_BaseTokens asset.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Widgets", meta = (DisplayName = "Base Token Overrides", ExposeOnSpawn = "true"))
 	TSoftObjectPtr<UBaseWidgetTokenCatalog> BaseTokens;
 
 	// Optional outer frame owned by the Widget Blueprint for stroke or selected-state highlights.

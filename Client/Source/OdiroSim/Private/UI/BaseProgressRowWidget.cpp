@@ -8,7 +8,8 @@ void UBaseProgressRowWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
 
-	if (const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens())
+	const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
+	if (tokens)
 	{
 		BaseWidgetPrivate::ApplyRoundedSurface(
 			BorderFrame.Get(),
@@ -34,17 +35,15 @@ void UBaseProgressRowWidget::SynchronizeBaseProperties()
 		BaseWidgetPrivate::ApplyTextIfSet(ValueTextBlock.Get(), ValueText);
 		ApplyTextStyle(ValueTextBlock.Get(), EBaseTextRole::Caption);
 	}
-	if (ProgressTrack)
+	if (ProgressTrack && tokens)
 	{
-		const UBaseWidgetTokenCatalog* tokens = GetResolvedBaseTokens();
 		const float clampedPercent = FMath::Clamp(ProgressPercent, 0.0f, 100.0f) / 100.0f;
-		const FLinearColor trackColor = tokens ? tokens->SurfaceWellColor : ResolveVariantColor(EBaseWidgetVariant::Neutral);
 		BaseWidgetPrivate::ApplyProgressSurface(
 			ProgressTrack.Get(),
-			trackColor,
+			tokens->SurfaceWellColor,
 			ResolveStateColor(State),
 			clampedPercent,
-			tokens ? tokens->RadiusPill : 999.0f);
+			tokens->RadiusPill);
 	}
 }
 

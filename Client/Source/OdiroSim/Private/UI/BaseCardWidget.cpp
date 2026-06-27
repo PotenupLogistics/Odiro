@@ -5,6 +5,15 @@
 #include "UI/BaseMetricCardWidget.h"
 #include "UI/BaseWidgetPrivate.h"
 
+namespace
+{
+	// Blends a neutral card line toward a semantic marker color.
+	FLinearColor MixCardLineColor(const FLinearColor& neutralColor, const FLinearColor& markerColor)
+	{
+		return FMath::Lerp(neutralColor, markerColor, 0.65f);
+	}
+}
+
 void UBaseCardWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
@@ -30,25 +39,32 @@ void UBaseCardWidget::SynchronizeBaseProperties()
 		}
 	}
 
-	FLinearColor surfaceColor = tokens ? tokens->SurfacePanelColor : ResolveVariantColor(EBaseWidgetVariant::Neutral);
-	FLinearColor frameColor = tokens ? tokens->LineFieldColor : ResolveVariantColor(EBaseWidgetVariant::Neutral);
-	if (State == EBaseWidgetState::Hovered && tokens)
+	if (!tokens)
+	{
+		return;
+	}
+
+	FLinearColor surfaceColor = tokens->SurfacePanelColor;
+	FLinearColor frameColor = tokens->LineFieldColor;
+	const bool bVariantColored = Variant != EBaseWidgetVariant::Neutral && Variant != EBaseWidgetVariant::Ghost;
+	const FLinearColor variantColor = ResolveVariantColor(Variant);
+	if (State == EBaseWidgetState::Hovered)
 	{
 		surfaceColor = tokens->SurfaceHoverColor;
 	}
-	else if (bStateDisabled && tokens)
+	else if (bStateDisabled)
 	{
 		surfaceColor = tokens->SurfaceControlColor;
 	}
 	if (bSelected)
 	{
-		frameColor = tokens ? tokens->AccentColor : ResolveStateColor(EBaseWidgetState::Selected);
+		frameColor = tokens->AccentColor;
 	}
-	else if (bStateDisabled && tokens)
+	else if (bStateDisabled)
 	{
 		frameColor = tokens->LineSubtleColor;
 	}
-	else if (State == EBaseWidgetState::Hovered && tokens)
+	else if (State == EBaseWidgetState::Hovered)
 	{
 		frameColor = tokens->LineFieldHoverColor;
 	}
@@ -56,19 +72,23 @@ void UBaseCardWidget::SynchronizeBaseProperties()
 	{
 		frameColor = ResolveStateColor(State);
 	}
+	else if (bVariantColored)
+	{
+		frameColor = MixCardLineColor(tokens->LineFieldColor, variantColor);
+	}
 
 	BaseWidgetPrivate::ApplyRoundedSurface(
 		BorderFrame.Get(),
 		SurfaceBorder.Get(),
 		surfaceColor,
 		frameColor,
-		tokens ? tokens->Radius : 4.0f,
-		tokens ? tokens->BorderWidth : 1.0f);
+		tokens->Radius,
+		tokens->BorderWidth);
 
 	if (StateMarker)
 	{
-		FLinearColor markerColor = ResolveVariantColor(Variant);
-		bool bShowMarker = Variant != EBaseWidgetVariant::Neutral;
+		FLinearColor markerColor = variantColor;
+		bool bShowMarker = bVariantColored;
 		if (bSelected)
 		{
 			markerColor = ResolveStateColor(EBaseWidgetState::Selected);

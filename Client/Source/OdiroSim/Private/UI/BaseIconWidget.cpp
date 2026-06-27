@@ -18,6 +18,7 @@ void UBaseIconWidget::SynchronizeBaseProperties()
 		IconImage->SetBrushFromTexture(Icon, false);
 	}
 	const bool bHasIcon = Icon != nullptr || BaseWidgetPrivate::HasAssignedImageResource(IconImage.Get());
+	BaseWidgetPrivate::ApplyIconSize(IconBox.Get(), IconImage.Get(), IconSize);
 	BaseWidgetPrivate::SetOptionalIconVisibility(IconBox.Get(), IconImage.Get(), bHasIcon);
 	const FLinearColor iconColor = bDisabled
 		? ResolveStateColor(EBaseWidgetState::Disabled)
@@ -37,9 +38,9 @@ void UBaseIconWidget::SetVariant(const EBaseWidgetVariant inVariant)
 	SynchronizeBaseProperties();
 }
 
-void UBaseIconWidget::SetBaseSize(const EBaseWidgetSize inSize)
+void UBaseIconWidget::SetIconSize(const float inIconSize)
 {
-	Size = inSize;
+	IconSize = FMath::Max(inIconSize, 1.0f);
 	SynchronizeBaseProperties();
 }
 

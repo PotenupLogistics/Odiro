@@ -526,6 +526,38 @@ jobs:
               Write-Host "Git LFS unlock auth: GIT_ASKPASS with LFS_LOCK_BOT_TOKEN as $tokenLogin."
           }
 
+          # Verifies that the token has effective repository push access before deleting locks.
+          function Assert-LfsUnlockTokenAccess {
+              $headersOutput = @(gh api -i user 2>&1)
+              if ($LASTEXITCODE -ne 0) {
+                  $detail = (($headersOutput | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  throw "Failed to inspect LFS_LOCK_BOT_TOKEN OAuth scopes.`n$detail"
+              }
+
+              $scopeLine = @($headersOutput | Where-Object { [string] $_ -match '^X-Oauth-Scopes:' } | Select-Object -First 1)
+              if ($scopeLine.Count -gt 0) {
+                  Write-Host "token_oauth_scopes=$(([string] $scopeLine[0]).Substring('X-Oauth-Scopes:'.Length).Trim())"
+              }
+              else {
+                  Write-Host "token_oauth_scopes=<not reported>"
+              }
+
+              $repoOutput = @(gh api "repos/$env:GITHUB_REPOSITORY" --jq '{full_name: .full_name, permissions: .permissions}' 2>&1)
+              if ($LASTEXITCODE -ne 0) {
+                  $detail = (($repoOutput | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  throw "Failed to inspect LFS_LOCK_BOT_TOKEN repository permissions.`n$detail"
+              }
+
+              $repoText = ($repoOutput -join "`n").Trim()
+              $repo = $repoText | ConvertFrom-Json
+              $admin = [bool] $repo.permissions.admin
+              $push = [bool] $repo.permissions.push
+              Write-Host "token_repo_permissions repo=$($repo.full_name) admin=$admin push=$push"
+              if (-not $push) {
+                  throw "LFS_LOCK_BOT_TOKEN does not have effective push access to $env:GITHUB_REPOSITORY. Recreate a classic PAT with the parent 'repo' scope, then check organization PAT policy for PotenupLogistics."
+              }
+          }
+
           # Runs a native command and throws with its stderr/stdout when it fails.
           function Invoke-CheckedNativeCommand {
               param(
@@ -595,6 +627,7 @@ jobs:
           }
 
           Initialize-LfsUnlockAuth
+          Assert-LfsUnlockTokenAccess
 
           $automaticUnlock = $env:EVENT_NAME -ne "workflow_dispatch"
           $cutoff = $null

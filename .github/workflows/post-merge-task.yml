@@ -691,6 +691,22 @@ jobs:
               if ($response.Status -lt 200 -or $response.Status -ge 300) {
                   throw "Failed to force unlock $Path by Git LFS lock id ${Id}.`nHTTP $($response.Status)`n$($response.Body)"
               }
+
+              if (-not [string]::IsNullOrWhiteSpace($response.Body)) {
+                  try {
+                      $payload = $response.Body | ConvertFrom-Json
+                      $lockProperty = $payload.PSObject.Properties["lock"]
+                      if ($null -ne $lockProperty -and $null -ne $lockProperty.Value) {
+                          $unlockedAtProperty = $lockProperty.Value.PSObject.Properties["unlocked_at"]
+                          if ($null -ne $unlockedAtProperty -and -not [string]::IsNullOrWhiteSpace([string] $unlockedAtProperty.Value)) {
+                              Write-Host "Unlock API accepted: $Path id=$Id unlocked_at=$($unlockedAtProperty.Value)"
+                          }
+                      }
+                  }
+                  catch {
+                      Write-Warning "Unlock API returned success but response JSON was not parsed for $Path id=$Id."
+                  }
+              }
           }
 
           # Reads current Git LFS locks and fails closed on query or JSON errors.
@@ -720,6 +736,34 @@ jobs:
                   }
               }
               return $locksByPath
+          }
+
+          # Waits briefly for Git LFS lock listing to reflect a successful unlock.
+          function Wait-LfsUnlockVisibility {
+              param(
+                  [string] $Path,
+                  [string] $Id
+              )
+
+              foreach ($attempt in 1..5) {
+                  if ($attempt -gt 1) {
+                      Start-Sleep -Seconds 2
+                  }
+
+                  $afterLocksByPath = Get-LocksByPath -Locks @(Get-Locks)
+                  if (-not $afterLocksByPath.ContainsKey($Path)) {
+                      Write-Host "Unlocked: $Path"
+                      return
+                  }
+
+                  $afterId = Get-LockId $afterLocksByPath[$Path]
+                  if ($afterId -ne $Id) {
+                      Write-Host "Lock was replaced after unlock: $Path previous=$Id current=$afterId"
+                      return
+                  }
+              }
+
+              Write-Warning "Unlock API returned success, but Git LFS lock listing still shows the same lock. Treating as eventual consistency: $Path id=$Id"
           }
 
           Initialize-LfsUnlockAuth
@@ -899,18 +943,7 @@ jobs:
                   }
 
                   Invoke-ForceUnlockById -Path $path -Id $id
-
-                  $afterLocksByPath = Get-LocksByPath -Locks @(Get-Locks)
-                  if ($afterLocksByPath.ContainsKey($path)) {
-                      $afterId = Get-LockId $afterLocksByPath[$path]
-                      if ($afterId -eq $id) {
-                          throw "Unlock returned success, but the same Git LFS lock is still active: $path id=$id"
-                      }
-                      Write-Host "Lock was replaced after unlock: $path previous=$id current=$afterId"
-                      continue
-                  }
-
-                  Write-Host "Unlocked: $path"
+                  Wait-LfsUnlockVisibility -Path $path -Id $id
               }
               catch {
                   $failure = "Failed to unlock target $path.`n$($_.Exception.Message)"

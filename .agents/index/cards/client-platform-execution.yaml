@@ -5,7 +5,7 @@ paths:
   - Client/README.md
   - Client/Source/OdiroSim/Public/Platform/**
   - Client/Source/OdiroSim/Private/Platform/**
-  - Client/Plugins/UmgMcp/**
+  - Client/Plugins/UE_MCP_Bridge/**
   - Client/Tools/**
   - task-run.bat
   - task-dev.bat
@@ -29,11 +29,11 @@ entry:
       - Client/Source/OdiroSim/Public/Platform/Widget/Odiro*Widget.h
       - Client/Source/OdiroSim/Private/Platform/Widget/Odiro*Widget.cpp
   - id: ui-and-tools
-    description: Platform widgets, UMG tooling plugin, and preview scripts.
+    description: Platform widgets, unified UE MCP tooling plugin, and preview scripts.
     read:
       - Client/Source/OdiroSim/Public/Platform/Widget
       - Client/Source/OdiroSim/Private/Platform/Widget
-      - Client/Plugins/UmgMcp
+      - Client/Plugins/UE_MCP_Bridge
       - Client/Tools
       - tools/run-preview.ps1
 guardrails:
@@ -58,7 +58,7 @@ guardrails:
   - SimulatorLaunchSubsystem treats run output artifacts such as status.json, summary.json, and episode result.json as immutable start guards.
   - Project-run AI analysis uses the v2 `project_path` plus `run_id` request path and stores review artifacts under the run.
   - C++ writes state/text/visibility into WBP-owned layouts; structural UMG ownership stays in client-runtime-foundation.
-  - StartupMenu/MainMenu UMG edits must complete UmgMcp tree readback, Blueprint compile/save, layout data, overlap check, and runtime or Slate capture verification before completion; property or geometry MCP queries require a scoped safety check because broad JsonUtilities serialization can stack-overflow editor sessions.
+  - StartupMenu/MainMenu UMG edits must complete UE_MCP_Bridge widget tree readback, Blueprint compile/save, layout data, overlap check, and runtime or Slate capture verification before completion; property or geometry MCP queries require a scoped safety check because broad JsonUtilities serialization can stack-overflow editor sessions.
   - StartupMap and ScenarioEditorMap root widget classes are configured by PlatformUiDeveloperSettings or exposed controller/widget properties, not hardcoded class paths.
   - Platform UI dynamic row/card widget classes, including startup recent-project cards and project run/result rows, are configured by WBP exposed properties first, with PlatformUiDeveloperSettings soft-class fallbacks for project-level defaults.
   - Client tools use `Client/Tools/Common.ps1`, never root `tools/common.ps1`.
@@ -73,9 +73,9 @@ verify:
   - when: platform UI or UMG tool flow changes
     run:
       - focused OdiroSim.PlatformUi automation tests for ViewModel/Common UI native changes
-      - UmgMcp widget tree readback for touched assets; avoid broad property/layout queries unless first scoped to a known-safe widget
+      - UE_MCP_Bridge widget tree readback for touched assets; avoid broad property/layout queries unless first scoped to a known-safe widget
       - Blueprint compile/save for touched widgets
-      - UmgMcp get_layout_data and check_widget_overlap after every user-facing UMG mutation
+      - UE_MCP_Bridge get_layout_data and check_widget_overlap after every user-facing UMG mutation
       - preview or MCP geometry/capture smoke for every user-facing layout change
 links:
   - Client/README.md

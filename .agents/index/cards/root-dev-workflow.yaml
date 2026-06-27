@@ -34,7 +34,7 @@ entry:
       - tools/set-git-config.ps1
       - tools/check-source-sanity.ps1
       - tools/pre-push-policy.ps1
-      - tools/open-pull-request.ps1
+      - tools/push-pr.ps1
       - .githooks
       - .github/workflows
 guardrails:

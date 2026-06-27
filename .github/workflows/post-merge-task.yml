@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Dry-run or unlock stale main locks. Path or base/head narrows scope.
+        description: Dry-run or unlock changed Unreal asset locks. Manual runs require path or base/head.
         required: true
         default: dry-run
         type: choice
@@ -15,15 +15,15 @@ on:
           - dry-run
           - unlock
       path:
-        description: Optional exact path. Leave empty to scan stale main locks or use base/head.
+        description: Optional exact path for manual unlock.
         required: false
         type: string
       base:
-        description: Optional base ref or SHA for replaying a merge range. Requires head.
+        description: Optional base ref or SHA for manual range unlock. Requires head.
         required: false
         type: string
       head:
-        description: Optional head ref or SHA for replaying a merge range. Requires base.
+        description: Optional head ref or SHA for manual range unlock. Requires base.
         required: false
         type: string
 
@@ -393,116 +393,6 @@ jobs:
               return @($Payload)
           }
 
-          # Fetches main history since the oldest active lock so stale recovery can inspect prior merges.
-          function Fetch-MainHistorySinceLock {
-              param([object[]] $Locks = @())
-
-              $oldest = $null
-              foreach ($lock in $Locks) {
-                  $path = Get-LockPath $lock
-                  if (-not (Test-UnrealAssetPath $path)) {
-                      continue
-                  }
-
-                  $lockedAt = Get-LockTime $lock
-                  if ($null -eq $lockedAt) {
-                      continue
-                  }
-                  if ($null -eq $oldest -or $lockedAt -lt $oldest) {
-                      $oldest = $lockedAt
-                  }
-              }
-
-              if ($null -eq $oldest) {
-                  return
-              }
-
-              $fetchSince = ([datetime]::SpecifyKind($oldest, [DateTimeKind]::Utc)).AddDays(-1)
-              $fetchSinceText = $fetchSince.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture)
-              Write-Host "Fetching origin/main first-parent history since $fetchSinceText for stale lock recovery."
-              git fetch --no-tags --shallow-since=$fetchSinceText origin "+refs/heads/main:refs/remotes/origin/main"
-              if ($LASTEXITCODE -ne 0) {
-                  throw "Failed to fetch origin/main history since $fetchSinceText for stale lock recovery."
-              }
-          }
-
-          # Returns the newest first-parent main commit that changed Path after LockedAt and before Cutoff.
-          function Get-MainChangeAfterLock {
-              param(
-                  [Parameter(Mandatory = $true)][string] $Path,
-                  [Parameter(Mandatory = $true)][datetime] $LockedAt,
-                  [datetime] $Cutoff
-              )
-
-              $sinceText = ([datetime]::SpecifyKind($LockedAt, [DateTimeKind]::Utc)).ToString("o", [Globalization.CultureInfo]::InvariantCulture)
-              $gitArgs = @(
-                  "log",
-                  "--first-parent",
-                  "--format=%H`t%cI",
-                  "--since=$sinceText"
-              )
-              if ($Cutoff -ne [datetime]::MinValue) {
-                  $untilText = ([datetime]::SpecifyKind($Cutoff, [DateTimeKind]::Utc)).ToString("o", [Globalization.CultureInfo]::InvariantCulture)
-                  $gitArgs += "--until=$untilText"
-              }
-              $gitArgs += @("origin/main", "--", $Path)
-
-              $lines = @(git @gitArgs)
-              if ($LASTEXITCODE -ne 0) {
-                  throw "Failed to inspect origin/main history for $Path."
-              }
-              if ($lines.Count -eq 0) {
-                  return $null
-              }
-
-              $parts = ([string] $lines[0]) -split "`t", 2
-              if ($parts.Count -ne 2) {
-                  throw "Unexpected git log output while inspecting stale lock history for $Path."
-              }
-
-              return [pscustomobject]@{
-                  Commit = $parts[0]
-                  CommittedAt = ConvertTo-UtcTimestamp -Value $parts[1] -Name "main commit timestamp"
-              }
-          }
-
-          # Adds active Unreal asset locks that have already landed on main after their lock time.
-          function Add-StaleMainLockTargets {
-              param(
-                  [object[]] $Locks = @(),
-                  [System.Collections.Generic.HashSet[string]] $Targets,
-                  [datetime] $Cutoff
-              )
-
-              Fetch-MainHistorySinceLock -Locks $Locks
-
-              foreach ($lock in $Locks) {
-                  $path = Get-LockPath $lock
-                  if (-not (Test-UnrealAssetPath $path)) {
-                      continue
-                  }
-
-                  $id = Get-LockId $lock
-                  $lockedAt = Get-LockTime $lock
-                  if ([string]::IsNullOrWhiteSpace($id)) {
-                      Write-Host "Skipping stale recovery candidate without lock id: $path"
-                      continue
-                  }
-                  if ($null -eq $lockedAt) {
-                      Write-Host "Skipping stale recovery candidate without locked_at: $path"
-                      continue
-                  }
-
-                  $mainChange = Get-MainChangeAfterLock -Path $path -LockedAt $lockedAt -Cutoff $Cutoff
-                  if ($null -eq $mainChange) {
-                      continue
-                  }
-
-                  [void] $Targets.Add($path)
-                  Write-Host "Stale main lock target: $path id=$id locked_at=$($lockedAt.ToString("o")) main_commit=$($mainChange.Commit) main_committed_at=$($mainChange.CommittedAt.ToString("o"))"
-              }
-          }
-
           # Returns the repository's effective Git LFS API endpoint without a trailing slash.
           # Throws when git lfs env fails or does not report an Endpoint line.
           function Get-LfsApiEndpoint {
@@ -658,6 +548,54 @@ jobs:
               }
           }
 
+          # Force-unlocks one Git LFS lock by repository path through the Git LFS client.
+          function Invoke-ForceUnlockByPath {
+              param(
+                  # Repository-relative lock path.
+                  [Parameter(Mandatory = $true)][string] $Path
+              )
+
+              $output = @(git lfs unlock --force $Path 2>&1)
+              if ($LASTEXITCODE -ne 0) {
+                  $detail = (($output | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  if ([string]::IsNullOrWhiteSpace($detail)) {
+                      throw "Failed to unlock $Path by path: no output from git lfs unlock."
+                  }
+                  throw "Failed to unlock $Path by path.`n$detail"
+              }
+          }
+
+          # Tries the official Git LFS client first, then falls back to the lock-id HTTP API.
+          function Invoke-ForceUnlock {
+              param(
+                  # Repository-relative lock path.
+                  [Parameter(Mandatory = $true)][string] $Path,
+                  # Optional Git LFS lock id used for API fallback.
+                  [string] $Id
+              )
+
+              $pathError = ""
+              try {
+                  Invoke-ForceUnlockByPath -Path $Path
+                  return
+              }
+              catch {
+                  $pathError = $_.Exception.Message
+                  Write-Warning "Path-based unlock failed for $Path. Trying Git LFS lock id fallback.`n$pathError"
+              }
+
+              if ([string]::IsNullOrWhiteSpace($Id)) {
+                  throw "Path-based unlock failed and no Git LFS lock id is available for fallback.`n$pathError"
+              }
+
+              try {
+                  Invoke-ForceUnlockById -Path $Path -Id $Id
+              }
+              catch {
+                  throw "Both unlock methods failed for $Path.`nPath unlock:`n$pathError`nLock id unlock:`n$($_.Exception.Message)"
+              }
+          }
+
           # Reads current Git LFS locks and fails closed on query or JSON errors.
           function Get-Locks {
               $locksJson = @(git lfs locks --json)
@@ -700,7 +638,7 @@ jobs:
           ) {
               git fetch --no-tags --depth=1 origin $env:PUSH_BEFORE
               if ($LASTEXITCODE -ne 0) {
-                  throw "Failed to fetch push before commit $env:PUSH_BEFORE; use manual unlock for any stale locks."
+                  throw "Failed to fetch push before commit $env:PUSH_BEFORE; rerun workflow_dispatch with an explicit base/head range if needed."
               }
           }
 
@@ -710,7 +648,6 @@ jobs:
           $mode = if ([string]::IsNullOrWhiteSpace($env:DISPATCH_MODE)) { "unlock" } else { $env:DISPATCH_MODE }
           $dryRun = $mode -ne "unlock"
           $targets = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-          $staleRecovery = $false
 
           if ($env:EVENT_NAME -eq "workflow_dispatch") {
               $manualPath = ConvertTo-GitPath $env:DISPATCH_PATH
@@ -745,10 +682,7 @@ jobs:
                       }
                   }
                   else {
-                      $staleRecovery = $true
-                      $cutoff = [datetime]::UtcNow
-                      Write-Host "Manual stale lock recovery scan cutoff: $($cutoff.ToString("o"))."
-                      Add-StaleMainLockTargets -Locks $locks -Targets $targets -Cutoff $cutoff
+                      throw "workflow_dispatch unlock requires path or base/head. Normal post-merge unlock is handled by push to main."
                   }
               }
               else {
@@ -789,65 +723,80 @@ jobs:
               exit 0
           }
 
+          $unlockFailures = [System.Collections.Generic.List[string]]::new()
           foreach ($path in ($targets | Sort-Object)) {
-              if (-not $locksByPath.ContainsKey($path)) {
-                  Write-Host "Already unlocked: $path"
-                  continue
-              }
-
-              $lock = $locksByPath[$path]
-              $id = Get-LockId $lock
-              if ($dryRun) {
-                  Write-Host "Dry-run unlock target: $path id=$id"
-                  continue
-              }
-
-              if ($automaticUnlock -or $staleRecovery) {
-                  $lockedAt = Get-LockTime $lock
-                  if ([string]::IsNullOrWhiteSpace($id)) {
-                      throw "Cannot safely unlock $path because the Git LFS lock id is missing."
-                  }
-                  if ($null -eq $lockedAt) {
-                      throw "Cannot safely unlock $path because the Git LFS lock timestamp is missing."
-                  }
-                  if ($lockedAt -gt $cutoff) {
-                      Write-Host "Skipping newer lock: $path locked_at=$($lockedAt.ToString("o")) cutoff=$($cutoff.ToString("o"))"
-                      continue
-                  }
-
-                  $currentLocksByPath = Get-LocksByPath -Locks @(Get-Locks)
-                  if (-not $currentLocksByPath.ContainsKey($path)) {
+              try {
+                  if (-not $locksByPath.ContainsKey($path)) {
                       Write-Host "Already unlocked: $path"
                       continue
                   }
 
-                  $currentLock = $currentLocksByPath[$path]
-                  $currentId = Get-LockId $currentLock
-                  $currentLockedAt = Get-LockTime $currentLock
-                  if ($currentId -ne $id) {
-                      Write-Host "Skipping changed lock id: $path initial=$id current=$currentId"
-                      continue
-                  }
-                  if ($null -eq $currentLockedAt) {
-                      throw "Cannot safely unlock $path because the current Git LFS lock timestamp is missing."
-                  }
-                  if ($currentLockedAt -gt $cutoff) {
-                      Write-Host "Skipping newer current lock: $path locked_at=$($currentLockedAt.ToString("o")) cutoff=$($cutoff.ToString("o"))"
+                  $lock = $locksByPath[$path]
+                  $id = Get-LockId $lock
+                  if ($dryRun) {
+                      Write-Host "Dry-run unlock target: $path id=$id"
                       continue
                   }
 
-                  $id = $currentId
-              }
+                  if ($automaticUnlock) {
+                      $lockedAt = Get-LockTime $lock
+                      if ([string]::IsNullOrWhiteSpace($id)) {
+                          throw "Cannot safely unlock $path because the Git LFS lock id is missing."
+                      }
+                      if ($null -eq $lockedAt) {
+                          throw "Cannot safely unlock $path because the Git LFS lock timestamp is missing."
+                      }
+                      if ($lockedAt -gt $cutoff) {
+                          Write-Host "Skipping newer lock: $path locked_at=$($lockedAt.ToString("o")) cutoff=$($cutoff.ToString("o"))"
+                          continue
+                      }
 
-              if ([string]::IsNullOrWhiteSpace($id)) {
-                  # No lock ID available; fall back to path-based unlock via git lfs CLI.
-                  git lfs unlock --force $path
-                  if ($LASTEXITCODE -ne 0) {
-                      throw "Failed to unlock $path."
+                      $currentLocksByPath = Get-LocksByPath -Locks @(Get-Locks)
+                      if (-not $currentLocksByPath.ContainsKey($path)) {
+                          Write-Host "Already unlocked: $path"
+                          continue
+                      }
+
+                      $currentLock = $currentLocksByPath[$path]
+                      $currentId = Get-LockId $currentLock
+                      $currentLockedAt = Get-LockTime $currentLock
+                      if ($currentId -ne $id) {
+                          Write-Host "Skipping changed lock id: $path initial=$id current=$currentId"
+                          continue
+                      }
+                      if ($null -eq $currentLockedAt) {
+                          throw "Cannot safely unlock $path because the current Git LFS lock timestamp is missing."
+                      }
+                      if ($currentLockedAt -gt $cutoff) {
+                          Write-Host "Skipping newer current lock: $path locked_at=$($currentLockedAt.ToString("o")) cutoff=$($cutoff.ToString("o"))"
+                          continue
+                      }
+
+                      $id = $currentId
                   }
+
+                  Invoke-ForceUnlock -Path $path -Id $id
+
+                  $afterLocksByPath = Get-LocksByPath -Locks @(Get-Locks)
+                  if ($afterLocksByPath.ContainsKey($path)) {
+                      $afterId = Get-LockId $afterLocksByPath[$path]
+                      if ($afterId -eq $id) {
+                          throw "Unlock returned success, but the same Git LFS lock is still active: $path id=$id"
+                      }
+                      Write-Host "Lock was replaced after unlock: $path previous=$id current=$afterId"
+                      continue
+                  }
+
+                  Write-Host "Unlocked: $path"
               }
-              else {
-                  Invoke-ForceUnlockById -Path $path -Id $id
+              catch {
+                  $failure = "Failed to unlock target $path.`n$($_.Exception.Message)"
+                  Write-Warning $failure
+                  $unlockFailures.Add($failure)
               }
-              Write-Host "Unlocked: $path"
+          }
+
+          if ($unlockFailures.Count -gt 0) {
+              $details = ($unlockFailures | ForEach-Object { "  - $_" }) -join "`n"
+              throw "Failed to unlock $($unlockFailures.Count) Git LFS lock target(s).`n$details"
           }

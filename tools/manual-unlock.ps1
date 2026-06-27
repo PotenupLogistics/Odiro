@@ -110,6 +110,133 @@ function Invoke-CheckedNativeCommand {
     throw "$FailureMessage`n$detail"
 }
 
+# Reads the active GitHub CLI login and token for force unlock authentication.
+function Get-GhAuthContext {
+    Assert-Command "gh"
+
+    $loginOutput = @(gh api user --jq ".login" 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        $detail = (($loginOutput | ForEach-Object { [string] $_ }) -join "`n").Trim()
+        throw "Failed to read active GitHub login from gh.`n$detail"
+    }
+
+    $login = (($loginOutput | Select-Object -First 1) -as [string]).Trim()
+    if ([string]::IsNullOrWhiteSpace($login)) {
+        throw "Active GitHub login from gh is empty."
+    }
+    if ($login -match '[\s:@/]') {
+        throw "Active GitHub login contains unsupported characters: $login"
+    }
+
+    $tokenOutput = @(gh auth token 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        $detail = (($tokenOutput | ForEach-Object { [string] $_ }) -join "`n").Trim()
+        throw "Failed to read active GitHub token from gh.`n$detail"
+    }
+
+    $token = (($tokenOutput | Select-Object -First 1) -as [string]).Trim()
+    if ([string]::IsNullOrWhiteSpace($token)) {
+        throw "Active GitHub token from gh is empty."
+    }
+
+    return [pscustomobject]@{
+        Login = $login
+        Token = $token
+    }
+}
+
+# Creates a temporary Git askpass helper that returns the supplied GitHub login and token.
+function New-GitAskPassHelper {
+    param(
+        [string] $Login,
+        [string] $Token
+    )
+
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("odiro-lfs-askpass-" + [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $tempDir | Out-Null
+
+    $isWindowsRuntime = [System.IO.Path]::DirectorySeparatorChar -eq [char] '\'
+    if ($isWindowsRuntime) {
+        $askPassPath = Join-Path $tempDir "askpass.cmd"
+        $askPassScript = @"
+@echo off
+setlocal EnableExtensions
+set PROMPT_ARG=%~1
+echo %PROMPT_ARG% | findstr /I "Username" >nul
+if %ERRORLEVEL%==0 (
+  echo %LFS_LOCK_BOT_LOGIN%
+) else (
+  echo %LFS_LOCK_BOT_TOKEN%
+)
+"@
+    }
+    else {
+        $askPassPath = Join-Path $tempDir "askpass.sh"
+        $askPassScript = (@(
+            '#!/usr/bin/env sh',
+            'case "$1" in',
+            '  *Username*) printf ''%s\n'' "${LFS_LOCK_BOT_LOGIN}" ;;',
+            '  *) printf ''%s\n'' "${LFS_LOCK_BOT_TOKEN}" ;;',
+            'esac'
+        ) -join "`n") + "`n"
+    }
+
+    [System.IO.File]::WriteAllText($askPassPath, $askPassScript, [System.Text.UTF8Encoding]::new($false))
+    if (-not $isWindowsRuntime) {
+        chmod 700 $askPassPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to make Git askpass helper executable."
+        }
+    }
+
+    return [pscustomobject]@{
+        Path = $askPassPath
+        TempDir = $tempDir
+        Login = $Login
+        Token = $Token
+    }
+}
+
+# Forces Git LFS to use the active GitHub CLI token while a script block runs.
+function Invoke-WithForceUnlockAuth {
+    param([scriptblock] $Command)
+
+    $auth = Get-GhAuthContext
+    $helper = New-GitAskPassHelper -Login $auth.Login -Token $auth.Token
+
+    $oldAskPass = $env:GIT_ASKPASS
+    $oldPrompt = $env:GIT_TERMINAL_PROMPT
+    $oldToken = $env:LFS_LOCK_BOT_TOKEN
+    $oldLogin = $env:LFS_LOCK_BOT_LOGIN
+
+    try {
+        $env:GIT_ASKPASS = $helper.Path
+        $env:GIT_TERMINAL_PROMPT = "0"
+        $env:LFS_LOCK_BOT_TOKEN = $auth.Token
+        $env:LFS_LOCK_BOT_LOGIN = $auth.Login
+
+        $usernameProbe = @(& $helper.Path "Username for 'https://github.com':" 2>&1)
+        if ($LASTEXITCODE -ne 0 -or (($usernameProbe | Select-Object -First 1) -as [string]).Trim() -ne $auth.Login) {
+            throw "Git askpass helper username probe failed."
+        }
+
+        $passwordProbe = @(& $helper.Path "Password for 'https://$($auth.Login)@github.com':" 2>&1)
+        if ($LASTEXITCODE -ne 0 -or (($passwordProbe | Select-Object -First 1) -as [string]).Trim() -ne $auth.Token) {
+            throw "Git askpass helper token probe failed."
+        }
+
+        Write-Step "Force unlock auth: gh token as $($auth.Login)"
+        & $Command
+    }
+    finally {
+        $env:GIT_ASKPASS = $oldAskPass
+        $env:GIT_TERMINAL_PROMPT = $oldPrompt
+        $env:LFS_LOCK_BOT_TOKEN = $oldToken
+        $env:LFS_LOCK_BOT_LOGIN = $oldLogin
+        Remove-Item -LiteralPath $helper.TempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # Unlocks a lock through the normal Git LFS path-based operation.
 function Invoke-NormalUnlockByPath {
     param(
@@ -155,9 +282,11 @@ function Invoke-LfsUnlock {
     )
 
     if ($Force) {
-        foreach ($lock in $Locks) {
-            Invoke-ForceUnlock -RepoRoot $RepoRoot -Path $Path -Id ([string] $lock.Id)
-            Assert-LfsLockRemovedById -RepoRoot $RepoRoot -Id ([string] $lock.Id)
+        Invoke-WithForceUnlockAuth {
+            foreach ($lock in $Locks) {
+                Invoke-ForceUnlock -RepoRoot $RepoRoot -Path $Path -Id ([string] $lock.Id)
+                Assert-LfsLockRemovedById -RepoRoot $RepoRoot -Id ([string] $lock.Id)
+            }
         }
         return
     }

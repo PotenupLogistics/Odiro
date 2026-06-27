@@ -248,6 +248,78 @@ function Write-ProblemMatcherRefresh {
     }
 }
 
+# Converts one value to a single table field.
+function Format-TableField {
+    param([string] $Value)
+
+    if ($null -eq $Value) {
+        return ""
+    }
+
+    return (($Value -replace "`t", " ") -replace "(`r`n|`n|`r)", " ").Trim()
+}
+
+# Calculates a display width for one compact table column.
+function Get-TableColumnWidth {
+    param(
+        [string] $Header,
+        [string[]] $Values
+    )
+
+    $width = $Header.Length
+    foreach ($value in $Values) {
+        if ($null -ne $value -and $value.Length -gt $width) {
+            $width = $value.Length
+        }
+    }
+
+    return $width
+}
+
+# Writes lock rows in compact table form for terminal inspection.
+function Write-LfsLockRowsAsTable {
+    param([object[]] $Rows)
+
+    if ($Rows.Count -eq 0) {
+        Write-Success "No active Git LFS locks."
+        return
+    }
+
+    $tableRows = @(
+        foreach ($row in $Rows) {
+            [pscustomobject]@{
+                Owner = Format-TableField -Value ([string] $row.Owner)
+                LockedAt = Format-TableField -Value ([string] $row.LockedAtDisplay)
+                Id = Format-TableField -Value ([string] $row.Id)
+                Path = Format-TableField -Value ([string] $row.Path)
+            }
+        }
+    )
+
+    $ownerWidth = Get-TableColumnWidth -Header "Owner" -Values @($tableRows.Owner)
+    $lockedAtWidth = Get-TableColumnWidth -Header "LockedAt" -Values @($tableRows.LockedAt)
+    $idWidth = Get-TableColumnWidth -Header "Id" -Values @($tableRows.Id)
+
+    Write-Output ("{0}  {1}  {2}  {3}" -f `
+        "Owner".PadRight($ownerWidth), `
+        "LockedAt".PadRight($lockedAtWidth), `
+        "Id".PadRight($idWidth), `
+        "Path")
+    Write-Output ("{0}  {1}  {2}  {3}" -f `
+        ("-" * $ownerWidth), `
+        ("-" * $lockedAtWidth), `
+        ("-" * $idWidth), `
+        "----")
+
+    foreach ($row in $tableRows) {
+        Write-Output ("{0}  {1}  {2}  {3}" -f `
+            $row.Owner.PadRight($ownerWidth), `
+            $row.LockedAt.PadRight($lockedAtWidth), `
+            $row.Id.PadRight($idWidth), `
+            $row.Path)
+    }
+}
+
 # Polls Git LFS locks for VSCode Problems until the task is stopped.
 function Watch-ProblemMatcherLocks {
     param(
@@ -300,24 +372,7 @@ function Invoke-ListLfsLocksScript {
         }
 
         $rows = @(Get-LfsLockRows -RepoRoot $repoRoot -NormalizedPrefix $normalizedPrefix)
-        if ($rows.Count -eq 0) {
-            if ([string]::IsNullOrWhiteSpace($normalizedPrefix)) {
-                Write-Success "No active Git LFS locks."
-            }
-            else {
-                Write-Success "No active Git LFS locks under: $normalizedPrefix"
-            }
-            exit 0
-        }
-
-        Write-Step "Active Git LFS locks: $($rows.Count)"
-        foreach ($row in $rows) {
-            Write-Host ""
-            Write-Host "Path     : $($row.Path)"
-            Write-Host "Owner    : $($row.Owner)"
-            Write-Host "LockedAt : $($row.LockedAt)"
-            Write-Host "Id       : $($row.Id)"
-        }
+        Write-LfsLockRowsAsTable -Rows $rows
     }
     catch {
         if ($ProblemMatcher) {

@@ -449,17 +449,38 @@ jobs:
               Write-Output "::add-mask::$env:LFS_LOCK_BOT_TOKEN"
 
               $askPassPath = Join-Path $env:RUNNER_TEMP "git-lfs-askpass.sh"
-              $askPassScript = @'
-          #!/usr/bin/env bash
-          case "$1" in
-            *Username*) printf '%s\n' "x-access-token" ;;
-            *) printf '%s\n' "${LFS_LOCK_BOT_TOKEN}" ;;
-          esac
-          '@
-              [System.IO.File]::WriteAllText($askPassPath, $askPassScript, [System.Text.Encoding]::UTF8)
+              $askPassScript = (@(
+                  '#!/usr/bin/env bash',
+                  'case "$1" in',
+                  '  *Username*) printf ''%s\n'' "x-access-token" ;;',
+                  '  *) printf ''%s\n'' "${LFS_LOCK_BOT_TOKEN}" ;;',
+                  'esac'
+              ) -join "`n") + "`n"
+              $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+              [System.IO.File]::WriteAllText($askPassPath, $askPassScript, $utf8NoBom)
+              $askPassBytes = [System.IO.File]::ReadAllBytes($askPassPath)
+              if (
+                  $askPassBytes.Length -ge 3 -and
+                  $askPassBytes[0] -eq 0xEF -and
+                  $askPassBytes[1] -eq 0xBB -and
+                  $askPassBytes[2] -eq 0xBF
+              ) {
+                  throw "Git askpass helper was written with a UTF-8 BOM."
+              }
+
               chmod 700 $askPassPath
               if ($LASTEXITCODE -ne 0) {
                   throw "Failed to make Git askpass helper executable."
+              }
+
+              $usernameProbe = @(& $askPassPath "Username for 'https://github.com':" 2>&1)
+              if ($LASTEXITCODE -ne 0 -or (($usernameProbe | Select-Object -First 1) -as [string]) -ne "x-access-token") {
+                  throw "Git askpass helper username probe failed."
+              }
+
+              $passwordProbe = @(& $askPassPath "Password for 'https://x-access-token@github.com':" 2>&1)
+              if ($LASTEXITCODE -ne 0 -or (($passwordProbe | Select-Object -First 1) -as [string]) -ne $env:LFS_LOCK_BOT_TOKEN) {
+                  throw "Git askpass helper token probe failed."
               }
 
               $env:GIT_ASKPASS = $askPassPath

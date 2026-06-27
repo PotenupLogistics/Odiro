@@ -552,7 +552,6 @@ jobs:
               }
 
               $gitArgs = @("lfs", "unlock", "--force", "--id=$Id")
-              $gitArgs += $Id
 
               $output = @(git @gitArgs 2>&1)
               if ($LASTEXITCODE -ne 0) {

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Dry-run lists targets. Unlock requires an exact path.
+        description: Dry-run or unlock stale main locks. Path or base/head narrows scope.
         required: true
         default: dry-run
         type: choice
@@ -15,7 +15,15 @@ on:
           - dry-run
           - unlock
       path:
-        description: Repository-relative exact path for manual unlock.
+        description: Optional exact path. Leave empty to scan stale main locks or use base/head.
+        required: false
+        type: string
+      base:
+        description: Optional base ref or SHA for replaying a merge range. Requires head.
+        required: false
+        type: string
+      head:
+        description: Optional head ref or SHA for replaying a merge range. Requires base.
         required: false
         type: string
 
@@ -251,6 +259,8 @@ jobs:
           PUSHED_AT: ${{ github.event.repository.pushed_at }}
           DISPATCH_MODE: ${{ github.event.inputs.mode }}
           DISPATCH_PATH: ${{ github.event.inputs.path }}
+          DISPATCH_BASE: ${{ github.event.inputs.base }}
+          DISPATCH_HEAD: ${{ github.event.inputs.head }}
           # Step-scoped because only LFS unlock calls should use the push-capable token.
           LFS_LOCK_BOT_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
         run: |
@@ -303,6 +313,44 @@ jobs:
               return (ConvertTo-GitPath $Path) -match "\.(uasset|umap|ubulk|uexp)$"
           }
 
+          function Test-ManualRevisionInput {
+              param([string] $Revision)
+
+              if ([string]::IsNullOrWhiteSpace($Revision)) {
+                  return $false
+              }
+              if ($Revision -match '\s' -or $Revision -match '[:*?\[\]\\]' -or $Revision -match '(^|/)\.\.($|/)' -or $Revision.StartsWith("-")) {
+                  return $false
+              }
+              return $Revision -match '^[A-Za-z0-9._/-]+$'
+          }
+
+          # Fetches a user-provided branch, tag, or SHA and returns the resolved commit id.
+          function Resolve-RemoteCommit {
+              param(
+                  # Human-facing input name used in diagnostics.
+                  [Parameter(Mandatory = $true)][string] $Name,
+                  # Branch, tag, or SHA to fetch from origin.
+                  [Parameter(Mandatory = $true)][string] $Revision
+              )
+
+              if (-not (Test-ManualRevisionInput $Revision)) {
+                  throw "Invalid $Name revision: $Revision"
+              }
+
+              git fetch --no-tags --depth=1 origin $Revision
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to fetch $Name revision from origin: $Revision"
+              }
+
+              $commit = (git rev-parse --verify "FETCH_HEAD^{commit}").Trim()
+              if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($commit)) {
+                  throw "Failed to resolve $Name revision to a commit: $Revision"
+              }
+
+              return $commit
+          }
+
           function Get-LockPath {
               param([object] $Lock)
               $property = $Lock.PSObject.Properties["path"]
@@ -343,6 +391,116 @@ jobs:
                   return @($locks.Value)
               }
               return @($Payload)
+          }
+
+          # Fetches main history since the oldest active lock so stale recovery can inspect prior merges.
+          function Fetch-MainHistorySinceLock {
+              param([object[]] $Locks = @())
+
+              $oldest = $null
+              foreach ($lock in $Locks) {
+                  $path = Get-LockPath $lock
+                  if (-not (Test-UnrealAssetPath $path)) {
+                      continue
+                  }
+
+                  $lockedAt = Get-LockTime $lock
+                  if ($null -eq $lockedAt) {
+                      continue
+                  }
+                  if ($null -eq $oldest -or $lockedAt -lt $oldest) {
+                      $oldest = $lockedAt
+                  }
+              }
+
+              if ($null -eq $oldest) {
+                  return
+              }
+
+              $fetchSince = ([datetime]::SpecifyKind($oldest, [DateTimeKind]::Utc)).AddDays(-1)
+              $fetchSinceText = $fetchSince.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture)
+              Write-Host "Fetching origin/main first-parent history since $fetchSinceText for stale lock recovery."
+              git fetch --no-tags --shallow-since=$fetchSinceText origin "+refs/heads/main:refs/remotes/origin/main"
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to fetch origin/main history since $fetchSinceText for stale lock recovery."
+              }
+          }
+
+          # Returns the newest first-parent main commit that changed Path after LockedAt and before Cutoff.
+          function Get-MainChangeAfterLock {
+              param(
+                  [Parameter(Mandatory = $true)][string] $Path,
+                  [Parameter(Mandatory = $true)][datetime] $LockedAt,
+                  [datetime] $Cutoff
+              )
+
+              $sinceText = ([datetime]::SpecifyKind($LockedAt, [DateTimeKind]::Utc)).ToString("o", [Globalization.CultureInfo]::InvariantCulture)
+              $gitArgs = @(
+                  "log",
+                  "--first-parent",
+                  "--format=%H`t%cI",
+                  "--since=$sinceText"
+              )
+              if ($Cutoff -ne [datetime]::MinValue) {
+                  $untilText = ([datetime]::SpecifyKind($Cutoff, [DateTimeKind]::Utc)).ToString("o", [Globalization.CultureInfo]::InvariantCulture)
+                  $gitArgs += "--until=$untilText"
+              }
+              $gitArgs += @("origin/main", "--", $Path)
+
+              $lines = @(git @gitArgs)
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to inspect origin/main history for $Path."
+              }
+              if ($lines.Count -eq 0) {
+                  return $null
+              }
+
+              $parts = ([string] $lines[0]) -split "`t", 2
+              if ($parts.Count -ne 2) {
+                  throw "Unexpected git log output while inspecting stale lock history for $Path."
+              }
+
+              return [pscustomobject]@{
+                  Commit = $parts[0]
+                  CommittedAt = ConvertTo-UtcTimestamp -Value $parts[1] -Name "main commit timestamp"
+              }
+          }
+
+          # Adds active Unreal asset locks that have already landed on main after their lock time.
+          function Add-StaleMainLockTargets {
+              param(
+                  [object[]] $Locks = @(),
+                  [System.Collections.Generic.HashSet[string]] $Targets,
+                  [datetime] $Cutoff
+              )
+
+              Fetch-MainHistorySinceLock -Locks $Locks
+
+              foreach ($lock in $Locks) {
+                  $path = Get-LockPath $lock
+                  if (-not (Test-UnrealAssetPath $path)) {
+                      continue
+                  }
+
+                  $id = Get-LockId $lock
+                  $lockedAt = Get-LockTime $lock
+                  if ([string]::IsNullOrWhiteSpace($id)) {
+                      Write-Host "Skipping stale recovery candidate without lock id: $path"
+                      continue
+                  }
+                  if ($null -eq $lockedAt) {
+                      Write-Host "Skipping stale recovery candidate without locked_at: $path"
+                      continue
+                  }
+
+                  $mainChange = Get-MainChangeAfterLock -Path $path -LockedAt $lockedAt -Cutoff $Cutoff
+                  if ($null -eq $mainChange) {
+                      continue
+                  }
+
+                  [void] $Targets.Add($path)
+                  Write-Host "Stale main lock target: $path id=$id locked_at=$($lockedAt.ToString("o")) main_commit=$($mainChange.Commit) main_committed_at=$($mainChange.CommittedAt.ToString("o"))"
+              }
           }
 
           # Returns the repository's effective Git LFS API endpoint without a trailing slash.
@@ -552,18 +710,45 @@ jobs:
           $mode = if ([string]::IsNullOrWhiteSpace($env:DISPATCH_MODE)) { "unlock" } else { $env:DISPATCH_MODE }
           $dryRun = $mode -ne "unlock"
           $targets = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+          $staleRecovery = $false
 
           if ($env:EVENT_NAME -eq "workflow_dispatch") {
               $manualPath = ConvertTo-GitPath $env:DISPATCH_PATH
+              $manualBase = if ([string]::IsNullOrWhiteSpace($env:DISPATCH_BASE)) { "" } else { $env:DISPATCH_BASE.Trim() }
+              $manualHead = if ([string]::IsNullOrWhiteSpace($env:DISPATCH_HEAD)) { "" } else { $env:DISPATCH_HEAD.Trim() }
+              $hasManualRange = -not [string]::IsNullOrWhiteSpace($manualBase) -or -not [string]::IsNullOrWhiteSpace($manualHead)
+
+              if (-not [string]::IsNullOrWhiteSpace($manualPath) -and $hasManualRange) {
+                  throw "workflow_dispatch unlock accepts either path or base/head range, not both."
+              }
+
               if ([string]::IsNullOrWhiteSpace($manualPath)) {
-                  foreach ($lock in $locks) {
-                      $path = Get-LockPath $lock
-                      if (Test-UnrealAssetPath $path) {
-                          [void] $targets.Add($path)
+                  if ($hasManualRange) {
+                      if ([string]::IsNullOrWhiteSpace($manualBase) -or [string]::IsNullOrWhiteSpace($manualHead)) {
+                          throw "workflow_dispatch range unlock requires both base and head."
+                      }
+
+                      $baseCommit = Resolve-RemoteCommit -Name "base" -Revision $manualBase
+                      $headCommit = Resolve-RemoteCommit -Name "head" -Revision $manualHead
+                      Write-Host "Manual range unlock target scan: base=$baseCommit head=$headCommit"
+
+                      $changed = @(git diff --name-only $baseCommit $headCommit)
+                      if ($LASTEXITCODE -ne 0) {
+                          throw "Failed to inspect manual unlock range between $baseCommit and $headCommit."
+                      }
+
+                      foreach ($path in $changed) {
+                          $gitPath = ConvertTo-GitPath $path
+                          if (Test-UnrealAssetPath $gitPath) {
+                              [void] $targets.Add($gitPath)
+                          }
                       }
                   }
-                  if (-not $dryRun) {
-                      throw "workflow_dispatch unlock requires an exact repository-relative path."
+                  else {
+                      $staleRecovery = $true
+                      $cutoff = [datetime]::UtcNow
+                      Write-Host "Manual stale lock recovery scan cutoff: $($cutoff.ToString("o"))."
+                      Add-StaleMainLockTargets -Locks $locks -Targets $targets -Cutoff $cutoff
                   }
               }
               else {
@@ -617,13 +802,13 @@ jobs:
                   continue
               }
 
-              if ($automaticUnlock) {
+              if ($automaticUnlock -or $staleRecovery) {
                   $lockedAt = Get-LockTime $lock
                   if ([string]::IsNullOrWhiteSpace($id)) {
-                      throw "Cannot safely auto-unlock $path because the Git LFS lock id is missing."
+                      throw "Cannot safely unlock $path because the Git LFS lock id is missing."
                   }
                   if ($null -eq $lockedAt) {
-                      throw "Cannot safely auto-unlock $path because the Git LFS lock timestamp is missing."
+                      throw "Cannot safely unlock $path because the Git LFS lock timestamp is missing."
                   }
                   if ($lockedAt -gt $cutoff) {
                       Write-Host "Skipping newer lock: $path locked_at=$($lockedAt.ToString("o")) cutoff=$($cutoff.ToString("o"))"
@@ -644,7 +829,7 @@ jobs:
                       continue
                   }
                   if ($null -eq $currentLockedAt) {
-                      throw "Cannot safely auto-unlock $path because the current Git LFS lock timestamp is missing."
+                      throw "Cannot safely unlock $path because the current Git LFS lock timestamp is missing."
                   }
                   if ($currentLockedAt -gt $cutoff) {
                       Write-Host "Skipping newer current lock: $path locked_at=$($currentLockedAt.ToString("o")) cutoff=$($cutoff.ToString("o"))"

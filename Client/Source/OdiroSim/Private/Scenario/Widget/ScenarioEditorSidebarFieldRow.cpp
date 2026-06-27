@@ -33,6 +33,18 @@ namespace
 	// Square hit and hover footprint for field-row action buttons.
 	constexpr float SidebarFieldActionButtonSize = 24.0f;
 
+	// Shared value-control text inset so editable and combo values start at the same x position.
+	FMargin MakeValueControlTextPadding()
+	{
+		return FMargin(5.0f, 1.0f);
+	}
+
+	// Selected combo content already has Slate button chrome, so only list rows use the value inset.
+	FMargin MakeComboSelectedTextPadding()
+	{
+		return FMargin(1.0f, 1.0f);
+	}
+
 	// Converts UI hex colors into Slate linear colors with a caller-controlled alpha.
 	FLinearColor MakeSidebarFieldColor(const TCHAR* hex, const float alpha = 1.0f)
 	{
@@ -167,7 +179,7 @@ namespace
 			.SetForegroundColor(FSlateColor(style.Color))
 			.SetReadOnlyForegroundColor(FSlateColor(style.Color))
 			.SetFocusedForegroundColor(FSlateColor(style.Color))
-			.SetPadding(FMargin(5.0f, 1.0f));
+			.SetPadding(MakeValueControlTextPadding());
 		textBox->SynchronizeProperties();
 		textBox->SetForegroundColor(style.Color);
 	}
@@ -219,17 +231,17 @@ namespace
 		FComboButtonStyle comboButtonStyle = comboStyle.ComboButtonStyle;
 		FButtonStyle buttonStyle = comboButtonStyle.ButtonStyle;
 		buttonStyle
-			.SetNormalPadding(FMargin(5.0f, 1.0f))
-			.SetPressedPadding(FMargin(5.0f, 1.0f));
+			.SetNormalPadding(FMargin(0.0f))
+			.SetPressedPadding(FMargin(0.0f));
 		comboButtonStyle
 			.SetButtonStyle(buttonStyle)
-			.SetContentPadding(FMargin(5.0f, 1.0f));
+			.SetContentPadding(FMargin(0.0f));
 		comboStyle
 			.SetComboButtonStyle(comboButtonStyle)
-			.SetContentPadding(FMargin(5.0f, 1.0f))
-			.SetMenuRowPadding(FMargin(5.0f, 1.0f));
+			.SetContentPadding(FMargin(0.0f))
+			.SetMenuRowPadding(MakeValueControlTextPadding());
 		comboBox->SetWidgetStyle(comboStyle);
-		comboBox->SetContentPadding(FMargin(5.0f, 1.0f));
+		comboBox->SetContentPadding(MakeComboSelectedTextPadding());
 
 PRAGMA_DISABLE_DEPRECATION_WARNINGS
 		comboBox->Font = style.Font;
@@ -965,6 +977,17 @@ void UScenarioEditorSidebarFieldRow::RefreshComboBoxOptions()
 
 	if (!ValueText.IsEmpty() && resolvedOptions.Contains(ValueText))
 	{
+		if (ValueComboBox->GetSelectedOption() == ValueText)
+		{
+			for (const FString& option : resolvedOptions)
+			{
+				if (!option.IsEmpty() && option != ValueText)
+				{
+					ValueComboBox->SetSelectedOption(option);
+					break;
+				}
+			}
+		}
 		ValueComboBox->SetSelectedOption(ValueText);
 	}
 	else if (bComboAllowsUnset)

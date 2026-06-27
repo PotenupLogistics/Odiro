@@ -1943,14 +1943,14 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetNavmeshDetails(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("class"), RecastNav->GetClass()->GetName());
 
 	// Cell / voxelization
-	Result->SetNumberField(TEXT("cellSize"), RecastNav->CellSize);
-	Result->SetNumberField(TEXT("cellHeight"), RecastNav->CellHeight);
+	Result->SetNumberField(TEXT("cellSize"), RecastNav->GetCellSize(ENavigationDataResolution::Default));
+	Result->SetNumberField(TEXT("cellHeight"), RecastNav->GetCellHeight(ENavigationDataResolution::Default));
 
 	// Agent
 	Result->SetNumberField(TEXT("agentRadius"), RecastNav->AgentRadius);
 	Result->SetNumberField(TEXT("agentHeight"), RecastNav->AgentHeight);
 	Result->SetNumberField(TEXT("agentMaxSlope"), RecastNav->AgentMaxSlope);
-	Result->SetNumberField(TEXT("agentMaxStepHeight"), RecastNav->AgentMaxStepHeight);
+	Result->SetNumberField(TEXT("agentMaxStepHeight"), RecastNav->GetAgentMaxStepHeight(ENavigationDataResolution::Default));
 
 	// Tile / region
 	Result->SetNumberField(TEXT("tileSize"), static_cast<double>(RecastNav->TileSizeUU));

@@ -448,6 +448,9 @@ jobs:
               }
 
               Write-Output "::add-mask::$env:LFS_LOCK_BOT_TOKEN"
+              if ($env:LFS_LOCK_BOT_TOKEN.StartsWith("github_pat_", [System.StringComparison]::Ordinal)) {
+                  Write-Warning "LFS_LOCK_BOT_TOKEN looks like a fine-grained PAT. GitHub LFS force unlock may reject fine-grained PATs even when REST repo permissions report admin=true. Use a classic PAT or GitHub CLI OAuth token with repo scope if force unlock keeps returning 403."
+              }
 
               $tokenLoginOutput = @(gh api user --jq ".login" 2>&1)
               if ($LASTEXITCODE -ne 0) {

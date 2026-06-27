@@ -538,20 +538,7 @@ jobs:
               }
           }
 
-          # Explains the common GitHub LFS 403 returned when the unlock token lacks push access.
-          function Get-LfsUnlockPermissionHint {
-              param([string] $Detail)
-
-              if ($Detail -match "You must have push access to delete a lock" -or $Detail -match "\bHTTP 403\b") {
-                  return "LFS_LOCK_BOT_TOKEN cannot delete Git LFS locks for this repository through Git LFS Basic auth. Give the token owner Write or higher access to $env:GITHUB_REPOSITORY, make sure the token is authorized and scoped for this repository, then update the repository secret."
-              }
-
-              return ""
-          }
-
-          # Force-unlocks one Git LFS lock by id through the Git LFS HTTP API.
-          # Path is the repository-relative asset path used for diagnostics, and Id is the Git LFS lock id string.
-          # Throws when LFS_LOCK_BOT_TOKEN is missing, the HTTP call fails, or the LFS server rejects the unlock request.
+          # Force-unlocks one Git LFS lock by id through the Git LFS client.
           function Invoke-ForceUnlockById {
               param(
                   # Repository-relative lock path used in error output.
@@ -560,79 +547,20 @@ jobs:
                   [string] $Id
               )
 
-              if ([string]::IsNullOrWhiteSpace($env:LFS_LOCK_BOT_TOKEN)) {
-                  throw "LFS_LOCK_BOT_TOKEN environment variable is required before calling the Git LFS API."
-              }
               if ([string]::IsNullOrWhiteSpace($Id)) {
                   throw "Git LFS lock id is required."
               }
 
-              $endpoint = Get-LfsApiEndpoint
-              # Escapes lock ids for URL-path safety because providers may emit reserved characters such as ':'.
-              $encodedId = [Uri]::EscapeDataString($Id)
-              $unlockUrl = "$endpoint/locks/$encodedId/unlock"
-              $body = @{ force = $true } | ConvertTo-Json -Compress
+              $gitArgs = @("lfs", "unlock", "--force", "--id=$Id")
+              $gitArgs += $Id
 
-              $response = Invoke-LfsApi -Method "POST" -Url $unlockUrl -Body $body
-              if ($response.Status -lt 200 -or $response.Status -ge 300) {
-                  $detail = "HTTP $($response.Status)`n$($response.Body)"
-                  if ([string]::IsNullOrWhiteSpace($detail)) {
-                      throw "Failed to unlock $Path by Git LFS lock id ${Id}: no output from Git LFS API. Check LFS_LOCK_BOT_TOKEN repository push access and LFS endpoint reachability."
-                  }
-
-                  $permissionHint = Get-LfsUnlockPermissionHint -Detail $detail
-                  if (-not [string]::IsNullOrWhiteSpace($permissionHint)) {
-                      throw "Failed to unlock $Path by Git LFS lock id ${Id}.`n$permissionHint`n$detail"
-                  }
-                  throw "Failed to unlock $Path by Git LFS lock id ${Id}.`n$detail"
-              }
-          }
-
-          # Force-unlocks one Git LFS lock by repository path through the Git LFS client.
-          function Invoke-ForceUnlockByPath {
-              param(
-                  # Repository-relative lock path.
-                  [Parameter(Mandatory = $true)][string] $Path
-              )
-
-              $output = @(git lfs unlock --force $Path 2>&1)
+              $output = @(git @gitArgs 2>&1)
               if ($LASTEXITCODE -ne 0) {
                   $detail = (($output | ForEach-Object { [string] $_ }) -join "`n").Trim()
                   if ([string]::IsNullOrWhiteSpace($detail)) {
-                      throw "Failed to unlock $Path by path: no output from git lfs unlock."
+                      throw "Failed to force unlock $Path by Git LFS lock id ${Id}: no output from git lfs unlock."
                   }
-                  throw "Failed to unlock $Path by path.`n$detail"
-              }
-          }
-
-          # Tries the official Git LFS client first, then falls back to the lock-id HTTP API.
-          function Invoke-ForceUnlock {
-              param(
-                  # Repository-relative lock path.
-                  [Parameter(Mandatory = $true)][string] $Path,
-                  # Optional Git LFS lock id used for API fallback.
-                  [string] $Id
-              )
-
-              $pathError = ""
-              try {
-                  Invoke-ForceUnlockByPath -Path $Path
-                  return
-              }
-              catch {
-                  $pathError = $_.Exception.Message
-                  Write-Warning "Path-based unlock failed for $Path. Trying Git LFS lock id fallback.`n$pathError"
-              }
-
-              if ([string]::IsNullOrWhiteSpace($Id)) {
-                  throw "Path-based unlock failed and no Git LFS lock id is available for fallback.`n$pathError"
-              }
-
-              try {
-                  Invoke-ForceUnlockById -Path $Path -Id $Id
-              }
-              catch {
-                  throw "Both unlock methods failed for $Path.`nPath unlock:`n$pathError`nLock id unlock:`n$($_.Exception.Message)"
+                  throw "Failed to force unlock $Path by Git LFS lock id ${Id}.`n$detail"
               }
           }
 
@@ -838,7 +766,7 @@ jobs:
                       continue
                   }
 
-                  Invoke-ForceUnlock -Path $path -Id $id
+                  Invoke-ForceUnlockById -Path $path -Id $id
 
                   $afterLocksByPath = Get-LocksByPath -Locks @(Get-Locks)
                   if ($afterLocksByPath.ContainsKey($path)) {

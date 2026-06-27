@@ -12,6 +12,7 @@
 #include "Materials/MaterialExpressionTextureSampleParameter.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
+#include "MaterialShared.h"
 #include "MaterialEditingLibrary.h"
 #include "UObject/UnrealType.h"
 
@@ -36,6 +37,99 @@ namespace
             return TEXT("");
         }
         return Expr->Desc.IsEmpty() ? Expr->GetName() : Expr->Desc;
+    }
+
+    static void AddMaterialInputConnections(UObject* Owner, const FString& TargetHandle, TArray<TSharedPtr<FJsonValue>>& Connections)
+    {
+        if (!Owner)
+        {
+            return;
+        }
+
+        for (TFieldIterator<FProperty> It(Owner->GetClass()); It; ++It)
+        {
+            FProperty* Prop = *It;
+            FStructProperty* StructProp = CastField<FStructProperty>(Prop);
+            if (!StructProp || !StructProp->Struct)
+            {
+                continue;
+            }
+
+            const FString StructName = StructProp->Struct->GetName();
+            if (!StructName.Equals(TEXT("ExpressionInput")) && !StructName.Contains(TEXT("MaterialInput")))
+            {
+                continue;
+            }
+
+            FExpressionInput* Input = StructProp->ContainerPtrToValuePtr<FExpressionInput>(Owner);
+            if (!Input || !Input->Expression)
+            {
+                continue;
+            }
+
+            TSharedPtr<FJsonObject> Connection = MakeShared<FJsonObject>();
+            Connection->SetStringField(TEXT("source"), ResolveHandleFromExpression(Input->Expression));
+            Connection->SetStringField(TEXT("target"), TargetHandle);
+            Connection->SetStringField(TEXT("target_pin"), Prop->GetName());
+            Connection->SetNumberField(TEXT("output_index"), Input->OutputIndex);
+            Connections.Add(MakeShared<FJsonValueObject>(Connection));
+        }
+    }
+
+    static TSharedPtr<FJsonObject> BuildMaterialGraphSnapshot(UMaterial* Mat)
+    {
+        TSharedPtr<FJsonObject> Snapshot = MakeShared<FJsonObject>();
+        TArray<TSharedPtr<FJsonValue>> Nodes;
+        TArray<TSharedPtr<FJsonValue>> Connections;
+
+        if (!Mat)
+        {
+            Snapshot->SetBoolField(TEXT("success"), false);
+            Snapshot->SetStringField(TEXT("error"), TEXT("No Target Material"));
+            return Snapshot;
+        }
+
+        TSharedPtr<FJsonObject> RootNode = MakeShared<FJsonObject>();
+        RootNode->SetStringField(TEXT("handle"), MasterHandleName);
+        RootNode->SetStringField(TEXT("name"), Mat->GetName());
+        RootNode->SetStringField(TEXT("class"), TEXT("MaterialRoot"));
+        Nodes.Add(MakeShared<FJsonValueObject>(RootNode));
+
+        AddMaterialInputConnections(Mat, MasterHandleName, Connections);
+#if WITH_EDITOR
+        AddMaterialInputConnections(Mat->GetEditorOnlyData(), MasterHandleName, Connections);
+#endif
+
+        for (UMaterialExpression* Expr : Mat->GetExpressions())
+        {
+            if (!Expr)
+            {
+                continue;
+            }
+
+            const FString Handle = ResolveHandleFromExpression(Expr);
+            TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
+            Node->SetStringField(TEXT("handle"), Handle);
+            Node->SetStringField(TEXT("name"), Expr->GetName());
+            Node->SetStringField(TEXT("class"), Expr->GetClass()->GetName());
+            if (!Expr->Desc.IsEmpty())
+            {
+                Node->SetStringField(TEXT("description"), Expr->Desc);
+            }
+            Node->SetNumberField(TEXT("x"), Expr->MaterialExpressionEditorX);
+            Node->SetNumberField(TEXT("y"), Expr->MaterialExpressionEditorY);
+            Nodes.Add(MakeShared<FJsonValueObject>(Node));
+
+            AddMaterialInputConnections(Expr, Handle, Connections);
+        }
+
+        Snapshot->SetBoolField(TEXT("success"), true);
+        Snapshot->SetStringField(TEXT("target"), Mat->GetPathName());
+        Snapshot->SetArrayField(TEXT("nodes"), Nodes);
+        Snapshot->SetArrayField(TEXT("connections"), Connections);
+        Snapshot->SetNumberField(TEXT("node_count"), Nodes.Num());
+        Snapshot->SetNumberField(TEXT("connection_count"), Connections.Num());
+        return Snapshot;
     }
 
     static FExpressionInput* FindMaterialInputByName(UMaterial* Mat, const FString& InputName)
@@ -653,6 +747,10 @@ TSharedPtr<FJsonObject> FUmgMcpMaterialCommands::HandleCommand(const FString& Co
              ResultJson->SetStringField(TEXT("error"), TEXT("Missing 'handle' parameter"));
              ResultJson->SetBoolField(TEXT("success"), false);
         }
+    }
+    else if (CommandType == TEXT("material_get_graph"))
+    {
+        ResultJson = BuildMaterialGraphSnapshot(Subsystem->GetTargetMaterial());
     }
 
     // --- P1: Input Definition ---

@@ -500,6 +500,24 @@ FString UUmgGetSubsystem::GetWidgetSchema(const FString& WidgetType)
     {
         WidgetClass = LoadObject<UClass>(nullptr, *WidgetType);
     }
+    if (!WidgetClass && !WidgetType.Contains(TEXT("/")) && !WidgetType.Contains(TEXT(".")))
+    {
+        const FString NativePath = FString::Printf(TEXT("/Script/UMG.%s"), *WidgetType);
+        WidgetClass = FindObject<UClass>(nullptr, *NativePath);
+        if (!WidgetClass)
+        {
+            WidgetClass = LoadObject<UClass>(nullptr, *NativePath);
+        }
+    }
+    if (!WidgetClass && !WidgetType.Contains(TEXT("/")) && !WidgetType.Contains(TEXT(".")))
+    {
+        const FString NativePathWithPrefix = FString::Printf(TEXT("/Script/UMG.U%s"), *WidgetType);
+        WidgetClass = FindObject<UClass>(nullptr, *NativePathWithPrefix);
+        if (!WidgetClass)
+        {
+            WidgetClass = LoadObject<UClass>(nullptr, *NativePathWithPrefix);
+        }
+    }
 
     if (!WidgetClass)
     {

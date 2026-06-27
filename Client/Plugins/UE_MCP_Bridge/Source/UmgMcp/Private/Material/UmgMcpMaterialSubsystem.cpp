@@ -12,6 +12,7 @@
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "MaterialEditingLibrary.h"
+#include "Misc/PackageName.h"
 // Graph Editing
 #include "MaterialGraph/MaterialGraph.h"
 #include "MaterialGraph/MaterialGraphNode.h"
@@ -49,14 +50,33 @@ FString UUmgMcpMaterialSubsystem::SetTargetMaterial(const FString& AssetPath, bo
     // UE_LOG(LogTemp, Warning, TEXT("[SetTargetMaterial] Called with path: %s"), *AssetPath);
 
     UMaterial* TargetMat = nullptr;
+    FString ObjectPath = AssetPath;
+    FString PackageName;
+    FString AssetName;
+
+    if (FPackageName::IsValidObjectPath(ObjectPath))
+    {
+        PackageName = FPackageName::ObjectPathToPackageName(ObjectPath);
+        AssetName = FPackageName::ObjectPathToObjectName(ObjectPath);
+    }
+    else if (FPackageName::IsValidLongPackageName(ObjectPath))
+    {
+        PackageName = ObjectPath;
+        AssetName = FPackageName::GetShortName(PackageName);
+        ObjectPath = PackageName + TEXT(".") + AssetName;
+    }
+    else
+    {
+        return FString::Printf(TEXT("错误: 无效的资产路径: %s"), *AssetPath);
+    }
 
     // 1. Try to find in open Editor FIRST (UMG pattern)
     if (GEditor)
     {
         if (UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
         {
-            FSoftObjectPath ObjectPath(AssetPath);
-            UObject* AssetObj = ObjectPath.ResolveObject();  // UMG uses ResolveObject, not TryLoad
+            FSoftObjectPath SoftObjectPath(ObjectPath);
+            UObject* AssetObj = SoftObjectPath.ResolveObject();  // UMG uses ResolveObject, not TryLoad
 
             if (AssetObj)
             {
@@ -78,7 +98,7 @@ FString UUmgMcpMaterialSubsystem::SetTargetMaterial(const FString& AssetPath, bo
     // 2. Fallback to LoadObject if not in editor (UMG pattern)
     if (!TargetMat)
     {
-        TargetMat = LoadObject<UMaterial>(nullptr, *AssetPath, nullptr, LOAD_NoWarn);
+        TargetMat = LoadObject<UMaterial>(nullptr, *ObjectPath, nullptr, LOAD_NoWarn);
     }
 
     if (TargetMat)
@@ -92,10 +112,7 @@ FString UUmgMcpMaterialSubsystem::SetTargetMaterial(const FString& AssetPath, bo
     // 2. Create if Not Found and Allowed
     if (bCreateIfNotFound)
     {
-        FString PackageName = AssetPath;
-        FString AssetName = FPackageName::GetShortName(PackageName);
-
-        if (!FPackageName::IsValidObjectPath(PackageName))
+        if (!FPackageName::IsValidLongPackageName(PackageName))
         {
             return FString::Printf(TEXT("错误: 无效的资产路径: %s"), *AssetPath);
         }

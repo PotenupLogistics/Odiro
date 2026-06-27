@@ -15,6 +15,7 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "FileManage/UmgFileTransformation.h"
 #include "Components/CanvasPanelSlot.h"
+#include "UObject/UnrealType.h"
 
 DEFINE_LOG_CATEGORY(LogUmgSet);
 
@@ -40,6 +41,133 @@ void CollectWidgetNames(const UWidget* Widget, TSet<FName>& OutNames)
     else if (const UContentWidget* ContentWidget = Cast<UContentWidget>(Widget))
     {
         CollectWidgetNames(ContentWidget->GetContent(), OutNames);
+    }
+}
+
+// Collects live widgets from the authoritative root tree instead of cached editor arrays.
+void CollectLiveWidgets(UWidget* Widget, TArray<UWidget*>& OutWidgets, TSet<FName>& OutWidgetNames)
+{
+    if (!Widget)
+    {
+        return;
+    }
+
+    OutWidgets.Add(Widget);
+    if (!Widget->GetFName().IsNone())
+    {
+        OutWidgetNames.Add(Widget->GetFName());
+    }
+
+    if (UPanelWidget* PanelWidget = Cast<UPanelWidget>(Widget))
+    {
+        for (int32 ChildIndex = 0; ChildIndex < PanelWidget->GetChildrenCount(); ++ChildIndex)
+        {
+            CollectLiveWidgets(PanelWidget->GetChildAt(ChildIndex), OutWidgets, OutWidgetNames);
+        }
+    }
+    else if (UContentWidget* ContentWidget = Cast<UContentWidget>(Widget))
+    {
+        CollectLiveWidgets(ContentWidget->GetContent(), OutWidgets, OutWidgetNames);
+    }
+}
+
+// Captures a subtree before it is detached so stale editor caches can be neutralized.
+void CollectWidgetSubtree(UWidget* Widget, TArray<UWidget*>& OutWidgets)
+{
+    if (!Widget)
+    {
+        return;
+    }
+
+    OutWidgets.Add(Widget);
+
+    if (UPanelWidget* PanelWidget = Cast<UPanelWidget>(Widget))
+    {
+        for (int32 ChildIndex = 0; ChildIndex < PanelWidget->GetChildrenCount(); ++ChildIndex)
+        {
+            CollectWidgetSubtree(PanelWidget->GetChildAt(ChildIndex), OutWidgets);
+        }
+    }
+    else if (UContentWidget* ContentWidget = Cast<UContentWidget>(Widget))
+    {
+        CollectWidgetSubtree(ContentWidget->GetContent(), OutWidgets);
+    }
+}
+
+// Detaches removed widgets from stale editor caches by moving them to transient ownership.
+void NeutralizeRemovedWidgets(UWidgetBlueprint* WidgetBlueprint, const TArray<UWidget*>& RemovedWidgets)
+{
+    if (!WidgetBlueprint)
+    {
+        return;
+    }
+
+    int32 RemovedWidgetIndex = 0;
+    for (UWidget* RemovedWidget : RemovedWidgets)
+    {
+        if (!RemovedWidget)
+        {
+            continue;
+        }
+
+        WidgetBlueprint->WidgetVariableNameToGuidMap.Remove(RemovedWidget->GetFName());
+        const FString RemovedName = FString::Printf(
+            TEXT("__UmgMcpRemoved_%s_%d_%s"),
+            *RemovedWidget->GetName(),
+            RemovedWidgetIndex++,
+            *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+        RemovedWidget->Rename(
+            *RemovedName,
+            GetTransientPackage(),
+            REN_DontCreateRedirectors | REN_ForceNoResetLoaders | REN_NonTransactional);
+        RemovedWidget->SetFlags(RF_Transient);
+    }
+}
+
+// Keeps UWidgetTree editor-only caches and Blueprint variable GUIDs aligned after structural edits.
+void SynchronizeWidgetBlueprintCompilerState(UWidgetBlueprint* WidgetBlueprint)
+{
+    if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+    {
+        return;
+    }
+
+    TArray<UWidget*> LiveWidgets;
+    TSet<FName> LiveWidgetNames;
+    CollectLiveWidgets(WidgetBlueprint->WidgetTree->RootWidget, LiveWidgets, LiveWidgetNames);
+
+#if WITH_EDITORONLY_DATA
+    if (FArrayProperty* AllWidgetsProperty = FindFProperty<FArrayProperty>(WidgetBlueprint->WidgetTree->GetClass(), TEXT("AllWidgets")))
+    {
+        if (FObjectPropertyBase* InnerObjectProperty = CastField<FObjectPropertyBase>(AllWidgetsProperty->Inner))
+        {
+            FScriptArrayHelper AllWidgetsHelper(
+                AllWidgetsProperty,
+                AllWidgetsProperty->ContainerPtrToValuePtr<void>(WidgetBlueprint->WidgetTree));
+            AllWidgetsHelper.EmptyAndAddValues(LiveWidgets.Num());
+            for (int32 Index = 0; Index < LiveWidgets.Num(); ++Index)
+            {
+                InnerObjectProperty->SetObjectPropertyValue(AllWidgetsHelper.GetRawPtr(Index), LiveWidgets[Index]);
+            }
+        }
+    }
+#endif
+
+    for (const FName& WidgetName : LiveWidgetNames)
+    {
+        if (!WidgetBlueprint->WidgetVariableNameToGuidMap.Contains(WidgetName))
+        {
+            WidgetBlueprint->WidgetVariableNameToGuidMap.Add(WidgetName, FGuid::NewGuid());
+        }
+    }
+
+    for (auto It = WidgetBlueprint->WidgetVariableNameToGuidMap.CreateIterator(); It; ++It)
+    {
+        if (!LiveWidgetNames.Contains(It.Key()))
+        {
+            UE_LOG(LogUmgSet, Log, TEXT("Removed stale widget GUID entry: %s"), *It.Key().ToString());
+            It.RemoveCurrent();
+        }
     }
 }
 
@@ -401,6 +529,7 @@ bool UUmgSetSubsystem::SetWidgetProperties(UWidgetBlueprint* WidgetBlueprint, co
         FJsonObjectConverter::JsonObjectToUStruct(SlotProperties.ToSharedRef(), FoundWidget->Slot->GetClass(), FoundWidget->Slot, 0, 0);
     }
 
+    SynchronizeWidgetBlueprintCompilerState(WidgetBlueprint);
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
     return true;
 }
@@ -419,7 +548,7 @@ FString UUmgSetSubsystem::CreateWidget(UWidgetBlueprint* WidgetBlueprint, const 
         return FString();
     }
 
-    RemoveStaleWidgetGuidEntries(WidgetBlueprint);
+    SynchronizeWidgetBlueprintCompilerState(WidgetBlueprint);
 
     // Load widget class first to check if it's valid
     // 1. Try finding/loading as a fully qualified path (if provided)
@@ -578,6 +707,7 @@ FString UUmgSetSubsystem::CreateWidget(UWidgetBlueprint* WidgetBlueprint, const 
     }
 
     WidgetBlueprint->Modify();
+    WidgetBlueprint->WidgetTree->Modify();
 
     UWidget* NewWidget = WidgetBlueprint->WidgetTree->ConstructWidget<UWidget>(WidgetClass, FName(*WidgetName));
     if (!NewWidget)
@@ -612,6 +742,7 @@ FString UUmgSetSubsystem::CreateWidget(UWidgetBlueprint* WidgetBlueprint, const 
         WidgetBlueprint->WidgetVariableNameToGuidMap.Add(NewWidget->GetFName(), FGuid::NewGuid());
     }
 
+    SynchronizeWidgetBlueprintCompilerState(WidgetBlueprint);
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
     return NewWidget->GetName();
 }
@@ -638,11 +769,18 @@ bool UUmgSetSubsystem::DeleteWidget(UWidgetBlueprint* WidgetBlueprint, const FSt
     }
 
     WidgetBlueprint->Modify();
+    WidgetBlueprint->WidgetTree->Modify();
+
+    TArray<UWidget*> RemovedWidgets;
+    CollectWidgetSubtree(FoundWidget, RemovedWidgets);
+
     RemoveWidgetGuidEntries(WidgetBlueprint, FoundWidget);
 
     if (RemoveWidgetSubtree(WidgetBlueprint->WidgetTree, FoundWidget))
     {
-        RemoveStaleWidgetGuidEntries(WidgetBlueprint);
+        WidgetBlueprint->WidgetVariableNameToGuidMap.Remove(FName(*WidgetName));
+        NeutralizeRemovedWidgets(WidgetBlueprint, RemovedWidgets);
+        SynchronizeWidgetBlueprintCompilerState(WidgetBlueprint);
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
         return true;
     }
@@ -686,6 +824,7 @@ bool UUmgSetSubsystem::MoveWidget(UWidgetBlueprint* WidgetBlueprint, const FStri
     }
 
     NewParentWidget->AddChild(WidgetToMove);
+    SynchronizeWidgetBlueprintCompilerState(WidgetBlueprint);
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
     return true;
 }
@@ -781,6 +920,7 @@ TArray<FString> UUmgSetSubsystem::ReparentWidget(UWidgetBlueprint* WidgetBluepri
 
     // 5. Construct new widget
     WidgetBlueprint->Modify();
+    WidgetBlueprint->WidgetTree->Modify();
     UWidget* NewWidget = WidgetBlueprint->WidgetTree->ConstructWidget<UWidget>(WidgetClass, FName(*TargetName));
     if (!NewWidget)
     {
@@ -810,7 +950,6 @@ TArray<FString> UUmgSetSubsystem::ReparentWidget(UWidgetBlueprint* WidgetBluepri
     // 7. Setup parent relation & inherit slot layout properties
     FWidgetParentInfo ParentInfo;
     FindWidgetParentRecursive(WidgetBlueprint->WidgetTree->RootWidget, WidgetToReplace, ParentInfo);
-    UPanelSlot* OldSlot = WidgetToReplace->Slot;
 
     if (ParentInfo.PanelParent)
     {
@@ -819,27 +958,14 @@ TArray<FString> UUmgSetSubsystem::ReparentWidget(UWidgetBlueprint* WidgetBluepri
         // Temporarily detach old widget
         ParentInfo.PanelParent->RemoveChild(WidgetToReplace);
 
-        // Insert new widget at the same index
-        UPanelSlot* NewSlot = nullptr;
-        if (ParentInfo.ChildIndex != INDEX_NONE)
+        if (!ParentInfo.PanelParent->AddChild(NewWidget))
         {
-            NewSlot = ParentInfo.PanelParent->InsertChildAt(ParentInfo.ChildIndex, NewWidget);
-        }
-        else
-        {
-            NewSlot = ParentInfo.PanelParent->AddChild(NewWidget);
+            UE_LOG(LogUmgSet, Error, TEXT("ReparentWidget: Failed to attach replacement '%s' to panel '%s'."), *NewWidget->GetName(), *ParentInfo.PanelParent->GetName());
+            ParentInfo.PanelParent->AddChild(WidgetToReplace);
+            return AffectedWidgets;
         }
 
-        // Inherit slot settings if slot types are identical
-        if (OldSlot && NewSlot && OldSlot->GetClass() == NewSlot->GetClass())
-        {
-            TSharedRef<FJsonObject> TempSlotJson = MakeShared<FJsonObject>();
-            if (FJsonObjectConverter::UStructToJsonObject(OldSlot->GetClass(), OldSlot, TempSlotJson, 0, 0))
-            {
-                NewSlot->Modify();
-                FJsonObjectConverter::JsonObjectToUStruct(TempSlotJson, NewSlot->GetClass(), NewSlot, 0, 0);
-            }
-        }
+        // Slot ownership fields are not safe to bulk-copy between UMG slots.
     }
     else if (ParentInfo.ContentParent)
     {
@@ -884,7 +1010,10 @@ TArray<FString> UUmgSetSubsystem::ReparentWidget(UWidgetBlueprint* WidgetBluepri
     }
 
     // 9. Destroy old widget
-    WidgetBlueprint->WidgetTree->RemoveWidget(WidgetToReplace);
+    TArray<UWidget*> ReplacedWidgets;
+    ReplacedWidgets.Add(WidgetToReplace);
+    WidgetBlueprint->WidgetVariableNameToGuidMap.Remove(WidgetToReplace->GetFName());
+    NeutralizeRemovedWidgets(WidgetBlueprint, ReplacedWidgets);
 
     // 10. Revert name (rename the temporary name back to original widget name if no new custom name was specified)
     FString FinalName = CustomName;
@@ -894,11 +1023,13 @@ TArray<FString> UUmgSetSubsystem::ReparentWidget(UWidgetBlueprint* WidgetBluepri
         FinalName = WidgetName;
     }
 
-    if (NewWidget->bIsVariable)
+    NewWidget->bIsVariable = true;
+    if (!WidgetBlueprint->WidgetVariableNameToGuidMap.Contains(NewWidget->GetFName()))
     {
         WidgetBlueprint->WidgetVariableNameToGuidMap.Add(NewWidget->GetFName(), FGuid::NewGuid());
     }
 
+    SynchronizeWidgetBlueprintCompilerState(WidgetBlueprint);
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
     AffectedWidgets.Add(FinalName); // The converted widget itself is affected
 

@@ -55,7 +55,7 @@ jobs:
         with:
           fetch-depth: 1
           lfs: false
-          persist-credentials: true
+          persist-credentials: false
           token: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
 
       - name: Verify Git LFS
@@ -262,6 +262,7 @@ jobs:
           DISPATCH_PATH: ${{ github.event.inputs.path }}
           DISPATCH_BASE: ${{ github.event.inputs.base }}
           DISPATCH_HEAD: ${{ github.event.inputs.head }}
+          LFS_LOCK_BOT_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
           GIT_TERMINAL_PROMPT: "0"
         run: |
           $ErrorActionPreference = "Stop"
@@ -433,6 +434,59 @@ jobs:
               return @($Payload)
           }
 
+          # Forces Git and Git LFS to authenticate with LFS_LOCK_BOT_TOKEN for this step.
+          function Initialize-LfsUnlockAuth {
+              if ([string]::IsNullOrWhiteSpace($env:LFS_LOCK_BOT_TOKEN)) {
+                  throw "LFS_LOCK_BOT_TOKEN is required for Git LFS unlock."
+              }
+              if ([string]::IsNullOrWhiteSpace($env:GITHUB_REPOSITORY)) {
+                  throw "GITHUB_REPOSITORY is required for Git LFS unlock."
+              }
+              if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
+                  throw "RUNNER_TEMP is required for Git LFS unlock."
+              }
+
+              Write-Output "::add-mask::$env:LFS_LOCK_BOT_TOKEN"
+
+              $askPassPath = Join-Path $env:RUNNER_TEMP "git-lfs-askpass.sh"
+              $askPassScript = @'
+          #!/usr/bin/env bash
+          case "$1" in
+            *Username*) printf '%s\n' "x-access-token" ;;
+            *) printf '%s\n' "${LFS_LOCK_BOT_TOKEN}" ;;
+          esac
+          '@
+              [System.IO.File]::WriteAllText($askPassPath, $askPassScript, [System.Text.Encoding]::UTF8)
+              chmod 700 $askPassPath
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to make Git askpass helper executable."
+              }
+
+              $env:GIT_ASKPASS = $askPassPath
+
+              $extraHeaderKeys = @(git config --local --name-only --get-regexp '^http\..*\.extraheader$' 2>$null)
+              $global:LASTEXITCODE = 0
+              foreach ($key in $extraHeaderKeys) {
+                  git config --local --unset-all $key
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "Failed to remove persisted Git extraheader credential: $key"
+                  }
+              }
+              Write-Host "Removed persisted Git extraheader credentials: $($extraHeaderKeys.Count)."
+
+              git config --local credential.helper ""
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to disable persisted Git credential helpers."
+              }
+
+              git remote set-url origin "https://github.com/$env:GITHUB_REPOSITORY.git"
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to normalize origin remote URL for Git LFS unlock."
+              }
+
+              Write-Host "Git LFS unlock auth: GIT_ASKPASS with LFS_LOCK_BOT_TOKEN."
+          }
+
           # Runs a native command and throws with its stderr/stdout when it fails.
           function Invoke-CheckedNativeCommand {
               param(
@@ -500,6 +554,8 @@ jobs:
               }
               return $locksByPath
           }
+
+          Initialize-LfsUnlockAuth
 
           $automaticUnlock = $env:EVENT_NAME -ne "workflow_dispatch"
           $cutoff = $null

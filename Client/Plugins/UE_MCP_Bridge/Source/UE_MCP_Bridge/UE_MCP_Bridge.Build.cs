@@ -73,7 +73,6 @@ public class UE_MCP_Bridge : ModuleRules
 				"StateTreeModule",
 				"StateTreeEditorModule",
 				"StaticMeshDescription",
-				"StructUtils",
 				"SubobjectDataInterface",
 				"ToolMenus",
 				"RenderCore",

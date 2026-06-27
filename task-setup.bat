@@ -5,7 +5,6 @@ setlocal EnableExtensions
 set "SCRIPT_DIR=%~dp0"
 set "POWERSHELL=powershell.exe"
 set "SKIP_PREREQUISITES="
-set "ALLOW_MISSING_PREREQUISITES="
 set "SKIP_GIT_HOOKS="
 set "SKIP_AGENTS="
 
@@ -13,11 +12,6 @@ set "SKIP_AGENTS="
 if "%~1"=="" goto run_setup
 if /I "%~1"=="-SkipPrerequisites" (
 	set "SKIP_PREREQUISITES=1"
-	shift
-	goto parse_args
-)
-if /I "%~1"=="-AllowMissingPrerequisites" (
-	set "ALLOW_MISSING_PREREQUISITES=1"
 	shift
 	goto parse_args
 )
@@ -40,11 +34,7 @@ goto exit_task
 echo [setup] Started.
 
 if not defined SKIP_PREREQUISITES (
-	if defined ALLOW_MISSING_PREREQUISITES (
-		"%POWERSHELL%" -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%tools\check-prerequisites.ps1" -AllowMissing
-	) else (
-		"%POWERSHELL%" -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%tools\check-prerequisites.ps1"
-	)
+	"%POWERSHELL%" -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%tools\check-prerequisites.ps1"
 	if errorlevel 1 (
 		set "TASK_EXIT_CODE=1"
 		goto exit_task

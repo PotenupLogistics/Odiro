@@ -5,8 +5,7 @@
 
 ## MCP
 - Before the first Unreal MCP call in a session, discover active tool names and match them to these roles; do not guess alternate server names
-  - `UmgMcp`: UMG writes
-  - `ue-mcp`: PIE/runtime screenshots, logs, build status, screen-debug work; no UI writes unless requested
+  - `UE_MCP_Bridge`: UMG writes, widget capture/runtime geometry, PIE/runtime screenshots, logs, build status, and screen-debug work
 - Reuse an open editor when possible; launch it only when MCP needs an editor-backed server
 - If the agent launched an editor only for MCP, close or reuse it before C++ edits, builds, or another editor launch unless the user wants it open
 - Treat early `connection refused` as editor/MCP startup state

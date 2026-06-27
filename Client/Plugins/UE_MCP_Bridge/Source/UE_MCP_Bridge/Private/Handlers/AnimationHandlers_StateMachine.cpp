@@ -51,6 +51,7 @@
 
 
 #define UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4))
+#define UE_MCP_HAS_POSESEARCH_UNIFIED_ANIMATION_ASSET_API (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7))
 
 static int32 GetPoseSearchAnimationAssetCount(const UPoseSearchDatabase* Database)
 {
@@ -63,6 +64,20 @@ static int32 GetPoseSearchAnimationAssetCount(const UPoseSearchDatabase* Databas
 
 static bool AddPoseSearchAnimationAsset(UPoseSearchDatabase* Database, UObject* AnimAsset, FString& OutError)
 {
+#if UE_MCP_HAS_POSESEARCH_UNIFIED_ANIMATION_ASSET_API
+	if (!Cast<UAnimSequence>(AnimAsset)
+		&& !Cast<UBlendSpace>(AnimAsset)
+		&& !Cast<UAnimComposite>(AnimAsset)
+		&& !Cast<UAnimMontage>(AnimAsset))
+	{
+		OutError = FString::Printf(TEXT("Animation asset type not supported by PoseSearch: %s"), *AnimAsset->GetClass()->GetName());
+		return false;
+	}
+
+	FPoseSearchDatabaseAnimationAsset NewEntry;
+	NewEntry.AnimAsset = AnimAsset;
+	Database->AddAnimationAsset(NewEntry);
+#else
 	FInstancedStruct NewEntry;
 	if (UAnimSequence* Sequence = Cast<UAnimSequence>(AnimAsset))
 	{
@@ -94,6 +109,7 @@ static bool AddPoseSearchAnimationAsset(UPoseSearchDatabase* Database, UObject* 
 	Database->AddAnimationAsset(MoveTemp(NewEntry));
 #else
 	Database->AnimationAssets.Add(MoveTemp(NewEntry));
+#endif
 #endif
 	return true;
 }
@@ -287,7 +303,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddState(const TSharedPtr<FJsonObject
 		UObject* GraphOuter = SMGraph->GetOuter();
 		if (GraphOuter)
 		{
-			if (UObject* Existing = StaticFindObject(nullptr, GraphOuter, *StateName, /*ExactClass*/ false))
+			if (UObject* Existing = StaticFindObject(nullptr, GraphOuter, *StateName, EFindObjectFlags::None))
 			{
 				return MCPError(FString::Printf(
 					TEXT("Cannot create state '%s' - name collides with existing %s in the state machine graph outer. Pick a unique stateName."),
@@ -311,7 +327,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddState(const TSharedPtr<FJsonObject
 	{
 		UObject* GraphOuter = NewState->BoundGraph->GetOuter();
 		const FString DesiredName = StateName;
-		if (UObject* Collision = StaticFindObject(nullptr, GraphOuter, *DesiredName, /*ExactClass*/ false))
+		if (UObject* Collision = StaticFindObject(nullptr, GraphOuter, *DesiredName, EFindObjectFlags::None))
 		{
 			if (Collision != NewState->BoundGraph)
 			{
@@ -1347,7 +1363,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadPoseSearchDatabase(const TSharedP
 	for (int32 i = 0; i < AssetCount; ++i)
 	{
 #if UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API
-		const FPoseSearchDatabaseAnimationAssetBase* Entry = Database->GetDatabaseAnimationAsset<FPoseSearchDatabaseAnimationAssetBase>(i);
+		const FPoseSearchDatabaseAnimationAssetBase* Entry = Database->GetDatabaseAnimationAsset(i);
 		if (!Entry) continue;
 		UObject* AnimationAsset = Entry->GetAnimationAsset();
 #else

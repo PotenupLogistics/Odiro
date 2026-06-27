@@ -139,7 +139,7 @@ verify:
     run:
       - focused ScenarioEditor model/selection tests
       - OdiroSim.ScenarioEditor.ViewModel automation tests
-      - UmgMcp and Blueprint verification for touched editor widgets
+      - UE_MCP_Bridge UMG and Blueprint verification for touched editor widgets
   - when: runtime, adapter, runner, evaluation, or output changes
     run:
       - focused Scenario/Episode automation tests

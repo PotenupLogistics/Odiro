@@ -281,6 +281,20 @@ namespace
 		return FontInfo;
 	}
 
+	template <typename StructType>
+	void McpSetStructPropertyValue(UObject* Object, const TCHAR* PropertyName, const StructType& Value)
+	{
+		if (!Object)
+		{
+			return;
+		}
+
+		if (FStructProperty* StructProperty = CastField<FStructProperty>(Object->GetClass()->FindPropertyByName(FName(PropertyName))))
+		{
+			StructProperty->CopyCompleteValue(StructProperty->ContainerPtrToValuePtr<void>(Object), &Value);
+		}
+	}
+
 	void McpApplyButtonStyle(UButton* Button, const TSharedPtr<FJsonObject>& StyleObj)
 	{
 		if (!Button || !StyleObj.IsValid())
@@ -293,7 +307,7 @@ namespace
 		const FLinearColor Pressed = McpColorFromJson(StyleObj->TryGetField(TEXT("pressed")), FLinearColor(0.18f, 0.18f, 0.18f, 1.0f));
 		const float Radius = StyleObj->HasField(TEXT("radius")) ? static_cast<float>(StyleObj->GetNumberField(TEXT("radius"))) : 4.0f;
 
-		FButtonStyle Style = Button->WidgetStyle;
+		FButtonStyle Style = Button->GetStyle();
 		Style.Normal = McpMakeBoxBrush(Normal, Radius);
 		Style.Hovered = McpMakeBoxBrush(Hovered, Radius);
 		Style.Pressed = McpMakeBoxBrush(Pressed, Radius);
@@ -367,12 +381,18 @@ namespace
 		const FLinearColor Text = McpColorFromJson(StyleObj->TryGetField(TEXT("text")), FLinearColor(0.86f, 0.86f, 0.86f, 1.0f));
 		const int32 FontSize = StyleObj->HasField(TEXT("fontSize")) ? static_cast<int32>(StyleObj->GetNumberField(TEXT("fontSize"))) : 13;
 
-		ComboBox->Font = McpMakeFont(FontSize, false);
-		ComboBox->ForegroundColor = FSlateColor(Text);
-		ComboBox->WidgetStyle.ComboButtonStyle.ButtonStyle.Normal = McpMakeBoxBrush(Background);
-		ComboBox->WidgetStyle.ComboButtonStyle.ButtonStyle.Hovered = McpMakeBoxBrush(Hover);
-		ComboBox->WidgetStyle.ComboButtonStyle.ButtonStyle.Pressed = McpMakeBoxBrush(Background * 0.85f);
-		ComboBox->ItemStyle.TextColor = FSlateColor(Text);
+		McpSetStructPropertyValue(ComboBox, TEXT("Font"), McpMakeFont(FontSize, false));
+		McpSetStructPropertyValue(ComboBox, TEXT("ForegroundColor"), FSlateColor(Text));
+
+		FComboBoxStyle WidgetStyle = ComboBox->GetWidgetStyle();
+		WidgetStyle.ComboButtonStyle.ButtonStyle.Normal = McpMakeBoxBrush(Background);
+		WidgetStyle.ComboButtonStyle.ButtonStyle.Hovered = McpMakeBoxBrush(Hover);
+		WidgetStyle.ComboButtonStyle.ButtonStyle.Pressed = McpMakeBoxBrush(Background * 0.85f);
+		ComboBox->SetWidgetStyle(WidgetStyle);
+
+		FTableRowStyle ItemStyle = ComboBox->GetItemStyle();
+		ItemStyle.TextColor = FSlateColor(Text);
+		ComboBox->SetItemStyle(ItemStyle);
 	}
 }
 

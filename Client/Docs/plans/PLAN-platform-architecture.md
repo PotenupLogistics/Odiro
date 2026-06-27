@@ -27,7 +27,7 @@ specs:
 - `WBP_MainMenu`: `ProjectWorkspaceScreen`을 root surface로 사용하고 control/workspace UI와 `ProjectScenarioEditPanel` 아래의 `WBP_ScenarioEditorRootWidget` 자식을 포함
 - Project 선택/생성 성공 흐름: Startup UI → active project 저장 → `ScenarioEditorMap` OpenLevel → `<UserProject>/scenario.json` 자동 로드
 - MainMenu는 project 선택/생성, project path 입력, preset card를 소유하지 않음
-- UMG asset 구조 변경은 `UmgMcp`로 수정/검증한다. `WBP_MainMenu`에 Startup 전용 widget이 남거나 `ScenarioEditorRootWidget`이 `ProjectScenarioEditPanel` 밖에 있으면 실패로 본다
+- UMG asset 구조 변경은 `UE_MCP_Bridge`로 수정/검증한다. `WBP_MainMenu`에 Startup 전용 widget이 남거나 `ScenarioEditorRootWidget`이 `ProjectScenarioEditPanel` 밖에 있으면 실패로 본다
 - Startup UI는 custom GameMode/PlayerController 없이 StartupMap에 배치된 bootstrap actor가 `WBP_StartupMenu`를 viewport에 붙인다
 - Level 전환은 OpenLevel 기반. Level Streaming 기반 background loading은 현 범위 제외
 

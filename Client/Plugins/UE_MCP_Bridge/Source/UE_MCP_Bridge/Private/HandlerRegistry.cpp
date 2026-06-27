@@ -5,6 +5,57 @@
 #include "HandlerUtils.h"
 #include "MCPHandlerRegistration.h"
 
+#include <initializer_list>
+
+namespace
+{
+/** Returns whether the caller supplied any field from the given set. */
+bool HasAnyField(const TSharedPtr<FJsonObject>& Params, std::initializer_list<const TCHAR*> FieldNames)
+{
+	if (!Params.IsValid())
+	{
+		return false;
+	}
+
+	for (const TCHAR* FieldName : FieldNames)
+	{
+		if (Params->HasField(FieldName))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+/** Identifies legacy UmgMcp call shapes for tool names that collide with Bridge-native tools. */
+bool IsLegacyUmgMcpCollisionCall(const FString& MethodName, const TSharedPtr<FJsonObject>& Params)
+{
+	if (MethodName == TEXT("compile_blueprint"))
+	{
+		return !HasAnyField(Params, { TEXT("path"), TEXT("assetPath") });
+	}
+
+	if (MethodName == TEXT("save_asset"))
+	{
+		return !HasAnyField(Params, { TEXT("path"), TEXT("assetPath") });
+	}
+
+	if (MethodName == TEXT("add_variable") ||
+		MethodName == TEXT("delete_variable") ||
+		MethodName == TEXT("delete_node"))
+	{
+		return !HasAnyField(Params, { TEXT("path"), TEXT("assetPath") });
+	}
+
+	if (MethodName == TEXT("list_assets"))
+	{
+		return HasAnyField(Params, { TEXT("class_name"), TEXT("package_path"), TEXT("max_count"), TEXT("recursive_paths"), TEXT("recursive_classes") });
+	}
+
+	return false;
+}
+}
+
 FMCPHandlerRegistry::FMCPHandlerRegistry()
 {
 }
@@ -54,6 +105,16 @@ void FMCPHandlerRegistry::RegisterPythonHandler(const FString& MethodName, const
 
 TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& Params)
 {
+	if (IsLegacyUmgMcpCollisionCall(MethodName, Params))
+	{
+		UEMCP::FExternalHandlerFn External;
+		float Unused = 0.0f;
+		if (UEMCP::LookupExternalHandler(MethodName, External, Unused))
+		{
+			return External(Params);
+		}
+	}
+
 	// Try C++ handler first
 	if (CppHandlers.Contains(MethodName))
 	{
@@ -102,7 +163,18 @@ TArray<FString> FMCPHandlerRegistry::GetHandlerNames() const
 
 	Names.Append(UEMCP::GetExternalHandlerNames());
 
-	return Names;
+	TSet<FString> SeenNames;
+	TArray<FString> UniqueNames;
+	for (const FString& Name : Names)
+	{
+		if (!SeenNames.Contains(Name))
+		{
+			SeenNames.Add(Name);
+			UniqueNames.Add(Name);
+		}
+	}
+
+	return UniqueNames;
 }
 
 void FMCPHandlerRegistry::Clear()

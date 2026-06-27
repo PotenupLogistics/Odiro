@@ -652,7 +652,7 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 	double Hardness = 0.0;
 	if (Params->TryGetNumberField(TEXT("hardness"), Hardness))
 	{
-		LayerInfo->Hardness = static_cast<float>(Hardness);
+		LayerInfo->SetHardness(static_cast<float>(Hardness), false, EPropertyChangeType::ValueSet);
 	}
 
 	FAssetRegistryModule::AssetCreated(LayerInfo);

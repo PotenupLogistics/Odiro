@@ -24,6 +24,7 @@ concurrency:
   queue: max
 
 permissions:
+  # This only scopes GITHUB_TOKEN; LFS unlock uses LFS_LOCK_BOT_TOKEN below.
   contents: read
 
 jobs:
@@ -51,6 +52,117 @@ jobs:
       - name: Verify Git LFS
         run: git lfs version
 
+      - name: Diagnose LFS lock token
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
+
+          if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
+              throw "LFS_LOCK_BOT_TOKEN is empty."
+          }
+
+          Write-Host "::group::GitHub token identity"
+          $viewer = @(gh api user --jq '"login=\(.login) id=\(.id) type=\(.type)"' 2>&1)
+          $viewerExit = $LASTEXITCODE
+          $viewerText = (($viewer | ForEach-Object { [string] $_ }) -join "`n").Trim()
+          if ($viewerExit -ne 0) {
+              Write-Warning "Failed to read token identity.`n$viewerText"
+          }
+          else {
+              Write-Host $viewerText
+          }
+          Write-Host "::endgroup::"
+
+          Write-Host "::group::Repository permissions"
+          $repoPermissions = @(
+              gh api "repos/$env:REPOSITORY" `
+                  --jq '"repo=\(.full_name) private=\(.private) archived=\(.archived) admin=\(.permissions.admin) push=\(.permissions.push) pull=\(.permissions.pull) maintain=\(.permissions.maintain // "n/a") triage=\(.permissions.triage // "n/a")"' `
+                  2>&1
+          )
+          $repoPermissionsExit = $LASTEXITCODE
+          $repoPermissionsText = (($repoPermissions | ForEach-Object { [string] $_ }) -join "`n").Trim()
+          if ($repoPermissionsExit -ne 0) {
+              Write-Warning "Failed to read repository permissions for $env:REPOSITORY.`n$repoPermissionsText"
+          }
+          else {
+              Write-Host $repoPermissionsText
+          }
+          Write-Host "::endgroup::"
+
+          Write-Host "::group::Git LFS endpoint and lock list"
+          $lfsEnv = @(git lfs env 2>&1)
+          $lfsEnvExit = $LASTEXITCODE
+          $lfsEnvText = (($lfsEnv | ForEach-Object { [string] $_ }) -join "`n").Trim()
+          if ($lfsEnvExit -ne 0) {
+              Write-Warning "Failed to read Git LFS environment.`n$lfsEnvText"
+              Write-Host "::endgroup::"
+              exit 0
+          }
+
+          $endpoint = ""
+          foreach ($line in $lfsEnv) {
+              if ([string] $line -match '^Endpoint=(?<Url>.+)$') {
+                  $endpoint = ([string] $Matches["Url"]).TrimEnd("/")
+                  break
+              }
+          }
+          if ([string]::IsNullOrWhiteSpace($endpoint)) {
+              Write-Warning "Git LFS endpoint was not found in git lfs env output."
+              Write-Host "::endgroup::"
+              exit 0
+          }
+          Write-Host "endpoint=$endpoint"
+
+          $locksList = @(
+              gh api "$endpoint/locks?limit=10" `
+                  -H "Accept: application/vnd.git-lfs+json" `
+                  --jq '"lfs_locks_api=ok sample_count=\((.locks // []) | length)"' `
+                  2>&1
+          )
+          $locksListExit = $LASTEXITCODE
+          $locksListText = (($locksList | ForEach-Object { [string] $_ }) -join "`n").Trim()
+          if ($locksListExit -ne 0) {
+              Write-Warning "Failed to query Git LFS locks through gh api.`n$locksListText"
+          }
+          else {
+              Write-Host $locksListText
+          }
+          Write-Host "::endgroup::"
+
+          Write-Host "::group::Non-destructive LFS unlock permission probe"
+          $probeId = "codex-diagnostic-nonexistent-lock-id"
+          $probeUrl = "$endpoint/locks/$([Uri]::EscapeDataString($probeId))/unlock"
+          $probeBody = @{ force = $true } | ConvertTo-Json -Compress
+          $probe = @(
+              $probeBody | gh api `
+                  -X POST `
+                  $probeUrl `
+                  -H "Accept: application/vnd.git-lfs+json" `
+                  -H "Content-Type: application/vnd.git-lfs+json" `
+                  --input - `
+                  2>&1
+          )
+          $probeExit = $LASTEXITCODE
+          $probeText = (($probe | ForEach-Object { [string] $_ }) -join "`n").Trim()
+          if ($probeExit -eq 0) {
+              Write-Warning "Unexpected success for nonexistent diagnostic lock id $probeId."
+          }
+          elseif ($probeText -match "You must have push access to delete a lock" -or $probeText -match "\bHTTP 403\b") {
+              Write-Warning "LFS unlock permission probe was denied before lock lookup. The token still lacks effective LFS lock delete permission for this repository.`n$probeText"
+          }
+          elseif ($probeText -match "\bHTTP 404\b" -or $probeText -match "(?i)not found|not exist") {
+              Write-Host "LFS unlock permission probe reached lock lookup. Not-found is expected for nonexistent diagnostic lock id $probeId."
+              Write-Host $probeText
+          }
+          else {
+              Write-Warning "LFS unlock permission probe returned an unexpected response.`n$probeText"
+          }
+          Write-Host "::endgroup::"
+
       - name: Unlock targets
         shell: pwsh
         env:
@@ -61,7 +173,7 @@ jobs:
           PUSHED_AT: ${{ github.event.repository.pushed_at }}
           DISPATCH_MODE: ${{ github.event.inputs.mode }}
           DISPATCH_PATH: ${{ github.event.inputs.path }}
-          # Step-scoped because only Invoke-ForceUnlockById should use the admin PAT via gh api.
+          # Step-scoped because only Invoke-ForceUnlockById should use the push-capable token via gh api.
           GH_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
         run: |
           $ErrorActionPreference = "Stop"
@@ -188,6 +300,17 @@ jobs:
               throw "Git LFS endpoint was not found. Verify Git LFS is configured for this repository."
           }
 
+          # Explains the common GitHub LFS 403 returned when the unlock token lacks push access.
+          function Get-LfsUnlockPermissionHint {
+              param([string] $Detail)
+
+              if ($Detail -match "You must have push access to delete a lock" -or $Detail -match "\bHTTP 403\b") {
+                  return "LFS_LOCK_BOT_TOKEN cannot delete Git LFS locks for this repository. Give the token owner Write or higher access to $env:GITHUB_REPOSITORY, make sure the token is authorized and scoped for this repository, then update the repository secret."
+              }
+
+              return ""
+          }
+
           # Force-unlocks one Git LFS lock by id through the Git LFS HTTP API using gh api.
           # Path is the repository-relative asset path used for diagnostics, and Id is the Git LFS lock id string.
           # Throws when GH_TOKEN is missing, the HTTP call fails, or the LFS server rejects the unlock request.
@@ -224,7 +347,12 @@ jobs:
               if ($LASTEXITCODE -ne 0) {
                   $detail = (($output | ForEach-Object { [string] $_ }) -join "`n").Trim()
                   if ([string]::IsNullOrWhiteSpace($detail)) {
-                      throw "Failed to unlock $Path by Git LFS lock id ${Id}: no output from gh api. Check GH_TOKEN admin access and LFS endpoint reachability."
+                      throw "Failed to unlock $Path by Git LFS lock id ${Id}: no output from gh api. Check LFS_LOCK_BOT_TOKEN repository push access and LFS endpoint reachability."
+                  }
+
+                  $permissionHint = Get-LfsUnlockPermissionHint -Detail $detail
+                  if (-not [string]::IsNullOrWhiteSpace($permissionHint)) {
+                      throw "Failed to unlock $Path by Git LFS lock id ${Id}.`n$permissionHint`n$detail"
                   }
                   throw "Failed to unlock $Path by Git LFS lock id ${Id}.`n$detail"
               }

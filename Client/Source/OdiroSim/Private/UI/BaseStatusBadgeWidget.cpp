@@ -4,12 +4,6 @@
 #include "Components/TextBlock.h"
 #include "UI/BaseWidgetPrivate.h"
 
-UBaseStatusBadgeWidget::UBaseStatusBadgeWidget()
-	: Label(FText::FromString(TEXT("Ready")))
-	, State(EBaseWidgetState::Success)
-{
-}
-
 void UBaseStatusBadgeWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
@@ -20,26 +14,15 @@ void UBaseStatusBadgeWidget::SynchronizeBaseProperties()
 		: ResolveStateColor(State);
 	if (LabelTextBlock)
 	{
-		LabelTextBlock->SetText(Label);
+		BaseWidgetPrivate::ApplyTextIfSet(LabelTextBlock.Get(), Label);
 		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Caption);
 		LabelTextBlock->SetColorAndOpacity(FSlateColor(bDisabled && tokens
 			? tokens->TextFaintColor
 			: badgeColor));
 	}
 
-	if (tokens)
-	{
-		BaseWidgetPrivate::ApplyRoundedSurface(
-			BorderFrame.Get(),
-			SurfaceBorder.Get(),
-			tokens->SurfaceControlColor,
-			tokens->LineFieldColor,
-			tokens->BorderWidth);
-	}
-	else
-	{
-		ApplyBorderColor(SurfaceBorder.Get(), ResolveVariantColor(EBaseWidgetVariant::Secondary));
-	}
+	BaseWidgetPrivate::MakeBorderVisualTransparent(BorderFrame.Get());
+	BaseWidgetPrivate::MakeBorderVisualTransparent(SurfaceBorder.Get());
 	ApplyBorderColor(StatusDot.Get(), badgeColor);
 }
 

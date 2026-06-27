@@ -13,9 +13,6 @@ class ODIROSIM_API UBaseTextWidget : public UBaseWidget
 	GENERATED_BODY()
 
 public:
-	// Creates preview defaults for standalone editor rendering.
-	UBaseTextWidget();
-
 	// Applies the exposed text, role, and disabled state to the WBP-owned text block.
 	virtual void SynchronizeBaseProperties() override;
 

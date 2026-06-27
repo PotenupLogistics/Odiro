@@ -6,6 +6,7 @@
 
 class UImage;
 class UTexture2D;
+class UWidget;
 
 // Standalone icon component for base widget layouts.
 UCLASS(BlueprintType, Blueprintable)
@@ -14,9 +15,6 @@ class ODIROSIM_API UBaseIconWidget : public UBaseWidget
 	GENERATED_BODY()
 
 public:
-	// Creates preview defaults for standalone editor rendering.
-	UBaseIconWidget();
-
 	// Applies icon texture, variant color, and disabled state to the WBP-owned image.
 	virtual void SynchronizeBaseProperties() override;
 
@@ -36,13 +34,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Icon")
 	EBaseWidgetVariant GetVariant() const { return Variant; }
 
-	// Updates the size hint used by the WBP layout.
+	// Updates the icon box and image size in pixels.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Icon")
-	void SetBaseSize(EBaseWidgetSize inSize);
+	void SetIconSize(float inIconSize);
 
-	// Returns the size hint used by the WBP layout.
+	// Returns the icon box and image size in pixels.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Icon")
-	EBaseWidgetSize GetBaseSize() const { return Size; }
+	float GetIconSize() const { return IconSize; }
 
 	// Updates the disabled visual state.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Icon")
@@ -61,9 +59,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetVariant", Setter = "SetVariant", BlueprintGetter = "GetVariant", BlueprintSetter = "SetVariant", Category = "UI|Base Icon", meta = (ExposeOnSpawn = "true"))
 	EBaseWidgetVariant Variant = EBaseWidgetVariant::Neutral;
 
-	// Size hint used by WBP variants.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetBaseSize", Setter = "SetBaseSize", BlueprintGetter = "GetBaseSize", BlueprintSetter = "SetBaseSize", Category = "UI|Base Icon", meta = (ExposeOnSpawn = "true"))
-	EBaseWidgetSize Size = EBaseWidgetSize::Medium;
+	// Icon box and image size in pixels.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIconSize", Setter = "SetIconSize", BlueprintGetter = "GetIconSize", BlueprintSetter = "SetIconSize", Category = "UI|Base Icon", meta = (DisplayName = "Icon Size (px)", ClampMin = "1.0", UIMin = "8.0", UIMax = "64.0", ExposeOnSpawn = "true"))
+	float IconSize = 24.0f;
 
 	// Disabled icon state.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|Base Icon", meta = (ExposeOnSpawn = "true"))
@@ -72,4 +70,8 @@ protected:
 	// Icon visual owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UImage> IconImage;
+
+	// Fixed-size wrapper hidden when no icon image resource is assigned.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> IconBox;
 };

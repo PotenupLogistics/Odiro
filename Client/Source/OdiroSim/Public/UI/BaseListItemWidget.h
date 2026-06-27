@@ -15,9 +15,6 @@ class ODIROSIM_API UBaseListItemWidget : public UBaseCardWidget
 	GENERATED_BODY()
 
 public:
-	// Creates preview defaults for standalone editor rendering.
-	UBaseListItemWidget();
-
 	// Applies card state plus optional leading icon.
 	virtual void SynchronizeBaseProperties() override;
 
@@ -29,10 +26,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base List Item")
 	UTexture2D* GetIcon() const { return Icon; }
 
+	// Updates the leading icon box and image size in pixels.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base List Item")
+	void SetIconSize(float inIconSize);
+
+	// Returns the leading icon box and image size in pixels.
+	UFUNCTION(BlueprintPure, Category = "UI|Base List Item")
+	float GetIconSize() const { return IconSize; }
+
 protected:
 	// Optional leading icon texture.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIcon", Setter = "SetIcon", BlueprintGetter = "GetIcon", BlueprintSetter = "SetIcon", Category = "UI|Base List Item", meta = (ExposeOnSpawn = "true"))
 	TObjectPtr<UTexture2D> Icon;
+
+	// Leading icon box and image size in pixels.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIconSize", Setter = "SetIconSize", BlueprintGetter = "GetIconSize", BlueprintSetter = "SetIconSize", Category = "UI|Base List Item", meta = (DisplayName = "Icon Size (px)", ClampMin = "1.0", UIMin = "8.0", UIMax = "64.0", ExposeOnSpawn = "true"))
+	float IconSize = 24.0f;
 
 	// Icon visual owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

@@ -2,15 +2,16 @@
 
 #include "Components/Border.h"
 #include "Components/TextBlock.h"
-#include "UI/BaseEmptyStateWidget.h"
 #include "UI/BaseMetricCardWidget.h"
-#include "UI/BaseToolbarWidget.h"
 #include "UI/BaseWidgetPrivate.h"
 
-UBaseCardWidget::UBaseCardWidget()
-	: Label(FText::FromString(TEXT("Card title")))
-	, Description(FText::FromString(TEXT("Supporting information for this surface")))
+namespace
 {
+	// Blends a neutral card line toward a semantic marker color.
+	FLinearColor MixCardLineColor(const FLinearColor& neutralColor, const FLinearColor& markerColor)
+	{
+		return FMath::Lerp(neutralColor, markerColor, 0.65f);
+	}
 }
 
 void UBaseCardWidget::SynchronizeBaseProperties()
@@ -21,7 +22,7 @@ void UBaseCardWidget::SynchronizeBaseProperties()
 	const bool bStateDisabled = bDisabled || State == EBaseWidgetState::Disabled;
 	if (LabelTextBlock)
 	{
-		LabelTextBlock->SetText(Label);
+		BaseWidgetPrivate::ApplyTextIfSet(LabelTextBlock.Get(), Label);
 		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Label);
 		if (bStateDisabled)
 		{
@@ -30,36 +31,40 @@ void UBaseCardWidget::SynchronizeBaseProperties()
 	}
 	if (DescriptionTextBlock)
 	{
-		DescriptionTextBlock->SetText(Description);
+		BaseWidgetPrivate::ApplyTextIfSet(DescriptionTextBlock.Get(), Description);
 		ApplyTextStyle(DescriptionTextBlock.Get(), EBaseTextRole::Caption);
 		if (bStateDisabled)
 		{
 			DescriptionTextBlock->SetColorAndOpacity(FSlateColor(ResolveStateColor(EBaseWidgetState::Disabled)));
 		}
-		DescriptionTextBlock->SetVisibility(Description.IsEmpty()
-			? ESlateVisibility::Collapsed
-			: ESlateVisibility::SelfHitTestInvisible);
 	}
 
-	FLinearColor surfaceColor = tokens ? tokens->SurfacePanelColor : ResolveVariantColor(EBaseWidgetVariant::Neutral);
-	FLinearColor frameColor = tokens ? tokens->LineFieldColor : ResolveVariantColor(EBaseWidgetVariant::Neutral);
-	if (State == EBaseWidgetState::Hovered && tokens)
+	if (!tokens)
+	{
+		return;
+	}
+
+	FLinearColor surfaceColor = tokens->SurfacePanelColor;
+	FLinearColor frameColor = tokens->LineFieldColor;
+	const bool bVariantColored = Variant != EBaseWidgetVariant::Neutral && Variant != EBaseWidgetVariant::Ghost;
+	const FLinearColor variantColor = ResolveVariantColor(Variant);
+	if (State == EBaseWidgetState::Hovered)
 	{
 		surfaceColor = tokens->SurfaceHoverColor;
 	}
-	else if (bStateDisabled && tokens)
+	else if (bStateDisabled)
 	{
 		surfaceColor = tokens->SurfaceControlColor;
 	}
 	if (bSelected)
 	{
-		frameColor = tokens ? tokens->AccentColor : ResolveStateColor(EBaseWidgetState::Selected);
+		frameColor = tokens->AccentColor;
 	}
-	else if (bStateDisabled && tokens)
+	else if (bStateDisabled)
 	{
 		frameColor = tokens->LineSubtleColor;
 	}
-	else if (State == EBaseWidgetState::Hovered && tokens)
+	else if (State == EBaseWidgetState::Hovered)
 	{
 		frameColor = tokens->LineFieldHoverColor;
 	}
@@ -67,18 +72,23 @@ void UBaseCardWidget::SynchronizeBaseProperties()
 	{
 		frameColor = ResolveStateColor(State);
 	}
+	else if (bVariantColored)
+	{
+		frameColor = MixCardLineColor(tokens->LineFieldColor, variantColor);
+	}
 
 	BaseWidgetPrivate::ApplyRoundedSurface(
 		BorderFrame.Get(),
 		SurfaceBorder.Get(),
 		surfaceColor,
 		frameColor,
-		tokens ? tokens->BorderWidth : 1.0f);
+		tokens->Radius,
+		tokens->BorderWidth);
 
 	if (StateMarker)
 	{
-		FLinearColor markerColor = ResolveVariantColor(Variant);
-		bool bShowMarker = Variant != EBaseWidgetVariant::Neutral;
+		FLinearColor markerColor = variantColor;
+		bool bShowMarker = bVariantColored;
 		if (bSelected)
 		{
 			markerColor = ResolveStateColor(EBaseWidgetState::Selected);
@@ -99,6 +109,12 @@ void UBaseCardWidget::SynchronizeBaseProperties()
 			? ESlateVisibility::SelfHitTestInvisible
 			: ESlateVisibility::Collapsed);
 	}
+}
+
+int32 UBaseCardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, const bool bParentEnabled) const
+{
+	BaseWidgetPrivate::UpdateRoundedSurfaceSize(SurfaceBorder.Get(), AllottedGeometry.GetLocalSize());
+	return Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
 }
 
 void UBaseCardWidget::SetLabel(const FText inLabel)
@@ -137,26 +153,13 @@ void UBaseCardWidget::SetDisabled(const bool bInDisabled)
 	SynchronizeBaseProperties();
 }
 
-UBaseToolbarWidget::UBaseToolbarWidget()
-{
-	Label = FText::FromString(TEXT("Toolbar"));
-	Description = FText::FromString(TEXT("Command group surface"));
-}
-
-UBaseMetricCardWidget::UBaseMetricCardWidget()
-	: ValueText(FText::FromString(TEXT("98%")))
-{
-	Label = FText::FromString(TEXT("Success rate"));
-	Description = FText::FromString(TEXT("Across selected run"));
-}
-
 void UBaseMetricCardWidget::SynchronizeBaseProperties()
 {
 	Super::SynchronizeBaseProperties();
 
 	if (ValueTextBlock)
 	{
-		ValueTextBlock->SetText(ValueText);
+		BaseWidgetPrivate::ApplyTextIfSet(ValueTextBlock.Get(), ValueText);
 		ApplyTextStyle(ValueTextBlock.Get(), EBaseTextRole::Value);
 	}
 }
@@ -165,10 +168,4 @@ void UBaseMetricCardWidget::SetValueText(const FText inValueText)
 {
 	ValueText = inValueText;
 	SynchronizeBaseProperties();
-}
-
-UBaseEmptyStateWidget::UBaseEmptyStateWidget()
-{
-	Label = FText::FromString(TEXT("No results"));
-	Description = FText::FromString(TEXT("Try changing filters or running another scenario"));
 }

@@ -2,67 +2,14 @@
 
 #include "Components/Border.h"
 #include "Components/Image.h"
+#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
-#include "Engine/Texture2D.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 
 namespace BaseWidgetPrivate
 {
-	float ResolveIconPreviewSize(const EBaseWidgetSize size)
-	{
-		switch (size)
-		{
-		case EBaseWidgetSize::Small:
-			return 14.0f;
-		case EBaseWidgetSize::Large:
-			return 22.0f;
-		case EBaseWidgetSize::Medium:
-		default:
-			return 18.0f;
-		}
-	}
-
-	FSlateBrush MakeColorBrush(const FLinearColor& color, const FVector2D size)
-	{
-		FSlateBrush brush;
-		brush.DrawAs = ESlateBrushDrawType::Box;
-		brush.ImageSize = size;
-		brush.TintColor = FSlateColor(color);
-		return brush;
-	}
-
-	void ApplyFixedImageBrushSize(UImage* image, const float size)
-	{
-		if (!IsValid(image))
-		{
-			return;
-		}
-
-		FSlateBrush brush = image->GetBrush();
-		brush.ImageSize = FVector2D(size, size);
-		image->SetBrush(brush);
-	}
-
-	bool HasAssignedImageResource(const UImage* image)
-	{
-		return IsValid(image) && image->GetBrush().GetResourceObject() != nullptr;
-	}
-
-	void SetOptionalIconVisibility(UWidget* iconBox, UImage* iconImage, const bool bVisible)
-	{
-		const ESlateVisibility visibility = bVisible
-			? ESlateVisibility::SelfHitTestInvisible
-			: ESlateVisibility::Collapsed;
-		if (IsValid(iconBox))
-		{
-			iconBox->SetVisibility(visibility);
-		}
-		if (IsValid(iconImage))
-		{
-			iconImage->SetVisibility(visibility);
-		}
-	}
-
 	const UBaseWidgetTokenCatalog* ResolveBaseTokenCatalog(
 		const TSoftObjectPtr<UBaseWidgetTokenCatalog>& baseTokens)
 	{
@@ -121,6 +68,50 @@ namespace BaseWidgetPrivate
 		textBlock->SetColorAndOpacity(FSlateColor(style.Color));
 	}
 
+	void ApplyTextIfSet(UTextBlock* textBlock, const FText& text)
+	{
+		if (IsValid(textBlock) && !text.IsEmpty())
+		{
+			textBlock->SetText(text);
+		}
+	}
+
+	bool HasAssignedImageResource(const UImage* image)
+	{
+		return IsValid(image) && image->GetBrush().GetResourceObject() != nullptr;
+	}
+
+	void SetOptionalIconVisibility(UWidget* iconBox, UImage* iconImage, const bool bVisible)
+	{
+		const ESlateVisibility visibility = bVisible
+			? ESlateVisibility::SelfHitTestInvisible
+			: ESlateVisibility::Collapsed;
+		if (IsValid(iconBox))
+		{
+			iconBox->SetVisibility(visibility);
+		}
+		if (IsValid(iconImage))
+		{
+			iconImage->SetVisibility(visibility);
+		}
+	}
+
+	void ApplyIconSize(UWidget* iconBox, UImage* iconImage, const float iconSize)
+	{
+		const float resolvedSize = FMath::Max(iconSize, 1.0f);
+		if (USizeBox* sizeBox = Cast<USizeBox>(iconBox))
+		{
+			sizeBox->SetWidthOverride(resolvedSize);
+			sizeBox->SetHeightOverride(resolvedSize);
+		}
+		if (IsValid(iconImage))
+		{
+			FSlateBrush brush = iconImage->GetBrush();
+			brush.ImageSize = FVector2D(resolvedSize, resolvedSize);
+			iconImage->SetBrush(brush);
+		}
+	}
+
 	void MakeNoDrawBrush(FSlateBrush& brush)
 	{
 		brush = FSlateBrush();
@@ -161,16 +152,19 @@ namespace BaseWidgetPrivate
 
 	namespace
 	{
-		// High-res rounded-rect mask (white RGB, straight alpha) authored with a
-		// 16px corner in a 64px texture -> 0.25 nine-slice margin. Drawn small via a
-		// Box brush so the corner downscales to a crisp ~5px radius.
-		const TCHAR* RoundedFillTexturePath =
-			TEXT("/Game/Widgets/Common/T_BaseRoundedFill.T_BaseRoundedFill");
-		const float RoundedSliceMargin = 0.25f;
-		const float RoundedImageSize = 16.0f;
+		// Analytic SDF UI materials. Each computes a crisp ~0.6px antialiased rounded
+		// surface in pixel space, taking the painted size as an ElementSize parameter
+		// because Slate gives no reliable screen-space derivatives for these brushes.
+		const TCHAR* RoundedMaterialPath =
+			TEXT("/Game/Widgets/Common/M_BaseRoundedSurface_UI.M_BaseRoundedSurface_UI");
+		const TCHAR* TabMaterialPath =
+			TEXT("/Game/Widgets/Common/M_BaseTabSurface_UI.M_BaseTabSurface_UI");
+		const TCHAR* ProgressMaterialPath =
+			TEXT("/Game/Widgets/Common/M_BaseProgressSurface_UI.M_BaseProgressSurface_UI");
+		const FVector2D MaterialBrushPlaceholderSize(16.0f, 16.0f);
 
-		// A textured Slate brush samples the tint as linear and writes to an sRGB
-		// target, brightening authored sRGB tokens (stored via ReinterpretAsLinear).
+		// The material's emissive color is written to an sRGB target, so an authored
+		// sRGB token (stored via ReinterpretAsLinear) would be gamma-brightened.
 		// Pre-encode pow 2.2 so it round-trips to the intended color. (Solid Box
 		// brushes, ApplyBorderBrushTint, skip this — they take the direct color.)
 		FLinearColor EncodeTexturedColor(const FLinearColor& color)
@@ -182,26 +176,84 @@ namespace BaseWidgetPrivate
 				color.A);
 		}
 
-		// Tints the rounded-fill texture as a 9-slice Box brush on one border.
-		// Slate multiplies texture x brush TintColor x Border BrushColor, so the
-		// color goes in TintColor and BrushColor stays White (neutral) — otherwise
-		// a textured brush double-darkens to color^2. The white mask's alpha-faded
-		// corners then blend cleanly at the authored color.
-		void SetRoundedFillBrush(UBorder* border, const FLinearColor& color)
+		// Ensures a border draws the given material and returns its cached dynamic
+		// instance (reused across calls so only its parameters change per frame).
+		UMaterialInstanceDynamic* EnsureMaterialBrush(UBorder* border, const TCHAR* materialPath)
 		{
 			if (!IsValid(border))
 			{
-				return;
+				return nullptr;
 			}
 
-			FSlateBrush brush;
-			brush.SetResourceObject(LoadObject<UTexture2D>(nullptr, RoundedFillTexturePath));
-			brush.DrawAs = ESlateBrushDrawType::Box;
-			brush.Margin = FMargin(RoundedSliceMargin);
-			brush.ImageSize = FVector2D(RoundedImageSize, RoundedImageSize);
-			brush.TintColor = FSlateColor(EncodeTexturedColor(color));
-			border->SetBrush(brush);
-			border->SetBrushColor(FLinearColor::White);
+			UMaterialInterface* baseMaterial = LoadObject<UMaterialInterface>(nullptr, materialPath);
+			if (!baseMaterial)
+			{
+				return nullptr;
+			}
+
+			auto applyMaterialBrush = [border](UMaterialInstanceDynamic* material)
+				-> UMaterialInstanceDynamic*
+			{
+				FSlateBrush brush = border->Background;
+				brush.DrawAs = ESlateBrushDrawType::Image;
+				brush.ImageSize = MaterialBrushPlaceholderSize;
+				brush.TintColor = FSlateColor(FLinearColor::White);
+				brush.SetResourceObject(material);
+				border->SetBrush(brush);
+				border->SetBrushColor(FLinearColor::White);
+				return material;
+			};
+
+			if (UMaterialInstanceDynamic* existingMaterial =
+				Cast<UMaterialInstanceDynamic>(border->Background.GetResourceObject()))
+			{
+				if (existingMaterial->Parent.Get() == baseMaterial)
+				{
+					return applyMaterialBrush(existingMaterial);
+				}
+			}
+
+			UMaterialInstanceDynamic* material = UMaterialInstanceDynamic::Create(baseMaterial, border);
+			if (!material)
+			{
+				return nullptr;
+			}
+
+			return applyMaterialBrush(material);
+		}
+
+		// Drives the rounded fill+stroke SDF material on one border.
+		void ApplyRoundedMaterial(
+			UBorder* border,
+			const TCHAR* materialPath,
+			const FLinearColor& fillColor,
+			const FLinearColor& strokeColor,
+			const float radiusPx,
+			const float borderWidthPx)
+		{
+			if (UMaterialInstanceDynamic* material = EnsureMaterialBrush(border, materialPath))
+			{
+				material->SetVectorParameterValue(TEXT("FillColor"), EncodeTexturedColor(fillColor));
+				material->SetVectorParameterValue(TEXT("StrokeColor"), EncodeTexturedColor(strokeColor));
+				material->SetScalarParameterValue(TEXT("RadiusPx"), FMath::Max(radiusPx, 0.0f));
+				material->SetScalarParameterValue(TEXT("BorderWidthPx"), FMath::Max(borderWidthPx, 0.0f));
+			}
+		}
+	}
+
+	void ApplyProgressSurface(
+		UBorder* trackBorder,
+		const FLinearColor& trackColor,
+		const FLinearColor& fillColor,
+		const float percent,
+		const float radiusPx)
+	{
+		if (UMaterialInstanceDynamic* material = EnsureMaterialBrush(trackBorder, ProgressMaterialPath))
+		{
+			material->SetVectorParameterValue(TEXT("TrackColor"), EncodeTexturedColor(trackColor));
+			material->SetVectorParameterValue(TEXT("FillColor"), EncodeTexturedColor(fillColor));
+			material->SetScalarParameterValue(TEXT("Percent"), FMath::Clamp(percent, 0.0f, 1.0f));
+			material->SetScalarParameterValue(TEXT("RadiusPx"), FMath::Max(radiusPx, 0.0f));
 		}
 	}
 
@@ -210,16 +262,92 @@ namespace BaseWidgetPrivate
 		UBorder* surfaceBorder,
 		const FLinearColor& fillColor,
 		const FLinearColor& strokeColor,
+		const float radiusPx,
 		const float borderWidthPx)
 	{
-		// Outer frame paints the stroke color; its padding insets the inner surface
-		// by the border width, exposing a clean rounded ring of stroke around the fill.
+		// One material draws both the fill and the inner stroke ring; the legacy
+		// frame border is no longer needed for a separate stroke layer.
 		if (IsValid(frameBorder))
 		{
-			SetRoundedFillBrush(frameBorder, strokeColor);
-			frameBorder->SetPadding(FMargin(FMath::Max(borderWidthPx, 0.0f)));
+			MakeBorderLayoutNeutral(frameBorder);
 		}
-		// Inner surface paints the fill color on top, covering all but the ring.
-		SetRoundedFillBrush(surfaceBorder, fillColor);
+		ApplyRoundedMaterial(surfaceBorder, RoundedMaterialPath, fillColor, strokeColor, radiusPx, borderWidthPx);
+	}
+
+	void ApplyTopRoundedSurface(
+		UBorder* frameBorder,
+		UBorder* surfaceBorder,
+		const FLinearColor& fillColor,
+		const FLinearColor& strokeColor,
+		const float radiusPx,
+		const float borderWidthPx)
+	{
+		if (IsValid(frameBorder))
+		{
+			MakeBorderLayoutNeutral(frameBorder);
+		}
+		if (fillColor.A <= KINDA_SMALL_NUMBER && strokeColor.A <= KINDA_SMALL_NUMBER)
+		{
+			MakeBorderVisualTransparent(surfaceBorder);
+			return;
+		}
+		ApplyRoundedMaterial(surfaceBorder, TabMaterialPath, fillColor, strokeColor, radiusPx, borderWidthPx);
+	}
+
+	void UpdateRoundedSurfaceSize(UBorder* surfaceBorder, const FVector2D& fallbackSize)
+	{
+		if (!IsValid(surfaceBorder))
+		{
+			return;
+		}
+
+		UMaterialInstanceDynamic* material =
+			Cast<UMaterialInstanceDynamic>(surfaceBorder->Background.GetResourceObject());
+		if (!material)
+		{
+			return;
+		}
+
+		FVector2D size = surfaceBorder->GetCachedGeometry().GetLocalSize();
+		if (size.X < 1.0f || size.Y < 1.0f)
+		{
+			size = fallbackSize;
+		}
+		material->SetVectorParameterValue(TEXT("ElementSize"), FLinearColor(size.X, size.Y, 0.0f, 0.0f));
+	}
+
+	void UpdateRoundedSurfaceSize(UImage* surfaceImage, const FVector2D& fallbackSize)
+	{
+		if (!IsValid(surfaceImage))
+		{
+			return;
+		}
+
+		UMaterialInstanceDynamic* material =
+			Cast<UMaterialInstanceDynamic>(surfaceImage->GetBrush().GetResourceObject());
+		if (!material)
+		{
+			return;
+		}
+
+		FVector2D size = surfaceImage->GetCachedGeometry().GetLocalSize();
+		if (size.X < 1.0f || size.Y < 1.0f)
+		{
+			size = fallbackSize;
+		}
+		material->SetVectorParameterValue(TEXT("ElementSize"), FLinearColor(size.X, size.Y, 0.0f, 0.0f));
+	}
+
+	void MakeBorderVisualTransparent(UBorder* border)
+	{
+		if (!IsValid(border))
+		{
+			return;
+		}
+
+		FSlateBrush brush = border->Background;
+		MakeNoDrawBrush(brush);
+		border->SetBrush(brush);
+		border->SetBrushColor(FLinearColor::Transparent);
 	}
 }

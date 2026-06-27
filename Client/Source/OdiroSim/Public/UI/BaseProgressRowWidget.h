@@ -5,7 +5,6 @@
 #include "BaseProgressRowWidget.generated.h"
 
 class UBorder;
-class UProgressBar;
 class UTextBlock;
 
 // Dashboard progress row component.
@@ -15,9 +14,6 @@ class ODIROSIM_API UBaseProgressRowWidget : public UBaseWidget
 	GENERATED_BODY()
 
 public:
-	// Creates preview defaults for standalone editor rendering.
-	UBaseProgressRowWidget();
-
 	// Applies row label, value text, and clamped progress.
 	virtual void SynchronizeBaseProperties() override;
 
@@ -62,6 +58,9 @@ public:
 	EBaseWidgetState GetBaseState() const { return State; }
 
 protected:
+	// Feeds the rounded surface material its painted size each paint (capture-safe).
+	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
+
 	// Progress row label.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLabel", Setter = "SetLabel", BlueprintGetter = "GetLabel", BlueprintSetter = "SetLabel", Category = "UI|Base Progress Row", meta = (ExposeOnSpawn = "true"))
 	FText Label;
@@ -98,7 +97,8 @@ protected:
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ValueTextBlock;
 
-	// Progress bar owned by the Widget Blueprint.
+	// Progress track surface owned by the Widget Blueprint; the progress SDF material
+	// draws the rounded track and the percent fill in one pass.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
-	TObjectPtr<UProgressBar> ProgressBar;
+	TObjectPtr<UBorder> ProgressTrack;
 };

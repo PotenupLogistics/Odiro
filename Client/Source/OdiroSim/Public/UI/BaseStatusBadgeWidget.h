@@ -14,9 +14,6 @@ class ODIROSIM_API UBaseStatusBadgeWidget : public UBaseWidget
 	GENERATED_BODY()
 
 public:
-	// Creates preview defaults for standalone editor rendering.
-	UBaseStatusBadgeWidget();
-
 	// Applies badge label and semantic color.
 	virtual void SynchronizeBaseProperties() override;
 

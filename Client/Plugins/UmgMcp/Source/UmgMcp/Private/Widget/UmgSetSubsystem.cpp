@@ -116,6 +116,59 @@ bool RemoveWidgetSubtree(UWidgetTree* WidgetTree, UWidget* Widget)
 
     return WidgetTree->RemoveWidget(Widget);
 }
+
+struct FWidgetParentInfo
+{
+    UPanelWidget* PanelParent = nullptr;
+    UContentWidget* ContentParent = nullptr;
+    int32 ChildIndex = INDEX_NONE;
+};
+
+// Finds the direct owner of a widget, including single-child content widgets such as Border.
+bool FindWidgetParentRecursive(UWidget* CurrentWidget, const UWidget* TargetWidget, FWidgetParentInfo& OutParentInfo)
+{
+    if (!CurrentWidget || !TargetWidget)
+    {
+        return false;
+    }
+
+    if (UContentWidget* ContentWidget = Cast<UContentWidget>(CurrentWidget))
+    {
+        UWidget* Content = ContentWidget->GetContent();
+        if (Content == TargetWidget)
+        {
+            OutParentInfo.ContentParent = ContentWidget;
+            return true;
+        }
+
+        if (FindWidgetParentRecursive(Content, TargetWidget, OutParentInfo))
+        {
+            return true;
+        }
+    }
+
+    if (UPanelWidget* PanelWidget = Cast<UPanelWidget>(CurrentWidget))
+    {
+        for (int32 ChildIndex = 0; ChildIndex < PanelWidget->GetChildrenCount(); ++ChildIndex)
+        {
+            UWidget* ChildWidget = PanelWidget->GetChildAt(ChildIndex);
+            if (ChildWidget == TargetWidget)
+            {
+                OutParentInfo.PanelParent = PanelWidget;
+                OutParentInfo.ChildIndex = ChildIndex;
+                return true;
+            }
+
+            if (FindWidgetParentRecursive(ChildWidget, TargetWidget, OutParentInfo))
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 }
 
 void UUmgSetSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -755,26 +808,26 @@ TArray<FString> UUmgSetSubsystem::ReparentWidget(UWidgetBlueprint* WidgetBluepri
     }
 
     // 7. Setup parent relation & inherit slot layout properties
-    UPanelWidget* OldParent = Cast<UPanelWidget>(WidgetToReplace->GetParent());
+    FWidgetParentInfo ParentInfo;
+    FindWidgetParentRecursive(WidgetBlueprint->WidgetTree->RootWidget, WidgetToReplace, ParentInfo);
     UPanelSlot* OldSlot = WidgetToReplace->Slot;
 
-    if (OldParent)
+    if (ParentInfo.PanelParent)
     {
-        OldParent->Modify();
-        int32 ChildIndex = OldParent->GetChildIndex(WidgetToReplace);
+        ParentInfo.PanelParent->Modify();
 
         // Temporarily detach old widget
-        OldParent->RemoveChild(WidgetToReplace);
+        ParentInfo.PanelParent->RemoveChild(WidgetToReplace);
 
         // Insert new widget at the same index
         UPanelSlot* NewSlot = nullptr;
-        if (ChildIndex != INDEX_NONE)
+        if (ParentInfo.ChildIndex != INDEX_NONE)
         {
-            NewSlot = OldParent->InsertChildAt(ChildIndex, NewWidget);
+            NewSlot = ParentInfo.PanelParent->InsertChildAt(ParentInfo.ChildIndex, NewWidget);
         }
         else
         {
-            NewSlot = OldParent->AddChild(NewWidget);
+            NewSlot = ParentInfo.PanelParent->AddChild(NewWidget);
         }
 
         // Inherit slot settings if slot types are identical
@@ -787,6 +840,11 @@ TArray<FString> UUmgSetSubsystem::ReparentWidget(UWidgetBlueprint* WidgetBluepri
                 FJsonObjectConverter::JsonObjectToUStruct(TempSlotJson, NewSlot->GetClass(), NewSlot, 0, 0);
             }
         }
+    }
+    else if (ParentInfo.ContentParent)
+    {
+        ParentInfo.ContentParent->Modify();
+        ParentInfo.ContentParent->SetContent(NewWidget);
     }
     else
     {

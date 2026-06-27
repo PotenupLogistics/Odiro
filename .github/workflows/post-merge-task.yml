@@ -261,6 +261,7 @@ jobs:
           DISPATCH_PATH: ${{ github.event.inputs.path }}
           DISPATCH_BASE: ${{ github.event.inputs.base }}
           DISPATCH_HEAD: ${{ github.event.inputs.head }}
+          GH_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
           # Step-scoped because only LFS unlock calls should use the push-capable token.
           LFS_LOCK_BOT_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
         run: |
@@ -538,7 +539,7 @@ jobs:
               }
           }
 
-          # Force-unlocks one Git LFS lock by id through the Git LFS client.
+          # Force-unlocks one Git LFS lock by id through the Git LFS HTTP API.
           function Invoke-ForceUnlockById {
               param(
                   # Repository-relative lock path used in error output.
@@ -550,14 +551,26 @@ jobs:
               if ([string]::IsNullOrWhiteSpace($Id)) {
                   throw "Git LFS lock id is required."
               }
+              if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
+                  throw "GH_TOKEN is required for gh api Git LFS unlock."
+              }
 
-              $gitArgs = @("lfs", "unlock", "--force", "--id=$Id")
-
-              $output = @(git @gitArgs 2>&1)
+              $endpoint = Get-LfsApiEndpoint
+              $unlockUrl = "$endpoint/locks/$Id/unlock"
+              $body = @{ force = $true } | ConvertTo-Json -Compress
+              $output = @(
+                  $body | gh api `
+                      -X POST `
+                      $unlockUrl `
+                      -H "Accept: application/vnd.git-lfs+json" `
+                      -H "Content-Type: application/vnd.git-lfs+json" `
+                      --input - `
+                      2>&1
+              )
               if ($LASTEXITCODE -ne 0) {
                   $detail = (($output | ForEach-Object { [string] $_ }) -join "`n").Trim()
                   if ([string]::IsNullOrWhiteSpace($detail)) {
-                      throw "Failed to force unlock $Path by Git LFS lock id ${Id}: no output from git lfs unlock."
+                      throw "Failed to force unlock $Path by Git LFS lock id ${Id}: no output from gh api."
                   }
                   throw "Failed to force unlock $Path by Git LFS lock id ${Id}.`n$detail"
               }

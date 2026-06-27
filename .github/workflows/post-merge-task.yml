@@ -262,6 +262,7 @@ jobs:
           DISPATCH_PATH: ${{ github.event.inputs.path }}
           DISPATCH_BASE: ${{ github.event.inputs.base }}
           DISPATCH_HEAD: ${{ github.event.inputs.head }}
+          GH_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
           LFS_LOCK_BOT_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
           GIT_TERMINAL_PROMPT: "0"
         run: |
@@ -448,11 +449,25 @@ jobs:
 
               Write-Output "::add-mask::$env:LFS_LOCK_BOT_TOKEN"
 
+              $tokenLoginOutput = @(gh api user --jq ".login" 2>&1)
+              if ($LASTEXITCODE -ne 0) {
+                  $detail = (($tokenLoginOutput | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  throw "Failed to read LFS_LOCK_BOT_TOKEN owner login.`n$detail"
+              }
+              $tokenLogin = (($tokenLoginOutput | Select-Object -First 1) -as [string]).Trim()
+              if ([string]::IsNullOrWhiteSpace($tokenLogin)) {
+                  throw "LFS_LOCK_BOT_TOKEN owner login is empty."
+              }
+              if ($tokenLogin -match '[\s:@/]') {
+                  throw "LFS_LOCK_BOT_TOKEN owner login contains unsupported characters: $tokenLogin"
+              }
+              $env:LFS_LOCK_BOT_LOGIN = $tokenLogin
+
               $askPassPath = Join-Path $env:RUNNER_TEMP "git-lfs-askpass.sh"
               $askPassScript = (@(
                   '#!/usr/bin/env bash',
                   'case "$1" in',
-                  '  *Username*) printf ''%s\n'' "x-access-token" ;;',
+                  '  *Username*) printf ''%s\n'' "${LFS_LOCK_BOT_LOGIN}" ;;',
                   '  *) printf ''%s\n'' "${LFS_LOCK_BOT_TOKEN}" ;;',
                   'esac'
               ) -join "`n") + "`n"
@@ -474,11 +489,11 @@ jobs:
               }
 
               $usernameProbe = @(& $askPassPath "Username for 'https://github.com':" 2>&1)
-              if ($LASTEXITCODE -ne 0 -or (($usernameProbe | Select-Object -First 1) -as [string]) -ne "x-access-token") {
+              if ($LASTEXITCODE -ne 0 -or (($usernameProbe | Select-Object -First 1) -as [string]) -ne $tokenLogin) {
                   throw "Git askpass helper username probe failed."
               }
 
-              $passwordProbe = @(& $askPassPath "Password for 'https://x-access-token@github.com':" 2>&1)
+              $passwordProbe = @(& $askPassPath "Password for 'https://$tokenLogin@github.com':" 2>&1)
               if ($LASTEXITCODE -ne 0 -or (($passwordProbe | Select-Object -First 1) -as [string]) -ne $env:LFS_LOCK_BOT_TOKEN) {
                   throw "Git askpass helper token probe failed."
               }
@@ -500,12 +515,12 @@ jobs:
                   throw "Failed to disable persisted Git credential helpers."
               }
 
-              git remote set-url origin "https://github.com/$env:GITHUB_REPOSITORY.git"
+              git remote set-url origin "https://$tokenLogin@github.com/$env:GITHUB_REPOSITORY.git"
               if ($LASTEXITCODE -ne 0) {
                   throw "Failed to normalize origin remote URL for Git LFS unlock."
               }
 
-              Write-Host "Git LFS unlock auth: GIT_ASKPASS with LFS_LOCK_BOT_TOKEN."
+              Write-Host "Git LFS unlock auth: GIT_ASKPASS with LFS_LOCK_BOT_TOKEN as $tokenLogin."
           }
 
           # Runs a native command and throws with its stderr/stdout when it fails.

@@ -228,8 +228,7 @@ void UUmgMcpBridge::Initialize(FSubsystemCollectionBase& Collection)
     Port = MCP_SERVER_PORT_DEFAULT;
     FIPv4Address::Parse(MCP_SERVER_HOST_DEFAULT, ServerAddress);
 
-    // Start the server automatically
-    StartServer();
+    UE_LOG(LogUmgMcp, Display, TEXT("UmgMcpBridge: Legacy TCP server disabled; commands are exposed through UE_MCP_Bridge."));
 }
 
 // Clean up resources when subsystem is destroyed

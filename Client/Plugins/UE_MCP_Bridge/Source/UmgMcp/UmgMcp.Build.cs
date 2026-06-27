@@ -57,6 +57,8 @@ public class UmgMcp : ModuleRules
 				"BlueprintGraph",
 				"Projects",
 				"AssetRegistry",
+				"UE_MCP_Bridge",
+				"XmlParser",
 				"UMGEditor", // Moved from PublicDependencyModuleNames
 				"MaterialEditor" // For Material Editing Libraries
 

@@ -287,8 +287,10 @@ bool FProjectSessionSubsystemPathsTest::RunTest(const FString& parameters)
 	TestEqual(TEXT("active project path"), subsystem->GetActiveProjectPath(), expectedProjectPath);
 	FString expectedScenarioPath = FPaths::Combine(expectedProjectPath, TEXT("scenario.json"));
 	FString expectedSettingPath = FPaths::Combine(expectedProjectPath, TEXT("setting.json"));
+	FString expectedProfilePath = FPaths::Combine(expectedProjectPath, TEXT("profile.json"));
 	FPaths::NormalizeFilename(expectedScenarioPath);
 	FPaths::NormalizeFilename(expectedSettingPath);
+	FPaths::NormalizeFilename(expectedProfilePath);
 	TestEqual(
 		TEXT("active scenario path"),
 		subsystem->GetActiveProjectScenarioPath(),
@@ -297,6 +299,10 @@ bool FProjectSessionSubsystemPathsTest::RunTest(const FString& parameters)
 		TEXT("active setting path"),
 		subsystem->GetActiveProjectSettingPath(),
 		expectedSettingPath);
+	TestEqual(
+		TEXT("active profile path"),
+		subsystem->GetActiveProjectProfilePath(),
+		expectedProfilePath);
 
 	subsystem->ClearActiveProject();
 	TestFalse(TEXT("active project cleared"), subsystem->HasActiveProject());

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Platform/ExperimentConfigSettings.h"
+#include "Platform/RobotProfileSettings.h"
 #include "Platform/SimulatorLaunchSubsystem.h"
 #include "Shared/SimulationSetupTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
@@ -13,6 +14,7 @@ class UOdiroListItemViewModel;
 class UPlatformAnalysisAiSubsystem;
 class UProjectSessionSubsystem;
 class UProjectWorkspaceViewModel;
+class URobotProfileViewModel;
 class UStartupMenuViewModel;
 struct FPlatformAnalysisAiResponse;
 struct FProjectRunResultDashboardData;
@@ -68,6 +70,10 @@ public:
 	// Experiment config ViewModel을 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|UI")
 	UExperimentConfigViewModel* GetExperimentConfigViewModel() const { return ExperimentConfigViewModel; }
+
+	// Returns the Robot profile ViewModel.
+	UFUNCTION(BlueprintPure, Category = "Platform|UI")
+	URobotProfileViewModel* GetRobotProfileViewModel() const { return RobotProfileViewModel; }
 
 	// Experiment result ViewModel을 반환한다.
 	UFUNCTION(BlueprintPure, Category = "Platform|UI")
@@ -187,6 +193,30 @@ public:
 		const FExperimentConfigSettings& settings,
 		FString& outStatusText);
 
+	// Reads the robot.body subset from user-project profile.json.
+	static bool LoadRobotProfileBodyForProject(
+		const FString& projectPath,
+		FRobotProfileBodySettings& outSettings,
+		FString& outErrorText);
+
+	// Writes the robot.body subset to user-project profile.json.
+	static bool SaveRobotProfileBodyForProject(
+		const FString& projectPath,
+		const FRobotProfileBodySettings& settings,
+		FString& outStatusText);
+
+	// Reads the exposed robot profile subset from user-project profile.json.
+	static bool LoadRobotProfileForProject(
+		const FString& projectPath,
+		FRobotProfileSettings& outSettings,
+		FString& outErrorText);
+
+	// Writes the exposed robot profile subset to user-project profile.json.
+	static bool SaveRobotProfileForProject(
+		const FString& projectPath,
+		const FRobotProfileSettings& settings,
+		FString& outStatusText);
+
 	// Legacy RunQueue 내부 ScenarioSetup 참조를 교체한다.
 	bool ReplaceLegacyScenarioSetupReferencesInRunQueues(
 		const FString& oldScenarioSetupPath,
@@ -267,6 +297,10 @@ private:
 	// user project setting.json 편집 상태.
 	UPROPERTY(Transient)
 	TObjectPtr<UExperimentConfigViewModel> ExperimentConfigViewModel;
+
+	// user project profile.json robot profile editing state.
+	UPROPERTY(Transient)
+	TObjectPtr<URobotProfileViewModel> RobotProfileViewModel;
 
 	// project run result dashboard 상태.
 	UPROPERTY(Transient)

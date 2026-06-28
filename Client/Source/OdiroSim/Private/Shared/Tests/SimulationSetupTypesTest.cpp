@@ -146,7 +146,7 @@ bool FDeliveryBotProfileJsonCompileContractTest::RunTest(const FString& paramete
 		TEXT("\"description\":\"Profile compiler contract\",")
 		TEXT("\"robot\":{")
 		TEXT("\"body\":{\"length_m\":1.0,\"width_m\":0.44,\"height_m\":0.64,\"wheel_base_m\":0.7,\"turning_radius_m\":1.2},")
-		TEXT("\"drive\":{\"max_speed_kmh\":7.0,\"max_reverse_kmh\":2.0,\"accel_kmh_per_s\":1.2,\"decel_kmh_per_s\":0.9,\"reverse_accel_kmh_per_s\":0.8,\"steering_rate_per_s\":3.2,\"throttle_rate_per_s\":0.28,\"brake_rate_per_s\":0.35,\"stop_brake\":0.18,\"gear_switch_stop_kmh\":0.1,\"gear_switch_brake\":0.2,\"slowdown_range_kmh\":5.0,\"speed_tolerance_kmh\":0.5,\"speed_limit_brake\":0.06,\"use_handbrake\":false,\"max_torque\":220.0,\"max_rpm\":4000.0,\"idle_rpm\":600.0,\"engine_brake\":0.04,\"rev_up_moi\":5.0,\"rev_down_rate\":600.0},")
+		TEXT("\"drive\":{\"max_speed_kmh\":7.0,\"max_reverse_kmh\":2.0,\"mass_kg\":48.0,\"accel_kmh_per_s\":1.2,\"decel_kmh_per_s\":0.9,\"reverse_accel_kmh_per_s\":0.8,\"steering_rate_per_s\":3.2,\"throttle_rate_per_s\":0.28,\"brake_rate_per_s\":0.35,\"stop_brake\":0.18,\"gear_switch_stop_kmh\":0.1,\"gear_switch_brake\":0.2,\"slowdown_range_kmh\":5.0,\"speed_tolerance_kmh\":0.5,\"speed_limit_brake\":0.06,\"use_handbrake\":false,\"max_torque\":220.0,\"max_rpm\":4000.0,\"idle_rpm\":600.0,\"engine_brake\":0.04,\"rev_up_moi\":5.0,\"rev_down_rate\":600.0},")
 		TEXT("\"lidar\":{\"lidar_mode\":\"TwoD\",\"mode\":\"ThreeD\",\"draw_debug\":true,\"angle_step_degree\":3.0,\"height_m\":0.07,\"vertical_min_degree\":-25.0,\"vertical_max_degree\":25.0,\"vertical_step_degree\":5.0,\"scan_rate_hz\":5.0,\"range_m\":15.0,\"front_half_angle_degree\":50.0,\"stop_distance_m\":2.0,\"obstacle_warning_distance_m\":5.2,\"slow_down_distance_m\":8.0,\"store_missed_rays\":false,\"trace_channel\":\"world_dynamic\",\"ignore_tags\":[\"ShouldNotApply\"],\"observation_profile\":\"realtime_point_cloud\",\"point_cloud\":{\"capture_enabled\":true,\"capture_every_n_sensor_frames\":10,\"range_limit_m\":15.0,\"include_ground_points\":true,\"max_points\":4096}}")
 		TEXT("}")
 		TEXT("}");
@@ -169,6 +169,8 @@ bool FDeliveryBotProfileJsonCompileContractTest::RunTest(const FString& paramete
 	const FDeliveryBotDriveConfigInfo& drive = result.SetupInfo.ChaosDriveConfigInfo;
 	TestEqual(TEXT("drive max speed"), drive.MaxSpeedKmh, 7.0f);
 	TestEqual(TEXT("drive max reverse speed"), drive.MaxReverseSpeedKmh, 2.0f);
+	TestTrue(TEXT("drive mass configured"), drive.bHasMassKg);
+	TestEqual(TEXT("drive mass"), drive.MassKg, 48.0f);
 	TestEqual(TEXT("drive acceleration"), drive.AccelerationRateKmhPerSecond, 1.2f);
 	TestEqual(TEXT("drive deceleration"), drive.DecelerationRateKmhPerSecond, 0.9f);
 	TestEqual(TEXT("drive reverse acceleration"), drive.ReverseAccelerationRateKmhPerSecond, 0.8f);

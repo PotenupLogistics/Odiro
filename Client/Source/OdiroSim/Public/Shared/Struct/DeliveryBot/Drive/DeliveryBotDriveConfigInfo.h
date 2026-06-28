@@ -15,6 +15,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float MaxReverseSpeedKmh{ 3.f };
 
+	// True when profile.json explicitly provided robot.drive.mass_kg.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bHasMassKg{ false };
+
+	// Chaos vehicle chassis mass in kilograms.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float MassKg{ 48.f };
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float ReverseAccelerationRateKmhPerSecond{ 1.f };
 

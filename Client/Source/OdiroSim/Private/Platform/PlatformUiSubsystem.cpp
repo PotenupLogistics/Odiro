@@ -1,5 +1,6 @@
 #include "Platform/PlatformUiSubsystem.h"
 
+#include "DeliveryBot/DeliveryBotSetupCompiler.h"
 #include "Dom/JsonObject.h"
 #include "Engine/World.h"
 #include "HAL/FileManager.h"
@@ -15,6 +16,7 @@
 #include "Platform/ViewModel/ExperimentResultViewModel.h"
 #include "Platform/ViewModel/OdiroListItemViewModel.h"
 #include "Platform/ViewModel/ProjectWorkspaceViewModel.h"
+#include "Platform/ViewModel/RobotProfileViewModel.h"
 #include "Platform/ViewModel/StartupMenuViewModel.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -23,6 +25,7 @@
 namespace
 {
 	const TCHAR* PlatformUiExperimentSettingFileName = TEXT("setting.json");
+	const TCHAR* PlatformUiRobotProfileFileName = TEXT("profile.json");
 	const TCHAR* PlatformUiExperimentDefaultMapId = TEXT("ScenarioSimulationMap");
 
 	// user project path 입력을 absolute normalized path로 맞춘다.
@@ -89,7 +92,152 @@ namespace
 		return NormalizePlatformUiProjectPath(FPaths::Combine(projectPath, PlatformUiExperimentSettingFileName));
 	}
 
-	// 파일 저장 경계에서 experiment setting subset 유효성을 확인한다.
+	// Builds the user-project profile.json path.
+	FString BuildPlatformUiRobotProfilePath(const FString& projectPath)
+	{
+		return NormalizePlatformUiProjectPath(FPaths::Combine(projectPath, PlatformUiRobotProfileFileName));
+	}
+
+	// Validates robot.body values before writing profile.json.
+	bool ValidatePlatformUiRobotProfileBodySettings(
+		const FRobotProfileBodySettings& settings,
+		FString& outErrorText)
+	{
+		TArray<FString> diagnostics;
+		if (settings.LengthM < 0.01f)
+		{
+			diagnostics.Add(TEXT("Body Length must be at least 0.01 m."));
+		}
+		if (settings.WidthM < 0.01f)
+		{
+			diagnostics.Add(TEXT("Body Width must be at least 0.01 m."));
+		}
+		if (settings.HeightM < 0.01f)
+		{
+			diagnostics.Add(TEXT("Body Height must be at least 0.01 m."));
+		}
+		if (settings.WheelBaseM < 0.0f)
+		{
+			diagnostics.Add(TEXT("Wheel Base must be 0 m or greater."));
+		}
+		if (settings.TurningRadiusM < 0.0f)
+		{
+			diagnostics.Add(TEXT("Turning Radius must be 0 m or greater."));
+		}
+
+		outErrorText = FString::Join(diagnostics, TEXT("\n"));
+		return diagnostics.IsEmpty();
+	}
+
+	// Validates robot.drive values before writing profile.json.
+	bool ValidatePlatformUiRobotProfileDriveSettings(
+		const FRobotProfileDriveSettings& settings,
+		FString& outErrorText)
+	{
+		TArray<FString> diagnostics;
+		if (settings.MaxSpeedKmh < 0.0f)
+		{
+			diagnostics.Add(TEXT("Max Speed must be 0 km/h or greater."));
+		}
+		if (settings.SteeringRatePerS < 0.0f)
+		{
+			diagnostics.Add(TEXT("Steering Rate must be 0 or greater."));
+		}
+		if (settings.MassKg < 0.01f)
+		{
+			diagnostics.Add(TEXT("Mass must be at least 0.01 kg."));
+		}
+
+		outErrorText = FString::Join(diagnostics, TEXT("\n"));
+		return diagnostics.IsEmpty();
+	}
+
+	// Validates robot.lidar values before writing profile.json.
+	bool ValidatePlatformUiRobotProfileLidarSettings(
+		const FRobotProfileLidarSettings& settings,
+		FString& outErrorText)
+	{
+		TArray<FString> diagnostics;
+		if (settings.ScanRangeM < 0.0f)
+		{
+			diagnostics.Add(TEXT("LiDAR Scan Range must be 0 m or greater."));
+		}
+		if (settings.FrontHalfAngleDegree < 0.0f || settings.FrontHalfAngleDegree > 180.0f)
+		{
+			diagnostics.Add(TEXT("LiDAR Front Angle must be between 0 and 180 degrees."));
+		}
+		if (settings.AngleStepDegree < 1.0f)
+		{
+			diagnostics.Add(TEXT("LiDAR Angle Step must be at least 1 degree."));
+		}
+		if (settings.ScanRateHz < 0.1f)
+		{
+			diagnostics.Add(TEXT("LiDAR Scan Rate must be at least 0.1 Hz."));
+		}
+
+		outErrorText = FString::Join(diagnostics, TEXT("\n"));
+		return diagnostics.IsEmpty();
+	}
+
+	// Validates exposed robot profile values before writing profile.json.
+	bool ValidatePlatformUiRobotProfileSettings(
+		const FRobotProfileSettings& settings,
+		FString& outErrorText)
+	{
+		TArray<FString> diagnostics;
+		FString bodyError;
+		if (!ValidatePlatformUiRobotProfileBodySettings(settings.Body, bodyError) && !bodyError.IsEmpty())
+		{
+			diagnostics.Add(bodyError);
+		}
+
+		FString driveError;
+		if (!ValidatePlatformUiRobotProfileDriveSettings(settings.Drive, driveError) && !driveError.IsEmpty())
+		{
+			diagnostics.Add(driveError);
+		}
+
+		FString lidarError;
+		if (!ValidatePlatformUiRobotProfileLidarSettings(settings.Lidar, lidarError) && !lidarError.IsEmpty())
+		{
+			diagnostics.Add(lidarError);
+		}
+
+		outErrorText = FString::Join(diagnostics, TEXT("\n"));
+		return diagnostics.IsEmpty();
+	}
+
+	// Applies a JSON number field to the target value when present.
+	void ReadOptionalRobotProfileNumberField(
+		const FJsonObject& object,
+		const TCHAR* fieldName,
+		float& targetValue)
+	{
+		double jsonValue = 0.0;
+		if (object.TryGetNumberField(fieldName, jsonValue))
+		{
+			targetValue = static_cast<float>(jsonValue);
+		}
+	}
+
+	// Converts DeliveryBot compiler diagnostics into a profile editor status message.
+	FString FormatDeliveryBotSetupDiagnostics(const FDeliveryBotSetupCompileResult& compileResult)
+	{
+		TArray<FString> lines;
+		for (const FScenarioCompileDiagnostic& diagnostic : compileResult.Diagnostics)
+		{
+			if (diagnostic.Severity == EScenarioCompileDiagnosticSeverity::Error)
+			{
+				lines.Add(diagnostic.Message.IsEmpty() ? diagnostic.Code : diagnostic.Message);
+			}
+		}
+
+		return lines.IsEmpty()
+			? TEXT("profile.json validation failed.")
+			: FString::Join(lines, TEXT("\n"));
+	}
+
+	// Validates experiment setting values before writing setting.json.
 	bool ValidatePlatformUiExperimentSettings(
 		const FExperimentConfigSettings& settings,
 		FString& outErrorText)
@@ -120,6 +268,7 @@ void UPlatformUiSubsystem::Initialize(FSubsystemCollectionBase& collection)
 	StartupMenuViewModel = NewObject<UStartupMenuViewModel>(this);
 	ProjectWorkspaceViewModel = NewObject<UProjectWorkspaceViewModel>(this);
 	ExperimentConfigViewModel = NewObject<UExperimentConfigViewModel>(this);
+	RobotProfileViewModel = NewObject<URobotProfileViewModel>(this);
 	ExperimentResultViewModel = NewObject<UExperimentResultViewModel>(this);
 
 	if (StartupMenuViewModel)
@@ -133,6 +282,10 @@ void UPlatformUiSubsystem::Initialize(FSubsystemCollectionBase& collection)
 	if (ExperimentConfigViewModel)
 	{
 		ExperimentConfigViewModel->InitializeForGameInstance(GetGameInstance());
+	}
+	if (RobotProfileViewModel)
+	{
+		RobotProfileViewModel->InitializeForGameInstance(GetGameInstance());
 	}
 	if (ExperimentResultViewModel)
 	{
@@ -166,6 +319,7 @@ void UPlatformUiSubsystem::Deinitialize()
 	StartupMenuViewModel = nullptr;
 	ProjectWorkspaceViewModel = nullptr;
 	ExperimentConfigViewModel = nullptr;
+	RobotProfileViewModel = nullptr;
 	ExperimentResultViewModel = nullptr;
 
 	Super::Deinitialize();
@@ -187,6 +341,10 @@ void UPlatformUiSubsystem::RefreshFromProjectSession()
 	if (ExperimentConfigViewModel)
 	{
 		ExperimentConfigViewModel->LoadFromActiveProject();
+	}
+	if (RobotProfileViewModel)
+	{
+		RobotProfileViewModel->LoadFromActiveProject();
 	}
 }
 
@@ -611,6 +769,219 @@ bool UPlatformUiSubsystem::SaveExperimentSettingsForProject(
 	}
 
 	outStatusText = FString::Printf(TEXT("Experiment settings saved: %s"), *settingPath);
+	return true;
+}
+
+bool UPlatformUiSubsystem::LoadRobotProfileBodyForProject(
+	const FString& projectPath,
+	FRobotProfileBodySettings& outSettings,
+	FString& outErrorText)
+{
+	FRobotProfileSettings profileSettings;
+	if (!LoadRobotProfileForProject(projectPath, profileSettings, outErrorText))
+	{
+		outSettings = FRobotProfileBodySettings{};
+		return false;
+	}
+
+	outSettings = profileSettings.Body;
+	return true;
+}
+
+bool UPlatformUiSubsystem::SaveRobotProfileBodyForProject(
+	const FString& projectPath,
+	const FRobotProfileBodySettings& settings,
+	FString& outStatusText)
+{
+	FRobotProfileSettings profileSettings;
+	if (!LoadRobotProfileForProject(projectPath, profileSettings, outStatusText))
+	{
+		return false;
+	}
+
+	profileSettings.Body = settings;
+	return SaveRobotProfileForProject(projectPath, profileSettings, outStatusText);
+}
+
+bool UPlatformUiSubsystem::LoadRobotProfileForProject(
+	const FString& projectPath,
+	FRobotProfileSettings& outSettings,
+	FString& outErrorText)
+{
+	outSettings = FRobotProfileSettings{};
+	outErrorText.Reset();
+
+	const FString normalizedProjectPath = NormalizePlatformUiProjectPath(projectPath);
+	if (normalizedProjectPath.IsEmpty())
+	{
+		outErrorText = TEXT("Active project is not set.");
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> rootObject;
+	const FString profilePath = BuildPlatformUiRobotProfilePath(normalizedProjectPath);
+	if (!LoadPlatformUiJsonRoot(profilePath, rootObject, outErrorText))
+	{
+		return false;
+	}
+
+	const UDeliveryBotSetupCompiler* compiler = NewObject<UDeliveryBotSetupCompiler>();
+	if (compiler)
+	{
+		FString profileJson;
+		if (FFileHelper::LoadFileToString(profileJson, *profilePath))
+		{
+			const FDeliveryBotSetupCompileResult compileResult =
+				compiler->CompileDeliveryBotSetupFromJsonString(profileJson);
+			if (!compileResult.bSuccess)
+			{
+				outErrorText = FormatDeliveryBotSetupDiagnostics(compileResult);
+				return false;
+			}
+		}
+	}
+
+	const TSharedPtr<FJsonObject>* robotObject = nullptr;
+	if (!rootObject->TryGetObjectField(TEXT("robot"), robotObject) || !robotObject || !robotObject->IsValid())
+	{
+		outErrorText = TEXT("profile.json must contain a robot object.");
+		return false;
+	}
+
+	const TSharedPtr<FJsonValue> bodyValue = (*robotObject)->TryGetField(TEXT("body"));
+	if (bodyValue.IsValid())
+	{
+		if (bodyValue->Type != EJson::Object || !bodyValue->AsObject().IsValid())
+		{
+			outErrorText = TEXT("profile.json robot.body must be an object.");
+			return false;
+		}
+
+		const TSharedPtr<FJsonObject> bodyObject = bodyValue->AsObject();
+		ReadOptionalRobotProfileNumberField(*bodyObject, TEXT("length_m"), outSettings.Body.LengthM);
+		ReadOptionalRobotProfileNumberField(*bodyObject, TEXT("width_m"), outSettings.Body.WidthM);
+		ReadOptionalRobotProfileNumberField(*bodyObject, TEXT("height_m"), outSettings.Body.HeightM);
+		ReadOptionalRobotProfileNumberField(*bodyObject, TEXT("wheel_base_m"), outSettings.Body.WheelBaseM);
+		ReadOptionalRobotProfileNumberField(*bodyObject, TEXT("turning_radius_m"), outSettings.Body.TurningRadiusM);
+	}
+
+	const TSharedPtr<FJsonValue> driveValue = (*robotObject)->TryGetField(TEXT("drive"));
+	if (driveValue.IsValid())
+	{
+		if (driveValue->Type != EJson::Object || !driveValue->AsObject().IsValid())
+		{
+			outErrorText = TEXT("profile.json robot.drive must be an object.");
+			return false;
+		}
+
+		const TSharedPtr<FJsonObject> driveObject = driveValue->AsObject();
+		ReadOptionalRobotProfileNumberField(*driveObject, TEXT("max_speed_kmh"), outSettings.Drive.MaxSpeedKmh);
+		ReadOptionalRobotProfileNumberField(*driveObject, TEXT("steering_rate_per_s"), outSettings.Drive.SteeringRatePerS);
+		ReadOptionalRobotProfileNumberField(*driveObject, TEXT("mass_kg"), outSettings.Drive.MassKg);
+	}
+
+	const TSharedPtr<FJsonValue> lidarValue = (*robotObject)->TryGetField(TEXT("lidar"));
+	if (lidarValue.IsValid())
+	{
+		if (lidarValue->Type != EJson::Object || !lidarValue->AsObject().IsValid())
+		{
+			outErrorText = TEXT("profile.json robot.lidar must be an object.");
+			return false;
+		}
+
+		const TSharedPtr<FJsonObject> lidarObject = lidarValue->AsObject();
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("scan_range_m"), outSettings.Lidar.ScanRangeM);
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("range_m"), outSettings.Lidar.ScanRangeM);
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("front_half_angle_degree"), outSettings.Lidar.FrontHalfAngleDegree);
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("angle_step_degree"), outSettings.Lidar.AngleStepDegree);
+		ReadOptionalRobotProfileNumberField(*lidarObject, TEXT("scan_rate_hz"), outSettings.Lidar.ScanRateHz);
+	}
+	return true;
+}
+
+bool UPlatformUiSubsystem::SaveRobotProfileForProject(
+	const FString& projectPath,
+	const FRobotProfileSettings& settings,
+	FString& outStatusText)
+{
+	outStatusText.Reset();
+	if (!ValidatePlatformUiRobotProfileSettings(settings, outStatusText))
+	{
+		return false;
+	}
+
+	const FString normalizedProjectPath = NormalizePlatformUiProjectPath(projectPath);
+	if (normalizedProjectPath.IsEmpty())
+	{
+		outStatusText = TEXT("Active project is not set.");
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> rootObject;
+	const FString profilePath = BuildPlatformUiRobotProfilePath(normalizedProjectPath);
+	if (!LoadPlatformUiJsonRoot(profilePath, rootObject, outStatusText))
+	{
+		return false;
+	}
+
+	const TSharedRef<FJsonObject> robotObject =
+		FindOrCreatePlatformUiObjectField(rootObject.ToSharedRef(), TEXT("robot"));
+	const TSharedRef<FJsonObject> bodyObject =
+		FindOrCreatePlatformUiObjectField(robotObject, TEXT("body"));
+	bodyObject->SetNumberField(TEXT("length_m"), settings.Body.LengthM);
+	bodyObject->SetNumberField(TEXT("width_m"), settings.Body.WidthM);
+	bodyObject->SetNumberField(TEXT("height_m"), settings.Body.HeightM);
+	bodyObject->SetNumberField(TEXT("wheel_base_m"), settings.Body.WheelBaseM);
+	bodyObject->SetNumberField(TEXT("turning_radius_m"), settings.Body.TurningRadiusM);
+
+	const TSharedRef<FJsonObject> driveObject =
+		FindOrCreatePlatformUiObjectField(robotObject, TEXT("drive"));
+	driveObject->SetNumberField(TEXT("max_speed_kmh"), settings.Drive.MaxSpeedKmh);
+	driveObject->SetNumberField(TEXT("steering_rate_per_s"), settings.Drive.SteeringRatePerS);
+	driveObject->SetNumberField(TEXT("mass_kg"), settings.Drive.MassKg);
+
+	const TSharedRef<FJsonObject> lidarObject =
+		FindOrCreatePlatformUiObjectField(robotObject, TEXT("lidar"));
+	lidarObject->SetNumberField(TEXT("scan_range_m"), settings.Lidar.ScanRangeM);
+	if (lidarObject->HasField(TEXT("range_m")))
+	{
+		lidarObject->SetNumberField(TEXT("range_m"), settings.Lidar.ScanRangeM);
+	}
+	lidarObject->SetNumberField(TEXT("front_half_angle_degree"), settings.Lidar.FrontHalfAngleDegree);
+	lidarObject->SetNumberField(TEXT("angle_step_degree"), settings.Lidar.AngleStepDegree);
+	lidarObject->SetNumberField(TEXT("scan_rate_hz"), settings.Lidar.ScanRateHz);
+
+	FString updatedJson;
+	const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> writer =
+		TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&updatedJson);
+	if (!FJsonSerializer::Serialize(rootObject.ToSharedRef(), writer))
+	{
+		outStatusText = TEXT("profile.json serialization failed.");
+		return false;
+	}
+
+	const UDeliveryBotSetupCompiler* compiler = NewObject<UDeliveryBotSetupCompiler>();
+	if (compiler)
+	{
+		const FDeliveryBotSetupCompileResult compileResult =
+			compiler->CompileDeliveryBotSetupFromJsonString(updatedJson);
+		if (!compileResult.bSuccess)
+		{
+			outStatusText = FormatDeliveryBotSetupDiagnostics(compileResult);
+			return false;
+		}
+	}
+
+	if (!FFileHelper::SaveStringToFile(
+		updatedJson,
+		*profilePath,
+		FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		outStatusText = FString::Printf(TEXT("profile.json save failed: %s"), *profilePath);
+		return false;
+	}
+
+	outStatusText = FString::Printf(TEXT("Robot profile saved: %s"), *profilePath);
 	return true;
 }
 

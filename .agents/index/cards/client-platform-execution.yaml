@@ -46,6 +46,7 @@ guardrails:
   - ViewModel repeatable UI data uses UObject item ViewModels for ListView/TileView-style rows/cards, including project result iteration selectors.
   - StartupMenuViewModel owns open/create form state, persisted project-open options, and recent-project list state; project path existence checks go through PlatformUiSubsystem path helpers.
   - ExperimentConfigViewModel owns FieldNotify input state only; user-project setting.json file/JSON I/O stays behind PlatformUiSubsystem experiment setting APIs.
+  - RobotProfileViewModel owns FieldNotify input state only; user-project profile.json robot.body, robot.drive, and robot.lidar file/JSON I/O stays behind PlatformUiSubsystem robot profile APIs.
   - ExperimentResultViewModel owns dashboard display state only; project run summary/review JSON loading and AI request relay stay behind PlatformUiSubsystem APIs.
   - ProjectWorkspaceViewModel does not call OpenLevel directly; startup return navigation is mediated by PlatformUiSubsystem.
   - Platform widgets must not rebuild WBP layout with WidgetTree/ConstructWidget fallback UI; keep structural layout and empty states in WBP-owned surfaces.

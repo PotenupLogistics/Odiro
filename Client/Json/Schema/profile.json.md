@@ -50,6 +50,7 @@ runs/<RunId>/snapshot/profile.json
 | --- | --- | --- | --- |
 | `max_speed_kmh` | number | 예 | 전진 최대 속도. 단위 km/h. |
 | `max_reverse_kmh` | number | 예 | 후진 최대 속도. 단위 km/h. |
+| `mass_kg` | number | 예 | Chaos Vehicle chassis mass. 단위 kg. |
 | `accel_kmh_per_s` | number | 예 | 전진 가속 기준값. |
 | `decel_kmh_per_s` | number | 예 | 감속 기준값. |
 | `reverse_accel_kmh_per_s` | number | 예 | 후진 가속 기준값. |
@@ -77,6 +78,7 @@ runs/<RunId>/snapshot/profile.json
 | 필드 | 타입 | 필수 | 설명 |
 | --- | --- | --- | --- |
 | `mode` | string | 예 | LiDAR mode. `OneD`, `TwoD`, `ThreeD`, `OneDAndTwoD`, `TwoDAndThreeD`, `All`. |
+| `scan_range_m` | number | 예 | LiDAR 감지 거리. 단위 m. |
 | `range_m` | number | 예 | LiDAR 감지 거리. 단위 m. |
 | `angle_step_degree` | number | 예 | Ray 간 yaw 간격. 단위 degree. |
 | `height_m` | number | 예 | Ray 시작 높이. 단위 m. |

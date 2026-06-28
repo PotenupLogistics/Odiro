@@ -186,6 +186,11 @@ void UDeliveryBot_DriveComponent::SetupVehicleMovement(
 	wheeledMovement->bMechanicalSimEnabled = true;
 	wheeledMovement->TransmissionSetup.bUseAutoReverse = false;
 
+	if (DriveConfigInfo.bHasMassKg)
+	{
+		wheeledMovement->Mass = DriveConfigInfo.MassKg;
+	}
+
 	wheeledMovement->EngineSetup.MaxTorque = DriveConfigInfo.MaxTorque;
 	wheeledMovement->EngineSetup.MaxRPM = DriveConfigInfo.MaxRPM;
 	wheeledMovement->EngineSetup.EngineIdleRPM = DriveConfigInfo.EngineIdleRPM;
@@ -366,6 +371,7 @@ FDeliveryBotDriveConfigInfo UDeliveryBot_DriveComponent::NormalizeDriveConfigInf
 
 	normalizedInfo.MaxSpeedKmh = FMath::Max(normalizedInfo.MaxSpeedKmh, 0.f);
 	normalizedInfo.MaxReverseSpeedKmh = FMath::Max(normalizedInfo.MaxReverseSpeedKmh, 0.f);
+	normalizedInfo.MassKg = FMath::Max(normalizedInfo.MassKg, 0.01f);
 	normalizedInfo.ReverseAccelerationRateKmhPerSecond = FMath::Max(normalizedInfo.ReverseAccelerationRateKmhPerSecond, 0.f);
 	normalizedInfo.GearSwitchStopSpeedKmh = FMath::Max(normalizedInfo.GearSwitchStopSpeedKmh, 0.f);
 	normalizedInfo.GearSwitchBrakeInput = FMath::Clamp(normalizedInfo.GearSwitchBrakeInput, 0.f, 1.f);

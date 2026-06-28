@@ -35,6 +35,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Platform|Project")
 	FString GetActiveProjectSettingPath() const;
 
+	// Returns <UserProject>/profile.json for the active project.
+	UFUNCTION(BlueprintPure, Category = "Platform|Project")
+	FString GetActiveProjectProfilePath() const;
+
 private:
 	static FString NormalizeProjectPath(const FString& projectPath);
 	static FString BuildProjectFilePath(const FString& projectPath, const TCHAR* fileName);

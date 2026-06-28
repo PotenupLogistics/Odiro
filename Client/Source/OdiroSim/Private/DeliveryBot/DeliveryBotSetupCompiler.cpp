@@ -333,6 +333,7 @@ void UDeliveryBotSetupCompiler::CompileDrive( const FJsonObject& robotObject, FD
 	ReadOptionalFloatField(*driveObject, TEXT("max_speed_kmh"), path, result, driveConfigInfo.MaxSpeedKmh, 0.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("max_reverse_speed_kmh"), path, result, driveConfigInfo.MaxReverseSpeedKmh, 0.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("max_reverse_kmh"), path, result, driveConfigInfo.MaxReverseSpeedKmh, 0.0f);
+	driveConfigInfo.bHasMassKg = ReadOptionalFloatField(*driveObject, TEXT("mass_kg"), path, result, driveConfigInfo.MassKg, 0.01f);
 	ReadOptionalFloatField(*driveObject, TEXT("reverse_acceleration_rate_kmh_per_second"), path, result, driveConfigInfo.ReverseAccelerationRateKmhPerSecond, 0.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("reverse_accel_kmh_per_s"), path, result, driveConfigInfo.ReverseAccelerationRateKmhPerSecond, 0.0f);
 	ReadOptionalFloatField(*driveObject, TEXT("gear_switch_stop_speed_kmh"), path, result, driveConfigInfo.GearSwitchStopSpeedKmh, 0.0f);

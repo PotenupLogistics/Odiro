@@ -32,14 +32,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Base Text")
 	EBaseTextRole GetTextRole() const { return TextRole; }
 
-	// Updates the size hint used by the WBP layout.
-	UFUNCTION(BlueprintCallable, Category = "UI|Base Text")
-	void SetBaseSize(EBaseWidgetSize inSize);
-
-	// Returns the size hint used by the WBP layout.
-	UFUNCTION(BlueprintPure, Category = "UI|Base Text")
-	EBaseWidgetSize GetBaseSize() const { return Size; }
-
 	// Updates the disabled visual state.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Text")
 	void SetDisabled(bool bInDisabled);
@@ -56,10 +48,6 @@ protected:
 	// Semantic typography role used for this text component.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetTextRole", Setter = "SetTextRole", BlueprintGetter = "GetTextRole", BlueprintSetter = "SetTextRole", Category = "UI|Base Text", meta = (ExposeOnSpawn = "true"))
 	EBaseTextRole TextRole = EBaseTextRole::Body;
-
-	// Size hint used by WBP variants.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetBaseSize", Setter = "SetBaseSize", BlueprintGetter = "GetBaseSize", BlueprintSetter = "SetBaseSize", Category = "UI|Base Text", meta = (ExposeOnSpawn = "true"))
-	EBaseWidgetSize Size = EBaseWidgetSize::Medium;
 
 	// Disabled text state.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsDisabled", Setter = "SetDisabled", BlueprintGetter = "IsDisabled", BlueprintSetter = "SetDisabled", Category = "UI|Base Text", meta = (ExposeOnSpawn = "true"))

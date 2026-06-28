@@ -13,9 +13,6 @@ class ODIROSIM_API UBaseSectionHeaderWidget : public UBaseWidget
 	GENERATED_BODY()
 
 public:
-	// Creates preview defaults for standalone editor rendering.
-	UBaseSectionHeaderWidget();
-
 	// Applies section label and supporting description.
 	virtual void SynchronizeBaseProperties() override;
 

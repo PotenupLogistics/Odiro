@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Dry-run lists targets. Unlock requires an exact path.
+        description: Dry-run or unlock changed Unreal asset locks. Manual runs require path or base/head.
         required: true
         default: dry-run
         type: choice
@@ -15,7 +15,15 @@ on:
           - dry-run
           - unlock
       path:
-        description: Repository-relative exact path for manual unlock.
+        description: Optional exact path for manual unlock.
+        required: false
+        type: string
+      base:
+        description: Optional base ref or SHA for manual range unlock. Requires head.
+        required: false
+        type: string
+      head:
+        description: Optional head ref or SHA for manual range unlock. Requires base.
         required: false
         type: string
 
@@ -24,6 +32,7 @@ concurrency:
   queue: max
 
 permissions:
+  # This only scopes GITHUB_TOKEN; LFS unlock uses LFS_LOCK_BOT_TOKEN below.
   contents: read
 
 jobs:
@@ -46,10 +55,200 @@ jobs:
         with:
           fetch-depth: 1
           lfs: false
+          persist-credentials: false
           token: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
 
       - name: Verify Git LFS
         run: git lfs version
+
+      - name: Diagnose LFS lock token
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
+          LFS_LOCK_BOT_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
+
+          if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
+              throw "LFS_LOCK_BOT_TOKEN is empty."
+          }
+
+          Write-Host "::group::GitHub token identity"
+          $viewer = @(gh api user --jq '"login=\(.login) id=\(.id) type=\(.type)"' 2>&1)
+          $viewerExit = $LASTEXITCODE
+          $viewerText = (($viewer | ForEach-Object { [string] $_ }) -join "`n").Trim()
+          if ($viewerExit -ne 0) {
+              Write-Warning "Failed to read token identity.`n$viewerText"
+          }
+          else {
+              Write-Host $viewerText
+          }
+          Write-Host "::endgroup::"
+
+          Write-Host "::group::Repository permissions"
+          $repoPermissions = @(
+              gh api "repos/$env:REPOSITORY" `
+                  --jq '"repo=\(.full_name) private=\(.private) archived=\(.archived) admin=\(.permissions.admin) push=\(.permissions.push) pull=\(.permissions.pull) maintain=\(.permissions.maintain // "n/a") triage=\(.permissions.triage // "n/a")"' `
+                  2>&1
+          )
+          $repoPermissionsExit = $LASTEXITCODE
+          $repoPermissionsText = (($repoPermissions | ForEach-Object { [string] $_ }) -join "`n").Trim()
+          if ($repoPermissionsExit -ne 0) {
+              Write-Warning "Failed to read repository permissions for $env:REPOSITORY.`n$repoPermissionsText"
+          }
+          else {
+              Write-Host $repoPermissionsText
+          }
+          Write-Host "::endgroup::"
+
+          # Builds the Git LFS HTTP Basic auth header without printing the token or encoded credential.
+          function New-LfsBasicAuthHeader {
+              if ([string]::IsNullOrWhiteSpace($env:LFS_LOCK_BOT_TOKEN)) {
+                  throw "LFS_LOCK_BOT_TOKEN is empty."
+              }
+
+              $credential = "x-access-token:$env:LFS_LOCK_BOT_TOKEN"
+              $encodedCredential = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($credential))
+              return "Authorization: Basic $encodedCredential"
+          }
+
+          # Calls the Git LFS HTTP API with Basic auth and returns status plus response body.
+          function Invoke-LfsApi {
+              param(
+                  [Parameter(Mandatory = $true)][string] $Method,
+                  [Parameter(Mandatory = $true)][string] $Url,
+                  [string] $Body = ""
+              )
+
+              $responsePath = [System.IO.Path]::GetTempFileName()
+              $requestPath = $null
+              try {
+                  $curlArgs = @(
+                      "--silent",
+                      "--show-error",
+                      "--location",
+                      "--request",
+                      $Method,
+                      "--header",
+                      (New-LfsBasicAuthHeader),
+                      "--header",
+                      "Accept: application/vnd.git-lfs+json",
+                      "--header",
+                      "Content-Type: application/vnd.git-lfs+json",
+                      "--output",
+                      $responsePath,
+                      "--write-out",
+                      "%{http_code}",
+                      $Url
+                  )
+
+                  if (-not [string]::IsNullOrWhiteSpace($Body)) {
+                      $requestPath = [System.IO.Path]::GetTempFileName()
+                      [System.IO.File]::WriteAllText($requestPath, $Body, [System.Text.Encoding]::UTF8)
+                      $curlArgs = @("--data-binary", "@$requestPath") + $curlArgs
+                  }
+
+                  $statusOutput = @(curl @curlArgs 2>&1)
+                  $curlExitCode = $LASTEXITCODE
+                  $statusText = (($statusOutput | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  $responseText = [System.IO.File]::ReadAllText($responsePath)
+
+                  if ($curlExitCode -ne 0) {
+                      throw "curl failed for Git LFS API request.`n$statusText`n$responseText"
+                  }
+                  if ($statusText -notmatch "(?<Status>\d{3})$") {
+                      throw "curl did not return an HTTP status code for Git LFS API request.`n$statusText`n$responseText"
+                  }
+
+                  return [pscustomobject]@{
+                      Status = [int] $Matches["Status"]
+                      Body = $responseText.Trim()
+                  }
+              }
+              finally {
+                  Remove-Item -LiteralPath $responsePath -Force -ErrorAction SilentlyContinue
+                  if ($null -ne $requestPath) {
+                      Remove-Item -LiteralPath $requestPath -Force -ErrorAction SilentlyContinue
+                  }
+              }
+          }
+
+          Write-Host "::group::Git LFS endpoint and lock list"
+          $lfsEnv = @(git lfs env 2>&1)
+          $lfsEnvExit = $LASTEXITCODE
+          $lfsEnvText = (($lfsEnv | ForEach-Object { [string] $_ }) -join "`n").Trim()
+          if ($lfsEnvExit -ne 0) {
+              Write-Warning "Failed to read Git LFS environment.`n$lfsEnvText"
+              Write-Host "::endgroup::"
+              exit 0
+          }
+
+          $endpoint = ""
+          $endpointAuth = ""
+          foreach ($line in $lfsEnv) {
+              if ([string] $line -match '^Endpoint=(?<Url>\S+)(?:\s+\(auth=(?<Auth>[^)]+)\))?') {
+                  $endpoint = ([string] $Matches["Url"]).TrimEnd("/")
+                  if ($Matches.ContainsKey("Auth")) {
+                      $endpointAuth = [string] $Matches["Auth"]
+                  }
+                  break
+              }
+          }
+          if ([string]::IsNullOrWhiteSpace($endpoint)) {
+              Write-Warning "Git LFS endpoint was not found in git lfs env output."
+              Write-Host "::endgroup::"
+              exit 0
+          }
+          Write-Host "endpoint=$endpoint"
+          if (-not [string]::IsNullOrWhiteSpace($endpointAuth)) {
+              Write-Host "git_lfs_env_auth=$endpointAuth"
+          }
+          Write-Host "auth=HTTP Basic with LFS_LOCK_BOT_TOKEN"
+
+          try {
+              $locksList = Invoke-LfsApi -Method "GET" -Url "$endpoint/locks?limit=10"
+              if ($locksList.Status -ge 200 -and $locksList.Status -lt 300) {
+                  $locksPayload = $locksList.Body | ConvertFrom-Json
+                  $sampleCount = if ($locksPayload.PSObject.Properties["locks"]) { @($locksPayload.locks).Count } else { 0 }
+                  Write-Host "lfs_locks_api=ok status=$($locksList.Status) sample_count=$sampleCount"
+              }
+              else {
+                  Write-Warning "Git LFS lock list returned HTTP $($locksList.Status).`n$($locksList.Body)"
+              }
+          }
+          catch {
+              Write-Warning "Failed to query Git LFS locks through Basic auth.`n$($_.Exception.Message)"
+          }
+          Write-Host "::endgroup::"
+
+          Write-Host "::group::Non-destructive LFS unlock permission probe"
+          $probeId = "codex-diagnostic-nonexistent-lock-id"
+          $probeUrl = "$endpoint/locks/$([Uri]::EscapeDataString($probeId))/unlock"
+          $probeBody = @{ force = $true } | ConvertTo-Json -Compress
+          try {
+              $probe = Invoke-LfsApi -Method "POST" -Url $probeUrl -Body $probeBody
+              if ($probe.Status -ge 200 -and $probe.Status -lt 300) {
+                  Write-Warning "Unexpected success for nonexistent diagnostic lock id $probeId."
+              }
+              elseif ($probe.Status -eq 403 -or $probe.Body -match "You must have push access to delete a lock") {
+                  Write-Warning "LFS unlock permission probe was denied before lock lookup. The token still lacks effective LFS lock delete permission for this repository.`nHTTP $($probe.Status)`n$($probe.Body)"
+              }
+              elseif ($probe.Status -eq 404 -or $probe.Body -match "(?i)not found|not exist") {
+                  Write-Host "LFS unlock permission probe reached lock lookup. Not-found is expected for nonexistent diagnostic lock id $probeId."
+                  Write-Host "HTTP $($probe.Status)"
+                  Write-Host $probe.Body
+              }
+              else {
+                  Write-Warning "LFS unlock permission probe returned an unexpected response.`nHTTP $($probe.Status)`n$($probe.Body)"
+              }
+          }
+          catch {
+              Write-Warning "LFS unlock permission probe failed before receiving an HTTP response.`n$($_.Exception.Message)"
+          }
+          Write-Host "::endgroup::"
+          exit 0
 
       - name: Unlock targets
         shell: pwsh
@@ -61,8 +260,11 @@ jobs:
           PUSHED_AT: ${{ github.event.repository.pushed_at }}
           DISPATCH_MODE: ${{ github.event.inputs.mode }}
           DISPATCH_PATH: ${{ github.event.inputs.path }}
-          # Step-scoped because only Invoke-ForceUnlockById should use the admin PAT via gh api.
+          DISPATCH_BASE: ${{ github.event.inputs.base }}
+          DISPATCH_HEAD: ${{ github.event.inputs.head }}
           GH_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
+          LFS_LOCK_BOT_TOKEN: ${{ secrets.LFS_LOCK_BOT_TOKEN }}
+          GIT_TERMINAL_PROMPT: "0"
         run: |
           $ErrorActionPreference = "Stop"
           Set-StrictMode -Version Latest
@@ -113,6 +315,84 @@ jobs:
               return (ConvertTo-GitPath $Path) -match "\.(uasset|umap|ubulk|uexp)$"
           }
 
+          function Test-ManualRevisionInput {
+              param([string] $Revision)
+
+              if ([string]::IsNullOrWhiteSpace($Revision)) {
+                  return $false
+              }
+              if ($Revision -match '\s' -or $Revision -match '[:*?\[\]\\]' -or $Revision -match '(^|/)\.\.($|/)' -or $Revision.StartsWith("-")) {
+                  return $false
+              }
+              return $Revision -match '^[A-Za-z0-9._/-]+$'
+          }
+
+          # Reads a commit timestamp from local git history as UTC.
+          function Get-CommitTimestamp {
+              param(
+                  # Commit id or commit-ish to inspect.
+                  [Parameter(Mandatory = $true)][string] $Commit
+              )
+
+              $timestampOutput = @(git show -s --format=%cI $Commit 2>&1)
+              if ($LASTEXITCODE -ne 0) {
+                  $detail = (($timestampOutput | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  throw "Failed to read commit timestamp for $Commit.`n$detail"
+              }
+
+              $timestamp = (($timestampOutput | Select-Object -First 1) -as [string])
+              return ConvertTo-UtcTimestamp -Value $timestamp -Name "commit timestamp"
+          }
+
+          # Fetches a user-provided branch, tag, or SHA and returns the resolved commit id.
+          function Resolve-RemoteCommit {
+              param(
+                  # Human-facing input name used in diagnostics.
+                  [Parameter(Mandatory = $true)][string] $Name,
+                  # Branch, tag, or SHA to fetch from origin.
+                  [Parameter(Mandatory = $true)][string] $Revision
+              )
+
+              if (-not (Test-ManualRevisionInput $Revision)) {
+                  throw "Invalid $Name revision: $Revision"
+              }
+
+              git fetch --no-tags --depth=1 origin $Revision
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to fetch $Name revision from origin: $Revision"
+              }
+
+              $commit = (git rev-parse --verify "FETCH_HEAD^{commit}").Trim()
+              if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($commit)) {
+                  throw "Failed to resolve $Name revision to a commit: $Revision"
+              }
+
+              return $commit
+          }
+
+          # Fetches origin/main with its first parent and returns the latest main range.
+          function Resolve-LatestMainRange {
+              git fetch --no-tags --depth=2 origin "+refs/heads/main:refs/remotes/origin/main"
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to fetch origin/main for manual dry-run preview."
+              }
+
+              $headCommit = (git rev-parse --verify "refs/remotes/origin/main^{commit}").Trim()
+              if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($headCommit)) {
+                  throw "Failed to resolve origin/main for manual dry-run preview."
+              }
+
+              $baseCommit = (git rev-parse --verify "$headCommit^1").Trim()
+              if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($baseCommit)) {
+                  throw "Failed to resolve the first parent of origin/main for manual dry-run preview."
+              }
+
+              return [pscustomobject]@{
+                  Base = $baseCommit
+                  Head = $headCommit
+              }
+          }
+
           function Get-LockPath {
               param([object] $Lock)
               $property = $Lock.PSObject.Properties["path"]
@@ -155,42 +435,242 @@ jobs:
               return @($Payload)
           }
 
-          # Returns the repository's effective Git LFS API endpoint without a trailing slash.
-          # Throws when git lfs env fails or does not report an Endpoint line.
-          function Get-LfsApiEndpoint {
-              $stderrPath = [System.IO.Path]::GetTempFileName()
-              try {
-                  $lines = @(git lfs env 2>$stderrPath)
-                  $gitExitCode = $LASTEXITCODE
-                  $stderrText = Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue
+          # Forces Git and Git LFS to authenticate with LFS_LOCK_BOT_TOKEN for this step.
+          function Initialize-LfsUnlockAuth {
+              if ([string]::IsNullOrWhiteSpace($env:LFS_LOCK_BOT_TOKEN)) {
+                  throw "LFS_LOCK_BOT_TOKEN is required for Git LFS unlock."
               }
-              finally {
-                  Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+              if ([string]::IsNullOrWhiteSpace($env:GITHUB_REPOSITORY)) {
+                  throw "GITHUB_REPOSITORY is required for Git LFS unlock."
+              }
+              if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
+                  throw "RUNNER_TEMP is required for Git LFS unlock."
               }
 
-              $trimmedStderr = if ($null -eq $stderrText) { "" } else { $stderrText.Trim() }
-              if ($gitExitCode -ne 0) {
-                  if ([string]::IsNullOrWhiteSpace($trimmedStderr)) {
-                      throw "Failed to read Git LFS environment."
-                  }
-                  throw "Failed to read Git LFS environment.`n$trimmedStderr"
+              Write-Output "::add-mask::$env:LFS_LOCK_BOT_TOKEN"
+              if ($env:LFS_LOCK_BOT_TOKEN.StartsWith("github_pat_", [System.StringComparison]::Ordinal)) {
+                  Write-Warning "LFS_LOCK_BOT_TOKEN looks like a fine-grained PAT. GitHub LFS force unlock may reject fine-grained PATs even when REST repo permissions report admin=true. Use a classic PAT or GitHub CLI OAuth token with repo scope if force unlock keeps returning 403."
               }
-              if ($lines.Count -eq 0) {
-                  throw "Git LFS environment output was empty."
+
+              $tokenLoginOutput = @(gh api user --jq ".login" 2>&1)
+              if ($LASTEXITCODE -ne 0) {
+                  $detail = (($tokenLoginOutput | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  throw "Failed to read LFS_LOCK_BOT_TOKEN owner login.`n$detail"
+              }
+              $tokenLogin = (($tokenLoginOutput | Select-Object -First 1) -as [string]).Trim()
+              if ([string]::IsNullOrWhiteSpace($tokenLogin)) {
+                  throw "LFS_LOCK_BOT_TOKEN owner login is empty."
+              }
+              if ($tokenLogin -match '[\s:@/]') {
+                  throw "LFS_LOCK_BOT_TOKEN owner login contains unsupported characters: $tokenLogin"
+              }
+              $env:LFS_LOCK_BOT_LOGIN = $tokenLogin
+
+              $askPassPath = Join-Path $env:RUNNER_TEMP "git-lfs-askpass.sh"
+              $askPassScript = (@(
+                  '#!/usr/bin/env bash',
+                  'case "$1" in',
+                  '  *Username*) printf ''%s\n'' "${LFS_LOCK_BOT_LOGIN}" ;;',
+                  '  *) printf ''%s\n'' "${LFS_LOCK_BOT_TOKEN}" ;;',
+                  'esac'
+              ) -join "`n") + "`n"
+              $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+              [System.IO.File]::WriteAllText($askPassPath, $askPassScript, $utf8NoBom)
+              $askPassBytes = [System.IO.File]::ReadAllBytes($askPassPath)
+              if (
+                  $askPassBytes.Length -ge 3 -and
+                  $askPassBytes[0] -eq 0xEF -and
+                  $askPassBytes[1] -eq 0xBB -and
+                  $askPassBytes[2] -eq 0xBF
+              ) {
+                  throw "Git askpass helper was written with a UTF-8 BOM."
+              }
+
+              chmod 700 $askPassPath
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to make Git askpass helper executable."
+              }
+
+              $usernameProbe = @(& $askPassPath "Username for 'https://github.com':" 2>&1)
+              if ($LASTEXITCODE -ne 0 -or (($usernameProbe | Select-Object -First 1) -as [string]) -ne $tokenLogin) {
+                  throw "Git askpass helper username probe failed."
+              }
+
+              $passwordProbe = @(& $askPassPath "Password for 'https://$tokenLogin@github.com':" 2>&1)
+              if ($LASTEXITCODE -ne 0 -or (($passwordProbe | Select-Object -First 1) -as [string]) -ne $env:LFS_LOCK_BOT_TOKEN) {
+                  throw "Git askpass helper token probe failed."
+              }
+
+              $env:GIT_ASKPASS = $askPassPath
+
+              $extraHeaderKeys = @(git config --local --name-only --get-regexp '^http\..*\.extraheader$' 2>$null)
+              $global:LASTEXITCODE = 0
+              foreach ($key in $extraHeaderKeys) {
+                  git config --local --unset-all $key
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "Failed to remove persisted Git extraheader credential: $key"
+                  }
+              }
+              Write-Host "Removed persisted Git extraheader credentials: $($extraHeaderKeys.Count)."
+
+              git config --local credential.helper ""
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to disable persisted Git credential helpers."
+              }
+
+              git remote set-url origin "https://$tokenLogin@github.com/$env:GITHUB_REPOSITORY.git"
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to normalize origin remote URL for Git LFS unlock."
+              }
+
+              Write-Host "Git LFS unlock auth: GIT_ASKPASS with LFS_LOCK_BOT_TOKEN as $tokenLogin."
+          }
+
+          # Verifies that the token has effective repository push access before deleting locks.
+          function Assert-LfsUnlockTokenAccess {
+              $headersOutput = @(gh api -i user 2>&1)
+              if ($LASTEXITCODE -ne 0) {
+                  $detail = (($headersOutput | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  throw "Failed to inspect LFS_LOCK_BOT_TOKEN OAuth scopes.`n$detail"
+              }
+
+              $scopeLine = @($headersOutput | Where-Object { [string] $_ -match '^X-Oauth-Scopes:' } | Select-Object -First 1)
+              if ($scopeLine.Count -gt 0) {
+                  Write-Host "token_oauth_scopes=$(([string] $scopeLine[0]).Substring('X-Oauth-Scopes:'.Length).Trim())"
+              }
+              else {
+                  Write-Host "token_oauth_scopes=<not reported>"
+              }
+
+              $repoOutput = @(gh api "repos/$env:GITHUB_REPOSITORY" --jq '{full_name: .full_name, permissions: .permissions}' 2>&1)
+              if ($LASTEXITCODE -ne 0) {
+                  $detail = (($repoOutput | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  throw "Failed to inspect LFS_LOCK_BOT_TOKEN repository permissions.`n$detail"
+              }
+
+              $repoText = ($repoOutput -join "`n").Trim()
+              $repo = $repoText | ConvertFrom-Json
+              $admin = [bool] $repo.permissions.admin
+              $push = [bool] $repo.permissions.push
+              Write-Host "token_repo_permissions repo=$($repo.full_name) admin=$admin push=$push"
+              if (-not $push) {
+                  throw "LFS_LOCK_BOT_TOKEN does not have effective push access to $env:GITHUB_REPOSITORY. Recreate a classic PAT with the parent 'repo' scope, then check organization PAT policy for PotenupLogistics."
+              }
+          }
+
+          # Returns the repository's effective Git LFS API endpoint without a trailing slash.
+          function Get-LfsApiEndpoint {
+              $lines = @(git lfs env 2>&1)
+              if ($LASTEXITCODE -ne 0) {
+                  $detail = (($lines | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  throw "Failed to read Git LFS environment.`n$detail"
               }
 
               foreach ($line in $lines) {
-                  if ($line -match '^Endpoint=(?<Url>.+)$') {
+                  if ([string] $line -match '^Endpoint=(?<Url>\S+)(?:\s+\(auth=[^)]+\))?') {
                       return ([string] $Matches["Url"]).TrimEnd("/")
                   }
               }
 
-              throw "Git LFS endpoint was not found. Verify Git LFS is configured for this repository."
+              throw "Git LFS endpoint was not found."
           }
 
-          # Force-unlocks one Git LFS lock by id through the Git LFS HTTP API using gh api.
-          # Path is the repository-relative asset path used for diagnostics, and Id is the Git LFS lock id string.
-          # Throws when GH_TOKEN is missing, the HTTP call fails, or the LFS server rejects the unlock request.
+          # Builds a Git LFS Basic auth header from the token owner login and token.
+          function New-LfsBasicAuthHeader {
+              if ([string]::IsNullOrWhiteSpace($env:LFS_LOCK_BOT_LOGIN)) {
+                  throw "LFS_LOCK_BOT_LOGIN is required for Git LFS API auth."
+              }
+              if ([string]::IsNullOrWhiteSpace($env:LFS_LOCK_BOT_TOKEN)) {
+                  throw "LFS_LOCK_BOT_TOKEN is required for Git LFS API auth."
+              }
+
+              $credential = "$($env:LFS_LOCK_BOT_LOGIN):$($env:LFS_LOCK_BOT_TOKEN)"
+              $encodedCredential = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($credential))
+              return "Authorization: Basic $encodedCredential"
+          }
+
+          # Calls the Git LFS HTTP API with explicit Basic auth, bypassing git credential helpers.
+          function Invoke-LfsApi {
+              param(
+                  [Parameter(Mandatory = $true)][string] $Method,
+                  [Parameter(Mandatory = $true)][string] $Url,
+                  [string] $Body = ""
+              )
+
+              $responsePath = [System.IO.Path]::GetTempFileName()
+              $requestPath = $null
+              try {
+                  $curlArgs = @(
+                      "--silent",
+                      "--show-error",
+                      "--location",
+                      "--request",
+                      $Method,
+                      "--header",
+                      (New-LfsBasicAuthHeader),
+                      "--header",
+                      "Accept: application/vnd.git-lfs+json",
+                      "--header",
+                      "Content-Type: application/vnd.git-lfs+json",
+                      "--output",
+                      $responsePath,
+                      "--write-out",
+                      "%{http_code}",
+                      $Url
+                  )
+
+                  if (-not [string]::IsNullOrWhiteSpace($Body)) {
+                      $requestPath = [System.IO.Path]::GetTempFileName()
+                      [System.IO.File]::WriteAllText($requestPath, $Body, [System.Text.UTF8Encoding]::new($false))
+                      $curlArgs = @("--data-binary", "@$requestPath") + $curlArgs
+                  }
+
+                  $statusOutput = @(curl @curlArgs 2>&1)
+                  $curlExitCode = $LASTEXITCODE
+                  $statusText = (($statusOutput | ForEach-Object { [string] $_ }) -join "`n").Trim()
+                  $responseText = [System.IO.File]::ReadAllText($responsePath)
+
+                  if ($curlExitCode -ne 0) {
+                      throw "curl failed for Git LFS API request.`n$statusText`n$responseText"
+                  }
+                  if ($statusText -notmatch "(?<Status>\d{3})$") {
+                      throw "curl did not return an HTTP status code for Git LFS API request.`n$statusText`n$responseText"
+                  }
+
+                  return [pscustomobject]@{
+                      Status = [int] $Matches["Status"]
+                      Body = $responseText.Trim()
+                  }
+              }
+              finally {
+                  Remove-Item -LiteralPath $responsePath -Force -ErrorAction SilentlyContinue
+                  if ($null -ne $requestPath) {
+                      Remove-Item -LiteralPath $requestPath -Force -ErrorAction SilentlyContinue
+                  }
+              }
+          }
+
+          # Runs a native command and throws with its stderr/stdout when it fails.
+          function Invoke-CheckedNativeCommand {
+              param(
+                  [string] $FailureMessage,
+                  [scriptblock] $Command
+              )
+
+              $output = @(& $Command 2>&1)
+              if ($LASTEXITCODE -eq 0) {
+                  return $output
+              }
+
+              $detail = (($output | ForEach-Object { [string] $_ }) -join "`n").Trim()
+              if ([string]::IsNullOrWhiteSpace($detail)) {
+                  throw $FailureMessage
+              }
+
+              throw "$FailureMessage`n$detail"
+          }
+
+          # Force-unlocks one Git LFS lock by id through the native Git LFS client.
           function Invoke-ForceUnlockById {
               param(
                   # Repository-relative lock path used in error output.
@@ -199,34 +679,33 @@ jobs:
                   [string] $Id
               )
 
-              if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
-                  throw "GH_TOKEN environment variable is required before calling gh api."
-              }
               if ([string]::IsNullOrWhiteSpace($Id)) {
                   throw "Git LFS lock id is required."
               }
 
               $endpoint = Get-LfsApiEndpoint
-              # Escapes lock ids for URL-path safety because providers may emit reserved characters such as ':'.
-              $encodedId = [Uri]::EscapeDataString($Id)
-              $unlockUrl = "$endpoint/locks/$encodedId/unlock"
+              $escapedId = [Uri]::EscapeDataString($Id)
+              $unlockUrl = "$endpoint/locks/$escapedId/unlock"
               $body = @{ force = $true } | ConvertTo-Json -Compress
+              $response = Invoke-LfsApi -Method "POST" -Url $unlockUrl -Body $body
+              if ($response.Status -lt 200 -or $response.Status -ge 300) {
+                  throw "Failed to force unlock $Path by Git LFS lock id ${Id}.`nHTTP $($response.Status)`n$($response.Body)"
+              }
 
-              $output = @(
-                  $body | gh api `
-                      -X POST `
-                      $unlockUrl `
-                      -H "Accept: application/vnd.git-lfs+json" `
-                      -H "Content-Type: application/vnd.git-lfs+json" `
-                      --input - `
-                      2>&1
-              )
-              if ($LASTEXITCODE -ne 0) {
-                  $detail = (($output | ForEach-Object { [string] $_ }) -join "`n").Trim()
-                  if ([string]::IsNullOrWhiteSpace($detail)) {
-                      throw "Failed to unlock $Path by Git LFS lock id ${Id}: no output from gh api. Check GH_TOKEN admin access and LFS endpoint reachability."
+              if (-not [string]::IsNullOrWhiteSpace($response.Body)) {
+                  try {
+                      $payload = $response.Body | ConvertFrom-Json
+                      $lockProperty = $payload.PSObject.Properties["lock"]
+                      if ($null -ne $lockProperty -and $null -ne $lockProperty.Value) {
+                          $unlockedAtProperty = $lockProperty.Value.PSObject.Properties["unlocked_at"]
+                          if ($null -ne $unlockedAtProperty -and -not [string]::IsNullOrWhiteSpace([string] $unlockedAtProperty.Value)) {
+                              Write-Host "Unlock API accepted: $Path id=$Id unlocked_at=$($unlockedAtProperty.Value)"
+                          }
+                      }
                   }
-                  throw "Failed to unlock $Path by Git LFS lock id ${Id}.`n$detail"
+                  catch {
+                      Write-Warning "Unlock API returned success but response JSON was not parsed for $Path id=$Id."
+                  }
               }
           }
 
@@ -259,6 +738,37 @@ jobs:
               return $locksByPath
           }
 
+          # Waits briefly for Git LFS lock listing to reflect a successful unlock.
+          function Wait-LfsUnlockVisibility {
+              param(
+                  [string] $Path,
+                  [string] $Id
+              )
+
+              foreach ($attempt in 1..5) {
+                  if ($attempt -gt 1) {
+                      Start-Sleep -Seconds 2
+                  }
+
+                  $afterLocksByPath = Get-LocksByPath -Locks @(Get-Locks)
+                  if (-not $afterLocksByPath.ContainsKey($Path)) {
+                      Write-Host "Unlocked: $Path"
+                      return
+                  }
+
+                  $afterId = Get-LockId $afterLocksByPath[$Path]
+                  if ($afterId -ne $Id) {
+                      Write-Host "Lock was replaced after unlock: $Path previous=$Id current=$afterId"
+                      return
+                  }
+              }
+
+              Write-Warning "Unlock API returned success, but Git LFS lock listing still shows the same lock. Treating as eventual consistency: $Path id=$Id"
+          }
+
+          Initialize-LfsUnlockAuth
+          Assert-LfsUnlockTokenAccess
+
           $automaticUnlock = $env:EVENT_NAME -ne "workflow_dispatch"
           $cutoff = $null
           if ($automaticUnlock) {
@@ -272,7 +782,7 @@ jobs:
           ) {
               git fetch --no-tags --depth=1 origin $env:PUSH_BEFORE
               if ($LASTEXITCODE -ne 0) {
-                  throw "Failed to fetch push before commit $env:PUSH_BEFORE; use manual unlock for any stale locks."
+                  throw "Failed to fetch push before commit $env:PUSH_BEFORE; rerun workflow_dispatch with an explicit base/head range if needed."
               }
           }
 
@@ -282,18 +792,63 @@ jobs:
           $mode = if ([string]::IsNullOrWhiteSpace($env:DISPATCH_MODE)) { "unlock" } else { $env:DISPATCH_MODE }
           $dryRun = $mode -ne "unlock"
           $targets = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+          $guardedUnlock = $automaticUnlock
 
           if ($env:EVENT_NAME -eq "workflow_dispatch") {
               $manualPath = ConvertTo-GitPath $env:DISPATCH_PATH
+              $manualBase = if ([string]::IsNullOrWhiteSpace($env:DISPATCH_BASE)) { "" } else { $env:DISPATCH_BASE.Trim() }
+              $manualHead = if ([string]::IsNullOrWhiteSpace($env:DISPATCH_HEAD)) { "" } else { $env:DISPATCH_HEAD.Trim() }
+              $hasManualRange = -not [string]::IsNullOrWhiteSpace($manualBase) -or -not [string]::IsNullOrWhiteSpace($manualHead)
+
+              if (-not [string]::IsNullOrWhiteSpace($manualPath) -and $hasManualRange) {
+                  throw "workflow_dispatch unlock accepts either path or base/head range, not both."
+              }
+
               if ([string]::IsNullOrWhiteSpace($manualPath)) {
-                  foreach ($lock in $locks) {
-                      $path = Get-LockPath $lock
-                      if (Test-UnrealAssetPath $path) {
-                          [void] $targets.Add($path)
+                  if ($hasManualRange) {
+                      if ([string]::IsNullOrWhiteSpace($manualBase) -or [string]::IsNullOrWhiteSpace($manualHead)) {
+                          throw "workflow_dispatch range unlock requires both base and head."
+                      }
+
+                      $baseCommit = Resolve-RemoteCommit -Name "base" -Revision $manualBase
+                      $headCommit = Resolve-RemoteCommit -Name "head" -Revision $manualHead
+                      Write-Host "Manual range unlock target scan: base=$baseCommit head=$headCommit"
+
+                      $changed = @(git diff --name-only $baseCommit $headCommit)
+                      if ($LASTEXITCODE -ne 0) {
+                          throw "Failed to inspect manual unlock range between $baseCommit and $headCommit."
+                      }
+
+                      foreach ($path in $changed) {
+                          $gitPath = ConvertTo-GitPath $path
+                          if (Test-UnrealAssetPath $gitPath) {
+                              [void] $targets.Add($gitPath)
+                          }
                       }
                   }
-                  if (-not $dryRun) {
-                      throw "workflow_dispatch unlock requires an exact repository-relative path."
+                  else {
+                      if (-not $dryRun) {
+                          throw "workflow_dispatch unlock requires path or base/head. Normal post-merge unlock is handled by push to main."
+                      }
+
+                      $latestMainRange = Resolve-LatestMainRange
+                      $baseCommit = $latestMainRange.Base
+                      $headCommit = $latestMainRange.Head
+                      $cutoff = Get-CommitTimestamp -Commit $headCommit
+                      $guardedUnlock = $true
+                      Write-Host "Manual dry-run preview uses latest origin/main range: base=$baseCommit head=$headCommit cutoff=$($cutoff.ToString("o"))."
+
+                      $changed = @(git diff --name-only $baseCommit $headCommit)
+                      if ($LASTEXITCODE -ne 0) {
+                          throw "Failed to inspect latest origin/main range between $baseCommit and $headCommit."
+                      }
+
+                      foreach ($path in $changed) {
+                          $gitPath = ConvertTo-GitPath $path
+                          if (Test-UnrealAssetPath $gitPath) {
+                              [void] $targets.Add($gitPath)
+                          }
+                      }
                   }
               }
               else {
@@ -334,65 +889,70 @@ jobs:
               exit 0
           }
 
+          $unlockFailures = [System.Collections.Generic.List[string]]::new()
           foreach ($path in ($targets | Sort-Object)) {
-              if (-not $locksByPath.ContainsKey($path)) {
-                  Write-Host "Already unlocked: $path"
-                  continue
-              }
-
-              $lock = $locksByPath[$path]
-              $id = Get-LockId $lock
-              if ($dryRun) {
-                  Write-Host "Dry-run unlock target: $path id=$id"
-                  continue
-              }
-
-              if ($automaticUnlock) {
-                  $lockedAt = Get-LockTime $lock
-                  if ([string]::IsNullOrWhiteSpace($id)) {
-                      throw "Cannot safely auto-unlock $path because the Git LFS lock id is missing."
-                  }
-                  if ($null -eq $lockedAt) {
-                      throw "Cannot safely auto-unlock $path because the Git LFS lock timestamp is missing."
-                  }
-                  if ($lockedAt -gt $cutoff) {
-                      Write-Host "Skipping newer lock: $path locked_at=$($lockedAt.ToString("o")) cutoff=$($cutoff.ToString("o"))"
-                      continue
-                  }
-
-                  $currentLocksByPath = Get-LocksByPath -Locks @(Get-Locks)
-                  if (-not $currentLocksByPath.ContainsKey($path)) {
+              try {
+                  if (-not $locksByPath.ContainsKey($path)) {
                       Write-Host "Already unlocked: $path"
                       continue
                   }
 
-                  $currentLock = $currentLocksByPath[$path]
-                  $currentId = Get-LockId $currentLock
-                  $currentLockedAt = Get-LockTime $currentLock
-                  if ($currentId -ne $id) {
-                      Write-Host "Skipping changed lock id: $path initial=$id current=$currentId"
-                      continue
+                  $lock = $locksByPath[$path]
+                  $id = Get-LockId $lock
+
+                  if ($guardedUnlock) {
+                      $lockedAt = Get-LockTime $lock
+                      if ([string]::IsNullOrWhiteSpace($id)) {
+                          throw "Cannot safely unlock $path because the Git LFS lock id is missing."
+                      }
+                      if ($null -eq $lockedAt) {
+                          throw "Cannot safely unlock $path because the Git LFS lock timestamp is missing."
+                      }
+                      if ($lockedAt -gt $cutoff) {
+                          Write-Host "Skipping newer lock: $path locked_at=$($lockedAt.ToString("o")) cutoff=$($cutoff.ToString("o"))"
+                          continue
+                      }
+
+                      $currentLocksByPath = Get-LocksByPath -Locks @(Get-Locks)
+                      if (-not $currentLocksByPath.ContainsKey($path)) {
+                          Write-Host "Already unlocked: $path"
+                          continue
+                      }
+
+                      $currentLock = $currentLocksByPath[$path]
+                      $currentId = Get-LockId $currentLock
+                      $currentLockedAt = Get-LockTime $currentLock
+                      if ($currentId -ne $id) {
+                          Write-Host "Skipping changed lock id: $path initial=$id current=$currentId"
+                          continue
+                      }
+                      if ($null -eq $currentLockedAt) {
+                          throw "Cannot safely unlock $path because the current Git LFS lock timestamp is missing."
+                      }
+                      if ($currentLockedAt -gt $cutoff) {
+                          Write-Host "Skipping newer current lock: $path locked_at=$($currentLockedAt.ToString("o")) cutoff=$($cutoff.ToString("o"))"
+                          continue
+                      }
+
+                      $id = $currentId
                   }
-                  if ($null -eq $currentLockedAt) {
-                      throw "Cannot safely auto-unlock $path because the current Git LFS lock timestamp is missing."
-                  }
-                  if ($currentLockedAt -gt $cutoff) {
-                      Write-Host "Skipping newer current lock: $path locked_at=$($currentLockedAt.ToString("o")) cutoff=$($cutoff.ToString("o"))"
+
+                  if ($dryRun) {
+                      Write-Host "Dry-run unlock target: $path id=$id"
                       continue
                   }
 
-                  $id = $currentId
-              }
-
-              if ([string]::IsNullOrWhiteSpace($id)) {
-                  # No lock ID available; fall back to path-based unlock via git lfs CLI.
-                  git lfs unlock --force $path
-                  if ($LASTEXITCODE -ne 0) {
-                      throw "Failed to unlock $path."
-                  }
-              }
-              else {
                   Invoke-ForceUnlockById -Path $path -Id $id
+                  Wait-LfsUnlockVisibility -Path $path -Id $id
               }
-              Write-Host "Unlocked: $path"
+              catch {
+                  $failure = "Failed to unlock target $path.`n$($_.Exception.Message)"
+                  Write-Warning $failure
+                  $unlockFailures.Add($failure)
+              }
+          }
+
+          if ($unlockFailures.Count -gt 0) {
+              $details = ($unlockFailures | ForEach-Object { "  - $_" }) -join "`n"
+              throw "Failed to unlock $($unlockFailures.Count) Git LFS lock target(s).`n$details"
           }

@@ -62,6 +62,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|TopDown", meta = (ClampMin = "1.0"))
 	double TopDownOrthoWidthMaxCm = 50000.0;
 
+	// Far clip distance for top-down ortho view; must stay past the grey background depth cutoff.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|TopDown", meta = (ClampMin = "1000000.0"))
+	double TopDownOrthoFarClipPlaneCm = 1200000.0;
+
 	// zoom 입력 1 단위당 ortho width 증감 비율.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Editor|TopDown", meta = (ClampMin = "0.001"))
 	double TopDownZoomStepRatio = 0.1;
@@ -106,6 +110,8 @@ public:
 private:
 	void ApplyMovementSettings();
 	void ApplyTopDownPanSpeed();
+	// Configures orthographic clipping so the background post-process can identify empty pixels.
+	void ApplyTopDownOrthoPlanes();
 	// Applies the editor viewport background post-process material to the camera.
 	void ApplyGreyBackgroundPostProcessMaterial();
 

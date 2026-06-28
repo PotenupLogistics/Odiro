@@ -1,17 +1,12 @@
-# Human-only helper for inspecting and force-unlocking Git LFS locks by exact path or per-lock prompt.
-[CmdletBinding(DefaultParameterSetName = "Path")]
+# Human-only helper for unlocking Git LFS locks by exact path or per-lock prompt.
+[CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true, ParameterSetName = "Path")]
-    [string] $Path,
+    [Parameter(Position = 0)]
+    [string] $Path = "",
 
-    [Parameter(Mandatory = $true, ParameterSetName = "All")]
-    [switch] $UnlockAll,
+    [switch] $All,
 
-    [Parameter(ParameterSetName = "Path")]
-    [switch] $Unlock,
-
-    [Parameter(ParameterSetName = "Path")]
-    [string] $ConfirmPath = ""
+    [switch] $Force
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,15 +14,17 @@ Set-StrictMode -Version Latest
 
 . "$PSScriptRoot\common.ps1"
 . "$PSScriptRoot\list-lfs-locks.ps1"
-Set-ToolPrefix "manual-unlock"
 
-trap {
-    Write-ErrorMessage $_.Exception.Message
-    exit 1
+# Returns the supported command-line forms for manual Git LFS unlocks.
+function Get-ManualUnlockUsage {
+    return @"
+Usage:
+  tools/manual-unlock.ps1 <Path>
+  tools/manual-unlock.ps1 -All
+  tools/manual-unlock.ps1 -Force <Path>
+  tools/manual-unlock.ps1 -Force -All
+"@.Trim()
 }
-
-$repoRoot = Get-RepoRoot
-Assert-Command "git"
 
 # Normalizes user input to repository-relative Git paths.
 function ConvertTo-GitPath {
@@ -39,6 +36,7 @@ function ConvertTo-GitPath {
     if ([System.IO.Path]::IsPathRooted($InputPath)) {
         throw "Use a repository-relative path, not an absolute path."
     }
+
     $gitPath = ($InputPath -replace '\\', '/').Trim()
     $gitPath = $gitPath.TrimStart('./')
     if ([string]::IsNullOrWhiteSpace($gitPath) -or $gitPath -eq "." -or $gitPath -eq "/") {
@@ -46,6 +44,9 @@ function ConvertTo-GitPath {
     }
     if ($gitPath -match '(^|/)\.\.($|/)') {
         throw "Parent directory segments are not allowed."
+    }
+    if ($gitPath.StartsWith("-", [System.StringComparison]::Ordinal)) {
+        throw "Path must not start with '-'."
     }
 
     return $gitPath
@@ -71,30 +72,16 @@ function ConvertLockPathToGitPath {
     return $gitPath
 }
 
-# Reads the Git LFS API endpoint from the repository's effective LFS config.
-function Get-LfsApiEndpoint {
-    param([string] $RepoRoot)
-
-    $lines = @(git -C $RepoRoot lfs env)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to read Git LFS environment."
-    }
-
-    foreach ($line in $lines) {
-        if ($line -match '^Endpoint=(?<Url>\S+)') {
-            return ([string] $Matches["Url"]).TrimEnd("/")
-        }
-    }
-
-    throw "Git LFS endpoint was not found."
-}
-
-# Verifies that an API-unlocked Git LFS lock id is no longer listed.
+# Verifies that an unlocked Git LFS lock id is no longer listed.
 function Assert-LfsLockRemovedById {
     param(
         [string] $RepoRoot,
         [string] $Id
     )
+
+    if ([string]::IsNullOrWhiteSpace($Id)) {
+        return
+    }
 
     $remainingLocks = @(Get-LfsLockRows -RepoRoot $RepoRoot -NormalizedPrefix "")
     $remainingLock = @($remainingLocks | Where-Object { [string] $_.Id -eq $Id })
@@ -103,42 +90,167 @@ function Assert-LfsLockRemovedById {
     }
 }
 
-# Force-unlocks one Git LFS lock by API id without touching the stored local path.
-function Invoke-ForceUnlockById {
+# Runs a native command and throws with its stderr/stdout when it fails.
+function Invoke-CheckedNativeCommand {
     param(
-        [string] $RepoRoot,
-        [string] $Path,
-        [string] $Id
+        [string] $FailureMessage,
+        [scriptblock] $Command
     )
 
-    Assert-Command "gh"
-
-    $endpoint = Get-LfsApiEndpoint -RepoRoot $RepoRoot
-    $unlockUrl = "$endpoint/locks/$Id/unlock"
-    $body = @{ force = $true } | ConvertTo-Json -Compress
-
-    $output = @(
-        $body | gh api `
-            -X POST `
-            $unlockUrl `
-            -H "Accept: application/vnd.git-lfs+json" `
-            -H "Content-Type: application/vnd.git-lfs+json" `
-            --input - `
-            2>&1
-    )
-    if ($LASTEXITCODE -ne 0) {
-        $detail = (($output | ForEach-Object { [string] $_ }) -join "`n").Trim()
-        if ([string]::IsNullOrWhiteSpace($detail)) {
-            throw "Failed to unlock $Path by Git LFS lock id $Id."
-        }
-
-        throw "Failed to unlock $Path by Git LFS lock id $Id.`n$detail"
+    $output = @(& $Command 2>&1)
+    if ($LASTEXITCODE -eq 0) {
+        return $output
     }
 
-    Assert-LfsLockRemovedById -RepoRoot $RepoRoot -Id $Id
+    $detail = (($output | ForEach-Object { [string] $_ }) -join "`n").Trim()
+    if ([string]::IsNullOrWhiteSpace($detail)) {
+        throw $FailureMessage
+    }
+
+    throw "$FailureMessage`n$detail"
 }
 
-# Force-unlocks one Git LFS lock by id when available, otherwise by path.
+# Reads the active GitHub CLI login and token for force unlock authentication.
+function Get-GhAuthContext {
+    Assert-Command "gh"
+
+    $loginOutput = @(gh api user --jq ".login" 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        $detail = (($loginOutput | ForEach-Object { [string] $_ }) -join "`n").Trim()
+        throw "Failed to read active GitHub login from gh.`n$detail"
+    }
+
+    $login = (($loginOutput | Select-Object -First 1) -as [string]).Trim()
+    if ([string]::IsNullOrWhiteSpace($login)) {
+        throw "Active GitHub login from gh is empty."
+    }
+    if ($login -match '[\s:@/]') {
+        throw "Active GitHub login contains unsupported characters: $login"
+    }
+
+    $tokenOutput = @(gh auth token 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        $detail = (($tokenOutput | ForEach-Object { [string] $_ }) -join "`n").Trim()
+        throw "Failed to read active GitHub token from gh.`n$detail"
+    }
+
+    $token = (($tokenOutput | Select-Object -First 1) -as [string]).Trim()
+    if ([string]::IsNullOrWhiteSpace($token)) {
+        throw "Active GitHub token from gh is empty."
+    }
+
+    return [pscustomobject]@{
+        Login = $login
+        Token = $token
+    }
+}
+
+# Creates a temporary Git askpass helper that returns the supplied GitHub login and token.
+function New-GitAskPassHelper {
+    param(
+        [string] $Login,
+        [string] $Token
+    )
+
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("odiro-lfs-askpass-" + [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $tempDir | Out-Null
+
+    $isWindowsRuntime = [System.IO.Path]::DirectorySeparatorChar -eq [char] '\'
+    if ($isWindowsRuntime) {
+        $askPassPath = Join-Path $tempDir "askpass.cmd"
+        $askPassScript = @"
+@echo off
+setlocal EnableExtensions
+set PROMPT_ARG=%~1
+echo %PROMPT_ARG% | findstr /I "Username" >nul
+if %ERRORLEVEL%==0 (
+  echo %LFS_LOCK_BOT_LOGIN%
+) else (
+  echo %LFS_LOCK_BOT_TOKEN%
+)
+"@
+    }
+    else {
+        $askPassPath = Join-Path $tempDir "askpass.sh"
+        $askPassScript = (@(
+            '#!/usr/bin/env sh',
+            'case "$1" in',
+            '  *Username*) printf ''%s\n'' "${LFS_LOCK_BOT_LOGIN}" ;;',
+            '  *) printf ''%s\n'' "${LFS_LOCK_BOT_TOKEN}" ;;',
+            'esac'
+        ) -join "`n") + "`n"
+    }
+
+    [System.IO.File]::WriteAllText($askPassPath, $askPassScript, [System.Text.UTF8Encoding]::new($false))
+    if (-not $isWindowsRuntime) {
+        chmod 700 $askPassPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to make Git askpass helper executable."
+        }
+    }
+
+    return [pscustomobject]@{
+        Path = $askPassPath
+        TempDir = $tempDir
+        Login = $Login
+        Token = $Token
+    }
+}
+
+# Forces Git LFS to use the active GitHub CLI token while a script block runs.
+function Invoke-WithForceUnlockAuth {
+    param([scriptblock] $Command)
+
+    $auth = Get-GhAuthContext
+    $helper = New-GitAskPassHelper -Login $auth.Login -Token $auth.Token
+
+    $oldAskPass = $env:GIT_ASKPASS
+    $oldPrompt = $env:GIT_TERMINAL_PROMPT
+    $oldToken = $env:LFS_LOCK_BOT_TOKEN
+    $oldLogin = $env:LFS_LOCK_BOT_LOGIN
+
+    try {
+        $env:GIT_ASKPASS = $helper.Path
+        $env:GIT_TERMINAL_PROMPT = "0"
+        $env:LFS_LOCK_BOT_TOKEN = $auth.Token
+        $env:LFS_LOCK_BOT_LOGIN = $auth.Login
+
+        $usernameProbe = @(& $helper.Path "Username for 'https://github.com':" 2>&1)
+        if ($LASTEXITCODE -ne 0 -or (($usernameProbe | Select-Object -First 1) -as [string]).Trim() -ne $auth.Login) {
+            throw "Git askpass helper username probe failed."
+        }
+
+        $passwordProbe = @(& $helper.Path "Password for 'https://$($auth.Login)@github.com':" 2>&1)
+        if ($LASTEXITCODE -ne 0 -or (($passwordProbe | Select-Object -First 1) -as [string]).Trim() -ne $auth.Token) {
+            throw "Git askpass helper token probe failed."
+        }
+
+        Write-Step "Force unlock auth: gh token as $($auth.Login)"
+        & $Command
+    }
+    finally {
+        $env:GIT_ASKPASS = $oldAskPass
+        $env:GIT_TERMINAL_PROMPT = $oldPrompt
+        $env:LFS_LOCK_BOT_TOKEN = $oldToken
+        $env:LFS_LOCK_BOT_LOGIN = $oldLogin
+        Remove-Item -LiteralPath $helper.TempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Unlocks a lock through the normal Git LFS path-based operation.
+function Invoke-NormalUnlockByPath {
+    param(
+        [string] $RepoRoot,
+        [string] $Path
+    )
+
+    Invoke-CheckedNativeCommand `
+        -FailureMessage "Failed to unlock $Path." `
+        -Command { git -C $RepoRoot lfs unlock $Path } |
+        Out-Null
+}
+
+# Force-unlocks a lock through Git LFS, preferring the lock id to avoid path ambiguity.
 function Invoke-ForceUnlock {
     param(
         [string] $RepoRoot,
@@ -147,21 +259,50 @@ function Invoke-ForceUnlock {
     )
 
     if ([string]::IsNullOrWhiteSpace($Id)) {
-        git -C $RepoRoot lfs unlock --force $Path
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to unlock $Path."
+        Invoke-CheckedNativeCommand `
+            -FailureMessage "Failed to force unlock $Path." `
+            -Command { git -C $RepoRoot lfs unlock --force $Path } |
+            Out-Null
+        return
+    }
+
+    Invoke-CheckedNativeCommand `
+        -FailureMessage "Failed to force unlock $Path by Git LFS lock id $Id." `
+        -Command { git -C $RepoRoot lfs unlock --force "--id=$Id" } |
+        Out-Null
+}
+
+# Unlocks one path using either normal or force mode and verifies removed lock ids.
+function Invoke-LfsUnlock {
+    param(
+        [string] $RepoRoot,
+        [string] $Path,
+        [object[]] $Locks,
+        [switch] $Force
+    )
+
+    if ($Force) {
+        Invoke-WithForceUnlockAuth {
+            foreach ($lock in $Locks) {
+                Invoke-ForceUnlock -RepoRoot $RepoRoot -Path $Path -Id ([string] $lock.Id)
+                Assert-LfsLockRemovedById -RepoRoot $RepoRoot -Id ([string] $lock.Id)
+            }
         }
         return
     }
 
-    Invoke-ForceUnlockById -RepoRoot $RepoRoot -Path $Path -Id $Id
+    Invoke-NormalUnlockByPath -RepoRoot $RepoRoot -Path $Path
+    foreach ($lock in $Locks) {
+        Assert-LfsLockRemovedById -RepoRoot $RepoRoot -Id ([string] $lock.Id)
+    }
 }
 
 # Prompts for explicit per-lock consent, defaulting every response to no.
 function Read-UnlockConfirmation {
     param(
         [object] $LockRow,
-        [string] $GitPath
+        [string] $GitPath,
+        [switch] $Force
     )
 
     Write-Host ""
@@ -170,7 +311,13 @@ function Read-UnlockConfirmation {
     Write-Host "LockedAt : $($LockRow.LockedAt)"
     Write-Host "Id       : $($LockRow.Id)"
 
-    $answer = Read-Host "Unlock this path? Type y to unlock [y/N]"
+    if ($Force) {
+        $answer = Read-Host "Force unlock this path? Type y to unlock [y/N]"
+    }
+    else {
+        $answer = Read-Host "Unlock this path? Type y to unlock [y/N]"
+    }
+
     if ($null -eq $answer) {
         return $false
     }
@@ -181,7 +328,10 @@ function Read-UnlockConfirmation {
 
 # Prompts through every current Git LFS lock and unlocks only selected rows.
 function Invoke-UnlockAllLocks {
-    param([string] $RepoRoot)
+    param(
+        [string] $RepoRoot,
+        [switch] $Force
+    )
 
     $rows = @(Get-LfsLockRows -RepoRoot $RepoRoot -NormalizedPrefix "")
     if ($rows.Count -eq 0) {
@@ -192,58 +342,83 @@ function Invoke-UnlockAllLocks {
     Write-Step "Active Git LFS locks: $($rows.Count)"
     $unlockedCount = 0
     $skippedCount = 0
+    $failedCount = 0
 
     foreach ($row in $rows) {
-        $gitPath = ConvertLockPathToGitPath ([string] $row.Path)
-        if (Read-UnlockConfirmation -LockRow $row -GitPath $gitPath) {
-            Invoke-ForceUnlock -RepoRoot $RepoRoot -Path $gitPath -Id ([string] $row.Id)
+        $gitPath = ConvertLockPathToGitPath -InputPath ([string] $row.Path)
+        if (-not (Read-UnlockConfirmation -LockRow $row -GitPath $gitPath -Force:$Force)) {
+            Write-Step "Skipped: $gitPath"
+            $skippedCount += 1
+            continue
+        }
+
+        try {
+            Invoke-LfsUnlock -RepoRoot $RepoRoot -Path $gitPath -Locks @($row) -Force:$Force
             Write-Success "Unlocked: $gitPath"
             $unlockedCount += 1
         }
-        else {
-            Write-Step "Skipped: $gitPath"
-            $skippedCount += 1
+        catch {
+            Write-WarningMessage "Failed: $gitPath"
+            Write-WarningMessage $_.Exception.Message
+            $failedCount += 1
         }
+    }
+
+    if ($failedCount -gt 0) {
+        throw "Unlock prompts complete with $failedCount failure(s). Unlocked $unlockedCount, skipped $skippedCount."
     }
 
     Write-Success "Unlock prompts complete. Unlocked $unlockedCount, skipped $skippedCount."
 }
 
-Write-WarningMessage "Human-only script. Coding agents must not run this unless the user explicitly requested unlock in the current turn."
+# Runs the command-line entry point for manual Git LFS unlocks.
+function Invoke-ManualUnlockScript {
+    Set-ToolPrefix "manual-unlock"
 
-if ($UnlockAll) {
-    Invoke-UnlockAllLocks -RepoRoot $repoRoot
-    exit 0
+    try {
+        Assert-Command "git"
+
+        if ($All -and -not [string]::IsNullOrWhiteSpace($Path)) {
+            throw "-All cannot be combined with Path.`n$(Get-ManualUnlockUsage)"
+        }
+        if (-not $All -and [string]::IsNullOrWhiteSpace($Path)) {
+            throw "Path is required unless -All is set.`n$(Get-ManualUnlockUsage)"
+        }
+
+        $repoRoot = Get-RepoRoot
+        Write-WarningMessage "Human-only script. Coding agents must not run this unless the user explicitly requested unlock in the current turn."
+
+        if ($All) {
+            Invoke-UnlockAllLocks -RepoRoot $repoRoot -Force:$Force
+            return
+        }
+
+        $repoPath = ConvertTo-GitPath -InputPath $Path
+        $locks = @(Get-LfsLockRows -RepoRoot $repoRoot -NormalizedPrefix "")
+        $matchingLocks = @(
+            $locks | Where-Object {
+                (ConvertLockPathToGitPath -InputPath ([string] $_.Path)) -eq $repoPath
+            }
+        )
+
+        if ($matchingLocks.Count -eq 0) {
+            Write-Step "No active lock: $repoPath"
+            return
+        }
+
+        foreach ($lock in $matchingLocks) {
+            Write-Step "Lock id=$($lock.Id) path=$repoPath owner=$($lock.Owner) locked_at=$($lock.LockedAt)"
+        }
+
+        Invoke-LfsUnlock -RepoRoot $repoRoot -Path $repoPath -Locks $matchingLocks -Force:$Force
+        Write-Success "Unlocked: $repoPath"
+    }
+    catch {
+        Write-ErrorMessage $_.Exception.Message
+        exit 1
+    }
 }
 
-$repoPath = ConvertTo-GitPath $Path
-$locks = @(Get-LfsLockRows -RepoRoot $repoRoot -NormalizedPrefix "")
-$matchingLocks = @($locks | Where-Object { (ConvertLockPathToGitPath ([string] $_.Path)) -eq $repoPath })
-
-if ($matchingLocks.Count -eq 0) {
-    Write-Step "No active lock: $repoPath"
-    exit 0
+if ($MyInvocation.InvocationName -ne ".") {
+    Invoke-ManualUnlockScript
 }
-
-foreach ($lock in $matchingLocks) {
-    $id = [string] $lock.Id
-    $owner = [string] $lock.Owner
-    $lockedAt = [string] $lock.LockedAt
-    Write-Step "Lock id=$id path=$repoPath owner=$owner locked_at=$lockedAt"
-}
-
-if (-not $Unlock) {
-    Write-Step "Dry-run only. Add -Unlock -ConfirmPath $repoPath to unlock."
-    exit 0
-}
-
-$confirmGitPath = ConvertTo-GitPath $ConfirmPath
-if ($confirmGitPath -ne $repoPath) {
-    throw "ConfirmPath must exactly match Path after normalization."
-}
-
-foreach ($lock in $matchingLocks) {
-    Invoke-ForceUnlock -RepoRoot $repoRoot -Path $repoPath -Id ([string] $lock.Id)
-}
-
-Write-Success "Unlocked: $repoPath"

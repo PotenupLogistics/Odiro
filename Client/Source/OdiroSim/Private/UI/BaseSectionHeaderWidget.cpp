@@ -1,12 +1,7 @@
 #include "UI/BaseSectionHeaderWidget.h"
 
 #include "Components/TextBlock.h"
-
-UBaseSectionHeaderWidget::UBaseSectionHeaderWidget()
-	: Label(FText::FromString(TEXT("Section")))
-	, Description(FText::FromString(TEXT("Grouped controls and dashboard content")))
-{
-}
+#include "UI/BaseWidgetPrivate.h"
 
 void UBaseSectionHeaderWidget::SynchronizeBaseProperties()
 {
@@ -14,16 +9,13 @@ void UBaseSectionHeaderWidget::SynchronizeBaseProperties()
 
 	if (LabelTextBlock)
 	{
-		LabelTextBlock->SetText(Label);
+		BaseWidgetPrivate::ApplyTextIfSet(LabelTextBlock.Get(), Label);
 		ApplyTextStyle(LabelTextBlock.Get(), EBaseTextRole::Title);
 	}
 	if (DescriptionTextBlock)
 	{
-		DescriptionTextBlock->SetText(Description);
+		BaseWidgetPrivate::ApplyTextIfSet(DescriptionTextBlock.Get(), Description);
 		ApplyTextStyle(DescriptionTextBlock.Get(), EBaseTextRole::Caption);
-		DescriptionTextBlock->SetVisibility(Description.IsEmpty()
-			? ESlateVisibility::Collapsed
-			: ESlateVisibility::SelfHitTestInvisible);
 	}
 }
 

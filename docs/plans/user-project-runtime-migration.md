@@ -363,7 +363,7 @@ T10 처리:
 - Bridge `status.json` lifecycle은 아직 UI direct path에서 사용하지 않음
 - UI direct launch는 임시 고정 `-PolicyPort=18145` 사용
 - Bridge 연결 후 `process.startSimulator`가 port를 소유하고 전달
-- UMG 수정은 MCP로 수행. `apply_layout` 대신 `create_widget` 경로를 사용해 Blueprint variable GUID를 유지
+- UMG 수정은 `UE_MCP_Bridge` MCP로 수행. `apply_layout` 대신 `create_widget` 경로를 사용해 Blueprint variable GUID를 유지
 
 프로토타입 UI:
 
@@ -391,7 +391,7 @@ T10 처리:
   - project mode 결과 목록은 `<UserProject>/runs/<RunId>` 기준 [구현]
   - project run preview는 `summary.json`, episode `result.json`, `actions/events/trace` 기준 [구현]
   - project run 선택 시 v2 analysis 호출 [구현]
-- `UmgMcp`
+- `UE_MCP_Bridge`
   - `create_widget`가 생성 widget을 Blueprint variable로 등록 [구현]
   - `delete_widget`가 subtree와 stale GUID를 함께 정리 [구현]
 

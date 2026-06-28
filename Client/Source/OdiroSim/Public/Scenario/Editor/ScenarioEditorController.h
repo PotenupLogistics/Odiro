@@ -198,6 +198,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Gizmo")
 	EScenarioTransformGizmoMode GetTransformGizmoMode() const { return TransformGizmoMode; }
 
+	// Sets the active transform gizmo edit mode used by selected placeables.
+	UFUNCTION(BlueprintCallable, Category = "Scenario|Editor|Gizmo")
+	void SetTransformGizmoMode(EScenarioTransformGizmoMode mode);
+
 	UFUNCTION(BlueprintPure, Category = "Scenario|Editor|Gizmo")
 	EScenarioTransformGizmoOrientationMode GetTransformGizmoOrientationMode() const { return TransformGizmoOrientationMode; }
 
@@ -409,7 +413,6 @@ private:
 	AScenarioTransformGizmoActor* EnsureTransformGizmoActor();
 	void UpdateTransformGizmoForSelection();
 	void HideTransformGizmo();
-	void SetTransformGizmoMode(EScenarioTransformGizmoMode mode);
 	EScenarioTransformGizmoOrientationMode GetEffectiveTransformGizmoOrientationModeForPlaceable(
 		const UScenarioPlaceableComponent* placeableComponent) const;
 	void GetTransformGizmoBasis(

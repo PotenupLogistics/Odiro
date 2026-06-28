@@ -10,7 +10,4 @@ class ODIROSIM_API UBaseEmptyStateWidget : public UBaseCardWidget
 {
 	GENERATED_BODY()
 
-public:
-	// Creates preview defaults for standalone editor rendering.
-	UBaseEmptyStateWidget();
 };

@@ -2,14 +2,7 @@
 
 #include "Components/Image.h"
 #include "Engine/Texture2D.h"
-#include "UI/BaseNotificationRowWidget.h"
 #include "UI/BaseWidgetPrivate.h"
-
-UBaseListItemWidget::UBaseListItemWidget()
-{
-	Label = FText::FromString(TEXT("List item"));
-	Description = FText::FromString(TEXT("Secondary row metadata"));
-}
 
 void UBaseListItemWidget::SynchronizeBaseProperties()
 {
@@ -20,18 +13,13 @@ void UBaseListItemWidget::SynchronizeBaseProperties()
 		return;
 	}
 
-	const float iconSize = BaseWidgetPrivate::ResolveIconPreviewSize(EBaseWidgetSize::Medium);
 	if (Icon)
 	{
 		IconImage->SetBrushFromTexture(Icon, false);
-		BaseWidgetPrivate::ApplyFixedImageBrushSize(IconImage.Get(), iconSize);
 	}
-	else
-	{
-		BaseWidgetPrivate::ApplyFixedImageBrushSize(IconImage.Get(), iconSize);
-	}
-	const bool bShowIcon = Icon != nullptr || BaseWidgetPrivate::HasAssignedImageResource(IconImage.Get());
-	BaseWidgetPrivate::SetOptionalIconVisibility(IconBox.Get(), IconImage.Get(), bShowIcon);
+	const bool bHasIcon = Icon != nullptr || BaseWidgetPrivate::HasAssignedImageResource(IconImage.Get());
+	BaseWidgetPrivate::ApplyIconSize(IconBox.Get(), IconImage.Get(), IconSize);
+	BaseWidgetPrivate::SetOptionalIconVisibility(IconBox.Get(), IconImage.Get(), bHasIcon);
 }
 
 void UBaseListItemWidget::SetIcon(UTexture2D* inIcon)
@@ -40,8 +28,8 @@ void UBaseListItemWidget::SetIcon(UTexture2D* inIcon)
 	SynchronizeBaseProperties();
 }
 
-UBaseNotificationRowWidget::UBaseNotificationRowWidget()
+void UBaseListItemWidget::SetIconSize(const float inIconSize)
 {
-	Label = FText::FromString(TEXT("Optimization complete"));
-	Description = FText::FromString(TEXT("New recommendation is ready for review"));
+	IconSize = FMath::Max(inIconSize, 1.0f);
+	SynchronizeBaseProperties();
 }

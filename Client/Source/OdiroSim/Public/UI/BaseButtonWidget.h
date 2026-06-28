@@ -9,6 +9,7 @@
 class UBaseButtonWidget;
 class UBorder;
 class UImage;
+class USpacer;
 class UTextBlock;
 class UTexture2D;
 class UWidget;
@@ -34,7 +35,7 @@ class ODIROSIM_API UBaseButtonWidget : public UCommonButtonBase
 	GENERATED_BODY()
 
 public:
-	// Creates preview defaults for standalone editor rendering.
+	// Creates the transparent CommonUI shell used by WBP-owned visuals.
 	UBaseButtonWidget(const FObjectInitializer& objectInitializer = FObjectInitializer::Get());
 
 	// Resolves the configured base tokens, falling back to the project default asset or built-in defaults.
@@ -72,6 +73,22 @@ public:
 	// Returns the optional icon texture.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
 	UTexture2D* GetIcon() const { return Icon; }
+
+	// Updates the fallback glyph shown only when no icon image resource exists.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Button")
+	void SetIconGlyphText(FText inIconGlyphText);
+
+	// Returns the fallback glyph text.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
+	FText GetIconGlyphText() const { return IconGlyphText; }
+
+	// Updates the icon box and image size in pixels.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Button")
+	void SetIconSize(float inIconSize);
+
+	// Returns the icon box and image size in pixels.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
+	float GetIconSize() const { return IconSize; }
 
 	// Updates the non-primary visual variant.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Button")
@@ -142,14 +159,25 @@ public:
 	FBaseButtonWidgetEvent OnBaseReleased;
 
 protected:
+	// Feeds the rounded surface material its painted size each paint (capture-safe).
+	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
+
 	// Reasserts the internal transparent CommonUI style before CommonUI rebuilds Slate styles.
 	void UseTransparentCommonStyle();
 
 	// Keeps Details-panel edits aligned with WBP-owned controls.
 	virtual void SynchronizeProperties() override;
 
+	// Reapplies WBP-owned visual state after CommonUI rebuilds the widget tree.
+	virtual void OnWidgetRebuilt() override;
+
 	// Keeps preview and runtime visuals aligned with exposed properties.
 	virtual void NativePreConstruct() override;
+
+#if WITH_EDITOR
+	// Refreshes the designer preview immediately after Details-panel edits.
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& propertyChangedEvent) override;
+#endif
 
 	// Prevents editor-loaded template CommonUI styles from drawing outside the WBP root.
 	virtual void PostLoad() override;
@@ -187,8 +215,8 @@ protected:
 	// Returns the visual state after disabled, interaction, and selected overrides.
 	EBaseWidgetState GetEffectiveState() const;
 
-	// Shared base token catalog used by this component instance.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
+	// Optional token catalog override; empty uses the shared DA_BaseTokens asset.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Base Button", meta = (DisplayName = "Base Token Overrides", ExposeOnSpawn = "true"))
 	TSoftObjectPtr<UBaseWidgetTokenCatalog> BaseTokens;
 
 	// Button text.
@@ -198,6 +226,14 @@ protected:
 	// Optional icon texture shown before the label.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIcon", Setter = "SetIcon", BlueprintGetter = "GetIcon", BlueprintSetter = "SetIcon", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
 	TObjectPtr<UTexture2D> Icon;
+
+	// Optional fallback glyph shown only when no icon image resource is assigned.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIconGlyphText", Setter = "SetIconGlyphText", BlueprintGetter = "GetIconGlyphText", BlueprintSetter = "SetIconGlyphText", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
+	FText IconGlyphText;
+
+	// Icon box and image size in pixels.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetIconSize", Setter = "SetIconSize", BlueprintGetter = "GetIconSize", BlueprintSetter = "SetIconSize", Category = "UI|Base Button", meta = (DisplayName = "Icon Size (px)", ClampMin = "1.0", UIMin = "8.0", UIMax = "64.0", ExposeOnSpawn = "true"))
+	float IconSize = 24.0f;
 
 	// Forces the primary variant for the uncommon single-primary-action case.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "IsPrimary", Setter = "SetPrimary", BlueprintGetter = "IsPrimary", BlueprintSetter = "SetPrimary", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
@@ -242,6 +278,10 @@ protected:
 	// Icon visual owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UImage> IconImage;
+
+	// Explicit spacing widget between icon and label, preferred over hidden slot padding.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<USpacer> IconLabelSpacer;
 
 	// Fixed-size wrapper that prevents optional icon textures from changing button layout.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

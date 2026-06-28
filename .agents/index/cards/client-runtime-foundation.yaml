@@ -49,9 +49,9 @@ verify:
       - source control provider loads as Git LFS 2 when source-control config changes
   - when: UMG assets or BindWidget contracts change
     run:
-      - UmgMcp widget tree readback for touched assets
+      - UE_MCP_Bridge widget tree readback for touched assets
       - Blueprint compile/save for touched maps/widgets/data assets
-      - UmgMcp get_layout_data and check_widget_overlap for user-facing UMG layout/style mutations
+      - UE_MCP_Bridge get_layout_data and check_widget_overlap for user-facing UMG layout/style mutations
       - relevant PIE or runtime log check
 related:
   - client-platform-execution

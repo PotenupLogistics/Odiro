@@ -97,7 +97,7 @@ function Complete-Prerequisites {
         [object[]] $Issues,
         [switch] $AllowMissing,
         [string] $SuccessMessage = "Setup prerequisites OK.",
-        [string] $ErrorMessage = "Setup prerequisites are missing. Install the missing tools, or rerun setup with -AllowMissingPrerequisites to continue anyway."
+        [string] $ErrorMessage = "Setup prerequisites are missing. Install the missing tools."
     )
 
     if ($Issues.Count -eq 0) {
@@ -146,7 +146,7 @@ function Complete-Prerequisites {
     }
 
     if ($AllowMissing) {
-        Write-WarningMessage "Continuing because -AllowMissing was set."
+        Write-WarningMessage "Continuing with missing prerequisites allowed."
         return
     }
 

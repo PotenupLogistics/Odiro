@@ -79,6 +79,58 @@ namespace
 	const TCHAR* McpBoldFontPath =
 		TEXT("/Game/Fonts/Freesentation/Freesentation-7Bold_Font.Freesentation-7Bold_Font");
 
+	void McpSynchronizeWidgetBlueprintCompilerState(UWidgetBlueprint* WidgetBP)
+	{
+		if (!WidgetBP || !WidgetBP->WidgetTree)
+		{
+			return;
+		}
+
+		TArray<UWidget*> CurrentWidgets;
+		WidgetBP->WidgetTree->GetAllWidgets(CurrentWidgets);
+
+#if WITH_EDITORONLY_DATA
+		if (FArrayProperty* AllWidgetsProperty = FindFProperty<FArrayProperty>(WidgetBP->WidgetTree->GetClass(), TEXT("AllWidgets")))
+		{
+			if (FObjectPropertyBase* InnerObjectProperty = CastField<FObjectPropertyBase>(AllWidgetsProperty->Inner))
+			{
+				FScriptArrayHelper AllWidgetsHelper(
+					AllWidgetsProperty,
+					AllWidgetsProperty->ContainerPtrToValuePtr<void>(WidgetBP->WidgetTree));
+				AllWidgetsHelper.EmptyAndAddValues(CurrentWidgets.Num());
+				for (int32 Index = 0; Index < CurrentWidgets.Num(); ++Index)
+				{
+					InnerObjectProperty->SetObjectPropertyValue(AllWidgetsHelper.GetRawPtr(Index), CurrentWidgets[Index]);
+				}
+			}
+		}
+#endif
+
+		TSet<FName> CurrentWidgetNames;
+		for (UWidget* Widget : CurrentWidgets)
+		{
+			if (!Widget || Widget->GetFName().IsNone())
+			{
+				continue;
+			}
+
+			const FName WidgetName = Widget->GetFName();
+			CurrentWidgetNames.Add(WidgetName);
+			if (!WidgetBP->WidgetVariableNameToGuidMap.Contains(WidgetName))
+			{
+				WidgetBP->WidgetVariableNameToGuidMap.Add(WidgetName, FGuid::NewGuid());
+			}
+		}
+
+		for (auto It = WidgetBP->WidgetVariableNameToGuidMap.CreateIterator(); It; ++It)
+		{
+			if (!CurrentWidgetNames.Contains(It.Key()))
+			{
+				It.RemoveCurrent();
+			}
+		}
+	}
+
 	FLinearColor McpColorFromJson(const TSharedPtr<FJsonValue>& Value, const FLinearColor& Fallback = FLinearColor::White)
 	{
 		if (!Value.IsValid() || Value->IsNull())
@@ -229,6 +281,20 @@ namespace
 		return FontInfo;
 	}
 
+	template <typename StructType>
+	void McpSetStructPropertyValue(UObject* Object, const TCHAR* PropertyName, const StructType& Value)
+	{
+		if (!Object)
+		{
+			return;
+		}
+
+		if (FStructProperty* StructProperty = CastField<FStructProperty>(Object->GetClass()->FindPropertyByName(FName(PropertyName))))
+		{
+			StructProperty->CopyCompleteValue(StructProperty->ContainerPtrToValuePtr<void>(Object), &Value);
+		}
+	}
+
 	void McpApplyButtonStyle(UButton* Button, const TSharedPtr<FJsonObject>& StyleObj)
 	{
 		if (!Button || !StyleObj.IsValid())
@@ -241,7 +307,7 @@ namespace
 		const FLinearColor Pressed = McpColorFromJson(StyleObj->TryGetField(TEXT("pressed")), FLinearColor(0.18f, 0.18f, 0.18f, 1.0f));
 		const float Radius = StyleObj->HasField(TEXT("radius")) ? static_cast<float>(StyleObj->GetNumberField(TEXT("radius"))) : 4.0f;
 
-		FButtonStyle Style = Button->WidgetStyle;
+		FButtonStyle Style = Button->GetStyle();
 		Style.Normal = McpMakeBoxBrush(Normal, Radius);
 		Style.Hovered = McpMakeBoxBrush(Hovered, Radius);
 		Style.Pressed = McpMakeBoxBrush(Pressed, Radius);
@@ -315,12 +381,18 @@ namespace
 		const FLinearColor Text = McpColorFromJson(StyleObj->TryGetField(TEXT("text")), FLinearColor(0.86f, 0.86f, 0.86f, 1.0f));
 		const int32 FontSize = StyleObj->HasField(TEXT("fontSize")) ? static_cast<int32>(StyleObj->GetNumberField(TEXT("fontSize"))) : 13;
 
-		ComboBox->Font = McpMakeFont(FontSize, false);
-		ComboBox->ForegroundColor = FSlateColor(Text);
-		ComboBox->WidgetStyle.ComboButtonStyle.ButtonStyle.Normal = McpMakeBoxBrush(Background);
-		ComboBox->WidgetStyle.ComboButtonStyle.ButtonStyle.Hovered = McpMakeBoxBrush(Hover);
-		ComboBox->WidgetStyle.ComboButtonStyle.ButtonStyle.Pressed = McpMakeBoxBrush(Background * 0.85f);
-		ComboBox->ItemStyle.TextColor = FSlateColor(Text);
+		McpSetStructPropertyValue(ComboBox, TEXT("Font"), McpMakeFont(FontSize, false));
+		McpSetStructPropertyValue(ComboBox, TEXT("ForegroundColor"), FSlateColor(Text));
+
+		FComboBoxStyle WidgetStyle = ComboBox->GetWidgetStyle();
+		WidgetStyle.ComboButtonStyle.ButtonStyle.Normal = McpMakeBoxBrush(Background);
+		WidgetStyle.ComboButtonStyle.ButtonStyle.Hovered = McpMakeBoxBrush(Hover);
+		WidgetStyle.ComboButtonStyle.ButtonStyle.Pressed = McpMakeBoxBrush(Background * 0.85f);
+		ComboBox->SetWidgetStyle(WidgetStyle);
+
+		FTableRowStyle ItemStyle = ComboBox->GetItemStyle();
+		ItemStyle.TextColor = FSlateColor(Text);
+		ComboBox->SetItemStyle(ItemStyle);
 	}
 }
 
@@ -738,17 +810,21 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ApplyWidgetTreeSpec(const TSharedPtr<FJs
 		{
 			if (Widget)
 			{
+				WidgetBP->WidgetVariableNameToGuidMap.Remove(Widget->GetFName());
 				const FString RemovedName = FString::Printf(
-					TEXT("__McpRemoved_%s_%d"),
+					TEXT("__McpRemoved_%s_%d_%s"),
 					*Widget->GetName(),
-					RemovedWidgetIndex++);
+					RemovedWidgetIndex++,
+					*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+				WidgetBP->WidgetTree->RemoveWidget(Widget);
 				Widget->Rename(
 					*RemovedName,
-					WidgetBP->WidgetTree,
+					GetTransientPackage(),
 					REN_DontCreateRedirectors | REN_ForceNoResetLoaders | REN_NonTransactional);
-				WidgetBP->WidgetTree->RemoveWidget(Widget);
+				Widget->SetFlags(RF_Transient);
 			}
 		}
+		McpSynchronizeWidgetBlueprintCompilerState(WidgetBP);
 	}
 
 	int32 CreatedCount = 0;
@@ -1201,6 +1277,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ApplyWidgetTreeSpec(const TSharedPtr<FJs
 			Errors.Add(FString::Printf(TEXT("Failed to construct widget: %s"), *WidgetClassName));
 			return nullptr;
 		}
+		if (!WidgetName.IsEmpty() && !WidgetBP->WidgetVariableNameToGuidMap.Contains(Widget->GetFName()))
+		{
+			WidgetBP->WidgetVariableNameToGuidMap.Add(Widget->GetFName(), FGuid::NewGuid());
+		}
 		CreatedCount++;
 
 		UPanelSlot* Slot = nullptr;
@@ -1251,6 +1331,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ApplyWidgetTreeSpec(const TSharedPtr<FJs
 	}
 
 	WidgetBP->MarkPackageDirty();
+	McpSynchronizeWidgetBlueprintCompilerState(WidgetBP);
 	FCompilerResultsLog CompileLog;
 	FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::None, &CompileLog);
 	const bool bSave = OptionalBool(Params, TEXT("save"), true);
@@ -1599,13 +1680,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 		}
 	}
 
-	// UE 5.4 exposed this map; UE 5.5 removed it from UWidgetBlueprint.
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 4
 	if (!WidgetBP->WidgetVariableNameToGuidMap.Contains(NewWidget->GetFName()))
 	{
 		WidgetBP->WidgetVariableNameToGuidMap.Add(NewWidget->GetFName(), FGuid::NewGuid());
 	}
-#endif
 
 	// ── Save ──
 	WidgetBP->MarkPackageDirty();

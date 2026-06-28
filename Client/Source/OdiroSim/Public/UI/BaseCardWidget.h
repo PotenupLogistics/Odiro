@@ -14,9 +14,6 @@ class ODIROSIM_API UBaseCardWidget : public UBaseWidget
 	GENERATED_BODY()
 
 public:
-	// Creates preview defaults for standalone editor rendering.
-	UBaseCardWidget();
-
 	// Applies title, description, and surface state to bound WBP controls.
 	virtual void SynchronizeBaseProperties() override;
 
@@ -69,6 +66,9 @@ public:
 	bool IsDisabled() const { return bDisabled; }
 
 protected:
+	// Feeds the rounded surface material its painted size each paint (capture-safe).
+	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
+
 	// Card title text.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetLabel", Setter = "SetLabel", BlueprintGetter = "GetLabel", BlueprintSetter = "SetLabel", Category = "UI|Base Card", meta = (ExposeOnSpawn = "true"))
 	FText Label;

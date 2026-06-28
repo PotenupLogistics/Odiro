@@ -1,7 +1,6 @@
 # Checks Client Unreal Engine and Visual Studio prerequisites.
 param(
-    [switch] $AllowMissing,
-    [switch] $PassThru
+    [switch] $CheckOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -156,7 +155,7 @@ function Test-UnrealEnginePrerequisite {
                 -Detail "Client/OdiroSim.uproject EngineAssociation is '$engineAssociation'." `
                 -Reason "Client build, run preview, and editor development scripts resolve UE $RequiredUnrealEngineVersion tools from this project association." `
                 -Install "Install Unreal Engine $RequiredUnrealEngineVersion with Epic Games Launcher, then keep Client/OdiroSim.uproject EngineAssociation=$RequiredUnrealEngineVersion." `
-                -Verify ".\Client\Tools\CheckPrerequisites.ps1 -AllowMissing" `
+                -Verify ".\Client\Tools\CheckPrerequisites.ps1" `
                 -Docs $UnrealDocs
         )
     }
@@ -173,7 +172,7 @@ function Test-UnrealEnginePrerequisite {
                 -Detail $_.Exception.Message `
                 -Reason "Client build, run preview, and editor development scripts need UnrealEditor.exe and Engine\Build\BatchFiles\Build.bat." `
                 -Install "Install Unreal Engine $RequiredUnrealEngineVersion in Epic Games Launcher, or set UE_EDITOR_EXE / UE_ENGINE_DIR." `
-                -Verify ".\Client\Tools\CheckPrerequisites.ps1 -AllowMissing" `
+                -Verify ".\Client\Tools\CheckPrerequisites.ps1" `
                 -Docs $UnrealDocs
         )
     }
@@ -194,7 +193,7 @@ function Test-VisualStudioPrerequisite {
             -Reason "UE 5.7 Windows C++ builds need the VS 2022 toolchain; 17.14 is recommended for this repo." `
             -MissingItems ($RequiredVisualStudioItems | ForEach-Object { Format-VisualStudioItem -Item $_ }) `
             -Install (Get-VisualStudioInstallCommand -MissingItems $RequiredVisualStudioItems -VisualStudio $null) `
-            -Verify "Open a new shell, then run: .\Client\Tools\CheckPrerequisites.ps1 -AllowMissing" `
+            -Verify "Open a new shell, then run: .\Client\Tools\CheckPrerequisites.ps1" `
             -Docs $VisualStudioDocs
     }
     else {
@@ -207,7 +206,7 @@ function Test-VisualStudioPrerequisite {
                 -Detail "Installed Visual Studio version is $visualStudioVersion. UE 5.7 expects 17.8+; 17.14 is recommended." `
                 -Reason "UE 5.7 binary integration does not support older VS 2022 versions." `
                 -Install "Open Visual Studio Installer and update Visual Studio 2022 to $RecommendedVisualStudioVersion or later." `
-                -Verify "Open a new shell, then run: .\Client\Tools\CheckPrerequisites.ps1 -AllowMissing" `
+                -Verify "Open a new shell, then run: .\Client\Tools\CheckPrerequisites.ps1" `
                 -Docs $VisualStudioDocs
         }
 
@@ -225,7 +224,7 @@ function Test-VisualStudioPrerequisite {
                 -Reason "Client build/run/dev tasks target Windows Unreal C++ development, Visual Studio Unreal tooling, and Unreal test/debug integration." `
                 -MissingItems ($missingVisualStudioItems | ForEach-Object { Format-VisualStudioItem -Item $_ }) `
                 -Install (Get-VisualStudioInstallCommand -MissingItems $missingVisualStudioItems -VisualStudio $visualStudio) `
-                -Verify "Open a new shell, then run: .\Client\Tools\CheckPrerequisites.ps1 -AllowMissing" `
+                -Verify "Open a new shell, then run: .\Client\Tools\CheckPrerequisites.ps1" `
                 -Docs $VisualStudioDocs
         }
     }
@@ -245,7 +244,7 @@ function Test-VisualStudioPrerequisite {
             -Detail "Installed Windows SDK versions: $installedSdkVersions" `
             -Reason "Unreal Build Tool needs a Windows SDK when compiling the Win64 Client target." `
             -Install "Install Windows 10 SDK 10.0.19041.0+ or Windows 11 SDK from Visual Studio Installer." `
-            -Verify "Open a new shell, then run: .\Client\Tools\CheckPrerequisites.ps1 -AllowMissing" `
+            -Verify "Open a new shell, then run: .\Client\Tools\CheckPrerequisites.ps1" `
             -Docs $VisualStudioDocs
     }
     else {
@@ -261,12 +260,12 @@ $issues = @()
 $issues += @(Test-UnrealEnginePrerequisite)
 $issues += @(Test-VisualStudioPrerequisite)
 
-if ($PassThru) {
+if ($CheckOnly) {
     return $issues
 }
 
 Complete-Prerequisites `
     -Issues $issues `
-    -AllowMissing:$AllowMissing `
+    -AllowMissing `
     -SuccessMessage "Client prerequisites OK." `
-    -ErrorMessage "Client prerequisites are missing. Install the missing tools, or rerun Client setup with -AllowMissingPrerequisites to continue anyway."
+    -ErrorMessage "Client prerequisites are missing. Install the missing tools."

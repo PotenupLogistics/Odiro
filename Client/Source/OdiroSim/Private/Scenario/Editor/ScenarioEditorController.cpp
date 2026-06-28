@@ -317,6 +317,12 @@ void AScenarioEditorController::Tick(float deltaSeconds)
 		}
 		break;
 	case EScenarioEditorControllerMode::EditPlacement:
+		// RMB is also bound to camera capture, so keep placement cancel independent of Enhanced Input consumption.
+		if (WasInputKeyJustPressed(EKeys::RightMouseButton))
+		{
+			CancelPlacement();
+			break;
+		}
 		UpdatePlacementPreview();
 		break;
 	case EScenarioEditorControllerMode::EditRegionDraw:

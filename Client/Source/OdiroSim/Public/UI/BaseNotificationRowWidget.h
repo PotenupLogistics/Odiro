@@ -10,7 +10,4 @@ class ODIROSIM_API UBaseNotificationRowWidget : public UBaseListItemWidget
 {
 	GENERATED_BODY()
 
-public:
-	// Creates preview defaults for standalone editor rendering.
-	UBaseNotificationRowWidget();
 };

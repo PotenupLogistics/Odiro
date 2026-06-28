@@ -21,6 +21,21 @@
 
 namespace
 {
+	// Shared right inset that keeps detail blocks and field controls clear of the panel edge.
+	constexpr float SidebarBlockRightInset = 4.0f;
+
+	// Texture path for the expanded block toggle icon.
+	const TCHAR* SidebarBlockExpandedIconPath = TEXT("/Game/Widgets/Icon/icon_arrow_drop_down.icon_arrow_drop_down");
+
+	// Texture path for the collapsed block toggle icon.
+	const TCHAR* SidebarBlockCollapsedIconPath = TEXT("/Game/Widgets/Icon/icon_arrow_right.icon_arrow_right");
+
+	// Compact square footprint shared by header action icons.
+	constexpr float SidebarBlockActionIconSize = 16.0f;
+
+	// Square hit and hover footprint for block header action buttons.
+	constexpr float SidebarBlockActionButtonSize = 24.0f;
+
 	// Converts UI hex colors into Slate linear colors with a caller-controlled alpha.
 	FLinearColor MakeSidebarBlockColor(const TCHAR* hex, const float alpha = 1.0f)
 	{
@@ -107,12 +122,12 @@ namespace
 		style.ContentPadding = FMargin(
 			6.0f + static_cast<float>(clampedDepth * 2),
 			4.0f + static_cast<float>(clampedDepth),
-			0.0f,
+			SidebarBlockRightInset,
 			6.0f + static_cast<float>(clampedDepth));
 		style.BodyPadding = FMargin(
 			10.0f + static_cast<float>(clampedDepth * 4),
 			7.0f,
-			0.0f,
+			SidebarBlockRightInset,
 			3.0f + static_cast<float>(clampedDepth));
 		return style;
 	}
@@ -150,7 +165,7 @@ namespace
 		brush.DrawAs = ESlateBrushDrawType::Box;
 		brush.TintColor = FSlateColor(MakeSidebarBlockColor(hex, alpha));
 		brush.Margin = FMargin(0.0f);
-		brush.ImageSize = FVector2D(32.0f, 32.0f);
+		brush.ImageSize = FVector2D(SidebarBlockActionButtonSize, SidebarBlockActionButtonSize);
 		brush.OutlineSettings.Width = 0.0f;
 		brush.OutlineSettings.Color = FLinearColor::Transparent;
 		brush.OutlineSettings.CornerRadii = FVector4(4.0f, 4.0f, 4.0f, 4.0f);
@@ -162,17 +177,35 @@ namespace
 	FButtonStyle MakeSidebarActionButtonStyle()
 	{
 		FButtonStyle style;
-		style.SetNormal(MakeSidebarActionBrush(TEXT("1E1E1E")));
-		style.SetHovered(MakeSidebarActionBrush(TEXT("282828")));
-		style.SetPressed(MakeSidebarActionBrush(TEXT("151515")));
-		style.SetDisabled(MakeSidebarActionBrush(TEXT("1E1E1E"), 0.45f));
+		style.SetNormal(MakeSidebarActionBrush(TEXT("000000"), 0.0f));
+		style.SetHovered(MakeSidebarActionBrush(TEXT("3A3A3A"), 0.8f));
+		style.SetPressed(MakeSidebarActionBrush(TEXT("2F2F2F"), 0.9f));
+		style.SetDisabled(MakeSidebarActionBrush(TEXT("000000"), 0.0f));
 		style.SetNormalForeground(FSlateColor(MakeSidebarBlockColor(TEXT("F2F2F2"))));
 		style.SetHoveredForeground(FSlateColor(MakeSidebarBlockColor(TEXT("FFFFFF"))));
 		style.SetPressedForeground(FSlateColor(MakeSidebarBlockColor(TEXT("DDE8F2"))));
 		style.SetDisabledForeground(FSlateColor(MakeSidebarBlockColor(TEXT("878787"))));
-		style.SetNormalPadding(FMargin(6.0f, 2.0f));
-		style.SetPressedPadding(FMargin(6.0f, 2.0f));
 		return style;
+	}
+
+	// Loads a sidebar button icon from a fixed project content path.
+	UTexture2D* LoadSidebarBlockIconTexture(const TCHAR* texturePath)
+	{
+		return texturePath ? LoadObject<UTexture2D>(nullptr, texturePath) : nullptr;
+	}
+
+	// Applies the fixed sidebar icon texture while preserving a consistent footprint.
+	void ApplySidebarBlockIconBrush(UImage* image, UTexture2D* texture, const FLinearColor& tint)
+	{
+		if (!image || !texture)
+		{
+			return;
+		}
+
+		image->SetBrushFromTexture(texture, false);
+		image->SetDesiredSizeOverride(FVector2D(SidebarBlockActionIconSize, SidebarBlockActionIconSize));
+		image->SetColorAndOpacity(tint);
+		image->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	}
 }
 
@@ -363,6 +396,7 @@ bool UScenarioEditorSidebarBlockWidget::ShouldBroadcastSelectionForPointer(
 
 void UScenarioEditorSidebarBlockWidget::BindControls()
 {
+	EnsureToggleIcon();
 	if (ToggleButton)
 	{
 		ToggleButton->OnClicked.RemoveDynamic(
@@ -424,6 +458,42 @@ void UScenarioEditorSidebarBlockWidget::EnsureActionButtons()
 		RemoveActionButton->OnClicked.AddDynamic(
 			this,
 			&UScenarioEditorSidebarBlockWidget::HandleRemoveActionClicked);
+	}
+}
+
+void UScenarioEditorSidebarBlockWidget::EnsureToggleIcon()
+{
+	if (ToggleIconImage)
+	{
+		if (ToggleTextBlock)
+		{
+			ToggleTextBlock->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		return;
+	}
+
+	if (!ToggleButton)
+	{
+		return;
+	}
+
+	UTexture2D* expandedTexture = LoadSidebarBlockIconTexture(SidebarBlockExpandedIconPath);
+	UTexture2D* collapsedTexture = LoadSidebarBlockIconTexture(SidebarBlockCollapsedIconPath);
+	if (!expandedTexture && !collapsedTexture)
+	{
+		return;
+	}
+
+	ToggleIconImage = NewObject<UImage>(ToggleButton.Get());
+	if (!ToggleIconImage)
+	{
+		return;
+	}
+
+	ToggleButton->SetContent(ToggleIconImage.Get());
+	if (ToggleTextBlock)
+	{
+		ToggleTextBlock->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }
 
@@ -548,6 +618,31 @@ void UScenarioEditorSidebarBlockWidget::SetActionButtonState(
 	}
 }
 
+void UScenarioEditorSidebarBlockWidget::ApplyToggleButtonState() const
+{
+	if (ToggleButton)
+	{
+		ToggleButton->SetStyle(MakeSidebarActionButtonStyle());
+		ToggleButton->SetBackgroundColor(FLinearColor::White);
+		ToggleButton->SetColorAndOpacity(FLinearColor::White);
+	}
+	if (ToggleIconImage)
+	{
+		UTexture2D* texture = LoadSidebarBlockIconTexture(
+			bExpanded ? SidebarBlockExpandedIconPath : SidebarBlockCollapsedIconPath);
+		ApplySidebarBlockIconBrush(
+			ToggleIconImage.Get(),
+			texture,
+			bSelected
+				? MakeSidebarBlockColor(TEXT("D6ECFF"))
+				: MakeSidebarBlockColor(TEXT("9A9A9A")));
+	}
+	if (ToggleTextBlock)
+	{
+		ToggleTextBlock->SetVisibility(ToggleIconImage ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
+}
+
 void UScenarioEditorSidebarBlockWidget::ApplyAssetHeaderSummaryState()
 {
 	const bool bShowAssetHeader = bAssetHeaderSummaryVisible && AssetHeaderContainer;
@@ -626,12 +721,6 @@ void UScenarioEditorSidebarBlockWidget::ApplyVisualStyle()
 	const FSidebarBlockSurfaceStyle surfaceStyle =
 		ResolveSidebarSurfaceStyle(blockDepth, bSelected, bShowNormalOutline);
 	FSidebarBlockSurfaceStyle resolvedSurfaceStyle = surfaceStyle;
-	if (bFocusedDetailLayout)
-	{
-		resolvedSurfaceStyle.OutlinePadding = FMargin(0.0f);
-		resolvedSurfaceStyle.ContentPadding.Left = 0.0f;
-		resolvedSurfaceStyle.BodyPadding.Left = 0.0f;
-	}
 	if (bDetailHostLayout)
 	{
 		resolvedSurfaceStyle.OutlineColor = FLinearColor::Transparent;
@@ -723,6 +812,7 @@ void UScenarioEditorSidebarBlockWidget::ApplyVisualStyle()
 
 void UScenarioEditorSidebarBlockWidget::RefreshBlock()
 {
+	EnsureToggleIcon();
 	EnsureAssetHeaderSummary();
 	EnsureActionButtons();
 
@@ -738,6 +828,7 @@ void UScenarioEditorSidebarBlockWidget::RefreshBlock()
 	SetActionButtonState(AddActionButton.Get(), AddActionTextBlock.Get(), bAddActionVisible && !bDetailHostLayout, TEXT("+"));
 	SetActionButtonState(RemoveActionButton.Get(), RemoveActionTextBlock.Get(), bRemoveActionVisible && !bDetailHostLayout, TEXT("-"));
 	ApplyVisualStyle();
+	ApplyToggleButtonState();
 	ApplyAssetHeaderSummaryState();
 
 	if (SelectedStateWidget)

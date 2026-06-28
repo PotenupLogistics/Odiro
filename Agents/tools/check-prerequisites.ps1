@@ -1,7 +1,6 @@
 # Checks uv availability for Agents Python dependency management.
 param(
-    [switch] $AllowMissing,
-    [switch] $PassThru
+    [switch] $CheckOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -41,12 +40,12 @@ function Test-UvPrerequisite {
 
 $issues = @(Test-UvPrerequisite)
 
-if ($PassThru) {
+if ($CheckOnly) {
     return $issues
 }
 
 Complete-Prerequisites `
     -Issues $issues `
-    -AllowMissing:$AllowMissing `
+    -AllowMissing `
     -SuccessMessage "Agents prerequisites OK." `
-    -ErrorMessage "Agents prerequisites are missing. Install the missing tools, or rerun Agents setup with -AllowMissingPrerequisites to continue anyway."
+    -ErrorMessage "Agents prerequisites are missing. Install the missing tools."

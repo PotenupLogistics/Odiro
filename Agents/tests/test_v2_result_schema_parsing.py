@@ -50,6 +50,31 @@ def _episode_metrics(*, episode_id: str, failure_type: str | None = None, timeou
     )
 
 
+def _write_summary_row(project: Path, *, terminal_reason: str, metrics: dict[str, int]) -> None:
+    """Write the summary row used by public success and count calculations."""
+    run_dir = project / "runs" / "000001"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps(
+            {
+                "schema": "run_summary",
+                "version": 1,
+                "run": {"run_id": "000001", "project_id": project.name},
+                "rows": [
+                    {
+                        "episode_id": "000001",
+                        "outcome": "Failure",
+                        "terminal_reason": terminal_reason,
+                        "duration_s": 10.0,
+                        "metrics": metrics,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_latest_result_summary_metrics_and_pascal_case_events_are_normalized() -> None:
     """Latest result.json fields and PascalCase events normalize to metrics."""
     metrics = EpisodeMetricExtractor().extract(
@@ -191,6 +216,11 @@ def test_latest_result_schema_drives_environment_review_finding(tmp_path: Path) 
         ),
         encoding="utf-8",
     )
+    _write_summary_row(
+        project,
+        terminal_reason="StaticObstacleCollision",
+        metrics={"goal_reached": 0, "static_obstacle_collision_count": 1},
+    )
 
     response = TestClient(app).post(
         "/api/v2/analysis/run",
@@ -234,6 +264,16 @@ def test_environment_review_summary_uses_environment_message_when_penalty_also_e
             }
         ),
         encoding="utf-8",
+    )
+    _write_summary_row(
+        project,
+        terminal_reason="StaticObstacleCollision",
+        metrics={
+            "goal_reached": 0,
+            "static_obstacle_collision_count": 74,
+            "pedestrian_collision_count": 104,
+            "penalty_region_violation_count": 1,
+        },
     )
 
     response = TestClient(app).post(

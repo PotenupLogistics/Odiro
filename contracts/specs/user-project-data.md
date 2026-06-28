@@ -891,23 +891,32 @@ image/data 파일
 경로:
 
 ```text
-runs/<RunId>/review/
-runs/<RunId>/review/analysis_run_response_v2.json
+runs/<RunId>/review/<ReviewId>/
 ```
 
-schema:
+생성 파일:
 
-```json
-"analysis_run_response_v2"
+```text
+status.json
+request.json
+report.json
+recommendations.json
+manifest.json
+policy/        # policy_review일 때만
+scenario.json  # environment_review일 때만
 ```
 
 규칙:
 
-- AI 분석 결과물
-- `/api/v2/analysis/run` 응답과 같은 JSON을 `analysis_run_response_v2.json`에 저장
-- 분석 근거는 `project_id`, `run_id`, `episode_id` 증거로 추적 가능
+- Agents `/api/v2/analysis/run`이 생성하는 review 결과물
+- review id는 같은 run 안에서 `0001`, `0002`처럼 증가하며 기존 review를 덮어쓰지 않음
+- public API 응답과 저장 파일은 구조가 다름
+- public API 응답은 `run_overview`, `episodes`, `summary`, `metrics`, `insights`, `patterns`, `recommendations`, `warnings`를 UI 표시용으로 제공
+- public API 응답에는 `analysis_text`, `analysis_mode`, `modified_policy_json`, `modified_environment_json`, `recommendations[].id`, `recommendations[].proposed_change`를 넣지 않음
+- `report.json`은 상세 `insights`, `findings`, `evidence`, `patterns`, `data_coverage`를 저장
+- `recommendations.json`은 상세 추천 `id`, `proposed_change`, `modified_policy_json`, `modified_environment_json`, 후보 artifact 상태를 저장
+- public `run_overview`, `episodes`, 성공률, 성공/실패 표시, 충돌 수는 `summary.json rows[]`와 UE dashboard 성공 판정 기준으로 계산
 - 근거 대상: `summary.json`, `result.json`, `events.jsonl`, `scenario_sample`
-- 추가 report/finding schema와 prompt 기록 방식은 추후 확정
 
 ## 행동 정책 패키지
 

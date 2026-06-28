@@ -23,8 +23,7 @@ class ResultAnalysisGraphStateV2(TypedDict, total=False):
     analysis_context: dict[str, Any]
     llm_analysis: dict[str, Any]
     recommendations: list[dict[str, Any]]
-    modified_policy_json: list[dict[str, Any]]
-    modified_environment_json: list[dict[str, Any]]
+    detailed_recommendations: list[dict[str, Any]]
     validation_errors: list[str]
     response: Any
     warnings: list[str]

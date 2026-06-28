@@ -127,13 +127,18 @@ v2 scenario generation은 실행 샘플 생성 API가 아니므로 아래 필드
 
 * `review_id`
 * `run_id`
-* `analysis_mode`
+* `run_overview`
+* `episodes`
+* `analysis_scope`
 * `summary`
 * `metrics`
 * `recommendation_type`
+* `insights`
+* `patterns`
 * `recommendations`
-* `analysis_text`
 * `warnings`
+
+public 응답에는 `analysis_text`, `analysis_mode`, `modified_policy_json`, `modified_environment_json`, `recommendations[].id`, `recommendations[].proposed_change`를 포함하지 않습니다. 상세 추천 id, 구조화된 수정 후보, 정책/환경 후보 payload는 `review/<review_id>/recommendations.json`에 저장합니다.
 
 `terminal_reason: SetupFailed`는 추천 유형 enum을 추가하지 않고 내부 `setup_failed` finding으로 분류합니다. setup-only Run 또는 SetupFailed와 성공 episode만 있는 Run은 임시 호환 처리로 `recommendation_type="none"`을 반환하지만, 일반 `none/no_change_needed`와 달리 `summary.overall_judgement="change_recommended"`로 표시하고 scenario, prop, catalog, asset, 환경 설정 점검을 안내합니다. SetupFailed episode는 episode/failure 집계와 review report에는 남기되 정책 판단과 후보 artifact 생성에는 사용하지 않습니다.
 
@@ -171,20 +176,22 @@ V2_AGENT_LLM_MAX_REPAIR_ATTEMPTS=1
 
 ## 추천 없음 규칙
 
-추천할 근거가 없거나 데이터가 부족하면 아래 배열은 항상 빈 배열입니다.
+추천할 근거가 없거나 데이터가 부족하면 public 표시 배열은 빈 배열입니다.
 
 ```json
 {
-  "recommendations": [],
-  "modified_policy_json": [],
-  "modified_environment_json": []
+  "insights": [],
+  "patterns": [],
+  "recommendations": []
 }
 ```
+
+`modified_policy_json`과 `modified_environment_json`은 public 응답 필드가 아니며, 후보 payload가 있을 때 `recommendations.json`에만 저장합니다.
 
 ## 현재 MVP 한계
 
 * `scenario` schema는 최종 Unreal 계약 확정 전까지 최소 구조 검증만 수행합니다.
 * 이미지 파일은 path, size, modified time 같은 metadata만 기록합니다.
 * timeline builder와 RAG query builder 결과는 내부 analysis context에 포함되며, 현재 final response schema에는 새 field를 추가하지 않습니다.
-* LLM mode는 optional이며, 기본 테스트는 fake/mock client 또는 disabled mode로 외부 API key 없이 통과해야 합니다.
+* LLM mode는 optional internal graph state이며 public analysis 응답에는 `analysis_mode`를 노출하지 않습니다. 기본 테스트는 fake/mock client 또는 disabled mode로 외부 API key 없이 통과해야 합니다.
 * provider별 attempt log와 representative failed episode timeline 요약은 후속 보강 대상입니다.

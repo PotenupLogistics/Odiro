@@ -22,6 +22,7 @@ def _write_blocked_episode(experiments, episode_id: str) -> None:
         '{"event_type": "blocked_region_violation", "time_s": 6.4}\n',
         encoding="utf-8",
     )
+    _upsert_summary_row(experiments / "Experiment1" / "runs" / "000001", episode_id, blocked=True)
 
 
 def _write_project_blocked_episode(project, episode_id: str) -> None:
@@ -35,12 +36,56 @@ def _write_project_blocked_episode(project, episode_id: str) -> None:
         '{"event_type": "blocked_region_violation", "time_s": 6.4}\n',
         encoding="utf-8",
     )
+    _upsert_summary_row(project / "runs" / "000001", episode_id, blocked=True)
 
 
 def _write_project_summary(project, summary: dict) -> None:
     run_dir = project / "runs" / "000001"
-    run_dir.mkdir(parents=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+
+
+def _write_project_summary_rows(project, rows: list[dict]) -> None:
+    """Create a run summary with dashboard rows."""
+    _write_project_summary(
+        project,
+        {
+            "schema": "run_summary",
+            "version": 1,
+            "run": {"run_id": "000001", "project_id": project.name},
+            "rows": rows,
+        },
+    )
+
+
+def _upsert_summary_row(run_dir, episode_id: str, *, blocked: bool) -> None:
+    """Keep graph runner fixtures paired with public summary rows."""
+    summary_path = run_dir / "summary.json"
+    if summary_path.is_file():
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    else:
+        summary = {
+            "schema": "run_summary",
+            "version": 1,
+            "run": {"run_id": "000001", "project_id": run_dir.parent.parent.name},
+            "rows": [],
+        }
+    row = {
+        "episode_id": episode_id,
+        "outcome": "Failure" if blocked else "Success",
+        "terminal_reason": "BlockedRegionViolation" if blocked else "GoalReached",
+        "duration_s": 6.4,
+        "metrics": {
+            "goal_reached": 0 if blocked else 1,
+            "blocked_region_violation_count": 1 if blocked else 0,
+            "blocked_region_collision_count": 1 if blocked else 0,
+        },
+    }
+    summary["rows"] = [item for item in summary.get("rows", []) if item.get("episode_id") != episode_id]
+    summary["rows"].append(row)
+    summary["rows"].sort(key=lambda item: str(item.get("episode_id", "")))
+    run_dir.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
 
 
 @pytest.fixture(autouse=True)
@@ -73,7 +118,7 @@ def test_graph_runner_generates_recommendations_for_repeated_blocked_region(tmp_
     assert response.summary.overall_judgement == "change_recommended"
     assert response.patterns[0]["type"] == "blocked_region_violation_repeated"
     assert response.recommendations[0]["target"] == "policy"
-    assert response.analysis_mode == "rule_based"
+    assert "analysis_mode" not in response.model_dump(by_alias=True)
 
 
 def test_graph_runner_exposes_node_state_without_response_schema_changes(tmp_path) -> None:
@@ -119,7 +164,7 @@ def test_analysis_api_uses_graph_runner_path(tmp_path) -> None:
     payload = response.json()
     assert payload["schema"] == "analysis_run_response_v2"
     assert payload["summary"]["overall_judgement"] == "change_recommended"
-    assert payload["analysis_mode"] == "rule_based"
+    assert "analysis_mode" not in payload
 
 
 def test_analysis_api_falls_back_when_openai_fails_without_ollama_attempt(monkeypatch, tmp_path) -> None:
@@ -143,7 +188,7 @@ def test_analysis_api_falls_back_when_openai_fails_without_ollama_attempt(monkey
     payload = response.json()
     assert providers == ["openai"]
     assert payload["schema"] == "analysis_run_response_v2"
-    assert payload["analysis_mode"] == "fallback"
+    assert "analysis_mode" not in payload
     assert payload["summary"]["overall_judgement"] == "change_recommended"
     assert payload["recommendations"]
     assert any("rule-based recommendation fallback" in warning for warning in payload["warnings"])
@@ -170,7 +215,7 @@ def test_analysis_api_falls_back_when_ollama_provider_fails(monkeypatch, tmp_pat
     payload = response.json()
     assert providers == ["ollama"]
     assert payload["schema"] == "analysis_run_response_v2"
-    assert payload["analysis_mode"] == "fallback"
+    assert "analysis_mode" not in payload
     assert payload["summary"]["overall_judgement"] == "change_recommended"
     assert payload["recommendations"]
     assert any("rule-based recommendation fallback" in warning for warning in payload["warnings"])
@@ -178,7 +223,25 @@ def test_analysis_api_falls_back_when_ollama_provider_fails(monkeypatch, tmp_pat
 
 def test_analysis_api_uses_summary_without_episode_results(tmp_path) -> None:
     project = tmp_path / "Project1"
-    _write_project_summary(project, {"episode_count": 2, "success_count": 1, "failure_count": 1})
+    _write_project_summary_rows(
+        project,
+        [
+            {
+                "episode_id": "000001",
+                "outcome": "Success",
+                "terminal_reason": "GoalReached",
+                "duration_s": 10.0,
+                "metrics": {"goal_reached": 1},
+            },
+            {
+                "episode_id": "000002",
+                "outcome": "Failure",
+                "terminal_reason": "Timeout",
+                "duration_s": 10.0,
+                "metrics": {"goal_reached": 0},
+            },
+        ],
+    )
 
     response = TestClient(app).post("/api/v2/analysis/run", json={"project_path": str(project), "run_id": "000001"})
 

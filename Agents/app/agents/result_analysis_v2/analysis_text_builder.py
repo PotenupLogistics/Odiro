@@ -160,8 +160,9 @@ class AnalysisTextBuilder:
         elif "robot_tip_over" in finding_types:
             signals.append("로봇 전도")
         if not signals:
-            signals.append("정책 관련 검토 신호")
-        return f"분석 로그에 다음 항목이 나타났습니다: {', '.join(signals)}."
+            return "분석 로그에서 정책 관련 검토 신호가 확인되었습니다."
+        particle = "이" if signals[-1].endswith("미도달") else "가"
+        return f"분석 로그에서 {', '.join(signals)}{particle} 확인되었습니다."
 
     def _environment_evidence_text(
         self,

@@ -8,14 +8,10 @@ namespace
 	const FSoftObjectPath DefaultCorridorSurfaceCatalogPath(
 		TEXT("/Game/Data/Scenario/DA_ScenarioCorridorSurfaceCatalog.DA_ScenarioCorridorSurfaceCatalog"));
 	// Built-in fallback material paths used when the catalog asset is unavailable.
-	const FSoftObjectPath SidewalkCorridorMaterialPath(
+	const FSoftObjectPath WalkwayCorridorMaterialPath(
 		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorSidewalk.M_ScenarioCorridorSidewalk"));
-	const FSoftObjectPath GrassCorridorMaterialPath(
-		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorGrass.M_ScenarioCorridorGrass"));
 	const FSoftObjectPath RoadCorridorMaterialPath(
 		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorRoad.M_ScenarioCorridorRoad"));
-	const FSoftObjectPath WallCorridorMaterialPath(
-		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorWall.M_ScenarioCorridorWall"));
 	const FSoftObjectPath BuildingCorridorMaterialPath(
 		TEXT("/Game/Materials/Scenario/M_ScenarioCorridorBuilding.M_ScenarioCorridorBuilding"));
 
@@ -53,35 +49,15 @@ TArray<FScenarioCorridorSurfaceEntry> UScenarioCorridorSurfaceCatalog::MakeDefau
 {
 	return {
 		MakeCorridorSurfaceEntry(
-			TEXT("sidewalk"),
-			TEXT("Sidewalk"),
+			TEXT("walkway"),
+			TEXT("Walkway"),
 			EScenarioSampleLaneType::Walkable,
 			EScenarioGroundRegionType::Walkable,
 			1.0,
 			FString(),
 			0.0,
 			FString(),
-			SidewalkCorridorMaterialPath),
-		MakeCorridorSurfaceEntry(
-			TEXT("crosswalk_stripe"),
-			TEXT("Crosswalk Stripe"),
-			EScenarioSampleLaneType::Walkable,
-			EScenarioGroundRegionType::Walkable,
-			1.0,
-			FString(),
-			0.0,
-			FString(),
-			SidewalkCorridorMaterialPath),
-		MakeCorridorSurfaceEntry(
-			TEXT("grass"),
-			TEXT("Grass"),
-			EScenarioSampleLaneType::Penalty,
-			EScenarioGroundRegionType::Penalty,
-			0.5,
-			TEXT("grass"),
-			1.0,
-			FString(),
-			GrassCorridorMaterialPath),
+			WalkwayCorridorMaterialPath),
 		MakeCorridorSurfaceEntry(
 			TEXT("road"),
 			TEXT("Road"),
@@ -92,26 +68,6 @@ TArray<FScenarioCorridorSurfaceEntry> UScenarioCorridorSurfaceCatalog::MakeDefau
 			1.0,
 			FString(),
 			RoadCorridorMaterialPath),
-		MakeCorridorSurfaceEntry(
-			TEXT("driveway"),
-			TEXT("Driveway"),
-			EScenarioSampleLaneType::Penalty,
-			EScenarioGroundRegionType::Penalty,
-			0.45,
-			TEXT("driveway"),
-			1.0,
-			FString(),
-			RoadCorridorMaterialPath),
-		MakeCorridorSurfaceEntry(
-			TEXT("wall"),
-			TEXT("Wall"),
-			EScenarioSampleLaneType::Blocked,
-			EScenarioGroundRegionType::Blocked,
-			0.0,
-			FString(),
-			0.0,
-			TEXT("wall"),
-			WallCorridorMaterialPath),
 		MakeCorridorSurfaceEntry(
 			TEXT("building"),
 			TEXT("Building"),
@@ -157,11 +113,16 @@ bool UScenarioCorridorSurfaceCatalog::FindSurfaceEntryById(
 		return false;
 	}
 
+	FScenarioCorridorSurfaceEntry defaultEntry;
+	if (!FindDefaultSurfaceEntryById(surfaceId, defaultEntry))
+	{
+		return false;
+	}
+
 	for (const FScenarioCorridorSurfaceEntry& entry : Entries)
 	{
 		if (entry.SurfaceId == surfaceId)
 		{
-			FScenarioCorridorSurfaceEntry defaultEntry;
 			if (entry.bInheritBuiltInSemanticDefaults && FindDefaultSurfaceEntryById(surfaceId, defaultEntry))
 			{
 				outSurfaceEntry = defaultEntry;
@@ -181,5 +142,6 @@ bool UScenarioCorridorSurfaceCatalog::FindSurfaceEntryById(
 		}
 	}
 
-	return FindDefaultSurfaceEntryById(surfaceId, outSurfaceEntry);
+	outSurfaceEntry = defaultEntry;
+	return true;
 }

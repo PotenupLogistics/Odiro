@@ -65,7 +65,7 @@ public:
 	// Default project asset location for Corridor surface metadata.
 	static TSoftObjectPtr<UScenarioCorridorSurfaceCatalog> MakeDefaultCatalogReference();
 
-	// Built-in fallback entries matching Client/Docs/Data/environment-catalog.md.
+	// Built-in fallback entries matching Client/Json/environment-catalog.md.
 	static TArray<FScenarioCorridorSurfaceEntry> MakeDefaultEntries();
 
 	// Finds a built-in fallback surface entry by id.

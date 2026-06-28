@@ -79,7 +79,7 @@ namespace
 				TEXT("\"corridor\":{")
 				TEXT("\"axis\":{\"type\":\"polyline\",\"points_m\":[[0.0,0.0],[12.0,0.0]]},")
 				TEXT("\"walkway_width_m\":{\"min\":2.5,\"max\":4.0},")
-				TEXT("\"building_side\":[{\"surface\":\"wall\",\"width_m\":0.5}],")
+				TEXT("\"building_side\":[{\"surface\":\"building\",\"width_m\":0.5}],")
 				TEXT("\"curb_side\":[{\"surface\":\"road\",\"width_m\":4.0}],")
 				TEXT("\"segments\":[{\"id\":\"main\",\"type\":\"straight\",\"along_range_m\":[0.0,12.0]}]")
 				TEXT("},")

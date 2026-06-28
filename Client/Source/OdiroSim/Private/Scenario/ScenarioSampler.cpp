@@ -250,11 +250,11 @@ namespace
 		}
 
 		const FString Normalized = SurfaceId.ToLower();
-		if (Normalized.Contains(TEXT("building")) || Normalized.Contains(TEXT("wall")) || Normalized.Contains(TEXT("block")))
+		if (Normalized.Contains(TEXT("building")) || Normalized.Contains(TEXT("block")))
 		{
 			return EScenarioSampleLaneType::Blocked;
 		}
-		if (Normalized.Contains(TEXT("grass")) || Normalized.Contains(TEXT("road")) || Normalized.Contains(TEXT("curb")))
+		if (Normalized.Contains(TEXT("road")) || Normalized.Contains(TEXT("curb")))
 		{
 			return EScenarioSampleLaneType::Penalty;
 		}
@@ -385,7 +385,7 @@ namespace
 			WalkwayLane.OffsetRangeMeters.MaxMeters = HalfWalkwayWidthMeters;
 			WalkwayLane.SurfaceId = ScenarioSamplerResolveString(
 				Segment.ReplacedBySurfaceId,
-				TEXT("sidewalk"),
+				TEXT("walkway"),
 				FString::Printf(TEXT("corridor.segments.%s.replaced_by"), *Segment.SegmentId),
 				Seed,
 				Params);

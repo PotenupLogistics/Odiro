@@ -43,7 +43,7 @@ Numeric field는 고정값 또는 range를 쓸 수 있다.
 String field는 고정값 또는 choices를 쓸 수 있다.
 
 ```json
-"replaced_by": { "choices": ["grass", "road"] }
+"replaced_by": { "choices": ["walkway", "road"] }
 ```
 
 Range와 choices는 `runs/<RunId>/episodes/<EpisodeId>/scenario.json` 생성 시 seed로 확정된다.

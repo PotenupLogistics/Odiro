@@ -142,7 +142,7 @@ void AScenarioCorridorPreviewActor::ConfigureFromCorridor(const FScenarioTemplat
 	for (int32 segmentIndex = 0; segmentIndex < renderSegments.Num(); ++segmentIndex)
 	{
 		const FScenarioTemplateSegment& segment = renderSegments[segmentIndex];
-		const FString walkwaySurfaceId = ResolvePreviewString(segment.ReplacedBySurfaceId, TEXT("sidewalk"));
+		const FString walkwaySurfaceId = ResolvePreviewString(segment.ReplacedBySurfaceId, TEXT("walkway"));
 		AddOrMergePreviewVisualLane(
 			visualLaneSpecs,
 			FPreviewCorridorVisualLaneSpec{

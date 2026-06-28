@@ -10,6 +10,59 @@ namespace
 {
 	const double MetersToCentimeters = 100.0;
 	const double RobotEndpointInsetMeters = 1.0;
+	// Width of the generated walkable walkway band added on a building-facing side.
+	const double GeneratedCityWalkwayExtensionWidthMeters = 5.0;
+	// Width of the generated blocking curb band added on a road-facing side.
+	const double GeneratedCityCurbWidthMeters = 0.5;
+	// Width of the generated two-lane road band added on a road-facing side.
+	const double GeneratedCityTwoLaneRoadWidthMeters = 6.4;
+	// Depth of the generated blocked building footprint beyond the walkway extension.
+	const double GeneratedCityBuildingDepthMeters = 10.0;
+
+	// Side of the sampled walkway used when deriving generated city padding bands.
+	enum class EGeneratedCitySide : uint8
+	{
+		Lower,
+		Upper
+	};
+
+	// Axis segment clipped to a layout along range for rectangular GroundRegion generation.
+	struct FGeneratedCityAxisChunk
+	{
+		// World-space start point in meters.
+		FVector2D StartWorldMeters = FVector2D::ZeroVector;
+
+		// World-space end point in meters.
+		FVector2D EndWorldMeters = FVector2D::ZeroVector;
+
+		// Stable local index used to make deterministic region ids.
+		int32 ChunkIndex = 0;
+	};
+
+	// One generated GroundRegion band measured as an offset interval from the sampled route axis.
+	struct FGeneratedCityBandSpec
+	{
+		// Stable id fragment for generated runtime GroundRegions.
+		FString BandId;
+
+		// Surface catalog id used for material and semantic metadata.
+		FString SurfaceId;
+
+		// Runtime traversability class for this generated band.
+		EScenarioGroundRegionType RegionType = EScenarioGroundRegionType::Walkable;
+
+		// Offset interval in meters in the sampled corridor frame.
+		FScenarioOffsetRangeMeters OffsetRangeMeters;
+
+		// Collision tag applied to blocked generated bands.
+		FString CollisionTag;
+
+		// Penalty kind applied to penalty generated bands.
+		FString PenaltyKind;
+
+		// Penalty cost applied to penalty generated bands.
+		double PenaltyCost = 0.0;
+	};
 
 	struct FResolvedSamplePose
 	{
@@ -315,6 +368,418 @@ namespace
 			return 0.0;
 		default:
 			return 1.0;
+		}
+	}
+
+	// Returns the score used by generated GroundRegions before authored metrics exist for the padding.
+	double ToGeneratedCityTraversabilityScore(EScenarioGroundRegionType RegionType)
+	{
+		switch (RegionType)
+		{
+		case EScenarioGroundRegionType::Penalty:
+			return 0.5;
+		case EScenarioGroundRegionType::Blocked:
+			return 0.0;
+		case EScenarioGroundRegionType::Walkable:
+		default:
+			return 1.0;
+		}
+	}
+
+	// Sanitizes authored segment ids before using them inside generated region ids.
+	FString MakeGeneratedCityIdFragment(const FString& RawId)
+	{
+		FString IdFragment = RawId.IsEmpty() ? TEXT("segment") : RawId;
+		IdFragment.ReplaceInline(TEXT(" "), TEXT("_"));
+		IdFragment.ReplaceInline(TEXT("."), TEXT("_"));
+		IdFragment.ReplaceInline(TEXT("/"), TEXT("_"));
+		IdFragment.ReplaceInline(TEXT("\\"), TEXT("_"));
+		IdFragment.ReplaceInline(TEXT(":"), TEXT("_"));
+		return IdFragment;
+	}
+
+	// Builds route-axis chunks clipped to one layout entry's along range.
+	void BuildGeneratedCityAxisChunks(
+		const FScenarioSampleRouteAxis& Axis,
+		const FScenarioAlongRangeMeters& AlongRangeMeters,
+		TArray<FGeneratedCityAxisChunk>& OutChunks)
+	{
+		OutChunks.Reset();
+		if (Axis.PointsMeters.Num() < 2)
+		{
+			return;
+		}
+
+		const double ClampedStartMeters = FMath::Max(0.0, FMath::Min(AlongRangeMeters.StartMeters, AlongRangeMeters.EndMeters));
+		const double ClampedEndMeters = FMath::Max(0.0, FMath::Max(AlongRangeMeters.StartMeters, AlongRangeMeters.EndMeters));
+		if (ClampedEndMeters <= ClampedStartMeters + KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
+
+		double SegmentStartAlongMeters = 0.0;
+		for (int32 Index = 0; Index < Axis.PointsMeters.Num() - 1; ++Index)
+		{
+			const FVector2D SegmentStart = Axis.PointsMeters[Index];
+			const FVector2D SegmentEnd = Axis.PointsMeters[Index + 1];
+			const FVector2D SegmentVector = SegmentEnd - SegmentStart;
+			const double SegmentLengthMeters = SegmentVector.Size();
+			if (SegmentLengthMeters <= KINDA_SMALL_NUMBER)
+			{
+				continue;
+			}
+
+			const double SegmentEndAlongMeters = SegmentStartAlongMeters + SegmentLengthMeters;
+			const double ChunkStartAlongMeters = FMath::Max(ClampedStartMeters, SegmentStartAlongMeters);
+			const double ChunkEndAlongMeters = FMath::Min(ClampedEndMeters, SegmentEndAlongMeters);
+			if (ChunkEndAlongMeters > ChunkStartAlongMeters + KINDA_SMALL_NUMBER)
+			{
+				const FVector2D LocalDirection = SegmentVector / SegmentLengthMeters;
+				const FVector2D LocalStart = SegmentStart + (LocalDirection * (ChunkStartAlongMeters - SegmentStartAlongMeters));
+				const FVector2D LocalEnd = SegmentStart + (LocalDirection * (ChunkEndAlongMeters - SegmentStartAlongMeters));
+
+				FGeneratedCityAxisChunk Chunk;
+				Chunk.StartWorldMeters = Axis.OriginXYMeters + RotateSamplePoint(LocalStart, Axis.HeadingDegrees);
+				Chunk.EndWorldMeters = Axis.OriginXYMeters + RotateSamplePoint(LocalEnd, Axis.HeadingDegrees);
+				Chunk.ChunkIndex = OutChunks.Num();
+				OutChunks.Add(Chunk);
+			}
+
+			SegmentStartAlongMeters = SegmentEndAlongMeters;
+			if (SegmentStartAlongMeters >= ClampedEndMeters)
+			{
+				break;
+			}
+		}
+	}
+
+	// Resolves the walkway lane offset bounds used as anchors for generated city padding.
+	bool TryResolveWalkwayOffsetRange(
+		const FScenarioSampleLayoutEntry& LayoutEntry,
+		FScenarioOffsetRangeMeters& OutOffsetRangeMeters)
+	{
+		const FScenarioSampleLayoutLane* WalkwayLane = LayoutEntry.Lanes.FindByPredicate(
+			[](const FScenarioSampleLayoutLane& Lane)
+			{
+				return Lane.LaneId.Equals(TEXT("walkway"), ESearchCase::IgnoreCase);
+			});
+		if (!WalkwayLane)
+		{
+			return false;
+		}
+
+		OutOffsetRangeMeters = WalkwayLane->OffsetRangeMeters;
+		return OutOffsetRangeMeters.MaxMeters > OutOffsetRangeMeters.MinMeters + KINDA_SMALL_NUMBER;
+	}
+
+	// Determines whether a sampled lane is on the negative or positive side of the walkway axis.
+	bool TryResolveGeneratedCitySide(
+		const FScenarioSampleLayoutLane& Lane,
+		EGeneratedCitySide& OutSide)
+	{
+		if (Lane.OffsetRangeMeters.MaxMeters <= 0.0)
+		{
+			OutSide = EGeneratedCitySide::Lower;
+			return true;
+		}
+
+		if (Lane.OffsetRangeMeters.MinMeters >= 0.0)
+		{
+			OutSide = EGeneratedCitySide::Upper;
+			return true;
+		}
+
+		const double CenterOffsetMeters =
+			(Lane.OffsetRangeMeters.MinMeters + Lane.OffsetRangeMeters.MaxMeters) * 0.5;
+		if (CenterOffsetMeters < -KINDA_SMALL_NUMBER)
+		{
+			OutSide = EGeneratedCitySide::Lower;
+			return true;
+		}
+
+		if (CenterOffsetMeters > KINDA_SMALL_NUMBER)
+		{
+			OutSide = EGeneratedCitySide::Upper;
+			return true;
+		}
+
+		return false;
+	}
+
+	// Detects side lanes that should seed building-front generated padding.
+	bool IsGeneratedCityBuildingSideLane(const FScenarioSampleLayoutLane& Lane)
+	{
+		return Lane.SurfaceId.Equals(TEXT("building"), ESearchCase::IgnoreCase)
+			|| Lane.LaneId.StartsWith(TEXT("building"), ESearchCase::IgnoreCase);
+	}
+
+	// Detects side lanes that should seed road generated padding.
+	bool IsGeneratedCityRoadSideLane(const FScenarioSampleLayoutLane& Lane)
+	{
+		return Lane.SurfaceId.Equals(TEXT("road"), ESearchCase::IgnoreCase);
+	}
+
+	// Scans one layout entry for semantic sides that should receive generated city padding.
+	void ResolveGeneratedCitySideFlags(
+		const FScenarioSampleLayoutEntry& LayoutEntry,
+		bool& bOutLowerBuildingSide,
+		bool& bOutUpperBuildingSide,
+		bool& bOutLowerRoadSide,
+		bool& bOutUpperRoadSide)
+	{
+		bOutLowerBuildingSide = false;
+		bOutUpperBuildingSide = false;
+		bOutLowerRoadSide = false;
+		bOutUpperRoadSide = false;
+
+		for (const FScenarioSampleLayoutLane& Lane : LayoutEntry.Lanes)
+		{
+			EGeneratedCitySide Side = EGeneratedCitySide::Upper;
+			if (!TryResolveGeneratedCitySide(Lane, Side))
+			{
+				continue;
+			}
+
+			if (IsGeneratedCityBuildingSideLane(Lane))
+			{
+				if (Side == EGeneratedCitySide::Lower)
+				{
+					bOutLowerBuildingSide = true;
+				}
+				else
+				{
+					bOutUpperBuildingSide = true;
+				}
+			}
+
+			if (IsGeneratedCityRoadSideLane(Lane))
+			{
+				if (Side == EGeneratedCitySide::Lower)
+				{
+					bOutLowerRoadSide = true;
+				}
+				else
+				{
+					bOutUpperRoadSide = true;
+				}
+			}
+		}
+	}
+
+	// Appends one generated GroundRegion band for every straight axis chunk in the layout range.
+	void AddGeneratedCityBandGroundRegions(
+		const FScenarioSampleRouteAxis& Axis,
+		const FScenarioSampleLayoutEntry& LayoutEntry,
+		int32 LayoutIndex,
+		const FGeneratedCityBandSpec& BandSpec,
+		FScenarioWorldSpec& WorldSpec)
+	{
+		const double WidthMeters = BandSpec.OffsetRangeMeters.MaxMeters - BandSpec.OffsetRangeMeters.MinMeters;
+		if (WidthMeters <= KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
+
+		TArray<FGeneratedCityAxisChunk> Chunks;
+		BuildGeneratedCityAxisChunks(Axis, LayoutEntry.AlongRangeMeters, Chunks);
+		if (Chunks.IsEmpty())
+		{
+			return;
+		}
+
+		const double CenterOffsetMeters =
+			(BandSpec.OffsetRangeMeters.MinMeters + BandSpec.OffsetRangeMeters.MaxMeters) * 0.5;
+		const FString SegmentId = MakeGeneratedCityIdFragment(LayoutEntry.SegmentId);
+		for (const FGeneratedCityAxisChunk& Chunk : Chunks)
+		{
+			const FVector2D SegmentVectorMeters = Chunk.EndWorldMeters - Chunk.StartWorldMeters;
+			const double LengthMeters = SegmentVectorMeters.Size();
+			if (LengthMeters <= KINDA_SMALL_NUMBER)
+			{
+				continue;
+			}
+
+			const FVector2D Forward = SegmentVectorMeters / LengthMeters;
+			const FVector2D Right(-Forward.Y, Forward.X);
+			const FVector2D CenterMeters =
+				((Chunk.StartWorldMeters + Chunk.EndWorldMeters) * 0.5) + (Right * CenterOffsetMeters);
+
+			FScenarioGroundRegionSpec RegionSpec;
+			RegionSpec.RegionId = FString::Printf(
+				TEXT("generated_city_%s_%s_%02d_%02d"),
+				*SegmentId,
+				*BandSpec.BandId,
+				LayoutIndex,
+				Chunk.ChunkIndex);
+			RegionSpec.RegionType = BandSpec.RegionType;
+			RegionSpec.SurfaceId = BandSpec.SurfaceId;
+			RegionSpec.ShapeType = EScenarioGroundShapeType::Rectangle;
+			RegionSpec.Center = FVector(
+				CenterMeters.X * MetersToCentimeters,
+				CenterMeters.Y * MetersToCentimeters,
+				0.0);
+			RegionSpec.Size = FVector2D(
+				LengthMeters * MetersToCentimeters,
+				WidthMeters * MetersToCentimeters);
+			RegionSpec.YawDegrees = FMath::RadiansToDegrees(FMath::Atan2(Forward.Y, Forward.X));
+			RegionSpec.TraversabilityScore = ToGeneratedCityTraversabilityScore(BandSpec.RegionType);
+			RegionSpec.CollisionTag = BandSpec.CollisionTag;
+			RegionSpec.PenaltyKind = BandSpec.PenaltyKind;
+			RegionSpec.PenaltyCost = BandSpec.PenaltyCost;
+			WorldSpec.GroundRegions.Add(RegionSpec);
+		}
+	}
+
+	// Creates a generated walkable walkway band and blocked building footprint on one side of the walkway.
+	void AddGeneratedCityBuildingSideGroundRegions(
+		const FScenarioSampleRouteAxis& Axis,
+		const FScenarioSampleLayoutEntry& LayoutEntry,
+		int32 LayoutIndex,
+		EGeneratedCitySide Side,
+		const FScenarioOffsetRangeMeters& WalkwayOffsetRangeMeters,
+		FScenarioWorldSpec& WorldSpec)
+	{
+		const double WalkwayEdgeMeters = Side == EGeneratedCitySide::Lower
+			? WalkwayOffsetRangeMeters.MinMeters
+			: WalkwayOffsetRangeMeters.MaxMeters;
+		const double SideSign = Side == EGeneratedCitySide::Lower ? -1.0 : 1.0;
+
+		FGeneratedCityBandSpec WalkwayBand;
+		WalkwayBand.BandId = Side == EGeneratedCitySide::Lower
+			? TEXT("lower_walkway_extension")
+			: TEXT("upper_walkway_extension");
+		WalkwayBand.SurfaceId = TEXT("walkway");
+		WalkwayBand.RegionType = EScenarioGroundRegionType::Walkable;
+		WalkwayBand.OffsetRangeMeters.MinMeters =
+			FMath::Min(WalkwayEdgeMeters, WalkwayEdgeMeters + (SideSign * GeneratedCityWalkwayExtensionWidthMeters));
+		WalkwayBand.OffsetRangeMeters.MaxMeters =
+			FMath::Max(WalkwayEdgeMeters, WalkwayEdgeMeters + (SideSign * GeneratedCityWalkwayExtensionWidthMeters));
+		AddGeneratedCityBandGroundRegions(Axis, LayoutEntry, LayoutIndex, WalkwayBand, WorldSpec);
+
+		FGeneratedCityBandSpec BuildingBand;
+		BuildingBand.BandId = Side == EGeneratedCitySide::Lower
+			? TEXT("lower_building")
+			: TEXT("upper_building");
+		BuildingBand.SurfaceId = TEXT("building");
+		BuildingBand.RegionType = EScenarioGroundRegionType::Blocked;
+		BuildingBand.CollisionTag = TEXT("building");
+		const double BuildingNearEdgeMeters =
+			WalkwayEdgeMeters + (SideSign * GeneratedCityWalkwayExtensionWidthMeters);
+		const double BuildingFarEdgeMeters =
+			BuildingNearEdgeMeters + (SideSign * GeneratedCityBuildingDepthMeters);
+		BuildingBand.OffsetRangeMeters.MinMeters = FMath::Min(BuildingNearEdgeMeters, BuildingFarEdgeMeters);
+		BuildingBand.OffsetRangeMeters.MaxMeters = FMath::Max(BuildingNearEdgeMeters, BuildingFarEdgeMeters);
+		AddGeneratedCityBandGroundRegions(Axis, LayoutEntry, LayoutIndex, BuildingBand, WorldSpec);
+	}
+
+	// Creates a generated blocking curb band and penalty road band on one side of the walkway.
+	void AddGeneratedCityRoadSideGroundRegions(
+		const FScenarioSampleRouteAxis& Axis,
+		const FScenarioSampleLayoutEntry& LayoutEntry,
+		int32 LayoutIndex,
+		EGeneratedCitySide Side,
+		const FScenarioOffsetRangeMeters& WalkwayOffsetRangeMeters,
+		FScenarioWorldSpec& WorldSpec)
+	{
+		const double WalkwayEdgeMeters = Side == EGeneratedCitySide::Lower
+			? WalkwayOffsetRangeMeters.MinMeters
+			: WalkwayOffsetRangeMeters.MaxMeters;
+		const double SideSign = Side == EGeneratedCitySide::Lower ? -1.0 : 1.0;
+
+		FGeneratedCityBandSpec CurbBand;
+		CurbBand.BandId = Side == EGeneratedCitySide::Lower ? TEXT("lower_curb") : TEXT("upper_curb");
+		CurbBand.SurfaceId = TEXT("road");
+		CurbBand.RegionType = EScenarioGroundRegionType::Blocked;
+		CurbBand.CollisionTag = TEXT("curb");
+		CurbBand.OffsetRangeMeters.MinMeters =
+			FMath::Min(WalkwayEdgeMeters, WalkwayEdgeMeters + (SideSign * GeneratedCityCurbWidthMeters));
+		CurbBand.OffsetRangeMeters.MaxMeters =
+			FMath::Max(WalkwayEdgeMeters, WalkwayEdgeMeters + (SideSign * GeneratedCityCurbWidthMeters));
+		AddGeneratedCityBandGroundRegions(Axis, LayoutEntry, LayoutIndex, CurbBand, WorldSpec);
+
+		FGeneratedCityBandSpec RoadBand;
+		RoadBand.BandId = Side == EGeneratedCitySide::Lower ? TEXT("lower_road_2lane") : TEXT("upper_road_2lane");
+		RoadBand.SurfaceId = TEXT("road");
+		RoadBand.RegionType = EScenarioGroundRegionType::Penalty;
+		RoadBand.PenaltyKind = TEXT("road");
+		RoadBand.PenaltyCost = 1.0;
+		const double RoadNearEdgeMeters = WalkwayEdgeMeters + (SideSign * GeneratedCityCurbWidthMeters);
+		const double RoadFarEdgeMeters = RoadNearEdgeMeters + (SideSign * GeneratedCityTwoLaneRoadWidthMeters);
+		RoadBand.OffsetRangeMeters.MinMeters = FMath::Min(RoadNearEdgeMeters, RoadFarEdgeMeters);
+		RoadBand.OffsetRangeMeters.MaxMeters = FMath::Max(RoadNearEdgeMeters, RoadFarEdgeMeters);
+		AddGeneratedCityBandGroundRegions(Axis, LayoutEntry, LayoutIndex, RoadBand, WorldSpec);
+	}
+
+	// Adds deterministic semantic city padding around sampled Corridor surfaces without changing authored JSON.
+	void AddGeneratedCityGroundRegionsFromSample(
+		const FScenarioSampleSemantic& Semantic,
+		FScenarioWorldSpec& WorldSpec)
+	{
+		if (Semantic.RouteAxis.PointsMeters.Num() < 2)
+		{
+			return;
+		}
+
+		for (int32 LayoutIndex = 0; LayoutIndex < Semantic.Layout.Num(); ++LayoutIndex)
+		{
+			const FScenarioSampleLayoutEntry& LayoutEntry = Semantic.Layout[LayoutIndex];
+			FScenarioOffsetRangeMeters WalkwayOffsetRangeMeters;
+			if (!TryResolveWalkwayOffsetRange(LayoutEntry, WalkwayOffsetRangeMeters))
+			{
+				continue;
+			}
+
+			bool bLowerBuildingSide = false;
+			bool bUpperBuildingSide = false;
+			bool bLowerRoadSide = false;
+			bool bUpperRoadSide = false;
+			ResolveGeneratedCitySideFlags(
+				LayoutEntry,
+				bLowerBuildingSide,
+				bUpperBuildingSide,
+				bLowerRoadSide,
+				bUpperRoadSide);
+
+			if (bLowerBuildingSide)
+			{
+				AddGeneratedCityBuildingSideGroundRegions(
+					Semantic.RouteAxis,
+					LayoutEntry,
+					LayoutIndex,
+					EGeneratedCitySide::Lower,
+					WalkwayOffsetRangeMeters,
+					WorldSpec);
+			}
+			if (bUpperBuildingSide)
+			{
+				AddGeneratedCityBuildingSideGroundRegions(
+					Semantic.RouteAxis,
+					LayoutEntry,
+					LayoutIndex,
+					EGeneratedCitySide::Upper,
+					WalkwayOffsetRangeMeters,
+					WorldSpec);
+			}
+			if (bLowerRoadSide)
+			{
+				AddGeneratedCityRoadSideGroundRegions(
+					Semantic.RouteAxis,
+					LayoutEntry,
+					LayoutIndex,
+					EGeneratedCitySide::Lower,
+					WalkwayOffsetRangeMeters,
+					WorldSpec);
+			}
+			if (bUpperRoadSide)
+			{
+				AddGeneratedCityRoadSideGroundRegions(
+					Semantic.RouteAxis,
+					LayoutEntry,
+					LayoutIndex,
+					EGeneratedCitySide::Upper,
+					WalkwayOffsetRangeMeters,
+					WorldSpec);
+			}
 		}
 	}
 
@@ -742,6 +1207,7 @@ FScenarioCompileResult FScenarioSampleWorldSpecAdapter::CompileScenarioWorldSpec
 	FScenarioWorldSpec WorldSpec;
 	PopulateRunConfig(Document, Result, WorldSpec);
 	AddCorridorsFromSample(Document.Scenario.Semantic, Result, WorldSpec);
+	AddGeneratedCityGroundRegionsFromSample(Document.Scenario.Semantic, WorldSpec);
 	AddRobotFromSample(Document.Scenario.Semantic, Result, WorldSpec);
 	AddStaticObstaclesFromSample(Document.Scenario.Semantic, Result, WorldSpec);
 	AddPedestriansFromSample(Document.Scenario.Semantic, Result, WorldSpec);

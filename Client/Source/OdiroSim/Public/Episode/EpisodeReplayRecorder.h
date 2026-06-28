@@ -20,7 +20,7 @@ public:
 		FEpisodeReplayRobotFrame Frame,
 		TArray<FString>& OutDiagnostics);
 
-	// Writes replay.frames.bin and replay.meta.json for the buffered frames.
+	// Writes replay/replay.frames.bin and replay/replay.meta.json for the buffered frames.
 	bool Close(TArray<FString>& OutDiagnostics);
 
 	// Discards any buffered replay data without writing files.

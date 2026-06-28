@@ -43,8 +43,9 @@ bool FScenarioReplayBinaryRoundTripTest::RunTest(const FString& Parameters)
 {
 	const FString TestDirectory = MakeReplayTestDirectory();
 	IFileManager::Get().MakeDirectory(*TestDirectory, true);
-	const FString FramePath = FPaths::Combine(TestDirectory, TEXT("replay.frames.bin"));
-	const FString ManifestPath = FPaths::Combine(TestDirectory, TEXT("replay.meta.json"));
+	const FString ReplayDirectory = FPaths::Combine(TestDirectory, TEXT("replay"));
+	const FString FramePath = FPaths::Combine(ReplayDirectory, TEXT("replay.frames.bin"));
+	const FString ManifestPath = FPaths::Combine(ReplayDirectory, TEXT("replay.meta.json"));
 
 	TArray<FEpisodeReplayRobotFrame> Frames;
 	Frames.Add(MakeReplayTestFrame(0.0f, FVector(1.0, 2.0, 3.0), 4.0f));

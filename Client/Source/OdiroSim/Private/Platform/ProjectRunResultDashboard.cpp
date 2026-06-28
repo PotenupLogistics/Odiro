@@ -11,6 +11,9 @@ namespace
 	const TCHAR* MainReviewDirectoryName = TEXT("review");
 	const TCHAR* MainAnalysisResponseFileName = TEXT("analysis_run_response_v2.json");
 	const TCHAR* MainRecommendationsFileName = TEXT("recommendations.json");
+	const TCHAR* MainReplayDirectoryName = TEXT("replay");
+	const TCHAR* MainReplayManifestFileName = TEXT("replay.meta.json");
+	const TCHAR* MainReplayFrameFileName = TEXT("replay.frames.bin");
 	constexpr double MainInstantGoalDurationToleranceSeconds = 0.1;
 	constexpr double MainGoalDistanceToleranceMeters = 0.001;
 
@@ -219,6 +222,17 @@ namespace
 			EpisodeId));
 	}
 
+	bool HasReplayArtifactsInDirectory(const FString& ReplayDirectory)
+	{
+		if (ReplayDirectory.IsEmpty())
+		{
+			return false;
+		}
+
+		return FPaths::FileExists(FPaths::Combine(ReplayDirectory, MainReplayManifestFileName))
+			&& FPaths::FileExists(FPaths::Combine(ReplayDirectory, MainReplayFrameFileName));
+	}
+
 	bool HasEpisodeReplayArtifacts(const FString& EpisodeDirectory)
 	{
 		if (EpisodeDirectory.IsEmpty())
@@ -226,8 +240,8 @@ namespace
 			return false;
 		}
 
-		return FPaths::FileExists(FPaths::Combine(EpisodeDirectory, TEXT("replay.meta.json")))
-			&& FPaths::FileExists(FPaths::Combine(EpisodeDirectory, TEXT("replay.frames.bin")));
+		return HasReplayArtifactsInDirectory(FPaths::Combine(EpisodeDirectory, MainReplayDirectoryName))
+			|| HasReplayArtifactsInDirectory(EpisodeDirectory);
 	}
 
 	FString MakePreviewImagePath(const FString& RunDirectory, const FString& EpisodeId)

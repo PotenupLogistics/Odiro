@@ -181,6 +181,12 @@ void UProjectEpisodeReplayViewerWidget::NativeConstruct()
 		FullscreenTopDownCameraButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleTopDownCameraClicked);
 	}
 
+	if (FullscreenOrbitCameraButton)
+	{
+		FullscreenOrbitCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleOrbitCameraClicked);
+		FullscreenOrbitCameraButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleOrbitCameraClicked);
+	}
+
 	if (FullscreenFreeCameraButton)
 	{
 		FullscreenFreeCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFreeCameraClicked);
@@ -205,6 +211,12 @@ void UProjectEpisodeReplayViewerWidget::NativeConstruct()
 	{
 		FullscreenPointCloudToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked);
 		FullscreenPointCloudToggleButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked);
+	}
+
+	if (FullscreenRayToggleButton)
+	{
+		FullscreenRayToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenRayToggleClicked);
+		FullscreenRayToggleButton->OnClicked.AddDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenRayToggleClicked);
 	}
 
 	if (ExitFullscreenButton)
@@ -270,6 +282,11 @@ void UProjectEpisodeReplayViewerWidget::NativeDestruct()
 		FullscreenTopDownCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleTopDownCameraClicked);
 	}
 
+	if (FullscreenOrbitCameraButton)
+	{
+		FullscreenOrbitCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleOrbitCameraClicked);
+	}
+
 	if (FullscreenFreeCameraButton)
 	{
 		FullscreenFreeCameraButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFreeCameraClicked);
@@ -290,6 +307,11 @@ void UProjectEpisodeReplayViewerWidget::NativeDestruct()
 		FullscreenPointCloudToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked);
 	}
 
+	if (FullscreenRayToggleButton)
+	{
+		FullscreenRayToggleButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleFullscreenRayToggleClicked);
+	}
+
 	if (ExitFullscreenButton)
 	{
 		ExitFullscreenButton->OnClicked.RemoveDynamic(this, &UProjectEpisodeReplayViewerWidget::HandleExitFullscreenClicked);
@@ -307,12 +329,20 @@ void UProjectEpisodeReplayViewerWidget::NativeTick(
 	UpdateReplayTimelineUi();
 
 	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
-	if (!CanUseReplayCameraInput()
-		|| !ReplaySubsystem
-		|| ReplaySubsystem->GetReplayCameraMode() != EScenarioReplayCameraMode::Free)
+	if (!CanUseReplayCameraInput() || !ReplaySubsystem)
 	{
 		ClearReplayMovementInput();
 		ClearReplayLookInput();
+		return;
+	}
+
+	if (ReplaySubsystem->GetReplayCameraMode() != EScenarioReplayCameraMode::Free)
+	{
+		ClearReplayMovementInput();
+		if (ReplaySubsystem->GetReplayCameraMode() != EScenarioReplayCameraMode::Orbit)
+		{
+			ClearReplayLookInput();
+		}
 		return;
 	}
 
@@ -328,7 +358,7 @@ FReply UProjectEpisodeReplayViewerWidget::NativeOnMouseButtonDown(
 	RequestReplayInputFocus();
 
 	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton
-		&& CanUseFreeCameraLook())
+		&& CanUseReplayCameraLook())
 	{
 		bFreeCameraLookHeld = true;
 		return FReply::Handled();
@@ -354,11 +384,18 @@ FReply UProjectEpisodeReplayViewerWidget::NativeOnMouseMove(
 	const FGeometry& InGeometry,
 	const FPointerEvent& InMouseEvent)
 {
-	if (bFreeCameraLookHeld && CanUseFreeCameraLook())
+	if (bFreeCameraLookHeld && CanUseReplayCameraLook())
 	{
 		if (UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem())
 		{
-			ReplaySubsystem->AddFreeCameraLook(InMouseEvent.GetCursorDelta());
+			if (ReplaySubsystem->GetReplayCameraMode() == EScenarioReplayCameraMode::Orbit)
+			{
+				ReplaySubsystem->AddOrbitCameraLook(InMouseEvent.GetCursorDelta());
+			}
+			else
+			{
+				ReplaySubsystem->AddFreeCameraLook(InMouseEvent.GetCursorDelta());
+			}
 			return FReply::Handled();
 		}
 	}
@@ -380,44 +417,72 @@ FReply UProjectEpisodeReplayViewerWidget::NativeOnKeyDown(
 	const FKey Key = InKeyEvent.GetKey();
 	const EScenarioReplayCameraMode CameraMode =
 		ReplaySubsystem->GetReplayCameraMode();
+	const bool bFreeCameraMode = CameraMode == EScenarioReplayCameraMode::Free;
+	const bool bTopDownCameraMode = CameraMode == EScenarioReplayCameraMode::TopDown;
 
 	if (Key == EKeys::W)
 	{
-		bMoveForwardHeld = CameraMode == EScenarioReplayCameraMode::Free;
-		return FReply::Handled();
+		if (bFreeCameraMode)
+		{
+			bMoveForwardHeld = true;
+			return FReply::Handled();
+		}
+		return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 	}
 	if (Key == EKeys::S)
 	{
-		bMoveBackwardHeld = CameraMode == EScenarioReplayCameraMode::Free;
-		return FReply::Handled();
+		if (bFreeCameraMode)
+		{
+			bMoveBackwardHeld = true;
+			return FReply::Handled();
+		}
+		return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 	}
 	if (Key == EKeys::A)
 	{
-		bMoveLeftHeld = CameraMode == EScenarioReplayCameraMode::Free;
-		return FReply::Handled();
+		if (bFreeCameraMode)
+		{
+			bMoveLeftHeld = true;
+			return FReply::Handled();
+		}
+		return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 	}
 	if (Key == EKeys::D)
 	{
-		bMoveRightHeld = CameraMode == EScenarioReplayCameraMode::Free;
-		return FReply::Handled();
+		if (bFreeCameraMode)
+		{
+			bMoveRightHeld = true;
+			return FReply::Handled();
+		}
+		return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 	}
 	if (Key == EKeys::E)
 	{
-		bMoveUpHeld = CameraMode == EScenarioReplayCameraMode::Free;
-		if (CameraMode == EScenarioReplayCameraMode::TopDown)
+		if (bFreeCameraMode)
+		{
+			bMoveUpHeld = true;
+			return FReply::Handled();
+		}
+		if (bTopDownCameraMode)
 		{
 			ReplaySubsystem->AddTopDownZoom(1.0f);
+			return FReply::Handled();
 		}
-		return FReply::Handled();
+		return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 	}
 	if (Key == EKeys::Q)
 	{
-		bMoveDownHeld = CameraMode == EScenarioReplayCameraMode::Free;
-		if (CameraMode == EScenarioReplayCameraMode::TopDown)
+		if (bFreeCameraMode)
+		{
+			bMoveDownHeld = true;
+			return FReply::Handled();
+		}
+		if (bTopDownCameraMode)
 		{
 			ReplaySubsystem->AddTopDownZoom(-1.0f);
+			return FReply::Handled();
 		}
-		return FReply::Handled();
+		return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 	}
 
 	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
@@ -468,11 +533,19 @@ FReply UProjectEpisodeReplayViewerWidget::NativeOnMouseWheel(
 	const FPointerEvent& InMouseEvent)
 {
 	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
-	if (CanUseReplayCameraInput()
-		&& ReplaySubsystem
-		&& ReplaySubsystem->GetReplayCameraMode() == EScenarioReplayCameraMode::TopDown)
+	if (!CanUseReplayCameraInput() || !ReplaySubsystem)
+	{
+		return Super::NativeOnMouseWheel(InGeometry, InMouseEvent);
+	}
+
+	if (ReplaySubsystem->GetReplayCameraMode() == EScenarioReplayCameraMode::TopDown)
 	{
 		ReplaySubsystem->AddTopDownZoom(InMouseEvent.GetWheelDelta());
+		return FReply::Handled();
+	}
+	if (ReplaySubsystem->GetReplayCameraMode() == EScenarioReplayCameraMode::Orbit)
+	{
+		ReplaySubsystem->AddOrbitCameraZoom(InMouseEvent.GetWheelDelta());
 		return FReply::Handled();
 	}
 
@@ -591,8 +664,39 @@ void UProjectEpisodeReplayViewerWidget::HandleTopDownCameraClicked()
 	ApplyReplayCameraMode(EScenarioReplayCameraMode::TopDown);
 }
 
+void UProjectEpisodeReplayViewerWidget::HandleOrbitCameraClicked()
+{
+	ApplyReplayCameraMode(EScenarioReplayCameraMode::Orbit);
+}
+
 void UProjectEpisodeReplayViewerWidget::HandleFreeCameraClicked()
 {
+	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
+	if (!ReplaySubsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioReplaySubsystem is unavailable."));
+		return;
+	}
+
+	if (!ReplaySubsystem->HasLoadedReplayFrames())
+	{
+		SetDiagnosticsText(TEXT("Replay camera is unavailable until replay frames are loaded."));
+		return;
+	}
+
+	if (ReplaySubsystem->GetReplayCameraMode() == EScenarioReplayCameraMode::Free)
+	{
+		ClearReplayMovementInput();
+		ClearReplayLookInput();
+		if (ReplaySubsystem->FocusFreeCameraOnReplayRobot())
+		{
+			SetDiagnosticsText(TEXT("Replay free camera refocused on robot."));
+		}
+		UpdateCameraModeText();
+		RequestReplayInputFocus();
+		return;
+	}
+
 	ApplyReplayCameraMode(EScenarioReplayCameraMode::Free);
 }
 
@@ -641,6 +745,31 @@ void UProjectEpisodeReplayViewerWidget::HandleFullscreenPointCloudToggleClicked(
 	SetDiagnosticsText(bNewVisible
 		? TEXT("Replay point cloud visible.")
 		: TEXT("Replay point cloud hidden."));
+	RequestReplayInputFocus();
+}
+
+// Toggles replay LiDAR ray visibility in fullscreen mode.
+void UProjectEpisodeReplayViewerWidget::HandleFullscreenRayToggleClicked()
+{
+	UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
+	if (!ReplaySubsystem)
+	{
+		SetDiagnosticsText(TEXT("ScenarioReplaySubsystem is unavailable."));
+		return;
+	}
+
+	if (!ReplaySubsystem->HasReplayLidarRays())
+	{
+		SetDiagnosticsText(TEXT("Replay LiDAR rays are unavailable."));
+		RequestReplayInputFocus();
+		return;
+	}
+
+	const bool bNewVisible = !ReplaySubsystem->IsReplayLidarRaysVisible();
+	ReplaySubsystem->SetReplayLidarRaysVisible(bNewVisible);
+	SetDiagnosticsText(bNewVisible
+		? TEXT("Replay LiDAR rays visible.")
+		: TEXT("Replay LiDAR rays hidden."));
 	RequestReplayInputFocus();
 }
 
@@ -736,6 +865,12 @@ void UProjectEpisodeReplayViewerWidget::ResolveFullscreenLayerToggleWidgets()
 		FullscreenPointCloudToggleButton =
 			Cast<UButton>(GetWidgetFromName(TEXT("FullscreenPointCloudToggleButton")));
 	}
+
+	if (!FullscreenRayToggleButton)
+	{
+		FullscreenRayToggleButton =
+			Cast<UButton>(GetWidgetFromName(TEXT("FullscreenRayToggleButton")));
+	}
 }
 
 void UProjectEpisodeReplayViewerWidget::ApplyReplayCameraMode(
@@ -748,6 +883,12 @@ void UProjectEpisodeReplayViewerWidget::ApplyReplayCameraMode(
 	if (!ReplaySubsystem)
 	{
 		SetDiagnosticsText(TEXT("ScenarioReplaySubsystem is unavailable."));
+		return;
+	}
+
+	if (!ReplaySubsystem->HasLoadedReplayFrames())
+	{
+		SetDiagnosticsText(TEXT("Replay camera is unavailable until replay frames are loaded."));
 		return;
 	}
 
@@ -765,12 +906,15 @@ EScenarioReplayCameraMode UProjectEpisodeReplayViewerWidget::GetNextReplayCamera
 	switch (CurrentMode)
 	{
 	case EScenarioReplayCameraMode::TopDown:
-		return EScenarioReplayCameraMode::Free;
+		return EScenarioReplayCameraMode::Orbit;
 
-	case EScenarioReplayCameraMode::Free:
+	case EScenarioReplayCameraMode::Orbit:
 		return EScenarioReplayCameraMode::VehicleFront;
 
 	case EScenarioReplayCameraMode::VehicleFront:
+		return EScenarioReplayCameraMode::Free;
+
+	case EScenarioReplayCameraMode::Free:
 	default:
 		return EScenarioReplayCameraMode::TopDown;
 	}
@@ -781,6 +925,9 @@ FText UProjectEpisodeReplayViewerWidget::GetReplayCameraModeLabel(
 {
 	switch (CameraMode)
 	{
+	case EScenarioReplayCameraMode::Orbit:
+		return FText::FromString(TEXT("Orbit"));
+
 	case EScenarioReplayCameraMode::Free:
 		return FText::FromString(TEXT("Free"));
 
@@ -892,6 +1039,12 @@ void UProjectEpisodeReplayViewerWidget::UpdateReplayTimelineUi()
 				: 0.0f);
 		bUpdatingReplayTimelineSlider = false;
 	}
+
+	if (FullscreenRayToggleButton)
+	{
+		FullscreenRayToggleButton->SetIsEnabled(
+			ReplaySubsystem && ReplaySubsystem->HasReplayLidarRays());
+	}
 }
 
 FText UProjectEpisodeReplayViewerWidget::FormatReplayTime(
@@ -928,12 +1081,13 @@ bool UProjectEpisodeReplayViewerWidget::CanUseReplayCameraInput() const
 		&& ReplaySubsystem->IsReplayCameraInputAllowed();
 }
 
-bool UProjectEpisodeReplayViewerWidget::CanUseFreeCameraLook() const
+bool UProjectEpisodeReplayViewerWidget::CanUseReplayCameraLook() const
 {
 	const UScenarioReplaySubsystem* ReplaySubsystem = GetReplaySubsystem();
 	return ReplaySubsystem
 		&& ReplaySubsystem->IsReplayCameraInputAllowed()
-		&& ReplaySubsystem->GetReplayCameraMode() == EScenarioReplayCameraMode::Free;
+		&& (ReplaySubsystem->GetReplayCameraMode() == EScenarioReplayCameraMode::Free
+			|| ReplaySubsystem->GetReplayCameraMode() == EScenarioReplayCameraMode::Orbit);
 }
 
 FVector UProjectEpisodeReplayViewerWidget::BuildFreeCameraInput() const

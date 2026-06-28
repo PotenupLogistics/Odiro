@@ -258,13 +258,13 @@ namespace
 			return;
 		}
 
-		const FString replayAnchorPath = BuildProjectOutputPathForEpisode(projectOutputEpisodeId, TEXT("replay.meta.json"));
-		if (replayAnchorPath.IsEmpty())
+		const FString episodeAnchorPath = BuildProjectOutputPathForEpisode(projectOutputEpisodeId, TEXT("result.json"));
+		if (episodeAnchorPath.IsEmpty())
 		{
 			return;
 		}
 
-		const FString episodeDirectory = FPaths::GetPath(replayAnchorPath);
+		const FString episodeDirectory = FPaths::GetPath(episodeAnchorPath);
 		if (episodeDirectory.IsEmpty())
 		{
 			return;

@@ -84,7 +84,7 @@ private:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
 	FString EpisodeDirectory;
 
-	// replay.meta.json과 replay.frames.bin이 모두 존재하는지 여부.
+	// True when episode/replay/replay.meta.json and episode/replay/replay.frames.bin exist.
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Platform|ExperimentResult", meta = (AllowPrivateAccess = "true"))
 	bool bReplayAvailable = false;
 };

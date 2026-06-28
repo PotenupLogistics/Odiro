@@ -30,12 +30,6 @@ void UBaseTextWidget::SetTextRole(const EBaseTextRole inTextRole)
 	SynchronizeBaseProperties();
 }
 
-void UBaseTextWidget::SetBaseSize(const EBaseWidgetSize inSize)
-{
-	Size = inSize;
-	SynchronizeBaseProperties();
-}
-
 void UBaseTextWidget::SetDisabled(const bool bInDisabled)
 {
 	bDisabled = bInDisabled;

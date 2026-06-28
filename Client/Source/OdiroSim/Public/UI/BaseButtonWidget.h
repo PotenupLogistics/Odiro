@@ -9,6 +9,7 @@
 class UBaseButtonWidget;
 class UBorder;
 class UImage;
+class USizeBox;
 class USpacer;
 class UTextBlock;
 class UTexture2D;
@@ -113,6 +114,14 @@ public:
 	// Returns the size hint used by the WBP layout.
 	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
 	EBaseWidgetSize GetBaseSize() const { return Size; }
+
+	// Updates optional min/max desired-size constraints for the WBP root wrapper.
+	UFUNCTION(BlueprintCallable, Category = "UI|Base Button")
+	void SetSizeConstraints(FBaseWidgetSizeConstraints inSizeConstraints);
+
+	// Returns optional min/max desired-size constraints for the WBP root wrapper.
+	UFUNCTION(BlueprintPure, Category = "UI|Base Button")
+	FBaseWidgetSizeConstraints GetSizeConstraints() const { return SizeConstraints; }
 
 	// Updates the semantic state used by non-interaction visuals.
 	UFUNCTION(BlueprintCallable, Category = "UI|Base Button")
@@ -247,6 +256,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetBaseSize", Setter = "SetBaseSize", BlueprintGetter = "GetBaseSize", BlueprintSetter = "SetBaseSize", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
 	EBaseWidgetSize Size = EBaseWidgetSize::Medium;
 
+	// Optional desired-size constraints applied when RootSize or RootSizeBox is bound.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetSizeConstraints", Setter = "SetSizeConstraints", BlueprintGetter = "GetSizeConstraints", BlueprintSetter = "SetSizeConstraints", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
+	FBaseWidgetSizeConstraints SizeConstraints;
+
 	// Button semantic state.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Getter = "GetBaseState", Setter = "SetBaseState", BlueprintGetter = "GetBaseState", BlueprintSetter = "SetBaseState", Category = "UI|Base Button", meta = (ExposeOnSpawn = "true"))
 	EBaseWidgetState State = EBaseWidgetState::Default;
@@ -266,6 +279,14 @@ protected:
 	// Optional outer frame owned by the Widget Blueprint for button stroke states.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> BorderFrame;
+
+	// Optional WBP root size wrapper used for min/max desired-size constraints.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<USizeBox> RootSize;
+
+	// Optional alternate WBP root size wrapper used for min/max desired-size constraints.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<USizeBox> RootSizeBox;
 
 	// Surface wrapper owned by the Widget Blueprint.
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

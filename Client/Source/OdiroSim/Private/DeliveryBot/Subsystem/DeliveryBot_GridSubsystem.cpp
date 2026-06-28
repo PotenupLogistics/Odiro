@@ -16,9 +16,6 @@
 
 namespace
 {
-	// Source label used when a scenario static obstacle blocks a navigation grid cell.
-	const FName StaticObstacleGridBlockSourceName{ TEXT("StaticObstacle") };
-
 	FDeliveryBotGridCollisionRuleInfo MakeGridSubsystemFallbackCollisionRule(
 		FName collisionProfileName,
 		EDeliveryBotGridAreaType areaType,
@@ -87,6 +84,39 @@ namespace
 		}
 	}
 
+	// Collects obstacle actors that LiDAR handles outside the static navigation grid.
+	void GatherStaticObstacleActorsIgnoredByGrid(const UWorld* world, TArray<const AActor*>& outActors)
+	{
+		outActors.Reset();
+		if (!IsValid(world))
+		{
+			return;
+		}
+
+		for (TActorIterator<AScenarioStaticObstacle> actorIt(world); actorIt; ++actorIt)
+		{
+			const AScenarioStaticObstacle* obstacleActor = *actorIt;
+			if (IsValid(obstacleActor))
+			{
+				outActors.Add(obstacleActor);
+			}
+		}
+	}
+
+	// Applies the static-grid ignore list to physics queries used during grid classification.
+	void AddStaticGridIgnoredActorsToQueryParams(
+		const TArray<const AActor*>& staticObstacleActorsIgnoredByGrid,
+		FCollisionQueryParams& queryParams)
+	{
+		for (const AActor* ignoredActor : staticObstacleActorsIgnoredByGrid)
+		{
+			if (IsValid(ignoredActor))
+			{
+				queryParams.AddIgnoredActor(ignoredActor);
+			}
+		}
+	}
+
 	// Identifies runtime/editor static obstacle collision primitives regardless of profile name.
 	bool IsScenarioStaticObstacleComponent(const UPrimitiveComponent* primitiveComponent)
 	{
@@ -131,6 +161,8 @@ void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoun
 	const ECollisionChannel gridTraceChannel = gridBoundsActor->GetGridTraceChannel();
 	const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules =
 		gridBoundsActor->GetCollisionProfileRules();
+	TArray<const AActor*> staticObstacleActorsIgnoredByGrid;
+	GatherStaticObstacleActorsIgnoredByGrid(GetWorld(), staticObstacleActorsIgnoredByGrid);
 
 	int32 walkableCellCount = 0;
 	int32 penaltyCellCount = 0;
@@ -152,7 +184,7 @@ void UDeliveryBot_GridSubsystem::BuildGridFromBounds(const ADeliveryBot_GridBoun
 				GridOrigin.Z
 			);
 
-			ClassifyCellByCollisionPreset(cellInfo.WorldLocation, robotBoxExtent, maxWalkableSlopeDegree, gridTraceChannel, collisionRules,cellInfo);
+			ClassifyCellByCollisionPreset(cellInfo.WorldLocation, robotBoxExtent, maxWalkableSlopeDegree, gridTraceChannel, collisionRules, staticObstacleActorsIgnoredByGrid, cellInfo);
 			switch (cellInfo.AreaType)
 			{
 			case EDeliveryBotGridAreaType::Walkable:
@@ -621,8 +653,8 @@ void UDeliveryBot_GridSubsystem::ApplyBlockedCell(FDeliveryBotGridCellInfo& cell
 }
 
 // 셀 하나를 검사해서 Walkable / Penalty / Blocked로 분류
-bool UDeliveryBot_GridSubsystem::ClassifyCellByCollisionPreset(const FVector& cellCenterLocation, const FVector& robotBoxExtent, float maxWalkableSlopeDegree, 
-	ECollisionChannel gridTraceChannel, const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, FDeliveryBotGridCellInfo& outCellInfo) const
+bool UDeliveryBot_GridSubsystem::ClassifyCellByCollisionPreset(const FVector& cellCenterLocation, const FVector& robotBoxExtent, float maxWalkableSlopeDegree,
+	ECollisionChannel gridTraceChannel, const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, const TArray<const AActor*>& staticObstacleActorsIgnoredByGrid, FDeliveryBotGridCellInfo& outCellInfo) const
 {
 	const UWorld* world = GetWorld();
 	if (!IsValid(world))
@@ -636,6 +668,7 @@ bool UDeliveryBot_GridSubsystem::ClassifyCellByCollisionPreset(const FVector& ce
 		robotBoxExtent,
 		gridTraceChannel,
 		collisionRules,
+		staticObstacleActorsIgnoredByGrid,
 		outCellInfo))
 	{
 		return true;
@@ -646,6 +679,7 @@ bool UDeliveryBot_GridSubsystem::ClassifyCellByCollisionPreset(const FVector& ce
 
 	FHitResult groundHit;
 	FCollisionQueryParams queryParams(SCENE_QUERY_STAT(DeliveryBotGridTrace), false);
+	AddStaticGridIgnoredActorsToQueryParams(staticObstacleActorsIgnoredByGrid, queryParams);
 
 	const bool bHit = world->LineTraceSingleByChannel(
 		groundHit,
@@ -665,12 +699,6 @@ bool UDeliveryBot_GridSubsystem::ClassifyCellByCollisionPreset(const FVector& ce
 	if (!IsValid(hitComponent))
 	{
 		ApplyBlockedCell(outCellInfo, TEXT("InvalidHitComponent"));
-		return true;
-	}
-
-	if (IsScenarioStaticObstacleComponent(hitComponent))
-	{
-		ApplyBlockedCell(outCellInfo, StaticObstacleGridBlockSourceName);
 		return true;
 	}
 
@@ -708,6 +736,7 @@ bool UDeliveryBot_GridSubsystem::ClassifyCellByCollisionPreset(const FVector& ce
 		robotBoxExtent,
 		gridTraceChannel,
 		collisionRules,
+		staticObstacleActorsIgnoredByGrid,
 		nullptr,
 		blockingProfileName))
 	{
@@ -732,6 +761,7 @@ bool UDeliveryBot_GridSubsystem::TryApplyScenarioCorridorSurfaceCell(
 	const FVector& robotBoxExtent,
 	const ECollisionChannel gridTraceChannel,
 	const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules,
+	const TArray<const AActor*>& staticObstacleActorsIgnoredByGrid,
 	FDeliveryBotGridCellInfo& outCellInfo) const
 {
 	const UWorld* world = GetWorld();
@@ -794,6 +824,7 @@ bool UDeliveryBot_GridSubsystem::TryApplyScenarioCorridorSurfaceCell(
 		robotBoxExtent,
 		gridTraceChannel,
 		collisionRules,
+		staticObstacleActorsIgnoredByGrid,
 		corridorActor,
 		blockingProfileName))
 	{
@@ -847,7 +878,7 @@ bool UDeliveryBot_GridSubsystem::HasBlockingCorridorFootprintOverlap(
 
 // 로봇의 실제 크기만큼 박스 overlap을 해서, 해당 셀에 로봇이 들어갈 수 있는지 검사한다.
 bool UDeliveryBot_GridSubsystem::HasBlockingFootprintOverlap(const FVector& groundLocation, const FVector& robotBoxExtent, ECollisionChannel gridTraceChannel,
-	const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, const AActor* ignoredActor, FName& outBlockingProfileName) const
+	const TArray<FDeliveryBotGridCollisionRuleInfo>& collisionRules, const TArray<const AActor*>& staticObstacleActorsIgnoredByGrid, const AActor* ignoredActor, FName& outBlockingProfileName) const
 {
 	outBlockingProfileName = NAME_None;
 
@@ -862,6 +893,11 @@ bool UDeliveryBot_GridSubsystem::HasBlockingFootprintOverlap(const FVector& grou
 
 	TArray<FOverlapResult> overlapResults;
 	FCollisionQueryParams queryParams(SCENE_QUERY_STAT(DeliveryBotGridOverlap), false);
+	AddStaticGridIgnoredActorsToQueryParams(staticObstacleActorsIgnoredByGrid, queryParams);
+	if (IsValid(ignoredActor))
+	{
+		queryParams.AddIgnoredActor(ignoredActor);
+	}
 
 	const bool bHasOverlap = world->OverlapMultiByChannel(
 		overlapResults,
@@ -887,8 +923,7 @@ bool UDeliveryBot_GridSubsystem::HasBlockingFootprintOverlap(const FVector& grou
 
 		if (IsScenarioStaticObstacleComponent(overlapComponent))
 		{
-			outBlockingProfileName = StaticObstacleGridBlockSourceName;
-			return true;
+			continue;
 		}
 
 		const FName profileName = overlapComponent->GetCollisionProfileName();

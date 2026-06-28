@@ -13,6 +13,7 @@
 #include "Scenario/Data/ScenarioCorridorSurfaceCatalog.h"
 #include "Scenario/Editor/ScenarioCorridorHandleActor.h"
 #include "Scenario/Editor/ScenarioCorridorPreviewActor.h"
+#include "Scenario/ScenarioCityBlockMaterializer.h"
 #include "Scenario/ScenarioCorridorGeometry.h"
 #include "Scenario/ScenarioSampleWorldSpecAdapter.h"
 #include "Scenario/ScenarioSampler.h"
@@ -75,6 +76,7 @@ UScenarioAuthoringSubsystem::UScenarioAuthoringSubsystem()
 	PedestrianClass = AScenarioPedestrian::StaticClass();
 	StaticObstaclePropCatalog = UScenarioStaticObstaclePropCatalog::MakeDefaultCatalogReference();
 	CorridorSurfaceCatalog = UScenarioCorridorSurfaceCatalog::MakeDefaultCatalogReference();
+	CityBlockCatalog = UScenarioCityBlockCatalog::MakeDefaultCatalogReference();
 
 	static ConstructorHelpers::FClassFinder<AScenarioPedestrian> pedestrianBlueprintClass(
 		TEXT("/Game/Blueprints/Scenario/BP_ScenarioPedestrian"));
@@ -3721,6 +3723,9 @@ void UScenarioAuthoringSubsystem::ClearGeneratedEditorPreviewActors()
 		}
 	}
 
+	// Generated CityBuildings preview actors are visual-only and share cleanup with other preview actors.
+	FScenarioCityBlockMaterializer::DestroySpawnedActors(CityBlockPreviewActors);
+
 	if (IsValid(CorridorPreviewActor))
 	{
 		CorridorPreviewActor->Destroy();
@@ -3733,6 +3738,7 @@ void UScenarioAuthoringSubsystem::ClearGeneratedEditorPreviewActors()
 	StaticObstacleActors.Reset();
 	PedestrianActors.Reset();
 	GroundRegionActors.Reset();
+	CityBlockPreviewActors.Reset();
 	NextStaticObstacleIndex = 1;
 	NextPedestrianIndex = 1;
 	NextGroundRegionIndex = 1;
@@ -3869,6 +3875,17 @@ bool UScenarioAuthoringSubsystem::RefreshGeneratedEditorPreviewActorsFromDraft(T
 			bSucceeded = false;
 		}
 	}
+
+	const UScenarioCityBlockCatalog* cityBlockCatalog = CityBlockCatalog.LoadSynchronous();
+	FScenarioCityBlockMaterializationOptions cityBlockOptions;
+	cityBlockOptions.LogContext = TEXT("ScenarioEditor");
+	cityBlockOptions.CatalogDebugName = CityBlockCatalog.ToSoftObjectPath().ToString();
+	FScenarioCityBlockMaterializer::SpawnGeneratedCityBlocks(
+		GetWorld(),
+		cityBlockCatalog,
+		previewWorldSpec.GroundRegions,
+		CityBlockPreviewActors,
+		cityBlockOptions);
 
 	return bSucceeded;
 }

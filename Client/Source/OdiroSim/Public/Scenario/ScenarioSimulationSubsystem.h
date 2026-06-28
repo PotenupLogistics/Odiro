@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Math/Box2D.h"
+#include "Scenario/Data/ScenarioCityBlockCatalog.h"
 #include "Scenario/Data/ScenarioStaticObstaclePropCatalog.h"
 #include "Scenario/Editor/ScenarioEditorTypes.h"
 #include "Subsystems/WorldSubsystem.h"
@@ -43,6 +44,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Catalog")
 	TSoftObjectPtr<UScenarioStaticObstaclePropCatalog> StaticObstaclePropCatalog;
+
+	// Catalog of visual CityBuildings blocks spawned after source-of-truth GroundRegions are built.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Catalog")
+	TSoftObjectPtr<UScenarioCityBlockCatalog> CityBlockCatalog;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scenario|Classes")
 	TSubclassOf<ADeliveryBot_GridBoundsActor> GridBoundsActorClass;
@@ -106,6 +111,10 @@ public:
 private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> RuntimeActors;
+
+	// Visual CityBuildings actors owned by the active scenario but excluded from evaluation actor lookup.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<AActor>> RuntimeCityBlockActors;
 
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<AScenarioGroundRegion>> RuntimeGroundRegions;

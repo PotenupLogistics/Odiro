@@ -14,6 +14,24 @@ namespace
 	const FName RoadSurfaceId(TEXT("road"));
 	const FName WalkwaySurfaceId(TEXT("walkway"));
 
+	// Generated city band markers encode the side needed for corridor-relative edge anchoring.
+	const TCHAR* GeneratedLowerSideMarkers[] =
+	{
+		TEXT("_lower_walkway_extension_"),
+		TEXT("_lower_building_"),
+		TEXT("_lower_curb_"),
+		TEXT("_lower_road_2lane_")
+	};
+
+	// Generated city band markers encode the side needed for corridor-relative edge anchoring.
+	const TCHAR* GeneratedUpperSideMarkers[] =
+	{
+		TEXT("_upper_walkway_extension_"),
+		TEXT("_upper_building_"),
+		TEXT("_upper_curb_"),
+		TEXT("_upper_road_2lane_")
+	};
+
 	// Filters the materializer to generated straight city padding without touching authored GroundRegions.
 	bool IsGeneratedCityVisualRegion(const FScenarioGroundRegionSpec& regionSpec)
 	{
@@ -21,26 +39,31 @@ namespace
 			&& regionSpec.RegionId.StartsWith(GeneratedCityRegionIdPrefix);
 	}
 
-	// Maps source-of-truth GroundRegion semantics to the first straight block roles supported by the catalog.
-	EScenarioCityBlockRole ResolveCityBlockRoleForRegion(const FScenarioGroundRegionSpec& regionSpec)
+	// Maps source-of-truth GroundRegion semantics to the straight block roles supported by the catalog.
+	void ResolveCityBlockRolesForRegion(
+		const FScenarioGroundRegionSpec& regionSpec,
+		TArray<EScenarioCityBlockRole>& outRoles)
 	{
+		outRoles.Reset();
 		const FName surfaceId(*regionSpec.SurfaceId);
 		if (surfaceId == WalkwaySurfaceId && regionSpec.RegionType == EScenarioGroundRegionType::Walkable)
 		{
-			return EScenarioCityBlockRole::WalkwayRoadStraight;
+			outRoles.Add(EScenarioCityBlockRole::WalkwayRoadStraight);
+			outRoles.Add(EScenarioCityBlockRole::WalkwayBuildingStraight);
+			return;
 		}
 
 		if (surfaceId == RoadSurfaceId && regionSpec.RegionType == EScenarioGroundRegionType::Penalty)
 		{
-			return EScenarioCityBlockRole::RoadStraight;
+			outRoles.Add(EScenarioCityBlockRole::RoadStraight);
+			outRoles.Add(EScenarioCityBlockRole::WalkwayRoadStraight);
+			return;
 		}
 
 		if (surfaceId == BuildingSurfaceId && regionSpec.RegionType == EScenarioGroundRegionType::Blocked)
 		{
-			return EScenarioCityBlockRole::Building;
+			outRoles.Add(EScenarioCityBlockRole::Building);
 		}
-
-		return EScenarioCityBlockRole::Unknown;
 	}
 
 	// Checks whether a catalog entry explicitly names the GroundRegion surface.
@@ -51,6 +74,50 @@ namespace
 		return !surfaceId.IsNone() && blockEntry.SemanticProfile.SurfaceIds.Contains(surfaceId);
 	}
 
+	// Resolves generated lower/upper side into a sign along the region's local right vector.
+	bool TryResolveGeneratedCitySideSign(const FString& regionId, double& outSideSign)
+	{
+		for (const TCHAR* marker : GeneratedLowerSideMarkers)
+		{
+			if (regionId.Contains(marker))
+			{
+				outSideSign = -1.0;
+				return true;
+			}
+		}
+
+		for (const TCHAR* marker : GeneratedUpperSideMarkers)
+		{
+			if (regionId.Contains(marker))
+			{
+				outSideSign = 1.0;
+				return true;
+			}
+		}
+
+		outSideSign = 0.0;
+		return false;
+	}
+
+	// Scores one catalog entry while preserving the role/surface/type fallback order.
+	int32 ScoreCityBlockEntryForRegion(
+		const FScenarioCityBlockCatalogEntry& blockEntry,
+		const FScenarioGroundRegionSpec& regionSpec,
+		FName surfaceId)
+	{
+		int32 matchTier = 1;
+		if (DoesCityBlockEntryNameSurface(blockEntry, surfaceId))
+		{
+			matchTier = 2;
+			if (blockEntry.SemanticProfile.PrimaryRegionType == regionSpec.RegionType)
+			{
+				matchTier = 3;
+			}
+		}
+
+		return (matchTier * 10000) + blockEntry.PlacementProfile.Priority;
+	}
+
 	// Selects the most specific catalog entry for one generated GroundRegion.
 	bool FindCityBlockEntryForRegion(
 		const UScenarioCityBlockCatalog& catalog,
@@ -58,57 +125,82 @@ namespace
 		FScenarioCityBlockCatalogEntry& outBlockEntry)
 	{
 		outBlockEntry = FScenarioCityBlockCatalogEntry();
-		const EScenarioCityBlockRole role = ResolveCityBlockRoleForRegion(regionSpec);
-		if (role == EScenarioCityBlockRole::Unknown)
+		TArray<EScenarioCityBlockRole> roles;
+		ResolveCityBlockRolesForRegion(regionSpec, roles);
+		if (roles.IsEmpty())
 		{
 			return false;
 		}
 
 		const FName surfaceId(*regionSpec.SurfaceId);
-		const FScenarioCityBlockCatalogEntry* surfaceFallback = nullptr;
-		const FScenarioCityBlockCatalogEntry* roleFallback = nullptr;
+		const FScenarioCityBlockCatalogEntry* bestEntry = nullptr;
+		int32 bestScore = MIN_int32;
 		for (const FScenarioCityBlockCatalogEntry& blockEntry : catalog.GetEntries())
 		{
-			if (blockEntry.Role != role)
+			if (!roles.Contains(blockEntry.Role))
 			{
 				continue;
 			}
 
-			if (!roleFallback)
+			const int32 score = ScoreCityBlockEntryForRegion(blockEntry, regionSpec, surfaceId);
+			if (!bestEntry || score > bestScore)
 			{
-				roleFallback = &blockEntry;
-			}
-
-			if (!DoesCityBlockEntryNameSurface(blockEntry, surfaceId))
-			{
-				continue;
-			}
-
-			if (!surfaceFallback)
-			{
-				surfaceFallback = &blockEntry;
-			}
-
-			if (blockEntry.SemanticProfile.PrimaryRegionType == regionSpec.RegionType)
-			{
-				outBlockEntry = blockEntry;
-				return true;
+				bestEntry = &blockEntry;
+				bestScore = score;
 			}
 		}
 
-		if (surfaceFallback)
+		if (bestEntry)
 		{
-			outBlockEntry = *surfaceFallback;
-			return true;
-		}
-
-		if (roleFallback)
-		{
-			outBlockEntry = *roleFallback;
+			outBlockEntry = *bestEntry;
 			return true;
 		}
 
 		return false;
+	}
+
+	// Computes the desired authored bounds center for center- and edge-anchored visual blocks.
+	FVector ResolveDesiredBlockBoundsCenter(
+		const FScenarioGroundRegionSpec& regionSpec,
+		const FScenarioCityBlockCatalogEntry& blockEntry,
+		const FRotator& blockRotation,
+		const FVector& forward,
+		double alongOffsetCm)
+	{
+		const FVector baseRegionCenter = regionSpec.Center + (forward * alongOffsetCm);
+		const EScenarioCityBlockLateralAnchor lateralAnchor =
+			blockEntry.PlacementProfile.LateralAnchor;
+		if (lateralAnchor == EScenarioCityBlockLateralAnchor::RegionCenter)
+		{
+			double sideSign = 0.0;
+			if (TryResolveGeneratedCitySideSign(regionSpec.RegionId, sideSign))
+			{
+				const FVector right = blockRotation.RotateVector(FVector::RightVector);
+				return baseRegionCenter
+					+ (right * sideSign * blockEntry.PlacementProfile.LateralOffsetMeters * 100.0);
+			}
+			return baseRegionCenter;
+		}
+
+		double sideSign = 0.0;
+		if (!TryResolveGeneratedCitySideSign(regionSpec.RegionId, sideSign))
+		{
+			return baseRegionCenter;
+		}
+
+		const FVector right = blockRotation.RotateVector(FVector::RightVector);
+		const double regionHalfWidthCm = regionSpec.Size.Y * 0.5;
+		const double blockHalfWidthCm = blockEntry.BoundsMeters.WidthMeters * 50.0;
+		const double postAnchorOffsetCm = blockEntry.PlacementProfile.LateralOffsetMeters * 100.0;
+
+		if (lateralAnchor == EScenarioCityBlockLateralAnchor::RegionInnerEdge)
+		{
+			return baseRegionCenter
+				+ (right * sideSign * (blockHalfWidthCm - regionHalfWidthCm + postAnchorOffsetCm));
+		}
+
+		return baseRegionCenter
+			+ (right * sideSign * (regionHalfWidthCm - blockHalfWidthCm + postAnchorOffsetCm));
 	}
 
 	// Disables every collision path on visual-only CityBuildings actors.
@@ -193,7 +285,12 @@ namespace
 		{
 			const double alongOffsetCm =
 				(static_cast<double>(blockIndex) * blockLengthCm) - (chainLengthCm * 0.5);
-			const FVector desiredBoundsCenter = regionSpec.Center + (forward * alongOffsetCm);
+			const FVector desiredBoundsCenter = ResolveDesiredBlockBoundsCenter(
+				regionSpec,
+				blockEntry,
+				blockRotation,
+				forward,
+				alongOffsetCm);
 			const FVector spawnLocation = desiredBoundsCenter - boundsCenterOffsetCm;
 			AActor* blockActor = world.SpawnActor<AActor>(
 				blockClass,
@@ -252,8 +349,9 @@ FScenarioCityBlockMaterializationResult FScenarioCityBlockMaterializer::SpawnGen
 
 	for (const FScenarioGroundRegionSpec& regionSpec : groundRegions)
 	{
-		if (!IsGeneratedCityVisualRegion(regionSpec)
-			|| ResolveCityBlockRoleForRegion(regionSpec) == EScenarioCityBlockRole::Unknown)
+		TArray<EScenarioCityBlockRole> roles;
+		ResolveCityBlockRolesForRegion(regionSpec, roles);
+		if (!IsGeneratedCityVisualRegion(regionSpec) || roles.IsEmpty())
 		{
 			continue;
 		}

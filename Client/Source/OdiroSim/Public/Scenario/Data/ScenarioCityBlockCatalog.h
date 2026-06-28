@@ -20,6 +20,15 @@ enum class EScenarioCityBlockRole : uint8
 	Building UMETA(DisplayName = "Building")
 };
 
+// Lateral reference line used when aligning visual blocks against generated city GroundRegions.
+UENUM(BlueprintType)
+enum class EScenarioCityBlockLateralAnchor : uint8
+{
+	RegionCenter UMETA(DisplayName = "Generated Region Center"),
+	RegionInnerEdge UMETA(DisplayName = "Generated Region Inner Edge"),
+	RegionOuterEdge UMETA(DisplayName = "Generated Region Outer Edge")
+};
+
 // Author-supplied block bounds in meters for deterministic tile placement.
 USTRUCT(BlueprintType)
 struct ODIROSIM_API FScenarioCityBlockBoundsMeters
@@ -41,6 +50,25 @@ struct ODIROSIM_API FScenarioCityBlockBoundsMeters
 	// Offset from the actor origin to the authored bounds center.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|City Block")
 	FVector CenterOffsetMeters = FVector::ZeroVector;
+};
+
+// Placement hint that separates CityBuildings visual alignment from source GroundRegion semantics.
+USTRUCT(BlueprintType)
+struct ODIROSIM_API FScenarioCityBlockPlacementProfile
+{
+	GENERATED_BODY()
+
+	// Selection tie-breaker used after role, surface, and GroundRegion type matching.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|City Block")
+	int32 Priority = 0;
+
+	// Generated region reference line that the block's authored bounds should align against.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|City Block")
+	EScenarioCityBlockLateralAnchor LateralAnchor = EScenarioCityBlockLateralAnchor::RegionCenter;
+
+	// Extra side-relative offset applied after anchor alignment; positive moves away from the Corridor.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|City Block")
+	double LateralOffsetMeters = 0.0;
 };
 
 // Descriptive semantic hint that keeps CityBuildings visuals aligned with source-of-truth GroundRegions.
@@ -91,6 +119,10 @@ struct ODIROSIM_API FScenarioCityBlockCatalogEntry
 	// Authored dimensions used instead of mesh collision or auto bounds as the placement contract.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|City Block")
 	FScenarioCityBlockBoundsMeters BoundsMeters;
+
+	// Placement metadata that chooses variants and aligns composite blocks to generated city edges.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|City Block")
+	FScenarioCityBlockPlacementProfile PlacementProfile;
 
 	// Semantic hint used to match visuals with generated GroundRegions without making the visual mesh authoritative.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scenario|City Block")
